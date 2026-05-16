@@ -258,13 +258,6 @@ static size_t dhcp_append_ipv4(uint8_t *p, uint8_t code, const char *ip) {
     return 6;
 }
 
-static size_t dhcp_append_u16(uint8_t *p, uint8_t code, uint16_t v_host) {
-    uint16_t v = htons(v_host);
-    p[0] = code;
-    p[1] = 2;
-    memcpy(p + 2, &v, 2);
-    return 4;
-}
 
 static size_t dhcp_append_bytes(uint8_t *p, uint8_t code, const uint8_t *v, uint8_t len) {
     p[0] = code;
@@ -280,7 +273,6 @@ static size_t build_dhcp_reply(dhcp_packet_t *out, const dhcp_packet_t *in, uint
     uint8_t *p;
     size_t boot_len;
     size_t max_len;
-    const char *pxe_vendor = "PXEClient";
 
     memset(out, 0, sizeof(*out));
     out->op = 2;
@@ -320,15 +312,11 @@ static size_t build_dhcp_reply(dhcp_packet_t *out, const dhcp_packet_t *in, uint
     if (boot_len > 0u) {
         p += dhcp_append_bytes(p, DHCP_OPT_BOOTFILE_NAME, (const uint8_t *)boot_file, (uint8_t)boot_len);
     }
-    if (is_pxe_client) {
-        p += dhcp_append_bytes(p, DHCP_OPT_VENDOR_CLASS, (const uint8_t *)pxe_vendor, (uint8_t)strlen(pxe_vendor));
-        if (has_arch) {
-            p += dhcp_append_u16(p, DHCP_OPT_CLIENT_ARCH, arch);
-        }
-        if (machine_id != NULL && machine_id_len > 0u) {
-            p += dhcp_append_bytes(p, DHCP_OPT_CLIENT_MACHINE, machine_id, machine_id_len);
-        }
-    }
+    (void)is_pxe_client;
+    (void)has_arch;
+    (void)arch;
+    (void)machine_id;
+    (void)machine_id_len;
     *p = DHCP_OPT_END;
     p++;
 
