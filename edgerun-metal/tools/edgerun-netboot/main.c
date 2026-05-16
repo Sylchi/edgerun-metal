@@ -22,7 +22,8 @@
 #define SUBNET_MASK "255.255.255.0"
 #define ROUTER_IP SERVER_IP
 #define DNS_IP SERVER_IP
-#define BOOT_FILE "BOOTX64.EFI"
+#define BOOT_FILE "EFI/BOOT/BOOTX64.EFI"
+#define BOOT_FILE_BASENAME "BOOTX64.EFI"
 #define HTTP_PORT_DEFAULT 8081u
 #define HTTP_PORT_FALLBACK 8080u
 #define HTTP_BOOT_PATH "/" BOOT_FILE
@@ -296,7 +297,7 @@ static size_t build_dhcp_reply(dhcp_packet_t *out, const dhcp_packet_t *in, uint
         memcpy(out->file, boot_file, boot_len);
         out->file[boot_len] = '\0';
     }
-    (void)snprintf((char *)out->sname, sizeof(out->sname), "%s", "edgerun");
+    /* sname intentionally left empty; siaddr/options carry boot server. */
     out->magic = htonl(DHCP_MAGIC);
 
     p = out->options;
@@ -807,7 +808,7 @@ static bool handle_http_client(int sock, const char *req_host, uint16_t port, co
     char target[512];
     char version[16];
     char expect_abs[512];
-    char expect_path[16];
+    char expect_path[64];
     const char *body;
     char resp_header[512];
     ssize_t n;
@@ -826,8 +827,14 @@ static bool handle_http_client(int sock, const char *req_host, uint16_t port, co
     snprintf(expect_path, sizeof(expect_path), "/%s", BOOT_FILE);
     snprintf(expect_abs, sizeof(expect_abs), "http://%s:%u%s", req_host, (unsigned)port, expect_path);
 
+    char expect_base[64];
+    char expect_base_abs[512];
+    snprintf(expect_base, sizeof(expect_base), "/%s", BOOT_FILE_BASENAME);
+    snprintf(expect_base_abs, sizeof(expect_base_abs), "http://%s:%u%s", req_host, (unsigned)port, expect_base);
+
     if ((strcasecmp(method, "GET") != 0) || (strcmp(version, "HTTP/1.0") != 0 && strcmp(version, "HTTP/1.1") != 0) ||
-        ((strcmp(target, expect_path) != 0) && (strcmp(target, expect_abs) != 0))) {
+        ((strcmp(target, expect_path) != 0) && (strcmp(target, expect_abs) != 0) &&
+         (strcmp(target, expect_base) != 0) && (strcmp(target, expect_base_abs) != 0))) {
         const char *not_found =
             "HTTP/1.1 404 Not Found\r\n"
             "Content-Length: 0\r\n"
@@ -1002,6 +1009,35 @@ static bool transfer_boot_file(const char *path, const struct sockaddr_in *peer)
     return ok;
 }
 
+
+static bool is_boot_filename(const char *filename) {
+    if (filename == NULL) {
+        return false;
+    }
+    if (strcmp(filename, BOOT_FILE) == 0) {
+        return true;
+    }
+    if (strcmp(filename, BOOT_FILE_BASENAME) == 0) {
+        return true;
+    }
+    if (strcmp(filename, "/BOOTX64.EFI") == 0) {
+        return true;
+    }
+    if (strcmp(filename, "/EFI/BOOT/BOOTX64.EFI") == 0) {
+        return true;
+    }
+    if (strcmp(filename, "\\EFI\\BOOT\\BOOTX64.EFI") == 0) {
+        return true;
+    }
+    if (strcasecmp(filename, "efi/boot/bootx64.efi") == 0) {
+        return true;
+    }
+    if (strcasecmp(filename, "bootx64.efi") == 0) {
+        return true;
+    }
+    return false;
+}
+
 static void handle_tftp(int sock, const uint8_t *pkt, size_t len, const struct sockaddr_in *src,
                         const char *efi_path) {
     uint16_t opcode;
@@ -1054,7 +1090,7 @@ static void handle_tftp(int sock, const uint8_t *pkt, size_t len, const struct s
         send_dhcp_error(sock, src, 0u, "Unsupported mode");
         return;
     }
-    if (strcmp(filename, BOOT_FILE) != 0) {
+    if (!is_boot_filename(filename)) {
         send_dhcp_error(sock, src, 1u, "File not found");
         return;
     }
