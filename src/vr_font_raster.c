@@ -42,6 +42,18 @@ static const float VR_RASTER_CURVE_NEWTON_EPSILON = 1e-5f;
 static const float VR_RASTER_CURVE_LINEAR_TOLERANCE = 1e-12f;
 #define VR_RASTER_MSDF_CHANNEL_COUNT 3u
 static const float VR_RASTER_MSDF_CHANNEL_SCALE = 3.0f;
+static const float VR_RASTER_MSDF_CHANNEL_HALF_BIN = 0.5f / VR_RASTER_MSDF_CHANNEL_SCALE;
+static const float VR_RASTER_MSDF_MISSING_CHANNEL_BLEND = 0.5f;
+static const uint8_t VR_RASTER_MSDF_CHANNEL_NEXT[VR_RASTER_MSDF_CHANNEL_COUNT] = {
+  1u,
+  2u,
+  0u,
+};
+static const uint8_t VR_RASTER_MSDF_CHANNEL_PREV[VR_RASTER_MSDF_CHANNEL_COUNT] = {
+  2u,
+  0u,
+  1u,
+};
 static const float VR_RASTER_MSDF_PI = 3.14159265359f;
 static const float VR_RASTER_MSDF_TWO_PI = 6.28318530718f;
 static const float VR_RASTER_ALPHA_MIN = 0.0f;
@@ -227,11 +239,38 @@ static uint8_t vr_msdf_edge_color(float dx, float dy, size_t fallback_index) {
     angle = VR_RASTER_MSDF_TWO_PI;
   }
   float normalized = angle / VR_RASTER_MSDF_TWO_PI;
-  uint8_t color = (uint8_t)floorf(normalized * VR_RASTER_MSDF_CHANNEL_SCALE);
+  float biased = normalized + VR_RASTER_MSDF_CHANNEL_HALF_BIN;
+  if (biased >= 1.0f) {
+    biased -= 1.0f;
+  }
+  uint8_t color = (uint8_t)floorf(biased * VR_RASTER_MSDF_CHANNEL_SCALE);
   if (color >= VR_RASTER_MSDF_CHANNEL_COUNT) {
     color = (uint8_t)(VR_RASTER_MSDF_CHANNEL_COUNT - 1u);
   }
   return color;
+}
+
+static float vr_msdf_resolve_missing_channel_distance(
+  const bool channel_present[VR_RASTER_MSDF_CHANNEL_COUNT],
+  const float distances[VR_RASTER_MSDF_CHANNEL_COUNT],
+  uint8_t color) {
+  uint8_t next_color = VR_RASTER_MSDF_CHANNEL_NEXT[color];
+  uint8_t prev_color = VR_RASTER_MSDF_CHANNEL_PREV[color];
+
+  bool next_present = channel_present[next_color];
+  bool prev_present = channel_present[prev_color];
+  if (next_present && prev_present) {
+    float next_distance = distances[next_color];
+    float prev_distance = distances[prev_color];
+    return (VR_RASTER_MSDF_MISSING_CHANNEL_BLEND * next_distance) +
+      ((1.0f - VR_RASTER_MSDF_MISSING_CHANNEL_BLEND) * prev_distance);
+  }
+
+  if (next_present) {
+    return distances[next_color];
+  }
+
+  return prev_present ? distances[prev_color] : distances[color];
 }
 
 static vr_status_t vr_append_transformed_points(
@@ -1197,9 +1236,10 @@ static void vr_msdf_signed_distances_to_outline(
 
   for (uint8_t color = 0u; color < VR_RASTER_MSDF_CHANNEL_COUNT; ++color) {
     if (!channel_present[color]) {
-      uint8_t next_color = (color + 1u) % VR_RASTER_MSDF_CHANNEL_COUNT;
-      uint8_t prev_color = (color + 2u) % VR_RASTER_MSDF_CHANNEL_COUNT;
-      distances[color] = channel_present[next_color] ? distances[next_color] : distances[prev_color];
+      distances[color] = vr_msdf_resolve_missing_channel_distance(
+        channel_present,
+        distances,
+        color);
     }
   }
 
