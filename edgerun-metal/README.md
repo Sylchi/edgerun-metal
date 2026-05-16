@@ -1,408 +1,317 @@
 # EdgeRun Metal v0.2
 
-This repository is a from-scratch x86_64 UEFI milestone that boots directly as a UEFI application and executes embedded Wasm modules.
+From-scratch x86_64 UEFI metal runtime that boots as `BOOTX64.EFI` and executes embedded Wasm modules with native hostcalls.
 
-## Status
-- Current milestone: **M5 PCI scan module (standalone) + regression module**
-  - `EdgeRun Metal Core v0.2`
-  - `UEFI boot OK`
-  - `Wasm module loaded`
-  - `Wasm export found: main`
-  - `wasm main() returned: 123` (regression module)
-  - `PCI scan bus 0..255`
-  - PCI discovery output for every discovered function (`bus/dev/func/id/command/status/class/revision/header/cacheline/BAR0-BAR5`)
-- No Linux kernel, no GRUB/Limine.
-- No external runtime libraries.
-- No WASI/module runtime dependency.
+## Current status
 
-## Dependencies
+Real hardware boot is confirmed.
+
+Hardware used for first proof:
+
+- Desktop: MSI X570 + Ryzen 5600X
+- GPU: RTX 5060 Ti 16GB
+- Laptop netboot host: Arch Linux over `eth0`
+- Server IP: `10.42.0.1`
+- Client IP: `10.42.0.2`
+
+Confirmed path:
+
+```text
+firmware -> BOOTX64.EFI -> EdgeRun Metal Core -> Wasm VM -> hostcalls
+```
+
+Confirmed working:
+
+- DHCP offer/request/ack over laptop Ethernet
+- TFTP RRQ for `BOOTX64.EFI`
+- `BOOTX64.EFI` loads on real hardware
+- EdgeRun Metal Core starts
+- Wasm VM runs on real hardware
+- PCI config-space hostcalls exist
+- COM1 serial mirror exists for `er_print`
+- Boot profiles exist: `smoke`, `pci`, `quiet`
+- Generated build artifacts are ignored by Git and should not block the agent
+
+## Current objective
+
+Netboot is now support infrastructure. Do not keep redesigning it unless it blocks boot.
+
+The real work is the core:
+
+1. Keep `smoke` boot stable.
+2. Use `pci` profile for concise device discovery.
+3. Add read-only MMIO mapping hostcalls.
+4. Probe NVIDIA/NVMe/Ethernet BARs safely.
+5. Build the minimal driver-runtime hostcall surface for Wasm driver modules.
+
+## Philosophy
+
+Do not rebuild Linux.
+
+Use existing driver code as source material, but run only extracted/adapted logic inside isolated Wasm modules. EdgeRun provides the minimal hostcalls needed by that driver logic:
+
+```text
+pci.config.read/write
+pci.enable.bus_master
+pci.bar.info
+mmio.map/read/write
+dma.alloc/map/sync/free
+irq.register/ack
+event.wait
+time.sleep/log
+firmware.blob.get
+```
+
+The goal is hardware control without dragging in a full general-purpose kernel/device model.
+
+## Build dependencies
+
 On Arch Linux:
 
 ```bash
 sudo pacman -S clang lld qemu-full edk2-ovmf
 ```
 
-If you build with gcc/binutils instead, install the equivalent:
-- `base-devel` (or at least gcc, binutils, make)
-- `qemu-full`
-- `edk2-ovmf`
+## Build profiles
 
-## Build
+Default build is `smoke` profile:
 
 ```bash
-make
+make -C edgerun-metal
 ```
 
-Produces:
-- `build/edgerun-metal.efi`
-- `build/esp/EFI/BOOT/BOOTX64.EFI`
+Explicit profiles:
+
+```bash
+make -C edgerun-metal smoke
+make -C edgerun-metal pci
+make -C edgerun-metal quiet
+```
+
+Profiles:
+
+```text
+smoke = banner + test Wasm only
+pci   = concise PCI target scan: NVIDIA / NVMe / Ethernet
+quiet = minimal halt-ready boot
+```
+
+Output:
+
+```text
+edgerun-metal/build/edgerun-metal.efi
+edgerun-metal/build/esp/EFI/BOOT/BOOTX64.EFI
+```
 
 ## Run in QEMU
 
 ```bash
-make run
+make -C edgerun-metal run
 ```
 
-The run script boots QEMU with OVMF and a FAT-formatted ESP drive rooted at `build/esp`.
+## Netboot baseline
 
-## Netboot helper tool
+Netboot should serve the generated EFI from:
 
-Build:
-```bash
-make netboot
+```text
+/home/ken/edgerun-c/edgerun-metal/build/esp/EFI/BOOT/BOOTX64.EFI
 ```
 
-Run:
-```bash
-sudo ./build/edgerun-netboot --iface <iface> --efi build/esp/EFI/BOOT/BOOTX64.EFI --http --http-port 8081
+The working desktop path is UEFI PXE/TFTP. Current known-good behavior:
+
+```text
+DHCPDISCOVER
+DHCPOFFER
+DHCPREQUEST
+DHCPACK
+TFTP RRQ BOOTX64.EFI
+TFTP DATA
+BOOTX64.EFI executes
 ```
-
-Optional interface preparation for direct ethernet boot:
-```bash
-sudo ip link set <iface> down
-sudo ip addr flush dev <iface>
-sudo ip addr add 10.42.0.1/24 dev <iface>
-sudo ip link set <iface> up
-```
-
-You can use `--setup-iface` to let the tool run those interface commands automatically.
-
-HTTP mode example:
-```bash
-sudo ./build/edgerun-netboot --iface <iface> --efi build/esp/EFI/BOOT/BOOTX64.EFI --http --setup-iface --allow-mac 00:d8:61:d7:50:30
-```
-
-Fallback TFTP example:
-```bash
-sudo ./build/edgerun-netboot --iface <iface> --efi build/esp/EFI/BOOT/BOOTX64.EFI --setup-iface --mode tftp
-```
-
-Mode options:
-- `--http` : force UEFI HTTP boot mode.
-- `--tftp` : force legacy TFTP boot mode.
-- `--auto` : auto-select mode based on DHCP vendor class (default).
-- `--mode auto|http|tftp` : explicit mode selection.
-- `--force-http-for-pxe` : send HTTP URL to PXE clients too.
-- `--client-ip 10.42.0.2` : fixed lease IP for desktop.
-- `--allow-mac <aa:bb:cc:dd:ee:ff>` : only respond to that MAC.
-- `--mgmt-dhcp` : answer management DHCP for non-boot clients.
-- `--mgmt-ip 10.42.0.10` : management client IP.
-- `--mgmt-mac <aa:bb:cc:dd:ee:ff>` : optional management client MAC.
-
-Switch in between:
-- Managed switches often send DHCP using their own vendor class e.g. `TL-SG1210MPE`.
-- edgerun-netboot ignores clients not reporting `HTTPClient` or `PXEClient` vendor class.
-- Restrict to one desktop NIC with `--allow-mac 00:d8:61:d7:50:30`.
-- Default behavior now filters non-boot DHCP clients before replying.
-
-For management DHCP on the switch:
-```bash
-sudo ./build/edgerun-netboot --iface eth0 --efi build/esp/EFI/BOOT/BOOTX64.EFI --setup-iface --mode auto --allow-mac 00:d8:61:d7:50:30 --mgmt-dhcp --mgmt-mac b0:19:21:fd:c3:92 --mgmt-ip 10.42.0.10
-```
-
-Troubleshooting:
-- Disable NetworkManager on that interface if it interferes:
-  `nmcli dev set <iface> managed no`
-- Re-enable later:
-  `nmcli dev set <iface> managed yes`
-- Check link:
-  `ip link show <iface>`
-- Watch packets for debug:
-  `sudo tcpdump -i <iface> -n -vvv -s0 'udp port 67 or udp port 68 or udp port 69'`
-
-- Quick checks:
-  `ss -ltnp | grep 8080`
-  `ss -lunp | grep ':67'`
-  `journalctl -u edgerun-netboot -f`
-
-- Test local HTTP serving:
-  `curl -v http://10.42.0.1:8081/BOOTX64.EFI -o /tmp/BOOTX64.EFI`
-  `cmp build/esp/EFI/BOOT/BOOTX64.EFI /tmp/BOOTX64.EFI`
-
-Exact netboot test matrix:
-
-A. Local HTTP test:
-```bash
-curl -v http://10.42.0.1:8081/BOOTX64.EFI -o /tmp/BOOTX64.EFI
-cmp build/esp/EFI/BOOT/BOOTX64.EFI /tmp/BOOTX64.EFI
-```
-
-B. PXE/TFTP boot test:
-```bash
-sudo ./build/edgerun-netboot --iface eth0 --efi build/esp/EFI/BOOT/BOOTX64.EFI --setup-iface --mode tftp --allow-mac 00:d8:61:d7:50:30
-```
-Select UEFI PXE IPv4 boot on desktop.
-
-C. HTTP boot test:
-```bash
-sudo ./build/edgerun-netboot --iface eth0 --efi build/esp/EFI/BOOT/BOOTX64.EFI --setup-iface --mode http --allow-mac 00:d8:61:d7:50:30
-```
-Select UEFI HTTP IPv4 boot on desktop.
-
-D. Auto mode test:
-```bash
-sudo ./build/edgerun-netboot --iface eth0 --efi build/esp/EFI/BOOT/BOOTX64.EFI --setup-iface --mode auto --allow-mac 00:d8:61:d7:50:30
-```
-
-E. Forced HTTP for PXE:
-```bash
-sudo ./build/edgerun-netboot --iface eth0 --efi build/esp/EFI/BOOT/BOOTX64.EFI --setup-iface --mode auto --force-http-for-pxe --allow-mac 00:d8:61:d7:50:30
-```
-
-UEFI HTTP notes:
-- If logs show vendor class `PXEClient`, firmware is using PXE mode.
-- If logs show vendor class `HTTPClient`, firmware is using HTTP boot mode.
-- For PXE clients, use `--tftp` or `--force-http-for-pxe` in auto mode.
-
-- Quick socket checks:
-  `ss -ltnp | grep '808[01]'`
-  `ss -lunp | grep ':67'`
-  `journalctl -u edgerun-netboot -f`
-
-Requirements for desktop boot:
-- Desktop firmware should use **UEFI HTTP boot / IPv4 HTTP boot** when using HTTP mode (or UEFI PXE as fallback).
-- Secure Boot should be disabled for unsigned test firmware.
-
-## Always-on netboot service
-
-Find your interface:
-
-```bash
-ip link
-```
-
-Install netboot as a startup service (starts `edgerun-netboot` on boot):
-
-```bash
-make install-netboot IFACE=enp4s0
-```
-
-This installs:
-- `/opt/edgerun-metal` symlink to this repository
-- `/etc/edgerun-netboot.env`
-- `/etc/systemd/system/edgerun-netboot.service`
-
-Install without prompt:
-
-```bash
-FORCE=1 make install-netboot IFACE=enp4s0
-```
-
-Check status/logs:
-
-```bash
-make status-netboot
-make logs-netboot
-```
-
-Rebuild only EFI and restart service:
-
-```bash
-make
-make restart-netboot
-```
-
-Uninstall the service:
-
-```bash
-make uninstall-netboot
-nmcli dev set <iface> managed yes
-```
-
-Notes:
-- The installer runs `make` and `make netboot`.
-- It asks for confirmation unless `FORCE=1` is set.
-- The install uses `/opt/edgerun-metal` as a symlink so `make` updates in the repo are picked up for next PXE transfer.
-- If `nmcli` exists, installer runs `nmcli dev set <iface> managed no` for the selected interface.
-- Service command is:
-
-  ```bash
-  /opt/edgerun-metal/build/edgerun-netboot --iface ${EDGERUN_NETBOOT_IFACE} --efi ${EDGERUN_NETBOOT_EFI} --setup-iface --mode ${EDGERUN_NETBOOT_MODE} --http-port ${EDGERUN_NETBOOT_HTTP_PORT} --client-ip ${EDGERUN_NETBOOT_CLIENT_IP} --allow-mac=${EDGERUN_NETBOOT_ALLOW_MAC} --mgmt-dhcp=${EDGERUN_NETBOOT_MGMT_DHCP} --mgmt-mac=${EDGERUN_NETBOOT_MGMT_MAC} --mgmt-ip ${EDGERUN_NETBOOT_MGMT_IP} --force-http-for-pxe=${EDGERUN_NETBOOT_FORCE_HTTP_FOR_PXE}
-  ```
-
-  with environment file `/etc/edgerun-netboot.env` containing:
-
-  ```
-  EDGERUN_NETBOOT_IFACE=<interface>
-  EDGERUN_NETBOOT_EFI=/opt/edgerun-metal/build/esp/EFI/BOOT/BOOTX64.EFI
-  EDGERUN_NETBOOT_MODE=auto
-  EDGERUN_NETBOOT_HTTP_PORT=8081
-  EDGERUN_NETBOOT_MGMT_DHCP=0
-  EDGERUN_NETBOOT_MGMT_IP=10.42.0.10
-  EDGERUN_NETBOOT_MGMT_MAC=
-  EDGERUN_NETBOOT_CLIENT_IP=10.42.0.2
-  EDGERUN_NETBOOT_ALLOW_MAC=
-  EDGERUN_NETBOOT_FORCE_HTTP_FOR_PXE=0
-  ```
-
-## Always-on development agent
-
-Use `make install-agent` to enable an always-on local sync/test/report loop on this machine.
-Use `make install-agent-user` when GitHub credentials should be loaded from the user environment.
-
-```bash
-make install-agent
-make install-agent-user
-```
-
-The service:
-
-- pulls `main` from GitHub
-- runs `.edgerun/agent/run.sh`
-- collects diagnostics and artifacts
-- commits outputs to branch `agent/fw`
-- never commits anything to `main`
 
 Useful commands:
 
 ```bash
-make run-agent
-make run-agent-user
-make logs-agent
-make logs-agent-user
-make status-agent
-make status-agent-user
+make -C edgerun-metal netboot
+sudo systemctl restart edgerun-netboot
+sudo systemctl restart edgerun-pxe4011 || true
+sudo journalctl -u edgerun-netboot -f
 ```
 
-To stop it:
+Packet capture:
 
 ```bash
-make uninstall-agent
-make uninstall-agent-user
+sudo tcpdump -i eth0 -n -e -vvv -s0 'udp port 67 or udp port 68 or udp port 69 or udp port 4011 or tcp port 8081 or arp'
 ```
 
-Output layout:
+Expected DHCP options:
 
+```text
+Server-ID:       10.42.0.1
+Subnet-Mask:     255.255.255.0
+Default-Gateway: 10.42.0.1
+TFTP server:     10.42.0.1
+Bootfile:        BOOTX64.EFI or EFI/BOOT/BOOTX64.EFI
 ```
+
+## Always-on netboot service
+
+Service files:
+
+```text
+edgerun-metal/systemd/edgerun-netboot.service
+edgerun-metal/systemd/edgerun-pxe4011.service
+/etc/edgerun-netboot.env
+```
+
+Recommended env:
+
+```text
+EDGERUN_NETBOOT_IFACE=eth0
+EDGERUN_NETBOOT_MODE=auto
+EDGERUN_NETBOOT_ALLOW_MAC=00:d8:61:d7:50:30
+EDGERUN_NETBOOT_CLIENT_IP=10.42.0.2
+EDGERUN_NETBOOT_MGMT_DHCP=1
+EDGERUN_NETBOOT_MGMT_MAC=
+EDGERUN_NETBOOT_MGMT_IP=10.42.0.10
+EDGERUN_NETBOOT_HTTP_PORT=8081
+EDGERUN_NETBOOT_FORCE_HTTP_FOR_PXE=0
+EDGERUN_NETBOOT_EFI=/home/ken/edgerun-c/edgerun-metal/build/esp/EFI/BOOT/BOOTX64.EFI
+```
+
+## Development agent
+
+The user service pulls `main`, runs `.edgerun/agent/run.sh`, collects reports, and pushes output to `agent/fw`.
+
+Commands:
+
+```bash
+make -C edgerun-metal install-agent-user
+make -C edgerun-metal run-agent-user
+make -C edgerun-metal logs-agent-user
+make -C edgerun-metal status-agent-user
+```
+
+The agent must not be blocked by generated files. Build outputs are ignored:
+
+```text
+edgerun-metal/build/
 agent-output/
-  latest/
-    summary.txt
-    job-id.txt
-    job-action.txt
-    job-result.txt
-    job.txt
-    run.log
-    git-status.txt
-    build.txt
-    netboot-status.txt
-    netboot-journal.txt
-    network.txt
-    sockets.txt
-    boot-artifacts.txt
-    timestamp.txt
-  history/
-    <timestamp>/
-      ...same files as latest...
+/tmp/
+*.log
 ```
 
-`run.sh` default behavior:
+If agent reports dirty tree from build output, fix `.gitignore` or remove tracked generated files. Do not commit generated binaries back to main.
 
-- `make`
-- `make netboot`
-- if `.edgerun/agent/jobs/current.env` exists, run `.edgerun/agent/job-runner.sh`
-- call `.edgerun/agent/collect.sh`
+## Local agent next goal
 
-To change behavior, edit `.edgerun/agent/run.sh` in `main` and push.
-The laptop executes the latest `main` branch script on the next timer run.
-Results are committed to branch `agent/fw` (not `main`).
+Build and test the `pci` profile:
 
-Current default job is `.edgerun/agent/jobs/current.env`:
-
-- `ACTION=set-netboot-env`
-- configures:
-  - `EDGERUN_NETBOOT_IFACE`
-  - `EDGERUN_NETBOOT_MODE`
-  - `EDGERUN_NETBOOT_ALLOW_MAC`
-  - `EDGERUN_NETBOOT_CLIENT_IP`
-  - `EDGERUN_NETBOOT_MGMT_DHCP`
-  - `EDGERUN_NETBOOT_MGMT_MAC`
-  - `EDGERUN_NETBOOT_MGMT_IP`
-  - `EDGERUN_NETBOOT_HTTP_PORT`
-  - `EDGERUN_NETBOOT_FORCE_HTTP_FOR_PXE`
-  - `EDGERUN_NETBOOT_EFI`
-
-Allowed action set is:
-
-- `noop`
-- `collect`
-- `build`
-- `build-netboot`
-- `restart-netboot`
-- `set-netboot-env`
-- `http-self-test`
-- `status`
-
-Allowed keys are parsed from `jobs/current.env` only; all others are ignored.
-Completed job IDs are recorded as:
-
-- `~/.local/state/edgerun-agent/jobs/<JOB_ID>.done`
-
-## Network boot later
-
-Serve `build/esp/EFI/BOOT/BOOTX64.EFI` as `BOOTX64.EFI` through an existing PXE/iPXE/UEFI HTTP/TFTP boot chain.
-
-## Layout
-
+```bash
+cd /home/ken/edgerun-c
+git pull --ff-only origin main
+make -C edgerun-metal pci
+sudo systemctl restart edgerun-netboot
 ```
-edgerun-metal/
-  Makefile
-  README.md
-  core/
-    efi_main.c
-    er_types.h
-    er_print.c
-    er_print.h
-    wasm_vm.c
-    wasm_vm.h
-    wasm_test_module.h
-    wasm_pci_scan_module.h
-  modules/
-    test_return_123/
-      test_return_123.wat
-      test_return_123.c
-    pci_scan/
-      pci_scan.wat
-  scripts/
-    run-qemu.sh
-    clean.sh
-  systemd/
-    edgerun-netboot.env.example
-    edgerun-netboot.service
-  tools/
-    install-netboot-service.sh
-    uninstall-netboot-service.sh
-    edgerun-agent/
-      README.md
-      edgerun-agent.sh
-      install-agent-service.sh
-      uninstall-agent-service.sh
-    edgerun-netboot/
-      Makefile
-      README.md
-      main.c
-  .edgerun/
-    agent/
-      collect.sh
-      redact.sh
-      README.md
-      run.sh
+
+Expected real-hardware screen output:
+
+```text
+EdgeRun Metal Core v0.2
+UEFI boot OK
+boot profile: pci
+PCI target scan: nvidia/nvme/ethernet
+  target: nvidia ...
+  target: nvme ...
+  target: ethernet ...
+PCI target scan done
+Press any key to halt...
+```
+
+If build fails with unused profile functions, the fix is to avoid preprocessor-removing profile calls or mark unused functions intentionally. Current intended code path uses runtime `if`/profile dispatch so all profile functions remain referenced.
+
+## Bus model
+
+Most high-value desktop devices start at PCI/PCIe discovery:
+
+```text
+GPU: PCIe
+NVMe: PCIe
+Ethernet: PCIe or chipset PCIe
+USB/xHCI: PCIe controller
+SATA/AHCI: PCIe-visible controller
+Audio/HDA: PCIe-visible device
+Chipset devices: PCI/PCIe enumerated
+```
+
+Other buses/layers to add later:
+
+```text
+MMIO: register access after BAR discovery
+I/O ports: legacy x86 controls, serial, PCI config CF8/CFC
+ACPI: topology, memory, interrupts, timers, power
+APIC/MSI/MSI-X: interrupts
+USB/xHCI: USB devices behind PCI controller
+I2C/SMBus: sensors, SPD, board controllers
+SPI/eSPI/LPC: firmware chip, embedded controller, super I/O
+```
+
+Practical order:
+
+```text
+1. PCI config scan
+2. BAR discovery
+3. Read-only MMIO mapping
+4. ACPI table discovery
+5. Interrupts
+6. DMA
+7. Wasm driver runtime
 ```
 
 ## Next milestones
 
-- M1: `ExitBootServices` and own framebuffer.
-- M2: memory map copy.
-- M3: page allocator.
-- M4: PCI config hostcalls. **DONE**
-- M5: load Wasm module over serial/network.
-- M6: hot-swappable Wasm modules.
+### M3: concise PCI target scanner
 
-## Real hardware test notes
+Status: implemented in native core profile `pci`.
 
-- Copy `build/esp/EFI/BOOT/BOOTX64.EFI` to removable media or ESP and boot as a UEFI application.
-- Keep output visible on screen, verify at least:
-  - `EdgeRun Metal Core v0.2`
-  - `UEFI boot OK`
-  - regression `wasm main() returned: 123`
-  - PCI scan lines for discovered functions
-- For network boot, expose the same path as `BOOTX64.EFI` in your PXE/iPXE/UEFI HTTP or TFTP loader.
+Targets:
+
+- NVIDIA vendor `0x10de`
+- NVMe class `0x0108xx`
+- Ethernet class `0x0200xx`
+
+### M4: MMIO read-only hostcalls
+
+Add:
+
+```text
+edgerun.mmio.map(phys, len) -> handle
+edgerun.mmio.read32(handle, offset) -> i64
+```
+
+No MMIO writes yet.
+
+### M5: NVIDIA BAR0 safe probe
+
+From the core or Wasm:
+
+- find vendor `0x10de`
+- inspect BAR0/BAR1
+- map BAR0 read-only
+- read a tiny fixed set of safe offsets
+- print values
+
+No firmware loading. No mode setting. No compute dispatch yet.
+
+## ExitBootServices policy
+
+Do not call `ExitBootServices` yet.
+
+Stay in UEFI app mode until:
+
+- boot output is stable
+- serial mirror is proven
+- PCI/BAR discovery works
+- read-only MMIO probing works
+
+Only exit Boot Services when firmware services actively block ownership of hardware.
