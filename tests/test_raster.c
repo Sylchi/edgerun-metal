@@ -7,6 +7,9 @@
 static const uint16_t VR_RASTER_TEST_MAX_X = 100u;
 static const uint16_t VR_RASTER_TEST_MAX_Y = 80u;
 static const uint16_t VR_RASTER_TEST_ZERO_COUNT = 0u;
+static const uint8_t VR_RASTER_TEST_ALPHA_HIGH = 240u;
+static const uint8_t VR_RASTER_TEST_ALPHA_LOW = 16u;
+static const uint8_t VR_RASTER_TEST_ALPHA_MAX = 255u;
 
 static bool test_bitmap_has_coverage(const uint8_t* bitmap, int w, int h) {
   size_t total = (size_t)w * (size_t)h;
@@ -14,6 +17,17 @@ static bool test_bitmap_has_coverage(const uint8_t* bitmap, int w, int h) {
     if (bitmap[i] > 0u) return true;
   }
   return false;
+}
+
+static uint8_t test_bitmap_max_alpha(const uint8_t* bitmap, int w, int h) {
+  size_t total = (size_t)w * (size_t)h;
+  uint8_t max = 0u;
+  for (size_t i = 0; i < total; ++i) {
+    if (bitmap[i] > max) {
+      max = bitmap[i];
+    }
+  }
+  return max;
 }
 
 static void test_rasterize_square_outline(void) {
@@ -47,10 +61,18 @@ static void test_rasterize_square_outline(void) {
   int out_top = VR_RASTER_TEST_ZERO_COUNT;
 
   vr_status_t st = vr_rasterize_outline(&face, &outline, &bitmap, &out_w, &out_h, &out_left, &out_top);
-  test_expect_status(st, VR_OK, "raster: square-like outline returns OK");
+    test_expect_status(st, VR_OK, "raster: square-like outline returns OK");
   if (st == VR_OK) {
     test_expect(out_w > 0 && out_h > 0, "raster: square-like outline produces bitmap dimensions");
+    test_expect(bitmap[(size_t)(out_h / 2) * (size_t)out_w + (out_w / 2)] >= VR_RASTER_TEST_ALPHA_HIGH,
+      "raster: square-like outline center is high alpha");
+    test_expect(test_bitmap_max_alpha(bitmap, out_w, out_h) == VR_RASTER_TEST_ALPHA_MAX,
+      "raster: square-like outline reaches saturated SDF alpha");
+    test_expect(bitmap[0u] <= VR_RASTER_TEST_ALPHA_LOW,
+      "raster: square-like outline corner is background");
     test_expect(test_bitmap_has_coverage(bitmap, out_w, out_h), "raster: square-like outline writes non-zero coverage");
+    test_expect(bitmap[(size_t)(out_h / 2) * (size_t)out_w + (out_w / 2)] > bitmap[(size_t)(out_w * out_h) - 1u],
+      "raster: square-like center alpha brighter than corner");
     free(bitmap);
   }
 }

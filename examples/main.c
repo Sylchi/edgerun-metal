@@ -28,8 +28,26 @@ typedef struct {
   size_t range_count;
 } demo_layer_render_t;
 
+typedef struct {
+  SDL_Window* window;
+  SDL_Renderer* renderer;
+  sdl_gl_iface_t gl_iface;
+  vr_font_face_t* face;
+  uint32_t* codepoints;
+  size_t codepoint_count;
+  demo_layer_render_t* layer_render_data;
+  SDL_Vertex** layer_vertices;
+  size_t* layer_vertex_counts;
+  bool sdl_ready;
+} sdl_demo_app_t;
+
 static const uint16_t VR_UI_WINDOW_WIDTH = 960u;
 static const uint16_t VR_UI_WINDOW_HEIGHT = 240u;
+static const uint32_t VR_TEXTURE_SLOT_INITIAL_CAP = 16u;
+static const uint32_t VR_RENDER_DELAY_MS = 16u;
+static const uint32_t VR_UTF8_MAX_ASCII = 0x80u;
+static const uint8_t VR_RGBA_CHANNEL_MAX = 255u;
+static const char* const VR_WEIGHT_AXIS_TAG = "wght";
 static const uint8_t VR_UI_BACKGROUND_RED = 0u;
 static const uint8_t VR_UI_BACKGROUND_GREEN = 0u;
 static const uint8_t VR_UI_BACKGROUND_BLUE = 0u;
@@ -37,7 +55,10 @@ static const uint8_t VR_UI_BACKGROUND_ALPHA = 255u;
 static const char* const VR_FALLBACK_FONT_PATH = "fonts/Geist[wght].ttf";
 static const char* const VR_DEFAULT_TEXT = "Geist variable font in SDL";
 static const float VR_TEXT_RENDER_X = 40.0f;
-#define VR_DEMO_LAYER_COUNT 4u
+static const int32_t VR_SDL_RENDERER_INDEX_AUTO = -1;
+typedef enum {
+  VR_DEMO_LAYER_COUNT = 4u
+} vr_demo_constants_t;
 
 static const demo_layer_t VR_DEMO_LAYERS[VR_DEMO_LAYER_COUNT] = {
   {26.0f, 250.0f, VR_TEXT_RENDER_X, 48.0f},
@@ -45,6 +66,61 @@ static const demo_layer_t VR_DEMO_LAYERS[VR_DEMO_LAYER_COUNT] = {
   {46.0f, 700.0f, VR_TEXT_RENDER_X, 128.0f},
   {58.0f, 900.0f, VR_TEXT_RENDER_X, 176.0f},
 };
+static void sdl_free_demo_layers(demo_layer_render_t* layers, size_t count);
+
+static void sdl_demo_release(sdl_demo_app_t* app) {
+  if (!app) {
+    return;
+  }
+
+  if (app->layer_vertices) {
+    for (size_t i = 0u; i < VR_DEMO_LAYER_COUNT; ++i) {
+      free(app->layer_vertices[i]);
+      app->layer_vertices[i] = NULL;
+    }
+    free(app->layer_vertices);
+    app->layer_vertices = NULL;
+  }
+  if (app->layer_vertex_counts) {
+    free(app->layer_vertex_counts);
+    app->layer_vertex_counts = NULL;
+  }
+
+  if (app->layer_render_data) {
+    sdl_free_demo_layers(app->layer_render_data, VR_DEMO_LAYER_COUNT);
+    free(app->layer_render_data);
+    app->layer_render_data = NULL;
+  }
+
+  free(app->codepoints);
+  app->codepoints = NULL;
+  app->codepoint_count = 0u;
+
+  if (app->face) {
+    vr_font_face_destroy(app->face);
+    app->face = NULL;
+  }
+
+  if (app->gl_iface.textures) {
+    free(app->gl_iface.textures);
+    app->gl_iface.textures = NULL;
+  }
+  app->gl_iface.texture_cap = 0u;
+  app->gl_iface.next_texture_id = 1u;
+
+  if (app->renderer) {
+    SDL_DestroyRenderer(app->renderer);
+    app->renderer = NULL;
+  }
+  if (app->window) {
+    SDL_DestroyWindow(app->window);
+    app->window = NULL;
+  }
+  if (app->sdl_ready) {
+    SDL_Quit();
+    app->sdl_ready = false;
+  }
+}
 
 static void sdl_free_demo_layers(demo_layer_render_t* layers, size_t count) {
   for (size_t i = 0u; i < count; ++i) {
@@ -76,7 +152,7 @@ static vr_status_t sdl_build_demo_layers(
       fprintf(stderr, "fatal: failed to set font size %.2f: %u\n", layer_spec->px_size, st);
       return st;
     }
-    st = vr_font_set_axis(face, "wght", layer_spec->weight);
+    st = vr_font_set_axis(face, VR_WEIGHT_AXIS_TAG, layer_spec->weight);
     if (st != VR_OK) {
       fprintf(stderr, "fatal: failed to set wght %.1f: %u\n", layer_spec->weight, st);
       return st;
@@ -123,8 +199,13 @@ static void sdl_convert_gray_to_rgba(const uint8_t* gray, int width, int height,
   size_t pixel_count = (size_t)width * (size_t)height;
   uint32_t* out = (uint32_t*)rgba;
   for (size_t i = 0; i < pixel_count; ++i) {
-    uint8_t g = gray ? gray[i] : 0u;
-    out[i] = SDL_MapRGBA(rgba_format, 255u, 255u, 255u, g);
+    uint8_t alpha = gray ? gray[i] : 0u;
+    out[i] = SDL_MapRGBA(
+      rgba_format,
+      VR_RGBA_CHANNEL_MAX,
+      VR_RGBA_CHANNEL_MAX,
+      VR_RGBA_CHANNEL_MAX,
+      alpha);
   }
   SDL_FreeFormat(rgba_format);
 }
@@ -133,7 +214,7 @@ static void sdl_ensure_texture_slot(sdl_gl_iface_t* iface, uint32_t texture_id) 
   if ((size_t)texture_id < iface->texture_cap) {
     return;
   }
-  size_t next_cap = iface->texture_cap == 0 ? 16u : iface->texture_cap * 2u;
+  size_t next_cap = iface->texture_cap == 0u ? VR_TEXTURE_SLOT_INITIAL_CAP : iface->texture_cap * 2u;
   while (next_cap <= (size_t)texture_id) {
     next_cap *= 2u;
   }
@@ -143,7 +224,10 @@ static void sdl_ensure_texture_slot(sdl_gl_iface_t* iface, uint32_t texture_id) 
     exit(1);
   }
   if (next_cap > iface->texture_cap) {
-    memset(next + iface->texture_cap, 0, (next_cap - iface->texture_cap) * sizeof(SDL_Texture*));
+    memset(
+      next + iface->texture_cap,
+      0,
+      (next_cap - iface->texture_cap) * sizeof(SDL_Texture*));
   }
   iface->textures = next;
   iface->texture_cap = next_cap;
@@ -227,7 +311,11 @@ static SDL_Vertex* build_render_vertices(const vr_vertex_t* verts, size_t vertex
     exit(1);
   }
 
-  SDL_Color white = {255, 255, 255, 255};
+  SDL_Color white = {
+    VR_RGBA_CHANNEL_MAX,
+    VR_RGBA_CHANNEL_MAX,
+    VR_RGBA_CHANNEL_MAX,
+    VR_RGBA_CHANNEL_MAX};
   for (size_t i = 0; i < vertex_count; ++i) {
     rv[i].position.x = verts[i].x;
     rv[i].position.y = verts[i].y;
@@ -256,7 +344,7 @@ static uint32_t utf8_to_codepoints(const char* text, uint32_t** out_codepoints, 
   }
   for (size_t i = 0; i < len; ++i) {
     unsigned char ch = (unsigned char)text[i];
-    if (ch >= 0x80u) {
+    if (ch >= VR_UTF8_MAX_ASCII) {
       free(cps);
       return VR_ERR_UNSUPPORTED;
     }
@@ -268,57 +356,63 @@ static uint32_t utf8_to_codepoints(const char* text, uint32_t** out_codepoints, 
 }
 
 int main(int argc, char** argv) {
-  const char* font_path = argc > 1 ? argv[1] : VR_FALLBACK_FONT_PATH;
+  const bool using_default_font = (argc <= 1);
+  const char* font_path = using_default_font ? VR_FALLBACK_FONT_PATH : argv[1];
   const char* text = argc > 2 ? argv[2] : VR_DEFAULT_TEXT;
+  int exit_code = 1;
 
+  sdl_demo_app_t app = {
+    .gl_iface = {0},
+    .window = NULL,
+    .renderer = NULL,
+    .face = NULL,
+    .codepoints = NULL,
+    .codepoint_count = 0u,
+    .layer_render_data = NULL,
+    .layer_vertices = NULL,
+    .layer_vertex_counts = NULL,
+    .sdl_ready = false,
+  };
+  app.gl_iface.next_texture_id = 1u;
+
+  vr_status_t st = VR_OK;
   if (SDL_Init(SDL_INIT_VIDEO) != 0) {
     fprintf(stderr, "fatal: SDL_Init failed: %s\n", SDL_GetError());
-    return 1;
+    goto cleanup;
   }
+  app.sdl_ready = true;
 
-  SDL_Window* window = SDL_CreateWindow(
+  app.window = SDL_CreateWindow(
     "VR Font SDL Demo",
     SDL_WINDOWPOS_CENTERED,
     SDL_WINDOWPOS_CENTERED,
     VR_UI_WINDOW_WIDTH,
     VR_UI_WINDOW_HEIGHT,
     SDL_WINDOW_SHOWN);
-  if (!window) {
+  if (!app.window) {
     fprintf(stderr, "fatal: SDL_CreateWindow failed: %s\n", SDL_GetError());
-    SDL_Quit();
-    return 1;
+    goto cleanup;
   }
 
-  SDL_Renderer* renderer = SDL_CreateRenderer(
-    window,
-    -1,
+  app.renderer = SDL_CreateRenderer(
+    app.window,
+    VR_SDL_RENDERER_INDEX_AUTO,
     SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
-  if (!renderer) {
+  if (!app.renderer) {
     fprintf(stderr, "fatal: SDL_CreateRenderer failed: %s\n", SDL_GetError());
-    SDL_DestroyWindow(window);
-    SDL_Quit();
-    return 1;
+    goto cleanup;
   }
-  if (SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_NONE) != 0) {
+  if (SDL_SetRenderDrawBlendMode(app.renderer, SDL_BLENDMODE_BLEND) != 0) {
     fprintf(stderr, "fatal: failed to configure draw blend mode: %s\n", SDL_GetError());
-    SDL_DestroyRenderer(renderer);
-    SDL_DestroyWindow(window);
-    SDL_Quit();
-    return 1;
+    goto cleanup;
   }
 
-  sdl_gl_iface_t iface = {
-    .renderer = renderer,
-    .textures = NULL,
-    .texture_cap = 0,
-    .next_texture_id = 1u,
-  };
-
+  app.gl_iface.renderer = app.renderer;
   vr_gl_iface_t gi = {0};
   gi.create_texture = sdl_create_texture;
   gi.update_texture = sdl_update_texture;
   gi.destroy_texture = sdl_destroy_texture;
-  gi.user = &iface;
+  gi.user = &app.gl_iface;
 
   vr_font_config_t cfg = {
     .px_size = VR_FONT_DEFAULT_PX_SIZE,
@@ -327,95 +421,53 @@ int main(int argc, char** argv) {
     .atlas_pad = VR_FONT_DEFAULT_ATLAS_PADDING,
     .gl = gi,
   };
-
-  vr_font_face_t* face = NULL;
-  vr_status_t st = vr_font_face_create(&face, font_path, &cfg);
+  st = vr_font_face_create(&app.face, font_path, &cfg);
   if (st != VR_OK) {
     fprintf(stderr, "fatal: failed to load face '%s' status=%u\n", font_path, st);
-    if (argc <= 1) {
+    if (using_default_font) {
       fprintf(stderr, "download source: https://raw.githubusercontent.com/vercel/geist-font/main/fonts/Geist/variable/Geist%%5Bwght%%5D.ttf\n");
       fprintf(stderr, "save it as fonts/Geist[wght].ttf\n");
     }
-    free(iface.textures);
-    SDL_DestroyRenderer(renderer);
-    SDL_DestroyWindow(window);
-    SDL_Quit();
-    return 1;
+    goto cleanup;
   }
 
-  uint32_t* cps = NULL;
-  size_t cp_count = 0;
-  if (utf8_to_codepoints(text, &cps, &cp_count) != VR_OK) {
-    fprintf(stderr, "fatal: unsupported characters in text\n");
-    vr_font_face_destroy(face);
-    SDL_DestroyRenderer(renderer);
-    SDL_DestroyWindow(window);
-    SDL_Quit();
-    free(iface.textures);
-    return 1;
-  }
-
-  demo_layer_render_t* demo_layers = (demo_layer_render_t*)calloc(VR_DEMO_LAYER_COUNT, sizeof(demo_layer_render_t));
-  if (!demo_layers) {
-    free(cps);
-    vr_font_face_destroy(face);
-    SDL_DestroyRenderer(renderer);
-    SDL_DestroyWindow(window);
-    SDL_Quit();
-    free(iface.textures);
-    return 1;
-  }
-
-  st = sdl_build_demo_layers(face, cps, cp_count, demo_layers, VR_DEMO_LAYER_COUNT);
-  free(cps);
+  st = utf8_to_codepoints(text, &app.codepoints, &app.codepoint_count);
   if (st != VR_OK) {
-    sdl_free_demo_layers(demo_layers, VR_DEMO_LAYER_COUNT);
-    free(demo_layers);
-    vr_font_face_destroy(face);
-    SDL_DestroyRenderer(renderer);
-    SDL_DestroyWindow(window);
-    SDL_Quit();
-    free(iface.textures);
-    return 1;
+    fprintf(stderr, "fatal: unsupported characters in text\n");
+    goto cleanup;
   }
 
-  SDL_Vertex** layer_render_verts = (SDL_Vertex**)calloc(VR_DEMO_LAYER_COUNT, sizeof(SDL_Vertex*));
-  size_t* layer_render_counts = (size_t*)calloc(VR_DEMO_LAYER_COUNT, sizeof(size_t));
-  if (!layer_render_verts || !layer_render_counts) {
-    free(layer_render_verts);
-    free(layer_render_counts);
-    sdl_free_demo_layers(demo_layers, VR_DEMO_LAYER_COUNT);
-    free(demo_layers);
-    vr_font_face_destroy(face);
-    SDL_DestroyRenderer(renderer);
-    SDL_DestroyWindow(window);
-    SDL_Quit();
-    free(iface.textures);
-    return 1;
+  app.layer_render_data = (demo_layer_render_t*)calloc(VR_DEMO_LAYER_COUNT, sizeof(demo_layer_render_t));
+  if (!app.layer_render_data) {
+    goto cleanup;
+  }
+
+  st = sdl_build_demo_layers(
+    app.face,
+    app.codepoints,
+    app.codepoint_count,
+    app.layer_render_data,
+    VR_DEMO_LAYER_COUNT);
+  if (st != VR_OK) {
+    goto cleanup;
+  }
+
+  app.layer_vertices = (SDL_Vertex**)calloc(VR_DEMO_LAYER_COUNT, sizeof(SDL_Vertex*));
+  app.layer_vertex_counts = (size_t*)calloc(VR_DEMO_LAYER_COUNT, sizeof(size_t));
+  if (!app.layer_vertices || !app.layer_vertex_counts) {
+    goto cleanup;
   }
 
   for (size_t i = 0u; i < VR_DEMO_LAYER_COUNT; ++i) {
-    if (demo_layers[i].range_count == 0u) {
+    if (app.layer_render_data[i].range_count == 0u) {
       continue;
     }
-    layer_render_verts[i] = build_render_vertices(
-      demo_layers[i].verts,
-      demo_layers[i].vertex_count,
-      &layer_render_counts[i]);
-    if (!layer_render_verts[i]) {
-      for (size_t j = 0u; j < i; ++j) {
-        free(layer_render_verts[j]);
-      }
-      free(layer_render_verts);
-      free(layer_render_counts);
-      sdl_free_demo_layers(demo_layers, VR_DEMO_LAYER_COUNT);
-      free(demo_layers);
-      vr_font_face_destroy(face);
-      SDL_DestroyRenderer(renderer);
-      SDL_DestroyWindow(window);
-      SDL_Quit();
-      free(iface.textures);
-      return 1;
+    app.layer_vertices[i] = build_render_vertices(
+      app.layer_render_data[i].verts,
+      app.layer_render_data[i].vertex_count,
+      &app.layer_vertex_counts[i]);
+    if (!app.layer_vertices[i]) {
+      goto cleanup;
     }
   }
 
@@ -431,45 +483,45 @@ int main(int argc, char** argv) {
     }
 
     SDL_SetRenderDrawColor(
-      renderer,
+      app.renderer,
       VR_UI_BACKGROUND_RED,
       VR_UI_BACKGROUND_GREEN,
       VR_UI_BACKGROUND_BLUE,
       VR_UI_BACKGROUND_ALPHA);
-    SDL_RenderClear(renderer);
+    SDL_RenderClear(app.renderer);
 
     for (size_t l = 0u; l < VR_DEMO_LAYER_COUNT; ++l) {
-      if (demo_layers[l].range_count == 0u || layer_render_counts[l] == 0u) {
+      if (app.layer_render_data[l].range_count == 0u || app.layer_vertex_counts[l] == 0u) {
         continue;
       }
-      for (size_t r = 0u; r < demo_layers[l].range_count; ++r) {
-        const vr_vertex_atlas_range_t* range = &demo_layers[l].ranges[r];
+      for (size_t r = 0u; r < app.layer_render_data[l].range_count; ++r) {
+        const vr_vertex_atlas_range_t* range = &app.layer_render_data[l].ranges[r];
         if (range->vertex_count == 0u) {
           continue;
         }
-        if (range->start_vertex + range->vertex_count > demo_layers[l].vertex_count) {
+        if (range->start_vertex + range->vertex_count > app.layer_render_data[l].vertex_count) {
           fprintf(stderr, "fatal: malformed atlas range\n");
           running = false;
           break;
         }
 
         uint32_t tex = 0u;
-        if (vr_font_atlas_texture(face, range->atlas_id, &tex) != VR_OK) {
+        if (vr_font_atlas_texture(app.face, range->atlas_id, &tex) != VR_OK) {
           fprintf(stderr, "fatal: invalid atlas id in range %zu\n", r);
           running = false;
           break;
         }
-        if (tex >= iface.texture_cap || !iface.textures[tex]) {
+        if (tex >= app.gl_iface.texture_cap || !app.gl_iface.textures[tex]) {
           fprintf(stderr, "fatal: missing texture for atlas id %u\n", range->atlas_id);
           running = false;
           break;
         }
 
-        SDL_Vertex* batch_start = layer_render_verts[l] + range->start_vertex;
+        SDL_Vertex* batch_start = app.layer_vertices[l] + range->start_vertex;
         int batch_count = (int)range->vertex_count;
         if (SDL_RenderGeometry(
-              renderer,
-              iface.textures[tex],
+              app.renderer,
+              app.gl_iface.textures[tex],
               batch_start,
               batch_count,
               NULL,
@@ -484,23 +536,13 @@ int main(int argc, char** argv) {
       }
     }
 
-    SDL_RenderPresent(renderer);
-    SDL_Delay(16);
+    SDL_RenderPresent(app.renderer);
+    SDL_Delay(VR_RENDER_DELAY_MS);
   }
 
-  for (size_t i = 0u; i < VR_DEMO_LAYER_COUNT; ++i) {
-    free(layer_render_verts[i]);
-    vr_font_free_vertices(face, demo_layers[i].verts);
-    vr_font_free_vertex_atlas_ranges(demo_layers[i].ranges);
-  }
-  free(layer_render_verts);
-  free(layer_render_counts);
-  free(demo_layers);
-  vr_font_face_destroy(face);
+  exit_code = 0;
 
-  SDL_DestroyRenderer(renderer);
-  SDL_DestroyWindow(window);
-  SDL_Quit();
-  free(iface.textures);
-  return 0;
+cleanup:
+  sdl_demo_release(&app);
+  return exit_code;
 }

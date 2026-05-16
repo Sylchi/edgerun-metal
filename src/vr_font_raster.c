@@ -1,5 +1,6 @@
 #include "vr_font_internal.h"
 
+#include <float.h>
 #include <math.h>
 #include <limits.h>
 #include <string.h>
@@ -21,17 +22,22 @@
 
 static const float VR_F2DOT14_SCALE = 16384.0f;
 static const float VR_FIXED_SCALE = 65536.0f;
-static const float VR_RASTER_ALPHA_SCALE = 255.0f;
 static const size_t VR_RASTER_SEGMENT_INITIAL_CAP = 64u;
 static const size_t VR_RASTER_OUTLINE_POINT_INITIAL_CAP = 16u;
 static const float VR_RASTER_SEGMENT_TOLERANCE = 1e-7f;
-static const int VR_RASTER_SUPERSAMPLE = 2;
+static const int VR_RASTER_SUPERSAMPLE = 4;
+static const float VR_RASTER_SDF_SPREAD = 1.0f;
+static const float VR_RASTER_SDF_MID_ALPHA = 128.0f;
+static const float VR_RASTER_SDF_EDGE_SCALE = 255.0f;
+static const float VR_RASTER_SDF_SAMPLE_OFFSET = 0.5f;
+static const float VR_RASTER_SDF_PADDING_SCALE = 1.0f;
 static const int VR_RASTER_PADDING = 2;
 static const int VR_RASTER_MAX_DEPTH = 8;
 static const int VR_RASTER_TESSELLATION_SOFT_LIMIT = 12;
 static const int VR_RASTER_TESSELLATION_HARD_LIMIT = 16;
-static const float VR_RASTER_QUAD_BEZIER_TOLERANCE = 0.25f;
-static const float VR_RASTER_SAMPLE_OFFSETS[2] = {0.25f, 0.75f};
+static const float VR_RASTER_QUAD_BEZIER_TOLERANCE = 0.01f;
+static const float VR_RASTER_ALPHA_MIN = 0.0f;
+static const float VR_RASTER_ALPHA_MAX = 255.0f;
 
 static vr_status_t vr_line_segments_from_quad(const vr_outline_point_t p0, const vr_outline_point_t p1, const vr_outline_point_t p2,
   vr_segment_t** segs, size_t* count, size_t* cap, float tolerance_sq, int depth);
@@ -694,10 +700,10 @@ vr_status_t vr_load_glyph_outline(const vr_font_face_t* face, uint16_t glyph_id,
 }
  
 
-static int vr_point_in_bbox(float x, float y, const vr_segment_t* seg) {
+static int vr_segment_crossing_sign(float x, float y, const vr_segment_t* seg) {
   float y1 = seg->y1;
   float y2 = seg->y2;
-  if ((y1 <= y) == (y2 <= y)) {
+  if (!((y1 <= y && y2 > y) || (y2 <= y && y1 > y))) {
     return 0;
   }
 
@@ -709,7 +715,71 @@ static int vr_point_in_bbox(float x, float y, const vr_segment_t* seg) {
   }
 
   float x_int = (x2 - x1) * (y - y1) / dy + x1;
-  return x < x_int;
+  if (x >= x_int) {
+    return 0;
+  }
+  return (y2 > y1) ? 1 : -1;
+}
+
+static float vr_clamp_float(float v, float lo, float hi) {
+  if (v < lo) return lo;
+  if (v > hi) return hi;
+  return v;
+}
+
+static float vr_sample_offset(int index, int samples) {
+  return (float)(index + 0.5f) / (float)samples - VR_RASTER_SDF_SAMPLE_OFFSET;
+}
+
+static float vr_segment_distance_sq(float px, float py, const vr_segment_t* seg) {
+  float vx = seg->x2 - seg->x1;
+  float vy = seg->y2 - seg->y1;
+  float wx = px - seg->x1;
+  float wy = py - seg->y1;
+
+  float seg_len_sq = vx * vx + vy * vy;
+  float t;
+  if (seg_len_sq <= VR_RASTER_SEGMENT_TOLERANCE) {
+    t = 0.0f;
+  } else {
+    t = (wx * vx + wy * vy) / seg_len_sq;
+  }
+
+  t = vr_clamp_float(t, 0.0f, 1.0f);
+  float proj_x = seg->x1 + t * vx;
+  float proj_y = seg->y1 + t * vy;
+  float dx = px - proj_x;
+  float dy = py - proj_y;
+  return dx * dx + dy * dy;
+}
+
+static float vr_signed_distance_to_outline(float px, float py, const vr_segment_t* segments, size_t seg_count) {
+  float nearest_sq = FLT_MAX;
+  for (size_t s = 0u; s < seg_count; ++s) {
+    float d_sq = vr_segment_distance_sq(px, py, &segments[s]);
+    if (d_sq < nearest_sq) {
+      nearest_sq = d_sq;
+    }
+  }
+
+  float nearest = sqrtf(nearest_sq);
+  int winding = 0;
+  for (size_t s = 0u; s < seg_count; ++s) {
+    winding += vr_segment_crossing_sign(px, py, &segments[s]);
+  }
+
+  int sign = (winding == 0) ? -1 : 1;
+  return (float)sign * nearest;
+}
+
+static uint8_t vr_alpha_from_signed_distance(float signed_distance, float spread) {
+  if (spread <= VR_RASTER_SEGMENT_TOLERANCE) {
+    return 0u;
+  }
+
+  float normalized = (float)VR_RASTER_SDF_MID_ALPHA + (signed_distance * VR_RASTER_SDF_EDGE_SCALE) / spread;
+  float clamped = vr_clamp_float(normalized, VR_RASTER_ALPHA_MIN, VR_RASTER_ALPHA_MAX);
+  return (uint8_t)(clamped + 0.5f);
 }
 
 vr_status_t vr_rasterize_outline(const vr_font_face_t* face, const vr_glyph_outline_t* outline,
@@ -724,17 +794,22 @@ vr_status_t vr_rasterize_outline(const vr_font_face_t* face, const vr_glyph_outl
   int x1 = (int)ceilf((float)outline->x_max * scale);
   int y1 = (int)ceilf((float)outline->y_max * scale);
 
-  int w = x1 - x0;
-  int h = y1 - y0;
+  int base_w = x1 - x0;
+  int base_h = y1 - y0;
+  if (base_w <= 0 || base_h <= 0) return VR_ERR_UNSUPPORTED;
+
+  int pad = (int)ceilf(VR_RASTER_SDF_SPREAD * VR_RASTER_SDF_PADDING_SCALE);
+  if (pad < VR_RASTER_PADDING) {
+    pad = VR_RASTER_PADDING;
+  }
+
+  int w = base_w + (pad * 2);
+  int h = base_h + (pad * 2);
   if (w <= 0 || h <= 0) return VR_ERR_UNSUPPORTED;
 
-  const int pad = VR_RASTER_PADDING;
-  const int base_w = w;
-  const int base_h = h;
-  w += pad;
-  h += pad;
   const int ss = VR_RASTER_SUPERSAMPLE;
   const float inv_ss = 1.0f / (float)(ss * ss);
+  const float sdf_pad_f = VR_RASTER_SDF_SPREAD * VR_RASTER_SDF_PADDING_SCALE;
 
   vr_segment_t* segments = NULL;
   size_t seg_count = 0;
@@ -773,31 +848,22 @@ vr_status_t vr_rasterize_outline(const vr_font_face_t* face, const vr_glyph_outl
     return VR_ERR_OOM;
   }
 
+  float sx_base = (float)x0 - (float)pad;
+  float sy_base = (float)(y1 - 1 + pad);
   for (int y = 0; y < h; ++y) {
     for (int x = 0; x < w; ++x) {
-      if (x >= base_w || y >= base_h) {
-        bitmap[(size_t)y * (size_t)w + x] = 0u;
-        continue;
-      }
-      float fx = x0 + x;
-      float fy = (float)(y1 - 1 - y);
-      int intersections = 0;
-      int inside_samples = 0;
+      float total_distance = 0.0f;
 
       for (int sy = 0; sy < ss; ++sy) {
         for (int sx = 0; sx < ss; ++sx) {
-          intersections = 0;
-          for (size_t s = 0; s < seg_count; ++s) {
-            if (vr_point_in_bbox(fx + VR_RASTER_SAMPLE_OFFSETS[(size_t)sx], fy + VR_RASTER_SAMPLE_OFFSETS[(size_t)sy], &segments[s])) {
-              intersections++;
-            }
-          }
-          inside_samples += (intersections & 1);
+          float fx = sx_base + (float)x + vr_sample_offset(sx, ss);
+          float fy = sy_base - (float)y + vr_sample_offset(sy, ss);
+          total_distance += vr_signed_distance_to_outline(fx, fy, segments, seg_count);
         }
       }
 
-      float cov = (float)inside_samples * VR_RASTER_ALPHA_SCALE * inv_ss;
-      bitmap[(size_t)y * (size_t)w + x] = (uint8_t)cov;
+      float signed_distance = total_distance * inv_ss;
+      bitmap[(size_t)y * (size_t)w + x] = vr_alpha_from_signed_distance(signed_distance, sdf_pad_f);
     }
   }
 
@@ -805,8 +871,8 @@ vr_status_t vr_rasterize_outline(const vr_font_face_t* face, const vr_glyph_outl
   *out_bitmap = bitmap;
   *out_w = w;
   *out_h = h;
-  *out_left = (int)floorf((float)outline->x_min * scale);
-  *out_top = y1 - 1;
+  *out_left = x0 - pad;
+  *out_top = y1 - 1 + pad;
 
   return VR_OK;
 }
