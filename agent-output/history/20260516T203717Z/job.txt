@@ -1,0 +1,34 @@
+[REDACTED_SECRET]
+action=set-netboot-env
+mode=auto
+iface=eth0
+allow-mac=00:d8:61:d7:50:30
+client-ip=
+mgmt-dhcp=1
+mgmt-mac=b0:19:21:fd:c3:92
+mgmt-ip=10.42.0.10
+http-port=8081
+force-http-for-pxe=0
+---
+● edgerun-netboot.service - EdgeRun Metal PXE network boot responder
+     Loaded: loaded ([REDACTED_TOKEN]; enabled; preset: disabled)
+     Active: active (running) since Sun 2026-05-17 03:37:23 +07; 4ms ago
+ Invocation: [REDACTED_SECRET]
+    Process: 155725 ExecStartPre=/bin/sh -c IFACE=$(sed -n "s/^EDGERUN_NETBOOT_IFACE=//p" /etc/edgerun-netboot.env | head -n1); for dev in $(ip -4 -o addr show | grep "10.42.0.1/24" | cut -d" " -f2 | tr -d ":"); do if [ "$dev" = "$IFACE" ]; then continue; fi; ip -4 addr del 10.42.0.1/24 dev "$dev" || true; ip -4 route del 10.42.0.0/24 dev "$dev" 2>/dev/null || true; done; for dev in $(ip -4 route show 10.42.0.0/24 | grep "^10.42.0.0/24" | cut -d" " -f3); do if [ "$dev" = "$IFACE" ]; then continue; fi; ip -4 route del 10.42.0.0/24 dev "$dev" 2>/dev/null || true; done (code=exited, status=0/SUCCESS)
+   Main PID: 155739 (edgerun-netboot)
+      Tasks: 1 (limit: 74428)
+     Memory: 2.5M (peak: 4.1M)
+        CPU: 18ms
+     CGroup: [REDACTED_SECRET]
+             └─155739 [REDACTED_TOKEN] --iface eth0 --efi [REDACTED_TOKEN] --setup-iface --mode auto --http-port 8081 --client-ip "" --force-http-for-pxe=0 --allow-mac=00:d8:61:d7:50:30 --mgmt-dhcp=1 --mgmt-mac=b0:19:21:fd:c3:92 --mgmt-ip 10.42.0.10
+
+May 17 03:37:23 fw systemd[1]: Starting EdgeRun Metal PXE network boot responder...
+May 17 03:37:23 fw systemd[1]: Started EdgeRun Metal PXE network boot responder.
+May 17 03:37:23 fw sh[155739]: invalid --client-ip value
+May 17 03:37:23 fw sh[155739]: Usage:
+May 17 03:37:23 fw sh[155739]:   [REDACTED_TOKEN] --iface <name> --efi <path-to-BOOTX64.EFI> [--setup-iface] [--http] [--tftp] [--auto] [--mode <auto|http|tftp>]
+May 17 03:37:23 fw sh[155739]:   [--http-port <port>] [--allow-mac <aa:bb:cc:dd:ee:ff>] [--client-ip <10.42.0.2>] [--force-http-for-pxe]
+May 17 03:37:23 fw sh[155739]:   [--mgmt-dhcp] [--mgmt-mac <aa:bb:cc:dd:ee:ff>] [--mgmt-ip <10.42.0.10>]
+May 17 03:37:23 fw sh[155739]:   --help
+May 17 03:37:23 fw systemd[1]: edgerun-netboot.service: Main process exited, code=exited, status=1/FAILURE
+result: success
