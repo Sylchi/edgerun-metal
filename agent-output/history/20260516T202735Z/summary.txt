@@ -19,4 +19,3 @@ source_sha=583d7e2
 run: skipped
 collect_exit=0
 redacting outputs
-output worktree: /tmp/edgerun-agent-output-worktree-ken
