@@ -1,0 +1,34 @@
+timestamp=20260516T202104Z
+hostname=fw
+repo=/home/ken/edgerun-c
+remote=origin
+source_branch=main
+output_branch=agent/fw
+interval_sec=60
+run_script=/home/ken/edgerun-c/.edgerun/agent/run.sh
+starting agent cycle
+started_at=2026-05-17T03:21:04+07:00
+repo: /home/ken/edgerun-c
+diagnose=yes
+whoami: ken
+uid_gid: uid=1000(ken) gid=1000(ken) groups=1000(ken),3(sys),90(network),150(wireshark),948(docker),949(plugdev),959(nopasswdlogin),968(seat),972(tss),979(rfkill),982(users),983(video),984(uucp),985(storage),989(lp),992(input),995(audio),998(wheel),1002(dialout),1003(quectel)
+pwd: /home/ken/edgerun-c
+REPO: /home/ken/edgerun-c
+ M edgerun-metal/Makefile
+ M edgerun-metal/README.md
+ M edgerun-metal/systemd/edgerun-agent.env.example
+ M edgerun-metal/tools/edgerun-agent/README.md
+ M edgerun-metal/tools/edgerun-agent/edgerun-agent.sh
+ M edgerun-metal/tools/edgerun-agent/install-agent-service.sh
+?? agent-output/
+?? edgerun-metal/systemd/user/
+?? edgerun-metal/tools/edgerun-agent/install-agent-user-service.sh
+?? edgerun-metal/tools/edgerun-agent/uninstall-agent-user-service.sh
+origin	git@github.com:Sylchi/edgerun-c.git (fetch)
+origin	git@github.com:Sylchi/edgerun-c.git (push)
++ agent/fw 4095d4b (/tmp/edgerun-agent-output-worktree) agent(fw): report 20260516T201943Z source b150c4c
+* main     b150c4c [origin/main] build: keep status-agent from failing as info command
+OUT_WT: /tmp/edgerun-agent-output-worktree
+output worktree missing
+ssh_test: Hi Sylchi! You've successfully autheticated, but GitHub does ot provide shell access.
+env:
