@@ -40,6 +40,10 @@ static const int VR_RASTER_CURVE_NEWTON_STEPS = 8;
 static const int VR_RASTER_CURVE_DISTANCE_SAMPLES = 16;
 static const float VR_RASTER_CURVE_NEWTON_EPSILON = 1e-5f;
 static const float VR_RASTER_CURVE_LINEAR_TOLERANCE = 1e-12f;
+static const uint8_t VR_RASTER_MSDF_CHANNEL_COUNT = 3u;
+static const float VR_RASTER_MSDF_CHANNEL_SCALE = 3.0f;
+static const float VR_RASTER_MSDF_PI = 3.14159265359f;
+static const float VR_RASTER_MSDF_TWO_PI = 6.28318530718f;
 static const float VR_RASTER_ALPHA_MIN = 0.0f;
 static const float VR_RASTER_ALPHA_MAX = 255.0f;
 
@@ -53,7 +57,15 @@ typedef struct {
 } vr_raster_curve_t;
 
 static vr_status_t vr_line_segments_from_quad(const vr_outline_point_t p0, const vr_outline_point_t p1, const vr_outline_point_t p2,
-  vr_segment_t** segs, size_t* count, size_t* cap, float tolerance_sq, int depth);
+  vr_segment_t** segs,
+  size_t* count,
+  size_t* cap,
+  float tolerance_sq,
+  int depth,
+  uint8_t segment_color,
+  uint8_t** seg_colors,
+  size_t* seg_color_count,
+  size_t* seg_color_cap);
 static vr_status_t vr_ensure_curves_capacity(vr_raster_curve_t** curves, size_t* curve_cap, size_t needed);
 static vr_status_t vr_push_curve(
   vr_raster_curve_t** curves,
@@ -65,6 +77,10 @@ static vr_status_t vr_push_curve(
   float y1,
   float x2,
   float y2);
+static vr_status_t vr_ensure_u8_capacity(uint8_t** values, size_t* values_cap, size_t needed);
+static vr_status_t vr_push_msdf_segment_color(uint8_t** seg_colors, size_t* seg_color_count, size_t* seg_color_cap, uint8_t color);
+static vr_status_t vr_push_msdf_curve_color(uint8_t** curve_colors, size_t* curve_color_count, size_t* curve_color_cap, uint8_t color);
+static uint8_t vr_msdf_edge_color(float dx, float dy, size_t fallback_index);
 
 static float vr_f2dot14_to_float(uint16_t v) {
   return (float)(int16_t)v / VR_F2DOT14_SCALE;
@@ -124,6 +140,20 @@ static vr_status_t vr_ensure_curves_capacity(vr_raster_curve_t** curves, size_t*
   return VR_OK;
 }
 
+static vr_status_t vr_ensure_u8_capacity(uint8_t** values, size_t* values_cap, size_t needed) {
+  if (*values_cap >= needed) return VR_OK;
+  size_t cap = (*values_cap == 0u) ? VR_RASTER_SEGMENT_INITIAL_CAP : *values_cap;
+  while (cap < needed) {
+    if (cap > (SIZE_MAX / 2u)) return VR_ERR_OOM;
+    cap *= 2u;
+  }
+  uint8_t* nv = (uint8_t*)realloc(*values, cap * sizeof(uint8_t));
+  if (!nv) return VR_ERR_OOM;
+  *values = nv;
+  *values_cap = cap;
+  return VR_OK;
+}
+
 static vr_status_t vr_push_curve(
   vr_raster_curve_t** curves,
   size_t* curve_count,
@@ -145,6 +175,43 @@ static vr_status_t vr_push_curve(
   (*curves)[*curve_count].y2 = y2;
   ++(*curve_count);
   return VR_OK;
+}
+
+static vr_status_t vr_push_msdf_segment_color(uint8_t** seg_colors, size_t* seg_color_count, size_t* seg_color_cap, uint8_t color) {
+  if (vr_ensure_u8_capacity(seg_colors, seg_color_cap, *seg_color_count + 1u) != VR_OK) {
+    return VR_ERR_OOM;
+  }
+  (*seg_colors)[*seg_color_count] = color;
+  ++(*seg_color_count);
+  return VR_OK;
+}
+
+static vr_status_t vr_push_msdf_curve_color(uint8_t** curve_colors, size_t* curve_color_count, size_t* curve_color_cap, uint8_t color) {
+  if (vr_ensure_u8_capacity(curve_colors, curve_color_cap, *curve_color_count + 1u) != VR_OK) {
+    return VR_ERR_OOM;
+  }
+  (*curve_colors)[*curve_color_count] = color;
+  ++(*curve_color_count);
+  return VR_OK;
+}
+
+static uint8_t vr_msdf_edge_color(float dx, float dy, size_t fallback_index) {
+  if ((fabsf(dx) <= VR_RASTER_SEGMENT_TOLERANCE) && (fabsf(dy) <= VR_RASTER_SEGMENT_TOLERANCE)) {
+    return (uint8_t)(fallback_index % VR_RASTER_MSDF_CHANNEL_COUNT);
+  }
+
+  float angle = atan2f(dy, dx) + VR_RASTER_MSDF_PI;
+  if (angle < 0.0f) {
+    angle = 0.0f;
+  } else if (angle >= VR_RASTER_MSDF_TWO_PI) {
+    angle = VR_RASTER_MSDF_TWO_PI;
+  }
+  float normalized = angle / VR_RASTER_MSDF_TWO_PI;
+  uint8_t color = (uint8_t)floorf(normalized * VR_RASTER_MSDF_CHANNEL_SCALE);
+  if (color >= VR_RASTER_MSDF_CHANNEL_COUNT) {
+    color = (uint8_t)(VR_RASTER_MSDF_CHANNEL_COUNT - 1u);
+  }
+  return color;
 }
 
 static vr_status_t vr_append_transformed_points(
@@ -356,9 +423,15 @@ static vr_status_t vr_emit_contour_segments(
   vr_segment_t** segs,
   size_t* seg_count,
   size_t* seg_cap,
+  uint8_t** seg_colors,
+  size_t* seg_color_count,
+  size_t* seg_color_cap,
   vr_raster_curve_t** curves,
   size_t* curve_count,
-  size_t* curve_cap) {
+  size_t* curve_cap,
+  uint8_t** curve_colors,
+  size_t* curve_color_count,
+  size_t* curve_color_cap) {
   if (point_count < 2u) {
     return VR_OK;
   }
@@ -377,6 +450,11 @@ static vr_status_t vr_emit_contour_segments(
         vr_status_t line_status = vr_push_segment(segs, seg_count, seg_cap, p0.x, p0.y, p1.x, p1.y);
         if (line_status != VR_OK) {
           return line_status;
+        }
+        uint8_t line_color = vr_msdf_edge_color(p1.x - p0.x, p1.y - p0.y, *seg_color_count);
+        vr_status_t line_color_status = vr_push_msdf_segment_color(seg_colors, seg_color_count, seg_color_cap, line_color);
+        if (line_color_status != VR_OK) {
+          return line_color_status;
         }
         i += 1u;
         break;
@@ -398,6 +476,11 @@ static vr_status_t vr_emit_contour_segments(
         if (curve_store_status != VR_OK) {
           return curve_store_status;
         }
+        uint8_t curve_color = vr_msdf_edge_color(points[i + 2u].x - p0.x, points[i + 2u].y - p0.y, *curve_color_count);
+        vr_status_t curve_color_status = vr_push_msdf_curve_color(curve_colors, curve_color_count, curve_color_cap, curve_color);
+        if (curve_color_status != VR_OK) {
+          return curve_color_status;
+        }
         vr_status_t curve_status = vr_line_segments_from_quad(
           p0,
           p1,
@@ -406,7 +489,11 @@ static vr_status_t vr_emit_contour_segments(
           seg_count,
           seg_cap,
           VR_RASTER_QUAD_BEZIER_TOLERANCE,
-          0);
+          0,
+          curve_color,
+          seg_colors,
+          seg_color_count,
+          seg_color_cap);
         if (curve_status != VR_OK) {
           return curve_status;
         }
@@ -423,8 +510,19 @@ static vr_status_t vr_emit_contour_segments(
   return VR_OK;
 }
 
-static vr_status_t vr_line_segments_from_quad(const vr_outline_point_t p0, const vr_outline_point_t p1, const vr_outline_point_t p2,
-                                     vr_segment_t** segs, size_t* count, size_t* cap, float tolerance_sq, int depth) {
+static vr_status_t vr_line_segments_from_quad(
+  const vr_outline_point_t p0,
+  const vr_outline_point_t p1,
+  const vr_outline_point_t p2,
+  vr_segment_t** segs,
+  size_t* count,
+  size_t* cap,
+  float tolerance_sq,
+  int depth,
+  uint8_t segment_color,
+  uint8_t** seg_colors,
+  size_t* seg_color_count,
+  size_t* seg_color_cap) {
   if (depth > VR_RASTER_TESSELLATION_SOFT_LIMIT) {
     if (depth > VR_RASTER_TESSELLATION_HARD_LIMIT) return VR_OK;
   }
@@ -442,17 +540,45 @@ static vr_status_t vr_line_segments_from_quad(const vr_outline_point_t p0, const
   float dy = y2 - y0;
   float dist2 = (x1 - midx) * (x1 - midx) + (y1 - midy) * (y1 - midy);
   if (dist2 <= tolerance_sq) {
-    return vr_push_segment(segs, count, cap, x0, y0, x2, y2);
+    vr_status_t push_status = vr_push_segment(segs, count, cap, x0, y0, x2, y2);
+    if (push_status != VR_OK) {
+      return push_status;
+    }
+    return vr_push_msdf_segment_color(seg_colors, seg_color_count, seg_color_cap, segment_color);
   }
 
   vr_outline_point_t q0 = {x0 + (x1 - x0) * 0.5f, y0 + (y1 - y0) * 0.5f, 1};
   vr_outline_point_t q1 = {x1 + (x2 - x1) * 0.5f, y1 + (y2 - y1) * 0.5f, 1};
   vr_outline_point_t r = {(q0.x + q1.x) * 0.5f, (q0.y + q1.y) * 0.5f, 1};
-  vr_status_t st = vr_line_segments_from_quad(p0, q0, r, segs, count, cap, tolerance_sq, depth + 1);
+  vr_status_t st = vr_line_segments_from_quad(
+    p0,
+    q0,
+    r,
+    segs,
+    count,
+    cap,
+    tolerance_sq,
+    depth + 1,
+    segment_color,
+    seg_colors,
+    seg_color_count,
+    seg_color_cap);
   if (st != VR_OK) {
     return st;
   }
-  return vr_line_segments_from_quad(r, q1, p2, segs, count, cap, tolerance_sq, depth + 1);
+  return vr_line_segments_from_quad(
+    r,
+    q1,
+    p2,
+    segs,
+    count,
+    cap,
+    tolerance_sq,
+    depth + 1,
+    segment_color,
+    seg_colors,
+    seg_color_count,
+    seg_color_cap);
 }
 
 float vr_get_glyph_advance(const vr_font_face_t* face, uint16_t glyph_id) {
@@ -908,36 +1034,138 @@ static float vr_quadratic_distance_sq(float px, float py, const vr_raster_curve_
   return best_sq;
 }
 
-static float vr_signed_distance_to_outline(
+static float vr_sorted_median_3(float a, float b, float c) {
+  if (a > b) {
+    float swap = a;
+    a = b;
+    b = swap;
+  }
+  if (b > c) {
+    float swap = b;
+    b = c;
+    c = swap;
+  }
+  if (a > b) {
+    float swap = a;
+    a = b;
+    b = swap;
+  }
+  return b;
+}
+
+static float vr_segment_distance_sq_for_color(
   float px,
   float py,
   const vr_segment_t* segments,
+  const uint8_t* seg_colors,
   size_t seg_count,
-  const vr_raster_curve_t* curves,
-  size_t curve_count) {
+  uint8_t color) {
   float nearest_sq = FLT_MAX;
   for (size_t s = 0u; s < seg_count; ++s) {
+    if (seg_colors[s] != color) continue;
     float d_sq = vr_segment_distance_sq(px, py, &segments[s]);
     if (d_sq < nearest_sq) {
       nearest_sq = d_sq;
     }
   }
+  return nearest_sq;
+}
 
-  float nearest = sqrtf(nearest_sq);
-  int winding = 0;
-  for (size_t s = 0u; s < seg_count; ++s) {
-    winding += vr_segment_crossing_sign(px, py, &segments[s]);
-  }
-
+static float vr_curve_distance_sq_for_color(
+  float px,
+  float py,
+  const vr_raster_curve_t* curves,
+  const uint8_t* curve_colors,
+  size_t curve_count,
+  uint8_t color) {
+  float nearest_sq = FLT_MAX;
   for (size_t c = 0u; c < curve_count; ++c) {
+    if (curve_colors[c] != color) continue;
     float d_sq = vr_quadratic_distance_sq(px, py, &curves[c]);
     if (d_sq < nearest_sq) {
       nearest_sq = d_sq;
     }
   }
+  return nearest_sq;
+}
 
-  int sign = (winding == 0) ? -1 : 1;
-  return (float)sign * nearest;
+static float vr_msdf_signed_distance_to_outline(
+  float px,
+  float py,
+  const vr_segment_t* segments,
+  size_t seg_count,
+  const uint8_t* seg_colors,
+  const vr_raster_curve_t* curves,
+  size_t curve_count,
+  const uint8_t* curve_colors) {
+  float nearest_sq_all = FLT_MAX;
+  for (size_t s = 0u; s < seg_count; ++s) {
+    float d_sq = vr_segment_distance_sq(px, py, &segments[s]);
+    if (d_sq < nearest_sq_all) {
+      nearest_sq_all = d_sq;
+    }
+  }
+  for (size_t c = 0u; c < curve_count; ++c) {
+    float d_sq = vr_quadratic_distance_sq(px, py, &curves[c]);
+    if (d_sq < nearest_sq_all) {
+      nearest_sq_all = d_sq;
+    }
+  }
+
+  float distances[VR_RASTER_MSDF_CHANNEL_COUNT];
+  bool channel_present[VR_RASTER_MSDF_CHANNEL_COUNT];
+  channel_present[0u] = false;
+  channel_present[1u] = false;
+  channel_present[2u] = false;
+
+  float fallback = sqrtf(nearest_sq_all);
+  if (!isfinite(fallback)) {
+    fallback = VR_RASTER_SEGMENT_TOLERANCE;
+  }
+
+  for (uint8_t color = 0u; color < VR_RASTER_MSDF_CHANNEL_COUNT; ++color) {
+    float segment_sq = vr_segment_distance_sq_for_color(px, py, segments, seg_colors, seg_count, color);
+    float curve_sq = vr_curve_distance_sq_for_color(px, py, curves, curve_colors, curve_count, color);
+    float nearest_sq = segment_sq;
+    if (curve_sq < nearest_sq) {
+      nearest_sq = curve_sq;
+    }
+
+    if (nearest_sq < FLT_MAX) {
+      distances[color] = sqrtf(nearest_sq);
+      channel_present[color] = true;
+    } else {
+      distances[color] = fallback;
+    }
+  }
+
+  bool all_missing = true;
+  for (uint8_t color = 0u; color < VR_RASTER_MSDF_CHANNEL_COUNT; ++color) {
+    if (channel_present[color]) {
+      all_missing = false;
+      break;
+    }
+  }
+  if (all_missing) {
+    return -fallback;
+  }
+
+  for (uint8_t color = 0u; color < VR_RASTER_MSDF_CHANNEL_COUNT; ++color) {
+    if (!channel_present[color]) {
+      distances[color] = distances[(color + 1u) % VR_RASTER_MSDF_CHANNEL_COUNT];
+    }
+  }
+
+  int winding = 0;
+  for (size_t s = 0u; s < seg_count; ++s) {
+    winding += vr_segment_crossing_sign(px, py, &segments[s]);
+  }
+
+  float sign = (winding == 0) ? -1.0f : 1.0f;
+  float channel_0 = sign * distances[0u];
+  float channel_1 = sign * distances[1u];
+  float channel_2 = sign * distances[2u];
+  return vr_sorted_median_3(channel_0, channel_1, channel_2);
 }
 
 static uint8_t vr_alpha_from_signed_distance(float signed_distance, float spread) {
@@ -982,9 +1210,15 @@ vr_status_t vr_rasterize_outline(const vr_font_face_t* face, const vr_glyph_outl
   vr_segment_t* segments = NULL;
   size_t seg_count = 0;
   size_t seg_cap = 0;
+  uint8_t* seg_colors = NULL;
+  size_t seg_color_count = 0u;
+  size_t seg_color_cap = 0u;
   vr_raster_curve_t* curves = NULL;
   size_t curve_count = 0;
   size_t curve_cap = 0;
+  uint8_t* curve_colors = NULL;
+  size_t curve_color_count = 0u;
+  size_t curve_color_cap = 0u;
 
   for (uint16_t c = 0; c < outline->number_of_contours; ++c) {
     uint16_t start = (c == 0) ? 0 : (outline->contour_end_pts[c - 1] + 1);
@@ -997,7 +1231,9 @@ vr_status_t vr_rasterize_outline(const vr_font_face_t* face, const vr_glyph_outl
     vr_status_t collect_status = vr_collect_contour_points(outline, start, end, scale, &contour_points, &contour_point_count);
     if (collect_status != VR_OK) {
       free(segments);
+      free(seg_colors);
       free(curves);
+      free(curve_colors);
       return collect_status;
     }
 
@@ -1007,27 +1243,44 @@ vr_status_t vr_rasterize_outline(const vr_font_face_t* face, const vr_glyph_outl
       &segments,
       &seg_count,
       &seg_cap,
+      &seg_colors,
+      &seg_color_count,
+      &seg_color_cap,
       &curves,
       &curve_count,
-      &curve_cap);
+      &curve_cap,
+      &curve_colors,
+      &curve_color_count,
+      &curve_color_cap);
     free(contour_points);
     if (emit_status != VR_OK) {
       free(segments);
+      free(seg_colors);
       free(curves);
+      free(curve_colors);
       return emit_status;
     }
   }
 
-  if ((seg_count == 0u && curve_count == 0u) || (!segments && seg_count > 0u) || (!curves && curve_count > 0u)) {
+  if (
+    (seg_count == 0u && curve_count == 0u) ||
+    (!segments && seg_count > 0u) ||
+    (!seg_colors && seg_color_count > 0u) ||
+    (!curves && curve_count > 0u) ||
+    (!curve_colors && curve_color_count > 0u)) {
     free(segments);
+    free(seg_colors);
     free(curves);
+    free(curve_colors);
     return VR_ERR_UNSUPPORTED;
   }
 
   uint8_t* bitmap = (uint8_t*)calloc((size_t)w * (size_t)h, 1);
   if (!bitmap) {
     free(segments);
+    free(seg_colors);
     free(curves);
+    free(curve_colors);
     return VR_ERR_OOM;
   }
 
@@ -1041,13 +1294,15 @@ vr_status_t vr_rasterize_outline(const vr_font_face_t* face, const vr_glyph_outl
         for (int sx = 0; sx < ss; ++sx) {
           float fx = sx_base + (float)x + vr_sample_offset(sx, ss);
           float fy = sy_base - (float)y + vr_sample_offset(sy, ss);
-          total_distance += vr_signed_distance_to_outline(
+          total_distance += vr_msdf_signed_distance_to_outline(
             fx,
             fy,
             segments,
             seg_count,
+            seg_colors,
             curves,
-            curve_count);
+            curve_count,
+            curve_colors);
         }
       }
 
@@ -1057,7 +1312,9 @@ vr_status_t vr_rasterize_outline(const vr_font_face_t* face, const vr_glyph_outl
   }
 
   free(segments);
+  free(seg_colors);
   free(curves);
+  free(curve_colors);
   *out_bitmap = bitmap;
   *out_w = w;
   *out_h = h;
