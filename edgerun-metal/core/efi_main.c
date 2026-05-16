@@ -61,6 +61,10 @@ static void er_pci_write32(INT64 bus_i, INT64 dev_i, INT64 func_i, INT64 offset_
   er_out32(0x0cfc, (UINT32)value_i);
 }
 
+static UINT32 er_pci_cfg_read32(UINT32 bus, UINT32 dev, UINT32 func, UINT32 offset) {
+  return (UINT32)er_pci_read32((INT64)bus, (INT64)dev, (INT64)func, (INT64)offset);
+}
+
 static void er_print_u64_field(const char* label, UINT64 value) {
   er_print("    ");
   er_print(label);
@@ -225,6 +229,108 @@ static int er_run_module(const UINT8* module_data, UINT32 module_size, const cha
   return 0;
 }
 
+static void er_print_pci_value(const char* label, UINT32 value) {
+  er_print("    ");
+  er_print(label);
+  er_print(": ");
+  er_print_u64_hex((UINT64)value);
+  er_print("\r\n");
+}
+
+static void er_print_pci_target(const char* label, UINT32 bus, UINT32 dev, UINT32 func, UINT32 id, UINT32 class_rev) {
+  UINT32 command_status = er_pci_cfg_read32(bus, dev, func, 0x04);
+  UINT32 header = er_pci_cfg_read32(bus, dev, func, 0x0c);
+  UINT32 bar0 = er_pci_cfg_read32(bus, dev, func, 0x10);
+  UINT32 bar1 = er_pci_cfg_read32(bus, dev, func, 0x14);
+  UINT32 bar2 = er_pci_cfg_read32(bus, dev, func, 0x18);
+  UINT32 bar3 = er_pci_cfg_read32(bus, dev, func, 0x1c);
+  UINT32 bar4 = er_pci_cfg_read32(bus, dev, func, 0x20);
+  UINT32 bar5 = er_pci_cfg_read32(bus, dev, func, 0x24);
+
+  er_print("  target: ");
+  er_print(label);
+  er_print(" bus=");
+  er_print_u64_hex((UINT64)bus);
+  er_print(" dev=");
+  er_print_u64_hex((UINT64)dev);
+  er_print(" func=");
+  er_print_u64_hex((UINT64)func);
+  er_print("\r\n");
+
+  er_print_pci_value("id", id);
+  er_print_pci_value("command/status", command_status);
+  er_print_pci_value("class/revision", class_rev);
+  er_print_pci_value("header/cacheline", header);
+  er_print_pci_value("BAR0", bar0);
+  er_print_pci_value("BAR1", bar1);
+  er_print_pci_value("BAR2", bar2);
+  er_print_pci_value("BAR3", bar3);
+  er_print_pci_value("BAR4", bar4);
+  er_print_pci_value("BAR5", bar5);
+}
+
+static void er_scan_pci_function(UINT32 bus, UINT32 dev, UINT32 func) {
+  UINT32 id = er_pci_cfg_read32(bus, dev, func, 0x00);
+  UINT32 vendor = id & 0xffffu;
+  UINT32 class_rev;
+  UINT32 class_code;
+  UINT32 subclass;
+
+  if (id == 0xffffffffu || vendor == 0xffffu) {
+    return;
+  }
+
+  class_rev = er_pci_cfg_read32(bus, dev, func, 0x08);
+  class_code = (class_rev >> 24) & 0xffu;
+  subclass = (class_rev >> 16) & 0xffu;
+
+  if (vendor == 0x10deu) {
+    er_print_pci_target("nvidia", bus, dev, func, id, class_rev);
+    return;
+  }
+
+  if (class_code == 0x01u && subclass == 0x08u) {
+    er_print_pci_target("nvme", bus, dev, func, id, class_rev);
+    return;
+  }
+
+  if (class_code == 0x02u && subclass == 0x00u) {
+    er_print_pci_target("ethernet", bus, dev, func, id, class_rev);
+    return;
+  }
+}
+
+static void er_scan_pci_targets(void) {
+  UINT32 bus;
+  UINT32 dev;
+
+  er_println("PCI target scan: nvidia/nvme/ethernet");
+
+  for (bus = 0; bus < 256u; ++bus) {
+    for (dev = 0; dev < 32u; ++dev) {
+      UINT32 id0 = er_pci_cfg_read32(bus, dev, 0u, 0x00);
+      UINT32 header0;
+      UINT32 max_func = 1u;
+      UINT32 func;
+
+      if (id0 == 0xffffffffu || (id0 & 0xffffu) == 0xffffu) {
+        continue;
+      }
+
+      header0 = er_pci_cfg_read32(bus, dev, 0u, 0x0c);
+      if ((header0 & 0x00800000u) != 0u) {
+        max_func = 8u;
+      }
+
+      for (func = 0; func < max_func; ++func) {
+        er_scan_pci_function(bus, dev, func);
+      }
+    }
+  }
+
+  er_println("PCI target scan done");
+}
+
 static void er_install_hostcalls(void) {
   g_host_calls.log_u64 = er_log_u64;
   g_host_calls.log_hex = er_log_hex;
@@ -240,9 +346,7 @@ static void er_run_smoke_profile(void) {
 
 static void er_run_pci_profile(void) {
   er_println("boot profile: pci");
-  er_println("PCI scan bus 0..255");
-  er_reset_log_state();
-  er_run_module(g_edgerun_pci_scan_wasm, ER_PCI_SCAN_WASM_SIZE, "pci_scan");
+  er_scan_pci_targets();
 }
 
 static void er_run_quiet_profile(void) {
