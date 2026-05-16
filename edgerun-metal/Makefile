@@ -1,4 +1,4 @@
-.PHONY: all run clean print-path netboot smoke pci quiet rebuild-profile install-netboot uninstall-netboot restart-netboot logs-netboot status-netboot install-agent install-agent-user uninstall-agent-user run-agent run-agent-user logs-agent logs-agent-user status-agent status-agent-user
+.PHONY: all run clean print-path netboot smoke pci quiet rebuild-profile install-netboot uninstall-netboot restart-netboot logs-netboot status-netboot
 
 CC = clang
 HOST_CC = cc
@@ -61,36 +61,6 @@ logs-netboot:
 
 status-netboot:
 	systemctl status edgerun-netboot
-
-install-agent:
-	sudo ./tools/edgerun-agent/install-agent-service.sh
-
-uninstall-agent:
-	sudo ./tools/edgerun-agent/uninstall-agent-service.sh
-
-install-agent-user:
-	./tools/edgerun-agent/install-agent-user-service.sh
-
-uninstall-agent-user:
-	./tools/edgerun-agent/uninstall-agent-user-service.sh
-
-run-agent:
-	sudo systemctl start edgerun-agent.service
-
-run-agent-user:
-	systemctl --user start edgerun-agent.service
-
-logs-agent:
-	journalctl -u edgerun-agent.service -f
-
-logs-agent-user:
-	journalctl --user -u edgerun-agent.service -f
-
-status-agent:
-	systemctl status edgerun-agent.timer edgerun-agent.service --no-pager || true
-
-status-agent-user:
-	systemctl --user status edgerun-agent.timer edgerun-agent.service --no-pager || true
 
 $(BUILD_DIR)/%.o: %.c $(HDRS)
 	mkdir -p $(dir $@)

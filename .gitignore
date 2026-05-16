@@ -1,6 +1,6 @@
-agent-output/
 /tmp/
 *.log
+machine-report*.txt
 
 # generated local build artifacts
 .build/

@@ -15,8 +15,7 @@ This repository contains two C projects:
 ├── tests/                 repository maintenance tests
 ├── edgerun-metal/         UEFI metal runtime, netboot tools, systemd units
 ├── varfont/               variable-font C library and tests
-├── .build/                local generated builds, ignored
-└── agent-output/          local agent output, ignored
+└── .build/                local generated builds, ignored
 ```
 
 Generated build output must stay out of source directories. Use `.build/` for local CMake builds and `edgerun-metal/build/` for EFI artifacts produced by the metal Makefile.
