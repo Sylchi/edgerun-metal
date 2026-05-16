@@ -4,6 +4,14 @@
 #include "wasm_test_module.h"
 #include "wasm_pci_scan_module.h"
 
+#ifndef ER_BOOT_PROFILE
+#define ER_BOOT_PROFILE 0
+#endif
+
+#define ER_BOOT_PROFILE_SMOKE 0
+#define ER_BOOT_PROFILE_PCI 1
+#define ER_BOOT_PROFILE_QUIET 2
+
 static ErWasmHostCalls g_host_calls = {0};
 static UINT8 g_log_u64_stage = 0;
 static UINT8 g_log_hex_stage = 0;
@@ -217,25 +225,47 @@ static int er_run_module(const UINT8* module_data, UINT32 module_size, const cha
   return 0;
 }
 
-EFI_STATUS EFIAPI efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE* SystemTable) {
-  (void)ImageHandle;
-
-  er_print_set_system_table(SystemTable);
-
+static void er_install_hostcalls(void) {
   g_host_calls.log_u64 = er_log_u64;
   g_host_calls.log_hex = er_log_hex;
   g_host_calls.pci_read32 = er_pci_read32;
   g_host_calls.pci_write32 = er_pci_write32;
+}
+
+static void er_run_smoke_profile(void) {
+  er_println("boot profile: smoke");
+  er_reset_log_state();
+  er_run_module(g_edgerun_test_wasm, ER_TEST_WASM_SIZE, "test_return_123");
+}
+
+static void er_run_pci_profile(void) {
+  er_println("boot profile: pci");
+  er_println("PCI scan bus 0..255");
+  er_reset_log_state();
+  er_run_module(g_edgerun_pci_scan_wasm, ER_PCI_SCAN_WASM_SIZE, "pci_scan");
+}
+
+static void er_run_quiet_profile(void) {
+  er_println("boot profile: quiet");
+  er_println("halt ready");
+}
+
+EFI_STATUS EFIAPI efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE* SystemTable) {
+  (void)ImageHandle;
+
+  er_print_set_system_table(SystemTable);
+  er_install_hostcalls();
 
   er_println("EdgeRun Metal Core v0.2");
   er_println("UEFI boot OK");
 
-  er_reset_log_state();
-  er_run_module(g_edgerun_test_wasm, ER_TEST_WASM_SIZE, "test_return_123");
-
-  er_println("PCI scan bus 0..255");
-  er_reset_log_state();
-  er_run_module(g_edgerun_pci_scan_wasm, ER_PCI_SCAN_WASM_SIZE, "pci_scan");
+#if ER_BOOT_PROFILE == ER_BOOT_PROFILE_PCI
+  er_run_pci_profile();
+#elif ER_BOOT_PROFILE == ER_BOOT_PROFILE_QUIET
+  er_run_quiet_profile();
+#else
+  er_run_smoke_profile();
+#endif
 
   er_println("Press any key to halt...");
   er_wait_for_key_then_halt(SystemTable);
