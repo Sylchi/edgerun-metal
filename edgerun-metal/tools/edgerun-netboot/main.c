@@ -247,6 +247,17 @@ static size_t dhcp_append_u32(uint8_t *p, uint8_t code, uint32_t v_host) {
     return 6;
 }
 
+static size_t dhcp_append_ipv4(uint8_t *p, uint8_t code, const char *ip) {
+    struct in_addr addr;
+    if (inet_pton(AF_INET, ip, &addr) != 1) {
+        addr.s_addr = 0u;
+    }
+    p[0] = code;
+    p[1] = 4;
+    memcpy(p + 2, &addr.s_addr, 4);
+    return 6;
+}
+
 static size_t dhcp_append_u16(uint8_t *p, uint8_t code, uint16_t v_host) {
     uint16_t v = htons(v_host);
     p[0] = code;
@@ -298,11 +309,11 @@ static size_t build_dhcp_reply(dhcp_packet_t *out, const dhcp_packet_t *in, uint
 
     p = out->options;
     p += dhcp_append_u8(p, DHCP_OPT_DHCP_MSG_TYPE, dhcp_msg);
-    p += dhcp_append_u32(p, DHCP_OPT_SERVER_ID, inet_addr(SERVER_IP));
+    p += dhcp_append_ipv4(p, DHCP_OPT_SERVER_ID, SERVER_IP);
     p += dhcp_append_u32(p, DHCP_OPT_LEASE_TIME, 3600u);
-    p += dhcp_append_u32(p, DHCP_OPT_SUBNET_MASK, inet_addr(SUBNET_MASK));
-    p += dhcp_append_u32(p, DHCP_OPT_ROUTER, inet_addr(ROUTER_IP));
-    p += dhcp_append_u32(p, DHCP_OPT_DNS, inet_addr(DNS_IP));
+    p += dhcp_append_ipv4(p, DHCP_OPT_SUBNET_MASK, SUBNET_MASK);
+    p += dhcp_append_ipv4(p, DHCP_OPT_ROUTER, ROUTER_IP);
+    p += dhcp_append_ipv4(p, DHCP_OPT_DNS, DNS_IP);
     if (mode == MODE_TFTP) {
         p += dhcp_append_bytes(p, DHCP_OPT_TFTP_SERVER, (const uint8_t *)SERVER_IP, (uint8_t)strlen(SERVER_IP));
     }
