@@ -16,7 +16,10 @@ typedef struct {
 
 static const uint16_t VR_UI_WINDOW_WIDTH = 960u;
 static const uint16_t VR_UI_WINDOW_HEIGHT = 240u;
-static const uint8_t VR_UI_BACKGROUND_CHANNEL = 12u;
+static const uint8_t VR_UI_BACKGROUND_RED = 0u;
+static const uint8_t VR_UI_BACKGROUND_GREEN = 0u;
+static const uint8_t VR_UI_BACKGROUND_BLUE = 0u;
+static const uint8_t VR_UI_BACKGROUND_ALPHA = 255u;
 static const char* const VR_FALLBACK_FONT_PATH = "fonts/Geist[wght].ttf";
 static const char* const VR_DEFAULT_TEXT = "Geist variable font in SDL";
 static const float VR_DEFAULT_AXIS_WEIGHT = 700.0f;
@@ -328,7 +331,12 @@ int main(int argc, char** argv) {
       }
     }
 
-    SDL_SetRenderDrawColor(renderer, VR_UI_BACKGROUND_CHANNEL, VR_UI_BACKGROUND_CHANNEL, VR_UI_BACKGROUND_CHANNEL, 255);
+    SDL_SetRenderDrawColor(
+      renderer,
+      VR_UI_BACKGROUND_RED,
+      VR_UI_BACKGROUND_GREEN,
+      VR_UI_BACKGROUND_BLUE,
+      VR_UI_BACKGROUND_ALPHA);
     SDL_RenderClear(renderer);
 
     for (size_t r = 0; r < range_count; ++r) {
