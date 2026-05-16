@@ -1,3 +1,0 @@
-make: Entering directory '/home/ken/edgerun-c/edgerun-metal'
-[REDACTED_TOKEN]
-make: Leaving directory '/home/ken/edgerun-c/edgerun-metal'

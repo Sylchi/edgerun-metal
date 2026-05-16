@@ -1,9 +1,0 @@
-hostname: fw
-rev-parse: [REDACTED_TOKEN]
-
-git status --short
- M .edgerun/agent/README.md
- M .edgerun/agent/run.sh
- M README.md
-?? .edgerun/agent/job-runner.sh
-?? .edgerun/agent/jobs/

@@ -1,9 +1,0 @@
-[agent] starting run at 2026-05-17T03:33:36+07:00
-[agent] repo: [REDACTED_SECRET]
-make: Nothing to be done for 'all'.
-[agent] run: make: ok\nmake: Nothing to be done for 'netboot'.
-[agent] run: make netboot: ok\n[agent] job id=none
-[agent] job action=noop
-[agent] job result=no-op
-[agent] build_rc=0
-[agent] run: collect: ok\n

@@ -1,8 +1,0 @@
-lo               UNKNOWN        00:00:00:00:00:00 <LOOPBACK,UP,LOWER_UP> 
-wlan0            UP             68:34:21:ed:a9:0e <BROADCAST,MULTICAST,UP,LOWER_UP> 
-eth0             UP             68:da:73:ac:53:cd <BROADCAST,MULTICAST,UP,LOWER_UP> 
-enp195s0f4u1u1   DOWN           00:e0:4c:68:0a:3e <NO-CARRIER,BROADCAST,MULTICAST,UP> 
-lo               UNKNOWN        127.0.0.1/8 
-wlan0            UP             192.168.1.41/24 2001:fb1:13b:6f23:6a34:21ff:feed:a90e/128 fe80::6a34:21ff:feed:a90e/64 
-eth0             UP             10.42.0.1/24 
-enp195s0f4u1u1   DOWN           

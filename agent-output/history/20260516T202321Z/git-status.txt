@@ -1,5 +1,0 @@
-hostname: fw
-rev-parse: [REDACTED_TOKEN]
-
-git status --short
-?? ../agent-output/
