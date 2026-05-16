@@ -17,4 +17,3 @@ source_sha=a2f8721
 run: skipped
 collect_exit=0
 redacting outputs
-output worktree: /tmp/edgerun-agent-output-worktree
