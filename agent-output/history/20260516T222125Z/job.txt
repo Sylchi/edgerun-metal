@@ -1,0 +1,49 @@
+[REDACTED_SECRET=[REDACTED]
+action=set-netboot-env
+mode=auto
+iface=eth0
+allow-mac=00:d8:61:d7:50:30
+client-ip=10.42.0.2
+mgmt-dhcp=1
+mgmt-mac=
+mgmt-ip=10.42.0.10
+http-port=8081
+force-http-for-pxe=1
+---
+● edgerun-netboot.service - EdgeRun Metal PXE network boot responder
+     Loaded: loaded ([REDACTED_TOKEN=[REDACTED] enabled; preset: disabled)
+     Active: active (running) since Sun 2026-05-17 04:34:32 +07; 6ms ago
+ Invocation: [REDACTED_SECRET=[REDACTED]
+    Process: 205295 ExecStartPre=/bin/sh -c IFACE=$(sed -n "s/^EDGERUN_NETBOOT_IFACE=//p" /etc/edgerun-netboot.env | head -n1); for dev in $(ip -4 -o addr show | grep "10.42.0.1/24" | cut -d" " -f2 | tr -d ":"); do if [ "$dev" = "$IFACE" ]; then continue; fi; ip -4 addr del 10.42.0.1/24 dev "$dev" || true; ip -4 route del 10.42.0.0/24 dev "$dev" 2>/dev/null || true; done; for dev in $(ip -4 route show 10.42.0.0/24 | grep "^10.42.0.0/24" | cut -d" " -f3); do if [ "$dev" = "$IFACE" ]; then continue; fi; ip -4 route del 10.42.0.0/24 dev "$dev" 2>/dev/null || true; done; ip -4 route replace 255.255.255.255/32 dev "$IFACE" 2>/dev/null || true; ip -4 route replace 10.42.0.255/32 dev "$IFACE" 2>/dev/null || true (code=exited, status=0/SUCCESS)
+   Main PID: 205311 (edgerun-netboot)
+      Tasks: 2 (limit: 74428)
+     Memory: 3M (peak: 4.5M)
+        CPU: 23ms
+     CGroup: [REDACTED_SECRET=[REDACTED]
+             ├─205311 [REDACTED_TOKEN=[REDACTED] --iface eth0 --efi [REDACTED_TOKEN=[REDACTED] --setup-iface --mode auto --http-port 8081 --client-ip 10.42.0.2 --force-http-for-pxe=1 --allow-mac=00:d8:61:d7:50:30 --mgmt-dhcp=1 --mgmt-ip 10.42.0.10
+             └─205313 ip link set eth0 down
+
+May 17 04:34:32 fw systemd[1]: Starting EdgeRun Metal PXE network boot responder...
+May 17 04:34:32 fw systemd[1]: Started EdgeRun Metal PXE network boot responder.
+result: success
+JOB_ID 20260517-netboot-force-http-006 already completed; skipping
+JOB_ID 20260517-netboot-force-http-006 already completed; skipping
+JOB_ID 20260517-netboot-force-http-006 already completed; skipping
+JOB_ID 20260517-netboot-force-http-006 already completed; skipping
+JOB_ID 20260517-netboot-force-http-006 already completed; skipping
+JOB_ID 20260517-netboot-force-http-006 already completed; skipping
+JOB_ID 20260517-netboot-force-http-006 already completed; skipping
+JOB_ID 20260517-netboot-force-http-006 already completed; skipping
+JOB_ID 20260517-netboot-force-http-006 already completed; skipping
+JOB_ID 20260517-netboot-force-http-006 already completed; skipping
+JOB_ID 20260517-netboot-force-http-006 already completed; skipping
+JOB_ID 20260517-netboot-force-http-006 already completed; skipping
+JOB_ID 20260517-netboot-force-http-006 already completed; skipping
+JOB_ID 20260517-netboot-force-http-006 already completed; skipping
+JOB_ID 20260517-netboot-force-http-006 already completed; skipping
+JOB_ID 20260517-netboot-force-http-006 already completed; skipping
+JOB_ID 20260517-netboot-force-http-006 already completed; skipping
+JOB_ID 20260517-netboot-force-http-006 already completed; skipping
+JOB_ID 20260517-netboot-force-http-006 already completed; skipping
+JOB_ID 20260517-netboot-force-http-006 already completed; skipping
+JOB_ID 20260517-netboot-force-http-006 already completed; skipping
