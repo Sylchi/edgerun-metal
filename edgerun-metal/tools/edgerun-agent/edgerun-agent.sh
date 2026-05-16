@@ -9,9 +9,13 @@ if [ ! -w "${LOCK_FILE%/*}" ]; then
     LOCK_FILE="/tmp/edgerun-agent.lock"
   fi
 fi
-ENV_FILE="${EDGERUN_AGENT_ENV_FILE:-/etc/edgerun-agent.env}"
-if [ ! -f "${ENV_FILE}" ] && [ -f "${HOME}/.config/edgerun-agent/edgerun-agent.env" ]; then
-  ENV_FILE="${HOME}/.config/edgerun-agent/edgerun-agent.env"
+ENV_FILE="${EDGERUN_AGENT_ENV_FILE:-}"
+if [ -z "${ENV_FILE}" ]; then
+  if [ -f "${HOME}/.config/edgerun-agent/edgerun-agent.env" ]; then
+    ENV_FILE="${HOME}/.config/edgerun-agent/edgerun-agent.env"
+  else
+    ENV_FILE="/etc/edgerun-agent.env"
+  fi
 fi
 PUSH_LOG="/tmp/edgerun-agent-push.out"
 
@@ -52,9 +56,22 @@ if ! git -C "${REPO}" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
   echo "not a git repo: ${REPO}"
   exit 1
 fi
-RUN_SCRIPT="${REPO}/${EDGERUN_AGENT_RUN_SCRIPT}"
-COLLECT_SCRIPT="${REPO}/.edgerun/agent/collect.sh"
-REDACT_SCRIPT="${REPO}/.edgerun/agent/redact.sh"
+if [ -z "${EDGERUN_AGENT_RUN_SCRIPT}" ]; then
+  EDGERUN_AGENT_RUN_SCRIPT=".edgerun/agent/run.sh"
+fi
+
+if [ "${EDGERUN_AGENT_RUN_SCRIPT}" != "${EDGERUN_AGENT_RUN_SCRIPT#/}" ] && [ -f "${EDGERUN_AGENT_RUN_SCRIPT}" ]; then
+  RUN_SCRIPT="${EDGERUN_AGENT_RUN_SCRIPT}"
+elif [ -f "${REPO}/${EDGERUN_AGENT_RUN_SCRIPT}" ]; then
+  RUN_SCRIPT="${REPO}/${EDGERUN_AGENT_RUN_SCRIPT}"
+elif [ -f "${REPO}/edgerun-metal/${EDGERUN_AGENT_RUN_SCRIPT}" ]; then
+  RUN_SCRIPT="${REPO}/edgerun-metal/${EDGERUN_AGENT_RUN_SCRIPT}"
+else
+  RUN_SCRIPT=""
+fi
+RUN_SCRIPT_DIR="$(dirname "${RUN_SCRIPT}")"
+COLLECT_SCRIPT="${RUN_SCRIPT_DIR}/collect.sh"
+REDACT_SCRIPT="${RUN_SCRIPT_DIR}/redact.sh"
 OUTPUT_DIR="${REPO}/agent-output"
 LATEST_DIR="${OUTPUT_DIR}/latest"
 HISTORY_DIR="${OUTPUT_DIR}/history/$(date -u +%Y%m%dT%H%M%SZ)"

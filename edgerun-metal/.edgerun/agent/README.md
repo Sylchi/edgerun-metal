@@ -8,6 +8,7 @@ This directory contains scripts used by `edgerun-agent`, the always-on local age
 
 - runs `make`
 - runs `make netboot`
+- if `.edgerun/agent/jobs/current.env` exists, runs `job-runner.sh` for allowlisted actions
 - calls `collect.sh` to collect diagnostics
 - writes logs to `agent-output/latest/run.log`
 
@@ -22,6 +23,18 @@ This directory contains scripts used by `edgerun-agent`, the always-on local age
 - `sockets.txt`
 - `boot-artifacts.txt`
 - `timestamp.txt`
+
+Job mailbox flow:
+
+- `jobs/current.env` contains a strict key/value declaration (no script execution).
+- `jobs/README.md` documents the allowed keys and actions.
+- successful job execution writes:
+  - `agent-output/latest/job-id.txt`
+  - `agent-output/latest/job-action.txt`
+  - `agent-output/latest/job-result.txt`
+  - `agent-output/latest/job.txt`
+- completed jobs are marked at:
+  - `~/.local/state/edgerun-agent/jobs/<JOB_ID>.done`
 
 ## Safety
 

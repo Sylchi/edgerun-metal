@@ -277,6 +277,11 @@ Output layout:
 agent-output/
   latest/
     summary.txt
+    job-id.txt
+    job-action.txt
+    job-result.txt
+    job.txt
+    run.log
     git-status.txt
     build.txt
     netboot-status.txt
@@ -285,7 +290,6 @@ agent-output/
     sockets.txt
     boot-artifacts.txt
     timestamp.txt
-    run.log
   history/
     <timestamp>/
       ...same files as latest...
@@ -295,11 +299,43 @@ agent-output/
 
 - `make`
 - `make netboot`
+- if `.edgerun/agent/jobs/current.env` exists, run `.edgerun/agent/job-runner.sh`
 - call `.edgerun/agent/collect.sh`
 
 To change behavior, edit `.edgerun/agent/run.sh` in `main` and push.
 The laptop executes the latest `main` branch script on the next timer run.
 Results are committed to branch `agent/fw` (not `main`).
+
+Current default job is `.edgerun/agent/jobs/current.env`:
+
+- `ACTION=set-netboot-env`
+- configures:
+  - `EDGERUN_NETBOOT_IFACE`
+  - `EDGERUN_NETBOOT_MODE`
+  - `EDGERUN_NETBOOT_ALLOW_MAC`
+  - `EDGERUN_NETBOOT_CLIENT_IP`
+  - `EDGERUN_NETBOOT_MGMT_DHCP`
+  - `EDGERUN_NETBOOT_MGMT_MAC`
+  - `EDGERUN_NETBOOT_MGMT_IP`
+  - `EDGERUN_NETBOOT_HTTP_PORT`
+  - `EDGERUN_NETBOOT_FORCE_HTTP_FOR_PXE`
+  - `EDGERUN_NETBOOT_EFI`
+
+Allowed action set is:
+
+- `noop`
+- `collect`
+- `build`
+- `build-netboot`
+- `restart-netboot`
+- `set-netboot-env`
+- `http-self-test`
+- `status`
+
+Allowed keys are parsed from `jobs/current.env` only; all others are ignored.
+Completed job IDs are recorded as:
+
+- `~/.local/state/edgerun-agent/jobs/<JOB_ID>.done`
 
 ## Network boot later
 
