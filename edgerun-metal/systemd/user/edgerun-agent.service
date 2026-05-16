@@ -1,0 +1,14 @@
+[Unit]
+Description=EdgeRun development agent
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+EnvironmentFile=/etc/edgerun-agent.env
+Environment=EDGERUN_AGENT_OUTPUT_WORKTREE=/tmp/edgerun-agent-output-worktree-%u
+WorkingDirectory=/opt/edgerun-metal
+ExecStart=/opt/edgerun-metal/tools/edgerun-agent/edgerun-agent.sh
+
+[Install]
+WantedBy=default.target

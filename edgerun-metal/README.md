@@ -238,9 +238,11 @@ Notes:
 ## Always-on development agent
 
 Use `make install-agent` to enable an always-on local sync/test/report loop on this machine.
+Use `make install-agent-user` when GitHub credentials should be loaded from the user environment.
 
 ```bash
 make install-agent
+make install-agent-user
 ```
 
 The service:
@@ -255,14 +257,18 @@ Useful commands:
 
 ```bash
 make run-agent
+make run-agent-user
 make logs-agent
+make logs-agent-user
 make status-agent
+make status-agent-user
 ```
 
 To stop it:
 
 ```bash
 make uninstall-agent
+make uninstall-agent-user
 ```
 
 Output layout:
