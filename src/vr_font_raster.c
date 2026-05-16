@@ -250,6 +250,27 @@ static uint8_t vr_msdf_edge_color(float dx, float dy, size_t fallback_index) {
   return color;
 }
 
+static uint8_t vr_msdf_adjacent_channel(uint8_t color) {
+  return (color == (uint8_t)(VR_RASTER_MSDF_CHANNEL_COUNT - 1u)) ? 0u : (uint8_t)(color + 1u);
+}
+
+static uint8_t vr_msdf_stable_edge_color(
+  float dx,
+  float dy,
+  size_t fallback_index,
+  bool avoid_repeat,
+  uint8_t previous_color) {
+  uint8_t color = vr_msdf_edge_color(dx, dy, fallback_index);
+  if (!avoid_repeat) {
+    return color;
+  }
+
+  if (color == previous_color) {
+    color = vr_msdf_adjacent_channel(color);
+  }
+  return color;
+}
+
 static float vr_msdf_resolve_missing_channel_distance(
   const bool channel_present[VR_RASTER_MSDF_CHANNEL_COUNT],
   const float distances[VR_RASTER_MSDF_CHANNEL_COUNT],
@@ -497,6 +518,8 @@ static vr_status_t vr_emit_contour_segments(
   }
 
   size_t i = 0u;
+  bool has_previous_edge_color = false;
+  uint8_t previous_edge_color = 0u;
   while (i + 1u < point_count) {
     vr_outline_point_t p0 = points[i];
     vr_outline_point_t p1 = points[i + 1u];
@@ -512,11 +535,18 @@ static vr_status_t vr_emit_contour_segments(
           return line_status;
         }
         if (using_msdf) {
-          uint8_t line_color = vr_msdf_edge_color(p1.x - p0.x, p1.y - p0.y, *seg_color_count);
+          uint8_t line_color = vr_msdf_stable_edge_color(
+            p1.x - p0.x,
+            p1.y - p0.y,
+            *seg_color_count,
+            has_previous_edge_color,
+            previous_edge_color);
           vr_status_t line_color_status = vr_push_msdf_segment_color(seg_colors, seg_color_count, seg_color_cap, line_color);
           if (line_color_status != VR_OK) {
             return line_color_status;
           }
+          has_previous_edge_color = true;
+          previous_edge_color = line_color;
         }
         i += 1u;
         break;
@@ -540,11 +570,18 @@ static vr_status_t vr_emit_contour_segments(
         }
         uint8_t curve_color = 0u;
         if (using_msdf) {
-          curve_color = vr_msdf_edge_color(points[i + 2u].x - p0.x, points[i + 2u].y - p0.y, *curve_color_count);
+          curve_color = vr_msdf_stable_edge_color(
+            points[i + 2u].x - p0.x,
+            points[i + 2u].y - p0.y,
+            *curve_color_count,
+            has_previous_edge_color,
+            previous_edge_color);
           vr_status_t curve_color_status = vr_push_msdf_curve_color(curve_colors, curve_color_count, curve_color_cap, curve_color);
           if (curve_color_status != VR_OK) {
             return curve_color_status;
           }
+          has_previous_edge_color = true;
+          previous_edge_color = curve_color;
         }
         vr_status_t curve_status = vr_line_segments_from_quad(
           p0,
