@@ -1292,6 +1292,13 @@ vr_status_t vr_rasterize_outline_with_mode(
   const float inv_ss = 1.0f / (float)(ss * ss);
   const float sdf_pad_f = VR_RASTER_SDF_SPREAD * VR_RASTER_SDF_PADDING_SCALE;
   const bool using_msdf = (atlas_format == VR_FONT_ATLAS_FORMAT_MSDF_RGB);
+  float sample_offsets_x[ss];
+  float sample_offsets_y[ss];
+  for (int s = 0; s < ss; ++s) {
+    float offset = vr_sample_offset(s, ss);
+    sample_offsets_x[s] = offset;
+    sample_offsets_y[s] = offset;
+  }
 
   vr_segment_t* segments = NULL;
   size_t seg_count = 0;
@@ -1375,19 +1382,21 @@ vr_status_t vr_rasterize_outline_with_mode(
   float sx_base = (float)x0 - (float)pad;
   float sy_base = (float)(y1 - 1 + pad);
   for (int y = 0; y < h; ++y) {
+    float fy = sy_base - (float)y;
     for (int x = 0; x < w; ++x) {
-      float total_distance = 0.0f;
-      float msdf_total[VR_RASTER_MSDF_CHANNEL_COUNT] = {0.0f};
+      float fx = sx_base + (float)x;
+      size_t out_idx = ((size_t)y * (size_t)w + (size_t)x);
 
-      for (int sy = 0; sy < ss; ++sy) {
-        for (int sx = 0; sx < ss; ++sx) {
-          float fx = sx_base + (float)x + vr_sample_offset(sx, ss);
-          float fy = sy_base - (float)y + vr_sample_offset(sy, ss);
-          if (using_msdf) {
-            float sample_distances[VR_RASTER_MSDF_CHANNEL_COUNT] = {0.0f};
+      if (using_msdf) {
+        float msdf_total[VR_RASTER_MSDF_CHANNEL_COUNT] = {0.0f};
+        for (int sy = 0; sy < ss; ++sy) {
+          float sample_fy = fy + sample_offsets_y[sy];
+          for (int sx = 0; sx < ss; ++sx) {
+            float sample_fx = fx + sample_offsets_x[sx];
+            float sample_distances[VR_RASTER_MSDF_CHANNEL_COUNT];
             vr_msdf_signed_distances_to_outline(
-              fx,
-              fy,
+              sample_fx,
+              sample_fy,
               segments,
               seg_count,
               seg_colors,
@@ -1398,26 +1407,29 @@ vr_status_t vr_rasterize_outline_with_mode(
             msdf_total[0u] += sample_distances[0u];
             msdf_total[1u] += sample_distances[1u];
             msdf_total[2u] += sample_distances[2u];
-          } else {
-            total_distance += vr_distance_to_outline(
-              fx,
-              fy,
-              segments,
-              seg_count,
-              curves,
-              curve_count);
           }
         }
-      }
 
-      size_t out_idx = ((size_t)y * (size_t)w + (size_t)x);
-      if (using_msdf) {
         size_t pixel_idx = out_idx * out_channels;
         for (uint8_t color = 0u; color < VR_RASTER_MSDF_CHANNEL_COUNT; ++color) {
           float signed_distance = msdf_total[color] * inv_ss;
           bitmap[pixel_idx + (size_t)color] = vr_alpha_from_signed_distance(signed_distance, sdf_pad_f);
         }
       } else {
+        float total_distance = 0.0f;
+        for (int sy = 0; sy < ss; ++sy) {
+          float sample_fy = fy + sample_offsets_y[sy];
+          for (int sx = 0; sx < ss; ++sx) {
+            float sample_fx = fx + sample_offsets_x[sx];
+            total_distance += vr_distance_to_outline(
+              sample_fx,
+              sample_fy,
+              segments,
+              seg_count,
+              curves,
+              curve_count);
+          }
+        }
         float signed_distance = total_distance * inv_ss;
         bitmap[out_idx] = vr_alpha_from_signed_distance(signed_distance, sdf_pad_f);
       }
