@@ -1096,40 +1096,48 @@ static float vr_distance_to_outline(
   return (winding == 0) ? -nearest : nearest;
 }
 
-static float vr_segment_distance_sq_for_color(
+static void vr_msdf_nearest_channel_distance_sq(
   float px,
   float py,
   const vr_segment_t* segments,
   const uint8_t* seg_colors,
   size_t seg_count,
-  uint8_t color) {
-  float nearest_sq = FLT_MAX;
-  for (size_t s = 0u; s < seg_count; ++s) {
-    if (seg_colors[s] != color) continue;
-    float d_sq = vr_segment_distance_sq(px, py, &segments[s]);
-    if (d_sq < nearest_sq) {
-      nearest_sq = d_sq;
-    }
-  }
-  return nearest_sq;
-}
-
-static float vr_curve_distance_sq_for_color(
-  float px,
-  float py,
   const vr_raster_curve_t* curves,
   const uint8_t* curve_colors,
   size_t curve_count,
-  uint8_t color) {
-  float nearest_sq = FLT_MAX;
-  for (size_t c = 0u; c < curve_count; ++c) {
-    if (curve_colors[c] != color) continue;
-    float d_sq = vr_quadratic_distance_sq(px, py, &curves[c]);
-    if (d_sq < nearest_sq) {
-      nearest_sq = d_sq;
+  float out_channel_sq[VR_RASTER_MSDF_CHANNEL_COUNT],
+  bool out_channel_present[VR_RASTER_MSDF_CHANNEL_COUNT],
+  float* out_nearest_sq_all) {
+  for (uint8_t color = 0u; color < VR_RASTER_MSDF_CHANNEL_COUNT; ++color) {
+    out_channel_sq[color] = FLT_MAX;
+    out_channel_present[color] = false;
+  }
+
+  *out_nearest_sq_all = FLT_MAX;
+
+  for (size_t s = 0u; s < seg_count; ++s) {
+    float d_sq = vr_segment_distance_sq(px, py, &segments[s]);
+    if (d_sq < *out_nearest_sq_all) {
+      *out_nearest_sq_all = d_sq;
+    }
+    uint8_t color = seg_colors[s];
+    if (color < VR_RASTER_MSDF_CHANNEL_COUNT && d_sq < out_channel_sq[color]) {
+      out_channel_sq[color] = d_sq;
+      out_channel_present[color] = true;
     }
   }
-  return nearest_sq;
+
+  for (size_t c = 0u; c < curve_count; ++c) {
+    float d_sq = vr_quadratic_distance_sq(px, py, &curves[c]);
+    if (d_sq < *out_nearest_sq_all) {
+      *out_nearest_sq_all = d_sq;
+    }
+    uint8_t color = curve_colors[c];
+    if (color < VR_RASTER_MSDF_CHANNEL_COUNT && d_sq < out_channel_sq[color]) {
+      out_channel_sq[color] = d_sq;
+      out_channel_present[color] = true;
+    }
+  }
 }
 
 static void vr_msdf_signed_distances_to_outline(
@@ -1143,24 +1151,21 @@ static void vr_msdf_signed_distances_to_outline(
   const uint8_t* curve_colors,
   float out_distances[VR_RASTER_MSDF_CHANNEL_COUNT]) {
   float nearest_sq_all = FLT_MAX;
-  for (size_t s = 0u; s < seg_count; ++s) {
-    float d_sq = vr_segment_distance_sq(px, py, &segments[s]);
-    if (d_sq < nearest_sq_all) {
-      nearest_sq_all = d_sq;
-    }
-  }
-  for (size_t c = 0u; c < curve_count; ++c) {
-    float d_sq = vr_quadratic_distance_sq(px, py, &curves[c]);
-    if (d_sq < nearest_sq_all) {
-      nearest_sq_all = d_sq;
-    }
-  }
-
-  float distances[VR_RASTER_MSDF_CHANNEL_COUNT];
+  float nearest_channel_sq[VR_RASTER_MSDF_CHANNEL_COUNT];
   bool channel_present[VR_RASTER_MSDF_CHANNEL_COUNT];
-  channel_present[0u] = false;
-  channel_present[1u] = false;
-  channel_present[2u] = false;
+  float distances[VR_RASTER_MSDF_CHANNEL_COUNT];
+  vr_msdf_nearest_channel_distance_sq(
+    px,
+    py,
+    segments,
+    seg_colors,
+    seg_count,
+    curves,
+    curve_colors,
+    curve_count,
+    nearest_channel_sq,
+    channel_present,
+    &nearest_sq_all);
 
   float fallback = sqrtf(nearest_sq_all);
   if (!isfinite(fallback)) {
@@ -1168,28 +1173,9 @@ static void vr_msdf_signed_distances_to_outline(
   }
 
   for (uint8_t color = 0u; color < VR_RASTER_MSDF_CHANNEL_COUNT; ++color) {
-    float segment_sq = vr_segment_distance_sq_for_color(
-      px,
-      py,
-      segments,
-      seg_colors,
-      seg_count,
-      color);
-    float curve_sq = vr_curve_distance_sq_for_color(
-      px,
-      py,
-      curves,
-      curve_colors,
-      curve_count,
-      color);
-    float nearest_sq = segment_sq;
-    if (curve_sq < nearest_sq) {
-      nearest_sq = curve_sq;
-    }
-
+    float nearest_sq = nearest_channel_sq[color];
     if (nearest_sq < FLT_MAX) {
       distances[color] = sqrtf(nearest_sq);
-      channel_present[color] = true;
     } else {
       distances[color] = fallback;
     }
@@ -1211,7 +1197,9 @@ static void vr_msdf_signed_distances_to_outline(
 
   for (uint8_t color = 0u; color < VR_RASTER_MSDF_CHANNEL_COUNT; ++color) {
     if (!channel_present[color]) {
-      distances[color] = distances[(color + 1u) % VR_RASTER_MSDF_CHANNEL_COUNT];
+      uint8_t next_color = (color + 1u) % VR_RASTER_MSDF_CHANNEL_COUNT;
+      uint8_t prev_color = (color + 2u) % VR_RASTER_MSDF_CHANNEL_COUNT;
+      distances[color] = channel_present[next_color] ? distances[next_color] : distances[prev_color];
     }
   }
 
