@@ -36,11 +36,35 @@ static const int VR_RASTER_MAX_DEPTH = 8;
 static const int VR_RASTER_TESSELLATION_SOFT_LIMIT = 12;
 static const int VR_RASTER_TESSELLATION_HARD_LIMIT = 16;
 static const float VR_RASTER_QUAD_BEZIER_TOLERANCE = 0.01f;
+static const int VR_RASTER_CURVE_NEWTON_STEPS = 8;
+static const int VR_RASTER_CURVE_DISTANCE_SAMPLES = 16;
+static const float VR_RASTER_CURVE_NEWTON_EPSILON = 1e-5f;
+static const float VR_RASTER_CURVE_LINEAR_TOLERANCE = 1e-12f;
 static const float VR_RASTER_ALPHA_MIN = 0.0f;
 static const float VR_RASTER_ALPHA_MAX = 255.0f;
 
+typedef struct {
+  float x0;
+  float y0;
+  float x1;
+  float y1;
+  float x2;
+  float y2;
+} vr_raster_curve_t;
+
 static vr_status_t vr_line_segments_from_quad(const vr_outline_point_t p0, const vr_outline_point_t p1, const vr_outline_point_t p2,
   vr_segment_t** segs, size_t* count, size_t* cap, float tolerance_sq, int depth);
+static vr_status_t vr_ensure_curves_capacity(vr_raster_curve_t** curves, size_t* curve_cap, size_t needed);
+static vr_status_t vr_push_curve(
+  vr_raster_curve_t** curves,
+  size_t* curve_count,
+  size_t* curve_cap,
+  float x0,
+  float y0,
+  float x1,
+  float y1,
+  float x2,
+  float y2);
 
 static float vr_f2dot14_to_float(uint16_t v) {
   return (float)(int16_t)v / VR_F2DOT14_SCALE;
@@ -82,6 +106,44 @@ static vr_status_t vr_push_segment(vr_segment_t** segs, size_t* seg_count, size_
   (*segs)[*seg_count].x2 = x2;
   (*segs)[*seg_count].y2 = y2;
   ++(*seg_count);
+  return VR_OK;
+}
+
+static vr_status_t vr_ensure_curves_capacity(vr_raster_curve_t** curves, size_t* curve_cap, size_t needed) {
+  if (*curve_cap >= needed) return VR_OK;
+
+  size_t cap = (*curve_cap == 0u) ? VR_RASTER_SEGMENT_INITIAL_CAP : *curve_cap;
+  while (cap < needed) {
+    if (cap > (SIZE_MAX / 2u)) return VR_ERR_OOM;
+    cap *= 2u;
+  }
+  vr_raster_curve_t* nc = (vr_raster_curve_t*)realloc(*curves, cap * sizeof(vr_raster_curve_t));
+  if (!nc) return VR_ERR_OOM;
+  *curves = nc;
+  *curve_cap = cap;
+  return VR_OK;
+}
+
+static vr_status_t vr_push_curve(
+  vr_raster_curve_t** curves,
+  size_t* curve_count,
+  size_t* curve_cap,
+  float x0,
+  float y0,
+  float x1,
+  float y1,
+  float x2,
+  float y2) {
+  if (vr_ensure_curves_capacity(curves, curve_cap, *curve_count + 1u) != VR_OK) {
+    return VR_ERR_OOM;
+  }
+  (*curves)[*curve_count].x0 = x0;
+  (*curves)[*curve_count].y0 = y0;
+  (*curves)[*curve_count].x1 = x1;
+  (*curves)[*curve_count].y1 = y1;
+  (*curves)[*curve_count].x2 = x2;
+  (*curves)[*curve_count].y2 = y2;
+  ++(*curve_count);
   return VR_OK;
 }
 
@@ -293,7 +355,10 @@ static vr_status_t vr_emit_contour_segments(
   size_t point_count,
   vr_segment_t** segs,
   size_t* seg_count,
-  size_t* seg_cap) {
+  size_t* seg_cap,
+  vr_raster_curve_t** curves,
+  size_t* curve_count,
+  size_t* curve_cap) {
   if (point_count < 2u) {
     return VR_OK;
   }
@@ -319,6 +384,19 @@ static vr_status_t vr_emit_contour_segments(
       case 2: {
         if (i + 2u >= point_count || !points[i + 2u].on_curve) {
           return VR_ERR_INVALID_FONT;
+        }
+        vr_status_t curve_store_status = vr_push_curve(
+          curves,
+          curve_count,
+          curve_cap,
+          p0.x,
+          p0.y,
+          p1.x,
+          p1.y,
+          points[i + 2u].x,
+          points[i + 2u].y);
+        if (curve_store_status != VR_OK) {
+          return curve_store_status;
         }
         vr_status_t curve_status = vr_line_segments_from_quad(
           p0,
@@ -753,7 +831,90 @@ static float vr_segment_distance_sq(float px, float py, const vr_segment_t* seg)
   return dx * dx + dy * dy;
 }
 
-static float vr_signed_distance_to_outline(float px, float py, const vr_segment_t* segments, size_t seg_count) {
+static float vr_quadratic_point_x(float t, const vr_raster_curve_t* curve) {
+  float omt = 1.0f - t;
+  float t2 = t * t;
+  float omt2 = omt * omt;
+  return omt2 * curve->x0 + 2.0f * omt * t * curve->x1 + t2 * curve->x2;
+}
+
+static float vr_quadratic_point_y(float t, const vr_raster_curve_t* curve) {
+  float omt = 1.0f - t;
+  float t2 = t * t;
+  float omt2 = omt * omt;
+  return omt2 * curve->y0 + 2.0f * omt * t * curve->y1 + t2 * curve->y2;
+}
+
+static float vr_quadratic_point_distance_sq(float px, float py, const vr_raster_curve_t* curve, float t) {
+  float x = vr_quadratic_point_x(t, curve);
+  float y = vr_quadratic_point_y(t, curve);
+  float dx = px - x;
+  float dy = py - y;
+  return dx * dx + dy * dy;
+}
+
+static float vr_quadratic_distance_sq(float px, float py, const vr_raster_curve_t* curve) {
+  float ax = curve->x0 - 2.0f * curve->x1 + curve->x2;
+  float ay = curve->y0 - 2.0f * curve->y1 + curve->y2;
+  float bx = 2.0f * (curve->x1 - curve->x0);
+  float by = 2.0f * (curve->y1 - curve->y0);
+  float cx = curve->x0 - px;
+  float cy = curve->y0 - py;
+
+  float quad_accel = ax * ax + ay * ay;
+  if (quad_accel <= VR_RASTER_CURVE_LINEAR_TOLERANCE) {
+    return vr_segment_distance_sq(px, py, &(vr_segment_t){curve->x0, curve->y0, curve->x2, curve->y2});
+  }
+
+  float c0 = cx * bx + cy * by;
+  float c1 = 2.0f * (cx * ax + cy * ay) + bx * bx + by * by;
+  float c2 = 2.0f * (bx * ax + by * ay);
+  float c3 = 2.0f * quad_accel;
+
+  float best_sq = vr_quadratic_point_distance_sq(px, py, curve, 0.0f);
+
+  float end_sq = vr_quadratic_point_distance_sq(px, py, curve, 1.0f);
+  if (end_sq < best_sq) {
+    best_sq = end_sq;
+  }
+
+  for (int sample = 0; sample <= VR_RASTER_CURVE_DISTANCE_SAMPLES; ++sample) {
+    float t = (float)sample / (float)VR_RASTER_CURVE_DISTANCE_SAMPLES;
+    for (int step = 0; step < VR_RASTER_CURVE_NEWTON_STEPS; ++step) {
+      float derivative = ((3.0f * c3 * t + 2.0f * c2) * t + c1) * t + c0;
+      float derivative_slope = (3.0f * c3 * t + 2.0f * c2) * t + c1;
+      if (fabsf(derivative_slope) <= VR_RASTER_SEGMENT_TOLERANCE) {
+        break;
+      }
+      float next_t = t - derivative / derivative_slope;
+      if (next_t < 0.0f) {
+        next_t = 0.0f;
+      } else if (next_t > 1.0f) {
+        next_t = 1.0f;
+      }
+      if (fabsf(next_t - t) <= VR_RASTER_CURVE_NEWTON_EPSILON) {
+        t = next_t;
+        break;
+      }
+      t = next_t;
+    }
+
+    float sq = vr_quadratic_point_distance_sq(px, py, curve, t);
+    if (sq < best_sq) {
+      best_sq = sq;
+    }
+  }
+
+  return best_sq;
+}
+
+static float vr_signed_distance_to_outline(
+  float px,
+  float py,
+  const vr_segment_t* segments,
+  size_t seg_count,
+  const vr_raster_curve_t* curves,
+  size_t curve_count) {
   float nearest_sq = FLT_MAX;
   for (size_t s = 0u; s < seg_count; ++s) {
     float d_sq = vr_segment_distance_sq(px, py, &segments[s]);
@@ -766,6 +927,13 @@ static float vr_signed_distance_to_outline(float px, float py, const vr_segment_
   int winding = 0;
   for (size_t s = 0u; s < seg_count; ++s) {
     winding += vr_segment_crossing_sign(px, py, &segments[s]);
+  }
+
+  for (size_t c = 0u; c < curve_count; ++c) {
+    float d_sq = vr_quadratic_distance_sq(px, py, &curves[c]);
+    if (d_sq < nearest_sq) {
+      nearest_sq = d_sq;
+    }
   }
 
   int sign = (winding == 0) ? -1 : 1;
@@ -814,6 +982,9 @@ vr_status_t vr_rasterize_outline(const vr_font_face_t* face, const vr_glyph_outl
   vr_segment_t* segments = NULL;
   size_t seg_count = 0;
   size_t seg_cap = 0;
+  vr_raster_curve_t* curves = NULL;
+  size_t curve_count = 0;
+  size_t curve_cap = 0;
 
   for (uint16_t c = 0; c < outline->number_of_contours; ++c) {
     uint16_t start = (c == 0) ? 0 : (outline->contour_end_pts[c - 1] + 1);
@@ -826,25 +997,37 @@ vr_status_t vr_rasterize_outline(const vr_font_face_t* face, const vr_glyph_outl
     vr_status_t collect_status = vr_collect_contour_points(outline, start, end, scale, &contour_points, &contour_point_count);
     if (collect_status != VR_OK) {
       free(segments);
+      free(curves);
       return collect_status;
     }
 
-    vr_status_t emit_status = vr_emit_contour_segments(contour_points, contour_point_count, &segments, &seg_count, &seg_cap);
+    vr_status_t emit_status = vr_emit_contour_segments(
+      contour_points,
+      contour_point_count,
+      &segments,
+      &seg_count,
+      &seg_cap,
+      &curves,
+      &curve_count,
+      &curve_cap);
     free(contour_points);
     if (emit_status != VR_OK) {
       free(segments);
+      free(curves);
       return emit_status;
     }
   }
 
-  if (seg_count == 0 || !segments) {
+  if ((seg_count == 0u && curve_count == 0u) || (!segments && seg_count > 0u) || (!curves && curve_count > 0u)) {
     free(segments);
+    free(curves);
     return VR_ERR_UNSUPPORTED;
   }
 
   uint8_t* bitmap = (uint8_t*)calloc((size_t)w * (size_t)h, 1);
   if (!bitmap) {
     free(segments);
+    free(curves);
     return VR_ERR_OOM;
   }
 
@@ -858,7 +1041,13 @@ vr_status_t vr_rasterize_outline(const vr_font_face_t* face, const vr_glyph_outl
         for (int sx = 0; sx < ss; ++sx) {
           float fx = sx_base + (float)x + vr_sample_offset(sx, ss);
           float fy = sy_base - (float)y + vr_sample_offset(sy, ss);
-          total_distance += vr_signed_distance_to_outline(fx, fy, segments, seg_count);
+          total_distance += vr_signed_distance_to_outline(
+            fx,
+            fy,
+            segments,
+            seg_count,
+            curves,
+            curve_count);
         }
       }
 
@@ -868,6 +1057,7 @@ vr_status_t vr_rasterize_outline(const vr_font_face_t* face, const vr_glyph_outl
   }
 
   free(segments);
+  free(curves);
   *out_bitmap = bitmap;
   *out_w = w;
   *out_h = h;
