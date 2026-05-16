@@ -8,7 +8,7 @@
 #include <unistd.h>
 
 #define SERVER_IP "10.42.0.1"
-#define BOOT_FILE "EFI/BOOT/BOOTX64.EFI"
+#define BOOT_FILE "BOOTX64.EFI"
 #define MAGIC 0x63825363u
 #define PORT 4011u
 
