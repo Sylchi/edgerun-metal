@@ -1,0 +1,251 @@
+
+May 17 03:35:12 fw sh[125483]: parameter request list (55): 1 3
+May 17 03:35:17 fw sh[125483]: DHCPDISCOVER from b0:19:21:fd:c3:92 xid=0x0000717c vendor=TL-SG1210MPE arch=<not-present> selected mode=ignored ip=10.42.0.2 bootfile=<none>
+May 17 03:35:17 fw sh[125483]: DHCPDISCOVER flags=0x8000 ciaddr=0.0.0.0
+May 17 03:35:17 fw sh[125483]: requested ip (50): <none>
+May 17 03:35:17 fw sh[125483]: server id in request (54): <none>
+May 17 03:35:17 fw sh[125483]: parameter request list (55): 1 3
+May 17 03:35:22 fw sh[125483]: DHCPDISCOVER from b0:19:21:fd:c3:92 xid=0x00005932 vendor=TL-SG1210MPE arch=<not-present> selected mode=ignored ip=10.42.0.2 bootfile=<none>
+May 17 03:35:22 fw sh[125483]: DHCPDISCOVER flags=0x8000 ciaddr=0.0.0.0
+May 17 03:35:22 fw sh[125483]: requested ip (50): <none>
+May 17 03:35:22 fw sh[125483]: server id in request (54): <none>
+May 17 03:35:22 fw sh[125483]: parameter request list (55): 1 3
+May 17 03:35:27 fw sh[125483]: DHCPDISCOVER from b0:19:21:fd:c3:92 xid=0x000025ab vendor=TL-SG1210MPE arch=<not-present> selected mode=ignored ip=10.42.0.2 bootfile=<none>
+May 17 03:35:27 fw sh[125483]: DHCPDISCOVER flags=0x8000 ciaddr=0.0.0.0
+May 17 03:35:27 fw sh[125483]: requested ip (50): <none>
+May 17 03:35:27 fw sh[125483]: server id in request (54): <none>
+May 17 03:35:27 fw sh[125483]: parameter request list (55): 1 3
+May 17 03:35:32 fw sh[125483]: DHCPDISCOVER from b0:19:21:fd:c3:92 xid=0x00006122 vendor=TL-SG1210MPE arch=<not-present> selected mode=ignored ip=10.42.0.2 bootfile=<none>
+May 17 03:35:32 fw sh[125483]: DHCPDISCOVER flags=0x8000 ciaddr=0.0.0.0
+May 17 03:35:32 fw sh[125483]: requested ip (50): <none>
+May 17 03:35:32 fw sh[125483]: server id in request (54): <none>
+May 17 03:35:32 fw sh[125483]: parameter request list (55): 1 3
+May 17 03:35:37 fw sh[125483]: DHCPDISCOVER from b0:19:21:fd:c3:92 xid=0x0000577d vendor=TL-SG1210MPE arch=<not-present> selected mode=ignored ip=10.42.0.2 bootfile=<none>
+May 17 03:35:37 fw sh[125483]: DHCPDISCOVER flags=0x8000 ciaddr=0.0.0.0
+May 17 03:35:37 fw sh[125483]: requested ip (50): <none>
+May 17 03:35:37 fw sh[125483]: server id in request (54): <none>
+May 17 03:35:37 fw sh[125483]: parameter request list (55): 1 3
+May 17 03:35:42 fw sh[125483]: DHCPDISCOVER from b0:19:21:fd:c3:92 xid=0x00005b17 vendor=TL-SG1210MPE arch=<not-present> selected mode=ignored ip=10.42.0.2 bootfile=<none>
+May 17 03:35:42 fw sh[125483]: DHCPDISCOVER flags=0x8000 ciaddr=0.0.0.0
+May 17 03:35:42 fw sh[125483]: requested ip (50): <none>
+May 17 03:35:42 fw sh[125483]: server id in request (54): <none>
+May 17 03:35:42 fw sh[125483]: parameter request list (55): 1 3
+May 17 03:35:47 fw sh[125483]: DHCPDISCOVER from b0:19:21:fd:c3:92 xid=0x00003d43 vendor=TL-SG1210MPE arch=<not-present> selected mode=ignored ip=10.42.0.2 bootfile=<none>
+May 17 03:35:47 fw sh[125483]: DHCPDISCOVER flags=0x8000 ciaddr=0.0.0.0
+May 17 03:35:47 fw sh[125483]: requested ip (50): <none>
+May 17 03:35:47 fw sh[125483]: server id in request (54): <none>
+May 17 03:35:47 fw sh[125483]: parameter request list (55): 1 3
+May 17 03:35:52 fw sh[125483]: DHCPDISCOVER from b0:19:21:fd:c3:92 xid=0x00004caf vendor=TL-SG1210MPE arch=<not-present> selected mode=ignored ip=10.42.0.2 bootfile=<none>
+May 17 03:35:52 fw sh[125483]: DHCPDISCOVER flags=0x8000 ciaddr=0.0.0.0
+May 17 03:35:52 fw sh[125483]: requested ip (50): <none>
+May 17 03:35:52 fw sh[125483]: server id in request (54): <none>
+May 17 03:35:52 fw sh[125483]: parameter request list (55): 1 3
+May 17 03:35:57 fw sh[125483]: DHCPDISCOVER from b0:19:21:fd:c3:92 xid=0x0000674d vendor=TL-SG1210MPE arch=<not-present> selected mode=ignored ip=10.42.0.2 bootfile=<none>
+May 17 03:35:57 fw sh[125483]: DHCPDISCOVER flags=0x8000 ciaddr=0.0.0.0
+May 17 03:35:57 fw sh[125483]: requested ip (50): <none>
+May 17 03:35:57 fw sh[125483]: server id in request (54): <none>
+May 17 03:35:57 fw sh[125483]: parameter request list (55): 1 3
+May 17 03:36:02 fw sh[125483]: DHCPDISCOVER from b0:19:21:fd:c3:92 xid=0x00002bef vendor=TL-SG1210MPE arch=<not-present> selected mode=ignored ip=10.42.0.2 bootfile=<none>
+May 17 03:36:02 fw sh[125483]: DHCPDISCOVER flags=0x8000 ciaddr=0.0.0.0
+May 17 03:36:02 fw sh[125483]: requested ip (50): <none>
+May 17 03:36:02 fw sh[125483]: server id in request (54): <none>
+May 17 03:36:02 fw sh[125483]: parameter request list (55): 1 3
+May 17 03:36:07 fw sh[125483]: DHCPDISCOVER from b0:19:21:fd:c3:92 xid=0x00003ba8 vendor=TL-SG1210MPE arch=<not-present> selected mode=ignored ip=10.42.0.2 bootfile=<none>
+May 17 03:36:07 fw sh[125483]: DHCPDISCOVER flags=0x8000 ciaddr=0.0.0.0
+May 17 03:36:07 fw sh[125483]: requested ip (50): <none>
+May 17 03:36:07 fw sh[125483]: server id in request (54): <none>
+May 17 03:36:07 fw sh[125483]: parameter request list (55): 1 3
+May 17 03:36:12 fw sh[125483]: DHCPDISCOVER from b0:19:21:fd:c3:92 xid=0x00007bb1 vendor=TL-SG1210MPE arch=<not-present> selected mode=ignored ip=10.42.0.2 bootfile=<none>
+May 17 03:36:12 fw sh[125483]: DHCPDISCOVER flags=0x8000 ciaddr=0.0.0.0
+May 17 03:36:12 fw sh[125483]: requested ip (50): <none>
+May 17 03:36:12 fw sh[125483]: server id in request (54): <none>
+May 17 03:36:12 fw sh[125483]: parameter request list (55): 1 3
+May 17 03:36:17 fw sh[125483]: DHCPDISCOVER from b0:19:21:fd:c3:92 xid=0x00005b10 vendor=TL-SG1210MPE arch=<not-present> selected mode=ignored ip=10.42.0.2 bootfile=<none>
+May 17 03:36:17 fw sh[125483]: DHCPDISCOVER flags=0x8000 ciaddr=0.0.0.0
+May 17 03:36:17 fw sh[125483]: requested ip (50): <none>
+May 17 03:36:17 fw sh[125483]: server id in request (54): <none>
+May 17 03:36:17 fw sh[125483]: parameter request list (55): 1 3
+May 17 03:36:22 fw sh[125483]: DHCPDISCOVER from b0:19:21:fd:c3:92 xid=0x000001cc vendor=TL-SG1210MPE arch=<not-present> selected mode=ignored ip=10.42.0.2 bootfile=<none>
+May 17 03:36:22 fw sh[125483]: DHCPDISCOVER flags=0x8000 ciaddr=0.0.0.0
+May 17 03:36:22 fw sh[125483]: requested ip (50): <none>
+May 17 03:36:22 fw sh[125483]: server id in request (54): <none>
+May 17 03:36:22 fw sh[125483]: parameter request list (55): 1 3
+May 17 03:36:27 fw sh[125483]: DHCPDISCOVER from b0:19:21:fd:c3:92 xid=0x0000498e vendor=TL-SG1210MPE arch=<not-present> selected mode=ignored ip=10.42.0.2 bootfile=<none>
+May 17 03:36:27 fw sh[125483]: DHCPDISCOVER flags=0x8000 ciaddr=0.0.0.0
+May 17 03:36:27 fw sh[125483]: requested ip (50): <none>
+May 17 03:36:27 fw sh[125483]: server id in request (54): <none>
+May 17 03:36:27 fw sh[125483]: parameter request list (55): 1 3
+May 17 03:36:32 fw sh[125483]: DHCPDISCOVER from b0:19:21:fd:c3:92 xid=0x000078c2 vendor=TL-SG1210MPE arch=<not-present> selected mode=ignored ip=10.42.0.2 bootfile=<none>
+May 17 03:36:32 fw sh[125483]: DHCPDISCOVER flags=0x8000 ciaddr=0.0.0.0
+May 17 03:36:32 fw sh[125483]: requested ip (50): <none>
+May 17 03:36:32 fw sh[125483]: server id in request (54): <none>
+May 17 03:36:32 fw sh[125483]: parameter request list (55): 1 3
+May 17 03:36:37 fw sh[125483]: DHCPDISCOVER from b0:19:21:fd:c3:92 xid=0x00002b55 vendor=TL-SG1210MPE arch=<not-present> selected mode=ignored ip=10.42.0.2 bootfile=<none>
+May 17 03:36:37 fw sh[125483]: DHCPDISCOVER flags=0x8000 ciaddr=0.0.0.0
+May 17 03:36:37 fw sh[125483]: requested ip (50): <none>
+May 17 03:36:37 fw sh[125483]: server id in request (54): <none>
+May 17 03:36:37 fw sh[125483]: parameter request list (55): 1 3
+May 17 03:36:42 fw sh[125483]: DHCPDISCOVER from b0:19:21:fd:c3:92 xid=0x000008ab vendor=TL-SG1210MPE arch=<not-present> selected mode=ignored ip=10.42.0.2 bootfile=<none>
+May 17 03:36:42 fw sh[125483]: DHCPDISCOVER flags=0x8000 ciaddr=0.0.0.0
+May 17 03:36:42 fw sh[125483]: requested ip (50): <none>
+May 17 03:36:42 fw sh[125483]: server id in request (54): <none>
+May 17 03:36:42 fw sh[125483]: parameter request list (55): 1 3
+May 17 03:36:47 fw sh[125483]: DHCPDISCOVER from b0:19:21:fd:c3:92 xid=0x0000624d vendor=TL-SG1210MPE arch=<not-present> selected mode=ignored ip=10.42.0.2 bootfile=<none>
+May 17 03:36:47 fw sh[125483]: DHCPDISCOVER flags=0x8000 ciaddr=0.0.0.0
+May 17 03:36:47 fw sh[125483]: requested ip (50): <none>
+May 17 03:36:47 fw sh[125483]: server id in request (54): <none>
+May 17 03:36:47 fw sh[125483]: parameter request list (55): 1 3
+May 17 03:36:52 fw sh[125483]: DHCPDISCOVER from b0:19:21:fd:c3:92 xid=0x000034ab vendor=TL-SG1210MPE arch=<not-present> selected mode=ignored ip=10.42.0.2 bootfile=<none>
+May 17 03:36:52 fw sh[125483]: DHCPDISCOVER flags=0x8000 ciaddr=0.0.0.0
+May 17 03:36:52 fw sh[125483]: requested ip (50): <none>
+May 17 03:36:52 fw sh[125483]: server id in request (54): <none>
+May 17 03:36:52 fw sh[125483]: parameter request list (55): 1 3
+May 17 03:36:57 fw sh[125483]: DHCPDISCOVER from b0:19:21:fd:c3:92 xid=0x00005aea vendor=TL-SG1210MPE arch=<not-present> selected mode=ignored ip=10.42.0.2 bootfile=<none>
+May 17 03:36:57 fw sh[125483]: DHCPDISCOVER flags=0x8000 ciaddr=0.0.0.0
+May 17 03:36:57 fw sh[125483]: requested ip (50): <none>
+May 17 03:36:57 fw sh[125483]: server id in request (54): <none>
+May 17 03:36:57 fw sh[125483]: parameter request list (55): 1 3
+May 17 03:37:02 fw sh[125483]: DHCPDISCOVER from b0:19:21:fd:c3:92 xid=0x00005384 vendor=TL-SG1210MPE arch=<not-present> selected mode=ignored ip=10.42.0.2 bootfile=<none>
+May 17 03:37:02 fw sh[125483]: DHCPDISCOVER flags=0x8000 ciaddr=0.0.0.0
+May 17 03:37:02 fw sh[125483]: requested ip (50): <none>
+May 17 03:37:02 fw sh[125483]: server id in request (54): <none>
+May 17 03:37:02 fw sh[125483]: parameter request list (55): 1 3
+May 17 03:37:07 fw sh[125483]: DHCPDISCOVER from b0:19:21:fd:c3:92 xid=0x00005297 vendor=TL-SG1210MPE arch=<not-present> selected mode=ignored ip=10.42.0.2 bootfile=<none>
+May 17 03:37:07 fw sh[125483]: DHCPDISCOVER flags=0x8000 ciaddr=0.0.0.0
+May 17 03:37:07 fw sh[125483]: requested ip (50): <none>
+May 17 03:37:07 fw sh[125483]: server id in request (54): <none>
+May 17 03:37:07 fw sh[125483]: parameter request list (55): 1 3
+May 17 03:37:12 fw sh[125483]: DHCPDISCOVER from b0:19:21:fd:c3:92 xid=0x000051be vendor=TL-SG1210MPE arch=<not-present> selected mode=ignored ip=10.42.0.2 bootfile=<none>
+May 17 03:37:12 fw sh[125483]: DHCPDISCOVER flags=0x8000 ciaddr=0.0.0.0
+May 17 03:37:12 fw sh[125483]: requested ip (50): <none>
+May 17 03:37:12 fw sh[125483]: server id in request (54): <none>
+May 17 03:37:12 fw sh[125483]: parameter request list (55): 1 3
+May 17 03:37:17 fw sh[125483]: DHCPDISCOVER from b0:19:21:fd:c3:92 xid=0x000035c3 vendor=TL-SG1210MPE arch=<not-present> selected mode=ignored ip=10.42.0.2 bootfile=<none>
+May 17 03:37:17 fw sh[125483]: DHCPDISCOVER flags=0x8000 ciaddr=0.0.0.0
+May 17 03:37:17 fw sh[125483]: requested ip (50): <none>
+May 17 03:37:17 fw sh[125483]: server id in request (54): <none>
+May 17 03:37:17 fw sh[125483]: parameter request list (55): 1 3
+May 17 03:37:22 fw sh[125483]: DHCPDISCOVER from b0:19:21:fd:c3:92 xid=0x00003c3a vendor=TL-SG1210MPE arch=<not-present> selected mode=ignored ip=10.42.0.2 bootfile=<none>
+May 17 03:37:22 fw sh[125483]: DHCPDISCOVER flags=0x8000 ciaddr=0.0.0.0
+May 17 03:37:22 fw sh[125483]: requested ip (50): <none>
+May 17 03:37:22 fw sh[125483]: server id in request (54): <none>
+May 17 03:37:22 fw sh[125483]: parameter request list (55): 1 3
+May 17 03:37:23 fw systemd[1]: Stopping EdgeRun Metal PXE network boot responder...
+May 17 03:37:23 fw systemd[1]: edgerun-netboot.service: Deactivated successfully.
+May 17 03:37:23 fw systemd[1]: Stopped EdgeRun Metal PXE network boot responder.
+May 17 03:37:23 fw systemd[1]: Starting EdgeRun Metal PXE network boot responder...
+May 17 03:37:23 fw systemd[1]: Started EdgeRun Metal PXE network boot responder.
+May 17 03:37:23 fw sh[155739]: invalid --client-ip value
+May 17 03:37:23 fw sh[155739]: Usage:
+May 17 03:37:23 fw sh[155739]:   [REDACTED_TOKEN] --iface <name> --efi <path-to-BOOTX64.EFI> [--setup-iface] [--http] [--tftp] [--auto] [--mode <auto|http|tftp>]
+May 17 03:37:23 fw sh[155739]:   [--http-port <port>] [--allow-mac <aa:bb:cc:dd:ee:ff>] [--client-ip <10.42.0.2>] [--force-http-for-pxe]
+May 17 03:37:23 fw sh[155739]:   [--mgmt-dhcp] [--mgmt-mac <aa:bb:cc:dd:ee:ff>] [--mgmt-ip <10.42.0.10>]
+May 17 03:37:23 fw sh[155739]:   --help
+May 17 03:37:23 fw systemd[1]: edgerun-netboot.service: Main process exited, code=exited, status=1/FAILURE
+May 17 03:37:23 fw systemd[1]: edgerun-netboot.service: Failed with result 'exit-code'.
+May 17 03:37:24 fw systemd[1]: edgerun-netboot.service: Scheduled restart job, restart counter is at 1.
+May 17 03:37:24 fw systemd[1]: Starting EdgeRun Metal PXE network boot responder...
+May 17 03:37:24 fw systemd[1]: Started EdgeRun Metal PXE network boot responder.
+May 17 03:37:24 fw sh[155900]: invalid --client-ip value
+May 17 03:37:24 fw sh[155900]: Usage:
+May 17 03:37:24 fw sh[155900]:   [REDACTED_TOKEN] --iface <name> --efi <path-to-BOOTX64.EFI> [--setup-iface] [--http] [--tftp] [--auto] [--mode <auto|http|tftp>]
+May 17 03:37:24 fw sh[155900]:   [--http-port <port>] [--allow-mac <aa:bb:cc:dd:ee:ff>] [--client-ip <10.42.0.2>] [--force-http-for-pxe]
+May 17 03:37:24 fw sh[155900]:   [--mgmt-dhcp] [--mgmt-mac <aa:bb:cc:dd:ee:ff>] [--mgmt-ip <10.42.0.10>]
+May 17 03:37:24 fw sh[155900]:   --help
+May 17 03:37:24 fw systemd[1]: edgerun-netboot.service: Main process exited, code=exited, status=1/FAILURE
+May 17 03:37:24 fw systemd[1]: edgerun-netboot.service: Failed with result 'exit-code'.
+May 17 03:37:25 fw systemd[1]: edgerun-netboot.service: Scheduled restart job, restart counter is at 2.
+May 17 03:37:25 fw systemd[1]: Starting EdgeRun Metal PXE network boot responder...
+May 17 03:37:25 fw systemd[1]: Started EdgeRun Metal PXE network boot responder.
+May 17 03:37:25 fw sh[155932]: invalid --client-ip value
+May 17 03:37:25 fw sh[155932]: Usage:
+May 17 03:37:25 fw sh[155932]:   [REDACTED_TOKEN] --iface <name> --efi <path-to-BOOTX64.EFI> [--setup-iface] [--http] [--tftp] [--auto] [--mode <auto|http|tftp>]
+May 17 03:37:25 fw sh[155932]:   [--http-port <port>] [--allow-mac <aa:bb:cc:dd:ee:ff>] [--client-ip <10.42.0.2>] [--force-http-for-pxe]
+May 17 03:37:25 fw sh[155932]:   [--mgmt-dhcp] [--mgmt-mac <aa:bb:cc:dd:ee:ff>] [--mgmt-ip <10.42.0.10>]
+May 17 03:37:25 fw sh[155932]:   --help
+May 17 03:37:25 fw systemd[1]: edgerun-netboot.service: Main process exited, code=exited, status=1/FAILURE
+May 17 03:37:25 fw systemd[1]: edgerun-netboot.service: Failed with result 'exit-code'.
+May 17 03:37:26 fw systemd[1]: edgerun-netboot.service: Scheduled restart job, restart counter is at 3.
+May 17 03:37:26 fw systemd[1]: Starting EdgeRun Metal PXE network boot responder...
+May 17 03:37:26 fw systemd[1]: Started EdgeRun Metal PXE network boot responder.
+May 17 03:37:26 fw sh[155967]: invalid --client-ip value
+May 17 03:37:26 fw sh[155967]: Usage:
+May 17 03:37:26 fw sh[155967]:   [REDACTED_TOKEN] --iface <name> --efi <path-to-BOOTX64.EFI> [--setup-iface] [--http] [--tftp] [--auto] [--mode <auto|http|tftp>]
+May 17 03:37:26 fw sh[155967]:   [--http-port <port>] [--allow-mac <aa:bb:cc:dd:ee:ff>] [--client-ip <10.42.0.2>] [--force-http-for-pxe]
+May 17 03:37:26 fw sh[155967]:   [--mgmt-dhcp] [--mgmt-mac <aa:bb:cc:dd:ee:ff>] [--mgmt-ip <10.42.0.10>]
+May 17 03:37:26 fw sh[155967]:   --help
+May 17 03:37:26 fw systemd[1]: edgerun-netboot.service: Main process exited, code=exited, status=1/FAILURE
+May 17 03:37:26 fw systemd[1]: edgerun-netboot.service: Failed with result 'exit-code'.
+May 17 03:37:27 fw systemd[1]: edgerun-netboot.service: Scheduled restart job, restart counter is at 4.
+May 17 03:37:27 fw systemd[1]: Starting EdgeRun Metal PXE network boot responder...
+May 17 03:37:27 fw systemd[1]: Started EdgeRun Metal PXE network boot responder.
+May 17 03:37:27 fw sh[155990]: invalid --client-ip value
+May 17 03:37:27 fw sh[155990]: Usage:
+May 17 03:37:27 fw sh[155990]:   [REDACTED_TOKEN] --iface <name> --efi <path-to-BOOTX64.EFI> [--setup-iface] [--http] [--tftp] [--auto] [--mode <auto|http|tftp>]
+May 17 03:37:27 fw sh[155990]:   [--http-port <port>] [--allow-mac <aa:bb:cc:dd:ee:ff>] [--client-ip <10.42.0.2>] [--force-http-for-pxe]
+May 17 03:37:27 fw sh[155990]:   [--mgmt-dhcp] [--mgmt-mac <aa:bb:cc:dd:ee:ff>] [--mgmt-ip <10.42.0.10>]
+May 17 03:37:27 fw sh[155990]:   --help
+May 17 03:37:27 fw systemd[1]: edgerun-netboot.service: Main process exited, code=exited, status=1/FAILURE
+May 17 03:37:27 fw systemd[1]: edgerun-netboot.service: Failed with result 'exit-code'.
+May 17 03:37:29 fw systemd[1]: edgerun-netboot.service: Scheduled restart job, restart counter is at 5.
+May 17 03:37:29 fw systemd[1]: edgerun-netboot.service: Start request repeated too quickly.
+May 17 03:37:29 fw systemd[1]: edgerun-netboot.service: Failed with result 'start-limit-hit'.
+May 17 03:37:29 fw systemd[1]: Failed to start EdgeRun Metal PXE network boot responder.
+May 17 03:40:54 fw systemd[1]: Starting EdgeRun Metal PXE network boot responder...
+May 17 03:40:54 fw systemd[1]: Started EdgeRun Metal PXE network boot responder.
+May 17 03:40:54 fw sh[160340]: invalid --mgmt-mac value
+May 17 03:40:54 fw sh[160340]: Usage:
+May 17 03:40:54 fw sh[160340]:   [REDACTED_TOKEN] --iface <name> --efi <path-to-BOOTX64.EFI> [--setup-iface] [--http] [--tftp] [--auto] [--mode <auto|http|tftp>]
+May 17 03:40:54 fw sh[160340]:   [--http-port <port>] [--allow-mac <aa:bb:cc:dd:ee:ff>] [--client-ip <10.42.0.2>] [--force-http-for-pxe]
+May 17 03:40:54 fw sh[160340]:   [--mgmt-dhcp] [--mgmt-mac <aa:bb:cc:dd:ee:ff>] [--mgmt-ip <10.42.0.10>]
+May 17 03:40:54 fw sh[160340]:   --help
+May 17 03:40:54 fw systemd[1]: edgerun-netboot.service: Main process exited, code=exited, status=1/FAILURE
+May 17 03:40:54 fw systemd[1]: edgerun-netboot.service: Failed with result 'exit-code'.
+May 17 03:40:55 fw systemd[1]: edgerun-netboot.service: Scheduled restart job, restart counter is at 1.
+May 17 03:40:55 fw systemd[1]: Starting EdgeRun Metal PXE network boot responder...
+May 17 03:40:55 fw systemd[1]: Started EdgeRun Metal PXE network boot responder.
+May 17 03:40:55 fw sh[160371]: invalid --mgmt-mac value
+May 17 03:40:55 fw sh[160371]: Usage:
+May 17 03:40:55 fw sh[160371]:   [REDACTED_TOKEN] --iface <name> --efi <path-to-BOOTX64.EFI> [--setup-iface] [--http] [--tftp] [--auto] [--mode <auto|http|tftp>]
+May 17 03:40:55 fw sh[160371]:   [--http-port <port>] [--allow-mac <aa:bb:cc:dd:ee:ff>] [--client-ip <10.42.0.2>] [--force-http-for-pxe]
+May 17 03:40:55 fw sh[160371]:   [--mgmt-dhcp] [--mgmt-mac <aa:bb:cc:dd:ee:ff>] [--mgmt-ip <10.42.0.10>]
+May 17 03:40:55 fw sh[160371]:   --help
+May 17 03:40:55 fw systemd[1]: edgerun-netboot.service: Main process exited, code=exited, status=1/FAILURE
+May 17 03:40:55 fw systemd[1]: edgerun-netboot.service: Failed with result 'exit-code'.
+May 17 03:40:56 fw systemd[1]: edgerun-netboot.service: Scheduled restart job, restart counter is at 2.
+May 17 03:40:56 fw systemd[1]: Starting EdgeRun Metal PXE network boot responder...
+May 17 03:40:56 fw systemd[1]: Started EdgeRun Metal PXE network boot responder.
+May 17 03:40:56 fw sh[160405]: invalid --mgmt-mac value
+May 17 03:40:56 fw sh[160405]: Usage:
+May 17 03:40:56 fw sh[160405]:   [REDACTED_TOKEN] --iface <name> --efi <path-to-BOOTX64.EFI> [--setup-iface] [--http] [--tftp] [--auto] [--mode <auto|http|tftp>]
+May 17 03:40:56 fw sh[160405]:   [--http-port <port>] [--allow-mac <aa:bb:cc:dd:ee:ff>] [--client-ip <10.42.0.2>] [--force-http-for-pxe]
+May 17 03:40:56 fw sh[160405]:   [--mgmt-dhcp] [--mgmt-mac <aa:bb:cc:dd:ee:ff>] [--mgmt-ip <10.42.0.10>]
+May 17 03:40:56 fw sh[160405]:   --help
+May 17 03:40:56 fw systemd[1]: edgerun-netboot.service: Main process exited, code=exited, status=1/FAILURE
+May 17 03:40:56 fw systemd[1]: edgerun-netboot.service: Failed with result 'exit-code'.
+May 17 03:40:57 fw systemd[1]: edgerun-netboot.service: Scheduled restart job, restart counter is at 3.
+May 17 03:40:57 fw systemd[1]: Starting EdgeRun Metal PXE network boot responder...
+May 17 03:40:57 fw systemd[1]: Started EdgeRun Metal PXE network boot responder.
+May 17 03:40:57 fw sh[160436]: invalid --mgmt-mac value
+May 17 03:40:57 fw sh[160436]: Usage:
+May 17 03:40:57 fw sh[160436]:   [REDACTED_TOKEN] --iface <name> --efi <path-to-BOOTX64.EFI> [--setup-iface] [--http] [--tftp] [--auto] [--mode <auto|http|tftp>]
+May 17 03:40:57 fw sh[160436]:   [--http-port <port>] [--allow-mac <aa:bb:cc:dd:ee:ff>] [--client-ip <10.42.0.2>] [--force-http-for-pxe]
+May 17 03:40:57 fw sh[160436]:   [--mgmt-dhcp] [--mgmt-mac <aa:bb:cc:dd:ee:ff>] [--mgmt-ip <10.42.0.10>]
+May 17 03:40:57 fw sh[160436]:   --help
+May 17 03:40:57 fw systemd[1]: edgerun-netboot.service: Main process exited, code=exited, status=1/FAILURE
+May 17 03:40:57 fw systemd[1]: edgerun-netboot.service: Failed with result 'exit-code'.
+May 17 03:40:59 fw systemd[1]: edgerun-netboot.service: Scheduled restart job, restart counter is at 4.
+May 17 03:40:59 fw systemd[1]: Starting EdgeRun Metal PXE network boot responder...
+May 17 03:40:59 fw systemd[1]: Started EdgeRun Metal PXE network boot responder.
+May 17 03:40:59 fw sh[160467]: invalid --mgmt-mac value
+May 17 03:40:59 fw sh[160467]: Usage:
+May 17 03:40:59 fw sh[160467]:   [REDACTED_TOKEN] --iface <name> --efi <path-to-BOOTX64.EFI> [--setup-iface] [--http] [--tftp] [--auto] [--mode <auto|http|tftp>]
+May 17 03:40:59 fw sh[160467]:   [--http-port <port>] [--allow-mac <aa:bb:cc:dd:ee:ff>] [--client-ip <10.42.0.2>] [--force-http-for-pxe]
+May 17 03:40:59 fw sh[160467]:   [--mgmt-dhcp] [--mgmt-mac <aa:bb:cc:dd:ee:ff>] [--mgmt-ip <10.42.0.10>]
+May 17 03:40:59 fw sh[160467]:   --help
+May 17 03:40:59 fw systemd[1]: edgerun-netboot.service: Main process exited, code=exited, status=1/FAILURE
+May 17 03:40:59 fw systemd[1]: edgerun-netboot.service: Failed with result 'exit-code'.
+May 17 03:41:00 fw systemd[1]: edgerun-netboot.service: Scheduled restart job, restart counter is at 5.
+May 17 03:41:00 fw systemd[1]: edgerun-netboot.service: Start request repeated too quickly.
+May 17 03:41:00 fw systemd[1]: edgerun-netboot.service: Failed with result 'start-limit-hit'.
+May 17 03:41:00 fw systemd[1]: Failed to start EdgeRun Metal PXE network boot responder.
