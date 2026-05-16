@@ -1,4 +1,4 @@
-.PHONY: all run clean print-path netboot install-netboot uninstall-netboot restart-netboot logs-netboot status-netboot install-agent install-agent-user uninstall-agent-user run-agent run-agent-user logs-agent logs-agent-user status-agent status-agent-user
+.PHONY: all run clean print-path netboot smoke pci quiet rebuild-profile install-netboot uninstall-netboot restart-netboot logs-netboot status-netboot install-agent install-agent-user uninstall-agent-user run-agent run-agent-user logs-agent logs-agent-user status-agent status-agent-user
 
 CC = clang
 HOST_CC = cc
@@ -8,8 +8,14 @@ ESP_DIR := $(BUILD_DIR)/esp
 EFI_OUT := $(BUILD_DIR)/edgerun-metal.efi
 EFI_BOOT := $(ESP_DIR)/EFI/BOOT/BOOTX64.EFI
 
+# Boot profiles are defined in core/efi_main.c:
+#   0 = smoke: banner + test Wasm only
+#   1 = pci:   PCI scan module
+#   2 = quiet: minimal halt-ready boot
+ER_BOOT_PROFILE ?= 0
+
 CFLAGS := -std=c11 -Wall -Werror -ffreestanding -fshort-wchar -fno-builtin -fno-stack-protector -mno-red-zone -fuse-ld=lld -target x86_64-pc-windows-msvc \
-          -I$(CURDIR)/core -I$(CURDIR)
+          -I$(CURDIR)/core -I$(CURDIR) -DER_BOOT_PROFILE=$(ER_BOOT_PROFILE)
 LDFLAGS := -nostdlib -Wl,/SUBSYSTEM:EFI_APPLICATION,/ENTRY:efi_main
 HOST_CFLAGS := -std=c11 -Wall -Wextra -Werror -O2
 
@@ -21,6 +27,19 @@ NETBOOT_BIN := $(BUILD_DIR)/edgerun-netboot
 IFACE ?=
 
 all: $(EFI_OUT) $(EFI_BOOT)
+
+smoke:
+	$(MAKE) rebuild-profile ER_BOOT_PROFILE=0
+
+pci:
+	$(MAKE) rebuild-profile ER_BOOT_PROFILE=1
+
+quiet:
+	$(MAKE) rebuild-profile ER_BOOT_PROFILE=2
+
+rebuild-profile:
+	rm -f $(OBJS) $(EFI_OUT) $(EFI_BOOT)
+	$(MAKE) all ER_BOOT_PROFILE=$(ER_BOOT_PROFILE)
 
 netboot: $(NETBOOT_BIN)
 
