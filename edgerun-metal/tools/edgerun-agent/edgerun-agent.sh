@@ -31,7 +31,7 @@ if [ -f "${ENV_FILE}" ]; then
   . "${ENV_FILE}"
 fi
 
-: "${EDGERUN_AGENT_REPO:=/home/ken/edgerun-c/edgerun-metal}"
+: "${EDGERUN_AGENT_REPO:=/home/ken/edgerun-c}"
 : "${EDGERUN_AGENT_REMOTE:=origin}"
 : "${EDGERUN_AGENT_SOURCE_BRANCH:=main}"
 : "${EDGERUN_AGENT_OUTPUT_BRANCH:=agent/fw}"
@@ -234,6 +234,20 @@ ensure_worktree() {
   local path="$1"
   mkdir -p "$(dirname "${path}")"
   if ! git_repo worktree add "${path}" "${OUTPUT_BRANCH}" >/dev/null 2>&1; then
+    local existing_branch_worktree
+    existing_branch_worktree="$(git_repo worktree list --porcelain | \
+      awk -v branch="refs/heads/${OUTPUT_BRANCH}" '
+        /^worktree / {worktree=$2}
+        /^branch / && $2==branch {print worktree}
+      ' | head -n1 || true)"
+    if [ -n "${existing_branch_worktree}" ] && [ "${existing_branch_worktree}" != "${path}" ]; then
+      log "removing existing output worktree for ${OUTPUT_BRANCH}: ${existing_branch_worktree}"
+      git_repo worktree remove --force "${existing_branch_worktree}" >/dev/null 2>&1 || true
+      git_repo worktree prune >/dev/null 2>&1 || true
+      if git_repo worktree add "${path}" "${OUTPUT_BRANCH}" >/dev/null 2>&1; then
+        return 0
+      fi
+    fi
     return 1
   fi
 }
@@ -266,7 +280,7 @@ else
   cp -a "${OUTPUT_DIR}" "${OUTPUT_WORKTREE}/"
 fi
 
-git_out add -- agent-output
+git_out add -f -- agent-output
 if git_out diff --cached --quiet; then
   log "output branch: no changes to commit"
 else
