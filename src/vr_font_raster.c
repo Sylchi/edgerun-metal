@@ -43,7 +43,7 @@ static const float VR_RASTER_CURVE_LINEAR_TOLERANCE = 1e-12f;
 #define VR_RASTER_MSDF_CHANNEL_COUNT 3u
 static const float VR_RASTER_MSDF_CHANNEL_SCALE = 3.0f;
 static const float VR_RASTER_MSDF_CHANNEL_HALF_BIN = 0.5f / VR_RASTER_MSDF_CHANNEL_SCALE;
-static const float VR_RASTER_MSDF_MISSING_CHANNEL_BLEND = 0.5f;
+static const float VR_RASTER_MSDF_MISSING_CHANNEL_EPSILON = 1e-6f;
 static const uint8_t VR_RASTER_MSDF_CHANNEL_NEXT[VR_RASTER_MSDF_CHANNEL_COUNT] = {
   1u,
   2u,
@@ -283,8 +283,11 @@ static float vr_msdf_resolve_missing_channel_distance(
   if (next_present && prev_present) {
     float next_distance = distances[next_color];
     float prev_distance = distances[prev_color];
-    return (VR_RASTER_MSDF_MISSING_CHANNEL_BLEND * next_distance) +
-      ((1.0f - VR_RASTER_MSDF_MISSING_CHANNEL_BLEND) * prev_distance);
+    float separation = fabsf(next_distance - prev_distance);
+    if (separation <= VR_RASTER_MSDF_MISSING_CHANNEL_EPSILON) {
+      return 0.5f * (next_distance + prev_distance);
+    }
+    return (next_distance < prev_distance) ? next_distance : prev_distance;
   }
 
   if (next_present) {
