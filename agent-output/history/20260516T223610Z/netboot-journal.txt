@@ -1,0 +1,251 @@
+
+May 17 05:02:03 fw sh[217118]: requested ip (50): 10.42.0.2
+May 17 05:02:03 fw sh[217118]: server id in request (54): 10.42.0.1
+May 17 05:02:03 fw sh[217118]: parameter request list (55): 1 2 3 4 5 6 12 13 15 17 18 22 23 28 40 41 42 43 50 51 54 58 59 60 66 67 97 128 129 130 131 132 133 134 135
+May 17 05:02:03 fw sh[217118]: sending DHCP reply to 255.255.255.255:68
+May 17 05:02:03 fw sh[217118]: DHCPACK boot 10.42.0.2 bootfile=BOOTX64.EFI
+May 17 05:03:57 fw sh[217118]: option 97 machine-id: .%.^.........a.P0
+May 17 05:03:57 fw sh[217118]: DHCPDISCOVER from 00:d8:61:d7:50:30 xid=0x93e3f269 vendor=PXEClient:Arch:00007:UNDI:003016 arch=0x0007 selected mode=tftp ip=10.42.0.2 bootfile=BOOTX64.EFI
+May 17 05:03:57 fw sh[217118]: DHCPDISCOVER flags=0x8000 ciaddr=0.0.0.0
+May 17 05:03:57 fw sh[217118]: requested ip (50): <none>
+May 17 05:03:57 fw sh[217118]: server id in request (54): <none>
+May 17 05:03:57 fw sh[217118]: parameter request list (55): 1 2 3 4 5 6 12 13 15 17 18 22 23 28 40 41 42 43 50 51 54 58 59 60 66 67 97 128 129 130 131 132 133 134 135
+May 17 05:03:57 fw sh[217118]: sending DHCP reply to 255.255.255.255:68
+May 17 05:03:57 fw sh[217118]: DHCPOFFER boot 10.42.0.2 bootfile=BOOTX64.EFI
+May 17 05:04:00 fw sh[217118]: option 97 machine-id: .%.^.........a.P0
+May 17 05:04:00 fw sh[217118]: DHCPREQUEST from 00:d8:61:d7:50:30 xid=0x93e3f269 vendor=PXEClient:Arch:00007:UNDI:003016 arch=0x0007 selected mode=tftp ip=10.42.0.2 bootfile=BOOTX64.EFI
+May 17 05:04:00 fw sh[217118]: DHCPREQUEST flags=0x8000 ciaddr=0.0.0.0
+May 17 05:04:00 fw sh[217118]: requested ip (50): 10.42.0.2
+May 17 05:04:00 fw sh[217118]: server id in request (54): 10.42.0.1
+May 17 05:04:00 fw sh[217118]: parameter request list (55): 1 2 3 4 5 6 12 13 15 17 18 22 23 28 40 41 42 43 50 51 54 58 59 60 66 67 97 128 129 130 131 132 133 134 135
+May 17 05:04:00 fw sh[217118]: sending DHCP reply to 255.255.255.255:68
+May 17 05:04:00 fw sh[217118]: DHCPACK boot 10.42.0.2 bootfile=BOOTX64.EFI
+May 17 05:04:45 fw sh[217118]: option 97 machine-id: .%.^.........a.P0
+May 17 05:04:45 fw sh[217118]: DHCPDISCOVER from 00:d8:61:d7:50:30 xid=0xfac9799b vendor=PXEClient:Arch:00007:UNDI:003016 arch=0x0007 selected mode=tftp ip=10.42.0.2 bootfile=BOOTX64.EFI
+May 17 05:04:45 fw sh[217118]: DHCPDISCOVER flags=0x8000 ciaddr=0.0.0.0
+May 17 05:04:45 fw sh[217118]: requested ip (50): <none>
+May 17 05:04:45 fw sh[217118]: server id in request (54): <none>
+May 17 05:04:45 fw sh[217118]: parameter request list (55): 1 2 3 4 5 6 12 13 15 17 18 22 23 28 40 41 42 43 50 51 54 58 59 60 66 67 97 128 129 130 131 132 133 134 135
+May 17 05:04:45 fw sh[217118]: sending DHCP reply to 255.255.255.255:68
+May 17 05:04:45 fw sh[217118]: DHCPOFFER boot 10.42.0.2 bootfile=BOOTX64.EFI
+May 17 05:04:48 fw sh[217118]: option 97 machine-id: .%.^.........a.P0
+May 17 05:04:48 fw sh[217118]: DHCPREQUEST from 00:d8:61:d7:50:30 xid=0xfac9799b vendor=PXEClient:Arch:00007:UNDI:003016 arch=0x0007 selected mode=tftp ip=10.42.0.2 bootfile=BOOTX64.EFI
+May 17 05:04:48 fw sh[217118]: DHCPREQUEST flags=0x8000 ciaddr=0.0.0.0
+May 17 05:04:48 fw sh[217118]: requested ip (50): 10.42.0.2
+May 17 05:04:48 fw sh[217118]: server id in request (54): 10.42.0.1
+May 17 05:04:48 fw sh[217118]: parameter request list (55): 1 2 3 4 5 6 12 13 15 17 18 22 23 28 40 41 42 43 50 51 54 58 59 60 66 67 97 128 129 130 131 132 133 134 135
+May 17 05:04:48 fw sh[217118]: sending DHCP reply to 255.255.255.255:68
+May 17 05:04:48 fw sh[217118]: DHCPACK boot 10.42.0.2 bootfile=BOOTX64.EFI
+May 17 05:09:37 fw systemd[1]: Stopping EdgeRun Metal PXE network boot responder...
+May 17 05:09:37 fw systemd[1]: edgerun-netboot.service: Deactivated successfully.
+May 17 05:09:37 fw systemd[1]: Stopped EdgeRun Metal PXE network boot responder.
+May 17 05:09:38 fw systemd[1]: Starting EdgeRun Metal PXE network boot responder...
+May 17 05:09:38 fw systemd[1]: Started EdgeRun Metal PXE network boot responder.
+May 17 05:09:38 fw sh[218681]: mode: auto
+May 17 05:09:38 fw sh[218681]: interface: eth0
+May 17 05:09:38 fw sh[218681]: server ip: 10.42.0.1
+May 17 05:09:38 fw sh[218681]: client ip: 10.42.0.2
+May 17 05:09:38 fw sh[218681]: http port: 8081
+May 17 05:09:38 fw sh[218681]: boot url: http://10.42.0.1:8081/BOOTX64.EFI
+May 17 05:09:38 fw sh[218681]: efi path: [REDACTED_TOKEN]
+May 17 05:09:38 fw sh[218681]: efi size: 19456
+May 17 05:09:38 fw sh[218681]: force-http-for-pxe: no
+May 17 05:09:38 fw sh[218681]: allow-mac: 00:d8:61:d7:50:30
+May 17 05:09:38 fw sh[218681]: mgmt-dhcp: enabled
+May 17 05:09:38 fw sh[218681]: mgmt-ip: 10.42.0.10
+May 17 05:09:38 fw sh[218681]: mgmt-mac: (not set)
+May 17 05:09:38 fw sh[218681]: tftp enabled: yes
+May 17 05:09:38 fw sh[218681]: http enabled: yes
+May 17 05:09:55 fw sh[218681]: option 97 machine-id: .%.^.........a.P0
+May 17 05:09:55 fw sh[218681]: DHCPDISCOVER from 00:d8:61:d7:50:30 xid=0x6f95d7ea vendor=PXEClient:Arch:00007:UNDI:003016 arch=0x0007 selected mode=tftp ip=10.42.0.2 bootfile=BOOTX64.EFI
+May 17 05:09:55 fw sh[218681]: DHCPDISCOVER flags=0x8000 ciaddr=0.0.0.0
+May 17 05:09:55 fw sh[218681]: requested ip (50): <none>
+May 17 05:09:55 fw sh[218681]: server id in request (54): <none>
+May 17 05:09:55 fw sh[218681]: parameter request list (55): 1 2 3 4 5 6 12 13 15 17 18 22 23 28 40 41 42 43 50 51 54 58 59 60 66 67 97 128 129 130 131 132 133 134 135
+May 17 05:09:55 fw sh[218681]: sending DHCP reply to 255.255.255.255:68
+May 17 05:09:55 fw sh[218681]: DHCPOFFER boot 10.42.0.2 bootfile=BOOTX64.EFI
+May 17 05:09:59 fw sh[218681]: option 97 machine-id: .%.^.........a.P0
+May 17 05:09:59 fw sh[218681]: DHCPREQUEST from 00:d8:61:d7:50:30 xid=0x6f95d7ea vendor=PXEClient:Arch:00007:UNDI:003016 arch=0x0007 selected mode=tftp ip=10.42.0.2 bootfile=BOOTX64.EFI
+May 17 05:09:59 fw sh[218681]: DHCPREQUEST flags=0x8000 ciaddr=0.0.0.0
+May 17 05:09:59 fw sh[218681]: requested ip (50): 10.42.0.2
+May 17 05:09:59 fw sh[218681]: server id in request (54): 10.42.0.1
+May 17 05:09:59 fw sh[218681]: parameter request list (55): 1 2 3 4 5 6 12 13 15 17 18 22 23 28 40 41 42 43 50 51 54 58 59 60 66 67 97 128 129 130 131 132 133 134 135
+May 17 05:09:59 fw sh[218681]: sending DHCP reply to 255.255.255.255:68
+May 17 05:09:59 fw sh[218681]: DHCPACK boot 10.42.0.2 bootfile=BOOTX64.EFI
+May 17 05:09:59 fw sh[218681]: TFTP RRQ BOOTX64.EFI
+May 17 05:10:05 fw sh[218681]: TFTP failed
+May 17 05:15:38 fw systemd[1]: Stopping EdgeRun Metal PXE network boot responder...
+May 17 05:15:38 fw systemd[1]: edgerun-netboot.service: Deactivated successfully.
+May 17 05:15:38 fw systemd[1]: Stopped EdgeRun Metal PXE network boot responder.
+May 17 05:15:39 fw systemd[1]: Starting EdgeRun Metal PXE network boot responder...
+May 17 05:15:39 fw systemd[1]: Started EdgeRun Metal PXE network boot responder.
+May 17 05:15:39 fw sh[219781]: mode: auto
+May 17 05:15:39 fw sh[219781]: interface: eth0
+May 17 05:15:39 fw sh[219781]: server ip: 10.42.0.1
+May 17 05:15:39 fw sh[219781]: client ip: 10.42.0.2
+May 17 05:15:39 fw sh[219781]: http port: 8081
+May 17 05:15:39 fw sh[219781]: boot url: http://10.42.0.1:8081/EFI/BOOT/BOOTX64.EFI
+May 17 05:15:39 fw sh[219781]: efi path: [REDACTED_TOKEN]
+May 17 05:15:39 fw sh[219781]: efi size: 19456
+May 17 05:15:39 fw sh[219781]: force-http-for-pxe: no
+May 17 05:15:39 fw sh[219781]: allow-mac: 00:d8:61:d7:50:30
+May 17 05:15:39 fw sh[219781]: mgmt-dhcp: enabled
+May 17 05:15:39 fw sh[219781]: mgmt-ip: 10.42.0.10
+May 17 05:15:39 fw sh[219781]: mgmt-mac: (not set)
+May 17 05:15:39 fw sh[219781]: tftp enabled: yes
+May 17 05:15:39 fw sh[219781]: http enabled: yes
+May 17 05:16:03 fw sh[219781]: option 97 machine-id: .%.^.........a.P0
+May 17 05:16:03 fw sh[219781]: DHCPDISCOVER from 00:d8:61:d7:50:30 xid=0xcd97ff69 vendor=PXEClient:Arch:00007:UNDI:003016 arch=0x0007 selected mode=tftp ip=10.42.0.2 bootfile=EFI/BOOT/BOOTX64.EFI
+May 17 05:16:03 fw sh[219781]: DHCPDISCOVER flags=0x8000 ciaddr=0.0.0.0
+May 17 05:16:03 fw sh[219781]: requested ip (50): <none>
+May 17 05:16:03 fw sh[219781]: server id in request (54): <none>
+May 17 05:16:03 fw sh[219781]: parameter request list (55): 1 2 3 4 5 6 12 13 15 17 18 22 23 28 40 41 42 43 50 51 54 58 59 60 66 67 97 128 129 130 131 132 133 134 135
+May 17 05:16:03 fw sh[219781]: sending DHCP reply to 255.255.255.255:68
+May 17 05:16:03 fw sh[219781]: DHCPOFFER boot 10.42.0.2 bootfile=EFI/BOOT/BOOTX64.EFI
+May 17 05:16:07 fw sh[219781]: option 97 machine-id: .%.^.........a.P0
+May 17 05:16:07 fw sh[219781]: DHCPREQUEST from 00:d8:61:d7:50:30 xid=0xcd97ff69 vendor=PXEClient:Arch:00007:UNDI:003016 arch=0x0007 selected mode=tftp ip=10.42.0.2 bootfile=EFI/BOOT/BOOTX64.EFI
+May 17 05:16:07 fw sh[219781]: DHCPREQUEST flags=0x8000 ciaddr=0.0.0.0
+May 17 05:16:07 fw sh[219781]: requested ip (50): 10.42.0.2
+May 17 05:16:07 fw sh[219781]: server id in request (54): 10.42.0.1
+May 17 05:16:07 fw sh[219781]: parameter request list (55): 1 2 3 4 5 6 12 13 15 17 18 22 23 28 40 41 42 43 50 51 54 58 59 60 66 67 97 128 129 130 131 132 133 134 135
+May 17 05:16:07 fw sh[219781]: sending DHCP reply to 255.255.255.255:68
+May 17 05:16:07 fw sh[219781]: DHCPACK boot 10.42.0.2 bootfile=EFI/BOOT/BOOTX64.EFI
+May 17 05:16:07 fw sh[219781]: TFTP RRQ EFI/BOOT/BOOTX64.EFI
+May 17 05:16:12 fw sh[219781]: TFTP failed
+May 17 05:19:26 fw sh[219781]: option 97 machine-id: .%.^.........a.P0
+May 17 05:19:26 fw sh[219781]: DHCPDISCOVER from 00:d8:61:d7:50:30 xid=0xcd41c4e8 vendor=PXEClient:Arch:00007:UNDI:003016 arch=0x0007 selected mode=tftp ip=10.42.0.2 bootfile=EFI/BOOT/BOOTX64.EFI
+May 17 05:19:26 fw sh[219781]: DHCPDISCOVER flags=0x8000 ciaddr=0.0.0.0
+May 17 05:19:26 fw sh[219781]: requested ip (50): <none>
+May 17 05:19:26 fw sh[219781]: server id in request (54): <none>
+May 17 05:19:26 fw sh[219781]: parameter request list (55): 1 2 3 4 5 6 12 13 15 17 18 22 23 28 40 41 42 43 50 51 54 58 59 60 66 67 97 128 129 130 131 132 133 134 135
+May 17 05:19:26 fw sh[219781]: sending DHCP reply to 255.255.255.255:68
+May 17 05:19:26 fw sh[219781]: DHCPOFFER boot 10.42.0.2 bootfile=EFI/BOOT/BOOTX64.EFI
+May 17 05:19:29 fw sh[219781]: option 97 machine-id: .%.^.........a.P0
+May 17 05:19:29 fw sh[219781]: DHCPREQUEST from 00:d8:61:d7:50:30 xid=0xcd41c4e8 vendor=PXEClient:Arch:00007:UNDI:003016 arch=0x0007 selected mode=tftp ip=10.42.0.2 bootfile=EFI/BOOT/BOOTX64.EFI
+May 17 05:19:29 fw sh[219781]: DHCPREQUEST flags=0x8000 ciaddr=0.0.0.0
+May 17 05:19:29 fw sh[219781]: requested ip (50): 10.42.0.2
+May 17 05:19:29 fw sh[219781]: server id in request (54): 10.42.0.1
+May 17 05:19:29 fw sh[219781]: parameter request list (55): 1 2 3 4 5 6 12 13 15 17 18 22 23 28 40 41 42 43 50 51 54 58 59 60 66 67 97 128 129 130 131 132 133 134 135
+May 17 05:19:29 fw sh[219781]: sending DHCP reply to 255.255.255.255:68
+May 17 05:19:29 fw sh[219781]: DHCPACK boot 10.42.0.2 bootfile=EFI/BOOT/BOOTX64.EFI
+May 17 05:19:29 fw sh[219781]: TFTP RRQ EFI/BOOT/BOOTX64.EFI
+May 17 05:19:35 fw sh[219781]: TFTP failed
+May 17 05:22:16 fw sh[219781]: DHCPREQUEST from 02:83:f6:11:24:e2 xid=0x36a938c7 vendor=android-dhcp-10 arch=<not-present> selected mode=management ip=10.42.0.10 bootfile=<none>
+May 17 05:22:16 fw sh[219781]: DHCPREQUEST flags=0x0000 ciaddr=0.0.0.0
+May 17 05:22:16 fw sh[219781]: requested ip (50): 192.168.1.44
+May 17 05:22:16 fw sh[219781]: server id in request (54): <none>
+May 17 05:22:16 fw sh[219781]: parameter request list (55): 1 3 6 15 26 28 51 58 59 43
+May 17 05:22:16 fw sh[219781]: sending DHCP reply to 255.255.255.255:68
+May 17 05:22:16 fw sh[219781]: DHCPACK management 10.42.0.10
+May 17 05:25:36 fw systemd[1]: Stopping EdgeRun Metal PXE network boot responder...
+May 17 05:25:36 fw systemd[1]: edgerun-netboot.service: Deactivated successfully.
+May 17 05:25:36 fw systemd[1]: Stopped EdgeRun Metal PXE network boot responder.
+May 17 05:25:36 fw systemd[1]: Starting EdgeRun Metal PXE network boot responder...
+May 17 05:25:36 fw systemd[1]: Started EdgeRun Metal PXE network boot responder.
+May 17 05:25:36 fw sh[222029]: mode: auto
+May 17 05:25:36 fw sh[222029]: interface: eth0
+May 17 05:25:36 fw sh[222029]: server ip: 10.42.0.1
+May 17 05:25:36 fw sh[222029]: client ip: 10.42.0.2
+May 17 05:25:36 fw sh[222029]: http port: 8081
+May 17 05:25:36 fw sh[222029]: boot url: http://10.42.0.1:8081/BOOTX64.EFI
+May 17 05:25:36 fw sh[222029]: efi path: [REDACTED_TOKEN]
+May 17 05:25:36 fw sh[222029]: efi size: 19456
+May 17 05:25:36 fw sh[222029]: force-http-for-pxe: no
+May 17 05:25:36 fw sh[222029]: allow-mac: 00:d8:61:d7:50:30
+May 17 05:25:36 fw sh[222029]: mgmt-dhcp: enabled
+May 17 05:25:36 fw sh[222029]: mgmt-ip: 10.42.0.10
+May 17 05:25:36 fw sh[222029]: mgmt-mac: (not set)
+May 17 05:25:36 fw sh[222029]: tftp enabled: yes
+May 17 05:25:36 fw sh[222029]: http enabled: yes
+May 17 05:26:52 fw sh[222029]: option 97 machine-id: .%.^.........a.P0
+May 17 05:26:52 fw sh[222029]: DHCPDISCOVER from 00:d8:61:d7:50:30 xid=0xde92d585 vendor=PXEClient:Arch:00007:UNDI:003016 arch=0x0007 selected mode=tftp ip=10.42.0.2 bootfile=BOOTX64.EFI
+May 17 05:26:52 fw sh[222029]: DHCPDISCOVER flags=0x8000 ciaddr=0.0.0.0
+May 17 05:26:52 fw sh[222029]: requested ip (50): <none>
+May 17 05:26:52 fw sh[222029]: server id in request (54): <none>
+May 17 05:26:52 fw sh[222029]: parameter request list (55): 1 2 3 4 5 6 12 13 15 17 18 22 23 28 40 41 42 43 50 51 54 58 59 60 66 67 97 128 129 130 131 132 133 134 135
+May 17 05:26:52 fw sh[222029]: sending DHCP reply to 255.255.255.255:68
+May 17 05:26:52 fw sh[222029]: DHCPOFFER boot 10.42.0.2 bootfile=BOOTX64.EFI
+May 17 05:26:56 fw sh[222029]: option 97 machine-id: .%.^.........a.P0
+May 17 05:26:56 fw sh[222029]: DHCPREQUEST from 00:d8:61:d7:50:30 xid=0xde92d585 vendor=PXEClient:Arch:00007:UNDI:003016 arch=0x0007 selected mode=tftp ip=10.42.0.2 bootfile=BOOTX64.EFI
+May 17 05:26:56 fw sh[222029]: DHCPREQUEST flags=0x8000 ciaddr=0.0.0.0
+May 17 05:26:56 fw sh[222029]: requested ip (50): 10.42.0.2
+May 17 05:26:56 fw sh[222029]: server id in request (54): 1.0.42.10
+May 17 05:26:56 fw sh[222029]: parameter request list (55): 1 2 3 4 5 6 12 13 15 17 18 22 23 28 40 41 42 43 50 51 54 58 59 60 66 67 97 128 129 130 131 132 133 134 135
+May 17 05:26:56 fw sh[222029]: sending DHCP reply to 255.255.255.255:68
+May 17 05:26:56 fw sh[222029]: DHCPACK boot 10.42.0.2 bootfile=BOOTX64.EFI
+May 17 05:28:34 fw systemd[1]: Stopping EdgeRun Metal PXE network boot responder...
+May 17 05:28:34 fw systemd[1]: edgerun-netboot.service: Deactivated successfully.
+May 17 05:28:34 fw systemd[1]: Stopped EdgeRun Metal PXE network boot responder.
+May 17 05:28:35 fw systemd[1]: Starting EdgeRun Metal PXE network boot responder...
+May 17 05:28:35 fw systemd[1]: Started EdgeRun Metal PXE network boot responder.
+May 17 05:28:35 fw sh[223418]: mode: auto
+May 17 05:28:35 fw sh[223418]: interface: eth0
+May 17 05:28:35 fw sh[223418]: server ip: 10.42.0.1
+May 17 05:28:35 fw sh[223418]: client ip: 10.42.0.2
+May 17 05:28:35 fw sh[223418]: http port: 8081
+May 17 05:28:35 fw sh[223418]: boot url: http://10.42.0.1:8081/EFI/BOOT/BOOTX64.EFI
+May 17 05:28:35 fw sh[223418]: efi path: [REDACTED_TOKEN]
+May 17 05:28:35 fw sh[223418]: efi size: 19456
+May 17 05:28:35 fw sh[223418]: force-http-for-pxe: no
+May 17 05:28:35 fw sh[223418]: allow-mac: 00:d8:61:d7:50:30
+May 17 05:28:35 fw sh[223418]: mgmt-dhcp: enabled
+May 17 05:28:35 fw sh[223418]: mgmt-ip: 10.42.0.10
+May 17 05:28:35 fw sh[223418]: mgmt-mac: (not set)
+May 17 05:28:35 fw sh[223418]: tftp enabled: yes
+May 17 05:28:35 fw sh[223418]: http enabled: yes
+May 17 05:28:57 fw sh[223418]: option 97 machine-id: .%.^.........a.P0
+May 17 05:28:57 fw sh[223418]: DHCPDISCOVER from 00:d8:61:d7:50:30 xid=0x36466dab vendor=PXEClient:Arch:00007:UNDI:003016 arch=0x0007 selected mode=tftp ip=10.42.0.2 bootfile=EFI/BOOT/BOOTX64.EFI
+May 17 05:28:57 fw sh[223418]: DHCPDISCOVER flags=0x8000 ciaddr=0.0.0.0
+May 17 05:28:57 fw sh[223418]: requested ip (50): <none>
+May 17 05:28:57 fw sh[223418]: server id in request (54): <none>
+May 17 05:28:57 fw sh[223418]: parameter request list (55): 1 2 3 4 5 6 12 13 15 17 18 22 23 28 40 41 42 43 50 51 54 58 59 60 66 67 97 128 129 130 131 132 133 134 135
+May 17 05:28:57 fw sh[223418]: sending DHCP reply to 255.255.255.255:68
+May 17 05:28:57 fw sh[223418]: DHCPOFFER boot 10.42.0.2 bootfile=EFI/BOOT/BOOTX64.EFI
+May 17 05:29:01 fw sh[223418]: option 97 machine-id: .%.^.........a.P0
+May 17 05:29:01 fw sh[223418]: DHCPREQUEST from 00:d8:61:d7:50:30 xid=0x36466dab vendor=PXEClient:Arch:00007:UNDI:003016 arch=0x0007 selected mode=tftp ip=10.42.0.2 bootfile=EFI/BOOT/BOOTX64.EFI
+May 17 05:29:01 fw sh[223418]: DHCPREQUEST flags=0x8000 ciaddr=0.0.0.0
+May 17 05:29:01 fw sh[223418]: requested ip (50): 10.42.0.2
+May 17 05:29:01 fw sh[223418]: server id in request (54): 10.42.0.1
+May 17 05:29:01 fw sh[223418]: parameter request list (55): 1 2 3 4 5 6 12 13 15 17 18 22 23 28 40 41 42 43 50 51 54 58 59 60 66 67 97 128 129 130 131 132 133 134 135
+May 17 05:29:01 fw sh[223418]: sending DHCP reply to 255.255.255.255:68
+May 17 05:29:01 fw sh[223418]: DHCPACK boot 10.42.0.2 bootfile=EFI/BOOT/BOOTX64.EFI
+May 17 05:29:01 fw sh[223418]: TFTP RRQ EFI/BOOT/BOOTX64.EFI
+May 17 05:29:06 fw sh[223418]: TFTP failed
+May 17 05:33:00 fw systemd[1]: Stopping EdgeRun Metal PXE network boot responder...
+May 17 05:33:00 fw systemd[1]: edgerun-netboot.service: Deactivated successfully.
+May 17 05:33:00 fw systemd[1]: Stopped EdgeRun Metal PXE network boot responder.
+May 17 05:33:00 fw systemd[1]: Starting EdgeRun Metal PXE network boot responder...
+May 17 05:33:00 fw systemd[1]: Started EdgeRun Metal PXE network boot responder.
+May 17 05:33:00 fw sh[225353]: mode: tftp
+May 17 05:33:00 fw sh[225353]: interface: eth0
+May 17 05:33:00 fw sh[225353]: server ip: 10.42.0.1
+May 17 05:33:00 fw sh[225353]: client ip: 10.42.0.2
+May 17 05:33:00 fw sh[225353]: http port: 8081
+May 17 05:33:00 fw sh[225353]: boot url: http://10.42.0.1:8081/BOOTX64.EFI
+May 17 05:33:00 fw sh[225353]: efi path: [REDACTED_TOKEN]
+May 17 05:33:00 fw sh[225353]: efi size: 19456
+May 17 05:33:00 fw sh[225353]: force-http-for-pxe: no
+May 17 05:33:00 fw sh[225353]: allow-mac: 00:d8:61:d7:50:30
+May 17 05:33:00 fw sh[225353]: mgmt-dhcp: enabled
+May 17 05:33:00 fw sh[225353]: mgmt-ip: 10.42.0.10
+May 17 05:33:00 fw sh[225353]: mgmt-mac: (not set)
+May 17 05:33:00 fw sh[225353]: tftp enabled: yes
+May 17 05:33:00 fw sh[225353]: http enabled: no
+May 17 05:33:17 fw sh[225353]: option 97 machine-id: .%.^.........a.P0
+May 17 05:33:17 fw sh[225353]: DHCPDISCOVER from 00:d8:61:d7:50:30 xid=0x9b818983 vendor=PXEClient:Arch:00007:UNDI:003016 arch=0x0007 selected mode=tftp ip=10.42.0.2 bootfile=BOOTX64.EFI
+May 17 05:33:17 fw sh[225353]: DHCPDISCOVER flags=0x8000 ciaddr=0.0.0.0
+May 17 05:33:17 fw sh[225353]: requested ip (50): <none>
+May 17 05:33:17 fw sh[225353]: server id in request (54): <none>
+May 17 05:33:17 fw sh[225353]: parameter request list (55): 1 2 3 4 5 6 12 13 15 17 18 22 23 28 40 41 42 43 50 51 54 58 59 60 66 67 97 128 129 130 131 132 133 134 135
+May 17 05:33:17 fw sh[225353]: sending DHCP reply to 255.255.255.255:68
+May 17 05:33:17 fw sh[225353]: DHCPOFFER boot 10.42.0.2 bootfile=BOOTX64.EFI
+May 17 05:33:21 fw sh[225353]: option 97 machine-id: .%.^.........a.P0
+May 17 05:33:21 fw sh[225353]: DHCPREQUEST from 00:d8:61:d7:50:30 xid=0x9b818983 vendor=PXEClient:Arch:00007:UNDI:003016 arch=0x0007 selected mode=tftp ip=10.42.0.2 bootfile=BOOTX64.EFI
+May 17 05:33:21 fw sh[225353]: DHCPREQUEST flags=0x8000 ciaddr=0.0.0.0
+May 17 05:33:21 fw sh[225353]: requested ip (50): 10.42.0.2
+May 17 05:33:21 fw sh[225353]: server id in request (54): 10.42.0.1
+May 17 05:33:21 fw sh[225353]: parameter request list (55): 1 2 3 4 5 6 12 13 15 17 18 22 23 28 40 41 42 43 50 51 54 58 59 60 66 67 97 128 129 130 131 132 133 134 135
+May 17 05:33:21 fw sh[225353]: sending DHCP reply to 255.255.255.255:68
+May 17 05:33:21 fw sh[225353]: DHCPACK boot 10.42.0.2 bootfile=BOOTX64.EFI
+May 17 05:33:21 fw sh[225353]: TFTP RRQ BOOTX64.EFI
+May 17 05:33:26 fw sh[225353]: TFTP failed
