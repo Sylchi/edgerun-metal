@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-REPO_NAME="$(basename "${REPO_DIR}")"
+REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 
 if [ -z "${REPO_DIR}" ] || [ ! -d "${REPO_DIR}" ]; then
   echo "invalid repo path: ${REPO_DIR}"
@@ -27,12 +26,11 @@ fi
 echo "repo path: ${REPO_DIR}"
 echo "installing for user: ${USER_NAME}"
 
-ENV_FILE="/etc/edgerun-agent.env"
-if [ ! -f "${ENV_FILE}" ]; then
-  if [ -w "${ENV_FILE%/*}" ]; then
-    echo "creating default ${ENV_FILE}"
-    cat >"${ENV_FILE}" <<EOF
-EDGERUN_AGENT_REPO=${REPO_DIR}
+ENV_DIR="${USER_HOME}/.config/edgerun-agent"
+ENV_FILE="${ENV_DIR}/edgerun-agent.env"
+mkdir -p "${ENV_DIR}"
+cat >"${ENV_FILE}" <<EOF
+EDGERUN_AGENT_REPO=/home/ken/edgerun-c
 EDGERUN_AGENT_REMOTE=origin
 EDGERUN_AGENT_SOURCE_BRANCH=main
 EDGERUN_AGENT_OUTPUT_BRANCH=agent/fw
@@ -41,25 +39,7 @@ EDGERUN_AGENT_INTERVAL_SEC=60
 EDGERUN_AGENT_RUN_SCRIPT=.edgerun/agent/run.sh
 EDGERUN_AGENT_OUTPUT_WORKTREE=/tmp/edgerun-agent-output-worktree
 EOF
-  else
-    USER_ENV_DIR="${USER_HOME}/.config/edgerun-agent"
-    mkdir -p "${USER_ENV_DIR}"
-    ENV_FILE="${USER_ENV_DIR}/edgerun-agent.env"
-    if [ ! -f "${ENV_FILE}" ]; then
-      echo "creating default ${ENV_FILE}"
-      cat >"${ENV_FILE}" <<EOF
-EDGERUN_AGENT_REPO=${REPO_DIR}
-EDGERUN_AGENT_REMOTE=origin
-EDGERUN_AGENT_SOURCE_BRANCH=main
-EDGERUN_AGENT_OUTPUT_BRANCH=agent/fw
-EDGERUN_AGENT_HOSTNAME=fw
-EDGERUN_AGENT_INTERVAL_SEC=60
-EDGERUN_AGENT_RUN_SCRIPT=.edgerun/agent/run.sh
-EDGERUN_AGENT_OUTPUT_WORKTREE=/tmp/edgerun-agent-output-worktree
-EOF
-    fi
-  fi
-fi
+chmod 600 "${ENV_FILE}"
 
 TARGET_DIR="${USER_HOME}/.config/systemd/user"
 mkdir -p "${TARGET_DIR}"
@@ -72,9 +52,8 @@ Wants=network-online.target
 [Service]
 Type=oneshot
 EnvironmentFile=${ENV_FILE}
-Environment=EDGERUN_AGENT_OUTPUT_WORKTREE=/tmp/edgerun-agent-output-worktree-${USER_NAME}
-WorkingDirectory=/opt/edgerun-metal
-ExecStart=/opt/edgerun-metal/tools/edgerun-agent/edgerun-agent.sh
+WorkingDirectory=/home/ken/edgerun-c/edgerun-metal
+ExecStart=/home/ken/edgerun-c/edgerun-metal/tools/edgerun-agent/edgerun-agent.sh
 
 [Install]
 WantedBy=default.target
