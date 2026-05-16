@@ -123,6 +123,10 @@ while IFS= read -r line || [ -n "${line}" ]; do
       validate_key_value "${key}" "${value}" || exit 1
       NETBOOT_MODE="${value}"
       ;;
+    NETBOOT_CLIENT_IP)
+      validate_key_value "${key}" "${value}" || exit 1
+      NETBOOT_CLIENT_IP="${value}"
+      ;;
     NETBOOT_ALLOW_MAC)
       validate_key_value "${key}" "${value}" || exit 1
       NETBOOT_ALLOW_MAC="${value}"
