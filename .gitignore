@@ -1,3 +1,6 @@
 agent-output/
 /tmp/
 *.log
+
+# generated local build artifacts
+edgerun-metal/build/
