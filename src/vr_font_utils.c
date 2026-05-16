@@ -1270,6 +1270,9 @@ vr_status_t vr_parse_font(vr_font_face_t* face) {
   if (face->cfg.atlas_pad == 0) {
     face->cfg.atlas_pad = VR_FONT_DEFAULT_ATLAS_PADDING;
   }
+  if (face->cfg.atlas_format == VR_FONT_ATLAS_FORMAT_UNSPECIFIED) {
+    face->cfg.atlas_format = VR_FONT_DEFAULT_ATLAS_FORMAT;
+  }
 
   return VR_OK;
 }

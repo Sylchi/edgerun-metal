@@ -13,6 +13,9 @@ vr_status_t vr_font_face_create(vr_font_face_t** out, const char* path, const vr
   if (face->cfg.atlas_width == 0) face->cfg.atlas_width = VR_FONT_DEFAULT_ATLAS_DIMENSION;
   if (face->cfg.atlas_height == 0) face->cfg.atlas_height = VR_FONT_DEFAULT_ATLAS_DIMENSION;
   if (face->cfg.atlas_pad == 0) face->cfg.atlas_pad = VR_FONT_DEFAULT_ATLAS_PADDING;
+  if (face->cfg.atlas_format == VR_FONT_ATLAS_FORMAT_UNSPECIFIED) {
+    face->cfg.atlas_format = VR_FONT_DEFAULT_ATLAS_FORMAT;
+  }
 
   vr_status_t st = vr_read_file(path, &face->file_data, &face->file_size);
   if (st != VR_OK) {

@@ -7,6 +7,30 @@ static const size_t VR_ATLAS_INITIAL_CAPACITY = 4u;
 static const size_t VR_GLYPH_CACHE_INITIAL_CAPACITY = 64u;
 static const uint32_t VR_FNV_OFFSET_BASIS = 2166136261u;
 static const uint32_t VR_FNV_PRIME = 0x9e3779b9u;
+static const size_t VR_ATLAS_ALPHA_BYTES_PER_PIXEL = 1u;
+static const size_t VR_ATLAS_MSDF_BYTES_PER_PIXEL = 3u;
+
+static size_t vr_atlas_pixel_stride(vr_font_atlas_format_t atlas_format) {
+  switch (atlas_format) {
+    case VR_FONT_ATLAS_FORMAT_ALPHA8:
+      return VR_ATLAS_ALPHA_BYTES_PER_PIXEL;
+    case VR_FONT_ATLAS_FORMAT_MSDF_RGB:
+      return VR_ATLAS_MSDF_BYTES_PER_PIXEL;
+    case VR_FONT_ATLAS_FORMAT_UNSPECIFIED:
+    default:
+      return 0u;
+  }
+}
+
+static vr_status_t vr_atlas_pixel_count(size_t w, size_t h, size_t bpp, size_t* out_pixel_count) {
+  if (!out_pixel_count) return VR_ERR_INVALID_FONT;
+  if (w == 0u || h == 0u || bpp == 0u) return VR_ERR_INVALID_FONT;
+  if (w > (SIZE_MAX / h) || (w * h) > (SIZE_MAX / bpp)) {
+    return VR_ERR_OOM;
+  }
+  *out_pixel_count = w * h * bpp;
+  return VR_OK;
+}
 
 static size_t vr_next_capacity(size_t current, size_t minimum, size_t initial_capacity) {
   size_t capacity = (current == 0u) ? initial_capacity : current;
@@ -74,11 +98,19 @@ static vr_status_t vr_atlas_create(vr_font_face_t* face, vr_atlas_page_t* page) 
     h = (int)VR_FONT_DEFAULT_ATLAS_DIMENSION;
   }
 
-  page->pixels = (uint8_t*)calloc((size_t)w * (size_t)h, 1);
+  size_t bpp = vr_atlas_pixel_stride(face->cfg.atlas_format);
+  if (bpp == 0u) return VR_ERR_INVALID_FONT;
+  size_t pixel_count = 0u;
+  if (vr_atlas_pixel_count((size_t)w, (size_t)h, bpp, &pixel_count) != VR_OK) {
+    return VR_ERR_OOM;
+  }
+
+  page->pixels = (uint8_t*)calloc(pixel_count, 1);
   if (!page->pixels) return VR_ERR_OOM;
 
   page->width = w;
   page->height = h;
+  page->bytes_per_pixel = bpp;
   page->x = 0;
   page->y = 0;
   page->h = 0;
@@ -140,9 +172,12 @@ vr_status_t vr_upload_bitmap_to_atlas(vr_font_face_t* face, uint32_t atlas_id, i
   vr_atlas_page_t* page = &face->atlases[pid];
 
   for (int row = 0; row < h; ++row) {
-    size_t dst = (size_t)(y + row) * (size_t)page->width + (size_t)x;
-    size_t src = (size_t)row * (size_t)w;
-    memcpy(page->pixels + dst, bitmap + src, (size_t)w);
+    size_t dst = ((size_t)(y + row) * (size_t)page->width + (size_t)x) * page->bytes_per_pixel;
+    size_t src = (size_t)row * (size_t)w * page->bytes_per_pixel;
+    memcpy(
+      page->pixels + dst,
+      bitmap + src,
+      (size_t)w * page->bytes_per_pixel);
   }
 
   if (face->cfg.gl.update_texture) {
@@ -274,7 +309,15 @@ vr_status_t vr_font_bake_glyph(vr_font_face_t* face, uint32_t glyph_id, vr_baked
 
   uint8_t* bmp = NULL;
   int w = 0, h = 0, left = 0, top = 0;
-  st = vr_rasterize_outline(face, &outline, &bmp, &w, &h, &left, &top);
+  st = vr_rasterize_outline_with_mode(
+    face,
+    &outline,
+    face->cfg.atlas_format,
+    &bmp,
+    &w,
+    &h,
+    &left,
+    &top);
   if (st == VR_ERR_UNSUPPORTED) {
     out->glyph = glyph_id;
     out->width = 0;

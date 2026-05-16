@@ -6,12 +6,14 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <math.h>
 
 typedef struct {
   SDL_Renderer* renderer;
   SDL_Texture** textures;
   size_t texture_cap;
   uint32_t next_texture_id;
+  vr_font_atlas_format_t atlas_format;
 } sdl_gl_iface_t;
 
 typedef struct {
@@ -52,6 +54,12 @@ static const uint8_t VR_UI_BACKGROUND_RED = 0u;
 static const uint8_t VR_UI_BACKGROUND_GREEN = 0u;
 static const uint8_t VR_UI_BACKGROUND_BLUE = 0u;
 static const uint8_t VR_UI_BACKGROUND_ALPHA = 255u;
+static const uint8_t VR_MSDF_RECON_TEXTURE_CHANNELS = 3u;
+static const float VR_MSDF_RECON_SPREAD = 1.0f;
+static const float VR_MSDF_RECON_MID_ALPHA = 128.0f;
+static const float VR_MSDF_RECON_EDGE_SCALE = 255.0f;
+static const float VR_MSDF_RECON_ALPHA_MIN = 0.0f;
+static const float VR_MSDF_RECON_ALPHA_MAX = 255.0f;
 static const char* const VR_FALLBACK_FONT_PATH = "fonts/Geist[wght].ttf";
 static const char* const VR_DEFAULT_TEXT = "Geist variable font in SDL";
 static const float VR_TEXT_RENDER_X = 40.0f;
@@ -190,6 +198,68 @@ static vr_status_t sdl_build_demo_layers(
   return VR_OK;
 }
 
+static float sdl_sorted_median_3(float a, float b, float c) {
+  if (a > b) {
+    float swap = a;
+    a = b;
+    b = swap;
+  }
+  if (b > c) {
+    float swap = b;
+    b = c;
+    c = swap;
+  }
+  if (a > b) {
+    float swap = a;
+    a = b;
+    b = swap;
+  }
+  return b;
+}
+
+static uint8_t sdl_alpha_from_signed_distance(float signed_distance, float spread) {
+  if (spread <= 0.0f) {
+    return 0u;
+  }
+
+  float normalized = VR_MSDF_RECON_MID_ALPHA + (signed_distance * VR_MSDF_RECON_EDGE_SCALE) / spread;
+  float clamped = fminf(VR_MSDF_RECON_ALPHA_MAX, fmaxf(VR_MSDF_RECON_ALPHA_MIN, normalized));
+  return (uint8_t)(clamped + 0.5f);
+}
+
+static float sdl_decode_msdf_channel(uint8_t encoded, float spread) {
+  return ((float)encoded - VR_MSDF_RECON_MID_ALPHA) * (spread / VR_MSDF_RECON_EDGE_SCALE);
+}
+
+static uint8_t sdl_msdf_to_alpha(const uint8_t* msdf_pixel, float spread) {
+  float d0 = sdl_decode_msdf_channel(msdf_pixel[0u], spread);
+  float d1 = sdl_decode_msdf_channel(msdf_pixel[1u], spread);
+  float d2 = sdl_decode_msdf_channel(msdf_pixel[2u], spread);
+  float signed_distance = sdl_sorted_median_3(d0, d1, d2);
+  return sdl_alpha_from_signed_distance(signed_distance, spread);
+}
+
+static void sdl_convert_msdf_to_rgba(const uint8_t* msdf, int width, int height, uint8_t* rgba) {
+  SDL_PixelFormat* rgba_format = SDL_AllocFormat(SDL_PIXELFORMAT_RGBA8888);
+  if (!rgba_format) {
+    fprintf(stderr, "fatal: failed to allocate pixel format: %s\n", SDL_GetError());
+    exit(1);
+  }
+  size_t pixel_count = (size_t)width * (size_t)height;
+  uint32_t* out = (uint32_t*)rgba;
+  for (size_t i = 0; i < pixel_count; ++i) {
+    size_t sample = i * (size_t)VR_MSDF_RECON_TEXTURE_CHANNELS;
+    uint8_t alpha = msdf ? sdl_msdf_to_alpha(msdf + sample, VR_MSDF_RECON_SPREAD) : 0u;
+    out[i] = SDL_MapRGBA(
+      rgba_format,
+      VR_RGBA_CHANNEL_MAX,
+      VR_RGBA_CHANNEL_MAX,
+      VR_RGBA_CHANNEL_MAX,
+      alpha);
+  }
+  SDL_FreeFormat(rgba_format);
+}
+
 static void sdl_convert_gray_to_rgba(const uint8_t* gray, int width, int height, uint8_t* rgba) {
   SDL_PixelFormat* rgba_format = SDL_AllocFormat(SDL_PIXELFORMAT_RGBA8888);
   if (!rgba_format) {
@@ -208,6 +278,19 @@ static void sdl_convert_gray_to_rgba(const uint8_t* gray, int width, int height,
       alpha);
   }
   SDL_FreeFormat(rgba_format);
+}
+
+static void sdl_convert_bitmap_to_rgba(
+  const uint8_t* pixels,
+  int width,
+  int height,
+  uint8_t* rgba,
+  vr_font_atlas_format_t atlas_format) {
+  if (atlas_format == VR_FONT_ATLAS_FORMAT_MSDF_RGB) {
+    sdl_convert_msdf_to_rgba(pixels, width, height, rgba);
+  } else {
+    sdl_convert_gray_to_rgba(pixels, width, height, rgba);
+  }
 }
 
 static void sdl_ensure_texture_slot(sdl_gl_iface_t* iface, uint32_t texture_id) {
@@ -253,7 +336,12 @@ static void sdl_create_texture(void* user, uint32_t* out_texture, int width, int
     fprintf(stderr, "fatal: out of memory while staging atlas upload\n");
     exit(1);
   }
-  sdl_convert_gray_to_rgba((const uint8_t*)pixels, width, height, rgba);
+  sdl_convert_bitmap_to_rgba(
+    (const uint8_t*)pixels,
+    width,
+    height,
+    rgba,
+    iface->atlas_format);
   if (SDL_UpdateTexture(tex, NULL, rgba, width * 4u) != 0) {
     free(rgba);
     SDL_DestroyTexture(tex);
@@ -283,7 +371,12 @@ static void sdl_update_texture(void* user, uint32_t texture, int x, int y, int w
     fprintf(stderr, "fatal: out of memory while staging atlas update\n");
     exit(1);
   }
-  sdl_convert_gray_to_rgba((const uint8_t*)pixels, w, h, rgba);
+  sdl_convert_bitmap_to_rgba(
+    (const uint8_t*)pixels,
+    w,
+    h,
+    rgba,
+    iface->atlas_format);
   SDL_Rect rect = {x, y, w, h};
   if (SDL_UpdateTexture(iface->textures[texture], &rect, rgba, w * 4u) != 0) {
     free(rgba);
@@ -419,8 +512,10 @@ int main(int argc, char** argv) {
     .atlas_width = VR_FONT_DEFAULT_ATLAS_DIMENSION,
     .atlas_height = VR_FONT_DEFAULT_ATLAS_DIMENSION,
     .atlas_pad = VR_FONT_DEFAULT_ATLAS_PADDING,
+    .atlas_format = VR_FONT_DEFAULT_ATLAS_FORMAT,
     .gl = gi,
   };
+  app.gl_iface.atlas_format = cfg.atlas_format;
   st = vr_font_face_create(&app.face, font_path, &cfg);
   if (st != VR_OK) {
     fprintf(stderr, "fatal: failed to load face '%s' status=%u\n", font_path, st);

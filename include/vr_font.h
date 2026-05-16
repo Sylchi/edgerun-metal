@@ -31,6 +31,14 @@ typedef enum {
 #define VR_FONT_PARSER_DEFAULT_PX_SIZE 32.0f
 #define VR_FONT_VERTICES_PER_GLYPH 6u
 
+typedef enum {
+  VR_FONT_ATLAS_FORMAT_UNSPECIFIED = 0,
+  VR_FONT_ATLAS_FORMAT_ALPHA8 = 1,
+  VR_FONT_ATLAS_FORMAT_MSDF_RGB = 2
+} vr_font_atlas_format_t;
+
+#define VR_FONT_DEFAULT_ATLAS_FORMAT VR_FONT_ATLAS_FORMAT_MSDF_RGB
+
 typedef struct {
   char name[VR_AXIS_NAME_LEN + 1];
   float min_value;
@@ -92,6 +100,7 @@ typedef struct {
   uint32_t atlas_width;
   uint32_t atlas_height;
   uint32_t atlas_pad;
+  vr_font_atlas_format_t atlas_format;
   vr_gl_iface_t gl;
 } vr_font_config_t;
 
