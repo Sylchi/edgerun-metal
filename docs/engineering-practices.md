@@ -1,0 +1,57 @@
+# Engineering Practices
+
+Purpose: define how changes are made, verified, and documented in this repository.
+
+Intention: make repository rules executable where possible and explicit where human judgment is required.
+
+## Change Requirements
+
+Every non-generated file must have a clear purpose:
+
+- Source files implement one bounded responsibility.
+- Tests describe the behavior or invariant they protect.
+- Tools state their purpose and intention near the top of the file.
+- Documentation explains decisions that are not obvious from code or command names.
+
+Generated output is not source and must not be tracked.
+
+## Verification
+
+Run the full local check before committing:
+
+```bash
+make check
+```
+
+`make check` verifies:
+
+- repository structure through `tools/repo-check.sh`
+- repository-policy tests through `tests/repo-check-tests.sh`
+- all `edgerun-metal` boot profiles build with warnings as errors
+- `varfont` builds with CMake and Ninja
+- `varfont` tests pass through CTest
+
+## Tooling
+
+Use current, deterministic tools already available on the machine:
+
+- `rg` for search
+- `clang` and `lld` for freestanding EFI builds
+- `CMake` and `Ninja` for `varfont`
+- `ctest --output-on-failure` for test execution
+- `git status --short --branch` before and after changes
+
+## Test Policy
+
+Tests must be added with behavior changes and with new repository tooling. If code cannot be unit-tested directly because it targets UEFI or hardware, the fallback check is not silent acceptance: add the strongest deterministic build or policy check available and document the remaining hardware-only verification path.
+
+## Documentation Policy
+
+Keep documentation close to the decision:
+
+- root workflow and commands belong in `README.md`
+- repository-wide rules belong in `agents.md`
+- structure and engineering intent belong in `docs/`
+- project-specific usage belongs in each project README
+
+When a workflow changes, update the command wrapper and documentation in the same change.

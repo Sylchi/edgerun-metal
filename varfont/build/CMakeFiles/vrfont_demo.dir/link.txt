@@ -1,1 +1,0 @@
-/usr/bin/cc -Wl,--dependency-file=CMakeFiles/vrfont_demo.dir/link.d CMakeFiles/vrfont_demo.dir/examples/main.c.o -o vrfont_demo  libvrfont.a /usr/lib/libSDL2-2.0.so.0.3200.68 /usr/lib/libSDL2main.a -lm

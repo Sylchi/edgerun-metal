@@ -1,6 +1,0 @@
-/home/ken/edgerun-c/build/CMakeFiles/vrfont.dir
-/home/ken/edgerun-c/build/CMakeFiles/vrfont_demo.dir
-/home/ken/edgerun-c/build/CMakeFiles/vrfont_tests.dir
-/home/ken/edgerun-c/build/CMakeFiles/test.dir
-/home/ken/edgerun-c/build/CMakeFiles/edit_cache.dir
-/home/ken/edgerun-c/build/CMakeFiles/rebuild_cache.dir

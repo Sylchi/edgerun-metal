@@ -3,4 +3,6 @@ agent-output/
 *.log
 
 # generated local build artifacts
+.build/
 edgerun-metal/build/
+varfont/build/

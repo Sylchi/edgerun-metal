@@ -37,12 +37,14 @@ runtime third-party dependencies. It provides:
 
 ```bash
 Install SDL2 development package in your toolchain.
-mkdir build
-cd build
-cmake ..
-cmake --build .
-./vrfont_demo fonts/Geist[wght].ttf
+cmake --preset dev -S varfont
+cmake --build .build/varfont
+ctest --test-dir .build/varfont --output-on-failure
+./.build/varfont/vrfont_demo varfont/fonts/Geist[wght].ttf
 ```
+
+Run those commands from the repository root. Local build output belongs in `.build/`,
+not in `varfont/build/`.
 
 ### Geist variable font
 
@@ -56,5 +58,5 @@ curl -L -o fonts/Geist[wght].ttf https://raw.githubusercontent.com/vercel/geist-
 Run:
 
 ```bash
-./build/vrfont_demo fonts/Geist[wght].ttf
+./.build/varfont/vrfont_demo varfont/fonts/Geist[wght].ttf
 ```
