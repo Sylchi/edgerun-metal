@@ -1,0 +1,19 @@
+Start testing: May 16 18:00 +07
+----------------------------------------------------------
+1/1 Testing: vrfont_tests
+1/1 Test: vrfont_tests
+Command: "/home/ken/edgerun-c/build/vrfont_tests"
+Directory: /home/ken/edgerun-c/build
+"vrfont_tests" start time: May 16 18:00 +07
+Output:
+----------------------------------------------------------
+OK 133 checks passed
+<end of output>
+Test time =   0.01 sec
+----------------------------------------------------------
+Test Passed.
+"vrfont_tests" end time: May 16 18:00 +07
+"vrfont_tests" time elapsed: 00:00:00
+----------------------------------------------------------
+
+End testing: May 16 18:00 +07

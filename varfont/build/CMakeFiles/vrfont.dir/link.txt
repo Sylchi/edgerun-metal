@@ -1,0 +1,2 @@
+/usr/bin/ar qc libvrfont.a CMakeFiles/vrfont.dir/src/vr_font.c.o CMakeFiles/vrfont.dir/src/vr_font_utils.c.o CMakeFiles/vrfont.dir/src/vr_font_shape.c.o CMakeFiles/vrfont.dir/src/vr_font_raster.c.o CMakeFiles/vrfont.dir/src/vr_font_atlas.c.o
+/usr/bin/ranlib libvrfont.a

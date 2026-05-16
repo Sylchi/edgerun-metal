@@ -41,6 +41,7 @@ static const int VR_RASTER_CURVE_NEWTON_STEPS = 8;
 static const int VR_RASTER_CURVE_DISTANCE_SAMPLES = 16;
 static const float VR_RASTER_CURVE_NEWTON_EPSILON = 1e-5f;
 static const float VR_RASTER_CURVE_LINEAR_TOLERANCE = 1e-12f;
+static const float VR_RASTER_CURVE_CROSSING_EPSILON = 1e-7f;
 #define VR_RASTER_MSDF_CHANNEL_COUNT 3u
 static const float VR_RASTER_MSDF_CHANNEL_SCALE = 3.0f;
 static const float VR_RASTER_MSDF_CHANNEL_HALF_BIN = 0.5f / VR_RASTER_MSDF_CHANNEL_SCALE;
@@ -59,6 +60,9 @@ static const float VR_RASTER_MSDF_PI = 3.14159265359f;
 static const float VR_RASTER_MSDF_TWO_PI = 6.28318530718f;
 static const float VR_RASTER_ALPHA_MIN = 0.0f;
 static const float VR_RASTER_ALPHA_MAX = 255.0f;
+static const uint32_t VR_RASTER_MSDF_COLOR_INF_COST = 0x3FFFFFFFu;
+static const uint8_t VR_RASTER_MSDF_CHANNEL_MAX_COST = 1u;
+static const uint8_t VR_RASTER_USE_QUADRATIC_WINDING = 0u;
 
 typedef struct {
   float x0;
@@ -69,6 +73,27 @@ typedef struct {
   float y2;
 } vr_raster_curve_t;
 
+typedef enum {
+  VR_MSDF_EDGE_KIND_LINE = 0u,
+  VR_MSDF_EDGE_KIND_QUAD = 1u
+} vr_msdf_edge_kind_t;
+
+typedef struct {
+  vr_msdf_edge_kind_t kind;
+  vr_outline_point_t p0;
+  vr_outline_point_t p1;
+  vr_outline_point_t p2;
+} vr_msdf_outline_edge_t;
+
+static vr_status_t vr_push_msdf_edge(
+  vr_msdf_outline_edge_t** edges,
+  size_t* edge_count,
+  size_t* edge_cap,
+  vr_msdf_edge_kind_t kind,
+  vr_outline_point_t p0,
+  vr_outline_point_t p1,
+  vr_outline_point_t p2);
+static vr_status_t vr_ensure_msdf_edges_capacity(vr_msdf_outline_edge_t** edges, size_t* edge_cap, size_t needed);
 static vr_status_t vr_line_segments_from_quad(const vr_outline_point_t p0, const vr_outline_point_t p1, const vr_outline_point_t p2,
   vr_segment_t** segs,
   size_t* count,
@@ -95,6 +120,12 @@ static vr_status_t vr_ensure_u8_capacity(uint8_t** values, size_t* values_cap, s
 static vr_status_t vr_push_msdf_segment_color(uint8_t** seg_colors, size_t* seg_color_count, size_t* seg_color_cap, uint8_t color);
 static vr_status_t vr_push_msdf_curve_color(uint8_t** curve_colors, size_t* curve_color_count, size_t* curve_color_cap, uint8_t color);
 static uint8_t vr_msdf_edge_color(float dx, float dy, size_t fallback_index);
+static vr_status_t vr_msdf_color_edges_cycle(
+  const vr_msdf_outline_edge_t* edges,
+  size_t edge_count,
+  uint8_t* out_colors);
+static uint8_t vr_msdf_color_cost(uint8_t color, uint8_t preferred_color);
+static int vr_quadratic_crossing_sign(float x, float y, const vr_raster_curve_t* curve);
 static void vr_msdf_signed_distances_to_outline(
   float px,
   float py,
@@ -219,6 +250,46 @@ static vr_status_t vr_push_msdf_segment_color(uint8_t** seg_colors, size_t* seg_
   return VR_OK;
 }
 
+static vr_status_t vr_push_msdf_edge(
+  vr_msdf_outline_edge_t** edges,
+  size_t* edge_count,
+  size_t* edge_cap,
+  vr_msdf_edge_kind_t kind,
+  vr_outline_point_t p0,
+  vr_outline_point_t p1,
+  vr_outline_point_t p2) {
+  if (vr_ensure_msdf_edges_capacity(edges, edge_cap, *edge_count + 1u) != VR_OK) {
+    return VR_ERR_OOM;
+  }
+  (*edges)[*edge_count].kind = kind;
+  (*edges)[*edge_count].p0 = p0;
+  (*edges)[*edge_count].p1 = p1;
+  (*edges)[*edge_count].p2 = p2;
+  ++(*edge_count);
+  return VR_OK;
+}
+
+static vr_status_t vr_ensure_msdf_edges_capacity(
+  vr_msdf_outline_edge_t** edges,
+  size_t* edge_cap,
+  size_t needed) {
+  if (!edges || !edge_cap) {
+    return VR_ERR_INVALID_FONT;
+  }
+  if (*edge_cap >= needed) return VR_OK;
+
+  size_t cap = (*edge_cap == 0u) ? VR_RASTER_SEGMENT_INITIAL_CAP : *edge_cap;
+  while (cap < needed) {
+    if (cap > (SIZE_MAX / 2u)) return VR_ERR_OOM;
+    cap *= 2u;
+  }
+  vr_msdf_outline_edge_t* ne = (vr_msdf_outline_edge_t*)realloc(*edges, cap * sizeof(vr_msdf_outline_edge_t));
+  if (!ne) return VR_ERR_OOM;
+  *edges = ne;
+  *edge_cap = cap;
+  return VR_OK;
+}
+
 static vr_status_t vr_push_msdf_curve_color(uint8_t** curve_colors, size_t* curve_color_count, size_t* curve_color_cap, uint8_t color) {
   if (vr_ensure_u8_capacity(curve_colors, curve_color_cap, *curve_color_count + 1u) != VR_OK) {
     return VR_ERR_OOM;
@@ -251,25 +322,154 @@ static uint8_t vr_msdf_edge_color(float dx, float dy, size_t fallback_index) {
   return color;
 }
 
-static uint8_t vr_msdf_adjacent_channel(uint8_t color) {
-  return (color == (uint8_t)(VR_RASTER_MSDF_CHANNEL_COUNT - 1u)) ? 0u : (uint8_t)(color + 1u);
-}
-
-static uint8_t vr_msdf_stable_edge_color(
+static uint8_t vr_msdf_preferred_edge_color(
   float dx,
   float dy,
-  size_t fallback_index,
-  bool avoid_repeat,
-  uint8_t previous_color) {
+  size_t fallback_index) {
   uint8_t color = vr_msdf_edge_color(dx, dy, fallback_index);
-  if (!avoid_repeat) {
-    return color;
+  return color;
+}
+
+static uint8_t vr_msdf_color_cost(uint8_t color, uint8_t preferred_color) {
+  return (uint8_t)(color == preferred_color ? 0u : VR_RASTER_MSDF_CHANNEL_MAX_COST);
+}
+
+static vr_status_t vr_msdf_color_edges_cycle(
+  const vr_msdf_outline_edge_t* edges,
+  size_t edge_count,
+  uint8_t* out_colors) {
+  if (edge_count == 0u) return VR_OK;
+  if (!edges || !out_colors) return VR_ERR_INVALID_FONT;
+  if (edge_count == 1u) {
+    vr_outline_point_t p0 = edges[0u].p0;
+    vr_outline_point_t p1 = (edges[0u].kind == VR_MSDF_EDGE_KIND_QUAD) ? edges[0u].p2 : edges[0u].p1;
+    out_colors[0u] = vr_msdf_preferred_edge_color(p1.x - p0.x, p1.y - p0.y, 0u);
+    return VR_OK;
   }
 
-  if (color == previous_color) {
-    color = vr_msdf_adjacent_channel(color);
+  if (edge_count > (SIZE_MAX / VR_RASTER_MSDF_CHANNEL_COUNT)) {
+    return VR_ERR_INVALID_FONT;
   }
-  return color;
+
+  uint8_t* preferred_colors = (uint8_t*)malloc(edge_count * sizeof(uint8_t));
+  if (!preferred_colors) return VR_ERR_OOM;
+  for (size_t i = 0u; i < edge_count; ++i) {
+    vr_outline_point_t p0 = edges[i].p0;
+    vr_outline_point_t p1 = (edges[i].kind == VR_MSDF_EDGE_KIND_QUAD) ? edges[i].p2 : edges[i].p1;
+    preferred_colors[i] = vr_msdf_preferred_edge_color(p1.x - p0.x, p1.y - p0.y, i);
+  }
+
+  uint8_t* parent = (uint8_t*)malloc(edge_count * VR_RASTER_MSDF_CHANNEL_COUNT * sizeof(uint8_t));
+  if (!parent) {
+    free(preferred_colors);
+    return VR_ERR_OOM;
+  }
+
+  uint32_t best_cost = VR_RASTER_MSDF_COLOR_INF_COST;
+  uint8_t best_first_color = 0u;
+  uint8_t best_last_color = 0u;
+
+  for (uint8_t first_color = 0u; first_color < VR_RASTER_MSDF_CHANNEL_COUNT; ++first_color) {
+    uint32_t dp_prev[VR_RASTER_MSDF_CHANNEL_COUNT];
+    uint32_t dp_next[VR_RASTER_MSDF_CHANNEL_COUNT];
+    for (uint8_t color = 0u; color < VR_RASTER_MSDF_CHANNEL_COUNT; ++color) {
+      dp_prev[color] = VR_RASTER_MSDF_COLOR_INF_COST;
+      dp_next[color] = VR_RASTER_MSDF_COLOR_INF_COST;
+    }
+    dp_prev[first_color] = vr_msdf_color_cost(first_color, preferred_colors[0u]);
+
+    for (size_t edge = 1u; edge < edge_count; ++edge) {
+      for (uint8_t color = 0u; color < VR_RASTER_MSDF_CHANNEL_COUNT; ++color) {
+        dp_next[color] = VR_RASTER_MSDF_COLOR_INF_COST;
+      }
+      for (uint8_t prev = 0u; prev < VR_RASTER_MSDF_CHANNEL_COUNT; ++prev) {
+        if (dp_prev[prev] == VR_RASTER_MSDF_COLOR_INF_COST) {
+          continue;
+        }
+        for (uint8_t color = 0u; color < VR_RASTER_MSDF_CHANNEL_COUNT; ++color) {
+          if (color == prev) continue;
+          uint32_t cost = dp_prev[prev] + vr_msdf_color_cost(color, preferred_colors[edge]);
+          if (cost < dp_next[color]) {
+            dp_next[color] = cost;
+          }
+        }
+      }
+      for (uint8_t color = 0u; color < VR_RASTER_MSDF_CHANNEL_COUNT; ++color) {
+        dp_prev[color] = dp_next[color];
+      }
+    }
+
+    for (uint8_t last_color = 0u; last_color < VR_RASTER_MSDF_CHANNEL_COUNT; ++last_color) {
+      if (last_color == first_color) continue;
+      uint32_t candidate = dp_prev[last_color];
+      bool better = false;
+      if (candidate < best_cost) {
+        better = true;
+      } else if (candidate == best_cost) {
+        if (first_color < best_first_color) better = true;
+        else if (first_color == best_first_color && last_color < best_last_color) better = true;
+      }
+
+      if (better) {
+        best_cost = candidate;
+        best_first_color = first_color;
+        best_last_color = last_color;
+      }
+    }
+  }
+
+  for (size_t edge = 0u; edge < edge_count; ++edge) {
+    for (uint8_t color = 0u; color < VR_RASTER_MSDF_CHANNEL_COUNT; ++color) {
+      parent[edge * VR_RASTER_MSDF_CHANNEL_COUNT + color] = 0u;
+    }
+  }
+
+  uint32_t dp_prev[VR_RASTER_MSDF_CHANNEL_COUNT];
+  uint32_t dp_next[VR_RASTER_MSDF_CHANNEL_COUNT];
+  for (uint8_t color = 0u; color < VR_RASTER_MSDF_CHANNEL_COUNT; ++color) {
+    dp_prev[color] = VR_RASTER_MSDF_COLOR_INF_COST;
+    dp_next[color] = VR_RASTER_MSDF_COLOR_INF_COST;
+  }
+  dp_prev[best_first_color] = vr_msdf_color_cost(best_first_color, preferred_colors[0u]);
+
+  for (size_t edge = 1u; edge < edge_count; ++edge) {
+    for (uint8_t color = 0u; color < VR_RASTER_MSDF_CHANNEL_COUNT; ++color) {
+      dp_next[color] = VR_RASTER_MSDF_COLOR_INF_COST;
+    }
+    for (uint8_t prev = 0u; prev < VR_RASTER_MSDF_CHANNEL_COUNT; ++prev) {
+      if (dp_prev[prev] == VR_RASTER_MSDF_COLOR_INF_COST) {
+        continue;
+      }
+      for (uint8_t color = 0u; color < VR_RASTER_MSDF_CHANNEL_COUNT; ++color) {
+        if (color == prev) continue;
+        uint32_t cost = dp_prev[prev] + vr_msdf_color_cost(color, preferred_colors[edge]);
+        if (cost < dp_next[color]) {
+          dp_next[color] = cost;
+          parent[edge * VR_RASTER_MSDF_CHANNEL_COUNT + color] = prev;
+        }
+      }
+    }
+    for (uint8_t color = 0u; color < VR_RASTER_MSDF_CHANNEL_COUNT; ++color) {
+      dp_prev[color] = dp_next[color];
+    }
+  }
+
+  if (best_cost == VR_RASTER_MSDF_COLOR_INF_COST || best_last_color >= VR_RASTER_MSDF_CHANNEL_COUNT) {
+    free(preferred_colors);
+    free(parent);
+    return VR_ERR_INVALID_FONT;
+  }
+
+  out_colors[edge_count - 1u] = best_last_color;
+  for (size_t edge = edge_count - 1u; edge > 0u; --edge) {
+    uint8_t current_color = out_colors[edge];
+    uint8_t prev_color = parent[edge * VR_RASTER_MSDF_CHANNEL_COUNT + current_color];
+    out_colors[edge - 1u] = prev_color;
+  }
+
+  free(preferred_colors);
+  free(parent);
+  return VR_OK;
 }
 
 static float vr_msdf_resolve_missing_channel_distance(
@@ -521,99 +721,201 @@ static vr_status_t vr_emit_contour_segments(
     return VR_OK;
   }
 
+  vr_msdf_outline_edge_t* msdf_edges = NULL;
+  uint8_t* msdf_edge_colors = NULL;
+  size_t edge_count = 0u;
+  size_t edge_capacity = point_count;
+  if (using_msdf) {
+    msdf_edges = (vr_msdf_outline_edge_t*)malloc(edge_capacity * sizeof(vr_msdf_outline_edge_t));
+    if (!msdf_edges) {
+      return VR_ERR_OOM;
+    }
+    msdf_edge_colors = (uint8_t*)malloc(edge_capacity * sizeof(uint8_t));
+    if (!msdf_edge_colors) {
+      free(msdf_edges);
+      return VR_ERR_OOM;
+    }
+  }
+
   size_t i = 0u;
-  bool has_previous_edge_color = false;
-  uint8_t previous_edge_color = 0u;
   while (i + 1u < point_count) {
     vr_outline_point_t p0 = points[i];
     vr_outline_point_t p1 = points[i + 1u];
     if (!p0.on_curve) {
+      free(msdf_edges);
+      free(msdf_edge_colors);
       return VR_ERR_INVALID_FONT;
     }
 
     int segment_type = (p0.on_curve ? 2 : 0) | (p1.on_curve ? 1 : 0);
     switch (segment_type) {
       case 3: {
-        vr_status_t line_status = vr_push_segment(segs, seg_count, seg_cap, p0.x, p0.y, p1.x, p1.y);
-        if (line_status != VR_OK) {
-          return line_status;
-        }
-        if (using_msdf) {
-          uint8_t line_color = vr_msdf_stable_edge_color(
-            p1.x - p0.x,
-            p1.y - p0.y,
-            *seg_color_count,
-            has_previous_edge_color,
-            previous_edge_color);
-          vr_status_t line_color_status = vr_push_msdf_segment_color(seg_colors, seg_color_count, seg_color_cap, line_color);
-          if (line_color_status != VR_OK) {
-            return line_color_status;
+        if (!using_msdf) {
+          vr_status_t line_status = vr_push_segment(segs, seg_count, seg_cap, p0.x, p0.y, p1.x, p1.y);
+          if (line_status != VR_OK) {
+            return line_status;
           }
-          has_previous_edge_color = true;
-          previous_edge_color = line_color;
+        } else {
+          vr_status_t edge_status = vr_push_msdf_edge(
+            &msdf_edges,
+            &edge_count,
+            &edge_capacity,
+            VR_MSDF_EDGE_KIND_LINE,
+            p0,
+            p1,
+            (vr_outline_point_t){0.0f, 0.0f, 0u});
+          if (edge_status != VR_OK) {
+            free(msdf_edges);
+            free(msdf_edge_colors);
+            return edge_status;
+          }
         }
         i += 1u;
         break;
       }
       case 2: {
         if (i + 2u >= point_count || !points[i + 2u].on_curve) {
+          free(msdf_edges);
+          free(msdf_edge_colors);
           return VR_ERR_INVALID_FONT;
         }
-        vr_status_t curve_store_status = vr_push_curve(
-          curves,
-          curve_count,
-          curve_cap,
-          p0.x,
-          p0.y,
-          p1.x,
-          p1.y,
-          points[i + 2u].x,
-          points[i + 2u].y);
-        if (curve_store_status != VR_OK) {
-          return curve_store_status;
-        }
-        uint8_t curve_color = 0u;
-        if (using_msdf) {
-          curve_color = vr_msdf_stable_edge_color(
-            points[i + 2u].x - p0.x,
-            points[i + 2u].y - p0.y,
-            *curve_color_count,
-            has_previous_edge_color,
-            previous_edge_color);
-          vr_status_t curve_color_status = vr_push_msdf_curve_color(curve_colors, curve_color_count, curve_color_cap, curve_color);
-          if (curve_color_status != VR_OK) {
-            return curve_color_status;
+        if (!using_msdf) {
+          vr_status_t curve_store_status = vr_push_curve(
+            curves,
+            curve_count,
+            curve_cap,
+            p0.x,
+            p0.y,
+            p1.x,
+            p1.y,
+            points[i + 2u].x,
+            points[i + 2u].y);
+          if (curve_store_status != VR_OK) {
+            return curve_store_status;
           }
-          has_previous_edge_color = true;
-          previous_edge_color = curve_color;
-        }
-        vr_status_t curve_status = vr_line_segments_from_quad(
-          p0,
-          p1,
-          points[i + 2u],
-          segs,
-          seg_count,
-          seg_cap,
-          VR_RASTER_QUAD_BEZIER_TOLERANCE,
-          0,
-          curve_color,
-          seg_colors,
-          seg_color_count,
-          seg_color_cap,
-          using_msdf);
-        if (curve_status != VR_OK) {
-          return curve_status;
+        } else {
+          vr_status_t edge_status = vr_push_msdf_edge(
+            &msdf_edges,
+            &edge_count,
+            &edge_capacity,
+            VR_MSDF_EDGE_KIND_QUAD,
+            p0,
+            p1,
+            points[i + 2u]);
+          if (edge_status != VR_OK) {
+            free(msdf_edges);
+            free(msdf_edge_colors);
+            return edge_status;
+          }
         }
         i += 2u;
         break;
       }
       case 1: {
+        free(msdf_edges);
+        free(msdf_edge_colors);
         return VR_ERR_INVALID_FONT;
       }
       default:
+        free(msdf_edges);
+        free(msdf_edge_colors);
         return VR_ERR_INVALID_FONT;
     }
   }
+
+  if (!using_msdf) {
+    return VR_OK;
+  }
+
+  if (edge_count == 0u) {
+    free(msdf_edges);
+    free(msdf_edge_colors);
+    return VR_OK;
+  }
+
+  vr_status_t color_status = vr_msdf_color_edges_cycle(msdf_edges, edge_count, msdf_edge_colors);
+  if (color_status != VR_OK) {
+    free(msdf_edges);
+    free(msdf_edge_colors);
+    return color_status;
+  }
+
+  for (size_t edge_index = 0u; edge_index < edge_count; ++edge_index) {
+    vr_msdf_outline_edge_t edge = msdf_edges[edge_index];
+    uint8_t edge_color = msdf_edge_colors[edge_index];
+    if (edge.kind == VR_MSDF_EDGE_KIND_LINE) {
+      vr_status_t line_status = vr_push_segment(
+        segs,
+        seg_count,
+        seg_cap,
+        edge.p0.x,
+        edge.p0.y,
+        edge.p1.x,
+        edge.p1.y);
+      if (line_status != VR_OK) {
+        free(msdf_edges);
+        free(msdf_edge_colors);
+        return line_status;
+      }
+      vr_status_t line_color_status = vr_push_msdf_segment_color(seg_colors, seg_color_count, seg_color_cap, edge_color);
+      if (line_color_status != VR_OK) {
+        free(msdf_edges);
+        free(msdf_edge_colors);
+        return line_color_status;
+      }
+      continue;
+    }
+
+    vr_status_t curve_store_status = vr_push_curve(
+      curves,
+      curve_count,
+      curve_cap,
+      edge.p0.x,
+      edge.p0.y,
+      edge.p1.x,
+      edge.p1.y,
+      edge.p2.x,
+      edge.p2.y);
+    if (curve_store_status != VR_OK) {
+      free(msdf_edges);
+      free(msdf_edge_colors);
+      return curve_store_status;
+    }
+
+    vr_status_t curve_color_status = vr_push_msdf_curve_color(
+      curve_colors,
+      curve_color_count,
+      curve_color_cap,
+      edge_color);
+    if (curve_color_status != VR_OK) {
+      free(msdf_edges);
+      free(msdf_edge_colors);
+      return curve_color_status;
+    }
+
+    vr_status_t curve_status = vr_line_segments_from_quad(
+      edge.p0,
+      edge.p1,
+      edge.p2,
+      segs,
+      seg_count,
+      seg_cap,
+      VR_RASTER_QUAD_BEZIER_TOLERANCE,
+      0,
+      edge_color,
+      seg_colors,
+      seg_color_count,
+      seg_color_cap,
+      using_msdf);
+    if (curve_status != VR_OK) {
+      free(msdf_edges);
+      free(msdf_edge_colors);
+      return curve_status;
+    }
+  }
+
+  free(msdf_edges);
+  free(msdf_edge_colors);
   return VR_OK;
 }
 
@@ -644,8 +946,6 @@ static vr_status_t vr_line_segments_from_quad(
   float ly = y0 + (2.0f * y1 + y2 - y0) * 0.5f;
   (void)lx;
   (void)ly;
-  float dx = x2 - x0;
-  float dy = y2 - y0;
   float dist2 = (x1 - midx) * (x1 - midx) + (y1 - midy) * (y1 - midy);
   if (dist2 <= tolerance_sq) {
     vr_status_t push_status = vr_push_segment(segs, count, cap, x0, y0, x2, y2);
@@ -653,8 +953,7 @@ static vr_status_t vr_line_segments_from_quad(
       return push_status;
     }
     if (using_msdf) {
-      uint8_t local_color = vr_msdf_edge_color(dx, dy, (size_t)segment_color);
-      return vr_push_msdf_segment_color(seg_colors, seg_color_count, seg_color_cap, local_color);
+      return vr_push_msdf_segment_color(seg_colors, seg_color_count, seg_color_cap, segment_color);
     }
     return VR_OK;
   }
@@ -1045,6 +1344,72 @@ static float vr_clamp_float(float v, float lo, float hi) {
   return v;
 }
 
+static int vr_quadratic_crossing_sign(float x, float y, const vr_raster_curve_t* curve) {
+  if (!curve) {
+    return 0;
+  }
+
+  float y0 = curve->y0;
+  float y1 = curve->y1;
+  float y2 = curve->y2;
+  if (!((y0 <= y && y2 > y) || (y2 <= y && y0 > y))) {
+    return 0;
+  }
+
+  float a = y0 - 2.0f * y1 + y2;
+  float b = 2.0f * (y1 - y0);
+  float c = y0 - y;
+  float disc = b * b - 4.0f * a * c;
+  if (disc < 0.0f) {
+    return 0;
+  }
+
+  float sqrt_disc = sqrtf(disc);
+  int winding = 0;
+  float inv2a = (fabsf(a) <= VR_RASTER_SEGMENT_TOLERANCE) ? 0.0f : (0.5f / a);
+  float invb = (fabsf(b) <= VR_RASTER_SEGMENT_TOLERANCE) ? 0.0f : (1.0f / b);
+
+  float t_candidates[2u];
+  size_t candidate_count = 0u;
+  if (fabsf(a) > VR_RASTER_SEGMENT_TOLERANCE) {
+    float t0 = (-b - sqrt_disc) * inv2a;
+    float t1 = (-b + sqrt_disc) * inv2a;
+    if (t0 > VR_RASTER_CURVE_CROSSING_EPSILON && t0 < 1.0f - VR_RASTER_CURVE_CROSSING_EPSILON) {
+      t_candidates[candidate_count++] = t0;
+    }
+    if (t1 > VR_RASTER_CURVE_CROSSING_EPSILON && t1 < 1.0f - VR_RASTER_CURVE_CROSSING_EPSILON) {
+      if ((candidate_count == 0u) || (fabsf(t1 - t_candidates[0u]) > VR_RASTER_CURVE_CROSSING_EPSILON)) {
+        t_candidates[candidate_count++] = t1;
+      }
+    }
+  } else if (fabsf(b) > VR_RASTER_SEGMENT_TOLERANCE) {
+    float t = -c * invb;
+    if (t > VR_RASTER_CURVE_CROSSING_EPSILON && t < 1.0f - VR_RASTER_CURVE_CROSSING_EPSILON) {
+      t_candidates[candidate_count++] = t;
+    }
+  }
+
+  if (candidate_count == 0u) {
+    return 0;
+  }
+
+  for (size_t i = 0u; i < candidate_count; ++i) {
+    float t = t_candidates[i];
+    float omt = 1.0f - t;
+    float x_int = omt * omt * curve->x0 + 2.0f * omt * t * curve->x1 + t * t * curve->x2;
+    if (x >= x_int) {
+      continue;
+    }
+
+    float dy_dt = 2.0f * (omt * (y1 - y0) + t * (y2 - y1));
+    if (fabsf(dy_dt) <= VR_RASTER_SEGMENT_TOLERANCE) {
+      continue;
+    }
+    winding += (dy_dt > 0.0f) ? 1 : -1;
+  }
+  return winding;
+}
+
 static float vr_sample_offset(int index, int samples) {
   return (float)(index + 0.5f) / (float)samples - VR_RASTER_SDF_SAMPLE_OFFSET;
 }
@@ -1174,6 +1539,11 @@ static float vr_distance_to_outline(
   for (size_t s = 0u; s < seg_count; ++s) {
     winding += vr_segment_crossing_sign(px, py, &segments[s]);
   }
+  if (VR_RASTER_USE_QUADRATIC_WINDING != 0u) {
+    for (size_t c = 0u; c < curve_count; ++c) {
+      winding += vr_quadratic_crossing_sign(px, py, &curves[c]);
+    }
+  }
   return (winding == 0) ? -nearest : nearest;
 }
 
@@ -1288,6 +1658,11 @@ static void vr_msdf_signed_distances_to_outline(
   int winding = 0;
   for (size_t s = 0u; s < seg_count; ++s) {
     winding += vr_segment_crossing_sign(px, py, &segments[s]);
+  }
+  if (VR_RASTER_USE_QUADRATIC_WINDING != 0u) {
+    for (size_t c = 0u; c < curve_count; ++c) {
+      winding += vr_quadratic_crossing_sign(px, py, &curves[c]);
+    }
   }
 
   float sign = (winding == 0) ? -1.0f : 1.0f;

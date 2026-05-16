@@ -58,8 +58,11 @@ static const uint8_t VR_MSDF_RECON_TEXTURE_CHANNELS = 3u;
 static const float VR_MSDF_RECON_SPREAD = 1.0f;
 static const float VR_MSDF_RECON_MID_ALPHA = 128.0f;
 static const float VR_MSDF_RECON_EDGE_SCALE = 255.0f;
-static const float VR_MSDF_RECON_ALPHA_MIN = 0.0f;
+static const uint8_t VR_MSDF_RECON_AA_SUBSAMPLES = 8u;
+static const float VR_MSDF_RECON_AA_WIDTH = 0.65f;
+static const float VR_MSDF_RECON_AA_SCALE = 1.00f;
 static const float VR_MSDF_RECON_ALPHA_MAX = 255.0f;
+static const uint8_t VR_MSDF_RECON_BORDER_SAMPLE_COUNT = 4u;
 static const char* const VR_FALLBACK_FONT_PATH = "fonts/Geist[wght].ttf";
 static const char* const VR_DEFAULT_TEXT = "Geist variable font in SDL";
 static const float VR_TEXT_RENDER_X = 40.0f;
@@ -217,26 +220,124 @@ static float sdl_sorted_median_3(float a, float b, float c) {
   return b;
 }
 
-static uint8_t sdl_alpha_from_signed_distance(float signed_distance, float spread) {
-  if (spread <= 0.0f) {
-    return 0u;
-  }
+static float sdl_clamp_float(float value, float min_value, float max_value) {
+  if (value < min_value) return min_value;
+  if (value > max_value) return max_value;
+  return value;
+}
 
-  float normalized = VR_MSDF_RECON_MID_ALPHA + (signed_distance * VR_MSDF_RECON_EDGE_SCALE) / spread;
-  float clamped = fminf(VR_MSDF_RECON_ALPHA_MAX, fmaxf(VR_MSDF_RECON_ALPHA_MIN, normalized));
-  return (uint8_t)(clamped + 0.5f);
+static float sdl_smoothstep_float(float edge0, float edge1, float value) {
+  if (edge0 >= edge1) return 0.0f;
+
+  float t = (value - edge0) / (edge1 - edge0);
+  t = sdl_clamp_float(t, 0.0f, 1.0f);
+  return t * t * (3.0f - 2.0f * t);
 }
 
 static float sdl_decode_msdf_channel(uint8_t encoded, float spread) {
   return ((float)encoded - VR_MSDF_RECON_MID_ALPHA) * (spread / VR_MSDF_RECON_EDGE_SCALE);
 }
 
-static uint8_t sdl_msdf_to_alpha(const uint8_t* msdf_pixel, float spread) {
-  float d0 = sdl_decode_msdf_channel(msdf_pixel[0u], spread);
-  float d1 = sdl_decode_msdf_channel(msdf_pixel[1u], spread);
-  float d2 = sdl_decode_msdf_channel(msdf_pixel[2u], spread);
-  float signed_distance = sdl_sorted_median_3(d0, d1, d2);
-  return sdl_alpha_from_signed_distance(signed_distance, spread);
+static float sdl_msdf_sample_distance(
+  const uint8_t* msdf,
+  int x,
+  int y,
+  int width,
+  int height,
+  float spread) {
+  int cx = (x < 0) ? 0 : ((x >= width) ? (width - 1) : x);
+  int cy = (y < 0) ? 0 : ((y >= height) ? (height - 1) : y);
+
+  size_t pixel_index = (size_t)cy * (size_t)width + (size_t)cx;
+  const uint8_t* pixel = msdf + pixel_index * (size_t)VR_MSDF_RECON_TEXTURE_CHANNELS;
+  float d0 = sdl_decode_msdf_channel(pixel[0u], spread);
+  float d1 = sdl_decode_msdf_channel(pixel[1u], spread);
+  float d2 = sdl_decode_msdf_channel(pixel[2u], spread);
+  return sdl_sorted_median_3(d0, d1, d2);
+}
+
+static float sdl_msdf_sample_distance_f(
+  const uint8_t* msdf,
+  float x,
+  float y,
+  int width,
+  int height,
+  float spread) {
+  if (!msdf || width <= 0 || height <= 0) {
+    return 0.0f;
+  }
+  float fx = sdl_clamp_float(x, 0.0f, (float)(width - 1));
+  float fy = sdl_clamp_float(y, 0.0f, (float)(height - 1));
+
+  int x0 = (int)floorf(fx);
+  int y0 = (int)floorf(fy);
+  int x1 = (x0 >= (width - 1)) ? x0 : (x0 + 1);
+  int y1 = (y0 >= (height - 1)) ? y0 : (y0 + 1);
+
+  float tx = fx - (float)x0;
+  float ty = fy - (float)y0;
+
+  float d00 = sdl_msdf_sample_distance(msdf, x0, y0, width, height, spread);
+  float d10 = sdl_msdf_sample_distance(msdf, x1, y0, width, height, spread);
+  float d01 = sdl_msdf_sample_distance(msdf, x0, y1, width, height, spread);
+  float d11 = sdl_msdf_sample_distance(msdf, x1, y1, width, height, spread);
+
+  float d0 = d00 + (d10 - d00) * tx;
+  float d1 = d01 + (d11 - d01) * tx;
+  return d0 + (d1 - d0) * ty;
+}
+
+static uint8_t sdl_msdf_to_alpha(
+  const uint8_t* msdf,
+  int x,
+  int y,
+  int width,
+  int height,
+  float spread,
+  bool invert_sign) {
+  if (width <= 0 || height <= 0 || spread <= 0.0f) {
+    return 0u;
+  }
+
+  float aa_step = 1.0f / (float)VR_MSDF_RECON_AA_SUBSAMPLES;
+  float coverage = 0.0f;
+  float half = 0.5f;
+  float aa_width = VR_MSDF_RECON_AA_WIDTH / spread;
+
+  for (uint8_t sy = 0u; sy < VR_MSDF_RECON_AA_SUBSAMPLES; ++sy) {
+    float fy = (float)sy * aa_step + aa_step * 0.5f - half;
+    for (uint8_t sx = 0u; sx < VR_MSDF_RECON_AA_SUBSAMPLES; ++sx) {
+      float fx = (float)sx * aa_step + aa_step * 0.5f - half;
+      float d = sdl_msdf_sample_distance_f(msdf, (float)x + fx, (float)y + fy, width, height, spread);
+      if (invert_sign) {
+        d = -d;
+      }
+      float sub_alpha = sdl_smoothstep_float(-aa_width, aa_width, d);
+      coverage += sdl_clamp_float(sub_alpha, 0.0f, 1.0f);
+    }
+  }
+
+  float sample_count = (float)(VR_MSDF_RECON_AA_SUBSAMPLES * VR_MSDF_RECON_AA_SUBSAMPLES);
+  float alpha_norm = coverage / sample_count * VR_MSDF_RECON_ALPHA_MAX;
+  alpha_norm *= VR_MSDF_RECON_AA_SCALE;
+  alpha_norm = sdl_clamp_float(alpha_norm, 0.0f, VR_MSDF_RECON_ALPHA_MAX);
+
+  return (uint8_t)(alpha_norm + 0.5f);
+}
+
+static bool sdl_msdf_is_inverted(const uint8_t* msdf, int width, int height, float spread) {
+  if (!msdf || width <= 0 || height <= 0) {
+    return false;
+  }
+
+  static const int sample_points[4u][2] = {{0, 0}, {-1, 0}, {0, -1}, {-1, -1}};
+  float sample_sum = 0.0f;
+  for (uint8_t i = 0u; i < VR_MSDF_RECON_BORDER_SAMPLE_COUNT; ++i) {
+    int sample_x = (sample_points[i][0u] < 0) ? (width - 1) : sample_points[i][0u];
+    int sample_y = (sample_points[i][1u] < 0) ? (height - 1) : sample_points[i][1u];
+    sample_sum += sdl_msdf_sample_distance(msdf, sample_x, sample_y, width, height, spread);
+  }
+  return sample_sum > 0.0f;
 }
 
 static void sdl_convert_msdf_to_rgba(const uint8_t* msdf, int width, int height, uint8_t* rgba) {
@@ -245,11 +346,13 @@ static void sdl_convert_msdf_to_rgba(const uint8_t* msdf, int width, int height,
     fprintf(stderr, "fatal: failed to allocate pixel format: %s\n", SDL_GetError());
     exit(1);
   }
+  bool invert_sign = sdl_msdf_is_inverted(msdf, width, height, VR_MSDF_RECON_SPREAD);
   size_t pixel_count = (size_t)width * (size_t)height;
   uint32_t* out = (uint32_t*)rgba;
   for (size_t i = 0; i < pixel_count; ++i) {
-    size_t sample = i * (size_t)VR_MSDF_RECON_TEXTURE_CHANNELS;
-    uint8_t alpha = msdf ? sdl_msdf_to_alpha(msdf + sample, VR_MSDF_RECON_SPREAD) : 0u;
+    int x = (int)(i % (size_t)width);
+    int y = (int)(i / (size_t)width);
+    uint8_t alpha = msdf ? sdl_msdf_to_alpha(msdf, x, y, width, height, VR_MSDF_RECON_SPREAD, invert_sign) : 0u;
     out[i] = SDL_MapRGBA(
       rgba_format,
       VR_RGBA_CHANNEL_MAX,
