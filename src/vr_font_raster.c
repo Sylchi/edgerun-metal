@@ -25,7 +25,8 @@ static const float VR_FIXED_SCALE = 65536.0f;
 static const size_t VR_RASTER_SEGMENT_INITIAL_CAP = 64u;
 static const size_t VR_RASTER_OUTLINE_POINT_INITIAL_CAP = 16u;
 static const float VR_RASTER_SEGMENT_TOLERANCE = 1e-7f;
-static const int VR_RASTER_SUPERSAMPLE = 4;
+static const int VR_RASTER_ALPHA_SUPERSAMPLE = 4;
+static const int VR_RASTER_MSDF_SUPERSAMPLE = 8;
 static const float VR_RASTER_SDF_SPREAD = 1.0f;
 static const float VR_RASTER_SDF_MID_ALPHA = 128.0f;
 static const float VR_RASTER_SDF_EDGE_SCALE = 255.0f;
@@ -1368,10 +1369,10 @@ vr_status_t vr_rasterize_outline_with_mode(
   int h = base_h + (pad * 2);
   if (w <= 0 || h <= 0) return VR_ERR_UNSUPPORTED;
 
-  const int ss = VR_RASTER_SUPERSAMPLE;
+  const bool using_msdf = (atlas_format == VR_FONT_ATLAS_FORMAT_MSDF_RGB);
+  const int ss = using_msdf ? VR_RASTER_MSDF_SUPERSAMPLE : VR_RASTER_ALPHA_SUPERSAMPLE;
   const float inv_ss = 1.0f / (float)(ss * ss);
   const float sdf_pad_f = VR_RASTER_SDF_SPREAD * VR_RASTER_SDF_PADDING_SCALE;
-  const bool using_msdf = (atlas_format == VR_FONT_ATLAS_FORMAT_MSDF_RGB);
   float sample_offsets_x[ss];
   float sample_offsets_y[ss];
   for (int s = 0; s < ss; ++s) {
