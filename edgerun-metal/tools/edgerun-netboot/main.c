@@ -36,6 +36,7 @@
 #define TFTP_BLOCK_SIZE 512u
 #define TFTP_TIMEOUT_MS 700u
 #define TFTP_MAX_RETRIES 8u
+#define TFTP_OP_OACK 6u
 
 enum {
     DHCP_MESSAGE_DISCOVER = 1u,
@@ -926,7 +927,7 @@ static bool send_block_with_retries(int sock, const struct sockaddr_in *peer, co
     return false;
 }
 
-static bool transfer_boot_file(const char *path, const struct sockaddr_in *peer) {
+static bool transfer_boot_file(const char *path, int tfd, const struct sockaddr_in *peer) {
     FILE *fp = NULL;
     uint8_t *file_data = NULL;
     long size_long;
@@ -972,12 +973,6 @@ static bool transfer_boot_file(const char *path, const struct sockaddr_in *peer)
     }
     fclose(fp);
 
-    int tfd = open_dgram_socket(0, false);
-    if (tfd < 0) {
-        free(file_data);
-        return false;
-    }
-
     while (!done) {
         size_t left = (offset < file_size) ? (file_size - offset) : 0u;
         size_t chunk = (left > TFTP_BLOCK_SIZE) ? TFTP_BLOCK_SIZE : left;
@@ -1004,7 +999,6 @@ static bool transfer_boot_file(const char *path, const struct sockaddr_in *peer)
         block++;
     }
 
-    close(tfd);
     free(file_data);
     return ok;
 }
@@ -1038,6 +1032,55 @@ static bool is_boot_filename(const char *filename) {
     return false;
 }
 
+
+static size_t tftp_make_oack(uint8_t *out, size_t out_cap, bool want_tsize, bool want_blksize, bool want_windowsize, size_t file_size) {
+    size_t off = 0;
+    uint16_t op = htons(TFTP_OP_OACK);
+    if (out_cap < 2) return 0;
+    memcpy(out + off, &op, 2);
+    off += 2;
+
+#define ADD_OPT(k, v) do { \
+    const char *kk = (k); const char *vv = (v); \
+    size_t kl = strlen(kk) + 1u; size_t vl = strlen(vv) + 1u; \
+    if (off + kl + vl > out_cap) return 0; \
+    memcpy(out + off, kk, kl); off += kl; \
+    memcpy(out + off, vv, vl); off += vl; \
+} while (0)
+
+    if (want_tsize) {
+        char n[32];
+        snprintf(n, sizeof(n), "%lu", (unsigned long)file_size);
+        ADD_OPT("tsize", n);
+    }
+    if (want_blksize) {
+        ADD_OPT("blksize", "512");
+    }
+    if (want_windowsize) {
+        ADD_OPT("windowsize", "1");
+    }
+
+#undef ADD_OPT
+    return off;
+}
+
+static bool tftp_rrq_has_option(const char *opt_start, const uint8_t *end, const char *name) {
+    const char *p = opt_start;
+    while ((const uint8_t *)p < end && *p != '\0') {
+        const char *k = p;
+        size_t kl = strlen(k);
+        p += kl + 1;
+        if ((const uint8_t *)p >= end) break;
+        const char *v = p;
+        size_t vl = strlen(v);
+        (void)v;
+        p += vl + 1;
+        if (strcasecmp(k, name) == 0) return true;
+    }
+    return false;
+}
+
+
 static void handle_tftp(int sock, const uint8_t *pkt, size_t len, const struct sockaddr_in *src,
                         const char *efi_path) {
     uint16_t opcode;
@@ -1049,6 +1092,16 @@ static void handle_tftp(int sock, const uint8_t *pkt, size_t len, const struct s
     char mode[16];
     size_t name_len;
     size_t mode_len;
+    struct stat st;
+    size_t file_size;
+    int tfd = -1;
+    uint8_t oack[256];
+    bool has_options;
+    bool want_tsize;
+    bool want_blksize;
+    bool want_windowsize;
+    size_t oack_len;
+    const uint8_t *opt_start;
     if (len < 4u) {
         return;
     }
@@ -1094,13 +1147,50 @@ static void handle_tftp(int sock, const uint8_t *pkt, size_t len, const struct s
         send_dhcp_error(sock, src, 1u, "File not found");
         return;
     }
+    if (stat(efi_path, &st) != 0) {
+        log_line("unable to stat %s", efi_path);
+        return;
+    }
+    if (st.st_size < 0 || st.st_size > (long)0x7fffffff) {
+        log_line("invalid EFI size");
+        return;
+    }
+    file_size = (size_t)st.st_size;
+
+    has_options = (mode_end + 1u) < end;
+    want_tsize = false;
+    want_blksize = false;
+    want_windowsize = false;
+    if (has_options) {
+        opt_start = mode_end + 1u;
+        want_tsize = tftp_rrq_has_option((const char *)opt_start, end, "tsize");
+        want_blksize = tftp_rrq_has_option((const char *)opt_start, end, "blksize");
+        want_windowsize = tftp_rrq_has_option((const char *)opt_start, end, "windowsize");
+    }
+    tfd = open_dgram_socket(0u, false);
+    if (tfd < 0) {
+        log_line("unable to allocate TFTP transfer socket");
+        return;
+    }
+    if (has_options) {
+        oack_len = tftp_make_oack(oack, sizeof(oack), want_tsize, want_blksize, want_windowsize, file_size);
+        if (oack_len == 0u || sendto(tfd, oack, oack_len, 0, (const struct sockaddr *)src, (socklen_t)sizeof(*src)) != (ssize_t)oack_len) {
+            close(tfd);
+            return;
+        }
+        if (!wait_for_ack(tfd, src, 0u)) {
+            close(tfd);
+            return;
+        }
+    }
 
     log_line("TFTP RRQ %s", filename);
-    if (transfer_boot_file(efi_path, src)) {
+    if (transfer_boot_file(efi_path, tfd, src)) {
         log_line("TFTP complete");
     } else {
         log_line("TFTP failed");
     }
+    close(tfd);
 }
 
 static bool parse_bool_value(const char *value) {
