@@ -1,4 +1,4 @@
-timestamp=20260516T233225Z
+timestamp=20260516T233326Z
 hostname=fw
 repo=/home/ken/edgerun-c
 remote=origin
@@ -7,13 +7,16 @@ output_branch=agent/fw
 interval_sec=60
 [REDACTED_TOKEN]
 starting agent cycle
-started_at=2026-05-17T06:32:25+07:00
+started_at=2026-05-17T06:33:26+07:00
 repo: /home/ken/edgerun-c
 working tree dirty; collect-only mode
- M .gitignore
- M agents.md
- M edgerun-metal/core/efi_main.c
- M varfont/README.md
+M  .gitignore
+A  Makefile
+A  README.md
+M  agents.md
+M  edgerun-metal/core/efi_main.c
+A  varfont/CMakePresets.json
+M  varfont/README.md
 D  varfont/build/CMakeCache.txt
 D  [REDACTED_TOKEN]
 D  [REDACTED_TOKEN]
@@ -100,9 +103,6 @@ D  [REDACTED_SECRET]
 D  varfont/build/libvrfont.a
 D  varfont/build/vrfont_demo
 D  varfont/build/vrfont_tests
-?? Makefile
-?? README.md
-?? varfont/CMakePresets.json
 sync: skipped due dirty tree
 source_sha=31f8c19
 run: skipped
