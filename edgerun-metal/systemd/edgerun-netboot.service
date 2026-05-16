@@ -1,0 +1,28 @@
+[Unit]
+Description=EdgeRun Metal PXE network boot responder
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/edgerun-metal
+EnvironmentFile=/etc/edgerun-netboot.env
+ExecStartPre=/bin/sh -c 'IFACE=$(sed -n "s/^EDGERUN_NETBOOT_IFACE=//p" /etc/edgerun-netboot.env | head -n1); for dev in $(ip -4 -o addr show | grep "10.42.0.1/24" | cut -d" " -f2 | tr -d ":"); do if [ "$dev" = "$IFACE" ]; then continue; fi; ip -4 addr del 10.42.0.1/24 dev "$dev" || true; ip -4 route del 10.42.0.0/24 dev "$dev" 2>/dev/null || true; done; for dev in $(ip -4 route show 10.42.0.0/24 | grep "^10.42.0.0/24" | cut -d" " -f3); do if [ "$dev" = "$IFACE" ]; then continue; fi; ip -4 route del 10.42.0.0/24 dev "$dev" 2>/dev/null || true; done'
+ExecStart=/bin/sh -c '. /etc/edgerun-netboot.env; \
+if [ -n "${EDGERUN_NETBOOT_ALLOW_MAC:-}" ]; then \
+  ALLOW_MAC_ARG="--allow-mac=$EDGERUN_NETBOOT_ALLOW_MAC"; \
+else \
+  ALLOW_MAC_ARG=""; \
+fi; \
+if [ -n "${EDGERUN_NETBOOT_MGMT_MAC:-}" ]; then \
+  MGMT_MAC_ARG="--mgmt-mac=$EDGERUN_NETBOOT_MGMT_MAC"; \
+else \
+  MGMT_MAC_ARG=""; \
+fi; \
+exec /opt/edgerun-metal/build/edgerun-netboot --iface "$EDGERUN_NETBOOT_IFACE" --efi "$EDGERUN_NETBOOT_EFI" --setup-iface --mode "$EDGERUN_NETBOOT_MODE" --http-port "$EDGERUN_NETBOOT_HTTP_PORT" --client-ip "$EDGERUN_NETBOOT_CLIENT_IP" --force-http-for-pxe="$EDGERUN_NETBOOT_FORCE_HTTP_FOR_PXE" $ALLOW_MAC_ARG --mgmt-dhcp="$EDGERUN_NETBOOT_MGMT_DHCP" $MGMT_MAC_ARG --mgmt-ip "$EDGERUN_NETBOOT_MGMT_IP"'
+Restart=always
+RestartSec=1
+
+[Install]
+WantedBy=multi-user.target
