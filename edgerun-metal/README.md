@@ -235,6 +235,66 @@ Notes:
   EDGERUN_NETBOOT_FORCE_HTTP_FOR_PXE=0
   ```
 
+## Always-on development agent
+
+Use `make install-agent` to enable an always-on local sync/test/report loop on this machine.
+
+```bash
+make install-agent
+```
+
+The service:
+
+- pulls `main` from GitHub
+- runs `.edgerun/agent/run.sh`
+- collects diagnostics and artifacts
+- commits outputs to branch `agent/fw`
+- never commits anything to `main`
+
+Useful commands:
+
+```bash
+make run-agent
+make logs-agent
+make status-agent
+```
+
+To stop it:
+
+```bash
+make uninstall-agent
+```
+
+Output layout:
+
+```
+agent-output/
+  latest/
+    summary.txt
+    git-status.txt
+    build.txt
+    netboot-status.txt
+    netboot-journal.txt
+    network.txt
+    sockets.txt
+    boot-artifacts.txt
+    timestamp.txt
+    run.log
+  history/
+    <timestamp>/
+      ...same files as latest...
+```
+
+`run.sh` default behavior:
+
+- `make`
+- `make netboot`
+- call `.edgerun/agent/collect.sh`
+
+To change behavior, edit `.edgerun/agent/run.sh` in `main` and push.
+The laptop executes the latest `main` branch script on the next timer run.
+Results are committed to branch `agent/fw` (not `main`).
+
 ## Network boot later
 
 Serve `build/esp/EFI/BOOT/BOOTX64.EFI` as `BOOTX64.EFI` through an existing PXE/iPXE/UEFI HTTP/TFTP boot chain.
@@ -269,10 +329,21 @@ edgerun-metal/
   tools/
     install-netboot-service.sh
     uninstall-netboot-service.sh
+    edgerun-agent/
+      README.md
+      edgerun-agent.sh
+      install-agent-service.sh
+      uninstall-agent-service.sh
     edgerun-netboot/
       Makefile
       README.md
       main.c
+  .edgerun/
+    agent/
+      collect.sh
+      redact.sh
+      README.md
+      run.sh
 ```
 
 ## Next milestones
