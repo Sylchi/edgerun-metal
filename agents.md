@@ -16,6 +16,9 @@
 - Eliminate repetition; refactor repeated logic into utility functions.
 - Consolidating and removing code is preferred over adding new code.
 - No regressions.
+- Generated build artifacts must stay untracked.
+- Use `.build/` for local CMake output.
+- Keep this as one Git repository; nested `.git` directories, `.gitmodules`, and submodule gitlinks are not allowed.
 
 ## Enforcement
 
@@ -27,3 +30,6 @@
 - Prefer editing existing code to simplify/remove duplication instead of appending behavior.
 - Preserve existing public behavior and interfaces unless explicitly instructed.
 - Keep implementations minimal, explicit, deterministic, and dependency-free.
+- Keep root documentation and command wrappers current when workflow changes.
+- Add tests for new repository tooling and for behavior changes when deterministic tests are possible.
+- Document the purpose and intention of new tools, tests, and top-level structure.

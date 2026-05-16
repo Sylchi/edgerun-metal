@@ -1,0 +1,114 @@
+# edgerun-c
+
+This repository contains two C projects:
+
+- `edgerun-metal`: a freestanding x86_64 UEFI runtime that boots as `BOOTX64.EFI` and runs embedded Wasm modules with native hostcalls.
+- `varfont`: a zero-dependency variable-font renderer library with parser, shaping, rasterization, atlas, and test coverage.
+
+## Repository Layout
+
+```text
+.
+├── agents.md              repository engineering rules
+├── docs/                  repository structure and engineering intent
+├── tools/                 repository maintenance tools
+├── tests/                 repository maintenance tests
+├── edgerun-metal/         UEFI metal runtime, netboot tools, systemd units
+├── varfont/               variable-font C library and tests
+├── .build/                local generated builds, ignored
+└── agent-output/          local agent output, ignored
+```
+
+Generated build output must stay out of source directories. Use `.build/` for local CMake builds and `edgerun-metal/build/` for EFI artifacts produced by the metal Makefile.
+
+This is one Git repository. Do not add nested `.git` directories, `.gitmodules`, or submodule gitlinks.
+
+## Required Tools
+
+Use the current system toolchain:
+
+```bash
+clang --version
+cc --version
+cmake --version
+ninja --version
+ctest --version
+```
+
+The preferred local build tools are:
+
+- `clang` and `lld` for `edgerun-metal`
+- `CMake` with `Ninja` for `varfont`
+- `ctest --output-on-failure` for tests
+- `rg` for repository search
+
+## Common Commands
+
+Build the default projects:
+
+```bash
+make
+```
+
+Run all local checks:
+
+```bash
+make check
+```
+
+Check only repository structure:
+
+```bash
+make repo-check
+```
+
+Run repository-policy tests:
+
+```bash
+make repo-test
+```
+
+Build individual `edgerun-metal` profiles:
+
+```bash
+make edgerun-smoke
+make edgerun-pci
+make edgerun-quiet
+```
+
+Build and test `varfont`:
+
+```bash
+cmake --preset dev -S varfont
+cmake --build .build/varfont
+ctest --test-dir .build/varfont --output-on-failure
+```
+
+The root Makefile wraps the same flow:
+
+```bash
+make varfont-test
+```
+
+Clean generated local output:
+
+```bash
+make clean
+```
+
+## Rules
+
+`agents.md` is authoritative for engineering behavior. In short:
+
+- warnings are errors
+- unsupported states fail immediately
+- generated artifacts are not source
+- no hidden fallback paths
+- preserve public behavior unless the task explicitly changes it
+
+Keep new docs and commands aligned with those rules.
+
+Additional intent documents:
+
+- [Repository structure](docs/repository-structure.md)
+- [Engineering practices](docs/engineering-practices.md)

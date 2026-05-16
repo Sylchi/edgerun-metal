@@ -354,6 +354,32 @@ static void er_run_quiet_profile(void) {
   er_println("halt ready");
 }
 
+static void er_run_invalid_profile(void) {
+  er_print("invalid boot profile: ");
+  er_print_u64_dec((UINT64)ER_BOOT_PROFILE);
+  er_println("");
+  er_halt_forever();
+}
+
+static void er_run_boot_profile(void) {
+  if (ER_BOOT_PROFILE == ER_BOOT_PROFILE_PCI) {
+    er_run_pci_profile();
+    return;
+  }
+
+  if (ER_BOOT_PROFILE == ER_BOOT_PROFILE_QUIET) {
+    er_run_quiet_profile();
+    return;
+  }
+
+  if (ER_BOOT_PROFILE == ER_BOOT_PROFILE_SMOKE) {
+    er_run_smoke_profile();
+    return;
+  }
+
+  er_run_invalid_profile();
+}
+
 EFI_STATUS EFIAPI efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE* SystemTable) {
   (void)ImageHandle;
 
@@ -363,13 +389,7 @@ EFI_STATUS EFIAPI efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE* SystemTable
   er_println("EdgeRun Metal Core v0.2");
   er_println("UEFI boot OK");
 
-#if ER_BOOT_PROFILE == ER_BOOT_PROFILE_PCI
-  er_run_pci_profile();
-#elif ER_BOOT_PROFILE == ER_BOOT_PROFILE_QUIET
-  er_run_quiet_profile();
-#else
-  er_run_smoke_profile();
-#endif
+  er_run_boot_profile();
 
   er_println("Press any key to halt...");
   er_wait_for_key_then_halt(SystemTable);
