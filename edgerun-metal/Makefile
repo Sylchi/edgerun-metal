@@ -56,7 +56,7 @@ logs-agent:
 	journalctl -u edgerun-agent.service -f
 
 status-agent:
-	systemctl status edgerun-agent.timer edgerun-agent.service --no-pager
+	systemctl status edgerun-agent.timer edgerun-agent.service --no-pager || true
 
 $(BUILD_DIR)/%.o: %.c $(HDRS)
 	mkdir -p $(dir $@)
