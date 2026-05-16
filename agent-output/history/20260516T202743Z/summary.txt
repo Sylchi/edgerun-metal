@@ -1,4 +1,4 @@
-timestamp=20260516T202804Z
+timestamp=20260516T202743Z
 hostname=fw
 [REDACTED_SECRET]
 remote=origin
@@ -7,7 +7,7 @@ output_branch=agent/fw
 interval_sec=60
 [REDACTED_TOKEN]
 starting agent cycle
-started_at=2026-05-17T03:28:04+07:00
+started_at=2026-05-17T03:27:43+07:00
 repo: [REDACTED_SECRET]
 working tree dirty; collect-only mode
 D  [REDACTED_SECRET]
@@ -23,5 +23,3 @@ source_sha=583d7e2
 run: skipped
 collect_exit=0
 redacting outputs
-output worktree: /tmp/edgerun-agent-output-worktree
-removing existing output worktree for agent/fw: /tmp/edgerun-agent-output-worktree-ken
