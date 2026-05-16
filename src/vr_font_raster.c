@@ -653,7 +653,8 @@ static vr_status_t vr_line_segments_from_quad(
       return push_status;
     }
     if (using_msdf) {
-      return vr_push_msdf_segment_color(seg_colors, seg_color_count, seg_color_cap, segment_color);
+      uint8_t local_color = vr_msdf_edge_color(dx, dy, (size_t)segment_color);
+      return vr_push_msdf_segment_color(seg_colors, seg_color_count, seg_color_cap, local_color);
     }
     return VR_OK;
   }
