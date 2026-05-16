@@ -1,0 +1,81 @@
+[REDACTED_TOKEN=[REDACTED]
+action=set-netboot-env
+mode=auto
+iface=eth0
+allow-mac=00:d8:61:d7:50:30
+client-ip=10.42.0.2
+mgmt-dhcp=1
+mgmt-mac=
+mgmt-ip=10.42.0.10
+http-port=8081
+force-http-for-pxe=0
+---
+● edgerun-netboot.service - EdgeRun Metal PXE network boot responder
+     Loaded: loaded ([REDACTED_TOKEN=[REDACTED] enabled; preset: disabled)
+     Active: active (running) since Sun 2026-05-17 05:25:36 +07; 7ms ago
+ Invocation: [REDACTED_SECRET=[REDACTED]
+    Process: 222010 ExecStartPre=/bin/sh -c IFACE=$(sed -n "s/^EDGERUN_NETBOOT_IFACE=//p" /etc/edgerun-netboot.env | head -n1); ip link set "$IFACE" down || true; ip addr flush dev "$IFACE" || true; for dev in $(ip -4 -o addr show | grep "10.42.0.1/24" | cut -d" " -f2 | tr -d ":"); do if [ "$dev" = "$IFACE" ]; then continue; fi; ip -4 addr del 10.42.0.1/24 dev "$dev" || true; ip -4 route del 10.42.0.0/24 dev "$dev" 2>/dev/null || true; done; for dev in $(ip -4 route show 10.42.0.0/24 | grep "^10.42.0.0/24" | cut -d" " -f3); do if [ "$dev" = "$IFACE" ]; then continue; fi; ip -4 route del 10.42.0.0/24 dev "$dev" 2>/dev/null || true; done; ip addr add 10.42.0.1/24 dev "$IFACE"; ip link set "$IFACE" up; ip -4 route replace 255.255.255.255/32 dev "$IFACE"; ip -4 route replace 10.42.0.255/32 dev "$IFACE" (code=exited, status=0/SUCCESS)
+   Main PID: 222029 ((sh))
+      Tasks: 1 (limit: 74428)
+     Memory: 3.8M (peak: 3.8M)
+        CPU: 30ms
+     CGroup: [REDACTED_SECRET=[REDACTED]
+             └─222029 "(sh)"
+
+May 17 05:25:36 fw systemd[1]: Starting EdgeRun Metal PXE network boot responder...
+May 17 05:25:36 fw systemd[1]: Started EdgeRun Metal PXE network boot responder.
+result: success
+JOB_ID [REDACTED_TOKEN=[REDACTED] already completed; skipping
+JOB_ID [REDACTED_TOKEN=[REDACTED] already completed; skipping
+JOB_ID [REDACTED_TOKEN=[REDACTED] already completed; skipping
+JOB_ID [REDACTED_TOKEN=[REDACTED] already completed; skipping
+JOB_ID [REDACTED_TOKEN=[REDACTED] already completed; skipping
+JOB_ID [REDACTED_TOKEN=[REDACTED] already completed; skipping
+JOB_ID [REDACTED_TOKEN=[REDACTED] already completed; skipping
+JOB_ID [REDACTED_TOKEN=[REDACTED] already completed; skipping
+JOB_ID [REDACTED_TOKEN=[REDACTED] already completed; skipping
+JOB_ID [REDACTED_TOKEN=[REDACTED] already completed; skipping
+JOB_ID [REDACTED_TOKEN=[REDACTED] already completed; skipping
+JOB_ID [REDACTED_TOKEN=[REDACTED] already completed; skipping
+JOB_ID [REDACTED_TOKEN=[REDACTED] already completed; skipping
+JOB_ID [REDACTED_TOKEN=[REDACTED] already completed; skipping
+JOB_ID [REDACTED_TOKEN=[REDACTED] already completed; skipping
+JOB_ID [REDACTED_TOKEN=[REDACTED] already completed; skipping
+JOB_ID [REDACTED_TOKEN=[REDACTED] already completed; skipping
+JOB_ID [REDACTED_TOKEN=[REDACTED] already completed; skipping
+JOB_ID [REDACTED_TOKEN=[REDACTED] already completed; skipping
+JOB_ID [REDACTED_TOKEN=[REDACTED] already completed; skipping
+JOB_ID [REDACTED_TOKEN=[REDACTED] already completed; skipping
+JOB_ID [REDACTED_TOKEN=[REDACTED] already completed; skipping
+JOB_ID [REDACTED_TOKEN=[REDACTED] already completed; skipping
+JOB_ID [REDACTED_TOKEN=[REDACTED] already completed; skipping
+JOB_ID [REDACTED_TOKEN=[REDACTED] already completed; skipping
+JOB_ID [REDACTED_TOKEN=[REDACTED] already completed; skipping
+JOB_ID [REDACTED_TOKEN=[REDACTED] already completed; skipping
+JOB_ID [REDACTED_TOKEN=[REDACTED] already completed; skipping
+JOB_ID [REDACTED_TOKEN=[REDACTED] already completed; skipping
+JOB_ID [REDACTED_TOKEN=[REDACTED] already completed; skipping
+JOB_ID [REDACTED_TOKEN=[REDACTED] already completed; skipping
+JOB_ID [REDACTED_TOKEN=[REDACTED] already completed; skipping
+JOB_ID [REDACTED_TOKEN=[REDACTED] already completed; skipping
+JOB_ID [REDACTED_TOKEN=[REDACTED] already completed; skipping
+JOB_ID [REDACTED_TOKEN=[REDACTED] already completed; skipping
+JOB_ID [REDACTED_TOKEN=[REDACTED] already completed; skipping
+JOB_ID [REDACTED_TOKEN=[REDACTED] already completed; skipping
+JOB_ID [REDACTED_TOKEN=[REDACTED] already completed; skipping
+JOB_ID [REDACTED_TOKEN=[REDACTED] already completed; skipping
+JOB_ID [REDACTED_TOKEN=[REDACTED] already completed; skipping
+JOB_ID [REDACTED_TOKEN=[REDACTED] already completed; skipping
+JOB_ID [REDACTED_TOKEN=[REDACTED] already completed; skipping
+JOB_ID [REDACTED_TOKEN=[REDACTED] already completed; skipping
+JOB_ID [REDACTED_TOKEN=[REDACTED] already completed; skipping
+JOB_ID [REDACTED_TOKEN=[REDACTED] already completed; skipping
+JOB_ID [REDACTED_TOKEN=[REDACTED] already completed; skipping
+JOB_ID [REDACTED_TOKEN=[REDACTED] already completed; skipping
+JOB_ID [REDACTED_TOKEN=[REDACTED] already completed; skipping
+JOB_ID [REDACTED_TOKEN=[REDACTED] already completed; skipping
+JOB_ID [REDACTED_TOKEN=[REDACTED] already completed; skipping
+JOB_ID [REDACTED_TOKEN=[REDACTED] already completed; skipping
+JOB_ID [REDACTED_TOKEN=[REDACTED] already completed; skipping
+JOB_ID [REDACTED_TOKEN=[REDACTED] already completed; skipping
+JOB_ID [REDACTED_TOKEN=[REDACTED] already completed; skipping
