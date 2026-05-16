@@ -1,33 +1,22 @@
-timestamp=20260516T233430Z
-hostname=fw
-repo=/home/ken/edgerun-c
-remote=origin
-source_branch=main
-output_branch=agent/fw
-interval_sec=60
-[REDACTED_TOKEN]
-starting agent cycle
-started_at=2026-05-17T06:34:30+07:00
-repo: /home/ken/edgerun-c
-working tree dirty; collect-only mode
-M  .gitignore
-A  Makefile
-A  README.md
-M  agents.md
-M  edgerun-metal/core/efi_main.c
-A  varfont/CMakePresets.json
-M  varfont/README.md
-D  varfont/build/CMakeCache.txt
-D  [REDACTED_TOKEN]
-D  [REDACTED_TOKEN]
-D  [REDACTED_TOKEN]
-D  [REDACTED_TOKEN]
-D  [REDACTED_TOKEN]
-D  [REDACTED_TOKEN]
-D  [REDACTED_TOKEN]
-D  [REDACTED_TOKEN]
+hostname: fw
+rev-parse: [REDACTED_TOKEN]
+
+git status --short
+M  ../.gitignore
+A  ../Makefile
+A  ../README.md
+M  ../agents.md
+M  core/efi_main.c
+A  ../varfont/CMakePresets.json
+M  ../varfont/README.md
 D  [REDACTED_SECRET]
-D  [REDACTED_SECRET]
+D  [REDACTED_TOKEN]
+D  [REDACTED_TOKEN]
+D  [REDACTED_TOKEN]
+D  [REDACTED_TOKEN]
+D  [REDACTED_TOKEN]
+D  [REDACTED_TOKEN]
+D  [REDACTED_TOKEN]
 D  [REDACTED_TOKEN]
 D  [REDACTED_TOKEN]
 D  [REDACTED_SECRET]
@@ -94,18 +83,15 @@ D  [REDACTED_TOKEN]
 D  [REDACTED_TOKEN]
 D  [REDACTED_TOKEN]
 D  [REDACTED_TOKEN]
-D  [REDACTED_SECRET]
-D  varfont/build/Makefile
 D  [REDACTED_TOKEN]
 D  [REDACTED_TOKEN]
 D  [REDACTED_TOKEN]
 D  [REDACTED_SECRET]
-D  varfont/build/libvrfont.a
-D  varfont/build/vrfont_demo
-D  varfont/build/vrfont_tests
-sync: skipped due dirty tree
-source_sha=31f8c19
-run: skipped
-collect_exit=0
-redacting outputs
-output worktree: /tmp/edgerun-agent-output-worktree
+D  ../varfont/build/Makefile
+D  [REDACTED_TOKEN]
+D  [REDACTED_TOKEN]
+D  [REDACTED_TOKEN]
+D  [REDACTED_SECRET]
+D  ../varfont/build/libvrfont.a
+D  ../varfont/build/vrfont_demo
+D  ../varfont/build/vrfont_tests
