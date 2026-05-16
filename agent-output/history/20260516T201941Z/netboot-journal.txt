@@ -1,0 +1,251 @@
+
+May 17 03:15:36 fw sh[125483]: DHCPDISCOVER from b0:19:21:fd:c3:92 xid=0x00007b2f vendor=TL-SG1210MPE arch=<not-present> selected mode=ignored ip=10.42.0.2 bootfile=<none>
+May 17 03:15:36 fw sh[125483]: DHCPDISCOVER flags=0x8000 ciaddr=0.0.0.0
+May 17 03:15:36 fw sh[125483]: requested ip (50): <none>
+May 17 03:15:36 fw sh[125483]: server id in request (54): <none>
+May 17 03:15:36 fw sh[125483]: parameter request list (55): 1 3
+May 17 03:15:41 fw sh[125483]: DHCPDISCOVER from b0:19:21:fd:c3:92 xid=0x00006763 vendor=TL-SG1210MPE arch=<not-present> selected mode=ignored ip=10.42.0.2 bootfile=<none>
+May 17 03:15:41 fw sh[125483]: DHCPDISCOVER flags=0x8000 ciaddr=0.0.0.0
+May 17 03:15:41 fw sh[125483]: requested ip (50): <none>
+May 17 03:15:41 fw sh[125483]: server id in request (54): <none>
+May 17 03:15:41 fw sh[125483]: parameter request list (55): 1 3
+May 17 03:15:46 fw sh[125483]: DHCPDISCOVER from b0:19:21:fd:c3:92 xid=0x00004654 vendor=TL-SG1210MPE arch=<not-present> selected mode=ignored ip=10.42.0.2 bootfile=<none>
+May 17 03:15:46 fw sh[125483]: DHCPDISCOVER flags=0x8000 ciaddr=0.0.0.0
+May 17 03:15:46 fw sh[125483]: requested ip (50): <none>
+May 17 03:15:46 fw sh[125483]: server id in request (54): <none>
+May 17 03:15:46 fw sh[125483]: parameter request list (55): 1 3
+May 17 03:15:51 fw sh[125483]: DHCPDISCOVER from b0:19:21:fd:c3:92 xid=0x00007954 vendor=TL-SG1210MPE arch=<not-present> selected mode=ignored ip=10.42.0.2 bootfile=<none>
+May 17 03:15:51 fw sh[125483]: DHCPDISCOVER flags=0x8000 ciaddr=0.0.0.0
+May 17 03:15:51 fw sh[125483]: requested ip (50): <none>
+May 17 03:15:51 fw sh[125483]: server id in request (54): <none>
+May 17 03:15:51 fw sh[125483]: parameter request list (55): 1 3
+May 17 03:15:56 fw sh[125483]: DHCPDISCOVER from b0:19:21:fd:c3:92 xid=0x000017e7 vendor=TL-SG1210MPE arch=<not-present> selected mode=ignored ip=10.42.0.2 bootfile=<none>
+May 17 03:15:56 fw sh[125483]: DHCPDISCOVER flags=0x8000 ciaddr=0.0.0.0
+May 17 03:15:56 fw sh[125483]: requested ip (50): <none>
+May 17 03:15:56 fw sh[125483]: server id in request (54): <none>
+May 17 03:15:56 fw sh[125483]: parameter request list (55): 1 3
+May 17 03:16:01 fw sh[125483]: DHCPDISCOVER from b0:19:21:fd:c3:92 xid=0x00004541 vendor=TL-SG1210MPE arch=<not-present> selected mode=ignored ip=10.42.0.2 bootfile=<none>
+May 17 03:16:01 fw sh[125483]: DHCPDISCOVER flags=0x8000 ciaddr=0.0.0.0
+May 17 03:16:01 fw sh[125483]: requested ip (50): <none>
+May 17 03:16:01 fw sh[125483]: server id in request (54): <none>
+May 17 03:16:01 fw sh[125483]: parameter request list (55): 1 3
+May 17 03:16:06 fw sh[125483]: DHCPDISCOVER from b0:19:21:fd:c3:92 xid=0x0000700f vendor=TL-SG1210MPE arch=<not-present> selected mode=ignored ip=10.42.0.2 bootfile=<none>
+May 17 03:16:06 fw sh[125483]: DHCPDISCOVER flags=0x8000 ciaddr=0.0.0.0
+May 17 03:16:06 fw sh[125483]: requested ip (50): <none>
+May 17 03:16:06 fw sh[125483]: server id in request (54): <none>
+May 17 03:16:06 fw sh[125483]: parameter request list (55): 1 3
+May 17 03:16:11 fw sh[125483]: DHCPDISCOVER from b0:19:21:fd:c3:92 xid=0x000045c8 vendor=TL-SG1210MPE arch=<not-present> selected mode=ignored ip=10.42.0.2 bootfile=<none>
+May 17 03:16:11 fw sh[125483]: DHCPDISCOVER flags=0x8000 ciaddr=0.0.0.0
+May 17 03:16:11 fw sh[125483]: requested ip (50): <none>
+May 17 03:16:11 fw sh[125483]: server id in request (54): <none>
+May 17 03:16:11 fw sh[125483]: parameter request list (55): 1 3
+May 17 03:16:16 fw sh[125483]: DHCPDISCOVER from b0:19:21:fd:c3:92 xid=0x00005f6d vendor=TL-SG1210MPE arch=<not-present> selected mode=ignored ip=10.42.0.2 bootfile=<none>
+May 17 03:16:16 fw sh[125483]: DHCPDISCOVER flags=0x8000 ciaddr=0.0.0.0
+May 17 03:16:16 fw sh[125483]: requested ip (50): <none>
+May 17 03:16:16 fw sh[125483]: server id in request (54): <none>
+May 17 03:16:16 fw sh[125483]: parameter request list (55): 1 3
+May 17 03:16:22 fw sh[125483]: DHCPDISCOVER from b0:19:21:fd:c3:92 xid=0x00004fef vendor=TL-SG1210MPE arch=<not-present> selected mode=ignored ip=10.42.0.2 bootfile=<none>
+May 17 03:16:22 fw sh[125483]: DHCPDISCOVER flags=0x8000 ciaddr=0.0.0.0
+May 17 03:16:22 fw sh[125483]: requested ip (50): <none>
+May 17 03:16:22 fw sh[125483]: server id in request (54): <none>
+May 17 03:16:22 fw sh[125483]: parameter request list (55): 1 3
+May 17 03:16:26 fw sh[125483]: DHCPDISCOVER from b0:19:21:fd:c3:92 xid=0x00005315 vendor=TL-SG1210MPE arch=<not-present> selected mode=ignored ip=10.42.0.2 bootfile=<none>
+May 17 03:16:26 fw sh[125483]: DHCPDISCOVER flags=0x8000 ciaddr=0.0.0.0
+May 17 03:16:26 fw sh[125483]: requested ip (50): <none>
+May 17 03:16:26 fw sh[125483]: server id in request (54): <none>
+May 17 03:16:26 fw sh[125483]: parameter request list (55): 1 3
+May 17 03:16:31 fw sh[125483]: DHCPDISCOVER from b0:19:21:fd:c3:92 xid=0x000067d3 vendor=TL-SG1210MPE arch=<not-present> selected mode=ignored ip=10.42.0.2 bootfile=<none>
+May 17 03:16:31 fw sh[125483]: DHCPDISCOVER flags=0x8000 ciaddr=0.0.0.0
+May 17 03:16:31 fw sh[125483]: requested ip (50): <none>
+May 17 03:16:31 fw sh[125483]: server id in request (54): <none>
+May 17 03:16:31 fw sh[125483]: parameter request list (55): 1 3
+May 17 03:16:36 fw sh[125483]: DHCPDISCOVER from b0:19:21:fd:c3:92 xid=0x0000023e vendor=TL-SG1210MPE arch=<not-present> selected mode=ignored ip=10.42.0.2 bootfile=<none>
+May 17 03:16:36 fw sh[125483]: DHCPDISCOVER flags=0x8000 ciaddr=0.0.0.0
+May 17 03:16:36 fw sh[125483]: requested ip (50): <none>
+May 17 03:16:36 fw sh[125483]: server id in request (54): <none>
+May 17 03:16:36 fw sh[125483]: parameter request list (55): 1 3
+May 17 03:16:41 fw sh[125483]: DHCPDISCOVER from b0:19:21:fd:c3:92 xid=0x000030f5 vendor=TL-SG1210MPE arch=<not-present> selected mode=ignored ip=10.42.0.2 bootfile=<none>
+May 17 03:16:41 fw sh[125483]: DHCPDISCOVER flags=0x8000 ciaddr=0.0.0.0
+May 17 03:16:41 fw sh[125483]: requested ip (50): <none>
+May 17 03:16:41 fw sh[125483]: server id in request (54): <none>
+May 17 03:16:41 fw sh[125483]: parameter request list (55): 1 3
+May 17 03:16:46 fw sh[125483]: DHCPDISCOVER from b0:19:21:fd:c3:92 xid=0x00000b3c vendor=TL-SG1210MPE arch=<not-present> selected mode=ignored ip=10.42.0.2 bootfile=<none>
+May 17 03:16:46 fw sh[125483]: DHCPDISCOVER flags=0x8000 ciaddr=0.0.0.0
+May 17 03:16:46 fw sh[125483]: requested ip (50): <none>
+May 17 03:16:46 fw sh[125483]: server id in request (54): <none>
+May 17 03:16:46 fw sh[125483]: parameter request list (55): 1 3
+May 17 03:16:52 fw sh[125483]: DHCPDISCOVER from b0:19:21:fd:c3:92 xid=0x000037e2 vendor=TL-SG1210MPE arch=<not-present> selected mode=ignored ip=10.42.0.2 bootfile=<none>
+May 17 03:16:52 fw sh[125483]: DHCPDISCOVER flags=0x8000 ciaddr=0.0.0.0
+May 17 03:16:52 fw sh[125483]: requested ip (50): <none>
+May 17 03:16:52 fw sh[125483]: server id in request (54): <none>
+May 17 03:16:52 fw sh[125483]: parameter request list (55): 1 3
+May 17 03:16:57 fw sh[125483]: DHCPDISCOVER from b0:19:21:fd:c3:92 xid=0x000060c3 vendor=TL-SG1210MPE arch=<not-present> selected mode=ignored ip=10.42.0.2 bootfile=<none>
+May 17 03:16:57 fw sh[125483]: DHCPDISCOVER flags=0x8000 ciaddr=0.0.0.0
+May 17 03:16:57 fw sh[125483]: requested ip (50): <none>
+May 17 03:16:57 fw sh[125483]: server id in request (54): <none>
+May 17 03:16:57 fw sh[125483]: parameter request list (55): 1 3
+May 17 03:17:02 fw sh[125483]: DHCPDISCOVER from b0:19:21:fd:c3:92 xid=0x00002951 vendor=TL-SG1210MPE arch=<not-present> selected mode=ignored ip=10.42.0.2 bootfile=<none>
+May 17 03:17:02 fw sh[125483]: DHCPDISCOVER flags=0x8000 ciaddr=0.0.0.0
+May 17 03:17:02 fw sh[125483]: requested ip (50): <none>
+May 17 03:17:02 fw sh[125483]: server id in request (54): <none>
+May 17 03:17:02 fw sh[125483]: parameter request list (55): 1 3
+May 17 03:17:07 fw sh[125483]: DHCPDISCOVER from b0:19:21:fd:c3:92 xid=0x00001779 vendor=TL-SG1210MPE arch=<not-present> selected mode=ignored ip=10.42.0.2 bootfile=<none>
+May 17 03:17:07 fw sh[125483]: DHCPDISCOVER flags=0x8000 ciaddr=0.0.0.0
+May 17 03:17:07 fw sh[125483]: requested ip (50): <none>
+May 17 03:17:07 fw sh[125483]: server id in request (54): <none>
+May 17 03:17:07 fw sh[125483]: parameter request list (55): 1 3
+May 17 03:17:12 fw sh[125483]: DHCPDISCOVER from b0:19:21:fd:c3:92 xid=0x00003410 vendor=TL-SG1210MPE arch=<not-present> selected mode=ignored ip=10.42.0.2 bootfile=<none>
+May 17 03:17:12 fw sh[125483]: DHCPDISCOVER flags=0x8000 ciaddr=0.0.0.0
+May 17 03:17:12 fw sh[125483]: requested ip (50): <none>
+May 17 03:17:12 fw sh[125483]: server id in request (54): <none>
+May 17 03:17:12 fw sh[125483]: parameter request list (55): 1 3
+May 17 03:17:17 fw sh[125483]: DHCPDISCOVER from b0:19:21:fd:c3:92 xid=0x000061df vendor=TL-SG1210MPE arch=<not-present> selected mode=ignored ip=10.42.0.2 bootfile=<none>
+May 17 03:17:17 fw sh[125483]: DHCPDISCOVER flags=0x8000 ciaddr=0.0.0.0
+May 17 03:17:17 fw sh[125483]: requested ip (50): <none>
+May 17 03:17:17 fw sh[125483]: server id in request (54): <none>
+May 17 03:17:17 fw sh[125483]: parameter request list (55): 1 3
+May 17 03:17:22 fw sh[125483]: DHCPDISCOVER from b0:19:21:fd:c3:92 xid=0x0000409a vendor=TL-SG1210MPE arch=<not-present> selected mode=ignored ip=10.42.0.2 bootfile=<none>
+May 17 03:17:22 fw sh[125483]: DHCPDISCOVER flags=0x8000 ciaddr=0.0.0.0
+May 17 03:17:22 fw sh[125483]: requested ip (50): <none>
+May 17 03:17:22 fw sh[125483]: server id in request (54): <none>
+May 17 03:17:22 fw sh[125483]: parameter request list (55): 1 3
+May 17 03:17:27 fw sh[125483]: DHCPDISCOVER from b0:19:21:fd:c3:92 xid=0x00005b5f vendor=TL-SG1210MPE arch=<not-present> selected mode=ignored ip=10.42.0.2 bootfile=<none>
+May 17 03:17:27 fw sh[125483]: DHCPDISCOVER flags=0x8000 ciaddr=0.0.0.0
+May 17 03:17:27 fw sh[125483]: requested ip (50): <none>
+May 17 03:17:27 fw sh[125483]: server id in request (54): <none>
+May 17 03:17:27 fw sh[125483]: parameter request list (55): 1 3
+May 17 03:17:32 fw sh[125483]: DHCPDISCOVER from b0:19:21:fd:c3:92 xid=0x000069d6 vendor=TL-SG1210MPE arch=<not-present> selected mode=ignored ip=10.42.0.2 bootfile=<none>
+May 17 03:17:32 fw sh[125483]: DHCPDISCOVER flags=0x8000 ciaddr=0.0.0.0
+May 17 03:17:32 fw sh[125483]: requested ip (50): <none>
+May 17 03:17:32 fw sh[125483]: server id in request (54): <none>
+May 17 03:17:32 fw sh[125483]: parameter request list (55): 1 3
+May 17 03:17:37 fw sh[125483]: DHCPDISCOVER from b0:19:21:fd:c3:92 xid=0x00000fe6 vendor=TL-SG1210MPE arch=<not-present> selected mode=ignored ip=10.42.0.2 bootfile=<none>
+May 17 03:17:37 fw sh[125483]: DHCPDISCOVER flags=0x8000 ciaddr=0.0.0.0
+May 17 03:17:37 fw sh[125483]: requested ip (50): <none>
+May 17 03:17:37 fw sh[125483]: server id in request (54): <none>
+May 17 03:17:37 fw sh[125483]: parameter request list (55): 1 3
+May 17 03:17:42 fw sh[125483]: DHCPDISCOVER from b0:19:21:fd:c3:92 xid=0x00007837 vendor=TL-SG1210MPE arch=<not-present> selected mode=ignored ip=10.42.0.2 bootfile=<none>
+May 17 03:17:42 fw sh[125483]: DHCPDISCOVER flags=0x8000 ciaddr=0.0.0.0
+May 17 03:17:42 fw sh[125483]: requested ip (50): <none>
+May 17 03:17:42 fw sh[125483]: server id in request (54): <none>
+May 17 03:17:42 fw sh[125483]: parameter request list (55): 1 3
+May 17 03:17:47 fw sh[125483]: DHCPDISCOVER from b0:19:21:fd:c3:92 xid=0x000077c0 vendor=TL-SG1210MPE arch=<not-present> selected mode=ignored ip=10.42.0.2 bootfile=<none>
+May 17 03:17:47 fw sh[125483]: DHCPDISCOVER flags=0x8000 ciaddr=0.0.0.0
+May 17 03:17:47 fw sh[125483]: requested ip (50): <none>
+May 17 03:17:47 fw sh[125483]: server id in request (54): <none>
+May 17 03:17:47 fw sh[125483]: parameter request list (55): 1 3
+May 17 03:17:52 fw sh[125483]: DHCPDISCOVER from b0:19:21:fd:c3:92 xid=0x00006487 vendor=TL-SG1210MPE arch=<not-present> selected mode=ignored ip=10.42.0.2 bootfile=<none>
+May 17 03:17:52 fw sh[125483]: DHCPDISCOVER flags=0x8000 ciaddr=0.0.0.0
+May 17 03:17:52 fw sh[125483]: requested ip (50): <none>
+May 17 03:17:52 fw sh[125483]: server id in request (54): <none>
+May 17 03:17:52 fw sh[125483]: parameter request list (55): 1 3
+May 17 03:17:57 fw sh[125483]: DHCPDISCOVER from b0:19:21:fd:c3:92 xid=0x00006d29 vendor=TL-SG1210MPE arch=<not-present> selected mode=ignored ip=10.42.0.2 bootfile=<none>
+May 17 03:17:57 fw sh[125483]: DHCPDISCOVER flags=0x8000 ciaddr=0.0.0.0
+May 17 03:17:57 fw sh[125483]: requested ip (50): <none>
+May 17 03:17:57 fw sh[125483]: server id in request (54): <none>
+May 17 03:17:57 fw sh[125483]: parameter request list (55): 1 3
+May 17 03:18:02 fw sh[125483]: DHCPDISCOVER from b0:19:21:fd:c3:92 xid=0x000056b3 vendor=TL-SG1210MPE arch=<not-present> selected mode=ignored ip=10.42.0.2 bootfile=<none>
+May 17 03:18:02 fw sh[125483]: DHCPDISCOVER flags=0x8000 ciaddr=0.0.0.0
+May 17 03:18:02 fw sh[125483]: requested ip (50): <none>
+May 17 03:18:02 fw sh[125483]: server id in request (54): <none>
+May 17 03:18:02 fw sh[125483]: parameter request list (55): 1 3
+May 17 03:18:07 fw sh[125483]: DHCPDISCOVER from b0:19:21:fd:c3:92 xid=0x00003f0e vendor=TL-SG1210MPE arch=<not-present> selected mode=ignored ip=10.42.0.2 bootfile=<none>
+May 17 03:18:07 fw sh[125483]: DHCPDISCOVER flags=0x8000 ciaddr=0.0.0.0
+May 17 03:18:07 fw sh[125483]: requested ip (50): <none>
+May 17 03:18:07 fw sh[125483]: server id in request (54): <none>
+May 17 03:18:07 fw sh[125483]: parameter request list (55): 1 3
+May 17 03:18:12 fw sh[125483]: DHCPDISCOVER from b0:19:21:fd:c3:92 xid=0x00007569 vendor=TL-SG1210MPE arch=<not-present> selected mode=ignored ip=10.42.0.2 bootfile=<none>
+May 17 03:18:12 fw sh[125483]: DHCPDISCOVER flags=0x8000 ciaddr=0.0.0.0
+May 17 03:18:12 fw sh[125483]: requested ip (50): <none>
+May 17 03:18:12 fw sh[125483]: server id in request (54): <none>
+May 17 03:18:12 fw sh[125483]: parameter request list (55): 1 3
+May 17 03:18:17 fw sh[125483]: DHCPDISCOVER from b0:19:21:fd:c3:92 xid=0x00003c96 vendor=TL-SG1210MPE arch=<not-present> selected mode=ignored ip=10.42.0.2 bootfile=<none>
+May 17 03:18:17 fw sh[125483]: DHCPDISCOVER flags=0x8000 ciaddr=0.0.0.0
+May 17 03:18:17 fw sh[125483]: requested ip (50): <none>
+May 17 03:18:17 fw sh[125483]: server id in request (54): <none>
+May 17 03:18:17 fw sh[125483]: parameter request list (55): 1 3
+May 17 03:18:22 fw sh[125483]: DHCPDISCOVER from b0:19:21:fd:c3:92 xid=0x00000b22 vendor=TL-SG1210MPE arch=<not-present> selected mode=ignored ip=10.42.0.2 bootfile=<none>
+May 17 03:18:22 fw sh[125483]: DHCPDISCOVER flags=0x8000 ciaddr=0.0.0.0
+May 17 03:18:22 fw sh[125483]: requested ip (50): <none>
+May 17 03:18:22 fw sh[125483]: server id in request (54): <none>
+May 17 03:18:22 fw sh[125483]: parameter request list (55): 1 3
+May 17 03:18:27 fw sh[125483]: DHCPDISCOVER from b0:19:21:fd:c3:92 xid=0x000008a8 vendor=TL-SG1210MPE arch=<not-present> selected mode=ignored ip=10.42.0.2 bootfile=<none>
+May 17 03:18:27 fw sh[125483]: DHCPDISCOVER flags=0x8000 ciaddr=0.0.0.0
+May 17 03:18:27 fw sh[125483]: requested ip (50): <none>
+May 17 03:18:27 fw sh[125483]: server id in request (54): <none>
+May 17 03:18:27 fw sh[125483]: parameter request list (55): 1 3
+May 17 03:18:32 fw sh[125483]: DHCPDISCOVER from b0:19:21:fd:c3:92 xid=0x00003c8d vendor=TL-SG1210MPE arch=<not-present> selected mode=ignored ip=10.42.0.2 bootfile=<none>
+May 17 03:18:32 fw sh[125483]: DHCPDISCOVER flags=0x8000 ciaddr=0.0.0.0
+May 17 03:18:32 fw sh[125483]: requested ip (50): <none>
+May 17 03:18:32 fw sh[125483]: server id in request (54): <none>
+May 17 03:18:32 fw sh[125483]: parameter request list (55): 1 3
+May 17 03:18:37 fw sh[125483]: DHCPDISCOVER from b0:19:21:fd:c3:92 xid=0x00006690 vendor=TL-SG1210MPE arch=<not-present> selected mode=ignored ip=10.42.0.2 bootfile=<none>
+May 17 03:18:37 fw sh[125483]: DHCPDISCOVER flags=0x8000 ciaddr=0.0.0.0
+May 17 03:18:37 fw sh[125483]: requested ip (50): <none>
+May 17 03:18:37 fw sh[125483]: server id in request (54): <none>
+May 17 03:18:37 fw sh[125483]: parameter request list (55): 1 3
+May 17 03:18:42 fw sh[125483]: DHCPDISCOVER from b0:19:21:fd:c3:92 xid=0x0000012a vendor=TL-SG1210MPE arch=<not-present> selected mode=ignored ip=10.42.0.2 bootfile=<none>
+May 17 03:18:42 fw sh[125483]: DHCPDISCOVER flags=0x8000 ciaddr=0.0.0.0
+May 17 03:18:42 fw sh[125483]: requested ip (50): <none>
+May 17 03:18:42 fw sh[125483]: server id in request (54): <none>
+May 17 03:18:42 fw sh[125483]: parameter request list (55): 1 3
+May 17 03:18:47 fw sh[125483]: DHCPDISCOVER from b0:19:21:fd:c3:92 xid=0x00004018 vendor=TL-SG1210MPE arch=<not-present> selected mode=ignored ip=10.42.0.2 bootfile=<none>
+May 17 03:18:47 fw sh[125483]: DHCPDISCOVER flags=0x8000 ciaddr=0.0.0.0
+May 17 03:18:47 fw sh[125483]: requested ip (50): <none>
+May 17 03:18:47 fw sh[125483]: server id in request (54): <none>
+May 17 03:18:47 fw sh[125483]: parameter request list (55): 1 3
+May 17 03:18:52 fw sh[125483]: DHCPDISCOVER from b0:19:21:fd:c3:92 xid=0x0000275c vendor=TL-SG1210MPE arch=<not-present> selected mode=ignored ip=10.42.0.2 bootfile=<none>
+May 17 03:18:52 fw sh[125483]: DHCPDISCOVER flags=0x8000 ciaddr=0.0.0.0
+May 17 03:18:52 fw sh[125483]: requested ip (50): <none>
+May 17 03:18:52 fw sh[125483]: server id in request (54): <none>
+May 17 03:18:52 fw sh[125483]: parameter request list (55): 1 3
+May 17 03:18:57 fw sh[125483]: DHCPDISCOVER from b0:19:21:fd:c3:92 xid=0x00003c53 vendor=TL-SG1210MPE arch=<not-present> selected mode=ignored ip=10.42.0.2 bootfile=<none>
+May 17 03:18:57 fw sh[125483]: DHCPDISCOVER flags=0x8000 ciaddr=0.0.0.0
+May 17 03:18:57 fw sh[125483]: requested ip (50): <none>
+May 17 03:18:57 fw sh[125483]: server id in request (54): <none>
+May 17 03:18:57 fw sh[125483]: parameter request list (55): 1 3
+May 17 03:19:02 fw sh[125483]: DHCPDISCOVER from b0:19:21:fd:c3:92 xid=0x0000325c vendor=TL-SG1210MPE arch=<not-present> selected mode=ignored ip=10.42.0.2 bootfile=<none>
+May 17 03:19:02 fw sh[125483]: DHCPDISCOVER flags=0x8000 ciaddr=0.0.0.0
+May 17 03:19:02 fw sh[125483]: requested ip (50): <none>
+May 17 03:19:02 fw sh[125483]: server id in request (54): <none>
+May 17 03:19:02 fw sh[125483]: parameter request list (55): 1 3
+May 17 03:19:07 fw sh[125483]: DHCPDISCOVER from b0:19:21:fd:c3:92 xid=0x00002654 vendor=TL-SG1210MPE arch=<not-present> selected mode=ignored ip=10.42.0.2 bootfile=<none>
+May 17 03:19:07 fw sh[125483]: DHCPDISCOVER flags=0x8000 ciaddr=0.0.0.0
+May 17 03:19:07 fw sh[125483]: requested ip (50): <none>
+May 17 03:19:07 fw sh[125483]: server id in request (54): <none>
+May 17 03:19:07 fw sh[125483]: parameter request list (55): 1 3
+May 17 03:19:12 fw sh[125483]: DHCPDISCOVER from b0:19:21:fd:c3:92 xid=0x000066f2 vendor=TL-SG1210MPE arch=<not-present> selected mode=ignored ip=10.42.0.2 bootfile=<none>
+May 17 03:19:12 fw sh[125483]: DHCPDISCOVER flags=0x8000 ciaddr=0.0.0.0
+May 17 03:19:12 fw sh[125483]: requested ip (50): <none>
+May 17 03:19:12 fw sh[125483]: server id in request (54): <none>
+May 17 03:19:12 fw sh[125483]: parameter request list (55): 1 3
+May 17 03:19:17 fw sh[125483]: DHCPDISCOVER from b0:19:21:fd:c3:92 xid=0x000054af vendor=TL-SG1210MPE arch=<not-present> selected mode=ignored ip=10.42.0.2 bootfile=<none>
+May 17 03:19:17 fw sh[125483]: DHCPDISCOVER flags=0x8000 ciaddr=0.0.0.0
+May 17 03:19:17 fw sh[125483]: requested ip (50): <none>
+May 17 03:19:17 fw sh[125483]: server id in request (54): <none>
+May 17 03:19:17 fw sh[125483]: parameter request list (55): 1 3
+May 17 03:19:22 fw sh[125483]: DHCPDISCOVER from b0:19:21:fd:c3:92 xid=0x00005924 vendor=TL-SG1210MPE arch=<not-present> selected mode=ignored ip=10.42.0.2 bootfile=<none>
+May 17 03:19:22 fw sh[125483]: DHCPDISCOVER flags=0x8000 ciaddr=0.0.0.0
+May 17 03:19:22 fw sh[125483]: requested ip (50): <none>
+May 17 03:19:22 fw sh[125483]: server id in request (54): <none>
+May 17 03:19:22 fw sh[125483]: parameter request list (55): 1 3
+May 17 03:19:27 fw sh[125483]: DHCPDISCOVER from b0:19:21:fd:c3:92 xid=0x00007211 vendor=TL-SG1210MPE arch=<not-present> selected mode=ignored ip=10.42.0.2 bootfile=<none>
+May 17 03:19:27 fw sh[125483]: DHCPDISCOVER flags=0x8000 ciaddr=0.0.0.0
+May 17 03:19:27 fw sh[125483]: requested ip (50): <none>
+May 17 03:19:27 fw sh[125483]: server id in request (54): <none>
+May 17 03:19:27 fw sh[125483]: parameter request list (55): 1 3
+May 17 03:19:32 fw sh[125483]: DHCPDISCOVER from b0:19:21:fd:c3:92 xid=0x00002e70 vendor=TL-SG1210MPE arch=<not-present> selected mode=ignored ip=10.42.0.2 bootfile=<none>
+May 17 03:19:32 fw sh[125483]: DHCPDISCOVER flags=0x8000 ciaddr=0.0.0.0
+May 17 03:19:32 fw sh[125483]: requested ip (50): <none>
+May 17 03:19:32 fw sh[125483]: server id in request (54): <none>
+May 17 03:19:32 fw sh[125483]: parameter request list (55): 1 3
+May 17 03:19:37 fw sh[125483]: DHCPDISCOVER from b0:19:21:fd:c3:92 xid=0x0000001c vendor=TL-SG1210MPE arch=<not-present> selected mode=ignored ip=10.42.0.2 bootfile=<none>
+May 17 03:19:37 fw sh[125483]: DHCPDISCOVER flags=0x8000 ciaddr=0.0.0.0
+May 17 03:19:37 fw sh[125483]: requested ip (50): <none>
+May 17 03:19:37 fw sh[125483]: server id in request (54): <none>
+May 17 03:19:37 fw sh[125483]: parameter request list (55): 1 3
+May 17 03:19:42 fw sh[125483]: DHCPDISCOVER from b0:19:21:fd:c3:92 xid=0x0000696b vendor=TL-SG1210MPE arch=<not-present> selected mode=ignored ip=10.42.0.2 bootfile=<none>
+May 17 03:19:42 fw sh[125483]: DHCPDISCOVER flags=0x8000 ciaddr=0.0.0.0
+May 17 03:19:42 fw sh[125483]: requested ip (50): <none>
+May 17 03:19:42 fw sh[125483]: server id in request (54): <none>
+May 17 03:19:42 fw sh[125483]: parameter request list (55): 1 3

@@ -1,0 +1,10 @@
+[agent] starting build pipeline at 2026-05-17T03:19:42+07:00
+[agent] repo: [REDACTED_SECRET]
+[agent] running make
+[agent] running make netboot
+[agent] collect rc=0
+nning make
+make: Nothing to be done for 'all'.
+[agent] running make netboot
+make: Nothing to be done for 'netboot'.
+[agent] collect rc=0
