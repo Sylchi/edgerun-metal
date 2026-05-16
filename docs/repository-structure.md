@@ -16,8 +16,7 @@ Intention: keep the repository source-first, with generated output ignored and n
 ├── tests/                 repository maintenance tests
 ├── edgerun-metal/         UEFI metal runtime and support tooling
 ├── varfont/               variable-font renderer library
-├── .build/                ignored local build output
-└── agent-output/          ignored local agent output
+└── .build/                ignored local build output
 ```
 
 ## Project Areas

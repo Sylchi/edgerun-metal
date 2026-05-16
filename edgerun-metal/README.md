@@ -30,7 +30,7 @@ Confirmed working:
 - PCI config-space hostcalls exist
 - COM1 serial mirror exists for `er_print`
 - Boot profiles exist: `smoke`, `pci`, `quiet`
-- Generated build artifacts are ignored by Git and should not block the agent
+- Generated build artifacts are ignored by Git
 
 ## Current objective
 
@@ -179,31 +179,7 @@ EDGERUN_NETBOOT_FORCE_HTTP_FOR_PXE=0
 EDGERUN_NETBOOT_EFI=/home/ken/edgerun-c/edgerun-metal/build/esp/EFI/BOOT/BOOTX64.EFI
 ```
 
-## Development agent
-
-The user service pulls `main`, runs `.edgerun/agent/run.sh`, collects reports, and pushes output to `agent/fw`.
-
-Commands:
-
-```bash
-make -C edgerun-metal install-agent-user
-make -C edgerun-metal run-agent-user
-make -C edgerun-metal logs-agent-user
-make -C edgerun-metal status-agent-user
-```
-
-The agent must not be blocked by generated files. Build outputs are ignored:
-
-```text
-edgerun-metal/build/
-agent-output/
-/tmp/
-*.log
-```
-
-If agent reports dirty tree from build output, fix `.gitignore` or remove tracked generated files. Do not commit generated binaries back to main.
-
-## Local agent next goal
+## Local next goal
 
 Build and test the `pci` profile:
 
