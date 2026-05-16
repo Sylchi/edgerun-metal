@@ -236,9 +236,9 @@ uint16_t vr_find_glyph_id(vr_font_face_t* face, uint32_t codepoint);
 float vr_map_axis_value(const vr_font_face_t* face, const char* tag, float user_value, float* out_norm);
 float vr_apply_avar_mapping(const vr_font_face_t* face, uint16_t axis_index, float value);
 float vr_find_kern_adjust(const vr_font_face_t* face, uint16_t left, uint16_t right);
-vr_status_t vr_apply_gvar_variation(vr_font_face_t* face, uint16_t glyph_id, vr_glyph_outline_t* outline);
+vr_status_t vr_apply_gvar_variation(const vr_font_face_t* face, uint16_t glyph_id, vr_glyph_outline_t* outline);
 
-vr_status_t vr_load_glyph_outline(vr_font_face_t* face, uint16_t glyph_id, vr_glyph_outline_t* out);
+vr_status_t vr_load_glyph_outline(const vr_font_face_t* face, uint16_t glyph_id, vr_glyph_outline_t* out);
 uint16_t vr_get_glyph_h_advance_units(const vr_font_face_t* face, uint16_t glyph_id);
 int16_t vr_get_glyph_h_lsb_units(const vr_font_face_t* face, uint16_t glyph_id);
 void vr_free_outline(vr_glyph_outline_t* outline);

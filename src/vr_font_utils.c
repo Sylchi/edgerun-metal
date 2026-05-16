@@ -241,7 +241,10 @@ int16_t vr_get_glyph_h_lsb_units(const vr_font_face_t* face, uint16_t glyph_id) 
   return 0;
 }
 
-static void vr_init_gvar_phantoms(vr_font_face_t* face, uint16_t glyph_id, vr_glyph_outline_t* outline) {
+static void vr_init_gvar_phantoms(
+  const vr_font_face_t* face,
+  uint16_t glyph_id,
+  vr_glyph_outline_t* outline) {
   int16_t lsb = vr_get_glyph_h_lsb_units(face, glyph_id);
   uint16_t adv = vr_get_glyph_h_advance_units(face, glyph_id);
 
@@ -656,7 +659,7 @@ vr_status_t vr_parse_avar(vr_font_face_t* face) {
   return VR_OK;
 }
 
-vr_status_t vr_apply_gvar_variation(vr_font_face_t* face, uint16_t glyph_id, vr_glyph_outline_t* outline) {
+vr_status_t vr_apply_gvar_variation(const vr_font_face_t* face, uint16_t glyph_id, vr_glyph_outline_t* outline) {
   if (!face || !outline) return VR_ERR_INVALID_FONT;
   if (face->gvar.axis_count == 0 || face->gvar.glyph_count == 0) return VR_OK;
   if (face->gvar.glyph_variation_offsets == NULL || glyph_id >= face->gvar.glyph_count) return VR_OK;

@@ -24,7 +24,7 @@ static const float VR_FIXED_SCALE = 65536.0f;
 static const float VR_RASTER_ALPHA_SCALE = 255.0f;
 static const size_t VR_RASTER_SEGMENT_INITIAL_CAP = 64u;
 static const size_t VR_RASTER_OUTLINE_POINT_INITIAL_CAP = 16u;
-static const float VR_RASTER_POINT_EPSILON = 1e-7f;
+static const float VR_RASTER_SEGMENT_TOLERANCE = 1e-7f;
 static const int VR_RASTER_SUPERSAMPLE = 2;
 static const int VR_RASTER_PADDING = 2;
 static const int VR_RASTER_MAX_DEPTH = 8;
@@ -44,7 +44,11 @@ static float vr_fixed_to_float(uint32_t v) {
   return (float)(int32_t)v / VR_FIXED_SCALE;
 }
 
-static vr_status_t vr_load_glyph_outline_internal(vr_font_face_t* face, uint16_t glyph_id, vr_glyph_outline_t* out, uint16_t depth);
+static vr_status_t vr_load_glyph_outline_internal(
+  const vr_font_face_t* face,
+  uint16_t glyph_id,
+  vr_glyph_outline_t* out,
+  uint16_t depth);
 static float vr_f2dot14_to_float(uint16_t v);
 static float vr_fixed_to_float(uint32_t v);
 
@@ -539,7 +543,12 @@ static vr_status_t vr_parse_simple_glyph(const vr_font_face_t* face, const uint8
   return VR_OK;
 }
 
-static vr_status_t vr_parse_composite_glyph(vr_font_face_t* face, const uint8_t* p, const uint8_t* end, vr_glyph_outline_t* out, uint16_t depth) {
+static vr_status_t vr_parse_composite_glyph(
+  const vr_font_face_t* face,
+  const uint8_t* p,
+  const uint8_t* end,
+  vr_glyph_outline_t* out,
+  uint16_t depth) {
   if (depth > VR_RASTER_MAX_DEPTH) {
     return VR_ERR_INVALID_FONT;
   }
@@ -622,7 +631,11 @@ static vr_status_t vr_parse_composite_glyph(vr_font_face_t* face, const uint8_t*
   return VR_OK;
 }
 
-static vr_status_t vr_load_glyph_outline_internal(vr_font_face_t* face, uint16_t glyph_id, vr_glyph_outline_t* out, uint16_t depth) {
+static vr_status_t vr_load_glyph_outline_internal(
+  const vr_font_face_t* face,
+  uint16_t glyph_id,
+  vr_glyph_outline_t* out,
+  uint16_t depth) {
   if (!face || !face->glyf || glyph_id >= face->num_glyphs || !out) return VR_ERR_INVALID_FONT;
   if (depth > 16) return VR_ERR_INVALID_FONT;
 
@@ -674,7 +687,7 @@ static vr_status_t vr_load_glyph_outline_internal(vr_font_face_t* face, uint16_t
   return vr_parse_composite_glyph(face, p, face->glyf + next_off, out, depth);
 }
 
-vr_status_t vr_load_glyph_outline(vr_font_face_t* face, uint16_t glyph_id, vr_glyph_outline_t* out) {
+vr_status_t vr_load_glyph_outline(const vr_font_face_t* face, uint16_t glyph_id, vr_glyph_outline_t* out) {
   if (!face || !out) return VR_ERR_INVALID_FONT;
   memset(out, 0, sizeof(*out));
   return vr_load_glyph_outline_internal(face, glyph_id, out, 0);
@@ -682,8 +695,21 @@ vr_status_t vr_load_glyph_outline(vr_font_face_t* face, uint16_t glyph_id, vr_gl
  
 
 static int vr_point_in_bbox(float x, float y, const vr_segment_t* seg) {
-  return ((seg->y1 > y) != (seg->y2 > y)) &&
-         (x < (seg->x2 - seg->x1) * (y - seg->y1) / (seg->y2 - seg->y1 + VR_RASTER_POINT_EPSILON) + seg->x1);
+  float y1 = seg->y1;
+  float y2 = seg->y2;
+  if ((y1 <= y) == (y2 <= y)) {
+    return 0;
+  }
+
+  float x1 = seg->x1;
+  float x2 = seg->x2;
+  float dy = y2 - y1;
+  if (fabsf(dy) <= VR_RASTER_SEGMENT_TOLERANCE) {
+    return 0;
+  }
+
+  float x_int = (x2 - x1) * (y - y1) / dy + x1;
+  return x < x_int;
 }
 
 vr_status_t vr_rasterize_outline(const vr_font_face_t* face, const vr_glyph_outline_t* outline,

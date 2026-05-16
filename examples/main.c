@@ -37,7 +37,7 @@ static const uint8_t VR_UI_BACKGROUND_ALPHA = 255u;
 static const char* const VR_FALLBACK_FONT_PATH = "fonts/Geist[wght].ttf";
 static const char* const VR_DEFAULT_TEXT = "Geist variable font in SDL";
 static const float VR_TEXT_RENDER_X = 40.0f;
-static const size_t VR_DEMO_LAYER_COUNT = 4u;
+#define VR_DEMO_LAYER_COUNT 4u
 
 static const demo_layer_t VR_DEMO_LAYERS[VR_DEMO_LAYER_COUNT] = {
   {26.0f, 250.0f, VR_TEXT_RENDER_X, 48.0f},
