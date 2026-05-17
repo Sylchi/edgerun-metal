@@ -12,6 +12,7 @@ endif()
 
 add_library(er_ui_core
   src/er_ui_components.c
+  src/er_ui_node.c
   src/er_ui_painter.c
   src/er_ui_primitives.c
   src/er_ui_runtime.c
@@ -36,6 +37,7 @@ if(ER_UI_CORE_BUILD_TESTS)
 
 add_executable(er_ui_core_tests
     tests/test_components.c
+    tests/test_node.c
     tests/test_shell.c
     tests/test_runtime.c
     tests/test_scene.c
