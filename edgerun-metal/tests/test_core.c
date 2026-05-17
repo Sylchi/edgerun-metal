@@ -4,6 +4,7 @@
 #include "er_acpi.h"
 #include "er_app.h"
 #include "er_blake3.h"
+#include "er_boot_profile.h"
 #include "er_bus.h"
 #include "er_crypto_blake3.h"
 #include "er_hw_relay.h"
@@ -1557,6 +1558,19 @@ static void test_app_identity_routes(void) {
   check_uint64("app launch address len", allocation.app_address_len, 4096u);
 }
 
+static void test_boot_profiles(void) {
+  check_int64("boot profile smoke valid", er_boot_profile_valid(ER_BOOT_PROFILE_SMOKE), 1);
+  check_int64("boot profile native valid", er_boot_profile_valid(ER_BOOT_PROFILE_NATIVE), 1);
+  check_int64("boot profile invalid rejected", er_boot_profile_valid(255u), 0);
+  check_cstr("boot profile smoke label", er_boot_profile_label(ER_BOOT_PROFILE_SMOKE), "smoke");
+  check_cstr("boot profile pci label", er_boot_profile_label(ER_BOOT_PROFILE_PCI), "pci");
+  check_cstr("boot profile quiet label", er_boot_profile_label(ER_BOOT_PROFILE_QUIET), "quiet");
+  check_cstr("boot profile mmio label", er_boot_profile_label(ER_BOOT_PROFILE_MMIO), "mmio");
+  check_cstr("boot profile ui label", er_boot_profile_label(ER_BOOT_PROFILE_UI), "ui");
+  check_cstr("boot profile native label", er_boot_profile_label(ER_BOOT_PROFILE_NATIVE), "native");
+  check_cstr("boot profile invalid label", er_boot_profile_label(255u), "invalid");
+}
+
 static void test_hw_relay_endpoints(void) {
   enum {
     RELAY_ETH_TEST_MMIO_DWORDS = 128u,
@@ -2275,6 +2289,7 @@ int main(void) {
   test_wasm_bus_exec_import();
   test_vfs_object_packets();
   test_app_identity_routes();
+  test_boot_profiles();
   test_hw_relay_endpoints();
   test_erwire_native_eth_sink();
   test_native_boot_erwire_eth_sink();
