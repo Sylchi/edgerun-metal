@@ -408,6 +408,57 @@ er_ui_status_t er_ui_shadcn_receipt_row_emit(
   const char* amount,
   const char* status_text,
   uint32_t id);
+er_ui_status_t er_ui_shadcn_panel_header_emit(
+  er_ui_scene_t* scene,
+  vr_font_face_t* font,
+  er_ui_bounds_t bounds,
+  er_ui_resolved_theme_t theme,
+  const char* title,
+  const char* subtitle,
+  const char* action_label,
+  uint32_t action_id);
+er_ui_status_t er_ui_shadcn_metric_card_emit(
+  er_ui_scene_t* scene,
+  vr_font_face_t* font,
+  er_ui_bounds_t bounds,
+  er_ui_resolved_theme_t theme,
+  const char* title,
+  const char* value,
+  const char* detail,
+  bool has_progress,
+  float progress,
+  er_ui_color4_t accent);
+er_ui_status_t er_ui_shadcn_transaction_row_emit(
+  er_ui_scene_t* scene,
+  vr_font_face_t* font,
+  er_ui_bounds_t bounds,
+  er_ui_resolved_theme_t theme,
+  const char* title,
+  const char* subtitle,
+  const char* date,
+  const char* amount,
+  bool positive,
+  uint32_t id);
+er_ui_status_t er_ui_shadcn_menu_item_emit(
+  er_ui_scene_t* scene,
+  vr_font_face_t* font,
+  er_ui_bounds_t bounds,
+  er_ui_resolved_theme_t theme,
+  const char* label,
+  const char* detail,
+  const char* badge,
+  bool selected,
+  er_ui_color4_t accent,
+  uint32_t id);
+er_ui_status_t er_ui_shadcn_control_row_emit(
+  er_ui_scene_t* scene,
+  vr_font_face_t* font,
+  er_ui_bounds_t bounds,
+  er_ui_resolved_theme_t theme,
+  const char* label,
+  const char* detail,
+  const char* accessory,
+  uint32_t id);
 er_ui_status_t er_ui_shadcn_bar_chart_emit(
   er_ui_scene_t* scene,
   vr_font_face_t* font,
