@@ -180,6 +180,11 @@ void run_node_tests(void) {
   expect_size(a11y.role, ER_UI_A11Y_BUTTON, "node: icon button accessibility role");
   expect_true(a11y.has_id && a11y.id == 8007u, "node: icon button accessibility id");
 
+  er_ui_node_t toast_icon_a11y = er_ui_node_toast_icon("Saved", ER_UI_ICON_CHECK, er_ui_color_rgba(0.0f, 0.5f, 0.2f, 1.0f));
+  expect_status(er_ui_node_accessibility(&toast_icon_a11y, &a11y), ER_UI_OK, "node: icon toast accessibility maps");
+  expect_size(a11y.role, ER_UI_A11Y_STATUS, "node: icon toast accessibility role");
+  expect_true(a11y.label == toast_icon_a11y.label, "node: icon toast label is borrowed");
+
   const char* const button_group_labels[] = {"Copy", "Paste", "More"};
   er_ui_node_t button_group_a11y = er_ui_node_button_group(button_group_labels, 3u, 8008u);
   expect_status(er_ui_node_accessibility(&button_group_a11y, &a11y), ER_UI_OK, "node: button group accessibility maps");
@@ -486,6 +491,7 @@ void run_node_tests(void) {
     const char* const table_cells[] = {"INV001", "Paid", "INV002", "Pending"};
     er_ui_node_t table = er_ui_node_table(table_headers, 2u, table_cells, 2u, 8200u);
     er_ui_node_t toast = er_ui_node_toast("Scheduled", theme.colors.accent);
+    er_ui_node_t toast_icon = er_ui_node_toast_icon("Saved", ER_UI_ICON_CHECK, theme.colors.success);
     er_ui_node_t empty = er_ui_node_empty("No results", "Try another filter.");
     er_ui_node_t list_row = er_ui_node_list_row("Billing", "Command B", 8300u, true);
     er_ui_node_t field = er_ui_node_field("Email", "name@example.com", 8400u);
@@ -605,6 +611,10 @@ void run_node_tests(void) {
                   "node: breadcrumb renders");
     expect_status(er_ui_node_render(&table, &scene, face, er_ui_bounds(0.0f, 354.0f, 320.0f, 112.0f), theme), ER_UI_OK, "node: table renders");
     expect_status(er_ui_node_render(&toast, &scene, face, er_ui_bounds(0.0f, 478.0f, 260.0f, 48.0f), theme), ER_UI_OK, "node: toast renders");
+    size_t icon_quads_before_toast = scene.icon_quad_count;
+    expect_status(er_ui_node_render(&toast_icon, &scene, face, er_ui_bounds(0.0f, 530.0f, 260.0f, 48.0f), theme), ER_UI_OK,
+                  "node: icon toast renders");
+    expect_size(scene.icon_quad_count, icon_quads_before_toast + 1u, "node: icon toast emits icon quad");
     expect_status(er_ui_node_render(&empty, &scene, face, er_ui_bounds(0.0f, 538.0f, 280.0f, 120.0f), theme), ER_UI_OK, "node: empty renders");
     expect_status(er_ui_node_render(&list_row, &scene, face, er_ui_bounds(0.0f, 670.0f, 220.0f, 44.0f), theme), ER_UI_OK,
                   "node: list row renders");

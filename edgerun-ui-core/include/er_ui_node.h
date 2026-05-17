@@ -257,6 +257,7 @@ er_ui_node_t er_ui_node_toggle_group(const char* const* labels, size_t label_cou
 er_ui_node_t er_ui_node_table(const char* const* headers, size_t header_count, const char* const* cells, size_t row_count, uint32_t id_base);
 er_ui_node_t er_ui_node_breadcrumb(const char* const* labels, size_t label_count, size_t selected, uint32_t base_id);
 er_ui_node_t er_ui_node_toast(const char* message, er_ui_color4_t accent);
+er_ui_node_t er_ui_node_toast_icon(const char* message, er_ui_icon_t icon, er_ui_color4_t accent);
 er_ui_node_t er_ui_node_empty(const char* title, const char* body);
 er_ui_node_t er_ui_node_list_row(const char* title, const char* detail, uint32_t id, bool selected);
 er_ui_node_t er_ui_node_field(const char* label, const char* value, uint32_t id);
