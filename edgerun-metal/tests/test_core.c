@@ -3,7 +3,9 @@
 #include "er_pci.h"
 #include "er_acpi.h"
 #include "er_app.h"
+#include "er_blake3.h"
 #include "er_bus.h"
+#include "er_crypto_blake3.h"
 #include "er_hw_relay.h"
 #include "er_ui_gop_renderer.h"
 #include "er_ui_text.h"
@@ -93,6 +95,39 @@ static void check_pixel(const char* name, UINT32 actual, UINT32 expected) {
   check_uint64(name, (UINT64)actual, (UINT64)expected);
 }
 
+static UINT8 test_hex_nibble(char c) {
+  if (c >= '0' && c <= '9') {
+    return (UINT8)(c - '0');
+  }
+  if (c >= 'a' && c <= 'f') {
+    return (UINT8)(c - 'a' + 10);
+  }
+  if (c >= 'A' && c <= 'F') {
+    return (UINT8)(c - 'A' + 10);
+  }
+  return 0xffu;
+}
+
+static void check_hash_hex(const char* name, const UINT8 actual[ER_HASH_LEN], const char* expected_hex) {
+  UINTN i;
+  UINT8 high;
+  UINT8 low;
+  UINT8 expected;
+
+  ++g_total;
+  for (i = 0u; i < ER_HASH_LEN; ++i) {
+    high = test_hex_nibble(expected_hex[i * 2u]);
+    low = test_hex_nibble(expected_hex[(i * 2u) + 1u]);
+    expected = (UINT8)((high << 4u) | low);
+    if (high > 0x0fu || low > 0x0fu || actual[i] != expected) {
+      fprintf(stderr, "FAIL %s: byte %llu got 0x%02x expected 0x%02x\n",
+              name, (unsigned long long)i, actual[i], expected);
+      ++g_failed;
+      return;
+    }
+  }
+}
+
 static void test_mem_helpers(void) {
   UINT8 dst[4] = {1u, 2u, 3u, 4u};
   const UINT8 src[4] = {9u, 8u, 7u, 6u};
@@ -106,6 +141,59 @@ static void test_mem_helpers(void) {
   er_mem_zero(0, 4u);
   er_mem_copy(0, src, 4u);
   er_mem_copy(dst, 0, 4u);
+}
+
+static void test_blake3(void) {
+  static const UINT8 abc[] = {'a', 'b', 'c'};
+  static const UINT8 domain[] = {'e', 'r', ':', 't', 'e', 's', 't'};
+  static const UINT8 span_a[] = {'a', 'b'};
+  static const UINT8 span_b[] = {'c', 'd', 'e', 'f'};
+  UINT8 large[1255];
+  UINT8 digest[ER_BLAKE3_OUT_LEN];
+  ErHash provider_hash;
+  ErBlake3Hasher hasher;
+  ErCryptoProvider provider;
+  ErByteSpan spans[2];
+  UINTN i;
+
+  check_int64("blake3 empty",
+              er_blake3_hash_bytes(0, 0u, digest),
+              1);
+  check_hash_hex("blake3 empty digest", digest,
+                 "af1349b9f5f9a1a6a0404dea36dcc9499bcb25c9adc112b7cc9a93cae41f3262");
+
+  check_int64("blake3 abc",
+              er_blake3_hash_bytes(abc, sizeof(abc), digest),
+              1);
+  check_hash_hex("blake3 abc digest", digest,
+                 "6437b3ac38465133ffb63b75273a8db548c558465d79db03fd359c6cd5bd9d85");
+
+  for (i = 0u; i < sizeof(large); ++i) {
+    large[i] = (UINT8)(i % 251u);
+  }
+  check_int64("blake3 large",
+              er_blake3_hash_bytes(large, sizeof(large), digest),
+              1);
+  check_hash_hex("blake3 large digest", digest,
+                 "8b929b2d329f8795b15060a2e5d087ea507aeba8dcf19fb00eb92ceb890d179e");
+
+  er_blake3_init(&hasher);
+  check_int64("blake3 update a", er_blake3_update(&hasher, large, 17u), 1);
+  check_int64("blake3 update b", er_blake3_update(&hasher, &large[17], sizeof(large) - 17u), 1);
+  check_int64("blake3 final", er_blake3_final(&hasher, digest), 1);
+  check_hash_hex("blake3 incremental digest", digest,
+                 "8b929b2d329f8795b15060a2e5d087ea507aeba8dcf19fb00eb92ceb890d179e");
+
+  er_crypto_blake3_provider(&provider);
+  spans[0].bytes = span_a;
+  spans[0].len = sizeof(span_a);
+  spans[1].bytes = span_b;
+  spans[1].len = sizeof(span_b);
+  check_int64("blake3 provider hash",
+              er_crypto_hash(&provider, domain, sizeof(domain), spans, 2u, &provider_hash),
+              1);
+  check_hash_hex("blake3 provider digest", provider_hash.bytes,
+                 "0c3b6b724833127c5e557fc48b82a6783858aff79a0a048a32e2029b2f04c650");
 }
 
 static void* test_alloc(void* user, size_t size, size_t align) {
@@ -1454,6 +1542,7 @@ static void test_ui_gop_renderer_varfont_text(void) {
 
 int main(void) {
   test_mem_helpers();
+  test_blake3();
   test_bar_decode();
   test_pci_config_addressing();
   test_acpi_tables();
