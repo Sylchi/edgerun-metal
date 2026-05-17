@@ -221,6 +221,7 @@ er_ui_status_t er_ui_node_add_child(er_ui_node_t* parent, er_ui_node_t* child);
 const char* er_ui_node_kind_label(er_ui_node_kind_t kind);
 const char* er_ui_node_composition_issue_label(er_ui_node_composition_issue_kind_t kind);
 er_ui_status_t er_ui_node_validate_composition(const er_ui_node_t* node, er_ui_node_composition_issue_t* out_issue);
+er_ui_status_t er_ui_node_child_bounds(const er_ui_node_t* node, size_t child_index, er_ui_bounds_t bounds, er_ui_bounds_t* out_bounds);
 const char* er_ui_a11y_role_label(er_ui_a11y_role_t role);
 er_ui_status_t er_ui_node_accessibility(const er_ui_node_t* node, er_ui_a11y_node_t* out_a11y);
 er_ui_status_t er_ui_node_accessibility_child(const er_ui_node_t* node, size_t child_index, er_ui_a11y_node_t* out_a11y);

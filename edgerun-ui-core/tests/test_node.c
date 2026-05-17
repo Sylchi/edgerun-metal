@@ -119,6 +119,15 @@ void run_node_tests(void) {
   expect_status(er_ui_node_add_child(&section_card, &section_column), ER_UI_OK, "node: card accepts unframed section");
   expect_status(er_ui_node_validate_composition(&section_card, &issue), ER_UI_OK,
                 "node: composition allows unframed sections in cards");
+  er_ui_bounds_t resolved_child = {0};
+  expect_status(er_ui_node_child_bounds(&root, 1u, er_ui_bounds(0.0f, 0.0f, 320.0f, 160.0f), &resolved_child), ER_UI_OK,
+                "node: card child bounds resolve");
+  expect_float(resolved_child.x, 10.0f, "node: card child bounds x includes padding");
+  expect_float(resolved_child.y, 84.0f, "node: card child bounds y includes gap");
+  expect_float(resolved_child.w, 300.0f, "node: card child bounds width includes padding");
+  expect_float(resolved_child.h, 66.0f, "node: card child bounds height divides space");
+  expect_status(er_ui_node_child_bounds(&button, 0u, er_ui_bounds(0.0f, 0.0f, 80.0f, 30.0f), &resolved_child), ER_UI_ERR_INVALID_ARGUMENT,
+                "node: leaf child bounds are rejected");
 
   er_ui_a11y_node_t a11y = {0};
   expect_status(er_ui_node_accessibility(&button, &a11y), ER_UI_OK, "node: button accessibility maps");
@@ -222,12 +231,21 @@ void run_node_tests(void) {
     expect_status(er_ui_node_add_child(&grid, &grid_badge_a), ER_UI_OK, "node: grid accepts first child");
     expect_status(er_ui_node_add_child(&grid, &grid_badge_b), ER_UI_OK, "node: grid accepts second child");
     expect_status(er_ui_node_add_child(&grid, &grid_badge_c), ER_UI_OK, "node: grid accepts third child");
+    expect_status(er_ui_node_child_bounds(&grid, 2u, er_ui_bounds(0.0f, 0.0f, 260.0f, 80.0f), &resolved_child), ER_UI_OK,
+                  "node: grid child bounds resolve");
+    expect_float(resolved_child.x, 0.0f, "node: grid child bounds x wraps");
+    expect_float(resolved_child.y, 42.0f, "node: grid child bounds y wraps");
+    expect_float(resolved_child.w, 128.0f, "node: grid child bounds width divides columns");
+    expect_float(resolved_child.h, 38.0f, "node: grid child bounds height divides rows");
     er_ui_node_t scroll = er_ui_node_scroll_area(20.0f, 8813u);
     er_ui_node_set_gap(&scroll, 4.0f);
     er_ui_node_t scroll_a = er_ui_node_list_row("Top", "scrolled", 8814u, false);
     er_ui_node_t scroll_b = er_ui_node_list_row("Bottom", "visible", 8815u, true);
     expect_status(er_ui_node_add_child(&scroll, &scroll_a), ER_UI_OK, "node: scroll accepts first child");
     expect_status(er_ui_node_add_child(&scroll, &scroll_b), ER_UI_OK, "node: scroll accepts second child");
+    expect_status(er_ui_node_child_bounds(&scroll, 0u, er_ui_bounds(0.0f, 2560.0f, 260.0f, 64.0f), &resolved_child), ER_UI_OK,
+                  "node: scroll child bounds resolve offset");
+    expect_float(resolved_child.y, 2540.0f, "node: scroll child bounds applies offset");
     er_ui_node_t spacer = er_ui_node_spacer();
     er_ui_node_t tooltip = er_ui_node_tooltip("Verify package");
     er_ui_node_t dialog = er_ui_node_dialog("Run network app", "Verify signed package bytes first.", theme.colors.accent);
