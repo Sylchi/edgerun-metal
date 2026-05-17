@@ -83,6 +83,7 @@ typedef struct {
 } vr_msdf_outline_edge_t;
 
 static vr_status_t vr_push_msdf_edge(
+  const vr_font_face_t* face,
   vr_msdf_outline_edge_t** edges,
   size_t* edge_count,
   size_t* edge_cap,
@@ -90,8 +91,8 @@ static vr_status_t vr_push_msdf_edge(
   vr_outline_point_t p0,
   vr_outline_point_t p1,
   vr_outline_point_t p2);
-static vr_status_t vr_ensure_msdf_edges_capacity(vr_msdf_outline_edge_t** edges, size_t* edge_cap, size_t needed);
-static vr_status_t vr_line_segments_from_quad(const vr_outline_point_t p0, const vr_outline_point_t p1, const vr_outline_point_t p2,
+static vr_status_t vr_ensure_msdf_edges_capacity(const vr_font_face_t* face, vr_msdf_outline_edge_t** edges, size_t* edge_cap, size_t needed);
+static vr_status_t vr_line_segments_from_quad(const vr_font_face_t* face, const vr_outline_point_t p0, const vr_outline_point_t p1, const vr_outline_point_t p2,
   vr_segment_t** segs,
   size_t* count,
   size_t* cap,
@@ -102,8 +103,9 @@ static vr_status_t vr_line_segments_from_quad(const vr_outline_point_t p0, const
   size_t* seg_color_count,
   size_t* seg_color_cap,
   bool using_msdf);
-static vr_status_t vr_ensure_curves_capacity(vr_raster_curve_t** curves, size_t* curve_cap, size_t needed);
+static vr_status_t vr_ensure_curves_capacity(const vr_font_face_t* face, vr_raster_curve_t** curves, size_t* curve_cap, size_t needed);
 static vr_status_t vr_push_curve(
+  const vr_font_face_t* face,
   vr_raster_curve_t** curves,
   size_t* curve_count,
   size_t* curve_cap,
@@ -113,11 +115,12 @@ static vr_status_t vr_push_curve(
   float y1,
   float x2,
   float y2);
-static vr_status_t vr_ensure_u8_capacity(uint8_t** values, size_t* values_cap, size_t needed);
-static vr_status_t vr_push_msdf_segment_color(uint8_t** seg_colors, size_t* seg_color_count, size_t* seg_color_cap, uint8_t color);
-static vr_status_t vr_push_msdf_curve_color(uint8_t** curve_colors, size_t* curve_color_count, size_t* curve_color_cap, uint8_t color);
+static vr_status_t vr_ensure_u8_capacity(const vr_font_face_t* face, uint8_t** values, size_t* values_cap, size_t needed);
+static vr_status_t vr_push_msdf_segment_color(const vr_font_face_t* face, uint8_t** seg_colors, size_t* seg_color_count, size_t* seg_color_cap, uint8_t color);
+static vr_status_t vr_push_msdf_curve_color(const vr_font_face_t* face, uint8_t** curve_colors, size_t* curve_color_count, size_t* curve_color_cap, uint8_t color);
 static uint8_t vr_msdf_edge_color(float dx, float dy, size_t fallback_index);
 static vr_status_t vr_msdf_color_edges_cycle(
+  const vr_font_face_t* face,
   const vr_msdf_outline_edge_t* edges,
   size_t edge_count,
   uint8_t* out_colors);
@@ -147,6 +150,16 @@ static float vr_f2dot14_to_float(uint16_t v) {
   return (float)(int16_t)v / VR_F2DOT14_SCALE;
 }
 
+static void* vr_raster_realloc_array(const vr_font_face_t* face, void* ptr, size_t old_cap, size_t new_cap, size_t elem_size) {
+  if (elem_size != 0u && (old_cap > SIZE_MAX / elem_size || new_cap > SIZE_MAX / elem_size)) return NULL;
+  return vr_realloc(face, ptr, old_cap * elem_size, new_cap * elem_size, 8u);
+}
+
+static void vr_raster_free_array(const vr_font_face_t* face, void* ptr, size_t cap, size_t elem_size) {
+  if (elem_size != 0u && cap > SIZE_MAX / elem_size) return;
+  vr_dealloc(face, ptr, cap * elem_size, 8u);
+}
+
 static vr_status_t vr_load_glyph_outline_internal(
   const vr_font_face_t* face,
   uint16_t glyph_id,
@@ -154,7 +167,7 @@ static vr_status_t vr_load_glyph_outline_internal(
   uint16_t depth);
 static float vr_f2dot14_to_float(uint16_t v);
 
-static vr_status_t vr_ensure_segments_capacity(vr_segment_t** segs, size_t* seg_cap, size_t needed) {
+static vr_status_t vr_ensure_segments_capacity(const vr_font_face_t* face, vr_segment_t** segs, size_t* seg_cap, size_t needed) {
   if (*seg_cap >= needed) return VR_OK;
 
   size_t cap = (*seg_cap == 0u) ? VR_RASTER_SEGMENT_INITIAL_CAP : *seg_cap;
@@ -162,15 +175,15 @@ static vr_status_t vr_ensure_segments_capacity(vr_segment_t** segs, size_t* seg_
     if (cap > (SIZE_MAX / 2u)) return VR_ERR_OOM;
     cap *= 2u;
   }
-  vr_segment_t* ns = (vr_segment_t*)vr_realloc_bytes(*segs, cap * sizeof(vr_segment_t));
+  vr_segment_t* ns = (vr_segment_t*)vr_raster_realloc_array(face, *segs, *seg_cap, cap, sizeof(vr_segment_t));
   if (!ns) return VR_ERR_OOM;
   *segs = ns;
   *seg_cap = cap;
   return VR_OK;
 }
 
-static vr_status_t vr_push_segment(vr_segment_t** segs, size_t* seg_count, size_t* seg_cap, float x1, float y1, float x2, float y2) {
-  if (vr_ensure_segments_capacity(segs, seg_cap, *seg_count + 1u) != VR_OK) {
+static vr_status_t vr_push_segment(const vr_font_face_t* face, vr_segment_t** segs, size_t* seg_count, size_t* seg_cap, float x1, float y1, float x2, float y2) {
+  if (vr_ensure_segments_capacity(face, segs, seg_cap, *seg_count + 1u) != VR_OK) {
     return VR_ERR_OOM;
   }
   (*segs)[*seg_count].x1 = x1;
@@ -181,7 +194,7 @@ static vr_status_t vr_push_segment(vr_segment_t** segs, size_t* seg_count, size_
   return VR_OK;
 }
 
-static vr_status_t vr_ensure_curves_capacity(vr_raster_curve_t** curves, size_t* curve_cap, size_t needed) {
+static vr_status_t vr_ensure_curves_capacity(const vr_font_face_t* face, vr_raster_curve_t** curves, size_t* curve_cap, size_t needed) {
   if (*curve_cap >= needed) return VR_OK;
 
   size_t cap = (*curve_cap == 0u) ? VR_RASTER_SEGMENT_INITIAL_CAP : *curve_cap;
@@ -189,21 +202,21 @@ static vr_status_t vr_ensure_curves_capacity(vr_raster_curve_t** curves, size_t*
     if (cap > (SIZE_MAX / 2u)) return VR_ERR_OOM;
     cap *= 2u;
   }
-  vr_raster_curve_t* nc = (vr_raster_curve_t*)vr_realloc_bytes(*curves, cap * sizeof(vr_raster_curve_t));
+  vr_raster_curve_t* nc = (vr_raster_curve_t*)vr_raster_realloc_array(face, *curves, *curve_cap, cap, sizeof(vr_raster_curve_t));
   if (!nc) return VR_ERR_OOM;
   *curves = nc;
   *curve_cap = cap;
   return VR_OK;
 }
 
-static vr_status_t vr_ensure_u8_capacity(uint8_t** values, size_t* values_cap, size_t needed) {
+static vr_status_t vr_ensure_u8_capacity(const vr_font_face_t* face, uint8_t** values, size_t* values_cap, size_t needed) {
   if (*values_cap >= needed) return VR_OK;
   size_t cap = (*values_cap == 0u) ? VR_RASTER_SEGMENT_INITIAL_CAP : *values_cap;
   while (cap < needed) {
     if (cap > (SIZE_MAX / 2u)) return VR_ERR_OOM;
     cap *= 2u;
   }
-  uint8_t* nv = (uint8_t*)vr_realloc_bytes(*values, cap * sizeof(uint8_t));
+  uint8_t* nv = (uint8_t*)vr_raster_realloc_array(face, *values, *values_cap, cap, sizeof(uint8_t));
   if (!nv) return VR_ERR_OOM;
   *values = nv;
   *values_cap = cap;
@@ -211,6 +224,7 @@ static vr_status_t vr_ensure_u8_capacity(uint8_t** values, size_t* values_cap, s
 }
 
 static vr_status_t vr_push_curve(
+  const vr_font_face_t* face,
   vr_raster_curve_t** curves,
   size_t* curve_count,
   size_t* curve_cap,
@@ -220,7 +234,7 @@ static vr_status_t vr_push_curve(
   float y1,
   float x2,
   float y2) {
-  if (vr_ensure_curves_capacity(curves, curve_cap, *curve_count + 1u) != VR_OK) {
+  if (vr_ensure_curves_capacity(face, curves, curve_cap, *curve_count + 1u) != VR_OK) {
     return VR_ERR_OOM;
   }
   (*curves)[*curve_count].x0 = x0;
@@ -233,8 +247,8 @@ static vr_status_t vr_push_curve(
   return VR_OK;
 }
 
-static vr_status_t vr_push_msdf_segment_color(uint8_t** seg_colors, size_t* seg_color_count, size_t* seg_color_cap, uint8_t color) {
-  if (vr_ensure_u8_capacity(seg_colors, seg_color_cap, *seg_color_count + 1u) != VR_OK) {
+static vr_status_t vr_push_msdf_segment_color(const vr_font_face_t* face, uint8_t** seg_colors, size_t* seg_color_count, size_t* seg_color_cap, uint8_t color) {
+  if (vr_ensure_u8_capacity(face, seg_colors, seg_color_cap, *seg_color_count + 1u) != VR_OK) {
     return VR_ERR_OOM;
   }
   (*seg_colors)[*seg_color_count] = color;
@@ -243,6 +257,7 @@ static vr_status_t vr_push_msdf_segment_color(uint8_t** seg_colors, size_t* seg_
 }
 
 static vr_status_t vr_push_msdf_edge(
+  const vr_font_face_t* face,
   vr_msdf_outline_edge_t** edges,
   size_t* edge_count,
   size_t* edge_cap,
@@ -250,7 +265,7 @@ static vr_status_t vr_push_msdf_edge(
   vr_outline_point_t p0,
   vr_outline_point_t p1,
   vr_outline_point_t p2) {
-  if (vr_ensure_msdf_edges_capacity(edges, edge_cap, *edge_count + 1u) != VR_OK) {
+  if (vr_ensure_msdf_edges_capacity(face, edges, edge_cap, *edge_count + 1u) != VR_OK) {
     return VR_ERR_OOM;
   }
   (*edges)[*edge_count].kind = kind;
@@ -262,6 +277,7 @@ static vr_status_t vr_push_msdf_edge(
 }
 
 static vr_status_t vr_ensure_msdf_edges_capacity(
+  const vr_font_face_t* face,
   vr_msdf_outline_edge_t** edges,
   size_t* edge_cap,
   size_t needed) {
@@ -275,15 +291,15 @@ static vr_status_t vr_ensure_msdf_edges_capacity(
     if (cap > (SIZE_MAX / 2u)) return VR_ERR_OOM;
     cap *= 2u;
   }
-  vr_msdf_outline_edge_t* ne = (vr_msdf_outline_edge_t*)vr_realloc_bytes(*edges, cap * sizeof(vr_msdf_outline_edge_t));
+  vr_msdf_outline_edge_t* ne = (vr_msdf_outline_edge_t*)vr_raster_realloc_array(face, *edges, *edge_cap, cap, sizeof(vr_msdf_outline_edge_t));
   if (!ne) return VR_ERR_OOM;
   *edges = ne;
   *edge_cap = cap;
   return VR_OK;
 }
 
-static vr_status_t vr_push_msdf_curve_color(uint8_t** curve_colors, size_t* curve_color_count, size_t* curve_color_cap, uint8_t color) {
-  if (vr_ensure_u8_capacity(curve_colors, curve_color_cap, *curve_color_count + 1u) != VR_OK) {
+static vr_status_t vr_push_msdf_curve_color(const vr_font_face_t* face, uint8_t** curve_colors, size_t* curve_color_count, size_t* curve_color_cap, uint8_t color) {
+  if (vr_ensure_u8_capacity(face, curve_colors, curve_color_cap, *curve_color_count + 1u) != VR_OK) {
     return VR_ERR_OOM;
   }
   (*curve_colors)[*curve_color_count] = color;
@@ -327,6 +343,7 @@ static uint8_t vr_msdf_color_cost(uint8_t color, uint8_t preferred_color) {
 }
 
 static vr_status_t vr_msdf_color_edges_cycle(
+  const vr_font_face_t* face,
   const vr_msdf_outline_edge_t* edges,
   size_t edge_count,
   uint8_t* out_colors) {
@@ -343,7 +360,7 @@ static vr_status_t vr_msdf_color_edges_cycle(
     return VR_ERR_INVALID_FONT;
   }
 
-  uint8_t* preferred_colors = (uint8_t*)vr_malloc_bytes(edge_count * sizeof(uint8_t));
+  uint8_t* preferred_colors = (uint8_t*)vr_alloc(face, edge_count * sizeof(uint8_t), 8u);
   if (!preferred_colors) return VR_ERR_OOM;
   for (size_t i = 0u; i < edge_count; ++i) {
     vr_outline_point_t p0 = edges[i].p0;
@@ -351,9 +368,9 @@ static vr_status_t vr_msdf_color_edges_cycle(
     preferred_colors[i] = vr_msdf_preferred_edge_color(p1.x - p0.x, p1.y - p0.y, i);
   }
 
-  uint8_t* parent = (uint8_t*)vr_malloc_bytes(edge_count * VR_RASTER_MSDF_CHANNEL_COUNT * sizeof(uint8_t));
+  uint8_t* parent = (uint8_t*)vr_alloc(face, edge_count * VR_RASTER_MSDF_CHANNEL_COUNT * sizeof(uint8_t), 8u);
   if (!parent) {
-    vr_free_bytes(preferred_colors);
+    vr_dealloc(face, preferred_colors, edge_count * sizeof(uint8_t), 8u);
     return VR_ERR_OOM;
   }
 
@@ -447,8 +464,8 @@ static vr_status_t vr_msdf_color_edges_cycle(
   }
 
   if (best_cost == VR_RASTER_MSDF_COLOR_INF_COST || best_last_color >= VR_RASTER_MSDF_CHANNEL_COUNT) {
-    vr_free_bytes(preferred_colors);
-    vr_free_bytes(parent);
+    vr_dealloc(face, preferred_colors, edge_count * sizeof(uint8_t), 8u);
+    vr_dealloc(face, parent, edge_count * VR_RASTER_MSDF_CHANNEL_COUNT * sizeof(uint8_t), 8u);
     return VR_ERR_INVALID_FONT;
   }
 
@@ -459,8 +476,8 @@ static vr_status_t vr_msdf_color_edges_cycle(
     out_colors[edge - 1u] = prev_color;
   }
 
-  vr_free_bytes(preferred_colors);
-  vr_free_bytes(parent);
+  vr_dealloc(face, preferred_colors, edge_count * sizeof(uint8_t), 8u);
+  vr_dealloc(face, parent, edge_count * VR_RASTER_MSDF_CHANNEL_COUNT * sizeof(uint8_t), 8u);
   return VR_OK;
 }
 
@@ -597,6 +614,7 @@ static vr_status_t vr_append_transformed_points(
 }
 
 static vr_status_t vr_append_outline_point(
+  const vr_font_face_t* face,
   vr_outline_point_t** points,
   size_t* count,
   size_t* cap,
@@ -608,7 +626,7 @@ static vr_status_t vr_append_outline_point(
     if (new_cap < *cap) {
       return VR_ERR_INVALID_FONT;
     }
-    vr_outline_point_t* np = (vr_outline_point_t*)vr_realloc_bytes(*points, new_cap * sizeof(vr_outline_point_t));
+    vr_outline_point_t* np = (vr_outline_point_t*)vr_raster_realloc_array(face, *points, *cap, new_cap, sizeof(vr_outline_point_t));
     if (!np) return VR_ERR_OOM;
     *points = np;
     *cap = new_cap;
@@ -621,21 +639,24 @@ static vr_status_t vr_append_outline_point(
 }
 
 static vr_status_t vr_collect_contour_points(
+  const vr_font_face_t* face,
   const vr_glyph_outline_t* outline,
   uint16_t start,
   uint16_t end,
   float scale,
   vr_outline_point_t** out_points,
-  size_t* out_count) {
+  size_t* out_count,
+  size_t* out_cap) {
   *out_points = NULL;
   *out_count = 0u;
+  *out_cap = 0u;
 
   size_t raw_count = (size_t)(end - start + 1u);
   if (raw_count > (SIZE_MAX - 2u) / 2u) {
     return VR_ERR_INVALID_FONT;
   }
   size_t cap = raw_count * 2u + 2u;
-  vr_outline_point_t* points = (vr_outline_point_t*)vr_malloc_bytes(cap * sizeof(vr_outline_point_t));
+  vr_outline_point_t* points = (vr_outline_point_t*)vr_alloc(face, cap * sizeof(vr_outline_point_t), 8u);
   if (!points) return VR_ERR_OOM;
   size_t point_count = 0u;
 
@@ -643,9 +664,9 @@ static vr_status_t vr_collect_contour_points(
     uint16_t last = end;
     float mx = ((float)outline->x[last] + (float)outline->x[start]) * 0.5f * scale;
     float my = ((float)outline->y[last] + (float)outline->y[start]) * 0.5f * scale;
-    vr_status_t inserted = vr_append_outline_point(&points, &point_count, &cap, mx, my, true);
+    vr_status_t inserted = vr_append_outline_point(face, &points, &point_count, &cap, mx, my, true);
     if (inserted != VR_OK) {
-      vr_free_bytes(points);
+      vr_raster_free_array(face, points, cap, sizeof(*points));
       return inserted;
     }
   }
@@ -654,9 +675,9 @@ static vr_status_t vr_collect_contour_points(
     uint16_t idx = (uint16_t)(start + i);
     float x = (float)outline->x[idx] * scale;
     float y = (float)outline->y[idx] * scale;
-    vr_status_t added = vr_append_outline_point(&points, &point_count, &cap, x, y, outline->on_curve[idx]);
+    vr_status_t added = vr_append_outline_point(face, &points, &point_count, &cap, x, y, outline->on_curve[idx]);
     if (added != VR_OK) {
-      vr_free_bytes(points);
+      vr_raster_free_array(face, points, cap, sizeof(*points));
       return added;
     }
 
@@ -664,20 +685,21 @@ static vr_status_t vr_collect_contour_points(
     if (!outline->on_curve[idx] && !outline->on_curve[next]) {
       float nx = ((float)outline->x[idx] + (float)outline->x[next]) * 0.5f * scale;
       float ny = ((float)outline->y[idx] + (float)outline->y[next]) * 0.5f * scale;
-      vr_status_t implied = vr_append_outline_point(&points, &point_count, &cap, nx, ny, true);
+      vr_status_t implied = vr_append_outline_point(face, &points, &point_count, &cap, nx, ny, true);
       if (implied != VR_OK) {
-        vr_free_bytes(points);
+        vr_raster_free_array(face, points, cap, sizeof(*points));
         return implied;
       }
     }
   }
 
   if (point_count == 0u) {
-    vr_free_bytes(points);
+    vr_raster_free_array(face, points, cap, sizeof(*points));
     return VR_ERR_INVALID_FONT;
   }
 
   vr_status_t closed = vr_append_outline_point(
+    face,
     &points,
     &point_count,
     &cap,
@@ -685,16 +707,18 @@ static vr_status_t vr_collect_contour_points(
     points[0].y,
     true);
   if (closed != VR_OK) {
-    vr_free_bytes(points);
+    vr_raster_free_array(face, points, cap, sizeof(*points));
     return closed;
   }
 
   *out_points = points;
   *out_count = point_count;
+  *out_cap = cap;
   return VR_OK;
 }
 
 static vr_status_t vr_emit_contour_segments(
+  const vr_font_face_t* face,
   const vr_outline_point_t* points,
   size_t point_count,
   vr_segment_t** segs,
@@ -719,13 +743,13 @@ static vr_status_t vr_emit_contour_segments(
   size_t edge_count = 0u;
   size_t edge_capacity = point_count;
   if (using_msdf) {
-    msdf_edges = (vr_msdf_outline_edge_t*)vr_malloc_bytes(edge_capacity * sizeof(vr_msdf_outline_edge_t));
+    msdf_edges = (vr_msdf_outline_edge_t*)vr_alloc(face, edge_capacity * sizeof(vr_msdf_outline_edge_t), 8u);
     if (!msdf_edges) {
       return VR_ERR_OOM;
     }
-    msdf_edge_colors = (uint8_t*)vr_malloc_bytes(edge_capacity * sizeof(uint8_t));
+    msdf_edge_colors = (uint8_t*)vr_alloc(face, edge_capacity * sizeof(uint8_t), 8u);
     if (!msdf_edge_colors) {
-      vr_free_bytes(msdf_edges);
+      vr_raster_free_array(face, msdf_edges, edge_capacity, sizeof(*msdf_edges));
       return VR_ERR_OOM;
     }
   }
@@ -735,8 +759,8 @@ static vr_status_t vr_emit_contour_segments(
     vr_outline_point_t p0 = points[i];
     vr_outline_point_t p1 = points[i + 1u];
     if (!p0.on_curve) {
-      vr_free_bytes(msdf_edges);
-      vr_free_bytes(msdf_edge_colors);
+      vr_raster_free_array(face, msdf_edges, edge_capacity, sizeof(*msdf_edges));
+      vr_raster_free_array(face, msdf_edge_colors, edge_capacity, sizeof(*msdf_edge_colors));
       return VR_ERR_INVALID_FONT;
     }
 
@@ -744,12 +768,13 @@ static vr_status_t vr_emit_contour_segments(
     switch (segment_type) {
       case 3: {
         if (!using_msdf) {
-          vr_status_t line_status = vr_push_segment(segs, seg_count, seg_cap, p0.x, p0.y, p1.x, p1.y);
+          vr_status_t line_status = vr_push_segment(face, segs, seg_count, seg_cap, p0.x, p0.y, p1.x, p1.y);
           if (line_status != VR_OK) {
             return line_status;
           }
         } else {
           vr_status_t edge_status = vr_push_msdf_edge(
+            face,
             &msdf_edges,
             &edge_count,
             &edge_capacity,
@@ -758,8 +783,8 @@ static vr_status_t vr_emit_contour_segments(
             p1,
             (vr_outline_point_t){0.0f, 0.0f, 0u});
           if (edge_status != VR_OK) {
-            vr_free_bytes(msdf_edges);
-            vr_free_bytes(msdf_edge_colors);
+            vr_raster_free_array(face, msdf_edges, edge_capacity, sizeof(*msdf_edges));
+            vr_raster_free_array(face, msdf_edge_colors, edge_capacity, sizeof(*msdf_edge_colors));
             return edge_status;
           }
         }
@@ -768,12 +793,13 @@ static vr_status_t vr_emit_contour_segments(
       }
       case 2: {
         if (i + 2u >= point_count || !points[i + 2u].on_curve) {
-          vr_free_bytes(msdf_edges);
-          vr_free_bytes(msdf_edge_colors);
+          vr_raster_free_array(face, msdf_edges, edge_capacity, sizeof(*msdf_edges));
+          vr_raster_free_array(face, msdf_edge_colors, edge_capacity, sizeof(*msdf_edge_colors));
           return VR_ERR_INVALID_FONT;
         }
         if (!using_msdf) {
           vr_status_t curve_store_status = vr_push_curve(
+            face,
             curves,
             curve_count,
             curve_cap,
@@ -788,6 +814,7 @@ static vr_status_t vr_emit_contour_segments(
           }
         } else {
           vr_status_t edge_status = vr_push_msdf_edge(
+            face,
             &msdf_edges,
             &edge_count,
             &edge_capacity,
@@ -796,8 +823,8 @@ static vr_status_t vr_emit_contour_segments(
             p1,
             points[i + 2u]);
           if (edge_status != VR_OK) {
-            vr_free_bytes(msdf_edges);
-            vr_free_bytes(msdf_edge_colors);
+            vr_raster_free_array(face, msdf_edges, edge_capacity, sizeof(*msdf_edges));
+            vr_raster_free_array(face, msdf_edge_colors, edge_capacity, sizeof(*msdf_edge_colors));
             return edge_status;
           }
         }
@@ -805,13 +832,13 @@ static vr_status_t vr_emit_contour_segments(
         break;
       }
       case 1: {
-        vr_free_bytes(msdf_edges);
-        vr_free_bytes(msdf_edge_colors);
+        vr_raster_free_array(face, msdf_edges, edge_capacity, sizeof(*msdf_edges));
+        vr_raster_free_array(face, msdf_edge_colors, edge_capacity, sizeof(*msdf_edge_colors));
         return VR_ERR_INVALID_FONT;
       }
       default:
-        vr_free_bytes(msdf_edges);
-        vr_free_bytes(msdf_edge_colors);
+        vr_raster_free_array(face, msdf_edges, edge_capacity, sizeof(*msdf_edges));
+        vr_raster_free_array(face, msdf_edge_colors, edge_capacity, sizeof(*msdf_edge_colors));
         return VR_ERR_INVALID_FONT;
     }
   }
@@ -821,15 +848,15 @@ static vr_status_t vr_emit_contour_segments(
   }
 
   if (edge_count == 0u) {
-    vr_free_bytes(msdf_edges);
-    vr_free_bytes(msdf_edge_colors);
+    vr_raster_free_array(face, msdf_edges, edge_capacity, sizeof(*msdf_edges));
+    vr_raster_free_array(face, msdf_edge_colors, edge_capacity, sizeof(*msdf_edge_colors));
     return VR_OK;
   }
 
-  vr_status_t color_status = vr_msdf_color_edges_cycle(msdf_edges, edge_count, msdf_edge_colors);
+  vr_status_t color_status = vr_msdf_color_edges_cycle(face, msdf_edges, edge_count, msdf_edge_colors);
   if (color_status != VR_OK) {
-    vr_free_bytes(msdf_edges);
-    vr_free_bytes(msdf_edge_colors);
+    vr_raster_free_array(face, msdf_edges, edge_capacity, sizeof(*msdf_edges));
+    vr_raster_free_array(face, msdf_edge_colors, edge_capacity, sizeof(*msdf_edge_colors));
     return color_status;
   }
 
@@ -838,6 +865,7 @@ static vr_status_t vr_emit_contour_segments(
     uint8_t edge_color = msdf_edge_colors[edge_index];
     if (edge.kind == VR_MSDF_EDGE_KIND_LINE) {
       vr_status_t line_status = vr_push_segment(
+        face,
         segs,
         seg_count,
         seg_cap,
@@ -846,20 +874,21 @@ static vr_status_t vr_emit_contour_segments(
         edge.p1.x,
         edge.p1.y);
       if (line_status != VR_OK) {
-        vr_free_bytes(msdf_edges);
-        vr_free_bytes(msdf_edge_colors);
+        vr_raster_free_array(face, msdf_edges, edge_capacity, sizeof(*msdf_edges));
+        vr_raster_free_array(face, msdf_edge_colors, edge_capacity, sizeof(*msdf_edge_colors));
         return line_status;
       }
-      vr_status_t line_color_status = vr_push_msdf_segment_color(seg_colors, seg_color_count, seg_color_cap, edge_color);
+      vr_status_t line_color_status = vr_push_msdf_segment_color(face, seg_colors, seg_color_count, seg_color_cap, edge_color);
       if (line_color_status != VR_OK) {
-        vr_free_bytes(msdf_edges);
-        vr_free_bytes(msdf_edge_colors);
+        vr_raster_free_array(face, msdf_edges, edge_capacity, sizeof(*msdf_edges));
+        vr_raster_free_array(face, msdf_edge_colors, edge_capacity, sizeof(*msdf_edge_colors));
         return line_color_status;
       }
       continue;
     }
 
     vr_status_t curve_store_status = vr_push_curve(
+      face,
       curves,
       curve_count,
       curve_cap,
@@ -870,23 +899,25 @@ static vr_status_t vr_emit_contour_segments(
       edge.p2.x,
       edge.p2.y);
     if (curve_store_status != VR_OK) {
-      vr_free_bytes(msdf_edges);
-      vr_free_bytes(msdf_edge_colors);
+      vr_raster_free_array(face, msdf_edges, edge_capacity, sizeof(*msdf_edges));
+      vr_raster_free_array(face, msdf_edge_colors, edge_capacity, sizeof(*msdf_edge_colors));
       return curve_store_status;
     }
 
     vr_status_t curve_color_status = vr_push_msdf_curve_color(
+      face,
       curve_colors,
       curve_color_count,
       curve_color_cap,
       edge_color);
     if (curve_color_status != VR_OK) {
-      vr_free_bytes(msdf_edges);
-      vr_free_bytes(msdf_edge_colors);
+      vr_raster_free_array(face, msdf_edges, edge_capacity, sizeof(*msdf_edges));
+      vr_raster_free_array(face, msdf_edge_colors, edge_capacity, sizeof(*msdf_edge_colors));
       return curve_color_status;
     }
 
     vr_status_t curve_status = vr_line_segments_from_quad(
+      face,
       edge.p0,
       edge.p1,
       edge.p2,
@@ -901,18 +932,19 @@ static vr_status_t vr_emit_contour_segments(
       seg_color_cap,
       using_msdf);
     if (curve_status != VR_OK) {
-      vr_free_bytes(msdf_edges);
-      vr_free_bytes(msdf_edge_colors);
+      vr_raster_free_array(face, msdf_edges, edge_capacity, sizeof(*msdf_edges));
+      vr_raster_free_array(face, msdf_edge_colors, edge_capacity, sizeof(*msdf_edge_colors));
       return curve_status;
     }
   }
 
-  vr_free_bytes(msdf_edges);
-  vr_free_bytes(msdf_edge_colors);
+  vr_raster_free_array(face, msdf_edges, edge_capacity, sizeof(*msdf_edges));
+  vr_raster_free_array(face, msdf_edge_colors, edge_capacity, sizeof(*msdf_edge_colors));
   return VR_OK;
 }
 
 static vr_status_t vr_line_segments_from_quad(
+  const vr_font_face_t* face,
   const vr_outline_point_t p0,
   const vr_outline_point_t p1,
   const vr_outline_point_t p2,
@@ -941,12 +973,12 @@ static vr_status_t vr_line_segments_from_quad(
   (void)ly;
   float dist2 = (x1 - midx) * (x1 - midx) + (y1 - midy) * (y1 - midy);
   if (dist2 <= tolerance_sq) {
-    vr_status_t push_status = vr_push_segment(segs, count, cap, x0, y0, x2, y2);
+    vr_status_t push_status = vr_push_segment(face, segs, count, cap, x0, y0, x2, y2);
     if (push_status != VR_OK) {
       return push_status;
     }
     if (using_msdf) {
-      return vr_push_msdf_segment_color(seg_colors, seg_color_count, seg_color_cap, segment_color);
+      return vr_push_msdf_segment_color(face, seg_colors, seg_color_count, seg_color_cap, segment_color);
     }
     return VR_OK;
   }
@@ -955,6 +987,7 @@ static vr_status_t vr_line_segments_from_quad(
   vr_outline_point_t q1 = {x1 + (x2 - x1) * 0.5f, y1 + (y2 - y1) * 0.5f, 1};
   vr_outline_point_t r = {(q0.x + q1.x) * 0.5f, (q0.y + q1.y) * 0.5f, 1};
   vr_status_t st = vr_line_segments_from_quad(
+    face,
     p0,
     q0,
     r,
@@ -972,6 +1005,7 @@ static vr_status_t vr_line_segments_from_quad(
     return st;
   }
   return vr_line_segments_from_quad(
+    face,
     r,
     q1,
     p2,
@@ -1245,6 +1279,30 @@ static vr_status_t vr_parse_composite_glyph(
     }
   } while ((flags & VR_GLYF_COMPOSITE_MORE_COMPONENTS) != 0 && q <= end);
 
+  return VR_OK;
+}
+
+vr_status_t vr_free_bitmap(const vr_font_face_t* face, uint8_t* bitmap, int width, int height, vr_font_atlas_format_t atlas_format) {
+  if (!bitmap) return VR_OK;
+  if (!face || width <= 0 || height <= 0) return VR_ERR_INVALID_FONT;
+
+  size_t channels = 0u;
+  switch (atlas_format) {
+    case VR_FONT_ATLAS_FORMAT_ALPHA8:
+      channels = 1u;
+      break;
+    case VR_FONT_ATLAS_FORMAT_MSDF_RGB:
+      channels = VR_RASTER_MSDF_CHANNEL_COUNT;
+      break;
+    case VR_FONT_ATLAS_FORMAT_UNSPECIFIED:
+    default:
+      return VR_ERR_INVALID_FONT;
+  }
+
+  size_t w = (size_t)width;
+  size_t h = (size_t)height;
+  if (w > SIZE_MAX / h || (w * h) > SIZE_MAX / channels) return VR_ERR_INVALID_FONT;
+  vr_dealloc(face, bitmap, w * h * channels, 8u);
   return VR_OK;
 }
 
@@ -1772,16 +1830,18 @@ vr_status_t vr_rasterize_outline_with_mode(
 
     vr_outline_point_t* contour_points = NULL;
     size_t contour_point_count = 0u;
-    vr_status_t collect_status = vr_collect_contour_points(outline, start, end, scale, &contour_points, &contour_point_count);
+    size_t contour_point_cap = 0u;
+    vr_status_t collect_status = vr_collect_contour_points(face, outline, start, end, scale, &contour_points, &contour_point_count, &contour_point_cap);
     if (collect_status != VR_OK) {
-      vr_free_bytes(segments);
-      vr_free_bytes(seg_colors);
-      vr_free_bytes(curves);
-      vr_free_bytes(curve_colors);
+      vr_raster_free_array(face, segments, seg_cap, sizeof(*segments));
+      vr_raster_free_array(face, seg_colors, seg_color_cap, sizeof(*seg_colors));
+      vr_raster_free_array(face, curves, curve_cap, sizeof(*curves));
+      vr_raster_free_array(face, curve_colors, curve_color_cap, sizeof(*curve_colors));
       return collect_status;
     }
 
     vr_status_t emit_status = vr_emit_contour_segments(
+      face,
       contour_points,
       contour_point_count,
       &segments,
@@ -1797,12 +1857,12 @@ vr_status_t vr_rasterize_outline_with_mode(
       &curve_color_count,
       &curve_color_cap,
       using_msdf);
-    vr_free_bytes(contour_points);
+    vr_raster_free_array(face, contour_points, contour_point_cap, sizeof(*contour_points));
     if (emit_status != VR_OK) {
-      vr_free_bytes(segments);
-      vr_free_bytes(seg_colors);
-      vr_free_bytes(curves);
-      vr_free_bytes(curve_colors);
+      vr_raster_free_array(face, segments, seg_cap, sizeof(*segments));
+      vr_raster_free_array(face, seg_colors, seg_color_cap, sizeof(*seg_colors));
+      vr_raster_free_array(face, curves, curve_cap, sizeof(*curves));
+      vr_raster_free_array(face, curve_colors, curve_color_cap, sizeof(*curve_colors));
       return emit_status;
     }
   }
@@ -1813,20 +1873,20 @@ vr_status_t vr_rasterize_outline_with_mode(
     (!curves && curve_count > 0u) ||
     (using_msdf && (!seg_colors && seg_color_count > 0u)) ||
     (using_msdf && (!curve_colors && curve_color_count > 0u))) {
-    vr_free_bytes(segments);
-    vr_free_bytes(seg_colors);
-    vr_free_bytes(curves);
-    vr_free_bytes(curve_colors);
+    vr_raster_free_array(face, segments, seg_cap, sizeof(*segments));
+    vr_raster_free_array(face, seg_colors, seg_color_cap, sizeof(*seg_colors));
+    vr_raster_free_array(face, curves, curve_cap, sizeof(*curves));
+    vr_raster_free_array(face, curve_colors, curve_color_cap, sizeof(*curve_colors));
     return VR_ERR_UNSUPPORTED;
   }
 
   size_t pixel_count = (size_t)w * (size_t)h * out_channels;
-  uint8_t* bitmap = (uint8_t*)vr_calloc_bytes(pixel_count, 1);
+  uint8_t* bitmap = (uint8_t*)vr_calloc(face, pixel_count, 1, 8u);
   if (!bitmap) {
-    vr_free_bytes(segments);
-    vr_free_bytes(seg_colors);
-    vr_free_bytes(curves);
-    vr_free_bytes(curve_colors);
+    vr_raster_free_array(face, segments, seg_cap, sizeof(*segments));
+    vr_raster_free_array(face, seg_colors, seg_color_cap, sizeof(*seg_colors));
+    vr_raster_free_array(face, curves, curve_cap, sizeof(*curves));
+    vr_raster_free_array(face, curve_colors, curve_color_cap, sizeof(*curve_colors));
     return VR_ERR_OOM;
   }
 
@@ -1887,10 +1947,10 @@ vr_status_t vr_rasterize_outline_with_mode(
     }
   }
 
-  vr_free_bytes(segments);
-  vr_free_bytes(seg_colors);
-  vr_free_bytes(curves);
-  vr_free_bytes(curve_colors);
+  vr_raster_free_array(face, segments, seg_cap, sizeof(*segments));
+  vr_raster_free_array(face, seg_colors, seg_color_cap, sizeof(*seg_colors));
+  vr_raster_free_array(face, curves, curve_cap, sizeof(*curves));
+  vr_raster_free_array(face, curve_colors, curve_color_cap, sizeof(*curve_colors));
   *out_bitmap = bitmap;
   *out_w = w;
   *out_h = h;

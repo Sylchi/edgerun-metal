@@ -17,6 +17,13 @@ static const uint8_t VR_RASTER_TEST_CHANNEL_INDEX_G = 1u;
 static const uint8_t VR_RASTER_TEST_CHANNEL_INDEX_B = 2u;
 static const size_t VR_RASTER_TEST_MSDF_CHANNEL_COUNT = 3u;
 
+static void test_init_synthetic_face(vr_font_face_t* face) {
+  vr_font_config_t cfg = test_default_font_config();
+  face->cfg = cfg;
+  face->allocator = cfg.allocator;
+  face->units_per_em = VR_FONT_DEFAULT_PX_SIZE;
+}
+
 static bool test_bitmap_has_coverage(const uint8_t* bitmap, int w, int h) {
   size_t total = (size_t)w * (size_t)h;
   for (size_t i = 0; i < total; ++i) {
@@ -65,8 +72,7 @@ static void test_rasterize_square_outline(void) {
   uint16_t contour_end[1] = {3u};
 
   vr_font_face_t face = {0};
-  face.cfg.px_size = VR_FONT_DEFAULT_PX_SIZE;
-  face.units_per_em = VR_FONT_DEFAULT_PX_SIZE;
+  test_init_synthetic_face(&face);
 
   vr_glyph_outline_t outline = {
     .number_of_contours = 1u,
@@ -101,7 +107,7 @@ static void test_rasterize_square_outline(void) {
     test_expect(test_bitmap_has_coverage(bitmap, out_w, out_h), "raster: square-like outline writes non-zero coverage");
     test_expect(bitmap[(size_t)(out_h / 2) * (size_t)out_w + (out_w / 2)] > bitmap[(size_t)(out_w * out_h) - 1u],
       "raster: square-like center alpha brighter than corner");
-    free(bitmap);
+    (void)vr_free_bitmap(&face, bitmap, out_w, out_h, VR_FONT_ATLAS_FORMAT_ALPHA8);
   }
 }
 
@@ -112,8 +118,7 @@ static void test_rasterize_off_curve_start_outline(void) {
   uint16_t contour_end[1] = {2u};
 
   vr_font_face_t face = {0};
-  face.cfg.px_size = VR_FONT_DEFAULT_PX_SIZE;
-  face.units_per_em = VR_FONT_DEFAULT_PX_SIZE;
+  test_init_synthetic_face(&face);
 
   vr_glyph_outline_t outline = {
     .number_of_contours = 1u,
@@ -140,14 +145,13 @@ static void test_rasterize_off_curve_start_outline(void) {
   if (st == VR_OK) {
     test_expect(out_w > 0 && out_h > 0, "raster: off-curve-start outline produces bitmap dimensions");
     test_expect(test_bitmap_has_coverage(bitmap, out_w, out_h), "raster: off-curve-start outline writes non-zero coverage");
-    free(bitmap);
+    (void)vr_free_bitmap(&face, bitmap, out_w, out_h, VR_FONT_ATLAS_FORMAT_ALPHA8);
   }
 }
 
 static void test_rasterize_validation(void) {
   vr_font_face_t face = {0};
-  face.cfg.px_size = VR_FONT_DEFAULT_PX_SIZE;
-  face.units_per_em = VR_FONT_DEFAULT_PX_SIZE;
+  test_init_synthetic_face(&face);
   uint8_t* bitmap = NULL;
   int out_w = VR_RASTER_TEST_ZERO_COUNT;
   int out_h = VR_RASTER_TEST_ZERO_COUNT;
@@ -195,7 +199,7 @@ static void test_rasterize_real_font_outline(void) {
   test_expect_status(st, VR_OK, "raster: real font outline returns OK");
   if (st == VR_OK) {
     test_expect(test_bitmap_has_coverage(bitmap, out_w, out_h), "raster: real font outline writes coverage");
-    free(bitmap);
+    (void)vr_free_bitmap(face, bitmap, out_w, out_h, VR_FONT_ATLAS_FORMAT_ALPHA8);
   }
 
   vr_free_outline(face, &outline);
@@ -243,7 +247,7 @@ static void test_rasterize_msdf_mode_outputs_channels(void) {
     size_t channel_count = (size_t)out_w * (size_t)out_h * VR_RASTER_TEST_MSDF_CHANNEL_COUNT;
     test_expect(channel_count > 0u, "raster: msdf mode emits non-zero output bytes");
     test_expect(test_msdf_has_variation(bitmap, out_w, out_h), "raster: msdf mode channels diverge");
-    free(bitmap);
+    (void)vr_free_bitmap(face, bitmap, out_w, out_h, VR_FONT_ATLAS_FORMAT_MSDF_RGB);
   }
 
   vr_free_outline(face, &outline);
@@ -299,16 +303,15 @@ static void test_rasterize_alpha_mode_matches_legacy_interface(void) {
     }
   }
 
-  free(legacy_bitmap);
-  free(mode_bitmap);
+  (void)vr_free_bitmap(face, legacy_bitmap, out_w_a, out_h_a, VR_FONT_ATLAS_FORMAT_ALPHA8);
+  (void)vr_free_bitmap(face, mode_bitmap, out_w_m, out_h_m, VR_FONT_ATLAS_FORMAT_ALPHA8);
   vr_free_outline(face, &outline);
   test_close_face(face);
 }
 
 static void test_rasterize_mode_invalid_format_rejected(void) {
   vr_font_face_t face = {0};
-  face.cfg.px_size = VR_FONT_DEFAULT_PX_SIZE;
-  face.units_per_em = VR_FONT_DEFAULT_PX_SIZE;
+  test_init_synthetic_face(&face);
   face.glyph_cache_count = 1u;
   int16_t xs[4] = {0, 100, 100, 0};
   int16_t ys[4] = {0, 0, 100, 100};
