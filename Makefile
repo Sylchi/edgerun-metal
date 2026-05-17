@@ -1,4 +1,4 @@
-.PHONY: all check clean repo-check repo-test repo-inspect erwire-decode erwire-test crypto-configure crypto-build crypto-test crypto-bench crypto-bench-avx2 crypto-bench-avx512 crypto-bench-avx512-threads crypto-bench-native-threads crypto-bench-sota edgerun-metal edgerun-smoke edgerun-pci edgerun-quiet edgerun-ui edgerun-check varfont-configure varfont-build varfont-test ui-core-configure ui-core-build ui-core-test
+.PHONY: all check clean repo-check repo-test repo-check-bin repo-inspect erwire-decode erwire-test crypto-configure crypto-build crypto-test crypto-bench crypto-bench-avx2 crypto-bench-avx512 crypto-bench-avx512-threads crypto-bench-native-threads crypto-bench-sota edgerun-metal edgerun-smoke edgerun-pci edgerun-quiet edgerun-ui edgerun-check varfont-configure varfont-build varfont-test ui-core-configure ui-core-build ui-core-test
 
 ifeq ($(origin CC),default)
 CC := clang
@@ -37,14 +37,18 @@ all: edgerun-metal
 
 check: repo-check repo-test crypto-test edgerun-check varfont-test ui-core-test
 
-repo-check:
-	./tools/repo-check.sh
+repo-check: repo-check-bin
+	./.build/repo-check .
 
-repo-test: repo-inspect
+repo-test: repo-check-bin repo-inspect
 	./tests/repo-check-tests.sh
 	./tests/repo-inspect-tests.sh
 	./tests/er-math-tests.sh
 	$(MAKE) erwire-test
+
+repo-check-bin:
+	mkdir -p .build
+	$(CCACHE_PREFIX) $(HOST_CC) -std=c11 -Wall -Wextra -Werror -O2 $(HOST_LDFLAGS) -o .build/repo-check tools/repo-check.c
 
 repo-inspect:
 	mkdir -p .build
