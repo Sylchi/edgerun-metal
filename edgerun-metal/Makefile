@@ -31,7 +31,7 @@ LDFLAGS := -nostdlib -Wl,/SUBSYSTEM:EFI_APPLICATION,/ENTRY:efi_main
 HOST_CFLAGS := -std=c11 -Wall -Wextra -Werror -O2 -DER_ENABLE_TEST_HOOKS=1 -I$(CURDIR)/core -I$(CURDIR)/../include -I$(CURDIR)/$(GENERATED_DIR) -I$(CURDIR)/$(CRYPTO_DIR)/include -I$(CURDIR)/$(UI_CORE_DIR)/include -I$(CURDIR)/$(VARFONT_DIR)/include
 HOST_LDFLAGS ?= $(if $(MOLD),-fuse-ld=mold,)
 
-SRCS := core/efi_main.c core/er_boot_profile.c core/er_print.c core/er_gfx_console.c core/er_ui_gop_renderer.c core/er_freestanding.c core/er_netlog.c core/er_crypto.c core/er_crypto_blake3.c core/er_mem.c core/er_vfs.c core/er_app.c core/er_hw_relay.c core/er_bus.c core/er_acpi.c core/erwire.c core/er_native_boot.c core/wasm_vm.c core/er_pci.c core/er_mmio.c core/er_virtio.c core/er_virtio_net.c core/er_net_frame.c core/er_native_eth.c
+SRCS := core/efi_main.c core/er_boot_profile.c core/er_print.c core/er_gfx_console.c core/er_ui_gop_renderer.c core/er_freestanding.c core/er_netlog.c core/er_crypto.c core/er_crypto_blake3.c core/er_mem.c core/er_vfs.c core/er_app.c core/er_hw_relay.c core/er_relay_router.c core/er_bus.c core/er_acpi.c core/erwire.c core/er_native_boot.c core/wasm_vm.c core/er_pci.c core/er_mmio.c core/er_virtio.c core/er_virtio_net.c core/er_net_frame.c core/er_native_eth.c
 UI_SRCS := $(UI_CORE_DIR)/src/er_ui_primitives.c $(UI_CORE_DIR)/src/er_ui_scene.c $(UI_CORE_DIR)/src/er_ui_painter.c $(UI_CORE_DIR)/src/er_ui_theme.c $(UI_CORE_DIR)/src/er_ui_text.c $(UI_CORE_DIR)/src/er_ui_components.c $(UI_CORE_DIR)/src/er_ui_icon.c $(UI_CORE_DIR)/src/er_ui_metal.c $(UI_CORE_DIR)/src/er_ui_node.c
 VARFONT_SRCS := $(VARFONT_DIR)/src/vr_font.c $(VARFONT_DIR)/src/vr_font_utils.c $(VARFONT_DIR)/src/vr_font_shape.c $(VARFONT_DIR)/src/vr_font_raster.c $(VARFONT_DIR)/src/vr_font_atlas.c
 CRYPTO_SRCS := $(CRYPTO_DIR)/src/er_blake3.c
@@ -57,7 +57,7 @@ NETBOOT_SRC := tools/edgerun-netboot/main.c
 NETBOOT_BIN := $(BUILD_DIR)/edgerun-netboot
 PXE4011_SRC := tools/edgerun-pxe4011/main.c
 PXE4011_BIN := $(BUILD_DIR)/edgerun-pxe4011
-CORE_TEST_SRC := tests/test_core.c core/er_boot_profile.c core/er_pci.c core/er_mmio.c core/er_crypto.c core/er_crypto_blake3.c $(CRYPTO_SRCS) core/er_mem.c core/er_vfs.c core/er_app.c core/er_hw_relay.c core/er_bus.c core/er_acpi.c core/er_netlog.c core/er_gfx_console.c core/er_ui_gop_renderer.c core/erwire.c core/er_native_boot.c core/wasm_vm.c core/er_virtio.c core/er_virtio_net.c core/er_net_frame.c core/er_native_eth.c $(UI_SRCS) $(VARFONT_SRCS)
+CORE_TEST_SRC := tests/test_core.c core/er_boot_profile.c core/er_pci.c core/er_mmio.c core/er_crypto.c core/er_crypto_blake3.c $(CRYPTO_SRCS) core/er_mem.c core/er_vfs.c core/er_app.c core/er_hw_relay.c core/er_relay_router.c core/er_bus.c core/er_acpi.c core/er_netlog.c core/er_gfx_console.c core/er_ui_gop_renderer.c core/erwire.c core/er_native_boot.c core/wasm_vm.c core/er_virtio.c core/er_virtio_net.c core/er_net_frame.c core/er_native_eth.c $(UI_SRCS) $(VARFONT_SRCS)
 CORE_TEST_BIN := $(BUILD_DIR)/test-core
 IFACE ?=
 
