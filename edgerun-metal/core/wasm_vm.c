@@ -1461,10 +1461,9 @@ int er_wasm_execute_i64(ErWasmModule* module, UINT32 function_index, INT64* resu
                                             &bytes) != 0) {
               return -1;
             }
-            if (er_relay_packet_valid((const UINT8*)bytes, (UINT32)len) == 0u) {
-              return -1;
-            }
-            if (module->host.app_usage == 0 || module->host.app_budget == 0 ||
+            if (er_relay_packet_authorized_for_app((const UINT8*)bytes, (UINT32)len,
+                                                   module->host.app_usage,
+                                                   module->host.app_budget) == 0u ||
                 er_app_usage_charge(module->host.app_usage, module->host.app_budget,
                                     ER_APP_BUDGET_PACKET_BYTE, (UINT64)len) == 0u) {
               return -1;

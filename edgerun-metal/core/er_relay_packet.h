@@ -6,7 +6,7 @@
  * Intention: make relay traffic accountable before it leaves an admitted memory outbox.
  */
 
-#include "er_work.h"
+#include "er_app.h"
 
 #define ER_RELAY_PACKET_ABI_VERSION 1u
 #define ER_RELAY_PACKET_KIND_BYTES 1u
@@ -41,6 +41,9 @@ UINT8 er_relay_packet_prepare(UINT8* packet, UINT32 packet_capacity,
                               UINT32 payload_len,
                               UINT32* out_packet_len);
 UINT8 er_relay_packet_valid(const UINT8* packet, UINT32 packet_len);
+UINT8 er_relay_packet_authorized_for_app(const UINT8* packet, UINT32 packet_len,
+                                         const ErAppUsage* usage,
+                                         const ErAppBudget* budget);
 UINT8 er_relay_packet_payload(const UINT8* packet, UINT32 packet_len,
                               const UINT8** out_payload, UINT32* out_payload_len);
 

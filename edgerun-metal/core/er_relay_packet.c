@@ -42,6 +42,20 @@ static UINT8 er_relay_packet_bytes_nonzero(const UINT8* bytes, UINT32 len) {
   return 0;
 }
 
+static UINT8 er_relay_packet_bytes_equal(const UINT8* left, const UINT8* right, UINT32 len) {
+  UINT32 i;
+
+  if (left == 0 || right == 0 || len == 0u) {
+    return 0;
+  }
+  for (i = 0u; i < len; ++i) {
+    if (left[i] != right[i]) {
+      return 0;
+    }
+  }
+  return 1;
+}
+
 static UINT16 er_relay_packet_read_u16(const UINT8* src) {
   return (UINT16)((UINT16)src[0] | ((UINT16)src[1] << ER_RELAY_PACKET_BYTE_BITS));
 }
@@ -175,6 +189,32 @@ UINT8 er_relay_packet_valid(const UINT8* packet, UINT32 packet_len) {
   cost_per_byte = er_relay_packet_read_u64(packet + ER_RELAY_PACKET_COST_PER_BYTE_OFFSET);
   max_total_cost = er_relay_packet_read_u64(packet + ER_RELAY_PACKET_MAX_TOTAL_COST_OFFSET);
   return er_relay_packet_cost_valid(payload_len, cost_per_byte, max_total_cost);
+}
+
+UINT8 er_relay_packet_authorized_for_app(const UINT8* packet, UINT32 packet_len,
+                                         const ErAppUsage* usage,
+                                         const ErAppBudget* budget) {
+  if (usage == 0 || budget == 0 ||
+      usage->abi_version != ER_APP_ABI_VERSION ||
+      budget->abi_version != ER_APP_ABI_VERSION ||
+      budget->app_kind != ER_APP_KIND_USER ||
+      er_relay_packet_valid(packet, packet_len) == 0u) {
+    return 0;
+  }
+  if (er_relay_packet_bytes_equal(usage->budget_id.bytes, budget->budget_id.bytes,
+                                  ER_HASH_LEN) == 0u) {
+    return 0;
+  }
+  if (er_relay_packet_bytes_equal(packet + ER_RELAY_PACKET_SOURCE_OFFSET,
+                                  usage->app_node_id.bytes, ER_NODE_ID_LEN) == 0u) {
+    return 0;
+  }
+  if (er_relay_packet_bytes_equal(packet + ER_RELAY_PACKET_ADMISSION_OFFSET,
+                                  budget->admission_id.bytes, ER_HASH_LEN) == 0u) {
+    return 0;
+  }
+  return er_relay_packet_bytes_equal(packet + ER_RELAY_PACKET_TOKEN_OFFSET,
+                                     budget->budget_id.bytes, ER_HASH_LEN);
 }
 
 UINT8 er_relay_packet_payload(const UINT8* packet, UINT32 packet_len,

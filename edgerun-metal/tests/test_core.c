@@ -1487,6 +1487,8 @@ static void test_relay_packets(void) {
   ErHash token;
   ErHash route;
   ErHash payload_hash;
+  ErAppBudget budget;
+  ErAppUsage usage;
   const UINT8* parsed_payload = 0;
   UINT32 parsed_payload_len = 0u;
   UINT32 packet_len = 0u;
@@ -1497,6 +1499,15 @@ static void test_relay_packets(void) {
   test_fill_bytes(token.bytes, ER_HASH_LEN, 0x70u);
   test_fill_bytes(route.bytes, ER_HASH_LEN, 0x90u);
   test_fill_bytes(payload_hash.bytes, ER_HASH_LEN, 0xb0u);
+  er_mem_zero((UINT8*)&budget, (UINTN)sizeof(budget));
+  er_mem_zero((UINT8*)&usage, (UINTN)sizeof(usage));
+  budget.abi_version = ER_APP_ABI_VERSION;
+  budget.app_kind = ER_APP_KIND_USER;
+  budget.admission_id = admission;
+  budget.budget_id = token;
+  usage.abi_version = ER_APP_ABI_VERSION;
+  usage.budget_id = token;
+  usage.app_node_id = source;
 
   check_int64("relay packet prepare",
               er_relay_packet_prepare(packet, (UINT32)sizeof(packet), &source, &target,
@@ -1512,6 +1523,16 @@ static void test_relay_packets(void) {
   check_uint64("relay packet payload len", parsed_payload_len, sizeof(payload));
   check_uint64("relay packet payload byte0", parsed_payload[0], payload[0]);
   check_uint64("relay packet payload byte3", parsed_payload[3], payload[3]);
+  check_int64("relay packet authorized",
+              er_relay_packet_authorized_for_app(packet, packet_len, &usage, &budget), 1);
+  usage.app_node_id.bytes[0] ^= 1u;
+  check_int64("relay packet reject source mismatch",
+              er_relay_packet_authorized_for_app(packet, packet_len, &usage, &budget), 0);
+  usage.app_node_id = source;
+  budget.budget_id.bytes[0] ^= 1u;
+  check_int64("relay packet reject token mismatch",
+              er_relay_packet_authorized_for_app(packet, packet_len, &usage, &budget), 0);
+  budget.budget_id = token;
 
   packet[0] = 0xffu;
   check_int64("relay packet reject abi", er_relay_packet_valid(packet, packet_len), 0);
@@ -1582,8 +1603,12 @@ static void test_wasm_relay_imports(void) {
   er_mem_zero((UINT8*)&usage, (UINTN)sizeof(usage));
   budget.abi_version = ER_APP_ABI_VERSION;
   budget.app_kind = ER_APP_KIND_USER;
+  budget.admission_id = admission;
+  budget.budget_id = token;
   budget.max_packet_bytes = ER_RELAY_PACKET_HEADER_LEN + 4u;
   usage.abi_version = ER_APP_ABI_VERSION;
+  usage.budget_id = token;
+  usage.app_node_id = source;
   host.app_budget = &budget;
   host.app_usage = &usage;
 
@@ -1616,6 +1641,11 @@ static void test_wasm_relay_imports(void) {
               er_wasm_execute_i64(&module, main_index, &result), -1);
   check_uint64("wasm relay usage unchanged after over budget", usage.packet_bytes, 0u);
   budget.max_packet_bytes = ER_RELAY_PACKET_HEADER_LEN + 4u;
+  usage.app_node_id.bytes[0] ^= 1u;
+  check_int64("wasm relay reject packet source mismatch",
+              er_wasm_execute_i64(&module, main_index, &result), -1);
+  check_uint64("wasm relay usage unchanged after source mismatch", usage.packet_bytes, 0u);
+  usage.app_node_id = source;
 
   check_int64("wasm relay shifted outbox prepare",
               er_wasm_prepare_linear_memory(memory, (UINT32)sizeof(memory),
