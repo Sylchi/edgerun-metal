@@ -226,10 +226,10 @@ static inline uint32_t vr_tag(const uint8_t* p) {
 }
 
 bool vr_allocator_valid(vr_font_allocator_t allocator);
-void* vr_alloc(vr_font_face_t* face, size_t size, size_t align);
-void* vr_calloc(vr_font_face_t* face, size_t count, size_t size, size_t align);
-void* vr_realloc(vr_font_face_t* face, void* ptr, size_t old_size, size_t new_size, size_t align);
-void vr_dealloc(vr_font_face_t* face, void* ptr, size_t size, size_t align);
+void* vr_alloc(const vr_font_face_t* face, size_t size, size_t align);
+void* vr_calloc(const vr_font_face_t* face, size_t count, size_t size, size_t align);
+void* vr_realloc(const vr_font_face_t* face, void* ptr, size_t old_size, size_t new_size, size_t align);
+void vr_dealloc(const vr_font_face_t* face, void* ptr, size_t size, size_t align);
 void vr_allocator_scope_enter(vr_font_face_t* face);
 void vr_allocator_scope_enter_config(vr_font_allocator_t allocator);
 void vr_allocator_scope_leave(void);
@@ -263,7 +263,7 @@ vr_status_t vr_apply_gvar_variation(const vr_font_face_t* face, uint16_t glyph_i
 vr_status_t vr_load_glyph_outline(const vr_font_face_t* face, uint16_t glyph_id, vr_glyph_outline_t* out);
 uint16_t vr_get_glyph_h_advance_units(const vr_font_face_t* face, uint16_t glyph_id);
 int16_t vr_get_glyph_h_lsb_units(const vr_font_face_t* face, uint16_t glyph_id);
-void vr_free_outline(vr_glyph_outline_t* outline);
+void vr_free_outline(const vr_font_face_t* face, vr_glyph_outline_t* outline);
 vr_status_t vr_rasterize_outline(const vr_font_face_t* face, const vr_glyph_outline_t* outline,
                                  uint8_t** out_bitmap, int* out_w, int* out_h, int* out_left, int* out_top);
 vr_status_t vr_rasterize_outline_with_mode(const vr_font_face_t* face,

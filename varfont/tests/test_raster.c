@@ -198,7 +198,7 @@ static void test_rasterize_real_font_outline(void) {
     free(bitmap);
   }
 
-  vr_free_outline(&outline);
+  vr_free_outline(face, &outline);
   test_close_face(face);
 }
 
@@ -246,7 +246,7 @@ static void test_rasterize_msdf_mode_outputs_channels(void) {
     free(bitmap);
   }
 
-  vr_free_outline(&outline);
+  vr_free_outline(face, &outline);
   test_close_face(face);
 }
 
@@ -261,7 +261,7 @@ static void test_rasterize_alpha_mode_matches_legacy_interface(void) {
   vr_status_t st = vr_load_glyph_outline(face, (uint16_t)vr_find_glyph_id(face, (uint32_t)'A'), &outline);
   if (st != VR_OK) {
     test_expect_status(st, VR_OK, "raster: A glyph outline loads for alpha parity");
-    vr_free_outline(&outline);
+    vr_free_outline(face, &outline);
     test_close_face(face);
     return;
   }
@@ -301,7 +301,7 @@ static void test_rasterize_alpha_mode_matches_legacy_interface(void) {
 
   free(legacy_bitmap);
   free(mode_bitmap);
-  vr_free_outline(&outline);
+  vr_free_outline(face, &outline);
   test_close_face(face);
 }
 
