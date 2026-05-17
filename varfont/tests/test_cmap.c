@@ -120,7 +120,6 @@ static void test_build_format4_single_segment_subtable(
 static void test_attach_allocator(vr_font_face_t* face) {
   vr_font_config_t cfg = test_default_font_config();
   face->allocator = cfg.allocator;
-  vr_allocator_scope_enter(face);
 }
 
 static vr_status_t test_build_face_with_single_cmap(
