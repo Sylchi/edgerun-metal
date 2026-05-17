@@ -5,10 +5,10 @@
 #include "er_acpi.h"
 #include "er_gfx_console.h"
 #include "er_ui_gop_renderer.h"
-#include "er_ui_painter.h"
+#include "er_ui_node.h"
 #include "er_ui_theme.h"
 #include "erwire.h"
-#include "font_geist_baked.h"
+#include "font_geist.h"
 #include "wasm_vm.h"
 #include "wasm_test_module.h"
 #include "wasm_pci_scan_module.h"
@@ -27,10 +27,23 @@
 #define ER_CONSOLE_MIN_COLUMNS 80u
 #define ER_CONSOLE_MIN_ROWS 25u
 #define ER_UI_BOOT_ARENA_SIZE (4u * 1024u * 1024u)
+#define ER_UI_BOOT_TILE_WIDTH 128u
+#define ER_UI_BOOT_TILE_HEIGHT 64u
+#define ER_UI_BOOT_MAX_DIRTY_TILES 4096u
+#define ER_UI_BOOT_MAX_TILE_MARKS 8192u
+#define ER_UI_BOOT_RENDER_OVERDRAW_BUDGET 4u
+#define ER_UI_BOOT_BACKING_BUFFERS 1u
+#define ER_UI_BOOT_COMMAND_BYTES (256u * 1024u)
+#define ER_UI_BOOT_GLYPH_CACHE_BYTES (1024u * 1024u)
+#define ER_UI_BOOT_SURFACE_BYTES 0u
+#define ER_UI_BOOT_MEMORY_BUDGET_BYTES (128u * 1024u * 1024u)
 
 static ErWasmHostCalls g_host_calls = {0};
 static UINT8 g_wasm_driver_memory[65536];
 static UINT8 g_ui_boot_arena[ER_UI_BOOT_ARENA_SIZE];
+static UINT8 g_ui_boot_tile_marks[ER_UI_BOOT_MAX_TILE_MARKS];
+static UINT32 g_ui_boot_dirty_tile_ids[ER_UI_BOOT_MAX_DIRTY_TILES];
+static ErUiGopFrameState g_ui_boot_frame_state;
 static UINTN g_ui_boot_arena_used;
 static UINT8 g_log_u64_stage = 0;
 static UINT8 g_log_hex_stage = 0;
@@ -79,10 +92,38 @@ static void er_ui_boot_free(void* user, void* ptr, size_t size, size_t align) {
   (void)align;
 }
 
+static void* er_ui_boot_realloc(void* user, void* ptr, size_t old_size, size_t new_size, size_t align) {
+  UINT8* next;
+  UINTN copy_size;
+  UINTN i;
+
+  if (new_size == 0u) {
+    return 0;
+  }
+  next = (UINT8*)er_ui_boot_alloc(user, new_size, align);
+  if (next == 0 || ptr == 0 || old_size == 0u) {
+    return next;
+  }
+  copy_size = (UINTN)(old_size < new_size ? old_size : new_size);
+  for (i = 0u; i < copy_size; ++i) {
+    next[i] = ((const UINT8*)ptr)[i];
+  }
+  return next;
+}
+
 static er_ui_allocator_t er_ui_boot_allocator(void) {
   er_ui_allocator_t allocator;
   allocator.user = g_ui_boot_arena;
   allocator.alloc = er_ui_boot_alloc;
+  allocator.free = er_ui_boot_free;
+  return allocator;
+}
+
+static vr_font_allocator_t er_ui_boot_font_allocator(void) {
+  vr_font_allocator_t allocator;
+  allocator.user = g_ui_boot_arena;
+  allocator.alloc = er_ui_boot_alloc;
+  allocator.realloc = er_ui_boot_realloc;
   allocator.free = er_ui_boot_free;
   return allocator;
 }
@@ -723,176 +764,141 @@ static void er_run_mmio_profile(void) {
   er_run_mmio_probe();
 }
 
-static er_ui_status_t er_ui_boot_push_panel(er_ui_painter_t* painter, er_ui_bounds_t bounds,
-                                            er_ui_color4_t fill, er_ui_color4_t border) {
-  er_ui_status_t status;
-
-  status = er_ui_painter_fill_rect(painter, bounds, 0.0f, fill);
-  if (status != ER_UI_OK) return status;
-  return er_ui_painter_border_rect(painter, bounds, 0.0f, border);
-}
-
-static UINTN er_ui_boot_ascii_codepoints(const char* text, UINT32* out, UINTN max_count) {
-  UINTN count = 0;
-
-  if (text == 0 || out == 0 || max_count == 0u) {
-    return 0u;
-  }
-  while (text[count] != 0 && count < max_count) {
-    out[count] = (UINT32)(UINT8)text[count];
-    ++count;
-  }
-  return count;
-}
-
-static const ErBakedFontGlyph* er_ui_boot_find_glyph(UINT32 codepoint) {
-  UINTN i;
-
-  for (i = 0u; i < ER_FONT_GEIST_BAKED_GLYPH_COUNT; ++i) {
-    if (g_er_font_geist_baked_glyphs[i].codepoint == codepoint) {
-      return &g_er_font_geist_baked_glyphs[i];
-    }
-  }
-  return 0;
-}
-
-static er_ui_status_t er_ui_boot_push_text(er_ui_scene_t* scene, const char* text,
-                                           float x, float y, er_ui_color4_t color) {
-  UINT32 codepoints[96];
-  UINTN count = er_ui_boot_ascii_codepoints(text, codepoints, (UINTN)(sizeof(codepoints) / sizeof(codepoints[0])));
-  UINTN i;
-  float pen_x = x;
-
-  if (count == 0u) {
-    return ER_UI_OK;
-  }
-
-  for (i = 0u; i < count; ++i) {
-    const ErBakedFontGlyph* glyph = er_ui_boot_find_glyph(codepoints[i]);
-    if (glyph == 0) {
-      continue;
-    }
-    if (glyph->width > 0 && glyph->height > 0) {
-      er_ui_status_t status = er_ui_scene_push_text_quad(
-        scene,
-        er_ui_quad_atlas(
-          pen_x + (float)glyph->left,
-          y - (float)glyph->top,
-          (float)glyph->width,
-          (float)glyph->height,
-          glyph->u0,
-          glyph->v0,
-          glyph->u1,
-          glyph->v1,
-          0u,
-          color));
-      if (status != ER_UI_OK) return status;
-    }
-    pen_x += glyph->advance;
-  }
-  return ER_UI_OK;
-}
-
-static er_ui_status_t er_build_ui_boot_scene(er_ui_scene_t* scene) {
+static er_ui_status_t er_build_ui_boot_scene(er_ui_scene_t* scene, vr_font_face_t* font) {
   er_ui_resolved_theme_t theme = er_ui_resolved_theme(
     ER_UI_STYLE_AUTHORITY_USER,
-    (er_ui_style_preset_t){ER_UI_COLOR_SCHEME_TERMINAL, ER_UI_ACCENT_GREEN, ER_UI_RADIUS_COMPACT});
-  er_ui_painter_t painter;
+    (er_ui_style_preset_t){ER_UI_COLOR_SCHEME_DARK, ER_UI_ACCENT_NEUTRAL, ER_UI_RADIUS_DEFAULT});
   er_ui_status_t status;
+  const char* const tabs[] = {"Boot", "Hardware", "Relay", "Apps"};
+  const char* const route_hops[] = {"executor", "bus", "wasm-driver", "device"};
+  const char* const table_headers[] = {"Area", "State", "Next"};
+  const char* const table_cells[] = {
+    "GOP", "ready", "input",
+    "ACPI", "scanned", "AML",
+    "WASM", "hostcalls", "NIC",
+    "Relay", "packets", "routing"
+  };
+  const char* const chart_labels[] = {"mem", "bus", "gfx", "vm"};
+  const float chart_values[] = {0.28f, 0.46f, 0.82f, 0.58f};
 
-  if (scene == 0) {
+  er_ui_node_t root = er_ui_node_column();
+  er_ui_node_t header = er_ui_node_panel_header("EdgeRun Metal", "bare-metal relay executor", "READY", 9000u);
+  er_ui_node_t tabs_node = er_ui_node_tabs(tabs, 4u, 0u, 9010u);
+  er_ui_node_t metric_grid = er_ui_node_grid(3u);
+  er_ui_node_t display = er_ui_node_metric_card("Display", "GOP", "framebuffer renderer online", true, 0.82f, theme.colors.accent);
+  er_ui_node_t hardware = er_ui_node_metric_card("Hardware", "ACPI", "tables scanned / PCI packets", true, 0.64f, theme.colors.success);
+  er_ui_node_t executor = er_ui_node_metric_card("Executor", "WASM", "host calls wired", true, 0.58f, theme.colors.info);
+  er_ui_node_t main_row = er_ui_node_row();
+  er_ui_node_t nav = er_ui_node_column();
+  er_ui_node_t nav0 = er_ui_node_menu_item("Boot path", "firmware to runtime", "active", true, theme.colors.accent, 9020u);
+  er_ui_node_t nav1 = er_ui_node_menu_item("Hardware", "addressed buses", "scan", false, theme.colors.success, 9021u);
+  er_ui_node_t nav2 = er_ui_node_menu_item("Relay", "move packets only", "core", false, theme.colors.info, 9022u);
+  er_ui_node_t nav3 = er_ui_node_menu_item("Apps", "wasm objects", "next", false, theme.colors.warning, 9023u);
+  er_ui_node_t center = er_ui_node_column();
+  er_ui_node_t route = er_ui_node_route_path("Packet route", route_hops, 4u);
+  er_ui_node_t table = er_ui_node_table(table_headers, 3u, table_cells, 4u, 9030u);
+  er_ui_node_t command = er_ui_node_command_palette("Search bus, app, capability...", 9040u);
+  er_ui_node_t right = er_ui_node_column();
+  er_ui_node_t grant0 = er_ui_node_capability_grant_row("display", "gop.framebuffer", "granted", 9050u);
+  er_ui_node_t grant1 = er_ui_node_capability_grant_row("driver-pci", "bus.pci.config", "limited", 9051u);
+  er_ui_node_t proof = er_ui_node_proof_event_row("boot scene", "baked from ui-core nodes", "verified", 9052u);
+  er_ui_node_t chart = er_ui_node_bar_chart("Runtime budget", chart_labels, chart_values, 4u, 9060u, 2u);
+  er_ui_node_t footer = er_ui_node_toast("UI emitted by edgerun-ui-core nodes/components; GOP only draws the scene.", theme.colors.accent);
+
+  if (scene == 0 || font == 0) {
     return ER_UI_ERR_INVALID_ARGUMENT;
   }
 
   status = er_ui_scene_init_with_allocator(scene, theme.colors.bg, er_ui_boot_allocator());
   if (status != ER_UI_OK) return status;
 
-  painter = er_ui_painter(scene);
+  er_ui_node_set_gap(&root, 22.0f);
+  er_ui_node_set_padding(&root, 0.0f);
 
-  status = er_ui_scene_push_rect(scene, er_ui_rect_linear_gradient(0.0f, 0.0f, 3840.0f, 2160.0f, 0.0f,
-                                                                  er_ui_color_rgb_u8(3u, 7u, 18u),
-                                                                  er_ui_color_rgb_u8(5u, 46u, 22u)));
-  if (status != ER_UI_OK) return status;
+  er_ui_node_set_bounds(&header, er_ui_bounds(120.0f, 80.0f, 3600.0f, 120.0f));
+  er_ui_node_set_bounds(&tabs_node, er_ui_bounds(120.0f, 228.0f, 660.0f, 48.0f));
+  er_ui_node_set_bounds(&metric_grid, er_ui_bounds(120.0f, 320.0f, 3600.0f, 310.0f));
+  er_ui_node_set_gap(&metric_grid, 20.0f);
+  er_ui_node_set_bounds(&main_row, er_ui_bounds(120.0f, 680.0f, 3600.0f, 1020.0f));
+  er_ui_node_set_gap(&main_row, 22.0f);
+  er_ui_node_set_bounds(&footer, er_ui_bounds(120.0f, 1760.0f, 3600.0f, 110.0f));
 
-  status = er_ui_painter_fill_rect(&painter, er_ui_bounds(0.0f, 0.0f, 3840.0f, 128.0f), 0.0f, theme.colors.topbar);
-  if (status != ER_UI_OK) return status;
-  status = er_ui_painter_fill_rect(&painter, er_ui_bounds(0.0f, 126.0f, 3840.0f, 2.0f), 0.0f, theme.colors.accent);
-  if (status != ER_UI_OK) return status;
-  status = er_ui_boot_push_text(scene, "EdgeRun Metal", 160.0f, 86.0f, theme.colors.text);
-  if (status != ER_UI_OK) return status;
-  status = er_ui_boot_push_text(scene, "GOP renderer / baked Geist atlas", 760.0f, 82.0f, theme.colors.muted);
-  if (status != ER_UI_OK) return status;
+  er_ui_node_set_bounds(&nav, er_ui_bounds(120.0f, 680.0f, 760.0f, 1020.0f));
+  er_ui_node_set_gap(&nav, 14.0f);
+  er_ui_node_set_bounds(&center, er_ui_bounds(920.0f, 680.0f, 1720.0f, 1020.0f));
+  er_ui_node_set_gap(&center, 18.0f);
+  er_ui_node_set_bounds(&right, er_ui_bounds(2680.0f, 680.0f, 1040.0f, 1020.0f));
+  er_ui_node_set_gap(&right, 18.0f);
 
-  status = er_ui_boot_push_panel(&painter, er_ui_bounds(160.0f, 220.0f, 1120.0f, 620.0f),
-                                 theme.colors.panel, theme.colors.border);
+  status = er_ui_node_add_child(&metric_grid, &display);
   if (status != ER_UI_OK) return status;
-  status = er_ui_boot_push_panel(&painter, er_ui_bounds(1360.0f, 220.0f, 2320.0f, 620.0f),
-                                 er_ui_color_with_alpha(theme.colors.panel, 0.82f), theme.colors.border);
+  status = er_ui_node_add_child(&metric_grid, &hardware);
   if (status != ER_UI_OK) return status;
-  status = er_ui_boot_push_panel(&painter, er_ui_bounds(160.0f, 960.0f, 1700.0f, 880.0f),
-                                 er_ui_color_with_alpha(theme.colors.row, 0.92f), theme.colors.border);
-  if (status != ER_UI_OK) return status;
-  status = er_ui_boot_push_panel(&painter, er_ui_bounds(1980.0f, 960.0f, 1700.0f, 880.0f),
-                                 er_ui_color_with_alpha(theme.colors.row, 0.78f), theme.colors.border);
+  status = er_ui_node_add_child(&metric_grid, &executor);
   if (status != ER_UI_OK) return status;
 
-  status = er_ui_painter_fill_rect(&painter, er_ui_bounds(240.0f, 310.0f, 960.0f, 42.0f), 0.0f, theme.colors.accent);
+  status = er_ui_node_add_child(&nav, &nav0);
   if (status != ER_UI_OK) return status;
-  status = er_ui_boot_push_text(scene, "Actual Geist font", 240.0f, 292.0f, theme.colors.text);
+  status = er_ui_node_add_child(&nav, &nav1);
   if (status != ER_UI_OK) return status;
-  status = er_ui_boot_push_text(scene, "Alpha atlas sampled by CPU", 240.0f, 392.0f, theme.colors.muted);
+  status = er_ui_node_add_child(&nav, &nav2);
   if (status != ER_UI_OK) return status;
-  status = er_ui_painter_fill_rect(&painter, er_ui_bounds(240.0f, 420.0f, 640.0f, 32.0f), 0.0f, theme.colors.success);
-  if (status != ER_UI_OK) return status;
-  status = er_ui_painter_fill_rect(&painter, er_ui_bounds(240.0f, 520.0f, 780.0f, 32.0f), 0.0f, theme.colors.info);
-  if (status != ER_UI_OK) return status;
-  status = er_ui_painter_fill_rect(&painter, er_ui_bounds(240.0f, 620.0f, 520.0f, 32.0f), 0.0f, theme.colors.warning);
+  status = er_ui_node_add_child(&nav, &nav3);
   if (status != ER_UI_OK) return status;
 
-  status = er_ui_scene_push_rect(scene, er_ui_rect_linear_gradient(1440.0f, 330.0f, 2080.0f, 260.0f, 0.0f,
-                                                                  er_ui_color_with_alpha(theme.colors.accent, 0.88f),
-                                                                  er_ui_color_with_alpha(theme.colors.info, 0.54f)));
+  status = er_ui_node_add_child(&center, &route);
   if (status != ER_UI_OK) return status;
-  status = er_ui_boot_push_text(scene, "Scene text quads", 1500.0f, 455.0f, theme.colors.accent_text);
+  status = er_ui_node_add_child(&center, &table);
   if (status != ER_UI_OK) return status;
-  status = er_ui_boot_push_text(scene, "No firmware text renderer", 1500.0f, 545.0f, theme.colors.accent_text);
-  if (status != ER_UI_OK) return status;
-  status = er_ui_painter_fill_rect(&painter, er_ui_bounds(1440.0f, 670.0f, 480.0f, 78.0f), 0.0f, theme.colors.success);
-  if (status != ER_UI_OK) return status;
-  status = er_ui_boot_push_text(scene, "READY", 1510.0f, 730.0f, theme.colors.accent_text);
-  if (status != ER_UI_OK) return status;
-  status = er_ui_painter_fill_rect(&painter, er_ui_bounds(1980.0f, 670.0f, 480.0f, 78.0f), 0.0f, theme.colors.warning);
-  if (status != ER_UI_OK) return status;
-  status = er_ui_boot_push_text(scene, "UEFI", 2050.0f, 730.0f, theme.colors.bg);
-  if (status != ER_UI_OK) return status;
-  status = er_ui_painter_fill_rect(&painter, er_ui_bounds(2520.0f, 670.0f, 480.0f, 78.0f), 0.0f, theme.colors.danger);
-  if (status != ER_UI_OK) return status;
-  status = er_ui_boot_push_text(scene, "CPU", 2610.0f, 730.0f, theme.colors.accent_text);
+  status = er_ui_node_add_child(&center, &command);
   if (status != ER_UI_OK) return status;
 
-  status = er_ui_painter_fill_rect(&painter, er_ui_bounds(280.0f, 1070.0f, 1460.0f, 96.0f), 0.0f, theme.colors.active);
+  status = er_ui_node_add_child(&right, &grant0);
   if (status != ER_UI_OK) return status;
-  status = er_ui_boot_push_text(scene, "renderer draws rectangles and real glyph atlas quads", 310.0f, 1140.0f, theme.colors.text);
+  status = er_ui_node_add_child(&right, &grant1);
   if (status != ER_UI_OK) return status;
-  status = er_ui_painter_fill_rect(&painter, er_ui_bounds(280.0f, 1230.0f, 1180.0f, 96.0f), 0.0f, theme.colors.composer);
+  status = er_ui_node_add_child(&right, &proof);
   if (status != ER_UI_OK) return status;
-  status = er_ui_boot_push_text(scene, "next: clipping, cached frame state, input", 310.0f, 1300.0f, theme.colors.muted);
-  if (status != ER_UI_OK) return status;
-  status = er_ui_painter_fill_rect(&painter, er_ui_bounds(280.0f, 1390.0f, 1320.0f, 96.0f), 0.0f, theme.colors.composer);
+  status = er_ui_node_add_child(&right, &chart);
   if (status != ER_UI_OK) return status;
 
-  status = er_ui_painter_fill_rect(&painter, er_ui_bounds(2100.0f, 1100.0f, 240.0f, 520.0f), 0.0f, theme.colors.accent);
+  status = er_ui_node_add_child(&main_row, &nav);
   if (status != ER_UI_OK) return status;
-  status = er_ui_painter_fill_rect(&painter, er_ui_bounds(2440.0f, 1260.0f, 240.0f, 360.0f), 0.0f, theme.colors.success);
+  status = er_ui_node_add_child(&main_row, &center);
   if (status != ER_UI_OK) return status;
-  status = er_ui_painter_fill_rect(&painter, er_ui_bounds(2780.0f, 1160.0f, 240.0f, 460.0f), 0.0f, theme.colors.info);
+  status = er_ui_node_add_child(&main_row, &right);
   if (status != ER_UI_OK) return status;
-  return er_ui_painter_fill_rect(&painter, er_ui_bounds(3120.0f, 1340.0f, 240.0f, 280.0f), 0.0f, theme.colors.warning);
+
+  status = er_ui_node_add_child(&root, &header);
+  if (status != ER_UI_OK) return status;
+  status = er_ui_node_add_child(&root, &tabs_node);
+  if (status != ER_UI_OK) return status;
+  status = er_ui_node_add_child(&root, &metric_grid);
+  if (status != ER_UI_OK) return status;
+  status = er_ui_node_add_child(&root, &main_row);
+  if (status != ER_UI_OK) return status;
+  status = er_ui_node_add_child(&root, &footer);
+  if (status != ER_UI_OK) return status;
+
+  return er_ui_node_render(&root, scene, font, er_ui_bounds(0.0f, 0.0f, 3840.0f, 2160.0f), theme);
 }
 
 static void er_run_ui_profile(EFI_SYSTEM_TABLE* SystemTable) {
   er_ui_scene_t scene = {0};
-  ErUiGopAlphaAtlas atlas;
+  er_ui_scene_stats_t scene_stats;
+  er_ui_scene_budget_t scene_budget;
+  er_ui_scene_budget_violation_t scene_violation;
+  ErUiGopRenderStats render_stats;
+  ErUiGopFrameBudget frame_budget;
+  ErUiGopFrameBudgetViolation frame_violation;
+  ErUiGopTilePlan tile_plan;
+  ErUiGopMemoryPlan memory_plan;
+  ErUiGopMemoryBudget memory_budget;
+  ErUiGopMemoryBudgetViolation memory_violation;
+  ErUiGopDirtyTileList dirty_tiles;
+  UINT8 used_dirty_render = 0u;
+  vr_font_config_t font_cfg;
+  vr_font_face_t* font = 0;
 
   er_println("boot profile: ui");
   if (er_ui_gop_renderer_init(SystemTable) == 0u) {
@@ -901,26 +907,154 @@ static void er_run_ui_profile(EFI_SYSTEM_TABLE* SystemTable) {
   }
 
   g_ui_boot_arena_used = 0u;
+  font_cfg.px_size = 28.0f;
+  font_cfg.atlas_width = 1024u;
+  font_cfg.atlas_height = 1024u;
+  font_cfg.atlas_pad = 2u;
+  font_cfg.atlas_format = VR_FONT_ATLAS_FORMAT_ALPHA8;
+  font_cfg.allocator = er_ui_boot_font_allocator();
+  font_cfg.gl.user = 0;
+  font_cfg.gl.create_texture = 0;
+  font_cfg.gl.update_texture = 0;
+  font_cfg.gl.destroy_texture = 0;
+
+  er_println("ui renderer: init font");
+  if (vr_font_face_create_from_memory(&font, g_er_font_geist_ttf, ER_FONT_GEIST_TTF_SIZE, &font_cfg) != VR_OK || font == 0) {
+    er_println("ui renderer: font failed");
+    return;
+  }
+
   er_println("ui renderer: build scene");
-  if (er_build_ui_boot_scene(&scene) != ER_UI_OK) {
+  if (er_build_ui_boot_scene(&scene, font) != ER_UI_OK) {
     er_println("ui renderer: scene build failed");
     er_ui_scene_destroy(&scene);
+    vr_font_face_destroy(font);
     return;
   }
-
-  atlas.pixels = g_er_font_geist_baked_atlas;
-  atlas.width = ER_FONT_GEIST_BAKED_ATLAS_WIDTH;
-  atlas.height = ER_FONT_GEIST_BAKED_ATLAS_HEIGHT;
-  atlas.bytes_per_pixel = ER_FONT_GEIST_BAKED_ATLAS_BYTES_PER_PIXEL;
+  scene_stats = er_ui_scene_stats(&scene);
+  scene_budget = er_ui_scene_budget_native_interactive_frame();
+  if (er_ui_scene_first_budget_violation(scene_stats, scene_budget, &scene_violation)) {
+    er_print("ui renderer: scene budget exceeded ");
+    er_print(scene_violation.name);
+    er_print(" actual=");
+    er_print_u64_dec((UINT64)scene_violation.actual);
+    er_print(" limit=");
+    er_print_u64_dec((UINT64)scene_violation.limit);
+    er_println("");
+    er_ui_scene_destroy(&scene);
+    vr_font_face_destroy(font);
+    return;
+  }
+  if (er_ui_gop_renderer_tile_plan(ER_UI_BOOT_TILE_WIDTH, ER_UI_BOOT_TILE_HEIGHT,
+                                   ER_UI_BOOT_MAX_DIRTY_TILES, &tile_plan) == 0u ||
+      tile_plan.tile_count > ER_UI_BOOT_MAX_TILE_MARKS) {
+    er_println("ui renderer: tile plan failed");
+    er_ui_scene_destroy(&scene);
+    vr_font_face_destroy(font);
+    return;
+  }
+  if (er_ui_gop_memory_plan_from_tile_plan(&tile_plan, ER_UI_BOOT_BACKING_BUFFERS,
+                                           ER_UI_BOOT_COMMAND_BYTES, ER_UI_BOOT_GLYPH_CACHE_BYTES,
+                                           ER_UI_BOOT_SURFACE_BYTES, &memory_plan) == 0u) {
+    er_println("ui renderer: memory plan failed");
+    er_ui_scene_destroy(&scene);
+    vr_font_face_destroy(font);
+    return;
+  }
+  memory_budget.scanout_bytes = memory_plan.scanout_bytes;
+  memory_budget.backing_bytes = memory_plan.backing_bytes;
+  memory_budget.tile_state_bytes = memory_plan.tile_state_bytes;
+  memory_budget.dirty_queue_bytes = memory_plan.dirty_queue_bytes;
+  memory_budget.command_bytes = ER_UI_BOOT_COMMAND_BYTES;
+  memory_budget.glyph_cache_bytes = ER_UI_BOOT_GLYPH_CACHE_BYTES;
+  memory_budget.surface_bytes = ER_UI_BOOT_SURFACE_BYTES;
+  memory_budget.total_bytes = ER_UI_BOOT_MEMORY_BUDGET_BYTES;
+  if (er_ui_gop_memory_plan_first_budget_violation(memory_plan, memory_budget, &memory_violation) != 0u) {
+    er_print("ui renderer: memory budget exceeded ");
+    er_print(memory_violation.name);
+    er_print(" actual=");
+    er_print_u64_dec(memory_violation.actual);
+    er_print(" limit=");
+    er_print_u64_dec(memory_violation.limit);
+    er_println("");
+    er_ui_scene_destroy(&scene);
+    vr_font_face_destroy(font);
+    return;
+  }
+  dirty_tiles.tile_ids = g_ui_boot_dirty_tile_ids;
+  dirty_tiles.capacity = ER_UI_BOOT_MAX_DIRTY_TILES;
+  dirty_tiles.count = 0u;
+  dirty_tiles.overflowed = 0u;
+  er_ui_gop_frame_state_reset(&g_ui_boot_frame_state);
+  if (er_ui_gop_frame_dirty_tiles(&g_ui_boot_frame_state, &tile_plan, 0, &scene,
+                                  g_ui_boot_tile_marks, ER_UI_BOOT_MAX_TILE_MARKS, &dirty_tiles) == 0u) {
+    er_println("ui renderer: dirty plan failed");
+    er_ui_scene_destroy(&scene);
+    vr_font_face_destroy(font);
+    return;
+  }
 
   er_println("ui renderer: render scene");
-  if (er_ui_gop_renderer_render_scene_with_atlas(&scene, &atlas) == 0u) {
+  if (dirty_tiles.overflowed == 0u && (UINT64)dirty_tiles.count < tile_plan.tile_count) {
+    used_dirty_render = 1u;
+    if (er_ui_gop_renderer_render_scene_dirty_tiles_with_font_stats(&scene, font, &tile_plan,
+                                                                    &dirty_tiles, &render_stats) == 0u) {
+      er_println("ui renderer: dirty render failed");
+      er_ui_scene_destroy(&scene);
+      vr_font_face_destroy(font);
+      return;
+    }
+  } else if (er_ui_gop_renderer_render_scene_with_font_stats(&scene, font, &render_stats) == 0u) {
     er_println("ui renderer: render failed");
     er_ui_scene_destroy(&scene);
+    vr_font_face_destroy(font);
     return;
   }
+  frame_budget = er_ui_gop_frame_budget_from_plan(&tile_plan, scene_budget, ER_UI_BOOT_RENDER_OVERDRAW_BUDGET);
+  if (er_ui_gop_render_stats_first_budget_violation(render_stats, frame_budget, &frame_violation) != 0u) {
+    er_print("ui renderer: frame budget exceeded ");
+    er_print(frame_violation.name);
+    er_print(" actual=");
+    er_print_u64_dec(frame_violation.actual);
+    er_print(" limit=");
+    er_print_u64_dec(frame_violation.limit);
+    er_println("");
+    er_ui_scene_destroy(&scene);
+    vr_font_face_destroy(font);
+    return;
+  }
+  er_ui_gop_frame_state_commit(&g_ui_boot_frame_state);
+  er_print("ui renderer: bytes=");
+  er_print_u64_dec(render_stats.bytes_written);
+  er_print(" rects=");
+  er_print_u64_dec(render_stats.rects);
+  er_print(" text=");
+  er_print_u64_dec(render_stats.text_quads);
+  er_print(" tiles=");
+  er_print_u64_dec((UINT64)dirty_tiles.count);
+  er_print("/");
+  er_print_u64_dec(tile_plan.tile_count);
+  er_print(" tile_bytes=");
+  er_print_u64_dec(tile_plan.max_tile_bytes);
+  er_print(" mem=");
+  er_print_u64_dec(memory_plan.total_bytes);
+  er_print(" backing=");
+  er_print_u64_dec(memory_plan.backing_bytes);
+  er_print(" rendered_tiles=");
+  er_print_u64_dec(render_stats.tiles_rendered);
+  er_print(" clipped=");
+  er_print_u64_dec(render_stats.clipped_primitives);
+  er_print(" rejected=");
+  er_print_u64_dec(render_stats.rejected_primitives);
+  if (dirty_tiles.overflowed != 0u) {
+    er_print(" overflow");
+  }
+  er_print(" mode=");
+  er_print(used_dirty_render != 0u ? "dirty" : "full");
+  er_println("");
 
   er_ui_scene_destroy(&scene);
+  vr_font_face_destroy(font);
   er_gfx_console_set_enabled(0u);
   er_println("ui renderer: scene drawn");
 }

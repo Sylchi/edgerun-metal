@@ -25,7 +25,7 @@ LDFLAGS := -nostdlib -Wl,/SUBSYSTEM:EFI_APPLICATION,/ENTRY:efi_main
 HOST_CFLAGS := -std=c11 -Wall -Wextra -Werror -O2 -I$(CURDIR)/core -I$(CURDIR)/$(GENERATED_DIR) -I$(CURDIR)/$(UI_CORE_DIR)/include -I$(CURDIR)/$(VARFONT_DIR)/include
 
 SRCS := core/efi_main.c core/er_print.c core/er_gfx_console.c core/er_ui_gop_renderer.c core/er_freestanding.c core/er_netlog.c core/er_crypto.c core/er_vfs.c core/er_app.c core/er_hw_relay.c core/er_bus.c core/er_acpi.c core/erwire.c core/wasm_vm.c core/er_pci.c core/er_mmio.c
-UI_SRCS := $(UI_CORE_DIR)/src/er_ui_primitives.c $(UI_CORE_DIR)/src/er_ui_scene.c $(UI_CORE_DIR)/src/er_ui_painter.c $(UI_CORE_DIR)/src/er_ui_theme.c $(UI_CORE_DIR)/src/er_ui_text.c
+UI_SRCS := $(UI_CORE_DIR)/src/er_ui_primitives.c $(UI_CORE_DIR)/src/er_ui_scene.c $(UI_CORE_DIR)/src/er_ui_painter.c $(UI_CORE_DIR)/src/er_ui_theme.c $(UI_CORE_DIR)/src/er_ui_text.c $(UI_CORE_DIR)/src/er_ui_components.c $(UI_CORE_DIR)/src/er_ui_node.c
 VARFONT_SRCS := $(VARFONT_DIR)/src/vr_font.c $(VARFONT_DIR)/src/vr_font_utils.c $(VARFONT_DIR)/src/vr_font_shape.c $(VARFONT_DIR)/src/vr_font_raster.c $(VARFONT_DIR)/src/vr_font_atlas.c
 OBJS := $(patsubst %.c,$(BUILD_DIR)/%.o,$(SRCS))
 UI_OBJS := $(patsubst $(UI_CORE_DIR)/src/%.c,$(BUILD_DIR)/ui-core/%.o,$(UI_SRCS))
@@ -49,7 +49,7 @@ CORE_TEST_SRC := tests/test_core.c core/er_pci.c core/er_mmio.c core/er_crypto.c
 CORE_TEST_BIN := $(BUILD_DIR)/test-core
 IFACE ?=
 
-all: wasm-modules $(FONT_BAKED_HEADER) $(EFI_OUT) $(EFI_BOOT)
+all: wasm-modules $(FONT_HEADER) $(FONT_BAKED_HEADER) $(EFI_OUT) $(EFI_BOOT)
 
 smoke:
 	$(MAKE) rebuild-profile ER_BOOT_PROFILE=0
@@ -117,7 +117,7 @@ $(FONT_BAKE_BIN): $(FONT_BAKE_SRC) $(VARFONT_SRCS) $(VARFONT_HDRS)
 $(FONT_BAKED_HEADER): $(FONT_SOURCE) $(FONT_BAKE_BIN)
 	$(FONT_BAKE_BIN) "$<" "$@"
 
-$(BUILD_DIR)/%.o: %.c $(HDRS) $(UI_HDRS) $(VARFONT_HDRS) $(WASM_MODULE_HEADERS) $(FONT_BAKED_HEADER)
+$(BUILD_DIR)/%.o: %.c $(HDRS) $(UI_HDRS) $(VARFONT_HDRS) $(WASM_MODULE_HEADERS) $(FONT_HEADER) $(FONT_BAKED_HEADER)
 	mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -c $< -o $@
 

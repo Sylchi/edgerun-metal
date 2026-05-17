@@ -7,6 +7,11 @@ static EFI_GUID g_gop_guid = {
 static ErUiGopSurface g_surface;
 static UINT8 g_ready;
 
+static UINT8 er_ui_gop_surface_render_scene_with_atlas_stats(ErUiGopSurface* surface, const er_ui_scene_t* scene, const ErUiGopAlphaAtlas* atlas, ErUiGopRenderStats* stats);
+static UINT8 er_ui_gop_clip_rect_to(const ErUiGopSurface* surface, const ErUiGopPixelRect* clip,
+                                    float x, float y, float w, float h,
+                                    UINT32* out_x0, UINT32* out_y0, UINT32* out_x1, UINT32* out_y1);
+
 static float er_ui_gop_clamp01(float value) {
   if (value < 0.0f) return 0.0f;
   if (value > 1.0f) return 1.0f;
@@ -30,6 +35,32 @@ static UINT32 er_ui_gop_texel_coord(float coord, UINT32 limit) {
   return out;
 }
 
+static void er_ui_gop_stats_add_pixels(ErUiGopRenderStats* stats, UINT64 pixels, UINT8 blended, UINT8 text) {
+  if (stats == 0 || pixels == 0u) return;
+  stats->pixels_written += pixels;
+  stats->bytes_written += pixels * 4u;
+  if (blended != 0u) stats->blend_pixels += pixels;
+  if (text != 0u) stats->text_pixels += pixels;
+}
+
+static void er_ui_gop_stats_add(ErUiGopRenderStats* dst, const ErUiGopRenderStats* src) {
+  if (dst == 0 || src == 0) return;
+  dst->pixels_written += src->pixels_written;
+  dst->bytes_written += src->bytes_written;
+  dst->blend_pixels += src->blend_pixels;
+  dst->text_pixels += src->text_pixels;
+  dst->clears += src->clears;
+  dst->rects += src->rects;
+  dst->solid_rects += src->solid_rects;
+  dst->gradient_rects += src->gradient_rects;
+  dst->border_rects += src->border_rects;
+  dst->text_quads += src->text_quads;
+  dst->tiles_rendered += src->tiles_rendered;
+  dst->dirty_tiles_requested += src->dirty_tiles_requested;
+  dst->clipped_primitives += src->clipped_primitives;
+  dst->rejected_primitives += src->rejected_primitives;
+}
+
 static INT64 er_ui_gop_floor_i64(float value) {
   INT64 truncated = (INT64)value;
   if (value < 0.0f && (float)truncated != value) {
@@ -46,16 +77,34 @@ static INT64 er_ui_gop_ceil_i64(float value) {
   return truncated;
 }
 
-static UINT8 er_ui_gop_clip_rect(const ErUiGopSurface* surface, float x, float y, float w, float h,
-                                 UINT32* out_x0, UINT32* out_y0, UINT32* out_x1, UINT32* out_y1) {
+static UINT8 er_ui_gop_clip_rect_to(const ErUiGopSurface* surface, const ErUiGopPixelRect* clip,
+                                    float x, float y, float w, float h,
+                                    UINT32* out_x0, UINT32* out_y0, UINT32* out_x1, UINT32* out_y1) {
   INT64 x0;
   INT64 y0;
   INT64 x1;
   INT64 y1;
+  UINT32 clip_x0 = 0u;
+  UINT32 clip_y0 = 0u;
+  UINT32 clip_x1;
+  UINT32 clip_y1;
 
   if (!er_ui_gop_surface_valid(surface) || out_x0 == 0 || out_y0 == 0 || out_x1 == 0 || out_y1 == 0 ||
       !(w > 0.0f) || !(h > 0.0f)) {
     return 0u;
+  }
+  clip_x1 = surface->width;
+  clip_y1 = surface->height;
+  if (clip != 0) {
+    clip_x0 = clip->x0;
+    clip_y0 = clip->y0;
+    clip_x1 = clip->x1;
+    clip_y1 = clip->y1;
+    if (clip_x0 > surface->width) clip_x0 = surface->width;
+    if (clip_y0 > surface->height) clip_y0 = surface->height;
+    if (clip_x1 > surface->width) clip_x1 = surface->width;
+    if (clip_y1 > surface->height) clip_y1 = surface->height;
+    if (clip_x0 >= clip_x1 || clip_y0 >= clip_y1) return 0u;
   }
 
   x0 = er_ui_gop_floor_i64(x);
@@ -63,10 +112,10 @@ static UINT8 er_ui_gop_clip_rect(const ErUiGopSurface* surface, float x, float y
   x1 = er_ui_gop_ceil_i64(x + w);
   y1 = er_ui_gop_ceil_i64(y + h);
 
-  if (x0 < 0) x0 = 0;
-  if (y0 < 0) y0 = 0;
-  if (x1 > (INT64)surface->width) x1 = (INT64)surface->width;
-  if (y1 > (INT64)surface->height) y1 = (INT64)surface->height;
+  if (x0 < (INT64)clip_x0) x0 = (INT64)clip_x0;
+  if (y0 < (INT64)clip_y0) y0 = (INT64)clip_y0;
+  if (x1 > (INT64)clip_x1) x1 = (INT64)clip_x1;
+  if (y1 > (INT64)clip_y1) y1 = (INT64)clip_y1;
   if (x0 >= x1 || y0 >= y1) return 0u;
 
   *out_x0 = (UINT32)x0;
@@ -110,10 +159,13 @@ static UINT32 er_ui_gop_blend_pixel(ErUiGopPixelFormat format, UINT32 dst, er_ui
 }
 
 static void er_ui_gop_fill_rect(ErUiGopSurface* surface, UINT32 x0, UINT32 y0, UINT32 x1, UINT32 y1,
-                                er_ui_color4_t color) {
+                                er_ui_color4_t color, ErUiGopRenderStats* stats) {
   UINT32 y;
   UINT32 x;
+  UINT64 pixels;
 
+  pixels = (UINT64)(x1 - x0) * (UINT64)(y1 - y0);
+  er_ui_gop_stats_add_pixels(stats, pixels, color.a < 1.0f ? 1u : 0u, 0u);
   for (y = y0; y < y1; ++y) {
     UINT32* row = surface->pixels + ((UINTN)y * (UINTN)surface->stride);
     for (x = x0; x < x1; ++x) {
@@ -133,52 +185,71 @@ static er_ui_color4_t er_ui_gop_lerp_color(er_ui_color4_t a, er_ui_color4_t b, f
 }
 
 static void er_ui_gop_gradient_rect(ErUiGopSurface* surface, UINT32 x0, UINT32 y0, UINT32 x1, UINT32 y1,
-                                    er_ui_color4_t from, er_ui_color4_t to) {
+                                    float source_x, float source_w,
+                                    er_ui_color4_t from, er_ui_color4_t to, ErUiGopRenderStats* stats) {
   UINT32 y;
   UINT32 x;
-  UINT32 span = x1 > x0 + 1u ? x1 - x0 - 1u : 1u;
+  float span = source_w > 1.0f ? source_w - 1.0f : 1.0f;
+  UINT64 pixels = (UINT64)(x1 - x0) * (UINT64)(y1 - y0);
 
+  er_ui_gop_stats_add_pixels(stats, pixels, (from.a < 1.0f || to.a < 1.0f) ? 1u : 0u, 0u);
   for (y = y0; y < y1; ++y) {
     UINT32* row = surface->pixels + ((UINTN)y * (UINTN)surface->stride);
     for (x = x0; x < x1; ++x) {
-      er_ui_color4_t color = er_ui_gop_lerp_color(from, to, (float)(x - x0) / (float)span);
+      er_ui_color4_t color = er_ui_gop_lerp_color(from, to, ((float)x - source_x) / span);
       row[x] = er_ui_gop_blend_pixel(surface->pixel_format, row[x], color);
     }
   }
 }
 
 static void er_ui_gop_border_rect(ErUiGopSurface* surface, UINT32 x0, UINT32 y0, UINT32 x1, UINT32 y1,
-                                  er_ui_color4_t color) {
+                                  er_ui_color4_t color, ErUiGopRenderStats* stats) {
   if (x0 >= x1 || y0 >= y1) return;
-  er_ui_gop_fill_rect(surface, x0, y0, x1, y0 + 1u, color);
-  if (y1 > y0 + 1u) er_ui_gop_fill_rect(surface, x0, y1 - 1u, x1, y1, color);
+  er_ui_gop_fill_rect(surface, x0, y0, x1, y0 + 1u, color, stats);
+  if (y1 > y0 + 1u) er_ui_gop_fill_rect(surface, x0, y1 - 1u, x1, y1, color, stats);
   if (y1 > y0 + 2u) {
-    er_ui_gop_fill_rect(surface, x0, y0 + 1u, x0 + 1u, y1 - 1u, color);
-    if (x1 > x0 + 1u) er_ui_gop_fill_rect(surface, x1 - 1u, y0 + 1u, x1, y1 - 1u, color);
+    er_ui_gop_fill_rect(surface, x0, y0 + 1u, x0 + 1u, y1 - 1u, color, stats);
+    if (x1 > x0 + 1u) er_ui_gop_fill_rect(surface, x1 - 1u, y0 + 1u, x1, y1 - 1u, color, stats);
   }
 }
 
-static void er_ui_gop_render_rect(ErUiGopSurface* surface, er_ui_rect_t rect) {
+static void er_ui_gop_render_rect(ErUiGopSurface* surface, er_ui_rect_t rect,
+                                  const ErUiGopPixelRect* clip, ErUiGopRenderStats* stats) {
   UINT32 x0;
   UINT32 y0;
   UINT32 x1;
   UINT32 y1;
+  UINT32 full_x0;
+  UINT32 full_y0;
+  UINT32 full_x1;
+  UINT32 full_y1;
 
-  if (er_ui_gop_clip_rect(surface, rect.x, rect.y, rect.w, rect.h, &x0, &y0, &x1, &y1) == 0u) {
+  if (er_ui_gop_clip_rect_to(surface, clip, rect.x, rect.y, rect.w, rect.h, &x0, &y0, &x1, &y1) == 0u) {
+    if (clip != 0 && stats != 0) ++stats->rejected_primitives;
     return;
   }
+  if (clip != 0 && stats != 0 &&
+      er_ui_gop_clip_rect_to(surface, 0, rect.x, rect.y, rect.w, rect.h,
+                             &full_x0, &full_y0, &full_x1, &full_y1) != 0u &&
+      (x0 != full_x0 || y0 != full_y0 || x1 != full_x1 || y1 != full_y1)) {
+    ++stats->clipped_primitives;
+  }
 
+  if (stats != 0) ++stats->rects;
   switch (rect.mode) {
     case ER_UI_RECT_BORDER:
-      er_ui_gop_border_rect(surface, x0, y0, x1, y1, rect.color);
+      if (stats != 0) ++stats->border_rects;
+      er_ui_gop_border_rect(surface, x0, y0, x1, y1, rect.color, stats);
       break;
     case ER_UI_RECT_LINEAR_GRADIENT:
-      er_ui_gop_gradient_rect(surface, x0, y0, x1, y1, rect.color, rect.color2);
+      if (stats != 0) ++stats->gradient_rects;
+      er_ui_gop_gradient_rect(surface, x0, y0, x1, y1, rect.x, rect.w, rect.color, rect.color2, stats);
       break;
     case ER_UI_RECT_SHADOW:
     case ER_UI_RECT_FILL:
     default:
-      er_ui_gop_fill_rect(surface, x0, y0, x1, y1, rect.color);
+      if (stats != 0) ++stats->solid_rects;
+      er_ui_gop_fill_rect(surface, x0, y0, x1, y1, rect.color, stats);
       break;
   }
 }
@@ -253,7 +324,10 @@ static UINT8 er_ui_gop_sample_boot_atlas_alpha(const ErUiGopAlphaAtlas* atlas, f
   return atlas->pixels[((UINTN)y * (UINTN)atlas->width + (UINTN)x) * atlas->bytes_per_pixel];
 }
 
-static void er_ui_gop_render_text_quad_with_alpha_atlas(ErUiGopSurface* surface, const er_ui_quad_t* quad, const ErUiGopAlphaAtlas* atlas) {
+static void er_ui_gop_render_text_quad_with_alpha_atlas(ErUiGopSurface* surface, const er_ui_quad_t* quad,
+                                                        const ErUiGopAlphaAtlas* atlas,
+                                                        const ErUiGopPixelRect* clip,
+                                                        ErUiGopRenderStats* stats) {
   UINT32 x0;
   UINT32 y0;
   UINT32 x1;
@@ -262,13 +336,26 @@ static void er_ui_gop_render_text_quad_with_alpha_atlas(ErUiGopSurface* surface,
   UINT32 x;
   float width;
   float height;
+  UINT32 full_x0;
+  UINT32 full_y0;
+  UINT32 full_x1;
+  UINT32 full_y1;
 
-  if (quad == 0 || atlas == 0 || er_ui_gop_clip_rect(surface, quad->x, quad->y, quad->w, quad->h, &x0, &y0, &x1, &y1) == 0u) {
+  if (quad == 0 || atlas == 0 ||
+      er_ui_gop_clip_rect_to(surface, clip, quad->x, quad->y, quad->w, quad->h, &x0, &y0, &x1, &y1) == 0u) {
+    if (quad != 0 && atlas != 0 && clip != 0 && stats != 0) ++stats->rejected_primitives;
     return;
+  }
+  if (clip != 0 && stats != 0 &&
+      er_ui_gop_clip_rect_to(surface, 0, quad->x, quad->y, quad->w, quad->h,
+                             &full_x0, &full_y0, &full_x1, &full_y1) != 0u &&
+      (x0 != full_x0 || y0 != full_y0 || x1 != full_x1 || y1 != full_y1)) {
+    ++stats->clipped_primitives;
   }
 
   width = quad->w > 1.0f ? quad->w : 1.0f;
   height = quad->h > 1.0f ? quad->h : 1.0f;
+  if (stats != 0) ++stats->text_quads;
   for (y = y0; y < y1; ++y) {
     UINT32* row = surface->pixels + ((UINTN)y * (UINTN)surface->stride);
     float ty = ((float)y + 0.5f - quad->y) / height;
@@ -280,13 +367,16 @@ static void er_ui_gop_render_text_quad_with_alpha_atlas(ErUiGopSurface* surface,
       if (alpha != 0u) {
         er_ui_color4_t color = quad->color;
         color.a *= (float)alpha / 255.0f;
+        er_ui_gop_stats_add_pixels(stats, 1u, color.a < 1.0f ? 1u : 0u, 1u);
         row[x] = er_ui_gop_blend_pixel(surface->pixel_format, row[x], color);
       }
     }
   }
 }
 
-static void er_ui_gop_render_text_quad(ErUiGopSurface* surface, const er_ui_quad_t* quad, const vr_font_face_t* font) {
+static void er_ui_gop_render_text_quad(ErUiGopSurface* surface, const er_ui_quad_t* quad,
+                                       const vr_font_face_t* font, const ErUiGopPixelRect* clip,
+                                       ErUiGopRenderStats* stats) {
   UINT32 x0;
   UINT32 y0;
   UINT32 x1;
@@ -296,9 +386,21 @@ static void er_ui_gop_render_text_quad(ErUiGopSurface* surface, const er_ui_quad
   UINT32 x;
   float width;
   float height;
+  UINT32 full_x0;
+  UINT32 full_y0;
+  UINT32 full_x1;
+  UINT32 full_y1;
 
-  if (quad == 0 || font == 0 || er_ui_gop_clip_rect(surface, quad->x, quad->y, quad->w, quad->h, &x0, &y0, &x1, &y1) == 0u) {
+  if (quad == 0 || font == 0 ||
+      er_ui_gop_clip_rect_to(surface, clip, quad->x, quad->y, quad->w, quad->h, &x0, &y0, &x1, &y1) == 0u) {
+    if (quad != 0 && font != 0 && clip != 0 && stats != 0) ++stats->rejected_primitives;
     return;
+  }
+  if (clip != 0 && stats != 0 &&
+      er_ui_gop_clip_rect_to(surface, 0, quad->x, quad->y, quad->w, quad->h,
+                             &full_x0, &full_y0, &full_x1, &full_y1) != 0u &&
+      (x0 != full_x0 || y0 != full_y0 || x1 != full_x1 || y1 != full_y1)) {
+    ++stats->clipped_primitives;
   }
   if (vr_font_atlas_view(font, quad->atlas_id, &atlas) != VR_OK) {
     return;
@@ -306,6 +408,7 @@ static void er_ui_gop_render_text_quad(ErUiGopSurface* surface, const er_ui_quad
 
   width = quad->w > 1.0f ? quad->w : 1.0f;
   height = quad->h > 1.0f ? quad->h : 1.0f;
+  if (stats != 0) ++stats->text_quads;
   for (y = y0; y < y1; ++y) {
     UINT32* row = surface->pixels + ((UINTN)y * (UINTN)surface->stride);
     float ty = ((float)y + 0.5f - quad->y) / height;
@@ -317,6 +420,7 @@ static void er_ui_gop_render_text_quad(ErUiGopSurface* surface, const er_ui_quad
       if (alpha != 0u) {
         er_ui_color4_t color = quad->color;
         color.a *= (float)alpha / 255.0f;
+        er_ui_gop_stats_add_pixels(stats, 1u, color.a < 1.0f ? 1u : 0u, 1u);
         row[x] = er_ui_gop_blend_pixel(surface->pixel_format, row[x], color);
       }
     }
@@ -329,6 +433,568 @@ UINT8 er_ui_gop_surface_valid(const ErUiGopSurface* surface) {
          (surface->pixel_format == ER_UI_GOP_PIXEL_RGBX || surface->pixel_format == ER_UI_GOP_PIXEL_BGRX);
 }
 
+UINT8 er_ui_gop_mode_valid(const ErUiGopMode* mode) {
+  return mode != 0 && mode->width > 0u && mode->height > 0u && mode->stride >= mode->width &&
+         mode->refresh_hz > 0u &&
+         (mode->pixel_format == ER_UI_GOP_PIXEL_RGBX || mode->pixel_format == ER_UI_GOP_PIXEL_BGRX);
+}
+
+static UINT32 er_ui_gop_div_ceil_u32(UINT32 value, UINT32 divisor) {
+  return (value + divisor - 1u) / divisor;
+}
+
+static UINT8 er_ui_gop_add_u64(UINT64 a, UINT64 b, UINT64* out) {
+  if (out == 0 || a > 0xffffffffffffffffull - b) {
+    return 0u;
+  }
+  *out = a + b;
+  return 1u;
+}
+
+static UINT8 er_ui_gop_mul_u64(UINT64 a, UINT64 b, UINT64* out) {
+  if (out == 0 || (a != 0u && b > 0xffffffffffffffffull / a)) {
+    return 0u;
+  }
+  *out = a * b;
+  return 1u;
+}
+
+UINT8 er_ui_gop_tile_plan_from_mode(const ErUiGopMode* mode, UINT32 tile_width, UINT32 tile_height,
+                                    UINT32 max_dirty_tiles, ErUiGopTilePlan* out_plan) {
+  UINT32 columns;
+  UINT32 rows;
+  UINT64 tile_count;
+
+  if (out_plan != 0) {
+    *out_plan = (ErUiGopTilePlan){0};
+  }
+  if (er_ui_gop_mode_valid(mode) == 0u || tile_width == 0u || tile_height == 0u ||
+      max_dirty_tiles == 0u || out_plan == 0) {
+    return 0u;
+  }
+
+  columns = er_ui_gop_div_ceil_u32(mode->width, tile_width);
+  rows = er_ui_gop_div_ceil_u32(mode->height, tile_height);
+  tile_count = (UINT64)columns * (UINT64)rows;
+  if ((UINT64)max_dirty_tiles > tile_count) {
+    max_dirty_tiles = (UINT32)tile_count;
+  }
+
+  out_plan->width = mode->width;
+  out_plan->height = mode->height;
+  out_plan->stride = mode->stride;
+  out_plan->bytes_per_pixel = 4u;
+  out_plan->tile_width = tile_width;
+  out_plan->tile_height = tile_height;
+  out_plan->columns = columns;
+  out_plan->rows = rows;
+  out_plan->max_dirty_tiles = max_dirty_tiles;
+  out_plan->tile_count = tile_count;
+  out_plan->scanout_bytes = (UINT64)mode->stride * (UINT64)mode->height * 4u;
+  out_plan->full_frame_bytes = (UINT64)mode->width * (UINT64)mode->height * 4u;
+  out_plan->max_tile_bytes = (UINT64)tile_width * (UINT64)tile_height * 4u;
+  out_plan->tile_state_bytes = tile_count;
+  out_plan->dirty_queue_bytes = (UINT64)max_dirty_tiles * 4u;
+  return 1u;
+}
+
+UINT8 er_ui_gop_tile_plan(const ErUiGopSurface* surface, UINT32 tile_width, UINT32 tile_height,
+                          UINT32 max_dirty_tiles, ErUiGopTilePlan* out_plan) {
+  ErUiGopMode mode;
+
+  if (er_ui_gop_surface_valid(surface) == 0u) {
+    if (out_plan != 0) {
+      *out_plan = (ErUiGopTilePlan){0};
+    }
+    return 0u;
+  }
+
+  mode.width = surface->width;
+  mode.height = surface->height;
+  mode.stride = surface->stride;
+  mode.refresh_hz = 1u;
+  mode.pixel_format = surface->pixel_format;
+  return er_ui_gop_tile_plan_from_mode(&mode, tile_width, tile_height, max_dirty_tiles, out_plan);
+}
+
+UINT8 er_ui_gop_bandwidth_plan_from_mode(const ErUiGopMode* mode, UINT32 overdraw_budget,
+                                         ErUiGopBandwidthPlan* out_plan) {
+  UINT64 scanout_bytes;
+  UINT64 full_frame_bytes;
+  UINT64 scanout_bytes_per_second;
+  UINT64 full_frame_bytes_per_second;
+  UINT64 budget_bytes_per_second;
+
+  if (out_plan != 0) {
+    *out_plan = (ErUiGopBandwidthPlan){0};
+  }
+  if (er_ui_gop_mode_valid(mode) == 0u || overdraw_budget == 0u || out_plan == 0) {
+    return 0u;
+  }
+  if (er_ui_gop_mul_u64((UINT64)mode->stride, (UINT64)mode->height, &scanout_bytes) == 0u ||
+      er_ui_gop_mul_u64(scanout_bytes, 4u, &scanout_bytes) == 0u ||
+      er_ui_gop_mul_u64((UINT64)mode->width, (UINT64)mode->height, &full_frame_bytes) == 0u ||
+      er_ui_gop_mul_u64(full_frame_bytes, 4u, &full_frame_bytes) == 0u ||
+      er_ui_gop_mul_u64(scanout_bytes, (UINT64)mode->refresh_hz, &scanout_bytes_per_second) == 0u ||
+      er_ui_gop_mul_u64(full_frame_bytes, (UINT64)mode->refresh_hz, &full_frame_bytes_per_second) == 0u ||
+      er_ui_gop_mul_u64(full_frame_bytes_per_second, (UINT64)overdraw_budget, &budget_bytes_per_second) == 0u) {
+    return 0u;
+  }
+
+  out_plan->refresh_hz = mode->refresh_hz;
+  out_plan->overdraw_budget = overdraw_budget;
+  out_plan->scanout_bytes_per_second = scanout_bytes_per_second;
+  out_plan->full_frame_bytes_per_second = full_frame_bytes_per_second;
+  out_plan->budget_bytes_per_second = budget_bytes_per_second;
+  return 1u;
+}
+
+UINT8 er_ui_gop_memory_plan_from_tile_plan(const ErUiGopTilePlan* tile_plan, UINT32 backing_buffer_count,
+                                           UINT64 command_bytes, UINT64 glyph_cache_bytes,
+                                           UINT64 surface_bytes, ErUiGopMemoryPlan* out_plan) {
+  UINT64 backing_bytes;
+  UINT64 total;
+
+  if (out_plan != 0) {
+    *out_plan = (ErUiGopMemoryPlan){0};
+  }
+  if (tile_plan == 0 || out_plan == 0 || tile_plan->tile_count == 0u) {
+    return 0u;
+  }
+  if (er_ui_gop_mul_u64(tile_plan->scanout_bytes, (UINT64)backing_buffer_count, &backing_bytes) == 0u) {
+    return 0u;
+  }
+
+  total = tile_plan->scanout_bytes;
+  if (er_ui_gop_add_u64(total, backing_bytes, &total) == 0u ||
+      er_ui_gop_add_u64(total, tile_plan->tile_state_bytes, &total) == 0u ||
+      er_ui_gop_add_u64(total, tile_plan->dirty_queue_bytes, &total) == 0u ||
+      er_ui_gop_add_u64(total, command_bytes, &total) == 0u ||
+      er_ui_gop_add_u64(total, glyph_cache_bytes, &total) == 0u ||
+      er_ui_gop_add_u64(total, surface_bytes, &total) == 0u) {
+    return 0u;
+  }
+
+  out_plan->backing_buffer_count = backing_buffer_count;
+  out_plan->scanout_bytes = tile_plan->scanout_bytes;
+  out_plan->backing_bytes = backing_bytes;
+  out_plan->tile_state_bytes = tile_plan->tile_state_bytes;
+  out_plan->dirty_queue_bytes = tile_plan->dirty_queue_bytes;
+  out_plan->command_bytes = command_bytes;
+  out_plan->glyph_cache_bytes = glyph_cache_bytes;
+  out_plan->surface_bytes = surface_bytes;
+  out_plan->total_bytes = total;
+  return 1u;
+}
+
+UINT8 er_ui_gop_memory_plan_first_budget_violation(ErUiGopMemoryPlan plan, ErUiGopMemoryBudget budget,
+                                                   ErUiGopMemoryBudgetViolation* out_violation) {
+  static const char* const names[] = {
+    "scanout_bytes",
+    "backing_bytes",
+    "tile_state_bytes",
+    "dirty_queue_bytes",
+    "command_bytes",
+    "glyph_cache_bytes",
+    "surface_bytes",
+    "total_bytes"
+  };
+  const UINT64 actual[] = {
+    plan.scanout_bytes,
+    plan.backing_bytes,
+    plan.tile_state_bytes,
+    plan.dirty_queue_bytes,
+    plan.command_bytes,
+    plan.glyph_cache_bytes,
+    plan.surface_bytes,
+    plan.total_bytes
+  };
+  const UINT64 limits[] = {
+    budget.scanout_bytes,
+    budget.backing_bytes,
+    budget.tile_state_bytes,
+    budget.dirty_queue_bytes,
+    budget.command_bytes,
+    budget.glyph_cache_bytes,
+    budget.surface_bytes,
+    budget.total_bytes
+  };
+  const UINTN count = (UINTN)(sizeof(actual) / sizeof(actual[0]));
+  UINTN i;
+
+  for (i = 0u; i < count; ++i) {
+    if (actual[i] > limits[i]) {
+      if (out_violation != 0) {
+        out_violation->name = names[i];
+        out_violation->actual = actual[i];
+        out_violation->limit = limits[i];
+      }
+      return 1u;
+    }
+  }
+  return 0u;
+}
+
+UINT8 er_ui_gop_memory_plan_fits_budget(ErUiGopMemoryPlan plan, ErUiGopMemoryBudget budget) {
+  return er_ui_gop_memory_plan_first_budget_violation(plan, budget, 0) == 0u;
+}
+
+UINT8 er_ui_gop_tile_rect(const ErUiGopTilePlan* plan, UINT32 tile_id, ErUiGopPixelRect* out_rect) {
+  UINT32 tx;
+  UINT32 ty;
+
+  if (out_rect != 0) {
+    *out_rect = (ErUiGopPixelRect){0};
+  }
+  if (plan == 0 || out_rect == 0 || plan->tile_count == 0u || (UINT64)tile_id >= plan->tile_count ||
+      plan->columns == 0u || plan->tile_width == 0u || plan->tile_height == 0u) {
+    return 0u;
+  }
+
+  tx = tile_id % plan->columns;
+  ty = tile_id / plan->columns;
+  out_rect->x0 = tx * plan->tile_width;
+  out_rect->y0 = ty * plan->tile_height;
+  out_rect->x1 = out_rect->x0 + plan->tile_width;
+  out_rect->y1 = out_rect->y0 + plan->tile_height;
+  if (out_rect->x1 > plan->width) out_rect->x1 = plan->width;
+  if (out_rect->y1 > plan->height) out_rect->y1 = plan->height;
+  return out_rect->x0 < out_rect->x1 && out_rect->y0 < out_rect->y1;
+}
+
+UINT8 er_ui_gop_dirty_tiles_reset(const ErUiGopTilePlan* plan, UINT8* tile_marks,
+                                  UINT64 tile_mark_count, ErUiGopDirtyTileList* list) {
+  UINT64 i;
+
+  if (plan == 0 || tile_marks == 0 || list == 0 || list->tile_ids == 0 ||
+      plan->tile_count == 0u || plan->tile_count > tile_mark_count ||
+      plan->tile_count > 0xffffffffu || list->capacity < plan->max_dirty_tiles) {
+    return 0u;
+  }
+
+  for (i = 0u; i < plan->tile_count; ++i) {
+    tile_marks[i] = 0u;
+  }
+  list->count = 0u;
+  list->overflowed = 0u;
+  return 1u;
+}
+
+UINT8 er_ui_gop_dirty_tiles_mark_rect(const ErUiGopTilePlan* plan, float x, float y, float w, float h,
+                                      UINT8* tile_marks, UINT64 tile_mark_count,
+                                      ErUiGopDirtyTileList* list) {
+  INT64 x0;
+  INT64 y0;
+  INT64 x1;
+  INT64 y1;
+  UINT32 tx0;
+  UINT32 ty0;
+  UINT32 tx1;
+  UINT32 ty1;
+  UINT32 ty;
+  UINT32 tx;
+
+  if (plan == 0 || tile_marks == 0 || list == 0 || list->tile_ids == 0 ||
+      plan->tile_count == 0u || plan->tile_count > tile_mark_count ||
+      plan->tile_count > 0xffffffffu || !(w > 0.0f) || !(h > 0.0f)) {
+    return 0u;
+  }
+
+  x0 = er_ui_gop_floor_i64(x);
+  y0 = er_ui_gop_floor_i64(y);
+  x1 = er_ui_gop_ceil_i64(x + w);
+  y1 = er_ui_gop_ceil_i64(y + h);
+  if (x0 < 0) x0 = 0;
+  if (y0 < 0) y0 = 0;
+  if (x1 > (INT64)plan->width) x1 = (INT64)plan->width;
+  if (y1 > (INT64)plan->height) y1 = (INT64)plan->height;
+  if (x0 >= x1 || y0 >= y1) {
+    return 1u;
+  }
+
+  tx0 = (UINT32)x0 / plan->tile_width;
+  ty0 = (UINT32)y0 / plan->tile_height;
+  tx1 = er_ui_gop_div_ceil_u32((UINT32)x1, plan->tile_width);
+  ty1 = er_ui_gop_div_ceil_u32((UINT32)y1, plan->tile_height);
+  if (tx1 > plan->columns) tx1 = plan->columns;
+  if (ty1 > plan->rows) ty1 = plan->rows;
+
+  for (ty = ty0; ty < ty1; ++ty) {
+    for (tx = tx0; tx < tx1; ++tx) {
+      UINT64 tile_id64 = (UINT64)ty * (UINT64)plan->columns + (UINT64)tx;
+      UINT32 tile_id = (UINT32)tile_id64;
+      if (tile_id64 >= plan->tile_count || tile_marks[tile_id] != 0u) {
+        continue;
+      }
+      tile_marks[tile_id] = 1u;
+      if (list->count < list->capacity && list->count < plan->max_dirty_tiles) {
+        list->tile_ids[list->count++] = tile_id;
+      } else {
+        list->overflowed = 1u;
+      }
+    }
+  }
+  return 1u;
+}
+
+static UINT8 er_ui_gop_color_equal(er_ui_color4_t a, er_ui_color4_t b) {
+  return a.r == b.r && a.g == b.g && a.b == b.b && a.a == b.a;
+}
+
+static UINT8 er_ui_gop_rect_equal(er_ui_rect_t a, er_ui_rect_t b) {
+  return a.x == b.x && a.y == b.y && a.w == b.w && a.h == b.h &&
+         a.radius == b.radius && a.mode == b.mode && a.shadow == b.shadow &&
+         er_ui_gop_color_equal(a.color, b.color) != 0u &&
+         er_ui_gop_color_equal(a.color2, b.color2) != 0u;
+}
+
+static UINT8 er_ui_gop_quad_equal(er_ui_quad_t a, er_ui_quad_t b) {
+  return a.x == b.x && a.y == b.y && a.w == b.w && a.h == b.h &&
+         a.u0 == b.u0 && a.v0 == b.v0 && a.u1 == b.u1 && a.v1 == b.v1 &&
+         a.atlas_id == b.atlas_id && er_ui_gop_color_equal(a.color, b.color) != 0u;
+}
+
+static UINT8 er_ui_gop_dirty_mark_quad(const ErUiGopTilePlan* plan, er_ui_quad_t quad,
+                                       UINT8* tile_marks, UINT64 tile_mark_count,
+                                       ErUiGopDirtyTileList* list) {
+  return er_ui_gop_dirty_tiles_mark_rect(plan, quad.x, quad.y, quad.w, quad.h,
+                                         tile_marks, tile_mark_count, list);
+}
+
+UINT8 er_ui_gop_dirty_tiles_mark_scene(const ErUiGopTilePlan* plan, const er_ui_scene_t* scene,
+                                       UINT8* tile_marks, UINT64 tile_mark_count,
+                                       ErUiGopDirtyTileList* list) {
+  size_t i;
+
+  if (plan == 0 || scene == 0) {
+    return 0u;
+  }
+
+  for (i = 0u; i < scene->rect_count; ++i) {
+    er_ui_rect_t rect = scene->rects[i];
+    if (er_ui_gop_dirty_tiles_mark_rect(plan, rect.x, rect.y, rect.w, rect.h,
+                                        tile_marks, tile_mark_count, list) == 0u) {
+      return 0u;
+    }
+  }
+  for (i = 0u; i < scene->icon_quad_count; ++i) {
+    if (er_ui_gop_dirty_mark_quad(plan, scene->icon_quads[i], tile_marks, tile_mark_count, list) == 0u) {
+      return 0u;
+    }
+  }
+  for (i = 0u; i < scene->text_quad_count; ++i) {
+    if (er_ui_gop_dirty_mark_quad(plan, scene->text_quads[i], tile_marks, tile_mark_count, list) == 0u) {
+      return 0u;
+    }
+  }
+  return 1u;
+}
+
+UINT8 er_ui_gop_dirty_tiles_mark_scene_diff(const ErUiGopTilePlan* plan, const er_ui_scene_t* prev,
+                                            const er_ui_scene_t* next, UINT8* tile_marks,
+                                            UINT64 tile_mark_count, ErUiGopDirtyTileList* list) {
+  size_t i;
+  size_t common;
+
+  if (plan == 0 || prev == 0 || next == 0) {
+    return 0u;
+  }
+
+  if (er_ui_gop_color_equal(prev->clear, next->clear) == 0u) {
+    return er_ui_gop_dirty_tiles_mark_rect(plan, 0.0f, 0.0f, (float)plan->width, (float)plan->height,
+                                           tile_marks, tile_mark_count, list);
+  }
+
+  common = prev->rect_count < next->rect_count ? prev->rect_count : next->rect_count;
+  for (i = 0u; i < common; ++i) {
+    if (er_ui_gop_rect_equal(prev->rects[i], next->rects[i]) == 0u) {
+      er_ui_rect_t prev_rect = prev->rects[i];
+      er_ui_rect_t next_rect = next->rects[i];
+      if (er_ui_gop_dirty_tiles_mark_rect(plan, prev_rect.x, prev_rect.y, prev_rect.w, prev_rect.h,
+                                          tile_marks, tile_mark_count, list) == 0u ||
+          er_ui_gop_dirty_tiles_mark_rect(plan, next_rect.x, next_rect.y, next_rect.w, next_rect.h,
+                                          tile_marks, tile_mark_count, list) == 0u) {
+        return 0u;
+      }
+    }
+  }
+  for (i = common; i < prev->rect_count; ++i) {
+    er_ui_rect_t rect = prev->rects[i];
+    if (er_ui_gop_dirty_tiles_mark_rect(plan, rect.x, rect.y, rect.w, rect.h,
+                                        tile_marks, tile_mark_count, list) == 0u) {
+      return 0u;
+    }
+  }
+  for (i = common; i < next->rect_count; ++i) {
+    er_ui_rect_t rect = next->rects[i];
+    if (er_ui_gop_dirty_tiles_mark_rect(plan, rect.x, rect.y, rect.w, rect.h,
+                                        tile_marks, tile_mark_count, list) == 0u) {
+      return 0u;
+    }
+  }
+
+  common = prev->icon_quad_count < next->icon_quad_count ? prev->icon_quad_count : next->icon_quad_count;
+  for (i = 0u; i < common; ++i) {
+    if (er_ui_gop_quad_equal(prev->icon_quads[i], next->icon_quads[i]) == 0u) {
+      if (er_ui_gop_dirty_mark_quad(plan, prev->icon_quads[i], tile_marks, tile_mark_count, list) == 0u ||
+          er_ui_gop_dirty_mark_quad(plan, next->icon_quads[i], tile_marks, tile_mark_count, list) == 0u) {
+        return 0u;
+      }
+    }
+  }
+  for (i = common; i < prev->icon_quad_count; ++i) {
+    if (er_ui_gop_dirty_mark_quad(plan, prev->icon_quads[i], tile_marks, tile_mark_count, list) == 0u) {
+      return 0u;
+    }
+  }
+  for (i = common; i < next->icon_quad_count; ++i) {
+    if (er_ui_gop_dirty_mark_quad(plan, next->icon_quads[i], tile_marks, tile_mark_count, list) == 0u) {
+      return 0u;
+    }
+  }
+
+  common = prev->text_quad_count < next->text_quad_count ? prev->text_quad_count : next->text_quad_count;
+  for (i = 0u; i < common; ++i) {
+    if (er_ui_gop_quad_equal(prev->text_quads[i], next->text_quads[i]) == 0u) {
+      if (er_ui_gop_dirty_mark_quad(plan, prev->text_quads[i], tile_marks, tile_mark_count, list) == 0u ||
+          er_ui_gop_dirty_mark_quad(plan, next->text_quads[i], tile_marks, tile_mark_count, list) == 0u) {
+        return 0u;
+      }
+    }
+  }
+  for (i = common; i < prev->text_quad_count; ++i) {
+    if (er_ui_gop_dirty_mark_quad(plan, prev->text_quads[i], tile_marks, tile_mark_count, list) == 0u) {
+      return 0u;
+    }
+  }
+  for (i = common; i < next->text_quad_count; ++i) {
+    if (er_ui_gop_dirty_mark_quad(plan, next->text_quads[i], tile_marks, tile_mark_count, list) == 0u) {
+      return 0u;
+    }
+  }
+
+  return 1u;
+}
+
+void er_ui_gop_frame_state_reset(ErUiGopFrameState* state) {
+  if (state != 0) {
+    *state = (ErUiGopFrameState){0};
+  }
+}
+
+UINT8 er_ui_gop_frame_dirty_tiles(const ErUiGopFrameState* state, const ErUiGopTilePlan* plan,
+                                  const er_ui_scene_t* prev, const er_ui_scene_t* next,
+                                  UINT8* tile_marks, UINT64 tile_mark_count,
+                                  ErUiGopDirtyTileList* list) {
+  UINT8 has_previous;
+
+  if (state == 0 || plan == 0 || next == 0) {
+    return 0u;
+  }
+  if (er_ui_gop_dirty_tiles_reset(plan, tile_marks, tile_mark_count, list) == 0u) {
+    return 0u;
+  }
+
+  has_previous = state->has_previous_scene != 0u && prev != 0;
+  if (has_previous == 0u) {
+    return er_ui_gop_dirty_tiles_mark_rect(plan, 0.0f, 0.0f, (float)plan->width, (float)plan->height,
+                                           tile_marks, tile_mark_count, list) != 0u &&
+           er_ui_gop_dirty_tiles_mark_scene(plan, next, tile_marks, tile_mark_count, list) != 0u;
+  }
+
+  return er_ui_gop_dirty_tiles_mark_scene_diff(plan, prev, next, tile_marks, tile_mark_count, list);
+}
+
+void er_ui_gop_frame_state_commit(ErUiGopFrameState* state) {
+  if (state != 0) {
+    state->has_previous_scene = 1u;
+  }
+}
+
+ErUiGopFrameBudget er_ui_gop_frame_budget_from_plan(const ErUiGopTilePlan* tile_plan,
+                                                    er_ui_scene_budget_t scene_budget,
+                                                    UINT32 overdraw_budget) {
+  ErUiGopFrameBudget budget = {0};
+  UINT64 frame_pixels;
+  UINT64 primitive_limit;
+
+  if (tile_plan == 0 || overdraw_budget == 0u) {
+    return budget;
+  }
+
+  frame_pixels = (UINT64)tile_plan->width * (UINT64)tile_plan->height;
+  primitive_limit = (UINT64)scene_budget.rects + (UINT64)scene_budget.text_quads;
+  budget.pixels_written = frame_pixels * (UINT64)overdraw_budget;
+  budget.bytes_written = tile_plan->full_frame_bytes * (UINT64)overdraw_budget;
+  budget.blend_pixels = frame_pixels * (UINT64)overdraw_budget;
+  budget.text_pixels = frame_pixels;
+  budget.rects = (UINT64)scene_budget.rects;
+  budget.text_quads = (UINT64)scene_budget.text_quads;
+  budget.tiles_rendered = tile_plan->tile_count;
+  budget.dirty_tiles_requested = (UINT64)tile_plan->max_dirty_tiles;
+  budget.clipped_primitives = primitive_limit * tile_plan->tile_count;
+  budget.rejected_primitives = primitive_limit * tile_plan->tile_count;
+  return budget;
+}
+
+UINT8 er_ui_gop_render_stats_first_budget_violation(ErUiGopRenderStats stats, ErUiGopFrameBudget budget,
+                                                    ErUiGopFrameBudgetViolation* out_violation) {
+  static const char* const names[] = {
+    "pixels_written",
+    "bytes_written",
+    "blend_pixels",
+    "text_pixels",
+    "rects",
+    "text_quads",
+    "tiles_rendered",
+    "dirty_tiles_requested",
+    "clipped_primitives",
+    "rejected_primitives"
+  };
+  const UINT64 actual[] = {
+    stats.pixels_written,
+    stats.bytes_written,
+    stats.blend_pixels,
+    stats.text_pixels,
+    stats.rects,
+    stats.text_quads,
+    stats.tiles_rendered,
+    stats.dirty_tiles_requested,
+    stats.clipped_primitives,
+    stats.rejected_primitives
+  };
+  const UINT64 limits[] = {
+    budget.pixels_written,
+    budget.bytes_written,
+    budget.blend_pixels,
+    budget.text_pixels,
+    budget.rects,
+    budget.text_quads,
+    budget.tiles_rendered,
+    budget.dirty_tiles_requested,
+    budget.clipped_primitives,
+    budget.rejected_primitives
+  };
+  const UINTN count = (UINTN)(sizeof(actual) / sizeof(actual[0]));
+  UINTN i;
+
+  for (i = 0u; i < count; ++i) {
+    if (actual[i] > limits[i]) {
+      if (out_violation != 0) {
+        out_violation->name = names[i];
+        out_violation->actual = actual[i];
+        out_violation->limit = limits[i];
+      }
+      return 1u;
+    }
+  }
+  return 0u;
+}
+
+UINT8 er_ui_gop_render_stats_fits_budget(ErUiGopRenderStats stats, ErUiGopFrameBudget budget) {
+  return er_ui_gop_render_stats_first_budget_violation(stats, budget, 0) == 0u;
+}
+
 UINT32 er_ui_gop_pack_rgb(ErUiGopPixelFormat format, UINT8 r, UINT8 g, UINT8 b) {
   if (format == ER_UI_GOP_PIXEL_BGRX) {
     return ((UINT32)b << 16) | ((UINT32)g << 8) | (UINT32)r;
@@ -336,26 +1002,58 @@ UINT32 er_ui_gop_pack_rgb(ErUiGopPixelFormat format, UINT8 r, UINT8 g, UINT8 b) 
   return ((UINT32)r << 16) | ((UINT32)g << 8) | (UINT32)b;
 }
 
-UINT8 er_ui_gop_surface_clear(ErUiGopSurface* surface, er_ui_color4_t color) {
+static UINT8 er_ui_gop_surface_clear_rect_stats(ErUiGopSurface* surface, er_ui_color4_t color,
+                                                const ErUiGopPixelRect* clip,
+                                                ErUiGopRenderStats* stats) {
   UINT32 y;
   UINT32 x;
   UINT32 packed;
+  UINT32 x0 = 0u;
+  UINT32 y0 = 0u;
+  UINT32 x1;
+  UINT32 y1;
 
   if (er_ui_gop_surface_valid(surface) == 0u) {
     return 0u;
+  }
+  x1 = surface->width;
+  y1 = surface->height;
+  if (clip != 0) {
+    x0 = clip->x0;
+    y0 = clip->y0;
+    x1 = clip->x1;
+    y1 = clip->y1;
+    if (x0 > surface->width) x0 = surface->width;
+    if (y0 > surface->height) y0 = surface->height;
+    if (x1 > surface->width) x1 = surface->width;
+    if (y1 > surface->height) y1 = surface->height;
+    if (x0 >= x1 || y0 >= y1) return 0u;
   }
 
   packed = er_ui_gop_pack_rgb(surface->pixel_format,
                               er_ui_gop_u8_from_unit(color.r),
                               er_ui_gop_u8_from_unit(color.g),
                               er_ui_gop_u8_from_unit(color.b));
-  for (y = 0; y < surface->height; ++y) {
+  if (stats != 0) {
+    ++stats->clears;
+    er_ui_gop_stats_add_pixels(stats, (UINT64)(x1 - x0) * (UINT64)(y1 - y0), 0u, 0u);
+  }
+  for (y = y0; y < y1; ++y) {
     UINT32* row = surface->pixels + ((UINTN)y * (UINTN)surface->stride);
-    for (x = 0; x < surface->width; ++x) {
+    for (x = x0; x < x1; ++x) {
       row[x] = packed;
     }
   }
   return 1u;
+}
+
+static UINT8 er_ui_gop_surface_clear_stats(ErUiGopSurface* surface, er_ui_color4_t color,
+                                           ErUiGopRenderStats* stats) {
+  return er_ui_gop_surface_clear_rect_stats(surface, color, 0, stats);
+}
+
+UINT8 er_ui_gop_surface_clear(ErUiGopSurface* surface, er_ui_color4_t color) {
+  return er_ui_gop_surface_clear_stats(surface, color, 0);
 }
 
 UINT8 er_ui_gop_surface_render_scene(ErUiGopSurface* surface, const er_ui_scene_t* scene) {
@@ -363,37 +1061,124 @@ UINT8 er_ui_gop_surface_render_scene(ErUiGopSurface* surface, const er_ui_scene_
 }
 
 UINT8 er_ui_gop_surface_render_scene_with_atlas(ErUiGopSurface* surface, const er_ui_scene_t* scene, const ErUiGopAlphaAtlas* atlas) {
+  return er_ui_gop_surface_render_scene_with_atlas_stats(surface, scene, atlas, 0);
+}
+
+static UINT8 er_ui_gop_surface_render_scene_with_atlas_clip_stats(ErUiGopSurface* surface,
+                                                                  const er_ui_scene_t* scene,
+                                                                  const ErUiGopAlphaAtlas* atlas,
+                                                                  const ErUiGopPixelRect* clip,
+                                                                  ErUiGopRenderStats* stats) {
   size_t i;
 
+  if (stats != 0) {
+    *stats = (ErUiGopRenderStats){0};
+  }
   if (er_ui_gop_surface_valid(surface) == 0u || scene == 0) {
     return 0u;
   }
 
-  if (er_ui_gop_surface_clear(surface, scene->clear) == 0u) {
+  if (er_ui_gop_surface_clear_rect_stats(surface, scene->clear, clip, stats) == 0u) {
     return 0u;
   }
 
   for (i = 0u; i < scene->rect_count; ++i) {
-    er_ui_gop_render_rect(surface, scene->rects[i]);
+    er_ui_gop_render_rect(surface, scene->rects[i], clip, stats);
   }
   if (atlas != 0) {
     for (i = 0u; i < scene->text_quad_count; ++i) {
-      er_ui_gop_render_text_quad_with_alpha_atlas(surface, &scene->text_quads[i], atlas);
+      er_ui_gop_render_text_quad_with_alpha_atlas(surface, &scene->text_quads[i], atlas, clip, stats);
     }
   }
   return 1u;
 }
 
-UINT8 er_ui_gop_surface_render_scene_with_font(ErUiGopSurface* surface, const er_ui_scene_t* scene, const vr_font_face_t* font) {
-  size_t i;
+static UINT8 er_ui_gop_surface_render_scene_with_atlas_stats(ErUiGopSurface* surface, const er_ui_scene_t* scene,
+                                                             const ErUiGopAlphaAtlas* atlas,
+                                                             ErUiGopRenderStats* stats) {
+  return er_ui_gop_surface_render_scene_with_atlas_clip_stats(surface, scene, atlas, 0, stats);
+}
 
-  if (er_ui_gop_surface_render_scene_with_atlas(surface, scene, 0) == 0u) {
+UINT8 er_ui_gop_surface_render_scene_with_font(ErUiGopSurface* surface, const er_ui_scene_t* scene, const vr_font_face_t* font) {
+  return er_ui_gop_surface_render_scene_with_font_stats(surface, scene, font, 0);
+}
+
+UINT8 er_ui_gop_surface_render_scene_with_font_stats(ErUiGopSurface* surface, const er_ui_scene_t* scene, const vr_font_face_t* font, ErUiGopRenderStats* out_stats) {
+  return er_ui_gop_surface_render_scene_tile_with_font_stats(surface, scene, font, 0, 0u, out_stats);
+}
+
+UINT8 er_ui_gop_surface_render_scene_tile_with_font_stats(ErUiGopSurface* surface, const er_ui_scene_t* scene,
+                                                          const vr_font_face_t* font,
+                                                          const ErUiGopTilePlan* plan, UINT32 tile_id,
+                                                          ErUiGopRenderStats* out_stats) {
+  size_t i;
+  ErUiGopPixelRect clip;
+  const ErUiGopPixelRect* clip_ptr = 0;
+
+  if (er_ui_gop_surface_valid(surface) == 0u) {
+    if (out_stats != 0) {
+      *out_stats = (ErUiGopRenderStats){0};
+    }
     return 0u;
+  }
+  if (plan != 0) {
+    if (er_ui_gop_tile_rect(plan, tile_id, &clip) == 0u ||
+        plan->width != surface->width || plan->height != surface->height || plan->stride != surface->stride) {
+      if (out_stats != 0) {
+        *out_stats = (ErUiGopRenderStats){0};
+      }
+      return 0u;
+    }
+    clip_ptr = &clip;
+  }
+
+  if (er_ui_gop_surface_render_scene_with_atlas_clip_stats(surface, scene, 0, clip_ptr, out_stats) == 0u) {
+    return 0u;
+  }
+  if (clip_ptr != 0 && out_stats != 0) {
+    out_stats->tiles_rendered = 1u;
   }
   if (font != 0) {
     for (i = 0u; i < scene->text_quad_count; ++i) {
-      er_ui_gop_render_text_quad(surface, &scene->text_quads[i], font);
+      er_ui_gop_render_text_quad(surface, &scene->text_quads[i], font, clip_ptr, out_stats);
     }
+  }
+  return 1u;
+}
+
+UINT8 er_ui_gop_surface_render_scene_dirty_tiles_with_font_stats(ErUiGopSurface* surface,
+                                                                 const er_ui_scene_t* scene,
+                                                                 const vr_font_face_t* font,
+                                                                 const ErUiGopTilePlan* plan,
+                                                                 const ErUiGopDirtyTileList* dirty_tiles,
+                                                                 ErUiGopRenderStats* out_stats) {
+  UINT32 i;
+  ErUiGopRenderStats total;
+
+  if (out_stats != 0) {
+    *out_stats = (ErUiGopRenderStats){0};
+  }
+  if (surface == 0 || scene == 0 || plan == 0 || dirty_tiles == 0 || dirty_tiles->tile_ids == 0 ||
+      dirty_tiles->overflowed != 0u || dirty_tiles->count > dirty_tiles->capacity) {
+    return 0u;
+  }
+
+  total = (ErUiGopRenderStats){0};
+  total.dirty_tiles_requested = dirty_tiles->count;
+  for (i = 0u; i < dirty_tiles->count; ++i) {
+    ErUiGopRenderStats tile_stats;
+    if (er_ui_gop_surface_render_scene_tile_with_font_stats(surface, scene, font, plan,
+                                                            dirty_tiles->tile_ids[i], &tile_stats) == 0u) {
+      if (out_stats != 0) {
+        *out_stats = (ErUiGopRenderStats){0};
+      }
+      return 0u;
+    }
+    er_ui_gop_stats_add(&total, &tile_stats);
+  }
+  if (out_stats != 0) {
+    total.dirty_tiles_requested = dirty_tiles->count;
+    *out_stats = total;
   }
   return 1u;
 }
@@ -435,6 +1220,17 @@ UINT8 er_ui_gop_renderer_ready(void) {
   return g_ready;
 }
 
+UINT8 er_ui_gop_renderer_tile_plan(UINT32 tile_width, UINT32 tile_height,
+                                   UINT32 max_dirty_tiles, ErUiGopTilePlan* out_plan) {
+  if (g_ready == 0u) {
+    if (out_plan != 0) {
+      *out_plan = (ErUiGopTilePlan){0};
+    }
+    return 0u;
+  }
+  return er_ui_gop_tile_plan(&g_surface, tile_width, tile_height, max_dirty_tiles, out_plan);
+}
+
 UINT8 er_ui_gop_renderer_render_scene(const er_ui_scene_t* scene) {
   return er_ui_gop_renderer_render_scene_with_atlas(scene, 0);
 }
@@ -447,8 +1243,39 @@ UINT8 er_ui_gop_renderer_render_scene_with_atlas(const er_ui_scene_t* scene, con
 }
 
 UINT8 er_ui_gop_renderer_render_scene_with_font(const er_ui_scene_t* scene, const vr_font_face_t* font) {
+  return er_ui_gop_renderer_render_scene_with_font_stats(scene, font, 0);
+}
+
+UINT8 er_ui_gop_renderer_render_scene_with_font_stats(const er_ui_scene_t* scene, const vr_font_face_t* font, ErUiGopRenderStats* out_stats) {
   if (g_ready == 0u) {
     return 0u;
   }
-  return er_ui_gop_surface_render_scene_with_font(&g_surface, scene, font);
+  return er_ui_gop_surface_render_scene_with_font_stats(&g_surface, scene, font, out_stats);
+}
+
+UINT8 er_ui_gop_renderer_render_scene_tile_with_font_stats(const er_ui_scene_t* scene, const vr_font_face_t* font,
+                                                           const ErUiGopTilePlan* plan, UINT32 tile_id,
+                                                           ErUiGopRenderStats* out_stats) {
+  if (g_ready == 0u) {
+    if (out_stats != 0) {
+      *out_stats = (ErUiGopRenderStats){0};
+    }
+    return 0u;
+  }
+  return er_ui_gop_surface_render_scene_tile_with_font_stats(&g_surface, scene, font, plan, tile_id, out_stats);
+}
+
+UINT8 er_ui_gop_renderer_render_scene_dirty_tiles_with_font_stats(const er_ui_scene_t* scene,
+                                                                  const vr_font_face_t* font,
+                                                                  const ErUiGopTilePlan* plan,
+                                                                  const ErUiGopDirtyTileList* dirty_tiles,
+                                                                  ErUiGopRenderStats* out_stats) {
+  if (g_ready == 0u) {
+    if (out_stats != 0) {
+      *out_stats = (ErUiGopRenderStats){0};
+    }
+    return 0u;
+  }
+  return er_ui_gop_surface_render_scene_dirty_tiles_with_font_stats(&g_surface, scene, font, plan,
+                                                                    dirty_tiles, out_stats);
 }

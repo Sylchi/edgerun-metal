@@ -98,6 +98,16 @@ Secure IPC routes bind source app node id, target node id, capability id, route 
 
 `AppLaunchAllocation` is the launch-time memory binding. The executor receives a concrete backing memory range, but the app receives an app-local address range starting at `ER_APP_ADDRESS_BASE`. The backing length must exactly match the admitted memory budget; extra memory is not implicitly available and short backing ranges fail. The app address is therefore a deterministic capability of the launch record, not a pointer inherited from the host.
 
+## Render Concepts
+
+Rendering is a budgeted runtime capability, not an unbounded local privilege. Apps submit UI state that resolves through `edgerun-ui-core` components into bounded scene/display-list data. The metal renderer draws that admitted scene to a dumb framebuffer.
+
+Apps cannot draw arbitrary pixels or create arbitrary overlapping windows. They submit predetermined component state, and the shell places that state into admitted layout regions. Transitions are selected from predetermined transition kinds. Overlays are reserved for system prompts, OSD, secure confirmation, and other trusted shell surfaces.
+
+The 4K120 CPU rendering target is a first-class architecture constraint. A 3840x2160 RGBA frame is about 33.2 MiB, and full-screen writes at 120 Hz are about 3.98 GiB/s. That is feasible for simple linear writes on desktop memory, but normal UI must rely on retained scenes, dirty tiles, cached glyphs, and bounded alpha blending. The renderer must account bytes written, dirty tiles, primitive count, glyph count, and app render budgets before accepting work.
+
+See `docs/metal-renderer-4k120.md` for the display architecture.
+
 ## VFS Concepts
 
 The VFS is an in-memory object graph, not a filesystem API.
