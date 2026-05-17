@@ -1,6 +1,10 @@
 #include "er_blake3.h"
 
-#if !defined(ER_BLAKE3_NO_SIMD) && defined(__SSE2__) && \
+#if !defined(ER_BLAKE3_NO_SIMD) && defined(__AVX2__) && \
+    (defined(__x86_64__) || defined(_M_X64) || defined(__i386) || defined(_M_IX86))
+#include <immintrin.h>
+#define ER_BLAKE3_USE_AVX2 1
+#elif !defined(ER_BLAKE3_NO_SIMD) && defined(__SSE2__) && \
     (defined(__x86_64__) || defined(_M_X64) || defined(__i386) || defined(_M_IX86))
 #include <emmintrin.h>
 #define ER_BLAKE3_USE_SSE2 1
@@ -32,6 +36,10 @@
 #define ER_BLAKE3_STATE_COUNTER_HIGH_INDEX 13u
 #define ER_BLAKE3_STATE_BLOCK_LEN_INDEX 14u
 #define ER_BLAKE3_STATE_FLAGS_INDEX 15u
+#define ER_BLAKE3_IV_WORD0_INDEX 0u
+#define ER_BLAKE3_IV_WORD1_INDEX 1u
+#define ER_BLAKE3_IV_WORD2_INDEX 2u
+#define ER_BLAKE3_IV_WORD3_INDEX 3u
 #define ER_BLAKE3_SSE2_LANE0_INDEX 0u
 #define ER_BLAKE3_SSE2_LANE1_INDEX 1u
 #define ER_BLAKE3_SSE2_LANE2_INDEX 2u
@@ -50,6 +58,7 @@
 #define ER_BLAKE3_IV7 0x5be0cd19u
 #define ER_BLAKE3_FULL_CHUNK_BLOCKS (ER_BLAKE3_CHUNK_LEN / ER_BLAKE3_BLOCK_LEN)
 #define ER_BLAKE3_SSE2_LANES 4u
+#define ER_BLAKE3_AVX2_LANES 8u
 
 static const uint32_t g_er_blake3_iv[ER_BLAKE3_CV_WORDS] = {
   ER_BLAKE3_IV0, ER_BLAKE3_IV1, ER_BLAKE3_IV2, ER_BLAKE3_IV3,
@@ -165,10 +174,10 @@ static void er_blake3_compress(const uint32_t cv[ER_BLAKE3_CV_WORDS],
     msg[i] = block_words[i];
     msg[i + ER_BLAKE3_CV_WORDS] = block_words[i + ER_BLAKE3_CV_WORDS];
   }
-  out[ER_BLAKE3_STATE_IV0_INDEX] = g_er_blake3_iv[0];
-  out[ER_BLAKE3_STATE_IV1_INDEX] = g_er_blake3_iv[1];
-  out[ER_BLAKE3_STATE_IV2_INDEX] = g_er_blake3_iv[2];
-  out[ER_BLAKE3_STATE_IV3_INDEX] = g_er_blake3_iv[3];
+  out[ER_BLAKE3_STATE_IV0_INDEX] = g_er_blake3_iv[ER_BLAKE3_IV_WORD0_INDEX];
+  out[ER_BLAKE3_STATE_IV1_INDEX] = g_er_blake3_iv[ER_BLAKE3_IV_WORD1_INDEX];
+  out[ER_BLAKE3_STATE_IV2_INDEX] = g_er_blake3_iv[ER_BLAKE3_IV_WORD2_INDEX];
+  out[ER_BLAKE3_STATE_IV3_INDEX] = g_er_blake3_iv[ER_BLAKE3_IV_WORD3_INDEX];
   out[ER_BLAKE3_STATE_COUNTER_LOW_INDEX] = (uint32_t)counter;
   out[ER_BLAKE3_STATE_COUNTER_HIGH_INDEX] = (uint32_t)(counter >> ER_BLAKE3_COUNTER_HIGH_SHIFT);
   out[ER_BLAKE3_STATE_BLOCK_LEN_INDEX] = block_len;
@@ -263,10 +272,10 @@ static void er_blake3_sse2_compress4(const __m128i cv[ER_BLAKE3_CV_WORDS],
     msg[i] = block_words[i];
     msg[i + ER_BLAKE3_CV_WORDS] = block_words[i + ER_BLAKE3_CV_WORDS];
   }
-  out[ER_BLAKE3_STATE_IV0_INDEX] = _mm_set1_epi32((int)g_er_blake3_iv[0]);
-  out[ER_BLAKE3_STATE_IV1_INDEX] = _mm_set1_epi32((int)g_er_blake3_iv[1]);
-  out[ER_BLAKE3_STATE_IV2_INDEX] = _mm_set1_epi32((int)g_er_blake3_iv[2]);
-  out[ER_BLAKE3_STATE_IV3_INDEX] = _mm_set1_epi32((int)g_er_blake3_iv[3]);
+  out[ER_BLAKE3_STATE_IV0_INDEX] = _mm_set1_epi32((int)g_er_blake3_iv[ER_BLAKE3_IV_WORD0_INDEX]);
+  out[ER_BLAKE3_STATE_IV1_INDEX] = _mm_set1_epi32((int)g_er_blake3_iv[ER_BLAKE3_IV_WORD1_INDEX]);
+  out[ER_BLAKE3_STATE_IV2_INDEX] = _mm_set1_epi32((int)g_er_blake3_iv[ER_BLAKE3_IV_WORD2_INDEX]);
+  out[ER_BLAKE3_STATE_IV3_INDEX] = _mm_set1_epi32((int)g_er_blake3_iv[ER_BLAKE3_IV_WORD3_INDEX]);
   out[ER_BLAKE3_STATE_COUNTER_LOW_INDEX] = counter_low;
   out[ER_BLAKE3_STATE_COUNTER_HIGH_INDEX] = counter_high;
   out[ER_BLAKE3_STATE_BLOCK_LEN_INDEX] = _mm_set1_epi32((int)block_len);
@@ -330,6 +339,152 @@ static void er_blake3_sse2_compress4_full_chunks(const uint8_t* bytes, uint64_t 
   for (word = 0u; word < ER_BLAKE3_CV_WORDS; ++word) {
     _mm_storeu_si128((__m128i*)lanes, cv[word]);
     for (lane = 0u; lane < ER_BLAKE3_SSE2_LANES; ++lane) {
+      out_cvs[lane][word] = lanes[lane];
+    }
+  }
+}
+#endif
+
+#if defined(ER_BLAKE3_USE_AVX2)
+static __m256i er_blake3_avx2_rotr32(__m256i word, int bits) {
+  return _mm256_or_si256(_mm256_srli_epi32(word, bits), _mm256_slli_epi32(word, 32 - bits));
+}
+
+static void er_blake3_avx2_g(__m256i state[ER_BLAKE3_BLOCK_WORDS], size_t a, size_t b, size_t c, size_t d,
+                             __m256i mx, __m256i my) {
+  state[a] = _mm256_add_epi32(_mm256_add_epi32(state[a], state[b]), mx);
+  state[d] = er_blake3_avx2_rotr32(_mm256_xor_si256(state[d], state[a]), ER_BLAKE3_ROTATE_A);
+  state[c] = _mm256_add_epi32(state[c], state[d]);
+  state[b] = er_blake3_avx2_rotr32(_mm256_xor_si256(state[b], state[c]), ER_BLAKE3_ROTATE_B);
+  state[a] = _mm256_add_epi32(_mm256_add_epi32(state[a], state[b]), my);
+  state[d] = er_blake3_avx2_rotr32(_mm256_xor_si256(state[d], state[a]), ER_BLAKE3_ROTATE_C);
+  state[c] = _mm256_add_epi32(state[c], state[d]);
+  state[b] = er_blake3_avx2_rotr32(_mm256_xor_si256(state[b], state[c]), ER_BLAKE3_ROTATE_D);
+}
+
+static void er_blake3_avx2_round(__m256i state[ER_BLAKE3_BLOCK_WORDS], const __m256i msg[ER_BLAKE3_BLOCK_WORDS]) {
+  er_blake3_avx2_g(state, 0u, 4u, 8u, 12u, msg[0], msg[1]);
+  er_blake3_avx2_g(state, 1u, 5u, 9u, 13u, msg[2], msg[3]);
+  er_blake3_avx2_g(state, 2u, 6u, 10u, 14u, msg[4], msg[5]);
+  er_blake3_avx2_g(state, 3u, 7u, 11u, 15u, msg[6], msg[7]);
+  er_blake3_avx2_g(state, 0u, 5u, 10u, 15u, msg[8], msg[9]);
+  er_blake3_avx2_g(state, 1u, 6u, 11u, 12u, msg[10], msg[11]);
+  er_blake3_avx2_g(state, 2u, 7u, 8u, 13u, msg[12], msg[13]);
+  er_blake3_avx2_g(state, 3u, 4u, 9u, 14u, msg[14], msg[15]);
+}
+
+static void er_blake3_avx2_permute(__m256i msg[ER_BLAKE3_BLOCK_WORDS]) {
+  __m256i permuted[ER_BLAKE3_BLOCK_WORDS];
+  size_t i;
+
+  for (i = 0u; i < ER_BLAKE3_BLOCK_WORDS; ++i) {
+    permuted[i] = msg[g_er_blake3_msg_perm[i]];
+  }
+  for (i = 0u; i < ER_BLAKE3_BLOCK_WORDS; ++i) {
+    msg[i] = permuted[i];
+  }
+}
+
+static __m256i er_blake3_avx2_load_word8(const uint8_t* bytes, size_t word_index) {
+  return _mm256_set_epi32((int)er_blake3_load32(&bytes[(7u * ER_BLAKE3_CHUNK_LEN) + (word_index * ER_BLAKE3_WORD_BYTES)]),
+                          (int)er_blake3_load32(&bytes[(6u * ER_BLAKE3_CHUNK_LEN) + (word_index * ER_BLAKE3_WORD_BYTES)]),
+                          (int)er_blake3_load32(&bytes[(5u * ER_BLAKE3_CHUNK_LEN) + (word_index * ER_BLAKE3_WORD_BYTES)]),
+                          (int)er_blake3_load32(&bytes[(4u * ER_BLAKE3_CHUNK_LEN) + (word_index * ER_BLAKE3_WORD_BYTES)]),
+                          (int)er_blake3_load32(&bytes[(3u * ER_BLAKE3_CHUNK_LEN) + (word_index * ER_BLAKE3_WORD_BYTES)]),
+                          (int)er_blake3_load32(&bytes[(2u * ER_BLAKE3_CHUNK_LEN) + (word_index * ER_BLAKE3_WORD_BYTES)]),
+                          (int)er_blake3_load32(&bytes[(1u * ER_BLAKE3_CHUNK_LEN) + (word_index * ER_BLAKE3_WORD_BYTES)]),
+                          (int)er_blake3_load32(&bytes[(0u * ER_BLAKE3_CHUNK_LEN) + (word_index * ER_BLAKE3_WORD_BYTES)]));
+}
+
+static void er_blake3_avx2_compress8(const __m256i cv[ER_BLAKE3_CV_WORDS],
+                                     const __m256i block_words[ER_BLAKE3_BLOCK_WORDS],
+                                     __m256i counter_low, __m256i counter_high,
+                                     uint32_t block_len, uint32_t flags,
+                                     __m256i out[ER_BLAKE3_BLOCK_WORDS]) {
+  __m256i msg[ER_BLAKE3_BLOCK_WORDS];
+  size_t round;
+  size_t i;
+
+  for (i = 0u; i < ER_BLAKE3_CV_WORDS; ++i) {
+    out[i] = cv[i];
+    msg[i] = block_words[i];
+    msg[i + ER_BLAKE3_CV_WORDS] = block_words[i + ER_BLAKE3_CV_WORDS];
+  }
+  out[ER_BLAKE3_STATE_IV0_INDEX] = _mm256_set1_epi32((int)g_er_blake3_iv[ER_BLAKE3_IV_WORD0_INDEX]);
+  out[ER_BLAKE3_STATE_IV1_INDEX] = _mm256_set1_epi32((int)g_er_blake3_iv[ER_BLAKE3_IV_WORD1_INDEX]);
+  out[ER_BLAKE3_STATE_IV2_INDEX] = _mm256_set1_epi32((int)g_er_blake3_iv[ER_BLAKE3_IV_WORD2_INDEX]);
+  out[ER_BLAKE3_STATE_IV3_INDEX] = _mm256_set1_epi32((int)g_er_blake3_iv[ER_BLAKE3_IV_WORD3_INDEX]);
+  out[ER_BLAKE3_STATE_COUNTER_LOW_INDEX] = counter_low;
+  out[ER_BLAKE3_STATE_COUNTER_HIGH_INDEX] = counter_high;
+  out[ER_BLAKE3_STATE_BLOCK_LEN_INDEX] = _mm256_set1_epi32((int)block_len);
+  out[ER_BLAKE3_STATE_FLAGS_INDEX] = _mm256_set1_epi32((int)flags);
+
+  for (round = 0u; round < ER_BLAKE3_COMPRESS_ROUNDS; ++round) {
+    er_blake3_avx2_round(out, msg);
+    if (round != ER_BLAKE3_LAST_PERMUTE_ROUND) {
+      er_blake3_avx2_permute(msg);
+    }
+  }
+
+  for (i = 0u; i < ER_BLAKE3_CV_WORDS; ++i) {
+    out[i] = _mm256_xor_si256(out[i], out[i + ER_BLAKE3_CV_WORDS]);
+    out[i + ER_BLAKE3_CV_WORDS] = _mm256_xor_si256(out[i + ER_BLAKE3_CV_WORDS], cv[i]);
+  }
+}
+
+static void er_blake3_avx2_compress8_full_chunks(const uint8_t* bytes, uint64_t chunk_counter,
+                                                 uint32_t flags,
+                                                 uint32_t out_cvs[ER_BLAKE3_AVX2_LANES][ER_BLAKE3_CV_WORDS]) {
+  __m256i cv[ER_BLAKE3_CV_WORDS];
+  __m256i words[ER_BLAKE3_BLOCK_WORDS];
+  __m256i compressed[ER_BLAKE3_BLOCK_WORDS];
+  uint32_t block_flags;
+  uint32_t lanes[ER_BLAKE3_AVX2_LANES];
+  size_t block;
+  size_t word;
+  size_t lane;
+
+  for (word = 0u; word < ER_BLAKE3_CV_WORDS; ++word) {
+    cv[word] = _mm256_set1_epi32((int)g_er_blake3_iv[word]);
+  }
+
+  for (block = 0u; block < ER_BLAKE3_FULL_CHUNK_BLOCKS; ++block) {
+    for (word = 0u; word < ER_BLAKE3_BLOCK_WORDS; ++word) {
+      words[word] = er_blake3_avx2_load_word8(&bytes[block * ER_BLAKE3_BLOCK_LEN], word);
+    }
+    block_flags = flags;
+    if (block == 0u) {
+      block_flags |= ER_BLAKE3_CHUNK_START;
+    }
+    if (block == (ER_BLAKE3_FULL_CHUNK_BLOCKS - 1u)) {
+      block_flags |= ER_BLAKE3_CHUNK_END;
+    }
+    er_blake3_avx2_compress8(cv, words,
+                             _mm256_set_epi32((int)(uint32_t)(chunk_counter + 7u),
+                                               (int)(uint32_t)(chunk_counter + 6u),
+                                               (int)(uint32_t)(chunk_counter + 5u),
+                                               (int)(uint32_t)(chunk_counter + 4u),
+                                               (int)(uint32_t)(chunk_counter + 3u),
+                                               (int)(uint32_t)(chunk_counter + 2u),
+                                               (int)(uint32_t)(chunk_counter + 1u),
+                                               (int)(uint32_t)chunk_counter),
+                             _mm256_set_epi32((int)(uint32_t)((chunk_counter + 7u) >> ER_BLAKE3_COUNTER_HIGH_SHIFT),
+                                               (int)(uint32_t)((chunk_counter + 6u) >> ER_BLAKE3_COUNTER_HIGH_SHIFT),
+                                               (int)(uint32_t)((chunk_counter + 5u) >> ER_BLAKE3_COUNTER_HIGH_SHIFT),
+                                               (int)(uint32_t)((chunk_counter + 4u) >> ER_BLAKE3_COUNTER_HIGH_SHIFT),
+                                               (int)(uint32_t)((chunk_counter + 3u) >> ER_BLAKE3_COUNTER_HIGH_SHIFT),
+                                               (int)(uint32_t)((chunk_counter + 2u) >> ER_BLAKE3_COUNTER_HIGH_SHIFT),
+                                               (int)(uint32_t)((chunk_counter + 1u) >> ER_BLAKE3_COUNTER_HIGH_SHIFT),
+                                               (int)(uint32_t)(chunk_counter >> ER_BLAKE3_COUNTER_HIGH_SHIFT)),
+                             ER_BLAKE3_BLOCK_LEN, block_flags, compressed);
+    for (word = 0u; word < ER_BLAKE3_CV_WORDS; ++word) {
+      cv[word] = compressed[word];
+    }
+  }
+
+  for (word = 0u; word < ER_BLAKE3_CV_WORDS; ++word) {
+    _mm256_storeu_si256((__m256i*)lanes, cv[word]);
+    for (lane = 0u; lane < ER_BLAKE3_AVX2_LANES; ++lane) {
       out_cvs[lane][word] = lanes[lane];
     }
   }
@@ -450,6 +605,25 @@ uint8_t er_blake3_update(ErBlake3Hasher* hasher, const uint8_t* bytes, size_t le
   }
 
   while (len > 0u) {
+#if defined(ER_BLAKE3_USE_AVX2)
+    if (hasher->block_len == 0u && hasher->blocks_compressed == 0u &&
+        len > (ER_BLAKE3_AVX2_LANES * ER_BLAKE3_CHUNK_LEN)) {
+      uint32_t cvs[ER_BLAKE3_AVX2_LANES][ER_BLAKE3_CV_WORDS];
+      size_t lane;
+
+      er_blake3_avx2_compress8_full_chunks(bytes, hasher->chunk_counter, hasher->flags, cvs);
+      for (lane = 0u; lane < ER_BLAKE3_AVX2_LANES; ++lane) {
+        ++hasher->chunk_counter;
+        if (er_blake3_push_cv(hasher, cvs[lane], hasher->chunk_counter) == 0u) {
+          return 0u;
+        }
+      }
+      bytes += ER_BLAKE3_AVX2_LANES * ER_BLAKE3_CHUNK_LEN;
+      len -= ER_BLAKE3_AVX2_LANES * ER_BLAKE3_CHUNK_LEN;
+      continue;
+    }
+#endif
+
 #if defined(ER_BLAKE3_USE_SSE2)
     if (hasher->block_len == 0u && hasher->blocks_compressed == 0u &&
         len > (ER_BLAKE3_SSE2_LANES * ER_BLAKE3_CHUNK_LEN)) {
@@ -549,7 +723,9 @@ uint8_t er_blake3_hash_bytes(const uint8_t* bytes, size_t len, uint8_t out[ER_BL
 }
 
 const char* er_blake3_backend_name(void) {
-#if defined(ER_BLAKE3_USE_SSE2)
+#if defined(ER_BLAKE3_USE_AVX2)
+  return "avx2-8x";
+#elif defined(ER_BLAKE3_USE_SSE2)
   return "sse2-4x";
 #else
   return "scalar";
