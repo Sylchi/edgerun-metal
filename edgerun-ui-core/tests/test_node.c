@@ -112,6 +112,7 @@ void run_node_tests(void) {
   expect_string(er_ui_node_kind_label(ER_UI_NODE_SIDEBAR), "sidebar", "node: kind label maps sidebar");
   expect_string(er_ui_node_kind_label(ER_UI_NODE_SONNER), "sonner", "node: kind label maps sonner");
   expect_string(er_ui_node_kind_label(ER_UI_NODE_ASPECT_RATIO), "aspect-ratio", "node: kind label maps aspect ratio");
+  expect_string(er_ui_node_kind_label(ER_UI_NODE_ALERT_DIALOG), "alert-dialog", "node: kind label maps alert dialog");
   expect_string(er_ui_icon_label(ER_UI_ICON_SEARCH), "search", "node: icon label maps canonical icon");
   expect_u32(er_ui_icon_atlas_id(ER_UI_ICON_SEARCH), (uint32_t)ER_UI_ICON_SEARCH + 1u, "node: icon atlas id is stable");
   expect_string(er_ui_icon_provider_name(ER_UI_ICON_APP, ER_UI_ICON_PROVIDER_LUCIDE), "app-window", "node: lucide provider name maps app icon");
@@ -334,6 +335,11 @@ void run_node_tests(void) {
   expect_size(a11y.role, ER_UI_A11Y_IMAGE, "node: aspect ratio accessibility role");
   expect_true(a11y.label == aspect_a11y.label, "node: aspect ratio label is borrowed");
 
+  er_ui_node_t alert_dialog_a11y = er_ui_node_alert_dialog("Are you absolutely sure?", "This action cannot be undone.", ER_UI_ICON_WARNING);
+  expect_status(er_ui_node_accessibility(&alert_dialog_a11y, &a11y), ER_UI_OK, "node: alert dialog accessibility maps");
+  expect_size(a11y.role, ER_UI_A11Y_DIALOG, "node: alert dialog accessibility role");
+  expect_true((a11y.states & ER_UI_A11Y_STATE_OPEN) != 0u, "node: alert dialog open state");
+
   er_ui_node_t checked = er_ui_node_checkbox("Remember", true, 8002u);
   expect_status(er_ui_node_accessibility(&checked, &a11y), ER_UI_OK, "node: checkbox accessibility maps");
   expect_size(a11y.role, ER_UI_A11Y_CHECKBOX, "node: checkbox accessibility role");
@@ -489,6 +495,7 @@ void run_node_tests(void) {
     const er_ui_color4_t render_sonner_colors[] = {theme.colors.success, theme.colors.danger};
     er_ui_node_t sonner = er_ui_node_sonner(render_sonner_messages, render_sonner_icons, render_sonner_colors, 2u);
     er_ui_node_t aspect = er_ui_node_aspect_ratio("Preview", ER_UI_ICON_FILE);
+    er_ui_node_t alert_dialog = er_ui_node_alert_dialog("Are you absolutely sure?", "This action cannot be undone.", ER_UI_ICON_WARNING);
 
     expect_status(er_ui_node_render(&alert, &scene, face, er_ui_bounds(0.0f, 170.0f, 360.0f, 76.0f), theme), ER_UI_OK, "node: alert renders");
     expect_status(er_ui_node_render(&avatar, &scene, face, er_ui_bounds(0.0f, 254.0f, 42.0f, 42.0f), theme), ER_UI_OK, "node: avatar renders");
@@ -633,6 +640,10 @@ void run_node_tests(void) {
     expect_status(er_ui_node_render(&aspect, &scene, face, er_ui_bounds(0.0f, 4826.0f, 320.0f, 180.0f), theme), ER_UI_OK,
                   "node: aspect ratio renders");
     expect_size(scene.icon_quad_count, icon_quads_before_aspect + 1u, "node: aspect ratio emits icon quad");
+    size_t icon_quads_before_alert_dialog = scene.icon_quad_count;
+    expect_status(er_ui_node_render(&alert_dialog, &scene, face, er_ui_bounds(0.0f, 5018.0f, 360.0f, 150.0f), theme), ER_UI_OK,
+                  "node: alert dialog renders");
+    expect_size(scene.icon_quad_count, icon_quads_before_alert_dialog + 1u, "node: alert dialog emits icon quad");
     size_t drag_sources_before = scene.drag_source_count;
     size_t drop_targets_before = scene.drop_target_count;
     expect_status(er_ui_node_render(&reorderable, &scene, face, er_ui_bounds(0.0f, 2930.0f, 260.0f, 52.0f), theme), ER_UI_OK,
