@@ -122,6 +122,7 @@ void run_node_tests(void) {
   expect_string(er_ui_node_kind_label(ER_UI_NODE_CAROUSEL), "carousel", "node: kind label maps carousel");
   expect_string(er_ui_node_kind_label(ER_UI_NODE_CALENDAR), "calendar", "node: kind label maps calendar");
   expect_string(er_ui_node_kind_label(ER_UI_NODE_COMBOBOX), "combobox", "node: kind label maps combobox");
+  expect_string(er_ui_node_kind_label(ER_UI_NODE_DIFF_BODY), "diff-body", "node: kind label maps diff body");
   expect_string(er_ui_icon_label(ER_UI_ICON_SEARCH), "search", "node: icon label maps canonical icon");
   expect_u32(er_ui_icon_atlas_id(ER_UI_ICON_SEARCH), (uint32_t)ER_UI_ICON_SEARCH + 1u, "node: icon atlas id is stable");
   expect_string(er_ui_icon_provider_name(ER_UI_ICON_APP, ER_UI_ICON_PROVIDER_LUCIDE), "app-window", "node: lucide provider name maps app icon");
@@ -437,6 +438,17 @@ void run_node_tests(void) {
   expect_true(a11y.has_id && a11y.id == 8085u, "node: combobox option id");
   expect_true((a11y.states & ER_UI_A11Y_STATE_SELECTED) != 0u, "node: combobox selected option state");
 
+  const char* const diff_lines[] = {"@@ -1,2 +1,2 @@", "-old", "+new", " context"};
+  er_ui_node_t diff_body_a11y = er_ui_node_diff_body(diff_lines, 4u, true);
+  expect_status(er_ui_node_accessibility(&diff_body_a11y, &a11y), ER_UI_OK, "node: diff body accessibility maps");
+  expect_size(a11y.role, ER_UI_A11Y_GROUP, "node: diff body accessibility role");
+  expect_true((a11y.states & ER_UI_A11Y_STATE_HAS_VALUE) != 0u, "node: diff body truncated state is exposed");
+  expect_status(er_ui_node_accessibility_child(&diff_body_a11y, 2u, &a11y), ER_UI_OK, "node: diff body line accessibility maps");
+  expect_size(a11y.role, ER_UI_A11Y_TEXT, "node: diff body line role");
+  expect_true(a11y.label == diff_lines[2], "node: diff body line label is borrowed");
+  expect_status(er_ui_node_accessibility_child(&diff_body_a11y, 4u, &a11y), ER_UI_OK, "node: diff body truncated accessibility maps");
+  expect_string(a11y.label, "[diff preview truncated]", "node: diff body truncated label");
+
   er_ui_node_t checked = er_ui_node_checkbox("Remember", true, 8002u);
   expect_status(er_ui_node_accessibility(&checked, &a11y), ER_UI_OK, "node: checkbox accessibility maps");
   expect_size(a11y.role, ER_UI_A11Y_CHECKBOX, "node: checkbox accessibility role");
@@ -608,6 +620,8 @@ void run_node_tests(void) {
     er_ui_node_t calendar = er_ui_node_calendar("May 2026", render_date_days, 4u, 2u, 8876u);
     const char* const render_combobox_options[] = {"Apple", "Banana", "Cherry"};
     er_ui_node_t combobox = er_ui_node_combobox("Fruit", "Banana", "Search fruit...", render_combobox_options, 3u, 1u, 8882u);
+    const char* const render_diff_lines[] = {"@@ -1,2 +1,2 @@", "-old", "+new", "*** End Patch"};
+    er_ui_node_t diff_body = er_ui_node_diff_body(render_diff_lines, 4u, true);
 
     expect_status(er_ui_node_render(&alert, &scene, face, er_ui_bounds(0.0f, 170.0f, 360.0f, 76.0f), theme), ER_UI_OK, "node: alert renders");
     expect_status(er_ui_node_render(&avatar, &scene, face, er_ui_bounds(0.0f, 254.0f, 42.0f, 42.0f), theme), ER_UI_OK, "node: avatar renders");
@@ -802,6 +816,10 @@ void run_node_tests(void) {
     expect_status(er_ui_node_render(&combobox, &scene, face, er_ui_bounds(0.0f, 6250.0f, 300.0f, 250.0f), theme), ER_UI_OK,
                   "node: combobox renders");
     expect_size(scene.hit_count, hits_before_combobox + 5u, "node: combobox emits select, command, and option hits");
+    size_t text_before_diff = scene.text_quad_count;
+    expect_status(er_ui_node_render(&diff_body, &scene, face, er_ui_bounds(0.0f, 6512.0f, 360.0f, 128.0f), theme), ER_UI_OK,
+                  "node: diff body renders");
+    expect_true(scene.text_quad_count > text_before_diff, "node: diff body emits variable font text");
     size_t drag_sources_before = scene.drag_source_count;
     size_t drop_targets_before = scene.drop_target_count;
     expect_status(er_ui_node_render(&reorderable, &scene, face, er_ui_bounds(0.0f, 2930.0f, 260.0f, 52.0f), theme), ER_UI_OK,

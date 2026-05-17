@@ -595,6 +595,15 @@ er_ui_node_t er_ui_node_combobox(const char* label, const char* value, const cha
   return node;
 }
 
+er_ui_node_t er_ui_node_diff_body(const char* const* lines, size_t line_count, bool truncated) {
+  er_ui_node_t node = er_ui_node_base(ER_UI_NODE_DIFF_BODY);
+  node.labels = lines;
+  node.label_count = line_count;
+  node.active = truncated;
+  node.gap = 4.0f;
+  return node;
+}
+
 er_ui_node_t er_ui_node_route_path(const char* label, const char* const* hops, size_t hop_count) {
   er_ui_node_t node = er_ui_node_base(ER_UI_NODE_ROUTE_PATH);
   node.label = label;
@@ -956,6 +965,7 @@ const char* er_ui_node_kind_label(er_ui_node_kind_t kind) {
     case ER_UI_NODE_CAROUSEL: return "carousel";
     case ER_UI_NODE_CALENDAR: return "calendar";
     case ER_UI_NODE_COMBOBOX: return "combobox";
+    case ER_UI_NODE_DIFF_BODY: return "diff-body";
     case ER_UI_NODE_ROUTE_PATH: return "route-path";
     case ER_UI_NODE_PACKAGE_CARD: return "package-card";
     case ER_UI_NODE_RECEIPT_ROW: return "receipt-row";
@@ -1339,6 +1349,10 @@ er_ui_status_t er_ui_node_accessibility(const er_ui_node_t* node, er_ui_a11y_nod
       er_ui_a11y_set_value(&out, node->value);
       out.states |= ER_UI_A11Y_STATE_OPEN;
       break;
+    case ER_UI_NODE_DIFF_BODY:
+      out = er_ui_a11y_base(ER_UI_A11Y_GROUP, "diff body", false, 0u);
+      if (node->active) out.states |= ER_UI_A11Y_STATE_HAS_VALUE;
+      break;
     case ER_UI_NODE_TABS:
       out = er_ui_a11y_base(ER_UI_A11Y_TAB_LIST, "tabs", false, 0u);
       break;
@@ -1503,6 +1517,12 @@ er_ui_status_t er_ui_node_accessibility_child(const er_ui_node_t* node, size_t c
     er_ui_a11y_node_t out = er_ui_a11y_base(ER_UI_A11Y_MENU_ITEM, node->labels[option_index], true, node->id + (uint32_t)child_index);
     if (option_index == node->selected) out.states |= ER_UI_A11Y_STATE_SELECTED;
     *out_a11y = out;
+    return ER_UI_OK;
+  }
+  if (node->kind == ER_UI_NODE_DIFF_BODY) {
+    if (!node->labels || child_index >= node->label_count + (node->active ? 1u : 0u)) return ER_UI_ERR_INVALID_ARGUMENT;
+    const char* label = child_index < node->label_count ? node->labels[child_index] : "[diff preview truncated]";
+    *out_a11y = er_ui_a11y_base(ER_UI_A11Y_TEXT, label, false, 0u);
     return ER_UI_OK;
   }
   if (node->kind == ER_UI_NODE_RADIO_GROUP) {
@@ -2505,6 +2525,44 @@ static er_ui_status_t er_ui_node_render_combobox(
   return ER_UI_OK;
 }
 
+static bool er_ui_node_diff_line_starts_with(const char* line, const char* prefix) {
+  if (!line || !prefix) return false;
+  size_t i = 0u;
+  while (prefix[i]) {
+    if (line[i] != prefix[i]) return false;
+    i++;
+  }
+  return true;
+}
+
+static er_ui_color4_t er_ui_node_diff_line_color(const char* line, er_ui_resolved_theme_t theme) {
+  if (er_ui_node_diff_line_starts_with(line, "+") && !er_ui_node_diff_line_starts_with(line, "+++")) return theme.colors.success;
+  if (er_ui_node_diff_line_starts_with(line, "-") && !er_ui_node_diff_line_starts_with(line, "---")) return theme.colors.danger;
+  if (er_ui_node_diff_line_starts_with(line, "@@") || er_ui_node_diff_line_starts_with(line, "***")) return theme.colors.muted;
+  return theme.colors.text;
+}
+
+static er_ui_status_t er_ui_node_render_diff_body(
+  const er_ui_node_t* node,
+  er_ui_scene_t* scene,
+  vr_font_face_t* font,
+  er_ui_bounds_t bounds,
+  er_ui_resolved_theme_t theme) {
+  if (!node || !scene || !font || !node->labels || !er_ui_bounds_valid(bounds)) return ER_UI_ERR_INVALID_ARGUMENT;
+  float y = bounds.y;
+  float line_h = 20.0f;
+  for (size_t i = 0u; i < node->label_count; ++i) {
+    er_ui_status_t status = er_ui_node_render_text(scene, font, node->labels[i], er_ui_bounds(bounds.x, y, bounds.w, line_h),
+                                                   er_ui_node_diff_line_color(node->labels[i], theme));
+    if (status != ER_UI_OK) return status;
+    y += line_h + node->gap;
+  }
+  if (node->active) {
+    return er_ui_node_render_text(scene, font, "[diff preview truncated]", er_ui_bounds(bounds.x, y, bounds.w, line_h), theme.colors.muted);
+  }
+  return ER_UI_OK;
+}
+
 static er_ui_status_t er_ui_node_render_label_group(
   const er_ui_node_t* node,
   er_ui_scene_t* scene,
@@ -2713,6 +2771,8 @@ er_ui_status_t er_ui_node_render(
       return er_ui_node_render_calendar(node, scene, font, rect, theme);
     case ER_UI_NODE_COMBOBOX:
       return er_ui_node_render_combobox(node, scene, font, rect, theme);
+    case ER_UI_NODE_DIFF_BODY:
+      return er_ui_node_render_diff_body(node, scene, font, rect, theme);
     case ER_UI_NODE_ROUTE_PATH:
       return er_ui_shadcn_route_path_emit(scene, font, rect, theme, node->label, node->labels, node->label_count);
     case ER_UI_NODE_PACKAGE_CARD:
