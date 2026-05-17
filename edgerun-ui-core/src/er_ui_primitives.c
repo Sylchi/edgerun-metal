@@ -1,23 +1,21 @@
 #include "er_ui_primitives.h"
 
-static const float ER_UI_FLOAT_MAX_VALUE = 3.4028234663852886e38f;
+#include "er_math.h"
 
 float er_ui_float_clamp(float value, float min_value, float max_value) {
-  if (value < min_value) return min_value;
-  if (value > max_value) return max_value;
-  return value;
+  return er_math_clampf(value, min_value, max_value);
 }
 
 float er_ui_float_min(float a, float b) {
-  return a < b ? a : b;
+  return er_math_minf(a, b);
 }
 
 float er_ui_float_max(float a, float b) {
-  return a > b ? a : b;
+  return er_math_maxf(a, b);
 }
 
 bool er_ui_float_is_finite_value(float value) {
-  return value == value && value <= ER_UI_FLOAT_MAX_VALUE && value >= -ER_UI_FLOAT_MAX_VALUE;
+  return er_math_isfinitef(value) != 0;
 }
 
 er_ui_bounds_t er_ui_bounds(float x, float y, float w, float h) {
