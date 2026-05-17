@@ -40,6 +40,14 @@
 - Add tests for new repository tooling and for behavior changes when deterministic tests are possible.
 - Document the purpose and intention of new tools, tests, and top-level structure.
 
+## Repo inspection annotations
+
+- `tools/repo-inspect.c` supports reasoned annotations for intentional false positives.
+- Use `//@optimizer-ignore reason` on the exact line, `//@optimizer-ignore-function reason` immediately before a function definition, or `//@optimizer-ignore-constant reason` immediately before a constant or macro block.
+- Every annotation must include a concrete reason; bare optimizer-ignore markers are misuse.
+- Prefer fixing real duplication, CPU-cost, magic-number, or string-indexing findings. Use annotations only when the reported shape is required by a protocol, ABI, hardware register layout, cryptographic schedule, SIMD lane packing, or another explicit invariant.
+- Do not use annotations to hide incomplete work, accidental complexity, unclear ownership, or missing tests.
+
 ## Multi-agent safety
 
 - Assume every agent shares the same working tree and current branch.
