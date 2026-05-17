@@ -12,9 +12,18 @@
 #define ER_GFX_CELL_W 6u
 #define ER_GFX_CELL_H 8u
 #define ER_GFX_MIN_SCALE 1u
+#define ER_GFX_RGB_SHIFT_R 16u
+#define ER_GFX_RGB_SHIFT_G 8u
+#define ER_GFX_COLOR_BLACK 0u
+#define ER_GFX_COLOR_WHITE 255u
+#define ER_GFX_CENTER_DIVISOR 2u
+#define ER_GFX_ASCII_MIN_PRINTABLE 32u
+#define ER_GFX_ASCII_MAX_PRINTABLE 126u
+#define ER_GFX_DIGIT_COUNT 10u
+#define ER_GFX_UPPER_COUNT 26u
 
 static EFI_GUID g_gop_guid = {
-  0x9042a9deu, 0x23dcu, 0x4a38u, {0x96u, 0xfbu, 0x7au, 0xdeu, 0xd0u, 0x80u, 0x51u, 0x6au}
+  0x9042a9deu, 0x23dcu, 0x4a38u, {0x96u, 0xfbu, 0x7au, 0xdeu, 0xd0u, 0x80u, 0x51u, 0x6au} //@optimizer-ignore UEFI graphics output protocol GUID
 };
 
 static UINT8 g_ready;
@@ -32,9 +41,9 @@ static char g_cells[ER_GFX_ROWS][ER_GFX_COLS];
 
 static UINT32 er_gfx_rgb(UINT8 r, UINT8 g, UINT8 b) {
   if (g_bgr != 0u) {
-    return ((UINT32)b << 16) | ((UINT32)g << 8) | (UINT32)r;
+    return ((UINT32)b << ER_GFX_RGB_SHIFT_R) | ((UINT32)g << ER_GFX_RGB_SHIFT_G) | (UINT32)r;
   }
-  return ((UINT32)r << 16) | ((UINT32)g << 8) | (UINT32)b;
+  return ((UINT32)r << ER_GFX_RGB_SHIFT_R) | ((UINT32)g << ER_GFX_RGB_SHIFT_G) | (UINT32)b;
 }
 
 static void er_gfx_put_pixel(UINT32 x, UINT32 y, UINT32 color) {
@@ -56,37 +65,37 @@ static void er_gfx_fill_rect(UINT32 x, UINT32 y, UINT32 w, UINT32 h, UINT32 colo
 }
 
 static UINT8 er_gfx_row_bits(char c, UINTN row) {
-  static const UINT8 space[7] = {0, 0, 0, 0, 0, 0, 0};
-  static const UINT8 unknown[7] = {14, 17, 1, 2, 4, 0, 4};
-  static const UINT8 digit[10][7] = {
-    {14, 17, 19, 21, 25, 17, 14}, {4, 12, 4, 4, 4, 4, 14},
-    {14, 17, 1, 2, 4, 8, 31},    {30, 1, 1, 14, 1, 1, 30},
-    {2, 6, 10, 18, 31, 2, 2},    {31, 16, 30, 1, 1, 17, 14},
-    {6, 8, 16, 30, 17, 17, 14},  {31, 1, 2, 4, 8, 8, 8},
-    {14, 17, 17, 14, 17, 17, 14}, {14, 17, 17, 15, 1, 2, 12}
+  static const UINT8 space[ER_GFX_GLYPH_H] = {0, 0, 0, 0, 0, 0, 0}; //@optimizer-ignore 5x7 bitmap glyph rows
+  static const UINT8 unknown[ER_GFX_GLYPH_H] = {14, 17, 1, 2, 4, 0, 4}; //@optimizer-ignore 5x7 bitmap glyph rows
+  static const UINT8 digit[ER_GFX_DIGIT_COUNT][ER_GFX_GLYPH_H] = {
+    {14, 17, 19, 21, 25, 17, 14}, {4, 12, 4, 4, 4, 4, 14}, //@optimizer-ignore 5x7 bitmap glyph rows
+    {14, 17, 1, 2, 4, 8, 31},    {30, 1, 1, 14, 1, 1, 30}, //@optimizer-ignore 5x7 bitmap glyph rows
+    {2, 6, 10, 18, 31, 2, 2},    {31, 16, 30, 1, 1, 17, 14}, //@optimizer-ignore 5x7 bitmap glyph rows
+    {6, 8, 16, 30, 17, 17, 14},  {31, 1, 2, 4, 8, 8, 8}, //@optimizer-ignore 5x7 bitmap glyph rows
+    {14, 17, 17, 14, 17, 17, 14}, {14, 17, 17, 15, 1, 2, 12} //@optimizer-ignore 5x7 bitmap glyph rows
   };
-  static const UINT8 upper[26][7] = {
-    {14, 17, 17, 31, 17, 17, 17}, {30, 17, 17, 30, 17, 17, 30},
-    {14, 17, 16, 16, 16, 17, 14}, {30, 17, 17, 17, 17, 17, 30},
-    {31, 16, 16, 30, 16, 16, 31}, {31, 16, 16, 30, 16, 16, 16},
-    {14, 17, 16, 23, 17, 17, 15}, {17, 17, 17, 31, 17, 17, 17},
-    {14, 4, 4, 4, 4, 4, 14},      {7, 2, 2, 2, 18, 18, 12},
-    {17, 18, 20, 24, 20, 18, 17}, {16, 16, 16, 16, 16, 16, 31},
-    {17, 27, 21, 21, 17, 17, 17}, {17, 25, 21, 19, 17, 17, 17},
-    {14, 17, 17, 17, 17, 17, 14}, {30, 17, 17, 30, 16, 16, 16},
-    {14, 17, 17, 17, 21, 18, 13}, {30, 17, 17, 30, 20, 18, 17},
-    {15, 16, 16, 14, 1, 1, 30},   {31, 4, 4, 4, 4, 4, 4},
-    {17, 17, 17, 17, 17, 17, 14}, {17, 17, 17, 17, 17, 10, 4},
-    {17, 17, 17, 21, 21, 21, 10}, {17, 17, 10, 4, 10, 17, 17},
-    {17, 17, 10, 4, 4, 4, 4},     {31, 1, 2, 4, 8, 16, 31}
+  static const UINT8 upper[ER_GFX_UPPER_COUNT][ER_GFX_GLYPH_H] = {
+    {14, 17, 17, 31, 17, 17, 17}, {30, 17, 17, 30, 17, 17, 30}, //@optimizer-ignore 5x7 bitmap glyph rows
+    {14, 17, 16, 16, 16, 17, 14}, {30, 17, 17, 17, 17, 17, 30}, //@optimizer-ignore 5x7 bitmap glyph rows
+    {31, 16, 16, 30, 16, 16, 31}, {31, 16, 16, 30, 16, 16, 16}, //@optimizer-ignore 5x7 bitmap glyph rows
+    {14, 17, 16, 23, 17, 17, 15}, {17, 17, 17, 31, 17, 17, 17}, //@optimizer-ignore 5x7 bitmap glyph rows
+    {14, 4, 4, 4, 4, 4, 14},      {7, 2, 2, 2, 18, 18, 12}, //@optimizer-ignore 5x7 bitmap glyph rows
+    {17, 18, 20, 24, 20, 18, 17}, {16, 16, 16, 16, 16, 16, 31}, //@optimizer-ignore 5x7 bitmap glyph rows
+    {17, 27, 21, 21, 17, 17, 17}, {17, 25, 21, 19, 17, 17, 17}, //@optimizer-ignore 5x7 bitmap glyph rows
+    {14, 17, 17, 17, 17, 17, 14}, {30, 17, 17, 30, 16, 16, 16}, //@optimizer-ignore 5x7 bitmap glyph rows
+    {14, 17, 17, 17, 21, 18, 13}, {30, 17, 17, 30, 20, 18, 17}, //@optimizer-ignore 5x7 bitmap glyph rows
+    {15, 16, 16, 14, 1, 1, 30},   {31, 4, 4, 4, 4, 4, 4}, //@optimizer-ignore 5x7 bitmap glyph rows
+    {17, 17, 17, 17, 17, 17, 14}, {17, 17, 17, 17, 17, 10, 4}, //@optimizer-ignore 5x7 bitmap glyph rows
+    {17, 17, 17, 21, 21, 21, 10}, {17, 17, 10, 4, 10, 17, 17}, //@optimizer-ignore 5x7 bitmap glyph rows
+    {17, 17, 10, 4, 4, 4, 4},     {31, 1, 2, 4, 8, 16, 31} //@optimizer-ignore 5x7 bitmap glyph rows
   };
-  static const UINT8 colon[7] = {0, 4, 4, 0, 4, 4, 0};
-  static const UINT8 dash[7] = {0, 0, 0, 31, 0, 0, 0};
-  static const UINT8 dot[7] = {0, 0, 0, 0, 0, 12, 12};
-  static const UINT8 slash[7] = {1, 1, 2, 4, 8, 16, 16};
-  static const UINT8 eq[7] = {0, 0, 31, 0, 31, 0, 0};
-  static const UINT8 under[7] = {0, 0, 0, 0, 0, 0, 31};
-  static const UINT8 bang[7] = {4, 4, 4, 4, 4, 0, 4};
+  static const UINT8 colon[ER_GFX_GLYPH_H] = {0, 4, 4, 0, 4, 4, 0}; //@optimizer-ignore 5x7 bitmap glyph rows
+  static const UINT8 dash[ER_GFX_GLYPH_H] = {0, 0, 0, 31, 0, 0, 0}; //@optimizer-ignore 5x7 bitmap glyph rows
+  static const UINT8 dot[ER_GFX_GLYPH_H] = {0, 0, 0, 0, 0, 12, 12}; //@optimizer-ignore 5x7 bitmap glyph rows
+  static const UINT8 slash[ER_GFX_GLYPH_H] = {1, 1, 2, 4, 8, 16, 16}; //@optimizer-ignore 5x7 bitmap glyph rows
+  static const UINT8 eq[ER_GFX_GLYPH_H] = {0, 0, 31, 0, 31, 0, 0}; //@optimizer-ignore 5x7 bitmap glyph rows
+  static const UINT8 under[ER_GFX_GLYPH_H] = {0, 0, 0, 0, 0, 0, 31}; //@optimizer-ignore 5x7 bitmap glyph rows
+  static const UINT8 bang[ER_GFX_GLYPH_H] = {4, 4, 4, 4, 4, 0, 4}; //@optimizer-ignore 5x7 bitmap glyph rows
   const UINT8* glyph = unknown;
 
   if (row >= ER_GFX_GLYPH_H) {
@@ -120,8 +129,8 @@ static UINT8 er_gfx_row_bits(char c, UINTN row) {
 }
 
 static void er_gfx_draw_cell(UINTN col, UINTN row, char c) {
-  UINT32 bg = er_gfx_rgb(0, 0, 0);
-  UINT32 fg = er_gfx_rgb(255, 255, 255);
+  UINT32 bg = er_gfx_rgb(ER_GFX_COLOR_BLACK, ER_GFX_COLOR_BLACK, ER_GFX_COLOR_BLACK);
+  UINT32 fg = er_gfx_rgb(ER_GFX_COLOR_WHITE, ER_GFX_COLOR_WHITE, ER_GFX_COLOR_WHITE);
   UINT32 x0 = g_origin_x + (UINT32)col * ER_GFX_CELL_W * g_scale;
   UINT32 y0 = g_origin_y + (UINT32)row * ER_GFX_CELL_H * g_scale;
   UINTN gy;
@@ -142,7 +151,8 @@ static void er_gfx_redraw(void) {
   UINTN row;
   UINTN col;
 
-  er_gfx_fill_rect(0, 0, g_width, g_height, er_gfx_rgb(0, 0, 0));
+  er_gfx_fill_rect(0, 0, g_width, g_height,
+                   er_gfx_rgb(ER_GFX_COLOR_BLACK, ER_GFX_COLOR_BLACK, ER_GFX_COLOR_BLACK));
   for (row = 0; row < ER_GFX_ROWS; ++row) {
     for (col = 0; col < ER_GFX_COLS; ++col) {
       er_gfx_draw_cell(col, row, g_cells[row][col]);
@@ -184,7 +194,7 @@ static void er_gfx_putc(char c) {
     er_gfx_newline();
     return;
   }
-  if ((UINT8)c < 32u || (UINT8)c > 126u) {
+  if ((UINT8)c < ER_GFX_ASCII_MIN_PRINTABLE || (UINT8)c > ER_GFX_ASCII_MAX_PRINTABLE) {
     c = '?';
   }
   if (g_col >= ER_GFX_COLS) {
@@ -236,9 +246,9 @@ void er_gfx_console_init(EFI_SYSTEM_TABLE* st) {
   }
 
   g_origin_x = (g_width > (ER_GFX_COLS * ER_GFX_CELL_W * g_scale)) ?
-    (g_width - (ER_GFX_COLS * ER_GFX_CELL_W * g_scale)) / 2u : 0u;
+    (g_width - (ER_GFX_COLS * ER_GFX_CELL_W * g_scale)) / ER_GFX_CENTER_DIVISOR : 0u;
   g_origin_y = (g_height > (ER_GFX_ROWS * ER_GFX_CELL_H * g_scale)) ?
-    (g_height - (ER_GFX_ROWS * ER_GFX_CELL_H * g_scale)) / 2u : 0u;
+    (g_height - (ER_GFX_ROWS * ER_GFX_CELL_H * g_scale)) / ER_GFX_CENTER_DIVISOR : 0u;
 
   for (row = 0; row < ER_GFX_ROWS; ++row) {
     for (col = 0; col < ER_GFX_COLS; ++col) {

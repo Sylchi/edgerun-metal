@@ -12,6 +12,33 @@
 #define ER_PCI_CONFIG_MAX_DEV 31
 #define ER_PCI_CONFIG_MAX_FUNC 7
 #define ER_PCI_CONFIG_MAX_OFFSET 252
+#define ER_PCI_CONFIG_DWORD_ALIGN_MASK 0x3u
+#define ER_PCI_CONFIG_BUS_SHIFT 16u
+#define ER_PCI_CONFIG_DEV_SHIFT 11u
+#define ER_PCI_CONFIG_FUNC_SHIFT 8u
+#define ER_PCI_INVALID_ID 0xffffffffu
+#define ER_PCI_INVALID_VENDOR_ID 0xffffu
+#define ER_PCI_VENDOR_ID_MASK 0xffffu
+#define ER_PCI_CLASS_CODE_SHIFT 24u
+#define ER_PCI_SUBCLASS_SHIFT 16u
+#define ER_PCI_REG_BYTE_MASK 0xffu
+#define ER_PCI_HEADER_MULTIFUNCTION_BIT 0x00800000u
+#define ER_PCI_NVIDIA_VENDOR_ID 0x10deu
+#define ER_PCI_CLASS_MASS_STORAGE 0x01u
+#define ER_PCI_SUBCLASS_NVME 0x08u
+#define ER_PCI_CLASS_NETWORK 0x02u
+#define ER_PCI_SUBCLASS_ETHERNET 0x00u
+#define ER_PCI_CLASS_DISPLAY 0x03u
+#define ER_PCI_BAR_IO_SPACE_BIT 0x1u
+#define ER_PCI_BAR_IO_BASE_MASK 0xfffffffcu
+#define ER_PCI_BAR_MEM_TYPE_SHIFT 1u
+#define ER_PCI_BAR_MEM_TYPE_MASK 0x3u
+#define ER_PCI_BAR_PREFETCH_SHIFT 3u
+#define ER_PCI_BAR_PREFETCH_MASK 0x1u
+#define ER_PCI_BAR_MEM_TYPE_32 0x0u
+#define ER_PCI_BAR_MEM_TYPE_64 0x2u
+#define ER_PCI_BAR_MMIO_BASE_MASK 0xfffffff0u
+#define ER_PCI_BAR_HIGH_SHIFT 32u
 
 static inline UINT32 er_in32(UINT16 port) {
   UINT32 value = 0;
@@ -40,7 +67,7 @@ UINT8 er_pci_config_access_valid(INT64 bus_i, INT64 dev_i, INT64 func_i, INT64 o
     return 0;
   }
 
-  if (((UINT32)offset_i & 0x3u) != 0u) {
+  if (((UINT32)offset_i & ER_PCI_CONFIG_DWORD_ALIGN_MASK) != 0u) {
     return 0;
   }
 
@@ -62,7 +89,8 @@ INT64 er_pci_config_address(INT64 bus_i, INT64 dev_i, INT64 func_i, INT64 offset
   dev = (UINT32)dev_i;
   func = (UINT32)func_i;
   offset = (UINT32)offset_i;
-  address = (UINT32)(ER_PCI_CONFIG_ADDRESS_ENABLE | (bus << 16) | (dev << 11) | (func << 8) | offset);
+  address = (UINT32)(ER_PCI_CONFIG_ADDRESS_ENABLE | (bus << ER_PCI_CONFIG_BUS_SHIFT) |
+                     (dev << ER_PCI_CONFIG_DEV_SHIFT) | (func << ER_PCI_CONFIG_FUNC_SHIFT) | offset);
   return (INT64)address;
 }
 
@@ -92,7 +120,7 @@ UINT32 er_pci_cfg_read32(UINT32 bus, UINT32 dev, UINT32 func, UINT32 offset) {
   INT64 value = er_pci_read32((INT64)bus, (INT64)dev, (INT64)func, (INT64)offset);
 
   if (value < 0) {
-    return 0xffffffffu;
+    return ER_PCI_INVALID_ID;
   }
 
   return (UINT32)value;
@@ -101,7 +129,7 @@ UINT32 er_pci_cfg_read32(UINT32 bus, UINT32 dev, UINT32 func, UINT32 offset) {
 UINT8 er_pci_device_present(UINT32 id) {
   UINT16 vendor = er_pci_vendor_id(id);
 
-  if (id == 0xffffffffu || vendor == 0xffffu) {
+  if (id == ER_PCI_INVALID_ID || vendor == ER_PCI_INVALID_VENDOR_ID) {
     return 0;
   }
 
@@ -109,19 +137,19 @@ UINT8 er_pci_device_present(UINT32 id) {
 }
 
 UINT16 er_pci_vendor_id(UINT32 id) {
-  return (UINT16)(id & 0xffffu);
+  return (UINT16)(id & ER_PCI_VENDOR_ID_MASK);
 }
 
 UINT8 er_pci_class_code(UINT32 class_rev) {
-  return (UINT8)((class_rev >> 24) & 0xffu);
+  return (UINT8)((class_rev >> ER_PCI_CLASS_CODE_SHIFT) & ER_PCI_REG_BYTE_MASK);
 }
 
 UINT8 er_pci_subclass(UINT32 class_rev) {
-  return (UINT8)((class_rev >> 16) & 0xffu);
+  return (UINT8)((class_rev >> ER_PCI_SUBCLASS_SHIFT) & ER_PCI_REG_BYTE_MASK);
 }
 
 UINT8 er_pci_header_multifunction(UINT32 header_cacheline) {
-  return (UINT8)((header_cacheline & 0x00800000u) != 0u);
+  return (UINT8)((header_cacheline & ER_PCI_HEADER_MULTIFUNCTION_BIT) != 0u);
 }
 
 UINT32 er_pci_function_count(UINT32 header_cacheline) {
@@ -153,19 +181,19 @@ UINT8 er_pci_classify_target(UINT32 id, UINT32 class_rev) {
     return ER_PCI_TARGET_KIND_NONE;
   }
 
-  if (vendor == 0x10deu) {
+  if (vendor == ER_PCI_NVIDIA_VENDOR_ID) {
     return ER_PCI_TARGET_KIND_NVIDIA;
   }
 
-  if (class_code == 0x01u && subclass == 0x08u) {
+  if (class_code == ER_PCI_CLASS_MASS_STORAGE && subclass == ER_PCI_SUBCLASS_NVME) {
     return ER_PCI_TARGET_KIND_NVME;
   }
 
-  if (class_code == 0x02u && subclass == 0x00u) {
+  if (class_code == ER_PCI_CLASS_NETWORK && subclass == ER_PCI_SUBCLASS_ETHERNET) {
     return ER_PCI_TARGET_KIND_ETHERNET;
   }
 
-  if (class_code == 0x03u) {
+  if (class_code == ER_PCI_CLASS_DISPLAY) {
     return ER_PCI_TARGET_KIND_DISPLAY;
   }
 
@@ -192,28 +220,28 @@ ErPciBarInfo er_pci_decode_bar(UINT32 bar_low, UINT32 bar_high) {
   info.base = 0;
   info.prefetchable = 0;
 
-  if (bar_low == 0u || bar_low == 0xffffffffu) {
+  if (bar_low == 0u || bar_low == ER_PCI_INVALID_ID) {
     return info;
   }
 
-  if ((bar_low & 0x1u) != 0u) {
+  if ((bar_low & ER_PCI_BAR_IO_SPACE_BIT) != 0u) {
     info.kind = ER_PCI_BAR_KIND_IO;
-    info.base = (UINT64)(bar_low & 0xfffffffcu);
+    info.base = (UINT64)(bar_low & ER_PCI_BAR_IO_BASE_MASK);
     return info;
   }
 
-  memory_type = (bar_low >> 1) & 0x3u;
-  info.prefetchable = (UINT8)((bar_low >> 3) & 0x1u);
+  memory_type = (bar_low >> ER_PCI_BAR_MEM_TYPE_SHIFT) & ER_PCI_BAR_MEM_TYPE_MASK;
+  info.prefetchable = (UINT8)((bar_low >> ER_PCI_BAR_PREFETCH_SHIFT) & ER_PCI_BAR_PREFETCH_MASK);
 
-  if (memory_type == 0x0u) {
+  if (memory_type == ER_PCI_BAR_MEM_TYPE_32) {
     info.kind = ER_PCI_BAR_KIND_MMIO32;
-    info.base = (UINT64)(bar_low & 0xfffffff0u);
+    info.base = (UINT64)(bar_low & ER_PCI_BAR_MMIO_BASE_MASK);
     return info;
   }
 
-  if (memory_type == 0x2u) {
+  if (memory_type == ER_PCI_BAR_MEM_TYPE_64) {
     info.kind = ER_PCI_BAR_KIND_MMIO64;
-    info.base = ((UINT64)bar_high << 32) | (UINT64)(bar_low & 0xfffffff0u);
+    info.base = ((UINT64)bar_high << ER_PCI_BAR_HIGH_SHIFT) | (UINT64)(bar_low & ER_PCI_BAR_MMIO_BASE_MASK);
     return info;
   }
 
@@ -281,10 +309,10 @@ void er_pci_clear_snapshot(ErPciDeviceSnapshot* snapshot) {
   snapshot->bus = 0;
   snapshot->dev = 0;
   snapshot->func = 0;
-  snapshot->id = 0xffffffffu;
-  snapshot->command_status = 0xffffffffu;
-  snapshot->class_revision = 0xffffffffu;
-  snapshot->header_cacheline = 0xffffffffu;
+  snapshot->id = ER_PCI_INVALID_ID;
+  snapshot->command_status = ER_PCI_INVALID_ID;
+  snapshot->class_revision = ER_PCI_INVALID_ID;
+  snapshot->header_cacheline = ER_PCI_INVALID_ID;
   for (i = 0; i < ER_PCI_BAR_COUNT; ++i) {
     snapshot->bars[i] = 0;
   }
