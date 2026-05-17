@@ -19,7 +19,38 @@ enum {
   ER_APP_U16_FIELD_BYTES = 2u,
   ER_APP_U64_FIELD_BYTES = 8u,
   ER_APP_BUDGET_U64_FIELD_COUNT = 6u,
-  ER_APP_BUDGET_FIELD_BYTES = ER_APP_U16_FIELD_BYTES + (ER_APP_U64_FIELD_BYTES * ER_APP_BUDGET_U64_FIELD_COUNT)
+  ER_APP_BUDGET_FIELD_BYTES = ER_APP_U16_FIELD_BYTES + (ER_APP_U64_FIELD_BYTES * ER_APP_BUDGET_U64_FIELD_COUNT),
+  ER_APP_IDENTITY_HASH_SPAN_COUNT = 4u,
+  ER_APP_IDENTITY_APP_OBJECT_SPAN = 0u,
+  ER_APP_IDENTITY_MANIFEST_SPAN = 1u,
+  ER_APP_IDENTITY_ADMISSION_SPAN = 2u,
+  ER_APP_IDENTITY_NONCE_SPAN = 3u,
+  ER_APP_IDENTITY_BUDGET_SPAN_COUNT = 4u,
+  ER_APP_IDENTITY_BUDGET_NODE_SPAN = 0u,
+  ER_APP_IDENTITY_BUDGET_ADMISSION_SPAN = 1u,
+  ER_APP_IDENTITY_BUDGET_ID_SPAN = 2u,
+  ER_APP_IDENTITY_BUDGET_FIELDS_SPAN = 3u,
+  ER_APP_BUDGET_HASH_SPAN_COUNT = 4u,
+  ER_APP_BUDGET_HASH_APP_OBJECT_SPAN = 0u,
+  ER_APP_BUDGET_HASH_MANIFEST_SPAN = 1u,
+  ER_APP_BUDGET_HASH_ADMISSION_SPAN = 2u,
+  ER_APP_BUDGET_HASH_FIELDS_SPAN = 3u,
+  ER_APP_ROUTE_BINDING_SPAN_COUNT = 5u,
+  ER_APP_ROUTE_SOURCE_SPAN = 0u,
+  ER_APP_ROUTE_TARGET_SPAN = 1u,
+  ER_APP_ROUTE_CAPABILITY_SPAN = 2u,
+  ER_APP_ROUTE_HASH_SPAN = 3u,
+  ER_APP_ROUTE_SEQUENCE_SPAN = 4u,
+  ER_APP_SESSION_SPAN_COUNT = 3u,
+  ER_APP_SESSION_ADMISSION_SPAN = 0u,
+  ER_APP_SESSION_ROUTE_SPAN = 1u,
+  ER_APP_SESSION_NONCE_SPAN = 2u,
+  ER_APP_PACKED_FIELD0_OFFSET = 0u,
+  ER_APP_PACKED_FIELD1_OFFSET = 8u,
+  ER_APP_PACKED_FIELD2_OFFSET = 16u,
+  ER_APP_PACKED_FIELD3_OFFSET = 24u,
+  ER_APP_PACKED_U64_FIELD_COUNT = 4u,
+  ER_APP_PACKED_U64_FIELDS_BYTES = ER_APP_U64_FIELD_BYTES * ER_APP_PACKED_U64_FIELD_COUNT
 };
 
 static void er_app_put_be(UINT8* dst, UINT64 value, UINTN byte_count) {
@@ -50,14 +81,14 @@ static UINT8 er_app_add_overflows(UINT64 current, UINT64 amount) {
 
 static void er_app_prepare_identity_budget_spans(const ErAppIdentity* identity, const ErAppBudget* budget,
                                                  const UINT8* fields, UINTN fields_len, ErByteSpan* spans) {
-  spans[0].bytes = identity->app_node_id.bytes;
-  spans[0].len = ER_NODE_ID_LEN;
-  spans[1].bytes = identity->admission_id.bytes;
-  spans[1].len = ER_HASH_LEN;
-  spans[2].bytes = budget->budget_id.bytes;
-  spans[2].len = ER_HASH_LEN;
-  spans[3].bytes = fields;
-  spans[3].len = fields_len;
+  spans[ER_APP_IDENTITY_BUDGET_NODE_SPAN].bytes = identity->app_node_id.bytes;
+  spans[ER_APP_IDENTITY_BUDGET_NODE_SPAN].len = ER_NODE_ID_LEN;
+  spans[ER_APP_IDENTITY_BUDGET_ADMISSION_SPAN].bytes = identity->admission_id.bytes;
+  spans[ER_APP_IDENTITY_BUDGET_ADMISSION_SPAN].len = ER_HASH_LEN;
+  spans[ER_APP_IDENTITY_BUDGET_ID_SPAN].bytes = budget->budget_id.bytes;
+  spans[ER_APP_IDENTITY_BUDGET_ID_SPAN].len = ER_HASH_LEN;
+  spans[ER_APP_IDENTITY_BUDGET_FIELDS_SPAN].bytes = fields;
+  spans[ER_APP_IDENTITY_BUDGET_FIELDS_SPAN].len = fields_len;
 }
 
 UINT8 er_app_derive_identity(const ErCryptoProvider* crypto, const ErHash* app_object_id,
@@ -65,7 +96,7 @@ UINT8 er_app_derive_identity(const ErCryptoProvider* crypto, const ErHash* app_o
                              const UINT8* instance_nonce, UINTN instance_nonce_len,
                              ErAppIdentity* out_identity) {
   ErHash app_node_hash;
-  ErByteSpan spans[4];
+  ErByteSpan spans[ER_APP_IDENTITY_HASH_SPAN_COUNT];
 
   if (crypto == 0 || app_object_id == 0 || manifest_hash == 0 || admission_id == 0 || out_identity == 0) {
     return 0;
@@ -74,16 +105,16 @@ UINT8 er_app_derive_identity(const ErCryptoProvider* crypto, const ErHash* app_o
     return 0;
   }
 
-  spans[0].bytes = app_object_id->bytes;
-  spans[0].len = ER_HASH_LEN;
-  spans[1].bytes = manifest_hash->bytes;
-  spans[1].len = ER_HASH_LEN;
-  spans[2].bytes = admission_id->bytes;
-  spans[2].len = ER_HASH_LEN;
-  spans[3].bytes = instance_nonce;
-  spans[3].len = instance_nonce_len;
+  spans[ER_APP_IDENTITY_APP_OBJECT_SPAN].bytes = app_object_id->bytes;
+  spans[ER_APP_IDENTITY_APP_OBJECT_SPAN].len = ER_HASH_LEN;
+  spans[ER_APP_IDENTITY_MANIFEST_SPAN].bytes = manifest_hash->bytes;
+  spans[ER_APP_IDENTITY_MANIFEST_SPAN].len = ER_HASH_LEN;
+  spans[ER_APP_IDENTITY_ADMISSION_SPAN].bytes = admission_id->bytes;
+  spans[ER_APP_IDENTITY_ADMISSION_SPAN].len = ER_HASH_LEN;
+  spans[ER_APP_IDENTITY_NONCE_SPAN].bytes = instance_nonce;
+  spans[ER_APP_IDENTITY_NONCE_SPAN].len = instance_nonce_len;
   if (er_crypto_hash(crypto, g_app_node_domain, (UINTN)(sizeof(g_app_node_domain) - 1u),
-                     spans, 4u, &app_node_hash) == 0u) {
+                     spans, ER_APP_IDENTITY_HASH_SPAN_COUNT, &app_node_hash) == 0u) {
     return 0;
   }
 
@@ -101,9 +132,9 @@ UINT8 er_app_prepare_ipc_route_binding(const ErCryptoProvider* crypto, const ErA
                                        const ErNodeId* target_node_id, const ErHash* capability_id,
                                        const ErHash* route_hash, UINT64 sequence_base,
                                        UINT32 capability_risk_flags, ErAppIpcRouteBinding* out_binding) {
-  UINT8 sequence_be[8];
-  ErByteSpan route_spans[5];
-  ErByteSpan session_spans[3];
+  UINT8 sequence_be[ER_APP_U64_FIELD_BYTES];
+  ErByteSpan route_spans[ER_APP_ROUTE_BINDING_SPAN_COUNT];
+  ErByteSpan session_spans[ER_APP_SESSION_SPAN_COUNT];
 
   if (crypto == 0 || source_app == 0 || target_node_id == 0 || capability_id == 0 ||
       route_hash == 0 || out_binding == 0) {
@@ -128,29 +159,29 @@ UINT8 er_app_prepare_ipc_route_binding(const ErCryptoProvider* crypto, const ErA
   out_binding->capability_risk_flags = capability_risk_flags;
 
   er_app_put_be64(sequence_be, sequence_base);
-  route_spans[0].bytes = source_app->app_node_id.bytes;
-  route_spans[0].len = ER_NODE_ID_LEN;
-  route_spans[1].bytes = target_node_id->bytes;
-  route_spans[1].len = ER_NODE_ID_LEN;
-  route_spans[2].bytes = capability_id->bytes;
-  route_spans[2].len = ER_HASH_LEN;
-  route_spans[3].bytes = route_hash->bytes;
-  route_spans[3].len = ER_HASH_LEN;
-  route_spans[4].bytes = sequence_be;
-  route_spans[4].len = (UINTN)sizeof(sequence_be);
+  route_spans[ER_APP_ROUTE_SOURCE_SPAN].bytes = source_app->app_node_id.bytes;
+  route_spans[ER_APP_ROUTE_SOURCE_SPAN].len = ER_NODE_ID_LEN;
+  route_spans[ER_APP_ROUTE_TARGET_SPAN].bytes = target_node_id->bytes;
+  route_spans[ER_APP_ROUTE_TARGET_SPAN].len = ER_NODE_ID_LEN;
+  route_spans[ER_APP_ROUTE_CAPABILITY_SPAN].bytes = capability_id->bytes;
+  route_spans[ER_APP_ROUTE_CAPABILITY_SPAN].len = ER_HASH_LEN;
+  route_spans[ER_APP_ROUTE_HASH_SPAN].bytes = route_hash->bytes;
+  route_spans[ER_APP_ROUTE_HASH_SPAN].len = ER_HASH_LEN;
+  route_spans[ER_APP_ROUTE_SEQUENCE_SPAN].bytes = sequence_be;
+  route_spans[ER_APP_ROUTE_SEQUENCE_SPAN].len = (UINTN)sizeof(sequence_be);
   if (er_crypto_hash(crypto, g_app_route_domain, (UINTN)(sizeof(g_app_route_domain) - 1u),
-                     route_spans, 5u, &out_binding->route_binding_id) == 0u) {
+                     route_spans, ER_APP_ROUTE_BINDING_SPAN_COUNT, &out_binding->route_binding_id) == 0u) {
     return 0;
   }
 
-  session_spans[0].bytes = source_app->admission_id.bytes;
-  session_spans[0].len = ER_HASH_LEN;
-  session_spans[1].bytes = out_binding->route_binding_id.bytes;
-  session_spans[1].len = ER_HASH_LEN;
-  session_spans[2].bytes = source_app->instance_nonce;
-  session_spans[2].len = ER_APP_INSTANCE_NONCE_LEN;
+  session_spans[ER_APP_SESSION_ADMISSION_SPAN].bytes = source_app->admission_id.bytes;
+  session_spans[ER_APP_SESSION_ADMISSION_SPAN].len = ER_HASH_LEN;
+  session_spans[ER_APP_SESSION_ROUTE_SPAN].bytes = out_binding->route_binding_id.bytes;
+  session_spans[ER_APP_SESSION_ROUTE_SPAN].len = ER_HASH_LEN;
+  session_spans[ER_APP_SESSION_NONCE_SPAN].bytes = source_app->instance_nonce;
+  session_spans[ER_APP_SESSION_NONCE_SPAN].len = ER_APP_INSTANCE_NONCE_LEN;
   return er_crypto_hash(crypto, g_app_session_domain, (UINTN)(sizeof(g_app_session_domain) - 1u),
-                        session_spans, 3u, &out_binding->session_id);
+                        session_spans, ER_APP_SESSION_SPAN_COUNT, &out_binding->session_id);
 }
 
 UINT8 er_app_prepare_budget(const ErCryptoProvider* crypto, const ErAppIdentity* identity,
@@ -160,7 +191,7 @@ UINT8 er_app_prepare_budget(const ErCryptoProvider* crypto, const ErAppIdentity*
                             ErAppBudget* out_budget) {
   UINT8 fields[ER_APP_BUDGET_FIELD_BYTES];
   UINT8* field_cursor = fields;
-  ErByteSpan spans[4];
+  ErByteSpan spans[ER_APP_IDENTITY_BUDGET_SPAN_COUNT];
 
   if (crypto == 0 || identity == 0 || out_budget == 0 || identity->abi_version != ER_APP_ABI_VERSION) {
     return 0;
@@ -193,16 +224,16 @@ UINT8 er_app_prepare_budget(const ErCryptoProvider* crypto, const ErAppIdentity*
   er_app_put_budget_field(&field_cursor, max_ipc_sends);
   er_app_put_budget_field(&field_cursor, max_ipc_recvs);
 
-  spans[0].bytes = identity->app_object_id.bytes;
-  spans[0].len = ER_HASH_LEN;
-  spans[1].bytes = identity->manifest_hash.bytes;
-  spans[1].len = ER_HASH_LEN;
-  spans[2].bytes = identity->admission_id.bytes;
-  spans[2].len = ER_HASH_LEN;
-  spans[3].bytes = fields;
-  spans[3].len = (UINTN)sizeof(fields);
+  spans[ER_APP_BUDGET_HASH_APP_OBJECT_SPAN].bytes = identity->app_object_id.bytes;
+  spans[ER_APP_BUDGET_HASH_APP_OBJECT_SPAN].len = ER_HASH_LEN;
+  spans[ER_APP_BUDGET_HASH_MANIFEST_SPAN].bytes = identity->manifest_hash.bytes;
+  spans[ER_APP_BUDGET_HASH_MANIFEST_SPAN].len = ER_HASH_LEN;
+  spans[ER_APP_BUDGET_HASH_ADMISSION_SPAN].bytes = identity->admission_id.bytes;
+  spans[ER_APP_BUDGET_HASH_ADMISSION_SPAN].len = ER_HASH_LEN;
+  spans[ER_APP_BUDGET_HASH_FIELDS_SPAN].bytes = fields;
+  spans[ER_APP_BUDGET_HASH_FIELDS_SPAN].len = (UINTN)sizeof(fields);
   return er_crypto_hash(crypto, g_app_budget_domain, (UINTN)(sizeof(g_app_budget_domain) - 1u),
-                        spans, 4u, &out_budget->budget_id);
+                        spans, ER_APP_BUDGET_HASH_SPAN_COUNT, &out_budget->budget_id);
 }
 
 UINT8 er_app_usage_init(const ErAppIdentity* identity, const ErAppBudget* budget, ErAppUsage* out_usage) {
@@ -269,8 +300,8 @@ UINT8 er_app_usage_charge(ErAppUsage* usage, const ErAppBudget* budget, UINT32 r
 UINT8 er_app_prepare_schedule_slot(const ErCryptoProvider* crypto, const ErAppIdentity* identity,
                                    const ErAppBudget* budget, UINT64 deterministic_tick,
                                    UINT64 sequence, ErAppScheduleSlot* out_slot) {
-  UINT8 fields[8u + 8u + 8u + 8u];
-  ErByteSpan spans[4];
+  UINT8 fields[ER_APP_PACKED_U64_FIELDS_BYTES];
+  ErByteSpan spans[ER_APP_IDENTITY_BUDGET_SPAN_COUNT];
 
   if (crypto == 0 || identity == 0 || budget == 0 || out_slot == 0 ||
       identity->abi_version != ER_APP_ABI_VERSION || budget->abi_version != ER_APP_ABI_VERSION) {
@@ -289,20 +320,20 @@ UINT8 er_app_prepare_schedule_slot(const ErCryptoProvider* crypto, const ErAppId
   out_slot->cpu_step_quanta = budget->max_cpu_steps;
   out_slot->memory_byte_limit = budget->max_memory_bytes;
 
-  er_app_put_be64(&fields[0], deterministic_tick);
-  er_app_put_be64(&fields[8], sequence);
-  er_app_put_be64(&fields[16], out_slot->cpu_step_quanta);
-  er_app_put_be64(&fields[24], out_slot->memory_byte_limit);
+  er_app_put_be64(&fields[ER_APP_PACKED_FIELD0_OFFSET], deterministic_tick);
+  er_app_put_be64(&fields[ER_APP_PACKED_FIELD1_OFFSET], sequence);
+  er_app_put_be64(&fields[ER_APP_PACKED_FIELD2_OFFSET], out_slot->cpu_step_quanta);
+  er_app_put_be64(&fields[ER_APP_PACKED_FIELD3_OFFSET], out_slot->memory_byte_limit);
   er_app_prepare_identity_budget_spans(identity, budget, fields, (UINTN)sizeof(fields), spans);
   return er_crypto_hash(crypto, g_app_schedule_domain, (UINTN)(sizeof(g_app_schedule_domain) - 1u),
-                        spans, 4u, &out_slot->slot_id);
+                        spans, ER_APP_IDENTITY_BUDGET_SPAN_COUNT, &out_slot->slot_id);
 }
 
 UINT8 er_app_prepare_launch_allocation(const ErCryptoProvider* crypto, const ErAppIdentity* identity,
                                        const ErAppBudget* budget, UINT64 executor_memory_base,
                                        UINT64 executor_memory_len, ErAppLaunchAllocation* out_allocation) {
-  UINT8 fields[8u + 8u + 8u + 8u];
-  ErByteSpan spans[4];
+  UINT8 fields[ER_APP_PACKED_U64_FIELDS_BYTES];
+  ErByteSpan spans[ER_APP_IDENTITY_BUDGET_SPAN_COUNT];
 
   if (crypto == 0 || identity == 0 || budget == 0 || out_allocation == 0 ||
       identity->abi_version != ER_APP_ABI_VERSION || budget->abi_version != ER_APP_ABI_VERSION) {
@@ -323,12 +354,12 @@ UINT8 er_app_prepare_launch_allocation(const ErCryptoProvider* crypto, const ErA
   out_allocation->app_address_base = ER_APP_ADDRESS_BASE;
   out_allocation->app_address_len = budget->max_memory_bytes;
 
-  er_app_put_be64(&fields[0], executor_memory_base);
-  er_app_put_be64(&fields[8], executor_memory_len);
-  er_app_put_be64(&fields[16], out_allocation->app_address_base);
-  er_app_put_be64(&fields[24], out_allocation->app_address_len);
+  er_app_put_be64(&fields[ER_APP_PACKED_FIELD0_OFFSET], executor_memory_base);
+  er_app_put_be64(&fields[ER_APP_PACKED_FIELD1_OFFSET], executor_memory_len);
+  er_app_put_be64(&fields[ER_APP_PACKED_FIELD2_OFFSET], out_allocation->app_address_base);
+  er_app_put_be64(&fields[ER_APP_PACKED_FIELD3_OFFSET], out_allocation->app_address_len);
   er_app_prepare_identity_budget_spans(identity, budget, fields, (UINTN)sizeof(fields), spans);
   return er_crypto_hash(crypto, g_app_launch_allocation_domain,
                         (UINTN)(sizeof(g_app_launch_allocation_domain) - 1u),
-                        spans, 4u, &out_allocation->allocation_id);
+                        spans, ER_APP_IDENTITY_BUDGET_SPAN_COUNT, &out_allocation->allocation_id);
 }
