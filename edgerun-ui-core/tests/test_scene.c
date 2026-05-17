@@ -123,6 +123,7 @@ static unsigned char* er_ui_test_read_file(const char* path, size_t* out_size) {
 }
 
 void run_runtime_tests(void);
+void run_shell_tests(void);
 
 static void test_scene_stats_and_clear(void) {
   er_ui_scene_t scene = {0};
@@ -552,6 +553,7 @@ int main(void) {
   test_scene_cursor_mutations();
   test_transition_and_budget_contracts();
   test_color_helpers_and_scheme_codes();
+  run_shell_tests();
   run_runtime_tests();
 
   if (g_tests_failed > 0) {
