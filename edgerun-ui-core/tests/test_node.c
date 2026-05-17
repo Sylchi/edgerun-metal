@@ -98,6 +98,7 @@ void run_node_tests(void) {
   expect_string(er_ui_node_kind_label(ER_UI_NODE_TOGGLE_GROUP), "toggle-group", "node: kind label maps toggle group");
   expect_string(er_ui_node_kind_label(ER_UI_NODE_PAGINATION), "pagination", "node: kind label maps pagination");
   expect_string(er_ui_node_kind_label(ER_UI_NODE_COLLAPSIBLE), "collapsible", "node: kind label maps collapsible");
+  expect_string(er_ui_node_kind_label(ER_UI_NODE_ACCORDION), "accordion", "node: kind label maps accordion");
   expect_string(er_ui_icon_label(ER_UI_ICON_SEARCH), "search", "node: icon label maps canonical icon");
   expect_u32(er_ui_icon_atlas_id(ER_UI_ICON_SEARCH), (uint32_t)ER_UI_ICON_SEARCH + 1u, "node: icon atlas id is stable");
   expect_string(er_ui_icon_provider_name(ER_UI_ICON_APP, ER_UI_ICON_PROVIDER_LUCIDE), "app-window", "node: lucide provider name maps app icon");
@@ -195,6 +196,16 @@ void run_node_tests(void) {
   expect_status(er_ui_node_accessibility_child(&collapsible_a11y, 2u, &a11y), ER_UI_OK, "node: collapsible row accessibility maps");
   expect_size(a11y.role, ER_UI_A11Y_LIST_ITEM, "node: collapsible row accessibility role");
   expect_true(a11y.has_id && a11y.id == 8024u, "node: collapsible row id");
+
+  const char* const accordion_titles[] = {"Product", "Billing"};
+  const char* const accordion_bodies[] = {"Network app storage", "Proof-backed receipts"};
+  er_ui_node_t accordion_a11y = er_ui_node_accordion(accordion_titles, accordion_bodies, 2u, 8025u);
+  expect_status(er_ui_node_accessibility(&accordion_a11y, &a11y), ER_UI_OK, "node: accordion accessibility maps");
+  expect_size(a11y.role, ER_UI_A11Y_GROUP, "node: accordion accessibility role");
+  expect_status(er_ui_node_accessibility_child(&accordion_a11y, 1u, &a11y), ER_UI_OK, "node: accordion item accessibility maps");
+  expect_size(a11y.role, ER_UI_A11Y_BUTTON, "node: accordion item accessibility role");
+  expect_true(a11y.has_id && a11y.id == 8026u, "node: accordion item id");
+  expect_true((a11y.states & ER_UI_A11Y_STATE_EXPANDED) != 0u, "node: accordion item expanded state");
 
   er_ui_node_t checked = er_ui_node_checkbox("Remember", true, 8002u);
   expect_status(er_ui_node_accessibility(&checked, &a11y), ER_UI_OK, "node: checkbox accessibility maps");
@@ -324,6 +335,9 @@ void run_node_tests(void) {
     const char* const render_collapsible_titles[] = {"Accordion", "Collapsible"};
     const char* const render_collapsible_details[] = {"one open item", "disclosure rows"};
     er_ui_node_t collapsible = er_ui_node_collapsible("Disclosure", render_collapsible_titles, render_collapsible_details, 2u, true, 8828u);
+    const char* const render_accordion_titles[] = {"Is it accessible?", "Is it styled?"};
+    const char* const render_accordion_bodies[] = {"Yes, each trigger is exposed.", "It uses shared shadcn primitives."};
+    er_ui_node_t accordion = er_ui_node_accordion(render_accordion_titles, render_accordion_bodies, 2u, 8831u);
 
     expect_status(er_ui_node_render(&alert, &scene, face, er_ui_bounds(0.0f, 170.0f, 360.0f, 76.0f), theme), ER_UI_OK, "node: alert renders");
     expect_status(er_ui_node_render(&avatar, &scene, face, er_ui_bounds(0.0f, 254.0f, 42.0f, 42.0f), theme), ER_UI_OK, "node: avatar renders");
@@ -413,6 +427,9 @@ void run_node_tests(void) {
     expect_status(er_ui_node_render(&collapsible, &scene, face, er_ui_bounds(0.0f, 3044.0f, 320.0f, 148.0f), theme), ER_UI_OK,
                   "node: collapsible renders");
     expect_size(scene.hit_count, hits_before_groups + 13u, "node: collapsible emits trigger and row hits");
+    expect_status(er_ui_node_render(&accordion, &scene, face, er_ui_bounds(0.0f, 3204.0f, 340.0f, 156.0f), theme), ER_UI_OK,
+                  "node: accordion renders");
+    expect_size(scene.hit_count, hits_before_groups + 15u, "node: accordion emits item trigger hits");
     size_t drag_sources_before = scene.drag_source_count;
     size_t drop_targets_before = scene.drop_target_count;
     expect_status(er_ui_node_render(&reorderable, &scene, face, er_ui_bounds(0.0f, 2930.0f, 260.0f, 52.0f), theme), ER_UI_OK,
