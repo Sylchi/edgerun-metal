@@ -15,6 +15,8 @@ See `../docs/relay-architecture.md` for the cross-project model and `../docs/coh
 - `erwire` packets can be parsed from native Ethernet frames.
 - Hardware relay endpoints exist for firmware UDP, native Ethernet, and VirtIO queues.
 - Relay routing policy is split into `er_relay_router`.
+- Native relay ingress polling can produce deterministic ingress records for none, malformed, unrouted, and routed packets.
+- Relay intent dispatch is split into `er_relay_dispatch` and can produce capture records for VirtIO block and VirtIO GPU targets.
 
 ## Architecture rule
 
@@ -43,6 +45,7 @@ Target QEMU proof:
 EdgeRun EtherType frame on VirtIO-net
   -> erwire parser
   -> relay router
+  -> relay dispatcher
   -> VirtIO block endpoint for storage/object packets
   -> VirtIO GPU endpoint for render packets
 ```
@@ -68,40 +71,44 @@ Proof:
 
 ### M2: Native relay ingress
 
-Status: next.
+Status: partially implemented; native profile loop and QEMU acknowledgement are next.
 
-- Poll `erwire_poll_native_eth`.
-- Reject invalid packets immediately.
-- Preserve packet kind, payload, ingress endpoint, sequence, and payload hash inputs for routing.
-- Emit deterministic relay ingress or relay intent records.
+- `er_native_boot_poll_relay_ingress` polls `erwire_poll_native_eth`.
+- Invalid accepted Ethernet frames are reported as malformed ingress records.
+- Accepted packets preserve packet kind, payload length, ingress endpoint, sequence, and packet hash inputs for routing.
+- Routed packets emit deterministic relay intent records.
+- Next: call the ingress helper from the native profile loop and emit deterministic acknowledgement or transit packets.
 
 Proof:
 
 - QEMU pcap shows EtherType `0x88b5` and erwire `ERW1`.
 - Core tests cover malformed and accepted native erwire packets.
-- Native run emits a deterministic relay acknowledgement or transit packet.
+- Core tests cover native ingress statuses for routed, malformed, and empty polls.
+- Remaining proof: native run emits a deterministic relay acknowledgement or transit packet.
 
 ### M3: VirtIO endpoint dispatch
 
-Status: next.
+Status: capture-record dispatch implemented; device adapters are next.
 
-- Convert `ErRelayForwardIntent` into a device endpoint dispatch.
+- Convert `ErRelayForwardIntent` into a device endpoint dispatch record.
 - Keep `er_hw_relay` limited to endpoint encoding and movement.
 - Keep `er_relay_router` limited to packet-class route selection.
-- Add test coverage for storage, render, unsupported, and malformed cases.
+- Keep `er_relay_dispatch` limited to intent consumption and endpoint classification until device adapters exist.
 
 Proof:
 
 - Storage packets produce VirtIO block intents.
 - Render capability packets produce VirtIO GPU intents.
 - Unsupported packet classes produce no intent.
+- Dispatch tests produce storage and render capture records.
+- Dispatch tests report unsupported and malformed endpoint records deterministically.
 
 ### M4: Storage adapter
 
-Status: not started.
+Status: next.
 
 - Accept storage-class erwire packets at the VirtIO block endpoint.
-- Start with deterministic capture or acknowledgement.
+- Start from the existing dispatch capture record and add a storage endpoint adapter.
 - Then add real VirtIO block request queue support.
 - Keep storage as sealed object movement, not a filesystem API.
 
@@ -112,10 +119,10 @@ Proof:
 
 ### M5: Render adapter
 
-Status: not started.
+Status: next.
 
 - Accept render-class capability packets at the VirtIO GPU endpoint.
-- Start with deterministic capture or acknowledgement.
+- Start from the existing dispatch capture record and add a render endpoint adapter.
 - Then add the smallest VirtIO GPU command queue path.
 - Keep apps targeting admitted UI scene packets, not framebuffers.
 

@@ -22,6 +22,8 @@ Intention: remove parallel implementations by forcing every app, UI, driver, sto
 - `erwire` carries typed packets and can send/parse native EdgeRun Ethernet frames.
 - `er_hw_relay` encodes firmware UDP, native Ethernet, and VirtIO endpoints.
 - `er_relay_router` maps storage and render packet classes to VirtIO endpoint intents.
+- `er_native_boot` can poll native erwire ingress into deterministic routed, unrouted, malformed, or empty records.
+- `er_relay_dispatch` consumes relay intents and produces capture records for VirtIO block and VirtIO GPU endpoints.
 - `edgerun-ui-core` provides backend-neutral UI scene records.
 - `wasm_vm` runs bounded Wasm modules with explicit hostcalls.
 
@@ -48,16 +50,17 @@ Goal: receive erwire over native VirtIO-net without EFI networking.
 
 Work:
 
-- Poll `erwire_poll_native_eth` from the native profile.
+- Poll `erwire_poll_native_eth` through the native ingress helper.
 - Build an ingress `ErChannelEndpoint` from the VirtIO-net MAC.
 - Reject malformed packets immediately.
 - Preserve packet kind, payload, sequence, payload hash inputs, and ingress endpoint.
+- Next: call the helper from the native profile loop.
 
 Proof:
 
 - QEMU pcap contains EdgeRun EtherType `0x88b5` packets.
-- Core test covers malformed header, bad length, bad CRC, unsupported kind, and accepted packet.
-- Native run emits a deterministic relay-ingress acknowledgement or transit packet.
+- Core tests cover accepted packets, malformed packets, routed ingress, and empty polls.
+- Remaining proof: native run emits a deterministic relay-ingress acknowledgement or transit packet.
 
 ## Milestone 3: Relay Intent Dispatch
 
@@ -68,7 +71,8 @@ Work:
 - Add a small dispatcher that consumes `ErRelayForwardIntent`.
 - Keep route selection inside `er_relay_router`.
 - Keep endpoint movement inside `er_hw_relay` or device-specific adapters.
-- Record unsupported endpoint kinds as hard failures, not fallback behavior.
+- Record unsupported endpoint kinds as deterministic rejection records, not fallback behavior.
+- Next: hand storage/render capture records to concrete endpoint adapters.
 
 Proof:
 
@@ -76,6 +80,7 @@ Proof:
 - Tests prove render capability packets produce VirtIO GPU intents.
 - Tests prove unsupported packet kinds produce no intent.
 - Tests prove malformed endpoint records are rejected.
+- Tests prove dispatch records classify storage, render, unsupported, and malformed endpoints.
 
 ## Milestone 4: VirtIO Storage Endpoint
 
