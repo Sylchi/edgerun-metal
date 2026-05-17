@@ -202,6 +202,19 @@ void run_shell_tests(void) {
       expect_true(shell_scene_has_hit_id(&scene, ER_UI_NETWORK_APP_PROMPT_VERIFY_CACHE_ID), "shell prompt: verify cache hit emits");
       expect_true(shell_scene_has_hit_id(&scene, ER_UI_NETWORK_APP_PROMPT_CANCEL_ID), "shell prompt: cancel hit emits");
 
+      action = er_ui_runtime_pointer_down(&runtime, &scene, 66.0f, 316.0f);
+      expect_true(action.kind == ER_UI_ACTION_FOCUSED, "shell prompt: pointer down focuses run once");
+      action = er_ui_runtime_pointer_up(&runtime, &scene, 66.0f, 316.0f);
+      expect_true(action.kind == ER_UI_ACTION_ACTIVATED, "shell prompt: pointer up activates run once");
+      expect_status(er_ui_shell_apply_action(&shell, action, &changed), ER_UI_OK, "shell prompt: run once action applies");
+      expect_true(changed, "shell prompt: run once reports changed");
+      expect_true(!er_ui_shell_network_app_prompt_open(&shell), "shell prompt: run once closes prompt");
+      expect_true(er_ui_shell_network_app_prompt_choice(&shell) == ER_UI_NETWORK_APP_PROMPT_CHOICE_RUN_ONCE, "shell prompt: run once records choice");
+      er_ui_shell_show_network_app_prompt(&shell);
+      er_ui_scene_clear_commands(&scene);
+      expect_status(er_ui_shell_emit_scene_with_font(&shell, &scene, er_ui_bounds(0.0f, 0.0f, 640.0f, 400.0f), theme, face), ER_UI_OK,
+                    "shell prompt: scene re-emits after run once");
+
       action = (er_ui_action_t){0};
       action.kind = ER_UI_ACTION_ACTIVATED;
       action.has_hit = true;
@@ -213,6 +226,19 @@ void run_shell_tests(void) {
                   "shell prompt: verify cache records choice");
       er_ui_shell_clear_network_app_prompt_choice(&shell);
       expect_true(er_ui_shell_network_app_prompt_choice(&shell) == ER_UI_NETWORK_APP_PROMPT_CHOICE_NONE, "shell prompt: choice clears");
+
+      er_ui_shell_show_network_app_prompt(&shell);
+      er_ui_scene_clear_commands(&scene);
+      expect_status(er_ui_shell_emit_scene_with_font(&shell, &scene, er_ui_bounds(0.0f, 0.0f, 640.0f, 400.0f), theme, face), ER_UI_OK,
+                    "shell prompt: scene re-emits for cancel");
+      action = er_ui_runtime_pointer_down(&runtime, &scene, 360.0f, 316.0f);
+      expect_true(action.kind == ER_UI_ACTION_FOCUSED, "shell prompt: pointer down focuses cancel");
+      action = er_ui_runtime_pointer_up(&runtime, &scene, 360.0f, 316.0f);
+      expect_true(action.kind == ER_UI_ACTION_ACTIVATED, "shell prompt: pointer up activates cancel");
+      expect_status(er_ui_shell_apply_action(&shell, action, &changed), ER_UI_OK, "shell prompt: cancel button applies");
+      expect_true(changed, "shell prompt: cancel button reports changed");
+      expect_true(!er_ui_shell_network_app_prompt_open(&shell), "shell prompt: cancel button closes prompt");
+      expect_true(er_ui_shell_network_app_prompt_choice(&shell) == ER_UI_NETWORK_APP_PROMPT_CHOICE_CANCEL, "shell prompt: cancel button records choice");
       vr_font_face_destroy(face);
     }
   }
