@@ -146,9 +146,6 @@ Useful commands:
 
 ```bash
 make -C edgerun-metal netboot
-sudo systemctl restart edgerun-netboot
-sudo systemctl restart edgerun-pxe4011 || true
-sudo journalctl -u edgerun-netboot -f
 ```
 
 Packet capture:
@@ -167,31 +164,6 @@ TFTP server:     10.42.0.1
 Bootfile:        BOOTX64.EFI or EFI/BOOT/BOOTX64.EFI
 ```
 
-## Always-on netboot service
-
-Service files:
-
-```text
-edgerun-metal/systemd/edgerun-netboot.service
-edgerun-metal/systemd/edgerun-pxe4011.service
-/etc/edgerun-netboot.env
-```
-
-Recommended env:
-
-```text
-EDGERUN_NETBOOT_IFACE=eth0
-EDGERUN_NETBOOT_MODE=auto
-EDGERUN_NETBOOT_ALLOW_MAC=00:d8:61:d7:50:30
-EDGERUN_NETBOOT_CLIENT_IP=10.42.0.2
-EDGERUN_NETBOOT_MGMT_DHCP=1
-EDGERUN_NETBOOT_MGMT_MAC=
-EDGERUN_NETBOOT_MGMT_IP=10.42.0.10
-EDGERUN_NETBOOT_HTTP_PORT=8081
-EDGERUN_NETBOOT_FORCE_HTTP_FOR_PXE=0
-EDGERUN_NETBOOT_EFI=/home/ken/edgerun-c/edgerun-metal/build/esp/EFI/BOOT/BOOTX64.EFI
-```
-
 ## Local next goal
 
 Build and test the `pci` profile:
@@ -200,7 +172,6 @@ Build and test the `pci` profile:
 cd /home/ken/edgerun-c
 git pull --ff-only origin main
 make -C edgerun-metal pci
-sudo systemctl restart edgerun-netboot
 ```
 
 Expected real-hardware screen output:

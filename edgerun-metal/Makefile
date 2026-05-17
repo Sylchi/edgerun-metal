@@ -1,4 +1,4 @@
-.PHONY: all run run-native clean print-path netboot smoke pci quiet mmio ui native rebuild-profile check test-core wasm-modules install-netboot uninstall-netboot restart-netboot logs-netboot status-netboot
+.PHONY: all run run-native clean print-path netboot smoke pci quiet mmio ui native rebuild-profile check test-core wasm-modules
 
 CC = clang
 HOST_CC ?= clang
@@ -93,25 +93,6 @@ test-core: $(CORE_TEST_BIN)
 	./$(CORE_TEST_BIN)
 
 wasm-modules: $(WASM_MODULE_HEADERS)
-
-install-netboot:
-	@if [ -z "$(IFACE)" ]; then \
-		echo "IFACE is required: make install-netboot IFACE=<iface>"; \
-		exit 1; \
-	fi
-	sudo ./tools/install-netboot-service.sh $(IFACE)
-
-uninstall-netboot:
-	sudo ./tools/uninstall-netboot-service.sh
-
-restart-netboot:
-	sudo systemctl restart edgerun-netboot
-
-logs-netboot:
-	sudo journalctl -u edgerun-netboot -f
-
-status-netboot:
-	systemctl status edgerun-netboot
 
 core/wasm_test_module.h: modules/test_return_123/test_return_123.wat $(WASM_HEADER_GEN)
 	$(WASM_HEADER_GEN) $< $@ WASM_TEST_MODULE_H g_edgerun_test_wasm ER_TEST_WASM_SIZE
