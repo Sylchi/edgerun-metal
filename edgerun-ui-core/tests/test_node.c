@@ -94,6 +94,8 @@ void run_node_tests(void) {
   expect_status(er_ui_node_add_child(&root, &row), ER_UI_OK, "node: card accepts row child");
   expect_string(er_ui_node_kind_label(ER_UI_NODE_CARD), "card", "node: kind label maps card");
   expect_string(er_ui_node_kind_label(ER_UI_NODE_ICON_BUTTON), "icon-button", "node: kind label maps icon button");
+  expect_string(er_ui_node_kind_label(ER_UI_NODE_BUTTON_GROUP), "button-group", "node: kind label maps button group");
+  expect_string(er_ui_node_kind_label(ER_UI_NODE_TOGGLE_GROUP), "toggle-group", "node: kind label maps toggle group");
   expect_string(er_ui_icon_label(ER_UI_ICON_SEARCH), "search", "node: icon label maps canonical icon");
   expect_u32(er_ui_icon_atlas_id(ER_UI_ICON_SEARCH), (uint32_t)ER_UI_ICON_SEARCH + 1u, "node: icon atlas id is stable");
   expect_string(er_ui_icon_provider_name(ER_UI_ICON_APP, ER_UI_ICON_PROVIDER_LUCIDE), "app-window", "node: lucide provider name maps app icon");
@@ -152,6 +154,22 @@ void run_node_tests(void) {
   expect_status(er_ui_node_accessibility(&icon_button_a11y, &a11y), ER_UI_OK, "node: icon button accessibility maps");
   expect_size(a11y.role, ER_UI_A11Y_BUTTON, "node: icon button accessibility role");
   expect_true(a11y.has_id && a11y.id == 8007u, "node: icon button accessibility id");
+
+  const char* const button_group_labels[] = {"Copy", "Paste", "More"};
+  er_ui_node_t button_group_a11y = er_ui_node_button_group(button_group_labels, 3u, 8008u);
+  expect_status(er_ui_node_accessibility(&button_group_a11y, &a11y), ER_UI_OK, "node: button group accessibility maps");
+  expect_size(a11y.role, ER_UI_A11Y_GROUP, "node: button group accessibility role");
+  expect_status(er_ui_node_accessibility_child(&button_group_a11y, 2u, &a11y), ER_UI_OK, "node: button group child accessibility maps");
+  expect_size(a11y.role, ER_UI_A11Y_BUTTON, "node: button group child accessibility role");
+  expect_true(a11y.has_id && a11y.id == 8010u, "node: button group child id");
+
+  const char* const toggle_group_labels[] = {"B", "I", "U"};
+  er_ui_node_t toggle_group_a11y = er_ui_node_toggle_group(toggle_group_labels, 3u, 1u, 8011u);
+  expect_status(er_ui_node_accessibility(&toggle_group_a11y, &a11y), ER_UI_OK, "node: toggle group accessibility maps");
+  expect_size(a11y.role, ER_UI_A11Y_GROUP, "node: toggle group accessibility role");
+  expect_status(er_ui_node_accessibility_child(&toggle_group_a11y, 1u, &a11y), ER_UI_OK, "node: toggle group child accessibility maps");
+  expect_size(a11y.role, ER_UI_A11Y_BUTTON, "node: toggle group child accessibility role");
+  expect_true((a11y.states & ER_UI_A11Y_STATE_SELECTED) != 0u, "node: toggle group selected child state");
 
   er_ui_node_t checked = er_ui_node_checkbox("Remember", true, 8002u);
   expect_status(er_ui_node_accessibility(&checked, &a11y), ER_UI_OK, "node: checkbox accessibility maps");
@@ -272,6 +290,10 @@ void run_node_tests(void) {
     er_ui_node_set_reorderable(&reorderable, 42u, 8816u, 3u);
     er_ui_node_t icon = er_ui_node_icon(ER_UI_ICON_TRUST, "Trust", theme.colors.accent);
     er_ui_node_t icon_button = er_ui_node_icon_button(ER_UI_ICON_SEARCH, "Search", 8817u, ER_UI_SHADCN_BUTTON_GHOST);
+    const char* const render_button_group_labels[] = {"Copy", "Paste", "More"};
+    er_ui_node_t button_group = er_ui_node_button_group(render_button_group_labels, 3u, 8818u);
+    const char* const render_toggle_group_labels[] = {"B", "I", "U"};
+    er_ui_node_t toggle_group = er_ui_node_toggle_group(render_toggle_group_labels, 3u, 1u, 8821u);
 
     expect_status(er_ui_node_render(&alert, &scene, face, er_ui_bounds(0.0f, 170.0f, 360.0f, 76.0f), theme), ER_UI_OK, "node: alert renders");
     expect_status(er_ui_node_render(&avatar, &scene, face, er_ui_bounds(0.0f, 254.0f, 42.0f, 42.0f), theme), ER_UI_OK, "node: avatar renders");
@@ -348,6 +370,13 @@ void run_node_tests(void) {
                   "node: icon button renders");
     expect_size(scene.icon_quad_count, icon_quads_before + 2u, "node: icon button emits icon quad");
     expect_size(scene.hit_count, hits_before_icon_button + 1u, "node: icon button emits hit");
+    size_t hits_before_groups = scene.hit_count;
+    expect_status(er_ui_node_render(&button_group, &scene, face, er_ui_bounds(160.0f, 2870.0f, 210.0f, 38.0f), theme), ER_UI_OK,
+                  "node: button group renders");
+    expect_size(scene.hit_count, hits_before_groups + 3u, "node: button group emits button hits");
+    expect_status(er_ui_node_render(&toggle_group, &scene, face, er_ui_bounds(0.0f, 2994.0f, 126.0f, 38.0f), theme), ER_UI_OK,
+                  "node: toggle group renders");
+    expect_size(scene.hit_count, hits_before_groups + 6u, "node: toggle group emits button hits");
     size_t drag_sources_before = scene.drag_source_count;
     size_t drop_targets_before = scene.drop_target_count;
     expect_status(er_ui_node_render(&reorderable, &scene, face, er_ui_bounds(0.0f, 2930.0f, 260.0f, 52.0f), theme), ER_UI_OK,
