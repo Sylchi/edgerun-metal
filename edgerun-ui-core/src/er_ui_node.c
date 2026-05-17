@@ -604,6 +604,24 @@ er_ui_node_t er_ui_node_diff_body(const char* const* lines, size_t line_count, b
   return node;
 }
 
+er_ui_node_t er_ui_node_chat_message(er_ui_shadcn_chat_role_t role, const char* heading, const char* detail) {
+  er_ui_node_t node = er_ui_node_base(ER_UI_NODE_CHAT_MESSAGE);
+  node.selected = (size_t)role;
+  node.label = heading;
+  node.detail = detail;
+  return node;
+}
+
+er_ui_node_t er_ui_node_chat_diff_message(const char* heading, const char* const* lines, size_t line_count, bool truncated) {
+  er_ui_node_t node = er_ui_node_base(ER_UI_NODE_CHAT_MESSAGE);
+  node.selected = (size_t)ER_UI_SHADCN_CHAT_ROLE_DIFF;
+  node.label = heading;
+  node.labels = lines;
+  node.label_count = line_count;
+  node.active = truncated;
+  return node;
+}
+
 er_ui_node_t er_ui_node_route_path(const char* label, const char* const* hops, size_t hop_count) {
   er_ui_node_t node = er_ui_node_base(ER_UI_NODE_ROUTE_PATH);
   node.label = label;
@@ -966,6 +984,7 @@ const char* er_ui_node_kind_label(er_ui_node_kind_t kind) {
     case ER_UI_NODE_CALENDAR: return "calendar";
     case ER_UI_NODE_COMBOBOX: return "combobox";
     case ER_UI_NODE_DIFF_BODY: return "diff-body";
+    case ER_UI_NODE_CHAT_MESSAGE: return "chat-message";
     case ER_UI_NODE_ROUTE_PATH: return "route-path";
     case ER_UI_NODE_PACKAGE_CARD: return "package-card";
     case ER_UI_NODE_RECEIPT_ROW: return "receipt-row";
@@ -1175,6 +1194,56 @@ static void er_ui_a11y_set_value(er_ui_a11y_node_t* out, const char* value) {
   out->states |= ER_UI_A11Y_STATE_HAS_VALUE;
 }
 
+static const char* er_ui_shadcn_chat_role_label(er_ui_shadcn_chat_role_t role) {
+  switch (role) {
+    case ER_UI_SHADCN_CHAT_ROLE_USER: return "user";
+    case ER_UI_SHADCN_CHAT_ROLE_ASSISTANT: return "assistant";
+    case ER_UI_SHADCN_CHAT_ROLE_REASONING: return "reasoning";
+    case ER_UI_SHADCN_CHAT_ROLE_DIFF: return "diff";
+    case ER_UI_SHADCN_CHAT_ROLE_TOOL_RUNNING: return "tool running";
+    case ER_UI_SHADCN_CHAT_ROLE_TOOL_SUCCESS: return "tool ok";
+    case ER_UI_SHADCN_CHAT_ROLE_TOOL_ERROR: return "tool failed";
+    case ER_UI_SHADCN_CHAT_ROLE_ERROR: return "error";
+    default: return "assistant";
+  }
+}
+
+static er_ui_shadcn_badge_variant_t er_ui_shadcn_chat_role_badge(er_ui_shadcn_chat_role_t role) {
+  switch (role) {
+    case ER_UI_SHADCN_CHAT_ROLE_TOOL_ERROR:
+    case ER_UI_SHADCN_CHAT_ROLE_ERROR: return ER_UI_SHADCN_BADGE_DESTRUCTIVE;
+    case ER_UI_SHADCN_CHAT_ROLE_TOOL_RUNNING: return ER_UI_SHADCN_BADGE_DEFAULT;
+    case ER_UI_SHADCN_CHAT_ROLE_DIFF:
+    case ER_UI_SHADCN_CHAT_ROLE_REASONING:
+    case ER_UI_SHADCN_CHAT_ROLE_TOOL_SUCCESS: return ER_UI_SHADCN_BADGE_SECONDARY;
+    case ER_UI_SHADCN_CHAT_ROLE_USER:
+    case ER_UI_SHADCN_CHAT_ROLE_ASSISTANT:
+    default: return ER_UI_SHADCN_BADGE_OUTLINE;
+  }
+}
+
+static er_ui_icon_t er_ui_shadcn_chat_role_icon(er_ui_shadcn_chat_role_t role) {
+  switch (role) {
+    case ER_UI_SHADCN_CHAT_ROLE_USER: return ER_UI_ICON_USER;
+    case ER_UI_SHADCN_CHAT_ROLE_ASSISTANT: return ER_UI_ICON_CHAT;
+    case ER_UI_SHADCN_CHAT_ROLE_REASONING: return ER_UI_ICON_SPARKLES;
+    case ER_UI_SHADCN_CHAT_ROLE_DIFF: return ER_UI_ICON_FILE;
+    case ER_UI_SHADCN_CHAT_ROLE_TOOL_RUNNING: return ER_UI_ICON_TERMINAL;
+    case ER_UI_SHADCN_CHAT_ROLE_TOOL_SUCCESS: return ER_UI_ICON_CHECK;
+    case ER_UI_SHADCN_CHAT_ROLE_TOOL_ERROR:
+    case ER_UI_SHADCN_CHAT_ROLE_ERROR: return ER_UI_ICON_WARNING;
+    default: return ER_UI_ICON_CHAT;
+  }
+}
+
+static bool er_ui_shadcn_chat_role_timeline(er_ui_shadcn_chat_role_t role) {
+  return role == ER_UI_SHADCN_CHAT_ROLE_REASONING ||
+         role == ER_UI_SHADCN_CHAT_ROLE_TOOL_RUNNING ||
+         role == ER_UI_SHADCN_CHAT_ROLE_TOOL_SUCCESS ||
+         role == ER_UI_SHADCN_CHAT_ROLE_TOOL_ERROR ||
+         role == ER_UI_SHADCN_CHAT_ROLE_ERROR;
+}
+
 er_ui_status_t er_ui_node_accessibility(const er_ui_node_t* node, er_ui_a11y_node_t* out_a11y) {
   if (!node || !out_a11y) return ER_UI_ERR_INVALID_ARGUMENT;
   er_ui_a11y_node_t out = er_ui_a11y_base(ER_UI_A11Y_GENERIC, "", false, 0u);
@@ -1353,6 +1422,10 @@ er_ui_status_t er_ui_node_accessibility(const er_ui_node_t* node, er_ui_a11y_nod
       out = er_ui_a11y_base(ER_UI_A11Y_GROUP, "diff body", false, 0u);
       if (node->active) out.states |= ER_UI_A11Y_STATE_HAS_VALUE;
       break;
+    case ER_UI_NODE_CHAT_MESSAGE:
+      out = er_ui_a11y_base(ER_UI_A11Y_GROUP, er_ui_shadcn_chat_role_label((er_ui_shadcn_chat_role_t)node->selected), false, 0u);
+      er_ui_a11y_set_value(&out, node->detail ? node->detail : node->label);
+      break;
     case ER_UI_NODE_TABS:
       out = er_ui_a11y_base(ER_UI_A11Y_TAB_LIST, "tabs", false, 0u);
       break;
@@ -1523,6 +1596,22 @@ er_ui_status_t er_ui_node_accessibility_child(const er_ui_node_t* node, size_t c
     if (!node->labels || child_index >= node->label_count + (node->active ? 1u : 0u)) return ER_UI_ERR_INVALID_ARGUMENT;
     const char* label = child_index < node->label_count ? node->labels[child_index] : "[diff preview truncated]";
     *out_a11y = er_ui_a11y_base(ER_UI_A11Y_TEXT, label, false, 0u);
+    return ER_UI_OK;
+  }
+  if (node->kind == ER_UI_NODE_CHAT_MESSAGE) {
+    er_ui_shadcn_chat_role_t role = (er_ui_shadcn_chat_role_t)node->selected;
+    if (role == ER_UI_SHADCN_CHAT_ROLE_DIFF) {
+      if (!node->labels || child_index >= node->label_count + 1u + (node->active ? 1u : 0u)) return ER_UI_ERR_INVALID_ARGUMENT;
+      if (child_index == 0u) {
+        *out_a11y = er_ui_a11y_base(ER_UI_A11Y_TEXT, node->label, false, 0u);
+        return ER_UI_OK;
+      }
+      const char* label = child_index - 1u < node->label_count ? node->labels[child_index - 1u] : "[diff preview truncated]";
+      *out_a11y = er_ui_a11y_base(ER_UI_A11Y_TEXT, label, false, 0u);
+      return ER_UI_OK;
+    }
+    if (child_index > 1u) return ER_UI_ERR_INVALID_ARGUMENT;
+    *out_a11y = er_ui_a11y_base(ER_UI_A11Y_TEXT, child_index == 0u ? node->label : node->detail, false, 0u);
     return ER_UI_OK;
   }
   if (node->kind == ER_UI_NODE_RADIO_GROUP) {
@@ -2563,6 +2652,76 @@ static er_ui_status_t er_ui_node_render_diff_body(
   return ER_UI_OK;
 }
 
+static er_ui_status_t er_ui_node_render_chat_header(
+  er_ui_scene_t* scene,
+  vr_font_face_t* font,
+  er_ui_bounds_t bounds,
+  er_ui_resolved_theme_t theme,
+  er_ui_shadcn_chat_role_t role,
+  const char* heading,
+  float icon_size) {
+  if (!scene || !font || !heading || !er_ui_bounds_valid(bounds)) return ER_UI_ERR_INVALID_ARGUMENT;
+  er_ui_status_t status = er_ui_node_render_icon(scene, er_ui_bounds(bounds.x, bounds.y + (bounds.h - icon_size) * 0.5f, icon_size, icon_size),
+                                                 er_ui_shadcn_chat_role_icon(role), theme.colors.muted);
+  if (status != ER_UI_OK) return status;
+  float badge_x = bounds.x + icon_size + 8.0f;
+  status = er_ui_shadcn_badge_emit(scene, font, er_ui_bounds(badge_x, bounds.y + (bounds.h - 24.0f) * 0.5f, 92.0f, 24.0f), theme,
+                                   er_ui_shadcn_chat_role_label(role), er_ui_shadcn_chat_role_badge(role));
+  if (status != ER_UI_OK) return status;
+  return er_ui_node_render_text(scene, font, heading, er_ui_bounds(badge_x + 100.0f, bounds.y, er_ui_float_max(bounds.w - badge_x - 100.0f, 0.0f), bounds.h),
+                                theme.colors.muted);
+}
+
+static er_ui_status_t er_ui_node_render_chat_message(
+  const er_ui_node_t* node,
+  er_ui_scene_t* scene,
+  vr_font_face_t* font,
+  er_ui_bounds_t bounds,
+  er_ui_resolved_theme_t theme) {
+  if (!node || !scene || !font || !node->label || !er_ui_bounds_valid(bounds)) return ER_UI_ERR_INVALID_ARGUMENT;
+  er_ui_shadcn_chat_role_t role = (er_ui_shadcn_chat_role_t)node->selected;
+  if (role == ER_UI_SHADCN_CHAT_ROLE_DIFF) {
+    if (!node->labels || node->label_count == 0u) return ER_UI_ERR_INVALID_ARGUMENT;
+    er_ui_status_t status = er_ui_shadcn_card_emit(scene, bounds, theme);
+    if (status != ER_UI_OK) return status;
+    float pad = 12.0f;
+    er_ui_bounds_t header = er_ui_bounds(bounds.x + pad, bounds.y + pad, bounds.w - pad * 2.0f, 28.0f);
+    status = er_ui_node_render_chat_header(scene, font, header, theme, role, node->label, 16.0f);
+    if (status != ER_UI_OK) return status;
+    er_ui_node_t diff = er_ui_node_diff_body(node->labels, node->label_count, node->active);
+    return er_ui_node_render_diff_body(&diff, scene, font, er_ui_bounds(bounds.x + pad, bounds.y + 48.0f, bounds.w - pad * 2.0f, bounds.h - 60.0f), theme);
+  }
+
+  if (!node->detail) return ER_UI_ERR_INVALID_ARGUMENT;
+  if (er_ui_shadcn_chat_role_timeline(role)) {
+    er_ui_status_t status = er_ui_scene_push_rect(scene, er_ui_rect_fill(bounds.x, bounds.y, bounds.w, bounds.h, theme.radius.card, theme.colors.bg));
+    if (status != ER_UI_OK) return status;
+    status = er_ui_scene_push_rect(scene, er_ui_rect_border(bounds.x, bounds.y, bounds.w, bounds.h, theme.radius.card, er_ui_color_with_alpha(theme.colors.border, 0.42f)));
+    if (status != ER_UI_OK) return status;
+    float pad = 12.0f;
+    status = er_ui_node_render_icon(scene, er_ui_bounds(bounds.x + pad, bounds.y + pad, 20.0f, 20.0f), er_ui_shadcn_chat_role_icon(role), theme.colors.muted);
+    if (status != ER_UI_OK) return status;
+    float text_x = bounds.x + pad + 32.0f;
+    er_ui_bounds_t header = er_ui_bounds(text_x, bounds.y + pad - 2.0f, bounds.w - text_x + bounds.x - pad, 28.0f);
+    status = er_ui_shadcn_badge_emit(scene, font, er_ui_bounds(header.x, header.y + 2.0f, 92.0f, 24.0f), theme, er_ui_shadcn_chat_role_label(role),
+                                     er_ui_shadcn_chat_role_badge(role));
+    if (status != ER_UI_OK) return status;
+    status = er_ui_node_render_text(scene, font, node->label, er_ui_bounds(header.x + 100.0f, header.y, er_ui_float_max(header.w - 100.0f, 0.0f), header.h),
+                                    theme.colors.muted);
+    if (status != ER_UI_OK) return status;
+    return er_ui_node_render_text(scene, font, node->detail, er_ui_bounds(text_x, bounds.y + 42.0f, bounds.w - text_x + bounds.x - pad, bounds.h - 48.0f),
+                                  theme.colors.text);
+  }
+
+  er_ui_status_t status = er_ui_shadcn_card_emit(scene, bounds, theme);
+  if (status != ER_UI_OK) return status;
+  float pad = 12.0f;
+  status = er_ui_node_render_chat_header(scene, font, er_ui_bounds(bounds.x + pad, bounds.y + pad, bounds.w - pad * 2.0f, 28.0f), theme, role, node->label, 16.0f);
+  if (status != ER_UI_OK) return status;
+  return er_ui_node_render_text(scene, font, node->detail, er_ui_bounds(bounds.x + pad, bounds.y + 48.0f, bounds.w - pad * 2.0f, bounds.h - 56.0f),
+                                theme.colors.text);
+}
+
 static er_ui_status_t er_ui_node_render_label_group(
   const er_ui_node_t* node,
   er_ui_scene_t* scene,
@@ -2773,6 +2932,8 @@ er_ui_status_t er_ui_node_render(
       return er_ui_node_render_combobox(node, scene, font, rect, theme);
     case ER_UI_NODE_DIFF_BODY:
       return er_ui_node_render_diff_body(node, scene, font, rect, theme);
+    case ER_UI_NODE_CHAT_MESSAGE:
+      return er_ui_node_render_chat_message(node, scene, font, rect, theme);
     case ER_UI_NODE_ROUTE_PATH:
       return er_ui_shadcn_route_path_emit(scene, font, rect, theme, node->label, node->labels, node->label_count);
     case ER_UI_NODE_PACKAGE_CARD:
