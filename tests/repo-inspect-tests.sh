@@ -108,6 +108,16 @@ typedef enum {
   EnumThree = 3,
   EnumFour = 4
 } EnumOnly;
+
+typedef struct {
+  unsigned char addr[4];
+  unsigned char mac[6];
+} StructOnly;
+
+typedef union {
+  unsigned char bytes[4];
+  unsigned int word;
+} UnionOnly;
 C
 mkdir -p "${TMP_DIR}/tests"
 cat > "${TMP_DIR}/tests/test_main.c" <<'C'

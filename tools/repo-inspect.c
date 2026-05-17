@@ -788,22 +788,26 @@ static uint8_t eri_line_declares_constant(const char* line) {
   return 0;
 }
 
-static uint8_t eri_line_starts_enum_block(const char* line) {
+static uint8_t eri_line_starts_type_decl_block(const char* line) {
   const char* trim = eri_ltrim(line);
 
   return (uint8_t)((strncmp(trim, "typedef enum", 12u) == 0 ||
-                    eri_line_starts_with_word(trim, "enum") != 0u) &&
+                    strncmp(trim, "typedef struct", 14u) == 0 ||
+                    strncmp(trim, "typedef union", 13u) == 0 ||
+                    eri_line_starts_with_word(trim, "enum") != 0u ||
+                    eri_line_starts_with_word(trim, "struct") != 0u ||
+                    eri_line_starts_with_word(trim, "union") != 0u) &&
                    strchr(trim, '{') != NULL);
 }
 
-static void eri_update_enum_block(int brace_delta, uint8_t* enum_block, int* enum_brace_depth) {
-  if (*enum_block == 0u) {
+static void eri_update_type_decl_block(int brace_delta, uint8_t* type_decl_block, int* type_decl_brace_depth) {
+  if (*type_decl_block == 0u) {
     return;
   }
-  *enum_brace_depth += brace_delta;
-  if (*enum_brace_depth <= 0) {
-    *enum_block = 0u;
-    *enum_brace_depth = 0;
+  *type_decl_brace_depth += brace_delta;
+  if (*type_decl_brace_depth <= 0) {
+    *type_decl_block = 0u;
+    *type_decl_brace_depth = 0;
   }
 }
 
@@ -1436,8 +1440,8 @@ static void eri_scan_line_metrics(const uint8_t* bytes, size_t len, EriTotals* f
   uint8_t constant_ignore_macro = 0u;
   int function_ignore_depth = 0;
   int brace_depth = 0;
-  uint8_t enum_block = 0u;
-  int enum_brace_depth = 0;
+  uint8_t type_decl_block = 0u;
+  int type_decl_brace_depth = 0;
 
   while (pos <= len) {
     size_t start = pos;
@@ -1496,7 +1500,7 @@ static void eri_scan_line_metrics(const uint8_t* bytes, size_t len, EriTotals* f
       size_t copy_len = end - start;
       char searchable[144];
       char literal[32];
-      uint8_t line_in_enum = enum_block;
+      uint8_t line_in_type_decl = type_decl_block;
 
       if (copy_len >= sizeof(snippet)) {
         copy_len = sizeof(snippet) - 1u;
@@ -1504,14 +1508,14 @@ static void eri_scan_line_metrics(const uint8_t* bytes, size_t len, EriTotals* f
       memcpy(snippet, bytes + start, copy_len);
       snippet[copy_len] = 0;
       eri_copy_without_literals(bytes, start, end, searchable, sizeof(searchable));
-      if (line_in_enum == 0u && eri_line_starts_enum_block(searchable) != 0u) {
-        line_in_enum = 1u;
-        enum_block = 1u;
+      if (line_in_type_decl == 0u && eri_line_starts_type_decl_block(searchable) != 0u) {
+        line_in_type_decl = 1u;
+        type_decl_block = 1u;
       }
       if (function_ignore_active != 0u) {
         int brace_delta = eri_line_brace_delta(searchable);
         brace_depth += brace_delta;
-        eri_update_enum_block(brace_delta, &enum_block, &enum_brace_depth);
+        eri_update_type_decl_block(brace_delta, &type_decl_block, &type_decl_brace_depth);
         if (brace_depth < function_ignore_depth) {
           function_ignore_active = 0u;
         }
@@ -1527,7 +1531,7 @@ static void eri_scan_line_metrics(const uint8_t* bytes, size_t len, EriTotals* f
           constant_ignore_macro = 0u;
         }
         brace_depth += brace_delta;
-        eri_update_enum_block(brace_delta, &enum_block, &enum_brace_depth);
+        eri_update_type_decl_block(brace_delta, &type_decl_block, &type_decl_brace_depth);
         ++line_no;
         continue;
       }
@@ -1537,7 +1541,7 @@ static void eri_scan_line_metrics(const uint8_t* bytes, size_t len, EriTotals* f
         eri_add_finding(findings, path, line_no, "ignore-misuse",
                         "optimizer ignore must use line, function, or constant scope with an explicit reason");
         brace_depth += brace_delta;
-        eri_update_enum_block(brace_delta, &enum_block, &enum_brace_depth);
+        eri_update_type_decl_block(brace_delta, &type_decl_block, &type_decl_brace_depth);
         ++line_no;
         continue;
       }
@@ -1600,7 +1604,7 @@ static void eri_scan_line_metrics(const uint8_t* bytes, size_t len, EriTotals* f
 
         pending_optimizer_ignore = 0u;
         brace_depth += brace_delta;
-        eri_update_enum_block(brace_delta, &enum_block, &enum_brace_depth);
+        eri_update_type_decl_block(brace_delta, &type_decl_block, &type_decl_brace_depth);
         ++line_no;
         continue;
       }
@@ -1614,7 +1618,7 @@ static void eri_scan_line_metrics(const uint8_t* bytes, size_t len, EriTotals* f
       if (strstr(searchable, "goto ") != NULL) {
         eri_add_finding(findings, path, line_no, "goto", eri_ltrim(snippet));
       }
-      if (line_in_enum == 0u && eri_line_has_magic_number(searchable, literal, sizeof(literal)) != 0u) {
+      if (line_in_type_decl == 0u && eri_line_has_magic_number(searchable, literal, sizeof(literal)) != 0u) {
         char text[144];
         snprintf(text, sizeof(text), "numeric literal %s in executable code", literal);
         eri_add_finding(findings, path, line_no, "magic-number", text);
@@ -1648,7 +1652,7 @@ static void eri_scan_line_metrics(const uint8_t* bytes, size_t len, EriTotals* f
       {
         int brace_delta = eri_line_brace_delta(searchable);
         brace_depth += brace_delta;
-        eri_update_enum_block(brace_delta, &enum_block, &enum_brace_depth);
+        eri_update_type_decl_block(brace_delta, &type_decl_block, &type_decl_brace_depth);
       }
     } else if (pending_optimizer_ignore != 0u) {
       pending_optimizer_ignore = 0u;
