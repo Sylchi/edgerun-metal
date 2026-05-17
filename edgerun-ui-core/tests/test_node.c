@@ -102,6 +102,7 @@ void run_node_tests(void) {
   expect_string(er_ui_node_kind_label(ER_UI_NODE_HOVER_CARD), "hover-card", "node: kind label maps hover card");
   expect_string(er_ui_node_kind_label(ER_UI_NODE_POPOVER), "popover", "node: kind label maps popover");
   expect_string(er_ui_node_kind_label(ER_UI_NODE_SHEET), "sheet", "node: kind label maps sheet");
+  expect_string(er_ui_node_kind_label(ER_UI_NODE_KBD), "kbd", "node: kind label maps kbd");
   expect_string(er_ui_icon_label(ER_UI_ICON_SEARCH), "search", "node: icon label maps canonical icon");
   expect_u32(er_ui_icon_atlas_id(ER_UI_ICON_SEARCH), (uint32_t)ER_UI_ICON_SEARCH + 1u, "node: icon atlas id is stable");
   expect_string(er_ui_icon_provider_name(ER_UI_ICON_APP, ER_UI_ICON_PROVIDER_LUCIDE), "app-window", "node: lucide provider name maps app icon");
@@ -238,6 +239,12 @@ void run_node_tests(void) {
   expect_size(a11y.role, ER_UI_A11Y_BUTTON, "node: sheet button accessibility role");
   expect_true(a11y.has_id && a11y.id == 8030u, "node: sheet button id");
 
+  const char* const kbd_keys[] = {"Cmd", "K"};
+  er_ui_node_t kbd_a11y = er_ui_node_kbd(kbd_keys, 2u, "Open command palette");
+  expect_status(er_ui_node_accessibility(&kbd_a11y, &a11y), ER_UI_OK, "node: kbd accessibility maps");
+  expect_size(a11y.role, ER_UI_A11Y_GROUP, "node: kbd accessibility role");
+  expect_true(a11y.label == kbd_a11y.label, "node: kbd label is borrowed");
+
   er_ui_node_t checked = er_ui_node_checkbox("Remember", true, 8002u);
   expect_status(er_ui_node_accessibility(&checked, &a11y), ER_UI_OK, "node: checkbox accessibility maps");
   expect_size(a11y.role, ER_UI_A11Y_CHECKBOX, "node: checkbox accessibility role");
@@ -372,6 +379,8 @@ void run_node_tests(void) {
     er_ui_node_t hover_card = er_ui_node_hover_card("ER", "UI core", "Variable font rendering stays required.", theme.colors.accent);
     er_ui_node_t popover = er_ui_node_popover("Open popover", "Dimensions", "Set layout constraints.", "Width", "100%", 8833u);
     er_ui_node_t sheet = er_ui_node_sheet("Profile", "Update local profile.", "Name", "EdgeRun", "Save changes", 8835u);
+    const char* const render_kbd_keys[] = {"Ctrl", "K"};
+    er_ui_node_t kbd = er_ui_node_kbd(render_kbd_keys, 2u, "Open command palette");
 
     expect_status(er_ui_node_render(&alert, &scene, face, er_ui_bounds(0.0f, 170.0f, 360.0f, 76.0f), theme), ER_UI_OK, "node: alert renders");
     expect_status(er_ui_node_render(&avatar, &scene, face, er_ui_bounds(0.0f, 254.0f, 42.0f, 42.0f), theme), ER_UI_OK, "node: avatar renders");
@@ -476,6 +485,10 @@ void run_node_tests(void) {
     expect_status(er_ui_node_render(&sheet, &scene, face, er_ui_bounds(0.0f, 3654.0f, 320.0f, 196.0f), theme), ER_UI_OK,
                   "node: sheet renders");
     expect_size(scene.hit_count, hits_before_sheet + 2u, "node: sheet emits field and button hits");
+    size_t rects_before_kbd = scene.rect_count;
+    expect_status(er_ui_node_render(&kbd, &scene, face, er_ui_bounds(0.0f, 3862.0f, 320.0f, 40.0f), theme), ER_UI_OK,
+                  "node: kbd renders");
+    expect_true(scene.rect_count > rects_before_kbd, "node: kbd emits key badge rects");
     size_t drag_sources_before = scene.drag_source_count;
     size_t drop_targets_before = scene.drop_target_count;
     expect_status(er_ui_node_render(&reorderable, &scene, face, er_ui_bounds(0.0f, 2930.0f, 260.0f, 52.0f), theme), ER_UI_OK,
