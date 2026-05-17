@@ -55,11 +55,14 @@ UEFI/EFI links stay on LLVM `lld`; `mold` is only used for hosted binaries.
 
 ## Common Commands
 
-Build the default projects:
+Build the default freestanding metal image:
 
 ```bash
 make
 ```
+
+Hosted CMake builds are for development, testing, and benchmarking only. Runtime
+code stays freestanding and is pulled into `edgerun-metal` directly.
 
 Run all local checks:
 

@@ -60,6 +60,19 @@ static void check_bytes(const char* name, const uint8_t* actual, const uint8_t* 
   }
 }
 
+static uint8_t run_jobs_inline(void* user, ErBlake3JobFn job_fn, void* const* jobs, size_t job_count) {
+  size_t i;
+
+  (void)user;
+  if (job_fn == 0 || jobs == 0) {
+    return 0u;
+  }
+  for (i = 0u; i < job_count; ++i) {
+    job_fn(jobs[i]);
+  }
+  return 1u;
+}
+
 int main(void) {
   static const uint8_t abc[] = {'a', 'b', 'c'};
   uint8_t large[4096];
@@ -110,6 +123,9 @@ int main(void) {
       bulk[i] = (uint8_t)((i * 131u + 17u) & 0xffu);
     }
     check_int("bulk hash", er_blake3_hash_bytes(bulk, 8388608u, digest), 1);
+    check_int("bulk parallel hash", er_blake3_hash_bytes_parallel(bulk, 8388608u, streaming_digest,
+                                                                  run_jobs_inline, 0, 8u), 1);
+    check_bytes("bulk parallel digest", digest, streaming_digest, ER_BLAKE3_OUT_LEN);
     er_blake3_init(&hasher);
     for (i = 0u; i < 8388608u; i += 3331u) {
       size_t take = 3331u;

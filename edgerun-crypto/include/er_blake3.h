@@ -26,10 +26,16 @@ typedef struct {
   uint32_t flags;
 } ErBlake3Hasher;
 
+typedef void (*ErBlake3JobFn)(void* job);
+typedef uint8_t (*ErBlake3RunJobsFn)(void* user, ErBlake3JobFn job_fn, void* const* jobs, size_t job_count);
+
 void er_blake3_init(ErBlake3Hasher* hasher);
 uint8_t er_blake3_update(ErBlake3Hasher* hasher, const uint8_t* bytes, size_t len);
 uint8_t er_blake3_final(const ErBlake3Hasher* hasher, uint8_t out[ER_BLAKE3_OUT_LEN]);
 uint8_t er_blake3_hash_bytes(const uint8_t* bytes, size_t len, uint8_t out[ER_BLAKE3_OUT_LEN]);
+/* Freestanding parallel primitive for full 1 KiB chunk inputs with power-of-two chunk counts. */
+uint8_t er_blake3_hash_bytes_parallel(const uint8_t* bytes, size_t len, uint8_t out[ER_BLAKE3_OUT_LEN],
+                                      ErBlake3RunJobsFn run_jobs, void* user, size_t max_jobs);
 const char* er_blake3_backend_name(void);
 
 #endif
