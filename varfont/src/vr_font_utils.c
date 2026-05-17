@@ -1,5 +1,7 @@
 #include "vr_font_internal.h"
 
+#include "er_math.h"
+
 #define VR_GVAR_TUPLE_SHARED_POINTS 0x8000
 #define VR_GVAR_TUPLE_EMBEDDED_PEAK 0x8000
 #define VR_GVAR_TUPLE_INTERMEDIATE 0x4000
@@ -24,9 +26,6 @@ static const uint16_t VR_CMAP_PLATFORM_ID_UNICODE = 0u;
 static const uint16_t VR_CMAP_PLATFORM_ID_WINDOWS = 3u;
 static const uint16_t VR_GVAR_OFFSET_FORMAT_32 = 1u;
 static const uint32_t VR_SFNT_VERSION_MAGIC = 0x00010000u;
-static const float VR_FLOAT_MAX_VALUE = 3.4028234663852886e38f;
-static const float VR_PI_VALUE = 3.14159265358979323846f;
-
 static void* vr_face_alloc_array(vr_font_face_t* face, size_t count, size_t item_size, size_t align) {
   return vr_calloc(face, count, item_size, align);
 }
@@ -113,55 +112,31 @@ void vr_dealloc(const vr_font_face_t* face, void* ptr, size_t size, size_t align
 }
 
 float vr_absf(float value) {
-  return value < 0.0f ? -value : value;
+  return er_math_absf(value);
 }
 
 float vr_floorf(float value) {
-  int truncated = (int)value;
-  if ((float)truncated > value) truncated -= 1;
-  return (float)truncated;
+  return er_math_floorf(value);
 }
 
 float vr_ceilf(float value) {
-  int truncated = (int)value;
-  if ((float)truncated < value) truncated += 1;
-  return (float)truncated;
+  return er_math_ceilf(value);
 }
 
 float vr_sqrtf(float value) {
-  if (value <= 0.0f) return 0.0f;
-  float x = value >= 1.0f ? value : 1.0f;
-  for (uint32_t i = 0u; i < 12u; ++i) x = 0.5f * (x + value / x);
-  return x;
+  return er_math_sqrtf(value);
 }
 
 long vr_lrintf(float value) {
-  return (long)(value >= 0.0f ? value + 0.5f : value - 0.5f);
+  return er_math_lrintf(value);
 }
 
 bool vr_float_is_finite(float value) {
-  return value == value && value <= VR_FLOAT_MAX_VALUE && value >= -VR_FLOAT_MAX_VALUE;
+  return er_math_isfinitef(value) != 0;
 }
 
 float vr_atan2f(float y, float x) {
-  if (x == 0.0f) {
-    if (y > 0.0f) return VR_PI_VALUE * 0.5f;
-    if (y < 0.0f) return -VR_PI_VALUE * 0.5f;
-    return 0.0f;
-  }
-
-  float abs_y = vr_absf(y) + 1.0e-10f;
-  float angle = 0.0f;
-  if (x < 0.0f) {
-    float r = (x + abs_y) / (abs_y - x);
-    angle = 3.0f * VR_PI_VALUE * 0.25f;
-    angle += (0.1963f * r * r - 0.9817f) * r;
-  } else {
-    float r = (x - abs_y) / (x + abs_y);
-    angle = VR_PI_VALUE * 0.25f;
-    angle += (0.1963f * r * r - 0.9817f) * r;
-  }
-  return y < 0.0f ? -angle : angle;
+  return er_math_atan2f(y, x);
 }
 
 static vr_status_t vr_parse_table_directory(vr_font_face_t* face) {

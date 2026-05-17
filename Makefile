@@ -40,6 +40,7 @@ repo-check:
 repo-test: repo-inspect
 	./tests/repo-check-tests.sh
 	./tests/repo-inspect-tests.sh
+	./tests/er-math-tests.sh
 	$(MAKE) erwire-test
 
 repo-inspect:

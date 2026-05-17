@@ -1,5 +1,6 @@
 #include "er_ui_gop_renderer.h"
 #include "er_ui_icon.h"
+#include "er_math.h"
 
 static EFI_GUID g_gop_guid = {
   0x9042a9deu, 0x23dcu, 0x4a38u, {0x96u, 0xfbu, 0x7au, 0xdeu, 0xd0u, 0x80u, 0x51u, 0x6au}
@@ -16,9 +17,7 @@ static void er_ui_gop_border_rect(ErUiGopSurface* surface, UINT32 x0, UINT32 y0,
                                   er_ui_color4_t color, ErUiGopRenderStats* stats);
 
 static float er_ui_gop_clamp01(float value) {
-  if (value < 0.0f) return 0.0f;
-  if (value > 1.0f) return 1.0f;
-  return value;
+  return er_math_clamp01f(value);
 }
 
 static UINT8 er_ui_gop_u8_from_unit(float value) {
@@ -92,19 +91,11 @@ static UINT8 er_ui_gop_frame_violation(const char* name, UINT64 actual, UINT64 l
 }
 
 static INT64 er_ui_gop_floor_i64(float value) {
-  INT64 truncated = (INT64)value;
-  if (value < 0.0f && (float)truncated != value) {
-    --truncated;
-  }
-  return truncated;
+  return (INT64)er_math_floor_i64(value);
 }
 
 static INT64 er_ui_gop_ceil_i64(float value) {
-  INT64 truncated = (INT64)value;
-  if (value > 0.0f && (float)truncated != value) {
-    ++truncated;
-  }
-  return truncated;
+  return (INT64)er_math_ceil_i64(value);
 }
 
 static UINT8 er_ui_gop_clip_rect_to(const ErUiGopSurface* surface, const ErUiGopPixelRect* clip,

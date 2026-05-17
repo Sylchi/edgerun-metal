@@ -26,6 +26,7 @@ add_library(er_ui_core
 
 target_include_directories(er_ui_core PUBLIC
   ${CMAKE_CURRENT_SOURCE_DIR}/include
+  ${CMAKE_CURRENT_SOURCE_DIR}/../include
 )
 
 target_link_libraries(er_ui_core PUBLIC vrfont)
