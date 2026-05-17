@@ -31,6 +31,10 @@ enum {
   ER_HW_RELAY_U16_HIGH_SHIFT = 8u,
   ER_HW_RELAY_U32_BYTE2_SHIFT = 16u,
   ER_HW_RELAY_U32_BYTE3_SHIFT = 24u,
+  ER_HW_RELAY_U32_BYTE0_INDEX = 0u,
+  ER_HW_RELAY_U32_BYTE1_INDEX = 1u,
+  ER_HW_RELAY_U32_BYTE2_INDEX = 2u,
+  ER_HW_RELAY_U32_BYTE3_INDEX = 3u,
   ER_HW_RELAY_U8_MASK = 0xffu
 };
 
@@ -49,15 +53,19 @@ static UINT8 er_hw_relay_bytes_equal(const UINT8* a, const UINT8* b, UINTN len) 
 }
 
 static void er_hw_relay_put_u16(UINT8* dst, UINT16 value) {
-  dst[0] = (UINT8)(value & ER_HW_RELAY_U8_MASK);
-  dst[1] = (UINT8)((value >> ER_HW_RELAY_U16_HIGH_SHIFT) & ER_HW_RELAY_U8_MASK);
+  dst[ER_HW_RELAY_U32_BYTE0_INDEX] = (UINT8)(value & ER_HW_RELAY_U8_MASK);
+  dst[ER_HW_RELAY_U32_BYTE1_INDEX] =
+    (UINT8)((value >> ER_HW_RELAY_U16_HIGH_SHIFT) & ER_HW_RELAY_U8_MASK);
 }
 
 static void er_hw_relay_put_u32(UINT8* dst, UINT32 value) {
-  dst[0] = (UINT8)(value & ER_HW_RELAY_U8_MASK);
-  dst[1] = (UINT8)((value >> ER_HW_RELAY_U16_HIGH_SHIFT) & ER_HW_RELAY_U8_MASK);
-  dst[2] = (UINT8)((value >> ER_HW_RELAY_U32_BYTE2_SHIFT) & ER_HW_RELAY_U8_MASK);
-  dst[3] = (UINT8)((value >> ER_HW_RELAY_U32_BYTE3_SHIFT) & ER_HW_RELAY_U8_MASK);
+  dst[ER_HW_RELAY_U32_BYTE0_INDEX] = (UINT8)(value & ER_HW_RELAY_U8_MASK);
+  dst[ER_HW_RELAY_U32_BYTE1_INDEX] =
+    (UINT8)((value >> ER_HW_RELAY_U16_HIGH_SHIFT) & ER_HW_RELAY_U8_MASK);
+  dst[ER_HW_RELAY_U32_BYTE2_INDEX] =
+    (UINT8)((value >> ER_HW_RELAY_U32_BYTE2_SHIFT) & ER_HW_RELAY_U8_MASK);
+  dst[ER_HW_RELAY_U32_BYTE3_INDEX] =
+    (UINT8)((value >> ER_HW_RELAY_U32_BYTE3_SHIFT) & ER_HW_RELAY_U8_MASK);
 }
 
 UINT8 er_hw_relay_prepare_firmware_udp_endpoint(UINT8 a, UINT8 b, UINT8 c, UINT8 d, UINT16 port,

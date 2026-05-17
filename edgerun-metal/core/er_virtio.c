@@ -11,6 +11,11 @@
 #define ER_VIRTIO_FEATURE_SEL_HIGH 1u
 #define ER_VIRTIO_U64_HIGH_SHIFT 32u
 #define ER_VIRTIO_U32_MASK 0xffffffffull
+#define ER_VIRTIO_CFG_DWORD_ALIGN_MASK 0x3u
+#define ER_VIRTIO_CFG_BYTE_BITS 8u
+#define ER_VIRTIO_CFG_BYTE_MASK 0xffu
+#define ER_VIRTIO_PCI_DEVICE_ID_SHIFT 16u
+#define ER_VIRTIO_PCI_DEVICE_ID_MASK 0xffffu
 #define ER_VIRTIO_PCI_CAP_PTR_OFFSET 0x34u
 #define ER_VIRTIO_PCI_CAP_MIN_OFFSET 0x40u
 #define ER_VIRTIO_PCI_CAP_GUARD_MAX 48u
@@ -87,8 +92,10 @@ static UINT8 er_virtio_device_type_from_pci_id(UINT32 device_id, UINT32* out_dev
 }
 
 static UINT8 er_virtio_cfg_read8(UINT32 bus, UINT32 dev, UINT32 func, UINT32 offset) {
-  UINT32 value = er_pci_cfg_read32(bus, dev, func, offset & ~0x3u);
-  return (UINT8)((value >> ((offset & 0x3u) * 8u)) & 0xffu);
+  UINT32 value = er_pci_cfg_read32(bus, dev, func, offset & ~ER_VIRTIO_CFG_DWORD_ALIGN_MASK);
+  UINT32 byte_shift = (offset & ER_VIRTIO_CFG_DWORD_ALIGN_MASK) * ER_VIRTIO_CFG_BYTE_BITS;
+
+  return (UINT8)((value >> byte_shift) & ER_VIRTIO_CFG_BYTE_MASK);
 }
 
 static UINT32 er_virtio_cfg_read32(UINT32 bus, UINT32 dev, UINT32 func, UINT32 offset) {
@@ -313,7 +320,7 @@ UINT8 er_virtio_pci_transport_init(UINT32 bus, UINT32 dev, UINT32 func,
     return 0;
   }
   vendor = er_pci_vendor_id(id);
-  device_id = (id >> 16u) & 0xffffu;
+  device_id = (id >> ER_VIRTIO_PCI_DEVICE_ID_SHIFT) & ER_VIRTIO_PCI_DEVICE_ID_MASK;
   if (vendor != ER_VIRTIO_VENDOR_ID ||
       er_virtio_device_type_from_pci_id(device_id, &device_type) == 0u ||
       (expected_device_type != 0u && device_type != expected_device_type)) {
