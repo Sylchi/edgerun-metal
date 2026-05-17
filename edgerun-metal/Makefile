@@ -45,8 +45,8 @@ HDRS := $(wildcard core/*.h)
 UI_HDRS := $(wildcard $(UI_CORE_DIR)/include/*.h)
 VARFONT_HDRS := $(wildcard $(VARFONT_DIR)/include/*.h) $(wildcard $(VARFONT_DIR)/src/*.h)
 CRYPTO_HDRS := $(wildcard $(CRYPTO_DIR)/include/*.h)
-WASM_HEADER_GEN := scripts/generate-wasm-header.sh
-BIN_HEADER_GEN := scripts/generate-binary-header.sh
+EMBED_HEADER_SRC := tools/embed-header/main.c
+EMBED_HEADER_BIN := $(BUILD_DIR)/embed-header
 WASM_MODULE_HEADERS := core/wasm_test_module.h core/wasm_pci_scan_module.h core/wasm_driver_bus_probe_module.h
 FONT_HEADER := $(GENERATED_DIR)/font_geist.h
 FONT_BAKED_HEADER := $(GENERATED_DIR)/font_geist_baked.h
@@ -94,17 +94,34 @@ test-core: $(CORE_TEST_BIN)
 
 wasm-modules: $(WASM_MODULE_HEADERS)
 
-core/wasm_test_module.h: modules/test_return_123/test_return_123.wat $(WASM_HEADER_GEN)
-	$(WASM_HEADER_GEN) $< $@ WASM_TEST_MODULE_H g_edgerun_test_wasm ER_TEST_WASM_SIZE
+$(EMBED_HEADER_BIN): $(EMBED_HEADER_SRC)
+	mkdir -p $(dir $@)
+	$(CCACHE_PREFIX) $(HOST_CC) $(HOST_CFLAGS) $(HOST_LDFLAGS) -o $@ $<
 
-core/wasm_pci_scan_module.h: modules/pci_scan/pci_scan.wat $(WASM_HEADER_GEN)
-	$(WASM_HEADER_GEN) $< $@ WASM_PCI_SCAN_MODULE_H g_edgerun_pci_scan_wasm ER_PCI_SCAN_WASM_SIZE
+$(GENERATED_DIR)/test_return_123.wasm: modules/test_return_123/test_return_123.wat
+	mkdir -p $(dir $@)
+	wat2wasm $< -o $@
 
-core/wasm_driver_bus_probe_module.h: modules/driver_bus_probe/driver_bus_probe.wat $(WASM_HEADER_GEN)
-	$(WASM_HEADER_GEN) $< $@ WASM_DRIVER_BUS_PROBE_MODULE_H g_edgerun_driver_bus_probe_wasm ER_DRIVER_BUS_PROBE_WASM_SIZE
+$(GENERATED_DIR)/pci_scan.wasm: modules/pci_scan/pci_scan.wat
+	mkdir -p $(dir $@)
+	wat2wasm $< -o $@
 
-$(FONT_HEADER): $(FONT_SOURCE) $(BIN_HEADER_GEN)
-	$(BIN_HEADER_GEN) "$<" "$@" ER_FONT_GEIST_H g_er_font_geist_ttf ER_FONT_GEIST_TTF_SIZE
+$(GENERATED_DIR)/driver_bus_probe.wasm: modules/driver_bus_probe/driver_bus_probe.wat
+	mkdir -p $(dir $@)
+	wat2wasm $< -o $@
+
+core/wasm_test_module.h: $(GENERATED_DIR)/test_return_123.wasm $(EMBED_HEADER_BIN)
+	$(EMBED_HEADER_BIN) wasm $< $@ WASM_TEST_MODULE_H g_edgerun_test_wasm ER_TEST_WASM_SIZE modules/test_return_123/test_return_123.wat
+
+core/wasm_pci_scan_module.h: $(GENERATED_DIR)/pci_scan.wasm $(EMBED_HEADER_BIN)
+	$(EMBED_HEADER_BIN) wasm $< $@ WASM_PCI_SCAN_MODULE_H g_edgerun_pci_scan_wasm ER_PCI_SCAN_WASM_SIZE modules/pci_scan/pci_scan.wat
+
+core/wasm_driver_bus_probe_module.h: $(GENERATED_DIR)/driver_bus_probe.wasm $(EMBED_HEADER_BIN)
+	$(EMBED_HEADER_BIN) wasm $< $@ WASM_DRIVER_BUS_PROBE_MODULE_H g_edgerun_driver_bus_probe_wasm ER_DRIVER_BUS_PROBE_WASM_SIZE modules/driver_bus_probe/driver_bus_probe.wat
+
+$(FONT_HEADER): $(FONT_SOURCE) $(EMBED_HEADER_BIN)
+	mkdir -p $(dir $@)
+	$(EMBED_HEADER_BIN) binary "$<" "$@" ER_FONT_GEIST_H g_er_font_geist_ttf ER_FONT_GEIST_TTF_SIZE
 
 $(FONT_BAKE_BIN): $(FONT_BAKE_SRC) $(VARFONT_SRCS) $(VARFONT_HDRS)
 	mkdir -p $(dir $@)
