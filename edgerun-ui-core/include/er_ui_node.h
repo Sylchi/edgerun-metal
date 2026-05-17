@@ -17,6 +17,8 @@ typedef enum {
   ER_UI_NODE_ROW = 0,
   ER_UI_NODE_COLUMN,
   ER_UI_NODE_CARD,
+  ER_UI_NODE_ICON,
+  ER_UI_NODE_ICON_BUTTON,
   ER_UI_NODE_TEXT,
   ER_UI_NODE_BADGE,
   ER_UI_NODE_BUTTON,
@@ -67,6 +69,41 @@ typedef enum {
 } er_ui_node_kind_t;
 
 typedef struct er_ui_node_t er_ui_node_t;
+
+typedef enum {
+  ER_UI_ICON_ACTIVITY = 0,
+  ER_UI_ICON_APP,
+  ER_UI_ICON_BELL,
+  ER_UI_ICON_CHAT,
+  ER_UI_ICON_CHECK,
+  ER_UI_ICON_CHEVRON_RIGHT,
+  ER_UI_ICON_CODE,
+  ER_UI_ICON_CPU,
+  ER_UI_ICON_DATABASE,
+  ER_UI_ICON_EYE,
+  ER_UI_ICON_FILE,
+  ER_UI_ICON_KEY,
+  ER_UI_ICON_LOCK,
+  ER_UI_ICON_MENU,
+  ER_UI_ICON_MESSAGE_PLUS,
+  ER_UI_ICON_NETWORK,
+  ER_UI_ICON_ROUTE,
+  ER_UI_ICON_SEARCH,
+  ER_UI_ICON_SEND,
+  ER_UI_ICON_SERVER,
+  ER_UI_ICON_SETTINGS,
+  ER_UI_ICON_SHIELD,
+  ER_UI_ICON_SPARKLES,
+  ER_UI_ICON_STORAGE,
+  ER_UI_ICON_TERMINAL,
+  ER_UI_ICON_TRUST,
+  ER_UI_ICON_TRASH,
+  ER_UI_ICON_USER,
+  ER_UI_ICON_WALLET,
+  ER_UI_ICON_WARNING,
+  ER_UI_ICON_X,
+  ER_UI_ICON_COUNT
+} er_ui_icon_t;
 
 typedef enum {
   ER_UI_NODE_COMPOSITION_OK = 0,
@@ -152,6 +189,7 @@ struct er_ui_node_t {
   er_ui_shadcn_button_variant_t button_variant;
   er_ui_shadcn_button_size_t button_size;
   er_ui_shadcn_badge_variant_t badge_variant;
+  er_ui_icon_t icon;
   er_ui_color4_t color;
   bool has_drag_source;
   er_ui_drag_source_t drag_source;
@@ -164,6 +202,8 @@ struct er_ui_node_t {
 er_ui_node_t er_ui_node_row(void);
 er_ui_node_t er_ui_node_column(void);
 er_ui_node_t er_ui_node_card(void);
+er_ui_node_t er_ui_node_icon(er_ui_icon_t icon, const char* label, er_ui_color4_t color);
+er_ui_node_t er_ui_node_icon_button(er_ui_icon_t icon, const char* label, uint32_t id, er_ui_shadcn_button_variant_t variant);
 er_ui_node_t er_ui_node_text(const char* value);
 er_ui_node_t er_ui_node_badge(const char* label, er_ui_shadcn_badge_variant_t variant);
 er_ui_node_t er_ui_node_button(const char* label, uint32_t id, er_ui_shadcn_button_variant_t variant);
@@ -218,6 +258,8 @@ er_ui_node_t* er_ui_node_set_draggable(er_ui_node_t* node, uint32_t scope_id, ui
 er_ui_node_t* er_ui_node_set_drop_target(er_ui_node_t* node, uint32_t scope_id, size_t index);
 er_ui_node_t* er_ui_node_set_reorderable(er_ui_node_t* node, uint32_t scope_id, uint32_t item_id, size_t index);
 er_ui_status_t er_ui_node_add_child(er_ui_node_t* parent, er_ui_node_t* child);
+const char* er_ui_icon_label(er_ui_icon_t icon);
+uint32_t er_ui_icon_atlas_id(er_ui_icon_t icon);
 const char* er_ui_node_kind_label(er_ui_node_kind_t kind);
 const char* er_ui_node_composition_issue_label(er_ui_node_composition_issue_kind_t kind);
 er_ui_status_t er_ui_node_validate_composition(const er_ui_node_t* node, er_ui_node_composition_issue_t* out_issue);
