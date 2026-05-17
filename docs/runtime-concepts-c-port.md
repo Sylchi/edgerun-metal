@@ -52,13 +52,21 @@ ACPI is the firmware-described hardware topology surface. The executor discovers
 
 ## Hardware Buses
 
-Hardware communication uses explicit bus addresses and bounded operation packets.
+Hardware communication uses explicit bus addresses and bounded operation packets. Drivers are WASM apps; the bare-metal executor is not where device policy or driver state lives. A driver app sends a packet that names the bus address, access width, offset, and value, and the executor validates the bounds before performing the transaction.
 
-`ErBusAddress` describes a concrete address on a hardware bus. The first supported bus kinds are PCI config space, MMIO32, and x86 I/O ports. PCI config addresses bind bus, device, and function. MMIO32 addresses bind a physical base, byte length, and BAR index. I/O port addresses bind an aligned 32-bit port.
+`ErBusAddress` describes a concrete address on a hardware bus. The first supported bus kinds are PCI config space, MMIO, and x86 I/O ports. PCI config addresses bind bus, device, and function. MMIO addresses bind a physical base, byte length, and BAR index. I/O port addresses bind a base port and byte range.
 
-`ErBusOp32` describes one 32-bit operation against an address. `ErBusPacket32` wraps that operation as a request or response with a packet id and status. Operations are valid only when the offset is aligned and inside the declared range. The executor does not decide policy here; it executes valid addressed hardware packets and reports status.
+`ErBusIoOp` describes one 8-bit, 16-bit, or 32-bit operation against an address. `ErBusIoPacket` wraps that operation as a request or response with a packet id and status. Operations are valid only when the width matches the requested access, the offset is aligned for that width, and the transaction stays inside the declared range. The older `ErBusOp32` and `ErBusPacket32` remain as compatibility wrappers for existing 32-bit PCI/MMIO probing.
+
+This byte-capable surface is the shape expected by device drivers. TPM, ACPI-described fixed hardware, controller registers, and legacy I/O devices are all represented as addressed bus bytes/words/dwords instead of host file descriptors, sockets, or OS driver handles.
 
 This layer intentionally does not model capability routes. It is the dumb hardware executor surface: address, operation, result.
+
+## WASM Driver Runtime
+
+Drivers are WASM modules executed by the metal interpreter. The interpreter owns no device policy; it gives the module bounded linear memory and explicit imports. The first driver-grade import is `edgerun.bus.exec(req_ptr, resp_ptr)`, where both pointers refer to `ErBusIoPacket` records inside the module's linear memory. The executor validates the pointed-to memory ranges, executes the addressed transaction, writes the response packet, and returns a numeric success status.
+
+This lets a NIC driver build descriptor/register transactions as data, pass them to the dumb bus executor, and keep driver state in admitted WASM memory. Device-specific logic remains app code; the executor remains a packet and bus transaction runner.
 
 ## Work Concepts
 

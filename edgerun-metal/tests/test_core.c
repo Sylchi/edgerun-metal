@@ -96,6 +96,23 @@ static INT64 test_vm_mmio_read32(INT64 handle, INT64 offset) {
   return 0x55667788;
 }
 
+static INT64 test_vm_bus_exec(const ErBusIoPacket* request, ErBusIoPacket* response) {
+  if (request == 0 || response == 0) {
+    return 0;
+  }
+  check_int64("wasm bus exec request abi", request->abi_version, ER_BUS_ABI_VERSION);
+  check_int64("wasm bus exec request kind", request->packet_kind, ER_BUS_PACKET_IO_REQUEST);
+  check_uint64("wasm bus exec packet id", request->packet_id, 77u);
+  check_int64("wasm bus exec width", request->op.width, 1);
+  response->abi_version = ER_BUS_ABI_VERSION;
+  response->packet_kind = ER_BUS_PACKET_IO_RESPONSE;
+  response->status = ER_BUS_STATUS_OK;
+  response->packet_id = request->packet_id;
+  response->op = request->op;
+  response->result = 0x5au;
+  return 1;
+}
+
 static void test_bar_decode(void) {
   ErPciBarInfo none = er_pci_decode_bar(0u, 0u);
   ErPciBarInfo io = er_pci_decode_bar(0x0000c001u, 0u);
@@ -269,11 +286,20 @@ static void test_mmio_handles(void) {
   check_uint64("mmio info len", info.len, (UINT64)sizeof(regs));
   check_int64("mmio read request valid0", er_mmio_read32_request_valid(handle, 0), 1);
   check_int64("mmio read request valid4", er_mmio_read32_request_valid(handle, 4), 1);
+  check_int64("mmio read8 request valid1", er_mmio_read8_request_valid(handle, 1), 1);
+  check_int64("mmio read16 request valid2", er_mmio_read16_request_valid(handle, 2), 1);
   check_int64("mmio read request reject bad handle", er_mmio_read32_request_valid(2, 0), 0);
   check_int64("mmio read request reject unaligned", er_mmio_read32_request_valid(handle, 2), 0);
+  check_int64("mmio read16 request reject unaligned", er_mmio_read16_request_valid(handle, 1), 0);
   check_int64("mmio read request reject out of range", er_mmio_read32_request_valid(handle, 8), 0);
+  check_uint64("mmio read8", (UINT64)er_mmio_read8(handle, 1), 0x33u);
+  check_uint64("mmio read16", (UINT64)er_mmio_read16(handle, 2), 0x1122u);
   check_uint64("mmio read0", (UINT64)er_mmio_read32(handle, 0), 0x11223344u);
   check_uint64("mmio read4", (UINT64)er_mmio_read32(handle, 4), 0xaabbccddu);
+  check_int64("mmio write8", er_mmio_write8(handle, 1, 0x55u), 1);
+  check_uint64("mmio write8 value", regs[0], 0x11225544u);
+  check_int64("mmio write16", er_mmio_write16(handle, 2, 0x6677u), 1);
+  check_uint64("mmio write16 value", regs[0], 0x66775544u);
   check_int64("mmio write4", er_mmio_write32(handle, 4, 0x01020304u), 1);
   check_uint64("mmio write4 value", regs[1], 0x01020304u);
   check_int64("mmio reject bad handle", er_mmio_read32(2, 0), -1);
@@ -293,11 +319,16 @@ static void test_bus_addresses(void) {
   uint32_t regs[2] = {0x11223344u, 0xaabbccddu};
   ErBusAddress pci;
   ErBusAddress mmio;
+  ErBusAddress mmio_short;
   ErBusAddress ioport;
   ErBusOp32 op;
   ErBusPacket32 request;
   ErBusPacket32 response;
+  ErBusIoPacket io_request;
+  ErBusIoPacket io_response;
   UINT32 value = 0;
+  UINT8 value8 = 0;
+  UINT16 value16 = 0;
 
   er_mmio_reset();
 
@@ -313,22 +344,29 @@ static void test_bus_addresses(void) {
 
   check_int64("bus mmio address",
               er_bus_prepare_mmio32_address((UINT64)(UINTN)regs, (UINT64)sizeof(regs), 0u,
-                                            ER_BUS_ACCESS_READ32 | ER_BUS_ACCESS_WRITE32, &mmio),
+                                            ER_BUS_ACCESS_READ_ALL | ER_BUS_ACCESS_WRITE_ALL, &mmio),
               1);
   check_int64("bus mmio kind", mmio.bus_kind, ER_BUS_KIND_MMIO32);
   check_int64("bus mmio supports read", er_bus_address_supports(&mmio, ER_BUS_ACCESS_READ32), 1);
   check_int64("bus mmio supports write", er_bus_address_supports(&mmio, ER_BUS_ACCESS_WRITE32), 1);
+  check_int64("bus mmio supports read8", er_bus_address_supports(&mmio, ER_BUS_ACCESS_READ8), 1);
   check_int64("bus mmio reject short",
-              er_bus_prepare_mmio32_address((UINT64)(UINTN)regs, 3u, 0u, ER_BUS_ACCESS_READ32, &mmio),
-              0);
+              er_bus_prepare_mmio32_address((UINT64)(UINTN)regs, 1u, 0u, ER_BUS_ACCESS_READ8, &mmio_short),
+              1);
 
   check_int64("bus io port address",
-              er_bus_prepare_io_port_address(0x0cf8u, ER_BUS_ACCESS_READ32 | ER_BUS_ACCESS_WRITE32, &ioport),
+              er_bus_prepare_io_port_address(0x0cf8u, ER_BUS_ACCESS_READ_ALL | ER_BUS_ACCESS_WRITE_ALL, &ioport),
               1);
   check_int64("bus io port kind", ioport.bus_kind, ER_BUS_KIND_IO_PORT);
   check_uint64("bus io port number", ioport.port, 0x0cf8u);
-  check_int64("bus io port reject unaligned",
-              er_bus_prepare_io_port_address(0x0cf9u, ER_BUS_ACCESS_READ32, &ioport),
+  check_int64("bus io port byte address",
+              er_bus_prepare_io_port_address(0x0cf9u, ER_BUS_ACCESS_READ8, &ioport),
+              1);
+  check_int64("bus io port high byte address",
+              er_bus_prepare_io_port_address(0xffffu, ER_BUS_ACCESS_READ8, &ioport),
+              1);
+  check_int64("bus io port reject high",
+              er_bus_prepare_io_port_address(0x10000u, ER_BUS_ACCESS_READ8, &ioport),
               0);
 
   op.abi_version = ER_BUS_ABI_VERSION;
@@ -345,10 +383,18 @@ static void test_bus_addresses(void) {
 
   check_int64("bus mmio read", er_bus_read32(&mmio, 0u, &value), 1);
   check_uint64("bus mmio read value", value, 0x11223344u);
+  check_int64("bus mmio read8", er_bus_read8(&mmio, 1u, &value8), 1);
+  check_uint64("bus mmio read8 value", value8, 0x33u);
+  check_int64("bus mmio read16", er_bus_read16(&mmio, 2u, &value16), 1);
+  check_uint64("bus mmio read16 value", value16, 0x1122u);
+  check_int64("bus mmio write8", er_bus_write8(&mmio, 1u, 0x55u), 1);
+  check_uint64("bus mmio write8 value", regs[0], 0x11225544u);
+  check_int64("bus mmio write16", er_bus_write16(&mmio, 2u, 0x6677u), 1);
+  check_uint64("bus mmio write16 value", regs[0], 0x66775544u);
   check_int64("bus mmio write", er_bus_write32(&mmio, 4u, 0x55667788u), 1);
   check_uint64("bus mmio write value", regs[1], 0x55667788u);
 
-  mmio.access_flags = ER_BUS_ACCESS_READ32;
+  mmio.access_flags = ER_BUS_ACCESS_READ_ALL;
   check_int64("bus mmio write denied", er_bus_write32(&mmio, 4u, 0x99u), 0);
 
   check_int64("bus packet read prepare",
@@ -359,9 +405,9 @@ static void test_bus_addresses(void) {
   check_int64("bus packet execute read", er_bus_execute_op32_packet(&request, &response), 1);
   check_int64("bus packet response kind", response.packet_kind, ER_BUS_PACKET_OP32_RESPONSE);
   check_int64("bus packet response ok", response.status, ER_BUS_STATUS_OK);
-  check_uint64("bus packet response value", response.result, 0x11223344u);
+  check_uint64("bus packet response value", response.result, 0x66775544u);
 
-  mmio.access_flags = ER_BUS_ACCESS_READ32 | ER_BUS_ACCESS_WRITE32;
+  mmio.access_flags = ER_BUS_ACCESS_READ_ALL | ER_BUS_ACCESS_WRITE_ALL;
   check_int64("bus packet write prepare",
               er_bus_prepare_op32_packet(8u, &mmio, ER_BUS_ACCESS_WRITE32, 4u, 0x01010101u, &request),
               1);
@@ -370,6 +416,16 @@ static void test_bus_addresses(void) {
 
   check_int64("bus packet reject invalid",
               er_bus_prepare_op32_packet(9u, &mmio, ER_BUS_ACCESS_READ32, 2u, 0u, &request),
+              0);
+  check_int64("bus io packet read8 prepare",
+              er_bus_prepare_io_packet(10u, &mmio, ER_BUS_ACCESS_READ8, 1u, 1u, 0u, &io_request),
+              1);
+  check_int64("bus io packet read8 valid", er_bus_io_op_valid(&io_request.op), 1);
+  check_int64("bus io packet read8 execute", er_bus_execute_io_packet(&io_request, &io_response), 1);
+  check_int64("bus io packet response kind", io_response.packet_kind, ER_BUS_PACKET_IO_RESPONSE);
+  check_uint64("bus io packet read8 result", io_response.result, 0x55u);
+  check_int64("bus io packet reject width access mismatch",
+              er_bus_prepare_io_packet(11u, &mmio, ER_BUS_ACCESS_READ16, 1u, 1u, 0u, &io_request),
               0);
 }
 
@@ -603,6 +659,54 @@ static void test_wasm_mmio_imports(void) {
   check_uint64("wasm mmio result", (UINT64)result, 0x55667788u);
 }
 
+static void test_wasm_bus_exec_import(void) {
+  /*
+   * Purpose: prove WASM driver code can send structured bus packets through linear memory.
+   * Intention: keep device drivers outside the executor while preserving addressed hardware I/O.
+   */
+  static const UINT8 wasm_bus_exec_test[] = {
+    0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00, 0x01, 0x0b, 0x02, 0x60,
+    0x02, 0x7e, 0x7e, 0x01, 0x7e, 0x60, 0x00, 0x01, 0x7e, 0x02, 0x14, 0x01,
+    0x0b, 0x65, 0x64, 0x67, 0x65, 0x72, 0x75, 0x6e, 0x2e, 0x62, 0x75, 0x73,
+    0x04, 0x65, 0x78, 0x65, 0x63, 0x00, 0x00, 0x03, 0x02, 0x01, 0x01, 0x05,
+    0x03, 0x01, 0x00, 0x01, 0x07, 0x08, 0x01, 0x04, 0x6d, 0x61, 0x69, 0x6e,
+    0x00, 0x01, 0x0a, 0x12, 0x01, 0x10, 0x00, 0x42, 0x00, 0x42, 0x80, 0x01,
+    0x10, 0x00, 0x1a, 0x41, 0x80, 0x01, 0x29, 0x03, 0x60, 0x0b
+  };
+  static UINT8 memory[65536];
+  ErWasmHostCalls host = {0};
+  ErWasmModule module;
+  ErBusIoPacket* request = (ErBusIoPacket*)&memory[0];
+  UINT32 main_index = 0;
+  INT64 result = 0;
+
+  host.bus_exec = test_vm_bus_exec;
+  host.memory = memory;
+  host.memory_size = (UINT32)sizeof(memory);
+
+  check_int64("wasm bus init", er_wasm_init(&module, wasm_bus_exec_test, (UINT32)sizeof(wasm_bus_exec_test), &host), 0);
+  check_int64("wasm bus memory min", module.memory_min_pages, 1);
+  check_int64("wasm bus find main", er_wasm_find_main(&module, &main_index), 0);
+
+  request->abi_version = ER_BUS_ABI_VERSION;
+  request->packet_kind = ER_BUS_PACKET_IO_REQUEST;
+  request->status = ER_BUS_STATUS_OK;
+  request->packet_id = 77u;
+  request->op.abi_version = ER_BUS_ABI_VERSION;
+  request->op.bus_kind = ER_BUS_KIND_MMIO32;
+  request->op.access = ER_BUS_ACCESS_READ8;
+  request->op.width = 1u;
+  request->op.address.abi_version = ER_BUS_ABI_VERSION;
+  request->op.address.bus_kind = ER_BUS_KIND_MMIO32;
+  request->op.address.access_flags = ER_BUS_ACCESS_READ8;
+  request->op.address.base = 0x1000u;
+  request->op.address.len = 4u;
+  request->op.offset = 0u;
+
+  check_int64("wasm bus execute", er_wasm_execute_i64(&module, main_index, &result), 0);
+  check_uint64("wasm bus result", (UINT64)result, 0x5au);
+}
+
 static void test_vfs_object_packets(void) {
   static const UINT8 object_bytes[] = {'a', 'b', 'c', 'd', 'e', 'f'};
   ErCryptoProvider crypto;
@@ -805,6 +909,7 @@ int main(void) {
   test_mmio_handles();
   test_bus_addresses();
   test_wasm_mmio_imports();
+  test_wasm_bus_exec_import();
   test_vfs_object_packets();
   test_app_identity_routes();
   test_hw_relay_endpoints();

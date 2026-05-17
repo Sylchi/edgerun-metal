@@ -19,11 +19,19 @@ typedef struct {
 
 void er_mmio_reset(void);
 UINT8 er_mmio_map_request_valid(INT64 phys_i, INT64 len_i);
+UINT8 er_mmio_read8_request_valid(INT64 handle_i, INT64 offset_i);
+UINT8 er_mmio_read16_request_valid(INT64 handle_i, INT64 offset_i);
 UINT8 er_mmio_read32_request_valid(INT64 handle_i, INT64 offset_i);
+UINT8 er_mmio_write8_request_valid(INT64 handle_i, INT64 offset_i);
+UINT8 er_mmio_write16_request_valid(INT64 handle_i, INT64 offset_i);
 UINT8 er_mmio_write32_request_valid(INT64 handle_i, INT64 offset_i);
 INT64 er_mmio_map(INT64 phys_i, INT64 len_i);
 UINT8 er_mmio_get_info(INT64 handle_i, ErMmioInfo* out_info);
+INT64 er_mmio_read8(INT64 handle_i, INT64 offset_i);
+INT64 er_mmio_read16(INT64 handle_i, INT64 offset_i);
 INT64 er_mmio_read32(INT64 handle_i, INT64 offset_i);
+UINT8 er_mmio_write8(INT64 handle_i, INT64 offset_i, UINT8 value);
+UINT8 er_mmio_write16(INT64 handle_i, INT64 offset_i, UINT16 value);
 UINT8 er_mmio_write32(INT64 handle_i, INT64 offset_i, UINT32 value);
 
 #endif
