@@ -569,6 +569,80 @@ er_ui_status_t er_ui_node_validate_composition(const er_ui_node_t* node, er_ui_n
   return er_ui_node_validate_composition_inner(node, false, node->kind, node->kind, 0u, 0u, out_issue);
 }
 
+static er_ui_bounds_t er_ui_node_resolve_bounds(const er_ui_node_t* node, er_ui_bounds_t bounds);
+
+static er_ui_status_t er_ui_node_linear_child_bounds(
+  const er_ui_node_t* node,
+  size_t child_index,
+  er_ui_bounds_t bounds,
+  bool row,
+  er_ui_bounds_t* out_bounds) {
+  if (!node || !out_bounds) return ER_UI_ERR_INVALID_ARGUMENT;
+  if (child_index >= node->child_count || !node->children[child_index]) return ER_UI_ERR_INVALID_ARGUMENT;
+  if (node->child_count == 0u) return ER_UI_ERR_INVALID_ARGUMENT;
+  er_ui_bounds_t content = er_ui_bounds_inset(bounds, node->padding, node->padding);
+  float total_gap = node->gap * (float)(node->child_count - 1u);
+  float step = row ? (content.w - total_gap) / (float)node->child_count : (content.h - total_gap) / (float)node->child_count;
+  if (step <= 0.0f) return ER_UI_ERR_INVALID_ARGUMENT;
+  er_ui_bounds_t child_bounds = content;
+  if (row) {
+    child_bounds.x = content.x + (step + node->gap) * (float)child_index;
+    child_bounds.w = step;
+  } else {
+    child_bounds.y = content.y + (step + node->gap) * (float)child_index;
+    child_bounds.h = step;
+  }
+  *out_bounds = er_ui_node_resolve_bounds(node->children[child_index], child_bounds);
+  return ER_UI_OK;
+}
+
+static er_ui_status_t er_ui_node_grid_child_bounds(
+  const er_ui_node_t* node,
+  size_t child_index,
+  er_ui_bounds_t bounds,
+  er_ui_bounds_t* out_bounds) {
+  if (!node || !out_bounds) return ER_UI_ERR_INVALID_ARGUMENT;
+  if (child_index >= node->child_count || !node->children[child_index]) return ER_UI_ERR_INVALID_ARGUMENT;
+  if (node->child_count == 0u) return ER_UI_ERR_INVALID_ARGUMENT;
+  size_t columns = node->selected == 0u ? 1u : node->selected;
+  if (columns > node->child_count) columns = node->child_count;
+  size_t rows = (node->child_count + columns - 1u) / columns;
+  er_ui_bounds_t content = er_ui_bounds_inset(bounds, node->padding, node->padding);
+  float total_gap_x = node->gap * (float)(columns - 1u);
+  float total_gap_y = node->gap * (float)(rows - 1u);
+  float cell_w = (content.w - total_gap_x) / (float)columns;
+  float cell_h = (content.h - total_gap_y) / (float)rows;
+  if (cell_w <= 0.0f || cell_h <= 0.0f) return ER_UI_ERR_INVALID_ARGUMENT;
+  size_t col = child_index % columns;
+  size_t row = child_index / columns;
+  er_ui_bounds_t child_bounds = er_ui_bounds(content.x + (cell_w + node->gap) * (float)col, content.y + (cell_h + node->gap) * (float)row, cell_w, cell_h);
+  *out_bounds = er_ui_node_resolve_bounds(node->children[child_index], child_bounds);
+  return ER_UI_OK;
+}
+
+er_ui_status_t er_ui_node_child_bounds(const er_ui_node_t* node, size_t child_index, er_ui_bounds_t bounds, er_ui_bounds_t* out_bounds) {
+  if (!node || !out_bounds) return ER_UI_ERR_INVALID_ARGUMENT;
+  er_ui_bounds_t rect = er_ui_node_resolve_bounds(node, bounds);
+  switch (node->kind) {
+    case ER_UI_NODE_ROW:
+      return er_ui_node_linear_child_bounds(node, child_index, rect, true, out_bounds);
+    case ER_UI_NODE_COLUMN:
+    case ER_UI_NODE_CARD:
+      return er_ui_node_linear_child_bounds(node, child_index, rect, false, out_bounds);
+    case ER_UI_NODE_GRID:
+    case ER_UI_NODE_MASONRY:
+    case ER_UI_NODE_BENTO_GRID:
+      return er_ui_node_grid_child_bounds(node, child_index, rect, out_bounds);
+    case ER_UI_NODE_SCROLL_AREA: {
+      er_ui_bounds_t scrolled = rect;
+      scrolled.y -= node->number;
+      return er_ui_node_linear_child_bounds(node, child_index, scrolled, false, out_bounds);
+    }
+    default:
+      return ER_UI_ERR_INVALID_ARGUMENT;
+  }
+}
+
 const char* er_ui_a11y_role_label(er_ui_a11y_role_t role) {
   switch (role) {
     case ER_UI_A11Y_GROUP: return "group";
