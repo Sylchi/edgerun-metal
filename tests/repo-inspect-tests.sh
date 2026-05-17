@@ -57,7 +57,8 @@ int other(void) {
       free(p);
     }
   }
-  for (int x = 0; x < 4; ++x) { render_tile(x); } //@optimizer-ignore bounded render smoke
+  //@optimizer-ignore bounded render smoke
+  for (int x = 0; x < 4; ++x) { render_tile(x); }
   return f + magic + names[1][0];
 }
 C

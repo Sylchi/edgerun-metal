@@ -172,7 +172,7 @@ static vr_status_t vr_ensure_segments_capacity(const vr_font_face_t* face, vr_se
 
   size_t cap = (*seg_cap == 0u) ? VR_RASTER_SEGMENT_INITIAL_CAP : *seg_cap;
   while (cap < needed) {
-    if (cap > (SIZE_MAX / 2u)) return VR_ERR_OOM;
+    if (cap > (SIZE_MAX >> 1u)) return VR_ERR_OOM;
     cap *= 2u;
   }
   vr_segment_t* ns = (vr_segment_t*)vr_raster_realloc_array(face, *segs, *seg_cap, cap, sizeof(vr_segment_t));
@@ -199,7 +199,7 @@ static vr_status_t vr_ensure_curves_capacity(const vr_font_face_t* face, vr_rast
 
   size_t cap = (*curve_cap == 0u) ? VR_RASTER_SEGMENT_INITIAL_CAP : *curve_cap;
   while (cap < needed) {
-    if (cap > (SIZE_MAX / 2u)) return VR_ERR_OOM;
+    if (cap > (SIZE_MAX >> 1u)) return VR_ERR_OOM;
     cap *= 2u;
   }
   vr_raster_curve_t* nc = (vr_raster_curve_t*)vr_raster_realloc_array(face, *curves, *curve_cap, cap, sizeof(vr_raster_curve_t));
@@ -213,7 +213,7 @@ static vr_status_t vr_ensure_u8_capacity(const vr_font_face_t* face, uint8_t** v
   if (*values_cap >= needed) return VR_OK;
   size_t cap = (*values_cap == 0u) ? VR_RASTER_SEGMENT_INITIAL_CAP : *values_cap;
   while (cap < needed) {
-    if (cap > (SIZE_MAX / 2u)) return VR_ERR_OOM;
+    if (cap > (SIZE_MAX >> 1u)) return VR_ERR_OOM;
     cap *= 2u;
   }
   uint8_t* nv = (uint8_t*)vr_raster_realloc_array(face, *values, *values_cap, cap, sizeof(uint8_t));
@@ -288,7 +288,7 @@ static vr_status_t vr_ensure_msdf_edges_capacity(
 
   size_t cap = (*edge_cap == 0u) ? VR_RASTER_SEGMENT_INITIAL_CAP : *edge_cap;
   while (cap < needed) {
-    if (cap > (SIZE_MAX / 2u)) return VR_ERR_OOM;
+    if (cap > (SIZE_MAX >> 1u)) return VR_ERR_OOM;
     cap *= 2u;
   }
   vr_msdf_outline_edge_t* ne = (vr_msdf_outline_edge_t*)vr_raster_realloc_array(face, *edges, *edge_cap, cap, sizeof(vr_msdf_outline_edge_t));
@@ -378,23 +378,29 @@ static vr_status_t vr_msdf_color_edges_cycle(
   uint8_t best_first_color = 0u;
   uint8_t best_last_color = 0u;
 
+  //@optimizer-ignore fixed three-channel MSDF color search
   for (uint8_t first_color = 0u; first_color < VR_RASTER_MSDF_CHANNEL_COUNT; ++first_color) {
     uint32_t dp_prev[VR_RASTER_MSDF_CHANNEL_COUNT];
     uint32_t dp_next[VR_RASTER_MSDF_CHANNEL_COUNT];
+    //@optimizer-ignore fixed channel initialization
     for (uint8_t color = 0u; color < VR_RASTER_MSDF_CHANNEL_COUNT; ++color) {
       dp_prev[color] = VR_RASTER_MSDF_COLOR_INF_COST;
       dp_next[color] = VR_RASTER_MSDF_COLOR_INF_COST;
     }
     dp_prev[first_color] = vr_msdf_color_cost(first_color, preferred_colors[0u]);
 
+    //@optimizer-ignore dynamic programming over glyph outline edges
     for (size_t edge = 1u; edge < edge_count; ++edge) {
+      //@optimizer-ignore fixed channel initialization
       for (uint8_t color = 0u; color < VR_RASTER_MSDF_CHANNEL_COUNT; ++color) {
         dp_next[color] = VR_RASTER_MSDF_COLOR_INF_COST;
       }
+      //@optimizer-ignore fixed previous-channel scan
       for (uint8_t prev = 0u; prev < VR_RASTER_MSDF_CHANNEL_COUNT; ++prev) {
         if (dp_prev[prev] == VR_RASTER_MSDF_COLOR_INF_COST) {
           continue;
         }
+        //@optimizer-ignore fixed channel transition scan
         for (uint8_t color = 0u; color < VR_RASTER_MSDF_CHANNEL_COUNT; ++color) {
           if (color == prev) continue;
           uint32_t cost = dp_prev[prev] + vr_msdf_color_cost(color, preferred_colors[edge]);
@@ -403,11 +409,13 @@ static vr_status_t vr_msdf_color_edges_cycle(
           }
         }
       }
+      //@optimizer-ignore fixed channel copy
       for (uint8_t color = 0u; color < VR_RASTER_MSDF_CHANNEL_COUNT; ++color) {
         dp_prev[color] = dp_next[color];
       }
     }
 
+    //@optimizer-ignore fixed final-channel scan
     for (uint8_t last_color = 0u; last_color < VR_RASTER_MSDF_CHANNEL_COUNT; ++last_color) {
       if (last_color == first_color) continue;
       uint32_t candidate = dp_prev[last_color];
@@ -427,7 +435,9 @@ static vr_status_t vr_msdf_color_edges_cycle(
     }
   }
 
+  //@optimizer-ignore fixed parent-table clear for MSDF backtracking
   for (size_t edge = 0u; edge < edge_count; ++edge) {
+    //@optimizer-ignore fixed channel initialization
     for (uint8_t color = 0u; color < VR_RASTER_MSDF_CHANNEL_COUNT; ++color) {
       parent[edge * VR_RASTER_MSDF_CHANNEL_COUNT + color] = 0u;
     }
@@ -435,20 +445,25 @@ static vr_status_t vr_msdf_color_edges_cycle(
 
   uint32_t dp_prev[VR_RASTER_MSDF_CHANNEL_COUNT];
   uint32_t dp_next[VR_RASTER_MSDF_CHANNEL_COUNT];
+  //@optimizer-ignore fixed channel initialization
   for (uint8_t color = 0u; color < VR_RASTER_MSDF_CHANNEL_COUNT; ++color) {
     dp_prev[color] = VR_RASTER_MSDF_COLOR_INF_COST;
     dp_next[color] = VR_RASTER_MSDF_COLOR_INF_COST;
   }
   dp_prev[best_first_color] = vr_msdf_color_cost(best_first_color, preferred_colors[0u]);
 
+  //@optimizer-ignore dynamic programming over glyph outline edges
   for (size_t edge = 1u; edge < edge_count; ++edge) {
+    //@optimizer-ignore fixed channel initialization
     for (uint8_t color = 0u; color < VR_RASTER_MSDF_CHANNEL_COUNT; ++color) {
       dp_next[color] = VR_RASTER_MSDF_COLOR_INF_COST;
     }
+    //@optimizer-ignore fixed previous-channel scan
     for (uint8_t prev = 0u; prev < VR_RASTER_MSDF_CHANNEL_COUNT; ++prev) {
       if (dp_prev[prev] == VR_RASTER_MSDF_COLOR_INF_COST) {
         continue;
       }
+      //@optimizer-ignore fixed channel transition scan
       for (uint8_t color = 0u; color < VR_RASTER_MSDF_CHANNEL_COUNT; ++color) {
         if (color == prev) continue;
         uint32_t cost = dp_prev[prev] + vr_msdf_color_cost(color, preferred_colors[edge]);
@@ -458,6 +473,7 @@ static vr_status_t vr_msdf_color_edges_cycle(
         }
       }
     }
+    //@optimizer-ignore fixed channel copy
     for (uint8_t color = 0u; color < VR_RASTER_MSDF_CHANNEL_COUNT; ++color) {
       dp_prev[color] = dp_next[color];
     }

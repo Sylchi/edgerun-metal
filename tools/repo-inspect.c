@@ -864,6 +864,13 @@ static uint8_t eri_line_has_optimizer_ignore(const char* line) {
   return (uint8_t)(strstr(line, ERI_OPTIMIZER_IGNORE_TAG) != NULL);
 }
 
+static uint8_t eri_line_is_optimizer_ignore_directive(const char* line) {
+  const char* trim = eri_ltrim(line);
+
+  return (uint8_t)((strncmp(trim, "//", 2u) == 0 || strncmp(trim, "/*", 2u) == 0) &&
+                   eri_line_has_optimizer_ignore(trim) != 0u);
+}
+
 static uint8_t eri_line_has_loop_start(const char* line) {
   const char* trim = eri_ltrim(line);
 
@@ -872,6 +879,34 @@ static uint8_t eri_line_has_loop_start(const char* line) {
     return 1u;
   }
   return 0u;
+}
+
+static void eri_update_loop_context(const char* structural_line, uint8_t has_loop_start,
+                                    int* brace_depth, int* loop_depth,
+                                    int* loop_brace_stack, size_t* loop_stack_len) {
+  size_t i;
+  int opens = 0;
+  int closes = 0;
+
+  for (i = 0u; structural_line[i] != 0; ++i) {
+    if (structural_line[i] == '{') {
+      ++opens;
+    } else if (structural_line[i] == '}') {
+      ++closes;
+    }
+  }
+  if (has_loop_start != 0u && opens > closes && *loop_stack_len < 128u) {
+    loop_brace_stack[*loop_stack_len] = *brace_depth + opens - closes;
+    ++(*loop_stack_len);
+    ++(*loop_depth);
+  }
+  for (i = 0u; structural_line[i] != 0; ++i) {
+    if (structural_line[i] == '{') {
+      ++(*brace_depth);
+    } else if (structural_line[i] == '}' && *brace_depth > 0) {
+      --(*brace_depth);
+    }
+  }
 }
 
 static uint8_t eri_line_has_division_or_modulo(const char* line) {
@@ -929,7 +964,7 @@ static uint8_t eri_line_has_io_op(const char* line) {
 
 static uint8_t eri_line_has_expensive_domain_call(const char* line) {
   static const char* tokens[] = {
-    "hash(", "compress", "raster", "shape", "measure", "render", "draw",
+    "hash(", "compress", "rasterize", "shape", "measure", "render", "draw",
     "scan", "decode", "parse", "layout", "paint", "blit", "map("
   };
 
@@ -945,17 +980,15 @@ static void eri_scan_cpu_costs(const EriVfsFile* file, EriFindings* findings) {
   int loop_depth = 0;
   int loop_brace_stack[128];
   size_t loop_stack_len = 0u;
+  uint8_t pending_optimizer_ignore = 0u;
 
   while (pos <= len) {
     size_t start = pos;
     size_t end;
     size_t copy_len;
-    size_t i;
     char snippet[256];
     char structural_line[1024];
     uint8_t has_loop_start;
-    int opens = 0;
-    int closes = 0;
 
     while (pos < len && bytes[pos] != '\n') {
       ++pos;
@@ -984,14 +1017,18 @@ static void eri_scan_cpu_costs(const EriVfsFile* file, EriFindings* findings) {
       }
     }
 
-    if (eri_line_has_optimizer_ignore(snippet) != 0u) {
-      for (i = 0u; structural_line[i] != 0; ++i) {
-        if (structural_line[i] == '{') {
-          ++brace_depth;
-        } else if (structural_line[i] == '}' && brace_depth > 0) {
-          --brace_depth;
-        }
-      }
+    if (eri_line_is_optimizer_ignore_directive(snippet) != 0u) {
+      pending_optimizer_ignore = 1u;
+      has_loop_start = eri_line_has_loop_start(structural_line);
+      eri_update_loop_context(structural_line, has_loop_start, &brace_depth, &loop_depth, loop_brace_stack, &loop_stack_len);
+      ++line_no;
+      continue;
+    }
+
+    if (pending_optimizer_ignore != 0u || eri_line_has_optimizer_ignore(snippet) != 0u) {
+      pending_optimizer_ignore = 0u;
+      has_loop_start = eri_line_has_loop_start(structural_line);
+      eri_update_loop_context(structural_line, has_loop_start, &brace_depth, &loop_depth, loop_brace_stack, &loop_stack_len);
       ++line_no;
       continue;
     }
@@ -1018,25 +1055,7 @@ static void eri_scan_cpu_costs(const EriVfsFile* file, EriFindings* findings) {
       }
     }
 
-    for (i = 0u; structural_line[i] != 0; ++i) {
-      if (structural_line[i] == '{') {
-        ++opens;
-      } else if (structural_line[i] == '}') {
-        ++closes;
-      }
-    }
-    if (has_loop_start != 0u && opens > closes && loop_stack_len < sizeof(loop_brace_stack) / sizeof(loop_brace_stack[0])) {
-      loop_brace_stack[loop_stack_len] = brace_depth + opens - closes;
-      ++loop_stack_len;
-      ++loop_depth;
-    }
-    for (i = 0u; structural_line[i] != 0; ++i) {
-      if (structural_line[i] == '{') {
-        ++brace_depth;
-      } else if (structural_line[i] == '}' && brace_depth > 0) {
-        --brace_depth;
-      }
-    }
+    eri_update_loop_context(structural_line, has_loop_start, &brace_depth, &loop_depth, loop_brace_stack, &loop_stack_len);
     ++line_no;
   }
 }
@@ -1046,6 +1065,7 @@ static void eri_scan_line_metrics(const uint8_t* bytes, size_t len, EriTotals* f
   size_t pos = 0u;
   uint8_t in_block = 0u;
   uint32_t line_no = 1u;
+  uint8_t pending_optimizer_ignore = 0u;
 
   while (pos <= len) {
     size_t start = pos;
@@ -1100,10 +1120,6 @@ static void eri_scan_line_metrics(const uint8_t* bytes, size_t len, EriTotals* f
     } else {
       ++file_totals->blank_lines;
     }
-    if (end - start > ERI_LONG_LINE) {
-      snprintf(snippet, sizeof(snippet), "line has %lu columns", (unsigned long)(end - start));
-      eri_add_finding(findings, path, line_no, "long-line", snippet);
-    }
     if (end > start) {
       size_t copy_len = end - start;
       char searchable[144];
@@ -1115,9 +1131,19 @@ static void eri_scan_line_metrics(const uint8_t* bytes, size_t len, EriTotals* f
       memcpy(snippet, bytes + start, copy_len);
       snippet[copy_len] = 0;
       eri_copy_without_literals(bytes, start, end, searchable, sizeof(searchable));
-      if (eri_line_has_optimizer_ignore(snippet) != 0u) {
+      if (eri_line_is_optimizer_ignore_directive(snippet) != 0u) {
+        pending_optimizer_ignore = 1u;
         ++line_no;
         continue;
+      }
+      if (pending_optimizer_ignore != 0u || eri_line_has_optimizer_ignore(snippet) != 0u) {
+        pending_optimizer_ignore = 0u;
+        ++line_no;
+        continue;
+      }
+      if (end - start > ERI_LONG_LINE) {
+        snprintf(snippet, sizeof(snippet), "line has %lu columns", (unsigned long)(end - start));
+        eri_add_finding(findings, path, line_no, "long-line", snippet);
       }
       if (strstr(searchable, "TODO") != NULL || strstr(searchable, "FIXME") != NULL || strstr(searchable, "HACK") != NULL) {
         eri_add_finding(findings, path, line_no, "marker", eri_ltrim(snippet));
@@ -1133,6 +1159,8 @@ static void eri_scan_line_metrics(const uint8_t* bytes, size_t len, EriTotals* f
       if (eri_line_has_string_indexing_smell(snippet, searchable) != 0u) {
         eri_add_finding(findings, path, line_no, "string-indexing", "string table/indexing may need enum/count guard");
       }
+    } else if (pending_optimizer_ignore != 0u) {
+      pending_optimizer_ignore = 0u;
     }
     ++line_no;
   }
