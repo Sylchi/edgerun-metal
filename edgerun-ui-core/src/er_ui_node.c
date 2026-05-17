@@ -376,6 +376,27 @@ er_ui_node_t er_ui_node_spacer(void) {
   return er_ui_node_base(ER_UI_NODE_SPACER);
 }
 
+er_ui_node_t er_ui_node_tooltip(const char* text) {
+  er_ui_node_t node = er_ui_node_base(ER_UI_NODE_TOOLTIP);
+  node.label = text;
+  return node;
+}
+
+er_ui_node_t er_ui_node_dialog(const char* title, const char* body, er_ui_color4_t accent) {
+  er_ui_node_t node = er_ui_node_base(ER_UI_NODE_DIALOG);
+  node.label = title;
+  node.detail = body;
+  node.color = accent;
+  return node;
+}
+
+er_ui_node_t er_ui_node_progress_ring(float value, er_ui_color4_t color) {
+  er_ui_node_t node = er_ui_node_base(ER_UI_NODE_PROGRESS_RING);
+  node.number = value;
+  node.color = color;
+  return node;
+}
+
 er_ui_node_t* er_ui_node_set_bounds(er_ui_node_t* node, er_ui_bounds_t bounds) {
   if (!node) return node;
   node->bounds = bounds;
@@ -599,6 +620,12 @@ er_ui_status_t er_ui_node_render(
       return er_ui_node_render_scroll_area(node, scene, font, rect, theme);
     case ER_UI_NODE_SPACER:
       return ER_UI_OK;
+    case ER_UI_NODE_TOOLTIP:
+      return er_ui_shadcn_tooltip_emit(scene, font, rect, theme, node->label);
+    case ER_UI_NODE_DIALOG:
+      return er_ui_shadcn_dialog_emit(scene, font, rect, theme, node->label, node->detail, node->color);
+    case ER_UI_NODE_PROGRESS_RING:
+      return er_ui_shadcn_progress_ring_emit(scene, rect, theme, node->number, node->color);
     default:
       return ER_UI_ERR_INVALID_ARGUMENT;
   }

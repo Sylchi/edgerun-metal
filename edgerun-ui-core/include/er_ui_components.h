@@ -281,6 +281,21 @@ er_ui_status_t er_ui_shadcn_empty_emit(
   er_ui_resolved_theme_t theme,
   const char* title,
   const char* body);
+er_ui_status_t er_ui_shadcn_tooltip_emit(
+  er_ui_scene_t* scene,
+  vr_font_face_t* font,
+  er_ui_bounds_t bounds,
+  er_ui_resolved_theme_t theme,
+  const char* text);
+er_ui_status_t er_ui_shadcn_dialog_emit(
+  er_ui_scene_t* scene,
+  vr_font_face_t* font,
+  er_ui_bounds_t bounds,
+  er_ui_resolved_theme_t theme,
+  const char* title,
+  const char* body,
+  er_ui_color4_t accent);
+er_ui_status_t er_ui_shadcn_progress_ring_emit(er_ui_scene_t* scene, er_ui_bounds_t bounds, er_ui_resolved_theme_t theme, float value, er_ui_color4_t color);
 er_ui_status_t er_ui_shadcn_alert_emit(
   er_ui_scene_t* scene,
   vr_font_face_t* font,
