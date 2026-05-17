@@ -14,6 +14,7 @@ Intention: keep the repository source-first, with generated output ignored and n
 ├── docs/                  repository-level engineering documentation
 ├── tools/                 repository maintenance tools
 ├── tests/                 repository maintenance tests
+├── edgerun-crypto/        reusable freestanding crypto primitives
 ├── edgerun-metal/         UEFI metal runtime and support tooling
 ├── edgerun-ui-core/       portable UI scene records and command buffer tests
 ├── varfont/               variable-font renderer library
@@ -23,6 +24,8 @@ Intention: keep the repository source-first, with generated output ignored and n
 ## Project Areas
 
 `edgerun-metal/` exists to build the freestanding EFI runtime, embedded Wasm host, real-hardware boot profiles, and runtime-owned binary telemetry protocol. Its generated EFI artifacts are allowed only under `edgerun-metal/build/`, which is ignored.
+
+`edgerun-crypto/` exists to hold reusable freestanding cryptographic primitives shared by runtime, tools, and libraries. It must not depend on the EFI runtime or project-specific provider boundaries. Generated build output must use `.build/edgerun-crypto/`.
 
 `edgerun-ui-core/` exists to port the Rust `edgerun-ui-core` platform-neutral UI layer to C. The first owned surface is the scene command buffer: colors, rects, clips, hits, drag/drop targets, quads, transitions, budgets, and deterministic tests. Generated build output must use `.build/edgerun-ui-core/`.
 

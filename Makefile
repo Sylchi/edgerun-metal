@@ -1,4 +1,4 @@
-.PHONY: all check clean repo-check repo-test erwire-decode erwire-test edgerun-smoke edgerun-pci edgerun-quiet edgerun-ui edgerun-check varfont-configure varfont-build varfont-test ui-core-configure ui-core-build ui-core-test
+.PHONY: all check clean repo-check repo-test erwire-decode erwire-test crypto-configure crypto-build crypto-test edgerun-smoke edgerun-pci edgerun-quiet edgerun-ui edgerun-check varfont-configure varfont-build varfont-test ui-core-configure ui-core-build ui-core-test
 
 ifeq ($(origin CC),default)
 CC := clang
@@ -21,12 +21,14 @@ endif
 
 VARFONT_BUILD_DIR ?= .build/varfont
 UI_CORE_BUILD_DIR ?= .build/edgerun-ui-core
+CRYPTO_BUILD_DIR ?= .build/edgerun-crypto
 VARFONT_CMAKE_GENERATOR ?= Ninja
 UI_CORE_CMAKE_GENERATOR ?= Ninja
+CRYPTO_CMAKE_GENERATOR ?= Ninja
 
-all: edgerun-smoke varfont-build ui-core-build
+all: crypto-build edgerun-smoke varfont-build ui-core-build
 
-check: repo-check repo-test edgerun-check varfont-test ui-core-test
+check: repo-check repo-test crypto-test edgerun-check varfont-test ui-core-test
 
 repo-check:
 	./tools/repo-check.sh
@@ -41,6 +43,15 @@ erwire-decode:
 
 erwire-test: erwire-decode
 	./tests/erwire-decode-tests.sh
+
+crypto-configure:
+	cmake -S edgerun-crypto -B $(CRYPTO_BUILD_DIR) -G "$(CRYPTO_CMAKE_GENERATOR)" $(CMAKE_TOOLCHAIN_ARGS)
+
+crypto-build: crypto-configure
+	cmake --build $(CRYPTO_BUILD_DIR)
+
+crypto-test: crypto-build
+	ctest --test-dir $(CRYPTO_BUILD_DIR) --output-on-failure
 
 edgerun-smoke:
 	$(MAKE) -C edgerun-metal smoke
