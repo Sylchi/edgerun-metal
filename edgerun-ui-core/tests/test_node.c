@@ -108,6 +108,7 @@ void run_node_tests(void) {
   expect_string(er_ui_node_kind_label(ER_UI_NODE_INPUT_GROUP), "input-group", "node: kind label maps input group");
   expect_string(er_ui_node_kind_label(ER_UI_NODE_INPUT_OTP), "input-otp", "node: kind label maps input otp");
   expect_string(er_ui_node_kind_label(ER_UI_NODE_NAVIGATION_MENU), "navigation-menu", "node: kind label maps navigation menu");
+  expect_string(er_ui_node_kind_label(ER_UI_NODE_RESIZABLE), "resizable", "node: kind label maps resizable");
   expect_string(er_ui_icon_label(ER_UI_ICON_SEARCH), "search", "node: icon label maps canonical icon");
   expect_u32(er_ui_icon_atlas_id(ER_UI_ICON_SEARCH), (uint32_t)ER_UI_ICON_SEARCH + 1u, "node: icon atlas id is stable");
   expect_string(er_ui_icon_provider_name(ER_UI_ICON_APP, ER_UI_ICON_PROVIDER_LUCIDE), "app-window", "node: lucide provider name maps app icon");
@@ -300,6 +301,11 @@ void run_node_tests(void) {
   expect_size(a11y.role, ER_UI_A11Y_LIST_ITEM, "node: navigation menu row role");
   expect_true(a11y.has_id && a11y.id == 8051u, "node: navigation menu row id");
 
+  const char* const resizable_labels[] = {"One", "Two", "Three"};
+  er_ui_node_t resizable_a11y = er_ui_node_resizable(resizable_labels, 3u);
+  expect_status(er_ui_node_accessibility(&resizable_a11y, &a11y), ER_UI_OK, "node: resizable accessibility maps");
+  expect_size(a11y.role, ER_UI_A11Y_GROUP, "node: resizable accessibility role");
+
   er_ui_node_t checked = er_ui_node_checkbox("Remember", true, 8002u);
   expect_status(er_ui_node_accessibility(&checked, &a11y), ER_UI_OK, "node: checkbox accessibility maps");
   expect_size(a11y.role, ER_UI_A11Y_CHECKBOX, "node: checkbox accessibility role");
@@ -446,6 +452,8 @@ void run_node_tests(void) {
     const char* const render_nav_tabs[] = {"Docs", "Components", "Examples"};
     er_ui_node_t navigation_menu =
       er_ui_node_navigation_menu(render_nav_tabs, 3u, 1u, "Components", "Reusable primitives", "Accordion", "Disclosure rows", 8852u);
+    const char* const render_resizable_labels[] = {"One", "Two", "Three"};
+    er_ui_node_t resizable = er_ui_node_resizable(render_resizable_labels, 3u);
 
     expect_status(er_ui_node_render(&alert, &scene, face, er_ui_bounds(0.0f, 170.0f, 360.0f, 76.0f), theme), ER_UI_OK, "node: alert renders");
     expect_status(er_ui_node_render(&avatar, &scene, face, er_ui_bounds(0.0f, 254.0f, 42.0f, 42.0f), theme), ER_UI_OK, "node: avatar renders");
@@ -574,6 +582,10 @@ void run_node_tests(void) {
     expect_status(er_ui_node_render(&navigation_menu, &scene, face, er_ui_bounds(0.0f, 4224.0f, 360.0f, 154.0f), theme), ER_UI_OK,
                   "node: navigation menu renders");
     expect_size(scene.hit_count, hits_before_navigation_menu + 4u, "node: navigation menu emits tab and row hits");
+    size_t rects_before_resizable = scene.rect_count;
+    expect_status(er_ui_node_render(&resizable, &scene, face, er_ui_bounds(0.0f, 4390.0f, 360.0f, 112.0f), theme), ER_UI_OK,
+                  "node: resizable renders");
+    expect_true(scene.rect_count > rects_before_resizable, "node: resizable emits cards and divider");
     size_t drag_sources_before = scene.drag_source_count;
     size_t drop_targets_before = scene.drop_target_count;
     expect_status(er_ui_node_render(&reorderable, &scene, face, er_ui_bounds(0.0f, 2930.0f, 260.0f, 52.0f), theme), ER_UI_OK,
