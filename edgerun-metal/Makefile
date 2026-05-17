@@ -1,4 +1,4 @@
-.PHONY: all run clean print-path netboot smoke pci quiet mmio ui rebuild-profile check test-core wasm-modules install-netboot uninstall-netboot restart-netboot logs-netboot status-netboot
+.PHONY: all run run-native clean print-path netboot smoke pci quiet mmio ui native rebuild-profile check test-core wasm-modules install-netboot uninstall-netboot restart-netboot logs-netboot status-netboot
 
 CC = clang
 HOST_CC ?= clang
@@ -21,6 +21,7 @@ GENERATED_DIR := $(BUILD_DIR)/generated
 #   2 = quiet: minimal halt-ready boot
 #   3 = mmio:  read-only NVIDIA BAR0 probe
 #   4 = ui:    GOP-backed UI rectangle scene
+#   5 = native: QEMU microvm VirtIO-MMIO erwire-over-Ethernet probe
 ER_BOOT_PROFILE ?= 0
 
 CFLAGS := -std=c11 -Wall -Werror -ffreestanding -fshort-wchar -fno-builtin -fno-stack-protector -mno-red-zone -fuse-ld=lld -target x86_64-pc-windows-msvc \
@@ -30,7 +31,7 @@ LDFLAGS := -nostdlib -Wl,/SUBSYSTEM:EFI_APPLICATION,/ENTRY:efi_main
 HOST_CFLAGS := -std=c11 -Wall -Wextra -Werror -O2 -DER_ENABLE_TEST_HOOKS=1 -I$(CURDIR)/core -I$(CURDIR)/../include -I$(CURDIR)/$(GENERATED_DIR) -I$(CURDIR)/$(CRYPTO_DIR)/include -I$(CURDIR)/$(UI_CORE_DIR)/include -I$(CURDIR)/$(VARFONT_DIR)/include
 HOST_LDFLAGS ?= $(if $(MOLD),-fuse-ld=mold,)
 
-SRCS := core/efi_main.c core/er_print.c core/er_gfx_console.c core/er_ui_gop_renderer.c core/er_freestanding.c core/er_netlog.c core/er_crypto.c core/er_crypto_blake3.c core/er_mem.c core/er_vfs.c core/er_app.c core/er_hw_relay.c core/er_bus.c core/er_acpi.c core/erwire.c core/wasm_vm.c core/er_pci.c core/er_mmio.c core/er_virtio.c core/er_virtio_net.c core/er_net_frame.c core/er_native_eth.c
+SRCS := core/efi_main.c core/er_print.c core/er_gfx_console.c core/er_ui_gop_renderer.c core/er_freestanding.c core/er_netlog.c core/er_crypto.c core/er_crypto_blake3.c core/er_mem.c core/er_vfs.c core/er_app.c core/er_hw_relay.c core/er_bus.c core/er_acpi.c core/erwire.c core/er_native_boot.c core/wasm_vm.c core/er_pci.c core/er_mmio.c core/er_virtio.c core/er_virtio_net.c core/er_net_frame.c core/er_native_eth.c
 UI_SRCS := $(UI_CORE_DIR)/src/er_ui_primitives.c $(UI_CORE_DIR)/src/er_ui_scene.c $(UI_CORE_DIR)/src/er_ui_painter.c $(UI_CORE_DIR)/src/er_ui_theme.c $(UI_CORE_DIR)/src/er_ui_text.c $(UI_CORE_DIR)/src/er_ui_components.c $(UI_CORE_DIR)/src/er_ui_icon.c $(UI_CORE_DIR)/src/er_ui_metal.c $(UI_CORE_DIR)/src/er_ui_node.c
 VARFONT_SRCS := $(VARFONT_DIR)/src/vr_font.c $(VARFONT_DIR)/src/vr_font_utils.c $(VARFONT_DIR)/src/vr_font_shape.c $(VARFONT_DIR)/src/vr_font_raster.c $(VARFONT_DIR)/src/vr_font_atlas.c
 CRYPTO_SRCS := $(CRYPTO_DIR)/src/er_blake3.c
@@ -56,7 +57,7 @@ NETBOOT_SRC := tools/edgerun-netboot/main.c
 NETBOOT_BIN := $(BUILD_DIR)/edgerun-netboot
 PXE4011_SRC := tools/edgerun-pxe4011/main.c
 PXE4011_BIN := $(BUILD_DIR)/edgerun-pxe4011
-CORE_TEST_SRC := tests/test_core.c core/er_pci.c core/er_mmio.c core/er_crypto.c core/er_crypto_blake3.c $(CRYPTO_SRCS) core/er_mem.c core/er_vfs.c core/er_app.c core/er_hw_relay.c core/er_bus.c core/er_acpi.c core/er_netlog.c core/er_ui_gop_renderer.c core/erwire.c core/wasm_vm.c core/er_virtio.c core/er_virtio_net.c core/er_net_frame.c core/er_native_eth.c $(UI_SRCS) $(VARFONT_SRCS)
+CORE_TEST_SRC := tests/test_core.c core/er_pci.c core/er_mmio.c core/er_crypto.c core/er_crypto_blake3.c $(CRYPTO_SRCS) core/er_mem.c core/er_vfs.c core/er_app.c core/er_hw_relay.c core/er_bus.c core/er_acpi.c core/er_netlog.c core/er_ui_gop_renderer.c core/erwire.c core/er_native_boot.c core/wasm_vm.c core/er_virtio.c core/er_virtio_net.c core/er_net_frame.c core/er_native_eth.c $(UI_SRCS) $(VARFONT_SRCS)
 CORE_TEST_BIN := $(BUILD_DIR)/test-core
 IFACE ?=
 
@@ -76,6 +77,9 @@ mmio:
 
 ui:
 	$(MAKE) rebuild-profile ER_BOOT_PROFILE=4
+
+native:
+	$(MAKE) rebuild-profile ER_BOOT_PROFILE=5
 
 rebuild-profile:
 	rm -f $(OBJS) $(UI_OBJS) $(VARFONT_OBJS) $(CRYPTO_OBJS) $(CRYPTO_ASM_OBJS) $(EFI_OUT) $(EFI_BOOT)
@@ -169,6 +173,9 @@ $(EFI_BOOT): $(EFI_OUT)
 
 run: $(EFI_BOOT)
 	./scripts/run-qemu.sh
+
+run-native: native
+	QEMU_NATIVE=1 ./scripts/run-qemu.sh
 
 clean:
 	rm -rf $(BUILD_DIR)

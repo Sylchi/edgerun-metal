@@ -4,6 +4,8 @@
 #include "er_bus.h"
 #include "er_types.h"
 
+#define ER_WASM_MAX_FUNCTIONS 16u
+
 /*
  * Purpose: define the bounded WASM interpreter ABI used by metal apps and drivers.
  * Intention: expose memory and hostcalls explicitly, without depending on host libc or OS handles.
@@ -45,13 +47,13 @@ typedef struct {
   UINT8* memory;
   UINT8 function_has_main;
   UINT32 main_index;
-  UINT32 function_type_indices[16];
-  UINT8  function_is_import[16];
-  UINT8  function_import_kind[16];
-  UINT8  type_params_0[16];
-  UINT8  type_result_count[16];
-  UINT8  type_result_type[16];
-  ErWasmCode code[16];
+  UINT32 function_type_indices[ER_WASM_MAX_FUNCTIONS];
+  UINT8  function_is_import[ER_WASM_MAX_FUNCTIONS];
+  UINT8  function_import_kind[ER_WASM_MAX_FUNCTIONS];
+  UINT8  type_params_0[ER_WASM_MAX_FUNCTIONS];
+  UINT8  type_result_count[ER_WASM_MAX_FUNCTIONS];
+  UINT8  type_result_type[ER_WASM_MAX_FUNCTIONS];
+  ErWasmCode code[ER_WASM_MAX_FUNCTIONS];
   ErWasmHostCalls host;
 } ErWasmModule;
 

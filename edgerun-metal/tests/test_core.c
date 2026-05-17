@@ -8,6 +8,7 @@
 #include "er_crypto_blake3.h"
 #include "er_hw_relay.h"
 #include "er_native_eth.h"
+#include "er_native_boot.h"
 #include "er_net_frame.h"
 #include "er_ui_gop_renderer.h"
 #include "er_ui_text.h"
@@ -1625,6 +1626,51 @@ static void test_erwire_native_eth_sink(void) {
   check_uint64("erwire eth text1", tx_frame[ERWIRE_ETH_TEST_TEXT_OFFSET + 1u], 'k');
 }
 
+static void test_native_boot_erwire_eth_sink(void) {
+  enum {
+    NATIVE_BOOT_TEST_MMIO_DWORDS = 128u,
+    NATIVE_BOOT_TEST_VIRTIO_HDR_LEN = 12u,
+    NATIVE_BOOT_TEST_TX_DESC = 0u,
+    NATIVE_BOOT_TEST_PAYLOAD_OFFSET = NATIVE_BOOT_TEST_VIRTIO_HDR_LEN + ER_NET_ETH_HEADER_LEN
+  };
+  UINT32 regs[NATIVE_BOOT_TEST_MMIO_DWORDS] = {0};
+  ErNativeBootState state;
+  ErVirtioQueueAvail* tx_avail;
+  UINT8* tx_frame;
+  UINT8 peer_mac[ER_NET_MAC_LEN] = {0x02u, 0x21u, 0x22u, 0x23u, 0x24u, 0x25u};
+
+  er_mmio_reset();
+  regs[ER_VIRTIO_MMIO_MAGIC_VALUE_OFFSET / sizeof(UINT32)] = ER_VIRTIO_MMIO_MAGIC;
+  regs[ER_VIRTIO_MMIO_VERSION_OFFSET / sizeof(UINT32)] = ER_VIRTIO_MMIO_VERSION_MODERN;
+  regs[ER_VIRTIO_MMIO_DEVICE_ID_OFFSET / sizeof(UINT32)] = ER_VIRTIO_DEVICE_TYPE_NET;
+  regs[ER_VIRTIO_MMIO_VENDOR_OFFSET / sizeof(UINT32)] = ER_VIRTIO_MMIO_VENDOR_ANY;
+  regs[ER_VIRTIO_MMIO_DEVICE_FEATURES_OFFSET / sizeof(UINT32)] = 1u;
+  regs[ER_VIRTIO_MMIO_QUEUE_NUM_MAX_OFFSET / sizeof(UINT32)] = ER_VIRTIO_QUEUE_SIZE;
+
+  check_int64("native boot sink configured",
+              er_native_boot_configure_erwire_eth_sink((UINT64)(UINTN)regs,
+                                                       (UINT64)sizeof(regs),
+                                                       peer_mac,
+                                                       &state),
+              1);
+  check_int64("native boot initialized", state.initialized, 1);
+  check_int64("native boot erwire ready", state.erwire_sink_ready, 1);
+  check_int64("native boot net", state.net != 0, 1);
+  check_int64("native boot eth", state.eth != 0, 1);
+
+  erwire_init(9u);
+  erwire_send_text("native");
+  erwire_clear_native_eth_sink();
+  tx_avail = er_virtio_net_test_tx_avail();
+  tx_frame = er_virtio_net_test_tx_buffer(NATIVE_BOOT_TEST_TX_DESC);
+  check_uint64("native boot tx desc", tx_avail->ring[0], NATIVE_BOOT_TEST_TX_DESC);
+  check_uint64("native boot dst mac0", tx_frame[NATIVE_BOOT_TEST_VIRTIO_HDR_LEN], peer_mac[0]);
+  check_uint64("native boot erwire magic0", tx_frame[NATIVE_BOOT_TEST_PAYLOAD_OFFSET], 'E');
+  check_uint64("native boot erwire magic1", tx_frame[NATIVE_BOOT_TEST_PAYLOAD_OFFSET + 1u], 'R');
+  check_uint64("native boot erwire magic2", tx_frame[NATIVE_BOOT_TEST_PAYLOAD_OFFSET + 2u], 'W');
+  check_uint64("native boot erwire magic3", tx_frame[NATIVE_BOOT_TEST_PAYLOAD_OFFSET + 3u], '1');
+}
+
 static void test_ui_gop_renderer_surface(void) {
   UINT32 pixels[24] = {0};
   ErUiGopSurface surface;
@@ -2123,6 +2169,7 @@ int main(void) {
   test_app_identity_routes();
   test_hw_relay_endpoints();
   test_erwire_native_eth_sink();
+  test_native_boot_erwire_eth_sink();
   test_ui_gop_renderer_surface();
   test_ui_gop_renderer_4k_tile_plan();
   test_ui_gop_renderer_varfont_text();
