@@ -147,6 +147,21 @@ void run_node_tests(void) {
     er_ui_node_t transaction = er_ui_node_transaction_row("Storage", "verified retrieval", "today", "8 units", false, 8810u);
     er_ui_node_t menu = er_ui_node_menu_item("Verify package", "content hash", "new", true, theme.colors.accent, 8811u);
     er_ui_node_t control = er_ui_node_control_row("Cache package", "avoid repeated retrieval", "enabled", 8812u);
+    er_ui_node_t grid = er_ui_node_grid(2u);
+    er_ui_node_set_gap(&grid, 4.0f);
+    er_ui_node_t grid_badge_a = er_ui_node_badge("One", ER_UI_SHADCN_BADGE_DEFAULT);
+    er_ui_node_t grid_badge_b = er_ui_node_badge("Two", ER_UI_SHADCN_BADGE_SECONDARY);
+    er_ui_node_t grid_badge_c = er_ui_node_badge("Three", ER_UI_SHADCN_BADGE_OUTLINE);
+    expect_status(er_ui_node_add_child(&grid, &grid_badge_a), ER_UI_OK, "node: grid accepts first child");
+    expect_status(er_ui_node_add_child(&grid, &grid_badge_b), ER_UI_OK, "node: grid accepts second child");
+    expect_status(er_ui_node_add_child(&grid, &grid_badge_c), ER_UI_OK, "node: grid accepts third child");
+    er_ui_node_t scroll = er_ui_node_scroll_area(20.0f, 8813u);
+    er_ui_node_set_gap(&scroll, 4.0f);
+    er_ui_node_t scroll_a = er_ui_node_list_row("Top", "scrolled", 8814u, false);
+    er_ui_node_t scroll_b = er_ui_node_list_row("Bottom", "visible", 8815u, true);
+    expect_status(er_ui_node_add_child(&scroll, &scroll_a), ER_UI_OK, "node: scroll accepts first child");
+    expect_status(er_ui_node_add_child(&scroll, &scroll_b), ER_UI_OK, "node: scroll accepts second child");
+    er_ui_node_t spacer = er_ui_node_spacer();
 
     expect_status(er_ui_node_render(&alert, &scene, face, er_ui_bounds(0.0f, 170.0f, 360.0f, 76.0f), theme), ER_UI_OK, "node: alert renders");
     expect_status(er_ui_node_render(&avatar, &scene, face, er_ui_bounds(0.0f, 254.0f, 42.0f, 42.0f), theme), ER_UI_OK, "node: avatar renders");
@@ -201,6 +216,12 @@ void run_node_tests(void) {
                   "node: menu item renders");
     expect_status(er_ui_node_render(&control, &scene, face, er_ui_bounds(0.0f, 2398.0f, 360.0f, 58.0f), theme), ER_UI_OK,
                   "node: control row renders");
+    expect_status(er_ui_node_render(&grid, &scene, face, er_ui_bounds(0.0f, 2468.0f, 260.0f, 80.0f), theme), ER_UI_OK,
+                  "node: grid renders children");
+    expect_status(er_ui_node_render(&scroll, &scene, face, er_ui_bounds(0.0f, 2560.0f, 260.0f, 64.0f), theme), ER_UI_OK,
+                  "node: scroll area renders clipped children");
+    expect_status(er_ui_node_render(&spacer, &scene, face, er_ui_bounds(0.0f, 2636.0f, 24.0f, 24.0f), theme), ER_UI_OK,
+                  "node: spacer renders as no-op");
 
     expect_true(scene.rect_count > 0u, "node: render emits rect geometry");
     expect_true(scene.hit_count > 0u, "node: render emits hit targets");

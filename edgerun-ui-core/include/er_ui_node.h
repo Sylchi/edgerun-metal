@@ -55,7 +55,12 @@ typedef enum {
   ER_UI_NODE_METRIC_CARD,
   ER_UI_NODE_TRANSACTION_ROW,
   ER_UI_NODE_MENU_ITEM,
-  ER_UI_NODE_CONTROL_ROW
+  ER_UI_NODE_CONTROL_ROW,
+  ER_UI_NODE_GRID,
+  ER_UI_NODE_MASONRY,
+  ER_UI_NODE_BENTO_GRID,
+  ER_UI_NODE_SCROLL_AREA,
+  ER_UI_NODE_SPACER
 } er_ui_node_kind_t;
 
 typedef struct er_ui_node_t er_ui_node_t;
@@ -129,6 +134,11 @@ er_ui_node_t er_ui_node_metric_card(const char* title, const char* value, const 
 er_ui_node_t er_ui_node_transaction_row(const char* title, const char* subtitle, const char* date, const char* amount, bool positive, uint32_t id);
 er_ui_node_t er_ui_node_menu_item(const char* label, const char* detail, const char* badge, bool selected, er_ui_color4_t accent, uint32_t id);
 er_ui_node_t er_ui_node_control_row(const char* label, const char* detail, const char* accessory, uint32_t id);
+er_ui_node_t er_ui_node_grid(size_t columns);
+er_ui_node_t er_ui_node_masonry(size_t columns);
+er_ui_node_t er_ui_node_bento_grid(size_t columns);
+er_ui_node_t er_ui_node_scroll_area(float offset_px, uint32_t id);
+er_ui_node_t er_ui_node_spacer(void);
 er_ui_node_t* er_ui_node_set_bounds(er_ui_node_t* node, er_ui_bounds_t bounds);
 er_ui_node_t* er_ui_node_set_gap(er_ui_node_t* node, float gap);
 er_ui_node_t* er_ui_node_set_padding(er_ui_node_t* node, float padding);
