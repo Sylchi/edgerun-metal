@@ -123,6 +123,7 @@ void run_node_tests(void) {
   expect_string(er_ui_node_kind_label(ER_UI_NODE_CALENDAR), "calendar", "node: kind label maps calendar");
   expect_string(er_ui_node_kind_label(ER_UI_NODE_COMBOBOX), "combobox", "node: kind label maps combobox");
   expect_string(er_ui_node_kind_label(ER_UI_NODE_DIFF_BODY), "diff-body", "node: kind label maps diff body");
+  expect_string(er_ui_node_kind_label(ER_UI_NODE_CHAT_MESSAGE), "chat-message", "node: kind label maps chat message");
   expect_string(er_ui_icon_label(ER_UI_ICON_SEARCH), "search", "node: icon label maps canonical icon");
   expect_u32(er_ui_icon_atlas_id(ER_UI_ICON_SEARCH), (uint32_t)ER_UI_ICON_SEARCH + 1u, "node: icon atlas id is stable");
   expect_string(er_ui_icon_provider_name(ER_UI_ICON_APP, ER_UI_ICON_PROVIDER_LUCIDE), "app-window", "node: lucide provider name maps app icon");
@@ -449,6 +450,15 @@ void run_node_tests(void) {
   expect_status(er_ui_node_accessibility_child(&diff_body_a11y, 4u, &a11y), ER_UI_OK, "node: diff body truncated accessibility maps");
   expect_string(a11y.label, "[diff preview truncated]", "node: diff body truncated label");
 
+  er_ui_node_t chat_message_a11y = er_ui_node_chat_message(ER_UI_SHADCN_CHAT_ROLE_ASSISTANT, "Response", "Done");
+  expect_status(er_ui_node_accessibility(&chat_message_a11y, &a11y), ER_UI_OK, "node: chat message accessibility maps");
+  expect_size(a11y.role, ER_UI_A11Y_GROUP, "node: chat message accessibility role");
+  expect_string(a11y.label, "assistant", "node: chat message role label maps");
+  expect_true(a11y.value == chat_message_a11y.detail, "node: chat message detail is borrowed");
+  er_ui_node_t chat_diff_a11y = er_ui_node_chat_diff_message("Patch", diff_lines, 4u, true);
+  expect_status(er_ui_node_accessibility_child(&chat_diff_a11y, 3u, &a11y), ER_UI_OK, "node: chat diff line accessibility maps");
+  expect_true(a11y.label == diff_lines[2], "node: chat diff line label is borrowed");
+
   er_ui_node_t checked = er_ui_node_checkbox("Remember", true, 8002u);
   expect_status(er_ui_node_accessibility(&checked, &a11y), ER_UI_OK, "node: checkbox accessibility maps");
   expect_size(a11y.role, ER_UI_A11Y_CHECKBOX, "node: checkbox accessibility role");
@@ -622,6 +632,9 @@ void run_node_tests(void) {
     er_ui_node_t combobox = er_ui_node_combobox("Fruit", "Banana", "Search fruit...", render_combobox_options, 3u, 1u, 8882u);
     const char* const render_diff_lines[] = {"@@ -1,2 +1,2 @@", "-old", "+new", "*** End Patch"};
     er_ui_node_t diff_body = er_ui_node_diff_body(render_diff_lines, 4u, true);
+    er_ui_node_t chat_message = er_ui_node_chat_message(ER_UI_SHADCN_CHAT_ROLE_ASSISTANT, "Response", "Done");
+    er_ui_node_t chat_timeline = er_ui_node_chat_message(ER_UI_SHADCN_CHAT_ROLE_TOOL_RUNNING, "Started", "shell");
+    er_ui_node_t chat_diff = er_ui_node_chat_diff_message("Patch", render_diff_lines, 4u, true);
 
     expect_status(er_ui_node_render(&alert, &scene, face, er_ui_bounds(0.0f, 170.0f, 360.0f, 76.0f), theme), ER_UI_OK, "node: alert renders");
     expect_status(er_ui_node_render(&avatar, &scene, face, er_ui_bounds(0.0f, 254.0f, 42.0f, 42.0f), theme), ER_UI_OK, "node: avatar renders");
@@ -820,6 +833,16 @@ void run_node_tests(void) {
     expect_status(er_ui_node_render(&diff_body, &scene, face, er_ui_bounds(0.0f, 6512.0f, 360.0f, 128.0f), theme), ER_UI_OK,
                   "node: diff body renders");
     expect_true(scene.text_quad_count > text_before_diff, "node: diff body emits variable font text");
+    size_t icons_before_chat = scene.icon_quad_count;
+    size_t text_before_chat = scene.text_quad_count;
+    expect_status(er_ui_node_render(&chat_message, &scene, face, er_ui_bounds(0.0f, 6652.0f, 360.0f, 110.0f), theme), ER_UI_OK,
+                  "node: chat message renders");
+    expect_status(er_ui_node_render(&chat_timeline, &scene, face, er_ui_bounds(0.0f, 6774.0f, 360.0f, 82.0f), theme), ER_UI_OK,
+                  "node: chat timeline message renders");
+    expect_status(er_ui_node_render(&chat_diff, &scene, face, er_ui_bounds(0.0f, 6868.0f, 380.0f, 154.0f), theme), ER_UI_OK,
+                  "node: chat diff message renders");
+    expect_true(scene.icon_quad_count >= icons_before_chat + 3u, "node: chat messages emit role icons");
+    expect_true(scene.text_quad_count > text_before_chat, "node: chat messages emit variable font text");
     size_t drag_sources_before = scene.drag_source_count;
     size_t drop_targets_before = scene.drop_target_count;
     expect_status(er_ui_node_render(&reorderable, &scene, face, er_ui_bounds(0.0f, 2930.0f, 260.0f, 52.0f), theme), ER_UI_OK,
