@@ -109,6 +109,34 @@ void run_node_tests(void) {
     er_ui_resolved_theme_t theme = er_ui_resolved_theme_user_default();
     expect_status(er_ui_node_render(&root, &scene, face, er_ui_bounds(0.0f, 0.0f, 320.0f, 160.0f), theme), ER_UI_OK,
                   "node: card tree renders");
+
+    er_ui_node_t alert = er_ui_node_alert("Heads up", "Reusable components stay in UI core.", theme.colors.warning);
+    er_ui_node_t avatar = er_ui_node_avatar("ER", theme.colors.accent, true);
+    er_ui_node_t progress = er_ui_node_progress(0.66f);
+    er_ui_node_t switch_node = er_ui_node_switch(true, 8002u);
+    const char* const breadcrumb_labels[] = {"Docs", "Components", "Button"};
+    er_ui_node_t breadcrumb = er_ui_node_breadcrumb(breadcrumb_labels, 3u, 2u, 8100u);
+    const char* const table_headers[] = {"Invoice", "Status"};
+    const char* const table_cells[] = {"INV001", "Paid", "INV002", "Pending"};
+    er_ui_node_t table = er_ui_node_table(table_headers, 2u, table_cells, 2u, 8200u);
+    er_ui_node_t toast = er_ui_node_toast("Scheduled", theme.colors.accent);
+    er_ui_node_t empty = er_ui_node_empty("No results", "Try another filter.");
+    er_ui_node_t list_row = er_ui_node_list_row("Billing", "Command B", 8300u, true);
+
+    expect_status(er_ui_node_render(&alert, &scene, face, er_ui_bounds(0.0f, 170.0f, 360.0f, 76.0f), theme), ER_UI_OK, "node: alert renders");
+    expect_status(er_ui_node_render(&avatar, &scene, face, er_ui_bounds(0.0f, 254.0f, 42.0f, 42.0f), theme), ER_UI_OK, "node: avatar renders");
+    expect_status(er_ui_node_render(&progress, &scene, face, er_ui_bounds(54.0f, 268.0f, 180.0f, 8.0f), theme), ER_UI_OK,
+                  "node: progress renders");
+    expect_status(er_ui_node_render(&switch_node, &scene, face, er_ui_bounds(246.0f, 262.0f, 44.0f, 24.0f), theme), ER_UI_OK,
+                  "node: switch renders");
+    expect_status(er_ui_node_render(&breadcrumb, &scene, face, er_ui_bounds(0.0f, 308.0f, 320.0f, 34.0f), theme), ER_UI_OK,
+                  "node: breadcrumb renders");
+    expect_status(er_ui_node_render(&table, &scene, face, er_ui_bounds(0.0f, 354.0f, 320.0f, 112.0f), theme), ER_UI_OK, "node: table renders");
+    expect_status(er_ui_node_render(&toast, &scene, face, er_ui_bounds(0.0f, 478.0f, 260.0f, 48.0f), theme), ER_UI_OK, "node: toast renders");
+    expect_status(er_ui_node_render(&empty, &scene, face, er_ui_bounds(0.0f, 538.0f, 280.0f, 120.0f), theme), ER_UI_OK, "node: empty renders");
+    expect_status(er_ui_node_render(&list_row, &scene, face, er_ui_bounds(0.0f, 670.0f, 220.0f, 44.0f), theme), ER_UI_OK,
+                  "node: list row renders");
+
     expect_true(scene.rect_count > 0u, "node: render emits rect geometry");
     expect_true(scene.hit_count > 0u, "node: render emits hit targets");
     expect_true(scene.text_quad_count > 0u, "node: render uses variable font text");
