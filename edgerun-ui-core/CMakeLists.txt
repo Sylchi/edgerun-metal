@@ -3,6 +3,7 @@ project(er_ui_core C)
 
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
+option(ER_UI_CORE_BUILD_TESTS "Build hosted ctest targets." ON)
 
 if(NOT TARGET vrfont)
   set(VRFONT_BUILD_HOSTED_TOOLS OFF CACHE BOOL "" FORCE)
@@ -28,22 +29,24 @@ if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
   target_compile_options(er_ui_core PRIVATE -Wall -Wextra -Wpedantic -Werror -ffreestanding -fno-builtin -fno-stack-protector)
 endif()
 
-enable_testing()
+if(ER_UI_CORE_BUILD_TESTS)
+  enable_testing()
 
-add_executable(er_ui_core_tests
-  tests/test_runtime.c
-  tests/test_scene.c
-)
+  add_executable(er_ui_core_tests
+    tests/test_runtime.c
+    tests/test_scene.c
+  )
 
-target_link_libraries(er_ui_core_tests PRIVATE er_ui_core)
-target_compile_definitions(er_ui_core_tests PRIVATE ER_UI_REPO_ROOT="${CMAKE_CURRENT_SOURCE_DIR}/..")
+  target_link_libraries(er_ui_core_tests PRIVATE er_ui_core)
+  target_compile_definitions(er_ui_core_tests PRIVATE ER_UI_REPO_ROOT="${CMAKE_CURRENT_SOURCE_DIR}/..")
 
-if(UNIX)
-  target_link_libraries(er_ui_core_tests PRIVATE m)
+  if(UNIX)
+    target_link_libraries(er_ui_core_tests PRIVATE m)
+  endif()
+
+  if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
+    target_compile_options(er_ui_core_tests PRIVATE -Wall -Wextra -Wpedantic -Werror)
+  endif()
+
+  add_test(NAME er_ui_core_tests COMMAND er_ui_core_tests)
 endif()
-
-if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
-  target_compile_options(er_ui_core_tests PRIVATE -Wall -Wextra -Wpedantic -Werror)
-endif()
-
-add_test(NAME er_ui_core_tests COMMAND er_ui_core_tests)
