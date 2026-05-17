@@ -81,6 +81,21 @@ static UINT8 er_match_name(const UINT8* actual_name, UINT32 actual_len, const ch
   return 1;
 }
 
+static UINT8 er_find_host_import(const UINT8* module_name, UINT32 module_len,
+                                 const UINT8* field_name, UINT32 field_len) {
+  const ErHostImport* import = ER_HOST_IMPORTS;
+  const ErHostImport* end = ER_HOST_IMPORTS + ER_HOST_IMPORT_COUNT;
+
+  while (import < end) {
+    if (er_match_name(module_name, module_len, import->module, import->module_len) &&
+        er_match_name(field_name, field_len, import->field, import->field_len)) {
+      return import->kind;
+    }
+    ++import;
+  }
+  return ER_IMPORT_KIND_NONE;
+}
+
 static void er_clear_module(ErWasmModule* module) {
   if (module == 0) {
     return;
@@ -531,13 +546,7 @@ int er_wasm_init(ErWasmModule* module, const UINT8* data, UINT32 size, const ErW
           return -1;
         }
 
-        for (i = 0; i < (UINT8)ER_HOST_IMPORT_COUNT; ++i) {
-          if (er_match_name(module_name, module_len, ER_HOST_IMPORTS[i].module, ER_HOST_IMPORTS[i].module_len) &&
-              er_match_name(field_name, field_len, ER_HOST_IMPORTS[i].field, ER_HOST_IMPORTS[i].field_len)) {
-            import_kind = ER_HOST_IMPORTS[i].kind;
-            break;
-          }
-        }
+        import_kind = er_find_host_import(module_name, module_len, field_name, field_len);
 
         if (er_reader_read_u8(&r, &kind) != 0) {
           return -1;

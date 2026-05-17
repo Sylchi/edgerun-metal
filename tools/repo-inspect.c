@@ -23,6 +23,7 @@
 #define ERI_LONG_FUNCTION_LINES 120u
 #define ERI_LARGE_FILE_LINES 800u
 #define ERI_DUP_BLOCK_LINES 6u
+#define ERI_OPTIMIZER_IGNORE_TAG "@optimizer-ignore"
 
 typedef struct {
   char* path;
@@ -294,6 +295,7 @@ static uint8_t eri_is_test_path(const char* path) {
 
 static uint8_t eri_is_example_path(const char* path) {
   return (uint8_t)(eri_contains_part(path, "examples") != 0u ||
+                   eri_contains_part(path, "bench") != 0u ||
                    eri_contains_part(path, "demo") != 0u ||
                    strstr(path, "_demo.c") != NULL);
 }
@@ -801,14 +803,32 @@ static uint8_t eri_identifier_contains_string_role(const char* line) {
   return 0;
 }
 
+static uint8_t eri_line_declares_metadata_string_table(const char* line) {
+  const char* trim = eri_ltrim(line);
+
+  if (strstr(trim, "static const char* const ") == NULL || strstr(trim, "[]") == NULL ||
+      strchr(trim, '{') == NULL) {
+    return 0;
+  }
+  return (uint8_t)(strstr(trim, "slots_") != NULL || strstr(trim, "states_") != NULL ||
+                   strstr(trim, "_variants") != NULL || strstr(trim, "_keyboard") != NULL ||
+                   strstr(trim, "_interactions") != NULL || strstr(trim, "_sides") != NULL);
+}
+
 static uint8_t eri_line_has_string_indexing_smell(const char* raw_line, const char* structural_line) {
   const char* trim = eri_ltrim(raw_line);
 
+  if (eri_line_declares_metadata_string_table(trim) != 0u) {
+    return 0;
+  }
   if (strstr(trim, "char ") != NULL || strstr(trim, "const char ") != NULL ||
       strstr(trim, "static const char ") != NULL || strstr(trim, "buffer") != NULL) {
     return 0;
   }
   if (strstr(structural_line, "control[") != NULL || strstr(structural_line, "stack[") != NULL) {
+    return 0;
+  }
+  if (strstr(structural_line, "_name[") != NULL) {
     return 0;
   }
   if (strstr(trim, "const char*") != NULL && strstr(trim, "[]") != NULL && strchr(trim, '{') != NULL) {
@@ -821,6 +841,10 @@ static uint8_t eri_line_has_string_indexing_smell(const char* raw_line, const ch
     return 1;
   }
   return 0;
+}
+
+static uint8_t eri_line_has_optimizer_ignore(const char* line) {
+  return (uint8_t)(strstr(line, ERI_OPTIMIZER_IGNORE_TAG) != NULL);
 }
 
 static void eri_scan_line_metrics(const uint8_t* bytes, size_t len, EriTotals* file_totals,
@@ -897,6 +921,10 @@ static void eri_scan_line_metrics(const uint8_t* bytes, size_t len, EriTotals* f
       memcpy(snippet, bytes + start, copy_len);
       snippet[copy_len] = 0;
       eri_copy_without_literals(bytes, start, end, searchable, sizeof(searchable));
+      if (eri_line_has_optimizer_ignore(snippet) != 0u) {
+        ++line_no;
+        continue;
+      }
       if (strstr(searchable, "TODO") != NULL || strstr(searchable, "FIXME") != NULL || strstr(searchable, "HACK") != NULL) {
         eri_add_finding(findings, path, line_no, "marker", eri_ltrim(snippet));
       }

@@ -14,26 +14,29 @@ static const UINT8 g_app_schedule_domain[] = "edgerun:c:v1:app:schedule-slot";
 static const UINT8 g_app_launch_allocation_domain[] = "edgerun:c:v1:app:launch-allocation";
 
 enum {
+  ER_APP_BYTE_BITS = 8u,
+  ER_APP_BYTE_MASK = 0xffu,
   ER_APP_U16_FIELD_BYTES = 2u,
   ER_APP_U64_FIELD_BYTES = 8u,
   ER_APP_BUDGET_U64_FIELD_COUNT = 6u,
   ER_APP_BUDGET_FIELD_BYTES = ER_APP_U16_FIELD_BYTES + (ER_APP_U64_FIELD_BYTES * ER_APP_BUDGET_U64_FIELD_COUNT)
 };
 
+static void er_app_put_be(UINT8* dst, UINT64 value, UINTN byte_count) {
+  UINTN i;
+
+  for (i = 0u; i < byte_count; ++i) {
+    UINTN shift = (byte_count - 1u - i) * ER_APP_BYTE_BITS;
+    dst[i] = (UINT8)((value >> shift) & ER_APP_BYTE_MASK);
+  }
+}
+
 static void er_app_put_be16(UINT8* dst, UINT16 value) {
-  dst[0] = (UINT8)((value >> 8) & 0xffu);
-  dst[1] = (UINT8)(value & 0xffu);
+  er_app_put_be(dst, value, ER_APP_U16_FIELD_BYTES);
 }
 
 static void er_app_put_be64(UINT8* dst, UINT64 value) {
-  dst[0] = (UINT8)((value >> 56) & 0xffu);
-  dst[1] = (UINT8)((value >> 48) & 0xffu);
-  dst[2] = (UINT8)((value >> 40) & 0xffu);
-  dst[3] = (UINT8)((value >> 32) & 0xffu);
-  dst[4] = (UINT8)((value >> 24) & 0xffu);
-  dst[5] = (UINT8)((value >> 16) & 0xffu);
-  dst[6] = (UINT8)((value >> 8) & 0xffu);
-  dst[7] = (UINT8)(value & 0xffu);
+  er_app_put_be(dst, value, ER_APP_U64_FIELD_BYTES);
 }
 
 static void er_app_put_budget_field(UINT8** cursor, UINT64 value) {
