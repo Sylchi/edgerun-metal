@@ -463,6 +463,16 @@ er_ui_node_t er_ui_node_sidebar(const char* title, const char* detail, const cha
   return node;
 }
 
+er_ui_node_t er_ui_node_sonner(const char* const* messages, const er_ui_icon_t* icons, const er_ui_color4_t* accents, size_t message_count) {
+  er_ui_node_t node = er_ui_node_base(ER_UI_NODE_SONNER);
+  node.labels = messages;
+  node.icons = icons;
+  node.colors = accents;
+  node.label_count = message_count;
+  node.gap = 8.0f;
+  return node;
+}
+
 er_ui_node_t er_ui_node_route_path(const char* label, const char* const* hops, size_t hop_count) {
   er_ui_node_t node = er_ui_node_base(ER_UI_NODE_ROUTE_PATH);
   node.label = label;
@@ -812,6 +822,7 @@ const char* er_ui_node_kind_label(er_ui_node_kind_t kind) {
     case ER_UI_NODE_NAVIGATION_MENU: return "navigation-menu";
     case ER_UI_NODE_RESIZABLE: return "resizable";
     case ER_UI_NODE_SIDEBAR: return "sidebar";
+    case ER_UI_NODE_SONNER: return "sonner";
     case ER_UI_NODE_ROUTE_PATH: return "route-path";
     case ER_UI_NODE_PACKAGE_CARD: return "package-card";
     case ER_UI_NODE_RECEIPT_ROW: return "receipt-row";
@@ -1147,6 +1158,9 @@ er_ui_status_t er_ui_node_accessibility(const er_ui_node_t* node, er_ui_a11y_nod
     case ER_UI_NODE_SIDEBAR:
       out = er_ui_a11y_base(ER_UI_A11Y_NAVIGATION, node->label, false, 0u);
       break;
+    case ER_UI_NODE_SONNER:
+      out = er_ui_a11y_base(ER_UI_A11Y_STATUS, "toaster", false, 0u);
+      break;
     case ER_UI_NODE_TABS:
       out = er_ui_a11y_base(ER_UI_A11Y_TAB_LIST, "tabs", false, 0u);
       break;
@@ -1287,6 +1301,11 @@ er_ui_status_t er_ui_node_accessibility_child(const er_ui_node_t* node, size_t c
       return ER_UI_OK;
     }
     *out_a11y = er_ui_a11y_base(ER_UI_A11Y_GROUP, node->value, false, 0u);
+    return ER_UI_OK;
+  }
+  if (node->kind == ER_UI_NODE_SONNER) {
+    if (!node->labels || child_index >= node->label_count) return ER_UI_ERR_INVALID_ARGUMENT;
+    *out_a11y = er_ui_a11y_base(ER_UI_A11Y_STATUS, node->labels[child_index], false, 0u);
     return ER_UI_OK;
   }
   if (node->kind == ER_UI_NODE_BREADCRUMB) {
@@ -1863,6 +1882,29 @@ static er_ui_status_t er_ui_node_render_sidebar(
   return er_ui_node_render_text(scene, font, node->aux, er_ui_bounds(main.x + 16.0f, main.y + 40.0f, main.w - 32.0f, 22.0f), theme.colors.muted);
 }
 
+static er_ui_status_t er_ui_node_render_sonner(
+  const er_ui_node_t* node,
+  er_ui_scene_t* scene,
+  vr_font_face_t* font,
+  er_ui_bounds_t bounds,
+  er_ui_resolved_theme_t theme) {
+  if (!node || !scene || !font || !node->labels || !node->icons || !node->colors || node->label_count == 0u || !er_ui_bounds_valid(bounds)) {
+    return ER_UI_ERR_INVALID_ARGUMENT;
+  }
+  float toast_h = 48.0f;
+  float y = bounds.y;
+  float w = er_ui_float_min(bounds.w, 280.0f);
+  for (size_t i = 0u; i < node->label_count; ++i) {
+    er_ui_bounds_t toast = er_ui_bounds(bounds.x, y, w, toast_h);
+    er_ui_status_t status = er_ui_shadcn_toast_emit(scene, font, toast, theme, node->labels[i], node->colors[i]);
+    if (status != ER_UI_OK) return status;
+    status = er_ui_node_render_icon(scene, er_ui_bounds(toast.x + 10.0f, toast.y + 16.0f, 16.0f, 16.0f), node->icons[i], node->colors[i]);
+    if (status != ER_UI_OK) return status;
+    y += toast_h + node->gap;
+  }
+  return ER_UI_OK;
+}
+
 static er_ui_status_t er_ui_node_render_label_group(
   const er_ui_node_t* node,
   er_ui_scene_t* scene,
@@ -2047,6 +2089,8 @@ er_ui_status_t er_ui_node_render(
       return er_ui_node_render_resizable(node, scene, font, rect, theme);
     case ER_UI_NODE_SIDEBAR:
       return er_ui_node_render_sidebar(node, scene, font, rect, theme);
+    case ER_UI_NODE_SONNER:
+      return er_ui_node_render_sonner(node, scene, font, rect, theme);
     case ER_UI_NODE_ROUTE_PATH:
       return er_ui_shadcn_route_path_emit(scene, font, rect, theme, node->label, node->labels, node->label_count);
     case ER_UI_NODE_PACKAGE_CARD:
