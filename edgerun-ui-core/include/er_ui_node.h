@@ -59,6 +59,7 @@ typedef enum {
   ER_UI_NODE_POPOVER,
   ER_UI_NODE_SHEET,
   ER_UI_NODE_KBD,
+  ER_UI_NODE_MENUBAR,
   ER_UI_NODE_ROUTE_PATH,
   ER_UI_NODE_PACKAGE_CARD,
   ER_UI_NODE_RECEIPT_ROW,
@@ -262,6 +263,7 @@ er_ui_node_t er_ui_node_popover(const char* button_label, const char* title, con
 er_ui_node_t er_ui_node_sheet(const char* title, const char* detail, const char* field_label, const char* field_value, const char* button_label,
                               uint32_t base_id);
 er_ui_node_t er_ui_node_kbd(const char* const* keys, size_t key_count, const char* label);
+er_ui_node_t er_ui_node_menubar(const char* const* items, size_t item_count, size_t selected, uint32_t base_id);
 er_ui_node_t er_ui_node_route_path(const char* label, const char* const* hops, size_t hop_count);
 er_ui_node_t er_ui_node_package_card(const char* name, const char* policy, const char* hash, uint32_t id);
 er_ui_node_t er_ui_node_receipt_row(const char* label, const char* amount, const char* status_text, uint32_t id);
