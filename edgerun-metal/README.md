@@ -33,6 +33,7 @@ Confirmed working:
 - Wasm module headers are generated from tracked WAT sources
 - Generated build artifacts are ignored by Git
 - GOP-backed UI rectangle scene renderer exists for the `ui` profile
+- The renderer architecture targets CPU-driven 4K120 from the start; see `docs/metal-renderer-4k120.md`
 
 ## Current objective
 
@@ -103,7 +104,7 @@ smoke = banner + test Wasm only
 pci   = concise PCI target scan: NVIDIA / NVMe / Ethernet
 quiet = minimal halt-ready boot
 mmio  = conservative read-only NVIDIA BAR0 probe
-ui    = GOP-backed UI rectangle scene
+ui    = GOP-backed UI-core component scene
 ```
 
 Output:

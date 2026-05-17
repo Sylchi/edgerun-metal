@@ -66,6 +66,28 @@ static void check_uint64(const char* name, UINT64 actual, UINT64 expected) {
   }
 }
 
+static void check_cstr(const char* name, const char* actual, const char* expected) {
+  UINTN i = 0u;
+  UINT8 matches = 1u;
+
+  ++g_total;
+  if (actual == 0 || expected == 0) {
+    matches = (actual == expected);
+  } else {
+    while (actual[i] != 0 || expected[i] != 0) {
+      if (actual[i] != expected[i]) {
+        matches = 0u;
+        break;
+      }
+      ++i;
+    }
+  }
+  if (matches == 0u) {
+    fprintf(stderr, "FAIL %s: got %s expected %s\n", name, actual == 0 ? "(null)" : actual, expected == 0 ? "(null)" : expected);
+    ++g_failed;
+  }
+}
+
 static void check_pixel(const char* name, UINT32 actual, UINT32 expected) {
   check_uint64(name, (UINT64)actual, (UINT64)expected);
 }
@@ -931,10 +953,27 @@ static void test_hw_relay_endpoints(void) {
 static void test_ui_gop_renderer_surface(void) {
   UINT32 pixels[24] = {0};
   ErUiGopSurface surface;
+  ErUiGopRenderStats stats;
+  ErUiGopFrameBudget frame_budget;
+  ErUiGopFrameBudgetViolation frame_violation;
+  ErUiGopMode mode;
+  ErUiGopBandwidthPlan bandwidth_plan;
+  ErUiGopTilePlan tile_plan;
+  ErUiGopMemoryPlan memory_plan;
+  ErUiGopMemoryBudget memory_budget;
+  ErUiGopMemoryBudgetViolation memory_violation;
+  ErUiGopDirtyTileList dirty_tiles;
+  UINT8 tile_marks[4] = {9u, 9u, 9u, 9u};
+  UINT32 tile_ids[4] = {0};
   er_ui_rect_t rects[3];
+  er_ui_rect_t next_rects[1];
   er_ui_scene_t scene;
+  er_ui_scene_t next_scene;
+  ErUiGopPixelRect tile_rect;
+  ErUiGopFrameState frame_state;
   UINT32 rgb_red = er_ui_gop_pack_rgb(ER_UI_GOP_PIXEL_RGBX, 255u, 0u, 0u);
   UINT32 bgr_red = er_ui_gop_pack_rgb(ER_UI_GOP_PIXEL_BGRX, 255u, 0u, 0u);
+  UINTN i;
 
   check_pixel("ui gop pack rgb red", rgb_red, 0x00ff0000u);
   check_pixel("ui gop pack bgr red", bgr_red, 0x000000ffu);
@@ -950,6 +989,97 @@ static void test_ui_gop_renderer_surface(void) {
   check_pixel("ui gop clear row end", pixels[2], 0x00010203u);
   check_pixel("ui gop clear stride untouched", pixels[3], 0u);
   check_pixel("ui gop clear second row", pixels[4], 0x00010203u);
+  mode.width = 3u;
+  mode.height = 2u;
+  mode.stride = 4u;
+  mode.refresh_hz = 120u;
+  mode.pixel_format = ER_UI_GOP_PIXEL_RGBX;
+  check_int64("ui gop mode valid", er_ui_gop_mode_valid(&mode), 1);
+  check_int64("ui gop mode tile plan", er_ui_gop_tile_plan_from_mode(&mode, 2u, 1u, 4u, &tile_plan), 1);
+  check_uint64("ui gop mode tile scanout bytes", tile_plan.scanout_bytes, 32u);
+  check_int64("ui gop bandwidth plan", er_ui_gop_bandwidth_plan_from_mode(&mode, 4u, &bandwidth_plan), 1);
+  check_uint64("ui gop bandwidth scanout", bandwidth_plan.scanout_bytes_per_second, 3840u);
+  check_uint64("ui gop bandwidth full frame", bandwidth_plan.full_frame_bytes_per_second, 2880u);
+  check_uint64("ui gop bandwidth budget", bandwidth_plan.budget_bytes_per_second, 11520u);
+  check_int64("ui gop bandwidth reject zero overdraw", er_ui_gop_bandwidth_plan_from_mode(&mode, 0u, &bandwidth_plan), 0);
+  check_uint64("ui gop bandwidth reject zeroes output", bandwidth_plan.budget_bytes_per_second, 0u);
+  mode.refresh_hz = 0u;
+  check_int64("ui gop reject zero refresh mode", er_ui_gop_mode_valid(&mode), 0);
+  check_int64("ui gop reject invalid mode plan", er_ui_gop_tile_plan_from_mode(&mode, 2u, 1u, 4u, &tile_plan), 0);
+  check_int64("ui gop tile plan", er_ui_gop_tile_plan(&surface, 2u, 1u, 4u, &tile_plan), 1);
+  check_uint64("ui gop tile columns", tile_plan.columns, 2u);
+  check_uint64("ui gop tile rows", tile_plan.rows, 2u);
+  check_uint64("ui gop tile count", tile_plan.tile_count, 4u);
+  check_uint64("ui gop tile scanout bytes", tile_plan.scanout_bytes, 32u);
+  check_uint64("ui gop tile frame bytes", tile_plan.full_frame_bytes, 24u);
+  check_uint64("ui gop tile max bytes", tile_plan.max_tile_bytes, 8u);
+  check_uint64("ui gop tile state bytes", tile_plan.tile_state_bytes, 4u);
+  check_uint64("ui gop tile dirty queue bytes", tile_plan.dirty_queue_bytes, 16u);
+  check_int64("ui gop memory plan",
+              er_ui_gop_memory_plan_from_tile_plan(&tile_plan, 1u, 64u, 128u, 256u, &memory_plan),
+              1);
+  check_uint64("ui gop memory scanout", memory_plan.scanout_bytes, 32u);
+  check_uint64("ui gop memory backing", memory_plan.backing_bytes, 32u);
+  check_uint64("ui gop memory tile state", memory_plan.tile_state_bytes, 4u);
+  check_uint64("ui gop memory dirty queue", memory_plan.dirty_queue_bytes, 16u);
+  check_uint64("ui gop memory commands", memory_plan.command_bytes, 64u);
+  check_uint64("ui gop memory glyph cache", memory_plan.glyph_cache_bytes, 128u);
+  check_uint64("ui gop memory surfaces", memory_plan.surface_bytes, 256u);
+  check_uint64("ui gop memory total", memory_plan.total_bytes, 532u);
+  memory_budget.scanout_bytes = 32u;
+  memory_budget.backing_bytes = 32u;
+  memory_budget.tile_state_bytes = 4u;
+  memory_budget.dirty_queue_bytes = 16u;
+  memory_budget.command_bytes = 64u;
+  memory_budget.glyph_cache_bytes = 128u;
+  memory_budget.surface_bytes = 256u;
+  memory_budget.total_bytes = 532u;
+  check_int64("ui gop memory fits exact budget", er_ui_gop_memory_plan_fits_budget(memory_plan, memory_budget), 1);
+  memory_budget.glyph_cache_bytes = 127u;
+  check_int64("ui gop memory first budget violation",
+              er_ui_gop_memory_plan_first_budget_violation(memory_plan, memory_budget, &memory_violation),
+              1);
+  check_cstr("ui gop memory budget violation name", memory_violation.name, "glyph_cache_bytes");
+  check_uint64("ui gop memory budget violation actual", memory_violation.actual, 128u);
+  check_uint64("ui gop memory budget violation limit", memory_violation.limit, 127u);
+  check_int64("ui gop memory rejects over budget", er_ui_gop_memory_plan_fits_budget(memory_plan, memory_budget), 0);
+  check_int64("ui gop memory reject overflow",
+              er_ui_gop_memory_plan_from_tile_plan(&tile_plan, 1u, 0xffffffffffffffffull, 0u, 0u, &memory_plan),
+              0);
+  check_uint64("ui gop memory overflow zeroes output", memory_plan.total_bytes, 0u);
+  frame_budget = er_ui_gop_frame_budget_from_plan(&tile_plan, er_ui_scene_budget_native_interactive_frame(), 4u);
+  check_uint64("ui gop derived budget pixels", frame_budget.pixels_written, 24u);
+  check_uint64("ui gop derived budget bytes", frame_budget.bytes_written, 96u);
+  check_uint64("ui gop derived budget rects", frame_budget.rects, 2000u);
+  check_uint64("ui gop derived budget text", frame_budget.text_quads, 8000u);
+  check_uint64("ui gop derived budget tiles", frame_budget.tiles_rendered, 4u);
+  check_uint64("ui gop derived budget dirty", frame_budget.dirty_tiles_requested, 4u);
+  check_uint64("ui gop derived budget clipped", frame_budget.clipped_primitives, 40000u);
+  frame_budget = er_ui_gop_frame_budget_from_plan(&tile_plan, er_ui_scene_budget_native_interactive_frame(), 0u);
+  check_uint64("ui gop reject zero overdraw budget", frame_budget.bytes_written, 0u);
+  check_int64("ui gop tile rect", er_ui_gop_tile_rect(&tile_plan, 3u, &tile_rect), 1);
+  check_uint64("ui gop tile rect x0", tile_rect.x0, 2u);
+  check_uint64("ui gop tile rect y0", tile_rect.y0, 1u);
+  check_uint64("ui gop tile rect x1", tile_rect.x1, 3u);
+  check_uint64("ui gop tile rect y1", tile_rect.y1, 2u);
+  dirty_tiles.tile_ids = tile_ids;
+  dirty_tiles.capacity = 4u;
+  dirty_tiles.count = 99u;
+  dirty_tiles.overflowed = 1u;
+  check_int64("ui gop dirty reset", er_ui_gop_dirty_tiles_reset(&tile_plan, tile_marks, 4u, &dirty_tiles), 1);
+  check_uint64("ui gop dirty reset count", dirty_tiles.count, 0u);
+  check_uint64("ui gop dirty reset mark", tile_marks[0], 0u);
+  check_int64("ui gop dirty mark clipped rect",
+              er_ui_gop_dirty_tiles_mark_rect(&tile_plan, -1.0f, 0.0f, 3.0f, 2.0f, tile_marks, 4u, &dirty_tiles),
+              1);
+  check_uint64("ui gop dirty count", dirty_tiles.count, 2u);
+  check_uint64("ui gop dirty first", dirty_tiles.tile_ids[0], 0u);
+  check_uint64("ui gop dirty second", dirty_tiles.tile_ids[1], 2u);
+  check_uint64("ui gop dirty duplicate count before", dirty_tiles.count, 2u);
+  check_int64("ui gop dirty mark duplicate",
+              er_ui_gop_dirty_tiles_mark_rect(&tile_plan, 0.0f, 0.0f, 1.0f, 1.0f, tile_marks, 4u, &dirty_tiles),
+              1);
+  check_uint64("ui gop dirty duplicate count after", dirty_tiles.count, 2u);
 
   rects[0] = er_ui_rect_fill(-1.0f, 0.0f, 3.0f, 2.0f, 0.0f, er_ui_color_rgb_u8(10u, 20u, 30u));
   scene.clear = er_ui_color_rgb_u8(0u, 0u, 0u);
@@ -981,6 +1111,81 @@ static void test_ui_gop_renderer_surface(void) {
   check_pixel("ui gop clipped fill x0", pixels[0], 0x000a141eu);
   check_pixel("ui gop clipped fill x1", pixels[1], 0x000a141eu);
   check_pixel("ui gop clipped fill x2 clear", pixels[2], 0u);
+  check_int64("ui gop render stats", er_ui_gop_surface_render_scene_with_font_stats(&surface, &scene, 0, &stats), 1);
+  check_uint64("ui gop stats clear count", stats.clears, 1u);
+  check_uint64("ui gop stats rect count", stats.rects, 1u);
+  check_uint64("ui gop stats solid count", stats.solid_rects, 1u);
+  check_uint64("ui gop stats pixels", stats.pixels_written, 10u);
+  check_uint64("ui gop stats bytes", stats.bytes_written, 40u);
+  frame_budget.pixels_written = 10u;
+  frame_budget.bytes_written = 40u;
+  frame_budget.blend_pixels = 0u;
+  frame_budget.text_pixels = 0u;
+  frame_budget.rects = 1u;
+  frame_budget.text_quads = 0u;
+  frame_budget.tiles_rendered = 0u;
+  frame_budget.dirty_tiles_requested = 0u;
+  frame_budget.clipped_primitives = 0u;
+  frame_budget.rejected_primitives = 0u;
+  check_int64("ui gop stats fit exact budget", er_ui_gop_render_stats_fits_budget(stats, frame_budget), 1);
+  frame_budget.bytes_written = 39u;
+  check_int64("ui gop stats first budget violation",
+              er_ui_gop_render_stats_first_budget_violation(stats, frame_budget, &frame_violation),
+              1);
+  check_cstr("ui gop stats budget violation name", frame_violation.name, "bytes_written");
+  check_uint64("ui gop stats budget violation actual", frame_violation.actual, 40u);
+  check_uint64("ui gop stats budget violation limit", frame_violation.limit, 39u);
+  check_int64("ui gop stats reject over budget", er_ui_gop_render_stats_fits_budget(stats, frame_budget), 0);
+  check_int64("ui gop dirty reset for scene", er_ui_gop_dirty_tiles_reset(&tile_plan, tile_marks, 4u, &dirty_tiles), 1);
+  check_int64("ui gop dirty mark scene",
+              er_ui_gop_dirty_tiles_mark_scene(&tile_plan, &scene, tile_marks, 4u, &dirty_tiles),
+              1);
+  check_uint64("ui gop dirty scene count", dirty_tiles.count, 2u);
+  check_uint64("ui gop dirty scene first", dirty_tiles.tile_ids[0], 0u);
+  check_uint64("ui gop dirty scene second", dirty_tiles.tile_ids[1], 2u);
+  er_ui_gop_frame_state_reset(&frame_state);
+  check_int64("ui gop frame first dirty",
+              er_ui_gop_frame_dirty_tiles(&frame_state, &tile_plan, 0, &scene,
+                                          tile_marks, 4u, &dirty_tiles),
+              1);
+  check_uint64("ui gop frame first count", dirty_tiles.count, 4u);
+  er_ui_gop_frame_state_commit(&frame_state);
+  next_rects[0] = er_ui_rect_fill(2.0f, 1.0f, 1.0f, 1.0f, 0.0f, er_ui_color_rgb_u8(40u, 50u, 60u));
+  next_scene = scene;
+  next_scene.rects = next_rects;
+  check_int64("ui gop dirty reset for diff", er_ui_gop_dirty_tiles_reset(&tile_plan, tile_marks, 4u, &dirty_tiles), 1);
+  check_int64("ui gop dirty mark scene diff",
+              er_ui_gop_dirty_tiles_mark_scene_diff(&tile_plan, &scene, &next_scene,
+                                                    tile_marks, 4u, &dirty_tiles),
+              1);
+  check_uint64("ui gop dirty diff count", dirty_tiles.count, 3u);
+  check_uint64("ui gop dirty diff old first", dirty_tiles.tile_ids[0], 0u);
+  check_uint64("ui gop dirty diff old second", dirty_tiles.tile_ids[1], 2u);
+  check_uint64("ui gop dirty diff new", dirty_tiles.tile_ids[2], 3u);
+  check_int64("ui gop frame next dirty",
+              er_ui_gop_frame_dirty_tiles(&frame_state, &tile_plan, &scene, &next_scene,
+                                          tile_marks, 4u, &dirty_tiles),
+              1);
+  check_uint64("ui gop frame next count", dirty_tiles.count, 3u);
+  check_int64("ui gop frame same dirty",
+              er_ui_gop_frame_dirty_tiles(&frame_state, &tile_plan, &scene, &scene,
+                                          tile_marks, 4u, &dirty_tiles),
+              1);
+  check_uint64("ui gop frame same count", dirty_tiles.count, 0u);
+  check_int64("ui gop render empty dirty tile list",
+              er_ui_gop_surface_render_scene_dirty_tiles_with_font_stats(&surface, &scene, 0,
+                                                                         &tile_plan, &dirty_tiles, &stats),
+              1);
+  check_uint64("ui gop empty dirty requested", stats.dirty_tiles_requested, 0u);
+  check_uint64("ui gop empty dirty rendered", stats.tiles_rendered, 0u);
+  check_uint64("ui gop empty dirty bytes", stats.bytes_written, 0u);
+  next_scene.clear = er_ui_color_rgb_u8(1u, 1u, 1u);
+  check_int64("ui gop dirty reset for clear diff", er_ui_gop_dirty_tiles_reset(&tile_plan, tile_marks, 4u, &dirty_tiles), 1);
+  check_int64("ui gop dirty mark clear diff",
+              er_ui_gop_dirty_tiles_mark_scene_diff(&tile_plan, &scene, &next_scene,
+                                                    tile_marks, 4u, &dirty_tiles),
+              1);
+  check_uint64("ui gop dirty clear diff count", dirty_tiles.count, 4u);
 
   rects[0] = er_ui_rect_fill(0.0f, 0.0f, 1.0f, 1.0f, 0.0f, er_ui_color_rgba_u8(255u, 0u, 0u, 128u));
   check_int64("ui gop render alpha fill", er_ui_gop_surface_render_scene(&surface, &scene), 1);
@@ -996,6 +1201,57 @@ static void test_ui_gop_renderer_surface(void) {
   check_pixel("ui gop border center clear", pixels[5], 0u);
   check_pixel("ui gop border right", pixels[7], 0x0000ff00u);
   check_pixel("ui gop border bottom", pixels[14], 0x0000ff00u);
+  for (i = 0u; i < (UINTN)(sizeof(pixels) / sizeof(pixels[0])); ++i) {
+    pixels[i] = 0x00abcdefu;
+  }
+  check_int64("ui gop tile plan 4x4", er_ui_gop_tile_plan(&surface, 2u, 2u, 4u, &tile_plan), 1);
+  rects[0] = er_ui_rect_fill(0.0f, 0.0f, 4.0f, 4.0f, 0.0f, er_ui_color_rgb_u8(255u, 0u, 0u));
+  check_int64("ui gop render one tile",
+              er_ui_gop_surface_render_scene_tile_with_font_stats(&surface, &scene, 0, &tile_plan, 3u, &stats),
+              1);
+  check_pixel("ui gop tile outside top left", pixels[0], 0x00abcdefu);
+  check_pixel("ui gop tile outside top right", pixels[3], 0x00abcdefu);
+  check_pixel("ui gop tile inside bottom right a", pixels[10], 0x00ff0000u);
+  check_pixel("ui gop tile inside bottom right b", pixels[15], 0x00ff0000u);
+  check_uint64("ui gop tile render clears", stats.clears, 1u);
+  check_uint64("ui gop tile render pixels", stats.pixels_written, 8u);
+  check_uint64("ui gop tile render count", stats.tiles_rendered, 1u);
+  check_uint64("ui gop tile render clipped", stats.clipped_primitives, 1u);
+  check_uint64("ui gop tile render rejected", stats.rejected_primitives, 0u);
+  tile_ids[0] = 0u;
+  tile_ids[1] = 3u;
+  dirty_tiles.tile_ids = tile_ids;
+  dirty_tiles.capacity = 4u;
+  dirty_tiles.count = 2u;
+  dirty_tiles.overflowed = 0u;
+  for (i = 0u; i < (UINTN)(sizeof(pixels) / sizeof(pixels[0])); ++i) {
+    pixels[i] = 0x00abcdefu;
+  }
+  check_int64("ui gop render dirty tile list",
+              er_ui_gop_surface_render_scene_dirty_tiles_with_font_stats(&surface, &scene, 0,
+                                                                         &tile_plan, &dirty_tiles, &stats),
+              1);
+  check_pixel("ui gop dirty list top left", pixels[0], 0x00ff0000u);
+  check_pixel("ui gop dirty list top right untouched", pixels[3], 0x00abcdefu);
+  check_pixel("ui gop dirty list bottom left untouched", pixels[8], 0x00abcdefu);
+  check_pixel("ui gop dirty list bottom right", pixels[15], 0x00ff0000u);
+  check_uint64("ui gop dirty list clears", stats.clears, 2u);
+  check_uint64("ui gop dirty list pixels", stats.pixels_written, 16u);
+  check_uint64("ui gop dirty list tiles", stats.tiles_rendered, 2u);
+  check_uint64("ui gop dirty list requested", stats.dirty_tiles_requested, 2u);
+  check_uint64("ui gop dirty list clipped", stats.clipped_primitives, 2u);
+  dirty_tiles.overflowed = 1u;
+  check_int64("ui gop reject overflowed dirty list",
+              er_ui_gop_surface_render_scene_dirty_tiles_with_font_stats(&surface, &scene, 0,
+                                                                         &tile_plan, &dirty_tiles, &stats),
+              0);
+  check_uint64("ui gop reject overflowed dirty stats", stats.pixels_written, 0u);
+  dirty_tiles.overflowed = 0u;
+  tile_plan.width = 3u;
+  check_int64("ui gop reject mismatched tile plan",
+              er_ui_gop_surface_render_scene_tile_with_font_stats(&surface, &scene, 0, &tile_plan, 3u, &stats),
+              0);
+  check_uint64("ui gop reject tile stats zero", stats.pixels_written, 0u);
 
   surface.width = 3u;
   surface.height = 1u;
@@ -1007,6 +1263,17 @@ static void test_ui_gop_renderer_surface(void) {
   check_pixel("ui gop gradient left", pixels[0], 0x00ff0000u);
   check_pixel("ui gop gradient middle", pixels[1], 0x00800080u);
   check_pixel("ui gop gradient right", pixels[2], 0x000000ffu);
+  for (i = 0u; i < (UINTN)(sizeof(pixels) / sizeof(pixels[0])); ++i) {
+    pixels[i] = 0x00abcdefu;
+  }
+  check_int64("ui gop tile plan 3x1", er_ui_gop_tile_plan(&surface, 1u, 1u, 3u, &tile_plan), 1);
+  check_int64("ui gop render gradient tile",
+              er_ui_gop_surface_render_scene_tile_with_font_stats(&surface, &scene, 0, &tile_plan, 1u, &stats),
+              1);
+  check_pixel("ui gop gradient tile outside left", pixels[0], 0x00abcdefu);
+  check_pixel("ui gop gradient tile middle", pixels[1], 0x00800080u);
+  check_pixel("ui gop gradient tile outside right", pixels[2], 0x00abcdefu);
+  check_uint64("ui gop gradient tile clipped", stats.clipped_primitives, 1u);
 
   {
     UINT8 atlas_bytes[3] = {80u, 128u, 180u};
@@ -1035,6 +1302,60 @@ static void test_ui_gop_renderer_surface(void) {
   surface.pixels = 0;
   check_int64("ui gop invalid surface", er_ui_gop_surface_valid(&surface), 0);
   check_int64("ui gop reject invalid surface", er_ui_gop_surface_render_scene(&surface, &scene), 0);
+  check_int64("ui gop reject invalid tile plan", er_ui_gop_tile_plan(&surface, 128u, 64u, 256u, &tile_plan), 0);
+}
+
+static void test_ui_gop_renderer_4k_tile_plan(void) {
+  UINT32 pixel = 0u;
+  ErUiGopSurface surface;
+  ErUiGopMode mode;
+  ErUiGopTilePlan plan;
+  ErUiGopBandwidthPlan bandwidth;
+  ErUiGopMemoryPlan memory;
+  ErUiGopFrameBudget budget;
+
+  surface.pixels = &pixel;
+  surface.width = 3840u;
+  surface.height = 2160u;
+  surface.stride = 3840u;
+  surface.pixel_format = ER_UI_GOP_PIXEL_RGBX;
+  mode.width = 3840u;
+  mode.height = 2160u;
+  mode.stride = 3840u;
+  mode.refresh_hz = 120u;
+  mode.pixel_format = ER_UI_GOP_PIXEL_RGBX;
+  check_int64("ui gop 4k mode tile plan", er_ui_gop_tile_plan_from_mode(&mode, 128u, 64u, 256u, &plan), 1);
+  check_uint64("ui gop 4k mode frame bytes", plan.full_frame_bytes, 33177600u);
+  check_int64("ui gop 4k bandwidth plan", er_ui_gop_bandwidth_plan_from_mode(&mode, 4u, &bandwidth), 1);
+  check_uint64("ui gop 4k bandwidth scanout", bandwidth.scanout_bytes_per_second, 3981312000u);
+  check_uint64("ui gop 4k bandwidth full frame", bandwidth.full_frame_bytes_per_second, 3981312000u);
+  check_uint64("ui gop 4k bandwidth budget", bandwidth.budget_bytes_per_second, 15925248000u);
+  check_int64("ui gop 4k tile plan", er_ui_gop_tile_plan(&surface, 128u, 64u, 256u, &plan), 1);
+  check_uint64("ui gop 4k tile columns", plan.columns, 30u);
+  check_uint64("ui gop 4k tile rows", plan.rows, 34u);
+  check_uint64("ui gop 4k tile count", plan.tile_count, 1020u);
+  check_uint64("ui gop 4k frame bytes", plan.full_frame_bytes, 33177600u);
+  check_uint64("ui gop 4k scanout bytes", plan.scanout_bytes, 33177600u);
+  check_uint64("ui gop 4k max tile bytes", plan.max_tile_bytes, 32768u);
+  check_uint64("ui gop 4k tile state bytes", plan.tile_state_bytes, 1020u);
+  check_uint64("ui gop 4k dirty queue bytes", plan.dirty_queue_bytes, 1024u);
+  check_int64("ui gop 4k memory plan",
+              er_ui_gop_memory_plan_from_tile_plan(&plan, 1u, 262144u, 1048576u, 0u, &memory),
+              1);
+  check_uint64("ui gop 4k memory scanout", memory.scanout_bytes, 33177600u);
+  check_uint64("ui gop 4k memory backing", memory.backing_bytes, 33177600u);
+  check_uint64("ui gop 4k memory tile state", memory.tile_state_bytes, 1020u);
+  check_uint64("ui gop 4k memory dirty queue", memory.dirty_queue_bytes, 1024u);
+  check_uint64("ui gop 4k memory total", memory.total_bytes, 67667964u);
+  budget = er_ui_gop_frame_budget_from_plan(&plan, er_ui_scene_budget_native_interactive_frame(), 4u);
+  check_uint64("ui gop 4k budget pixels", budget.pixels_written, 33177600u);
+  check_uint64("ui gop 4k budget bytes", budget.bytes_written, 132710400u);
+  check_uint64("ui gop 4k budget text pixels", budget.text_pixels, 8294400u);
+  check_uint64("ui gop 4k budget tiles", budget.tiles_rendered, 1020u);
+  check_uint64("ui gop 4k budget dirty", budget.dirty_tiles_requested, 256u);
+  check_uint64("ui gop 4k budget clipped", budget.clipped_primitives, 10200000u);
+  check_int64("ui gop reject zero tile width", er_ui_gop_tile_plan(&surface, 0u, 64u, 256u, &plan), 0);
+  check_int64("ui gop reject zero dirty budget", er_ui_gop_tile_plan(&surface, 128u, 64u, 0u, &plan), 0);
 }
 
 static void test_ui_gop_renderer_varfont_text(void) {
@@ -1108,6 +1429,7 @@ int main(void) {
   test_app_identity_routes();
   test_hw_relay_endpoints();
   test_ui_gop_renderer_surface();
+  test_ui_gop_renderer_4k_tile_plan();
   test_ui_gop_renderer_varfont_text();
 
   if (g_failed != 0) {
