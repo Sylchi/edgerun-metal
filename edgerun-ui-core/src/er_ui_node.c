@@ -158,6 +158,42 @@ er_ui_node_t er_ui_node_list_row(const char* title, const char* detail, uint32_t
   return node;
 }
 
+er_ui_node_t er_ui_node_field(const char* label, const char* value, uint32_t id) {
+  er_ui_node_t node = er_ui_node_base(ER_UI_NODE_FIELD);
+  node.label = label;
+  node.value = value;
+  node.id = id;
+  return node;
+}
+
+er_ui_node_t er_ui_node_text_area(const char* label, const char* value, uint32_t id) {
+  er_ui_node_t node = er_ui_node_base(ER_UI_NODE_TEXT_AREA);
+  node.label = label;
+  node.value = value;
+  node.id = id;
+  return node;
+}
+
+er_ui_node_t er_ui_node_tabs(const char* const* labels, size_t label_count, size_t selected, uint32_t base_id) {
+  er_ui_node_t node = er_ui_node_base(ER_UI_NODE_TABS);
+  node.labels = labels;
+  node.label_count = label_count;
+  node.selected = selected;
+  node.id = base_id;
+  return node;
+}
+
+er_ui_node_t er_ui_node_bar_chart(const char* title, const char* const* labels, const float* values, size_t value_count, uint32_t base_id, size_t selected) {
+  er_ui_node_t node = er_ui_node_base(ER_UI_NODE_BAR_CHART);
+  node.label = title;
+  node.labels = labels;
+  node.values = values;
+  node.value_count = value_count;
+  node.id = base_id;
+  node.selected = selected;
+  return node;
+}
+
 er_ui_node_t* er_ui_node_set_bounds(er_ui_node_t* node, er_ui_bounds_t bounds) {
   if (!node) return node;
   node->bounds = bounds;
@@ -283,6 +319,14 @@ er_ui_status_t er_ui_node_render(
       return er_ui_shadcn_empty_emit(scene, font, rect, theme, node->label, node->detail);
     case ER_UI_NODE_LIST_ROW:
       return er_ui_shadcn_list_row_emit(scene, font, rect, theme, node->label, node->detail, node->id, node->active);
+    case ER_UI_NODE_FIELD:
+      return er_ui_shadcn_field_emit(scene, font, rect, theme, node->label, node->value, node->id, false);
+    case ER_UI_NODE_TEXT_AREA:
+      return er_ui_shadcn_field_emit(scene, font, rect, theme, node->label, node->value, node->id, true);
+    case ER_UI_NODE_TABS:
+      return er_ui_shadcn_tabs_emit(scene, font, rect, theme, node->labels, node->label_count, node->selected, node->id);
+    case ER_UI_NODE_BAR_CHART:
+      return er_ui_shadcn_bar_chart_emit(scene, font, rect, theme, node->label, node->labels, node->values, node->value_count, node->id, node->selected);
     default:
       return ER_UI_ERR_INVALID_ARGUMENT;
   }
