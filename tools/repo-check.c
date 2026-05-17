@@ -1,0 +1,233 @@
+#define _POSIX_C_SOURCE 200809L
+
+#include <dirent.h>
+#include <errno.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/stat.h>
+
+enum {
+  ERC_INDEX_HEADER_BYTES = 12,
+  ERC_INDEX_ENTRY_BASE_BYTES = 62,
+  ERC_GITLINK_MODE = 0160000
+};
+
+static int erc_fail(const char* message) {
+  fprintf(stderr, "repo-check: %s\n", message);
+  return 1;
+}
+
+static uint32_t erc_be32(const unsigned char* p) {
+  return ((uint32_t)p[0] << 24u) | ((uint32_t)p[1] << 16u) | ((uint32_t)p[2] << 8u) | (uint32_t)p[3];
+}
+
+static int erc_has_component(const char* path, const char* component) {
+  size_t component_len = strlen(component);
+  const char* p = path;
+
+  while (*p != '\0') {
+    const char* start = p;
+    size_t len;
+
+    while (*p != '\0' && *p != '/') {
+      ++p;
+    }
+    len = (size_t)(p - start);
+    if (len == component_len && strncmp(start, component, component_len) == 0) {
+      return 1;
+    }
+    if (*p == '/') {
+      ++p;
+    }
+  }
+  return 0;
+}
+
+static int erc_is_tracked_build_artifact(const char* path) {
+  return strncmp(path, ".build/", 7u) == 0 ||
+         strncmp(path, "varfont/build/", 14u) == 0 ||
+         strncmp(path, "edgerun-metal/build/", 20u) == 0;
+}
+
+static int erc_join(char* out, size_t out_len, const char* a, const char* b) {
+  int n;
+
+  n = snprintf(out, out_len, "%s/%s", a, b);
+  return n > 0 && (size_t)n < out_len;
+}
+
+static int erc_scan_nested_git(const char* root, const char* rel) {
+  char path[4096];
+  DIR* dir;
+  struct dirent* entry;
+
+  if (rel[0] == '\0') {
+    if (snprintf(path, sizeof(path), "%s", root) >= (int)sizeof(path)) {
+      return erc_fail("path too long");
+    }
+  } else if (!erc_join(path, sizeof(path), root, rel)) {
+    return erc_fail("path too long");
+  }
+
+  dir = opendir(path);
+  if (dir == NULL) {
+    return erc_fail("unable to scan repository");
+  }
+
+  while ((entry = readdir(dir)) != NULL) {
+    char child_rel[4096];
+    char child_path[4096];
+    struct stat st;
+
+    if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0) {
+      continue;
+    }
+    if (rel[0] == '\0' && strcmp(entry->d_name, ".git") == 0) {
+      continue;
+    }
+    if (strcmp(entry->d_name, ".git") == 0 || strcmp(entry->d_name, ".gitmodules") == 0) {
+      closedir(dir);
+      return erc_fail("nested Git metadata is not allowed");
+    }
+
+    if (rel[0] == '\0') {
+      if (snprintf(child_rel, sizeof(child_rel), "%s", entry->d_name) >= (int)sizeof(child_rel)) {
+        closedir(dir);
+        return erc_fail("path too long");
+      }
+    } else if (!erc_join(child_rel, sizeof(child_rel), rel, entry->d_name)) {
+      closedir(dir);
+      return erc_fail("path too long");
+    }
+    if (!erc_join(child_path, sizeof(child_path), root, child_rel)) {
+      closedir(dir);
+      return erc_fail("path too long");
+    }
+    if (lstat(child_path, &st) != 0) {
+      closedir(dir);
+      return erc_fail("unable to inspect repository entry");
+    }
+    if (S_ISDIR(st.st_mode) && erc_has_component(child_rel, ".build") == 0 &&
+        erc_has_component(child_rel, "build") == 0) {
+      int rc = erc_scan_nested_git(root, child_rel);
+      if (rc != 0) {
+        closedir(dir);
+        return rc;
+      }
+    }
+  }
+  closedir(dir);
+  return 0;
+}
+
+static unsigned char* erc_read_file(const char* path, size_t* out_len) {
+  FILE* file;
+  long len;
+  unsigned char* bytes;
+
+  file = fopen(path, "rb");
+  if (file == NULL) {
+    return NULL;
+  }
+  if (fseek(file, 0, SEEK_END) != 0) {
+    fclose(file);
+    return NULL;
+  }
+  len = ftell(file);
+  if (len < 0 || fseek(file, 0, SEEK_SET) != 0) {
+    fclose(file);
+    return NULL;
+  }
+  bytes = (unsigned char*)malloc((size_t)len == 0u ? 1u : (size_t)len);
+  if (bytes == NULL) {
+    fclose(file);
+    return NULL;
+  }
+  if ((size_t)len > 0u && fread(bytes, 1u, (size_t)len, file) != (size_t)len) {
+    free(bytes);
+    fclose(file);
+    return NULL;
+  }
+  fclose(file);
+  *out_len = (size_t)len;
+  return bytes;
+}
+
+static int erc_scan_index(const char* root) {
+  char index_path[4096];
+  unsigned char* index_bytes;
+  size_t index_len;
+  uint32_t entries;
+  uint32_t i;
+  size_t offset = ERC_INDEX_HEADER_BYTES;
+
+  if (!erc_join(index_path, sizeof(index_path), root, ".git/index")) {
+    return erc_fail("path too long");
+  }
+  index_bytes = erc_read_file(index_path, &index_len);
+  if (index_bytes == NULL) {
+    return 0;
+  }
+  if (index_len < ERC_INDEX_HEADER_BYTES || memcmp(index_bytes, "DIRC", 4u) != 0) {
+    free(index_bytes);
+    return erc_fail("Git index is not readable");
+  }
+  entries = erc_be32(index_bytes + 8u);
+  for (i = 0u; i < entries; ++i) {
+    uint32_t mode;
+    uint16_t flags;
+    size_t name_len;
+    size_t entry_len;
+    const char* name;
+
+    if (offset + ERC_INDEX_ENTRY_BASE_BYTES > index_len) {
+      free(index_bytes);
+      return erc_fail("Git index entry is truncated");
+    }
+    mode = erc_be32(index_bytes + offset + 24u);
+    flags = (uint16_t)(((uint16_t)index_bytes[offset + 60u] << 8u) | (uint16_t)index_bytes[offset + 61u]);
+    name = (const char*)(index_bytes + offset + ERC_INDEX_ENTRY_BASE_BYTES);
+    name_len = (size_t)(flags & 0x0fffu);
+    if (name_len == 0x0fffu) {
+      const unsigned char* end = memchr(name, '\0', index_len - offset - ERC_INDEX_ENTRY_BASE_BYTES);
+      if (end == NULL) {
+        free(index_bytes);
+        return erc_fail("Git index entry path is truncated");
+      }
+      name_len = (size_t)(end - (const unsigned char*)name);
+    }
+    if (offset + ERC_INDEX_ENTRY_BASE_BYTES + name_len >= index_len) {
+      free(index_bytes);
+      return erc_fail("Git index entry path is truncated");
+    }
+    if (mode == ERC_GITLINK_MODE) {
+      free(index_bytes);
+      return erc_fail("Git submodule entries are not allowed");
+    }
+    if (erc_is_tracked_build_artifact(name) != 0) {
+      free(index_bytes);
+      return erc_fail("generated build artifacts must not be tracked");
+    }
+    entry_len = ERC_INDEX_ENTRY_BASE_BYTES + name_len + 1u;
+    entry_len = (entry_len + 7u) & ~7u;
+    offset += entry_len;
+  }
+  free(index_bytes);
+  return 0;
+}
+
+int main(int argc, char** argv) {
+  const char* root = argc > 1 ? argv[1] : ".";
+  int rc;
+
+  if (argc > 2) {
+    return erc_fail("usage: repo-check [repo-root]");
+  }
+  rc = erc_scan_nested_git(root, "");
+  if (rc != 0) {
+    return rc;
+  }
+  return erc_scan_index(root);
+}

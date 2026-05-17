@@ -8,7 +8,7 @@ set -euo pipefail
 
 readonly SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 readonly ROOT_DIR="$(dirname "${SCRIPT_DIR}")"
-readonly REPO_CHECK="${ROOT_DIR}/tools/repo-check.sh"
+readonly REPO_CHECK="${ROOT_DIR}/.build/repo-check"
 readonly TMP_DIR="$(mktemp -d)"
 
 cleanup() {
