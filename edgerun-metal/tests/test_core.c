@@ -967,6 +967,7 @@ static void test_ui_gop_renderer_surface(void) {
   UINT32 tile_ids[4] = {0};
   er_ui_rect_t rects[3];
   er_ui_rect_t next_rects[1];
+  er_ui_quad_t icon_quads[1];
   er_ui_scene_t scene;
   er_ui_scene_t next_scene;
   ErUiGopPixelRect tile_rect;
@@ -1051,10 +1052,11 @@ static void test_ui_gop_renderer_surface(void) {
   check_uint64("ui gop derived budget pixels", frame_budget.pixels_written, 24u);
   check_uint64("ui gop derived budget bytes", frame_budget.bytes_written, 96u);
   check_uint64("ui gop derived budget rects", frame_budget.rects, 2000u);
+  check_uint64("ui gop derived budget icons", frame_budget.icon_quads, 1200u);
   check_uint64("ui gop derived budget text", frame_budget.text_quads, 8000u);
   check_uint64("ui gop derived budget tiles", frame_budget.tiles_rendered, 4u);
   check_uint64("ui gop derived budget dirty", frame_budget.dirty_tiles_requested, 4u);
-  check_uint64("ui gop derived budget clipped", frame_budget.clipped_primitives, 40000u);
+  check_uint64("ui gop derived budget clipped", frame_budget.clipped_primitives, 44800u);
   frame_budget = er_ui_gop_frame_budget_from_plan(&tile_plan, er_ui_scene_budget_native_interactive_frame(), 0u);
   check_uint64("ui gop reject zero overdraw budget", frame_budget.bytes_written, 0u);
   check_int64("ui gop tile rect", er_ui_gop_tile_rect(&tile_plan, 3u, &tile_rect), 1);
@@ -1122,6 +1124,7 @@ static void test_ui_gop_renderer_surface(void) {
   frame_budget.blend_pixels = 0u;
   frame_budget.text_pixels = 0u;
   frame_budget.rects = 1u;
+  frame_budget.icon_quads = 0u;
   frame_budget.text_quads = 0u;
   frame_budget.tiles_rendered = 0u;
   frame_budget.dirty_tiles_requested = 0u;
@@ -1136,6 +1139,15 @@ static void test_ui_gop_renderer_surface(void) {
   check_uint64("ui gop stats budget violation actual", frame_violation.actual, 40u);
   check_uint64("ui gop stats budget violation limit", frame_violation.limit, 39u);
   check_int64("ui gop stats reject over budget", er_ui_gop_render_stats_fits_budget(stats, frame_budget), 0);
+  icon_quads[0] = er_ui_quad_atlas(0.0f, 0.0f, 2.0f, 2.0f, 0.0f, 0.0f, 1.0f, 1.0f, 2u, er_ui_color_rgb_u8(200u, 200u, 200u));
+  scene.icon_quads = icon_quads;
+  scene.icon_quad_count = 1u;
+  scene.icon_quad_capacity = 1u;
+  check_int64("ui gop render icon stats", er_ui_gop_surface_render_scene_with_font_stats(&surface, &scene, 0, &stats), 1);
+  check_uint64("ui gop stats icon count", stats.icon_quads, 1u);
+  scene.icon_quads = 0;
+  scene.icon_quad_count = 0u;
+  scene.icon_quad_capacity = 0u;
   check_int64("ui gop dirty reset for scene", er_ui_gop_dirty_tiles_reset(&tile_plan, tile_marks, 4u, &dirty_tiles), 1);
   check_int64("ui gop dirty mark scene",
               er_ui_gop_dirty_tiles_mark_scene(&tile_plan, &scene, tile_marks, 4u, &dirty_tiles),
@@ -1353,7 +1365,7 @@ static void test_ui_gop_renderer_4k_tile_plan(void) {
   check_uint64("ui gop 4k budget text pixels", budget.text_pixels, 8294400u);
   check_uint64("ui gop 4k budget tiles", budget.tiles_rendered, 1020u);
   check_uint64("ui gop 4k budget dirty", budget.dirty_tiles_requested, 256u);
-  check_uint64("ui gop 4k budget clipped", budget.clipped_primitives, 10200000u);
+  check_uint64("ui gop 4k budget clipped", budget.clipped_primitives, 11424000u);
   check_int64("ui gop reject zero tile width", er_ui_gop_tile_plan(&surface, 0u, 64u, 256u, &plan), 0);
   check_int64("ui gop reject zero dirty budget", er_ui_gop_tile_plan(&surface, 128u, 64u, 0u, &plan), 0);
 }

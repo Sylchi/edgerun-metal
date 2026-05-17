@@ -930,6 +930,8 @@ static void er_run_ui_profile(EFI_SYSTEM_TABLE* SystemTable) {
   er_print_u64_dec(render_stats.bytes_written);
   er_print(" rects=");
   er_print_u64_dec(render_stats.rects);
+  er_print(" icons=");
+  er_print_u64_dec(render_stats.icon_quads);
   er_print(" text=");
   er_print_u64_dec(render_stats.text_quads);
   er_print(" tiles=");
