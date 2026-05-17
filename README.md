@@ -76,6 +76,41 @@ receipt to the device identity. They are meaningful only where that admission
 is accepted. An identity without an accepted admission token can still sign
 packets, but it has no right to consume that jurisdiction's resources.
 
+For hardware-backed devices, the proof chain can start below the operating
+system. A signed EFI image gives the device owner and admission policy a known
+runtime entry point. Secure Boot can refuse unsigned or unauthorized boot code.
+Measured boot can extend firmware, EFI image, boot configuration, drivers, and
+runtime measurements into TPM PCRs. The device can then produce TPM quotes that
+bind those measurements to a device-held attestation key and to an EdgeRun
+node identity.
+
+That does not prove an infinite abstract machine; it proves a specific measured
+machine state. EdgeRun admission can combine the TPM quote with deterministic
+hardware discovery and runtime self-measurement: CPU topology, memory map,
+storage device identity and size, NIC identity, accelerator presence, battery
+state, queue limits, and booted EdgeRun runtime hash. The admission program can
+then mint only the token budget allowed by that measured state and local owner
+policy. If the EFI image, boot chain, hardware inventory, or accounting program
+changes, the measurements change and old capacity claims stop matching the
+admission policy.
+
+The useful invariant is:
+
+```text
+signed EFI + Secure Boot + TPM measured boot
+  -> attested EdgeRun runtime identity
+  -> deterministic hardware/resource inventory
+  -> admission policy
+  -> bounded resource-token issuance
+  -> packet/work proofs and receipts
+```
+
+This makes hardware resources identity-routed and auditable without giving the
+TPM, firmware vendor, or network operator authority over the user's device. They
+only help prove what code booted and what resources that code measured. Local
+admission still decides what is offered, what it costs, who can use it, and how
+much capacity can be turned into spendable claims.
+
 Each packet, object, compute slice, storage interval, relay hop, or scheduling
 slot can therefore carry a cost before it is admitted. Local programs may spend
 tokens created by the same user up to the limits the device owner assigned.
