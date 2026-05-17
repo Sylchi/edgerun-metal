@@ -1406,12 +1406,6 @@ static int vr_segment_crossing_sign(float x, float y, const vr_segment_t* seg) {
   return (y2 > y1) ? 1 : -1;
 }
 
-static float vr_clamp_float(float v, float lo, float hi) {
-  if (v < lo) return lo;
-  if (v > hi) return hi;
-  return v;
-}
-
 static int vr_quadratic_crossing_sign(float x, float y, const vr_raster_curve_t* curve) {
   if (!curve) {
     return 0;
@@ -1496,7 +1490,7 @@ static float vr_segment_distance_sq(float px, float py, const vr_segment_t* seg)
     t = (wx * vx + wy * vy) / seg_len_sq;
   }
 
-  t = vr_clamp_float(t, 0.0f, 1.0f);
+  t = vr_clampf(t, 0.0f, 1.0f);
   float proj_x = seg->x1 + t * vx;
   float proj_y = seg->y1 + t * vy;
   float dx = px - proj_x;
@@ -1728,7 +1722,7 @@ static uint8_t vr_alpha_from_signed_distance(float signed_distance, float spread
   }
 
   float normalized = (float)VR_RASTER_SDF_MID_ALPHA + (signed_distance * VR_RASTER_SDF_EDGE_SCALE) / spread;
-  float clamped = vr_clamp_float(normalized, VR_RASTER_ALPHA_MIN, VR_RASTER_ALPHA_MAX);
+  float clamped = vr_clampf(normalized, VR_RASTER_ALPHA_MIN, VR_RASTER_ALPHA_MAX);
   return (uint8_t)(clamped + 0.5f);
 }
 
@@ -1940,7 +1934,7 @@ vr_status_t vr_rasterize_outline_with_mode(
               curve_count);
           }
         }
-        bitmap[out_idx] = (uint8_t)((float)covered_samples * inv_ss * 255.0f + 0.5f);
+        bitmap[out_idx] = vr_u8_from_unitf((float)covered_samples * inv_ss);
       }
     }
   }

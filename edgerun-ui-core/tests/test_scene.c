@@ -1,4 +1,5 @@
 #include "er_ui_scene.h"
+#include "er_math.h"
 #include "test_common.h"
 
 #include <math.h>
@@ -34,7 +35,7 @@ void expect_u32(uint32_t got, uint32_t expected, const char* name) {
 }
 
 void expect_float(float got, float expected, const char* name) {
-  expect_true(fabsf(got - expected) <= ER_TEST_EPSILON, name);
+  expect_true(er_math_absf(got - expected) <= ER_TEST_EPSILON, name);
 }
 
 void expect_string(const char* got, const char* expected, const char* name) {
