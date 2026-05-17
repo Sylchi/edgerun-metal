@@ -1,7 +1,6 @@
 #include "vr_font_internal.h"
 
 #include <limits.h>
-#include <string.h>
 
 static const size_t VR_ATLAS_BUCKET_INITIAL_CAP = 4u;
 static const float VR_VERTEX_COLOR_ONE = 1.0f;
@@ -21,13 +20,13 @@ static vr_status_t vr_reserve_u32_size_t_pairs(uint32_t** ids, size_t** counts, 
     new_cap *= 2u;
   }
 
-  uint32_t* new_ids = (uint32_t*)realloc(*ids, new_cap * sizeof(uint32_t));
+  uint32_t* new_ids = (uint32_t*)vr_realloc_bytes(*ids, new_cap * sizeof(uint32_t));
   if (!new_ids) {
     return VR_ERR_OOM;
   }
-  size_t* new_counts = (size_t*)realloc(*counts, new_cap * sizeof(size_t));
+  size_t* new_counts = (size_t*)vr_realloc_bytes(*counts, new_cap * sizeof(size_t));
   if (!new_counts) {
-    free(new_ids);
+    vr_free_bytes(new_ids);
     return VR_ERR_OOM;
   }
 
@@ -99,17 +98,18 @@ static void vr_free_batch_intermediate(
   vr_vertex_t* sorted_vertices,
   vr_vertex_t* source_vertices,
   vr_vertex_atlas_range_t* ranges) {
-  free(atlas_ids);
-  free(atlas_counts);
-  free(atlas_starts);
-  free(atlas_positions);
-  free(sorted_vertices);
-  free(source_vertices);
-  free(ranges);
+  vr_free_bytes(atlas_ids);
+  vr_free_bytes(atlas_counts);
+  vr_free_bytes(atlas_starts);
+  vr_free_bytes(atlas_positions);
+  vr_free_bytes(sorted_vertices);
+  vr_free_bytes(source_vertices);
+  vr_free_bytes(ranges);
 }
 
 vr_status_t vr_font_set_size(vr_font_face_t* face, float px_size) {
   if (!face || px_size <= 0.0f) return VR_ERR_INVALID_FONT;
+  vr_allocator_scope_enter(face);
   if (face->cfg.px_size != px_size) {
     vr_cache_remove(face);
   }
@@ -119,8 +119,9 @@ vr_status_t vr_font_set_size(vr_font_face_t* face, float px_size) {
 
 vr_status_t vr_font_set_axis(vr_font_face_t* face, const char* tag, float user_value) {
   if (!face || !tag) return VR_ERR_INVALID_FONT;
+  vr_allocator_scope_enter(face);
   for (uint16_t i = 0; i < face->fvar.axis_count && i < VR_MAX_AXES; ++i) {
-    if (strncmp(face->fvar.descriptors[i].tag, tag, 4) == 0) {
+    if (vr_tag_compare(face->fvar.descriptors[i].tag, tag) == 0) {
       float norm = 0.0f;
       float clamped = vr_map_axis_value(face, tag, user_value, &norm);
       face->axes[i].value = clamped;
@@ -149,13 +150,14 @@ vr_status_t vr_font_shape_text(
   vr_shaped_glyph_t** out_glyphs,
   size_t* out_count) {
   if (!face || !codepoints || !out_glyphs || !out_count) return VR_ERR_INVALID_FONT;
+  vr_allocator_scope_enter(face);
   if (codepoint_count == 0) {
     *out_glyphs = NULL;
     *out_count = 0;
     return VR_OK;
   }
 
-  vr_shaped_glyph_t* g = (vr_shaped_glyph_t*)calloc(codepoint_count, sizeof(vr_shaped_glyph_t));
+  vr_shaped_glyph_t* g = (vr_shaped_glyph_t*)vr_calloc_bytes(codepoint_count, sizeof(vr_shaped_glyph_t));
   if (!g) return VR_ERR_OOM;
 
   uint16_t prev_gid = 0;
@@ -182,8 +184,8 @@ vr_status_t vr_font_shape_text(
 }
 
 vr_status_t vr_font_free_shaped(vr_font_face_t* face, vr_shaped_glyph_t* glyphs) {
-  (void)face;
-  free(glyphs);
+  if (face) vr_allocator_scope_enter(face);
+  vr_free_bytes(glyphs);
   return VR_OK;
 }
 
@@ -196,6 +198,7 @@ vr_status_t vr_font_build_vertex_batch(
   vr_vertex_t** out_vertices,
   size_t* out_vertex_count) {
   if (!face || !out_vertices || !out_vertex_count) return VR_ERR_INVALID_FONT;
+  vr_allocator_scope_enter(face);
   if (shaped_count == 0) {
     *out_vertices = NULL;
     *out_vertex_count = 0;
@@ -203,7 +206,7 @@ vr_status_t vr_font_build_vertex_batch(
   }
   if (!shaped) return VR_ERR_INVALID_FONT;
 
-  vr_vertex_t* verts = (vr_vertex_t*)calloc(shaped_count * VR_FONT_VERTICES_PER_GLYPH, sizeof(vr_vertex_t));
+  vr_vertex_t* verts = (vr_vertex_t*)vr_calloc_bytes(shaped_count * VR_FONT_VERTICES_PER_GLYPH, sizeof(vr_vertex_t));
   if (!verts) return VR_ERR_OOM;
 
   float pen_x = x;
@@ -214,7 +217,7 @@ vr_status_t vr_font_build_vertex_batch(
     vr_baked_glyph_t baked = {0};
     vr_status_t s = vr_font_bake_glyph(face, shaped[i].glyph, &baked);
     if (s != VR_OK) {
-      free(verts);
+      vr_free_bytes(verts);
       return s;
     }
     if (baked.width <= 0 || baked.height <= 0) {
@@ -253,6 +256,7 @@ vr_status_t vr_font_build_vertex_batches_by_atlas(
   if (!face || !out_vertices || !out_vertex_count || !out_ranges || !out_range_count) {
     return VR_ERR_INVALID_FONT;
   }
+  vr_allocator_scope_enter(face);
   if (shaped_count == 0) {
     *out_vertices = NULL;
     *out_vertex_count = 0;
@@ -271,7 +275,7 @@ vr_status_t vr_font_build_vertex_batches_by_atlas(
     return st;
   }
   if (source_vertex_count == 0) {
-    free(source_vertices);
+    vr_free_bytes(source_vertices);
     *out_vertices = NULL;
     *out_vertex_count = 0;
     *out_ranges = NULL;
@@ -299,7 +303,7 @@ vr_status_t vr_font_build_vertex_batches_by_atlas(
     atlas_counts[idx] += 1u;
   }
 
-  atlas_starts = (size_t*)calloc(atlas_count, sizeof(size_t));
+  atlas_starts = (size_t*)vr_calloc_bytes(atlas_count, sizeof(size_t));
   if (!atlas_starts) {
     st = VR_ERR_OOM;
     vr_free_batch_intermediate(atlas_ids, atlas_counts, atlas_starts, atlas_positions, sorted_vertices, source_vertices, ranges);
@@ -312,7 +316,7 @@ vr_status_t vr_font_build_vertex_batches_by_atlas(
     cursor += atlas_counts[i];
   }
 
-  atlas_positions = (size_t*)malloc(atlas_count * sizeof(size_t));
+  atlas_positions = (size_t*)vr_malloc_bytes(atlas_count * sizeof(size_t));
   if (!atlas_positions) {
     st = VR_ERR_OOM;
     vr_free_batch_intermediate(atlas_ids, atlas_counts, atlas_starts, atlas_positions, sorted_vertices, source_vertices, ranges);
@@ -323,7 +327,7 @@ vr_status_t vr_font_build_vertex_batches_by_atlas(
     atlas_positions[i] = atlas_starts[i];
   }
 
-  sorted_vertices = (vr_vertex_t*)malloc(source_vertex_count * sizeof(vr_vertex_t));
+  sorted_vertices = (vr_vertex_t*)vr_malloc_bytes(source_vertex_count * sizeof(vr_vertex_t));
   if (!sorted_vertices) {
     st = VR_ERR_OOM;
     vr_free_batch_intermediate(atlas_ids, atlas_counts, atlas_starts, atlas_positions, sorted_vertices, source_vertices, ranges);
@@ -341,7 +345,7 @@ vr_status_t vr_font_build_vertex_batches_by_atlas(
     sorted_vertices[atlas_positions[idx]++] = source_vertices[i];
   }
 
-  ranges = (vr_vertex_atlas_range_t*)calloc(atlas_count, sizeof(vr_vertex_atlas_range_t));
+  ranges = (vr_vertex_atlas_range_t*)vr_calloc_bytes(atlas_count, sizeof(vr_vertex_atlas_range_t));
   if (!ranges) {
     st = VR_ERR_OOM;
     vr_free_batch_intermediate(atlas_ids, atlas_counts, atlas_starts, atlas_positions, sorted_vertices, source_vertices, ranges);
@@ -364,13 +368,13 @@ vr_status_t vr_font_build_vertex_batches_by_atlas(
 }
 
 vr_status_t vr_font_free_vertices(vr_font_face_t* face, vr_vertex_t* verts) {
-  (void)face;
-  free(verts);
+  if (face) vr_allocator_scope_enter(face);
+  vr_free_bytes(verts);
   return VR_OK;
 }
 
 void vr_font_free_vertex_atlas_ranges(vr_vertex_atlas_range_t* ranges) {
-  free(ranges);
+  vr_free_bytes(ranges);
 }
 
 uint32_t vr_font_last_error(const vr_font_face_t* face) {

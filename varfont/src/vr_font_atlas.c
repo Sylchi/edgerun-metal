@@ -1,7 +1,6 @@
 #include "vr_font_internal.h"
 
 #include <limits.h>
-#include <string.h>
 
 static const size_t VR_ATLAS_INITIAL_CAPACITY = 4u;
 static const size_t VR_GLYPH_CACHE_INITIAL_CAPACITY = 64u;
@@ -55,15 +54,15 @@ static vr_status_t vr_reserve_array(
   }
 
   size_t new_cap = vr_next_capacity(*out_cap, needed, initial_cap);
-  void* resized = realloc(*out_ptr, new_cap * elem_size);
+  void* resized = vr_realloc_bytes(*out_ptr, new_cap * elem_size);
   if (!resized) {
     return VR_ERR_OOM;
   }
 
   if (*out_ptr == NULL) {
-    memset(resized, 0, new_cap * elem_size);
+    vr_zero(resized, new_cap * elem_size);
   } else if (clear_tail && new_cap > *out_cap) {
-    memset((uint8_t*)resized + (*out_cap * elem_size), 0, (new_cap - *out_cap) * elem_size);
+    vr_zero((uint8_t*)resized + (*out_cap * elem_size), (new_cap - *out_cap) * elem_size);
   }
 
   *out_ptr = resized;
@@ -105,7 +104,7 @@ static vr_status_t vr_atlas_create(vr_font_face_t* face, vr_atlas_page_t* page) 
     return VR_ERR_OOM;
   }
 
-  page->pixels = (uint8_t*)calloc(pixel_count, 1);
+  page->pixels = (uint8_t*)vr_calloc_bytes(pixel_count, 1);
   if (!page->pixels) return VR_ERR_OOM;
 
   page->width = w;
@@ -130,7 +129,7 @@ static vr_status_t vr_atlas_create(vr_font_face_t* face, vr_atlas_page_t* page) 
     VR_ATLAS_INITIAL_CAPACITY,
     1);
   if (st != VR_OK) {
-    free(page->pixels);
+    vr_free_bytes(page->pixels);
     return st;
   }
 
@@ -174,7 +173,7 @@ vr_status_t vr_upload_bitmap_to_atlas(vr_font_face_t* face, uint32_t atlas_id, i
   for (int row = 0; row < h; ++row) {
     size_t dst = ((size_t)(y + row) * (size_t)page->width + (size_t)x) * page->bytes_per_pixel;
     size_t src = (size_t)row * (size_t)w * page->bytes_per_pixel;
-    memcpy(
+    vr_copy(
       page->pixels + dst,
       bitmap + src,
       (size_t)w * page->bytes_per_pixel);
@@ -281,12 +280,12 @@ void vr_cache_remove(vr_font_face_t* face) {
   for (size_t i = 0; i < face->glyph_cache_count; ++i) {
     vr_glyph_cache_entry_t* e = &face->glyph_cache[i];
     if (e->bitmap) {
-      free(e->bitmap);
+      vr_free_bytes(e->bitmap);
       e->bitmap = NULL;
     }
   }
 
-  free(face->glyph_cache);
+  vr_free_bytes(face->glyph_cache);
   face->glyph_cache = NULL;
   face->glyph_cache_count = 0;
   face->glyph_cache_cap = 0;
@@ -294,6 +293,7 @@ void vr_cache_remove(vr_font_face_t* face) {
 
 vr_status_t vr_font_bake_glyph(vr_font_face_t* face, uint32_t glyph_id, vr_baked_glyph_t* out) {
   if (!face || !out) return VR_ERR_INVALID_FONT;
+  vr_allocator_scope_enter(face);
 
   if (vr_cache_lookup(face, (uint16_t)glyph_id, out) == VR_OK) {
     return VR_OK;
@@ -348,14 +348,14 @@ vr_status_t vr_font_bake_glyph(vr_font_face_t* face, uint32_t glyph_id, vr_baked
   int uy = 0;
   st = vr_ensure_atlas(face, w, h, &atlas_id, &ux, &uy);
   if (st != VR_OK) {
-    free(bmp);
+    vr_free_bytes(bmp);
     return st;
   }
   vr_atlas_page_t* page = &face->atlases[atlas_id];
 
   st = vr_upload_bitmap_to_atlas(face, atlas_id, ux, uy, w, h, bmp);
   if (st != VR_OK) {
-    free(bmp);
+    vr_free_bytes(bmp);
     return st;
   }
 
@@ -374,7 +374,7 @@ vr_status_t vr_font_bake_glyph(vr_font_face_t* face, uint32_t glyph_id, vr_baked
   out->atlas_v1 = (float)(uy + h) / denom_v;
 
   vr_store_cache(face, (uint16_t)glyph_id, out);
-  free(bmp);
+  vr_free_bytes(bmp);
 
   return VR_OK;
 }

@@ -4,7 +4,6 @@
 #include "vr_font.h"
 
 #include <stdbool.h>
-#include <stdlib.h>
 
 #define VR_TABLE_TAG(a,b,c,d) (((uint32_t)(a)<<24)|((uint32_t)(b)<<16)|((uint32_t)(c)<<8)|((uint32_t)(d)))
 
@@ -161,6 +160,7 @@ typedef struct {
 } vr_atlas_page_t;
 
 struct vr_font_face_t {
+  vr_font_allocator_t allocator;
   vr_table_record_t* tables;
   size_t table_count;
   uint8_t* file_data;
@@ -225,9 +225,30 @@ static inline uint32_t vr_tag(const uint8_t* p) {
   return ((uint32_t)p[0] << 24) | ((uint32_t)p[1] << 16) | ((uint32_t)p[2] << 8) | (uint32_t)p[3];
 }
 
-void vr_free_if_not_null(void* p);
-
-vr_status_t vr_read_file(const char* path, uint8_t** out_data, size_t* out_size);
+bool vr_allocator_valid(vr_font_allocator_t allocator);
+void* vr_alloc(vr_font_face_t* face, size_t size, size_t align);
+void* vr_calloc(vr_font_face_t* face, size_t count, size_t size, size_t align);
+void* vr_realloc(vr_font_face_t* face, void* ptr, size_t old_size, size_t new_size, size_t align);
+void vr_dealloc(vr_font_face_t* face, void* ptr, size_t size, size_t align);
+void vr_allocator_scope_enter(vr_font_face_t* face);
+void vr_allocator_scope_enter_config(vr_font_allocator_t allocator);
+void vr_allocator_scope_leave(void);
+void* vr_malloc_bytes(size_t size);
+void* vr_calloc_bytes(size_t count, size_t size);
+void* vr_realloc_bytes(void* ptr, size_t size);
+void vr_free_bytes(void* ptr);
+void vr_zero(void* ptr, size_t size);
+void vr_copy(void* dst, const void* src, size_t size);
+void vr_move(void* dst, const void* src, size_t size);
+int vr_mem_compare(const void* left, const void* right, size_t size);
+int vr_tag_compare(const char* left, const char* right);
+float vr_absf(float value);
+float vr_floorf(float value);
+float vr_ceilf(float value);
+float vr_sqrtf(float value);
+long vr_lrintf(float value);
+float vr_atan2f(float y, float x);
+bool vr_float_is_finite(float value);
 vr_status_t vr_parse_font(vr_font_face_t* face);
 vr_status_t vr_parse_cmap(vr_font_face_t* face);
 vr_status_t vr_parse_kern(vr_font_face_t* face);

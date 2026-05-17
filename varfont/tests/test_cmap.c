@@ -117,6 +117,12 @@ static void test_build_format4_single_segment_subtable(
   set_u16_be(subtable, 22u, id_range_offset);
 }
 
+static void test_attach_allocator(vr_font_face_t* face) {
+  vr_font_config_t cfg = test_default_font_config();
+  face->allocator = cfg.allocator;
+  vr_allocator_scope_enter(face);
+}
+
 static vr_status_t test_build_face_with_single_cmap(
   const uint8_t* subtable,
   size_t sub_len,
@@ -151,6 +157,7 @@ static vr_status_t test_build_face_with_single_cmap(
   tables[0].length = (uint32_t)cmap_body;
 
   memset(out_face, 0, sizeof(vr_font_face_t));
+  test_attach_allocator(out_face);
   out_face->tables = tables;
   out_face->table_count = VR_UTILS_CMAP_ONE_TABLE;
   out_face->file_data = data;
@@ -166,6 +173,7 @@ static void test_glyph_lookup_format4_delta(void) {
   uint16_t id_range_offset[VR_UTILS_CMAP_SEGMENT_COUNT] = {VR_UTILS_ZERO_COUNT};
 
   vr_font_face_t face = {0};
+  test_attach_allocator(&face);
   face.cmap.format = VR_UTILS_CMAP_FORMAT_ID_4;
   face.cmap.length = VR_UTILS_ZERO_COUNT;
   face.cmap.language = VR_UTILS_ZERO_COUNT;
@@ -188,6 +196,7 @@ static void test_glyph_lookup_format4_range_offset(void) {
   uint16_t id_range_offset[VR_UTILS_CMAP_SEGMENT_COUNT] = {VR_UTILS_CMAP_GLYPH_DELTA_OFFSET};
 
   vr_font_face_t face = {0};
+  test_attach_allocator(&face);
   face.cmap.format = VR_UTILS_CMAP_FORMAT_ID_4;
   face.cmap.u.format4.seg_count_x2 = VR_UTILS_CMAP_SEGMENT_COUNT_X2;
   face.cmap.u.format4.end_code = end_code;
@@ -208,6 +217,7 @@ static void test_glyph_lookup_format4_missing_range_offset_entry(void) {
   uint16_t id_range_offset[VR_UTILS_CMAP_SEGMENT_COUNT] = {VR_UTILS_CMAP_SEGMENT_COUNT_X2};
 
   vr_font_face_t face = {0};
+  test_attach_allocator(&face);
   face.cmap.format = VR_UTILS_CMAP_FORMAT_ID_4;
   face.cmap.u.format4.seg_count_x2 = VR_UTILS_CMAP_SEGMENT_COUNT_X2;
   face.cmap.u.format4.end_code = end_code;
@@ -226,6 +236,7 @@ static void test_glyph_lookup_format12(void) {
   uint32_t start_glyphs[VR_UTILS_CMAP_SEGMENT_COUNT] = {VR_UTILS_CMAP_FORMAT12_GLYPH_BASE};
 
   vr_font_face_t face = {0};
+  test_attach_allocator(&face);
   face.cmap.format = VR_UTILS_CMAP_FORMAT_ID_12;
   face.cmap.language = VR_UTILS_ZERO_COUNT;
   face.cmap.u.format12.n_groups = VR_UTILS_CMAP_ONE_TABLE;
@@ -374,6 +385,7 @@ static void test_parse_cmap_unknown_version(void) {
 
 static void test_parse_cmap_missing_table(void) {
   vr_font_face_t face = {0};
+  test_attach_allocator(&face);
   face.file_data = (uint8_t*)calloc(VR_UTILS_CMAP_ONE_TABLE, 1u);
   face.file_size = VR_UTILS_CMAP_ONE_TABLE;
   uint8_t* storage = face.file_data;
@@ -402,6 +414,7 @@ static void test_parse_cmap_no_offsets_selected(void) {
   tables[0].length = VR_UTILS_CMAP_TABLE_OFFSET;
 
   vr_font_face_t face = {0};
+  test_attach_allocator(&face);
   face.tables = tables;
   face.table_count = VR_UTILS_CMAP_ONE_TABLE;
   face.file_data = storage;

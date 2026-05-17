@@ -1,9 +1,10 @@
 # edgerun-c
 
-This repository contains two C projects:
+This repository contains three C projects:
 
 - `edgerun-metal`: a freestanding x86_64 UEFI runtime that boots as `BOOTX64.EFI` and runs embedded Wasm modules with native hostcalls.
 - `varfont`: a zero-dependency variable-font renderer library with parser, shaping, rasterization, atlas, and test coverage.
+- `edgerun-ui-core`: the C port of EdgeRun's platform-neutral UI scene command buffer.
 
 ## Repository Layout
 
@@ -14,6 +15,7 @@ This repository contains two C projects:
 ├── tools/                 repository maintenance tools
 ├── tests/                 repository maintenance tests
 ├── edgerun-metal/         UEFI metal runtime, netboot tools, systemd units
+├── edgerun-ui-core/       portable UI scene records and command buffer tests
 ├── varfont/               variable-font C library and tests
 └── .build/                local generated builds, ignored
 ```
@@ -37,9 +39,10 @@ ctest --version
 The preferred local build tools are:
 
 - `clang` and `lld` for `edgerun-metal`
-- `CMake` with `Ninja` for `varfont`
+- `CMake` with `Ninja` for `varfont` and `edgerun-ui-core`
 - `ctest --output-on-failure` for tests
 - `rg` for repository search
+- `socat` or `nc` for UDP boot log capture
 
 ## Common Commands
 
@@ -73,6 +76,21 @@ Build individual `edgerun-metal` profiles:
 make edgerun-smoke
 make edgerun-pci
 make edgerun-quiet
+make -C edgerun-metal mmio
+```
+
+Listen for real-hardware UDP boot logs:
+
+```bash
+make log-listen
+```
+
+Install the listener as an always-on systemd service:
+
+```bash
+make install-log-listen
+make logs-log-listen
+make status-log-listen
 ```
 
 Build and test `varfont`:
@@ -87,6 +105,20 @@ The root Makefile wraps the same flow:
 
 ```bash
 make varfont-test
+```
+
+Build and test `edgerun-ui-core`:
+
+```bash
+cmake -S edgerun-ui-core -B .build/edgerun-ui-core -G Ninja
+cmake --build .build/edgerun-ui-core
+ctest --test-dir .build/edgerun-ui-core --output-on-failure
+```
+
+The root Makefile wraps the same flow:
+
+```bash
+make ui-core-test
 ```
 
 Clean generated local output:
