@@ -4,6 +4,27 @@
 #include "erwire.h"
 
 #define ER_COM1_PORT 0x03f8u
+#define ER_SERIAL_INTERRUPT_ENABLE_OFFSET 1u
+#define ER_SERIAL_FIFO_CONTROL_OFFSET 2u
+#define ER_SERIAL_LINE_CONTROL_OFFSET 3u
+#define ER_SERIAL_MODEM_CONTROL_OFFSET 4u
+#define ER_SERIAL_LINE_STATUS_OFFSET 5u
+#define ER_SERIAL_INTERRUPTS_DISABLED 0x00u
+#define ER_SERIAL_DLAB_ENABLE 0x80u
+#define ER_SERIAL_DIVISOR_LOW_38400 0x03u
+#define ER_SERIAL_DIVISOR_HIGH_38400 0x00u
+#define ER_SERIAL_LINE_8N1 0x03u
+#define ER_SERIAL_FIFO_ENABLE_CLEAR_14B 0xc7u
+#define ER_SERIAL_MODEM_IRQ_RTS_DSR 0x0bu
+#define ER_SERIAL_TX_READY_MASK 0x20u
+#define ER_SERIAL_TX_WAIT_SPINS 1000000u
+#define ER_PRINT_FW_BUFFER_CHARS 256u
+#define ER_PRINT_HEX_BUF_CHARS 24u
+#define ER_PRINT_HEX_DIGITS 16u
+#define ER_PRINT_HEX_BITS_PER_DIGIT 4u
+#define ER_PRINT_HEX_DIGIT_MASK 0xfu
+#define ER_PRINT_DEC_BUF_CHARS 24u
+#define ER_PRINT_DEC_BASE 10u
 
 static EFI_SYSTEM_TABLE* g_st;
 static UINT8 g_serial_ready;
@@ -23,13 +44,13 @@ static void er_serial_init(void) {
     return;
   }
 
-  er_io_out8((UINT16)(ER_COM1_PORT + 1u), 0x00u); /* disable interrupts */
-  er_io_out8((UINT16)(ER_COM1_PORT + 3u), 0x80u); /* enable DLAB */
-  er_io_out8((UINT16)(ER_COM1_PORT + 0u), 0x03u); /* divisor low: 38400 baud */
-  er_io_out8((UINT16)(ER_COM1_PORT + 1u), 0x00u); /* divisor high */
-  er_io_out8((UINT16)(ER_COM1_PORT + 3u), 0x03u); /* 8n1 */
-  er_io_out8((UINT16)(ER_COM1_PORT + 2u), 0xc7u); /* fifo on, clear, 14-byte threshold */
-  er_io_out8((UINT16)(ER_COM1_PORT + 4u), 0x0bu); /* irq enabled, rts/dsr set */
+  er_io_out8((UINT16)(ER_COM1_PORT + ER_SERIAL_INTERRUPT_ENABLE_OFFSET), ER_SERIAL_INTERRUPTS_DISABLED);
+  er_io_out8((UINT16)(ER_COM1_PORT + ER_SERIAL_LINE_CONTROL_OFFSET), ER_SERIAL_DLAB_ENABLE);
+  er_io_out8((UINT16)ER_COM1_PORT, ER_SERIAL_DIVISOR_LOW_38400);
+  er_io_out8((UINT16)(ER_COM1_PORT + ER_SERIAL_INTERRUPT_ENABLE_OFFSET), ER_SERIAL_DIVISOR_HIGH_38400);
+  er_io_out8((UINT16)(ER_COM1_PORT + ER_SERIAL_LINE_CONTROL_OFFSET), ER_SERIAL_LINE_8N1);
+  er_io_out8((UINT16)(ER_COM1_PORT + ER_SERIAL_FIFO_CONTROL_OFFSET), ER_SERIAL_FIFO_ENABLE_CLEAR_14B);
+  er_io_out8((UINT16)(ER_COM1_PORT + ER_SERIAL_MODEM_CONTROL_OFFSET), ER_SERIAL_MODEM_IRQ_RTS_DSR);
 
   g_serial_ready = 1;
 }
@@ -38,7 +59,8 @@ static void er_serial_putc(char c) {
   UINT32 spins = 0;
 
   er_serial_init();
-  while ((er_io_in8((UINT16)(ER_COM1_PORT + 5u)) & 0x20u) == 0u && spins < 1000000u) {
+  while ((er_io_in8((UINT16)(ER_COM1_PORT + ER_SERIAL_LINE_STATUS_OFFSET)) & ER_SERIAL_TX_READY_MASK) == 0u &&
+         spins < ER_SERIAL_TX_WAIT_SPINS) {
     ++spins;
   }
   er_io_out8((UINT16)ER_COM1_PORT, (UINT8)c);
@@ -71,7 +93,7 @@ void er_print_set_system_table(EFI_SYSTEM_TABLE* st) {
 }
 
 void er_print(const char* s) {
-  CHAR16 out[256];
+  CHAR16 out[ER_PRINT_FW_BUFFER_CHARS];
   UINTN i;
   UINTN j = 0;
 
@@ -104,7 +126,7 @@ void er_println(const char* s) {
 }
 
 void er_print_u64_hex(UINT64 value) {
-  char buf[24];
+  char buf[ER_PRINT_HEX_BUF_CHARS];
   const char hex_digits[16] = "0123456789abcdef";
   int i = 0;
   UINTN n;
@@ -112,8 +134,8 @@ void er_print_u64_hex(UINT64 value) {
   buf[i++] = '0';
   buf[i++] = 'x';
 
-  for (n = 16; n > 0; --n) {
-    UINT8 nibble = (UINT8)((value >> ((n - 1) * 4)) & 0xf);
+  for (n = ER_PRINT_HEX_DIGITS; n > 0; --n) {
+    UINT8 nibble = (UINT8)((value >> ((n - 1u) * ER_PRINT_HEX_BITS_PER_DIGIT)) & ER_PRINT_HEX_DIGIT_MASK);
     buf[i++] = hex_digits[nibble];
   }
 
@@ -122,7 +144,7 @@ void er_print_u64_hex(UINT64 value) {
 }
 
 void er_print_u64_dec(UINT64 value) {
-  char buf[24];
+  char buf[ER_PRINT_DEC_BUF_CHARS];
   int i = 0;
   UINT64 tmp = value;
 
@@ -132,8 +154,8 @@ void er_print_u64_dec(UINT64 value) {
   }
 
   while (tmp > 0 && i < (int)(sizeof(buf) - 1)) {
-    buf[i++] = (char)('0' + (tmp % 10));
-    tmp /= 10;
+    buf[i++] = (char)('0' + (tmp % ER_PRINT_DEC_BASE));
+    tmp /= ER_PRINT_DEC_BASE;
   }
 
   for (int left = 0, right = i - 1; left < right; ++left, --right) {

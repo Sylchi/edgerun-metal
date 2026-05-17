@@ -9,13 +9,27 @@
 #define ER_NETLOG_PORT 9000u
 #define ER_NETLOG_MAX_DATAGRAM 1200u
 #define ER_NETLOG_BEST_EFFORT_POLLS 1u
+#define ER_NETLOG_DEFAULT_TTL 64u
+#define ER_NETLOG_TX_FRAGMENT_COUNT 1u
+#define ER_NETLOG_TX_FRAGMENT_INDEX 0u
+
+enum {
+  ER_NETLOG_IPV4_A_INDEX = 0u,
+  ER_NETLOG_IPV4_B_INDEX = 1u,
+  ER_NETLOG_IPV4_C_INDEX = 2u,
+  ER_NETLOG_IPV4_D_INDEX = 3u,
+  ER_NETLOG_DEFAULT_IP_A = 10u,
+  ER_NETLOG_DEFAULT_IP_B = 42u,
+  ER_NETLOG_DEFAULT_IP_C = 0u,
+  ER_NETLOG_DEFAULT_IP_D = 1u
+};
 
 static EFI_GUID g_udp4_service_binding_guid = {
-  0x83f01464u, 0x99bdu, 0x45e5u, {0xb3u, 0x83u, 0xafu, 0x63u, 0x05u, 0xd8u, 0xe9u, 0xe6u}
+  0x83f01464u, 0x99bdu, 0x45e5u, {0xb3u, 0x83u, 0xafu, 0x63u, 0x05u, 0xd8u, 0xe9u, 0xe6u} //@optimizer-ignore UEFI UDP4 service binding GUID
 };
 
 static EFI_GUID g_udp4_protocol_guid = {
-  0x3ad9df29u, 0x4501u, 0x478du, {0xb1u, 0xf8u, 0x7fu, 0x7fu, 0xe7u, 0x0eu, 0x50u, 0xf3u}
+  0x3ad9df29u, 0x4501u, 0x478du, {0xb1u, 0xf8u, 0x7fu, 0x7fu, 0xe7u, 0x0eu, 0x50u, 0xf3u} //@optimizer-ignore UEFI UDP4 protocol GUID
 };
 
 static EFI_BOOT_SERVICES* g_bs;
@@ -96,24 +110,24 @@ static void er_netlog_zero_config(EFI_UDP4_CONFIG_DATA* config) {
   config->AcceptAnyPort = 1;
   config->AllowDuplicatePort = 1;
   config->TypeOfService = 0;
-  config->TimeToLive = 64;
+  config->TimeToLive = ER_NETLOG_DEFAULT_TTL;
   config->DoNotFragment = 0;
   config->ReceiveTimeout = 0;
   config->TransmitTimeout = 0;
   config->UseDefaultAddress = 1;
-  config->StationAddress.Addr[0] = 0;
-  config->StationAddress.Addr[1] = 0;
-  config->StationAddress.Addr[2] = 0;
-  config->StationAddress.Addr[3] = 0;
-  config->SubnetMask.Addr[0] = 0;
-  config->SubnetMask.Addr[1] = 0;
-  config->SubnetMask.Addr[2] = 0;
-  config->SubnetMask.Addr[3] = 0;
+  config->StationAddress.Addr[ER_NETLOG_IPV4_A_INDEX] = 0;
+  config->StationAddress.Addr[ER_NETLOG_IPV4_B_INDEX] = 0;
+  config->StationAddress.Addr[ER_NETLOG_IPV4_C_INDEX] = 0;
+  config->StationAddress.Addr[ER_NETLOG_IPV4_D_INDEX] = 0;
+  config->SubnetMask.Addr[ER_NETLOG_IPV4_A_INDEX] = 0;
+  config->SubnetMask.Addr[ER_NETLOG_IPV4_B_INDEX] = 0;
+  config->SubnetMask.Addr[ER_NETLOG_IPV4_C_INDEX] = 0;
+  config->SubnetMask.Addr[ER_NETLOG_IPV4_D_INDEX] = 0;
   config->StationPort = 0;
-  config->RemoteAddress.Addr[0] = 10;
-  config->RemoteAddress.Addr[1] = 42;
-  config->RemoteAddress.Addr[2] = 0;
-  config->RemoteAddress.Addr[3] = 1;
+  config->RemoteAddress.Addr[ER_NETLOG_IPV4_A_INDEX] = ER_NETLOG_DEFAULT_IP_A;
+  config->RemoteAddress.Addr[ER_NETLOG_IPV4_B_INDEX] = ER_NETLOG_DEFAULT_IP_B;
+  config->RemoteAddress.Addr[ER_NETLOG_IPV4_C_INDEX] = ER_NETLOG_DEFAULT_IP_C;
+  config->RemoteAddress.Addr[ER_NETLOG_IPV4_D_INDEX] = ER_NETLOG_DEFAULT_IP_D;
   config->RemotePort = ER_NETLOG_PORT;
 }
 
@@ -188,21 +202,21 @@ void er_netlog_init(EFI_SYSTEM_TABLE* st) {
     return;
   }
 
-  g_tx_session.SourceAddress.Addr[0] = 0;
-  g_tx_session.SourceAddress.Addr[1] = 0;
-  g_tx_session.SourceAddress.Addr[2] = 0;
-  g_tx_session.SourceAddress.Addr[3] = 0;
+  g_tx_session.SourceAddress.Addr[ER_NETLOG_IPV4_A_INDEX] = 0;
+  g_tx_session.SourceAddress.Addr[ER_NETLOG_IPV4_B_INDEX] = 0;
+  g_tx_session.SourceAddress.Addr[ER_NETLOG_IPV4_C_INDEX] = 0;
+  g_tx_session.SourceAddress.Addr[ER_NETLOG_IPV4_D_INDEX] = 0;
   g_tx_session.SourcePort = 0;
-  g_tx_session.DestinationAddress.Addr[0] = 10;
-  g_tx_session.DestinationAddress.Addr[1] = 42;
-  g_tx_session.DestinationAddress.Addr[2] = 0;
-  g_tx_session.DestinationAddress.Addr[3] = 1;
+  g_tx_session.DestinationAddress.Addr[ER_NETLOG_IPV4_A_INDEX] = ER_NETLOG_DEFAULT_IP_A;
+  g_tx_session.DestinationAddress.Addr[ER_NETLOG_IPV4_B_INDEX] = ER_NETLOG_DEFAULT_IP_B;
+  g_tx_session.DestinationAddress.Addr[ER_NETLOG_IPV4_C_INDEX] = ER_NETLOG_DEFAULT_IP_C;
+  g_tx_session.DestinationAddress.Addr[ER_NETLOG_IPV4_D_INDEX] = ER_NETLOG_DEFAULT_IP_D;
   g_tx_session.DestinationPort = ER_NETLOG_PORT;
 
   g_tx_data.UdpSessionData = &g_tx_session;
   g_tx_data.GatewayAddress = 0;
-  g_tx_data.FragmentCount = 1;
-  g_tx_data.FragmentTable[0].FragmentBuffer = g_tx_buffer;
+  g_tx_data.FragmentCount = ER_NETLOG_TX_FRAGMENT_COUNT;
+  g_tx_data.FragmentTable[ER_NETLOG_TX_FRAGMENT_INDEX].FragmentBuffer = g_tx_buffer;
   g_tx_token.Event = g_tx_event;
   g_tx_token.Status = EFI_NOT_READY;
   g_tx_token.Packet.TxData = &g_tx_data;
