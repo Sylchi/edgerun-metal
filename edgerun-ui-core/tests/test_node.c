@@ -105,6 +105,7 @@ void run_node_tests(void) {
   expect_string(er_ui_node_kind_label(ER_UI_NODE_KBD), "kbd", "node: kind label maps kbd");
   expect_string(er_ui_node_kind_label(ER_UI_NODE_MENUBAR), "menubar", "node: kind label maps menubar");
   expect_string(er_ui_node_kind_label(ER_UI_NODE_RADIO_GROUP), "radio-group", "node: kind label maps radio group");
+  expect_string(er_ui_node_kind_label(ER_UI_NODE_INPUT_GROUP), "input-group", "node: kind label maps input group");
   expect_string(er_ui_icon_label(ER_UI_ICON_SEARCH), "search", "node: icon label maps canonical icon");
   expect_u32(er_ui_icon_atlas_id(ER_UI_ICON_SEARCH), (uint32_t)ER_UI_ICON_SEARCH + 1u, "node: icon atlas id is stable");
   expect_string(er_ui_icon_provider_name(ER_UI_ICON_APP, ER_UI_ICON_PROVIDER_LUCIDE), "app-window", "node: lucide provider name maps app icon");
@@ -265,6 +266,16 @@ void run_node_tests(void) {
   expect_true(a11y.has_id && a11y.id == 8036u, "node: radio group item id");
   expect_true((a11y.states & ER_UI_A11Y_STATE_CHECKED) != 0u, "node: radio group selected item state");
 
+  er_ui_node_t input_group_a11y = er_ui_node_input_group("URL", "https://edgerun.local", "Copy", 8038u);
+  expect_status(er_ui_node_accessibility(&input_group_a11y, &a11y), ER_UI_OK, "node: input group accessibility maps");
+  expect_size(a11y.role, ER_UI_A11Y_GROUP, "node: input group accessibility role");
+  expect_status(er_ui_node_accessibility_child(&input_group_a11y, 0u, &a11y), ER_UI_OK, "node: input group field accessibility maps");
+  expect_size(a11y.role, ER_UI_A11Y_TEXTBOX, "node: input group field accessibility role");
+  expect_true(a11y.has_id && a11y.id == 8038u, "node: input group field id");
+  expect_status(er_ui_node_accessibility_child(&input_group_a11y, 1u, &a11y), ER_UI_OK, "node: input group button accessibility maps");
+  expect_size(a11y.role, ER_UI_A11Y_BUTTON, "node: input group button accessibility role");
+  expect_true(a11y.has_id && a11y.id == 8039u, "node: input group button id");
+
   er_ui_node_t checked = er_ui_node_checkbox("Remember", true, 8002u);
   expect_status(er_ui_node_accessibility(&checked, &a11y), ER_UI_OK, "node: checkbox accessibility maps");
   expect_size(a11y.role, ER_UI_A11Y_CHECKBOX, "node: checkbox accessibility role");
@@ -405,6 +416,7 @@ void run_node_tests(void) {
     er_ui_node_t menubar = er_ui_node_menubar(render_menubar_items, 3u, 1u, 8837u);
     const char* const render_radio_group_labels[] = {"Default", "Comfortable", "Compact"};
     er_ui_node_t radio_group = er_ui_node_radio_group(render_radio_group_labels, 3u, 0u, 8840u);
+    er_ui_node_t input_group = er_ui_node_input_group("URL", "https://edgerun.local", "Copy", 8843u);
 
     expect_status(er_ui_node_render(&alert, &scene, face, er_ui_bounds(0.0f, 170.0f, 360.0f, 76.0f), theme), ER_UI_OK, "node: alert renders");
     expect_status(er_ui_node_render(&avatar, &scene, face, er_ui_bounds(0.0f, 254.0f, 42.0f, 42.0f), theme), ER_UI_OK, "node: avatar renders");
@@ -521,6 +533,10 @@ void run_node_tests(void) {
     expect_status(er_ui_node_render(&radio_group, &scene, face, er_ui_bounds(0.0f, 3972.0f, 260.0f, 106.0f), theme), ER_UI_OK,
                   "node: radio group renders");
     expect_size(scene.hit_count, hits_before_radio_group + 3u, "node: radio group emits radio hits");
+    size_t hits_before_input_group = scene.hit_count;
+    expect_status(er_ui_node_render(&input_group, &scene, face, er_ui_bounds(0.0f, 4090.0f, 340.0f, 58.0f), theme), ER_UI_OK,
+                  "node: input group renders");
+    expect_size(scene.hit_count, hits_before_input_group + 2u, "node: input group emits field and button hits");
     size_t drag_sources_before = scene.drag_source_count;
     size_t drop_targets_before = scene.drop_target_count;
     expect_status(er_ui_node_render(&reorderable, &scene, face, er_ui_bounds(0.0f, 2930.0f, 260.0f, 52.0f), theme), ER_UI_OK,
