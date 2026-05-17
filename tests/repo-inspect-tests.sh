@@ -32,8 +32,15 @@ int main(void) {
 }
 C
 cat > "${TMP_DIR}/pkg/other.c" <<'C'
+void* malloc(unsigned long n);
+void free(void* p);
+void er_mem_copy(unsigned char* dst, const unsigned char* src, unsigned long len);
+int render_tile(int x);
+
 int other(void) {
   static const char* const names[] = {"zero", "one", "two"};
+  unsigned char dst[8];
+  unsigned char src[8];
   int a = 1;
   int b = 2;
   int c = a + b;
@@ -41,6 +48,16 @@ int other(void) {
   int e = d + c;
   int f = e + d;
   int magic = 42;
+  for (int y = 0; y < 4; ++y) {
+    for (int x = 1; x < 4; ++x) {
+      int q = y % x;
+      void* p = malloc((unsigned long)x);
+      er_mem_copy(dst, src, sizeof(dst));
+      f += render_tile(q);
+      free(p);
+    }
+  }
+  for (int x = 0; x < 4; ++x) { render_tile(x); } //@optimizer-ignore bounded render smoke
   return f + magic + names[1][0];
 }
 C
@@ -100,6 +117,16 @@ esac
 case "${report}" in
   *"Potential duplication"*".c:"*"resembles"* ) ;;
   * ) printf 'missing duplication candidate\n%s\n' "${report}" >&2; exit 1 ;;
+esac
+
+case "${report}" in
+  *"CPU cost signals"*"nested loops"*"division/modulo"* ) ;;
+  * ) printf 'missing CPU cost summary\n%s\n' "${report}" >&2; exit 1 ;;
+esac
+
+case "${report}" in
+  *"focused CPU-cost candidates:"*"[cpu-nested-loop]"*"[cpu-alloc-in-loop]"* ) ;;
+  * ) printf 'missing focused CPU cost candidates\n%s\n' "${report}" >&2; exit 1 ;;
 esac
 
 case "${report}" in
