@@ -54,6 +54,27 @@ UINT8 er_native_boot_configure_erwire_eth_sink(UINT64 mmio_base, UINT64 mmio_len
   return 1;
 }
 
+UINT8 er_native_boot_configure_pci_erwire_eth_sink(ErNativeBootState* out_state) {
+  er_native_boot_clear_state(out_state);
+  erwire_clear_native_eth_sink();
+  er_mem_zero((UINT8*)&g_native_boot_net, (UINTN)sizeof(g_native_boot_net));
+  er_mem_zero((UINT8*)&g_native_boot_eth, (UINTN)sizeof(g_native_boot_eth));
+
+  if (er_virtio_net_init_first_pci(&g_native_boot_net) == 0u ||
+      er_native_eth_init(&g_native_boot_eth, &g_native_boot_net, g_qemu_microvm_peer_mac) == 0u ||
+      erwire_set_native_eth_sink(&g_native_boot_eth) == 0u) {
+    return 0;
+  }
+
+  if (out_state != 0) {
+    out_state->initialized = 1u;
+    out_state->erwire_sink_ready = 1u;
+    out_state->net = &g_native_boot_net;
+    out_state->eth = &g_native_boot_eth;
+  }
+  return 1;
+}
+
 UINT8 er_native_boot_configure_qemu_microvm_erwire_eth_sink(ErNativeBootState* out_state) {
   static const UINT64 bases[ER_NATIVE_BOOT_QEMU_MICROVM_CANDIDATES] = {
     ER_NATIVE_BOOT_QEMU_MICROVM_VIRTIO_MMIO_BASE,

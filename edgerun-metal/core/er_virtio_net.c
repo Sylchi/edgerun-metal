@@ -51,14 +51,14 @@ static UINT8 er_virtio_net_read_config8(const ErVirtioNet* net, UINT64 offset, U
   if (net == 0 || out_value == 0) {
     return 0;
   }
-  return er_bus_read8(&net->transport.address, ER_VIRTIO_MMIO_CONFIG_OFFSET + offset, out_value);
+  return er_virtio_config_read8(&net->transport, offset, out_value);
 }
 
 static UINT8 er_virtio_net_read_config16(const ErVirtioNet* net, UINT64 offset, UINT16* out_value) {
   if (net == 0 || out_value == 0) {
     return 0;
   }
-  return er_bus_read16(&net->transport.address, ER_VIRTIO_MMIO_CONFIG_OFFSET + offset, out_value);
+  return er_virtio_config_read16(&net->transport, offset, out_value);
 }
 
 static UINT8 er_virtio_net_frame_len(UINT32 payload_len, UINT32* out_frame_len) {
@@ -163,7 +163,7 @@ static void er_virtio_net_reap_tx_used(ErVirtioNet* net) {
   }
 }
 
-UINT8 er_virtio_net_init_mmio(UINT64 base, UINT64 len, ErVirtioNet* out_net) {
+static UINT8 er_virtio_net_init_transport(const ErVirtioMmioTransport* transport, ErVirtioNet* out_net) {
   ErVirtioFeatureSet features;
   UINT16 rx_queue_size = 0;
   UINT16 tx_queue_size = 0;
@@ -175,8 +175,11 @@ UINT8 er_virtio_net_init_mmio(UINT64 base, UINT64 len, ErVirtioNet* out_net) {
   }
   er_mem_zero((UINT8*)out_net, (UINTN)sizeof(*out_net));
   er_virtio_net_reset_storage();
-  if (er_virtio_mmio_transport_init(base, len, ER_VIRTIO_DEVICE_TYPE_NET, &out_net->transport) == 0u ||
-      er_virtio_mmio_negotiate_features(&out_net->transport,
+  if (transport == 0 || transport->device_type != ER_VIRTIO_DEVICE_TYPE_NET) {
+    return 0;
+  }
+  out_net->transport = *transport;
+  if (er_virtio_mmio_negotiate_features(&out_net->transport,
                                         ER_VIRTIO_F_VERSION_1 | ER_VIRTIO_NET_F_MAC |
                                           ER_VIRTIO_NET_F_STATUS,
                                         &features) == 0u) {
@@ -229,6 +232,42 @@ UINT8 er_virtio_net_init_mmio(UINT64 base, UINT64 len, ErVirtioNet* out_net) {
   }
   out_net->initialized = 1;
   return 1;
+}
+
+UINT8 er_virtio_net_init_mmio(UINT64 base, UINT64 len, ErVirtioNet* out_net) {
+  ErVirtioMmioTransport transport;
+
+  if (er_virtio_mmio_transport_init(base, len, ER_VIRTIO_DEVICE_TYPE_NET, &transport) == 0u) {
+    if (out_net != 0) {
+      er_mem_zero((UINT8*)out_net, (UINTN)sizeof(*out_net));
+    }
+    return 0;
+  }
+  return er_virtio_net_init_transport(&transport, out_net);
+}
+
+UINT8 er_virtio_net_init_pci(UINT32 bus, UINT32 dev, UINT32 func, ErVirtioNet* out_net) {
+  ErVirtioMmioTransport transport;
+
+  if (er_virtio_pci_transport_init(bus, dev, func, ER_VIRTIO_DEVICE_TYPE_NET, &transport) == 0u) {
+    if (out_net != 0) {
+      er_mem_zero((UINT8*)out_net, (UINTN)sizeof(*out_net));
+    }
+    return 0;
+  }
+  return er_virtio_net_init_transport(&transport, out_net);
+}
+
+UINT8 er_virtio_net_init_first_pci(ErVirtioNet* out_net) {
+  ErVirtioMmioTransport transport;
+
+  if (er_virtio_pci_find_transport(ER_VIRTIO_DEVICE_TYPE_NET, &transport) == 0u) {
+    if (out_net != 0) {
+      er_mem_zero((UINT8*)out_net, (UINTN)sizeof(*out_net));
+    }
+    return 0;
+  }
+  return er_virtio_net_init_transport(&transport, out_net);
 }
 
 UINT8 er_virtio_net_send(ErVirtioNet* net, const UINT8* frame, UINT32 frame_len) {

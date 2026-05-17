@@ -24,6 +24,7 @@ typedef struct {
 UINT8 er_native_boot_configure_erwire_eth_sink(UINT64 mmio_base, UINT64 mmio_len,
                                                const UINT8* peer_mac,
                                                ErNativeBootState* out_state);
+UINT8 er_native_boot_configure_pci_erwire_eth_sink(ErNativeBootState* out_state);
 UINT8 er_native_boot_configure_qemu_microvm_erwire_eth_sink(ErNativeBootState* out_state);
 
 #endif

@@ -796,14 +796,20 @@ static void er_run_quiet_profile(void) {
 static void er_run_native_profile(void) {
   ErNativeBootState native_state;
   UINT32 mac_index;
+  UINT64 transport_base;
 
   er_println("boot profile: native");
-  if (er_native_boot_configure_qemu_microvm_erwire_eth_sink(&native_state) == 0u) {
-    er_println("native transport: virtio-mmio net unavailable");
+  if (er_native_boot_configure_pci_erwire_eth_sink(&native_state) == 0u &&
+      er_native_boot_configure_qemu_microvm_erwire_eth_sink(&native_state) == 0u) {
+    er_println("native transport: virtio net unavailable");
     return;
   }
-  er_print("native transport: virtio-mmio net ");
-  er_print_u64_hex(native_state.net->transport.address.base);
+  transport_base = native_state.net->transport.address.base;
+  if (transport_base == 0u) {
+    transport_base = native_state.net->transport.common.address.base;
+  }
+  er_print("native transport: virtio net ");
+  er_print_u64_hex(transport_base);
   er_print(" mac=");
   for (mac_index = 0u; mac_index < ER_NET_MAC_LEN; ++mac_index) {
     if (mac_index != 0u) {
