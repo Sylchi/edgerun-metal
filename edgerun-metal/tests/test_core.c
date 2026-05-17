@@ -10,6 +10,8 @@
 #include "er_native_eth.h"
 #include "er_native_boot.h"
 #include "er_net_frame.h"
+#include "er_netlog.h"
+#include "er_gfx_console.h"
 #include "er_ui_gop_renderer.h"
 #include "er_ui_text.h"
 #include "er_virtio.h"
@@ -1757,6 +1759,25 @@ static void test_native_boot_erwire_eth_sink(void) {
   check_uint64("native boot erwire magic3", tx_frame[NATIVE_BOOT_TEST_PAYLOAD_OFFSET + 3u], '1');
 }
 
+static void test_netlog_disabled_path(void) {
+  check_int64("netlog starts disabled", er_netlog_ready(), 0);
+  check_int64("netlog null init stays disabled", (er_netlog_init(0), er_netlog_ready()), 0);
+  check_int64("netlog disabled write fails", er_netlog_write_bytes_wait((const UINT8*)"x", 1u, 0u), 0);
+  check_int64("netlog disabled empty write fails", er_netlog_write_bytes_wait((const UINT8*)"", 0u, 0u), 0);
+  er_netlog_write(0);
+  er_netlog_write_text("queued\n");
+  er_netlog_flush_text();
+}
+
+static void test_gfx_console_disabled_path(void) {
+  er_gfx_console_set_enabled(0u);
+  er_gfx_console_write("disabled path");
+  er_gfx_console_write(0);
+  er_gfx_console_init(0);
+  er_gfx_console_write("still disabled");
+  check_int64("gfx console disabled path reached", 1, 1);
+}
+
 static void test_ui_gop_renderer_surface(void) {
   UINT32 pixels[24] = {0};
   ErUiGopSurface surface;
@@ -2257,6 +2278,8 @@ int main(void) {
   test_hw_relay_endpoints();
   test_erwire_native_eth_sink();
   test_native_boot_erwire_eth_sink();
+  test_netlog_disabled_path();
+  test_gfx_console_disabled_path();
   test_ui_gop_renderer_surface();
   test_ui_gop_renderer_4k_tile_plan();
   test_ui_gop_renderer_varfont_text();
