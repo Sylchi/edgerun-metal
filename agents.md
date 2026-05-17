@@ -22,6 +22,8 @@
 - Keep this as one Git repository; nested `.git` directories, `.gitmodules`, and submodule gitlinks are not allowed.
 - Multiple agents may work in this repository at the same time.
 - Stay inside the bounds of the assigned task and owned files.
+- Use `main` only. Do not create, switch to, or continue work on feature branches unless the user explicitly asks for a temporary archival branch.
+- Commit and push finished work directly to `main`; do not leave implementation work stranded on side branches.
 
 ## Enforcement
 
@@ -40,10 +42,13 @@
 
 ## Multi-agent safety
 
+- Assume every agent shares the same working tree and current branch.
+- Do not switch branches during normal work. Branch switching moves all agents sharing this checkout and can hide or strand their changes.
 - Treat unrecognized local changes as another agent's work.
 - Do not overwrite, revert, reformat, move, or delete another agent's files unless explicitly instructed.
 - Do not run destructive Git commands such as `git reset --hard`, `git checkout --`, `git clean`, or broad restore operations.
 - Do not use `git add -A` or broad staging when unrelated changes are present; stage only owned paths.
 - Check `git status --short --branch` before edits, before staging, and before committing.
+- Before starting work, verify the checkout is on `main`; if it is not, stop and report the branch rather than switching automatically.
 - If a needed change overlaps another agent's work, stop and coordinate instead of resolving by force.
 - Keep commits scoped to one coherent task and mention any intentionally touched shared files.
