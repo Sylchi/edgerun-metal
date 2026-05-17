@@ -440,6 +440,14 @@ er_ui_node_t er_ui_node_navigation_menu(const char* const* tabs, size_t tab_coun
   return node;
 }
 
+er_ui_node_t er_ui_node_resizable(const char* const* labels, size_t label_count) {
+  er_ui_node_t node = er_ui_node_base(ER_UI_NODE_RESIZABLE);
+  node.labels = labels;
+  node.label_count = label_count;
+  node.gap = 4.0f;
+  return node;
+}
+
 er_ui_node_t er_ui_node_route_path(const char* label, const char* const* hops, size_t hop_count) {
   er_ui_node_t node = er_ui_node_base(ER_UI_NODE_ROUTE_PATH);
   node.label = label;
@@ -787,6 +795,7 @@ const char* er_ui_node_kind_label(er_ui_node_kind_t kind) {
     case ER_UI_NODE_INPUT_GROUP: return "input-group";
     case ER_UI_NODE_INPUT_OTP: return "input-otp";
     case ER_UI_NODE_NAVIGATION_MENU: return "navigation-menu";
+    case ER_UI_NODE_RESIZABLE: return "resizable";
     case ER_UI_NODE_ROUTE_PATH: return "route-path";
     case ER_UI_NODE_PACKAGE_CARD: return "package-card";
     case ER_UI_NODE_RECEIPT_ROW: return "receipt-row";
@@ -1115,6 +1124,9 @@ er_ui_status_t er_ui_node_accessibility(const er_ui_node_t* node, er_ui_a11y_nod
       break;
     case ER_UI_NODE_NAVIGATION_MENU:
       out = er_ui_a11y_base(ER_UI_A11Y_NAVIGATION, node->label, false, 0u);
+      break;
+    case ER_UI_NODE_RESIZABLE:
+      out = er_ui_a11y_base(ER_UI_A11Y_GROUP, "resizable", false, 0u);
       break;
     case ER_UI_NODE_TABS:
       out = er_ui_a11y_base(ER_UI_A11Y_TAB_LIST, "tabs", false, 0u);
@@ -1747,6 +1759,47 @@ static er_ui_status_t er_ui_node_render_navigation_menu(
                                     node->id + (uint32_t)node->label_count, false);
 }
 
+static const char* er_ui_node_label_or_default(const er_ui_node_t* node, size_t index, const char* fallback) {
+  if (!node || !node->labels || index >= node->label_count || !node->labels[index]) return fallback;
+  return node->labels[index];
+}
+
+static er_ui_status_t er_ui_node_render_resizable(
+  const er_ui_node_t* node,
+  er_ui_scene_t* scene,
+  vr_font_face_t* font,
+  er_ui_bounds_t bounds,
+  er_ui_resolved_theme_t theme) {
+  if (!node || !scene || !font || !er_ui_bounds_valid(bounds)) return ER_UI_ERR_INVALID_ARGUMENT;
+  float gap = node->gap;
+  float divider_w = 4.0f;
+  float first_w = er_ui_float_max((bounds.w - divider_w - gap * 2.0f) * 0.50f, 1.0f);
+  float second_w = er_ui_float_max(bounds.w - first_w - divider_w - gap * 2.0f, 1.0f);
+  er_ui_bounds_t first = er_ui_bounds(bounds.x, bounds.y, first_w, bounds.h);
+  er_ui_bounds_t divider = er_ui_bounds(first.x + first.w + gap, bounds.y, divider_w, bounds.h);
+  er_ui_bounds_t right = er_ui_bounds(divider.x + divider.w + gap, bounds.y, second_w, bounds.h);
+  float stacked_h = er_ui_float_max((right.h - gap) * 0.5f, 1.0f);
+  er_ui_bounds_t second = er_ui_bounds(right.x, right.y, right.w, stacked_h);
+  er_ui_bounds_t third = er_ui_bounds(right.x, right.y + stacked_h + gap, right.w, stacked_h);
+
+  er_ui_status_t status = er_ui_shadcn_card_emit(scene, first, theme);
+  if (status != ER_UI_OK) return status;
+  status = er_ui_node_render_text(scene, font, er_ui_node_label_or_default(node, 0u, "One"), er_ui_bounds(first.x + 12.0f, first.y + 8.0f, first.w - 24.0f, 28.0f),
+                                  theme.colors.text);
+  if (status != ER_UI_OK) return status;
+  status = er_ui_shadcn_separator_emit(scene, divider, theme);
+  if (status != ER_UI_OK) return status;
+  status = er_ui_shadcn_card_emit(scene, second, theme);
+  if (status != ER_UI_OK) return status;
+  status = er_ui_node_render_text(scene, font, er_ui_node_label_or_default(node, 1u, "Two"), er_ui_bounds(second.x + 12.0f, second.y + 8.0f, second.w - 24.0f, 24.0f),
+                                  theme.colors.text);
+  if (status != ER_UI_OK) return status;
+  status = er_ui_shadcn_card_emit(scene, third, theme);
+  if (status != ER_UI_OK) return status;
+  return er_ui_node_render_text(scene, font, er_ui_node_label_or_default(node, 2u, "Three"), er_ui_bounds(third.x + 12.0f, third.y + 8.0f, third.w - 24.0f, 24.0f),
+                                theme.colors.text);
+}
+
 static er_ui_status_t er_ui_node_render_label_group(
   const er_ui_node_t* node,
   er_ui_scene_t* scene,
@@ -1927,6 +1980,8 @@ er_ui_status_t er_ui_node_render(
       return er_ui_node_render_input_otp(node, scene, font, rect, theme);
     case ER_UI_NODE_NAVIGATION_MENU:
       return er_ui_node_render_navigation_menu(node, scene, font, rect, theme);
+    case ER_UI_NODE_RESIZABLE:
+      return er_ui_node_render_resizable(node, scene, font, rect, theme);
     case ER_UI_NODE_ROUTE_PATH:
       return er_ui_shadcn_route_path_emit(scene, font, rect, theme, node->label, node->labels, node->label_count);
     case ER_UI_NODE_PACKAGE_CARD:
