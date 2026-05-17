@@ -9,6 +9,24 @@
 
 static ErMmioInfo g_mmio_maps[ER_MMIO_MAX_MAPS];
 
+static const ErMmioInfo* er_mmio_lookup_map(INT64 handle_i) {
+  UINT32 handle;
+  const ErMmioInfo* map;
+
+  if (handle_i <= 0) {
+    return 0;
+  }
+  handle = (UINT32)handle_i;
+  if (handle == ER_MMIO_INVALID_HANDLE || handle > ER_MMIO_MAX_MAPS) {
+    return 0;
+  }
+  map = &g_mmio_maps[handle - 1u];
+  if (map->used == 0u) {
+    return 0;
+  }
+  return map;
+}
+
 void er_mmio_reset(void) {
   UINT32 i;
 
@@ -40,20 +58,14 @@ UINT8 er_mmio_map_request_valid(INT64 phys_i, INT64 len_i) {
 
 static UINT8 er_mmio_access_request_valid(INT64 handle_i, INT64 offset_i, UINT64 width) {
   UINT64 offset = (UINT64)offset_i;
-  UINT32 handle;
   const ErMmioInfo* map;
 
   if (handle_i <= 0 || offset_i < 0 || width == 0u) {
     return 0;
   }
 
-  handle = (UINT32)handle_i;
-  if (handle == ER_MMIO_INVALID_HANDLE || handle > ER_MMIO_MAX_MAPS) {
-    return 0;
-  }
-
-  map = &g_mmio_maps[handle - 1u];
-  if (map->used == 0u) {
+  map = er_mmio_lookup_map(handle_i);
+  if (map == 0) {
     return 0;
   }
 
@@ -116,7 +128,6 @@ INT64 er_mmio_map(INT64 phys_i, INT64 len_i) {
 }
 
 UINT8 er_mmio_get_info(INT64 handle_i, ErMmioInfo* out_info) {
-  UINT32 handle;
   const ErMmioInfo* map;
 
   if (out_info == 0) {
@@ -127,17 +138,8 @@ UINT8 er_mmio_get_info(INT64 handle_i, ErMmioInfo* out_info) {
   out_info->phys = 0;
   out_info->len = 0;
 
-  if (handle_i <= 0) {
-    return 0;
-  }
-
-  handle = (UINT32)handle_i;
-  if (handle == ER_MMIO_INVALID_HANDLE || handle > ER_MMIO_MAX_MAPS) {
-    return 0;
-  }
-
-  map = &g_mmio_maps[handle - 1u];
-  if (map->used == 0u) {
+  map = er_mmio_lookup_map(handle_i);
+  if (map == 0) {
     return 0;
   }
 
@@ -149,7 +151,6 @@ UINT8 er_mmio_get_info(INT64 handle_i, ErMmioInfo* out_info) {
 
 INT64 er_mmio_read8(INT64 handle_i, INT64 offset_i) {
   UINT64 offset = (UINT64)offset_i;
-  UINT32 handle;
   const volatile UINT8* ptr;
   const ErMmioInfo* map;
 
@@ -157,15 +158,13 @@ INT64 er_mmio_read8(INT64 handle_i, INT64 offset_i) {
     return -1;
   }
 
-  handle = (UINT32)handle_i;
-  map = &g_mmio_maps[handle - 1u];
+  map = er_mmio_lookup_map(handle_i);
   ptr = (const volatile UINT8*)(UINTN)(map->phys + offset);
   return (INT64)(UINT8)(*ptr);
 }
 
 INT64 er_mmio_read16(INT64 handle_i, INT64 offset_i) {
   UINT64 offset = (UINT64)offset_i;
-  UINT32 handle;
   const volatile UINT16* ptr;
   const ErMmioInfo* map;
 
@@ -173,15 +172,13 @@ INT64 er_mmio_read16(INT64 handle_i, INT64 offset_i) {
     return -1;
   }
 
-  handle = (UINT32)handle_i;
-  map = &g_mmio_maps[handle - 1u];
+  map = er_mmio_lookup_map(handle_i);
   ptr = (const volatile UINT16*)(UINTN)(map->phys + offset);
   return (INT64)(UINT16)(*ptr);
 }
 
 INT64 er_mmio_read32(INT64 handle_i, INT64 offset_i) {
   UINT64 offset = (UINT64)offset_i;
-  UINT32 handle;
   const volatile UINT32* ptr;
   const ErMmioInfo* map;
 
@@ -189,15 +186,13 @@ INT64 er_mmio_read32(INT64 handle_i, INT64 offset_i) {
     return -1;
   }
 
-  handle = (UINT32)handle_i;
-  map = &g_mmio_maps[handle - 1u];
+  map = er_mmio_lookup_map(handle_i);
   ptr = (const volatile UINT32*)(UINTN)(map->phys + offset);
   return (INT64)(UINT32)(*ptr);
 }
 
 UINT8 er_mmio_write8(INT64 handle_i, INT64 offset_i, UINT8 value) {
   UINT64 offset = (UINT64)offset_i;
-  UINT32 handle;
   volatile UINT8* ptr;
   const ErMmioInfo* map;
 
@@ -205,8 +200,7 @@ UINT8 er_mmio_write8(INT64 handle_i, INT64 offset_i, UINT8 value) {
     return 0;
   }
 
-  handle = (UINT32)handle_i;
-  map = &g_mmio_maps[handle - 1u];
+  map = er_mmio_lookup_map(handle_i);
   ptr = (volatile UINT8*)(UINTN)(map->phys + offset);
   *ptr = value;
   return 1;
@@ -214,7 +208,6 @@ UINT8 er_mmio_write8(INT64 handle_i, INT64 offset_i, UINT8 value) {
 
 UINT8 er_mmio_write16(INT64 handle_i, INT64 offset_i, UINT16 value) {
   UINT64 offset = (UINT64)offset_i;
-  UINT32 handle;
   volatile UINT16* ptr;
   const ErMmioInfo* map;
 
@@ -222,8 +215,7 @@ UINT8 er_mmio_write16(INT64 handle_i, INT64 offset_i, UINT16 value) {
     return 0;
   }
 
-  handle = (UINT32)handle_i;
-  map = &g_mmio_maps[handle - 1u];
+  map = er_mmio_lookup_map(handle_i);
   ptr = (volatile UINT16*)(UINTN)(map->phys + offset);
   *ptr = value;
   return 1;
@@ -231,7 +223,6 @@ UINT8 er_mmio_write16(INT64 handle_i, INT64 offset_i, UINT16 value) {
 
 UINT8 er_mmio_write32(INT64 handle_i, INT64 offset_i, UINT32 value) {
   UINT64 offset = (UINT64)offset_i;
-  UINT32 handle;
   volatile UINT32* ptr;
   const ErMmioInfo* map;
 
@@ -239,8 +230,7 @@ UINT8 er_mmio_write32(INT64 handle_i, INT64 offset_i, UINT32 value) {
     return 0;
   }
 
-  handle = (UINT32)handle_i;
-  map = &g_mmio_maps[handle - 1u];
+  map = er_mmio_lookup_map(handle_i);
   ptr = (volatile UINT32*)(UINTN)(map->phys + offset);
   *ptr = value;
   return 1;

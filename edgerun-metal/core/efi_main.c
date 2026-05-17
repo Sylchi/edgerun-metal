@@ -35,27 +35,53 @@
 #define ER_UI_BOOT_MAX_TILE_MARKS 8192u
 #define ER_UI_BOOT_RENDER_OVERDRAW_BUDGET 4u
 #define ER_UI_BOOT_BACKING_BUFFERS 1u
+#define ER_UI_BOOT_LOW_HEIGHT_MAX 1200u
+#define ER_UI_BOOT_SMALL_FONT_PX 16.0f
+#define ER_UI_BOOT_LARGE_FONT_PX 28.0f
+#define ER_UI_BOOT_FONT_ATLAS_SIZE 1024u
+#define ER_UI_BOOT_FONT_ATLAS_PAD 2u
 #define ER_UI_BOOT_COMMAND_BYTES (256u * 1024u)
 #define ER_UI_BOOT_GLYPH_CACHE_BYTES (1024u * 1024u)
 #define ER_UI_BOOT_SURFACE_BYTES 0u
 #define ER_UI_BOOT_MEMORY_BUDGET_BYTES (128u * 1024u * 1024u)
+#define ER_WASM_DRIVER_MEMORY_BYTES (64u * 1024u)
+#define ER_ACPI_SIGNATURE_BYTES 4u
+#define ER_BYTE_MASK 0xffu
+#define ER_MMIO_PROBE_REG0_OFFSET 0x00u
+#define ER_MMIO_PROBE_REG1_OFFSET 0x04u
+#define ER_MMIO_PROBE_REG2_OFFSET 0x08u
+
+enum {
+  ER_LOG_U64_STAGE_IDLE = 0u,
+  ER_LOG_U64_STAGE_PCI_FIELDS = 3u,
+  ER_LOG_HEX_STAGE_ID = 0u,
+  ER_LOG_HEX_STAGE_COMMAND_STATUS = 1u,
+  ER_LOG_HEX_STAGE_CLASS_REVISION = 2u,
+  ER_LOG_HEX_STAGE_HEADER_CACHELINE = 3u,
+  ER_LOG_HEX_STAGE_BAR0 = 4u,
+  ER_LOG_HEX_STAGE_BAR1 = 5u,
+  ER_LOG_HEX_STAGE_BAR2 = 6u,
+  ER_LOG_HEX_STAGE_BAR3 = 7u,
+  ER_LOG_HEX_STAGE_BAR4 = 8u,
+  ER_LOG_HEX_STAGE_BAR5 = 9u
+};
 
 static ErWasmHostCalls g_host_calls = {0};
-static UINT8 g_wasm_driver_memory[65536];
+static UINT8 g_wasm_driver_memory[ER_WASM_DRIVER_MEMORY_BYTES];
 static UINT8 g_ui_boot_arena[ER_UI_BOOT_ARENA_SIZE];
 static UINT8 g_ui_boot_tile_marks[ER_UI_BOOT_MAX_TILE_MARKS];
 static UINT32 g_ui_boot_dirty_tile_ids[ER_UI_BOOT_MAX_DIRTY_TILES];
 static ErUiGopFrameState g_ui_boot_frame_state;
 static UINTN g_ui_boot_arena_used;
-static UINT8 g_log_u64_stage = 0;
-static UINT8 g_log_hex_stage = 0;
+static UINT8 g_log_u64_stage = ER_LOG_U64_STAGE_IDLE;
+static UINT8 g_log_hex_stage = ER_LOG_HEX_STAGE_ID;
 static UINT64 g_log_bus = 0;
 static UINT64 g_log_dev = 0;
 static UINT64 g_log_func = 0;
 
 static void er_reset_log_state(void) {
-  g_log_u64_stage = 0;
-  g_log_hex_stage = 0;
+  g_log_u64_stage = ER_LOG_U64_STAGE_IDLE;
+  g_log_hex_stage = ER_LOG_HEX_STAGE_ID;
   g_log_bus = 0;
   g_log_dev = 0;
   g_log_func = 0;
@@ -135,6 +161,15 @@ static void er_print_u64_field(const char* label, UINT64 value) {
   er_print("\r\n");
 }
 
+static void er_acpi_signature_name(UINT32 signature, char out_name[ER_ACPI_SIGNATURE_BYTES + 1u]) {
+  UINTN i;
+
+  for (i = 0u; i < ER_ACPI_SIGNATURE_BYTES; ++i) {
+    out_name[i] = (char)((signature >> (i * 8u)) & ER_BYTE_MASK);
+  }
+  out_name[ER_ACPI_SIGNATURE_BYTES] = 0;
+}
+
 static void er_log_acpi(EFI_SYSTEM_TABLE* SystemTable) {
   ErAcpiRsdpInfo rsdp;
   ErAcpiTableList tables;
@@ -166,13 +201,9 @@ static void er_log_acpi(EFI_SYSTEM_TABLE* SystemTable) {
 
   for (i = 0; i < tables.table_count; ++i) {
     UINT32 sig = tables.tables[i].signature;
-    char name[5];
+    char name[ER_ACPI_SIGNATURE_BYTES + 1u];
 
-    name[0] = (char)(sig & 0xffu);
-    name[1] = (char)((sig >> 8) & 0xffu);
-    name[2] = (char)((sig >> 16) & 0xffu);
-    name[3] = (char)((sig >> 24) & 0xffu);
-    name[4] = 0;
+    er_acpi_signature_name(sig, name);
     er_print("  ");
     er_print(name);
     er_print(" ");
@@ -356,65 +387,65 @@ static void er_log_u64(INT64 value) {
     er_print("    func: ");
     er_print_u64_hex(g_log_func);
     er_print("\r\n");
-    g_log_u64_stage = 3;
-    g_log_hex_stage = 0;
+    g_log_u64_stage = ER_LOG_U64_STAGE_PCI_FIELDS;
+    g_log_hex_stage = ER_LOG_HEX_STAGE_ID;
     return;
   }
 
-  g_log_u64_stage = 3;
+  g_log_u64_stage = ER_LOG_U64_STAGE_PCI_FIELDS;
 }
 
 static void er_log_hex(UINT64 value) {
-  if (g_log_u64_stage != 3) {
+  if (g_log_u64_stage != ER_LOG_U64_STAGE_PCI_FIELDS) {
     return;
   }
 
   switch (g_log_hex_stage) {
-    case 0:
+    case ER_LOG_HEX_STAGE_ID:
       er_print_u64_field("id", value);
-      g_log_hex_stage = 1;
+      g_log_hex_stage = ER_LOG_HEX_STAGE_COMMAND_STATUS;
       break;
-    case 1:
+    case ER_LOG_HEX_STAGE_COMMAND_STATUS:
       er_print_u64_field("command/status", value);
-      g_log_hex_stage = 2;
+      g_log_hex_stage = ER_LOG_HEX_STAGE_CLASS_REVISION;
       break;
-    case 2:
+    case ER_LOG_HEX_STAGE_CLASS_REVISION:
       er_print_u64_field("class/revision", value);
-      g_log_hex_stage = 3;
+      g_log_hex_stage = ER_LOG_HEX_STAGE_HEADER_CACHELINE;
       break;
-    case 3:
+    case ER_LOG_HEX_STAGE_HEADER_CACHELINE:
       er_print_u64_field("header/cacheline", value);
-      g_log_hex_stage = 4;
+      g_log_hex_stage = ER_LOG_HEX_STAGE_BAR0;
       break;
-    case 4:
+    case ER_LOG_HEX_STAGE_BAR0:
       er_print_u64_field("BAR0", value);
-      g_log_hex_stage = 5;
+      g_log_hex_stage = ER_LOG_HEX_STAGE_BAR1;
       break;
-    case 5:
+    case ER_LOG_HEX_STAGE_BAR1:
       er_print_u64_field("BAR1", value);
-      g_log_hex_stage = 6;
+      g_log_hex_stage = ER_LOG_HEX_STAGE_BAR2;
       break;
-    case 6:
+    case ER_LOG_HEX_STAGE_BAR2:
       er_print_u64_field("BAR2", value);
-      g_log_hex_stage = 7;
+      g_log_hex_stage = ER_LOG_HEX_STAGE_BAR3;
       break;
-    case 7:
+    case ER_LOG_HEX_STAGE_BAR3:
       er_print_u64_field("BAR3", value);
-      g_log_hex_stage = 8;
+      g_log_hex_stage = ER_LOG_HEX_STAGE_BAR4;
       break;
-    case 8:
+    case ER_LOG_HEX_STAGE_BAR4:
       er_print_u64_field("BAR4", value);
-      g_log_hex_stage = 9;
+      g_log_hex_stage = ER_LOG_HEX_STAGE_BAR5;
       break;
-    case 9:
+    case ER_LOG_HEX_STAGE_BAR5:
       er_print_u64_field("BAR5", value);
-      g_log_hex_stage = 0;
-      g_log_u64_stage = 0;
+      g_log_hex_stage = ER_LOG_HEX_STAGE_ID;
+      g_log_u64_stage = ER_LOG_U64_STAGE_IDLE;
       break;
     default:
       er_print_u64_field("value", value);
-      g_log_hex_stage = 0;
-      g_log_u64_stage = 0;
+      g_log_hex_stage = ER_LOG_HEX_STAGE_ID;
+      g_log_u64_stage = ER_LOG_U64_STAGE_IDLE;
       break;
   }
 }
@@ -495,6 +526,22 @@ static void er_print_pci_value(const char* label, UINT32 value) {
   er_print("\r\n");
 }
 
+static void er_print_pci_bar_value(UINTN index, UINT32 value) {
+  er_print("    BAR");
+  er_print_u64_dec((UINT64)index);
+  er_print(": ");
+  er_print_u64_hex((UINT64)value);
+  er_print("\r\n");
+}
+
+static void er_print_pci_bars(const ErPciDeviceSnapshot* snapshot) {
+  UINTN i;
+
+  for (i = 0u; i < ER_PCI_BAR_COUNT; ++i) {
+    er_print_pci_bar_value(i, snapshot->bars[i]);
+  }
+}
+
 static void er_print_bar_kind(UINT8 kind) {
   switch (kind) {
     case ER_PCI_BAR_KIND_IO:
@@ -542,6 +589,18 @@ static void er_print_mmio_read32(INT64 handle, UINT32 offset) {
   er_println("");
 }
 
+static void er_print_pci_location(const char* prefix, const char* label, const ErPciDeviceSnapshot* snapshot) {
+  er_print(prefix);
+  er_print(label);
+  er_print(" bus=");
+  er_print_u64_hex((UINT64)snapshot->bus);
+  er_print(" dev=");
+  er_print_u64_hex((UINT64)snapshot->dev);
+  er_print(" func=");
+  er_print_u64_hex((UINT64)snapshot->func);
+  er_print("\r\n");
+}
+
 static void er_probe_mmio_readonly(const char* label, const ErPciDeviceSnapshot* snapshot) {
   ErPciBarSelection selection;
   INT64 handle;
@@ -552,15 +611,7 @@ static void er_probe_mmio_readonly(const char* label, const ErPciDeviceSnapshot*
 
   selection = er_pci_select_first_mmio_bar(snapshot->bars);
 
-  er_print("  mmio target: ");
-  er_print(label);
-  er_print(" bus=");
-  er_print_u64_hex((UINT64)snapshot->bus);
-  er_print(" dev=");
-  er_print_u64_hex((UINT64)snapshot->dev);
-  er_print(" func=");
-  er_print_u64_hex((UINT64)snapshot->func);
-  er_print("\r\n");
+  er_print_pci_location("  mmio target: ", label, snapshot);
   er_print_u64_field("command/status", (UINT64)snapshot->command_status);
 
   if (er_pci_command_memory_enabled(snapshot->command_status) == 0u) {
@@ -591,9 +642,9 @@ static void er_probe_mmio_readonly(const char* label, const ErPciDeviceSnapshot*
   er_print("    BAR handle: ");
   er_print_u64_dec((UINT64)handle);
   er_print("\r\n");
-  er_print_mmio_read32(handle, 0x00u);
-  er_print_mmio_read32(handle, 0x04u);
-  er_print_mmio_read32(handle, 0x08u);
+  er_print_mmio_read32(handle, ER_MMIO_PROBE_REG0_OFFSET);
+  er_print_mmio_read32(handle, ER_MMIO_PROBE_REG1_OFFSET);
+  er_print_mmio_read32(handle, ER_MMIO_PROBE_REG2_OFFSET);
 }
 
 static void er_print_pci_target(const char* label, const ErPciDeviceSnapshot* snapshot) {
@@ -601,26 +652,13 @@ static void er_print_pci_target(const char* label, const ErPciDeviceSnapshot* sn
     return;
   }
 
-  er_print("  target: ");
-  er_print(label);
-  er_print(" bus=");
-  er_print_u64_hex((UINT64)snapshot->bus);
-  er_print(" dev=");
-  er_print_u64_hex((UINT64)snapshot->dev);
-  er_print(" func=");
-  er_print_u64_hex((UINT64)snapshot->func);
-  er_print("\r\n");
+  er_print_pci_location("  target: ", label, snapshot);
 
   er_print_pci_value("id", snapshot->id);
   er_print_pci_value("command/status", snapshot->command_status);
   er_print_pci_value("class/revision", snapshot->class_revision);
   er_print_pci_value("header/cacheline", snapshot->header_cacheline);
-  er_print_pci_value("BAR0", snapshot->bars[0]);
-  er_print_pci_value("BAR1", snapshot->bars[1]);
-  er_print_pci_value("BAR2", snapshot->bars[2]);
-  er_print_pci_value("BAR3", snapshot->bars[3]);
-  er_print_pci_value("BAR4", snapshot->bars[4]);
-  er_print_pci_value("BAR5", snapshot->bars[5]);
+  er_print_pci_bars(snapshot);
 }
 
 static void erwire_send_pci_snapshot(UINT8 target_kind, const ErPciDeviceSnapshot* snapshot) {
@@ -665,15 +703,19 @@ static void er_scan_pci_function(UINT32 bus, UINT32 dev, UINT32 func) {
   }
 }
 
-static void er_scan_pci_targets(void) {
+typedef UINT8 (*ErPciFunctionVisitor)(UINT32 bus, UINT32 dev, UINT32 func);
+
+static UINT8 er_visit_pci_functions(ErPciFunctionVisitor visitor) {
   UINT32 bus;
   UINT32 dev;
 
-  er_println("PCI target scan: nvidia/nvme/ethernet");
+  if (visitor == 0) {
+    return 0;
+  }
 
   for (bus = 0; bus < ER_PCI_BUS_COUNT; ++bus) {
     for (dev = 0; dev < ER_PCI_DEVICE_COUNT; ++dev) {
-      UINT32 id0 = er_pci_cfg_read32(bus, dev, 0u, 0x00);
+      UINT32 id0 = er_pci_cfg_read32(bus, dev, 0u, ER_PCI_ID_OFFSET);
       UINT32 header0;
       UINT32 max_func;
       UINT32 func;
@@ -682,45 +724,36 @@ static void er_scan_pci_targets(void) {
         continue;
       }
 
-      header0 = er_pci_cfg_read32(bus, dev, 0u, 0x0c);
+      header0 = er_pci_cfg_read32(bus, dev, 0u, ER_PCI_HEADER_CACHELINE_OFFSET);
       max_func = er_pci_function_count(header0);
 
       for (func = 0; func < max_func; ++func) {
-        er_scan_pci_function(bus, dev, func);
+        if (visitor(bus, dev, func) != 0u) {
+          return 1;
+        }
       }
     }
   }
 
+  return 0;
+}
+
+static UINT8 er_scan_pci_target_visitor(UINT32 bus, UINT32 dev, UINT32 func) {
+  er_scan_pci_function(bus, dev, func);
+  return 0;
+}
+
+static void er_scan_pci_targets(void) {
+  er_println("PCI target scan: nvidia/nvme/ethernet");
+  (void)er_visit_pci_functions(er_scan_pci_target_visitor);
   er_println("PCI target scan done");
 }
 
 static void er_run_mmio_probe(void) {
-  UINT32 bus;
-  UINT32 dev;
-
   er_println("MMIO read-only probe: nvidia MMIO BAR");
-
-  for (bus = 0; bus < ER_PCI_BUS_COUNT; ++bus) {
-    for (dev = 0; dev < ER_PCI_DEVICE_COUNT; ++dev) {
-      UINT32 id0 = er_pci_cfg_read32(bus, dev, 0u, 0x00);
-      UINT32 header0;
-      UINT32 max_func;
-      UINT32 func;
-
-      if (er_pci_device_present(id0) == 0u) {
-        continue;
-      }
-
-      header0 = er_pci_cfg_read32(bus, dev, 0u, 0x0c);
-      max_func = er_pci_function_count(header0);
-
-      for (func = 0; func < max_func; ++func) {
-        if (er_scan_mmio_probe_function(bus, dev, func) != 0u) {
-          er_println("MMIO read-only probe done");
-          return;
-        }
-      }
-    }
+  if (er_visit_pci_functions(er_scan_mmio_probe_function) != 0u) {
+    er_println("MMIO read-only probe done");
+    return;
   }
 
   er_println("MMIO read-only probe: no NVIDIA target found");
@@ -815,10 +848,10 @@ static void er_run_ui_profile(EFI_SYSTEM_TABLE* SystemTable) {
     er_println("ui renderer: tile plan failed");
     return;
   }
-  font_cfg.px_size = mode.height <= 1200u ? 16.0f : 28.0f;
-  font_cfg.atlas_width = 1024u;
-  font_cfg.atlas_height = 1024u;
-  font_cfg.atlas_pad = 2u;
+  font_cfg.px_size = mode.height <= ER_UI_BOOT_LOW_HEIGHT_MAX ? ER_UI_BOOT_SMALL_FONT_PX : ER_UI_BOOT_LARGE_FONT_PX;
+  font_cfg.atlas_width = ER_UI_BOOT_FONT_ATLAS_SIZE;
+  font_cfg.atlas_height = ER_UI_BOOT_FONT_ATLAS_SIZE;
+  font_cfg.atlas_pad = ER_UI_BOOT_FONT_ATLAS_PAD;
   font_cfg.atlas_format = VR_FONT_ATLAS_FORMAT_ALPHA8;
   font_cfg.allocator = er_ui_boot_font_allocator();
   font_cfg.gl.user = 0;

@@ -583,23 +583,33 @@ static void er_ui_gop_render_icon_quad(ErUiGopSurface* surface, const er_ui_quad
   }
 }
 
-static UINT8 er_ui_gop_sample_alpha8(const vr_font_atlas_view_t* atlas, float u, float v) {
+static const UINT8* er_ui_gop_sample_texel(const UINT8* pixels, UINT32 width, UINT32 height,
+                                           UINT32 bytes_per_pixel, float u, float v) {
   UINT32 x;
   UINT32 y;
 
-  if (atlas == 0 || atlas->pixels == 0 || atlas->width == 0u || atlas->height == 0u ||
-      atlas->bytes_per_pixel == 0u) {
+  if (pixels == 0 || width == 0u || height == 0u || bytes_per_pixel == 0u) {
+    return 0;
+  }
+  x = er_ui_gop_texel_coord(u, width);
+  y = er_ui_gop_texel_coord(v, height);
+  return pixels + (((UINTN)y * (UINTN)width + (UINTN)x) * bytes_per_pixel);
+}
+
+static UINT8 er_ui_gop_sample_alpha8(const vr_font_atlas_view_t* atlas, float u, float v) {
+  const UINT8* px;
+
+  if (atlas == 0) {
     return 0u;
   }
-
-  x = er_ui_gop_texel_coord(u, atlas->width);
-  y = er_ui_gop_texel_coord(v, atlas->height);
-  return atlas->pixels[((UINTN)y * (UINTN)atlas->width + (UINTN)x) * atlas->bytes_per_pixel];
+  px = er_ui_gop_sample_texel(atlas->pixels, atlas->width, atlas->height, atlas->bytes_per_pixel, u, v);
+  if (px == 0) {
+    return 0u;
+  }
+  return px[0];
 }
 
 static UINT8 er_ui_gop_sample_msdf_alpha(const vr_font_atlas_view_t* atlas, float u, float v) {
-  UINT32 x;
-  UINT32 y;
   const UINT8* px;
   UINT8 r;
   UINT8 g;
@@ -613,9 +623,10 @@ static UINT8 er_ui_gop_sample_msdf_alpha(const vr_font_atlas_view_t* atlas, floa
     return 0u;
   }
 
-  x = er_ui_gop_texel_coord(u, atlas->width);
-  y = er_ui_gop_texel_coord(v, atlas->height);
-  px = atlas->pixels + (((UINTN)y * (UINTN)atlas->width + (UINTN)x) * atlas->bytes_per_pixel);
+  px = er_ui_gop_sample_texel(atlas->pixels, atlas->width, atlas->height, atlas->bytes_per_pixel, u, v);
+  if (px == 0) {
+    return 0u;
+  }
   r = px[0];
   g = px[1];
   b = px[2];
@@ -641,119 +652,97 @@ static UINT8 er_ui_gop_sample_atlas_alpha(const vr_font_atlas_view_t* atlas, flo
 }
 
 static UINT8 er_ui_gop_sample_boot_atlas_alpha(const ErUiGopAlphaAtlas* atlas, float u, float v) {
-  UINT32 x;
-  UINT32 y;
+  const UINT8* px;
 
-  if (atlas == 0 || atlas->pixels == 0 || atlas->width == 0u || atlas->height == 0u ||
-      atlas->bytes_per_pixel == 0u) {
+  if (atlas == 0) {
     return 0u;
   }
-  x = er_ui_gop_texel_coord(u, atlas->width);
-  y = er_ui_gop_texel_coord(v, atlas->height);
-  return atlas->pixels[((UINTN)y * (UINTN)atlas->width + (UINTN)x) * atlas->bytes_per_pixel];
+  px = er_ui_gop_sample_texel(atlas->pixels, atlas->width, atlas->height, atlas->bytes_per_pixel, u, v);
+  if (px == 0) {
+    return 0u;
+  }
+  return px[0];
+}
+
+typedef UINT8 (*ErUiGopTextAlphaSampler)(const void* context, float u, float v);
+
+static UINT8 er_ui_gop_sample_text_boot_alpha(const void* context, float u, float v) {
+  return er_ui_gop_sample_boot_atlas_alpha((const ErUiGopAlphaAtlas*)context, u, v);
+}
+
+static UINT8 er_ui_gop_sample_text_font_alpha(const void* context, float u, float v) {
+  return er_ui_gop_sample_atlas_alpha((const vr_font_atlas_view_t*)context, u, v);
+}
+
+static void er_ui_gop_render_text_quad_sampled(ErUiGopSurface* surface, const er_ui_quad_t* quad,
+                                               ErUiGopTextAlphaSampler sampler, const void* sampler_context,
+                                               const ErUiGopPixelRect* clip, ErUiGopRenderStats* stats) {
+  UINT32 x0;
+  UINT32 y0;
+  UINT32 x1;
+  UINT32 y1;
+  UINT32 y;
+  UINT32 x;
+  float width;
+  float height;
+  UINT32 full_x0;
+  UINT32 full_y0;
+  UINT32 full_x1;
+  UINT32 full_y1;
+
+  if (quad == 0 || sampler == 0 || sampler_context == 0 ||
+      er_ui_gop_clip_rect_to(surface, clip, quad->x, quad->y, quad->w, quad->h, &x0, &y0, &x1, &y1) == 0u) {
+    if (quad != 0 && sampler != 0 && sampler_context != 0 && clip != 0 && stats != 0) ++stats->rejected_primitives;
+    return;
+  }
+  if (clip != 0 && stats != 0 &&
+      er_ui_gop_clip_rect_to(surface, 0, quad->x, quad->y, quad->w, quad->h,
+                             &full_x0, &full_y0, &full_x1, &full_y1) != 0u &&
+      (x0 != full_x0 || y0 != full_y0 || x1 != full_x1 || y1 != full_y1)) {
+    ++stats->clipped_primitives;
+  }
+
+  width = quad->w > 1.0f ? quad->w : 1.0f;
+  height = quad->h > 1.0f ? quad->h : 1.0f;
+  if (stats != 0) ++stats->text_quads;
+  for (y = y0; y < y1; ++y) {
+    UINT32* row = surface->pixels + ((UINTN)y * (UINTN)surface->stride);
+    float ty = ((float)y + 0.5f - quad->y) / height;
+    float v = quad->v0 + (quad->v1 - quad->v0) * er_ui_gop_clamp01(ty);
+    for (x = x0; x < x1; ++x) {
+      float tx = ((float)x + 0.5f - quad->x) / width;
+      float u = quad->u0 + (quad->u1 - quad->u0) * er_ui_gop_clamp01(tx);
+      UINT8 alpha = sampler(sampler_context, u, v);
+      if (alpha != 0u) {
+        er_ui_color4_t color = quad->color;
+        color.a *= (float)alpha / 255.0f;
+        er_ui_gop_stats_add_pixels(stats, 1u, color.a < 1.0f ? 1u : 0u, 1u);
+        row[x] = er_ui_gop_blend_pixel(surface->pixel_format, row[x], color);
+      }
+    }
+  }
 }
 
 static void er_ui_gop_render_text_quad_with_alpha_atlas(ErUiGopSurface* surface, const er_ui_quad_t* quad,
                                                         const ErUiGopAlphaAtlas* atlas,
                                                         const ErUiGopPixelRect* clip,
                                                         ErUiGopRenderStats* stats) {
-  UINT32 x0;
-  UINT32 y0;
-  UINT32 x1;
-  UINT32 y1;
-  UINT32 y;
-  UINT32 x;
-  float width;
-  float height;
-  UINT32 full_x0;
-  UINT32 full_y0;
-  UINT32 full_x1;
-  UINT32 full_y1;
-
-  if (quad == 0 || atlas == 0 ||
-      er_ui_gop_clip_rect_to(surface, clip, quad->x, quad->y, quad->w, quad->h, &x0, &y0, &x1, &y1) == 0u) {
-    if (quad != 0 && atlas != 0 && clip != 0 && stats != 0) ++stats->rejected_primitives;
-    return;
-  }
-  if (clip != 0 && stats != 0 &&
-      er_ui_gop_clip_rect_to(surface, 0, quad->x, quad->y, quad->w, quad->h,
-                             &full_x0, &full_y0, &full_x1, &full_y1) != 0u &&
-      (x0 != full_x0 || y0 != full_y0 || x1 != full_x1 || y1 != full_y1)) {
-    ++stats->clipped_primitives;
-  }
-
-  width = quad->w > 1.0f ? quad->w : 1.0f;
-  height = quad->h > 1.0f ? quad->h : 1.0f;
-  if (stats != 0) ++stats->text_quads;
-  for (y = y0; y < y1; ++y) {
-    UINT32* row = surface->pixels + ((UINTN)y * (UINTN)surface->stride);
-    float ty = ((float)y + 0.5f - quad->y) / height;
-    float v = quad->v0 + (quad->v1 - quad->v0) * er_ui_gop_clamp01(ty);
-    for (x = x0; x < x1; ++x) {
-      float tx = ((float)x + 0.5f - quad->x) / width;
-      float u = quad->u0 + (quad->u1 - quad->u0) * er_ui_gop_clamp01(tx);
-      UINT8 alpha = er_ui_gop_sample_boot_atlas_alpha(atlas, u, v);
-      if (alpha != 0u) {
-        er_ui_color4_t color = quad->color;
-        color.a *= (float)alpha / 255.0f;
-        er_ui_gop_stats_add_pixels(stats, 1u, color.a < 1.0f ? 1u : 0u, 1u);
-        row[x] = er_ui_gop_blend_pixel(surface->pixel_format, row[x], color);
-      }
-    }
-  }
+  er_ui_gop_render_text_quad_sampled(surface, quad, er_ui_gop_sample_text_boot_alpha, atlas, clip, stats);
 }
 
 static void er_ui_gop_render_text_quad(ErUiGopSurface* surface, const er_ui_quad_t* quad,
                                        const vr_font_face_t* font, const ErUiGopPixelRect* clip,
                                        ErUiGopRenderStats* stats) {
-  UINT32 x0;
-  UINT32 y0;
-  UINT32 x1;
-  UINT32 y1;
   vr_font_atlas_view_t atlas;
-  UINT32 y;
-  UINT32 x;
-  float width;
-  float height;
-  UINT32 full_x0;
-  UINT32 full_y0;
-  UINT32 full_x1;
-  UINT32 full_y1;
 
-  if (quad == 0 || font == 0 ||
-      er_ui_gop_clip_rect_to(surface, clip, quad->x, quad->y, quad->w, quad->h, &x0, &y0, &x1, &y1) == 0u) {
+  if (quad == 0 || font == 0) {
     if (quad != 0 && font != 0 && clip != 0 && stats != 0) ++stats->rejected_primitives;
     return;
-  }
-  if (clip != 0 && stats != 0 &&
-      er_ui_gop_clip_rect_to(surface, 0, quad->x, quad->y, quad->w, quad->h,
-                             &full_x0, &full_y0, &full_x1, &full_y1) != 0u &&
-      (x0 != full_x0 || y0 != full_y0 || x1 != full_x1 || y1 != full_y1)) {
-    ++stats->clipped_primitives;
   }
   if (vr_font_atlas_view(font, quad->atlas_id, &atlas) != VR_OK) {
     return;
   }
-
-  width = quad->w > 1.0f ? quad->w : 1.0f;
-  height = quad->h > 1.0f ? quad->h : 1.0f;
-  if (stats != 0) ++stats->text_quads;
-  for (y = y0; y < y1; ++y) {
-    UINT32* row = surface->pixels + ((UINTN)y * (UINTN)surface->stride);
-    float ty = ((float)y + 0.5f - quad->y) / height;
-    float v = quad->v0 + (quad->v1 - quad->v0) * er_ui_gop_clamp01(ty);
-    for (x = x0; x < x1; ++x) {
-      float tx = ((float)x + 0.5f - quad->x) / width;
-      float u = quad->u0 + (quad->u1 - quad->u0) * er_ui_gop_clamp01(tx);
-      UINT8 alpha = er_ui_gop_sample_atlas_alpha(&atlas, u, v);
-      if (alpha != 0u) {
-        er_ui_color4_t color = quad->color;
-        color.a *= (float)alpha / 255.0f;
-        er_ui_gop_stats_add_pixels(stats, 1u, color.a < 1.0f ? 1u : 0u, 1u);
-        row[x] = er_ui_gop_blend_pixel(surface->pixel_format, row[x], color);
-      }
-    }
-  }
+  er_ui_gop_render_text_quad_sampled(surface, quad, er_ui_gop_sample_text_font_alpha, &atlas, clip, stats);
 }
 
 UINT8 er_ui_gop_surface_valid(const ErUiGopSurface* surface) {

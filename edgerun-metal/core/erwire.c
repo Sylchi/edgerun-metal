@@ -10,6 +10,9 @@
 #define ERWIRE_PACKET_MAX (ERWIRE_HEADER_SIZE + ERWIRE_MAX_PAYLOAD)
 #define ERWIRE_BLOB_CHUNK_HEADER_SIZE 16u
 #define ERWIRE_PCI_DEVICE_SIZE 56u
+#define ERWIRE_U16_BYTES 2u
+#define ERWIRE_U32_BYTES 4u
+#define ERWIRE_PCI_BAR_COUNT 6u
 
 static UINT32 g_stream_id = 1u;
 static UINT32 g_seq;
@@ -37,6 +40,16 @@ static void erwire_put_u32(UINT8* dst, UINT32 value) {
   dst[1] = (UINT8)((value >> 8) & 0xffu);
   dst[2] = (UINT8)((value >> 16) & 0xffu);
   dst[3] = (UINT8)((value >> 24) & 0xffu);
+}
+
+static void erwire_write_u16(UINT8** cursor, UINT16 value) {
+  erwire_put_u16(*cursor, value);
+  *cursor += ERWIRE_U16_BYTES;
+}
+
+static void erwire_write_u32(UINT8** cursor, UINT32 value) {
+  erwire_put_u32(*cursor, value);
+  *cursor += ERWIRE_U32_BYTES;
 }
 
 static UINT32 erwire_crc32(const UINT8* data, UINT32 len) {
@@ -76,6 +89,7 @@ void erwire_init(UINT32 stream_id) {
 }
 
 void erwire_send(UINT16 kind, UINT16 flags, const UINT8* payload, UINT32 payload_len) {
+  UINT8* packet_cursor = g_packet;
   UINT32 send_len;
   ErRelayForwardIntent intent;
 
@@ -83,16 +97,16 @@ void erwire_send(UINT16 kind, UINT16 flags, const UINT8* payload, UINT32 payload
     return;
   }
 
-  erwire_put_u32(&g_packet[0], ERWIRE_MAGIC);
-  erwire_put_u16(&g_packet[4], ERWIRE_VERSION);
-  erwire_put_u16(&g_packet[6], ERWIRE_HEADER_SIZE);
-  erwire_put_u32(&g_packet[8], g_stream_id);
-  erwire_put_u32(&g_packet[12], g_seq);
-  erwire_put_u16(&g_packet[16], kind);
-  erwire_put_u16(&g_packet[18], flags);
-  erwire_put_u32(&g_packet[20], payload_len);
-  erwire_put_u32(&g_packet[24], erwire_crc32(payload, payload_len));
-  erwire_put_u32(&g_packet[28], 0u);
+  erwire_write_u32(&packet_cursor, ERWIRE_MAGIC);
+  erwire_write_u16(&packet_cursor, ERWIRE_VERSION);
+  erwire_write_u16(&packet_cursor, ERWIRE_HEADER_SIZE);
+  erwire_write_u32(&packet_cursor, g_stream_id);
+  erwire_write_u32(&packet_cursor, g_seq);
+  erwire_write_u16(&packet_cursor, kind);
+  erwire_write_u16(&packet_cursor, flags);
+  erwire_write_u32(&packet_cursor, payload_len);
+  erwire_write_u32(&packet_cursor, erwire_crc32(payload, payload_len));
+  erwire_write_u32(&packet_cursor, 0u);
 
   if (payload_len > 0u) {
     er_mem_copy(&g_packet[ERWIRE_HEADER_SIZE], payload, (UINTN)payload_len);
@@ -131,6 +145,7 @@ void erwire_send_text(const char* s) {
 
 void erwire_send_blob_chunk(UINT32 object_id, UINT32 offset, UINT32 total_size, const UINT8* data, UINT32 len, UINT8 is_last) {
   UINT8 payload[ERWIRE_MAX_PAYLOAD];
+  UINT8* payload_cursor = payload;
   UINT16 flags = ERWIRE_FLAG_FIRST;
 
   if (len > (ERWIRE_MAX_PAYLOAD - ERWIRE_BLOB_CHUNK_HEADER_SIZE) || (len > 0u && data == 0)) {
@@ -143,10 +158,10 @@ void erwire_send_blob_chunk(UINT32 object_id, UINT32 offset, UINT32 total_size, 
     flags |= ERWIRE_FLAG_LAST;
   }
 
-  erwire_put_u32(&payload[0], object_id);
-  erwire_put_u32(&payload[4], offset);
-  erwire_put_u32(&payload[8], total_size);
-  erwire_put_u32(&payload[12], len);
+  erwire_write_u32(&payload_cursor, object_id);
+  erwire_write_u32(&payload_cursor, offset);
+  erwire_write_u32(&payload_cursor, total_size);
+  erwire_write_u32(&payload_cursor, len);
   er_mem_copy(&payload[ERWIRE_BLOB_CHUNK_HEADER_SIZE], data, (UINTN)len);
   erwire_send(ERWIRE_KIND_BLOB_CHUNK, flags, payload, ERWIRE_BLOB_CHUNK_HEADER_SIZE + len);
 }
@@ -155,23 +170,24 @@ void erwire_send_pci_device(UINT32 bus, UINT32 dev, UINT32 func, UINT32 target_k
                             UINT32 command_status, UINT32 class_revision, UINT32 header_cacheline,
                             const UINT32* bars) {
   UINT8 payload[ERWIRE_PCI_DEVICE_SIZE];
+  UINT8* payload_cursor = payload;
   UINT32 i;
 
-  erwire_put_u32(&payload[0], bus);
-  erwire_put_u32(&payload[4], dev);
-  erwire_put_u32(&payload[8], func);
-  erwire_put_u32(&payload[12], target_kind);
-  erwire_put_u32(&payload[16], id);
-  erwire_put_u32(&payload[20], command_status);
-  erwire_put_u32(&payload[24], class_revision);
-  erwire_put_u32(&payload[28], header_cacheline);
-  for (i = 0; i < 6u; ++i) {
+  erwire_write_u32(&payload_cursor, bus);
+  erwire_write_u32(&payload_cursor, dev);
+  erwire_write_u32(&payload_cursor, func);
+  erwire_write_u32(&payload_cursor, target_kind);
+  erwire_write_u32(&payload_cursor, id);
+  erwire_write_u32(&payload_cursor, command_status);
+  erwire_write_u32(&payload_cursor, class_revision);
+  erwire_write_u32(&payload_cursor, header_cacheline);
+  for (i = 0; i < ERWIRE_PCI_BAR_COUNT; ++i) {
     UINT32 value = 0;
 
     if (bars != 0) {
       value = bars[i];
     }
-    erwire_put_u32(&payload[32u + (i * 4u)], value);
+    erwire_write_u32(&payload_cursor, value);
   }
   erwire_send(ERWIRE_KIND_PCI_DEVICE, ERWIRE_FLAG_FIRST | ERWIRE_FLAG_LAST, payload, ERWIRE_PCI_DEVICE_SIZE);
 }

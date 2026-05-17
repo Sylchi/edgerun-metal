@@ -200,11 +200,11 @@ static int er_reader_read_i64_leb(ErReader* r, INT64* out) {
   return 0;
 }
 
-static int er_skip_u32_leb(const UINT8* data, UINT32 size, UINT32* ofs) {
+static int er_skip_leb_bytes(const UINT8* data, UINT32 size, UINT32* ofs, UINT32 max_bytes) {
   UINT8 byte = 0;
   UINT32 count = 0;
 
-  if (data == 0 || ofs == 0) {
+  if (data == 0 || ofs == 0 || max_bytes == 0u) {
     return -1;
   }
 
@@ -215,7 +215,7 @@ static int er_skip_u32_leb(const UINT8* data, UINT32 size, UINT32* ofs) {
       return 0;
     }
 
-    if (++count >= 5) {
+    if (++count >= max_bytes) {
       return -1;
     }
   }
@@ -223,27 +223,12 @@ static int er_skip_u32_leb(const UINT8* data, UINT32 size, UINT32* ofs) {
   return -1;
 }
 
+static int er_skip_u32_leb(const UINT8* data, UINT32 size, UINT32* ofs) {
+  return er_skip_leb_bytes(data, size, ofs, 5u);
+}
+
 static int er_skip_i64_leb(const UINT8* data, UINT32 size, UINT32* ofs) {
-  UINT8 byte = 0;
-  UINT32 count = 0;
-
-  if (data == 0 || ofs == 0) {
-    return -1;
-  }
-
-  while (*ofs < size) {
-    byte = data[*ofs];
-    ++(*ofs);
-    if (!(byte & 0x80)) {
-      return 0;
-    }
-
-    if (++count >= 10) {
-      return -1;
-    }
-  }
-
-  return -1;
+  return er_skip_leb_bytes(data, size, ofs, 10u);
 }
 
 static int er_reader_skip(ErReader* r, UINT32 count) {

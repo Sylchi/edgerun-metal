@@ -1,4 +1,4 @@
-.PHONY: all check clean repo-check repo-test erwire-decode erwire-test crypto-configure crypto-build crypto-test edgerun-smoke edgerun-pci edgerun-quiet edgerun-ui edgerun-check varfont-configure varfont-build varfont-test ui-core-configure ui-core-build ui-core-test
+.PHONY: all check clean repo-check repo-test repo-inspect erwire-decode erwire-test crypto-configure crypto-build crypto-test edgerun-smoke edgerun-pci edgerun-quiet edgerun-ui edgerun-check varfont-configure varfont-build varfont-test ui-core-configure ui-core-build ui-core-test
 
 ifeq ($(origin CC),default)
 CC := clang
@@ -33,9 +33,14 @@ check: repo-check repo-test crypto-test edgerun-check varfont-test ui-core-test
 repo-check:
 	./tools/repo-check.sh
 
-repo-test:
+repo-test: repo-inspect
 	./tests/repo-check-tests.sh
+	./tests/repo-inspect-tests.sh
 	$(MAKE) erwire-test
+
+repo-inspect:
+	mkdir -p .build
+	$(CCACHE_PREFIX) $(HOST_CC) -std=c11 -Wall -Wextra -Werror -O2 $(HOST_LDFLAGS) -o .build/repo-inspect tools/repo-inspect.c
 
 erwire-decode:
 	mkdir -p .build
