@@ -1728,6 +1728,101 @@ static void test_erwire_native_eth_sink(void) {
   check_uint64("erwire eth text1", tx_frame[ERWIRE_ETH_TEST_TEXT_OFFSET + 1u], 'k');
 }
 
+static void test_erwire_parse_and_native_poll(void) {
+  enum {
+    ERWIRE_RX_TEST_MMIO_DWORDS = 128u,
+    ERWIRE_RX_TEST_VIRTIO_HDR_LEN = 12u,
+    ERWIRE_RX_TEST_TX_DESC = 0u,
+    ERWIRE_RX_TEST_RX_DESC = 3u,
+    ERWIRE_RX_TEST_STREAM_ID = 11u,
+    ERWIRE_RX_TEST_PAYLOAD_LEN = 2u,
+    ERWIRE_RX_TEST_PAYLOAD_OFFSET = ERWIRE_RX_TEST_VIRTIO_HDR_LEN + ER_NET_ETH_HEADER_LEN,
+    ERWIRE_RX_TEST_PACKET_LEN = ERWIRE_HEADER_SIZE + ERWIRE_RX_TEST_PAYLOAD_LEN
+  };
+  UINT32 regs[ERWIRE_RX_TEST_MMIO_DWORDS] = {0};
+  ErVirtioNet net;
+  ErNativeEth native_eth;
+  ErwirePacketHeader header;
+  ErVirtioQueueUsed* rx_used;
+  UINT8* rx_buffer;
+  UINT8* tx_frame;
+  UINT8 payload[ERWIRE_MAX_PAYLOAD] = {0};
+  UINT8 short_payload[1] = {0};
+  UINT8 bad_packet[ERWIRE_RX_TEST_PACKET_LEN] = {0};
+  UINT8 peer_mac[ER_NET_MAC_LEN] = {0x02u, 0x31u, 0x32u, 0x33u, 0x34u, 0x35u};
+  UINT32 frame_len = 0u;
+  UINT32 payload_len = 0u;
+
+  er_mmio_reset();
+  regs[ER_VIRTIO_MMIO_MAGIC_VALUE_OFFSET / sizeof(UINT32)] = ER_VIRTIO_MMIO_MAGIC;
+  regs[ER_VIRTIO_MMIO_VERSION_OFFSET / sizeof(UINT32)] = ER_VIRTIO_MMIO_VERSION_MODERN;
+  regs[ER_VIRTIO_MMIO_DEVICE_ID_OFFSET / sizeof(UINT32)] = ER_VIRTIO_DEVICE_TYPE_NET;
+  regs[ER_VIRTIO_MMIO_VENDOR_OFFSET / sizeof(UINT32)] = ER_VIRTIO_MMIO_VENDOR_ANY;
+  regs[ER_VIRTIO_MMIO_DEVICE_FEATURES_OFFSET / sizeof(UINT32)] = 1u;
+  regs[ER_VIRTIO_MMIO_QUEUE_NUM_MAX_OFFSET / sizeof(UINT32)] = ER_VIRTIO_QUEUE_SIZE;
+
+  check_int64("erwire rx virtio init",
+              er_virtio_net_init_mmio((UINT64)(UINTN)regs, (UINT64)sizeof(regs), &net),
+              1);
+  net.mac[0] = 0x02u;
+  net.mac[ER_NET_MAC_LEN - 1u] = 0x02u;
+  check_int64("erwire rx native init", er_native_eth_init(&native_eth, &net, peer_mac), 1);
+  erwire_init(ERWIRE_RX_TEST_STREAM_ID);
+  check_int64("erwire rx set sink", erwire_set_native_eth_sink(&native_eth), 1);
+  erwire_send_text("rx");
+
+  tx_frame = er_virtio_net_test_tx_buffer(ERWIRE_RX_TEST_TX_DESC);
+  check_int64("erwire parse packet",
+              erwire_parse_packet(tx_frame + ERWIRE_RX_TEST_PAYLOAD_OFFSET,
+                                  ERWIRE_RX_TEST_PACKET_LEN, &header,
+                                  payload, (UINT32)sizeof(payload),
+                                  &payload_len),
+              1);
+  check_uint64("erwire parse stream", header.StreamId, ERWIRE_RX_TEST_STREAM_ID);
+  check_uint64("erwire parse seq", header.Seq, 0u);
+  check_uint64("erwire parse kind", header.Kind, ERWIRE_KIND_LOG_TEXT);
+  check_uint64("erwire parse flags", header.Flags, ERWIRE_FLAG_FIRST | ERWIRE_FLAG_LAST);
+  check_uint64("erwire parse len", payload_len, ERWIRE_RX_TEST_PAYLOAD_LEN);
+  check_uint64("erwire parse payload0", payload[0], 'r');
+  check_uint64("erwire parse payload1", payload[1], 'x');
+  check_int64("erwire parse reject capacity",
+              erwire_parse_packet(tx_frame + ERWIRE_RX_TEST_PAYLOAD_OFFSET,
+                                  ERWIRE_RX_TEST_PACKET_LEN, &header,
+                                  short_payload, (UINT32)sizeof(short_payload),
+                                  &payload_len),
+              0);
+  er_mem_copy(bad_packet, tx_frame + ERWIRE_RX_TEST_PAYLOAD_OFFSET,
+              ERWIRE_RX_TEST_PACKET_LEN);
+  bad_packet[0] = 0u;
+  check_int64("erwire parse reject magic",
+              erwire_parse_packet(bad_packet, ERWIRE_RX_TEST_PACKET_LEN,
+                                  &header, payload, (UINT32)sizeof(payload),
+                                  &payload_len),
+              0);
+
+  rx_used = er_virtio_net_test_rx_used();
+  rx_buffer = er_virtio_net_test_rx_buffer(ERWIRE_RX_TEST_RX_DESC);
+  check_int64("erwire rx build frame",
+              er_net_build_eth_frame(peer_mac, net.mac, ER_NET_ETH_TYPE_EDGERUN,
+                                     tx_frame + ERWIRE_RX_TEST_PAYLOAD_OFFSET,
+                                     ERWIRE_RX_TEST_PACKET_LEN,
+                                     rx_buffer + ERWIRE_RX_TEST_VIRTIO_HDR_LEN,
+                                     ER_NET_FRAME_MAX, &frame_len),
+              1);
+  rx_used->ring[0].id = ERWIRE_RX_TEST_RX_DESC;
+  rx_used->ring[0].len = ERWIRE_RX_TEST_VIRTIO_HDR_LEN + frame_len;
+  rx_used->idx = 1u;
+  check_int64("erwire poll native eth",
+              erwire_poll_native_eth(&header, payload, (UINT32)sizeof(payload),
+                                     &payload_len),
+              1);
+  check_uint64("erwire poll stream", header.StreamId, ERWIRE_RX_TEST_STREAM_ID);
+  check_uint64("erwire poll payload len", payload_len, ERWIRE_RX_TEST_PAYLOAD_LEN);
+  check_uint64("erwire poll payload0", payload[0], 'r');
+  check_uint64("erwire poll payload1", payload[1], 'x');
+  erwire_clear_native_eth_sink();
+}
+
 static void test_native_boot_erwire_eth_sink(void) {
   enum {
     NATIVE_BOOT_TEST_MMIO_DWORDS = 128u,
@@ -2292,6 +2387,7 @@ int main(void) {
   test_boot_profiles();
   test_hw_relay_endpoints();
   test_erwire_native_eth_sink();
+  test_erwire_parse_and_native_poll();
   test_native_boot_erwire_eth_sink();
   test_netlog_disabled_path();
   test_gfx_console_disabled_path();

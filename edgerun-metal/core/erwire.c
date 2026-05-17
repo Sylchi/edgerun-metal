@@ -3,7 +3,7 @@
 #include "er_mem.h"
 
 /*
- * Purpose: serialize small binary records into UDP-sized EdgeRun wire packets.
+ * Purpose: serialize and parse small binary EdgeRun wire packets.
  * Intention: keep the firmware side allocation-free and endian-explicit.
  */
 
@@ -24,6 +24,16 @@
 #define ERWIRE_CRC32_INITIAL 0xffffffffu
 #define ERWIRE_CRC32_POLY 0xedb88320u
 #define ERWIRE_CRC32_BITS_PER_BYTE 8u
+#define ERWIRE_HEADER_MAGIC_OFFSET 0u
+#define ERWIRE_HEADER_VERSION_OFFSET 4u
+#define ERWIRE_HEADER_SIZE_OFFSET 6u
+#define ERWIRE_HEADER_STREAM_ID_OFFSET 8u
+#define ERWIRE_HEADER_SEQ_OFFSET 12u
+#define ERWIRE_HEADER_KIND_OFFSET 16u
+#define ERWIRE_HEADER_FLAGS_OFFSET 18u
+#define ERWIRE_HEADER_PAYLOAD_LEN_OFFSET 20u
+#define ERWIRE_HEADER_PAYLOAD_CRC_OFFSET 24u
+#define ERWIRE_HEADER_RESERVED_OFFSET 28u
 
 static UINT32 g_stream_id = 1u;
 static UINT32 g_seq;
@@ -42,6 +52,18 @@ static UINT32 erwire_len(const char* s) {
     ++n;
   }
   return n;
+}
+
+static UINT16 erwire_get_u16(const UINT8* src) {
+  return (UINT16)((UINT16)src[ERWIRE_BYTE0] |
+                  (UINT16)((UINT16)src[ERWIRE_BYTE1] << ERWIRE_U16_HIGH_SHIFT));
+}
+
+static UINT32 erwire_get_u32(const UINT8* src) {
+  return (UINT32)src[ERWIRE_BYTE0] |
+         ((UINT32)src[ERWIRE_BYTE1] << ERWIRE_U16_HIGH_SHIFT) |
+         ((UINT32)src[ERWIRE_BYTE2] << ERWIRE_U32_BYTE2_SHIFT) |
+         ((UINT32)src[ERWIRE_BYTE3] << ERWIRE_U32_BYTE3_SHIFT);
 }
 
 static void erwire_put_u16(UINT8* dst, UINT16 value) {
@@ -120,6 +142,67 @@ void erwire_clear_native_eth_sink(void) {
   g_native_eth = 0;
   g_use_native_eth = 0u;
   er_mem_zero((UINT8*)&g_native_eth_endpoint, (UINTN)sizeof(g_native_eth_endpoint));
+}
+
+UINT8 erwire_parse_packet(const UINT8* packet, UINT32 packet_len,
+                          ErwirePacketHeader* out_header,
+                          UINT8* out_payload, UINT32 out_capacity,
+                          UINT32* out_payload_len) {
+  ErwirePacketHeader header;
+  UINT32 expected_len;
+
+  if (packet == 0 || out_header == 0 || out_payload_len == 0 ||
+      packet_len < ERWIRE_HEADER_SIZE) {
+    return 0;
+  }
+  *out_payload_len = 0u;
+  header.Magic = erwire_get_u32(packet + ERWIRE_HEADER_MAGIC_OFFSET);
+  header.Version = erwire_get_u16(packet + ERWIRE_HEADER_VERSION_OFFSET);
+  header.HeaderSize = erwire_get_u16(packet + ERWIRE_HEADER_SIZE_OFFSET);
+  header.StreamId = erwire_get_u32(packet + ERWIRE_HEADER_STREAM_ID_OFFSET);
+  header.Seq = erwire_get_u32(packet + ERWIRE_HEADER_SEQ_OFFSET);
+  header.Kind = erwire_get_u16(packet + ERWIRE_HEADER_KIND_OFFSET);
+  header.Flags = erwire_get_u16(packet + ERWIRE_HEADER_FLAGS_OFFSET);
+  header.PayloadLen = erwire_get_u32(packet + ERWIRE_HEADER_PAYLOAD_LEN_OFFSET);
+  header.PayloadCrc = erwire_get_u32(packet + ERWIRE_HEADER_PAYLOAD_CRC_OFFSET);
+  header.Reserved = erwire_get_u32(packet + ERWIRE_HEADER_RESERVED_OFFSET);
+
+  expected_len = ERWIRE_HEADER_SIZE + header.PayloadLen;
+  if (header.Magic != ERWIRE_MAGIC || header.Version != ERWIRE_VERSION ||
+      header.HeaderSize != ERWIRE_HEADER_SIZE || header.PayloadLen > ERWIRE_MAX_PAYLOAD ||
+      header.Reserved != 0u || expected_len != packet_len ||
+      header.PayloadLen > out_capacity ||
+      erwire_crc32(packet + ERWIRE_HEADER_SIZE, header.PayloadLen) != header.PayloadCrc) {
+    return 0;
+  }
+  if (header.PayloadLen > 0u && out_payload == 0) {
+    return 0;
+  }
+  *out_header = header;
+  if (header.PayloadLen > 0u) {
+    er_mem_copy(out_payload, packet + ERWIRE_HEADER_SIZE, (UINTN)header.PayloadLen);
+  }
+  *out_payload_len = header.PayloadLen;
+  return 1;
+}
+
+UINT8 erwire_poll_native_eth(ErwirePacketHeader* out_header,
+                             UINT8* out_payload, UINT32 out_capacity,
+                             UINT32* out_payload_len) {
+  UINT8 packet[ERWIRE_PACKET_MAX];
+  UINT32 packet_len = 0u;
+
+  if (out_payload_len == 0) {
+    return 0;
+  }
+  *out_payload_len = 0u;
+  if (g_use_native_eth == 0u || g_native_eth == 0 ||
+      er_native_eth_recv(g_native_eth, packet, (UINT32)sizeof(packet),
+                         &packet_len) == 0u) {
+    return 0;
+  }
+  return erwire_parse_packet(packet, packet_len, out_header, out_payload,
+                             out_capacity, out_payload_len);
 }
 
 void erwire_send(UINT16 kind, UINT16 flags, const UINT8* payload, UINT32 payload_len) {
