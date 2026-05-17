@@ -99,8 +99,26 @@ static void test_shadcn_render_primitives(void) {
                 ER_UI_OK, "shadcn render: select emits");
   expect_status(er_ui_shadcn_slider_emit(&scene, face, er_ui_bounds(16.0f, 126.0f, 188.0f, 48.0f), theme, "Minimum payout", 0.42f, 3003u),
                 ER_UI_OK, "shadcn render: slider emits");
+  expect_status(er_ui_shadcn_badge_emit(&scene, face, er_ui_bounds(232.0f, 16.0f, 88.0f, 26.0f), theme, "Active",
+                                        ER_UI_SHADCN_BADGE_SECONDARY),
+                ER_UI_OK, "shadcn render: badge emits");
+  expect_status(er_ui_shadcn_field_emit(&scene, face, er_ui_bounds(232.0f, 48.0f, 160.0f, 58.0f), theme, "Name", "EdgeRun", 3004u, false),
+                ER_UI_OK, "shadcn render: field emits");
+  expect_status(er_ui_shadcn_field_emit(&scene, face, er_ui_bounds(232.0f, 110.0f, 160.0f, 86.0f), theme, "Notes", "Verified cache", 3005u, true),
+                ER_UI_OK, "shadcn render: textarea emits");
+  expect_status(er_ui_shadcn_checkbox_emit(&scene, face, er_ui_bounds(16.0f, 180.0f, 188.0f, 32.0f), theme, "Cache verified bytes", true, 3006u),
+                ER_UI_OK, "shadcn render: checkbox emits");
+  expect_status(er_ui_shadcn_progress_emit(&scene, er_ui_bounds(232.0f, 204.0f, 160.0f, 8.0f), theme, 0.64f), ER_UI_OK,
+                "shadcn render: progress emits");
+  expect_status(er_ui_shadcn_switch_emit(&scene, er_ui_bounds(16.0f, 220.0f, 44.0f, 24.0f), theme, true, 3007u), ER_UI_OK,
+                "shadcn render: switch emits");
+  expect_status(er_ui_shadcn_separator_emit(&scene, er_ui_bounds(72.0f, 231.0f, 132.0f, 1.0f), theme), ER_UI_OK,
+                "shadcn render: separator emits");
+  const char* const tabs[] = {"Preview", "Code", "A11y"};
+  expect_status(er_ui_shadcn_tabs_emit(&scene, face, er_ui_bounds(232.0f, 224.0f, 180.0f, 38.0f), theme, tabs, 3u, 1u, 3010u), ER_UI_OK,
+                "shadcn render: tabs emit");
   expect_true(scene.rect_count >= 8u, "shadcn render: primitives emit geometry");
-  expect_true(scene.hit_count >= 3u, "shadcn render: interactive primitives emit hits");
+  expect_true(scene.hit_count >= 10u, "shadcn render: interactive primitives emit hits");
   expect_true(scene.text_quad_count > 0u, "shadcn render: primitives use variable font text");
   expect_status(er_ui_shadcn_button_emit(&scene, NULL, er_ui_bounds(0.0f, 0.0f, 40.0f, 40.0f), theme, "Nope", 9u,
                                          ER_UI_SHADCN_BUTTON_DEFAULT, ER_UI_SHADCN_BUTTON_SIZE_DEFAULT, true),
