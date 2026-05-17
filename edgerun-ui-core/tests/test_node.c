@@ -115,6 +115,7 @@ void run_node_tests(void) {
   expect_string(er_ui_node_kind_label(ER_UI_NODE_ALERT_DIALOG), "alert-dialog", "node: kind label maps alert dialog");
   expect_string(er_ui_node_kind_label(ER_UI_NODE_DIRECTION), "direction", "node: kind label maps direction");
   expect_string(er_ui_node_kind_label(ER_UI_NODE_DRAWER), "drawer", "node: kind label maps drawer");
+  expect_string(er_ui_node_kind_label(ER_UI_NODE_DROPDOWN_MENU), "dropdown-menu", "node: kind label maps dropdown menu");
   expect_string(er_ui_icon_label(ER_UI_ICON_SEARCH), "search", "node: icon label maps canonical icon");
   expect_u32(er_ui_icon_atlas_id(ER_UI_ICON_SEARCH), (uint32_t)ER_UI_ICON_SEARCH + 1u, "node: icon atlas id is stable");
   expect_string(er_ui_icon_provider_name(ER_UI_ICON_APP, ER_UI_ICON_PROVIDER_LUCIDE), "app-window", "node: lucide provider name maps app icon");
@@ -360,6 +361,16 @@ void run_node_tests(void) {
   expect_size(a11y.role, ER_UI_A11Y_BUTTON, "node: drawer button role");
   expect_true(a11y.has_id && a11y.id == 8060u, "node: drawer button id");
 
+  const char* const dropdown_labels[] = {"Profile", "Billing", "Logout"};
+  const char* const dropdown_shortcuts[] = {"P", "B", ""};
+  er_ui_node_t dropdown_a11y = er_ui_node_dropdown_menu(dropdown_labels, dropdown_shortcuts, 3u, 1u, 8061u);
+  expect_status(er_ui_node_accessibility(&dropdown_a11y, &a11y), ER_UI_OK, "node: dropdown menu accessibility maps");
+  expect_size(a11y.role, ER_UI_A11Y_NAVIGATION, "node: dropdown menu accessibility role");
+  expect_status(er_ui_node_accessibility_child(&dropdown_a11y, 1u, &a11y), ER_UI_OK, "node: dropdown menu item accessibility maps");
+  expect_size(a11y.role, ER_UI_A11Y_MENU_ITEM, "node: dropdown menu item role");
+  expect_true(a11y.has_id && a11y.id == 8062u, "node: dropdown menu item id");
+  expect_true((a11y.states & ER_UI_A11Y_STATE_SELECTED) != 0u, "node: dropdown menu selected state");
+
   er_ui_node_t checked = er_ui_node_checkbox("Remember", true, 8002u);
   expect_status(er_ui_node_accessibility(&checked, &a11y), ER_UI_OK, "node: checkbox accessibility maps");
   expect_size(a11y.role, ER_UI_A11Y_CHECKBOX, "node: checkbox accessibility role");
@@ -518,6 +529,9 @@ void run_node_tests(void) {
     er_ui_node_t alert_dialog = er_ui_node_alert_dialog("Are you absolutely sure?", "This action cannot be undone.", ER_UI_ICON_WARNING);
     er_ui_node_t direction = er_ui_node_direction("Left to right", "Right to left");
     er_ui_node_t drawer = er_ui_node_drawer("Drawer", "Adjust display density.", "Density", 0.42f, 8860u);
+    const char* const render_dropdown_labels[] = {"Profile", "Billing", "Logout"};
+    const char* const render_dropdown_shortcuts[] = {"P", "B", ""};
+    er_ui_node_t dropdown_menu = er_ui_node_dropdown_menu(render_dropdown_labels, render_dropdown_shortcuts, 3u, 1u, 8862u);
 
     expect_status(er_ui_node_render(&alert, &scene, face, er_ui_bounds(0.0f, 170.0f, 360.0f, 76.0f), theme), ER_UI_OK, "node: alert renders");
     expect_status(er_ui_node_render(&avatar, &scene, face, er_ui_bounds(0.0f, 254.0f, 42.0f, 42.0f), theme), ER_UI_OK, "node: avatar renders");
@@ -676,6 +690,10 @@ void run_node_tests(void) {
     expect_status(er_ui_node_render(&drawer, &scene, face, er_ui_bounds(0.0f, 5256.0f, 320.0f, 184.0f), theme), ER_UI_OK,
                   "node: drawer renders");
     expect_size(scene.hit_count, hits_before_drawer + 2u, "node: drawer emits slider and button hits");
+    size_t hits_before_dropdown = scene.hit_count;
+    expect_status(er_ui_node_render(&dropdown_menu, &scene, face, er_ui_bounds(0.0f, 5452.0f, 260.0f, 144.0f), theme), ER_UI_OK,
+                  "node: dropdown menu renders");
+    expect_size(scene.hit_count, hits_before_dropdown + 3u, "node: dropdown menu emits item hits");
     size_t drag_sources_before = scene.drag_source_count;
     size_t drop_targets_before = scene.drop_target_count;
     expect_status(er_ui_node_render(&reorderable, &scene, face, er_ui_bounds(0.0f, 2930.0f, 260.0f, 52.0f), theme), ER_UI_OK,
