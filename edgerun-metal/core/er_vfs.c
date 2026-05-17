@@ -14,29 +14,49 @@ static const UINT8 g_transform_domain[] = "edgerun:c:v1:vfs:object-transform";
 
 enum {
   ER_VFS_U16_FIELD_BYTES = 2u,
+  ER_VFS_U32_FIELD_BYTES = 4u,
   ER_VFS_U64_FIELD_BYTES = 8u,
+  ER_VFS_U16_HIGH_SHIFT = 8u,
+  ER_VFS_U32_HIGH24_SHIFT = 24u,
+  ER_VFS_U32_HIGH16_SHIFT = 16u,
+  ER_VFS_U64_HIGH32_SHIFT = 32u,
+  ER_VFS_BE_BYTE0 = 0u,
+  ER_VFS_BE_BYTE1 = 1u,
+  ER_VFS_BE_BYTE2 = 2u,
+  ER_VFS_BE_BYTE3 = 3u,
+  ER_VFS_U8_MASK = 0xffu,
+  ER_VFS_U32_MASK = 0xffffffffu,
+  ER_VFS_LABEL_REF_SPAN_COUNT = 3u,
+  ER_VFS_TRANSFORM_REF_SPAN_COUNT = 3u,
   ER_VFS_TRANSFORM_U16_FIELD_COUNT = 2u,
   ER_VFS_TRANSFORM_U64_FIELD_COUNT = 2u,
   ER_VFS_TRANSFORM_FIELD_BYTES =
       (ER_VFS_U16_FIELD_BYTES * ER_VFS_TRANSFORM_U16_FIELD_COUNT) +
-      (ER_VFS_U64_FIELD_BYTES * ER_VFS_TRANSFORM_U64_FIELD_COUNT)
+      (ER_VFS_U64_FIELD_BYTES * ER_VFS_TRANSFORM_U64_FIELD_COUNT),
+  ER_VFS_PACKET_ABI_OFFSET = 0u,
+  ER_VFS_PACKET_INDEX_OFFSET = ER_VFS_PACKET_ABI_OFFSET + ER_VFS_U16_FIELD_BYTES,
+  ER_VFS_PACKET_COUNT_OFFSET = ER_VFS_PACKET_INDEX_OFFSET + ER_VFS_U32_FIELD_BYTES,
+  ER_VFS_PACKET_OBJECT_OFFSET_OFFSET = ER_VFS_PACKET_COUNT_OFFSET + ER_VFS_U32_FIELD_BYTES,
+  ER_VFS_PACKET_OBJECT_ID_OFFSET = ER_VFS_PACKET_OBJECT_OFFSET_OFFSET + ER_VFS_U64_FIELD_BYTES,
+  ER_VFS_PACKET_PAYLOAD_HASH_OFFSET = ER_VFS_PACKET_OBJECT_ID_OFFSET + ER_HASH_LEN,
+  ER_VFS_PACKET_PREIMAGE_BYTES = ER_VFS_PACKET_PAYLOAD_HASH_OFFSET + ER_HASH_LEN
 };
 
 static void er_vfs_put_be16(UINT8* dst, UINT16 value) {
-  dst[0] = (UINT8)((value >> 8) & 0xffu);
-  dst[1] = (UINT8)(value & 0xffu);
+  dst[ER_VFS_BE_BYTE0] = (UINT8)((value >> ER_VFS_U16_HIGH_SHIFT) & ER_VFS_U8_MASK);
+  dst[ER_VFS_BE_BYTE1] = (UINT8)(value & ER_VFS_U8_MASK);
 }
 
 static void er_vfs_put_be32(UINT8* dst, UINT32 value) {
-  dst[0] = (UINT8)((value >> 24) & 0xffu);
-  dst[1] = (UINT8)((value >> 16) & 0xffu);
-  dst[2] = (UINT8)((value >> 8) & 0xffu);
-  dst[3] = (UINT8)(value & 0xffu);
+  dst[ER_VFS_BE_BYTE0] = (UINT8)((value >> ER_VFS_U32_HIGH24_SHIFT) & ER_VFS_U8_MASK);
+  dst[ER_VFS_BE_BYTE1] = (UINT8)((value >> ER_VFS_U32_HIGH16_SHIFT) & ER_VFS_U8_MASK);
+  dst[ER_VFS_BE_BYTE2] = (UINT8)((value >> ER_VFS_U16_HIGH_SHIFT) & ER_VFS_U8_MASK);
+  dst[ER_VFS_BE_BYTE3] = (UINT8)(value & ER_VFS_U8_MASK);
 }
 
 static void er_vfs_put_be64(UINT8* dst, UINT64 value) {
-  er_vfs_put_be32(dst, (UINT32)(value >> 32));
-  er_vfs_put_be32(dst + 4, (UINT32)(value & 0xffffffffu));
+  er_vfs_put_be32(dst, (UINT32)(value >> ER_VFS_U64_HIGH32_SHIFT));
+  er_vfs_put_be32(dst + ER_VFS_U32_FIELD_BYTES, (UINT32)(value & ER_VFS_U32_MASK));
 }
 
 static void er_vfs_put_transform_field16(UINT8** cursor, UINT16 value) {
@@ -104,7 +124,7 @@ UINT8 er_vfs_prepare_object_packet(const ErCryptoProvider* crypto, const UINT8* 
                                    ErVfsObjectPacket* out_packet) {
   UINTN remaining;
   UINTN chunk_len;
-  UINT8 packet_preimage[2u + 4u + 4u + 8u + ER_HASH_LEN + ER_HASH_LEN];
+  UINT8 packet_preimage[ER_VFS_PACKET_PREIMAGE_BYTES];
   ErByteSpan payload_span;
   ErByteSpan packet_spans[1];
 
@@ -146,12 +166,12 @@ UINT8 er_vfs_prepare_object_packet(const ErCryptoProvider* crypto, const UINT8* 
     return 0;
   }
 
-  er_vfs_put_be16(&packet_preimage[0], out_packet->header.abi_version);
-  er_vfs_put_be32(&packet_preimage[2], packet_index);
-  er_vfs_put_be32(&packet_preimage[6], packet_count);
-  er_vfs_put_be64(&packet_preimage[10], out_packet->header.offset);
-  er_mem_copy(&packet_preimage[18], out_packet->header.object_id.bytes, ER_HASH_LEN);
-  er_mem_copy(&packet_preimage[18u + ER_HASH_LEN], out_packet->header.payload_hash.bytes, ER_HASH_LEN);
+  er_vfs_put_be16(&packet_preimage[ER_VFS_PACKET_ABI_OFFSET], out_packet->header.abi_version);
+  er_vfs_put_be32(&packet_preimage[ER_VFS_PACKET_INDEX_OFFSET], packet_index);
+  er_vfs_put_be32(&packet_preimage[ER_VFS_PACKET_COUNT_OFFSET], packet_count);
+  er_vfs_put_be64(&packet_preimage[ER_VFS_PACKET_OBJECT_OFFSET_OFFSET], out_packet->header.offset);
+  er_mem_copy(&packet_preimage[ER_VFS_PACKET_OBJECT_ID_OFFSET], out_packet->header.object_id.bytes, ER_HASH_LEN);
+  er_mem_copy(&packet_preimage[ER_VFS_PACKET_PAYLOAD_HASH_OFFSET], out_packet->header.payload_hash.bytes, ER_HASH_LEN);
   packet_spans[0].bytes = packet_preimage;
   packet_spans[0].len = (UINTN)sizeof(packet_preimage);
   return er_crypto_hash(crypto, g_packet_domain, (UINTN)(sizeof(g_packet_domain) - 1u),
@@ -174,7 +194,7 @@ UINT8 er_vfs_prepare_object_label_ref_from_object(const ErCryptoProvider* crypto
                                                   UINTN label_len, const ErHash* object_id,
                                                   UINT64 object_len, ErVfsObjectLabelRef* out_ref) {
   UINT8 len_be[8];
-  ErByteSpan spans[3];
+  ErByteSpan spans[ER_VFS_LABEL_REF_SPAN_COUNT];
 
   if (out_ref == 0 || crypto == 0 || object_id == 0 || er_vfs_label_valid(label, label_len) == 0u) {
     return 0;
@@ -194,7 +214,7 @@ UINT8 er_vfs_prepare_object_label_ref_from_object(const ErCryptoProvider* crypto
   spans[2].bytes = len_be;
   spans[2].len = (UINTN)sizeof(len_be);
   return er_crypto_hash(crypto, g_label_ref_domain, (UINTN)(sizeof(g_label_ref_domain) - 1u),
-                        spans, 3u, &out_ref->label_hash);
+                        spans, ER_VFS_LABEL_REF_SPAN_COUNT, &out_ref->label_hash);
 }
 
 UINT8 er_vfs_prepare_transform_ref(const ErCryptoProvider* crypto, const ErHash* plaintext_object_id,
@@ -203,7 +223,7 @@ UINT8 er_vfs_prepare_transform_ref(const ErCryptoProvider* crypto, const ErHash*
                                    ErVfsObjectTransformRef* out_ref) {
   UINT8 fields[ER_VFS_TRANSFORM_FIELD_BYTES];
   UINT8* field_cursor = fields;
-  ErByteSpan spans[3];
+  ErByteSpan spans[ER_VFS_TRANSFORM_REF_SPAN_COUNT];
 
   if (out_ref == 0 || crypto == 0 || plaintext_object_id == 0 || transport_object_id == 0) {
     return 0;
@@ -232,5 +252,5 @@ UINT8 er_vfs_prepare_transform_ref(const ErCryptoProvider* crypto, const ErHash*
   spans[2].bytes = fields;
   spans[2].len = (UINTN)sizeof(fields);
   return er_crypto_hash(crypto, g_transform_domain, (UINTN)(sizeof(g_transform_domain) - 1u),
-                        spans, 3u, &out_ref->transform_hash);
+                        spans, ER_VFS_TRANSFORM_REF_SPAN_COUNT, &out_ref->transform_hash);
 }
