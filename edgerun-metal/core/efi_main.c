@@ -5,7 +5,8 @@
 #include "er_acpi.h"
 #include "er_gfx_console.h"
 #include "er_ui_gop_renderer.h"
-#include "er_ui_node.h"
+#include "er_ui_components.h"
+#include "er_ui_metal.h"
 #include "er_ui_theme.h"
 #include "erwire.h"
 #include "font_geist.h"
@@ -768,42 +769,8 @@ static er_ui_status_t er_build_ui_boot_scene(er_ui_scene_t* scene, vr_font_face_
   er_ui_resolved_theme_t theme = er_ui_resolved_theme(
     ER_UI_STYLE_AUTHORITY_USER,
     (er_ui_style_preset_t){ER_UI_COLOR_SCHEME_DARK, ER_UI_ACCENT_NEUTRAL, ER_UI_RADIUS_DEFAULT});
+  er_ui_shadcn_demo_gallery_state_t gallery_state = {0};
   er_ui_status_t status;
-  const char* const tabs[] = {"Boot", "Hardware", "Relay", "Apps"};
-  const char* const route_hops[] = {"executor", "bus", "wasm-driver", "device"};
-  const char* const table_headers[] = {"Area", "State", "Next"};
-  const char* const table_cells[] = {
-    "GOP", "ready", "input",
-    "ACPI", "scanned", "AML",
-    "WASM", "hostcalls", "NIC",
-    "Relay", "packets", "routing"
-  };
-  const char* const chart_labels[] = {"mem", "bus", "gfx", "vm"};
-  const float chart_values[] = {0.28f, 0.46f, 0.82f, 0.58f};
-
-  er_ui_node_t root = er_ui_node_column();
-  er_ui_node_t header = er_ui_node_panel_header("EdgeRun Metal", "bare-metal relay executor", "READY", 9000u);
-  er_ui_node_t tabs_node = er_ui_node_tabs(tabs, 4u, 0u, 9010u);
-  er_ui_node_t metric_grid = er_ui_node_grid(3u);
-  er_ui_node_t display = er_ui_node_metric_card("Display", "GOP", "framebuffer renderer online", true, 0.82f, theme.colors.accent);
-  er_ui_node_t hardware = er_ui_node_metric_card("Hardware", "ACPI", "tables scanned / PCI packets", true, 0.64f, theme.colors.success);
-  er_ui_node_t executor = er_ui_node_metric_card("Executor", "WASM", "host calls wired", true, 0.58f, theme.colors.info);
-  er_ui_node_t main_row = er_ui_node_row();
-  er_ui_node_t nav = er_ui_node_column();
-  er_ui_node_t nav0 = er_ui_node_menu_item("Boot path", "firmware to runtime", "active", true, theme.colors.accent, 9020u);
-  er_ui_node_t nav1 = er_ui_node_menu_item("Hardware", "addressed buses", "scan", false, theme.colors.success, 9021u);
-  er_ui_node_t nav2 = er_ui_node_menu_item("Relay", "move packets only", "core", false, theme.colors.info, 9022u);
-  er_ui_node_t nav3 = er_ui_node_menu_item("Apps", "wasm objects", "next", false, theme.colors.warning, 9023u);
-  er_ui_node_t center = er_ui_node_column();
-  er_ui_node_t route = er_ui_node_route_path("Packet route", route_hops, 4u);
-  er_ui_node_t table = er_ui_node_table(table_headers, 3u, table_cells, 4u, 9030u);
-  er_ui_node_t command = er_ui_node_command_palette("Search bus, app, capability...", 9040u);
-  er_ui_node_t right = er_ui_node_column();
-  er_ui_node_t grant0 = er_ui_node_capability_grant_row("display", "gop.framebuffer", "granted", 9050u);
-  er_ui_node_t grant1 = er_ui_node_capability_grant_row("driver-pci", "bus.pci.config", "limited", 9051u);
-  er_ui_node_t proof = er_ui_node_proof_event_row("boot scene", "baked from ui-core nodes", "verified", 9052u);
-  er_ui_node_t chart = er_ui_node_bar_chart("Runtime budget", chart_labels, chart_values, 4u, 9060u, 2u);
-  er_ui_node_t footer = er_ui_node_toast("UI emitted by edgerun-ui-core nodes/components; GOP only draws the scene.", theme.colors.accent);
 
   if (scene == 0 || font == 0) {
     return ER_UI_ERR_INVALID_ARGUMENT;
@@ -811,76 +778,8 @@ static er_ui_status_t er_build_ui_boot_scene(er_ui_scene_t* scene, vr_font_face_
 
   status = er_ui_scene_init_with_allocator(scene, theme.colors.bg, er_ui_boot_allocator());
   if (status != ER_UI_OK) return status;
-
-  er_ui_node_set_gap(&root, 22.0f);
-  er_ui_node_set_padding(&root, 0.0f);
-
-  er_ui_node_set_bounds(&header, er_ui_bounds(120.0f, 80.0f, 3600.0f, 120.0f));
-  er_ui_node_set_bounds(&tabs_node, er_ui_bounds(120.0f, 228.0f, 660.0f, 48.0f));
-  er_ui_node_set_bounds(&metric_grid, er_ui_bounds(120.0f, 320.0f, 3600.0f, 310.0f));
-  er_ui_node_set_gap(&metric_grid, 20.0f);
-  er_ui_node_set_bounds(&main_row, er_ui_bounds(120.0f, 680.0f, 3600.0f, 1020.0f));
-  er_ui_node_set_gap(&main_row, 22.0f);
-  er_ui_node_set_bounds(&footer, er_ui_bounds(120.0f, 1760.0f, 3600.0f, 110.0f));
-
-  er_ui_node_set_bounds(&nav, er_ui_bounds(120.0f, 680.0f, 760.0f, 1020.0f));
-  er_ui_node_set_gap(&nav, 14.0f);
-  er_ui_node_set_bounds(&center, er_ui_bounds(920.0f, 680.0f, 1720.0f, 1020.0f));
-  er_ui_node_set_gap(&center, 18.0f);
-  er_ui_node_set_bounds(&right, er_ui_bounds(2680.0f, 680.0f, 1040.0f, 1020.0f));
-  er_ui_node_set_gap(&right, 18.0f);
-
-  status = er_ui_node_add_child(&metric_grid, &display);
-  if (status != ER_UI_OK) return status;
-  status = er_ui_node_add_child(&metric_grid, &hardware);
-  if (status != ER_UI_OK) return status;
-  status = er_ui_node_add_child(&metric_grid, &executor);
-  if (status != ER_UI_OK) return status;
-
-  status = er_ui_node_add_child(&nav, &nav0);
-  if (status != ER_UI_OK) return status;
-  status = er_ui_node_add_child(&nav, &nav1);
-  if (status != ER_UI_OK) return status;
-  status = er_ui_node_add_child(&nav, &nav2);
-  if (status != ER_UI_OK) return status;
-  status = er_ui_node_add_child(&nav, &nav3);
-  if (status != ER_UI_OK) return status;
-
-  status = er_ui_node_add_child(&center, &route);
-  if (status != ER_UI_OK) return status;
-  status = er_ui_node_add_child(&center, &table);
-  if (status != ER_UI_OK) return status;
-  status = er_ui_node_add_child(&center, &command);
-  if (status != ER_UI_OK) return status;
-
-  status = er_ui_node_add_child(&right, &grant0);
-  if (status != ER_UI_OK) return status;
-  status = er_ui_node_add_child(&right, &grant1);
-  if (status != ER_UI_OK) return status;
-  status = er_ui_node_add_child(&right, &proof);
-  if (status != ER_UI_OK) return status;
-  status = er_ui_node_add_child(&right, &chart);
-  if (status != ER_UI_OK) return status;
-
-  status = er_ui_node_add_child(&main_row, &nav);
-  if (status != ER_UI_OK) return status;
-  status = er_ui_node_add_child(&main_row, &center);
-  if (status != ER_UI_OK) return status;
-  status = er_ui_node_add_child(&main_row, &right);
-  if (status != ER_UI_OK) return status;
-
-  status = er_ui_node_add_child(&root, &header);
-  if (status != ER_UI_OK) return status;
-  status = er_ui_node_add_child(&root, &tabs_node);
-  if (status != ER_UI_OK) return status;
-  status = er_ui_node_add_child(&root, &metric_grid);
-  if (status != ER_UI_OK) return status;
-  status = er_ui_node_add_child(&root, &main_row);
-  if (status != ER_UI_OK) return status;
-  status = er_ui_node_add_child(&root, &footer);
-  if (status != ER_UI_OK) return status;
-
-  return er_ui_node_render(&root, scene, font, er_ui_bounds(0.0f, 0.0f, 3840.0f, 2160.0f), theme);
+  er_ui_shadcn_demo_gallery_state_init(&gallery_state);
+  return er_ui_edgerun_metal_surface_emit(scene, font, er_ui_bounds(0.0f, 0.0f, 3840.0f, 2160.0f), theme, &gallery_state);
 }
 
 static void er_run_ui_profile(EFI_SYSTEM_TABLE* SystemTable) {

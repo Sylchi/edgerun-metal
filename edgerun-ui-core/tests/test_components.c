@@ -178,6 +178,14 @@ static void test_shadcn_render_primitives(void) {
   expect_true(scene.hit_count >= 20u, "shadcn showcase: catalog rows and preview controls emit hits");
   expect_true(scene.text_quad_count > 20u, "shadcn showcase: catalog and preview use variable font text");
 
+  er_ui_scene_clear_commands(&scene);
+  expect_status(er_ui_edgerun_metal_surface_emit(&scene, face, er_ui_bounds(0.0f, 0.0f, 3840.0f, 2160.0f), theme, &state), ER_UI_OK,
+                "metal surface: ui-core owns boot scene composition");
+  expect_true(scene.hit_count >= 20u, "metal surface: showcase and controls emit hits");
+  expect_true(scene.text_quad_count > 80u, "metal surface: boot UI emits variable font text");
+  expect_true(er_ui_scene_stats_fits_budget(er_ui_scene_stats(&scene), er_ui_scene_budget_native_interactive_frame()),
+              "metal surface: boot scene fits native frame budget");
+
   for (size_t i = 0u; i < er_ui_shadcn_demo_count(); ++i) {
     const er_ui_shadcn_demo_spec_t* spec = er_ui_shadcn_demo_at(i);
     expect_true(spec != NULL, "shadcn scene preview: indexed spec exists");
