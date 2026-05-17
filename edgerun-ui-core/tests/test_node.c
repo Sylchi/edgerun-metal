@@ -165,6 +165,8 @@ void run_node_tests(void) {
     er_ui_node_t tooltip = er_ui_node_tooltip("Verify package");
     er_ui_node_t dialog = er_ui_node_dialog("Run network app", "Verify signed package bytes first.", theme.colors.accent);
     er_ui_node_t ring = er_ui_node_progress_ring(0.58f, theme.colors.success);
+    er_ui_node_t reorderable = er_ui_node_list_row("Drag me", "reorderable", 8816u, false);
+    er_ui_node_set_reorderable(&reorderable, 42u, 8816u, 3u);
 
     expect_status(er_ui_node_render(&alert, &scene, face, er_ui_bounds(0.0f, 170.0f, 360.0f, 76.0f), theme), ER_UI_OK, "node: alert renders");
     expect_status(er_ui_node_render(&avatar, &scene, face, er_ui_bounds(0.0f, 254.0f, 42.0f, 42.0f), theme), ER_UI_OK, "node: avatar renders");
@@ -231,6 +233,15 @@ void run_node_tests(void) {
                   "node: dialog renders");
     expect_status(er_ui_node_render(&ring, &scene, face, er_ui_bounds(0.0f, 2870.0f, 48.0f, 48.0f), theme), ER_UI_OK,
                   "node: progress ring renders");
+    size_t drag_sources_before = scene.drag_source_count;
+    size_t drop_targets_before = scene.drop_target_count;
+    expect_status(er_ui_node_render(&reorderable, &scene, face, er_ui_bounds(0.0f, 2930.0f, 260.0f, 52.0f), theme), ER_UI_OK,
+                  "node: reorderable row renders");
+    expect_size(scene.drag_source_count, drag_sources_before + 1u, "node: reorderable emits drag source");
+    expect_size(scene.drop_target_count, drop_targets_before + 1u, "node: reorderable emits drop target");
+    expect_size(scene.drag_sources[drag_sources_before].scope_id, 42u, "node: drag source scope is preserved");
+    expect_size(scene.drag_sources[drag_sources_before].item_id, 8816u, "node: drag source item is preserved");
+    expect_size(scene.drop_targets[drop_targets_before].index, 3u, "node: drop target index is preserved");
 
     expect_true(scene.rect_count > 0u, "node: render emits rect geometry");
     expect_true(scene.hit_count > 0u, "node: render emits hit targets");
