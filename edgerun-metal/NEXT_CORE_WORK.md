@@ -22,6 +22,8 @@ Do not add a second app IPC, remote UI, driver RPC, or storage protocol.
 
 Do not add host-like files outside VFS. VFS labels are manifest names for content-addressed objects. They are not paths, authority, durable storage identity, or runtime handles.
 
+Do not let local authority escape its jurisdiction. Hardware code owns local queues and registers, relays own packet movement, storage owns typed object persistence, schedulers own local execution slots, and policy/admission owns only the resources and relationships inside its scope. Compatibility comes from the shared `edgerun-work` records and proofs, not from any one layer becoming a global authority.
+
 All boundary-crossing work must be shaped as:
 
 ```text
@@ -89,6 +91,7 @@ Status: next.
 
 - Decode accepted erwire payloads as `edgerun-work` records.
 - Verify `NetworkMessage` and `CapabilityEnvelope` payloads against a signed `WorkAdmission` path.
+- Verify the admission's jurisdiction before producing a local endpoint intent.
 - Convert verified admission-defined routes into a local endpoint intent.
 - Keep `er_hw_relay` limited to endpoint encoding and movement.
 - Reject packet-class matches without a valid admission.
@@ -97,6 +100,7 @@ Proof:
 
 - Admitted storage work can produce a VirtIO block intent.
 - Admitted render capability work can produce a VirtIO GPU intent.
+- A valid admission for one jurisdiction cannot authorize another jurisdiction's endpoint.
 - Packet-class matches without a valid admission produce no intent.
 - Malformed or unsupported admitted endpoints are rejected deterministically.
 

@@ -14,6 +14,20 @@ The transport medium is not protocol authority. Native Ethernet, VirtIO queues, 
 
 Files are not a runtime primitive. The only file-like surface is VFS labeling, and a VFS label is only a manifest name for a content-addressed object. Durable identity is the object hash, transport object hash, transform hash, route hash, and recipient identity. Host paths, process handles, sockets, file descriptors, and kernel objects do not cross the runtime boundary.
 
+## System Contract
+
+`edgerun-work` is the intent and admission contract for a system of systems. It lets hardware adapters, network relays, storage nodes, UI renderers, apps, schedulers, human relationship policy, and settlement logic cooperate without giving any one layer enough authority to control the rest.
+
+The contract has three parts:
+
+- Intent: signed requests and capability envelopes say what a user, app, device, or service is asking to do.
+- Jurisdiction: a signed admission says which local authority accepted that intent for its own resources, route scope, budget, and policy window.
+- Evidence: ordered messages, transit hashes, delivery proofs, receipts, and typed payload checks prove what happened without trusting the mover.
+
+No admission is global authority. A storage admission can authorize storage work for its storage domain, but it cannot grant UI focus, decrypt user data, spend another budget, select an unrelated relay path, or command hardware outside that jurisdiction. A scheduler admission can allocate time and memory for a local execution slot, but it cannot turn packet movement into user intent. A human relationship or organization policy admission can authorize access within that social scope, but it does not become a device driver or storage root.
+
+Global compatibility comes from every jurisdiction using the same record shapes, identity rules, hashes, ordered channels, and proof surfaces. Local authority remains local; interoperability comes from the shared verification contract.
+
 ## Roles
 
 An EdgeRun node is an addressable capability endpoint with an Ed25519 identity. A node may be a whole machine, but it may also be one local or remote capability. Roles are declarations under that same node identity, and each packet is handled through one explicit role at a time:
