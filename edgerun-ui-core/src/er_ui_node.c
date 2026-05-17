@@ -488,6 +488,14 @@ er_ui_node_t er_ui_node_alert_dialog(const char* title, const char* body, er_ui_
   return node;
 }
 
+er_ui_node_t er_ui_node_direction(const char* ltr_text, const char* rtl_text) {
+  er_ui_node_t node = er_ui_node_base(ER_UI_NODE_DIRECTION);
+  node.label = ltr_text;
+  node.detail = rtl_text;
+  node.gap = 8.0f;
+  return node;
+}
+
 er_ui_node_t er_ui_node_route_path(const char* label, const char* const* hops, size_t hop_count) {
   er_ui_node_t node = er_ui_node_base(ER_UI_NODE_ROUTE_PATH);
   node.label = label;
@@ -840,6 +848,7 @@ const char* er_ui_node_kind_label(er_ui_node_kind_t kind) {
     case ER_UI_NODE_SONNER: return "sonner";
     case ER_UI_NODE_ASPECT_RATIO: return "aspect-ratio";
     case ER_UI_NODE_ALERT_DIALOG: return "alert-dialog";
+    case ER_UI_NODE_DIRECTION: return "direction";
     case ER_UI_NODE_ROUTE_PATH: return "route-path";
     case ER_UI_NODE_PACKAGE_CARD: return "package-card";
     case ER_UI_NODE_RECEIPT_ROW: return "receipt-row";
@@ -1186,6 +1195,9 @@ er_ui_status_t er_ui_node_accessibility(const er_ui_node_t* node, er_ui_a11y_nod
       er_ui_a11y_set_value(&out, node->detail);
       out.states |= ER_UI_A11Y_STATE_OPEN;
       break;
+    case ER_UI_NODE_DIRECTION:
+      out = er_ui_a11y_base(ER_UI_A11Y_GROUP, "direction", false, 0u);
+      break;
     case ER_UI_NODE_TABS:
       out = er_ui_a11y_base(ER_UI_A11Y_TAB_LIST, "tabs", false, 0u);
       break;
@@ -1281,6 +1293,11 @@ er_ui_status_t er_ui_node_accessibility_child(const er_ui_node_t* node, size_t c
     er_ui_a11y_node_t out = er_ui_a11y_base(ER_UI_A11Y_RADIO, node->labels[child_index], true, node->id + (uint32_t)child_index);
     if (child_index == node->selected) out.states |= ER_UI_A11Y_STATE_CHECKED;
     *out_a11y = out;
+    return ER_UI_OK;
+  }
+  if (node->kind == ER_UI_NODE_DIRECTION) {
+    if (child_index > 1u) return ER_UI_ERR_INVALID_ARGUMENT;
+    *out_a11y = er_ui_a11y_base(ER_UI_A11Y_TEXT, child_index == 0u ? node->label : node->detail, false, 0u);
     return ER_UI_OK;
   }
   if (node->kind == ER_UI_NODE_INPUT_GROUP) {
@@ -1978,6 +1995,31 @@ static er_ui_status_t er_ui_node_render_alert_dialog(
   return er_ui_shadcn_separator_emit(scene, er_ui_bounds(bounds.x + 18.0f, bounds.y + 92.0f, bounds.w - 36.0f, 1.0f), theme);
 }
 
+static er_ui_status_t er_ui_node_render_direction(
+  const er_ui_node_t* node,
+  er_ui_scene_t* scene,
+  vr_font_face_t* font,
+  er_ui_bounds_t bounds,
+  er_ui_resolved_theme_t theme) {
+  if (!node || !scene || !font || !node->label || !node->detail || !er_ui_bounds_valid(bounds)) return ER_UI_ERR_INVALID_ARGUMENT;
+  float row_h = er_ui_float_min(28.0f, (bounds.h - node->gap) * 0.5f);
+  if (row_h <= 0.0f) return ER_UI_ERR_INVALID_ARGUMENT;
+  float badge_w = 44.0f;
+  er_ui_bounds_t ltr_badge = er_ui_bounds(bounds.x, bounds.y + 1.0f, badge_w, 26.0f);
+  er_ui_status_t status = er_ui_shadcn_badge_emit(scene, font, ltr_badge, theme, "LTR", ER_UI_SHADCN_BADGE_DEFAULT);
+  if (status != ER_UI_OK) return status;
+  status = er_ui_node_render_text(scene, font, node->label, er_ui_bounds(bounds.x + badge_w + node->gap, bounds.y, bounds.w - badge_w - node->gap, row_h),
+                                  theme.colors.text);
+  if (status != ER_UI_OK) return status;
+
+  float y = bounds.y + row_h + node->gap;
+  er_ui_bounds_t rtl_badge = er_ui_bounds(bounds.x + er_ui_float_max(bounds.w - badge_w, 0.0f), y + 1.0f, badge_w, 26.0f);
+  float rtl_text_w = er_ui_float_max(bounds.w - badge_w - node->gap, 0.0f);
+  status = er_ui_node_render_text(scene, font, node->detail, er_ui_bounds(bounds.x, y, rtl_text_w, row_h), theme.colors.text);
+  if (status != ER_UI_OK) return status;
+  return er_ui_shadcn_badge_emit(scene, font, rtl_badge, theme, "RTL", ER_UI_SHADCN_BADGE_SECONDARY);
+}
+
 static er_ui_status_t er_ui_node_render_label_group(
   const er_ui_node_t* node,
   er_ui_scene_t* scene,
@@ -2168,6 +2210,8 @@ er_ui_status_t er_ui_node_render(
       return er_ui_node_render_aspect_ratio(node, scene, font, rect, theme);
     case ER_UI_NODE_ALERT_DIALOG:
       return er_ui_node_render_alert_dialog(node, scene, font, rect, theme);
+    case ER_UI_NODE_DIRECTION:
+      return er_ui_node_render_direction(node, scene, font, rect, theme);
     case ER_UI_NODE_ROUTE_PATH:
       return er_ui_shadcn_route_path_emit(scene, font, rect, theme, node->label, node->labels, node->label_count);
     case ER_UI_NODE_PACKAGE_CARD:
