@@ -1468,8 +1468,21 @@ static void test_app_identity_routes(void) {
 }
 
 static void test_hw_relay_endpoints(void) {
+  enum {
+    RELAY_ETH_TEST_MMIO_DWORDS = 128u,
+    RELAY_ETH_TEST_VIRTIO_HDR_LEN = 12u,
+    RELAY_ETH_TEST_TX_DESC = 0u
+  };
+  UINT32 regs[RELAY_ETH_TEST_MMIO_DWORDS] = {0};
   ErChannelEndpoint endpoint;
+  ErChannelEndpoint eth_endpoint;
   ErRelayForwardIntent intent;
+  ErVirtioNet net;
+  ErNativeEth native_eth;
+  ErVirtioQueueAvail* tx_avail;
+  UINT8* tx_frame;
+  UINT8 peer_mac[ER_NET_MAC_LEN] = {0x02u, 0x10u, 0x20u, 0x30u, 0x40u, 0x50u};
+  UINT8 other_mac[ER_NET_MAC_LEN] = {0x02u, 0xaau, 0xbbu, 0xccu, 0xddu, 0xeeu};
   UINT8 packet[4] = {1u, 2u, 3u, 4u};
 
   check_int64("relay udp endpoint",
@@ -1497,6 +1510,61 @@ static void test_hw_relay_endpoints(void) {
 
   endpoint.kind = ER_CHANNEL_KIND_MEMORY;
   check_int64("relay udp reject kind", er_hw_relay_endpoint_is_firmware_udp(&endpoint), 0);
+
+  check_int64("relay native eth endpoint",
+              er_hw_relay_prepare_native_eth_endpoint(peer_mac, "native-eth", 10u,
+                                                      &eth_endpoint),
+              1);
+  check_int64("relay native eth abi", eth_endpoint.abi_version, ER_WORK_ABI_VERSION);
+  check_int64("relay native eth kind", eth_endpoint.kind, ER_CHANNEL_KIND_DEVICE_RING);
+  check_int64("relay native eth address len", eth_endpoint.address_len,
+              ER_HW_RELAY_NATIVE_ETH_ADDR_LEN);
+  check_uint64("relay native eth mac0", eth_endpoint.address[0], peer_mac[0]);
+  check_uint64("relay native eth mac5", eth_endpoint.address[5], peer_mac[5]);
+  check_int64("relay native eth recognized",
+              er_hw_relay_endpoint_is_native_eth(&eth_endpoint), 1);
+
+  er_mmio_reset();
+  regs[ER_VIRTIO_MMIO_MAGIC_VALUE_OFFSET / sizeof(UINT32)] = ER_VIRTIO_MMIO_MAGIC;
+  regs[ER_VIRTIO_MMIO_VERSION_OFFSET / sizeof(UINT32)] = ER_VIRTIO_MMIO_VERSION_MODERN;
+  regs[ER_VIRTIO_MMIO_DEVICE_ID_OFFSET / sizeof(UINT32)] = ER_VIRTIO_DEVICE_TYPE_NET;
+  regs[ER_VIRTIO_MMIO_VENDOR_OFFSET / sizeof(UINT32)] = ER_VIRTIO_MMIO_VENDOR_ANY;
+  regs[ER_VIRTIO_MMIO_DEVICE_FEATURES_OFFSET / sizeof(UINT32)] = 1u;
+  regs[ER_VIRTIO_MMIO_QUEUE_NUM_MAX_OFFSET / sizeof(UINT32)] = ER_VIRTIO_QUEUE_SIZE;
+  check_int64("relay native eth virtio init",
+              er_virtio_net_init_mmio((UINT64)(UINTN)regs, (UINT64)sizeof(regs), &net),
+              1);
+  net.mac[0] = 0x02u;
+  net.mac[ER_NET_MAC_LEN - 1u] = 0x02u;
+  check_int64("relay native eth init",
+              er_native_eth_init(&native_eth, &net, peer_mac), 1);
+  intent.to = eth_endpoint;
+  check_int64("relay forward native eth",
+              er_hw_relay_forward_to_native_eth(&native_eth, &intent, packet,
+                                                (UINTN)sizeof(packet)),
+              1);
+  tx_avail = er_virtio_net_test_tx_avail();
+  tx_frame = er_virtio_net_test_tx_buffer(RELAY_ETH_TEST_TX_DESC);
+  check_uint64("relay native eth tx desc", tx_avail->ring[0], RELAY_ETH_TEST_TX_DESC);
+  check_uint64("relay native eth tx mac0",
+               tx_frame[RELAY_ETH_TEST_VIRTIO_HDR_LEN], peer_mac[0]);
+  check_uint64("relay native eth tx type hi",
+               tx_frame[RELAY_ETH_TEST_VIRTIO_HDR_LEN + 12u], 0x88u);
+  check_uint64("relay native eth tx type lo",
+               tx_frame[RELAY_ETH_TEST_VIRTIO_HDR_LEN + 13u], 0xb5u);
+  check_uint64("relay native eth payload3",
+               tx_frame[RELAY_ETH_TEST_VIRTIO_HDR_LEN + ER_NET_ETH_HEADER_LEN + 3u],
+               packet[3]);
+
+  check_int64("relay native eth other endpoint",
+              er_hw_relay_prepare_native_eth_endpoint(other_mac, "native-eth", 10u,
+                                                      &eth_endpoint),
+              1);
+  intent.to = eth_endpoint;
+  check_int64("relay native eth reject mac mismatch",
+              er_hw_relay_forward_to_native_eth(&native_eth, &intent, packet,
+                                                (UINTN)sizeof(packet)),
+              0);
 }
 
 static void test_ui_gop_renderer_surface(void) {
