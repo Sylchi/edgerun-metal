@@ -48,7 +48,8 @@ static void check_int(const char* name, int actual, int expected) {
 
 int main(void) {
   static const uint8_t abc[] = {'a', 'b', 'c'};
-  uint8_t large[1255];
+  uint8_t large[4096];
+  uint8_t huge[65536];
   uint8_t digest[ER_BLAKE3_OUT_LEN];
   ErBlake3Hasher hasher;
   size_t i;
@@ -62,12 +63,27 @@ int main(void) {
   for (i = 0u; i < sizeof(large); ++i) {
     large[i] = (uint8_t)(i % 251u);
   }
-  check_int("large hash", er_blake3_hash_bytes(large, sizeof(large), digest), 1);
+  for (i = 0u; i < sizeof(huge); ++i) {
+    huge[i] = (uint8_t)(i % 251u);
+  }
+  check_int("large hash", er_blake3_hash_bytes(large, 1255u, digest), 1);
   check_hash_hex("large digest", digest, "8b929b2d329f8795b15060a2e5d087ea507aeba8dcf19fb00eb92ceb890d179e");
+
+  check_int("full chunk hash", er_blake3_hash_bytes(large, 1024u, digest), 1);
+  check_hash_hex("full chunk digest", digest, "42214739f095a406f3fc83deb889744ac00df831c10daa55189b5d121c855af7");
+
+  check_int("chunk plus one hash", er_blake3_hash_bytes(large, 1025u, digest), 1);
+  check_hash_hex("chunk plus one digest", digest, "d00278ae47eb27b34faecf67b4fe263f82d5412916c1ffd97c8cb7fb814b8444");
+
+  check_int("four chunk hash", er_blake3_hash_bytes(large, sizeof(large), digest), 1);
+  check_hash_hex("four chunk digest", digest, "015094013f57a5277b59d8475c0501042c0b642e531b0a1c8f58d2163229e969");
+
+  check_int("many chunk hash", er_blake3_hash_bytes(huge, sizeof(huge), digest), 1);
+  check_hash_hex("many chunk digest", digest, "68d647e619a930e7b1082f74f334b0c65a315725569bdc123f0ee11881717bfe");
 
   er_blake3_init(&hasher);
   check_int("update a", er_blake3_update(&hasher, large, 17u), 1);
-  check_int("update b", er_blake3_update(&hasher, &large[17], sizeof(large) - 17u), 1);
+  check_int("update b", er_blake3_update(&hasher, &large[17], 1255u - 17u), 1);
   check_int("final", er_blake3_final(&hasher, digest), 1);
   check_hash_hex("incremental digest", digest, "8b929b2d329f8795b15060a2e5d087ea507aeba8dcf19fb00eb92ceb890d179e");
 

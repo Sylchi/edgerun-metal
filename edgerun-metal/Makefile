@@ -25,6 +25,7 @@ ER_BOOT_PROFILE ?= 0
 
 CFLAGS := -std=c11 -Wall -Werror -ffreestanding -fshort-wchar -fno-builtin -fno-stack-protector -mno-red-zone -fuse-ld=lld -target x86_64-pc-windows-msvc \
           -I$(CURDIR)/core -I$(CURDIR) -I$(CURDIR)/$(GENERATED_DIR) -I$(CURDIR)/$(CRYPTO_DIR)/include -I$(CURDIR)/$(UI_CORE_DIR)/include -I$(CURDIR)/$(VARFONT_DIR)/include -DER_BOOT_PROFILE=$(ER_BOOT_PROFILE)
+CRYPTO_CFLAGS := $(CFLAGS) -O3
 LDFLAGS := -nostdlib -Wl,/SUBSYSTEM:EFI_APPLICATION,/ENTRY:efi_main
 HOST_CFLAGS := -std=c11 -Wall -Wextra -Werror -O2 -I$(CURDIR)/core -I$(CURDIR)/$(GENERATED_DIR) -I$(CURDIR)/$(CRYPTO_DIR)/include -I$(CURDIR)/$(UI_CORE_DIR)/include -I$(CURDIR)/$(VARFONT_DIR)/include
 HOST_LDFLAGS ?= $(if $(MOLD),-fuse-ld=mold,)
@@ -139,7 +140,7 @@ $(BUILD_DIR)/varfont/%.o: $(VARFONT_DIR)/src/%.c $(VARFONT_HDRS)
 
 $(BUILD_DIR)/crypto/%.o: $(CRYPTO_DIR)/src/%.c $(CRYPTO_HDRS)
 	mkdir -p $(dir $@)
-	$(CCACHE_PREFIX) $(CC) $(CFLAGS) -c $< -o $@
+	$(CCACHE_PREFIX) $(CC) $(CRYPTO_CFLAGS) -c $< -o $@
 
 $(EFI_OUT): $(OBJS) $(UI_OBJS) $(VARFONT_OBJS) $(CRYPTO_OBJS)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $^
