@@ -77,7 +77,7 @@ static const demo_layer_t VR_DEMO_LAYERS[VR_DEMO_LAYER_COUNT] = {
   {46.0f, 700.0f, VR_TEXT_RENDER_X, 128.0f},
   {58.0f, 900.0f, VR_TEXT_RENDER_X, 176.0f},
 };
-static void sdl_free_demo_layers(demo_layer_render_t* layers, size_t count);
+static void sdl_free_demo_layers(vr_font_face_t* face, demo_layer_render_t* layers, size_t count);
 
 static void sdl_demo_release(sdl_demo_app_t* app) {
   if (!app) {
@@ -98,7 +98,7 @@ static void sdl_demo_release(sdl_demo_app_t* app) {
   }
 
   if (app->layer_render_data) {
-    sdl_free_demo_layers(app->layer_render_data, VR_DEMO_LAYER_COUNT);
+    sdl_free_demo_layers(app->face, app->layer_render_data, VR_DEMO_LAYER_COUNT);
     free(app->layer_render_data);
     app->layer_render_data = NULL;
   }
@@ -133,10 +133,10 @@ static void sdl_demo_release(sdl_demo_app_t* app) {
   }
 }
 
-static void sdl_free_demo_layers(demo_layer_render_t* layers, size_t count) {
+static void sdl_free_demo_layers(vr_font_face_t* face, demo_layer_render_t* layers, size_t count) {
   for (size_t i = 0u; i < count; ++i) {
-    vr_font_free_vertices(NULL, layers[i].verts);
-    vr_font_free_vertex_atlas_ranges(layers[i].ranges);
+    vr_font_free_vertices(face, layers[i].verts);
+    (void)vr_font_free_vertex_atlas_ranges(face, layers[i].ranges, layers[i].range_count);
     layers[i].verts = NULL;
     layers[i].vertex_count = 0u;
     layers[i].ranges = NULL;

@@ -373,8 +373,12 @@ vr_status_t vr_font_free_vertices(vr_font_face_t* face, vr_vertex_t* verts) {
   return VR_OK;
 }
 
-void vr_font_free_vertex_atlas_ranges(vr_vertex_atlas_range_t* ranges) {
-  vr_free_bytes(ranges);
+vr_status_t vr_font_free_vertex_atlas_ranges(vr_font_face_t* face, vr_vertex_atlas_range_t* ranges, size_t range_count) {
+  if (!ranges) return VR_OK;
+  if (!face) return VR_ERR_INVALID_FONT;
+  if (range_count > ((size_t)-1) / sizeof(*ranges)) return VR_ERR_INVALID_FONT;
+  vr_dealloc(face, ranges, range_count * sizeof(*ranges), 8u);
+  return VR_OK;
 }
 
 uint32_t vr_font_last_error(const vr_font_face_t* face) {

@@ -261,7 +261,11 @@ er_ui_drop_target_t er_ui_drop_target(uint32_t scope_id, size_t index, float x, 
 }
 
 er_ui_quad_t er_ui_quad(float x, float y, float w, float h, float u0, float v0, float u1, float v1, er_ui_color4_t color) {
-  er_ui_quad_t quad = {x, y, w, h, u0, v0, u1, v1, color};
+  return er_ui_quad_atlas(x, y, w, h, u0, v0, u1, v1, 0u, color);
+}
+
+er_ui_quad_t er_ui_quad_atlas(float x, float y, float w, float h, float u0, float v0, float u1, float v1, uint32_t atlas_id, er_ui_color4_t color) {
+  er_ui_quad_t quad = {x, y, w, h, u0, v0, u1, v1, atlas_id, color};
   return quad;
 }
 

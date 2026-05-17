@@ -161,7 +161,7 @@ vr_status_t vr_font_build_vertex_batches_by_atlas(
   size_t* out_range_count);
 
 vr_status_t vr_font_free_vertices(vr_font_face_t* face, vr_vertex_t* verts);
-void vr_font_free_vertex_atlas_ranges(vr_vertex_atlas_range_t* ranges);
+vr_status_t vr_font_free_vertex_atlas_ranges(vr_font_face_t* face, vr_vertex_atlas_range_t* ranges, size_t range_count);
 
 uint32_t vr_font_last_error(const vr_font_face_t* face);
 
