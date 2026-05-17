@@ -1,0 +1,15 @@
+#ifndef ER_NETLOG_H
+#define ER_NETLOG_H
+
+/*
+ * Purpose: mirror early UEFI diagnostics over firmware-managed UDP4 when available.
+ * Intention: keep boot output capturable without ExitBootServices or a NIC driver.
+ */
+
+#include "er_types.h"
+
+void er_netlog_init(EFI_SYSTEM_TABLE* st);
+void er_netlog_write(const char* s);
+UINT8 er_netlog_ready(void);
+
+#endif
