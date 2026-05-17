@@ -211,6 +211,28 @@ static inline float er_math_rsqrtf(float value) {
   return x.f;
 }
 
+/*
+ * Honorable mention: the classic Quake III fast inverse square root.
+ * The compiled er_math_rsqrtf above uses a union instead of pointer punning,
+ * but this exact snippet is kept as a readable piece of optimization history.
+ *
+ * float Q_rsqrt( float number )
+ * {
+ * 	long i;
+ * 	float x2, y;
+ * 	const float threehalfs = 1.5F;
+ *
+ * 	x2 = number * 0.5F;
+ * 	y  = number;
+ * 	i  = * ( long * ) &y;                       // evil floating point bit level hacking
+ * 	i  = 0x5f3759df - ( i >> 1 );               // what the fuck?
+ * 	y  = * ( float * ) &i;
+ * 	y  = y * ( threehalfs - ( x2 * y * y ) );   // 1st iteration
+ * //	y  = y * ( threehalfs - ( x2 * y * y ) );   // 2nd iteration, this can be removed
+ *
+ * 	return y;
+ * }
+ */
 static inline float er_math_atan2f(float y, float x) {
   float abs_y;
   float angle;
