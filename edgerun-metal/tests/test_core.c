@@ -8,8 +8,6 @@
 #include "er_bus.h"
 #include "er_crypto_blake3.h"
 #include "er_hw_relay.h"
-#include "er_relay_dispatch.h"
-#include "er_relay_router.h"
 #include "er_native_eth.h"
 #include "er_native_boot.h"
 #include "er_net_frame.h"
@@ -1580,18 +1578,13 @@ static void test_hw_relay_endpoints(void) {
     RELAY_ETH_TEST_TX_DESC = 0u,
     RELAY_VIRTIO_TEST_DEVICE_TYPE_OFFSET = 0u,
     RELAY_VIRTIO_TEST_QUEUE_OFFSET = 4u,
-    RELAY_VIRTIO_TEST_TRANSPORT_OFFSET = 6u,
-    RELAY_VIRTIO_TEST_CAP_CONTENT_OFFSET = 6u,
-    RELAY_VIRTIO_TEST_WORK_DEPARTMENT_OFFSET = 4u
+    RELAY_VIRTIO_TEST_TRANSPORT_OFFSET = 6u
   };
   UINT32 regs[RELAY_ETH_TEST_MMIO_DWORDS] = {0};
   ErChannelEndpoint endpoint;
   ErChannelEndpoint eth_endpoint;
   ErChannelEndpoint virtio_endpoint;
   ErRelayForwardIntent intent;
-  ErRelayForwardIntent route_intent;
-  ErRelayDispatchRecord dispatch_record;
-  ErRelayVirtioRoutes routes;
   ErVirtioNet net;
   ErNativeEth native_eth;
   ErVirtioQueueAvail* tx_avail;
@@ -1599,8 +1592,6 @@ static void test_hw_relay_endpoints(void) {
   UINT8 peer_mac[ER_NET_MAC_LEN] = {0x02u, 0x10u, 0x20u, 0x30u, 0x40u, 0x50u};
   UINT8 other_mac[ER_NET_MAC_LEN] = {0x02u, 0xaau, 0xbbu, 0xccu, 0xddu, 0xeeu};
   UINT8 packet[4] = {1u, 2u, 3u, 4u};
-  UINT8 render_capability[8] = {0};
-  UINT8 storage_work[6] = {0};
 
   check_int64("relay udp endpoint",
               er_hw_relay_prepare_firmware_udp_endpoint(10u, 42u, 0u, 1u, 9000u,
@@ -1704,89 +1695,6 @@ static void test_hw_relay_endpoints(void) {
               er_hw_relay_endpoint_is_virtio(&virtio_endpoint), 1);
   check_int64("relay native eth not virtio",
               er_hw_relay_endpoint_is_virtio(&eth_endpoint), 0);
-
-  check_int64("relay default virtio routes",
-              er_relay_prepare_default_virtio_routes(&routes), 1);
-  check_int64("relay route storage object",
-              er_relay_route_erwire_to_virtio(&eth_endpoint,
-                                              ERWIRE_KIND_VFS_OBJECT_PACKET,
-                                              packet, (UINT32)sizeof(packet),
-                                              &routes, &route_intent),
-              1);
-  check_uint64("relay route storage target type",
-               route_intent.to.address[RELAY_VIRTIO_TEST_DEVICE_TYPE_OFFSET],
-               ER_VIRTIO_DEVICE_TYPE_BLK);
-  check_uint64("relay route storage from mac",
-               route_intent.from.address[0], eth_endpoint.address[0]);
-  route_intent.sequence = 77u;
-  check_int64("relay dispatch storage",
-              er_relay_dispatch_intent(&route_intent, packet,
-                                       (UINTN)sizeof(packet),
-                                       &dispatch_record),
-              1);
-  check_int64("relay dispatch storage status",
-              dispatch_record.status, ER_RELAY_DISPATCH_STORAGE_CAPTURE);
-  check_uint64("relay dispatch storage type",
-               dispatch_record.virtio_device_type, ER_VIRTIO_DEVICE_TYPE_BLK);
-  check_uint64("relay dispatch storage queue", dispatch_record.virtio_queue, 0u);
-  check_uint64("relay dispatch storage sequence", dispatch_record.sequence, 77u);
-  check_uint64("relay dispatch storage len", dispatch_record.packet_len, sizeof(packet));
-
-  render_capability[RELAY_VIRTIO_TEST_CAP_CONTENT_OFFSET] =
-      ER_CAPABILITY_CONTENT_RENDER;
-  check_int64("relay route render capability",
-              er_relay_route_erwire_to_virtio(&eth_endpoint,
-                                              ERWIRE_KIND_CAPABILITY_ENVELOPE,
-                                              render_capability,
-                                              (UINT32)sizeof(render_capability),
-                                              &routes, &route_intent),
-              1);
-  check_uint64("relay route render target type",
-               route_intent.to.address[RELAY_VIRTIO_TEST_DEVICE_TYPE_OFFSET],
-               ER_VIRTIO_DEVICE_TYPE_GPU);
-  check_int64("relay dispatch render",
-              er_relay_dispatch_intent(&route_intent, render_capability,
-                                       (UINTN)sizeof(render_capability),
-                                       &dispatch_record),
-              1);
-  check_int64("relay dispatch render status",
-              dispatch_record.status, ER_RELAY_DISPATCH_RENDER_CAPTURE);
-  check_uint64("relay dispatch render type",
-               dispatch_record.virtio_device_type, ER_VIRTIO_DEVICE_TYPE_GPU);
-
-  storage_work[RELAY_VIRTIO_TEST_WORK_DEPARTMENT_OFFSET] =
-      ER_DEPARTMENT_STORAGE;
-  check_int64("relay route storage work",
-              er_relay_route_erwire_to_virtio(&eth_endpoint,
-                                              ERWIRE_KIND_WORK_REQUEST,
-                                              storage_work,
-                                              (UINT32)sizeof(storage_work),
-                                              &routes, &route_intent),
-              1);
-  check_uint64("relay route work target type",
-               route_intent.to.address[RELAY_VIRTIO_TEST_DEVICE_TYPE_OFFSET],
-               ER_VIRTIO_DEVICE_TYPE_BLK);
-  check_int64("relay route reject log",
-              er_relay_route_erwire_to_virtio(&eth_endpoint,
-                                              ERWIRE_KIND_LOG_TEXT,
-                                              packet, (UINT32)sizeof(packet),
-                                              &routes, &route_intent),
-              0);
-  intent.to = endpoint;
-  check_int64("relay dispatch unsupported endpoint kind",
-              er_relay_dispatch_intent(&intent, packet, (UINTN)sizeof(packet),
-                                       &dispatch_record),
-              1);
-  check_int64("relay dispatch unsupported status",
-              dispatch_record.status, ER_RELAY_DISPATCH_UNSUPPORTED_ENDPOINT);
-  intent.to = virtio_endpoint;
-  intent.to.address[ER_HW_RELAY_VIRTIO_ADDR_LEN - 1u] = 1u;
-  check_int64("relay dispatch malformed endpoint",
-              er_relay_dispatch_intent(&intent, packet, (UINTN)sizeof(packet),
-                                       &dispatch_record),
-              1);
-  check_int64("relay dispatch malformed status",
-              dispatch_record.status, ER_RELAY_DISPATCH_MALFORMED_ENDPOINT);
 }
 
 static void test_erwire_native_eth_sink(void) {
@@ -1954,7 +1862,6 @@ static void test_native_boot_erwire_eth_sink(void) {
   };
   UINT32 regs[NATIVE_BOOT_TEST_MMIO_DWORDS] = {0};
   ErNativeBootState state;
-  ErRelayVirtioRoutes routes;
   ErNativeRelayIngress ingress;
   ErCryptoProvider crypto;
   ErVirtioQueueAvail* tx_avail;
@@ -2012,17 +1919,13 @@ static void test_native_boot_erwire_eth_sink(void) {
   rx_used->idx = 1u;
 
   er_crypto_blake3_provider(&crypto);
-  check_int64("native boot default routes",
-              er_relay_prepare_default_virtio_routes(&routes), 1);
   check_int64("native boot poll relay ingress",
-              er_native_boot_poll_relay_ingress(&state, &routes, &crypto, &ingress), 1);
-  check_int64("native boot relay routed", ingress.status, ER_NATIVE_RELAY_INGRESS_ROUTED);
+              er_native_boot_poll_relay_ingress(&state, &crypto, &ingress), 1);
+  check_int64("native boot relay accepted", ingress.status, ER_NATIVE_RELAY_INGRESS_ACCEPTED);
   check_uint64("native boot relay kind", ingress.header.Kind, ERWIRE_KIND_VFS_OBJECT_PACKET);
-  check_uint64("native boot relay seq", ingress.intent.sequence, 0u);
+  check_uint64("native boot relay seq", ingress.header.Seq, 0u);
   check_uint64("native boot relay payload len", ingress.payload_len, NATIVE_BOOT_TEST_PAYLOAD_LEN);
-  check_uint64("native boot relay target",
-               ingress.intent.to.address[0], ER_VIRTIO_DEVICE_TYPE_BLK);
-  check_hash_equal("native boot relay intent hash", &ingress.intent.packet_hash, &ingress.packet_hash);
+  check_uint64("native boot relay ingress mac", ingress.ingress.address[0], peer_mac[0]);
 
   rx_buffer = er_virtio_net_test_rx_buffer(NATIVE_BOOT_TEST_BAD_RX_DESC);
   check_int64("native boot bad relay frame",
@@ -2036,10 +1939,10 @@ static void test_native_boot_erwire_eth_sink(void) {
   rx_used->ring[1].len = NATIVE_BOOT_TEST_VIRTIO_HDR_LEN + frame_len;
   rx_used->idx = 2u;
   check_int64("native boot poll malformed relay ingress",
-              er_native_boot_poll_relay_ingress(&state, &routes, &crypto, &ingress), 1);
+              er_native_boot_poll_relay_ingress(&state, &crypto, &ingress), 1);
   check_int64("native boot relay malformed", ingress.status, ER_NATIVE_RELAY_INGRESS_MALFORMED);
   check_int64("native boot poll no relay ingress",
-              er_native_boot_poll_relay_ingress(&state, &routes, &crypto, &ingress), 1);
+              er_native_boot_poll_relay_ingress(&state, &crypto, &ingress), 1);
   check_int64("native boot relay none", ingress.status, ER_NATIVE_RELAY_INGRESS_NONE);
   erwire_clear_native_eth_sink();
 }

@@ -44,8 +44,8 @@ The real work is the relay core:
 1. Keep known boot profiles stable.
 2. Use native VirtIO-net as the first EdgeRun Ethernet ingress.
 3. Parse incoming erwire packets without firmware networking.
-4. Route storage-class packets to VirtIO block endpoints.
-5. Route render-class packets to VirtIO GPU endpoints.
+4. Verify admitted storage work before dispatching it to VirtIO block endpoint adapters.
+5. Verify admitted render capability work before dispatching it to VirtIO GPU endpoint adapters.
 6. Move app, UI, driver, storage, and device work through one erwire relay model.
 
 The cross-project architecture is documented in `../docs/relay-architecture.md`.
@@ -271,11 +271,11 @@ Status: implemented as the first native relay transport proof.
 
 The native profile can bring up VirtIO-net and submit EdgeRun Ethernet frames with EtherType `0x88b5`.
 
-### Native relay ingress and dispatch
+### Native Relay Ingress
 
-Status: host-tested capture path implemented; native profile loop and device adapters are next.
+Status: host-tested ingress records implemented; admission-defined route verification, native profile loop, and device adapters are next.
 
-`er_native_boot_poll_relay_ingress` accepts native erwire packets, records malformed or empty ingress deterministically, and turns routed packets into relay intents. `er_relay_dispatch` consumes those intents and records storage or render captures for VirtIO block and VirtIO GPU targets.
+`er_native_boot_poll_relay_ingress` accepts native erwire packets and records accepted, malformed, or empty ingress deterministically. The durable path must decode `edgerun-work` records, verify signed admissions, then hand assigned local endpoint adapters only already-admitted work.
 
 ## Next milestones
 
@@ -283,9 +283,9 @@ Use `NEXT_CORE_WORK.md` and `../docs/coherent-system-milestones.md` as the activ
 
 ```text
 1. Object-only storage contract
-2. Native relay ingress loop and acknowledgement
-3. VirtIO storage endpoint adapter
-4. VirtIO render endpoint adapter
+2. Native relay ingress loop and admission-defined acknowledgement
+3. Admission-defined VirtIO storage endpoint adapter
+4. Admission-defined VirtIO render endpoint adapter
 5. Wasm relay hostcalls
 6. Distributed UI proof
 7. Remote driver proof
@@ -300,7 +300,7 @@ Stay in UEFI app mode until:
 - boot output is stable
 - serial mirror is proven
 - native erwire ingress works
-- relay dispatch to VirtIO endpoints works
+- admission-defined route verification can hand admitted packets to VirtIO endpoint adapters
 - storage and render endpoint proofs exist
 
 Only exit Boot Services when firmware services actively block ownership of hardware.

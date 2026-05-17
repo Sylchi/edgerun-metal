@@ -1,20 +1,22 @@
 # EdgeRun Relay Architecture
 
-Purpose: define the single relay model that apps, UI renderers, Wasm drivers, and hardware adapters use.
+Purpose: define how the C runtime maps onto the `edgerun-work` relay model that apps, UI renderers, Wasm drivers, and hardware adapters use.
 
 Intention: keep EdgeRun as one identity-routed system where local machine boundaries are implementation details, not protocol authority.
 
 ## Core Rule
 
-Everything that crosses an execution, display, storage, device, or machine boundary crosses as an admitted erwire relay packet.
+Everything that crosses an execution, display, storage, device, or machine boundary crosses as admitted `edgerun-work` protocol traffic carried by erwire.
 
-There are no separate app IPC, remote UI, driver RPC, storage RPC, or device-control protocols. Those are packet classes carried by erwire, authorized by work/admission records, sealed to the recipient identity, and moved by relay nodes.
+There are no separate app IPC, remote UI, driver RPC, storage RPC, or device-control protocols. Those are `NetworkMessage` and `CapabilityEnvelope` payloads authorized by signed `WorkRequest` and `WorkAdmission` records, sealed or hashed to the recipient identity, and moved by relay nodes.
+
+The transport medium is not protocol authority. Native Ethernet, VirtIO queues, memory channels, TCP, WebSocket, browser workers, and future transports only move the same admitted bytes. Validity comes from identities, signatures, hashes, admission-defined routes, ordered-channel rules, typed payload verification, proofs, receipts, and settlement checks.
 
 Files are not a runtime primitive. The only file-like surface is VFS labeling, and a VFS label is only a manifest name for a content-addressed object. Durable identity is the object hash, transport object hash, transform hash, route hash, and recipient identity. Host paths, process handles, sockets, file descriptors, and kernel objects do not cross the runtime boundary.
 
 ## Roles
 
-An EdgeRun node may hold more than one role, but each packet is handled through one explicit role at a time:
+An EdgeRun node is an addressable capability endpoint with an Ed25519 identity. A node may be a whole machine, but it may also be one local or remote capability. Roles are declarations under that same node identity, and each packet is handled through one explicit role at a time:
 
 - App logic node: executes content-addressed Wasm app code.
 - UI renderer node: converts admitted UI scene packets into pixels on a local display backend.
@@ -24,7 +26,7 @@ An EdgeRun node may hold more than one role, but each packet is handled through 
 - Storage node: stores and retrieves sealed content-addressed objects.
 - Relay node: moves packets between channel endpoints and records transit.
 
-Locality does not grant authority. A driver running on one machine can drive a device attached to another machine only through an admitted route to that device endpoint. An app running on one machine can render on another machine only through an admitted route to that UI renderer endpoint.
+Locality does not grant authority. A driver running on one machine can drive a device attached to another machine only through an admitted route to that device capability. An app running on one machine can render on another machine only through an admitted route to that UI renderer capability.
 
 ## Packet Shape
 
@@ -44,13 +46,14 @@ The payload is one of the runtime records already owned by the C core:
 
 - `WorkRequest`: asks to cross an authority boundary.
 - `WorkAdmission`: admits a route, budget, channel, and relay path.
-- `ChannelEnvelope`: carries ordered app, UI, driver, input, or storage messages.
+- `NetworkMessage`: binds sender, recipient, first relay, department, work type, sequence, payload hash, and signature.
+- `ChannelEnvelope`: carries ordered work packets.
 - `CapabilityEnvelope`: invokes a session-bound capability such as render, input, object, or device operation.
 - `RelayTransitHop`: records that a relay moved a packet.
 - VFS object packets: move sealed content-addressed bytes.
 - App identity and route-binding packets: bind content-addressed Wasm execution to admitted routes.
 
-The current `ERWIRE_KIND_*` values are therefore not separate protocols. They are packet classes inside one relay protocol.
+The current `ERWIRE_KIND_*` values are carriage classes, not routing authority. New work must prefer decoding the admitted work payload and verifying it against its `WorkAdmission` before choosing a local endpoint adapter.
 
 ## UI Relay
 
@@ -99,14 +102,15 @@ Wasm driver
 
 The device endpoint is the only component that touches local hardware registers, DMA rings, or VirtIO queues. It is an adapter from admitted relay packets to a concrete local transport.
 
-This means a VirtIO-net device can act as the first relay ingress while other VirtIO devices are addressed as relay endpoints:
+This means a VirtIO-net device can act as a native relay ingress while other VirtIO devices are local adapters for admitted capability endpoints:
 
 ```text
 VirtIO net ingress
   -> erwire parse
-  -> relay router
-  -> VirtIO block endpoint
-  -> VirtIO GPU endpoint
+  -> work packet decode
+  -> admission-defined route verification
+  -> local endpoint adapter selected from the admitted channel/route
+  -> VirtIO block or VirtIO GPU queue only if that endpoint owns the capability
 ```
 
 The same model later extends to PCI/MMIO, USB, NVMe, real NICs, and GPUs. The driver logic can live on another node because its output is not a pointer or host syscall. It is a sealed, admitted device-operation packet.
@@ -158,8 +162,6 @@ The code should stay split by responsibility:
 - `er_work`: identity, work, admission, channel, capability, relay records.
 - `er_app`: app identity, app budgets, app IPC route bindings.
 - `er_hw_relay`: endpoint encoding and local packet movement.
-- `er_relay_router`: deterministic route selection from erwire packet class to relay endpoint.
-- `er_relay_dispatch`: deterministic consumption of relay intents into endpoint dispatch records.
 - `er_native_eth`: native EdgeRun Ethernet transport.
 - `er_virtio` and device-specific VirtIO modules: queue and device adapters.
 - `wasm_vm`: bounded Wasm execution and hostcall dispatch.
@@ -176,8 +178,8 @@ The proof that this architecture is real is not a full OS. It is a relay chain i
 Wasm or host test emits erwire packet
   -> VirtIO net receives EdgeRun EtherType frame
   -> native erwire parser accepts packet
-  -> relay router selects endpoint
-  -> relay dispatcher records a VirtIO block or VirtIO GPU capture
+  -> work payload is decoded as admitted protocol traffic
+  -> admission-defined route is verified
   -> VirtIO block or VirtIO GPU adapter consumes packet
   -> transit/result packet is emitted back over erwire
 ```
@@ -185,9 +187,9 @@ Wasm or host test emits erwire packet
 The first concrete milestones are:
 
 1. Add a native profile loop around the existing native ingress polling helper.
-2. Convert accepted packets into `ErRelayForwardIntent`.
-3. Dispatch storage-class packets to a VirtIO block capture record, then adapter.
-4. Dispatch render-class packets to a VirtIO GPU capture record, then adapter.
+2. Decode accepted packets into `edgerun-work` records and reject packets that are not admitted work traffic.
+3. Convert verified admission-defined routes into `ErRelayForwardIntent`.
+4. Add assigned storage/render capability endpoint adapters.
 5. Add Wasm hostcalls that send and receive erwire relay packets, replacing direct device hostcalls as the driver/app boundary.
 6. Prove one app can render the same UI scene to more than one renderer route.
 7. Prove one Wasm driver can submit device work to a device endpoint reached through a relay route.
@@ -199,7 +201,7 @@ A new runtime feature fits this architecture only when all answers are explicit:
 - What erwire packet kind carries it?
 - Which work, channel, capability, object, or transit record is the payload?
 - Which identity is the recipient?
-- Which admission or route binding authorizes it?
+- Which signed `WorkRequest` and `WorkAdmission` authorize it?
 - Which relay endpoint moves it on the current hop?
 - Which component owns local adapter behavior?
 - What proof shows the same payload can move locally or remotely without changing protocol?

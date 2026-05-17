@@ -116,12 +116,10 @@ static UINT8 er_native_boot_hash_ingress_packet(const ErCryptoProvider* crypto,
 }
 
 UINT8 er_native_boot_poll_relay_ingress(const ErNativeBootState* state,
-                                        const ErRelayVirtioRoutes* routes,
                                         const ErCryptoProvider* crypto,
                                         ErNativeRelayIngress* out_ingress) {
   ErNativeEthStats before;
   ErNativeEthStats after;
-  ErChannelEndpoint ingress;
   UINT8 payload[ERWIRE_MAX_PAYLOAD];
   UINT32 payload_len = 0u;
 
@@ -151,18 +149,9 @@ UINT8 er_native_boot_poll_relay_ingress(const ErNativeBootState* state,
       er_hw_relay_prepare_native_eth_endpoint(state->eth->peer_mac,
                                               g_native_relay_ingress_label,
                                               (UINTN)(sizeof(g_native_relay_ingress_label) - 1u),
-                                              &ingress) == 0u) {
+                                              &out_ingress->ingress) == 0u) {
     return 0;
   }
-
-  if (er_relay_route_erwire_to_virtio(&ingress, out_ingress->header.Kind,
-                                      payload, payload_len, routes,
-                                      &out_ingress->intent) == 0u) {
-    out_ingress->status = ER_NATIVE_RELAY_INGRESS_UNROUTED;
-    return 1;
-  }
-  out_ingress->intent.sequence = out_ingress->header.Seq;
-  out_ingress->intent.packet_hash = out_ingress->packet_hash;
-  out_ingress->status = ER_NATIVE_RELAY_INGRESS_ROUTED;
+  out_ingress->status = ER_NATIVE_RELAY_INGRESS_ACCEPTED;
   return 1;
 }
