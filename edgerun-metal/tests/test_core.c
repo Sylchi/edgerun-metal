@@ -12,6 +12,7 @@
 #include "er_native_boot.h"
 #include "er_net_frame.h"
 #include "er_netlog.h"
+#include "er_relay_packet.h"
 #include "er_gfx_console.h"
 #include "er_ui_gop_renderer.h"
 #include "er_ui_text.h"
@@ -272,6 +273,14 @@ static void test_put_le64(UINT8* dst, UINT64 value) {
   test_put_le32(dst + 4, (UINT32)(value >> 32));
 }
 
+static void test_fill_bytes(UINT8* dst, UINTN len, UINT8 seed) {
+  UINTN i;
+
+  for (i = 0u; i < len; ++i) {
+    dst[i] = (UINT8)(seed + (UINT8)i);
+  }
+}
+
 static void test_acpi_set_checksum(UINT8* bytes, UINTN len, UINTN checksum_offset) {
   UINTN i;
   UINT8 sum = 0;
@@ -315,14 +324,21 @@ static INT64 test_vm_bus_exec(const ErBusIoPacket* request, ErBusIoPacket* respo
 }
 
 static INT64 test_vm_relay_send(const UINT8* bytes, UINT32 len) {
+  const UINT8* payload = 0;
+  UINT32 payload_len = 0u;
+
   if (bytes == 0) {
     return 0;
   }
-  check_uint64("wasm relay send len", len, 4u);
-  check_uint64("wasm relay send byte0", bytes[0], (UINT8)'p');
-  check_uint64("wasm relay send byte1", bytes[1], (UINT8)'i');
-  check_uint64("wasm relay send byte2", bytes[2], (UINT8)'n');
-  check_uint64("wasm relay send byte3", bytes[3], (UINT8)'g');
+  check_uint64("wasm relay send len", len, ER_RELAY_PACKET_HEADER_LEN + 4u);
+  check_int64("wasm relay send packet valid", er_relay_packet_valid(bytes, len), 1);
+  check_int64("wasm relay send payload view",
+              er_relay_packet_payload(bytes, len, &payload, &payload_len), 1);
+  check_uint64("wasm relay send payload len", payload_len, 4u);
+  check_uint64("wasm relay send byte0", payload[0], (UINT8)'p');
+  check_uint64("wasm relay send byte1", payload[1], (UINT8)'i');
+  check_uint64("wasm relay send byte2", payload[2], (UINT8)'n');
+  check_uint64("wasm relay send byte3", payload[3], (UINT8)'g');
   return (INT64)len;
 }
 
@@ -1462,6 +1478,57 @@ static void test_wasm_bus_exec_import(void) {
   check_uint64("wasm bus result", (UINT64)result, 0x5au);
 }
 
+static void test_relay_packets(void) {
+  static const UINT8 payload[] = {'p', 'i', 'n', 'g'};
+  UINT8 packet[ER_RELAY_PACKET_HEADER_LEN + sizeof(payload)];
+  ErNodeId source;
+  ErNodeId target;
+  ErHash admission;
+  ErHash token;
+  ErHash route;
+  ErHash payload_hash;
+  const UINT8* parsed_payload = 0;
+  UINT32 parsed_payload_len = 0u;
+  UINT32 packet_len = 0u;
+
+  test_fill_bytes(source.bytes, ER_NODE_ID_LEN, 0x10u);
+  test_fill_bytes(target.bytes, ER_NODE_ID_LEN, 0x30u);
+  test_fill_bytes(admission.bytes, ER_HASH_LEN, 0x50u);
+  test_fill_bytes(token.bytes, ER_HASH_LEN, 0x70u);
+  test_fill_bytes(route.bytes, ER_HASH_LEN, 0x90u);
+  test_fill_bytes(payload_hash.bytes, ER_HASH_LEN, 0xb0u);
+
+  check_int64("relay packet prepare",
+              er_relay_packet_prepare(packet, (UINT32)sizeof(packet), &source, &target,
+                                      &admission, &token, &route, 7u, 3u, 12u,
+                                      &payload_hash, payload, (UINT32)sizeof(payload),
+                                      &packet_len),
+              1);
+  check_uint64("relay packet len", packet_len, sizeof(packet));
+  check_int64("relay packet valid", er_relay_packet_valid(packet, packet_len), 1);
+  check_int64("relay packet payload",
+              er_relay_packet_payload(packet, packet_len, &parsed_payload, &parsed_payload_len),
+              1);
+  check_uint64("relay packet payload len", parsed_payload_len, sizeof(payload));
+  check_uint64("relay packet payload byte0", parsed_payload[0], payload[0]);
+  check_uint64("relay packet payload byte3", parsed_payload[3], payload[3]);
+
+  packet[0] = 0xffu;
+  check_int64("relay packet reject abi", er_relay_packet_valid(packet, packet_len), 0);
+  packet[0] = 1u;
+  check_int64("relay packet reject short len", er_relay_packet_valid(packet, packet_len - 1u), 0);
+  er_mem_zero(packet + ER_RELAY_PACKET_HEADER_LEN - ER_HASH_LEN, ER_HASH_LEN);
+  check_int64("relay packet reject empty payload hash",
+              er_relay_packet_valid(packet, packet_len), 0);
+  test_fill_bytes(payload_hash.bytes, ER_HASH_LEN, 0xb0u);
+  check_int64("relay packet reject cost overflow",
+              er_relay_packet_prepare(packet, (UINT32)sizeof(packet), &source, &target,
+                                      &admission, &token, &route, 8u, ~0ull, ~0ull,
+                                      &payload_hash, payload, (UINT32)sizeof(payload),
+                                      &packet_len),
+              0);
+}
+
 static void test_wasm_relay_imports(void) {
   /*
    * Purpose: prove a WASM program can only exchange relay bytes through admitted memory windows.
@@ -1475,19 +1542,32 @@ static void test_wasm_relay_imports(void) {
     0x67, 0x65, 0x72, 0x75, 0x6e, 0x2e, 0x72, 0x65, 0x6c, 0x61, 0x79, 0x04,
     0x72, 0x65, 0x63, 0x76, 0x00, 0x00, 0x03, 0x02, 0x01, 0x01, 0x05, 0x03,
     0x01, 0x00, 0x01, 0x07,
-    0x08, 0x01, 0x04, 0x6d, 0x61, 0x69, 0x6e, 0x00, 0x02, 0x0a, 0x12, 0x01,
-    0x10, 0x00, 0x42, 0x80, 0x08, 0x42, 0x04, 0x10, 0x00, 0x42, 0x00, 0x42,
-    0x04, 0x10, 0x01, 0x7c, 0x0b, 0x0b, 0x0b, 0x01, 0x00, 0x41, 0x80, 0x08,
-    0x0b, 0x04, 0x70, 0x69, 0x6e, 0x67
+    0x08, 0x01, 0x04, 0x6d, 0x61, 0x69, 0x6e, 0x00, 0x02, 0x0a, 0x13, 0x01,
+    0x11, 0x00, 0x42, 0x80, 0x08, 0x42, 0xec, 0x01, 0x10, 0x00, 0x42, 0x00,
+    0x42, 0x04, 0x10, 0x01, 0x7c, 0x0b
   };
+  static const UINT8 payload[] = {'p', 'i', 'n', 'g'};
   static UINT8 memory[65536];
   ErWasmHostCalls host = {0};
   ErWasmLinearMemory linear_memory;
   ErWasmModule module;
+  ErNodeId source;
+  ErNodeId target;
+  ErHash admission;
+  ErHash token;
+  ErHash route;
+  ErHash payload_hash;
   UINT32 main_index = 0;
+  UINT32 packet_len = 0u;
   INT64 result = 0;
 
   er_mem_zero(memory, (UINTN)sizeof(memory));
+  test_fill_bytes(source.bytes, ER_NODE_ID_LEN, 0x11u);
+  test_fill_bytes(target.bytes, ER_NODE_ID_LEN, 0x31u);
+  test_fill_bytes(admission.bytes, ER_HASH_LEN, 0x51u);
+  test_fill_bytes(token.bytes, ER_HASH_LEN, 0x71u);
+  test_fill_bytes(route.bytes, ER_HASH_LEN, 0x91u);
+  test_fill_bytes(payload_hash.bytes, ER_HASH_LEN, 0xb1u);
   check_int64("wasm relay linear memory prepare",
               er_wasm_prepare_linear_memory(memory, (UINT32)sizeof(memory),
                                             0u, 1024u, 1024u, 2048u,
@@ -1503,8 +1583,17 @@ static void test_wasm_relay_imports(void) {
               0);
   check_int64("wasm relay find main", er_wasm_find_main(&module, &main_index), 0);
   check_int64("wasm relay main index", main_index, 2);
+  check_int64("wasm relay packet prepare",
+              er_relay_packet_prepare(memory + 1024u,
+                                      (UINT32)sizeof(memory) - 1024u,
+                                      &source, &target, &admission, &token, &route,
+                                      9u, 2u, 8u, &payload_hash,
+                                      payload, (UINT32)sizeof(payload),
+                                      &packet_len),
+              1);
+  check_uint64("wasm relay packet len", packet_len, ER_RELAY_PACKET_HEADER_LEN + 4u);
   check_int64("wasm relay execute", er_wasm_execute_i64(&module, main_index, &result), 0);
-  check_uint64("wasm relay result", (UINT64)result, 8u);
+  check_uint64("wasm relay result", (UINT64)result, ER_RELAY_PACKET_HEADER_LEN + 8u);
   check_uint64("wasm relay inbox byte0", memory[0], (UINT8)'p');
   check_uint64("wasm relay inbox byte1", memory[1], (UINT8)'o');
   check_uint64("wasm relay inbox byte2", memory[2], (UINT8)'n');
@@ -2601,6 +2690,7 @@ int main(void) {
   test_native_eth_endpoint();
   test_wasm_mmio_imports();
   test_wasm_bus_exec_import();
+  test_relay_packets();
   test_wasm_relay_imports();
   test_vfs_object_packets();
   test_app_identity_routes();

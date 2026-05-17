@@ -1,5 +1,6 @@
 #include "wasm_vm.h"
 #include "er_mem.h"
+#include "er_relay_packet.h"
 
 /*
  * Purpose: run small admitted WASM driver/app modules inside the metal executor.
@@ -1454,6 +1455,9 @@ int er_wasm_execute_i64(ErWasmModule* module, UINT32 function_index, INT64* resu
                                             module->linear_memory.relay_outbox_base,
                                             module->linear_memory.relay_outbox_len,
                                             &bytes) != 0) {
+              return -1;
+            }
+            if (er_relay_packet_valid((const UINT8*)bytes, (UINT32)len) == 0u) {
               return -1;
             }
 
