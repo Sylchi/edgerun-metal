@@ -1368,19 +1368,64 @@ static void test_wasm_bus_exec_import(void) {
    */
   static UINT8 memory[65536];
   ErWasmHostCalls host = {0};
+  ErWasmLinearMemory linear_memory;
   ErWasmModule module;
   UINT32 main_index = 0;
   INT64 result = 0;
 
+  check_int64("wasm linear memory prepare",
+              er_wasm_prepare_linear_memory(memory, (UINT32)sizeof(memory),
+                                            0u, 1024u, 1024u, 2048u,
+                                            &linear_memory),
+              0);
+  check_uint64("wasm linear memory base", linear_memory.address_base, ER_WASM_LINEAR_MEMORY_BASE);
+  check_uint64("wasm linear memory len", linear_memory.address_len, sizeof(memory));
+  check_uint64("wasm linear memory inbox", linear_memory.relay_inbox_base, 0u);
+  check_uint64("wasm linear memory outbox", linear_memory.relay_outbox_base, 1024u);
+  check_int64("wasm linear memory reject outbox overflow",
+              er_wasm_prepare_linear_memory(memory, (UINT32)sizeof(memory),
+                                            0u, 1024u, 65535u, 2u,
+                                            &linear_memory),
+              -1);
+  check_int64("wasm linear memory reject missing inbox",
+              er_wasm_prepare_linear_memory(memory, (UINT32)sizeof(memory),
+                                            0u, 0u, 1024u, 2048u,
+                                            &linear_memory),
+              -1);
+  check_int64("wasm linear memory reject overlap",
+              er_wasm_prepare_linear_memory(memory, (UINT32)sizeof(memory),
+                                            0u, 2048u, 1024u, 2048u,
+                                            &linear_memory),
+              -1);
+  check_int64("wasm linear memory restore",
+              er_wasm_prepare_linear_memory(memory, (UINT32)sizeof(memory),
+                                            0u, 1024u, 1024u, 2048u,
+                                            &linear_memory),
+              0);
+
   host.bus_exec = test_vm_bus_exec;
-  host.memory = memory;
-  host.memory_size = (UINT32)sizeof(memory);
+  host.linear_memory = linear_memory;
 
   check_int64("wasm bus init",
               er_wasm_init(&module, g_edgerun_driver_bus_probe_wasm,
                            ER_DRIVER_BUS_PROBE_WASM_SIZE, &host),
               0);
+  linear_memory.address_base = 1u;
+  host.linear_memory = linear_memory;
+  check_int64("wasm bus reject nonzero base",
+              er_wasm_init(&module, g_edgerun_driver_bus_probe_wasm,
+                           ER_DRIVER_BUS_PROBE_WASM_SIZE, &host),
+              -1);
+  linear_memory.address_base = ER_WASM_LINEAR_MEMORY_BASE;
+  host.linear_memory = linear_memory;
+  check_int64("wasm bus restore after reject",
+              er_wasm_init(&module, g_edgerun_driver_bus_probe_wasm,
+                           ER_DRIVER_BUS_PROBE_WASM_SIZE, &host),
+              0);
   check_int64("wasm bus memory min", module.memory_min_pages, 1);
+  check_uint64("wasm bus linear len", module.linear_memory.address_len, sizeof(memory));
+  check_uint64("wasm bus relay inbox len", module.linear_memory.relay_inbox_len, 1024u);
+  check_uint64("wasm bus relay outbox len", module.linear_memory.relay_outbox_len, 2048u);
   check_int64("wasm bus find main", er_wasm_find_main(&module, &main_index), 0);
   check_int64("wasm bus main index", main_index, 1);
 

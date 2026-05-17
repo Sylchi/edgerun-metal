@@ -5,6 +5,7 @@
 #include "er_types.h"
 
 #define ER_WASM_MAX_FUNCTIONS 16u
+#define ER_WASM_LINEAR_MEMORY_BASE 0u
 
 /*
  * Purpose: define the bounded WASM interpreter ABI used by metal apps and drivers.
@@ -20,6 +21,16 @@ typedef INT64 (*er_wasm_mmio_read32)(INT64 handle, INT64 offset);
 typedef INT64 (*er_wasm_bus_exec)(const ErBusIoPacket* request, ErBusIoPacket* response);
 
 typedef struct {
+  UINT8* bytes;
+  UINT32 address_base;
+  UINT32 address_len;
+  UINT32 relay_inbox_base;
+  UINT32 relay_inbox_len;
+  UINT32 relay_outbox_base;
+  UINT32 relay_outbox_len;
+} ErWasmLinearMemory;
+
+typedef struct {
   er_wasm_log_u64 log_u64;
   er_wasm_log_hex log_hex;
   er_wasm_pci_read32 pci_read32;
@@ -29,6 +40,7 @@ typedef struct {
   er_wasm_bus_exec bus_exec;
   UINT8* memory;
   UINT32 memory_size;
+  ErWasmLinearMemory linear_memory;
 } ErWasmHostCalls;
 
 typedef struct {
@@ -45,6 +57,7 @@ typedef struct {
   UINT32 memory_min_pages;
   UINT32 memory_size;
   UINT8* memory;
+  ErWasmLinearMemory linear_memory;
   UINT8 function_has_main;
   UINT32 main_index;
   UINT32 function_type_indices[ER_WASM_MAX_FUNCTIONS];
@@ -57,6 +70,10 @@ typedef struct {
   ErWasmHostCalls host;
 } ErWasmModule;
 
+int er_wasm_prepare_linear_memory(UINT8* bytes, UINT32 address_len,
+                                  UINT32 relay_inbox_base, UINT32 relay_inbox_len,
+                                  UINT32 relay_outbox_base, UINT32 relay_outbox_len,
+                                  ErWasmLinearMemory* out_memory);
 int er_wasm_init(ErWasmModule* module, const UINT8* data, UINT32 size, const ErWasmHostCalls* host);
 int er_wasm_find_main(ErWasmModule* module, UINT32* main_index);
 int er_wasm_execute_i64(ErWasmModule* module, UINT32 function_index, INT64* result);
