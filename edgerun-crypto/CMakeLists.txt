@@ -2,6 +2,7 @@ cmake_minimum_required(VERSION 3.16)
 project(edgerun_crypto C)
 
 option(ER_CRYPTO_DISABLE_SIMD "Disable SIMD acceleration in edgerun-crypto" OFF)
+option(ER_CRYPTO_USE_UPSTREAM_BLAKE3_ASM "Use vendored official BLAKE3 x86_64 assembly leaves" ON)
 option(ER_CRYPTO_ENABLE_AVX2 "Build edgerun-crypto with AVX2 acceleration" OFF)
 option(ER_CRYPTO_ENABLE_AVX512 "Build edgerun-crypto with AVX-512 acceleration" OFF)
 option(ER_CRYPTO_ENABLE_THREADS "Build hosted pthread adapter for development and benchmark runs" OFF)
@@ -32,6 +33,26 @@ if(ER_CRYPTO_ENABLE_THREADS)
 endif()
 if(ER_CRYPTO_ENABLE_NATIVE AND NOT MSVC)
   target_compile_options(edgerun_crypto PRIVATE -march=native)
+endif()
+if(ER_CRYPTO_USE_UPSTREAM_BLAKE3_ASM AND NOT ER_CRYPTO_DISABLE_SIMD
+    AND CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64|AMD64|amd64")
+  enable_language(ASM)
+  if(WIN32)
+    target_sources(edgerun_crypto PRIVATE
+      ${CMAKE_CURRENT_SOURCE_DIR}/../third_party/blake3/c/blake3_sse2_x86-64_windows_gnu.S
+      ${CMAKE_CURRENT_SOURCE_DIR}/../third_party/blake3/c/blake3_sse41_x86-64_windows_gnu.S
+      ${CMAKE_CURRENT_SOURCE_DIR}/../third_party/blake3/c/blake3_avx2_x86-64_windows_gnu.S
+      ${CMAKE_CURRENT_SOURCE_DIR}/../third_party/blake3/c/blake3_avx512_x86-64_windows_gnu.S
+    )
+  else()
+    target_sources(edgerun_crypto PRIVATE
+      ${CMAKE_CURRENT_SOURCE_DIR}/../third_party/blake3/c/blake3_sse2_x86-64_unix.S
+      ${CMAKE_CURRENT_SOURCE_DIR}/../third_party/blake3/c/blake3_sse41_x86-64_unix.S
+      ${CMAKE_CURRENT_SOURCE_DIR}/../third_party/blake3/c/blake3_avx2_x86-64_unix.S
+      ${CMAKE_CURRENT_SOURCE_DIR}/../third_party/blake3/c/blake3_avx512_x86-64_unix.S
+    )
+  endif()
+  target_compile_definitions(edgerun_crypto PRIVATE ER_BLAKE3_USE_UPSTREAM_ASM=1)
 endif()
 if(ER_CRYPTO_ENABLE_AVX512 AND NOT ER_CRYPTO_DISABLE_SIMD)
   if(MSVC)
