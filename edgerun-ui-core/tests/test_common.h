@@ -3,6 +3,7 @@
 
 #include "er_ui_painter.h"
 #include "er_ui_components.h"
+#include "er_ui_metal.h"
 #include "er_ui_node.h"
 #include "er_ui_primitives.h"
 #include "er_ui_scene.h"
