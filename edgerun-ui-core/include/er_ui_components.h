@@ -1,8 +1,11 @@
 #ifndef ER_UI_COMPONENTS_H
 #define ER_UI_COMPONENTS_H
 
+#include "er_ui_runtime.h"
+
 #include <stdbool.h>
 #include <stddef.h>
+#include <stdint.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -80,6 +83,36 @@ typedef struct {
 } er_ui_shadcn_parity_contract_t;
 
 #define ER_UI_SHADCN_DEMO_COUNT 57u
+#define ER_UI_SHADCN_DEMO_PREVIEW_BASE_ID 18000u
+#define ER_UI_SHADCN_SELECT_CURRENCY_BASE_ID (ER_UI_SHADCN_DEMO_PREVIEW_BASE_ID + 1100u)
+#define ER_UI_SHADCN_SELECT_ORDER_BASE_ID (ER_UI_SHADCN_DEMO_PREVIEW_BASE_ID + 1120u)
+#define ER_UI_SHADCN_SELECT_TICKER_BASE_ID (ER_UI_SHADCN_DEMO_PREVIEW_BASE_ID + 1140u)
+#define ER_UI_SHADCN_CHART_CONTRIBUTION_BASE_ID (ER_UI_SHADCN_DEMO_PREVIEW_BASE_ID + 1200u)
+#define ER_UI_SHADCN_CHART_STOCK_BASE_ID (ER_UI_SHADCN_DEMO_PREVIEW_BASE_ID + 1220u)
+#define ER_UI_SHADCN_CHART_POWER_BASE_ID (ER_UI_SHADCN_DEMO_PREVIEW_BASE_ID + 1240u)
+#define ER_UI_SHADCN_SELECT_PREFERRED_CURRENCY_ID (ER_UI_SHADCN_DEMO_PREVIEW_BASE_ID + 942u)
+#define ER_UI_SHADCN_SELECT_ORDER_TYPE_ID (ER_UI_SHADCN_DEMO_PREVIEW_BASE_ID + 946u)
+#define ER_UI_SHADCN_SELECT_DEFAULT_CURRENCY_ID (ER_UI_SHADCN_DEMO_PREVIEW_BASE_ID + 968u)
+#define ER_UI_SHADCN_SELECT_TICKER_ID (ER_UI_SHADCN_DEMO_PREVIEW_BASE_ID + 1056u)
+#define ER_UI_SHADCN_GALLERY_SLIDER_CAPACITY 32u
+
+typedef struct {
+  uint32_t id;
+  float value;
+} er_ui_shadcn_slider_value_t;
+
+typedef struct {
+  bool has_open_select;
+  uint32_t open_select;
+  size_t currency_index;
+  size_t order_index;
+  size_t ticker_index;
+  size_t contribution_bar;
+  size_t stock_bar;
+  size_t power_bar;
+  er_ui_shadcn_slider_value_t sliders[ER_UI_SHADCN_GALLERY_SLIDER_CAPACITY];
+  size_t slider_count;
+} er_ui_shadcn_demo_gallery_state_t;
 
 const char* er_ui_shadcn_demo_category_label(er_ui_shadcn_demo_category_t category);
 const char* er_ui_shadcn_demo_status_label(er_ui_shadcn_demo_status_t status);
@@ -104,6 +137,16 @@ bool er_ui_shadcn_contract_supports_slot(const er_ui_shadcn_parity_contract_t* c
 bool er_ui_shadcn_contract_supports_state(const er_ui_shadcn_parity_contract_t* contract, const char* state);
 bool er_ui_shadcn_contract_supports_variant(const er_ui_shadcn_parity_contract_t* contract, const char* variant);
 bool er_ui_shadcn_contract_supports_interaction(const er_ui_shadcn_parity_contract_t* contract, const char* interaction);
+void er_ui_shadcn_demo_gallery_state_init(er_ui_shadcn_demo_gallery_state_t* state);
+bool er_ui_shadcn_demo_gallery_apply_action(er_ui_shadcn_demo_gallery_state_t* state, er_ui_action_t action);
+bool er_ui_shadcn_demo_gallery_select_open(const er_ui_shadcn_demo_gallery_state_t* state, uint32_t id);
+float er_ui_shadcn_demo_gallery_slider(const er_ui_shadcn_demo_gallery_state_t* state, uint32_t id, float fallback);
+size_t er_ui_shadcn_option_index(uint32_t id, uint32_t base, size_t len, bool* out_has_index);
+bool er_ui_shadcn_component_preview_available(const char* slug);
+bool er_ui_shadcn_demo_preview_available(const char* slug);
+bool er_ui_shadcn_component_preview_available_by_source_component(const char* source_component);
+bool er_ui_shadcn_component_preview_available_by_identifier(const char* identifier);
+bool er_ui_shadcn_demo_preview_available_by_identifier(const char* identifier);
 
 #ifdef __cplusplus
 }
