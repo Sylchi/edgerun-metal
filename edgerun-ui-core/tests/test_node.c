@@ -92,6 +92,33 @@ void run_node_tests(void) {
   expect_status(er_ui_node_add_child(&row, &button), ER_UI_OK, "node: row accepts button child");
   expect_status(er_ui_node_add_child(&root, &title), ER_UI_OK, "node: card accepts title child");
   expect_status(er_ui_node_add_child(&root, &row), ER_UI_OK, "node: card accepts row child");
+  expect_string(er_ui_node_kind_label(ER_UI_NODE_CARD), "card", "node: kind label maps card");
+  expect_string(er_ui_node_composition_issue_label(ER_UI_NODE_COMPOSITION_NESTED_CARD), "nested-card",
+                "node: composition issue label maps nested card");
+  er_ui_node_composition_issue_t issue = {0};
+  expect_status(er_ui_node_validate_composition(&root, &issue), ER_UI_OK, "node: card tree composition validates");
+  expect_size(issue.kind, ER_UI_NODE_COMPOSITION_OK, "node: valid composition reports ok");
+
+  er_ui_node_t outer_card = er_ui_node_card();
+  er_ui_node_t nested_column = er_ui_node_column();
+  er_ui_node_t inner_card = er_ui_node_metric_card("Spend", "4", "units", false, 0.0f, er_ui_color_rgba(0.0f, 0.0f, 0.0f, 1.0f));
+  expect_status(er_ui_node_add_child(&nested_column, &inner_card), ER_UI_OK, "node: nested column accepts card-like child");
+  expect_status(er_ui_node_add_child(&outer_card, &nested_column), ER_UI_OK, "node: outer card accepts column child");
+  expect_status(er_ui_node_validate_composition(&outer_card, &issue), ER_UI_ERR_INVALID_ARGUMENT,
+                "node: composition rejects cards inside cards");
+  expect_size(issue.kind, ER_UI_NODE_COMPOSITION_NESTED_CARD, "node: nested card issue kind");
+  expect_size(issue.ancestor_kind, ER_UI_NODE_CARD, "node: nested card issue ancestor");
+  expect_size(issue.parent_kind, ER_UI_NODE_COLUMN, "node: nested card issue parent");
+  expect_size(issue.node_kind, ER_UI_NODE_METRIC_CARD, "node: nested card issue node");
+  expect_size(issue.child_index, 0u, "node: nested card issue child index");
+
+  er_ui_node_t section_card = er_ui_node_card();
+  er_ui_node_t section_column = er_ui_node_column();
+  er_ui_node_t section_child = er_ui_node_section("Policy", "hash visible");
+  expect_status(er_ui_node_add_child(&section_column, &section_child), ER_UI_OK, "node: section column accepts child");
+  expect_status(er_ui_node_add_child(&section_card, &section_column), ER_UI_OK, "node: card accepts unframed section");
+  expect_status(er_ui_node_validate_composition(&section_card, &issue), ER_UI_OK,
+                "node: composition allows unframed sections in cards");
 
   er_ui_a11y_node_t a11y = {0};
   expect_status(er_ui_node_accessibility(&button, &a11y), ER_UI_OK, "node: button accessibility maps");
