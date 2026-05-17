@@ -87,6 +87,77 @@ er_ui_node_t er_ui_node_skeleton(void) {
   return er_ui_node_base(ER_UI_NODE_SKELETON);
 }
 
+er_ui_node_t er_ui_node_alert(const char* title, const char* body, er_ui_color4_t accent) {
+  er_ui_node_t node = er_ui_node_base(ER_UI_NODE_ALERT);
+  node.label = title;
+  node.detail = body;
+  node.color = accent;
+  return node;
+}
+
+er_ui_node_t er_ui_node_avatar(const char* label, er_ui_color4_t color, bool online) {
+  er_ui_node_t node = er_ui_node_base(ER_UI_NODE_AVATAR);
+  node.label = label;
+  node.color = color;
+  node.active = online;
+  return node;
+}
+
+er_ui_node_t er_ui_node_progress(float value) {
+  er_ui_node_t node = er_ui_node_base(ER_UI_NODE_PROGRESS);
+  node.number = value;
+  return node;
+}
+
+er_ui_node_t er_ui_node_switch(bool checked, uint32_t id) {
+  er_ui_node_t node = er_ui_node_base(ER_UI_NODE_SWITCH);
+  node.active = checked;
+  node.id = id;
+  return node;
+}
+
+er_ui_node_t er_ui_node_table(const char* const* headers, size_t header_count, const char* const* cells, size_t row_count, uint32_t id_base) {
+  er_ui_node_t node = er_ui_node_base(ER_UI_NODE_TABLE);
+  node.labels = headers;
+  node.label_count = header_count;
+  node.cells = cells;
+  node.row_count = row_count;
+  node.id = id_base;
+  return node;
+}
+
+er_ui_node_t er_ui_node_breadcrumb(const char* const* labels, size_t label_count, size_t selected, uint32_t base_id) {
+  er_ui_node_t node = er_ui_node_base(ER_UI_NODE_BREADCRUMB);
+  node.labels = labels;
+  node.label_count = label_count;
+  node.selected = selected;
+  node.id = base_id;
+  return node;
+}
+
+er_ui_node_t er_ui_node_toast(const char* message, er_ui_color4_t accent) {
+  er_ui_node_t node = er_ui_node_base(ER_UI_NODE_TOAST);
+  node.label = message;
+  node.color = accent;
+  return node;
+}
+
+er_ui_node_t er_ui_node_empty(const char* title, const char* body) {
+  er_ui_node_t node = er_ui_node_base(ER_UI_NODE_EMPTY);
+  node.label = title;
+  node.detail = body;
+  return node;
+}
+
+er_ui_node_t er_ui_node_list_row(const char* title, const char* detail, uint32_t id, bool selected) {
+  er_ui_node_t node = er_ui_node_base(ER_UI_NODE_LIST_ROW);
+  node.label = title;
+  node.detail = detail;
+  node.id = id;
+  node.active = selected;
+  return node;
+}
+
 er_ui_node_t* er_ui_node_set_bounds(er_ui_node_t* node, er_ui_bounds_t bounds) {
   if (!node) return node;
   node->bounds = bounds;
@@ -194,6 +265,24 @@ er_ui_status_t er_ui_node_render(
       return er_ui_shadcn_separator_emit(scene, rect, theme);
     case ER_UI_NODE_SKELETON:
       return er_ui_shadcn_skeleton_emit(scene, rect, theme);
+    case ER_UI_NODE_ALERT:
+      return er_ui_shadcn_alert_emit(scene, font, rect, theme, node->label, node->detail, node->color);
+    case ER_UI_NODE_AVATAR:
+      return er_ui_shadcn_avatar_emit(scene, font, rect, theme, node->label, node->color, node->active);
+    case ER_UI_NODE_PROGRESS:
+      return er_ui_shadcn_progress_emit(scene, rect, theme, node->number);
+    case ER_UI_NODE_SWITCH:
+      return er_ui_shadcn_switch_emit(scene, rect, theme, node->active, node->id);
+    case ER_UI_NODE_TABLE:
+      return er_ui_shadcn_table_emit(scene, font, rect, theme, node->labels, node->label_count, node->cells, node->row_count, node->id);
+    case ER_UI_NODE_BREADCRUMB:
+      return er_ui_shadcn_breadcrumb_emit(scene, font, rect, theme, node->labels, node->label_count, node->selected, node->id);
+    case ER_UI_NODE_TOAST:
+      return er_ui_shadcn_toast_emit(scene, font, rect, theme, node->label, node->color);
+    case ER_UI_NODE_EMPTY:
+      return er_ui_shadcn_empty_emit(scene, font, rect, theme, node->label, node->detail);
+    case ER_UI_NODE_LIST_ROW:
+      return er_ui_shadcn_list_row_emit(scene, font, rect, theme, node->label, node->detail, node->id, node->active);
     default:
       return ER_UI_ERR_INVALID_ARGUMENT;
   }
