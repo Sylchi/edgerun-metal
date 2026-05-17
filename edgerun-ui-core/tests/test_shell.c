@@ -166,6 +166,14 @@ void run_shell_tests(void) {
                   "shell prompt: variable font opens from memory");
     free(font_data);
     if (face) {
+      er_ui_scene_clear_commands(&scene);
+      expect_status(er_ui_shell_emit_scene_with_font(&shell, &scene, er_ui_bounds(0.0f, 0.0f, 640.0f, 400.0f), theme, face), ER_UI_OK,
+                    "shell font: normal shell emits with variable font");
+      expect_true(scene.text_quad_count > 0u, "shell font: normal shell emits variable font text");
+      er_ui_scene_clear_commands(&scene);
+      expect_status(er_ui_shell_emit_scene_with_font(&shell, &scene, er_ui_bounds(0.0f, 0.0f, 640.0f, 400.0f), theme, NULL), ER_UI_ERR_INVALID_ARGUMENT,
+                    "shell font: font-backed scene rejects missing variable font");
+
       er_ui_shell_show_network_app_prompt(&shell);
       expect_true(er_ui_shell_network_app_prompt_open(&shell), "shell prompt: prompt opens");
       er_ui_scene_clear_commands(&scene);

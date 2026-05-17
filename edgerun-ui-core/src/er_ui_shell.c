@@ -298,6 +298,61 @@ static er_ui_status_t er_ui_shell_push_ascii_text(er_ui_scene_t* scene, vr_font_
   return er_ui_scene_push_varfont_text(scene, font, codepoints, count, x, y, color);
 }
 
+static size_t er_ui_shell_u32_to_ascii(uint32_t value, char* out, size_t out_capacity) {
+  if (!out || out_capacity == 0u) return 0u;
+  char reversed[10u];
+  size_t count = 0u;
+  do {
+    reversed[count++] = (char)('0' + (value % 10u));
+    value /= 10u;
+  } while (value != 0u && count < sizeof(reversed));
+  if (count + 1u > out_capacity) return 0u;
+  for (size_t i = 0u; i < count; ++i) out[i] = reversed[count - 1u - i];
+  out[count] = '\0';
+  return count;
+}
+
+static er_ui_status_t er_ui_shell_push_surface_label(
+  er_ui_scene_t* scene,
+  vr_font_face_t* font,
+  uint32_t surface_id,
+  float x,
+  float y,
+  er_ui_color4_t color) {
+  char label[24u] = {'S', 'u', 'r', 'f', 'a', 'c', 'e', ' ', '\0'};
+  size_t prefix_len = 8u;
+  size_t digits = er_ui_shell_u32_to_ascii(surface_id, label + prefix_len, sizeof(label) - prefix_len);
+  if (digits == 0u) return ER_UI_ERR_INVALID_ARGUMENT;
+  return er_ui_shell_push_ascii_text(scene, font, label, x, y, color);
+}
+
+static er_ui_status_t er_ui_shell_emit_text_labels(
+  const er_ui_shell_state_t* state,
+  er_ui_scene_t* scene,
+  er_ui_bounds_t bounds,
+  er_ui_resolved_theme_t theme,
+  vr_font_face_t* font) {
+  if (!font) return ER_UI_ERR_INVALID_ARGUMENT;
+  er_ui_status_t status = er_ui_shell_push_ascii_text(scene, font, "EdgeRun", bounds.x + 52.0f, bounds.y + 27.0f, theme.colors.text);
+  if (status != ER_UI_OK) return status;
+
+  float tabs_y = bounds.y + ER_UI_SHELL_TOPBAR_HEIGHT;
+  for (size_t i = 0u; i < state->surface_count; ++i) {
+    uint32_t id = state->surfaces[i].id;
+    float tab_x = bounds.x + (float)i * ER_UI_WORKSPACE_TAB_WIDTH;
+    er_ui_color4_t text = id == state->focused_surface_id ? theme.colors.accent_text : theme.colors.text;
+    status = er_ui_shell_push_surface_label(scene, font, id, tab_x + 12.0f, tabs_y + 27.0f, text);
+    if (status != ER_UI_OK) return status;
+  }
+
+  if (state->launcher_open) {
+    status = er_ui_shell_push_ascii_text(scene, font, "Run network app", bounds.x + 18.0f, bounds.y + ER_UI_SHELL_TOPBAR_HEIGHT + 34.0f,
+                                         theme.colors.text);
+    if (status != ER_UI_OK) return status;
+  }
+  return ER_UI_OK;
+}
+
 static er_ui_status_t er_ui_shell_emit_prompt_button(
   er_ui_scene_t* scene,
   vr_font_face_t* font,
@@ -405,6 +460,8 @@ er_ui_status_t er_ui_shell_emit_scene_with_font(
   er_ui_resolved_theme_t theme,
   vr_font_face_t* font) {
   er_ui_status_t status = er_ui_shell_emit_scene_base(state, scene, bounds, theme);
+  if (status != ER_UI_OK) return status;
+  status = er_ui_shell_emit_text_labels(state, scene, bounds, theme, font);
   if (status != ER_UI_OK) return status;
   return er_ui_shell_emit_network_app_prompt(state, scene, bounds, theme, font);
 }
