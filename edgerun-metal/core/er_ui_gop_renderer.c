@@ -12,6 +12,11 @@
 #define ER_UI_GOP_ICON_GRID_SIZE 24u
 #define ER_UI_GOP_ICON_GRID_HALF 12u
 #define ER_UI_GOP_ICON_STROKE_DIVISOR 7u
+#define ER_UI_GOP_MSDF_RGB_CHANNELS 3u
+#define ER_UI_GOP_MSDF_ALPHA_LOW 96u
+#define ER_UI_GOP_MSDF_ALPHA_HIGH 160u
+#define ER_UI_GOP_MSDF_ALPHA_RANGE (ER_UI_GOP_MSDF_ALPHA_HIGH - ER_UI_GOP_MSDF_ALPHA_LOW)
+#define ER_UI_GOP_DIRTY_TILE_ID_BYTES 4u
 
 //@optimizer-ignore-constant UEFI GOP protocol GUID is ABI-defined by firmware
 static EFI_GUID g_gop_guid = {
@@ -656,7 +661,7 @@ static UINT8 er_ui_gop_sample_msdf_alpha(const vr_font_atlas_view_t* atlas, floa
   UINT8 mid;
 
   if (atlas == 0 || atlas->pixels == 0 || atlas->width == 0u || atlas->height == 0u ||
-      atlas->bytes_per_pixel < 3u) {
+      atlas->bytes_per_pixel < ER_UI_GOP_MSDF_RGB_CHANNELS) {
     return 0u;
   }
 
@@ -672,9 +677,10 @@ static UINT8 er_ui_gop_sample_msdf_alpha(const vr_font_atlas_view_t* atlas, floa
   hi = r > g ? r : g;
   hi = hi > b ? hi : b;
   mid = (UINT8)((UINT32)r + (UINT32)g + (UINT32)b - (UINT32)lo - (UINT32)hi);
-  if (mid <= 96u) return 0u;
-  if (mid >= 160u) return 255u;
-  return (UINT8)(((UINT32)(mid - 96u) * 255u) / 64u);
+  if (mid <= ER_UI_GOP_MSDF_ALPHA_LOW) return 0u;
+  if (mid >= ER_UI_GOP_MSDF_ALPHA_HIGH) return ER_UI_GOP_COLOR_BYTE_MAX;
+  return (UINT8)(((UINT32)(mid - ER_UI_GOP_MSDF_ALPHA_LOW) * ER_UI_GOP_COLOR_BYTE_MAX) /
+                 ER_UI_GOP_MSDF_ALPHA_RANGE);
 }
 
 static UINT8 er_ui_gop_sample_atlas_alpha(const vr_font_atlas_view_t* atlas, float u, float v) {
@@ -799,7 +805,7 @@ static UINT32 er_ui_gop_div_ceil_u32(UINT32 value, UINT32 divisor) {
 }
 
 static UINT8 er_ui_gop_add_u64(UINT64 a, UINT64 b, UINT64* out) {
-  if (out == 0 || a > 0xffffffffffffffffull - b) {
+  if (out == 0 || a > UINT64_MAX - b) {
     return 0u;
   }
   *out = a + b;
@@ -807,7 +813,7 @@ static UINT8 er_ui_gop_add_u64(UINT64 a, UINT64 b, UINT64* out) {
 }
 
 static UINT8 er_ui_gop_mul_u64(UINT64 a, UINT64 b, UINT64* out) {
-  if (out == 0 || (a != 0u && b > 0xffffffffffffffffull / a)) {
+  if (out == 0 || (a != 0u && b > UINT64_MAX / a)) {
     return 0u;
   }
   *out = a * b;
@@ -849,7 +855,7 @@ UINT8 er_ui_gop_tile_plan_from_mode(const ErUiGopMode* mode, UINT32 tile_width, 
   out_plan->full_frame_bytes = (UINT64)mode->width * (UINT64)mode->height * ER_UI_GOP_BYTES_PER_PIXEL;
   out_plan->max_tile_bytes = (UINT64)tile_width * (UINT64)tile_height * ER_UI_GOP_BYTES_PER_PIXEL;
   out_plan->tile_state_bytes = tile_count;
-  out_plan->dirty_queue_bytes = (UINT64)max_dirty_tiles * 4u;
+  out_plan->dirty_queue_bytes = (UINT64)max_dirty_tiles * ER_UI_GOP_DIRTY_TILE_ID_BYTES;
   return 1u;
 }
 
@@ -988,7 +994,7 @@ UINT8 er_ui_gop_dirty_tiles_reset(const ErUiGopTilePlan* plan, UINT8* tile_marks
 
   if (plan == 0 || tile_marks == 0 || list == 0 || list->tile_ids == 0 ||
       plan->tile_count == 0u || plan->tile_count > tile_mark_count ||
-      plan->tile_count > 0xffffffffu || list->capacity < plan->max_dirty_tiles) {
+      plan->tile_count > UINT32_MAX || list->capacity < plan->max_dirty_tiles) {
     return 0u;
   }
 
@@ -1016,7 +1022,7 @@ UINT8 er_ui_gop_dirty_tiles_mark_rect(const ErUiGopTilePlan* plan, float x, floa
 
   if (plan == 0 || tile_marks == 0 || list == 0 || list->tile_ids == 0 ||
       plan->tile_count == 0u || plan->tile_count > tile_mark_count ||
-      plan->tile_count > 0xffffffffu || !(w > 0.0f) || !(h > 0.0f)) {
+      plan->tile_count > UINT32_MAX || !(w > 0.0f) || !(h > 0.0f)) {
     return 0u;
   }
 

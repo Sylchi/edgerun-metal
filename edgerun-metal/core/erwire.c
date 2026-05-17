@@ -13,6 +13,17 @@
 #define ERWIRE_U16_BYTES 2u
 #define ERWIRE_U32_BYTES 4u
 #define ERWIRE_PCI_BAR_COUNT 6u
+#define ERWIRE_BYTE0 0u
+#define ERWIRE_BYTE1 1u
+#define ERWIRE_BYTE2 2u
+#define ERWIRE_BYTE3 3u
+#define ERWIRE_U8_MASK 0xffu
+#define ERWIRE_U16_HIGH_SHIFT 8u
+#define ERWIRE_U32_BYTE2_SHIFT 16u
+#define ERWIRE_U32_BYTE3_SHIFT 24u
+#define ERWIRE_CRC32_INITIAL 0xffffffffu
+#define ERWIRE_CRC32_POLY 0xedb88320u
+#define ERWIRE_CRC32_BITS_PER_BYTE 8u
 
 static UINT32 g_stream_id = 1u;
 static UINT32 g_seq;
@@ -34,15 +45,15 @@ static UINT32 erwire_len(const char* s) {
 }
 
 static void erwire_put_u16(UINT8* dst, UINT16 value) {
-  dst[0] = (UINT8)(value & 0xffu);
-  dst[1] = (UINT8)((value >> 8) & 0xffu);
+  dst[ERWIRE_BYTE0] = (UINT8)(value & ERWIRE_U8_MASK);
+  dst[ERWIRE_BYTE1] = (UINT8)((value >> ERWIRE_U16_HIGH_SHIFT) & ERWIRE_U8_MASK);
 }
 
 static void erwire_put_u32(UINT8* dst, UINT32 value) {
-  dst[0] = (UINT8)(value & 0xffu);
-  dst[1] = (UINT8)((value >> 8) & 0xffu);
-  dst[2] = (UINT8)((value >> 16) & 0xffu);
-  dst[3] = (UINT8)((value >> 24) & 0xffu);
+  dst[ERWIRE_BYTE0] = (UINT8)(value & ERWIRE_U8_MASK);
+  dst[ERWIRE_BYTE1] = (UINT8)((value >> ERWIRE_U16_HIGH_SHIFT) & ERWIRE_U8_MASK);
+  dst[ERWIRE_BYTE2] = (UINT8)((value >> ERWIRE_U32_BYTE2_SHIFT) & ERWIRE_U8_MASK);
+  dst[ERWIRE_BYTE3] = (UINT8)((value >> ERWIRE_U32_BYTE3_SHIFT) & ERWIRE_U8_MASK);
 }
 
 static void erwire_write_u16(UINT8** cursor, UINT16 value) {
@@ -56,7 +67,7 @@ static void erwire_write_u32(UINT8** cursor, UINT32 value) {
 }
 
 static UINT32 erwire_crc32(const UINT8* data, UINT32 len) {
-  UINT32 crc = 0xffffffffu;
+  UINT32 crc = ERWIRE_CRC32_INITIAL;
   UINT32 i;
 
   if (data == 0) {
@@ -65,9 +76,9 @@ static UINT32 erwire_crc32(const UINT8* data, UINT32 len) {
   for (i = 0; i < len; ++i) {
     UINT32 bit;
     crc ^= (UINT32)data[i];
-    for (bit = 0; bit < 8u; ++bit) {
+    for (bit = 0; bit < ERWIRE_CRC32_BITS_PER_BYTE; ++bit) {
       UINT32 mask = 0u - (crc & 1u);
-      crc = (crc >> 1) ^ (0xedb88320u & mask);
+      crc = (crc >> 1) ^ (ERWIRE_CRC32_POLY & mask);
     }
   }
   return ~crc;
