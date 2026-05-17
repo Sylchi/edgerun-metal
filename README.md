@@ -40,6 +40,10 @@ transports can all move the same verifiable bytes.
 
 ## Global Resource Sharing
 
+> "I think compute is going to be the currency of the future."
+>
+> Sam Altman, [Lex Fridman Podcast #419](https://www.youtube.com/watch?v=jvqFAi7vkBc&t=10s) ([transcript](https://lexfridman.com/sam-altman-2-transcript/))
+
 The larger goal is user-governed global resource sharing. A user should be able
 to join a computer, phone, storage device, renderer, or local network link to a
 global EdgeRun network without handing authority to a carrier, cloud operator,
