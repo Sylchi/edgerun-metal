@@ -39,6 +39,12 @@ static void test_axis_metadata(vr_font_face_t* face) {
 
     st = vr_font_set_axis(face, "fake", new_value);
     test_expect_status(st, VR_ERR_NOT_FOUND, "axes: unknown axis returns not found");
+
+    st = vr_font_set_axis(face, "w", new_value);
+    test_expect_status(st, VR_ERR_INVALID_FONT, "axes: short axis tag is invalid");
+
+    st = vr_font_set_axis(face, "wghtx", new_value);
+    test_expect_status(st, VR_ERR_INVALID_FONT, "axes: long axis tag is invalid");
   }
 }
 
@@ -50,4 +56,3 @@ void run_axis_tests(void) {
   test_axis_metadata(face);
   test_close_face(face);
 }
-

@@ -7,6 +7,14 @@ static const float VR_VERTEX_COLOR_ONE = 1.0f;
 
 static size_t vr_find_atlas_index(const uint32_t* atlas_ids, size_t atlas_count, uint32_t atlas_id);
 
+static bool vr_axis_tag_valid(const char* tag) {
+  if (!tag) return false;
+  for (size_t i = 0u; i < VR_AXIS_NAME_LEN; ++i) {
+    if (tag[i] == '\0') return false;
+  }
+  return tag[VR_AXIS_NAME_LEN] == '\0';
+}
+
 static void* vr_shape_alloc(vr_font_face_t* face, size_t size) {
   return vr_alloc(face, size, 8u);
 }
@@ -144,7 +152,7 @@ vr_status_t vr_font_set_size(vr_font_face_t* face, float px_size) {
 }
 
 vr_status_t vr_font_set_axis(vr_font_face_t* face, const char* tag, float user_value) {
-  if (!face || !tag) return VR_ERR_INVALID_FONT;
+  if (!face || !vr_axis_tag_valid(tag)) return VR_ERR_INVALID_FONT;
   for (uint16_t i = 0; i < face->fvar.axis_count && i < VR_MAX_AXES; ++i) {
     if (vr_tag_compare(face->fvar.descriptors[i].tag, tag) == 0) {
       float norm = 0.0f;
