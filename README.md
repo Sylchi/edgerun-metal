@@ -94,14 +94,33 @@ policy. If the EFI image, boot chain, hardware inventory, or accounting program
 changes, the measurements change and old capacity claims stop matching the
 admission policy.
 
+The same rule applies at every layer. A storage controller, NIC, GPU, radio,
+sensor, VM, app runtime, or scheduler can have its own admission authority and
+its own local tokens for the resources it governs. Those subsystem tokens are
+not global money; they are proofs that a measured subsystem accepted and
+accounted for a bounded amount of work. The device admission can compose those
+subsystem claims into device-level capacity. The user admission can then decide
+which device-level claims are spendable by local programs, friends, groups, or
+external users.
+
+That makes the global question mostly a question of what booted, what measured
+itself, and which owner policy admitted it. Mobile platforms already use
+hardware-rooted boot chains to decide which software and keys are trusted on a
+device. EdgeRun uses the same class of proof for resource accounting, but moves
+the governing authority to the user and the user's admissions instead of making
+the hardware vendor, app store, carrier, cloud, or network operator the only
+root of control.
+
 The useful invariant is:
 
 ```text
 signed EFI + Secure Boot + TPM measured boot
   -> attested EdgeRun runtime identity
-  -> deterministic hardware/resource inventory
-  -> admission policy
-  -> bounded resource-token issuance
+  -> deterministic subsystem inventories
+  -> subsystem admissions and local tokens
+  -> device admission and composed capacity
+  -> user admission policy
+  -> bounded spendable resource claims
   -> packet/work proofs and receipts
 ```
 
