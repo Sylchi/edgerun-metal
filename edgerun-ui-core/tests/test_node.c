@@ -106,6 +106,7 @@ void run_node_tests(void) {
   expect_string(er_ui_node_kind_label(ER_UI_NODE_MENUBAR), "menubar", "node: kind label maps menubar");
   expect_string(er_ui_node_kind_label(ER_UI_NODE_RADIO_GROUP), "radio-group", "node: kind label maps radio group");
   expect_string(er_ui_node_kind_label(ER_UI_NODE_INPUT_GROUP), "input-group", "node: kind label maps input group");
+  expect_string(er_ui_node_kind_label(ER_UI_NODE_INPUT_OTP), "input-otp", "node: kind label maps input otp");
   expect_string(er_ui_icon_label(ER_UI_ICON_SEARCH), "search", "node: icon label maps canonical icon");
   expect_u32(er_ui_icon_atlas_id(ER_UI_ICON_SEARCH), (uint32_t)ER_UI_ICON_SEARCH + 1u, "node: icon atlas id is stable");
   expect_string(er_ui_icon_provider_name(ER_UI_ICON_APP, ER_UI_ICON_PROVIDER_LUCIDE), "app-window", "node: lucide provider name maps app icon");
@@ -276,6 +277,16 @@ void run_node_tests(void) {
   expect_size(a11y.role, ER_UI_A11Y_BUTTON, "node: input group button accessibility role");
   expect_true(a11y.has_id && a11y.id == 8039u, "node: input group button id");
 
+  const char* const otp_values[] = {"1", "2", "3", "-", "4", "5"};
+  er_ui_node_t otp_a11y = er_ui_node_input_otp(otp_values, 6u, 4u, 8040u);
+  expect_status(er_ui_node_accessibility(&otp_a11y, &a11y), ER_UI_OK, "node: input otp accessibility maps");
+  expect_size(a11y.role, ER_UI_A11Y_GROUP, "node: input otp accessibility role");
+  expect_status(er_ui_node_accessibility_child(&otp_a11y, 4u, &a11y), ER_UI_OK, "node: input otp digit accessibility maps");
+  expect_size(a11y.role, ER_UI_A11Y_TEXTBOX, "node: input otp digit accessibility role");
+  expect_true(a11y.has_id && a11y.id == 8044u, "node: input otp digit id");
+  expect_true((a11y.states & ER_UI_A11Y_STATE_FOCUSED) != 0u, "node: input otp focused digit state");
+  expect_status(er_ui_node_accessibility_child(&otp_a11y, 3u, &a11y), ER_UI_ERR_INVALID_ARGUMENT, "node: input otp separator is not focusable");
+
   er_ui_node_t checked = er_ui_node_checkbox("Remember", true, 8002u);
   expect_status(er_ui_node_accessibility(&checked, &a11y), ER_UI_OK, "node: checkbox accessibility maps");
   expect_size(a11y.role, ER_UI_A11Y_CHECKBOX, "node: checkbox accessibility role");
@@ -417,6 +428,8 @@ void run_node_tests(void) {
     const char* const render_radio_group_labels[] = {"Default", "Comfortable", "Compact"};
     er_ui_node_t radio_group = er_ui_node_radio_group(render_radio_group_labels, 3u, 0u, 8840u);
     er_ui_node_t input_group = er_ui_node_input_group("URL", "https://edgerun.local", "Copy", 8843u);
+    const char* const render_otp_values[] = {"1", "2", "3", "-", "4", ""};
+    er_ui_node_t input_otp = er_ui_node_input_otp(render_otp_values, 6u, 5u, 8845u);
 
     expect_status(er_ui_node_render(&alert, &scene, face, er_ui_bounds(0.0f, 170.0f, 360.0f, 76.0f), theme), ER_UI_OK, "node: alert renders");
     expect_status(er_ui_node_render(&avatar, &scene, face, er_ui_bounds(0.0f, 254.0f, 42.0f, 42.0f), theme), ER_UI_OK, "node: avatar renders");
@@ -537,6 +550,10 @@ void run_node_tests(void) {
     expect_status(er_ui_node_render(&input_group, &scene, face, er_ui_bounds(0.0f, 4090.0f, 340.0f, 58.0f), theme), ER_UI_OK,
                   "node: input group renders");
     expect_size(scene.hit_count, hits_before_input_group + 2u, "node: input group emits field and button hits");
+    size_t hits_before_input_otp = scene.hit_count;
+    expect_status(er_ui_node_render(&input_otp, &scene, face, er_ui_bounds(0.0f, 4160.0f, 300.0f, 52.0f), theme), ER_UI_OK,
+                  "node: input otp renders");
+    expect_size(scene.hit_count, hits_before_input_otp + 5u, "node: input otp emits editable cell hits");
     size_t drag_sources_before = scene.drag_source_count;
     size_t drop_targets_before = scene.drop_target_count;
     expect_status(er_ui_node_render(&reorderable, &scene, face, er_ui_bounds(0.0f, 2930.0f, 260.0f, 52.0f), theme), ER_UI_OK,
