@@ -138,6 +138,15 @@ er_ui_status_t er_ui_shell_apply_action(er_ui_shell_state_t* state, er_ui_action
     }
   }
 
+  if (action.has_hit && action.hit.kind == ER_UI_HIT_APP_LAUNCHER_ITEM && action.kind == ER_UI_ACTION_ACTIVATED &&
+      action.hit.id == ER_UI_SHELL_NETWORK_APP_LAUNCHER_ID) {
+    state->launcher_open = false;
+    state->network_app_prompt_open = true;
+    state->network_app_prompt_choice = ER_UI_NETWORK_APP_PROMPT_CHOICE_NONE;
+    if (out_changed) *out_changed = true;
+    return ER_UI_OK;
+  }
+
   if (action.has_hit && action.hit.kind == ER_UI_HIT_SHELL_LAUNCHER && action.kind == ER_UI_ACTION_ACTIVATED) {
     state->launcher_open = !state->launcher_open;
     if (out_changed) *out_changed = true;
@@ -249,7 +258,15 @@ static er_ui_status_t er_ui_shell_emit_launcher(const er_ui_shell_state_t* state
   er_ui_bounds_t panel = er_ui_bounds(bounds.x, bounds.y + ER_UI_SHELL_TOPBAR_HEIGHT, w, bounds.h - ER_UI_SHELL_TOPBAR_HEIGHT);
   er_ui_status_t status = er_ui_scene_push_rect(scene, er_ui_rect_fill(panel.x, panel.y, panel.w, panel.h, theme.radius.panel, theme.colors.sidebar));
   if (status != ER_UI_OK) return status;
-  return er_ui_scene_push_hit(scene, er_ui_hit(ER_UI_HIT_SHELL_LAUNCHER, ER_UI_SHELL_LAUNCHER_ID, panel.x, panel.y, panel.w, panel.h));
+  status = er_ui_scene_push_hit(scene, er_ui_hit(ER_UI_HIT_SHELL_LAUNCHER, ER_UI_SHELL_LAUNCHER_ID, panel.x, panel.y, panel.w, panel.h));
+  if (status != ER_UI_OK) return status;
+
+  er_ui_bounds_t network_app = er_ui_bounds(panel.x + ER_UI_SHELL_PAD, panel.y + 52.0f, panel.w - ER_UI_SHELL_PAD * 2.0f, 42.0f);
+  status = er_ui_scene_push_rect(scene, er_ui_rect_fill(network_app.x, network_app.y, network_app.w, network_app.h, theme.radius.control, theme.colors.row));
+  if (status != ER_UI_OK) return status;
+  return er_ui_scene_push_hit(scene,
+                              er_ui_hit(ER_UI_HIT_APP_LAUNCHER_ITEM, ER_UI_SHELL_NETWORK_APP_LAUNCHER_ID, network_app.x, network_app.y,
+                                        network_app.w, network_app.h));
 }
 
 static er_ui_status_t er_ui_shell_emit_workspace(const er_ui_shell_state_t* state, er_ui_scene_t* scene, er_ui_bounds_t bounds, er_ui_resolved_theme_t theme) {
@@ -347,6 +364,9 @@ static er_ui_status_t er_ui_shell_emit_text_labels(
 
   if (state->launcher_open) {
     status = er_ui_shell_push_ascii_text(scene, font, "Run network app", bounds.x + 18.0f, bounds.y + ER_UI_SHELL_TOPBAR_HEIGHT + 34.0f,
+                                         theme.colors.text);
+    if (status != ER_UI_OK) return status;
+    status = er_ui_shell_push_ascii_text(scene, font, "Network app", bounds.x + 26.0f, bounds.y + ER_UI_SHELL_TOPBAR_HEIGHT + 80.0f,
                                          theme.colors.text);
     if (status != ER_UI_OK) return status;
   }
