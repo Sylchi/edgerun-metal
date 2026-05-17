@@ -10,6 +10,7 @@
 #include "er_ui_gop_renderer.h"
 #include "er_ui_text.h"
 #include "er_virtio.h"
+#include "er_virtio_net.h"
 #include "er_vfs.h"
 #include "font_geist.h"
 #include "wasm_vm.h"
@@ -744,6 +745,102 @@ static void test_virtio_split_queue(void) {
   check_uint64("virtio queue last second", last_used_idx, 2u);
   check_int64("virtio queue take empty",
               er_virtio_queue_take_next_used(&used, 4u, &last_used_idx, &elem), 0);
+}
+
+static void test_virtio_net_mmio(void) {
+  enum {
+    VIRTIO_NET_TEST_MMIO_DWORDS = 128u,
+    VIRTIO_NET_TEST_QUEUE_MAX = ER_VIRTIO_QUEUE_SIZE,
+    VIRTIO_NET_TEST_FRAME_LEN = 4u,
+    VIRTIO_NET_TEST_RX_DESC = 2u
+  };
+  UINT32 regs[VIRTIO_NET_TEST_MMIO_DWORDS] = {0};
+  ErVirtioNet net;
+  ErVirtioNetStats stats;
+  ErVirtioQueueDesc* rx_desc;
+  ErVirtioQueueAvail* rx_avail;
+  ErVirtioQueueUsed* rx_used;
+  UINT8* rx_buffer;
+  ErVirtioQueueDesc* tx_desc;
+  ErVirtioQueueAvail* tx_avail;
+  ErVirtioQueueUsed* tx_used;
+  UINT8* tx_buffer;
+  UINT8 frame[VIRTIO_NET_TEST_FRAME_LEN] = {0xdeu, 0xadu, 0xbeu, 0xefu};
+  UINT8 recv_frame[8] = {0};
+  UINT32 recv_len = 0;
+
+  er_mmio_reset();
+  regs[ER_VIRTIO_MMIO_MAGIC_VALUE_OFFSET / sizeof(UINT32)] = ER_VIRTIO_MMIO_MAGIC;
+  regs[ER_VIRTIO_MMIO_VERSION_OFFSET / sizeof(UINT32)] = ER_VIRTIO_MMIO_VERSION_MODERN;
+  regs[ER_VIRTIO_MMIO_DEVICE_ID_OFFSET / sizeof(UINT32)] = ER_VIRTIO_DEVICE_TYPE_NET;
+  regs[ER_VIRTIO_MMIO_VENDOR_OFFSET / sizeof(UINT32)] = ER_VIRTIO_MMIO_VENDOR_ANY;
+  regs[ER_VIRTIO_MMIO_DEVICE_FEATURES_OFFSET / sizeof(UINT32)] = 1u;
+  regs[ER_VIRTIO_MMIO_QUEUE_NUM_MAX_OFFSET / sizeof(UINT32)] = VIRTIO_NET_TEST_QUEUE_MAX;
+
+  check_int64("virtio net init",
+              er_virtio_net_init_mmio((UINT64)(UINTN)regs, (UINT64)sizeof(regs), &net),
+              1);
+  check_int64("virtio net initialized", net.initialized, 1);
+  check_int64("virtio net link up default", net.link_up, 1);
+  check_uint64("virtio net queue size", net.queue_size, ER_VIRTIO_QUEUE_SIZE);
+  check_uint64("virtio net features", net.features, ER_VIRTIO_F_VERSION_1);
+  check_uint64("virtio net status driver ok",
+               regs[ER_VIRTIO_MMIO_STATUS_OFFSET / sizeof(UINT32)],
+               ER_VIRTIO_STATUS_ACKNOWLEDGE | ER_VIRTIO_STATUS_DRIVER |
+               ER_VIRTIO_STATUS_FEATURES_OK | ER_VIRTIO_STATUS_DRIVER_OK);
+  check_uint64("virtio net initial notify rx",
+               regs[ER_VIRTIO_MMIO_QUEUE_NOTIFY_OFFSET / sizeof(UINT32)], 0u);
+
+  rx_desc = er_virtio_net_test_rx_desc();
+  rx_avail = er_virtio_net_test_rx_avail();
+  rx_used = er_virtio_net_test_rx_used();
+  tx_desc = er_virtio_net_test_tx_desc();
+  tx_avail = er_virtio_net_test_tx_avail();
+  tx_used = er_virtio_net_test_tx_used();
+  check_uint64("virtio net rx avail filled", rx_avail->idx, ER_VIRTIO_QUEUE_SIZE);
+  check_uint64("virtio net rx desc write", rx_desc[0].flags, ER_VIRTIO_DESC_F_WRITE);
+  check_uint64("virtio net tx avail empty", tx_avail->idx, 0u);
+
+  check_int64("virtio net send", er_virtio_net_send(&net, frame, VIRTIO_NET_TEST_FRAME_LEN), 1);
+  tx_buffer = er_virtio_net_test_tx_buffer(0u);
+  check_uint64("virtio net tx avail idx", tx_avail->idx, 1u);
+  check_uint64("virtio net tx avail desc", tx_avail->ring[0], 0u);
+  check_uint64("virtio net tx desc len", tx_desc[0].len, 12u + VIRTIO_NET_TEST_FRAME_LEN);
+  check_uint64("virtio net tx desc flags", tx_desc[0].flags, 0u);
+  check_uint64("virtio net tx hdr zero", tx_buffer[0], 0u);
+  check_uint64("virtio net tx payload0", tx_buffer[12], frame[0]);
+  check_uint64("virtio net tx payload3", tx_buffer[15], frame[3]);
+  check_uint64("virtio net tx notify",
+               regs[ER_VIRTIO_MMIO_QUEUE_NOTIFY_OFFSET / sizeof(UINT32)], 1u);
+  stats = er_virtio_net_stats(&net);
+  check_uint64("virtio net tx submitted", stats.tx_submitted, 1u);
+  check_uint64("virtio net tx completed before used", stats.tx_completed, 0u);
+
+  tx_used->ring[0].id = 0u;
+  tx_used->ring[0].len = 12u + VIRTIO_NET_TEST_FRAME_LEN;
+  tx_used->idx = 1u;
+  stats = er_virtio_net_stats(&net);
+  check_uint64("virtio net tx completed after used", stats.tx_completed, 1u);
+
+  rx_buffer = er_virtio_net_test_rx_buffer(VIRTIO_NET_TEST_RX_DESC);
+  rx_buffer[12] = 0x11u;
+  rx_buffer[13] = 0x22u;
+  rx_buffer[14] = 0x33u;
+  rx_used->ring[0].id = VIRTIO_NET_TEST_RX_DESC;
+  rx_used->ring[0].len = 15u;
+  rx_used->idx = 1u;
+  check_int64("virtio net recv",
+              er_virtio_net_recv(&net, recv_frame, (UINT32)sizeof(recv_frame), &recv_len),
+              1);
+  check_uint64("virtio net recv len", recv_len, 3u);
+  check_uint64("virtio net recv byte0", recv_frame[0], 0x11u);
+  check_uint64("virtio net recv byte2", recv_frame[2], 0x33u);
+  check_uint64("virtio net rx repost", rx_avail->idx, ER_VIRTIO_QUEUE_SIZE + 1u);
+  check_uint64("virtio net rx notify",
+               regs[ER_VIRTIO_MMIO_QUEUE_NOTIFY_OFFSET / sizeof(UINT32)], 0u);
+  stats = er_virtio_net_stats(&net);
+  check_uint64("virtio net rx received", stats.rx_received, 1u);
+  check_uint64("virtio net rx invalid", stats.rx_invalid, 0u);
 }
 
 static void test_acpi_tables(void) {
@@ -1694,6 +1791,7 @@ int main(void) {
   test_bus_addresses();
   test_virtio_mmio_transport();
   test_virtio_split_queue();
+  test_virtio_net_mmio();
   test_wasm_mmio_imports();
   test_wasm_bus_exec_import();
   test_vfs_object_packets();
