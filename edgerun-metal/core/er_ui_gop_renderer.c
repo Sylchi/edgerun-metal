@@ -8,6 +8,10 @@
 #define ER_UI_GOP_BLEND_ROUND_BIAS 127u
 #define ER_UI_GOP_COLOR_GREEN_SHIFT 8u
 #define ER_UI_GOP_COLOR_RED_SHIFT 16u
+#define ER_UI_GOP_SHADOW_LAYERS 3u
+#define ER_UI_GOP_ICON_GRID_SIZE 24u
+#define ER_UI_GOP_ICON_GRID_HALF 12u
+#define ER_UI_GOP_ICON_STROKE_DIVISOR 7u
 
 //@optimizer-ignore-constant UEFI GOP protocol GUID is ABI-defined by firmware
 static EFI_GUID g_gop_guid = {
@@ -290,7 +294,7 @@ static void er_ui_gop_shadow_round_rect(ErUiGopSurface* surface, const ErUiGopPi
   UINT32 layer;
   float spread = rect.shadow > 0.0f ? rect.shadow : 14.0f;
 
-  for (layer = 3u; layer > 0u; --layer) {
+  for (layer = ER_UI_GOP_SHADOW_LAYERS; layer > 0u; --layer) {
     UINT32 x0;
     UINT32 y0;
     UINT32 x1;
@@ -299,7 +303,7 @@ static void er_ui_gop_shadow_round_rect(ErUiGopSurface* surface, const ErUiGopPi
     UINT32 full_y0;
     UINT32 full_x1;
     UINT32 full_y1;
-    float k = (float)layer / 3.0f;
+    float k = (float)layer / (float)ER_UI_GOP_SHADOW_LAYERS;
     float inset = spread * k * 0.40f;
     float alpha = 0.065f * k;
     er_ui_color4_t color = er_ui_color_rgba(0.0f, 0.0f, 0.0f, alpha);
@@ -442,11 +446,13 @@ static void er_ui_gop_draw_line(ErUiGopSurface* surface, INT32 x0, INT32 y0, INT
 }
 
 static INT32 er_ui_gop_icon_x(UINT32 x0, UINT32 w, INT32 value) {
-  return (INT32)x0 + (INT32)(((UINT64)w * (UINT64)(UINT32)value + 12u) / 24u);
+  return (INT32)x0 + (INT32)(((UINT64)w * (UINT64)(UINT32)value + ER_UI_GOP_ICON_GRID_HALF) /
+                             ER_UI_GOP_ICON_GRID_SIZE);
 }
 
 static INT32 er_ui_gop_icon_y(UINT32 y0, UINT32 h, INT32 value) {
-  return (INT32)y0 + (INT32)(((UINT64)h * (UINT64)(UINT32)value + 12u) / 24u);
+  return (INT32)y0 + (INT32)(((UINT64)h * (UINT64)(UINT32)value + ER_UI_GOP_ICON_GRID_HALF) /
+                             ER_UI_GOP_ICON_GRID_SIZE);
 }
 
 static void er_ui_gop_icon_line(ErUiGopSurface* surface, UINT32 x0, UINT32 y0, UINT32 w, UINT32 h,
@@ -470,8 +476,10 @@ static void er_ui_gop_icon_circle(ErUiGopSurface* surface, UINT32 x0, UINT32 y0,
                                   er_ui_color4_t color, const ErUiGopPixelRect* clip, ErUiGopRenderStats* stats) {
   INT32 cx = er_ui_gop_icon_x(x0, w, cx24);
   INT32 cy = er_ui_gop_icon_y(y0, h, cy24);
-  INT32 rx = (INT32)(((UINT64)w * (UINT64)(UINT32)r24 + 12u) / 24u);
-  INT32 ry = (INT32)(((UINT64)h * (UINT64)(UINT32)r24 + 12u) / 24u);
+  INT32 rx = (INT32)(((UINT64)w * (UINT64)(UINT32)r24 + ER_UI_GOP_ICON_GRID_HALF) /
+                     ER_UI_GOP_ICON_GRID_SIZE);
+  INT32 ry = (INT32)(((UINT64)h * (UINT64)(UINT32)r24 + ER_UI_GOP_ICON_GRID_HALF) /
+                     ER_UI_GOP_ICON_GRID_SIZE);
   INT32 r = rx < ry ? rx : ry;
   INT32 inner = r - (INT32)stroke;
   INT32 y;
@@ -489,6 +497,7 @@ static void er_ui_gop_icon_circle(ErUiGopSurface* surface, UINT32 x0, UINT32 y0,
   }
 }
 
+//@optimizer-ignore-function icon vector coordinates are literal points on a 24-unit art grid
 static void er_ui_gop_render_icon_quad(ErUiGopSurface* surface, const er_ui_quad_t* quad,
                                        const ErUiGopPixelRect* clip, ErUiGopRenderStats* stats) {
   UINT32 x0;
@@ -518,7 +527,7 @@ static void er_ui_gop_render_icon_quad(ErUiGopSurface* surface, const er_ui_quad
 
   w = x1 - x0;
   h = y1 - y0;
-  stroke = w < h ? w / 7u : h / 7u;
+  stroke = w < h ? w / ER_UI_GOP_ICON_STROKE_DIVISOR : h / ER_UI_GOP_ICON_STROKE_DIVISOR;
   if (stroke == 0u) stroke = 1u;
   icon = er_ui_icon_from_atlas_id(quad->atlas_id);
 

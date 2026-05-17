@@ -8,20 +8,35 @@
 
 #define ER_NET_U16_HIGH_SHIFT 8u
 #define ER_NET_U16_BYTE_MASK 0xffu
+#define ER_NET_U16_WORD_MASK 0xffffu
 #define ER_NET_U32_HIGH16_SHIFT 16u
 #define ER_NET_ETH_DST_OFFSET 0u
 #define ER_NET_ETH_SRC_OFFSET 6u
 #define ER_NET_ETH_TYPE_OFFSET 12u
 #define ER_NET_IPV4_OFFSET ER_NET_ETH_HEADER_LEN
 #define ER_NET_IPV4_VERSION_IHL 0x45u
+#define ER_NET_IPV4_TOTAL_LEN_OFFSET 2u
+#define ER_NET_IPV4_ID_OFFSET 4u
+#define ER_NET_IPV4_FLAGS_FRAGMENT_OFFSET 6u
+#define ER_NET_IPV4_TTL_OFFSET 8u
+#define ER_NET_IPV4_PROTO_OFFSET 9u
 #define ER_NET_IPV4_TTL 64u
 #define ER_NET_IPV4_CHECKSUM_OFFSET 10u
 #define ER_NET_IPV4_SRC_OFFSET 12u
 #define ER_NET_IPV4_DST_OFFSET 16u
 #define ER_NET_UDP_OFFSET (ER_NET_ETH_HEADER_LEN + ER_NET_IPV4_HEADER_LEN)
+#define ER_NET_UDP_SRC_PORT_OFFSET 0u
+#define ER_NET_UDP_DST_PORT_OFFSET 2u
+#define ER_NET_UDP_LEN_OFFSET 4u
+#define ER_NET_UDP_CHECKSUM_OFFSET 6u
 #define ER_NET_UDP_CHECKSUM_ZERO 0u
 #define ER_NET_UDP_PAYLOAD_OFFSET ER_NET_IPV4_UDP_HEADER_LEN
 #define ER_NET_ARP_OFFSET ER_NET_ETH_HEADER_LEN
+#define ER_NET_ARP_HTYPE_OFFSET 0u
+#define ER_NET_ARP_PTYPE_OFFSET 2u
+#define ER_NET_ARP_HLEN_OFFSET 4u
+#define ER_NET_ARP_PLEN_OFFSET 5u
+#define ER_NET_ARP_OP_OFFSET 6u
 #define ER_NET_ARP_HTYPE_ETHERNET 1u
 #define ER_NET_ARP_PTYPE_IPV4 ER_NET_ETH_TYPE_IPV4
 #define ER_NET_ARP_HLEN_ETHERNET ER_NET_MAC_LEN
@@ -128,9 +143,9 @@ UINT16 er_net_checksum16(const UINT8* bytes, UINT32 len) {
     sum += (UINT32)bytes[i] << ER_NET_U16_HIGH_SHIFT;
   }
   while ((sum >> ER_NET_U32_HIGH16_SHIFT) != 0u) {
-    sum = (sum & 0xffffu) + (sum >> ER_NET_U32_HIGH16_SHIFT);
+    sum = (sum & ER_NET_U16_WORD_MASK) + (sum >> ER_NET_U32_HIGH16_SHIFT);
   }
-  return (UINT16)(~sum & 0xffffu);
+  return (UINT16)(~sum & ER_NET_U16_WORD_MASK);
 }
 
 UINT8 er_net_build_ipv4_udp_frame(const UINT8* src_mac, const UINT8* dst_mac,
@@ -163,21 +178,21 @@ UINT8 er_net_build_ipv4_udp_frame(const UINT8* src_mac, const UINT8* dst_mac,
   ip = out_frame + ER_NET_IPV4_OFFSET;
   ip[0] = ER_NET_IPV4_VERSION_IHL;
   ip[1] = 0;
-  er_net_put_u16_be(ip + 2u, (UINT16)ip_len);
-  er_net_put_u16_be(ip + 4u, 0);
-  er_net_put_u16_be(ip + 6u, 0);
-  ip[8] = ER_NET_IPV4_TTL;
-  ip[9] = ER_NET_IP_PROTO_UDP;
+  er_net_put_u16_be(ip + ER_NET_IPV4_TOTAL_LEN_OFFSET, (UINT16)ip_len);
+  er_net_put_u16_be(ip + ER_NET_IPV4_ID_OFFSET, 0);
+  er_net_put_u16_be(ip + ER_NET_IPV4_FLAGS_FRAGMENT_OFFSET, 0);
+  ip[ER_NET_IPV4_TTL_OFFSET] = ER_NET_IPV4_TTL;
+  ip[ER_NET_IPV4_PROTO_OFFSET] = ER_NET_IP_PROTO_UDP;
   er_mem_copy(ip + ER_NET_IPV4_SRC_OFFSET, src_ip, ER_NET_IPV4_LEN);
   er_mem_copy(ip + ER_NET_IPV4_DST_OFFSET, dst_ip, ER_NET_IPV4_LEN);
   ip_checksum = er_net_checksum16(ip, ER_NET_IPV4_HEADER_LEN);
   er_net_put_u16_be(ip + ER_NET_IPV4_CHECKSUM_OFFSET, ip_checksum);
 
   udp = out_frame + ER_NET_UDP_OFFSET;
-  er_net_put_u16_be(udp, src_port);
-  er_net_put_u16_be(udp + 2u, dst_port);
-  er_net_put_u16_be(udp + 4u, (UINT16)udp_len);
-  er_net_put_u16_be(udp + 6u, ER_NET_UDP_CHECKSUM_ZERO);
+  er_net_put_u16_be(udp + ER_NET_UDP_SRC_PORT_OFFSET, src_port);
+  er_net_put_u16_be(udp + ER_NET_UDP_DST_PORT_OFFSET, dst_port);
+  er_net_put_u16_be(udp + ER_NET_UDP_LEN_OFFSET, (UINT16)udp_len);
+  er_net_put_u16_be(udp + ER_NET_UDP_CHECKSUM_OFFSET, ER_NET_UDP_CHECKSUM_ZERO);
   er_mem_copy(out_frame + ER_NET_UDP_PAYLOAD_OFFSET, payload, (UINTN)payload_len);
   *out_frame_len = frame_len;
   return 1;
@@ -199,11 +214,11 @@ UINT8 er_net_build_arp_request(const UINT8* src_mac, const UINT8* src_ip,
   er_mem_zero(out_frame, ER_NET_ARP_FRAME_LEN);
   er_net_put_eth_header(out_frame, src_mac, broadcast, ER_NET_ETH_TYPE_ARP);
   arp = out_frame + ER_NET_ARP_OFFSET;
-  er_net_put_u16_be(arp, ER_NET_ARP_HTYPE_ETHERNET);
-  er_net_put_u16_be(arp + 2u, ER_NET_ARP_PTYPE_IPV4);
-  arp[4] = ER_NET_ARP_HLEN_ETHERNET;
-  arp[5] = ER_NET_ARP_PLEN_IPV4;
-  er_net_put_u16_be(arp + 6u, ER_NET_ARP_OP_REQUEST);
+  er_net_put_u16_be(arp + ER_NET_ARP_HTYPE_OFFSET, ER_NET_ARP_HTYPE_ETHERNET);
+  er_net_put_u16_be(arp + ER_NET_ARP_PTYPE_OFFSET, ER_NET_ARP_PTYPE_IPV4);
+  arp[ER_NET_ARP_HLEN_OFFSET] = ER_NET_ARP_HLEN_ETHERNET;
+  arp[ER_NET_ARP_PLEN_OFFSET] = ER_NET_ARP_PLEN_IPV4;
+  er_net_put_u16_be(arp + ER_NET_ARP_OP_OFFSET, ER_NET_ARP_OP_REQUEST);
   er_mem_copy(arp + ER_NET_ARP_SHA_OFFSET, src_mac, ER_NET_MAC_LEN);
   er_mem_copy(arp + ER_NET_ARP_SPA_OFFSET, src_ip, ER_NET_IPV4_LEN);
   er_mem_copy(arp + ER_NET_ARP_TPA_OFFSET, target_ip, ER_NET_IPV4_LEN);
@@ -225,11 +240,11 @@ UINT8 er_net_parse_arp_ipv4_reply(const UINT8* frame, UINT32 frame_len,
     return 0;
   }
   arp = frame + ER_NET_ARP_OFFSET;
-  if (er_net_get_u16_be(arp) != ER_NET_ARP_HTYPE_ETHERNET ||
-      er_net_get_u16_be(arp + 2u) != ER_NET_ARP_PTYPE_IPV4 ||
-      arp[4] != ER_NET_ARP_HLEN_ETHERNET ||
-      arp[5] != ER_NET_ARP_PLEN_IPV4 ||
-      er_net_get_u16_be(arp + 6u) != ER_NET_ARP_OP_REPLY) {
+  if (er_net_get_u16_be(arp + ER_NET_ARP_HTYPE_OFFSET) != ER_NET_ARP_HTYPE_ETHERNET ||
+      er_net_get_u16_be(arp + ER_NET_ARP_PTYPE_OFFSET) != ER_NET_ARP_PTYPE_IPV4 ||
+      arp[ER_NET_ARP_HLEN_OFFSET] != ER_NET_ARP_HLEN_ETHERNET ||
+      arp[ER_NET_ARP_PLEN_OFFSET] != ER_NET_ARP_PLEN_IPV4 ||
+      er_net_get_u16_be(arp + ER_NET_ARP_OP_OFFSET) != ER_NET_ARP_OP_REPLY) {
     return 0;
   }
   if (er_net_bytes_equal(arp + ER_NET_ARP_SPA_OFFSET, expected_sender_ip, ER_NET_IPV4_LEN) == 0u ||
