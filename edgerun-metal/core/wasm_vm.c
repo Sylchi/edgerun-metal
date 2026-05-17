@@ -34,7 +34,9 @@ enum {
   ER_IMPORT_KIND_LOG_U64 = 1,
   ER_IMPORT_KIND_LOG_HEX = 2,
   ER_IMPORT_KIND_PCI_READ32 = 3,
-  ER_IMPORT_KIND_PCI_WRITE32 = 4
+  ER_IMPORT_KIND_PCI_WRITE32 = 4,
+  ER_IMPORT_KIND_MMIO_MAP = 5,
+  ER_IMPORT_KIND_MMIO_READ32 = 6
 };
 
 enum {
@@ -47,7 +49,9 @@ static const ErHostImport ER_HOST_IMPORTS[] = {
   {"edgerun.log", 11, "u64", 3, ER_IMPORT_KIND_LOG_U64},
   {"edgerun.log", 11, "hex", 3, ER_IMPORT_KIND_LOG_HEX},
   {"edgerun.pci", 11, "read32", 6, ER_IMPORT_KIND_PCI_READ32},
-  {"edgerun.pci", 11, "write32", 7, ER_IMPORT_KIND_PCI_WRITE32}
+  {"edgerun.pci", 11, "write32", 7, ER_IMPORT_KIND_PCI_WRITE32},
+  {"edgerun.mmio", 12, "map", 3, ER_IMPORT_KIND_MMIO_MAP},
+  {"edgerun.mmio", 12, "read32", 6, ER_IMPORT_KIND_MMIO_READ32}
 };
 static const UINT32 ER_HOST_IMPORT_COUNT = (UINT32)(sizeof(ER_HOST_IMPORTS) / sizeof(ER_HOST_IMPORTS[0]));
 
@@ -98,6 +102,8 @@ static void er_clear_module(ErWasmModule* module) {
   module->host.log_hex = 0;
   module->host.pci_read32 = 0;
   module->host.pci_write32 = 0;
+  module->host.mmio_map = 0;
+  module->host.mmio_read32 = 0;
 }
 
 static int er_reader_init(ErReader* r, const UINT8* data, UINT32 size) {
@@ -174,7 +180,7 @@ static int er_reader_read_i64_leb(ErReader* r, INT64* out) {
   } while (byte & 0x80);
 
   if ((shift < 64) && (byte & 0x40)) {
-    result |= (~(INT64)0) << shift;
+    result |= (INT64)(~((UINT64)0) << shift);
   }
 
   *out = result;
@@ -341,7 +347,12 @@ int er_wasm_init(ErWasmModule* module, const UINT8* data, UINT32 size, const ErW
   er_clear_module(module);
 
   if (host != 0) {
-    module->host = *host;
+    module->host.log_u64 = host->log_u64;
+    module->host.log_hex = host->log_hex;
+    module->host.pci_read32 = host->pci_read32;
+    module->host.pci_write32 = host->pci_write32;
+    module->host.mmio_map = host->mmio_map;
+    module->host.mmio_read32 = host->mmio_read32;
   }
 
   if (er_reader_init(&r, data, size) != 0) {
@@ -930,6 +941,54 @@ int er_wasm_execute_i64(ErWasmModule* module, UINT32 function_index, INT64* resu
             dev = stack[--stack_size];
             bus = stack[--stack_size];
             module->host.pci_write32(bus, dev, func, offset, value);
+          } else if (import_kind == ER_IMPORT_KIND_MMIO_MAP) {
+            INT64 value = 0;
+            INT64 phys = 0;
+            INT64 len = 0;
+            if (param_count_call != 2 || result_count != 1) {
+              return -1;
+            }
+            if (result_type != 0x7e) {
+              return -1;
+            }
+            if (stack_size < 2) {
+              return -1;
+            }
+            if (module->host.mmio_map == 0) {
+              return -1;
+            }
+            len = stack[--stack_size];
+            phys = stack[--stack_size];
+
+            value = module->host.mmio_map(phys, len);
+            if (stack_size >= 32) {
+              return -1;
+            }
+            stack[stack_size++] = value;
+          } else if (import_kind == ER_IMPORT_KIND_MMIO_READ32) {
+            INT64 value = 0;
+            INT64 handle = 0;
+            INT64 offset = 0;
+            if (param_count_call != 2 || result_count != 1) {
+              return -1;
+            }
+            if (result_type != 0x7e) {
+              return -1;
+            }
+            if (stack_size < 2) {
+              return -1;
+            }
+            if (module->host.mmio_read32 == 0) {
+              return -1;
+            }
+            offset = stack[--stack_size];
+            handle = stack[--stack_size];
+
+            value = module->host.mmio_read32(handle, offset);
+            if (stack_size >= 32) {
+              return -1;
+            }
+            stack[stack_size++] = value;
           } else {
             return -1;
           }

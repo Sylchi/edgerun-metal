@@ -86,6 +86,7 @@ Explicit profiles:
 make -C edgerun-metal smoke
 make -C edgerun-metal pci
 make -C edgerun-metal quiet
+make -C edgerun-metal mmio
 ```
 
 Profiles:
@@ -94,6 +95,7 @@ Profiles:
 smoke = banner + test Wasm only
 pci   = concise PCI target scan: NVIDIA / NVMe / Ethernet
 quiet = minimal halt-ready boot
+mmio  = conservative read-only NVIDIA BAR0 probe
 ```
 
 Output:
@@ -258,14 +260,21 @@ Targets:
 
 ### M4: MMIO read-only hostcalls
 
-Add:
+Foundation added:
 
 ```text
 edgerun.mmio.map(phys, len) -> handle
 edgerun.mmio.read32(handle, offset) -> i64
 ```
 
-No MMIO writes yet.
+Current limits:
+
+- read-only only
+- fixed native handle table
+- range and alignment validation before reads
+- `mmio` profile maps only a fixed 4 KiB BAR0 window
+- no Boot Services memory ownership changes
+- no MMIO writes yet
 
 ### M5: NVIDIA BAR0 safe probe
 

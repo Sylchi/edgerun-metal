@@ -7,12 +7,16 @@ typedef void (*er_wasm_log_u64)(INT64 value);
 typedef void (*er_wasm_log_hex)(UINT64 value);
 typedef INT64 (*er_wasm_pci_read32)(INT64 bus, INT64 device, INT64 func, INT64 offset);
 typedef void (*er_wasm_pci_write32)(INT64 bus, INT64 device, INT64 func, INT64 offset, INT64 value);
+typedef INT64 (*er_wasm_mmio_map)(INT64 phys, INT64 len);
+typedef INT64 (*er_wasm_mmio_read32)(INT64 handle, INT64 offset);
 
 typedef struct {
   er_wasm_log_u64 log_u64;
   er_wasm_log_hex log_hex;
   er_wasm_pci_read32 pci_read32;
   er_wasm_pci_write32 pci_write32;
+  er_wasm_mmio_map mmio_map;
+  er_wasm_mmio_read32 mmio_read32;
 } ErWasmHostCalls;
 
 typedef struct {
