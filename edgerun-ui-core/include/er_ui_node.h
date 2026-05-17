@@ -73,6 +73,7 @@ typedef enum {
   ER_UI_NODE_DRAWER,
   ER_UI_NODE_DROPDOWN_MENU,
   ER_UI_NODE_CONTEXT_MENU,
+  ER_UI_NODE_DATE_PICKER,
   ER_UI_NODE_ROUTE_PATH,
   ER_UI_NODE_PACKAGE_CARD,
   ER_UI_NODE_RECEIPT_ROW,
@@ -295,6 +296,7 @@ er_ui_node_t er_ui_node_drawer(const char* title, const char* detail, const char
 er_ui_node_t er_ui_node_dropdown_menu(const char* const* labels, const char* const* shortcuts, size_t item_count, size_t selected, uint32_t base_id);
 er_ui_node_t er_ui_node_context_menu(const char* title, const char* detail, const char* const* labels, const char* const* shortcuts, size_t item_count,
                                      size_t selected, uint32_t base_id);
+er_ui_node_t er_ui_node_date_picker(const char* label, const char* month, const char* const* days, size_t day_count, size_t selected, uint32_t base_id);
 er_ui_node_t er_ui_node_route_path(const char* label, const char* const* hops, size_t hop_count);
 er_ui_node_t er_ui_node_package_card(const char* name, const char* policy, const char* hash, uint32_t id);
 er_ui_node_t er_ui_node_receipt_row(const char* label, const char* amount, const char* status_text, uint32_t id);

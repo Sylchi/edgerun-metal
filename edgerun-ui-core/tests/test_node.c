@@ -117,6 +117,7 @@ void run_node_tests(void) {
   expect_string(er_ui_node_kind_label(ER_UI_NODE_DRAWER), "drawer", "node: kind label maps drawer");
   expect_string(er_ui_node_kind_label(ER_UI_NODE_DROPDOWN_MENU), "dropdown-menu", "node: kind label maps dropdown menu");
   expect_string(er_ui_node_kind_label(ER_UI_NODE_CONTEXT_MENU), "context-menu", "node: kind label maps context menu");
+  expect_string(er_ui_node_kind_label(ER_UI_NODE_DATE_PICKER), "date-picker", "node: kind label maps date picker");
   expect_string(er_ui_icon_label(ER_UI_ICON_SEARCH), "search", "node: icon label maps canonical icon");
   expect_u32(er_ui_icon_atlas_id(ER_UI_ICON_SEARCH), (uint32_t)ER_UI_ICON_SEARCH + 1u, "node: icon atlas id is stable");
   expect_string(er_ui_icon_provider_name(ER_UI_ICON_APP, ER_UI_ICON_PROVIDER_LUCIDE), "app-window", "node: lucide provider name maps app icon");
@@ -380,6 +381,18 @@ void run_node_tests(void) {
   expect_true(a11y.has_id && a11y.id == 8066u, "node: context menu item id");
   expect_true((a11y.states & ER_UI_A11Y_STATE_SELECTED) != 0u, "node: context menu selected state");
 
+  const char* const date_days[] = {"12", "13", "14", "15"};
+  er_ui_node_t date_picker_a11y = er_ui_node_date_picker("Pick a date", "May 2026", date_days, 4u, 2u, 8068u);
+  expect_status(er_ui_node_accessibility(&date_picker_a11y, &a11y), ER_UI_OK, "node: date picker accessibility maps");
+  expect_size(a11y.role, ER_UI_A11Y_COMBOBOX, "node: date picker accessibility role");
+  expect_true((a11y.states & ER_UI_A11Y_STATE_OPEN) != 0u, "node: date picker open state");
+  expect_status(er_ui_node_accessibility_child(&date_picker_a11y, 0u, &a11y), ER_UI_OK, "node: date picker trigger accessibility maps");
+  expect_size(a11y.role, ER_UI_A11Y_BUTTON, "node: date picker trigger role");
+  expect_true(a11y.has_id && a11y.id == 8068u, "node: date picker trigger id");
+  expect_status(er_ui_node_accessibility_child(&date_picker_a11y, 3u, &a11y), ER_UI_OK, "node: date picker day accessibility maps");
+  expect_true(a11y.has_id && a11y.id == 8071u, "node: date picker day id");
+  expect_true((a11y.states & ER_UI_A11Y_STATE_SELECTED) != 0u, "node: date picker selected day state");
+
   er_ui_node_t checked = er_ui_node_checkbox("Remember", true, 8002u);
   expect_status(er_ui_node_accessibility(&checked, &a11y), ER_UI_OK, "node: checkbox accessibility maps");
   expect_size(a11y.role, ER_UI_A11Y_CHECKBOX, "node: checkbox accessibility role");
@@ -542,6 +555,8 @@ void run_node_tests(void) {
     const char* const render_dropdown_shortcuts[] = {"P", "B", ""};
     er_ui_node_t dropdown_menu = er_ui_node_dropdown_menu(render_dropdown_labels, render_dropdown_shortcuts, 3u, 1u, 8862u);
     er_ui_node_t context_menu = er_ui_node_context_menu("Actions", "Right click options", render_dropdown_labels, render_dropdown_shortcuts, 3u, 2u, 8865u);
+    const char* const render_date_days[] = {"12", "13", "14", "15"};
+    er_ui_node_t date_picker = er_ui_node_date_picker("Pick a date", "May 2026", render_date_days, 4u, 2u, 8868u);
 
     expect_status(er_ui_node_render(&alert, &scene, face, er_ui_bounds(0.0f, 170.0f, 360.0f, 76.0f), theme), ER_UI_OK, "node: alert renders");
     expect_status(er_ui_node_render(&avatar, &scene, face, er_ui_bounds(0.0f, 254.0f, 42.0f, 42.0f), theme), ER_UI_OK, "node: avatar renders");
@@ -708,6 +723,10 @@ void run_node_tests(void) {
     expect_status(er_ui_node_render(&context_menu, &scene, face, er_ui_bounds(0.0f, 5608.0f, 280.0f, 220.0f), theme), ER_UI_OK,
                   "node: context menu renders");
     expect_size(scene.hit_count, hits_before_context + 3u, "node: context menu emits item hits");
+    size_t hits_before_date_picker = scene.hit_count;
+    expect_status(er_ui_node_render(&date_picker, &scene, face, er_ui_bounds(0.0f, 5840.0f, 300.0f, 128.0f), theme), ER_UI_OK,
+                  "node: date picker renders");
+    expect_size(scene.hit_count, hits_before_date_picker + 5u, "node: date picker emits trigger and day hits");
     size_t drag_sources_before = scene.drag_source_count;
     size_t drop_targets_before = scene.drop_target_count;
     expect_status(er_ui_node_render(&reorderable, &scene, face, er_ui_bounds(0.0f, 2930.0f, 260.0f, 52.0f), theme), ER_UI_OK,
