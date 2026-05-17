@@ -940,6 +940,18 @@ static void er_blake3_subtree16_cv(const uint32_t cvs[ER_BLAKE3_AVX2_SUBTREE16_C
 }
 #endif
 
+#if defined(ER_BLAKE3_USE_SSE2)
+static void er_blake3_subtree4_cv(const uint32_t cvs[ER_BLAKE3_SSE2_LANES][ER_BLAKE3_CV_WORDS],
+                                  uint32_t out_cv[ER_BLAKE3_CV_WORDS]) {
+  uint32_t left_cv[ER_BLAKE3_CV_WORDS];
+  uint32_t right_cv[ER_BLAKE3_CV_WORDS];
+
+  er_blake3_parent_cv(cvs[ER_BLAKE3_SSE2_LANE0_INDEX], cvs[ER_BLAKE3_SSE2_LANE1_INDEX], left_cv);
+  er_blake3_parent_cv(cvs[ER_BLAKE3_SSE2_LANE2_INDEX], cvs[ER_BLAKE3_SSE2_LANE3_INDEX], right_cv);
+  er_blake3_parent_cv(left_cv, right_cv, out_cv);
+}
+#endif
+
 static uint8_t er_blake3_is_power_of_two_size(size_t value) {
   return value != 0u && (value & (value - 1u)) == 0u;
 }
@@ -1008,6 +1020,15 @@ static void er_blake3_subtree_cv_exact(const uint8_t* bytes, uint64_t chunk_coun
 
     er_blake3_avx2_compress8_full_chunks(bytes, chunk_counter, flags, cvs);
     er_blake3_subtree8_cv(cvs, out_cv);
+    return;
+  }
+#endif
+#if defined(ER_BLAKE3_USE_SSE2)
+  if (chunk_count == ER_BLAKE3_SSE2_LANES) {
+    uint32_t cvs[ER_BLAKE3_SSE2_LANES][ER_BLAKE3_CV_WORDS];
+
+    er_blake3_sse2_compress4_full_chunks(bytes, chunk_counter, flags, cvs);
+    er_blake3_subtree4_cv(cvs, out_cv);
     return;
   }
 #endif
