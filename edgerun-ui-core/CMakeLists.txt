@@ -25,7 +25,7 @@ target_include_directories(er_ui_core PUBLIC
 target_link_libraries(er_ui_core PUBLIC vrfont)
 
 if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
-  target_compile_options(er_ui_core PRIVATE -Wall -Wextra -Wpedantic -Werror -ffreestanding -fno-builtin)
+  target_compile_options(er_ui_core PRIVATE -Wall -Wextra -Wpedantic -Werror -ffreestanding -fno-builtin -fno-stack-protector)
 endif()
 
 enable_testing()

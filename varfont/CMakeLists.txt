@@ -15,6 +15,7 @@ if(VRFONT_ENABLE_COVERAGE)
 endif()
 
 add_library(vrfont
+  src/vr_font_freestanding.c
   src/vr_font.c
   src/vr_font_utils.c
   src/vr_font_shape.c
@@ -22,7 +23,7 @@ add_library(vrfont
   src/vr_font_atlas.c
 )
 if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
-  target_compile_options(vrfont PRIVATE -Wall -Wextra -Wpedantic -Werror -ffreestanding -fno-builtin)
+  target_compile_options(vrfont PRIVATE -Wall -Wextra -Wpedantic -Werror -ffreestanding -fno-builtin -fno-stack-protector)
 endif()
 if(VRFONT_ENABLE_COVERAGE)
   target_compile_options(vrfont PRIVATE ${COVERAGE_FLAGS})
