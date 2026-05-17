@@ -67,12 +67,12 @@ int vr_tag_compare(const char* left, const char* right) {
   return vr_mem_compare(left, right, 4u);
 }
 
-void* vr_alloc(vr_font_face_t* face, size_t size, size_t align) {
+void* vr_alloc(const vr_font_face_t* face, size_t size, size_t align) {
   if (!face || !vr_allocator_valid(face->allocator) || size == 0u) return NULL;
   return face->allocator.alloc(face->allocator.user, size, align);
 }
 
-void* vr_calloc(vr_font_face_t* face, size_t count, size_t size, size_t align) {
+void* vr_calloc(const vr_font_face_t* face, size_t count, size_t size, size_t align) {
   if (size != 0u && count > ((size_t)-1) / size) return NULL;
   size_t bytes = count * size;
   void* ptr = vr_alloc(face, bytes, align);
@@ -80,7 +80,7 @@ void* vr_calloc(vr_font_face_t* face, size_t count, size_t size, size_t align) {
   return ptr;
 }
 
-void* vr_realloc(vr_font_face_t* face, void* ptr, size_t old_size, size_t new_size, size_t align) {
+void* vr_realloc(const vr_font_face_t* face, void* ptr, size_t old_size, size_t new_size, size_t align) {
   if (!face || !vr_allocator_valid(face->allocator)) return NULL;
   if (new_size == 0u) {
     vr_dealloc(face, ptr, old_size, align);
@@ -94,7 +94,7 @@ void* vr_realloc(vr_font_face_t* face, void* ptr, size_t old_size, size_t new_si
   return next;
 }
 
-void vr_dealloc(vr_font_face_t* face, void* ptr, size_t size, size_t align) {
+void vr_dealloc(const vr_font_face_t* face, void* ptr, size_t size, size_t align) {
   if (!face || !ptr || !vr_allocator_valid(face->allocator)) return;
   face->allocator.free(face->allocator.user, ptr, size, align);
 }

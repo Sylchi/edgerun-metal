@@ -491,6 +491,7 @@ static float vr_msdf_resolve_missing_channel_distance(
 }
 
 static vr_status_t vr_append_transformed_points(
+  const vr_font_face_t* face,
   vr_glyph_outline_t* dst,
   const vr_glyph_outline_t* src,
   float xx,
@@ -519,19 +520,19 @@ static vr_status_t vr_append_transformed_points(
       }
     }
 
-    int16_t* nx = (int16_t*)vr_realloc_bytes(dst->x, cap * sizeof(int16_t));
+    int16_t* nx = (int16_t*)vr_realloc(face, dst->x, dst_point_cap * sizeof(int16_t), cap * sizeof(int16_t), 8u);
     if (!nx) {
       return VR_ERR_OOM;
     }
-    int16_t* ny = (int16_t*)vr_realloc_bytes(dst->y, cap * sizeof(int16_t));
+    int16_t* ny = (int16_t*)vr_realloc(face, dst->y, dst_point_cap * sizeof(int16_t), cap * sizeof(int16_t), 8u);
     if (!ny) {
-      vr_free_bytes(nx);
+      vr_dealloc(face, nx, cap * sizeof(int16_t), 8u);
       return VR_ERR_OOM;
     }
-    bool* noc = (bool*)vr_realloc_bytes(dst->on_curve, cap * sizeof(bool));
+    bool* noc = (bool*)vr_realloc(face, dst->on_curve, dst_point_cap * sizeof(bool), cap * sizeof(bool), 8u);
     if (!noc) {
-      vr_free_bytes(nx);
-      vr_free_bytes(ny);
+      vr_dealloc(face, nx, cap * sizeof(int16_t), 8u);
+      vr_dealloc(face, ny, cap * sizeof(int16_t), 8u);
       return VR_ERR_OOM;
     }
     dst->x = nx;
@@ -580,7 +581,7 @@ static vr_status_t vr_append_transformed_points(
     return VR_ERR_INVALID_FONT;
   }
 
-  uint16_t* new_ends = (uint16_t*)vr_realloc_bytes(dst->contour_end_pts, new_contours * sizeof(uint16_t));
+  uint16_t* new_ends = (uint16_t*)vr_realloc(face, dst->contour_end_pts, dst_contours * sizeof(uint16_t), new_contours * sizeof(uint16_t), 8u);
   if (!new_ends) return VR_ERR_OOM;
   dst->contour_end_pts = new_ends;
 
@@ -1009,7 +1010,7 @@ float vr_get_glyph_advance(const vr_font_face_t* face, uint16_t glyph_id) {
 
   vr_status_t out_status = vr_load_glyph_outline(face, glyph_id, &outline);
   if (out_status != VR_OK && out_status != VR_ERR_UNSUPPORTED) {
-    vr_free_outline(&outline);
+    vr_free_outline(face, &outline);
     return (float)adv_units * scale;
   }
 
@@ -1029,16 +1030,16 @@ float vr_get_glyph_advance(const vr_font_face_t* face, uint16_t glyph_id) {
   if (outline.has_phantom_points) {
     adv_units = outline.phantom_x[1] - outline.phantom_x[0];
   }
-  vr_free_outline(&outline);
+  vr_free_outline(face, &outline);
   return (float)adv_units * scale;
 }
 
-void vr_free_outline(vr_glyph_outline_t* outline) {
+void vr_free_outline(const vr_font_face_t* face, vr_glyph_outline_t* outline) {
   if (!outline) return;
-  vr_free_bytes(outline->contour_end_pts);
-  vr_free_bytes(outline->x);
-  vr_free_bytes(outline->y);
-  vr_free_bytes(outline->on_curve);
+  vr_dealloc(face, outline->contour_end_pts, (size_t)outline->number_of_contours * sizeof(*outline->contour_end_pts), 8u);
+  vr_dealloc(face, outline->x, (size_t)outline->point_count_alloc * sizeof(*outline->x), 8u);
+  vr_dealloc(face, outline->y, (size_t)outline->point_count_alloc * sizeof(*outline->y), 8u);
+  vr_dealloc(face, outline->on_curve, (size_t)outline->point_count_alloc * sizeof(*outline->on_curve), 8u);
   vr_zero(outline, sizeof(*outline));
 }
 
@@ -1060,28 +1061,28 @@ static vr_status_t vr_parse_simple_glyph(const vr_font_face_t* face, const uint8
   uint16_t points = out->contour_end_pts[n - 1] + 1;
   out->point_count = points;
   out->point_count_alloc = points;
-  out->x = (int16_t*)vr_calloc_bytes(points, sizeof(int16_t));
-  out->y = (int16_t*)vr_calloc_bytes(points, sizeof(int16_t));
-  out->on_curve = (bool*)vr_calloc_bytes(points, sizeof(bool));
+  out->x = (int16_t*)vr_calloc(face, points, sizeof(int16_t), 8u);
+  out->y = (int16_t*)vr_calloc(face, points, sizeof(int16_t), 8u);
+  out->on_curve = (bool*)vr_calloc(face, points, sizeof(bool), 8u);
   if (!out->x || !out->y || !out->on_curve) {
     return VR_ERR_OOM;
   }
 
-  uint8_t* flags = (uint8_t*)vr_malloc_bytes(points);
+  uint8_t* flags = (uint8_t*)vr_alloc(face, points, 8u);
   if (!flags) {
     return VR_ERR_OOM;
   }
 
   for (uint16_t i = 0; i < points;) {
     if (q >= end) {
-      vr_free_bytes(flags);
+      vr_dealloc(face, flags, points, 8u);
       return VR_ERR_INVALID_FONT;
     }
     uint8_t flag = *q++;
     uint16_t repeat = 1u;
     if ((flag & VR_GLYF_FLAG_REPEATED) != 0u) {
       if (q >= end) {
-        vr_free_bytes(flags);
+        vr_dealloc(face, flags, points, 8u);
         return VR_ERR_INVALID_FONT;
       }
       repeat = (uint16_t)((uint16_t)(*q++) + 1u);
@@ -1097,7 +1098,7 @@ static vr_status_t vr_parse_simple_glyph(const vr_font_face_t* face, const uint8
     uint8_t flag = flags[i];
     if (flag & VR_GLYF_FLAG_X_SHORT) {
       if (q >= end) {
-        vr_free_bytes(flags);
+        vr_dealloc(face, flags, points, 8u);
         return VR_ERR_INVALID_FONT;
       }
       uint16_t raw = (uint16_t)*q++;
@@ -1107,7 +1108,7 @@ static vr_status_t vr_parse_simple_glyph(const vr_font_face_t* face, const uint8
       cx += 0;
     } else {
       if ((q + 1) >= end) {
-        vr_free_bytes(flags);
+        vr_dealloc(face, flags, points, 8u);
         return VR_ERR_INVALID_FONT;
       }
       cx += (int16_t)vr_i16(q);
@@ -1121,7 +1122,7 @@ static vr_status_t vr_parse_simple_glyph(const vr_font_face_t* face, const uint8
     uint8_t flag = flags[i];
     if (flag & VR_GLYF_FLAG_Y_SHORT) {
       if (q >= end) {
-        vr_free_bytes(flags);
+        vr_dealloc(face, flags, points, 8u);
         return VR_ERR_INVALID_FONT;
       }
       uint16_t raw = (uint16_t)*q++;
@@ -1131,7 +1132,7 @@ static vr_status_t vr_parse_simple_glyph(const vr_font_face_t* face, const uint8
       cy += 0;
     } else {
       if ((q + 1) >= end) {
-        vr_free_bytes(flags);
+        vr_dealloc(face, flags, points, 8u);
         return VR_ERR_INVALID_FONT;
       }
       cy += (int16_t)vr_i16(q);
@@ -1140,7 +1141,7 @@ static vr_status_t vr_parse_simple_glyph(const vr_font_face_t* face, const uint8
     out->y[i] = cy;
   }
 
-  vr_free_bytes(flags);
+  vr_dealloc(face, flags, points, 8u);
   out->has_phantom_points = false;
   if (out->point_count > 0) {
     out->x_min = out->x[0];
@@ -1222,12 +1223,12 @@ static vr_status_t vr_parse_composite_glyph(
     vr_zero(&comp, sizeof(comp));
     vr_status_t st = vr_load_glyph_outline_internal(face, gid, &comp, (uint16_t)(depth + 1));
     if (st == VR_OK) {
-      st = vr_append_transformed_points(out, &comp, xx, yx, xy, yy, arg1, arg2);
+      st = vr_append_transformed_points(face, out, &comp, xx, yx, xy, yy, arg1, arg2);
     } else if (st != VR_ERR_UNSUPPORTED) {
-      vr_free_outline(&comp);
+      vr_free_outline(face, &comp);
       return st;
     }
-    vr_free_outline(&comp);
+    vr_free_outline(face, &comp);
     if (st == VR_ERR_UNSUPPORTED) {
       continue;
     }
@@ -1289,12 +1290,12 @@ static vr_status_t vr_load_glyph_outline_internal(
 
   if (number_of_contours > 0) {
     out->number_of_contours = (uint16_t)number_of_contours;
-    out->contour_end_pts = (uint16_t*)vr_calloc_bytes((size_t)number_of_contours, sizeof(uint16_t));
+    out->contour_end_pts = (uint16_t*)vr_calloc(face, (size_t)number_of_contours, sizeof(uint16_t), 8u);
     if (!out->contour_end_pts) return VR_ERR_OOM;
     const uint8_t* end = face->glyf + next_off;
     vr_status_t status = vr_parse_simple_glyph(face, p, end, number_of_contours, out);
     if (status != VR_OK) {
-      vr_free_outline(out);
+      vr_free_outline(face, out);
       return status;
     }
     return VR_OK;
