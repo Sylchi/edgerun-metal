@@ -80,7 +80,7 @@ void er_print(const char* s) {
   }
 
   er_serial_write(s);
-  er_netlog_write(s);
+  er_netlog_write_text(s);
   er_gfx_console_write(s);
 
   if (g_st == 0 || g_st->ConOut == 0 || g_st->ConOut->OutputString == 0) {

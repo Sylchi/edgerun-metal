@@ -504,7 +504,6 @@ static void er_probe_mmio_readonly(const char* label, const ErPciDeviceSnapshot*
   er_print_mmio_read32(handle, 0x00u);
   er_print_mmio_read32(handle, 0x04u);
   er_print_mmio_read32(handle, 0x08u);
-  er_print_mmio_read32(handle, 0x100u);
 }
 
 static void er_print_pci_target(const char* label, const ErPciDeviceSnapshot* snapshot) {
