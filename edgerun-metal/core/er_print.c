@@ -1,4 +1,6 @@
 #include "er_print.h"
+#include "er_gfx_console.h"
+#include "er_netlog.h"
 
 #define ER_COM1_PORT 0x03f8u
 
@@ -56,6 +58,13 @@ static void er_serial_write(const char* s) {
 void er_print_set_system_table(EFI_SYSTEM_TABLE* st) {
   g_st = st;
   er_serial_init();
+  er_gfx_console_init(st);
+  er_netlog_init(st);
+  if (er_netlog_ready() != 0u) {
+    er_println("netlog: init ok 10.42.0.1:9000");
+  } else {
+    er_println("netlog: unavailable");
+  }
 }
 
 void er_print(const char* s) {
@@ -68,6 +77,8 @@ void er_print(const char* s) {
   }
 
   er_serial_write(s);
+  er_netlog_write(s);
+  er_gfx_console_write(s);
 
   if (g_st == 0 || g_st->ConOut == 0 || g_st->ConOut->OutputString == 0) {
     return;
