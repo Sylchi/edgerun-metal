@@ -38,6 +38,41 @@ gateways, meshes, and private-network perimeters. EdgeRun secures the work
 itself, so memory, Ethernet, USB, Bluetooth, WebSocket, TCP, files, or future
 transports can all move the same verifiable bytes.
 
+## Global Resource Sharing
+
+The larger goal is user-governed global resource sharing. A user should be able
+to join a computer, phone, storage device, renderer, or local network link to a
+global EdgeRun network without handing authority to a carrier, cloud operator,
+VPN, TLS endpoint, or trusted relay.
+
+Each device remains inside its owner's jurisdiction. The owner can decide what
+it offers, who may use it, what it costs, and what limits apply. That offer can
+be free, paid, reciprocal, or policy-based. Tokens or admissions can represent
+scoped rights such as:
+
+- move up to N bytes through this relay
+- store up to N sealed object bytes
+- use this local Wi-Fi path for N packets
+- reserve N CPU, memory, render, or scheduling units
+- reach only this route, recipient, role, department, or time window
+
+The token is not control over the device. It is a bounded claim that local
+policy may accept, reject, rate-limit, revoke, price, or settle. The device
+still governs its own queues, storage, radio, battery, CPU, memory, display,
+and user relationships.
+
+This means phones can relay packets over open Wi-Fi without first reaching a
+global operator network over 4G. Computers can store or relay other users'
+sealed data without being able to decrypt it. Any transport can carry packets
+because every packet is accounted for by signed intent, scoped admission,
+ordered-channel state, payload hashes, transit evidence, delivery proofs, and
+receipts.
+
+Global compatibility comes from the shared `edgerun-work` contract. Abuse is
+limited by local admission policy and by proof-based accounting: resources are
+shared only inside the scope the owner admitted, and payment or credit is owed
+only for verified work.
+
 The rough global scale is large enough to matter. IEA estimates data centres
 used about 415 TWh in 2024 and may reach about 945 TWh by 2030. IEA also
 estimates data transmission networks used about 260-360 TWh in 2022. A simple
