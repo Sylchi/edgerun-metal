@@ -156,6 +156,19 @@ static void test_scene_stats_and_clear(void) {
   er_ui_scene_destroy(&scene);
 }
 
+static void test_scene_reserve_handles_large_public_count(void) {
+  er_ui_scene_t scene = {0};
+  expect_status(er_ui_scene_init_with_allocator(&scene, ER_TEST_BG, er_ui_test_allocator()), ER_UI_OK, "reserve: init succeeds");
+
+  scene.rect_count = 20u;
+  expect_status(er_ui_scene_push_rect(&scene, er_ui_rect_fill(0.0f, 0.0f, 10.0f, 10.0f, 0.0f, ER_TEST_TEXT)), ER_UI_OK,
+                "reserve: sparse public count grows enough capacity");
+  expect_true(scene.rect_capacity > 20u, "reserve: capacity covers inserted sparse index");
+  expect_size(scene.rect_count, 21u, "reserve: count advances from public count");
+
+  er_ui_scene_destroy(&scene);
+}
+
 static void test_scene_topmost_queries(void) {
   er_ui_scene_t scene = {0};
   expect_status(er_ui_scene_init_with_allocator(&scene, ER_TEST_BG, er_ui_test_allocator()), ER_UI_OK, "query: init succeeds");
@@ -525,6 +538,7 @@ int main(void) {
   test_varfont_vertices_emit_text_quads();
   test_varfont_memory_face_emits_ui_text();
   test_scene_stats_and_clear();
+  test_scene_reserve_handles_large_public_count();
   test_scene_topmost_queries();
   test_scene_validation_and_clipping();
   test_scene_cursor_mutations();
