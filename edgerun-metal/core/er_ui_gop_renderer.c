@@ -1220,6 +1220,21 @@ UINT8 er_ui_gop_renderer_ready(void) {
   return g_ready;
 }
 
+UINT8 er_ui_gop_renderer_mode(ErUiGopMode* out_mode) {
+  if (out_mode != 0) {
+    *out_mode = (ErUiGopMode){0};
+  }
+  if (g_ready == 0u || out_mode == 0) {
+    return 0u;
+  }
+  out_mode->width = g_surface.width;
+  out_mode->height = g_surface.height;
+  out_mode->stride = g_surface.stride;
+  out_mode->refresh_hz = 1u;
+  out_mode->pixel_format = g_surface.pixel_format;
+  return er_ui_gop_mode_valid(out_mode);
+}
+
 UINT8 er_ui_gop_renderer_tile_plan(UINT32 tile_width, UINT32 tile_height,
                                    UINT32 max_dirty_tiles, ErUiGopTilePlan* out_plan) {
   if (g_ready == 0u) {

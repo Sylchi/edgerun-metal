@@ -3,6 +3,9 @@ set -euo pipefail
 
 BUILD_DIR="$(cd "$(dirname "$0")/.." && pwd)/build"
 ESP_DIR="${BUILD_DIR}/esp"
+QEMU_WIDTH="${QEMU_WIDTH:-1920}"
+QEMU_HEIGHT="${QEMU_HEIGHT:-1080}"
+QEMU_REFRESH="${QEMU_REFRESH:-60}"
 if [[ -z "${OVMF_CODE:-}" ]]; then
   for candidate in \
     "/usr/share/OVMF/OVMF_CODE.fd" \
@@ -56,6 +59,8 @@ fi
 
 qemu-system-x86_64 \
   -m 1024 \
+  -vga none \
+  -device "VGA,xres=${QEMU_WIDTH},yres=${QEMU_HEIGHT},refresh_rate=${QEMU_REFRESH}" \
   -drive if=pflash,format=raw,readonly=on,file="${OVMF_CODE}" \
   -drive if=pflash,format=raw,file="${OVMF_VARS_WRITABLE}" \
   -drive format=raw,file=fat:rw:"${ESP_DIR}",media=disk \

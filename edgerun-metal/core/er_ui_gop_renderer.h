@@ -204,6 +204,7 @@ UINT8 er_ui_gop_surface_render_scene_dirty_tiles_with_font_stats(ErUiGopSurface*
 
 UINT8 er_ui_gop_renderer_init(EFI_SYSTEM_TABLE* st);
 UINT8 er_ui_gop_renderer_ready(void);
+UINT8 er_ui_gop_renderer_mode(ErUiGopMode* out_mode);
 UINT8 er_ui_gop_renderer_tile_plan(UINT32 tile_width, UINT32 tile_height,
                                     UINT32 max_dirty_tiles, ErUiGopTilePlan* out_plan);
 UINT8 er_ui_gop_renderer_render_scene(const er_ui_scene_t* scene);
