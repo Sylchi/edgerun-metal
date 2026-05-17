@@ -1,7 +1,8 @@
-# vr-font (zero-dependency variable-font renderer skeleton)
+# vr-font (freestanding variable-font renderer)
 
-This is a C implementation scaffold for a variable-font-to-OpenGL texture workflow with no
-runtime third-party dependencies. It provides:
+This is a C implementation for variable-font parsing, shaping, rasterization,
+atlas baking, and UI vertex generation. Production code is freestanding and does
+not depend on host libc allocation, file I/O, string, or math APIs. It provides:
 
 - SFNT/TrueType table parsing (`head`, `maxp`, `loca`, `glyf`, `hhea`, `hmtx`, `cmap`, `fvar`)
 - Basic glyph shaping scaffold (`codepoint -> glyph_id` + advances)
@@ -21,6 +22,9 @@ runtime third-party dependencies. It provides:
 - No complex shaping (GSUB/GPOS/Bidi). This is a fallback-compatible foundation.
 - Rasterizer uses 2x2 supersampling for anti-aliased coverage output.
 - CMap support is constrained to formats 4 and 12; other formats return `VR_ERR_UNSUPPORTED`.
+- Font creation for production uses `vr_font_face_create_from_memory`; hosted file loading belongs in tests/tools before calling the library.
+- All dynamic storage is routed through `vr_font_allocator_t` in `vr_font_config_t`.
+- `vrfont` is a required dependency of `edgerun-ui-core`; UI text quads are emitted from `vr_vertex_t` batches.
 
 ## Files
 
@@ -36,7 +40,7 @@ runtime third-party dependencies. It provides:
 ## Build
 
 ```bash
-Install SDL2 development package in your toolchain.
+Install SDL2 development package only when building hosted demo/tools.
 cmake --preset dev -S varfont
 cmake --build .build/varfont
 ctest --test-dir .build/varfont --output-on-failure
@@ -45,6 +49,14 @@ ctest --test-dir .build/varfont --output-on-failure
 
 Run those commands from the repository root. Local build output belongs in `.build/`,
 not in `varfont/build/`.
+
+For production embedding through another CMake target:
+
+```cmake
+set(VRFONT_BUILD_HOSTED_TOOLS OFF CACHE BOOL "" FORCE)
+add_subdirectory(varfont)
+target_link_libraries(your_target PRIVATE vrfont)
+```
 
 ### Geist variable font
 

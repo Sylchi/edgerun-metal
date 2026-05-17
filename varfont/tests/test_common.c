@@ -28,17 +28,73 @@ void test_expect_u32_eq(uint32_t got, uint32_t expected, const char* name) {
   }
 }
 
+static void* test_vr_alloc(void* user, size_t size, size_t align) {
+  (void)user;
+  (void)align;
+  return malloc(size);
+}
+
+static void* test_vr_realloc(void* user, void* ptr, size_t old_size, size_t new_size, size_t align) {
+  (void)user;
+  (void)old_size;
+  (void)align;
+  return realloc(ptr, new_size);
+}
+
+static void test_vr_free(void* user, void* ptr, size_t size, size_t align) {
+  (void)user;
+  (void)size;
+  (void)align;
+  free(ptr);
+}
+
 vr_font_config_t test_default_font_config(void) {
   vr_font_config_t cfg = {0};
   cfg.px_size = VR_FONT_DEFAULT_PX_SIZE;
   cfg.atlas_width = VR_FONT_DEFAULT_ATLAS_DIMENSION;
   cfg.atlas_height = VR_FONT_DEFAULT_ATLAS_DIMENSION;
   cfg.atlas_pad = VR_FONT_DEFAULT_ATLAS_PADDING;
+  cfg.allocator.alloc = test_vr_alloc;
+  cfg.allocator.realloc = test_vr_realloc;
+  cfg.allocator.free = test_vr_free;
   cfg.gl.create_texture = NULL;
   cfg.gl.update_texture = NULL;
   cfg.gl.destroy_texture = NULL;
   cfg.gl.user = NULL;
   return cfg;
+}
+
+uint8_t* test_read_file_bytes(const char* path, size_t* out_size) {
+  if (!path || !out_size) return NULL;
+  *out_size = 0;
+  FILE* file = fopen(path, "rb");
+  if (!file) return NULL;
+  if (fseek(file, 0, SEEK_END) != 0) {
+    fclose(file);
+    return NULL;
+  }
+  long size = ftell(file);
+  if (size <= 0) {
+    fclose(file);
+    return NULL;
+  }
+  if (fseek(file, 0, SEEK_SET) != 0) {
+    fclose(file);
+    return NULL;
+  }
+  uint8_t* data = (uint8_t*)malloc((size_t)size);
+  if (!data) {
+    fclose(file);
+    return NULL;
+  }
+  size_t read = fread(data, 1u, (size_t)size, file);
+  fclose(file);
+  if (read != (size_t)size) {
+    free(data);
+    return NULL;
+  }
+  *out_size = (size_t)size;
+  return data;
 }
 
 const char* test_font_path(void) {
@@ -62,7 +118,11 @@ const char* test_font_path(void) {
 vr_font_face_t* test_open_face(const char* path) {
   vr_font_config_t cfg = test_default_font_config();
   vr_font_face_t* face = NULL;
-  vr_status_t st = vr_font_face_create(&face, path, &cfg);
+  size_t size = 0;
+  uint8_t* data = test_read_file_bytes(path, &size);
+  if (!data) return NULL;
+  vr_status_t st = vr_font_face_create_from_memory(&face, data, size, &cfg);
+  free(data);
   if (st != VR_OK) {
     return NULL;
   }

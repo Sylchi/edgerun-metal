@@ -95,17 +95,30 @@ typedef struct {
   void (*destroy_texture)(void* user, uint32_t texture);
 } vr_gl_iface_t;
 
+typedef void* (*vr_font_alloc_fn)(void* user, size_t size, size_t align);
+typedef void* (*vr_font_realloc_fn)(void* user, void* ptr, size_t old_size, size_t new_size, size_t align);
+typedef void (*vr_font_free_fn)(void* user, void* ptr, size_t size, size_t align);
+
+typedef struct {
+  void* user;
+  vr_font_alloc_fn alloc;
+  vr_font_realloc_fn realloc;
+  vr_font_free_fn free;
+} vr_font_allocator_t;
+
 typedef struct {
   float px_size;
   uint32_t atlas_width;
   uint32_t atlas_height;
   uint32_t atlas_pad;
   vr_font_atlas_format_t atlas_format;
+  vr_font_allocator_t allocator;
   vr_gl_iface_t gl;
 } vr_font_config_t;
 
 typedef struct vr_font_face_t vr_font_face_t;
 
+vr_status_t vr_font_face_create_from_memory(vr_font_face_t** out, const void* data, size_t size, const vr_font_config_t* cfg);
 vr_status_t vr_font_face_create(vr_font_face_t** out, const char* path, const vr_font_config_t* cfg);
 void vr_font_face_destroy(vr_font_face_t* face);
 

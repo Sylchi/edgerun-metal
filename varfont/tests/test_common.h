@@ -17,6 +17,7 @@ void test_expect_u32_eq(uint32_t got, uint32_t expected, const char* name);
 
 vr_font_config_t test_default_font_config(void);
 const char* test_font_path(void);
+uint8_t* test_read_file_bytes(const char* path, size_t* out_size);
 vr_font_face_t* test_open_face(const char* path);
 vr_font_face_t* test_open_default_face(void);
 void test_close_face(vr_font_face_t* face);
@@ -25,4 +26,3 @@ uint32_t* test_ascii_codepoints(const char* text, size_t* out_count);
 void test_free_codepoints(uint32_t* cps);
 
 void test_report_results(void);
-

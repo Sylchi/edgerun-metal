@@ -1,9 +1,5 @@
 #include "vr_font_internal.h"
 
-#include <stdio.h>
-#include <string.h>
-#include <math.h>
-
 #define VR_GVAR_TUPLE_SHARED_POINTS 0x8000
 #define VR_GVAR_TUPLE_EMBEDDED_PEAK 0x8000
 #define VR_GVAR_TUPLE_INTERMEDIATE 0x4000
@@ -28,59 +24,170 @@ static const uint16_t VR_CMAP_PLATFORM_ID_UNICODE = 0u;
 static const uint16_t VR_CMAP_PLATFORM_ID_WINDOWS = 3u;
 static const uint16_t VR_GVAR_OFFSET_FORMAT_32 = 1u;
 static const uint32_t VR_SFNT_VERSION_MAGIC = 0x00010000u;
+static vr_font_allocator_t g_vr_allocator_scope;
+static const float VR_FLOAT_MAX_VALUE = 3.4028234663852886e38f;
+static const float VR_PI_VALUE = 3.14159265358979323846f;
 
-void vr_free_if_not_null(void* p) {
-  if (p) {
-    free(p);
+bool vr_allocator_valid(vr_font_allocator_t allocator) {
+  return allocator.alloc != 0 && allocator.free != 0;
+}
+
+void vr_zero(void* ptr, size_t size) {
+  uint8_t* bytes = (uint8_t*)ptr;
+  for (size_t i = 0u; i < size; ++i) bytes[i] = 0u;
+}
+
+void vr_copy(void* dst, const void* src, size_t size) {
+  uint8_t* out = (uint8_t*)dst;
+  const uint8_t* in = (const uint8_t*)src;
+  for (size_t i = 0u; i < size; ++i) out[i] = in[i];
+}
+
+void vr_move(void* dst, const void* src, size_t size) {
+  uint8_t* out = (uint8_t*)dst;
+  const uint8_t* in = (const uint8_t*)src;
+  if (out == in || size == 0u) return;
+  if (out < in) {
+    for (size_t i = 0u; i < size; ++i) out[i] = in[i];
+  } else {
+    for (size_t i = size; i > 0u; --i) out[i - 1u] = in[i - 1u];
   }
 }
 
-vr_status_t vr_read_file(const char* path, uint8_t** out_data, size_t* out_size) {
-  *out_data = NULL;
-  *out_size = 0;
+int vr_mem_compare(const void* left, const void* right, size_t size) {
+  const uint8_t* a = (const uint8_t*)left;
+  const uint8_t* b = (const uint8_t*)right;
+  for (size_t i = 0u; i < size; ++i) {
+    if (a[i] != b[i]) return a[i] < b[i] ? -1 : 1;
+  }
+  return 0;
+}
 
-  FILE* f = fopen(path, "rb");
-  if (!f) {
-    return VR_ERR_IO;
+int vr_tag_compare(const char* left, const char* right) {
+  return vr_mem_compare(left, right, 4u);
+}
+
+void* vr_alloc(vr_font_face_t* face, size_t size, size_t align) {
+  if (!face || !vr_allocator_valid(face->allocator) || size == 0u) return NULL;
+  return face->allocator.alloc(face->allocator.user, size, align);
+}
+
+void* vr_calloc(vr_font_face_t* face, size_t count, size_t size, size_t align) {
+  if (size != 0u && count > ((size_t)-1) / size) return NULL;
+  size_t bytes = count * size;
+  void* ptr = vr_alloc(face, bytes, align);
+  if (ptr) vr_zero(ptr, bytes);
+  return ptr;
+}
+
+void* vr_realloc(vr_font_face_t* face, void* ptr, size_t old_size, size_t new_size, size_t align) {
+  if (!face || !vr_allocator_valid(face->allocator)) return NULL;
+  if (new_size == 0u) {
+    vr_dealloc(face, ptr, old_size, align);
+    return NULL;
+  }
+  if (face->allocator.realloc) return face->allocator.realloc(face->allocator.user, ptr, old_size, new_size, align);
+  void* next = vr_alloc(face, new_size, align);
+  if (!next) return NULL;
+  if (ptr && old_size > 0u) vr_copy(next, ptr, old_size < new_size ? old_size : new_size);
+  vr_dealloc(face, ptr, old_size, align);
+  return next;
+}
+
+void vr_dealloc(vr_font_face_t* face, void* ptr, size_t size, size_t align) {
+  if (!face || !ptr || !vr_allocator_valid(face->allocator)) return;
+  face->allocator.free(face->allocator.user, ptr, size, align);
+}
+
+void vr_allocator_scope_enter(vr_font_face_t* face) {
+  g_vr_allocator_scope = face ? face->allocator : (vr_font_allocator_t){0};
+}
+
+void vr_allocator_scope_enter_config(vr_font_allocator_t allocator) {
+  g_vr_allocator_scope = allocator;
+}
+
+void vr_allocator_scope_leave(void) {
+  g_vr_allocator_scope = (vr_font_allocator_t){0};
+}
+
+void* vr_malloc_bytes(size_t size) {
+  if (!vr_allocator_valid(g_vr_allocator_scope) || size == 0u) return NULL;
+  return g_vr_allocator_scope.alloc(g_vr_allocator_scope.user, size, 8u);
+}
+
+void* vr_calloc_bytes(size_t count, size_t size) {
+  if (size != 0u && count > ((size_t)-1) / size) return NULL;
+  size_t bytes = count * size;
+  if (bytes == 0u) bytes = 1u;
+  void* ptr = vr_malloc_bytes(bytes);
+  if (ptr) vr_zero(ptr, bytes);
+  return ptr;
+}
+
+void* vr_realloc_bytes(void* ptr, size_t size) {
+  if (!vr_allocator_valid(g_vr_allocator_scope)) return NULL;
+  if (g_vr_allocator_scope.realloc) return g_vr_allocator_scope.realloc(g_vr_allocator_scope.user, ptr, 0u, size, 8u);
+  void* next = vr_malloc_bytes(size);
+  if (ptr) g_vr_allocator_scope.free(g_vr_allocator_scope.user, ptr, 0u, 8u);
+  return next;
+}
+
+void vr_free_bytes(void* ptr) {
+  if (!ptr || !vr_allocator_valid(g_vr_allocator_scope)) return;
+  g_vr_allocator_scope.free(g_vr_allocator_scope.user, ptr, 0u, 8u);
+}
+
+float vr_absf(float value) {
+  return value < 0.0f ? -value : value;
+}
+
+float vr_floorf(float value) {
+  int truncated = (int)value;
+  if ((float)truncated > value) truncated -= 1;
+  return (float)truncated;
+}
+
+float vr_ceilf(float value) {
+  int truncated = (int)value;
+  if ((float)truncated < value) truncated += 1;
+  return (float)truncated;
+}
+
+float vr_sqrtf(float value) {
+  if (value <= 0.0f) return 0.0f;
+  float x = value >= 1.0f ? value : 1.0f;
+  for (uint32_t i = 0u; i < 12u; ++i) x = 0.5f * (x + value / x);
+  return x;
+}
+
+long vr_lrintf(float value) {
+  return (long)(value >= 0.0f ? value + 0.5f : value - 0.5f);
+}
+
+bool vr_float_is_finite(float value) {
+  return value == value && value <= VR_FLOAT_MAX_VALUE && value >= -VR_FLOAT_MAX_VALUE;
+}
+
+float vr_atan2f(float y, float x) {
+  if (x == 0.0f) {
+    if (y > 0.0f) return VR_PI_VALUE * 0.5f;
+    if (y < 0.0f) return -VR_PI_VALUE * 0.5f;
+    return 0.0f;
   }
 
-  if (fseek(f, 0, SEEK_END) != 0) {
-    fclose(f);
-    return VR_ERR_IO;
+  float abs_y = vr_absf(y) + 1.0e-10f;
+  float angle = 0.0f;
+  if (x < 0.0f) {
+    float r = (x + abs_y) / (abs_y - x);
+    angle = 3.0f * VR_PI_VALUE * 0.25f;
+    angle += (0.1963f * r * r - 0.9817f) * r;
+  } else {
+    float r = (x - abs_y) / (x + abs_y);
+    angle = VR_PI_VALUE * 0.25f;
+    angle += (0.1963f * r * r - 0.9817f) * r;
   }
-
-  long size = ftell(f);
-  if (size < 0) {
-    fclose(f);
-    return VR_ERR_IO;
-  }
-
-  if (fseek(f, 0, SEEK_SET) != 0) {
-    fclose(f);
-    return VR_ERR_IO;
-  }
-
-  if (size == 0) {
-    fclose(f);
-    return VR_ERR_INVALID_FONT;
-  }
-
-  uint8_t* data = (uint8_t*)malloc((size_t)size);
-  if (!data) {
-    fclose(f);
-    return VR_ERR_OOM;
-  }
-
-  size_t read = fread(data, 1, (size_t)size, f);
-  fclose(f);
-  if (read != (size_t)size) {
-    free(data);
-    return VR_ERR_IO;
-  }
-
-  *out_data = data;
-  *out_size = (size_t)size;
-  return VR_OK;
+  return y < 0.0f ? -angle : angle;
 }
 
 static vr_status_t vr_parse_table_directory(vr_font_face_t* face) {
@@ -96,7 +203,7 @@ static vr_status_t vr_parse_table_directory(vr_font_face_t* face) {
   }
 
   face->table_count = numTables;
-  face->tables = (vr_table_record_t*)calloc(numTables, sizeof(vr_table_record_t));
+  face->tables = (vr_table_record_t*)vr_calloc_bytes(numTables, sizeof(vr_table_record_t));
   if (!face->tables) {
     return VR_ERR_OOM;
   }
@@ -192,7 +299,7 @@ static vr_status_t vr_parse_loca(vr_font_face_t* face) {
   }
 
   size_t count = face->num_glyphs + 1;
-  face->loca_offsets = (uint32_t*)calloc(count, sizeof(uint32_t));
+  face->loca_offsets = (uint32_t*)vr_calloc_bytes(count, sizeof(uint32_t));
   if (!face->loca_offsets) return VR_ERR_OOM;
 
   const uint8_t* p = face->file_data + loc->offset;
@@ -295,7 +402,7 @@ static vr_status_t vr_decode_point_indices(
   }
   if (count > ((SIZE_MAX - 1) / sizeof(uint16_t))) return VR_ERR_INVALID_FONT;
 
-  uint16_t* points = (uint16_t*)malloc(count * sizeof(uint16_t));
+  uint16_t* points = (uint16_t*)vr_malloc_bytes(count * sizeof(uint16_t));
   if (!points && count > 0) return VR_ERR_OOM;
   if (count == 0) {
     *out_points = NULL;
@@ -308,7 +415,7 @@ static vr_status_t vr_decode_point_indices(
   uint16_t last = 0;
   while (parsed < count) {
     if (p >= end) {
-      free(points);
+      vr_free_bytes(points);
       return VR_ERR_INVALID_FONT;
     }
 
@@ -320,14 +427,14 @@ static vr_status_t vr_decode_point_indices(
       uint16_t delta = 0;
       if (words) {
         if (p + 2 > end) {
-          free(points);
+          vr_free_bytes(points);
           return VR_ERR_INVALID_FONT;
         }
         delta = vr_u16(p);
         p += 2;
       } else {
         if (p >= end) {
-          free(points);
+          vr_free_bytes(points);
           return VR_ERR_INVALID_FONT;
         }
         delta = (uint16_t)(*p++);
@@ -506,7 +613,7 @@ vr_status_t vr_parse_gvar(vr_font_face_t* face) {
   if (shared_tuples_offset < header_len + offset_bytes) return VR_ERR_INVALID_FONT;
   if (glyph_data_array_offset < shared_tuples_offset) return VR_ERR_INVALID_FONT;
 
-  uint32_t* glyph_off = (uint32_t*)calloc(offset_count, sizeof(uint32_t));
+  uint32_t* glyph_off = (uint32_t*)vr_calloc_bytes(offset_count, sizeof(uint32_t));
   if (!glyph_off) return VR_ERR_OOM;
 
   const uint8_t* offset_base = p + header_len;
@@ -515,7 +622,7 @@ vr_status_t vr_parse_gvar(vr_font_face_t* face) {
                            ((uint32_t)vr_u16(offset_base + i * 2u) * VR_GVAR_OFFSET_MULTIPLIER_16);
     uint64_t abs = (uint64_t)glyph_data_array_offset + rel;
     if (abs > (uint64_t)t->length) {
-      free(glyph_off);
+      vr_free_bytes(glyph_off);
       return VR_ERR_INVALID_FONT;
     }
     glyph_off[i] = (uint32_t)abs;
@@ -525,17 +632,17 @@ vr_status_t vr_parse_gvar(vr_font_face_t* face) {
     size_t shared_bytes = (size_t)shared_tuple_count * (size_t)axis_count * 2u;
     uint32_t shared_end = shared_tuples_offset + (uint32_t)shared_bytes;
     if (shared_end > glyph_data_array_offset) {
-      free(glyph_off);
+      vr_free_bytes(glyph_off);
       return VR_ERR_INVALID_FONT;
     }
     if (shared_end > t->length) {
-      free(glyph_off);
+      vr_free_bytes(glyph_off);
       return VR_ERR_INVALID_FONT;
     }
 
-    float* shared_tuples = (float*)calloc((size_t)shared_tuple_count * (size_t)axis_count, sizeof(float));
+    float* shared_tuples = (float*)vr_calloc_bytes((size_t)shared_tuple_count * (size_t)axis_count, sizeof(float));
     if (!shared_tuples) {
-      free(glyph_off);
+      vr_free_bytes(glyph_off);
       return VR_ERR_OOM;
     }
 
@@ -582,11 +689,11 @@ vr_status_t vr_parse_avar(vr_font_face_t* face) {
     return VR_OK;
   }
 
-  uint16_t* seg_counts = (uint16_t*)calloc(axis_count, sizeof(uint16_t));
-  size_t* seg_offsets = (size_t*)calloc(axis_count, sizeof(size_t));
+  uint16_t* seg_counts = (uint16_t*)vr_calloc_bytes(axis_count, sizeof(uint16_t));
+  size_t* seg_offsets = (size_t*)vr_calloc_bytes(axis_count, sizeof(size_t));
   if (!seg_counts || !seg_offsets) {
-    free(seg_counts);
-    free(seg_offsets);
+    vr_free_bytes(seg_counts);
+    vr_free_bytes(seg_offsets);
     return VR_ERR_OOM;
   }
 
@@ -598,8 +705,8 @@ vr_status_t vr_parse_avar(vr_font_face_t* face) {
       continue;
     }
     if ((size_t)off + 2 > t->length) {
-      free(seg_counts);
-      free(seg_offsets);
+      vr_free_bytes(seg_counts);
+      vr_free_bytes(seg_offsets);
       return VR_ERR_INVALID_FONT;
     }
     seg_counts[a] = vr_u16(p + off);
@@ -607,18 +714,18 @@ vr_status_t vr_parse_avar(vr_font_face_t* face) {
   }
 
   if (total_segments == 0) {
-    free(seg_counts);
-    free(seg_offsets);
+    vr_free_bytes(seg_counts);
+    vr_free_bytes(seg_offsets);
     return VR_OK;
   }
 
-  float* map_from = (float*)calloc((size_t)total_segments, sizeof(float));
-  float* map_to = (float*)calloc((size_t)total_segments, sizeof(float));
+  float* map_from = (float*)vr_calloc_bytes((size_t)total_segments, sizeof(float));
+  float* map_to = (float*)vr_calloc_bytes((size_t)total_segments, sizeof(float));
   if (!map_from || !map_to) {
-    free(map_from);
-    free(map_to);
-    free(seg_counts);
-    free(seg_offsets);
+    vr_free_bytes(map_from);
+    vr_free_bytes(map_to);
+    vr_free_bytes(seg_counts);
+    vr_free_bytes(seg_offsets);
     return VR_ERR_OOM;
   }
 
@@ -635,10 +742,10 @@ vr_status_t vr_parse_avar(vr_font_face_t* face) {
     const uint8_t* map = p + off;
     size_t needed = 2u + (size_t)sc * 4u;
     if (off + needed > t->length) {
-      free(map_from);
-      free(map_to);
-      free(seg_counts);
-      free(seg_offsets);
+      vr_free_bytes(map_from);
+      vr_free_bytes(map_to);
+      vr_free_bytes(seg_counts);
+      vr_free_bytes(seg_offsets);
       return VR_ERR_INVALID_FONT;
     }
 
@@ -710,7 +817,7 @@ vr_status_t vr_apply_gvar_variation(const vr_font_face_t* face, uint16_t glyph_i
       break;
     }
     if (header + 4 > glyph_data_end) {
-      free(shared_points);
+      vr_free_bytes(shared_points);
       return VR_ERR_INVALID_FONT;
     }
 
@@ -718,7 +825,7 @@ vr_status_t vr_apply_gvar_variation(const vr_font_face_t* face, uint16_t glyph_i
     uint16_t tuple_index = vr_u16(header + 2);
     header += 4;
     if (tuple_data + tuple_data_size > glyph_data_end) {
-      free(shared_points);
+      vr_free_bytes(shared_points);
       return VR_ERR_INVALID_FONT;
     }
 
@@ -733,7 +840,7 @@ vr_status_t vr_apply_gvar_variation(const vr_font_face_t* face, uint16_t glyph_i
     if (embedded_peak) {
       for (uint16_t i = 0; i < face->gvar.axis_count; ++i) {
         if (header + 2 > glyph_data_end) {
-          free(shared_points);
+          vr_free_bytes(shared_points);
           return VR_ERR_INVALID_FONT;
         }
         peak[i] = vr_f2dot14_to_float(vr_u16(header));
@@ -742,7 +849,7 @@ vr_status_t vr_apply_gvar_variation(const vr_font_face_t* face, uint16_t glyph_i
     } else {
       uint16_t shared_index = tuple_index & VR_GVAR_TUPLE_COUNT_MASK;
       if (shared_index >= face->gvar.shared_tuple_count || face->gvar.shared_tuples == NULL) {
-        free(shared_points);
+        vr_free_bytes(shared_points);
         return VR_ERR_INVALID_FONT;
       }
       for (uint16_t i = 0; i < face->gvar.axis_count; ++i) {
@@ -753,7 +860,7 @@ vr_status_t vr_apply_gvar_variation(const vr_font_face_t* face, uint16_t glyph_i
     if (intermediate) {
       for (uint16_t i = 0; i < face->gvar.axis_count; ++i) {
         if (header + 2 > glyph_data_end || header + 4 > glyph_data_end) {
-          free(shared_points);
+          vr_free_bytes(shared_points);
           return VR_ERR_INVALID_FONT;
         }
         start_curve[i] = vr_f2dot14_to_float(vr_u16(header));
@@ -784,11 +891,11 @@ vr_status_t vr_apply_gvar_variation(const vr_font_face_t* face, uint16_t glyph_i
       vr_status_t st = vr_decode_point_indices(tuple_data, glyph_data_end, total_points, &tuple_all,
                                                &tuple_points, &tuple_point_count, &local_bytes);
       if (st != VR_OK) {
-        free(shared_points);
+        vr_free_bytes(shared_points);
         return st;
       }
       if (tuple_points == NULL && tuple_point_count > 0) {
-        free(shared_points);
+        vr_free_bytes(shared_points);
         return VR_ERR_OOM;
       }
     } else if ((table_flags & VR_GVAR_TUPLE_SHARED_POINTS) != 0) {
@@ -811,23 +918,23 @@ vr_status_t vr_apply_gvar_variation(const vr_font_face_t* face, uint16_t glyph_i
     size_t used_y = 0;
 
     if (point_apply_count > 0) {
-      dx = (int16_t*)calloc(point_apply_count, sizeof(int16_t));
-      dy = (int16_t*)calloc(point_apply_count, sizeof(int16_t));
+      dx = (int16_t*)vr_calloc_bytes(point_apply_count, sizeof(int16_t));
+      dy = (int16_t*)vr_calloc_bytes(point_apply_count, sizeof(int16_t));
       if (!dx || !dy) {
-        free(dx);
-        free(dy);
-        free(tuple_points);
-        free(shared_points);
+        vr_free_bytes(dx);
+        vr_free_bytes(dy);
+        vr_free_bytes(tuple_points);
+        vr_free_bytes(shared_points);
         return VR_ERR_OOM;
       }
 
       vr_status_t sx = vr_decode_delta_runs(delta_data, glyph_data_end, dx, point_apply_count, &used_x);
       vr_status_t sy = vr_decode_delta_runs(delta_data + used_x, glyph_data_end, dy, point_apply_count, &used_y);
       if (sx != VR_OK || sy != VR_OK || (delta_data + used_x + used_y > tuple_data + tuple_data_size)) {
-        free(dx);
-        free(dy);
-        free(tuple_points);
-        free(shared_points);
+        vr_free_bytes(dx);
+        vr_free_bytes(dy);
+        vr_free_bytes(tuple_points);
+        vr_free_bytes(shared_points);
         return VR_ERR_INVALID_FONT;
       }
     }
@@ -837,8 +944,8 @@ vr_status_t vr_apply_gvar_variation(const vr_font_face_t* face, uint16_t glyph_i
       for (size_t i = 0; i < point_apply_count; ++i) {
         uint16_t pi = tuple_all ? (uint16_t)i : tuple_points[i];
         if (point_apply_count == 0) continue;
-        int32_t nx = (int32_t)lrintf((float)dx[i] * scalar);
-        int32_t ny = (int32_t)lrintf((float)dy[i] * scalar);
+        int32_t nx = (int32_t)vr_lrintf((float)dx[i] * scalar);
+        int32_t ny = (int32_t)vr_lrintf((float)dy[i] * scalar);
 
         if (pi < (uint16_t)outline->point_count) {
           outline->x[pi] = (int16_t)((int32_t)outline->x[pi] + nx);
@@ -853,15 +960,15 @@ vr_status_t vr_apply_gvar_variation(const vr_font_face_t* face, uint16_t glyph_i
       }
     }
 
-    free(dx);
-    free(dy);
-    free(tuple_points);
+    vr_free_bytes(dx);
+    vr_free_bytes(dy);
+    vr_free_bytes(tuple_points);
 
     tuple_data += tuple_data_size;
     (void)tuple_data_size;
   }
 
-  free(shared_points);
+  vr_free_bytes(shared_points);
   return VR_OK;
 }
 
@@ -943,15 +1050,15 @@ static vr_status_t vr_parse_cmap_format4(
   size_t headers = (size_t)4u * 2u * (size_t)seg_count;
   if ((size_t)length < (size_t)(q - sub) + headers) return VR_ERR_INVALID_FONT;
 
-  uint16_t* end_code = (uint16_t*)calloc(seg_count, sizeof(uint16_t));
-  uint16_t* start_code = (uint16_t*)calloc(seg_count, sizeof(uint16_t));
-  int16_t* id_delta = (int16_t*)calloc(seg_count, sizeof(int16_t));
-  uint16_t* id_range_offset = (uint16_t*)calloc(seg_count, sizeof(uint16_t));
+  uint16_t* end_code = (uint16_t*)vr_calloc_bytes(seg_count, sizeof(uint16_t));
+  uint16_t* start_code = (uint16_t*)vr_calloc_bytes(seg_count, sizeof(uint16_t));
+  int16_t* id_delta = (int16_t*)vr_calloc_bytes(seg_count, sizeof(int16_t));
+  uint16_t* id_range_offset = (uint16_t*)vr_calloc_bytes(seg_count, sizeof(uint16_t));
   if (!end_code || !start_code || !id_delta || !id_range_offset) {
-    free(end_code);
-    free(start_code);
-    free(id_delta);
-    free(id_range_offset);
+    vr_free_bytes(end_code);
+    vr_free_bytes(start_code);
+    vr_free_bytes(id_delta);
+    vr_free_bytes(id_range_offset);
     return VR_ERR_OOM;
   }
 
@@ -974,12 +1081,12 @@ static vr_status_t vr_parse_cmap_format4(
 
   size_t remaining = (size_t)length - (size_t)(q - sub);
   size_t glyph_count = remaining / 2u;
-  uint16_t* glyph_id_array = (uint16_t*)calloc(glyph_count, sizeof(uint16_t));
+  uint16_t* glyph_id_array = (uint16_t*)vr_calloc_bytes(glyph_count, sizeof(uint16_t));
   if (!glyph_id_array) {
-    free(end_code);
-    free(start_code);
-    free(id_delta);
-    free(id_range_offset);
+    vr_free_bytes(end_code);
+    vr_free_bytes(start_code);
+    vr_free_bytes(id_delta);
+    vr_free_bytes(id_range_offset);
     return VR_ERR_OOM;
   }
   for (size_t i = 0; i < glyph_count; ++i) {
@@ -1008,13 +1115,13 @@ static vr_status_t vr_parse_cmap_format12(
   size_t needed = 16u + (size_t)n_groups * 12u;
   if (needed > (size_t)length) return VR_ERR_INVALID_FONT;
 
-  uint32_t* start_char = (uint32_t*)calloc(n_groups, sizeof(uint32_t));
-  uint32_t* end_char = (uint32_t*)calloc(n_groups, sizeof(uint32_t));
-  uint32_t* start_glyph = (uint32_t*)calloc(n_groups, sizeof(uint32_t));
+  uint32_t* start_char = (uint32_t*)vr_calloc_bytes(n_groups, sizeof(uint32_t));
+  uint32_t* end_char = (uint32_t*)vr_calloc_bytes(n_groups, sizeof(uint32_t));
+  uint32_t* start_glyph = (uint32_t*)vr_calloc_bytes(n_groups, sizeof(uint32_t));
   if (!start_char || !end_char || !start_glyph) {
-    free(start_char);
-    free(end_char);
-    free(start_glyph);
+    vr_free_bytes(start_char);
+    vr_free_bytes(end_char);
+    vr_free_bytes(start_glyph);
     return VR_ERR_OOM;
   }
 
@@ -1069,7 +1176,7 @@ vr_status_t vr_parse_cmap(vr_font_face_t* face) {
   uint16_t numTables = vr_u16(p + 2);
 
   face->cmap_offset_count = numTables;
-  face->cmap_offsets = (uint32_t*)calloc(numTables, sizeof(uint32_t));
+  face->cmap_offsets = (uint32_t*)vr_calloc_bytes(numTables, sizeof(uint32_t));
   if (!face->cmap_offsets) {
     return VR_ERR_OOM;
   }
@@ -1081,7 +1188,7 @@ vr_status_t vr_parse_cmap(vr_font_face_t* face) {
 
   const uint8_t* sub = p + sel;
   uint16_t length = vr_u16(sub + 2);
-  memset(&face->cmap, 0, sizeof(vr_cmap_table_t));
+  vr_zero(&face->cmap, sizeof(vr_cmap_table_t));
   if (length == 0u || sub + length > p + cmap->length) {
     return VR_ERR_INVALID_FONT;
   }
@@ -1155,7 +1262,7 @@ vr_status_t vr_parse_kern(vr_font_face_t* face) {
     }
 
     size_t new_cap = face->kern.count + n_pairs;
-    vr_kern_pair_t* pairs = (vr_kern_pair_t*)realloc(face->kern.pairs, new_cap * sizeof(vr_kern_pair_t));
+    vr_kern_pair_t* pairs = (vr_kern_pair_t*)vr_realloc_bytes(face->kern.pairs, new_cap * sizeof(vr_kern_pair_t));
     if (!pairs && n_pairs > 0) {
       return VR_ERR_OOM;
     }
@@ -1177,7 +1284,7 @@ vr_status_t vr_parse_kern(vr_font_face_t* face) {
 float vr_map_axis_value(const vr_font_face_t* face, const char* tag, float user_value, float* out_norm) {
   *out_norm = 0.0f;
   for (uint16_t i = 0; i < face->fvar.axis_count; ++i) {
-    if (strncmp(face->fvar.descriptors[i].tag, tag, 4) == 0) {
+    if (vr_tag_compare(face->fvar.descriptors[i].tag, tag) == 0) {
       float clamped = user_value;
       if (clamped < face->fvar.descriptors[i].min) clamped = face->fvar.descriptors[i].min;
       if (clamped > face->fvar.descriptors[i].max) clamped = face->fvar.descriptors[i].max;

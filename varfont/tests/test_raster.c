@@ -2,6 +2,8 @@
 
 #include "vr_font_internal.h"
 
+#include <stdlib.h>
+
 #include <stdbool.h>
 
 static const uint16_t VR_RASTER_TEST_MAX_X = 100u;

@@ -1,24 +1,34 @@
 #include "test_common.h"
 
+#include <stdlib.h>
 #include <string.h>
 
 static const float VR_VALIDATION_ZERO = 0.0f;
 
 static void test_face_create_validation(void) {
   vr_font_config_t cfg = test_default_font_config();
+  size_t font_size = 0;
+  uint8_t* font_data = test_read_file_bytes(test_font_path(), &font_size);
+  test_expect(font_data != NULL && font_size > 0u, "validation: test font bytes load");
 
-  vr_status_t st = vr_font_face_create(NULL, test_font_path(), &cfg);
+  vr_status_t st = vr_font_face_create_from_memory(NULL, font_data, font_size, &cfg);
   test_expect_status(st, VR_ERR_INVALID_FONT, "validation: null face output pointer is rejected");
 
   vr_font_face_t* face = NULL;
-  st = vr_font_face_create(&face, NULL, &cfg);
-  test_expect_status(st, VR_ERR_INVALID_FONT, "validation: null path is rejected");
+  st = vr_font_face_create_from_memory(&face, NULL, font_size, &cfg);
+  test_expect_status(st, VR_ERR_INVALID_FONT, "validation: null memory is rejected");
 
-  st = vr_font_face_create(&face, test_font_path(), NULL);
+  st = vr_font_face_create_from_memory(&face, font_data, font_size, NULL);
   test_expect_status(st, VR_ERR_INVALID_FONT, "validation: null config is rejected");
 
-  st = vr_font_face_create(&face, "fonts/does-not-exist.ttf", &cfg);
-  test_expect_status(st, VR_ERR_IO, "validation: missing font returns IO");
+  vr_font_config_t no_allocator = cfg;
+  no_allocator.allocator.alloc = NULL;
+  st = vr_font_face_create_from_memory(&face, font_data, font_size, &no_allocator);
+  test_expect_status(st, VR_ERR_INVALID_FONT, "validation: missing allocator is rejected");
+
+  st = vr_font_face_create(&face, test_font_path(), &cfg);
+  test_expect_status(st, VR_ERR_UNSUPPORTED, "validation: hosted path loader is unsupported in freestanding core");
+  free(font_data);
 }
 
 static void test_runtime_null_validation(vr_font_face_t* face) {

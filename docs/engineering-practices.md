@@ -30,6 +30,8 @@ make check
 - all `edgerun-metal` boot profiles build with warnings as errors
 - `varfont` builds with CMake and Ninja
 - `varfont` tests pass through CTest
+- `edgerun-ui-core` builds with CMake and Ninja
+- `edgerun-ui-core` tests pass through CTest
 
 ## Tooling
 
@@ -37,7 +39,7 @@ Use current, deterministic tools already available on the machine:
 
 - `rg` for search
 - `clang` and `lld` for freestanding EFI builds
-- `CMake` and `Ninja` for `varfont`
+- `CMake` and `Ninja` for `varfont` and `edgerun-ui-core`
 - `ctest --output-on-failure` for test execution
 - `git status --short --branch` before and after changes
 

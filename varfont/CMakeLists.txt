@@ -4,6 +4,7 @@ project(vrfont C)
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 option(VRFONT_ENABLE_COVERAGE "Enable coverage instrumentation for the test target." OFF)
+option(VRFONT_BUILD_HOSTED_TOOLS "Build hosted SDL demo and ctest targets." ON)
 
 if(VRFONT_ENABLE_COVERAGE)
   if (CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
@@ -20,7 +21,9 @@ add_library(vrfont
   src/vr_font_raster.c
   src/vr_font_atlas.c
 )
-target_link_libraries(vrfont PRIVATE m)
+if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
+  target_compile_options(vrfont PRIVATE -Wall -Wextra -Wpedantic -Werror -ffreestanding -fno-builtin)
+endif()
 if(VRFONT_ENABLE_COVERAGE)
   target_compile_options(vrfont PRIVATE ${COVERAGE_FLAGS})
   target_link_options(vrfont PRIVATE --coverage)
@@ -30,6 +33,7 @@ target_include_directories(vrfont PUBLIC
   ${CMAKE_CURRENT_SOURCE_DIR}/include
 )
 
+if(VRFONT_BUILD_HOSTED_TOOLS)
 find_package(SDL2 REQUIRED)
 
 if (NOT TARGET SDL2::SDL2)
@@ -41,6 +45,9 @@ if (TARGET SDL2::SDL2main)
   target_link_libraries(vrfont_demo PRIVATE vrfont SDL2::SDL2 SDL2::SDL2main)
 else()
   target_link_libraries(vrfont_demo PRIVATE vrfont SDL2::SDL2)
+endif()
+if(UNIX)
+  target_link_libraries(vrfont_demo PRIVATE m)
 endif()
 
 enable_testing()
@@ -57,6 +64,9 @@ add_executable(vrfont_tests
   tests/test_raster.c
 )
 target_link_libraries(vrfont_tests PRIVATE vrfont)
+if(UNIX)
+  target_link_libraries(vrfont_tests PRIVATE m)
+endif()
 target_include_directories(vrfont_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 target_compile_definitions(vrfont_tests PRIVATE VRFONT_PROJECT_ROOT="${CMAKE_CURRENT_SOURCE_DIR}")
 if(VRFONT_ENABLE_COVERAGE)
@@ -64,3 +74,4 @@ if(VRFONT_ENABLE_COVERAGE)
   target_link_options(vrfont_tests PRIVATE --coverage)
 endif()
 add_test(NAME vrfont_tests COMMAND vrfont_tests)
+endif()

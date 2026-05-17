@@ -44,7 +44,10 @@ static void test_invalid_font_file(const char* path, const uint8_t* payload, siz
   }
   close(fd);
 
-  vr_status_t st = vr_font_face_create(&face, path, &cfg);
+  size_t size = 0;
+  uint8_t* data = test_read_file_bytes(path, &size);
+  vr_status_t st = data ? vr_font_face_create_from_memory(&face, data, size, &cfg) : VR_ERR_INVALID_FONT;
+  free(data);
   test_expect_status(st, VR_ERR_INVALID_FONT, label);
   test_close_face(face);
   unlink(path);
