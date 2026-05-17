@@ -1,4 +1,5 @@
 #include "er_ui_metal.h"
+#include "er_ui_node.h"
 
 static const float ER_UI_METAL_SCREEN_PAD = 120.0f;
 static const float ER_UI_METAL_COMPACT_SCREEN_PAD = 48.0f;
@@ -44,6 +45,7 @@ static const float ER_UI_METAL_COMPACT_MAX_WIDTH = 2400.0f;
 static const uint32_t ER_UI_METAL_TAB_BASE_ID = ER_UI_SHADCN_DEMO_PREVIEW_BASE_ID + 4100u;
 static const uint32_t ER_UI_METAL_HEADER_ACTION_ID = ER_UI_SHADCN_DEMO_PREVIEW_BASE_ID + 4200u;
 static const uint32_t ER_UI_METAL_ROUTE_BASE_ID = ER_UI_SHADCN_DEMO_PREVIEW_BASE_ID + 4300u;
+static const uint32_t ER_UI_METAL_ICON_BASE_ID = ER_UI_SHADCN_DEMO_PREVIEW_BASE_ID + 4400u;
 
 typedef struct er_ui_metal_layout_s {
   float screen_pad;
@@ -94,6 +96,33 @@ static er_ui_metal_layout_t er_ui_metal_layout_for_bounds(er_ui_bounds_t bounds)
   };
 }
 
+static er_ui_status_t er_ui_metal_emit_icon_bar(
+  er_ui_scene_t* scene,
+  vr_font_face_t* font,
+  er_ui_bounds_t bounds,
+  er_ui_resolved_theme_t theme) {
+  static const er_ui_icon_t icons[] = {
+    ER_UI_ICON_APP,
+    ER_UI_ICON_SEARCH,
+    ER_UI_ICON_CPU,
+    ER_UI_ICON_NETWORK,
+    ER_UI_ICON_SHIELD,
+    ER_UI_ICON_SETTINGS
+  };
+  static const char* const labels[] = {"Apps", "Search", "CPU", "Network", "Trust", "Settings"};
+  const float size = 36.0f;
+  const float gap = 8.0f;
+  const size_t count = sizeof(icons) / sizeof(icons[0]);
+
+  if (!scene || !font || !er_ui_bounds_valid(bounds)) return ER_UI_ERR_INVALID_ARGUMENT;
+  for (size_t i = 0u; i < count; ++i) {
+    er_ui_node_t button = er_ui_node_icon_button(icons[i], labels[i], ER_UI_METAL_ICON_BASE_ID + (uint32_t)i, ER_UI_SHADCN_BUTTON_GHOST);
+    er_ui_status_t status = er_ui_node_render(&button, scene, font, er_ui_bounds(bounds.x + (size + gap) * (float)i, bounds.y, size, size), theme);
+    if (status != ER_UI_OK) return status;
+  }
+  return ER_UI_OK;
+}
+
 er_ui_status_t er_ui_edgerun_metal_surface_emit(
   er_ui_scene_t* scene,
   vr_font_face_t* font,
@@ -137,6 +166,24 @@ er_ui_status_t er_ui_edgerun_metal_surface_emit(
   er_ui_bounds_t showcase = er_ui_bounds(showcase_x, lower.y, showcase_w, lower.h);
   er_ui_bounds_t footer = er_ui_bounds(content.x, content.y + content.h - layout.toast_h, content.w, layout.toast_h);
   if (!er_ui_bounds_valid(showcase)) return ER_UI_ERR_INVALID_ARGUMENT;
+
+  if (layout.compact) {
+    er_ui_bounds_t compact_header = er_ui_bounds(content.x, content.y, content.w, layout.header_h);
+    er_ui_bounds_t icon_bar = er_ui_bounds(content.x + content.w - 258.0f, content.y + 6.0f, 258.0f, 36.0f);
+    er_ui_bounds_t compact_showcase = er_ui_bounds(content.x, content.y + layout.header_h + layout.block_gap, content.w,
+                                                   content.h - layout.header_h - layout.block_gap - layout.toast_h - layout.block_gap);
+    er_ui_bounds_t compact_footer = er_ui_bounds(content.x, content.y + content.h - layout.toast_h, content.w, layout.toast_h);
+    if (!er_ui_bounds_valid(compact_showcase)) return ER_UI_ERR_INVALID_ARGUMENT;
+
+    status = er_ui_shadcn_panel_header_emit(scene, font, compact_header, theme, "EdgeRun UI Core", "shadcn catalog rendered by GOP", "COMPACT", ER_UI_METAL_HEADER_ACTION_ID);
+    if (status != ER_UI_OK) return status;
+    status = er_ui_metal_emit_icon_bar(scene, font, icon_bar, theme);
+    if (status != ER_UI_OK) return status;
+    status = er_ui_shadcn_showcase_emit(scene, font, compact_showcase, theme, "dialog", state);
+    if (status != ER_UI_OK) return status;
+    return er_ui_shadcn_toast_emit(scene, font, compact_footer, theme, "UI-core shadcn components, node icons, hits, text, and GOP rendering are active.",
+                                   theme.colors.accent);
+  }
 
   status = er_ui_shadcn_panel_header_emit(scene, font, header, theme, "EdgeRun Metal", "GOP rendering UI-core components", "READY", ER_UI_METAL_HEADER_ACTION_ID);
   if (status != ER_UI_OK) return status;

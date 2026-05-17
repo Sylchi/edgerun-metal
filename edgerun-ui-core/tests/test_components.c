@@ -191,6 +191,13 @@ static void test_shadcn_render_primitives(void) {
   expect_true(scene.hit_count >= 20u, "metal surface: qemu 1080p controls emit hits");
   expect_true(er_ui_scene_stats_fits_budget(er_ui_scene_stats(&scene), er_ui_scene_budget_native_interactive_frame()),
               "metal surface: qemu 1080p scene fits native frame budget");
+  er_ui_scene_clear_commands(&scene);
+  expect_status(er_ui_edgerun_metal_surface_emit(&scene, face, er_ui_bounds(0.0f, 0.0f, 1280.0f, 720.0f), theme, &state), ER_UI_OK,
+                "metal surface: qemu 720p scene emits");
+  expect_true(scene.hit_count >= 20u, "metal surface: qemu 720p controls emit hits");
+  expect_true(scene.icon_quad_count >= 6u, "metal surface: qemu 720p icon nodes emit quads");
+  expect_true(er_ui_scene_stats_fits_budget(er_ui_scene_stats(&scene), er_ui_scene_budget_native_interactive_frame()),
+              "metal surface: qemu 720p scene fits native frame budget");
 
   for (size_t i = 0u; i < er_ui_shadcn_demo_count(); ++i) {
     const er_ui_shadcn_demo_spec_t* spec = er_ui_shadcn_demo_at(i);
