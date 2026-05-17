@@ -130,6 +130,18 @@ void run_node_tests(void) {
     const float chart_values[] = {0.25f, 0.72f, 0.54f};
     er_ui_node_t chart = er_ui_node_bar_chart("Visitors", chart_labels, chart_values, 3u, 8600u, 1u);
     er_ui_node_t command = er_ui_node_command_palette("Search components...", 8700u);
+    er_ui_node_t tree_item = er_ui_node_tree_item("src", "expanded", 1u, true, 8800u);
+    er_ui_node_t section = er_ui_node_section("Proof", "Verified rows");
+    er_ui_node_t identity = er_ui_node_identity_card("Ken", "browser-node", "personal", 8801u);
+    er_ui_node_t contact = er_ui_node_contact_card("Ada", "publisher", 8802u);
+    er_ui_node_t thread = er_ui_node_thread_row("Sync complete", "Drive import finished", true, 8803u);
+    er_ui_node_t attachment = er_ui_node_attachment_preview("manifest.rkyv", "package manifest", 8804u);
+    er_ui_node_t grant = er_ui_node_capability_grant_row("Mail", "contacts:read", "granted", 8805u);
+    er_ui_node_t proof = er_ui_node_proof_event_row("Package hash", "b3:abc123", "verified", 8806u);
+    const char* const route_hops[] = {"browser", "admission", "relay"};
+    er_ui_node_t route = er_ui_node_route_path("Admission route", route_hops, 3u);
+    er_ui_node_t package = er_ui_node_package_card("Docs", "cache-ok", "b3:def456", 8807u);
+    er_ui_node_t receipt = er_ui_node_receipt_row("Retrieval", "4 units", "settled", 8808u);
 
     expect_status(er_ui_node_render(&alert, &scene, face, er_ui_bounds(0.0f, 170.0f, 360.0f, 76.0f), theme), ER_UI_OK, "node: alert renders");
     expect_status(er_ui_node_render(&avatar, &scene, face, er_ui_bounds(0.0f, 254.0f, 42.0f, 42.0f), theme), ER_UI_OK, "node: avatar renders");
@@ -152,6 +164,28 @@ void run_node_tests(void) {
                   "node: bar chart renders");
     expect_status(er_ui_node_render(&command, &scene, face, er_ui_bounds(0.0f, 1114.0f, 300.0f, 46.0f), theme), ER_UI_OK,
                   "node: command palette renders");
+    expect_status(er_ui_node_render(&tree_item, &scene, face, er_ui_bounds(0.0f, 1172.0f, 320.0f, 42.0f), theme), ER_UI_OK,
+                  "node: tree item renders");
+    expect_status(er_ui_node_render(&section, &scene, face, er_ui_bounds(0.0f, 1226.0f, 320.0f, 34.0f), theme), ER_UI_OK,
+                  "node: section renders");
+    expect_status(er_ui_node_render(&identity, &scene, face, er_ui_bounds(0.0f, 1272.0f, 320.0f, 110.0f), theme), ER_UI_OK,
+                  "node: identity card renders");
+    expect_status(er_ui_node_render(&contact, &scene, face, er_ui_bounds(0.0f, 1394.0f, 320.0f, 64.0f), theme), ER_UI_OK,
+                  "node: contact card renders");
+    expect_status(er_ui_node_render(&thread, &scene, face, er_ui_bounds(0.0f, 1470.0f, 320.0f, 58.0f), theme), ER_UI_OK,
+                  "node: thread row renders");
+    expect_status(er_ui_node_render(&attachment, &scene, face, er_ui_bounds(0.0f, 1540.0f, 320.0f, 64.0f), theme), ER_UI_OK,
+                  "node: attachment preview renders");
+    expect_status(er_ui_node_render(&grant, &scene, face, er_ui_bounds(0.0f, 1616.0f, 360.0f, 58.0f), theme), ER_UI_OK,
+                  "node: capability grant row renders");
+    expect_status(er_ui_node_render(&proof, &scene, face, er_ui_bounds(0.0f, 1686.0f, 360.0f, 58.0f), theme), ER_UI_OK,
+                  "node: proof event row renders");
+    expect_status(er_ui_node_render(&route, &scene, face, er_ui_bounds(0.0f, 1756.0f, 360.0f, 86.0f), theme), ER_UI_OK,
+                  "node: route path renders");
+    expect_status(er_ui_node_render(&package, &scene, face, er_ui_bounds(0.0f, 1854.0f, 320.0f, 110.0f), theme), ER_UI_OK,
+                  "node: package card renders");
+    expect_status(er_ui_node_render(&receipt, &scene, face, er_ui_bounds(0.0f, 1976.0f, 360.0f, 58.0f), theme), ER_UI_OK,
+                  "node: receipt row renders");
 
     expect_true(scene.rect_count > 0u, "node: render emits rect geometry");
     expect_true(scene.hit_count > 0u, "node: render emits hit targets");

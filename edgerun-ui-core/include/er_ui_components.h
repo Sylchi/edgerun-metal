@@ -313,6 +313,101 @@ er_ui_status_t er_ui_shadcn_command_palette_emit(
   er_ui_resolved_theme_t theme,
   const char* placeholder,
   uint32_t id);
+er_ui_status_t er_ui_shadcn_tree_item_emit(
+  er_ui_scene_t* scene,
+  vr_font_face_t* font,
+  er_ui_bounds_t bounds,
+  er_ui_resolved_theme_t theme,
+  const char* label,
+  const char* detail,
+  uint8_t depth,
+  bool expanded,
+  uint32_t id);
+er_ui_status_t er_ui_shadcn_section_header_emit(
+  er_ui_scene_t* scene,
+  vr_font_face_t* font,
+  er_ui_bounds_t bounds,
+  er_ui_resolved_theme_t theme,
+  const char* title,
+  const char* detail);
+er_ui_status_t er_ui_shadcn_identity_card_emit(
+  er_ui_scene_t* scene,
+  vr_font_face_t* font,
+  er_ui_bounds_t bounds,
+  er_ui_resolved_theme_t theme,
+  const char* name,
+  const char* node,
+  const char* policy,
+  uint32_t id);
+er_ui_status_t er_ui_shadcn_contact_card_emit(
+  er_ui_scene_t* scene,
+  vr_font_face_t* font,
+  er_ui_bounds_t bounds,
+  er_ui_resolved_theme_t theme,
+  const char* name,
+  const char* detail,
+  uint32_t id);
+er_ui_status_t er_ui_shadcn_thread_row_emit(
+  er_ui_scene_t* scene,
+  vr_font_face_t* font,
+  er_ui_bounds_t bounds,
+  er_ui_resolved_theme_t theme,
+  const char* title,
+  const char* last_message,
+  bool unread,
+  uint32_t id);
+er_ui_status_t er_ui_shadcn_attachment_preview_emit(
+  er_ui_scene_t* scene,
+  vr_font_face_t* font,
+  er_ui_bounds_t bounds,
+  er_ui_resolved_theme_t theme,
+  const char* name,
+  const char* kind,
+  uint32_t id);
+er_ui_status_t er_ui_shadcn_capability_grant_row_emit(
+  er_ui_scene_t* scene,
+  vr_font_face_t* font,
+  er_ui_bounds_t bounds,
+  er_ui_resolved_theme_t theme,
+  const char* app,
+  const char* capability,
+  const char* state,
+  uint32_t id);
+er_ui_status_t er_ui_shadcn_proof_event_row_emit(
+  er_ui_scene_t* scene,
+  vr_font_face_t* font,
+  er_ui_bounds_t bounds,
+  er_ui_resolved_theme_t theme,
+  const char* title,
+  const char* hash,
+  const char* status_text,
+  uint32_t id);
+er_ui_status_t er_ui_shadcn_route_path_emit(
+  er_ui_scene_t* scene,
+  vr_font_face_t* font,
+  er_ui_bounds_t bounds,
+  er_ui_resolved_theme_t theme,
+  const char* label,
+  const char* const* hops,
+  size_t hop_count);
+er_ui_status_t er_ui_shadcn_package_card_emit(
+  er_ui_scene_t* scene,
+  vr_font_face_t* font,
+  er_ui_bounds_t bounds,
+  er_ui_resolved_theme_t theme,
+  const char* name,
+  const char* policy,
+  const char* hash,
+  uint32_t id);
+er_ui_status_t er_ui_shadcn_receipt_row_emit(
+  er_ui_scene_t* scene,
+  vr_font_face_t* font,
+  er_ui_bounds_t bounds,
+  er_ui_resolved_theme_t theme,
+  const char* label,
+  const char* amount,
+  const char* status_text,
+  uint32_t id);
 er_ui_status_t er_ui_shadcn_bar_chart_emit(
   er_ui_scene_t* scene,
   vr_font_face_t* font,
