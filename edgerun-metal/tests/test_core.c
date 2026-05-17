@@ -9,6 +9,7 @@
 #include "er_hw_relay.h"
 #include "er_ui_gop_renderer.h"
 #include "er_ui_text.h"
+#include "er_virtio.h"
 #include "er_vfs.h"
 #include "font_geist.h"
 #include "wasm_vm.h"
@@ -622,6 +623,127 @@ static void test_bus_addresses(void) {
   check_int64("bus io packet reject width access mismatch",
               er_bus_prepare_io_packet(11u, &mmio, ER_BUS_ACCESS_READ16, 1u, 1u, 0u, &io_request),
               0);
+}
+
+static void test_virtio_mmio_transport(void) {
+  enum {
+    VIRTIO_TEST_MMIO_DWORDS = 128u,
+    VIRTIO_TEST_QUEUE_INDEX = 3u,
+    VIRTIO_TEST_QUEUE_MAX = 8u,
+    VIRTIO_TEST_DESC_ADDR = 0x1122334455667788ull,
+    VIRTIO_TEST_DRIVER_ADDR = 0x2233445566778899ull,
+    VIRTIO_TEST_DEVICE_ADDR = 0x33445566778899aau,
+    VIRTIO_TEST_INTERRUPT_STATUS = 3u
+  };
+  UINT32 regs[VIRTIO_TEST_MMIO_DWORDS] = {0};
+  ErVirtioMmioTransport transport;
+  ErVirtioMmioTransport rejected_transport;
+  ErVirtioFeatureSet features;
+  UINT16 queue_size = 0;
+  UINT8 interrupt_status = 0;
+
+  er_mmio_reset();
+  regs[ER_VIRTIO_MMIO_MAGIC_VALUE_OFFSET / sizeof(UINT32)] = ER_VIRTIO_MMIO_MAGIC;
+  regs[ER_VIRTIO_MMIO_VERSION_OFFSET / sizeof(UINT32)] = ER_VIRTIO_MMIO_VERSION_MODERN;
+  regs[ER_VIRTIO_MMIO_DEVICE_ID_OFFSET / sizeof(UINT32)] = ER_VIRTIO_DEVICE_TYPE_NET;
+  regs[ER_VIRTIO_MMIO_VENDOR_OFFSET / sizeof(UINT32)] = ER_VIRTIO_MMIO_VENDOR_ANY;
+  regs[ER_VIRTIO_MMIO_DEVICE_FEATURES_OFFSET / sizeof(UINT32)] = 1u;
+  regs[ER_VIRTIO_MMIO_QUEUE_NUM_MAX_OFFSET / sizeof(UINT32)] = VIRTIO_TEST_QUEUE_MAX;
+  regs[ER_VIRTIO_MMIO_INTERRUPT_STATUS_OFFSET / sizeof(UINT32)] = VIRTIO_TEST_INTERRUPT_STATUS;
+
+  check_int64("virtio mmio init",
+              er_virtio_mmio_transport_init((UINT64)(UINTN)regs, (UINT64)sizeof(regs),
+                                            ER_VIRTIO_DEVICE_TYPE_NET, &transport),
+              1);
+  check_uint64("virtio mmio device type", transport.device_type, ER_VIRTIO_DEVICE_TYPE_NET);
+  check_int64("virtio mmio reject wrong type",
+              er_virtio_mmio_transport_init((UINT64)(UINTN)regs, (UINT64)sizeof(regs),
+                                            ER_VIRTIO_DEVICE_TYPE_BLK, &rejected_transport),
+              0);
+  check_int64("virtio mmio negotiate",
+              er_virtio_mmio_negotiate_features(&transport, ER_VIRTIO_F_VERSION_1 | 1u, &features),
+              1);
+  check_uint64("virtio mmio host features", features.host, ER_VIRTIO_F_VERSION_1 | 1u);
+  check_uint64("virtio mmio driver features", features.driver, ER_VIRTIO_F_VERSION_1 | 1u);
+  check_uint64("virtio mmio status features ok",
+               regs[ER_VIRTIO_MMIO_STATUS_OFFSET / sizeof(UINT32)],
+               ER_VIRTIO_STATUS_ACKNOWLEDGE | ER_VIRTIO_STATUS_DRIVER | ER_VIRTIO_STATUS_FEATURES_OK);
+  check_uint64("virtio mmio driver feature selector",
+               regs[ER_VIRTIO_MMIO_DRIVER_FEATURES_SEL_OFFSET / sizeof(UINT32)],
+               1u);
+  check_uint64("virtio mmio driver feature high",
+               regs[ER_VIRTIO_MMIO_DRIVER_FEATURES_OFFSET / sizeof(UINT32)],
+               1u);
+
+  check_int64("virtio mmio configure queue",
+              er_virtio_mmio_configure_split_queue(&transport, VIRTIO_TEST_QUEUE_INDEX,
+                                                   ER_VIRTIO_QUEUE_SIZE, 1u,
+                                                   VIRTIO_TEST_DESC_ADDR, VIRTIO_TEST_DRIVER_ADDR,
+                                                   VIRTIO_TEST_DEVICE_ADDR, &queue_size),
+              1);
+  check_uint64("virtio mmio queue size", queue_size, VIRTIO_TEST_QUEUE_MAX);
+  check_uint64("virtio mmio queue select",
+               regs[ER_VIRTIO_MMIO_QUEUE_SEL_OFFSET / sizeof(UINT32)], VIRTIO_TEST_QUEUE_INDEX);
+  check_uint64("virtio mmio queue desc low",
+               regs[ER_VIRTIO_MMIO_QUEUE_DESC_LOW_OFFSET / sizeof(UINT32)],
+               (UINT32)VIRTIO_TEST_DESC_ADDR);
+  check_uint64("virtio mmio queue desc high",
+               regs[ER_VIRTIO_MMIO_QUEUE_DESC_HIGH_OFFSET / sizeof(UINT32)],
+               (UINT32)(VIRTIO_TEST_DESC_ADDR >> 32));
+  check_uint64("virtio mmio queue driver low",
+               regs[ER_VIRTIO_MMIO_QUEUE_DRIVER_LOW_OFFSET / sizeof(UINT32)],
+               (UINT32)VIRTIO_TEST_DRIVER_ADDR);
+  check_uint64("virtio mmio queue device high",
+               regs[ER_VIRTIO_MMIO_QUEUE_DEVICE_HIGH_OFFSET / sizeof(UINT32)],
+               (UINT32)(VIRTIO_TEST_DEVICE_ADDR >> 32));
+  check_uint64("virtio mmio queue ready",
+               regs[ER_VIRTIO_MMIO_QUEUE_READY_OFFSET / sizeof(UINT32)], 1u);
+  check_int64("virtio mmio notify", er_virtio_mmio_notify_queue(&transport, VIRTIO_TEST_QUEUE_INDEX), 1);
+  check_uint64("virtio mmio notify value",
+               regs[ER_VIRTIO_MMIO_QUEUE_NOTIFY_OFFSET / sizeof(UINT32)], VIRTIO_TEST_QUEUE_INDEX);
+  check_int64("virtio mmio interrupt",
+              er_virtio_mmio_take_interrupt_status(&transport, &interrupt_status), 1);
+  check_uint64("virtio mmio interrupt value", interrupt_status, VIRTIO_TEST_INTERRUPT_STATUS);
+  check_uint64("virtio mmio interrupt ack",
+               regs[ER_VIRTIO_MMIO_INTERRUPT_ACK_OFFSET / sizeof(UINT32)], VIRTIO_TEST_INTERRUPT_STATUS);
+}
+
+static void test_virtio_split_queue(void) {
+  ErVirtioQueueDesc desc[ER_VIRTIO_QUEUE_SIZE];
+  ErVirtioQueueAvail avail;
+  ErVirtioQueueUsed used;
+  ErVirtioQueueUsedElem elem;
+  UINT16 last_used_idx = 0;
+
+  er_virtio_queue_clear(desc, &avail, &used);
+  check_uint64("virtio queue desc clear", desc[0].addr, 0u);
+  check_uint64("virtio queue avail clear", avail.idx, 0u);
+  check_uint64("virtio queue used clear", used.idx, 0u);
+  check_int64("virtio queue post first", er_virtio_queue_post_descriptor(&avail, 4u, 2u), 1);
+  check_uint64("virtio queue avail idx first", avail.idx, 1u);
+  check_uint64("virtio queue avail ring first", avail.ring[0], 2u);
+  check_int64("virtio queue post second", er_virtio_queue_post_descriptor(&avail, 4u, 3u), 1);
+  check_uint64("virtio queue avail idx second", avail.idx, 2u);
+  check_uint64("virtio queue avail ring second", avail.ring[1], 3u);
+  check_int64("virtio queue reject high desc", er_virtio_queue_post_descriptor(&avail, 4u, 4u), 0);
+
+  used.idx = 2u;
+  used.ring[0].id = 2u;
+  used.ring[0].len = 64u;
+  used.ring[1].id = 3u;
+  used.ring[1].len = 128u;
+  check_int64("virtio queue take first",
+              er_virtio_queue_take_next_used(&used, 4u, &last_used_idx, &elem), 1);
+  check_uint64("virtio queue used first id", elem.id, 2u);
+  check_uint64("virtio queue used first len", elem.len, 64u);
+  check_uint64("virtio queue last first", last_used_idx, 1u);
+  check_int64("virtio queue take second",
+              er_virtio_queue_take_next_used(&used, 4u, &last_used_idx, &elem), 1);
+  check_uint64("virtio queue used second id", elem.id, 3u);
+  check_uint64("virtio queue used second len", elem.len, 128u);
+  check_uint64("virtio queue last second", last_used_idx, 2u);
+  check_int64("virtio queue take empty",
+              er_virtio_queue_take_next_used(&used, 4u, &last_used_idx, &elem), 0);
 }
 
 static void test_acpi_tables(void) {
@@ -1570,6 +1692,8 @@ int main(void) {
   test_pci_device_classification();
   test_mmio_handles();
   test_bus_addresses();
+  test_virtio_mmio_transport();
+  test_virtio_split_queue();
   test_wasm_mmio_imports();
   test_wasm_bus_exec_import();
   test_vfs_object_packets();
