@@ -170,6 +170,7 @@ static void er_clear_module(ErWasmModule* module) {
   module->memory_min_pages = 0;
   module->memory_size = 0;
   module->memory = 0;
+  er_mem_zero((UINT8*)&module->linear_memory, (UINTN)sizeof(module->linear_memory));
   module->function_has_main = 0;
   module->main_index = 0;
 
@@ -194,6 +195,7 @@ static void er_clear_module(ErWasmModule* module) {
   module->host.bus_exec = 0;
   module->host.memory = 0;
   module->host.memory_size = 0;
+  er_mem_zero((UINT8*)&module->host.linear_memory, (UINTN)sizeof(module->host.linear_memory));
 }
 
 static int er_reader_init(ErReader* r, const UINT8* data, UINT32 size) {
@@ -316,14 +318,97 @@ static int er_reader_skip(ErReader* r, UINT32 count) {
   return 0;
 }
 
+static int er_wasm_linear_window_valid(UINT32 address_base, UINT32 address_len,
+                                       UINT32 window_base, UINT32 window_len) {
+  UINT64 address_end;
+
+  if (window_len == 0u) {
+    return 0;
+  }
+  address_end = (UINT64)address_base + (UINT64)address_len;
+  if ((UINT64)window_base < (UINT64)address_base || (UINT64)window_base > address_end) {
+    return 0;
+  }
+  if (address_end - (UINT64)window_base < (UINT64)window_len) {
+    return 0;
+  }
+  return 1;
+}
+
+static int er_wasm_linear_windows_overlap(UINT32 a_base, UINT32 a_len,
+                                          UINT32 b_base, UINT32 b_len) {
+  UINT64 a_end = (UINT64)a_base + (UINT64)a_len;
+  UINT64 b_end = (UINT64)b_base + (UINT64)b_len;
+
+  if (a_end <= (UINT64)b_base || b_end <= (UINT64)a_base) {
+    return 0;
+  }
+  return 1;
+}
+
+static int er_wasm_linear_memory_valid(const ErWasmLinearMemory* memory) {
+  if (memory == 0 || memory->bytes == 0 ||
+      memory->address_base != ER_WASM_LINEAR_MEMORY_BASE ||
+      memory->address_len == 0u) {
+    return 0;
+  }
+  if (er_wasm_linear_window_valid(memory->address_base, memory->address_len,
+                                  memory->relay_inbox_base,
+                                  memory->relay_inbox_len) == 0 ||
+      er_wasm_linear_window_valid(memory->address_base, memory->address_len,
+                                  memory->relay_outbox_base,
+                                  memory->relay_outbox_len) == 0) {
+    return 0;
+  }
+  if (er_wasm_linear_windows_overlap(memory->relay_inbox_base,
+                                     memory->relay_inbox_len,
+                                     memory->relay_outbox_base,
+                                     memory->relay_outbox_len) != 0) {
+    return 0;
+  }
+  return 1;
+}
+
+int er_wasm_prepare_linear_memory(UINT8* bytes, UINT32 address_len,
+                                  UINT32 relay_inbox_base, UINT32 relay_inbox_len,
+                                  UINT32 relay_outbox_base, UINT32 relay_outbox_len,
+                                  ErWasmLinearMemory* out_memory) {
+  if (bytes == 0 || address_len == 0u || out_memory == 0) {
+    return -1;
+  }
+  if (er_wasm_linear_window_valid(ER_WASM_LINEAR_MEMORY_BASE, address_len,
+                                  relay_inbox_base, relay_inbox_len) == 0 ||
+      er_wasm_linear_window_valid(ER_WASM_LINEAR_MEMORY_BASE, address_len,
+                                  relay_outbox_base, relay_outbox_len) == 0) {
+    return -1;
+  }
+  if (er_wasm_linear_windows_overlap(relay_inbox_base, relay_inbox_len,
+                                     relay_outbox_base, relay_outbox_len) != 0) {
+    return -1;
+  }
+  er_mem_zero((UINT8*)out_memory, (UINTN)sizeof(*out_memory));
+  out_memory->bytes = bytes;
+  out_memory->address_base = ER_WASM_LINEAR_MEMORY_BASE;
+  out_memory->address_len = address_len;
+  out_memory->relay_inbox_base = relay_inbox_base;
+  out_memory->relay_inbox_len = relay_inbox_len;
+  out_memory->relay_outbox_base = relay_outbox_base;
+  out_memory->relay_outbox_len = relay_outbox_len;
+  return 0;
+}
+
 static int er_wasm_memory_range(ErWasmModule* module, UINT64 offset, UINT32 len, UINT8** out_bytes) {
-  if (module == 0 || out_bytes == 0 || module->memory == 0 || len == 0u) {
+  UINT64 address_end;
+
+  if (module == 0 || out_bytes == 0 || module->linear_memory.bytes == 0 || len == 0u) {
     return -1;
   }
-  if (offset > (UINT64)module->memory_size || (UINT64)module->memory_size - offset < (UINT64)len) {
+  address_end = (UINT64)module->linear_memory.address_base + (UINT64)module->linear_memory.address_len;
+  if (offset < (UINT64)module->linear_memory.address_base ||
+      offset > address_end || address_end - offset < (UINT64)len) {
     return -1;
   }
-  *out_bytes = &module->memory[(UINT32)offset];
+  *out_bytes = &module->linear_memory.bytes[(UINT32)(offset - module->linear_memory.address_base)];
   return 0;
 }
 
@@ -481,8 +566,25 @@ int er_wasm_init(ErWasmModule* module, const UINT8* data, UINT32 size, const ErW
     module->host.bus_exec = host->bus_exec;
     module->host.memory = host->memory;
     module->host.memory_size = host->memory_size;
-    module->memory = host->memory;
-    module->memory_size = host->memory_size;
+    module->host.linear_memory = host->linear_memory;
+    if (host->linear_memory.bytes != 0) {
+      if (er_wasm_linear_memory_valid(&host->linear_memory) == 0) {
+        return -1;
+      }
+      module->linear_memory = host->linear_memory;
+      module->memory = host->linear_memory.bytes;
+      module->memory_size = host->linear_memory.address_len;
+    } else if (host->memory != 0 && host->memory_size != 0u) {
+      if (er_wasm_prepare_linear_memory(host->memory, host->memory_size,
+                                        ER_WASM_LINEAR_MEMORY_BASE, host->memory_size,
+                                        ER_WASM_LINEAR_MEMORY_BASE, host->memory_size,
+                                        &module->linear_memory) != 0) {
+        return -1;
+      }
+      module->host.linear_memory = module->linear_memory;
+      module->memory = host->memory;
+      module->memory_size = host->memory_size;
+    }
   }
 
   if (er_reader_init(&r, data, size) != 0) {
