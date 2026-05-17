@@ -221,7 +221,7 @@ I2C/SMBus: sensors, SPD, board controllers
 SPI/eSPI/LPC: firmware chip, embedded controller, super I/O
 ```
 
-Practical order:
+Hardware bring-up order:
 
 ```text
 1. PCI config scan
@@ -230,14 +230,16 @@ Practical order:
 4. ACPI table discovery
 5. Interrupts
 6. DMA
-7. Wasm driver runtime
+7. Device endpoint adapters
 ```
 
-## Next milestones
+These are adapter-enabling steps. They are not the app or driver ABI. Apps and drivers talk through erwire relay packets; endpoint adapters translate admitted packets into local hardware operations.
 
-### M3: concise PCI target scanner
+## Proven bring-up
 
-Status: implemented in native core profile `pci`.
+### Concise PCI target scanner
+
+Status: implemented in native profile `pci`.
 
 Targets:
 
@@ -245,9 +247,9 @@ Targets:
 - NVMe class `0x0108xx`
 - Ethernet class `0x0200xx`
 
-### M4: MMIO read-only hostcalls
+### MMIO read-only hostcalls
 
-Foundation added:
+Status: implemented as bring-up scaffolding.
 
 ```text
 edgerun.mmio.map(phys, len) -> handle
@@ -263,17 +265,26 @@ Current limits:
 - no Boot Services memory ownership changes
 - no MMIO writes yet
 
-### M5: NVIDIA BAR0 safe probe
+### Native erwire over VirtIO-net
 
-From the core or Wasm:
+Status: implemented as the first native relay transport proof.
 
-- find vendor `0x10de`
-- inspect BAR0/BAR1
-- map BAR0 read-only
-- read a tiny fixed set of safe offsets
-- print values
+The native profile can bring up VirtIO-net and submit EdgeRun Ethernet frames with EtherType `0x88b5`.
 
-No firmware loading. No mode setting. No compute dispatch yet.
+## Next milestones
+
+Use `NEXT_CORE_WORK.md` and `../docs/coherent-system-milestones.md` as the active checklist. In short:
+
+```text
+1. Object-only storage contract
+2. Native relay ingress
+3. Relay intent dispatch
+4. VirtIO storage endpoint
+5. VirtIO render endpoint
+6. Wasm relay hostcalls
+7. Distributed UI proof
+8. Remote driver proof
+```
 
 ## ExitBootServices policy
 
@@ -283,7 +294,8 @@ Stay in UEFI app mode until:
 
 - boot output is stable
 - serial mirror is proven
-- PCI/BAR discovery works
-- read-only MMIO probing works
+- native erwire ingress works
+- relay dispatch to VirtIO endpoints works
+- storage and render endpoint proofs exist
 
 Only exit Boot Services when firmware services actively block ownership of hardware.

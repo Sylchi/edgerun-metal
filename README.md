@@ -218,3 +218,4 @@ Additional intent documents:
 - [Repository structure](docs/repository-structure.md)
 - [Engineering practices](docs/engineering-practices.md)
 - [Relay architecture](docs/relay-architecture.md)
+- [Coherent system milestones](docs/coherent-system-milestones.md)

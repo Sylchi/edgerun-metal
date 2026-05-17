@@ -2,7 +2,7 @@
 
 The metal core is now a relay runtime, not a local driver experiment. Netboot, GOP, PCI scans, and direct hostcalls are support surfaces. The product architecture is erwire relay between apps, UI renderers, drivers, storage, and hardware endpoints.
 
-See `../docs/relay-architecture.md` for the cross-project model.
+See `../docs/relay-architecture.md` for the cross-project model and `../docs/coherent-system-milestones.md` for the proof checklist.
 
 ## Proven baseline
 
@@ -19,6 +19,8 @@ See `../docs/relay-architecture.md` for the cross-project model.
 ## Architecture rule
 
 Do not add a second app IPC, remote UI, driver RPC, or storage protocol.
+
+Do not add host-like files outside VFS. VFS labels are manifest names for content-addressed objects. They are not paths, authority, durable storage identity, or runtime handles.
 
 All boundary-crossing work must be shaped as:
 
@@ -47,18 +49,39 @@ EdgeRun EtherType frame on VirtIO-net
 
 The first endpoint adapters may acknowledge or capture packets before they implement full device behavior. The important proof is one ingress, one erwire protocol, one router, and typed VirtIO endpoints.
 
-## Milestones
+## Immediate milestones
 
-### M1: Native relay ingress
+### M1: Object-only storage contract
+
+Status: next.
+
+- Audit runtime surfaces for host path/file/socket/descriptor concepts.
+- Keep VFS labels as object labels only.
+- Prove labels map to object ids, and object ids do not depend on labels.
+- Keep storage routing restricted to object packet, label ref, transform ref, and object capability records.
+
+Proof:
+
+- VFS tests reject traversal and invalid labels.
+- VFS tests show same bytes produce same object id with different labels.
+- Relay router tests send object packets to storage and reject non-storage packets.
+
+### M2: Native relay ingress
 
 Status: next.
 
 - Poll `erwire_poll_native_eth`.
 - Reject invalid packets immediately.
 - Preserve packet kind, payload, ingress endpoint, sequence, and payload hash inputs for routing.
-- Emit deterministic relay intent records.
+- Emit deterministic relay ingress or relay intent records.
 
-### M2: VirtIO endpoint dispatch
+Proof:
+
+- QEMU pcap shows EtherType `0x88b5` and erwire `ERW1`.
+- Core tests cover malformed and accepted native erwire packets.
+- Native run emits a deterministic relay acknowledgement or transit packet.
+
+### M3: VirtIO endpoint dispatch
 
 Status: next.
 
@@ -67,7 +90,13 @@ Status: next.
 - Keep `er_relay_router` limited to packet-class route selection.
 - Add test coverage for storage, render, unsupported, and malformed cases.
 
-### M3: Storage adapter
+Proof:
+
+- Storage packets produce VirtIO block intents.
+- Render capability packets produce VirtIO GPU intents.
+- Unsupported packet classes produce no intent.
+
+### M4: Storage adapter
 
 Status: not started.
 
@@ -76,7 +105,12 @@ Status: not started.
 - Then add real VirtIO block request queue support.
 - Keep storage as sealed object movement, not a filesystem API.
 
-### M4: Render adapter
+Proof:
+
+- Unit test feeds an object packet through erwire and dispatches it to storage.
+- QEMU proof routes a net-ingress storage packet to the VirtIO block endpoint.
+
+### M5: Render adapter
 
 Status: not started.
 
@@ -85,7 +119,12 @@ Status: not started.
 - Then add the smallest VirtIO GPU command queue path.
 - Keep apps targeting admitted UI scene packets, not framebuffers.
 
-### M5: Wasm relay hostcalls
+Proof:
+
+- Unit test feeds a render capability packet through erwire and dispatches it to render.
+- QEMU proof routes a net-ingress render packet to the VirtIO GPU endpoint.
+
+### M6: Wasm relay hostcalls
 
 Status: not started.
 
@@ -93,7 +132,13 @@ Status: not started.
 - Move driver modules away from direct PCI/MMIO hostcalls as the durable ABI.
 - Keep direct bus hostcalls only for bring-up until relay device endpoints are proven.
 
-### M6: Distributed UI proof
+Proof:
+
+- Wasm fixture emits object and render packets through relay send.
+- Wasm fixture receives a completion or input packet through relay receive.
+- Tests prove memory bounds, packet bounds, and budget failures.
+
+### M7: Distributed UI proof
 
 Status: not started.
 
@@ -101,7 +146,12 @@ Status: not started.
 - Render locally through GOP and remotely or virtually through a second renderer endpoint.
 - Route input back as input capability packets.
 
-### M7: Remote driver proof
+Proof:
+
+- Both renderer routes receive the same scene hash.
+- Input returns on an ordered input capability route.
+
+### M8: Remote driver proof
 
 Status: not started.
 
@@ -109,6 +159,11 @@ Status: not started.
 - Submit device-operation packets over erwire.
 - Execute the operation at a device endpoint that owns the local hardware queue.
 - Return completion over erwire.
+
+Proof:
+
+- The driver uses relay send/receive, not direct bus hostcalls, for its durable ABI.
+- The same device-operation packet can route to a local or remote endpoint without changing the driver.
 
 ## Freeze rule
 
