@@ -1557,6 +1557,8 @@ static void test_wasm_relay_imports(void) {
   ErHash token;
   ErHash route;
   ErHash payload_hash;
+  ErAppBudget budget;
+  ErAppUsage usage;
   UINT32 main_index = 0;
   UINT32 packet_len = 0u;
   INT64 result = 0;
@@ -1576,6 +1578,14 @@ static void test_wasm_relay_imports(void) {
   host.relay_send = test_vm_relay_send;
   host.relay_recv = test_vm_relay_recv;
   host.linear_memory = linear_memory;
+  er_mem_zero((UINT8*)&budget, (UINTN)sizeof(budget));
+  er_mem_zero((UINT8*)&usage, (UINTN)sizeof(usage));
+  budget.abi_version = ER_APP_ABI_VERSION;
+  budget.app_kind = ER_APP_KIND_USER;
+  budget.max_packet_bytes = ER_RELAY_PACKET_HEADER_LEN + 4u;
+  usage.abi_version = ER_APP_ABI_VERSION;
+  host.app_budget = &budget;
+  host.app_usage = &usage;
 
   check_int64("wasm relay init",
               er_wasm_init(&module, wasm_relay_import_test,
@@ -1598,6 +1608,14 @@ static void test_wasm_relay_imports(void) {
   check_uint64("wasm relay inbox byte1", memory[1], (UINT8)'o');
   check_uint64("wasm relay inbox byte2", memory[2], (UINT8)'n');
   check_uint64("wasm relay inbox byte3", memory[3], (UINT8)'g');
+  check_uint64("wasm relay usage charged", usage.packet_bytes, ER_RELAY_PACKET_HEADER_LEN + 4u);
+
+  usage.packet_bytes = 0u;
+  budget.max_packet_bytes = ER_RELAY_PACKET_HEADER_LEN + 3u;
+  check_int64("wasm relay reject packet over budget",
+              er_wasm_execute_i64(&module, main_index, &result), -1);
+  check_uint64("wasm relay usage unchanged after over budget", usage.packet_bytes, 0u);
+  budget.max_packet_bytes = ER_RELAY_PACKET_HEADER_LEN + 4u;
 
   check_int64("wasm relay shifted outbox prepare",
               er_wasm_prepare_linear_memory(memory, (UINT32)sizeof(memory),

@@ -2,6 +2,7 @@
 #define WASM_VM_H
 
 #include "er_bus.h"
+#include "er_app.h"
 #include "er_types.h"
 
 #define ER_WASM_MAX_FUNCTIONS 16u
@@ -45,6 +46,8 @@ typedef struct {
   UINT8* memory;
   UINT32 memory_size;
   ErWasmLinearMemory linear_memory;
+  ErAppUsage* app_usage;
+  const ErAppBudget* app_budget;
 } ErWasmHostCalls;
 
 typedef struct {

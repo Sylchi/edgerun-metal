@@ -208,6 +208,8 @@ static void er_clear_module(ErWasmModule* module) {
   module->host.memory = 0;
   module->host.memory_size = 0;
   er_mem_zero((UINT8*)&module->host.linear_memory, (UINTN)sizeof(module->host.linear_memory));
+  module->host.app_usage = 0;
+  module->host.app_budget = 0;
 }
 
 static int er_reader_init(ErReader* r, const UINT8* data, UINT32 size) {
@@ -596,6 +598,8 @@ int er_wasm_init(ErWasmModule* module, const UINT8* data, UINT32 size, const ErW
     module->host.memory = host->memory;
     module->host.memory_size = host->memory_size;
     module->host.linear_memory = host->linear_memory;
+    module->host.app_usage = host->app_usage;
+    module->host.app_budget = host->app_budget;
     if (host->linear_memory.bytes != 0) {
       if (er_wasm_linear_memory_valid(&host->linear_memory) == 0) {
         return -1;
@@ -1458,6 +1462,11 @@ int er_wasm_execute_i64(ErWasmModule* module, UINT32 function_index, INT64* resu
               return -1;
             }
             if (er_relay_packet_valid((const UINT8*)bytes, (UINT32)len) == 0u) {
+              return -1;
+            }
+            if (module->host.app_usage == 0 || module->host.app_budget == 0 ||
+                er_app_usage_charge(module->host.app_usage, module->host.app_budget,
+                                    ER_APP_BUDGET_PACKET_BYTE, (UINT64)len) == 0u) {
               return -1;
             }
 
