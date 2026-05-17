@@ -26,6 +26,24 @@ er_ui_node_t er_ui_node_card(void) {
   return node;
 }
 
+er_ui_node_t er_ui_node_icon(er_ui_icon_t icon, const char* label, er_ui_color4_t color) {
+  er_ui_node_t node = er_ui_node_base(ER_UI_NODE_ICON);
+  node.icon = icon;
+  node.label = label;
+  node.color = color;
+  return node;
+}
+
+er_ui_node_t er_ui_node_icon_button(er_ui_icon_t icon, const char* label, uint32_t id, er_ui_shadcn_button_variant_t variant) {
+  er_ui_node_t node = er_ui_node_base(ER_UI_NODE_ICON_BUTTON);
+  node.icon = icon;
+  node.label = label;
+  node.id = id;
+  node.button_variant = variant;
+  node.button_size = ER_UI_SHADCN_BUTTON_SIZE_ICON;
+  return node;
+}
+
 er_ui_node_t er_ui_node_text(const char* value) {
   er_ui_node_t node = er_ui_node_base(ER_UI_NODE_TEXT);
   node.label = value;
@@ -444,11 +462,56 @@ er_ui_status_t er_ui_node_add_child(er_ui_node_t* parent, er_ui_node_t* child) {
   return ER_UI_OK;
 }
 
+const char* er_ui_icon_label(er_ui_icon_t icon) {
+  switch (icon) {
+    case ER_UI_ICON_ACTIVITY: return "activity";
+    case ER_UI_ICON_APP: return "app";
+    case ER_UI_ICON_BELL: return "bell";
+    case ER_UI_ICON_CHAT: return "chat";
+    case ER_UI_ICON_CHECK: return "check";
+    case ER_UI_ICON_CHEVRON_RIGHT: return "chevron-right";
+    case ER_UI_ICON_CODE: return "code";
+    case ER_UI_ICON_CPU: return "cpu";
+    case ER_UI_ICON_DATABASE: return "database";
+    case ER_UI_ICON_EYE: return "eye";
+    case ER_UI_ICON_FILE: return "file";
+    case ER_UI_ICON_KEY: return "key";
+    case ER_UI_ICON_LOCK: return "lock";
+    case ER_UI_ICON_MENU: return "menu";
+    case ER_UI_ICON_MESSAGE_PLUS: return "message-plus";
+    case ER_UI_ICON_NETWORK: return "network";
+    case ER_UI_ICON_ROUTE: return "route";
+    case ER_UI_ICON_SEARCH: return "search";
+    case ER_UI_ICON_SEND: return "send";
+    case ER_UI_ICON_SERVER: return "server";
+    case ER_UI_ICON_SETTINGS: return "settings";
+    case ER_UI_ICON_SHIELD: return "shield";
+    case ER_UI_ICON_SPARKLES: return "sparkles";
+    case ER_UI_ICON_STORAGE: return "storage";
+    case ER_UI_ICON_TERMINAL: return "terminal";
+    case ER_UI_ICON_TRUST: return "trust";
+    case ER_UI_ICON_TRASH: return "trash";
+    case ER_UI_ICON_USER: return "user";
+    case ER_UI_ICON_WALLET: return "wallet";
+    case ER_UI_ICON_WARNING: return "warning";
+    case ER_UI_ICON_X: return "x";
+    case ER_UI_ICON_COUNT:
+    default: return "unknown";
+  }
+}
+
+uint32_t er_ui_icon_atlas_id(er_ui_icon_t icon) {
+  if ((uint32_t)icon >= (uint32_t)ER_UI_ICON_COUNT) return 0u;
+  return (uint32_t)icon + 1u;
+}
+
 const char* er_ui_node_kind_label(er_ui_node_kind_t kind) {
   switch (kind) {
     case ER_UI_NODE_ROW: return "row";
     case ER_UI_NODE_COLUMN: return "column";
     case ER_UI_NODE_CARD: return "card";
+    case ER_UI_NODE_ICON: return "icon";
+    case ER_UI_NODE_ICON_BUTTON: return "icon-button";
     case ER_UI_NODE_TEXT: return "text";
     case ER_UI_NODE_BADGE: return "badge";
     case ER_UI_NODE_BUTTON: return "button";
@@ -707,7 +770,11 @@ er_ui_status_t er_ui_node_accessibility(const er_ui_node_t* node, er_ui_a11y_nod
     case ER_UI_NODE_BADGE:
       out = er_ui_a11y_base(ER_UI_A11Y_TEXT, node->label, false, 0u);
       break;
+    case ER_UI_NODE_ICON:
+      out = er_ui_a11y_base(ER_UI_A11Y_IMAGE, node->label ? node->label : er_ui_icon_label(node->icon), false, 0u);
+      break;
     case ER_UI_NODE_BUTTON:
+    case ER_UI_NODE_ICON_BUTTON:
       out = er_ui_a11y_base(ER_UI_A11Y_BUTTON, node->label, true, node->id);
       break;
     case ER_UI_NODE_CHECKBOX:
@@ -975,6 +1042,18 @@ static er_ui_status_t er_ui_node_render_text(er_ui_scene_t* scene, vr_font_face_
   return er_ui_scene_push_varfont_text(scene, font, codepoints, count, bounds.x, bounds.y + er_ui_float_min(bounds.h * 0.62f, 22.0f), color);
 }
 
+static er_ui_status_t er_ui_node_render_icon(er_ui_scene_t* scene, er_ui_bounds_t bounds, er_ui_icon_t icon, er_ui_color4_t color) {
+  if (!scene || !er_ui_bounds_valid(bounds)) return ER_UI_ERR_INVALID_ARGUMENT;
+  uint32_t atlas_id = er_ui_icon_atlas_id(icon);
+  if (atlas_id == 0u) return ER_UI_ERR_INVALID_ARGUMENT;
+  return er_ui_scene_push_icon_quad(scene, er_ui_quad_atlas(bounds.x, bounds.y, bounds.w, bounds.h, 0.0f, 0.0f, 1.0f, 1.0f, atlas_id, color));
+}
+
+static er_ui_bounds_t er_ui_node_center_square(er_ui_bounds_t bounds, float size) {
+  float w = er_ui_float_min(size, er_ui_float_min(bounds.w, bounds.h));
+  return er_ui_bounds(bounds.x + (bounds.w - w) * 0.5f, bounds.y + (bounds.h - w) * 0.5f, w, w);
+}
+
 er_ui_status_t er_ui_node_render(
   const er_ui_node_t* node,
   er_ui_scene_t* scene,
@@ -995,12 +1074,19 @@ er_ui_status_t er_ui_node_render(
       if (status != ER_UI_OK) return status;
       return er_ui_node_render_children(node, scene, font, rect, theme, false);
     }
+    case ER_UI_NODE_ICON:
+      return er_ui_node_render_icon(scene, er_ui_node_center_square(rect, 20.0f), node->icon, node->color.a > 0.0f ? node->color : theme.colors.muted);
     case ER_UI_NODE_TEXT:
       return er_ui_node_render_text(scene, font, node->label, rect, theme.colors.text);
     case ER_UI_NODE_BADGE:
       return er_ui_shadcn_badge_emit(scene, font, rect, theme, node->label, node->badge_variant);
     case ER_UI_NODE_BUTTON:
       return er_ui_shadcn_button_emit(scene, font, rect, theme, node->label, node->id, node->button_variant, node->button_size, node->active);
+    case ER_UI_NODE_ICON_BUTTON: {
+      er_ui_status_t status = er_ui_shadcn_button_emit(scene, font, rect, theme, "", node->id, node->button_variant, ER_UI_SHADCN_BUTTON_SIZE_ICON, node->active);
+      if (status != ER_UI_OK) return status;
+      return er_ui_node_render_icon(scene, er_ui_node_center_square(rect, 16.0f), node->icon, theme.colors.text);
+    }
     case ER_UI_NODE_CHECKBOX:
       return er_ui_shadcn_checkbox_emit(scene, font, rect, theme, node->label, node->active, node->id);
     case ER_UI_NODE_RADIO:

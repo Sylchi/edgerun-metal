@@ -93,6 +93,9 @@ void run_node_tests(void) {
   expect_status(er_ui_node_add_child(&root, &title), ER_UI_OK, "node: card accepts title child");
   expect_status(er_ui_node_add_child(&root, &row), ER_UI_OK, "node: card accepts row child");
   expect_string(er_ui_node_kind_label(ER_UI_NODE_CARD), "card", "node: kind label maps card");
+  expect_string(er_ui_node_kind_label(ER_UI_NODE_ICON_BUTTON), "icon-button", "node: kind label maps icon button");
+  expect_string(er_ui_icon_label(ER_UI_ICON_SEARCH), "search", "node: icon label maps canonical icon");
+  expect_u32(er_ui_icon_atlas_id(ER_UI_ICON_SEARCH), (uint32_t)ER_UI_ICON_SEARCH + 1u, "node: icon atlas id is stable");
   expect_string(er_ui_node_composition_issue_label(ER_UI_NODE_COMPOSITION_NESTED_CARD), "nested-card",
                 "node: composition issue label maps nested card");
   er_ui_node_composition_issue_t issue = {0};
@@ -134,6 +137,16 @@ void run_node_tests(void) {
   expect_size(a11y.role, ER_UI_A11Y_BUTTON, "node: button accessibility role");
   expect_true(a11y.has_id && a11y.id == 8001u, "node: button accessibility id");
   expect_true(a11y.label == button.label, "node: button accessibility label is borrowed");
+
+  er_ui_node_t icon_a11y = er_ui_node_icon(ER_UI_ICON_TRUST, NULL, er_ui_color_rgba(0.0f, 0.0f, 0.0f, 1.0f));
+  expect_status(er_ui_node_accessibility(&icon_a11y, &a11y), ER_UI_OK, "node: icon accessibility maps");
+  expect_size(a11y.role, ER_UI_A11Y_IMAGE, "node: icon accessibility role");
+  expect_string(a11y.label, "trust", "node: icon accessibility uses canonical label fallback");
+
+  er_ui_node_t icon_button_a11y = er_ui_node_icon_button(ER_UI_ICON_SEARCH, "Search", 8007u, ER_UI_SHADCN_BUTTON_GHOST);
+  expect_status(er_ui_node_accessibility(&icon_button_a11y, &a11y), ER_UI_OK, "node: icon button accessibility maps");
+  expect_size(a11y.role, ER_UI_A11Y_BUTTON, "node: icon button accessibility role");
+  expect_true(a11y.has_id && a11y.id == 8007u, "node: icon button accessibility id");
 
   er_ui_node_t checked = er_ui_node_checkbox("Remember", true, 8002u);
   expect_status(er_ui_node_accessibility(&checked, &a11y), ER_UI_OK, "node: checkbox accessibility maps");
@@ -252,6 +265,8 @@ void run_node_tests(void) {
     er_ui_node_t ring = er_ui_node_progress_ring(0.58f, theme.colors.success);
     er_ui_node_t reorderable = er_ui_node_list_row("Drag me", "reorderable", 8816u, false);
     er_ui_node_set_reorderable(&reorderable, 42u, 8816u, 3u);
+    er_ui_node_t icon = er_ui_node_icon(ER_UI_ICON_TRUST, "Trust", theme.colors.accent);
+    er_ui_node_t icon_button = er_ui_node_icon_button(ER_UI_ICON_SEARCH, "Search", 8817u, ER_UI_SHADCN_BUTTON_GHOST);
 
     expect_status(er_ui_node_render(&alert, &scene, face, er_ui_bounds(0.0f, 170.0f, 360.0f, 76.0f), theme), ER_UI_OK, "node: alert renders");
     expect_status(er_ui_node_render(&avatar, &scene, face, er_ui_bounds(0.0f, 254.0f, 42.0f, 42.0f), theme), ER_UI_OK, "node: avatar renders");
@@ -318,6 +333,16 @@ void run_node_tests(void) {
                   "node: dialog renders");
     expect_status(er_ui_node_render(&ring, &scene, face, er_ui_bounds(0.0f, 2870.0f, 48.0f, 48.0f), theme), ER_UI_OK,
                   "node: progress ring renders");
+    size_t icon_quads_before = scene.icon_quad_count;
+    size_t hits_before_icon_button = scene.hit_count;
+    expect_status(er_ui_node_render(&icon, &scene, face, er_ui_bounds(64.0f, 2870.0f, 32.0f, 32.0f), theme), ER_UI_OK,
+                  "node: icon renders");
+    expect_size(scene.icon_quad_count, icon_quads_before + 1u, "node: icon emits icon quad");
+    expect_u32(scene.icon_quads[icon_quads_before].atlas_id, er_ui_icon_atlas_id(ER_UI_ICON_TRUST), "node: icon quad carries atlas id");
+    expect_status(er_ui_node_render(&icon_button, &scene, face, er_ui_bounds(108.0f, 2870.0f, 40.0f, 40.0f), theme), ER_UI_OK,
+                  "node: icon button renders");
+    expect_size(scene.icon_quad_count, icon_quads_before + 2u, "node: icon button emits icon quad");
+    expect_size(scene.hit_count, hits_before_icon_button + 1u, "node: icon button emits hit");
     size_t drag_sources_before = scene.drag_source_count;
     size_t drop_targets_before = scene.drop_target_count;
     expect_status(er_ui_node_render(&reorderable, &scene, face, er_ui_bounds(0.0f, 2930.0f, 260.0f, 52.0f), theme), ER_UI_OK,
