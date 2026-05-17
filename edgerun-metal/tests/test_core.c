@@ -7,6 +7,7 @@
 #include "er_bus.h"
 #include "er_crypto_blake3.h"
 #include "er_hw_relay.h"
+#include "er_net_frame.h"
 #include "er_ui_gop_renderer.h"
 #include "er_ui_text.h"
 #include "er_virtio.h"
@@ -841,6 +842,77 @@ static void test_virtio_net_mmio(void) {
   stats = er_virtio_net_stats(&net);
   check_uint64("virtio net rx received", stats.rx_received, 1u);
   check_uint64("virtio net rx invalid", stats.rx_invalid, 0u);
+}
+
+static void test_net_frame_builders(void) {
+  enum {
+    NET_TEST_UDP_PAYLOAD_LEN = 3u,
+    NET_TEST_SRC_PORT = 1234u,
+    NET_TEST_DST_PORT = 9000u
+  };
+  UINT8 src_mac[ER_NET_MAC_LEN] = {0x02u, 0x00u, 0x00u, 0x00u, 0x00u, 0x02u};
+  UINT8 dst_mac[ER_NET_MAC_LEN] = {0x02u, 0x00u, 0x00u, 0x00u, 0x00u, 0x01u};
+  UINT8 src_ip[ER_NET_IPV4_LEN] = {10u, 42u, 0u, 2u};
+  UINT8 dst_ip[ER_NET_IPV4_LEN] = {10u, 42u, 0u, 1u};
+  UINT8 payload[NET_TEST_UDP_PAYLOAD_LEN] = {'E', 'R', 'W'};
+  UINT8 frame[ER_NET_FRAME_MAX] = {0};
+  UINT32 frame_len = 0;
+  UINT8 arp[ER_NET_ARP_FRAME_LEN] = {0};
+  UINT8 parsed_mac[ER_NET_MAC_LEN] = {0};
+  UINT32 arp_len = 0;
+
+  check_int64("net frame udp build",
+              er_net_build_ipv4_udp_frame(src_mac, dst_mac, src_ip, dst_ip,
+                                          NET_TEST_SRC_PORT, NET_TEST_DST_PORT,
+                                          payload, NET_TEST_UDP_PAYLOAD_LEN,
+                                          frame, (UINT32)sizeof(frame), &frame_len),
+              1);
+  check_uint64("net frame udp len", frame_len,
+               ER_NET_IPV4_UDP_HEADER_LEN + NET_TEST_UDP_PAYLOAD_LEN);
+  check_uint64("net frame dst mac0", frame[0], dst_mac[0]);
+  check_uint64("net frame src mac5", frame[11], src_mac[5]);
+  check_uint64("net frame eth ipv4 hi", frame[12], 0x08u);
+  check_uint64("net frame eth ipv4 lo", frame[13], 0x00u);
+  check_uint64("net frame ipv4 version", frame[14], 0x45u);
+  check_uint64("net frame ipv4 total hi", frame[16], 0x00u);
+  check_uint64("net frame ipv4 total lo", frame[17],
+               ER_NET_IPV4_HEADER_LEN + ER_NET_UDP_HEADER_LEN + NET_TEST_UDP_PAYLOAD_LEN);
+  check_uint64("net frame ipv4 ttl", frame[22], 64u);
+  check_uint64("net frame ipv4 proto udp", frame[23], ER_NET_IP_PROTO_UDP);
+  check_uint64("net frame ipv4 checksum valid",
+               er_net_checksum16(&frame[ER_NET_ETH_HEADER_LEN], ER_NET_IPV4_HEADER_LEN), 0u);
+  check_uint64("net frame udp src hi", frame[34], 0x04u);
+  check_uint64("net frame udp src lo", frame[35], 0xd2u);
+  check_uint64("net frame udp dst hi", frame[36], 0x23u);
+  check_uint64("net frame udp dst lo", frame[37], 0x28u);
+  check_uint64("net frame udp len lo", frame[39], ER_NET_UDP_HEADER_LEN + NET_TEST_UDP_PAYLOAD_LEN);
+  check_uint64("net frame udp checksum zero", frame[40] | frame[41], 0u);
+  check_uint64("net frame payload0", frame[ER_NET_IPV4_UDP_HEADER_LEN], payload[0]);
+  check_uint64("net frame payload2", frame[ER_NET_IPV4_UDP_HEADER_LEN + 2u], payload[2]);
+
+  check_int64("net frame arp request",
+              er_net_build_arp_request(src_mac, src_ip, dst_ip, arp, (UINT32)sizeof(arp), &arp_len),
+              1);
+  check_uint64("net frame arp len", arp_len, ER_NET_ARP_FRAME_LEN);
+  check_uint64("net frame arp broadcast", arp[0], 0xffu);
+  check_uint64("net frame arp eth type hi", arp[12], 0x08u);
+  check_uint64("net frame arp eth type lo", arp[13], 0x06u);
+  check_uint64("net frame arp op request", arp[21], 0x01u);
+  check_uint64("net frame arp source mac5", arp[ER_NET_ETH_HEADER_LEN + 13u], src_mac[5]);
+  check_uint64("net frame arp target ip0", arp[ER_NET_ETH_HEADER_LEN + 24u], dst_ip[0]);
+
+  er_mem_copy(arp, dst_mac, ER_NET_MAC_LEN);
+  er_mem_copy(arp + 6u, src_mac, ER_NET_MAC_LEN);
+  arp[21] = 0x02u;
+  er_mem_copy(arp + ER_NET_ETH_HEADER_LEN + 8u, dst_mac, ER_NET_MAC_LEN);
+  er_mem_copy(arp + ER_NET_ETH_HEADER_LEN + 14u, dst_ip, ER_NET_IPV4_LEN);
+  er_mem_copy(arp + ER_NET_ETH_HEADER_LEN + 18u, src_mac, ER_NET_MAC_LEN);
+  er_mem_copy(arp + ER_NET_ETH_HEADER_LEN + 24u, src_ip, ER_NET_IPV4_LEN);
+  check_int64("net frame arp parse",
+              er_net_parse_arp_ipv4_reply(arp, arp_len, dst_ip, src_ip, parsed_mac),
+              1);
+  check_uint64("net frame arp parsed mac0", parsed_mac[0], dst_mac[0]);
+  check_uint64("net frame arp parsed mac5", parsed_mac[5], dst_mac[5]);
 }
 
 static void test_acpi_tables(void) {
@@ -1792,6 +1864,7 @@ int main(void) {
   test_virtio_mmio_transport();
   test_virtio_split_queue();
   test_virtio_net_mmio();
+  test_net_frame_builders();
   test_wasm_mmio_imports();
   test_wasm_bus_exec_import();
   test_vfs_object_packets();
