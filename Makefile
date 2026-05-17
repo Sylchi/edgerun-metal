@@ -1,4 +1,4 @@
-.PHONY: all check clean repo-check repo-test repo-inspect erwire-decode erwire-test crypto-configure crypto-build crypto-test crypto-bench edgerun-smoke edgerun-pci edgerun-quiet edgerun-ui edgerun-check varfont-configure varfont-build varfont-test ui-core-configure ui-core-build ui-core-test
+.PHONY: all check clean repo-check repo-test repo-inspect erwire-decode erwire-test crypto-configure crypto-build crypto-test crypto-bench crypto-bench-avx2 edgerun-smoke edgerun-pci edgerun-quiet edgerun-ui edgerun-check varfont-configure varfont-build varfont-test ui-core-configure ui-core-build ui-core-test
 
 ifeq ($(origin CC),default)
 CC := clang
@@ -22,6 +22,7 @@ endif
 VARFONT_BUILD_DIR ?= .build/varfont
 UI_CORE_BUILD_DIR ?= .build/edgerun-ui-core
 CRYPTO_BUILD_DIR ?= .build/edgerun-crypto
+CRYPTO_AVX2_BUILD_DIR ?= .build/edgerun-crypto-avx2
 VARFONT_CMAKE_GENERATOR ?= Ninja
 UI_CORE_CMAKE_GENERATOR ?= Ninja
 CRYPTO_CMAKE_GENERATOR ?= Ninja
@@ -60,6 +61,10 @@ crypto-test: crypto-build
 
 crypto-bench: crypto-build
 	cmake --build $(CRYPTO_BUILD_DIR) --target bench
+
+crypto-bench-avx2:
+	cmake -S edgerun-crypto -B $(CRYPTO_AVX2_BUILD_DIR) -G "$(CRYPTO_CMAKE_GENERATOR)" $(CMAKE_TOOLCHAIN_ARGS) -DER_CRYPTO_ENABLE_AVX2=ON
+	cmake --build $(CRYPTO_AVX2_BUILD_DIR) --target bench
 
 edgerun-smoke:
 	$(MAKE) -C edgerun-metal smoke
