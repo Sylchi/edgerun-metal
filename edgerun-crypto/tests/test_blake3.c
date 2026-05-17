@@ -109,6 +109,17 @@ int main(void) {
 
   check_int("many chunk hash", er_blake3_hash_bytes(huge, sizeof(huge), digest), 1);
   check_hash_hex("many chunk digest", digest, "68d647e619a930e7b1082f74f334b0c65a315725569bdc123f0ee11881717bfe");
+  er_blake3_init(&hasher);
+  for (i = 0u; i < sizeof(huge); i += 3331u) {
+    size_t take = 3331u;
+
+    if (take > sizeof(huge) - i) {
+      take = sizeof(huge) - i;
+    }
+    check_int("many chunk update", er_blake3_update(&hasher, &huge[i], take), 1);
+  }
+  check_int("many chunk final", er_blake3_final(&hasher, streaming_digest), 1);
+  check_bytes("many chunk streaming digest", digest, streaming_digest, ER_BLAKE3_OUT_LEN);
 
   er_blake3_init(&hasher);
   check_int("update a", er_blake3_update(&hasher, large, 17u), 1);

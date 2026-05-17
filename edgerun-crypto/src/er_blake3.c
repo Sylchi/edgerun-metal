@@ -108,6 +108,7 @@
 #define ER_BLAKE3_AVX512_SUBTREE32_LEVEL 5u
 #define ER_BLAKE3_AVX512_SUBTREE32_MASK (ER_BLAKE3_AVX512_SUBTREE32_CHUNKS - 1u)
 #define ER_BLAKE3_PARALLEL_MIN_LEN (8u * 1024u * 1024u)
+#define ER_BLAKE3_DIRECT_FULL_CHUNKS_MAX_LEN (1024u * 1024u)
 #if !defined(ER_BLAKE3_PARALLEL_MAX_JOBS)
 #define ER_BLAKE3_PARALLEL_MAX_JOBS 16u
 #endif
@@ -1035,6 +1036,27 @@ static void er_blake3_root_from_parent_cvs(const uint32_t left_cv[ER_BLAKE3_CV_W
   er_blake3_output_root(&output, out);
 }
 
+static uint8_t er_blake3_hash_full_power_two_chunks(const uint8_t* bytes, size_t len,
+                                                    uint8_t out[ER_BLAKE3_OUT_LEN]) {
+  size_t chunk_count = len / ER_BLAKE3_CHUNK_LEN;
+  size_t left_chunks;
+  uint32_t left_cv[ER_BLAKE3_CV_WORDS];
+  uint32_t right_cv[ER_BLAKE3_CV_WORDS];
+
+  if (len > ER_BLAKE3_DIRECT_FULL_CHUNKS_MAX_LEN ||
+      (len % ER_BLAKE3_CHUNK_LEN) != 0u || chunk_count < 2u ||
+      !er_blake3_is_power_of_two_size(chunk_count)) {
+    return 0u;
+  }
+
+  left_chunks = chunk_count >> 1u;
+  er_blake3_subtree_cv_exact(bytes, 0u, left_chunks, 0u, left_cv);
+  er_blake3_subtree_cv_exact(bytes + (left_chunks * ER_BLAKE3_CHUNK_LEN),
+                             (uint64_t)left_chunks, left_chunks, 0u, right_cv);
+  er_blake3_root_from_parent_cvs(left_cv, right_cv, out);
+  return 1u;
+}
+
 typedef struct {
   const uint8_t* bytes;
   uint64_t chunk_counter;
@@ -1380,6 +1402,9 @@ uint8_t er_blake3_hash_bytes(const uint8_t* bytes, size_t len, uint8_t out[ER_BL
     return 1u;
   }
 #endif
+  if (er_blake3_hash_full_power_two_chunks(bytes, len, out) != 0u) {
+    return 1u;
+  }
   er_blake3_init(&hasher);
   if (er_blake3_update(&hasher, bytes, len) == 0u) {
     return 0u;
