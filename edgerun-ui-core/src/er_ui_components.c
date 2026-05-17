@@ -1184,6 +1184,7 @@ bool er_ui_shadcn_component_scene_preview_available(const char* slug) {
          er_ui_shadcn_streq(slug, "input-otp") ||
          er_ui_shadcn_streq(slug, "item") ||
          er_ui_shadcn_streq(slug, "kbd") ||
+         er_ui_shadcn_streq(slug, "label") ||
          er_ui_shadcn_streq(slug, "menubar") ||
          er_ui_shadcn_streq(slug, "native-select") ||
          er_ui_shadcn_streq(slug, "navigation-menu") ||
@@ -1456,6 +1457,12 @@ er_ui_status_t er_ui_shadcn_component_scene_preview_emit(
     status = er_ui_shadcn_badge_emit(scene, font, er_ui_bounds(bounds.x + 42.0f, bounds.y, 28.0f, 28.0f), theme, "K", ER_UI_SHADCN_BADGE_SECONDARY);
     if (status != ER_UI_OK) return status;
     return er_ui_shadcn_push_ascii_text(scene, font, "Command menu", bounds.x + 84.0f, bounds.y + 20.0f, theme.colors.text);
+  }
+  if (er_ui_shadcn_streq(slug, "label")) {
+    er_ui_status_t status = er_ui_shadcn_push_ascii_text(scene, font, "Email", bounds.x, bounds.y + 16.0f, theme.colors.text);
+    if (status != ER_UI_OK) return status;
+    return er_ui_shadcn_field_emit(scene, font, er_ui_bounds(bounds.x, bounds.y + 24.0f, er_ui_float_min(bounds.w, 260.0f), 58.0f), theme, "", "name@example.com",
+                                   ER_UI_SHADCN_DEMO_PREVIEW_BASE_ID + 92u, false);
   }
   if (er_ui_shadcn_streq(slug, "menubar")) {
     const char* const labels[] = {"File", "Edit", "View", "Profiles"};
