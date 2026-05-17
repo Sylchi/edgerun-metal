@@ -4,6 +4,7 @@
 #include "er_ui_painter.h"
 #include "er_ui_primitives.h"
 #include "er_ui_scene.h"
+#include "er_ui_shell.h"
 #include "er_ui_theme.h"
 #include "er_ui_text.h"
 
