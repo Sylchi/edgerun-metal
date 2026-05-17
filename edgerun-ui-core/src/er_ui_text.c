@@ -11,6 +11,36 @@ static er_ui_status_t er_ui_status_from_vr(vr_status_t status) {
   }
 }
 
+er_ui_status_t er_ui_varfont_measure_text(
+  vr_font_face_t* face,
+  const uint32_t* codepoints,
+  size_t codepoint_count,
+  er_ui_varfont_text_metrics_t* out_metrics) {
+  if (!face || !out_metrics || (!codepoints && codepoint_count > 0u)) return ER_UI_ERR_INVALID_ARGUMENT;
+
+  vr_font_metrics_t font_metrics = {0};
+  vr_status_t vr_status = vr_font_metrics(face, &font_metrics);
+  if (vr_status != VR_OK) return er_ui_status_from_vr(vr_status);
+
+  out_metrics->advance_width = 0.0f;
+  out_metrics->ascender = font_metrics.ascender;
+  out_metrics->descender = font_metrics.descender;
+  out_metrics->line_gap = font_metrics.line_gap;
+  out_metrics->line_height = font_metrics.line_height;
+  if (codepoint_count == 0u) return ER_UI_OK;
+
+  vr_shaped_glyph_t* shaped = 0;
+  size_t shaped_count = 0u;
+  vr_status = vr_font_shape_text(face, codepoints, codepoint_count, &shaped, &shaped_count);
+  if (vr_status != VR_OK) return er_ui_status_from_vr(vr_status);
+
+  float width = 0.0f;
+  for (size_t i = 0u; i < shaped_count; ++i) width += shaped[i].x_advance;
+  (void)vr_font_free_shaped(face, shaped, shaped_count);
+  out_metrics->advance_width = width;
+  return ER_UI_OK;
+}
+
 er_ui_status_t er_ui_scene_push_varfont_vertices(er_ui_scene_t* scene, const vr_vertex_t* vertices, size_t vertex_count, er_ui_color4_t color) {
   if (!scene || (!vertices && vertex_count > 0u)) return ER_UI_ERR_INVALID_ARGUMENT;
   if ((vertex_count % VR_FONT_VERTICES_PER_GLYPH) != 0u) return ER_UI_ERR_INVALID_ARGUMENT;
