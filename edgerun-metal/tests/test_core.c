@@ -193,6 +193,11 @@ static void test_mem_helpers(void) {
   check_int64("mem equal mismatch", er_mem_equal(dst, src, 4u), 0);
   check_int64("mem equal null left", er_mem_equal(0, src, 4u), 0);
   check_int64("mem equal null right", er_mem_equal(dst, 0, 4u), 0);
+  check_int64("mem any nonzero match", er_mem_any_nonzero(dst, 4u), 1);
+  er_mem_zero(dst, 4u);
+  check_int64("mem any nonzero zeroed", er_mem_any_nonzero(dst, 4u), 0);
+  check_int64("mem any nonzero null", er_mem_any_nonzero(0, 4u), 0);
+  check_int64("mem any nonzero empty", er_mem_any_nonzero(src, 0u), 0);
   er_mem_zero(0, 4u);
   er_mem_copy(0, src, 4u);
   er_mem_copy(dst, 0, 4u);
