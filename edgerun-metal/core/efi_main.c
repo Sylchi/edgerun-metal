@@ -4,6 +4,7 @@
 #include "er_mmio.h"
 #include "er_mem.h"
 #include "er_acpi.h"
+#include "er_boot_profile.h"
 #include "er_gfx_console.h"
 #include "er_ui_gop_renderer.h"
 #include "er_ui_components.h"
@@ -17,15 +18,8 @@
 #include "wasm_pci_scan_module.h"
 
 #ifndef ER_BOOT_PROFILE
-#define ER_BOOT_PROFILE 0
+#define ER_BOOT_PROFILE ER_BOOT_PROFILE_SMOKE
 #endif
-
-#define ER_BOOT_PROFILE_SMOKE 0
-#define ER_BOOT_PROFILE_PCI 1
-#define ER_BOOT_PROFILE_QUIET 2
-#define ER_BOOT_PROFILE_MMIO 3
-#define ER_BOOT_PROFILE_UI 4
-#define ER_BOOT_PROFILE_NATIVE 5
 
 #define ER_MMIO_PROBE_WINDOW_LEN 0x1000u
 #define ER_CONSOLE_MIN_COLUMNS 80u
