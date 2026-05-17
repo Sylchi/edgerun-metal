@@ -1427,6 +1427,28 @@ static void test_wasm_bus_exec_import(void) {
   check_uint64("wasm linear memory len", linear_memory.address_len, sizeof(memory));
   check_uint64("wasm linear memory inbox", linear_memory.relay_inbox_base, 0u);
   check_uint64("wasm linear memory outbox", linear_memory.relay_outbox_base, 1024u);
+  {
+    UINT32 region_base = 0u;
+    UINT32 region_len = 0u;
+    check_int64("wasm public inbox region",
+                er_wasm_linear_memory_public_region(&linear_memory,
+                                                    ER_WASM_PUBLIC_REGION_RELAY_INBOX,
+                                                    &region_base, &region_len),
+                0);
+    check_uint64("wasm public inbox base", region_base, 0u);
+    check_uint64("wasm public inbox len", region_len, 1024u);
+    check_int64("wasm public outbox region",
+                er_wasm_linear_memory_public_region(&linear_memory,
+                                                    ER_WASM_PUBLIC_REGION_RELAY_OUTBOX,
+                                                    &region_base, &region_len),
+                0);
+    check_uint64("wasm public outbox base", region_base, 1024u);
+    check_uint64("wasm public outbox len", region_len, 2048u);
+    check_int64("wasm reject unknown public region",
+                er_wasm_linear_memory_public_region(&linear_memory, 0xffffffffu,
+                                                    &region_base, &region_len),
+                -1);
+  }
   check_int64("wasm linear memory reject outbox overflow",
               er_wasm_prepare_linear_memory(memory, (UINT32)sizeof(memory),
                                             0u, 1024u, 65535u, 2u,
@@ -1476,6 +1498,47 @@ static void test_wasm_bus_exec_import(void) {
 
   check_int64("wasm bus execute", er_wasm_execute_i64(&module, main_index, &result), 0);
   check_uint64("wasm bus result", (UINT64)result, 0x5au);
+}
+
+static void test_wasm_public_region_imports(void) {
+  /*
+   * Purpose: prove WASM apps discover public memory regions through hostcalls.
+   * Intention: keep app memory private except for fixed, bounded regions the VM can meter cheaply.
+   */
+  static const UINT8 wasm_public_region_import_test[] = {
+    0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00, 0x01, 0x0a, 0x02, 0x60,
+    0x01, 0x7e, 0x01, 0x7e, 0x60, 0x00, 0x01, 0x7e, 0x02, 0x3a, 0x02, 0x0e,
+    0x65, 0x64, 0x67, 0x65, 0x72, 0x75, 0x6e, 0x2e, 0x6d, 0x65, 0x6d, 0x6f,
+    0x72, 0x79, 0x0b, 0x72, 0x65, 0x67, 0x69, 0x6f, 0x6e, 0x5f, 0x62, 0x61,
+    0x73, 0x65, 0x00, 0x00, 0x0e, 0x65, 0x64, 0x67, 0x65, 0x72, 0x75, 0x6e,
+    0x2e, 0x6d, 0x65, 0x6d, 0x6f, 0x72, 0x79, 0x0a, 0x72, 0x65, 0x67, 0x69,
+    0x6f, 0x6e, 0x5f, 0x6c, 0x65, 0x6e, 0x00, 0x00, 0x03, 0x02, 0x01, 0x01,
+    0x05, 0x03, 0x01, 0x00, 0x01, 0x07, 0x08, 0x01, 0x04, 0x6d, 0x61, 0x69,
+    0x6e, 0x00, 0x02, 0x0a, 0x0d, 0x01, 0x0b, 0x00, 0x42, 0x02, 0x10, 0x00,
+    0x42, 0x02, 0x10, 0x01, 0x7c, 0x0b
+  };
+  static UINT8 memory[65536];
+  ErWasmHostCalls host = {0};
+  ErWasmLinearMemory linear_memory;
+  ErWasmModule module;
+  UINT32 main_index = 0;
+  INT64 result = 0;
+
+  er_mem_zero(memory, (UINTN)sizeof(memory));
+  check_int64("wasm public region memory prepare",
+              er_wasm_prepare_linear_memory(memory, (UINT32)sizeof(memory),
+                                            0u, 1024u, 1024u, 2048u,
+                                            &linear_memory),
+              0);
+  host.linear_memory = linear_memory;
+  check_int64("wasm public region init",
+              er_wasm_init(&module, wasm_public_region_import_test,
+                           (UINT32)sizeof(wasm_public_region_import_test), &host),
+              0);
+  check_int64("wasm public region find main", er_wasm_find_main(&module, &main_index), 0);
+  check_int64("wasm public region main index", main_index, 2);
+  check_int64("wasm public region execute", er_wasm_execute_i64(&module, main_index, &result), 0);
+  check_uint64("wasm public region outbox base plus len", (UINT64)result, 3072u);
 }
 
 static void test_relay_packets(void) {
@@ -2738,6 +2801,7 @@ int main(void) {
   test_native_eth_endpoint();
   test_wasm_mmio_imports();
   test_wasm_bus_exec_import();
+  test_wasm_public_region_imports();
   test_relay_packets();
   test_wasm_relay_imports();
   test_vfs_object_packets();

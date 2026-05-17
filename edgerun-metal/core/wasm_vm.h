@@ -7,6 +7,8 @@
 
 #define ER_WASM_MAX_FUNCTIONS 16u
 #define ER_WASM_LINEAR_MEMORY_BASE 0u
+#define ER_WASM_PUBLIC_REGION_RELAY_INBOX 1u
+#define ER_WASM_PUBLIC_REGION_RELAY_OUTBOX 2u
 
 /*
  * Purpose: define the bounded WASM interpreter ABI used by metal apps and drivers.
@@ -81,6 +83,8 @@ int er_wasm_prepare_linear_memory(UINT8* bytes, UINT32 address_len,
                                   UINT32 relay_inbox_base, UINT32 relay_inbox_len,
                                   UINT32 relay_outbox_base, UINT32 relay_outbox_len,
                                   ErWasmLinearMemory* out_memory);
+int er_wasm_linear_memory_public_region(const ErWasmLinearMemory* memory, UINT32 region_id,
+                                        UINT32* out_base, UINT32* out_len);
 int er_wasm_init(ErWasmModule* module, const UINT8* data, UINT32 size, const ErWasmHostCalls* host);
 int er_wasm_find_main(ErWasmModule* module, UINT32* main_index);
 int er_wasm_execute_i64(ErWasmModule* module, UINT32 function_index, INT64* result);
