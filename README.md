@@ -65,13 +65,16 @@ policy may accept, reject, rate-limit, revoke, price, or settle. The device
 still governs its own queues, storage, radio, battery, CPU, memory, display,
 and user relationships.
 
-The practical path is that every admission authority can issue tokens for only
-the resources it actually governs. A laptop admission can mint credits for its
-CPU, disk, Wi-Fi relay, battery budget, local apps, and local users. A phone
-admission can mint credits for its radio, hotspot path, storage, camera, and
-background scheduling windows. Those tokens are meaningful only where that
-admission is accepted. An identity without an accepted admission token can still
-sign packets, but it has no right to consume that jurisdiction's resources.
+The practical path is that every admission authority can issue tokens only up
+to the resources it actually governs and can prove. A laptop admission can mint
+bounded claims against its measured CPU, disk, Wi-Fi relay, battery budget,
+local apps, and local users. A phone admission can mint bounded claims against
+its radio, hotspot path, storage, camera, and background scheduling windows.
+Those claims are created by deterministic, identity-routed accounting programs
+that bind capacity, admission policy, packet cost, work output, proof, and
+receipt to the device identity. They are meaningful only where that admission
+is accepted. An identity without an accepted admission token can still sign
+packets, but it has no right to consume that jurisdiction's resources.
 
 Each packet, object, compute slice, storage interval, relay hop, or scheduling
 slot can therefore carry a cost before it is admitted. Local programs may spend
