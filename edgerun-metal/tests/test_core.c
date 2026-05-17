@@ -7,6 +7,7 @@
 #include "er_boot_profile.h"
 #include "er_bus.h"
 #include "er_crypto_blake3.h"
+#include "er_device_identity.h"
 #include "er_hw_relay.h"
 #include "er_native_eth.h"
 #include "er_native_boot.h"
@@ -90,6 +91,32 @@ static void check_hash_equal(const char* name, const ErHash* actual, const ErHas
       return;
     }
   }
+}
+
+static void check_node_id_equal(const char* name, const ErNodeId* actual, const ErNodeId* expected) {
+  UINTN i;
+
+  ++g_total;
+  for (i = 0; i < ER_NODE_ID_LEN; ++i) {
+    if (actual->bytes[i] != expected->bytes[i]) {
+      fprintf(stderr, "FAIL %s: node id differs at byte %llu\n", name, (unsigned long long)i);
+      ++g_failed;
+      return;
+    }
+  }
+}
+
+static void check_node_id_not_equal(const char* name, const ErNodeId* actual, const ErNodeId* expected) {
+  UINTN i;
+
+  ++g_total;
+  for (i = 0; i < ER_NODE_ID_LEN; ++i) {
+    if (actual->bytes[i] != expected->bytes[i]) {
+      return;
+    }
+  }
+  fprintf(stderr, "FAIL %s: node ids match\n", name);
+  ++g_failed;
 }
 
 static void check_cstr(const char* name, const char* actual, const char* expected) {
@@ -1896,6 +1923,92 @@ static void test_app_identity_routes(void) {
   check_uint64("app launch address len", allocation.app_address_len, 4096u);
 }
 
+static void test_device_relay_identity(void) {
+  ErCryptoProvider crypto;
+  ErPublicKey hardware_key;
+  ErPublicKey ephemeral_key;
+  ErHash program_hash;
+  ErHash other_program_hash;
+  ErDeviceIdentity hardware_device;
+  ErDeviceIdentity ephemeral_device;
+  ErDeviceRelayIdentity hardware_relay;
+  ErDeviceRelayIdentity hardware_relay_again;
+  ErDeviceRelayIdentity ephemeral_relay;
+  ErDeviceRelayIdentity other_program_relay;
+
+  crypto.ctx = (void*)(UINTN)7u;
+  crypto.hash = test_hash;
+  crypto.seal = 0;
+  crypto.open = 0;
+  crypto.sign = 0;
+  crypto.verify = 0;
+
+  test_fill_bytes(hardware_key.bytes, ER_PUBLIC_KEY_LEN, 0x21u);
+  test_fill_bytes(ephemeral_key.bytes, ER_PUBLIC_KEY_LEN, 0x41u);
+  test_fill_bytes(program_hash.bytes, ER_HASH_LEN, 0x61u);
+  test_fill_bytes(other_program_hash.bytes, ER_HASH_LEN, 0x62u);
+
+  check_int64("device identity hardware prepare",
+              er_device_identity_prepare(ER_DEVICE_IDENTITY_KIND_HARDWARE,
+                                         &hardware_key, &hardware_device),
+              1);
+  check_int64("device identity ephemeral prepare",
+              er_device_identity_prepare(ER_DEVICE_IDENTITY_KIND_EPHEMERAL,
+                                         &ephemeral_key, &ephemeral_device),
+              1);
+  check_int64("device identity reject kind",
+              er_device_identity_prepare(99u, &hardware_key, &hardware_device), 0);
+  er_mem_zero(hardware_key.bytes, ER_PUBLIC_KEY_LEN);
+  check_int64("device identity reject zero key",
+              er_device_identity_prepare(ER_DEVICE_IDENTITY_KIND_HARDWARE,
+                                         &hardware_key, &hardware_device),
+              0);
+  test_fill_bytes(hardware_key.bytes, ER_PUBLIC_KEY_LEN, 0x21u);
+  check_int64("device identity hardware restore",
+              er_device_identity_prepare(ER_DEVICE_IDENTITY_KIND_HARDWARE,
+                                         &hardware_key, &hardware_device),
+              1);
+
+  check_int64("device relay hardware derive",
+              er_device_relay_identity_derive(&crypto, &hardware_device,
+                                              &program_hash, &hardware_relay),
+              1);
+  check_int64("device relay abi", hardware_relay.abi_version, ER_WORK_ABI_VERSION);
+  check_int64("device relay trust kind", hardware_relay.trust_kind,
+              ER_DEVICE_IDENTITY_KIND_HARDWARE);
+  check_int64("device relay role", hardware_relay.relay_node.role, ER_NODE_ROLE_RELAY);
+  check_uint64("device relay public key byte0",
+               hardware_relay.relay_node.public_key.bytes[0], 0x21u);
+  check_int64("device relay deterministic derive",
+              er_device_relay_identity_derive(&crypto, &hardware_device,
+                                              &program_hash, &hardware_relay_again),
+              1);
+  check_node_id_equal("device relay deterministic node",
+                      &hardware_relay_again.relay_node.node_id,
+                      &hardware_relay.relay_node.node_id);
+
+  check_int64("device relay ephemeral derive",
+              er_device_relay_identity_derive(&crypto, &ephemeral_device,
+                                              &program_hash, &ephemeral_relay),
+              1);
+  check_node_id_not_equal("device relay hardware differs from ephemeral",
+                          &hardware_relay.relay_node.node_id,
+                          &ephemeral_relay.relay_node.node_id);
+  check_int64("device relay other program derive",
+              er_device_relay_identity_derive(&crypto, &hardware_device,
+                                              &other_program_hash, &other_program_relay),
+              1);
+  check_node_id_not_equal("device relay program hash changes node",
+                          &hardware_relay.relay_node.node_id,
+                          &other_program_relay.relay_node.node_id);
+
+  er_mem_zero(program_hash.bytes, ER_HASH_LEN);
+  check_int64("device relay reject zero program hash",
+              er_device_relay_identity_derive(&crypto, &hardware_device,
+                                              &program_hash, &hardware_relay),
+              0);
+}
+
 static void test_boot_profiles(void) {
   check_int64("boot profile smoke valid", er_boot_profile_valid(ER_BOOT_PROFILE_SMOKE), 1);
   check_int64("boot profile native valid", er_boot_profile_valid(ER_BOOT_PROFILE_NATIVE), 1);
@@ -2806,6 +2919,7 @@ int main(void) {
   test_wasm_relay_imports();
   test_vfs_object_packets();
   test_app_identity_routes();
+  test_device_relay_identity();
   test_boot_profiles();
   test_hw_relay_endpoints();
   test_erwire_native_eth_sink();
