@@ -1,5 +1,7 @@
 #include "er_ui_text.h"
 
+static const size_t ER_UI_TEXT_ASCII_STACK_CAPACITY = 256u;
+
 static er_ui_status_t er_ui_status_from_vr(vr_status_t status) {
   switch (status) {
     case VR_OK:
@@ -87,4 +89,25 @@ er_ui_status_t er_ui_scene_push_varfont_text(
   (void)vr_font_free_vertices(face, vertices, vertex_count);
   (void)vr_font_free_shaped(face, shaped, shaped_count);
   return status;
+}
+
+er_ui_status_t er_ui_scene_push_ascii_text(
+  er_ui_scene_t* scene,
+  vr_font_face_t* face,
+  const char* text,
+  size_t max_codepoints,
+  float x,
+  float y,
+  er_ui_color4_t color) {
+  if (!scene || !face || !text || max_codepoints > ER_UI_TEXT_ASCII_STACK_CAPACITY) return ER_UI_ERR_INVALID_ARGUMENT;
+
+  uint32_t codepoints[ER_UI_TEXT_ASCII_STACK_CAPACITY];
+  size_t count = 0u;
+  while (text[count] != '\0') {
+    if (count >= max_codepoints) return ER_UI_ERR_INVALID_ARGUMENT;
+    unsigned char byte = (unsigned char)text[count];
+    codepoints[count] = byte < 0x80u ? (uint32_t)byte : (uint32_t)'?';
+    count++;
+  }
+  return er_ui_scene_push_varfont_text(scene, face, codepoints, count, x, y, color);
 }

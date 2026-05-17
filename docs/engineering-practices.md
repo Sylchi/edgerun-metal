@@ -39,9 +39,15 @@ Use current, deterministic tools already available on the machine:
 
 - `rg` for search
 - `clang` and `lld` for freestanding EFI builds
+- `ccache` for repeat local C builds when available
+- `mold` for hosted Linux test/tool links when available; do not use it for EFI links
 - `CMake` and `Ninja` for `varfont` and `edgerun-ui-core`
 - `ctest --output-on-failure` for test execution
 - `git status --short --branch` before and after changes
+
+The Makefile wrappers discover `ccache` and `mold` automatically and keep the
+tool selections overridable through make variables. Keep that behavior when
+adding new build targets.
 
 ## Test Policy
 

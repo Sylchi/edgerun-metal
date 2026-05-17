@@ -1,4 +1,5 @@
 #include "er_ui_node.h"
+#include "er_ui_painter.h"
 
 static er_ui_node_t er_ui_node_base(er_ui_node_kind_t kind) {
   er_ui_node_t node = {0};
@@ -803,127 +804,6 @@ er_ui_status_t er_ui_node_add_child(er_ui_node_t* parent, er_ui_node_t* child) {
   if (parent->child_count >= ER_UI_NODE_MAX_CHILDREN) return ER_UI_ERR_OOM;
   parent->children[parent->child_count++] = child;
   return ER_UI_OK;
-}
-
-const char* er_ui_icon_label(er_ui_icon_t icon) {
-  switch (icon) {
-    case ER_UI_ICON_ACTIVITY: return "activity";
-    case ER_UI_ICON_APP: return "app";
-    case ER_UI_ICON_BELL: return "bell";
-    case ER_UI_ICON_CHAT: return "chat";
-    case ER_UI_ICON_CHECK: return "check";
-    case ER_UI_ICON_CHEVRON_RIGHT: return "chevron-right";
-    case ER_UI_ICON_CODE: return "code";
-    case ER_UI_ICON_CPU: return "cpu";
-    case ER_UI_ICON_DATABASE: return "database";
-    case ER_UI_ICON_EYE: return "eye";
-    case ER_UI_ICON_FILE: return "file";
-    case ER_UI_ICON_KEY: return "key";
-    case ER_UI_ICON_LOCK: return "lock";
-    case ER_UI_ICON_MENU: return "menu";
-    case ER_UI_ICON_MESSAGE_PLUS: return "message-plus";
-    case ER_UI_ICON_NETWORK: return "network";
-    case ER_UI_ICON_ROUTE: return "route";
-    case ER_UI_ICON_SEARCH: return "search";
-    case ER_UI_ICON_SEND: return "send";
-    case ER_UI_ICON_SERVER: return "server";
-    case ER_UI_ICON_SETTINGS: return "settings";
-    case ER_UI_ICON_SHIELD: return "shield";
-    case ER_UI_ICON_SPARKLES: return "sparkles";
-    case ER_UI_ICON_STORAGE: return "storage";
-    case ER_UI_ICON_TERMINAL: return "terminal";
-    case ER_UI_ICON_TRUST: return "trust";
-    case ER_UI_ICON_TRASH: return "trash";
-    case ER_UI_ICON_USER: return "user";
-    case ER_UI_ICON_WALLET: return "wallet";
-    case ER_UI_ICON_WARNING: return "warning";
-    case ER_UI_ICON_X: return "x";
-    case ER_UI_ICON_COUNT:
-    default: return "unknown";
-  }
-}
-
-uint32_t er_ui_icon_atlas_id(er_ui_icon_t icon) {
-  if ((uint32_t)icon >= (uint32_t)ER_UI_ICON_COUNT) return 0u;
-  return (uint32_t)icon + 1u;
-}
-
-const char* er_ui_icon_provider_name(er_ui_icon_t icon, er_ui_icon_provider_t provider) {
-  if (provider == ER_UI_ICON_PROVIDER_TABLER) {
-    switch (icon) {
-      case ER_UI_ICON_ACTIVITY: return "activity";
-      case ER_UI_ICON_APP: return "apps";
-      case ER_UI_ICON_BELL: return "bell";
-      case ER_UI_ICON_CHAT: return "message-circle";
-      case ER_UI_ICON_CHECK: return "check";
-      case ER_UI_ICON_CHEVRON_RIGHT: return "chevron-right";
-      case ER_UI_ICON_CODE: return "code";
-      case ER_UI_ICON_CPU: return "cpu";
-      case ER_UI_ICON_DATABASE: return "database";
-      case ER_UI_ICON_EYE: return "eye";
-      case ER_UI_ICON_FILE: return "file";
-      case ER_UI_ICON_KEY: return "key";
-      case ER_UI_ICON_LOCK: return "lock";
-      case ER_UI_ICON_MENU: return "menu-2";
-      case ER_UI_ICON_MESSAGE_PLUS: return "message-plus";
-      case ER_UI_ICON_NETWORK: return "network";
-      case ER_UI_ICON_ROUTE: return "route";
-      case ER_UI_ICON_SEARCH: return "search";
-      case ER_UI_ICON_SEND: return "arrow-up";
-      case ER_UI_ICON_SERVER: return "server";
-      case ER_UI_ICON_SETTINGS: return "settings";
-      case ER_UI_ICON_SHIELD: return "shield-check";
-      case ER_UI_ICON_SPARKLES: return "sparkles";
-      case ER_UI_ICON_STORAGE: return "database";
-      case ER_UI_ICON_TERMINAL: return "terminal-2";
-      case ER_UI_ICON_TRUST: return "shield-check";
-      case ER_UI_ICON_TRASH: return "trash";
-      case ER_UI_ICON_USER: return "user";
-      case ER_UI_ICON_WALLET: return "wallet";
-      case ER_UI_ICON_WARNING: return "alert-triangle";
-      case ER_UI_ICON_X: return "x";
-      case ER_UI_ICON_COUNT:
-      default: return NULL;
-    }
-  }
-  if (provider == ER_UI_ICON_PROVIDER_LUCIDE) {
-    switch (icon) {
-      case ER_UI_ICON_ACTIVITY: return "activity";
-      case ER_UI_ICON_APP: return "app-window";
-      case ER_UI_ICON_BELL: return "bell";
-      case ER_UI_ICON_CHAT: return "message-circle";
-      case ER_UI_ICON_CHECK: return "check";
-      case ER_UI_ICON_CHEVRON_RIGHT: return "chevron-right";
-      case ER_UI_ICON_CODE: return "code";
-      case ER_UI_ICON_CPU: return "cpu";
-      case ER_UI_ICON_DATABASE: return "database";
-      case ER_UI_ICON_EYE: return "eye";
-      case ER_UI_ICON_FILE: return "file";
-      case ER_UI_ICON_KEY: return "key";
-      case ER_UI_ICON_LOCK: return "lock";
-      case ER_UI_ICON_MENU: return "menu";
-      case ER_UI_ICON_MESSAGE_PLUS: return "message-circle-plus";
-      case ER_UI_ICON_NETWORK: return "network";
-      case ER_UI_ICON_ROUTE: return "route";
-      case ER_UI_ICON_SEARCH: return "search";
-      case ER_UI_ICON_SEND: return "arrow-up";
-      case ER_UI_ICON_SERVER: return "server";
-      case ER_UI_ICON_SETTINGS: return "settings";
-      case ER_UI_ICON_SHIELD: return "shield-check";
-      case ER_UI_ICON_SPARKLES: return "sparkles";
-      case ER_UI_ICON_STORAGE: return "database";
-      case ER_UI_ICON_TERMINAL: return "square-terminal";
-      case ER_UI_ICON_TRUST: return "shield-check";
-      case ER_UI_ICON_TRASH: return "trash-2";
-      case ER_UI_ICON_USER: return "user";
-      case ER_UI_ICON_WALLET: return "wallet";
-      case ER_UI_ICON_WARNING: return "triangle-alert";
-      case ER_UI_ICON_X: return "x";
-      case ER_UI_ICON_COUNT:
-      default: return NULL;
-    }
-  }
-  return NULL;
 }
 
 const char* er_ui_node_kind_label(er_ui_node_kind_t kind) {
@@ -1895,21 +1775,13 @@ static er_ui_status_t er_ui_node_render_scroll_area(
 
 static er_ui_status_t er_ui_node_render_text(er_ui_scene_t* scene, vr_font_face_t* font, const char* text, er_ui_bounds_t bounds, er_ui_color4_t color) {
   if (!scene || !font || !text || !er_ui_bounds_valid(bounds)) return ER_UI_ERR_INVALID_ARGUMENT;
-  uint32_t codepoints[128u];
-  size_t count = 0u;
-  while (text[count] && count < 128u) {
-    unsigned char byte = (unsigned char)text[count];
-    codepoints[count] = byte < 0x80u ? (uint32_t)byte : (uint32_t)'?';
-    count++;
-  }
-  return er_ui_scene_push_varfont_text(scene, font, codepoints, count, bounds.x, bounds.y + er_ui_float_min(bounds.h * 0.62f, 22.0f), color);
+  return er_ui_scene_push_ascii_text(scene, font, text, 128u, bounds.x, bounds.y + er_ui_float_min(bounds.h * 0.62f, 22.0f), color);
 }
 
 static er_ui_status_t er_ui_node_render_icon(er_ui_scene_t* scene, er_ui_bounds_t bounds, er_ui_icon_t icon, er_ui_color4_t color) {
   if (!scene || !er_ui_bounds_valid(bounds)) return ER_UI_ERR_INVALID_ARGUMENT;
-  uint32_t atlas_id = er_ui_icon_atlas_id(icon);
-  if (atlas_id == 0u) return ER_UI_ERR_INVALID_ARGUMENT;
-  return er_ui_scene_push_icon_quad(scene, er_ui_quad_atlas(bounds.x, bounds.y, bounds.w, bounds.h, 0.0f, 0.0f, 1.0f, 1.0f, atlas_id, color));
+  er_ui_painter_t painter = er_ui_painter(scene);
+  return er_ui_painter_icon(&painter, bounds, icon, color);
 }
 
 static er_ui_bounds_t er_ui_node_center_square(er_ui_bounds_t bounds, float size);

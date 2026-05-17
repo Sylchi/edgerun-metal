@@ -12,6 +12,7 @@ endif()
 
 add_library(er_ui_core
   src/er_ui_components.c
+  src/er_ui_icon.c
   src/er_ui_metal.c
   src/er_ui_node.c
   src/er_ui_painter.c

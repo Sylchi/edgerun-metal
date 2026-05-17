@@ -1,4 +1,5 @@
 #include "er_acpi.h"
+#include "er_mem.h"
 
 /*
  * Purpose: parse the small ACPI discovery surface needed by the metal executor.
@@ -25,17 +26,6 @@ static const EFI_GUID g_acpi_10_table_guid = {
 static const EFI_GUID g_acpi_20_table_guid = {
   0x8868e871u, 0xe4f1u, 0x11d3u, {0xbcu, 0x22u, 0x00u, 0x80u, 0xc7u, 0x3cu, 0x88u, 0x81u}
 };
-
-static void er_acpi_zero(UINT8* bytes, UINTN len) {
-  UINTN i;
-
-  if (bytes == 0) {
-    return;
-  }
-  for (i = 0; i < len; ++i) {
-    bytes[i] = 0;
-  }
-}
 
 static UINT8 er_acpi_guid_equal(const EFI_GUID* a, const EFI_GUID* b) {
   UINTN i;
@@ -92,7 +82,7 @@ static UINT8 er_acpi_parse_rsdp(const UINT8* rsdp, ErAcpiRsdpInfo* out_info) {
     return 0;
   }
 
-  er_acpi_zero((UINT8*)out_info, (UINTN)sizeof(*out_info));
+  er_mem_zero((UINT8*)out_info, (UINTN)sizeof(*out_info));
   out_info->found = 1;
   out_info->revision = rsdp[15];
   out_info->checksum_valid = er_acpi_checksum_valid(rsdp, ER_ACPI_RSDP_V1_LEN);
@@ -117,7 +107,7 @@ UINT8 er_acpi_find_rsdp(EFI_SYSTEM_TABLE* st, ErAcpiRsdpInfo* out_info) {
   if (out_info == 0) {
     return 0;
   }
-  er_acpi_zero((UINT8*)out_info, (UINTN)sizeof(*out_info));
+  er_mem_zero((UINT8*)out_info, (UINTN)sizeof(*out_info));
 
   if (st == 0 || st->ConfigurationTable == 0 || st->NumberOfTableEntries == 0u) {
     return 0;
@@ -172,7 +162,7 @@ UINT8 er_acpi_enumerate_tables(const ErAcpiRsdpInfo* rsdp, ErAcpiTableList* out_
   if (out_list == 0) {
     return 0;
   }
-  er_acpi_zero((UINT8*)out_list, (UINTN)sizeof(*out_list));
+  er_mem_zero((UINT8*)out_list, (UINTN)sizeof(*out_list));
 
   if (rsdp == 0 || rsdp->found == 0u || rsdp->checksum_valid == 0u) {
     return 0;
@@ -221,7 +211,7 @@ UINT8 er_acpi_find_table(const ErAcpiTableList* list, UINT32 signature, ErAcpiTa
   if (out_info == 0) {
     return 0;
   }
-  er_acpi_zero((UINT8*)out_info, (UINTN)sizeof(*out_info));
+  er_mem_zero((UINT8*)out_info, (UINTN)sizeof(*out_info));
   if (list == 0 || list->found == 0u || signature == 0u) {
     return 0;
   }
@@ -247,7 +237,7 @@ UINT8 er_acpi_parse_madt(UINT64 madt_address, ErAcpiMadtInfo* out_info) {
   if (out_info == 0) {
     return 0;
   }
-  er_acpi_zero((UINT8*)out_info, (UINTN)sizeof(*out_info));
+  er_mem_zero((UINT8*)out_info, (UINTN)sizeof(*out_info));
   if (madt == 0 || er_acpi_get_u32(madt) != er_acpi_signature("APIC")) {
     return 0;
   }
@@ -316,7 +306,7 @@ UINT8 er_acpi_parse_mcfg(UINT64 mcfg_address, ErAcpiMcfgInfo* out_info) {
   if (out_info == 0) {
     return 0;
   }
-  er_acpi_zero((UINT8*)out_info, (UINTN)sizeof(*out_info));
+  er_mem_zero((UINT8*)out_info, (UINTN)sizeof(*out_info));
   if (mcfg == 0 || er_acpi_get_u32(mcfg) != er_acpi_signature("MCFG")) {
     return 0;
   }
@@ -387,7 +377,7 @@ UINT8 er_acpi_parse_hpet(UINT64 hpet_address, ErAcpiHpetInfo* out_info) {
   if (out_info == 0) {
     return 0;
   }
-  er_acpi_zero((UINT8*)out_info, (UINTN)sizeof(*out_info));
+  er_mem_zero((UINT8*)out_info, (UINTN)sizeof(*out_info));
   if (hpet == 0 || er_acpi_get_u32(hpet) != er_acpi_signature("HPET")) {
     return 0;
   }
@@ -437,7 +427,7 @@ UINT8 er_acpi_parse_fadt(UINT64 fadt_address, ErAcpiFadtInfo* out_info) {
   if (out_info == 0) {
     return 0;
   }
-  er_acpi_zero((UINT8*)out_info, (UINTN)sizeof(*out_info));
+  er_mem_zero((UINT8*)out_info, (UINTN)sizeof(*out_info));
   if (fadt == 0 || er_acpi_get_u32(fadt) != er_acpi_signature("FACP")) {
     return 0;
   }

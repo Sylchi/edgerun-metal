@@ -1,89 +1,12 @@
 #include "test_common.h"
 
-#include <stdio.h>
-#include <stdlib.h>
-
-static void* component_vr_alloc(void* user, size_t size, size_t align) {
-  (void)user;
-  (void)align;
-  return malloc(size);
-}
-
-static void* component_vr_realloc(void* user, void* ptr, size_t old_size, size_t new_size, size_t align) {
-  (void)user;
-  (void)old_size;
-  (void)align;
-  return realloc(ptr, new_size);
-}
-
-static void component_vr_free(void* user, void* ptr, size_t size, size_t align) {
-  (void)user;
-  (void)size;
-  (void)align;
-  free(ptr);
-}
-
-static vr_font_allocator_t component_vr_allocator(void) {
-  vr_font_allocator_t allocator = {0};
-  allocator.alloc = component_vr_alloc;
-  allocator.realloc = component_vr_realloc;
-  allocator.free = component_vr_free;
-  return allocator;
-}
-
-static unsigned char* component_read_file(const char* path, size_t* out_size) {
-  if (out_size) *out_size = 0u;
-  FILE* file = fopen(path, "rb");
-  if (!file) return NULL;
-  if (fseek(file, 0, SEEK_END) != 0) {
-    fclose(file);
-    return NULL;
-  }
-  long len = ftell(file);
-  if (len <= 0) {
-    fclose(file);
-    return NULL;
-  }
-  rewind(file);
-  unsigned char* data = (unsigned char*)malloc((size_t)len);
-  if (!data) {
-    fclose(file);
-    return NULL;
-  }
-  size_t read = fread(data, 1u, (size_t)len, file);
-  fclose(file);
-  if (read != (size_t)len) {
-    free(data);
-    return NULL;
-  }
-  if (out_size) *out_size = (size_t)len;
-  return data;
-}
-
 static void test_shadcn_render_primitives(void) {
   er_ui_scene_t scene = {0};
   expect_status(er_ui_scene_init_with_allocator(&scene, er_ui_palette_slate_950(), er_ui_test_allocator()), ER_UI_OK,
                 "shadcn render: scene init succeeds");
 
-  size_t font_size = 0u;
-  unsigned char* font_data = component_read_file(ER_UI_REPO_ROOT "/varfont/fonts/Geist[wght].ttf", &font_size);
-  expect_true(font_data != NULL && font_size > 0u, "shadcn render: bundled variable font loads");
-  if (!font_data) {
-    er_ui_scene_destroy(&scene);
-    return;
-  }
-
-  vr_font_config_t cfg = {0};
-  cfg.px_size = 14.0f;
-  cfg.atlas_width = 512u;
-  cfg.atlas_height = 512u;
-  cfg.atlas_pad = VR_FONT_DEFAULT_ATLAS_PADDING;
-  cfg.atlas_format = VR_FONT_ATLAS_FORMAT_ALPHA8;
-  cfg.allocator = component_vr_allocator();
-  vr_font_face_t* face = NULL;
-  expect_status((er_ui_status_t)vr_font_face_create_from_memory(&face, font_data, font_size, &cfg), (er_ui_status_t)VR_OK,
-                "shadcn render: variable font opens from memory");
-  free(font_data);
+  vr_font_face_t* face =
+      er_ui_test_open_font(14.0f, "shadcn render: bundled variable font loads", "shadcn render: variable font opens from memory");
   if (!face) {
     er_ui_scene_destroy(&scene);
     return;

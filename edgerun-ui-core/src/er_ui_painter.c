@@ -26,6 +26,12 @@ er_ui_status_t er_ui_painter_panel(er_ui_painter_t* painter, er_ui_bounds_t boun
   return er_ui_painter_border_rect(painter, bounds, radius, border);
 }
 
+er_ui_status_t er_ui_painter_card(er_ui_painter_t* painter, er_ui_bounds_t bounds, er_ui_resolved_theme_t theme) {
+  er_ui_status_t status = er_ui_painter_shadow_rect(painter, bounds, theme.radius.card, er_ui_color_rgba(0.0f, 0.0f, 0.0f, 0.10f), 18.0f);
+  if (status != ER_UI_OK) return status;
+  return er_ui_painter_panel(painter, bounds, theme.radius.card, theme.colors.panel, er_ui_color_with_alpha(theme.colors.border, 0.42f));
+}
+
 er_ui_status_t er_ui_painter_soft_card(er_ui_painter_t* painter, er_ui_bounds_t bounds, float radius, er_ui_color4_t fill) {
   er_ui_bounds_t shadow = bounds;
   shadow.y += 10.0f;
@@ -52,6 +58,14 @@ er_ui_status_t er_ui_painter_drag_source(er_ui_painter_t* painter, uint32_t scop
 er_ui_status_t er_ui_painter_drop_target(er_ui_painter_t* painter, uint32_t scope_id, size_t index, er_ui_bounds_t bounds) {
   if (!painter || !painter->scene) return ER_UI_ERR_INVALID_ARGUMENT;
   return er_ui_scene_push_drop_target(painter->scene, er_ui_drop_target(scope_id, index, bounds.x, bounds.y, bounds.w, bounds.h));
+}
+
+er_ui_status_t er_ui_painter_icon(er_ui_painter_t* painter, er_ui_bounds_t bounds, er_ui_icon_t icon, er_ui_color4_t color) {
+  uint32_t atlas_id;
+  if (!painter || !painter->scene) return ER_UI_ERR_INVALID_ARGUMENT;
+  atlas_id = er_ui_icon_atlas_id(icon);
+  if (atlas_id == 0u) return ER_UI_ERR_INVALID_ARGUMENT;
+  return er_ui_scene_push_icon_quad(painter->scene, er_ui_quad_atlas(bounds.x, bounds.y, bounds.w, bounds.h, 0.0f, 0.0f, 1.0f, 1.0f, atlas_id, color));
 }
 
 er_ui_status_t er_ui_painter_icon_quad(er_ui_painter_t* painter, er_ui_bounds_t bounds, float u0, float v0, float u1, float v1, er_ui_color4_t color) {

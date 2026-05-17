@@ -2,6 +2,7 @@
 #define ER_UI_NODE_H
 
 #include "er_ui_components.h"
+#include "er_ui_icon.h"
 
 #include <stdbool.h>
 #include <stddef.h>
@@ -100,46 +101,6 @@ typedef enum {
 } er_ui_node_kind_t;
 
 typedef struct er_ui_node_t er_ui_node_t;
-
-typedef enum {
-  ER_UI_ICON_ACTIVITY = 0,
-  ER_UI_ICON_APP,
-  ER_UI_ICON_BELL,
-  ER_UI_ICON_CHAT,
-  ER_UI_ICON_CHECK,
-  ER_UI_ICON_CHEVRON_RIGHT,
-  ER_UI_ICON_CODE,
-  ER_UI_ICON_CPU,
-  ER_UI_ICON_DATABASE,
-  ER_UI_ICON_EYE,
-  ER_UI_ICON_FILE,
-  ER_UI_ICON_KEY,
-  ER_UI_ICON_LOCK,
-  ER_UI_ICON_MENU,
-  ER_UI_ICON_MESSAGE_PLUS,
-  ER_UI_ICON_NETWORK,
-  ER_UI_ICON_ROUTE,
-  ER_UI_ICON_SEARCH,
-  ER_UI_ICON_SEND,
-  ER_UI_ICON_SERVER,
-  ER_UI_ICON_SETTINGS,
-  ER_UI_ICON_SHIELD,
-  ER_UI_ICON_SPARKLES,
-  ER_UI_ICON_STORAGE,
-  ER_UI_ICON_TERMINAL,
-  ER_UI_ICON_TRUST,
-  ER_UI_ICON_TRASH,
-  ER_UI_ICON_USER,
-  ER_UI_ICON_WALLET,
-  ER_UI_ICON_WARNING,
-  ER_UI_ICON_X,
-  ER_UI_ICON_COUNT
-} er_ui_icon_t;
-
-typedef enum {
-  ER_UI_ICON_PROVIDER_LUCIDE = 0,
-  ER_UI_ICON_PROVIDER_TABLER
-} er_ui_icon_provider_t;
 
 typedef enum {
   ER_UI_SHADCN_CHAT_ROLE_USER = 0,
@@ -348,9 +309,6 @@ er_ui_node_t* er_ui_node_set_draggable(er_ui_node_t* node, uint32_t scope_id, ui
 er_ui_node_t* er_ui_node_set_drop_target(er_ui_node_t* node, uint32_t scope_id, size_t index);
 er_ui_node_t* er_ui_node_set_reorderable(er_ui_node_t* node, uint32_t scope_id, uint32_t item_id, size_t index);
 er_ui_status_t er_ui_node_add_child(er_ui_node_t* parent, er_ui_node_t* child);
-const char* er_ui_icon_label(er_ui_icon_t icon);
-uint32_t er_ui_icon_atlas_id(er_ui_icon_t icon);
-const char* er_ui_icon_provider_name(er_ui_icon_t icon, er_ui_icon_provider_t provider);
 const char* er_ui_node_kind_label(er_ui_node_kind_t kind);
 const char* er_ui_node_composition_issue_label(er_ui_node_composition_issue_kind_t kind);
 er_ui_status_t er_ui_node_validate_composition(const er_ui_node_t* node, er_ui_node_composition_issue_t* out_issue);

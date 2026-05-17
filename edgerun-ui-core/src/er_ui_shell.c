@@ -1,4 +1,5 @@
 #include "er_ui_shell.h"
+#include "er_ui_internal.h"
 
 static const size_t ER_UI_SHELL_INITIAL_SURFACE_CAP = 4u;
 static const float ER_UI_SHELL_PAD = 8.0f;
@@ -10,45 +11,10 @@ static const float ER_UI_NETWORK_APP_PROMPT_WIDTH = 560.0f;
 static const float ER_UI_NETWORK_APP_PROMPT_HEIGHT = 328.0f;
 static const size_t ER_UI_SHELL_TEXT_MAX_CODEPOINTS = 192u;
 
-static bool er_ui_shell_allocator_valid(er_ui_allocator_t allocator) {
-  return allocator.alloc != 0 && allocator.free != 0;
-}
-
-static void er_ui_shell_zero(void* ptr, size_t size) {
-  unsigned char* bytes = (unsigned char*)ptr;
-  for (size_t i = 0u; i < size; ++i) bytes[i] = 0u;
-}
-
-static void er_ui_shell_copy(void* dst, const void* src, size_t size) {
-  unsigned char* out = (unsigned char*)dst;
-  const unsigned char* in = (const unsigned char*)src;
-  for (size_t i = 0u; i < size; ++i) out[i] = in[i];
-}
-
-static void er_ui_shell_free(er_ui_allocator_t allocator, void* ptr, size_t size, size_t align) {
-  if (ptr && er_ui_shell_allocator_valid(allocator)) allocator.free(allocator.user, ptr, size, align);
-}
-
 static bool er_ui_shell_reserve_surfaces(er_ui_shell_state_t* state, size_t count) {
   if (!state || count < state->surface_capacity) return true;
-  if (!er_ui_shell_allocator_valid(state->allocator)) return false;
-
-  size_t next_capacity = state->surface_capacity == 0u ? ER_UI_SHELL_INITIAL_SURFACE_CAP : state->surface_capacity;
-  while (next_capacity <= count) {
-    if (next_capacity > ((size_t)-1) / 2u) return false;
-    next_capacity *= 2u;
-  }
-  if (next_capacity > ((size_t)-1) / sizeof(*state->surfaces)) return false;
-
-  size_t old_size = state->surface_capacity * sizeof(*state->surfaces);
-  size_t next_size = next_capacity * sizeof(*state->surfaces);
-  er_ui_workspace_surface_t* next = (er_ui_workspace_surface_t*)state->allocator.alloc(state->allocator.user, next_size, 4u);
-  if (!next) return false;
-  if (state->surfaces && old_size > 0u) er_ui_shell_copy(next, state->surfaces, old_size);
-  er_ui_shell_free(state->allocator, state->surfaces, old_size, 4u);
-  state->surfaces = next;
-  state->surface_capacity = next_capacity;
-  return true;
+  return er_ui_allocator_reserve(state->allocator, (void**)&state->surfaces, &state->surface_capacity, count, sizeof(*state->surfaces),
+                                 ER_UI_SHELL_INITIAL_SURFACE_CAP, 4u);
 }
 
 static size_t er_ui_workspace_find_surface(const er_ui_shell_state_t* state, uint32_t surface_id) {
@@ -65,8 +31,8 @@ er_ui_status_t er_ui_shell_state_init(er_ui_shell_state_t* state) {
 }
 
 er_ui_status_t er_ui_shell_state_init_with_allocator(er_ui_shell_state_t* state, er_ui_allocator_t allocator) {
-  if (!state || !er_ui_shell_allocator_valid(allocator)) return ER_UI_ERR_INVALID_ARGUMENT;
-  er_ui_shell_zero(state, sizeof(*state));
+  if (!state || !er_ui_allocator_is_valid(allocator)) return ER_UI_ERR_INVALID_ARGUMENT;
+  er_ui_mem_zero(state, sizeof(*state));
   state->allocator = allocator;
   return ER_UI_OK;
 }
@@ -74,8 +40,8 @@ er_ui_status_t er_ui_shell_state_init_with_allocator(er_ui_shell_state_t* state,
 void er_ui_shell_state_destroy(er_ui_shell_state_t* state) {
   if (!state) return;
   er_ui_allocator_t allocator = state->allocator;
-  er_ui_shell_free(allocator, state->surfaces, state->surface_capacity * sizeof(*state->surfaces), 4u);
-  er_ui_shell_zero(state, sizeof(*state));
+  er_ui_allocator_free(allocator, state->surfaces, state->surface_capacity * sizeof(*state->surfaces), 4u);
+  er_ui_mem_zero(state, sizeof(*state));
 }
 
 bool er_ui_shell_launcher_open(const er_ui_shell_state_t* state) {
@@ -284,18 +250,7 @@ static er_ui_status_t er_ui_shell_emit_workspace(const er_ui_shell_state_t* stat
 }
 
 static er_ui_status_t er_ui_shell_push_ascii_text(er_ui_scene_t* scene, vr_font_face_t* font, const char* text, float x, float y, er_ui_color4_t color) {
-  if (!scene || !font || !text) return ER_UI_ERR_INVALID_ARGUMENT;
-  uint32_t codepoints[192u];
-  size_t count = 0u;
-  while (text[count] != '\0') {
-    if (count >= ER_UI_SHELL_TEXT_MAX_CODEPOINTS) return ER_UI_ERR_INVALID_ARGUMENT;
-    unsigned char ch = (unsigned char)text[count];
-    if (ch > 0x7Fu) return ER_UI_ERR_INVALID_ARGUMENT;
-    codepoints[count] = (uint32_t)ch;
-    count++;
-  }
-  if (count == 0u) return ER_UI_OK;
-  return er_ui_scene_push_varfont_text(scene, font, codepoints, count, x, y, color);
+  return er_ui_scene_push_ascii_text(scene, font, text, ER_UI_SHELL_TEXT_MAX_CODEPOINTS, x, y, color);
 }
 
 static size_t er_ui_shell_u32_to_ascii(uint32_t value, char* out, size_t out_capacity) {

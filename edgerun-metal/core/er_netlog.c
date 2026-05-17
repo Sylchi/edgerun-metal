@@ -1,4 +1,5 @@
 #include "er_netlog.h"
+#include "er_mem.h"
 
 /*
  * Purpose: use UEFI UDP4 service binding as an optional best-effort log sink.
@@ -70,14 +71,6 @@ static UINTN er_netlog_len(const char* s) {
 
 static void er_netlog_clear_text(void) {
   g_text_len = 0;
-}
-
-static void er_netlog_copy(UINT8* dst, const UINT8* src, UINTN len) {
-  UINTN i;
-
-  for (i = 0; i < len; ++i) {
-    dst[i] = src[i];
-  }
 }
 
 static UINT8 er_netlog_wait_idle(UINT32 poll_limit) {
@@ -278,7 +271,7 @@ UINT8 er_netlog_write_bytes_wait(const UINT8* data, UINTN len, UINT32 poll_limit
       chunk = ER_NETLOG_MAX_DATAGRAM;
     }
 
-    er_netlog_copy(g_tx_buffer, data + offset, chunk);
+    er_mem_copy(g_tx_buffer, data + offset, chunk);
     g_tx_data.DataLength = (UINT32)chunk;
     g_tx_data.FragmentTable[0].FragmentLength = (UINT32)chunk;
     g_tx_token.Status = EFI_NOT_READY;

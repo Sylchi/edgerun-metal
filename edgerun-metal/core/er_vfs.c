@@ -1,4 +1,5 @@
 #include "er_vfs.h"
+#include "er_mem.h"
 
 /*
  * Purpose: build content-addressed VFS object records from in-memory bytes.
@@ -10,25 +11,6 @@ static const UINT8 g_payload_domain[] = "edgerun:c:v1:vfs:object-payload";
 static const UINT8 g_packet_domain[] = "edgerun:c:v1:vfs:object-packet";
 static const UINT8 g_file_ref_domain[] = "edgerun:c:v1:vfs:file-ref";
 static const UINT8 g_transform_domain[] = "edgerun:c:v1:vfs:object-transform";
-
-static void er_vfs_zero(UINT8* bytes, UINTN len) {
-  UINTN i;
-
-  if (bytes == 0) {
-    return;
-  }
-  for (i = 0; i < len; ++i) {
-    bytes[i] = 0;
-  }
-}
-
-static void er_vfs_copy(UINT8* dst, const UINT8* src, UINTN len) {
-  UINTN i;
-
-  for (i = 0; i < len; ++i) {
-    dst[i] = src[i];
-  }
-}
 
 static void er_vfs_put_be16(UINT8* dst, UINT16 value) {
   dst[0] = (UINT8)((value >> 8) & 0xffu);
@@ -116,14 +98,14 @@ UINT8 er_vfs_prepare_object_packet(const ErCryptoProvider* crypto, const UINT8* 
     return 0;
   }
 
-  er_vfs_zero((UINT8*)out_packet, (UINTN)sizeof(*out_packet));
+  er_mem_zero((UINT8*)out_packet, (UINTN)sizeof(*out_packet));
   remaining = object_len - offset;
   chunk_len = remaining;
   if (chunk_len > ER_VFS_OBJECT_PACKET_BYTES) {
     chunk_len = ER_VFS_OBJECT_PACKET_BYTES;
   }
   if (chunk_len > 0u) {
-    er_vfs_copy(out_packet->bytes, object_bytes + offset, chunk_len);
+    er_mem_copy(out_packet->bytes, object_bytes + offset, chunk_len);
   }
 
   out_packet->header.abi_version = ER_VFS_ABI_VERSION;
@@ -148,8 +130,8 @@ UINT8 er_vfs_prepare_object_packet(const ErCryptoProvider* crypto, const UINT8* 
   er_vfs_put_be32(&packet_preimage[2], packet_index);
   er_vfs_put_be32(&packet_preimage[6], packet_count);
   er_vfs_put_be64(&packet_preimage[10], out_packet->header.offset);
-  er_vfs_copy(&packet_preimage[18], out_packet->header.object_id.bytes, ER_HASH_LEN);
-  er_vfs_copy(&packet_preimage[18u + ER_HASH_LEN], out_packet->header.payload_hash.bytes, ER_HASH_LEN);
+  er_mem_copy(&packet_preimage[18], out_packet->header.object_id.bytes, ER_HASH_LEN);
+  er_mem_copy(&packet_preimage[18u + ER_HASH_LEN], out_packet->header.payload_hash.bytes, ER_HASH_LEN);
   packet_spans[0].bytes = packet_preimage;
   packet_spans[0].len = (UINTN)sizeof(packet_preimage);
   return er_crypto_hash(crypto, g_packet_domain, (UINTN)(sizeof(g_packet_domain) - 1u),
@@ -164,10 +146,10 @@ UINT8 er_vfs_prepare_file_ref(const ErCryptoProvider* crypto, const char* path, 
   if (out_ref == 0 || er_vfs_path_label_valid(path, path_len) == 0u) {
     return 0;
   }
-  er_vfs_zero((UINT8*)out_ref, (UINTN)sizeof(*out_ref));
+  er_mem_zero((UINT8*)out_ref, (UINTN)sizeof(*out_ref));
   out_ref->abi_version = ER_VFS_ABI_VERSION;
   out_ref->path_len = (UINT16)path_len;
-  er_vfs_copy((UINT8*)out_ref->path, (const UINT8*)path, path_len);
+  er_mem_copy((UINT8*)out_ref->path, (const UINT8*)path, path_len);
   out_ref->object_len = (UINT64)object_len;
   if (er_vfs_hash_object(crypto, object_bytes, object_len, &out_ref->object_id) == 0u) {
     return 0;
@@ -198,7 +180,7 @@ UINT8 er_vfs_prepare_transform_ref(const ErCryptoProvider* crypto, const ErHash*
     return 0;
   }
 
-  er_vfs_zero((UINT8*)out_ref, (UINTN)sizeof(*out_ref));
+  er_mem_zero((UINT8*)out_ref, (UINTN)sizeof(*out_ref));
   out_ref->abi_version = ER_VFS_ABI_VERSION;
   out_ref->compression_kind = compression_kind;
   out_ref->seal_kind = seal_kind;

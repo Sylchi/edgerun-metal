@@ -31,6 +31,8 @@ Use the current system toolchain:
 ```bash
 clang --version
 cc --version
+ccache --version
+mold --version
 wat2wasm --version
 cmake --version
 ninja --version
@@ -40,10 +42,16 @@ ctest --version
 The preferred local build tools are:
 
 - `clang` and `lld` for `edgerun-metal`
+- `ccache` when available for repeated C builds
+- `mold` when available for hosted Linux test/tool executables
 - `wat2wasm` for source-first metal Wasm module fixtures
 - `CMake` with `Ninja` for `varfont` and `edgerun-ui-core`
 - `ctest --output-on-failure` for tests
 - `rg` for repository search
+
+The root Makefile auto-detects `ccache` and `mold`. Override with `CCACHE=`,
+`MOLD=`, `HOST_CC=`, or `CC=` when a specific environment needs different tools.
+UEFI/EFI links stay on LLVM `lld`; `mold` is only used for hosted binaries.
 
 ## Common Commands
 
