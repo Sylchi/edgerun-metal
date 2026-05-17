@@ -48,6 +48,7 @@ typedef struct {
   UINT64 solid_rects;
   UINT64 gradient_rects;
   UINT64 border_rects;
+  UINT64 icon_quads;
   UINT64 text_quads;
   UINT64 tiles_rendered;
   UINT64 dirty_tiles_requested;
@@ -61,6 +62,7 @@ typedef struct {
   UINT64 blend_pixels;
   UINT64 text_pixels;
   UINT64 rects;
+  UINT64 icon_quads;
   UINT64 text_quads;
   UINT64 tiles_rendered;
   UINT64 dirty_tiles_requested;
