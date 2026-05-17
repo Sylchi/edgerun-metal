@@ -64,6 +64,55 @@ static void er_net_put_eth_header(UINT8* frame, const UINT8* src_mac, const UINT
   er_net_put_u16_be(frame + ER_NET_ETH_TYPE_OFFSET, eth_type);
 }
 
+UINT8 er_net_build_eth_frame(const UINT8* src_mac, const UINT8* dst_mac,
+                             UINT16 eth_type, const UINT8* payload,
+                             UINT32 payload_len, UINT8* out_frame,
+                             UINT32 out_capacity, UINT32* out_frame_len) {
+  UINT32 frame_len;
+
+  if (src_mac == 0 || dst_mac == 0 || out_frame == 0 || out_frame_len == 0 ||
+      eth_type == 0u || payload_len == 0u || payload_len > ER_NET_ETH_PAYLOAD_MAX ||
+      payload == 0) {
+    return 0;
+  }
+  frame_len = ER_NET_ETH_HEADER_LEN + payload_len;
+  if (frame_len > out_capacity || frame_len > ER_NET_FRAME_MAX) {
+    return 0;
+  }
+  er_net_put_eth_header(out_frame, src_mac, dst_mac, eth_type);
+  er_mem_copy(out_frame + ER_NET_ETH_HEADER_LEN, payload, (UINTN)payload_len);
+  *out_frame_len = frame_len;
+  return 1;
+}
+
+UINT8 er_net_parse_eth_frame(const UINT8* frame, UINT32 frame_len,
+                             const UINT8* expected_dst_mac,
+                             UINT16 expected_eth_type, UINT8* out_src_mac,
+                             UINT8* out_payload, UINT32 out_capacity,
+                             UINT32* out_payload_len) {
+  UINT32 payload_len;
+
+  if (frame == 0 || expected_dst_mac == 0 || out_src_mac == 0 ||
+      out_payload_len == 0 || expected_eth_type == 0u ||
+      frame_len <= ER_NET_ETH_HEADER_LEN || frame_len > ER_NET_FRAME_MAX) {
+    return 0;
+  }
+  payload_len = frame_len - ER_NET_ETH_HEADER_LEN;
+  if (payload_len == 0u || payload_len > out_capacity ||
+      er_net_bytes_equal(frame + ER_NET_ETH_DST_OFFSET, expected_dst_mac,
+                         ER_NET_MAC_LEN) == 0u ||
+      er_net_get_u16_be(frame + ER_NET_ETH_TYPE_OFFSET) != expected_eth_type) {
+    return 0;
+  }
+  er_mem_copy(out_src_mac, frame + ER_NET_ETH_SRC_OFFSET, ER_NET_MAC_LEN);
+  if (payload_len > 0u && out_payload == 0) {
+    return 0;
+  }
+  er_mem_copy(out_payload, frame + ER_NET_ETH_HEADER_LEN, (UINTN)payload_len);
+  *out_payload_len = payload_len;
+  return 1;
+}
+
 UINT16 er_net_checksum16(const UINT8* bytes, UINT32 len) {
   UINT32 sum = 0;
   UINT32 i = 0;
