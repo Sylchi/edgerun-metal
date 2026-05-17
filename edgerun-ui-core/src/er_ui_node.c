@@ -473,6 +473,13 @@ er_ui_node_t er_ui_node_sonner(const char* const* messages, const er_ui_icon_t* 
   return node;
 }
 
+er_ui_node_t er_ui_node_aspect_ratio(const char* label, er_ui_icon_t icon) {
+  er_ui_node_t node = er_ui_node_base(ER_UI_NODE_ASPECT_RATIO);
+  node.label = label;
+  node.icon = icon;
+  return node;
+}
+
 er_ui_node_t er_ui_node_route_path(const char* label, const char* const* hops, size_t hop_count) {
   er_ui_node_t node = er_ui_node_base(ER_UI_NODE_ROUTE_PATH);
   node.label = label;
@@ -823,6 +830,7 @@ const char* er_ui_node_kind_label(er_ui_node_kind_t kind) {
     case ER_UI_NODE_RESIZABLE: return "resizable";
     case ER_UI_NODE_SIDEBAR: return "sidebar";
     case ER_UI_NODE_SONNER: return "sonner";
+    case ER_UI_NODE_ASPECT_RATIO: return "aspect-ratio";
     case ER_UI_NODE_ROUTE_PATH: return "route-path";
     case ER_UI_NODE_PACKAGE_CARD: return "package-card";
     case ER_UI_NODE_RECEIPT_ROW: return "receipt-row";
@@ -1160,6 +1168,9 @@ er_ui_status_t er_ui_node_accessibility(const er_ui_node_t* node, er_ui_a11y_nod
       break;
     case ER_UI_NODE_SONNER:
       out = er_ui_a11y_base(ER_UI_A11Y_STATUS, "toaster", false, 0u);
+      break;
+    case ER_UI_NODE_ASPECT_RATIO:
+      out = er_ui_a11y_base(ER_UI_A11Y_IMAGE, node->label, false, 0u);
       break;
     case ER_UI_NODE_TABS:
       out = er_ui_a11y_base(ER_UI_A11Y_TAB_LIST, "tabs", false, 0u);
@@ -1905,6 +1916,33 @@ static er_ui_status_t er_ui_node_render_sonner(
   return ER_UI_OK;
 }
 
+static er_ui_status_t er_ui_node_render_aspect_ratio(
+  const er_ui_node_t* node,
+  er_ui_scene_t* scene,
+  vr_font_face_t* font,
+  er_ui_bounds_t bounds,
+  er_ui_resolved_theme_t theme) {
+  if (!node || !scene || !font || !node->label || !er_ui_bounds_valid(bounds)) return ER_UI_ERR_INVALID_ARGUMENT;
+  er_ui_status_t status = er_ui_shadcn_card_emit(scene, bounds, theme);
+  if (status != ER_UI_OK) return status;
+  float pad = 0.0f;
+  float max_w = bounds.w - pad * 2.0f;
+  float max_h = bounds.h - pad * 2.0f;
+  float panel_w = max_w;
+  float panel_h = panel_w * 9.0f / 16.0f;
+  if (panel_h > max_h) {
+    panel_h = max_h;
+    panel_w = panel_h * 16.0f / 9.0f;
+  }
+  er_ui_bounds_t panel = er_ui_bounds(bounds.x + (bounds.w - panel_w) * 0.5f, bounds.y + (bounds.h - panel_h) * 0.5f, panel_w, panel_h);
+  status = er_ui_scene_push_rect(scene, er_ui_rect_fill(panel.x, panel.y, panel.w, panel.h, theme.radius.card, er_ui_color_with_alpha(theme.colors.row, 0.62f)));
+  if (status != ER_UI_OK) return status;
+  float center_y = panel.y + panel.h * 0.5f;
+  status = er_ui_node_render_icon(scene, er_ui_bounds(panel.x + (panel.w - 32.0f) * 0.5f, center_y - 32.0f, 32.0f, 32.0f), node->icon, theme.colors.muted);
+  if (status != ER_UI_OK) return status;
+  return er_ui_node_render_text(scene, font, node->label, er_ui_bounds(panel.x + 12.0f, center_y + 8.0f, panel.w - 24.0f, 28.0f), theme.colors.text);
+}
+
 static er_ui_status_t er_ui_node_render_label_group(
   const er_ui_node_t* node,
   er_ui_scene_t* scene,
@@ -2091,6 +2129,8 @@ er_ui_status_t er_ui_node_render(
       return er_ui_node_render_sidebar(node, scene, font, rect, theme);
     case ER_UI_NODE_SONNER:
       return er_ui_node_render_sonner(node, scene, font, rect, theme);
+    case ER_UI_NODE_ASPECT_RATIO:
+      return er_ui_node_render_aspect_ratio(node, scene, font, rect, theme);
     case ER_UI_NODE_ROUTE_PATH:
       return er_ui_shadcn_route_path_emit(scene, font, rect, theme, node->label, node->labels, node->label_count);
     case ER_UI_NODE_PACKAGE_CARD:
