@@ -1,5 +1,9 @@
 #include "er_blake3.h"
 
+#if defined(ER_BLAKE3_USE_UPSTREAM_ASM)
+#include <stdbool.h>
+#endif
+
 #if defined(ER_BLAKE3_ENABLE_THREADS)
 #include <pthread.h>
 #endif
@@ -126,6 +130,8 @@ static const uint8_t g_er_blake3_msg_perm[ER_BLAKE3_BLOCK_WORDS] = {
   2u, 6u, 3u, 10u, 7u, 0u, 4u, 13u, 1u, 11u, 12u, 5u, 9u, 14u, 15u, 8u //@optimizer-ignore BLAKE3 message word permutation
 };
 
+static uint32_t er_blake3_load32(const uint8_t bytes[4]);
+
 typedef struct {
   uint32_t input_cv[ER_BLAKE3_CV_WORDS];
   uint8_t block[ER_BLAKE3_BLOCK_LEN];
@@ -137,6 +143,36 @@ typedef struct {
 static void er_blake3_parent_cv(const uint32_t left_cv[ER_BLAKE3_CV_WORDS],
                                 const uint32_t right_cv[ER_BLAKE3_CV_WORDS],
                                 uint32_t out_cv[ER_BLAKE3_CV_WORDS]);
+
+#if defined(ER_BLAKE3_USE_UPSTREAM_ASM)
+void er_blake3_upstream_hash_many_sse2(const uint8_t* const* inputs, size_t num_inputs,
+                                       size_t blocks, const uint32_t key[8],
+                                       uint64_t counter, bool increment_counter,
+                                       uint8_t flags, uint8_t flags_start,
+                                       uint8_t flags_end, uint8_t* out);
+void er_blake3_upstream_hash_many_avx2(const uint8_t* const* inputs, size_t num_inputs,
+                                       size_t blocks, const uint32_t key[8],
+                                       uint64_t counter, bool increment_counter,
+                                       uint8_t flags, uint8_t flags_start,
+                                       uint8_t flags_end, uint8_t* out);
+void er_blake3_upstream_hash_many_avx512(const uint8_t* const* inputs, size_t num_inputs,
+                                         size_t blocks, const uint32_t key[8],
+                                         uint64_t counter, bool increment_counter,
+                                         uint8_t flags, uint8_t flags_start,
+                                         uint8_t flags_end, uint8_t* out);
+
+static void er_blake3_cvs_from_bytes(const uint8_t* bytes, size_t cv_count,
+                                     uint32_t out_cvs[][ER_BLAKE3_CV_WORDS]) {
+  size_t cv;
+  size_t word;
+
+  for (cv = 0u; cv < cv_count; ++cv) {
+    for (word = 0u; word < ER_BLAKE3_CV_WORDS; ++word) {
+      out_cvs[cv][word] = er_blake3_load32(&bytes[(cv * ER_BLAKE3_OUT_LEN) + (word * ER_BLAKE3_WORD_BYTES)]);
+    }
+  }
+}
+#endif
 
 static void er_blake3_zero(uint8_t* bytes, size_t len) {
   size_t i;
@@ -306,12 +342,14 @@ static void er_blake3_sse2_permute(__m128i msg[ER_BLAKE3_BLOCK_WORDS]) {
   }
 }
 
+#if !defined(ER_BLAKE3_USE_UPSTREAM_ASM)
 static __m128i er_blake3_sse2_load_word4(const uint8_t* bytes, size_t word_index) {
   return _mm_set_epi32((int)er_blake3_load32(&bytes[(ER_BLAKE3_SSE2_LANE3_INDEX * ER_BLAKE3_CHUNK_LEN) + (word_index * ER_BLAKE3_WORD_BYTES)]),
                        (int)er_blake3_load32(&bytes[(ER_BLAKE3_SSE2_LANE2_INDEX * ER_BLAKE3_CHUNK_LEN) + (word_index * ER_BLAKE3_WORD_BYTES)]),
                        (int)er_blake3_load32(&bytes[(ER_BLAKE3_SSE2_LANE1_INDEX * ER_BLAKE3_CHUNK_LEN) + (word_index * ER_BLAKE3_WORD_BYTES)]),
                        (int)er_blake3_load32(&bytes[(ER_BLAKE3_SSE2_LANE0_INDEX * ER_BLAKE3_CHUNK_LEN) + (word_index * ER_BLAKE3_WORD_BYTES)]));
 }
+#endif
 
 static void er_blake3_sse2_compress4(const __m128i cv[ER_BLAKE3_CV_WORDS],
                                      const __m128i block_words[ER_BLAKE3_BLOCK_WORDS],
@@ -352,6 +390,19 @@ static void er_blake3_sse2_compress4(const __m128i cv[ER_BLAKE3_CV_WORDS],
 static void er_blake3_sse2_compress4_full_chunks(const uint8_t* bytes, uint64_t chunk_counter,
                                                  uint32_t flags,
                                                  uint32_t out_cvs[ER_BLAKE3_SSE2_LANES][ER_BLAKE3_CV_WORDS]) {
+#if defined(ER_BLAKE3_USE_UPSTREAM_ASM)
+  const uint8_t* inputs[ER_BLAKE3_SSE2_LANES];
+  uint8_t out[ER_BLAKE3_SSE2_LANES * ER_BLAKE3_OUT_LEN];
+  size_t lane;
+
+  for (lane = 0u; lane < ER_BLAKE3_SSE2_LANES; ++lane) {
+    inputs[lane] = bytes + (lane * ER_BLAKE3_CHUNK_LEN);
+  }
+  er_blake3_upstream_hash_many_sse2(inputs, ER_BLAKE3_SSE2_LANES, ER_BLAKE3_FULL_CHUNK_BLOCKS,
+                                    g_er_blake3_iv, chunk_counter, true, (uint8_t)flags,
+                                    ER_BLAKE3_CHUNK_START, ER_BLAKE3_CHUNK_END, out);
+  er_blake3_cvs_from_bytes(out, ER_BLAKE3_SSE2_LANES, out_cvs);
+#else
   __m128i cv[ER_BLAKE3_CV_WORDS];
   __m128i words[ER_BLAKE3_BLOCK_WORDS];
   __m128i compressed[ER_BLAKE3_BLOCK_WORDS];
@@ -397,6 +448,7 @@ static void er_blake3_sse2_compress4_full_chunks(const uint8_t* bytes, uint64_t 
       out_cvs[lane][word] = lanes[lane];
     }
   }
+#endif
 }
 
 static void er_blake3_sse2_parent2_from4(const uint32_t cvs[ER_BLAKE3_SSE2_LANES][ER_BLAKE3_CV_WORDS],
@@ -479,6 +531,7 @@ static void er_blake3_avx2_permute(__m256i msg[ER_BLAKE3_BLOCK_WORDS]) {
   }
 }
 
+#if !defined(ER_BLAKE3_USE_UPSTREAM_ASM)
 static __m256i er_blake3_avx2_load_word8(const uint8_t* bytes, size_t word_index) {
   return _mm256_set_epi32((int)er_blake3_load32(&bytes[(ER_BLAKE3_AVX2_LANE7_INDEX * ER_BLAKE3_CHUNK_LEN) + (word_index * ER_BLAKE3_WORD_BYTES)]),
                           (int)er_blake3_load32(&bytes[(ER_BLAKE3_AVX2_LANE6_INDEX * ER_BLAKE3_CHUNK_LEN) + (word_index * ER_BLAKE3_WORD_BYTES)]),
@@ -489,6 +542,7 @@ static __m256i er_blake3_avx2_load_word8(const uint8_t* bytes, size_t word_index
                           (int)er_blake3_load32(&bytes[(ER_BLAKE3_AVX2_LANE1_INDEX * ER_BLAKE3_CHUNK_LEN) + (word_index * ER_BLAKE3_WORD_BYTES)]),
                           (int)er_blake3_load32(&bytes[(ER_BLAKE3_AVX2_LANE0_INDEX * ER_BLAKE3_CHUNK_LEN) + (word_index * ER_BLAKE3_WORD_BYTES)]));
 }
+#endif
 
 static void er_blake3_avx2_compress8(const __m256i cv[ER_BLAKE3_CV_WORDS],
                                      const __m256i block_words[ER_BLAKE3_BLOCK_WORDS],
@@ -529,6 +583,19 @@ static void er_blake3_avx2_compress8(const __m256i cv[ER_BLAKE3_CV_WORDS],
 static void er_blake3_avx2_compress8_full_chunks(const uint8_t* bytes, uint64_t chunk_counter,
                                                  uint32_t flags,
                                                  uint32_t out_cvs[ER_BLAKE3_AVX2_LANES][ER_BLAKE3_CV_WORDS]) {
+#if defined(ER_BLAKE3_USE_UPSTREAM_ASM)
+  const uint8_t* inputs[ER_BLAKE3_AVX2_LANES];
+  uint8_t out[ER_BLAKE3_AVX2_LANES * ER_BLAKE3_OUT_LEN];
+  size_t lane;
+
+  for (lane = 0u; lane < ER_BLAKE3_AVX2_LANES; ++lane) {
+    inputs[lane] = bytes + (lane * ER_BLAKE3_CHUNK_LEN);
+  }
+  er_blake3_upstream_hash_many_avx2(inputs, ER_BLAKE3_AVX2_LANES, ER_BLAKE3_FULL_CHUNK_BLOCKS,
+                                    g_er_blake3_iv, chunk_counter, true, (uint8_t)flags,
+                                    ER_BLAKE3_CHUNK_START, ER_BLAKE3_CHUNK_END, out);
+  er_blake3_cvs_from_bytes(out, ER_BLAKE3_AVX2_LANES, out_cvs);
+#else
   __m256i cv[ER_BLAKE3_CV_WORDS];
   __m256i words[ER_BLAKE3_BLOCK_WORDS];
   __m256i compressed[ER_BLAKE3_BLOCK_WORDS];
@@ -582,6 +649,7 @@ static void er_blake3_avx2_compress8_full_chunks(const uint8_t* bytes, uint64_t 
       out_cvs[lane][word] = lanes[lane];
     }
   }
+#endif
 }
 
 static void er_blake3_avx2_parent4(const uint32_t cvs[ER_BLAKE3_AVX2_LANES][ER_BLAKE3_CV_WORDS],
@@ -722,6 +790,7 @@ static void er_blake3_avx512_permute(__m512i msg[ER_BLAKE3_BLOCK_WORDS]) {
   }
 }
 
+#if !defined(ER_BLAKE3_USE_UPSTREAM_ASM)
 static __m512i er_blake3_avx512_load_word16(const uint8_t* bytes, size_t word_index) {
   const size_t word_offset = word_index * ER_BLAKE3_WORD_BYTES;
 
@@ -742,6 +811,7 @@ static __m512i er_blake3_avx512_load_word16(const uint8_t* bytes, size_t word_in
                           (int)er_blake3_load32(&bytes[(ER_BLAKE3_AVX512_LANE1_INDEX * ER_BLAKE3_CHUNK_LEN) + word_offset]),
                           (int)er_blake3_load32(&bytes[(ER_BLAKE3_AVX512_LANE0_INDEX * ER_BLAKE3_CHUNK_LEN) + word_offset]));
 }
+#endif
 
 static void er_blake3_avx512_compress16(const __m512i cv[ER_BLAKE3_CV_WORDS],
                                         const __m512i block_words[ER_BLAKE3_BLOCK_WORDS],
@@ -782,6 +852,19 @@ static void er_blake3_avx512_compress16(const __m512i cv[ER_BLAKE3_CV_WORDS],
 static void er_blake3_avx512_compress16_full_chunks(const uint8_t* bytes, uint64_t chunk_counter,
                                                     uint32_t flags,
                                                     uint32_t out_cvs[ER_BLAKE3_AVX512_LANES][ER_BLAKE3_CV_WORDS]) {
+#if defined(ER_BLAKE3_USE_UPSTREAM_ASM)
+  const uint8_t* inputs[ER_BLAKE3_AVX512_LANES];
+  uint8_t out[ER_BLAKE3_AVX512_LANES * ER_BLAKE3_OUT_LEN];
+  size_t lane;
+
+  for (lane = 0u; lane < ER_BLAKE3_AVX512_LANES; ++lane) {
+    inputs[lane] = bytes + (lane * ER_BLAKE3_CHUNK_LEN);
+  }
+  er_blake3_upstream_hash_many_avx512(inputs, ER_BLAKE3_AVX512_LANES, ER_BLAKE3_FULL_CHUNK_BLOCKS,
+                                      g_er_blake3_iv, chunk_counter, true, (uint8_t)flags,
+                                      ER_BLAKE3_CHUNK_START, ER_BLAKE3_CHUNK_END, out);
+  er_blake3_cvs_from_bytes(out, ER_BLAKE3_AVX512_LANES, out_cvs);
+#else
   __m512i cv[ER_BLAKE3_CV_WORDS];
   __m512i words[ER_BLAKE3_BLOCK_WORDS];
   __m512i compressed[ER_BLAKE3_BLOCK_WORDS];
@@ -851,6 +934,7 @@ static void er_blake3_avx512_compress16_full_chunks(const uint8_t* bytes, uint64
       out_cvs[lane][word] = lanes[lane];
     }
   }
+#endif
 }
 
 #endif
