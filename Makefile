@@ -1,4 +1,4 @@
-.PHONY: all check clean repo-check repo-test repo-inspect erwire-decode erwire-test crypto-configure crypto-build crypto-test edgerun-smoke edgerun-pci edgerun-quiet edgerun-ui edgerun-check varfont-configure varfont-build varfont-test ui-core-configure ui-core-build ui-core-test
+.PHONY: all check clean repo-check repo-test repo-inspect erwire-decode erwire-test crypto-configure crypto-build crypto-test crypto-bench edgerun-smoke edgerun-pci edgerun-quiet edgerun-ui edgerun-check varfont-configure varfont-build varfont-test ui-core-configure ui-core-build ui-core-test
 
 ifeq ($(origin CC),default)
 CC := clang
@@ -57,6 +57,9 @@ crypto-build: crypto-configure
 
 crypto-test: crypto-build
 	ctest --test-dir $(CRYPTO_BUILD_DIR) --output-on-failure
+
+crypto-bench: crypto-build
+	cmake --build $(CRYPTO_BUILD_DIR) --target bench
 
 edgerun-smoke:
 	$(MAKE) -C edgerun-metal smoke
