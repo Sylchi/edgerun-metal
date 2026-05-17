@@ -1,5 +1,11 @@
 #include "er_blake3.h"
 
+#if !defined(ER_BLAKE3_NO_SIMD) && defined(__SSE2__) && \
+    (defined(__x86_64__) || defined(_M_X64) || defined(__i386) || defined(_M_IX86))
+#include <emmintrin.h>
+#define ER_BLAKE3_USE_SSE2 1
+#endif
+
 #define ER_BLAKE3_CHUNK_START 1u
 #define ER_BLAKE3_CHUNK_END 2u
 #define ER_BLAKE3_PARENT 4u
@@ -13,7 +19,23 @@
 #define ER_BLAKE3_WORD_BYTE1_SHIFT 8u
 #define ER_BLAKE3_WORD_BYTE2_SHIFT 16u
 #define ER_BLAKE3_WORD_BYTE3_SHIFT 24u
+#define ER_BLAKE3_WORD_BYTE0_INDEX 0u
+#define ER_BLAKE3_WORD_BYTE1_INDEX 1u
+#define ER_BLAKE3_WORD_BYTE2_INDEX 2u
+#define ER_BLAKE3_WORD_BYTE3_INDEX 3u
 #define ER_BLAKE3_COUNTER_HIGH_SHIFT 32u
+#define ER_BLAKE3_STATE_IV0_INDEX 8u
+#define ER_BLAKE3_STATE_IV1_INDEX 9u
+#define ER_BLAKE3_STATE_IV2_INDEX 10u
+#define ER_BLAKE3_STATE_IV3_INDEX 11u
+#define ER_BLAKE3_STATE_COUNTER_LOW_INDEX 12u
+#define ER_BLAKE3_STATE_COUNTER_HIGH_INDEX 13u
+#define ER_BLAKE3_STATE_BLOCK_LEN_INDEX 14u
+#define ER_BLAKE3_STATE_FLAGS_INDEX 15u
+#define ER_BLAKE3_SSE2_LANE0_INDEX 0u
+#define ER_BLAKE3_SSE2_LANE1_INDEX 1u
+#define ER_BLAKE3_SSE2_LANE2_INDEX 2u
+#define ER_BLAKE3_SSE2_LANE3_INDEX 3u
 #define ER_BLAKE3_ROTATE_A 16u
 #define ER_BLAKE3_ROTATE_B 12u
 #define ER_BLAKE3_ROTATE_C 8u
@@ -26,6 +48,8 @@
 #define ER_BLAKE3_IV5 0x9b05688cu
 #define ER_BLAKE3_IV6 0x1f83d9abu
 #define ER_BLAKE3_IV7 0x5be0cd19u
+#define ER_BLAKE3_FULL_CHUNK_BLOCKS (ER_BLAKE3_CHUNK_LEN / ER_BLAKE3_BLOCK_LEN)
+#define ER_BLAKE3_SSE2_LANES 4u
 
 static const uint32_t g_er_blake3_iv[ER_BLAKE3_CV_WORDS] = {
   ER_BLAKE3_IV0, ER_BLAKE3_IV1, ER_BLAKE3_IV2, ER_BLAKE3_IV3,
@@ -33,7 +57,7 @@ static const uint32_t g_er_blake3_iv[ER_BLAKE3_CV_WORDS] = {
 };
 
 static const uint8_t g_er_blake3_msg_perm[ER_BLAKE3_BLOCK_WORDS] = {
-  2u, 6u, 3u, 10u, 7u, 0u, 4u, 13u, 1u, 11u, 12u, 5u, 9u, 14u, 15u, 8u
+  2u, 6u, 3u, 10u, 7u, 0u, 4u, 13u, 1u, 11u, 12u, 5u, 9u, 14u, 15u, 8u //@optimizer-ignore BLAKE3 message word permutation
 };
 
 typedef struct {
@@ -71,16 +95,17 @@ static uint32_t er_blake3_rotr32(uint32_t word, uint32_t bits) {
 }
 
 static uint32_t er_blake3_load32(const uint8_t* bytes) {
-  return ((uint32_t)bytes[0]) | ((uint32_t)bytes[1] << ER_BLAKE3_WORD_BYTE1_SHIFT) |
-         ((uint32_t)bytes[2] << ER_BLAKE3_WORD_BYTE2_SHIFT) |
-         ((uint32_t)bytes[3] << ER_BLAKE3_WORD_BYTE3_SHIFT);
+  return ((uint32_t)bytes[ER_BLAKE3_WORD_BYTE0_INDEX]) |
+         ((uint32_t)bytes[ER_BLAKE3_WORD_BYTE1_INDEX] << ER_BLAKE3_WORD_BYTE1_SHIFT) |
+         ((uint32_t)bytes[ER_BLAKE3_WORD_BYTE2_INDEX] << ER_BLAKE3_WORD_BYTE2_SHIFT) |
+         ((uint32_t)bytes[ER_BLAKE3_WORD_BYTE3_INDEX] << ER_BLAKE3_WORD_BYTE3_SHIFT);
 }
 
 static void er_blake3_store32(uint8_t* bytes, uint32_t word) {
-  bytes[0] = (uint8_t)word;
-  bytes[1] = (uint8_t)(word >> ER_BLAKE3_WORD_BYTE1_SHIFT);
-  bytes[2] = (uint8_t)(word >> ER_BLAKE3_WORD_BYTE2_SHIFT);
-  bytes[3] = (uint8_t)(word >> ER_BLAKE3_WORD_BYTE3_SHIFT);
+  bytes[ER_BLAKE3_WORD_BYTE0_INDEX] = (uint8_t)word;
+  bytes[ER_BLAKE3_WORD_BYTE1_INDEX] = (uint8_t)(word >> ER_BLAKE3_WORD_BYTE1_SHIFT);
+  bytes[ER_BLAKE3_WORD_BYTE2_INDEX] = (uint8_t)(word >> ER_BLAKE3_WORD_BYTE2_SHIFT);
+  bytes[ER_BLAKE3_WORD_BYTE3_INDEX] = (uint8_t)(word >> ER_BLAKE3_WORD_BYTE3_SHIFT);
 }
 
 static void er_blake3_words_from_block(const uint8_t block[ER_BLAKE3_BLOCK_LEN],
@@ -105,14 +130,14 @@ static void er_blake3_g(uint32_t state[ER_BLAKE3_BLOCK_WORDS], size_t a, size_t 
 }
 
 static void er_blake3_round(uint32_t state[ER_BLAKE3_BLOCK_WORDS], const uint32_t msg[ER_BLAKE3_BLOCK_WORDS]) {
-  er_blake3_g(state, 0u, 4u, 8u, 12u, msg[0], msg[1]);
-  er_blake3_g(state, 1u, 5u, 9u, 13u, msg[2], msg[3]);
-  er_blake3_g(state, 2u, 6u, 10u, 14u, msg[4], msg[5]);
-  er_blake3_g(state, 3u, 7u, 11u, 15u, msg[6], msg[7]);
-  er_blake3_g(state, 0u, 5u, 10u, 15u, msg[8], msg[9]);
-  er_blake3_g(state, 1u, 6u, 11u, 12u, msg[10], msg[11]);
-  er_blake3_g(state, 2u, 7u, 8u, 13u, msg[12], msg[13]);
-  er_blake3_g(state, 3u, 4u, 9u, 14u, msg[14], msg[15]);
+  er_blake3_g(state, 0u, 4u, 8u, 12u, msg[0], msg[1]); //@optimizer-ignore BLAKE3 compression schedule
+  er_blake3_g(state, 1u, 5u, 9u, 13u, msg[2], msg[3]); //@optimizer-ignore BLAKE3 compression schedule
+  er_blake3_g(state, 2u, 6u, 10u, 14u, msg[4], msg[5]); //@optimizer-ignore BLAKE3 compression schedule
+  er_blake3_g(state, 3u, 7u, 11u, 15u, msg[6], msg[7]); //@optimizer-ignore BLAKE3 compression schedule
+  er_blake3_g(state, 0u, 5u, 10u, 15u, msg[8], msg[9]); //@optimizer-ignore BLAKE3 compression schedule
+  er_blake3_g(state, 1u, 6u, 11u, 12u, msg[10], msg[11]); //@optimizer-ignore BLAKE3 compression schedule
+  er_blake3_g(state, 2u, 7u, 8u, 13u, msg[12], msg[13]); //@optimizer-ignore BLAKE3 compression schedule
+  er_blake3_g(state, 3u, 4u, 9u, 14u, msg[14], msg[15]); //@optimizer-ignore BLAKE3 compression schedule
 }
 
 static void er_blake3_permute(uint32_t msg[ER_BLAKE3_BLOCK_WORDS]) {
@@ -140,14 +165,14 @@ static void er_blake3_compress(const uint32_t cv[ER_BLAKE3_CV_WORDS],
     msg[i] = block_words[i];
     msg[i + ER_BLAKE3_CV_WORDS] = block_words[i + ER_BLAKE3_CV_WORDS];
   }
-  out[8] = g_er_blake3_iv[0];
-  out[9] = g_er_blake3_iv[1];
-  out[10] = g_er_blake3_iv[2];
-  out[11] = g_er_blake3_iv[3];
-  out[12] = (uint32_t)counter;
-  out[13] = (uint32_t)(counter >> ER_BLAKE3_COUNTER_HIGH_SHIFT);
-  out[14] = block_len;
-  out[15] = flags;
+  out[ER_BLAKE3_STATE_IV0_INDEX] = g_er_blake3_iv[0];
+  out[ER_BLAKE3_STATE_IV1_INDEX] = g_er_blake3_iv[1];
+  out[ER_BLAKE3_STATE_IV2_INDEX] = g_er_blake3_iv[2];
+  out[ER_BLAKE3_STATE_IV3_INDEX] = g_er_blake3_iv[3];
+  out[ER_BLAKE3_STATE_COUNTER_LOW_INDEX] = (uint32_t)counter;
+  out[ER_BLAKE3_STATE_COUNTER_HIGH_INDEX] = (uint32_t)(counter >> ER_BLAKE3_COUNTER_HIGH_SHIFT);
+  out[ER_BLAKE3_STATE_BLOCK_LEN_INDEX] = block_len;
+  out[ER_BLAKE3_STATE_FLAGS_INDEX] = flags;
 
   for (round = 0u; round < ER_BLAKE3_COMPRESS_ROUNDS; ++round) {
     er_blake3_round(out, msg);
@@ -176,6 +201,140 @@ static void er_blake3_compress_cv(const uint32_t cv[ER_BLAKE3_CV_WORDS],
     out_cv[i] = compressed[i];
   }
 }
+
+#if defined(ER_BLAKE3_USE_SSE2)
+static __m128i er_blake3_sse2_rotr32(__m128i word, int bits) {
+  return _mm_or_si128(_mm_srli_epi32(word, bits), _mm_slli_epi32(word, 32 - bits));
+}
+
+static void er_blake3_sse2_g(__m128i state[ER_BLAKE3_BLOCK_WORDS], size_t a, size_t b, size_t c, size_t d,
+                             __m128i mx, __m128i my) {
+  state[a] = _mm_add_epi32(_mm_add_epi32(state[a], state[b]), mx);
+  state[d] = er_blake3_sse2_rotr32(_mm_xor_si128(state[d], state[a]), ER_BLAKE3_ROTATE_A);
+  state[c] = _mm_add_epi32(state[c], state[d]);
+  state[b] = er_blake3_sse2_rotr32(_mm_xor_si128(state[b], state[c]), ER_BLAKE3_ROTATE_B);
+  state[a] = _mm_add_epi32(_mm_add_epi32(state[a], state[b]), my);
+  state[d] = er_blake3_sse2_rotr32(_mm_xor_si128(state[d], state[a]), ER_BLAKE3_ROTATE_C);
+  state[c] = _mm_add_epi32(state[c], state[d]);
+  state[b] = er_blake3_sse2_rotr32(_mm_xor_si128(state[b], state[c]), ER_BLAKE3_ROTATE_D);
+}
+
+static void er_blake3_sse2_round(__m128i state[ER_BLAKE3_BLOCK_WORDS], const __m128i msg[ER_BLAKE3_BLOCK_WORDS]) {
+  er_blake3_sse2_g(state, 0u, 4u, 8u, 12u, msg[0], msg[1]); //@optimizer-ignore BLAKE3 compression schedule
+  er_blake3_sse2_g(state, 1u, 5u, 9u, 13u, msg[2], msg[3]); //@optimizer-ignore BLAKE3 compression schedule
+  er_blake3_sse2_g(state, 2u, 6u, 10u, 14u, msg[4], msg[5]); //@optimizer-ignore BLAKE3 compression schedule
+  er_blake3_sse2_g(state, 3u, 7u, 11u, 15u, msg[6], msg[7]); //@optimizer-ignore BLAKE3 compression schedule
+  er_blake3_sse2_g(state, 0u, 5u, 10u, 15u, msg[8], msg[9]); //@optimizer-ignore BLAKE3 compression schedule
+  er_blake3_sse2_g(state, 1u, 6u, 11u, 12u, msg[10], msg[11]); //@optimizer-ignore BLAKE3 compression schedule
+  er_blake3_sse2_g(state, 2u, 7u, 8u, 13u, msg[12], msg[13]); //@optimizer-ignore BLAKE3 compression schedule
+  er_blake3_sse2_g(state, 3u, 4u, 9u, 14u, msg[14], msg[15]); //@optimizer-ignore BLAKE3 compression schedule
+}
+
+static void er_blake3_sse2_permute(__m128i msg[ER_BLAKE3_BLOCK_WORDS]) {
+  __m128i permuted[ER_BLAKE3_BLOCK_WORDS];
+  size_t i;
+
+  for (i = 0u; i < ER_BLAKE3_BLOCK_WORDS; ++i) {
+    permuted[i] = msg[g_er_blake3_msg_perm[i]];
+  }
+  for (i = 0u; i < ER_BLAKE3_BLOCK_WORDS; ++i) {
+    msg[i] = permuted[i];
+  }
+}
+
+static __m128i er_blake3_sse2_load_word4(const uint8_t* bytes, size_t word_index) {
+  return _mm_set_epi32((int)er_blake3_load32(&bytes[(ER_BLAKE3_SSE2_LANE3_INDEX * ER_BLAKE3_CHUNK_LEN) + (word_index * ER_BLAKE3_WORD_BYTES)]),
+                       (int)er_blake3_load32(&bytes[(ER_BLAKE3_SSE2_LANE2_INDEX * ER_BLAKE3_CHUNK_LEN) + (word_index * ER_BLAKE3_WORD_BYTES)]),
+                       (int)er_blake3_load32(&bytes[(ER_BLAKE3_SSE2_LANE1_INDEX * ER_BLAKE3_CHUNK_LEN) + (word_index * ER_BLAKE3_WORD_BYTES)]),
+                       (int)er_blake3_load32(&bytes[(ER_BLAKE3_SSE2_LANE0_INDEX * ER_BLAKE3_CHUNK_LEN) + (word_index * ER_BLAKE3_WORD_BYTES)]));
+}
+
+static void er_blake3_sse2_compress4(const __m128i cv[ER_BLAKE3_CV_WORDS],
+                                     const __m128i block_words[ER_BLAKE3_BLOCK_WORDS],
+                                     __m128i counter_low, __m128i counter_high,
+                                     uint32_t block_len, uint32_t flags,
+                                     __m128i out[ER_BLAKE3_BLOCK_WORDS]) {
+  __m128i msg[ER_BLAKE3_BLOCK_WORDS];
+  size_t round;
+  size_t i;
+
+  for (i = 0u; i < ER_BLAKE3_CV_WORDS; ++i) {
+    out[i] = cv[i];
+    msg[i] = block_words[i];
+    msg[i + ER_BLAKE3_CV_WORDS] = block_words[i + ER_BLAKE3_CV_WORDS];
+  }
+  out[ER_BLAKE3_STATE_IV0_INDEX] = _mm_set1_epi32((int)g_er_blake3_iv[0]);
+  out[ER_BLAKE3_STATE_IV1_INDEX] = _mm_set1_epi32((int)g_er_blake3_iv[1]);
+  out[ER_BLAKE3_STATE_IV2_INDEX] = _mm_set1_epi32((int)g_er_blake3_iv[2]);
+  out[ER_BLAKE3_STATE_IV3_INDEX] = _mm_set1_epi32((int)g_er_blake3_iv[3]);
+  out[ER_BLAKE3_STATE_COUNTER_LOW_INDEX] = counter_low;
+  out[ER_BLAKE3_STATE_COUNTER_HIGH_INDEX] = counter_high;
+  out[ER_BLAKE3_STATE_BLOCK_LEN_INDEX] = _mm_set1_epi32((int)block_len);
+  out[ER_BLAKE3_STATE_FLAGS_INDEX] = _mm_set1_epi32((int)flags);
+
+  for (round = 0u; round < ER_BLAKE3_COMPRESS_ROUNDS; ++round) {
+    er_blake3_sse2_round(out, msg);
+    if (round != ER_BLAKE3_LAST_PERMUTE_ROUND) {
+      er_blake3_sse2_permute(msg);
+    }
+  }
+
+  for (i = 0u; i < ER_BLAKE3_CV_WORDS; ++i) {
+    out[i] = _mm_xor_si128(out[i], out[i + ER_BLAKE3_CV_WORDS]);
+    out[i + ER_BLAKE3_CV_WORDS] = _mm_xor_si128(out[i + ER_BLAKE3_CV_WORDS], cv[i]);
+  }
+}
+
+static void er_blake3_sse2_compress4_full_chunks(const uint8_t* bytes, uint64_t chunk_counter,
+                                                 uint32_t flags,
+                                                 uint32_t out_cvs[ER_BLAKE3_SSE2_LANES][ER_BLAKE3_CV_WORDS]) {
+  __m128i cv[ER_BLAKE3_CV_WORDS];
+  __m128i words[ER_BLAKE3_BLOCK_WORDS];
+  __m128i compressed[ER_BLAKE3_BLOCK_WORDS];
+  uint32_t block_flags;
+  uint32_t lanes[ER_BLAKE3_SSE2_LANES];
+  size_t block;
+  size_t word;
+  size_t lane;
+
+  for (word = 0u; word < ER_BLAKE3_CV_WORDS; ++word) {
+    cv[word] = _mm_set1_epi32((int)g_er_blake3_iv[word]);
+  }
+
+  for (block = 0u; block < ER_BLAKE3_FULL_CHUNK_BLOCKS; ++block) {
+    for (word = 0u; word < ER_BLAKE3_BLOCK_WORDS; ++word) {
+      words[word] = er_blake3_sse2_load_word4(&bytes[block * ER_BLAKE3_BLOCK_LEN], word);
+    }
+    block_flags = flags;
+    if (block == 0u) {
+      block_flags |= ER_BLAKE3_CHUNK_START;
+    }
+    if (block == (ER_BLAKE3_FULL_CHUNK_BLOCKS - 1u)) {
+      block_flags |= ER_BLAKE3_CHUNK_END;
+    }
+    er_blake3_sse2_compress4(cv, words,
+                             _mm_set_epi32((int)(uint32_t)(chunk_counter + ER_BLAKE3_SSE2_LANE3_INDEX),
+                                           (int)(uint32_t)(chunk_counter + ER_BLAKE3_SSE2_LANE2_INDEX),
+                                           (int)(uint32_t)(chunk_counter + ER_BLAKE3_SSE2_LANE1_INDEX),
+                                           (int)(uint32_t)chunk_counter),
+                             _mm_set_epi32((int)(uint32_t)((chunk_counter + ER_BLAKE3_SSE2_LANE3_INDEX) >> ER_BLAKE3_COUNTER_HIGH_SHIFT),
+                                           (int)(uint32_t)((chunk_counter + ER_BLAKE3_SSE2_LANE2_INDEX) >> ER_BLAKE3_COUNTER_HIGH_SHIFT),
+                                           (int)(uint32_t)((chunk_counter + ER_BLAKE3_SSE2_LANE1_INDEX) >> ER_BLAKE3_COUNTER_HIGH_SHIFT),
+                                           (int)(uint32_t)(chunk_counter >> ER_BLAKE3_COUNTER_HIGH_SHIFT)),
+                             ER_BLAKE3_BLOCK_LEN, block_flags, compressed);
+    for (word = 0u; word < ER_BLAKE3_CV_WORDS; ++word) {
+      cv[word] = compressed[word];
+    }
+  }
+
+  for (word = 0u; word < ER_BLAKE3_CV_WORDS; ++word) {
+    _mm_storeu_si128((__m128i*)lanes, cv[word]);
+    for (lane = 0u; lane < ER_BLAKE3_SSE2_LANES; ++lane) {
+      out_cvs[lane][word] = lanes[lane];
+    }
+  }
+}
+#endif
 
 static void er_blake3_parent_block(const uint32_t left_cv[ER_BLAKE3_CV_WORDS],
                                    const uint32_t right_cv[ER_BLAKE3_CV_WORDS],
@@ -291,6 +450,25 @@ uint8_t er_blake3_update(ErBlake3Hasher* hasher, const uint8_t* bytes, size_t le
   }
 
   while (len > 0u) {
+#if defined(ER_BLAKE3_USE_SSE2)
+    if (hasher->block_len == 0u && hasher->blocks_compressed == 0u &&
+        len > (ER_BLAKE3_SSE2_LANES * ER_BLAKE3_CHUNK_LEN)) {
+      uint32_t cvs[ER_BLAKE3_SSE2_LANES][ER_BLAKE3_CV_WORDS];
+      size_t lane;
+
+      er_blake3_sse2_compress4_full_chunks(bytes, hasher->chunk_counter, hasher->flags, cvs);
+      for (lane = 0u; lane < ER_BLAKE3_SSE2_LANES; ++lane) {
+        ++hasher->chunk_counter;
+        if (er_blake3_push_cv(hasher, cvs[lane], hasher->chunk_counter) == 0u) {
+          return 0u;
+        }
+      }
+      bytes += ER_BLAKE3_SSE2_LANES * ER_BLAKE3_CHUNK_LEN;
+      len -= ER_BLAKE3_SSE2_LANES * ER_BLAKE3_CHUNK_LEN;
+      continue;
+    }
+#endif
+
     if (hasher->block_len == ER_BLAKE3_BLOCK_LEN) {
       if (er_blake3_chunk_len(hasher) == ER_BLAKE3_CHUNK_LEN) {
         if (er_blake3_finish_chunk(hasher) == 0u) {
@@ -368,4 +546,12 @@ uint8_t er_blake3_hash_bytes(const uint8_t* bytes, size_t len, uint8_t out[ER_BL
     return 0u;
   }
   return er_blake3_final(&hasher, out);
+}
+
+const char* er_blake3_backend_name(void) {
+#if defined(ER_BLAKE3_USE_SSE2)
+  return "sse2-4x";
+#else
+  return "scalar";
+#endif
 }

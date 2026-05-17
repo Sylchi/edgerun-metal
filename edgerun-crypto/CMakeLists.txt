@@ -1,6 +1,8 @@
 cmake_minimum_required(VERSION 3.16)
 project(edgerun_crypto C)
 
+option(ER_CRYPTO_DISABLE_SIMD "Disable SIMD acceleration in edgerun-crypto" OFF)
+
 if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR
     AND NOT CMAKE_BUILD_TYPE
     AND NOT CMAKE_CONFIGURATION_TYPES)
@@ -14,6 +16,9 @@ target_include_directories(edgerun_crypto PUBLIC
   ${CMAKE_CURRENT_SOURCE_DIR}/include
 )
 target_compile_features(edgerun_crypto PUBLIC c_std_11)
+if(ER_CRYPTO_DISABLE_SIMD)
+  target_compile_definitions(edgerun_crypto PRIVATE ER_BLAKE3_NO_SIMD=1)
+endif()
 
 if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
   enable_testing()

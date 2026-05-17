@@ -86,7 +86,7 @@ int main(void) {
   }
   bench_fill(bytes, max_len);
 
-  printf("BLAKE3 portable benchmark\n");
+  printf("BLAKE3 benchmark (%s)\n", er_blake3_backend_name());
   for (i = 0u; i < sizeof(cases) / sizeof(cases[0]); ++i) {
     if (bench_run_case(&cases[i], bytes) == 0u) {
       free(bytes);
