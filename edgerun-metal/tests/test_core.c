@@ -14,6 +14,7 @@
 #include "er_net_frame.h"
 #include "er_netlog.h"
 #include "er_relay_packet.h"
+#include "er_work_route.h"
 #include "er_gfx_console.h"
 #include "er_ui_gop_renderer.h"
 #include "er_ui_text.h"
@@ -91,6 +92,19 @@ static void check_hash_equal(const char* name, const ErHash* actual, const ErHas
       return;
     }
   }
+}
+
+static void check_hash_not_equal(const char* name, const ErHash* actual, const ErHash* expected) {
+  UINTN i;
+
+  ++g_total;
+  for (i = 0; i < ER_HASH_LEN; ++i) {
+    if (actual->bytes[i] != expected->bytes[i]) {
+      return;
+    }
+  }
+  fprintf(stderr, "FAIL %s: hashes match\n", name);
+  ++g_failed;
 }
 
 static void check_node_id_equal(const char* name, const ErNodeId* actual, const ErNodeId* expected) {
@@ -2049,6 +2063,189 @@ static void test_device_relay_identity(void) {
               0);
 }
 
+static void test_work_admitted_relay_route(void) {
+  ErCryptoProvider crypto;
+  ErWorkRequest request;
+  ErWorkAdmission admission;
+  ErChannelEnvelopeHeader envelope;
+  ErChannelEndpoint from_endpoint;
+  ErChannelEndpoint to_endpoint;
+  ErNodeId source_node_id;
+  ErNodeId target_node_id;
+  ErNodeId relay_node_id;
+  ErNodeId second_relay_node_id;
+  ErNodeId wrong_relay_node_id;
+  ErHash channel_id;
+  ErHash input_hash;
+  ErHash previous_transit_hash;
+  ErAdmittedRoute route;
+  ErAdmittedRoute route_again;
+  ErRelayForwardIntent intent;
+  ErRelayTransitHop hop;
+  ErRelayTransitHop hop_again;
+  ErRelayTransitHop hop_changed;
+  ErRelayAccountingClaim claim;
+
+  crypto.ctx = (void*)(UINTN)11u;
+  crypto.hash = test_hash;
+  crypto.seal = 0;
+  crypto.open = 0;
+  crypto.sign = 0;
+  crypto.verify = 0;
+
+  er_mem_zero((UINT8*)&request, (UINTN)sizeof(request));
+  er_mem_zero((UINT8*)&admission, (UINTN)sizeof(admission));
+  er_mem_zero((UINT8*)&envelope, (UINTN)sizeof(envelope));
+  er_mem_zero((UINT8*)&from_endpoint, (UINTN)sizeof(from_endpoint));
+  er_mem_zero((UINT8*)&to_endpoint, (UINTN)sizeof(to_endpoint));
+  test_fill_bytes(source_node_id.bytes, ER_NODE_ID_LEN, 0x11u);
+  test_fill_bytes(target_node_id.bytes, ER_NODE_ID_LEN, 0x22u);
+  test_fill_bytes(relay_node_id.bytes, ER_NODE_ID_LEN, 0x33u);
+  test_fill_bytes(second_relay_node_id.bytes, ER_NODE_ID_LEN, 0x44u);
+  test_fill_bytes(wrong_relay_node_id.bytes, ER_NODE_ID_LEN, 0x55u);
+  test_fill_bytes(channel_id.bytes, ER_HASH_LEN, 0x66u);
+  test_fill_bytes(input_hash.bytes, ER_HASH_LEN, 0x77u);
+  test_fill_bytes(previous_transit_hash.bytes, ER_HASH_LEN, 0x88u);
+
+  request.abi_version = ER_WORK_ABI_VERSION;
+  request.work_type = ER_WORK_TYPE_CAPABILITY_INVOKE;
+  request.department = ER_DEPARTMENT_CAPABILITY;
+  test_fill_bytes(request.request_id.bytes, ER_HASH_LEN, 0x91u);
+  test_fill_bytes(request.user.bytes, ER_PUBLIC_KEY_LEN, 0x92u);
+  request.user_sequence = 3u;
+  request.recipient = target_node_id;
+  test_fill_bytes(request.payload_hash.bytes, ER_HASH_LEN, 0x93u);
+  test_fill_bytes(request.input_root.bytes, ER_HASH_LEN, 0x94u);
+  request.max_total_cost = 20u;
+  request.valid_until_ms = 100000u;
+
+  admission.abi_version = ER_WORK_ABI_VERSION;
+  admission.relay_count = 2u;
+  test_fill_bytes(admission.admission_id.bytes, ER_HASH_LEN, 0xa1u);
+  admission.user = request.user;
+  admission.admission_node.abi_version = ER_WORK_ABI_VERSION;
+  admission.admission_node.role = ER_NODE_ROLE_ADMISSION;
+  test_fill_bytes(admission.admission_node.node_id.bytes, ER_NODE_ID_LEN, 0xa2u);
+  test_fill_bytes(admission.admission_node.public_key.bytes, ER_PUBLIC_KEY_LEN, 0xa2u);
+  test_fill_bytes(admission.request_hash.bytes, ER_HASH_LEN, 0xa3u);
+  test_fill_bytes(admission.route_commitment.bytes, ER_HASH_LEN, 0xa4u);
+  admission.channel.abi_version = ER_WORK_ABI_VERSION;
+  admission.channel.kind = ER_CHANNEL_KIND_MEMORY;
+  admission.channel.channel_id = channel_id;
+  admission.relay_path[0] = relay_node_id;
+  admission.relay_path[1] = second_relay_node_id;
+  admission.admitted_budget = 20u;
+  test_fill_bytes(admission.policy_hash.bytes, ER_HASH_LEN, 0xa5u);
+  admission.sequence = 5u;
+  admission.valid_until_ms = 90000u;
+
+  from_endpoint.abi_version = ER_WORK_ABI_VERSION;
+  from_endpoint.kind = ER_CHANNEL_KIND_MEMORY;
+  from_endpoint.channel_id = channel_id;
+  to_endpoint.abi_version = ER_WORK_ABI_VERSION;
+  to_endpoint.kind = ER_CHANNEL_KIND_MEMORY;
+  to_endpoint.channel_id = channel_id;
+
+  envelope.abi_version = ER_WORK_ABI_VERSION;
+  envelope.packet_kind = ER_WORK_TYPE_CAPABILITY_INVOKE;
+  envelope.channel_id = channel_id;
+  envelope.from = source_node_id;
+  envelope.to = target_node_id;
+  envelope.route_hash = admission.route_commitment;
+  test_fill_bytes(envelope.packet_hash.bytes, ER_HASH_LEN, 0xb1u);
+  envelope.sequence = 1u;
+  test_fill_bytes(envelope.previous_message_hash.bytes, ER_HASH_LEN, 0xb2u);
+
+  check_int64("work route admitted",
+              er_work_admitted_route_from_admission(&crypto, &request, &admission,
+                                                    &source_node_id, &relay_node_id,
+                                                    ER_NODE_ROLE_CAPABILITY, &route),
+              1);
+  check_int64("work route abi", route.abi_version, ER_WORK_ABI_VERSION);
+  check_node_id_equal("work route source", &route.source_node_id, &source_node_id);
+  check_node_id_equal("work route target", &route.target_node_id, &target_node_id);
+  check_node_id_equal("work route relay", &route.relay_node_id, &relay_node_id);
+  check_hash_equal("work route channel", &route.channel_id, &channel_id);
+  check_hash_equal("work route commitment", &route.target_route_commitment,
+                   &admission.route_commitment);
+  check_uint64("work route budget", route.admitted_budget, admission.admitted_budget);
+  check_int64("work route deterministic",
+              er_work_admitted_route_from_admission(&crypto, &request, &admission,
+                                                    &source_node_id, &relay_node_id,
+                                                    ER_NODE_ROLE_CAPABILITY, &route_again),
+              1);
+  check_hash_equal("work route deterministic id", &route_again.route_id, &route.route_id);
+
+  check_int64("work envelope for route",
+              er_work_verify_channel_envelope_for_route(&envelope, &route), 1);
+  envelope.route_hash.bytes[0] ^= 1u;
+  check_int64("work envelope reject route",
+              er_work_verify_channel_envelope_for_route(&envelope, &route), 0);
+  envelope.route_hash = admission.route_commitment;
+  envelope.packet_hash.bytes[0] = 0u;
+  er_mem_zero(envelope.packet_hash.bytes, ER_HASH_LEN);
+  check_int64("work envelope reject packet hash",
+              er_work_verify_channel_envelope_for_route(&envelope, &route), 0);
+  test_fill_bytes(envelope.packet_hash.bytes, ER_HASH_LEN, 0xb1u);
+  envelope.packet_kind = ER_WORK_TYPE_CAPABILITY_CLOSE;
+  check_int64("work envelope reject packet kind",
+              er_work_verify_channel_envelope_for_route(&envelope, &route), 0);
+  envelope.packet_kind = ER_WORK_TYPE_CAPABILITY_INVOKE;
+
+  check_int64("work forward intent",
+              er_work_prepare_relay_forward_intent(&admission, &envelope,
+                                                   &relay_node_id, &from_endpoint,
+                                                   &to_endpoint, &intent),
+              1);
+  check_node_id_equal("work intent relay", &intent.relay_node_id, &relay_node_id);
+  check_node_id_equal("work intent source", &intent.source_node_id, &source_node_id);
+  check_node_id_equal("work intent target", &intent.target_node_id, &target_node_id);
+  check_hash_equal("work intent packet", &intent.packet_hash, &envelope.packet_hash);
+  check_int64("work forward reject wrong relay",
+              er_work_prepare_relay_forward_intent(&admission, &envelope,
+                                                   &wrong_relay_node_id, &from_endpoint,
+                                                   &to_endpoint, &intent),
+              0);
+
+  check_int64("work ordered input hash",
+              er_work_ordered_message_input_hash(&crypto, &envelope, &input_hash), 1);
+  check_int64("work transit hop",
+              er_work_prepare_relay_transit_hop(&crypto, &intent, &input_hash,
+                                                &previous_transit_hash, 0u, &hop),
+              1);
+  check_node_id_equal("work transit from", &hop.from, &source_node_id);
+  check_node_id_equal("work transit to", &hop.to, &target_node_id);
+  check_hash_equal("work transit input", &hop.input_hash, &input_hash);
+  check_int64("work transit deterministic",
+              er_work_prepare_relay_transit_hop(&crypto, &intent, &input_hash,
+                                                &previous_transit_hash, 0u, &hop_again),
+              1);
+  check_hash_equal("work transit deterministic hash", &hop_again.transit_hash,
+                   &hop.transit_hash);
+  previous_transit_hash.bytes[0] ^= 9u;
+  check_int64("work transit changes with chain",
+              er_work_prepare_relay_transit_hop(&crypto, &intent, &input_hash,
+                                                &previous_transit_hash, 0u, &hop_changed),
+              1);
+  check_hash_not_equal("work transit chain differs", &hop_changed.transit_hash,
+                       &hop.transit_hash);
+
+  check_int64("work relay accounting claim",
+              er_work_prepare_relay_accounting_claim(&hop, &route.request_hash,
+                                                     &route.admission_hash,
+                                                     1500u, 2u, 1u, &claim),
+              1);
+  check_uint64("work relay accounting units", claim.units_used, 2u);
+  check_uint64("work relay accounting total", claim.total_claim, 5u);
+  check_hash_equal("work relay accounting transit", &claim.transit_hash,
+                   &hop.transit_hash);
+  check_int64("work relay accounting reject zero bytes",
+              er_work_prepare_relay_accounting_claim(&hop, &route.request_hash,
+                                                     &route.admission_hash,
+                                                     0u, 2u, 1u, &claim),
+              0);
+}
+
 static void test_boot_profiles(void) {
   check_int64("boot profile smoke valid", er_boot_profile_valid(ER_BOOT_PROFILE_SMOKE), 1);
   check_int64("boot profile native valid", er_boot_profile_valid(ER_BOOT_PROFILE_NATIVE), 1);
@@ -2960,6 +3157,7 @@ int main(void) {
   test_vfs_object_packets();
   test_app_identity_routes();
   test_device_relay_identity();
+  test_work_admitted_relay_route();
   test_boot_profiles();
   test_hw_relay_endpoints();
   test_erwire_native_eth_sink();

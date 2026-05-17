@@ -17,6 +17,7 @@
 #define ER_CHANNEL_ADDRESS_MAX 64u
 #define ER_CHANNEL_LABEL_MAX 32u
 #define ER_ROUTE_RELAY_MAX 8u
+#define ER_WORK_COST_UNIT_BYTES 1024u
 
 #define ER_NODE_ROLE_RELAY 1u
 #define ER_NODE_ROLE_BARE_METAL_EXECUTOR ER_NODE_ROLE_RELAY
@@ -114,6 +115,8 @@ typedef struct {
   UINT16 abi_version;
   UINT16 reserved;
   ErNodeId relay_node_id;
+  ErNodeId source_node_id;
+  ErNodeId target_node_id;
   ErChannelEndpoint from;
   ErChannelEndpoint to;
   ErHash route_hash;
@@ -180,6 +183,43 @@ typedef struct {
   ErHash previous_transit_hash;
   ErHash transit_hash;
 } ErRelayTransitHop;
+
+typedef struct {
+  UINT16 abi_version;
+  UINT16 role;
+  ErHash route_id;
+  ErHash request_hash;
+  ErHash admission_hash;
+  ErPublicKey user;
+  ErNodeId source_node_id;
+  ErNodeId target_node_id;
+  ErNodeId relay_node_id;
+  ErHash channel_id;
+  UINT16 relay_count;
+  UINT16 department;
+  UINT16 work_type;
+  ErHash admission_route_commitment;
+  ErHash target_route_commitment;
+  ErHash policy_hash;
+  UINT64 admitted_budget;
+  UINT64 valid_until_ms;
+  ErNodeId relay_path[ER_ROUTE_RELAY_MAX];
+} ErAdmittedRoute;
+
+typedef struct {
+  UINT16 abi_version;
+  UINT16 reserved;
+  ErNodeId relay_node_id;
+  ErHash request_hash;
+  ErHash admission_hash;
+  ErHash transit_hash;
+  UINT64 packet_bytes;
+  UINT64 units_used;
+  UINT64 unit_price;
+  UINT64 receipt_base;
+  UINT64 total_claim;
+  UINT64 sequence;
+} ErRelayAccountingClaim;
 
 typedef struct {
   UINT16 abi_version;
