@@ -22,6 +22,7 @@ typedef enum {
   ER_UI_NODE_TEXT,
   ER_UI_NODE_BADGE,
   ER_UI_NODE_BUTTON,
+  ER_UI_NODE_CARD_SUMMARY,
   ER_UI_NODE_BUTTON_GROUP,
   ER_UI_NODE_CHECKBOX,
   ER_UI_NODE_RADIO,
@@ -242,6 +243,7 @@ er_ui_node_t er_ui_node_icon_button(er_ui_icon_t icon, const char* label, uint32
 er_ui_node_t er_ui_node_text(const char* value);
 er_ui_node_t er_ui_node_badge(const char* label, er_ui_shadcn_badge_variant_t variant);
 er_ui_node_t er_ui_node_button(const char* label, uint32_t id, er_ui_shadcn_button_variant_t variant);
+er_ui_node_t er_ui_node_card_summary(const char* title, const char* detail);
 er_ui_node_t er_ui_node_button_group(const char* const* labels, size_t label_count, uint32_t base_id);
 er_ui_node_t er_ui_node_checkbox(const char* label, bool checked, uint32_t id);
 er_ui_node_t er_ui_node_radio(const char* label, bool selected, uint32_t id);

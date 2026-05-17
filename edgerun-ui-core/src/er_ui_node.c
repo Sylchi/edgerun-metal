@@ -65,6 +65,13 @@ er_ui_node_t er_ui_node_button(const char* label, uint32_t id, er_ui_shadcn_butt
   return node;
 }
 
+er_ui_node_t er_ui_node_card_summary(const char* title, const char* detail) {
+  er_ui_node_t node = er_ui_node_base(ER_UI_NODE_CARD_SUMMARY);
+  node.label = title;
+  node.detail = detail;
+  return node;
+}
+
 er_ui_node_t er_ui_node_button_group(const char* const* labels, size_t label_count, uint32_t base_id) {
   er_ui_node_t node = er_ui_node_base(ER_UI_NODE_BUTTON_GROUP);
   node.labels = labels;
@@ -893,6 +900,7 @@ const char* er_ui_node_kind_label(er_ui_node_kind_t kind) {
     case ER_UI_NODE_TEXT: return "text";
     case ER_UI_NODE_BADGE: return "badge";
     case ER_UI_NODE_BUTTON: return "button";
+    case ER_UI_NODE_CARD_SUMMARY: return "card-summary";
     case ER_UI_NODE_BUTTON_GROUP: return "button-group";
     case ER_UI_NODE_CHECKBOX: return "checkbox";
     case ER_UI_NODE_RADIO: return "radio";
@@ -978,6 +986,7 @@ const char* er_ui_node_composition_issue_label(er_ui_node_composition_issue_kind
 
 static bool er_ui_node_is_card_like(er_ui_node_kind_t kind) {
   return kind == ER_UI_NODE_CARD ||
+         kind == ER_UI_NODE_CARD_SUMMARY ||
          kind == ER_UI_NODE_IDENTITY_CARD ||
          kind == ER_UI_NODE_CONTACT_CARD ||
          kind == ER_UI_NODE_PACKAGE_CARD ||
@@ -1166,7 +1175,12 @@ er_ui_status_t er_ui_node_accessibility(const er_ui_node_t* node, er_ui_a11y_nod
     case ER_UI_NODE_MASONRY:
     case ER_UI_NODE_BENTO_GRID:
     case ER_UI_NODE_CARD:
+    case ER_UI_NODE_CARD_SUMMARY:
       out = er_ui_a11y_base(ER_UI_A11Y_GROUP, "", false, 0u);
+      if (node->kind == ER_UI_NODE_CARD_SUMMARY) {
+        out.label = node->label ? node->label : "";
+        er_ui_a11y_set_value(&out, node->detail);
+      }
       break;
     case ER_UI_NODE_SCROLL_AREA:
       out = er_ui_a11y_base(ER_UI_A11Y_GROUP, "scroll area", node->id != 0u, node->id);
@@ -1783,6 +1797,23 @@ static er_ui_status_t er_ui_node_render_toast(
   status = er_ui_node_render_icon(scene, er_ui_node_center_square(icon_box, 16.0f), node->icon, node->color);
   if (status != ER_UI_OK) return status;
   return er_ui_node_render_text(scene, font, node->label, er_ui_bounds(bounds.x + 46.0f, bounds.y, bounds.w - 56.0f, bounds.h), theme.colors.text);
+}
+
+static er_ui_status_t er_ui_node_render_card_summary(
+  const er_ui_node_t* node,
+  er_ui_scene_t* scene,
+  vr_font_face_t* font,
+  er_ui_bounds_t bounds,
+  er_ui_resolved_theme_t theme) {
+  if (!node || !scene || !font || !node->label || !node->detail || !er_ui_bounds_valid(bounds)) return ER_UI_ERR_INVALID_ARGUMENT;
+  er_ui_status_t status = er_ui_shadcn_card_emit(scene, bounds, theme);
+  if (status != ER_UI_OK) return status;
+  float pad = 16.0f;
+  status = er_ui_node_render_text(scene, font, node->label, er_ui_bounds(bounds.x + pad, bounds.y + pad, bounds.w - pad * 2.0f, 26.0f),
+                                  theme.colors.text);
+  if (status != ER_UI_OK) return status;
+  return er_ui_node_render_text(scene, font, node->detail, er_ui_bounds(bounds.x + pad, bounds.y + pad + 28.0f, bounds.w - pad * 2.0f, 24.0f),
+                                theme.colors.muted);
 }
 
 static er_ui_status_t er_ui_node_render_collapsible(
@@ -2565,6 +2596,8 @@ er_ui_status_t er_ui_node_render(
       return er_ui_shadcn_badge_emit(scene, font, rect, theme, node->label, node->badge_variant);
     case ER_UI_NODE_BUTTON:
       return er_ui_shadcn_button_emit(scene, font, rect, theme, node->label, node->id, node->button_variant, node->button_size, node->active);
+    case ER_UI_NODE_CARD_SUMMARY:
+      return er_ui_node_render_card_summary(node, scene, font, rect, theme);
     case ER_UI_NODE_BUTTON_GROUP:
       return er_ui_node_render_label_group(node, scene, font, rect, theme, false);
     case ER_UI_NODE_ICON_BUTTON: {

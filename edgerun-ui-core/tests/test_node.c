@@ -93,6 +93,7 @@ void run_node_tests(void) {
   expect_status(er_ui_node_add_child(&root, &title), ER_UI_OK, "node: card accepts title child");
   expect_status(er_ui_node_add_child(&root, &row), ER_UI_OK, "node: card accepts row child");
   expect_string(er_ui_node_kind_label(ER_UI_NODE_CARD), "card", "node: kind label maps card");
+  expect_string(er_ui_node_kind_label(ER_UI_NODE_CARD_SUMMARY), "card-summary", "node: kind label maps card summary");
   expect_string(er_ui_node_kind_label(ER_UI_NODE_ICON_BUTTON), "icon-button", "node: kind label maps icon button");
   expect_string(er_ui_node_kind_label(ER_UI_NODE_BUTTON_GROUP), "button-group", "node: kind label maps button group");
   expect_string(er_ui_node_kind_label(ER_UI_NODE_TOGGLE_GROUP), "toggle-group", "node: kind label maps toggle group");
@@ -184,6 +185,12 @@ void run_node_tests(void) {
   expect_status(er_ui_node_accessibility(&toast_icon_a11y, &a11y), ER_UI_OK, "node: icon toast accessibility maps");
   expect_size(a11y.role, ER_UI_A11Y_STATUS, "node: icon toast accessibility role");
   expect_true(a11y.label == toast_icon_a11y.label, "node: icon toast label is borrowed");
+
+  er_ui_node_t card_summary_a11y = er_ui_node_card_summary("Title", "Detail");
+  expect_status(er_ui_node_accessibility(&card_summary_a11y, &a11y), ER_UI_OK, "node: card summary accessibility maps");
+  expect_size(a11y.role, ER_UI_A11Y_GROUP, "node: card summary accessibility role");
+  expect_true(a11y.label == card_summary_a11y.label, "node: card summary title is borrowed");
+  expect_true(a11y.value == card_summary_a11y.detail, "node: card summary detail is borrowed");
 
   const char* const button_group_labels[] = {"Copy", "Paste", "More"};
   er_ui_node_t button_group_a11y = er_ui_node_button_group(button_group_labels, 3u, 8008u);
@@ -492,6 +499,7 @@ void run_node_tests(void) {
     er_ui_node_t table = er_ui_node_table(table_headers, 2u, table_cells, 2u, 8200u);
     er_ui_node_t toast = er_ui_node_toast("Scheduled", theme.colors.accent);
     er_ui_node_t toast_icon = er_ui_node_toast_icon("Saved", ER_UI_ICON_CHECK, theme.colors.success);
+    er_ui_node_t card_summary = er_ui_node_card_summary("Title", "Detail");
     er_ui_node_t empty = er_ui_node_empty("No results", "Try another filter.");
     er_ui_node_t list_row = er_ui_node_list_row("Billing", "Command B", 8300u, true);
     er_ui_node_t field = er_ui_node_field("Email", "name@example.com", 8400u);
@@ -615,6 +623,10 @@ void run_node_tests(void) {
     expect_status(er_ui_node_render(&toast_icon, &scene, face, er_ui_bounds(0.0f, 530.0f, 260.0f, 48.0f), theme), ER_UI_OK,
                   "node: icon toast renders");
     expect_size(scene.icon_quad_count, icon_quads_before_toast + 1u, "node: icon toast emits icon quad");
+    size_t text_before_card_summary = scene.text_quad_count;
+    expect_status(er_ui_node_render(&card_summary, &scene, face, er_ui_bounds(0.0f, 584.0f, 260.0f, 84.0f), theme), ER_UI_OK,
+                  "node: card summary renders");
+    expect_true(scene.text_quad_count > text_before_card_summary, "node: card summary emits variable font text");
     expect_status(er_ui_node_render(&empty, &scene, face, er_ui_bounds(0.0f, 538.0f, 280.0f, 120.0f), theme), ER_UI_OK, "node: empty renders");
     expect_status(er_ui_node_render(&list_row, &scene, face, er_ui_bounds(0.0f, 670.0f, 220.0f, 44.0f), theme), ER_UI_OK,
                   "node: list row renders");
