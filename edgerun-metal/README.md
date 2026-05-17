@@ -39,19 +39,24 @@ Confirmed working:
 
 Netboot is now support infrastructure. Do not keep redesigning it unless it blocks boot.
 
-The real work is the core:
+The real work is the relay core:
 
-1. Keep `smoke` boot stable.
-2. Use `pci` profile for concise device discovery.
-3. Add read-only MMIO mapping hostcalls.
-4. Probe NVIDIA/NVMe/Ethernet BARs safely.
-5. Build the minimal driver-runtime hostcall surface for Wasm driver modules.
+1. Keep known boot profiles stable.
+2. Use native VirtIO-net as the first EdgeRun Ethernet ingress.
+3. Parse incoming erwire packets without firmware networking.
+4. Route storage-class packets to VirtIO block endpoints.
+5. Route render-class packets to VirtIO GPU endpoints.
+6. Move app, UI, driver, storage, and device work through one erwire relay model.
+
+The cross-project architecture is documented in `../docs/relay-architecture.md`.
 
 ## Philosophy
 
 Do not rebuild Linux.
 
-Use existing driver code as source material, but run only extracted/adapted logic inside isolated Wasm modules. EdgeRun provides the minimal hostcalls needed by that driver logic:
+Use existing driver code as source material, but run only extracted/adapted logic inside isolated Wasm modules. Direct hardware hostcalls are bring-up scaffolding. The durable driver ABI is relay packet send/receive through erwire, with endpoint adapters owning the local hardware queue or bus operation.
+
+Bring-up may still use narrow hostcalls while a device endpoint is not proven:
 
 ```text
 pci.config.read/write
@@ -65,7 +70,7 @@ time.sleep/log
 firmware.blob.get
 ```
 
-The goal is hardware control without dragging in a full general-purpose kernel/device model.
+Those calls should collapse behind relay endpoints as each device path becomes real. The goal is hardware control without dragging in a full general-purpose kernel/device model or inventing a second driver RPC path.
 
 ## Build dependencies
 
