@@ -126,12 +126,12 @@ static const uint32_t g_er_blake3_iv[ER_BLAKE3_CV_WORDS] = {
   ER_BLAKE3_IV4, ER_BLAKE3_IV5, ER_BLAKE3_IV6, ER_BLAKE3_IV7
 };
 
-//@optimizer-ignore-begin BLAKE3 spec constants and hand-shaped compression kernels
+//@optimizer-ignore-constant BLAKE3 message permutation table copied from the specification
 static const uint8_t g_er_blake3_msg_perm[ER_BLAKE3_BLOCK_WORDS] = {
   2u, 6u, 3u, 10u, 7u, 0u, 4u, 13u, 1u, 11u, 12u, 5u, 9u, 14u, 15u, 8u //@optimizer-ignore BLAKE3 message word permutation
 };
 
-static uint32_t er_blake3_load32(const uint8_t bytes[4]);
+static uint32_t er_blake3_load32(const uint8_t bytes[ER_BLAKE3_WORD_BYTES]);
 
 typedef struct {
   uint32_t input_cv[ER_BLAKE3_CV_WORDS];
@@ -162,6 +162,7 @@ void er_blake3_upstream_hash_many_avx512(const uint8_t* const* inputs, size_t nu
                                          uint8_t flags, uint8_t flags_start,
                                          uint8_t flags_end, uint8_t* out);
 
+//@optimizer-ignore-function BLAKE3 upstream assembly output decoding is fixed-width CV extraction
 static void er_blake3_cvs_from_bytes(const uint8_t* bytes, size_t cv_count,
                                      uint32_t out_cvs[][ER_BLAKE3_CV_WORDS]) {
   size_t cv;
@@ -236,6 +237,7 @@ static void er_blake3_g(uint32_t state[ER_BLAKE3_BLOCK_WORDS], size_t a, size_t 
   state[b] = er_blake3_rotr32(state[b] ^ state[c], ER_BLAKE3_ROTATE_D);
 }
 
+//@optimizer-ignore-constant BLAKE3 diagonal/column round message schedule from the specification
 #define ER_BLAKE3_ROUND_MSG(state, msg, m0, m1, m2, m3, m4, m5, m6, m7, \
                             m8, m9, m10, m11, m12, m13, m14, m15)       \
   do {                                                                   \
@@ -249,6 +251,7 @@ static void er_blake3_g(uint32_t state[ER_BLAKE3_BLOCK_WORDS], size_t a, size_t 
     er_blake3_g((state), 3u, 4u, 9u, 14u, (msg)[m14], (msg)[m15]);       \
   } while (0)
 
+//@optimizer-ignore-function BLAKE3 scalar compression schedule mirrors the specification
 static void er_blake3_compress(const uint32_t cv[ER_BLAKE3_CV_WORDS],
                                const uint32_t block_words[ER_BLAKE3_BLOCK_WORDS],
                                uint64_t counter, uint32_t block_len, uint32_t flags,
@@ -288,6 +291,7 @@ static void er_blake3_compress(const uint32_t cv[ER_BLAKE3_CV_WORDS],
   }
 }
 
+//@optimizer-ignore-function BLAKE3 CV compression wrapper is part of the hash hot path
 static void er_blake3_compress_cv(const uint32_t cv[ER_BLAKE3_CV_WORDS],
                                   const uint8_t block[ER_BLAKE3_BLOCK_LEN],
                                   uint64_t counter, uint32_t block_len, uint32_t flags,
@@ -388,6 +392,7 @@ static void er_blake3_sse2_compress4(const __m128i cv[ER_BLAKE3_CV_WORDS],
   }
 }
 
+//@optimizer-ignore-function BLAKE3 SSE2 full-chunk compression is intentionally loop-shaped
 static void er_blake3_sse2_compress4_full_chunks(const uint8_t* bytes, uint64_t chunk_counter,
                                                  uint32_t flags,
                                                  uint32_t out_cvs[ER_BLAKE3_SSE2_LANES][ER_BLAKE3_CV_WORDS]) {
@@ -452,6 +457,7 @@ static void er_blake3_sse2_compress4_full_chunks(const uint8_t* bytes, uint64_t 
 #endif
 }
 
+//@optimizer-ignore-function BLAKE3 SSE2 parent compression packs fixed CV lanes
 static void er_blake3_sse2_parent2_from4(const uint32_t cvs[ER_BLAKE3_SSE2_LANES][ER_BLAKE3_CV_WORDS],
                                          uint32_t out_cvs[2][ER_BLAKE3_CV_WORDS]) {
   __m128i cv[ER_BLAKE3_CV_WORDS];
@@ -581,6 +587,7 @@ static void er_blake3_avx2_compress8(const __m256i cv[ER_BLAKE3_CV_WORDS],
   }
 }
 
+//@optimizer-ignore-function BLAKE3 AVX2 full-chunk compression is intentionally loop-shaped
 static void er_blake3_avx2_compress8_full_chunks(const uint8_t* bytes, uint64_t chunk_counter,
                                                  uint32_t flags,
                                                  uint32_t out_cvs[ER_BLAKE3_AVX2_LANES][ER_BLAKE3_CV_WORDS]) {
@@ -686,6 +693,7 @@ static void er_blake3_avx2_parent4(const uint32_t cvs[ER_BLAKE3_AVX2_LANES][ER_B
   }
 }
 
+//@optimizer-ignore-function BLAKE3 AVX2 parent compression packs fixed CV lanes
 static void er_blake3_avx2_parent8_from16(const uint32_t cvs[ER_BLAKE3_AVX2_SUBTREE16_CHUNKS][ER_BLAKE3_CV_WORDS],
                                           uint32_t out_cvs[ER_BLAKE3_AVX2_LANES][ER_BLAKE3_CV_WORDS]) {
   __m256i cv[ER_BLAKE3_CV_WORDS];
@@ -1368,7 +1376,6 @@ static uint8_t er_blake3_run_jobs_pthread(void* user, ErBlake3JobFn job_fn, void
   return 1u;
 }
 #endif
-//@optimizer-ignore-end
 
 static uint8_t er_blake3_finish_chunk(ErBlake3Hasher* hasher) {
   uint32_t flags = hasher->flags | ER_BLAKE3_CHUNK_END;
@@ -1400,6 +1407,7 @@ void er_blake3_init(ErBlake3Hasher* hasher) {
   er_blake3_reset_chunk(hasher);
 }
 
+//@optimizer-ignore-function BLAKE3 streaming update hot loop intentionally dispatches compression helpers
 uint8_t er_blake3_update(ErBlake3Hasher* hasher, const uint8_t* bytes, size_t len) {
   size_t take;
   uint32_t flags;
@@ -1408,7 +1416,6 @@ uint8_t er_blake3_update(ErBlake3Hasher* hasher, const uint8_t* bytes, size_t le
     return 0u;
   }
 
-  //@optimizer-ignore-begin BLAKE3 streaming update hot loop intentionally dispatches compression helpers
   while (len > 0u) {
 #if defined(ER_BLAKE3_USE_AVX512)
     if (hasher->block_len == 0u && hasher->blocks_compressed == 0u &&
@@ -1542,7 +1549,6 @@ uint8_t er_blake3_update(ErBlake3Hasher* hasher, const uint8_t* bytes, size_t le
     bytes += take;
     len -= take;
   }
-  //@optimizer-ignore-end
 
   return 1u;
 }

@@ -75,23 +75,30 @@ int other(void) {
 }
 C
 cat > "${TMP_DIR}/pkg/ignored.c" <<'C'
-int ignored(void) {
-  static const char* const labels[] = {"zero", "one"}; //@optimizer-ignore intentional metadata table
-  int value = 31337; //@optimizer-ignore protocol example value
-  return value + labels[0][0]; //@optimizer-ignore intentional metadata lookup
-}
-
+//@optimizer-ignore-function verified generated-style schedule
 int ignored_block(void) {
   int value = 0;
-  //@optimizer-ignore-begin verified generated-style schedule
   for (int y = 0; y < 4; ++y) {
     for (int x = 1; x < 4; ++x) {
       value += (y % x) + 31337;
     }
   }
-  //@optimizer-ignore-end
   return value;
 }
+
+int ignored(void) {
+  static const char* const labels[] = {"zero", "one"}; //@optimizer-ignore-constant intentional metadata table
+  int value = 31337; //@optimizer-ignore protocol example value
+  return value + labels[0][0]; //@optimizer-ignore intentional metadata lookup
+}
+C
+cat > "${TMP_DIR}/pkg/ignore_misuse.c" <<'C'
+//@optimizer-ignore
+int missing_reason(void) { return 1234; }
+
+//@optimizer-ignore-begin obsolete block form
+int removed_block_form(void) { return 31337; }
+//@optimizer-ignore-end
 C
 mkdir -p "${TMP_DIR}/tests"
 cat > "${TMP_DIR}/tests/test_main.c" <<'C'
@@ -105,7 +112,7 @@ printf '\177ELFtest' > "${TMP_DIR}/release.efi"
 report="$("${REPO_INSPECT}" "${TMP_DIR}")"
 
 case "${report}" in
-  *"files:         4"* ) ;;
+  *"files:         5"* ) ;;
   * ) printf 'missing source file count\n%s\n' "${report}" >&2; exit 1 ;;
 esac
 
@@ -177,6 +184,11 @@ esac
 case "${report}" in
   *"ignored.c:"* ) printf 'optimizer-ignore line still reported\n%s\n' "${report}" >&2; exit 1 ;;
   * ) ;;
+esac
+
+case "${report}" in
+  *"ignore_misuse.c:"*"[ignore-misuse]"* ) ;;
+  * ) printf 'missing optimizer ignore misuse report\n%s\n' "${report}" >&2; exit 1 ;;
 esac
 
 printf 'repo-inspect tests passed\n'

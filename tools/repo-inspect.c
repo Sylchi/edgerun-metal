@@ -24,8 +24,8 @@
 #define ERI_LARGE_FILE_LINES 800u
 #define ERI_DUP_BLOCK_LINES 6u
 #define ERI_OPTIMIZER_IGNORE_TAG "@optimizer-ignore"
-#define ERI_OPTIMIZER_IGNORE_BEGIN_TAG "@optimizer-ignore-begin"
-#define ERI_OPTIMIZER_IGNORE_END_TAG "@optimizer-ignore-end"
+#define ERI_OPTIMIZER_IGNORE_FUNCTION_TAG "@optimizer-ignore-function"
+#define ERI_OPTIMIZER_IGNORE_CONSTANT_TAG "@optimizer-ignore-constant"
 
 typedef struct {
   char* path;
@@ -1062,16 +1062,42 @@ static uint8_t eri_line_has_wasm64_offset_smell(const char* path, const char* st
   return 0u;
 }
 
-static uint8_t eri_line_has_optimizer_ignore(const char* line) {
+static uint8_t eri_directive_has_reason(const char* line, const char* tag) {
+  const char* hit = strstr(line, tag);
+  size_t tag_len = strlen(tag);
+
+  if (hit == NULL) {
+    return 0u;
+  }
+  if (strcmp(tag, ERI_OPTIMIZER_IGNORE_TAG) == 0 && hit[tag_len] == '-') {
+    return 0u;
+  }
+  hit += tag_len;
+  while (*hit != 0 && isspace((unsigned char)*hit)) {
+    ++hit;
+  }
+  return (uint8_t)(isalnum((unsigned char)*hit) || *hit == '_' || *hit == '-' || *hit == '"' || *hit == '\'');
+}
+
+static uint8_t eri_line_mentions_optimizer_ignore(const char* line) {
   return (uint8_t)(strstr(line, ERI_OPTIMIZER_IGNORE_TAG) != NULL);
 }
 
-static uint8_t eri_line_has_optimizer_ignore_begin(const char* line) {
-  return (uint8_t)(strstr(line, ERI_OPTIMIZER_IGNORE_BEGIN_TAG) != NULL);
+static uint8_t eri_line_has_optimizer_ignore(const char* line) {
+  return eri_directive_has_reason(line, ERI_OPTIMIZER_IGNORE_TAG);
 }
 
-static uint8_t eri_line_has_optimizer_ignore_end(const char* line) {
-  return (uint8_t)(strstr(line, ERI_OPTIMIZER_IGNORE_END_TAG) != NULL);
+static uint8_t eri_line_has_optimizer_ignore_function(const char* line) {
+  return eri_directive_has_reason(line, ERI_OPTIMIZER_IGNORE_FUNCTION_TAG);
+}
+
+static uint8_t eri_line_has_optimizer_ignore_constant(const char* line) {
+  return eri_directive_has_reason(line, ERI_OPTIMIZER_IGNORE_CONSTANT_TAG);
+}
+
+static uint8_t eri_line_has_removed_optimizer_ignore_block(const char* line) {
+  return (uint8_t)(strstr(line, "@optimizer-ignore-begin") != NULL ||
+                   strstr(line, "@optimizer-ignore-end") != NULL);
 }
 
 static uint8_t eri_line_is_optimizer_ignore_directive(const char* line) {
@@ -1081,18 +1107,33 @@ static uint8_t eri_line_is_optimizer_ignore_directive(const char* line) {
                    eri_line_has_optimizer_ignore(trim) != 0u);
 }
 
-static uint8_t eri_line_is_optimizer_ignore_begin_directive(const char* line) {
+static uint8_t eri_line_is_optimizer_ignore_function_directive(const char* line) {
   const char* trim = eri_ltrim(line);
 
   return (uint8_t)((strncmp(trim, "//", 2u) == 0 || strncmp(trim, "/*", 2u) == 0) &&
-                   eri_line_has_optimizer_ignore_begin(trim) != 0u);
+                   eri_line_has_optimizer_ignore_function(trim) != 0u);
 }
 
-static uint8_t eri_line_is_optimizer_ignore_end_directive(const char* line) {
+static uint8_t eri_line_is_optimizer_ignore_constant_directive(const char* line) {
   const char* trim = eri_ltrim(line);
 
   return (uint8_t)((strncmp(trim, "//", 2u) == 0 || strncmp(trim, "/*", 2u) == 0) &&
-                   eri_line_has_optimizer_ignore_end(trim) != 0u);
+                   eri_line_has_optimizer_ignore_constant(trim) != 0u);
+}
+
+static uint8_t eri_line_has_invalid_optimizer_ignore(const char* line) {
+  if (eri_line_mentions_optimizer_ignore(line) == 0u) {
+    return 0u;
+  }
+  if (eri_line_has_removed_optimizer_ignore_block(line) != 0u) {
+    return 1u;
+  }
+  if (eri_line_has_optimizer_ignore(line) != 0u ||
+      eri_line_has_optimizer_ignore_function(line) != 0u ||
+      eri_line_has_optimizer_ignore_constant(line) != 0u) {
+    return 0u;
+  }
+  return 1u;
 }
 
 static uint8_t eri_line_has_loop_start(const char* line) {
@@ -1103,6 +1144,15 @@ static uint8_t eri_line_has_loop_start(const char* line) {
     return 1u;
   }
   return 0u;
+}
+
+static uint8_t eri_line_ends_with_backslash(const char* line) {
+  size_t len = strlen(line);
+
+  while (len > 0u && isspace((unsigned char)line[len - 1u])) {
+    --len;
+  }
+  return (uint8_t)(len > 0u && line[len - 1u] == '\\');
 }
 
 static void eri_update_loop_context(const char* structural_line, uint8_t has_loop_start,
@@ -1131,6 +1181,20 @@ static void eri_update_loop_context(const char* structural_line, uint8_t has_loo
       --(*brace_depth);
     }
   }
+}
+
+static int eri_line_brace_delta(const char* structural_line) {
+  size_t i;
+  int delta = 0;
+
+  for (i = 0u; structural_line[i] != 0; ++i) {
+    if (structural_line[i] == '{') {
+      ++delta;
+    } else if (structural_line[i] == '}') {
+      --delta;
+    }
+  }
+  return delta;
 }
 
 static uint8_t eri_line_has_division_or_modulo(const char* line) {
@@ -1205,7 +1269,9 @@ static void eri_scan_cpu_costs(const EriVfsFile* file, EriFindings* findings) {
   int loop_brace_stack[128];
   size_t loop_stack_len = 0u;
   uint8_t pending_optimizer_ignore = 0u;
-  uint8_t optimizer_ignore_block = 0u;
+  uint8_t pending_function_ignore = 0u;
+  uint8_t function_ignore_active = 0u;
+  int function_ignore_depth = 0;
 
   while (pos <= len) {
     size_t start = pos;
@@ -1242,16 +1308,25 @@ static void eri_scan_cpu_costs(const EriVfsFile* file, EriFindings* findings) {
       }
     }
 
-    if (eri_line_is_optimizer_ignore_begin_directive(snippet) != 0u) {
-      optimizer_ignore_block = 1u;
+    if (function_ignore_active != 0u) {
+      has_loop_start = eri_line_has_loop_start(structural_line);
+      eri_update_loop_context(structural_line, has_loop_start, &brace_depth, &loop_depth, loop_brace_stack, &loop_stack_len);
+      if (brace_depth < function_ignore_depth) {
+        function_ignore_active = 0u;
+      }
+      ++line_no;
+      continue;
+    }
+
+    if (eri_line_has_invalid_optimizer_ignore(structural_line) != 0u) {
       has_loop_start = eri_line_has_loop_start(structural_line);
       eri_update_loop_context(structural_line, has_loop_start, &brace_depth, &loop_depth, loop_brace_stack, &loop_stack_len);
       ++line_no;
       continue;
     }
 
-    if (eri_line_is_optimizer_ignore_end_directive(snippet) != 0u) {
-      optimizer_ignore_block = 0u;
+    if (eri_line_is_optimizer_ignore_function_directive(snippet) != 0u) {
+      pending_function_ignore = 1u;
       has_loop_start = eri_line_has_loop_start(structural_line);
       eri_update_loop_context(structural_line, has_loop_start, &brace_depth, &loop_depth, loop_brace_stack, &loop_stack_len);
       ++line_no;
@@ -1266,8 +1341,35 @@ static void eri_scan_cpu_costs(const EriVfsFile* file, EriFindings* findings) {
       continue;
     }
 
-    if (optimizer_ignore_block != 0u || pending_optimizer_ignore != 0u ||
-        eri_line_has_optimizer_ignore(snippet) != 0u) {
+    if (pending_function_ignore != 0u) {
+      char func_name[128];
+      uint8_t is_static;
+
+      if (eri_probable_function_def(structural_line, func_name, sizeof(func_name), &is_static) != 0u ||
+          strchr(structural_line, '{') != NULL) {
+        int brace_delta = eri_line_brace_delta(structural_line);
+
+        pending_function_ignore = 0u;
+        function_ignore_active = 1u;
+        has_loop_start = eri_line_has_loop_start(structural_line);
+        eri_update_loop_context(structural_line, has_loop_start, &brace_depth, &loop_depth, loop_brace_stack, &loop_stack_len);
+        function_ignore_depth = brace_depth;
+        if (brace_delta <= 0) {
+          function_ignore_active = 0u;
+        }
+        (void)is_static;
+        ++line_no;
+        continue;
+      }
+      if (strchr(structural_line, ';') == NULL && strchr(structural_line, '}') == NULL) {
+        ++line_no;
+        continue;
+      }
+      pending_function_ignore = 0u;
+    }
+
+    if (pending_optimizer_ignore != 0u || eri_line_has_optimizer_ignore(snippet) != 0u ||
+        eri_line_has_optimizer_ignore_constant(snippet) != 0u) {
       pending_optimizer_ignore = 0u;
       has_loop_start = eri_line_has_loop_start(structural_line);
       eri_update_loop_context(structural_line, has_loop_start, &brace_depth, &loop_depth, loop_brace_stack, &loop_stack_len);
@@ -1308,7 +1410,13 @@ static void eri_scan_line_metrics(const uint8_t* bytes, size_t len, EriTotals* f
   uint8_t in_block = 0u;
   uint32_t line_no = 1u;
   uint8_t pending_optimizer_ignore = 0u;
-  uint8_t optimizer_ignore_block = 0u;
+  uint8_t pending_function_ignore = 0u;
+  uint8_t pending_constant_ignore = 0u;
+  uint8_t function_ignore_active = 0u;
+  uint8_t constant_ignore_active = 0u;
+  uint8_t constant_ignore_macro = 0u;
+  int function_ignore_depth = 0;
+  int brace_depth = 0;
 
   while (pos <= len) {
     size_t start = pos;
@@ -1374,13 +1482,38 @@ static void eri_scan_line_metrics(const uint8_t* bytes, size_t len, EriTotals* f
       memcpy(snippet, bytes + start, copy_len);
       snippet[copy_len] = 0;
       eri_copy_without_literals(bytes, start, end, searchable, sizeof(searchable));
-      if (eri_line_is_optimizer_ignore_begin_directive(snippet) != 0u) {
-        optimizer_ignore_block = 1u;
+      if (function_ignore_active != 0u) {
+        brace_depth += eri_line_brace_delta(searchable);
+        if (brace_depth < function_ignore_depth) {
+          function_ignore_active = 0u;
+        }
         ++line_no;
         continue;
       }
-      if (eri_line_is_optimizer_ignore_end_directive(snippet) != 0u) {
-        optimizer_ignore_block = 0u;
+      if (constant_ignore_active != 0u) {
+        if ((constant_ignore_macro != 0u && eri_line_ends_with_backslash(searchable) == 0u) ||
+            (constant_ignore_macro == 0u && strchr(searchable, ';') != NULL)) {
+          constant_ignore_active = 0u;
+          constant_ignore_macro = 0u;
+        }
+        brace_depth += eri_line_brace_delta(searchable);
+        ++line_no;
+        continue;
+      }
+      if (eri_line_has_invalid_optimizer_ignore(searchable) != 0u) {
+        eri_add_finding(findings, path, line_no, "ignore-misuse",
+                        "optimizer ignore must use line, function, or constant scope with an explicit reason");
+        brace_depth += eri_line_brace_delta(searchable);
+        ++line_no;
+        continue;
+      }
+      if (eri_line_is_optimizer_ignore_function_directive(snippet) != 0u) {
+        pending_function_ignore = 1u;
+        ++line_no;
+        continue;
+      }
+      if (eri_line_is_optimizer_ignore_constant_directive(snippet) != 0u) {
+        pending_constant_ignore = 1u;
         ++line_no;
         continue;
       }
@@ -1389,9 +1522,48 @@ static void eri_scan_line_metrics(const uint8_t* bytes, size_t len, EriTotals* f
         ++line_no;
         continue;
       }
-      if (optimizer_ignore_block != 0u || pending_optimizer_ignore != 0u ||
-          eri_line_has_optimizer_ignore(snippet) != 0u) {
+      if (pending_function_ignore != 0u) {
+        char func_name[128];
+        uint8_t is_static;
+
+        if (eri_probable_function_def(searchable, func_name, sizeof(func_name), &is_static) != 0u ||
+            strchr(searchable, '{') != NULL) {
+          int brace_delta = eri_line_brace_delta(searchable);
+
+          pending_function_ignore = 0u;
+          function_ignore_active = 1u;
+          brace_depth += brace_delta;
+          function_ignore_depth = brace_depth;
+          if (brace_delta <= 0) {
+            function_ignore_active = 0u;
+          }
+          (void)is_static;
+          ++line_no;
+          continue;
+        }
+        if (strchr(searchable, ';') != NULL || strchr(searchable, '}') != NULL) {
+          pending_function_ignore = 0u;
+          eri_add_finding(findings, path, line_no, "ignore-misuse",
+                          "optimizer-ignore-function must be immediately before a function definition");
+        }
+      }
+      if (pending_constant_ignore != 0u) {
+        const char* trim = eri_ltrim(searchable);
+
+        pending_constant_ignore = 0u;
+        constant_ignore_macro = trim[0] == '#' ? 1u : 0u;
+        if ((constant_ignore_macro != 0u && eri_line_ends_with_backslash(searchable) != 0u) ||
+            (constant_ignore_macro == 0u && strchr(searchable, ';') == NULL)) {
+          constant_ignore_active = 1u;
+        }
+        brace_depth += eri_line_brace_delta(searchable);
+        ++line_no;
+        continue;
+      }
+      if (pending_optimizer_ignore != 0u || eri_line_has_optimizer_ignore(snippet) != 0u ||
+          eri_line_has_optimizer_ignore_constant(snippet) != 0u) {
         pending_optimizer_ignore = 0u;
+        brace_depth += eri_line_brace_delta(searchable);
         ++line_no;
         continue;
       }
@@ -1436,6 +1608,7 @@ static void eri_scan_line_metrics(const uint8_t* bytes, size_t len, EriTotals* f
         eri_add_finding(findings, path, line_no, "world-wasm64-offset",
                         "64-bit length/offset in runtime path needs a WASM32 reason");
       }
+      brace_depth += eri_line_brace_delta(searchable);
     } else if (pending_optimizer_ignore != 0u) {
       pending_optimizer_ignore = 0u;
     }
@@ -2205,28 +2378,31 @@ static uint32_t eri_finding_rank(const EriFinding* finding) {
   if (strcmp(finding->kind, "marker") == 0) {
     return 2u;
   }
-  if (strcmp(finding->kind, "goto") == 0) {
+  if (strcmp(finding->kind, "ignore-misuse") == 0) {
     return 3u;
   }
-  if (strcmp(finding->kind, "magic-number") == 0) {
+  if (strcmp(finding->kind, "goto") == 0) {
     return 4u;
   }
-  if (strcmp(finding->kind, "string-indexing") == 0) {
+  if (strcmp(finding->kind, "magic-number") == 0) {
     return 5u;
   }
-  if (strcmp(finding->kind, "math-primitive") == 0) {
+  if (strcmp(finding->kind, "string-indexing") == 0) {
     return 6u;
   }
-  if (strncmp(finding->kind, "world-", 6u) == 0) {
+  if (strcmp(finding->kind, "math-primitive") == 0) {
     return 7u;
   }
-  if (strncmp(finding->kind, "cpu-", 4u) == 0) {
+  if (strncmp(finding->kind, "world-", 6u) == 0) {
     return 8u;
   }
-  if (strcmp(finding->kind, "long-line") == 0) {
+  if (strncmp(finding->kind, "cpu-", 4u) == 0) {
     return 9u;
   }
-  return 10u;
+  if (strcmp(finding->kind, "long-line") == 0) {
+    return 10u;
+  }
+  return 11u;
 }
 
 static int eri_cmp_finding(const void* a, const void* b) {
@@ -2375,6 +2551,8 @@ static uint8_t eri_collect_smell_packages(const EriFindings* findings, EriSmellP
     } else if (strcmp(findings->items[i].kind, "long-function") == 0) {
       ++pkg->long_functions;
     } else if (strcmp(findings->items[i].kind, "marker") == 0) {
+      ++pkg->markers;
+    } else if (strcmp(findings->items[i].kind, "ignore-misuse") == 0) {
       ++pkg->markers;
     } else if (strcmp(findings->items[i].kind, "goto") == 0) {
       ++pkg->gotos;
@@ -2787,7 +2965,7 @@ static uint8_t eri_analyze(const EriVfs* vfs) {
   printf("\n");
 
   printf("CPU cost signals\n");
-  printf("  heuristic: loop-local review targets; use %s for intentional hot paths\n", ERI_OPTIMIZER_IGNORE_TAG);
+  printf("  heuristic: loop-local review targets; use reasoned line/function/constant optimizer ignores for intentional hot paths\n");
   if (eri_count_cpu_findings(&findings) == 0u) {
     printf("  none from current heuristics\n");
   } else {
@@ -2825,10 +3003,11 @@ static uint8_t eri_analyze(const EriVfs* vfs) {
   if (findings.len == 0u) {
     printf("  none from current heuristics\n");
   } else {
-    printf("  summary: %llu large files, %llu long functions, %llu markers, %llu gotos, %llu magic numbers, %llu string-indexing, %llu math primitives, %llu long lines\n",
+    printf("  summary: %llu large files, %llu long functions, %llu markers, %llu ignore misuse, %llu gotos, %llu magic numbers, %llu string-indexing, %llu math primitives, %llu long lines\n",
            (unsigned long long)eri_count_findings_kind(&findings, "large-file"),
            (unsigned long long)eri_count_findings_kind(&findings, "long-function"),
            (unsigned long long)eri_count_findings_kind(&findings, "marker"),
+           (unsigned long long)eri_count_findings_kind(&findings, "ignore-misuse"),
            (unsigned long long)eri_count_findings_kind(&findings, "goto"),
            (unsigned long long)eri_count_findings_kind(&findings, "magic-number"),
            (unsigned long long)eri_count_findings_kind(&findings, "string-indexing"),
