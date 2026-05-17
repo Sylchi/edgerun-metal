@@ -8,6 +8,7 @@
 #include "er_bus.h"
 #include "er_crypto_blake3.h"
 #include "er_hw_relay.h"
+#include "er_relay_router.h"
 #include "er_native_eth.h"
 #include "er_native_boot.h"
 #include "er_net_frame.h"
@@ -1588,7 +1589,7 @@ static void test_hw_relay_endpoints(void) {
   ErChannelEndpoint virtio_endpoint;
   ErRelayForwardIntent intent;
   ErRelayForwardIntent route_intent;
-  ErHwRelayVirtioRoutes routes;
+  ErRelayVirtioRoutes routes;
   ErVirtioNet net;
   ErNativeEth native_eth;
   ErVirtioQueueAvail* tx_avail;
@@ -1703,12 +1704,12 @@ static void test_hw_relay_endpoints(void) {
               er_hw_relay_endpoint_is_virtio(&eth_endpoint), 0);
 
   check_int64("relay default virtio routes",
-              er_hw_relay_prepare_default_virtio_routes(&routes), 1);
+              er_relay_prepare_default_virtio_routes(&routes), 1);
   check_int64("relay route storage object",
-              er_hw_relay_route_erwire_to_virtio(&eth_endpoint,
-                                                 ERWIRE_KIND_VFS_OBJECT_PACKET,
-                                                 packet, (UINT32)sizeof(packet),
-                                                 &routes, &route_intent),
+              er_relay_route_erwire_to_virtio(&eth_endpoint,
+                                              ERWIRE_KIND_VFS_OBJECT_PACKET,
+                                              packet, (UINT32)sizeof(packet),
+                                              &routes, &route_intent),
               1);
   check_uint64("relay route storage target type",
                route_intent.to.address[RELAY_VIRTIO_TEST_DEVICE_TYPE_OFFSET],
@@ -1719,11 +1720,11 @@ static void test_hw_relay_endpoints(void) {
   render_capability[RELAY_VIRTIO_TEST_CAP_CONTENT_OFFSET] =
       ER_CAPABILITY_CONTENT_RENDER;
   check_int64("relay route render capability",
-              er_hw_relay_route_erwire_to_virtio(&eth_endpoint,
-                                                 ERWIRE_KIND_CAPABILITY_ENVELOPE,
-                                                 render_capability,
-                                                 (UINT32)sizeof(render_capability),
-                                                 &routes, &route_intent),
+              er_relay_route_erwire_to_virtio(&eth_endpoint,
+                                              ERWIRE_KIND_CAPABILITY_ENVELOPE,
+                                              render_capability,
+                                              (UINT32)sizeof(render_capability),
+                                              &routes, &route_intent),
               1);
   check_uint64("relay route render target type",
                route_intent.to.address[RELAY_VIRTIO_TEST_DEVICE_TYPE_OFFSET],
@@ -1732,20 +1733,20 @@ static void test_hw_relay_endpoints(void) {
   storage_work[RELAY_VIRTIO_TEST_WORK_DEPARTMENT_OFFSET] =
       ER_DEPARTMENT_STORAGE;
   check_int64("relay route storage work",
-              er_hw_relay_route_erwire_to_virtio(&eth_endpoint,
-                                                 ERWIRE_KIND_WORK_REQUEST,
-                                                 storage_work,
-                                                 (UINT32)sizeof(storage_work),
-                                                 &routes, &route_intent),
+              er_relay_route_erwire_to_virtio(&eth_endpoint,
+                                              ERWIRE_KIND_WORK_REQUEST,
+                                              storage_work,
+                                              (UINT32)sizeof(storage_work),
+                                              &routes, &route_intent),
               1);
   check_uint64("relay route work target type",
                route_intent.to.address[RELAY_VIRTIO_TEST_DEVICE_TYPE_OFFSET],
                ER_VIRTIO_DEVICE_TYPE_BLK);
   check_int64("relay route reject log",
-              er_hw_relay_route_erwire_to_virtio(&eth_endpoint,
-                                                 ERWIRE_KIND_LOG_TEXT,
-                                                 packet, (UINT32)sizeof(packet),
-                                                 &routes, &route_intent),
+              er_relay_route_erwire_to_virtio(&eth_endpoint,
+                                              ERWIRE_KIND_LOG_TEXT,
+                                              packet, (UINT32)sizeof(packet),
+                                              &routes, &route_intent),
               0);
 }
 
