@@ -660,6 +660,7 @@ static void er_blake3_avx2_compress8_full_chunks(const uint8_t* bytes, uint64_t 
 #endif
 }
 
+//@optimizer-ignore-function BLAKE3 AVX2 parent compression stores fixed parent lanes
 static void er_blake3_avx2_parent4(const uint32_t cvs[ER_BLAKE3_AVX2_LANES][ER_BLAKE3_CV_WORDS],
                                    uint32_t out_cvs[ER_BLAKE3_AVX2_PARENT4_COUNT][ER_BLAKE3_CV_WORDS]) {
   __m256i cv[ER_BLAKE3_CV_WORDS];
@@ -729,6 +730,7 @@ static void er_blake3_avx2_parent8_from16(const uint32_t cvs[ER_BLAKE3_AVX2_SUBT
   }
 }
 
+//@optimizer-ignore-function BLAKE3 AVX2 parent compression stores fixed root lanes
 static void er_blake3_avx2_parent2(const uint32_t cvs[ER_BLAKE3_AVX2_PARENT4_COUNT][ER_BLAKE3_CV_WORDS],
                                    uint32_t out_cvs[ER_BLAKE3_AVX2_PARENT2_COUNT][ER_BLAKE3_CV_WORDS]) {
   __m256i cv[ER_BLAKE3_CV_WORDS];
@@ -858,6 +860,7 @@ static void er_blake3_avx512_compress16(const __m512i cv[ER_BLAKE3_CV_WORDS],
   }
 }
 
+//@optimizer-ignore-function BLAKE3 AVX512 full-chunk compression is intentionally loop-shaped
 static void er_blake3_avx512_compress16_full_chunks(const uint8_t* bytes, uint64_t chunk_counter,
                                                     uint32_t flags,
                                                     uint32_t out_cvs[ER_BLAKE3_AVX512_LANES][ER_BLAKE3_CV_WORDS]) {
@@ -1085,6 +1088,7 @@ static uint8_t er_blake3_is_power_of_two_size(size_t value) {
   return value != 0u && (value & (value - 1u)) == 0u;
 }
 
+//@optimizer-ignore-function BLAKE3 scalar full-chunk compression walks fixed block schedule
 static void er_blake3_chunk_cv_full_scalar(const uint8_t* bytes, uint64_t chunk_counter,
                                            uint32_t flags, uint32_t out_cv[ER_BLAKE3_CV_WORDS]) {
   uint32_t cv[ER_BLAKE3_CV_WORDS];
@@ -1196,6 +1200,7 @@ static void er_blake3_root_from_parent_cvs(const uint32_t left_cv[ER_BLAKE3_CV_W
   er_blake3_output_root(&output, out);
 }
 
+//@optimizer-ignore-function BLAKE3 direct chunk hashing loops over bounded chunk blocks
 static uint8_t er_blake3_hash_one_chunk_direct(const uint8_t* bytes, size_t len,
                                                uint8_t out[ER_BLAKE3_OUT_LEN]) {
   ErBlake3Output output;
@@ -1270,6 +1275,7 @@ static void er_blake3_parallel_subtree_job(void* arg) {
   er_blake3_subtree_cv_exact(work->bytes, work->chunk_counter, work->chunk_count, work->flags, work->cv);
 }
 
+//@optimizer-ignore-function BLAKE3 parallel hash reduces a fixed power-of-two CV tree
 uint8_t er_blake3_hash_bytes_parallel(const uint8_t* bytes, size_t len, uint8_t out[ER_BLAKE3_OUT_LEN],
                                       ErBlake3RunJobsFn run_jobs, void* user, size_t max_jobs) {
   ErBlake3ParallelWork work[ER_BLAKE3_PARALLEL_MAX_JOBS];
@@ -1347,6 +1353,7 @@ static void* er_blake3_pthread_job(void* arg) {
   return 0;
 }
 
+//@optimizer-ignore-function BLAKE3 pthread adapter joins already-started jobs on create failure
 static uint8_t er_blake3_run_jobs_pthread(void* user, ErBlake3JobFn job_fn, void* const* jobs, size_t job_count) {
   pthread_t threads[ER_BLAKE3_PARALLEL_MAX_JOBS];
   ErBlake3PthreadJob pthread_jobs[ER_BLAKE3_PARALLEL_MAX_JOBS];
