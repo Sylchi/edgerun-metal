@@ -518,6 +518,20 @@ er_ui_node_t er_ui_node_dropdown_menu(const char* const* labels, const char* con
   return node;
 }
 
+er_ui_node_t er_ui_node_context_menu(const char* title, const char* detail, const char* const* labels, const char* const* shortcuts, size_t item_count,
+                                     size_t selected, uint32_t base_id) {
+  er_ui_node_t node = er_ui_node_base(ER_UI_NODE_CONTEXT_MENU);
+  node.label = title;
+  node.detail = detail;
+  node.labels = labels;
+  node.cells = shortcuts;
+  node.label_count = item_count;
+  node.selected = selected;
+  node.id = base_id;
+  node.gap = 8.0f;
+  return node;
+}
+
 er_ui_node_t er_ui_node_route_path(const char* label, const char* const* hops, size_t hop_count) {
   er_ui_node_t node = er_ui_node_base(ER_UI_NODE_ROUTE_PATH);
   node.label = label;
@@ -873,6 +887,7 @@ const char* er_ui_node_kind_label(er_ui_node_kind_t kind) {
     case ER_UI_NODE_DIRECTION: return "direction";
     case ER_UI_NODE_DRAWER: return "drawer";
     case ER_UI_NODE_DROPDOWN_MENU: return "dropdown-menu";
+    case ER_UI_NODE_CONTEXT_MENU: return "context-menu";
     case ER_UI_NODE_ROUTE_PATH: return "route-path";
     case ER_UI_NODE_PACKAGE_CARD: return "package-card";
     case ER_UI_NODE_RECEIPT_ROW: return "receipt-row";
@@ -1230,6 +1245,10 @@ er_ui_status_t er_ui_node_accessibility(const er_ui_node_t* node, er_ui_a11y_nod
     case ER_UI_NODE_DROPDOWN_MENU:
       out = er_ui_a11y_base(ER_UI_A11Y_NAVIGATION, "dropdown menu", false, 0u);
       break;
+    case ER_UI_NODE_CONTEXT_MENU:
+      out = er_ui_a11y_base(ER_UI_A11Y_NAVIGATION, node->label, false, 0u);
+      er_ui_a11y_set_value(&out, node->detail);
+      break;
     case ER_UI_NODE_TABS:
       out = er_ui_a11y_base(ER_UI_A11Y_TAB_LIST, "tabs", false, 0u);
       break;
@@ -1321,6 +1340,14 @@ er_ui_status_t er_ui_node_accessibility_child(const er_ui_node_t* node, size_t c
     return ER_UI_OK;
   }
   if (node->kind == ER_UI_NODE_DROPDOWN_MENU) {
+    if (!node->labels || child_index >= node->label_count) return ER_UI_ERR_INVALID_ARGUMENT;
+    er_ui_a11y_node_t out = er_ui_a11y_base(ER_UI_A11Y_MENU_ITEM, node->labels[child_index], true, node->id + (uint32_t)child_index);
+    if (child_index == node->selected) out.states |= ER_UI_A11Y_STATE_SELECTED;
+    if (node->cells) er_ui_a11y_set_value(&out, node->cells[child_index]);
+    *out_a11y = out;
+    return ER_UI_OK;
+  }
+  if (node->kind == ER_UI_NODE_CONTEXT_MENU) {
     if (!node->labels || child_index >= node->label_count) return ER_UI_ERR_INVALID_ARGUMENT;
     er_ui_a11y_node_t out = er_ui_a11y_base(ER_UI_A11Y_MENU_ITEM, node->labels[child_index], true, node->id + (uint32_t)child_index);
     if (child_index == node->selected) out.states |= ER_UI_A11Y_STATE_SELECTED;
@@ -2115,6 +2142,37 @@ static er_ui_status_t er_ui_node_render_dropdown_menu(
   return ER_UI_OK;
 }
 
+static er_ui_status_t er_ui_node_render_context_menu(
+  const er_ui_node_t* node,
+  er_ui_scene_t* scene,
+  vr_font_face_t* font,
+  er_ui_bounds_t bounds,
+  er_ui_resolved_theme_t theme) {
+  if (!node || !scene || !font || !node->label || !node->detail || !node->labels || node->label_count == 0u || !er_ui_bounds_valid(bounds)) {
+    return ER_UI_ERR_INVALID_ARGUMENT;
+  }
+  er_ui_status_t status = er_ui_shadcn_card_emit(scene, bounds, theme);
+  if (status != ER_UI_OK) return status;
+  float pad = 12.0f;
+  er_ui_bounds_t inner = er_ui_bounds(bounds.x + pad, bounds.y + pad, bounds.w - pad * 2.0f, bounds.h - pad * 2.0f);
+  if (!er_ui_bounds_valid(inner)) return ER_UI_ERR_INVALID_ARGUMENT;
+  status = er_ui_node_render_text(scene, font, node->label, er_ui_bounds(inner.x, inner.y, inner.w, 24.0f), theme.colors.text);
+  if (status != ER_UI_OK) return status;
+  status = er_ui_node_render_text(scene, font, node->detail, er_ui_bounds(inner.x, inner.y + 24.0f, inner.w, 22.0f), theme.colors.muted);
+  if (status != ER_UI_OK) return status;
+
+  float row_h = 44.0f;
+  float y = inner.y + 54.0f;
+  for (size_t i = 0u; i < node->label_count; ++i) {
+    const char* shortcut = node->cells ? node->cells[i] : "";
+    status = er_ui_shadcn_menu_item_emit(scene, font, er_ui_bounds(inner.x, y, inner.w, row_h), theme, node->labels[i], shortcut, "",
+                                         i == node->selected, theme.colors.accent, node->id + (uint32_t)i);
+    if (status != ER_UI_OK) return status;
+    y += row_h + node->gap;
+  }
+  return ER_UI_OK;
+}
+
 static er_ui_status_t er_ui_node_render_label_group(
   const er_ui_node_t* node,
   er_ui_scene_t* scene,
@@ -2311,6 +2369,8 @@ er_ui_status_t er_ui_node_render(
       return er_ui_node_render_drawer(node, scene, font, rect, theme);
     case ER_UI_NODE_DROPDOWN_MENU:
       return er_ui_node_render_dropdown_menu(node, scene, font, rect, theme);
+    case ER_UI_NODE_CONTEXT_MENU:
+      return er_ui_node_render_context_menu(node, scene, font, rect, theme);
     case ER_UI_NODE_ROUTE_PATH:
       return er_ui_shadcn_route_path_emit(scene, font, rect, theme, node->label, node->labels, node->label_count);
     case ER_UI_NODE_PACKAGE_CARD:
