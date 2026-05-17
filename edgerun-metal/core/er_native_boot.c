@@ -31,13 +31,17 @@ static void er_native_boot_clear_state(ErNativeBootState* state) {
   er_mem_zero((UINT8*)state, (UINTN)sizeof(*state));
 }
 
+static void er_native_boot_clear_eth_sink(void) {
+  erwire_clear_native_eth_sink();
+  er_mem_zero((UINT8*)&g_native_boot_net, (UINTN)sizeof(g_native_boot_net));
+  er_mem_zero((UINT8*)&g_native_boot_eth, (UINTN)sizeof(g_native_boot_eth));
+}
+
 UINT8 er_native_boot_configure_erwire_eth_sink(UINT64 mmio_base, UINT64 mmio_len,
                                                const UINT8* peer_mac,
                                                ErNativeBootState* out_state) {
   er_native_boot_clear_state(out_state);
-  erwire_clear_native_eth_sink();
-  er_mem_zero((UINT8*)&g_native_boot_net, (UINTN)sizeof(g_native_boot_net));
-  er_mem_zero((UINT8*)&g_native_boot_eth, (UINTN)sizeof(g_native_boot_eth));
+  er_native_boot_clear_eth_sink();
 
   if (peer_mac == 0 ||
       er_virtio_net_init_mmio(mmio_base, mmio_len, &g_native_boot_net) == 0u ||
@@ -57,9 +61,7 @@ UINT8 er_native_boot_configure_erwire_eth_sink(UINT64 mmio_base, UINT64 mmio_len
 
 UINT8 er_native_boot_configure_pci_erwire_eth_sink(ErNativeBootState* out_state) {
   er_native_boot_clear_state(out_state);
-  erwire_clear_native_eth_sink();
-  er_mem_zero((UINT8*)&g_native_boot_net, (UINTN)sizeof(g_native_boot_net));
-  er_mem_zero((UINT8*)&g_native_boot_eth, (UINTN)sizeof(g_native_boot_eth));
+  er_native_boot_clear_eth_sink();
 
   if (er_virtio_net_init_first_pci(&g_native_boot_net) == 0u ||
       er_native_eth_init(&g_native_boot_eth, &g_native_boot_net, g_qemu_microvm_peer_mac) == 0u ||

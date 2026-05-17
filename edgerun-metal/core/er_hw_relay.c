@@ -38,20 +38,6 @@ enum {
   ER_HW_RELAY_U8_MASK = 0xffu
 };
 
-static UINT8 er_hw_relay_bytes_equal(const UINT8* a, const UINT8* b, UINTN len) {
-  UINTN i;
-
-  if (a == 0 || b == 0) {
-    return 0;
-  }
-  for (i = 0; i < len; ++i) {
-    if (a[i] != b[i]) {
-      return 0;
-    }
-  }
-  return 1;
-}
-
 static void er_hw_relay_put_u16(UINT8* dst, UINT16 value) {
   dst[ER_HW_RELAY_U32_BYTE0_INDEX] = (UINT8)(value & ER_HW_RELAY_U8_MASK);
   dst[ER_HW_RELAY_U32_BYTE1_INDEX] =
@@ -160,8 +146,8 @@ UINT8 er_hw_relay_forward_to_native_eth(ErNativeEth* native_eth,
   }
   if (intent->abi_version != ER_WORK_ABI_VERSION ||
       er_hw_relay_endpoint_is_native_eth(&intent->to) == 0u ||
-      er_hw_relay_bytes_equal(native_eth->peer_mac, intent->to.address,
-                              ER_HW_RELAY_NATIVE_ETH_ADDR_LEN) == 0u) {
+      er_mem_equal(native_eth->peer_mac, intent->to.address,
+                   ER_HW_RELAY_NATIVE_ETH_ADDR_LEN) == 0u) {
     return 0;
   }
   return er_native_eth_send(native_eth, packet, (UINT32)packet_len);
