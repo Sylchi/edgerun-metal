@@ -14,6 +14,7 @@
 #include "er_virtio.h"
 #include "er_virtio_net.h"
 #include "er_vfs.h"
+#include "erwire.h"
 #include "font_geist.h"
 #include "wasm_vm.h"
 #include "wasm_driver_bus_probe_module.h"
@@ -1567,6 +1568,63 @@ static void test_hw_relay_endpoints(void) {
               0);
 }
 
+static void test_erwire_native_eth_sink(void) {
+  enum {
+    ERWIRE_ETH_TEST_MMIO_DWORDS = 128u,
+    ERWIRE_ETH_TEST_VIRTIO_HDR_LEN = 12u,
+    ERWIRE_ETH_TEST_TX_DESC = 0u,
+    ERWIRE_ETH_TEST_STREAM_ID = 7u,
+    ERWIRE_ETH_TEST_ETH_TYPE_OFFSET = ERWIRE_ETH_TEST_VIRTIO_HDR_LEN + (ER_NET_MAC_LEN * 2u),
+    ERWIRE_ETH_TEST_ETH_TYPE_HI = (ER_NET_ETH_TYPE_EDGERUN >> 8u) & 0xffu,
+    ERWIRE_ETH_TEST_ETH_TYPE_LO = ER_NET_ETH_TYPE_EDGERUN & 0xffu,
+    ERWIRE_ETH_TEST_PAYLOAD_OFFSET = ERWIRE_ETH_TEST_VIRTIO_HDR_LEN + ER_NET_ETH_HEADER_LEN,
+    ERWIRE_ETH_TEST_KIND_OFFSET =
+        ERWIRE_ETH_TEST_PAYLOAD_OFFSET + sizeof(UINT32) + (sizeof(UINT16) * 2u) + (sizeof(UINT32) * 2u),
+    ERWIRE_ETH_TEST_LEN_OFFSET = ERWIRE_ETH_TEST_KIND_OFFSET + (sizeof(UINT16) * 2u),
+    ERWIRE_ETH_TEST_TEXT_OFFSET = ERWIRE_ETH_TEST_PAYLOAD_OFFSET + ERWIRE_HEADER_SIZE
+  };
+  UINT32 regs[ERWIRE_ETH_TEST_MMIO_DWORDS] = {0};
+  ErVirtioNet net;
+  ErNativeEth native_eth;
+  ErVirtioQueueAvail* tx_avail;
+  UINT8* tx_frame;
+  UINT8 peer_mac[ER_NET_MAC_LEN] = {0x02u, 0x21u, 0x22u, 0x23u, 0x24u, 0x25u};
+
+  er_mmio_reset();
+  regs[ER_VIRTIO_MMIO_MAGIC_VALUE_OFFSET / sizeof(UINT32)] = ER_VIRTIO_MMIO_MAGIC;
+  regs[ER_VIRTIO_MMIO_VERSION_OFFSET / sizeof(UINT32)] = ER_VIRTIO_MMIO_VERSION_MODERN;
+  regs[ER_VIRTIO_MMIO_DEVICE_ID_OFFSET / sizeof(UINT32)] = ER_VIRTIO_DEVICE_TYPE_NET;
+  regs[ER_VIRTIO_MMIO_VENDOR_OFFSET / sizeof(UINT32)] = ER_VIRTIO_MMIO_VENDOR_ANY;
+  regs[ER_VIRTIO_MMIO_DEVICE_FEATURES_OFFSET / sizeof(UINT32)] = 1u;
+  regs[ER_VIRTIO_MMIO_QUEUE_NUM_MAX_OFFSET / sizeof(UINT32)] = ER_VIRTIO_QUEUE_SIZE;
+
+  check_int64("erwire eth virtio init",
+              er_virtio_net_init_mmio((UINT64)(UINTN)regs, (UINT64)sizeof(regs), &net),
+              1);
+  net.mac[0] = 0x02u;
+  net.mac[ER_NET_MAC_LEN - 1u] = 0x02u;
+  check_int64("erwire eth native init", er_native_eth_init(&native_eth, &net, peer_mac), 1);
+  erwire_init(ERWIRE_ETH_TEST_STREAM_ID);
+  check_int64("erwire eth set sink", erwire_set_native_eth_sink(&native_eth), 1);
+  erwire_send_text("ok");
+  erwire_clear_native_eth_sink();
+
+  tx_avail = er_virtio_net_test_tx_avail();
+  tx_frame = er_virtio_net_test_tx_buffer(ERWIRE_ETH_TEST_TX_DESC);
+  check_uint64("erwire eth tx desc", tx_avail->ring[0], ERWIRE_ETH_TEST_TX_DESC);
+  check_uint64("erwire eth dst mac0", tx_frame[ERWIRE_ETH_TEST_VIRTIO_HDR_LEN], peer_mac[0]);
+  check_uint64("erwire eth type hi", tx_frame[ERWIRE_ETH_TEST_ETH_TYPE_OFFSET], ERWIRE_ETH_TEST_ETH_TYPE_HI);
+  check_uint64("erwire eth type lo", tx_frame[ERWIRE_ETH_TEST_ETH_TYPE_OFFSET + 1u], ERWIRE_ETH_TEST_ETH_TYPE_LO);
+  check_uint64("erwire eth magic0", tx_frame[ERWIRE_ETH_TEST_PAYLOAD_OFFSET], 'E');
+  check_uint64("erwire eth magic1", tx_frame[ERWIRE_ETH_TEST_PAYLOAD_OFFSET + 1u], 'R');
+  check_uint64("erwire eth magic2", tx_frame[ERWIRE_ETH_TEST_PAYLOAD_OFFSET + 2u], 'W');
+  check_uint64("erwire eth magic3", tx_frame[ERWIRE_ETH_TEST_PAYLOAD_OFFSET + 3u], '1');
+  check_uint64("erwire eth kind", tx_frame[ERWIRE_ETH_TEST_KIND_OFFSET], ERWIRE_KIND_LOG_TEXT);
+  check_uint64("erwire eth payload len", tx_frame[ERWIRE_ETH_TEST_LEN_OFFSET], 2u);
+  check_uint64("erwire eth text0", tx_frame[ERWIRE_ETH_TEST_TEXT_OFFSET], 'o');
+  check_uint64("erwire eth text1", tx_frame[ERWIRE_ETH_TEST_TEXT_OFFSET + 1u], 'k');
+}
+
 static void test_ui_gop_renderer_surface(void) {
   UINT32 pixels[24] = {0};
   ErUiGopSurface surface;
@@ -2064,6 +2122,7 @@ int main(void) {
   test_vfs_object_packets();
   test_app_identity_routes();
   test_hw_relay_endpoints();
+  test_erwire_native_eth_sink();
   test_ui_gop_renderer_surface();
   test_ui_gop_renderer_4k_tile_plan();
   test_ui_gop_renderer_varfont_text();
