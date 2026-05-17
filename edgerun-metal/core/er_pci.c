@@ -306,15 +306,15 @@ UINT8 er_pci_read_snapshot(UINT32 bus, UINT32 dev, UINT32 func, ErPciDeviceSnaps
   out_snapshot->bus = bus;
   out_snapshot->dev = dev;
   out_snapshot->func = func;
-  out_snapshot->id = er_pci_cfg_read32(bus, dev, func, 0x00u);
+  out_snapshot->id = er_pci_cfg_read32(bus, dev, func, ER_PCI_ID_OFFSET);
   if (er_pci_device_present(out_snapshot->id) == 0u) {
     return 0;
   }
 
   out_snapshot->present = 1;
-  out_snapshot->command_status = er_pci_cfg_read32(bus, dev, func, 0x04u);
-  out_snapshot->class_revision = er_pci_cfg_read32(bus, dev, func, 0x08u);
-  out_snapshot->header_cacheline = er_pci_cfg_read32(bus, dev, func, 0x0cu);
+  out_snapshot->command_status = er_pci_cfg_read32(bus, dev, func, ER_PCI_COMMAND_STATUS_OFFSET);
+  out_snapshot->class_revision = er_pci_cfg_read32(bus, dev, func, ER_PCI_CLASS_REVISION_OFFSET);
+  out_snapshot->header_cacheline = er_pci_cfg_read32(bus, dev, func, ER_PCI_HEADER_CACHELINE_OFFSET);
   for (i = 0; i < ER_PCI_BAR_COUNT; ++i) {
     out_snapshot->bars[i] = er_pci_cfg_read32(bus, dev, func, ER_PCI_BAR0_OFFSET + (i * ER_PCI_BAR_STRIDE));
   }

@@ -12,6 +12,16 @@ static const UINT8 g_packet_domain[] = "edgerun:c:v1:vfs:object-packet";
 static const UINT8 g_file_ref_domain[] = "edgerun:c:v1:vfs:file-ref";
 static const UINT8 g_transform_domain[] = "edgerun:c:v1:vfs:object-transform";
 
+enum {
+  ER_VFS_U16_FIELD_BYTES = 2u,
+  ER_VFS_U64_FIELD_BYTES = 8u,
+  ER_VFS_TRANSFORM_U16_FIELD_COUNT = 2u,
+  ER_VFS_TRANSFORM_U64_FIELD_COUNT = 2u,
+  ER_VFS_TRANSFORM_FIELD_BYTES =
+      (ER_VFS_U16_FIELD_BYTES * ER_VFS_TRANSFORM_U16_FIELD_COUNT) +
+      (ER_VFS_U64_FIELD_BYTES * ER_VFS_TRANSFORM_U64_FIELD_COUNT)
+};
+
 static void er_vfs_put_be16(UINT8* dst, UINT16 value) {
   dst[0] = (UINT8)((value >> 8) & 0xffu);
   dst[1] = (UINT8)(value & 0xffu);
@@ -27,6 +37,16 @@ static void er_vfs_put_be32(UINT8* dst, UINT32 value) {
 static void er_vfs_put_be64(UINT8* dst, UINT64 value) {
   er_vfs_put_be32(dst, (UINT32)(value >> 32));
   er_vfs_put_be32(dst + 4, (UINT32)(value & 0xffffffffu));
+}
+
+static void er_vfs_put_transform_field16(UINT8** cursor, UINT16 value) {
+  er_vfs_put_be16(*cursor, value);
+  *cursor += ER_VFS_U16_FIELD_BYTES;
+}
+
+static void er_vfs_put_transform_field64(UINT8** cursor, UINT64 value) {
+  er_vfs_put_be64(*cursor, value);
+  *cursor += ER_VFS_U64_FIELD_BYTES;
 }
 
 UINT8 er_vfs_path_label_valid(const char* path, UINTN path_len) {
@@ -170,7 +190,8 @@ UINT8 er_vfs_prepare_transform_ref(const ErCryptoProvider* crypto, const ErHash*
                                    UINT64 plaintext_len, const ErHash* transport_object_id,
                                    UINT64 transport_len, UINT16 compression_kind, UINT16 seal_kind,
                                    ErVfsObjectTransformRef* out_ref) {
-  UINT8 fields[2u + 2u + 8u + 8u];
+  UINT8 fields[ER_VFS_TRANSFORM_FIELD_BYTES];
+  UINT8* field_cursor = fields;
   ErByteSpan spans[3];
 
   if (out_ref == 0 || crypto == 0 || plaintext_object_id == 0 || transport_object_id == 0) {
@@ -189,10 +210,10 @@ UINT8 er_vfs_prepare_transform_ref(const ErCryptoProvider* crypto, const ErHash*
   out_ref->transport_object_id = *transport_object_id;
   out_ref->transport_len = transport_len;
 
-  er_vfs_put_be16(&fields[0], compression_kind);
-  er_vfs_put_be16(&fields[2], seal_kind);
-  er_vfs_put_be64(&fields[4], plaintext_len);
-  er_vfs_put_be64(&fields[12], transport_len);
+  er_vfs_put_transform_field16(&field_cursor, compression_kind);
+  er_vfs_put_transform_field16(&field_cursor, seal_kind);
+  er_vfs_put_transform_field64(&field_cursor, plaintext_len);
+  er_vfs_put_transform_field64(&field_cursor, transport_len);
   spans[0].bytes = plaintext_object_id->bytes;
   spans[0].len = ER_HASH_LEN;
   spans[1].bytes = transport_object_id->bytes;

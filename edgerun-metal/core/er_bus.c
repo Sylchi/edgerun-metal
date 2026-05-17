@@ -261,6 +261,116 @@ static void er_bus_copy_io_op(ErBusIoOp* dst, const ErBusIoOp* src) {
   dst->value = src->value;
 }
 
+static UINT8 er_bus_prepare_io_op(const ErBusAddress* address, UINT32 access, UINT32 width,
+                                  UINT64 offset, UINT32 value, ErBusIoOp* out_op) {
+  if (address == 0 || out_op == 0) {
+    return 0;
+  }
+  er_mem_zero((UINT8*)out_op, (UINTN)sizeof(*out_op));
+  out_op->abi_version = ER_BUS_ABI_VERSION;
+  out_op->bus_kind = address->bus_kind;
+  out_op->access = access;
+  out_op->width = width;
+  er_bus_copy_address(&out_op->address, address);
+  out_op->offset = offset;
+  out_op->value = value;
+  return er_bus_io_op_valid(out_op);
+}
+
+static UINT8 er_bus_pci_config_write_masked(const ErBusAddress* address, UINT64 offset,
+                                            UINT32 value, UINT32 mask, UINT32 shift) {
+  UINT64 aligned_offset = offset & ~0x3ull;
+  INT64 old_value;
+  UINT32 new_value;
+
+  old_value = er_pci_read32((INT64)address->bus, (INT64)address->dev, (INT64)address->func,
+                            (INT64)aligned_offset);
+  if (old_value < 0) {
+    return 0;
+  }
+  new_value = ((UINT32)old_value & ~(mask << shift)) | ((value & mask) << shift);
+  er_pci_write32((INT64)address->bus, (INT64)address->dev, (INT64)address->func,
+                 (INT64)aligned_offset, (INT64)new_value);
+  return 1;
+}
+
+static UINT8 er_bus_pci_config_read_masked(const ErBusAddress* address, UINT64 offset,
+                                           UINT32 mask, UINT32 shift, UINT32* out_value) {
+  INT64 value;
+
+  if (address == 0 || out_value == 0) {
+    return 0;
+  }
+  value = er_pci_read32((INT64)address->bus, (INT64)address->dev, (INT64)address->func,
+                        (INT64)(offset & ~0x3ull));
+  if (value < 0) {
+    return 0;
+  }
+  *out_value = ((UINT32)value >> shift) & mask;
+  return 1;
+}
+
+static UINT8 er_bus_read_io_width(const ErBusIoOp* op, UINT32* out_value) {
+  if (op == 0 || out_value == 0) {
+    return 0;
+  }
+  if (op->width == 1u) {
+    UINT8 read_value = 0;
+    if (er_bus_read8(&op->address, op->offset, &read_value) == 0u) {
+      return 0;
+    }
+    *out_value = read_value;
+    return 1;
+  }
+  if (op->width == 2u) {
+    UINT16 read_value = 0;
+    if (er_bus_read16(&op->address, op->offset, &read_value) == 0u) {
+      return 0;
+    }
+    *out_value = read_value;
+    return 1;
+  }
+  return er_bus_read32(&op->address, op->offset, out_value);
+}
+
+static UINT8 er_bus_write_io_width(const ErBusIoOp* op) {
+  if (op == 0) {
+    return 0;
+  }
+  if (op->width == 1u) {
+    return er_bus_write8(&op->address, op->offset, (UINT8)op->value);
+  }
+  if (op->width == 2u) {
+    return er_bus_write16(&op->address, op->offset, (UINT16)op->value);
+  }
+  return er_bus_write32(&op->address, op->offset, op->value);
+}
+
+static UINT8 er_bus_mmio_read_width(const ErBusAddress* address, UINT64 offset, UINT32 width, UINT32* out_value) {
+  INT64 handle;
+  INT64 value;
+
+  if (address == 0 || out_value == 0) {
+    return 0;
+  }
+  handle = er_mmio_map((INT64)address->base, (INT64)address->len);
+  if (handle < 0) {
+    return 0;
+  }
+  if (width == 1u) {
+    value = er_mmio_read8(handle, (INT64)offset);
+  } else if (width == 2u) {
+    value = er_mmio_read16(handle, (INT64)offset);
+  } else {
+    value = er_mmio_read32(handle, (INT64)offset);
+  }
+  if (value < 0) {
+    return 0;
+  }
+  *out_value = (UINT32)value;
+  return 1;
+}
+
 UINT8 er_bus_execute_op32_packet(const ErBusPacket32* request, ErBusPacket32* out_response) {
   UINT32 value = 0;
 
@@ -360,25 +470,9 @@ UINT8 er_bus_execute_io_packet(const ErBusIoPacket* request, ErBusIoPacket* out_
   }
 
   if (er_bus_access_is_read(request->op.access) != 0u) {
-    if (request->op.width == 1u) {
-      UINT8 read_value = 0;
-      if (er_bus_read8(&request->op.address, request->op.offset, &read_value) == 0u) {
-        out_response->status = ER_BUS_STATUS_IO_FAILED;
-        return 0;
-      }
-      value = read_value;
-    } else if (request->op.width == 2u) {
-      UINT16 read_value = 0;
-      if (er_bus_read16(&request->op.address, request->op.offset, &read_value) == 0u) {
-        out_response->status = ER_BUS_STATUS_IO_FAILED;
-        return 0;
-      }
-      value = read_value;
-    } else {
-      if (er_bus_read32(&request->op.address, request->op.offset, &value) == 0u) {
-        out_response->status = ER_BUS_STATUS_IO_FAILED;
-        return 0;
-      }
+    if (er_bus_read_io_width(&request->op, &value) == 0u) {
+      out_response->status = ER_BUS_STATUS_IO_FAILED;
+      return 0;
     }
     out_response->status = ER_BUS_STATUS_OK;
     out_response->result = value;
@@ -386,16 +480,7 @@ UINT8 er_bus_execute_io_packet(const ErBusIoPacket* request, ErBusIoPacket* out_
   }
 
   if (er_bus_access_is_write(request->op.access) != 0u) {
-    UINT8 ok;
-
-    if (request->op.width == 1u) {
-      ok = er_bus_write8(&request->op.address, request->op.offset, (UINT8)request->op.value);
-    } else if (request->op.width == 2u) {
-      ok = er_bus_write16(&request->op.address, request->op.offset, (UINT16)request->op.value);
-    } else {
-      ok = er_bus_write32(&request->op.address, request->op.offset, request->op.value);
-    }
-    if (ok == 0u) {
+    if (er_bus_write_io_width(&request->op) == 0u) {
       out_response->status = ER_BUS_STATUS_IO_FAILED;
       return 0;
     }
@@ -410,43 +495,28 @@ UINT8 er_bus_execute_io_packet(const ErBusIoPacket* request, ErBusIoPacket* out_
 
 UINT8 er_bus_read8(const ErBusAddress* address, UINT64 offset, UINT8* out_value) {
   ErBusIoOp op;
+  UINT32 value;
 
   if (out_value == 0 || address == 0) {
     return 0;
   }
-  er_mem_zero((UINT8*)&op, (UINTN)sizeof(op));
-  op.abi_version = ER_BUS_ABI_VERSION;
-  op.bus_kind = address->bus_kind;
-  op.access = ER_BUS_ACCESS_READ8;
-  op.width = 1u;
-  er_bus_copy_address(&op.address, address);
-  op.offset = offset;
-  if (er_bus_io_op_valid(&op) == 0u) {
+  if (er_bus_prepare_io_op(address, ER_BUS_ACCESS_READ8, 1u, offset, 0u, &op) == 0u) {
     return 0;
   }
 
   if (address->bus_kind == ER_BUS_KIND_PCI_CONFIG) {
-    INT64 value = er_pci_read32((INT64)address->bus, (INT64)address->dev, (INT64)address->func,
-                                (INT64)(offset & ~0x3ull));
-    if (value < 0) {
+    if (er_bus_pci_config_read_masked(address, offset, 0xffu, (UINT32)(offset & 0x3u) * 8u, &value) == 0u) {
       return 0;
     }
-    *out_value = (UINT8)(((UINT32)value >> ((UINT32)(offset & 0x3u) * 8u)) & 0xffu);
+    *out_value = (UINT8)value;
     return 1;
   }
 
   if (address->bus_kind == ER_BUS_KIND_MMIO32) {
-    INT64 handle = er_mmio_map((INT64)address->base, (INT64)address->len);
-    INT64 value;
-
-    if (handle < 0) {
+    if (er_bus_mmio_read_width(address, offset, 1u, &value) == 0u) {
       return 0;
     }
-    value = er_mmio_read8(handle, (INT64)offset);
-    if (value < 0) {
-      return 0;
-    }
-    *out_value = (UINT8)value;
+    *out_value = (UINT8)(value & 0xffu);
     return 1;
   }
 
@@ -460,43 +530,28 @@ UINT8 er_bus_read8(const ErBusAddress* address, UINT64 offset, UINT8* out_value)
 
 UINT8 er_bus_read16(const ErBusAddress* address, UINT64 offset, UINT16* out_value) {
   ErBusIoOp op;
+  UINT32 value;
 
   if (out_value == 0 || address == 0) {
     return 0;
   }
-  er_mem_zero((UINT8*)&op, (UINTN)sizeof(op));
-  op.abi_version = ER_BUS_ABI_VERSION;
-  op.bus_kind = address->bus_kind;
-  op.access = ER_BUS_ACCESS_READ16;
-  op.width = 2u;
-  er_bus_copy_address(&op.address, address);
-  op.offset = offset;
-  if (er_bus_io_op_valid(&op) == 0u) {
+  if (er_bus_prepare_io_op(address, ER_BUS_ACCESS_READ16, 2u, offset, 0u, &op) == 0u) {
     return 0;
   }
 
   if (address->bus_kind == ER_BUS_KIND_PCI_CONFIG) {
-    INT64 value = er_pci_read32((INT64)address->bus, (INT64)address->dev, (INT64)address->func,
-                                (INT64)(offset & ~0x3ull));
-    if (value < 0) {
+    if (er_bus_pci_config_read_masked(address, offset, 0xffffu, (UINT32)(offset & 0x2u) * 8u, &value) == 0u) {
       return 0;
     }
-    *out_value = (UINT16)(((UINT32)value >> ((UINT32)(offset & 0x2u) * 8u)) & 0xffffu);
+    *out_value = (UINT16)value;
     return 1;
   }
 
   if (address->bus_kind == ER_BUS_KIND_MMIO32) {
-    INT64 handle = er_mmio_map((INT64)address->base, (INT64)address->len);
-    INT64 value;
-
-    if (handle < 0) {
+    if (er_bus_mmio_read_width(address, offset, 2u, &value) == 0u) {
       return 0;
     }
-    value = er_mmio_read16(handle, (INT64)offset);
-    if (value < 0) {
-      return 0;
-    }
-    *out_value = (UINT16)value;
+    *out_value = (UINT16)(value & 0xffffu);
     return 1;
   }
 
@@ -510,6 +565,7 @@ UINT8 er_bus_read16(const ErBusAddress* address, UINT64 offset, UINT16* out_valu
 
 UINT8 er_bus_read32(const ErBusAddress* address, UINT64 offset, UINT32* out_value) {
   ErBusOp32 op;
+  UINT32 value;
 
   if (out_value == 0 || address == 0) {
     return 0;
@@ -535,17 +591,10 @@ UINT8 er_bus_read32(const ErBusAddress* address, UINT64 offset, UINT32* out_valu
   }
 
   if (address->bus_kind == ER_BUS_KIND_MMIO32) {
-    INT64 handle = er_mmio_map((INT64)address->base, (INT64)address->len);
-    INT64 value;
-
-    if (handle < 0) {
+    if (er_bus_mmio_read_width(address, offset, 4u, &value) == 0u) {
       return 0;
     }
-    value = er_mmio_read32(handle, (INT64)offset);
-    if (value < 0) {
-      return 0;
-    }
-    *out_value = (UINT32)value;
+    *out_value = value;
     return 1;
   }
 
@@ -560,35 +609,13 @@ UINT8 er_bus_read32(const ErBusAddress* address, UINT64 offset, UINT32* out_valu
 UINT8 er_bus_write8(const ErBusAddress* address, UINT64 offset, UINT8 value) {
   ErBusIoOp op;
 
-  if (address == 0) {
-    return 0;
-  }
-  er_mem_zero((UINT8*)&op, (UINTN)sizeof(op));
-  op.abi_version = ER_BUS_ABI_VERSION;
-  op.bus_kind = address->bus_kind;
-  op.access = ER_BUS_ACCESS_WRITE8;
-  op.width = 1u;
-  er_bus_copy_address(&op.address, address);
-  op.offset = offset;
-  op.value = value;
-  if (er_bus_io_op_valid(&op) == 0u) {
+  if (er_bus_prepare_io_op(address, ER_BUS_ACCESS_WRITE8, 1u, offset, value, &op) == 0u) {
     return 0;
   }
 
   if (address->bus_kind == ER_BUS_KIND_PCI_CONFIG) {
     UINT32 shift = (UINT32)(offset & 0x3u) * 8u;
-    UINT64 aligned_offset = offset & ~0x3ull;
-    INT64 old_value = er_pci_read32((INT64)address->bus, (INT64)address->dev, (INT64)address->func,
-                                    (INT64)aligned_offset);
-    UINT32 new_value;
-
-    if (old_value < 0) {
-      return 0;
-    }
-    new_value = ((UINT32)old_value & ~(0xffu << shift)) | ((UINT32)value << shift);
-    er_pci_write32((INT64)address->bus, (INT64)address->dev, (INT64)address->func,
-                   (INT64)aligned_offset, (INT64)new_value);
-    return 1;
+    return er_bus_pci_config_write_masked(address, offset, value, 0xffu, shift);
   }
 
   if (address->bus_kind == ER_BUS_KIND_MMIO32) {
@@ -611,35 +638,13 @@ UINT8 er_bus_write8(const ErBusAddress* address, UINT64 offset, UINT8 value) {
 UINT8 er_bus_write16(const ErBusAddress* address, UINT64 offset, UINT16 value) {
   ErBusIoOp op;
 
-  if (address == 0) {
-    return 0;
-  }
-  er_mem_zero((UINT8*)&op, (UINTN)sizeof(op));
-  op.abi_version = ER_BUS_ABI_VERSION;
-  op.bus_kind = address->bus_kind;
-  op.access = ER_BUS_ACCESS_WRITE16;
-  op.width = 2u;
-  er_bus_copy_address(&op.address, address);
-  op.offset = offset;
-  op.value = value;
-  if (er_bus_io_op_valid(&op) == 0u) {
+  if (er_bus_prepare_io_op(address, ER_BUS_ACCESS_WRITE16, 2u, offset, value, &op) == 0u) {
     return 0;
   }
 
   if (address->bus_kind == ER_BUS_KIND_PCI_CONFIG) {
     UINT32 shift = (UINT32)(offset & 0x2u) * 8u;
-    UINT64 aligned_offset = offset & ~0x3ull;
-    INT64 old_value = er_pci_read32((INT64)address->bus, (INT64)address->dev, (INT64)address->func,
-                                    (INT64)aligned_offset);
-    UINT32 new_value;
-
-    if (old_value < 0) {
-      return 0;
-    }
-    new_value = ((UINT32)old_value & ~(0xffffu << shift)) | ((UINT32)value << shift);
-    er_pci_write32((INT64)address->bus, (INT64)address->dev, (INT64)address->func,
-                   (INT64)aligned_offset, (INT64)new_value);
-    return 1;
+    return er_bus_pci_config_write_masked(address, offset, value, 0xffffu, shift);
   }
 
   if (address->bus_kind == ER_BUS_KIND_MMIO32) {

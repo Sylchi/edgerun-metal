@@ -340,12 +340,26 @@ static bool sdl_msdf_is_inverted(const uint8_t* msdf, int width, int height, flo
   return sample_sum > 0.0f;
 }
 
-static void sdl_convert_msdf_to_rgba(const uint8_t* msdf, int width, int height, uint8_t* rgba) {
+static SDL_PixelFormat* sdl_alloc_rgba_format_or_exit(void) {
   SDL_PixelFormat* rgba_format = SDL_AllocFormat(SDL_PIXELFORMAT_RGBA8888);
   if (!rgba_format) {
     fprintf(stderr, "fatal: failed to allocate pixel format: %s\n", SDL_GetError());
     exit(1);
   }
+  return rgba_format;
+}
+
+static uint32_t sdl_map_white_alpha(SDL_PixelFormat* rgba_format, uint8_t alpha) {
+  return SDL_MapRGBA(
+    rgba_format,
+    VR_RGBA_CHANNEL_MAX,
+    VR_RGBA_CHANNEL_MAX,
+    VR_RGBA_CHANNEL_MAX,
+    alpha);
+}
+
+static void sdl_convert_msdf_to_rgba(const uint8_t* msdf, int width, int height, uint8_t* rgba) {
+  SDL_PixelFormat* rgba_format = sdl_alloc_rgba_format_or_exit();
   bool invert_sign = sdl_msdf_is_inverted(msdf, width, height, VR_MSDF_RECON_SPREAD);
   size_t pixel_count = (size_t)width * (size_t)height;
   uint32_t* out = (uint32_t*)rgba;
@@ -353,32 +367,18 @@ static void sdl_convert_msdf_to_rgba(const uint8_t* msdf, int width, int height,
     int x = (int)(i % (size_t)width);
     int y = (int)(i / (size_t)width);
     uint8_t alpha = msdf ? sdl_msdf_to_alpha(msdf, x, y, width, height, VR_MSDF_RECON_SPREAD, invert_sign) : 0u;
-    out[i] = SDL_MapRGBA(
-      rgba_format,
-      VR_RGBA_CHANNEL_MAX,
-      VR_RGBA_CHANNEL_MAX,
-      VR_RGBA_CHANNEL_MAX,
-      alpha);
+    out[i] = sdl_map_white_alpha(rgba_format, alpha);
   }
   SDL_FreeFormat(rgba_format);
 }
 
 static void sdl_convert_gray_to_rgba(const uint8_t* gray, int width, int height, uint8_t* rgba) {
-  SDL_PixelFormat* rgba_format = SDL_AllocFormat(SDL_PIXELFORMAT_RGBA8888);
-  if (!rgba_format) {
-    fprintf(stderr, "fatal: failed to allocate pixel format: %s\n", SDL_GetError());
-    exit(1);
-  }
+  SDL_PixelFormat* rgba_format = sdl_alloc_rgba_format_or_exit();
   size_t pixel_count = (size_t)width * (size_t)height;
   uint32_t* out = (uint32_t*)rgba;
   for (size_t i = 0; i < pixel_count; ++i) {
     uint8_t alpha = gray ? gray[i] : 0u;
-    out[i] = SDL_MapRGBA(
-      rgba_format,
-      VR_RGBA_CHANNEL_MAX,
-      VR_RGBA_CHANNEL_MAX,
-      VR_RGBA_CHANNEL_MAX,
-      alpha);
+    out[i] = sdl_map_white_alpha(rgba_format, alpha);
   }
   SDL_FreeFormat(rgba_format);
 }
