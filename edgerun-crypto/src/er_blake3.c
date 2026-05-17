@@ -199,41 +199,27 @@ static void er_blake3_g(uint32_t state[ER_BLAKE3_BLOCK_WORDS], size_t a, size_t 
   state[b] = er_blake3_rotr32(state[b] ^ state[c], ER_BLAKE3_ROTATE_D);
 }
 
-static void er_blake3_round(uint32_t state[ER_BLAKE3_BLOCK_WORDS], const uint32_t msg[ER_BLAKE3_BLOCK_WORDS]) {
-  er_blake3_g(state, 0u, 4u, 8u, 12u, msg[0], msg[1]); //@optimizer-ignore BLAKE3 compression schedule
-  er_blake3_g(state, 1u, 5u, 9u, 13u, msg[2], msg[3]); //@optimizer-ignore BLAKE3 compression schedule
-  er_blake3_g(state, 2u, 6u, 10u, 14u, msg[4], msg[5]); //@optimizer-ignore BLAKE3 compression schedule
-  er_blake3_g(state, 3u, 7u, 11u, 15u, msg[6], msg[7]); //@optimizer-ignore BLAKE3 compression schedule
-  er_blake3_g(state, 0u, 5u, 10u, 15u, msg[8], msg[9]); //@optimizer-ignore BLAKE3 compression schedule
-  er_blake3_g(state, 1u, 6u, 11u, 12u, msg[10], msg[11]); //@optimizer-ignore BLAKE3 compression schedule
-  er_blake3_g(state, 2u, 7u, 8u, 13u, msg[12], msg[13]); //@optimizer-ignore BLAKE3 compression schedule
-  er_blake3_g(state, 3u, 4u, 9u, 14u, msg[14], msg[15]); //@optimizer-ignore BLAKE3 compression schedule
-}
-
-static void er_blake3_permute(uint32_t msg[ER_BLAKE3_BLOCK_WORDS]) {
-  uint32_t permuted[ER_BLAKE3_BLOCK_WORDS];
-  size_t i;
-
-  for (i = 0u; i < ER_BLAKE3_BLOCK_WORDS; ++i) {
-    permuted[i] = msg[g_er_blake3_msg_perm[i]];
-  }
-  for (i = 0u; i < ER_BLAKE3_BLOCK_WORDS; ++i) {
-    msg[i] = permuted[i];
-  }
-}
+#define ER_BLAKE3_ROUND_MSG(state, msg, m0, m1, m2, m3, m4, m5, m6, m7, \
+                            m8, m9, m10, m11, m12, m13, m14, m15)       \
+  do {                                                                   \
+    er_blake3_g((state), 0u, 4u, 8u, 12u, (msg)[m0], (msg)[m1]);         \
+    er_blake3_g((state), 1u, 5u, 9u, 13u, (msg)[m2], (msg)[m3]);         \
+    er_blake3_g((state), 2u, 6u, 10u, 14u, (msg)[m4], (msg)[m5]);        \
+    er_blake3_g((state), 3u, 7u, 11u, 15u, (msg)[m6], (msg)[m7]);        \
+    er_blake3_g((state), 0u, 5u, 10u, 15u, (msg)[m8], (msg)[m9]);        \
+    er_blake3_g((state), 1u, 6u, 11u, 12u, (msg)[m10], (msg)[m11]);      \
+    er_blake3_g((state), 2u, 7u, 8u, 13u, (msg)[m12], (msg)[m13]);       \
+    er_blake3_g((state), 3u, 4u, 9u, 14u, (msg)[m14], (msg)[m15]);       \
+  } while (0)
 
 static void er_blake3_compress(const uint32_t cv[ER_BLAKE3_CV_WORDS],
                                const uint32_t block_words[ER_BLAKE3_BLOCK_WORDS],
                                uint64_t counter, uint32_t block_len, uint32_t flags,
                                uint32_t out[ER_BLAKE3_BLOCK_WORDS]) {
-  uint32_t msg[ER_BLAKE3_BLOCK_WORDS];
-  size_t round;
   size_t i;
 
   for (i = 0u; i < ER_BLAKE3_CV_WORDS; ++i) {
     out[i] = cv[i];
-    msg[i] = block_words[i];
-    msg[i + ER_BLAKE3_CV_WORDS] = block_words[i + ER_BLAKE3_CV_WORDS];
   }
   out[ER_BLAKE3_STATE_IV0_INDEX] = g_er_blake3_iv[ER_BLAKE3_IV_WORD0_INDEX];
   out[ER_BLAKE3_STATE_IV1_INDEX] = g_er_blake3_iv[ER_BLAKE3_IV_WORD1_INDEX];
@@ -244,12 +230,20 @@ static void er_blake3_compress(const uint32_t cv[ER_BLAKE3_CV_WORDS],
   out[ER_BLAKE3_STATE_BLOCK_LEN_INDEX] = block_len;
   out[ER_BLAKE3_STATE_FLAGS_INDEX] = flags;
 
-  for (round = 0u; round < ER_BLAKE3_COMPRESS_ROUNDS; ++round) {
-    er_blake3_round(out, msg);
-    if (round != ER_BLAKE3_LAST_PERMUTE_ROUND) {
-      er_blake3_permute(msg);
-    }
-  }
+  ER_BLAKE3_ROUND_MSG(out, block_words, 0u, 1u, 2u, 3u, 4u, 5u, 6u, 7u,
+                      8u, 9u, 10u, 11u, 12u, 13u, 14u, 15u);
+  ER_BLAKE3_ROUND_MSG(out, block_words, 2u, 6u, 3u, 10u, 7u, 0u, 4u, 13u,
+                      1u, 11u, 12u, 5u, 9u, 14u, 15u, 8u);
+  ER_BLAKE3_ROUND_MSG(out, block_words, 3u, 4u, 10u, 12u, 13u, 2u, 7u, 14u,
+                      6u, 5u, 9u, 0u, 11u, 15u, 8u, 1u);
+  ER_BLAKE3_ROUND_MSG(out, block_words, 10u, 7u, 12u, 9u, 14u, 3u, 13u, 15u,
+                      4u, 0u, 11u, 2u, 5u, 8u, 1u, 6u);
+  ER_BLAKE3_ROUND_MSG(out, block_words, 12u, 13u, 9u, 11u, 15u, 10u, 14u, 8u,
+                      7u, 2u, 5u, 3u, 0u, 1u, 6u, 4u);
+  ER_BLAKE3_ROUND_MSG(out, block_words, 9u, 14u, 11u, 5u, 8u, 12u, 15u, 1u,
+                      13u, 3u, 0u, 10u, 2u, 6u, 4u, 7u);
+  ER_BLAKE3_ROUND_MSG(out, block_words, 11u, 15u, 5u, 0u, 1u, 9u, 8u, 6u,
+                      14u, 10u, 2u, 12u, 3u, 4u, 7u, 13u);
 
   for (i = 0u; i < ER_BLAKE3_CV_WORDS; ++i) {
     out[i] ^= out[i + ER_BLAKE3_CV_WORDS];
