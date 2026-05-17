@@ -50,7 +50,12 @@ typedef enum {
   ER_UI_NODE_PROOF_EVENT_ROW,
   ER_UI_NODE_ROUTE_PATH,
   ER_UI_NODE_PACKAGE_CARD,
-  ER_UI_NODE_RECEIPT_ROW
+  ER_UI_NODE_RECEIPT_ROW,
+  ER_UI_NODE_PANEL_HEADER,
+  ER_UI_NODE_METRIC_CARD,
+  ER_UI_NODE_TRANSACTION_ROW,
+  ER_UI_NODE_MENU_ITEM,
+  ER_UI_NODE_CONTROL_ROW
 } er_ui_node_kind_t;
 
 typedef struct er_ui_node_t er_ui_node_t;
@@ -63,6 +68,7 @@ struct er_ui_node_t {
   const char* label;
   const char* value;
   const char* detail;
+  const char* aux;
   const char* const* labels;
   size_t label_count;
   const char* const* cells;
@@ -118,6 +124,11 @@ er_ui_node_t er_ui_node_proof_event_row(const char* title, const char* hash, con
 er_ui_node_t er_ui_node_route_path(const char* label, const char* const* hops, size_t hop_count);
 er_ui_node_t er_ui_node_package_card(const char* name, const char* policy, const char* hash, uint32_t id);
 er_ui_node_t er_ui_node_receipt_row(const char* label, const char* amount, const char* status_text, uint32_t id);
+er_ui_node_t er_ui_node_panel_header(const char* title, const char* subtitle, const char* action_label, uint32_t action_id);
+er_ui_node_t er_ui_node_metric_card(const char* title, const char* value, const char* detail, bool has_progress, float progress, er_ui_color4_t accent);
+er_ui_node_t er_ui_node_transaction_row(const char* title, const char* subtitle, const char* date, const char* amount, bool positive, uint32_t id);
+er_ui_node_t er_ui_node_menu_item(const char* label, const char* detail, const char* badge, bool selected, er_ui_color4_t accent, uint32_t id);
+er_ui_node_t er_ui_node_control_row(const char* label, const char* detail, const char* accessory, uint32_t id);
 er_ui_node_t* er_ui_node_set_bounds(er_ui_node_t* node, er_ui_bounds_t bounds);
 er_ui_node_t* er_ui_node_set_gap(er_ui_node_t* node, float gap);
 er_ui_node_t* er_ui_node_set_padding(er_ui_node_t* node, float padding);

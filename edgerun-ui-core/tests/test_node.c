@@ -142,6 +142,11 @@ void run_node_tests(void) {
     er_ui_node_t route = er_ui_node_route_path("Admission route", route_hops, 3u);
     er_ui_node_t package = er_ui_node_package_card("Docs", "cache-ok", "b3:def456", 8807u);
     er_ui_node_t receipt = er_ui_node_receipt_row("Retrieval", "4 units", "settled", 8808u);
+    er_ui_node_t panel = er_ui_node_panel_header("Dashboard", "Reusable UI primitives", "Run", 8809u);
+    er_ui_node_t metric = er_ui_node_metric_card("Budget", "184", "units reserved", true, 0.64f, theme.colors.accent);
+    er_ui_node_t transaction = er_ui_node_transaction_row("Storage", "verified retrieval", "today", "8 units", false, 8810u);
+    er_ui_node_t menu = er_ui_node_menu_item("Verify package", "content hash", "new", true, theme.colors.accent, 8811u);
+    er_ui_node_t control = er_ui_node_control_row("Cache package", "avoid repeated retrieval", "enabled", 8812u);
 
     expect_status(er_ui_node_render(&alert, &scene, face, er_ui_bounds(0.0f, 170.0f, 360.0f, 76.0f), theme), ER_UI_OK, "node: alert renders");
     expect_status(er_ui_node_render(&avatar, &scene, face, er_ui_bounds(0.0f, 254.0f, 42.0f, 42.0f), theme), ER_UI_OK, "node: avatar renders");
@@ -186,6 +191,16 @@ void run_node_tests(void) {
                   "node: package card renders");
     expect_status(er_ui_node_render(&receipt, &scene, face, er_ui_bounds(0.0f, 1976.0f, 360.0f, 58.0f), theme), ER_UI_OK,
                   "node: receipt row renders");
+    expect_status(er_ui_node_render(&panel, &scene, face, er_ui_bounds(0.0f, 2046.0f, 360.0f, 56.0f), theme), ER_UI_OK,
+                  "node: panel header renders");
+    expect_status(er_ui_node_render(&metric, &scene, face, er_ui_bounds(0.0f, 2114.0f, 220.0f, 132.0f), theme), ER_UI_OK,
+                  "node: metric card renders");
+    expect_status(er_ui_node_render(&transaction, &scene, face, er_ui_bounds(0.0f, 2258.0f, 360.0f, 58.0f), theme), ER_UI_OK,
+                  "node: transaction row renders");
+    expect_status(er_ui_node_render(&menu, &scene, face, er_ui_bounds(0.0f, 2328.0f, 260.0f, 58.0f), theme), ER_UI_OK,
+                  "node: menu item renders");
+    expect_status(er_ui_node_render(&control, &scene, face, er_ui_bounds(0.0f, 2398.0f, 360.0f, 58.0f), theme), ER_UI_OK,
+                  "node: control row renders");
 
     expect_true(scene.rect_count > 0u, "node: render emits rect geometry");
     expect_true(scene.hit_count > 0u, "node: render emits hit targets");

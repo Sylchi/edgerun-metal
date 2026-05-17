@@ -1395,6 +1395,145 @@ er_ui_status_t er_ui_shadcn_receipt_row_emit(
   return er_ui_shadcn_separator_emit(scene, er_ui_bounds(bounds.x, bounds.y + bounds.h - 1.0f, bounds.w, 1.0f), theme);
 }
 
+er_ui_status_t er_ui_shadcn_panel_header_emit(
+  er_ui_scene_t* scene,
+  vr_font_face_t* font,
+  er_ui_bounds_t bounds,
+  er_ui_resolved_theme_t theme,
+  const char* title,
+  const char* subtitle,
+  const char* action_label,
+  uint32_t action_id) {
+  if (!scene || !font || !title || !subtitle || !er_ui_bounds_valid(bounds)) return ER_UI_ERR_INVALID_ARGUMENT;
+  er_ui_status_t status = er_ui_shadcn_push_ascii_text(scene, font, title, bounds.x, bounds.y + 20.0f, theme.colors.text);
+  if (status != ER_UI_OK) return status;
+  if (subtitle[0]) {
+    status = er_ui_shadcn_push_ascii_text(scene, font, subtitle, bounds.x, bounds.y + 40.0f, theme.colors.muted);
+    if (status != ER_UI_OK) return status;
+  }
+  if (action_label && action_label[0]) {
+    status = er_ui_shadcn_button_emit(scene, font, er_ui_bounds(bounds.x + bounds.w - 96.0f, bounds.y + 4.0f, 96.0f, 36.0f), theme, action_label, action_id,
+                                      ER_UI_SHADCN_BUTTON_SECONDARY, ER_UI_SHADCN_BUTTON_SIZE_SM, true);
+    if (status != ER_UI_OK) return status;
+  }
+  return er_ui_shadcn_separator_emit(scene, er_ui_bounds(bounds.x, bounds.y + bounds.h - 1.0f, bounds.w, 1.0f), theme);
+}
+
+er_ui_status_t er_ui_shadcn_metric_card_emit(
+  er_ui_scene_t* scene,
+  vr_font_face_t* font,
+  er_ui_bounds_t bounds,
+  er_ui_resolved_theme_t theme,
+  const char* title,
+  const char* value,
+  const char* detail,
+  bool has_progress,
+  float progress,
+  er_ui_color4_t accent) {
+  if (!scene || !font || !title || !value || !detail || !er_ui_bounds_valid(bounds)) return ER_UI_ERR_INVALID_ARGUMENT;
+  er_ui_status_t status = er_ui_shadcn_card_emit(scene, bounds, theme);
+  if (status != ER_UI_OK) return status;
+  status = er_ui_shadcn_push_ascii_text(scene, font, title, bounds.x + 14.0f, bounds.y + 24.0f, theme.colors.muted);
+  if (status != ER_UI_OK) return status;
+  status = er_ui_shadcn_push_ascii_text(scene, font, value, bounds.x + 14.0f, bounds.y + 56.0f, theme.colors.text);
+  if (status != ER_UI_OK) return status;
+  if (detail[0]) {
+    status = er_ui_shadcn_push_ascii_text(scene, font, detail, bounds.x + 14.0f, bounds.y + 82.0f, theme.colors.muted);
+    if (status != ER_UI_OK) return status;
+  }
+  if (has_progress) {
+    return er_ui_shadcn_progress_emit(scene, er_ui_bounds(bounds.x + 14.0f, bounds.y + bounds.h - 18.0f, bounds.w - 28.0f, 8.0f),
+                                      theme, progress);
+  }
+  return er_ui_scene_push_rect(scene, er_ui_rect_fill(bounds.x + bounds.w - 28.0f, bounds.y + 16.0f, 12.0f, 12.0f, 6.0f, accent));
+}
+
+er_ui_status_t er_ui_shadcn_transaction_row_emit(
+  er_ui_scene_t* scene,
+  vr_font_face_t* font,
+  er_ui_bounds_t bounds,
+  er_ui_resolved_theme_t theme,
+  const char* title,
+  const char* subtitle,
+  const char* date,
+  const char* amount,
+  bool positive,
+  uint32_t id) {
+  if (!scene || !font || !title || !subtitle || !date || !amount || !er_ui_bounds_valid(bounds)) return ER_UI_ERR_INVALID_ARGUMENT;
+  er_ui_status_t status = er_ui_scene_push_hit(scene, er_ui_hit(ER_UI_HIT_TRANSACTION_ROW, id, bounds.x, bounds.y, bounds.w, bounds.h));
+  if (status != ER_UI_OK) return status;
+  status = er_ui_scene_push_rect(scene, er_ui_rect_fill(bounds.x, bounds.y, bounds.w, bounds.h, 0.0f, theme.colors.panel));
+  if (status != ER_UI_OK) return status;
+  status = er_ui_shadcn_push_ascii_text(scene, font, title, bounds.x + 12.0f, bounds.y + 22.0f, theme.colors.text);
+  if (status != ER_UI_OK) return status;
+  status = er_ui_shadcn_push_ascii_text(scene, font, subtitle, bounds.x + 12.0f, bounds.y + 44.0f, theme.colors.muted);
+  if (status != ER_UI_OK) return status;
+  status = er_ui_shadcn_push_ascii_text(scene, font, date, bounds.x + bounds.w - 170.0f, bounds.y + 22.0f, theme.colors.muted);
+  if (status != ER_UI_OK) return status;
+  status = er_ui_shadcn_push_ascii_text(scene, font, amount, bounds.x + bounds.w - 86.0f, bounds.y + 34.0f, positive ? theme.colors.success : theme.colors.danger);
+  if (status != ER_UI_OK) return status;
+  return er_ui_shadcn_separator_emit(scene, er_ui_bounds(bounds.x, bounds.y + bounds.h - 1.0f, bounds.w, 1.0f), theme);
+}
+
+er_ui_status_t er_ui_shadcn_menu_item_emit(
+  er_ui_scene_t* scene,
+  vr_font_face_t* font,
+  er_ui_bounds_t bounds,
+  er_ui_resolved_theme_t theme,
+  const char* label,
+  const char* detail,
+  const char* badge,
+  bool selected,
+  er_ui_color4_t accent,
+  uint32_t id) {
+  if (!scene || !font || !label || !detail || !badge || !er_ui_bounds_valid(bounds)) return ER_UI_ERR_INVALID_ARGUMENT;
+  er_ui_status_t status = er_ui_scene_push_hit(scene, er_ui_hit(ER_UI_HIT_MENU_ITEM, id, bounds.x, bounds.y, bounds.w, bounds.h));
+  if (status != ER_UI_OK) return status;
+  er_ui_color4_t fill = selected ? er_ui_color_with_alpha(accent, 0.18f) : theme.colors.panel;
+  status = er_ui_scene_push_rect(scene, er_ui_rect_fill(bounds.x, bounds.y, bounds.w, bounds.h, theme.radius.control, fill));
+  if (status != ER_UI_OK) return status;
+  status = er_ui_shadcn_push_ascii_text(scene, font, label, bounds.x + 12.0f, bounds.y + 22.0f, theme.colors.text);
+  if (status != ER_UI_OK) return status;
+  if (detail[0]) {
+    status = er_ui_shadcn_push_ascii_text(scene, font, detail, bounds.x + 12.0f, bounds.y + 44.0f, theme.colors.muted);
+    if (status != ER_UI_OK) return status;
+  }
+  if (badge[0]) {
+    return er_ui_shadcn_badge_emit(scene, font, er_ui_bounds(bounds.x + bounds.w - 84.0f, bounds.y + 17.0f, 72.0f, 24.0f), theme, badge,
+                                   ER_UI_SHADCN_BADGE_SECONDARY);
+  }
+  return ER_UI_OK;
+}
+
+er_ui_status_t er_ui_shadcn_control_row_emit(
+  er_ui_scene_t* scene,
+  vr_font_face_t* font,
+  er_ui_bounds_t bounds,
+  er_ui_resolved_theme_t theme,
+  const char* label,
+  const char* detail,
+  const char* accessory,
+  uint32_t id) {
+  if (!scene || !font || !label || !detail || !accessory || !er_ui_bounds_valid(bounds)) return ER_UI_ERR_INVALID_ARGUMENT;
+  if (id != 0u) {
+    er_ui_status_t hit_status = er_ui_scene_push_hit(scene, er_ui_hit(ER_UI_HIT_LIST_ROW, id, bounds.x, bounds.y, bounds.w, bounds.h));
+    if (hit_status != ER_UI_OK) return hit_status;
+  }
+  er_ui_status_t status = er_ui_scene_push_rect(scene, er_ui_rect_fill(bounds.x, bounds.y, bounds.w, bounds.h, 0.0f, theme.colors.panel));
+  if (status != ER_UI_OK) return status;
+  status = er_ui_shadcn_push_ascii_text(scene, font, label, bounds.x + 12.0f, bounds.y + 22.0f, theme.colors.text);
+  if (status != ER_UI_OK) return status;
+  if (detail[0]) {
+    status = er_ui_shadcn_push_ascii_text(scene, font, detail, bounds.x + 12.0f, bounds.y + 44.0f, theme.colors.muted);
+    if (status != ER_UI_OK) return status;
+  }
+  if (accessory[0]) {
+    status = er_ui_shadcn_push_ascii_text(scene, font, accessory, bounds.x + bounds.w - 116.0f, bounds.y + 34.0f, theme.colors.muted);
+    if (status != ER_UI_OK) return status;
+  }
+  return er_ui_shadcn_separator_emit(scene, er_ui_bounds(bounds.x, bounds.y + bounds.h - 1.0f, bounds.w, 1.0f), theme);
+}
+
 er_ui_status_t er_ui_shadcn_bar_chart_emit(
   er_ui_scene_t* scene,
   vr_font_face_t* font,

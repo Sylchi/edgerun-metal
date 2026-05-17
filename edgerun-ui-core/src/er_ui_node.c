@@ -296,6 +296,57 @@ er_ui_node_t er_ui_node_receipt_row(const char* label, const char* amount, const
   return node;
 }
 
+er_ui_node_t er_ui_node_panel_header(const char* title, const char* subtitle, const char* action_label, uint32_t action_id) {
+  er_ui_node_t node = er_ui_node_base(ER_UI_NODE_PANEL_HEADER);
+  node.label = title;
+  node.detail = subtitle;
+  node.value = action_label;
+  node.id = action_id;
+  return node;
+}
+
+er_ui_node_t er_ui_node_metric_card(const char* title, const char* value, const char* detail, bool has_progress, float progress, er_ui_color4_t accent) {
+  er_ui_node_t node = er_ui_node_base(ER_UI_NODE_METRIC_CARD);
+  node.label = title;
+  node.value = value;
+  node.detail = detail;
+  node.active = has_progress;
+  node.number = progress;
+  node.color = accent;
+  return node;
+}
+
+er_ui_node_t er_ui_node_transaction_row(const char* title, const char* subtitle, const char* date, const char* amount, bool positive, uint32_t id) {
+  er_ui_node_t node = er_ui_node_base(ER_UI_NODE_TRANSACTION_ROW);
+  node.label = title;
+  node.value = subtitle;
+  node.aux = date;
+  node.detail = amount;
+  node.active = positive;
+  node.id = id;
+  return node;
+}
+
+er_ui_node_t er_ui_node_menu_item(const char* label, const char* detail, const char* badge, bool selected, er_ui_color4_t accent, uint32_t id) {
+  er_ui_node_t node = er_ui_node_base(ER_UI_NODE_MENU_ITEM);
+  node.label = label;
+  node.detail = detail;
+  node.value = badge;
+  node.active = selected;
+  node.color = accent;
+  node.id = id;
+  return node;
+}
+
+er_ui_node_t er_ui_node_control_row(const char* label, const char* detail, const char* accessory, uint32_t id) {
+  er_ui_node_t node = er_ui_node_base(ER_UI_NODE_CONTROL_ROW);
+  node.label = label;
+  node.detail = detail;
+  node.value = accessory;
+  node.id = id;
+  return node;
+}
+
 er_ui_node_t* er_ui_node_set_bounds(er_ui_node_t* node, er_ui_bounds_t bounds) {
   if (!node) return node;
   node->bounds = bounds;
@@ -453,6 +504,16 @@ er_ui_status_t er_ui_node_render(
       return er_ui_shadcn_package_card_emit(scene, font, rect, theme, node->label, node->value, node->detail, node->id);
     case ER_UI_NODE_RECEIPT_ROW:
       return er_ui_shadcn_receipt_row_emit(scene, font, rect, theme, node->label, node->value, node->detail, node->id);
+    case ER_UI_NODE_PANEL_HEADER:
+      return er_ui_shadcn_panel_header_emit(scene, font, rect, theme, node->label, node->detail, node->value, node->id);
+    case ER_UI_NODE_METRIC_CARD:
+      return er_ui_shadcn_metric_card_emit(scene, font, rect, theme, node->label, node->value, node->detail, node->active, node->number, node->color);
+    case ER_UI_NODE_TRANSACTION_ROW:
+      return er_ui_shadcn_transaction_row_emit(scene, font, rect, theme, node->label, node->value, node->aux, node->detail, node->active, node->id);
+    case ER_UI_NODE_MENU_ITEM:
+      return er_ui_shadcn_menu_item_emit(scene, font, rect, theme, node->label, node->detail, node->value, node->active, node->color, node->id);
+    case ER_UI_NODE_CONTROL_ROW:
+      return er_ui_shadcn_control_row_emit(scene, font, rect, theme, node->label, node->detail, node->value, node->id);
     default:
       return ER_UI_ERR_INVALID_ARGUMENT;
   }
