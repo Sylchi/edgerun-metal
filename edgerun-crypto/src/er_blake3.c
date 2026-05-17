@@ -1,5 +1,9 @@
 #include "er_blake3.h"
 
+#if defined(ER_BLAKE3_ENABLE_THREADS)
+#include <pthread.h>
+#endif
+
 #if !defined(ER_BLAKE3_NO_SIMD) && defined(__AVX512F__) && defined(__AVX2__) && \
     (defined(__x86_64__) || defined(_M_X64) || defined(__i386) || defined(_M_IX86))
 #include <immintrin.h>
@@ -103,6 +107,8 @@
 #define ER_BLAKE3_AVX512_SUBTREE32_CHUNKS 32u
 #define ER_BLAKE3_AVX512_SUBTREE32_LEVEL 5u
 #define ER_BLAKE3_AVX512_SUBTREE32_MASK (ER_BLAKE3_AVX512_SUBTREE32_CHUNKS - 1u)
+#define ER_BLAKE3_PARALLEL_MIN_LEN (8u * 1024u * 1024u)
+#define ER_BLAKE3_PARALLEL_MAX_THREADS 16u
 
 static const uint32_t g_er_blake3_iv[ER_BLAKE3_CV_WORDS] = {
   ER_BLAKE3_IV0, ER_BLAKE3_IV1, ER_BLAKE3_IV2, ER_BLAKE3_IV3,
@@ -928,6 +934,178 @@ static void er_blake3_subtree16_cv(const uint32_t cvs[ER_BLAKE3_AVX2_SUBTREE16_C
 }
 #endif
 
+#if defined(ER_BLAKE3_ENABLE_THREADS)
+static uint8_t er_blake3_is_power_of_two_size(size_t value) {
+  return value != 0u && (value & (value - 1u)) == 0u;
+}
+
+static void er_blake3_chunk_cv_full_scalar(const uint8_t* bytes, uint64_t chunk_counter,
+                                           uint32_t flags, uint32_t out_cv[ER_BLAKE3_CV_WORDS]) {
+  uint32_t cv[ER_BLAKE3_CV_WORDS];
+  uint32_t block_flags;
+  size_t block;
+
+  er_blake3_copy_cv(cv, g_er_blake3_iv);
+  for (block = 0u; block < ER_BLAKE3_FULL_CHUNK_BLOCKS; ++block) {
+    block_flags = flags;
+    if (block == 0u) {
+      block_flags |= ER_BLAKE3_CHUNK_START;
+    }
+    if (block == (ER_BLAKE3_FULL_CHUNK_BLOCKS - 1u)) {
+      block_flags |= ER_BLAKE3_CHUNK_END;
+    }
+    er_blake3_compress_cv(cv, &bytes[block * ER_BLAKE3_BLOCK_LEN], chunk_counter,
+                          ER_BLAKE3_BLOCK_LEN, block_flags, cv);
+  }
+  er_blake3_copy_cv(out_cv, cv);
+}
+
+static void er_blake3_subtree_cv_exact(const uint8_t* bytes, uint64_t chunk_counter,
+                                       size_t chunk_count, uint32_t flags,
+                                       uint32_t out_cv[ER_BLAKE3_CV_WORDS]) {
+  size_t left_chunks;
+  uint32_t left_cv[ER_BLAKE3_CV_WORDS];
+  uint32_t right_cv[ER_BLAKE3_CV_WORDS];
+
+#if defined(ER_BLAKE3_USE_AVX512)
+  if (chunk_count == ER_BLAKE3_AVX512_SUBTREE32_CHUNKS) {
+    uint32_t cvs[ER_BLAKE3_AVX512_LANES][ER_BLAKE3_CV_WORDS];
+
+    er_blake3_avx512_compress16_full_chunks(bytes, chunk_counter, flags, cvs);
+    er_blake3_subtree16_cv(cvs, left_cv);
+    er_blake3_avx512_compress16_full_chunks(bytes + (ER_BLAKE3_AVX512_LANES * ER_BLAKE3_CHUNK_LEN),
+                                            chunk_counter + ER_BLAKE3_AVX512_LANES, flags, cvs);
+    er_blake3_subtree16_cv(cvs, right_cv);
+    er_blake3_parent_cv(left_cv, right_cv, out_cv);
+    return;
+  }
+  if (chunk_count == ER_BLAKE3_AVX512_LANES) {
+    uint32_t cvs[ER_BLAKE3_AVX512_LANES][ER_BLAKE3_CV_WORDS];
+
+    er_blake3_avx512_compress16_full_chunks(bytes, chunk_counter, flags, cvs);
+    er_blake3_subtree16_cv(cvs, out_cv);
+    return;
+  }
+#endif
+#if defined(ER_BLAKE3_USE_AVX2)
+  if (chunk_count == ER_BLAKE3_AVX2_SUBTREE16_CHUNKS) {
+    uint32_t cvs[ER_BLAKE3_AVX2_SUBTREE16_CHUNKS][ER_BLAKE3_CV_WORDS];
+
+    er_blake3_avx2_compress8_full_chunks(bytes, chunk_counter, flags, cvs);
+    er_blake3_avx2_compress8_full_chunks(bytes + (ER_BLAKE3_AVX2_LANES * ER_BLAKE3_CHUNK_LEN),
+                                         chunk_counter + ER_BLAKE3_AVX2_LANES,
+                                         flags, &cvs[ER_BLAKE3_AVX2_LANES]);
+    er_blake3_subtree16_cv(cvs, out_cv);
+    return;
+  }
+  if (chunk_count == ER_BLAKE3_AVX2_LANES) {
+    uint32_t cvs[ER_BLAKE3_AVX2_LANES][ER_BLAKE3_CV_WORDS];
+
+    er_blake3_avx2_compress8_full_chunks(bytes, chunk_counter, flags, cvs);
+    er_blake3_subtree8_cv(cvs, out_cv);
+    return;
+  }
+#endif
+  if (chunk_count == 1u) {
+    er_blake3_chunk_cv_full_scalar(bytes, chunk_counter, flags, out_cv);
+    return;
+  }
+
+  left_chunks = chunk_count >> 1u;
+  er_blake3_subtree_cv_exact(bytes, chunk_counter, left_chunks, flags, left_cv);
+  er_blake3_subtree_cv_exact(bytes + (left_chunks * ER_BLAKE3_CHUNK_LEN),
+                             chunk_counter + left_chunks, left_chunks, flags, right_cv);
+  er_blake3_parent_cv(left_cv, right_cv, out_cv);
+}
+
+static void er_blake3_root_from_parent_cvs(const uint32_t left_cv[ER_BLAKE3_CV_WORDS],
+                                           const uint32_t right_cv[ER_BLAKE3_CV_WORDS],
+                                           uint8_t out[ER_BLAKE3_OUT_LEN]) {
+  ErBlake3Output output;
+
+  er_blake3_copy_cv(output.input_cv, g_er_blake3_iv);
+  er_blake3_parent_block(left_cv, right_cv, output.block);
+  output.counter = 0u;
+  output.block_len = ER_BLAKE3_BLOCK_LEN;
+  output.flags = ER_BLAKE3_PARENT;
+  er_blake3_output_root(&output, out);
+}
+
+typedef struct {
+  const uint8_t* bytes;
+  uint64_t chunk_counter;
+  size_t chunk_count;
+  uint32_t flags;
+  uint32_t cv[ER_BLAKE3_CV_WORDS];
+} ErBlake3ThreadWork;
+
+static void* er_blake3_thread_subtree(void* arg) {
+  ErBlake3ThreadWork* work = (ErBlake3ThreadWork*)arg;
+
+  er_blake3_subtree_cv_exact(work->bytes, work->chunk_counter, work->chunk_count, work->flags, work->cv);
+  return 0;
+}
+
+static uint8_t er_blake3_hash_bytes_parallel_full_chunks(const uint8_t* bytes, size_t len,
+                                                         uint8_t out[ER_BLAKE3_OUT_LEN]) {
+  pthread_t threads[ER_BLAKE3_PARALLEL_MAX_THREADS];
+  ErBlake3ThreadWork work[ER_BLAKE3_PARALLEL_MAX_THREADS];
+  uint32_t level_cvs[ER_BLAKE3_PARALLEL_MAX_THREADS][ER_BLAKE3_CV_WORDS];
+  uint32_t next_cvs[ER_BLAKE3_PARALLEL_MAX_THREADS][ER_BLAKE3_CV_WORDS];
+  size_t chunk_count = len / ER_BLAKE3_CHUNK_LEN;
+  size_t thread_count = ER_BLAKE3_PARALLEL_MAX_THREADS;
+  size_t chunks_per_thread;
+  size_t level_count;
+  size_t i;
+  size_t out_i;
+
+  while (thread_count > 1u && (chunk_count < thread_count || (chunk_count % thread_count) != 0u)) {
+    thread_count >>= 1u;
+  }
+  chunks_per_thread = chunk_count / thread_count;
+  if (thread_count < 2u || !er_blake3_is_power_of_two_size(chunks_per_thread)) {
+    return 0u;
+  }
+
+  for (i = 0u; i < thread_count; ++i) {
+    work[i].bytes = bytes + (i * chunks_per_thread * ER_BLAKE3_CHUNK_LEN);
+    work[i].chunk_counter = (uint64_t)(i * chunks_per_thread);
+    work[i].chunk_count = chunks_per_thread;
+    work[i].flags = 0u;
+    if (pthread_create(&threads[i], 0, er_blake3_thread_subtree, &work[i]) != 0) {
+      while (i > 0u) {
+        --i;
+        (void)pthread_join(threads[i], 0);
+      }
+      return 0u;
+    }
+  }
+
+  for (i = 0u; i < thread_count; ++i) {
+    if (pthread_join(threads[i], 0) != 0) {
+      return 0u;
+    }
+    er_blake3_copy_cv(level_cvs[i], work[i].cv);
+  }
+
+  level_count = thread_count;
+  while (level_count > 2u) {
+    out_i = 0u;
+    for (i = 0u; i < level_count; i += 2u) {
+      er_blake3_parent_cv(level_cvs[i], level_cvs[i + 1u], next_cvs[out_i]);
+      ++out_i;
+    }
+    for (i = 0u; i < out_i; ++i) {
+      er_blake3_copy_cv(level_cvs[i], next_cvs[i]);
+    }
+    level_count = out_i;
+  }
+
+  er_blake3_root_from_parent_cvs(level_cvs[0], level_cvs[1], out);
+  return 1u;
+}
+#endif
+
 static uint8_t er_blake3_finish_chunk(ErBlake3Hasher* hasher) {
   uint32_t flags = hasher->flags | ER_BLAKE3_CHUNK_END;
   uint32_t chunk_cv[ER_BLAKE3_CV_WORDS];
@@ -1141,9 +1319,16 @@ uint8_t er_blake3_final(const ErBlake3Hasher* hasher, uint8_t out[ER_BLAKE3_OUT_
 uint8_t er_blake3_hash_bytes(const uint8_t* bytes, size_t len, uint8_t out[ER_BLAKE3_OUT_LEN]) {
   ErBlake3Hasher hasher;
 
-  if (len > 0u && bytes == 0) {
+  if (out == 0 || (len > 0u && bytes == 0)) {
     return 0u;
   }
+#if defined(ER_BLAKE3_ENABLE_THREADS)
+  if (len >= ER_BLAKE3_PARALLEL_MIN_LEN && (len % ER_BLAKE3_CHUNK_LEN) == 0u &&
+      er_blake3_is_power_of_two_size(len / ER_BLAKE3_CHUNK_LEN) &&
+      er_blake3_hash_bytes_parallel_full_chunks(bytes, len, out) != 0u) {
+    return 1u;
+  }
+#endif
   er_blake3_init(&hasher);
   if (er_blake3_update(&hasher, bytes, len) == 0u) {
     return 0u;
@@ -1152,7 +1337,11 @@ uint8_t er_blake3_hash_bytes(const uint8_t* bytes, size_t len, uint8_t out[ER_BL
 }
 
 const char* er_blake3_backend_name(void) {
-#if defined(ER_BLAKE3_USE_AVX512)
+#if defined(ER_BLAKE3_ENABLE_THREADS) && defined(ER_BLAKE3_USE_AVX512)
+  return "avx512-16x+pthreads";
+#elif defined(ER_BLAKE3_ENABLE_THREADS) && defined(ER_BLAKE3_USE_AVX2)
+  return "avx2-8x+pthreads";
+#elif defined(ER_BLAKE3_USE_AVX512)
   return "avx512-16x";
 #elif defined(ER_BLAKE3_USE_AVX2)
   return "avx2-8x";

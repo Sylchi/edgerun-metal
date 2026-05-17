@@ -87,7 +87,8 @@ int main(void) {
     {"chunk", ER_BLAKE3_CHUNK_LEN, 100000u},
     {"64k", 65536u, 5000u},
     {"1m", 1048576u, 500u},
-    {"8m", 8388608u, 64u}
+    {"8m", 8388608u, 64u},
+    {"64m", 67108864u, 8u}
   };
   uint8_t* bytes;
   size_t max_len = 0u;

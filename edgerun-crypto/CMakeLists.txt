@@ -4,6 +4,7 @@ project(edgerun_crypto C)
 option(ER_CRYPTO_DISABLE_SIMD "Disable SIMD acceleration in edgerun-crypto" OFF)
 option(ER_CRYPTO_ENABLE_AVX2 "Build edgerun-crypto with AVX2 acceleration" OFF)
 option(ER_CRYPTO_ENABLE_AVX512 "Build edgerun-crypto with AVX-512 acceleration" OFF)
+option(ER_CRYPTO_ENABLE_THREADS "Build edgerun-crypto with pthread parallel hashing" OFF)
 
 if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR
     AND NOT CMAKE_BUILD_TYPE
@@ -20,6 +21,11 @@ target_include_directories(edgerun_crypto PUBLIC
 target_compile_features(edgerun_crypto PUBLIC c_std_11)
 if(ER_CRYPTO_DISABLE_SIMD)
   target_compile_definitions(edgerun_crypto PRIVATE ER_BLAKE3_NO_SIMD=1)
+endif()
+if(ER_CRYPTO_ENABLE_THREADS)
+  find_package(Threads REQUIRED)
+  target_compile_definitions(edgerun_crypto PRIVATE ER_BLAKE3_ENABLE_THREADS=1)
+  target_link_libraries(edgerun_crypto PUBLIC Threads::Threads)
 endif()
 if(ER_CRYPTO_ENABLE_AVX512 AND NOT ER_CRYPTO_DISABLE_SIMD)
   if(MSVC)
