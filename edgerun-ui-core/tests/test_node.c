@@ -122,6 +122,13 @@ void run_node_tests(void) {
     er_ui_node_t toast = er_ui_node_toast("Scheduled", theme.colors.accent);
     er_ui_node_t empty = er_ui_node_empty("No results", "Try another filter.");
     er_ui_node_t list_row = er_ui_node_list_row("Billing", "Command B", 8300u, true);
+    er_ui_node_t field = er_ui_node_field("Email", "name@example.com", 8400u);
+    er_ui_node_t text_area = er_ui_node_text_area("Message", "Type your message here.", 8401u);
+    const char* const tab_labels[] = {"Account", "Billing", "Team"};
+    er_ui_node_t tabs = er_ui_node_tabs(tab_labels, 3u, 1u, 8500u);
+    const char* const chart_labels[] = {"Jan", "Feb", "Mar"};
+    const float chart_values[] = {0.25f, 0.72f, 0.54f};
+    er_ui_node_t chart = er_ui_node_bar_chart("Visitors", chart_labels, chart_values, 3u, 8600u, 1u);
 
     expect_status(er_ui_node_render(&alert, &scene, face, er_ui_bounds(0.0f, 170.0f, 360.0f, 76.0f), theme), ER_UI_OK, "node: alert renders");
     expect_status(er_ui_node_render(&avatar, &scene, face, er_ui_bounds(0.0f, 254.0f, 42.0f, 42.0f), theme), ER_UI_OK, "node: avatar renders");
@@ -136,6 +143,12 @@ void run_node_tests(void) {
     expect_status(er_ui_node_render(&empty, &scene, face, er_ui_bounds(0.0f, 538.0f, 280.0f, 120.0f), theme), ER_UI_OK, "node: empty renders");
     expect_status(er_ui_node_render(&list_row, &scene, face, er_ui_bounds(0.0f, 670.0f, 220.0f, 44.0f), theme), ER_UI_OK,
                   "node: list row renders");
+    expect_status(er_ui_node_render(&field, &scene, face, er_ui_bounds(0.0f, 726.0f, 240.0f, 58.0f), theme), ER_UI_OK, "node: field renders");
+    expect_status(er_ui_node_render(&text_area, &scene, face, er_ui_bounds(0.0f, 796.0f, 280.0f, 84.0f), theme), ER_UI_OK,
+                  "node: text area renders");
+    expect_status(er_ui_node_render(&tabs, &scene, face, er_ui_bounds(0.0f, 892.0f, 300.0f, 38.0f), theme), ER_UI_OK, "node: tabs render");
+    expect_status(er_ui_node_render(&chart, &scene, face, er_ui_bounds(0.0f, 942.0f, 320.0f, 160.0f), theme), ER_UI_OK,
+                  "node: bar chart renders");
 
     expect_true(scene.rect_count > 0u, "node: render emits rect geometry");
     expect_true(scene.hit_count > 0u, "node: render emits hit targets");

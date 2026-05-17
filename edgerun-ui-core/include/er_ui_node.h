@@ -34,7 +34,11 @@ typedef enum {
   ER_UI_NODE_BREADCRUMB,
   ER_UI_NODE_TOAST,
   ER_UI_NODE_EMPTY,
-  ER_UI_NODE_LIST_ROW
+  ER_UI_NODE_LIST_ROW,
+  ER_UI_NODE_FIELD,
+  ER_UI_NODE_TEXT_AREA,
+  ER_UI_NODE_TABS,
+  ER_UI_NODE_BAR_CHART
 } er_ui_node_kind_t;
 
 typedef struct er_ui_node_t er_ui_node_t;
@@ -51,6 +55,8 @@ struct er_ui_node_t {
   size_t label_count;
   const char* const* cells;
   size_t row_count;
+  const float* values;
+  size_t value_count;
   size_t selected;
   uint32_t id;
   bool active;
@@ -84,6 +90,10 @@ er_ui_node_t er_ui_node_breadcrumb(const char* const* labels, size_t label_count
 er_ui_node_t er_ui_node_toast(const char* message, er_ui_color4_t accent);
 er_ui_node_t er_ui_node_empty(const char* title, const char* body);
 er_ui_node_t er_ui_node_list_row(const char* title, const char* detail, uint32_t id, bool selected);
+er_ui_node_t er_ui_node_field(const char* label, const char* value, uint32_t id);
+er_ui_node_t er_ui_node_text_area(const char* label, const char* value, uint32_t id);
+er_ui_node_t er_ui_node_tabs(const char* const* labels, size_t label_count, size_t selected, uint32_t base_id);
+er_ui_node_t er_ui_node_bar_chart(const char* title, const char* const* labels, const float* values, size_t value_count, uint32_t base_id, size_t selected);
 er_ui_node_t* er_ui_node_set_bounds(er_ui_node_t* node, er_ui_bounds_t bounds);
 er_ui_node_t* er_ui_node_set_gap(er_ui_node_t* node, float gap);
 er_ui_node_t* er_ui_node_set_padding(er_ui_node_t* node, float padding);
