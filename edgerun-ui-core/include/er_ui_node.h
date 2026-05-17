@@ -60,7 +60,10 @@ typedef enum {
   ER_UI_NODE_MASONRY,
   ER_UI_NODE_BENTO_GRID,
   ER_UI_NODE_SCROLL_AREA,
-  ER_UI_NODE_SPACER
+  ER_UI_NODE_SPACER,
+  ER_UI_NODE_TOOLTIP,
+  ER_UI_NODE_DIALOG,
+  ER_UI_NODE_PROGRESS_RING
 } er_ui_node_kind_t;
 
 typedef struct er_ui_node_t er_ui_node_t;
@@ -139,6 +142,9 @@ er_ui_node_t er_ui_node_masonry(size_t columns);
 er_ui_node_t er_ui_node_bento_grid(size_t columns);
 er_ui_node_t er_ui_node_scroll_area(float offset_px, uint32_t id);
 er_ui_node_t er_ui_node_spacer(void);
+er_ui_node_t er_ui_node_tooltip(const char* text);
+er_ui_node_t er_ui_node_dialog(const char* title, const char* body, er_ui_color4_t accent);
+er_ui_node_t er_ui_node_progress_ring(float value, er_ui_color4_t color);
 er_ui_node_t* er_ui_node_set_bounds(er_ui_node_t* node, er_ui_bounds_t bounds);
 er_ui_node_t* er_ui_node_set_gap(er_ui_node_t* node, float gap);
 er_ui_node_t* er_ui_node_set_padding(er_ui_node_t* node, float padding);

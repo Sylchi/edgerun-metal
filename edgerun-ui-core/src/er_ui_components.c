@@ -1054,6 +1054,61 @@ er_ui_status_t er_ui_shadcn_empty_emit(
   return er_ui_shadcn_push_ascii_text(scene, font, body, bounds.x + 10.0f, bounds.y + 94.0f, theme.colors.muted);
 }
 
+er_ui_status_t er_ui_shadcn_tooltip_emit(
+  er_ui_scene_t* scene,
+  vr_font_face_t* font,
+  er_ui_bounds_t bounds,
+  er_ui_resolved_theme_t theme,
+  const char* text) {
+  if (!scene || !font || !text || !er_ui_bounds_valid(bounds)) return ER_UI_ERR_INVALID_ARGUMENT;
+  er_ui_status_t status = er_ui_scene_push_rect(scene, er_ui_rect_fill(bounds.x, bounds.y, bounds.w, bounds.h, theme.radius.card, theme.colors.topbar));
+  if (status != ER_UI_OK) return status;
+  status = er_ui_scene_push_rect(scene, er_ui_rect_border(bounds.x, bounds.y, bounds.w, bounds.h, theme.radius.card, er_ui_color_with_alpha(theme.colors.border, 0.72f)));
+  if (status != ER_UI_OK) return status;
+  return er_ui_shadcn_push_ascii_text(scene, font, text, bounds.x + 10.0f, bounds.y + bounds.h * 0.62f, theme.colors.text);
+}
+
+er_ui_status_t er_ui_shadcn_dialog_emit(
+  er_ui_scene_t* scene,
+  vr_font_face_t* font,
+  er_ui_bounds_t bounds,
+  er_ui_resolved_theme_t theme,
+  const char* title,
+  const char* body,
+  er_ui_color4_t accent) {
+  if (!scene || !font || !title || !body || !er_ui_bounds_valid(bounds)) return ER_UI_ERR_INVALID_ARGUMENT;
+  er_ui_status_t status = er_ui_shadcn_card_emit(scene, bounds, theme);
+  if (status != ER_UI_OK) return status;
+  status = er_ui_scene_push_rect(scene, er_ui_rect_fill(bounds.x + 18.0f, bounds.y + 18.0f, 34.0f, 34.0f, 10.0f, er_ui_color_with_alpha(accent, 0.28f)));
+  if (status != ER_UI_OK) return status;
+  status = er_ui_shadcn_push_ascii_text(scene, font, "!", bounds.x + 31.0f, bounds.y + 40.0f, accent);
+  if (status != ER_UI_OK) return status;
+  status = er_ui_shadcn_push_ascii_text(scene, font, title, bounds.x + 64.0f, bounds.y + 32.0f, theme.colors.text);
+  if (status != ER_UI_OK) return status;
+  status = er_ui_shadcn_push_ascii_text(scene, font, body, bounds.x + 64.0f, bounds.y + 56.0f, theme.colors.muted);
+  if (status != ER_UI_OK) return status;
+  return er_ui_shadcn_separator_emit(scene, er_ui_bounds(bounds.x + 18.0f, bounds.y + 74.0f, bounds.w - 36.0f, 1.0f), theme);
+}
+
+er_ui_status_t er_ui_shadcn_progress_ring_emit(er_ui_scene_t* scene, er_ui_bounds_t bounds, er_ui_resolved_theme_t theme, float value, er_ui_color4_t color) {
+  if (!scene || !er_ui_bounds_valid(bounds)) return ER_UI_ERR_INVALID_ARGUMENT;
+  float size = er_ui_float_min(bounds.w, bounds.h);
+  float x = bounds.x + (bounds.w - size) * 0.5f;
+  float y = bounds.y + (bounds.h - size) * 0.5f;
+  float t = er_ui_float_max(size * 0.10f, 2.0f);
+  er_ui_status_t status = er_ui_scene_push_rect(scene, er_ui_rect_border(x, y, size, size, size * 0.5f, er_ui_color_with_alpha(theme.colors.border, 0.70f)));
+  if (status != ER_UI_OK) return status;
+  float clamped = er_ui_float_clamp(value, 0.0f, 1.0f);
+  size_t segments = (size_t)(clamped * 12.0f + 0.5f);
+  const float px[12] = {0.50f, 0.70f, 0.84f, 0.90f, 0.84f, 0.70f, 0.50f, 0.30f, 0.16f, 0.10f, 0.16f, 0.30f};
+  const float py[12] = {0.06f, 0.10f, 0.24f, 0.44f, 0.64f, 0.80f, 0.86f, 0.80f, 0.64f, 0.44f, 0.24f, 0.10f};
+  for (size_t i = 0u; i < segments && i < 12u; ++i) {
+    status = er_ui_scene_push_rect(scene, er_ui_rect_fill(x + size * px[i] - t * 0.5f, y + size * py[i] - t * 0.5f, t, t, t * 0.5f, color));
+    if (status != ER_UI_OK) return status;
+  }
+  return ER_UI_OK;
+}
+
 er_ui_status_t er_ui_shadcn_alert_emit(
   er_ui_scene_t* scene,
   vr_font_face_t* font,

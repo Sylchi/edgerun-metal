@@ -162,6 +162,9 @@ void run_node_tests(void) {
     expect_status(er_ui_node_add_child(&scroll, &scroll_a), ER_UI_OK, "node: scroll accepts first child");
     expect_status(er_ui_node_add_child(&scroll, &scroll_b), ER_UI_OK, "node: scroll accepts second child");
     er_ui_node_t spacer = er_ui_node_spacer();
+    er_ui_node_t tooltip = er_ui_node_tooltip("Verify package");
+    er_ui_node_t dialog = er_ui_node_dialog("Run network app", "Verify signed package bytes first.", theme.colors.accent);
+    er_ui_node_t ring = er_ui_node_progress_ring(0.58f, theme.colors.success);
 
     expect_status(er_ui_node_render(&alert, &scene, face, er_ui_bounds(0.0f, 170.0f, 360.0f, 76.0f), theme), ER_UI_OK, "node: alert renders");
     expect_status(er_ui_node_render(&avatar, &scene, face, er_ui_bounds(0.0f, 254.0f, 42.0f, 42.0f), theme), ER_UI_OK, "node: avatar renders");
@@ -222,6 +225,12 @@ void run_node_tests(void) {
                   "node: scroll area renders clipped children");
     expect_status(er_ui_node_render(&spacer, &scene, face, er_ui_bounds(0.0f, 2636.0f, 24.0f, 24.0f), theme), ER_UI_OK,
                   "node: spacer renders as no-op");
+    expect_status(er_ui_node_render(&tooltip, &scene, face, er_ui_bounds(0.0f, 2672.0f, 180.0f, 34.0f), theme), ER_UI_OK,
+                  "node: tooltip renders");
+    expect_status(er_ui_node_render(&dialog, &scene, face, er_ui_bounds(0.0f, 2718.0f, 360.0f, 140.0f), theme), ER_UI_OK,
+                  "node: dialog renders");
+    expect_status(er_ui_node_render(&ring, &scene, face, er_ui_bounds(0.0f, 2870.0f, 48.0f, 48.0f), theme), ER_UI_OK,
+                  "node: progress ring renders");
 
     expect_true(scene.rect_count > 0u, "node: render emits rect geometry");
     expect_true(scene.hit_count > 0u, "node: render emits hit targets");
