@@ -425,6 +425,21 @@ er_ui_node_t er_ui_node_input_otp(const char* const* values, size_t value_count,
   return node;
 }
 
+er_ui_node_t er_ui_node_navigation_menu(const char* const* tabs, size_t tab_count, size_t selected, const char* title, const char* detail,
+                                        const char* row_title, const char* row_detail, uint32_t base_id) {
+  er_ui_node_t node = er_ui_node_base(ER_UI_NODE_NAVIGATION_MENU);
+  node.labels = tabs;
+  node.label_count = tab_count;
+  node.selected = selected;
+  node.label = title;
+  node.detail = detail;
+  node.aux = row_title;
+  node.extra = row_detail;
+  node.id = base_id;
+  node.gap = 8.0f;
+  return node;
+}
+
 er_ui_node_t er_ui_node_route_path(const char* label, const char* const* hops, size_t hop_count) {
   er_ui_node_t node = er_ui_node_base(ER_UI_NODE_ROUTE_PATH);
   node.label = label;
@@ -771,6 +786,7 @@ const char* er_ui_node_kind_label(er_ui_node_kind_t kind) {
     case ER_UI_NODE_RADIO_GROUP: return "radio-group";
     case ER_UI_NODE_INPUT_GROUP: return "input-group";
     case ER_UI_NODE_INPUT_OTP: return "input-otp";
+    case ER_UI_NODE_NAVIGATION_MENU: return "navigation-menu";
     case ER_UI_NODE_ROUTE_PATH: return "route-path";
     case ER_UI_NODE_PACKAGE_CARD: return "package-card";
     case ER_UI_NODE_RECEIPT_ROW: return "receipt-row";
@@ -1097,6 +1113,9 @@ er_ui_status_t er_ui_node_accessibility(const er_ui_node_t* node, er_ui_a11y_nod
     case ER_UI_NODE_INPUT_OTP:
       out = er_ui_a11y_base(ER_UI_A11Y_GROUP, "one-time password", false, 0u);
       break;
+    case ER_UI_NODE_NAVIGATION_MENU:
+      out = er_ui_a11y_base(ER_UI_A11Y_NAVIGATION, node->label, false, 0u);
+      break;
     case ER_UI_NODE_TABS:
       out = er_ui_a11y_base(ER_UI_A11Y_TAB_LIST, "tabs", false, 0u);
       break;
@@ -1215,6 +1234,17 @@ er_ui_status_t er_ui_node_accessibility_child(const er_ui_node_t* node, size_t c
     er_ui_a11y_set_value(&out, node->labels[child_index]);
     if (child_index == node->selected) out.states |= ER_UI_A11Y_STATE_FOCUSED;
     *out_a11y = out;
+    return ER_UI_OK;
+  }
+  if (node->kind == ER_UI_NODE_NAVIGATION_MENU) {
+    if (!node->labels || child_index > node->label_count) return ER_UI_ERR_INVALID_ARGUMENT;
+    if (child_index < node->label_count) {
+      er_ui_a11y_node_t out = er_ui_a11y_base(ER_UI_A11Y_BUTTON, node->labels[child_index], true, node->id + (uint32_t)child_index);
+      if (child_index == node->selected) out.states |= ER_UI_A11Y_STATE_SELECTED;
+      *out_a11y = out;
+      return ER_UI_OK;
+    }
+    *out_a11y = er_ui_a11y_base(ER_UI_A11Y_LIST_ITEM, node->aux, true, node->id + (uint32_t)node->label_count);
     return ER_UI_OK;
   }
   if (node->kind == ER_UI_NODE_BREADCRUMB) {
@@ -1683,6 +1713,40 @@ static er_ui_status_t er_ui_node_render_input_otp(
   return ER_UI_OK;
 }
 
+static er_ui_status_t er_ui_node_render_navigation_menu(
+  const er_ui_node_t* node,
+  er_ui_scene_t* scene,
+  vr_font_face_t* font,
+  er_ui_bounds_t bounds,
+  er_ui_resolved_theme_t theme) {
+  if (!node || !scene || !font || !node->labels || node->label_count == 0u || !node->label || !node->detail || !node->aux || !node->extra ||
+      !er_ui_bounds_valid(bounds)) {
+    return ER_UI_ERR_INVALID_ARGUMENT;
+  }
+  float nav_h = 38.0f;
+  float gap = node->gap;
+  float total_gap = 4.0f * (float)(node->label_count - 1u);
+  float item_w = (er_ui_float_min(bounds.w, 360.0f) - total_gap) / (float)node->label_count;
+  if (item_w <= 0.0f) return ER_UI_ERR_INVALID_ARGUMENT;
+  for (size_t i = 0u; i < node->label_count; ++i) {
+    er_ui_bounds_t item = er_ui_bounds(bounds.x + (item_w + 4.0f) * (float)i, bounds.y, item_w, nav_h);
+    er_ui_shadcn_button_variant_t variant = i == node->selected ? ER_UI_SHADCN_BUTTON_SECONDARY : ER_UI_SHADCN_BUTTON_GHOST;
+    er_ui_status_t status = er_ui_shadcn_button_emit(scene, font, item, theme, node->labels[i], node->id + (uint32_t)i, variant, ER_UI_SHADCN_BUTTON_SIZE_SM, true);
+    if (status != ER_UI_OK) return status;
+  }
+
+  er_ui_bounds_t card = er_ui_bounds(bounds.x, bounds.y + nav_h + gap, er_ui_float_min(bounds.w, 340.0f), er_ui_float_max(bounds.h - nav_h - gap, 92.0f));
+  er_ui_status_t status = er_ui_shadcn_card_emit(scene, card, theme);
+  if (status != ER_UI_OK) return status;
+  float pad = 12.0f;
+  status = er_ui_node_render_text(scene, font, node->label, er_ui_bounds(card.x + pad, card.y + pad, card.w - pad * 2.0f, 22.0f), theme.colors.text);
+  if (status != ER_UI_OK) return status;
+  status = er_ui_node_render_text(scene, font, node->detail, er_ui_bounds(card.x + pad, card.y + 34.0f, card.w - pad * 2.0f, 22.0f), theme.colors.muted);
+  if (status != ER_UI_OK) return status;
+  return er_ui_shadcn_list_row_emit(scene, font, er_ui_bounds(card.x + pad, card.y + 62.0f, card.w - pad * 2.0f, 44.0f), theme, node->aux, node->extra,
+                                    node->id + (uint32_t)node->label_count, false);
+}
+
 static er_ui_status_t er_ui_node_render_label_group(
   const er_ui_node_t* node,
   er_ui_scene_t* scene,
@@ -1861,6 +1925,8 @@ er_ui_status_t er_ui_node_render(
       return er_ui_node_render_input_group(node, scene, font, rect, theme);
     case ER_UI_NODE_INPUT_OTP:
       return er_ui_node_render_input_otp(node, scene, font, rect, theme);
+    case ER_UI_NODE_NAVIGATION_MENU:
+      return er_ui_node_render_navigation_menu(node, scene, font, rect, theme);
     case ER_UI_NODE_ROUTE_PATH:
       return er_ui_shadcn_route_path_emit(scene, font, rect, theme, node->label, node->labels, node->label_count);
     case ER_UI_NODE_PACKAGE_CARD:

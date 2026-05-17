@@ -63,6 +63,7 @@ typedef enum {
   ER_UI_NODE_RADIO_GROUP,
   ER_UI_NODE_INPUT_GROUP,
   ER_UI_NODE_INPUT_OTP,
+  ER_UI_NODE_NAVIGATION_MENU,
   ER_UI_NODE_ROUTE_PATH,
   ER_UI_NODE_PACKAGE_CARD,
   ER_UI_NODE_RECEIPT_ROW,
@@ -270,6 +271,8 @@ er_ui_node_t er_ui_node_menubar(const char* const* items, size_t item_count, siz
 er_ui_node_t er_ui_node_radio_group(const char* const* labels, size_t label_count, size_t selected, uint32_t base_id);
 er_ui_node_t er_ui_node_input_group(const char* label, const char* value, const char* button_label, uint32_t id);
 er_ui_node_t er_ui_node_input_otp(const char* const* values, size_t value_count, size_t focused_index, uint32_t base_id);
+er_ui_node_t er_ui_node_navigation_menu(const char* const* tabs, size_t tab_count, size_t selected, const char* title, const char* detail,
+                                        const char* row_title, const char* row_detail, uint32_t base_id);
 er_ui_node_t er_ui_node_route_path(const char* label, const char* const* hops, size_t hop_count);
 er_ui_node_t er_ui_node_package_card(const char* name, const char* policy, const char* hash, uint32_t id);
 er_ui_node_t er_ui_node_receipt_row(const char* label, const char* amount, const char* status_text, uint32_t id);
