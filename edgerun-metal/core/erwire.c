@@ -8,7 +8,7 @@
  */
 
 #define ERWIRE_PACKET_MAX (ERWIRE_HEADER_SIZE + ERWIRE_MAX_PAYLOAD)
-#define ERWIRE_BLOB_CHUNK_HEADER_SIZE 16u
+#define ERWIRE_BLOB_CHUNK_HEADER_SIZE (ER_HASH_LEN + 12u)
 #define ERWIRE_PCI_DEVICE_SIZE 56u
 #define ERWIRE_U16_BYTES 2u
 #define ERWIRE_U32_BYTES 4u
@@ -143,12 +143,14 @@ void erwire_send_text(const char* s) {
   }
 }
 
-void erwire_send_blob_chunk(UINT32 object_id, UINT32 offset, UINT32 total_size, const UINT8* data, UINT32 len, UINT8 is_last) {
+void erwire_send_blob_chunk(const ErHash* object_id, UINT32 offset, UINT32 total_size, const UINT8* data,
+                            UINT32 len, UINT8 is_last) {
   UINT8 payload[ERWIRE_MAX_PAYLOAD];
   UINT8* payload_cursor = payload;
   UINT16 flags = ERWIRE_FLAG_FIRST;
 
-  if (len > (ERWIRE_MAX_PAYLOAD - ERWIRE_BLOB_CHUNK_HEADER_SIZE) || (len > 0u && data == 0)) {
+  if (object_id == 0 || len > (ERWIRE_MAX_PAYLOAD - ERWIRE_BLOB_CHUNK_HEADER_SIZE) ||
+      (len > 0u && data == 0)) {
     return;
   }
   if (offset != 0u) {
@@ -158,7 +160,8 @@ void erwire_send_blob_chunk(UINT32 object_id, UINT32 offset, UINT32 total_size, 
     flags |= ERWIRE_FLAG_LAST;
   }
 
-  erwire_write_u32(&payload_cursor, object_id);
+  er_mem_copy(payload_cursor, object_id->bytes, ER_HASH_LEN);
+  payload_cursor += ER_HASH_LEN;
   erwire_write_u32(&payload_cursor, offset);
   erwire_write_u32(&payload_cursor, total_size);
   erwire_write_u32(&payload_cursor, len);

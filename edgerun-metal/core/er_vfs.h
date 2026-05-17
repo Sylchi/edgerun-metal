@@ -10,7 +10,7 @@
 #include "er_crypto.h"
 
 #define ER_VFS_ABI_VERSION 1u
-#define ER_VFS_PATH_MAX 160u
+#define ER_VFS_LABEL_MAX 160u
 #define ER_VFS_OBJECT_PACKET_BYTES 1024u
 
 #define ER_VFS_COMPRESSION_NONE 0u
@@ -37,12 +37,12 @@ typedef struct {
 
 typedef struct {
   UINT16 abi_version;
-  UINT16 path_len;
-  char path[ER_VFS_PATH_MAX];
+  UINT16 label_len;
+  char label[ER_VFS_LABEL_MAX];
   ErHash object_id;
   UINT64 object_len;
-  ErHash file_hash;
-} ErVfsFileRef;
+  ErHash label_hash;
+} ErVfsObjectLabelRef;
 
 typedef struct {
   UINT16 abi_version;
@@ -80,12 +80,16 @@ typedef struct {
   UINT64 sealed_envelope_len;
 } ErVfsObjectUnsealRequestHeader;
 
-UINT8 er_vfs_path_label_valid(const char* path, UINTN path_len);
+UINT8 er_vfs_label_valid(const char* label, UINTN label_len);
 UINT8 er_vfs_prepare_object_packet(const ErCryptoProvider* crypto, const UINT8* object_bytes, UINTN object_len,
                                    UINTN offset, UINT32 packet_index, UINT32 packet_count,
                                    ErVfsObjectPacket* out_packet);
-UINT8 er_vfs_prepare_file_ref(const ErCryptoProvider* crypto, const char* path, UINTN path_len,
-                              const UINT8* object_bytes, UINTN object_len, ErVfsFileRef* out_ref);
+UINT8 er_vfs_prepare_object_label_ref(const ErCryptoProvider* crypto, const char* label, UINTN label_len,
+                                      const UINT8* object_bytes, UINTN object_len,
+                                      ErVfsObjectLabelRef* out_ref);
+UINT8 er_vfs_prepare_object_label_ref_from_object(const ErCryptoProvider* crypto, const char* label,
+                                                  UINTN label_len, const ErHash* object_id,
+                                                  UINT64 object_len, ErVfsObjectLabelRef* out_ref);
 UINT8 er_vfs_prepare_transform_ref(const ErCryptoProvider* crypto, const ErHash* plaintext_object_id,
                                    UINT64 plaintext_len, const ErHash* transport_object_id,
                                    UINT64 transport_len, UINT16 compression_kind, UINT16 seal_kind,

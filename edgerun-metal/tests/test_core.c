@@ -69,6 +69,19 @@ static void check_uint64(const char* name, UINT64 actual, UINT64 expected) {
   }
 }
 
+static void check_hash_equal(const char* name, const ErHash* actual, const ErHash* expected) {
+  UINTN i;
+
+  ++g_total;
+  for (i = 0; i < ER_HASH_LEN; ++i) {
+    if (actual->bytes[i] != expected->bytes[i]) {
+      fprintf(stderr, "FAIL %s: hash differs at byte %llu\n", name, (unsigned long long)i);
+      ++g_failed;
+      return;
+    }
+  }
+}
+
 static void check_cstr(const char* name, const char* actual, const char* expected) {
   UINTN i = 0u;
   UINT8 matches = 1u;
@@ -872,7 +885,8 @@ static void test_vfs_object_packets(void) {
   static const UINT8 object_bytes[] = {'a', 'b', 'c', 'd', 'e', 'f'};
   ErCryptoProvider crypto;
   ErVfsObjectPacket packet;
-  ErVfsFileRef ref;
+  ErVfsObjectLabelRef ref;
+  ErVfsObjectLabelRef ref_from_object;
   ErVfsObjectTransformRef transform;
 
   crypto.ctx = (void*)(UINTN)5u;
@@ -882,11 +896,11 @@ static void test_vfs_object_packets(void) {
   crypto.sign = 0;
   crypto.verify = 0;
 
-  check_int64("vfs path valid", er_vfs_path_label_valid("app/data.bin", 12), 1);
-  check_int64("vfs path reject empty", er_vfs_path_label_valid("", 0), 0);
-  check_int64("vfs path reject absolute", er_vfs_path_label_valid("/app/data.bin", 13), 0);
-  check_int64("vfs path reject parent", er_vfs_path_label_valid("app/../data.bin", 15), 0);
-  check_int64("vfs path reject backslash", er_vfs_path_label_valid("app\\data.bin", 12), 0);
+  check_int64("vfs label valid", er_vfs_label_valid("app/data.bin", 12), 1);
+  check_int64("vfs label reject empty", er_vfs_label_valid("", 0), 0);
+  check_int64("vfs label reject absolute", er_vfs_label_valid("/app/data.bin", 13), 0);
+  check_int64("vfs label reject parent", er_vfs_label_valid("app/../data.bin", 15), 0);
+  check_int64("vfs label reject backslash", er_vfs_label_valid("app\\data.bin", 12), 0);
 
   check_int64("vfs object packet", er_vfs_prepare_object_packet(&crypto, object_bytes, sizeof(object_bytes), 2, 1, 3, &packet), 1);
   check_int64("vfs packet abi", packet.header.abi_version, ER_VFS_ABI_VERSION);
@@ -898,10 +912,17 @@ static void test_vfs_object_packets(void) {
   check_int64("vfs packet byte0", packet.bytes[0], 'c');
   check_int64("vfs packet byte3", packet.bytes[3], 'f');
 
-  check_int64("vfs file ref", er_vfs_prepare_file_ref(&crypto, "app/data.bin", 12, object_bytes, sizeof(object_bytes), &ref), 1);
-  check_int64("vfs file ref abi", ref.abi_version, ER_VFS_ABI_VERSION);
-  check_int64("vfs file ref path len", ref.path_len, 12);
-  check_uint64("vfs file ref object len", ref.object_len, sizeof(object_bytes));
+  check_int64("vfs label ref", er_vfs_prepare_object_label_ref(&crypto, "app/data.bin", 12, object_bytes, sizeof(object_bytes), &ref), 1);
+  check_int64("vfs label ref abi", ref.abi_version, ER_VFS_ABI_VERSION);
+  check_int64("vfs label ref label len", ref.label_len, 12);
+  check_uint64("vfs label ref object len", ref.object_len, sizeof(object_bytes));
+  check_int64("vfs label ref from object",
+              er_vfs_prepare_object_label_ref_from_object(&crypto, "app/alias.bin", 13, &ref.object_id,
+                                                          ref.object_len, &ref_from_object),
+              1);
+  check_int64("vfs label ref from object abi", ref_from_object.abi_version, ER_VFS_ABI_VERSION);
+  check_uint64("vfs label ref from object len", ref_from_object.object_len, sizeof(object_bytes));
+  check_hash_equal("vfs label ref from object id", &ref_from_object.object_id, &ref.object_id);
 
   check_int64("vfs transform reject unsealed",
               er_vfs_prepare_transform_ref(&crypto, &ref.object_id, ref.object_len, &packet.header.payload_hash,
