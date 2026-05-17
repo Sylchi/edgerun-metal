@@ -30,7 +30,7 @@
 #define ERWIRE_KIND_APP_IDENTITY 40u
 #define ERWIRE_KIND_APP_IPC_ROUTE 41u
 #define ERWIRE_KIND_VFS_OBJECT_PACKET 48u
-#define ERWIRE_KIND_VFS_FILE_REF 49u
+#define ERWIRE_KIND_VFS_OBJECT_LABEL_REF 49u
 #define ERWIRE_KIND_VFS_OBJECT_TRANSFORM 50u
 #define ERWIRE_FLAG_FIRST 0x0001u
 #define ERWIRE_FLAG_LAST 0x0002u
@@ -52,7 +52,8 @@ typedef struct {
 void erwire_init(UINT32 stream_id);
 void erwire_send(UINT16 kind, UINT16 flags, const UINT8* payload, UINT32 payload_len);
 void erwire_send_text(const char* s);
-void erwire_send_blob_chunk(UINT32 object_id, UINT32 offset, UINT32 total_size, const UINT8* data, UINT32 len, UINT8 is_last);
+void erwire_send_blob_chunk(const ErHash* object_id, UINT32 offset, UINT32 total_size, const UINT8* data,
+                            UINT32 len, UINT8 is_last);
 void erwire_send_pci_device(UINT32 bus, UINT32 dev, UINT32 func, UINT32 target_kind, UINT32 id,
                             UINT32 command_status, UINT32 class_revision, UINT32 header_cacheline,
                             const UINT32* bars);

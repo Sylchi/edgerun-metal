@@ -3,13 +3,13 @@
 
 /*
  * Purpose: build content-addressed VFS object records from in-memory bytes.
- * Intention: files remain app-facing labels; wire/durable identity is sealed object data.
+ * Intention: labels remain app-facing manifest names; wire/durable identity is sealed object data.
  */
 
 static const UINT8 g_object_domain[] = "edgerun:c:v1:vfs:object";
 static const UINT8 g_payload_domain[] = "edgerun:c:v1:vfs:object-payload";
 static const UINT8 g_packet_domain[] = "edgerun:c:v1:vfs:object-packet";
-static const UINT8 g_file_ref_domain[] = "edgerun:c:v1:vfs:file-ref";
+static const UINT8 g_label_ref_domain[] = "edgerun:c:v1:vfs:object-label";
 static const UINT8 g_transform_domain[] = "edgerun:c:v1:vfs:object-transform";
 
 enum {
@@ -49,18 +49,18 @@ static void er_vfs_put_transform_field64(UINT8** cursor, UINT64 value) {
   *cursor += ER_VFS_U64_FIELD_BYTES;
 }
 
-UINT8 er_vfs_path_label_valid(const char* path, UINTN path_len) {
+UINT8 er_vfs_label_valid(const char* label, UINTN label_len) {
   UINTN i;
   UINT8 last_was_slash = 0;
 
-  if (path == 0 || path_len == 0u || path_len > ER_VFS_PATH_MAX) {
+  if (label == 0 || label_len == 0u || label_len > ER_VFS_LABEL_MAX) {
     return 0;
   }
-  if (path[0] == '/' || path[path_len - 1u] == '/') {
+  if (label[0] == '/' || label[label_len - 1u] == '/') {
     return 0;
   }
-  for (i = 0; i < path_len; ++i) {
-    char c = path[i];
+  for (i = 0; i < label_len; ++i) {
+    char c = label[i];
 
     if (c == 0 || c == '\\') {
       return 0;
@@ -73,10 +73,10 @@ UINT8 er_vfs_path_label_valid(const char* path, UINTN path_len) {
       continue;
     }
     if (c == '.') {
-      UINT8 at_part_start = (i == 0u || path[i - 1u] == '/') ? 1u : 0u;
-      UINT8 at_part_end = (i + 1u == path_len || path[i + 1u] == '/') ? 1u : 0u;
-      UINT8 dotdot = (i + 1u < path_len && path[i + 1u] == '.' &&
-                      (i + 2u == path_len || path[i + 2u] == '/')) ? 1u : 0u;
+      UINT8 at_part_start = (i == 0u || label[i - 1u] == '/') ? 1u : 0u;
+      UINT8 at_part_end = (i + 1u == label_len || label[i + 1u] == '/') ? 1u : 0u;
+      UINT8 dotdot = (i + 1u < label_len && label[i + 1u] == '.' &&
+                      (i + 2u == label_len || label[i + 2u] == '/')) ? 1u : 0u;
 
       if (at_part_start != 0u && (at_part_end != 0u || dotdot != 0u)) {
         return 0;
@@ -158,32 +158,43 @@ UINT8 er_vfs_prepare_object_packet(const ErCryptoProvider* crypto, const UINT8* 
                         packet_spans, 1u, &out_packet->header.packet_id);
 }
 
-UINT8 er_vfs_prepare_file_ref(const ErCryptoProvider* crypto, const char* path, UINTN path_len,
-                              const UINT8* object_bytes, UINTN object_len, ErVfsFileRef* out_ref) {
+UINT8 er_vfs_prepare_object_label_ref(const ErCryptoProvider* crypto, const char* label, UINTN label_len,
+                                      const UINT8* object_bytes, UINTN object_len,
+                                      ErVfsObjectLabelRef* out_ref) {
+  ErHash object_id;
+
+  if (er_vfs_hash_object(crypto, object_bytes, object_len, &object_id) == 0u) {
+    return 0;
+  }
+  return er_vfs_prepare_object_label_ref_from_object(crypto, label, label_len, &object_id,
+                                                    (UINT64)object_len, out_ref);
+}
+
+UINT8 er_vfs_prepare_object_label_ref_from_object(const ErCryptoProvider* crypto, const char* label,
+                                                  UINTN label_len, const ErHash* object_id,
+                                                  UINT64 object_len, ErVfsObjectLabelRef* out_ref) {
   UINT8 len_be[8];
   ErByteSpan spans[3];
 
-  if (out_ref == 0 || er_vfs_path_label_valid(path, path_len) == 0u) {
+  if (out_ref == 0 || crypto == 0 || object_id == 0 || er_vfs_label_valid(label, label_len) == 0u) {
     return 0;
   }
   er_mem_zero((UINT8*)out_ref, (UINTN)sizeof(*out_ref));
   out_ref->abi_version = ER_VFS_ABI_VERSION;
-  out_ref->path_len = (UINT16)path_len;
-  er_mem_copy((UINT8*)out_ref->path, (const UINT8*)path, path_len);
-  out_ref->object_len = (UINT64)object_len;
-  if (er_vfs_hash_object(crypto, object_bytes, object_len, &out_ref->object_id) == 0u) {
-    return 0;
-  }
+  out_ref->label_len = (UINT16)label_len;
+  er_mem_copy((UINT8*)out_ref->label, (const UINT8*)label, label_len);
+  out_ref->object_id = *object_id;
+  out_ref->object_len = object_len;
 
   er_vfs_put_be64(len_be, out_ref->object_len);
-  spans[0].bytes = (const UINT8*)path;
-  spans[0].len = path_len;
+  spans[0].bytes = (const UINT8*)label;
+  spans[0].len = label_len;
   spans[1].bytes = out_ref->object_id.bytes;
   spans[1].len = ER_HASH_LEN;
   spans[2].bytes = len_be;
   spans[2].len = (UINTN)sizeof(len_be);
-  return er_crypto_hash(crypto, g_file_ref_domain, (UINTN)(sizeof(g_file_ref_domain) - 1u),
-                        spans, 3u, &out_ref->file_hash);
+  return er_crypto_hash(crypto, g_label_ref_domain, (UINTN)(sizeof(g_label_ref_domain) - 1u),
+                        spans, 3u, &out_ref->label_hash);
 }
 
 UINT8 er_vfs_prepare_transform_ref(const ErCryptoProvider* crypto, const ErHash* plaintext_object_id,

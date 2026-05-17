@@ -160,10 +160,26 @@ typedef struct {
 } EriCpuPackage;
 
 typedef struct {
+  char package[ERI_PACKAGE_MAX];
+  uint64_t host_fs_runtime;
+  uint64_t path_identity;
+  uint64_t legacy_object_ids;
+  uint64_t raw_object_apis;
+  uint64_t wasm64_offsets;
+  uint64_t nonprod_findings;
+} EriWorldviewPackage;
+
+typedef struct {
   EriCpuPackage* items;
   size_t len;
   size_t cap;
 } EriCpuPackages;
+
+typedef struct {
+  EriWorldviewPackage* items;
+  size_t len;
+  size_t cap;
+} EriWorldviewPackages;
 
 typedef struct {
   uint64_t hash;
@@ -320,6 +336,18 @@ static uint8_t eri_is_example_path(const char* path) {
 
 static uint8_t eri_is_nonprod_path(const char* path) {
   return (uint8_t)(eri_is_test_path(path) != 0u || eri_is_example_path(path) != 0u);
+}
+
+static uint8_t eri_is_hosted_tool_path(const char* path) {
+  return (uint8_t)(eri_contains_part(path, "tools") != 0u ||
+                   eri_contains_part(path, "scripts") != 0u ||
+                   eri_contains_part(path, "bench") != 0u);
+}
+
+static uint8_t eri_is_runtime_path(const char* path) {
+  return (uint8_t)(eri_is_nonprod_path(path) == 0u &&
+                   eri_is_hosted_tool_path(path) == 0u &&
+                   eri_is_build_path(path) == 0u);
 }
 
 static void eri_package_name(const char* path, char* out, size_t out_cap) {
@@ -944,6 +972,94 @@ static uint8_t eri_line_has_math_primitive_smell(const char* path, const char* r
   return 0u;
 }
 
+static uint8_t eri_line_has_any_token(const char* line, const char* const* tokens, size_t len);
+
+static uint8_t eri_line_has_host_fs_runtime_smell(const char* path, const char* structural_line) {
+  static const char* tokens[] = {
+    "fopen(", "freopen(", "open(", "openat(", "read(", "write(", "close(",
+    "stat(", "lstat(", "fstat(", "opendir(", "readdir(", "closedir(",
+    "mkdir(", "unlink(", "remove(", "rename(", "realpath(", "getcwd(",
+    "chdir(", "access(", "system(", "popen(", "fork(", "getenv(",
+    "FILE*", "FILE *", "DIR*", "DIR *"
+  };
+  size_t i;
+
+  if (eri_is_runtime_path(path) == 0u) {
+    return 0u;
+  }
+  for (i = 0u; i < sizeof(tokens) / sizeof(tokens[0]); ++i) {
+    const char* hit = structural_line;
+
+    while ((hit = strstr(hit, tokens[i])) != NULL) {
+      if (hit == structural_line ||
+          (!isalnum((unsigned char)hit[-1]) && hit[-1] != '_')) {
+        return 1u;
+      }
+      hit += strlen(tokens[i]);
+    }
+  }
+  return 0u;
+}
+
+static uint8_t eri_line_has_path_identity_smell(const char* path, const char* structural_line) {
+  if (eri_is_runtime_path(path) == 0u) {
+    return 0u;
+  }
+  if ((strstr(structural_line, "path") != NULL || strstr(structural_line, "name") != NULL) &&
+      (strstr(structural_line, "object_id") != NULL || strstr(structural_line, "ErHash") != NULL ||
+       strstr(structural_line, "_hash") != NULL || strstr(structural_line, "hash(") != NULL)) {
+    return 1u;
+  }
+  return 0u;
+}
+
+static uint8_t eri_line_has_legacy_object_id_smell(const char* path, const char* structural_line) {
+  if (eri_is_runtime_path(path) == 0u) {
+    return 0u;
+  }
+  if (strstr(structural_line, "UINT32 object_id") != NULL ||
+      strstr(structural_line, "uint32_t object_id") != NULL) {
+    return 1u;
+  }
+  return 0u;
+}
+
+static uint8_t eri_line_has_raw_object_api_smell(const char* path, const char* structural_line) {
+  if (eri_is_runtime_path(path) == 0u) {
+    return 0u;
+  }
+  if (strstr(structural_line, "er_vfs_prepare_object_packet") != NULL ||
+      strstr(structural_line, "er_vfs_prepare_object_label_ref") != NULL ||
+      strstr(structural_line, "er_vfs_hash_object") != NULL) {
+    return 0u;
+  }
+  if ((strstr(structural_line, "object_bytes") != NULL || strstr(structural_line, "file_data") != NULL) &&
+      (strstr(structural_line, "const UINT8*") != NULL || strstr(structural_line, "const uint8_t*") != NULL ||
+       strstr(structural_line, "UINT8*") != NULL || strstr(structural_line, "uint8_t*") != NULL) &&
+      (strstr(structural_line, "_prepare_") != NULL || strstr(structural_line, "_create(") != NULL ||
+       strstr(structural_line, "_init(") != NULL)) {
+    return 1u;
+  }
+  return 0u;
+}
+
+static uint8_t eri_line_has_wasm64_offset_smell(const char* path, const char* structural_line) {
+  if (eri_is_runtime_path(path) == 0u) {
+    return 0u;
+  }
+  if (strstr(structural_line, "(UINT64") != NULL || strstr(structural_line, "(uint64_t") != NULL ||
+      strstr(structural_line, "er_print") != NULL) {
+    return 0u;
+  }
+  if ((strstr(structural_line, "UINT64") != NULL || strstr(structural_line, "uint64_t") != NULL) &&
+      (strstr(structural_line, "offset") != NULL || strstr(structural_line, "_len") != NULL ||
+       strstr(structural_line, "length") != NULL || strstr(structural_line, "size") != NULL) &&
+      strstr(structural_line, "ErHash") == NULL) {
+    return 1u;
+  }
+  return 0u;
+}
+
 static uint8_t eri_line_has_optimizer_ignore(const char* line) {
   return (uint8_t)(strstr(line, ERI_OPTIMIZER_IGNORE_TAG) != NULL);
 }
@@ -1246,6 +1362,26 @@ static void eri_scan_line_metrics(const uint8_t* bytes, size_t len, EriTotals* f
       if (eri_line_has_math_primitive_smell(path, snippet, searchable) != 0u) {
         eri_add_finding(findings, path, line_no, "math-primitive", "local math primitive should use include/er_math.h");
       }
+      if (eri_line_has_host_fs_runtime_smell(path, searchable) != 0u) {
+        eri_add_finding(findings, path, line_no, "world-host-fs",
+                        "runtime code reaches for host filesystem/process API");
+      }
+      if (eri_line_has_path_identity_smell(path, searchable) != 0u) {
+        eri_add_finding(findings, path, line_no, "world-path-identity",
+                        "path/name appears coupled to object identity or hashing");
+      }
+      if (eri_line_has_legacy_object_id_smell(path, searchable) != 0u) {
+        eri_add_finding(findings, path, line_no, "world-legacy-object-id",
+                        "small numeric object_id should be an ErHash for content-addressed objects");
+      }
+      if (eri_line_has_raw_object_api_smell(path, searchable) != 0u) {
+        eri_add_finding(findings, path, line_no, "world-raw-object-api",
+                        "runtime API takes raw object bytes where object hash/length may be enough");
+      }
+      if (eri_line_has_wasm64_offset_smell(path, searchable) != 0u) {
+        eri_add_finding(findings, path, line_no, "world-wasm64-offset",
+                        "64-bit length/offset in runtime path needs a WASM32 reason");
+      }
     } else if (pending_optimizer_ignore != 0u) {
       pending_optimizer_ignore = 0u;
     }
@@ -1546,6 +1682,32 @@ static EriCpuPackage* eri_cpu_package_get(EriCpuPackages* packages, const char* 
   return &packages->items[packages->len - 1u];
 }
 
+static EriWorldviewPackage* eri_worldview_package_get(EriWorldviewPackages* packages, const char* path) {
+  char name[ERI_PACKAGE_MAX];
+  size_t i;
+  EriWorldviewPackage* grown;
+
+  eri_package_name(path, name, sizeof(name));
+
+  for (i = 0; i < packages->len; ++i) {
+    if (strcmp(packages->items[i].package, name) == 0) {
+      return &packages->items[i];
+    }
+  }
+  if (packages->len + 1u > packages->cap) {
+    grown = (EriWorldviewPackage*)eri_grow(packages->items, sizeof(packages->items[0]),
+                                           &packages->cap, packages->len + 1u);
+    if (grown == NULL) {
+      return NULL;
+    }
+    packages->items = grown;
+  }
+  memset(&packages->items[packages->len], 0, sizeof(packages->items[packages->len]));
+  snprintf(packages->items[packages->len].package, sizeof(packages->items[packages->len].package), "%s", name);
+  ++packages->len;
+  return &packages->items[packages->len - 1u];
+}
+
 static void eri_mark_test_signals(const EriVfs* vfs, EriSourceFiles* sources, const EriFunctions* funcs) {
   size_t i;
 
@@ -1827,6 +1989,11 @@ static uint64_t eri_cpu_package_score(const EriCpuPackage* pkg) {
          pkg->memory_ops_in_loops * 45u + pkg->divisions_in_loops * 35u + pkg->calls_in_loops * 30u;
 }
 
+static uint64_t eri_worldview_package_score(const EriWorldviewPackage* pkg) {
+  return pkg->host_fs_runtime * 120u + pkg->path_identity * 90u + pkg->legacy_object_ids * 90u +
+         pkg->raw_object_apis * 45u + pkg->wasm64_offsets * 20u;
+}
+
 static int eri_cmp_smell_pkg(const void* a, const void* b) {
   const EriSmellPackage* pa = (const EriSmellPackage*)a;
   const EriSmellPackage* pb = (const EriSmellPackage*)b;
@@ -1847,6 +2014,21 @@ static int eri_cmp_cpu_pkg(const void* a, const void* b) {
   const EriCpuPackage* pb = (const EriCpuPackage*)b;
   uint64_t sa = eri_cpu_package_score(pa);
   uint64_t sb = eri_cpu_package_score(pb);
+
+  if (sa < sb) {
+    return 1;
+  }
+  if (sa > sb) {
+    return -1;
+  }
+  return strcmp(pa->package, pb->package);
+}
+
+static int eri_cmp_worldview_pkg(const void* a, const void* b) {
+  const EriWorldviewPackage* pa = (const EriWorldviewPackage*)a;
+  const EriWorldviewPackage* pb = (const EriWorldviewPackage*)b;
+  uint64_t sa = eri_worldview_package_score(pa);
+  uint64_t sb = eri_worldview_package_score(pb);
 
   if (sa < sb) {
     return 1;
@@ -1981,13 +2163,16 @@ static uint32_t eri_finding_rank(const EriFinding* finding) {
   if (strcmp(finding->kind, "math-primitive") == 0) {
     return 6u;
   }
-  if (strncmp(finding->kind, "cpu-", 4u) == 0) {
+  if (strncmp(finding->kind, "world-", 6u) == 0) {
     return 7u;
   }
-  if (strcmp(finding->kind, "long-line") == 0) {
+  if (strncmp(finding->kind, "cpu-", 4u) == 0) {
     return 8u;
   }
-  return 9u;
+  if (strcmp(finding->kind, "long-line") == 0) {
+    return 9u;
+  }
+  return 10u;
 }
 
 static int eri_cmp_finding(const void* a, const void* b) {
@@ -2056,6 +2241,10 @@ static uint8_t eri_finding_is_cpu_cost(const EriFinding* finding) {
   return (uint8_t)(strncmp(finding->kind, "cpu-", 4u) == 0);
 }
 
+static uint8_t eri_finding_is_worldview_risk(const EriFinding* finding) {
+  return (uint8_t)(strncmp(finding->kind, "world-", 6u) == 0);
+}
+
 static uint64_t eri_count_cpu_findings(const EriFindings* findings) {
   size_t i;
   uint64_t count = 0u;
@@ -2068,12 +2257,41 @@ static uint64_t eri_count_cpu_findings(const EriFindings* findings) {
   return count;
 }
 
+static uint64_t eri_count_worldview_findings(const EriFindings* findings) {
+  size_t i;
+  uint64_t count = 0u;
+
+  for (i = 0; i < findings->len; ++i) {
+    if (eri_finding_is_worldview_risk(&findings->items[i]) != 0u) {
+      ++count;
+    }
+  }
+  return count;
+}
+
 static void eri_print_cpu_finding_samples(const EriFindings* findings, size_t limit) {
   size_t i;
   size_t shown = 0u;
 
   for (i = 0u; i < findings->len && shown < limit; ++i) {
     if (eri_finding_is_cpu_cost(&findings->items[i]) == 0u) {
+      continue;
+    }
+    printf("    %s:%u [%s] %s\n", findings->items[i].path, findings->items[i].line,
+           findings->items[i].kind, findings->items[i].text);
+    ++shown;
+  }
+  if (shown == 0u) {
+    printf("    none\n");
+  }
+}
+
+static void eri_print_worldview_finding_samples(const EriFindings* findings, size_t limit) {
+  size_t i;
+  size_t shown = 0u;
+
+  for (i = 0u; i < findings->len && shown < limit; ++i) {
+    if (eri_finding_is_worldview_risk(&findings->items[i]) == 0u) {
       continue;
     }
     printf("    %s:%u [%s] %s\n", findings->items[i].path, findings->items[i].line,
@@ -2155,6 +2373,39 @@ static uint8_t eri_collect_cpu_packages(const EriFindings* findings, EriCpuPacka
   return 1;
 }
 
+static uint8_t eri_collect_worldview_packages(const EriFindings* findings, EriWorldviewPackages* packages) {
+  size_t i;
+
+  for (i = 0; i < findings->len; ++i) {
+    EriWorldviewPackage* pkg;
+
+    if (eri_finding_is_worldview_risk(&findings->items[i]) == 0u) {
+      continue;
+    }
+    pkg = eri_worldview_package_get(packages, findings->items[i].path);
+    if (pkg == NULL) {
+      return 0;
+    }
+    if (eri_is_runtime_path(findings->items[i].path) == 0u) {
+      ++pkg->nonprod_findings;
+      continue;
+    }
+    if (strcmp(findings->items[i].kind, "world-host-fs") == 0) {
+      ++pkg->host_fs_runtime;
+    } else if (strcmp(findings->items[i].kind, "world-path-identity") == 0) {
+      ++pkg->path_identity;
+    } else if (strcmp(findings->items[i].kind, "world-legacy-object-id") == 0) {
+      ++pkg->legacy_object_ids;
+    } else if (strcmp(findings->items[i].kind, "world-raw-object-api") == 0) {
+      ++pkg->raw_object_apis;
+    } else if (strcmp(findings->items[i].kind, "world-wasm64-offset") == 0) {
+      ++pkg->wasm64_offsets;
+    }
+  }
+  qsort(packages->items, packages->len, sizeof(packages->items[0]), eri_cmp_worldview_pkg);
+  return 1;
+}
+
 static uint8_t eri_collect_duplicates(const EriVfs* vfs, EriDuplicates* duplicates) {
   EriDupBlockRefs refs;
   size_t i;
@@ -2216,7 +2467,8 @@ static void eri_print_size(uint64_t bytes) {
 static void eri_analyze_cleanup(EriPackages* packages, EriFunctions* funcs, EriFindings* findings,
                                 EriBinaries* bins, EriSourceFiles* sources,
                                 EriCoveragePackages* coverage_packages, EriSmellPackages* smell_packages,
-                                EriCpuPackages* cpu_packages, EriDuplicates* duplicates) {
+                                EriCpuPackages* cpu_packages, EriWorldviewPackages* worldview_packages,
+                                EriDuplicates* duplicates) {
   eri_sources_free(sources);
   eri_duplicates_free(duplicates);
   eri_functions_free(funcs);
@@ -2225,6 +2477,7 @@ static void eri_analyze_cleanup(EriPackages* packages, EriFunctions* funcs, EriF
   free(coverage_packages->items);
   free(smell_packages->items);
   free(cpu_packages->items);
+  free(worldview_packages->items);
   free(bins->items);
 }
 
@@ -2238,6 +2491,7 @@ static uint8_t eri_analyze(const EriVfs* vfs) {
   EriCoveragePackages coverage_packages;
   EriSmellPackages smell_packages;
   EriCpuPackages cpu_packages;
+  EriWorldviewPackages worldview_packages;
   EriDuplicates duplicates;
   size_t i;
 
@@ -2250,6 +2504,7 @@ static uint8_t eri_analyze(const EriVfs* vfs) {
   memset(&coverage_packages, 0, sizeof(coverage_packages));
   memset(&smell_packages, 0, sizeof(smell_packages));
   memset(&cpu_packages, 0, sizeof(cpu_packages));
+  memset(&worldview_packages, 0, sizeof(worldview_packages));
   memset(&duplicates, 0, sizeof(duplicates));
 
   for (i = 0; i < vfs->len; ++i) {
@@ -2271,7 +2526,7 @@ static uint8_t eri_analyze(const EriVfs* vfs) {
     if (eri_is_c_impl(file->path) &&
         eri_add_source_file(&sources, file->path, file_totals.code_lines, eri_is_test_path(file->path)) == 0u) {
       eri_analyze_cleanup(&packages, &funcs, &findings, &bins, &sources, &coverage_packages,
-                          &smell_packages, &cpu_packages, &duplicates);
+                          &smell_packages, &cpu_packages, &worldview_packages, &duplicates);
       return 0;
     }
     if (file_totals.code_lines > ERI_LARGE_FILE_LINES) {
@@ -2290,7 +2545,7 @@ static uint8_t eri_analyze(const EriVfs* vfs) {
     package = eri_package_get(&packages, file->path);
     if (package == NULL) {
       eri_analyze_cleanup(&packages, &funcs, &findings, &bins, &sources, &coverage_packages,
-                          &smell_packages, &cpu_packages, &duplicates);
+                          &smell_packages, &cpu_packages, &worldview_packages, &duplicates);
       return 0;
     }
     ++package->files;
@@ -2303,7 +2558,7 @@ static uint8_t eri_analyze(const EriVfs* vfs) {
   eri_measure_binary_release_sizes(&bins);
   if (eri_collect_duplicates(vfs, &duplicates) == 0u) {
     eri_analyze_cleanup(&packages, &funcs, &findings, &bins, &sources, &coverage_packages,
-                        &smell_packages, &cpu_packages, &duplicates);
+                        &smell_packages, &cpu_packages, &worldview_packages, &duplicates);
     return 0;
   }
   for (i = 0; i < sources.len; ++i) {
@@ -2314,7 +2569,7 @@ static uint8_t eri_analyze(const EriVfs* vfs) {
     coverage_package = eri_coverage_package_get(&coverage_packages, package_name);
     if (coverage_package == NULL) {
       eri_analyze_cleanup(&packages, &funcs, &findings, &bins, &sources, &coverage_packages,
-                          &smell_packages, &cpu_packages, &duplicates);
+                          &smell_packages, &cpu_packages, &worldview_packages, &duplicates);
       return 0;
     }
     if (sources.items[i].is_test != 0u) {
@@ -2334,12 +2589,17 @@ static uint8_t eri_analyze(const EriVfs* vfs) {
   qsort(findings.items, findings.len, sizeof(findings.items[0]), eri_cmp_finding);
   if (eri_collect_smell_packages(&findings, &smell_packages) == 0u) {
     eri_analyze_cleanup(&packages, &funcs, &findings, &bins, &sources, &coverage_packages,
-                        &smell_packages, &cpu_packages, &duplicates);
+                        &smell_packages, &cpu_packages, &worldview_packages, &duplicates);
     return 0;
   }
   if (eri_collect_cpu_packages(&findings, &cpu_packages) == 0u) {
     eri_analyze_cleanup(&packages, &funcs, &findings, &bins, &sources, &coverage_packages,
-                        &smell_packages, &cpu_packages, &duplicates);
+                        &smell_packages, &cpu_packages, &worldview_packages, &duplicates);
+    return 0;
+  }
+  if (eri_collect_worldview_packages(&findings, &worldview_packages) == 0u) {
+    eri_analyze_cleanup(&packages, &funcs, &findings, &bins, &sources, &coverage_packages,
+                        &smell_packages, &cpu_packages, &worldview_packages, &duplicates);
     return 0;
   }
 
@@ -2439,6 +2699,39 @@ static uint8_t eri_analyze(const EriVfs* vfs) {
   }
   printf("\n");
 
+  printf("Content-addressed VFS worldview risks\n");
+  printf("  heuristic: runtime APIs should prefer VFS object hashes/lengths over host paths or mutable names\n");
+  if (eri_count_worldview_findings(&findings) == 0u) {
+    printf("  none from current heuristics\n");
+  } else {
+    printf("  summary: %llu host FS/process, %llu path identity, %llu legacy object ids, %llu raw object APIs, %llu WASM32-sized offset reviews\n",
+           (unsigned long long)eri_count_findings_kind(&findings, "world-host-fs"),
+           (unsigned long long)eri_count_findings_kind(&findings, "world-path-identity"),
+           (unsigned long long)eri_count_findings_kind(&findings, "world-legacy-object-id"),
+           (unsigned long long)eri_count_findings_kind(&findings, "world-raw-object-api"),
+           (unsigned long long)eri_count_findings_kind(&findings, "world-wasm64-offset"));
+    printf("  package hotspots:\n");
+    for (i = 0; i < worldview_packages.len && i < ERI_TOP_LIMIT; ++i) {
+      const EriWorldviewPackage* pkg = &worldview_packages.items[i];
+
+      if (eri_worldview_package_score(pkg) == 0u) {
+        continue;
+      }
+      printf("    %-24s score %5llu  host-fs %3llu  path-id %3llu  obj-id %3llu  raw-api %3llu  u64 %3llu  nonprod %4llu\n",
+             pkg->package,
+             (unsigned long long)eri_worldview_package_score(pkg),
+             (unsigned long long)pkg->host_fs_runtime,
+             (unsigned long long)pkg->path_identity,
+             (unsigned long long)pkg->legacy_object_ids,
+             (unsigned long long)pkg->raw_object_apis,
+             (unsigned long long)pkg->wasm64_offsets,
+             (unsigned long long)pkg->nonprod_findings);
+    }
+    printf("  focused worldview candidates:\n");
+    eri_print_worldview_finding_samples(&findings, ERI_TOP_LIMIT);
+  }
+  printf("\n");
+
   printf("CPU cost signals\n");
   printf("  heuristic: loop-local review targets; use %s for intentional hot paths\n", ERI_OPTIMIZER_IGNORE_TAG);
   if (eri_count_cpu_findings(&findings) == 0u) {
@@ -2514,7 +2807,8 @@ static uint8_t eri_analyze(const EriVfs* vfs) {
     printf("  focused math primitive candidates:\n");
     eri_print_finding_kind_samples(&findings, "math-primitive", ERI_TOP_LIMIT);
     for (i = 0; i < findings.len && i < ERI_TOP_LIMIT * 2u; ++i) {
-      if (eri_finding_is_cpu_cost(&findings.items[i]) != 0u) {
+      if (eri_finding_is_cpu_cost(&findings.items[i]) != 0u ||
+          eri_finding_is_worldview_risk(&findings.items[i]) != 0u) {
         continue;
       }
       printf("  %s:%u [%s] %s\n", findings.items[i].path, findings.items[i].line,
@@ -2526,7 +2820,7 @@ static uint8_t eri_analyze(const EriVfs* vfs) {
   }
 
   eri_analyze_cleanup(&packages, &funcs, &findings, &bins, &sources, &coverage_packages,
-                      &smell_packages, &cpu_packages, &duplicates);
+                      &smell_packages, &cpu_packages, &worldview_packages, &duplicates);
   return 1;
 }
 

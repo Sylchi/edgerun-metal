@@ -24,6 +24,7 @@
 #define ERWIRE_KIND_BUS_IO_REQUEST 23u
 #define ERWIRE_KIND_BUS_IO_RESPONSE 24u
 #define ERWIRE_MAX_PAYLOAD 1024u
+#define ERWIRE_HASH_LEN 32u
 
 typedef struct {
   uint32_t stream_id;
@@ -210,13 +211,20 @@ static void er_print_pci_payload(const uint8_t* payload, uint32_t len) {
 }
 
 static void er_print_blob_payload(const uint8_t* payload, uint32_t len) {
-  if (len < 16u) {
+  uint32_t i;
+
+  if (len < ERWIRE_HASH_LEN + 12u) {
     printf(" blob=truncated");
     return;
   }
-  printf(" object=%u offset=%u total=%u chunk=%u",
-         er_get_u32(payload + 0), er_get_u32(payload + 4),
-         er_get_u32(payload + 8), er_get_u32(payload + 12));
+  printf(" object=");
+  for (i = 0; i < ERWIRE_HASH_LEN; ++i) {
+    printf("%02x", payload[i]);
+  }
+  printf(" offset=%u total=%u chunk=%u",
+         er_get_u32(payload + ERWIRE_HASH_LEN),
+         er_get_u32(payload + ERWIRE_HASH_LEN + 4u),
+         er_get_u32(payload + ERWIRE_HASH_LEN + 8u));
 }
 
 static void er_print_bus_address(const uint8_t* address) {
