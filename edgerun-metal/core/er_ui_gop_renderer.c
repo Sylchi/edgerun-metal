@@ -2,6 +2,14 @@
 #include "er_ui_icon.h"
 #include "er_math.h"
 
+#define ER_UI_GOP_BYTES_PER_PIXEL 4u
+#define ER_UI_GOP_COLOR_BYTE_MASK 0xffu
+#define ER_UI_GOP_COLOR_BYTE_MAX 255u
+#define ER_UI_GOP_BLEND_ROUND_BIAS 127u
+#define ER_UI_GOP_COLOR_GREEN_SHIFT 8u
+#define ER_UI_GOP_COLOR_RED_SHIFT 16u
+
+//@optimizer-ignore-constant UEFI GOP protocol GUID is ABI-defined by firmware
 static EFI_GUID g_gop_guid = {
   0x9042a9deu, 0x23dcu, 0x4a38u, {0x96u, 0xfbu, 0x7au, 0xdeu, 0xd0u, 0x80u, 0x51u, 0x6au}
 };
@@ -37,7 +45,7 @@ static UINT32 er_ui_gop_texel_coord(float coord, UINT32 limit) {
 static void er_ui_gop_stats_add_pixels(ErUiGopRenderStats* stats, UINT64 pixels, UINT8 blended, UINT8 text) {
   if (stats == 0 || pixels == 0u) return;
   stats->pixels_written += pixels;
-  stats->bytes_written += pixels * 4u;
+  stats->bytes_written += pixels * ER_UI_GOP_BYTES_PER_PIXEL;
   if (blended != 0u) stats->blend_pixels += pixels;
   if (text != 0u) stats->text_pixels += pixels;
 }
@@ -145,14 +153,14 @@ static UINT8 er_ui_gop_clip_rect_to(const ErUiGopSurface* surface, const ErUiGop
 
 static void er_ui_gop_unpack(ErUiGopPixelFormat format, UINT32 pixel, UINT8* r, UINT8* g, UINT8* b) {
   if (format == ER_UI_GOP_PIXEL_BGRX) {
-    *b = (UINT8)((pixel >> 16) & 0xffu);
-    *g = (UINT8)((pixel >> 8) & 0xffu);
-    *r = (UINT8)(pixel & 0xffu);
+    *b = (UINT8)((pixel >> ER_UI_GOP_COLOR_RED_SHIFT) & ER_UI_GOP_COLOR_BYTE_MASK);
+    *g = (UINT8)((pixel >> ER_UI_GOP_COLOR_GREEN_SHIFT) & ER_UI_GOP_COLOR_BYTE_MASK);
+    *r = (UINT8)(pixel & ER_UI_GOP_COLOR_BYTE_MASK);
     return;
   }
-  *r = (UINT8)((pixel >> 16) & 0xffu);
-  *g = (UINT8)((pixel >> 8) & 0xffu);
-  *b = (UINT8)(pixel & 0xffu);
+  *r = (UINT8)((pixel >> ER_UI_GOP_COLOR_RED_SHIFT) & ER_UI_GOP_COLOR_BYTE_MASK);
+  *g = (UINT8)((pixel >> ER_UI_GOP_COLOR_GREEN_SHIFT) & ER_UI_GOP_COLOR_BYTE_MASK);
+  *b = (UINT8)(pixel & ER_UI_GOP_COLOR_BYTE_MASK);
 }
 
 static UINT32 er_ui_gop_blend_pixel(ErUiGopPixelFormat format, UINT32 dst, er_ui_color4_t src) {
@@ -163,17 +171,23 @@ static UINT32 er_ui_gop_blend_pixel(ErUiGopPixelFormat format, UINT32 dst, er_ui
   UINT8 sg = er_ui_gop_u8_from_unit(src.g);
   UINT8 sb = er_ui_gop_u8_from_unit(src.b);
   UINT32 a = (UINT32)er_ui_gop_u8_from_unit(src.a);
-  UINT32 inv = 255u - a;
+  UINT32 inv = ER_UI_GOP_COLOR_BYTE_MAX - a;
 
-  if (a >= 255u) {
+  if (a >= ER_UI_GOP_COLOR_BYTE_MAX) {
     return er_ui_gop_pack_rgb(format, sr, sg, sb);
   }
 
   er_ui_gop_unpack(format, dst, &dr, &dg, &db);
   return er_ui_gop_pack_rgb(format,
-                            (UINT8)(((UINT32)sr * a + (UINT32)dr * inv + 127u) / 255u),
-                            (UINT8)(((UINT32)sg * a + (UINT32)dg * inv + 127u) / 255u),
-                            (UINT8)(((UINT32)sb * a + (UINT32)db * inv + 127u) / 255u));
+                            (UINT8)(((UINT32)sr * a + (UINT32)dr * inv +
+                                     ER_UI_GOP_BLEND_ROUND_BIAS) /
+                                    ER_UI_GOP_COLOR_BYTE_MAX),
+                            (UINT8)(((UINT32)sg * a + (UINT32)dg * inv +
+                                     ER_UI_GOP_BLEND_ROUND_BIAS) /
+                                    ER_UI_GOP_COLOR_BYTE_MAX),
+                            (UINT8)(((UINT32)sb * a + (UINT32)db * inv +
+                                     ER_UI_GOP_BLEND_ROUND_BIAS) /
+                                    ER_UI_GOP_COLOR_BYTE_MAX));
 }
 
 static void er_ui_gop_fill_rect(ErUiGopSurface* surface, UINT32 x0, UINT32 y0, UINT32 x1, UINT32 y1,
@@ -815,16 +829,16 @@ UINT8 er_ui_gop_tile_plan_from_mode(const ErUiGopMode* mode, UINT32 tile_width, 
   out_plan->width = mode->width;
   out_plan->height = mode->height;
   out_plan->stride = mode->stride;
-  out_plan->bytes_per_pixel = 4u;
+  out_plan->bytes_per_pixel = ER_UI_GOP_BYTES_PER_PIXEL;
   out_plan->tile_width = tile_width;
   out_plan->tile_height = tile_height;
   out_plan->columns = columns;
   out_plan->rows = rows;
   out_plan->max_dirty_tiles = max_dirty_tiles;
   out_plan->tile_count = tile_count;
-  out_plan->scanout_bytes = (UINT64)mode->stride * (UINT64)mode->height * 4u;
-  out_plan->full_frame_bytes = (UINT64)mode->width * (UINT64)mode->height * 4u;
-  out_plan->max_tile_bytes = (UINT64)tile_width * (UINT64)tile_height * 4u;
+  out_plan->scanout_bytes = (UINT64)mode->stride * (UINT64)mode->height * ER_UI_GOP_BYTES_PER_PIXEL;
+  out_plan->full_frame_bytes = (UINT64)mode->width * (UINT64)mode->height * ER_UI_GOP_BYTES_PER_PIXEL;
+  out_plan->max_tile_bytes = (UINT64)tile_width * (UINT64)tile_height * ER_UI_GOP_BYTES_PER_PIXEL;
   out_plan->tile_state_bytes = tile_count;
   out_plan->dirty_queue_bytes = (UINT64)max_dirty_tiles * 4u;
   return 1u;
@@ -864,9 +878,9 @@ UINT8 er_ui_gop_bandwidth_plan_from_mode(const ErUiGopMode* mode, UINT32 overdra
     return 0u;
   }
   if (er_ui_gop_mul_u64((UINT64)mode->stride, (UINT64)mode->height, &scanout_bytes) == 0u ||
-      er_ui_gop_mul_u64(scanout_bytes, 4u, &scanout_bytes) == 0u ||
+      er_ui_gop_mul_u64(scanout_bytes, ER_UI_GOP_BYTES_PER_PIXEL, &scanout_bytes) == 0u ||
       er_ui_gop_mul_u64((UINT64)mode->width, (UINT64)mode->height, &full_frame_bytes) == 0u ||
-      er_ui_gop_mul_u64(full_frame_bytes, 4u, &full_frame_bytes) == 0u ||
+      er_ui_gop_mul_u64(full_frame_bytes, ER_UI_GOP_BYTES_PER_PIXEL, &full_frame_bytes) == 0u ||
       er_ui_gop_mul_u64(scanout_bytes, (UINT64)mode->refresh_hz, &scanout_bytes_per_second) == 0u ||
       er_ui_gop_mul_u64(full_frame_bytes, (UINT64)mode->refresh_hz, &full_frame_bytes_per_second) == 0u ||
       er_ui_gop_mul_u64(full_frame_bytes_per_second, (UINT64)overdraw_budget, &budget_bytes_per_second) == 0u) {
@@ -1257,9 +1271,13 @@ UINT8 er_ui_gop_render_stats_fits_budget(ErUiGopRenderStats stats, ErUiGopFrameB
 
 UINT32 er_ui_gop_pack_rgb(ErUiGopPixelFormat format, UINT8 r, UINT8 g, UINT8 b) {
   if (format == ER_UI_GOP_PIXEL_BGRX) {
-    return ((UINT32)b << 16) | ((UINT32)g << 8) | (UINT32)r;
+    return ((UINT32)b << ER_UI_GOP_COLOR_RED_SHIFT) |
+           ((UINT32)g << ER_UI_GOP_COLOR_GREEN_SHIFT) |
+           (UINT32)r;
   }
-  return ((UINT32)r << 16) | ((UINT32)g << 8) | (UINT32)b;
+  return ((UINT32)r << ER_UI_GOP_COLOR_RED_SHIFT) |
+         ((UINT32)g << ER_UI_GOP_COLOR_GREEN_SHIFT) |
+         (UINT32)b;
 }
 
 static UINT8 er_ui_gop_surface_clear_rect_stats(ErUiGopSurface* surface, er_ui_color4_t color,

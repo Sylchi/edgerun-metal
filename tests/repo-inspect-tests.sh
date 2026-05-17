@@ -100,6 +100,15 @@ int missing_reason(void) { return 1234; }
 int removed_block_form(void) { return 31337; }
 //@optimizer-ignore-end
 C
+cat > "${TMP_DIR}/pkg/enum_only.c" <<'C'
+typedef enum {
+  EnumZero = 0,
+  EnumOne = 1,
+  EnumTwo = 2,
+  EnumThree = 3,
+  EnumFour = 4
+} EnumOnly;
+C
 mkdir -p "${TMP_DIR}/tests"
 cat > "${TMP_DIR}/tests/test_main.c" <<'C'
 int test_main_path(void) {
@@ -112,7 +121,7 @@ printf '\177ELFtest' > "${TMP_DIR}/release.efi"
 report="$("${REPO_INSPECT}" "${TMP_DIR}")"
 
 case "${report}" in
-  *"files:         5"* ) ;;
+  *"files:         6"* ) ;;
   * ) printf 'missing source file count\n%s\n' "${report}" >&2; exit 1 ;;
 esac
 
@@ -183,6 +192,11 @@ esac
 
 case "${report}" in
   *"ignored.c:"* ) printf 'optimizer-ignore line still reported\n%s\n' "${report}" >&2; exit 1 ;;
+  * ) ;;
+esac
+
+case "${report}" in
+  *"enum_only.c:"* ) printf 'enum ABI constants reported as smells\n%s\n' "${report}" >&2; exit 1 ;;
   * ) ;;
 esac
 
