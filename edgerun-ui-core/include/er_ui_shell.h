@@ -12,7 +12,6 @@ extern "C" {
 #endif
 
 #define ER_UI_SHELL_LAUNCHER_ID 1u
-#define ER_UI_SHELL_NETWORK_APP_LAUNCHER_ID 2u
 #define ER_UI_SHELL_TOPBAR_HEIGHT 40.0f
 #define ER_UI_WORKSPACE_TAB_HEIGHT 36.0f
 #define ER_UI_NETWORK_APP_PROMPT_RUN_ONCE_ID 0xED010001u
@@ -50,6 +49,10 @@ void er_ui_shell_set_launcher_open(er_ui_shell_state_t* state, bool open);
 void er_ui_shell_toggle_launcher(er_ui_shell_state_t* state);
 er_ui_status_t er_ui_shell_apply_action(er_ui_shell_state_t* state, er_ui_action_t action, bool* out_changed);
 bool er_ui_shell_network_app_prompt_open(const er_ui_shell_state_t* state);
+/*
+ * UI core owns the prompt component, not app inventory. Hosts call this after
+ * their app/package model selects a network app.
+ */
 void er_ui_shell_show_network_app_prompt(er_ui_shell_state_t* state);
 void er_ui_shell_clear_network_app_prompt_choice(er_ui_shell_state_t* state);
 er_ui_network_app_prompt_choice_t er_ui_shell_network_app_prompt_choice(const er_ui_shell_state_t* state);
