@@ -65,6 +65,30 @@ policy may accept, reject, rate-limit, revoke, price, or settle. The device
 still governs its own queues, storage, radio, battery, CPU, memory, display,
 and user relationships.
 
+The practical path is that every admission authority can issue tokens for only
+the resources it actually governs. A laptop admission can mint credits for its
+CPU, disk, Wi-Fi relay, battery budget, local apps, and local users. A phone
+admission can mint credits for its radio, hotspot path, storage, camera, and
+background scheduling windows. Those tokens are meaningful only where that
+admission is accepted. An identity without an accepted admission token can still
+sign packets, but it has no right to consume that jurisdiction's resources.
+
+Each packet, object, compute slice, storage interval, relay hop, or scheduling
+slot can therefore carry a cost before it is admitted. Local programs may spend
+tokens created by the same user up to the limits the device owner assigned.
+Friends, nearby devices, organizations, apps, or strangers crossing into another
+jurisdiction must pay in a token that the destination admission accepts, under
+that destination's current price and policy.
+
+There does not need to be one global token or one global operator. Users can
+accept tokens from other users, price their own resources against those tokens,
+and rebalance by spending the mixed tokens they earn on other people's
+resources. External settlement bridges, stablecoins, or swap services can help
+when a user wants harder settlement, but they are bridges around local
+admission, not the source of authority. The protocol only needs the work claim,
+admission, route, proof, receipt, and settlement records to agree on what was
+authorized and what was actually delivered.
+
 This means phones can relay packets over open Wi-Fi without first reaching a
 global operator network over 4G. Computers can store or relay other users'
 sealed data without being able to decrypt it. Any transport can carry packets
