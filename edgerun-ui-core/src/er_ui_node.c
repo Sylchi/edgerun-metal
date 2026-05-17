@@ -340,6 +340,16 @@ er_ui_node_t er_ui_node_accordion(const char* const* item_titles, const char* co
   return node;
 }
 
+er_ui_node_t er_ui_node_hover_card(const char* label, const char* detail, const char* body, er_ui_color4_t color) {
+  er_ui_node_t node = er_ui_node_base(ER_UI_NODE_HOVER_CARD);
+  node.label = label;
+  node.detail = detail;
+  node.aux = body;
+  node.color = color;
+  node.gap = 8.0f;
+  return node;
+}
+
 er_ui_node_t er_ui_node_route_path(const char* label, const char* const* hops, size_t hop_count) {
   er_ui_node_t node = er_ui_node_base(ER_UI_NODE_ROUTE_PATH);
   node.label = label;
@@ -678,6 +688,7 @@ const char* er_ui_node_kind_label(er_ui_node_kind_t kind) {
     case ER_UI_NODE_PAGINATION: return "pagination";
     case ER_UI_NODE_COLLAPSIBLE: return "collapsible";
     case ER_UI_NODE_ACCORDION: return "accordion";
+    case ER_UI_NODE_HOVER_CARD: return "hover-card";
     case ER_UI_NODE_ROUTE_PATH: return "route-path";
     case ER_UI_NODE_PACKAGE_CARD: return "package-card";
     case ER_UI_NODE_RECEIPT_ROW: return "receipt-row";
@@ -975,6 +986,10 @@ er_ui_status_t er_ui_node_accessibility(const er_ui_node_t* node, er_ui_a11y_nod
       break;
     case ER_UI_NODE_ACCORDION:
       out = er_ui_a11y_base(ER_UI_A11Y_GROUP, "accordion", false, 0u);
+      break;
+    case ER_UI_NODE_HOVER_CARD:
+      out = er_ui_a11y_base(ER_UI_A11Y_GROUP, node->label, false, 0u);
+      er_ui_a11y_set_value(&out, node->detail);
       break;
     case ER_UI_NODE_TABS:
       out = er_ui_a11y_base(ER_UI_A11Y_TAB_LIST, "tabs", false, 0u);
@@ -1311,6 +1326,25 @@ static er_ui_status_t er_ui_node_render_accordion(
   return ER_UI_OK;
 }
 
+static er_ui_status_t er_ui_node_render_hover_card(
+  const er_ui_node_t* node,
+  er_ui_scene_t* scene,
+  vr_font_face_t* font,
+  er_ui_bounds_t bounds,
+  er_ui_resolved_theme_t theme) {
+  if (!node || !scene || !font || !node->label || !node->detail || !node->aux || !er_ui_bounds_valid(bounds)) return ER_UI_ERR_INVALID_ARGUMENT;
+  float avatar_size = er_ui_float_min(42.0f, bounds.h);
+  er_ui_status_t status = er_ui_shadcn_avatar_emit(scene, font, er_ui_bounds(bounds.x, bounds.y, avatar_size, avatar_size), theme, node->label, node->color, false);
+  if (status != ER_UI_OK) return status;
+  float text_x = bounds.x + avatar_size + 12.0f;
+  float text_w = er_ui_float_max(bounds.w - avatar_size - 12.0f, 0.0f);
+  status = er_ui_node_render_text(scene, font, node->label, er_ui_bounds(text_x, bounds.y, text_w, 20.0f), theme.colors.text);
+  if (status != ER_UI_OK) return status;
+  status = er_ui_node_render_text(scene, font, node->detail, er_ui_bounds(text_x, bounds.y + 22.0f, text_w, 20.0f), theme.colors.muted);
+  if (status != ER_UI_OK) return status;
+  return er_ui_node_render_text(scene, font, node->aux, er_ui_bounds(bounds.x, bounds.y + avatar_size + node->gap, bounds.w, 28.0f), theme.colors.text);
+}
+
 static er_ui_status_t er_ui_node_render_label_group(
   const er_ui_node_t* node,
   er_ui_scene_t* scene,
@@ -1473,6 +1507,8 @@ er_ui_status_t er_ui_node_render(
       return er_ui_node_render_collapsible(node, scene, font, rect, theme);
     case ER_UI_NODE_ACCORDION:
       return er_ui_node_render_accordion(node, scene, font, rect, theme);
+    case ER_UI_NODE_HOVER_CARD:
+      return er_ui_node_render_hover_card(node, scene, font, rect, theme);
     case ER_UI_NODE_ROUTE_PATH:
       return er_ui_shadcn_route_path_emit(scene, font, rect, theme, node->label, node->labels, node->label_count);
     case ER_UI_NODE_PACKAGE_CARD:
