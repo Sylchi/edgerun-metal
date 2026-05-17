@@ -1,5 +1,6 @@
 #include "er_ui_runtime.h"
 #include "er_ui_internal.h"
+#include "er_math.h"
 
 static const size_t ER_UI_TEXT_INITIAL_CAPACITY = 32u;
 static const size_t ER_UI_RUNTIME_INITIAL_CAPACITY = 8u;
@@ -54,9 +55,7 @@ static bool er_ui_runtime_reserve(er_ui_allocator_t allocator, void** data, size
 }
 
 static float er_ui_runtime_clamp_float(float value, float min_value, float max_value) {
-  if (value < min_value) return min_value;
-  if (value > max_value) return max_value;
-  return value;
+  return er_math_clampf(value, min_value, max_value);
 }
 
 static er_ui_transition_state_t er_ui_transition_state_new(er_ui_transition_t spec) {

@@ -21,10 +21,7 @@ static float er_ui_gop_clamp01(float value) {
 }
 
 static UINT8 er_ui_gop_u8_from_unit(float value) {
-  float scaled = er_ui_gop_clamp01(value) * 255.0f + 0.5f;
-  if (scaled <= 0.0f) return 0u;
-  if (scaled >= 255.0f) return 255u;
-  return (UINT8)scaled;
+  return (UINT8)er_math_u8_from_unitf(value);
 }
 
 static UINT32 er_ui_gop_texel_coord(float coord, UINT32 limit) {

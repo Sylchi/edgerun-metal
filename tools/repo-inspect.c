@@ -916,8 +916,15 @@ static uint8_t eri_line_has_math_primitive_smell(const char* path, const char* r
       strstr(structural_line, "return a > b ? a : b") != NULL) {
     return 1u;
   }
+  if ((strstr(structural_line, "return min_value") != NULL && strstr(structural_line, "< min_value") != NULL) ||
+      (strstr(structural_line, "return max_value") != NULL && strstr(structural_line, "> max_value") != NULL)) {
+    return 1u;
+  }
   if ((strstr(structural_line, "< 0.0f") != NULL && strstr(structural_line, "return 0.0f") != NULL) ||
       (strstr(structural_line, "> 1.0f") != NULL && strstr(structural_line, "return 1.0f") != NULL)) {
+    return 1u;
+  }
+  if (strstr(structural_line, "* 255.0f") != NULL && strstr(structural_line, "+ 0.5f") != NULL) {
     return 1u;
   }
   if (strstr(structural_line, "truncated = (int") != NULL ||
