@@ -628,6 +628,37 @@ er_ui_status_t er_ui_node_accessibility(const er_ui_node_t* node, er_ui_a11y_nod
   return ER_UI_OK;
 }
 
+er_ui_status_t er_ui_node_accessibility_child(const er_ui_node_t* node, size_t child_index, er_ui_a11y_node_t* out_a11y) {
+  if (!node || !out_a11y) return ER_UI_ERR_INVALID_ARGUMENT;
+  if (node->kind == ER_UI_NODE_TABS) {
+    if (!node->labels || child_index >= node->label_count) return ER_UI_ERR_INVALID_ARGUMENT;
+    er_ui_a11y_node_t out = er_ui_a11y_base(ER_UI_A11Y_TAB, node->labels[child_index], true, node->id + (uint32_t)child_index);
+    if (child_index == node->selected) out.states |= ER_UI_A11Y_STATE_SELECTED;
+    *out_a11y = out;
+    return ER_UI_OK;
+  }
+  if (node->kind == ER_UI_NODE_BREADCRUMB) {
+    if (!node->labels || child_index >= node->label_count) return ER_UI_ERR_INVALID_ARGUMENT;
+    er_ui_a11y_node_t out = er_ui_a11y_base(ER_UI_A11Y_LIST_ITEM, node->labels[child_index], true, node->id + (uint32_t)child_index);
+    if (child_index == node->selected) out.states |= ER_UI_A11Y_STATE_CURRENT;
+    *out_a11y = out;
+    return ER_UI_OK;
+  }
+  if (node->kind == ER_UI_NODE_TABLE) {
+    if (node->label_count == 0u) return ER_UI_ERR_INVALID_ARGUMENT;
+    if (child_index == 0u) {
+      *out_a11y = er_ui_a11y_base(ER_UI_A11Y_ROW, "header", false, 0u);
+      return ER_UI_OK;
+    }
+    size_t row = child_index - 1u;
+    if (row >= node->row_count) return ER_UI_ERR_INVALID_ARGUMENT;
+    *out_a11y = er_ui_a11y_base(ER_UI_A11Y_ROW, "", true, node->id + (uint32_t)row);
+    return ER_UI_OK;
+  }
+  if (child_index >= node->child_count || !node->children[child_index]) return ER_UI_ERR_INVALID_ARGUMENT;
+  return er_ui_node_accessibility(node->children[child_index], out_a11y);
+}
+
 static er_ui_bounds_t er_ui_node_resolve_bounds(const er_ui_node_t* node, er_ui_bounds_t bounds) {
   if (!node) return bounds;
   if (er_ui_bounds_valid(node->bounds)) return node->bounds;
