@@ -135,7 +135,7 @@ static void sdl_demo_release(sdl_demo_app_t* app) {
 
 static void sdl_free_demo_layers(vr_font_face_t* face, demo_layer_render_t* layers, size_t count) {
   for (size_t i = 0u; i < count; ++i) {
-    vr_font_free_vertices(face, layers[i].verts);
+    vr_font_free_vertices(face, layers[i].verts, layers[i].vertex_count);
     (void)vr_font_free_vertex_atlas_ranges(face, layers[i].ranges, layers[i].range_count);
     layers[i].verts = NULL;
     layers[i].vertex_count = 0u;
@@ -174,11 +174,11 @@ static vr_status_t sdl_build_demo_layers(
     st = vr_font_shape_text(face, cps, cp_count, &shaped, &shaped_count);
     if (st != VR_OK) {
       fprintf(stderr, "fatal: shape failed for sample %zu status=%u\n", i, st);
-      vr_font_free_shaped(face, shaped);
+      vr_font_free_shaped(face, shaped, shaped_count);
       return st;
     }
     if (shaped_count == 0u) {
-      vr_font_free_shaped(face, shaped);
+      vr_font_free_shaped(face, shaped, shaped_count);
       return VR_ERR_INVALID_FONT;
     }
 
@@ -192,7 +192,7 @@ static vr_status_t sdl_build_demo_layers(
       &layer->vertex_count,
       &layer->ranges,
       &layer->range_count);
-    vr_font_free_shaped(face, shaped);
+    vr_font_free_shaped(face, shaped, shaped_count);
     if (st != VR_OK) {
       fprintf(stderr, "fatal: batch failed for sample %zu status=%u\n", i, st);
       return st;

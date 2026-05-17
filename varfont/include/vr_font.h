@@ -134,7 +134,7 @@ vr_status_t vr_font_shape_text(
   vr_shaped_glyph_t** out_glyphs,
   size_t* out_count);
 
-vr_status_t vr_font_free_shaped(vr_font_face_t* face, vr_shaped_glyph_t* glyphs);
+vr_status_t vr_font_free_shaped(vr_font_face_t* face, vr_shaped_glyph_t* glyphs, size_t glyph_count);
 
 vr_status_t vr_font_bake_glyph(vr_font_face_t* face, uint32_t glyph_id, vr_baked_glyph_t* out);
 
@@ -160,7 +160,7 @@ vr_status_t vr_font_build_vertex_batches_by_atlas(
   vr_vertex_atlas_range_t** out_ranges,
   size_t* out_range_count);
 
-vr_status_t vr_font_free_vertices(vr_font_face_t* face, vr_vertex_t* verts);
+vr_status_t vr_font_free_vertices(vr_font_face_t* face, vr_vertex_t* verts, size_t vertex_count);
 vr_status_t vr_font_free_vertex_atlas_ranges(vr_font_face_t* face, vr_vertex_atlas_range_t* ranges, size_t range_count);
 
 uint32_t vr_font_last_error(const vr_font_face_t* face);
