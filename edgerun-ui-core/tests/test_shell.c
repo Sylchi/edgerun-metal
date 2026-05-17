@@ -171,22 +171,7 @@ void run_shell_tests(void) {
       expect_status(er_ui_shell_emit_scene_with_font(&shell, &scene, er_ui_bounds(0.0f, 0.0f, 640.0f, 400.0f), theme, face), ER_UI_OK,
                     "shell font: normal shell emits with variable font");
       expect_true(scene.text_quad_count > 0u, "shell font: normal shell emits variable font text");
-      expect_true(shell_scene_has_hit_id(&scene, ER_UI_SHELL_NETWORK_APP_LAUNCHER_ID), "shell launcher: network app item hit emits");
-      action = er_ui_runtime_pointer_down(&runtime, &scene, 24.0f, 96.0f);
-      expect_true(action.kind == ER_UI_ACTION_FOCUSED, "shell launcher: pointer down focuses network app item");
-      action = er_ui_runtime_pointer_up(&runtime, &scene, 24.0f, 96.0f);
-      expect_true(action.kind == ER_UI_ACTION_ACTIVATED, "shell launcher: pointer up activates network app item");
-      expect_status(er_ui_shell_apply_action(&shell, action, &changed), ER_UI_OK, "shell launcher: network app action applies");
-      expect_true(changed, "shell launcher: network app action reports changed");
-      expect_true(!er_ui_shell_launcher_open(&shell), "shell launcher: network app action closes launcher");
-      expect_true(er_ui_shell_network_app_prompt_open(&shell), "shell launcher: network app action opens prompt");
-      er_ui_shell_set_launcher_open(&shell, true);
-      er_ui_shell_clear_network_app_prompt_choice(&shell);
-      action = (er_ui_action_t){0};
-      action.kind = ER_UI_ACTION_CANCELLED;
-      expect_status(er_ui_shell_apply_action(&shell, action, &changed), ER_UI_OK, "shell launcher: cancel prompt after launcher action applies");
-      expect_true(changed, "shell launcher: cancel prompt reports changed");
-      expect_true(!er_ui_shell_network_app_prompt_open(&shell), "shell launcher: cancel prompt closes prompt");
+      expect_true(!shell_scene_has_hit_id(&scene, ER_UI_NETWORK_APP_PROMPT_RUN_ONCE_ID), "shell font: prompt actions are absent until host opens prompt");
 
       er_ui_scene_clear_commands(&scene);
       expect_status(er_ui_shell_emit_scene_with_font(&shell, &scene, er_ui_bounds(0.0f, 0.0f, 640.0f, 400.0f), theme, NULL), ER_UI_ERR_INVALID_ARGUMENT,
