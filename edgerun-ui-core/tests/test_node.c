@@ -104,6 +104,7 @@ void run_node_tests(void) {
   expect_string(er_ui_node_kind_label(ER_UI_NODE_SHEET), "sheet", "node: kind label maps sheet");
   expect_string(er_ui_node_kind_label(ER_UI_NODE_KBD), "kbd", "node: kind label maps kbd");
   expect_string(er_ui_node_kind_label(ER_UI_NODE_MENUBAR), "menubar", "node: kind label maps menubar");
+  expect_string(er_ui_node_kind_label(ER_UI_NODE_RADIO_GROUP), "radio-group", "node: kind label maps radio group");
   expect_string(er_ui_icon_label(ER_UI_ICON_SEARCH), "search", "node: icon label maps canonical icon");
   expect_u32(er_ui_icon_atlas_id(ER_UI_ICON_SEARCH), (uint32_t)ER_UI_ICON_SEARCH + 1u, "node: icon atlas id is stable");
   expect_string(er_ui_icon_provider_name(ER_UI_ICON_APP, ER_UI_ICON_PROVIDER_LUCIDE), "app-window", "node: lucide provider name maps app icon");
@@ -255,6 +256,15 @@ void run_node_tests(void) {
   expect_true(a11y.has_id && a11y.id == 8032u, "node: menubar item id");
   expect_true((a11y.states & ER_UI_A11Y_STATE_SELECTED) != 0u, "node: menubar selected item state");
 
+  const char* const radio_group_labels[] = {"Default", "Comfortable", "Compact"};
+  er_ui_node_t radio_group_a11y = er_ui_node_radio_group(radio_group_labels, 3u, 2u, 8034u);
+  expect_status(er_ui_node_accessibility(&radio_group_a11y, &a11y), ER_UI_OK, "node: radio group accessibility maps");
+  expect_size(a11y.role, ER_UI_A11Y_GROUP, "node: radio group accessibility role");
+  expect_status(er_ui_node_accessibility_child(&radio_group_a11y, 2u, &a11y), ER_UI_OK, "node: radio group item accessibility maps");
+  expect_size(a11y.role, ER_UI_A11Y_RADIO, "node: radio group item accessibility role");
+  expect_true(a11y.has_id && a11y.id == 8036u, "node: radio group item id");
+  expect_true((a11y.states & ER_UI_A11Y_STATE_CHECKED) != 0u, "node: radio group selected item state");
+
   er_ui_node_t checked = er_ui_node_checkbox("Remember", true, 8002u);
   expect_status(er_ui_node_accessibility(&checked, &a11y), ER_UI_OK, "node: checkbox accessibility maps");
   expect_size(a11y.role, ER_UI_A11Y_CHECKBOX, "node: checkbox accessibility role");
@@ -393,6 +403,8 @@ void run_node_tests(void) {
     er_ui_node_t kbd = er_ui_node_kbd(render_kbd_keys, 2u, "Open command palette");
     const char* const render_menubar_items[] = {"File", "Edit", "View"};
     er_ui_node_t menubar = er_ui_node_menubar(render_menubar_items, 3u, 1u, 8837u);
+    const char* const render_radio_group_labels[] = {"Default", "Comfortable", "Compact"};
+    er_ui_node_t radio_group = er_ui_node_radio_group(render_radio_group_labels, 3u, 0u, 8840u);
 
     expect_status(er_ui_node_render(&alert, &scene, face, er_ui_bounds(0.0f, 170.0f, 360.0f, 76.0f), theme), ER_UI_OK, "node: alert renders");
     expect_status(er_ui_node_render(&avatar, &scene, face, er_ui_bounds(0.0f, 254.0f, 42.0f, 42.0f), theme), ER_UI_OK, "node: avatar renders");
@@ -505,6 +517,10 @@ void run_node_tests(void) {
     expect_status(er_ui_node_render(&menubar, &scene, face, er_ui_bounds(0.0f, 3914.0f, 300.0f, 46.0f), theme), ER_UI_OK,
                   "node: menubar renders");
     expect_size(scene.hit_count, hits_before_menubar + 3u, "node: menubar emits item hits");
+    size_t hits_before_radio_group = scene.hit_count;
+    expect_status(er_ui_node_render(&radio_group, &scene, face, er_ui_bounds(0.0f, 3972.0f, 260.0f, 106.0f), theme), ER_UI_OK,
+                  "node: radio group renders");
+    expect_size(scene.hit_count, hits_before_radio_group + 3u, "node: radio group emits radio hits");
     size_t drag_sources_before = scene.drag_source_count;
     size_t drop_targets_before = scene.drop_target_count;
     expect_status(er_ui_node_render(&reorderable, &scene, face, er_ui_bounds(0.0f, 2930.0f, 260.0f, 52.0f), theme), ER_UI_OK,
