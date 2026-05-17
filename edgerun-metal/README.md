@@ -271,19 +271,24 @@ Status: implemented as the first native relay transport proof.
 
 The native profile can bring up VirtIO-net and submit EdgeRun Ethernet frames with EtherType `0x88b5`.
 
+### Native relay ingress and dispatch
+
+Status: host-tested capture path implemented; native profile loop and device adapters are next.
+
+`er_native_boot_poll_relay_ingress` accepts native erwire packets, records malformed or empty ingress deterministically, and turns routed packets into relay intents. `er_relay_dispatch` consumes those intents and records storage or render captures for VirtIO block and VirtIO GPU targets.
+
 ## Next milestones
 
 Use `NEXT_CORE_WORK.md` and `../docs/coherent-system-milestones.md` as the active checklist. In short:
 
 ```text
 1. Object-only storage contract
-2. Native relay ingress
-3. Relay intent dispatch
-4. VirtIO storage endpoint
-5. VirtIO render endpoint
-6. Wasm relay hostcalls
-7. Distributed UI proof
-8. Remote driver proof
+2. Native relay ingress loop and acknowledgement
+3. VirtIO storage endpoint adapter
+4. VirtIO render endpoint adapter
+5. Wasm relay hostcalls
+6. Distributed UI proof
+7. Remote driver proof
 ```
 
 ## ExitBootServices policy

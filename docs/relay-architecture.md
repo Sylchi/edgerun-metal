@@ -159,6 +159,7 @@ The code should stay split by responsibility:
 - `er_app`: app identity, app budgets, app IPC route bindings.
 - `er_hw_relay`: endpoint encoding and local packet movement.
 - `er_relay_router`: deterministic route selection from erwire packet class to relay endpoint.
+- `er_relay_dispatch`: deterministic consumption of relay intents into endpoint dispatch records.
 - `er_native_eth`: native EdgeRun Ethernet transport.
 - `er_virtio` and device-specific VirtIO modules: queue and device adapters.
 - `wasm_vm`: bounded Wasm execution and hostcall dispatch.
@@ -176,16 +177,17 @@ Wasm or host test emits erwire packet
   -> VirtIO net receives EdgeRun EtherType frame
   -> native erwire parser accepts packet
   -> relay router selects endpoint
+  -> relay dispatcher records a VirtIO block or VirtIO GPU capture
   -> VirtIO block or VirtIO GPU adapter consumes packet
   -> transit/result packet is emitted back over erwire
 ```
 
 The first concrete milestones are:
 
-1. Add a native ingress loop that polls `erwire_poll_native_eth`.
+1. Add a native profile loop around the existing native ingress polling helper.
 2. Convert accepted packets into `ErRelayForwardIntent`.
-3. Dispatch storage-class packets to a VirtIO block adapter.
-4. Dispatch render-class packets to a VirtIO GPU adapter.
+3. Dispatch storage-class packets to a VirtIO block capture record, then adapter.
+4. Dispatch render-class packets to a VirtIO GPU capture record, then adapter.
 5. Add Wasm hostcalls that send and receive erwire relay packets, replacing direct device hostcalls as the driver/app boundary.
 6. Prove one app can render the same UI scene to more than one renderer route.
 7. Prove one Wasm driver can submit device work to a device endpoint reached through a relay route.
