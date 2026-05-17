@@ -1823,12 +1823,14 @@ static void test_app_identity_routes(void) {
   ErHash capability_id;
   ErHash route_hash;
   ErNodeId target_node_id;
+  ErNodeId parent_relay_node_id;
   ErAppIdentity identity;
   ErAppIpcRouteBinding binding;
   ErAppBudget budget;
   ErAppUsage usage;
   ErAppScheduleSlot slot;
   ErAppLaunchAllocation allocation;
+  ErAppExecutionJurisdiction jurisdiction;
   UINT8 nonce[ER_APP_INSTANCE_NONCE_LEN];
   UINTN i;
 
@@ -1846,6 +1848,7 @@ static void test_app_identity_routes(void) {
     capability_id.bytes[i] = (UINT8)(0x70u + i);
     route_hash.bytes[i] = (UINT8)(0x90u + i);
     target_node_id.bytes[i] = (UINT8)(0xb0u + i);
+    parent_relay_node_id.bytes[i] = (UINT8)(0xc0u + i);
     nonce[i] = (UINT8)(0xd0u + i);
   }
 
@@ -1926,6 +1929,38 @@ static void test_app_identity_routes(void) {
   check_uint64("app launch executor len", allocation.executor_memory_len, 4096u);
   check_uint64("app launch address base", allocation.app_address_base, ER_APP_ADDRESS_BASE);
   check_uint64("app launch address len", allocation.app_address_len, 4096u);
+
+  check_int64("app execution jurisdiction",
+              er_app_prepare_execution_jurisdiction(&crypto, &identity, &budget, &allocation,
+                                                    &parent_relay_node_id, 0u, 1024u,
+                                                    1024u, 1024u, &jurisdiction),
+              1);
+  check_int64("app execution abi", jurisdiction.abi_version, ER_APP_ABI_VERSION);
+  check_node_id_equal("app execution parent relay", &jurisdiction.parent_relay_node_id,
+                      &parent_relay_node_id);
+  check_node_id_equal("app execution app node", &jurisdiction.app_node_id,
+                      &identity.app_node_id);
+  check_uint64("app execution address len", jurisdiction.app_address_len, 4096u);
+  check_uint64("app execution inbox base", jurisdiction.public_inbox_base, 0u);
+  check_uint64("app execution inbox len", jurisdiction.public_inbox_len, 1024u);
+  check_uint64("app execution outbox base", jurisdiction.public_outbox_base, 1024u);
+  check_uint64("app execution outbox len", jurisdiction.public_outbox_len, 1024u);
+  check_int64("app execution reject overlap",
+              er_app_prepare_execution_jurisdiction(&crypto, &identity, &budget, &allocation,
+                                                    &parent_relay_node_id, 0u, 2048u,
+                                                    1024u, 1024u, &jurisdiction),
+              0);
+  check_int64("app execution reject outbox outside",
+              er_app_prepare_execution_jurisdiction(&crypto, &identity, &budget, &allocation,
+                                                    &parent_relay_node_id, 0u, 1024u,
+                                                    4096u, 1u, &jurisdiction),
+              0);
+  er_mem_zero(parent_relay_node_id.bytes, ER_NODE_ID_LEN);
+  check_int64("app execution reject zero parent",
+              er_app_prepare_execution_jurisdiction(&crypto, &identity, &budget, &allocation,
+                                                    &parent_relay_node_id, 0u, 1024u,
+                                                    1024u, 1024u, &jurisdiction),
+              0);
 }
 
 static void test_device_relay_identity(void) {

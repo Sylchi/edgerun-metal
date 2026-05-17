@@ -100,6 +100,23 @@ typedef struct {
   UINT64 app_address_len;
 } ErAppLaunchAllocation;
 
+typedef struct {
+  UINT16 abi_version;
+  UINT16 reserved;
+  ErHash jurisdiction_id;
+  ErHash admission_id;
+  ErHash budget_id;
+  ErHash allocation_id;
+  ErNodeId parent_relay_node_id;
+  ErNodeId app_node_id;
+  UINT64 app_address_base;
+  UINT64 app_address_len;
+  UINT64 public_inbox_base;
+  UINT64 public_inbox_len;
+  UINT64 public_outbox_base;
+  UINT64 public_outbox_len;
+} ErAppExecutionJurisdiction;
+
 UINT8 er_app_derive_identity(const ErCryptoProvider* crypto, const ErHash* app_object_id,
                              const ErHash* manifest_hash, const ErHash* admission_id,
                              const UINT8* instance_nonce, UINTN instance_nonce_len,
@@ -121,5 +138,15 @@ UINT8 er_app_prepare_schedule_slot(const ErCryptoProvider* crypto, const ErAppId
 UINT8 er_app_prepare_launch_allocation(const ErCryptoProvider* crypto, const ErAppIdentity* identity,
                                        const ErAppBudget* budget, UINT64 executor_memory_base,
                                        UINT64 executor_memory_len, ErAppLaunchAllocation* out_allocation);
+UINT8 er_app_prepare_execution_jurisdiction(const ErCryptoProvider* crypto,
+                                            const ErAppIdentity* identity,
+                                            const ErAppBudget* budget,
+                                            const ErAppLaunchAllocation* allocation,
+                                            const ErNodeId* parent_relay_node_id,
+                                            UINT64 public_inbox_base,
+                                            UINT64 public_inbox_len,
+                                            UINT64 public_outbox_base,
+                                            UINT64 public_outbox_len,
+                                            ErAppExecutionJurisdiction* out_jurisdiction);
 
 #endif

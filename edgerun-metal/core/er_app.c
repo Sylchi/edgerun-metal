@@ -12,6 +12,7 @@ static const UINT8 g_app_session_domain[] = "edgerun:c:v1:app:ipc-session";
 static const UINT8 g_app_budget_domain[] = "edgerun:c:v1:app:budget";
 static const UINT8 g_app_schedule_domain[] = "edgerun:c:v1:app:schedule-slot";
 static const UINT8 g_app_launch_allocation_domain[] = "edgerun:c:v1:app:launch-allocation";
+static const UINT8 g_app_execution_jurisdiction_domain[] = "edgerun:c:v1:app:execution-jurisdiction";
 
 enum {
   ER_APP_BYTE_BITS = 8u,
@@ -45,12 +46,27 @@ enum {
   ER_APP_SESSION_ADMISSION_SPAN = 0u,
   ER_APP_SESSION_ROUTE_SPAN = 1u,
   ER_APP_SESSION_NONCE_SPAN = 2u,
+  ER_APP_EXECUTION_SPAN_COUNT = 5u,
+  ER_APP_EXECUTION_PARENT_RELAY_SPAN = 0u,
+  ER_APP_EXECUTION_APP_NODE_SPAN = 1u,
+  ER_APP_EXECUTION_ADMISSION_SPAN = 2u,
+  ER_APP_EXECUTION_BUDGET_SPAN = 3u,
+  ER_APP_EXECUTION_FIELDS_SPAN = 4u,
   ER_APP_PACKED_FIELD0_OFFSET = 0u,
   ER_APP_PACKED_FIELD1_OFFSET = 8u,
   ER_APP_PACKED_FIELD2_OFFSET = 16u,
   ER_APP_PACKED_FIELD3_OFFSET = 24u,
   ER_APP_PACKED_U64_FIELD_COUNT = 4u,
-  ER_APP_PACKED_U64_FIELDS_BYTES = ER_APP_U64_FIELD_BYTES * ER_APP_PACKED_U64_FIELD_COUNT
+  ER_APP_PACKED_U64_FIELDS_BYTES = ER_APP_U64_FIELD_BYTES * ER_APP_PACKED_U64_FIELD_COUNT,
+  ER_APP_EXECUTION_U64_FIELD_COUNT = 6u,
+  ER_APP_EXECUTION_U64_FIELDS_BYTES = ER_APP_U64_FIELD_BYTES * ER_APP_EXECUTION_U64_FIELD_COUNT,
+  ER_APP_EXECUTION_ALLOCATION_OFFSET = 0u,
+  ER_APP_EXECUTION_ADDRESS_BASE_OFFSET = 32u,
+  ER_APP_EXECUTION_ADDRESS_LEN_OFFSET = 40u,
+  ER_APP_EXECUTION_INBOX_BASE_OFFSET = 48u,
+  ER_APP_EXECUTION_INBOX_LEN_OFFSET = 56u,
+  ER_APP_EXECUTION_OUTBOX_BASE_OFFSET = 64u,
+  ER_APP_EXECUTION_OUTBOX_LEN_OFFSET = 72u
 };
 
 static void er_app_put_be(UINT8* dst, UINT64 value, UINTN byte_count) {
@@ -77,6 +93,48 @@ static void er_app_put_budget_field(UINT8** cursor, UINT64 value) {
 
 static UINT8 er_app_add_overflows(UINT64 current, UINT64 amount) {
   return (UINT64)(current + amount) < current ? 1u : 0u;
+}
+
+static UINT8 er_app_node_nonzero(const ErNodeId* node_id) {
+  UINTN i;
+
+  if (node_id == 0) {
+    return 0;
+  }
+  for (i = 0u; i < ER_NODE_ID_LEN; ++i) {
+    if (node_id->bytes[i] != 0u) {
+      return 1;
+    }
+  }
+  return 0;
+}
+
+static UINT8 er_app_hash_equal(const ErHash* left, const ErHash* right) {
+  UINTN i;
+
+  if (left == 0 || right == 0) {
+    return 0;
+  }
+  for (i = 0u; i < ER_HASH_LEN; ++i) {
+    if (left->bytes[i] != right->bytes[i]) {
+      return 0;
+    }
+  }
+  return 1;
+}
+
+static UINT8 er_app_node_equal(const ErNodeId* left, const ErNodeId* right) {
+  UINTN i;
+
+  if (left == 0 || right == 0) {
+    return 0;
+  }
+  for (i = 0u; i < ER_NODE_ID_LEN; ++i) {
+    if (left->bytes[i] != right->bytes[i]) {
+      return 0;
+    }
+  }
+  return 1;
 }
 
 static void er_app_prepare_identity_budget_spans(const ErAppIdentity* identity, const ErAppBudget* budget,
@@ -362,4 +420,94 @@ UINT8 er_app_prepare_launch_allocation(const ErCryptoProvider* crypto, const ErA
   return er_crypto_hash(crypto, g_app_launch_allocation_domain,
                         (UINTN)(sizeof(g_app_launch_allocation_domain) - 1u),
                         spans, ER_APP_IDENTITY_BUDGET_SPAN_COUNT, &out_allocation->allocation_id);
+}
+
+UINT8 er_app_prepare_execution_jurisdiction(const ErCryptoProvider* crypto,
+                                            const ErAppIdentity* identity,
+                                            const ErAppBudget* budget,
+                                            const ErAppLaunchAllocation* allocation,
+                                            const ErNodeId* parent_relay_node_id,
+                                            UINT64 public_inbox_base,
+                                            UINT64 public_inbox_len,
+                                            UINT64 public_outbox_base,
+                                            UINT64 public_outbox_len,
+                                            ErAppExecutionJurisdiction* out_jurisdiction) {
+  UINT8 fields[ER_HASH_LEN + ER_APP_EXECUTION_U64_FIELDS_BYTES];
+  ErByteSpan spans[ER_APP_EXECUTION_SPAN_COUNT];
+  UINT64 app_address_end;
+  UINT64 inbox_end;
+  UINT64 outbox_end;
+
+  if (crypto == 0 || identity == 0 || budget == 0 || allocation == 0 ||
+      parent_relay_node_id == 0 || out_jurisdiction == 0 ||
+      identity->abi_version != ER_APP_ABI_VERSION ||
+      budget->abi_version != ER_APP_ABI_VERSION ||
+      allocation->abi_version != ER_APP_ABI_VERSION ||
+      budget->app_kind != ER_APP_KIND_USER ||
+      er_app_node_nonzero(parent_relay_node_id) == 0u) {
+    return 0;
+  }
+  if (er_app_hash_equal(&identity->admission_id, &budget->admission_id) == 0u ||
+      er_app_hash_equal(&identity->admission_id, &allocation->admission_id) == 0u ||
+      er_app_hash_equal(&budget->budget_id, &allocation->budget_id) == 0u ||
+      er_app_node_equal(&identity->app_node_id, &allocation->app_node_id) == 0u) {
+    return 0;
+  }
+  if (allocation->app_address_base != ER_APP_ADDRESS_BASE ||
+      allocation->app_address_len != budget->max_memory_bytes ||
+      allocation->executor_memory_len != budget->max_memory_bytes ||
+      allocation->app_address_len == 0u ||
+      public_inbox_len == 0u || public_outbox_len == 0u) {
+    return 0;
+  }
+  app_address_end = allocation->app_address_base + allocation->app_address_len;
+  inbox_end = public_inbox_base + public_inbox_len;
+  outbox_end = public_outbox_base + public_outbox_len;
+  if (app_address_end < allocation->app_address_base ||
+      inbox_end < public_inbox_base ||
+      outbox_end < public_outbox_base ||
+      public_inbox_base < allocation->app_address_base ||
+      public_outbox_base < allocation->app_address_base ||
+      inbox_end > app_address_end ||
+      outbox_end > app_address_end ||
+      (public_inbox_base < outbox_end && public_outbox_base < inbox_end)) {
+    return 0;
+  }
+
+  er_mem_copy(&fields[ER_APP_EXECUTION_ALLOCATION_OFFSET], allocation->allocation_id.bytes, ER_HASH_LEN);
+  er_app_put_be64(&fields[ER_APP_EXECUTION_ADDRESS_BASE_OFFSET], allocation->app_address_base);
+  er_app_put_be64(&fields[ER_APP_EXECUTION_ADDRESS_LEN_OFFSET], allocation->app_address_len);
+  er_app_put_be64(&fields[ER_APP_EXECUTION_INBOX_BASE_OFFSET], public_inbox_base);
+  er_app_put_be64(&fields[ER_APP_EXECUTION_INBOX_LEN_OFFSET], public_inbox_len);
+  er_app_put_be64(&fields[ER_APP_EXECUTION_OUTBOX_BASE_OFFSET], public_outbox_base);
+  er_app_put_be64(&fields[ER_APP_EXECUTION_OUTBOX_LEN_OFFSET], public_outbox_len);
+
+  spans[ER_APP_EXECUTION_PARENT_RELAY_SPAN].bytes = parent_relay_node_id->bytes;
+  spans[ER_APP_EXECUTION_PARENT_RELAY_SPAN].len = ER_NODE_ID_LEN;
+  spans[ER_APP_EXECUTION_APP_NODE_SPAN].bytes = identity->app_node_id.bytes;
+  spans[ER_APP_EXECUTION_APP_NODE_SPAN].len = ER_NODE_ID_LEN;
+  spans[ER_APP_EXECUTION_ADMISSION_SPAN].bytes = identity->admission_id.bytes;
+  spans[ER_APP_EXECUTION_ADMISSION_SPAN].len = ER_HASH_LEN;
+  spans[ER_APP_EXECUTION_BUDGET_SPAN].bytes = budget->budget_id.bytes;
+  spans[ER_APP_EXECUTION_BUDGET_SPAN].len = ER_HASH_LEN;
+  spans[ER_APP_EXECUTION_FIELDS_SPAN].bytes = fields;
+  spans[ER_APP_EXECUTION_FIELDS_SPAN].len = (UINTN)sizeof(fields);
+
+  er_mem_zero((UINT8*)out_jurisdiction, (UINTN)sizeof(*out_jurisdiction));
+  out_jurisdiction->abi_version = ER_APP_ABI_VERSION;
+  out_jurisdiction->admission_id = identity->admission_id;
+  out_jurisdiction->budget_id = budget->budget_id;
+  out_jurisdiction->allocation_id = allocation->allocation_id;
+  out_jurisdiction->parent_relay_node_id = *parent_relay_node_id;
+  out_jurisdiction->app_node_id = identity->app_node_id;
+  out_jurisdiction->app_address_base = allocation->app_address_base;
+  out_jurisdiction->app_address_len = allocation->app_address_len;
+  out_jurisdiction->public_inbox_base = public_inbox_base;
+  out_jurisdiction->public_inbox_len = public_inbox_len;
+  out_jurisdiction->public_outbox_base = public_outbox_base;
+  out_jurisdiction->public_outbox_len = public_outbox_len;
+
+  return er_crypto_hash(crypto, g_app_execution_jurisdiction_domain,
+                        (UINTN)(sizeof(g_app_execution_jurisdiction_domain) - 1u),
+                        spans, ER_APP_EXECUTION_SPAN_COUNT, &out_jurisdiction->jurisdiction_id);
 }
