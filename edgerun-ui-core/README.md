@@ -7,7 +7,7 @@ Implemented portable slices:
 - primitive bounds and float helpers used by scene, painter, and future component code
 - colors, rects, clips, hits, drag sources, drop targets, icon/text quads, and transitions
 - painter facade for panels, soft cards, dividers, hits, drag/drop regions, quads, and transitions
-- shadcn-style reusable component primitives and a component showcase scene emitter, kept app/data agnostic
+- shadcn demo catalog and parity metadata ported from the Rust UI core source, including 57 component specs, slots, states, identifier resolution, and port mappings
 - semantic palette/theme records for color schemes, accents, radius scales, density, and token resolution
 - required `vrfont` integration for converting variable-font vertex batches into scene text quads
 - cursor-based opacity and translation for grouped commands
@@ -22,8 +22,6 @@ The runtime input slice includes:
 - runtime state for transitions, scroll offsets, toggles, sliders, open values, selected tabs, text values, and deterministic tests
 - focus state, focusable/text hit classification, open focus scopes, scoped focus cycling, and deterministic tests
 - pointer, wheel, key, drag/drop, activation, escape, and blur dispatch returning canonical `er_ui_action_t` records
-
-The shadcn component showcase is a visual reference frame for component parity. It renders reusable controls such as buttons, badges, cards, inputs, checkboxes, switches, sliders, tabs, and rows into `er_ui_scene_t`. It does not own app catalogs, launcher inventories, product app metadata, or app-run policy.
 
 Production code is freestanding:
 

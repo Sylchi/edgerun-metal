@@ -1,123 +1,70 @@
 #include "test_common.h"
 
-#include <stdio.h>
-#include <stdlib.h>
-
-static void* component_vr_alloc(void* user, size_t size, size_t align) {
-  (void)user;
-  (void)align;
-  return malloc(size);
-}
-
-static void* component_vr_realloc(void* user, void* ptr, size_t old_size, size_t new_size, size_t align) {
-  (void)user;
-  (void)old_size;
-  (void)align;
-  return realloc(ptr, new_size);
-}
-
-static void component_vr_free(void* user, void* ptr, size_t size, size_t align) {
-  (void)user;
-  (void)size;
-  (void)align;
-  free(ptr);
-}
-
-static vr_font_allocator_t component_vr_allocator(void) {
-  vr_font_allocator_t allocator = {0};
-  allocator.alloc = component_vr_alloc;
-  allocator.realloc = component_vr_realloc;
-  allocator.free = component_vr_free;
-  return allocator;
-}
-
-static unsigned char* component_read_file(const char* path, size_t* out_size) {
-  if (!path || !out_size) return NULL;
-  *out_size = 0u;
-  FILE* file = fopen(path, "rb");
-  if (!file) return NULL;
-  if (fseek(file, 0, SEEK_END) != 0) {
-    fclose(file);
-    return NULL;
-  }
-  long size = ftell(file);
-  if (size <= 0) {
-    fclose(file);
-    return NULL;
-  }
-  if (fseek(file, 0, SEEK_SET) != 0) {
-    fclose(file);
-    return NULL;
-  }
-  unsigned char* data = (unsigned char*)malloc((size_t)size);
-  if (!data) {
-    fclose(file);
-    return NULL;
-  }
-  size_t read = fread(data, 1u, (size_t)size, file);
-  fclose(file);
-  if (read != (size_t)size) {
-    free(data);
-    return NULL;
-  }
-  *out_size = (size_t)size;
-  return data;
-}
-
 void run_component_tests(void) {
-  er_ui_scene_t scene = {0};
-  er_ui_resolved_theme_t theme = er_ui_resolved_theme_user_default();
-  expect_status(er_ui_scene_init_with_allocator(&scene, theme.colors.bg, er_ui_test_allocator()), ER_UI_OK, "components: scene init succeeds");
+  expect_size(er_ui_shadcn_demo_count(), 57u, "shadcn catalog: component count matches Rust source");
+  expect_true(er_ui_shadcn_find_demo_by_slug("accordion") != 0, "shadcn catalog: accordion exists");
+  expect_true(er_ui_shadcn_find_demo_by_slug("tooltip") != 0, "shadcn catalog: tooltip exists");
+  expect_true(er_ui_shadcn_find_demo_by_slug("data-table") != 0, "shadcn catalog: data-table exists");
+  expect_true(er_ui_shadcn_find_demo_by_slug("input-otp") != 0, "shadcn catalog: input-otp exists");
 
-  size_t font_size = 0u;
-  unsigned char* font_data = component_read_file(ER_UI_REPO_ROOT "/varfont/fonts/Geist[wght].ttf", &font_size);
-  expect_true(font_data != NULL && font_size > 0u, "components: bundled variable font loads");
-  if (!font_data) {
-    er_ui_scene_destroy(&scene);
-    return;
+  const er_ui_shadcn_demo_spec_t* input_group = er_ui_shadcn_find_demo_by_source_component("InputGroup");
+  expect_true(input_group != 0, "shadcn catalog: InputGroup resolves by source component");
+  if (input_group) expect_string(input_group->slug, "input-group", "shadcn catalog: InputGroup slug matches");
+  const er_ui_shadcn_demo_spec_t* button = er_ui_shadcn_find_demo_by_slug("button");
+  expect_true(er_ui_shadcn_demo_uses_state(button, "disabled"), "shadcn catalog: button has disabled state");
+  expect_true(er_ui_shadcn_demo_uses_slot(er_ui_shadcn_find_demo_by_slug("dialog"), "dialog-content"), "shadcn catalog: dialog content slot exists");
+
+  er_ui_shadcn_parity_contract_t contract = {0};
+  expect_true(er_ui_shadcn_parity_contract_for_slug("button", &contract), "shadcn parity: button contract exists");
+  expect_string(contract.aria_pattern, "button", "shadcn parity: button aria pattern matches");
+  expect_true(er_ui_shadcn_contract_supports_variant(&contract, "destructive"), "shadcn parity: button destructive variant exists");
+  expect_true(er_ui_shadcn_contract_supports_variant(&contract, "ghost"), "shadcn parity: button ghost variant exists");
+  expect_true(er_ui_shadcn_contract_supports_interaction(&contract, "click"), "shadcn parity: button click interaction exists");
+  expect_size(contract.keyboard_count, 2u, "shadcn parity: button keyboard count matches");
+
+  er_ui_shadcn_resolved_demo_t resolved = {0};
+  expect_true(er_ui_shadcn_resolve_demo_identifier("button", &resolved), "shadcn resolve: slug resolves");
+  expect_string(resolved.spec->slug, "button", "shadcn resolve: slug result matches");
+  expect_true(resolved.kind == ER_UI_SHADCN_RESOLVE_SLUG, "shadcn resolve: slug kind matches");
+  expect_true(er_ui_shadcn_resolve_demo_identifier("Button", &resolved), "shadcn resolve: source component resolves");
+  expect_true(resolved.kind == ER_UI_SHADCN_RESOLVE_SOURCE_COMPONENT, "shadcn resolve: source kind matches");
+  expect_true(er_ui_shadcn_resolve_demo_identifier("@/components/ui/input-otp", &resolved), "shadcn resolve: module path resolves");
+  expect_true(resolved.kind == ER_UI_SHADCN_RESOLVE_MODULE_PATH, "shadcn resolve: module path kind matches");
+  expect_true(er_ui_shadcn_resolve_demo_identifier("components/ui/card.tsx", &resolved), "shadcn resolve: tsx path resolves");
+  expect_string(resolved.spec->slug, "card", "shadcn resolve: tsx path slug matches");
+  expect_true(er_ui_shadcn_resolve_demo_identifier("data-slot=\"card-header\"", &resolved), "shadcn resolve: data-slot resolves");
+  expect_string(resolved.spec->slug, "card", "shadcn resolve: data-slot slug matches");
+  expect_true(er_ui_shadcn_resolve_demo_identifier("CardHeader", &resolved), "shadcn resolve: pascal slot resolves");
+  expect_true(resolved.kind == ER_UI_SHADCN_RESOLVE_SLOT, "shadcn resolve: slot kind matches");
+  expect_true(!er_ui_shadcn_resolve_demo_identifier("UnknownThing", &resolved), "shadcn resolve: unknown is rejected");
+
+  er_ui_shadcn_port_mapping_t mapping = {0};
+  expect_true(er_ui_shadcn_port_mapping_for_identifier("@/components/ui/button", &mapping), "shadcn mapping: module path maps");
+  expect_string(mapping.slug, "button", "shadcn mapping: slug matches");
+  expect_string(mapping.source_component, "Button", "shadcn mapping: source component matches");
+  expect_string(mapping.edge_builder, "button", "shadcn mapping: edge builder matches");
+  expect_true(mapping.category == ER_UI_SHADCN_CATEGORY_FOUNDATION, "shadcn mapping: category matches");
+  expect_true(mapping.status == ER_UI_SHADCN_STATUS_EXACT_PORT, "shadcn mapping: status matches");
+  expect_true(mapping.native_renderer, "shadcn mapping: native renderer true");
+  expect_true(mapping.exact_port, "shadcn mapping: exact port true");
+  expect_true(!er_ui_shadcn_port_mapping_for_identifier("UnknownThing", &mapping), "shadcn mapping: unknown is rejected");
+
+  expect_size(er_ui_shadcn_native_demo_count(), 57u, "shadcn progress: native count matches Rust source");
+  expect_size(er_ui_shadcn_exact_demo_count(), 57u, "shadcn progress: exact count matches Rust source");
+  expect_size(er_ui_shadcn_exact_parity_count(), 57u, "shadcn progress: parity count matches Rust source");
+  expect_size(er_ui_shadcn_count_by_status(ER_UI_SHADCN_STATUS_NATIVE_PRIMITIVE), 0u, "shadcn progress: native primitive count matches Rust source");
+  expect_true(er_ui_shadcn_count_by_category(ER_UI_SHADCN_CATEGORY_FOUNDATION) > 0u, "shadcn progress: foundation category populated");
+  expect_true(er_ui_shadcn_count_by_category(ER_UI_SHADCN_CATEGORY_OVERLAY) > 0u, "shadcn progress: overlay category populated");
+
+  for (size_t i = 0u; i < er_ui_shadcn_demo_count(); ++i) {
+    const er_ui_shadcn_demo_spec_t* spec = er_ui_shadcn_demo_at(i);
+    expect_true(spec != 0, "shadcn catalog: indexed spec exists");
+    if (!spec) continue;
+    expect_true(spec->route && spec->route[0] == '/' && spec->route[1] == 'd', "shadcn catalog: docs route is stable");
+    expect_true(spec->edge_builder && spec->edge_builder[0] != '\0', "shadcn catalog: edge builder is present");
+    expect_true(spec->source_component && spec->source_component[0] != '\0', "shadcn catalog: source component is present");
+    expect_true(er_ui_shadcn_parity_contract_for_slug(spec->slug, &contract), "shadcn parity: every exact component has a contract");
+    expect_true(contract.compound == (spec->slot_count > 1u), "shadcn parity: compound flag matches slot count");
+    expect_true(er_ui_shadcn_contract_supports_interaction(&contract, "render"), "shadcn parity: every contract renders");
   }
-
-  vr_font_config_t cfg = {0};
-  cfg.px_size = 16.0f;
-  cfg.atlas_width = 512u;
-  cfg.atlas_height = 512u;
-  cfg.atlas_pad = VR_FONT_DEFAULT_ATLAS_PADDING;
-  cfg.atlas_format = VR_FONT_ATLAS_FORMAT_ALPHA8;
-  cfg.allocator = component_vr_allocator();
-
-  vr_font_face_t* face = NULL;
-  expect_status((er_ui_status_t)vr_font_face_create_from_memory(&face, font_data, font_size, &cfg), (er_ui_status_t)VR_OK,
-                "components: variable font opens from memory");
-  free(font_data);
-  if (!face) {
-    er_ui_scene_destroy(&scene);
-    return;
-  }
-
-  er_ui_painter_t painter = er_ui_painter(&scene);
-  expect_status(er_ui_component_button(&painter, face, er_ui_bounds(8.0f, 8.0f, 120.0f, 36.0f), 10u, "Primary",
-                                       ER_UI_COMPONENT_BUTTON_PRIMARY, theme),
-                ER_UI_OK, "components: button emits");
-  expect_status(er_ui_component_input(&painter, face, er_ui_bounds(8.0f, 54.0f, 180.0f, 36.0f), 11u, "", "Identity name", theme), ER_UI_OK,
-                "components: input emits");
-  expect_status(er_ui_component_checkbox(&painter, face, er_ui_bounds(8.0f, 100.0f, 220.0f, 30.0f), 12u, "Cache verified bytes", true, theme),
-                ER_UI_OK, "components: checkbox emits");
-  expect_true(scene.hit_count >= 3u, "components: basic controls emit hits");
-  expect_true(scene.text_quad_count > 0u, "components: basic controls emit variable font text");
-
-  er_ui_scene_clear_commands(&scene);
-  er_ui_shadcn_showcase_stats_t stats = {0};
-  expect_status(er_ui_shadcn_showcase_emit(&scene, face, er_ui_bounds(0.0f, 0.0f, 760.0f, 560.0f), theme, 1000u, &stats), ER_UI_OK,
-                "showcase: shadcn reference emits");
-  expect_true(stats.component_count >= 20u, "showcase: enough component examples are counted");
-  expect_size(stats.button_count, 5u, "showcase: button variants are counted");
-  expect_true(stats.text_label_count >= 18u, "showcase: text labels are counted");
-  expect_true(scene.rect_count >= 25u, "showcase: visual rect commands emit");
-  expect_true(scene.hit_count >= 13u, "showcase: interactive hit commands emit");
-  expect_true(scene.text_quad_count > 80u, "showcase: variable font text quads emit");
-  expect_status(er_ui_shadcn_showcase_emit(&scene, NULL, er_ui_bounds(0.0f, 0.0f, 760.0f, 560.0f), theme, 1000u, NULL),
-                ER_UI_ERR_INVALID_ARGUMENT, "showcase: missing variable font is rejected");
-
-  vr_font_face_destroy(face);
-  er_ui_scene_destroy(&scene);
 }
