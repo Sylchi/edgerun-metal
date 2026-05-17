@@ -106,6 +106,11 @@ typedef enum {
 } er_ui_icon_t;
 
 typedef enum {
+  ER_UI_ICON_PROVIDER_LUCIDE = 0,
+  ER_UI_ICON_PROVIDER_TABLER
+} er_ui_icon_provider_t;
+
+typedef enum {
   ER_UI_NODE_COMPOSITION_OK = 0,
   ER_UI_NODE_COMPOSITION_NESTED_CARD
 } er_ui_node_composition_issue_kind_t;
@@ -260,6 +265,7 @@ er_ui_node_t* er_ui_node_set_reorderable(er_ui_node_t* node, uint32_t scope_id, 
 er_ui_status_t er_ui_node_add_child(er_ui_node_t* parent, er_ui_node_t* child);
 const char* er_ui_icon_label(er_ui_icon_t icon);
 uint32_t er_ui_icon_atlas_id(er_ui_icon_t icon);
+const char* er_ui_icon_provider_name(er_ui_icon_t icon, er_ui_icon_provider_t provider);
 const char* er_ui_node_kind_label(er_ui_node_kind_t kind);
 const char* er_ui_node_composition_issue_label(er_ui_node_composition_issue_kind_t kind);
 er_ui_status_t er_ui_node_validate_composition(const er_ui_node_t* node, er_ui_node_composition_issue_t* out_issue);
