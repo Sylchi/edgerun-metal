@@ -116,6 +116,23 @@ void run_node_tests(void) {
   expect_true((a11y.states & ER_UI_A11Y_STATE_EXPANDED) != 0u, "node: tree accessibility expanded state");
   expect_true(er_ui_a11y_role_label(a11y.role) != NULL, "node: accessibility role has stable label");
 
+  const char* const a11y_tabs[] = {"One", "Two"};
+  er_ui_node_t tabs_a11y = er_ui_node_tabs(a11y_tabs, 2u, 1u, 8005u);
+  expect_status(er_ui_node_accessibility(&tabs_a11y, &a11y), ER_UI_OK, "node: tab list accessibility maps");
+  expect_size(a11y.role, ER_UI_A11Y_TAB_LIST, "node: tab list accessibility role");
+  expect_status(er_ui_node_accessibility_child(&tabs_a11y, 1u, &a11y), ER_UI_OK, "node: selected tab accessibility maps");
+  expect_size(a11y.role, ER_UI_A11Y_TAB, "node: selected tab accessibility role");
+  expect_true(a11y.has_id && a11y.id == 8006u, "node: selected tab accessibility id");
+  expect_true((a11y.states & ER_UI_A11Y_STATE_SELECTED) != 0u, "node: selected tab accessibility state");
+
+  const char* const a11y_headers[] = {"Name"};
+  const char* const a11y_cells[] = {"EdgeRun"};
+  er_ui_node_t table_a11y = er_ui_node_table(a11y_headers, 1u, a11y_cells, 1u, 8010u);
+  expect_status(er_ui_node_accessibility_child(&table_a11y, 0u, &a11y), ER_UI_OK, "node: table header accessibility maps");
+  expect_size(a11y.role, ER_UI_A11Y_ROW, "node: table header accessibility role");
+  expect_status(er_ui_node_accessibility_child(&table_a11y, 1u, &a11y), ER_UI_OK, "node: table row accessibility maps");
+  expect_true(a11y.has_id && a11y.id == 8010u, "node: table row accessibility id");
+
   er_ui_node_t full = er_ui_node_row();
   er_ui_node_t children[ER_UI_NODE_MAX_CHILDREN + 1u];
   for (size_t i = 0u; i < ER_UI_NODE_MAX_CHILDREN; ++i) {

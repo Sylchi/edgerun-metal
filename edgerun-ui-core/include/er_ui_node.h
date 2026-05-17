@@ -206,6 +206,7 @@ er_ui_node_t* er_ui_node_set_reorderable(er_ui_node_t* node, uint32_t scope_id, 
 er_ui_status_t er_ui_node_add_child(er_ui_node_t* parent, er_ui_node_t* child);
 const char* er_ui_a11y_role_label(er_ui_a11y_role_t role);
 er_ui_status_t er_ui_node_accessibility(const er_ui_node_t* node, er_ui_a11y_node_t* out_a11y);
+er_ui_status_t er_ui_node_accessibility_child(const er_ui_node_t* node, size_t child_index, er_ui_a11y_node_t* out_a11y);
 er_ui_status_t er_ui_node_render(
   const er_ui_node_t* node,
   er_ui_scene_t* scene,
