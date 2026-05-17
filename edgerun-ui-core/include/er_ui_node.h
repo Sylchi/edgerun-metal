@@ -80,6 +80,7 @@ typedef enum {
   ER_UI_NODE_COMBOBOX,
   ER_UI_NODE_DIFF_BODY,
   ER_UI_NODE_CHAT_MESSAGE,
+  ER_UI_NODE_CONVERSATION,
   ER_UI_NODE_ROUTE_PATH,
   ER_UI_NODE_PACKAGE_CARD,
   ER_UI_NODE_RECEIPT_ROW,
@@ -323,6 +324,7 @@ er_ui_node_t er_ui_node_combobox(const char* label, const char* value, const cha
 er_ui_node_t er_ui_node_diff_body(const char* const* lines, size_t line_count, bool truncated);
 er_ui_node_t er_ui_node_chat_message(er_ui_shadcn_chat_role_t role, const char* heading, const char* detail);
 er_ui_node_t er_ui_node_chat_diff_message(const char* heading, const char* const* lines, size_t line_count, bool truncated);
+er_ui_node_t er_ui_node_conversation(float scroll_offset_px, uint32_t scroll_id);
 er_ui_node_t er_ui_node_route_path(const char* label, const char* const* hops, size_t hop_count);
 er_ui_node_t er_ui_node_package_card(const char* name, const char* policy, const char* hash, uint32_t id);
 er_ui_node_t er_ui_node_receipt_row(const char* label, const char* amount, const char* status_text, uint32_t id);

@@ -124,6 +124,7 @@ void run_node_tests(void) {
   expect_string(er_ui_node_kind_label(ER_UI_NODE_COMBOBOX), "combobox", "node: kind label maps combobox");
   expect_string(er_ui_node_kind_label(ER_UI_NODE_DIFF_BODY), "diff-body", "node: kind label maps diff body");
   expect_string(er_ui_node_kind_label(ER_UI_NODE_CHAT_MESSAGE), "chat-message", "node: kind label maps chat message");
+  expect_string(er_ui_node_kind_label(ER_UI_NODE_CONVERSATION), "conversation", "node: kind label maps conversation");
   expect_string(er_ui_icon_label(ER_UI_ICON_SEARCH), "search", "node: icon label maps canonical icon");
   expect_u32(er_ui_icon_atlas_id(ER_UI_ICON_SEARCH), (uint32_t)ER_UI_ICON_SEARCH + 1u, "node: icon atlas id is stable");
   expect_string(er_ui_icon_provider_name(ER_UI_ICON_APP, ER_UI_ICON_PROVIDER_LUCIDE), "app-window", "node: lucide provider name maps app icon");
@@ -459,6 +460,20 @@ void run_node_tests(void) {
   expect_status(er_ui_node_accessibility_child(&chat_diff_a11y, 3u, &a11y), ER_UI_OK, "node: chat diff line accessibility maps");
   expect_true(a11y.label == diff_lines[2], "node: chat diff line label is borrowed");
 
+  er_ui_node_t conversation_a11y = er_ui_node_conversation(12.0f, 8090u);
+  er_ui_node_t conversation_child_a = er_ui_node_chat_message(ER_UI_SHADCN_CHAT_ROLE_USER, "", "Run tests");
+  er_ui_node_t conversation_child_b = er_ui_node_chat_message(ER_UI_SHADCN_CHAT_ROLE_ASSISTANT, "Response", "Tests passed");
+  expect_status(er_ui_node_add_child(&conversation_a11y, &conversation_child_a), ER_UI_OK, "node: conversation accepts first child");
+  expect_status(er_ui_node_add_child(&conversation_a11y, &conversation_child_b), ER_UI_OK, "node: conversation accepts second child");
+  expect_status(er_ui_node_accessibility(&conversation_a11y, &a11y), ER_UI_OK, "node: conversation accessibility maps");
+  expect_size(a11y.role, ER_UI_A11Y_GROUP, "node: conversation accessibility role");
+  expect_true(a11y.has_id && a11y.id == 8090u, "node: conversation scroll id");
+  expect_status(er_ui_node_accessibility_child(&conversation_a11y, 1u, &a11y), ER_UI_OK, "node: conversation child accessibility maps");
+  expect_string(a11y.label, "assistant", "node: conversation child role is preserved");
+  expect_status(er_ui_node_child_bounds(&conversation_a11y, 0u, er_ui_bounds(0.0f, 0.0f, 360.0f, 220.0f), &resolved_child), ER_UI_OK,
+                "node: conversation child bounds resolve");
+  expect_float(resolved_child.y, 4.0f, "node: conversation child bounds apply padding and scroll offset");
+
   er_ui_node_t checked = er_ui_node_checkbox("Remember", true, 8002u);
   expect_status(er_ui_node_accessibility(&checked, &a11y), ER_UI_OK, "node: checkbox accessibility maps");
   expect_size(a11y.role, ER_UI_A11Y_CHECKBOX, "node: checkbox accessibility role");
@@ -635,6 +650,11 @@ void run_node_tests(void) {
     er_ui_node_t chat_message = er_ui_node_chat_message(ER_UI_SHADCN_CHAT_ROLE_ASSISTANT, "Response", "Done");
     er_ui_node_t chat_timeline = er_ui_node_chat_message(ER_UI_SHADCN_CHAT_ROLE_TOOL_RUNNING, "Started", "shell");
     er_ui_node_t chat_diff = er_ui_node_chat_diff_message("Patch", render_diff_lines, 4u, true);
+    er_ui_node_t conversation = er_ui_node_conversation(8.0f, 8890u);
+    er_ui_node_t conversation_a = er_ui_node_chat_message(ER_UI_SHADCN_CHAT_ROLE_USER, "", "Run tests");
+    er_ui_node_t conversation_b = er_ui_node_chat_message(ER_UI_SHADCN_CHAT_ROLE_ASSISTANT, "Response", "Tests passed");
+    expect_status(er_ui_node_add_child(&conversation, &conversation_a), ER_UI_OK, "node: render conversation accepts first child");
+    expect_status(er_ui_node_add_child(&conversation, &conversation_b), ER_UI_OK, "node: render conversation accepts second child");
 
     expect_status(er_ui_node_render(&alert, &scene, face, er_ui_bounds(0.0f, 170.0f, 360.0f, 76.0f), theme), ER_UI_OK, "node: alert renders");
     expect_status(er_ui_node_render(&avatar, &scene, face, er_ui_bounds(0.0f, 254.0f, 42.0f, 42.0f), theme), ER_UI_OK, "node: avatar renders");
@@ -843,6 +863,10 @@ void run_node_tests(void) {
                   "node: chat diff message renders");
     expect_true(scene.icon_quad_count >= icons_before_chat + 3u, "node: chat messages emit role icons");
     expect_true(scene.text_quad_count > text_before_chat, "node: chat messages emit variable font text");
+    size_t hits_before_conversation = scene.hit_count;
+    expect_status(er_ui_node_render(&conversation, &scene, face, er_ui_bounds(0.0f, 7034.0f, 380.0f, 220.0f), theme), ER_UI_OK,
+                  "node: conversation renders");
+    expect_size(scene.hit_count, hits_before_conversation + 1u, "node: conversation emits scroll hit");
     size_t drag_sources_before = scene.drag_source_count;
     size_t drop_targets_before = scene.drop_target_count;
     expect_status(er_ui_node_render(&reorderable, &scene, face, er_ui_bounds(0.0f, 2930.0f, 260.0f, 52.0f), theme), ER_UI_OK,
