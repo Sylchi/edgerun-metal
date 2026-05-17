@@ -444,6 +444,131 @@ er_ui_status_t er_ui_node_add_child(er_ui_node_t* parent, er_ui_node_t* child) {
   return ER_UI_OK;
 }
 
+const char* er_ui_node_kind_label(er_ui_node_kind_t kind) {
+  switch (kind) {
+    case ER_UI_NODE_ROW: return "row";
+    case ER_UI_NODE_COLUMN: return "column";
+    case ER_UI_NODE_CARD: return "card";
+    case ER_UI_NODE_TEXT: return "text";
+    case ER_UI_NODE_BADGE: return "badge";
+    case ER_UI_NODE_BUTTON: return "button";
+    case ER_UI_NODE_CHECKBOX: return "checkbox";
+    case ER_UI_NODE_RADIO: return "radio";
+    case ER_UI_NODE_SELECT: return "select";
+    case ER_UI_NODE_SLIDER: return "slider";
+    case ER_UI_NODE_SEPARATOR: return "separator";
+    case ER_UI_NODE_SKELETON: return "skeleton";
+    case ER_UI_NODE_ALERT: return "alert";
+    case ER_UI_NODE_AVATAR: return "avatar";
+    case ER_UI_NODE_PROGRESS: return "progress";
+    case ER_UI_NODE_SWITCH: return "switch";
+    case ER_UI_NODE_TABLE: return "table";
+    case ER_UI_NODE_BREADCRUMB: return "breadcrumb";
+    case ER_UI_NODE_TOAST: return "toast";
+    case ER_UI_NODE_EMPTY: return "empty";
+    case ER_UI_NODE_LIST_ROW: return "list-row";
+    case ER_UI_NODE_FIELD: return "field";
+    case ER_UI_NODE_TEXT_AREA: return "text-area";
+    case ER_UI_NODE_TABS: return "tabs";
+    case ER_UI_NODE_BAR_CHART: return "bar-chart";
+    case ER_UI_NODE_COMMAND_PALETTE: return "command-palette";
+    case ER_UI_NODE_TREE_ITEM: return "tree-item";
+    case ER_UI_NODE_SECTION: return "section";
+    case ER_UI_NODE_IDENTITY_CARD: return "identity-card";
+    case ER_UI_NODE_CONTACT_CARD: return "contact-card";
+    case ER_UI_NODE_THREAD_ROW: return "thread-row";
+    case ER_UI_NODE_ATTACHMENT_PREVIEW: return "attachment-preview";
+    case ER_UI_NODE_CAPABILITY_GRANT_ROW: return "capability-grant-row";
+    case ER_UI_NODE_PROOF_EVENT_ROW: return "proof-event-row";
+    case ER_UI_NODE_ROUTE_PATH: return "route-path";
+    case ER_UI_NODE_PACKAGE_CARD: return "package-card";
+    case ER_UI_NODE_RECEIPT_ROW: return "receipt-row";
+    case ER_UI_NODE_PANEL_HEADER: return "panel-header";
+    case ER_UI_NODE_METRIC_CARD: return "metric-card";
+    case ER_UI_NODE_TRANSACTION_ROW: return "transaction-row";
+    case ER_UI_NODE_MENU_ITEM: return "menu-item";
+    case ER_UI_NODE_CONTROL_ROW: return "control-row";
+    case ER_UI_NODE_GRID: return "grid";
+    case ER_UI_NODE_MASONRY: return "masonry";
+    case ER_UI_NODE_BENTO_GRID: return "bento-grid";
+    case ER_UI_NODE_SCROLL_AREA: return "scroll-area";
+    case ER_UI_NODE_SPACER: return "spacer";
+    case ER_UI_NODE_TOOLTIP: return "tooltip";
+    case ER_UI_NODE_DIALOG: return "dialog";
+    case ER_UI_NODE_PROGRESS_RING: return "progress-ring";
+    default: return "unknown";
+  }
+}
+
+const char* er_ui_node_composition_issue_label(er_ui_node_composition_issue_kind_t kind) {
+  switch (kind) {
+    case ER_UI_NODE_COMPOSITION_OK: return "ok";
+    case ER_UI_NODE_COMPOSITION_NESTED_CARD: return "nested-card";
+    default: return "unknown";
+  }
+}
+
+static bool er_ui_node_is_card_like(er_ui_node_kind_t kind) {
+  return kind == ER_UI_NODE_CARD ||
+         kind == ER_UI_NODE_IDENTITY_CARD ||
+         kind == ER_UI_NODE_CONTACT_CARD ||
+         kind == ER_UI_NODE_PACKAGE_CARD ||
+         kind == ER_UI_NODE_METRIC_CARD;
+}
+
+static void er_ui_node_clear_composition_issue(er_ui_node_composition_issue_t* out_issue) {
+  if (!out_issue) return;
+  out_issue->kind = ER_UI_NODE_COMPOSITION_OK;
+  out_issue->ancestor_kind = ER_UI_NODE_ROW;
+  out_issue->parent_kind = ER_UI_NODE_ROW;
+  out_issue->node_kind = ER_UI_NODE_ROW;
+  out_issue->child_index = 0u;
+  out_issue->depth = 0u;
+}
+
+static er_ui_status_t er_ui_node_validate_composition_inner(
+  const er_ui_node_t* node,
+  bool inside_card,
+  er_ui_node_kind_t card_ancestor,
+  er_ui_node_kind_t parent_kind,
+  size_t child_index,
+  size_t depth,
+  er_ui_node_composition_issue_t* out_issue) {
+  if (!node) return ER_UI_ERR_INVALID_ARGUMENT;
+  bool card_like = er_ui_node_is_card_like(node->kind);
+  if (card_like && inside_card) {
+    if (out_issue) {
+      out_issue->kind = ER_UI_NODE_COMPOSITION_NESTED_CARD;
+      out_issue->ancestor_kind = card_ancestor;
+      out_issue->parent_kind = parent_kind;
+      out_issue->node_kind = node->kind;
+      out_issue->child_index = child_index;
+      out_issue->depth = depth;
+    }
+    return ER_UI_ERR_INVALID_ARGUMENT;
+  }
+  bool next_inside_card = inside_card || card_like;
+  er_ui_node_kind_t next_card_ancestor = inside_card ? card_ancestor : node->kind;
+  for (size_t i = 0u; i < node->child_count; ++i) {
+    er_ui_status_t status = er_ui_node_validate_composition_inner(
+      node->children[i],
+      next_inside_card,
+      next_card_ancestor,
+      node->kind,
+      i,
+      depth + 1u,
+      out_issue);
+    if (status != ER_UI_OK) return status;
+  }
+  return ER_UI_OK;
+}
+
+er_ui_status_t er_ui_node_validate_composition(const er_ui_node_t* node, er_ui_node_composition_issue_t* out_issue) {
+  if (!node) return ER_UI_ERR_INVALID_ARGUMENT;
+  er_ui_node_clear_composition_issue(out_issue);
+  return er_ui_node_validate_composition_inner(node, false, node->kind, node->kind, 0u, 0u, out_issue);
+}
+
 const char* er_ui_a11y_role_label(er_ui_a11y_role_t role) {
   switch (role) {
     case ER_UI_A11Y_GROUP: return "group";

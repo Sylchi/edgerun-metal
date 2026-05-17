@@ -69,6 +69,20 @@ typedef enum {
 typedef struct er_ui_node_t er_ui_node_t;
 
 typedef enum {
+  ER_UI_NODE_COMPOSITION_OK = 0,
+  ER_UI_NODE_COMPOSITION_NESTED_CARD
+} er_ui_node_composition_issue_kind_t;
+
+typedef struct {
+  er_ui_node_composition_issue_kind_t kind;
+  er_ui_node_kind_t ancestor_kind;
+  er_ui_node_kind_t parent_kind;
+  er_ui_node_kind_t node_kind;
+  size_t child_index;
+  size_t depth;
+} er_ui_node_composition_issue_t;
+
+typedef enum {
   ER_UI_A11Y_GENERIC = 0,
   ER_UI_A11Y_GROUP,
   ER_UI_A11Y_TEXT,
@@ -204,6 +218,9 @@ er_ui_node_t* er_ui_node_set_draggable(er_ui_node_t* node, uint32_t scope_id, ui
 er_ui_node_t* er_ui_node_set_drop_target(er_ui_node_t* node, uint32_t scope_id, size_t index);
 er_ui_node_t* er_ui_node_set_reorderable(er_ui_node_t* node, uint32_t scope_id, uint32_t item_id, size_t index);
 er_ui_status_t er_ui_node_add_child(er_ui_node_t* parent, er_ui_node_t* child);
+const char* er_ui_node_kind_label(er_ui_node_kind_t kind);
+const char* er_ui_node_composition_issue_label(er_ui_node_composition_issue_kind_t kind);
+er_ui_status_t er_ui_node_validate_composition(const er_ui_node_t* node, er_ui_node_composition_issue_t* out_issue);
 const char* er_ui_a11y_role_label(er_ui_a11y_role_t role);
 er_ui_status_t er_ui_node_accessibility(const er_ui_node_t* node, er_ui_a11y_node_t* out_a11y);
 er_ui_status_t er_ui_node_accessibility_child(const er_ui_node_t* node, size_t child_index, er_ui_a11y_node_t* out_a11y);
