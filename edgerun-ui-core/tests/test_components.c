@@ -123,6 +123,19 @@ static void test_shadcn_render_primitives(void) {
   expect_status(er_ui_shadcn_button_emit(&scene, NULL, er_ui_bounds(0.0f, 0.0f, 40.0f, 40.0f), theme, "Nope", 9u,
                                          ER_UI_SHADCN_BUTTON_DEFAULT, ER_UI_SHADCN_BUTTON_SIZE_DEFAULT, true),
                 ER_UI_ERR_INVALID_ARGUMENT, "shadcn render: missing variable font is rejected");
+  expect_true(er_ui_shadcn_component_scene_preview_available("button"), "shadcn scene preview: button is available");
+  expect_true(er_ui_shadcn_component_scene_preview_available("tabs"), "shadcn scene preview: tabs are available");
+  expect_true(!er_ui_shadcn_component_scene_preview_available("accordion"), "shadcn scene preview: unported visual body is not claimed");
+  expect_status(er_ui_shadcn_component_scene_preview_emit(&scene, face, er_ui_bounds(420.0f, 16.0f, 180.0f, 58.0f), theme, "button", NULL),
+                ER_UI_OK, "shadcn scene preview: selected body emits");
+  expect_status(er_ui_shadcn_component_scene_preview_emit(&scene, face, er_ui_bounds(420.0f, 82.0f, 180.0f, 58.0f), theme, "accordion", NULL),
+                ER_UI_ERR_INVALID_ARGUMENT, "shadcn scene preview: unported body is rejected");
+  er_ui_shadcn_demo_gallery_state_t state = {0};
+  er_ui_shadcn_demo_gallery_state_init(&state);
+  expect_status(er_ui_shadcn_showcase_emit(&scene, face, er_ui_bounds(0.0f, 280.0f, 720.0f, 360.0f), theme, "button", &state), ER_UI_OK,
+                "shadcn showcase: component reference emits");
+  expect_true(scene.hit_count >= 20u, "shadcn showcase: catalog rows and preview controls emit hits");
+  expect_true(scene.text_quad_count > 20u, "shadcn showcase: catalog and preview use variable font text");
 
   vr_font_face_destroy(face);
   er_ui_scene_destroy(&scene);

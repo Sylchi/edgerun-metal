@@ -121,6 +121,7 @@ typedef struct {
 #define ER_UI_SHADCN_SELECT_DEFAULT_CURRENCY_ID (ER_UI_SHADCN_DEMO_PREVIEW_BASE_ID + 968u)
 #define ER_UI_SHADCN_SELECT_TICKER_ID (ER_UI_SHADCN_DEMO_PREVIEW_BASE_ID + 1056u)
 #define ER_UI_SHADCN_GALLERY_SLIDER_CAPACITY 32u
+#define ER_UI_SHADCN_SHOWCASE_ROW_BASE_ID (ER_UI_SHADCN_DEMO_PREVIEW_BASE_ID + 3000u)
 
 typedef struct {
   uint32_t id;
@@ -238,6 +239,21 @@ er_ui_status_t er_ui_shadcn_tabs_emit(
   size_t label_count,
   size_t selected,
   uint32_t base_id);
+bool er_ui_shadcn_component_scene_preview_available(const char* slug);
+er_ui_status_t er_ui_shadcn_component_scene_preview_emit(
+  er_ui_scene_t* scene,
+  vr_font_face_t* font,
+  er_ui_bounds_t bounds,
+  er_ui_resolved_theme_t theme,
+  const char* slug,
+  const er_ui_shadcn_demo_gallery_state_t* state);
+er_ui_status_t er_ui_shadcn_showcase_emit(
+  er_ui_scene_t* scene,
+  vr_font_face_t* font,
+  er_ui_bounds_t bounds,
+  er_ui_resolved_theme_t theme,
+  const char* selected_slug,
+  const er_ui_shadcn_demo_gallery_state_t* state);
 
 #ifdef __cplusplus
 }

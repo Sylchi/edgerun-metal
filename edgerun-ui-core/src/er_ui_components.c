@@ -942,3 +942,148 @@ er_ui_status_t er_ui_shadcn_tabs_emit(
   }
   return ER_UI_OK;
 }
+
+bool er_ui_shadcn_component_scene_preview_available(const char* slug) {
+  return er_ui_shadcn_streq(slug, "badge") ||
+         er_ui_shadcn_streq(slug, "button") ||
+         er_ui_shadcn_streq(slug, "card") ||
+         er_ui_shadcn_streq(slug, "checkbox") ||
+         er_ui_shadcn_streq(slug, "field") ||
+         er_ui_shadcn_streq(slug, "input") ||
+         er_ui_shadcn_streq(slug, "native-select") ||
+         er_ui_shadcn_streq(slug, "progress") ||
+         er_ui_shadcn_streq(slug, "select") ||
+         er_ui_shadcn_streq(slug, "separator") ||
+         er_ui_shadcn_streq(slug, "slider") ||
+         er_ui_shadcn_streq(slug, "switch") ||
+         er_ui_shadcn_streq(slug, "tabs") ||
+         er_ui_shadcn_streq(slug, "textarea");
+}
+
+er_ui_status_t er_ui_shadcn_component_scene_preview_emit(
+  er_ui_scene_t* scene,
+  vr_font_face_t* font,
+  er_ui_bounds_t bounds,
+  er_ui_resolved_theme_t theme,
+  const char* slug,
+  const er_ui_shadcn_demo_gallery_state_t* state) {
+  if (!scene || !font || !slug || !er_ui_bounds_valid(bounds)) return ER_UI_ERR_INVALID_ARGUMENT;
+  if (er_ui_shadcn_streq(slug, "badge")) {
+    er_ui_status_t status = er_ui_shadcn_badge_emit(scene, font, er_ui_bounds(bounds.x, bounds.y, 82.0f, 26.0f), theme, "Default", ER_UI_SHADCN_BADGE_DEFAULT);
+    if (status != ER_UI_OK) return status;
+    status = er_ui_shadcn_badge_emit(scene, font, er_ui_bounds(bounds.x + 92.0f, bounds.y, 96.0f, 26.0f), theme, "Secondary", ER_UI_SHADCN_BADGE_SECONDARY);
+    if (status != ER_UI_OK) return status;
+    return er_ui_shadcn_badge_emit(scene, font, er_ui_bounds(bounds.x, bounds.y + 34.0f, 112.0f, 26.0f), theme, "Destructive", ER_UI_SHADCN_BADGE_DESTRUCTIVE);
+  }
+  if (er_ui_shadcn_streq(slug, "button")) {
+    er_ui_status_t status = er_ui_shadcn_button_emit(scene, font, er_ui_bounds(bounds.x, bounds.y, 96.0f, 42.0f), theme, "Button", ER_UI_SHADCN_DEMO_PREVIEW_BASE_ID + 2u,
+                                                     ER_UI_SHADCN_BUTTON_DEFAULT, ER_UI_SHADCN_BUTTON_SIZE_DEFAULT, true);
+    if (status != ER_UI_OK) return status;
+    status = er_ui_shadcn_button_emit(scene, font, er_ui_bounds(bounds.x + 106.0f, bounds.y, 116.0f, 42.0f), theme, "Secondary",
+                                      ER_UI_SHADCN_DEMO_PREVIEW_BASE_ID + 3u, ER_UI_SHADCN_BUTTON_SECONDARY, ER_UI_SHADCN_BUTTON_SIZE_DEFAULT, true);
+    if (status != ER_UI_OK) return status;
+    return er_ui_shadcn_button_emit(scene, font, er_ui_bounds(bounds.x + 232.0f, bounds.y, 86.0f, 42.0f), theme, "Ghost",
+                                    ER_UI_SHADCN_DEMO_PREVIEW_BASE_ID + 4u, ER_UI_SHADCN_BUTTON_GHOST, ER_UI_SHADCN_BUTTON_SIZE_DEFAULT, true);
+  }
+  if (er_ui_shadcn_streq(slug, "card")) {
+    er_ui_status_t status = er_ui_shadcn_card_emit(scene, bounds, theme);
+    if (status != ER_UI_OK) return status;
+    status = er_ui_shadcn_push_ascii_text(scene, font, "Create project", bounds.x + 16.0f, bounds.y + 28.0f, theme.colors.text);
+    if (status != ER_UI_OK) return status;
+    return er_ui_shadcn_push_ascii_text(scene, font, "Deploy your new project in one click.", bounds.x + 16.0f, bounds.y + 52.0f, theme.colors.muted);
+  }
+  if (er_ui_shadcn_streq(slug, "checkbox")) {
+    er_ui_status_t status = er_ui_shadcn_checkbox_emit(scene, font, er_ui_bounds(bounds.x, bounds.y, bounds.w, 32.0f), theme, "Accept terms and conditions", true,
+                                                       ER_UI_SHADCN_DEMO_PREVIEW_BASE_ID + 6u);
+    if (status != ER_UI_OK) return status;
+    return er_ui_shadcn_checkbox_emit(scene, font, er_ui_bounds(bounds.x, bounds.y + 38.0f, bounds.w, 32.0f), theme, "Receive security emails", false,
+                                      ER_UI_SHADCN_DEMO_PREVIEW_BASE_ID + 7u);
+  }
+  if (er_ui_shadcn_streq(slug, "field") || er_ui_shadcn_streq(slug, "input")) {
+    return er_ui_shadcn_field_emit(scene, font, er_ui_bounds(bounds.x, bounds.y, bounds.w, 58.0f), theme, "Email", "name@example.com",
+                                   ER_UI_SHADCN_DEMO_PREVIEW_BASE_ID + 11u, false);
+  }
+  if (er_ui_shadcn_streq(slug, "native-select") || er_ui_shadcn_streq(slug, "select")) {
+    uint32_t id = ER_UI_SHADCN_SELECT_TICKER_ID;
+    bool open = er_ui_shadcn_demo_gallery_select_open(state, id);
+    return er_ui_shadcn_select_emit(scene, font, er_ui_bounds(bounds.x, bounds.y, bounds.w, 62.0f), theme, "Framework", "Next.js", id, open);
+  }
+  if (er_ui_shadcn_streq(slug, "progress")) {
+    return er_ui_shadcn_progress_emit(scene, er_ui_bounds(bounds.x, bounds.y + 20.0f, bounds.w, 8.0f), theme, 0.66f);
+  }
+  if (er_ui_shadcn_streq(slug, "separator")) {
+    er_ui_status_t status = er_ui_shadcn_push_ascii_text(scene, font, "Radix Primitives", bounds.x, bounds.y + 12.0f, theme.colors.text);
+    if (status != ER_UI_OK) return status;
+    status = er_ui_shadcn_separator_emit(scene, er_ui_bounds(bounds.x, bounds.y + 28.0f, bounds.w, 1.0f), theme);
+    if (status != ER_UI_OK) return status;
+    return er_ui_shadcn_push_ascii_text(scene, font, "Styled with EdgeRun UI tokens", bounds.x, bounds.y + 52.0f, theme.colors.muted);
+  }
+  if (er_ui_shadcn_streq(slug, "slider")) {
+    float value = er_ui_shadcn_demo_gallery_slider(state, ER_UI_SHADCN_DEMO_PREVIEW_BASE_ID + 21u, 0.42f);
+    return er_ui_shadcn_slider_emit(scene, font, er_ui_bounds(bounds.x, bounds.y, bounds.w, 48.0f), theme, "Volume", value, ER_UI_SHADCN_DEMO_PREVIEW_BASE_ID + 21u);
+  }
+  if (er_ui_shadcn_streq(slug, "switch")) {
+    er_ui_status_t status = er_ui_shadcn_switch_emit(scene, er_ui_bounds(bounds.x, bounds.y, 44.0f, 24.0f), theme, true, ER_UI_SHADCN_DEMO_PREVIEW_BASE_ID + 22u);
+    if (status != ER_UI_OK) return status;
+    return er_ui_shadcn_push_ascii_text(scene, font, "Airplane mode", bounds.x + 56.0f, bounds.y + 18.0f, theme.colors.text);
+  }
+  if (er_ui_shadcn_streq(slug, "tabs")) {
+    const char* const labels[] = {"Account", "Password", "Settings"};
+    return er_ui_shadcn_tabs_emit(scene, font, er_ui_bounds(bounds.x, bounds.y, er_ui_float_min(bounds.w, 330.0f), 38.0f), theme, labels, 3u, 0u,
+                                  ER_UI_SHADCN_DEMO_PREVIEW_BASE_ID + 23u);
+  }
+  if (er_ui_shadcn_streq(slug, "textarea")) {
+    return er_ui_shadcn_field_emit(scene, font, er_ui_bounds(bounds.x, bounds.y, bounds.w, 84.0f), theme, "Message", "Type your message here.",
+                                   ER_UI_SHADCN_DEMO_PREVIEW_BASE_ID + 45u, true);
+  }
+  return ER_UI_ERR_INVALID_ARGUMENT;
+}
+
+er_ui_status_t er_ui_shadcn_showcase_emit(
+  er_ui_scene_t* scene,
+  vr_font_face_t* font,
+  er_ui_bounds_t bounds,
+  er_ui_resolved_theme_t theme,
+  const char* selected_slug,
+  const er_ui_shadcn_demo_gallery_state_t* state) {
+  if (!scene || !font || !er_ui_bounds_valid(bounds)) return ER_UI_ERR_INVALID_ARGUMENT;
+  const er_ui_shadcn_demo_spec_t* selected = er_ui_shadcn_find_demo_by_slug(selected_slug ? selected_slug : "button");
+  if (!selected) selected = er_ui_shadcn_find_demo_by_slug("button");
+  if (!selected) return ER_UI_ERR_INVALID_ARGUMENT;
+
+  er_ui_status_t status = er_ui_scene_push_rect(scene, er_ui_rect_fill(bounds.x, bounds.y, bounds.w, bounds.h, 0.0f, theme.colors.bg));
+  if (status != ER_UI_OK) return status;
+  er_ui_bounds_t list = er_ui_bounds(bounds.x + 16.0f, bounds.y + 16.0f, er_ui_float_min(260.0f, bounds.w * 0.36f), bounds.h - 32.0f);
+  er_ui_bounds_t preview = er_ui_bounds(list.x + list.w + 16.0f, bounds.y + 16.0f, bounds.w - list.w - 48.0f, bounds.h - 32.0f);
+  status = er_ui_shadcn_card_emit(scene, list, theme);
+  if (status != ER_UI_OK) return status;
+  status = er_ui_shadcn_push_ascii_text(scene, font, "shadcn components", list.x + 14.0f, list.y + 28.0f, theme.colors.text);
+  if (status != ER_UI_OK) return status;
+  size_t visible = er_ui_float_min((float)ER_UI_SHADCN_DEMO_COUNT, (list.h - 48.0f) / 24.0f);
+  for (size_t i = 0u; i < visible; ++i) {
+    const er_ui_shadcn_demo_spec_t* spec = er_ui_shadcn_demo_at(i);
+    if (!spec) continue;
+    er_ui_bounds_t row = er_ui_bounds(list.x + 8.0f, list.y + 44.0f + (float)i * 24.0f, list.w - 16.0f, 22.0f);
+    status = er_ui_scene_push_hit(scene, er_ui_hit(ER_UI_HIT_LIST_ROW, ER_UI_SHADCN_SHOWCASE_ROW_BASE_ID + (uint32_t)i, row.x, row.y, row.w, row.h));
+    if (status != ER_UI_OK) return status;
+    if (er_ui_shadcn_streq(spec->slug, selected->slug)) {
+      status = er_ui_scene_push_rect(scene, er_ui_rect_fill(row.x, row.y, row.w, row.h, theme.radius.control, er_ui_color_with_alpha(theme.colors.active, 0.54f)));
+      if (status != ER_UI_OK) return status;
+    }
+    status = er_ui_shadcn_push_ascii_text(scene, font, spec->name, row.x + 8.0f, row.y + 16.0f,
+                                          er_ui_shadcn_component_scene_preview_available(spec->slug) ? theme.colors.text : theme.colors.muted);
+    if (status != ER_UI_OK) return status;
+  }
+
+  status = er_ui_shadcn_card_emit(scene, preview, theme);
+  if (status != ER_UI_OK) return status;
+  status = er_ui_shadcn_push_ascii_text(scene, font, selected->name, preview.x + 18.0f, preview.y + 30.0f, theme.colors.text);
+  if (status != ER_UI_OK) return status;
+  status = er_ui_shadcn_push_ascii_text(scene, font, er_ui_shadcn_demo_category_label(selected->category), preview.x + 18.0f, preview.y + 54.0f, theme.colors.muted);
+  if (status != ER_UI_OK) return status;
+  er_ui_bounds_t body = er_ui_bounds(preview.x + 18.0f, preview.y + 76.0f, preview.w - 36.0f, preview.h - 94.0f);
+  if (er_ui_shadcn_component_scene_preview_available(selected->slug)) {
+    return er_ui_shadcn_component_scene_preview_emit(scene, font, body, theme, selected->slug, state);
+  }
+  return er_ui_shadcn_push_ascii_text(scene, font, "Cataloged; native C scene preview not ported yet.", body.x, body.y + 18.0f, theme.colors.muted);
+}
