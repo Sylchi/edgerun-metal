@@ -309,6 +309,30 @@ static INT64 test_vm_bus_exec(const ErBusIoPacket* request, ErBusIoPacket* respo
   return 1;
 }
 
+static INT64 test_vm_relay_send(const UINT8* bytes, UINT32 len) {
+  if (bytes == 0) {
+    return 0;
+  }
+  check_uint64("wasm relay send len", len, 4u);
+  check_uint64("wasm relay send byte0", bytes[0], (UINT8)'p');
+  check_uint64("wasm relay send byte1", bytes[1], (UINT8)'i');
+  check_uint64("wasm relay send byte2", bytes[2], (UINT8)'n');
+  check_uint64("wasm relay send byte3", bytes[3], (UINT8)'g');
+  return (INT64)len;
+}
+
+static INT64 test_vm_relay_recv(UINT8* bytes, UINT32 capacity) {
+  if (bytes == 0) {
+    return 0;
+  }
+  check_uint64("wasm relay recv capacity", capacity, 4u);
+  bytes[0] = (UINT8)'p';
+  bytes[1] = (UINT8)'o';
+  bytes[2] = (UINT8)'n';
+  bytes[3] = (UINT8)'g';
+  return 4;
+}
+
 static void test_bar_decode(void) {
   ErPciBarInfo none = er_pci_decode_bar(0u, 0u);
   ErPciBarInfo io = er_pci_decode_bar(0x0000c001u, 0u);
@@ -1433,6 +1457,70 @@ static void test_wasm_bus_exec_import(void) {
   check_uint64("wasm bus result", (UINT64)result, 0x5au);
 }
 
+static void test_wasm_relay_imports(void) {
+  /*
+   * Purpose: prove a WASM program can only exchange relay bytes through admitted memory windows.
+   * Intention: make inbox/outbox jurisdiction a VM-enforced boundary, not a program convention.
+   */
+  static const UINT8 wasm_relay_import_test[] = {
+    0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00, 0x01, 0x0b, 0x02, 0x60,
+    0x02, 0x7e, 0x7e, 0x01, 0x7e, 0x60, 0x00, 0x01, 0x7e, 0x02, 0x2b, 0x02,
+    0x0d, 0x65, 0x64, 0x67, 0x65, 0x72, 0x75, 0x6e, 0x2e, 0x72, 0x65, 0x6c,
+    0x61, 0x79, 0x04, 0x73, 0x65, 0x6e, 0x64, 0x00, 0x00, 0x0d, 0x65, 0x64,
+    0x67, 0x65, 0x72, 0x75, 0x6e, 0x2e, 0x72, 0x65, 0x6c, 0x61, 0x79, 0x04,
+    0x72, 0x65, 0x63, 0x76, 0x00, 0x00, 0x03, 0x02, 0x01, 0x01, 0x05, 0x03,
+    0x01, 0x00, 0x01, 0x07,
+    0x08, 0x01, 0x04, 0x6d, 0x61, 0x69, 0x6e, 0x00, 0x02, 0x0a, 0x12, 0x01,
+    0x10, 0x00, 0x42, 0x80, 0x08, 0x42, 0x04, 0x10, 0x00, 0x42, 0x00, 0x42,
+    0x04, 0x10, 0x01, 0x7c, 0x0b, 0x0b, 0x0b, 0x01, 0x00, 0x41, 0x80, 0x08,
+    0x0b, 0x04, 0x70, 0x69, 0x6e, 0x67
+  };
+  static UINT8 memory[65536];
+  ErWasmHostCalls host = {0};
+  ErWasmLinearMemory linear_memory;
+  ErWasmModule module;
+  UINT32 main_index = 0;
+  INT64 result = 0;
+
+  er_mem_zero(memory, (UINTN)sizeof(memory));
+  check_int64("wasm relay linear memory prepare",
+              er_wasm_prepare_linear_memory(memory, (UINT32)sizeof(memory),
+                                            0u, 1024u, 1024u, 2048u,
+                                            &linear_memory),
+              0);
+  host.relay_send = test_vm_relay_send;
+  host.relay_recv = test_vm_relay_recv;
+  host.linear_memory = linear_memory;
+
+  check_int64("wasm relay init",
+              er_wasm_init(&module, wasm_relay_import_test,
+                           (UINT32)sizeof(wasm_relay_import_test), &host),
+              0);
+  check_int64("wasm relay find main", er_wasm_find_main(&module, &main_index), 0);
+  check_int64("wasm relay main index", main_index, 2);
+  check_int64("wasm relay execute", er_wasm_execute_i64(&module, main_index, &result), 0);
+  check_uint64("wasm relay result", (UINT64)result, 8u);
+  check_uint64("wasm relay inbox byte0", memory[0], (UINT8)'p');
+  check_uint64("wasm relay inbox byte1", memory[1], (UINT8)'o');
+  check_uint64("wasm relay inbox byte2", memory[2], (UINT8)'n');
+  check_uint64("wasm relay inbox byte3", memory[3], (UINT8)'g');
+
+  check_int64("wasm relay shifted outbox prepare",
+              er_wasm_prepare_linear_memory(memory, (UINT32)sizeof(memory),
+                                            0u, 1024u, 2048u, 2048u,
+                                            &linear_memory),
+              0);
+  host.linear_memory = linear_memory;
+  check_int64("wasm relay shifted outbox init",
+              er_wasm_init(&module, wasm_relay_import_test,
+                           (UINT32)sizeof(wasm_relay_import_test), &host),
+              0);
+  check_int64("wasm relay shifted outbox find main",
+              er_wasm_find_main(&module, &main_index), 0);
+  check_int64("wasm relay reject send outside outbox",
+              er_wasm_execute_i64(&module, main_index, &result), -1);
+}
+
 static void test_vfs_object_packets(void) {
   static const UINT8 object_bytes[] = {'a', 'b', 'c', 'd', 'e', 'f'};
   ErCryptoProvider crypto;
@@ -2508,6 +2596,7 @@ int main(void) {
   test_native_eth_endpoint();
   test_wasm_mmio_imports();
   test_wasm_bus_exec_import();
+  test_wasm_relay_imports();
   test_vfs_object_packets();
   test_app_identity_routes();
   test_boot_profiles();
