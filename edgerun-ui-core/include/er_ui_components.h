@@ -239,6 +239,48 @@ er_ui_status_t er_ui_shadcn_tabs_emit(
   size_t label_count,
   size_t selected,
   uint32_t base_id);
+er_ui_status_t er_ui_shadcn_list_row_emit(
+  er_ui_scene_t* scene,
+  vr_font_face_t* font,
+  er_ui_bounds_t bounds,
+  er_ui_resolved_theme_t theme,
+  const char* title,
+  const char* detail,
+  uint32_t id,
+  bool selected);
+er_ui_status_t er_ui_shadcn_radio_emit(
+  er_ui_scene_t* scene,
+  vr_font_face_t* font,
+  er_ui_bounds_t bounds,
+  er_ui_resolved_theme_t theme,
+  const char* label,
+  bool selected,
+  uint32_t id);
+er_ui_status_t er_ui_shadcn_table_emit(
+  er_ui_scene_t* scene,
+  vr_font_face_t* font,
+  er_ui_bounds_t bounds,
+  er_ui_resolved_theme_t theme,
+  const char* const* headers,
+  size_t header_count,
+  const char* const* cells,
+  size_t row_count,
+  uint32_t id_base);
+er_ui_status_t er_ui_shadcn_skeleton_emit(er_ui_scene_t* scene, er_ui_bounds_t bounds, er_ui_resolved_theme_t theme);
+er_ui_status_t er_ui_shadcn_toast_emit(
+  er_ui_scene_t* scene,
+  vr_font_face_t* font,
+  er_ui_bounds_t bounds,
+  er_ui_resolved_theme_t theme,
+  const char* message,
+  er_ui_color4_t accent);
+er_ui_status_t er_ui_shadcn_empty_emit(
+  er_ui_scene_t* scene,
+  vr_font_face_t* font,
+  er_ui_bounds_t bounds,
+  er_ui_resolved_theme_t theme,
+  const char* title,
+  const char* body);
 bool er_ui_shadcn_component_scene_preview_available(const char* slug);
 er_ui_status_t er_ui_shadcn_component_scene_preview_emit(
   er_ui_scene_t* scene,

@@ -943,21 +943,149 @@ er_ui_status_t er_ui_shadcn_tabs_emit(
   return ER_UI_OK;
 }
 
+er_ui_status_t er_ui_shadcn_list_row_emit(
+  er_ui_scene_t* scene,
+  vr_font_face_t* font,
+  er_ui_bounds_t bounds,
+  er_ui_resolved_theme_t theme,
+  const char* title,
+  const char* detail,
+  uint32_t id,
+  bool selected) {
+  if (!scene || !font || !title || !detail || !er_ui_bounds_valid(bounds)) return ER_UI_ERR_INVALID_ARGUMENT;
+  er_ui_status_t status = er_ui_scene_push_hit(scene, er_ui_hit(ER_UI_HIT_LIST_ROW, id, bounds.x, bounds.y, bounds.w, bounds.h));
+  if (status != ER_UI_OK) return status;
+  er_ui_color4_t fill = selected ? er_ui_color_with_alpha(theme.colors.active, 0.54f) : er_ui_color_with_alpha(theme.colors.row, 0.34f);
+  status = er_ui_scene_push_rect(scene, er_ui_rect_fill(bounds.x, bounds.y, bounds.w, bounds.h, theme.radius.control, fill));
+  if (status != ER_UI_OK) return status;
+  status = er_ui_shadcn_push_ascii_text(scene, font, title, bounds.x + 12.0f, bounds.y + 20.0f, theme.colors.text);
+  if (status != ER_UI_OK) return status;
+  return er_ui_shadcn_push_ascii_text(scene, font, detail, bounds.x + 12.0f, bounds.y + 40.0f, theme.colors.muted);
+}
+
+er_ui_status_t er_ui_shadcn_radio_emit(
+  er_ui_scene_t* scene,
+  vr_font_face_t* font,
+  er_ui_bounds_t bounds,
+  er_ui_resolved_theme_t theme,
+  const char* label,
+  bool selected,
+  uint32_t id) {
+  if (!scene || !font || !label || !er_ui_bounds_valid(bounds)) return ER_UI_ERR_INVALID_ARGUMENT;
+  er_ui_bounds_t dot = er_ui_bounds(bounds.x, bounds.y + (bounds.h - 18.0f) * 0.5f, 18.0f, 18.0f);
+  er_ui_status_t status = er_ui_scene_push_hit(scene, er_ui_hit(ER_UI_HIT_RADIO, id, bounds.x, bounds.y, bounds.w, bounds.h));
+  if (status != ER_UI_OK) return status;
+  status = er_ui_scene_push_rect(scene, er_ui_rect_border(dot.x, dot.y, dot.w, dot.h, 9.0f, selected ? theme.colors.accent : er_ui_color_with_alpha(theme.colors.border, 0.58f)));
+  if (status != ER_UI_OK) return status;
+  if (selected) {
+    status = er_ui_scene_push_rect(scene, er_ui_rect_fill(dot.x + 5.0f, dot.y + 5.0f, 8.0f, 8.0f, 4.0f, theme.colors.accent));
+    if (status != ER_UI_OK) return status;
+  }
+  return er_ui_shadcn_push_ascii_text(scene, font, label, bounds.x + 28.0f, bounds.y + bounds.h * 0.62f, theme.colors.text);
+}
+
+er_ui_status_t er_ui_shadcn_table_emit(
+  er_ui_scene_t* scene,
+  vr_font_face_t* font,
+  er_ui_bounds_t bounds,
+  er_ui_resolved_theme_t theme,
+  const char* const* headers,
+  size_t header_count,
+  const char* const* cells,
+  size_t row_count,
+  uint32_t id_base) {
+  if (!scene || !font || !headers || !cells || header_count == 0u || !er_ui_bounds_valid(bounds)) return ER_UI_ERR_INVALID_ARGUMENT;
+  er_ui_status_t status = er_ui_shadcn_card_emit(scene, bounds, theme);
+  if (status != ER_UI_OK) return status;
+  float col_w = (bounds.w - 24.0f) / (float)header_count;
+  float y = bounds.y + 24.0f;
+  for (size_t h = 0u; h < header_count; ++h) {
+    status = er_ui_shadcn_push_ascii_text(scene, font, headers[h], bounds.x + 12.0f + col_w * (float)h, y, theme.colors.muted);
+    if (status != ER_UI_OK) return status;
+  }
+  status = er_ui_shadcn_separator_emit(scene, er_ui_bounds(bounds.x + 10.0f, bounds.y + 34.0f, bounds.w - 20.0f, 1.0f), theme);
+  if (status != ER_UI_OK) return status;
+  for (size_t r = 0u; r < row_count; ++r) {
+    er_ui_bounds_t row = er_ui_bounds(bounds.x + 8.0f, bounds.y + 42.0f + (float)r * 28.0f, bounds.w - 16.0f, 26.0f);
+    status = er_ui_scene_push_hit(scene, er_ui_hit(ER_UI_HIT_TRANSACTION_ROW, id_base + (uint32_t)r, row.x, row.y, row.w, row.h));
+    if (status != ER_UI_OK) return status;
+    for (size_t h = 0u; h < header_count; ++h) {
+      const char* value = cells[r * header_count + h];
+      status = er_ui_shadcn_push_ascii_text(scene, font, value, bounds.x + 12.0f + col_w * (float)h, row.y + 18.0f, theme.colors.text);
+      if (status != ER_UI_OK) return status;
+    }
+  }
+  return ER_UI_OK;
+}
+
+er_ui_status_t er_ui_shadcn_skeleton_emit(er_ui_scene_t* scene, er_ui_bounds_t bounds, er_ui_resolved_theme_t theme) {
+  if (!scene || !er_ui_bounds_valid(bounds)) return ER_UI_ERR_INVALID_ARGUMENT;
+  return er_ui_scene_push_rect(scene, er_ui_rect_fill(bounds.x, bounds.y, bounds.w, bounds.h, theme.radius.control, er_ui_color_with_alpha(theme.colors.row, 0.64f)));
+}
+
+er_ui_status_t er_ui_shadcn_toast_emit(
+  er_ui_scene_t* scene,
+  vr_font_face_t* font,
+  er_ui_bounds_t bounds,
+  er_ui_resolved_theme_t theme,
+  const char* message,
+  er_ui_color4_t accent) {
+  if (!scene || !font || !message || !er_ui_bounds_valid(bounds)) return ER_UI_ERR_INVALID_ARGUMENT;
+  er_ui_status_t status = er_ui_shadcn_card_emit(scene, bounds, theme);
+  if (status != ER_UI_OK) return status;
+  status = er_ui_scene_push_rect(scene, er_ui_rect_fill(bounds.x + 12.0f, bounds.y + (bounds.h - 10.0f) * 0.5f, 10.0f, 10.0f, 5.0f, accent));
+  if (status != ER_UI_OK) return status;
+  return er_ui_shadcn_push_ascii_text(scene, font, message, bounds.x + 32.0f, bounds.y + bounds.h * 0.60f, theme.colors.text);
+}
+
+er_ui_status_t er_ui_shadcn_empty_emit(
+  er_ui_scene_t* scene,
+  vr_font_face_t* font,
+  er_ui_bounds_t bounds,
+  er_ui_resolved_theme_t theme,
+  const char* title,
+  const char* body) {
+  if (!scene || !font || !title || !body || !er_ui_bounds_valid(bounds)) return ER_UI_ERR_INVALID_ARGUMENT;
+  er_ui_status_t status = er_ui_scene_push_rect(scene, er_ui_rect_fill(bounds.x + (bounds.w - 44.0f) * 0.5f, bounds.y, 44.0f, 44.0f, 22.0f,
+                                                                     er_ui_color_with_alpha(theme.colors.row, 0.62f)));
+  if (status != ER_UI_OK) return status;
+  status = er_ui_shadcn_push_ascii_text(scene, font, title, bounds.x + 10.0f, bounds.y + 70.0f, theme.colors.text);
+  if (status != ER_UI_OK) return status;
+  return er_ui_shadcn_push_ascii_text(scene, font, body, bounds.x + 10.0f, bounds.y + 94.0f, theme.colors.muted);
+}
+
 bool er_ui_shadcn_component_scene_preview_available(const char* slug) {
   return er_ui_shadcn_streq(slug, "badge") ||
          er_ui_shadcn_streq(slug, "button") ||
          er_ui_shadcn_streq(slug, "card") ||
          er_ui_shadcn_streq(slug, "checkbox") ||
+         er_ui_shadcn_streq(slug, "context-menu") ||
+         er_ui_shadcn_streq(slug, "data-table") ||
+         er_ui_shadcn_streq(slug, "dropdown-menu") ||
+         er_ui_shadcn_streq(slug, "empty") ||
          er_ui_shadcn_streq(slug, "field") ||
          er_ui_shadcn_streq(slug, "input") ||
+         er_ui_shadcn_streq(slug, "input-group") ||
+         er_ui_shadcn_streq(slug, "input-otp") ||
+         er_ui_shadcn_streq(slug, "item") ||
+         er_ui_shadcn_streq(slug, "kbd") ||
+         er_ui_shadcn_streq(slug, "menubar") ||
          er_ui_shadcn_streq(slug, "native-select") ||
+         er_ui_shadcn_streq(slug, "pagination") ||
          er_ui_shadcn_streq(slug, "progress") ||
+         er_ui_shadcn_streq(slug, "radio-group") ||
          er_ui_shadcn_streq(slug, "select") ||
          er_ui_shadcn_streq(slug, "separator") ||
+         er_ui_shadcn_streq(slug, "skeleton") ||
          er_ui_shadcn_streq(slug, "slider") ||
+         er_ui_shadcn_streq(slug, "sonner") ||
          er_ui_shadcn_streq(slug, "switch") ||
+         er_ui_shadcn_streq(slug, "table") ||
          er_ui_shadcn_streq(slug, "tabs") ||
-         er_ui_shadcn_streq(slug, "textarea");
+         er_ui_shadcn_streq(slug, "textarea") ||
+         er_ui_shadcn_streq(slug, "toast") ||
+         er_ui_shadcn_streq(slug, "toggle") ||
+         er_ui_shadcn_streq(slug, "toggle-group");
 }
 
 er_ui_status_t er_ui_shadcn_component_scene_preview_emit(
@@ -999,17 +1127,94 @@ er_ui_status_t er_ui_shadcn_component_scene_preview_emit(
     return er_ui_shadcn_checkbox_emit(scene, font, er_ui_bounds(bounds.x, bounds.y + 38.0f, bounds.w, 32.0f), theme, "Receive security emails", false,
                                       ER_UI_SHADCN_DEMO_PREVIEW_BASE_ID + 7u);
   }
+  if (er_ui_shadcn_streq(slug, "context-menu") || er_ui_shadcn_streq(slug, "dropdown-menu")) {
+    er_ui_status_t status = er_ui_shadcn_list_row_emit(scene, font, er_ui_bounds(bounds.x, bounds.y, er_ui_float_min(bounds.w, 220.0f), 44.0f), theme, "Profile", "Command P",
+                                                       ER_UI_SHADCN_DEMO_PREVIEW_BASE_ID + 9u, false);
+    if (status != ER_UI_OK) return status;
+    status = er_ui_shadcn_list_row_emit(scene, font, er_ui_bounds(bounds.x, bounds.y + 48.0f, er_ui_float_min(bounds.w, 220.0f), 44.0f), theme, "Billing", "Command B",
+                                        ER_UI_SHADCN_DEMO_PREVIEW_BASE_ID + 10u, true);
+    if (status != ER_UI_OK) return status;
+    return er_ui_shadcn_list_row_emit(scene, font, er_ui_bounds(bounds.x, bounds.y + 96.0f, er_ui_float_min(bounds.w, 220.0f), 44.0f), theme, "Log out", "Shift Command Q",
+                                      ER_UI_SHADCN_DEMO_PREVIEW_BASE_ID + 11u, false);
+  }
+  if (er_ui_shadcn_streq(slug, "data-table") || er_ui_shadcn_streq(slug, "table")) {
+    const char* const headers[] = {"Invoice", "Status", "Amount"};
+    const char* const cells[] = {"INV001", "Paid", "$250.00", "INV002", "Pending", "$150.00"};
+    return er_ui_shadcn_table_emit(scene, font, er_ui_bounds(bounds.x, bounds.y, er_ui_float_min(bounds.w, 360.0f), 112.0f), theme, headers, 3u, cells, 2u,
+                                   ER_UI_SHADCN_DEMO_PREVIEW_BASE_ID + 43u);
+  }
+  if (er_ui_shadcn_streq(slug, "empty")) {
+    return er_ui_shadcn_empty_emit(scene, font, er_ui_bounds(bounds.x, bounds.y, er_ui_float_min(bounds.w, 280.0f), 120.0f), theme, "No results found",
+                                   "Try adjusting your search or filters.");
+  }
   if (er_ui_shadcn_streq(slug, "field") || er_ui_shadcn_streq(slug, "input")) {
     return er_ui_shadcn_field_emit(scene, font, er_ui_bounds(bounds.x, bounds.y, bounds.w, 58.0f), theme, "Email", "name@example.com",
                                    ER_UI_SHADCN_DEMO_PREVIEW_BASE_ID + 11u, false);
+  }
+  if (er_ui_shadcn_streq(slug, "input-group")) {
+    er_ui_status_t status = er_ui_shadcn_field_emit(scene, font, er_ui_bounds(bounds.x, bounds.y, er_ui_float_max(bounds.w - 92.0f, 96.0f), 58.0f), theme, "URL",
+                                                    "https://example.com", ER_UI_SHADCN_DEMO_PREVIEW_BASE_ID + 12u, false);
+    if (status != ER_UI_OK) return status;
+    return er_ui_shadcn_button_emit(scene, font, er_ui_bounds(bounds.x + er_ui_float_max(bounds.w - 84.0f, 104.0f), bounds.y + 18.0f, 80.0f, 40.0f), theme, "Copy",
+                                    ER_UI_SHADCN_DEMO_PREVIEW_BASE_ID + 13u, ER_UI_SHADCN_BUTTON_SECONDARY, ER_UI_SHADCN_BUTTON_SIZE_SM, true);
+  }
+  if (er_ui_shadcn_streq(slug, "input-otp")) {
+    const char* const values[] = {"1", "2", "3", "-", "", "", ""};
+    for (size_t i = 0u; i < 7u; ++i) {
+      if (er_ui_shadcn_streq(values[i], "-")) {
+        er_ui_status_t status = er_ui_shadcn_push_ascii_text(scene, font, "-", bounds.x + (float)i * 42.0f + 12.0f, bounds.y + 36.0f, theme.colors.muted);
+        if (status != ER_UI_OK) return status;
+        continue;
+      }
+      er_ui_status_t status = er_ui_shadcn_field_emit(scene, font, er_ui_bounds(bounds.x + (float)i * 42.0f, bounds.y, 36.0f, 52.0f), theme, "", values[i],
+                                                      ER_UI_SHADCN_DEMO_PREVIEW_BASE_ID + 80u + (uint32_t)i, false);
+      if (status != ER_UI_OK) return status;
+    }
+    return ER_UI_OK;
+  }
+  if (er_ui_shadcn_streq(slug, "item")) {
+    return er_ui_shadcn_list_row_emit(scene, font, er_ui_bounds(bounds.x, bounds.y, er_ui_float_min(bounds.w, 280.0f), 52.0f), theme, "Payment successful",
+                                      "Stripe payout completed", ER_UI_SHADCN_DEMO_PREVIEW_BASE_ID + 13u, false);
+  }
+  if (er_ui_shadcn_streq(slug, "kbd")) {
+    er_ui_status_t status = er_ui_shadcn_badge_emit(scene, font, er_ui_bounds(bounds.x, bounds.y, 34.0f, 28.0f), theme, "Cmd", ER_UI_SHADCN_BADGE_SECONDARY);
+    if (status != ER_UI_OK) return status;
+    status = er_ui_shadcn_badge_emit(scene, font, er_ui_bounds(bounds.x + 42.0f, bounds.y, 28.0f, 28.0f), theme, "K", ER_UI_SHADCN_BADGE_SECONDARY);
+    if (status != ER_UI_OK) return status;
+    return er_ui_shadcn_push_ascii_text(scene, font, "Command menu", bounds.x + 84.0f, bounds.y + 20.0f, theme.colors.text);
+  }
+  if (er_ui_shadcn_streq(slug, "menubar")) {
+    const char* const labels[] = {"File", "Edit", "View", "Profiles"};
+    return er_ui_shadcn_tabs_emit(scene, font, er_ui_bounds(bounds.x, bounds.y, er_ui_float_min(bounds.w, 360.0f), 38.0f), theme, labels, 4u, 0u,
+                                  ER_UI_SHADCN_DEMO_PREVIEW_BASE_ID + 70u);
   }
   if (er_ui_shadcn_streq(slug, "native-select") || er_ui_shadcn_streq(slug, "select")) {
     uint32_t id = ER_UI_SHADCN_SELECT_TICKER_ID;
     bool open = er_ui_shadcn_demo_gallery_select_open(state, id);
     return er_ui_shadcn_select_emit(scene, font, er_ui_bounds(bounds.x, bounds.y, bounds.w, 62.0f), theme, "Framework", "Next.js", id, open);
   }
+  if (er_ui_shadcn_streq(slug, "pagination")) {
+    er_ui_status_t status = er_ui_shadcn_button_emit(scene, font, er_ui_bounds(bounds.x, bounds.y, 90.0f, 40.0f), theme, "Previous", ER_UI_SHADCN_DEMO_PREVIEW_BASE_ID + 37u,
+                                                     ER_UI_SHADCN_BUTTON_GHOST, ER_UI_SHADCN_BUTTON_SIZE_DEFAULT, false);
+    if (status != ER_UI_OK) return status;
+    status = er_ui_shadcn_button_emit(scene, font, er_ui_bounds(bounds.x + 96.0f, bounds.y, 42.0f, 40.0f), theme, "1", ER_UI_SHADCN_DEMO_PREVIEW_BASE_ID + 38u,
+                                      ER_UI_SHADCN_BUTTON_SECONDARY, ER_UI_SHADCN_BUTTON_SIZE_DEFAULT, true);
+    if (status != ER_UI_OK) return status;
+    return er_ui_shadcn_button_emit(scene, font, er_ui_bounds(bounds.x + 144.0f, bounds.y, 68.0f, 40.0f), theme, "Next", ER_UI_SHADCN_DEMO_PREVIEW_BASE_ID + 39u,
+                                    ER_UI_SHADCN_BUTTON_GHOST, ER_UI_SHADCN_BUTTON_SIZE_DEFAULT, true);
+  }
   if (er_ui_shadcn_streq(slug, "progress")) {
     return er_ui_shadcn_progress_emit(scene, er_ui_bounds(bounds.x, bounds.y + 20.0f, bounds.w, 8.0f), theme, 0.66f);
+  }
+  if (er_ui_shadcn_streq(slug, "radio-group")) {
+    er_ui_status_t status = er_ui_shadcn_radio_emit(scene, font, er_ui_bounds(bounds.x, bounds.y, bounds.w, 30.0f), theme, "Default", true,
+                                                    ER_UI_SHADCN_DEMO_PREVIEW_BASE_ID + 14u);
+    if (status != ER_UI_OK) return status;
+    status = er_ui_shadcn_radio_emit(scene, font, er_ui_bounds(bounds.x, bounds.y + 34.0f, bounds.w, 30.0f), theme, "Comfortable", false,
+                                     ER_UI_SHADCN_DEMO_PREVIEW_BASE_ID + 15u);
+    if (status != ER_UI_OK) return status;
+    return er_ui_shadcn_radio_emit(scene, font, er_ui_bounds(bounds.x, bounds.y + 68.0f, bounds.w, 30.0f), theme, "Compact", false,
+                                   ER_UI_SHADCN_DEMO_PREVIEW_BASE_ID + 16u);
   }
   if (er_ui_shadcn_streq(slug, "separator")) {
     er_ui_status_t status = er_ui_shadcn_push_ascii_text(scene, font, "Radix Primitives", bounds.x, bounds.y + 12.0f, theme.colors.text);
@@ -1017,6 +1222,13 @@ er_ui_status_t er_ui_shadcn_component_scene_preview_emit(
     status = er_ui_shadcn_separator_emit(scene, er_ui_bounds(bounds.x, bounds.y + 28.0f, bounds.w, 1.0f), theme);
     if (status != ER_UI_OK) return status;
     return er_ui_shadcn_push_ascii_text(scene, font, "Styled with EdgeRun UI tokens", bounds.x, bounds.y + 52.0f, theme.colors.muted);
+  }
+  if (er_ui_shadcn_streq(slug, "skeleton")) {
+    er_ui_status_t status = er_ui_shadcn_skeleton_emit(scene, er_ui_bounds(bounds.x, bounds.y, bounds.w, 18.0f), theme);
+    if (status != ER_UI_OK) return status;
+    status = er_ui_shadcn_skeleton_emit(scene, er_ui_bounds(bounds.x, bounds.y + 28.0f, bounds.w * 0.66f, 18.0f), theme);
+    if (status != ER_UI_OK) return status;
+    return er_ui_shadcn_skeleton_emit(scene, er_ui_bounds(bounds.x, bounds.y + 56.0f, bounds.w * 0.50f, 18.0f), theme);
   }
   if (er_ui_shadcn_streq(slug, "slider")) {
     float value = er_ui_shadcn_demo_gallery_slider(state, ER_UI_SHADCN_DEMO_PREVIEW_BASE_ID + 21u, 0.42f);
@@ -1027,6 +1239,13 @@ er_ui_status_t er_ui_shadcn_component_scene_preview_emit(
     if (status != ER_UI_OK) return status;
     return er_ui_shadcn_push_ascii_text(scene, font, "Airplane mode", bounds.x + 56.0f, bounds.y + 18.0f, theme.colors.text);
   }
+  if (er_ui_shadcn_streq(slug, "sonner")) {
+    er_ui_status_t status = er_ui_shadcn_toast_emit(scene, font, er_ui_bounds(bounds.x, bounds.y, er_ui_float_min(bounds.w, 260.0f), 48.0f), theme, "Event has been created",
+                                                    theme.colors.success);
+    if (status != ER_UI_OK) return status;
+    return er_ui_shadcn_toast_emit(scene, font, er_ui_bounds(bounds.x, bounds.y + 56.0f, er_ui_float_min(bounds.w, 260.0f), 48.0f), theme, "Upload failed",
+                                   theme.colors.danger);
+  }
   if (er_ui_shadcn_streq(slug, "tabs")) {
     const char* const labels[] = {"Account", "Password", "Settings"};
     return er_ui_shadcn_tabs_emit(scene, font, er_ui_bounds(bounds.x, bounds.y, er_ui_float_min(bounds.w, 330.0f), 38.0f), theme, labels, 3u, 0u,
@@ -1035,6 +1254,18 @@ er_ui_status_t er_ui_shadcn_component_scene_preview_emit(
   if (er_ui_shadcn_streq(slug, "textarea")) {
     return er_ui_shadcn_field_emit(scene, font, er_ui_bounds(bounds.x, bounds.y, bounds.w, 84.0f), theme, "Message", "Type your message here.",
                                    ER_UI_SHADCN_DEMO_PREVIEW_BASE_ID + 45u, true);
+  }
+  if (er_ui_shadcn_streq(slug, "toast")) {
+    return er_ui_shadcn_toast_emit(scene, font, er_ui_bounds(bounds.x, bounds.y, er_ui_float_min(bounds.w, 260.0f), 48.0f), theme, "Scheduled: Catch up",
+                                   theme.colors.accent);
+  }
+  if (er_ui_shadcn_streq(slug, "toggle")) {
+    return er_ui_shadcn_switch_emit(scene, er_ui_bounds(bounds.x, bounds.y, 44.0f, 24.0f), theme, true, ER_UI_SHADCN_DEMO_PREVIEW_BASE_ID + 24u);
+  }
+  if (er_ui_shadcn_streq(slug, "toggle-group")) {
+    const char* const labels[] = {"B", "I", "U"};
+    return er_ui_shadcn_tabs_emit(scene, font, er_ui_bounds(bounds.x, bounds.y, 126.0f, 38.0f), theme, labels, 3u, 0u,
+                                  ER_UI_SHADCN_DEMO_PREVIEW_BASE_ID + 44u);
   }
   return ER_UI_ERR_INVALID_ARGUMENT;
 }

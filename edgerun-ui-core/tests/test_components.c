@@ -117,6 +117,20 @@ static void test_shadcn_render_primitives(void) {
   const char* const tabs[] = {"Preview", "Code", "A11y"};
   expect_status(er_ui_shadcn_tabs_emit(&scene, face, er_ui_bounds(232.0f, 224.0f, 180.0f, 38.0f), theme, tabs, 3u, 1u, 3010u), ER_UI_OK,
                 "shadcn render: tabs emit");
+  expect_status(er_ui_shadcn_list_row_emit(&scene, face, er_ui_bounds(420.0f, 148.0f, 180.0f, 48.0f), theme, "Billing", "Command B", 3013u, true),
+                ER_UI_OK, "shadcn render: list row emits");
+  expect_status(er_ui_shadcn_radio_emit(&scene, face, er_ui_bounds(420.0f, 202.0f, 180.0f, 30.0f), theme, "Default", true, 3014u),
+                ER_UI_OK, "shadcn render: radio emits");
+  const char* const headers[] = {"Invoice", "Status"};
+  const char* const cells[] = {"INV001", "Paid", "INV002", "Pending"};
+  expect_status(er_ui_shadcn_table_emit(&scene, face, er_ui_bounds(420.0f, 238.0f, 180.0f, 96.0f), theme, headers, 2u, cells, 2u, 3015u),
+                ER_UI_OK, "shadcn render: table emits");
+  expect_status(er_ui_shadcn_skeleton_emit(&scene, er_ui_bounds(420.0f, 340.0f, 120.0f, 16.0f), theme), ER_UI_OK,
+                "shadcn render: skeleton emits");
+  expect_status(er_ui_shadcn_toast_emit(&scene, face, er_ui_bounds(420.0f, 362.0f, 180.0f, 44.0f), theme, "Scheduled", theme.colors.accent), ER_UI_OK,
+                "shadcn render: toast emits");
+  expect_status(er_ui_shadcn_empty_emit(&scene, face, er_ui_bounds(420.0f, 412.0f, 180.0f, 110.0f), theme, "No results", "Try another filter"), ER_UI_OK,
+                "shadcn render: empty emits");
   expect_true(scene.rect_count >= 8u, "shadcn render: primitives emit geometry");
   expect_true(scene.hit_count >= 10u, "shadcn render: interactive primitives emit hits");
   expect_true(scene.text_quad_count > 0u, "shadcn render: primitives use variable font text");
@@ -125,9 +139,14 @@ static void test_shadcn_render_primitives(void) {
                 ER_UI_ERR_INVALID_ARGUMENT, "shadcn render: missing variable font is rejected");
   expect_true(er_ui_shadcn_component_scene_preview_available("button"), "shadcn scene preview: button is available");
   expect_true(er_ui_shadcn_component_scene_preview_available("tabs"), "shadcn scene preview: tabs are available");
+  expect_true(er_ui_shadcn_component_scene_preview_available("data-table"), "shadcn scene preview: data table is available");
+  expect_true(er_ui_shadcn_component_scene_preview_available("radio-group"), "shadcn scene preview: radio group is available");
+  expect_true(er_ui_shadcn_component_scene_preview_available("toast"), "shadcn scene preview: toast is available");
   expect_true(!er_ui_shadcn_component_scene_preview_available("accordion"), "shadcn scene preview: unported visual body is not claimed");
   expect_status(er_ui_shadcn_component_scene_preview_emit(&scene, face, er_ui_bounds(420.0f, 16.0f, 180.0f, 58.0f), theme, "button", NULL),
                 ER_UI_OK, "shadcn scene preview: selected body emits");
+  expect_status(er_ui_shadcn_component_scene_preview_emit(&scene, face, er_ui_bounds(420.0f, 530.0f, 220.0f, 112.0f), theme, "data-table", NULL),
+                ER_UI_OK, "shadcn scene preview: table body emits");
   expect_status(er_ui_shadcn_component_scene_preview_emit(&scene, face, er_ui_bounds(420.0f, 82.0f, 180.0f, 58.0f), theme, "accordion", NULL),
                 ER_UI_ERR_INVALID_ARGUMENT, "shadcn scene preview: unported body is rejected");
   er_ui_shadcn_demo_gallery_state_t state = {0};
