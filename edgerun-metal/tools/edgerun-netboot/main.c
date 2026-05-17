@@ -38,6 +38,77 @@
 #define TFTP_MAX_RETRIES 8u
 #define TFTP_OP_OACK 6u
 
+#define NETBOOT_PATH_BUFFER_SIZE 1024u
+#define NETBOOT_COMMAND_BUFFER_SIZE 256u
+#define NETBOOT_TEXT_BUFFER_SIZE 256u
+#define NETBOOT_VENDOR_BUFFER_SIZE 128u
+#define NETBOOT_HTTP_REQUEST_BUFFER_SIZE 1024u
+#define NETBOOT_HTTP_TARGET_BUFFER_SIZE 512u
+#define NETBOOT_HTTP_HEADER_BUFFER_SIZE 512u
+#define NETBOOT_HTTP_PATH_BUFFER_SIZE 64u
+#define NETBOOT_FILE_BUFFER_SIZE 4096u
+#define NETBOOT_ABSOLUTE_PATH_BUFFER_SIZE 4096u
+#define NETBOOT_BOOT_URL_BUFFER_SIZE 128u
+#define NETBOOT_IO_BUFFER_SIZE 2048u
+#define NETBOOT_FILE_SIZE_MAX 0x7fffffff
+#define NETBOOT_PRINTABLE_ASCII_LIMIT 127u
+#define NETBOOT_DECIMAL_BYTE_TEXT_ROOM 4u
+#define NETBOOT_IPV4_BYTES 4u
+#define NETBOOT_MAC_BYTES 6u
+#define NETBOOT_VENDOR_HTTP "HTTPClient"
+#define NETBOOT_VENDOR_PXE "PXEClient"
+#define NETBOOT_VENDOR_HTTP_LEN 10u
+#define NETBOOT_VENDOR_PXE_LEN 9u
+#define NETBOOT_HTTP_REQUEST_FIELD_COUNT 3
+#define NETBOOT_STRTOL_BASE_DECIMAL 10
+#define NETBOOT_TCP_PORT_MAX 65535
+#define NETBOOT_OPT_MGMT_DHCP_EQ "--mgmt-dhcp="
+#define NETBOOT_OPT_FORCE_HTTP_FOR_PXE_EQ "--force-http-for-pxe="
+#define NETBOOT_OPT_CLIENT_IP_EQ "--client-ip="
+#define NETBOOT_OPT_MGMT_IP_EQ "--mgmt-ip="
+#define NETBOOT_OPT_ALLOW_MAC_EQ "--allow-mac="
+#define NETBOOT_OPT_MGMT_MAC_EQ "--mgmt-mac="
+#define NETBOOT_OPT_MODE_EQ "--mode="
+#define NETBOOT_OPT_IFACE_EQ "--iface="
+#define NETBOOT_OPT_EFI_EQ "--efi="
+#define NETBOOT_OPT_HTTP_PORT_EQ "--http-port="
+#define NETBOOT_LITERAL_LEN(value) (sizeof(value) - 1u)
+#define NETBOOT_BYTE0 0u
+#define NETBOOT_BYTE1 1u
+#define NETBOOT_BYTE2 2u
+#define NETBOOT_BYTE3 3u
+#define NETBOOT_BYTE4 4u
+#define NETBOOT_BYTE5 5u
+
+#define DHCP_OP_BOOTREPLY 2u
+#define DHCP_OP_BOOTREQUEST 1u
+#define DHCP_OPTION_CODE_OFFSET 0u
+#define DHCP_OPTION_LEN_OFFSET 1u
+#define DHCP_OPTION_VALUE_OFFSET 2u
+#define DHCP_OPTION_U8_PAYLOAD_LEN 1u
+#define DHCP_OPTION_U32_PAYLOAD_LEN 4u
+#define DHCP_OPTION_ARCH_PAYLOAD_LEN 2u
+#define DHCP_OPTION_MSG_TYPE_PAYLOAD_LEN 1u
+#define DHCP_OPTION_U8_TOTAL_LEN 3u
+#define DHCP_OPTION_U32_TOTAL_LEN 6u
+#define DHCP_LEASE_SECONDS 3600u
+
+#define TFTP_ERROR_PACKET_BYTES 516u
+#define TFTP_PACKET_BYTES 516u
+#define TFTP_FILENAME_BUFFER_SIZE 260u
+#define TFTP_OACK_BUFFER_SIZE 256u
+#define TFTP_HEADER_BYTES 4u
+#define TFTP_MIN_ACK_BYTES 4
+#define TFTP_OP_HIGH_OFFSET 0u
+#define TFTP_OP_LOW_OFFSET 1u
+#define TFTP_BLOCK_HIGH_OFFSET 2u
+#define TFTP_BLOCK_LOW_OFFSET 3u
+#define TFTP_PAYLOAD_OFFSET 4u
+#define TFTP_ERROR_CODE_OFFSET 2u
+#define TFTP_ERROR_MSG_OFFSET 4u
+#define TFTP_ERROR_OVERHEAD_BYTES 5u
+#define HTTP_LISTEN_BACKLOG 4
+
 enum {
     DHCP_MESSAGE_DISCOVER = 1u,
     DHCP_MESSAGE_OFFER = 2u,
@@ -120,7 +191,7 @@ static void usage(const char *prog) {
 }
 
 static bool make_absolute_path(const char *input, char *output, size_t output_size) {
-    char cwd[1024];
+    char cwd[NETBOOT_PATH_BUFFER_SIZE];
     if (input == NULL || output == NULL || output_size == 0u) {
         return false;
     }
@@ -136,7 +207,7 @@ static bool make_absolute_path(const char *input, char *output, size_t output_si
 }
 
 static bool run_cmd(const char *fmt, const char *iface) {
-    char cmd[256];
+    char cmd[NETBOOT_COMMAND_BUFFER_SIZE];
     int rc;
 
     (void)snprintf(cmd, sizeof(cmd), fmt, iface);
@@ -235,18 +306,18 @@ static int open_dgram_socket(uint16_t port, bool allow_bcast) {
 }
 
 static size_t dhcp_append_u8(uint8_t *p, uint8_t code, uint8_t v) {
-    p[0] = code;
-    p[1] = 1;
-    p[2] = v;
-    return 3;
+    p[DHCP_OPTION_CODE_OFFSET] = code;
+    p[DHCP_OPTION_LEN_OFFSET] = DHCP_OPTION_U8_PAYLOAD_LEN;
+    p[DHCP_OPTION_VALUE_OFFSET] = v;
+    return DHCP_OPTION_U8_TOTAL_LEN;
 }
 
 static size_t dhcp_append_u32(uint8_t *p, uint8_t code, uint32_t v_host) {
     uint32_t v = htonl(v_host);
-    p[0] = code;
-    p[1] = 4;
-    memcpy(p + 2, &v, 4);
-    return 6;
+    p[DHCP_OPTION_CODE_OFFSET] = code;
+    p[DHCP_OPTION_LEN_OFFSET] = DHCP_OPTION_U32_PAYLOAD_LEN;
+    memcpy(p + DHCP_OPTION_VALUE_OFFSET, &v, DHCP_OPTION_U32_PAYLOAD_LEN);
+    return DHCP_OPTION_U32_TOTAL_LEN;
 }
 
 static size_t dhcp_append_ipv4(uint8_t *p, uint8_t code, const char *ip) {
@@ -254,18 +325,18 @@ static size_t dhcp_append_ipv4(uint8_t *p, uint8_t code, const char *ip) {
     if (inet_pton(AF_INET, ip, &addr) != 1) {
         addr.s_addr = 0u;
     }
-    p[0] = code;
-    p[1] = 4;
-    memcpy(p + 2, &addr.s_addr, 4);
-    return 6;
+    p[DHCP_OPTION_CODE_OFFSET] = code;
+    p[DHCP_OPTION_LEN_OFFSET] = DHCP_OPTION_U32_PAYLOAD_LEN;
+    memcpy(p + DHCP_OPTION_VALUE_OFFSET, &addr.s_addr, DHCP_OPTION_U32_PAYLOAD_LEN);
+    return DHCP_OPTION_U32_TOTAL_LEN;
 }
 
 
 static size_t dhcp_append_bytes(uint8_t *p, uint8_t code, const uint8_t *v, uint8_t len) {
-    p[0] = code;
-    p[1] = len;
-    memcpy(p + 2, v, len);
-    return (size_t)(2 + len);
+    p[DHCP_OPTION_CODE_OFFSET] = code;
+    p[DHCP_OPTION_LEN_OFFSET] = len;
+    memcpy(p + DHCP_OPTION_VALUE_OFFSET, v, len);
+    return (size_t)(DHCP_OPTION_VALUE_OFFSET + len);
 }
 
 static size_t build_dhcp_reply(dhcp_packet_t *out, const dhcp_packet_t *in, uint8_t dhcp_msg,
@@ -277,7 +348,7 @@ static size_t build_dhcp_reply(dhcp_packet_t *out, const dhcp_packet_t *in, uint
     size_t max_len;
 
     memset(out, 0, sizeof(*out));
-    out->op = 2;
+    out->op = DHCP_OP_BOOTREPLY;
     out->htype = in->htype;
     out->hlen = in->hlen;
     out->hops = 0u;
@@ -304,7 +375,7 @@ static size_t build_dhcp_reply(dhcp_packet_t *out, const dhcp_packet_t *in, uint
     p = out->options;
     p += dhcp_append_u8(p, DHCP_OPT_DHCP_MSG_TYPE, dhcp_msg);
     p += dhcp_append_ipv4(p, DHCP_OPT_SERVER_ID, SERVER_IP);
-    p += dhcp_append_u32(p, DHCP_OPT_LEASE_TIME, 3600u);
+    p += dhcp_append_u32(p, DHCP_OPT_LEASE_TIME, DHCP_LEASE_SECONDS);
     p += dhcp_append_ipv4(p, DHCP_OPT_SUBNET_MASK, SUBNET_MASK);
     p += dhcp_append_ipv4(p, DHCP_OPT_ROUTER, ROUTER_IP);
     p += dhcp_append_ipv4(p, DHCP_OPT_DNS, DNS_IP);
@@ -337,13 +408,13 @@ static void format_ipv4_str(uint32_t in_addr, char *out, size_t out_size) {
 }
 
 static void print_vendor_bytes(const char *label, const uint8_t *data, uint8_t len) {
-    char out[256];
+    char out[NETBOOT_TEXT_BUFFER_SIZE];
     size_t i;
     size_t out_len = 0u;
 
     out_len = 0u;
     for (i = 0; i < (size_t)len && out_len < (sizeof(out) - 1u); i++) {
-        if (isprint((int)data[i]) && data[i] < 127u) {
+        if (isprint((int)data[i]) && data[i] < NETBOOT_PRINTABLE_ASCII_LIMIT) {
             out[out_len++] = (char)data[i];
         } else {
             out[out_len++] = '.';
@@ -354,7 +425,7 @@ static void print_vendor_bytes(const char *label, const uint8_t *data, uint8_t l
 }
 
 static void print_bytes_list_hex(const char *label, const uint8_t *data, uint8_t len) {
-    char out[256];
+    char out[NETBOOT_TEXT_BUFFER_SIZE];
     size_t off = 0u;
     size_t i;
 
@@ -366,7 +437,7 @@ static void print_bytes_list_hex(const char *label, const uint8_t *data, uint8_t
         return;
     }
 
-    for (i = 0u; i < (size_t)len && off < (sizeof(out) - 4u); i++) {
+    for (i = 0u; i < (size_t)len && off < (sizeof(out) - NETBOOT_DECIMAL_BYTE_TEXT_ROOM); i++) {
         off += (size_t)snprintf(&out[off], sizeof(out) - off, "%s%u", i == 0u ? "" : " ", (unsigned)data[i]);
     }
     if (off >= (sizeof(out) - 1u)) {
@@ -378,11 +449,12 @@ static void print_bytes_list_hex(const char *label, const uint8_t *data, uint8_t
 }
 
 static void print_option_ip(const char *label, const uint8_t *data, uint8_t len) {
-    if (data == NULL || len != 4u) {
+    if (data == NULL || len != NETBOOT_IPV4_BYTES) {
         print_bytes_list_hex(label, data, len);
         return;
     }
-    log_line("%s: %u.%u.%u.%u", label, data[0], data[1], data[2], data[3]);
+    log_line("%s: %u.%u.%u.%u", label,
+             data[NETBOOT_BYTE0], data[NETBOOT_BYTE1], data[NETBOOT_BYTE2], data[NETBOOT_BYTE3]);
 }
 
 static void vendor_to_string(const uint8_t *data, uint8_t len, char *out, size_t out_size) {
@@ -396,7 +468,7 @@ static void vendor_to_string(const uint8_t *data, uint8_t len, char *out, size_t
         return;
     }
     for (i = 0; i < (size_t)len && out_len < (out_size - 1u); i++) {
-        if (isprint((int)data[i]) && data[i] < 127u) {
+        if (isprint((int)data[i]) && data[i] < NETBOOT_PRINTABLE_ASCII_LIMIT) {
             out[out_len++] = (char)data[i];
         }
     }
@@ -411,10 +483,10 @@ static uint8_t classify_client_class(const char *vendor) {
     if (vendor == NULL) {
         return CLIENT_OTHER;
     }
-    if (strncmp(vendor, "HTTPClient", 10u) == 0) {
+    if (strncmp(vendor, NETBOOT_VENDOR_HTTP, NETBOOT_VENDOR_HTTP_LEN) == 0) {
         return CLIENT_HTTP_BOOT;
     }
-    if (strncmp(vendor, "PXEClient", 9u) == 0) {
+    if (strncmp(vendor, NETBOOT_VENDOR_PXE, NETBOOT_VENDOR_PXE_LEN) == 0) {
         return CLIENT_PXE_BOOT;
     }
     return CLIENT_OTHER;
@@ -446,23 +518,23 @@ static bool parse_mac(const char *s, uint8_t *out) {
     if (s == NULL || *s == '\0') {
         return false;
     }
-    if (sscanf(s, "%2x:%2x:%2x:%2x:%2x:%2x%n", &b0, &b1, &b2, &b3, &b4, &b5, &consumed) != 6) {
+    if (sscanf(s, "%2x:%2x:%2x:%2x:%2x:%2x%n", &b0, &b1, &b2, &b3, &b4, &b5, &consumed) != NETBOOT_MAC_BYTES) {
         return false;
     }
     if (s[consumed] != '\0') {
         return false;
     }
-    out[0] = (uint8_t)b0;
-    out[1] = (uint8_t)b1;
-    out[2] = (uint8_t)b2;
-    out[3] = (uint8_t)b3;
-    out[4] = (uint8_t)b4;
-    out[5] = (uint8_t)b5;
+    out[NETBOOT_BYTE0] = (uint8_t)b0;
+    out[NETBOOT_BYTE1] = (uint8_t)b1;
+    out[NETBOOT_BYTE2] = (uint8_t)b2;
+    out[NETBOOT_BYTE3] = (uint8_t)b3;
+    out[NETBOOT_BYTE4] = (uint8_t)b4;
+    out[NETBOOT_BYTE5] = (uint8_t)b5;
     return true;
 }
 
 static bool mac_match(const uint8_t *a, const uint8_t *b) {
-    return memcmp(a, b, 6u) == 0;
+    return memcmp(a, b, NETBOOT_MAC_BYTES) == 0;
 }
 
 static void mac_to_str(const uint8_t *mac, uint8_t len, char *out, size_t out_size) {
@@ -477,7 +549,7 @@ static void mac_to_str(const uint8_t *mac, uint8_t len, char *out, size_t out_si
         return;
     }
 
-    for (i = 0; i < (size_t)(len < 6u ? len : 6u); i++) {
+    for (i = 0; i < (size_t)(len < NETBOOT_MAC_BYTES ? len : NETBOOT_MAC_BYTES); i++) {
         off += snprintf(&out[off], out_size - (size_t)off, "%s%02x", i == 0u ? "" : ":", mac[i]);
         if (off >= (int)out_size) {
             break;
@@ -503,7 +575,7 @@ static void handle_dhcp(int sock, const uint8_t *buf, size_t len, const char *bo
     uint8_t msg_type = 0;
     const uint8_t *vendor_opt = NULL;
     uint8_t vendor_len = 0u;
-    char vendor[128];
+    char vendor[NETBOOT_VENDOR_BUFFER_SIZE];
     bool has_arch = false;
     uint16_t arch = 0u;
     uint8_t client_type = CLIENT_OTHER;
@@ -535,12 +607,13 @@ static void handle_dhcp(int sock, const uint8_t *buf, size_t len, const char *bo
     if (req->magic != htonl(DHCP_MAGIC)) {
         return;
     }
-    if (req->op != 1u) {
+    if (req->op != DHCP_OP_BOOTREQUEST) {
         return;
     }
 
     opts_len = len - offsetof(dhcp_packet_t, options);
-    if (!get_option(req->options, opts_len, DHCP_OPT_DHCP_MSG_TYPE, &v, &l) || l != 1u) {
+    if (!get_option(req->options, opts_len, DHCP_OPT_DHCP_MSG_TYPE, &v, &l) ||
+        l != DHCP_OPTION_MSG_TYPE_PAYLOAD_LEN) {
         return;
     }
     msg_type = v[0];
@@ -559,7 +632,8 @@ static void handle_dhcp(int sock, const uint8_t *buf, size_t len, const char *bo
     } else {
         (void)snprintf(vendor, sizeof(vendor), "<unknown>");
     }
-    if (get_option(req->options, opts_len, DHCP_OPT_CLIENT_ARCH, &v, &l) && l == 2u) {
+    if (get_option(req->options, opts_len, DHCP_OPT_CLIENT_ARCH, &v, &l) &&
+        l == DHCP_OPTION_ARCH_PAYLOAD_LEN) {
         arch = (uint16_t)(((uint16_t)v[0] << 8u) | (uint16_t)v[1]);
         has_arch = true;
     }
@@ -633,7 +707,7 @@ static void handle_dhcp(int sock, const uint8_t *buf, size_t len, const char *bo
         } else {
             same_mgmt_client = true;
             *has_assigned_mgmt_client = true;
-            memcpy(assigned_mgmt_mac, req->chaddr, 6u);
+            memcpy(assigned_mgmt_mac, req->chaddr, NETBOOT_MAC_BYTES);
         }
         if (!same_mgmt_client) {
             log_line("ignoring additional management DHCP client %s vendor=%s", peer_mac, vendor);
@@ -654,7 +728,7 @@ static void handle_dhcp(int sock, const uint8_t *buf, size_t len, const char *bo
                     return;
                 }
             } else {
-                memcpy(assigned_mac, req->chaddr, 6u);
+                memcpy(assigned_mac, req->chaddr, NETBOOT_MAC_BYTES);
                 *has_assigned_client = true;
             }
         }
@@ -706,20 +780,20 @@ static bool send_all(int sock, const uint8_t *buf, size_t len) {
 }
 
 static bool send_dhcp_error(int sock, const struct sockaddr_in *client, uint16_t code, const char *msg) {
-    uint8_t pkt[516];
+    uint8_t pkt[TFTP_ERROR_PACKET_BYTES];
     size_t len = strlen(msg);
     uint16_t code_net = htons(code);
     size_t total;
 
-    if (len > sizeof(pkt) - 5u) {
-        len = sizeof(pkt) - 5u;
+    if (len > sizeof(pkt) - TFTP_ERROR_OVERHEAD_BYTES) {
+        len = sizeof(pkt) - TFTP_ERROR_OVERHEAD_BYTES;
     }
-    pkt[0] = 0;
-    pkt[1] = TFTP_OP_ERR;
-    memcpy(&pkt[2], &code_net, 2);
-    memcpy(&pkt[4], msg, len);
-    pkt[4 + len] = 0;
-    total = 5u + len;
+    pkt[NETBOOT_BYTE0] = 0;
+    pkt[NETBOOT_BYTE1] = TFTP_OP_ERR;
+    memcpy(&pkt[TFTP_ERROR_CODE_OFFSET], &code_net, DHCP_OPTION_ARCH_PAYLOAD_LEN);
+    memcpy(&pkt[TFTP_ERROR_MSG_OFFSET], msg, len);
+    pkt[TFTP_ERROR_MSG_OFFSET + len] = 0;
+    total = TFTP_ERROR_OVERHEAD_BYTES + len;
     return sendto(sock, pkt, total, 0, (const struct sockaddr *)client, (socklen_t)sizeof(*client)) == (ssize_t)total;
 }
 
@@ -749,7 +823,7 @@ static int open_http_listener(const char *bind_ip, uint16_t port) {
         return -1;
     }
 
-    if (listen(fd, 4) < 0) {
+    if (listen(fd, HTTP_LISTEN_BACKLOG) < 0) {
         perror("listen");
         close(fd);
         return -1;
@@ -784,7 +858,7 @@ static int open_http_listener_with_fallback(uint16_t *port, bool port_explicit) 
 
 static bool serve_http_file(int sock, const char *efi_path) {
     FILE *fp = fopen(efi_path, "rb");
-    uint8_t buf[4096];
+    uint8_t buf[NETBOOT_FILE_BUFFER_SIZE];
     size_t nread;
     bool ok;
 
@@ -804,14 +878,14 @@ static bool serve_http_file(int sock, const char *efi_path) {
 }
 
 static bool handle_http_client(int sock, const char *req_host, uint16_t port, const char *efi_path, size_t efi_size) {
-    char request[1024];
+    char request[NETBOOT_HTTP_REQUEST_BUFFER_SIZE];
     char method[16];
-    char target[512];
+    char target[NETBOOT_HTTP_TARGET_BUFFER_SIZE];
     char version[16];
-    char expect_abs[512];
-    char expect_path[64];
+    char expect_abs[NETBOOT_HTTP_TARGET_BUFFER_SIZE];
+    char expect_path[NETBOOT_HTTP_PATH_BUFFER_SIZE];
     const char *body;
-    char resp_header[512];
+    char resp_header[NETBOOT_HTTP_HEADER_BUFFER_SIZE];
     ssize_t n;
 
     memset(request, 0, sizeof(request));
@@ -821,15 +895,15 @@ static bool handle_http_client(int sock, const char *req_host, uint16_t port, co
     }
     request[sizeof(request) - 1u] = '\0';
 
-    if (sscanf(request, "%15s %511s %15s", method, target, version) != 3) {
+    if (sscanf(request, "%15s %511s %15s", method, target, version) != NETBOOT_HTTP_REQUEST_FIELD_COUNT) {
         return false;
     }
     log_line("HTTP request: %s %s %s", method, target, version);
     snprintf(expect_path, sizeof(expect_path), "/%s", BOOT_FILE);
     snprintf(expect_abs, sizeof(expect_abs), "http://%s:%u%s", req_host, (unsigned)port, expect_path);
 
-    char expect_base[64];
-    char expect_base_abs[512];
+    char expect_base[NETBOOT_HTTP_PATH_BUFFER_SIZE];
+    char expect_base_abs[NETBOOT_HTTP_TARGET_BUFFER_SIZE];
     snprintf(expect_base, sizeof(expect_base), "/%s", BOOT_FILE_BASENAME);
     snprintf(expect_base_abs, sizeof(expect_base_abs), "http://%s:%u%s", req_host, (unsigned)port, expect_base);
 
@@ -870,7 +944,7 @@ static bool wait_for_ack(int sock, const struct sockaddr_in *peer, uint16_t expe
         struct timeval tv = {(time_t)(TFTP_TIMEOUT_MS / 1000u), (suseconds_t)((TFTP_TIMEOUT_MS % 1000u) * 1000u)};
         struct sockaddr_in src;
         socklen_t src_len = (socklen_t)sizeof(src);
-        uint8_t buf[516];
+        uint8_t buf[TFTP_PACKET_BYTES];
         int rc;
         ssize_t n;
 
@@ -881,13 +955,14 @@ static bool wait_for_ack(int sock, const struct sockaddr_in *peer, uint16_t expe
             return false;
         }
         n = recvfrom(sock, buf, sizeof(buf), 0, (struct sockaddr *)&src, &src_len);
-        if (n < 4 || !is_same_peer(&src, peer)) {
+        if (n < TFTP_MIN_ACK_BYTES || !is_same_peer(&src, peer)) {
             continue;
         }
-        if (buf[0] != 0 || buf[1] != TFTP_OP_ACK) {
+        if (buf[TFTP_OP_HIGH_OFFSET] != 0 || buf[TFTP_OP_LOW_OFFSET] != TFTP_OP_ACK) {
             continue;
         }
-        if (((uint16_t)buf[2] << 8u | (uint16_t)buf[3]) == expected_block) {
+        if (((uint16_t)buf[TFTP_BLOCK_HIGH_OFFSET] << 8u |
+             (uint16_t)buf[TFTP_BLOCK_LOW_OFFSET]) == expected_block) {
             return true;
         }
     }
@@ -897,7 +972,7 @@ static bool send_block_with_retries(int sock, const struct sockaddr_in *peer, co
                                    size_t file_size, size_t offset, uint16_t block) {
     size_t left;
     size_t chunk;
-    uint8_t packet[4 + TFTP_BLOCK_SIZE];
+    uint8_t packet[TFTP_HEADER_BYTES + TFTP_BLOCK_SIZE];
 
     left = (offset < file_size) ? (file_size - offset) : 0u;
     if (left > TFTP_BLOCK_SIZE) {
@@ -906,16 +981,16 @@ static bool send_block_with_retries(int sock, const struct sockaddr_in *peer, co
         chunk = left;
     }
 
-    packet[0] = 0;
-    packet[1] = TFTP_OP_DATA;
-    packet[2] = (uint8_t)(block >> 8u);
-    packet[3] = (uint8_t)block;
+    packet[TFTP_OP_HIGH_OFFSET] = 0;
+    packet[TFTP_OP_LOW_OFFSET] = TFTP_OP_DATA;
+    packet[TFTP_BLOCK_HIGH_OFFSET] = (uint8_t)(block >> 8u);
+    packet[TFTP_BLOCK_LOW_OFFSET] = (uint8_t)block;
     if (chunk > 0u) {
-        memcpy(&packet[4], file_data + offset, chunk);
+        memcpy(&packet[TFTP_PAYLOAD_OFFSET], file_data + offset, chunk);
     }
 
     for (uint32_t attempt = 0u; attempt < TFTP_MAX_RETRIES; attempt++) {
-        ssize_t sent = sendto(sock, packet, 4u + chunk, 0, (const struct sockaddr *)peer, (socklen_t)sizeof(*peer));
+        ssize_t sent = sendto(sock, packet, TFTP_HEADER_BYTES + chunk, 0, (const struct sockaddr *)peer, (socklen_t)sizeof(*peer));
         if (sent < 0) {
             return false;
         }
@@ -949,7 +1024,7 @@ static bool transfer_boot_file(const char *path, int tfd, const struct sockaddr_
         return false;
     }
     size_long = ftell(fp);
-    if (size_long < 0 || size_long > (long)0x7fffffff) {
+    if (size_long < 0 || size_long > (long)NETBOOT_FILE_SIZE_MAX) {
         fclose(fp);
         return false;
     }
@@ -1088,30 +1163,31 @@ static void handle_tftp(int sock, const uint8_t *pkt, size_t len, const struct s
     const uint8_t *end;
     const uint8_t *name_end;
     const uint8_t *mode_end;
-    char filename[260];
+    char filename[TFTP_FILENAME_BUFFER_SIZE];
     char mode[16];
     size_t name_len;
     size_t mode_len;
     struct stat st;
     size_t file_size;
     int tfd = -1;
-    uint8_t oack[256];
+    uint8_t oack[TFTP_OACK_BUFFER_SIZE];
     bool has_options;
     bool want_tsize;
     bool want_blksize;
     bool want_windowsize;
     size_t oack_len;
     const uint8_t *opt_start;
-    if (len < 4u) {
+    if (len < TFTP_HEADER_BYTES) {
         return;
     }
 
-    opcode = (uint16_t)((uint16_t)pkt[0] << 8u | (uint16_t)pkt[1]);
+    opcode = (uint16_t)((uint16_t)pkt[TFTP_OP_HIGH_OFFSET] << 8u |
+                        (uint16_t)pkt[TFTP_OP_LOW_OFFSET]);
     if (opcode != TFTP_OP_RRQ) {
         return;
     }
 
-    cursor = &pkt[2];
+    cursor = &pkt[TFTP_ERROR_CODE_OFFSET];
     end = pkt + len;
     name_end = memchr(cursor, 0, (size_t)(end - cursor));
     if (name_end == NULL) {
@@ -1151,7 +1227,7 @@ static void handle_tftp(int sock, const uint8_t *pkt, size_t len, const struct s
         log_line("unable to stat %s", efi_path);
         return;
     }
-    if (st.st_size < 0 || st.st_size > (long)0x7fffffff) {
+    if (st.st_size < 0 || st.st_size > (long)NETBOOT_FILE_SIZE_MAX) {
         log_line("invalid EFI size");
         return;
     }
@@ -1232,27 +1308,27 @@ int main(int argc, char **argv) {
     bool explicit_http_port = false;
     uint8_t mode = MODE_AUTO;
     bool setup_interface = false;
-    uint8_t allow_mac[6];
+    uint8_t allow_mac[NETBOOT_MAC_BYTES];
     bool has_allow_mac = false;
-    uint8_t mgmt_mac[6];
+    uint8_t mgmt_mac[NETBOOT_MAC_BYTES];
     bool has_mgmt_mac = false;
     bool mgmt_dhcp = false;
     bool force_http_for_pxe = false;
     bool has_assigned_client = false;
-    uint8_t assigned_mac[6];
+    uint8_t assigned_mac[NETBOOT_MAC_BYTES];
     bool has_assigned_mgmt_client = false;
-    uint8_t assigned_mgmt_mac[6];
+    uint8_t assigned_mgmt_mac[NETBOOT_MAC_BYTES];
     struct stat st;
     size_t efi_size = 0u;
     int dhcp_sock = -1;
     int tftp_sock = -1;
     int http_sock = -1;
-    char boot_url[128];
-    char efi_abs_path[4096];
+    char boot_url[NETBOOT_BOOT_URL_BUFFER_SIZE];
+    char efi_abs_path[NETBOOT_ABSOLUTE_PATH_BUFFER_SIZE];
     bool running = true;
     bool seen_client = false;
     bool parse_done;
-    uint8_t buf[2048];
+    uint8_t buf[NETBOOT_IO_BUFFER_SIZE];
     const char *prog = argv[0];
     int i;
 
@@ -1291,8 +1367,8 @@ int main(int argc, char **argv) {
                 usage(prog);
                 return 1;
             }
-            val = strtol(argv[++i], &end, 10);
-            if (end == NULL || *end != '\0' || val <= 0 || val > 65535) {
+            val = strtol(argv[++i], &end, NETBOOT_STRTOL_BASE_DECIMAL);
+            if (end == NULL || *end != '\0' || val <= 0 || val > NETBOOT_TCP_PORT_MAX) {
                 log_line("invalid --http-port value");
                 usage(prog);
                 return 1;
@@ -1309,8 +1385,8 @@ int main(int argc, char **argv) {
             mgmt_dhcp = true;
             continue;
         }
-        if (strncmp(argv[i], "--mgmt-dhcp=", 12) == 0) {
-            mgmt_dhcp = parse_bool_value(argv[i] + 12);
+        if (strncmp(argv[i], NETBOOT_OPT_MGMT_DHCP_EQ, NETBOOT_LITERAL_LEN(NETBOOT_OPT_MGMT_DHCP_EQ)) == 0) {
+            mgmt_dhcp = parse_bool_value(argv[i] + NETBOOT_LITERAL_LEN(NETBOOT_OPT_MGMT_DHCP_EQ));
             continue;
         }
         if (strcmp(argv[i], "--http") == 0) {
@@ -1417,13 +1493,15 @@ int main(int argc, char **argv) {
             force_http_for_pxe = true;
             continue;
         }
-        if (strncmp(argv[i], "--force-http-for-pxe=", 21) == 0) {
-            force_http_for_pxe = parse_bool_value(argv[i] + 21);
+        if (strncmp(argv[i], NETBOOT_OPT_FORCE_HTTP_FOR_PXE_EQ,
+                    NETBOOT_LITERAL_LEN(NETBOOT_OPT_FORCE_HTTP_FOR_PXE_EQ)) == 0) {
+            force_http_for_pxe =
+                parse_bool_value(argv[i] + NETBOOT_LITERAL_LEN(NETBOOT_OPT_FORCE_HTTP_FOR_PXE_EQ));
             continue;
         }
-        if (strncmp(argv[i], "--client-ip=", 11) == 0) {
+        if (strncmp(argv[i], NETBOOT_OPT_CLIENT_IP_EQ, NETBOOT_LITERAL_LEN(NETBOOT_OPT_CLIENT_IP_EQ)) == 0) {
             struct in_addr tmp;
-            client_ip = argv[i] + 11;
+            client_ip = argv[i] + NETBOOT_LITERAL_LEN(NETBOOT_OPT_CLIENT_IP_EQ);
             if (inet_pton(AF_INET, client_ip, &tmp) != 1) {
                 log_line("invalid --client-ip value");
                 usage(prog);
@@ -1431,9 +1509,9 @@ int main(int argc, char **argv) {
             }
             continue;
         }
-        if (strncmp(argv[i], "--mgmt-ip=", 9) == 0) {
+        if (strncmp(argv[i], NETBOOT_OPT_MGMT_IP_EQ, NETBOOT_LITERAL_LEN(NETBOOT_OPT_MGMT_IP_EQ)) == 0) {
             struct in_addr tmp;
-            mgmt_ip = argv[i] + 9;
+            mgmt_ip = argv[i] + NETBOOT_LITERAL_LEN(NETBOOT_OPT_MGMT_IP_EQ);
             if (inet_pton(AF_INET, mgmt_ip, &tmp) != 1) {
                 log_line("invalid --mgmt-ip value");
                 usage(prog);
@@ -1441,8 +1519,8 @@ int main(int argc, char **argv) {
             }
             continue;
         }
-        if (strncmp(argv[i], "--allow-mac=", 12) == 0) {
-            const char *mac_arg = argv[i] + 12;
+        if (strncmp(argv[i], NETBOOT_OPT_ALLOW_MAC_EQ, NETBOOT_LITERAL_LEN(NETBOOT_OPT_ALLOW_MAC_EQ)) == 0) {
+            const char *mac_arg = argv[i] + NETBOOT_LITERAL_LEN(NETBOOT_OPT_ALLOW_MAC_EQ);
             if (*mac_arg == '\0') {
                 has_allow_mac = false;
                 continue;
@@ -1455,8 +1533,8 @@ int main(int argc, char **argv) {
             has_allow_mac = true;
             continue;
         }
-        if (strncmp(argv[i], "--mgmt-mac=", 10) == 0) {
-            const char *mac_arg = argv[i] + 10;
+        if (strncmp(argv[i], NETBOOT_OPT_MGMT_MAC_EQ, NETBOOT_LITERAL_LEN(NETBOOT_OPT_MGMT_MAC_EQ)) == 0) {
+            const char *mac_arg = argv[i] + NETBOOT_LITERAL_LEN(NETBOOT_OPT_MGMT_MAC_EQ);
             if (*mac_arg == '\0') {
                 has_mgmt_mac = false;
                 continue;
@@ -1469,9 +1547,9 @@ int main(int argc, char **argv) {
             has_mgmt_mac = true;
             continue;
         }
-        if (strncmp(argv[i], "--mode=", 7) == 0) {
+        if (strncmp(argv[i], NETBOOT_OPT_MODE_EQ, NETBOOT_LITERAL_LEN(NETBOOT_OPT_MODE_EQ)) == 0) {
             uint8_t parsed;
-            parse_done = parse_mode_arg(argv[i] + 7, &parsed);
+            parse_done = parse_mode_arg(argv[i] + NETBOOT_LITERAL_LEN(NETBOOT_OPT_MODE_EQ), &parsed);
             if (!parse_done) {
                 log_line("--mode expects auto|http|tftp");
                 usage(prog);
@@ -1480,18 +1558,19 @@ int main(int argc, char **argv) {
             mode = parsed;
             continue;
         }
-        if (strncmp(argv[i], "--iface=", 8) == 0) {
-            iface = argv[i] + 8;
+        if (strncmp(argv[i], NETBOOT_OPT_IFACE_EQ, NETBOOT_LITERAL_LEN(NETBOOT_OPT_IFACE_EQ)) == 0) {
+            iface = argv[i] + NETBOOT_LITERAL_LEN(NETBOOT_OPT_IFACE_EQ);
             continue;
         }
-        if (strncmp(argv[i], "--efi=", 6) == 0) {
-            efi_path = argv[i] + 6;
+        if (strncmp(argv[i], NETBOOT_OPT_EFI_EQ, NETBOOT_LITERAL_LEN(NETBOOT_OPT_EFI_EQ)) == 0) {
+            efi_path = argv[i] + NETBOOT_LITERAL_LEN(NETBOOT_OPT_EFI_EQ);
             continue;
         }
-        if (strncmp(argv[i], "--http-port=", 12) == 0) {
+        if (strncmp(argv[i], NETBOOT_OPT_HTTP_PORT_EQ, NETBOOT_LITERAL_LEN(NETBOOT_OPT_HTTP_PORT_EQ)) == 0) {
             char *end = NULL;
-            long val = strtol(argv[i] + 12, &end, 10);
-            if (end == NULL || *end != '\0' || val <= 0 || val > 65535) {
+            long val = strtol(argv[i] + NETBOOT_LITERAL_LEN(NETBOOT_OPT_HTTP_PORT_EQ),
+                              &end, NETBOOT_STRTOL_BASE_DECIMAL);
+            if (end == NULL || *end != '\0' || val <= 0 || val > NETBOOT_TCP_PORT_MAX) {
                 log_line("invalid --http-port value");
                 usage(prog);
                 return 1;
@@ -1565,7 +1644,7 @@ int main(int argc, char **argv) {
     log_line("force-http-for-pxe: %s", force_http_for_pxe ? "yes" : "no");
     if (has_allow_mac) {
         char allow_buf[32];
-        mac_to_str(allow_mac, 6u, allow_buf, sizeof(allow_buf));
+        mac_to_str(allow_mac, NETBOOT_MAC_BYTES, allow_buf, sizeof(allow_buf));
         log_line("allow-mac: %s", allow_buf);
     } else {
         log_line("allow-mac: (not set)");
@@ -1574,7 +1653,7 @@ int main(int argc, char **argv) {
     log_line("mgmt-ip: %s", mgmt_ip);
     if (has_mgmt_mac) {
         char mgmt_buf[32];
-        mac_to_str(mgmt_mac, 6u, mgmt_buf, sizeof(mgmt_buf));
+        mac_to_str(mgmt_mac, NETBOOT_MAC_BYTES, mgmt_buf, sizeof(mgmt_buf));
         log_line("mgmt-mac: %s", mgmt_buf);
     } else {
         log_line("mgmt-mac: (not set)");
@@ -1642,7 +1721,7 @@ int main(int argc, char **argv) {
         }
 
         if (tftp_sock >= 0 && FD_ISSET(tftp_sock, &fds)) {
-            uint8_t tbuf[516];
+            uint8_t tbuf[TFTP_PACKET_BYTES];
             struct sockaddr_in peer;
             socklen_t peer_len = (socklen_t)sizeof(peer);
             ssize_t n = recvfrom(tftp_sock, tbuf, sizeof(tbuf), 0, (struct sockaddr *)&peer, &peer_len);
