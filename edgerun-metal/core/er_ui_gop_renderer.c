@@ -254,6 +254,62 @@ static void er_ui_gop_render_rect(ErUiGopSurface* surface, er_ui_rect_t rect,
   }
 }
 
+static void er_ui_gop_render_icon_quad(ErUiGopSurface* surface, const er_ui_quad_t* quad,
+                                       const ErUiGopPixelRect* clip, ErUiGopRenderStats* stats) {
+  UINT32 x0;
+  UINT32 y0;
+  UINT32 x1;
+  UINT32 y1;
+  UINT32 w;
+  UINT32 h;
+  UINT32 stroke;
+  UINT32 mid_x;
+  UINT32 mid_y;
+  UINT32 glyph;
+
+  if (quad == 0 || er_ui_gop_clip_rect_to(surface, clip, quad->x, quad->y, quad->w, quad->h, &x0, &y0, &x1, &y1) == 0u) {
+    if (clip != 0 && stats != 0) ++stats->rejected_primitives;
+    return;
+  }
+  if (x1 <= x0 || y1 <= y0) return;
+
+  w = x1 - x0;
+  h = y1 - y0;
+  stroke = w < h ? w / 7u : h / 7u;
+  if (stroke == 0u) stroke = 1u;
+  mid_x = x0 + w / 2u;
+  mid_y = y0 + h / 2u;
+  glyph = quad->atlas_id % 6u;
+
+  er_ui_gop_border_rect(surface, x0, y0, x1, y1, quad->color, stats);
+  switch (glyph) {
+    case 0u:
+      er_ui_gop_fill_rect(surface, x0 + w / 4u, mid_y, x1 - w / 4u, mid_y + stroke, quad->color, stats);
+      er_ui_gop_fill_rect(surface, mid_x, y0 + h / 4u, mid_x + stroke, y1 - h / 4u, quad->color, stats);
+      break;
+    case 1u:
+      er_ui_gop_border_rect(surface, x0 + w / 4u, y0 + h / 4u, x1 - w / 5u, y1 - h / 5u, quad->color, stats);
+      er_ui_gop_fill_rect(surface, x1 - w / 4u, y1 - h / 4u, x1, y1 - h / 4u + stroke, quad->color, stats);
+      break;
+    case 2u:
+      er_ui_gop_fill_rect(surface, x0 + w / 5u, y0 + h / 4u, x1 - w / 5u, y0 + h / 4u + stroke, quad->color, stats);
+      er_ui_gop_fill_rect(surface, x0 + w / 5u, mid_y, x1 - w / 5u, mid_y + stroke, quad->color, stats);
+      er_ui_gop_fill_rect(surface, x0 + w / 5u, y1 - h / 4u, x1 - w / 5u, y1 - h / 4u + stroke, quad->color, stats);
+      break;
+    case 3u:
+      er_ui_gop_fill_rect(surface, x0 + w / 5u, y0 + h / 5u, x1 - w / 5u, y1 - h / 5u, er_ui_color_with_alpha(quad->color, 0.28f), stats);
+      er_ui_gop_border_rect(surface, x0 + w / 5u, y0 + h / 5u, x1 - w / 5u, y1 - h / 5u, quad->color, stats);
+      break;
+    case 4u:
+      er_ui_gop_fill_rect(surface, mid_x - stroke, y0 + h / 5u, mid_x + stroke, y1 - h / 5u, quad->color, stats);
+      er_ui_gop_fill_rect(surface, x0 + w / 5u, mid_y - stroke, x1 - w / 5u, mid_y + stroke, quad->color, stats);
+      break;
+    default:
+      er_ui_gop_fill_rect(surface, x0 + w / 4u, y0 + h / 4u, x1 - w / 4u, y1 - h / 4u, quad->color, stats);
+      break;
+  }
+}
+
 static UINT8 er_ui_gop_sample_alpha8(const vr_font_atlas_view_t* atlas, float u, float v) {
   UINT32 x;
   UINT32 y;
@@ -1084,6 +1140,9 @@ static UINT8 er_ui_gop_surface_render_scene_with_atlas_clip_stats(ErUiGopSurface
 
   for (i = 0u; i < scene->rect_count; ++i) {
     er_ui_gop_render_rect(surface, scene->rects[i], clip, stats);
+  }
+  for (i = 0u; i < scene->icon_quad_count; ++i) {
+    er_ui_gop_render_icon_quad(surface, &scene->icon_quads[i], clip, stats);
   }
   if (atlas != 0) {
     for (i = 0u; i < scene->text_quad_count; ++i) {
