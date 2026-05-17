@@ -10,6 +10,8 @@ Everything that crosses an execution, display, storage, device, or machine bound
 
 There are no separate app IPC, remote UI, driver RPC, storage RPC, or device-control protocols. Those are packet classes carried by erwire, authorized by work/admission records, sealed to the recipient identity, and moved by relay nodes.
 
+Files are not a runtime primitive. The only file-like surface is VFS labeling, and a VFS label is only a manifest name for a content-addressed object. Durable identity is the object hash, transport object hash, transform hash, route hash, and recipient identity. Host paths, process handles, sockets, file descriptors, and kernel objects do not cross the runtime boundary.
+
 ## Roles
 
 An EdgeRun node may hold more than one role, but each packet is handled through one explicit role at a time:
@@ -122,6 +124,18 @@ object packet / transform packet
 
 Only sealed transport objects become durable or cross relays. A storage endpoint can be memory, VirtIO block, NVMe, a remote object service, or any future backend that accepts the same object packet classes.
 
+VFS labels exist for human and manifest organization:
+
+```text
+label
+  -> object id
+  -> object packets
+  -> optional transform ref
+  -> sealed transport object
+```
+
+The label never becomes authority. A node may use a host filesystem as an adapter later, but the adapter stores and retrieves content-addressed object packets. It must not expose host paths as application authority or relay route identity.
+
 ## Routing Identity
 
 EdgeRun identities are public-key identities. MAC addresses and VirtIO queue addresses are delivery locators for a local hop, not trust roots.
@@ -175,3 +189,17 @@ The first concrete milestones are:
 5. Add Wasm hostcalls that send and receive erwire relay packets, replacing direct device hostcalls as the driver/app boundary.
 6. Prove one app can render the same UI scene to more than one renderer route.
 7. Prove one Wasm driver can submit device work to a device endpoint reached through a relay route.
+
+## Coherence Checklist
+
+A new runtime feature fits this architecture only when all answers are explicit:
+
+- What erwire packet kind carries it?
+- Which work, channel, capability, object, or transit record is the payload?
+- Which identity is the recipient?
+- Which admission or route binding authorizes it?
+- Which relay endpoint moves it on the current hop?
+- Which component owns local adapter behavior?
+- What proof shows the same payload can move locally or remotely without changing protocol?
+
+If a feature needs a host path, host socket, local process id, raw framebuffer pointer, direct driver call, or out-of-band IPC channel in its durable ABI, it is outside the architecture and must be reshaped as relay work first.

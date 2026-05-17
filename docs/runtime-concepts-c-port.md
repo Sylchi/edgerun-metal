@@ -128,7 +128,7 @@ The runtime can hold plaintext buffers while work is active, but only sealed tra
 
 The first C milestone is:
 
-- fixed ABI records for work, channel, capability, relay transit, VFS object packet, file ref, and transform ref
+- fixed ABI records for work, channel, capability, relay transit, VFS object packet, object label ref, and transform ref
 - app identity and IPC route records for content-addressed WASM execution
 - `erwire` packet carriage for those records
 - memory-only object packet assembly
