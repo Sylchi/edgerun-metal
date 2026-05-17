@@ -1036,6 +1036,45 @@ static void er_blake3_root_from_parent_cvs(const uint32_t left_cv[ER_BLAKE3_CV_W
   er_blake3_output_root(&output, out);
 }
 
+static uint8_t er_blake3_hash_one_chunk_direct(const uint8_t* bytes, size_t len,
+                                               uint8_t out[ER_BLAKE3_OUT_LEN]) {
+  ErBlake3Output output;
+  uint32_t cv[ER_BLAKE3_CV_WORDS];
+  uint8_t block[ER_BLAKE3_BLOCK_LEN];
+  size_t offset = 0u;
+  size_t remaining = len;
+  size_t block_len;
+  uint32_t flags;
+
+  if (len > ER_BLAKE3_CHUNK_LEN) {
+    return 0u;
+  }
+
+  er_blake3_copy_cv(cv, g_er_blake3_iv);
+  while (remaining > ER_BLAKE3_BLOCK_LEN) {
+    flags = offset == 0u ? ER_BLAKE3_CHUNK_START : 0u;
+    er_blake3_compress_cv(cv, &bytes[offset], 0u, ER_BLAKE3_BLOCK_LEN, flags, cv);
+    offset += ER_BLAKE3_BLOCK_LEN;
+    remaining -= ER_BLAKE3_BLOCK_LEN;
+  }
+
+  block_len = remaining;
+  er_blake3_zero(block, ER_BLAKE3_BLOCK_LEN);
+  if (block_len > 0u) {
+    er_blake3_copy(block, &bytes[offset], block_len);
+  }
+  er_blake3_copy_cv(output.input_cv, cv);
+  er_blake3_copy(output.block, block, ER_BLAKE3_BLOCK_LEN);
+  output.counter = 0u;
+  output.block_len = (uint32_t)block_len;
+  output.flags = ER_BLAKE3_CHUNK_END;
+  if (offset == 0u) {
+    output.flags |= ER_BLAKE3_CHUNK_START;
+  }
+  er_blake3_output_root(&output, out);
+  return 1u;
+}
+
 static uint8_t er_blake3_hash_full_power_two_chunks(const uint8_t* bytes, size_t len,
                                                     uint8_t out[ER_BLAKE3_OUT_LEN]) {
   size_t chunk_count = len / ER_BLAKE3_CHUNK_LEN;
@@ -1402,6 +1441,9 @@ uint8_t er_blake3_hash_bytes(const uint8_t* bytes, size_t len, uint8_t out[ER_BL
     return 1u;
   }
 #endif
+  if (er_blake3_hash_one_chunk_direct(bytes, len, out) != 0u) {
+    return 1u;
+  }
   if (er_blake3_hash_full_power_two_chunks(bytes, len, out) != 0u) {
     return 1u;
   }
