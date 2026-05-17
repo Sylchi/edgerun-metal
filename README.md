@@ -8,6 +8,13 @@ This repository contains three C projects:
 
 ## Why This Work Exists
 
+EdgeRun is a philosophy of user control over identity and resources before it
+is a technology stack. The pieces already exist: public-key identity, measured
+boot, signed firmware, local capability systems, encrypted payloads, verifiable
+receipts, and resource accounting. The missing step is using those pieces for
+the user's advantage instead of using them mainly to protect platform owners,
+cloud operators, carriers, vendors, and intermediaries from the user.
+
 EdgeRun is built around sealed, identity-routed work instead of trusted network
 sessions. A node's durable protocol identity is its public key. Transport
 addresses, including Ethernet MAC addresses, are local delivery locators, not
