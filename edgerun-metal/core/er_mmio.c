@@ -6,6 +6,9 @@
  */
 
 #define ER_MMIO_MAX_SIGNED_ADDRESS 0x7fffffffffffffffull
+#define ER_MMIO_WIDTH8_BYTES 1u
+#define ER_MMIO_WIDTH16_BYTES 2u
+#define ER_MMIO_WIDTH32_BYTES 4u
 
 static ErMmioInfo g_mmio_maps[ER_MMIO_MAX_MAPS];
 
@@ -77,15 +80,15 @@ static UINT8 er_mmio_access_request_valid(INT64 handle_i, INT64 offset_i, UINT64
 }
 
 UINT8 er_mmio_read8_request_valid(INT64 handle_i, INT64 offset_i) {
-  return er_mmio_access_request_valid(handle_i, offset_i, 1u);
+  return er_mmio_access_request_valid(handle_i, offset_i, ER_MMIO_WIDTH8_BYTES);
 }
 
 UINT8 er_mmio_read16_request_valid(INT64 handle_i, INT64 offset_i) {
-  return er_mmio_access_request_valid(handle_i, offset_i, 2u);
+  return er_mmio_access_request_valid(handle_i, offset_i, ER_MMIO_WIDTH16_BYTES);
 }
 
 UINT8 er_mmio_read32_request_valid(INT64 handle_i, INT64 offset_i) {
-  return er_mmio_access_request_valid(handle_i, offset_i, 4u);
+  return er_mmio_access_request_valid(handle_i, offset_i, ER_MMIO_WIDTH32_BYTES);
 }
 
 UINT8 er_mmio_write8_request_valid(INT64 handle_i, INT64 offset_i) {
