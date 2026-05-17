@@ -38,12 +38,15 @@ typedef struct {
 #define ER_WASM_IMPORT_MODULE_PCI "edgerun.pci"
 #define ER_WASM_IMPORT_MODULE_MMIO "edgerun.mmio"
 #define ER_WASM_IMPORT_MODULE_BUS "edgerun.bus"
+#define ER_WASM_IMPORT_MODULE_RELAY "edgerun.relay"
 #define ER_WASM_IMPORT_FIELD_U64 "u64"
 #define ER_WASM_IMPORT_FIELD_HEX "hex"
 #define ER_WASM_IMPORT_FIELD_READ32 "read32"
 #define ER_WASM_IMPORT_FIELD_WRITE32 "write32"
 #define ER_WASM_IMPORT_FIELD_MAP "map"
 #define ER_WASM_IMPORT_FIELD_EXEC "exec"
+#define ER_WASM_IMPORT_FIELD_SEND "send"
+#define ER_WASM_IMPORT_FIELD_RECV "recv"
 #define ER_WASM_STRING_LEN(value) ((UINT8)(sizeof(value) - 1u))
 #define ER_WASM_LEB32_MAX_BYTES 5u
 #define ER_WASM_LEB64_MAX_BYTES 10u
@@ -97,7 +100,9 @@ enum {
   ER_IMPORT_KIND_PCI_WRITE32 = 4,
   ER_IMPORT_KIND_MMIO_MAP = 5,
   ER_IMPORT_KIND_MMIO_READ32 = 6,
-  ER_IMPORT_KIND_BUS_EXEC = 7
+  ER_IMPORT_KIND_BUS_EXEC = 7,
+  ER_IMPORT_KIND_RELAY_SEND = 8,
+  ER_IMPORT_KIND_RELAY_RECV = 9
 };
 
 enum {
@@ -120,7 +125,11 @@ static const ErHostImport ER_HOST_IMPORTS[] = {
   {ER_WASM_IMPORT_MODULE_MMIO, ER_WASM_STRING_LEN(ER_WASM_IMPORT_MODULE_MMIO),
    ER_WASM_IMPORT_FIELD_READ32, ER_WASM_STRING_LEN(ER_WASM_IMPORT_FIELD_READ32), ER_IMPORT_KIND_MMIO_READ32},
   {ER_WASM_IMPORT_MODULE_BUS, ER_WASM_STRING_LEN(ER_WASM_IMPORT_MODULE_BUS),
-   ER_WASM_IMPORT_FIELD_EXEC, ER_WASM_STRING_LEN(ER_WASM_IMPORT_FIELD_EXEC), ER_IMPORT_KIND_BUS_EXEC}
+   ER_WASM_IMPORT_FIELD_EXEC, ER_WASM_STRING_LEN(ER_WASM_IMPORT_FIELD_EXEC), ER_IMPORT_KIND_BUS_EXEC},
+  {ER_WASM_IMPORT_MODULE_RELAY, ER_WASM_STRING_LEN(ER_WASM_IMPORT_MODULE_RELAY),
+   ER_WASM_IMPORT_FIELD_SEND, ER_WASM_STRING_LEN(ER_WASM_IMPORT_FIELD_SEND), ER_IMPORT_KIND_RELAY_SEND},
+  {ER_WASM_IMPORT_MODULE_RELAY, ER_WASM_STRING_LEN(ER_WASM_IMPORT_MODULE_RELAY),
+   ER_WASM_IMPORT_FIELD_RECV, ER_WASM_STRING_LEN(ER_WASM_IMPORT_FIELD_RECV), ER_IMPORT_KIND_RELAY_RECV}
 };
 static const UINT32 ER_HOST_IMPORT_COUNT = (UINT32)(sizeof(ER_HOST_IMPORTS) / sizeof(ER_HOST_IMPORTS[0]));
 
@@ -193,6 +202,8 @@ static void er_clear_module(ErWasmModule* module) {
   module->host.mmio_map = 0;
   module->host.mmio_read32 = 0;
   module->host.bus_exec = 0;
+  module->host.relay_send = 0;
+  module->host.relay_recv = 0;
   module->host.memory = 0;
   module->host.memory_size = 0;
   er_mem_zero((UINT8*)&module->host.linear_memory, (UINTN)sizeof(module->host.linear_memory));
@@ -412,6 +423,21 @@ static int er_wasm_memory_range(ErWasmModule* module, UINT64 offset, UINT32 len,
   return 0;
 }
 
+static int er_wasm_memory_window_range(ErWasmModule* module, UINT64 offset, UINT32 len,
+                                       UINT32 window_base, UINT32 window_len,
+                                       UINT8** out_bytes) {
+  UINT64 window_end = (UINT64)window_base + (UINT64)window_len;
+
+  if (module == 0 || out_bytes == 0 || len == 0u || window_len == 0u) {
+    return -1;
+  }
+  if (offset < (UINT64)window_base || offset > window_end ||
+      window_end - offset < (UINT64)len) {
+    return -1;
+  }
+  return er_wasm_memory_range(module, offset, len, out_bytes);
+}
+
 static UINT32 er_wasm_load_u32(const UINT8* src) {
   return (UINT32)src[ER_WASM_U32_BYTE0] |
          ((UINT32)src[ER_WASM_U32_BYTE1] << ER_WASM_U32_BYTE1_SHIFT) |
@@ -564,6 +590,8 @@ int er_wasm_init(ErWasmModule* module, const UINT8* data, UINT32 size, const ErW
     module->host.mmio_map = host->mmio_map;
     module->host.mmio_read32 = host->mmio_read32;
     module->host.bus_exec = host->bus_exec;
+    module->host.relay_send = host->relay_send;
+    module->host.relay_recv = host->relay_recv;
     module->host.memory = host->memory;
     module->host.memory_size = host->memory_size;
     module->host.linear_memory = host->linear_memory;
@@ -1395,6 +1423,77 @@ int er_wasm_execute_i64(ErWasmModule* module, UINT32 function_index, INT64* resu
 
             value = module->host.bus_exec((const ErBusIoPacket*)request_bytes,
                                           (ErBusIoPacket*)response_bytes);
+            if (stack_size >= 32) {
+              return -1;
+            }
+            stack[stack_size++] = value;
+          } else if (import_kind == ER_IMPORT_KIND_RELAY_SEND) {
+            INT64 value = 0;
+            INT64 ptr = 0;
+            INT64 len = 0;
+            UINT8* bytes = 0;
+
+            if (param_count_call != 2 || result_count != 1) {
+              return -1;
+            }
+            if (result_type != 0x7e) {
+              return -1;
+            }
+            if (stack_size < 2) {
+              return -1;
+            }
+            if (module->host.relay_send == 0) {
+              return -1;
+            }
+            len = stack[--stack_size];
+            ptr = stack[--stack_size];
+            if (ptr < 0 || len < 0 || (UINT64)len > (UINT64)ER_WASM_U32_MASK) {
+              return -1;
+            }
+            if (er_wasm_memory_window_range(module, (UINT64)ptr, (UINT32)len,
+                                            module->linear_memory.relay_outbox_base,
+                                            module->linear_memory.relay_outbox_len,
+                                            &bytes) != 0) {
+              return -1;
+            }
+
+            value = module->host.relay_send((const UINT8*)bytes, (UINT32)len);
+            if (stack_size >= 32) {
+              return -1;
+            }
+            stack[stack_size++] = value;
+          } else if (import_kind == ER_IMPORT_KIND_RELAY_RECV) {
+            INT64 value = 0;
+            INT64 ptr = 0;
+            INT64 capacity = 0;
+            UINT8* bytes = 0;
+
+            if (param_count_call != 2 || result_count != 1) {
+              return -1;
+            }
+            if (result_type != 0x7e) {
+              return -1;
+            }
+            if (stack_size < 2) {
+              return -1;
+            }
+            if (module->host.relay_recv == 0) {
+              return -1;
+            }
+            capacity = stack[--stack_size];
+            ptr = stack[--stack_size];
+            if (ptr < 0 || capacity < 0 ||
+                (UINT64)capacity > (UINT64)ER_WASM_U32_MASK) {
+              return -1;
+            }
+            if (er_wasm_memory_window_range(module, (UINT64)ptr, (UINT32)capacity,
+                                            module->linear_memory.relay_inbox_base,
+                                            module->linear_memory.relay_inbox_len,
+                                            &bytes) != 0) {
+              return -1;
+            }
+
+            value = module->host.relay_recv(bytes, (UINT32)capacity);
             if (stack_size >= 32) {
               return -1;
             }

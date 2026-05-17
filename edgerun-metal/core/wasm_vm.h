@@ -19,6 +19,8 @@ typedef void (*er_wasm_pci_write32)(INT64 bus, INT64 device, INT64 func, INT64 o
 typedef INT64 (*er_wasm_mmio_map)(INT64 phys, INT64 len);
 typedef INT64 (*er_wasm_mmio_read32)(INT64 handle, INT64 offset);
 typedef INT64 (*er_wasm_bus_exec)(const ErBusIoPacket* request, ErBusIoPacket* response);
+typedef INT64 (*er_wasm_relay_send)(const UINT8* bytes, UINT32 len);
+typedef INT64 (*er_wasm_relay_recv)(UINT8* bytes, UINT32 capacity);
 
 typedef struct {
   UINT8* bytes;
@@ -38,6 +40,8 @@ typedef struct {
   er_wasm_mmio_map mmio_map;
   er_wasm_mmio_read32 mmio_read32;
   er_wasm_bus_exec bus_exec;
+  er_wasm_relay_send relay_send;
+  er_wasm_relay_recv relay_recv;
   UINT8* memory;
   UINT32 memory_size;
   ErWasmLinearMemory linear_memory;
