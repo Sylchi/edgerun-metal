@@ -110,6 +110,7 @@ void run_node_tests(void) {
   expect_string(er_ui_node_kind_label(ER_UI_NODE_NAVIGATION_MENU), "navigation-menu", "node: kind label maps navigation menu");
   expect_string(er_ui_node_kind_label(ER_UI_NODE_RESIZABLE), "resizable", "node: kind label maps resizable");
   expect_string(er_ui_node_kind_label(ER_UI_NODE_SIDEBAR), "sidebar", "node: kind label maps sidebar");
+  expect_string(er_ui_node_kind_label(ER_UI_NODE_SONNER), "sonner", "node: kind label maps sonner");
   expect_string(er_ui_icon_label(ER_UI_ICON_SEARCH), "search", "node: icon label maps canonical icon");
   expect_u32(er_ui_icon_atlas_id(ER_UI_ICON_SEARCH), (uint32_t)ER_UI_ICON_SEARCH + 1u, "node: icon atlas id is stable");
   expect_string(er_ui_icon_provider_name(ER_UI_ICON_APP, ER_UI_ICON_PROVIDER_LUCIDE), "app-window", "node: lucide provider name maps app icon");
@@ -317,6 +318,16 @@ void run_node_tests(void) {
   expect_status(er_ui_node_accessibility_child(&sidebar_a11y, 3u, &a11y), ER_UI_OK, "node: sidebar main panel accessibility maps");
   expect_size(a11y.role, ER_UI_A11Y_GROUP, "node: sidebar main panel role");
 
+  const char* const sonner_messages[] = {"Event created", "Upload failed"};
+  const er_ui_icon_t sonner_icons[] = {ER_UI_ICON_CHECK, ER_UI_ICON_WARNING};
+  const er_ui_color4_t sonner_colors[] = {er_ui_color_rgba(0.0f, 0.5f, 0.2f, 1.0f), er_ui_color_rgba(0.8f, 0.2f, 0.1f, 1.0f)};
+  er_ui_node_t sonner_a11y = er_ui_node_sonner(sonner_messages, sonner_icons, sonner_colors, 2u);
+  expect_status(er_ui_node_accessibility(&sonner_a11y, &a11y), ER_UI_OK, "node: sonner accessibility maps");
+  expect_size(a11y.role, ER_UI_A11Y_STATUS, "node: sonner accessibility role");
+  expect_status(er_ui_node_accessibility_child(&sonner_a11y, 1u, &a11y), ER_UI_OK, "node: sonner toast accessibility maps");
+  expect_size(a11y.role, ER_UI_A11Y_STATUS, "node: sonner toast accessibility role");
+  expect_true(a11y.label == sonner_messages[1], "node: sonner toast label is borrowed");
+
   er_ui_node_t checked = er_ui_node_checkbox("Remember", true, 8002u);
   expect_status(er_ui_node_accessibility(&checked, &a11y), ER_UI_OK, "node: checkbox accessibility maps");
   expect_size(a11y.role, ER_UI_A11Y_CHECKBOX, "node: checkbox accessibility role");
@@ -467,6 +478,10 @@ void run_node_tests(void) {
     er_ui_node_t resizable = er_ui_node_resizable(render_resizable_labels, 3u);
     const char* const render_sidebar_items[] = {"Dashboard", "Transactions", "Settings"};
     er_ui_node_t sidebar = er_ui_node_sidebar("App", "Workspace", render_sidebar_items, 3u, 0u, "Dashboard", "Proof-aware activity", 8856u);
+    const char* const render_sonner_messages[] = {"Event created", "Upload failed"};
+    const er_ui_icon_t render_sonner_icons[] = {ER_UI_ICON_CHECK, ER_UI_ICON_WARNING};
+    const er_ui_color4_t render_sonner_colors[] = {theme.colors.success, theme.colors.danger};
+    er_ui_node_t sonner = er_ui_node_sonner(render_sonner_messages, render_sonner_icons, render_sonner_colors, 2u);
 
     expect_status(er_ui_node_render(&alert, &scene, face, er_ui_bounds(0.0f, 170.0f, 360.0f, 76.0f), theme), ER_UI_OK, "node: alert renders");
     expect_status(er_ui_node_render(&avatar, &scene, face, er_ui_bounds(0.0f, 254.0f, 42.0f, 42.0f), theme), ER_UI_OK, "node: avatar renders");
@@ -603,6 +618,10 @@ void run_node_tests(void) {
     expect_status(er_ui_node_render(&sidebar, &scene, face, er_ui_bounds(0.0f, 4514.0f, 420.0f, 176.0f), theme), ER_UI_OK,
                   "node: sidebar renders");
     expect_size(scene.hit_count, hits_before_sidebar + 3u, "node: sidebar emits menu item hits");
+    size_t icon_quads_before_sonner = scene.icon_quad_count;
+    expect_status(er_ui_node_render(&sonner, &scene, face, er_ui_bounds(0.0f, 4702.0f, 300.0f, 112.0f), theme), ER_UI_OK,
+                  "node: sonner renders");
+    expect_size(scene.icon_quad_count, icon_quads_before_sonner + 2u, "node: sonner emits toast icon quads");
     size_t drag_sources_before = scene.drag_source_count;
     size_t drop_targets_before = scene.drop_target_count;
     expect_status(er_ui_node_render(&reorderable, &scene, face, er_ui_bounds(0.0f, 2930.0f, 260.0f, 52.0f), theme), ER_UI_OK,
