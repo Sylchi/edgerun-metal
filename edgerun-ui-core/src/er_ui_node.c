@@ -1136,6 +1136,16 @@ static er_ui_status_t er_ui_node_grid_child_bounds(
   return ER_UI_OK;
 }
 
+static er_ui_status_t er_ui_node_scrolled_child_bounds(
+  const er_ui_node_t* node,
+  size_t child_index,
+  er_ui_bounds_t rect,
+  er_ui_bounds_t* out_bounds) {
+  er_ui_bounds_t scrolled = rect;
+  scrolled.y -= node->number;
+  return er_ui_node_linear_child_bounds(node, child_index, scrolled, false, out_bounds);
+}
+
 er_ui_status_t er_ui_node_child_bounds(const er_ui_node_t* node, size_t child_index, er_ui_bounds_t bounds, er_ui_bounds_t* out_bounds) {
   if (!node || !out_bounds) return ER_UI_ERR_INVALID_ARGUMENT;
   er_ui_bounds_t rect = er_ui_node_resolve_bounds(node, bounds);
@@ -1149,16 +1159,9 @@ er_ui_status_t er_ui_node_child_bounds(const er_ui_node_t* node, size_t child_in
     case ER_UI_NODE_MASONRY:
     case ER_UI_NODE_BENTO_GRID:
       return er_ui_node_grid_child_bounds(node, child_index, rect, out_bounds);
-    case ER_UI_NODE_SCROLL_AREA: {
-      er_ui_bounds_t scrolled = rect;
-      scrolled.y -= node->number;
-      return er_ui_node_linear_child_bounds(node, child_index, scrolled, false, out_bounds);
-    }
-    case ER_UI_NODE_CONVERSATION: {
-      er_ui_bounds_t scrolled = rect;
-      scrolled.y -= node->number;
-      return er_ui_node_linear_child_bounds(node, child_index, scrolled, false, out_bounds);
-    }
+    case ER_UI_NODE_SCROLL_AREA:
+    case ER_UI_NODE_CONVERSATION:
+      return er_ui_node_scrolled_child_bounds(node, child_index, rect, out_bounds);
     default:
       return ER_UI_ERR_INVALID_ARGUMENT;
   }
@@ -1888,15 +1891,6 @@ static er_ui_status_t er_ui_node_render_scroll_area(
   status = er_ui_node_render_children(node, scene, font, scrolled, theme, false);
   if (pushed) er_ui_scene_pop_clip(scene);
   return status;
-}
-
-static er_ui_status_t er_ui_node_render_conversation(
-  const er_ui_node_t* node,
-  er_ui_scene_t* scene,
-  vr_font_face_t* font,
-  er_ui_bounds_t bounds,
-  er_ui_resolved_theme_t theme) {
-  return er_ui_node_render_scroll_area(node, scene, font, bounds, theme);
 }
 
 static er_ui_status_t er_ui_node_render_text(er_ui_scene_t* scene, vr_font_face_t* font, const char* text, er_ui_bounds_t bounds, er_ui_color4_t color) {
@@ -2965,7 +2959,7 @@ er_ui_status_t er_ui_node_render(
     case ER_UI_NODE_CHAT_MESSAGE:
       return er_ui_node_render_chat_message(node, scene, font, rect, theme);
     case ER_UI_NODE_CONVERSATION:
-      return er_ui_node_render_conversation(node, scene, font, rect, theme);
+      return er_ui_node_render_scroll_area(node, scene, font, rect, theme);
     case ER_UI_NODE_ROUTE_PATH:
       return er_ui_shadcn_route_path_emit(scene, font, rect, theme, node->label, node->labels, node->label_count);
     case ER_UI_NODE_PACKAGE_CARD:
