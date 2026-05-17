@@ -7,6 +7,7 @@
 - Errors are fatal.
 - No shortcuts.
 - No external dependencies.
+- Production code must be freestanding and must not depend on host libc.
 - No ambiguity.
 - Tests must cover 100% of code.
 - Code must be deterministic.
@@ -19,6 +20,8 @@
 - Generated build artifacts must stay untracked.
 - Use `.build/` for local CMake output.
 - Keep this as one Git repository; nested `.git` directories, `.gitmodules`, and submodule gitlinks are not allowed.
+- Multiple agents may work in this repository at the same time.
+- Stay inside the bounds of the assigned task and owned files.
 
 ## Enforcement
 
@@ -30,6 +33,17 @@
 - Prefer editing existing code to simplify/remove duplication instead of appending behavior.
 - Preserve existing public behavior and interfaces unless explicitly instructed.
 - Keep implementations minimal, explicit, deterministic, and dependency-free.
+- Use project-owned primitives for memory, strings, math, and I/O in production paths; host libc is allowed only inside deterministic host-side tests and build tools.
 - Keep root documentation and command wrappers current when workflow changes.
 - Add tests for new repository tooling and for behavior changes when deterministic tests are possible.
 - Document the purpose and intention of new tools, tests, and top-level structure.
+
+## Multi-agent safety
+
+- Treat unrecognized local changes as another agent's work.
+- Do not overwrite, revert, reformat, move, or delete another agent's files unless explicitly instructed.
+- Do not run destructive Git commands such as `git reset --hard`, `git checkout --`, `git clean`, or broad restore operations.
+- Do not use `git add -A` or broad staging when unrelated changes are present; stage only owned paths.
+- Check `git status --short --branch` before edits, before staging, and before committing.
+- If a needed change overlaps another agent's work, stop and coordinate instead of resolving by force.
+- Keep commits scoped to one coherent task and mention any intentionally touched shared files.

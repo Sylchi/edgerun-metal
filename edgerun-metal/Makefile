@@ -1,4 +1,4 @@
-.PHONY: all run clean print-path netboot smoke pci quiet rebuild-profile install-netboot uninstall-netboot restart-netboot logs-netboot status-netboot
+.PHONY: all run clean print-path netboot smoke pci quiet mmio rebuild-profile check test-core install-netboot uninstall-netboot restart-netboot logs-netboot status-netboot
 
 CC = clang
 HOST_CC = cc
@@ -12,6 +12,7 @@ EFI_BOOT := $(ESP_DIR)/EFI/BOOT/BOOTX64.EFI
 #   0 = smoke: banner + test Wasm only
 #   1 = pci:   PCI scan module
 #   2 = quiet: minimal halt-ready boot
+#   3 = mmio:  read-only NVIDIA BAR0 probe
 ER_BOOT_PROFILE ?= 0
 
 CFLAGS := -std=c11 -Wall -Werror -ffreestanding -fshort-wchar -fno-builtin -fno-stack-protector -mno-red-zone -fuse-ld=lld -target x86_64-pc-windows-msvc \
@@ -19,11 +20,15 @@ CFLAGS := -std=c11 -Wall -Werror -ffreestanding -fshort-wchar -fno-builtin -fno-
 LDFLAGS := -nostdlib -Wl,/SUBSYSTEM:EFI_APPLICATION,/ENTRY:efi_main
 HOST_CFLAGS := -std=c11 -Wall -Wextra -Werror -O2
 
-SRCS := core/efi_main.c core/er_print.c core/wasm_vm.c
+SRCS := core/efi_main.c core/er_print.c core/wasm_vm.c core/er_pci.c core/er_mmio.c
 OBJS := $(patsubst %.c,$(BUILD_DIR)/%.o,$(SRCS))
 HDRS := $(wildcard core/*.h)
 NETBOOT_SRC := tools/edgerun-netboot/main.c
 NETBOOT_BIN := $(BUILD_DIR)/edgerun-netboot
+PXE4011_SRC := tools/edgerun-pxe4011/main.c
+PXE4011_BIN := $(BUILD_DIR)/edgerun-pxe4011
+CORE_TEST_SRC := tests/test_core.c core/er_pci.c core/er_mmio.c core/wasm_vm.c
+CORE_TEST_BIN := $(BUILD_DIR)/test-core
 IFACE ?=
 
 all: $(EFI_OUT) $(EFI_BOOT)
@@ -37,11 +42,19 @@ pci:
 quiet:
 	$(MAKE) rebuild-profile ER_BOOT_PROFILE=2
 
+mmio:
+	$(MAKE) rebuild-profile ER_BOOT_PROFILE=3
+
 rebuild-profile:
 	rm -f $(OBJS) $(EFI_OUT) $(EFI_BOOT)
 	$(MAKE) all ER_BOOT_PROFILE=$(ER_BOOT_PROFILE)
 
-netboot: $(NETBOOT_BIN)
+netboot: $(NETBOOT_BIN) $(PXE4011_BIN)
+
+check: smoke pci mmio quiet test-core
+
+test-core: $(CORE_TEST_BIN)
+	./$(CORE_TEST_BIN)
 
 install-netboot:
 	@if [ -z "$(IFACE)" ]; then \
@@ -72,6 +85,14 @@ $(EFI_OUT): $(OBJS)
 $(NETBOOT_BIN): $(NETBOOT_SRC)
 	mkdir -p $(dir $@)
 	$(HOST_CC) $(HOST_CFLAGS) -o $@ $<
+
+$(PXE4011_BIN): $(PXE4011_SRC)
+	mkdir -p $(dir $@)
+	$(HOST_CC) $(HOST_CFLAGS) -o $@ $<
+
+$(CORE_TEST_BIN): $(CORE_TEST_SRC) $(HDRS)
+	mkdir -p $(dir $@)
+	$(HOST_CC) $(HOST_CFLAGS) -I$(CURDIR)/core -o $@ $(CORE_TEST_SRC)
 
 $(EFI_BOOT): $(EFI_OUT)
 	mkdir -p $(dir $@)
