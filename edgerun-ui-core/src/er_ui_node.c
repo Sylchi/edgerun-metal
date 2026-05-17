@@ -201,6 +201,101 @@ er_ui_node_t er_ui_node_command_palette(const char* placeholder, uint32_t id) {
   return node;
 }
 
+er_ui_node_t er_ui_node_tree_item(const char* label, const char* detail, uint8_t depth, bool expanded, uint32_t id) {
+  er_ui_node_t node = er_ui_node_base(ER_UI_NODE_TREE_ITEM);
+  node.label = label;
+  node.detail = detail;
+  node.number = (float)depth;
+  node.active = expanded;
+  node.id = id;
+  return node;
+}
+
+er_ui_node_t er_ui_node_section(const char* title, const char* detail) {
+  er_ui_node_t node = er_ui_node_base(ER_UI_NODE_SECTION);
+  node.label = title;
+  node.detail = detail;
+  return node;
+}
+
+er_ui_node_t er_ui_node_identity_card(const char* name, const char* node_name, const char* policy, uint32_t id) {
+  er_ui_node_t node = er_ui_node_base(ER_UI_NODE_IDENTITY_CARD);
+  node.label = name;
+  node.value = node_name;
+  node.detail = policy;
+  node.id = id;
+  return node;
+}
+
+er_ui_node_t er_ui_node_contact_card(const char* name, const char* detail, uint32_t id) {
+  er_ui_node_t node = er_ui_node_base(ER_UI_NODE_CONTACT_CARD);
+  node.label = name;
+  node.detail = detail;
+  node.id = id;
+  return node;
+}
+
+er_ui_node_t er_ui_node_thread_row(const char* title, const char* last_message, bool unread, uint32_t id) {
+  er_ui_node_t node = er_ui_node_base(ER_UI_NODE_THREAD_ROW);
+  node.label = title;
+  node.detail = last_message;
+  node.active = unread;
+  node.id = id;
+  return node;
+}
+
+er_ui_node_t er_ui_node_attachment_preview(const char* name, const char* kind, uint32_t id) {
+  er_ui_node_t node = er_ui_node_base(ER_UI_NODE_ATTACHMENT_PREVIEW);
+  node.label = name;
+  node.detail = kind;
+  node.id = id;
+  return node;
+}
+
+er_ui_node_t er_ui_node_capability_grant_row(const char* app, const char* capability, const char* state, uint32_t id) {
+  er_ui_node_t node = er_ui_node_base(ER_UI_NODE_CAPABILITY_GRANT_ROW);
+  node.label = app;
+  node.value = capability;
+  node.detail = state;
+  node.id = id;
+  return node;
+}
+
+er_ui_node_t er_ui_node_proof_event_row(const char* title, const char* hash, const char* status_text, uint32_t id) {
+  er_ui_node_t node = er_ui_node_base(ER_UI_NODE_PROOF_EVENT_ROW);
+  node.label = title;
+  node.value = hash;
+  node.detail = status_text;
+  node.id = id;
+  return node;
+}
+
+er_ui_node_t er_ui_node_route_path(const char* label, const char* const* hops, size_t hop_count) {
+  er_ui_node_t node = er_ui_node_base(ER_UI_NODE_ROUTE_PATH);
+  node.label = label;
+  node.labels = hops;
+  node.label_count = hop_count;
+  return node;
+}
+
+er_ui_node_t er_ui_node_package_card(const char* name, const char* policy, const char* hash, uint32_t id) {
+  er_ui_node_t node = er_ui_node_base(ER_UI_NODE_PACKAGE_CARD);
+  node.label = name;
+  node.value = policy;
+  node.detail = hash;
+  node.id = id;
+  return node;
+}
+
+er_ui_node_t er_ui_node_receipt_row(const char* label, const char* amount, const char* status_text, uint32_t id) {
+  er_ui_node_t node = er_ui_node_base(ER_UI_NODE_RECEIPT_ROW);
+  node.label = label;
+  node.value = amount;
+  node.detail = status_text;
+  node.id = id;
+  return node;
+}
+
 er_ui_node_t* er_ui_node_set_bounds(er_ui_node_t* node, er_ui_bounds_t bounds) {
   if (!node) return node;
   node->bounds = bounds;
@@ -336,6 +431,28 @@ er_ui_status_t er_ui_node_render(
       return er_ui_shadcn_bar_chart_emit(scene, font, rect, theme, node->label, node->labels, node->values, node->value_count, node->id, node->selected);
     case ER_UI_NODE_COMMAND_PALETTE:
       return er_ui_shadcn_command_palette_emit(scene, font, rect, theme, node->label, node->id);
+    case ER_UI_NODE_TREE_ITEM:
+      return er_ui_shadcn_tree_item_emit(scene, font, rect, theme, node->label, node->detail, (uint8_t)node->number, node->active, node->id);
+    case ER_UI_NODE_SECTION:
+      return er_ui_shadcn_section_header_emit(scene, font, rect, theme, node->label, node->detail);
+    case ER_UI_NODE_IDENTITY_CARD:
+      return er_ui_shadcn_identity_card_emit(scene, font, rect, theme, node->label, node->value, node->detail, node->id);
+    case ER_UI_NODE_CONTACT_CARD:
+      return er_ui_shadcn_contact_card_emit(scene, font, rect, theme, node->label, node->detail, node->id);
+    case ER_UI_NODE_THREAD_ROW:
+      return er_ui_shadcn_thread_row_emit(scene, font, rect, theme, node->label, node->detail, node->active, node->id);
+    case ER_UI_NODE_ATTACHMENT_PREVIEW:
+      return er_ui_shadcn_attachment_preview_emit(scene, font, rect, theme, node->label, node->detail, node->id);
+    case ER_UI_NODE_CAPABILITY_GRANT_ROW:
+      return er_ui_shadcn_capability_grant_row_emit(scene, font, rect, theme, node->label, node->value, node->detail, node->id);
+    case ER_UI_NODE_PROOF_EVENT_ROW:
+      return er_ui_shadcn_proof_event_row_emit(scene, font, rect, theme, node->label, node->value, node->detail, node->id);
+    case ER_UI_NODE_ROUTE_PATH:
+      return er_ui_shadcn_route_path_emit(scene, font, rect, theme, node->label, node->labels, node->label_count);
+    case ER_UI_NODE_PACKAGE_CARD:
+      return er_ui_shadcn_package_card_emit(scene, font, rect, theme, node->label, node->value, node->detail, node->id);
+    case ER_UI_NODE_RECEIPT_ROW:
+      return er_ui_shadcn_receipt_row_emit(scene, font, rect, theme, node->label, node->value, node->detail, node->id);
     default:
       return ER_UI_ERR_INVALID_ARGUMENT;
   }
