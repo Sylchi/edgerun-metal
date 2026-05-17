@@ -58,9 +58,19 @@
 #define ER_VIRTIO_MMIO_QUEUE_DEVICE_HIGH_OFFSET 0x0a4u
 #define ER_VIRTIO_MMIO_CONFIG_OFFSET 0x100u
 
+#define ER_VIRTIO_TRANSPORT_KIND_NONE 0u
+#define ER_VIRTIO_TRANSPORT_KIND_MMIO 1u
+#define ER_VIRTIO_TRANSPORT_KIND_MODERN_PCI 2u
+
 #define ER_VIRTIO_QUEUE_SIZE 16u
 #define ER_VIRTIO_DESC_F_NEXT 0x0001u
 #define ER_VIRTIO_DESC_F_WRITE 0x0002u
+
+#define ER_VIRTIO_PCI_CAP_VENDOR 0x09u
+#define ER_VIRTIO_PCI_CAP_COMMON_CFG 1u
+#define ER_VIRTIO_PCI_CAP_NOTIFY_CFG 2u
+#define ER_VIRTIO_PCI_CAP_ISR_CFG 3u
+#define ER_VIRTIO_PCI_CAP_DEVICE_CFG 4u
 
 typedef struct {
   UINT64 addr;
@@ -89,7 +99,25 @@ typedef struct {
 } ErVirtioQueueUsed;
 
 typedef struct {
+  UINT8 present;
+  UINT8 cfg_type;
+  UINT8 bar;
+  UINT32 offset;
+  UINT32 length;
+  UINT32 notify_off_multiplier;
   ErBusAddress address;
+} ErVirtioPciCap;
+
+typedef struct {
+  UINT8 transport_kind;
+  UINT32 bus;
+  UINT32 dev;
+  UINT32 func;
+  ErBusAddress address;
+  ErVirtioPciCap common;
+  ErVirtioPciCap notify;
+  ErVirtioPciCap device;
+  ErVirtioPciCap isr;
   UINT32 device_type;
   UINT32 vendor_id;
 } ErVirtioMmioTransport;
@@ -101,12 +129,19 @@ typedef struct {
 
 UINT8 er_virtio_mmio_transport_init(UINT64 base, UINT64 len, UINT32 expected_device_type,
                                     ErVirtioMmioTransport* out_transport);
+UINT8 er_virtio_pci_transport_init(UINT32 bus, UINT32 dev, UINT32 func,
+                                   UINT32 expected_device_type,
+                                   ErVirtioMmioTransport* out_transport);
+UINT8 er_virtio_pci_find_transport(UINT32 expected_device_type,
+                                   ErVirtioMmioTransport* out_transport);
 UINT8 er_virtio_mmio_read32(const ErVirtioMmioTransport* transport, UINT64 offset, UINT32* out_value);
 UINT8 er_virtio_mmio_write32(const ErVirtioMmioTransport* transport, UINT64 offset, UINT32 value);
 UINT8 er_virtio_mmio_read_features(const ErVirtioMmioTransport* transport, UINT64* out_features);
 UINT8 er_virtio_mmio_write_driver_features(const ErVirtioMmioTransport* transport, UINT64 features);
 UINT8 er_virtio_mmio_read_status(const ErVirtioMmioTransport* transport, UINT8* out_status);
 UINT8 er_virtio_mmio_write_status(const ErVirtioMmioTransport* transport, UINT8 status);
+UINT8 er_virtio_config_read8(const ErVirtioMmioTransport* transport, UINT64 offset, UINT8* out_value);
+UINT8 er_virtio_config_read16(const ErVirtioMmioTransport* transport, UINT64 offset, UINT16* out_value);
 UINT8 er_virtio_mmio_negotiate_features(const ErVirtioMmioTransport* transport, UINT64 supported_features,
                                         ErVirtioFeatureSet* out_features);
 UINT8 er_virtio_mmio_configure_split_queue(const ErVirtioMmioTransport* transport, UINT16 queue,

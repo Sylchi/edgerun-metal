@@ -38,6 +38,8 @@ typedef struct {
 } ErVirtioNet;
 
 UINT8 er_virtio_net_init_mmio(UINT64 base, UINT64 len, ErVirtioNet* out_net);
+UINT8 er_virtio_net_init_pci(UINT32 bus, UINT32 dev, UINT32 func, ErVirtioNet* out_net);
+UINT8 er_virtio_net_init_first_pci(ErVirtioNet* out_net);
 UINT8 er_virtio_net_send(ErVirtioNet* net, const UINT8* frame, UINT32 frame_len);
 UINT8 er_virtio_net_recv(ErVirtioNet* net, UINT8* out_frame, UINT32 out_capacity, UINT32* out_frame_len);
 ErVirtioNetStats er_virtio_net_stats(ErVirtioNet* net);

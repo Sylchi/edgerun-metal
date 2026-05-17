@@ -713,6 +713,92 @@ static void test_virtio_mmio_transport(void) {
                regs[ER_VIRTIO_MMIO_INTERRUPT_ACK_OFFSET / sizeof(UINT32)], VIRTIO_TEST_INTERRUPT_STATUS);
 }
 
+static void test_virtio_modern_pci_transport_registers(void) {
+  enum {
+    VIRTIO_PCI_TEST_QUEUE_INDEX = 2u,
+    VIRTIO_PCI_TEST_QUEUE_MAX = 8u,
+    VIRTIO_PCI_TEST_QUEUE_NOTIFY_OFF = 3u,
+    VIRTIO_PCI_TEST_NOTIFY_MULT = 4u,
+    VIRTIO_PCI_TEST_COMMON_QUEUE_SELECT_OFFSET = 22u,
+    VIRTIO_PCI_TEST_COMMON_QUEUE_SIZE_OFFSET = 24u,
+    VIRTIO_PCI_TEST_COMMON_QUEUE_ENABLE_OFFSET = 28u,
+    VIRTIO_PCI_TEST_COMMON_QUEUE_NOTIFY_OFF_OFFSET = 30u,
+    VIRTIO_PCI_TEST_COMMON_QUEUE_DESC_OFFSET = 32u,
+    VIRTIO_PCI_TEST_COMMON_QUEUE_DRIVER_OFFSET = 40u,
+    VIRTIO_PCI_TEST_COMMON_QUEUE_DEVICE_OFFSET = 48u,
+    VIRTIO_PCI_TEST_NOTIFY_OFFSET = VIRTIO_PCI_TEST_QUEUE_NOTIFY_OFF * VIRTIO_PCI_TEST_NOTIFY_MULT,
+    VIRTIO_PCI_TEST_DESC_ADDR = 0x1122334455667788ull,
+    VIRTIO_PCI_TEST_DRIVER_ADDR = 0x2233445566778899ull,
+    VIRTIO_PCI_TEST_DEVICE_ADDR = 0x33445566778899aau
+  };
+  UINT32 common[32] = {0};
+  UINT32 notify[8] = {0};
+  UINT32 device[8] = {0};
+  UINT32 isr[1] = {0};
+  ErVirtioMmioTransport transport;
+  UINT16 queue_size = 0;
+
+  er_mem_zero((UINT8*)&transport, (UINTN)sizeof(transport));
+  transport.transport_kind = ER_VIRTIO_TRANSPORT_KIND_MODERN_PCI;
+  transport.device_type = ER_VIRTIO_DEVICE_TYPE_NET;
+  transport.vendor_id = ER_VIRTIO_VENDOR_ID;
+  transport.common.present = 1u;
+  transport.notify.present = 1u;
+  transport.device.present = 1u;
+  transport.isr.present = 1u;
+  transport.notify.notify_off_multiplier = VIRTIO_PCI_TEST_NOTIFY_MULT;
+  check_int64("virtio pci common address",
+              er_bus_prepare_mmio32_address((UINT64)(UINTN)common, (UINT64)sizeof(common), 0u,
+                                            ER_BUS_ACCESS_READ_ALL | ER_BUS_ACCESS_WRITE_ALL,
+                                            &transport.common.address),
+              1);
+  check_int64("virtio pci notify address",
+              er_bus_prepare_mmio32_address((UINT64)(UINTN)notify, (UINT64)sizeof(notify), 1u,
+                                            ER_BUS_ACCESS_READ_ALL | ER_BUS_ACCESS_WRITE_ALL,
+                                            &transport.notify.address),
+              1);
+  check_int64("virtio pci device address",
+              er_bus_prepare_mmio32_address((UINT64)(UINTN)device, (UINT64)sizeof(device), 2u,
+                                            ER_BUS_ACCESS_READ_ALL | ER_BUS_ACCESS_WRITE_ALL,
+                                            &transport.device.address),
+              1);
+  check_int64("virtio pci isr address",
+              er_bus_prepare_mmio32_address((UINT64)(UINTN)isr, (UINT64)sizeof(isr), 3u,
+                                            ER_BUS_ACCESS_READ_ALL | ER_BUS_ACCESS_WRITE_ALL,
+                                            &transport.isr.address),
+              1);
+  *(UINT16*)((UINT8*)common + VIRTIO_PCI_TEST_COMMON_QUEUE_SIZE_OFFSET) = VIRTIO_PCI_TEST_QUEUE_MAX;
+  *(UINT16*)((UINT8*)common + VIRTIO_PCI_TEST_COMMON_QUEUE_NOTIFY_OFF_OFFSET) = VIRTIO_PCI_TEST_QUEUE_NOTIFY_OFF;
+
+  check_int64("virtio pci configure queue",
+              er_virtio_mmio_configure_split_queue(&transport, VIRTIO_PCI_TEST_QUEUE_INDEX,
+                                                   ER_VIRTIO_QUEUE_SIZE, 1u,
+                                                   VIRTIO_PCI_TEST_DESC_ADDR,
+                                                   VIRTIO_PCI_TEST_DRIVER_ADDR,
+                                                   VIRTIO_PCI_TEST_DEVICE_ADDR,
+                                                   &queue_size),
+              1);
+  check_uint64("virtio pci queue size", queue_size, VIRTIO_PCI_TEST_QUEUE_MAX);
+  check_uint64("virtio pci queue select",
+               *(UINT16*)((UINT8*)common + VIRTIO_PCI_TEST_COMMON_QUEUE_SELECT_OFFSET),
+               VIRTIO_PCI_TEST_QUEUE_INDEX);
+  check_uint64("virtio pci queue desc low",
+               *(UINT32*)((UINT8*)common + VIRTIO_PCI_TEST_COMMON_QUEUE_DESC_OFFSET),
+               (UINT32)VIRTIO_PCI_TEST_DESC_ADDR);
+  check_uint64("virtio pci queue driver high",
+               *(UINT32*)((UINT8*)common + VIRTIO_PCI_TEST_COMMON_QUEUE_DRIVER_OFFSET + sizeof(UINT32)),
+               (UINT32)(VIRTIO_PCI_TEST_DRIVER_ADDR >> 32));
+  check_uint64("virtio pci queue device high",
+               *(UINT32*)((UINT8*)common + VIRTIO_PCI_TEST_COMMON_QUEUE_DEVICE_OFFSET + sizeof(UINT32)),
+               (UINT32)(VIRTIO_PCI_TEST_DEVICE_ADDR >> 32));
+  check_uint64("virtio pci queue enabled",
+               *(UINT16*)((UINT8*)common + VIRTIO_PCI_TEST_COMMON_QUEUE_ENABLE_OFFSET), 1u);
+
+  check_int64("virtio pci notify", er_virtio_mmio_notify_queue(&transport, VIRTIO_PCI_TEST_QUEUE_INDEX), 1);
+  check_uint64("virtio pci notify value",
+               *(UINT16*)((UINT8*)notify + VIRTIO_PCI_TEST_NOTIFY_OFFSET), VIRTIO_PCI_TEST_QUEUE_INDEX);
+}
+
 static void test_virtio_split_queue(void) {
   ErVirtioQueueDesc desc[ER_VIRTIO_QUEUE_SIZE];
   ErVirtioQueueAvail avail;
@@ -2159,6 +2245,7 @@ int main(void) {
   test_mmio_handles();
   test_bus_addresses();
   test_virtio_mmio_transport();
+  test_virtio_modern_pci_transport_registers();
   test_virtio_split_queue();
   test_virtio_net_mmio();
   test_net_frame_builders();

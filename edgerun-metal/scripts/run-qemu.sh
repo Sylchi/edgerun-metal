@@ -40,20 +40,6 @@ if [[ -z "${OVMF_VARS:-}" ]]; then
   done
 fi
 
-if [[ -z "${OVMF_NATIVE_FIRMWARE:-}" ]]; then
-  for candidate in \
-    "/usr/share/edk2/x64/OVMF.4m.fd" \
-    "/usr/share/edk2-ovmf/x64/OVMF.fd" \
-    "/usr/share/OVMF/OVMF.fd" \
-    "/usr/share/ovmf/OVMF.fd"
-  do
-    if [[ -f "$candidate" ]]; then
-      OVMF_NATIVE_FIRMWARE="$candidate"
-      break
-    fi
-  done
-fi
-
 if [[ ! -f "${OVMF_CODE}" ]]; then
   echo "OVMF binary not found. Install edk2-ovmf and set OVMF_CODE/OVMF_VARS." >&2
   exit 1
@@ -74,21 +60,17 @@ if [[ ! -f "${ESP_DIR}/EFI/BOOT/BOOTX64.EFI" ]]; then
 fi
 
 if [[ "${QEMU_NATIVE}" == "1" ]]; then
-  if [[ ! -f "${OVMF_NATIVE_FIRMWARE}" ]]; then
-    echo "Combined OVMF firmware not found. Set OVMF_NATIVE_FIRMWARE for microvm native mode." >&2
-    exit 1
-  fi
   mkdir -p "$(dirname "${QEMU_CAPTURE}")"
   rm -f "${QEMU_CAPTURE}"
   qemu-system-x86_64 \
     -m 1024 \
-    -nodefaults \
-    -machine "microvm,acpi=on,pcie=off,graphics=on" \
-    -bios "${OVMF_NATIVE_FIRMWARE}" \
-    -drive if=none,id=edgerun-esp,format=raw,file=fat:rw:"${ESP_DIR}" \
-    -device virtio-blk-device,drive=edgerun-esp \
+    -vga none \
+    -device "VGA,xres=${QEMU_WIDTH},yres=${QEMU_HEIGHT},refresh_rate=${QEMU_REFRESH}" \
+    -drive if=pflash,format=raw,readonly=on,file="${OVMF_CODE}" \
+    -drive if=pflash,format=raw,file="${OVMF_VARS_WRITABLE}" \
+    -drive format=raw,file=fat:rw:"${ESP_DIR}",media=disk \
     -netdev user,id=edgerun0 \
-    -device virtio-net-device,netdev=edgerun0,mac=02:21:22:23:24:25 \
+    -device virtio-net-pci,netdev=edgerun0,mac=02:21:22:23:24:25,disable-legacy=on \
     -object "filter-dump,id=edgerun-native-dump,netdev=edgerun0,file=${QEMU_CAPTURE}" \
     -serial mon:stdio
   exit 0
