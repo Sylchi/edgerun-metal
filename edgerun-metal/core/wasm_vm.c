@@ -40,6 +40,7 @@ typedef struct {
 #define ER_WASM_IMPORT_MODULE_MMIO "edgerun.mmio"
 #define ER_WASM_IMPORT_MODULE_BUS "edgerun.bus"
 #define ER_WASM_IMPORT_MODULE_RELAY "edgerun.relay"
+#define ER_WASM_IMPORT_MODULE_MEMORY "edgerun.memory"
 #define ER_WASM_IMPORT_FIELD_U64 "u64"
 #define ER_WASM_IMPORT_FIELD_HEX "hex"
 #define ER_WASM_IMPORT_FIELD_READ32 "read32"
@@ -48,6 +49,8 @@ typedef struct {
 #define ER_WASM_IMPORT_FIELD_EXEC "exec"
 #define ER_WASM_IMPORT_FIELD_SEND "send"
 #define ER_WASM_IMPORT_FIELD_RECV "recv"
+#define ER_WASM_IMPORT_FIELD_REGION_BASE "region_base"
+#define ER_WASM_IMPORT_FIELD_REGION_LEN "region_len"
 #define ER_WASM_STRING_LEN(value) ((UINT8)(sizeof(value) - 1u))
 #define ER_WASM_LEB32_MAX_BYTES 5u
 #define ER_WASM_LEB64_MAX_BYTES 10u
@@ -103,7 +106,9 @@ enum {
   ER_IMPORT_KIND_MMIO_READ32 = 6,
   ER_IMPORT_KIND_BUS_EXEC = 7,
   ER_IMPORT_KIND_RELAY_SEND = 8,
-  ER_IMPORT_KIND_RELAY_RECV = 9
+  ER_IMPORT_KIND_RELAY_RECV = 9,
+  ER_IMPORT_KIND_MEMORY_REGION_BASE = 10,
+  ER_IMPORT_KIND_MEMORY_REGION_LEN = 11
 };
 
 enum {
@@ -130,7 +135,13 @@ static const ErHostImport ER_HOST_IMPORTS[] = {
   {ER_WASM_IMPORT_MODULE_RELAY, ER_WASM_STRING_LEN(ER_WASM_IMPORT_MODULE_RELAY),
    ER_WASM_IMPORT_FIELD_SEND, ER_WASM_STRING_LEN(ER_WASM_IMPORT_FIELD_SEND), ER_IMPORT_KIND_RELAY_SEND},
   {ER_WASM_IMPORT_MODULE_RELAY, ER_WASM_STRING_LEN(ER_WASM_IMPORT_MODULE_RELAY),
-   ER_WASM_IMPORT_FIELD_RECV, ER_WASM_STRING_LEN(ER_WASM_IMPORT_FIELD_RECV), ER_IMPORT_KIND_RELAY_RECV}
+   ER_WASM_IMPORT_FIELD_RECV, ER_WASM_STRING_LEN(ER_WASM_IMPORT_FIELD_RECV), ER_IMPORT_KIND_RELAY_RECV},
+  {ER_WASM_IMPORT_MODULE_MEMORY, ER_WASM_STRING_LEN(ER_WASM_IMPORT_MODULE_MEMORY),
+   ER_WASM_IMPORT_FIELD_REGION_BASE, ER_WASM_STRING_LEN(ER_WASM_IMPORT_FIELD_REGION_BASE),
+   ER_IMPORT_KIND_MEMORY_REGION_BASE},
+  {ER_WASM_IMPORT_MODULE_MEMORY, ER_WASM_STRING_LEN(ER_WASM_IMPORT_MODULE_MEMORY),
+   ER_WASM_IMPORT_FIELD_REGION_LEN, ER_WASM_STRING_LEN(ER_WASM_IMPORT_FIELD_REGION_LEN),
+   ER_IMPORT_KIND_MEMORY_REGION_LEN}
 };
 static const UINT32 ER_HOST_IMPORT_COUNT = (UINT32)(sizeof(ER_HOST_IMPORTS) / sizeof(ER_HOST_IMPORTS[0]));
 
@@ -408,6 +419,34 @@ int er_wasm_prepare_linear_memory(UINT8* bytes, UINT32 address_len,
   out_memory->relay_inbox_len = relay_inbox_len;
   out_memory->relay_outbox_base = relay_outbox_base;
   out_memory->relay_outbox_len = relay_outbox_len;
+  return 0;
+}
+
+int er_wasm_linear_memory_public_region(const ErWasmLinearMemory* memory, UINT32 region_id,
+                                        UINT32* out_base, UINT32* out_len) {
+  UINT32 base = 0u;
+  UINT32 len = 0u;
+
+  if (memory == 0 || out_base == 0 || out_len == 0 ||
+      er_wasm_linear_memory_valid(memory) == 0) {
+    return -1;
+  }
+
+  switch (region_id) {
+    case ER_WASM_PUBLIC_REGION_RELAY_INBOX:
+      base = memory->relay_inbox_base;
+      len = memory->relay_inbox_len;
+      break;
+    case ER_WASM_PUBLIC_REGION_RELAY_OUTBOX:
+      base = memory->relay_outbox_base;
+      len = memory->relay_outbox_len;
+      break;
+    default:
+      return -1;
+  }
+
+  *out_base = base;
+  *out_len = len;
   return 0;
 }
 
@@ -1510,6 +1549,37 @@ int er_wasm_execute_i64(ErWasmModule* module, UINT32 function_index, INT64* resu
               return -1;
             }
             stack[stack_size++] = value;
+          } else if (import_kind == ER_IMPORT_KIND_MEMORY_REGION_BASE ||
+                     import_kind == ER_IMPORT_KIND_MEMORY_REGION_LEN) {
+            INT64 region_id = 0;
+            UINT32 region_base = 0u;
+            UINT32 region_len = 0u;
+
+            if (param_count_call != 1 || result_count != 1) {
+              return -1;
+            }
+            if (result_type != 0x7e) {
+              return -1;
+            }
+            if (stack_size < 1) {
+              return -1;
+            }
+            region_id = stack[--stack_size];
+            if (region_id < 0 || (UINT64)region_id > (UINT64)ER_WASM_U32_MASK) {
+              return -1;
+            }
+            if (er_wasm_linear_memory_public_region(&module->linear_memory, (UINT32)region_id,
+                                                    &region_base, &region_len) != 0) {
+              return -1;
+            }
+            if (stack_size >= 32) {
+              return -1;
+            }
+            if (import_kind == ER_IMPORT_KIND_MEMORY_REGION_BASE) {
+              stack[stack_size++] = (INT64)(UINT64)region_base;
+            } else {
+              stack[stack_size++] = (INT64)(UINT64)region_len;
+            }
           } else {
             return -1;
           }
