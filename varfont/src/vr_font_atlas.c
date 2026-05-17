@@ -359,25 +359,19 @@ vr_status_t vr_font_bake_glyph(vr_font_face_t* face, uint32_t glyph_id, vr_baked
   if (st != VR_OK) {
     return st;
   }
-  size_t bmp_bytes = 0u;
-  if (vr_atlas_pixel_count((size_t)w, (size_t)h, vr_atlas_pixel_stride(face->cfg.atlas_format), &bmp_bytes) != VR_OK) {
-    vr_dealloc(face, bmp, 0u, 8u);
-    return VR_ERR_OOM;
-  }
-
   uint32_t atlas_id = 0;
   int ux = 0;
   int uy = 0;
   st = vr_ensure_atlas(face, w, h, &atlas_id, &ux, &uy);
   if (st != VR_OK) {
-    vr_dealloc(face, bmp, bmp_bytes, 8u);
+    vr_free_bitmap(face, bmp, w, h, face->cfg.atlas_format);
     return st;
   }
   vr_atlas_page_t* page = &face->atlases[atlas_id];
 
   st = vr_upload_bitmap_to_atlas(face, atlas_id, ux, uy, w, h, bmp);
   if (st != VR_OK) {
-    vr_dealloc(face, bmp, bmp_bytes, 8u);
+    vr_free_bitmap(face, bmp, w, h, face->cfg.atlas_format);
     return st;
   }
 
@@ -396,7 +390,7 @@ vr_status_t vr_font_bake_glyph(vr_font_face_t* face, uint32_t glyph_id, vr_baked
   out->atlas_v1 = (float)(uy + h) / denom_v;
 
   vr_store_cache(face, (uint16_t)glyph_id, out);
-  vr_dealloc(face, bmp, bmp_bytes, 8u);
+  vr_free_bitmap(face, bmp, w, h, face->cfg.atlas_format);
 
   return VR_OK;
 }

@@ -274,6 +274,7 @@ vr_status_t vr_rasterize_outline_with_mode(const vr_font_face_t* face,
                                  int* out_h,
                                  int* out_left,
                                  int* out_top);
+vr_status_t vr_free_bitmap(const vr_font_face_t* face, uint8_t* bitmap, int width, int height, vr_font_atlas_format_t atlas_format);
 float vr_get_glyph_advance(const vr_font_face_t* face, uint16_t glyph_id);
 vr_status_t vr_ensure_atlas(vr_font_face_t* face, int required_w, int required_h, uint32_t* out_atlas_id, int* out_x, int* out_y);
 vr_status_t vr_upload_bitmap_to_atlas(vr_font_face_t* face, uint32_t atlas_id, int x, int y, int w, int h, const uint8_t* bitmap);
