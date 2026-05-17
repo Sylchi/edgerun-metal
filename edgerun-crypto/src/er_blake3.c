@@ -356,6 +356,7 @@ static __m128i er_blake3_sse2_load_word4(const uint8_t* bytes, size_t word_index
 }
 #endif
 
+//@optimizer-ignore-function BLAKE3 SSE2 compression follows fixed vector schedule
 static void er_blake3_sse2_compress4(const __m128i cv[ER_BLAKE3_CV_WORDS],
                                      const __m128i block_words[ER_BLAKE3_BLOCK_WORDS],
                                      __m128i counter_low, __m128i counter_high,
@@ -551,6 +552,7 @@ static __m256i er_blake3_avx2_load_word8(const uint8_t* bytes, size_t word_index
 }
 #endif
 
+//@optimizer-ignore-function BLAKE3 AVX2 compression follows fixed vector schedule
 static void er_blake3_avx2_compress8(const __m256i cv[ER_BLAKE3_CV_WORDS],
                                      const __m256i block_words[ER_BLAKE3_BLOCK_WORDS],
                                      __m256i counter_low, __m256i counter_high,
