@@ -46,6 +46,11 @@ typedef struct {
 } EFI_GUID;
 
 typedef struct {
+  EFI_GUID VendorGuid;
+  void* VendorTable;
+} EFI_CONFIGURATION_TABLE;
+
+typedef struct {
   UINT32 Revision;
   UINT32 HeaderSize;
   UINT32 CRC32;
@@ -285,7 +290,7 @@ typedef struct {
   void* RuntimeServices;
   EFI_BOOT_SERVICES* BootServices;
   UINTN NumberOfTableEntries;
-  void* ConfigurationTable;
+  EFI_CONFIGURATION_TABLE* ConfigurationTable;
 } EFI_SYSTEM_TABLE;
 
 #define EFI_SUCCESS 0

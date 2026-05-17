@@ -1,4 +1,4 @@
-.PHONY: all check clean repo-check repo-test tooling-test log-listen install-log-listen uninstall-log-listen logs-log-listen status-log-listen edgerun-smoke edgerun-pci edgerun-quiet edgerun-check varfont-configure varfont-build varfont-test ui-core-configure ui-core-build ui-core-test
+.PHONY: all check clean repo-check repo-test edgerun-smoke edgerun-pci edgerun-quiet edgerun-check varfont-configure varfont-build varfont-test ui-core-configure ui-core-build ui-core-test
 
 VARFONT_BUILD_DIR ?= .build/varfont
 UI_CORE_BUILD_DIR ?= .build/edgerun-ui-core
@@ -7,31 +7,13 @@ UI_CORE_CMAKE_GENERATOR ?= Ninja
 
 all: edgerun-smoke varfont-build ui-core-build
 
-check: repo-check repo-test tooling-test edgerun-check varfont-test ui-core-test
+check: repo-check repo-test edgerun-check varfont-test ui-core-test
 
 repo-check:
 	./tools/repo-check.sh
 
 repo-test:
 	./tests/repo-check-tests.sh
-
-tooling-test:
-	./tests/tooling-tests.sh
-
-log-listen:
-	./tools/edgerun-log-listen.sh
-
-install-log-listen:
-	$(MAKE) -C edgerun-metal install-log-listen
-
-uninstall-log-listen:
-	$(MAKE) -C edgerun-metal uninstall-log-listen
-
-logs-log-listen:
-	$(MAKE) -C edgerun-metal logs-log-listen
-
-status-log-listen:
-	$(MAKE) -C edgerun-metal status-log-listen
 
 edgerun-smoke:
 	$(MAKE) -C edgerun-metal smoke

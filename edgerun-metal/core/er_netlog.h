@@ -10,6 +10,7 @@
 
 void er_netlog_init(EFI_SYSTEM_TABLE* st);
 void er_netlog_write(const char* s);
+void er_netlog_write_bytes(const UINT8* data, UINTN len);
 UINT8 er_netlog_ready(void);
 
 #endif

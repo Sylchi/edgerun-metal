@@ -2,8 +2,8 @@
 #define ER_MMIO_H
 
 /*
- * Purpose: expose read-only MMIO handle primitives for native and Wasm driver code.
- * Intention: validate handles and ranges before any register reads; writes are intentionally absent.
+ * Purpose: expose MMIO handle primitives for native and Wasm driver code.
+ * Intention: validate handles and ranges before register reads or explicit writes.
  */
 
 #include "er_types.h"
@@ -20,8 +20,10 @@ typedef struct {
 void er_mmio_reset(void);
 UINT8 er_mmio_map_request_valid(INT64 phys_i, INT64 len_i);
 UINT8 er_mmio_read32_request_valid(INT64 handle_i, INT64 offset_i);
+UINT8 er_mmio_write32_request_valid(INT64 handle_i, INT64 offset_i);
 INT64 er_mmio_map(INT64 phys_i, INT64 len_i);
 UINT8 er_mmio_get_info(INT64 handle_i, ErMmioInfo* out_info);
 INT64 er_mmio_read32(INT64 handle_i, INT64 offset_i);
+UINT8 er_mmio_write32(INT64 handle_i, INT64 offset_i, UINT32 value);
 
 #endif

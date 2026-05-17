@@ -2,6 +2,8 @@
 #include "er_print.h"
 #include "er_pci.h"
 #include "er_mmio.h"
+#include "er_acpi.h"
+#include "erwire.h"
 #include "wasm_vm.h"
 #include "wasm_test_module.h"
 #include "wasm_pci_scan_module.h"
@@ -40,6 +42,136 @@ static void er_print_u64_field(const char* label, UINT64 value) {
   er_print(": ");
   er_print_u64_hex(value);
   er_print("\r\n");
+}
+
+static void er_log_acpi(EFI_SYSTEM_TABLE* SystemTable) {
+  ErAcpiRsdpInfo rsdp;
+  ErAcpiTableList tables;
+  UINT32 i;
+
+  if (er_acpi_find_rsdp(SystemTable, &rsdp) == 0u) {
+    er_println("ACPI: RSDP unavailable");
+    return;
+  }
+
+  er_print("ACPI: RSDP ");
+  er_print_u64_hex(rsdp.rsdp_address);
+  er_print(" revision=");
+  er_print_u64_dec((UINT64)rsdp.revision);
+  er_print(" checksum=");
+  er_print_u64_dec((UINT64)rsdp.checksum_valid);
+  er_print("\r\n");
+
+  if (er_acpi_enumerate_tables(&rsdp, &tables) == 0u) {
+    er_println("ACPI: table enumeration unavailable");
+    return;
+  }
+
+  er_print("ACPI: tables=");
+  er_print_u64_dec((UINT64)tables.table_count);
+  er_print(" root=");
+  er_print(tables.table_kind == ER_ACPI_TABLE_KIND_XSDT ? "XSDT" : "RSDT");
+  er_print("\r\n");
+
+  for (i = 0; i < tables.table_count; ++i) {
+    UINT32 sig = tables.tables[i].signature;
+    char name[5];
+
+    name[0] = (char)(sig & 0xffu);
+    name[1] = (char)((sig >> 8) & 0xffu);
+    name[2] = (char)((sig >> 16) & 0xffu);
+    name[3] = (char)((sig >> 24) & 0xffu);
+    name[4] = 0;
+    er_print("  ");
+    er_print(name);
+    er_print(" ");
+    er_print_u64_hex(tables.tables[i].address);
+    er_print(" len=");
+    er_print_u64_dec((UINT64)tables.tables[i].length);
+    er_print(" checksum=");
+    er_print_u64_dec((UINT64)tables.tables[i].checksum_valid);
+    er_print("\r\n");
+  }
+
+  {
+    ErAcpiTableInfo fadt_table;
+    ErAcpiFadtInfo fadt;
+
+    if (er_acpi_find_table(&tables, er_acpi_signature("FACP"), &fadt_table) != 0u &&
+        er_acpi_parse_fadt(fadt_table.address, &fadt) != 0u && fadt.found != 0u) {
+      er_print("ACPI: FADT sci=");
+      er_print_u64_dec((UINT64)fadt.sci_interrupt);
+      er_print(" pm_timer=");
+      er_print_u64_hex((UINT64)fadt.pm_timer_block);
+      er_print(" reset=");
+      er_print_u64_hex(fadt.reset_register.address);
+      er_print(" checksum=");
+      er_print_u64_dec((UINT64)fadt.checksum_valid);
+      er_print("\r\n");
+    }
+  }
+
+  {
+    ErAcpiTableInfo madt_table;
+    ErAcpiMadtInfo madt;
+
+    if (er_acpi_find_table(&tables, er_acpi_signature("APIC"), &madt_table) != 0u &&
+        er_acpi_parse_madt(madt_table.address, &madt) != 0u && madt.found != 0u) {
+      er_print("ACPI: MADT lapic=");
+      er_print_u64_hex((UINT64)madt.lapic_address);
+      er_print(" cpus=");
+      er_print_u64_dec((UINT64)madt.lapic_count);
+      er_print(" ioapics=");
+      er_print_u64_dec((UINT64)madt.ioapic_count);
+      er_print(" iso=");
+      er_print_u64_dec((UINT64)madt.interrupt_source_override_count);
+      er_print(" checksum=");
+      er_print_u64_dec((UINT64)madt.checksum_valid);
+      er_print("\r\n");
+    }
+  }
+
+  {
+    ErAcpiTableInfo mcfg_table;
+    ErAcpiMcfgInfo mcfg;
+
+    if (er_acpi_find_table(&tables, er_acpi_signature("MCFG"), &mcfg_table) != 0u &&
+        er_acpi_parse_mcfg(mcfg_table.address, &mcfg) != 0u && mcfg.found != 0u) {
+      er_print("ACPI: MCFG allocations=");
+      er_print_u64_dec((UINT64)mcfg.allocation_count);
+      er_print(" checksum=");
+      er_print_u64_dec((UINT64)mcfg.checksum_valid);
+      if (mcfg.allocation_count > 0u) {
+        er_print(" base=");
+        er_print_u64_hex(mcfg.allocations[0].base_address);
+        er_print(" bus=");
+        er_print_u64_dec((UINT64)mcfg.allocations[0].start_bus);
+        er_print("-");
+        er_print_u64_dec((UINT64)mcfg.allocations[0].end_bus);
+      }
+      er_print("\r\n");
+    }
+  }
+
+  {
+    ErAcpiTableInfo hpet_table;
+    ErAcpiHpetInfo hpet;
+
+    if (er_acpi_find_table(&tables, er_acpi_signature("HPET"), &hpet_table) != 0u &&
+        er_acpi_parse_hpet(hpet_table.address, &hpet) != 0u && hpet.found != 0u) {
+      er_print("ACPI: HPET addr=");
+      er_print_u64_hex(hpet.address);
+      er_print(" timers=");
+      er_print_u64_dec((UINT64)hpet.comparator_count);
+      er_print(" bits64=");
+      er_print_u64_dec((UINT64)hpet.counter_size_64);
+      er_print(" min_tick=");
+      er_print_u64_dec((UINT64)hpet.minimum_tick);
+      er_print(" checksum=");
+      er_print_u64_dec((UINT64)hpet.checksum_valid);
+      er_print("\r\n");
+    }
+  }
 }
 
 static void er_select_large_console(EFI_SYSTEM_TABLE* SystemTable) {
@@ -401,6 +533,15 @@ static void er_print_pci_target(const char* label, const ErPciDeviceSnapshot* sn
   er_print_pci_value("BAR5", snapshot->bars[5]);
 }
 
+static void erwire_send_pci_snapshot(UINT8 target_kind, const ErPciDeviceSnapshot* snapshot) {
+  if (snapshot == 0 || snapshot->present == 0u) {
+    return;
+  }
+  erwire_send_pci_device(snapshot->bus, snapshot->dev, snapshot->func, (UINT32)target_kind, snapshot->id,
+                         snapshot->command_status, snapshot->class_revision, snapshot->header_cacheline,
+                         snapshot->bars);
+}
+
 static UINT8 er_scan_mmio_probe_function(UINT32 bus, UINT32 dev, UINT32 func) {
   ErPciDeviceSnapshot snapshot;
   UINT8 target_kind;
@@ -428,6 +569,7 @@ static void er_scan_pci_function(UINT32 bus, UINT32 dev, UINT32 func) {
 
   target_kind = er_pci_classify_target(snapshot.id, snapshot.class_revision);
   if (target_kind != ER_PCI_TARGET_KIND_NONE) {
+    erwire_send_pci_snapshot(target_kind, &snapshot);
     er_print_pci_target(er_pci_target_label(target_kind), &snapshot);
     return;
   }
@@ -565,6 +707,7 @@ EFI_STATUS EFIAPI efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE* SystemTable
 
   er_println("EdgeRun Metal Core v0.2");
   er_println("UEFI boot OK");
+  er_log_acpi(SystemTable);
 
   er_run_boot_profile();
 

@@ -22,13 +22,13 @@ Intention: keep the repository source-first, with generated output ignored and n
 
 ## Project Areas
 
-`edgerun-metal/` exists to build the EFI runtime, embedded Wasm host, real-hardware boot path, UDP boot-log capture, netboot tooling, and systemd service helpers. Its generated EFI artifacts are allowed only under `edgerun-metal/build/`, which is ignored.
+`edgerun-metal/` exists to build the freestanding EFI runtime, embedded Wasm host, real-hardware boot profiles, and runtime-owned binary telemetry protocol. Its generated EFI artifacts are allowed only under `edgerun-metal/build/`, which is ignored.
 
 `edgerun-ui-core/` exists to port the Rust `edgerun-ui-core` platform-neutral UI layer to C. The first owned surface is the scene command buffer: colors, rects, clips, hits, drag/drop targets, quads, transitions, budgets, and deterministic tests. Generated build output must use `.build/edgerun-ui-core/`.
 
 `varfont/` exists to build and test the variable-font renderer. Its source, tests, public headers, examples, fonts, and CMake configuration are tracked. Its generated build output must use `.build/varfont/`, not `varfont/build/`.
 
-`tools/` exists for deterministic repository-maintenance and operational commands that are shared by the Makefile and tests. Tools must state their purpose at the top of the file. Project-owned implementations may live under their project tree when root tools delegate to them.
+`tools/` exists for deterministic repository-maintenance commands that are shared by the Makefile and tests. Tools must state their purpose at the top of the file.
 
 `tests/` exists for repository-level tests that do not belong to either C project. Tests must be runnable from `make check`.
 

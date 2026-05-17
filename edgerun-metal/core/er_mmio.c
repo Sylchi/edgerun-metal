@@ -1,7 +1,7 @@
 #include "er_mmio.h"
 
 /*
- * Purpose: manage a small read-only MMIO mapping table in UEFI app mode.
+ * Purpose: manage a small MMIO mapping table in UEFI app mode.
  * Intention: treat physical addresses as identity-readable until Boot Services mapping is required.
  */
 
@@ -62,6 +62,10 @@ UINT8 er_mmio_read32_request_valid(INT64 handle_i, INT64 offset_i) {
   }
 
   return 1;
+}
+
+UINT8 er_mmio_write32_request_valid(INT64 handle_i, INT64 offset_i) {
+  return er_mmio_read32_request_valid(handle_i, offset_i);
 }
 
 INT64 er_mmio_map(INT64 phys_i, INT64 len_i) {
@@ -137,4 +141,21 @@ INT64 er_mmio_read32(INT64 handle_i, INT64 offset_i) {
   map = &g_mmio_maps[handle - 1u];
   ptr = (const volatile UINT32*)(UINTN)(map->phys + offset);
   return (INT64)(UINT32)(*ptr);
+}
+
+UINT8 er_mmio_write32(INT64 handle_i, INT64 offset_i, UINT32 value) {
+  UINT64 offset = (UINT64)offset_i;
+  UINT32 handle;
+  volatile UINT32* ptr;
+  const ErMmioInfo* map;
+
+  if (er_mmio_write32_request_valid(handle_i, offset_i) == 0u) {
+    return 0;
+  }
+
+  handle = (UINT32)handle_i;
+  map = &g_mmio_maps[handle - 1u];
+  ptr = (volatile UINT32*)(UINTN)(map->phys + offset);
+  *ptr = value;
+  return 1;
 }

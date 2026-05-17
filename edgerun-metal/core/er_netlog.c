@@ -6,7 +6,7 @@
  */
 
 #define ER_NETLOG_PORT 9000u
-#define ER_NETLOG_MAX_DATAGRAM 192u
+#define ER_NETLOG_MAX_DATAGRAM 1200u
 
 static EFI_GUID g_udp4_service_binding_guid = {
   0x83f01464u, 0x99bdu, 0x45e5u, {0xb3u, 0x83u, 0xafu, 0x63u, 0x05u, 0xd8u, 0xe9u, 0xe6u}
@@ -21,7 +21,7 @@ static EFI_UDP4_PROTOCOL* g_udp4;
 static EFI_EVENT g_tx_event;
 static UINT8 g_ready;
 static UINT8 g_tx_busy;
-static char g_tx_buffer[ER_NETLOG_MAX_DATAGRAM];
+static UINT8 g_tx_buffer[ER_NETLOG_MAX_DATAGRAM];
 static EFI_UDP4_SESSION_DATA g_tx_session;
 static EFI_UDP4_TRANSMIT_DATA g_tx_data;
 static EFI_UDP4_COMPLETION_TOKEN g_tx_token;
@@ -57,7 +57,7 @@ static UINTN er_netlog_len(const char* s) {
   return n;
 }
 
-static void er_netlog_copy(char* dst, const char* src, UINTN len) {
+static void er_netlog_copy(UINT8* dst, const UINT8* src, UINTN len) {
   UINTN i;
 
   for (i = 0; i < len; ++i) {
@@ -182,10 +182,14 @@ UINT8 er_netlog_ready(void) {
 }
 
 void er_netlog_write(const char* s) {
-  UINTN remaining = er_netlog_len(s);
+  er_netlog_write_bytes((const UINT8*)s, er_netlog_len(s));
+}
+
+void er_netlog_write_bytes(const UINT8* data, UINTN len) {
+  UINTN remaining = len;
   UINTN offset = 0;
 
-  if (g_ready == 0 || g_udp4 == 0 || s == 0) {
+  if (g_ready == 0 || g_udp4 == 0 || data == 0) {
     return;
   }
 
@@ -205,7 +209,7 @@ void er_netlog_write(const char* s) {
       chunk = ER_NETLOG_MAX_DATAGRAM;
     }
 
-    er_netlog_copy(g_tx_buffer, s + offset, chunk);
+    er_netlog_copy(g_tx_buffer, data + offset, chunk);
     g_tx_data.DataLength = (UINT32)chunk;
     g_tx_data.FragmentTable[0].FragmentLength = (UINT32)chunk;
     g_tx_token.Status = EFI_NOT_READY;
