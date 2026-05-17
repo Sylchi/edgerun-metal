@@ -100,6 +100,9 @@
 #define ER_BLAKE3_AVX512_LANE13_INDEX 13u
 #define ER_BLAKE3_AVX512_LANE14_INDEX 14u
 #define ER_BLAKE3_AVX512_LANE15_INDEX 15u
+#define ER_BLAKE3_AVX512_SUBTREE32_CHUNKS 32u
+#define ER_BLAKE3_AVX512_SUBTREE32_LEVEL 5u
+#define ER_BLAKE3_AVX512_SUBTREE32_MASK (ER_BLAKE3_AVX512_SUBTREE32_CHUNKS - 1u)
 
 static const uint32_t g_er_blake3_iv[ER_BLAKE3_CV_WORDS] = {
   ER_BLAKE3_IV0, ER_BLAKE3_IV1, ER_BLAKE3_IV2, ER_BLAKE3_IV3,
@@ -799,6 +802,7 @@ static void er_blake3_avx512_compress16_full_chunks(const uint8_t* bytes, uint64
     }
   }
 }
+
 #endif
 
 static void er_blake3_parent_block(const uint32_t left_cv[ER_BLAKE3_CV_WORDS],
@@ -964,6 +968,31 @@ uint8_t er_blake3_update(ErBlake3Hasher* hasher, const uint8_t* bytes, size_t le
 
   while (len > 0u) {
 #if defined(ER_BLAKE3_USE_AVX512)
+    if (hasher->block_len == 0u && hasher->blocks_compressed == 0u &&
+        (hasher->chunk_counter & ER_BLAKE3_AVX512_SUBTREE32_MASK) == 0u &&
+        len > (ER_BLAKE3_AVX512_SUBTREE32_CHUNKS * ER_BLAKE3_CHUNK_LEN)) {
+      uint32_t cvs[ER_BLAKE3_AVX512_LANES][ER_BLAKE3_CV_WORDS];
+      uint32_t left_cv[ER_BLAKE3_CV_WORDS];
+      uint32_t right_cv[ER_BLAKE3_CV_WORDS];
+      uint32_t subtree_cv[ER_BLAKE3_CV_WORDS];
+
+      er_blake3_avx512_compress16_full_chunks(bytes, hasher->chunk_counter, hasher->flags, cvs);
+      er_blake3_subtree16_cv(cvs, left_cv);
+      er_blake3_avx512_compress16_full_chunks(bytes + (ER_BLAKE3_AVX512_LANES * ER_BLAKE3_CHUNK_LEN),
+                                              hasher->chunk_counter + ER_BLAKE3_AVX512_LANES,
+                                              hasher->flags, cvs);
+      er_blake3_subtree16_cv(cvs, right_cv);
+      hasher->chunk_counter += ER_BLAKE3_AVX512_SUBTREE32_CHUNKS;
+      er_blake3_parent_cv(left_cv, right_cv, subtree_cv);
+      if (er_blake3_push_cv_at_level(hasher, subtree_cv, hasher->chunk_counter,
+                                     ER_BLAKE3_AVX512_SUBTREE32_LEVEL) == 0u) {
+        return 0u;
+      }
+      bytes += ER_BLAKE3_AVX512_SUBTREE32_CHUNKS * ER_BLAKE3_CHUNK_LEN;
+      len -= ER_BLAKE3_AVX512_SUBTREE32_CHUNKS * ER_BLAKE3_CHUNK_LEN;
+      continue;
+    }
+
     if (hasher->block_len == 0u && hasher->blocks_compressed == 0u &&
         (hasher->chunk_counter & ER_BLAKE3_AVX2_SUBTREE16_MASK) == 0u &&
         len > (ER_BLAKE3_AVX512_LANES * ER_BLAKE3_CHUNK_LEN)) {
