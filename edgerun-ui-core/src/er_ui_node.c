@@ -317,6 +317,19 @@ er_ui_node_t er_ui_node_pagination(const char* const* pages, size_t page_count, 
   return node;
 }
 
+er_ui_node_t er_ui_node_collapsible(const char* title, const char* const* row_titles, const char* const* row_details, size_t row_count, bool open,
+                                    uint32_t base_id) {
+  er_ui_node_t node = er_ui_node_base(ER_UI_NODE_COLLAPSIBLE);
+  node.label = title;
+  node.labels = row_titles;
+  node.cells = row_details;
+  node.row_count = row_count;
+  node.active = open;
+  node.id = base_id;
+  node.gap = 8.0f;
+  return node;
+}
+
 er_ui_node_t er_ui_node_route_path(const char* label, const char* const* hops, size_t hop_count) {
   er_ui_node_t node = er_ui_node_base(ER_UI_NODE_ROUTE_PATH);
   node.label = label;
@@ -653,6 +666,7 @@ const char* er_ui_node_kind_label(er_ui_node_kind_t kind) {
     case ER_UI_NODE_CAPABILITY_GRANT_ROW: return "capability-grant-row";
     case ER_UI_NODE_PROOF_EVENT_ROW: return "proof-event-row";
     case ER_UI_NODE_PAGINATION: return "pagination";
+    case ER_UI_NODE_COLLAPSIBLE: return "collapsible";
     case ER_UI_NODE_ROUTE_PATH: return "route-path";
     case ER_UI_NODE_PACKAGE_CARD: return "package-card";
     case ER_UI_NODE_RECEIPT_ROW: return "receipt-row";
@@ -944,6 +958,10 @@ er_ui_status_t er_ui_node_accessibility(const er_ui_node_t* node, er_ui_a11y_nod
     case ER_UI_NODE_PAGINATION:
       out = er_ui_a11y_base(ER_UI_A11Y_NAVIGATION, "pagination", false, 0u);
       break;
+    case ER_UI_NODE_COLLAPSIBLE:
+      out = er_ui_a11y_base(ER_UI_A11Y_GROUP, node->label, false, 0u);
+      if (node->active) out.states |= ER_UI_A11Y_STATE_EXPANDED | ER_UI_A11Y_STATE_OPEN;
+      break;
     case ER_UI_NODE_TABS:
       out = er_ui_a11y_base(ER_UI_A11Y_TAB_LIST, "tabs", false, 0u);
       break;
@@ -1040,6 +1058,17 @@ er_ui_status_t er_ui_node_accessibility_child(const er_ui_node_t* node, size_t c
     er_ui_a11y_node_t out = er_ui_a11y_base(ER_UI_A11Y_BUTTON, label, true, node->id + (uint32_t)child_index);
     if (child_index > 0u && child_index <= node->label_count && child_index - 1u == node->selected) out.states |= ER_UI_A11Y_STATE_CURRENT;
     *out_a11y = out;
+    return ER_UI_OK;
+  }
+  if (node->kind == ER_UI_NODE_COLLAPSIBLE) {
+    if (child_index == 0u) {
+      er_ui_a11y_node_t out = er_ui_a11y_base(ER_UI_A11Y_BUTTON, node->label, true, node->id);
+      if (node->active) out.states |= ER_UI_A11Y_STATE_EXPANDED | ER_UI_A11Y_STATE_OPEN;
+      *out_a11y = out;
+      return ER_UI_OK;
+    }
+    if (!node->active || !node->labels || child_index - 1u >= node->row_count) return ER_UI_ERR_INVALID_ARGUMENT;
+    *out_a11y = er_ui_a11y_base(ER_UI_A11Y_LIST_ITEM, node->labels[child_index - 1u], true, node->id + (uint32_t)child_index);
     return ER_UI_OK;
   }
   if (node->kind == ER_UI_NODE_TABLE) {
@@ -1179,6 +1208,44 @@ static er_ui_status_t er_ui_node_render_icon(er_ui_scene_t* scene, er_ui_bounds_
   uint32_t atlas_id = er_ui_icon_atlas_id(icon);
   if (atlas_id == 0u) return ER_UI_ERR_INVALID_ARGUMENT;
   return er_ui_scene_push_icon_quad(scene, er_ui_quad_atlas(bounds.x, bounds.y, bounds.w, bounds.h, 0.0f, 0.0f, 1.0f, 1.0f, atlas_id, color));
+}
+
+static er_ui_bounds_t er_ui_node_center_square(er_ui_bounds_t bounds, float size);
+
+static er_ui_status_t er_ui_node_render_collapsible(
+  const er_ui_node_t* node,
+  er_ui_scene_t* scene,
+  vr_font_face_t* font,
+  er_ui_bounds_t bounds,
+  er_ui_resolved_theme_t theme) {
+  if (!node || !scene || !font || !node->label || !er_ui_bounds_valid(bounds)) return ER_UI_ERR_INVALID_ARGUMENT;
+  if (node->active && node->row_count > 0u && (!node->labels || !node->cells)) return ER_UI_ERR_INVALID_ARGUMENT;
+  er_ui_status_t status = er_ui_shadcn_card_emit(scene, bounds, theme);
+  if (status != ER_UI_OK) return status;
+
+  float pad = 12.0f;
+  float header_h = er_ui_float_min(36.0f, bounds.h - pad * 2.0f);
+  if (header_h <= 0.0f) return ER_UI_ERR_INVALID_ARGUMENT;
+  er_ui_bounds_t inner = er_ui_bounds(bounds.x + pad, bounds.y + pad, bounds.w - pad * 2.0f, bounds.h - pad * 2.0f);
+  if (!er_ui_bounds_valid(inner)) return ER_UI_ERR_INVALID_ARGUMENT;
+  er_ui_bounds_t title = er_ui_bounds(inner.x, inner.y, er_ui_float_max(0.0f, inner.w - header_h - 8.0f), header_h);
+  er_ui_bounds_t trigger = er_ui_bounds(inner.x + inner.w - header_h, inner.y, header_h, header_h);
+  status = er_ui_node_render_text(scene, font, node->label, title, theme.colors.text);
+  if (status != ER_UI_OK) return status;
+  status = er_ui_shadcn_button_emit(scene, font, trigger, theme, "", node->id, ER_UI_SHADCN_BUTTON_GHOST, ER_UI_SHADCN_BUTTON_SIZE_ICON, true);
+  if (status != ER_UI_OK) return status;
+  status = er_ui_node_render_icon(scene, er_ui_node_center_square(trigger, 16.0f), ER_UI_ICON_CHEVRON_RIGHT, theme.colors.text);
+  if (status != ER_UI_OK || !node->active) return status;
+
+  float row_y = inner.y + header_h + node->gap;
+  float row_h = 44.0f;
+  for (size_t i = 0u; i < node->row_count; ++i) {
+    er_ui_bounds_t row = er_ui_bounds(inner.x, row_y, inner.w, row_h);
+    status = er_ui_shadcn_list_row_emit(scene, font, row, theme, node->labels[i], node->cells[i], node->id + 1u + (uint32_t)i, false);
+    if (status != ER_UI_OK) return status;
+    row_y += row_h + node->gap;
+  }
+  return ER_UI_OK;
 }
 
 static er_ui_status_t er_ui_node_render_label_group(
@@ -1339,6 +1406,8 @@ er_ui_status_t er_ui_node_render(
       return er_ui_shadcn_proof_event_row_emit(scene, font, rect, theme, node->label, node->value, node->detail, node->id);
     case ER_UI_NODE_PAGINATION:
       return er_ui_node_render_pagination(node, scene, font, rect, theme);
+    case ER_UI_NODE_COLLAPSIBLE:
+      return er_ui_node_render_collapsible(node, scene, font, rect, theme);
     case ER_UI_NODE_ROUTE_PATH:
       return er_ui_shadcn_route_path_emit(scene, font, rect, theme, node->label, node->labels, node->label_count);
     case ER_UI_NODE_PACKAGE_CARD:

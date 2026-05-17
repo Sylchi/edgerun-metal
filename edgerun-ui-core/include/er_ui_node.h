@@ -53,6 +53,7 @@ typedef enum {
   ER_UI_NODE_CAPABILITY_GRANT_ROW,
   ER_UI_NODE_PROOF_EVENT_ROW,
   ER_UI_NODE_PAGINATION,
+  ER_UI_NODE_COLLAPSIBLE,
   ER_UI_NODE_ROUTE_PATH,
   ER_UI_NODE_PACKAGE_CARD,
   ER_UI_NODE_RECEIPT_ROW,
@@ -246,6 +247,8 @@ er_ui_node_t er_ui_node_attachment_preview(const char* name, const char* kind, u
 er_ui_node_t er_ui_node_capability_grant_row(const char* app, const char* capability, const char* state, uint32_t id);
 er_ui_node_t er_ui_node_proof_event_row(const char* title, const char* hash, const char* status_text, uint32_t id);
 er_ui_node_t er_ui_node_pagination(const char* const* pages, size_t page_count, size_t selected, uint32_t base_id);
+er_ui_node_t er_ui_node_collapsible(const char* title, const char* const* row_titles, const char* const* row_details, size_t row_count, bool open,
+                                    uint32_t base_id);
 er_ui_node_t er_ui_node_route_path(const char* label, const char* const* hops, size_t hop_count);
 er_ui_node_t er_ui_node_package_card(const char* name, const char* policy, const char* hash, uint32_t id);
 er_ui_node_t er_ui_node_receipt_row(const char* label, const char* amount, const char* status_text, uint32_t id);
