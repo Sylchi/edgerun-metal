@@ -7,6 +7,9 @@
  */
 
 #include "er_types.h"
+#include "er_crypto.h"
+#include "er_relay_router.h"
+#include "erwire.h"
 #include "er_virtio_net.h"
 #include "er_native_eth.h"
 
@@ -21,10 +24,29 @@ typedef struct {
   ErNativeEth* eth;
 } ErNativeBootState;
 
+typedef enum {
+  ER_NATIVE_RELAY_INGRESS_NONE = 0,
+  ER_NATIVE_RELAY_INGRESS_ROUTED = 1,
+  ER_NATIVE_RELAY_INGRESS_UNROUTED = 2,
+  ER_NATIVE_RELAY_INGRESS_MALFORMED = 3
+} ErNativeRelayIngressStatus;
+
+typedef struct {
+  ErNativeRelayIngressStatus status;
+  ErwirePacketHeader header;
+  UINT32 payload_len;
+  ErHash packet_hash;
+  ErRelayForwardIntent intent;
+} ErNativeRelayIngress;
+
 UINT8 er_native_boot_configure_erwire_eth_sink(UINT64 mmio_base, UINT64 mmio_len,
                                                const UINT8* peer_mac,
                                                ErNativeBootState* out_state);
 UINT8 er_native_boot_configure_pci_erwire_eth_sink(ErNativeBootState* out_state);
 UINT8 er_native_boot_configure_qemu_microvm_erwire_eth_sink(ErNativeBootState* out_state);
+UINT8 er_native_boot_poll_relay_ingress(const ErNativeBootState* state,
+                                        const ErRelayVirtioRoutes* routes,
+                                        const ErCryptoProvider* crypto,
+                                        ErNativeRelayIngress* out_ingress);
 
 #endif

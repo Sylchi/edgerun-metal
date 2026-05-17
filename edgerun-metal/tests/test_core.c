@@ -1907,13 +1907,25 @@ static void test_native_boot_erwire_eth_sink(void) {
     NATIVE_BOOT_TEST_MMIO_DWORDS = 128u,
     NATIVE_BOOT_TEST_VIRTIO_HDR_LEN = 12u,
     NATIVE_BOOT_TEST_TX_DESC = 0u,
+    NATIVE_BOOT_TEST_RX_DESC = 3u,
+    NATIVE_BOOT_TEST_BAD_RX_DESC = 4u,
+    NATIVE_BOOT_TEST_STREAM_ID = 9u,
+    NATIVE_BOOT_TEST_PAYLOAD_LEN = 4u,
     NATIVE_BOOT_TEST_PAYLOAD_OFFSET = NATIVE_BOOT_TEST_VIRTIO_HDR_LEN + ER_NET_ETH_HEADER_LEN
   };
   UINT32 regs[NATIVE_BOOT_TEST_MMIO_DWORDS] = {0};
   ErNativeBootState state;
+  ErRelayVirtioRoutes routes;
+  ErNativeRelayIngress ingress;
+  ErCryptoProvider crypto;
   ErVirtioQueueAvail* tx_avail;
+  ErVirtioQueueUsed* rx_used;
   UINT8* tx_frame;
+  UINT8* rx_buffer;
+  UINT8 payload[NATIVE_BOOT_TEST_PAYLOAD_LEN] = {1u, 2u, 3u, 4u};
+  UINT8 bad_packet[ERWIRE_HEADER_SIZE] = {0};
   UINT8 peer_mac[ER_NET_MAC_LEN] = {0x02u, 0x21u, 0x22u, 0x23u, 0x24u, 0x25u};
+  UINT32 frame_len = 0u;
 
   er_mmio_reset();
   regs[ER_VIRTIO_MMIO_MAGIC_VALUE_OFFSET / sizeof(UINT32)] = ER_VIRTIO_MMIO_MAGIC;
@@ -1934,9 +1946,9 @@ static void test_native_boot_erwire_eth_sink(void) {
   check_int64("native boot net", state.net != 0, 1);
   check_int64("native boot eth", state.eth != 0, 1);
 
-  erwire_init(9u);
-  erwire_send_text("native");
-  erwire_clear_native_eth_sink();
+  erwire_init(NATIVE_BOOT_TEST_STREAM_ID);
+  erwire_send(ERWIRE_KIND_VFS_OBJECT_PACKET, ERWIRE_FLAG_FIRST | ERWIRE_FLAG_LAST,
+              payload, (UINT32)sizeof(payload));
   tx_avail = er_virtio_net_test_tx_avail();
   tx_frame = er_virtio_net_test_tx_buffer(NATIVE_BOOT_TEST_TX_DESC);
   check_uint64("native boot tx desc", tx_avail->ring[0], NATIVE_BOOT_TEST_TX_DESC);
@@ -1945,6 +1957,52 @@ static void test_native_boot_erwire_eth_sink(void) {
   check_uint64("native boot erwire magic1", tx_frame[NATIVE_BOOT_TEST_PAYLOAD_OFFSET + 1u], 'R');
   check_uint64("native boot erwire magic2", tx_frame[NATIVE_BOOT_TEST_PAYLOAD_OFFSET + 2u], 'W');
   check_uint64("native boot erwire magic3", tx_frame[NATIVE_BOOT_TEST_PAYLOAD_OFFSET + 3u], '1');
+
+  rx_used = er_virtio_net_test_rx_used();
+  rx_buffer = er_virtio_net_test_rx_buffer(NATIVE_BOOT_TEST_RX_DESC);
+  check_int64("native boot relay build frame",
+              er_net_build_eth_frame(peer_mac, state.net->mac,
+                                     ER_NET_ETH_TYPE_EDGERUN,
+                                     tx_frame + NATIVE_BOOT_TEST_PAYLOAD_OFFSET,
+                                     ERWIRE_HEADER_SIZE + NATIVE_BOOT_TEST_PAYLOAD_LEN,
+                                     rx_buffer + NATIVE_BOOT_TEST_VIRTIO_HDR_LEN,
+                                     ER_NET_FRAME_MAX, &frame_len),
+              1);
+  rx_used->ring[0].id = NATIVE_BOOT_TEST_RX_DESC;
+  rx_used->ring[0].len = NATIVE_BOOT_TEST_VIRTIO_HDR_LEN + frame_len;
+  rx_used->idx = 1u;
+
+  er_crypto_blake3_provider(&crypto);
+  check_int64("native boot default routes",
+              er_relay_prepare_default_virtio_routes(&routes), 1);
+  check_int64("native boot poll relay ingress",
+              er_native_boot_poll_relay_ingress(&state, &routes, &crypto, &ingress), 1);
+  check_int64("native boot relay routed", ingress.status, ER_NATIVE_RELAY_INGRESS_ROUTED);
+  check_uint64("native boot relay kind", ingress.header.Kind, ERWIRE_KIND_VFS_OBJECT_PACKET);
+  check_uint64("native boot relay seq", ingress.intent.sequence, 0u);
+  check_uint64("native boot relay payload len", ingress.payload_len, NATIVE_BOOT_TEST_PAYLOAD_LEN);
+  check_uint64("native boot relay target",
+               ingress.intent.to.address[0], ER_VIRTIO_DEVICE_TYPE_BLK);
+  check_hash_equal("native boot relay intent hash", &ingress.intent.packet_hash, &ingress.packet_hash);
+
+  rx_buffer = er_virtio_net_test_rx_buffer(NATIVE_BOOT_TEST_BAD_RX_DESC);
+  check_int64("native boot bad relay frame",
+              er_net_build_eth_frame(peer_mac, state.net->mac,
+                                     ER_NET_ETH_TYPE_EDGERUN,
+                                     bad_packet, (UINT32)sizeof(bad_packet),
+                                     rx_buffer + NATIVE_BOOT_TEST_VIRTIO_HDR_LEN,
+                                     ER_NET_FRAME_MAX, &frame_len),
+              1);
+  rx_used->ring[1].id = NATIVE_BOOT_TEST_BAD_RX_DESC;
+  rx_used->ring[1].len = NATIVE_BOOT_TEST_VIRTIO_HDR_LEN + frame_len;
+  rx_used->idx = 2u;
+  check_int64("native boot poll malformed relay ingress",
+              er_native_boot_poll_relay_ingress(&state, &routes, &crypto, &ingress), 1);
+  check_int64("native boot relay malformed", ingress.status, ER_NATIVE_RELAY_INGRESS_MALFORMED);
+  check_int64("native boot poll no relay ingress",
+              er_native_boot_poll_relay_ingress(&state, &routes, &crypto, &ingress), 1);
+  check_int64("native boot relay none", ingress.status, ER_NATIVE_RELAY_INGRESS_NONE);
+  erwire_clear_native_eth_sink();
 }
 
 static void test_netlog_disabled_path(void) {

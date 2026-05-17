@@ -1,6 +1,5 @@
 #include "er_native_boot.h"
 #include "er_mem.h"
-#include "erwire.h"
 
 enum {
   ER_NATIVE_BOOT_QEMU_MICROVM_CANDIDATES = 2u,
@@ -12,6 +11,8 @@ enum {
   ER_NATIVE_BOOT_MAC5 = 0x25u
 };
 
+static const UINT8 g_native_relay_ingress_domain[] = "edgerun:c:v1:native-relay-ingress";
+static const char g_native_relay_ingress_label[] = "native-eth";
 static ErVirtioNet g_native_boot_net;
 static ErNativeEth g_native_boot_eth;
 static const UINT8 g_qemu_microvm_peer_mac[ER_NET_MAC_LEN] = {
@@ -91,4 +92,77 @@ UINT8 er_native_boot_configure_qemu_microvm_erwire_eth_sink(ErNativeBootState* o
     }
   }
   return 0;
+}
+
+static UINT8 er_native_boot_hash_ingress_packet(const ErCryptoProvider* crypto,
+                                                const ErwirePacketHeader* header,
+                                                const UINT8* payload,
+                                                UINT32 payload_len,
+                                                ErHash* out_hash) {
+  ErByteSpan spans[2];
+
+  if (crypto == 0 || header == 0 || out_hash == 0 ||
+      (payload_len > 0u && payload == 0)) {
+    return 0;
+  }
+  spans[0].bytes = (const UINT8*)header;
+  spans[0].len = (UINTN)sizeof(*header);
+  spans[1].bytes = payload;
+  spans[1].len = (UINTN)payload_len;
+  return er_crypto_hash(crypto,
+                        g_native_relay_ingress_domain,
+                        (UINTN)(sizeof(g_native_relay_ingress_domain) - 1u),
+                        spans, 2u, out_hash);
+}
+
+UINT8 er_native_boot_poll_relay_ingress(const ErNativeBootState* state,
+                                        const ErRelayVirtioRoutes* routes,
+                                        const ErCryptoProvider* crypto,
+                                        ErNativeRelayIngress* out_ingress) {
+  ErNativeEthStats before;
+  ErNativeEthStats after;
+  ErChannelEndpoint ingress;
+  UINT8 payload[ERWIRE_MAX_PAYLOAD];
+  UINT32 payload_len = 0u;
+
+  if (out_ingress == 0) {
+    return 0;
+  }
+  er_mem_zero((UINT8*)out_ingress, (UINTN)sizeof(*out_ingress));
+  if (state == 0 || state->initialized == 0u || state->erwire_sink_ready == 0u ||
+      state->eth == 0 || crypto == 0) {
+    return 0;
+  }
+
+  before = er_native_eth_stats(state->eth);
+  if (erwire_poll_native_eth(&out_ingress->header, payload,
+                             (UINT32)sizeof(payload), &payload_len) == 0u) {
+    after = er_native_eth_stats(state->eth);
+    if (after.rx_frames_accepted != before.rx_frames_accepted) {
+      out_ingress->status = ER_NATIVE_RELAY_INGRESS_MALFORMED;
+    }
+    return 1;
+  }
+
+  out_ingress->payload_len = payload_len;
+  if (er_native_boot_hash_ingress_packet(crypto, &out_ingress->header,
+                                         payload, payload_len,
+                                         &out_ingress->packet_hash) == 0u ||
+      er_hw_relay_prepare_native_eth_endpoint(state->eth->peer_mac,
+                                              g_native_relay_ingress_label,
+                                              (UINTN)(sizeof(g_native_relay_ingress_label) - 1u),
+                                              &ingress) == 0u) {
+    return 0;
+  }
+
+  if (er_relay_route_erwire_to_virtio(&ingress, out_ingress->header.Kind,
+                                      payload, payload_len, routes,
+                                      &out_ingress->intent) == 0u) {
+    out_ingress->status = ER_NATIVE_RELAY_INGRESS_UNROUTED;
+    return 1;
+  }
+  out_ingress->intent.sequence = out_ingress->header.Seq;
+  out_ingress->intent.packet_hash = out_ingress->packet_hash;
+  out_ingress->status = ER_NATIVE_RELAY_INGRESS_ROUTED;
+  return 1;
 }
