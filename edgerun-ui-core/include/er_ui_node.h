@@ -68,6 +68,54 @@ typedef enum {
 
 typedef struct er_ui_node_t er_ui_node_t;
 
+typedef enum {
+  ER_UI_A11Y_GENERIC = 0,
+  ER_UI_A11Y_GROUP,
+  ER_UI_A11Y_TEXT,
+  ER_UI_A11Y_BUTTON,
+  ER_UI_A11Y_CHECKBOX,
+  ER_UI_A11Y_RADIO,
+  ER_UI_A11Y_TEXTBOX,
+  ER_UI_A11Y_COMBOBOX,
+  ER_UI_A11Y_DIALOG,
+  ER_UI_A11Y_TOOLTIP,
+  ER_UI_A11Y_STATUS,
+  ER_UI_A11Y_PROGRESSBAR,
+  ER_UI_A11Y_TABLE,
+  ER_UI_A11Y_ROW,
+  ER_UI_A11Y_CELL,
+  ER_UI_A11Y_TAB_LIST,
+  ER_UI_A11Y_TAB,
+  ER_UI_A11Y_MENU_ITEM,
+  ER_UI_A11Y_LIST_ITEM,
+  ER_UI_A11Y_NAVIGATION,
+  ER_UI_A11Y_SEPARATOR,
+  ER_UI_A11Y_IMAGE,
+  ER_UI_A11Y_SLIDER
+} er_ui_a11y_role_t;
+
+enum {
+  ER_UI_A11Y_STATE_DISABLED = 1u << 0,
+  ER_UI_A11Y_STATE_CHECKED = 1u << 1,
+  ER_UI_A11Y_STATE_SELECTED = 1u << 2,
+  ER_UI_A11Y_STATE_EXPANDED = 1u << 3,
+  ER_UI_A11Y_STATE_FOCUSED = 1u << 4,
+  ER_UI_A11Y_STATE_CURRENT = 1u << 5,
+  ER_UI_A11Y_STATE_INVALID = 1u << 6,
+  ER_UI_A11Y_STATE_OPEN = 1u << 7,
+  ER_UI_A11Y_STATE_HAS_VALUE = 1u << 8
+};
+
+typedef struct {
+  er_ui_a11y_role_t role;
+  const char* label;
+  const char* value;
+  bool has_id;
+  uint32_t id;
+  uint32_t states;
+  float numeric_value;
+} er_ui_a11y_node_t;
+
 struct er_ui_node_t {
   er_ui_node_kind_t kind;
   er_ui_bounds_t bounds;
@@ -156,6 +204,8 @@ er_ui_node_t* er_ui_node_set_draggable(er_ui_node_t* node, uint32_t scope_id, ui
 er_ui_node_t* er_ui_node_set_drop_target(er_ui_node_t* node, uint32_t scope_id, size_t index);
 er_ui_node_t* er_ui_node_set_reorderable(er_ui_node_t* node, uint32_t scope_id, uint32_t item_id, size_t index);
 er_ui_status_t er_ui_node_add_child(er_ui_node_t* parent, er_ui_node_t* child);
+const char* er_ui_a11y_role_label(er_ui_a11y_role_t role);
+er_ui_status_t er_ui_node_accessibility(const er_ui_node_t* node, er_ui_a11y_node_t* out_a11y);
 er_ui_status_t er_ui_node_render(
   const er_ui_node_t* node,
   er_ui_scene_t* scene,

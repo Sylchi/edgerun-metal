@@ -93,6 +93,29 @@ void run_node_tests(void) {
   expect_status(er_ui_node_add_child(&root, &title), ER_UI_OK, "node: card accepts title child");
   expect_status(er_ui_node_add_child(&root, &row), ER_UI_OK, "node: card accepts row child");
 
+  er_ui_a11y_node_t a11y = {0};
+  expect_status(er_ui_node_accessibility(&button, &a11y), ER_UI_OK, "node: button accessibility maps");
+  expect_size(a11y.role, ER_UI_A11Y_BUTTON, "node: button accessibility role");
+  expect_true(a11y.has_id && a11y.id == 8001u, "node: button accessibility id");
+  expect_true(a11y.label == button.label, "node: button accessibility label is borrowed");
+
+  er_ui_node_t checked = er_ui_node_checkbox("Remember", true, 8002u);
+  expect_status(er_ui_node_accessibility(&checked, &a11y), ER_UI_OK, "node: checkbox accessibility maps");
+  expect_size(a11y.role, ER_UI_A11Y_CHECKBOX, "node: checkbox accessibility role");
+  expect_true((a11y.states & ER_UI_A11Y_STATE_CHECKED) != 0u, "node: checkbox accessibility checked state");
+
+  er_ui_node_t field_a11y = er_ui_node_field("Email", "name@example.com", 8003u);
+  expect_status(er_ui_node_accessibility(&field_a11y, &a11y), ER_UI_OK, "node: field accessibility maps");
+  expect_size(a11y.role, ER_UI_A11Y_TEXTBOX, "node: field accessibility role");
+  expect_true((a11y.states & ER_UI_A11Y_STATE_HAS_VALUE) != 0u, "node: field accessibility value state");
+  expect_true(a11y.value == field_a11y.value, "node: field accessibility value is borrowed");
+
+  er_ui_node_t tree_a11y = er_ui_node_tree_item("src", "expanded", 1u, true, 8004u);
+  expect_status(er_ui_node_accessibility(&tree_a11y, &a11y), ER_UI_OK, "node: tree accessibility maps");
+  expect_size(a11y.role, ER_UI_A11Y_LIST_ITEM, "node: tree accessibility role");
+  expect_true((a11y.states & ER_UI_A11Y_STATE_EXPANDED) != 0u, "node: tree accessibility expanded state");
+  expect_true(er_ui_a11y_role_label(a11y.role) != NULL, "node: accessibility role has stable label");
+
   er_ui_node_t full = er_ui_node_row();
   er_ui_node_t children[ER_UI_NODE_MAX_CHILDREN + 1u];
   for (size_t i = 0u; i < ER_UI_NODE_MAX_CHILDREN; ++i) {

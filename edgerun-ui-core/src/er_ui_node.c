@@ -444,6 +444,190 @@ er_ui_status_t er_ui_node_add_child(er_ui_node_t* parent, er_ui_node_t* child) {
   return ER_UI_OK;
 }
 
+const char* er_ui_a11y_role_label(er_ui_a11y_role_t role) {
+  switch (role) {
+    case ER_UI_A11Y_GROUP: return "group";
+    case ER_UI_A11Y_TEXT: return "text";
+    case ER_UI_A11Y_BUTTON: return "button";
+    case ER_UI_A11Y_CHECKBOX: return "checkbox";
+    case ER_UI_A11Y_RADIO: return "radio";
+    case ER_UI_A11Y_TEXTBOX: return "textbox";
+    case ER_UI_A11Y_COMBOBOX: return "combobox";
+    case ER_UI_A11Y_DIALOG: return "dialog";
+    case ER_UI_A11Y_TOOLTIP: return "tooltip";
+    case ER_UI_A11Y_STATUS: return "status";
+    case ER_UI_A11Y_PROGRESSBAR: return "progressbar";
+    case ER_UI_A11Y_TABLE: return "table";
+    case ER_UI_A11Y_ROW: return "row";
+    case ER_UI_A11Y_CELL: return "cell";
+    case ER_UI_A11Y_TAB_LIST: return "tab-list";
+    case ER_UI_A11Y_TAB: return "tab";
+    case ER_UI_A11Y_MENU_ITEM: return "menu-item";
+    case ER_UI_A11Y_LIST_ITEM: return "list-item";
+    case ER_UI_A11Y_NAVIGATION: return "navigation";
+    case ER_UI_A11Y_SEPARATOR: return "separator";
+    case ER_UI_A11Y_IMAGE: return "image";
+    case ER_UI_A11Y_SLIDER: return "slider";
+    case ER_UI_A11Y_GENERIC:
+    default: return "generic";
+  }
+}
+
+static er_ui_a11y_node_t er_ui_a11y_base(er_ui_a11y_role_t role, const char* label, bool has_id, uint32_t id) {
+  er_ui_a11y_node_t out = {0};
+  out.role = role;
+  out.label = label ? label : "";
+  out.value = "";
+  out.has_id = has_id;
+  out.id = id;
+  return out;
+}
+
+static void er_ui_a11y_set_value(er_ui_a11y_node_t* out, const char* value) {
+  if (!out) return;
+  out->value = value ? value : "";
+  out->states |= ER_UI_A11Y_STATE_HAS_VALUE;
+}
+
+er_ui_status_t er_ui_node_accessibility(const er_ui_node_t* node, er_ui_a11y_node_t* out_a11y) {
+  if (!node || !out_a11y) return ER_UI_ERR_INVALID_ARGUMENT;
+  er_ui_a11y_node_t out = er_ui_a11y_base(ER_UI_A11Y_GENERIC, "", false, 0u);
+  switch (node->kind) {
+    case ER_UI_NODE_ROW:
+    case ER_UI_NODE_COLUMN:
+    case ER_UI_NODE_GRID:
+    case ER_UI_NODE_MASONRY:
+    case ER_UI_NODE_BENTO_GRID:
+    case ER_UI_NODE_CARD:
+      out = er_ui_a11y_base(ER_UI_A11Y_GROUP, "", false, 0u);
+      break;
+    case ER_UI_NODE_SCROLL_AREA:
+      out = er_ui_a11y_base(ER_UI_A11Y_GROUP, "scroll area", node->id != 0u, node->id);
+      break;
+    case ER_UI_NODE_TEXT:
+    case ER_UI_NODE_BADGE:
+      out = er_ui_a11y_base(ER_UI_A11Y_TEXT, node->label, false, 0u);
+      break;
+    case ER_UI_NODE_BUTTON:
+      out = er_ui_a11y_base(ER_UI_A11Y_BUTTON, node->label, true, node->id);
+      break;
+    case ER_UI_NODE_CHECKBOX:
+      out = er_ui_a11y_base(ER_UI_A11Y_CHECKBOX, node->label, true, node->id);
+      if (node->active) out.states |= ER_UI_A11Y_STATE_CHECKED;
+      break;
+    case ER_UI_NODE_RADIO:
+      out = er_ui_a11y_base(ER_UI_A11Y_RADIO, node->label, true, node->id);
+      if (node->active) out.states |= ER_UI_A11Y_STATE_CHECKED;
+      break;
+    case ER_UI_NODE_SELECT:
+      out = er_ui_a11y_base(ER_UI_A11Y_COMBOBOX, node->label, true, node->id);
+      er_ui_a11y_set_value(&out, node->value);
+      break;
+    case ER_UI_NODE_FIELD:
+    case ER_UI_NODE_TEXT_AREA:
+      out = er_ui_a11y_base(ER_UI_A11Y_TEXTBOX, node->label, true, node->id);
+      er_ui_a11y_set_value(&out, node->value);
+      break;
+    case ER_UI_NODE_SLIDER:
+      out = er_ui_a11y_base(ER_UI_A11Y_SLIDER, node->label, true, node->id);
+      out.numeric_value = node->number;
+      out.states |= ER_UI_A11Y_STATE_HAS_VALUE;
+      break;
+    case ER_UI_NODE_TOOLTIP:
+      out = er_ui_a11y_base(ER_UI_A11Y_TOOLTIP, node->label, false, 0u);
+      break;
+    case ER_UI_NODE_DIALOG:
+      out = er_ui_a11y_base(ER_UI_A11Y_DIALOG, node->label, false, 0u);
+      break;
+    case ER_UI_NODE_TOAST:
+      out = er_ui_a11y_base(ER_UI_A11Y_STATUS, node->label, false, 0u);
+      break;
+    case ER_UI_NODE_EMPTY:
+    case ER_UI_NODE_SECTION:
+      out = er_ui_a11y_base(ER_UI_A11Y_GROUP, node->label, false, 0u);
+      break;
+    case ER_UI_NODE_SKELETON:
+      out = er_ui_a11y_base(ER_UI_A11Y_GENERIC, "loading", false, 0u);
+      break;
+    case ER_UI_NODE_PROGRESS:
+    case ER_UI_NODE_PROGRESS_RING:
+      out = er_ui_a11y_base(ER_UI_A11Y_PROGRESSBAR, "progress", false, 0u);
+      out.numeric_value = node->number;
+      out.states |= ER_UI_A11Y_STATE_HAS_VALUE;
+      break;
+    case ER_UI_NODE_TABLE:
+      out = er_ui_a11y_base(ER_UI_A11Y_TABLE, "table", true, node->id);
+      break;
+    case ER_UI_NODE_BREADCRUMB:
+      out = er_ui_a11y_base(ER_UI_A11Y_NAVIGATION, "breadcrumb", false, 0u);
+      break;
+    case ER_UI_NODE_TABS:
+      out = er_ui_a11y_base(ER_UI_A11Y_TAB_LIST, "tabs", false, 0u);
+      break;
+    case ER_UI_NODE_COMMAND_PALETTE:
+      out = er_ui_a11y_base(ER_UI_A11Y_COMBOBOX, node->label, true, node->id);
+      break;
+    case ER_UI_NODE_TREE_ITEM:
+      out = er_ui_a11y_base(ER_UI_A11Y_LIST_ITEM, node->label, true, node->id);
+      if (node->active) out.states |= ER_UI_A11Y_STATE_EXPANDED;
+      break;
+    case ER_UI_NODE_IDENTITY_CARD:
+    case ER_UI_NODE_CONTACT_CARD:
+    case ER_UI_NODE_ATTACHMENT_PREVIEW:
+    case ER_UI_NODE_PACKAGE_CARD:
+      out = er_ui_a11y_base(ER_UI_A11Y_GROUP, node->label, true, node->id);
+      break;
+    case ER_UI_NODE_THREAD_ROW:
+      out = er_ui_a11y_base(ER_UI_A11Y_LIST_ITEM, node->label, true, node->id);
+      if (node->active) out.states |= ER_UI_A11Y_STATE_CURRENT;
+      break;
+    case ER_UI_NODE_CAPABILITY_GRANT_ROW:
+    case ER_UI_NODE_PROOF_EVENT_ROW:
+    case ER_UI_NODE_RECEIPT_ROW:
+    case ER_UI_NODE_TRANSACTION_ROW:
+    case ER_UI_NODE_LIST_ROW:
+      out = er_ui_a11y_base(ER_UI_A11Y_LIST_ITEM, node->label, true, node->id);
+      break;
+    case ER_UI_NODE_ROUTE_PATH:
+    case ER_UI_NODE_PANEL_HEADER:
+    case ER_UI_NODE_METRIC_CARD:
+      out = er_ui_a11y_base(ER_UI_A11Y_GROUP, node->label, false, 0u);
+      if (node->kind == ER_UI_NODE_METRIC_CARD) er_ui_a11y_set_value(&out, node->value);
+      break;
+    case ER_UI_NODE_MENU_ITEM:
+      out = er_ui_a11y_base(ER_UI_A11Y_MENU_ITEM, node->label, true, node->id);
+      if (node->active) out.states |= ER_UI_A11Y_STATE_SELECTED;
+      break;
+    case ER_UI_NODE_CONTROL_ROW:
+      out = er_ui_a11y_base(ER_UI_A11Y_LIST_ITEM, node->label, node->id != 0u, node->id);
+      er_ui_a11y_set_value(&out, node->value);
+      break;
+    case ER_UI_NODE_SWITCH:
+      out = er_ui_a11y_base(ER_UI_A11Y_BUTTON, "toggle", true, node->id);
+      if (node->active) out.states |= ER_UI_A11Y_STATE_CHECKED;
+      break;
+    case ER_UI_NODE_AVATAR:
+      out = er_ui_a11y_base(ER_UI_A11Y_IMAGE, node->label, false, 0u);
+      if (node->active) out.states |= ER_UI_A11Y_STATE_CURRENT;
+      break;
+    case ER_UI_NODE_BAR_CHART:
+      out = er_ui_a11y_base(ER_UI_A11Y_IMAGE, node->label, false, 0u);
+      break;
+    case ER_UI_NODE_ALERT:
+      out = er_ui_a11y_base(ER_UI_A11Y_STATUS, node->label, false, 0u);
+      break;
+    case ER_UI_NODE_SEPARATOR:
+      out = er_ui_a11y_base(ER_UI_A11Y_SEPARATOR, "", false, 0u);
+      break;
+    case ER_UI_NODE_SPACER:
+    default:
+      out = er_ui_a11y_base(ER_UI_A11Y_GENERIC, "", false, 0u);
+      break;
+  }
+  *out_a11y = out;
+  return ER_UI_OK;
+}
+
 static er_ui_bounds_t er_ui_node_resolve_bounds(const er_ui_node_t* node, er_ui_bounds_t bounds) {
   if (!node) return bounds;
   if (er_ui_bounds_valid(node->bounds)) return node->bounds;
