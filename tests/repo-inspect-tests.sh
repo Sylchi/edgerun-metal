@@ -80,6 +80,18 @@ int ignored(void) {
   int value = 31337; //@optimizer-ignore protocol example value
   return value + labels[0][0]; //@optimizer-ignore intentional metadata lookup
 }
+
+int ignored_block(void) {
+  int value = 0;
+  //@optimizer-ignore-begin verified generated-style schedule
+  for (int y = 0; y < 4; ++y) {
+    for (int x = 1; x < 4; ++x) {
+      value += (y % x) + 31337;
+    }
+  }
+  //@optimizer-ignore-end
+  return value;
+}
 C
 mkdir -p "${TMP_DIR}/tests"
 cat > "${TMP_DIR}/tests/test_main.c" <<'C'

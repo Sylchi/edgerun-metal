@@ -126,6 +126,7 @@ static const uint32_t g_er_blake3_iv[ER_BLAKE3_CV_WORDS] = {
   ER_BLAKE3_IV4, ER_BLAKE3_IV5, ER_BLAKE3_IV6, ER_BLAKE3_IV7
 };
 
+//@optimizer-ignore-begin BLAKE3 spec constants and hand-shaped compression kernels
 static const uint8_t g_er_blake3_msg_perm[ER_BLAKE3_BLOCK_WORDS] = {
   2u, 6u, 3u, 10u, 7u, 0u, 4u, 13u, 1u, 11u, 12u, 5u, 9u, 14u, 15u, 8u //@optimizer-ignore BLAKE3 message word permutation
 };
@@ -1367,6 +1368,7 @@ static uint8_t er_blake3_run_jobs_pthread(void* user, ErBlake3JobFn job_fn, void
   return 1u;
 }
 #endif
+//@optimizer-ignore-end
 
 static uint8_t er_blake3_finish_chunk(ErBlake3Hasher* hasher) {
   uint32_t flags = hasher->flags | ER_BLAKE3_CHUNK_END;
@@ -1406,6 +1408,7 @@ uint8_t er_blake3_update(ErBlake3Hasher* hasher, const uint8_t* bytes, size_t le
     return 0u;
   }
 
+  //@optimizer-ignore-begin BLAKE3 streaming update hot loop intentionally dispatches compression helpers
   while (len > 0u) {
 #if defined(ER_BLAKE3_USE_AVX512)
     if (hasher->block_len == 0u && hasher->blocks_compressed == 0u &&
@@ -1539,6 +1542,7 @@ uint8_t er_blake3_update(ErBlake3Hasher* hasher, const uint8_t* bytes, size_t le
     bytes += take;
     len -= take;
   }
+  //@optimizer-ignore-end
 
   return 1u;
 }

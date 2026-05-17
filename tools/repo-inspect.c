@@ -24,6 +24,8 @@
 #define ERI_LARGE_FILE_LINES 800u
 #define ERI_DUP_BLOCK_LINES 6u
 #define ERI_OPTIMIZER_IGNORE_TAG "@optimizer-ignore"
+#define ERI_OPTIMIZER_IGNORE_BEGIN_TAG "@optimizer-ignore-begin"
+#define ERI_OPTIMIZER_IGNORE_END_TAG "@optimizer-ignore-end"
 
 typedef struct {
   char* path;
@@ -1064,11 +1066,33 @@ static uint8_t eri_line_has_optimizer_ignore(const char* line) {
   return (uint8_t)(strstr(line, ERI_OPTIMIZER_IGNORE_TAG) != NULL);
 }
 
+static uint8_t eri_line_has_optimizer_ignore_begin(const char* line) {
+  return (uint8_t)(strstr(line, ERI_OPTIMIZER_IGNORE_BEGIN_TAG) != NULL);
+}
+
+static uint8_t eri_line_has_optimizer_ignore_end(const char* line) {
+  return (uint8_t)(strstr(line, ERI_OPTIMIZER_IGNORE_END_TAG) != NULL);
+}
+
 static uint8_t eri_line_is_optimizer_ignore_directive(const char* line) {
   const char* trim = eri_ltrim(line);
 
   return (uint8_t)((strncmp(trim, "//", 2u) == 0 || strncmp(trim, "/*", 2u) == 0) &&
                    eri_line_has_optimizer_ignore(trim) != 0u);
+}
+
+static uint8_t eri_line_is_optimizer_ignore_begin_directive(const char* line) {
+  const char* trim = eri_ltrim(line);
+
+  return (uint8_t)((strncmp(trim, "//", 2u) == 0 || strncmp(trim, "/*", 2u) == 0) &&
+                   eri_line_has_optimizer_ignore_begin(trim) != 0u);
+}
+
+static uint8_t eri_line_is_optimizer_ignore_end_directive(const char* line) {
+  const char* trim = eri_ltrim(line);
+
+  return (uint8_t)((strncmp(trim, "//", 2u) == 0 || strncmp(trim, "/*", 2u) == 0) &&
+                   eri_line_has_optimizer_ignore_end(trim) != 0u);
 }
 
 static uint8_t eri_line_has_loop_start(const char* line) {
@@ -1181,6 +1205,7 @@ static void eri_scan_cpu_costs(const EriVfsFile* file, EriFindings* findings) {
   int loop_brace_stack[128];
   size_t loop_stack_len = 0u;
   uint8_t pending_optimizer_ignore = 0u;
+  uint8_t optimizer_ignore_block = 0u;
 
   while (pos <= len) {
     size_t start = pos;
@@ -1217,6 +1242,22 @@ static void eri_scan_cpu_costs(const EriVfsFile* file, EriFindings* findings) {
       }
     }
 
+    if (eri_line_is_optimizer_ignore_begin_directive(snippet) != 0u) {
+      optimizer_ignore_block = 1u;
+      has_loop_start = eri_line_has_loop_start(structural_line);
+      eri_update_loop_context(structural_line, has_loop_start, &brace_depth, &loop_depth, loop_brace_stack, &loop_stack_len);
+      ++line_no;
+      continue;
+    }
+
+    if (eri_line_is_optimizer_ignore_end_directive(snippet) != 0u) {
+      optimizer_ignore_block = 0u;
+      has_loop_start = eri_line_has_loop_start(structural_line);
+      eri_update_loop_context(structural_line, has_loop_start, &brace_depth, &loop_depth, loop_brace_stack, &loop_stack_len);
+      ++line_no;
+      continue;
+    }
+
     if (eri_line_is_optimizer_ignore_directive(snippet) != 0u) {
       pending_optimizer_ignore = 1u;
       has_loop_start = eri_line_has_loop_start(structural_line);
@@ -1225,7 +1266,8 @@ static void eri_scan_cpu_costs(const EriVfsFile* file, EriFindings* findings) {
       continue;
     }
 
-    if (pending_optimizer_ignore != 0u || eri_line_has_optimizer_ignore(snippet) != 0u) {
+    if (optimizer_ignore_block != 0u || pending_optimizer_ignore != 0u ||
+        eri_line_has_optimizer_ignore(snippet) != 0u) {
       pending_optimizer_ignore = 0u;
       has_loop_start = eri_line_has_loop_start(structural_line);
       eri_update_loop_context(structural_line, has_loop_start, &brace_depth, &loop_depth, loop_brace_stack, &loop_stack_len);
@@ -1266,6 +1308,7 @@ static void eri_scan_line_metrics(const uint8_t* bytes, size_t len, EriTotals* f
   uint8_t in_block = 0u;
   uint32_t line_no = 1u;
   uint8_t pending_optimizer_ignore = 0u;
+  uint8_t optimizer_ignore_block = 0u;
 
   while (pos <= len) {
     size_t start = pos;
@@ -1331,12 +1374,23 @@ static void eri_scan_line_metrics(const uint8_t* bytes, size_t len, EriTotals* f
       memcpy(snippet, bytes + start, copy_len);
       snippet[copy_len] = 0;
       eri_copy_without_literals(bytes, start, end, searchable, sizeof(searchable));
+      if (eri_line_is_optimizer_ignore_begin_directive(snippet) != 0u) {
+        optimizer_ignore_block = 1u;
+        ++line_no;
+        continue;
+      }
+      if (eri_line_is_optimizer_ignore_end_directive(snippet) != 0u) {
+        optimizer_ignore_block = 0u;
+        ++line_no;
+        continue;
+      }
       if (eri_line_is_optimizer_ignore_directive(snippet) != 0u) {
         pending_optimizer_ignore = 1u;
         ++line_no;
         continue;
       }
-      if (pending_optimizer_ignore != 0u || eri_line_has_optimizer_ignore(snippet) != 0u) {
+      if (optimizer_ignore_block != 0u || pending_optimizer_ignore != 0u ||
+          eri_line_has_optimizer_ignore(snippet) != 0u) {
         pending_optimizer_ignore = 0u;
         ++line_no;
         continue;
@@ -2523,7 +2577,7 @@ static uint8_t eri_analyze(const EriVfs* vfs) {
     eri_scan_line_metrics(file->bytes, file->len, &file_totals, &findings, file->path);
     eri_scan_functions(file, &funcs, &findings);
     eri_scan_cpu_costs(file, &findings);
-    if (eri_is_c_impl(file->path) &&
+    if (eri_is_c_impl(file->path) && eri_is_example_path(file->path) == 0u &&
         eri_add_source_file(&sources, file->path, file_totals.code_lines, eri_is_test_path(file->path)) == 0u) {
       eri_analyze_cleanup(&packages, &funcs, &findings, &bins, &sources, &coverage_packages,
                           &smell_packages, &cpu_packages, &worldview_packages, &duplicates);

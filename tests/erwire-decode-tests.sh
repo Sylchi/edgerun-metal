@@ -143,10 +143,10 @@ require_contains "${TMP_DIR}/pci.out" 'bus=2 dev=3 func=4'
 require_contains "${TMP_DIR}/pci.out" 'id=0x12348086'
 require_contains "${TMP_DIR}/pci.out" 'bar0=0xfebc0000'
 
-make_packet_file "${TMP_DIR}/blob.bin" 2 0 "b'\x07\x00\x00\x00\x04\x00\x00\x00\x0a\x00\x00\x00\x03\x00\x00\x00abc'"
+make_packet_file "${TMP_DIR}/blob.bin" 2 0 "(b'\x07' + (b'\x00' * 31) + b'\x04\x00\x00\x00\x0a\x00\x00\x00\x03\x00\x00\x00abc')"
 "${DECODER}" < "${TMP_DIR}/blob.bin" > "${TMP_DIR}/blob.out"
 require_contains "${TMP_DIR}/blob.out" 'kind=blob_chunk(2)'
-require_contains "${TMP_DIR}/blob.out" 'object=7 offset=4 total=10 chunk=3'
+require_contains "${TMP_DIR}/blob.out" 'object=0700000000000000000000000000000000000000000000000000000000000000 offset=4 total=10 chunk=3'
 
 python3 - "${TMP_DIR}/bus-io.bin" <<'PY'
 import binascii
