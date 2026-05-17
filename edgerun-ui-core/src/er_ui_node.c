@@ -307,6 +307,16 @@ er_ui_node_t er_ui_node_proof_event_row(const char* title, const char* hash, con
   return node;
 }
 
+er_ui_node_t er_ui_node_pagination(const char* const* pages, size_t page_count, size_t selected, uint32_t base_id) {
+  er_ui_node_t node = er_ui_node_base(ER_UI_NODE_PAGINATION);
+  node.labels = pages;
+  node.label_count = page_count;
+  node.selected = selected;
+  node.id = base_id;
+  node.gap = 4.0f;
+  return node;
+}
+
 er_ui_node_t er_ui_node_route_path(const char* label, const char* const* hops, size_t hop_count) {
   er_ui_node_t node = er_ui_node_base(ER_UI_NODE_ROUTE_PATH);
   node.label = label;
@@ -642,6 +652,7 @@ const char* er_ui_node_kind_label(er_ui_node_kind_t kind) {
     case ER_UI_NODE_ATTACHMENT_PREVIEW: return "attachment-preview";
     case ER_UI_NODE_CAPABILITY_GRANT_ROW: return "capability-grant-row";
     case ER_UI_NODE_PROOF_EVENT_ROW: return "proof-event-row";
+    case ER_UI_NODE_PAGINATION: return "pagination";
     case ER_UI_NODE_ROUTE_PATH: return "route-path";
     case ER_UI_NODE_PACKAGE_CARD: return "package-card";
     case ER_UI_NODE_RECEIPT_ROW: return "receipt-row";
@@ -930,6 +941,9 @@ er_ui_status_t er_ui_node_accessibility(const er_ui_node_t* node, er_ui_a11y_nod
     case ER_UI_NODE_BREADCRUMB:
       out = er_ui_a11y_base(ER_UI_A11Y_NAVIGATION, "breadcrumb", false, 0u);
       break;
+    case ER_UI_NODE_PAGINATION:
+      out = er_ui_a11y_base(ER_UI_A11Y_NAVIGATION, "pagination", false, 0u);
+      break;
     case ER_UI_NODE_TABS:
       out = er_ui_a11y_base(ER_UI_A11Y_TAB_LIST, "tabs", false, 0u);
       break;
@@ -1017,6 +1031,14 @@ er_ui_status_t er_ui_node_accessibility_child(const er_ui_node_t* node, size_t c
     if (!node->labels || child_index >= node->label_count) return ER_UI_ERR_INVALID_ARGUMENT;
     er_ui_a11y_node_t out = er_ui_a11y_base(ER_UI_A11Y_LIST_ITEM, node->labels[child_index], true, node->id + (uint32_t)child_index);
     if (child_index == node->selected) out.states |= ER_UI_A11Y_STATE_CURRENT;
+    *out_a11y = out;
+    return ER_UI_OK;
+  }
+  if (node->kind == ER_UI_NODE_PAGINATION) {
+    if (!node->labels || child_index >= node->label_count + 2u) return ER_UI_ERR_INVALID_ARGUMENT;
+    const char* label = child_index == 0u ? "Previous" : (child_index == node->label_count + 1u ? "Next" : node->labels[child_index - 1u]);
+    er_ui_a11y_node_t out = er_ui_a11y_base(ER_UI_A11Y_BUTTON, label, true, node->id + (uint32_t)child_index);
+    if (child_index > 0u && child_index <= node->label_count && child_index - 1u == node->selected) out.states |= ER_UI_A11Y_STATE_CURRENT;
     *out_a11y = out;
     return ER_UI_OK;
   }
@@ -1181,6 +1203,42 @@ static er_ui_status_t er_ui_node_render_label_group(
   return ER_UI_OK;
 }
 
+static er_ui_status_t er_ui_node_render_pagination(
+  const er_ui_node_t* node,
+  er_ui_scene_t* scene,
+  vr_font_face_t* font,
+  er_ui_bounds_t bounds,
+  er_ui_resolved_theme_t theme) {
+  if (!node || !scene || !font || !node->labels || node->label_count == 0u) return ER_UI_ERR_INVALID_ARGUMENT;
+  size_t item_count = node->label_count + 2u;
+  float gap = node->gap;
+  float total_gap = gap * (float)(item_count - 1u);
+  float page_w = 42.0f;
+  float previous_w = 90.0f;
+  float next_w = 68.0f;
+  float needed_w = previous_w + next_w + page_w * (float)node->label_count + total_gap;
+  if (bounds.w < needed_w) {
+    float scale = bounds.w / needed_w;
+    previous_w *= scale;
+    next_w *= scale;
+    page_w *= scale;
+  }
+  float x = bounds.x;
+  er_ui_status_t status = er_ui_shadcn_button_emit(scene, font, er_ui_bounds(x, bounds.y, previous_w, bounds.h), theme, "Previous", node->id,
+                                                   ER_UI_SHADCN_BUTTON_GHOST, ER_UI_SHADCN_BUTTON_SIZE_DEFAULT, false);
+  if (status != ER_UI_OK) return status;
+  x += previous_w + gap;
+  for (size_t i = 0u; i < node->label_count; ++i) {
+    er_ui_shadcn_button_variant_t variant = i == node->selected ? ER_UI_SHADCN_BUTTON_SECONDARY : ER_UI_SHADCN_BUTTON_GHOST;
+    status = er_ui_shadcn_button_emit(scene, font, er_ui_bounds(x, bounds.y, page_w, bounds.h), theme, node->labels[i], node->id + 1u + (uint32_t)i,
+                                      variant, ER_UI_SHADCN_BUTTON_SIZE_DEFAULT, true);
+    if (status != ER_UI_OK) return status;
+    x += page_w + gap;
+  }
+  return er_ui_shadcn_button_emit(scene, font, er_ui_bounds(x, bounds.y, next_w, bounds.h), theme, "Next", node->id + 1u + (uint32_t)node->label_count,
+                                  ER_UI_SHADCN_BUTTON_GHOST, ER_UI_SHADCN_BUTTON_SIZE_DEFAULT, true);
+}
+
 static er_ui_bounds_t er_ui_node_center_square(er_ui_bounds_t bounds, float size) {
   float w = er_ui_float_min(size, er_ui_float_min(bounds.w, bounds.h));
   return er_ui_bounds(bounds.x + (bounds.w - w) * 0.5f, bounds.y + (bounds.h - w) * 0.5f, w, w);
@@ -1279,6 +1337,8 @@ er_ui_status_t er_ui_node_render(
       return er_ui_shadcn_capability_grant_row_emit(scene, font, rect, theme, node->label, node->value, node->detail, node->id);
     case ER_UI_NODE_PROOF_EVENT_ROW:
       return er_ui_shadcn_proof_event_row_emit(scene, font, rect, theme, node->label, node->value, node->detail, node->id);
+    case ER_UI_NODE_PAGINATION:
+      return er_ui_node_render_pagination(node, scene, font, rect, theme);
     case ER_UI_NODE_ROUTE_PATH:
       return er_ui_shadcn_route_path_emit(scene, font, rect, theme, node->label, node->labels, node->label_count);
     case ER_UI_NODE_PACKAGE_CARD:
