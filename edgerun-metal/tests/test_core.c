@@ -160,6 +160,11 @@ static void test_mem_helpers(void) {
   er_mem_copy(dst, src, 4u);
   check_uint64("mem copy byte 0", dst[0], 9u);
   check_uint64("mem copy byte 3", dst[3], 6u);
+  check_int64("mem equal match", er_mem_equal(dst, src, 4u), 1);
+  dst[2] = 0u;
+  check_int64("mem equal mismatch", er_mem_equal(dst, src, 4u), 0);
+  check_int64("mem equal null left", er_mem_equal(0, src, 4u), 0);
+  check_int64("mem equal null right", er_mem_equal(dst, 0, 4u), 0);
   er_mem_zero(0, 4u);
   er_mem_copy(0, src, 4u);
   er_mem_copy(dst, 0, 4u);

@@ -26,3 +26,17 @@ void er_mem_copy(UINT8* dst, const UINT8* src, UINTN len) {
     dst[i] = src[i];
   }
 }
+
+UINT8 er_mem_equal(const UINT8* a, const UINT8* b, UINTN len) {
+  UINTN i;
+
+  if (a == 0 || b == 0) {
+    return 0;
+  }
+  for (i = 0; i < len; ++i) {
+    if (a[i] != b[i]) {
+      return 0;
+    }
+  }
+  return 1;
+}

@@ -58,20 +58,6 @@ static UINT16 er_net_get_u16_be(const UINT8* src) {
   return (UINT16)(((UINT16)src[0] << ER_NET_U16_HIGH_SHIFT) | (UINT16)src[1]);
 }
 
-static UINT8 er_net_bytes_equal(const UINT8* a, const UINT8* b, UINT32 len) {
-  UINT32 i;
-
-  if (a == 0 || b == 0) {
-    return 0;
-  }
-  for (i = 0; i < len; ++i) {
-    if (a[i] != b[i]) {
-      return 0;
-    }
-  }
-  return 1;
-}
-
 static void er_net_put_eth_header(UINT8* frame, const UINT8* src_mac, const UINT8* dst_mac,
                                   UINT16 eth_type) {
   er_mem_copy(frame + ER_NET_ETH_DST_OFFSET, dst_mac, ER_NET_MAC_LEN);
@@ -114,8 +100,8 @@ UINT8 er_net_parse_eth_frame(const UINT8* frame, UINT32 frame_len,
   }
   payload_len = frame_len - ER_NET_ETH_HEADER_LEN;
   if (payload_len == 0u || payload_len > out_capacity ||
-      er_net_bytes_equal(frame + ER_NET_ETH_DST_OFFSET, expected_dst_mac,
-                         ER_NET_MAC_LEN) == 0u ||
+      er_mem_equal(frame + ER_NET_ETH_DST_OFFSET, expected_dst_mac,
+                   ER_NET_MAC_LEN) == 0u ||
       er_net_get_u16_be(frame + ER_NET_ETH_TYPE_OFFSET) != expected_eth_type) {
     return 0;
   }
@@ -247,8 +233,8 @@ UINT8 er_net_parse_arp_ipv4_reply(const UINT8* frame, UINT32 frame_len,
       er_net_get_u16_be(arp + ER_NET_ARP_OP_OFFSET) != ER_NET_ARP_OP_REPLY) {
     return 0;
   }
-  if (er_net_bytes_equal(arp + ER_NET_ARP_SPA_OFFSET, expected_sender_ip, ER_NET_IPV4_LEN) == 0u ||
-      er_net_bytes_equal(arp + ER_NET_ARP_TPA_OFFSET, expected_target_ip, ER_NET_IPV4_LEN) == 0u) {
+  if (er_mem_equal(arp + ER_NET_ARP_SPA_OFFSET, expected_sender_ip, ER_NET_IPV4_LEN) == 0u ||
+      er_mem_equal(arp + ER_NET_ARP_TPA_OFFSET, expected_target_ip, ER_NET_IPV4_LEN) == 0u) {
     return 0;
   }
   er_mem_copy(out_sender_mac, arp + ER_NET_ARP_SHA_OFFSET, ER_NET_MAC_LEN);
