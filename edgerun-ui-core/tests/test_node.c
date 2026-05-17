@@ -129,6 +129,7 @@ void run_node_tests(void) {
     const char* const chart_labels[] = {"Jan", "Feb", "Mar"};
     const float chart_values[] = {0.25f, 0.72f, 0.54f};
     er_ui_node_t chart = er_ui_node_bar_chart("Visitors", chart_labels, chart_values, 3u, 8600u, 1u);
+    er_ui_node_t command = er_ui_node_command_palette("Search components...", 8700u);
 
     expect_status(er_ui_node_render(&alert, &scene, face, er_ui_bounds(0.0f, 170.0f, 360.0f, 76.0f), theme), ER_UI_OK, "node: alert renders");
     expect_status(er_ui_node_render(&avatar, &scene, face, er_ui_bounds(0.0f, 254.0f, 42.0f, 42.0f), theme), ER_UI_OK, "node: avatar renders");
@@ -149,6 +150,8 @@ void run_node_tests(void) {
     expect_status(er_ui_node_render(&tabs, &scene, face, er_ui_bounds(0.0f, 892.0f, 300.0f, 38.0f), theme), ER_UI_OK, "node: tabs render");
     expect_status(er_ui_node_render(&chart, &scene, face, er_ui_bounds(0.0f, 942.0f, 320.0f, 160.0f), theme), ER_UI_OK,
                   "node: bar chart renders");
+    expect_status(er_ui_node_render(&command, &scene, face, er_ui_bounds(0.0f, 1114.0f, 300.0f, 46.0f), theme), ER_UI_OK,
+                  "node: command palette renders");
 
     expect_true(scene.rect_count > 0u, "node: render emits rect geometry");
     expect_true(scene.hit_count > 0u, "node: render emits hit targets");
