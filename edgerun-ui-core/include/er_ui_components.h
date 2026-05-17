@@ -1,7 +1,10 @@
 #ifndef ER_UI_COMPONENTS_H
 #define ER_UI_COMPONENTS_H
 
+#include "er_ui_primitives.h"
 #include "er_ui_runtime.h"
+#include "er_ui_text.h"
+#include "er_ui_theme.h"
 
 #include <stdbool.h>
 #include <stddef.h>
@@ -34,6 +37,22 @@ typedef enum {
   ER_UI_SHADCN_RESOLVE_MODULE_PATH,
   ER_UI_SHADCN_RESOLVE_SLOT
 } er_ui_shadcn_resolve_kind_t;
+
+typedef enum {
+  ER_UI_SHADCN_BUTTON_DEFAULT = 0,
+  ER_UI_SHADCN_BUTTON_DESTRUCTIVE,
+  ER_UI_SHADCN_BUTTON_OUTLINE,
+  ER_UI_SHADCN_BUTTON_SECONDARY,
+  ER_UI_SHADCN_BUTTON_GHOST,
+  ER_UI_SHADCN_BUTTON_LINK
+} er_ui_shadcn_button_variant_t;
+
+typedef enum {
+  ER_UI_SHADCN_BUTTON_SIZE_DEFAULT = 0,
+  ER_UI_SHADCN_BUTTON_SIZE_SM,
+  ER_UI_SHADCN_BUTTON_SIZE_LG,
+  ER_UI_SHADCN_BUTTON_SIZE_ICON
+} er_ui_shadcn_button_size_t;
 
 typedef struct {
   const char* name;
@@ -147,6 +166,35 @@ bool er_ui_shadcn_demo_preview_available(const char* slug);
 bool er_ui_shadcn_component_preview_available_by_source_component(const char* source_component);
 bool er_ui_shadcn_component_preview_available_by_identifier(const char* identifier);
 bool er_ui_shadcn_demo_preview_available_by_identifier(const char* identifier);
+er_ui_bounds_t er_ui_shadcn_button_bounds(er_ui_bounds_t bounds, er_ui_shadcn_button_size_t size);
+er_ui_status_t er_ui_shadcn_card_emit(er_ui_scene_t* scene, er_ui_bounds_t bounds, er_ui_resolved_theme_t theme);
+er_ui_status_t er_ui_shadcn_button_emit(
+  er_ui_scene_t* scene,
+  vr_font_face_t* font,
+  er_ui_bounds_t bounds,
+  er_ui_resolved_theme_t theme,
+  const char* label,
+  uint32_t id,
+  er_ui_shadcn_button_variant_t variant,
+  er_ui_shadcn_button_size_t size,
+  bool active);
+er_ui_status_t er_ui_shadcn_select_emit(
+  er_ui_scene_t* scene,
+  vr_font_face_t* font,
+  er_ui_bounds_t bounds,
+  er_ui_resolved_theme_t theme,
+  const char* label,
+  const char* value,
+  uint32_t id,
+  bool open);
+er_ui_status_t er_ui_shadcn_slider_emit(
+  er_ui_scene_t* scene,
+  vr_font_face_t* font,
+  er_ui_bounds_t bounds,
+  er_ui_resolved_theme_t theme,
+  const char* label,
+  float value,
+  uint32_t id);
 
 #ifdef __cplusplus
 }

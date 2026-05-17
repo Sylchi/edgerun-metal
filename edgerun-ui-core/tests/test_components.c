@@ -1,5 +1,115 @@
 #include "test_common.h"
 
+#include <stdio.h>
+#include <stdlib.h>
+
+static void* component_vr_alloc(void* user, size_t size, size_t align) {
+  (void)user;
+  (void)align;
+  return malloc(size);
+}
+
+static void* component_vr_realloc(void* user, void* ptr, size_t old_size, size_t new_size, size_t align) {
+  (void)user;
+  (void)old_size;
+  (void)align;
+  return realloc(ptr, new_size);
+}
+
+static void component_vr_free(void* user, void* ptr, size_t size, size_t align) {
+  (void)user;
+  (void)size;
+  (void)align;
+  free(ptr);
+}
+
+static vr_font_allocator_t component_vr_allocator(void) {
+  vr_font_allocator_t allocator = {0};
+  allocator.alloc = component_vr_alloc;
+  allocator.realloc = component_vr_realloc;
+  allocator.free = component_vr_free;
+  return allocator;
+}
+
+static unsigned char* component_read_file(const char* path, size_t* out_size) {
+  if (out_size) *out_size = 0u;
+  FILE* file = fopen(path, "rb");
+  if (!file) return NULL;
+  if (fseek(file, 0, SEEK_END) != 0) {
+    fclose(file);
+    return NULL;
+  }
+  long len = ftell(file);
+  if (len <= 0) {
+    fclose(file);
+    return NULL;
+  }
+  rewind(file);
+  unsigned char* data = (unsigned char*)malloc((size_t)len);
+  if (!data) {
+    fclose(file);
+    return NULL;
+  }
+  size_t read = fread(data, 1u, (size_t)len, file);
+  fclose(file);
+  if (read != (size_t)len) {
+    free(data);
+    return NULL;
+  }
+  if (out_size) *out_size = (size_t)len;
+  return data;
+}
+
+static void test_shadcn_render_primitives(void) {
+  er_ui_scene_t scene = {0};
+  expect_status(er_ui_scene_init_with_allocator(&scene, er_ui_palette_slate_950(), er_ui_test_allocator()), ER_UI_OK,
+                "shadcn render: scene init succeeds");
+
+  size_t font_size = 0u;
+  unsigned char* font_data = component_read_file(ER_UI_REPO_ROOT "/varfont/fonts/Geist[wght].ttf", &font_size);
+  expect_true(font_data != NULL && font_size > 0u, "shadcn render: bundled variable font loads");
+  if (!font_data) {
+    er_ui_scene_destroy(&scene);
+    return;
+  }
+
+  vr_font_config_t cfg = {0};
+  cfg.px_size = 14.0f;
+  cfg.atlas_width = 512u;
+  cfg.atlas_height = 512u;
+  cfg.atlas_pad = VR_FONT_DEFAULT_ATLAS_PADDING;
+  cfg.atlas_format = VR_FONT_ATLAS_FORMAT_ALPHA8;
+  cfg.allocator = component_vr_allocator();
+  vr_font_face_t* face = NULL;
+  expect_status((er_ui_status_t)vr_font_face_create_from_memory(&face, font_data, font_size, &cfg), (er_ui_status_t)VR_OK,
+                "shadcn render: variable font opens from memory");
+  free(font_data);
+  if (!face) {
+    er_ui_scene_destroy(&scene);
+    return;
+  }
+
+  er_ui_resolved_theme_t theme = er_ui_resolved_theme_user_default();
+  expect_status(er_ui_shadcn_card_emit(&scene, er_ui_bounds(4.0f, 4.0f, 220.0f, 156.0f), theme), ER_UI_OK,
+                "shadcn render: card emits");
+  expect_status(er_ui_shadcn_button_emit(&scene, face, er_ui_bounds(16.0f, 16.0f, 128.0f, 48.0f), theme, "Deploy", 3001u,
+                                         ER_UI_SHADCN_BUTTON_DEFAULT, ER_UI_SHADCN_BUTTON_SIZE_DEFAULT, true),
+                ER_UI_OK, "shadcn render: button emits");
+  expect_status(er_ui_shadcn_select_emit(&scene, face, er_ui_bounds(16.0f, 66.0f, 188.0f, 62.0f), theme, "Currency", "USD", 3002u, true),
+                ER_UI_OK, "shadcn render: select emits");
+  expect_status(er_ui_shadcn_slider_emit(&scene, face, er_ui_bounds(16.0f, 126.0f, 188.0f, 48.0f), theme, "Minimum payout", 0.42f, 3003u),
+                ER_UI_OK, "shadcn render: slider emits");
+  expect_true(scene.rect_count >= 8u, "shadcn render: primitives emit geometry");
+  expect_true(scene.hit_count >= 3u, "shadcn render: interactive primitives emit hits");
+  expect_true(scene.text_quad_count > 0u, "shadcn render: primitives use variable font text");
+  expect_status(er_ui_shadcn_button_emit(&scene, NULL, er_ui_bounds(0.0f, 0.0f, 40.0f, 40.0f), theme, "Nope", 9u,
+                                         ER_UI_SHADCN_BUTTON_DEFAULT, ER_UI_SHADCN_BUTTON_SIZE_DEFAULT, true),
+                ER_UI_ERR_INVALID_ARGUMENT, "shadcn render: missing variable font is rejected");
+
+  vr_font_face_destroy(face);
+  er_ui_scene_destroy(&scene);
+}
+
 void run_component_tests(void) {
   expect_size(er_ui_shadcn_demo_count(), 57u, "shadcn catalog: component count matches Rust source");
   expect_true(er_ui_shadcn_find_demo_by_slug("accordion") != 0, "shadcn catalog: accordion exists");
@@ -127,4 +237,6 @@ void run_component_tests(void) {
     expect_true(er_ui_shadcn_component_preview_available(spec->slug), "shadcn preview: every native component has a preview");
     expect_true(er_ui_shadcn_demo_preview_available(spec->slug), "shadcn preview: every native demo has a preview");
   }
+
+  test_shadcn_render_primitives();
 }

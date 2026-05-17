@@ -2,6 +2,8 @@
 
 #include <stdint.h>
 
+#define ER_UI_SHADCN_TEXT_CAPACITY 128u
+
 static bool er_ui_shadcn_streq(const char* a, const char* b) {
   if (!a || !b) return false;
   while (*a && *b) { if (*a != *b) return false; a++; b++; }
@@ -12,6 +14,54 @@ static bool er_ui_shadcn_list_contains(const char* const* values, size_t count, 
   if (!values || !value) return false;
   for (size_t i = 0u; i < count; ++i) if (er_ui_shadcn_streq(values[i], value)) return true;
   return false;
+}
+
+static er_ui_status_t er_ui_shadcn_push_ascii_text(
+  er_ui_scene_t* scene,
+  vr_font_face_t* font,
+  const char* text,
+  float x,
+  float y,
+  er_ui_color4_t color) {
+  if (!scene || !font || !text) return ER_UI_ERR_INVALID_ARGUMENT;
+  uint32_t codepoints[ER_UI_SHADCN_TEXT_CAPACITY];
+  size_t count = 0u;
+  while (text[count] && count < ER_UI_SHADCN_TEXT_CAPACITY) {
+    unsigned char byte = (unsigned char)text[count];
+    codepoints[count] = byte < 0x80u ? (uint32_t)byte : (uint32_t)'?';
+    count++;
+  }
+  return er_ui_scene_push_varfont_text(scene, font, codepoints, count, x, y, color);
+}
+
+static er_ui_color4_t er_ui_shadcn_button_fill(er_ui_resolved_theme_t theme, er_ui_shadcn_button_variant_t variant) {
+  switch (variant) {
+    case ER_UI_SHADCN_BUTTON_DESTRUCTIVE: return er_ui_color_with_alpha(theme.colors.danger, 0.18f);
+    case ER_UI_SHADCN_BUTTON_OUTLINE: return er_ui_color_with_alpha(theme.colors.panel, 0.74f);
+    case ER_UI_SHADCN_BUTTON_SECONDARY: return er_ui_color_with_alpha(theme.colors.row, 0.82f);
+    case ER_UI_SHADCN_BUTTON_GHOST:
+    case ER_UI_SHADCN_BUTTON_LINK: return er_ui_color_with_alpha(theme.colors.panel, 0.0f);
+    case ER_UI_SHADCN_BUTTON_DEFAULT:
+    default: return theme.colors.accent;
+  }
+}
+
+static er_ui_color4_t er_ui_shadcn_button_border(er_ui_resolved_theme_t theme, er_ui_shadcn_button_variant_t variant) {
+  switch (variant) {
+    case ER_UI_SHADCN_BUTTON_DESTRUCTIVE: return theme.colors.danger;
+    case ER_UI_SHADCN_BUTTON_DEFAULT: return theme.colors.accent;
+    default: return theme.colors.border;
+  }
+}
+
+static er_ui_color4_t er_ui_shadcn_button_text(er_ui_resolved_theme_t theme, er_ui_shadcn_button_variant_t variant) {
+  switch (variant) {
+    case ER_UI_SHADCN_BUTTON_DEFAULT: return theme.colors.accent_text;
+    case ER_UI_SHADCN_BUTTON_DESTRUCTIVE: return theme.colors.danger;
+    case ER_UI_SHADCN_BUTTON_GHOST:
+    case ER_UI_SHADCN_BUTTON_LINK: return theme.colors.muted;
+    default: return theme.colors.text;
+  }
 }
 
 static const char* const no_variants[] = {0};
@@ -660,4 +710,101 @@ bool er_ui_shadcn_component_preview_available_by_identifier(const char* identifi
 
 bool er_ui_shadcn_demo_preview_available_by_identifier(const char* identifier) {
   return er_ui_shadcn_component_preview_available_by_identifier(identifier);
+}
+
+er_ui_bounds_t er_ui_shadcn_button_bounds(er_ui_bounds_t bounds, er_ui_shadcn_button_size_t size) {
+  switch (size) {
+    case ER_UI_SHADCN_BUTTON_SIZE_SM: return er_ui_bounds_with_height_centered(bounds, 36.0f);
+    case ER_UI_SHADCN_BUTTON_SIZE_LG: return er_ui_bounds_with_height_centered(bounds, 44.0f);
+    case ER_UI_SHADCN_BUTTON_SIZE_ICON: {
+      er_ui_bounds_t centered = er_ui_bounds_with_height_centered(bounds, 40.0f);
+      return er_ui_bounds_with_width_centered(centered, 40.0f);
+    }
+    case ER_UI_SHADCN_BUTTON_SIZE_DEFAULT:
+    default: return er_ui_bounds_with_height_centered(bounds, 40.0f);
+  }
+}
+
+er_ui_status_t er_ui_shadcn_card_emit(er_ui_scene_t* scene, er_ui_bounds_t bounds, er_ui_resolved_theme_t theme) {
+  if (!scene || !er_ui_bounds_valid(bounds)) return ER_UI_ERR_INVALID_ARGUMENT;
+  er_ui_status_t status = er_ui_scene_push_rect(scene, er_ui_rect_fill(bounds.x, bounds.y, bounds.w, bounds.h, theme.radius.card, theme.colors.panel));
+  if (status != ER_UI_OK) return status;
+  return er_ui_scene_push_rect(scene, er_ui_rect_border(bounds.x, bounds.y, bounds.w, bounds.h, theme.radius.card, er_ui_color_with_alpha(theme.colors.border, 0.42f)));
+}
+
+er_ui_status_t er_ui_shadcn_button_emit(
+  er_ui_scene_t* scene,
+  vr_font_face_t* font,
+  er_ui_bounds_t bounds,
+  er_ui_resolved_theme_t theme,
+  const char* label,
+  uint32_t id,
+  er_ui_shadcn_button_variant_t variant,
+  er_ui_shadcn_button_size_t size,
+  bool active) {
+  if (!scene || !font || !label || !er_ui_bounds_valid(bounds)) return ER_UI_ERR_INVALID_ARGUMENT;
+  er_ui_bounds_t rect = er_ui_shadcn_button_bounds(bounds, size);
+  er_ui_color4_t fill = er_ui_shadcn_button_fill(theme, variant);
+  if (!active) fill = er_ui_color_with_alpha(fill, fill.a * 0.74f);
+  er_ui_status_t status = er_ui_scene_push_hit(scene, er_ui_hit(ER_UI_HIT_BUTTON, id, rect.x, rect.y, rect.w, rect.h));
+  if (status != ER_UI_OK) return status;
+  if (variant != ER_UI_SHADCN_BUTTON_LINK) {
+    status = er_ui_scene_push_rect(scene, er_ui_rect_fill(rect.x, rect.y, rect.w, rect.h, theme.radius.control, fill));
+    if (status != ER_UI_OK) return status;
+  }
+  if (variant != ER_UI_SHADCN_BUTTON_GHOST && variant != ER_UI_SHADCN_BUTTON_LINK) {
+    status = er_ui_scene_push_rect(scene, er_ui_rect_border(rect.x, rect.y, rect.w, rect.h, theme.radius.control,
+                                                           er_ui_color_with_alpha(er_ui_shadcn_button_border(theme, variant), active ? 0.32f : 0.18f)));
+    if (status != ER_UI_OK) return status;
+  }
+  return er_ui_shadcn_push_ascii_text(scene, font, label, rect.x + 14.0f, rect.y + rect.h * 0.62f, er_ui_shadcn_button_text(theme, variant));
+}
+
+er_ui_status_t er_ui_shadcn_select_emit(
+  er_ui_scene_t* scene,
+  vr_font_face_t* font,
+  er_ui_bounds_t bounds,
+  er_ui_resolved_theme_t theme,
+  const char* label,
+  const char* value,
+  uint32_t id,
+  bool open) {
+  if (!scene || !font || !label || !value || !er_ui_bounds_valid(bounds)) return ER_UI_ERR_INVALID_ARGUMENT;
+  er_ui_status_t status = er_ui_shadcn_push_ascii_text(scene, font, label, bounds.x, bounds.y + 13.0f, theme.colors.muted);
+  if (status != ER_UI_OK) return status;
+  er_ui_bounds_t control = er_ui_bounds(bounds.x, bounds.y + 18.0f, bounds.w, er_ui_float_min(bounds.h - 18.0f, 40.0f));
+  if (!er_ui_bounds_valid(control)) return ER_UI_ERR_INVALID_ARGUMENT;
+  status = er_ui_scene_push_hit(scene, er_ui_hit(ER_UI_HIT_SELECT, id, control.x, control.y, control.w, control.h));
+  if (status != ER_UI_OK) return status;
+  er_ui_color4_t fill = open ? er_ui_color_with_alpha(theme.colors.active, 0.58f) : er_ui_color_with_alpha(theme.colors.row, 0.74f);
+  status = er_ui_scene_push_rect(scene, er_ui_rect_fill(control.x, control.y, control.w, control.h, theme.radius.control, fill));
+  if (status != ER_UI_OK) return status;
+  status = er_ui_scene_push_rect(scene, er_ui_rect_border(control.x, control.y, control.w, control.h, theme.radius.control, er_ui_color_with_alpha(theme.colors.border, 0.40f)));
+  if (status != ER_UI_OK) return status;
+  status = er_ui_shadcn_push_ascii_text(scene, font, value, control.x + 12.0f, control.y + 26.0f, theme.colors.text);
+  if (status != ER_UI_OK) return status;
+  return er_ui_shadcn_push_ascii_text(scene, font, open ? "^" : "v", control.x + control.w - 22.0f, control.y + 26.0f, theme.colors.muted);
+}
+
+er_ui_status_t er_ui_shadcn_slider_emit(
+  er_ui_scene_t* scene,
+  vr_font_face_t* font,
+  er_ui_bounds_t bounds,
+  er_ui_resolved_theme_t theme,
+  const char* label,
+  float value,
+  uint32_t id) {
+  if (!scene || !font || !label || !er_ui_bounds_valid(bounds)) return ER_UI_ERR_INVALID_ARGUMENT;
+  float clamped = er_ui_shadcn_clamp01(value);
+  er_ui_status_t status = er_ui_shadcn_push_ascii_text(scene, font, label, bounds.x, bounds.y + 13.0f, theme.colors.muted);
+  if (status != ER_UI_OK) return status;
+  er_ui_bounds_t track = er_ui_bounds(bounds.x, bounds.y + bounds.h - 18.0f, bounds.w, 6.0f);
+  status = er_ui_scene_push_hit(scene, er_ui_hit(ER_UI_HIT_SLIDER, id, track.x, track.y - 12.0f, track.w, 30.0f));
+  if (status != ER_UI_OK) return status;
+  status = er_ui_scene_push_rect(scene, er_ui_rect_fill(track.x, track.y, track.w, track.h, 999.0f, er_ui_color_with_alpha(theme.colors.row, 0.86f)));
+  if (status != ER_UI_OK) return status;
+  status = er_ui_scene_push_rect(scene, er_ui_rect_fill(track.x, track.y, track.w * clamped, track.h, 999.0f, theme.colors.accent));
+  if (status != ER_UI_OK) return status;
+  float thumb_x = track.x + track.w * clamped - 7.0f;
+  return er_ui_scene_push_rect(scene, er_ui_rect_fill(thumb_x, track.y - 5.0f, 16.0f, 16.0f, 8.0f, theme.colors.accent_text));
 }
