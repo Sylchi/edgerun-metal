@@ -1117,6 +1117,28 @@ er_ui_status_t er_ui_shadcn_breadcrumb_emit(
   return ER_UI_OK;
 }
 
+er_ui_status_t er_ui_shadcn_command_palette_emit(
+  er_ui_scene_t* scene,
+  vr_font_face_t* font,
+  er_ui_bounds_t bounds,
+  er_ui_resolved_theme_t theme,
+  const char* placeholder,
+  uint32_t id) {
+  if (!scene || !font || !placeholder || !er_ui_bounds_valid(bounds)) return ER_UI_ERR_INVALID_ARGUMENT;
+  er_ui_status_t status = er_ui_scene_push_hit(scene, er_ui_hit(ER_UI_HIT_INPUT, id, bounds.x, bounds.y, bounds.w, bounds.h));
+  if (status != ER_UI_OK) return status;
+  status = er_ui_scene_push_rect(scene, er_ui_rect_fill(bounds.x, bounds.y, bounds.w, bounds.h, theme.radius.control, theme.colors.composer));
+  if (status != ER_UI_OK) return status;
+  status = er_ui_scene_push_rect(scene, er_ui_rect_border(bounds.x, bounds.y, bounds.w, bounds.h, theme.radius.control, er_ui_color_with_alpha(theme.colors.border, 0.54f)));
+  if (status != ER_UI_OK) return status;
+  float icon_y = bounds.y + (bounds.h - 14.0f) * 0.5f;
+  status = er_ui_scene_push_rect(scene, er_ui_rect_border(bounds.x + 14.0f, icon_y, 10.0f, 10.0f, 5.0f, theme.colors.muted));
+  if (status != ER_UI_OK) return status;
+  status = er_ui_scene_push_rect(scene, er_ui_rect_fill(bounds.x + 23.0f, icon_y + 10.0f, 7.0f, 2.0f, 1.0f, theme.colors.muted));
+  if (status != ER_UI_OK) return status;
+  return er_ui_shadcn_push_ascii_text(scene, font, placeholder, bounds.x + 44.0f, bounds.y + bounds.h * 0.62f, theme.colors.muted);
+}
+
 er_ui_status_t er_ui_shadcn_bar_chart_emit(
   er_ui_scene_t* scene,
   vr_font_face_t* font,

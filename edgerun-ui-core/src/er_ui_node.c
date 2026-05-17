@@ -194,6 +194,13 @@ er_ui_node_t er_ui_node_bar_chart(const char* title, const char* const* labels, 
   return node;
 }
 
+er_ui_node_t er_ui_node_command_palette(const char* placeholder, uint32_t id) {
+  er_ui_node_t node = er_ui_node_base(ER_UI_NODE_COMMAND_PALETTE);
+  node.label = placeholder;
+  node.id = id;
+  return node;
+}
+
 er_ui_node_t* er_ui_node_set_bounds(er_ui_node_t* node, er_ui_bounds_t bounds) {
   if (!node) return node;
   node->bounds = bounds;
@@ -327,6 +334,8 @@ er_ui_status_t er_ui_node_render(
       return er_ui_shadcn_tabs_emit(scene, font, rect, theme, node->labels, node->label_count, node->selected, node->id);
     case ER_UI_NODE_BAR_CHART:
       return er_ui_shadcn_bar_chart_emit(scene, font, rect, theme, node->label, node->labels, node->values, node->value_count, node->id, node->selected);
+    case ER_UI_NODE_COMMAND_PALETTE:
+      return er_ui_shadcn_command_palette_emit(scene, font, rect, theme, node->label, node->id);
     default:
       return ER_UI_ERR_INVALID_ARGUMENT;
   }
