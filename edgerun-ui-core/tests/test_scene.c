@@ -517,6 +517,14 @@ static void test_varfont_memory_face_emits_ui_text(void) {
   }
 
   const uint32_t text[] = {'R', 'u', 'n'};
+  er_ui_varfont_text_metrics_t measured = {0};
+  expect_status(er_ui_varfont_measure_text(face, text, 3u, &measured), ER_UI_OK, "varfont text: measure succeeds");
+  expect_true(measured.advance_width > 0.0f, "varfont text: measured advance is positive");
+  expect_true(measured.line_height > 0.0f, "varfont text: measured line height is positive");
+  expect_true(measured.ascender > 0.0f, "varfont text: measured ascender is positive");
+  expect_status(er_ui_varfont_measure_text(face, NULL, 1u, &measured), ER_UI_ERR_INVALID_ARGUMENT,
+                "varfont text: measure rejects missing codepoints");
+
   expect_status(er_ui_scene_push_varfont_text(&scene, face, text, 3u, 4.0f, 40.0f, ER_TEST_TEXT), ER_UI_OK,
                 "varfont text: shaped text emits scene quads");
   expect_true(scene.text_quad_count > 0u, "varfont text: emitted at least one quad");
