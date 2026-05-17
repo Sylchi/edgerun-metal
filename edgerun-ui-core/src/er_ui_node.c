@@ -176,6 +176,16 @@ er_ui_node_t er_ui_node_toast(const char* message, er_ui_color4_t accent) {
   er_ui_node_t node = er_ui_node_base(ER_UI_NODE_TOAST);
   node.label = message;
   node.color = accent;
+  node.active = false;
+  return node;
+}
+
+er_ui_node_t er_ui_node_toast_icon(const char* message, er_ui_icon_t icon, er_ui_color4_t accent) {
+  er_ui_node_t node = er_ui_node_base(ER_UI_NODE_TOAST);
+  node.label = message;
+  node.icon = icon;
+  node.color = accent;
+  node.active = true;
   return node;
 }
 
@@ -1757,6 +1767,24 @@ static er_ui_status_t er_ui_node_render_icon(er_ui_scene_t* scene, er_ui_bounds_
 
 static er_ui_bounds_t er_ui_node_center_square(er_ui_bounds_t bounds, float size);
 
+static er_ui_status_t er_ui_node_render_toast(
+  const er_ui_node_t* node,
+  er_ui_scene_t* scene,
+  vr_font_face_t* font,
+  er_ui_bounds_t bounds,
+  er_ui_resolved_theme_t theme) {
+  if (!node || !scene || !font || !node->label || !er_ui_bounds_valid(bounds)) return ER_UI_ERR_INVALID_ARGUMENT;
+  if (!node->active) return er_ui_shadcn_toast_emit(scene, font, bounds, theme, node->label, node->color);
+  er_ui_status_t status = er_ui_shadcn_card_emit(scene, bounds, theme);
+  if (status != ER_UI_OK) return status;
+  er_ui_bounds_t icon_box = er_ui_bounds(bounds.x + 10.0f, bounds.y + (bounds.h - 28.0f) * 0.5f, 28.0f, 28.0f);
+  status = er_ui_scene_push_rect(scene, er_ui_rect_fill(icon_box.x, icon_box.y, icon_box.w, icon_box.h, 8.0f, er_ui_color_with_alpha(node->color, 0.18f)));
+  if (status != ER_UI_OK) return status;
+  status = er_ui_node_render_icon(scene, er_ui_node_center_square(icon_box, 16.0f), node->icon, node->color);
+  if (status != ER_UI_OK) return status;
+  return er_ui_node_render_text(scene, font, node->label, er_ui_bounds(bounds.x + 46.0f, bounds.y, bounds.w - 56.0f, bounds.h), theme.colors.text);
+}
+
 static er_ui_status_t er_ui_node_render_collapsible(
   const er_ui_node_t* node,
   er_ui_scene_t* scene,
@@ -2571,7 +2599,7 @@ er_ui_status_t er_ui_node_render(
     case ER_UI_NODE_BREADCRUMB:
       return er_ui_shadcn_breadcrumb_emit(scene, font, rect, theme, node->labels, node->label_count, node->selected, node->id);
     case ER_UI_NODE_TOAST:
-      return er_ui_shadcn_toast_emit(scene, font, rect, theme, node->label, node->color);
+      return er_ui_node_render_toast(node, scene, font, rect, theme);
     case ER_UI_NODE_EMPTY:
       return er_ui_shadcn_empty_emit(scene, font, rect, theme, node->label, node->detail);
     case ER_UI_NODE_LIST_ROW:
