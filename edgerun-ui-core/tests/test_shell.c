@@ -1,5 +1,77 @@
 #include "test_common.h"
 
+#include <stdio.h>
+#include <stdlib.h>
+
+static void* shell_vr_alloc(void* user, size_t size, size_t align) {
+  (void)user;
+  (void)align;
+  return malloc(size);
+}
+
+static void* shell_vr_realloc(void* user, void* ptr, size_t old_size, size_t new_size, size_t align) {
+  (void)user;
+  (void)old_size;
+  (void)align;
+  return realloc(ptr, new_size);
+}
+
+static void shell_vr_free(void* user, void* ptr, size_t size, size_t align) {
+  (void)user;
+  (void)size;
+  (void)align;
+  free(ptr);
+}
+
+static vr_font_allocator_t shell_vr_allocator(void) {
+  vr_font_allocator_t allocator = {0};
+  allocator.alloc = shell_vr_alloc;
+  allocator.realloc = shell_vr_realloc;
+  allocator.free = shell_vr_free;
+  return allocator;
+}
+
+static unsigned char* shell_read_file(const char* path, size_t* out_size) {
+  if (!path || !out_size) return NULL;
+  *out_size = 0u;
+  FILE* file = fopen(path, "rb");
+  if (!file) return NULL;
+  if (fseek(file, 0, SEEK_END) != 0) {
+    fclose(file);
+    return NULL;
+  }
+  long size = ftell(file);
+  if (size <= 0) {
+    fclose(file);
+    return NULL;
+  }
+  if (fseek(file, 0, SEEK_SET) != 0) {
+    fclose(file);
+    return NULL;
+  }
+  unsigned char* data = (unsigned char*)malloc((size_t)size);
+  if (!data) {
+    fclose(file);
+    return NULL;
+  }
+  size_t read = fread(data, 1u, (size_t)size, file);
+  fclose(file);
+  if (read != (size_t)size) {
+    free(data);
+    return NULL;
+  }
+  *out_size = (size_t)size;
+  return data;
+}
+
+static bool shell_scene_has_hit_id(const er_ui_scene_t* scene, uint32_t id) {
+  if (!scene) return false;
+  for (size_t i = 0u; i < scene->hit_count; ++i) {
+    if (scene->hits[i].id == id) return true;
+  }
+  return false;
+}
+
 void run_shell_tests(void) {
   er_ui_shell_state_t shell = {0};
   er_ui_runtime_state_t runtime = {0};
@@ -77,6 +149,47 @@ void run_shell_tests(void) {
   action.kind = ER_UI_ACTION_HOVERED;
   expect_status(er_ui_shell_apply_action(&shell, action, &changed), ER_UI_OK, "shell action: ignored action applies");
   expect_true(!changed, "shell action: ignored action reports unchanged");
+
+  size_t font_size = 0u;
+  unsigned char* font_data = shell_read_file(ER_UI_REPO_ROOT "/varfont/fonts/Geist[wght].ttf", &font_size);
+  expect_true(font_data != NULL && font_size > 0u, "shell prompt: bundled variable font loads");
+  if (font_data) {
+    vr_font_config_t cfg = {0};
+    cfg.px_size = 18.0f;
+    cfg.atlas_width = 512u;
+    cfg.atlas_height = 512u;
+    cfg.atlas_pad = VR_FONT_DEFAULT_ATLAS_PADDING;
+    cfg.atlas_format = VR_FONT_ATLAS_FORMAT_ALPHA8;
+    cfg.allocator = shell_vr_allocator();
+    vr_font_face_t* face = NULL;
+    expect_status((er_ui_status_t)vr_font_face_create_from_memory(&face, font_data, font_size, &cfg), (er_ui_status_t)VR_OK,
+                  "shell prompt: variable font opens from memory");
+    free(font_data);
+    if (face) {
+      er_ui_shell_show_network_app_prompt(&shell);
+      expect_true(er_ui_shell_network_app_prompt_open(&shell), "shell prompt: prompt opens");
+      er_ui_scene_clear_commands(&scene);
+      expect_status(er_ui_shell_emit_scene_with_font(&shell, &scene, er_ui_bounds(0.0f, 0.0f, 640.0f, 400.0f), theme, face), ER_UI_OK,
+                    "shell prompt: scene emits with variable font");
+      expect_true(scene.text_quad_count > 0u, "shell prompt: variable font text emits quads");
+      expect_true(shell_scene_has_hit_id(&scene, ER_UI_NETWORK_APP_PROMPT_RUN_ONCE_ID), "shell prompt: run once hit emits");
+      expect_true(shell_scene_has_hit_id(&scene, ER_UI_NETWORK_APP_PROMPT_VERIFY_CACHE_ID), "shell prompt: verify cache hit emits");
+      expect_true(shell_scene_has_hit_id(&scene, ER_UI_NETWORK_APP_PROMPT_CANCEL_ID), "shell prompt: cancel hit emits");
+
+      action = (er_ui_action_t){0};
+      action.kind = ER_UI_ACTION_ACTIVATED;
+      action.has_hit = true;
+      action.hit = er_ui_hit(ER_UI_HIT_BUTTON, ER_UI_NETWORK_APP_PROMPT_VERIFY_CACHE_ID, 0.0f, 0.0f, 1.0f, 1.0f);
+      expect_status(er_ui_shell_apply_action(&shell, action, &changed), ER_UI_OK, "shell prompt: verify cache action applies");
+      expect_true(changed, "shell prompt: verify cache reports changed");
+      expect_true(!er_ui_shell_network_app_prompt_open(&shell), "shell prompt: verify cache closes prompt");
+      expect_true(er_ui_shell_network_app_prompt_choice(&shell) == ER_UI_NETWORK_APP_PROMPT_CHOICE_VERIFY_CACHE,
+                  "shell prompt: verify cache records choice");
+      er_ui_shell_clear_network_app_prompt_choice(&shell);
+      expect_true(er_ui_shell_network_app_prompt_choice(&shell) == ER_UI_NETWORK_APP_PROMPT_CHOICE_NONE, "shell prompt: choice clears");
+      vr_font_face_destroy(face);
+    }
+  }
 
   expect_status(er_ui_workspace_remove_surface(&shell, 10u), ER_UI_OK, "workspace: remove final surface succeeds");
   expect_u32(er_ui_workspace_focused_surface_id(&shell), 0u, "workspace: focus clears when empty");
