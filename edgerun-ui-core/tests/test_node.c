@@ -119,6 +119,7 @@ void run_node_tests(void) {
   expect_string(er_ui_node_kind_label(ER_UI_NODE_CONTEXT_MENU), "context-menu", "node: kind label maps context menu");
   expect_string(er_ui_node_kind_label(ER_UI_NODE_DATE_PICKER), "date-picker", "node: kind label maps date picker");
   expect_string(er_ui_node_kind_label(ER_UI_NODE_CAROUSEL), "carousel", "node: kind label maps carousel");
+  expect_string(er_ui_node_kind_label(ER_UI_NODE_CALENDAR), "calendar", "node: kind label maps calendar");
   expect_string(er_ui_icon_label(ER_UI_ICON_SEARCH), "search", "node: icon label maps canonical icon");
   expect_u32(er_ui_icon_atlas_id(ER_UI_ICON_SEARCH), (uint32_t)ER_UI_ICON_SEARCH + 1u, "node: icon atlas id is stable");
   expect_string(er_ui_icon_provider_name(ER_UI_ICON_APP, ER_UI_ICON_PROVIDER_LUCIDE), "app-window", "node: lucide provider name maps app icon");
@@ -404,6 +405,15 @@ void run_node_tests(void) {
   expect_status(er_ui_node_accessibility_child(&carousel_a11y, 4u, &a11y), ER_UI_OK, "node: carousel next accessibility maps");
   expect_true(a11y.has_id && a11y.id == 8075u, "node: carousel next id");
 
+  er_ui_node_t calendar_a11y = er_ui_node_calendar("May 2026", date_days, 4u, 2u, 8076u);
+  expect_status(er_ui_node_accessibility(&calendar_a11y, &a11y), ER_UI_OK, "node: calendar accessibility maps");
+  expect_size(a11y.role, ER_UI_A11Y_GROUP, "node: calendar accessibility role");
+  expect_status(er_ui_node_accessibility_child(&calendar_a11y, 0u, &a11y), ER_UI_OK, "node: calendar previous accessibility maps");
+  expect_true(a11y.has_id && a11y.id == 8076u, "node: calendar previous id");
+  expect_status(er_ui_node_accessibility_child(&calendar_a11y, 4u, &a11y), ER_UI_OK, "node: calendar day accessibility maps");
+  expect_true(a11y.has_id && a11y.id == 8080u, "node: calendar day id");
+  expect_true((a11y.states & ER_UI_A11Y_STATE_SELECTED) != 0u, "node: calendar selected day state");
+
   er_ui_node_t checked = er_ui_node_checkbox("Remember", true, 8002u);
   expect_status(er_ui_node_accessibility(&checked, &a11y), ER_UI_OK, "node: checkbox accessibility maps");
   expect_size(a11y.role, ER_UI_A11Y_CHECKBOX, "node: checkbox accessibility role");
@@ -570,6 +580,7 @@ void run_node_tests(void) {
     er_ui_node_t date_picker = er_ui_node_date_picker("Pick a date", "May 2026", render_date_days, 4u, 2u, 8868u);
     const char* const render_carousel_items[] = {"One", "Two", "Three"};
     er_ui_node_t carousel = er_ui_node_carousel(render_carousel_items, 3u, 8874u);
+    er_ui_node_t calendar = er_ui_node_calendar("May 2026", render_date_days, 4u, 2u, 8876u);
 
     expect_status(er_ui_node_render(&alert, &scene, face, er_ui_bounds(0.0f, 170.0f, 360.0f, 76.0f), theme), ER_UI_OK, "node: alert renders");
     expect_status(er_ui_node_render(&avatar, &scene, face, er_ui_bounds(0.0f, 254.0f, 42.0f, 42.0f), theme), ER_UI_OK, "node: avatar renders");
@@ -746,6 +757,12 @@ void run_node_tests(void) {
                   "node: carousel renders");
     expect_size(scene.hit_count, hits_before_carousel + 2u, "node: carousel emits previous and next hits");
     expect_size(scene.icon_quad_count, icons_before_carousel + 2u, "node: carousel emits chevron icons");
+    size_t hits_before_calendar = scene.hit_count;
+    size_t icons_before_calendar = scene.icon_quad_count;
+    expect_status(er_ui_node_render(&calendar, &scene, face, er_ui_bounds(0.0f, 6088.0f, 320.0f, 150.0f), theme), ER_UI_OK,
+                  "node: calendar renders");
+    expect_size(scene.hit_count, hits_before_calendar + 6u, "node: calendar emits navigation and day hits");
+    expect_size(scene.icon_quad_count, icons_before_calendar + 2u, "node: calendar emits navigation icons");
     size_t drag_sources_before = scene.drag_source_count;
     size_t drop_targets_before = scene.drop_target_count;
     expect_status(er_ui_node_render(&reorderable, &scene, face, er_ui_bounds(0.0f, 2930.0f, 260.0f, 52.0f), theme), ER_UI_OK,
