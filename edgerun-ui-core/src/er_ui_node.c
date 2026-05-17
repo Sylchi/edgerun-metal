@@ -564,6 +564,20 @@ er_ui_node_t er_ui_node_calendar(const char* month, const char* const* days, siz
   return node;
 }
 
+er_ui_node_t er_ui_node_combobox(const char* label, const char* value, const char* placeholder, const char* const* options, size_t option_count,
+                                 size_t selected, uint32_t base_id) {
+  er_ui_node_t node = er_ui_node_base(ER_UI_NODE_COMBOBOX);
+  node.label = label;
+  node.value = value;
+  node.detail = placeholder;
+  node.labels = options;
+  node.label_count = option_count;
+  node.selected = selected;
+  node.id = base_id;
+  node.gap = 8.0f;
+  return node;
+}
+
 er_ui_node_t er_ui_node_route_path(const char* label, const char* const* hops, size_t hop_count) {
   er_ui_node_t node = er_ui_node_base(ER_UI_NODE_ROUTE_PATH);
   node.label = label;
@@ -923,6 +937,7 @@ const char* er_ui_node_kind_label(er_ui_node_kind_t kind) {
     case ER_UI_NODE_DATE_PICKER: return "date-picker";
     case ER_UI_NODE_CAROUSEL: return "carousel";
     case ER_UI_NODE_CALENDAR: return "calendar";
+    case ER_UI_NODE_COMBOBOX: return "combobox";
     case ER_UI_NODE_ROUTE_PATH: return "route-path";
     case ER_UI_NODE_PACKAGE_CARD: return "package-card";
     case ER_UI_NODE_RECEIPT_ROW: return "receipt-row";
@@ -1295,6 +1310,11 @@ er_ui_status_t er_ui_node_accessibility(const er_ui_node_t* node, er_ui_a11y_nod
     case ER_UI_NODE_CALENDAR:
       out = er_ui_a11y_base(ER_UI_A11Y_GROUP, node->label, false, 0u);
       break;
+    case ER_UI_NODE_COMBOBOX:
+      out = er_ui_a11y_base(ER_UI_A11Y_COMBOBOX, node->label, true, node->id);
+      er_ui_a11y_set_value(&out, node->value);
+      out.states |= ER_UI_A11Y_STATE_OPEN;
+      break;
     case ER_UI_NODE_TABS:
       out = er_ui_a11y_base(ER_UI_A11Y_TAB_LIST, "tabs", false, 0u);
       break;
@@ -1439,6 +1459,25 @@ er_ui_status_t er_ui_node_accessibility_child(const er_ui_node_t* node, size_t c
     size_t day_index = child_index - 2u;
     er_ui_a11y_node_t out = er_ui_a11y_base(ER_UI_A11Y_BUTTON, node->labels[day_index], true, node->id + (uint32_t)child_index);
     if (day_index == node->selected) out.states |= ER_UI_A11Y_STATE_SELECTED;
+    *out_a11y = out;
+    return ER_UI_OK;
+  }
+  if (node->kind == ER_UI_NODE_COMBOBOX) {
+    if (!node->labels || child_index >= node->label_count + 2u) return ER_UI_ERR_INVALID_ARGUMENT;
+    if (child_index == 0u) {
+      er_ui_a11y_node_t out = er_ui_a11y_base(ER_UI_A11Y_COMBOBOX, node->label, true, node->id);
+      er_ui_a11y_set_value(&out, node->value);
+      out.states |= ER_UI_A11Y_STATE_OPEN;
+      *out_a11y = out;
+      return ER_UI_OK;
+    }
+    if (child_index == 1u) {
+      *out_a11y = er_ui_a11y_base(ER_UI_A11Y_COMBOBOX, node->detail, true, node->id + 1u);
+      return ER_UI_OK;
+    }
+    size_t option_index = child_index - 2u;
+    er_ui_a11y_node_t out = er_ui_a11y_base(ER_UI_A11Y_MENU_ITEM, node->labels[option_index], true, node->id + (uint32_t)child_index);
+    if (option_index == node->selected) out.states |= ER_UI_A11Y_STATE_SELECTED;
     *out_a11y = out;
     return ER_UI_OK;
   }
@@ -2381,6 +2420,32 @@ static er_ui_status_t er_ui_node_render_calendar(
   return ER_UI_OK;
 }
 
+static er_ui_status_t er_ui_node_render_combobox(
+  const er_ui_node_t* node,
+  er_ui_scene_t* scene,
+  vr_font_face_t* font,
+  er_ui_bounds_t bounds,
+  er_ui_resolved_theme_t theme) {
+  if (!node || !scene || !font || !node->label || !node->value || !node->detail || !node->labels || node->label_count == 0u ||
+      !er_ui_bounds_valid(bounds)) {
+    return ER_UI_ERR_INVALID_ARGUMENT;
+  }
+  er_ui_status_t status = er_ui_shadcn_select_emit(scene, font, er_ui_bounds(bounds.x, bounds.y, bounds.w, 46.0f), theme, node->label, node->value,
+                                                   node->id, false);
+  if (status != ER_UI_OK) return status;
+  status = er_ui_shadcn_command_palette_emit(scene, font, er_ui_bounds(bounds.x, bounds.y + 46.0f + node->gap, bounds.w, 46.0f), theme, node->detail,
+                                             node->id + 1u);
+  if (status != ER_UI_OK) return status;
+  float y = bounds.y + 46.0f + node->gap + 46.0f + node->gap;
+  for (size_t i = 0u; i < node->label_count; ++i) {
+    status = er_ui_shadcn_menu_item_emit(scene, font, er_ui_bounds(bounds.x, y, bounds.w, 44.0f), theme, node->labels[i], "", "",
+                                         i == node->selected, theme.colors.accent, node->id + 2u + (uint32_t)i);
+    if (status != ER_UI_OK) return status;
+    y += 44.0f + node->gap;
+  }
+  return ER_UI_OK;
+}
+
 static er_ui_status_t er_ui_node_render_label_group(
   const er_ui_node_t* node,
   er_ui_scene_t* scene,
@@ -2585,6 +2650,8 @@ er_ui_status_t er_ui_node_render(
       return er_ui_node_render_carousel(node, scene, font, rect, theme);
     case ER_UI_NODE_CALENDAR:
       return er_ui_node_render_calendar(node, scene, font, rect, theme);
+    case ER_UI_NODE_COMBOBOX:
+      return er_ui_node_render_combobox(node, scene, font, rect, theme);
     case ER_UI_NODE_ROUTE_PATH:
       return er_ui_shadcn_route_path_emit(scene, font, rect, theme, node->label, node->labels, node->label_count);
     case ER_UI_NODE_PACKAGE_CARD:
