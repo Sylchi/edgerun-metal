@@ -8,11 +8,27 @@ Intention: remove parallel implementations by forcing every app, UI, driver, sto
 
 - One boundary protocol model: `edgerun-work` protocol records carried by erwire.
 - One authority model: identity-routed, recipient-sealed, admission-bound work.
+- One jurisdiction model: every admission controls only the resources, route scope, budget, and policy window it is authorized to govern.
 - One storage model: content-addressed objects plus VFS labels.
 - One UI model: admitted scene/render capability packets, never app-owned framebuffers.
 - One driver model: Wasm driver logic sends relay device-operation packets.
 - One hardware model: endpoint adapters own local queues, registers, DMA, and firmware compatibility.
 - One routing model: signed `WorkAdmission` records define relay paths; relay intents and transit records only move and prove admitted packets.
+- One compatibility model: hardware, network, storage, scheduling, user policy, and application layers share record shapes and proofs without sharing authority.
+
+## Authority Rule
+
+No layer may turn its local authority into global authority.
+
+- Hardware adapters may own queues, registers, DMA, and interrupts for admitted endpoint work only.
+- Network relays may move packets and produce transit evidence only.
+- Storage nodes may verify and store admitted typed object payloads only.
+- UI renderers may draw admitted scene/render capability payloads only.
+- Schedulers may allocate local time, memory, and execution slots only.
+- Human relationship, group, and organization policy may admit access inside their own social or administrative scope only.
+- Settlement may pay verified receipts and proofs only.
+
+The shared contract is what lets these parts interoperate. The admissions remain scoped to their jurisdictions.
 
 ## Current Baseline
 

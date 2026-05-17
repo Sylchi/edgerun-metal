@@ -20,6 +20,7 @@ These are concept sources only. The C runtime owns its ABI, memory model, and im
 - The relay node may store opaque encrypted bytes and forward sealed packets. Storage is just another packet/address operation.
 - Data movement happens through admitted work and relay paths.
 - A boundary is crossed only through a relay controlled by an admission node.
+- Admissions are scoped jurisdictions, not global authority. An admission can authorize only the resources, relationships, route scope, budget, and policy window governed by its signer.
 - Plaintext is an active in-memory state only. It is never a storage or transport format.
 - Anything that can persist or leave the local authority boundary is sealed first.
 - The host can store data without holding keys. Stored data is content-addressed and encrypted or sealed to the intended recipient.
@@ -75,6 +76,8 @@ This lets a NIC driver build descriptor/register transactions as data, pass them
 `WorkRequest` is signed intent from a user or app asking to cross an authority boundary. It commits to recipient, work type, department, payload hash, input root, budget, validity, and sequence.
 
 `WorkAdmission` is the policy decision. It commits to the request hash, admitted route, channel, relay path, budget, policy hash, validity, and admission node.
+
+The admission node's authority is jurisdictional. A storage admission governs storage work for its storage domain. A render admission governs render access for a renderer or shell scope. A scheduler admission governs local time and memory slots. A human relationship, group, or organization admission governs access inside that social scope. None of these admissions can authorize a different layer by implication; cross-jurisdiction work must carry the relevant signed intent and admission for the destination authority.
 
 `ChannelEnvelope` carries an admitted packet over a channel. The channel is an abstraction; in this runtime it starts as memory and firmware transports, not OS sockets.
 
