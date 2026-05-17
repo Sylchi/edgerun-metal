@@ -507,7 +507,12 @@ static void test_varfont_memory_face_emits_ui_text(void) {
   expect_status(er_ui_scene_push_varfont_text(&scene, face, text, 3u, 4.0f, 40.0f, ER_TEST_TEXT), ER_UI_OK,
                 "varfont text: shaped text emits scene quads");
   expect_true(scene.text_quad_count > 0u, "varfont text: emitted at least one quad");
-  expect_true(vr_font_atlas_count(face) > 0u, "varfont text: atlas page was created");
+  size_t atlas_count = vr_font_atlas_count(face);
+  expect_true(atlas_count > 0u, "varfont text: atlas page was created");
+  expect_true(scene.text_quads[0].atlas_id < atlas_count, "varfont text: emitted quad references a valid atlas page");
+  uint32_t atlas_texture = 0u;
+  expect_status((er_ui_status_t)vr_font_atlas_texture(face, scene.text_quads[0].atlas_id, &atlas_texture), (er_ui_status_t)VR_OK,
+                "varfont text: emitted atlas page resolves");
 
   vr_font_face_destroy(face);
   er_ui_scene_destroy(&scene);
