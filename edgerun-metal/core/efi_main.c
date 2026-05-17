@@ -765,7 +765,7 @@ static void er_run_mmio_profile(void) {
   er_run_mmio_probe();
 }
 
-static er_ui_status_t er_build_ui_boot_scene(er_ui_scene_t* scene, vr_font_face_t* font) {
+static er_ui_status_t er_build_ui_boot_scene(er_ui_scene_t* scene, vr_font_face_t* font, UINT32 width, UINT32 height) {
   er_ui_resolved_theme_t theme = er_ui_resolved_theme(
     ER_UI_STYLE_AUTHORITY_USER,
     (er_ui_style_preset_t){ER_UI_COLOR_SCHEME_DARK, ER_UI_ACCENT_NEUTRAL, ER_UI_RADIUS_DEFAULT});
@@ -779,7 +779,7 @@ static er_ui_status_t er_build_ui_boot_scene(er_ui_scene_t* scene, vr_font_face_
   status = er_ui_scene_init_with_allocator(scene, theme.colors.bg, er_ui_boot_allocator());
   if (status != ER_UI_OK) return status;
   er_ui_shadcn_demo_gallery_state_init(&gallery_state);
-  return er_ui_edgerun_metal_surface_emit(scene, font, er_ui_bounds(0.0f, 0.0f, 3840.0f, 2160.0f), theme, &gallery_state);
+  return er_ui_edgerun_metal_surface_emit(scene, font, er_ui_bounds(0.0f, 0.0f, (float)width, (float)height), theme, &gallery_state);
 }
 
 static void er_run_ui_profile(EFI_SYSTEM_TABLE* SystemTable) {
@@ -788,6 +788,7 @@ static void er_run_ui_profile(EFI_SYSTEM_TABLE* SystemTable) {
   er_ui_scene_budget_t scene_budget;
   er_ui_scene_budget_violation_t scene_violation;
   ErUiGopRenderStats render_stats;
+  ErUiGopMode mode;
   ErUiGopFrameBudget frame_budget;
   ErUiGopFrameBudgetViolation frame_violation;
   ErUiGopTilePlan tile_plan;
@@ -806,7 +807,17 @@ static void er_run_ui_profile(EFI_SYSTEM_TABLE* SystemTable) {
   }
 
   g_ui_boot_arena_used = 0u;
-  font_cfg.px_size = 28.0f;
+  if (er_ui_gop_renderer_mode(&mode) == 0u) {
+    er_println("ui renderer: mode unavailable");
+    return;
+  }
+  if (er_ui_gop_renderer_tile_plan(ER_UI_BOOT_TILE_WIDTH, ER_UI_BOOT_TILE_HEIGHT,
+                                   ER_UI_BOOT_MAX_DIRTY_TILES, &tile_plan) == 0u ||
+      tile_plan.tile_count > ER_UI_BOOT_MAX_TILE_MARKS) {
+    er_println("ui renderer: tile plan failed");
+    return;
+  }
+  font_cfg.px_size = mode.height <= 1200u ? 16.0f : 28.0f;
   font_cfg.atlas_width = 1024u;
   font_cfg.atlas_height = 1024u;
   font_cfg.atlas_pad = 2u;
@@ -824,7 +835,7 @@ static void er_run_ui_profile(EFI_SYSTEM_TABLE* SystemTable) {
   }
 
   er_println("ui renderer: build scene");
-  if (er_build_ui_boot_scene(&scene, font) != ER_UI_OK) {
+  if (er_build_ui_boot_scene(&scene, font, mode.width, mode.height) != ER_UI_OK) {
     er_println("ui renderer: scene build failed");
     er_ui_scene_destroy(&scene);
     vr_font_face_destroy(font);
@@ -840,14 +851,6 @@ static void er_run_ui_profile(EFI_SYSTEM_TABLE* SystemTable) {
     er_print(" limit=");
     er_print_u64_dec((UINT64)scene_violation.limit);
     er_println("");
-    er_ui_scene_destroy(&scene);
-    vr_font_face_destroy(font);
-    return;
-  }
-  if (er_ui_gop_renderer_tile_plan(ER_UI_BOOT_TILE_WIDTH, ER_UI_BOOT_TILE_HEIGHT,
-                                   ER_UI_BOOT_MAX_DIRTY_TILES, &tile_plan) == 0u ||
-      tile_plan.tile_count > ER_UI_BOOT_MAX_TILE_MARKS) {
-    er_println("ui renderer: tile plan failed");
     er_ui_scene_destroy(&scene);
     vr_font_face_destroy(font);
     return;
