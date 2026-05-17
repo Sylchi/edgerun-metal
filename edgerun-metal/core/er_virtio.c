@@ -30,6 +30,7 @@
 #define ER_VIRTIO_PCI_ID_BLK ER_VIRTIO_MODERN_DEVICE_ID_BLK
 #define ER_VIRTIO_PCI_ID_CONSOLE ER_VIRTIO_MODERN_DEVICE_ID_CONSOLE
 #define ER_VIRTIO_PCI_ID_RNG ER_VIRTIO_MODERN_DEVICE_ID_RNG
+#define ER_VIRTIO_PCI_ID_GPU ER_VIRTIO_MODERN_DEVICE_ID_GPU
 #define ER_VIRTIO_PCI_COMMON_DEVICE_FEATURE_SELECT_OFFSET 0u
 #define ER_VIRTIO_PCI_COMMON_DEVICE_FEATURE_OFFSET 4u
 #define ER_VIRTIO_PCI_COMMON_DRIVER_FEATURE_SELECT_OFFSET 8u
@@ -75,6 +76,9 @@ static UINT8 er_virtio_device_type_from_pci_id(UINT32 device_id, UINT32* out_dev
       return 1;
     case ER_VIRTIO_PCI_ID_RNG:
       *out_device_type = ER_VIRTIO_DEVICE_TYPE_RNG;
+      return 1;
+    case ER_VIRTIO_PCI_ID_GPU:
+      *out_device_type = ER_VIRTIO_DEVICE_TYPE_GPU;
       return 1;
     default:
       *out_device_type = 0;

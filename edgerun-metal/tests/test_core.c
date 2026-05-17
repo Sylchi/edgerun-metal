@@ -1575,12 +1575,20 @@ static void test_hw_relay_endpoints(void) {
   enum {
     RELAY_ETH_TEST_MMIO_DWORDS = 128u,
     RELAY_ETH_TEST_VIRTIO_HDR_LEN = 12u,
-    RELAY_ETH_TEST_TX_DESC = 0u
+    RELAY_ETH_TEST_TX_DESC = 0u,
+    RELAY_VIRTIO_TEST_DEVICE_TYPE_OFFSET = 0u,
+    RELAY_VIRTIO_TEST_QUEUE_OFFSET = 4u,
+    RELAY_VIRTIO_TEST_TRANSPORT_OFFSET = 6u,
+    RELAY_VIRTIO_TEST_CAP_CONTENT_OFFSET = 6u,
+    RELAY_VIRTIO_TEST_WORK_DEPARTMENT_OFFSET = 4u
   };
   UINT32 regs[RELAY_ETH_TEST_MMIO_DWORDS] = {0};
   ErChannelEndpoint endpoint;
   ErChannelEndpoint eth_endpoint;
+  ErChannelEndpoint virtio_endpoint;
   ErRelayForwardIntent intent;
+  ErRelayForwardIntent route_intent;
+  ErHwRelayVirtioRoutes routes;
   ErVirtioNet net;
   ErNativeEth native_eth;
   ErVirtioQueueAvail* tx_avail;
@@ -1588,6 +1596,8 @@ static void test_hw_relay_endpoints(void) {
   UINT8 peer_mac[ER_NET_MAC_LEN] = {0x02u, 0x10u, 0x20u, 0x30u, 0x40u, 0x50u};
   UINT8 other_mac[ER_NET_MAC_LEN] = {0x02u, 0xaau, 0xbbu, 0xccu, 0xddu, 0xeeu};
   UINT8 packet[4] = {1u, 2u, 3u, 4u};
+  UINT8 render_capability[8] = {0};
+  UINT8 storage_work[6] = {0};
 
   check_int64("relay udp endpoint",
               er_hw_relay_prepare_firmware_udp_endpoint(10u, 42u, 0u, 1u, 9000u,
@@ -1668,6 +1678,74 @@ static void test_hw_relay_endpoints(void) {
   check_int64("relay native eth reject mac mismatch",
               er_hw_relay_forward_to_native_eth(&native_eth, &intent, packet,
                                                 (UINTN)sizeof(packet)),
+              0);
+
+  check_int64("relay virtio endpoint",
+              er_hw_relay_prepare_virtio_endpoint(ER_VIRTIO_DEVICE_TYPE_BLK, 0u,
+                                                  "virtio-blk", 10u,
+                                                  &virtio_endpoint),
+              1);
+  check_int64("relay virtio abi", virtio_endpoint.abi_version, ER_WORK_ABI_VERSION);
+  check_int64("relay virtio kind", virtio_endpoint.kind, ER_CHANNEL_KIND_DEVICE_RING);
+  check_int64("relay virtio address len", virtio_endpoint.address_len,
+              ER_HW_RELAY_VIRTIO_ADDR_LEN);
+  check_uint64("relay virtio device type byte0",
+               virtio_endpoint.address[RELAY_VIRTIO_TEST_DEVICE_TYPE_OFFSET],
+               ER_VIRTIO_DEVICE_TYPE_BLK);
+  check_uint64("relay virtio queue byte0",
+               virtio_endpoint.address[RELAY_VIRTIO_TEST_QUEUE_OFFSET], 0u);
+  check_uint64("relay virtio transport any",
+               virtio_endpoint.address[RELAY_VIRTIO_TEST_TRANSPORT_OFFSET],
+               ER_VIRTIO_TRANSPORT_KIND_NONE);
+  check_int64("relay virtio recognized",
+              er_hw_relay_endpoint_is_virtio(&virtio_endpoint), 1);
+  check_int64("relay native eth not virtio",
+              er_hw_relay_endpoint_is_virtio(&eth_endpoint), 0);
+
+  check_int64("relay default virtio routes",
+              er_hw_relay_prepare_default_virtio_routes(&routes), 1);
+  check_int64("relay route storage object",
+              er_hw_relay_route_erwire_to_virtio(&eth_endpoint,
+                                                 ERWIRE_KIND_VFS_OBJECT_PACKET,
+                                                 packet, (UINT32)sizeof(packet),
+                                                 &routes, &route_intent),
+              1);
+  check_uint64("relay route storage target type",
+               route_intent.to.address[RELAY_VIRTIO_TEST_DEVICE_TYPE_OFFSET],
+               ER_VIRTIO_DEVICE_TYPE_BLK);
+  check_uint64("relay route storage from mac",
+               route_intent.from.address[0], eth_endpoint.address[0]);
+
+  render_capability[RELAY_VIRTIO_TEST_CAP_CONTENT_OFFSET] =
+      ER_CAPABILITY_CONTENT_RENDER;
+  check_int64("relay route render capability",
+              er_hw_relay_route_erwire_to_virtio(&eth_endpoint,
+                                                 ERWIRE_KIND_CAPABILITY_ENVELOPE,
+                                                 render_capability,
+                                                 (UINT32)sizeof(render_capability),
+                                                 &routes, &route_intent),
+              1);
+  check_uint64("relay route render target type",
+               route_intent.to.address[RELAY_VIRTIO_TEST_DEVICE_TYPE_OFFSET],
+               ER_VIRTIO_DEVICE_TYPE_GPU);
+
+  storage_work[RELAY_VIRTIO_TEST_WORK_DEPARTMENT_OFFSET] =
+      ER_DEPARTMENT_STORAGE;
+  check_int64("relay route storage work",
+              er_hw_relay_route_erwire_to_virtio(&eth_endpoint,
+                                                 ERWIRE_KIND_WORK_REQUEST,
+                                                 storage_work,
+                                                 (UINT32)sizeof(storage_work),
+                                                 &routes, &route_intent),
+              1);
+  check_uint64("relay route work target type",
+               route_intent.to.address[RELAY_VIRTIO_TEST_DEVICE_TYPE_OFFSET],
+               ER_VIRTIO_DEVICE_TYPE_BLK);
+  check_int64("relay route reject log",
+              er_hw_relay_route_erwire_to_virtio(&eth_endpoint,
+                                                 ERWIRE_KIND_LOG_TEXT,
+                                                 packet, (UINT32)sizeof(packet),
+                                                 &routes, &route_intent),
               0);
 }
 
