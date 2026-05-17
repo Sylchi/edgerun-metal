@@ -17,6 +17,9 @@
 static UINT32 g_stream_id = 1u;
 static UINT32 g_seq;
 static UINT8 g_packet[ERWIRE_PACKET_MAX];
+static ErNativeEth* g_native_eth;
+static ErChannelEndpoint g_native_eth_endpoint;
+static UINT8 g_use_native_eth;
 
 static UINT32 erwire_len(const char* s) {
   UINT32 n = 0;
@@ -88,6 +91,26 @@ void erwire_init(UINT32 stream_id) {
   g_seq = 0;
 }
 
+UINT8 erwire_set_native_eth_sink(ErNativeEth* native_eth) {
+  static const char label[] = "erwire-l2";
+
+  if (native_eth == 0 ||
+      er_hw_relay_prepare_native_eth_endpoint(native_eth->peer_mac, label,
+                                              (UINTN)(sizeof(label) - 1u),
+                                              &g_native_eth_endpoint) == 0u) {
+    return 0;
+  }
+  g_native_eth = native_eth;
+  g_use_native_eth = 1u;
+  return 1;
+}
+
+void erwire_clear_native_eth_sink(void) {
+  g_native_eth = 0;
+  g_use_native_eth = 0u;
+  er_mem_zero((UINT8*)&g_native_eth_endpoint, (UINTN)sizeof(g_native_eth_endpoint));
+}
+
 void erwire_send(UINT16 kind, UINT16 flags, const UINT8* payload, UINT32 payload_len) {
   UINT8* packet_cursor = g_packet;
   UINT32 send_len;
@@ -115,7 +138,10 @@ void erwire_send(UINT16 kind, UINT16 flags, const UINT8* payload, UINT32 payload
   er_mem_zero((UINT8*)&intent, (UINTN)sizeof(intent));
   intent.abi_version = ER_WORK_ABI_VERSION;
   erwire_prepare_memory_endpoint(&intent.from);
-  if (er_hw_relay_default_firmware_udp_endpoint(&intent.to) != 0u) {
+  if (g_use_native_eth != 0u && g_native_eth != 0) {
+    intent.to = g_native_eth_endpoint;
+    (void)er_hw_relay_forward_to_native_eth(g_native_eth, &intent, g_packet, (UINTN)send_len);
+  } else if (er_hw_relay_default_firmware_udp_endpoint(&intent.to) != 0u) {
     (void)er_hw_relay_forward_to_firmware_udp(&intent, g_packet, (UINTN)send_len);
   }
   ++g_seq;

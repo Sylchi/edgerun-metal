@@ -10,6 +10,7 @@
 #include "er_work.h"
 #include "er_vfs.h"
 #include "er_app.h"
+#include "er_native_eth.h"
 
 #define ERWIRE_MAGIC 0x31575245u
 #define ERWIRE_VERSION 1u
@@ -50,6 +51,8 @@ typedef struct {
 } ErwirePacketHeader;
 
 void erwire_init(UINT32 stream_id);
+UINT8 erwire_set_native_eth_sink(ErNativeEth* native_eth);
+void erwire_clear_native_eth_sink(void);
 void erwire_send(UINT16 kind, UINT16 flags, const UINT8* payload, UINT32 payload_len);
 void erwire_send_text(const char* s);
 void erwire_send_blob_chunk(const ErHash* object_id, UINT32 offset, UINT32 total_size, const UINT8* data,
