@@ -14,7 +14,7 @@ This repository contains three C projects:
 ├── docs/                  repository structure and engineering intent
 ├── tools/                 repository maintenance tools
 ├── tests/                 repository maintenance tests
-├── edgerun-metal/         UEFI metal runtime, netboot tools, systemd units
+├── edgerun-metal/         freestanding UEFI runtime and boot profiles
 ├── edgerun-ui-core/       portable UI scene records and command buffer tests
 ├── varfont/               variable-font C library and tests
 └── .build/                local generated builds, ignored
@@ -42,7 +42,6 @@ The preferred local build tools are:
 - `CMake` with `Ninja` for `varfont` and `edgerun-ui-core`
 - `ctest --output-on-failure` for tests
 - `rg` for repository search
-- `socat` or `nc` for UDP boot log capture
 
 ## Common Commands
 
@@ -77,20 +76,6 @@ make edgerun-smoke
 make edgerun-pci
 make edgerun-quiet
 make -C edgerun-metal mmio
-```
-
-Listen for real-hardware UDP boot logs:
-
-```bash
-make log-listen
-```
-
-Install the listener as an always-on systemd service:
-
-```bash
-make install-log-listen
-make logs-log-listen
-make status-log-listen
 ```
 
 Build and test `varfont`:

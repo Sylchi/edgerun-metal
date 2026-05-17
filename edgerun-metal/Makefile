@@ -1,4 +1,4 @@
-.PHONY: all run clean print-path netboot smoke pci quiet mmio rebuild-profile check test-core log-listen install-log-listen uninstall-log-listen restart-log-listen logs-log-listen status-log-listen install-netboot uninstall-netboot restart-netboot logs-netboot status-netboot
+.PHONY: all run clean print-path netboot smoke pci quiet mmio rebuild-profile check test-core install-netboot uninstall-netboot restart-netboot logs-netboot status-netboot
 
 CC = clang
 HOST_CC = cc
@@ -20,14 +20,14 @@ CFLAGS := -std=c11 -Wall -Werror -ffreestanding -fshort-wchar -fno-builtin -fno-
 LDFLAGS := -nostdlib -Wl,/SUBSYSTEM:EFI_APPLICATION,/ENTRY:efi_main
 HOST_CFLAGS := -std=c11 -Wall -Wextra -Werror -O2
 
-SRCS := core/efi_main.c core/er_print.c core/er_gfx_console.c core/er_netlog.c core/wasm_vm.c core/er_pci.c core/er_mmio.c
+SRCS := core/efi_main.c core/er_print.c core/er_gfx_console.c core/er_netlog.c core/er_crypto.c core/er_vfs.c core/er_app.c core/er_hw_relay.c core/er_bus.c core/er_acpi.c core/erwire.c core/wasm_vm.c core/er_pci.c core/er_mmio.c
 OBJS := $(patsubst %.c,$(BUILD_DIR)/%.o,$(SRCS))
 HDRS := $(wildcard core/*.h)
 NETBOOT_SRC := tools/edgerun-netboot/main.c
 NETBOOT_BIN := $(BUILD_DIR)/edgerun-netboot
 PXE4011_SRC := tools/edgerun-pxe4011/main.c
 PXE4011_BIN := $(BUILD_DIR)/edgerun-pxe4011
-CORE_TEST_SRC := tests/test_core.c core/er_pci.c core/er_mmio.c core/wasm_vm.c
+CORE_TEST_SRC := tests/test_core.c core/er_pci.c core/er_mmio.c core/er_crypto.c core/er_vfs.c core/er_app.c core/er_hw_relay.c core/er_bus.c core/er_acpi.c core/er_netlog.c core/wasm_vm.c
 CORE_TEST_BIN := $(BUILD_DIR)/test-core
 IFACE ?=
 
@@ -55,24 +55,6 @@ check: smoke pci mmio quiet test-core
 
 test-core: $(CORE_TEST_BIN)
 	./$(CORE_TEST_BIN)
-
-log-listen:
-	./tools/edgerun-log-listen.sh
-
-install-log-listen:
-	sudo ./tools/install-log-listen-service.sh
-
-uninstall-log-listen:
-	sudo ./tools/uninstall-log-listen-service.sh
-
-restart-log-listen:
-	sudo systemctl restart edgerun-log-listen
-
-logs-log-listen:
-	sudo journalctl -u edgerun-log-listen -f
-
-status-log-listen:
-	systemctl status edgerun-log-listen
 
 install-netboot:
 	@if [ -z "$(IFACE)" ]; then \
