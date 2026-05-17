@@ -107,6 +107,7 @@ void run_node_tests(void) {
   expect_string(er_ui_node_kind_label(ER_UI_NODE_RADIO_GROUP), "radio-group", "node: kind label maps radio group");
   expect_string(er_ui_node_kind_label(ER_UI_NODE_INPUT_GROUP), "input-group", "node: kind label maps input group");
   expect_string(er_ui_node_kind_label(ER_UI_NODE_INPUT_OTP), "input-otp", "node: kind label maps input otp");
+  expect_string(er_ui_node_kind_label(ER_UI_NODE_NAVIGATION_MENU), "navigation-menu", "node: kind label maps navigation menu");
   expect_string(er_ui_icon_label(ER_UI_ICON_SEARCH), "search", "node: icon label maps canonical icon");
   expect_u32(er_ui_icon_atlas_id(ER_UI_ICON_SEARCH), (uint32_t)ER_UI_ICON_SEARCH + 1u, "node: icon atlas id is stable");
   expect_string(er_ui_icon_provider_name(ER_UI_ICON_APP, ER_UI_ICON_PROVIDER_LUCIDE), "app-window", "node: lucide provider name maps app icon");
@@ -287,6 +288,18 @@ void run_node_tests(void) {
   expect_true((a11y.states & ER_UI_A11Y_STATE_FOCUSED) != 0u, "node: input otp focused digit state");
   expect_status(er_ui_node_accessibility_child(&otp_a11y, 3u, &a11y), ER_UI_ERR_INVALID_ARGUMENT, "node: input otp separator is not focusable");
 
+  const char* const nav_tabs[] = {"Docs", "Components", "Examples"};
+  er_ui_node_t nav_a11y = er_ui_node_navigation_menu(nav_tabs, 3u, 1u, "Components", "Reusable primitives", "Accordion", "Disclosure rows", 8048u);
+  expect_status(er_ui_node_accessibility(&nav_a11y, &a11y), ER_UI_OK, "node: navigation menu accessibility maps");
+  expect_size(a11y.role, ER_UI_A11Y_NAVIGATION, "node: navigation menu accessibility role");
+  expect_status(er_ui_node_accessibility_child(&nav_a11y, 1u, &a11y), ER_UI_OK, "node: navigation menu tab accessibility maps");
+  expect_size(a11y.role, ER_UI_A11Y_BUTTON, "node: navigation menu tab role");
+  expect_true(a11y.has_id && a11y.id == 8049u, "node: navigation menu selected tab id");
+  expect_true((a11y.states & ER_UI_A11Y_STATE_SELECTED) != 0u, "node: navigation menu selected tab state");
+  expect_status(er_ui_node_accessibility_child(&nav_a11y, 3u, &a11y), ER_UI_OK, "node: navigation menu row accessibility maps");
+  expect_size(a11y.role, ER_UI_A11Y_LIST_ITEM, "node: navigation menu row role");
+  expect_true(a11y.has_id && a11y.id == 8051u, "node: navigation menu row id");
+
   er_ui_node_t checked = er_ui_node_checkbox("Remember", true, 8002u);
   expect_status(er_ui_node_accessibility(&checked, &a11y), ER_UI_OK, "node: checkbox accessibility maps");
   expect_size(a11y.role, ER_UI_A11Y_CHECKBOX, "node: checkbox accessibility role");
@@ -430,6 +443,9 @@ void run_node_tests(void) {
     er_ui_node_t input_group = er_ui_node_input_group("URL", "https://edgerun.local", "Copy", 8843u);
     const char* const render_otp_values[] = {"1", "2", "3", "-", "4", ""};
     er_ui_node_t input_otp = er_ui_node_input_otp(render_otp_values, 6u, 5u, 8845u);
+    const char* const render_nav_tabs[] = {"Docs", "Components", "Examples"};
+    er_ui_node_t navigation_menu =
+      er_ui_node_navigation_menu(render_nav_tabs, 3u, 1u, "Components", "Reusable primitives", "Accordion", "Disclosure rows", 8852u);
 
     expect_status(er_ui_node_render(&alert, &scene, face, er_ui_bounds(0.0f, 170.0f, 360.0f, 76.0f), theme), ER_UI_OK, "node: alert renders");
     expect_status(er_ui_node_render(&avatar, &scene, face, er_ui_bounds(0.0f, 254.0f, 42.0f, 42.0f), theme), ER_UI_OK, "node: avatar renders");
@@ -554,6 +570,10 @@ void run_node_tests(void) {
     expect_status(er_ui_node_render(&input_otp, &scene, face, er_ui_bounds(0.0f, 4160.0f, 300.0f, 52.0f), theme), ER_UI_OK,
                   "node: input otp renders");
     expect_size(scene.hit_count, hits_before_input_otp + 5u, "node: input otp emits editable cell hits");
+    size_t hits_before_navigation_menu = scene.hit_count;
+    expect_status(er_ui_node_render(&navigation_menu, &scene, face, er_ui_bounds(0.0f, 4224.0f, 360.0f, 154.0f), theme), ER_UI_OK,
+                  "node: navigation menu renders");
+    expect_size(scene.hit_count, hits_before_navigation_menu + 4u, "node: navigation menu emits tab and row hits");
     size_t drag_sources_before = scene.drag_source_count;
     size_t drop_targets_before = scene.drop_target_count;
     expect_status(er_ui_node_render(&reorderable, &scene, face, er_ui_bounds(0.0f, 2930.0f, 260.0f, 52.0f), theme), ER_UI_OK,
