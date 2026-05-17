@@ -92,6 +92,18 @@ int ignored(void) {
   return value + labels[0][0]; //@optimizer-ignore intentional metadata lookup
 }
 C
+cat > "${TMP_DIR}/pkg/ignored_dup.c" <<'C'
+//@optimizer-ignore-function intentional duplicate schedule fixture
+int ignored_duplicate(void) {
+  int a = 1;
+  int b = 2;
+  int c = a + b;
+  int d = c + b;
+  int e = d + c;
+  int f = e + d;
+  return f;
+}
+C
 cat > "${TMP_DIR}/pkg/ignore_misuse.c" <<'C'
 //@optimizer-ignore
 int missing_reason(void) { return 1234; }
@@ -131,7 +143,7 @@ printf '\177ELFtest' > "${TMP_DIR}/release.efi"
 report="$("${REPO_INSPECT}" "${TMP_DIR}")"
 
 case "${report}" in
-  *"files:         6"* ) ;;
+  *"files:         7"* ) ;;
   * ) printf 'missing source file count\n%s\n' "${report}" >&2; exit 1 ;;
 esac
 
@@ -202,6 +214,11 @@ esac
 
 case "${report}" in
   *"ignored.c:"* ) printf 'optimizer-ignore line still reported\n%s\n' "${report}" >&2; exit 1 ;;
+  * ) ;;
+esac
+
+case "${report}" in
+  *"ignored_dup.c:"* ) printf 'optimizer-ignore duplicate block still reported\n%s\n' "${report}" >&2; exit 1 ;;
   * ) ;;
 esac
 

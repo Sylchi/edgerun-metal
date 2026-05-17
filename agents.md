@@ -42,7 +42,7 @@
 
 ## Repo inspection annotations
 
-- `tools/repo-inspect.c` supports reasoned annotations for intentional false positives.
+- `tools/repo-inspect.c` supports reasoned annotations for intentional false positives, including duplicate-block findings.
 - Use `//@optimizer-ignore reason` on the exact line, `//@optimizer-ignore-function reason` immediately before a function definition, or `//@optimizer-ignore-constant reason` immediately before a constant or macro block.
 - Every annotation must include a concrete reason; bare optimizer-ignore markers are misuse.
 - Prefer fixing real duplication, CPU-cost, magic-number, or string-indexing findings. Use annotations only when the reported shape is required by a protocol, ABI, hardware register layout, cryptographic schedule, SIMD lane packing, or another explicit invariant.
