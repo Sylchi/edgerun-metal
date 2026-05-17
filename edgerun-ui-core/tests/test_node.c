@@ -114,6 +114,7 @@ void run_node_tests(void) {
   expect_string(er_ui_node_kind_label(ER_UI_NODE_ASPECT_RATIO), "aspect-ratio", "node: kind label maps aspect ratio");
   expect_string(er_ui_node_kind_label(ER_UI_NODE_ALERT_DIALOG), "alert-dialog", "node: kind label maps alert dialog");
   expect_string(er_ui_node_kind_label(ER_UI_NODE_DIRECTION), "direction", "node: kind label maps direction");
+  expect_string(er_ui_node_kind_label(ER_UI_NODE_DRAWER), "drawer", "node: kind label maps drawer");
   expect_string(er_ui_icon_label(ER_UI_ICON_SEARCH), "search", "node: icon label maps canonical icon");
   expect_u32(er_ui_icon_atlas_id(ER_UI_ICON_SEARCH), (uint32_t)ER_UI_ICON_SEARCH + 1u, "node: icon atlas id is stable");
   expect_string(er_ui_icon_provider_name(ER_UI_ICON_APP, ER_UI_ICON_PROVIDER_LUCIDE), "app-window", "node: lucide provider name maps app icon");
@@ -348,6 +349,17 @@ void run_node_tests(void) {
   expect_size(a11y.role, ER_UI_A11Y_TEXT, "node: direction child role");
   expect_true(a11y.label == direction_a11y.detail, "node: direction rtl text is borrowed");
 
+  er_ui_node_t drawer_a11y = er_ui_node_drawer("Drawer", "Adjust display density.", "Density", 0.42f, 8059u);
+  expect_status(er_ui_node_accessibility(&drawer_a11y, &a11y), ER_UI_OK, "node: drawer accessibility maps");
+  expect_size(a11y.role, ER_UI_A11Y_DIALOG, "node: drawer accessibility role");
+  expect_true((a11y.states & ER_UI_A11Y_STATE_OPEN) != 0u, "node: drawer open state");
+  expect_status(er_ui_node_accessibility_child(&drawer_a11y, 0u, &a11y), ER_UI_OK, "node: drawer slider accessibility maps");
+  expect_size(a11y.role, ER_UI_A11Y_SLIDER, "node: drawer slider role");
+  expect_true(a11y.has_id && a11y.id == 8059u, "node: drawer slider id");
+  expect_status(er_ui_node_accessibility_child(&drawer_a11y, 1u, &a11y), ER_UI_OK, "node: drawer button accessibility maps");
+  expect_size(a11y.role, ER_UI_A11Y_BUTTON, "node: drawer button role");
+  expect_true(a11y.has_id && a11y.id == 8060u, "node: drawer button id");
+
   er_ui_node_t checked = er_ui_node_checkbox("Remember", true, 8002u);
   expect_status(er_ui_node_accessibility(&checked, &a11y), ER_UI_OK, "node: checkbox accessibility maps");
   expect_size(a11y.role, ER_UI_A11Y_CHECKBOX, "node: checkbox accessibility role");
@@ -505,6 +517,7 @@ void run_node_tests(void) {
     er_ui_node_t aspect = er_ui_node_aspect_ratio("Preview", ER_UI_ICON_FILE);
     er_ui_node_t alert_dialog = er_ui_node_alert_dialog("Are you absolutely sure?", "This action cannot be undone.", ER_UI_ICON_WARNING);
     er_ui_node_t direction = er_ui_node_direction("Left to right", "Right to left");
+    er_ui_node_t drawer = er_ui_node_drawer("Drawer", "Adjust display density.", "Density", 0.42f, 8860u);
 
     expect_status(er_ui_node_render(&alert, &scene, face, er_ui_bounds(0.0f, 170.0f, 360.0f, 76.0f), theme), ER_UI_OK, "node: alert renders");
     expect_status(er_ui_node_render(&avatar, &scene, face, er_ui_bounds(0.0f, 254.0f, 42.0f, 42.0f), theme), ER_UI_OK, "node: avatar renders");
@@ -659,6 +672,10 @@ void run_node_tests(void) {
                   "node: direction renders");
     expect_true(scene.rect_count > rects_before_direction, "node: direction emits badge rects");
     expect_true(scene.text_quad_count > text_before_direction, "node: direction emits variable font text");
+    size_t hits_before_drawer = scene.hit_count;
+    expect_status(er_ui_node_render(&drawer, &scene, face, er_ui_bounds(0.0f, 5256.0f, 320.0f, 184.0f), theme), ER_UI_OK,
+                  "node: drawer renders");
+    expect_size(scene.hit_count, hits_before_drawer + 2u, "node: drawer emits slider and button hits");
     size_t drag_sources_before = scene.drag_source_count;
     size_t drop_targets_before = scene.drop_target_count;
     expect_status(er_ui_node_render(&reorderable, &scene, face, er_ui_bounds(0.0f, 2930.0f, 260.0f, 52.0f), theme), ER_UI_OK,
