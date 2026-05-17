@@ -59,6 +59,7 @@ static void er_ui_free_alloc(er_ui_allocator_t allocator, void* ptr, size_t size
 static bool er_ui_text_reserve(er_ui_text_buffer_t* buffer, size_t byte_len) {
   if (!buffer) return false;
   if (!er_ui_allocator_valid(buffer->allocator)) return false;
+  if (byte_len == ((size_t)-1)) return false;
   size_t needed = byte_len + 1u;
   if (needed <= buffer->byte_capacity) return true;
 
@@ -81,8 +82,12 @@ static bool er_ui_runtime_reserve(er_ui_allocator_t allocator, void** data, size
   if (count < *capacity) return true;
   if (!er_ui_allocator_valid(allocator)) return false;
 
-  size_t next_capacity = *capacity == 0u ? ER_UI_RUNTIME_INITIAL_CAPACITY : *capacity * 2u;
-  if (next_capacity <= *capacity) return false;
+  size_t next_capacity = *capacity == 0u ? ER_UI_RUNTIME_INITIAL_CAPACITY : *capacity;
+  while (next_capacity <= count) {
+    if (next_capacity > ((size_t)-1) / 2u) return false;
+    next_capacity *= 2u;
+  }
+  if (item_size != 0u && *capacity > ((size_t)-1) / item_size) return false;
   if (item_size != 0u && next_capacity > ((size_t)-1) / item_size) return false;
 
   size_t old_size = *capacity * item_size;
