@@ -96,6 +96,11 @@ void run_node_tests(void) {
   expect_string(er_ui_node_kind_label(ER_UI_NODE_ICON_BUTTON), "icon-button", "node: kind label maps icon button");
   expect_string(er_ui_icon_label(ER_UI_ICON_SEARCH), "search", "node: icon label maps canonical icon");
   expect_u32(er_ui_icon_atlas_id(ER_UI_ICON_SEARCH), (uint32_t)ER_UI_ICON_SEARCH + 1u, "node: icon atlas id is stable");
+  expect_string(er_ui_icon_provider_name(ER_UI_ICON_APP, ER_UI_ICON_PROVIDER_LUCIDE), "app-window", "node: lucide provider name maps app icon");
+  expect_string(er_ui_icon_provider_name(ER_UI_ICON_APP, ER_UI_ICON_PROVIDER_TABLER), "apps", "node: tabler provider name maps app icon");
+  expect_string(er_ui_icon_provider_name(ER_UI_ICON_TRASH, ER_UI_ICON_PROVIDER_LUCIDE), "trash-2", "node: lucide provider name maps trash icon");
+  expect_string(er_ui_icon_provider_name(ER_UI_ICON_TRASH, ER_UI_ICON_PROVIDER_TABLER), "trash", "node: tabler provider name maps trash icon");
+  expect_true(er_ui_icon_provider_name(ER_UI_ICON_COUNT, ER_UI_ICON_PROVIDER_LUCIDE) == NULL, "node: invalid icon provider name is null");
   expect_string(er_ui_node_composition_issue_label(ER_UI_NODE_COMPOSITION_NESTED_CARD), "nested-card",
                 "node: composition issue label maps nested card");
   er_ui_node_composition_issue_t issue = {0};

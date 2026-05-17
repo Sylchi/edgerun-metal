@@ -505,6 +505,84 @@ uint32_t er_ui_icon_atlas_id(er_ui_icon_t icon) {
   return (uint32_t)icon + 1u;
 }
 
+const char* er_ui_icon_provider_name(er_ui_icon_t icon, er_ui_icon_provider_t provider) {
+  if (provider == ER_UI_ICON_PROVIDER_TABLER) {
+    switch (icon) {
+      case ER_UI_ICON_ACTIVITY: return "activity";
+      case ER_UI_ICON_APP: return "apps";
+      case ER_UI_ICON_BELL: return "bell";
+      case ER_UI_ICON_CHAT: return "message-circle";
+      case ER_UI_ICON_CHECK: return "check";
+      case ER_UI_ICON_CHEVRON_RIGHT: return "chevron-right";
+      case ER_UI_ICON_CODE: return "code";
+      case ER_UI_ICON_CPU: return "cpu";
+      case ER_UI_ICON_DATABASE: return "database";
+      case ER_UI_ICON_EYE: return "eye";
+      case ER_UI_ICON_FILE: return "file";
+      case ER_UI_ICON_KEY: return "key";
+      case ER_UI_ICON_LOCK: return "lock";
+      case ER_UI_ICON_MENU: return "menu-2";
+      case ER_UI_ICON_MESSAGE_PLUS: return "message-plus";
+      case ER_UI_ICON_NETWORK: return "network";
+      case ER_UI_ICON_ROUTE: return "route";
+      case ER_UI_ICON_SEARCH: return "search";
+      case ER_UI_ICON_SEND: return "arrow-up";
+      case ER_UI_ICON_SERVER: return "server";
+      case ER_UI_ICON_SETTINGS: return "settings";
+      case ER_UI_ICON_SHIELD: return "shield-check";
+      case ER_UI_ICON_SPARKLES: return "sparkles";
+      case ER_UI_ICON_STORAGE: return "database";
+      case ER_UI_ICON_TERMINAL: return "terminal-2";
+      case ER_UI_ICON_TRUST: return "shield-check";
+      case ER_UI_ICON_TRASH: return "trash";
+      case ER_UI_ICON_USER: return "user";
+      case ER_UI_ICON_WALLET: return "wallet";
+      case ER_UI_ICON_WARNING: return "alert-triangle";
+      case ER_UI_ICON_X: return "x";
+      case ER_UI_ICON_COUNT:
+      default: return NULL;
+    }
+  }
+  if (provider == ER_UI_ICON_PROVIDER_LUCIDE) {
+    switch (icon) {
+      case ER_UI_ICON_ACTIVITY: return "activity";
+      case ER_UI_ICON_APP: return "app-window";
+      case ER_UI_ICON_BELL: return "bell";
+      case ER_UI_ICON_CHAT: return "message-circle";
+      case ER_UI_ICON_CHECK: return "check";
+      case ER_UI_ICON_CHEVRON_RIGHT: return "chevron-right";
+      case ER_UI_ICON_CODE: return "code";
+      case ER_UI_ICON_CPU: return "cpu";
+      case ER_UI_ICON_DATABASE: return "database";
+      case ER_UI_ICON_EYE: return "eye";
+      case ER_UI_ICON_FILE: return "file";
+      case ER_UI_ICON_KEY: return "key";
+      case ER_UI_ICON_LOCK: return "lock";
+      case ER_UI_ICON_MENU: return "menu";
+      case ER_UI_ICON_MESSAGE_PLUS: return "message-circle-plus";
+      case ER_UI_ICON_NETWORK: return "network";
+      case ER_UI_ICON_ROUTE: return "route";
+      case ER_UI_ICON_SEARCH: return "search";
+      case ER_UI_ICON_SEND: return "arrow-up";
+      case ER_UI_ICON_SERVER: return "server";
+      case ER_UI_ICON_SETTINGS: return "settings";
+      case ER_UI_ICON_SHIELD: return "shield-check";
+      case ER_UI_ICON_SPARKLES: return "sparkles";
+      case ER_UI_ICON_STORAGE: return "database";
+      case ER_UI_ICON_TERMINAL: return "square-terminal";
+      case ER_UI_ICON_TRUST: return "shield-check";
+      case ER_UI_ICON_TRASH: return "trash-2";
+      case ER_UI_ICON_USER: return "user";
+      case ER_UI_ICON_WALLET: return "wallet";
+      case ER_UI_ICON_WARNING: return "triangle-alert";
+      case ER_UI_ICON_X: return "x";
+      case ER_UI_ICON_COUNT:
+      default: return NULL;
+    }
+  }
+  return NULL;
+}
+
 const char* er_ui_node_kind_label(er_ui_node_kind_t kind) {
   switch (kind) {
     case ER_UI_NODE_ROW: return "row";
