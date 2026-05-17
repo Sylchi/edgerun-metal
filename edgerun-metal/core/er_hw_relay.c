@@ -126,7 +126,7 @@ UINT8 er_hw_relay_prepare_native_eth_endpoint(const UINT8* mac,
 
   er_mem_zero((UINT8*)out_endpoint, (UINTN)sizeof(*out_endpoint));
   out_endpoint->abi_version = ER_WORK_ABI_VERSION;
-  out_endpoint->kind = ER_CHANNEL_KIND_DEVICE_RING;
+  out_endpoint->kind = ER_CHANNEL_KIND_NATIVE_ETH;
   out_endpoint->address_len = ER_HW_RELAY_NATIVE_ETH_ADDR_LEN;
   out_endpoint->label_len = (UINT16)label_len;
   er_mem_copy(out_endpoint->address, mac, ER_HW_RELAY_NATIVE_ETH_ADDR_LEN);
@@ -136,7 +136,7 @@ UINT8 er_hw_relay_prepare_native_eth_endpoint(const UINT8* mac,
 
 UINT8 er_hw_relay_endpoint_is_native_eth(const ErChannelEndpoint* endpoint) {
   if (endpoint == 0 || endpoint->abi_version != ER_WORK_ABI_VERSION ||
-      endpoint->kind != ER_CHANNEL_KIND_DEVICE_RING ||
+      endpoint->kind != ER_CHANNEL_KIND_NATIVE_ETH ||
       endpoint->address_len != ER_HW_RELAY_NATIVE_ETH_ADDR_LEN) {
     return 0;
   }
@@ -169,7 +169,7 @@ UINT8 er_hw_relay_prepare_virtio_endpoint(UINT32 device_type, UINT16 queue,
 
   er_mem_zero((UINT8*)out_endpoint, (UINTN)sizeof(*out_endpoint));
   out_endpoint->abi_version = ER_WORK_ABI_VERSION;
-  out_endpoint->kind = ER_CHANNEL_KIND_DEVICE_RING;
+  out_endpoint->kind = ER_CHANNEL_KIND_VIRTIO_QUEUE;
   out_endpoint->address_len = ER_HW_RELAY_VIRTIO_ADDR_LEN;
   out_endpoint->label_len = (UINT16)label_len;
   er_hw_relay_put_u32(out_endpoint->address + ER_HW_RELAY_VIRTIO_DEVICE_TYPE_OFFSET,
@@ -185,7 +185,7 @@ UINT8 er_hw_relay_prepare_virtio_endpoint(UINT32 device_type, UINT16 queue,
 
 UINT8 er_hw_relay_endpoint_is_virtio(const ErChannelEndpoint* endpoint) {
   if (endpoint == 0 || endpoint->abi_version != ER_WORK_ABI_VERSION ||
-      endpoint->kind != ER_CHANNEL_KIND_DEVICE_RING ||
+      endpoint->kind != ER_CHANNEL_KIND_VIRTIO_QUEUE ||
       endpoint->address_len != ER_HW_RELAY_VIRTIO_ADDR_LEN ||
       endpoint->address[ER_HW_RELAY_VIRTIO_RESERVED_OFFSET] != 0u) {
     return 0;
