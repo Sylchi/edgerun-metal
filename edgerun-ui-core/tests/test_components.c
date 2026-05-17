@@ -131,6 +131,17 @@ static void test_shadcn_render_primitives(void) {
                 "shadcn render: toast emits");
   expect_status(er_ui_shadcn_empty_emit(&scene, face, er_ui_bounds(420.0f, 412.0f, 180.0f, 110.0f), theme, "No results", "Try another filter"), ER_UI_OK,
                 "shadcn render: empty emits");
+  expect_status(er_ui_shadcn_alert_emit(&scene, face, er_ui_bounds(606.0f, 16.0f, 220.0f, 72.0f), theme, "Heads up", "Reusable components", theme.colors.warning),
+                ER_UI_OK, "shadcn render: alert emits");
+  expect_status(er_ui_shadcn_avatar_emit(&scene, face, er_ui_bounds(606.0f, 96.0f, 42.0f, 42.0f), theme, "ER", theme.colors.accent, true),
+                ER_UI_OK, "shadcn render: avatar emits");
+  const char* const crumbs[] = {"Docs", "Components", "Breadcrumb"};
+  expect_status(er_ui_shadcn_breadcrumb_emit(&scene, face, er_ui_bounds(606.0f, 146.0f, 220.0f, 32.0f), theme, crumbs, 3u, 2u, 3020u),
+                ER_UI_OK, "shadcn render: breadcrumb emits");
+  const char* const chart_labels[] = {"Jan", "Feb", "Mar"};
+  const float chart_values[] = {0.4f, 0.8f, 0.6f};
+  expect_status(er_ui_shadcn_bar_chart_emit(&scene, face, er_ui_bounds(606.0f, 186.0f, 180.0f, 120.0f), theme, "Visitors", chart_labels, chart_values, 3u, 3024u, 1u),
+                ER_UI_OK, "shadcn render: bar chart emits");
   expect_true(scene.rect_count >= 8u, "shadcn render: primitives emit geometry");
   expect_true(scene.hit_count >= 10u, "shadcn render: interactive primitives emit hits");
   expect_true(scene.text_quad_count > 0u, "shadcn render: primitives use variable font text");
@@ -138,17 +149,27 @@ static void test_shadcn_render_primitives(void) {
                                          ER_UI_SHADCN_BUTTON_DEFAULT, ER_UI_SHADCN_BUTTON_SIZE_DEFAULT, true),
                 ER_UI_ERR_INVALID_ARGUMENT, "shadcn render: missing variable font is rejected");
   expect_true(er_ui_shadcn_component_scene_preview_available("button"), "shadcn scene preview: button is available");
+  expect_true(er_ui_shadcn_component_scene_preview_available("accordion"), "shadcn scene preview: accordion is available");
+  expect_true(er_ui_shadcn_component_scene_preview_available("alert-dialog"), "shadcn scene preview: alert dialog is available");
+  expect_true(er_ui_shadcn_component_scene_preview_available("avatar"), "shadcn scene preview: avatar is available");
+  expect_true(er_ui_shadcn_component_scene_preview_available("chart"), "shadcn scene preview: chart is available");
+  expect_true(er_ui_shadcn_component_scene_preview_available("combobox"), "shadcn scene preview: combobox is available");
+  expect_true(er_ui_shadcn_component_scene_preview_available("sheet"), "shadcn scene preview: sheet is available");
   expect_true(er_ui_shadcn_component_scene_preview_available("tabs"), "shadcn scene preview: tabs are available");
   expect_true(er_ui_shadcn_component_scene_preview_available("data-table"), "shadcn scene preview: data table is available");
   expect_true(er_ui_shadcn_component_scene_preview_available("radio-group"), "shadcn scene preview: radio group is available");
   expect_true(er_ui_shadcn_component_scene_preview_available("toast"), "shadcn scene preview: toast is available");
-  expect_true(!er_ui_shadcn_component_scene_preview_available("accordion"), "shadcn scene preview: unported visual body is not claimed");
+  expect_true(!er_ui_shadcn_component_scene_preview_available("unknown-demo"), "shadcn scene preview: unknown body is not claimed");
   expect_status(er_ui_shadcn_component_scene_preview_emit(&scene, face, er_ui_bounds(420.0f, 16.0f, 180.0f, 58.0f), theme, "button", NULL),
                 ER_UI_OK, "shadcn scene preview: selected body emits");
   expect_status(er_ui_shadcn_component_scene_preview_emit(&scene, face, er_ui_bounds(420.0f, 530.0f, 220.0f, 112.0f), theme, "data-table", NULL),
                 ER_UI_OK, "shadcn scene preview: table body emits");
+  expect_status(er_ui_shadcn_component_scene_preview_emit(&scene, face, er_ui_bounds(420.0f, 646.0f, 240.0f, 132.0f), theme, "calendar", NULL),
+                ER_UI_OK, "shadcn scene preview: calendar body emits");
   expect_status(er_ui_shadcn_component_scene_preview_emit(&scene, face, er_ui_bounds(420.0f, 82.0f, 180.0f, 58.0f), theme, "accordion", NULL),
-                ER_UI_ERR_INVALID_ARGUMENT, "shadcn scene preview: unported body is rejected");
+                ER_UI_OK, "shadcn scene preview: accordion body emits");
+  expect_status(er_ui_shadcn_component_scene_preview_emit(&scene, face, er_ui_bounds(420.0f, 782.0f, 180.0f, 58.0f), theme, "unknown-demo", NULL),
+                ER_UI_ERR_INVALID_ARGUMENT, "shadcn scene preview: unknown body is rejected");
   er_ui_shadcn_demo_gallery_state_t state = {0};
   er_ui_shadcn_demo_gallery_state_init(&state);
   expect_status(er_ui_shadcn_showcase_emit(&scene, face, er_ui_bounds(0.0f, 280.0f, 720.0f, 360.0f), theme, "button", &state), ER_UI_OK,

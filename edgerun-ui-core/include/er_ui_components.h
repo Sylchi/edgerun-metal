@@ -281,6 +281,42 @@ er_ui_status_t er_ui_shadcn_empty_emit(
   er_ui_resolved_theme_t theme,
   const char* title,
   const char* body);
+er_ui_status_t er_ui_shadcn_alert_emit(
+  er_ui_scene_t* scene,
+  vr_font_face_t* font,
+  er_ui_bounds_t bounds,
+  er_ui_resolved_theme_t theme,
+  const char* title,
+  const char* body,
+  er_ui_color4_t accent);
+er_ui_status_t er_ui_shadcn_avatar_emit(
+  er_ui_scene_t* scene,
+  vr_font_face_t* font,
+  er_ui_bounds_t bounds,
+  er_ui_resolved_theme_t theme,
+  const char* label,
+  er_ui_color4_t color,
+  bool online);
+er_ui_status_t er_ui_shadcn_breadcrumb_emit(
+  er_ui_scene_t* scene,
+  vr_font_face_t* font,
+  er_ui_bounds_t bounds,
+  er_ui_resolved_theme_t theme,
+  const char* const* labels,
+  size_t label_count,
+  size_t selected,
+  uint32_t base_id);
+er_ui_status_t er_ui_shadcn_bar_chart_emit(
+  er_ui_scene_t* scene,
+  vr_font_face_t* font,
+  er_ui_bounds_t bounds,
+  er_ui_resolved_theme_t theme,
+  const char* title,
+  const char* const* labels,
+  const float* values,
+  size_t value_count,
+  uint32_t base_id,
+  size_t selected);
 bool er_ui_shadcn_component_scene_preview_available(const char* slug);
 er_ui_status_t er_ui_shadcn_component_scene_preview_emit(
   er_ui_scene_t* scene,
