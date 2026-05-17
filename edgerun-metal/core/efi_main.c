@@ -795,6 +795,7 @@ static void er_run_quiet_profile(void) {
 
 static void er_run_native_profile(void) {
   ErNativeBootState native_state;
+  UINT32 mac_index;
 
   er_println("boot profile: native");
   if (er_native_boot_configure_qemu_microvm_erwire_eth_sink(&native_state) == 0u) {
@@ -804,17 +805,12 @@ static void er_run_native_profile(void) {
   er_print("native transport: virtio-mmio net ");
   er_print_u64_hex(native_state.net->transport.address.base);
   er_print(" mac=");
-  er_print_u64_hex((UINT64)native_state.net->mac[0]);
-  er_print(":");
-  er_print_u64_hex((UINT64)native_state.net->mac[1]);
-  er_print(":");
-  er_print_u64_hex((UINT64)native_state.net->mac[2]);
-  er_print(":");
-  er_print_u64_hex((UINT64)native_state.net->mac[3]);
-  er_print(":");
-  er_print_u64_hex((UINT64)native_state.net->mac[4]);
-  er_print(":");
-  er_print_u64_hex((UINT64)native_state.net->mac[5]);
+  for (mac_index = 0u; mac_index < ER_NET_MAC_LEN; ++mac_index) {
+    if (mac_index != 0u) {
+      er_print(":");
+    }
+    er_print_u64_hex((UINT64)native_state.net->mac[mac_index]);
+  }
   er_println("");
   erwire_send_text("native-erwire-l2-ready");
   er_println("native transport: erwire EdgeRun Ethernet frame submitted");
