@@ -4,8 +4,12 @@
 #include "er_app.h"
 #include "er_bus.h"
 #include "er_hw_relay.h"
+#include "er_ui_gop_renderer.h"
+#include "er_ui_text.h"
 #include "er_vfs.h"
+#include "font_geist.h"
 #include "wasm_vm.h"
+#include "wasm_driver_bus_probe_module.h"
 
 /*
  * Purpose: test pure EdgeRun Metal core helpers outside firmware.
@@ -14,6 +18,7 @@
 
 #include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
 
 static int g_failed = 0;
 static int g_total = 0;
@@ -61,6 +66,47 @@ static void check_uint64(const char* name, UINT64 actual, UINT64 expected) {
   }
 }
 
+static void check_pixel(const char* name, UINT32 actual, UINT32 expected) {
+  check_uint64(name, (UINT64)actual, (UINT64)expected);
+}
+
+static void* test_alloc(void* user, size_t size, size_t align) {
+  (void)user;
+  (void)align;
+  return size == 0u ? 0 : malloc(size);
+}
+
+static void* test_realloc(void* user, void* ptr, size_t old_size, size_t new_size, size_t align) {
+  (void)user;
+  (void)old_size;
+  (void)align;
+  return realloc(ptr, new_size);
+}
+
+static void test_free(void* user, void* ptr, size_t size, size_t align) {
+  (void)user;
+  (void)size;
+  (void)align;
+  free(ptr);
+}
+
+static er_ui_allocator_t test_ui_allocator(void) {
+  er_ui_allocator_t allocator;
+  allocator.user = 0;
+  allocator.alloc = test_alloc;
+  allocator.free = test_free;
+  return allocator;
+}
+
+static vr_font_allocator_t test_vr_allocator(void) {
+  vr_font_allocator_t allocator;
+  allocator.user = 0;
+  allocator.alloc = test_alloc;
+  allocator.realloc = test_realloc;
+  allocator.free = test_free;
+  return allocator;
+}
+
 static void test_put_le32(UINT8* dst, UINT32 value) {
   dst[0] = (UINT8)(value & 0xffu);
   dst[1] = (UINT8)((value >> 8) & 0xffu);
@@ -102,8 +148,10 @@ static INT64 test_vm_bus_exec(const ErBusIoPacket* request, ErBusIoPacket* respo
   }
   check_int64("wasm bus exec request abi", request->abi_version, ER_BUS_ABI_VERSION);
   check_int64("wasm bus exec request kind", request->packet_kind, ER_BUS_PACKET_IO_REQUEST);
-  check_uint64("wasm bus exec packet id", request->packet_id, 77u);
+  check_uint64("wasm bus exec packet id", request->packet_id, 1u);
   check_int64("wasm bus exec width", request->op.width, 1);
+  check_uint64("wasm bus exec base", request->op.address.base, 4096u);
+  check_uint64("wasm bus exec len", request->op.address.len, 4u);
   response->abi_version = ER_BUS_ABI_VERSION;
   response->packet_kind = ER_BUS_PACKET_IO_RESPONSE;
   response->status = ER_BUS_STATUS_OK;
@@ -664,19 +712,9 @@ static void test_wasm_bus_exec_import(void) {
    * Purpose: prove WASM driver code can send structured bus packets through linear memory.
    * Intention: keep device drivers outside the executor while preserving addressed hardware I/O.
    */
-  static const UINT8 wasm_bus_exec_test[] = {
-    0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00, 0x01, 0x0b, 0x02, 0x60,
-    0x02, 0x7e, 0x7e, 0x01, 0x7e, 0x60, 0x00, 0x01, 0x7e, 0x02, 0x14, 0x01,
-    0x0b, 0x65, 0x64, 0x67, 0x65, 0x72, 0x75, 0x6e, 0x2e, 0x62, 0x75, 0x73,
-    0x04, 0x65, 0x78, 0x65, 0x63, 0x00, 0x00, 0x03, 0x02, 0x01, 0x01, 0x05,
-    0x03, 0x01, 0x00, 0x01, 0x07, 0x08, 0x01, 0x04, 0x6d, 0x61, 0x69, 0x6e,
-    0x00, 0x01, 0x0a, 0x12, 0x01, 0x10, 0x00, 0x42, 0x00, 0x42, 0x80, 0x01,
-    0x10, 0x00, 0x1a, 0x41, 0x80, 0x01, 0x29, 0x03, 0x60, 0x0b
-  };
   static UINT8 memory[65536];
   ErWasmHostCalls host = {0};
   ErWasmModule module;
-  ErBusIoPacket* request = (ErBusIoPacket*)&memory[0];
   UINT32 main_index = 0;
   INT64 result = 0;
 
@@ -684,24 +722,13 @@ static void test_wasm_bus_exec_import(void) {
   host.memory = memory;
   host.memory_size = (UINT32)sizeof(memory);
 
-  check_int64("wasm bus init", er_wasm_init(&module, wasm_bus_exec_test, (UINT32)sizeof(wasm_bus_exec_test), &host), 0);
+  check_int64("wasm bus init",
+              er_wasm_init(&module, g_edgerun_driver_bus_probe_wasm,
+                           ER_DRIVER_BUS_PROBE_WASM_SIZE, &host),
+              0);
   check_int64("wasm bus memory min", module.memory_min_pages, 1);
   check_int64("wasm bus find main", er_wasm_find_main(&module, &main_index), 0);
-
-  request->abi_version = ER_BUS_ABI_VERSION;
-  request->packet_kind = ER_BUS_PACKET_IO_REQUEST;
-  request->status = ER_BUS_STATUS_OK;
-  request->packet_id = 77u;
-  request->op.abi_version = ER_BUS_ABI_VERSION;
-  request->op.bus_kind = ER_BUS_KIND_MMIO32;
-  request->op.access = ER_BUS_ACCESS_READ8;
-  request->op.width = 1u;
-  request->op.address.abi_version = ER_BUS_ABI_VERSION;
-  request->op.address.bus_kind = ER_BUS_KIND_MMIO32;
-  request->op.address.access_flags = ER_BUS_ACCESS_READ8;
-  request->op.address.base = 0x1000u;
-  request->op.address.len = 4u;
-  request->op.offset = 0u;
+  check_int64("wasm bus main index", main_index, 1);
 
   check_int64("wasm bus execute", er_wasm_execute_i64(&module, main_index, &result), 0);
   check_uint64("wasm bus result", (UINT64)result, 0x5au);
@@ -901,6 +928,173 @@ static void test_hw_relay_endpoints(void) {
   check_int64("relay udp reject kind", er_hw_relay_endpoint_is_firmware_udp(&endpoint), 0);
 }
 
+static void test_ui_gop_renderer_surface(void) {
+  UINT32 pixels[24] = {0};
+  ErUiGopSurface surface;
+  er_ui_rect_t rects[3];
+  er_ui_scene_t scene;
+  UINT32 rgb_red = er_ui_gop_pack_rgb(ER_UI_GOP_PIXEL_RGBX, 255u, 0u, 0u);
+  UINT32 bgr_red = er_ui_gop_pack_rgb(ER_UI_GOP_PIXEL_BGRX, 255u, 0u, 0u);
+
+  check_pixel("ui gop pack rgb red", rgb_red, 0x00ff0000u);
+  check_pixel("ui gop pack bgr red", bgr_red, 0x000000ffu);
+
+  surface.pixels = pixels;
+  surface.width = 3u;
+  surface.height = 2u;
+  surface.stride = 4u;
+  surface.pixel_format = ER_UI_GOP_PIXEL_RGBX;
+  check_int64("ui gop surface valid", er_ui_gop_surface_valid(&surface), 1);
+  check_int64("ui gop surface clear", er_ui_gop_surface_clear(&surface, er_ui_color_rgb_u8(1u, 2u, 3u)), 1);
+  check_pixel("ui gop clear first", pixels[0], 0x00010203u);
+  check_pixel("ui gop clear row end", pixels[2], 0x00010203u);
+  check_pixel("ui gop clear stride untouched", pixels[3], 0u);
+  check_pixel("ui gop clear second row", pixels[4], 0x00010203u);
+
+  rects[0] = er_ui_rect_fill(-1.0f, 0.0f, 3.0f, 2.0f, 0.0f, er_ui_color_rgb_u8(10u, 20u, 30u));
+  scene.clear = er_ui_color_rgb_u8(0u, 0u, 0u);
+  scene.rects = rects;
+  scene.rect_count = 1u;
+  scene.rect_capacity = 1u;
+  scene.hits = 0;
+  scene.hit_count = 0u;
+  scene.hit_capacity = 0u;
+  scene.drag_sources = 0;
+  scene.drag_source_count = 0u;
+  scene.drag_source_capacity = 0u;
+  scene.drop_targets = 0;
+  scene.drop_target_count = 0u;
+  scene.drop_target_capacity = 0u;
+  scene.transitions = 0;
+  scene.transition_count = 0u;
+  scene.transition_capacity = 0u;
+  scene.clips = 0;
+  scene.clip_count = 0u;
+  scene.clip_capacity = 0u;
+  scene.icon_quads = 0;
+  scene.icon_quad_count = 0u;
+  scene.icon_quad_capacity = 0u;
+  scene.text_quads = 0;
+  scene.text_quad_count = 0u;
+  scene.text_quad_capacity = 0u;
+  check_int64("ui gop render clipped fill", er_ui_gop_surface_render_scene(&surface, &scene), 1);
+  check_pixel("ui gop clipped fill x0", pixels[0], 0x000a141eu);
+  check_pixel("ui gop clipped fill x1", pixels[1], 0x000a141eu);
+  check_pixel("ui gop clipped fill x2 clear", pixels[2], 0u);
+
+  rects[0] = er_ui_rect_fill(0.0f, 0.0f, 1.0f, 1.0f, 0.0f, er_ui_color_rgba_u8(255u, 0u, 0u, 128u));
+  check_int64("ui gop render alpha fill", er_ui_gop_surface_render_scene(&surface, &scene), 1);
+  check_pixel("ui gop alpha over clear", pixels[0], 0x00800000u);
+
+  surface.width = 4u;
+  surface.height = 4u;
+  surface.stride = 4u;
+  rects[0] = er_ui_rect_border(0.0f, 0.0f, 4.0f, 4.0f, 0.0f, er_ui_color_rgb_u8(0u, 255u, 0u));
+  check_int64("ui gop render border", er_ui_gop_surface_render_scene(&surface, &scene), 1);
+  check_pixel("ui gop border top", pixels[1], 0x0000ff00u);
+  check_pixel("ui gop border left", pixels[4], 0x0000ff00u);
+  check_pixel("ui gop border center clear", pixels[5], 0u);
+  check_pixel("ui gop border right", pixels[7], 0x0000ff00u);
+  check_pixel("ui gop border bottom", pixels[14], 0x0000ff00u);
+
+  surface.width = 3u;
+  surface.height = 1u;
+  surface.stride = 3u;
+  rects[0] = er_ui_rect_linear_gradient(0.0f, 0.0f, 3.0f, 1.0f, 0.0f,
+                                        er_ui_color_rgb_u8(255u, 0u, 0u),
+                                        er_ui_color_rgb_u8(0u, 0u, 255u));
+  check_int64("ui gop render gradient", er_ui_gop_surface_render_scene(&surface, &scene), 1);
+  check_pixel("ui gop gradient left", pixels[0], 0x00ff0000u);
+  check_pixel("ui gop gradient middle", pixels[1], 0x00800080u);
+  check_pixel("ui gop gradient right", pixels[2], 0x000000ffu);
+
+  {
+    UINT8 atlas_bytes[3] = {80u, 128u, 180u};
+    ErUiGopAlphaAtlas atlas;
+    er_ui_quad_t text_quads[1];
+
+    atlas.pixels = atlas_bytes;
+    atlas.width = 3u;
+    atlas.height = 1u;
+    atlas.bytes_per_pixel = 1u;
+    text_quads[0] = er_ui_quad_atlas(0.0f, 0.0f, 3.0f, 1.0f, 0.0f, 0.0f, 1.0f, 1.0f, 0u,
+                                     er_ui_color_rgb_u8(255u, 255u, 255u));
+    scene.rect_count = 0u;
+    scene.text_quads = text_quads;
+    scene.text_quad_count = 1u;
+    scene.text_quad_capacity = 1u;
+    check_int64("ui gop render alpha atlas", er_ui_gop_surface_render_scene_with_atlas(&surface, &scene, &atlas), 1);
+    check_pixel("ui gop alpha low", pixels[0], 0x00505050u);
+    check_pixel("ui gop alpha middle", pixels[1], 0x00808080u);
+    check_pixel("ui gop alpha high", pixels[2], 0x00b4b4b4u);
+    scene.text_quads = 0;
+    scene.text_quad_count = 0u;
+    scene.text_quad_capacity = 0u;
+  }
+
+  surface.pixels = 0;
+  check_int64("ui gop invalid surface", er_ui_gop_surface_valid(&surface), 0);
+  check_int64("ui gop reject invalid surface", er_ui_gop_surface_render_scene(&surface, &scene), 0);
+}
+
+static void test_ui_gop_renderer_varfont_text(void) {
+  vr_font_config_t cfg;
+  vr_font_face_t* font = 0;
+  vr_font_atlas_view_t atlas;
+  er_ui_scene_t scene;
+  UINT32 codepoints[5] = {'H', 'e', 'l', 'l', 'o'};
+  UINT32 pixels[512u * 160u] = {0};
+  ErUiGopSurface surface;
+  UINTN i;
+  UINTN lit_pixels = 0;
+
+  cfg.px_size = 56.0f;
+  cfg.atlas_width = 512u;
+  cfg.atlas_height = 512u;
+  cfg.atlas_pad = 2u;
+  cfg.atlas_format = VR_FONT_ATLAS_FORMAT_ALPHA8;
+  cfg.allocator = test_vr_allocator();
+  cfg.gl.user = 0;
+  cfg.gl.create_texture = 0;
+  cfg.gl.update_texture = 0;
+  cfg.gl.destroy_texture = 0;
+
+  check_int64("ui text font create",
+              vr_font_face_create_from_memory(&font, g_er_font_geist_ttf, ER_FONT_GEIST_TTF_SIZE, &cfg),
+              VR_OK);
+  if (font == 0) {
+    return;
+  }
+
+  check_int64("ui text scene init",
+              er_ui_scene_init_with_allocator(&scene, er_ui_color_rgb_u8(0u, 0u, 0u), test_ui_allocator()),
+              ER_UI_OK);
+  check_int64("ui text push",
+              er_ui_scene_push_varfont_text(&scene, font, codepoints, 5u, 20.0f, 90.0f, er_ui_color_rgb_u8(255u, 255u, 255u)),
+              ER_UI_OK);
+  check_int64("ui text emits quads", scene.text_quad_count > 0u, 1);
+  check_int64("ui text atlas exists", vr_font_atlas_count(font) > 0u, 1);
+  check_int64("ui text atlas view", vr_font_atlas_view(font, 0u, &atlas), VR_OK);
+  check_int64("ui text atlas alpha format", atlas.format, VR_FONT_ATLAS_FORMAT_ALPHA8);
+  check_int64("ui text atlas bytes", atlas.bytes_per_pixel, 1);
+
+  surface.pixels = pixels;
+  surface.width = 512u;
+  surface.height = 160u;
+  surface.stride = 512u;
+  surface.pixel_format = ER_UI_GOP_PIXEL_RGBX;
+  check_int64("ui text render", er_ui_gop_surface_render_scene_with_font(&surface, &scene, font), 1);
+  for (i = 0u; i < (UINTN)(sizeof(pixels) / sizeof(pixels[0])); ++i) {
+    if (pixels[i] != 0u) {
+      ++lit_pixels;
+    }
+  }
+  check_int64("ui text render lit pixels", lit_pixels > 0u, 1);
+
+  er_ui_scene_destroy(&scene);
+  vr_font_face_destroy(font);
+}
+
 int main(void) {
   test_bar_decode();
   test_pci_config_addressing();
@@ -913,6 +1107,8 @@ int main(void) {
   test_vfs_object_packets();
   test_app_identity_routes();
   test_hw_relay_endpoints();
+  test_ui_gop_renderer_surface();
+  test_ui_gop_renderer_varfont_text();
 
   if (g_failed != 0) {
     fprintf(stderr, "FAILED %d/%d checks\n", g_failed, g_total);

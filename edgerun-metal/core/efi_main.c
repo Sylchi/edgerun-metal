@@ -3,7 +3,12 @@
 #include "er_pci.h"
 #include "er_mmio.h"
 #include "er_acpi.h"
+#include "er_gfx_console.h"
+#include "er_ui_gop_renderer.h"
+#include "er_ui_painter.h"
+#include "er_ui_theme.h"
 #include "erwire.h"
+#include "font_geist_baked.h"
 #include "wasm_vm.h"
 #include "wasm_test_module.h"
 #include "wasm_pci_scan_module.h"
@@ -16,13 +21,17 @@
 #define ER_BOOT_PROFILE_PCI 1
 #define ER_BOOT_PROFILE_QUIET 2
 #define ER_BOOT_PROFILE_MMIO 3
+#define ER_BOOT_PROFILE_UI 4
 
 #define ER_MMIO_PROBE_WINDOW_LEN 0x1000u
 #define ER_CONSOLE_MIN_COLUMNS 80u
 #define ER_CONSOLE_MIN_ROWS 25u
+#define ER_UI_BOOT_ARENA_SIZE (4u * 1024u * 1024u)
 
 static ErWasmHostCalls g_host_calls = {0};
 static UINT8 g_wasm_driver_memory[65536];
+static UINT8 g_ui_boot_arena[ER_UI_BOOT_ARENA_SIZE];
+static UINTN g_ui_boot_arena_used;
 static UINT8 g_log_u64_stage = 0;
 static UINT8 g_log_hex_stage = 0;
 static UINT64 g_log_bus = 0;
@@ -35,6 +44,47 @@ static void er_reset_log_state(void) {
   g_log_bus = 0;
   g_log_dev = 0;
   g_log_func = 0;
+}
+
+static void* er_ui_boot_alloc(void* user, size_t size, size_t align) {
+  UINTN mask;
+  UINTN start;
+  UINTN end;
+  UINT8* arena = (UINT8*)user;
+
+  if (arena == 0 || size == 0u) {
+    return 0;
+  }
+  if (align == 0u) {
+    align = 1u;
+  }
+  mask = (UINTN)align - 1u;
+  if (((UINTN)align & mask) != 0u) {
+    return 0;
+  }
+
+  start = (g_ui_boot_arena_used + mask) & ~mask;
+  if ((UINTN)size > ER_UI_BOOT_ARENA_SIZE || start > ER_UI_BOOT_ARENA_SIZE - (UINTN)size) {
+    return 0;
+  }
+  end = start + (UINTN)size;
+  g_ui_boot_arena_used = end;
+  return arena + start;
+}
+
+static void er_ui_boot_free(void* user, void* ptr, size_t size, size_t align) {
+  (void)user;
+  (void)ptr;
+  (void)size;
+  (void)align;
+}
+
+static er_ui_allocator_t er_ui_boot_allocator(void) {
+  er_ui_allocator_t allocator;
+  allocator.user = g_ui_boot_arena;
+  allocator.alloc = er_ui_boot_alloc;
+  allocator.free = er_ui_boot_free;
+  return allocator;
 }
 
 static void er_print_u64_field(const char* label, UINT64 value) {
@@ -673,6 +723,208 @@ static void er_run_mmio_profile(void) {
   er_run_mmio_probe();
 }
 
+static er_ui_status_t er_ui_boot_push_panel(er_ui_painter_t* painter, er_ui_bounds_t bounds,
+                                            er_ui_color4_t fill, er_ui_color4_t border) {
+  er_ui_status_t status;
+
+  status = er_ui_painter_fill_rect(painter, bounds, 0.0f, fill);
+  if (status != ER_UI_OK) return status;
+  return er_ui_painter_border_rect(painter, bounds, 0.0f, border);
+}
+
+static UINTN er_ui_boot_ascii_codepoints(const char* text, UINT32* out, UINTN max_count) {
+  UINTN count = 0;
+
+  if (text == 0 || out == 0 || max_count == 0u) {
+    return 0u;
+  }
+  while (text[count] != 0 && count < max_count) {
+    out[count] = (UINT32)(UINT8)text[count];
+    ++count;
+  }
+  return count;
+}
+
+static const ErBakedFontGlyph* er_ui_boot_find_glyph(UINT32 codepoint) {
+  UINTN i;
+
+  for (i = 0u; i < ER_FONT_GEIST_BAKED_GLYPH_COUNT; ++i) {
+    if (g_er_font_geist_baked_glyphs[i].codepoint == codepoint) {
+      return &g_er_font_geist_baked_glyphs[i];
+    }
+  }
+  return 0;
+}
+
+static er_ui_status_t er_ui_boot_push_text(er_ui_scene_t* scene, const char* text,
+                                           float x, float y, er_ui_color4_t color) {
+  UINT32 codepoints[96];
+  UINTN count = er_ui_boot_ascii_codepoints(text, codepoints, (UINTN)(sizeof(codepoints) / sizeof(codepoints[0])));
+  UINTN i;
+  float pen_x = x;
+
+  if (count == 0u) {
+    return ER_UI_OK;
+  }
+
+  for (i = 0u; i < count; ++i) {
+    const ErBakedFontGlyph* glyph = er_ui_boot_find_glyph(codepoints[i]);
+    if (glyph == 0) {
+      continue;
+    }
+    if (glyph->width > 0 && glyph->height > 0) {
+      er_ui_status_t status = er_ui_scene_push_text_quad(
+        scene,
+        er_ui_quad_atlas(
+          pen_x + (float)glyph->left,
+          y - (float)glyph->top,
+          (float)glyph->width,
+          (float)glyph->height,
+          glyph->u0,
+          glyph->v0,
+          glyph->u1,
+          glyph->v1,
+          0u,
+          color));
+      if (status != ER_UI_OK) return status;
+    }
+    pen_x += glyph->advance;
+  }
+  return ER_UI_OK;
+}
+
+static er_ui_status_t er_build_ui_boot_scene(er_ui_scene_t* scene) {
+  er_ui_resolved_theme_t theme = er_ui_resolved_theme(
+    ER_UI_STYLE_AUTHORITY_USER,
+    (er_ui_style_preset_t){ER_UI_COLOR_SCHEME_TERMINAL, ER_UI_ACCENT_GREEN, ER_UI_RADIUS_COMPACT});
+  er_ui_painter_t painter;
+  er_ui_status_t status;
+
+  if (scene == 0) {
+    return ER_UI_ERR_INVALID_ARGUMENT;
+  }
+
+  status = er_ui_scene_init_with_allocator(scene, theme.colors.bg, er_ui_boot_allocator());
+  if (status != ER_UI_OK) return status;
+
+  painter = er_ui_painter(scene);
+
+  status = er_ui_scene_push_rect(scene, er_ui_rect_linear_gradient(0.0f, 0.0f, 3840.0f, 2160.0f, 0.0f,
+                                                                  er_ui_color_rgb_u8(3u, 7u, 18u),
+                                                                  er_ui_color_rgb_u8(5u, 46u, 22u)));
+  if (status != ER_UI_OK) return status;
+
+  status = er_ui_painter_fill_rect(&painter, er_ui_bounds(0.0f, 0.0f, 3840.0f, 128.0f), 0.0f, theme.colors.topbar);
+  if (status != ER_UI_OK) return status;
+  status = er_ui_painter_fill_rect(&painter, er_ui_bounds(0.0f, 126.0f, 3840.0f, 2.0f), 0.0f, theme.colors.accent);
+  if (status != ER_UI_OK) return status;
+  status = er_ui_boot_push_text(scene, "EdgeRun Metal", 160.0f, 86.0f, theme.colors.text);
+  if (status != ER_UI_OK) return status;
+  status = er_ui_boot_push_text(scene, "GOP renderer / baked Geist atlas", 760.0f, 82.0f, theme.colors.muted);
+  if (status != ER_UI_OK) return status;
+
+  status = er_ui_boot_push_panel(&painter, er_ui_bounds(160.0f, 220.0f, 1120.0f, 620.0f),
+                                 theme.colors.panel, theme.colors.border);
+  if (status != ER_UI_OK) return status;
+  status = er_ui_boot_push_panel(&painter, er_ui_bounds(1360.0f, 220.0f, 2320.0f, 620.0f),
+                                 er_ui_color_with_alpha(theme.colors.panel, 0.82f), theme.colors.border);
+  if (status != ER_UI_OK) return status;
+  status = er_ui_boot_push_panel(&painter, er_ui_bounds(160.0f, 960.0f, 1700.0f, 880.0f),
+                                 er_ui_color_with_alpha(theme.colors.row, 0.92f), theme.colors.border);
+  if (status != ER_UI_OK) return status;
+  status = er_ui_boot_push_panel(&painter, er_ui_bounds(1980.0f, 960.0f, 1700.0f, 880.0f),
+                                 er_ui_color_with_alpha(theme.colors.row, 0.78f), theme.colors.border);
+  if (status != ER_UI_OK) return status;
+
+  status = er_ui_painter_fill_rect(&painter, er_ui_bounds(240.0f, 310.0f, 960.0f, 42.0f), 0.0f, theme.colors.accent);
+  if (status != ER_UI_OK) return status;
+  status = er_ui_boot_push_text(scene, "Actual Geist font", 240.0f, 292.0f, theme.colors.text);
+  if (status != ER_UI_OK) return status;
+  status = er_ui_boot_push_text(scene, "Alpha atlas sampled by CPU", 240.0f, 392.0f, theme.colors.muted);
+  if (status != ER_UI_OK) return status;
+  status = er_ui_painter_fill_rect(&painter, er_ui_bounds(240.0f, 420.0f, 640.0f, 32.0f), 0.0f, theme.colors.success);
+  if (status != ER_UI_OK) return status;
+  status = er_ui_painter_fill_rect(&painter, er_ui_bounds(240.0f, 520.0f, 780.0f, 32.0f), 0.0f, theme.colors.info);
+  if (status != ER_UI_OK) return status;
+  status = er_ui_painter_fill_rect(&painter, er_ui_bounds(240.0f, 620.0f, 520.0f, 32.0f), 0.0f, theme.colors.warning);
+  if (status != ER_UI_OK) return status;
+
+  status = er_ui_scene_push_rect(scene, er_ui_rect_linear_gradient(1440.0f, 330.0f, 2080.0f, 260.0f, 0.0f,
+                                                                  er_ui_color_with_alpha(theme.colors.accent, 0.88f),
+                                                                  er_ui_color_with_alpha(theme.colors.info, 0.54f)));
+  if (status != ER_UI_OK) return status;
+  status = er_ui_boot_push_text(scene, "Scene text quads", 1500.0f, 455.0f, theme.colors.accent_text);
+  if (status != ER_UI_OK) return status;
+  status = er_ui_boot_push_text(scene, "No firmware text renderer", 1500.0f, 545.0f, theme.colors.accent_text);
+  if (status != ER_UI_OK) return status;
+  status = er_ui_painter_fill_rect(&painter, er_ui_bounds(1440.0f, 670.0f, 480.0f, 78.0f), 0.0f, theme.colors.success);
+  if (status != ER_UI_OK) return status;
+  status = er_ui_boot_push_text(scene, "READY", 1510.0f, 730.0f, theme.colors.accent_text);
+  if (status != ER_UI_OK) return status;
+  status = er_ui_painter_fill_rect(&painter, er_ui_bounds(1980.0f, 670.0f, 480.0f, 78.0f), 0.0f, theme.colors.warning);
+  if (status != ER_UI_OK) return status;
+  status = er_ui_boot_push_text(scene, "UEFI", 2050.0f, 730.0f, theme.colors.bg);
+  if (status != ER_UI_OK) return status;
+  status = er_ui_painter_fill_rect(&painter, er_ui_bounds(2520.0f, 670.0f, 480.0f, 78.0f), 0.0f, theme.colors.danger);
+  if (status != ER_UI_OK) return status;
+  status = er_ui_boot_push_text(scene, "CPU", 2610.0f, 730.0f, theme.colors.accent_text);
+  if (status != ER_UI_OK) return status;
+
+  status = er_ui_painter_fill_rect(&painter, er_ui_bounds(280.0f, 1070.0f, 1460.0f, 96.0f), 0.0f, theme.colors.active);
+  if (status != ER_UI_OK) return status;
+  status = er_ui_boot_push_text(scene, "renderer draws rectangles and real glyph atlas quads", 310.0f, 1140.0f, theme.colors.text);
+  if (status != ER_UI_OK) return status;
+  status = er_ui_painter_fill_rect(&painter, er_ui_bounds(280.0f, 1230.0f, 1180.0f, 96.0f), 0.0f, theme.colors.composer);
+  if (status != ER_UI_OK) return status;
+  status = er_ui_boot_push_text(scene, "next: clipping, cached frame state, input", 310.0f, 1300.0f, theme.colors.muted);
+  if (status != ER_UI_OK) return status;
+  status = er_ui_painter_fill_rect(&painter, er_ui_bounds(280.0f, 1390.0f, 1320.0f, 96.0f), 0.0f, theme.colors.composer);
+  if (status != ER_UI_OK) return status;
+
+  status = er_ui_painter_fill_rect(&painter, er_ui_bounds(2100.0f, 1100.0f, 240.0f, 520.0f), 0.0f, theme.colors.accent);
+  if (status != ER_UI_OK) return status;
+  status = er_ui_painter_fill_rect(&painter, er_ui_bounds(2440.0f, 1260.0f, 240.0f, 360.0f), 0.0f, theme.colors.success);
+  if (status != ER_UI_OK) return status;
+  status = er_ui_painter_fill_rect(&painter, er_ui_bounds(2780.0f, 1160.0f, 240.0f, 460.0f), 0.0f, theme.colors.info);
+  if (status != ER_UI_OK) return status;
+  return er_ui_painter_fill_rect(&painter, er_ui_bounds(3120.0f, 1340.0f, 240.0f, 280.0f), 0.0f, theme.colors.warning);
+}
+
+static void er_run_ui_profile(EFI_SYSTEM_TABLE* SystemTable) {
+  er_ui_scene_t scene = {0};
+  ErUiGopAlphaAtlas atlas;
+
+  er_println("boot profile: ui");
+  if (er_ui_gop_renderer_init(SystemTable) == 0u) {
+    er_println("ui renderer: GOP unavailable");
+    return;
+  }
+
+  g_ui_boot_arena_used = 0u;
+  er_println("ui renderer: build scene");
+  if (er_build_ui_boot_scene(&scene) != ER_UI_OK) {
+    er_println("ui renderer: scene build failed");
+    er_ui_scene_destroy(&scene);
+    return;
+  }
+
+  atlas.pixels = g_er_font_geist_baked_atlas;
+  atlas.width = ER_FONT_GEIST_BAKED_ATLAS_WIDTH;
+  atlas.height = ER_FONT_GEIST_BAKED_ATLAS_HEIGHT;
+  atlas.bytes_per_pixel = ER_FONT_GEIST_BAKED_ATLAS_BYTES_PER_PIXEL;
+
+  er_println("ui renderer: render scene");
+  if (er_ui_gop_renderer_render_scene_with_atlas(&scene, &atlas) == 0u) {
+    er_println("ui renderer: render failed");
+    er_ui_scene_destroy(&scene);
+    return;
+  }
+
+  er_ui_scene_destroy(&scene);
+  er_gfx_console_set_enabled(0u);
+  er_println("ui renderer: scene drawn");
+}
+
 static void er_run_invalid_profile(void) {
   er_print("invalid boot profile: ");
   er_print_u64_dec((UINT64)ER_BOOT_PROFILE);
@@ -680,7 +932,12 @@ static void er_run_invalid_profile(void) {
   er_halt_forever();
 }
 
-static void er_run_boot_profile(void) {
+static void er_run_boot_profile(EFI_SYSTEM_TABLE* SystemTable) {
+  if (ER_BOOT_PROFILE == ER_BOOT_PROFILE_UI) {
+    er_run_ui_profile(SystemTable);
+    return;
+  }
+
   if (ER_BOOT_PROFILE == ER_BOOT_PROFILE_PCI) {
     er_run_pci_profile();
     return;
@@ -716,7 +973,7 @@ EFI_STATUS EFIAPI efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE* SystemTable
   er_println("UEFI boot OK");
   er_log_acpi(SystemTable);
 
-  er_run_boot_profile();
+  er_run_boot_profile(SystemTable);
 
   er_println("Press any key to halt...");
   er_wait_for_key_then_halt(SystemTable);

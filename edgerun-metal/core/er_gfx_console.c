@@ -251,6 +251,10 @@ void er_gfx_console_init(EFI_SYSTEM_TABLE* st) {
   er_gfx_redraw();
 }
 
+void er_gfx_console_set_enabled(UINT8 enabled) {
+  g_ready = enabled != 0u ? g_ready : 0u;
+}
+
 void er_gfx_console_write(const char* s) {
   UINTN i;
 

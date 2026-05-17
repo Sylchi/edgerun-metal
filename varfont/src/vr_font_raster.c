@@ -59,7 +59,7 @@ static const float VR_RASTER_ALPHA_MIN = 0.0f;
 static const float VR_RASTER_ALPHA_MAX = 255.0f;
 static const uint32_t VR_RASTER_MSDF_COLOR_INF_COST = 0x3FFFFFFFu;
 static const uint8_t VR_RASTER_MSDF_CHANNEL_MAX_COST = 1u;
-static const uint8_t VR_RASTER_USE_QUADRATIC_WINDING = 0u;
+static const uint8_t VR_RASTER_USE_QUADRATIC_WINDING = 1u;
 
 typedef struct {
   float x0;
@@ -1565,38 +1565,21 @@ static float vr_quadratic_distance_sq(float px, float py, const vr_raster_curve_
   return best_sq;
 }
 
-static float vr_distance_to_outline(
+static int vr_point_inside_outline(
   float px,
   float py,
   const vr_segment_t* segments,
   size_t seg_count,
   const vr_raster_curve_t* curves,
   size_t curve_count) {
-  float nearest_sq = FLT_MAX;
-  for (size_t s = 0u; s < seg_count; ++s) {
-    float d_sq = vr_segment_distance_sq(px, py, &segments[s]);
-    if (d_sq < nearest_sq) {
-      nearest_sq = d_sq;
-    }
-  }
-  for (size_t c = 0u; c < curve_count; ++c) {
-    float d_sq = vr_quadratic_distance_sq(px, py, &curves[c]);
-    if (d_sq < nearest_sq) {
-      nearest_sq = d_sq;
-    }
-  }
-  float nearest = (nearest_sq >= 0.0f) ? vr_sqrtf(nearest_sq) : 0.0f;
-
   int winding = 0;
   for (size_t s = 0u; s < seg_count; ++s) {
     winding += vr_segment_crossing_sign(px, py, &segments[s]);
   }
-  if (VR_RASTER_USE_QUADRATIC_WINDING != 0u) {
-    for (size_t c = 0u; c < curve_count; ++c) {
-      winding += vr_quadratic_crossing_sign(px, py, &curves[c]);
-    }
+  for (size_t c = 0u; c < curve_count; ++c) {
+    winding += vr_quadratic_crossing_sign(px, py, &curves[c]);
   }
-  return (winding == 0) ? -nearest : nearest;
+  return winding != 0;
 }
 
 static void vr_msdf_nearest_channel_distance_sq(
@@ -1927,12 +1910,12 @@ vr_status_t vr_rasterize_outline_with_mode(
           bitmap[pixel_idx + (size_t)color] = vr_alpha_from_signed_distance(signed_distance, sdf_pad_f);
         }
       } else {
-        float total_distance = 0.0f;
+        int covered_samples = 0;
         for (int sy = 0; sy < ss; ++sy) {
           float sample_fy = fy + sample_offsets_y[sy];
           for (int sx = 0; sx < ss; ++sx) {
             float sample_fx = fx + sample_offsets_x[sx];
-            total_distance += vr_distance_to_outline(
+            covered_samples += vr_point_inside_outline(
               sample_fx,
               sample_fy,
               segments,
@@ -1941,8 +1924,7 @@ vr_status_t vr_rasterize_outline_with_mode(
               curve_count);
           }
         }
-        float signed_distance = total_distance * inv_ss;
-        bitmap[out_idx] = vr_alpha_from_signed_distance(signed_distance, sdf_pad_f);
+        bitmap[out_idx] = (uint8_t)((float)covered_samples * inv_ss * 255.0f + 0.5f);
       }
     }
   }

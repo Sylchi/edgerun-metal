@@ -100,6 +100,14 @@ typedef struct {
 } vr_font_metrics_t;
 
 typedef struct {
+  const uint8_t* pixels;
+  uint32_t width;
+  uint32_t height;
+  size_t bytes_per_pixel;
+  vr_font_atlas_format_t format;
+} vr_font_atlas_view_t;
+
+typedef struct {
   void* user;
   void (*create_texture)(void* user, uint32_t* out_texture, int width, int height, const void* pixels);
   void (*update_texture)(void* user, uint32_t texture, int x, int y, int width, int height, const void* pixels);
@@ -179,6 +187,7 @@ uint32_t vr_font_last_error(const vr_font_face_t* face);
 
 size_t vr_font_atlas_count(const vr_font_face_t* face);
 vr_status_t vr_font_atlas_texture(const vr_font_face_t* face, uint32_t atlas_id, uint32_t* out_texture);
+vr_status_t vr_font_atlas_view(const vr_font_face_t* face, uint32_t atlas_id, vr_font_atlas_view_t* out_view);
 
 #ifdef __cplusplus
 }

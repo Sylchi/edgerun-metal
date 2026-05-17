@@ -1,4 +1,4 @@
-.PHONY: all check clean repo-check repo-test erwire-decode erwire-test edgerun-smoke edgerun-pci edgerun-quiet edgerun-check varfont-configure varfont-build varfont-test ui-core-configure ui-core-build ui-core-test
+.PHONY: all check clean repo-check repo-test erwire-decode erwire-test edgerun-smoke edgerun-pci edgerun-quiet edgerun-ui edgerun-check varfont-configure varfont-build varfont-test ui-core-configure ui-core-build ui-core-test
 
 VARFONT_BUILD_DIR ?= .build/varfont
 UI_CORE_BUILD_DIR ?= .build/edgerun-ui-core
@@ -31,6 +31,9 @@ edgerun-pci:
 
 edgerun-quiet:
 	$(MAKE) -C edgerun-metal quiet
+
+edgerun-ui:
+	$(MAKE) -C edgerun-metal ui
 
 edgerun-check:
 	$(MAKE) -C edgerun-metal check
