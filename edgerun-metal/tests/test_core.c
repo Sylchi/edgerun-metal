@@ -8,6 +8,7 @@
 #include "er_bus.h"
 #include "er_crypto_blake3.h"
 #include "er_hw_relay.h"
+#include "er_relay_dispatch.h"
 #include "er_relay_router.h"
 #include "er_native_eth.h"
 #include "er_native_boot.h"
@@ -1589,6 +1590,7 @@ static void test_hw_relay_endpoints(void) {
   ErChannelEndpoint virtio_endpoint;
   ErRelayForwardIntent intent;
   ErRelayForwardIntent route_intent;
+  ErRelayDispatchRecord dispatch_record;
   ErRelayVirtioRoutes routes;
   ErVirtioNet net;
   ErNativeEth native_eth;
@@ -1716,6 +1718,19 @@ static void test_hw_relay_endpoints(void) {
                ER_VIRTIO_DEVICE_TYPE_BLK);
   check_uint64("relay route storage from mac",
                route_intent.from.address[0], eth_endpoint.address[0]);
+  route_intent.sequence = 77u;
+  check_int64("relay dispatch storage",
+              er_relay_dispatch_intent(&route_intent, packet,
+                                       (UINTN)sizeof(packet),
+                                       &dispatch_record),
+              1);
+  check_int64("relay dispatch storage status",
+              dispatch_record.status, ER_RELAY_DISPATCH_STORAGE_CAPTURE);
+  check_uint64("relay dispatch storage type",
+               dispatch_record.virtio_device_type, ER_VIRTIO_DEVICE_TYPE_BLK);
+  check_uint64("relay dispatch storage queue", dispatch_record.virtio_queue, 0u);
+  check_uint64("relay dispatch storage sequence", dispatch_record.sequence, 77u);
+  check_uint64("relay dispatch storage len", dispatch_record.packet_len, sizeof(packet));
 
   render_capability[RELAY_VIRTIO_TEST_CAP_CONTENT_OFFSET] =
       ER_CAPABILITY_CONTENT_RENDER;
@@ -1729,6 +1744,15 @@ static void test_hw_relay_endpoints(void) {
   check_uint64("relay route render target type",
                route_intent.to.address[RELAY_VIRTIO_TEST_DEVICE_TYPE_OFFSET],
                ER_VIRTIO_DEVICE_TYPE_GPU);
+  check_int64("relay dispatch render",
+              er_relay_dispatch_intent(&route_intent, render_capability,
+                                       (UINTN)sizeof(render_capability),
+                                       &dispatch_record),
+              1);
+  check_int64("relay dispatch render status",
+              dispatch_record.status, ER_RELAY_DISPATCH_RENDER_CAPTURE);
+  check_uint64("relay dispatch render type",
+               dispatch_record.virtio_device_type, ER_VIRTIO_DEVICE_TYPE_GPU);
 
   storage_work[RELAY_VIRTIO_TEST_WORK_DEPARTMENT_OFFSET] =
       ER_DEPARTMENT_STORAGE;
@@ -1748,6 +1772,21 @@ static void test_hw_relay_endpoints(void) {
                                               packet, (UINT32)sizeof(packet),
                                               &routes, &route_intent),
               0);
+  intent.to = endpoint;
+  check_int64("relay dispatch unsupported endpoint kind",
+              er_relay_dispatch_intent(&intent, packet, (UINTN)sizeof(packet),
+                                       &dispatch_record),
+              1);
+  check_int64("relay dispatch unsupported status",
+              dispatch_record.status, ER_RELAY_DISPATCH_UNSUPPORTED_ENDPOINT);
+  intent.to = virtio_endpoint;
+  intent.to.address[ER_HW_RELAY_VIRTIO_ADDR_LEN - 1u] = 1u;
+  check_int64("relay dispatch malformed endpoint",
+              er_relay_dispatch_intent(&intent, packet, (UINTN)sizeof(packet),
+                                       &dispatch_record),
+              1);
+  check_int64("relay dispatch malformed status",
+              dispatch_record.status, ER_RELAY_DISPATCH_MALFORMED_ENDPOINT);
 }
 
 static void test_erwire_native_eth_sink(void) {
