@@ -22,7 +22,7 @@ er_ui_status_t er_ui_scene_push_varfont_vertices(er_ui_scene_t* scene, const vr_
     float y = v0->y;
     float w = v2->x - v0->x;
     float h = v2->y - v0->y;
-    er_ui_status_t status = er_ui_scene_push_text_quad(scene, er_ui_quad(x, y, w, h, v0->u, v0->v, v2->u, v2->v, color));
+    er_ui_status_t status = er_ui_scene_push_text_quad(scene, er_ui_quad_atlas(x, y, w, h, v0->u, v0->v, v2->u, v2->v, v0->atlas_id, color));
     if (status != ER_UI_OK) return status;
   }
 

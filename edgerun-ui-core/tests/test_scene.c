@@ -450,12 +450,12 @@ static void test_varfont_vertices_emit_text_quads(void) {
   expect_status(er_ui_scene_init_with_allocator(&scene, ER_TEST_BG, er_ui_test_allocator()), ER_UI_OK, "varfont: scene init succeeds");
 
   vr_vertex_t vertices[VR_FONT_VERTICES_PER_GLYPH] = {
-    {10.0f, 20.0f, 0.10f, 0.20f, 1.0f, 1.0f, 1.0f, 1.0f, 0u},
-    {18.0f, 20.0f, 0.30f, 0.20f, 1.0f, 1.0f, 1.0f, 1.0f, 0u},
-    {18.0f, 32.0f, 0.30f, 0.50f, 1.0f, 1.0f, 1.0f, 1.0f, 0u},
-    {10.0f, 20.0f, 0.10f, 0.20f, 1.0f, 1.0f, 1.0f, 1.0f, 0u},
-    {18.0f, 32.0f, 0.30f, 0.50f, 1.0f, 1.0f, 1.0f, 1.0f, 0u},
-    {10.0f, 32.0f, 0.10f, 0.50f, 1.0f, 1.0f, 1.0f, 1.0f, 0u},
+    {10.0f, 20.0f, 0.10f, 0.20f, 1.0f, 1.0f, 1.0f, 1.0f, 7u},
+    {18.0f, 20.0f, 0.30f, 0.20f, 1.0f, 1.0f, 1.0f, 1.0f, 7u},
+    {18.0f, 32.0f, 0.30f, 0.50f, 1.0f, 1.0f, 1.0f, 1.0f, 7u},
+    {10.0f, 20.0f, 0.10f, 0.20f, 1.0f, 1.0f, 1.0f, 1.0f, 7u},
+    {18.0f, 32.0f, 0.30f, 0.50f, 1.0f, 1.0f, 1.0f, 1.0f, 7u},
+    {10.0f, 32.0f, 0.10f, 0.50f, 1.0f, 1.0f, 1.0f, 1.0f, 7u},
   };
 
   expect_status(er_ui_scene_push_varfont_vertices(&scene, vertices, VR_FONT_VERTICES_PER_GLYPH, ER_TEST_TEXT), ER_UI_OK,
@@ -467,6 +467,7 @@ static void test_varfont_vertices_emit_text_quads(void) {
   expect_float(scene.text_quads[0].h, 12.0f, "varfont: quad height derived");
   expect_float(scene.text_quads[0].u0, 0.10f, "varfont: quad u0 copied");
   expect_float(scene.text_quads[0].v1, 0.50f, "varfont: quad v1 copied");
+  expect_u32(scene.text_quads[0].atlas_id, 7u, "varfont: atlas id copied");
   expect_status(er_ui_scene_push_varfont_vertices(&scene, vertices, 1u, ER_TEST_TEXT), ER_UI_ERR_INVALID_ARGUMENT,
                 "varfont: partial vertex batch is rejected");
 

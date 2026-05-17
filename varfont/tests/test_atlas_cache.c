@@ -58,7 +58,7 @@ void run_atlas_tests(void) {
       test_expect(total == vert_count, "atlas: ranges sum to vertex count");
     }
 
-    vr_font_free_vertex_atlas_ranges(ranges);
+        (void)vr_font_free_vertex_atlas_ranges(face, ranges, range_count);
     st = vr_font_free_vertices(face, verts);
     test_expect_status(st, VR_OK, "atlas: free vertices returns OK");
   }

@@ -150,7 +150,7 @@ static void test_batch_and_bake_validation(vr_font_face_t* face) {
           test_expect(ranges[i].atlas_id < vr_font_atlas_count(face), "api: atlas id is in-bounds");
         }
         vr_font_free_vertices(face, ranged_vertices);
-        vr_font_free_vertex_atlas_ranges(ranges);
+        (void)vr_font_free_vertex_atlas_ranges(face, ranges, range_count);
       }
     } else {
       test_expect(st == VR_ERR_INVALID_FONT || st == VR_ERR_UNSUPPORTED || st == VR_ERR_NO_SPACE,
