@@ -100,6 +100,7 @@ void run_node_tests(void) {
   expect_string(er_ui_node_kind_label(ER_UI_NODE_COLLAPSIBLE), "collapsible", "node: kind label maps collapsible");
   expect_string(er_ui_node_kind_label(ER_UI_NODE_ACCORDION), "accordion", "node: kind label maps accordion");
   expect_string(er_ui_node_kind_label(ER_UI_NODE_HOVER_CARD), "hover-card", "node: kind label maps hover card");
+  expect_string(er_ui_node_kind_label(ER_UI_NODE_POPOVER), "popover", "node: kind label maps popover");
   expect_string(er_ui_icon_label(ER_UI_ICON_SEARCH), "search", "node: icon label maps canonical icon");
   expect_u32(er_ui_icon_atlas_id(ER_UI_ICON_SEARCH), (uint32_t)ER_UI_ICON_SEARCH + 1u, "node: icon atlas id is stable");
   expect_string(er_ui_icon_provider_name(ER_UI_ICON_APP, ER_UI_ICON_PROVIDER_LUCIDE), "app-window", "node: lucide provider name maps app icon");
@@ -213,6 +214,17 @@ void run_node_tests(void) {
   expect_size(a11y.role, ER_UI_A11Y_GROUP, "node: hover card accessibility role");
   expect_true(a11y.label == hover_a11y.label, "node: hover card label is borrowed");
   expect_true((a11y.states & ER_UI_A11Y_STATE_HAS_VALUE) != 0u, "node: hover card detail value state");
+
+  er_ui_node_t popover_a11y = er_ui_node_popover("Open popover", "Dimensions", "Set layout constraints.", "Width", "100%", 8027u);
+  expect_status(er_ui_node_accessibility(&popover_a11y, &a11y), ER_UI_OK, "node: popover accessibility maps");
+  expect_size(a11y.role, ER_UI_A11Y_DIALOG, "node: popover accessibility role");
+  expect_true(a11y.label == popover_a11y.value, "node: popover title is borrowed");
+  expect_status(er_ui_node_accessibility_child(&popover_a11y, 0u, &a11y), ER_UI_OK, "node: popover trigger accessibility maps");
+  expect_size(a11y.role, ER_UI_A11Y_BUTTON, "node: popover trigger accessibility role");
+  expect_true(a11y.has_id && a11y.id == 8027u, "node: popover trigger id");
+  expect_status(er_ui_node_accessibility_child(&popover_a11y, 1u, &a11y), ER_UI_OK, "node: popover field accessibility maps");
+  expect_size(a11y.role, ER_UI_A11Y_TEXTBOX, "node: popover field accessibility role");
+  expect_true(a11y.has_id && a11y.id == 8028u, "node: popover field id");
 
   er_ui_node_t checked = er_ui_node_checkbox("Remember", true, 8002u);
   expect_status(er_ui_node_accessibility(&checked, &a11y), ER_UI_OK, "node: checkbox accessibility maps");
@@ -346,6 +358,7 @@ void run_node_tests(void) {
     const char* const render_accordion_bodies[] = {"Yes, each trigger is exposed.", "It uses shared shadcn primitives."};
     er_ui_node_t accordion = er_ui_node_accordion(render_accordion_titles, render_accordion_bodies, 2u, 8831u);
     er_ui_node_t hover_card = er_ui_node_hover_card("ER", "UI core", "Variable font rendering stays required.", theme.colors.accent);
+    er_ui_node_t popover = er_ui_node_popover("Open popover", "Dimensions", "Set layout constraints.", "Width", "100%", 8833u);
 
     expect_status(er_ui_node_render(&alert, &scene, face, er_ui_bounds(0.0f, 170.0f, 360.0f, 76.0f), theme), ER_UI_OK, "node: alert renders");
     expect_status(er_ui_node_render(&avatar, &scene, face, er_ui_bounds(0.0f, 254.0f, 42.0f, 42.0f), theme), ER_UI_OK, "node: avatar renders");
@@ -442,6 +455,10 @@ void run_node_tests(void) {
     expect_status(er_ui_node_render(&hover_card, &scene, face, er_ui_bounds(0.0f, 3372.0f, 320.0f, 88.0f), theme), ER_UI_OK,
                   "node: hover card renders");
     expect_true(scene.text_quad_count > text_before_hover, "node: hover card emits variable font text");
+    size_t hits_before_popover = scene.hit_count;
+    expect_status(er_ui_node_render(&popover, &scene, face, er_ui_bounds(0.0f, 3472.0f, 320.0f, 170.0f), theme), ER_UI_OK,
+                  "node: popover renders");
+    expect_size(scene.hit_count, hits_before_popover + 2u, "node: popover emits trigger and field hits");
     size_t drag_sources_before = scene.drag_source_count;
     size_t drop_targets_before = scene.drop_target_count;
     expect_status(er_ui_node_render(&reorderable, &scene, face, er_ui_bounds(0.0f, 2930.0f, 260.0f, 52.0f), theme), ER_UI_OK,

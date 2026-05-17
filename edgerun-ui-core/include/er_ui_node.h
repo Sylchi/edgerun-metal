@@ -56,6 +56,7 @@ typedef enum {
   ER_UI_NODE_COLLAPSIBLE,
   ER_UI_NODE_ACCORDION,
   ER_UI_NODE_HOVER_CARD,
+  ER_UI_NODE_POPOVER,
   ER_UI_NODE_ROUTE_PATH,
   ER_UI_NODE_PACKAGE_CARD,
   ER_UI_NODE_RECEIPT_ROW,
@@ -187,6 +188,7 @@ struct er_ui_node_t {
   const char* value;
   const char* detail;
   const char* aux;
+  const char* extra;
   const char* const* labels;
   size_t label_count;
   const char* const* cells;
@@ -253,6 +255,8 @@ er_ui_node_t er_ui_node_collapsible(const char* title, const char* const* row_ti
                                     uint32_t base_id);
 er_ui_node_t er_ui_node_accordion(const char* const* item_titles, const char* const* item_bodies, size_t item_count, uint32_t base_id);
 er_ui_node_t er_ui_node_hover_card(const char* label, const char* detail, const char* body, er_ui_color4_t color);
+er_ui_node_t er_ui_node_popover(const char* button_label, const char* title, const char* detail, const char* field_label, const char* field_value,
+                                uint32_t base_id);
 er_ui_node_t er_ui_node_route_path(const char* label, const char* const* hops, size_t hop_count);
 er_ui_node_t er_ui_node_package_card(const char* name, const char* policy, const char* hash, uint32_t id);
 er_ui_node_t er_ui_node_receipt_row(const char* label, const char* amount, const char* status_text, uint32_t id);
