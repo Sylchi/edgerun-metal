@@ -363,6 +363,19 @@ er_ui_node_t er_ui_node_popover(const char* button_label, const char* title, con
   return node;
 }
 
+er_ui_node_t er_ui_node_sheet(const char* title, const char* detail, const char* field_label, const char* field_value, const char* button_label,
+                              uint32_t base_id) {
+  er_ui_node_t node = er_ui_node_base(ER_UI_NODE_SHEET);
+  node.label = title;
+  node.detail = detail;
+  node.aux = field_label;
+  node.extra = field_value;
+  node.value = button_label;
+  node.id = base_id;
+  node.gap = 12.0f;
+  return node;
+}
+
 er_ui_node_t er_ui_node_route_path(const char* label, const char* const* hops, size_t hop_count) {
   er_ui_node_t node = er_ui_node_base(ER_UI_NODE_ROUTE_PATH);
   node.label = label;
@@ -703,6 +716,7 @@ const char* er_ui_node_kind_label(er_ui_node_kind_t kind) {
     case ER_UI_NODE_ACCORDION: return "accordion";
     case ER_UI_NODE_HOVER_CARD: return "hover-card";
     case ER_UI_NODE_POPOVER: return "popover";
+    case ER_UI_NODE_SHEET: return "sheet";
     case ER_UI_NODE_ROUTE_PATH: return "route-path";
     case ER_UI_NODE_PACKAGE_CARD: return "package-card";
     case ER_UI_NODE_RECEIPT_ROW: return "receipt-row";
@@ -1009,6 +1023,10 @@ er_ui_status_t er_ui_node_accessibility(const er_ui_node_t* node, er_ui_a11y_nod
       out = er_ui_a11y_base(ER_UI_A11Y_DIALOG, node->value, false, 0u);
       er_ui_a11y_set_value(&out, node->detail);
       break;
+    case ER_UI_NODE_SHEET:
+      out = er_ui_a11y_base(ER_UI_A11Y_DIALOG, node->label, false, 0u);
+      er_ui_a11y_set_value(&out, node->detail);
+      break;
     case ER_UI_NODE_TABS:
       out = er_ui_a11y_base(ER_UI_A11Y_TAB_LIST, "tabs", false, 0u);
       break;
@@ -1134,6 +1152,19 @@ er_ui_status_t er_ui_node_accessibility_child(const er_ui_node_t* node, size_t c
       er_ui_a11y_node_t out = er_ui_a11y_base(ER_UI_A11Y_TEXTBOX, node->aux, true, node->id + 1u);
       er_ui_a11y_set_value(&out, node->extra);
       *out_a11y = out;
+      return ER_UI_OK;
+    }
+    return ER_UI_ERR_INVALID_ARGUMENT;
+  }
+  if (node->kind == ER_UI_NODE_SHEET) {
+    if (child_index == 0u) {
+      er_ui_a11y_node_t out = er_ui_a11y_base(ER_UI_A11Y_TEXTBOX, node->aux, true, node->id);
+      er_ui_a11y_set_value(&out, node->extra);
+      *out_a11y = out;
+      return ER_UI_OK;
+    }
+    if (child_index == 1u) {
+      *out_a11y = er_ui_a11y_base(ER_UI_A11Y_BUTTON, node->value, true, node->id + 1u);
       return ER_UI_OK;
     }
     return ER_UI_ERR_INVALID_ARGUMENT;
@@ -1402,6 +1433,30 @@ static er_ui_status_t er_ui_node_render_popover(
                                  node->id + 1u, false);
 }
 
+static er_ui_status_t er_ui_node_render_sheet(
+  const er_ui_node_t* node,
+  er_ui_scene_t* scene,
+  vr_font_face_t* font,
+  er_ui_bounds_t bounds,
+  er_ui_resolved_theme_t theme) {
+  if (!node || !scene || !font || !node->label || !node->detail || !node->aux || !node->extra || !node->value || !er_ui_bounds_valid(bounds)) {
+    return ER_UI_ERR_INVALID_ARGUMENT;
+  }
+  er_ui_status_t status = er_ui_shadcn_card_emit(scene, bounds, theme);
+  if (status != ER_UI_OK) return status;
+  float pad = 16.0f;
+  er_ui_bounds_t inner = er_ui_bounds(bounds.x + pad, bounds.y + pad, bounds.w - pad * 2.0f, bounds.h - pad * 2.0f);
+  if (!er_ui_bounds_valid(inner)) return ER_UI_ERR_INVALID_ARGUMENT;
+  status = er_ui_node_render_text(scene, font, node->label, er_ui_bounds(inner.x, inner.y, inner.w, 24.0f), theme.colors.text);
+  if (status != ER_UI_OK) return status;
+  status = er_ui_node_render_text(scene, font, node->detail, er_ui_bounds(inner.x, inner.y + 26.0f, inner.w, 22.0f), theme.colors.muted);
+  if (status != ER_UI_OK) return status;
+  status = er_ui_shadcn_field_emit(scene, font, er_ui_bounds(inner.x, inner.y + 58.0f, inner.w, 54.0f), theme, node->aux, node->extra, node->id, false);
+  if (status != ER_UI_OK) return status;
+  return er_ui_shadcn_button_emit(scene, font, er_ui_bounds(inner.x, inner.y + 124.0f, er_ui_float_min(inner.w, 160.0f), 40.0f), theme, node->value,
+                                  node->id + 1u, ER_UI_SHADCN_BUTTON_DEFAULT, ER_UI_SHADCN_BUTTON_SIZE_DEFAULT, true);
+}
+
 static er_ui_status_t er_ui_node_render_label_group(
   const er_ui_node_t* node,
   er_ui_scene_t* scene,
@@ -1568,6 +1623,8 @@ er_ui_status_t er_ui_node_render(
       return er_ui_node_render_hover_card(node, scene, font, rect, theme);
     case ER_UI_NODE_POPOVER:
       return er_ui_node_render_popover(node, scene, font, rect, theme);
+    case ER_UI_NODE_SHEET:
+      return er_ui_node_render_sheet(node, scene, font, rect, theme);
     case ER_UI_NODE_ROUTE_PATH:
       return er_ui_shadcn_route_path_emit(scene, font, rect, theme, node->label, node->labels, node->label_count);
     case ER_UI_NODE_PACKAGE_CARD:
