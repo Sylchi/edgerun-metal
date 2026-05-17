@@ -1,4 +1,5 @@
 #include "vr_font.h"
+#include "er_math.h"
 
 #include <SDL2/SDL.h>
 
@@ -6,7 +7,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <math.h>
 
 typedef struct {
   SDL_Renderer* renderer;
@@ -220,17 +220,11 @@ static float sdl_sorted_median_3(float a, float b, float c) {
   return b;
 }
 
-static float sdl_clamp_float(float value, float min_value, float max_value) {
-  if (value < min_value) return min_value;
-  if (value > max_value) return max_value;
-  return value;
-}
-
 static float sdl_smoothstep_float(float edge0, float edge1, float value) {
   if (edge0 >= edge1) return 0.0f;
 
   float t = (value - edge0) / (edge1 - edge0);
-  t = sdl_clamp_float(t, 0.0f, 1.0f);
+  t = er_math_clamp01f(t);
   return t * t * (3.0f - 2.0f * t);
 }
 
@@ -266,11 +260,11 @@ static float sdl_msdf_sample_distance_f(
   if (!msdf || width <= 0 || height <= 0) {
     return 0.0f;
   }
-  float fx = sdl_clamp_float(x, 0.0f, (float)(width - 1));
-  float fy = sdl_clamp_float(y, 0.0f, (float)(height - 1));
+  float fx = er_math_clampf(x, 0.0f, (float)(width - 1));
+  float fy = er_math_clampf(y, 0.0f, (float)(height - 1));
 
-  int x0 = (int)floorf(fx);
-  int y0 = (int)floorf(fy);
+  int x0 = (int)er_math_floorf(fx);
+  int y0 = (int)er_math_floorf(fy);
   int x1 = (x0 >= (width - 1)) ? x0 : (x0 + 1);
   int y1 = (y0 >= (height - 1)) ? y0 : (y0 + 1);
 
@@ -313,14 +307,14 @@ static uint8_t sdl_msdf_to_alpha(
         d = -d;
       }
       float sub_alpha = sdl_smoothstep_float(-aa_width, aa_width, d);
-      coverage += sdl_clamp_float(sub_alpha, 0.0f, 1.0f);
+      coverage += er_math_clamp01f(sub_alpha);
     }
   }
 
   float sample_count = (float)(VR_MSDF_RECON_AA_SUBSAMPLES * VR_MSDF_RECON_AA_SUBSAMPLES);
   float alpha_norm = coverage / sample_count * VR_MSDF_RECON_ALPHA_MAX;
   alpha_norm *= VR_MSDF_RECON_AA_SCALE;
-  alpha_norm = sdl_clamp_float(alpha_norm, 0.0f, VR_MSDF_RECON_ALPHA_MAX);
+  alpha_norm = er_math_clampf(alpha_norm, 0.0f, VR_MSDF_RECON_ALPHA_MAX);
 
   return (uint8_t)(alpha_norm + 0.5f);
 }

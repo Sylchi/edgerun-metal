@@ -115,6 +115,10 @@ float vr_absf(float value) {
   return er_math_absf(value);
 }
 
+float vr_clampf(float value, float min_value, float max_value) {
+  return er_math_clampf(value, min_value, max_value);
+}
+
 float vr_floorf(float value) {
   return er_math_floorf(value);
 }
@@ -125,6 +129,10 @@ float vr_ceilf(float value) {
 
 float vr_sqrtf(float value) {
   return er_math_sqrtf(value);
+}
+
+uint8_t vr_u8_from_unitf(float value) {
+  return er_math_u8_from_unitf(value);
 }
 
 long vr_lrintf(float value) {
