@@ -108,8 +108,11 @@
 #define ER_BLAKE3_AVX512_SUBTREE32_LEVEL 5u
 #define ER_BLAKE3_AVX512_SUBTREE32_MASK (ER_BLAKE3_AVX512_SUBTREE32_CHUNKS - 1u)
 #define ER_BLAKE3_PARALLEL_MIN_LEN (8u * 1024u * 1024u)
-#if !defined(ER_BLAKE3_PARALLEL_MAX_THREADS)
-#define ER_BLAKE3_PARALLEL_MAX_THREADS 8u
+#if !defined(ER_BLAKE3_PARALLEL_MAX_JOBS)
+#define ER_BLAKE3_PARALLEL_MAX_JOBS 16u
+#endif
+#if !defined(ER_BLAKE3_PTHREAD_JOBS)
+#define ER_BLAKE3_PTHREAD_JOBS 8u
 #endif
 
 static const uint32_t g_er_blake3_iv[ER_BLAKE3_CV_WORDS] = {
@@ -936,7 +939,6 @@ static void er_blake3_subtree16_cv(const uint32_t cvs[ER_BLAKE3_AVX2_SUBTREE16_C
 }
 #endif
 
-#if defined(ER_BLAKE3_ENABLE_THREADS)
 static uint8_t er_blake3_is_power_of_two_size(size_t value) {
   return value != 0u && (value & (value - 1u)) == 0u;
 }
@@ -1039,58 +1041,62 @@ typedef struct {
   size_t chunk_count;
   uint32_t flags;
   uint32_t cv[ER_BLAKE3_CV_WORDS];
-} ErBlake3ThreadWork;
+} ErBlake3ParallelWork;
 
-static void* er_blake3_thread_subtree(void* arg) {
-  ErBlake3ThreadWork* work = (ErBlake3ThreadWork*)arg;
+static void er_blake3_parallel_subtree_job(void* arg) {
+  ErBlake3ParallelWork* work = (ErBlake3ParallelWork*)arg;
 
   er_blake3_subtree_cv_exact(work->bytes, work->chunk_counter, work->chunk_count, work->flags, work->cv);
-  return 0;
 }
 
-static uint8_t er_blake3_hash_bytes_parallel_full_chunks(const uint8_t* bytes, size_t len,
-                                                         uint8_t out[ER_BLAKE3_OUT_LEN]) {
-  pthread_t threads[ER_BLAKE3_PARALLEL_MAX_THREADS];
-  ErBlake3ThreadWork work[ER_BLAKE3_PARALLEL_MAX_THREADS];
-  uint32_t level_cvs[ER_BLAKE3_PARALLEL_MAX_THREADS][ER_BLAKE3_CV_WORDS];
-  uint32_t next_cvs[ER_BLAKE3_PARALLEL_MAX_THREADS][ER_BLAKE3_CV_WORDS];
+uint8_t er_blake3_hash_bytes_parallel(const uint8_t* bytes, size_t len, uint8_t out[ER_BLAKE3_OUT_LEN],
+                                      ErBlake3RunJobsFn run_jobs, void* user, size_t max_jobs) {
+  ErBlake3ParallelWork work[ER_BLAKE3_PARALLEL_MAX_JOBS];
+  void* job_args[ER_BLAKE3_PARALLEL_MAX_JOBS];
+  uint32_t level_cvs[ER_BLAKE3_PARALLEL_MAX_JOBS][ER_BLAKE3_CV_WORDS];
+  uint32_t next_cvs[ER_BLAKE3_PARALLEL_MAX_JOBS][ER_BLAKE3_CV_WORDS];
   size_t chunk_count = len / ER_BLAKE3_CHUNK_LEN;
-  size_t thread_count = ER_BLAKE3_PARALLEL_MAX_THREADS;
-  size_t chunks_per_thread;
+  size_t job_count = 1u;
+  size_t chunks_per_job;
   size_t level_count;
   size_t i;
   size_t out_i;
 
-  while (thread_count > 1u && (chunk_count < thread_count || (chunk_count % thread_count) != 0u)) {
-    thread_count >>= 1u;
+  if (out == 0 || run_jobs == 0 || max_jobs < 2u || (len > 0u && bytes == 0) ||
+      (len % ER_BLAKE3_CHUNK_LEN) != 0u || !er_blake3_is_power_of_two_size(chunk_count)) {
+    return 0u;
   }
-  chunks_per_thread = chunk_count / thread_count;
-  if (thread_count < 2u || !er_blake3_is_power_of_two_size(chunks_per_thread)) {
+  if (max_jobs > ER_BLAKE3_PARALLEL_MAX_JOBS) {
+    max_jobs = ER_BLAKE3_PARALLEL_MAX_JOBS;
+  }
+  while ((job_count << 1u) <= max_jobs) {
+    job_count <<= 1u;
+  }
+  while (job_count > 1u && (chunk_count < job_count || (chunk_count % job_count) != 0u)) {
+    job_count >>= 1u;
+  }
+  chunks_per_job = chunk_count / job_count;
+  if (job_count < 2u || !er_blake3_is_power_of_two_size(chunks_per_job)) {
     return 0u;
   }
 
-  for (i = 0u; i < thread_count; ++i) {
-    work[i].bytes = bytes + (i * chunks_per_thread * ER_BLAKE3_CHUNK_LEN);
-    work[i].chunk_counter = (uint64_t)(i * chunks_per_thread);
-    work[i].chunk_count = chunks_per_thread;
+  for (i = 0u; i < job_count; ++i) {
+    work[i].bytes = bytes + (i * chunks_per_job * ER_BLAKE3_CHUNK_LEN);
+    work[i].chunk_counter = (uint64_t)(i * chunks_per_job);
+    work[i].chunk_count = chunks_per_job;
     work[i].flags = 0u;
-    if (pthread_create(&threads[i], 0, er_blake3_thread_subtree, &work[i]) != 0) {
-      while (i > 0u) {
-        --i;
-        (void)pthread_join(threads[i], 0);
-      }
-      return 0u;
-    }
+    job_args[i] = &work[i];
   }
 
-  for (i = 0u; i < thread_count; ++i) {
-    if (pthread_join(threads[i], 0) != 0) {
-      return 0u;
-    }
+  if (run_jobs(user, er_blake3_parallel_subtree_job, job_args, job_count) == 0u) {
+    return 0u;
+  }
+
+  for (i = 0u; i < job_count; ++i) {
     er_blake3_copy_cv(level_cvs[i], work[i].cv);
   }
 
-  level_count = thread_count;
+  level_count = job_count;
   while (level_count > 2u) {
     out_i = 0u;
     for (i = 0u; i < level_count; i += 2u) {
@@ -1104,6 +1110,48 @@ static uint8_t er_blake3_hash_bytes_parallel_full_chunks(const uint8_t* bytes, s
   }
 
   er_blake3_root_from_parent_cvs(level_cvs[0], level_cvs[1], out);
+  return 1u;
+}
+
+#if defined(ER_BLAKE3_ENABLE_THREADS)
+typedef struct {
+  ErBlake3JobFn job_fn;
+  void* job;
+} ErBlake3PthreadJob;
+
+static void* er_blake3_pthread_job(void* arg) {
+  ErBlake3PthreadJob* job = (ErBlake3PthreadJob*)arg;
+
+  job->job_fn(job->job);
+  return 0;
+}
+
+static uint8_t er_blake3_run_jobs_pthread(void* user, ErBlake3JobFn job_fn, void* const* jobs, size_t job_count) {
+  pthread_t threads[ER_BLAKE3_PARALLEL_MAX_JOBS];
+  ErBlake3PthreadJob pthread_jobs[ER_BLAKE3_PARALLEL_MAX_JOBS];
+  size_t i;
+
+  (void)user;
+  if (job_fn == 0 || jobs == 0 || job_count > ER_BLAKE3_PARALLEL_MAX_JOBS) {
+    return 0u;
+  }
+
+  for (i = 0u; i < job_count; ++i) {
+    pthread_jobs[i].job_fn = job_fn;
+    pthread_jobs[i].job = jobs[i];
+    if (pthread_create(&threads[i], 0, er_blake3_pthread_job, &pthread_jobs[i]) != 0) {
+      while (i > 0u) {
+        --i;
+        (void)pthread_join(threads[i], 0);
+      }
+      return 0u;
+    }
+  }
+  for (i = 0u; i < job_count; ++i) {
+    if (pthread_join(threads[i], 0) != 0) {
+      return 0u;
+    }
+  }
   return 1u;
 }
 #endif
@@ -1327,7 +1375,8 @@ uint8_t er_blake3_hash_bytes(const uint8_t* bytes, size_t len, uint8_t out[ER_BL
 #if defined(ER_BLAKE3_ENABLE_THREADS)
   if (len >= ER_BLAKE3_PARALLEL_MIN_LEN && (len % ER_BLAKE3_CHUNK_LEN) == 0u &&
       er_blake3_is_power_of_two_size(len / ER_BLAKE3_CHUNK_LEN) &&
-      er_blake3_hash_bytes_parallel_full_chunks(bytes, len, out) != 0u) {
+      er_blake3_hash_bytes_parallel(bytes, len, out, er_blake3_run_jobs_pthread,
+                                    0, ER_BLAKE3_PTHREAD_JOBS) != 0u) {
     return 1u;
   }
 #endif
