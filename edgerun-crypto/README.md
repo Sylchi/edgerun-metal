@@ -11,3 +11,14 @@ cmake -S edgerun-crypto -B .build/edgerun-crypto
 cmake --build .build/edgerun-crypto
 ctest --test-dir .build/edgerun-crypto --output-on-failure
 ```
+
+## Benchmarks
+
+```sh
+make crypto-bench-sota
+```
+
+The SOTA comparison target is hosted-only. It benchmarks the freestanding
+implementation, fetches official upstream BLAKE3 into `.build/blake3-upstream`,
+prints the upstream commit, and runs matching upstream C/amd64-asm benchmarks.
+If oneTBB is available through `pkg-config`, it also runs the upstream TBB path.
