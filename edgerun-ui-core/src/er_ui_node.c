@@ -347,6 +347,35 @@ er_ui_node_t er_ui_node_control_row(const char* label, const char* detail, const
   return node;
 }
 
+er_ui_node_t er_ui_node_grid(size_t columns) {
+  er_ui_node_t node = er_ui_node_base(ER_UI_NODE_GRID);
+  node.selected = columns == 0u ? 1u : columns;
+  return node;
+}
+
+er_ui_node_t er_ui_node_masonry(size_t columns) {
+  er_ui_node_t node = er_ui_node_base(ER_UI_NODE_MASONRY);
+  node.selected = columns == 0u ? 1u : columns;
+  return node;
+}
+
+er_ui_node_t er_ui_node_bento_grid(size_t columns) {
+  er_ui_node_t node = er_ui_node_base(ER_UI_NODE_BENTO_GRID);
+  node.selected = columns == 0u ? 1u : columns;
+  return node;
+}
+
+er_ui_node_t er_ui_node_scroll_area(float offset_px, uint32_t id) {
+  er_ui_node_t node = er_ui_node_base(ER_UI_NODE_SCROLL_AREA);
+  node.number = er_ui_float_max(offset_px, 0.0f);
+  node.id = id;
+  return node;
+}
+
+er_ui_node_t er_ui_node_spacer(void) {
+  return er_ui_node_base(ER_UI_NODE_SPACER);
+}
+
 er_ui_node_t* er_ui_node_set_bounds(er_ui_node_t* node, er_ui_bounds_t bounds) {
   if (!node) return node;
   node->bounds = bounds;
@@ -404,6 +433,54 @@ static er_ui_status_t er_ui_node_render_children(
     if (status != ER_UI_OK) return status;
   }
   return ER_UI_OK;
+}
+
+static er_ui_status_t er_ui_node_render_grid(
+  const er_ui_node_t* node,
+  er_ui_scene_t* scene,
+  vr_font_face_t* font,
+  er_ui_bounds_t bounds,
+  er_ui_resolved_theme_t theme) {
+  if (!node) return ER_UI_ERR_INVALID_ARGUMENT;
+  if (node->child_count == 0u) return ER_UI_OK;
+  size_t columns = node->selected == 0u ? 1u : node->selected;
+  if (columns > node->child_count) columns = node->child_count;
+  size_t rows = (node->child_count + columns - 1u) / columns;
+  er_ui_bounds_t content = er_ui_bounds_inset(bounds, node->padding, node->padding);
+  float total_gap_x = node->gap * (float)(columns - 1u);
+  float total_gap_y = node->gap * (float)(rows - 1u);
+  float cell_w = (content.w - total_gap_x) / (float)columns;
+  float cell_h = (content.h - total_gap_y) / (float)rows;
+  if (cell_w <= 0.0f || cell_h <= 0.0f) return ER_UI_ERR_INVALID_ARGUMENT;
+  for (size_t i = 0u; i < node->child_count; ++i) {
+    size_t col = i % columns;
+    size_t row = i / columns;
+    er_ui_bounds_t child_bounds = er_ui_bounds(content.x + (cell_w + node->gap) * (float)col, content.y + (cell_h + node->gap) * (float)row, cell_w, cell_h);
+    er_ui_status_t status = er_ui_node_render(node->children[i], scene, font, child_bounds, theme);
+    if (status != ER_UI_OK) return status;
+  }
+  return ER_UI_OK;
+}
+
+static er_ui_status_t er_ui_node_render_scroll_area(
+  const er_ui_node_t* node,
+  er_ui_scene_t* scene,
+  vr_font_face_t* font,
+  er_ui_bounds_t bounds,
+  er_ui_resolved_theme_t theme) {
+  if (!node || !scene) return ER_UI_ERR_INVALID_ARGUMENT;
+  if (node->id != 0u) {
+    er_ui_status_t hit_status = er_ui_scene_push_hit(scene, er_ui_hit(ER_UI_HIT_SCROLL_AREA, node->id, bounds.x, bounds.y, bounds.w, bounds.h));
+    if (hit_status != ER_UI_OK) return hit_status;
+  }
+  bool pushed = false;
+  er_ui_status_t status = er_ui_scene_push_clip(scene, er_ui_clip(bounds.x, bounds.y, bounds.w, bounds.h), &pushed);
+  if (status != ER_UI_OK) return status;
+  er_ui_bounds_t scrolled = bounds;
+  scrolled.y -= node->number;
+  status = er_ui_node_render_children(node, scene, font, scrolled, theme, false);
+  if (pushed) er_ui_scene_pop_clip(scene);
+  return status;
 }
 
 static er_ui_status_t er_ui_node_render_text(er_ui_scene_t* scene, vr_font_face_t* font, const char* text, er_ui_bounds_t bounds, er_ui_color4_t color) {
@@ -514,6 +591,14 @@ er_ui_status_t er_ui_node_render(
       return er_ui_shadcn_menu_item_emit(scene, font, rect, theme, node->label, node->detail, node->value, node->active, node->color, node->id);
     case ER_UI_NODE_CONTROL_ROW:
       return er_ui_shadcn_control_row_emit(scene, font, rect, theme, node->label, node->detail, node->value, node->id);
+    case ER_UI_NODE_GRID:
+    case ER_UI_NODE_MASONRY:
+    case ER_UI_NODE_BENTO_GRID:
+      return er_ui_node_render_grid(node, scene, font, rect, theme);
+    case ER_UI_NODE_SCROLL_AREA:
+      return er_ui_node_render_scroll_area(node, scene, font, rect, theme);
+    case ER_UI_NODE_SPACER:
+      return ER_UI_OK;
     default:
       return ER_UI_ERR_INVALID_ARGUMENT;
   }
