@@ -59,11 +59,11 @@ void run_atlas_tests(void) {
     }
 
         (void)vr_font_free_vertex_atlas_ranges(face, ranges, range_count);
-    st = vr_font_free_vertices(face, verts);
+    st = vr_font_free_vertices(face, verts, vert_count);
     test_expect_status(st, VR_OK, "atlas: free vertices returns OK");
   }
 
-  st = vr_font_free_shaped(face, shaped);
+  st = vr_font_free_shaped(face, shaped, shaped_count);
   test_expect_status(st, VR_OK, "atlas: free shaped returns OK");
   test_free_codepoints(cps);
   test_close_face(face);
@@ -94,9 +94,9 @@ void run_cache_tests(void) {
   st = vr_font_build_vertex_batch(face, shaped, shaped_count, VR_ATLAS_RENDER_X, VR_ATLAS_RENDER_Y, &verts, &vert_count);
   test_expect_status(st, VR_OK, "cache: first batch build returns OK");
   test_expect(vert_count > 0, "cache: first batch produces geometry");
-  st = vr_font_free_vertices(face, verts);
+  st = vr_font_free_vertices(face, verts, vert_count);
   test_expect_status(st, VR_OK, "cache: first free vertices returns OK");
-  st = vr_font_free_shaped(face, shaped);
+  st = vr_font_free_shaped(face, shaped, shaped_count);
   test_expect_status(st, VR_OK, "cache: first free shaped returns OK");
 
   st = vr_font_clear_cache(face);
@@ -114,9 +114,9 @@ void run_cache_tests(void) {
   test_expect(after_atlases >= before_atlases, "cache: atlas count is non-decreasing");
   test_expect(vert_count > 0, "cache: second batch produces geometry");
 
-  st = vr_font_free_vertices(face, verts);
+  st = vr_font_free_vertices(face, verts, vert_count);
   test_expect_status(st, VR_OK, "cache: second free vertices returns OK");
-  st = vr_font_free_shaped(face, shaped);
+  st = vr_font_free_shaped(face, shaped, shaped_count);
   test_expect_status(st, VR_OK, "cache: second free shaped returns OK");
   test_free_codepoints(cps);
   test_close_face(face);

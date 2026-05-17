@@ -49,12 +49,12 @@ er_ui_status_t er_ui_scene_push_varfont_text(
   size_t vertex_count = 0u;
   vr_status = vr_font_build_vertex_batch(face, shaped, shaped_count, x, y, &vertices, &vertex_count);
   if (vr_status != VR_OK) {
-    (void)vr_font_free_shaped(face, shaped);
+    (void)vr_font_free_shaped(face, shaped, shaped_count);
     return er_ui_status_from_vr(vr_status);
   }
 
   er_ui_status_t status = er_ui_scene_push_varfont_vertices(scene, vertices, vertex_count, color);
-  (void)vr_font_free_vertices(face, vertices);
-  (void)vr_font_free_shaped(face, shaped);
+  (void)vr_font_free_vertices(face, vertices, vertex_count);
+  (void)vr_font_free_shaped(face, shaped, shaped_count);
   return status;
 }

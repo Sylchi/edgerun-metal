@@ -118,7 +118,7 @@ static void test_batch_and_bake_validation(vr_font_face_t* face) {
   st = vr_font_bake_glyph(face, VR_INVALID_GLYPH_ID, &out);
   test_expect_status(st, VR_ERR_INVALID_FONT, "api: bake rejects glyph id outside font range");
 
-  st = vr_font_free_shaped(face, NULL);
+  st = vr_font_free_shaped(face, NULL, 0u);
   test_expect_status(st, VR_OK, "api: free_shaped accepts null list");
 
   vr_vertex_t* verts = NULL;
@@ -128,7 +128,7 @@ static void test_batch_and_bake_validation(vr_font_face_t* face) {
   test_expect(verts == NULL, "api: batch returns null when shaped_count is zero");
   test_expect(vert_count == 0, "api: batch returns zero when shaped_count is zero");
 
-  st = vr_font_free_vertices(face, NULL);
+  st = vr_font_free_vertices(face, NULL, 0u);
   test_expect_status(st, VR_OK, "api: free_vertices accepts null vertices");
 
   vr_vertex_t* ranged_vertices = NULL;
@@ -149,14 +149,14 @@ static void test_batch_and_bake_validation(vr_font_face_t* face) {
           test_expect((ranges[i].vertex_count % VR_FONT_VERTICES_PER_GLYPH) == 0, "api: atlas range vertex counts align to triangles");
           test_expect(ranges[i].atlas_id < vr_font_atlas_count(face), "api: atlas id is in-bounds");
         }
-        vr_font_free_vertices(face, ranged_vertices);
+        vr_font_free_vertices(face, ranged_vertices, vert_count);
         (void)vr_font_free_vertex_atlas_ranges(face, ranges, range_count);
       }
     } else {
       test_expect(st == VR_ERR_INVALID_FONT || st == VR_ERR_UNSUPPORTED || st == VR_ERR_NO_SPACE,
                   "api: range batching may reject malformed/empty glyph outlines");
     }
-    vr_font_free_shaped(face, shaped);
+    vr_font_free_shaped(face, shaped, shaped_count);
   }
 }
 

@@ -43,6 +43,7 @@ static size_t vr_next_capacity(size_t current, size_t minimum, size_t initial_ca
 }
 
 static vr_status_t vr_reserve_array(
+  vr_font_face_t* face,
   void** out_ptr,
   size_t* out_cap,
   size_t needed,
@@ -54,16 +55,25 @@ static vr_status_t vr_reserve_array(
   }
 
   size_t new_cap = vr_next_capacity(*out_cap, needed, initial_cap);
-  void* resized = vr_realloc_bytes(*out_ptr, new_cap * elem_size);
+  if (elem_size != 0u && new_cap > SIZE_MAX / elem_size) {
+    return VR_ERR_OOM;
+  }
+  size_t old_size = *out_cap * elem_size;
+  size_t new_size = new_cap * elem_size;
+  void* resized = vr_alloc(face, new_size, 8u);
   if (!resized) {
     return VR_ERR_OOM;
   }
 
   if (*out_ptr == NULL) {
-    vr_zero(resized, new_cap * elem_size);
+    vr_zero(resized, new_size);
   } else if (clear_tail && new_cap > *out_cap) {
-    vr_zero((uint8_t*)resized + (*out_cap * elem_size), (new_cap - *out_cap) * elem_size);
+    vr_copy(resized, *out_ptr, old_size);
+    vr_zero((uint8_t*)resized + old_size, new_size - old_size);
+  } else {
+    vr_copy(resized, *out_ptr, old_size);
   }
+  vr_dealloc(face, *out_ptr, old_size, 8u);
 
   *out_ptr = resized;
   *out_cap = new_cap;
@@ -104,7 +114,7 @@ static vr_status_t vr_atlas_create(vr_font_face_t* face, vr_atlas_page_t* page) 
     return VR_ERR_OOM;
   }
 
-  page->pixels = (uint8_t*)vr_calloc_bytes(pixel_count, 1);
+  page->pixels = (uint8_t*)vr_calloc(face, pixel_count, 1, 8u);
   if (!page->pixels) return VR_ERR_OOM;
 
   page->width = w;
@@ -122,6 +132,7 @@ static vr_status_t vr_atlas_create(vr_font_face_t* face, vr_atlas_page_t* page) 
   }
 
   vr_status_t st = vr_reserve_array(
+    face,
     (void**)&face->atlases,
     &face->atlas_cap,
     face->atlas_count + 1u,
@@ -129,7 +140,7 @@ static vr_status_t vr_atlas_create(vr_font_face_t* face, vr_atlas_page_t* page) 
     VR_ATLAS_INITIAL_CAPACITY,
     1);
   if (st != VR_OK) {
-    vr_free_bytes(page->pixels);
+    vr_dealloc(face, page->pixels, pixel_count, 8u);
     return st;
   }
 
@@ -202,6 +213,7 @@ vr_status_t vr_ensure_atlas(vr_font_face_t* face, int required_w, int required_h
 
   if (face->atlas_count >= face->atlas_cap) {
     vr_status_t st = vr_reserve_array(
+      face,
       (void**)&face->atlases,
       &face->atlas_cap,
       face->atlas_count + 1u,
@@ -226,6 +238,7 @@ vr_status_t vr_ensure_atlas(vr_font_face_t* face, int required_w, int required_h
 
 static vr_status_t vr_store_cache(vr_font_face_t* face, uint16_t glyph_id, vr_baked_glyph_t* out) {
   vr_status_t st = vr_reserve_array(
+    face,
     (void**)&face->glyph_cache,
     &face->glyph_cache_cap,
     face->glyph_cache_count + 1u,
@@ -280,12 +293,16 @@ void vr_cache_remove(vr_font_face_t* face) {
   for (size_t i = 0; i < face->glyph_cache_count; ++i) {
     vr_glyph_cache_entry_t* e = &face->glyph_cache[i];
     if (e->bitmap) {
-      vr_free_bytes(e->bitmap);
+      size_t bitmap_size = 0u;
+      if (e->atlas_id < face->atlas_count) {
+        bitmap_size = (size_t)e->width * (size_t)e->height * face->atlases[e->atlas_id].bytes_per_pixel;
+      }
+      vr_dealloc(face, e->bitmap, bitmap_size, 8u);
       e->bitmap = NULL;
     }
   }
 
-  vr_free_bytes(face->glyph_cache);
+  vr_dealloc(face, face->glyph_cache, face->glyph_cache_cap * sizeof(*face->glyph_cache), 8u);
   face->glyph_cache = NULL;
   face->glyph_cache_count = 0;
   face->glyph_cache_cap = 0;

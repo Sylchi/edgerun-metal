@@ -46,9 +46,9 @@ static void test_shape_ascii_text(void) {
   test_expect_status(st, VR_OK, "shape: single-atlas batch builder returns OK");
   test_expect((vert_count % VR_FONT_VERTICES_PER_GLYPH) == 0, "shape: vertex count is triangle-multiple");
 
-  st = vr_font_free_vertices(face, verts);
+  st = vr_font_free_vertices(face, verts, vert_count);
   test_expect_status(st, VR_OK, "shape: free vertices returns OK");
-  st = vr_font_free_shaped(face, shaped);
+  st = vr_font_free_shaped(face, shaped, shaped_count);
   test_expect_status(st, VR_OK, "shape: free shaped returns OK");
   test_free_codepoints(cps);
   test_close_face(face);
