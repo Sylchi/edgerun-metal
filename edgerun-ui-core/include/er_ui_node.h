@@ -22,6 +22,7 @@ typedef enum {
   ER_UI_NODE_TEXT,
   ER_UI_NODE_BADGE,
   ER_UI_NODE_BUTTON,
+  ER_UI_NODE_BUTTON_GROUP,
   ER_UI_NODE_CHECKBOX,
   ER_UI_NODE_RADIO,
   ER_UI_NODE_SELECT,
@@ -32,6 +33,7 @@ typedef enum {
   ER_UI_NODE_AVATAR,
   ER_UI_NODE_PROGRESS,
   ER_UI_NODE_SWITCH,
+  ER_UI_NODE_TOGGLE_GROUP,
   ER_UI_NODE_TABLE,
   ER_UI_NODE_BREADCRUMB,
   ER_UI_NODE_TOAST,
@@ -212,6 +214,7 @@ er_ui_node_t er_ui_node_icon_button(er_ui_icon_t icon, const char* label, uint32
 er_ui_node_t er_ui_node_text(const char* value);
 er_ui_node_t er_ui_node_badge(const char* label, er_ui_shadcn_badge_variant_t variant);
 er_ui_node_t er_ui_node_button(const char* label, uint32_t id, er_ui_shadcn_button_variant_t variant);
+er_ui_node_t er_ui_node_button_group(const char* const* labels, size_t label_count, uint32_t base_id);
 er_ui_node_t er_ui_node_checkbox(const char* label, bool checked, uint32_t id);
 er_ui_node_t er_ui_node_radio(const char* label, bool selected, uint32_t id);
 er_ui_node_t er_ui_node_select(const char* label, const char* value, uint32_t id);
@@ -222,6 +225,7 @@ er_ui_node_t er_ui_node_alert(const char* title, const char* body, er_ui_color4_
 er_ui_node_t er_ui_node_avatar(const char* label, er_ui_color4_t color, bool online);
 er_ui_node_t er_ui_node_progress(float value);
 er_ui_node_t er_ui_node_switch(bool checked, uint32_t id);
+er_ui_node_t er_ui_node_toggle_group(const char* const* labels, size_t label_count, size_t selected, uint32_t base_id);
 er_ui_node_t er_ui_node_table(const char* const* headers, size_t header_count, const char* const* cells, size_t row_count, uint32_t id_base);
 er_ui_node_t er_ui_node_breadcrumb(const char* const* labels, size_t label_count, size_t selected, uint32_t base_id);
 er_ui_node_t er_ui_node_toast(const char* message, er_ui_color4_t accent);

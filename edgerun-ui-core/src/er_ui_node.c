@@ -65,6 +65,15 @@ er_ui_node_t er_ui_node_button(const char* label, uint32_t id, er_ui_shadcn_butt
   return node;
 }
 
+er_ui_node_t er_ui_node_button_group(const char* const* labels, size_t label_count, uint32_t base_id) {
+  er_ui_node_t node = er_ui_node_base(ER_UI_NODE_BUTTON_GROUP);
+  node.labels = labels;
+  node.label_count = label_count;
+  node.id = base_id;
+  node.gap = 0.0f;
+  return node;
+}
+
 er_ui_node_t er_ui_node_checkbox(const char* label, bool checked, uint32_t id) {
   er_ui_node_t node = er_ui_node_base(ER_UI_NODE_CHECKBOX);
   node.label = label;
@@ -131,6 +140,16 @@ er_ui_node_t er_ui_node_switch(bool checked, uint32_t id) {
   er_ui_node_t node = er_ui_node_base(ER_UI_NODE_SWITCH);
   node.active = checked;
   node.id = id;
+  return node;
+}
+
+er_ui_node_t er_ui_node_toggle_group(const char* const* labels, size_t label_count, size_t selected, uint32_t base_id) {
+  er_ui_node_t node = er_ui_node_base(ER_UI_NODE_TOGGLE_GROUP);
+  node.labels = labels;
+  node.label_count = label_count;
+  node.selected = selected;
+  node.id = base_id;
+  node.gap = 4.0f;
   return node;
 }
 
@@ -593,6 +612,7 @@ const char* er_ui_node_kind_label(er_ui_node_kind_t kind) {
     case ER_UI_NODE_TEXT: return "text";
     case ER_UI_NODE_BADGE: return "badge";
     case ER_UI_NODE_BUTTON: return "button";
+    case ER_UI_NODE_BUTTON_GROUP: return "button-group";
     case ER_UI_NODE_CHECKBOX: return "checkbox";
     case ER_UI_NODE_RADIO: return "radio";
     case ER_UI_NODE_SELECT: return "select";
@@ -603,6 +623,7 @@ const char* er_ui_node_kind_label(er_ui_node_kind_t kind) {
     case ER_UI_NODE_AVATAR: return "avatar";
     case ER_UI_NODE_PROGRESS: return "progress";
     case ER_UI_NODE_SWITCH: return "switch";
+    case ER_UI_NODE_TOGGLE_GROUP: return "toggle-group";
     case ER_UI_NODE_TABLE: return "table";
     case ER_UI_NODE_BREADCRUMB: return "breadcrumb";
     case ER_UI_NODE_TOAST: return "toast";
@@ -855,6 +876,10 @@ er_ui_status_t er_ui_node_accessibility(const er_ui_node_t* node, er_ui_a11y_nod
     case ER_UI_NODE_ICON_BUTTON:
       out = er_ui_a11y_base(ER_UI_A11Y_BUTTON, node->label, true, node->id);
       break;
+    case ER_UI_NODE_BUTTON_GROUP:
+    case ER_UI_NODE_TOGGLE_GROUP:
+      out = er_ui_a11y_base(ER_UI_A11Y_GROUP, node->kind == ER_UI_NODE_BUTTON_GROUP ? "button group" : "toggle group", false, 0u);
+      break;
     case ER_UI_NODE_CHECKBOX:
       out = er_ui_a11y_base(ER_UI_A11Y_CHECKBOX, node->label, true, node->id);
       if (node->active) out.states |= ER_UI_A11Y_STATE_CHECKED;
@@ -978,6 +1003,13 @@ er_ui_status_t er_ui_node_accessibility_child(const er_ui_node_t* node, size_t c
     if (!node->labels || child_index >= node->label_count) return ER_UI_ERR_INVALID_ARGUMENT;
     er_ui_a11y_node_t out = er_ui_a11y_base(ER_UI_A11Y_TAB, node->labels[child_index], true, node->id + (uint32_t)child_index);
     if (child_index == node->selected) out.states |= ER_UI_A11Y_STATE_SELECTED;
+    *out_a11y = out;
+    return ER_UI_OK;
+  }
+  if (node->kind == ER_UI_NODE_BUTTON_GROUP || node->kind == ER_UI_NODE_TOGGLE_GROUP) {
+    if (!node->labels || child_index >= node->label_count) return ER_UI_ERR_INVALID_ARGUMENT;
+    er_ui_a11y_node_t out = er_ui_a11y_base(ER_UI_A11Y_BUTTON, node->labels[child_index], true, node->id + (uint32_t)child_index);
+    if (node->kind == ER_UI_NODE_TOGGLE_GROUP && child_index == node->selected) out.states |= ER_UI_A11Y_STATE_SELECTED;
     *out_a11y = out;
     return ER_UI_OK;
   }
@@ -1127,6 +1159,28 @@ static er_ui_status_t er_ui_node_render_icon(er_ui_scene_t* scene, er_ui_bounds_
   return er_ui_scene_push_icon_quad(scene, er_ui_quad_atlas(bounds.x, bounds.y, bounds.w, bounds.h, 0.0f, 0.0f, 1.0f, 1.0f, atlas_id, color));
 }
 
+static er_ui_status_t er_ui_node_render_label_group(
+  const er_ui_node_t* node,
+  er_ui_scene_t* scene,
+  vr_font_face_t* font,
+  er_ui_bounds_t bounds,
+  er_ui_resolved_theme_t theme,
+  bool toggle_group) {
+  if (!node || !scene || !font || !node->labels || node->label_count == 0u) return ER_UI_ERR_INVALID_ARGUMENT;
+  float gap = toggle_group ? 4.0f : 0.0f;
+  float total_gap = gap * (float)(node->label_count - 1u);
+  float item_w = (bounds.w - total_gap) / (float)node->label_count;
+  if (item_w <= 0.0f) return ER_UI_ERR_INVALID_ARGUMENT;
+  for (size_t i = 0u; i < node->label_count; ++i) {
+    er_ui_bounds_t item = er_ui_bounds(bounds.x + (item_w + gap) * (float)i, bounds.y, item_w, bounds.h);
+    er_ui_shadcn_button_variant_t variant = ER_UI_SHADCN_BUTTON_SECONDARY;
+    if (toggle_group && i != node->selected) variant = ER_UI_SHADCN_BUTTON_GHOST;
+    er_ui_status_t status = er_ui_shadcn_button_emit(scene, font, item, theme, node->labels[i], node->id + (uint32_t)i, variant, ER_UI_SHADCN_BUTTON_SIZE_SM, true);
+    if (status != ER_UI_OK) return status;
+  }
+  return ER_UI_OK;
+}
+
 static er_ui_bounds_t er_ui_node_center_square(er_ui_bounds_t bounds, float size) {
   float w = er_ui_float_min(size, er_ui_float_min(bounds.w, bounds.h));
   return er_ui_bounds(bounds.x + (bounds.w - w) * 0.5f, bounds.y + (bounds.h - w) * 0.5f, w, w);
@@ -1160,6 +1214,8 @@ er_ui_status_t er_ui_node_render(
       return er_ui_shadcn_badge_emit(scene, font, rect, theme, node->label, node->badge_variant);
     case ER_UI_NODE_BUTTON:
       return er_ui_shadcn_button_emit(scene, font, rect, theme, node->label, node->id, node->button_variant, node->button_size, node->active);
+    case ER_UI_NODE_BUTTON_GROUP:
+      return er_ui_node_render_label_group(node, scene, font, rect, theme, false);
     case ER_UI_NODE_ICON_BUTTON: {
       er_ui_status_t status = er_ui_shadcn_button_emit(scene, font, rect, theme, "", node->id, node->button_variant, ER_UI_SHADCN_BUTTON_SIZE_ICON, node->active);
       if (status != ER_UI_OK) return status;
@@ -1185,6 +1241,8 @@ er_ui_status_t er_ui_node_render(
       return er_ui_shadcn_progress_emit(scene, rect, theme, node->number);
     case ER_UI_NODE_SWITCH:
       return er_ui_shadcn_switch_emit(scene, rect, theme, node->active, node->id);
+    case ER_UI_NODE_TOGGLE_GROUP:
+      return er_ui_node_render_label_group(node, scene, font, rect, theme, true);
     case ER_UI_NODE_TABLE:
       return er_ui_shadcn_table_emit(scene, font, rect, theme, node->labels, node->label_count, node->cells, node->row_count, node->id);
     case ER_UI_NODE_BREADCRUMB:
