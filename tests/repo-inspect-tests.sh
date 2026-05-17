@@ -37,6 +37,12 @@ void free(void* p);
 void er_mem_copy(unsigned char* dst, const unsigned char* src, unsigned long len);
 int render_tile(int x);
 
+static float local_clamp01(float value) {
+  if (value < 0.0f) return 0.0f;
+  if (value > 1.0f) return 1.0f;
+  return value;
+}
+
 int other(void) {
   static const char* const names[] = {"zero", "one", "two"};
   unsigned char dst[8];
@@ -136,17 +142,17 @@ case "${report}" in
 esac
 
 case "${report}" in
-  *"magic numbers"*"string-indexing"* ) ;;
+  *"magic numbers"*"string-indexing"*"math primitives"* ) ;;
   * ) printf 'missing magic/string smell summary\n%s\n' "${report}" >&2; exit 1 ;;
 esac
 
 case "${report}" in
-  *"focused magic-number candidates:"*"focused string-indexing candidates:"* ) ;;
+  *"focused magic-number candidates:"*"focused string-indexing candidates:"*"focused math primitive candidates:"* ) ;;
   * ) printf 'missing focused magic/string candidates\n%s\n' "${report}" >&2; exit 1 ;;
 esac
 
 case "${report}" in
-  *"[magic-number]"*"[string-indexing]"* | *"[string-indexing]"*"[magic-number]"* ) ;;
+  *"[magic-number]"*"[string-indexing]"*"[math-primitive]"* | *"[math-primitive]"*"[string-indexing]"*"[magic-number]"* ) ;;
   * ) printf 'missing magic/string smell details\n%s\n' "${report}" >&2; exit 1 ;;
 esac
 

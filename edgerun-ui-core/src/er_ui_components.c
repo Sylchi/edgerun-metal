@@ -1,5 +1,6 @@
 #include "er_ui_components.h"
 #include "er_ui_painter.h"
+#include "er_math.h"
 
 #define ER_UI_SHADCN_TEXT_CAPACITY 128u
 
@@ -593,9 +594,7 @@ static bool er_ui_shadcn_preview_select_id(uint32_t id) {
 }
 
 static float er_ui_shadcn_clamp01(float value) {
-  if (value < 0.0f) return 0.0f;
-  if (value > 1.0f) return 1.0f;
-  return value;
+  return er_math_clamp01f(value);
 }
 
 static bool er_ui_shadcn_gallery_set_slider(er_ui_shadcn_demo_gallery_state_t* state, uint32_t id, float value) {

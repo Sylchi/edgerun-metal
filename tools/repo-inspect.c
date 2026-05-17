@@ -138,6 +138,7 @@ typedef struct {
   uint64_t long_lines;
   uint64_t magic_numbers;
   uint64_t string_indexing;
+  uint64_t math_primitives;
   uint64_t nonprod_findings;
 } EriSmellPackage;
 
@@ -860,6 +861,82 @@ static uint8_t eri_line_has_string_indexing_smell(const char* raw_line, const ch
   return 0;
 }
 
+static uint8_t eri_path_is_shared_math(const char* path) {
+  return (uint8_t)(strcmp(path, "include/er_math.h") == 0 || strcmp(path, "./include/er_math.h") == 0);
+}
+
+static uint8_t eri_line_has_direct_host_math_call(const char* line) {
+  static const char* calls[] = {
+    "floorf(", "ceilf(", "sqrtf(", "atan2f(", "fabsf(", "roundf(", "lrintf(",
+    "floor(", "ceil(", "sqrt(", "atan2(", "fabs(", "round("
+  };
+  size_t i;
+
+  for (i = 0u; i < sizeof(calls) / sizeof(calls[0]); ++i) {
+    const char* hit = strstr(line, calls[i]);
+    if (hit == NULL) {
+      continue;
+    }
+    if (hit > line && (isalnum((unsigned char)hit[-1]) || hit[-1] == '_')) {
+      continue;
+    }
+    if (hit >= line + 8 && strncmp(hit - 8, "er_math_", 8u) == 0) {
+      continue;
+    }
+    if (hit >= line + 3 && strncmp(hit - 3, "vr_", 3u) == 0) {
+      continue;
+    }
+    if (hit >= line + 6 && strncmp(hit - 6, "er_ui_", 6u) == 0) {
+      continue;
+    }
+    return 1u;
+  }
+  return 0u;
+}
+
+static uint8_t eri_line_has_math_primitive_smell(const char* path, const char* raw_line, const char* structural_line) {
+  const char* trim = eri_ltrim(raw_line);
+
+  if (eri_path_is_shared_math(path) != 0u) {
+    return 0u;
+  }
+  if (strstr(structural_line, "er_math_") != NULL || strstr(trim, "#include \"er_math.h\"") != NULL) {
+    return 0u;
+  }
+  if (strstr(structural_line, "3.4028234663852886e38f") != NULL ||
+      strstr(structural_line, "0x5f3759df") != NULL) {
+    return 1u;
+  }
+  if (strstr(structural_line, "value == value") != NULL ||
+      strstr(structural_line, "value != value") != NULL ||
+      strstr(structural_line, "isfinite") != NULL) {
+    return 1u;
+  }
+  if (strstr(structural_line, "return a < b ? a : b") != NULL ||
+      strstr(structural_line, "return a > b ? a : b") != NULL) {
+    return 1u;
+  }
+  if ((strstr(structural_line, "< 0.0f") != NULL && strstr(structural_line, "return 0.0f") != NULL) ||
+      (strstr(structural_line, "> 1.0f") != NULL && strstr(structural_line, "return 1.0f") != NULL)) {
+    return 1u;
+  }
+  if (strstr(structural_line, "truncated = (int") != NULL ||
+      strstr(structural_line, "truncated = (INT") != NULL ||
+      strstr(structural_line, "truncated = (int64_t") != NULL) {
+    return 1u;
+  }
+  if ((strstr(structural_line, "value / x") != NULL && strstr(structural_line, "0.5f") != NULL) ||
+      strstr(structural_line, "1.0e-10f") != NULL ||
+      strstr(structural_line, "0.1963f") != NULL ||
+      strstr(structural_line, "0.9817f") != NULL) {
+    return 1u;
+  }
+  if (eri_line_has_direct_host_math_call(structural_line) != 0u) {
+    return 1u;
+  }
+  return 0u;
+}
+
 static uint8_t eri_line_has_optimizer_ignore(const char* line) {
   return (uint8_t)(strstr(line, ERI_OPTIMIZER_IGNORE_TAG) != NULL);
 }
@@ -1158,6 +1235,9 @@ static void eri_scan_line_metrics(const uint8_t* bytes, size_t len, EriTotals* f
       }
       if (eri_line_has_string_indexing_smell(snippet, searchable) != 0u) {
         eri_add_finding(findings, path, line_no, "string-indexing", "string table/indexing may need enum/count guard");
+      }
+      if (eri_line_has_math_primitive_smell(path, snippet, searchable) != 0u) {
+        eri_add_finding(findings, path, line_no, "math-primitive", "local math primitive should use include/er_math.h");
       }
     } else if (pending_optimizer_ignore != 0u) {
       pending_optimizer_ignore = 0u;
@@ -1731,7 +1811,8 @@ static int eri_cmp_coverage_pkg(const void* a, const void* b) {
 
 static uint64_t eri_smell_package_score(const EriSmellPackage* pkg) {
   return pkg->large_files * 800u + pkg->long_functions * 120u + pkg->markers * 80u +
-         pkg->gotos * 60u + pkg->magic_numbers * 12u + pkg->string_indexing * 20u + pkg->long_lines;
+         pkg->gotos * 60u + pkg->math_primitives * 45u + pkg->magic_numbers * 12u +
+         pkg->string_indexing * 20u + pkg->long_lines;
 }
 
 static uint64_t eri_cpu_package_score(const EriCpuPackage* pkg) {
@@ -1890,13 +1971,16 @@ static uint32_t eri_finding_rank(const EriFinding* finding) {
   if (strcmp(finding->kind, "string-indexing") == 0) {
     return 5u;
   }
-  if (strncmp(finding->kind, "cpu-", 4u) == 0) {
+  if (strcmp(finding->kind, "math-primitive") == 0) {
     return 6u;
   }
-  if (strcmp(finding->kind, "long-line") == 0) {
+  if (strncmp(finding->kind, "cpu-", 4u) == 0) {
     return 7u;
   }
-  return 8u;
+  if (strcmp(finding->kind, "long-line") == 0) {
+    return 8u;
+  }
+  return 9u;
 }
 
 static int eri_cmp_finding(const void* a, const void* b) {
@@ -2019,6 +2103,8 @@ static uint8_t eri_collect_smell_packages(const EriFindings* findings, EriSmellP
       ++pkg->magic_numbers;
     } else if (strcmp(findings->items[i].kind, "string-indexing") == 0) {
       ++pkg->string_indexing;
+    } else if (strcmp(findings->items[i].kind, "math-primitive") == 0) {
+      ++pkg->math_primitives;
     } else if (strcmp(findings->items[i].kind, "long-line") == 0) {
       ++pkg->long_lines;
     }
@@ -2385,13 +2471,14 @@ static uint8_t eri_analyze(const EriVfs* vfs) {
   if (findings.len == 0u) {
     printf("  none from current heuristics\n");
   } else {
-    printf("  summary: %llu large files, %llu long functions, %llu markers, %llu gotos, %llu magic numbers, %llu string-indexing, %llu long lines\n",
+    printf("  summary: %llu large files, %llu long functions, %llu markers, %llu gotos, %llu magic numbers, %llu string-indexing, %llu math primitives, %llu long lines\n",
            (unsigned long long)eri_count_findings_kind(&findings, "large-file"),
            (unsigned long long)eri_count_findings_kind(&findings, "long-function"),
            (unsigned long long)eri_count_findings_kind(&findings, "marker"),
            (unsigned long long)eri_count_findings_kind(&findings, "goto"),
            (unsigned long long)eri_count_findings_kind(&findings, "magic-number"),
            (unsigned long long)eri_count_findings_kind(&findings, "string-indexing"),
+           (unsigned long long)eri_count_findings_kind(&findings, "math-primitive"),
            (unsigned long long)eri_count_findings_kind(&findings, "long-line"));
     printf("  package hotspots:\n");
     for (i = 0; i < smell_packages.len && i < ERI_TOP_LIMIT; ++i) {
@@ -2400,7 +2487,7 @@ static uint8_t eri_analyze(const EriVfs* vfs) {
       if (eri_smell_package_score(pkg) == 0u) {
         continue;
       }
-      printf("    %-24s score %5llu  large %2llu  funcs %2llu  markers %2llu  gotos %2llu  magic %4llu  str-index %3llu  long-lines %4llu  nonprod %4llu\n",
+      printf("    %-24s score %5llu  large %2llu  funcs %2llu  markers %2llu  gotos %2llu  magic %4llu  str-index %3llu  math %3llu  long-lines %4llu  nonprod %4llu\n",
              pkg->package,
              (unsigned long long)eri_smell_package_score(pkg),
              (unsigned long long)pkg->large_files,
@@ -2409,6 +2496,7 @@ static uint8_t eri_analyze(const EriVfs* vfs) {
              (unsigned long long)pkg->gotos,
              (unsigned long long)pkg->magic_numbers,
              (unsigned long long)pkg->string_indexing,
+             (unsigned long long)pkg->math_primitives,
              (unsigned long long)pkg->long_lines,
              (unsigned long long)pkg->nonprod_findings);
     }
@@ -2416,6 +2504,8 @@ static uint8_t eri_analyze(const EriVfs* vfs) {
     eri_print_finding_kind_samples(&findings, "magic-number", ERI_TOP_LIMIT);
     printf("  focused string-indexing candidates:\n");
     eri_print_finding_kind_samples(&findings, "string-indexing", ERI_TOP_LIMIT);
+    printf("  focused math primitive candidates:\n");
+    eri_print_finding_kind_samples(&findings, "math-primitive", ERI_TOP_LIMIT);
     for (i = 0; i < findings.len && i < ERI_TOP_LIMIT * 2u; ++i) {
       if (eri_finding_is_cpu_cost(&findings.items[i]) != 0u) {
         continue;
