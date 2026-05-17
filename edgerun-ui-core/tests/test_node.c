@@ -109,6 +109,7 @@ void run_node_tests(void) {
   expect_string(er_ui_node_kind_label(ER_UI_NODE_INPUT_OTP), "input-otp", "node: kind label maps input otp");
   expect_string(er_ui_node_kind_label(ER_UI_NODE_NAVIGATION_MENU), "navigation-menu", "node: kind label maps navigation menu");
   expect_string(er_ui_node_kind_label(ER_UI_NODE_RESIZABLE), "resizable", "node: kind label maps resizable");
+  expect_string(er_ui_node_kind_label(ER_UI_NODE_SIDEBAR), "sidebar", "node: kind label maps sidebar");
   expect_string(er_ui_icon_label(ER_UI_ICON_SEARCH), "search", "node: icon label maps canonical icon");
   expect_u32(er_ui_icon_atlas_id(ER_UI_ICON_SEARCH), (uint32_t)ER_UI_ICON_SEARCH + 1u, "node: icon atlas id is stable");
   expect_string(er_ui_icon_provider_name(ER_UI_ICON_APP, ER_UI_ICON_PROVIDER_LUCIDE), "app-window", "node: lucide provider name maps app icon");
@@ -306,6 +307,16 @@ void run_node_tests(void) {
   expect_status(er_ui_node_accessibility(&resizable_a11y, &a11y), ER_UI_OK, "node: resizable accessibility maps");
   expect_size(a11y.role, ER_UI_A11Y_GROUP, "node: resizable accessibility role");
 
+  const char* const sidebar_items[] = {"Dashboard", "Transactions", "Settings"};
+  er_ui_node_t sidebar_a11y = er_ui_node_sidebar("App", "Workspace", sidebar_items, 3u, 0u, "Dashboard", "Proof-aware activity", 8052u);
+  expect_status(er_ui_node_accessibility(&sidebar_a11y, &a11y), ER_UI_OK, "node: sidebar accessibility maps");
+  expect_size(a11y.role, ER_UI_A11Y_NAVIGATION, "node: sidebar accessibility role");
+  expect_status(er_ui_node_accessibility_child(&sidebar_a11y, 0u, &a11y), ER_UI_OK, "node: sidebar selected item accessibility maps");
+  expect_size(a11y.role, ER_UI_A11Y_MENU_ITEM, "node: sidebar selected item role");
+  expect_true((a11y.states & ER_UI_A11Y_STATE_SELECTED) != 0u, "node: sidebar selected item state");
+  expect_status(er_ui_node_accessibility_child(&sidebar_a11y, 3u, &a11y), ER_UI_OK, "node: sidebar main panel accessibility maps");
+  expect_size(a11y.role, ER_UI_A11Y_GROUP, "node: sidebar main panel role");
+
   er_ui_node_t checked = er_ui_node_checkbox("Remember", true, 8002u);
   expect_status(er_ui_node_accessibility(&checked, &a11y), ER_UI_OK, "node: checkbox accessibility maps");
   expect_size(a11y.role, ER_UI_A11Y_CHECKBOX, "node: checkbox accessibility role");
@@ -454,6 +465,8 @@ void run_node_tests(void) {
       er_ui_node_navigation_menu(render_nav_tabs, 3u, 1u, "Components", "Reusable primitives", "Accordion", "Disclosure rows", 8852u);
     const char* const render_resizable_labels[] = {"One", "Two", "Three"};
     er_ui_node_t resizable = er_ui_node_resizable(render_resizable_labels, 3u);
+    const char* const render_sidebar_items[] = {"Dashboard", "Transactions", "Settings"};
+    er_ui_node_t sidebar = er_ui_node_sidebar("App", "Workspace", render_sidebar_items, 3u, 0u, "Dashboard", "Proof-aware activity", 8856u);
 
     expect_status(er_ui_node_render(&alert, &scene, face, er_ui_bounds(0.0f, 170.0f, 360.0f, 76.0f), theme), ER_UI_OK, "node: alert renders");
     expect_status(er_ui_node_render(&avatar, &scene, face, er_ui_bounds(0.0f, 254.0f, 42.0f, 42.0f), theme), ER_UI_OK, "node: avatar renders");
@@ -586,6 +599,10 @@ void run_node_tests(void) {
     expect_status(er_ui_node_render(&resizable, &scene, face, er_ui_bounds(0.0f, 4390.0f, 360.0f, 112.0f), theme), ER_UI_OK,
                   "node: resizable renders");
     expect_true(scene.rect_count > rects_before_resizable, "node: resizable emits cards and divider");
+    size_t hits_before_sidebar = scene.hit_count;
+    expect_status(er_ui_node_render(&sidebar, &scene, face, er_ui_bounds(0.0f, 4514.0f, 420.0f, 176.0f), theme), ER_UI_OK,
+                  "node: sidebar renders");
+    expect_size(scene.hit_count, hits_before_sidebar + 3u, "node: sidebar emits menu item hits");
     size_t drag_sources_before = scene.drag_source_count;
     size_t drop_targets_before = scene.drop_target_count;
     expect_status(er_ui_node_render(&reorderable, &scene, face, er_ui_bounds(0.0f, 2930.0f, 260.0f, 52.0f), theme), ER_UI_OK,
