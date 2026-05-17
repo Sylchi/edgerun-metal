@@ -65,6 +65,32 @@ static void er_ui_gop_stats_add(ErUiGopRenderStats* dst, const ErUiGopRenderStat
   dst->rejected_primitives += src->rejected_primitives;
 }
 
+static UINT8 er_ui_gop_memory_violation(const char* name, UINT64 actual, UINT64 limit,
+                                        ErUiGopMemoryBudgetViolation* out_violation) {
+  if (actual <= limit) {
+    return 0u;
+  }
+  if (out_violation != 0) {
+    out_violation->name = name;
+    out_violation->actual = actual;
+    out_violation->limit = limit;
+  }
+  return 1u;
+}
+
+static UINT8 er_ui_gop_frame_violation(const char* name, UINT64 actual, UINT64 limit,
+                                       ErUiGopFrameBudgetViolation* out_violation) {
+  if (actual <= limit) {
+    return 0u;
+  }
+  if (out_violation != 0) {
+    out_violation->name = name;
+    out_violation->actual = actual;
+    out_violation->limit = limit;
+  }
+  return 1u;
+}
+
 static INT64 er_ui_gop_floor_i64(float value) {
   INT64 truncated = (INT64)value;
   if (value < 0.0f && (float)truncated != value) {
@@ -907,50 +933,15 @@ UINT8 er_ui_gop_memory_plan_from_tile_plan(const ErUiGopTilePlan* tile_plan, UIN
 
 UINT8 er_ui_gop_memory_plan_first_budget_violation(ErUiGopMemoryPlan plan, ErUiGopMemoryBudget budget,
                                                    ErUiGopMemoryBudgetViolation* out_violation) {
-  static const char* const names[] = {
-    "scanout_bytes",
-    "backing_bytes",
-    "tile_state_bytes",
-    "dirty_queue_bytes",
-    "command_bytes",
-    "glyph_cache_bytes",
-    "surface_bytes",
-    "total_bytes"
-  };
-  const UINT64 actual[] = {
-    plan.scanout_bytes,
-    plan.backing_bytes,
-    plan.tile_state_bytes,
-    plan.dirty_queue_bytes,
-    plan.command_bytes,
-    plan.glyph_cache_bytes,
-    plan.surface_bytes,
-    plan.total_bytes
-  };
-  const UINT64 limits[] = {
-    budget.scanout_bytes,
-    budget.backing_bytes,
-    budget.tile_state_bytes,
-    budget.dirty_queue_bytes,
-    budget.command_bytes,
-    budget.glyph_cache_bytes,
-    budget.surface_bytes,
-    budget.total_bytes
-  };
-  const UINTN count = (UINTN)(sizeof(actual) / sizeof(actual[0]));
-  UINTN i;
-
-  for (i = 0u; i < count; ++i) {
-    if (actual[i] > limits[i]) {
-      if (out_violation != 0) {
-        out_violation->name = names[i];
-        out_violation->actual = actual[i];
-        out_violation->limit = limits[i];
-      }
-      return 1u;
-    }
-  }
-  return 0u;
+  return (UINT8)(
+      er_ui_gop_memory_violation("scanout_bytes", plan.scanout_bytes, budget.scanout_bytes, out_violation) != 0u ||
+      er_ui_gop_memory_violation("backing_bytes", plan.backing_bytes, budget.backing_bytes, out_violation) != 0u ||
+      er_ui_gop_memory_violation("tile_state_bytes", plan.tile_state_bytes, budget.tile_state_bytes, out_violation) != 0u ||
+      er_ui_gop_memory_violation("dirty_queue_bytes", plan.dirty_queue_bytes, budget.dirty_queue_bytes, out_violation) != 0u ||
+      er_ui_gop_memory_violation("command_bytes", plan.command_bytes, budget.command_bytes, out_violation) != 0u ||
+      er_ui_gop_memory_violation("glyph_cache_bytes", plan.glyph_cache_bytes, budget.glyph_cache_bytes, out_violation) != 0u ||
+      er_ui_gop_memory_violation("surface_bytes", plan.surface_bytes, budget.surface_bytes, out_violation) != 0u ||
+      er_ui_gop_memory_violation("total_bytes", plan.total_bytes, budget.total_bytes, out_violation) != 0u);
 }
 
 UINT8 er_ui_gop_memory_plan_fits_budget(ErUiGopMemoryPlan plan, ErUiGopMemoryBudget budget) {
@@ -1258,59 +1249,18 @@ ErUiGopFrameBudget er_ui_gop_frame_budget_from_plan(const ErUiGopTilePlan* tile_
 
 UINT8 er_ui_gop_render_stats_first_budget_violation(ErUiGopRenderStats stats, ErUiGopFrameBudget budget,
                                                     ErUiGopFrameBudgetViolation* out_violation) {
-  static const char* const names[] = {
-    "pixels_written",
-    "bytes_written",
-    "blend_pixels",
-    "text_pixels",
-    "rects",
-    "icon_quads",
-    "text_quads",
-    "tiles_rendered",
-    "dirty_tiles_requested",
-    "clipped_primitives",
-    "rejected_primitives"
-  };
-  const UINT64 actual[] = {
-    stats.pixels_written,
-    stats.bytes_written,
-    stats.blend_pixels,
-    stats.text_pixels,
-    stats.rects,
-    stats.icon_quads,
-    stats.text_quads,
-    stats.tiles_rendered,
-    stats.dirty_tiles_requested,
-    stats.clipped_primitives,
-    stats.rejected_primitives
-  };
-  const UINT64 limits[] = {
-    budget.pixels_written,
-    budget.bytes_written,
-    budget.blend_pixels,
-    budget.text_pixels,
-    budget.rects,
-    budget.icon_quads,
-    budget.text_quads,
-    budget.tiles_rendered,
-    budget.dirty_tiles_requested,
-    budget.clipped_primitives,
-    budget.rejected_primitives
-  };
-  const UINTN count = (UINTN)(sizeof(actual) / sizeof(actual[0]));
-  UINTN i;
-
-  for (i = 0u; i < count; ++i) {
-    if (actual[i] > limits[i]) {
-      if (out_violation != 0) {
-        out_violation->name = names[i];
-        out_violation->actual = actual[i];
-        out_violation->limit = limits[i];
-      }
-      return 1u;
-    }
-  }
-  return 0u;
+  return (UINT8)(
+      er_ui_gop_frame_violation("pixels_written", stats.pixels_written, budget.pixels_written, out_violation) != 0u ||
+      er_ui_gop_frame_violation("bytes_written", stats.bytes_written, budget.bytes_written, out_violation) != 0u ||
+      er_ui_gop_frame_violation("blend_pixels", stats.blend_pixels, budget.blend_pixels, out_violation) != 0u ||
+      er_ui_gop_frame_violation("text_pixels", stats.text_pixels, budget.text_pixels, out_violation) != 0u ||
+      er_ui_gop_frame_violation("rects", stats.rects, budget.rects, out_violation) != 0u ||
+      er_ui_gop_frame_violation("icon_quads", stats.icon_quads, budget.icon_quads, out_violation) != 0u ||
+      er_ui_gop_frame_violation("text_quads", stats.text_quads, budget.text_quads, out_violation) != 0u ||
+      er_ui_gop_frame_violation("tiles_rendered", stats.tiles_rendered, budget.tiles_rendered, out_violation) != 0u ||
+      er_ui_gop_frame_violation("dirty_tiles_requested", stats.dirty_tiles_requested, budget.dirty_tiles_requested, out_violation) != 0u ||
+      er_ui_gop_frame_violation("clipped_primitives", stats.clipped_primitives, budget.clipped_primitives, out_violation) != 0u ||
+      er_ui_gop_frame_violation("rejected_primitives", stats.rejected_primitives, budget.rejected_primitives, out_violation) != 0u);
 }
 
 UINT8 er_ui_gop_render_stats_fits_budget(ErUiGopRenderStats stats, ErUiGopFrameBudget budget) {

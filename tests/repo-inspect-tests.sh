@@ -44,6 +44,13 @@ int other(void) {
   return f + magic + names[1][0];
 }
 C
+cat > "${TMP_DIR}/pkg/ignored.c" <<'C'
+int ignored(void) {
+  static const char* const labels[] = {"zero", "one"}; //@optimizer-ignore intentional metadata table
+  int value = 31337; //@optimizer-ignore protocol example value
+  return value + labels[0][0]; //@optimizer-ignore intentional metadata lookup
+}
+C
 mkdir -p "${TMP_DIR}/tests"
 cat > "${TMP_DIR}/tests/test_main.c" <<'C'
 int test_main_path(void) {
@@ -56,7 +63,7 @@ printf '\177ELFtest' > "${TMP_DIR}/release.efi"
 report="$("${REPO_INSPECT}" "${TMP_DIR}")"
 
 case "${report}" in
-  *"files:         3"* ) ;;
+  *"files:         4"* ) ;;
   * ) printf 'missing source file count\n%s\n' "${report}" >&2; exit 1 ;;
 esac
 
@@ -113,6 +120,11 @@ esac
 case "${report}" in
   *"[magic-number]"*"[string-indexing]"* | *"[string-indexing]"*"[magic-number]"* ) ;;
   * ) printf 'missing magic/string smell details\n%s\n' "${report}" >&2; exit 1 ;;
+esac
+
+case "${report}" in
+  *"ignored.c:"* ) printf 'optimizer-ignore line still reported\n%s\n' "${report}" >&2; exit 1 ;;
+  * ) ;;
 esac
 
 printf 'repo-inspect tests passed\n'
