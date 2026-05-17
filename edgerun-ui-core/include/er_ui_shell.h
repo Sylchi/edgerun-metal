@@ -2,6 +2,7 @@
 #define ER_UI_SHELL_H
 
 #include "er_ui_primitives.h"
+#include "er_ui_runtime.h"
 #include "er_ui_scene.h"
 #include "er_ui_theme.h"
 
@@ -33,6 +34,7 @@ void er_ui_shell_state_destroy(er_ui_shell_state_t* state);
 bool er_ui_shell_launcher_open(const er_ui_shell_state_t* state);
 void er_ui_shell_set_launcher_open(er_ui_shell_state_t* state, bool open);
 void er_ui_shell_toggle_launcher(er_ui_shell_state_t* state);
+er_ui_status_t er_ui_shell_apply_action(er_ui_shell_state_t* state, er_ui_action_t action, bool* out_changed);
 
 er_ui_status_t er_ui_workspace_add_surface(er_ui_shell_state_t* state, uint32_t surface_id);
 er_ui_status_t er_ui_workspace_remove_surface(er_ui_shell_state_t* state, uint32_t surface_id);

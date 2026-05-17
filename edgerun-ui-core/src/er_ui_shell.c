@@ -87,6 +87,49 @@ void er_ui_shell_toggle_launcher(er_ui_shell_state_t* state) {
   if (state) state->launcher_open = !state->launcher_open;
 }
 
+static uint32_t er_ui_shell_action_target_id(er_ui_action_t action) {
+  return action.has_hit ? action.hit.id : action.id;
+}
+
+er_ui_status_t er_ui_shell_apply_action(er_ui_shell_state_t* state, er_ui_action_t action, bool* out_changed) {
+  if (out_changed) *out_changed = false;
+  if (!state) return ER_UI_ERR_INVALID_ARGUMENT;
+
+  if (action.kind == ER_UI_ACTION_CANCELLED) {
+    if (state->launcher_open) {
+      state->launcher_open = false;
+      if (out_changed) *out_changed = true;
+    }
+    return ER_UI_OK;
+  }
+
+  if (action.has_hit && action.hit.kind == ER_UI_HIT_SHELL_LAUNCHER && action.kind == ER_UI_ACTION_ACTIVATED) {
+    state->launcher_open = !state->launcher_open;
+    if (out_changed) *out_changed = true;
+    return ER_UI_OK;
+  }
+
+  if ((action.kind == ER_UI_ACTION_TAB_SELECTED) ||
+      (action.has_hit && action.hit.kind == ER_UI_HIT_WORKSPACE_TAB &&
+       (action.kind == ER_UI_ACTION_ACTIVATED || action.kind == ER_UI_ACTION_FOCUSED))) {
+    uint32_t surface_id = er_ui_shell_action_target_id(action);
+    uint32_t previous = state->focused_surface_id;
+    er_ui_status_t status = er_ui_workspace_focus_surface(state, surface_id);
+    if (status != ER_UI_OK) return status;
+    if (out_changed) *out_changed = previous != state->focused_surface_id;
+    return ER_UI_OK;
+  }
+
+  if (action.has_hit && action.hit.kind == ER_UI_HIT_WORKSPACE_CLOSE && action.kind == ER_UI_ACTION_ACTIVATED) {
+    er_ui_status_t status = er_ui_workspace_remove_surface(state, action.hit.id);
+    if (status != ER_UI_OK) return status;
+    if (out_changed) *out_changed = true;
+    return ER_UI_OK;
+  }
+
+  return ER_UI_OK;
+}
+
 er_ui_status_t er_ui_workspace_add_surface(er_ui_shell_state_t* state, uint32_t surface_id) {
   if (!state || surface_id == 0u) return ER_UI_ERR_INVALID_ARGUMENT;
   if (er_ui_workspace_find_surface(state, surface_id) != (size_t)-1) {
