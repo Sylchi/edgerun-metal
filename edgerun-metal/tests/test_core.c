@@ -7,6 +7,7 @@
 #include "er_bus.h"
 #include "er_crypto_blake3.h"
 #include "er_hw_relay.h"
+#include "er_native_udp.h"
 #include "er_net_frame.h"
 #include "er_ui_gop_renderer.h"
 #include "er_ui_text.h"
@@ -913,6 +914,107 @@ static void test_net_frame_builders(void) {
               1);
   check_uint64("net frame arp parsed mac0", parsed_mac[0], dst_mac[0]);
   check_uint64("net frame arp parsed mac5", parsed_mac[5], dst_mac[5]);
+}
+
+static void test_native_udp_endpoint(void) {
+  enum {
+    NATIVE_UDP_TEST_MMIO_DWORDS = 128u,
+    NATIVE_UDP_TEST_SRC_PORT = 40000u,
+    NATIVE_UDP_TEST_DST_PORT = 9000u,
+    NATIVE_UDP_TEST_PAYLOAD_LEN = 4u,
+    NATIVE_UDP_TEST_VIRTIO_HDR_LEN = 12u,
+    NATIVE_UDP_TEST_TX_ARP_DESC = 0u,
+    NATIVE_UDP_TEST_TX_UDP_DESC = 1u,
+    NATIVE_UDP_TEST_RX_ARP_DESC = 2u
+  };
+  UINT32 regs[NATIVE_UDP_TEST_MMIO_DWORDS] = {0};
+  ErVirtioNet net;
+  ErNativeUdp endpoint;
+  ErNativeUdpStats stats;
+  ErVirtioQueueUsed* rx_used;
+  UINT8* rx_buffer;
+  ErVirtioQueueAvail* tx_avail;
+  UINT8* tx_arp;
+  UINT8* tx_udp;
+  UINT8 local_ip[ER_NET_IPV4_LEN] = {10u, 42u, 0u, 2u};
+  UINT8 remote_ip[ER_NET_IPV4_LEN] = {10u, 42u, 0u, 1u};
+  UINT8 remote_mac[ER_NET_MAC_LEN] = {0x02u, 0x00u, 0x00u, 0x00u, 0x00u, 0x01u};
+  UINT8 arp_reply[ER_NET_ARP_FRAME_LEN] = {0};
+  UINT8 payload[NATIVE_UDP_TEST_PAYLOAD_LEN] = {'t', 'e', 's', 't'};
+  UINT32 arp_len = 0u;
+
+  er_mmio_reset();
+  regs[ER_VIRTIO_MMIO_MAGIC_VALUE_OFFSET / sizeof(UINT32)] = ER_VIRTIO_MMIO_MAGIC;
+  regs[ER_VIRTIO_MMIO_VERSION_OFFSET / sizeof(UINT32)] = ER_VIRTIO_MMIO_VERSION_MODERN;
+  regs[ER_VIRTIO_MMIO_DEVICE_ID_OFFSET / sizeof(UINT32)] = ER_VIRTIO_DEVICE_TYPE_NET;
+  regs[ER_VIRTIO_MMIO_VENDOR_OFFSET / sizeof(UINT32)] = ER_VIRTIO_MMIO_VENDOR_ANY;
+  regs[ER_VIRTIO_MMIO_DEVICE_FEATURES_OFFSET / sizeof(UINT32)] = 1u;
+  regs[ER_VIRTIO_MMIO_QUEUE_NUM_MAX_OFFSET / sizeof(UINT32)] = ER_VIRTIO_QUEUE_SIZE;
+
+  check_int64("native udp virtio init",
+              er_virtio_net_init_mmio((UINT64)(UINTN)regs, (UINT64)sizeof(regs), &net),
+              1);
+  net.mac[0] = 0x02u;
+  net.mac[ER_NET_MAC_LEN - 1u] = 0x02u;
+  check_int64("native udp init",
+              er_native_udp_init(&endpoint, &net, local_ip, NATIVE_UDP_TEST_SRC_PORT,
+                                 remote_ip, NATIVE_UDP_TEST_DST_PORT),
+              1);
+  check_int64("native udp reject send before arp",
+              er_native_udp_send(&endpoint, payload, NATIVE_UDP_TEST_PAYLOAD_LEN),
+              0);
+  check_int64("native udp resolve", er_native_udp_resolve(&endpoint), 1);
+  tx_avail = er_virtio_net_test_tx_avail();
+  tx_arp = er_virtio_net_test_tx_buffer(NATIVE_UDP_TEST_TX_ARP_DESC);
+  check_uint64("native udp tx arp avail", tx_avail->ring[0], NATIVE_UDP_TEST_TX_ARP_DESC);
+  check_uint64("native udp tx arp eth type hi",
+               tx_arp[NATIVE_UDP_TEST_VIRTIO_HDR_LEN + 12u], 0x08u);
+  check_uint64("native udp tx arp eth type lo",
+               tx_arp[NATIVE_UDP_TEST_VIRTIO_HDR_LEN + 13u], 0x06u);
+  stats = er_native_udp_stats(&endpoint);
+  check_uint64("native udp arp request stats", stats.arp_requests_sent, 1u);
+
+  check_int64("native udp build arp reply",
+              er_net_build_arp_request(remote_mac, remote_ip, local_ip, arp_reply,
+                                       (UINT32)sizeof(arp_reply), &arp_len),
+              1);
+  er_mem_copy(arp_reply, net.mac, ER_NET_MAC_LEN);
+  er_mem_copy(arp_reply + 6u, remote_mac, ER_NET_MAC_LEN);
+  arp_reply[21] = 0x02u;
+  er_mem_copy(arp_reply + ER_NET_ETH_HEADER_LEN + 18u, net.mac, ER_NET_MAC_LEN);
+  check_int64("native udp learn arp",
+              er_native_udp_learn_arp(&endpoint, arp_reply, arp_len),
+              1);
+  check_int64("native udp mac known", endpoint.remote_mac_known, 1);
+  check_uint64("native udp remote mac5", endpoint.remote_mac[ER_NET_MAC_LEN - 1u],
+               remote_mac[ER_NET_MAC_LEN - 1u]);
+  check_int64("native udp send", er_native_udp_send(&endpoint, payload, NATIVE_UDP_TEST_PAYLOAD_LEN), 1);
+  tx_udp = er_virtio_net_test_tx_buffer(NATIVE_UDP_TEST_TX_UDP_DESC);
+  check_uint64("native udp tx udp avail", tx_avail->ring[1], NATIVE_UDP_TEST_TX_UDP_DESC);
+  check_uint64("native udp tx udp dst mac0", tx_udp[NATIVE_UDP_TEST_VIRTIO_HDR_LEN], remote_mac[0]);
+  check_uint64("native udp tx udp eth type hi",
+               tx_udp[NATIVE_UDP_TEST_VIRTIO_HDR_LEN + 12u], 0x08u);
+  check_uint64("native udp tx udp eth type lo",
+               tx_udp[NATIVE_UDP_TEST_VIRTIO_HDR_LEN + 13u], 0x00u);
+  check_uint64("native udp tx udp dst port hi",
+               tx_udp[NATIVE_UDP_TEST_VIRTIO_HDR_LEN + 36u], 0x23u);
+  check_uint64("native udp tx udp dst port lo",
+               tx_udp[NATIVE_UDP_TEST_VIRTIO_HDR_LEN + 37u], 0x28u);
+  check_uint64("native udp tx udp payload0",
+               tx_udp[NATIVE_UDP_TEST_VIRTIO_HDR_LEN + ER_NET_IPV4_UDP_HEADER_LEN], payload[0]);
+
+  rx_used = er_virtio_net_test_rx_used();
+  rx_buffer = er_virtio_net_test_rx_buffer(NATIVE_UDP_TEST_RX_ARP_DESC);
+  er_mem_copy(rx_buffer + NATIVE_UDP_TEST_VIRTIO_HDR_LEN, arp_reply, arp_len);
+  rx_used->ring[0].id = NATIVE_UDP_TEST_RX_ARP_DESC;
+  rx_used->ring[0].len = NATIVE_UDP_TEST_VIRTIO_HDR_LEN + arp_len;
+  rx_used->idx = 1u;
+  check_int64("native udp poll arp", er_native_udp_poll_arp(&endpoint, 1u), 1);
+
+  stats = er_native_udp_stats(&endpoint);
+  check_uint64("native udp arp reply stats", stats.arp_replies_accepted, 2u);
+  check_uint64("native udp rx poll stats", stats.rx_frames_polled, 1u);
+  check_uint64("native udp tx stats", stats.udp_frames_sent, 1u);
 }
 
 static void test_acpi_tables(void) {
@@ -1865,6 +1967,7 @@ int main(void) {
   test_virtio_split_queue();
   test_virtio_net_mmio();
   test_net_frame_builders();
+  test_native_udp_endpoint();
   test_wasm_mmio_imports();
   test_wasm_bus_exec_import();
   test_vfs_object_packets();
