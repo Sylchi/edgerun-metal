@@ -10,6 +10,7 @@
 #include "er_ui_metal.h"
 #include "er_ui_theme.h"
 #include "erwire.h"
+#include "er_native_boot.h"
 #include "font_geist.h"
 #include "wasm_vm.h"
 #include "wasm_test_module.h"
@@ -24,6 +25,7 @@
 #define ER_BOOT_PROFILE_QUIET 2
 #define ER_BOOT_PROFILE_MMIO 3
 #define ER_BOOT_PROFILE_UI 4
+#define ER_BOOT_PROFILE_NATIVE 5
 
 #define ER_MMIO_PROBE_WINDOW_LEN 0x1000u
 #define ER_CONSOLE_MIN_COLUMNS 80u
@@ -791,6 +793,33 @@ static void er_run_quiet_profile(void) {
   er_println("halt ready");
 }
 
+static void er_run_native_profile(void) {
+  ErNativeBootState native_state;
+
+  er_println("boot profile: native");
+  if (er_native_boot_configure_qemu_microvm_erwire_eth_sink(&native_state) == 0u) {
+    er_println("native transport: virtio-mmio net unavailable");
+    return;
+  }
+  er_print("native transport: virtio-mmio net ");
+  er_print_u64_hex(native_state.net->transport.address.base);
+  er_print(" mac=");
+  er_print_u64_hex((UINT64)native_state.net->mac[0]);
+  er_print(":");
+  er_print_u64_hex((UINT64)native_state.net->mac[1]);
+  er_print(":");
+  er_print_u64_hex((UINT64)native_state.net->mac[2]);
+  er_print(":");
+  er_print_u64_hex((UINT64)native_state.net->mac[3]);
+  er_print(":");
+  er_print_u64_hex((UINT64)native_state.net->mac[4]);
+  er_print(":");
+  er_print_u64_hex((UINT64)native_state.net->mac[5]);
+  er_println("");
+  erwire_send_text("native-erwire-l2-ready");
+  er_println("native transport: erwire EdgeRun Ethernet frame submitted");
+}
+
 static void er_run_mmio_profile(void) {
   er_println("boot profile: mmio");
   er_run_mmio_probe();
@@ -1019,6 +1048,11 @@ static void er_run_boot_profile(EFI_SYSTEM_TABLE* SystemTable) {
 
   if (ER_BOOT_PROFILE == ER_BOOT_PROFILE_MMIO) {
     er_run_mmio_profile();
+    return;
+  }
+
+  if (ER_BOOT_PROFILE == ER_BOOT_PROFILE_NATIVE) {
+    er_run_native_profile();
     return;
   }
 

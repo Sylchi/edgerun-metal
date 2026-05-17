@@ -34,6 +34,61 @@ typedef struct {
   UINT32 stack_depth;
 } ErControlFrame;
 
+#define ER_WASM_IMPORT_MODULE_LOG "edgerun.log"
+#define ER_WASM_IMPORT_MODULE_PCI "edgerun.pci"
+#define ER_WASM_IMPORT_MODULE_MMIO "edgerun.mmio"
+#define ER_WASM_IMPORT_MODULE_BUS "edgerun.bus"
+#define ER_WASM_IMPORT_FIELD_U64 "u64"
+#define ER_WASM_IMPORT_FIELD_HEX "hex"
+#define ER_WASM_IMPORT_FIELD_READ32 "read32"
+#define ER_WASM_IMPORT_FIELD_WRITE32 "write32"
+#define ER_WASM_IMPORT_FIELD_MAP "map"
+#define ER_WASM_IMPORT_FIELD_EXEC "exec"
+#define ER_WASM_STRING_LEN(value) ((UINT8)(sizeof(value) - 1u))
+#define ER_WASM_LEB32_MAX_BYTES 5u
+#define ER_WASM_LEB64_MAX_BYTES 10u
+#define ER_WASM_LEB_PAYLOAD_MASK 0x7fu
+#define ER_WASM_LEB_CONTINUE_MASK 0x80u
+#define ER_WASM_LEB_SIGN_MASK 0x40u
+#define ER_WASM_LEB_BITS_PER_BYTE 7u
+#define ER_WASM_U8_MASK 0xffu
+#define ER_WASM_U32_BYTE0 0u
+#define ER_WASM_U32_BYTE1 1u
+#define ER_WASM_U32_BYTE2 2u
+#define ER_WASM_U32_BYTE3 3u
+#define ER_WASM_U32_BYTE1_SHIFT 8u
+#define ER_WASM_U32_BYTE2_SHIFT 16u
+#define ER_WASM_U32_BYTE3_SHIFT 24u
+#define ER_WASM_U32_BYTES 4u
+#define ER_WASM_U32_MASK 0xffffffffu
+#define ER_WASM_U64_HIGH32_SHIFT 32u
+#define ER_WASM_MAGIC_BYTES 8u
+#define ER_WASM_MAGIC_0 0x00u
+#define ER_WASM_MAGIC_1 0x61u
+#define ER_WASM_MAGIC_2 0x73u
+#define ER_WASM_MAGIC_3 0x6du
+#define ER_WASM_VERSION_0 0x01u
+#define ER_WASM_VERSION_1 0x00u
+#define ER_WASM_VERSION_2 0x00u
+#define ER_WASM_VERSION_3 0x00u
+#define ER_WASM_OP_BLOCK 0x02u
+#define ER_WASM_OP_LOOP 0x03u
+#define ER_WASM_OP_IF 0x04u
+#define ER_WASM_OP_ELSE 0x05u
+#define ER_WASM_OP_END 0x0bu
+#define ER_WASM_OP_BR 0x0cu
+#define ER_WASM_OP_BR_IF 0x0du
+#define ER_WASM_OP_CALL 0x10u
+#define ER_WASM_OP_LOCAL_GET 0x20u
+#define ER_WASM_OP_LOCAL_SET 0x21u
+#define ER_WASM_OP_LOCAL_TEE 0x22u
+#define ER_WASM_OP_I32_LOAD_MIN 0x28u
+#define ER_WASM_OP_MEMORY_MAX 0x3eu
+#define ER_WASM_OP_MEMORY_SIZE 0x3fu
+#define ER_WASM_OP_MEMORY_GROW 0x40u
+#define ER_WASM_OP_I32_CONST 0x41u
+#define ER_WASM_OP_I64_CONST 0x42u
+
 enum {
   ER_IMPORT_KIND_NONE = 0,
   ER_IMPORT_KIND_LOG_U64 = 1,
@@ -52,13 +107,20 @@ enum {
 };
 
 static const ErHostImport ER_HOST_IMPORTS[] = {
-  {"edgerun.log", 11, "u64", 3, ER_IMPORT_KIND_LOG_U64},
-  {"edgerun.log", 11, "hex", 3, ER_IMPORT_KIND_LOG_HEX},
-  {"edgerun.pci", 11, "read32", 6, ER_IMPORT_KIND_PCI_READ32},
-  {"edgerun.pci", 11, "write32", 7, ER_IMPORT_KIND_PCI_WRITE32},
-  {"edgerun.mmio", 12, "map", 3, ER_IMPORT_KIND_MMIO_MAP},
-  {"edgerun.mmio", 12, "read32", 6, ER_IMPORT_KIND_MMIO_READ32},
-  {"edgerun.bus", 11, "exec", 4, ER_IMPORT_KIND_BUS_EXEC}
+  {ER_WASM_IMPORT_MODULE_LOG, ER_WASM_STRING_LEN(ER_WASM_IMPORT_MODULE_LOG),
+   ER_WASM_IMPORT_FIELD_U64, ER_WASM_STRING_LEN(ER_WASM_IMPORT_FIELD_U64), ER_IMPORT_KIND_LOG_U64},
+  {ER_WASM_IMPORT_MODULE_LOG, ER_WASM_STRING_LEN(ER_WASM_IMPORT_MODULE_LOG),
+   ER_WASM_IMPORT_FIELD_HEX, ER_WASM_STRING_LEN(ER_WASM_IMPORT_FIELD_HEX), ER_IMPORT_KIND_LOG_HEX},
+  {ER_WASM_IMPORT_MODULE_PCI, ER_WASM_STRING_LEN(ER_WASM_IMPORT_MODULE_PCI),
+   ER_WASM_IMPORT_FIELD_READ32, ER_WASM_STRING_LEN(ER_WASM_IMPORT_FIELD_READ32), ER_IMPORT_KIND_PCI_READ32},
+  {ER_WASM_IMPORT_MODULE_PCI, ER_WASM_STRING_LEN(ER_WASM_IMPORT_MODULE_PCI),
+   ER_WASM_IMPORT_FIELD_WRITE32, ER_WASM_STRING_LEN(ER_WASM_IMPORT_FIELD_WRITE32), ER_IMPORT_KIND_PCI_WRITE32},
+  {ER_WASM_IMPORT_MODULE_MMIO, ER_WASM_STRING_LEN(ER_WASM_IMPORT_MODULE_MMIO),
+   ER_WASM_IMPORT_FIELD_MAP, ER_WASM_STRING_LEN(ER_WASM_IMPORT_FIELD_MAP), ER_IMPORT_KIND_MMIO_MAP},
+  {ER_WASM_IMPORT_MODULE_MMIO, ER_WASM_STRING_LEN(ER_WASM_IMPORT_MODULE_MMIO),
+   ER_WASM_IMPORT_FIELD_READ32, ER_WASM_STRING_LEN(ER_WASM_IMPORT_FIELD_READ32), ER_IMPORT_KIND_MMIO_READ32},
+  {ER_WASM_IMPORT_MODULE_BUS, ER_WASM_STRING_LEN(ER_WASM_IMPORT_MODULE_BUS),
+   ER_WASM_IMPORT_FIELD_EXEC, ER_WASM_STRING_LEN(ER_WASM_IMPORT_FIELD_EXEC), ER_IMPORT_KIND_BUS_EXEC}
 };
 static const UINT32 ER_HOST_IMPORT_COUNT = (UINT32)(sizeof(ER_HOST_IMPORTS) / sizeof(ER_HOST_IMPORTS[0]));
 
@@ -111,7 +173,7 @@ static void er_clear_module(ErWasmModule* module) {
   module->function_has_main = 0;
   module->main_index = 0;
 
-  for (UINT32 i = 0; i < 16; ++i) {
+  for (UINT32 i = 0; i < ER_WASM_MAX_FUNCTIONS; ++i) {
     module->function_type_indices[i] = 0;
     module->function_is_import[i] = 0;
     module->function_import_kind[i] = ER_IMPORT_KIND_NONE;
@@ -176,13 +238,13 @@ static int er_reader_read_u32_leb(ErReader* r, UINT32* out) {
   }
 
   do {
-    if (count++ >= 5 || r->ofs >= r->size) {
+    if (count++ >= ER_WASM_LEB32_MAX_BYTES || r->ofs >= r->size) {
       return -1;
     }
     byte = r->data[r->ofs++];
-    result |= (UINT32)(byte & 0x7f) << shift;
-    shift += 7;
-  } while (byte & 0x80);
+    result |= (UINT32)(byte & ER_WASM_LEB_PAYLOAD_MASK) << shift;
+    shift += ER_WASM_LEB_BITS_PER_BYTE;
+  } while (byte & ER_WASM_LEB_CONTINUE_MASK);
 
   *out = result;
   return 0;
@@ -199,15 +261,15 @@ static int er_reader_read_i64_leb(ErReader* r, INT64* out) {
   }
 
   do {
-    if (count++ >= 10 || r->ofs >= r->size) {
+    if (count++ >= ER_WASM_LEB64_MAX_BYTES || r->ofs >= r->size) {
       return -1;
     }
     byte = r->data[r->ofs++];
-    result |= (INT64)(byte & 0x7f) << shift;
-    shift += 7;
-  } while (byte & 0x80);
+    result |= (INT64)(byte & ER_WASM_LEB_PAYLOAD_MASK) << shift;
+    shift += ER_WASM_LEB_BITS_PER_BYTE;
+  } while (byte & ER_WASM_LEB_CONTINUE_MASK);
 
-  if ((shift < 64) && (byte & 0x40)) {
+  if ((shift < 64) && (byte & ER_WASM_LEB_SIGN_MASK)) {
     result |= (INT64)(~((UINT64)0) << shift);
   }
 
@@ -226,7 +288,7 @@ static int er_skip_leb_bytes(const UINT8* data, UINT32 size, UINT32* ofs, UINT32
   while (*ofs < size) {
     byte = data[*ofs];
     ++(*ofs);
-    if (!(byte & 0x80)) {
+    if ((byte & ER_WASM_LEB_CONTINUE_MASK) == 0u) {
       return 0;
     }
 
@@ -239,11 +301,11 @@ static int er_skip_leb_bytes(const UINT8* data, UINT32 size, UINT32* ofs, UINT32
 }
 
 static int er_skip_u32_leb(const UINT8* data, UINT32 size, UINT32* ofs) {
-  return er_skip_leb_bytes(data, size, ofs, 5u);
+  return er_skip_leb_bytes(data, size, ofs, ER_WASM_LEB32_MAX_BYTES);
 }
 
 static int er_skip_i64_leb(const UINT8* data, UINT32 size, UINT32* ofs) {
-  return er_skip_leb_bytes(data, size, ofs, 10u);
+  return er_skip_leb_bytes(data, size, ofs, ER_WASM_LEB64_MAX_BYTES);
 }
 
 static int er_reader_skip(ErReader* r, UINT32 count) {
@@ -266,23 +328,27 @@ static int er_wasm_memory_range(ErWasmModule* module, UINT64 offset, UINT32 len,
 }
 
 static UINT32 er_wasm_load_u32(const UINT8* src) {
-  return (UINT32)src[0] | ((UINT32)src[1] << 8) | ((UINT32)src[2] << 16) | ((UINT32)src[3] << 24);
+  return (UINT32)src[ER_WASM_U32_BYTE0] |
+         ((UINT32)src[ER_WASM_U32_BYTE1] << ER_WASM_U32_BYTE1_SHIFT) |
+         ((UINT32)src[ER_WASM_U32_BYTE2] << ER_WASM_U32_BYTE2_SHIFT) |
+         ((UINT32)src[ER_WASM_U32_BYTE3] << ER_WASM_U32_BYTE3_SHIFT);
 }
 
 static UINT64 er_wasm_load_u64(const UINT8* src) {
-  return (UINT64)er_wasm_load_u32(src) | ((UINT64)er_wasm_load_u32(src + 4) << 32);
+  return (UINT64)er_wasm_load_u32(src) |
+         ((UINT64)er_wasm_load_u32(src + ER_WASM_U32_BYTES) << ER_WASM_U64_HIGH32_SHIFT);
 }
 
 static void er_wasm_store_u32(UINT8* dst, UINT32 value) {
-  dst[0] = (UINT8)(value & 0xffu);
-  dst[1] = (UINT8)((value >> 8) & 0xffu);
-  dst[2] = (UINT8)((value >> 16) & 0xffu);
-  dst[3] = (UINT8)((value >> 24) & 0xffu);
+  dst[ER_WASM_U32_BYTE0] = (UINT8)(value & ER_WASM_U8_MASK);
+  dst[ER_WASM_U32_BYTE1] = (UINT8)((value >> ER_WASM_U32_BYTE1_SHIFT) & ER_WASM_U8_MASK);
+  dst[ER_WASM_U32_BYTE2] = (UINT8)((value >> ER_WASM_U32_BYTE2_SHIFT) & ER_WASM_U8_MASK);
+  dst[ER_WASM_U32_BYTE3] = (UINT8)((value >> ER_WASM_U32_BYTE3_SHIFT) & ER_WASM_U8_MASK);
 }
 
 static void er_wasm_store_u64(UINT8* dst, UINT64 value) {
-  er_wasm_store_u32(dst, (UINT32)(value & 0xffffffffu));
-  er_wasm_store_u32(dst + 4, (UINT32)(value >> 32));
+  er_wasm_store_u32(dst, (UINT32)(value & ER_WASM_U32_MASK));
+  er_wasm_store_u32(dst + ER_WASM_U32_BYTES, (UINT32)(value >> ER_WASM_U64_HIGH32_SHIFT));
 }
 
 static int er_read_string(ErReader* r, const UINT8** out_string, UINT32* out_len) {
@@ -325,7 +391,7 @@ static int er_scan_matching_end(const UINT8* data, UINT32 size, UINT32 start_pc,
   while (pc < size) {
     UINT8 op = data[pc++];
 
-    if (op == 0x02 || op == 0x03 || op == 0x04) {
+    if (op == ER_WASM_OP_BLOCK || op == ER_WASM_OP_LOOP || op == ER_WASM_OP_IF) {
       if (pc >= size) {
         return -1;
       }
@@ -334,14 +400,14 @@ static int er_scan_matching_end(const UINT8* data, UINT32 size, UINT32 start_pc,
       continue;
     }
 
-    if (op == 0x05) {
+    if (op == ER_WASM_OP_ELSE) {
       if (depth == 1 && out_else_pc != 0 && *out_else_pc == 0) {
         *out_else_pc = pc;
       }
       continue;
     }
 
-    if (op == 0x0b) {
+    if (op == ER_WASM_OP_END) {
       if (depth == 0) {
         return -1;
       }
@@ -353,35 +419,36 @@ static int er_scan_matching_end(const UINT8* data, UINT32 size, UINT32 start_pc,
       continue;
     }
 
-    if (op == 0x10 || op == 0x0c || op == 0x0d || op == 0x20 || op == 0x21 || op == 0x22) {
+    if (op == ER_WASM_OP_CALL || op == ER_WASM_OP_BR || op == ER_WASM_OP_BR_IF ||
+        op == ER_WASM_OP_LOCAL_GET || op == ER_WASM_OP_LOCAL_SET || op == ER_WASM_OP_LOCAL_TEE) {
       if (er_skip_u32_leb(data, size, &pc) != 0) {
         return -1;
       }
       continue;
     }
 
-    if (op == 0x41) {
+    if (op == ER_WASM_OP_I32_CONST) {
       if (er_skip_u32_leb(data, size, &pc) != 0) {
         return -1;
       }
       continue;
     }
 
-    if (op == 0x42) {
+    if (op == ER_WASM_OP_I64_CONST) {
       if (er_skip_i64_leb(data, size, &pc) != 0) {
         return -1;
       }
       continue;
     }
 
-    if (op >= 0x28 && op <= 0x3e) {
+    if (op >= ER_WASM_OP_I32_LOAD_MIN && op <= ER_WASM_OP_MEMORY_MAX) {
       if (er_skip_u32_leb(data, size, &pc) != 0 || er_skip_u32_leb(data, size, &pc) != 0) {
         return -1;
       }
       continue;
     }
 
-    if (op == 0x3f || op == 0x40) {
+    if (op == ER_WASM_OP_MEMORY_SIZE || op == ER_WASM_OP_MEMORY_GROW) {
       if (er_skip_u32_leb(data, size, &pc) != 0) {
         return -1;
       }
@@ -394,8 +461,8 @@ static int er_scan_matching_end(const UINT8* data, UINT32 size, UINT32 start_pc,
 
 int er_wasm_init(ErWasmModule* module, const UINT8* data, UINT32 size, const ErWasmHostCalls* host) {
   ErReader r;
-  ErFuncType temp_type[16];
-  ErFuncType func_types[16];
+  ErFuncType temp_type[ER_WASM_MAX_FUNCTIONS];
+  ErFuncType func_types[ER_WASM_MAX_FUNCTIONS];
   UINT8 i;
 
   if (module == 0) {
@@ -422,19 +489,21 @@ int er_wasm_init(ErWasmModule* module, const UINT8* data, UINT32 size, const ErW
     return -1;
   }
 
-  if (size < 8) {
+  if (size < ER_WASM_MAGIC_BYTES) {
     return -1;
   }
 
-  if (data[0] != 0x00 || data[1] != 0x61 || data[2] != 0x73 || data[3] != 0x6d) {
+  if (data[0] != ER_WASM_MAGIC_0 || data[1] != ER_WASM_MAGIC_1 ||
+      data[2] != ER_WASM_MAGIC_2 || data[3] != ER_WASM_MAGIC_3) {
     return -1;
   }
 
-  if (data[4] != 0x01 || data[5] != 0x00 || data[6] != 0x00 || data[7] != 0x00) {
+  if (data[4] != ER_WASM_VERSION_0 || data[5] != ER_WASM_VERSION_1 ||
+      data[6] != ER_WASM_VERSION_2 || data[7] != ER_WASM_VERSION_3) {
     return -1;
   }
 
-  r.ofs = 8;
+  r.ofs = ER_WASM_MAGIC_BYTES;
 
   while (r.ofs < r.size) {
     UINT8 section_id = 0;
