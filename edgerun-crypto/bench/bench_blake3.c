@@ -11,6 +11,8 @@ typedef struct {
   size_t iterations;
 } BenchCase;
 
+#define BENCH_RUNS 5u
+
 static volatile uint8_t g_bench_sink;
 
 static uint64_t bench_now_ns(void) {
@@ -30,13 +32,10 @@ static void bench_fill(uint8_t* bytes, size_t len) {
   }
 }
 
-static uint8_t bench_run_case(const BenchCase* c, const uint8_t* bytes) {
+static uint8_t bench_run_case_once(const BenchCase* c, const uint8_t* bytes, uint64_t* out_elapsed_ns) {
   uint8_t digest[ER_BLAKE3_OUT_LEN];
   uint64_t start;
   uint64_t end;
-  double seconds;
-  double mib;
-  double ns_per_byte;
   size_t i;
 
   start = bench_now_ns();
@@ -53,12 +52,32 @@ static uint8_t bench_run_case(const BenchCase* c, const uint8_t* bytes) {
   if (end <= start) {
     return 0u;
   }
+  *out_elapsed_ns = end - start;
+  return 1u;
+}
 
-  seconds = (double)(end - start) / 1000000000.0;
+static uint8_t bench_run_case(const BenchCase* c, const uint8_t* bytes) {
+  uint64_t elapsed_ns;
+  uint64_t best_ns = 0u;
+  double seconds;
+  double mib;
+  double ns_per_byte;
+  size_t run;
+
+  for (run = 0u; run < BENCH_RUNS; ++run) {
+    if (bench_run_case_once(c, bytes, &elapsed_ns) == 0u) {
+      return 0u;
+    }
+    if (best_ns == 0u || elapsed_ns < best_ns) {
+      best_ns = elapsed_ns;
+    }
+  }
+
+  seconds = (double)best_ns / 1000000000.0;
   mib = ((double)c->bytes_len * (double)c->iterations) / (1024.0 * 1024.0);
-  ns_per_byte = (double)(end - start) / ((double)c->bytes_len * (double)c->iterations);
-  printf("%-10s %9zu bytes x %-8zu %9.2f MiB/s %8.3f ns/B\n",
-         c->name, c->bytes_len, c->iterations, mib / seconds, ns_per_byte);
+  ns_per_byte = (double)best_ns / ((double)c->bytes_len * (double)c->iterations);
+  printf("%-10s %9zu bytes x %-8zu best-of-%u %9.2f MiB/s %8.3f ns/B\n",
+         c->name, c->bytes_len, c->iterations, (unsigned)BENCH_RUNS, mib / seconds, ns_per_byte);
   return 1u;
 }
 
@@ -67,7 +86,8 @@ int main(void) {
     {"small", 64u, 500000u},
     {"chunk", ER_BLAKE3_CHUNK_LEN, 100000u},
     {"64k", 65536u, 5000u},
-    {"1m", 1048576u, 500u}
+    {"1m", 1048576u, 500u},
+    {"8m", 8388608u, 64u}
   };
   uint8_t* bytes;
   size_t max_len = 0u;
