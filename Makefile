@@ -1,4 +1,4 @@
-.PHONY: all check clean repo-check repo-test edgerun-smoke edgerun-pci edgerun-quiet edgerun-check varfont-configure varfont-build varfont-test ui-core-configure ui-core-build ui-core-test
+.PHONY: all check clean repo-check repo-test erwire-decode erwire-test edgerun-smoke edgerun-pci edgerun-quiet edgerun-check varfont-configure varfont-build varfont-test ui-core-configure ui-core-build ui-core-test
 
 VARFONT_BUILD_DIR ?= .build/varfont
 UI_CORE_BUILD_DIR ?= .build/edgerun-ui-core
@@ -14,6 +14,14 @@ repo-check:
 
 repo-test:
 	./tests/repo-check-tests.sh
+	$(MAKE) erwire-test
+
+erwire-decode:
+	mkdir -p .build
+	$(CC) -std=c11 -Wall -Wextra -Werror -O2 -o .build/erwire-decode tools/erwire-decode.c
+
+erwire-test: erwire-decode
+	./tests/erwire-decode-tests.sh
 
 edgerun-smoke:
 	$(MAKE) -C edgerun-metal smoke

@@ -7,6 +7,7 @@
 
 #define ER_NETLOG_PORT 9000u
 #define ER_NETLOG_MAX_DATAGRAM 1200u
+#define ER_NETLOG_BEST_EFFORT_POLLS 1u
 
 static EFI_GUID g_udp4_service_binding_guid = {
   0x83f01464u, 0x99bdu, 0x45e5u, {0xb3u, 0x83u, 0xafu, 0x63u, 0x05u, 0xd8u, 0xe9u, 0xe6u}
@@ -17,11 +18,15 @@ static EFI_GUID g_udp4_protocol_guid = {
 };
 
 static EFI_BOOT_SERVICES* g_bs;
+static EFI_SERVICE_BINDING_PROTOCOL* g_udp4_binding;
+static EFI_HANDLE g_udp4_child;
 static EFI_UDP4_PROTOCOL* g_udp4;
 static EFI_EVENT g_tx_event;
 static UINT8 g_ready;
 static UINT8 g_tx_busy;
 static UINT8 g_tx_buffer[ER_NETLOG_MAX_DATAGRAM];
+static UINT8 g_text_buffer[ER_NETLOG_MAX_DATAGRAM];
+static UINTN g_text_len;
 static EFI_UDP4_SESSION_DATA g_tx_session;
 static EFI_UDP4_TRANSMIT_DATA g_tx_data;
 static EFI_UDP4_COMPLETION_TOKEN g_tx_token;
@@ -30,10 +35,16 @@ static void er_netlog_disable(void) {
   if (g_bs != 0 && g_tx_event != 0 && g_bs->CloseEvent != 0) {
     g_bs->CloseEvent(g_tx_event);
   }
+  if (g_udp4_binding != 0 && g_udp4_child != 0 && g_udp4_binding->DestroyChild != 0) {
+    g_udp4_binding->DestroyChild(g_udp4_binding, g_udp4_child);
+  }
 
   g_ready = 0;
   g_tx_busy = 0;
+  g_text_len = 0;
   g_tx_event = 0;
+  g_udp4_child = 0;
+  g_udp4_binding = 0;
   g_udp4 = 0;
 }
 
@@ -57,12 +68,33 @@ static UINTN er_netlog_len(const char* s) {
   return n;
 }
 
+static void er_netlog_clear_text(void) {
+  g_text_len = 0;
+}
+
 static void er_netlog_copy(UINT8* dst, const UINT8* src, UINTN len) {
   UINTN i;
 
   for (i = 0; i < len; ++i) {
     dst[i] = src[i];
   }
+}
+
+static UINT8 er_netlog_wait_idle(UINT32 poll_limit) {
+  UINT32 i;
+
+  if (g_tx_busy == 0u) {
+    return 1;
+  }
+  if (g_udp4 == 0 || g_udp4->Poll == 0) {
+    return 0;
+  }
+
+  for (i = 0; i < poll_limit && g_tx_busy != 0u; ++i) {
+    g_udp4->Poll(g_udp4);
+  }
+
+  return (UINT8)(g_tx_busy == 0u);
 }
 
 static void er_netlog_zero_config(EFI_UDP4_CONFIG_DATA* config) {
@@ -101,7 +133,10 @@ void er_netlog_init(EFI_SYSTEM_TABLE* st) {
 
   g_ready = 0;
   g_tx_busy = 0;
+  er_netlog_clear_text();
   g_udp4 = 0;
+  g_udp4_binding = 0;
+  g_udp4_child = 0;
   g_tx_event = 0;
   g_bs = 0;
 
@@ -123,7 +158,7 @@ void er_netlog_init(EFI_SYSTEM_TABLE* st) {
     EFI_SERVICE_BINDING_PROTOCOL* binding = 0;
 
     if (g_bs->HandleProtocol(handles[i], &g_udp4_service_binding_guid, (void**)&binding) != EFI_SUCCESS || binding == 0 ||
-        binding->CreateChild == 0) {
+        binding->CreateChild == 0 || binding->DestroyChild == 0) {
       continue;
     }
 
@@ -134,8 +169,12 @@ void er_netlog_init(EFI_SYSTEM_TABLE* st) {
 
     if (g_bs->HandleProtocol(child, &g_udp4_protocol_guid, (void**)&g_udp4) != EFI_SUCCESS || g_udp4 == 0) {
       g_udp4 = 0;
+      binding->DestroyChild(binding, child);
       continue;
     }
+
+    g_udp4_binding = binding;
+    g_udp4_child = child;
   }
 
   g_bs->FreePool(handles);
@@ -185,24 +224,54 @@ void er_netlog_write(const char* s) {
   er_netlog_write_bytes((const UINT8*)s, er_netlog_len(s));
 }
 
+void er_netlog_flush_text(void) {
+  if (g_text_len == 0u) {
+    return;
+  }
+
+  (void)er_netlog_write_bytes_wait(g_text_buffer, g_text_len, ER_NETLOG_BEST_EFFORT_POLLS);
+  er_netlog_clear_text();
+}
+
+void er_netlog_write_text(const char* s) {
+  UINTN i;
+
+  if (s == 0) {
+    return;
+  }
+
+  for (i = 0; s[i] != 0; ++i) {
+    if (g_text_len >= ER_NETLOG_MAX_DATAGRAM) {
+      er_netlog_flush_text();
+    }
+    g_text_buffer[g_text_len] = (UINT8)s[i];
+    ++g_text_len;
+    if (s[i] == '\n') {
+      er_netlog_flush_text();
+    }
+  }
+}
+
 void er_netlog_write_bytes(const UINT8* data, UINTN len) {
+  (void)er_netlog_write_bytes_wait(data, len, ER_NETLOG_BEST_EFFORT_POLLS);
+}
+
+UINT8 er_netlog_write_bytes_wait(const UINT8* data, UINTN len, UINT32 poll_limit) {
   UINTN remaining = len;
   UINTN offset = 0;
 
   if (g_ready == 0 || g_udp4 == 0 || data == 0) {
-    return;
+    return 0;
+  }
+  if (len == 0u) {
+    return 1;
   }
 
   while (remaining > 0) {
     UINTN chunk = remaining;
 
-    if (g_tx_busy != 0) {
-      if (g_udp4->Poll != 0) {
-        g_udp4->Poll(g_udp4);
-      }
-      if (g_tx_busy != 0) {
-        return;
-      }
+    if (er_netlog_wait_idle(poll_limit) == 0u) {
+      return 0;
     }
 
     if (chunk > ER_NETLOG_MAX_DATAGRAM) {
@@ -216,11 +285,13 @@ void er_netlog_write_bytes(const UINT8* data, UINTN len) {
 
     if (g_udp4->Transmit(g_udp4, &g_tx_token) != EFI_SUCCESS) {
       er_netlog_disable();
-      return;
+      return 0;
     }
 
     g_tx_busy = 1;
     offset += chunk;
     remaining -= chunk;
   }
+
+  return er_netlog_wait_idle(poll_limit);
 }

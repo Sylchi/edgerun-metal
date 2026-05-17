@@ -48,6 +48,8 @@ Everything above that belongs outside the executor. Apps, admissions, manifests,
 
 The first hardware-backed channel endpoint is UEFI UDP4. The endpoint address is encoded as IPv4 bytes plus a big-endian UDP port in `ErChannelEndpoint.address`. The default boot relay target is `10.42.0.1:9000`, matching the existing firmware UDP transmit path. This is a real hardware/firmware packet path, but still only a relay path: the executor forwards opaque `erwire` packets and does not gain authority from the NIC, firmware stack, or local machine.
 
+Human text output remains best-effort early boot logging and is line-buffered before UDP transmission so formatted fragments do not become one packet each. Structured `erwire` relay packets flush pending text first, bypass the text buffer, and use bounded polling before and after transmit so PCI snapshots and other capture records are not normally dropped just because the previous UDP4 transmit has not completed yet. The host decoder still tracks packet sequence gaps because firmware transport is not treated as reliable.
+
 ACPI is the firmware-described hardware topology surface. The executor discovers the RSDP from UEFI configuration tables, prefers XSDT when present and checksum-valid, and enumerates SDT signatures, addresses, lengths, revisions, and checksums. ACPI table bytes are addressed hardware/firmware data; interpretation belongs to later bus/device code. The current parsed tables are FADT for fixed ACPI hardware registers, MADT for APIC/interrupt topology, MCFG for PCIe ECAM configuration-space windows, and HPET for timer MMIO discovery.
 
 ## Hardware Buses

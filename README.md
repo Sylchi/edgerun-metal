@@ -69,6 +69,20 @@ Run repository-policy tests:
 make repo-test
 ```
 
+Build the host-side erwire decoder:
+
+```bash
+make erwire-decode
+```
+
+The decoder reads raw erwire packets from standard input, prints packet kind/sequence/CRC state, and decodes current log-text and PCI-device payloads. It can also listen directly for firmware UDP packets:
+
+```bash
+.build/erwire-decode --udp 9000
+```
+
+It is host tooling only; runtime code still emits binary erwire packets without depending on host OS APIs.
+
 Build individual `edgerun-metal` profiles:
 
 ```bash
