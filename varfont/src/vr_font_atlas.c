@@ -393,3 +393,15 @@ vr_status_t vr_font_bake_glyph(vr_font_face_t* face, uint32_t glyph_id, vr_baked
 
   return VR_OK;
 }
+
+vr_status_t vr_font_atlas_view(const vr_font_face_t* face, uint32_t atlas_id, vr_font_atlas_view_t* out_view) {
+  if (!face || !out_view || (size_t)atlas_id >= face->atlas_count) return VR_ERR_INVALID_FONT;
+
+  const vr_atlas_page_t* page = &face->atlases[atlas_id];
+  out_view->pixels = page->pixels;
+  out_view->width = (uint32_t)page->width;
+  out_view->height = (uint32_t)page->height;
+  out_view->bytes_per_pixel = page->bytes_per_pixel;
+  out_view->format = face->cfg.atlas_format;
+  return VR_OK;
+}

@@ -9,6 +9,7 @@
 #include "er_types.h"
 
 void er_gfx_console_init(EFI_SYSTEM_TABLE* st);
+void er_gfx_console_set_enabled(UINT8 enabled);
 void er_gfx_console_write(const char* s);
 
 #endif

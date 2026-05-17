@@ -31,6 +31,7 @@ Use the current system toolchain:
 ```bash
 clang --version
 cc --version
+wat2wasm --version
 cmake --version
 ninja --version
 ctest --version
@@ -39,6 +40,7 @@ ctest --version
 The preferred local build tools are:
 
 - `clang` and `lld` for `edgerun-metal`
+- `wat2wasm` for source-first metal Wasm module fixtures
 - `CMake` with `Ninja` for `varfont` and `edgerun-ui-core`
 - `ctest --output-on-failure` for tests
 - `rg` for repository search
@@ -86,10 +88,12 @@ It is host tooling only; runtime code still emits binary erwire packets without 
 Build individual `edgerun-metal` profiles:
 
 ```bash
+make -C edgerun-metal wasm-modules
 make edgerun-smoke
 make edgerun-pci
 make edgerun-quiet
 make -C edgerun-metal mmio
+make edgerun-ui
 ```
 
 Build and test `varfont`:

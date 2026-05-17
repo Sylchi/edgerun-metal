@@ -29,8 +29,10 @@ Confirmed working:
 - Wasm VM runs on real hardware
 - PCI config-space hostcalls exist
 - COM1 serial mirror exists for `er_print`
-- Boot profiles exist: `smoke`, `pci`, `quiet`
+- Boot profiles exist: `smoke`, `pci`, `quiet`, `mmio`, `ui`
+- Wasm module headers are generated from tracked WAT sources
 - Generated build artifacts are ignored by Git
+- GOP-backed UI rectangle scene renderer exists for the `ui` profile
 
 ## Current objective
 
@@ -70,7 +72,10 @@ On Arch Linux:
 
 ```bash
 sudo pacman -S clang lld qemu-full edk2-ovmf
+sudo pacman -S wabt
 ```
+
+`wabt` provides `wat2wasm`, which is used to regenerate embedded Wasm module headers from source WAT files.
 
 ## Build profiles
 
@@ -83,10 +88,12 @@ make -C edgerun-metal
 Explicit profiles:
 
 ```bash
+make -C edgerun-metal wasm-modules
 make -C edgerun-metal smoke
 make -C edgerun-metal pci
 make -C edgerun-metal quiet
 make -C edgerun-metal mmio
+make -C edgerun-metal ui
 ```
 
 Profiles:
@@ -96,6 +103,7 @@ smoke = banner + test Wasm only
 pci   = concise PCI target scan: NVIDIA / NVMe / Ethernet
 quiet = minimal halt-ready boot
 mmio  = conservative read-only NVIDIA BAR0 probe
+ui    = GOP-backed UI rectangle scene
 ```
 
 Output:
