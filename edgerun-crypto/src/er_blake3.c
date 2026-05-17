@@ -75,6 +75,7 @@
 #define ER_BLAKE3_IV7 0x5be0cd19u
 #define ER_BLAKE3_FULL_CHUNK_BLOCKS (ER_BLAKE3_CHUNK_LEN / ER_BLAKE3_BLOCK_LEN)
 #define ER_BLAKE3_SSE2_LANES 4u
+#define ER_BLAKE3_SSE2_SUBTREE8_CHUNKS 8u
 #define ER_BLAKE3_AVX2_LANES 8u
 #define ER_BLAKE3_AVX2_PARENT4_COUNT 4u
 #define ER_BLAKE3_AVX2_PARENT2_COUNT 2u
@@ -132,6 +133,10 @@ typedef struct {
   uint32_t block_len;
   uint32_t flags;
 } ErBlake3Output;
+
+static void er_blake3_parent_cv(const uint32_t left_cv[ER_BLAKE3_CV_WORDS],
+                                const uint32_t right_cv[ER_BLAKE3_CV_WORDS],
+                                uint32_t out_cv[ER_BLAKE3_CV_WORDS]);
 
 static void er_blake3_zero(uint8_t* bytes, size_t len) {
   size_t i;
@@ -398,6 +403,45 @@ static void er_blake3_sse2_compress4_full_chunks(const uint8_t* bytes, uint64_t 
       out_cvs[lane][word] = lanes[lane];
     }
   }
+}
+
+static void er_blake3_sse2_parent2_from4(const uint32_t cvs[ER_BLAKE3_SSE2_LANES][ER_BLAKE3_CV_WORDS],
+                                         uint32_t out_cvs[2][ER_BLAKE3_CV_WORDS]) {
+  __m128i cv[ER_BLAKE3_CV_WORDS];
+  __m128i words[ER_BLAKE3_BLOCK_WORDS];
+  __m128i compressed[ER_BLAKE3_BLOCK_WORDS];
+  uint32_t lanes[ER_BLAKE3_SSE2_LANES];
+  size_t word;
+  size_t lane;
+
+  for (word = 0u; word < ER_BLAKE3_CV_WORDS; ++word) {
+    cv[word] = _mm_set1_epi32((int)g_er_blake3_iv[word]);
+    words[word] = _mm_set_epi32(0, 0, (int)cvs[ER_BLAKE3_SSE2_LANE2_INDEX][word],
+                                (int)cvs[ER_BLAKE3_SSE2_LANE0_INDEX][word]);
+    words[word + ER_BLAKE3_CV_WORDS] =
+        _mm_set_epi32(0, 0, (int)cvs[ER_BLAKE3_SSE2_LANE3_INDEX][word],
+                      (int)cvs[ER_BLAKE3_SSE2_LANE1_INDEX][word]);
+  }
+
+  er_blake3_sse2_compress4(cv, words, _mm_setzero_si128(), _mm_setzero_si128(),
+                           ER_BLAKE3_BLOCK_LEN, ER_BLAKE3_PARENT, compressed);
+  for (word = 0u; word < ER_BLAKE3_CV_WORDS; ++word) {
+    _mm_storeu_si128((__m128i*)lanes, compressed[word]);
+    for (lane = 0u; lane < 2u; ++lane) {
+      out_cvs[lane][word] = lanes[lane];
+    }
+  }
+}
+
+static void er_blake3_sse2_subtree8_cv(const uint32_t cvs[ER_BLAKE3_SSE2_SUBTREE8_CHUNKS][ER_BLAKE3_CV_WORDS],
+                                       uint32_t out_cv[ER_BLAKE3_CV_WORDS]) {
+  uint32_t parent4[ER_BLAKE3_SSE2_LANES][ER_BLAKE3_CV_WORDS];
+  uint32_t parent2[2][ER_BLAKE3_CV_WORDS];
+
+  er_blake3_sse2_parent2_from4(cvs, parent4);
+  er_blake3_sse2_parent2_from4(&cvs[ER_BLAKE3_SSE2_LANES], &parent4[2]);
+  er_blake3_sse2_parent2_from4(parent4, parent2);
+  er_blake3_parent_cv(parent2[0], parent2[1], out_cv);
 }
 #endif
 
@@ -943,12 +987,10 @@ static void er_blake3_subtree16_cv(const uint32_t cvs[ER_BLAKE3_AVX2_SUBTREE16_C
 #if defined(ER_BLAKE3_USE_SSE2)
 static void er_blake3_subtree4_cv(const uint32_t cvs[ER_BLAKE3_SSE2_LANES][ER_BLAKE3_CV_WORDS],
                                   uint32_t out_cv[ER_BLAKE3_CV_WORDS]) {
-  uint32_t left_cv[ER_BLAKE3_CV_WORDS];
-  uint32_t right_cv[ER_BLAKE3_CV_WORDS];
+  uint32_t parent2[2][ER_BLAKE3_CV_WORDS];
 
-  er_blake3_parent_cv(cvs[ER_BLAKE3_SSE2_LANE0_INDEX], cvs[ER_BLAKE3_SSE2_LANE1_INDEX], left_cv);
-  er_blake3_parent_cv(cvs[ER_BLAKE3_SSE2_LANE2_INDEX], cvs[ER_BLAKE3_SSE2_LANE3_INDEX], right_cv);
-  er_blake3_parent_cv(left_cv, right_cv, out_cv);
+  er_blake3_sse2_parent2_from4(cvs, parent2);
+  er_blake3_parent_cv(parent2[0], parent2[1], out_cv);
 }
 #endif
 
@@ -1024,6 +1066,16 @@ static void er_blake3_subtree_cv_exact(const uint8_t* bytes, uint64_t chunk_coun
   }
 #endif
 #if defined(ER_BLAKE3_USE_SSE2)
+  if (chunk_count == ER_BLAKE3_SSE2_SUBTREE8_CHUNKS) {
+    uint32_t cvs[ER_BLAKE3_SSE2_SUBTREE8_CHUNKS][ER_BLAKE3_CV_WORDS];
+
+    er_blake3_sse2_compress4_full_chunks(bytes, chunk_counter, flags, cvs);
+    er_blake3_sse2_compress4_full_chunks(bytes + (ER_BLAKE3_SSE2_LANES * ER_BLAKE3_CHUNK_LEN),
+                                         chunk_counter + ER_BLAKE3_SSE2_LANES, flags,
+                                         &cvs[ER_BLAKE3_SSE2_LANES]);
+    er_blake3_sse2_subtree8_cv(cvs, out_cv);
+    return;
+  }
   if (chunk_count == ER_BLAKE3_SSE2_LANES) {
     uint32_t cvs[ER_BLAKE3_SSE2_LANES][ER_BLAKE3_CV_WORDS];
 
