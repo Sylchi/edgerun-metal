@@ -415,6 +415,16 @@ er_ui_node_t er_ui_node_input_group(const char* label, const char* value, const 
   return node;
 }
 
+er_ui_node_t er_ui_node_input_otp(const char* const* values, size_t value_count, size_t focused_index, uint32_t base_id) {
+  er_ui_node_t node = er_ui_node_base(ER_UI_NODE_INPUT_OTP);
+  node.labels = values;
+  node.label_count = value_count;
+  node.selected = focused_index;
+  node.id = base_id;
+  node.gap = 8.0f;
+  return node;
+}
+
 er_ui_node_t er_ui_node_route_path(const char* label, const char* const* hops, size_t hop_count) {
   er_ui_node_t node = er_ui_node_base(ER_UI_NODE_ROUTE_PATH);
   node.label = label;
@@ -760,6 +770,7 @@ const char* er_ui_node_kind_label(er_ui_node_kind_t kind) {
     case ER_UI_NODE_MENUBAR: return "menubar";
     case ER_UI_NODE_RADIO_GROUP: return "radio-group";
     case ER_UI_NODE_INPUT_GROUP: return "input-group";
+    case ER_UI_NODE_INPUT_OTP: return "input-otp";
     case ER_UI_NODE_ROUTE_PATH: return "route-path";
     case ER_UI_NODE_PACKAGE_CARD: return "package-card";
     case ER_UI_NODE_RECEIPT_ROW: return "receipt-row";
@@ -1083,6 +1094,9 @@ er_ui_status_t er_ui_node_accessibility(const er_ui_node_t* node, er_ui_a11y_nod
       out = er_ui_a11y_base(ER_UI_A11Y_GROUP, node->label, false, 0u);
       er_ui_a11y_set_value(&out, node->value);
       break;
+    case ER_UI_NODE_INPUT_OTP:
+      out = er_ui_a11y_base(ER_UI_A11Y_GROUP, "one-time password", false, 0u);
+      break;
     case ER_UI_NODE_TABS:
       out = er_ui_a11y_base(ER_UI_A11Y_TAB_LIST, "tabs", false, 0u);
       break;
@@ -1192,6 +1206,16 @@ er_ui_status_t er_ui_node_accessibility_child(const er_ui_node_t* node, size_t c
       return ER_UI_OK;
     }
     return ER_UI_ERR_INVALID_ARGUMENT;
+  }
+  if (node->kind == ER_UI_NODE_INPUT_OTP) {
+    if (!node->labels || child_index >= node->label_count || (node->labels[child_index] && node->labels[child_index][0] == '-' && node->labels[child_index][1] == 0)) {
+      return ER_UI_ERR_INVALID_ARGUMENT;
+    }
+    er_ui_a11y_node_t out = er_ui_a11y_base(ER_UI_A11Y_TEXTBOX, "otp digit", true, node->id + (uint32_t)child_index);
+    er_ui_a11y_set_value(&out, node->labels[child_index]);
+    if (child_index == node->selected) out.states |= ER_UI_A11Y_STATE_FOCUSED;
+    *out_a11y = out;
+    return ER_UI_OK;
   }
   if (node->kind == ER_UI_NODE_BREADCRUMB) {
     if (!node->labels || child_index >= node->label_count) return ER_UI_ERR_INVALID_ARGUMENT;
@@ -1626,6 +1650,39 @@ static er_ui_status_t er_ui_node_render_input_group(
   return er_ui_shadcn_button_emit(scene, font, button, theme, node->detail, node->id + 1u, ER_UI_SHADCN_BUTTON_SECONDARY, ER_UI_SHADCN_BUTTON_SIZE_SM, true);
 }
 
+static er_ui_status_t er_ui_node_render_input_otp(
+  const er_ui_node_t* node,
+  er_ui_scene_t* scene,
+  vr_font_face_t* font,
+  er_ui_bounds_t bounds,
+  er_ui_resolved_theme_t theme) {
+  if (!node || !scene || !font || !node->labels || node->label_count == 0u || !er_ui_bounds_valid(bounds)) return ER_UI_ERR_INVALID_ARGUMENT;
+  float cell_w = 40.0f;
+  float dash_w = 18.0f;
+  float x = bounds.x;
+  for (size_t i = 0u; i < node->label_count; ++i) {
+    const char* value = node->labels[i];
+    if (!value) return ER_UI_ERR_INVALID_ARGUMENT;
+    bool dash = value[0] == '-' && value[1] == 0;
+    if (dash) {
+      er_ui_status_t status = er_ui_node_render_text(scene, font, value, er_ui_bounds(x, bounds.y, dash_w, bounds.h), theme.colors.muted);
+      if (status != ER_UI_OK) return status;
+      x += dash_w + node->gap;
+      continue;
+    }
+    er_ui_bounds_t cell = er_ui_bounds(x, bounds.y, cell_w, bounds.h);
+    er_ui_status_t status = er_ui_shadcn_field_emit(scene, font, cell, theme, "", value, node->id + (uint32_t)i, false);
+    if (status != ER_UI_OK) return status;
+    if (i == node->selected) {
+      status = er_ui_scene_push_rect(scene, er_ui_rect_border(cell.x, cell.y + 18.0f, cell.w, er_ui_float_max(cell.h - 18.0f, 24.0f), theme.radius.control,
+                                                            er_ui_color_with_alpha(theme.colors.accent, 0.78f)));
+      if (status != ER_UI_OK) return status;
+    }
+    x += cell_w + node->gap;
+  }
+  return ER_UI_OK;
+}
+
 static er_ui_status_t er_ui_node_render_label_group(
   const er_ui_node_t* node,
   er_ui_scene_t* scene,
@@ -1802,6 +1859,8 @@ er_ui_status_t er_ui_node_render(
       return er_ui_node_render_radio_group(node, scene, font, rect, theme);
     case ER_UI_NODE_INPUT_GROUP:
       return er_ui_node_render_input_group(node, scene, font, rect, theme);
+    case ER_UI_NODE_INPUT_OTP:
+      return er_ui_node_render_input_otp(node, scene, font, rect, theme);
     case ER_UI_NODE_ROUTE_PATH:
       return er_ui_shadcn_route_path_emit(scene, font, rect, theme, node->label, node->labels, node->label_count);
     case ER_UI_NODE_PACKAGE_CARD:
