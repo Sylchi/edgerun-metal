@@ -25,5 +25,8 @@ void expect_u32(uint32_t got, uint32_t expected, const char* name);
 void expect_float(float got, float expected, const char* name);
 void expect_string(const char* got, const char* expected, const char* name);
 er_ui_allocator_t er_ui_test_allocator(void);
+vr_font_allocator_t er_ui_test_vr_allocator(void);
+unsigned char* er_ui_test_read_file(const char* path, size_t* out_size);
+vr_font_face_t* er_ui_test_open_font(float px_size, const char* load_message, const char* open_message);
 
 #endif

@@ -1,4 +1,5 @@
 #include "er_ui_runtime.h"
+#include "er_ui_internal.h"
 
 static const size_t ER_UI_TEXT_INITIAL_CAPACITY = 32u;
 static const size_t ER_UI_RUNTIME_INITIAL_CAPACITY = 8u;
@@ -19,28 +20,6 @@ bool er_ui_runtime_open_value(const er_ui_runtime_state_t* state, uint32_t id, b
 bool er_ui_runtime_is_focusable_hit(er_ui_hit_t hit);
 void er_ui_runtime_clear_focus_scope(er_ui_runtime_state_t* state, uint32_t open_id);
 
-static void er_ui_zero_bytes(void* ptr, size_t size) {
-  unsigned char* bytes = (unsigned char*)ptr;
-  for (size_t i = 0u; i < size; ++i) bytes[i] = 0u;
-}
-
-static void er_ui_copy_bytes(void* dst, const void* src, size_t size) {
-  unsigned char* out = (unsigned char*)dst;
-  const unsigned char* in = (const unsigned char*)src;
-  for (size_t i = 0u; i < size; ++i) out[i] = in[i];
-}
-
-static void er_ui_move_bytes(void* dst, const void* src, size_t size) {
-  unsigned char* out = (unsigned char*)dst;
-  const unsigned char* in = (const unsigned char*)src;
-  if (out == in || size == 0u) return;
-  if (out < in) {
-    for (size_t i = 0u; i < size; ++i) out[i] = in[i];
-  } else {
-    for (size_t i = size; i > 0u; --i) out[i - 1u] = in[i - 1u];
-  }
-}
-
 static size_t er_ui_cstr_len(const char* text) {
   size_t len = 0u;
   if (!text) return 0u;
@@ -48,17 +27,9 @@ static size_t er_ui_cstr_len(const char* text) {
   return len;
 }
 
-static bool er_ui_allocator_valid(er_ui_allocator_t allocator) {
-  return allocator.alloc != 0 && allocator.free != 0;
-}
-
-static void er_ui_free_alloc(er_ui_allocator_t allocator, void* ptr, size_t size, size_t align) {
-  if (ptr && er_ui_allocator_valid(allocator)) allocator.free(allocator.user, ptr, size, align);
-}
-
 static bool er_ui_text_reserve(er_ui_text_buffer_t* buffer, size_t byte_len) {
   if (!buffer) return false;
-  if (!er_ui_allocator_valid(buffer->allocator)) return false;
+  if (!er_ui_allocator_is_valid(buffer->allocator)) return false;
   if (byte_len == ((size_t)-1)) return false;
   size_t needed = byte_len + 1u;
   if (needed <= buffer->byte_capacity) return true;
@@ -71,34 +42,15 @@ static bool er_ui_text_reserve(er_ui_text_buffer_t* buffer, size_t byte_len) {
 
   char* next = (char*)buffer->allocator.alloc(buffer->allocator.user, next_capacity, 1u);
   if (!next) return false;
-  if (buffer->value && buffer->byte_capacity > 0u) er_ui_copy_bytes(next, buffer->value, buffer->byte_len + 1u);
-  er_ui_free_alloc(buffer->allocator, buffer->value, buffer->byte_capacity, 1u);
+  if (buffer->value && buffer->byte_capacity > 0u) er_ui_mem_copy(next, buffer->value, buffer->byte_len + 1u);
+  er_ui_allocator_free(buffer->allocator, buffer->value, buffer->byte_capacity, 1u);
   buffer->value = next;
   buffer->byte_capacity = next_capacity;
   return true;
 }
 
 static bool er_ui_runtime_reserve(er_ui_allocator_t allocator, void** data, size_t* capacity, size_t count, size_t item_size) {
-  if (count < *capacity) return true;
-  if (!er_ui_allocator_valid(allocator)) return false;
-
-  size_t next_capacity = *capacity == 0u ? ER_UI_RUNTIME_INITIAL_CAPACITY : *capacity;
-  while (next_capacity <= count) {
-    if (next_capacity > ((size_t)-1) / 2u) return false;
-    next_capacity *= 2u;
-  }
-  if (item_size != 0u && *capacity > ((size_t)-1) / item_size) return false;
-  if (item_size != 0u && next_capacity > ((size_t)-1) / item_size) return false;
-
-  size_t old_size = *capacity * item_size;
-  size_t next_size = next_capacity * item_size;
-  void* next = allocator.alloc(allocator.user, next_size, 4u);
-  if (!next) return false;
-  if (*data && old_size > 0u) er_ui_copy_bytes(next, *data, old_size);
-  er_ui_free_alloc(allocator, *data, old_size, 4u);
-  *data = next;
-  *capacity = next_capacity;
-  return true;
+  return er_ui_allocator_reserve(allocator, data, capacity, count, item_size, ER_UI_RUNTIME_INITIAL_CAPACITY, 4u);
 }
 
 static float er_ui_runtime_clamp_float(float value, float min_value, float max_value) {
@@ -169,14 +121,14 @@ static er_ui_status_t er_ui_set_pair_bool(er_ui_allocator_t allocator, er_ui_pai
 
 static er_ui_status_t er_ui_strdup_validated(er_ui_allocator_t allocator, const char* value, char** out_value) {
   if (!value || !out_value) return ER_UI_ERR_INVALID_ARGUMENT;
-  if (!er_ui_allocator_valid(allocator)) return ER_UI_ERR_OOM;
+  if (!er_ui_allocator_is_valid(allocator)) return ER_UI_ERR_OOM;
   size_t byte_len = 0u;
   size_t char_count = 0u;
   if (!er_ui_utf8_validate_and_count(value, &byte_len, &char_count)) return ER_UI_ERR_INVALID_ARGUMENT;
   (void)char_count;
   char* copy = (char*)allocator.alloc(allocator.user, byte_len + 1u, 1u);
   if (!copy) return ER_UI_ERR_OOM;
-  er_ui_copy_bytes(copy, value, byte_len + 1u);
+  er_ui_mem_copy(copy, value, byte_len + 1u);
   *out_value = copy;
   return ER_UI_OK;
 }
@@ -250,7 +202,7 @@ static bool er_ui_runtime_focused_index(const er_ui_runtime_state_t* state, cons
 
 static er_ui_action_t er_ui_action_none(void) {
   er_ui_action_t action;
-  er_ui_zero_bytes(&action, sizeof(action));
+  er_ui_mem_zero(&action, sizeof(action));
   action.kind = ER_UI_ACTION_NONE;
   return action;
 }
@@ -547,7 +499,7 @@ er_ui_status_t er_ui_text_buffer_init(er_ui_text_buffer_t* buffer) {
 
 er_ui_status_t er_ui_text_buffer_init_with_allocator(er_ui_text_buffer_t* buffer, er_ui_allocator_t allocator) {
   if (!buffer) return ER_UI_ERR_INVALID_ARGUMENT;
-  er_ui_zero_bytes(buffer, sizeof(*buffer));
+  er_ui_mem_zero(buffer, sizeof(*buffer));
   buffer->allocator = allocator;
   if (!er_ui_text_reserve(buffer, 0u)) return ER_UI_ERR_OOM;
   buffer->value[0] = '\0';
@@ -557,8 +509,8 @@ er_ui_status_t er_ui_text_buffer_init_with_allocator(er_ui_text_buffer_t* buffer
 void er_ui_text_buffer_destroy(er_ui_text_buffer_t* buffer) {
   if (!buffer) return;
   er_ui_allocator_t allocator = buffer->allocator;
-  er_ui_free_alloc(allocator, buffer->value, buffer->byte_capacity, 1u);
-  er_ui_zero_bytes(buffer, sizeof(*buffer));
+  er_ui_allocator_free(allocator, buffer->value, buffer->byte_capacity, 1u);
+  er_ui_mem_zero(buffer, sizeof(*buffer));
 }
 
 void er_ui_text_buffer_clear(er_ui_text_buffer_t* buffer) {
@@ -592,7 +544,7 @@ er_ui_status_t er_ui_text_buffer_set_text(er_ui_text_buffer_t* buffer, const cha
   if (!er_ui_utf8_validate_and_count(text, &byte_len, &char_count)) return ER_UI_ERR_INVALID_ARGUMENT;
   if (byte_len > ER_UI_TEXT_BUFFER_MAX_BYTES) return ER_UI_ERR_INVALID_ARGUMENT;
   if (!er_ui_text_reserve(buffer, byte_len)) return ER_UI_ERR_OOM;
-  er_ui_copy_bytes(buffer->value, text, byte_len + 1u);
+  er_ui_mem_copy(buffer->value, text, byte_len + 1u);
   buffer->byte_len = byte_len;
   buffer->cursor_chars = char_count;
   return ER_UI_OK;
@@ -610,8 +562,8 @@ er_ui_status_t er_ui_text_buffer_insert(er_ui_text_buffer_t* buffer, const char*
 
   size_t byte_index = er_ui_text_cursor_byte_index(buffer);
   if (!er_ui_text_reserve(buffer, buffer->byte_len + insert_len)) return ER_UI_ERR_OOM;
-  er_ui_move_bytes(buffer->value + byte_index + insert_len, buffer->value + byte_index, buffer->byte_len - byte_index + 1u);
-  er_ui_copy_bytes(buffer->value + byte_index, text, insert_len);
+  er_ui_mem_move(buffer->value + byte_index + insert_len, buffer->value + byte_index, buffer->byte_len - byte_index + 1u);
+  er_ui_mem_copy(buffer->value + byte_index, text, insert_len);
   buffer->byte_len += insert_len;
   buffer->cursor_chars += insert_chars;
   return ER_UI_OK;
@@ -633,7 +585,7 @@ er_ui_status_t er_ui_text_buffer_handle_text_input(er_ui_text_buffer_t* buffer, 
       size_t available = ER_UI_TEXT_BUFFER_MAX_BYTES - buffer->byte_len;
       if (ch.byte_len > available) break;
       char one[5] = {0};
-      er_ui_copy_bytes(one, text + offset, ch.byte_len);
+      er_ui_mem_copy(one, text + offset, ch.byte_len);
       er_ui_status_t status = er_ui_text_buffer_insert(buffer, one);
       if (status != ER_UI_OK) return status;
       *out_action = ER_UI_TEXT_ACTION_CHANGED;
@@ -726,7 +678,7 @@ void er_ui_text_buffer_delete_before_cursor(er_ui_text_buffer_t* buffer) {
   size_t end = er_ui_text_cursor_byte_index(buffer);
   buffer->cursor_chars--;
   size_t start = er_ui_text_cursor_byte_index(buffer);
-  er_ui_move_bytes(buffer->value + start, buffer->value + end, buffer->byte_len - end + 1u);
+  er_ui_mem_move(buffer->value + start, buffer->value + end, buffer->byte_len - end + 1u);
   buffer->byte_len -= end - start;
 }
 
@@ -737,14 +689,14 @@ void er_ui_text_buffer_delete_after_cursor(er_ui_text_buffer_t* buffer) {
   buffer->cursor_chars++;
   size_t end = er_ui_text_cursor_byte_index(buffer);
   buffer->cursor_chars--;
-  er_ui_move_bytes(buffer->value + start, buffer->value + end, buffer->byte_len - end + 1u);
+  er_ui_mem_move(buffer->value + start, buffer->value + end, buffer->byte_len - end + 1u);
   buffer->byte_len -= end - start;
 }
 
 void er_ui_text_buffer_delete_before_cursor_all(er_ui_text_buffer_t* buffer) {
   if (!buffer || !buffer->value) return;
   size_t end = er_ui_text_cursor_byte_index(buffer);
-  er_ui_move_bytes(buffer->value, buffer->value + end, buffer->byte_len - end + 1u);
+  er_ui_mem_move(buffer->value, buffer->value + end, buffer->byte_len - end + 1u);
   buffer->byte_len -= end;
   buffer->cursor_chars = 0u;
 }
@@ -766,7 +718,7 @@ void er_ui_text_buffer_delete_word_before_cursor(er_ui_text_buffer_t* buffer) {
     buffer->cursor_chars--;
   }
   size_t start = er_ui_text_cursor_byte_index(buffer);
-  er_ui_move_bytes(buffer->value + start, buffer->value + end, buffer->byte_len - end + 1u);
+  er_ui_mem_move(buffer->value + start, buffer->value + end, buffer->byte_len - end + 1u);
   buffer->byte_len -= end - start;
 }
 
@@ -800,12 +752,12 @@ er_ui_status_t er_ui_text_buffer_value_with_cursor(const er_ui_text_buffer_t* bu
   if (buffer->byte_len > ((size_t)-1) - marker_len - 1u) return ER_UI_ERR_INVALID_ARGUMENT;
 
   size_t byte_index = er_ui_text_cursor_byte_index(buffer);
-  if (!er_ui_allocator_valid(buffer->allocator)) return ER_UI_ERR_OOM;
+  if (!er_ui_allocator_is_valid(buffer->allocator)) return ER_UI_ERR_OOM;
   char* out = (char*)buffer->allocator.alloc(buffer->allocator.user, buffer->byte_len + marker_len + 1u, 1u);
   if (!out) return ER_UI_ERR_OOM;
-  er_ui_copy_bytes(out, buffer->value, byte_index);
-  er_ui_copy_bytes(out + byte_index, marker, marker_len);
-  er_ui_copy_bytes(out + byte_index + marker_len, buffer->value + byte_index, buffer->byte_len - byte_index + 1u);
+  er_ui_mem_copy(out, buffer->value, byte_index);
+  er_ui_mem_copy(out + byte_index, marker, marker_len);
+  er_ui_mem_copy(out + byte_index + marker_len, buffer->value + byte_index, buffer->byte_len - byte_index + 1u);
   *out_text = out;
   return ER_UI_OK;
 }
@@ -816,10 +768,10 @@ er_ui_status_t er_ui_text_buffer_display_value(const er_ui_text_buffer_t* buffer
     size_t placeholder_len = 0u;
     size_t placeholder_chars = 0u;
     if (!er_ui_utf8_validate_and_count(placeholder, &placeholder_len, &placeholder_chars)) return ER_UI_ERR_INVALID_ARGUMENT;
-    if (!er_ui_allocator_valid(buffer->allocator)) return ER_UI_ERR_OOM;
+    if (!er_ui_allocator_is_valid(buffer->allocator)) return ER_UI_ERR_OOM;
     char* out = (char*)buffer->allocator.alloc(buffer->allocator.user, placeholder_len + 1u, 1u);
     if (!out) return ER_UI_ERR_OOM;
-    er_ui_copy_bytes(out, placeholder, placeholder_len + 1u);
+    er_ui_mem_copy(out, placeholder, placeholder_len + 1u);
     *out_text = out;
     return ER_UI_OK;
   }
@@ -828,7 +780,7 @@ er_ui_status_t er_ui_text_buffer_display_value(const er_ui_text_buffer_t* buffer
 
 void er_ui_text_buffer_free_text(const er_ui_text_buffer_t* buffer, char* text) {
   if (!buffer || !text) return;
-  er_ui_free_alloc(buffer->allocator, text, er_ui_cstr_len(text) + 1u, 1u);
+  er_ui_allocator_free(buffer->allocator, text, er_ui_cstr_len(text) + 1u, 1u);
 }
 
 er_ui_status_t er_ui_runtime_state_init(er_ui_runtime_state_t* state) {
@@ -838,7 +790,7 @@ er_ui_status_t er_ui_runtime_state_init(er_ui_runtime_state_t* state) {
 
 er_ui_status_t er_ui_runtime_state_init_with_allocator(er_ui_runtime_state_t* state, er_ui_allocator_t allocator) {
   if (!state) return ER_UI_ERR_INVALID_ARGUMENT;
-  er_ui_zero_bytes(state, sizeof(*state));
+  er_ui_mem_zero(state, sizeof(*state));
   state->allocator = allocator;
   return ER_UI_OK;
 }
@@ -846,21 +798,21 @@ er_ui_status_t er_ui_runtime_state_init_with_allocator(er_ui_runtime_state_t* st
 void er_ui_runtime_state_destroy(er_ui_runtime_state_t* state) {
   if (!state) return;
   er_ui_allocator_t allocator = state->allocator;
-  er_ui_free_alloc(allocator, state->transitions, state->transition_capacity * sizeof(*state->transitions), 4u);
-  er_ui_free_alloc(allocator, state->scroll_offsets, state->scroll_offset_capacity * sizeof(*state->scroll_offsets), 4u);
-  er_ui_free_alloc(allocator, state->toggle_values, state->toggle_value_capacity * sizeof(*state->toggle_values), 4u);
-  er_ui_free_alloc(allocator, state->slider_values, state->slider_value_capacity * sizeof(*state->slider_values), 4u);
-  er_ui_free_alloc(allocator, state->open_values, state->open_value_capacity * sizeof(*state->open_values), 4u);
+  er_ui_allocator_free(allocator, state->transitions, state->transition_capacity * sizeof(*state->transitions), 4u);
+  er_ui_allocator_free(allocator, state->scroll_offsets, state->scroll_offset_capacity * sizeof(*state->scroll_offsets), 4u);
+  er_ui_allocator_free(allocator, state->toggle_values, state->toggle_value_capacity * sizeof(*state->toggle_values), 4u);
+  er_ui_allocator_free(allocator, state->slider_values, state->slider_value_capacity * sizeof(*state->slider_values), 4u);
+  er_ui_allocator_free(allocator, state->open_values, state->open_value_capacity * sizeof(*state->open_values), 4u);
   for (size_t i = 0u; i < state->text_value_count; ++i) {
-    er_ui_free_alloc(allocator, state->text_values[i].value, er_ui_cstr_len(state->text_values[i].value) + 1u, 1u);
+    er_ui_allocator_free(allocator, state->text_values[i].value, er_ui_cstr_len(state->text_values[i].value) + 1u, 1u);
   }
-  er_ui_free_alloc(allocator, state->text_values, state->text_value_capacity * sizeof(*state->text_values), 4u);
-  er_ui_free_alloc(allocator, state->selected_tab_ids, state->selected_tab_id_capacity * sizeof(*state->selected_tab_ids), 4u);
+  er_ui_allocator_free(allocator, state->text_values, state->text_value_capacity * sizeof(*state->text_values), 4u);
+  er_ui_allocator_free(allocator, state->selected_tab_ids, state->selected_tab_id_capacity * sizeof(*state->selected_tab_ids), 4u);
   for (size_t i = 0u; i < state->focus_scope_count; ++i) {
-    er_ui_free_alloc(allocator, state->focus_scopes[i].hits, state->focus_scopes[i].hit_capacity * sizeof(*state->focus_scopes[i].hits), 4u);
+    er_ui_allocator_free(allocator, state->focus_scopes[i].hits, state->focus_scopes[i].hit_capacity * sizeof(*state->focus_scopes[i].hits), 4u);
   }
-  er_ui_free_alloc(allocator, state->focus_scopes, state->focus_scope_capacity * sizeof(*state->focus_scopes), 4u);
-  er_ui_zero_bytes(state, sizeof(*state));
+  er_ui_allocator_free(allocator, state->focus_scopes, state->focus_scope_capacity * sizeof(*state->focus_scopes), 4u);
+  er_ui_mem_zero(state, sizeof(*state));
 }
 
 float er_ui_runtime_transition_value(const er_ui_runtime_state_t* state, er_ui_transition_t spec) {
@@ -1004,7 +956,7 @@ er_ui_status_t er_ui_runtime_set_open(er_ui_runtime_state_t* state, uint32_t id,
       state->open_values[i].value = open;
       if (open && i + 1u < state->open_value_count) {
         er_ui_pair_bool_t entry = state->open_values[i];
-        er_ui_move_bytes(state->open_values + i, state->open_values + i + 1u, (state->open_value_count - i - 1u) * sizeof(*state->open_values));
+        er_ui_mem_move(state->open_values + i, state->open_values + i + 1u, (state->open_value_count - i - 1u) * sizeof(*state->open_values));
         state->open_values[state->open_value_count - 1u] = entry;
       }
       if (!open) er_ui_runtime_clear_focus_scope(state, id);
@@ -1043,7 +995,7 @@ er_ui_status_t er_ui_runtime_set_text(er_ui_runtime_state_t* state, uint32_t id,
 
   for (size_t i = 0u; i < state->text_value_count; ++i) {
     if (state->text_values[i].id == id) {
-      er_ui_free_alloc(state->allocator, state->text_values[i].value, er_ui_cstr_len(state->text_values[i].value) + 1u, 1u);
+      er_ui_allocator_free(state->allocator, state->text_values[i].value, er_ui_cstr_len(state->text_values[i].value) + 1u, 1u);
       state->text_values[i].value = copy;
       return ER_UI_OK;
     }
@@ -1051,7 +1003,7 @@ er_ui_status_t er_ui_runtime_set_text(er_ui_runtime_state_t* state, uint32_t id,
 
   if (!er_ui_runtime_reserve(state->allocator, (void**)&state->text_values, &state->text_value_capacity, state->text_value_count,
                              sizeof(*state->text_values))) {
-    er_ui_free_alloc(state->allocator, copy, er_ui_cstr_len(copy) + 1u, 1u);
+    er_ui_allocator_free(state->allocator, copy, er_ui_cstr_len(copy) + 1u, 1u);
     return ER_UI_ERR_OOM;
   }
   state->text_values[state->text_value_count].id = id;
@@ -1121,7 +1073,7 @@ er_ui_status_t er_ui_runtime_set_focus_scope(er_ui_runtime_state_t* state, uint3
 
   er_ui_hit_ref_t* refs = NULL;
   if (focusable_count > 0u) {
-    if (!er_ui_allocator_valid(state->allocator)) return ER_UI_ERR_OOM;
+    if (!er_ui_allocator_is_valid(state->allocator)) return ER_UI_ERR_OOM;
     refs = (er_ui_hit_ref_t*)state->allocator.alloc(state->allocator.user, focusable_count * sizeof(*refs), 4u);
     if (!refs) return ER_UI_ERR_OOM;
     size_t write_index = 0u;
@@ -1135,7 +1087,7 @@ er_ui_status_t er_ui_runtime_set_focus_scope(er_ui_runtime_state_t* state, uint3
 
   for (size_t i = 0u; i < state->focus_scope_count; ++i) {
     if (state->focus_scopes[i].open_id == open_id) {
-      er_ui_free_alloc(state->allocator, state->focus_scopes[i].hits, state->focus_scopes[i].hit_capacity * sizeof(*state->focus_scopes[i].hits), 4u);
+      er_ui_allocator_free(state->allocator, state->focus_scopes[i].hits, state->focus_scopes[i].hit_capacity * sizeof(*state->focus_scopes[i].hits), 4u);
       state->focus_scopes[i].hits = refs;
       state->focus_scopes[i].hit_count = focusable_count;
       state->focus_scopes[i].hit_capacity = focusable_count;
@@ -1145,7 +1097,7 @@ er_ui_status_t er_ui_runtime_set_focus_scope(er_ui_runtime_state_t* state, uint3
 
   if (!er_ui_runtime_reserve(state->allocator, (void**)&state->focus_scopes, &state->focus_scope_capacity, state->focus_scope_count,
                              sizeof(*state->focus_scopes))) {
-    er_ui_free_alloc(state->allocator, refs, focusable_count * sizeof(*refs), 4u);
+    er_ui_allocator_free(state->allocator, refs, focusable_count * sizeof(*refs), 4u);
     return ER_UI_ERR_OOM;
   }
 
@@ -1161,9 +1113,9 @@ void er_ui_runtime_clear_focus_scope(er_ui_runtime_state_t* state, uint32_t open
   if (!state) return;
   for (size_t i = 0u; i < state->focus_scope_count; ++i) {
     if (state->focus_scopes[i].open_id != open_id) continue;
-    er_ui_free_alloc(state->allocator, state->focus_scopes[i].hits, state->focus_scopes[i].hit_capacity * sizeof(*state->focus_scopes[i].hits), 4u);
+    er_ui_allocator_free(state->allocator, state->focus_scopes[i].hits, state->focus_scopes[i].hit_capacity * sizeof(*state->focus_scopes[i].hits), 4u);
     if (i + 1u < state->focus_scope_count) {
-      er_ui_move_bytes(state->focus_scopes + i, state->focus_scopes + i + 1u, (state->focus_scope_count - i - 1u) * sizeof(*state->focus_scopes));
+      er_ui_mem_move(state->focus_scopes + i, state->focus_scopes + i + 1u, (state->focus_scope_count - i - 1u) * sizeof(*state->focus_scopes));
     }
     state->focus_scope_count--;
     return;
@@ -1248,7 +1200,7 @@ er_ui_action_t er_ui_runtime_pointer_down(er_ui_runtime_state_t* state, const er
       state->has_focused = true;
     }
     if (has_source) {
-      er_ui_zero_bytes(&state->drag, sizeof(state->drag));
+      er_ui_mem_zero(&state->drag, sizeof(state->drag));
       state->drag.source = source;
       state->drag.start_x = x;
       state->drag.start_y = y;
@@ -1266,7 +1218,7 @@ er_ui_action_t er_ui_runtime_pointer_down(er_ui_runtime_state_t* state, const er
   er_ui_runtime_clear_focus(state);
 
   if (has_source) {
-    er_ui_zero_bytes(&state->drag, sizeof(state->drag));
+    er_ui_mem_zero(&state->drag, sizeof(state->drag));
     state->drag.source = source;
     state->drag.start_x = x;
     state->drag.start_y = y;
@@ -1320,7 +1272,7 @@ er_ui_action_t er_ui_runtime_pointer_up(er_ui_runtime_state_t* state, const er_u
   if (state->has_drag) {
     er_ui_drag_state_t drag = state->drag;
     state->has_drag = false;
-    er_ui_zero_bytes(&state->drag, sizeof(state->drag));
+    er_ui_mem_zero(&state->drag, sizeof(state->drag));
     if (drag.started && drag.has_target) {
       er_ui_action_kind_t kind = drag.source.index == drag.target.index ? ER_UI_ACTION_DROPPED : ER_UI_ACTION_REORDERED;
       return er_ui_action_drag(kind, drag.source, true, drag.target);
@@ -1354,7 +1306,7 @@ er_ui_action_t er_ui_runtime_key_down(er_ui_runtime_state_t* state, const er_ui_
     if (state->has_drag) {
       er_ui_drag_source_t source = state->drag.source;
       state->has_drag = false;
-      er_ui_zero_bytes(&state->drag, sizeof(state->drag));
+      er_ui_mem_zero(&state->drag, sizeof(state->drag));
       return er_ui_action_drag(ER_UI_ACTION_DRAG_CANCELLED, source, false, (er_ui_drop_target_t){0});
     }
     uint32_t closed_id = 0u;
@@ -1393,6 +1345,6 @@ er_ui_action_t er_ui_runtime_blur(er_ui_runtime_state_t* state) {
   state->has_active = false;
   state->has_focused = false;
   state->has_drag = false;
-  er_ui_zero_bytes(&state->drag, sizeof(state->drag));
+  er_ui_mem_zero(&state->drag, sizeof(state->drag));
   return changed ? er_ui_action_bool(ER_UI_ACTION_CANCELLED, 0u, false) : er_ui_action_none();
 }

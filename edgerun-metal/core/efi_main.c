@@ -2,6 +2,7 @@
 #include "er_print.h"
 #include "er_pci.h"
 #include "er_mmio.h"
+#include "er_mem.h"
 #include "er_acpi.h"
 #include "er_gfx_console.h"
 #include "er_ui_gop_renderer.h"
@@ -96,7 +97,6 @@ static void er_ui_boot_free(void* user, void* ptr, size_t size, size_t align) {
 static void* er_ui_boot_realloc(void* user, void* ptr, size_t old_size, size_t new_size, size_t align) {
   UINT8* next;
   UINTN copy_size;
-  UINTN i;
 
   if (new_size == 0u) {
     return 0;
@@ -106,9 +106,7 @@ static void* er_ui_boot_realloc(void* user, void* ptr, size_t old_size, size_t n
     return next;
   }
   copy_size = (UINTN)(old_size < new_size ? old_size : new_size);
-  for (i = 0u; i < copy_size; ++i) {
-    next[i] = ((const UINT8*)ptr)[i];
-  }
+  er_mem_copy(next, (const UINT8*)ptr, copy_size);
   return next;
 }
 

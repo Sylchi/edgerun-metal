@@ -31,6 +31,14 @@ er_ui_status_t er_ui_scene_push_varfont_text(
   float x,
   float y,
   er_ui_color4_t color);
+er_ui_status_t er_ui_scene_push_ascii_text(
+  er_ui_scene_t* scene,
+  vr_font_face_t* face,
+  const char* text,
+  size_t max_codepoints,
+  float x,
+  float y,
+  er_ui_color4_t color);
 
 #ifdef __cplusplus
 }

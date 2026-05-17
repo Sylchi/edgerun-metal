@@ -1,4 +1,5 @@
 #include "er_hw_relay.h"
+#include "er_mem.h"
 #include "er_netlog.h"
 
 /*
@@ -9,25 +10,6 @@
 static const char g_default_udp_label[] = "uefi-udp4";
 #define ER_HW_RELAY_UDP_WAIT_POLLS 100000u
 
-static void er_hw_relay_zero(UINT8* bytes, UINTN len) {
-  UINTN i;
-
-  if (bytes == 0) {
-    return;
-  }
-  for (i = 0; i < len; ++i) {
-    bytes[i] = 0;
-  }
-}
-
-static void er_hw_relay_copy(UINT8* dst, const UINT8* src, UINTN len) {
-  UINTN i;
-
-  for (i = 0; i < len; ++i) {
-    dst[i] = src[i];
-  }
-}
-
 UINT8 er_hw_relay_prepare_firmware_udp_endpoint(UINT8 a, UINT8 b, UINT8 c, UINT8 d, UINT16 port,
                                                 const char* label, UINTN label_len,
                                                 ErChannelEndpoint* out_endpoint) {
@@ -35,7 +17,7 @@ UINT8 er_hw_relay_prepare_firmware_udp_endpoint(UINT8 a, UINT8 b, UINT8 c, UINT8
     return 0;
   }
 
-  er_hw_relay_zero((UINT8*)out_endpoint, (UINTN)sizeof(*out_endpoint));
+  er_mem_zero((UINT8*)out_endpoint, (UINTN)sizeof(*out_endpoint));
   out_endpoint->abi_version = ER_WORK_ABI_VERSION;
   out_endpoint->kind = ER_CHANNEL_KIND_FIRMWARE_UDP;
   out_endpoint->address_len = ER_HW_RELAY_FIRMWARE_UDP_ADDR_LEN;
@@ -46,7 +28,7 @@ UINT8 er_hw_relay_prepare_firmware_udp_endpoint(UINT8 a, UINT8 b, UINT8 c, UINT8
   out_endpoint->address[3] = d;
   out_endpoint->address[4] = (UINT8)((port >> 8) & 0xffu);
   out_endpoint->address[5] = (UINT8)(port & 0xffu);
-  er_hw_relay_copy((UINT8*)out_endpoint->label, (const UINT8*)label, label_len);
+  er_mem_copy((UINT8*)out_endpoint->label, (const UINT8*)label, label_len);
   return 1;
 }
 

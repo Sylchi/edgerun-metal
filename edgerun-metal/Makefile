@@ -1,7 +1,10 @@
 .PHONY: all run clean print-path netboot smoke pci quiet mmio ui rebuild-profile check test-core wasm-modules install-netboot uninstall-netboot restart-netboot logs-netboot status-netboot
 
 CC = clang
-HOST_CC = cc
+HOST_CC ?= clang
+CCACHE ?= $(shell command -v ccache 2>/dev/null)
+MOLD ?= $(shell command -v mold 2>/dev/null)
+CCACHE_PREFIX := $(if $(CCACHE),$(CCACHE),)
 
 BUILD_DIR := build
 ESP_DIR := $(BUILD_DIR)/esp
@@ -23,9 +26,10 @@ CFLAGS := -std=c11 -Wall -Werror -ffreestanding -fshort-wchar -fno-builtin -fno-
           -I$(CURDIR)/core -I$(CURDIR) -I$(CURDIR)/$(GENERATED_DIR) -I$(CURDIR)/$(UI_CORE_DIR)/include -I$(CURDIR)/$(VARFONT_DIR)/include -DER_BOOT_PROFILE=$(ER_BOOT_PROFILE)
 LDFLAGS := -nostdlib -Wl,/SUBSYSTEM:EFI_APPLICATION,/ENTRY:efi_main
 HOST_CFLAGS := -std=c11 -Wall -Wextra -Werror -O2 -I$(CURDIR)/core -I$(CURDIR)/$(GENERATED_DIR) -I$(CURDIR)/$(UI_CORE_DIR)/include -I$(CURDIR)/$(VARFONT_DIR)/include
+HOST_LDFLAGS ?= $(if $(MOLD),-fuse-ld=mold,)
 
-SRCS := core/efi_main.c core/er_print.c core/er_gfx_console.c core/er_ui_gop_renderer.c core/er_freestanding.c core/er_netlog.c core/er_crypto.c core/er_vfs.c core/er_app.c core/er_hw_relay.c core/er_bus.c core/er_acpi.c core/erwire.c core/wasm_vm.c core/er_pci.c core/er_mmio.c
-UI_SRCS := $(UI_CORE_DIR)/src/er_ui_primitives.c $(UI_CORE_DIR)/src/er_ui_scene.c $(UI_CORE_DIR)/src/er_ui_painter.c $(UI_CORE_DIR)/src/er_ui_theme.c $(UI_CORE_DIR)/src/er_ui_text.c $(UI_CORE_DIR)/src/er_ui_components.c $(UI_CORE_DIR)/src/er_ui_metal.c $(UI_CORE_DIR)/src/er_ui_node.c
+SRCS := core/efi_main.c core/er_print.c core/er_gfx_console.c core/er_ui_gop_renderer.c core/er_freestanding.c core/er_netlog.c core/er_crypto.c core/er_mem.c core/er_vfs.c core/er_app.c core/er_hw_relay.c core/er_bus.c core/er_acpi.c core/erwire.c core/wasm_vm.c core/er_pci.c core/er_mmio.c
+UI_SRCS := $(UI_CORE_DIR)/src/er_ui_primitives.c $(UI_CORE_DIR)/src/er_ui_scene.c $(UI_CORE_DIR)/src/er_ui_painter.c $(UI_CORE_DIR)/src/er_ui_theme.c $(UI_CORE_DIR)/src/er_ui_text.c $(UI_CORE_DIR)/src/er_ui_components.c $(UI_CORE_DIR)/src/er_ui_icon.c $(UI_CORE_DIR)/src/er_ui_metal.c $(UI_CORE_DIR)/src/er_ui_node.c
 VARFONT_SRCS := $(VARFONT_DIR)/src/vr_font.c $(VARFONT_DIR)/src/vr_font_utils.c $(VARFONT_DIR)/src/vr_font_shape.c $(VARFONT_DIR)/src/vr_font_raster.c $(VARFONT_DIR)/src/vr_font_atlas.c
 OBJS := $(patsubst %.c,$(BUILD_DIR)/%.o,$(SRCS))
 UI_OBJS := $(patsubst $(UI_CORE_DIR)/src/%.c,$(BUILD_DIR)/ui-core/%.o,$(UI_SRCS))
@@ -45,7 +49,7 @@ NETBOOT_SRC := tools/edgerun-netboot/main.c
 NETBOOT_BIN := $(BUILD_DIR)/edgerun-netboot
 PXE4011_SRC := tools/edgerun-pxe4011/main.c
 PXE4011_BIN := $(BUILD_DIR)/edgerun-pxe4011
-CORE_TEST_SRC := tests/test_core.c core/er_pci.c core/er_mmio.c core/er_crypto.c core/er_vfs.c core/er_app.c core/er_hw_relay.c core/er_bus.c core/er_acpi.c core/er_netlog.c core/er_ui_gop_renderer.c core/wasm_vm.c $(UI_SRCS) $(VARFONT_SRCS)
+CORE_TEST_SRC := tests/test_core.c core/er_pci.c core/er_mmio.c core/er_crypto.c core/er_mem.c core/er_vfs.c core/er_app.c core/er_hw_relay.c core/er_bus.c core/er_acpi.c core/er_netlog.c core/er_ui_gop_renderer.c core/wasm_vm.c $(UI_SRCS) $(VARFONT_SRCS)
 CORE_TEST_BIN := $(BUILD_DIR)/test-core
 IFACE ?=
 
@@ -112,37 +116,37 @@ $(FONT_HEADER): $(FONT_SOURCE) $(BIN_HEADER_GEN)
 
 $(FONT_BAKE_BIN): $(FONT_BAKE_SRC) $(VARFONT_SRCS) $(VARFONT_HDRS)
 	mkdir -p $(dir $@)
-	$(HOST_CC) $(HOST_CFLAGS) -I$(CURDIR)/$(VARFONT_DIR)/src -o $@ $(FONT_BAKE_SRC) $(VARFONT_SRCS)
+	$(CCACHE_PREFIX) $(HOST_CC) $(HOST_CFLAGS) -I$(CURDIR)/$(VARFONT_DIR)/src $(HOST_LDFLAGS) -o $@ $(FONT_BAKE_SRC) $(VARFONT_SRCS)
 
 $(FONT_BAKED_HEADER): $(FONT_SOURCE) $(FONT_BAKE_BIN)
 	$(FONT_BAKE_BIN) "$<" "$@"
 
 $(BUILD_DIR)/%.o: %.c $(HDRS) $(UI_HDRS) $(VARFONT_HDRS) $(WASM_MODULE_HEADERS) $(FONT_HEADER) $(FONT_BAKED_HEADER)
 	mkdir -p $(dir $@)
-	$(CC) $(CFLAGS) -c $< -o $@
+	$(CCACHE_PREFIX) $(CC) $(CFLAGS) -c $< -o $@
 
 $(BUILD_DIR)/ui-core/%.o: $(UI_CORE_DIR)/src/%.c $(UI_HDRS) $(VARFONT_HDRS)
 	mkdir -p $(dir $@)
-	$(CC) $(CFLAGS) -c $< -o $@
+	$(CCACHE_PREFIX) $(CC) $(CFLAGS) -c $< -o $@
 
 $(BUILD_DIR)/varfont/%.o: $(VARFONT_DIR)/src/%.c $(VARFONT_HDRS)
 	mkdir -p $(dir $@)
-	$(CC) $(CFLAGS) -c $< -o $@
+	$(CCACHE_PREFIX) $(CC) $(CFLAGS) -c $< -o $@
 
 $(EFI_OUT): $(OBJS) $(UI_OBJS) $(VARFONT_OBJS)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $^
 
 $(NETBOOT_BIN): $(NETBOOT_SRC)
 	mkdir -p $(dir $@)
-	$(HOST_CC) $(HOST_CFLAGS) -o $@ $<
+	$(CCACHE_PREFIX) $(HOST_CC) $(HOST_CFLAGS) $(HOST_LDFLAGS) -o $@ $<
 
 $(PXE4011_BIN): $(PXE4011_SRC)
 	mkdir -p $(dir $@)
-	$(HOST_CC) $(HOST_CFLAGS) -o $@ $<
+	$(CCACHE_PREFIX) $(HOST_CC) $(HOST_CFLAGS) $(HOST_LDFLAGS) -o $@ $<
 
 $(CORE_TEST_BIN): $(CORE_TEST_SRC) $(HDRS) $(UI_HDRS) $(VARFONT_HDRS) $(WASM_MODULE_HEADERS) $(FONT_HEADER)
 	mkdir -p $(dir $@)
-	$(HOST_CC) $(HOST_CFLAGS) -o $@ $(CORE_TEST_SRC)
+	$(CCACHE_PREFIX) $(HOST_CC) $(HOST_CFLAGS) $(HOST_LDFLAGS) -o $@ $(CORE_TEST_SRC)
 
 $(EFI_BOOT): $(EFI_OUT)
 	mkdir -p $(dir $@)

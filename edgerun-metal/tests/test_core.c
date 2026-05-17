@@ -1,4 +1,5 @@
 #include "er_mmio.h"
+#include "er_mem.h"
 #include "er_pci.h"
 #include "er_acpi.h"
 #include "er_app.h"
@@ -90,6 +91,21 @@ static void check_cstr(const char* name, const char* actual, const char* expecte
 
 static void check_pixel(const char* name, UINT32 actual, UINT32 expected) {
   check_uint64(name, (UINT64)actual, (UINT64)expected);
+}
+
+static void test_mem_helpers(void) {
+  UINT8 dst[4] = {1u, 2u, 3u, 4u};
+  const UINT8 src[4] = {9u, 8u, 7u, 6u};
+
+  er_mem_zero(dst, 4u);
+  check_uint64("mem zero byte 0", dst[0], 0u);
+  check_uint64("mem zero byte 3", dst[3], 0u);
+  er_mem_copy(dst, src, 4u);
+  check_uint64("mem copy byte 0", dst[0], 9u);
+  check_uint64("mem copy byte 3", dst[3], 6u);
+  er_mem_zero(0, 4u);
+  er_mem_copy(0, src, 4u);
+  er_mem_copy(dst, 0, 4u);
 }
 
 static void* test_alloc(void* user, size_t size, size_t align) {
@@ -475,6 +491,10 @@ static void test_bus_addresses(void) {
   check_int64("bus packet execute read", er_bus_execute_op32_packet(&request, &response), 1);
   check_int64("bus packet response kind", response.packet_kind, ER_BUS_PACKET_OP32_RESPONSE);
   check_int64("bus packet response ok", response.status, ER_BUS_STATUS_OK);
+  check_uint64("bus packet response copies packet id", response.packet_id, 7u);
+  check_uint64("bus packet response copies address base", response.op.address.base, mmio.base);
+  check_uint64("bus packet response copies address len", response.op.address.len, mmio.len);
+  check_uint64("bus packet response copies offset", response.op.offset, 0u);
   check_uint64("bus packet response value", response.result, 0x66775544u);
 
   mmio.access_flags = ER_BUS_ACCESS_READ_ALL | ER_BUS_ACCESS_WRITE_ALL;
@@ -493,6 +513,10 @@ static void test_bus_addresses(void) {
   check_int64("bus io packet read8 valid", er_bus_io_op_valid(&io_request.op), 1);
   check_int64("bus io packet read8 execute", er_bus_execute_io_packet(&io_request, &io_response), 1);
   check_int64("bus io packet response kind", io_response.packet_kind, ER_BUS_PACKET_IO_RESPONSE);
+  check_uint64("bus io packet response copies packet id", io_response.packet_id, 10u);
+  check_uint64("bus io packet response copies width", io_response.op.width, 1u);
+  check_uint64("bus io packet response copies address base", io_response.op.address.base, mmio.base);
+  check_uint64("bus io packet response copies offset", io_response.op.offset, 1u);
   check_uint64("bus io packet read8 result", io_response.result, 0x55u);
   check_int64("bus io packet reject width access mismatch",
               er_bus_prepare_io_packet(11u, &mmio, ER_BUS_ACCESS_READ16, 1u, 1u, 0u, &io_request),
@@ -1429,6 +1453,7 @@ static void test_ui_gop_renderer_varfont_text(void) {
 }
 
 int main(void) {
+  test_mem_helpers();
   test_bar_decode();
   test_pci_config_addressing();
   test_acpi_tables();

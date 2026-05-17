@@ -1,4 +1,5 @@
 #include "wasm_vm.h"
+#include "er_mem.h"
 
 /*
  * Purpose: run small admitted WASM driver/app modules inside the metal executor.
@@ -251,17 +252,6 @@ static int er_reader_skip(ErReader* r, UINT32 count) {
   }
   r->ofs += count;
   return 0;
-}
-
-static void er_wasm_zero(UINT8* dst, UINT32 len) {
-  UINT32 i;
-
-  if (dst == 0) {
-    return;
-  }
-  for (i = 0; i < len; ++i) {
-    dst[i] = 0;
-  }
 }
 
 static int er_wasm_memory_range(ErWasmModule* module, UINT64 offset, UINT32 len, UINT8** out_bytes) {
@@ -624,7 +614,7 @@ int er_wasm_init(ErWasmModule* module, const UINT8* data, UINT32 size, const ErW
           if (module->memory == 0 || required_bytes > (UINT64)module->memory_size) {
             return -1;
           }
-          er_wasm_zero(module->memory, (UINT32)required_bytes);
+          er_mem_zero(module->memory, (UINTN)required_bytes);
         }
         module->memory_min_pages = min_pages;
       }

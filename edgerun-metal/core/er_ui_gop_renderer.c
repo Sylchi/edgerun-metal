@@ -1,5 +1,5 @@
 #include "er_ui_gop_renderer.h"
-#include "er_ui_node.h"
+#include "er_ui_icon.h"
 
 static EFI_GUID g_gop_guid = {
   0x9042a9deu, 0x23dcu, 0x4a38u, {0x96u, 0xfbu, 0x7au, 0xdeu, 0xd0u, 0x80u, 0x51u, 0x6au}
@@ -470,7 +470,7 @@ static void er_ui_gop_render_icon_quad(ErUiGopSurface* surface, const er_ui_quad
   UINT32 w;
   UINT32 h;
   UINT32 stroke;
-  UINT32 icon;
+  er_ui_icon_t icon;
   UINT32 full_x0;
   UINT32 full_y0;
   UINT32 full_x1;
@@ -492,7 +492,7 @@ static void er_ui_gop_render_icon_quad(ErUiGopSurface* surface, const er_ui_quad
   h = y1 - y0;
   stroke = w < h ? w / 7u : h / 7u;
   if (stroke == 0u) stroke = 1u;
-  icon = quad->atlas_id > 0u ? quad->atlas_id - 1u : (UINT32)ER_UI_ICON_APP;
+  icon = er_ui_icon_from_atlas_id(quad->atlas_id);
 
   switch (icon) {
     case ER_UI_ICON_ACTIVITY:

@@ -1,5 +1,6 @@
 #include "erwire.h"
 #include "er_hw_relay.h"
+#include "er_mem.h"
 
 /*
  * Purpose: serialize small binary records into UDP-sized EdgeRun wire packets.
@@ -56,36 +57,17 @@ static UINT32 erwire_crc32(const UINT8* data, UINT32 len) {
   return ~crc;
 }
 
-static void erwire_copy(UINT8* dst, const UINT8* src, UINT32 len) {
-  UINT32 i;
-
-  for (i = 0; i < len; ++i) {
-    dst[i] = src[i];
-  }
-}
-
-static void erwire_zero(UINT8* dst, UINT32 len) {
-  UINT32 i;
-
-  if (dst == 0) {
-    return;
-  }
-  for (i = 0; i < len; ++i) {
-    dst[i] = 0;
-  }
-}
-
 static void erwire_prepare_memory_endpoint(ErChannelEndpoint* endpoint) {
   static const char label[] = "erwire";
 
   if (endpoint == 0) {
     return;
   }
-  erwire_zero((UINT8*)endpoint, (UINT32)sizeof(*endpoint));
+  er_mem_zero((UINT8*)endpoint, (UINTN)sizeof(*endpoint));
   endpoint->abi_version = ER_WORK_ABI_VERSION;
   endpoint->kind = ER_CHANNEL_KIND_MEMORY;
   endpoint->label_len = (UINT16)(sizeof(label) - 1u);
-  erwire_copy((UINT8*)endpoint->label, (const UINT8*)label, (UINT32)(sizeof(label) - 1u));
+  er_mem_copy((UINT8*)endpoint->label, (const UINT8*)label, (UINTN)(sizeof(label) - 1u));
 }
 
 void erwire_init(UINT32 stream_id) {
@@ -113,10 +95,10 @@ void erwire_send(UINT16 kind, UINT16 flags, const UINT8* payload, UINT32 payload
   erwire_put_u32(&g_packet[28], 0u);
 
   if (payload_len > 0u) {
-    erwire_copy(&g_packet[ERWIRE_HEADER_SIZE], payload, payload_len);
+    er_mem_copy(&g_packet[ERWIRE_HEADER_SIZE], payload, (UINTN)payload_len);
   }
   send_len = ERWIRE_HEADER_SIZE + payload_len;
-  erwire_zero((UINT8*)&intent, (UINT32)sizeof(intent));
+  er_mem_zero((UINT8*)&intent, (UINTN)sizeof(intent));
   intent.abi_version = ER_WORK_ABI_VERSION;
   erwire_prepare_memory_endpoint(&intent.from);
   if (er_hw_relay_default_firmware_udp_endpoint(&intent.to) != 0u) {
@@ -165,7 +147,7 @@ void erwire_send_blob_chunk(UINT32 object_id, UINT32 offset, UINT32 total_size, 
   erwire_put_u32(&payload[4], offset);
   erwire_put_u32(&payload[8], total_size);
   erwire_put_u32(&payload[12], len);
-  erwire_copy(&payload[ERWIRE_BLOB_CHUNK_HEADER_SIZE], data, len);
+  er_mem_copy(&payload[ERWIRE_BLOB_CHUNK_HEADER_SIZE], data, (UINTN)len);
   erwire_send(ERWIRE_KIND_BLOB_CHUNK, flags, payload, ERWIRE_BLOB_CHUNK_HEADER_SIZE + len);
 }
 

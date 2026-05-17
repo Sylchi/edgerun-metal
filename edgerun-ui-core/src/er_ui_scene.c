@@ -1,4 +1,5 @@
 #include "er_ui_scene.h"
+#include "er_ui_internal.h"
 #include "er_ui_primitives.h"
 
 static const float ER_UI_COLOR_U8_SCALE = 255.0f;
@@ -12,47 +13,8 @@ static bool er_ui_valid_geometry(float x, float y, float w, float h) {
   return er_ui_bounds_valid(er_ui_bounds(x, y, w, h));
 }
 
-static void er_ui_zero(void* ptr, size_t size) {
-  unsigned char* bytes = (unsigned char*)ptr;
-  for (size_t i = 0u; i < size; ++i) bytes[i] = 0u;
-}
-
-static void er_ui_copy(void* dst, const void* src, size_t size) {
-  unsigned char* out = (unsigned char*)dst;
-  const unsigned char* in = (const unsigned char*)src;
-  for (size_t i = 0u; i < size; ++i) out[i] = in[i];
-}
-
-static bool er_ui_allocator_valid(er_ui_allocator_t allocator) {
-  return allocator.alloc != 0 && allocator.free != 0;
-}
-
-static void er_ui_free_alloc(er_ui_allocator_t allocator, void* ptr, size_t size, size_t align) {
-  if (ptr && er_ui_allocator_valid(allocator)) allocator.free(allocator.user, ptr, size, align);
-}
-
 static bool er_ui_reserve(er_ui_allocator_t allocator, void** data, size_t* capacity, size_t count, size_t item_size) {
-  if (count < *capacity) return true;
-  if (!er_ui_allocator_valid(allocator)) return false;
-
-  size_t next_capacity = *capacity == 0u ? ER_UI_INITIAL_CAPACITY : *capacity;
-  while (next_capacity <= count) {
-    if (next_capacity > ((size_t)-1) / 2u) return false;
-    next_capacity *= 2u;
-  }
-  if (item_size != 0u && *capacity > ((size_t)-1) / item_size) return false;
-  if (item_size != 0u && next_capacity > ((size_t)-1) / item_size) return false;
-
-  size_t old_size = *capacity * item_size;
-  size_t next_size = next_capacity * item_size;
-  void* next = allocator.alloc(allocator.user, next_size, ER_UI_ALIGN_F32);
-  if (!next) return false;
-  if (*data && old_size > 0u) er_ui_copy(next, *data, old_size);
-  er_ui_free_alloc(allocator, *data, old_size, ER_UI_ALIGN_F32);
-
-  *data = next;
-  *capacity = next_capacity;
-  return true;
+  return er_ui_allocator_reserve(allocator, data, capacity, count, item_size, ER_UI_INITIAL_CAPACITY, ER_UI_ALIGN_F32);
 }
 
 static bool er_ui_clip_intersect(er_ui_clip_t a, er_ui_clip_t b, er_ui_clip_t* out_clip) {
@@ -319,7 +281,7 @@ er_ui_status_t er_ui_scene_init(er_ui_scene_t* scene, er_ui_color4_t clear) {
 
 er_ui_status_t er_ui_scene_init_with_allocator(er_ui_scene_t* scene, er_ui_color4_t clear, er_ui_allocator_t allocator) {
   if (!scene) return ER_UI_ERR_INVALID_ARGUMENT;
-  er_ui_zero(scene, sizeof(*scene));
+  er_ui_mem_zero(scene, sizeof(*scene));
   scene->allocator = allocator;
   scene->clear = clear;
   return ER_UI_OK;
@@ -328,15 +290,15 @@ er_ui_status_t er_ui_scene_init_with_allocator(er_ui_scene_t* scene, er_ui_color
 void er_ui_scene_destroy(er_ui_scene_t* scene) {
   if (!scene) return;
   er_ui_allocator_t allocator = scene->allocator;
-  er_ui_free_alloc(allocator, scene->rects, scene->rect_capacity * sizeof(*scene->rects), ER_UI_ALIGN_F32);
-  er_ui_free_alloc(allocator, scene->hits, scene->hit_capacity * sizeof(*scene->hits), ER_UI_ALIGN_F32);
-  er_ui_free_alloc(allocator, scene->drag_sources, scene->drag_source_capacity * sizeof(*scene->drag_sources), ER_UI_ALIGN_F32);
-  er_ui_free_alloc(allocator, scene->drop_targets, scene->drop_target_capacity * sizeof(*scene->drop_targets), ER_UI_ALIGN_F32);
-  er_ui_free_alloc(allocator, scene->transitions, scene->transition_capacity * sizeof(*scene->transitions), ER_UI_ALIGN_F32);
-  er_ui_free_alloc(allocator, scene->clips, scene->clip_capacity * sizeof(*scene->clips), ER_UI_ALIGN_F32);
-  er_ui_free_alloc(allocator, scene->icon_quads, scene->icon_quad_capacity * sizeof(*scene->icon_quads), ER_UI_ALIGN_F32);
-  er_ui_free_alloc(allocator, scene->text_quads, scene->text_quad_capacity * sizeof(*scene->text_quads), ER_UI_ALIGN_F32);
-  er_ui_zero(scene, sizeof(*scene));
+  er_ui_allocator_free(allocator, scene->rects, scene->rect_capacity * sizeof(*scene->rects), ER_UI_ALIGN_F32);
+  er_ui_allocator_free(allocator, scene->hits, scene->hit_capacity * sizeof(*scene->hits), ER_UI_ALIGN_F32);
+  er_ui_allocator_free(allocator, scene->drag_sources, scene->drag_source_capacity * sizeof(*scene->drag_sources), ER_UI_ALIGN_F32);
+  er_ui_allocator_free(allocator, scene->drop_targets, scene->drop_target_capacity * sizeof(*scene->drop_targets), ER_UI_ALIGN_F32);
+  er_ui_allocator_free(allocator, scene->transitions, scene->transition_capacity * sizeof(*scene->transitions), ER_UI_ALIGN_F32);
+  er_ui_allocator_free(allocator, scene->clips, scene->clip_capacity * sizeof(*scene->clips), ER_UI_ALIGN_F32);
+  er_ui_allocator_free(allocator, scene->icon_quads, scene->icon_quad_capacity * sizeof(*scene->icon_quads), ER_UI_ALIGN_F32);
+  er_ui_allocator_free(allocator, scene->text_quads, scene->text_quad_capacity * sizeof(*scene->text_quads), ER_UI_ALIGN_F32);
+  er_ui_mem_zero(scene, sizeof(*scene));
 }
 
 void er_ui_scene_clear_commands(er_ui_scene_t* scene) {

@@ -81,7 +81,7 @@ er_ui_allocator_t er_ui_test_allocator(void) {
   return allocator;
 }
 
-static vr_font_allocator_t er_ui_test_vr_allocator(void) {
+vr_font_allocator_t er_ui_test_vr_allocator(void) {
   vr_font_allocator_t allocator = {0};
   allocator.alloc = test_vr_alloc;
   allocator.realloc = test_vr_realloc;
@@ -89,7 +89,7 @@ static vr_font_allocator_t er_ui_test_vr_allocator(void) {
   return allocator;
 }
 
-static unsigned char* er_ui_test_read_file(const char* path, size_t* out_size) {
+unsigned char* er_ui_test_read_file(const char* path, size_t* out_size) {
   if (!path || !out_size) return NULL;
   *out_size = 0u;
   FILE* file = fopen(path, "rb");
@@ -120,6 +120,27 @@ static unsigned char* er_ui_test_read_file(const char* path, size_t* out_size) {
   }
   *out_size = (size_t)size;
   return data;
+}
+
+vr_font_face_t* er_ui_test_open_font(float px_size, const char* load_message, const char* open_message) {
+  size_t font_size = 0u;
+  unsigned char* font_data = er_ui_test_read_file(ER_UI_REPO_ROOT "/varfont/fonts/Geist[wght].ttf", &font_size);
+  expect_true(font_data != NULL && font_size > 0u, load_message);
+  if (!font_data) return NULL;
+
+  vr_font_config_t cfg = {0};
+  cfg.px_size = px_size;
+  cfg.atlas_width = 512u;
+  cfg.atlas_height = 512u;
+  cfg.atlas_pad = VR_FONT_DEFAULT_ATLAS_PADDING;
+  cfg.atlas_format = VR_FONT_ATLAS_FORMAT_ALPHA8;
+  cfg.allocator = er_ui_test_vr_allocator();
+
+  vr_font_face_t* face = NULL;
+  expect_status((er_ui_status_t)vr_font_face_create_from_memory(&face, font_data, font_size, &cfg), (er_ui_status_t)VR_OK,
+                open_message);
+  free(font_data);
+  return face;
 }
 
 void run_runtime_tests(void);
@@ -369,7 +390,15 @@ static void test_painter_facade_pushes_scene_commands(void) {
   er_ui_scene_t scene = {0};
   expect_status(er_ui_scene_init_with_allocator(&scene, ER_TEST_BG, er_ui_test_allocator()), ER_UI_OK, "painter: scene init succeeds");
   er_ui_painter_t painter = er_ui_painter(&scene);
+  er_ui_painter_t empty_painter = er_ui_painter(NULL);
   er_ui_color4_t border = er_ui_color_rgba(0.2f, 0.3f, 0.4f, 1.0f);
+
+  expect_status(er_ui_painter_fill_rect(NULL, er_ui_bounds(0.0f, 0.0f, 1.0f, 1.0f), 0.0f, ER_TEST_TEXT),
+                ER_UI_ERR_INVALID_ARGUMENT, "painter: fill rejects missing painter");
+  expect_status(er_ui_painter_fill_rect(&empty_painter, er_ui_bounds(0.0f, 0.0f, 1.0f, 1.0f), 0.0f, ER_TEST_TEXT),
+                ER_UI_ERR_INVALID_ARGUMENT, "painter: fill rejects missing scene");
+  expect_status(er_ui_painter_icon(&painter, er_ui_bounds(0.0f, 0.0f, 16.0f, 16.0f), ER_UI_ICON_COUNT, ER_TEST_TEXT),
+                ER_UI_ERR_INVALID_ARGUMENT, "painter: semantic icon rejects unknown icon");
 
   expect_status(er_ui_painter_soft_card(&painter, er_ui_bounds(10.0f, 20.0f, 100.0f, 40.0f), 8.0f, ER_TEST_TEXT), ER_UI_OK,
                 "painter: soft card succeeds");
@@ -403,13 +432,17 @@ static void test_painter_facade_pushes_scene_commands(void) {
   expect_size(scene.drag_source_count, 1u, "painter: drag source count increments");
   expect_size(scene.drop_target_count, 1u, "painter: drop target count increments");
 
+  expect_status(er_ui_painter_icon(&painter, er_ui_bounds(20.0f, 0.0f, 16.0f, 16.0f), ER_UI_ICON_SEARCH, ER_TEST_TEXT),
+                ER_UI_OK, "painter: semantic icon succeeds");
   expect_status(er_ui_painter_icon_quad(&painter, er_ui_bounds(0.0f, 0.0f, 16.0f, 16.0f), 0.0f, 0.0f, 1.0f, 1.0f, ER_TEST_TEXT),
                 ER_UI_OK, "painter: icon quad succeeds");
   expect_status(er_ui_painter_text_quad(&painter, er_ui_bounds(0.0f, 20.0f, 16.0f, 16.0f), 0.0f, 0.0f, 1.0f, 1.0f, ER_TEST_TEXT),
                 ER_UI_OK, "painter: text quad succeeds");
   expect_status(er_ui_painter_transition(&painter, er_ui_transition_opacity(123u, 0.0f, 1.0f, 120u)), ER_UI_OK,
                 "painter: transition succeeds");
-  expect_size(scene.icon_quad_count, 1u, "painter: icon quad count increments");
+  expect_size(scene.icon_quad_count, 2u, "painter: icon quad count increments");
+  expect_u32(scene.icon_quads[0].atlas_id, er_ui_icon_atlas_id(ER_UI_ICON_SEARCH), "painter: semantic icon stores atlas id");
+  expect_u32(scene.icon_quads[1].atlas_id, 0u, "painter: raw icon quad keeps atlas id zero");
   expect_size(scene.text_quad_count, 1u, "painter: text quad count increments");
   expect_size(scene.transition_count, 1u, "painter: transition count increments");
 
@@ -531,6 +564,14 @@ static void test_varfont_memory_face_emits_ui_text(void) {
   expect_status(er_ui_scene_push_varfont_text(&scene, face, text, 3u, 4.0f, 40.0f, ER_TEST_TEXT), ER_UI_OK,
                 "varfont text: shaped text emits scene quads");
   expect_true(scene.text_quad_count > 0u, "varfont text: emitted at least one quad");
+  size_t text_quads_before_ascii = scene.text_quad_count;
+  expect_status(er_ui_scene_push_ascii_text(&scene, face, "ASCII", 8u, 4.0f, 68.0f, ER_TEST_TEXT), ER_UI_OK,
+                "varfont text: ascii helper emits text");
+  expect_true(scene.text_quad_count > text_quads_before_ascii, "varfont text: ascii helper emits quads");
+  expect_status(er_ui_scene_push_ascii_text(&scene, face, "too long", 3u, 4.0f, 92.0f, ER_TEST_TEXT), ER_UI_ERR_INVALID_ARGUMENT,
+                "varfont text: ascii helper enforces caller budget");
+  expect_status(er_ui_scene_push_ascii_text(&scene, face, "wide", 300u, 4.0f, 116.0f, ER_TEST_TEXT), ER_UI_ERR_INVALID_ARGUMENT,
+                "varfont text: ascii helper rejects oversized stack budget");
   size_t atlas_count = vr_font_atlas_count(face);
   expect_true(atlas_count > 0u, "varfont text: atlas page was created");
   expect_true(scene.text_quads[0].atlas_id < atlas_count, "varfont text: emitted quad references a valid atlas page");

@@ -1,4 +1,5 @@
 #include "er_app.h"
+#include "er_mem.h"
 
 /*
  * Purpose: derive app and IPC identities from runtime hashes.
@@ -11,25 +12,6 @@ static const UINT8 g_app_session_domain[] = "edgerun:c:v1:app:ipc-session";
 static const UINT8 g_app_budget_domain[] = "edgerun:c:v1:app:budget";
 static const UINT8 g_app_schedule_domain[] = "edgerun:c:v1:app:schedule-slot";
 static const UINT8 g_app_launch_allocation_domain[] = "edgerun:c:v1:app:launch-allocation";
-
-static void er_app_zero(UINT8* bytes, UINTN len) {
-  UINTN i;
-
-  if (bytes == 0) {
-    return;
-  }
-  for (i = 0; i < len; ++i) {
-    bytes[i] = 0;
-  }
-}
-
-static void er_app_copy(UINT8* dst, const UINT8* src, UINTN len) {
-  UINTN i;
-
-  for (i = 0; i < len; ++i) {
-    dst[i] = src[i];
-  }
-}
 
 static void er_app_put_be64(UINT8* dst, UINT64 value) {
   dst[0] = (UINT8)((value >> 56) & 0xffu);
@@ -73,13 +55,13 @@ UINT8 er_app_derive_identity(const ErCryptoProvider* crypto, const ErHash* app_o
     return 0;
   }
 
-  er_app_zero((UINT8*)out_identity, (UINTN)sizeof(*out_identity));
+  er_mem_zero((UINT8*)out_identity, (UINTN)sizeof(*out_identity));
   out_identity->abi_version = ER_APP_ABI_VERSION;
   out_identity->app_object_id = *app_object_id;
   out_identity->manifest_hash = *manifest_hash;
   out_identity->admission_id = *admission_id;
-  er_app_copy(out_identity->instance_nonce, instance_nonce, ER_APP_INSTANCE_NONCE_LEN);
-  er_app_copy(out_identity->app_node_id.bytes, app_node_hash.bytes, ER_NODE_ID_LEN);
+  er_mem_copy(out_identity->instance_nonce, instance_nonce, ER_APP_INSTANCE_NONCE_LEN);
+  er_mem_copy(out_identity->app_node_id.bytes, app_node_hash.bytes, ER_NODE_ID_LEN);
   return 1;
 }
 
@@ -102,7 +84,7 @@ UINT8 er_app_prepare_ipc_route_binding(const ErCryptoProvider* crypto, const ErA
     return 0;
   }
 
-  er_app_zero((UINT8*)out_binding, (UINTN)sizeof(*out_binding));
+  er_mem_zero((UINT8*)out_binding, (UINTN)sizeof(*out_binding));
   out_binding->abi_version = ER_APP_ABI_VERSION;
   out_binding->seal_policy = ER_APP_SEAL_POLICY_REQUIRED;
   out_binding->admission_id = source_app->admission_id;
@@ -157,7 +139,7 @@ UINT8 er_app_prepare_budget(const ErCryptoProvider* crypto, const ErAppIdentity*
     return 0;
   }
 
-  er_app_zero((UINT8*)out_budget, (UINTN)sizeof(*out_budget));
+  er_mem_zero((UINT8*)out_budget, (UINTN)sizeof(*out_budget));
   out_budget->abi_version = ER_APP_ABI_VERSION;
   out_budget->app_kind = app_kind;
   out_budget->admission_id = identity->admission_id;
@@ -199,7 +181,7 @@ UINT8 er_app_usage_init(const ErAppIdentity* identity, const ErAppBudget* budget
     return 0;
   }
 
-  er_app_zero((UINT8*)out_usage, (UINTN)sizeof(*out_usage));
+  er_mem_zero((UINT8*)out_usage, (UINTN)sizeof(*out_usage));
   out_usage->abi_version = ER_APP_ABI_VERSION;
   out_usage->budget_id = budget->budget_id;
   out_usage->app_node_id = identity->app_node_id;
@@ -265,7 +247,7 @@ UINT8 er_app_prepare_schedule_slot(const ErCryptoProvider* crypto, const ErAppId
     return 0;
   }
 
-  er_app_zero((UINT8*)out_slot, (UINTN)sizeof(*out_slot));
+  er_mem_zero((UINT8*)out_slot, (UINTN)sizeof(*out_slot));
   out_slot->abi_version = ER_APP_ABI_VERSION;
   out_slot->admission_id = identity->admission_id;
   out_slot->app_node_id = identity->app_node_id;
@@ -305,7 +287,7 @@ UINT8 er_app_prepare_launch_allocation(const ErCryptoProvider* crypto, const ErA
     return 0;
   }
 
-  er_app_zero((UINT8*)out_allocation, (UINTN)sizeof(*out_allocation));
+  er_mem_zero((UINT8*)out_allocation, (UINTN)sizeof(*out_allocation));
   out_allocation->abi_version = ER_APP_ABI_VERSION;
   out_allocation->admission_id = identity->admission_id;
   out_allocation->budget_id = budget->budget_id;

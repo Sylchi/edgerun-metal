@@ -1,4 +1,5 @@
 #include "er_bus.h"
+#include "er_mem.h"
 
 /*
  * Purpose: execute concrete PCI config, MMIO, and I/O port bus operations.
@@ -75,17 +76,6 @@ static UINT8 er_bus_access_is_write(UINT32 access) {
                  access == ER_BUS_ACCESS_WRITE32);
 }
 
-static void er_bus_zero(UINT8* bytes, UINTN len) {
-  UINTN i;
-
-  if (bytes == 0) {
-    return;
-  }
-  for (i = 0; i < len; ++i) {
-    bytes[i] = 0;
-  }
-}
-
 static void er_bus_copy_address(ErBusAddress* dst, const ErBusAddress* src) {
   if (dst == 0 || src == 0) {
     return;
@@ -110,7 +100,7 @@ UINT8 er_bus_prepare_pci_config_address(UINT32 bus, UINT32 dev, UINT32 func, UIN
     return 0;
   }
 
-  er_bus_zero((UINT8*)out_address, (UINTN)sizeof(*out_address));
+  er_mem_zero((UINT8*)out_address, (UINTN)sizeof(*out_address));
   out_address->abi_version = ER_BUS_ABI_VERSION;
   out_address->bus_kind = ER_BUS_KIND_PCI_CONFIG;
   out_address->access_flags = access_flags;
@@ -127,7 +117,7 @@ UINT8 er_bus_prepare_io_port_address(UINT32 port, UINT32 access_flags, ErBusAddr
     return 0;
   }
 
-  er_bus_zero((UINT8*)out_address, (UINTN)sizeof(*out_address));
+  er_mem_zero((UINT8*)out_address, (UINTN)sizeof(*out_address));
   out_address->abi_version = ER_BUS_ABI_VERSION;
   out_address->bus_kind = ER_BUS_KIND_IO_PORT;
   out_address->access_flags = access_flags;
@@ -146,7 +136,7 @@ UINT8 er_bus_prepare_mmio32_address(UINT64 base, UINT64 len, UINT32 bar_index, U
     return 0;
   }
 
-  er_bus_zero((UINT8*)out_address, (UINTN)sizeof(*out_address));
+  er_mem_zero((UINT8*)out_address, (UINTN)sizeof(*out_address));
   out_address->abi_version = ER_BUS_ABI_VERSION;
   out_address->bus_kind = ER_BUS_KIND_MMIO32;
   out_address->access_flags = access_flags;
@@ -227,7 +217,7 @@ UINT8 er_bus_prepare_op32_packet(UINT64 packet_id, const ErBusAddress* address, 
     return 0;
   }
 
-  er_bus_zero((UINT8*)out_packet, (UINTN)sizeof(*out_packet));
+  er_mem_zero((UINT8*)out_packet, (UINTN)sizeof(*out_packet));
   out_packet->abi_version = ER_BUS_ABI_VERSION;
   out_packet->packet_kind = ER_BUS_PACKET_OP32_REQUEST;
   out_packet->status = ER_BUS_STATUS_OK;
@@ -277,7 +267,7 @@ UINT8 er_bus_execute_op32_packet(const ErBusPacket32* request, ErBusPacket32* ou
   if (out_response == 0) {
     return 0;
   }
-  er_bus_zero((UINT8*)out_response, (UINTN)sizeof(*out_response));
+  er_mem_zero((UINT8*)out_response, (UINTN)sizeof(*out_response));
   out_response->abi_version = ER_BUS_ABI_VERSION;
   out_response->packet_kind = ER_BUS_PACKET_OP32_RESPONSE;
   out_response->status = ER_BUS_STATUS_INVALID_OPERATION;
@@ -325,7 +315,7 @@ UINT8 er_bus_prepare_io_packet(UINT64 packet_id, const ErBusAddress* address, UI
     return 0;
   }
 
-  er_bus_zero((UINT8*)out_packet, (UINTN)sizeof(*out_packet));
+  er_mem_zero((UINT8*)out_packet, (UINTN)sizeof(*out_packet));
   out_packet->abi_version = ER_BUS_ABI_VERSION;
   out_packet->packet_kind = ER_BUS_PACKET_IO_REQUEST;
   out_packet->status = ER_BUS_STATUS_OK;
@@ -351,7 +341,7 @@ UINT8 er_bus_execute_io_packet(const ErBusIoPacket* request, ErBusIoPacket* out_
   if (out_response == 0) {
     return 0;
   }
-  er_bus_zero((UINT8*)out_response, (UINTN)sizeof(*out_response));
+  er_mem_zero((UINT8*)out_response, (UINTN)sizeof(*out_response));
   out_response->abi_version = ER_BUS_ABI_VERSION;
   out_response->packet_kind = ER_BUS_PACKET_IO_RESPONSE;
   out_response->status = ER_BUS_STATUS_INVALID_OPERATION;
@@ -424,7 +414,7 @@ UINT8 er_bus_read8(const ErBusAddress* address, UINT64 offset, UINT8* out_value)
   if (out_value == 0 || address == 0) {
     return 0;
   }
-  er_bus_zero((UINT8*)&op, (UINTN)sizeof(op));
+  er_mem_zero((UINT8*)&op, (UINTN)sizeof(op));
   op.abi_version = ER_BUS_ABI_VERSION;
   op.bus_kind = address->bus_kind;
   op.access = ER_BUS_ACCESS_READ8;
@@ -474,7 +464,7 @@ UINT8 er_bus_read16(const ErBusAddress* address, UINT64 offset, UINT16* out_valu
   if (out_value == 0 || address == 0) {
     return 0;
   }
-  er_bus_zero((UINT8*)&op, (UINTN)sizeof(op));
+  er_mem_zero((UINT8*)&op, (UINTN)sizeof(op));
   op.abi_version = ER_BUS_ABI_VERSION;
   op.bus_kind = address->bus_kind;
   op.access = ER_BUS_ACCESS_READ16;
@@ -524,7 +514,7 @@ UINT8 er_bus_read32(const ErBusAddress* address, UINT64 offset, UINT32* out_valu
   if (out_value == 0 || address == 0) {
     return 0;
   }
-  er_bus_zero((UINT8*)&op, (UINTN)sizeof(op));
+  er_mem_zero((UINT8*)&op, (UINTN)sizeof(op));
   op.abi_version = ER_BUS_ABI_VERSION;
   op.bus_kind = address->bus_kind;
   op.access = ER_BUS_ACCESS_READ32;
@@ -573,7 +563,7 @@ UINT8 er_bus_write8(const ErBusAddress* address, UINT64 offset, UINT8 value) {
   if (address == 0) {
     return 0;
   }
-  er_bus_zero((UINT8*)&op, (UINTN)sizeof(op));
+  er_mem_zero((UINT8*)&op, (UINTN)sizeof(op));
   op.abi_version = ER_BUS_ABI_VERSION;
   op.bus_kind = address->bus_kind;
   op.access = ER_BUS_ACCESS_WRITE8;
@@ -624,7 +614,7 @@ UINT8 er_bus_write16(const ErBusAddress* address, UINT64 offset, UINT16 value) {
   if (address == 0) {
     return 0;
   }
-  er_bus_zero((UINT8*)&op, (UINTN)sizeof(op));
+  er_mem_zero((UINT8*)&op, (UINTN)sizeof(op));
   op.abi_version = ER_BUS_ABI_VERSION;
   op.bus_kind = address->bus_kind;
   op.access = ER_BUS_ACCESS_WRITE16;
@@ -675,7 +665,7 @@ UINT8 er_bus_write32(const ErBusAddress* address, UINT64 offset, UINT32 value) {
   if (address == 0) {
     return 0;
   }
-  er_bus_zero((UINT8*)&op, (UINTN)sizeof(op));
+  er_mem_zero((UINT8*)&op, (UINTN)sizeof(op));
   op.abi_version = ER_BUS_ABI_VERSION;
   op.bus_kind = address->bus_kind;
   op.access = ER_BUS_ACCESS_WRITE32;

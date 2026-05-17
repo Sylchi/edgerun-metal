@@ -1,5 +1,24 @@
 .PHONY: all check clean repo-check repo-test erwire-decode erwire-test edgerun-smoke edgerun-pci edgerun-quiet edgerun-ui edgerun-check varfont-configure varfont-build varfont-test ui-core-configure ui-core-build ui-core-test
 
+ifeq ($(origin CC),default)
+CC := clang
+endif
+ifeq ($(origin HOST_CC),undefined)
+HOST_CC := clang
+endif
+
+CCACHE ?= $(shell command -v ccache 2>/dev/null)
+MOLD ?= $(shell command -v mold 2>/dev/null)
+CCACHE_PREFIX := $(if $(CCACHE),$(CCACHE),)
+HOST_LDFLAGS ?= $(if $(MOLD),-fuse-ld=mold,)
+CMAKE_TOOLCHAIN_ARGS := -DCMAKE_C_COMPILER=$(HOST_CC)
+ifneq ($(CCACHE),)
+CMAKE_TOOLCHAIN_ARGS += -DCMAKE_C_COMPILER_LAUNCHER=$(CCACHE)
+endif
+ifneq ($(HOST_LDFLAGS),)
+CMAKE_TOOLCHAIN_ARGS += -DCMAKE_EXE_LINKER_FLAGS=$(HOST_LDFLAGS)
+endif
+
 VARFONT_BUILD_DIR ?= .build/varfont
 UI_CORE_BUILD_DIR ?= .build/edgerun-ui-core
 VARFONT_CMAKE_GENERATOR ?= Ninja
@@ -18,7 +37,7 @@ repo-test:
 
 erwire-decode:
 	mkdir -p .build
-	$(CC) -std=c11 -Wall -Wextra -Werror -O2 -o .build/erwire-decode tools/erwire-decode.c
+	$(CCACHE_PREFIX) $(HOST_CC) -std=c11 -Wall -Wextra -Werror -O2 $(HOST_LDFLAGS) -o .build/erwire-decode tools/erwire-decode.c
 
 erwire-test: erwire-decode
 	./tests/erwire-decode-tests.sh
@@ -39,7 +58,7 @@ edgerun-check:
 	$(MAKE) -C edgerun-metal check
 
 varfont-configure:
-	cmake -S varfont -B $(VARFONT_BUILD_DIR) -G "$(VARFONT_CMAKE_GENERATOR)"
+	cmake -S varfont -B $(VARFONT_BUILD_DIR) -G "$(VARFONT_CMAKE_GENERATOR)" $(CMAKE_TOOLCHAIN_ARGS)
 
 varfont-build: varfont-configure
 	cmake --build $(VARFONT_BUILD_DIR)
@@ -48,7 +67,7 @@ varfont-test: varfont-build
 	ctest --test-dir $(VARFONT_BUILD_DIR) --output-on-failure
 
 ui-core-configure:
-	cmake -S edgerun-ui-core -B $(UI_CORE_BUILD_DIR) -G "$(UI_CORE_CMAKE_GENERATOR)"
+	cmake -S edgerun-ui-core -B $(UI_CORE_BUILD_DIR) -G "$(UI_CORE_CMAKE_GENERATOR)" $(CMAKE_TOOLCHAIN_ARGS)
 
 ui-core-build: ui-core-configure
 	cmake --build $(UI_CORE_BUILD_DIR)

@@ -73,10 +73,12 @@ On Arch Linux:
 
 ```bash
 sudo pacman -S clang lld qemu-full edk2-ovmf
-sudo pacman -S wabt
+sudo pacman -S ccache mold wabt
 ```
 
 `wabt` provides `wat2wasm`, which is used to regenerate embedded Wasm module headers from source WAT files.
+`ccache` accelerates repeat local builds. `mold` is used only for hosted Linux
+tools and tests; the UEFI binary still links with LLVM `lld`.
 
 ## Build profiles
 
