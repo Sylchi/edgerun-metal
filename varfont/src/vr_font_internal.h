@@ -6,6 +6,16 @@
 #include <stdbool.h>
 
 #define VR_TABLE_TAG(a,b,c,d) (((uint32_t)(a)<<24)|((uint32_t)(b)<<16)|((uint32_t)(c)<<8)|((uint32_t)(d)))
+#define VR_FONT_ALIGN_U8 1u
+#define VR_FONT_ALIGN_U16 2u
+#define VR_FONT_ALIGN_U32 4u
+#define VR_FONT_ALIGN_PTR 8u
+#define VR_FONT_AXIS_TAG_STORAGE_LEN (VR_AXIS_NAME_LEN + 1u)
+#define VR_FONT_PHANTOM_POINT_COUNT 4u
+#define VR_FONT_CMAP_FORMAT_4 4u
+#define VR_FONT_CMAP_FORMAT_12 12u
+#define VR_FONT_HASH_MIX_LEFT_SHIFT 6u
+#define VR_FONT_HASH_MIX_RIGHT_SHIFT 2u
 
 typedef struct {
   uint32_t tag;
@@ -49,7 +59,7 @@ typedef struct {
 typedef struct {
   uint16_t axis_count;
   struct {
-    char tag[5];
+    char tag[VR_FONT_AXIS_TAG_STORAGE_LEN];
     float min;
     float default_value;
     float max;
@@ -113,8 +123,8 @@ typedef struct {
   bool* on_curve;
   size_t point_count_alloc;
   bool has_phantom_points;
-  int32_t phantom_x[4];
-  int32_t phantom_y[4];
+  int32_t phantom_x[VR_FONT_PHANTOM_POINT_COUNT];
+  int32_t phantom_y[VR_FONT_PHANTOM_POINT_COUNT];
 } vr_glyph_outline_t;
 
 typedef struct {

@@ -34,7 +34,7 @@ static vr_status_t vr_atlas_pixel_count(size_t w, size_t h, size_t bpp, size_t* 
 static size_t vr_next_capacity(size_t current, size_t minimum, size_t initial_capacity) {
   size_t capacity = (current == 0u) ? initial_capacity : current;
   while (capacity < minimum) {
-    if (capacity > (SIZE_MAX / 2u)) {
+    if (capacity > (SIZE_MAX >> 1u)) {
       return minimum;
     }
     capacity *= 2u;
@@ -88,14 +88,14 @@ static uint32_t vr_hash_axes(const vr_font_face_t* face) {
       uint32_t u;
     } c;
     c.f = face->axis_values[i];
-    h ^= (c.u + VR_FNV_PRIME + (h << 6) + (h >> 2));
+    h ^= (c.u + VR_FNV_PRIME + (h << VR_FONT_HASH_MIX_LEFT_SHIFT) + (h >> VR_FONT_HASH_MIX_RIGHT_SHIFT));
   }
   union {
     float f;
     uint32_t u;
   } ps;
   ps.f = face->cfg.px_size;
-  h ^= (ps.u + VR_FNV_PRIME + (h << 6) + (h >> 2));
+  h ^= (ps.u + VR_FNV_PRIME + (h << VR_FONT_HASH_MIX_LEFT_SHIFT) + (h >> VR_FONT_HASH_MIX_RIGHT_SHIFT));
   return h;
 }
 

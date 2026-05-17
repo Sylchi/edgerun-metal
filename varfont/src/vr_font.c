@@ -74,36 +74,36 @@ void vr_font_face_destroy(vr_font_face_t* face) {
       if (face->cfg.gl.destroy_texture && face->atlases[i].texture_id) {
         face->cfg.gl.destroy_texture(face->cfg.gl.user, face->atlases[i].texture_id);
       }
-      vr_dealloc(face, face->atlases[i].pixels, (size_t)face->atlases[i].width * (size_t)face->atlases[i].height * face->atlases[i].bytes_per_pixel, 1u);
+      vr_dealloc(face, face->atlases[i].pixels, (size_t)face->atlases[i].width * (size_t)face->atlases[i].height * face->atlases[i].bytes_per_pixel, VR_FONT_ALIGN_U8);
     }
-    vr_dealloc(face, face->atlases, face->atlas_cap * sizeof(*face->atlases), 8u);
+    vr_dealloc(face, face->atlases, face->atlas_cap * sizeof(*face->atlases), VR_FONT_ALIGN_PTR);
   }
 
-  if (face->cmap.format == 4) {
+  if (face->cmap.format == VR_FONT_CMAP_FORMAT_4) {
     size_t seg_count = (size_t)face->cmap.u.format4.seg_count_x2 / 2u;
-    vr_dealloc(face, face->cmap.u.format4.end_code, seg_count * sizeof(*face->cmap.u.format4.end_code), 2u);
-    vr_dealloc(face, face->cmap.u.format4.start_code, seg_count * sizeof(*face->cmap.u.format4.start_code), 2u);
-    vr_dealloc(face, face->cmap.u.format4.id_delta, seg_count * sizeof(*face->cmap.u.format4.id_delta), 2u);
-    vr_dealloc(face, face->cmap.u.format4.id_range_offset, seg_count * sizeof(*face->cmap.u.format4.id_range_offset), 2u);
-    vr_dealloc(face, face->cmap.u.format4.glyph_id_array, face->cmap.u.format4.glyph_id_array_count * sizeof(*face->cmap.u.format4.glyph_id_array), 2u);
+    vr_dealloc(face, face->cmap.u.format4.end_code, seg_count * sizeof(*face->cmap.u.format4.end_code), VR_FONT_ALIGN_U16);
+    vr_dealloc(face, face->cmap.u.format4.start_code, seg_count * sizeof(*face->cmap.u.format4.start_code), VR_FONT_ALIGN_U16);
+    vr_dealloc(face, face->cmap.u.format4.id_delta, seg_count * sizeof(*face->cmap.u.format4.id_delta), VR_FONT_ALIGN_U16);
+    vr_dealloc(face, face->cmap.u.format4.id_range_offset, seg_count * sizeof(*face->cmap.u.format4.id_range_offset), VR_FONT_ALIGN_U16);
+    vr_dealloc(face, face->cmap.u.format4.glyph_id_array, face->cmap.u.format4.glyph_id_array_count * sizeof(*face->cmap.u.format4.glyph_id_array), VR_FONT_ALIGN_U16);
   }
-  if (face->cmap.format == 12) {
+  if (face->cmap.format == VR_FONT_CMAP_FORMAT_12) {
     size_t groups = face->cmap.u.format12.n_groups;
-    vr_dealloc(face, face->cmap.u.format12.start_char_code, groups * sizeof(*face->cmap.u.format12.start_char_code), 4u);
-    vr_dealloc(face, face->cmap.u.format12.end_char_code, groups * sizeof(*face->cmap.u.format12.end_char_code), 4u);
-    vr_dealloc(face, face->cmap.u.format12.start_glyph_id, groups * sizeof(*face->cmap.u.format12.start_glyph_id), 4u);
+    vr_dealloc(face, face->cmap.u.format12.start_char_code, groups * sizeof(*face->cmap.u.format12.start_char_code), VR_FONT_ALIGN_U32);
+    vr_dealloc(face, face->cmap.u.format12.end_char_code, groups * sizeof(*face->cmap.u.format12.end_char_code), VR_FONT_ALIGN_U32);
+    vr_dealloc(face, face->cmap.u.format12.start_glyph_id, groups * sizeof(*face->cmap.u.format12.start_glyph_id), VR_FONT_ALIGN_U32);
   }
-  vr_dealloc(face, face->kern.pairs, face->kern.cap * sizeof(*face->kern.pairs), 8u);
-  vr_dealloc(face, face->gvar.shared_tuples, (size_t)face->gvar.shared_tuple_count * (size_t)face->gvar.axis_count * sizeof(*face->gvar.shared_tuples), 8u);
-  vr_dealloc(face, face->gvar.glyph_variation_offsets, ((size_t)face->gvar.glyph_count + 1u) * sizeof(*face->gvar.glyph_variation_offsets), 4u);
-  vr_dealloc(face, face->avar.segment_count, (size_t)face->avar.axis_count * sizeof(*face->avar.segment_count), 2u);
-  vr_dealloc(face, face->avar.segment_offset, (size_t)face->avar.axis_count * sizeof(*face->avar.segment_offset), 8u);
-  vr_dealloc(face, face->avar.map_from, face->avar.total_segment_count * sizeof(*face->avar.map_from), 8u);
-  vr_dealloc(face, face->avar.map_to, face->avar.total_segment_count * sizeof(*face->avar.map_to), 8u);
+  vr_dealloc(face, face->kern.pairs, face->kern.cap * sizeof(*face->kern.pairs), VR_FONT_ALIGN_PTR);
+  vr_dealloc(face, face->gvar.shared_tuples, (size_t)face->gvar.shared_tuple_count * (size_t)face->gvar.axis_count * sizeof(*face->gvar.shared_tuples), VR_FONT_ALIGN_PTR);
+  vr_dealloc(face, face->gvar.glyph_variation_offsets, ((size_t)face->gvar.glyph_count + 1u) * sizeof(*face->gvar.glyph_variation_offsets), VR_FONT_ALIGN_U32);
+  vr_dealloc(face, face->avar.segment_count, (size_t)face->avar.axis_count * sizeof(*face->avar.segment_count), VR_FONT_ALIGN_U16);
+  vr_dealloc(face, face->avar.segment_offset, (size_t)face->avar.axis_count * sizeof(*face->avar.segment_offset), VR_FONT_ALIGN_PTR);
+  vr_dealloc(face, face->avar.map_from, face->avar.total_segment_count * sizeof(*face->avar.map_from), VR_FONT_ALIGN_PTR);
+  vr_dealloc(face, face->avar.map_to, face->avar.total_segment_count * sizeof(*face->avar.map_to), VR_FONT_ALIGN_PTR);
 
-  vr_dealloc(face, face->cmap_offsets, face->cmap_offset_count * sizeof(*face->cmap_offsets), 4u);
-  vr_dealloc(face, face->tables, face->table_count * sizeof(*face->tables), 8u);
-  vr_dealloc(face, face->loca_offsets, ((size_t)face->num_glyphs + 1u) * sizeof(*face->loca_offsets), 4u);
-  vr_dealloc(face, face->file_data, face->file_size, 1u);
-  vr_config_free(face->allocator, face, sizeof(*face), 8u);
+  vr_dealloc(face, face->cmap_offsets, face->cmap_offset_count * sizeof(*face->cmap_offsets), VR_FONT_ALIGN_U32);
+  vr_dealloc(face, face->tables, face->table_count * sizeof(*face->tables), VR_FONT_ALIGN_PTR);
+  vr_dealloc(face, face->loca_offsets, ((size_t)face->num_glyphs + 1u) * sizeof(*face->loca_offsets), VR_FONT_ALIGN_U32);
+  vr_dealloc(face, face->file_data, face->file_size, VR_FONT_ALIGN_U8);
+  vr_config_free(face->allocator, face, sizeof(*face), VR_FONT_ALIGN_PTR);
 }
