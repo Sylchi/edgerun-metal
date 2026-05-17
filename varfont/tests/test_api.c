@@ -75,6 +75,13 @@ static void test_face_state_queries(void) {
 
   st = vr_font_atlas_texture(NULL, 0u, NULL);
   test_expect_status(st, VR_ERR_INVALID_FONT, "api: atlas texture query rejects null output pointer");
+
+  vr_font_atlas_view_t view = {0};
+  st = vr_font_atlas_view(NULL, 0u, &view);
+  test_expect_status(st, VR_ERR_INVALID_FONT, "api: atlas view rejects null face");
+
+  st = vr_font_atlas_view(NULL, 0u, NULL);
+  test_expect_status(st, VR_ERR_INVALID_FONT, "api: atlas view rejects null output pointer");
 }
 
 static void test_mutating_api_validation(vr_font_face_t* face) {
@@ -141,6 +148,20 @@ static void test_batch_and_bake_validation(vr_font_face_t* face) {
 
   st = vr_font_bake_glyph(face, VR_INVALID_GLYPH_ID, &out);
   test_expect_status(st, VR_ERR_INVALID_FONT, "api: bake rejects glyph id outside font range");
+
+  st = vr_font_bake_glyph(face, VR_TEST_GLYPH_CODE, &out);
+  if (st == VR_OK) {
+    vr_font_atlas_view_t view = {0};
+    st = vr_font_atlas_view(face, out.atlas_id, &view);
+    test_expect_status(st, VR_OK, "api: atlas view accepts baked glyph atlas");
+    test_expect(view.pixels != NULL, "api: atlas view exposes pixels");
+    test_expect(view.width > 0u && view.height > 0u, "api: atlas view exposes dimensions");
+    test_expect(view.bytes_per_pixel > 0u, "api: atlas view exposes pixel stride");
+    test_expect(view.format == VR_FONT_DEFAULT_ATLAS_FORMAT, "api: atlas view exposes resolved format");
+  } else {
+    test_expect(st == VR_ERR_INVALID_FONT || st == VR_ERR_UNSUPPORTED || st == VR_ERR_NO_SPACE,
+                "api: valid glyph bake may reject malformed/empty glyph outlines");
+  }
 
   st = vr_font_free_shaped(face, NULL, 0u);
   test_expect_status(st, VR_OK, "api: free_shaped accepts null list");
