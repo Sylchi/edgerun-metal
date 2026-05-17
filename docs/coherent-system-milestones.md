@@ -1,29 +1,27 @@
 # Coherent System Milestones
 
-Purpose: define the ordered implementation checklist and proof artifacts for the unified EdgeRun relay system.
+Purpose: define the ordered implementation checklist and proof artifacts for the C runtime's implementation of the `edgerun-work` relay system.
 
 Intention: remove parallel implementations by forcing every app, UI, driver, storage, and hardware path through content-addressed objects and erwire relays.
 
 ## System Invariants
 
-- One boundary protocol: erwire.
+- One boundary protocol model: `edgerun-work` protocol records carried by erwire.
 - One authority model: identity-routed, recipient-sealed, admission-bound work.
 - One storage model: content-addressed objects plus VFS labels.
 - One UI model: admitted scene/render capability packets, never app-owned framebuffers.
 - One driver model: Wasm driver logic sends relay device-operation packets.
 - One hardware model: endpoint adapters own local queues, registers, DMA, and firmware compatibility.
-- One routing model: relay intents and transit records bind packet hash, route hash, endpoints, and sequence.
+- One routing model: signed `WorkAdmission` records define relay paths; relay intents and transit records only move and prove admitted packets.
 
 ## Current Baseline
 
-- `er_work` defines node identities, channel endpoints, work requests, admissions, capability envelopes, and relay transit records.
+- `er_work` defines the C mirror of `edgerun-work` node identities, channel endpoints, work requests, admissions, capability envelopes, and relay transit records.
 - `er_app` defines content-addressed Wasm app identity, budget, usage, schedule, launch allocation, and IPC route binding.
 - `er_vfs` defines object packets, object labels, and transform refs without host filesystem authority.
 - `erwire` carries typed packets and can send/parse native EdgeRun Ethernet frames.
 - `er_hw_relay` encodes firmware UDP, native Ethernet, and VirtIO endpoints.
-- `er_relay_router` maps storage and render packet classes to VirtIO endpoint intents.
-- `er_native_boot` can poll native erwire ingress into deterministic routed, unrouted, malformed, or empty records.
-- `er_relay_dispatch` consumes relay intents and produces capture records for VirtIO block and VirtIO GPU endpoints.
+- `er_native_boot` can poll native erwire ingress into deterministic accepted, malformed, or empty records.
 - `edgerun-ui-core` provides backend-neutral UI scene records.
 - `wasm_vm` runs bounded Wasm modules with explicit hostcalls.
 
@@ -36,13 +34,13 @@ Work:
 - Audit runtime code for host path, file, socket, or descriptor concepts outside tools and boot compatibility.
 - Keep `er_vfs` labels as manifest labels only.
 - Add docs or tests showing labels resolve to object ids, not authority.
-- Ensure storage-class routing only accepts object packet, label ref, transform ref, and object capability records.
+- Ensure storage work accepts typed object payloads only when carried by an admitted storage or capability route.
 
 Proof:
 
 - Host tests reject invalid labels and path traversal.
 - Host tests prove identical bytes produce identical object ids independent of label.
-- Relay router tests send object packets to storage endpoints and reject log/control packets.
+- Route tests must start from signed admissions, not packet-class inference.
 
 ## Milestone 2: Native Relay Ingress
 
@@ -53,34 +51,33 @@ Work:
 - Poll `erwire_poll_native_eth` through the native ingress helper.
 - Build an ingress `ErChannelEndpoint` from the VirtIO-net MAC.
 - Reject malformed packets immediately.
-- Preserve packet kind, payload, sequence, payload hash inputs, and ingress endpoint.
+- Preserve packet kind, payload, sequence, payload hash inputs, and ingress endpoint without treating the ingress transport as authority.
 - Next: call the helper from the native profile loop.
 
 Proof:
 
 - QEMU pcap contains EdgeRun EtherType `0x88b5` packets.
-- Core tests cover accepted packets, malformed packets, routed ingress, and empty polls.
+- Core tests cover accepted packets, malformed packets, and empty polls.
 - Remaining proof: native run emits a deterministic relay-ingress acknowledgement or transit packet.
 
-## Milestone 3: Relay Intent Dispatch
+## Milestone 3: Admission-Defined Route Verification
 
-Goal: turn parsed erwire packets into one dispatch path for every endpoint.
+Goal: turn admitted `edgerun-work` traffic into relay intents only after route verification.
 
 Work:
 
-- Add a small dispatcher that consumes `ErRelayForwardIntent`.
-- Keep route selection inside `er_relay_router`.
+- Decode the payload as the corresponding `edgerun-work` record.
+- Verify `NetworkMessage` department, work type, recipient, first relay, and route commitment against the signed admission path.
+- Build `ErRelayForwardIntent` only from the verified admission-defined route and local endpoint mapping.
+- Reject packet-class matches without a valid admission.
 - Keep endpoint movement inside `er_hw_relay` or device-specific adapters.
-- Record unsupported endpoint kinds as deterministic rejection records, not fallback behavior.
-- Next: hand storage/render capture records to concrete endpoint adapters.
 
 Proof:
 
-- Tests prove storage packets produce VirtIO block intents.
-- Tests prove render capability packets produce VirtIO GPU intents.
-- Tests prove unsupported packet kinds produce no intent.
-- Tests prove malformed endpoint records are rejected.
-- Tests prove dispatch records classify storage, render, unsupported, and malformed endpoints.
+- Tests prove admitted storage work can produce a VirtIO block intent.
+- Tests prove admitted render capability work can produce a VirtIO GPU intent.
+- Tests prove packet-class matches without a valid admission produce no intent.
+- Tests prove malformed or unsupported admitted endpoints are rejected deterministically.
 
 ## Milestone 4: VirtIO Storage Endpoint
 
@@ -88,15 +85,15 @@ Goal: make storage a relay endpoint before making it a full disk driver.
 
 Work:
 
-- Add a VirtIO block endpoint adapter.
+- Add a VirtIO block endpoint adapter behind an admitted storage or object capability route.
 - First implementation may capture or acknowledge object packets deterministically.
 - Then add minimal VirtIO block request queue submission.
 - Keep the adapter object-based; no file paths or filesystem calls.
 
 Proof:
 
-- Unit test feeds an `ErVfsObjectPacket` through erwire and dispatcher to the storage adapter.
-- QEMU proof shows net ingress routes storage packet to the block endpoint.
+- Unit test feeds admitted storage/object work through erwire and the route verifier to the storage adapter.
+- QEMU proof shows net ingress carries admitted storage work to the block endpoint.
 - Later QEMU proof writes and reads the same content-addressed object bytes through VirtIO block.
 
 ## Milestone 5: VirtIO Render Endpoint
@@ -105,15 +102,15 @@ Goal: make UI rendering a relay endpoint before making it a full compositor.
 
 Work:
 
-- Define the first render payload as a bounded scene or scene-delta capability packet.
-- Add a VirtIO GPU endpoint adapter.
+- Define the first render payload as a bounded scene or scene-delta capability envelope.
+- Add a VirtIO GPU endpoint adapter behind an admitted render capability route.
 - First implementation may capture scene metadata or acknowledge render packets deterministically.
 - Then add minimal VirtIO GPU command queue submission.
 
 Proof:
 
-- Unit test feeds render capability packet through erwire and dispatcher to the render adapter.
-- QEMU proof shows net ingress routes render packet to the GPU endpoint.
+- Unit test feeds admitted render capability work through erwire and the route verifier to the render adapter.
+- QEMU proof shows net ingress carries admitted render work to the GPU endpoint.
 - UI proof renders the same scene locally through GOP and through the render endpoint path.
 
 ## Milestone 6: Wasm Relay ABI
