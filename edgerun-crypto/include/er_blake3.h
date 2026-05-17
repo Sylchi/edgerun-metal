@@ -30,5 +30,6 @@ void er_blake3_init(ErBlake3Hasher* hasher);
 uint8_t er_blake3_update(ErBlake3Hasher* hasher, const uint8_t* bytes, size_t len);
 uint8_t er_blake3_final(const ErBlake3Hasher* hasher, uint8_t out[ER_BLAKE3_OUT_LEN]);
 uint8_t er_blake3_hash_bytes(const uint8_t* bytes, size_t len, uint8_t out[ER_BLAKE3_OUT_LEN]);
+const char* er_blake3_backend_name(void);
 
 #endif
