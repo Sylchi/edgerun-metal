@@ -24,36 +24,20 @@ enum {
   ER_RELAY_PACKET_U16_BYTES = 2u,
   ER_RELAY_PACKET_U32_BYTES = 4u,
   ER_RELAY_PACKET_U64_BYTES = 8u,
+  ER_RELAY_PACKET_U32_BYTE0_OFFSET = 0u,
+  ER_RELAY_PACKET_U32_BYTE1_OFFSET = 1u,
+  ER_RELAY_PACKET_U32_BYTE2_OFFSET = 2u,
+  ER_RELAY_PACKET_U32_BYTE3_OFFSET = 3u,
   ER_RELAY_PACKET_BYTE_BITS = 8u,
-  ER_RELAY_PACKET_U8_MASK = 0xffu
+  ER_RELAY_PACKET_U8_MASK = 0xffu,
+  ER_RELAY_PACKET_U32_MASK = 0xffffffffu
 };
 
-static UINT8 er_relay_packet_bytes_nonzero(const UINT8* bytes, UINT32 len) {
-  UINT32 i;
-
-  if (bytes == 0 || len == 0u) {
-    return 0;
-  }
-  for (i = 0u; i < len; ++i) {
-    if (bytes[i] != 0u) {
-      return 1;
-    }
-  }
-  return 0;
-}
-
 static UINT8 er_relay_packet_bytes_equal(const UINT8* left, const UINT8* right, UINT32 len) {
-  UINT32 i;
-
-  if (left == 0 || right == 0 || len == 0u) {
+  if (len == 0u) {
     return 0;
   }
-  for (i = 0u; i < len; ++i) {
-    if (left[i] != right[i]) {
-      return 0;
-    }
-  }
-  return 1;
+  return er_mem_equal(left, right, (UINTN)len);
 }
 
 static UINT16 er_relay_packet_read_u16(const UINT8* src) {
@@ -61,10 +45,12 @@ static UINT16 er_relay_packet_read_u16(const UINT8* src) {
 }
 
 static UINT32 er_relay_packet_read_u32(const UINT8* src) {
-  return (UINT32)src[0] |
-         ((UINT32)src[1] << ER_RELAY_PACKET_BYTE_BITS) |
-         ((UINT32)src[2] << (ER_RELAY_PACKET_BYTE_BITS * 2u)) |
-         ((UINT32)src[3] << (ER_RELAY_PACKET_BYTE_BITS * 3u));
+  return (UINT32)src[ER_RELAY_PACKET_U32_BYTE0_OFFSET] |
+         ((UINT32)src[ER_RELAY_PACKET_U32_BYTE1_OFFSET] << ER_RELAY_PACKET_BYTE_BITS) |
+         ((UINT32)src[ER_RELAY_PACKET_U32_BYTE2_OFFSET] <<
+          (ER_RELAY_PACKET_BYTE_BITS * ER_RELAY_PACKET_U32_BYTE2_OFFSET)) |
+         ((UINT32)src[ER_RELAY_PACKET_U32_BYTE3_OFFSET] <<
+          (ER_RELAY_PACKET_BYTE_BITS * ER_RELAY_PACKET_U32_BYTE3_OFFSET));
 }
 
 static UINT64 er_relay_packet_read_u64(const UINT8* src) {
@@ -79,14 +65,16 @@ static void er_relay_packet_write_u16(UINT8* dst, UINT16 value) {
 }
 
 static void er_relay_packet_write_u32(UINT8* dst, UINT32 value) {
-  dst[0] = (UINT8)(value & ER_RELAY_PACKET_U8_MASK);
-  dst[1] = (UINT8)((value >> ER_RELAY_PACKET_BYTE_BITS) & ER_RELAY_PACKET_U8_MASK);
-  dst[2] = (UINT8)((value >> (ER_RELAY_PACKET_BYTE_BITS * 2u)) & ER_RELAY_PACKET_U8_MASK);
-  dst[3] = (UINT8)((value >> (ER_RELAY_PACKET_BYTE_BITS * 3u)) & ER_RELAY_PACKET_U8_MASK);
+  dst[ER_RELAY_PACKET_U32_BYTE0_OFFSET] = (UINT8)(value & ER_RELAY_PACKET_U8_MASK);
+  dst[ER_RELAY_PACKET_U32_BYTE1_OFFSET] = (UINT8)((value >> ER_RELAY_PACKET_BYTE_BITS) & ER_RELAY_PACKET_U8_MASK);
+  dst[ER_RELAY_PACKET_U32_BYTE2_OFFSET] =
+    (UINT8)((value >> (ER_RELAY_PACKET_BYTE_BITS * ER_RELAY_PACKET_U32_BYTE2_OFFSET)) & ER_RELAY_PACKET_U8_MASK);
+  dst[ER_RELAY_PACKET_U32_BYTE3_OFFSET] =
+    (UINT8)((value >> (ER_RELAY_PACKET_BYTE_BITS * ER_RELAY_PACKET_U32_BYTE3_OFFSET)) & ER_RELAY_PACKET_U8_MASK);
 }
 
 static void er_relay_packet_write_u64(UINT8* dst, UINT64 value) {
-  er_relay_packet_write_u32(dst, (UINT32)(value & 0xffffffffu));
+  er_relay_packet_write_u32(dst, (UINT32)(value & ER_RELAY_PACKET_U32_MASK));
   er_relay_packet_write_u32(dst + ER_RELAY_PACKET_U32_BYTES,
                             (UINT32)(value >> (ER_RELAY_PACKET_BYTE_BITS * ER_RELAY_PACKET_U32_BYTES)));
 }
@@ -129,12 +117,12 @@ UINT8 er_relay_packet_prepare(UINT8* packet, UINT32 packet_capacity,
       er_relay_packet_cost_valid(payload_len, cost_per_byte, max_total_cost) == 0u) {
     return 0;
   }
-  if (er_relay_packet_bytes_nonzero(source_node_id->bytes, ER_NODE_ID_LEN) == 0u ||
-      er_relay_packet_bytes_nonzero(target_node_id->bytes, ER_NODE_ID_LEN) == 0u ||
-      er_relay_packet_bytes_nonzero(admission_id->bytes, ER_HASH_LEN) == 0u ||
-      er_relay_packet_bytes_nonzero(token_id->bytes, ER_HASH_LEN) == 0u ||
-      er_relay_packet_bytes_nonzero(route_hash->bytes, ER_HASH_LEN) == 0u ||
-      er_relay_packet_bytes_nonzero(payload_hash->bytes, ER_HASH_LEN) == 0u) {
+  if (er_mem_any_nonzero(source_node_id->bytes, ER_NODE_ID_LEN) == 0u ||
+      er_mem_any_nonzero(target_node_id->bytes, ER_NODE_ID_LEN) == 0u ||
+      er_mem_any_nonzero(admission_id->bytes, ER_HASH_LEN) == 0u ||
+      er_mem_any_nonzero(token_id->bytes, ER_HASH_LEN) == 0u ||
+      er_mem_any_nonzero(route_hash->bytes, ER_HASH_LEN) == 0u ||
+      er_mem_any_nonzero(payload_hash->bytes, ER_HASH_LEN) == 0u) {
     return 0;
   }
 
@@ -178,12 +166,12 @@ UINT8 er_relay_packet_valid(const UINT8* packet, UINT32 packet_len) {
       er_relay_packet_read_u32(packet + ER_RELAY_PACKET_RESERVED_OFFSET) != 0u) {
     return 0;
   }
-  if (er_relay_packet_bytes_nonzero(packet + ER_RELAY_PACKET_SOURCE_OFFSET, ER_NODE_ID_LEN) == 0u ||
-      er_relay_packet_bytes_nonzero(packet + ER_RELAY_PACKET_TARGET_OFFSET, ER_NODE_ID_LEN) == 0u ||
-      er_relay_packet_bytes_nonzero(packet + ER_RELAY_PACKET_ADMISSION_OFFSET, ER_HASH_LEN) == 0u ||
-      er_relay_packet_bytes_nonzero(packet + ER_RELAY_PACKET_TOKEN_OFFSET, ER_HASH_LEN) == 0u ||
-      er_relay_packet_bytes_nonzero(packet + ER_RELAY_PACKET_ROUTE_OFFSET, ER_HASH_LEN) == 0u ||
-      er_relay_packet_bytes_nonzero(packet + ER_RELAY_PACKET_PAYLOAD_HASH_OFFSET, ER_HASH_LEN) == 0u) {
+  if (er_mem_any_nonzero(packet + ER_RELAY_PACKET_SOURCE_OFFSET, ER_NODE_ID_LEN) == 0u ||
+      er_mem_any_nonzero(packet + ER_RELAY_PACKET_TARGET_OFFSET, ER_NODE_ID_LEN) == 0u ||
+      er_mem_any_nonzero(packet + ER_RELAY_PACKET_ADMISSION_OFFSET, ER_HASH_LEN) == 0u ||
+      er_mem_any_nonzero(packet + ER_RELAY_PACKET_TOKEN_OFFSET, ER_HASH_LEN) == 0u ||
+      er_mem_any_nonzero(packet + ER_RELAY_PACKET_ROUTE_OFFSET, ER_HASH_LEN) == 0u ||
+      er_mem_any_nonzero(packet + ER_RELAY_PACKET_PAYLOAD_HASH_OFFSET, ER_HASH_LEN) == 0u) {
     return 0;
   }
   cost_per_byte = er_relay_packet_read_u64(packet + ER_RELAY_PACKET_COST_PER_BYTE_OFFSET);

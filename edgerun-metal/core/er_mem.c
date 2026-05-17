@@ -40,3 +40,17 @@ UINT8 er_mem_equal(const UINT8* a, const UINT8* b, UINTN len) {
   }
   return 1;
 }
+
+UINT8 er_mem_any_nonzero(const UINT8* bytes, UINTN len) {
+  UINTN i;
+
+  if (bytes == 0 || len == 0u) {
+    return 0;
+  }
+  for (i = 0u; i < len; ++i) {
+    if (bytes[i] != 0u) {
+      return 1;
+    }
+  }
+  return 0;
+}
