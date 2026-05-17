@@ -20,7 +20,6 @@ vr_status_t vr_font_face_create_from_memory(vr_font_face_t** out, const void* da
 
   face->cfg = *cfg;
   face->allocator = cfg->allocator;
-  vr_allocator_scope_enter(face);
   if (face->cfg.atlas_width == 0) face->cfg.atlas_width = VR_FONT_DEFAULT_ATLAS_DIMENSION;
   if (face->cfg.atlas_height == 0) face->cfg.atlas_height = VR_FONT_DEFAULT_ATLAS_DIMENSION;
   if (face->cfg.atlas_pad == 0) face->cfg.atlas_pad = VR_FONT_DEFAULT_ATLAS_PADDING;
@@ -56,14 +55,12 @@ vr_status_t vr_font_face_create(vr_font_face_t** out, const char* path, const vr
 
 vr_status_t vr_font_clear_cache(vr_font_face_t* face) {
   if (!face) return VR_ERR_INVALID_FONT;
-  vr_allocator_scope_enter(face);
   vr_cache_remove(face);
   return VR_OK;
 }
 
 void vr_font_face_destroy(vr_font_face_t* face) {
   if (!face) return;
-  vr_allocator_scope_enter(face);
 
   if (face->glyph_cache) {
     for (size_t i = 0; i < face->glyph_cache_count; ++i) {

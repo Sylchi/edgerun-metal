@@ -310,7 +310,6 @@ void vr_cache_remove(vr_font_face_t* face) {
 
 vr_status_t vr_font_bake_glyph(vr_font_face_t* face, uint32_t glyph_id, vr_baked_glyph_t* out) {
   if (!face || !out) return VR_ERR_INVALID_FONT;
-  vr_allocator_scope_enter(face);
 
   if (vr_cache_lookup(face, (uint16_t)glyph_id, out) == VR_OK) {
     return VR_OK;
