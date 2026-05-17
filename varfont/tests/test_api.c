@@ -61,11 +61,16 @@ static void test_invalid_font_file_variants(void) {
 static void test_face_state_queries(void) {
   test_expect(vr_font_axis_count(NULL) == 0, "api: axis count query is safe for null face");
   test_expect(vr_font_axes(NULL) == NULL, "api: axis query is safe for null face");
+  vr_font_metrics_t metrics = {0};
+  vr_status_t st = vr_font_metrics(NULL, &metrics);
+  test_expect_status(st, VR_ERR_INVALID_FONT, "api: metrics query rejects null face");
+  st = vr_font_metrics(NULL, NULL);
+  test_expect_status(st, VR_ERR_INVALID_FONT, "api: metrics query rejects null output");
   test_expect(vr_font_last_error(NULL) == VR_ERR_INVALID_FONT, "api: last_error query is safe for null face");
   test_expect(vr_font_atlas_count(NULL) == 0, "api: atlas count query is safe for null face");
 
   uint32_t out_texture = 0;
-  vr_status_t st = vr_font_atlas_texture(NULL, 0u, &out_texture);
+  st = vr_font_atlas_texture(NULL, 0u, &out_texture);
   test_expect_status(st, VR_ERR_INVALID_FONT, "api: atlas texture query rejects null face");
 
   st = vr_font_atlas_texture(NULL, 0u, NULL);
@@ -105,6 +110,25 @@ static void test_mutating_api_validation(vr_font_face_t* face) {
     st = vr_font_atlas_texture(face, 0u, &out_texture);
     test_expect_status(st, VR_OK, "api: atlas texture accepts a valid atlas id");
   }
+}
+
+static void test_metrics_query(vr_font_face_t* face) {
+  vr_font_metrics_t metrics = {0};
+  vr_status_t st = vr_font_metrics(face, &metrics);
+  test_expect_status(st, VR_OK, "api: metrics query succeeds");
+  test_expect(metrics.units_per_em > 0u, "api: metrics exposes units per em");
+  test_expect(metrics.px_size > 0.0f, "api: metrics exposes pixel size");
+  test_expect(metrics.ascender > 0.0f, "api: metrics ascender is positive");
+  test_expect(metrics.descender < 0.0f, "api: metrics descender is negative");
+  test_expect(metrics.line_height > 0.0f, "api: metrics line height is positive");
+
+  st = vr_font_set_size(face, 32.0f);
+  test_expect_status(st, VR_OK, "api: metrics test size set succeeds");
+  vr_font_metrics_t resized = {0};
+  st = vr_font_metrics(face, &resized);
+  test_expect_status(st, VR_OK, "api: resized metrics query succeeds");
+  test_expect(resized.px_size == 32.0f, "api: metrics follows current pixel size");
+  test_expect(resized.line_height < metrics.line_height, "api: metrics scale with pixel size");
 }
 
 static void test_batch_and_bake_validation(vr_font_face_t* face) {
@@ -170,6 +194,7 @@ void run_api_tests(void) {
   if (!face) return;
 
   test_mutating_api_validation(face);
+  test_metrics_query(face);
   test_batch_and_bake_validation(face);
   test_close_face(face);
 }

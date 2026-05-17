@@ -89,6 +89,17 @@ typedef struct {
 } vr_baked_glyph_t;
 
 typedef struct {
+  uint16_t units_per_em;
+  float px_size;
+  float ascender;
+  float descender;
+  float line_gap;
+  float line_height;
+  float y_min;
+  float y_max;
+} vr_font_metrics_t;
+
+typedef struct {
   void* user;
   void (*create_texture)(void* user, uint32_t* out_texture, int width, int height, const void* pixels);
   void (*update_texture)(void* user, uint32_t texture, int x, int y, int width, int height, const void* pixels);
@@ -126,6 +137,7 @@ vr_status_t vr_font_set_size(vr_font_face_t* face, float px_size);
 vr_status_t vr_font_set_axis(vr_font_face_t* face, const char* tag, float user_value);
 int vr_font_axis_count(const vr_font_face_t* face);
 const vr_font_axis_t* vr_font_axes(const vr_font_face_t* face);
+vr_status_t vr_font_metrics(const vr_font_face_t* face, vr_font_metrics_t* out_metrics);
 
 vr_status_t vr_font_shape_text(
   vr_font_face_t* face,

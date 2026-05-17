@@ -224,8 +224,7 @@ static void vr_set_axis_data(vr_font_face_t* face) {
 }
 
 static vr_status_t vr_parse_head(vr_font_face_t* face, const uint8_t* p, size_t len) {
-  (void)len;
-  if (!p || face->file_size < 1) {
+  if (!p || len < 54u) {
     return VR_ERR_INVALID_FONT;
   }
   face->head = (uint8_t*)p;
@@ -256,9 +255,11 @@ static vr_status_t vr_parse_maxp(vr_font_face_t* face, const uint8_t* p, size_t 
 }
 
 static vr_status_t vr_parse_hhea(vr_font_face_t* face, const uint8_t* p, size_t len) {
-  (void)len;
-  if (!p) return VR_ERR_INVALID_FONT;
+  if (!p || len < 36u) return VR_ERR_INVALID_FONT;
   face->hhea = (uint8_t*)p;
+  face->ascender = vr_i16(p + 4);
+  face->descender = vr_i16(p + 6);
+  face->line_gap = vr_i16(p + 8);
   face->num_h_metrics = vr_u16(p + 34);
   return VR_OK;
 }
