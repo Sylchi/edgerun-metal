@@ -154,6 +154,7 @@ static void test_shadcn_render_primitives(void) {
   expect_true(er_ui_shadcn_component_scene_preview_available("avatar"), "shadcn scene preview: avatar is available");
   expect_true(er_ui_shadcn_component_scene_preview_available("chart"), "shadcn scene preview: chart is available");
   expect_true(er_ui_shadcn_component_scene_preview_available("combobox"), "shadcn scene preview: combobox is available");
+  expect_true(er_ui_shadcn_component_scene_preview_available("label"), "shadcn scene preview: label is available");
   expect_true(er_ui_shadcn_component_scene_preview_available("sheet"), "shadcn scene preview: sheet is available");
   expect_true(er_ui_shadcn_component_scene_preview_available("tabs"), "shadcn scene preview: tabs are available");
   expect_true(er_ui_shadcn_component_scene_preview_available("data-table"), "shadcn scene preview: data table is available");
@@ -176,6 +177,15 @@ static void test_shadcn_render_primitives(void) {
                 "shadcn showcase: component reference emits");
   expect_true(scene.hit_count >= 20u, "shadcn showcase: catalog rows and preview controls emit hits");
   expect_true(scene.text_quad_count > 20u, "shadcn showcase: catalog and preview use variable font text");
+
+  for (size_t i = 0u; i < er_ui_shadcn_demo_count(); ++i) {
+    const er_ui_shadcn_demo_spec_t* spec = er_ui_shadcn_demo_at(i);
+    expect_true(spec != NULL, "shadcn scene preview: indexed spec exists");
+    if (!spec) continue;
+    expect_true(er_ui_shadcn_component_scene_preview_available(spec->slug), "shadcn scene preview: every catalog component is claimed");
+    expect_status(er_ui_shadcn_component_scene_preview_emit(&scene, face, er_ui_bounds(8.0f, 860.0f, 360.0f, 190.0f), theme, spec->slug, &state), ER_UI_OK,
+                  "shadcn scene preview: every catalog component emits");
+  }
 
   vr_font_face_destroy(face);
   er_ui_scene_destroy(&scene);
