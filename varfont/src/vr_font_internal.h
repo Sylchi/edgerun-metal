@@ -169,6 +169,9 @@ struct vr_font_face_t {
   uint16_t units_per_em;
   int16_t index_to_loc_format;
   uint16_t num_glyphs;
+  int16_t ascender;
+  int16_t descender;
+  int16_t line_gap;
   int16_t yMin;
   int16_t yMax;
   uint16_t num_h_metrics;

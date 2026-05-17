@@ -176,6 +176,20 @@ const vr_font_axis_t* vr_font_axes(const vr_font_face_t* face) {
   return face->axes;
 }
 
+vr_status_t vr_font_metrics(const vr_font_face_t* face, vr_font_metrics_t* out_metrics) {
+  if (!face || !out_metrics || face->units_per_em == 0u) return VR_ERR_INVALID_FONT;
+  float scale = face->cfg.px_size / (float)face->units_per_em;
+  out_metrics->units_per_em = face->units_per_em;
+  out_metrics->px_size = face->cfg.px_size;
+  out_metrics->ascender = (float)face->ascender * scale;
+  out_metrics->descender = (float)face->descender * scale;
+  out_metrics->line_gap = (float)face->line_gap * scale;
+  out_metrics->line_height = (float)(face->ascender - face->descender + face->line_gap) * scale;
+  out_metrics->y_min = (float)face->yMin * scale;
+  out_metrics->y_max = (float)face->yMax * scale;
+  return VR_OK;
+}
+
 vr_status_t vr_font_shape_text(
   vr_font_face_t* face,
   const uint32_t* codepoints,
