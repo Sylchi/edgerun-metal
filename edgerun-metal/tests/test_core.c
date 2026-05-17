@@ -1624,13 +1624,15 @@ static void test_hw_relay_endpoints(void) {
                                                       &eth_endpoint),
               1);
   check_int64("relay native eth abi", eth_endpoint.abi_version, ER_WORK_ABI_VERSION);
-  check_int64("relay native eth kind", eth_endpoint.kind, ER_CHANNEL_KIND_DEVICE_RING);
+  check_int64("relay native eth kind", eth_endpoint.kind, ER_CHANNEL_KIND_NATIVE_ETH);
   check_int64("relay native eth address len", eth_endpoint.address_len,
               ER_HW_RELAY_NATIVE_ETH_ADDR_LEN);
   check_uint64("relay native eth mac0", eth_endpoint.address[0], peer_mac[0]);
   check_uint64("relay native eth mac5", eth_endpoint.address[5], peer_mac[5]);
   check_int64("relay native eth recognized",
               er_hw_relay_endpoint_is_native_eth(&eth_endpoint), 1);
+  check_int64("relay native eth not virtio",
+              er_hw_relay_endpoint_is_virtio(&eth_endpoint), 0);
 
   er_mmio_reset();
   regs[ER_VIRTIO_MMIO_MAGIC_VALUE_OFFSET / sizeof(UINT32)] = ER_VIRTIO_MMIO_MAGIC;
@@ -1680,7 +1682,7 @@ static void test_hw_relay_endpoints(void) {
                                                   &virtio_endpoint),
               1);
   check_int64("relay virtio abi", virtio_endpoint.abi_version, ER_WORK_ABI_VERSION);
-  check_int64("relay virtio kind", virtio_endpoint.kind, ER_CHANNEL_KIND_DEVICE_RING);
+  check_int64("relay virtio kind", virtio_endpoint.kind, ER_CHANNEL_KIND_VIRTIO_QUEUE);
   check_int64("relay virtio address len", virtio_endpoint.address_len,
               ER_HW_RELAY_VIRTIO_ADDR_LEN);
   check_uint64("relay virtio device type byte0",
@@ -1693,8 +1695,8 @@ static void test_hw_relay_endpoints(void) {
                ER_VIRTIO_TRANSPORT_KIND_NONE);
   check_int64("relay virtio recognized",
               er_hw_relay_endpoint_is_virtio(&virtio_endpoint), 1);
-  check_int64("relay native eth not virtio",
-              er_hw_relay_endpoint_is_virtio(&eth_endpoint), 0);
+  check_int64("relay virtio not native eth",
+              er_hw_relay_endpoint_is_native_eth(&virtio_endpoint), 0);
 }
 
 static void test_erwire_native_eth_sink(void) {
