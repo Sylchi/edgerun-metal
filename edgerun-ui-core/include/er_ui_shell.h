@@ -5,6 +5,7 @@
 #include "er_ui_runtime.h"
 #include "er_ui_scene.h"
 #include "er_ui_theme.h"
+#include "er_ui_text.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -13,6 +14,16 @@ extern "C" {
 #define ER_UI_SHELL_LAUNCHER_ID 1u
 #define ER_UI_SHELL_TOPBAR_HEIGHT 40.0f
 #define ER_UI_WORKSPACE_TAB_HEIGHT 36.0f
+#define ER_UI_NETWORK_APP_PROMPT_RUN_ONCE_ID 0xED010001u
+#define ER_UI_NETWORK_APP_PROMPT_VERIFY_CACHE_ID 0xED010002u
+#define ER_UI_NETWORK_APP_PROMPT_CANCEL_ID 0xED010003u
+
+typedef enum {
+  ER_UI_NETWORK_APP_PROMPT_CHOICE_NONE = 0,
+  ER_UI_NETWORK_APP_PROMPT_CHOICE_RUN_ONCE,
+  ER_UI_NETWORK_APP_PROMPT_CHOICE_VERIFY_CACHE,
+  ER_UI_NETWORK_APP_PROMPT_CHOICE_CANCEL
+} er_ui_network_app_prompt_choice_t;
 
 typedef struct {
   uint32_t id;
@@ -21,6 +32,8 @@ typedef struct {
 typedef struct {
   er_ui_allocator_t allocator;
   bool launcher_open;
+  bool network_app_prompt_open;
+  er_ui_network_app_prompt_choice_t network_app_prompt_choice;
   uint32_t focused_surface_id;
   er_ui_workspace_surface_t* surfaces;
   size_t surface_count;
@@ -35,6 +48,10 @@ bool er_ui_shell_launcher_open(const er_ui_shell_state_t* state);
 void er_ui_shell_set_launcher_open(er_ui_shell_state_t* state, bool open);
 void er_ui_shell_toggle_launcher(er_ui_shell_state_t* state);
 er_ui_status_t er_ui_shell_apply_action(er_ui_shell_state_t* state, er_ui_action_t action, bool* out_changed);
+bool er_ui_shell_network_app_prompt_open(const er_ui_shell_state_t* state);
+void er_ui_shell_show_network_app_prompt(er_ui_shell_state_t* state);
+void er_ui_shell_clear_network_app_prompt_choice(er_ui_shell_state_t* state);
+er_ui_network_app_prompt_choice_t er_ui_shell_network_app_prompt_choice(const er_ui_shell_state_t* state);
 
 er_ui_status_t er_ui_workspace_add_surface(er_ui_shell_state_t* state, uint32_t surface_id);
 er_ui_status_t er_ui_workspace_remove_surface(er_ui_shell_state_t* state, uint32_t surface_id);
@@ -48,6 +65,12 @@ er_ui_status_t er_ui_shell_emit_scene(
   er_ui_scene_t* scene,
   er_ui_bounds_t bounds,
   er_ui_resolved_theme_t theme);
+er_ui_status_t er_ui_shell_emit_scene_with_font(
+  const er_ui_shell_state_t* state,
+  er_ui_scene_t* scene,
+  er_ui_bounds_t bounds,
+  er_ui_resolved_theme_t theme,
+  vr_font_face_t* font);
 
 #ifdef __cplusplus
 }

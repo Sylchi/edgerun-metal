@@ -6,6 +6,9 @@ static const float ER_UI_SHELL_LAUNCHER_WIDTH = 280.0f;
 static const float ER_UI_SHELL_LAUNCHER_BUTTON = 32.0f;
 static const float ER_UI_WORKSPACE_TAB_WIDTH = 132.0f;
 static const float ER_UI_WORKSPACE_CLOSE_SIZE = 20.0f;
+static const float ER_UI_NETWORK_APP_PROMPT_WIDTH = 560.0f;
+static const float ER_UI_NETWORK_APP_PROMPT_HEIGHT = 328.0f;
+static const size_t ER_UI_SHELL_TEXT_MAX_CODEPOINTS = 192u;
 
 static bool er_ui_shell_allocator_valid(er_ui_allocator_t allocator) {
   return allocator.alloc != 0 && allocator.free != 0;
@@ -91,16 +94,48 @@ static uint32_t er_ui_shell_action_target_id(er_ui_action_t action) {
   return action.has_hit ? action.hit.id : action.id;
 }
 
+static bool er_ui_shell_prompt_choice_for_id(uint32_t id, er_ui_network_app_prompt_choice_t* out_choice) {
+  er_ui_network_app_prompt_choice_t choice = ER_UI_NETWORK_APP_PROMPT_CHOICE_NONE;
+  if (id == ER_UI_NETWORK_APP_PROMPT_RUN_ONCE_ID) {
+    choice = ER_UI_NETWORK_APP_PROMPT_CHOICE_RUN_ONCE;
+  } else if (id == ER_UI_NETWORK_APP_PROMPT_VERIFY_CACHE_ID) {
+    choice = ER_UI_NETWORK_APP_PROMPT_CHOICE_VERIFY_CACHE;
+  } else if (id == ER_UI_NETWORK_APP_PROMPT_CANCEL_ID) {
+    choice = ER_UI_NETWORK_APP_PROMPT_CHOICE_CANCEL;
+  } else {
+    return false;
+  }
+  if (out_choice) *out_choice = choice;
+  return true;
+}
+
 er_ui_status_t er_ui_shell_apply_action(er_ui_shell_state_t* state, er_ui_action_t action, bool* out_changed) {
   if (out_changed) *out_changed = false;
   if (!state) return ER_UI_ERR_INVALID_ARGUMENT;
 
   if (action.kind == ER_UI_ACTION_CANCELLED) {
+    if (state->network_app_prompt_open) {
+      state->network_app_prompt_open = false;
+      state->network_app_prompt_choice = ER_UI_NETWORK_APP_PROMPT_CHOICE_CANCEL;
+      if (out_changed) *out_changed = true;
+      return ER_UI_OK;
+    }
     if (state->launcher_open) {
       state->launcher_open = false;
       if (out_changed) *out_changed = true;
     }
     return ER_UI_OK;
+  }
+
+  if (state->network_app_prompt_open && action.kind == ER_UI_ACTION_ACTIVATED) {
+    er_ui_network_app_prompt_choice_t choice = ER_UI_NETWORK_APP_PROMPT_CHOICE_NONE;
+    uint32_t id = er_ui_shell_action_target_id(action);
+    if (er_ui_shell_prompt_choice_for_id(id, &choice)) {
+      state->network_app_prompt_open = false;
+      state->network_app_prompt_choice = choice;
+      if (out_changed) *out_changed = true;
+      return ER_UI_OK;
+    }
   }
 
   if (action.has_hit && action.hit.kind == ER_UI_HIT_SHELL_LAUNCHER && action.kind == ER_UI_ACTION_ACTIVATED) {
@@ -128,6 +163,24 @@ er_ui_status_t er_ui_shell_apply_action(er_ui_shell_state_t* state, er_ui_action
   }
 
   return ER_UI_OK;
+}
+
+bool er_ui_shell_network_app_prompt_open(const er_ui_shell_state_t* state) {
+  return state && state->network_app_prompt_open;
+}
+
+void er_ui_shell_show_network_app_prompt(er_ui_shell_state_t* state) {
+  if (!state) return;
+  state->network_app_prompt_open = true;
+  state->network_app_prompt_choice = ER_UI_NETWORK_APP_PROMPT_CHOICE_NONE;
+}
+
+void er_ui_shell_clear_network_app_prompt_choice(er_ui_shell_state_t* state) {
+  if (state) state->network_app_prompt_choice = ER_UI_NETWORK_APP_PROMPT_CHOICE_NONE;
+}
+
+er_ui_network_app_prompt_choice_t er_ui_shell_network_app_prompt_choice(const er_ui_shell_state_t* state) {
+  return state ? state->network_app_prompt_choice : ER_UI_NETWORK_APP_PROMPT_CHOICE_NONE;
 }
 
 er_ui_status_t er_ui_workspace_add_surface(er_ui_shell_state_t* state, uint32_t surface_id) {
@@ -230,7 +283,99 @@ static er_ui_status_t er_ui_shell_emit_workspace(const er_ui_shell_state_t* stat
   return ER_UI_OK;
 }
 
-er_ui_status_t er_ui_shell_emit_scene(
+static er_ui_status_t er_ui_shell_push_ascii_text(er_ui_scene_t* scene, vr_font_face_t* font, const char* text, float x, float y, er_ui_color4_t color) {
+  if (!scene || !font || !text) return ER_UI_ERR_INVALID_ARGUMENT;
+  uint32_t codepoints[192u];
+  size_t count = 0u;
+  while (text[count] != '\0') {
+    if (count >= ER_UI_SHELL_TEXT_MAX_CODEPOINTS) return ER_UI_ERR_INVALID_ARGUMENT;
+    unsigned char ch = (unsigned char)text[count];
+    if (ch > 0x7Fu) return ER_UI_ERR_INVALID_ARGUMENT;
+    codepoints[count] = (uint32_t)ch;
+    count++;
+  }
+  if (count == 0u) return ER_UI_OK;
+  return er_ui_scene_push_varfont_text(scene, font, codepoints, count, x, y, color);
+}
+
+static er_ui_status_t er_ui_shell_emit_prompt_button(
+  er_ui_scene_t* scene,
+  vr_font_face_t* font,
+  er_ui_bounds_t bounds,
+  uint32_t id,
+  const char* label,
+  er_ui_color4_t fill,
+  er_ui_color4_t text,
+  float radius) {
+  er_ui_status_t status = er_ui_scene_push_rect(scene, er_ui_rect_fill(bounds.x, bounds.y, bounds.w, bounds.h, radius, fill));
+  if (status != ER_UI_OK) return status;
+  status = er_ui_scene_push_hit(scene, er_ui_hit(ER_UI_HIT_BUTTON, id, bounds.x, bounds.y, bounds.w, bounds.h));
+  if (status != ER_UI_OK) return status;
+  return er_ui_shell_push_ascii_text(scene, font, label, bounds.x + 14.0f, bounds.y + 27.0f, text);
+}
+
+static er_ui_status_t er_ui_shell_emit_network_app_prompt(
+  const er_ui_shell_state_t* state,
+  er_ui_scene_t* scene,
+  er_ui_bounds_t bounds,
+  er_ui_resolved_theme_t theme,
+  vr_font_face_t* font) {
+  if (!state->network_app_prompt_open) return ER_UI_OK;
+  if (!font) return ER_UI_ERR_INVALID_ARGUMENT;
+
+  er_ui_color4_t overlay = {0.0f, 0.0f, 0.0f, 0.54f};
+  er_ui_status_t status = er_ui_scene_push_rect(scene, er_ui_rect_fill(bounds.x, bounds.y, bounds.w, bounds.h, 0.0f, overlay));
+  if (status != ER_UI_OK) return status;
+
+  float panel_w = bounds.w - 32.0f;
+  if (panel_w > ER_UI_NETWORK_APP_PROMPT_WIDTH) panel_w = ER_UI_NETWORK_APP_PROMPT_WIDTH;
+  if (panel_w <= 0.0f || bounds.h <= ER_UI_NETWORK_APP_PROMPT_HEIGHT) return ER_UI_ERR_INVALID_ARGUMENT;
+  er_ui_bounds_t panel = er_ui_bounds(bounds.x + (bounds.w - panel_w) * 0.5f, bounds.y + (bounds.h - ER_UI_NETWORK_APP_PROMPT_HEIGHT) * 0.5f,
+                                      panel_w, ER_UI_NETWORK_APP_PROMPT_HEIGHT);
+  status = er_ui_scene_push_rect(scene, er_ui_rect_fill(panel.x, panel.y, panel.w, panel.h, theme.radius.panel, theme.colors.panel));
+  if (status != ER_UI_OK) return status;
+  status = er_ui_scene_push_rect(scene, er_ui_rect_border(panel.x, panel.y, panel.w, panel.h, theme.radius.panel, theme.colors.border));
+  if (status != ER_UI_OK) return status;
+
+  float text_x = panel.x + 24.0f;
+  float y = panel.y + 44.0f;
+  status = er_ui_shell_push_ascii_text(scene, font, "This app runs from EdgeRun network storage.", text_x, y, theme.colors.text);
+  if (status != ER_UI_OK) return status;
+  y += 34.0f;
+  status = er_ui_shell_push_ascii_text(scene, font, "Your browser node retrieves signed package bytes,", text_x, y, theme.colors.muted);
+  if (status != ER_UI_OK) return status;
+  y += 28.0f;
+  status = er_ui_shell_push_ascii_text(scene, font, "verifies hashes, and runs locally.", text_x, y, theme.colors.muted);
+  if (status != ER_UI_OK) return status;
+  y += 28.0f;
+  status = er_ui_shell_push_ascii_text(scene, font, "Retrieval cost is deterministic from package size", text_x, y, theme.colors.muted);
+  if (status != ER_UI_OK) return status;
+  y += 28.0f;
+  status = er_ui_shell_push_ascii_text(scene, font, "and the active policy schedule.", text_x, y, theme.colors.muted);
+  if (status != ER_UI_OK) return status;
+  y += 28.0f;
+  status = er_ui_shell_push_ascii_text(scene, font, "Cache verified bytes locally to avoid repeated", text_x, y, theme.colors.muted);
+  if (status != ER_UI_OK) return status;
+  y += 28.0f;
+  status = er_ui_shell_push_ascii_text(scene, font, "retrieval payments.", text_x, y, theme.colors.muted);
+  if (status != ER_UI_OK) return status;
+
+  float button_y = panel.y + panel.h - 58.0f;
+  er_ui_bounds_t run_once = er_ui_bounds(panel.x + 24.0f, button_y, 112.0f, 38.0f);
+  er_ui_bounds_t verify_cache = er_ui_bounds(run_once.x + run_once.w + 10.0f, button_y, 154.0f, 38.0f);
+  er_ui_bounds_t cancel = er_ui_bounds(verify_cache.x + verify_cache.w + 10.0f, button_y, 92.0f, 38.0f);
+
+  status = er_ui_shell_emit_prompt_button(scene, font, run_once, ER_UI_NETWORK_APP_PROMPT_RUN_ONCE_ID, "Run once", theme.colors.row, theme.colors.text,
+                                          theme.radius.control);
+  if (status != ER_UI_OK) return status;
+  status = er_ui_shell_emit_prompt_button(scene, font, verify_cache, ER_UI_NETWORK_APP_PROMPT_VERIFY_CACHE_ID, "Verify & cache", theme.colors.accent,
+                                          theme.colors.accent_text, theme.radius.control);
+  if (status != ER_UI_OK) return status;
+  return er_ui_shell_emit_prompt_button(scene, font, cancel, ER_UI_NETWORK_APP_PROMPT_CANCEL_ID, "Cancel", theme.colors.row, theme.colors.text,
+                                        theme.radius.control);
+}
+
+static er_ui_status_t er_ui_shell_emit_scene_base(
   const er_ui_shell_state_t* state,
   er_ui_scene_t* scene,
   er_ui_bounds_t bounds,
@@ -243,4 +388,23 @@ er_ui_status_t er_ui_shell_emit_scene(
   status = er_ui_shell_emit_workspace(state, scene, bounds, theme);
   if (status != ER_UI_OK) return status;
   return er_ui_shell_emit_launcher(state, scene, bounds, theme);
+}
+
+er_ui_status_t er_ui_shell_emit_scene(
+  const er_ui_shell_state_t* state,
+  er_ui_scene_t* scene,
+  er_ui_bounds_t bounds,
+  er_ui_resolved_theme_t theme) {
+  return er_ui_shell_emit_scene_base(state, scene, bounds, theme);
+}
+
+er_ui_status_t er_ui_shell_emit_scene_with_font(
+  const er_ui_shell_state_t* state,
+  er_ui_scene_t* scene,
+  er_ui_bounds_t bounds,
+  er_ui_resolved_theme_t theme,
+  vr_font_face_t* font) {
+  er_ui_status_t status = er_ui_shell_emit_scene_base(state, scene, bounds, theme);
+  if (status != ER_UI_OK) return status;
+  return er_ui_shell_emit_network_app_prompt(state, scene, bounds, theme, font);
 }
