@@ -148,6 +148,23 @@ typedef struct {
 } EriSmellPackages;
 
 typedef struct {
+  char package[ERI_PACKAGE_MAX];
+  uint64_t nested_loops;
+  uint64_t calls_in_loops;
+  uint64_t divisions_in_loops;
+  uint64_t memory_ops_in_loops;
+  uint64_t allocations_in_loops;
+  uint64_t io_ops_in_loops;
+  uint64_t nonprod_findings;
+} EriCpuPackage;
+
+typedef struct {
+  EriCpuPackage* items;
+  size_t len;
+  size_t cap;
+} EriCpuPackages;
+
+typedef struct {
   uint64_t hash;
   char* path;
   uint32_t line;
@@ -847,6 +864,183 @@ static uint8_t eri_line_has_optimizer_ignore(const char* line) {
   return (uint8_t)(strstr(line, ERI_OPTIMIZER_IGNORE_TAG) != NULL);
 }
 
+static uint8_t eri_line_has_loop_start(const char* line) {
+  const char* trim = eri_ltrim(line);
+
+  if (strstr(trim, "for(") != NULL || strstr(trim, "for (") != NULL ||
+      strstr(trim, "while(") != NULL || strstr(trim, "while (") != NULL) {
+    return 1u;
+  }
+  return 0u;
+}
+
+static uint8_t eri_line_has_division_or_modulo(const char* line) {
+  size_t i;
+
+  for (i = 0u; line[i] != 0; ++i) {
+    if (line[i] == '%') {
+      return 1u;
+    }
+    if (line[i] == '/' && line[i + 1u] != '/' && line[i + 1u] != '*' &&
+        (i == 0u || line[i - 1u] != '*')) {
+      return 1u;
+    }
+  }
+  return 0u;
+}
+
+static uint8_t eri_line_has_any_token(const char* line, const char* const* tokens, size_t len) {
+  size_t i;
+
+  for (i = 0u; i < len; ++i) {
+    if (strstr(line, tokens[i]) != NULL) {
+      return 1u;
+    }
+  }
+  return 0u;
+}
+
+static uint8_t eri_line_has_memory_op(const char* line) {
+  static const char* tokens[] = {
+    "memcpy(", "memmove(", "memset(", "memcmp(", "er_mem_copy(", "er_mem_zero(",
+    "eri_zero(", "vr_memcpy(", "vr_memset("
+  };
+
+  return eri_line_has_any_token(line, tokens, sizeof(tokens) / sizeof(tokens[0]));
+}
+
+static uint8_t eri_line_has_allocator_op(const char* line) {
+  static const char* tokens[] = {
+    "malloc(", "calloc(", "realloc(", "free(", "eri_grow(", "_alloc(", "_realloc(", "alloc_"
+  };
+
+  return eri_line_has_any_token(line, tokens, sizeof(tokens) / sizeof(tokens[0]));
+}
+
+static uint8_t eri_line_has_io_op(const char* line) {
+  static const char* tokens[] = {
+    "er_mmio_", "er_pci_", "er_bus_in", "er_bus_out", "er_io_in", "er_io_out",
+    "LocateProtocol(", "HandleProtocol(", "OutputString(", "Poll(", "Transmit(",
+    "Configure(", "Read(", "Write("
+  };
+
+  return eri_line_has_any_token(line, tokens, sizeof(tokens) / sizeof(tokens[0]));
+}
+
+static uint8_t eri_line_has_expensive_domain_call(const char* line) {
+  static const char* tokens[] = {
+    "hash(", "compress", "raster", "shape", "measure", "render", "draw",
+    "scan", "decode", "parse", "layout", "paint", "blit", "map("
+  };
+
+  return eri_line_has_any_token(line, tokens, sizeof(tokens) / sizeof(tokens[0]));
+}
+
+static void eri_scan_cpu_costs(const EriVfsFile* file, EriFindings* findings) {
+  const uint8_t* bytes = file->bytes;
+  size_t len = file->len;
+  size_t pos = 0u;
+  uint32_t line_no = 1u;
+  int brace_depth = 0;
+  int loop_depth = 0;
+  int loop_brace_stack[128];
+  size_t loop_stack_len = 0u;
+
+  while (pos <= len) {
+    size_t start = pos;
+    size_t end;
+    size_t copy_len;
+    size_t i;
+    char snippet[256];
+    char structural_line[1024];
+    uint8_t has_loop_start;
+    int opens = 0;
+    int closes = 0;
+
+    while (pos < len && bytes[pos] != '\n') {
+      ++pos;
+    }
+    end = pos;
+    if (pos < len && bytes[pos] == '\n') {
+      ++pos;
+    } else if (start == len) {
+      break;
+    }
+    if (end > start && bytes[end - 1u] == '\r') {
+      --end;
+    }
+    copy_len = end - start;
+    if (copy_len >= sizeof(snippet)) {
+      copy_len = sizeof(snippet) - 1u;
+    }
+    memcpy(snippet, bytes + start, copy_len);
+    snippet[copy_len] = 0;
+    eri_copy_without_literals(bytes, start, end, structural_line, sizeof(structural_line));
+
+    while (loop_stack_len > 0u && brace_depth < loop_brace_stack[loop_stack_len - 1u]) {
+      --loop_stack_len;
+      if (loop_depth > 0) {
+        --loop_depth;
+      }
+    }
+
+    if (eri_line_has_optimizer_ignore(snippet) != 0u) {
+      for (i = 0u; structural_line[i] != 0; ++i) {
+        if (structural_line[i] == '{') {
+          ++brace_depth;
+        } else if (structural_line[i] == '}' && brace_depth > 0) {
+          --brace_depth;
+        }
+      }
+      ++line_no;
+      continue;
+    }
+
+    has_loop_start = eri_line_has_loop_start(structural_line);
+    if (has_loop_start != 0u && loop_depth > 0) {
+      eri_add_finding(findings, file->path, line_no, "cpu-nested-loop", "nested loop may multiply CPU work");
+    }
+    if (loop_depth > 0) {
+      if (eri_line_has_allocator_op(structural_line) != 0u) {
+        eri_add_finding(findings, file->path, line_no, "cpu-alloc-in-loop", "allocator/free operation inside loop");
+      }
+      if (eri_line_has_io_op(structural_line) != 0u) {
+        eri_add_finding(findings, file->path, line_no, "cpu-io-in-loop", "hardware/firmware I/O call inside loop");
+      }
+      if (eri_line_has_memory_op(structural_line) != 0u) {
+        eri_add_finding(findings, file->path, line_no, "cpu-memory-in-loop", "memory operation inside loop");
+      }
+      if (eri_line_has_division_or_modulo(structural_line) != 0u) {
+        eri_add_finding(findings, file->path, line_no, "cpu-div-in-loop", "division or modulo inside loop");
+      }
+      if (eri_line_has_expensive_domain_call(structural_line) != 0u) {
+        eri_add_finding(findings, file->path, line_no, "cpu-call-in-loop", "domain-heavy helper call inside loop");
+      }
+    }
+
+    for (i = 0u; structural_line[i] != 0; ++i) {
+      if (structural_line[i] == '{') {
+        ++opens;
+      } else if (structural_line[i] == '}') {
+        ++closes;
+      }
+    }
+    if (has_loop_start != 0u && opens > closes && loop_stack_len < sizeof(loop_brace_stack) / sizeof(loop_brace_stack[0])) {
+      loop_brace_stack[loop_stack_len] = brace_depth + opens - closes;
+      ++loop_stack_len;
+      ++loop_depth;
+    }
+    for (i = 0u; structural_line[i] != 0; ++i) {
+      if (structural_line[i] == '{') {
+        ++brace_depth;
+      } else if (structural_line[i] == '}' && brace_depth > 0) {
+        --brace_depth;
+      }
+    }
+    ++line_no;
+  }
+}
+
 static void eri_scan_line_metrics(const uint8_t* bytes, size_t len, EriTotals* file_totals,
                                   EriFindings* findings, const char* path) {
   size_t pos = 0u;
@@ -1212,6 +1406,31 @@ static EriSmellPackage* eri_smell_package_get(EriSmellPackages* packages, const 
   return &packages->items[packages->len - 1u];
 }
 
+static EriCpuPackage* eri_cpu_package_get(EriCpuPackages* packages, const char* path) {
+  char name[ERI_PACKAGE_MAX];
+  size_t i;
+  EriCpuPackage* grown;
+
+  eri_package_name(path, name, sizeof(name));
+  for (i = 0; i < packages->len; ++i) {
+    if (strcmp(packages->items[i].package, name) == 0) {
+      return &packages->items[i];
+    }
+  }
+  if (packages->len + 1u > packages->cap) {
+    grown = (EriCpuPackage*)eri_grow(packages->items, sizeof(packages->items[0]),
+                                     &packages->cap, packages->len + 1u);
+    if (grown == NULL) {
+      return NULL;
+    }
+    packages->items = grown;
+  }
+  memset(&packages->items[packages->len], 0, sizeof(packages->items[packages->len]));
+  snprintf(packages->items[packages->len].package, sizeof(packages->items[packages->len].package), "%s", name);
+  ++packages->len;
+  return &packages->items[packages->len - 1u];
+}
+
 static void eri_mark_test_signals(const EriVfs* vfs, EriSourceFiles* sources, const EriFunctions* funcs) {
   size_t i;
 
@@ -1487,11 +1706,31 @@ static uint64_t eri_smell_package_score(const EriSmellPackage* pkg) {
          pkg->gotos * 60u + pkg->magic_numbers * 12u + pkg->string_indexing * 20u + pkg->long_lines;
 }
 
+static uint64_t eri_cpu_package_score(const EriCpuPackage* pkg) {
+  return pkg->nested_loops * 90u + pkg->allocations_in_loops * 80u + pkg->io_ops_in_loops * 80u +
+         pkg->memory_ops_in_loops * 45u + pkg->divisions_in_loops * 35u + pkg->calls_in_loops * 30u;
+}
+
 static int eri_cmp_smell_pkg(const void* a, const void* b) {
   const EriSmellPackage* pa = (const EriSmellPackage*)a;
   const EriSmellPackage* pb = (const EriSmellPackage*)b;
   uint64_t sa = eri_smell_package_score(pa);
   uint64_t sb = eri_smell_package_score(pb);
+
+  if (sa < sb) {
+    return 1;
+  }
+  if (sa > sb) {
+    return -1;
+  }
+  return strcmp(pa->package, pb->package);
+}
+
+static int eri_cmp_cpu_pkg(const void* a, const void* b) {
+  const EriCpuPackage* pa = (const EriCpuPackage*)a;
+  const EriCpuPackage* pb = (const EriCpuPackage*)b;
+  uint64_t sa = eri_cpu_package_score(pa);
+  uint64_t sb = eri_cpu_package_score(pb);
 
   if (sa < sb) {
     return 1;
@@ -1623,10 +1862,13 @@ static uint32_t eri_finding_rank(const EriFinding* finding) {
   if (strcmp(finding->kind, "string-indexing") == 0) {
     return 5u;
   }
-  if (strcmp(finding->kind, "long-line") == 0) {
+  if (strncmp(finding->kind, "cpu-", 4u) == 0) {
     return 6u;
   }
-  return 7u;
+  if (strcmp(finding->kind, "long-line") == 0) {
+    return 7u;
+  }
+  return 8u;
 }
 
 static int eri_cmp_finding(const void* a, const void* b) {
@@ -1691,6 +1933,39 @@ static void eri_print_finding_kind_samples(const EriFindings* findings, const ch
   }
 }
 
+static uint8_t eri_finding_is_cpu_cost(const EriFinding* finding) {
+  return (uint8_t)(strncmp(finding->kind, "cpu-", 4u) == 0);
+}
+
+static uint64_t eri_count_cpu_findings(const EriFindings* findings) {
+  size_t i;
+  uint64_t count = 0u;
+
+  for (i = 0; i < findings->len; ++i) {
+    if (eri_finding_is_cpu_cost(&findings->items[i]) != 0u) {
+      ++count;
+    }
+  }
+  return count;
+}
+
+static void eri_print_cpu_finding_samples(const EriFindings* findings, size_t limit) {
+  size_t i;
+  size_t shown = 0u;
+
+  for (i = 0u; i < findings->len && shown < limit; ++i) {
+    if (eri_finding_is_cpu_cost(&findings->items[i]) == 0u) {
+      continue;
+    }
+    printf("    %s:%u [%s] %s\n", findings->items[i].path, findings->items[i].line,
+           findings->items[i].kind, findings->items[i].text);
+    ++shown;
+  }
+  if (shown == 0u) {
+    printf("    none\n");
+  }
+}
+
 static uint8_t eri_collect_smell_packages(const EriFindings* findings, EriSmellPackages* packages) {
   size_t i;
 
@@ -1721,6 +1996,41 @@ static uint8_t eri_collect_smell_packages(const EriFindings* findings, EriSmellP
     }
   }
   qsort(packages->items, packages->len, sizeof(packages->items[0]), eri_cmp_smell_pkg);
+  return 1;
+}
+
+static uint8_t eri_collect_cpu_packages(const EriFindings* findings, EriCpuPackages* packages) {
+  size_t i;
+
+  for (i = 0; i < findings->len; ++i) {
+    EriCpuPackage* pkg;
+
+    if (eri_finding_is_cpu_cost(&findings->items[i]) == 0u) {
+      continue;
+    }
+    pkg = eri_cpu_package_get(packages, findings->items[i].path);
+    if (pkg == NULL) {
+      return 0;
+    }
+    if (eri_is_nonprod_path(findings->items[i].path) != 0u) {
+      ++pkg->nonprod_findings;
+      continue;
+    }
+    if (strcmp(findings->items[i].kind, "cpu-nested-loop") == 0) {
+      ++pkg->nested_loops;
+    } else if (strcmp(findings->items[i].kind, "cpu-call-in-loop") == 0) {
+      ++pkg->calls_in_loops;
+    } else if (strcmp(findings->items[i].kind, "cpu-div-in-loop") == 0) {
+      ++pkg->divisions_in_loops;
+    } else if (strcmp(findings->items[i].kind, "cpu-memory-in-loop") == 0) {
+      ++pkg->memory_ops_in_loops;
+    } else if (strcmp(findings->items[i].kind, "cpu-alloc-in-loop") == 0) {
+      ++pkg->allocations_in_loops;
+    } else if (strcmp(findings->items[i].kind, "cpu-io-in-loop") == 0) {
+      ++pkg->io_ops_in_loops;
+    }
+  }
+  qsort(packages->items, packages->len, sizeof(packages->items[0]), eri_cmp_cpu_pkg);
   return 1;
 }
 
@@ -1785,7 +2095,7 @@ static void eri_print_size(uint64_t bytes) {
 static void eri_analyze_cleanup(EriPackages* packages, EriFunctions* funcs, EriFindings* findings,
                                 EriBinaries* bins, EriSourceFiles* sources,
                                 EriCoveragePackages* coverage_packages, EriSmellPackages* smell_packages,
-                                EriDuplicates* duplicates) {
+                                EriCpuPackages* cpu_packages, EriDuplicates* duplicates) {
   eri_sources_free(sources);
   eri_duplicates_free(duplicates);
   eri_functions_free(funcs);
@@ -1793,6 +2103,7 @@ static void eri_analyze_cleanup(EriPackages* packages, EriFunctions* funcs, EriF
   free(packages->items);
   free(coverage_packages->items);
   free(smell_packages->items);
+  free(cpu_packages->items);
   free(bins->items);
 }
 
@@ -1805,6 +2116,7 @@ static uint8_t eri_analyze(const EriVfs* vfs) {
   EriSourceFiles sources;
   EriCoveragePackages coverage_packages;
   EriSmellPackages smell_packages;
+  EriCpuPackages cpu_packages;
   EriDuplicates duplicates;
   size_t i;
 
@@ -1816,6 +2128,7 @@ static uint8_t eri_analyze(const EriVfs* vfs) {
   memset(&sources, 0, sizeof(sources));
   memset(&coverage_packages, 0, sizeof(coverage_packages));
   memset(&smell_packages, 0, sizeof(smell_packages));
+  memset(&cpu_packages, 0, sizeof(cpu_packages));
   memset(&duplicates, 0, sizeof(duplicates));
 
   for (i = 0; i < vfs->len; ++i) {
@@ -1833,9 +2146,11 @@ static uint8_t eri_analyze(const EriVfs* vfs) {
     memset(&file_totals, 0, sizeof(file_totals));
     eri_scan_line_metrics(file->bytes, file->len, &file_totals, &findings, file->path);
     eri_scan_functions(file, &funcs, &findings);
+    eri_scan_cpu_costs(file, &findings);
     if (eri_is_c_impl(file->path) &&
         eri_add_source_file(&sources, file->path, file_totals.code_lines, eri_is_test_path(file->path)) == 0u) {
-      eri_analyze_cleanup(&packages, &funcs, &findings, &bins, &sources, &coverage_packages, &smell_packages, &duplicates);
+      eri_analyze_cleanup(&packages, &funcs, &findings, &bins, &sources, &coverage_packages,
+                          &smell_packages, &cpu_packages, &duplicates);
       return 0;
     }
     if (file_totals.code_lines > ERI_LARGE_FILE_LINES) {
@@ -1853,7 +2168,8 @@ static uint8_t eri_analyze(const EriVfs* vfs) {
 
     package = eri_package_get(&packages, file->path);
     if (package == NULL) {
-      eri_analyze_cleanup(&packages, &funcs, &findings, &bins, &sources, &coverage_packages, &smell_packages, &duplicates);
+      eri_analyze_cleanup(&packages, &funcs, &findings, &bins, &sources, &coverage_packages,
+                          &smell_packages, &cpu_packages, &duplicates);
       return 0;
     }
     ++package->files;
@@ -1865,7 +2181,8 @@ static uint8_t eri_analyze(const EriVfs* vfs) {
   eri_mark_test_signals(vfs, &sources, &funcs);
   eri_measure_binary_release_sizes(&bins);
   if (eri_collect_duplicates(vfs, &duplicates) == 0u) {
-    eri_analyze_cleanup(&packages, &funcs, &findings, &bins, &sources, &coverage_packages, &smell_packages, &duplicates);
+    eri_analyze_cleanup(&packages, &funcs, &findings, &bins, &sources, &coverage_packages,
+                        &smell_packages, &cpu_packages, &duplicates);
     return 0;
   }
   for (i = 0; i < sources.len; ++i) {
@@ -1875,7 +2192,8 @@ static uint8_t eri_analyze(const EriVfs* vfs) {
     eri_package_name(sources.items[i].path, package_name, sizeof(package_name));
     coverage_package = eri_coverage_package_get(&coverage_packages, package_name);
     if (coverage_package == NULL) {
-      eri_analyze_cleanup(&packages, &funcs, &findings, &bins, &sources, &coverage_packages, &smell_packages, &duplicates);
+      eri_analyze_cleanup(&packages, &funcs, &findings, &bins, &sources, &coverage_packages,
+                          &smell_packages, &cpu_packages, &duplicates);
       return 0;
     }
     if (sources.items[i].is_test != 0u) {
@@ -1894,7 +2212,13 @@ static uint8_t eri_analyze(const EriVfs* vfs) {
   qsort(bins.items, bins.len, sizeof(bins.items[0]), eri_cmp_bin);
   qsort(findings.items, findings.len, sizeof(findings.items[0]), eri_cmp_finding);
   if (eri_collect_smell_packages(&findings, &smell_packages) == 0u) {
-    eri_analyze_cleanup(&packages, &funcs, &findings, &bins, &sources, &coverage_packages, &smell_packages, &duplicates);
+    eri_analyze_cleanup(&packages, &funcs, &findings, &bins, &sources, &coverage_packages,
+                        &smell_packages, &cpu_packages, &duplicates);
+    return 0;
+  }
+  if (eri_collect_cpu_packages(&findings, &cpu_packages) == 0u) {
+    eri_analyze_cleanup(&packages, &funcs, &findings, &bins, &sources, &coverage_packages,
+                        &smell_packages, &cpu_packages, &duplicates);
     return 0;
   }
 
@@ -1994,6 +2318,41 @@ static uint8_t eri_analyze(const EriVfs* vfs) {
   }
   printf("\n");
 
+  printf("CPU cost signals\n");
+  printf("  heuristic: loop-local review targets; use %s for intentional hot paths\n", ERI_OPTIMIZER_IGNORE_TAG);
+  if (eri_count_cpu_findings(&findings) == 0u) {
+    printf("  none from current heuristics\n");
+  } else {
+    printf("  summary: %llu nested loops, %llu calls in loops, %llu division/modulo in loops, %llu memory ops in loops, %llu allocations in loops, %llu I/O ops in loops\n",
+           (unsigned long long)eri_count_findings_kind(&findings, "cpu-nested-loop"),
+           (unsigned long long)eri_count_findings_kind(&findings, "cpu-call-in-loop"),
+           (unsigned long long)eri_count_findings_kind(&findings, "cpu-div-in-loop"),
+           (unsigned long long)eri_count_findings_kind(&findings, "cpu-memory-in-loop"),
+           (unsigned long long)eri_count_findings_kind(&findings, "cpu-alloc-in-loop"),
+           (unsigned long long)eri_count_findings_kind(&findings, "cpu-io-in-loop"));
+    printf("  package hotspots:\n");
+    for (i = 0; i < cpu_packages.len && i < ERI_TOP_LIMIT; ++i) {
+      const EriCpuPackage* pkg = &cpu_packages.items[i];
+
+      if (eri_cpu_package_score(pkg) == 0u) {
+        continue;
+      }
+      printf("    %-24s score %5llu  nested %3llu  calls %4llu  div/mod %3llu  mem %3llu  alloc %3llu  io %3llu  nonprod %4llu\n",
+             pkg->package,
+             (unsigned long long)eri_cpu_package_score(pkg),
+             (unsigned long long)pkg->nested_loops,
+             (unsigned long long)pkg->calls_in_loops,
+             (unsigned long long)pkg->divisions_in_loops,
+             (unsigned long long)pkg->memory_ops_in_loops,
+             (unsigned long long)pkg->allocations_in_loops,
+             (unsigned long long)pkg->io_ops_in_loops,
+             (unsigned long long)pkg->nonprod_findings);
+    }
+    printf("  focused CPU-cost candidates:\n");
+    eri_print_cpu_finding_samples(&findings, ERI_TOP_LIMIT);
+  }
+  printf("\n");
+
   printf("Code smells and review targets\n");
   if (findings.len == 0u) {
     printf("  none from current heuristics\n");
@@ -2030,6 +2389,9 @@ static uint8_t eri_analyze(const EriVfs* vfs) {
     printf("  focused string-indexing candidates:\n");
     eri_print_finding_kind_samples(&findings, "string-indexing", ERI_TOP_LIMIT);
     for (i = 0; i < findings.len && i < ERI_TOP_LIMIT * 2u; ++i) {
+      if (eri_finding_is_cpu_cost(&findings.items[i]) != 0u) {
+        continue;
+      }
       printf("  %s:%u [%s] %s\n", findings.items[i].path, findings.items[i].line,
              findings.items[i].kind, findings.items[i].text);
     }
@@ -2038,7 +2400,8 @@ static uint8_t eri_analyze(const EriVfs* vfs) {
     }
   }
 
-  eri_analyze_cleanup(&packages, &funcs, &findings, &bins, &sources, &coverage_packages, &smell_packages, &duplicates);
+  eri_analyze_cleanup(&packages, &funcs, &findings, &bins, &sources, &coverage_packages,
+                      &smell_packages, &cpu_packages, &duplicates);
   return 1;
 }
 
@@ -2047,7 +2410,7 @@ static void eri_usage(const char* argv0) {
   printf("\n");
   printf("Builds a virtual file snapshot, then reports C LOC, package size,\n");
   printf("binary artifacts, test signals, duplicate blocks, dead-code candidates,\n");
-  printf("and simple code smells.\n");
+  printf("CPU cost signals, and simple code smells.\n");
 }
 
 int main(int argc, char** argv) {
