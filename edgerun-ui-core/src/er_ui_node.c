@@ -415,6 +415,28 @@ er_ui_node_t* er_ui_node_set_padding(er_ui_node_t* node, float padding) {
   return node;
 }
 
+er_ui_node_t* er_ui_node_set_draggable(er_ui_node_t* node, uint32_t scope_id, uint32_t item_id, size_t index) {
+  if (!node) return node;
+  node->has_drag_source = true;
+  node->drag_source.scope_id = scope_id;
+  node->drag_source.item_id = item_id;
+  node->drag_source.index = index;
+  return node;
+}
+
+er_ui_node_t* er_ui_node_set_drop_target(er_ui_node_t* node, uint32_t scope_id, size_t index) {
+  if (!node) return node;
+  node->has_drop_target = true;
+  node->drop_target.scope_id = scope_id;
+  node->drop_target.index = index;
+  return node;
+}
+
+er_ui_node_t* er_ui_node_set_reorderable(er_ui_node_t* node, uint32_t scope_id, uint32_t item_id, size_t index) {
+  er_ui_node_set_draggable(node, scope_id, item_id, index);
+  return er_ui_node_set_drop_target(node, scope_id, index);
+}
+
 er_ui_status_t er_ui_node_add_child(er_ui_node_t* parent, er_ui_node_t* child) {
   if (!parent || !child) return ER_UI_ERR_INVALID_ARGUMENT;
   if (parent->child_count >= ER_UI_NODE_MAX_CHILDREN) return ER_UI_ERR_OOM;
@@ -426,6 +448,29 @@ static er_ui_bounds_t er_ui_node_resolve_bounds(const er_ui_node_t* node, er_ui_
   if (!node) return bounds;
   if (er_ui_bounds_valid(node->bounds)) return node->bounds;
   return bounds;
+}
+
+static er_ui_status_t er_ui_node_emit_interaction(const er_ui_node_t* node, er_ui_scene_t* scene, er_ui_bounds_t bounds) {
+  if (!node || !scene) return ER_UI_ERR_INVALID_ARGUMENT;
+  if (node->has_drag_source) {
+    er_ui_drag_source_t source = node->drag_source;
+    source.x = bounds.x;
+    source.y = bounds.y;
+    source.w = bounds.w;
+    source.h = bounds.h;
+    er_ui_status_t status = er_ui_scene_push_drag_source(scene, source);
+    if (status != ER_UI_OK) return status;
+  }
+  if (node->has_drop_target) {
+    er_ui_drop_target_t target = node->drop_target;
+    target.x = bounds.x;
+    target.y = bounds.y;
+    target.w = bounds.w;
+    target.h = bounds.h;
+    er_ui_status_t status = er_ui_scene_push_drop_target(scene, target);
+    if (status != ER_UI_OK) return status;
+  }
+  return ER_UI_OK;
 }
 
 static er_ui_status_t er_ui_node_render_children(
@@ -524,6 +569,8 @@ er_ui_status_t er_ui_node_render(
   er_ui_resolved_theme_t theme) {
   if (!node || !scene || !font || !er_ui_bounds_valid(bounds)) return ER_UI_ERR_INVALID_ARGUMENT;
   er_ui_bounds_t rect = er_ui_node_resolve_bounds(node, bounds);
+  er_ui_status_t interaction_status = er_ui_node_emit_interaction(node, scene, rect);
+  if (interaction_status != ER_UI_OK) return interaction_status;
   switch (node->kind) {
     case ER_UI_NODE_ROW:
       return er_ui_node_render_children(node, scene, font, rect, theme, true);

@@ -91,6 +91,10 @@ struct er_ui_node_t {
   er_ui_shadcn_button_size_t button_size;
   er_ui_shadcn_badge_variant_t badge_variant;
   er_ui_color4_t color;
+  bool has_drag_source;
+  er_ui_drag_source_t drag_source;
+  bool has_drop_target;
+  er_ui_drop_target_t drop_target;
   er_ui_node_t* children[ER_UI_NODE_MAX_CHILDREN];
   size_t child_count;
 };
@@ -148,6 +152,9 @@ er_ui_node_t er_ui_node_progress_ring(float value, er_ui_color4_t color);
 er_ui_node_t* er_ui_node_set_bounds(er_ui_node_t* node, er_ui_bounds_t bounds);
 er_ui_node_t* er_ui_node_set_gap(er_ui_node_t* node, float gap);
 er_ui_node_t* er_ui_node_set_padding(er_ui_node_t* node, float padding);
+er_ui_node_t* er_ui_node_set_draggable(er_ui_node_t* node, uint32_t scope_id, uint32_t item_id, size_t index);
+er_ui_node_t* er_ui_node_set_drop_target(er_ui_node_t* node, uint32_t scope_id, size_t index);
+er_ui_node_t* er_ui_node_set_reorderable(er_ui_node_t* node, uint32_t scope_id, uint32_t item_id, size_t index);
 er_ui_status_t er_ui_node_add_child(er_ui_node_t* parent, er_ui_node_t* child);
 er_ui_status_t er_ui_node_render(
   const er_ui_node_t* node,
