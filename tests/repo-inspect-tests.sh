@@ -43,6 +43,12 @@ static float local_clamp01(float value) {
   return value;
 }
 
+static float local_clamp(float value, float min_value, float max_value) {
+  if (value < min_value) return min_value;
+  if (value > max_value) return max_value;
+  return value;
+}
+
 int other(void) {
   static const char* const names[] = {"zero", "one", "two"};
   unsigned char dst[8];
