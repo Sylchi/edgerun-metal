@@ -54,6 +54,13 @@ typedef enum {
   ER_UI_SHADCN_BUTTON_SIZE_ICON
 } er_ui_shadcn_button_size_t;
 
+typedef enum {
+  ER_UI_SHADCN_BADGE_DEFAULT = 0,
+  ER_UI_SHADCN_BADGE_SECONDARY,
+  ER_UI_SHADCN_BADGE_DESTRUCTIVE,
+  ER_UI_SHADCN_BADGE_OUTLINE
+} er_ui_shadcn_badge_variant_t;
+
 typedef struct {
   const char* name;
   const char* slug;
@@ -195,6 +202,42 @@ er_ui_status_t er_ui_shadcn_slider_emit(
   const char* label,
   float value,
   uint32_t id);
+er_ui_status_t er_ui_shadcn_badge_emit(
+  er_ui_scene_t* scene,
+  vr_font_face_t* font,
+  er_ui_bounds_t bounds,
+  er_ui_resolved_theme_t theme,
+  const char* label,
+  er_ui_shadcn_badge_variant_t variant);
+er_ui_status_t er_ui_shadcn_field_emit(
+  er_ui_scene_t* scene,
+  vr_font_face_t* font,
+  er_ui_bounds_t bounds,
+  er_ui_resolved_theme_t theme,
+  const char* label,
+  const char* value,
+  uint32_t id,
+  bool text_area);
+er_ui_status_t er_ui_shadcn_checkbox_emit(
+  er_ui_scene_t* scene,
+  vr_font_face_t* font,
+  er_ui_bounds_t bounds,
+  er_ui_resolved_theme_t theme,
+  const char* label,
+  bool checked,
+  uint32_t id);
+er_ui_status_t er_ui_shadcn_progress_emit(er_ui_scene_t* scene, er_ui_bounds_t bounds, er_ui_resolved_theme_t theme, float value);
+er_ui_status_t er_ui_shadcn_switch_emit(er_ui_scene_t* scene, er_ui_bounds_t bounds, er_ui_resolved_theme_t theme, bool checked, uint32_t id);
+er_ui_status_t er_ui_shadcn_separator_emit(er_ui_scene_t* scene, er_ui_bounds_t bounds, er_ui_resolved_theme_t theme);
+er_ui_status_t er_ui_shadcn_tabs_emit(
+  er_ui_scene_t* scene,
+  vr_font_face_t* font,
+  er_ui_bounds_t bounds,
+  er_ui_resolved_theme_t theme,
+  const char* const* labels,
+  size_t label_count,
+  size_t selected,
+  uint32_t base_id);
 
 #ifdef __cplusplus
 }
