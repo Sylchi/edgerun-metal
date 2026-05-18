@@ -37,6 +37,8 @@ enum {
   ER_TPM_MMIO_PAGE_MASK = 0xfffu,
   ER_TPM_MMIO_PAGE_BASE_MIN = 0x1000u,
   ER_TPM_ACPI_TABLE_LENGTH_OFFSET = 4u,
+  ER_TPM_COMMAND_SIZE_OFFSET = 2u,
+  ER_TPM_COMMAND_CODE_OFFSET = 6u,
   ER_TPM_RESPONSE_CODE_OFFSET = 6u,
   ER_TPM_RESPONSE_SIZE_OFFSET = 2u,
   ER_TPM_TPM2B_LEN_BYTES = 2u,
@@ -48,6 +50,12 @@ enum {
   ER_TPM_EMPTY_SENSITIVE_CREATE_LEN = 4u,
   ER_TPM_EMPTY_SENSITIVE_CREATE_FIELD_LEN = 6u,
   ER_TPM_PUBLIC_AUTH_POLICY_OFFSET = 8u,
+  ER_TPM_PUBLIC_NAME_ALG_OFFSET = 2u,
+  ER_TPM_PUBLIC_SYMMETRIC_OFFSET = 0u,
+  ER_TPM_PUBLIC_SCHEME_OFFSET = 2u,
+  ER_TPM_PUBLIC_SCHEME_HASH_OFFSET = 4u,
+  ER_TPM_PUBLIC_CURVE_ID_OFFSET = 6u,
+  ER_TPM_PUBLIC_KDF_OFFSET = 8u,
   ER_TPM_P256_POINT_BYTES = 32u,
   ER_TPM_P256_PUBLIC_MIN_LEN = 24u,
   ER_TPM_TPMT_PUBLIC_FIXED_LEN = 10u,
@@ -58,6 +66,7 @@ enum {
   ER_TPM_SIGN_COMMAND_LEN = 73u,
   ER_TPM_FLUSH_CONTEXT_COMMAND_LEN = 14u,
   ER_TPM_SIGNATURE_MAX_COMPONENT_LEN = 32u,
+  ER_TPM_SIGNATURE_SCHEME_AND_HASH_LEN = 4u,
   ER_TPM_PW_AUTH_AREA_LEN = 9u,
   ER_TPM_START_METHOD_CRB = 6u,
   ER_TPM_START_METHOD_CRB_WITH_ACPI = 7u,
@@ -359,8 +368,8 @@ static UINT8 er_tpm_build_header(UINT16 tag, UINT32 size, UINT32 command_code,
     return 0;
   }
   er_tpm_put_be16(out_command, tag);
-  er_tpm_put_be32(out_command + 2u, size);
-  er_tpm_put_be32(out_command + 6u, command_code);
+  er_tpm_put_be32(out_command + ER_TPM_COMMAND_SIZE_OFFSET, size);
+  er_tpm_put_be32(out_command + ER_TPM_COMMAND_CODE_OFFSET, command_code);
   return 1;
 }
 
@@ -581,7 +590,7 @@ static UINT8 er_tpm_parse_p256_public_area(const UINT8* public_area,
   if (public_area == 0 || out_public_key == 0 ||
       public_area_len < ER_TPM_P256_PUBLIC_MIN_LEN ||
       er_tpm_get_be16(public_area) != ER_TPM_ALG_ECC ||
-      er_tpm_get_be16(public_area + 2u) != ER_TPM_ALG_SHA256) {
+      er_tpm_get_be16(public_area + ER_TPM_PUBLIC_NAME_ALG_OFFSET) != ER_TPM_ALG_SHA256) {
     return 0;
   }
 
@@ -592,11 +601,11 @@ static UINT8 er_tpm_parse_p256_public_area(const UINT8* public_area,
   }
 
   cursor = ER_TPM_TPMT_PUBLIC_FIXED_LEN + auth_policy_len;
-  if (er_tpm_get_be16(public_area + cursor) != ER_TPM_ALG_NULL ||
-      er_tpm_get_be16(public_area + cursor + 2u) != ER_TPM_ALG_ECDSA ||
-      er_tpm_get_be16(public_area + cursor + 4u) != ER_TPM_ALG_SHA256 ||
-      er_tpm_get_be16(public_area + cursor + 6u) != ER_TPM_ECC_NIST_P256 ||
-      er_tpm_get_be16(public_area + cursor + 8u) != ER_TPM_ALG_NULL) {
+  if (er_tpm_get_be16(public_area + cursor + ER_TPM_PUBLIC_SYMMETRIC_OFFSET) != ER_TPM_ALG_NULL ||
+      er_tpm_get_be16(public_area + cursor + ER_TPM_PUBLIC_SCHEME_OFFSET) != ER_TPM_ALG_ECDSA ||
+      er_tpm_get_be16(public_area + cursor + ER_TPM_PUBLIC_SCHEME_HASH_OFFSET) != ER_TPM_ALG_SHA256 ||
+      er_tpm_get_be16(public_area + cursor + ER_TPM_PUBLIC_CURVE_ID_OFFSET) != ER_TPM_ECC_NIST_P256 ||
+      er_tpm_get_be16(public_area + cursor + ER_TPM_PUBLIC_KDF_OFFSET) != ER_TPM_ALG_NULL) {
     return 0;
   }
   cursor += ER_TPM_ECC_PARAMS_LEN;
@@ -712,7 +721,7 @@ UINT8 er_tpm_parse_p256_sha256_signature_response(const UINT8* response,
       parameter_end = cursor + parameter_size;
     }
   }
-  if (cursor > parameter_end || parameter_end - cursor < 4u) {
+  if (cursor > parameter_end || parameter_end - cursor < ER_TPM_SIGNATURE_SCHEME_AND_HASH_LEN) {
     return 0;
   }
   scheme = er_tpm_get_be16(response + cursor);
