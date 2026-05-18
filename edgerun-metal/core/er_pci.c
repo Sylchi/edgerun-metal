@@ -262,6 +262,7 @@ ErPciBarInfo er_pci_decode_bar_at(const UINT32* bars, UINT32 index) {
   return er_pci_decode_bar(bars[index], high);
 }
 
+//@optimizer-ignore-function PCI BAR selection must walk the fixed six-register BAR layout and skip 64-bit pairs
 ErPciBarSelection er_pci_select_first_mmio_bar(const UINT32* bars) {
   ErPciBarSelection selection;
   UINT32 index = 0;
@@ -318,6 +319,7 @@ void er_pci_clear_snapshot(ErPciDeviceSnapshot* snapshot) {
   }
 }
 
+//@optimizer-ignore-function PCI snapshot must read each config-space BAR register from hardware
 UINT8 er_pci_read_snapshot(UINT32 bus, UINT32 dev, UINT32 func, ErPciDeviceSnapshot* out_snapshot) {
   UINT32 i;
 

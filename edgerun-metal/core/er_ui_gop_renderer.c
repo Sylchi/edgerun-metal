@@ -199,6 +199,7 @@ static UINT32 er_ui_gop_blend_pixel(ErUiGopPixelFormat format, UINT32 dst, er_ui
                                     ER_UI_GOP_COLOR_BYTE_MAX));
 }
 
+//@optimizer-ignore-function GOP rectangle raster must blend each covered framebuffer pixel
 static void er_ui_gop_fill_rect(ErUiGopSurface* surface, UINT32 x0, UINT32 y0, UINT32 x1, UINT32 y1,
                                 er_ui_color4_t color, ErUiGopRenderStats* stats) {
   UINT32 y;
@@ -240,6 +241,7 @@ static UINT8 er_ui_gop_point_in_round_rect(INT64 x, INT64 y, INT64 x0, INT64 y0,
   return (dx * dx + dy * dy <= radius * radius) ? 1u : 0u;
 }
 
+//@optimizer-ignore-function rounded GOP raster must test and blend each covered framebuffer pixel
 static void er_ui_gop_fill_round_rect(ErUiGopSurface* surface,
                                       UINT32 x0, UINT32 y0, UINT32 x1, UINT32 y1,
                                       UINT32 full_x0, UINT32 full_y0, UINT32 full_x1, UINT32 full_y1,
@@ -265,6 +267,7 @@ static void er_ui_gop_fill_round_rect(ErUiGopSurface* surface,
   er_ui_gop_stats_add_pixels(stats, pixels, color.a < 1.0f ? 1u : 0u, 0u);
 }
 
+//@optimizer-ignore-function rounded GOP border raster must test outer and inner bounds per covered framebuffer pixel
 static void er_ui_gop_border_round_rect(ErUiGopSurface* surface,
                                         UINT32 x0, UINT32 y0, UINT32 x1, UINT32 y1,
                                         UINT32 full_x0, UINT32 full_y0, UINT32 full_x1, UINT32 full_y1,
@@ -294,6 +297,7 @@ static void er_ui_gop_border_round_rect(ErUiGopSurface* surface,
   er_ui_gop_stats_add_pixels(stats, pixels, color.a < 1.0f ? 1u : 0u, 0u);
 }
 
+//@optimizer-ignore-function shadow rendering uses a fixed three-layer raster pass for deterministic GOP output
 static void er_ui_gop_shadow_round_rect(ErUiGopSurface* surface, const ErUiGopPixelRect* clip,
                                         er_ui_rect_t rect, ErUiGopRenderStats* stats) {
   UINT32 layer;
@@ -335,6 +339,7 @@ static er_ui_color4_t er_ui_gop_lerp_color(er_ui_color4_t a, er_ui_color4_t b, f
   return out;
 }
 
+//@optimizer-ignore-function GOP gradient raster must interpolate and blend each covered framebuffer pixel
 static void er_ui_gop_gradient_rect(ErUiGopSurface* surface, UINT32 x0, UINT32 y0, UINT32 x1, UINT32 y1,
                                     float source_x, float source_w,
                                     er_ui_color4_t from, er_ui_color4_t to, ErUiGopRenderStats* stats) {
