@@ -14,6 +14,7 @@ static const UINT8 g_app_schedule_domain[] = "edgerun:c:v1:app:schedule-slot";
 static const UINT8 g_app_launch_allocation_domain[] = "edgerun:c:v1:app:launch-allocation";
 static const UINT8 g_app_execution_jurisdiction_domain[] = "edgerun:c:v1:app:execution-jurisdiction";
 static const UINT8 g_app_ui_presentation_domain[] = "edgerun:c:v1:app:ui-presentation";
+static const UINT8 g_app_package_domain[] = "edgerun:c:v1:app:package";
 
 enum {
   ER_APP_BYTE_BITS = 8u,
@@ -22,6 +23,14 @@ enum {
   ER_APP_U64_FIELD_BYTES = 8u,
   ER_APP_BUDGET_U64_FIELD_COUNT = 6u,
   ER_APP_BUDGET_FIELD_BYTES = ER_APP_U16_FIELD_BYTES + (ER_APP_U64_FIELD_BYTES * ER_APP_BUDGET_U64_FIELD_COUNT),
+  ER_APP_PACKAGE_U64_FIELD_COUNT = 3u,
+  ER_APP_PACKAGE_FIELD_BYTES =
+      ER_APP_U16_FIELD_BYTES + (ER_APP_U64_FIELD_BYTES * ER_APP_PACKAGE_U64_FIELD_COUNT),
+  ER_APP_PACKAGE_SPAN_COUNT = 4u,
+  ER_APP_PACKAGE_FIELDS_SPAN = 0u,
+  ER_APP_PACKAGE_APP_OBJECT_SPAN = 1u,
+  ER_APP_PACKAGE_MANIFEST_OBJECT_SPAN = 2u,
+  ER_APP_PACKAGE_UI_ASSETS_OBJECT_SPAN = 3u,
   ER_APP_IDENTITY_HASH_SPAN_COUNT = 4u,
   ER_APP_IDENTITY_APP_OBJECT_SPAN = 0u,
   ER_APP_IDENTITY_MANIFEST_SPAN = 1u,
@@ -133,6 +142,13 @@ static UINT8 er_app_hash_equal(const ErHash* left, const ErHash* right) {
   return 1;
 }
 
+static UINT8 er_app_hash_nonzero(const ErHash* hash) {
+  if (hash == 0) {
+    return 0;
+  }
+  return er_mem_any_nonzero(hash->bytes, ER_HASH_LEN);
+}
+
 static UINT8 er_app_node_equal(const ErNodeId* left, const ErNodeId* right) {
   UINTN i;
 
@@ -147,6 +163,14 @@ static UINT8 er_app_node_equal(const ErNodeId* left, const ErNodeId* right) {
   return 1;
 }
 
+static UINT8 er_app_label_ref_valid(const ErVfsObjectLabelRef* object_ref) {
+  return (UINT8)(object_ref != 0 &&
+                 object_ref->abi_version == ER_VFS_ABI_VERSION &&
+                 object_ref->object_len != 0u &&
+                 er_vfs_label_valid(object_ref->label, object_ref->label_len) != 0u &&
+                 er_app_hash_nonzero(&object_ref->object_id) != 0u);
+}
+
 static UINT8 er_app_scene_budget_nonzero(er_ui_scene_budget_t budget) {
   return (UINT8)(budget.rects != 0u ||
                  budget.hits != 0u ||
@@ -155,6 +179,81 @@ static UINT8 er_app_scene_budget_nonzero(er_ui_scene_budget_t budget) {
                  budget.transitions != 0u ||
                  budget.icon_quads != 0u ||
                  budget.text_quads != 0u);
+}
+
+UINT8 er_app_prepare_package_manifest(const ErCryptoProvider* crypto,
+                                      const ErVfsObjectLabelRef* app_object,
+                                      const ErVfsObjectLabelRef* manifest_object,
+                                      const ErVfsObjectLabelRef* ui_assets_object,
+                                      ErAppPackageManifest* out_package) {
+  UINT8 fields[ER_APP_PACKAGE_FIELD_BYTES];
+  UINT8* cursor = fields;
+  ErHash zero_hash;
+  const ErHash* ui_assets_object_id = &zero_hash;
+  UINT64 ui_assets_object_len = 0u;
+  ErByteSpan spans[ER_APP_PACKAGE_SPAN_COUNT];
+
+  if (crypto == 0 || out_package == 0 ||
+      er_app_label_ref_valid(app_object) == 0u ||
+      er_app_label_ref_valid(manifest_object) == 0u) {
+    return 0;
+  }
+  if (ui_assets_object != 0) {
+    if (er_app_label_ref_valid(ui_assets_object) == 0u) {
+      return 0;
+    }
+    ui_assets_object_id = &ui_assets_object->object_id;
+    ui_assets_object_len = ui_assets_object->object_len;
+  }
+
+  er_mem_zero((UINT8*)&zero_hash, (UINTN)sizeof(zero_hash));
+  er_mem_zero((UINT8*)out_package, (UINTN)sizeof(*out_package));
+  out_package->abi_version = ER_APP_ABI_VERSION;
+  out_package->app_kind = ER_APP_KIND_USER;
+  out_package->app_object_id = app_object->object_id;
+  out_package->app_object_len = app_object->object_len;
+  out_package->manifest_object_id = manifest_object->object_id;
+  out_package->manifest_object_len = manifest_object->object_len;
+  out_package->ui_assets_object_id = *ui_assets_object_id;
+  out_package->ui_assets_object_len = ui_assets_object_len;
+
+  er_app_put_be16(cursor, ER_APP_KIND_USER);
+  cursor += ER_APP_U16_FIELD_BYTES;
+  er_app_put_budget_field(&cursor, out_package->app_object_len);
+  er_app_put_budget_field(&cursor, out_package->manifest_object_len);
+  er_app_put_budget_field(&cursor, out_package->ui_assets_object_len);
+
+  spans[ER_APP_PACKAGE_FIELDS_SPAN].bytes = fields;
+  spans[ER_APP_PACKAGE_FIELDS_SPAN].len = (UINTN)sizeof(fields);
+  spans[ER_APP_PACKAGE_APP_OBJECT_SPAN].bytes = out_package->app_object_id.bytes;
+  spans[ER_APP_PACKAGE_APP_OBJECT_SPAN].len = ER_HASH_LEN;
+  spans[ER_APP_PACKAGE_MANIFEST_OBJECT_SPAN].bytes = out_package->manifest_object_id.bytes;
+  spans[ER_APP_PACKAGE_MANIFEST_OBJECT_SPAN].len = ER_HASH_LEN;
+  spans[ER_APP_PACKAGE_UI_ASSETS_OBJECT_SPAN].bytes = out_package->ui_assets_object_id.bytes;
+  spans[ER_APP_PACKAGE_UI_ASSETS_OBJECT_SPAN].len = ER_HASH_LEN;
+  return er_crypto_hash(crypto, g_app_package_domain, (UINTN)(sizeof(g_app_package_domain) - 1u),
+                        spans, ER_APP_PACKAGE_SPAN_COUNT, &out_package->package_id);
+}
+
+UINT8 er_app_derive_identity_from_package(const ErCryptoProvider* crypto,
+                                          const ErAppPackageManifest* package,
+                                          const ErHash* admission_id,
+                                          const UINT8* instance_nonce,
+                                          UINTN instance_nonce_len,
+                                          ErAppIdentity* out_identity) {
+  if (package == 0 || package->abi_version != ER_APP_ABI_VERSION ||
+      package->app_kind != ER_APP_KIND_USER ||
+      er_app_hash_nonzero(&package->package_id) == 0u ||
+      er_app_hash_nonzero(&package->app_object_id) == 0u ||
+      er_app_hash_nonzero(&package->manifest_object_id) == 0u ||
+      package->app_object_len == 0u ||
+      package->manifest_object_len == 0u) {
+    return 0;
+  }
+  return er_app_derive_identity(crypto, &package->app_object_id,
+                                &package->manifest_object_id,
+                                admission_id, instance_nonce,
+                                instance_nonce_len, out_identity);
 }
 
 static UINT8 er_app_scene_count_fits(UINT64 actual, UINT64 limit) {

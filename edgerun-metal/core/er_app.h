@@ -7,6 +7,7 @@
  */
 
 #include "er_crypto.h"
+#include "er_vfs.h"
 #include "er_work.h"
 #include "er_ui_scene.h"
 
@@ -23,6 +24,18 @@
 #define ER_APP_BUDGET_STORAGE_BYTE 0x00000008u
 #define ER_APP_BUDGET_IPC_SEND 0x00000010u
 #define ER_APP_BUDGET_IPC_RECV 0x00000020u
+
+typedef struct {
+  UINT16 abi_version;
+  UINT16 app_kind;
+  ErHash package_id;
+  ErHash app_object_id;
+  UINT64 app_object_len;
+  ErHash manifest_object_id;
+  UINT64 manifest_object_len;
+  ErHash ui_assets_object_id;
+  UINT64 ui_assets_object_len;
+} ErAppPackageManifest;
 
 typedef struct {
   UINT16 abi_version;
@@ -141,6 +154,17 @@ UINT8 er_app_derive_identity(const ErCryptoProvider* crypto, const ErHash* app_o
                              const ErHash* manifest_hash, const ErHash* admission_id,
                              const UINT8* instance_nonce, UINTN instance_nonce_len,
                              ErAppIdentity* out_identity);
+UINT8 er_app_prepare_package_manifest(const ErCryptoProvider* crypto,
+                                      const ErVfsObjectLabelRef* app_object,
+                                      const ErVfsObjectLabelRef* manifest_object,
+                                      const ErVfsObjectLabelRef* ui_assets_object,
+                                      ErAppPackageManifest* out_package);
+UINT8 er_app_derive_identity_from_package(const ErCryptoProvider* crypto,
+                                          const ErAppPackageManifest* package,
+                                          const ErHash* admission_id,
+                                          const UINT8* instance_nonce,
+                                          UINTN instance_nonce_len,
+                                          ErAppIdentity* out_identity);
 UINT8 er_app_prepare_ipc_route_binding(const ErCryptoProvider* crypto, const ErAppIdentity* source_app,
                                        const ErNodeId* target_node_id, const ErHash* capability_id,
                                        const ErHash* route_hash, UINT64 sequence_base,

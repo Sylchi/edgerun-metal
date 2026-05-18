@@ -35,8 +35,10 @@ The goal of the metal work is to make user-authored Wasm apps feel native:
 beautiful, budgeted UI surfaces; explicit admissions; and relay-routed storage,
 rendering, input, and device work. The current boot UI proof can keep multiple
 Wasm UI apps resident in isolated preallocated runtime contexts and switch the
-active app context from shell selection. Replacing firmware boot-service
-networking with runtime-owned drivers is the immediate infrastructure step:
+active app context from shell selection. App package records now bind app code,
+manifests, and UI assets by content object identity instead of labels.
+Replacing firmware boot-service networking with runtime-owned drivers is the
+immediate infrastructure step:
 
 1. Discover PCI/MMIO devices from ACPI and PCI configuration space.
 2. Bring up VirtIO queues in freestanding C.
