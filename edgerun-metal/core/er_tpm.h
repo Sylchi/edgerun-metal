@@ -26,6 +26,7 @@
 
 #define ER_TPM_CC_STARTUP 0x00000144u
 #define ER_TPM_CC_CREATE_PRIMARY 0x00000131u
+#define ER_TPM_CC_GET_CAPABILITY 0x0000017Au
 #define ER_TPM_CC_GET_RANDOM 0x0000017Bu
 #define ER_TPM_CC_READ_PUBLIC 0x00000173u
 #define ER_TPM_CC_SIGN 0x0000015Du
@@ -41,6 +42,11 @@
 #define ER_TPM_ALG_ECDSA 0x0018u
 #define ER_TPM_ALG_ECC 0x0023u
 #define ER_TPM_ECC_NIST_P256 0x0003u
+
+#define ER_TPM_CAP_TPM_PROPERTIES 0x00000006u
+#define ER_TPM_PT_FIXED 0x00000100u
+#define ER_TPM_PT_NV_INDEX_MAX 0x00000117u
+#define ER_TPM_PT_NV_BUFFER_MAX 0x0000012Cu
 
 #define ER_TPM_P256_PUBLIC_KEY_LEN 64u
 
@@ -66,6 +72,14 @@ typedef struct {
   UINT8 public_key[ER_TPM_P256_PUBLIC_KEY_LEN];
 } ErTpmP256Primary;
 
+typedef struct {
+  UINT8 has_nv_index_max;
+  UINT8 has_nv_buffer_max;
+  UINT16 reserved;
+  UINT32 nv_index_max;
+  UINT32 nv_buffer_max;
+} ErTpmNvLimits;
+
 UINT8 er_tpm_parse_tpm2_table(UINT64 tpm2_address, ErTpm2Info* out_info);
 UINT8 er_tpm_find_tpm2_table(const ErAcpiTableList* tables, ErTpm2Info* out_info);
 UINT8 er_tpm2_info_is_crb(const ErTpm2Info* info);
@@ -86,6 +100,11 @@ UINT8 er_tpm_build_create_primary_p256_signing_command(UINT8* out_command,
 UINT8 er_tpm_build_get_random_command(UINT16 bytes_requested,
                                       UINT8* out_command, UINT32 command_capacity,
                                       UINT32* out_command_len);
+UINT8 er_tpm_build_get_capability_command(UINT32 capability, UINT32 property,
+                                          UINT32 property_count,
+                                          UINT8* out_command,
+                                          UINT32 command_capacity,
+                                          UINT32* out_command_len);
 UINT8 er_tpm_build_read_public_command(UINT32 handle,
                                        UINT8* out_command, UINT32 command_capacity,
                                        UINT32* out_command_len);
@@ -103,6 +122,9 @@ UINT8 er_tpm_response_success(const UINT8* response, UINT32 response_len);
 UINT8 er_tpm_parse_get_random_response(const UINT8* response, UINT32 response_len,
                                        UINT8* out_random, UINT32 random_capacity,
                                        UINT32* out_random_len);
+UINT8 er_tpm_parse_nv_storage_limits_response(const UINT8* response,
+                                              UINT32 response_len,
+                                              ErTpmNvLimits* out_limits);
 UINT8 er_tpm_parse_create_primary_p256_response(const UINT8* response,
                                                 UINT32 response_len,
                                                 ErTpmP256Primary* out_primary);

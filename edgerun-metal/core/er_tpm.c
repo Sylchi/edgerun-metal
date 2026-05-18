@@ -43,6 +43,8 @@ enum {
   ER_TPM_RESPONSE_SIZE_OFFSET = 2u,
   ER_TPM_TPM2B_LEN_BYTES = 2u,
   ER_TPM_RANDOM_BYTES_OFFSET = 12u,
+  ER_TPM_CAPABILITY_RESPONSE_BODY_OFFSET = 11u,
+  ER_TPM_TAGGED_PROPERTY_LEN = 8u,
   ER_TPM_AUTH_VALUE_LEN = 9u,
   ER_TPM_CREATE_PRIMARY_COMMAND_LEN = 65u,
   ER_TPM_CREATE_PRIMARY_PUBLIC_LEN = 24u,
@@ -61,6 +63,7 @@ enum {
   ER_TPM_TPMT_PUBLIC_FIXED_LEN = 10u,
   ER_TPM_ECC_PARAMS_LEN = 10u,
   ER_TPM_STARTUP_COMMAND_LEN = 12u,
+  ER_TPM_GET_CAPABILITY_COMMAND_LEN = 22u,
   ER_TPM_GET_RANDOM_COMMAND_LEN = 12u,
   ER_TPM_READ_PUBLIC_COMMAND_LEN = 14u,
   ER_TPM_SIGN_COMMAND_LEN = 73u,
@@ -469,6 +472,32 @@ UINT8 er_tpm_build_get_random_command(UINT16 bytes_requested,
   return 1;
 }
 
+UINT8 er_tpm_build_get_capability_command(UINT32 capability, UINT32 property,
+                                          UINT32 property_count,
+                                          UINT8* out_command,
+                                          UINT32 command_capacity,
+                                          UINT32* out_command_len) {
+  UINT32 offset;
+
+  if (out_command_len == 0 || property_count == 0u ||
+      er_tpm_build_header(ER_TPM_ST_NO_SESSIONS, ER_TPM_GET_CAPABILITY_COMMAND_LEN,
+                          ER_TPM_CC_GET_CAPABILITY, out_command, command_capacity) == 0u) {
+    return 0;
+  }
+  offset = ER_TPM_HEADER_LEN;
+  er_tpm_put_be32(out_command + offset, capability);
+  offset += ER_TPM_U32_BYTES;
+  er_tpm_put_be32(out_command + offset, property);
+  offset += ER_TPM_U32_BYTES;
+  er_tpm_put_be32(out_command + offset, property_count);
+  offset += ER_TPM_U32_BYTES;
+  if (offset != ER_TPM_GET_CAPABILITY_COMMAND_LEN) {
+    return 0;
+  }
+  *out_command_len = offset;
+  return 1;
+}
+
 UINT8 er_tpm_build_read_public_command(UINT32 handle,
                                        UINT8* out_command, UINT32 command_capacity,
                                        UINT32* out_command_len) {
@@ -571,6 +600,64 @@ UINT8 er_tpm_parse_get_random_response(const UINT8* response, UINT32 response_le
   }
   er_mem_copy(out_random, response + ER_TPM_RANDOM_BYTES_OFFSET, random_len);
   *out_random_len = random_len;
+  return 1;
+}
+
+UINT8 er_tpm_parse_nv_storage_limits_response(const UINT8* response,
+                                              UINT32 response_len,
+                                              ErTpmNvLimits* out_limits) {
+  UINT32 cursor;
+  UINT32 capability;
+  UINT32 property_count;
+  UINT32 property_index;
+  UINT32 property;
+  UINT32 value;
+
+  if (response == 0 || out_limits == 0 ||
+      er_tpm_response_success(response, response_len) == 0u ||
+      response_len < ER_TPM_CAPABILITY_RESPONSE_BODY_OFFSET + ER_TPM_U32_BYTES + ER_TPM_U32_BYTES) {
+    return 0;
+  }
+
+  er_mem_zero((UINT8*)out_limits, (UINTN)sizeof(*out_limits));
+  cursor = ER_TPM_HEADER_LEN;
+  cursor += 1u;
+  capability = er_tpm_get_be32(response + cursor);
+  cursor += ER_TPM_U32_BYTES;
+  if (capability != ER_TPM_CAP_TPM_PROPERTIES) {
+    return 0;
+  }
+  property_count = er_tpm_get_be32(response + cursor);
+  cursor += ER_TPM_U32_BYTES;
+  if (property_count > (response_len - cursor) / ER_TPM_TAGGED_PROPERTY_LEN) {
+    return 0;
+  }
+
+  for (property_index = 0u; property_index < property_count; ++property_index) {
+    property = er_tpm_get_be32(response + cursor);
+    cursor += ER_TPM_U32_BYTES;
+    value = er_tpm_get_be32(response + cursor);
+    cursor += ER_TPM_U32_BYTES;
+
+    switch (property) {
+      case ER_TPM_PT_NV_INDEX_MAX:
+        out_limits->has_nv_index_max = 1u;
+        out_limits->nv_index_max = value;
+        break;
+      case ER_TPM_PT_NV_BUFFER_MAX:
+        out_limits->has_nv_buffer_max = 1u;
+        out_limits->nv_buffer_max = value;
+        break;
+      default:
+        break;
+    }
+  }
+
+  if (cursor != response_len ||
+      out_limits->has_nv_index_max == 0u ||
+      out_limits->has_nv_buffer_max == 0u) {
+    return 0;
+  }
   return 1;
 }
 

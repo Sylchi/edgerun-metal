@@ -424,6 +424,7 @@ static void test_tpm_crb_direct_transport(void) {
   ErTpm2Info info;
   ErTpmCrbTransport transport;
   ErTpmP256Primary primary;
+  ErTpmNvLimits limits;
   UINT8 command[128];
   UINT8 response[256];
   UINT8 random[32];
@@ -527,6 +528,37 @@ static void test_tpm_crb_direct_transport(void) {
   check_uint64("tpm random len", random_len, 4u);
   check_uint64("tpm random byte0", random[0], 0xaau);
   check_uint64("tpm random byte3", random[3], 0xddu);
+
+  check_int64("tpm get capability command",
+              er_tpm_build_get_capability_command(ER_TPM_CAP_TPM_PROPERTIES,
+                                                  ER_TPM_PT_NV_INDEX_MAX, 2u,
+                                                  command, (UINT32)sizeof(command),
+                                                  &command_len),
+              1);
+  check_uint64("tpm get capability len", command_len, 22u);
+  check_uint64("tpm get capability code", command[9], 0x7au);
+  check_uint64("tpm get capability property", command[17], 0x17u);
+
+  er_mem_zero(response_buffer, (UINTN)sizeof(response_buffer));
+  response_buffer[0] = 0x80u;
+  response_buffer[1] = 0x01u;
+  test_put_be32(response_buffer + 2u, 35u);
+  test_put_be32(response_buffer + 6u, ER_TPM_RC_SUCCESS);
+  response_buffer[10] = 0u;
+  test_put_be32(response_buffer + 11u, ER_TPM_CAP_TPM_PROPERTIES);
+  test_put_be32(response_buffer + 15u, 2u);
+  test_put_be32(response_buffer + 19u, ER_TPM_PT_NV_INDEX_MAX);
+  test_put_be32(response_buffer + 23u, 1600u);
+  test_put_be32(response_buffer + 27u, ER_TPM_PT_NV_BUFFER_MAX);
+  test_put_be32(response_buffer + 31u, 1024u);
+  check_int64("tpm parse nv limits",
+              er_tpm_parse_nv_storage_limits_response(response_buffer, 35u,
+                                                      &limits),
+              1);
+  check_uint64("tpm nv index max present", limits.has_nv_index_max, 1u);
+  check_uint64("tpm nv index max", limits.nv_index_max, 1600u);
+  check_uint64("tpm nv buffer max present", limits.has_nv_buffer_max, 1u);
+  check_uint64("tpm nv buffer max", limits.nv_buffer_max, 1024u);
 
   check_int64("tpm create primary command",
               er_tpm_build_create_primary_p256_signing_command(
