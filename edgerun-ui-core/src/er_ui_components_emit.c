@@ -258,7 +258,9 @@ er_ui_status_t er_ui_component_checkbox_emit(
                                     theme.shadcn.colors.primary_foreground);
     if (status != ER_UI_OK) return status;
   }
-  return er_ui_component_push_ascii_text(scene, font, label, bounds.x + 28.0f, bounds.y + bounds.h * 0.62f, theme.shadcn.colors.foreground);
+  return er_ui_component_push_ascii_text_clipped(scene, font, label, bounds.x + 28.0f, bounds.y + bounds.h * 0.62f,
+                                                 bounds.w - 28.0f - ER_UI_COMPONENT_ROW_TEXT_PAD_RIGHT,
+                                                 theme.shadcn.colors.foreground);
 }
 
 er_ui_status_t er_ui_component_progress_emit(er_ui_scene_t* scene, er_ui_bounds_t bounds, er_ui_resolved_theme_t theme, float value) {
@@ -312,8 +314,9 @@ er_ui_status_t er_ui_component_tabs_emit(
                                                            theme.shadcn.colors.card));
       if (status != ER_UI_OK) return status;
     }
-    status = er_ui_component_push_ascii_text(scene, font, label, tab.x + 12.0f, tab.y + tab.h * 0.62f,
-                                             i == selected ? theme.shadcn.colors.foreground : theme.shadcn.colors.muted_foreground);
+    status = er_ui_component_push_ascii_text_clipped(scene, font, label, tab.x + 12.0f, tab.y + tab.h * 0.62f,
+                                                     tab.w - 24.0f,
+                                                     i == selected ? theme.shadcn.colors.foreground : theme.shadcn.colors.muted_foreground);
     if (status != ER_UI_OK) return status;
     label_cursor++;
   }
@@ -353,7 +356,9 @@ er_ui_status_t er_ui_component_radio_emit(
     status = er_ui_scene_push_rect(scene, er_ui_rect_fill(dot.x + 5.0f, dot.y + 5.0f, 8.0f, 8.0f, 4.0f, theme.colors.accent));
     if (status != ER_UI_OK) return status;
   }
-  return er_ui_component_push_ascii_text(scene, font, label, bounds.x + 28.0f, bounds.y + bounds.h * 0.62f, theme.colors.text);
+  return er_ui_component_push_ascii_text_clipped(scene, font, label, bounds.x + 28.0f, bounds.y + bounds.h * 0.62f,
+                                                 bounds.w - 28.0f - ER_UI_COMPONENT_ROW_TEXT_PAD_RIGHT,
+                                                 theme.colors.text);
 }
 
 //@optimizer-ignore-function table rendering must visit each visible row and column cell
@@ -373,7 +378,8 @@ er_ui_status_t er_ui_component_table_emit(
   float col_w = (bounds.w - 24.0f) / (float)header_count;
   float y = bounds.y + 24.0f;
   for (size_t h = 0u; h < header_count; ++h) {
-    status = er_ui_component_push_ascii_text(scene, font, headers[h], bounds.x + 12.0f + col_w * (float)h, y, theme.colors.muted);
+    status = er_ui_component_push_ascii_text_clipped(scene, font, headers[h], bounds.x + 12.0f + col_w * (float)h, y,
+                                                     col_w - ER_UI_COMPONENT_ROW_TEXT_PAD_RIGHT, theme.colors.muted);
     if (status != ER_UI_OK) return status;
   }
   status = er_ui_component_separator_emit(scene, er_ui_bounds(bounds.x + 10.0f, bounds.y + 34.0f, bounds.w - 20.0f, 1.0f), theme);
@@ -384,7 +390,8 @@ er_ui_status_t er_ui_component_table_emit(
     if (status != ER_UI_OK) return status;
     for (size_t h = 0u; h < header_count; ++h) {
       const char* value = cells[r * header_count + h];
-      status = er_ui_component_push_ascii_text(scene, font, value, bounds.x + 12.0f + col_w * (float)h, row.y + 18.0f, theme.colors.text);
+      status = er_ui_component_push_ascii_text_clipped(scene, font, value, bounds.x + 12.0f + col_w * (float)h, row.y + 18.0f,
+                                                       col_w - ER_UI_COMPONENT_ROW_TEXT_PAD_RIGHT, theme.colors.text);
       if (status != ER_UI_OK) return status;
     }
   }
@@ -803,11 +810,14 @@ er_ui_status_t er_ui_component_receipt_row_emit(
   if (status != ER_UI_OK) return status;
   status = er_ui_component_icon_tile(scene, er_ui_bounds(bounds.x + 12.0f, bounds.y + 15.0f, 28.0f, 28.0f), theme, ER_UI_ICON_WALLET, theme.colors.success);
   if (status != ER_UI_OK) return status;
-  status = er_ui_component_push_ascii_text(scene, font, label, bounds.x + 48.0f, bounds.y + 34.0f, theme.colors.text);
+  status = er_ui_component_push_ascii_text_clipped(scene, font, label, bounds.x + 48.0f, bounds.y + 34.0f,
+                                                   bounds.w - 210.0f, theme.colors.text);
   if (status != ER_UI_OK) return status;
-  status = er_ui_component_push_ascii_text(scene, font, status_text, bounds.x + bounds.w - 150.0f, bounds.y + 34.0f, theme.colors.muted);
+  status = er_ui_component_push_ascii_text_clipped(scene, font, status_text, bounds.x + bounds.w - 150.0f, bounds.y + 34.0f,
+                                                   66.0f, theme.colors.muted);
   if (status != ER_UI_OK) return status;
-  status = er_ui_component_push_ascii_text(scene, font, amount, bounds.x + bounds.w - 76.0f, bounds.y + 34.0f, theme.colors.success);
+  status = er_ui_component_push_ascii_text_clipped(scene, font, amount, bounds.x + bounds.w - 76.0f, bounds.y + 34.0f,
+                                                   76.0f, theme.colors.success);
   if (status != ER_UI_OK) return status;
   return er_ui_component_bottom_separator_emit(scene, bounds, theme);
 }
@@ -876,9 +886,11 @@ er_ui_status_t er_ui_component_transaction_row_emit(
   er_ui_status_t status = er_ui_component_row_body_emit(scene, font, bounds, theme, ER_UI_HIT_TRANSACTION_ROW, id, true, title, subtitle, 0.0f,
                                                      theme.colors.panel, 22.0f, 44.0f);
   if (status != ER_UI_OK) return status;
-  status = er_ui_component_push_ascii_text(scene, font, date, bounds.x + bounds.w - 170.0f, bounds.y + 22.0f, theme.colors.muted);
+  status = er_ui_component_push_ascii_text_clipped(scene, font, date, bounds.x + bounds.w - 170.0f, bounds.y + 22.0f,
+                                                   78.0f, theme.colors.muted);
   if (status != ER_UI_OK) return status;
-  status = er_ui_component_push_ascii_text(scene, font, amount, bounds.x + bounds.w - 86.0f, bounds.y + 34.0f, positive ? theme.colors.success : theme.colors.danger);
+  status = er_ui_component_push_ascii_text_clipped(scene, font, amount, bounds.x + bounds.w - 86.0f, bounds.y + 34.0f,
+                                                   86.0f, positive ? theme.colors.success : theme.colors.danger);
   if (status != ER_UI_OK) return status;
   return er_ui_component_bottom_separator_emit(scene, bounds, theme);
 }
@@ -920,7 +932,8 @@ er_ui_status_t er_ui_component_control_row_emit(
                                                      theme.colors.panel, 22.0f, 44.0f);
   if (status != ER_UI_OK) return status;
   if (accessory[0]) {
-    status = er_ui_component_push_ascii_text(scene, font, accessory, bounds.x + bounds.w - 116.0f, bounds.y + 34.0f, theme.colors.muted);
+    status = er_ui_component_push_ascii_text_clipped(scene, font, accessory, bounds.x + bounds.w - 116.0f, bounds.y + 34.0f,
+                                                     104.0f, theme.colors.muted);
     if (status != ER_UI_OK) return status;
   }
   return er_ui_component_bottom_separator_emit(scene, bounds, theme);

@@ -159,8 +159,12 @@ er_ui_status_t er_ui_component_row_body_emit(
   if (!scene || !font || !title || !detail || !er_ui_bounds_valid(bounds)) return ER_UI_ERR_INVALID_ARGUMENT;
   er_ui_status_t status = er_ui_component_row_frame_emit(scene, bounds, hit_kind, id, has_hit, radius, fill);
   if (status != ER_UI_OK) return status;
-  return er_ui_component_push_text_pair(scene, font, title, bounds.x + 12.0f, bounds.y + title_y, theme.colors.text,
-                                        detail, bounds.x + 12.0f, bounds.y + detail_y, theme.colors.muted, false);
+  float text_x = bounds.x + ER_UI_COMPONENT_ROW_TEXT_PAD_RIGHT;
+  float text_w = bounds.w - ER_UI_COMPONENT_ROW_TEXT_PAD_RIGHT * 2.0f;
+  status = er_ui_component_push_ascii_text_clipped(scene, font, title, text_x, bounds.y + title_y, text_w, theme.colors.text);
+  if (status != ER_UI_OK) return status;
+  if (!detail[0]) return ER_UI_OK;
+  return er_ui_component_push_ascii_text_clipped(scene, font, detail, text_x, bounds.y + detail_y, text_w, theme.colors.muted);
 }
 
 
@@ -215,8 +219,11 @@ er_ui_status_t er_ui_component_icon_text_row_emit(
   }
   status = er_ui_component_icon_tile(scene, row->icon_bounds, theme, row->icon, row->icon_color);
   if (status != ER_UI_OK) return status;
-  status = er_ui_component_push_text_pair(scene, font, title, bounds.x + row->text_x, bounds.y + row->title_y, theme.colors.text,
-                                          detail, bounds.x + row->text_x, bounds.y + row->detail_y, theme.colors.muted, true);
+  float text_x = bounds.x + row->text_x;
+  float text_w = bounds.x + bounds.w - text_x - ER_UI_COMPONENT_ROW_TEXT_PAD_RIGHT;
+  status = er_ui_component_push_ascii_text_clipped(scene, font, title, text_x, bounds.y + row->title_y, text_w, theme.colors.text);
+  if (status != ER_UI_OK) return status;
+  status = er_ui_component_push_ascii_text_clipped(scene, font, detail, text_x, bounds.y + row->detail_y, text_w, theme.colors.muted);
   if (status != ER_UI_OK) return status;
   if (!row->separator) return ER_UI_OK;
   return er_ui_component_separator_emit(scene, er_ui_bounds(bounds.x, bounds.y + bounds.h - ER_UI_COMPONENT_ROW_SEPARATOR_H,
