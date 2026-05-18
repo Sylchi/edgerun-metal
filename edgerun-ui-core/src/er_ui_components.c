@@ -3600,63 +3600,7 @@ er_ui_status_t er_ui_network_app_prompt_emit(
 }
 
 bool er_ui_component_scene_preview_available(const char* slug) {
-  return er_ui_component_streq(slug, "accordion") ||
-         er_ui_component_streq(slug, "alert") ||
-         er_ui_component_streq(slug, "alert-dialog") ||
-         er_ui_component_streq(slug, "aspect-ratio") ||
-         er_ui_component_streq(slug, "avatar") ||
-         er_ui_component_streq(slug, "badge") ||
-         er_ui_component_streq(slug, "breadcrumb") ||
-         er_ui_component_streq(slug, "button") ||
-         er_ui_component_streq(slug, "button-group") ||
-         er_ui_component_streq(slug, "calendar") ||
-         er_ui_component_streq(slug, "card") ||
-         er_ui_component_streq(slug, "carousel") ||
-         er_ui_component_streq(slug, "chart") ||
-         er_ui_component_streq(slug, "checkbox") ||
-         er_ui_component_streq(slug, "collapsible") ||
-         er_ui_component_streq(slug, "combobox") ||
-         er_ui_component_streq(slug, "command") ||
-         er_ui_component_streq(slug, "context-menu") ||
-         er_ui_component_streq(slug, "data-table") ||
-         er_ui_component_streq(slug, "date-picker") ||
-         er_ui_component_streq(slug, "dialog") ||
-         er_ui_component_streq(slug, "direction") ||
-         er_ui_component_streq(slug, "drawer") ||
-         er_ui_component_streq(slug, "dropdown-menu") ||
-         er_ui_component_streq(slug, "empty") ||
-         er_ui_component_streq(slug, "field") ||
-         er_ui_component_streq(slug, "hover-card") ||
-         er_ui_component_streq(slug, "input") ||
-         er_ui_component_streq(slug, "input-group") ||
-         er_ui_component_streq(slug, "input-otp") ||
-         er_ui_component_streq(slug, "item") ||
-         er_ui_component_streq(slug, "kbd") ||
-         er_ui_component_streq(slug, "label") ||
-         er_ui_component_streq(slug, "menubar") ||
-         er_ui_component_streq(slug, "native-select") ||
-         er_ui_component_streq(slug, "navigation-menu") ||
-         er_ui_component_streq(slug, "pagination") ||
-         er_ui_component_streq(slug, "popover") ||
-         er_ui_component_streq(slug, "progress") ||
-         er_ui_component_streq(slug, "radio-group") ||
-         er_ui_component_streq(slug, "resizable") ||
-         er_ui_component_streq(slug, "scroll-area") ||
-         er_ui_component_streq(slug, "select") ||
-         er_ui_component_streq(slug, "separator") ||
-         er_ui_component_streq(slug, "sheet") ||
-         er_ui_component_streq(slug, "sidebar") ||
-         er_ui_component_streq(slug, "skeleton") ||
-         er_ui_component_streq(slug, "slider") ||
-         er_ui_component_streq(slug, "sonner") ||
-         er_ui_component_streq(slug, "switch") ||
-         er_ui_component_streq(slug, "table") ||
-         er_ui_component_streq(slug, "tabs") ||
-         er_ui_component_streq(slug, "textarea") ||
-         er_ui_component_streq(slug, "toast") ||
-         er_ui_component_streq(slug, "toggle") ||
-         er_ui_component_streq(slug, "toggle-group") ||
-         er_ui_component_streq(slug, "tooltip");
+  return er_ui_component_find_by_slug(slug) != 0;
 }
 
 er_ui_status_t er_ui_component_scene_preview_emit(
@@ -4149,8 +4093,7 @@ er_ui_status_t er_ui_component_showcase_emit(
       status = er_ui_scene_push_rect(scene, er_ui_rect_fill(row.x, row.y, row.w, row.h, theme.radius.control, er_ui_color_with_alpha(theme.colors.active, 0.54f)));
       if (status != ER_UI_OK) return status;
     }
-    status = er_ui_component_push_ascii_text(scene, font, spec->name, row.x + 8.0f, row.y + 16.0f,
-                                          er_ui_component_scene_preview_available(spec->slug) ? theme.colors.text : theme.colors.muted);
+    status = er_ui_component_push_ascii_text(scene, font, spec->name, row.x + 8.0f, row.y + 16.0f, theme.colors.text);
     if (status != ER_UI_OK) return status;
   }
 
@@ -4161,8 +4104,5 @@ er_ui_status_t er_ui_component_showcase_emit(
   status = er_ui_component_push_ascii_text(scene, font, er_ui_component_category_label(selected->category), preview.x + 18.0f, preview.y + 54.0f, theme.colors.muted);
   if (status != ER_UI_OK) return status;
   er_ui_bounds_t body = er_ui_bounds(preview.x + 18.0f, preview.y + 76.0f, preview.w - 36.0f, preview.h - 94.0f);
-  if (er_ui_component_scene_preview_available(selected->slug)) {
-    return er_ui_component_scene_preview_emit(scene, font, body, theme, selected->slug, state);
-  }
-  return er_ui_component_push_ascii_text(scene, font, "Cataloged; native C scene preview not ported yet.", body.x, body.y + 18.0f, theme.colors.muted);
+  return er_ui_component_scene_preview_emit(scene, font, body, theme, selected->slug, state);
 }
