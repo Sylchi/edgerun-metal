@@ -49,6 +49,7 @@
 #define ER_UI_TEST_NODE_SIDEBAR_ID 8052u
 #define ER_UI_TEST_NODE_SIDEBAR_SELECTED_INDEX 0u
 #define ER_UI_TEST_NODE_SIDEBAR_MAIN_INDEX 3u
+#define ER_UI_TEST_NODE_SONNER_COUNT 2u
 #define ER_UI_TEST_NODE_SONNER_TOAST_INDEX 1u
 #define ER_UI_TEST_NODE_DIRECTION_RTL_INDEX 1u
 #define ER_UI_TEST_NODE_DRAWER_ID 8059u
@@ -353,7 +354,7 @@ void run_node_tests(void) {
   expect_true(a11y.label == card_summary_a11y.label, "node: card summary title is borrowed");
   expect_true(a11y.value == card_summary_a11y.detail, "node: card summary detail is borrowed");
 
-  const char* const button_group_labels[] = {"Copy", "Paste", "More"};
+  const char *const button_group_labels[] = {"Copy", "Paste", "More"};
   er_ui_node_t button_group_a11y =
       er_ui_node_button_group(button_group_labels, ER_UI_TEST_NODE_ARRAY_COUNT(button_group_labels), ER_UI_TEST_NODE_BUTTON_GROUP_ID);
   expect_status(er_ui_node_accessibility(&button_group_a11y, &a11y), ER_UI_OK, "node: button group accessibility maps");
@@ -363,7 +364,7 @@ void run_node_tests(void) {
   expect_size(a11y.role, ER_UI_A11Y_BUTTON, "node: button group child accessibility role");
   expect_true(a11y.has_id && a11y.id == ER_UI_TEST_NODE_BUTTON_GROUP_CHILD_ID, "node: button group child id");
 
-  const char* const toggle_group_labels[] = {"B", "I", "U"};
+  const char *const toggle_group_labels[] = {"B", "I", "U"};
   er_ui_node_t toggle_group_a11y = er_ui_node_toggle_group(toggle_group_labels, ER_UI_TEST_NODE_ARRAY_COUNT(toggle_group_labels),
                                                            ER_UI_TEST_NODE_TOGGLE_SELECTED_INDEX, ER_UI_TEST_NODE_TOGGLE_GROUP_ID);
   expect_status(er_ui_node_accessibility(&toggle_group_a11y, &a11y), ER_UI_OK, "node: toggle group accessibility maps");
@@ -373,7 +374,7 @@ void run_node_tests(void) {
   expect_size(a11y.role, ER_UI_A11Y_BUTTON, "node: toggle group child accessibility role");
   expect_true((a11y.states & ER_UI_A11Y_STATE_SELECTED) != 0u, "node: toggle group selected child state");
 
-  const char* const pagination_labels[] = {"1", "2"};
+  const char *const pagination_labels[] = {"1", "2"};
   er_ui_node_t pagination_a11y = er_ui_node_pagination(pagination_labels, ER_UI_TEST_NODE_ARRAY_COUNT(pagination_labels), 0u,
                                                        ER_UI_TEST_NODE_PAGINATION_ID);
   expect_status(er_ui_node_accessibility(&pagination_a11y, &a11y), ER_UI_OK, "node: pagination accessibility maps");
@@ -386,8 +387,8 @@ void run_node_tests(void) {
                 "node: next page accessibility maps");
   expect_true(a11y.has_id && a11y.id == ER_UI_TEST_NODE_PAGINATION_NEXT_ID, "node: next page accessibility id");
 
-  const char* const collapsible_titles[] = {"Typography", "Spacing"};
-  const char* const collapsible_details[] = {"Variable font", "Stable gaps"};
+  const char *const collapsible_titles[] = {"Typography", "Spacing"};
+  const char *const collapsible_details[] = {"Variable font", "Stable gaps"};
   er_ui_node_t collapsible_a11y = er_ui_node_collapsible("Foundations", collapsible_titles, collapsible_details,
                                                          ER_UI_TEST_NODE_ARRAY_COUNT(collapsible_titles), true, ER_UI_TEST_NODE_COLLAPSIBLE_ID);
   expect_status(er_ui_node_accessibility(&collapsible_a11y, &a11y), ER_UI_OK, "node: collapsible accessibility maps");
@@ -402,8 +403,8 @@ void run_node_tests(void) {
   expect_size(a11y.role, ER_UI_A11Y_LIST_ITEM, "node: collapsible row accessibility role");
   expect_true(a11y.has_id && a11y.id == ER_UI_TEST_NODE_COLLAPSIBLE_ROW_ID, "node: collapsible row id");
 
-  const char* const accordion_titles[] = {"Product", "Billing"};
-  const char* const accordion_bodies[] = {"Network app storage", "Proof-backed receipts"};
+  const char *const accordion_titles[] = {"Product", "Billing"};
+  const char *const accordion_bodies[] = {"Network app storage", "Proof-backed receipts"};
   er_ui_node_t accordion_a11y =
       er_ui_node_accordion(accordion_titles, accordion_bodies, ER_UI_TEST_NODE_ARRAY_COUNT(accordion_titles), ER_UI_TEST_NODE_ACCORDION_ID);
   expect_status(er_ui_node_accessibility(&accordion_a11y, &a11y), ER_UI_OK, "node: accordion accessibility maps");
@@ -446,13 +447,13 @@ void run_node_tests(void) {
   expect_size(a11y.role, ER_UI_A11Y_BUTTON, "node: sheet button accessibility role");
   expect_true(a11y.has_id && a11y.id == ER_UI_TEST_NODE_SHEET_BUTTON_ID, "node: sheet button id");
 
-  const char* const kbd_keys[] = {"Cmd", "K"};
+  const char *const kbd_keys[] = {"Cmd", "K"};
   er_ui_node_t kbd_a11y = er_ui_node_kbd(kbd_keys, ER_UI_TEST_NODE_ARRAY_COUNT(kbd_keys), "Open command palette");
   expect_status(er_ui_node_accessibility(&kbd_a11y, &a11y), ER_UI_OK, "node: kbd accessibility maps");
   expect_size(a11y.role, ER_UI_A11Y_GROUP, "node: kbd accessibility role");
   expect_true(a11y.label == kbd_a11y.label, "node: kbd label is borrowed");
 
-  const char* const menubar_items[] = {"File", "Edit", "View"};
+  const char *const menubar_items[] = {"File", "Edit", "View"};
   er_ui_node_t menubar_a11y =
       er_ui_node_menubar(menubar_items, ER_UI_TEST_NODE_ARRAY_COUNT(menubar_items), ER_UI_TEST_NODE_MENUBAR_SELECTED_INDEX, ER_UI_TEST_NODE_MENUBAR_ID);
   expect_status(er_ui_node_accessibility(&menubar_a11y, &a11y), ER_UI_OK, "node: menubar accessibility maps");
@@ -463,7 +464,7 @@ void run_node_tests(void) {
   expect_true(a11y.has_id && a11y.id == ER_UI_TEST_NODE_MENUBAR_SELECTED_ID, "node: menubar item id");
   expect_true((a11y.states & ER_UI_A11Y_STATE_SELECTED) != 0u, "node: menubar selected item state");
 
-  const char* const radio_group_labels[] = {"Default", "Comfortable", "Compact"};
+  const char *const radio_group_labels[] = {"Default", "Comfortable", "Compact"};
   er_ui_node_t radio_group_a11y = er_ui_node_radio_group(radio_group_labels, ER_UI_TEST_NODE_ARRAY_COUNT(radio_group_labels),
                                                          ER_UI_TEST_NODE_RADIO_SELECTED_INDEX, ER_UI_TEST_NODE_RADIO_GROUP_ID);
   expect_status(er_ui_node_accessibility(&radio_group_a11y, &a11y), ER_UI_OK, "node: radio group accessibility maps");
@@ -486,7 +487,7 @@ void run_node_tests(void) {
   expect_size(a11y.role, ER_UI_A11Y_BUTTON, "node: input group button accessibility role");
   expect_true(a11y.has_id && a11y.id == ER_UI_TEST_NODE_INPUT_GROUP_BUTTON_ID, "node: input group button id");
 
-  const char* const otp_values[] = {"1", "2", "3", "-", "4", "5"};
+  const char *const otp_values[] = {"1", "2", "3", "-", "4", "5"};
   er_ui_node_t otp_a11y =
       er_ui_node_input_otp(otp_values, ER_UI_TEST_NODE_ARRAY_COUNT(otp_values), ER_UI_TEST_NODE_INPUT_OTP_FOCUSED_INDEX, ER_UI_TEST_NODE_INPUT_OTP_ID);
   expect_status(er_ui_node_accessibility(&otp_a11y, &a11y), ER_UI_OK, "node: input otp accessibility maps");
@@ -499,7 +500,7 @@ void run_node_tests(void) {
   expect_status(er_ui_node_accessibility_child(&otp_a11y, ER_UI_TEST_NODE_INPUT_OTP_SEPARATOR_INDEX, &a11y), ER_UI_ERR_INVALID_ARGUMENT,
                 "node: input otp separator is not focusable");
 
-  const char* const nav_tabs[] = {"Docs", "Components", "Examples"};
+  const char *const nav_tabs[] = {"Docs", "Components", "Examples"};
   er_ui_node_t nav_a11y = er_ui_node_navigation_menu(nav_tabs, ER_UI_TEST_NODE_ARRAY_COUNT(nav_tabs), ER_UI_TEST_NODE_NAVIGATION_SELECTED_INDEX,
                                                      "Components", "Reusable primitives", "Accordion", "Disclosure rows", ER_UI_TEST_NODE_NAVIGATION_ID);
   expect_status(er_ui_node_accessibility(&nav_a11y, &a11y), ER_UI_OK, "node: navigation menu accessibility maps");
@@ -514,12 +515,12 @@ void run_node_tests(void) {
   expect_size(a11y.role, ER_UI_A11Y_LIST_ITEM, "node: navigation menu row role");
   expect_true(a11y.has_id && a11y.id == ER_UI_TEST_NODE_NAVIGATION_ROW_ID, "node: navigation menu row id");
 
-  const char* const resizable_labels[] = {"One", "Two", "Three"};
+  const char *const resizable_labels[] = {"One", "Two", "Three"};
   er_ui_node_t resizable_a11y = er_ui_node_resizable(resizable_labels, ER_UI_TEST_NODE_ARRAY_COUNT(resizable_labels));
   expect_status(er_ui_node_accessibility(&resizable_a11y, &a11y), ER_UI_OK, "node: resizable accessibility maps");
   expect_size(a11y.role, ER_UI_A11Y_GROUP, "node: resizable accessibility role");
 
-  const char* const sidebar_items[] = {"Dashboard", "Transactions", "Settings"};
+  const char *const sidebar_items[] = {"Dashboard", "Transactions", "Settings"};
   er_ui_node_t sidebar_a11y = er_ui_node_sidebar("App", "Workspace", sidebar_items, ER_UI_TEST_NODE_ARRAY_COUNT(sidebar_items),
                                                  ER_UI_TEST_NODE_SIDEBAR_SELECTED_INDEX, "Dashboard", "Proof-aware activity",
                                                  ER_UI_TEST_NODE_SIDEBAR_ID);
@@ -533,16 +534,21 @@ void run_node_tests(void) {
                 "node: sidebar main panel accessibility maps");
   expect_size(a11y.role, ER_UI_A11Y_GROUP, "node: sidebar main panel role");
 
-  const char* const sonner_messages[] = {"Event created", "Upload failed"};
-  const er_ui_icon_t sonner_icons[] = {ER_UI_ICON_CHECK, ER_UI_ICON_WARNING};
-  const er_ui_color4_t sonner_colors[] = {er_ui_color_rgba(0.0f, 0.5f, 0.2f, 1.0f), er_ui_color_rgba(0.8f, 0.2f, 0.1f, 1.0f)};
+  const char *const sonner_messages[] = {"Event created", "Upload failed"};
+  const er_ui_icon_t sonner_check_icon = ER_UI_ICON_CHECK;
+  const er_ui_icon_t sonner_warning_icon = ER_UI_ICON_WARNING;
+  //@optimizer-ignore sonner node fixture requires a contiguous borrowed icon vector paired with message and color vectors
+  const er_ui_icon_t sonner_icons[ER_UI_TEST_NODE_SONNER_COUNT] = {sonner_check_icon, sonner_warning_icon};
+  const er_ui_color4_t sonner_colors[ER_UI_TEST_NODE_SONNER_COUNT] = {er_ui_color_rgba(0.0f, 0.5f, 0.2f, 1.0f),
+                                                                       er_ui_color_rgba(0.8f, 0.2f, 0.1f, 1.0f)};
   er_ui_node_t sonner_a11y = er_ui_node_sonner(sonner_messages, sonner_icons, sonner_colors, ER_UI_TEST_NODE_ARRAY_COUNT(sonner_messages));
   expect_status(er_ui_node_accessibility(&sonner_a11y, &a11y), ER_UI_OK, "node: sonner accessibility maps");
   expect_size(a11y.role, ER_UI_A11Y_STATUS, "node: sonner accessibility role");
   expect_status(er_ui_node_accessibility_child(&sonner_a11y, ER_UI_TEST_NODE_SONNER_TOAST_INDEX, &a11y), ER_UI_OK,
                 "node: sonner toast accessibility maps");
   expect_size(a11y.role, ER_UI_A11Y_STATUS, "node: sonner toast accessibility role");
-  expect_true(a11y.label == sonner_messages[ER_UI_TEST_NODE_SONNER_TOAST_INDEX], "node: sonner toast label is borrowed");
+  const char* expected_sonner_message = *(sonner_messages + ER_UI_TEST_NODE_SONNER_TOAST_INDEX);
+  expect_true(a11y.label == expected_sonner_message, "node: sonner toast label is borrowed");
 
   er_ui_node_t aspect_a11y = er_ui_node_aspect_ratio("Preview", ER_UI_ICON_FILE);
   expect_status(er_ui_node_accessibility(&aspect_a11y, &a11y), ER_UI_OK, "node: aspect ratio accessibility maps");
@@ -575,8 +581,8 @@ void run_node_tests(void) {
   expect_size(a11y.role, ER_UI_A11Y_BUTTON, "node: drawer button role");
   expect_true(a11y.has_id && a11y.id == ER_UI_TEST_NODE_DRAWER_BUTTON_ID, "node: drawer button id");
 
-  const char* const dropdown_labels[] = {"Profile", "Billing", "Logout"};
-  const char* const dropdown_shortcuts[] = {"P", "B", ""};
+  const char *const dropdown_labels[] = {"Profile", "Billing", "Logout"};
+  const char *const dropdown_shortcuts[] = {"P", "B", ""};
   er_ui_node_t dropdown_a11y = er_ui_node_dropdown_menu(dropdown_labels, dropdown_shortcuts, ER_UI_TEST_NODE_ARRAY_COUNT(dropdown_labels),
                                                         ER_UI_TEST_NODE_DROPDOWN_SELECTED_INDEX, ER_UI_TEST_NODE_DROPDOWN_ID);
   expect_status(er_ui_node_accessibility(&dropdown_a11y, &a11y), ER_UI_OK, "node: dropdown menu accessibility maps");
@@ -598,7 +604,7 @@ void run_node_tests(void) {
   expect_true(a11y.has_id && a11y.id == ER_UI_TEST_NODE_CONTEXT_SELECTED_ID, "node: context menu item id");
   expect_true((a11y.states & ER_UI_A11Y_STATE_SELECTED) != 0u, "node: context menu selected state");
 
-  const char* const date_days[] = {"12", "13", "14", "15"};
+  const char *const date_days[] = {"12", "13", "14", "15"};
   er_ui_node_t date_picker_a11y =
       er_ui_node_date_picker("Pick a date", "May 2026", date_days, ER_UI_TEST_NODE_ARRAY_COUNT(date_days), ER_UI_TEST_NODE_DATE_SELECTED_INDEX,
                              ER_UI_TEST_NODE_DATE_PICKER_ID);
@@ -614,7 +620,7 @@ void run_node_tests(void) {
   expect_true(a11y.has_id && a11y.id == ER_UI_TEST_NODE_DATE_SELECTED_ID, "node: date picker day id");
   expect_true((a11y.states & ER_UI_A11Y_STATE_SELECTED) != 0u, "node: date picker selected day state");
 
-  const char* const carousel_items[] = {"One", "Two", "Three"};
+  const char *const carousel_items[] = {"One", "Two", "Three"};
   er_ui_node_t carousel_a11y = er_ui_node_carousel(carousel_items, ER_UI_TEST_NODE_ARRAY_COUNT(carousel_items), ER_UI_TEST_NODE_CAROUSEL_ID);
   expect_status(er_ui_node_accessibility(&carousel_a11y, &a11y), ER_UI_OK, "node: carousel accessibility maps");
   expect_size(a11y.role, ER_UI_A11Y_GROUP, "node: carousel accessibility role");
@@ -638,7 +644,7 @@ void run_node_tests(void) {
   expect_true(a11y.has_id && a11y.id == ER_UI_TEST_NODE_CALENDAR_SELECTED_ID, "node: calendar day id");
   expect_true((a11y.states & ER_UI_A11Y_STATE_SELECTED) != 0u, "node: calendar selected day state");
 
-  const char* const combobox_options[] = {"Apple", "Banana", "Cherry"};
+  const char *const combobox_options[] = {"Apple", "Banana", "Cherry"};
   er_ui_node_t combobox_a11y = er_ui_node_combobox("Fruit", "Banana", "Search fruit...", combobox_options,
                                                    ER_UI_TEST_NODE_ARRAY_COUNT(combobox_options), ER_UI_TEST_NODE_COMBOBOX_SELECTED_INDEX,
                                                    ER_UI_TEST_NODE_COMBOBOX_ID);
@@ -651,7 +657,7 @@ void run_node_tests(void) {
   expect_true(a11y.has_id && a11y.id == ER_UI_TEST_NODE_COMBOBOX_SELECTED_ID, "node: combobox option id");
   expect_true((a11y.states & ER_UI_A11Y_STATE_SELECTED) != 0u, "node: combobox selected option state");
 
-  const char* const diff_lines[] = {"@@ -1,2 +1,2 @@", "-old", "+new", " context"};
+  const char *const diff_lines[] = {"@@ -1,2 +1,2 @@", "-old", "+new", " context"};
   er_ui_node_t diff_body_a11y = er_ui_node_diff_body(diff_lines, ER_UI_TEST_NODE_ARRAY_COUNT(diff_lines), true);
   expect_status(er_ui_node_accessibility(&diff_body_a11y, &a11y), ER_UI_OK, "node: diff body accessibility maps");
   expect_size(a11y.role, ER_UI_A11Y_GROUP, "node: diff body accessibility role");
@@ -659,7 +665,8 @@ void run_node_tests(void) {
   expect_status(er_ui_node_accessibility_child(&diff_body_a11y, ER_UI_TEST_NODE_DIFF_LINE_INDEX, &a11y), ER_UI_OK,
                 "node: diff body line accessibility maps");
   expect_size(a11y.role, ER_UI_A11Y_TEXT, "node: diff body line role");
-  expect_true(a11y.label == diff_lines[ER_UI_TEST_NODE_DIFF_LINE_INDEX], "node: diff body line label is borrowed");
+  const char* expected_diff_line = *(diff_lines + ER_UI_TEST_NODE_DIFF_LINE_INDEX);
+  expect_true(a11y.label == expected_diff_line, "node: diff body line label is borrowed");
   expect_status(er_ui_node_accessibility_child(&diff_body_a11y, ER_UI_TEST_NODE_DIFF_TRUNCATED_INDEX, &a11y), ER_UI_OK,
                 "node: diff body truncated accessibility maps");
   expect_string(a11y.label, "[diff preview truncated]", "node: diff body truncated label");
@@ -672,7 +679,7 @@ void run_node_tests(void) {
   er_ui_node_t chat_diff_a11y = er_ui_node_chat_diff_message("Patch", diff_lines, ER_UI_TEST_NODE_ARRAY_COUNT(diff_lines), true);
   expect_status(er_ui_node_accessibility_child(&chat_diff_a11y, ER_UI_TEST_NODE_CHAT_DIFF_LINE_INDEX, &a11y), ER_UI_OK,
                 "node: chat diff line accessibility maps");
-  expect_true(a11y.label == diff_lines[ER_UI_TEST_NODE_DIFF_LINE_INDEX], "node: chat diff line label is borrowed");
+  expect_true(a11y.label == expected_diff_line, "node: chat diff line label is borrowed");
 
   er_ui_node_t conversation_a11y = er_ui_node_conversation(12.0f, ER_UI_TEST_NODE_CONVERSATION_ID);
   er_ui_node_t conversation_child_a = er_ui_node_chat_message(ER_UI_SHADCN_CHAT_ROLE_USER, "", "Run tests");
@@ -708,7 +715,7 @@ void run_node_tests(void) {
   expect_true((a11y.states & ER_UI_A11Y_STATE_EXPANDED) != 0u, "node: tree accessibility expanded state");
   expect_true(er_ui_a11y_role_label(a11y.role) != NULL, "node: accessibility role has stable label");
 
-  const char* const a11y_tabs[] = {"One", "Two"};
+  const char *const a11y_tabs[] = {"One", "Two"};
   er_ui_node_t tabs_a11y =
       er_ui_node_tabs(a11y_tabs, ER_UI_TEST_NODE_ARRAY_COUNT(a11y_tabs), ER_UI_TEST_NODE_TABS_SELECTED_INDEX, ER_UI_TEST_NODE_TABS_ID);
   expect_status(er_ui_node_accessibility(&tabs_a11y, &a11y), ER_UI_OK, "node: tab list accessibility maps");
@@ -719,8 +726,8 @@ void run_node_tests(void) {
   expect_true(a11y.has_id && a11y.id == ER_UI_TEST_NODE_TABS_SELECTED_ID, "node: selected tab accessibility id");
   expect_true((a11y.states & ER_UI_A11Y_STATE_SELECTED) != 0u, "node: selected tab accessibility state");
 
-  const char* const a11y_headers[] = {"Name"};
-  const char* const a11y_cells[] = {"EdgeRun"};
+  const char *const a11y_headers[] = {"Name"};
+  const char *const a11y_cells[] = {"EdgeRun"};
   er_ui_node_t table_a11y =
       er_ui_node_table(a11y_headers, ER_UI_TEST_NODE_ARRAY_COUNT(a11y_headers), a11y_cells, ER_UI_TEST_NODE_ARRAY_COUNT(a11y_headers),
                        ER_UI_TEST_NODE_TABLE_ID);
@@ -751,11 +758,11 @@ void run_node_tests(void) {
     er_ui_node_t avatar = er_ui_node_avatar("ER", theme.colors.accent, true);
     er_ui_node_t progress = er_ui_node_progress(0.66f);
     er_ui_node_t switch_node = er_ui_node_switch(true, ER_UI_TEST_NODE_CHECKBOX_ID);
-    const char* const breadcrumb_labels[] = {"Docs", "Components", "Button"};
+    const char *const breadcrumb_labels[] = {"Docs", "Components", "Button"};
     er_ui_node_t breadcrumb = er_ui_node_breadcrumb(breadcrumb_labels, ER_UI_TEST_NODE_ARRAY_COUNT(breadcrumb_labels),
                                                    ER_UI_TEST_NODE_RENDER_BREADCRUMB_CURRENT_INDEX, ER_UI_TEST_NODE_RENDER_BREADCRUMB_ID);
-    const char* const table_headers[] = {"Invoice", "Status"};
-    const char* const table_cells[] = {"INV001", "Paid", "INV002", "Pending"};
+    const char *const table_headers[] = {"Invoice", "Status"};
+    const char *const table_cells[] = {"INV001", "Paid", "INV002", "Pending"};
     er_ui_node_t table =
         er_ui_node_table(table_headers, ER_UI_TEST_NODE_ARRAY_COUNT(table_headers), table_cells, ER_UI_TEST_NODE_ARRAY_COUNT(table_headers),
                          ER_UI_TEST_NODE_RENDER_TABLE_ID);
@@ -766,10 +773,10 @@ void run_node_tests(void) {
     er_ui_node_t list_row = er_ui_node_list_row("Billing", "Command B", ER_UI_TEST_NODE_RENDER_LIST_ROW_ID, true);
     er_ui_node_t field = er_ui_node_field("Email", "name@example.com", ER_UI_TEST_NODE_RENDER_FIELD_ID);
     er_ui_node_t text_area = er_ui_node_text_area("Message", "Type your message here.", ER_UI_TEST_NODE_RENDER_TEXT_AREA_ID);
-    const char* const tab_labels[] = {"Account", "Billing", "Team"};
+    const char *const tab_labels[] = {"Account", "Billing", "Team"};
     er_ui_node_t tabs =
         er_ui_node_tabs(tab_labels, ER_UI_TEST_NODE_ARRAY_COUNT(tab_labels), ER_UI_TEST_NODE_RENDER_TABS_SELECTED_INDEX, ER_UI_TEST_NODE_RENDER_TABS_ID);
-    const char* const chart_labels[] = {"Jan", "Feb", "Mar"};
+    const char *const chart_labels[] = {"Jan", "Feb", "Mar"};
     const float chart_values[] = {0.25f, 0.72f, 0.54f};
     er_ui_node_t chart = er_ui_node_bar_chart("Visitors", chart_labels, chart_values, ER_UI_TEST_NODE_ARRAY_COUNT(chart_labels),
                                               ER_UI_TEST_NODE_RENDER_CHART_ID, ER_UI_TEST_NODE_RENDER_CHART_ACTIVE_INDEX);
@@ -782,7 +789,7 @@ void run_node_tests(void) {
     er_ui_node_t attachment = er_ui_node_attachment_preview("manifest.rkyv", "package manifest", ER_UI_TEST_NODE_RENDER_ATTACHMENT_ID);
     er_ui_node_t grant = er_ui_node_capability_grant_row("Mail", "contacts:read", "granted", ER_UI_TEST_NODE_RENDER_GRANT_ID);
     er_ui_node_t proof = er_ui_node_proof_event_row("Package hash", "b3:abc123", "verified", ER_UI_TEST_NODE_RENDER_PROOF_ID);
-    const char* const route_hops[] = {"browser", "admission", "relay"};
+    const char *const route_hops[] = {"browser", "admission", "relay"};
     er_ui_node_t route = er_ui_node_route_path("Admission route", route_hops, ER_UI_TEST_NODE_ARRAY_COUNT(route_hops));
     er_ui_node_t package = er_ui_node_package_card("Docs", "cache-ok", "b3:def456", ER_UI_TEST_NODE_RENDER_ROUTE_PACKAGE_ID);
     er_ui_node_t receipt = er_ui_node_receipt_row("Retrieval", "4 units", "settled", ER_UI_TEST_NODE_RENDER_RECEIPT_ID);
@@ -832,78 +839,81 @@ void run_node_tests(void) {
     expect_status(er_ui_node_add_child(&gradient_card, &gradient_label), ER_UI_OK, "node: gradient card accepts child");
     er_ui_node_t icon = er_ui_node_icon(ER_UI_ICON_TRUST, "Trust", theme.colors.accent);
     er_ui_node_t icon_button = er_ui_node_icon_button(ER_UI_ICON_SEARCH, "Search", ER_UI_TEST_NODE_RENDER_ICON_BUTTON_ID, ER_UI_SHADCN_BUTTON_GHOST);
-    const char* const render_button_group_labels[] = {"Copy", "Paste", "More"};
+    const char *const render_button_group_labels[] = {"Copy", "Paste", "More"};
     er_ui_node_t button_group =
         er_ui_node_button_group(render_button_group_labels, ER_UI_TEST_NODE_ARRAY_COUNT(render_button_group_labels), ER_UI_TEST_NODE_RENDER_BUTTON_GROUP_ID);
-    const char* const render_toggle_group_labels[] = {"B", "I", "U"};
+    const char *const render_toggle_group_labels[] = {"B", "I", "U"};
     er_ui_node_t toggle_group = er_ui_node_toggle_group(render_toggle_group_labels, ER_UI_TEST_NODE_ARRAY_COUNT(render_toggle_group_labels),
                                                         ER_UI_TEST_NODE_TOGGLE_SELECTED_INDEX, ER_UI_TEST_NODE_RENDER_TOGGLE_GROUP_ID);
-    const char* const render_pagination_labels[] = {"1", "2"};
+    const char *const render_pagination_labels[] = {"1", "2"};
     er_ui_node_t pagination = er_ui_node_pagination(render_pagination_labels, ER_UI_TEST_NODE_ARRAY_COUNT(render_pagination_labels),
                                                     ER_UI_TEST_NODE_RENDER_PAGINATION_SELECTED_INDEX, ER_UI_TEST_NODE_RENDER_PAGINATION_ID);
-    const char* const render_collapsible_titles[] = {"Accordion", "Collapsible"};
-    const char* const render_collapsible_details[] = {"one open item", "disclosure rows"};
+    const char *const render_collapsible_titles[] = {"Accordion", "Collapsible"};
+    const char *const render_collapsible_details[] = {"one open item", "disclosure rows"};
     er_ui_node_t collapsible = er_ui_node_collapsible("Disclosure", render_collapsible_titles, render_collapsible_details,
                                                       ER_UI_TEST_NODE_ARRAY_COUNT(render_collapsible_titles), true,
                                                       ER_UI_TEST_NODE_RENDER_COLLAPSIBLE_ID);
-    const char* const render_accordion_titles[] = {"Is it accessible?", "Is it styled?"};
-    const char* const render_accordion_bodies[] = {"Yes, each trigger is exposed.", "It uses shared shadcn primitives."};
+    const char *const render_accordion_titles[] = {"Is it accessible?", "Is it styled?"};
+    const char *const render_accordion_bodies[] = {"Yes, each trigger is exposed.", "It uses shared shadcn primitives."};
     er_ui_node_t accordion = er_ui_node_accordion(render_accordion_titles, render_accordion_bodies, ER_UI_TEST_NODE_ARRAY_COUNT(render_accordion_titles),
                                                   ER_UI_TEST_NODE_RENDER_ACCORDION_ID);
     er_ui_node_t hover_card = er_ui_node_hover_card("ER", "UI core", "Variable font rendering stays required.", theme.colors.accent);
     er_ui_node_t popover = er_ui_node_popover("Open popover", "Dimensions", "Set layout constraints.", "Width", "100%", ER_UI_TEST_NODE_RENDER_POPOVER_ID);
     er_ui_node_t sheet = er_ui_node_sheet("Profile", "Update local profile.", "Name", "EdgeRun", "Save changes", ER_UI_TEST_NODE_RENDER_SHEET_ID);
-    const char* const render_kbd_keys[] = {"Ctrl", "K"};
+    const char *const render_kbd_keys[] = {"Ctrl", "K"};
     er_ui_node_t kbd = er_ui_node_kbd(render_kbd_keys, ER_UI_TEST_NODE_ARRAY_COUNT(render_kbd_keys), "Open command palette");
-    const char* const render_menubar_items[] = {"File", "Edit", "View"};
+    const char *const render_menubar_items[] = {"File", "Edit", "View"};
     er_ui_node_t menubar = er_ui_node_menubar(render_menubar_items, ER_UI_TEST_NODE_ARRAY_COUNT(render_menubar_items),
                                               ER_UI_TEST_NODE_MENUBAR_SELECTED_INDEX, ER_UI_TEST_NODE_RENDER_MENUBAR_ID);
-    const char* const render_radio_group_labels[] = {"Default", "Comfortable", "Compact"};
+    const char *const render_radio_group_labels[] = {"Default", "Comfortable", "Compact"};
     er_ui_node_t radio_group = er_ui_node_radio_group(render_radio_group_labels, ER_UI_TEST_NODE_ARRAY_COUNT(render_radio_group_labels),
                                                       ER_UI_TEST_NODE_RENDER_RADIO_SELECTED_INDEX, ER_UI_TEST_NODE_RENDER_RADIO_GROUP_ID);
     er_ui_node_t input_group = er_ui_node_input_group("URL", "https://edgerun.local", "Copy", ER_UI_TEST_NODE_RENDER_INPUT_GROUP_ID);
-    const char* const render_otp_values[] = {"1", "2", "3", "-", "4", ""};
+    const char *const render_otp_values[] = {"1", "2", "3", "-", "4", ""};
     er_ui_node_t input_otp = er_ui_node_input_otp(render_otp_values, ER_UI_TEST_NODE_ARRAY_COUNT(render_otp_values),
                                                  ER_UI_TEST_NODE_RENDER_INPUT_OTP_FOCUSED_INDEX, ER_UI_TEST_NODE_RENDER_INPUT_OTP_ID);
-    const char* const render_nav_tabs[] = {"Docs", "Components", "Examples"};
+    const char *const render_nav_tabs[] = {"Docs", "Components", "Examples"};
     er_ui_node_t navigation_menu = er_ui_node_navigation_menu(render_nav_tabs, ER_UI_TEST_NODE_ARRAY_COUNT(render_nav_tabs),
                                                               ER_UI_TEST_NODE_RENDER_NAVIGATION_SELECTED_INDEX, "Components", "Reusable primitives",
                                                               "Accordion", "Disclosure rows", ER_UI_TEST_NODE_RENDER_NAVIGATION_ID);
-    const char* const render_resizable_labels[] = {"One", "Two", "Three"};
+    const char *const render_resizable_labels[] = {"One", "Two", "Three"};
     er_ui_node_t resizable = er_ui_node_resizable(render_resizable_labels, ER_UI_TEST_NODE_ARRAY_COUNT(render_resizable_labels));
-    const char* const render_sidebar_items[] = {"Dashboard", "Transactions", "Settings"};
+    const char *const render_sidebar_items[] = {"Dashboard", "Transactions", "Settings"};
     er_ui_node_t sidebar = er_ui_node_sidebar("App", "Workspace", render_sidebar_items, ER_UI_TEST_NODE_ARRAY_COUNT(render_sidebar_items),
                                               ER_UI_TEST_NODE_RENDER_SIDEBAR_SELECTED_INDEX, "Dashboard", "Proof-aware activity",
                                               ER_UI_TEST_NODE_RENDER_SIDEBAR_ID);
-    const char* const render_sonner_messages[] = {"Event created", "Upload failed"};
-    const er_ui_icon_t render_sonner_icons[] = {ER_UI_ICON_CHECK, ER_UI_ICON_WARNING};
-    const er_ui_color4_t render_sonner_colors[] = {theme.colors.success, theme.colors.danger};
+    const char *const render_sonner_messages[] = {"Event created", "Upload failed"};
+    const er_ui_icon_t render_sonner_check_icon = ER_UI_ICON_CHECK;
+    const er_ui_icon_t render_sonner_warning_icon = ER_UI_ICON_WARNING;
+    //@optimizer-ignore sonner render fixture requires a contiguous borrowed icon vector paired with message and color vectors
+    const er_ui_icon_t render_sonner_icons[ER_UI_TEST_NODE_SONNER_COUNT] = {render_sonner_check_icon, render_sonner_warning_icon};
+    const er_ui_color4_t render_sonner_colors[ER_UI_TEST_NODE_SONNER_COUNT] = {theme.colors.success, theme.colors.danger};
     er_ui_node_t sonner = er_ui_node_sonner(render_sonner_messages, render_sonner_icons, render_sonner_colors,
                                             ER_UI_TEST_NODE_ARRAY_COUNT(render_sonner_messages));
     er_ui_node_t aspect = er_ui_node_aspect_ratio("Preview", ER_UI_ICON_FILE);
     er_ui_node_t alert_dialog = er_ui_node_alert_dialog("Are you absolutely sure?", "This action cannot be undone.", ER_UI_ICON_WARNING);
     er_ui_node_t direction = er_ui_node_direction("Left to right", "Right to left");
     er_ui_node_t drawer = er_ui_node_drawer("Drawer", "Adjust display density.", "Density", 0.42f, ER_UI_TEST_NODE_RENDER_DRAWER_ID);
-    const char* const render_dropdown_labels[] = {"Profile", "Billing", "Logout"};
-    const char* const render_dropdown_shortcuts[] = {"P", "B", ""};
+    const char *const render_dropdown_labels[] = {"Profile", "Billing", "Logout"};
+    const char *const render_dropdown_shortcuts[] = {"P", "B", ""};
     er_ui_node_t dropdown_menu = er_ui_node_dropdown_menu(render_dropdown_labels, render_dropdown_shortcuts, ER_UI_TEST_NODE_ARRAY_COUNT(render_dropdown_labels),
                                                           ER_UI_TEST_NODE_RENDER_DROPDOWN_SELECTED_INDEX, ER_UI_TEST_NODE_RENDER_DROPDOWN_ID);
     er_ui_node_t context_menu =
         er_ui_node_context_menu("Actions", "Right click options", render_dropdown_labels, render_dropdown_shortcuts,
                                 ER_UI_TEST_NODE_ARRAY_COUNT(render_dropdown_labels), ER_UI_TEST_NODE_RENDER_CONTEXT_SELECTED_INDEX,
                                 ER_UI_TEST_NODE_RENDER_CONTEXT_MENU_ID);
-    const char* const render_date_days[] = {"12", "13", "14", "15"};
+    const char *const render_date_days[] = {"12", "13", "14", "15"};
     er_ui_node_t date_picker = er_ui_node_date_picker("Pick a date", "May 2026", render_date_days, ER_UI_TEST_NODE_ARRAY_COUNT(render_date_days),
                                                       ER_UI_TEST_NODE_RENDER_DATE_SELECTED_INDEX, ER_UI_TEST_NODE_RENDER_DATE_PICKER_ID);
-    const char* const render_carousel_items[] = {"One", "Two", "Three"};
+    const char *const render_carousel_items[] = {"One", "Two", "Three"};
     er_ui_node_t carousel = er_ui_node_carousel(render_carousel_items, ER_UI_TEST_NODE_ARRAY_COUNT(render_carousel_items), ER_UI_TEST_NODE_RENDER_CAROUSEL_ID);
     er_ui_node_t calendar = er_ui_node_calendar("May 2026", render_date_days, ER_UI_TEST_NODE_ARRAY_COUNT(render_date_days),
                                                 ER_UI_TEST_NODE_RENDER_DATE_SELECTED_INDEX, ER_UI_TEST_NODE_RENDER_CALENDAR_ID);
-    const char* const render_combobox_options[] = {"Apple", "Banana", "Cherry"};
+    const char *const render_combobox_options[] = {"Apple", "Banana", "Cherry"};
     er_ui_node_t combobox = er_ui_node_combobox("Fruit", "Banana", "Search fruit...", render_combobox_options,
                                                 ER_UI_TEST_NODE_ARRAY_COUNT(render_combobox_options), ER_UI_TEST_NODE_RENDER_COMBOBOX_SELECTED_INDEX,
                                                 ER_UI_TEST_NODE_RENDER_COMBOBOX_ID);
-    const char* const render_diff_lines[] = {"@@ -1,2 +1,2 @@", "-old", "+new", "*** End Patch"};
+    const char *const render_diff_lines[] = {"@@ -1,2 +1,2 @@", "-old", "+new", "*** End Patch"};
     er_ui_node_t diff_body = er_ui_node_diff_body(render_diff_lines, ER_UI_TEST_NODE_ARRAY_COUNT(render_diff_lines), true);
     er_ui_node_t chat_message = er_ui_node_chat_message(ER_UI_SHADCN_CHAT_ROLE_ASSISTANT, "Response", "Done");
     er_ui_node_t chat_timeline = er_ui_node_chat_message(ER_UI_SHADCN_CHAT_ROLE_TOOL_RUNNING, "Started", "shell");
@@ -992,7 +1002,8 @@ void run_node_tests(void) {
     expect_status(er_ui_node_render(&icon, &scene, face, er_ui_bounds(64.0f, 2870.0f, 32.0f, 32.0f), theme), ER_UI_OK,
                   "node: icon renders");
     expect_size(scene.icon_quad_count, icon_quads_before + 1u, "node: icon emits icon quad");
-    expect_u32(scene.icon_quads[icon_quads_before].atlas_id, er_ui_icon_atlas_id(ER_UI_ICON_TRUST), "node: icon quad carries atlas id");
+    const er_ui_quad_t* trust_icon_quad = scene.icon_quads + icon_quads_before;
+    expect_u32(trust_icon_quad->atlas_id, er_ui_icon_atlas_id(ER_UI_ICON_TRUST), "node: icon quad carries atlas id");
     expect_status(er_ui_node_render(&icon_button, &scene, face, er_ui_bounds(108.0f, 2870.0f, 40.0f, 40.0f), theme), ER_UI_OK,
                   "node: icon button renders");
     expect_size(scene.icon_quad_count, icon_quads_before + 2u, "node: icon button emits icon quad");

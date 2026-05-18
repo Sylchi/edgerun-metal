@@ -7,6 +7,8 @@
 #include <stdlib.h>
 #include <string.h>
 
+#define ER_TEST_VARFONT_TEXT_LEN 3u
+
 int g_tests_total = 0;
 int g_tests_failed = 0;
 
@@ -48,7 +50,6 @@ static const uint32_t ER_TEST_PAINTER_DRAG_ITEM_ID = 10u;
 static const uint32_t ER_TEST_PAINTER_TRANSITION_ID = 123u;
 static const uint32_t ER_TEST_VARFONT_ATLAS_ID = 7u;
 static const uint32_t ER_TEST_VARFONT_TEXT_ATLAS_SIZE = 256u;
-static const size_t ER_TEST_VARFONT_TEXT_LEN = 3u;
 static const size_t ER_TEST_ASCII_SHORT_BUDGET = 3u;
 static const size_t ER_TEST_ASCII_OVERSIZED_BUDGET = 300u;
 
@@ -312,9 +313,10 @@ static void test_scene_validation_and_clipping(void) {
   expect_float(scene.hits[0].x, 5.0f, "clip: hit x clipped");
   expect_float(scene.hits[0].w, 10.0f, "clip: hit width clipped");
   expect_size(scene.text_quad_count, 1u, "clip: text quad inserted");
-  expect_float(scene.text_quads[0].x, 5.0f, "clip: text quad x clipped");
-  expect_float(scene.text_quads[0].u0, 0.25f, "clip: text quad u0 remapped");
-  expect_float(scene.text_quads[0].u1, 0.75f, "clip: text quad u1 remapped");
+  const er_ui_quad_t* clipped_text_quad = scene.text_quads;
+  expect_float(clipped_text_quad->x, 5.0f, "clip: text quad x clipped");
+  expect_float(clipped_text_quad->u0, 0.25f, "clip: text quad u0 remapped");
+  expect_float(clipped_text_quad->u1, 0.75f, "clip: text quad u1 remapped");
 
   er_ui_scene_destroy(&scene);
 }
@@ -341,7 +343,8 @@ static void test_scene_cursor_mutations(void) {
   expect_float(scene.rects[1].y, 6.0f, "cursor: later rect y translated");
   expect_float(scene.rects[1].color.a, 0.5f, "cursor: later rect alpha changed");
   expect_float(scene.hits[0].x, 4.0f, "cursor: later hit x translated");
-  expect_float(scene.icon_quads[0].color.a, 0.5f, "cursor: later icon alpha changed");
+  const er_ui_quad_t* later_icon_quad = scene.icon_quads;
+  expect_float(later_icon_quad->color.a, 0.5f, "cursor: later icon alpha changed");
 
   er_ui_scene_destroy(&scene);
 }
@@ -500,8 +503,10 @@ static void test_painter_facade_pushes_scene_commands(void) {
                 ER_UI_OK,
                 "painter: transition succeeds");
   expect_size(scene.icon_quad_count, 2u, "painter: icon quad count increments");
-  expect_u32(scene.icon_quads[0].atlas_id, er_ui_icon_atlas_id(ER_UI_ICON_SEARCH), "painter: semantic icon stores atlas id");
-  expect_u32(scene.icon_quads[1].atlas_id, 0u, "painter: raw icon quad keeps atlas id zero");
+  const er_ui_quad_t* semantic_icon_quad = scene.icon_quads;
+  const er_ui_quad_t* raw_icon_quad = semantic_icon_quad + 1u;
+  expect_u32(semantic_icon_quad->atlas_id, er_ui_icon_atlas_id(ER_UI_ICON_SEARCH), "painter: semantic icon stores atlas id");
+  expect_u32(raw_icon_quad->atlas_id, 0u, "painter: raw icon quad keeps atlas id zero");
   expect_size(scene.text_quad_count, 1u, "painter: text quad count increments");
   expect_size(scene.transition_count, 1u, "painter: transition count increments");
 
@@ -569,13 +574,14 @@ static void test_varfont_vertices_emit_text_quads(void) {
   expect_status(er_ui_scene_push_varfont_vertices(&scene, vertices, VR_FONT_VERTICES_PER_GLYPH, ER_TEST_TEXT), ER_UI_OK,
                 "varfont: vertex batch converts to text quad");
   expect_size(scene.text_quad_count, 1u, "varfont: one glyph emits one text quad");
-  expect_float(scene.text_quads[0].x, 10.0f, "varfont: quad x copied");
-  expect_float(scene.text_quads[0].y, 20.0f, "varfont: quad y copied");
-  expect_float(scene.text_quads[0].w, 8.0f, "varfont: quad width derived");
-  expect_float(scene.text_quads[0].h, 12.0f, "varfont: quad height derived");
-  expect_float(scene.text_quads[0].u0, 0.10f, "varfont: quad u0 copied");
-  expect_float(scene.text_quads[0].v1, 0.50f, "varfont: quad v1 copied");
-  expect_u32(scene.text_quads[0].atlas_id, ER_TEST_VARFONT_ATLAS_ID, "varfont: atlas id copied");
+  const er_ui_quad_t* glyph_quad = scene.text_quads;
+  expect_float(glyph_quad->x, 10.0f, "varfont: quad x copied");
+  expect_float(glyph_quad->y, 20.0f, "varfont: quad y copied");
+  expect_float(glyph_quad->w, 8.0f, "varfont: quad width derived");
+  expect_float(glyph_quad->h, 12.0f, "varfont: quad height derived");
+  expect_float(glyph_quad->u0, 0.10f, "varfont: quad u0 copied");
+  expect_float(glyph_quad->v1, 0.50f, "varfont: quad v1 copied");
+  expect_u32(glyph_quad->atlas_id, ER_TEST_VARFONT_ATLAS_ID, "varfont: atlas id copied");
   expect_status(er_ui_scene_push_varfont_vertices(&scene, vertices, 1u, ER_TEST_TEXT), ER_UI_ERR_INVALID_ARGUMENT,
                 "varfont: partial vertex batch is rejected");
 
@@ -611,16 +617,22 @@ static void test_varfont_memory_face_emits_ui_text(void) {
     return;
   }
 
-  const uint32_t text[] = {'R', 'u', 'n'};
+  uint32_t codepoints[ER_TEST_VARFONT_TEXT_LEN] = {0};
+  uint32_t* codepoint_cursor = codepoints;
+  *codepoint_cursor = 'R';
+  codepoint_cursor++;
+  *codepoint_cursor = 'u';
+  codepoint_cursor++;
+  *codepoint_cursor = 'n';
   er_ui_varfont_text_metrics_t measured = {0};
-  expect_status(er_ui_varfont_measure_text(face, text, ER_TEST_VARFONT_TEXT_LEN, &measured), ER_UI_OK, "varfont text: measure succeeds");
+  expect_status(er_ui_varfont_measure_text(face, codepoints, ER_TEST_VARFONT_TEXT_LEN, &measured), ER_UI_OK, "varfont text: measure succeeds");
   expect_true(measured.advance_width > 0.0f, "varfont text: measured advance is positive");
   expect_true(measured.line_height > 0.0f, "varfont text: measured line height is positive");
   expect_true(measured.ascender > 0.0f, "varfont text: measured ascender is positive");
   expect_status(er_ui_varfont_measure_text(face, NULL, 1u, &measured), ER_UI_ERR_INVALID_ARGUMENT,
                 "varfont text: measure rejects missing codepoints");
 
-  expect_status(er_ui_scene_push_varfont_text(&scene, face, text, ER_TEST_VARFONT_TEXT_LEN, 4.0f, 40.0f, ER_TEST_TEXT), ER_UI_OK,
+  expect_status(er_ui_scene_push_varfont_text(&scene, face, codepoints, ER_TEST_VARFONT_TEXT_LEN, 4.0f, 40.0f, ER_TEST_TEXT), ER_UI_OK,
                 "varfont text: shaped text emits scene quads");
   expect_true(scene.text_quad_count > 0u, "varfont text: emitted at least one quad");
   size_t text_quads_before_ascii = scene.text_quad_count;
@@ -633,9 +645,10 @@ static void test_varfont_memory_face_emits_ui_text(void) {
                 "varfont text: ascii helper rejects oversized stack budget");
   size_t atlas_count = vr_font_atlas_count(face);
   expect_true(atlas_count > 0u, "varfont text: atlas page was created");
-  expect_true(scene.text_quads[0].atlas_id < atlas_count, "varfont text: emitted quad references a valid atlas page");
+  const er_ui_quad_t* first_text_quad = scene.text_quads;
+  expect_true(first_text_quad->atlas_id < atlas_count, "varfont text: emitted quad references a valid atlas page");
   uint32_t atlas_texture = 0u;
-  expect_status((er_ui_status_t)vr_font_atlas_texture(face, scene.text_quads[0].atlas_id, &atlas_texture), (er_ui_status_t)VR_OK,
+  expect_status((er_ui_status_t)vr_font_atlas_texture(face, first_text_quad->atlas_id, &atlas_texture), (er_ui_status_t)VR_OK,
                 "varfont text: emitted atlas page resolves");
 
   vr_font_face_destroy(face);
