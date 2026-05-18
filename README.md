@@ -174,6 +174,14 @@ material, not relay policy. If multiple authority profiles exist, the user
 selects one before the runtime starts. If Secure Boot or TPM state cannot be
 verified, boot fails instead of silently continuing under an ambiguous authority.
 
+The interoperable Wi-Fi baseline is intentionally simple: an open fixed SSID
+named `edgerun`, no WPA enrollment, and no IP requirement for native EdgeRun
+traffic. A device may run as an AP or as a station and may switch roles when
+local policy asks it to. Once associated, the driver only needs adapter MAC,
+Ethernet-style RX/TX, and the EdgeRun EtherType; sealed EdgeRun frames ride as
+L2 payloads. TCP/IP can remain a separate compatibility channel on the same or a
+different interface.
+
 Recipient sealing should be hybrid. Small one-recipient payloads can be sealed
 directly to the recipient. Durable objects, large payloads, or anything with
 more than one recipient should be encrypted once with a content key, then only
