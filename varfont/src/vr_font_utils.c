@@ -324,6 +324,7 @@ static void vr_init_gvar_phantoms(
   outline->phantom_y[3] = (int32_t)outline->y_min;
 }
 
+//@optimizer-ignore-function gvar point index decoding must expand compressed point runs from the font table
 static vr_status_t vr_decode_point_indices(
   const vr_font_face_t* face,
   const uint8_t* p,
@@ -412,6 +413,7 @@ static vr_status_t vr_decode_point_indices(
   return VR_OK;
 }
 
+//@optimizer-ignore-function gvar delta decoding must expand zero, byte, and word run encodings point-by-point
 static vr_status_t vr_decode_delta_runs(
   const uint8_t* p,
   const uint8_t* end,
@@ -465,6 +467,7 @@ static vr_status_t vr_decode_delta_runs(
   return produced == out_count ? VR_OK : VR_ERR_INVALID_FONT;
 }
 
+//@optimizer-ignore-function variation tuple scalar must evaluate each active axis support interval
 static float vr_compute_tuple_scalar(const vr_font_face_t* face, uint16_t axis_count,
                                     const float* start, const float* peak, const float* end) {
   float scalar = 1.0f;
@@ -598,6 +601,7 @@ static void vr_iup_interpolate_outline_deltas(
   }
 }
 
+//@optimizer-ignore-function avar mapping must scan ordered axis segments and interpolate the containing interval
 float vr_apply_avar_mapping(const vr_font_face_t* face, uint16_t axis_index, float value) {
   if (!face || face->avar.axis_count == 0 || axis_index >= face->avar.axis_count) return value;
   if (!face->avar.map_from || !face->avar.map_to || !face->avar.segment_count || !face->avar.segment_offset) {
@@ -635,6 +639,7 @@ float vr_apply_avar_mapping(const vr_font_face_t* face, uint16_t axis_index, flo
   return value;
 }
 
+//@optimizer-ignore-function gvar parsing must decode glyph offsets and shared tuples from variable-font tables
 vr_status_t vr_parse_gvar(vr_font_face_t* face) {
   const vr_table_record_t* t = vr_find_table(face, VR_TABLE_TAG('g', 'v', 'a', 'r'));
   if (!t) {
@@ -726,6 +731,7 @@ vr_status_t vr_parse_gvar(vr_font_face_t* face) {
   return VR_OK;
 }
 
+//@optimizer-ignore-function avar parsing must decode each axis segment map from variable-font tables
 vr_status_t vr_parse_avar(vr_font_face_t* face) {
   const vr_table_record_t* t = vr_find_table(face, VR_TABLE_TAG('a', 'v', 'a', 'r'));
   if (!t) {
@@ -825,6 +831,7 @@ vr_status_t vr_parse_avar(vr_font_face_t* face) {
   return VR_OK;
 }
 
+//@optimizer-ignore-function gvar application must walk each tuple variation and apply per-point deltas
 vr_status_t vr_apply_gvar_variation(const vr_font_face_t* face, uint16_t glyph_id, vr_glyph_outline_t* outline) {
   if (!face || !outline) return VR_ERR_INVALID_FONT;
   if (face->gvar.axis_count == 0 || face->gvar.glyph_count == 0) return VR_OK;
@@ -1362,6 +1369,7 @@ vr_status_t vr_parse_cmap(vr_font_face_t* face) {
   }
 }
 
+//@optimizer-ignore-function kern parsing must allocate and decode each legacy kerning pair from font tables
 vr_status_t vr_parse_kern(vr_font_face_t* face) {
   const vr_table_record_t* kern = vr_find_table(face, VR_TABLE_TAG('k','e','r','n'));
   if (!kern) {
@@ -1435,6 +1443,7 @@ vr_status_t vr_parse_kern(vr_font_face_t* face) {
   return VR_OK;
 }
 
+//@optimizer-ignore-function axis mapping must scan each fvar axis and normalize against min/default/max
 float vr_map_axis_value(const vr_font_face_t* face, const char* tag, float user_value, float* out_norm) {
   *out_norm = 0.0f;
   for (uint16_t i = 0; i < face->fvar.axis_count; ++i) {
@@ -1538,6 +1547,7 @@ vr_status_t vr_parse_font(vr_font_face_t* face) {
   return VR_OK;
 }
 
+//@optimizer-ignore-function cmap lookup must scan encoded format 4 or 12 ranges and apply table offsets
 uint16_t vr_find_glyph_id(vr_font_face_t* face, uint32_t codepoint) {
   if (!face || !face->cmap.format) return 0;
   switch (face->cmap.format) {

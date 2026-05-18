@@ -89,10 +89,14 @@ int main(void) {
   check_int("abc hash", er_blake3_hash_bytes(abc, sizeof(abc), digest), 1);
   check_hash_hex("abc digest", digest, "6437b3ac38465133ffb63b75273a8db548c558465d79db03fd359c6cd5bd9d85");
 
+  //@optimizer-ignore deterministic test fixture pattern intentionally wraps at a prime byte value
   for (i = 0u; i < sizeof(large); ++i) {
+    //@optimizer-ignore deterministic test fixture pattern intentionally wraps at a prime byte value
     large[i] = (uint8_t)(i % 251u);
   }
+  //@optimizer-ignore deterministic test fixture pattern intentionally wraps at a prime byte value
   for (i = 0u; i < sizeof(huge); ++i) {
+    //@optimizer-ignore deterministic test fixture pattern intentionally wraps at a prime byte value
     huge[i] = (uint8_t)(i % 251u);
   }
   check_int("large hash", er_blake3_hash_bytes(large, 1255u, digest), 1);

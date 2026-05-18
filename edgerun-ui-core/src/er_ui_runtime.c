@@ -28,6 +28,7 @@ static size_t er_ui_cstr_len(const char* text) {
   return len;
 }
 
+//@optimizer-ignore-function text buffer reserve grows capacity geometrically with overflow checks
 static bool er_ui_text_reserve(er_ui_text_buffer_t* buffer, size_t byte_len) {
   if (!buffer) return false;
   if (!er_ui_allocator_is_valid(buffer->allocator)) return false;
@@ -377,6 +378,7 @@ static bool er_ui_utf8_decode_one(const char* text, size_t available, er_ui_utf8
   return false;
 }
 
+//@optimizer-ignore-function UTF-8 validation must decode each codepoint to count text length
 static bool er_ui_utf8_validate_and_count(const char* text, size_t* out_byte_len, size_t* out_char_count) {
   if (!text || !out_byte_len || !out_char_count) return false;
   size_t byte_len = er_ui_cstr_len(text);
@@ -393,6 +395,7 @@ static bool er_ui_utf8_validate_and_count(const char* text, size_t* out_byte_len
   return true;
 }
 
+//@optimizer-ignore-function cursor byte lookup must walk UTF-8 codepoints up to the logical cursor
 static size_t er_ui_text_cursor_byte_index(const er_ui_text_buffer_t* buffer) {
   if (!buffer || !buffer->value) return 0u;
   size_t offset = 0u;
@@ -406,6 +409,7 @@ static size_t er_ui_text_cursor_byte_index(const er_ui_text_buffer_t* buffer) {
   return offset;
 }
 
+//@optimizer-ignore-function text char count must decode each UTF-8 codepoint in the buffer
 static size_t er_ui_text_char_count(const er_ui_text_buffer_t* buffer) {
   if (!buffer || !buffer->value) return 0u;
   size_t offset = 0u;
@@ -457,6 +461,7 @@ static bool er_ui_codepoint_is_whitespace(uint32_t codepoint) {
   }
 }
 
+//@optimizer-ignore-function word navigation must decode UTF-8 codepoints up to the cursor
 static uint32_t er_ui_text_codepoint_before_cursor(const er_ui_text_buffer_t* buffer) {
   if (!buffer || buffer->cursor_chars == 0u) return 0u;
   size_t offset = 0u;
@@ -568,6 +573,7 @@ er_ui_status_t er_ui_text_buffer_insert(er_ui_text_buffer_t* buffer, const char*
   return ER_UI_OK;
 }
 
+//@optimizer-ignore-function text input handler must decode and insert each accepted UTF-8 codepoint
 er_ui_status_t er_ui_text_buffer_handle_text_input(er_ui_text_buffer_t* buffer, const char* text, er_ui_text_buffer_action_t* out_action) {
   if (!buffer || !buffer->value || !text || !out_action) return ER_UI_ERR_INVALID_ARGUMENT;
   *out_action = ER_UI_TEXT_ACTION_NONE;
@@ -794,6 +800,7 @@ er_ui_status_t er_ui_runtime_state_init_with_allocator(er_ui_runtime_state_t* st
   return ER_UI_OK;
 }
 
+//@optimizer-ignore-function runtime destroy must free each owned dynamic state collection
 void er_ui_runtime_state_destroy(er_ui_runtime_state_t* state) {
   if (!state) return;
   er_ui_allocator_t allocator = state->allocator;
@@ -852,6 +859,7 @@ er_ui_status_t er_ui_runtime_sync_transitions(er_ui_runtime_state_t* state, cons
   return ER_UI_OK;
 }
 
+//@optimizer-ignore-function transition advance must visit each active transition once per frame
 bool er_ui_runtime_advance_transitions(er_ui_runtime_state_t* state, uint32_t delta_ms) {
   if (!state) return false;
   bool needs_redraw = false;
@@ -986,6 +994,7 @@ er_ui_status_t er_ui_runtime_select_tab(er_ui_runtime_state_t* state, uint32_t i
   return ER_UI_OK;
 }
 
+//@optimizer-ignore-function text state replacement must scan ids and free the replaced value
 er_ui_status_t er_ui_runtime_set_text(er_ui_runtime_state_t* state, uint32_t id, const char* value) {
   if (!state || !value) return ER_UI_ERR_INVALID_ARGUMENT;
   char* copy = NULL;
@@ -1062,6 +1071,7 @@ void er_ui_runtime_clear_focus(er_ui_runtime_state_t* state) {
   state->has_focused = false;
 }
 
+//@optimizer-ignore-function focus scope registration must filter hit refs and replace existing scope storage
 er_ui_status_t er_ui_runtime_set_focus_scope(er_ui_runtime_state_t* state, uint32_t open_id, const er_ui_hit_t* hits, size_t hit_count) {
   if (!state || (!hits && hit_count > 0u)) return ER_UI_ERR_INVALID_ARGUMENT;
 
@@ -1108,6 +1118,7 @@ er_ui_status_t er_ui_runtime_set_focus_scope(er_ui_runtime_state_t* state, uint3
   return ER_UI_OK;
 }
 
+//@optimizer-ignore-function focus scope clear must free matching scope storage and compact the array
 void er_ui_runtime_clear_focus_scope(er_ui_runtime_state_t* state, uint32_t open_id) {
   if (!state) return;
   for (size_t i = 0u; i < state->focus_scope_count; ++i) {

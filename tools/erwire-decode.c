@@ -53,6 +53,7 @@ static uint64_t er_get_u64(const uint8_t* bytes) {
   return (uint64_t)er_get_u32(bytes) | ((uint64_t)er_get_u32(bytes + 4) << 32);
 }
 
+//@optimizer-ignore-function CRC32 decoder must fold every payload byte through the bit-serial polynomial
 static uint32_t er_crc32(const uint8_t* data, uint32_t len) {
   uint32_t crc = 0xffffffffu;
   uint32_t i;
@@ -373,6 +374,7 @@ static int er_parse_port(const char* s, uint16_t* out_port) {
   return 0;
 }
 
+//@optimizer-ignore-function stream decoder must read and decode each framed packet from stdin
 static int er_decode_stdin(void) {
   for (;;) {
     size_t got = fread(g_packet, 1u, ERWIRE_HEADER_SIZE, stdin);
@@ -402,6 +404,7 @@ static int er_decode_stdin(void) {
   }
 }
 
+//@optimizer-ignore-function UDP decoder must receive and decode each datagram until stopped
 static int er_decode_udp(uint16_t port) {
   int fd;
   struct sockaddr_in addr;

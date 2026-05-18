@@ -160,6 +160,7 @@ static void vr_raster_free_array(const vr_font_face_t* face, void* ptr, size_t c
   vr_dealloc(face, ptr, cap * elem_size, 8u);
 }
 
+//@optimizer-ignore-function TrueType glyph outline loading must expand repeated flags and coordinate deltas point-by-point
 static vr_status_t vr_load_glyph_outline_internal(
   const vr_font_face_t* face,
   uint16_t glyph_id,
@@ -1093,6 +1094,7 @@ void vr_free_outline(const vr_font_face_t* face, vr_glyph_outline_t* outline) {
   vr_zero(outline, sizeof(*outline));
 }
 
+//@optimizer-ignore-function simple glyph parsing must expand repeated flags and coordinate deltas point-by-point
 static vr_status_t vr_parse_simple_glyph(const vr_font_face_t* face, const uint8_t* p, const uint8_t* end, int16_t contours, vr_glyph_outline_t* out) {
   (void)face;
   size_t n = (size_t)contours;
@@ -1520,6 +1522,7 @@ static float vr_quadratic_point_distance_sq(float px, float py, const vr_raster_
   return dx * dx + dy * dy;
 }
 
+//@optimizer-ignore-function quadratic distance search samples fixed curve points and Newton-refines candidates
 static float vr_quadratic_distance_sq(float px, float py, const vr_raster_curve_t* curve) {
   float ax = curve->x0 - 2.0f * curve->x1 + curve->x2;
   float ay = curve->y0 - 2.0f * curve->y1 + curve->y2;
@@ -1752,6 +1755,7 @@ vr_status_t vr_rasterize_outline(const vr_font_face_t* face,
     out_top);
 }
 
+//@optimizer-ignore-function glyph rasterization must visit each output pixel and each configured subpixel sample
 vr_status_t vr_rasterize_outline_with_mode(
   const vr_font_face_t* face,
   const vr_glyph_outline_t* outline,

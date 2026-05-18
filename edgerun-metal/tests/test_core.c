@@ -44,6 +44,7 @@
 static int g_failed = 0;
 static int g_total = 0;
 
+//@optimizer-ignore-function fake test hash must visit each supplied byte span deterministically
 static UINT8 test_hash(void* ctx, const UINT8* domain, UINTN domain_len,
                        const ErByteSpan* spans, UINTN span_count, ErHash* out_hash) {
   UINTN i;
@@ -248,7 +249,9 @@ static void test_blake3(void) {
   check_hash_hex("blake3 abc digest", digest,
                  "6437b3ac38465133ffb63b75273a8db548c558465d79db03fd359c6cd5bd9d85");
 
+  //@optimizer-ignore deterministic test fixture pattern intentionally wraps at a prime byte value
   for (i = 0u; i < sizeof(large); ++i) {
+    //@optimizer-ignore deterministic test fixture pattern intentionally wraps at a prime byte value
     large[i] = (UINT8)(i % 251u);
   }
   check_int64("blake3 large",
@@ -626,7 +629,9 @@ static void test_mmio_handles(void) {
 
   er_mmio_reset();
   check_int64("mmio info after reset", er_mmio_get_info(handle, &info), 0);
+  //@optimizer-ignore mmio table saturation test must map every slot
   for (i = 0; i < ER_MMIO_MAX_MAPS; ++i) {
+    //@optimizer-ignore mmio table saturation test must map every slot
     handles[i] = er_mmio_map((INT64)(UINTN)&regs[0] + (INT64)(i * sizeof(regs)), (INT64)sizeof(regs));
     check_int64("mmio table handle", handles[i], (INT64)(i + 1u));
   }

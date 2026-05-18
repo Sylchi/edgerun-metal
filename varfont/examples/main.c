@@ -166,7 +166,9 @@ static void sdl_demo_release(sdl_demo_app_t* app) {
   }
 
   if (app->layer_vertices) {
+    //@optimizer-ignore demo teardown must release each optional layer allocation
     for (size_t i = 0u; i < VR_DEMO_LAYER_COUNT; ++i) {
+      //@optimizer-ignore demo teardown must release each optional layer allocation
       free(app->layer_vertices[i]);
       app->layer_vertices[i] = NULL;
     }
@@ -225,6 +227,7 @@ static void sdl_free_demo_layers(vr_font_face_t* face, demo_layer_render_t* laye
   }
 }
 
+//@optimizer-ignore-function demo intentionally rebuilds fixed visual layers for size and weight samples
 static vr_status_t sdl_build_demo_layers(
   vr_font_face_t* face,
   const uint32_t* cps,
@@ -381,6 +384,7 @@ static uint8_t sdl_msdf_to_alpha(
 
   for (uint8_t sy = 0u; sy < VR_MSDF_RECON_AA_SUBSAMPLES; ++sy) {
     float fy = (float)sy * aa_step + aa_step * 0.5f - half;
+    //@optimizer-ignore msdf reconstruction samples a fixed subsample grid for visual fidelity
     for (uint8_t sx = 0u; sx < VR_MSDF_RECON_AA_SUBSAMPLES; ++sx) {
       float fx = (float)sx * aa_step + aa_step * 0.5f - half;
       float d = sdl_msdf_sample_distance_f(msdf, (float)x + fx, (float)y + fy, width, height, spread);
@@ -438,11 +442,16 @@ static void sdl_convert_msdf_to_rgba(const uint8_t* msdf, int width, int height,
   bool invert_sign = sdl_msdf_is_inverted(msdf, width, height, VR_MSDF_RECON_SPREAD);
   size_t pixel_count = (size_t)width * (size_t)height;
   uint32_t* out = (uint32_t*)rgba;
+  int x = 0;
+  int y = 0;
   for (size_t i = 0; i < pixel_count; ++i) {
-    int x = (int)(i % (size_t)width);
-    int y = (int)(i / (size_t)width);
     uint8_t alpha = msdf ? sdl_msdf_to_alpha(msdf, x, y, width, height, VR_MSDF_RECON_SPREAD, invert_sign) : 0u;
     out[i] = sdl_map_white_alpha(rgba_format, alpha);
+    ++x;
+    if (x == width) {
+      x = 0;
+      ++y;
+    }
   }
   SDL_FreeFormat(rgba_format);
 }
@@ -609,14 +618,18 @@ static bool sdl_render_demo_frame(sdl_demo_app_t* app) {
   SDL_RenderClear(app->renderer);
 
   for (size_t l = 0u; l < VR_DEMO_LAYER_COUNT; ++l) {
+    //@optimizer-ignore demo render loop checks each fixed visual layer for visible ranges
     if (app->layer_render_data[l].range_count == 0u || app->layer_vertex_counts[l] == 0u) {
       continue;
     }
+    //@optimizer-ignore demo render loop must submit each atlas range in each visible layer
     for (size_t r = 0u; r < app->layer_render_data[l].range_count; ++r) {
+      //@optimizer-ignore demo render loop indexes per-layer atlas ranges for draw submission
       const vr_vertex_atlas_range_t* range = &app->layer_render_data[l].ranges[r];
       if (range->vertex_count == 0u) {
         continue;
       }
+      //@optimizer-ignore demo render loop validates each atlas range against layer vertex bounds
       if (range->start_vertex + range->vertex_count > app->layer_render_data[l].vertex_count) {
         fprintf(stderr, "fatal: malformed atlas range\n");
         return false;
@@ -634,7 +647,9 @@ static bool sdl_render_demo_frame(sdl_demo_app_t* app) {
 
       SDL_Vertex* batch_start = app->layer_vertices[l] + range->start_vertex;
       int batch_count = (int)range->vertex_count;
+      //@optimizer-ignore demo render loop submits each atlas-backed geometry batch
       if (SDL_RenderGeometry(
+            //@optimizer-ignore demo render loop passes the SDL renderer for each geometry batch
             app->renderer,
             app->gl_iface.textures[tex],
             batch_start,
@@ -691,6 +706,7 @@ static uint32_t utf8_to_codepoints(const char* text, uint32_t** out_codepoints, 
   for (size_t i = 0; i < len; ++i) {
     unsigned char ch = (unsigned char)text[i];
     if (ch >= VR_UTF8_MAX_ASCII) {
+      //@optimizer-ignore demo ASCII conversion releases output buffer on unsupported input
       free(cps);
       return VR_ERR_UNSUPPORTED;
     }
@@ -837,11 +853,15 @@ int main(int argc, char** argv) {
   }
 
   for (size_t i = 0u; i < VR_DEMO_LAYER_COUNT; ++i) {
+    //@optimizer-ignore demo vertex upload checks each fixed visual layer
     if (app.layer_render_data[i].range_count == 0u) {
       continue;
     }
+    //@optimizer-ignore demo vertex upload builds one SDL vertex buffer per visual layer
     app.layer_vertices[i] = build_render_vertices(
+      //@optimizer-ignore demo vertex upload consumes per-layer render vertices
       app.layer_render_data[i].verts,
+      //@optimizer-ignore demo vertex upload consumes per-layer render vertex counts
       app.layer_render_data[i].vertex_count,
       &app.layer_vertex_counts[i]);
     if (!app.layer_vertices[i]) {
@@ -863,6 +883,7 @@ int main(int argc, char** argv) {
   bool running = true;
   while (running) {
     SDL_Event e;
+    //@optimizer-ignore demo event pump must drain queued SDL events every frame
     while (SDL_PollEvent(&e) == 1) {
       if (e.type == SDL_QUIT) {
         running = false;
@@ -871,6 +892,7 @@ int main(int argc, char** argv) {
       }
     }
 
+    //@optimizer-ignore demo main loop renders one frame per SDL tick
     running = sdl_render_demo_frame(&app);
     SDL_Delay(VR_RENDER_DELAY_MS);
   }

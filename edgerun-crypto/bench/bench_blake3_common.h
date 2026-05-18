@@ -43,7 +43,9 @@ static uint8_t bench_run_case_once(const BenchCase* c, const uint8_t* bytes, uin
   if (start == 0u) {
     return 0u;
   }
+  //@optimizer-ignore benchmark intentionally repeats the hash workload for stable timing
   for (i = 0u; i < c->iterations; ++i) {
+    //@optimizer-ignore benchmark hot loop intentionally calls the hash backend each iteration
     if (bench_blake3_hash(bytes, c->bytes_len, digest) == 0u) {
       return 0u;
     }
@@ -95,6 +97,7 @@ int main(void) {
   size_t max_len = 0u;
   size_t i;
 
+  //@optimizer-ignore benchmark owns one shared input allocation and releases it on early failure
   for (i = 0u; i < sizeof(cases) / sizeof(cases[0]); ++i) {
     if (cases[i].bytes_len > max_len) {
       max_len = cases[i].bytes_len;
@@ -111,6 +114,7 @@ int main(void) {
   printf("BLAKE3 benchmark (%s)\n", bench_blake3_backend_name());
   for (i = 0u; i < sizeof(cases) / sizeof(cases[0]); ++i) {
     if (bench_run_case(&cases[i], bytes) == 0u) {
+      //@optimizer-ignore benchmark releases shared input allocation on early failure
       free(bytes);
       return 1;
     }
