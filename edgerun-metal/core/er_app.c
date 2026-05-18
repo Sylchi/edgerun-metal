@@ -15,6 +15,7 @@ static const UINT8 g_app_launch_allocation_domain[] = "edgerun:c:v1:app:launch-a
 static const UINT8 g_app_execution_jurisdiction_domain[] = "edgerun:c:v1:app:execution-jurisdiction";
 static const UINT8 g_app_ui_presentation_domain[] = "edgerun:c:v1:app:ui-presentation";
 static const UINT8 g_app_package_domain[] = "edgerun:c:v1:app:package";
+static const UINT8 g_app_package_storage_source_domain[] = "edgerun:c:v1:app:package-storage-source";
 
 enum {
   ER_APP_BYTE_BITS = 8u,
@@ -31,6 +32,11 @@ enum {
   ER_APP_PACKAGE_APP_OBJECT_SPAN = 1u,
   ER_APP_PACKAGE_MANIFEST_OBJECT_SPAN = 2u,
   ER_APP_PACKAGE_UI_ASSETS_OBJECT_SPAN = 3u,
+  ER_APP_PACKAGE_STORAGE_SPAN_COUNT = 4u,
+  ER_APP_PACKAGE_STORAGE_PACKAGE_SPAN = 0u,
+  ER_APP_PACKAGE_STORAGE_APP_ROUTE_SPAN = 1u,
+  ER_APP_PACKAGE_STORAGE_MANIFEST_ROUTE_SPAN = 2u,
+  ER_APP_PACKAGE_STORAGE_UI_ASSETS_ROUTE_SPAN = 3u,
   ER_APP_IDENTITY_HASH_SPAN_COUNT = 4u,
   ER_APP_IDENTITY_APP_OBJECT_SPAN = 0u,
   ER_APP_IDENTITY_MANIFEST_SPAN = 1u,
@@ -269,6 +275,21 @@ static UINT8 er_app_load_package_object(const ErCryptoProvider* crypto,
   return 1;
 }
 
+static UINT8 er_app_storage_retrieve_route_valid(const ErAdmittedRoute* route) {
+  return (UINT8)(route != 0 &&
+                 route->abi_version == ER_WORK_ABI_VERSION &&
+                 route->role == ER_NODE_ROLE_STORAGE &&
+                 route->department == ER_DEPARTMENT_STORAGE &&
+                 route->work_type == ER_WORK_TYPE_OBJECT_RETRIEVE &&
+                 route->admitted_budget != 0u &&
+                 er_app_hash_nonzero(&route->route_id) != 0u &&
+                 er_app_hash_nonzero(&route->request_hash) != 0u &&
+                 er_app_hash_nonzero(&route->admission_hash) != 0u &&
+                 er_app_node_nonzero(&route->source_node_id) != 0u &&
+                 er_app_node_nonzero(&route->target_node_id) != 0u &&
+                 er_app_node_nonzero(&route->relay_node_id) != 0u);
+}
+
 UINT8 er_app_prepare_package_manifest(const ErCryptoProvider* crypto,
                                       const ErVfsObjectLabelRef* app_object,
                                       const ErVfsObjectLabelRef* manifest_object,
@@ -357,6 +378,56 @@ UINT8 er_app_load_package_objects(const ErCryptoProvider* crypto,
     out_loaded->ui_assets_len = ui_assets_len;
   }
   return 1;
+}
+
+UINT8 er_app_prepare_package_storage_source(const ErCryptoProvider* crypto,
+                                            const ErAppPackageManifest* package,
+                                            const ErAdmittedRoute* app_route,
+                                            const ErAdmittedRoute* manifest_route,
+                                            const ErAdmittedRoute* ui_assets_route,
+                                            ErAppPackageStorageSource* out_source) {
+  ErHash zero_route_id;
+  const ErHash* ui_assets_route_id = &zero_route_id;
+  ErByteSpan spans[ER_APP_PACKAGE_STORAGE_SPAN_COUNT];
+
+  if (crypto == 0 || out_source == 0 ||
+      er_app_package_manifest_valid(crypto, package) == 0u ||
+      er_app_storage_retrieve_route_valid(app_route) == 0u ||
+      er_app_storage_retrieve_route_valid(manifest_route) == 0u) {
+    return 0;
+  }
+  er_mem_zero((UINT8*)&zero_route_id, (UINTN)sizeof(zero_route_id));
+  if (package->ui_assets_object_len != 0u) {
+    if (er_app_storage_retrieve_route_valid(ui_assets_route) == 0u) {
+      return 0;
+    }
+    ui_assets_route_id = &ui_assets_route->route_id;
+  } else if (ui_assets_route != 0) {
+    return 0;
+  }
+
+  er_mem_zero((UINT8*)out_source, (UINTN)sizeof(*out_source));
+  out_source->abi_version = ER_APP_ABI_VERSION;
+  out_source->app_kind = ER_APP_KIND_USER;
+  out_source->package_id = package->package_id;
+  out_source->app_retrieve_route_id = app_route->route_id;
+  out_source->manifest_retrieve_route_id = manifest_route->route_id;
+  out_source->ui_assets_retrieve_route_id = *ui_assets_route_id;
+
+  spans[ER_APP_PACKAGE_STORAGE_PACKAGE_SPAN].bytes = out_source->package_id.bytes;
+  spans[ER_APP_PACKAGE_STORAGE_PACKAGE_SPAN].len = ER_HASH_LEN;
+  spans[ER_APP_PACKAGE_STORAGE_APP_ROUTE_SPAN].bytes = out_source->app_retrieve_route_id.bytes;
+  spans[ER_APP_PACKAGE_STORAGE_APP_ROUTE_SPAN].len = ER_HASH_LEN;
+  spans[ER_APP_PACKAGE_STORAGE_MANIFEST_ROUTE_SPAN].bytes =
+      out_source->manifest_retrieve_route_id.bytes;
+  spans[ER_APP_PACKAGE_STORAGE_MANIFEST_ROUTE_SPAN].len = ER_HASH_LEN;
+  spans[ER_APP_PACKAGE_STORAGE_UI_ASSETS_ROUTE_SPAN].bytes =
+      out_source->ui_assets_retrieve_route_id.bytes;
+  spans[ER_APP_PACKAGE_STORAGE_UI_ASSETS_ROUTE_SPAN].len = ER_HASH_LEN;
+  return er_crypto_hash(crypto, g_app_package_storage_source_domain,
+                        (UINTN)(sizeof(g_app_package_storage_source_domain) - 1u),
+                        spans, ER_APP_PACKAGE_STORAGE_SPAN_COUNT,
+                        &out_source->source_id);
 }
 
 UINT8 er_app_derive_identity_from_package(const ErCryptoProvider* crypto,
