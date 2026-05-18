@@ -219,15 +219,23 @@ UINT8 er_native_boot_decode_endpoint_intent(const ErNativeRelayIngress* ingress,
     return 1;
   }
   if (er_native_boot_route_is_render_capability(route) == 0u ||
-      payload_len != (UINT32)sizeof(out_intent->capability)) {
+      payload_len < (UINT32)sizeof(out_intent->capability)) {
     out_intent->kind = ER_NATIVE_ENDPOINT_INTENT_UNSUPPORTED;
     return 1;
   }
   er_mem_copy((UINT8*)&out_intent->capability, payload,
               (UINTN)sizeof(out_intent->capability));
+  out_intent->scene_payload_len =
+      payload_len - (UINT32)sizeof(out_intent->capability);
+  if (out_intent->scene_payload_len > 0u) {
+    er_mem_copy(out_intent->scene_payload,
+                payload + (UINT32)sizeof(out_intent->capability),
+                (UINTN)out_intent->scene_payload_len);
+  }
   if (er_work_capability_envelope_header_valid(&out_intent->capability) == 0u ||
       out_intent->capability.content_type != ER_CAPABILITY_CONTENT_RENDER ||
       out_intent->capability.risk_flags != ER_CAPABILITY_RISK_NONE ||
+      out_intent->capability.payload_len != out_intent->scene_payload_len ||
       out_intent->capability.sequence != out_intent->packet.sequence ||
       er_node_id_equal(&out_intent->capability.source_node_id,
                                 &route->source_node_id) == 0u ||

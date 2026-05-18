@@ -102,6 +102,7 @@ void er_run_os_path(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE* SystemTable) {
   render_context.apps = apps;
   render_context.app_count = ER_UI_BOOT_APP_COUNT;
   render_context.active_app = 0u;
+  render_context.scene = &scene;
 
   if (er_ui_ledger_app_state_init(&ledger_state, er_ui_boot_allocator()) != ER_UI_OK) {
     er_println("ui renderer: ledger app state failed");

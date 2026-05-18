@@ -13,6 +13,7 @@
 #include "er_gfx_console.h"
 #include "er_ps2_keyboard.h"
 #include "er_native_boot.h"
+#include "er_render_endpoint.h"
 #include "er_ui_surface_renderer.h"
 #include "er_ui_components.h"
 #include "er_ui_ledger_app.h"
@@ -125,6 +126,7 @@ typedef struct {
   UINT64 malformed;
   UINT64 unsupported;
   UINT64 render_capability;
+  UINT64 render_scenes;
   UINT64 transit_hops;
   UINT64 transit_emitted;
 } ErUiBootNativeRelayStats;
@@ -143,9 +145,12 @@ typedef struct {
   ErUiBootAppContext* apps;
   UINT32 app_count;
   UINT32 active_app;
+  er_ui_scene_t* scene;
   ErNativeBootState* native_relay;
   ErUiBootNativeRelayStats native_relay_stats;
   ErRelayTransitHop native_relay_last_transit;
+  ErRenderEndpointCapture native_relay_last_render_capture;
+  ErRenderEndpointScene native_relay_last_render_scene;
 } ErUiBootRenderContext;
 
 extern ErWasmHostCalls g_host_calls;

@@ -39,6 +39,25 @@ static UINT8 er_ui_boot_prepare_render_endpoint(const ErAdmittedRoute* route,
   return 1u;
 }
 
+static UINT8 er_ui_boot_prepare_route_envelope(const ErAdmittedRoute* route,
+                                               const ErHash* packet_hash,
+                                               UINT64 sequence,
+                                               ErChannelEnvelopeHeader* out_envelope) {
+  if (route == 0 || packet_hash == 0 || out_envelope == 0) {
+    return 0u;
+  }
+  er_mem_zero((UINT8*)out_envelope, (UINTN)sizeof(*out_envelope));
+  out_envelope->abi_version = ER_WORK_ABI_VERSION;
+  out_envelope->packet_kind = route->work_type;
+  out_envelope->channel_id = route->channel_id;
+  out_envelope->from = route->source_node_id;
+  out_envelope->to = route->target_node_id;
+  out_envelope->route_hash = route->target_route_commitment;
+  out_envelope->packet_hash = *packet_hash;
+  out_envelope->sequence = sequence;
+  return er_work_verify_channel_envelope_for_route(out_envelope, route);
+}
+
 static UINT8 er_ui_boot_prepare_native_relay_transit(ErUiBootRenderContext* render,
                                                      const ErNativeRelayIngress* ingress,
                                                      const ErAdmittedRoute* route,
@@ -54,16 +73,8 @@ static UINT8 er_ui_boot_prepare_native_relay_transit(ErUiBootRenderContext* rend
     return 0u;
   }
 
-  er_mem_zero((UINT8*)&envelope, (UINTN)sizeof(envelope));
-  envelope.abi_version = ER_WORK_ABI_VERSION;
-  envelope.packet_kind = route->work_type;
-  envelope.channel_id = route->channel_id;
-  envelope.from = route->source_node_id;
-  envelope.to = route->target_node_id;
-  envelope.route_hash = route->target_route_commitment;
-  envelope.packet_hash = ingress->packet_hash;
-  envelope.sequence = packet->sequence;
-  if (er_work_verify_channel_envelope_for_route(&envelope, route) == 0u) {
+  if (er_ui_boot_prepare_route_envelope(route, &ingress->packet_hash,
+                                        packet->sequence, &envelope) == 0u) {
     return 0u;
   }
 
@@ -100,6 +111,43 @@ static UINT8 er_ui_boot_prepare_native_relay_transit(ErUiBootRenderContext* rend
                 (UINT32)sizeof(render->native_relay_last_transit));
     ++render->native_relay_stats.transit_emitted;
   }
+  return 1u;
+}
+
+static UINT8 er_ui_boot_decode_native_render_scene(ErUiBootRenderContext* render,
+                                                   const ErAdmittedRoute* route,
+                                                   const ErNativeEndpointIntent* intent,
+                                                   UINT8* out_redraw) {
+  ErCryptoProvider crypto;
+  ErChannelEnvelopeHeader envelope;
+
+  if (render == 0 || route == 0 || intent == 0 || out_redraw == 0) {
+    return 0u;
+  }
+  if (intent->scene_payload_len == 0u) {
+    return 1u;
+  }
+  if (render->scene == 0) {
+    return 0u;
+  }
+
+  er_crypto_blake3_provider(&crypto);
+  if (er_ui_boot_prepare_route_envelope(route, &intent->capability.payload_hash,
+                                        intent->packet.sequence,
+                                        &envelope) == 0u ||
+      er_render_endpoint_capture(&crypto, route, &envelope,
+                                 &intent->capability,
+                                 &render->native_relay_last_render_capture) == 0u ||
+      er_render_endpoint_decode_scene_payload(&crypto,
+                                              &render->native_relay_last_render_capture,
+                                              intent->scene_payload,
+                                              intent->scene_payload_len,
+                                              render->scene,
+                                              &render->native_relay_last_render_scene) == 0u) {
+    return 0u;
+  }
+  ++render->native_relay_stats.render_scenes;
+  *out_redraw = 1u;
   return 1u;
 }
 
@@ -146,7 +194,9 @@ UINT8 er_ui_boot_dispatch_native_relay_ingress(ErUiBootRenderContext* render,
       return 1u;
     case ER_NATIVE_ENDPOINT_INTENT_RENDER_CAPABILITY:
       if (er_ui_boot_prepare_native_relay_transit(render, ingress, &route,
-                                                  &intent.packet) == 0u) {
+                                                  &intent.packet) == 0u ||
+          er_ui_boot_decode_native_render_scene(render, &route, &intent,
+                                                out_redraw) == 0u) {
         return 0u;
       }
       ++render->native_relay_stats.render_capability;

@@ -51,6 +51,8 @@ typedef struct {
   ErNativeEndpointIntentKind kind;
   ErRelayPacketHeader packet;
   ErCapabilityEnvelopeHeader capability;
+  UINT32 scene_payload_len;
+  UINT8 scene_payload[ERWIRE_MAX_PAYLOAD];
 } ErNativeEndpointIntent;
 
 UINT8 er_native_boot_configure_erwire_eth_sink(UINT64 mmio_base, UINT64 mmio_len,
