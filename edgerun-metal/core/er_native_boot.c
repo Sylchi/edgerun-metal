@@ -201,8 +201,8 @@ static UINT8 er_native_boot_route_is_storage_object(const ErAdmittedRoute* route
 static UINT8 er_native_boot_object_packet_header_valid(const ErVfsObjectPacket* packet) {
   return (UINT8)(packet != 0 &&
                  packet->header.abi_version == ER_VFS_ABI_VERSION &&
-                 packet->header.packet_count == 1u &&
-                 packet->header.packet_index == 0u &&
+                 packet->header.packet_count != 0u &&
+                 packet->header.packet_index < packet->header.packet_count &&
                  packet->header.object_len != 0u &&
                  packet->header.bytes_len != 0u &&
                  packet->header.bytes_len <= ER_VFS_OBJECT_PACKET_BYTES &&
