@@ -12,6 +12,7 @@ endif()
 
 add_library(er_ui_core
   src/er_ui_components.c
+  src/er_ui_demo_apps.c
   src/er_ui_icon.c
   src/er_ui_metal.c
   src/er_ui_node.c
@@ -40,10 +41,12 @@ if(ER_UI_CORE_BUILD_TESTS)
 
 add_executable(er_ui_core_tests
     tests/test_components.c
+    tests/test_demo_apps.c
     tests/test_node.c
     tests/test_shell.c
     tests/test_runtime.c
     tests/test_scene.c
+    tests/test_text.c
   )
 
   target_link_libraries(er_ui_core_tests PRIVATE er_ui_core)
