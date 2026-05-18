@@ -120,6 +120,7 @@ typedef struct {
   ErUiSurfaceFrameBudget frame_budget;
   er_ui_resolved_theme_t theme;
   const er_ui_scene_t* wasm_scene;
+  ErUiWasmAppRuntime* wasm_runtime;
   UINT8 wasm_scene_ready;
 } ErUiBootRenderContext;
 
@@ -1356,38 +1357,48 @@ static void er_ui_boot_prepare_wasm_presentation(const er_ui_scene_budget_t* sce
   out_presentation->max_text_quads = (UINT64)scene_budget->text_quads;
 }
 
-static UINT8 er_ui_boot_run_wasm_counter(er_ui_scene_t* wasm_scene,
-                                         const er_ui_scene_budget_t* scene_budget) {
-  ErUiWasmAppRuntime runtime;
-  ErAppUiPresentation presentation;
+static UINT8 er_ui_boot_execute_wasm_counter(ErUiWasmAppRuntime* runtime) {
   INT64 main_result = 0;
 
-  if (wasm_scene == 0 || scene_budget == 0) {
+  if (runtime == 0) {
     return 0u;
   }
-  er_ui_boot_prepare_wasm_presentation(scene_budget, &presentation);
-  er_mem_zero((UINT8*)&runtime, (UINTN)sizeof(runtime));
-  runtime.memory = g_wasm_driver_memory;
-  runtime.memory_size = (UINT32)sizeof(g_wasm_driver_memory);
-  runtime.relay_inbox_base = ER_UI_WASM_RELAY_INBOX_BASE;
-  runtime.relay_inbox_len = ER_UI_WASM_RELAY_INBOX_BYTES;
-  runtime.relay_outbox_base = ER_UI_WASM_RELAY_OUTBOX_BASE;
-  runtime.relay_outbox_len = ER_UI_WASM_RELAY_OUTBOX_BYTES;
-  runtime.presentation = &presentation;
-  runtime.scene = wasm_scene;
-  if (er_ui_wasm_app_run(g_edgerun_ui_counter_wasm, ER_UI_COUNTER_WASM_SIZE,
-                         &g_host_calls, &runtime, &main_result) != 0 ||
+  if (er_ui_wasm_app_execute(runtime, &main_result) != 0 ||
       main_result != (INT64)(UINT64)ER_UI_WASM_COUNTER_PACKET_BYTES) {
     return 0u;
   }
   er_print("ui renderer: wasm scene rects=");
-  er_print_u64_dec((UINT64)runtime.emitted_stats.rects);
+  er_print_u64_dec((UINT64)runtime->emitted_stats.rects);
   er_print(" hits=");
-  er_print_u64_dec((UINT64)runtime.emitted_stats.hits);
+  er_print_u64_dec((UINT64)runtime->emitted_stats.hits);
   er_print(" text=");
-  er_print_u64_dec((UINT64)runtime.emitted_stats.text_quads);
+  er_print_u64_dec((UINT64)runtime->emitted_stats.text_quads);
   er_println("");
   return 1u;
+}
+
+static UINT8 er_ui_boot_prepare_wasm_counter(ErUiWasmAppRuntime* runtime,
+                                             ErAppUiPresentation* presentation,
+                                             er_ui_scene_t* wasm_scene,
+                                             const er_ui_scene_budget_t* scene_budget) {
+  if (runtime == 0 || presentation == 0 || wasm_scene == 0 || scene_budget == 0) {
+    return 0u;
+  }
+  er_ui_boot_prepare_wasm_presentation(scene_budget, presentation);
+  er_mem_zero((UINT8*)runtime, (UINTN)sizeof(*runtime));
+  runtime->memory = g_wasm_driver_memory;
+  runtime->memory_size = (UINT32)sizeof(g_wasm_driver_memory);
+  runtime->relay_inbox_base = ER_UI_WASM_RELAY_INBOX_BASE;
+  runtime->relay_inbox_len = ER_UI_WASM_RELAY_INBOX_BYTES;
+  runtime->relay_outbox_base = ER_UI_WASM_RELAY_OUTBOX_BASE;
+  runtime->relay_outbox_len = ER_UI_WASM_RELAY_OUTBOX_BYTES;
+  runtime->presentation = presentation;
+  runtime->scene = wasm_scene;
+  if (er_ui_wasm_app_prepare(g_edgerun_ui_counter_wasm, ER_UI_COUNTER_WASM_SIZE,
+                             &g_host_calls, runtime) != 0) {
+    return 0u;
+  }
+  return er_ui_boot_execute_wasm_counter(runtime);
 }
 
 static UINT8 er_ui_boot_render_scene(er_ui_scene_t* scene,
@@ -1479,6 +1490,7 @@ static er_ui_action_t er_ui_boot_action_from_ps2(er_ui_runtime_state_t* runtime,
 static UINT8 er_ui_boot_apply_input(er_ui_demo_apps_state_t* demo_state,
                                     er_ui_runtime_state_t* runtime,
                                     er_ui_scene_t* scene,
+                                    const ErUiBootRenderContext* render,
                                     ErPs2KeyboardAction input,
                                     UINT8* out_redraw) {
   er_ui_action_t action;
@@ -1493,6 +1505,15 @@ static UINT8 er_ui_boot_apply_input(er_ui_demo_apps_state_t* demo_state,
   }
   if (input.kind == ER_PS2_KEYBOARD_ACTION_NONE) {
     return 1u;
+  }
+  if (input.kind == ER_PS2_KEYBOARD_ACTION_UI_KEY && render != 0 &&
+      render->wasm_runtime != 0) {
+    if (er_ui_wasm_app_deliver_key_input(render->wasm_runtime,
+                                         input.key, input.modifiers) != 0 ||
+        er_ui_boot_execute_wasm_counter(render->wasm_runtime) == 0u) {
+      return 0u;
+    }
+    *out_redraw = 1u;
   }
   action = er_ui_boot_action_from_ps2(runtime, scene, input);
   if (action.kind == ER_UI_ACTION_NONE) {
@@ -1526,7 +1547,7 @@ static void er_ui_boot_input_loop(er_ui_demo_apps_state_t* demo_state,
       er_pause_once();
       continue;
     }
-    if (er_ui_boot_apply_input(demo_state, runtime, scene, input, &redraw) == 0u) {
+    if (er_ui_boot_apply_input(demo_state, runtime, scene, render, input, &redraw) == 0u) {
       er_halt_forever();
     }
     if (redraw != 0u &&
@@ -1551,6 +1572,8 @@ static void er_run_ui_profile(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE* SystemTa
   er_ui_scene_t wasm_scene = {0};
   er_ui_runtime_state_t runtime = {0};
   er_ui_demo_apps_state_t demo_state = {0};
+  ErAppUiPresentation wasm_presentation;
+  ErUiWasmAppRuntime wasm_runtime;
   ErUiBootRenderContext render_context = {0};
   vr_font_face_t* font = 0;
 
@@ -1638,7 +1661,8 @@ static void er_run_ui_profile(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE* SystemTa
     vr_font_face_destroy(font);
     return;
   }
-  if (er_ui_boot_run_wasm_counter(&wasm_scene, &scene_budget) == 0u) {
+  if (er_ui_boot_prepare_wasm_counter(&wasm_runtime, &wasm_presentation,
+                                      &wasm_scene, &scene_budget) == 0u) {
     er_println("ui renderer: wasm scene failed");
     er_ui_scene_destroy(&wasm_scene);
     er_ui_scene_destroy(&scene);
@@ -1648,6 +1672,7 @@ static void er_run_ui_profile(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE* SystemTa
     return;
   }
   render_context.wasm_scene = &wasm_scene;
+  render_context.wasm_runtime = &wasm_runtime;
   render_context.wasm_scene_ready = 1u;
 
   er_println("ui renderer: render scene");
