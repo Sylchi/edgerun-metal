@@ -55,7 +55,7 @@ repo-check-bin:
 
 repo-inspect:
 	mkdir -p .build
-	$(CCACHE_PREFIX) $(HOST_CC) -std=c11 -Wall -Wextra -Werror -O2 -pthread $(HOST_LDFLAGS) -o .build/repo-inspect tools/repo-inspect.c
+	$(CCACHE_PREFIX) $(HOST_CC) -std=c11 -Wall -Wextra -Werror -O2 -pthread $(HOST_LDFLAGS) -o .build/repo-inspect tools/repo-inspect/repo_inspect_main.c
 
 repo-progress:
 	./tools/repo-progress.sh $(REPO_PROGRESS_SCOPE) $(REPO_PROGRESS_TEST)
