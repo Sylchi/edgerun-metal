@@ -1,0 +1,83 @@
+#include "efi_boot_internal.h"
+
+static UINT32 g_virtio_gpu_framebuffer[ER_GPU_PROFILE_FRAMEBUFFER_WIDTH_MAX *
+                                       ER_GPU_PROFILE_FRAMEBUFFER_HEIGHT_MAX];
+
+UINT8 er_virtio_gpu_wait_ok(ErVirtioGpu* gpu) {
+  UINT32 poll_count;
+
+  for (poll_count = 0u; poll_count < ER_GPU_PROFILE_POLL_LIMIT; ++poll_count) {
+    if (er_virtio_gpu_poll_ok_nodata(gpu) != 0u) {
+      return 1u;
+    }
+  }
+  return 0u;
+}
+
+UINT8 er_virtio_gpu_wait_display_info(ErVirtioGpu* gpu,
+                                             ErVirtioGpuDisplayInfo* out_info) {
+  UINT32 poll_count;
+
+  if (out_info == 0) {
+    return 0u;
+  }
+  for (poll_count = 0u; poll_count < ER_GPU_PROFILE_POLL_LIMIT; ++poll_count) {
+    if (er_virtio_gpu_poll_display_info(gpu, out_info) != 0u) {
+      return 1u;
+    }
+  }
+  return 0u;
+}
+
+UINT8 er_ui_boot_gpu_present(const ErUiBootRenderContext* render) {
+  if (render == 0 || render->gpu == 0 || render->framebuffer == 0) {
+    return 0u;
+  }
+  if (er_virtio_gpu_submit_framebuffer_transfer(render->gpu, render->framebuffer) == 0u ||
+      er_virtio_gpu_wait_ok(render->gpu) == 0u ||
+      er_virtio_gpu_submit_framebuffer_flush(render->gpu, render->framebuffer) == 0u ||
+      er_virtio_gpu_wait_ok(render->gpu) == 0u) {
+    return 0u;
+  }
+  return 1u;
+}
+
+UINT8 er_ui_boot_gpu_prepare_scanout(ErVirtioGpu* gpu,
+                                            ErVirtioGpuFramebuffer* framebuffer,
+                                            ErUiSurface* surface,
+                                            ErUiSurfaceMode* out_mode) {
+  if (gpu == 0 || framebuffer == 0 || surface == 0 || out_mode == 0) {
+    return 0u;
+  }
+  if (er_virtio_gpu_framebuffer_init(framebuffer, ER_UI_BOOT_GPU_RESOURCE_ID,
+                                     ER_UI_BOOT_GPU_SCANOUT_ID,
+                                     ER_VIRTIO_GPU_FORMAT_B8G8R8X8_UNORM,
+                                     ER_GPU_PROFILE_FRAMEBUFFER_WIDTH,
+                                     ER_GPU_PROFILE_FRAMEBUFFER_HEIGHT,
+                                     ER_GPU_PROFILE_FRAMEBUFFER_WIDTH,
+                                     g_virtio_gpu_framebuffer,
+                                     ER_GPU_PROFILE_FRAMEBUFFER_WIDTH_MAX *
+                                         ER_GPU_PROFILE_FRAMEBUFFER_HEIGHT_MAX) == 0u) {
+    return 0u;
+  }
+  if (er_virtio_gpu_submit_framebuffer_create(gpu, framebuffer) == 0u ||
+      er_virtio_gpu_wait_ok(gpu) == 0u ||
+      er_virtio_gpu_submit_framebuffer_attach(gpu, framebuffer) == 0u ||
+      er_virtio_gpu_wait_ok(gpu) == 0u ||
+      er_virtio_gpu_submit_framebuffer_set_scanout(gpu, framebuffer) == 0u ||
+      er_virtio_gpu_wait_ok(gpu) == 0u) {
+    return 0u;
+  }
+  surface->pixels = framebuffer->pixels;
+  surface->width = framebuffer->width;
+  surface->height = framebuffer->height;
+  surface->stride = framebuffer->stride_pixels;
+  surface->pixel_format = ER_UI_SURFACE_PIXEL_BGRX;
+  out_mode->width = framebuffer->width;
+  out_mode->height = framebuffer->height;
+  out_mode->stride = framebuffer->stride_pixels;
+  out_mode->refresh_hz = 1u;
+  out_mode->pixel_format = ER_UI_SURFACE_PIXEL_BGRX;
+  return (UINT8)(er_ui_surface_valid(surface) != 0u &&
+                 er_ui_surface_mode_valid(out_mode) != 0u);
+}
