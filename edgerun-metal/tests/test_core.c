@@ -14,6 +14,7 @@
 #include "er_net_frame.h"
 #include "er_netlog.h"
 #include "er_relay_packet.h"
+#include "er_tpm.h"
 #include "er_work_route.h"
 #include "er_gfx_console.h"
 #include "er_ui_gop_renderer.h"
@@ -1420,6 +1421,164 @@ static void test_acpi_tables(void) {
 
   rsdp_info.checksum_valid = 0;
   check_int64("acpi reject bad rsdp", er_acpi_enumerate_tables(&rsdp_info, &table_list), 0);
+}
+
+static void test_tpm_crb_direct_transport(void) {
+  static UINT8 tpm2[52];
+  static UINT8 crb[4096];
+  static UINT8 command_buffer[256];
+  static UINT8 response_buffer[256];
+  ErTpm2Info info;
+  ErTpmCrbTransport transport;
+  UINT8 command[128];
+  UINT8 response[256];
+  UINT8 random[32];
+  UINT8 digest[32];
+  UINT8 signature[64];
+  UINT32 command_len = 0u;
+  UINT32 response_len = 0u;
+  UINT32 random_len = 0u;
+  UINT32 response_body_len;
+
+  er_mem_zero(tpm2, (UINTN)sizeof(tpm2));
+  er_mem_zero(crb, (UINTN)sizeof(crb));
+  er_mem_zero(command_buffer, (UINTN)sizeof(command_buffer));
+  er_mem_zero(response_buffer, (UINTN)sizeof(response_buffer));
+  test_fill_bytes(digest, (UINTN)sizeof(digest), 0x31u);
+
+  test_put_le32(&tpm2[0], er_acpi_signature("TPM2"));
+  test_put_le32(&tpm2[4], (UINT32)sizeof(tpm2));
+  tpm2[8] = 4u;
+  test_put_le64(&tpm2[40], (UINT64)(UINTN)crb);
+  test_put_le32(&tpm2[48], 6u);
+  test_acpi_set_checksum(tpm2, (UINTN)sizeof(tpm2), 9u);
+
+  check_int64("tpm parse tpm2",
+              er_tpm_parse_tpm2_table((UINT64)(UINTN)tpm2, &info), 1);
+  check_int64("tpm info found", info.found, 1);
+  check_int64("tpm info crb", er_tpm2_info_is_crb(&info), 1);
+  check_uint64("tpm control area", info.control_area, (UINT64)(UINTN)crb);
+
+  test_put_le32(&crb[0x58], (UINT32)sizeof(command_buffer));
+  test_put_le64(&crb[0x5c], (UINT64)(UINTN)command_buffer);
+  test_put_le32(&crb[0x64], (UINT32)sizeof(response_buffer));
+  test_put_le64(&crb[0x68], (UINT64)(UINTN)response_buffer);
+  check_int64("tpm crb from base",
+              er_tpm_crb_from_register_base((UINT64)(UINTN)crb, &transport), 1);
+  transport.timeout_polls = 0u;
+  check_uint64("tpm crb command buffer", transport.command_buffer,
+               (UINT64)(UINTN)command_buffer);
+  check_uint64("tpm crb response buffer", transport.response_buffer,
+               (UINT64)(UINTN)response_buffer);
+
+  check_int64("tpm startup command",
+              er_tpm_build_startup_command(ER_TPM_SU_CLEAR, command,
+                                           (UINT32)sizeof(command), &command_len),
+              1);
+  check_uint64("tpm startup command len", command_len, 12u);
+  check_uint64("tpm startup tag", command[0], 0x80u);
+  check_uint64("tpm startup cc lo", command[9], 0x44u);
+
+  response_buffer[0] = 0x80u;
+  response_buffer[1] = 0x01u;
+  response_buffer[2] = 0u;
+  response_buffer[3] = 0u;
+  response_buffer[4] = 0u;
+  response_buffer[5] = 10u;
+  response_buffer[6] = 0u;
+  response_buffer[7] = 0u;
+  response_buffer[8] = 0u;
+  response_buffer[9] = 0u;
+  check_int64("tpm crb transact",
+              er_tpm_crb_transact(&transport, command, command_len,
+                                  response, (UINT32)sizeof(response),
+                                  &response_len),
+              1);
+  check_uint64("tpm crb response len", response_len, 10u);
+  check_uint64("tpm crb copied command cc", command_buffer[9], 0x44u);
+  check_uint64("tpm response code", er_tpm_response_code(response, response_len),
+               ER_TPM_RC_SUCCESS);
+
+  check_int64("tpm get random command",
+              er_tpm_build_get_random_command(4u, command,
+                                              (UINT32)sizeof(command),
+                                              &command_len),
+              1);
+  response_buffer[0] = 0x80u;
+  response_buffer[1] = 0x01u;
+  response_buffer[2] = 0u;
+  response_buffer[3] = 0u;
+  response_buffer[4] = 0u;
+  response_buffer[5] = 16u;
+  response_buffer[6] = 0u;
+  response_buffer[7] = 0u;
+  response_buffer[8] = 0u;
+  response_buffer[9] = 0u;
+  response_buffer[10] = 0u;
+  response_buffer[11] = 4u;
+  response_buffer[12] = 0xaau;
+  response_buffer[13] = 0xbbu;
+  response_buffer[14] = 0xccu;
+  response_buffer[15] = 0xddu;
+  check_int64("tpm random transact",
+              er_tpm_crb_transact(&transport, command, command_len,
+                                  response, (UINT32)sizeof(response),
+                                  &response_len),
+              1);
+  check_int64("tpm parse random",
+              er_tpm_parse_get_random_response(response, response_len, random,
+                                               (UINT32)sizeof(random), &random_len),
+              1);
+  check_uint64("tpm random len", random_len, 4u);
+  check_uint64("tpm random byte0", random[0], 0xaau);
+  check_uint64("tpm random byte3", random[3], 0xddu);
+
+  check_int64("tpm read public command",
+              er_tpm_build_read_public_command(0x81000001u, command,
+                                               (UINT32)sizeof(command),
+                                               &command_len),
+              1);
+  check_uint64("tpm read public len", command_len, 14u);
+  check_uint64("tpm read public handle hi", command[10], 0x81u);
+
+  check_int64("tpm sign command",
+              er_tpm_build_sign_p256_sha256_command(0x81000001u, digest,
+                                                    command, (UINT32)sizeof(command),
+                                                    &command_len),
+              1);
+  check_uint64("tpm sign command len", command_len, 73u);
+  check_uint64("tpm sign tag sessions", command[1], 0x02u);
+  check_uint64("tpm sign digest byte0", command[29], digest[0]);
+
+  response_body_len = 4u + 2u + 31u + 2u + 32u;
+  response_buffer[0] = 0x80u;
+  response_buffer[1] = 0x01u;
+  response_buffer[2] = 0u;
+  response_buffer[3] = 0u;
+  response_buffer[4] = 0u;
+  response_buffer[5] = (UINT8)(10u + response_body_len);
+  response_buffer[6] = 0u;
+  response_buffer[7] = 0u;
+  response_buffer[8] = 0u;
+  response_buffer[9] = 0u;
+  response_buffer[10] = 0x00u;
+  response_buffer[11] = 0x18u;
+  response_buffer[12] = 0x00u;
+  response_buffer[13] = 0x0bu;
+  response_buffer[14] = 0u;
+  response_buffer[15] = 31u;
+  test_fill_bytes(response_buffer + 16u, 31u, 0x41u);
+  response_buffer[47] = 0u;
+  response_buffer[48] = 32u;
+  test_fill_bytes(response_buffer + 49u, 32u, 0x61u);
+  check_int64("tpm parse signature",
+              er_tpm_parse_p256_sha256_signature_response(response_buffer,
+                                                          10u + response_body_len,
+                                                          signature),
+              1);
+  check_uint64("tpm signature pads r", signature[0], 0u);
+  check_uint64("tpm signature r first", signature[1], 0x41u);
+  check_uint64("tpm signature s first", signature[32], 0x61u);
 }
 
 static void test_wasm_mmio_imports(void) {
@@ -3140,6 +3299,7 @@ int main(void) {
   test_bar_decode();
   test_pci_config_addressing();
   test_acpi_tables();
+  test_tpm_crb_direct_transport();
   test_pci_device_classification();
   test_mmio_handles();
   test_bus_addresses();

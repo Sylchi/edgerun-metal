@@ -1,0 +1,91 @@
+#ifndef ER_TPM_H
+#define ER_TPM_H
+
+/*
+ * Purpose: speak TPM2 directly from the metal runtime.
+ * Intention: make hardware identity available without Linux, TSS, or host services.
+ */
+
+#include "er_acpi.h"
+
+#define ER_TPM_HEADER_LEN 10u
+#define ER_TPM_CRB_MAX_BUFFER_SIZE 65536u
+#define ER_TPM_DEFAULT_TIMEOUT_POLLS 1000000u
+
+#define ER_TPM_ST_NO_SESSIONS 0x8001u
+#define ER_TPM_ST_SESSIONS 0x8002u
+#define ER_TPM_ST_HASHCHECK 0x8024u
+
+#define ER_TPM_RC_SUCCESS 0x00000000u
+#define ER_TPM_RC_INITIALIZE 0x00000100u
+#define ER_TPM_RC_FAILURE 0x00000101u
+#define ER_TPM_RC_TESTING 0x0000000Au
+#define ER_TPM_RC_METAL_TIMEOUT 0xfffffffeu
+#define ER_TPM_RC_METAL_PROTOCOL 0xfffffffcu
+#define ER_TPM_RC_METAL_UNSUPPORTED 0xfffffffau
+
+#define ER_TPM_CC_STARTUP 0x00000144u
+#define ER_TPM_CC_GET_RANDOM 0x0000017Bu
+#define ER_TPM_CC_READ_PUBLIC 0x00000173u
+#define ER_TPM_CC_SIGN 0x0000015Du
+
+#define ER_TPM_SU_CLEAR 0x0000u
+#define ER_TPM_RS_PW 0x40000009u
+#define ER_TPM_RH_NULL 0x40000007u
+
+#define ER_TPM_ALG_SHA256 0x000Bu
+#define ER_TPM_ALG_ECDSA 0x0018u
+
+typedef struct {
+  UINT8 found;
+  UINT8 checksum_valid;
+  UINT16 platform_class;
+  UINT64 control_area;
+  UINT32 start_method;
+} ErTpm2Info;
+
+typedef struct {
+  UINT64 control_area;
+  UINT64 command_buffer;
+  UINT64 command_buffer_size;
+  UINT64 response_buffer;
+  UINT64 response_buffer_size;
+  UINT32 timeout_polls;
+} ErTpmCrbTransport;
+
+UINT8 er_tpm_parse_tpm2_table(UINT64 tpm2_address, ErTpm2Info* out_info);
+UINT8 er_tpm_find_tpm2_table(const ErAcpiTableList* tables, ErTpm2Info* out_info);
+UINT8 er_tpm2_info_is_crb(const ErTpm2Info* info);
+
+UINT8 er_tpm_crb_from_register_base(UINT64 register_base, ErTpmCrbTransport* out_transport);
+UINT8 er_tpm_crb_from_tpm2_info(const ErTpm2Info* info, ErTpmCrbTransport* out_transport);
+UINT8 er_tpm_crb_transact(ErTpmCrbTransport* transport,
+                          const UINT8* command, UINT32 command_len,
+                          UINT8* response, UINT32 response_capacity,
+                          UINT32* out_response_len);
+
+UINT8 er_tpm_build_startup_command(UINT16 startup_type,
+                                   UINT8* out_command, UINT32 command_capacity,
+                                   UINT32* out_command_len);
+UINT8 er_tpm_build_get_random_command(UINT16 bytes_requested,
+                                      UINT8* out_command, UINT32 command_capacity,
+                                      UINT32* out_command_len);
+UINT8 er_tpm_build_read_public_command(UINT32 handle,
+                                       UINT8* out_command, UINT32 command_capacity,
+                                       UINT32* out_command_len);
+UINT8 er_tpm_build_sign_p256_sha256_command(UINT32 handle,
+                                            const UINT8 digest[32],
+                                            UINT8* out_command,
+                                            UINT32 command_capacity,
+                                            UINT32* out_command_len);
+
+UINT32 er_tpm_response_code(const UINT8* response, UINT32 response_len);
+UINT8 er_tpm_response_success(const UINT8* response, UINT32 response_len);
+UINT8 er_tpm_parse_get_random_response(const UINT8* response, UINT32 response_len,
+                                       UINT8* out_random, UINT32 random_capacity,
+                                       UINT32* out_random_len);
+UINT8 er_tpm_parse_p256_sha256_signature_response(const UINT8* response,
+                                                  UINT32 response_len,
+                                                  UINT8 out_signature[64]);
+
+#endif
