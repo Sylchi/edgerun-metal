@@ -61,6 +61,15 @@ static bool test_ledger_hits_stay_inside(const er_ui_scene_t* scene, er_ui_bound
   return true;
 }
 
+static bool test_ledger_text_stays_inside_width(const er_ui_scene_t* scene, er_ui_bounds_t bounds) {
+  if (!scene) return false;
+  for (size_t q = 0u; q < scene->text_quad_count; ++q) {
+    const er_ui_quad_t* quad = &scene->text_quads[q];
+    if (quad->x < bounds.x || quad->x + quad->w > bounds.x + bounds.w) return false;
+  }
+  return true;
+}
+
 static void test_ledger_app_state_and_surface_switching(void) {
   er_ui_ledger_app_state_t apps = {0};
   er_ui_runtime_state_t runtime = {0};
@@ -109,6 +118,7 @@ static void test_ledger_app_state_and_surface_switching(void) {
   expect_true(test_ledger_hit_has_fill_rect(&scene, ER_TEST_LEDGER_INVEST_BUTTON_ID),
               "ledger app: compact review order action is visibly rendered");
   expect_true(test_ledger_hits_stay_inside(&scene, ER_TEST_LEDGER_COMPACT_BOUNDS), "ledger app: compact hits stay inside surface bounds");
+  expect_true(test_ledger_text_stays_inside_width(&scene, ER_TEST_LEDGER_COMPACT_BOUNDS), "ledger app: compact text stays inside surface width");
 
   er_ui_scene_clear_commands(&scene);
   expect_status(er_ui_ledger_app_emit_scene(&apps, &scene, font, ER_TEST_LEDGER_STACKED_BOUNDS, theme), ER_UI_OK,
@@ -116,6 +126,7 @@ static void test_ledger_app_state_and_surface_switching(void) {
   stats = er_ui_scene_stats(&scene);
   expect_size(stats.hits, ER_TEST_LEDGER_APP_HITS, "ledger app: stacked scene emits expected hits");
   expect_true(test_ledger_hits_stay_inside(&scene, ER_TEST_LEDGER_STACKED_BOUNDS), "ledger app: stacked hits stay inside surface bounds");
+  expect_true(test_ledger_text_stays_inside_width(&scene, ER_TEST_LEDGER_STACKED_BOUNDS), "ledger app: stacked text stays inside surface width");
 
   expect_status(er_ui_workspace_focus_surface(&apps.shell, ER_UI_LEDGER_APP_ACCESS_ID), ER_UI_OK, "ledger app: access surface focuses");
   er_ui_scene_clear_commands(&scene);
