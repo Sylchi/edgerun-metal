@@ -118,6 +118,11 @@ edgerun-metal/build/esp/EFI/BOOT/BOOTX64.EFI
 make -C edgerun-metal run
 ```
 
+QEMU launch settings live in `edgerun-metal/qemu.conf`. Edit that file for
+display backend, dimensions, OVMF paths, VirtIO GPU/net, capture, and TPM
+settings. The `run` target builds the EFI image and the C launcher before
+starting QEMU; it does not use environment-variable configuration.
+
 ## Netboot baseline
 
 Netboot should serve the generated EFI from:
