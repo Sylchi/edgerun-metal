@@ -175,6 +175,6 @@ Proof:
 
 ## Freeze rule
 
-Do not destabilize the known boot profiles unless a change is directly required for the relay runtime.
+Do not destabilize the active UI, native, TPM, and GPU profiles unless a change is directly required for the relay runtime.
 
 Do not call `ExitBootServices` yet. Dropping EFI Boot Services becomes justified when the native relay path owns enough hardware to boot, log, receive, verify admitted routes, and hand packets to endpoint adapters without firmware services.

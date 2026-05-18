@@ -3410,19 +3410,20 @@ static void test_work_admitted_relay_route(void) {
 }
 
 static void test_boot_profiles(void) {
-  check_int64("boot profile smoke valid", er_boot_profile_valid(ER_BOOT_PROFILE_SMOKE), 1);
+  check_int64("boot profile ui valid", er_boot_profile_valid(ER_BOOT_PROFILE_UI), 1);
   check_int64("boot profile native valid", er_boot_profile_valid(ER_BOOT_PROFILE_NATIVE), 1);
   check_int64("boot profile tpm valid", er_boot_profile_valid(ER_BOOT_PROFILE_TPM), 1);
   check_int64("boot profile gpu valid", er_boot_profile_valid(ER_BOOT_PROFILE_GPU), 1);
+  check_int64("boot profile retired smoke rejected", er_boot_profile_valid(0u), 0);
+  check_int64("boot profile retired pci rejected", er_boot_profile_valid(1u), 0);
+  check_int64("boot profile retired quiet rejected", er_boot_profile_valid(2u), 0);
+  check_int64("boot profile retired mmio rejected", er_boot_profile_valid(3u), 0);
   check_int64("boot profile invalid rejected", er_boot_profile_valid(255u), 0);
-  check_cstr("boot profile smoke label", er_boot_profile_label(ER_BOOT_PROFILE_SMOKE), "smoke");
-  check_cstr("boot profile pci label", er_boot_profile_label(ER_BOOT_PROFILE_PCI), "pci");
-  check_cstr("boot profile quiet label", er_boot_profile_label(ER_BOOT_PROFILE_QUIET), "quiet");
-  check_cstr("boot profile mmio label", er_boot_profile_label(ER_BOOT_PROFILE_MMIO), "mmio");
   check_cstr("boot profile ui label", er_boot_profile_label(ER_BOOT_PROFILE_UI), "ui");
   check_cstr("boot profile native label", er_boot_profile_label(ER_BOOT_PROFILE_NATIVE), "native");
   check_cstr("boot profile tpm label", er_boot_profile_label(ER_BOOT_PROFILE_TPM), "tpm");
   check_cstr("boot profile gpu label", er_boot_profile_label(ER_BOOT_PROFILE_GPU), "gpu");
+  check_cstr("boot profile retired label", er_boot_profile_label(0u), "invalid");
   check_cstr("boot profile invalid label", er_boot_profile_label(255u), "invalid");
 }
 
