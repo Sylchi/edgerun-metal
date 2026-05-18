@@ -9,6 +9,7 @@ static const float ER_UI_SHELL_LAUNCHER_WIDTH = 280.0f;
 static const float ER_UI_SHELL_LAUNCHER_BUTTON = 32.0f;
 static const float ER_UI_WORKSPACE_TAB_WIDTH = 132.0f;
 static const float ER_UI_WORKSPACE_CLOSE_SIZE = 20.0f;
+static const float ER_UI_WORKSPACE_PANEL_PAD = 8.0f;
 static const float ER_UI_NETWORK_APP_PROMPT_WIDTH = 560.0f;
 static const float ER_UI_NETWORK_APP_PROMPT_HEIGHT = 328.0f;
 static const size_t ER_UI_SHELL_TEXT_MAX_CODEPOINTS = 192u;
@@ -213,9 +214,8 @@ bool er_ui_workspace_focused_surface_bounds(const er_ui_shell_state_t* state, er
   er_ui_bounds_t workspace = er_ui_bounds(shell_bounds.x, tabs.y + tabs.h, shell_bounds.w,
                                           shell_bounds.h - ER_UI_SHELL_TOPBAR_HEIGHT - ER_UI_WORKSPACE_TAB_HEIGHT);
   if (!er_ui_bounds_valid(workspace)) return false;
-  er_ui_bounds_t inner = er_ui_bounds_inset(workspace, ER_UI_SHELL_PAD, ER_UI_SHELL_PAD);
-  if (!er_ui_bounds_valid(inner)) return false;
-  return er_ui_workspace_surface_bounds(state, inner, state->focused_surface_id, out_bounds);
+  *out_bounds = er_ui_bounds_inset(workspace, ER_UI_SHELL_PAD, ER_UI_SHELL_PAD);
+  return er_ui_bounds_valid(*out_bounds);
 }
 
 static er_ui_status_t er_ui_shell_emit_topbar(er_ui_scene_t* scene, er_ui_bounds_t bounds, er_ui_resolved_theme_t theme) {
@@ -272,27 +272,23 @@ static er_ui_status_t er_ui_shell_emit_workspace(
     if (status != ER_UI_OK) return status;
   }
 
-  er_ui_bounds_t workspace = er_ui_bounds(bounds.x, tabs.y + tabs.h, bounds.w,
-                                          bounds.h - ER_UI_SHELL_TOPBAR_HEIGHT - ER_UI_WORKSPACE_TAB_HEIGHT);
-  er_ui_bounds_t inner = er_ui_bounds_inset(workspace, ER_UI_SHELL_PAD, ER_UI_SHELL_PAD);
-  if (er_ui_bounds_valid(inner)) {
-    for (size_t i = 0u; i < state->surface_count; ++i) {
-      er_ui_bounds_t tile = {0};
-      if (!er_ui_workspace_surface_bounds(state, inner, state->surfaces[i].id, &tile)) continue;
-      er_ui_color4_t fill = state->surfaces[i].id == state->focused_surface_id ? theme.colors.panel : er_ui_color_with_alpha(theme.colors.panel, 0.58f);
-      status = er_ui_scene_push_rect(scene, er_ui_rect_fill(tile.x, tile.y, tile.w, tile.h, theme.radius.panel, fill));
-      if (status != ER_UI_OK) return status;
-      status = er_ui_scene_push_drop_target(scene, er_ui_drop_target(state->surfaces[i].id, i, tile.x, tile.y, tile.w, tile.h));
-      if (status != ER_UI_OK) return status;
-    }
-  }
-
   er_ui_bounds_t focused = {0};
   if (er_ui_workspace_focused_surface_bounds(state, bounds, &focused)) {
-    status = er_ui_scene_push_rect(scene, er_ui_rect_border(focused.x, focused.y, focused.w, focused.h, theme.radius.panel, er_ui_color_with_alpha(theme.colors.accent, 0.42f)));
+    status = er_ui_scene_push_rect(scene, er_ui_rect_linear_gradient(focused.x, focused.y, focused.w, focused.h, theme.radius.panel,
+                                                                     er_ui_color_with_alpha(theme.colors.panel, 0.96f),
+                                                                     er_ui_color_with_alpha(theme.colors.row, 0.54f)));
+    if (status != ER_UI_OK) return status;
+    status = er_ui_scene_push_rect(scene, er_ui_rect_border(focused.x, focused.y, focused.w, focused.h, theme.radius.panel, er_ui_color_with_alpha(theme.colors.border, 0.58f)));
+    if (status != ER_UI_OK) return status;
+    er_ui_bounds_t drop = er_ui_bounds_inset(focused, ER_UI_WORKSPACE_PANEL_PAD, ER_UI_WORKSPACE_PANEL_PAD);
+    if (!er_ui_bounds_valid(drop)) return ER_UI_ERR_INVALID_ARGUMENT;
+    for (size_t i = 0u; i < state->surface_count; ++i) {
+      status = er_ui_scene_push_drop_target(scene, er_ui_drop_target(state->surfaces[i].id, i, drop.x, drop.y, drop.w, drop.h));
+      if (status != ER_UI_OK) return status;
+    }
     if (status != ER_UI_OK) return status;
     if (emit_surface) {
-      status = emit_surface(state->focused_surface_id, scene, font, focused, theme, user);
+      status = emit_surface(state->focused_surface_id, scene, font, drop, theme, user);
       if (status != ER_UI_OK) return status;
     }
   }
