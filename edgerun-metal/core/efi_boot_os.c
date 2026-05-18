@@ -1,6 +1,7 @@
 #include "efi_boot_internal.h"
 
-void er_run_os_path(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE* SystemTable) {
+void er_run_os_path(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE* SystemTable,
+                    const ErBootServicesReport* boot_report) {
   er_ui_scene_budget_t scene_budget;
   ErUiSurfaceMode mode;
   ErUiSurfaceFrameBudget frame_budget;
@@ -27,6 +28,13 @@ void er_run_os_path(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE* SystemTable) {
   er_mem_zero((UINT8*)&native_relay, (UINTN)sizeof(native_relay));
 
   er_println("boot path: os");
+  if (er_boot_services_runtime_entry_allowed(boot_report) == 0u) {
+    ErBootServicesAction action = er_boot_services_decide_action(boot_report);
+    er_print("boot services: runtime entry blocked action=");
+    er_print(er_boot_services_action_label(action));
+    er_println("");
+    er_halt_forever();
+  }
   if (er_virtio_gpu_init_first_pci(&gpu) == 0u) {
     er_println("ui renderer: virtio gpu unavailable");
     return;
