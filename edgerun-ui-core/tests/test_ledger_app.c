@@ -3,13 +3,18 @@
 
 static const er_ui_color4_t ER_TEST_LEDGER_BG = {0.01f, 0.012f, 0.015f, 1.0f};
 static const size_t ER_TEST_LEDGER_APP_SURFACE_COUNT = 3u;
-static const size_t ER_TEST_LEDGER_APP_HITS = 6u;
+static const size_t ER_TEST_LEDGER_APP_HITS = 7u;
+static const size_t ER_TEST_LEDGER_SCROLLED_DASHBOARD_HITS = 6u;
 static const size_t ER_TEST_LEDGER_ACCESS_HITS = 4u;
 static const size_t ER_TEST_LEDGER_PAYMENTS_HITS = 4u;
 static const uint32_t ER_TEST_LEDGER_ACTION_BASE = 0xED024000u;
 static const uint32_t ER_TEST_LEDGER_INVEST_BUTTON_ID = ER_TEST_LEDGER_ACTION_BASE + 2u;
 static const uint32_t ER_TEST_LEDGER_SAVE_THRESHOLD_BUTTON_ID = ER_TEST_LEDGER_ACTION_BASE + 8u;
+static const uint32_t ER_TEST_LEDGER_DASHBOARD_SCROLL_ID = ER_TEST_LEDGER_ACTION_BASE + 16u;
 static const float ER_TEST_LEDGER_BUTTON_LABEL_MIN_CENTER_X = 0.25f;
+static const float ER_TEST_LEDGER_SCROLL_TEST_DELTA = 2000.0f;
+static const float ER_TEST_LEDGER_SCROLL_TEST_X = 600.0f;
+static const float ER_TEST_LEDGER_SCROLL_TEST_Y = 300.0f;
 static const er_ui_bounds_t ER_TEST_LEDGER_COMPACT_BOUNDS = {240.0f, 80.0f, 760.0f, 760.0f};
 static const er_ui_bounds_t ER_TEST_LEDGER_STACKED_BOUNDS = {0.0f, 0.0f, 390.0f, 1100.0f};
 
@@ -115,10 +120,27 @@ static void test_ledger_app_state_and_surface_switching(void) {
   expect_size(stats.hits, ER_TEST_LEDGER_APP_HITS, "ledger app: compact scene emits expected hits");
   expect_true(test_ledger_hit_has_fill_rect(&scene, ER_TEST_LEDGER_SAVE_THRESHOLD_BUTTON_ID),
               "ledger app: compact save threshold action is visibly rendered");
-  expect_true(test_ledger_hit_has_fill_rect(&scene, ER_TEST_LEDGER_INVEST_BUTTON_ID),
-              "ledger app: compact review order action is visibly rendered");
   expect_true(test_ledger_hits_stay_inside(&scene, ER_TEST_LEDGER_COMPACT_BOUNDS), "ledger app: compact hits stay inside surface bounds");
   expect_true(test_ledger_text_stays_inside_width(&scene, ER_TEST_LEDGER_COMPACT_BOUNDS), "ledger app: compact text stays inside surface width");
+
+  er_ui_action_t scroll = er_ui_runtime_wheel(&runtime, &scene, ER_TEST_LEDGER_SCROLL_TEST_X, ER_TEST_LEDGER_SCROLL_TEST_Y, ER_TEST_LEDGER_SCROLL_TEST_DELTA);
+  expect_size(scroll.kind, ER_UI_ACTION_SCROLL_CHANGED, "ledger app: compact wheel scrolls dashboard");
+  expect_u32(scroll.id, ER_TEST_LEDGER_DASHBOARD_SCROLL_ID, "ledger app: compact wheel targets dashboard scroll area");
+  changed = false;
+  expect_status(er_ui_ledger_app_apply_action(&apps, scroll, &changed), ER_UI_OK, "ledger app: compact scroll action applies");
+  expect_true(changed, "ledger app: compact scroll action reports state change");
+  expect_true(apps.dashboard_scroll > 0.0f, "ledger app: compact scroll state advances");
+
+  er_ui_scene_clear_commands(&scene);
+  expect_status(er_ui_ledger_app_emit_scene(&apps, &scene, font, ER_TEST_LEDGER_COMPACT_BOUNDS, theme), ER_UI_OK,
+                "ledger app: compact scrolled scene emits");
+  stats = er_ui_scene_stats(&scene);
+  expect_size(stats.hits, ER_TEST_LEDGER_SCROLLED_DASHBOARD_HITS, "ledger app: compact scrolled scene emits expected hits");
+  expect_true(test_ledger_hit_has_fill_rect(&scene, ER_TEST_LEDGER_INVEST_BUTTON_ID),
+              "ledger app: compact scrolled review order action is visibly rendered");
+  expect_true(test_ledger_hits_stay_inside(&scene, ER_TEST_LEDGER_COMPACT_BOUNDS), "ledger app: compact scrolled hits stay inside surface bounds");
+  expect_true(test_ledger_text_stays_inside_width(&scene, ER_TEST_LEDGER_COMPACT_BOUNDS), "ledger app: compact scrolled text stays inside surface width");
+  apps.dashboard_scroll = 0.0f;
 
   er_ui_scene_clear_commands(&scene);
   expect_status(er_ui_ledger_app_emit_scene(&apps, &scene, font, ER_TEST_LEDGER_STACKED_BOUNDS, theme), ER_UI_OK,

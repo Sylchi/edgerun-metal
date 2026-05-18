@@ -51,6 +51,8 @@ static const float ER_UI_LEDGER_COMPACT_NAV_GAP = 8.0f;
 static const float ER_UI_LEDGER_COMPACT_NAV_Y = 92.0f;
 static const float ER_UI_LEDGER_DENSE_CARD_H = 180.0f;
 static const float ER_UI_LEDGER_DENSE_FORM_H = 190.0f;
+static const float ER_UI_LEDGER_DASHBOARD_ROW_MIN_H = 228.0f;
+static const float ER_UI_LEDGER_SCROLL_THUMB_MIN_H = 32.0f;
 static const float ER_UI_LEDGER_FIELD_PAD_X = 10.0f;
 static const float ER_UI_LEDGER_DOT_SIZE = 4.0f;
 static const float ER_UI_LEDGER_SELECT_CHEVRON_W = 14.0f;
@@ -61,6 +63,7 @@ static const uint32_t ER_UI_LEDGER_PAYOUT_SLIDER_ID = ER_UI_LEDGER_ACTION_BASE +
 static const uint32_t ER_UI_LEDGER_INVEST_BUTTON_ID = ER_UI_LEDGER_ACTION_BASE + 2u;
 static const uint32_t ER_UI_LEDGER_TRANSFER_BUTTON_ID = ER_UI_LEDGER_ACTION_BASE + 4u;
 static const uint32_t ER_UI_LEDGER_SAVE_THRESHOLD_BUTTON_ID = ER_UI_LEDGER_ACTION_BASE + 8u;
+static const uint32_t ER_UI_LEDGER_DASHBOARD_SCROLL_ID = ER_UI_LEDGER_ACTION_BASE + 16u;
 
 typedef struct {
   er_ui_color4_t bg;
@@ -838,12 +841,32 @@ static er_ui_status_t er_ui_ledger_transfer_card(
   return er_ui_ledger_bottom_button(scene, font, bounds, colors, "Schedule Transfer", ER_UI_LEDGER_TRANSFER_BUTTON_ID, 48.0f);
 }
 
+static er_ui_status_t er_ui_ledger_scrollbar(
+  er_ui_scene_t* scene,
+  er_ui_bounds_t viewport,
+  er_ui_ledger_colors_t colors,
+  float content_h,
+  float scroll) {
+  if (content_h <= viewport.h) return ER_UI_OK;
+  er_ui_bounds_t track = er_ui_scrollbar_track_rect(viewport, viewport);
+  er_ui_bounds_t hit = er_ui_scrollbar_hit_rect(track);
+  er_ui_status_t status = er_ui_scene_push_hit(scene, er_ui_hit(ER_UI_HIT_SCROLLBAR, ER_UI_LEDGER_DASHBOARD_SCROLL_ID, hit.x, hit.y, hit.w, hit.h));
+  if (status != ER_UI_OK) return status;
+  status = er_ui_ledger_rect(scene, track, ER_UI_SCROLLBAR_TRACK_W * 0.5f, er_ui_color_with_alpha(colors.border, 0.5f));
+  if (status != ER_UI_OK) return status;
+  float thumb_h = er_ui_float_max(viewport.h * (viewport.h / content_h), ER_UI_LEDGER_SCROLL_THUMB_MIN_H);
+  thumb_h = er_ui_float_min(thumb_h, track.h);
+  float thumb_y = track.y + (track.h - thumb_h) * er_ui_float_clamp(scroll, 0.0f, 1.0f);
+  return er_ui_ledger_rect(scene, er_ui_bounds(track.x, thumb_y, track.w, thumb_h), ER_UI_SCROLLBAR_TRACK_W * 0.5f, colors.muted);
+}
+
 static er_ui_status_t er_ui_ledger_dashboard(
   er_ui_scene_t* scene,
   vr_font_face_t* font,
   er_ui_bounds_t bounds,
   er_ui_ledger_colors_t colors,
-  uint32_t focused_id) {
+  uint32_t focused_id,
+  float scroll) {
   er_ui_ledger_content_layout_t layout = er_ui_ledger_content_layout(bounds);
   if (!er_ui_bounds_valid(layout.sidebar) || !er_ui_bounds_valid(layout.content)) return ER_UI_ERR_INVALID_ARGUMENT;
   float top_y = layout.content.y + ER_UI_LEDGER_MARGIN;
@@ -870,28 +893,40 @@ static er_ui_status_t er_ui_ledger_dashboard(
   size_t detail_index = summary_rows * grid.columns;
   size_t transaction_span = grid.columns > 2u ? grid.columns - 1u : 1u;
   size_t row_count = er_ui_responsive_grid_row_count(grid, detail_index + transaction_span + 1u);
-  float row_h = er_ui_float_max(er_ui_responsive_grid_row_height(grid, row_count), 1.0f);
+  float row_h = er_ui_float_max(er_ui_responsive_grid_row_height(grid, row_count), ER_UI_LEDGER_DASHBOARD_ROW_MIN_H);
+  float content_h = er_ui_responsive_grid_height(grid, detail_index + transaction_span + 1u, row_h);
+  float scroll_px = er_ui_float_max(content_h - grid.bounds.h, 0.0f) * er_ui_float_clamp(scroll, 0.0f, 1.0f);
+  er_ui_status_t hit_status = er_ui_scene_push_hit(scene, er_ui_hit(ER_UI_HIT_SCROLL_AREA, ER_UI_LEDGER_DASHBOARD_SCROLL_ID,
+                                                                    grid.bounds.x, grid.bounds.y, grid.bounds.w, grid.bounds.h));
+  if (hit_status != ER_UI_OK) return hit_status;
+  er_ui_responsive_grid_t content_grid = grid;
+  content_grid.bounds.y -= scroll_px;
+  bool pushed = false;
+  status = er_ui_scene_push_clip(scene, er_ui_clip(grid.bounds.x, grid.bounds.y, grid.bounds.w, grid.bounds.h), &pushed);
+  if (status != ER_UI_OK) return status;
   size_t cell_index = 0u;
-  status = er_ui_ledger_contribution_card(scene, font, er_ui_responsive_grid_cell(grid, cell_index, row_h), colors);
-  if (status != ER_UI_OK) return status;
+  status = er_ui_ledger_contribution_card(scene, font, er_ui_responsive_grid_cell(content_grid, cell_index, row_h), colors);
   cell_index++;
-  status = er_ui_ledger_payout_card(scene, font, er_ui_responsive_grid_cell(grid, cell_index, row_h), colors);
-  if (status != ER_UI_OK) return status;
+  if (status == ER_UI_OK) status = er_ui_ledger_payout_card(scene, font, er_ui_responsive_grid_cell(content_grid, cell_index, row_h), colors);
   cell_index++;
-  status = er_ui_ledger_targets_card(scene, font, er_ui_responsive_grid_cell(grid, cell_index, row_h), colors);
-  if (status != ER_UI_OK) return status;
+  if (status == ER_UI_OK) status = er_ui_ledger_targets_card(scene, font, er_ui_responsive_grid_cell(content_grid, cell_index, row_h), colors);
   cell_index++;
-  if (summary_cards == ER_UI_LEDGER_DASHBOARD_WIDE_SUMMARY_CARDS) {
-    status = er_ui_ledger_invest_card(scene, font, er_ui_responsive_grid_cell(grid, cell_index, row_h), colors);
-    if (status != ER_UI_OK) return status;
+  if (status == ER_UI_OK && summary_cards == ER_UI_LEDGER_DASHBOARD_WIDE_SUMMARY_CARDS) {
+    status = er_ui_ledger_invest_card(scene, font, er_ui_responsive_grid_cell(content_grid, cell_index, row_h), colors);
     cell_index++;
   }
-  status = er_ui_ledger_transactions_card(scene, font, er_ui_responsive_grid_span(grid, detail_index, transaction_span, row_h), colors);
-  if (status != ER_UI_OK) return status;
-  if (summary_cards == ER_UI_LEDGER_DASHBOARD_WIDE_SUMMARY_CARDS) {
-    return er_ui_ledger_account_summary_card(scene, font, er_ui_responsive_grid_cell(grid, detail_index + transaction_span, row_h), colors);
+  if (status == ER_UI_OK) {
+    status = er_ui_ledger_transactions_card(scene, font, er_ui_responsive_grid_span(content_grid, detail_index, transaction_span, row_h), colors);
   }
-  return er_ui_ledger_invest_card(scene, font, er_ui_responsive_grid_cell(grid, detail_index + transaction_span, row_h), colors);
+  if (status == ER_UI_OK && summary_cards == ER_UI_LEDGER_DASHBOARD_WIDE_SUMMARY_CARDS) {
+    status = er_ui_ledger_account_summary_card(scene, font, er_ui_responsive_grid_cell(content_grid, detail_index + transaction_span, row_h), colors);
+  } else if (status == ER_UI_OK) {
+    status = er_ui_ledger_invest_card(scene, font, er_ui_responsive_grid_cell(content_grid, detail_index + transaction_span, row_h), colors);
+  }
+  if (pushed) er_ui_scene_pop_clip(scene);
+  if (status != ER_UI_OK) return status;
+  status = er_ui_ledger_scrollbar(scene, grid.bounds, colors, content_h, scroll);
+  return status;
 }
 
 static er_ui_status_t er_ui_ledger_payments(
@@ -934,6 +969,7 @@ er_ui_status_t er_ui_ledger_app_state_init(er_ui_ledger_app_state_t* state, er_u
   status = er_ui_shell_state_init_with_allocator(&state->shell, allocator);
   if (status != ER_UI_OK) return status;
   er_ui_component_gallery_state_init(&state->gallery);
+  state->dashboard_scroll = 0.0f;
   status = er_ui_workspace_add_named_surface(&state->shell, ER_UI_LEDGER_APP_LEDGER_ID, "Dashboard");
   if (status != ER_UI_OK) return status;
   status = er_ui_workspace_add_named_surface(&state->shell, ER_UI_LEDGER_APP_PAYMENTS_ID, "Payments");
@@ -950,14 +986,23 @@ void er_ui_ledger_app_state_destroy(er_ui_ledger_app_state_t* state) {
 
 er_ui_status_t er_ui_ledger_app_apply_action(er_ui_ledger_app_state_t* state, er_ui_action_t action, bool* out_changed) {
   bool gallery_changed;
+  bool scroll_changed = false;
+  bool shell_changed = false;
   er_ui_status_t status;
   if (out_changed) *out_changed = false;
   if (!state) return ER_UI_ERR_INVALID_ARGUMENT;
 
   gallery_changed = er_ui_component_gallery_apply_action(&state->gallery, action);
-  status = er_ui_shell_apply_action(&state->shell, action, out_changed);
+  if (action.kind == ER_UI_ACTION_SCROLL_CHANGED && action.id == ER_UI_LEDGER_DASHBOARD_SCROLL_ID) {
+    float next_scroll = er_ui_float_clamp(action.float_value, 0.0f, 1.0f);
+    if (state->dashboard_scroll != next_scroll) {
+      state->dashboard_scroll = next_scroll;
+      scroll_changed = true;
+    }
+  }
+  status = er_ui_shell_apply_action(&state->shell, action, &shell_changed);
   if (status != ER_UI_OK) return status;
-  if (out_changed && gallery_changed) *out_changed = true;
+  if (out_changed) *out_changed = gallery_changed || scroll_changed || shell_changed;
   return ER_UI_OK;
 }
 
@@ -986,7 +1031,7 @@ er_ui_status_t er_ui_ledger_app_emit_scene(
       break;
     case ER_UI_LEDGER_APP_LEDGER_ID:
     default:
-      status = er_ui_ledger_dashboard(scene, font, bounds, colors, focused_id);
+      status = er_ui_ledger_dashboard(scene, font, bounds, colors, focused_id, state->dashboard_scroll);
       break;
   }
   if (pushed) er_ui_scene_pop_clip(scene);

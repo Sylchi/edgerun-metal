@@ -15,6 +15,7 @@ extern "C" {
 typedef struct {
   er_ui_shell_state_t shell;
   er_ui_component_gallery_state_t gallery;
+  float dashboard_scroll;
 } er_ui_ledger_app_state_t;
 
 er_ui_status_t er_ui_ledger_app_state_init(er_ui_ledger_app_state_t* state, er_ui_allocator_t allocator);
