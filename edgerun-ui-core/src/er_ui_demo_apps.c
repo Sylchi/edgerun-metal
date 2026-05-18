@@ -41,7 +41,7 @@ static er_ui_status_t er_ui_demo_emit_resources(
   vr_font_face_t* font,
   er_ui_bounds_t bounds,
   er_ui_resolved_theme_t theme) {
-  static const char* const chart_labels[] = {"cpu", "mem", "net", "store"};
+  static const char *const chart_labels[] = {"cpu", "mem", "net", "store"};
   static const float chart_values[] = {0.46f, 0.64f, 0.31f, 0.72f};
   er_ui_status_t status;
   float metric_w;
@@ -105,9 +105,9 @@ static er_ui_status_t er_ui_demo_emit_network(
   vr_font_face_t* font,
   er_ui_bounds_t bounds,
   er_ui_resolved_theme_t theme) {
-  static const char* const route[] = {"app", "ui relay", "device", "peer"};
-  static const char* const headers[] = {"Token", "Rate", "Policy"};
-  static const char* const cells[] = {
+  static const char *const route[] = {"app", "ui relay", "device", "peer"};
+  static const char *const headers[] = {"Token", "Rate", "Policy"};
+  static const char *const cells[] = {
     "local.cpu", "1.0", "own device",
     "peer.bytes", "0.7", "friend relay",
     "store.cache", "0.2", "verified hash"

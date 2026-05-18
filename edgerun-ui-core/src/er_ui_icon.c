@@ -11,6 +11,7 @@ typedef struct {
   const char* lucide;
 } ErUiIconMapping;
 
+//@optimizer-ignore-constant icon metadata is indexed only after er_ui_icon_t range guards and mirrors ER_UI_ICON_COUNT order
 static const ErUiIconMapping g_icon_mappings[ER_UI_ICON_COUNT] = {
   {"activity", "activity", "activity"},
   {"app", "apps", "app-window"},
@@ -45,9 +46,15 @@ static const ErUiIconMapping g_icon_mappings[ER_UI_ICON_COUNT] = {
   {"x", "x", "x"}
 };
 
+static const ErUiIconMapping* er_ui_icon_mapping(er_ui_icon_t icon) {
+  if ((uint32_t)icon >= (uint32_t)ER_UI_ICON_COUNT) return 0;
+  return g_icon_mappings + (uint32_t)icon;
+}
+
 const char* er_ui_icon_label(er_ui_icon_t icon) {
-  if ((uint32_t)icon >= (uint32_t)ER_UI_ICON_COUNT) return "unknown";
-  return g_icon_mappings[(uint32_t)icon].label;
+  const ErUiIconMapping* mapping = er_ui_icon_mapping(icon);
+  if (!mapping) return "unknown";
+  return mapping->label;
 }
 
 uint32_t er_ui_icon_atlas_id(er_ui_icon_t icon) {
@@ -61,12 +68,13 @@ er_ui_icon_t er_ui_icon_from_atlas_id(uint32_t atlas_id) {
 }
 
 const char* er_ui_icon_provider_name(er_ui_icon_t icon, er_ui_icon_provider_t provider) {
-  if ((uint32_t)icon >= (uint32_t)ER_UI_ICON_COUNT) return 0;
+  const ErUiIconMapping* mapping = er_ui_icon_mapping(icon);
+  if (!mapping) return 0;
   if (provider == ER_UI_ICON_PROVIDER_TABLER) {
-    return g_icon_mappings[(uint32_t)icon].tabler;
+    return mapping->tabler;
   }
   if (provider == ER_UI_ICON_PROVIDER_LUCIDE) {
-    return g_icon_mappings[(uint32_t)icon].lucide;
+    return mapping->lucide;
   }
   return 0;
 }
