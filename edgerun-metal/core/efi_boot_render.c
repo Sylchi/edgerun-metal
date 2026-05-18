@@ -47,7 +47,6 @@ UINT8 er_ui_boot_switch_app_for_surface(ErUiBootRenderContext* render, UINT32 su
 UINT8 er_ui_boot_render_scene(er_ui_scene_t* scene,
                                      er_ui_ledger_app_state_t* ledger_state,
                                      const ErUiBootRenderContext* render) {
-  const ErUiBootAppContext* active_app;
   er_ui_scene_stats_t scene_stats;
   er_ui_scene_budget_violation_t scene_violation;
   ErUiSurfaceRenderStats render_stats;
@@ -59,16 +58,12 @@ UINT8 er_ui_boot_render_scene(er_ui_scene_t* scene,
   }
 
   er_ui_scene_clear_commands(scene);
-  if (er_ui_ledger_app_emit_scene(ledger_state, scene, render->font,
-                                 er_ui_bounds(0.0f, 0.0f, (float)render->mode.width, (float)render->mode.height),
-                                 render->theme) != ER_UI_OK) {
+  if (er_ui_edgerun_metal_surface_emit(scene,
+                                       render->font,
+                                       er_ui_bounds(0.0f, 0.0f, (float)render->mode.width, (float)render->mode.height),
+                                       render->theme,
+                                       &ledger_state->gallery) != ER_UI_OK) {
     er_println("ui renderer: scene build failed");
-    return 0u;
-  }
-  active_app = er_ui_boot_active_app_const(render);
-  if (active_app != 0 &&
-      er_ui_boot_append_wasm_scene(scene, &active_app->scene) == 0u) {
-    er_println("ui renderer: wasm scene append failed");
     return 0u;
   }
 
