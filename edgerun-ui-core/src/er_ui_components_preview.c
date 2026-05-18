@@ -540,18 +540,29 @@ er_ui_status_t er_ui_component_showcase_emit(
                                                        ER_UI_COMPONENT_SHOWCASE_GRID_GAP,
                                                        ER_UI_COMPONENT_SHOWCASE_GRID_GAP);
   if (grid.columns == 0u) return ER_UI_ERR_INVALID_ARGUMENT;
-  size_t rows = er_ui_responsive_grid_row_count(grid, er_ui_component_count());
-  float row_h = er_ui_responsive_grid_row_height(grid, rows);
-  if (row_h <= 0.0f) return ER_UI_ERR_INVALID_ARGUMENT;
+  float row_h = ER_UI_COMPONENT_SHOWCASE_CARD_H;
+  float content_h = er_ui_responsive_grid_height(grid, er_ui_component_count(), row_h);
+  er_ui_scroll_viewport_t viewport = er_ui_scroll_viewport(grid.bounds,
+                                                           content_h,
+                                                           0.0f,
+                                                           ER_UI_COMPONENT_SHOWCASE_SCROLL_THUMB_MIN_H);
+  status = er_ui_scene_push_hit(scene, er_ui_hit(ER_UI_HIT_SCROLL_AREA, ER_UI_COMPONENT_SHOWCASE_SCROLL_ID,
+                                                 viewport.viewport.x, viewport.viewport.y,
+                                                 viewport.viewport.w, viewport.viewport.h));
+  if (status != ER_UI_OK) return status;
+  er_ui_responsive_grid_t content_grid = grid;
+  content_grid.bounds = viewport.content;
   bool pushed = false;
-  status = er_ui_scene_push_clip(scene, er_ui_clip(bounds.x, bounds.y, bounds.w, bounds.h), &pushed);
+  status = er_ui_scene_push_clip(scene, er_ui_clip(viewport.viewport.x, viewport.viewport.y, viewport.viewport.w, viewport.viewport.h), &pushed);
   if (status != ER_UI_OK) return status;
   for (size_t i = 0u; i < er_ui_component_count(); ++i) {
     const er_ui_component_spec_t* spec = er_ui_component_at(i);
+    er_ui_bounds_t card = er_ui_responsive_grid_cell(content_grid, i, row_h);
     if (!spec) continue;
+    if (card.y >= viewport.viewport.y + viewport.viewport.h || card.y + card.h <= viewport.viewport.y) continue;
     status = er_ui_component_showcase_card_emit(scene,
                                                 font,
-                                                er_ui_responsive_grid_cell(grid, i, row_h),
+                                                card,
                                                 theme,
                                                 spec,
                                                 selected,
@@ -560,5 +571,16 @@ er_ui_status_t er_ui_component_showcase_emit(
     if (status != ER_UI_OK) break;
   }
   if (pushed) er_ui_scene_pop_clip(scene);
+  if (status != ER_UI_OK) return status;
+  if (viewport.scrollable) {
+    status = er_ui_scene_push_hit(scene, er_ui_hit(ER_UI_HIT_SCROLLBAR, ER_UI_COMPONENT_SHOWCASE_SCROLL_ID,
+                                                   viewport.hit.x, viewport.hit.y, viewport.hit.w, viewport.hit.h));
+    if (status != ER_UI_OK) return status;
+    status = er_ui_scene_push_rect(scene, er_ui_rect_fill(viewport.track.x, viewport.track.y, viewport.track.w, viewport.track.h,
+                                                         viewport.track.w * 0.5f, er_ui_color_with_alpha(theme.shadcn.colors.border, 0.64f)));
+    if (status != ER_UI_OK) return status;
+    return er_ui_scene_push_rect(scene, er_ui_rect_fill(viewport.thumb.x, viewport.thumb.y, viewport.thumb.w, viewport.thumb.h,
+                                                       viewport.thumb.w * 0.5f, theme.shadcn.colors.muted_foreground));
+  }
   return status;
 }
