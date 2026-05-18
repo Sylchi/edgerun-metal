@@ -6,7 +6,16 @@
 
 enum {
   ER_EMBED_BYTES_PER_WASM_LINE = 12,
-  ER_EMBED_BYTES_PER_BINARY_LINE = 16
+  ER_EMBED_BYTES_PER_BINARY_LINE = 16,
+  ER_EMBED_BINARY_ARGC = 7,
+  ER_EMBED_WASM_ARGC = 8,
+  ER_EMBED_MODE_ARG = 1,
+  ER_EMBED_INPUT_ARG = 2,
+  ER_EMBED_OUTPUT_ARG = 3,
+  ER_EMBED_GUARD_ARG = 4,
+  ER_EMBED_ARRAY_ARG = 5,
+  ER_EMBED_SIZE_ARG = 6,
+  ER_EMBED_SOURCE_ARG = 7
 };
 
 static int er_embed_usage(const char* program) {
@@ -151,19 +160,21 @@ static int er_embed_write_header(const char* mode, const char* input_path, const
 int main(int argc, char** argv) {
   const char* mode;
 
-  if (argc != 7 && argc != 8) {
+  if (argc != ER_EMBED_BINARY_ARGC && argc != ER_EMBED_WASM_ARGC) {
     return er_embed_usage(argv[0]);
   }
-  mode = argv[1];
+  mode = argv[ER_EMBED_MODE_ARG];
   if (strcmp(mode, "binary") != 0 && strcmp(mode, "wasm") != 0) {
     return er_embed_usage(argv[0]);
   }
-  if (strcmp(mode, "wasm") == 0 && argc != 8) {
+  if (strcmp(mode, "wasm") == 0 && argc != ER_EMBED_WASM_ARGC) {
     return er_embed_usage(argv[0]);
   }
-  if (strcmp(mode, "binary") == 0 && argc != 7) {
+  if (strcmp(mode, "binary") == 0 && argc != ER_EMBED_BINARY_ARGC) {
     return er_embed_usage(argv[0]);
   }
-  return er_embed_write_header(mode, argv[2], argv[3], argv[4], argv[5], argv[6],
-                               argc == 8 ? argv[7] : NULL);
+  return er_embed_write_header(mode, argv[ER_EMBED_INPUT_ARG], argv[ER_EMBED_OUTPUT_ARG],
+                               argv[ER_EMBED_GUARD_ARG], argv[ER_EMBED_ARRAY_ARG],
+                               argv[ER_EMBED_SIZE_ARG],
+                               argc == ER_EMBED_WASM_ARGC ? argv[ER_EMBED_SOURCE_ARG] : NULL);
 }
