@@ -95,6 +95,12 @@ static void test_component_render_primitives(void) {
   expect_status(er_ui_component_field_emit(&scene, face, er_ui_bounds(232.0f, 110.0f, 160.0f, 86.0f), theme, "Notes", "Verified cache",
                                         ER_UI_TEST_COMPONENT_TEXTAREA_ID, true),
                 ER_UI_OK, "component render: textarea emits");
+  size_t passive_hit_count = scene.hit_count;
+  expect_status(er_ui_component_select_static_emit(&scene, face, er_ui_bounds(232.0f, 198.0f, 160.0f, 58.0f), theme, "Currency", "USD", false),
+                ER_UI_OK, "component render: passive select emits");
+  expect_status(er_ui_component_field_static_emit(&scene, face, er_ui_bounds(232.0f, 260.0f, 160.0f, 58.0f), theme, "Account", "Studio", false),
+                ER_UI_OK, "component render: passive field emits");
+  expect_size(scene.hit_count, passive_hit_count, "component render: passive controls do not emit hits");
   expect_status(er_ui_component_checkbox_emit(&scene, face, er_ui_bounds(16.0f, 180.0f, 188.0f, 32.0f), theme, "Cache verified bytes", true,
                                            ER_UI_TEST_COMPONENT_CHECKBOX_ID),
                 ER_UI_OK, "component render: checkbox emits");
