@@ -1726,6 +1726,14 @@ static uint8_t vr_alpha_from_signed_distance(float signed_distance, float spread
   return (uint8_t)(clamped + 0.5f);
 }
 
+static float vr_sdf_spread_from_padding(uint32_t atlas_pad) {
+  float spread = VR_RASTER_SDF_SPREAD;
+  if (atlas_pad > 0u && (float)atlas_pad > spread) {
+    spread = (float)atlas_pad;
+  }
+  return spread;
+}
+
 vr_status_t vr_rasterize_outline(const vr_font_face_t* face,
                                  const vr_glyph_outline_t* outline,
                                  uint8_t** out_bitmap,
@@ -1781,7 +1789,8 @@ vr_status_t vr_rasterize_outline_with_mode(
   int base_h = y1 - y0;
   if (base_w <= 0 || base_h <= 0) return VR_ERR_UNSUPPORTED;
 
-  int pad = (int)vr_ceilf(VR_RASTER_SDF_SPREAD * VR_RASTER_SDF_PADDING_SCALE);
+  float sdf_spread = vr_sdf_spread_from_padding(face->cfg.atlas_pad);
+  int pad = (int)vr_ceilf(sdf_spread * VR_RASTER_SDF_PADDING_SCALE);
   if (pad < VR_RASTER_PADDING) {
     pad = VR_RASTER_PADDING;
   }
@@ -1793,7 +1802,7 @@ vr_status_t vr_rasterize_outline_with_mode(
   const bool using_msdf = (atlas_format == VR_FONT_ATLAS_FORMAT_MSDF_RGB);
   const int ss = using_msdf ? VR_RASTER_MSDF_SUPERSAMPLE : VR_RASTER_ALPHA_SUPERSAMPLE;
   const float inv_ss = 1.0f / (float)(ss * ss);
-  const float sdf_pad_f = VR_RASTER_SDF_SPREAD * VR_RASTER_SDF_PADDING_SCALE;
+  const float sdf_pad_f = sdf_spread * VR_RASTER_SDF_PADDING_SCALE;
   float sample_offsets_x[ss];
   float sample_offsets_y[ss];
   for (int s = 0; s < ss; ++s) {

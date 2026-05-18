@@ -499,6 +499,105 @@ static float vr_compute_tuple_scalar(const vr_font_face_t* face, uint16_t axis_c
   return scalar;
 }
 
+static size_t vr_iup_next_index(size_t index, size_t start, size_t end) {
+  return (index >= end) ? start : (index + 1u);
+}
+
+static int32_t vr_iup_interpolate_delta(int16_t coord, int16_t coord_a, int16_t coord_b, int32_t delta_a, int32_t delta_b) {
+  if (coord_a == coord_b) {
+    return delta_a;
+  }
+
+  int16_t min_coord = coord_a;
+  int16_t max_coord = coord_b;
+  int32_t min_delta = delta_a;
+  int32_t max_delta = delta_b;
+  if (coord_a > coord_b) {
+    min_coord = coord_b;
+    max_coord = coord_a;
+    min_delta = delta_b;
+    max_delta = delta_a;
+  }
+
+  if (coord <= min_coord) {
+    return min_delta;
+  }
+  if (coord >= max_coord) {
+    return max_delta;
+  }
+
+  float ratio = (float)(coord - min_coord) / (float)(max_coord - min_coord);
+  return (int32_t)vr_lrintf((float)min_delta + ((float)(max_delta - min_delta) * ratio));
+}
+
+static void vr_iup_interpolate_contour_axis(
+  const int16_t* coords,
+  int32_t* deltas,
+  const uint8_t* touched,
+  size_t start,
+  size_t end) {
+  size_t first_touched = end + 1u;
+  size_t touched_count = 0u;
+  for (size_t i = start; i <= end; ++i) {
+    if (touched[i] != 0u) {
+      if (first_touched > end) {
+        first_touched = i;
+      }
+      ++touched_count;
+    }
+  }
+
+  if (touched_count == 0u) {
+    return;
+  }
+  if (touched_count == 1u) {
+    int32_t delta = deltas[first_touched];
+    for (size_t i = start; i <= end; ++i) {
+      if (touched[i] == 0u) {
+        deltas[i] = delta;
+      }
+    }
+    return;
+  }
+
+  size_t left = first_touched;
+  do {
+    size_t right = vr_iup_next_index(left, start, end);
+    while (right != left && touched[right] == 0u) {
+      right = vr_iup_next_index(right, start, end);
+    }
+
+    size_t fill = vr_iup_next_index(left, start, end);
+    while (fill != right) {
+      deltas[fill] = vr_iup_interpolate_delta(coords[fill], coords[left], coords[right], deltas[left], deltas[right]);
+      fill = vr_iup_next_index(fill, start, end);
+    }
+    left = right;
+  } while (left != first_touched);
+}
+
+static void vr_iup_interpolate_outline_deltas(
+  const vr_glyph_outline_t* outline,
+  const int16_t* base_x,
+  const int16_t* base_y,
+  int32_t* dx,
+  int32_t* dy,
+  const uint8_t* touched) {
+  if (!outline || !base_x || !base_y || !dx || !dy || !touched || outline->point_count <= 0) {
+    return;
+  }
+
+  for (uint16_t c = 0u; c < outline->number_of_contours; ++c) {
+    size_t start = (c == 0u) ? 0u : ((size_t)outline->contour_end_pts[c - 1u] + 1u);
+    size_t end = (size_t)outline->contour_end_pts[c];
+    if (start > end || end >= (size_t)outline->point_count) {
+      continue;
+    }
+    vr_iup_interpolate_contour_axis(base_x, dx, touched, start, end);
+    vr_iup_interpolate_contour_axis(base_y, dy, touched, start, end);
+  }
+}
+
 float vr_apply_avar_mapping(const vr_font_face_t* face, uint16_t axis_index, float value) {
   if (!face || face->avar.axis_count == 0 || axis_index >= face->avar.axis_count) return value;
   if (!face->avar.map_from || !face->avar.map_to || !face->avar.segment_count || !face->avar.segment_offset) {
@@ -747,11 +846,30 @@ vr_status_t vr_apply_gvar_variation(const vr_font_face_t* face, uint16_t glyph_i
   if (glyph_data + 4 > glyph_data_end) return VR_OK;
 
   size_t total_points = (size_t)outline->point_count + 4u;
+  int16_t* base_x = NULL;
+  int16_t* base_y = NULL;
+  if (outline->point_count > 0) {
+    base_x = (int16_t*)vr_alloc(face, (size_t)outline->point_count * sizeof(*base_x), 2u);
+    base_y = (int16_t*)vr_alloc(face, (size_t)outline->point_count * sizeof(*base_y), 2u);
+    if (!base_x || !base_y) {
+      vr_dealloc(face, base_x, (size_t)outline->point_count * sizeof(*base_x), 2u);
+      vr_dealloc(face, base_y, (size_t)outline->point_count * sizeof(*base_y), 2u);
+      return VR_ERR_OOM;
+    }
+    for (size_t i = 0u; i < (size_t)outline->point_count; ++i) {
+      base_x[i] = outline->x[i];
+      base_y[i] = outline->y[i];
+    }
+  }
   uint16_t tuple_count = vr_u16(glyph_data) & VR_GVAR_TUPLE_COUNT_MASK;
   uint16_t table_flags = vr_u16(glyph_data) & 0xF000u;
   size_t data_offset = (size_t)vr_u16(glyph_data + 2);
   const uint8_t* serialized = glyph_data + data_offset;
-  if (serialized > glyph_data_end) return VR_OK;
+  if (serialized > glyph_data_end) {
+    vr_dealloc(face, base_x, (size_t)outline->point_count * sizeof(*base_x), 2u);
+    vr_dealloc(face, base_y, (size_t)outline->point_count * sizeof(*base_y), 2u);
+    return VR_OK;
+  }
 
   uint16_t* shared_points = NULL;
   bool shared_points_all = false;
@@ -763,10 +881,14 @@ vr_status_t vr_apply_gvar_variation(const vr_font_face_t* face, uint16_t glyph_i
     vr_status_t st = vr_decode_point_indices(face, serialized, glyph_data_end, total_points, &shared_points_all,
                                              &shared_points, &shared_point_count, &shared_consumed);
     if (st != VR_OK) {
+      vr_dealloc(face, base_x, (size_t)outline->point_count * sizeof(*base_x), 2u);
+      vr_dealloc(face, base_y, (size_t)outline->point_count * sizeof(*base_y), 2u);
       return st;
     }
     tuple_data += shared_consumed;
     if (shared_points == NULL && shared_point_count > 0) {
+      vr_dealloc(face, base_x, (size_t)outline->point_count * sizeof(*base_x), 2u);
+      vr_dealloc(face, base_y, (size_t)outline->point_count * sizeof(*base_y), 2u);
       return VR_ERR_OOM;
     }
   }
@@ -778,6 +900,8 @@ vr_status_t vr_apply_gvar_variation(const vr_font_face_t* face, uint16_t glyph_i
     }
     if (header + 4 > glyph_data_end) {
       vr_dealloc(face, shared_points, shared_point_count * sizeof(*shared_points), 2u);
+      vr_dealloc(face, base_x, (size_t)outline->point_count * sizeof(*base_x), 2u);
+      vr_dealloc(face, base_y, (size_t)outline->point_count * sizeof(*base_y), 2u);
       return VR_ERR_INVALID_FONT;
     }
 
@@ -786,6 +910,8 @@ vr_status_t vr_apply_gvar_variation(const vr_font_face_t* face, uint16_t glyph_i
     header += 4;
     if (tuple_data + tuple_data_size > glyph_data_end) {
       vr_dealloc(face, shared_points, shared_point_count * sizeof(*shared_points), 2u);
+      vr_dealloc(face, base_x, (size_t)outline->point_count * sizeof(*base_x), 2u);
+      vr_dealloc(face, base_y, (size_t)outline->point_count * sizeof(*base_y), 2u);
       return VR_ERR_INVALID_FONT;
     }
 
@@ -801,6 +927,8 @@ vr_status_t vr_apply_gvar_variation(const vr_font_face_t* face, uint16_t glyph_i
       for (uint16_t i = 0; i < face->gvar.axis_count; ++i) {
         if (header + 2 > glyph_data_end) {
           vr_dealloc(face, shared_points, shared_point_count * sizeof(*shared_points), 2u);
+          vr_dealloc(face, base_x, (size_t)outline->point_count * sizeof(*base_x), 2u);
+          vr_dealloc(face, base_y, (size_t)outline->point_count * sizeof(*base_y), 2u);
           return VR_ERR_INVALID_FONT;
         }
         peak[i] = vr_f2dot14_to_float(vr_u16(header));
@@ -810,6 +938,8 @@ vr_status_t vr_apply_gvar_variation(const vr_font_face_t* face, uint16_t glyph_i
       uint16_t shared_index = tuple_index & VR_GVAR_TUPLE_COUNT_MASK;
       if (shared_index >= face->gvar.shared_tuple_count || face->gvar.shared_tuples == NULL) {
         vr_dealloc(face, shared_points, shared_point_count * sizeof(*shared_points), 2u);
+        vr_dealloc(face, base_x, (size_t)outline->point_count * sizeof(*base_x), 2u);
+        vr_dealloc(face, base_y, (size_t)outline->point_count * sizeof(*base_y), 2u);
         return VR_ERR_INVALID_FONT;
       }
       for (uint16_t i = 0; i < face->gvar.axis_count; ++i) {
@@ -821,6 +951,8 @@ vr_status_t vr_apply_gvar_variation(const vr_font_face_t* face, uint16_t glyph_i
       for (uint16_t i = 0; i < face->gvar.axis_count; ++i) {
         if (header + 2 > glyph_data_end || header + 4 > glyph_data_end) {
           vr_dealloc(face, shared_points, shared_point_count * sizeof(*shared_points), 2u);
+          vr_dealloc(face, base_x, (size_t)outline->point_count * sizeof(*base_x), 2u);
+          vr_dealloc(face, base_y, (size_t)outline->point_count * sizeof(*base_y), 2u);
           return VR_ERR_INVALID_FONT;
         }
         start_curve[i] = vr_f2dot14_to_float(vr_u16(header));
@@ -852,10 +984,14 @@ vr_status_t vr_apply_gvar_variation(const vr_font_face_t* face, uint16_t glyph_i
                                                &tuple_points, &tuple_point_count, &local_bytes);
       if (st != VR_OK) {
         vr_dealloc(face, shared_points, shared_point_count * sizeof(*shared_points), 2u);
+        vr_dealloc(face, base_x, (size_t)outline->point_count * sizeof(*base_x), 2u);
+        vr_dealloc(face, base_y, (size_t)outline->point_count * sizeof(*base_y), 2u);
         return st;
       }
       if (tuple_points == NULL && tuple_point_count > 0) {
         vr_dealloc(face, shared_points, shared_point_count * sizeof(*shared_points), 2u);
+        vr_dealloc(face, base_x, (size_t)outline->point_count * sizeof(*base_x), 2u);
+        vr_dealloc(face, base_y, (size_t)outline->point_count * sizeof(*base_y), 2u);
         return VR_ERR_OOM;
       }
     } else if ((table_flags & VR_GVAR_TUPLE_SHARED_POINTS) != 0) {
@@ -872,44 +1008,85 @@ vr_status_t vr_apply_gvar_variation(const vr_font_face_t* face, uint16_t glyph_i
     size_t point_apply_count = tuple_all ? total_points : tuple_point_count;
     if (point_apply_count > (size_t)UINT16_MAX) point_apply_count = (size_t)UINT16_MAX;
 
-    int16_t* dx = NULL;
-    int16_t* dy = NULL;
+    int16_t* raw_dx = NULL;
+    int16_t* raw_dy = NULL;
+    int32_t* dx = NULL;
+    int32_t* dy = NULL;
+    uint8_t* touched = NULL;
     size_t used_x = 0;
     size_t used_y = 0;
 
     if (point_apply_count > 0) {
-      dx = (int16_t*)vr_calloc(face, point_apply_count, sizeof(int16_t), 2u);
-      dy = (int16_t*)vr_calloc(face, point_apply_count, sizeof(int16_t), 2u);
-      if (!dx || !dy) {
-        vr_dealloc(face, dx, point_apply_count * sizeof(*dx), 2u);
-        vr_dealloc(face, dy, point_apply_count * sizeof(*dy), 2u);
+      raw_dx = (int16_t*)vr_calloc(face, point_apply_count, sizeof(int16_t), 2u);
+      raw_dy = (int16_t*)vr_calloc(face, point_apply_count, sizeof(int16_t), 2u);
+      dx = (int32_t*)vr_calloc(face, total_points, sizeof(int32_t), 4u);
+      dy = (int32_t*)vr_calloc(face, total_points, sizeof(int32_t), 4u);
+      touched = (uint8_t*)vr_calloc(face, total_points, sizeof(uint8_t), 1u);
+      if (!raw_dx || !raw_dy || !dx || !dy || !touched) {
+        vr_dealloc(face, raw_dx, point_apply_count * sizeof(*raw_dx), 2u);
+        vr_dealloc(face, raw_dy, point_apply_count * sizeof(*raw_dy), 2u);
+        vr_dealloc(face, dx, total_points * sizeof(*dx), 4u);
+        vr_dealloc(face, dy, total_points * sizeof(*dy), 4u);
+        vr_dealloc(face, touched, total_points * sizeof(*touched), 1u);
         if (private_points) vr_dealloc(face, tuple_points, tuple_point_count * sizeof(*tuple_points), 2u);
         vr_dealloc(face, shared_points, shared_point_count * sizeof(*shared_points), 2u);
+        vr_dealloc(face, base_x, (size_t)outline->point_count * sizeof(*base_x), 2u);
+        vr_dealloc(face, base_y, (size_t)outline->point_count * sizeof(*base_y), 2u);
         return VR_ERR_OOM;
       }
 
-      vr_status_t sx = vr_decode_delta_runs(delta_data, glyph_data_end, dx, point_apply_count, &used_x);
-      vr_status_t sy = vr_decode_delta_runs(delta_data + used_x, glyph_data_end, dy, point_apply_count, &used_y);
+      vr_status_t sx = vr_decode_delta_runs(delta_data, glyph_data_end, raw_dx, point_apply_count, &used_x);
+      vr_status_t sy = vr_decode_delta_runs(delta_data + used_x, glyph_data_end, raw_dy, point_apply_count, &used_y);
       if (sx != VR_OK || sy != VR_OK || (delta_data + used_x + used_y > tuple_data + tuple_data_size)) {
-        vr_dealloc(face, dx, point_apply_count * sizeof(*dx), 2u);
-        vr_dealloc(face, dy, point_apply_count * sizeof(*dy), 2u);
+        vr_dealloc(face, raw_dx, point_apply_count * sizeof(*raw_dx), 2u);
+        vr_dealloc(face, raw_dy, point_apply_count * sizeof(*raw_dy), 2u);
+        vr_dealloc(face, dx, total_points * sizeof(*dx), 4u);
+        vr_dealloc(face, dy, total_points * sizeof(*dy), 4u);
+        vr_dealloc(face, touched, total_points * sizeof(*touched), 1u);
         if (private_points) vr_dealloc(face, tuple_points, tuple_point_count * sizeof(*tuple_points), 2u);
         vr_dealloc(face, shared_points, shared_point_count * sizeof(*shared_points), 2u);
+        vr_dealloc(face, base_x, (size_t)outline->point_count * sizeof(*base_x), 2u);
+        vr_dealloc(face, base_y, (size_t)outline->point_count * sizeof(*base_y), 2u);
         return VR_ERR_INVALID_FONT;
+      }
+
+      for (size_t i = 0; i < point_apply_count; ++i) {
+        uint16_t pi = tuple_all ? (uint16_t)i : tuple_points[i];
+        if (pi >= total_points) {
+          continue;
+        }
+        dx[pi] = raw_dx[i];
+        dy[pi] = raw_dy[i];
+        touched[pi] = 1u;
+      }
+      if (!tuple_all && outline->point_count > 0) {
+        vr_iup_interpolate_outline_deltas(outline, base_x, base_y, dx, dy, touched);
       }
     }
 
     float scalar = vr_compute_tuple_scalar(face, face->gvar.axis_count, start_curve, peak, end_curve);
     if (scalar > 0.0f && point_apply_count > 0) {
-      for (size_t i = 0; i < point_apply_count; ++i) {
-        uint16_t pi = tuple_all ? (uint16_t)i : tuple_points[i];
-        if (point_apply_count == 0) continue;
-        int32_t nx = (int32_t)vr_lrintf((float)dx[i] * scalar);
-        int32_t ny = (int32_t)vr_lrintf((float)dy[i] * scalar);
+      for (size_t pi = 0; pi < total_points; ++pi) {
+        int32_t nx = (int32_t)vr_lrintf((float)dx[pi] * scalar);
+        int32_t ny = (int32_t)vr_lrintf((float)dy[pi] * scalar);
 
         if (pi < (uint16_t)outline->point_count) {
-          outline->x[pi] = (int16_t)((int32_t)outline->x[pi] + nx);
-          outline->y[pi] = (int16_t)((int32_t)outline->y[pi] + ny);
+          int32_t next_x = (int32_t)outline->x[pi] + nx;
+          int32_t next_y = (int32_t)outline->y[pi] + ny;
+          if (next_x < INT16_MIN || next_x > INT16_MAX || next_y < INT16_MIN || next_y > INT16_MAX) {
+            vr_dealloc(face, raw_dx, point_apply_count * sizeof(*raw_dx), 2u);
+            vr_dealloc(face, raw_dy, point_apply_count * sizeof(*raw_dy), 2u);
+            vr_dealloc(face, dx, total_points * sizeof(*dx), 4u);
+            vr_dealloc(face, dy, total_points * sizeof(*dy), 4u);
+            vr_dealloc(face, touched, total_points * sizeof(*touched), 1u);
+            if (private_points) vr_dealloc(face, tuple_points, tuple_point_count * sizeof(*tuple_points), 2u);
+            vr_dealloc(face, shared_points, shared_point_count * sizeof(*shared_points), 2u);
+            vr_dealloc(face, base_x, (size_t)outline->point_count * sizeof(*base_x), 2u);
+            vr_dealloc(face, base_y, (size_t)outline->point_count * sizeof(*base_y), 2u);
+            return VR_ERR_INVALID_FONT;
+          }
+          outline->x[pi] = (int16_t)next_x;
+          outline->y[pi] = (int16_t)next_y;
           continue;
         }
         if (outline->has_phantom_points && pi >= (uint16_t)outline->point_count && pi < (uint16_t)(outline->point_count + 4)) {
@@ -920,8 +1097,11 @@ vr_status_t vr_apply_gvar_variation(const vr_font_face_t* face, uint16_t glyph_i
       }
     }
 
-    vr_dealloc(face, dx, point_apply_count * sizeof(*dx), 2u);
-    vr_dealloc(face, dy, point_apply_count * sizeof(*dy), 2u);
+    vr_dealloc(face, raw_dx, point_apply_count * sizeof(*raw_dx), 2u);
+    vr_dealloc(face, raw_dy, point_apply_count * sizeof(*raw_dy), 2u);
+    vr_dealloc(face, dx, total_points * sizeof(*dx), 4u);
+    vr_dealloc(face, dy, total_points * sizeof(*dy), 4u);
+    vr_dealloc(face, touched, total_points * sizeof(*touched), 1u);
     if (private_points) vr_dealloc(face, tuple_points, tuple_point_count * sizeof(*tuple_points), 2u);
 
     tuple_data += tuple_data_size;
@@ -929,6 +1109,8 @@ vr_status_t vr_apply_gvar_variation(const vr_font_face_t* face, uint16_t glyph_i
   }
 
   vr_dealloc(face, shared_points, shared_point_count * sizeof(*shared_points), 2u);
+  vr_dealloc(face, base_x, (size_t)outline->point_count * sizeof(*base_x), 2u);
+  vr_dealloc(face, base_y, (size_t)outline->point_count * sizeof(*base_y), 2u);
   return VR_OK;
 }
 

@@ -11,6 +11,7 @@ int main(void) {
   run_api_tests();
   run_cmap_tests();
   run_raster_tests();
+  run_vr_font_freestanding_tests();
 
   extern int g_tests_failed;
   extern int g_tests_total;
