@@ -128,17 +128,30 @@ er_ui_status_t er_ui_initial_setup_state_init(
   size_t status_capacity);
 er_ui_status_t er_ui_initial_setup_set_password(er_ui_initial_setup_state_t* state, const char* value);
 er_ui_status_t er_ui_initial_setup_set_confirm_password(er_ui_initial_setup_state_t* state, const char* value);
-er_ui_initial_setup_intent_t er_ui_initial_setup_handle_action(er_ui_initial_setup_state_t* state, er_ui_action_t action);
+er_ui_initial_setup_intent_t er_ui_initial_setup_handle_action(
+  er_ui_initial_setup_state_t* state,
+  er_ui_action_t action);
 er_ui_status_t er_ui_initial_setup_mark_configured(er_ui_initial_setup_state_t* state, size_t envelope_len);
 er_ui_status_t er_ui_initial_setup_mark_error(er_ui_initial_setup_state_t* state, const char* message);
-er_ui_status_t er_ui_initial_setup_build_surface(const er_ui_initial_setup_state_t* state, er_ui_initial_setup_surface_t* out_surface);
+er_ui_status_t er_ui_initial_setup_build_surface(
+  const er_ui_initial_setup_state_t* state,
+  er_ui_initial_setup_surface_t* out_surface);
 
-er_ui_status_t er_ui_yubikey_grant_state_init(er_ui_yubikey_grant_state_t* state, char* pin, size_t pin_capacity, char* status, size_t status_capacity);
+er_ui_status_t er_ui_yubikey_grant_state_init(
+  er_ui_yubikey_grant_state_t* state,
+  char* pin,
+  size_t pin_capacity,
+  char* status,
+  size_t status_capacity);
 er_ui_status_t er_ui_yubikey_grant_set_pin(er_ui_yubikey_grant_state_t* state, const char* value);
-er_ui_yubikey_grant_intent_t er_ui_yubikey_grant_handle_action(er_ui_yubikey_grant_state_t* state, er_ui_action_t action);
+er_ui_yubikey_grant_intent_t er_ui_yubikey_grant_handle_action(
+  er_ui_yubikey_grant_state_t* state,
+  er_ui_action_t action);
 er_ui_status_t er_ui_yubikey_grant_mark_signed(er_ui_yubikey_grant_state_t* state, const char* summary);
 er_ui_status_t er_ui_yubikey_grant_mark_error(er_ui_yubikey_grant_state_t* state, const char* message);
-er_ui_status_t er_ui_yubikey_grant_build_surface(const er_ui_yubikey_grant_state_t* state, er_ui_initial_setup_surface_t* out_surface);
+er_ui_status_t er_ui_yubikey_grant_build_surface(
+  const er_ui_yubikey_grant_state_t* state,
+  er_ui_initial_setup_surface_t* out_surface);
 
 er_ui_record_status_t er_ui_fingerprint_presence_ref_write(
   const er_ui_fingerprint_presence_ref_t* value,
