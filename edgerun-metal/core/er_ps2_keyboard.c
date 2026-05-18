@@ -54,15 +54,15 @@ static UINT8 er_ps2_keyboard_set_surface(UINT8 make_code, ErPs2KeyboardAction* o
   switch (make_code) {
     case ER_PS2_SET1_1:
       out_action->kind = ER_PS2_KEYBOARD_ACTION_SELECT_SURFACE;
-      out_action->surface_id = ER_UI_DEMO_APP_LEDGER_ID;
+      out_action->surface_id = ER_UI_LEDGER_APP_LEDGER_ID;
       return 1u;
     case ER_PS2_SET1_2:
       out_action->kind = ER_PS2_KEYBOARD_ACTION_SELECT_SURFACE;
-      out_action->surface_id = ER_UI_DEMO_APP_PAYMENTS_ID;
+      out_action->surface_id = ER_UI_LEDGER_APP_PAYMENTS_ID;
       return 1u;
     case ER_PS2_SET1_3:
       out_action->kind = ER_PS2_KEYBOARD_ACTION_SELECT_SURFACE;
-      out_action->surface_id = ER_UI_DEMO_APP_ACCESS_ID;
+      out_action->surface_id = ER_UI_LEDGER_APP_ACCESS_ID;
       return 1u;
     default:
       return 0u;

@@ -22,7 +22,7 @@
 #include "er_gfx_console.h"
 #include "er_ui_surface_renderer.h"
 #include "er_ui_tabler_icon_atlas.h"
-#include "er_ui_demo_apps.h"
+#include "er_ui_ledger_app.h"
 #include "er_ui_wasm_app.h"
 #include "er_ui_text.h"
 #include "er_virtio.h"
@@ -4332,8 +4332,8 @@ static void test_ui_surface_renderer_varfont_text(void) {
   vr_font_face_destroy(font);
 }
 
-static void test_ui_demo_apps_switching(void) {
-  er_ui_demo_apps_state_t apps;
+static void test_ui_ledger_app_switching(void) {
+  er_ui_ledger_app_state_t apps;
   er_ui_runtime_state_t runtime;
   er_ui_scene_t scene;
   er_ui_scene_stats_t stats;
@@ -4358,44 +4358,44 @@ static void test_ui_demo_apps_switching(void) {
   cfg.gl.update_texture = 0;
   cfg.gl.destroy_texture = 0;
 
-  check_int64("ui demo font create",
+  check_int64("ui ledger font create",
               vr_font_face_create_from_memory(&font, g_er_font_geist_ttf, ER_FONT_GEIST_TTF_SIZE, &cfg),
               VR_OK);
   if (font == 0) {
     return;
   }
 
-  check_int64("ui demo state init", er_ui_demo_apps_state_init(&apps, test_ui_allocator()), ER_UI_OK);
-  check_uint64("ui demo app count", er_ui_workspace_surface_count(&apps.shell), 3u);
-  check_uint64("ui demo initial focus", er_ui_workspace_focused_surface_id(&apps.shell), ER_UI_DEMO_APP_LEDGER_ID);
-  check_int64("ui demo focused bounds",
+  check_int64("ui ledger state init", er_ui_ledger_app_state_init(&apps, test_ui_allocator()), ER_UI_OK);
+  check_uint64("ui ledger app count", er_ui_workspace_surface_count(&apps.shell), 3u);
+  check_uint64("ui ledger initial focus", er_ui_workspace_focused_surface_id(&apps.shell), ER_UI_LEDGER_APP_LEDGER_ID);
+  check_int64("ui ledger focused bounds",
               er_ui_workspace_focused_surface_bounds(&apps.shell, er_ui_bounds(0.0f, 0.0f, 1600.0f, 900.0f), &focused),
               1);
-  check_int64("ui demo focused bounds positive", focused.w > 0.0f && focused.h > 0.0f, 1);
+  check_int64("ui ledger focused bounds positive", focused.w > 0.0f && focused.h > 0.0f, 1);
 
-  check_int64("ui demo runtime init", er_ui_runtime_state_init_with_allocator(&runtime, test_ui_allocator()), ER_UI_OK);
-  check_int64("ui demo scene init",
+  check_int64("ui ledger runtime init", er_ui_runtime_state_init_with_allocator(&runtime, test_ui_allocator()), ER_UI_OK);
+  check_int64("ui ledger scene init",
               er_ui_scene_init_with_allocator(&scene, theme.colors.bg, test_ui_allocator()),
               ER_UI_OK);
-  check_int64("ui demo emit",
-              er_ui_demo_apps_emit_scene(&apps, &scene, font, er_ui_bounds(0.0f, 0.0f, 1600.0f, 900.0f), theme),
+  check_int64("ui ledger emit",
+              er_ui_ledger_app_emit_scene(&apps, &scene, font, er_ui_bounds(0.0f, 0.0f, 1600.0f, 900.0f), theme),
               ER_UI_OK);
   stats = er_ui_scene_stats(&scene);
-  check_int64("ui demo emits rects", stats.rects > 0u, 1);
-  check_uint64("ui demo emits hits", stats.hits, 6u);
-  check_int64("ui demo emits text", stats.text_quads > 0u, 1);
+  check_int64("ui ledger emits rects", stats.rects > 0u, 1);
+  check_uint64("ui ledger emits hits", stats.hits, 6u);
+  check_int64("ui ledger emits text", stats.text_quads > 0u, 1);
 
   down = er_ui_runtime_pointer_down(&runtime, &scene, 40.0f, 138.0f);
-  check_int64("ui demo nav down focus", down.kind, ER_UI_ACTION_FOCUSED);
+  check_int64("ui ledger nav down focus", down.kind, ER_UI_ACTION_FOCUSED);
   up = er_ui_runtime_pointer_up(&runtime, &scene, 40.0f, 138.0f);
-  check_int64("ui demo nav up select", up.kind, ER_UI_ACTION_TAB_SELECTED);
-  check_int64("ui demo apply payments nav", er_ui_demo_apps_apply_action(&apps, up, &changed), ER_UI_OK);
-  check_int64("ui demo tab changed", changed, 1);
-  check_uint64("ui demo payments focus", er_ui_workspace_focused_surface_id(&apps.shell), ER_UI_DEMO_APP_PAYMENTS_ID);
+  check_int64("ui ledger nav up select", up.kind, ER_UI_ACTION_TAB_SELECTED);
+  check_int64("ui ledger apply payments nav", er_ui_ledger_app_apply_action(&apps, up, &changed), ER_UI_OK);
+  check_int64("ui ledger tab changed", changed, 1);
+  check_uint64("ui ledger payments focus", er_ui_workspace_focused_surface_id(&apps.shell), ER_UI_LEDGER_APP_PAYMENTS_ID);
 
   er_ui_scene_destroy(&scene);
   er_ui_runtime_state_destroy(&runtime);
-  er_ui_demo_apps_state_destroy(&apps);
+  er_ui_ledger_app_state_destroy(&apps);
   vr_font_face_destroy(font);
 }
 
@@ -4423,13 +4423,13 @@ static void test_ps2_keyboard_set1_decoder(void) {
   check_int64("ps2 decode surface 1",
               er_ps2_keyboard_decode_set1(&state, 0x02u, &action), 1);
   check_int64("ps2 surface action", action.kind, ER_PS2_KEYBOARD_ACTION_SELECT_SURFACE);
-  check_uint64("ps2 ledger surface", action.surface_id, ER_UI_DEMO_APP_LEDGER_ID);
+  check_uint64("ps2 ledger surface", action.surface_id, ER_UI_LEDGER_APP_LEDGER_ID);
   check_int64("ps2 decode surface 2",
               er_ps2_keyboard_decode_set1(&state, 0x03u, &action), 1);
-  check_uint64("ps2 payments surface", action.surface_id, ER_UI_DEMO_APP_PAYMENTS_ID);
+  check_uint64("ps2 payments surface", action.surface_id, ER_UI_LEDGER_APP_PAYMENTS_ID);
   check_int64("ps2 decode surface 3",
               er_ps2_keyboard_decode_set1(&state, 0x04u, &action), 1);
-  check_uint64("ps2 access surface", action.surface_id, ER_UI_DEMO_APP_ACCESS_ID);
+  check_uint64("ps2 access surface", action.surface_id, ER_UI_LEDGER_APP_ACCESS_ID);
 
   check_int64("ps2 extended prefix",
               er_ps2_keyboard_decode_set1(&state, 0xe0u, &action), 1);
@@ -4490,7 +4490,7 @@ int main(void) {
   test_ui_surface_renderer_surface();
   test_ui_surface_renderer_4k_tile_plan();
   test_ui_surface_renderer_varfont_text();
-  test_ui_demo_apps_switching();
+  test_ui_ledger_app_switching();
   test_ps2_keyboard_set1_decoder();
 
   if (g_failed != 0) {

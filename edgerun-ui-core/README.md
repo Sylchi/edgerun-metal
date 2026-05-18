@@ -7,10 +7,10 @@ Implemented portable slices:
 - primitive bounds and float helpers used by scene, painter, and future component code
 - colors, rects, clips, hits, drag sources, drop targets, icon/text quads, and transitions
 - painter facade for panels, soft cards, dividers, hits, drag/drop regions, quads, and transitions
-- shadcn demo catalog and parity metadata ported from the Rust UI core source, including 57 component specs, slots, states, identifier resolution, and port mappings
+- component catalog and parity metadata ported from the Rust UI core source, including 57 component specs, slots, states, identifier resolution, and port mappings
 - reusable EdgeRun component contracts ported from Rust, including stable selectors, state matrices, projected input fields, and accessibility role/label metadata
 - semantic palette/theme records for color schemes, accents, radius scales, density, and token resolution
-- shadcn preset-code recipes, base62 encode/decode parity, style-family palettes/specs, extracted style tokens, and source-capture provenance
+- component preset-code recipes, base62 encode/decode parity, style-family palettes/specs, extracted style tokens, and source-capture provenance
 - shared spacing and sizing contracts for rows, controls, app surfaces, system panels, overlays, and scroll geometry
 - runtime-replaceable UI asset pack contracts for icons, fonts, emoji, and extracted component coverage
 - required `vrfont` integration for converting variable-font vertex batches into scene text quads
@@ -33,7 +33,7 @@ The runtime input slice includes:
 
 ## Component System
 
-App and shell surfaces should compose `er_ui_shadcn_*_emit` and
+App and shell surfaces should compose `er_ui_component_*_emit` and
 `er_ui_*_prompt_emit` component functions instead of drawing one-off rectangles,
 ASCII glyphs, and ad hoc hit targets. Components own their visual density,
 radius, borders, semantic hits, projected-state contracts, and Tabler-compatible

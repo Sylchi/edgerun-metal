@@ -440,7 +440,7 @@ er_ui_status_t er_ui_preset_encode(er_ui_preset_recipe_t recipe, char* out, size
   return ER_UI_OK;
 }
 
-//@optimizer-ignore-function preset-code decode must walk the fixed shadcn bitfield schema in wire order
+//@optimizer-ignore-function preset-code decode must walk the fixed component bitfield schema in wire order
 er_ui_status_t er_ui_preset_decode(const char* preset_code, er_ui_preset_recipe_t* out_recipe) {
   if (!preset_code || !out_recipe || preset_code[0] != 'b') return ER_UI_ERR_INVALID_ARGUMENT;
   uint64_t value = 0u;

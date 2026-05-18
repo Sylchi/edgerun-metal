@@ -197,8 +197,8 @@ void run_node_tests(void) {
   er_ui_node_t title = er_ui_node_text("Create project");
   er_ui_node_t row = er_ui_node_row();
   er_ui_node_set_gap(&row, 6.0f);
-  er_ui_node_t badge = er_ui_node_badge("Native", ER_UI_SHADCN_BADGE_SECONDARY);
-  er_ui_node_t button = er_ui_node_button("Deploy", ER_UI_TEST_NODE_DEPLOY_BUTTON_ID, ER_UI_SHADCN_BUTTON_DEFAULT);
+  er_ui_node_t badge = er_ui_node_badge("Native", ER_UI_COMPONENT_BADGE_SECONDARY);
+  er_ui_node_t button = er_ui_node_button("Deploy", ER_UI_TEST_NODE_DEPLOY_BUTTON_ID, ER_UI_COMPONENT_BUTTON_DEFAULT);
   expect_status(er_ui_node_add_child(&row, &badge), ER_UI_OK, "node: row accepts badge child");
   expect_status(er_ui_node_add_child(&row, &button), ER_UI_OK, "node: row accepts button child");
   expect_status(er_ui_node_add_child(&root, &title), ER_UI_OK, "node: card accepts title child");
@@ -338,7 +338,7 @@ void run_node_tests(void) {
   expect_size(a11y.role, ER_UI_A11Y_IMAGE, "node: icon accessibility role");
   expect_string(a11y.label, "trust", "node: icon accessibility uses canonical label fallback");
 
-  er_ui_node_t icon_button_a11y = er_ui_node_icon_button(ER_UI_ICON_SEARCH, "Search", ER_UI_TEST_NODE_ICON_BUTTON_ID, ER_UI_SHADCN_BUTTON_GHOST);
+  er_ui_node_t icon_button_a11y = er_ui_node_icon_button(ER_UI_ICON_SEARCH, "Search", ER_UI_TEST_NODE_ICON_BUTTON_ID, ER_UI_COMPONENT_BUTTON_GHOST);
   expect_status(er_ui_node_accessibility(&icon_button_a11y, &a11y), ER_UI_OK, "node: icon button accessibility maps");
   expect_size(a11y.role, ER_UI_A11Y_BUTTON, "node: icon button accessibility role");
   expect_true(a11y.has_id && a11y.id == ER_UI_TEST_NODE_ICON_BUTTON_ID, "node: icon button accessibility id");
@@ -415,7 +415,7 @@ void run_node_tests(void) {
   expect_true(a11y.has_id && a11y.id == ER_UI_TEST_NODE_ACCORDION_ITEM_ID, "node: accordion item id");
   expect_true((a11y.states & ER_UI_A11Y_STATE_EXPANDED) != 0u, "node: accordion item expanded state");
 
-  er_ui_node_t hover_a11y = er_ui_node_hover_card("ER", "UI", "Reusable shadcn primitive.", er_ui_color_rgba(0.1f, 0.2f, 0.3f, 1.0f));
+  er_ui_node_t hover_a11y = er_ui_node_hover_card("ER", "UI", "Reusable component primitive.", er_ui_color_rgba(0.1f, 0.2f, 0.3f, 1.0f));
   expect_status(er_ui_node_accessibility(&hover_a11y, &a11y), ER_UI_OK, "node: hover card accessibility maps");
   expect_size(a11y.role, ER_UI_A11Y_GROUP, "node: hover card accessibility role");
   expect_true(a11y.label == hover_a11y.label, "node: hover card label is borrowed");
@@ -671,7 +671,7 @@ void run_node_tests(void) {
                 "node: diff body truncated accessibility maps");
   expect_string(a11y.label, "[diff preview truncated]", "node: diff body truncated label");
 
-  er_ui_node_t chat_message_a11y = er_ui_node_chat_message(ER_UI_SHADCN_CHAT_ROLE_ASSISTANT, "Response", "Done");
+  er_ui_node_t chat_message_a11y = er_ui_node_chat_message(ER_UI_COMPONENT_CHAT_ROLE_ASSISTANT, "Response", "Done");
   expect_status(er_ui_node_accessibility(&chat_message_a11y, &a11y), ER_UI_OK, "node: chat message accessibility maps");
   expect_size(a11y.role, ER_UI_A11Y_GROUP, "node: chat message accessibility role");
   expect_string(a11y.label, "assistant", "node: chat message role label maps");
@@ -682,8 +682,8 @@ void run_node_tests(void) {
   expect_true(a11y.label == expected_diff_line, "node: chat diff line label is borrowed");
 
   er_ui_node_t conversation_a11y = er_ui_node_conversation(12.0f, ER_UI_TEST_NODE_CONVERSATION_ID);
-  er_ui_node_t conversation_child_a = er_ui_node_chat_message(ER_UI_SHADCN_CHAT_ROLE_USER, "", "Run tests");
-  er_ui_node_t conversation_child_b = er_ui_node_chat_message(ER_UI_SHADCN_CHAT_ROLE_ASSISTANT, "Response", "Tests passed");
+  er_ui_node_t conversation_child_a = er_ui_node_chat_message(ER_UI_COMPONENT_CHAT_ROLE_USER, "", "Run tests");
+  er_ui_node_t conversation_child_b = er_ui_node_chat_message(ER_UI_COMPONENT_CHAT_ROLE_ASSISTANT, "Response", "Tests passed");
   expect_status(er_ui_node_add_child(&conversation_a11y, &conversation_child_a), ER_UI_OK, "node: conversation accepts first child");
   expect_status(er_ui_node_add_child(&conversation_a11y, &conversation_child_b), ER_UI_OK, "node: conversation accepts second child");
   expect_status(er_ui_node_accessibility(&conversation_a11y, &a11y), ER_UI_OK, "node: conversation accessibility maps");
@@ -800,9 +800,9 @@ void run_node_tests(void) {
     er_ui_node_t control = er_ui_node_control_row("Cache package", "avoid repeated retrieval", "enabled", ER_UI_TEST_NODE_RENDER_CONTROL_ID);
     er_ui_node_t grid = er_ui_node_grid(ER_UI_TEST_NODE_RENDER_GRID_COLUMNS);
     er_ui_node_set_gap(&grid, 4.0f);
-    er_ui_node_t grid_badge_a = er_ui_node_badge("One", ER_UI_SHADCN_BADGE_DEFAULT);
-    er_ui_node_t grid_badge_b = er_ui_node_badge("Two", ER_UI_SHADCN_BADGE_SECONDARY);
-    er_ui_node_t grid_badge_c = er_ui_node_badge("Three", ER_UI_SHADCN_BADGE_OUTLINE);
+    er_ui_node_t grid_badge_a = er_ui_node_badge("One", ER_UI_COMPONENT_BADGE_DEFAULT);
+    er_ui_node_t grid_badge_b = er_ui_node_badge("Two", ER_UI_COMPONENT_BADGE_SECONDARY);
+    er_ui_node_t grid_badge_c = er_ui_node_badge("Three", ER_UI_COMPONENT_BADGE_OUTLINE);
     expect_status(er_ui_node_add_child(&grid, &grid_badge_a), ER_UI_OK, "node: grid accepts first child");
     expect_status(er_ui_node_add_child(&grid, &grid_badge_b), ER_UI_OK, "node: grid accepts second child");
     expect_status(er_ui_node_add_child(&grid, &grid_badge_c), ER_UI_OK, "node: grid accepts third child");
@@ -838,7 +838,7 @@ void run_node_tests(void) {
     er_ui_node_t gradient_label = er_ui_node_text("Gradient card");
     expect_status(er_ui_node_add_child(&gradient_card, &gradient_label), ER_UI_OK, "node: gradient card accepts child");
     er_ui_node_t icon = er_ui_node_icon(ER_UI_ICON_TRUST, "Trust", theme.colors.accent);
-    er_ui_node_t icon_button = er_ui_node_icon_button(ER_UI_ICON_SEARCH, "Search", ER_UI_TEST_NODE_RENDER_ICON_BUTTON_ID, ER_UI_SHADCN_BUTTON_GHOST);
+    er_ui_node_t icon_button = er_ui_node_icon_button(ER_UI_ICON_SEARCH, "Search", ER_UI_TEST_NODE_RENDER_ICON_BUTTON_ID, ER_UI_COMPONENT_BUTTON_GHOST);
     const char *const render_button_group_labels[] = {"Copy", "Paste", "More"};
     er_ui_node_t button_group =
         er_ui_node_button_group(render_button_group_labels, ER_UI_TEST_NODE_ARRAY_COUNT(render_button_group_labels), ER_UI_TEST_NODE_RENDER_BUTTON_GROUP_ID);
@@ -854,7 +854,7 @@ void run_node_tests(void) {
                                                       ER_UI_TEST_NODE_ARRAY_COUNT(render_collapsible_titles), true,
                                                       ER_UI_TEST_NODE_RENDER_COLLAPSIBLE_ID);
     const char *const render_accordion_titles[] = {"Is it accessible?", "Is it styled?"};
-    const char *const render_accordion_bodies[] = {"Yes, each trigger is exposed.", "It uses shared shadcn primitives."};
+    const char *const render_accordion_bodies[] = {"Yes, each trigger is exposed.", "It uses shared component primitives."};
     er_ui_node_t accordion = er_ui_node_accordion(render_accordion_titles, render_accordion_bodies, ER_UI_TEST_NODE_ARRAY_COUNT(render_accordion_titles),
                                                   ER_UI_TEST_NODE_RENDER_ACCORDION_ID);
     er_ui_node_t hover_card = er_ui_node_hover_card("ER", "UI core", "Variable font rendering stays required.", theme.colors.accent);
@@ -915,12 +915,12 @@ void run_node_tests(void) {
                                                 ER_UI_TEST_NODE_RENDER_COMBOBOX_ID);
     const char *const render_diff_lines[] = {"@@ -1,2 +1,2 @@", "-old", "+new", "*** End Patch"};
     er_ui_node_t diff_body = er_ui_node_diff_body(render_diff_lines, ER_UI_TEST_NODE_ARRAY_COUNT(render_diff_lines), true);
-    er_ui_node_t chat_message = er_ui_node_chat_message(ER_UI_SHADCN_CHAT_ROLE_ASSISTANT, "Response", "Done");
-    er_ui_node_t chat_timeline = er_ui_node_chat_message(ER_UI_SHADCN_CHAT_ROLE_TOOL_RUNNING, "Started", "shell");
+    er_ui_node_t chat_message = er_ui_node_chat_message(ER_UI_COMPONENT_CHAT_ROLE_ASSISTANT, "Response", "Done");
+    er_ui_node_t chat_timeline = er_ui_node_chat_message(ER_UI_COMPONENT_CHAT_ROLE_TOOL_RUNNING, "Started", "shell");
     er_ui_node_t chat_diff = er_ui_node_chat_diff_message("Patch", render_diff_lines, ER_UI_TEST_NODE_ARRAY_COUNT(render_diff_lines), true);
     er_ui_node_t conversation = er_ui_node_conversation(8.0f, ER_UI_TEST_NODE_RENDER_CONVERSATION_ID);
-    er_ui_node_t conversation_a = er_ui_node_chat_message(ER_UI_SHADCN_CHAT_ROLE_USER, "", "Run tests");
-    er_ui_node_t conversation_b = er_ui_node_chat_message(ER_UI_SHADCN_CHAT_ROLE_ASSISTANT, "Response", "Tests passed");
+    er_ui_node_t conversation_a = er_ui_node_chat_message(ER_UI_COMPONENT_CHAT_ROLE_USER, "", "Run tests");
+    er_ui_node_t conversation_b = er_ui_node_chat_message(ER_UI_COMPONENT_CHAT_ROLE_ASSISTANT, "Response", "Tests passed");
     expect_status(er_ui_node_add_child(&conversation, &conversation_a), ER_UI_OK, "node: render conversation accepts first child");
     expect_status(er_ui_node_add_child(&conversation, &conversation_b), ER_UI_OK, "node: render conversation accepts second child");
 

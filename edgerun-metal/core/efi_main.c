@@ -10,7 +10,7 @@
 #include "er_tpm.h"
 #include "er_ui_surface_renderer.h"
 #include "er_ui_components.h"
-#include "er_ui_demo_apps.h"
+#include "er_ui_ledger_app.h"
 #include "er_ui_metal.h"
 #include "er_ui_theme.h"
 #include "er_ui_wasm_app.h"
@@ -677,7 +677,7 @@ static UINT8 er_gpu_profile_render_component_scene_to_framebuffer(ErVirtioGpuFra
   er_ui_scene_t scene = {0};
   ErUiSurface surface;
   er_ui_scene_stats_t scene_stats;
-  er_ui_shadcn_demo_gallery_state_t gallery_state;
+  er_ui_component_gallery_state_t gallery_state;
 
   if (framebuffer == 0 || framebuffer->initialized == 0u || framebuffer->pixels == 0 || font == 0 ||
       framebuffer->width == 0u || framebuffer->height == 0u) {
@@ -687,7 +687,7 @@ static UINT8 er_gpu_profile_render_component_scene_to_framebuffer(ErVirtioGpuFra
     return 0u;
   }
 
-  er_ui_shadcn_demo_gallery_state_init(&gallery_state);
+  er_ui_component_gallery_state_init(&gallery_state);
   if (er_ui_scene_init_with_allocator(&scene, theme.colors.bg, er_ui_boot_allocator()) != ER_UI_OK ||
       er_ui_edgerun_metal_surface_emit(&scene, font,
                                        er_ui_bounds(0.0f, 0.0f, (float)framebuffer->width, (float)framebuffer->height),
@@ -1091,19 +1091,19 @@ static UINT8 er_ui_boot_prepare_wasm_counter(ErUiWasmAppRuntime* runtime,
 }
 
 static UINT8 er_ui_boot_render_scene(er_ui_scene_t* scene,
-                                     er_ui_demo_apps_state_t* demo_state,
+                                     er_ui_ledger_app_state_t* ledger_state,
                                      const ErUiBootRenderContext* render) {
   er_ui_scene_stats_t scene_stats;
   er_ui_scene_budget_violation_t scene_violation;
   ErUiSurfaceRenderStats render_stats;
   ErUiSurfaceFrameBudgetViolation frame_violation;
 
-  if (scene == 0 || demo_state == 0 || render == 0 || render->font == 0 || render->tile_plan == 0) {
+  if (scene == 0 || ledger_state == 0 || render == 0 || render->font == 0 || render->tile_plan == 0) {
     return 0u;
   }
 
   er_ui_scene_clear_commands(scene);
-  if (er_ui_demo_apps_emit_scene(demo_state, scene, render->font,
+  if (er_ui_ledger_app_emit_scene(ledger_state, scene, render->font,
                                  er_ui_bounds(0.0f, 0.0f, (float)render->mode.width, (float)render->mode.height),
                                  render->theme) != ER_UI_OK) {
     er_println("ui renderer: scene build failed");
@@ -1144,7 +1144,7 @@ static UINT8 er_ui_boot_render_scene(er_ui_scene_t* scene,
   }
 
   er_print("ui renderer: app=");
-  er_print_u64_dec((UINT64)er_ui_workspace_focused_surface_id(&demo_state->shell));
+  er_print_u64_dec((UINT64)er_ui_workspace_focused_surface_id(&ledger_state->shell));
   er_print(" bytes=");
   er_print_u64_dec(render_stats.bytes_written);
   er_print(" rects=");
@@ -1176,7 +1176,7 @@ static er_ui_action_t er_ui_boot_action_from_ps2(er_ui_runtime_state_t* runtime,
   return action;
 }
 
-static UINT8 er_ui_boot_apply_input(er_ui_demo_apps_state_t* demo_state,
+static UINT8 er_ui_boot_apply_input(er_ui_ledger_app_state_t* ledger_state,
                                     er_ui_runtime_state_t* runtime,
                                     er_ui_scene_t* scene,
                                     const ErUiBootRenderContext* render,
@@ -1189,7 +1189,7 @@ static UINT8 er_ui_boot_apply_input(er_ui_demo_apps_state_t* demo_state,
     return 0u;
   }
   *out_redraw = 0u;
-  if (demo_state == 0 || runtime == 0 || scene == 0) {
+  if (ledger_state == 0 || runtime == 0 || scene == 0) {
     return 0u;
   }
   if (input.kind == ER_PS2_KEYBOARD_ACTION_NONE) {
@@ -1208,7 +1208,7 @@ static UINT8 er_ui_boot_apply_input(er_ui_demo_apps_state_t* demo_state,
   if (action.kind == ER_UI_ACTION_NONE) {
     return 1u;
   }
-  if (er_ui_demo_apps_apply_action(demo_state, action, &changed) != ER_UI_OK) {
+  if (er_ui_ledger_app_apply_action(ledger_state, action, &changed) != ER_UI_OK) {
     return 0u;
   }
   *out_redraw = (UINT8)(changed || er_ui_action_needs_redraw(action));
@@ -1216,7 +1216,7 @@ static UINT8 er_ui_boot_apply_input(er_ui_demo_apps_state_t* demo_state,
 }
 
 //@optimizer-ignore-function post-ExitBootServices input loop must poll PS/2 I/O and redraw after accepted key events
-static void er_ui_boot_input_loop(er_ui_demo_apps_state_t* demo_state,
+static void er_ui_boot_input_loop(er_ui_ledger_app_state_t* ledger_state,
                                   er_ui_runtime_state_t* runtime,
                                   er_ui_scene_t* scene,
                                   const ErUiBootRenderContext* render) {
@@ -1236,11 +1236,11 @@ static void er_ui_boot_input_loop(er_ui_demo_apps_state_t* demo_state,
       er_pause_once();
       continue;
     }
-    if (er_ui_boot_apply_input(demo_state, runtime, scene, render, input, &redraw) == 0u) {
+    if (er_ui_boot_apply_input(ledger_state, runtime, scene, render, input, &redraw) == 0u) {
       er_halt_forever();
     }
     if (redraw != 0u &&
-        er_ui_boot_render_scene(scene, demo_state, render) == 0u) {
+        er_ui_boot_render_scene(scene, ledger_state, render) == 0u) {
       er_halt_forever();
     }
   }
@@ -1260,7 +1260,7 @@ static void er_run_ui_profile(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE* SystemTa
   er_ui_scene_t scene = {0};
   er_ui_scene_t wasm_scene = {0};
   er_ui_runtime_state_t runtime = {0};
-  er_ui_demo_apps_state_t demo_state = {0};
+  er_ui_ledger_app_state_t ledger_state = {0};
   ErAppUiPresentation wasm_presentation;
   ErUiWasmAppRuntime wasm_runtime;
   ErUiBootRenderContext render_context = {0};
@@ -1324,21 +1324,21 @@ static void er_run_ui_profile(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE* SystemTa
   render_context.frame_budget = frame_budget;
   render_context.theme = theme;
 
-  if (er_ui_demo_apps_state_init(&demo_state, er_ui_boot_allocator()) != ER_UI_OK) {
-    er_println("ui renderer: demo app state failed");
+  if (er_ui_ledger_app_state_init(&ledger_state, er_ui_boot_allocator()) != ER_UI_OK) {
+    er_println("ui renderer: ledger app state failed");
     vr_font_face_destroy(font);
     return;
   }
   if (er_ui_runtime_state_init_with_allocator(&runtime, er_ui_boot_allocator()) != ER_UI_OK) {
     er_println("ui renderer: runtime state failed");
-    er_ui_demo_apps_state_destroy(&demo_state);
+    er_ui_ledger_app_state_destroy(&ledger_state);
     vr_font_face_destroy(font);
     return;
   }
   if (er_ui_scene_init_with_allocator(&scene, theme.colors.bg, er_ui_boot_allocator()) != ER_UI_OK) {
     er_println("ui renderer: scene state failed");
     er_ui_runtime_state_destroy(&runtime);
-    er_ui_demo_apps_state_destroy(&demo_state);
+    er_ui_ledger_app_state_destroy(&ledger_state);
     vr_font_face_destroy(font);
     return;
   }
@@ -1346,7 +1346,7 @@ static void er_run_ui_profile(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE* SystemTa
     er_println("ui renderer: wasm scene state failed");
     er_ui_scene_destroy(&scene);
     er_ui_runtime_state_destroy(&runtime);
-    er_ui_demo_apps_state_destroy(&demo_state);
+    er_ui_ledger_app_state_destroy(&ledger_state);
     vr_font_face_destroy(font);
     return;
   }
@@ -1356,7 +1356,7 @@ static void er_run_ui_profile(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE* SystemTa
     er_ui_scene_destroy(&wasm_scene);
     er_ui_scene_destroy(&scene);
     er_ui_runtime_state_destroy(&runtime);
-    er_ui_demo_apps_state_destroy(&demo_state);
+    er_ui_ledger_app_state_destroy(&ledger_state);
     vr_font_face_destroy(font);
     return;
   }
@@ -1367,11 +1367,11 @@ static void er_run_ui_profile(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE* SystemTa
   er_gfx_console_set_enabled(0u);
   er_print_set_firmware_console_enabled(0u);
   er_println("ui renderer: render scene");
-  if (er_ui_boot_render_scene(&scene, &demo_state, &render_context) == 0u) {
+  if (er_ui_boot_render_scene(&scene, &ledger_state, &render_context) == 0u) {
     er_ui_scene_destroy(&wasm_scene);
     er_ui_scene_destroy(&scene);
     er_ui_runtime_state_destroy(&runtime);
-    er_ui_demo_apps_state_destroy(&demo_state);
+    er_ui_ledger_app_state_destroy(&ledger_state);
     vr_font_face_destroy(font);
     return;
   }
@@ -1381,11 +1381,11 @@ static void er_run_ui_profile(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE* SystemTa
     er_ui_scene_destroy(&wasm_scene);
     er_ui_scene_destroy(&scene);
     er_ui_runtime_state_destroy(&runtime);
-    er_ui_demo_apps_state_destroy(&demo_state);
+    er_ui_ledger_app_state_destroy(&ledger_state);
     vr_font_face_destroy(font);
     er_halt_forever();
   }
-  er_ui_boot_input_loop(&demo_state, &runtime, &scene, &render_context);
+  er_ui_boot_input_loop(&ledger_state, &runtime, &scene, &render_context);
 }
 
 static void er_run_invalid_profile(void) {
