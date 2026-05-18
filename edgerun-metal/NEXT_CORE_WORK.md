@@ -22,7 +22,7 @@ See `../docs/relay-architecture.md` for the cross-project model and `../docs/coh
 - `er_app` can build content-addressed app package manifests from VFS object refs for app code, manifests, and UI assets. Package identity is derived from object ids and lengths, not labels.
 - `er_vfs` can reassemble canonical object packet sequences into bounded caller-owned memory while validating packet order, offsets, payload hashes, packet ids, object id, and output capacity.
 - `er_app` can load app package objects from validated VFS packets into caller-owned buffers, then reject package id mismatches, object id mismatches, tampered object bytes, and unexpected asset payloads.
-- The boot UI profile now packages the embedded Wasm UI app as VFS object packets and loads it through `er_app_load_package_objects` into persistent per-app module buffers before preparing each runtime.
+- The boot UI profile now packages the embedded Wasm UI app as VFS object packets and loads it through the storage-bound package loader into persistent per-app module buffers before preparing each runtime.
 - `er_app` can bind a launchable saved package source to admitted storage-retrieve route ids for the package's app, manifest, and optional UI asset objects.
 - `er_app` can load a package from storage-bound object responses only when each retrieved object matches the source's admitted route id.
 

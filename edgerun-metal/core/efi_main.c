@@ -63,6 +63,14 @@
 #define ER_UI_WASM_APP_NODE_ID_SEED 0x70u
 #define ER_UI_WASM_RELAY_NODE_ID_SEED 0x90u
 #define ER_UI_WASM_ROUTE_HASH_SEED 0xb0u
+#define ER_UI_WASM_STORAGE_APP_ROUTE_ID_SEED 0xc0u
+#define ER_UI_WASM_STORAGE_MANIFEST_ROUTE_ID_SEED 0xd0u
+#define ER_UI_WASM_STORAGE_REQUEST_HASH_OFFSET 1u
+#define ER_UI_WASM_STORAGE_ADMISSION_HASH_OFFSET 2u
+#define ER_UI_WASM_STORAGE_SOURCE_NODE_OFFSET 3u
+#define ER_UI_WASM_STORAGE_TARGET_NODE_OFFSET 4u
+#define ER_UI_WASM_STORAGE_RELAY_NODE_OFFSET 5u
+#define ER_UI_WASM_STORAGE_ROUTE_BUDGET 2u
 #define ER_UI_WASM_APP_SEED_STRIDE 0x10u
 #define ER_UI_WASM_PS2_INPUT_EPOCH_STRIDE 1u
 #define ER_UI_WASM_EXECUTE_EPOCH_STRIDE 2u
@@ -1132,6 +1140,35 @@ static void er_ui_boot_prepare_wasm_presentation(const er_ui_scene_budget_t* sce
   out_presentation->max_text_quads = (UINT64)scene_budget->text_quads;
 }
 
+static UINT8 er_ui_boot_prepare_storage_retrieve_route(UINT8 route_seed,
+                                                       UINT32 app_index,
+                                                       ErAdmittedRoute* out_route) {
+  UINT8 base_seed;
+
+  if (out_route == 0) {
+    return 0u;
+  }
+  base_seed = er_ui_boot_app_seed(route_seed, app_index);
+  er_mem_zero((UINT8*)out_route, (UINTN)sizeof(*out_route));
+  out_route->abi_version = ER_WORK_ABI_VERSION;
+  out_route->role = ER_NODE_ROLE_STORAGE;
+  out_route->department = ER_DEPARTMENT_STORAGE;
+  out_route->work_type = ER_WORK_TYPE_OBJECT_RETRIEVE;
+  out_route->admitted_budget = ER_UI_WASM_STORAGE_ROUTE_BUDGET;
+  er_fill_nonzero_bytes(out_route->route_id.bytes, ER_HASH_LEN, base_seed);
+  er_fill_nonzero_bytes(out_route->request_hash.bytes, ER_HASH_LEN,
+                        (UINT8)(base_seed + ER_UI_WASM_STORAGE_REQUEST_HASH_OFFSET));
+  er_fill_nonzero_bytes(out_route->admission_hash.bytes, ER_HASH_LEN,
+                        (UINT8)(base_seed + ER_UI_WASM_STORAGE_ADMISSION_HASH_OFFSET));
+  er_fill_nonzero_bytes(out_route->source_node_id.bytes, ER_NODE_ID_LEN,
+                        (UINT8)(base_seed + ER_UI_WASM_STORAGE_SOURCE_NODE_OFFSET));
+  er_fill_nonzero_bytes(out_route->target_node_id.bytes, ER_NODE_ID_LEN,
+                        (UINT8)(base_seed + ER_UI_WASM_STORAGE_TARGET_NODE_OFFSET));
+  er_fill_nonzero_bytes(out_route->relay_node_id.bytes, ER_NODE_ID_LEN,
+                        (UINT8)(base_seed + ER_UI_WASM_STORAGE_RELAY_NODE_OFFSET));
+  return 1u;
+}
+
 static UINT8 er_ui_boot_execute_wasm_counter(ErUiWasmAppRuntime* runtime) {
   INT64 main_result = 0;
 
@@ -1156,6 +1193,7 @@ static UINT8 er_ui_boot_load_wasm_counter_package(UINT8* module_memory,
                                                   UINT32 module_memory_size,
                                                   UINT8* manifest_memory,
                                                   UINT32 manifest_memory_size,
+                                                  UINT32 app_index,
                                                   ErAppLoadedPackage* out_loaded) {
   ErCryptoProvider crypto;
   ErVfsObjectLabelRef app_ref;
@@ -1163,6 +1201,11 @@ static UINT8 er_ui_boot_load_wasm_counter_package(UINT8* module_memory,
   ErAppPackageManifest package;
   ErVfsObjectPacket app_packet;
   ErVfsObjectPacket manifest_packet;
+  ErAdmittedRoute app_route;
+  ErAdmittedRoute manifest_route;
+  ErAppPackageStorageSource storage_source;
+  ErAppPackageStorageObject app_object;
+  ErAppPackageStorageObject manifest_object;
   ErAppPackageObjectLoad app_load;
   ErAppPackageObjectLoad manifest_load;
 
@@ -1206,8 +1249,23 @@ static UINT8 er_ui_boot_load_wasm_counter_package(UINT8* module_memory,
   manifest_load.packet_count = 1u;
   manifest_load.bytes = manifest_memory;
   manifest_load.capacity = manifest_memory_size;
-  return er_app_load_package_objects(&crypto, &package, &app_load,
-                                     &manifest_load, 0, out_loaded);
+  if (er_ui_boot_prepare_storage_retrieve_route(ER_UI_WASM_STORAGE_APP_ROUTE_ID_SEED,
+                                                app_index, &app_route) == 0u ||
+      er_ui_boot_prepare_storage_retrieve_route(ER_UI_WASM_STORAGE_MANIFEST_ROUTE_ID_SEED,
+                                                app_index, &manifest_route) == 0u ||
+      er_app_prepare_package_storage_source(&crypto, &package, &app_route,
+                                            &manifest_route, 0,
+                                            &storage_source) == 0u) {
+    return 0u;
+  }
+  app_object.retrieve_route_id = storage_source.app_retrieve_route_id;
+  app_object.object = app_load;
+  manifest_object.retrieve_route_id = storage_source.manifest_retrieve_route_id;
+  manifest_object.object = manifest_load;
+  return er_app_load_package_from_storage_source(&crypto, &package,
+                                                 &storage_source, &app_object,
+                                                 &manifest_object, 0,
+                                                 out_loaded);
 }
 
 static UINT8 er_ui_boot_prepare_wasm_counter(ErUiWasmAppRuntime* runtime,
@@ -1230,7 +1288,7 @@ static UINT8 er_ui_boot_prepare_wasm_counter(ErUiWasmAppRuntime* runtime,
   }
   if (er_ui_boot_load_wasm_counter_package(module_memory, module_memory_size,
                                            manifest_memory, manifest_memory_size,
-                                           &loaded_package) == 0u) {
+                                           app_index, &loaded_package) == 0u) {
     return 0u;
   }
   er_ui_boot_prepare_wasm_presentation(scene_budget, app_index, presentation);
