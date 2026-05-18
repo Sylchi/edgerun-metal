@@ -391,6 +391,23 @@ static UINT8 er_bus_mmio_read_width(const ErBusAddress* address, UINT64 offset, 
   return 1;
 }
 
+static UINT8 er_bus_packet_io_failed(UINT32* status) {
+  if (status != 0) {
+    *status = ER_BUS_STATUS_IO_FAILED;
+  }
+  return 0;
+}
+
+static UINT8 er_bus_packet_ok(UINT32* status, UINT32* result, UINT32 value) {
+  if (status != 0) {
+    *status = ER_BUS_STATUS_OK;
+  }
+  if (result != 0) {
+    *result = value;
+  }
+  return 1;
+}
+
 UINT8 er_bus_execute_op32_packet(const ErBusPacket32* request, ErBusPacket32* out_response) {
   UINT32 value = 0;
 
@@ -417,22 +434,16 @@ UINT8 er_bus_execute_op32_packet(const ErBusPacket32* request, ErBusPacket32* ou
 
   if (request->op.access == ER_BUS_ACCESS_READ32) {
     if (er_bus_read32(&request->op.address, request->op.offset, &value) == 0u) {
-      out_response->status = ER_BUS_STATUS_IO_FAILED;
-      return 0;
+      return er_bus_packet_io_failed(&out_response->status);
     }
-    out_response->status = ER_BUS_STATUS_OK;
-    out_response->result = value;
-    return 1;
+    return er_bus_packet_ok(&out_response->status, &out_response->result, value);
   }
 
   if (request->op.access == ER_BUS_ACCESS_WRITE32) {
     if (er_bus_write32(&request->op.address, request->op.offset, request->op.value) == 0u) {
-      out_response->status = ER_BUS_STATUS_IO_FAILED;
-      return 0;
+      return er_bus_packet_io_failed(&out_response->status);
     }
-    out_response->status = ER_BUS_STATUS_OK;
-    out_response->result = request->op.value;
-    return 1;
+    return er_bus_packet_ok(&out_response->status, &out_response->result, request->op.value);
   }
 
   out_response->status = ER_BUS_STATUS_DENIED;
@@ -491,22 +502,16 @@ UINT8 er_bus_execute_io_packet(const ErBusIoPacket* request, ErBusIoPacket* out_
 
   if (er_bus_access_is_read(request->op.access) != 0u) {
     if (er_bus_read_io_width(&request->op, &value) == 0u) {
-      out_response->status = ER_BUS_STATUS_IO_FAILED;
-      return 0;
+      return er_bus_packet_io_failed(&out_response->status);
     }
-    out_response->status = ER_BUS_STATUS_OK;
-    out_response->result = value;
-    return 1;
+    return er_bus_packet_ok(&out_response->status, &out_response->result, value);
   }
 
   if (er_bus_access_is_write(request->op.access) != 0u) {
     if (er_bus_write_io_width(&request->op) == 0u) {
-      out_response->status = ER_BUS_STATUS_IO_FAILED;
-      return 0;
+      return er_bus_packet_io_failed(&out_response->status);
     }
-    out_response->status = ER_BUS_STATUS_OK;
-    out_response->result = request->op.value;
-    return 1;
+    return er_bus_packet_ok(&out_response->status, &out_response->result, request->op.value);
   }
 
   out_response->status = ER_BUS_STATUS_DENIED;
