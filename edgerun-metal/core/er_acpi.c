@@ -209,6 +209,7 @@ static UINT8 er_acpi_parse_rsdp(const UINT8* rsdp, ErAcpiRsdpInfo* out_info) {
   return 1;
 }
 
+//@optimizer-ignore-function UEFI ACPI discovery must scan firmware configuration-table entries for ACPI GUIDs
 UINT8 er_acpi_find_rsdp(EFI_SYSTEM_TABLE* st, ErAcpiRsdpInfo* out_info) {
   UINTN i;
   UINT8 found_10 = 0;
