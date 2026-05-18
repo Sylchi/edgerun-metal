@@ -27,6 +27,7 @@ See `../docs/relay-architecture.md` for the cross-project model and `../docs/coh
 - `er_app` can load a package from storage-bound object responses only when each retrieved object matches the source's admitted route id.
 - `er_app` can adapt typed storage endpoint object responses into package storage objects only when the response route id, object id, object length, packet list, and caller-owned destination memory match the package source and manifest.
 - `er_work` can prepare and validate capability envelope headers, and the Wasm relay fixture can emit a render capability invocation through `edgerun.relay/send` under the existing outbox, admission, token, and packet-byte budget checks.
+- `er_render_endpoint` can capture admitted render capability work only after the admitted route, channel envelope, render capability header, source/target nodes, sequence, and scene hash line up.
 
 ## Architecture rule
 
@@ -125,10 +126,10 @@ Proof:
 
 ### M4: Render adapter
 
-Status: next.
+Status: deterministic render capture implemented; drawing through GOP or VirtIO GPU is next.
 
 - Accept admitted render capability work at a render endpoint.
-- Start with deterministic capture of scene metadata or scene hashes after admission-defined route verification.
+- Deterministically capture scene metadata or scene hashes after admission-defined route verification.
 - Then connect the captured scene path to the existing GOP and VirtIO GPU rendering surfaces.
 - Keep apps targeting admitted UI scene packets, not framebuffers.
 
@@ -153,12 +154,12 @@ Proof:
 
 ### M6: User-authored Wasm UI app proof
 
-Status: relay hostcall foundation, concurrent local Wasm UI app contexts, content-addressed app package records, validated package object loading, boot-local package-loaded app launch, admitted storage-source binding, storage endpoint response adaptation, storage-bound package loading, and Wasm render capability relay-send proof implemented; render endpoint verification and capture are next.
+Status: relay hostcall foundation, concurrent local Wasm UI app contexts, content-addressed app package records, validated package object loading, boot-local package-loaded app launch, admitted storage-source binding, storage endpoint response adaptation, storage-bound package loading, Wasm render capability relay-send proof, and render endpoint capture implemented; endpoint drawing is next.
 
 - Keep bounded Wasm imports for relay send/receive as the durable app boundary.
 - Keep each loaded app in an explicit runtime context with preallocated memory, presentation identity, scene state, and app-switcher selection.
 - Replace the embedded package packet source with real endpoint responses that satisfy the admitted storage-source route ids and object identities for saved user-authored app packages.
-- Connect render capability packets from relay send to admission-defined render endpoint verification and capture.
+- Connect render endpoint capture to GOP or VirtIO GPU drawing.
 - Feed input or completion packets back through relay receive.
 - Move driver modules away from direct PCI/MMIO hostcalls as the durable ABI.
 - Keep direct bus hostcalls only for bring-up until relay device endpoints are proven.
