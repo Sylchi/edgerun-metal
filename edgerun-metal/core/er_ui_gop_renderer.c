@@ -1,5 +1,6 @@
 #include "er_ui_gop_renderer.h"
 #include "er_ui_icon.h"
+#include "er_ui_tabler_icon_atlas.h"
 #include "er_math.h"
 
 #define ER_UI_GOP_BYTES_PER_PIXEL 4u
@@ -30,6 +31,8 @@ static UINT8 er_ui_gop_surface_render_scene_with_atlas_stats(ErUiGopSurface* sur
 static UINT8 er_ui_gop_clip_rect_to(const ErUiGopSurface* surface, const ErUiGopPixelRect* clip,
                                     float x, float y, float w, float h,
                                     UINT32* out_x0, UINT32* out_y0, UINT32* out_x1, UINT32* out_y1);
+static const UINT8* er_ui_gop_sample_texel(const UINT8* pixels, UINT32 width, UINT32 height,
+                                           UINT32 bytes_per_pixel, float u, float v);
 static void er_ui_gop_border_rect(ErUiGopSurface* surface, UINT32 x0, UINT32 y0, UINT32 x1, UINT32 y1,
                                   er_ui_color4_t color, ErUiGopRenderStats* stats);
 
@@ -537,11 +540,43 @@ static void er_ui_gop_render_icon_quad(ErUiGopSurface* surface, const er_ui_quad
   }
   if (stats != 0) ++stats->icon_quads;
 
+  icon = er_ui_icon_from_atlas_id(quad->atlas_id);
+  {
+    ErUiTablerIconRect rect;
+    if (er_ui_tabler_icon_rect(icon, &rect) != 0u) {
+      float width = quad->w > 1.0f ? quad->w : 1.0f;
+      float height = quad->h > 1.0f ? quad->h : 1.0f;
+      UINT32 y;
+      UINT32 x;
+      for (y = y0; y < y1; ++y) {
+        UINT32* row = surface->pixels + ((UINTN)y * (UINTN)surface->stride);
+        float ty = ((float)y + 0.5f - quad->y) / height;
+        float local_v = quad->v0 + (quad->v1 - quad->v0) * er_ui_gop_clamp01(ty);
+        float atlas_v = ((float)rect.y + (float)rect.h * local_v) / (float)ER_UI_TABLER_ICON_ATLAS_HEIGHT;
+        for (x = x0; x < x1; ++x) {
+          float tx = ((float)x + 0.5f - quad->x) / width;
+          float local_u = quad->u0 + (quad->u1 - quad->u0) * er_ui_gop_clamp01(tx);
+          float atlas_u = ((float)rect.x + (float)rect.w * local_u) / (float)ER_UI_TABLER_ICON_ATLAS_WIDTH;
+          const UINT8* px = er_ui_gop_sample_texel(g_er_ui_tabler_icon_atlas_alpha, ER_UI_TABLER_ICON_ATLAS_WIDTH,
+                                                   ER_UI_TABLER_ICON_ATLAS_HEIGHT, ER_UI_TABLER_ICON_ATLAS_BYTES_PER_PIXEL,
+                                                   atlas_u, atlas_v);
+          UINT8 alpha = px == 0 ? 0u : px[0];
+          if (alpha != 0u) {
+            er_ui_color4_t color = quad->color;
+            color.a *= (float)alpha / 255.0f;
+            er_ui_gop_stats_add_pixels(stats, 1u, color.a < 1.0f ? 1u : 0u, 0u);
+            row[x] = er_ui_gop_blend_pixel(surface->pixel_format, row[x], color);
+          }
+        }
+      }
+      return;
+    }
+  }
+
   w = x1 - x0;
   h = y1 - y0;
   stroke = w < h ? w / ER_UI_GOP_ICON_STROKE_DIVISOR : h / ER_UI_GOP_ICON_STROKE_DIVISOR;
   if (stroke == 0u) stroke = 1u;
-  icon = er_ui_icon_from_atlas_id(quad->atlas_id);
 
   switch (icon) {
     case ER_UI_ICON_ACTIVITY:

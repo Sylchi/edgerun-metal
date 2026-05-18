@@ -1,6 +1,7 @@
 #include "er_ui_shell.h"
 #include "er_ui_components.h"
 #include "er_ui_internal.h"
+#include "er_ui_painter.h"
 
 static const size_t ER_UI_SHELL_INITIAL_SURFACE_CAP = 4u;
 static const float ER_UI_SHELL_PAD = 8.0f;
@@ -223,6 +224,9 @@ static er_ui_status_t er_ui_shell_emit_topbar(er_ui_scene_t* scene, er_ui_bounds
   er_ui_bounds_t launcher = er_ui_bounds(bounds.x + ER_UI_SHELL_PAD, bounds.y + 4.0f, ER_UI_SHELL_LAUNCHER_BUTTON, ER_UI_SHELL_LAUNCHER_BUTTON);
   status = er_ui_scene_push_rect(scene, er_ui_rect_fill(launcher.x, launcher.y, launcher.w, launcher.h, theme.radius.control, theme.colors.row));
   if (status != ER_UI_OK) return status;
+  er_ui_painter_t painter = er_ui_painter(scene);
+  status = er_ui_painter_icon(&painter, er_ui_bounds(launcher.x + 8.0f, launcher.y + 8.0f, 16.0f, 16.0f), ER_UI_ICON_APP, theme.colors.text);
+  if (status != ER_UI_OK) return status;
   return er_ui_scene_push_hit(scene, er_ui_hit(ER_UI_HIT_SHELL_LAUNCHER, ER_UI_SHELL_LAUNCHER_ID, launcher.x, launcher.y, launcher.w, launcher.h));
 }
 
@@ -246,16 +250,24 @@ static er_ui_status_t er_ui_shell_emit_workspace(
   er_ui_bounds_t tabs = er_ui_bounds(bounds.x, bounds.y + ER_UI_SHELL_TOPBAR_HEIGHT, bounds.w, ER_UI_WORKSPACE_TAB_HEIGHT);
   er_ui_status_t status = er_ui_scene_push_rect(scene, er_ui_rect_fill(tabs.x, tabs.y, tabs.w, tabs.h, 0.0f, theme.colors.panel));
   if (status != ER_UI_OK) return status;
+  er_ui_painter_t painter = er_ui_painter(scene);
   for (size_t i = 0u; i < state->surface_count; ++i) {
     uint32_t id = state->surfaces[i].id;
     float tab_x = tabs.x + (float)i * ER_UI_WORKSPACE_TAB_WIDTH;
     er_ui_bounds_t tab = er_ui_bounds(tab_x, tabs.y + 4.0f, ER_UI_WORKSPACE_TAB_WIDTH - 4.0f, tabs.h - 8.0f);
     er_ui_color4_t tab_color = id == state->focused_surface_id ? theme.colors.active : theme.colors.row;
+    er_ui_color4_t icon_color = id == state->focused_surface_id ? theme.colors.accent_text : theme.colors.muted;
     status = er_ui_scene_push_rect(scene, er_ui_rect_fill(tab.x, tab.y, tab.w, tab.h, theme.radius.control, tab_color));
+    if (status != ER_UI_OK) return status;
+    //@optimizer-ignore workspace tabs intentionally draw one app icon per visible surface tab
+    status = er_ui_painter_icon(&painter, er_ui_bounds(tab.x + 10.0f, tab.y + (tab.h - 16.0f) * 0.5f, 16.0f, 16.0f), ER_UI_ICON_APP, icon_color);
     if (status != ER_UI_OK) return status;
     status = er_ui_scene_push_hit(scene, er_ui_hit(ER_UI_HIT_WORKSPACE_TAB, id, tab.x, tab.y, tab.w, tab.h));
     if (status != ER_UI_OK) return status;
     er_ui_bounds_t close = er_ui_bounds(tab.x + tab.w - ER_UI_WORKSPACE_CLOSE_SIZE - 4.0f, tab.y + 4.0f, ER_UI_WORKSPACE_CLOSE_SIZE, ER_UI_WORKSPACE_CLOSE_SIZE);
+    //@optimizer-ignore workspace tabs intentionally draw one close icon per visible surface tab
+    status = er_ui_painter_icon(&painter, er_ui_bounds(close.x + 4.0f, close.y + 4.0f, 12.0f, 12.0f), ER_UI_ICON_X, icon_color);
+    if (status != ER_UI_OK) return status;
     status = er_ui_scene_push_hit(scene, er_ui_hit(ER_UI_HIT_WORKSPACE_CLOSE, id, close.x, close.y, close.w, close.h));
     if (status != ER_UI_OK) return status;
   }
@@ -341,7 +353,7 @@ static er_ui_status_t er_ui_shell_emit_text_labels(
     uint32_t id = state->surfaces[i].id;
     float tab_x = bounds.x + (float)i * ER_UI_WORKSPACE_TAB_WIDTH;
     er_ui_color4_t text = id == state->focused_surface_id ? theme.colors.accent_text : theme.colors.text;
-    status = er_ui_shell_push_surface_label(state, scene, font, id, tab_x + 12.0f, tabs_y + 27.0f, text);
+    status = er_ui_shell_push_surface_label(state, scene, font, id, tab_x + 34.0f, tabs_y + 27.0f, text);
     if (status != ER_UI_OK) return status;
   }
 
