@@ -251,74 +251,226 @@ static const er_ui_component_state_t component_states[] = {
 };
 
 static const er_ui_component_projected_field_t network_app_prompt_fields[] = {
-  {"app_name", true}, {"package_size", false}, {"retrieval_cost", false}, {"policy_hash", false},
-  {"run_once_id", true}, {"verify_cache_id", true}, {"cancel_id", true}
+  {"app_name", true},
+  {"package_size", false},
+  {"retrieval_cost", false},
+  {"policy_hash", false},
+  {"run_once_id", true},
+  {"verify_cache_id", true},
+  {"cancel_id", true},
 };
 static const er_ui_component_projected_field_t app_store_card_fields[] = {
-  {"name", true}, {"developer", false}, {"release", false}, {"package_hash", false},
-  {"app_policy_hash", false}, {"access_mode", false}, {"detail_id", true}, {"run_id", true}
+  {"name", true},
+  {"developer", false},
+  {"release", false},
+  {"package_hash", false},
+  {"app_policy_hash", false},
+  {"access_mode", false},
+  {"detail_id", true},
+  {"run_id", true},
 };
 static const er_ui_component_projected_field_t trust_manager_action_fields[] = {
-  {"open_identity_id", true}, {"open_app_store_id", true}, {"revoke_grant_id", true}, {"remove_cache_id", true}
+  {"open_identity_id", true},
+  {"open_app_store_id", true},
+  {"revoke_grant_id", true},
+  {"remove_cache_id", true},
 };
 static const er_ui_component_projected_field_t runtime_event_row_fields[] = {
-  {"title", true}, {"detail", false}, {"event_hash", true}, {"status", false}, {"id", true}, {"accent", false}
+  {"title", true},
+  {"detail", false},
+  {"event_hash", true},
+  {"status", false},
+  {"id", true},
+  {"accent", false},
 };
 static const er_ui_component_projected_field_t package_proof_row_fields[] = {
-  {"package_hash", true}, {"manifest_hash", true}, {"developer", false}, {"release", false}, {"status", false}, {"id", true}
+  {"package_hash", true},
+  {"manifest_hash", true},
+  {"developer", false},
+  {"release", false},
+  {"status", false},
+  {"id", true},
 };
 static const er_ui_component_projected_field_t import_sync_source_row_fields[] = {
-  {"kind", true}, {"name", false}, {"detail", false}, {"policy_hash", false}, {"status", false},
-  {"id", true}, {"sync_id", false}, {"configure_id", false}
+  {"kind", true},
+  {"name", false},
+  {"detail", false},
+  {"policy_hash", false},
+  {"status", false},
+  {"id", true},
+  {"sync_id", false},
+  {"configure_id", false},
 };
 static const er_ui_component_projected_field_t publish_from_node_row_fields[] = {
-  {"kind", true}, {"title", false}, {"node_instance", false}, {"route_scope", false}, {"policy_hash", false},
-  {"budget", false}, {"status", false}, {"id", true}, {"publish_id", false}, {"configure_id", false}
+  {"kind", true},
+  {"title", false},
+  {"node_instance", false},
+  {"route_scope", false},
+  {"policy_hash", false},
+  {"budget", false},
+  {"status", false},
+  {"id", true},
+  {"publish_id", false},
+  {"configure_id", false},
 };
 static const er_ui_component_projected_field_t node_instance_row_fields[] = {
-  {"role", true}, {"runtime_target", false}, {"route_scope", false}, {"policy_hash", false}, {"status", false}, {"id", true}, {"open_id", false}
+  {"role", true},
+  {"runtime_target", false},
+  {"route_scope", false},
+  {"policy_hash", false},
+  {"status", false},
+  {"id", true},
+  {"open_id", false},
 };
 static const er_ui_component_projected_field_t admission_policy_row_fields[] = {
-  {"source", true}, {"policy_hash", true}, {"admission_node", false}, {"validity", false}, {"status", false}, {"id", true}, {"inspect_id", false}
+  {"source", true},
+  {"policy_hash", true},
+  {"admission_node", false},
+  {"validity", false},
+  {"status", false},
+  {"id", true},
+  {"inspect_id", false},
 };
 static const er_ui_component_projected_field_t route_budget_row_fields[] = {
-  {"route", true}, {"admitted_budget", true}, {"spent", false}, {"channel", false}, {"status", false}, {"id", true}, {"inspect_id", false}
+  {"route", true},
+  {"admitted_budget", true},
+  {"spent", false},
+  {"channel", false},
+  {"status", false},
+  {"id", true},
+  {"inspect_id", false},
 };
 static const er_ui_component_projected_field_t data_table_control_fields[] = {
-  {"title", false}, {"filter_label", false}, {"filter_value", false}, {"filter_id", true}, {"clear_filter_id", false}, {"columns", true}
+  {"title", false},
+  {"filter_label", false},
+  {"filter_value", false},
+  {"filter_id", true},
+  {"clear_filter_id", false},
+  {"columns", true},
 };
+//@optimizer-ignore-constant icon-only projection metadata is returned with an explicit field count by component id switch
 static const er_ui_component_projected_field_t icon_only_button_fields[] = {
-  {"icon", true}, {"id", true}, {"label", true}, {"active", false}
+  {"icon", true},
+  {"id", true},
+  {"label", true},
+  {"active", false},
 };
 static const er_ui_component_projected_field_t segmented_control_fields[] = {
-  {"items", true}, {"selected", true}
+  {"items", true},
+  {"selected", true},
 };
 static const er_ui_component_projected_field_t receipt_payment_row_fields[] = {
-  {"label", true}, {"receipt_id", false}, {"policy_hash", false}, {"amount", true}, {"status", true}, {"id", true}, {"action", false}
+  {"label", true},
+  {"receipt_id", false},
+  {"policy_hash", false},
+  {"amount", true},
+  {"status", true},
+  {"id", true},
+  {"action", false},
 };
 static const er_ui_component_projected_field_t capability_grant_row_fields[] = {
-  {"app", true}, {"capability", true}, {"scope", false}, {"policy_hash", false}, {"expiry", false}, {"status", false}, {"id", true}, {"revoke_id", false}
+  {"app", true},
+  {"capability", true},
+  {"scope", false},
+  {"policy_hash", false},
+  {"expiry", false},
+  {"status", false},
+  {"id", true},
+  {"revoke_id", false},
 };
 static const er_ui_component_projected_field_t system_surface_state_panel_fields[] = {
-  {"kind", true}, {"state", true}, {"title", false}, {"detail", false}, {"reference", false}, {"id", true}, {"action", false}
+  {"kind", true},
+  {"state", true},
+  {"title", false},
+  {"detail", false},
+  {"reference", false},
+  {"id", true},
+  {"action", false},
 };
 
-static const char* const network_app_prompt_labels[] = {"app_name"};
-static const char* const app_store_card_labels[] = {"name", "developer", "app_policy_hash"};
-static const char* const trust_manager_action_labels[] = {"open_identity_id", "open_app_store_id", "revoke_grant_id", "remove_cache_id"};
-static const char* const runtime_event_row_labels[] = {"title", "event_hash", "status"};
-static const char* const package_proof_row_labels[] = {"package_hash", "manifest_hash", "status"};
-static const char* const import_sync_source_row_labels[] = {"kind", "name", "policy_hash", "status"};
-static const char* const publish_from_node_row_labels[] = {"kind", "title", "node_instance", "policy_hash", "status"};
-static const char* const node_instance_row_labels[] = {"role", "runtime_target", "policy_hash", "status"};
-static const char* const admission_policy_row_labels[] = {"source", "policy_hash", "admission_node", "status"};
-static const char* const route_budget_row_labels[] = {"route", "admitted_budget", "status"};
-static const char* const data_table_control_labels[] = {"title", "filter_label", "columns"};
-static const char* const icon_only_button_labels[] = {"label"};
-static const char* const segmented_control_labels[] = {"items"};
-static const char* const receipt_payment_row_labels[] = {"label", "receipt_id", "amount", "status"};
-static const char* const capability_grant_row_labels[] = {"app", "capability", "scope", "status"};
-static const char* const system_surface_state_panel_labels[] = {"kind", "state", "title", "detail"};
+static const char *const network_app_prompt_labels[] = {
+  "app_name",
+};
+static const char *const app_store_card_labels[] = {
+  "name",
+  "developer",
+  "app_policy_hash",
+};
+static const char *const trust_manager_action_labels[] = {
+  "open_identity_id",
+  "open_app_store_id",
+  "revoke_grant_id",
+  "remove_cache_id",
+};
+static const char *const runtime_event_row_labels[] = {
+  "title",
+  "event_hash",
+  "status",
+};
+static const char *const package_proof_row_labels[] = {
+  "package_hash",
+  "manifest_hash",
+  "status",
+};
+static const char *const import_sync_source_row_labels[] = {
+  "kind",
+  "name",
+  "policy_hash",
+  "status",
+};
+static const char *const publish_from_node_row_labels[] = {
+  "kind",
+  "title",
+  "node_instance",
+  "policy_hash",
+  "status",
+};
+static const char *const node_instance_row_labels[] = {
+  "role",
+  "runtime_target",
+  "policy_hash",
+  "status",
+};
+static const char *const admission_policy_row_labels[] = {
+  "source",
+  "policy_hash",
+  "admission_node",
+  "status",
+};
+static const char *const route_budget_row_labels[] = {
+  "route",
+  "admitted_budget",
+  "status",
+};
+static const char *const data_table_control_labels[] = {
+  "title",
+  "filter_label",
+  "columns",
+};
+static const char *const icon_only_button_labels[] = {
+  "label",
+};
+static const char *const segmented_control_labels[] = {
+  "items",
+};
+static const char *const receipt_payment_row_labels[] = {
+  "label",
+  "receipt_id",
+  "amount",
+  "status",
+};
+static const char *const capability_grant_row_labels[] = {
+  "app",
+  "capability",
+  "scope",
+  "status",
+};
+static const char *const system_surface_state_panel_labels[] = {
+  "kind",
+  "state",
+  "title",
+  "detail",
+};
 
 static const char* const no_variants[] = {0};
 static const char* const no_keyboard[] = {0};
