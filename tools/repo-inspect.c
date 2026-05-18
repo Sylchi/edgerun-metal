@@ -9,6 +9,7 @@
 #include <ctype.h>
 #include <dirent.h>
 #include <errno.h>
+#include <pthread.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -23,6 +24,8 @@
 #define ERI_LONG_FUNCTION_LINES 120u
 #define ERI_LARGE_FILE_LINES 800u
 #define ERI_DUP_BLOCK_LINES 6u
+#define ERI_MIN_THREAD_COUNT 1u
+#define ERI_MAX_THREAD_COUNT 32u
 #define ERI_OPTIMIZER_IGNORE_TAG "@optimizer-ignore"
 #define ERI_OPTIMIZER_IGNORE_FUNCTION_TAG "@optimizer-ignore-function"
 #define ERI_OPTIMIZER_IGNORE_CONSTANT_TAG "@optimizer-ignore-constant"
@@ -222,6 +225,23 @@ typedef struct {
   uint8_t constant_ignore_active;
   uint8_t constant_ignore_macro;
 } EriDupIgnoreState;
+
+typedef struct {
+  uint8_t analyzed;
+  uint8_t failed;
+  EriTotals totals;
+  EriFindings findings;
+  EriFunctions funcs;
+  EriSourceFiles sources;
+} EriFileAnalysis;
+
+typedef struct {
+  const EriVfs* vfs;
+  EriFileAnalysis* files;
+  pthread_mutex_t mutex;
+  size_t next_index;
+  uint8_t failed;
+} EriAnalysisJobs;
 
 static char* eri_strdup_len(const char* s, size_t len) {
   char* out = (char*)malloc(len + 1u);
@@ -2915,6 +2935,187 @@ static void eri_analyze_cleanup(EriPackages* packages, EriFunctions* funcs, EriF
   free(bins->items);
 }
 
+static uint8_t eri_host_thread_count(size_t* out_count) {
+  long online = sysconf(_SC_NPROCESSORS_ONLN);
+  size_t threads;
+
+  if (out_count == NULL || online < (long)ERI_MIN_THREAD_COUNT) {
+    return 0u;
+  }
+  threads = (size_t)online;
+  if (threads > ERI_MAX_THREAD_COUNT) {
+    threads = ERI_MAX_THREAD_COUNT;
+  }
+  *out_count = threads;
+  return 1u;
+}
+
+static uint8_t eri_append_findings_move(EriFindings* dst, EriFindings* src) {
+  EriFinding* grown;
+
+  if (src->len == 0u) {
+    return 1u;
+  }
+  if (dst->len + src->len > dst->cap) {
+    grown = (EriFinding*)eri_grow(dst->items, sizeof(dst->items[0]), &dst->cap, dst->len + src->len);
+    if (grown == NULL) {
+      return 0u;
+    }
+    dst->items = grown;
+  }
+  memcpy(dst->items + dst->len, src->items, sizeof(src->items[0]) * src->len);
+  dst->len += src->len;
+  src->items = NULL;
+  src->len = 0u;
+  src->cap = 0u;
+  return 1u;
+}
+
+static uint8_t eri_append_functions_move(EriFunctions* dst, EriFunctions* src) {
+  EriFunction* grown;
+
+  if (src->len == 0u) {
+    return 1u;
+  }
+  if (dst->len + src->len > dst->cap) {
+    grown = (EriFunction*)eri_grow(dst->items, sizeof(dst->items[0]), &dst->cap, dst->len + src->len);
+    if (grown == NULL) {
+      return 0u;
+    }
+    dst->items = grown;
+  }
+  memcpy(dst->items + dst->len, src->items, sizeof(src->items[0]) * src->len);
+  dst->len += src->len;
+  src->items = NULL;
+  src->len = 0u;
+  src->cap = 0u;
+  return 1u;
+}
+
+static uint8_t eri_append_sources_move(EriSourceFiles* dst, EriSourceFiles* src) {
+  EriSourceFile* grown;
+
+  if (src->len == 0u) {
+    return 1u;
+  }
+  if (dst->len + src->len > dst->cap) {
+    grown = (EriSourceFile*)eri_grow(dst->items, sizeof(dst->items[0]), &dst->cap, dst->len + src->len);
+    if (grown == NULL) {
+      return 0u;
+    }
+    dst->items = grown;
+  }
+  memcpy(dst->items + dst->len, src->items, sizeof(src->items[0]) * src->len);
+  dst->len += src->len;
+  src->items = NULL;
+  src->len = 0u;
+  src->cap = 0u;
+  return 1u;
+}
+
+static void eri_file_analysis_free(EriFileAnalysis* analysis) {
+  eri_sources_free(&analysis->sources);
+  eri_functions_free(&analysis->funcs);
+  eri_findings_free(&analysis->findings);
+}
+
+static void eri_file_analysis_scan(const EriVfsFile* file, EriFileAnalysis* analysis) {
+  memset(analysis, 0, sizeof(*analysis));
+  if (eri_is_build_path(file->path) != 0u || !eri_is_c_source(file->path) ||
+      eri_is_generated_header(file->path, file->bytes, file->len) != 0u) {
+    return;
+  }
+  analysis->analyzed = 1u;
+  eri_scan_line_metrics(file->bytes, file->len, &analysis->totals, &analysis->findings, file->path);
+  eri_scan_functions(file, &analysis->funcs, &analysis->findings);
+  eri_scan_cpu_costs(file, &analysis->findings);
+  if (eri_is_c_impl(file->path) && eri_is_example_path(file->path) == 0u &&
+      eri_add_source_file(&analysis->sources, file->path, analysis->totals.code_lines,
+                          eri_is_test_path(file->path)) == 0u) {
+    analysis->failed = 1u;
+    return;
+  }
+  if (analysis->totals.code_lines > ERI_LARGE_FILE_LINES) {
+    char text[128];
+    snprintf(text, sizeof(text), "file has %llu code lines", (unsigned long long)analysis->totals.code_lines);
+    eri_add_finding(&analysis->findings, file->path, 1u, "large-file", text);
+  }
+}
+
+//@optimizer-ignore-function worker must claim and analyze each VFS file index from the shared queue
+static void* eri_analysis_worker(void* arg) {
+  EriAnalysisJobs* jobs = (EriAnalysisJobs*)arg;
+
+  for (;;) {
+    size_t index;
+
+    if (pthread_mutex_lock(&jobs->mutex) != 0) {
+      return NULL;
+    }
+    if (jobs->failed != 0u || jobs->next_index >= jobs->vfs->len) {
+      if (pthread_mutex_unlock(&jobs->mutex) != 0) {
+        jobs->failed = 1u;
+      }
+      return NULL;
+    }
+    index = jobs->next_index;
+    ++jobs->next_index;
+    if (pthread_mutex_unlock(&jobs->mutex) != 0) {
+      jobs->failed = 1u;
+      return NULL;
+    }
+    eri_file_analysis_scan(&jobs->vfs->files[index], &jobs->files[index]);
+    if (jobs->files[index].failed != 0u) {
+      if (pthread_mutex_lock(&jobs->mutex) != 0) {
+        return NULL;
+      }
+      jobs->failed = 1u;
+      (void)pthread_mutex_unlock(&jobs->mutex);
+      return NULL;
+    }
+  }
+}
+
+//@optimizer-ignore-function pthread orchestration starts every worker and joins all started workers on failure
+static uint8_t eri_run_file_analysis_jobs(const EriVfs* vfs, EriFileAnalysis* file_results,
+                                          size_t thread_count) {
+  EriAnalysisJobs jobs;
+  pthread_t threads[ERI_MAX_THREAD_COUNT];
+  size_t started = 0u;
+  size_t i;
+
+  memset(&jobs, 0, sizeof(jobs));
+  jobs.vfs = vfs;
+  jobs.files = file_results;
+  if (pthread_mutex_init(&jobs.mutex, NULL) != 0) {
+    return 0u;
+  }
+  for (i = 0u; i < thread_count; ++i) {
+    if (pthread_create(&threads[i], NULL, eri_analysis_worker, &jobs) != 0) {
+      if (pthread_mutex_lock(&jobs.mutex) == 0) {
+        jobs.failed = 1u;
+        (void)pthread_mutex_unlock(&jobs.mutex);
+      }
+      while (started > 0u) {
+        --started;
+        (void)pthread_join(threads[started], NULL);
+      }
+      (void)pthread_mutex_destroy(&jobs.mutex);
+      return 0u;
+    }
+    ++started;
+  }
+  for (i = 0u; i < started; ++i) {
+    if (pthread_join(threads[i], NULL) != 0) {
+      jobs.failed = 1u;
+    }
+  }
+  if (pthread_mutex_destroy(&jobs.mutex) != 0) {
+    jobs.failed = 1u;
+  }
+  return jobs.failed == 0u ? 1u : 0u;
+}
+
 //@optimizer-ignore-function repo analysis orchestrates per-file metric, function, and CPU scans over the VFS snapshot
 static uint8_t eri_analyze(const EriVfs* vfs) {
   EriTotals totals;
@@ -2928,7 +3129,18 @@ static uint8_t eri_analyze(const EriVfs* vfs) {
   EriCpuPackages cpu_packages;
   EriWorldviewPackages worldview_packages;
   EriDuplicates duplicates;
+  EriFileAnalysis* file_results;
+  size_t thread_count;
   size_t i;
+
+  file_results = (EriFileAnalysis*)calloc(vfs->len == 0u ? 1u : vfs->len, sizeof(file_results[0]));
+  if (file_results == NULL) {
+    return 0u;
+  }
+  if (eri_host_thread_count(&thread_count) == 0u) {
+    free(file_results);
+    return 0u;
+  }
 
   memset(&totals, 0, sizeof(totals));
   memset(&packages, 0, sizeof(packages));
@@ -2942,51 +3154,60 @@ static uint8_t eri_analyze(const EriVfs* vfs) {
   memset(&worldview_packages, 0, sizeof(worldview_packages));
   memset(&duplicates, 0, sizeof(duplicates));
 
+  if (eri_run_file_analysis_jobs(vfs, file_results, thread_count) == 0u) {
+    for (i = 0u; i < vfs->len; ++i) {
+      eri_file_analysis_free(&file_results[i]);
+    }
+    free(file_results);
+    eri_analyze_cleanup(&packages, &funcs, &findings, &bins, &sources, &coverage_packages,
+                        &smell_packages, &cpu_packages, &worldview_packages, &duplicates);
+    return 0u;
+  }
+
   for (i = 0; i < vfs->len; ++i) {
     const EriVfsFile* file = &vfs->files[i];
-    EriTotals file_totals;
     EriPackage* package;
 
     if (eri_is_binary_like(file) != 0u) {
       eri_add_binary(&bins, file);
     }
-    if (eri_is_build_path(file->path) != 0u || !eri_is_c_source(file->path) ||
-        eri_is_generated_header(file->path, file->bytes, file->len) != 0u) {
+    if (file_results[i].analyzed == 0u) {
       continue;
     }
-    memset(&file_totals, 0, sizeof(file_totals));
-    eri_scan_line_metrics(file->bytes, file->len, &file_totals, &findings, file->path);
-    eri_scan_functions(file, &funcs, &findings);
-    eri_scan_cpu_costs(file, &findings);
-    if (eri_is_c_impl(file->path) && eri_is_example_path(file->path) == 0u &&
-        eri_add_source_file(&sources, file->path, file_totals.code_lines, eri_is_test_path(file->path)) == 0u) {
+    if (eri_append_findings_move(&findings, &file_results[i].findings) == 0u ||
+        eri_append_functions_move(&funcs, &file_results[i].funcs) == 0u ||
+        eri_append_sources_move(&sources, &file_results[i].sources) == 0u) {
+      for (; i < vfs->len; ++i) {
+        eri_file_analysis_free(&file_results[i]);
+      }
+      free(file_results);
       eri_analyze_cleanup(&packages, &funcs, &findings, &bins, &sources, &coverage_packages,
                           &smell_packages, &cpu_packages, &worldview_packages, &duplicates);
       return 0;
     }
-    if (file_totals.code_lines > ERI_LARGE_FILE_LINES) {
-      char text[128];
-      snprintf(text, sizeof(text), "file has %llu code lines", (unsigned long long)file_totals.code_lines);
-      eri_add_finding(&findings, file->path, 1u, "large-file", text);
-    }
 
     ++totals.files;
     totals.bytes += file->len;
-    totals.total_lines += file_totals.total_lines;
-    totals.code_lines += file_totals.code_lines;
-    totals.comment_lines += file_totals.comment_lines;
-    totals.blank_lines += file_totals.blank_lines;
+    totals.total_lines += file_results[i].totals.total_lines;
+    totals.code_lines += file_results[i].totals.code_lines;
+    totals.comment_lines += file_results[i].totals.comment_lines;
+    totals.blank_lines += file_results[i].totals.blank_lines;
 
     package = eri_package_get(&packages, file->path);
     if (package == NULL) {
+      for (; i < vfs->len; ++i) {
+        eri_file_analysis_free(&file_results[i]);
+      }
+      free(file_results);
       eri_analyze_cleanup(&packages, &funcs, &findings, &bins, &sources, &coverage_packages,
                           &smell_packages, &cpu_packages, &worldview_packages, &duplicates);
       return 0;
     }
     ++package->files;
     package->bytes += file->len;
-    package->code_lines += file_totals.code_lines;
+    package->code_lines += file_results[i].totals.code_lines;
   }
+  free(file_results);
 
   eri_count_function_refs(vfs, &funcs);
   eri_mark_test_signals(vfs, &sources, &funcs);
