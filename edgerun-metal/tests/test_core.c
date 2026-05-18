@@ -427,12 +427,80 @@ static INT64 test_vm_ui_emit(const UINT8* bytes, UINT32 len,
   if (bytes == 0 || stats == 0) {
     return 0;
   }
-  check_uint64("wasm ui emit len", len, ER_WASM_UI_COMMAND_LIST_HEADER_LEN);
+  check_uint64("wasm ui emit len", len,
+               ER_WASM_UI_COMMAND_LIST_HEADER_LEN +
+                 ER_WASM_UI_RECT_RECORD_LEN +
+                 ER_WASM_UI_HIT_RECORD_LEN +
+                 ER_WASM_UI_QUAD_RECORD_LEN);
   check_uint64("wasm ui emit abi lo", bytes[0], ER_WASM_UI_COMMAND_ABI_VERSION);
   check_uint64("wasm ui emit rects", stats->rects, 1u);
   check_uint64("wasm ui emit hits", stats->hits, 1u);
   check_uint64("wasm ui emit text", stats->text_quads, 1u);
+  check_uint64("wasm ui emit rect mode",
+               bytes[ER_WASM_UI_COMMAND_LIST_HEADER_LEN + 52u], 0u);
+  check_uint64("wasm ui emit hit kind",
+               bytes[ER_WASM_UI_COMMAND_LIST_HEADER_LEN +
+                     ER_WASM_UI_RECT_RECORD_LEN],
+               3u);
   return (INT64)len;
+}
+
+static void test_write_wasm_ui_header(UINT8* bytes, UINT32 command_count,
+                                      UINT32 rect_count, UINT32 hit_count,
+                                      UINT32 text_quad_count) {
+  test_put_le32(bytes + 0u, ER_WASM_UI_COMMAND_ABI_VERSION);
+  test_put_le32(bytes + 4u, command_count);
+  test_put_le32(bytes + 8u, rect_count);
+  test_put_le32(bytes + 12u, hit_count);
+  test_put_le32(bytes + 16u, 0u);
+  test_put_le32(bytes + 20u, 0u);
+  test_put_le32(bytes + 24u, 0u);
+  test_put_le32(bytes + 28u, 0u);
+  test_put_le32(bytes + 32u, text_quad_count);
+}
+
+static void test_wasm_ui_command_stats_records(void) {
+  UINT8 bytes[ER_WASM_UI_COMMAND_LIST_HEADER_LEN +
+              ER_WASM_UI_RECT_RECORD_LEN +
+              ER_WASM_UI_HIT_RECORD_LEN +
+              ER_WASM_UI_QUAD_RECORD_LEN];
+  er_ui_scene_stats_t stats;
+  UINT32 rect_offset = ER_WASM_UI_COMMAND_LIST_HEADER_LEN;
+  UINT32 hit_offset = rect_offset + ER_WASM_UI_RECT_RECORD_LEN;
+  UINT32 quad_offset = hit_offset + ER_WASM_UI_HIT_RECORD_LEN;
+
+  er_mem_zero(bytes, (UINTN)sizeof(bytes));
+  test_write_wasm_ui_header(bytes, 3u, 1u, 1u, 1u);
+  test_put_le32(bytes + rect_offset + 52u, 0u);
+  test_put_le32(bytes + hit_offset, 3u);
+  test_put_le32(bytes + quad_offset + 24u, 0x3f800000u);
+  test_put_le32(bytes + quad_offset + 28u, 0x3f800000u);
+  test_put_le32(bytes + quad_offset + 36u, 0x3f800000u);
+  test_put_le32(bytes + quad_offset + 40u, 0x3f800000u);
+  test_put_le32(bytes + quad_offset + 44u, 0x3f800000u);
+  test_put_le32(bytes + quad_offset + 48u, 0x3f800000u);
+  check_int64("wasm ui scene packet validates",
+              er_wasm_ui_command_stats(bytes, (UINT32)sizeof(bytes), &stats), 0);
+  check_uint64("wasm ui scene packet rect stats", stats.rects, 1u);
+  check_uint64("wasm ui scene packet hit stats", stats.hits, 1u);
+  check_uint64("wasm ui scene packet text stats", stats.text_quads, 1u);
+
+  check_int64("wasm ui scene rejects short packet",
+              er_wasm_ui_command_stats(bytes, (UINT32)sizeof(bytes) - 1u, &stats), -1);
+
+  test_put_le32(bytes + rect_offset + 52u, 4u);
+  check_int64("wasm ui scene rejects rect mode",
+              er_wasm_ui_command_stats(bytes, (UINT32)sizeof(bytes), &stats), -1);
+  test_put_le32(bytes + rect_offset + 52u, 0u);
+
+  test_put_le32(bytes + hit_offset, 25u);
+  check_int64("wasm ui scene rejects hit kind",
+              er_wasm_ui_command_stats(bytes, (UINT32)sizeof(bytes), &stats), -1);
+  test_put_le32(bytes + hit_offset, 3u);
+
+  test_put_le32(bytes + quad_offset, 0x7f800000u);
+  check_int64("wasm ui scene rejects infinite float",
+              er_wasm_ui_command_stats(bytes, (UINT32)sizeof(bytes), &stats), -1);
 }
 
 static void test_bar_decode(void) {
@@ -2429,7 +2497,11 @@ static void test_wasm_ui_emit_import(void) {
   check_int64("wasm ui find main", er_wasm_find_main(&module, &main_index), 0);
   check_int64("wasm ui main index", main_index, 1);
   check_int64("wasm ui execute", er_wasm_execute_i64(&module, main_index, &result), 0);
-  check_uint64("wasm ui result", (UINT64)result, ER_WASM_UI_COMMAND_LIST_HEADER_LEN);
+  check_uint64("wasm ui result", (UINT64)result,
+               ER_WASM_UI_COMMAND_LIST_HEADER_LEN +
+                 ER_WASM_UI_RECT_RECORD_LEN +
+                 ER_WASM_UI_HIT_RECORD_LEN +
+                 ER_WASM_UI_QUAD_RECORD_LEN);
   check_uint64("wasm ui command count", memory[1028], 3u);
 
   presentation.max_text_quads = 0u;
@@ -4106,6 +4178,7 @@ int main(void) {
   test_wasm_public_region_imports();
   test_relay_packets();
   test_wasm_relay_imports();
+  test_wasm_ui_command_stats_records();
   test_wasm_ui_emit_import();
   test_vfs_object_packets();
   test_app_identity_routes();
