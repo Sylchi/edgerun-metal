@@ -2597,6 +2597,9 @@ static void test_ui_wasm_app_runner(void) {
   ErUiWasmAppRuntime runtime;
   ErAppUiPresentation presentation;
   er_ui_scene_t scene;
+  er_ui_key_t key;
+  er_ui_key_t invalid_key;
+  er_ui_key_modifiers_t modifiers;
   INT64 result = 0;
 
   test_prepare_wasm_ui_presentation(&presentation);
@@ -2629,6 +2632,25 @@ static void test_ui_wasm_app_runner(void) {
               er_ui_wasm_app_deliver_input(&runtime, input_packet,
                                            runtime.relay_inbox_len + 1u),
               -1);
+  key.kind = ER_UI_KEY_OTHER;
+  key.codepoint = (UINT32)'A';
+  modifiers = er_ui_key_modifiers(true, true, false, false);
+  check_int64("ui wasm app deliver key input",
+              er_ui_wasm_app_deliver_key_input(&runtime, key, modifiers), 0);
+  check_uint64("ui wasm app key input abi", memory[ER_UI_WASM_INPUT_ABI_OFFSET],
+               ER_UI_WASM_INPUT_ABI_VERSION);
+  check_uint64("ui wasm app key input kind", memory[ER_UI_WASM_INPUT_KIND_OFFSET],
+               ER_UI_WASM_INPUT_KIND_KEY);
+  check_uint64("ui wasm app key input key", memory[ER_UI_WASM_INPUT_KEY_KIND_OFFSET],
+               ER_UI_KEY_OTHER);
+  check_uint64("ui wasm app key input codepoint", memory[ER_UI_WASM_INPUT_KEY_CODEPOINT_OFFSET],
+               (UINT8)'A');
+  check_uint64("ui wasm app key input modifiers", memory[ER_UI_WASM_INPUT_MODIFIERS_OFFSET],
+               ER_UI_WASM_INPUT_MODIFIER_SHIFT | ER_UI_WASM_INPUT_MODIFIER_CTRL);
+  invalid_key.kind = (er_ui_key_kind_t)(ER_UI_KEY_OTHER + 1u);
+  invalid_key.codepoint = 0u;
+  check_int64("ui wasm app reject invalid key input",
+              er_ui_wasm_app_deliver_key_input(&runtime, invalid_key, modifiers), -1);
   check_int64("ui wasm app execute", er_ui_wasm_app_execute(&runtime, &result),
               0);
   check_uint64("ui wasm app result", (UINT64)result,
