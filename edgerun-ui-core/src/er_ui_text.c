@@ -114,3 +114,21 @@ er_ui_status_t er_ui_scene_push_ascii_text(
   }
   return er_ui_scene_push_varfont_text(scene, face, codepoints, count, x, y, color);
 }
+
+er_ui_status_t er_ui_scene_push_ascii_text_n(
+  er_ui_scene_t* scene,
+  vr_font_face_t* face,
+  const char* text,
+  size_t codepoint_count,
+  float x,
+  float y,
+  er_ui_color4_t color) {
+  if (!scene || !face || (!text && codepoint_count > 0u) || codepoint_count > ER_UI_TEXT_ASCII_STACK_CAPACITY) return ER_UI_ERR_INVALID_ARGUMENT;
+
+  uint32_t codepoints[ER_UI_TEXT_ASCII_STACK_CAPACITY];
+  for (size_t i = 0u; i < codepoint_count; ++i) {
+    unsigned char byte = (unsigned char)text[i];
+    codepoints[i] = byte < ER_UI_TEXT_ASCII_LIMIT ? (uint32_t)byte : (uint32_t)'?';
+  }
+  return er_ui_scene_push_varfont_text(scene, face, codepoints, codepoint_count, x, y, color);
+}
