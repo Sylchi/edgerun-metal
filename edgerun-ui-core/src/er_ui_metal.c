@@ -25,6 +25,17 @@ static const float ER_UI_METAL_COMPACT_RAIL_W = 176.0f;
 static const float ER_UI_METAL_COMPACT_MAIN_MIN_W = 220.0f;
 static const float ER_UI_METAL_COMPACT_RAIL_STACKED_H = 560.0f;
 static const float ER_UI_METAL_COMPACT_TOPBAR_H = 52.0f;
+static const float ER_UI_METAL_TOPBAR_LEFT_W = 154.0f;
+static const float ER_UI_METAL_TOPBAR_GAP = 12.0f;
+static const float ER_UI_METAL_TOPBAR_PAD_Y = 7.0f;
+static const float ER_UI_METAL_TOPBAR_COMMAND_MIN_W = 220.0f;
+static const float ER_UI_METAL_TOPBAR_COMMAND_H = 38.0f;
+static const float ER_UI_METAL_TOPBAR_ICON_BAR_W = 256.0f;
+static const float ER_UI_METAL_TOPBAR_ICON_BAR_H = 36.0f;
+static const float ER_UI_METAL_TOPBAR_STACKED_H = 100.0f;
+static const float ER_UI_METAL_ICON_BUTTON_SIZE = 36.0f;
+static const float ER_UI_METAL_ICON_BUTTON_MIN_SIZE = 28.0f;
+static const float ER_UI_METAL_ICON_BUTTON_GAP = 8.0f;
 static const float ER_UI_METAL_TOAST_H = 86.0f;
 static const float ER_UI_METAL_COMPACT_TOAST_H = 54.0f;
 static const float ER_UI_METAL_ROUTE_H = 156.0f;
@@ -136,11 +147,18 @@ static er_ui_status_t er_ui_metal_emit_icon_bar(
     ER_UI_ICON_SETTINGS
   };
   static const char* const labels[] = {"Apps", "Search", "CPU", "Network", "Trust", "Settings"};
-  const float size = 36.0f;
-  const float gap = 8.0f;
+  float size = ER_UI_METAL_ICON_BUTTON_SIZE;
+  float gap = ER_UI_METAL_ICON_BUTTON_GAP;
   const size_t count = sizeof(icons) / sizeof(icons[0]);
 
   if (!scene || !font || !er_ui_bounds_valid(bounds)) return ER_UI_ERR_INVALID_ARGUMENT;
+  float preferred_w = size * (float)count + gap * (float)(count - 1u);
+  if (preferred_w > bounds.w) {
+    float fitted_size = bounds.w / (float)count;
+    if (fitted_size < ER_UI_METAL_ICON_BUTTON_MIN_SIZE) return ER_UI_ERR_INVALID_ARGUMENT;
+    size = er_ui_float_min(size, fitted_size);
+    gap = count > 1u ? (bounds.w - size * (float)count) / (float)(count - 1u) : 0.0f;
+  }
   for (size_t i = 0u; i < count; ++i) {
     er_ui_node_t button = er_ui_node_icon_button(icons[i], labels[i], ER_UI_METAL_ICON_BASE_ID + (uint32_t)i, ER_UI_COMPONENT_BUTTON_GHOST);
     er_ui_status_t status = er_ui_node_render(&button, scene, font, er_ui_bounds(bounds.x + (size + gap) * (float)i, bounds.y, size, size), theme);
@@ -159,6 +177,13 @@ static er_ui_status_t er_ui_metal_panel(
   if (status != ER_UI_OK) return status;
   return er_ui_scene_push_rect(scene, er_ui_rect_border(bounds.x, bounds.y, bounds.w, bounds.h, theme.radius.card,
                                                        er_ui_color_with_alpha(theme.colors.border, 0.70f)));
+}
+
+static float er_ui_metal_showcase_topbar_height(float width) {
+  float tools_w = width - ER_UI_METAL_TOPBAR_LEFT_W - ER_UI_METAL_TOPBAR_GAP;
+  float inline_tools_w = ER_UI_METAL_TOPBAR_COMMAND_MIN_W + ER_UI_METAL_TOPBAR_GAP + ER_UI_METAL_TOPBAR_ICON_BAR_W;
+  if (tools_w >= inline_tools_w) return ER_UI_METAL_COMPACT_TOPBAR_H;
+  return ER_UI_METAL_TOPBAR_STACKED_H;
 }
 
 static er_ui_status_t er_ui_metal_emit_label_value(
@@ -315,10 +340,26 @@ static er_ui_status_t er_ui_metal_emit_showcase_topbar(
   status = er_ui_component_button_emit(scene, font, er_ui_bounds(bounds.x + 42.0f, bounds.y + 9.0f, 112.0f, 34.0f), theme, "Components",
                                     ER_UI_METAL_COMPONENTS_BUTTON_ID, ER_UI_COMPONENT_BUTTON_GHOST, ER_UI_COMPONENT_BUTTON_SIZE_SM, true);
   if (status != ER_UI_OK) return status;
-  status = er_ui_component_command_palette_emit(scene, font, er_ui_bounds(bounds.x + 166.0f, bounds.y + 7.0f, bounds.w - 446.0f, 38.0f), theme,
+  er_ui_bounds_t tools = er_ui_bounds(
+    bounds.x + ER_UI_METAL_TOPBAR_LEFT_W + ER_UI_METAL_TOPBAR_GAP,
+    bounds.y + ER_UI_METAL_TOPBAR_PAD_Y,
+    bounds.w - ER_UI_METAL_TOPBAR_LEFT_W - ER_UI_METAL_TOPBAR_GAP,
+    bounds.h - ER_UI_METAL_TOPBAR_PAD_Y * 2.0f);
+  if (!er_ui_bounds_valid(tools)) return ER_UI_ERR_INVALID_ARGUMENT;
+  float command_preferred_w = tools.w - ER_UI_METAL_TOPBAR_GAP - ER_UI_METAL_TOPBAR_ICON_BAR_W;
+  if (command_preferred_w < ER_UI_METAL_TOPBAR_COMMAND_MIN_W) command_preferred_w = ER_UI_METAL_TOPBAR_COMMAND_MIN_W;
+  er_ui_responsive_sidecar_t tool_layout = er_ui_responsive_sidecar(
+    tools,
+    ER_UI_METAL_TOPBAR_COMMAND_MIN_W,
+    command_preferred_w,
+    ER_UI_METAL_TOPBAR_ICON_BAR_W,
+    ER_UI_METAL_TOPBAR_GAP,
+    ER_UI_METAL_TOPBAR_COMMAND_H);
+  if (!er_ui_bounds_valid(tool_layout.side) || !er_ui_bounds_valid(tool_layout.main)) return ER_UI_ERR_INVALID_ARGUMENT;
+  status = er_ui_component_command_palette_emit(scene, font, er_ui_bounds(tool_layout.side.x, tool_layout.side.y, tool_layout.side.w, ER_UI_METAL_TOPBAR_COMMAND_H), theme,
                                              "Search components...", ER_UI_METAL_SEARCH_COMMAND_ID);
   if (status != ER_UI_OK) return status;
-  status = er_ui_metal_emit_icon_bar(scene, font, er_ui_bounds(bounds.x + bounds.w - 252.0f, bounds.y + 8.0f, 252.0f, 36.0f), theme);
+  status = er_ui_metal_emit_icon_bar(scene, font, er_ui_bounds(tool_layout.main.x, tool_layout.main.y, tool_layout.main.w, ER_UI_METAL_TOPBAR_ICON_BAR_H), theme);
   if (status != ER_UI_OK) return status;
   return er_ui_scene_push_rect(scene, er_ui_rect_fill(bounds.x, bounds.y + bounds.h - 1.0f, bounds.w, 1.0f, 0.0f, er_ui_color_with_alpha(theme.colors.border, 0.56f)));
 }
@@ -487,7 +528,7 @@ er_ui_status_t er_ui_edgerun_metal_surface_emit(
       ER_UI_METAL_COMPACT_RAIL_STACKED_H);
     if (!er_ui_bounds_valid(compact.side) || !er_ui_bounds_valid(compact.main)) return ER_UI_ERR_INVALID_ARGUMENT;
     er_ui_vertical_flow_t main_flow = er_ui_vertical_flow(compact.main, layout.block_gap);
-    er_ui_bounds_t topbar = er_ui_vertical_flow_next(&main_flow, ER_UI_METAL_COMPACT_TOPBAR_H);
+    er_ui_bounds_t topbar = er_ui_vertical_flow_next(&main_flow, er_ui_metal_showcase_topbar_height(compact.main.w));
     er_ui_bounds_t board = er_ui_vertical_flow_remaining(&main_flow);
     if (!er_ui_bounds_valid(board)) return ER_UI_ERR_INVALID_ARGUMENT;
 
