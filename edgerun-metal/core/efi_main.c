@@ -47,8 +47,10 @@
 #define ER_ACPI_SIGNATURE_BYTES 4u
 #define ER_BYTE_MASK 0xffu
 #define ER_GPU_PROFILE_POLL_LIMIT 1000000u
-#define ER_GPU_PROFILE_FRAMEBUFFER_WIDTH_MAX 640u
-#define ER_GPU_PROFILE_FRAMEBUFFER_HEIGHT_MAX 480u
+#define ER_GPU_PROFILE_FRAMEBUFFER_WIDTH_MAX 1280u
+#define ER_GPU_PROFILE_FRAMEBUFFER_HEIGHT_MAX 720u
+#define ER_GPU_PROFILE_FRAMEBUFFER_WIDTH 1280u
+#define ER_GPU_PROFILE_FRAMEBUFFER_HEIGHT 720u
 #define ER_GPU_PROFILE_RESOURCE_ID 1u
 #define ER_GPU_PROFILE_SCANOUT_ID 0u
 #define ER_GPU_PROFILE_TOP_COLOR 0x0040d0e0u
@@ -864,16 +866,16 @@ static UINT8 er_gpu_profile_wait_display_info(ErVirtioGpu* gpu,
   return 0u;
 }
 
-static UINT8 er_gpu_profile_render_demo_scene_to_framebuffer(ErVirtioGpuFramebuffer* framebuffer,
-                                                             er_ui_demo_apps_state_t* demo_state,
-                                                             vr_font_face_t* font,
-                                                             er_ui_resolved_theme_t theme,
-                                                             ErUiSurfaceRenderStats* out_stats) {
+static UINT8 er_gpu_profile_render_component_scene_to_framebuffer(ErVirtioGpuFramebuffer* framebuffer,
+                                                                  vr_font_face_t* font,
+                                                                  er_ui_resolved_theme_t theme,
+                                                                  ErUiSurfaceRenderStats* out_stats) {
   er_ui_scene_t scene = {0};
   ErUiSurface surface;
   er_ui_scene_stats_t scene_stats;
+  er_ui_shadcn_demo_gallery_state_t gallery_state;
 
-  if (framebuffer == 0 || framebuffer->initialized == 0u || framebuffer->pixels == 0 || demo_state == 0 || font == 0 ||
+  if (framebuffer == 0 || framebuffer->initialized == 0u || framebuffer->pixels == 0 || font == 0 ||
       framebuffer->width == 0u || framebuffer->height == 0u) {
     if (out_stats != 0) {
       *out_stats = (ErUiSurfaceRenderStats){0};
@@ -881,7 +883,11 @@ static UINT8 er_gpu_profile_render_demo_scene_to_framebuffer(ErVirtioGpuFramebuf
     return 0u;
   }
 
-  if (er_build_ui_boot_scene(&scene, demo_state, font, framebuffer->width, framebuffer->height, theme) != ER_UI_OK) {
+  er_ui_shadcn_demo_gallery_state_init(&gallery_state);
+  if (er_ui_scene_init_with_allocator(&scene, theme.colors.bg, er_ui_boot_allocator()) != ER_UI_OK ||
+      er_ui_edgerun_metal_surface_emit(&scene, font,
+                                       er_ui_bounds(0.0f, 0.0f, (float)framebuffer->width, (float)framebuffer->height),
+                                       theme, &gallery_state) != ER_UI_OK) {
     er_ui_scene_destroy(&scene);
     if (out_stats != 0) {
       *out_stats = (ErUiSurfaceRenderStats){0};
@@ -916,7 +922,6 @@ static UINT8 er_gpu_profile_flush_framebuffer(ErVirtioGpu* gpu, UINT32 width, UI
   er_ui_resolved_theme_t theme = er_ui_resolved_theme(
     ER_UI_STYLE_AUTHORITY_USER,
     (er_ui_style_preset_t){ER_UI_COLOR_SCHEME_DARK, ER_UI_ACCENT_NEUTRAL, ER_UI_RADIUS_DEFAULT});
-  er_ui_demo_apps_state_t demo_state = {0};
   vr_font_config_t font_cfg;
   vr_font_face_t* font = 0;
 
@@ -945,49 +950,38 @@ static UINT8 er_gpu_profile_flush_framebuffer(ErVirtioGpu* gpu, UINT32 width, UI
     er_println("gpu framebuffer: font failed");
     return 0u;
   }
-  if (er_ui_demo_apps_state_init(&demo_state, er_ui_boot_allocator()) != ER_UI_OK) {
-    er_println("gpu framebuffer: demo app state failed");
-    vr_font_face_destroy(font);
-    return 0u;
-  }
-  if (er_gpu_profile_render_demo_scene_to_framebuffer(&framebuffer, &demo_state, font, theme, &render_stats) == 0u) {
+  if (er_gpu_profile_render_component_scene_to_framebuffer(&framebuffer, font, theme, &render_stats) == 0u) {
     er_println("gpu framebuffer: scene render failed");
-    er_ui_demo_apps_state_destroy(&demo_state);
     vr_font_face_destroy(font);
     return 0u;
   }
   if (er_virtio_gpu_submit_framebuffer_create(gpu, &framebuffer) == 0u ||
       er_gpu_profile_wait_ok(gpu) == 0u) {
     er_println("gpu framebuffer: create failed");
-    er_ui_demo_apps_state_destroy(&demo_state);
     vr_font_face_destroy(font);
     return 0u;
   }
   if (er_virtio_gpu_submit_framebuffer_attach(gpu, &framebuffer) == 0u ||
       er_gpu_profile_wait_ok(gpu) == 0u) {
     er_println("gpu framebuffer: attach failed");
-    er_ui_demo_apps_state_destroy(&demo_state);
     vr_font_face_destroy(font);
     return 0u;
   }
   if (er_virtio_gpu_submit_framebuffer_set_scanout(gpu, &framebuffer) == 0u ||
       er_gpu_profile_wait_ok(gpu) == 0u) {
     er_println("gpu framebuffer: scanout failed");
-    er_ui_demo_apps_state_destroy(&demo_state);
     vr_font_face_destroy(font);
     return 0u;
   }
   if (er_virtio_gpu_submit_framebuffer_transfer(gpu, &framebuffer) == 0u ||
       er_gpu_profile_wait_ok(gpu) == 0u) {
     er_println("gpu framebuffer: transfer failed");
-    er_ui_demo_apps_state_destroy(&demo_state);
     vr_font_face_destroy(font);
     return 0u;
   }
   if (er_virtio_gpu_submit_framebuffer_flush(gpu, &framebuffer) == 0u ||
       er_gpu_profile_wait_ok(gpu) == 0u) {
     er_println("gpu framebuffer: flush failed");
-    er_ui_demo_apps_state_destroy(&demo_state);
     vr_font_face_destroy(font);
     return 0u;
   }
@@ -998,7 +992,6 @@ static UINT8 er_gpu_profile_flush_framebuffer(ErVirtioGpu* gpu, UINT32 width, UI
   er_print(" text=");
   er_print_u64_dec(render_stats.text_quads);
   er_println("");
-  er_ui_demo_apps_state_destroy(&demo_state);
   vr_font_face_destroy(font);
   return 1u;
 }
@@ -1045,8 +1038,13 @@ static void er_run_gpu_profile(void) {
   er_print(" height=");
   er_print_u64_dec((UINT64)display_info.scanouts[0].rect.height);
   er_println("");
-  if (er_gpu_profile_flush_framebuffer(&gpu, display_info.scanouts[0].rect.width,
-                                       display_info.scanouts[0].rect.height) != 0u) {
+  er_print("gpu framebuffer: target width=");
+  er_print_u64_dec((UINT64)ER_GPU_PROFILE_FRAMEBUFFER_WIDTH);
+  er_print(" height=");
+  er_print_u64_dec((UINT64)ER_GPU_PROFILE_FRAMEBUFFER_HEIGHT);
+  er_println("");
+  if (er_gpu_profile_flush_framebuffer(&gpu, ER_GPU_PROFILE_FRAMEBUFFER_WIDTH,
+                                       ER_GPU_PROFILE_FRAMEBUFFER_HEIGHT) != 0u) {
     er_println("gpu framebuffer: flushed");
   }
 }
