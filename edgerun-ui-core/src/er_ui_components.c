@@ -41,6 +41,22 @@
 #define ER_UI_SHADCN_PREVIEW_COMBOBOX_RESULT_ID (ER_UI_SHADCN_DEMO_PREVIEW_BASE_ID + 61u)
 #define ER_UI_SHADCN_PREVIEW_TABLE_ID (ER_UI_SHADCN_DEMO_PREVIEW_BASE_ID + 43u)
 #define ER_UI_SHADCN_PREVIEW_INPUT_OTP_BASE_ID (ER_UI_SHADCN_DEMO_PREVIEW_BASE_ID + 80u)
+#define ER_UI_SHADCN_PREVIEW_ITEM_ID (ER_UI_SHADCN_DEMO_PREVIEW_BASE_ID + 13u)
+#define ER_UI_SHADCN_PREVIEW_LABEL_FIELD_ID (ER_UI_SHADCN_DEMO_PREVIEW_BASE_ID + 92u)
+#define ER_UI_SHADCN_PREVIEW_MENUBAR_ID (ER_UI_SHADCN_DEMO_PREVIEW_BASE_ID + 70u)
+#define ER_UI_SHADCN_PREVIEW_PAGINATION_PREVIOUS_ID (ER_UI_SHADCN_DEMO_PREVIEW_BASE_ID + 37u)
+#define ER_UI_SHADCN_PREVIEW_PAGINATION_CURRENT_ID (ER_UI_SHADCN_DEMO_PREVIEW_BASE_ID + 38u)
+#define ER_UI_SHADCN_PREVIEW_PAGINATION_NEXT_ID (ER_UI_SHADCN_DEMO_PREVIEW_BASE_ID + 39u)
+#define ER_UI_SHADCN_PREVIEW_NAVIGATION_TABS_ID (ER_UI_SHADCN_DEMO_PREVIEW_BASE_ID + 74u)
+#define ER_UI_SHADCN_PREVIEW_NAVIGATION_INSTALL_ID (ER_UI_SHADCN_DEMO_PREVIEW_BASE_ID + 77u)
+#define ER_UI_SHADCN_PREVIEW_POPOVER_BUTTON_ID (ER_UI_SHADCN_DEMO_PREVIEW_BASE_ID + 41u)
+#define ER_UI_SHADCN_PREVIEW_POPOVER_FIELD_ID (ER_UI_SHADCN_DEMO_PREVIEW_BASE_ID + 42u)
+#define ER_UI_SHADCN_PREVIEW_RADIO_DEFAULT_ID (ER_UI_SHADCN_DEMO_PREVIEW_BASE_ID + 14u)
+#define ER_UI_SHADCN_PREVIEW_RADIO_COMFORTABLE_ID (ER_UI_SHADCN_DEMO_PREVIEW_BASE_ID + 15u)
+#define ER_UI_SHADCN_PREVIEW_RADIO_COMPACT_ID (ER_UI_SHADCN_DEMO_PREVIEW_BASE_ID + 16u)
+#define ER_UI_SHADCN_PREVIEW_SCROLL_INITIAL_ID (ER_UI_SHADCN_DEMO_PREVIEW_BASE_ID + 17u)
+#define ER_UI_SHADCN_PREVIEW_SCROLL_UPDATES_ID (ER_UI_SHADCN_DEMO_PREVIEW_BASE_ID + 18u)
+#define ER_UI_SHADCN_PREVIEW_SCROLL_PRESET_ID (ER_UI_SHADCN_DEMO_PREVIEW_BASE_ID + 19u)
 
 static bool er_ui_shadcn_streq(const char* a, const char* b) {
   if (!a || !b) return false;
@@ -2424,7 +2440,7 @@ er_ui_status_t er_ui_shadcn_component_scene_preview_emit(
   }
   if (er_ui_shadcn_streq(slug, "item")) {
     return er_ui_shadcn_list_row_emit(scene, font, er_ui_bounds(bounds.x, bounds.y, er_ui_float_min(bounds.w, 280.0f), 52.0f), theme, "Payment successful",
-                                      "Stripe payout completed", ER_UI_SHADCN_DEMO_PREVIEW_BASE_ID + 13u, false);
+                                      "Stripe payout completed", ER_UI_SHADCN_PREVIEW_ITEM_ID, false);
   }
   if (er_ui_shadcn_streq(slug, "kbd")) {
     er_ui_status_t status = er_ui_shadcn_badge_emit(scene, font, er_ui_bounds(bounds.x, bounds.y, 34.0f, 28.0f), theme, "Cmd", ER_UI_SHADCN_BADGE_SECONDARY);
@@ -2437,12 +2453,12 @@ er_ui_status_t er_ui_shadcn_component_scene_preview_emit(
     er_ui_status_t status = er_ui_shadcn_push_ascii_text(scene, font, "Email", bounds.x, bounds.y + 16.0f, theme.colors.text);
     if (status != ER_UI_OK) return status;
     return er_ui_shadcn_field_emit(scene, font, er_ui_bounds(bounds.x, bounds.y + 24.0f, er_ui_float_min(bounds.w, 260.0f), 58.0f), theme, "", "name@example.com",
-                                   ER_UI_SHADCN_DEMO_PREVIEW_BASE_ID + 92u, false);
+                                   ER_UI_SHADCN_PREVIEW_LABEL_FIELD_ID, false);
   }
   if (er_ui_shadcn_streq(slug, "menubar")) {
     const char* const labels[] = {"File", "Edit", "View", "Profiles"};
-    return er_ui_shadcn_tabs_emit(scene, font, er_ui_bounds(bounds.x, bounds.y, er_ui_float_min(bounds.w, 360.0f), 38.0f), theme, labels, 4u, 0u,
-                                  ER_UI_SHADCN_DEMO_PREVIEW_BASE_ID + 70u);
+    return er_ui_shadcn_tabs_emit(scene, font, er_ui_bounds(bounds.x, bounds.y, er_ui_float_min(bounds.w, 360.0f), 38.0f), theme, labels,
+                                  ER_UI_SHADCN_ARRAY_COUNT(labels), 0u, ER_UI_SHADCN_PREVIEW_MENUBAR_ID);
   }
   if (er_ui_shadcn_streq(slug, "native-select") || er_ui_shadcn_streq(slug, "select")) {
     uint32_t id = ER_UI_SHADCN_SELECT_TICKER_ID;
@@ -2450,26 +2466,29 @@ er_ui_status_t er_ui_shadcn_component_scene_preview_emit(
     return er_ui_shadcn_select_emit(scene, font, er_ui_bounds(bounds.x, bounds.y, bounds.w, 62.0f), theme, "Framework", "Next.js", id, open);
   }
   if (er_ui_shadcn_streq(slug, "pagination")) {
-    er_ui_status_t status = er_ui_shadcn_button_emit(scene, font, er_ui_bounds(bounds.x, bounds.y, 90.0f, 40.0f), theme, "Previous", ER_UI_SHADCN_DEMO_PREVIEW_BASE_ID + 37u,
+    er_ui_status_t status = er_ui_shadcn_button_emit(scene, font, er_ui_bounds(bounds.x, bounds.y, 90.0f, 40.0f), theme, "Previous",
+                                                     ER_UI_SHADCN_PREVIEW_PAGINATION_PREVIOUS_ID,
                                                      ER_UI_SHADCN_BUTTON_GHOST, ER_UI_SHADCN_BUTTON_SIZE_DEFAULT, false);
     if (status != ER_UI_OK) return status;
-    status = er_ui_shadcn_button_emit(scene, font, er_ui_bounds(bounds.x + 96.0f, bounds.y, 42.0f, 40.0f), theme, "1", ER_UI_SHADCN_DEMO_PREVIEW_BASE_ID + 38u,
+    status = er_ui_shadcn_button_emit(scene, font, er_ui_bounds(bounds.x + 96.0f, bounds.y, 42.0f, 40.0f), theme, "1",
+                                      ER_UI_SHADCN_PREVIEW_PAGINATION_CURRENT_ID,
                                       ER_UI_SHADCN_BUTTON_SECONDARY, ER_UI_SHADCN_BUTTON_SIZE_DEFAULT, true);
     if (status != ER_UI_OK) return status;
-    return er_ui_shadcn_button_emit(scene, font, er_ui_bounds(bounds.x + 144.0f, bounds.y, 68.0f, 40.0f), theme, "Next", ER_UI_SHADCN_DEMO_PREVIEW_BASE_ID + 39u,
+    return er_ui_shadcn_button_emit(scene, font, er_ui_bounds(bounds.x + 144.0f, bounds.y, 68.0f, 40.0f), theme, "Next",
+                                    ER_UI_SHADCN_PREVIEW_PAGINATION_NEXT_ID,
                                     ER_UI_SHADCN_BUTTON_GHOST, ER_UI_SHADCN_BUTTON_SIZE_DEFAULT, true);
   }
   if (er_ui_shadcn_streq(slug, "navigation-menu")) {
     const char* const labels[] = {"Getting started", "Components", "Docs"};
-    er_ui_status_t status = er_ui_shadcn_tabs_emit(scene, font, er_ui_bounds(bounds.x, bounds.y, er_ui_float_min(bounds.w, 360.0f), 38.0f), theme, labels, 3u, 0u,
-                                                   ER_UI_SHADCN_DEMO_PREVIEW_BASE_ID + 74u);
+    er_ui_status_t status = er_ui_shadcn_tabs_emit(scene, font, er_ui_bounds(bounds.x, bounds.y, er_ui_float_min(bounds.w, 360.0f), 38.0f), theme, labels,
+                                                   ER_UI_SHADCN_ARRAY_COUNT(labels), 0u, ER_UI_SHADCN_PREVIEW_NAVIGATION_TABS_ID);
     if (status != ER_UI_OK) return status;
     return er_ui_shadcn_list_row_emit(scene, font, er_ui_bounds(bounds.x, bounds.y + 50.0f, er_ui_float_min(bounds.w, 320.0f), 52.0f), theme, "Installation",
-                                      "Add components to your app", ER_UI_SHADCN_DEMO_PREVIEW_BASE_ID + 77u, false);
+                                      "Add components to your app", ER_UI_SHADCN_PREVIEW_NAVIGATION_INSTALL_ID, false);
   }
   if (er_ui_shadcn_streq(slug, "popover")) {
     er_ui_status_t status = er_ui_shadcn_button_emit(scene, font, er_ui_bounds(bounds.x, bounds.y, 136.0f, 38.0f), theme, "Open popover",
-                                                     ER_UI_SHADCN_DEMO_PREVIEW_BASE_ID + 41u, ER_UI_SHADCN_BUTTON_SECONDARY, ER_UI_SHADCN_BUTTON_SIZE_SM, true);
+                                                     ER_UI_SHADCN_PREVIEW_POPOVER_BUTTON_ID, ER_UI_SHADCN_BUTTON_SECONDARY, ER_UI_SHADCN_BUTTON_SIZE_SM, true);
     if (status != ER_UI_OK) return status;
     er_ui_bounds_t card = er_ui_bounds(bounds.x, bounds.y + 48.0f, er_ui_float_min(bounds.w, 300.0f), 120.0f);
     status = er_ui_shadcn_card_emit(scene, card, theme);
@@ -2479,20 +2498,20 @@ er_ui_status_t er_ui_shadcn_component_scene_preview_emit(
     status = er_ui_shadcn_push_ascii_text(scene, font, "Set the dimensions for the layer.", card.x + 14.0f, card.y + 48.0f, theme.colors.muted);
     if (status != ER_UI_OK) return status;
     return er_ui_shadcn_field_emit(scene, font, er_ui_bounds(card.x + 14.0f, card.y + 58.0f, card.w - 28.0f, 54.0f), theme, "Width", "100%",
-                                   ER_UI_SHADCN_DEMO_PREVIEW_BASE_ID + 42u, false);
+                                   ER_UI_SHADCN_PREVIEW_POPOVER_FIELD_ID, false);
   }
   if (er_ui_shadcn_streq(slug, "progress")) {
     return er_ui_shadcn_progress_emit(scene, er_ui_bounds(bounds.x, bounds.y + 20.0f, bounds.w, 8.0f), theme, 0.66f);
   }
   if (er_ui_shadcn_streq(slug, "radio-group")) {
     er_ui_status_t status = er_ui_shadcn_radio_emit(scene, font, er_ui_bounds(bounds.x, bounds.y, bounds.w, 30.0f), theme, "Default", true,
-                                                    ER_UI_SHADCN_DEMO_PREVIEW_BASE_ID + 14u);
+                                                    ER_UI_SHADCN_PREVIEW_RADIO_DEFAULT_ID);
     if (status != ER_UI_OK) return status;
     status = er_ui_shadcn_radio_emit(scene, font, er_ui_bounds(bounds.x, bounds.y + 34.0f, bounds.w, 30.0f), theme, "Comfortable", false,
-                                     ER_UI_SHADCN_DEMO_PREVIEW_BASE_ID + 15u);
+                                     ER_UI_SHADCN_PREVIEW_RADIO_COMFORTABLE_ID);
     if (status != ER_UI_OK) return status;
     return er_ui_shadcn_radio_emit(scene, font, er_ui_bounds(bounds.x, bounds.y + 68.0f, bounds.w, 30.0f), theme, "Compact", false,
-                                   ER_UI_SHADCN_DEMO_PREVIEW_BASE_ID + 16u);
+                                   ER_UI_SHADCN_PREVIEW_RADIO_COMPACT_ID);
   }
   if (er_ui_shadcn_streq(slug, "resizable")) {
     er_ui_bounds_t first = er_ui_bounds(bounds.x, bounds.y, 90.0f, 92.0f);
@@ -2512,13 +2531,13 @@ er_ui_status_t er_ui_shadcn_component_scene_preview_emit(
   }
   if (er_ui_shadcn_streq(slug, "scroll-area")) {
     er_ui_status_t status = er_ui_shadcn_list_row_emit(scene, font, er_ui_bounds(bounds.x, bounds.y, er_ui_float_min(bounds.w, 260.0f), 44.0f), theme, "v1.0.0",
-                                                       "Initial release", ER_UI_SHADCN_DEMO_PREVIEW_BASE_ID + 17u, false);
+                                                       "Initial release", ER_UI_SHADCN_PREVIEW_SCROLL_INITIAL_ID, false);
     if (status != ER_UI_OK) return status;
     status = er_ui_shadcn_list_row_emit(scene, font, er_ui_bounds(bounds.x, bounds.y + 48.0f, er_ui_float_min(bounds.w, 260.0f), 44.0f), theme, "v1.1.0",
-                                        "Component updates", ER_UI_SHADCN_DEMO_PREVIEW_BASE_ID + 18u, false);
+                                        "Component updates", ER_UI_SHADCN_PREVIEW_SCROLL_UPDATES_ID, false);
     if (status != ER_UI_OK) return status;
     return er_ui_shadcn_list_row_emit(scene, font, er_ui_bounds(bounds.x, bounds.y + 96.0f, er_ui_float_min(bounds.w, 260.0f), 44.0f), theme, "v1.2.0",
-                                      "Preset builder", ER_UI_SHADCN_DEMO_PREVIEW_BASE_ID + 19u, false);
+                                      "Preset builder", ER_UI_SHADCN_PREVIEW_SCROLL_PRESET_ID, false);
   }
   if (er_ui_shadcn_streq(slug, "separator")) {
     er_ui_status_t status = er_ui_shadcn_push_ascii_text(scene, font, "Radix Primitives", bounds.x, bounds.y + 12.0f, theme.colors.text);
