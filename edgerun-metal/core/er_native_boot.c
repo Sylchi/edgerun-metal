@@ -162,22 +162,6 @@ UINT8 er_native_boot_poll_relay_ingress(const ErNativeBootState* state,
   return 1;
 }
 
-static UINT8 er_native_boot_hash_equal(const ErHash* left,
-                                       const ErHash* right) {
-  if (left == 0 || right == 0) {
-    return 0u;
-  }
-  return er_mem_equal(left->bytes, right->bytes, ER_HASH_LEN);
-}
-
-static UINT8 er_native_boot_node_equal(const ErNodeId* left,
-                                       const ErNodeId* right) {
-  if (left == 0 || right == 0) {
-    return 0u;
-  }
-  return er_mem_equal(left->bytes, right->bytes, ER_NODE_ID_LEN);
-}
-
 static UINT8 er_native_boot_relay_packet_matches_route(const ErRelayPacketHeader* packet,
                                                        const ErAdmittedRoute* route) {
   if (packet == 0 || route == 0 ||
@@ -185,13 +169,13 @@ static UINT8 er_native_boot_relay_packet_matches_route(const ErRelayPacketHeader
       packet->packet_kind != ER_RELAY_PACKET_KIND_BYTES ||
       route->abi_version != ER_WORK_ABI_VERSION ||
       packet->sequence == 0u ||
-      er_native_boot_node_equal(&packet->source_node_id,
+      er_node_id_equal(&packet->source_node_id,
                                 &route->source_node_id) == 0u ||
-      er_native_boot_node_equal(&packet->target_node_id,
+      er_node_id_equal(&packet->target_node_id,
                                 &route->target_node_id) == 0u ||
-      er_native_boot_hash_equal(&packet->admission_id,
+      er_hash_equal(&packet->admission_id,
                                 &route->admission_hash) == 0u ||
-      er_native_boot_hash_equal(&packet->route_hash,
+      er_hash_equal(&packet->route_hash,
                                 &route->target_route_commitment) == 0u) {
     return 0u;
   }
@@ -245,9 +229,9 @@ UINT8 er_native_boot_decode_endpoint_intent(const ErNativeRelayIngress* ingress,
       out_intent->capability.content_type != ER_CAPABILITY_CONTENT_RENDER ||
       out_intent->capability.risk_flags != ER_CAPABILITY_RISK_NONE ||
       out_intent->capability.sequence != out_intent->packet.sequence ||
-      er_native_boot_node_equal(&out_intent->capability.source_node_id,
+      er_node_id_equal(&out_intent->capability.source_node_id,
                                 &route->source_node_id) == 0u ||
-      er_native_boot_node_equal(&out_intent->capability.target_node_id,
+      er_node_id_equal(&out_intent->capability.target_node_id,
                                 &route->target_node_id) == 0u) {
     out_intent->kind = ER_NATIVE_ENDPOINT_INTENT_MALFORMED;
     return 1;

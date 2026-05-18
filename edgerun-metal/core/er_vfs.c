@@ -82,20 +82,6 @@ static void er_vfs_set_span(ErByteSpan* span, const UINT8* bytes, UINTN len) {
   span->len = len;
 }
 
-static UINT8 er_vfs_hash_equal(const ErHash* left, const ErHash* right) {
-  UINTN i;
-
-  if (left == 0 || right == 0) {
-    return 0;
-  }
-  for (i = 0u; i < ER_HASH_LEN; ++i) {
-    if (left->bytes[i] != right->bytes[i]) {
-      return 0;
-    }
-  }
-  return 1;
-}
-
 static UINT8 er_vfs_char_is_slash(char value) {
   return (UINT8)(value == '/' ? 1u : 0u);
 }
@@ -300,7 +286,7 @@ UINT8 er_vfs_assemble_object_packets(const ErCryptoProvider* crypto,
         packet->header.packet_count != packet_count ||
         packet->header.object_len != object_len ||
         packet->header.offset != expected_offset ||
-        er_vfs_hash_equal(&packet->header.object_id, &object_id) == 0u) {
+        er_hash_equal(&packet->header.object_id, &object_id) == 0u) {
       return 0;
     }
     expected_bytes = er_vfs_expected_packet_bytes(object_len, i);
@@ -310,7 +296,7 @@ UINT8 er_vfs_assemble_object_packets(const ErCryptoProvider* crypto,
     }
     if (er_vfs_hash_payload(crypto, packet->bytes, packet->header.bytes_len,
                             &expected_payload_hash) == 0u ||
-        er_vfs_hash_equal(&expected_payload_hash,
+        er_hash_equal(&expected_payload_hash,
                           &packet->header.payload_hash) == 0u) {
       return 0;
     }
@@ -321,7 +307,7 @@ UINT8 er_vfs_assemble_object_packets(const ErCryptoProvider* crypto,
                               &packet->header.object_id,
                               &packet->header.payload_hash,
                               &expected_packet_id) == 0u ||
-        er_vfs_hash_equal(&expected_packet_id,
+        er_hash_equal(&expected_packet_id,
                           &packet->header.packet_id) == 0u) {
       return 0;
     }
@@ -332,7 +318,7 @@ UINT8 er_vfs_assemble_object_packets(const ErCryptoProvider* crypto,
   }
   if (er_vfs_hash_object(crypto, out_object_bytes, (UINTN)object_len,
                          out_object_id) == 0u ||
-      er_vfs_hash_equal(out_object_id, &object_id) == 0u) {
+      er_hash_equal(out_object_id, &object_id) == 0u) {
     return 0;
   }
   *out_object_len = (UINTN)object_len;

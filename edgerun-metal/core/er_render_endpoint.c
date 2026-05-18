@@ -65,25 +65,11 @@ static void er_render_put_be32(UINT8* dst, UINT32 value) {
   er_render_put_be(dst, value, ER_RENDER_ENDPOINT_U32_BYTES);
 }
 
-static UINT8 er_render_hash_equal(const ErHash* left, const ErHash* right) {
-  if (left == 0 || right == 0) {
-    return 0;
-  }
-  return er_mem_equal(left->bytes, right->bytes, ER_HASH_LEN);
-}
-
-static UINT8 er_render_node_equal(const ErNodeId* left, const ErNodeId* right) {
-  if (left == 0 || right == 0) {
-    return 0;
-  }
-  return er_mem_equal(left->bytes, right->bytes, ER_NODE_ID_LEN);
-}
-
 static UINT8 er_render_capture_valid(const ErRenderEndpointCapture* capture) {
   return (UINT8)(capture != 0 &&
                  capture->abi_version == ER_RENDER_ENDPOINT_ABI_VERSION &&
-                 er_mem_any_nonzero(capture->capture_id.bytes, ER_HASH_LEN) != 0u &&
-                 er_mem_any_nonzero(capture->scene_hash.bytes, ER_HASH_LEN) != 0u);
+                 er_hash_nonzero(&capture->capture_id) != 0u &&
+                 er_hash_nonzero(&capture->scene_hash) != 0u);
 }
 
 static UINT8 er_render_route_accepts_capability(const ErAdmittedRoute* route) {
@@ -211,12 +197,12 @@ UINT8 er_render_endpoint_capture(const ErCryptoProvider* crypto,
       er_render_route_accepts_capability(route) == 0u ||
       er_work_verify_channel_envelope_for_route(envelope, route) == 0u ||
       er_render_capability_is_render_invoke(capability) == 0u ||
-      er_render_node_equal(&capability->source_node_id,
+      er_node_id_equal(&capability->source_node_id,
                            &route->source_node_id) == 0u ||
-      er_render_node_equal(&capability->target_node_id,
+      er_node_id_equal(&capability->target_node_id,
                            &route->target_node_id) == 0u ||
       capability->sequence != envelope->sequence ||
-      er_render_hash_equal(&capability->payload_hash,
+      er_hash_equal(&capability->payload_hash,
                            &envelope->packet_hash) == 0u) {
     return 0;
   }
@@ -251,7 +237,7 @@ UINT8 er_render_endpoint_decode_scene_payload(const ErCryptoProvider* crypto,
       len != capture->scene_bytes ||
       er_render_endpoint_scene_payload_hash(crypto, bytes, len,
                                             &payload_hash) == 0u ||
-      er_render_hash_equal(&payload_hash, &capture->scene_hash) == 0u ||
+      er_hash_equal(&payload_hash, &capture->scene_hash) == 0u ||
       er_wasm_ui_command_decode(bytes, len, out_scene, &stats) != 0) {
     return 0;
   }
