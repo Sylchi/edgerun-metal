@@ -3,11 +3,12 @@
 
 static const er_ui_color4_t ER_TEST_LEDGER_BG = {0.01f, 0.012f, 0.015f, 1.0f};
 static const size_t ER_TEST_LEDGER_APP_SURFACE_COUNT = 3u;
-static const size_t ER_TEST_LEDGER_APP_HITS = 12u;
-static const size_t ER_TEST_LEDGER_COMPACT_DASHBOARD_HITS = 7u;
+static const size_t ER_TEST_LEDGER_APP_HITS = 21u;
+static const size_t ER_TEST_LEDGER_COMPACT_DASHBOARD_HITS = 8u;
 static const size_t ER_TEST_LEDGER_SCROLLED_DASHBOARD_HITS = 7u;
-static const size_t ER_TEST_LEDGER_ACCESS_HITS = 4u;
-static const size_t ER_TEST_LEDGER_PAYMENTS_HITS = 4u;
+static const size_t ER_TEST_LEDGER_STACKED_DASHBOARD_HITS = 11u;
+static const size_t ER_TEST_LEDGER_ACCESS_HITS = 6u;
+static const size_t ER_TEST_LEDGER_PAYMENTS_HITS = 10u;
 static const uint32_t ER_TEST_LEDGER_ACTION_BASE = 0xED024000u;
 static const uint32_t ER_TEST_LEDGER_INVEST_BUTTON_ID = ER_TEST_LEDGER_ACTION_BASE + 2u;
 static const uint32_t ER_TEST_LEDGER_SAVE_THRESHOLD_BUTTON_ID = ER_TEST_LEDGER_ACTION_BASE + 8u;
@@ -149,7 +150,7 @@ static void test_ledger_app_state_and_surface_switching(void) {
   expect_status(er_ui_ledger_app_emit_scene(&apps, &scene, font, ER_TEST_LEDGER_STACKED_BOUNDS, theme), ER_UI_OK,
                 "ledger app: stacked narrow scene emits");
   stats = er_ui_scene_stats(&scene);
-  expect_size(stats.hits, ER_TEST_LEDGER_COMPACT_DASHBOARD_HITS, "ledger app: stacked scene emits expected hits");
+  expect_size(stats.hits, ER_TEST_LEDGER_STACKED_DASHBOARD_HITS, "ledger app: stacked scene emits expected hits");
   expect_true(test_ledger_hits_stay_inside(&scene, ER_TEST_LEDGER_STACKED_BOUNDS), "ledger app: stacked hits stay inside surface bounds");
   expect_true(test_ledger_text_stays_inside_width(&scene, ER_TEST_LEDGER_STACKED_BOUNDS), "ledger app: stacked text stays inside surface width");
 

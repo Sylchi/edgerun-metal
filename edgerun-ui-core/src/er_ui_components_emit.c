@@ -883,14 +883,25 @@ er_ui_status_t er_ui_component_transaction_row_emit(
   bool positive,
   uint32_t id) {
   if (!scene || !font || !title || !subtitle || !date || !amount || !er_ui_bounds_valid(bounds)) return ER_UI_ERR_INVALID_ARGUMENT;
-  er_ui_status_t status = er_ui_component_row_body_emit(scene, font, bounds, theme, ER_UI_HIT_TRANSACTION_ROW, id, true, title, subtitle, 0.0f,
-                                                     theme.colors.panel, 22.0f, 44.0f);
+  er_ui_status_t status = er_ui_component_row_frame_emit(scene, bounds, ER_UI_HIT_TRANSACTION_ROW, id, true, 0.0f, theme.colors.panel);
   if (status != ER_UI_OK) return status;
-  status = er_ui_component_push_ascii_text_clipped(scene, font, date, bounds.x + bounds.w - 170.0f, bounds.y + 22.0f,
-                                                   78.0f, theme.colors.muted);
+  bool compact = bounds.w < 420.0f;
+  float amount_w = compact ? 82.0f : 86.0f;
+  float amount_x = bounds.x + bounds.w - amount_w;
+  float text_x = bounds.x + ER_UI_COMPONENT_ROW_TEXT_PAD_RIGHT;
+  float text_right = compact ? amount_x - 12.0f : bounds.x + bounds.w - 184.0f;
+  float text_w = er_ui_float_max(text_right - text_x, 1.0f);
+  status = er_ui_component_push_ascii_text_clipped(scene, font, title, text_x, bounds.y + 22.0f, text_w, theme.colors.text);
   if (status != ER_UI_OK) return status;
-  status = er_ui_component_push_ascii_text_clipped(scene, font, amount, bounds.x + bounds.w - 86.0f, bounds.y + 34.0f,
-                                                   86.0f, positive ? theme.colors.success : theme.colors.danger);
+  status = er_ui_component_push_ascii_text_clipped(scene, font, subtitle, text_x, bounds.y + 44.0f, text_w, theme.colors.muted);
+  if (status != ER_UI_OK) return status;
+  if (!compact) {
+    status = er_ui_component_push_ascii_text_clipped(scene, font, date, bounds.x + bounds.w - 170.0f, bounds.y + 22.0f,
+                                                     78.0f, theme.colors.muted);
+    if (status != ER_UI_OK) return status;
+  }
+  status = er_ui_component_push_ascii_text_clipped(scene, font, amount, amount_x, bounds.y + 34.0f,
+                                                   amount_w, positive ? theme.colors.success : theme.colors.text);
   if (status != ER_UI_OK) return status;
   return er_ui_component_bottom_separator_emit(scene, bounds, theme);
 }
