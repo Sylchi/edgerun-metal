@@ -76,6 +76,9 @@ static void test_responsive_grid_derives_columns_from_available_width(void) {
   expect_size(er_ui_responsive_grid_row_count(wide, ER_TEST_RESPONSIVE_GRID_ITEM_COUNT),
               ER_TEST_RESPONSIVE_GRID_EXPECTED_ROWS,
               "spacing: responsive grid row count wraps items by columns");
+  expect_float(er_ui_responsive_grid_row_height(wide, ER_TEST_RESPONSIVE_GRID_EXPECTED_ROWS),
+               (400.0f - 18.0f) / 2.0f,
+               "spacing: responsive grid row height derives from rows");
   expect_float(er_ui_responsive_grid_height(wide, ER_TEST_RESPONSIVE_GRID_ITEM_COUNT, ER_TEST_RESPONSIVE_GRID_ROW_H),
                ER_TEST_RESPONSIVE_GRID_ROW_H * 2.0f + 18.0f,
                "spacing: responsive grid height includes row gaps");

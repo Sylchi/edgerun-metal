@@ -121,6 +121,11 @@ size_t er_ui_responsive_grid_row_count(er_ui_responsive_grid_t grid, size_t item
   return (item_count + grid.columns - 1u) / grid.columns;
 }
 
+float er_ui_responsive_grid_row_height(er_ui_responsive_grid_t grid, size_t row_count) {
+  if (grid.columns == 0u || row_count == 0u || !er_ui_bounds_valid(grid.bounds)) return 0.0f;
+  return er_ui_float_max((grid.bounds.h - grid.gap_y * (float)(row_count - 1u)) / (float)row_count, 0.0f);
+}
+
 float er_ui_responsive_grid_height(er_ui_responsive_grid_t grid, size_t item_count, float row_h) {
   if (row_h <= 0.0f) return 0.0f;
   size_t rows = er_ui_responsive_grid_row_count(grid, item_count);

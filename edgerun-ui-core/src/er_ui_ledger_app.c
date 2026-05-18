@@ -777,8 +777,10 @@ static er_ui_status_t er_ui_ledger_dashboard(
   size_t summary_cards = grid.columns >= ER_UI_LEDGER_DASHBOARD_WIDE_SUMMARY_CARDS ? ER_UI_LEDGER_DASHBOARD_WIDE_SUMMARY_CARDS :
                                                                             ER_UI_LEDGER_DASHBOARD_COMPACT_SUMMARY_CARDS;
   size_t summary_rows = er_ui_responsive_grid_row_count(grid, summary_cards);
-  size_t row_count = summary_rows + 1u;
-  float row_h = er_ui_float_max((available_h - ER_UI_LEDGER_GAP * (float)(row_count - 1u)) / (float)row_count, 1.0f);
+  size_t detail_index = summary_rows * grid.columns;
+  size_t transaction_span = grid.columns > 2u ? grid.columns - 1u : 1u;
+  size_t row_count = er_ui_responsive_grid_row_count(grid, detail_index + transaction_span + 1u);
+  float row_h = er_ui_float_max(er_ui_responsive_grid_row_height(grid, row_count), 1.0f);
   size_t cell_index = 0u;
   status = er_ui_ledger_contribution_card(scene, font, er_ui_responsive_grid_cell(grid, cell_index, row_h), colors);
   if (status != ER_UI_OK) return status;
@@ -794,8 +796,6 @@ static er_ui_status_t er_ui_ledger_dashboard(
     if (status != ER_UI_OK) return status;
     cell_index++;
   }
-  size_t detail_index = er_ui_responsive_grid_row_count(grid, cell_index) * grid.columns;
-  size_t transaction_span = grid.columns > 2u ? grid.columns - 1u : 1u;
   status = er_ui_ledger_transactions_card(scene, font, er_ui_responsive_grid_span(grid, detail_index, transaction_span, row_h), colors);
   if (status != ER_UI_OK) return status;
   if (summary_cards == ER_UI_LEDGER_DASHBOARD_WIDE_SUMMARY_CARDS) {
