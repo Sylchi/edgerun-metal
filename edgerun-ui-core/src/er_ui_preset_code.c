@@ -6,7 +6,13 @@ enum {
   ER_UI_PRESET_MIN_CODE_LEN = 2u,
   ER_UI_PRESET_MAX_CODE_LEN = 10u,
   ER_UI_PRESET_FIELD_COUNT = 10u,
-  ER_UI_PRESET_BASE62_BUFFER_LEN = 11u
+  ER_UI_PRESET_BASE62_BUFFER_LEN = 11u,
+  ER_UI_PRESET_BITS_COMPACT = 3u,
+  ER_UI_PRESET_BITS_RADIUS = 4u,
+  ER_UI_PRESET_BITS_STANDARD = 6u,
+  ER_UI_PRESET_BITS_HEADING_FONT = 5u,
+  ER_UI_PRESET_BASE62_UPPER_OFFSET = 10u,
+  ER_UI_PRESET_BASE62_LOWER_OFFSET = 36u
 };
 
 typedef enum {
@@ -141,16 +147,16 @@ static const char* const ER_UI_PRESET_STYLES[] = {"nova", "vega", "maia", "lyra"
   }
 
 static const er_ui_preset_field_t ER_UI_PRESET_FIELDS[ER_UI_PRESET_FIELD_COUNT] = {
-  {"menuColor", ER_UI_PRESET_MENU_COLORS, sizeof(ER_UI_PRESET_MENU_COLORS) / sizeof(ER_UI_PRESET_MENU_COLORS[0]), 3u},
-  {"menuAccent", ER_UI_PRESET_MENU_ACCENTS, sizeof(ER_UI_PRESET_MENU_ACCENTS) / sizeof(ER_UI_PRESET_MENU_ACCENTS[0]), 3u},
-  {"radius", ER_UI_PRESET_RADII, sizeof(ER_UI_PRESET_RADII) / sizeof(ER_UI_PRESET_RADII[0]), 4u},
-  {"font", ER_UI_PRESET_FONTS, sizeof(ER_UI_PRESET_FONTS) / sizeof(ER_UI_PRESET_FONTS[0]), 6u},
-  {"iconLibrary", ER_UI_PRESET_ICON_LIBRARIES, sizeof(ER_UI_PRESET_ICON_LIBRARIES) / sizeof(ER_UI_PRESET_ICON_LIBRARIES[0]), 6u},
-  {"theme", ER_UI_PRESET_THEME_COLORS, sizeof(ER_UI_PRESET_THEME_COLORS) / sizeof(ER_UI_PRESET_THEME_COLORS[0]), 6u},
-  {"baseColor", ER_UI_PRESET_BASE_COLORS, sizeof(ER_UI_PRESET_BASE_COLORS) / sizeof(ER_UI_PRESET_BASE_COLORS[0]), 6u},
-  {"style", ER_UI_PRESET_STYLES, sizeof(ER_UI_PRESET_STYLES) / sizeof(ER_UI_PRESET_STYLES[0]), 6u},
-  {"chartColor", ER_UI_PRESET_THEME_COLORS, sizeof(ER_UI_PRESET_THEME_COLORS) / sizeof(ER_UI_PRESET_THEME_COLORS[0]), 6u},
-  {"fontHeading", ER_UI_PRESET_HEADING_FONTS, sizeof(ER_UI_PRESET_HEADING_FONTS) / sizeof(ER_UI_PRESET_HEADING_FONTS[0]), 5u}
+  {"menuColor", ER_UI_PRESET_MENU_COLORS, sizeof(ER_UI_PRESET_MENU_COLORS) / sizeof(ER_UI_PRESET_MENU_COLORS[0]), ER_UI_PRESET_BITS_COMPACT},
+  {"menuAccent", ER_UI_PRESET_MENU_ACCENTS, sizeof(ER_UI_PRESET_MENU_ACCENTS) / sizeof(ER_UI_PRESET_MENU_ACCENTS[0]), ER_UI_PRESET_BITS_COMPACT},
+  {"radius", ER_UI_PRESET_RADII, sizeof(ER_UI_PRESET_RADII) / sizeof(ER_UI_PRESET_RADII[0]), ER_UI_PRESET_BITS_RADIUS},
+  {"font", ER_UI_PRESET_FONTS, sizeof(ER_UI_PRESET_FONTS) / sizeof(ER_UI_PRESET_FONTS[0]), ER_UI_PRESET_BITS_STANDARD},
+  {"iconLibrary", ER_UI_PRESET_ICON_LIBRARIES, sizeof(ER_UI_PRESET_ICON_LIBRARIES) / sizeof(ER_UI_PRESET_ICON_LIBRARIES[0]), ER_UI_PRESET_BITS_STANDARD},
+  {"theme", ER_UI_PRESET_THEME_COLORS, sizeof(ER_UI_PRESET_THEME_COLORS) / sizeof(ER_UI_PRESET_THEME_COLORS[0]), ER_UI_PRESET_BITS_STANDARD},
+  {"baseColor", ER_UI_PRESET_BASE_COLORS, sizeof(ER_UI_PRESET_BASE_COLORS) / sizeof(ER_UI_PRESET_BASE_COLORS[0]), ER_UI_PRESET_BITS_STANDARD},
+  {"style", ER_UI_PRESET_STYLES, sizeof(ER_UI_PRESET_STYLES) / sizeof(ER_UI_PRESET_STYLES[0]), ER_UI_PRESET_BITS_STANDARD},
+  {"chartColor", ER_UI_PRESET_THEME_COLORS, sizeof(ER_UI_PRESET_THEME_COLORS) / sizeof(ER_UI_PRESET_THEME_COLORS[0]), ER_UI_PRESET_BITS_STANDARD},
+  {"fontHeading", ER_UI_PRESET_HEADING_FONTS, sizeof(ER_UI_PRESET_HEADING_FONTS) / sizeof(ER_UI_PRESET_HEADING_FONTS[0]), ER_UI_PRESET_BITS_HEADING_FONT}
 };
 
 static const er_ui_semantic_colors_t ER_UI_STYLE_FAMILY_COLORS[ER_UI_STYLE_FAMILY_COUNT] = {
@@ -298,11 +304,11 @@ static bool er_ui_preset_alphabet_index(char byte, size_t* out_index) {
     return true;
   }
   if (byte >= 'A' && byte <= 'Z') {
-    *out_index = (size_t)(byte - 'A') + 10u;
+    *out_index = (size_t)(byte - 'A') + ER_UI_PRESET_BASE62_UPPER_OFFSET;
     return true;
   }
   if (byte >= 'a' && byte <= 'z') {
-    *out_index = (size_t)(byte - 'a') + 36u;
+    *out_index = (size_t)(byte - 'a') + ER_UI_PRESET_BASE62_LOWER_OFFSET;
     return true;
   }
   return false;
