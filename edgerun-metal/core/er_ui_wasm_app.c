@@ -151,6 +151,7 @@ int er_ui_wasm_app_execute(ErUiWasmAppRuntime* runtime, INT64* out_result) {
       runtime->scene == 0 || g_active_runtime != 0) {
     return -1;
   }
+  er_ui_scene_clear_commands(runtime->scene);
   er_mem_zero((UINT8*)&runtime->emitted_stats, (UINTN)sizeof(runtime->emitted_stats));
   runtime->emitted = 0u;
   g_active_runtime = runtime;
