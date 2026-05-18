@@ -33,7 +33,7 @@
 #define ER_UI_TEST_COMPONENT_MIN_METAL_ICON_QUADS 6u
 #define ER_UI_TEST_COMPONENT_NARROW_METAL_W 800.0f
 #define ER_UI_TEST_COMPONENT_NARROW_METAL_H 720.0f
-#define ER_UI_TEST_COMPONENT_COUNT 57u
+#define ER_UI_TEST_COMPONENT_COUNT 58u
 #define ER_UI_TEST_COMPONENT_KEYBOARD_COUNT 2u
 #define ER_UI_TEST_COMPONENT_ORDER_OPTION_INDEX 1u
 #define ER_UI_TEST_COMPONENT_STOCK_BUTTON_INDEX 2u
@@ -168,6 +168,7 @@ static void test_component_render_primitives(void) {
   expect_true(er_ui_component_scene_preview_available("combobox"), "component scene preview: combobox is available");
   expect_true(er_ui_component_scene_preview_available("label"), "component scene preview: label is available");
   expect_true(er_ui_component_scene_preview_available("sheet"), "component scene preview: sheet is available");
+  expect_true(er_ui_component_scene_preview_available("spinner"), "component scene preview: spinner is available");
   expect_true(er_ui_component_scene_preview_available("tabs"), "component scene preview: tabs are available");
   expect_true(er_ui_component_scene_preview_available("data-table"), "component scene preview: data table is available");
   expect_true(er_ui_component_scene_preview_available("radio-group"), "component scene preview: radio group is available");
@@ -265,7 +266,7 @@ void run_component_tests(void) {
   expect_string(er_ui_component_shadcn_reference_at(ER_UI_COMPONENT_SHADCN_REFERENCE_COUNT - 1u), "tooltip",
                 "component catalog: shadcn reference ends sorted");
   expect_true(er_ui_component_shadcn_reference_covered("button"), "component catalog: shadcn button is covered");
-  expect_true(!er_ui_component_shadcn_reference_covered("spinner"), "component catalog: shadcn spinner gap is explicit");
+  expect_true(er_ui_component_shadcn_reference_covered("spinner"), "component catalog: shadcn spinner is covered");
   expect_true(er_ui_component_find_by_slug("accordion") != 0, "component catalog: accordion exists");
   expect_true(er_ui_component_find_by_slug("tooltip") != 0, "component catalog: tooltip exists");
   expect_true(er_ui_component_find_by_slug("data-table") != 0, "component catalog: data-table exists");

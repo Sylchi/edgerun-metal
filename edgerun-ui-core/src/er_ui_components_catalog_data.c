@@ -495,6 +495,12 @@ static const char* const slots_skeleton[] = {
 static const char* const states_skeleton[] = {
   "loading",
 };
+static const char* const slots_spinner[] = {
+  "spinner",
+};
+static const char* const states_spinner[] = {
+  "loading",
+};
 static const char* const slots_slider[] = {
   "slider",
   "slider-track",
@@ -982,6 +988,14 @@ static const er_ui_component_spec_t component_catalog[] = {
     "skeleton",
     slots_skeleton,
     states_skeleton),
+  ER_UI_COMPONENT_ENTRY(
+    "Spinner",
+    "spinner",
+    ER_UI_COMPONENT_CATEGORY_FEEDBACK,
+    "Spinner",
+    "spinner",
+    slots_spinner,
+    states_spinner),
   ER_UI_COMPONENT_ENTRY(
     "Slider",
     "slider",

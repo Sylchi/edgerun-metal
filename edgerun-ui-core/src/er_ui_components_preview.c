@@ -412,6 +412,11 @@ er_ui_status_t er_ui_component_scene_preview_emit(
     if (status != ER_UI_OK) return status;
     return er_ui_component_push_ascii_text(scene, font, "Airplane mode", bounds.x + 56.0f, bounds.y + 18.0f, theme.colors.text);
   }
+  if (er_ui_component_streq(slug, "spinner")) {
+    er_ui_status_t status = er_ui_component_spinner_emit(scene, er_ui_bounds(bounds.x, bounds.y, 28.0f, 28.0f), theme);
+    if (status != ER_UI_OK) return status;
+    return er_ui_component_push_ascii_text(scene, font, "Loading", bounds.x + 40.0f, bounds.y + 21.0f, theme.shadcn.colors.muted_foreground);
+  }
   if (er_ui_component_streq(slug, "sonner")) {
     er_ui_status_t status = er_ui_component_toast_emit(scene, font, er_ui_bounds(bounds.x, bounds.y, er_ui_float_min(bounds.w, 260.0f), 48.0f), theme, "Event has been created",
                                                     theme.colors.success);

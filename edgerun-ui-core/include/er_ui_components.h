@@ -171,7 +171,7 @@ typedef struct {
   size_t label_field_count;
 } er_ui_component_accessibility_metadata_t;
 
-#define ER_UI_COMPONENT_COUNT 57u
+#define ER_UI_COMPONENT_COUNT 58u
 #define ER_UI_COMPONENT_SHADCN_REFERENCE_COUNT 55u
 #define ER_UI_COMPONENT_TEST_ID_COUNT 16u
 #define ER_UI_COMPONENT_STATE_COUNT 7u
@@ -390,6 +390,7 @@ er_ui_status_t er_ui_component_table_emit(
   size_t row_count,
   uint32_t id_base);
 er_ui_status_t er_ui_component_skeleton_emit(er_ui_scene_t* scene, er_ui_bounds_t bounds, er_ui_resolved_theme_t theme);
+er_ui_status_t er_ui_component_spinner_emit(er_ui_scene_t* scene, er_ui_bounds_t bounds, er_ui_resolved_theme_t theme);
 er_ui_status_t er_ui_component_toast_emit(
   er_ui_scene_t* scene,
   vr_font_face_t* font,
