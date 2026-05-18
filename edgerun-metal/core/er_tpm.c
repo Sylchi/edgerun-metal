@@ -22,6 +22,10 @@ enum {
   ER_TPM_CRB_CTRL_REQ_CMD_READY = 1u,
   ER_TPM_CRB_CTRL_START = 1u,
   ER_TPM_CRB_MMIO_SPAN_MAX = 0x10000u,
+  ER_TPM_BYTE0_INDEX = 0u,
+  ER_TPM_BYTE1_INDEX = 1u,
+  ER_TPM_BYTE2_INDEX = 2u,
+  ER_TPM_BYTE3_INDEX = 3u,
   ER_TPM_U16_BYTES = 2u,
   ER_TPM_U32_BYTES = 4u,
   ER_TPM_U64_HIGH_OFFSET = 4u,
@@ -32,6 +36,7 @@ enum {
   ER_TPM_BYTE_MASK = 0xffu,
   ER_TPM_MMIO_PAGE_MASK = 0xfffu,
   ER_TPM_MMIO_PAGE_BASE_MIN = 0x1000u,
+  ER_TPM_ACPI_TABLE_LENGTH_OFFSET = 4u,
   ER_TPM_RESPONSE_CODE_OFFSET = 6u,
   ER_TPM_RESPONSE_SIZE_OFFSET = 2u,
   ER_TPM_TPM2B_LEN_BYTES = 2u,
@@ -47,9 +52,13 @@ enum {
   ER_TPM_P256_PUBLIC_MIN_LEN = 24u,
   ER_TPM_TPMT_PUBLIC_FIXED_LEN = 10u,
   ER_TPM_ECC_PARAMS_LEN = 10u,
+  ER_TPM_STARTUP_COMMAND_LEN = 12u,
+  ER_TPM_GET_RANDOM_COMMAND_LEN = 12u,
+  ER_TPM_READ_PUBLIC_COMMAND_LEN = 14u,
   ER_TPM_SIGN_COMMAND_LEN = 73u,
   ER_TPM_FLUSH_CONTEXT_COMMAND_LEN = 14u,
   ER_TPM_SIGNATURE_MAX_COMPONENT_LEN = 32u,
+  ER_TPM_PW_AUTH_AREA_LEN = 9u,
   ER_TPM_START_METHOD_CRB = 6u,
   ER_TPM_START_METHOD_CRB_WITH_ACPI = 7u,
   ER_TPM_START_METHOD_CRB_WITH_SMC = 8u,
@@ -62,13 +71,13 @@ enum {
 };
 
 static UINT16 er_tpm_get_le16(const UINT8* bytes) {
-  return (UINT16)((UINT16)bytes[0] | ((UINT16)bytes[1] << ER_TPM_BYTE_BITS));
+  return (UINT16)((UINT16)bytes[ER_TPM_BYTE0_INDEX] | ((UINT16)bytes[ER_TPM_BYTE1_INDEX] << ER_TPM_BYTE_BITS));
 }
 
 static UINT32 er_tpm_get_le32(const UINT8* bytes) {
-  return (UINT32)((UINT32)bytes[0] | ((UINT32)bytes[1] << ER_TPM_BYTE_BITS) |
-                  ((UINT32)bytes[2] << ER_TPM_U32_MID_BITS) |
-                  ((UINT32)bytes[3] << ER_TPM_U32_HIGH_BITS));
+  return (UINT32)((UINT32)bytes[ER_TPM_BYTE0_INDEX] | ((UINT32)bytes[ER_TPM_BYTE1_INDEX] << ER_TPM_BYTE_BITS) |
+                  ((UINT32)bytes[ER_TPM_BYTE2_INDEX] << ER_TPM_U32_MID_BITS) |
+                  ((UINT32)bytes[ER_TPM_BYTE3_INDEX] << ER_TPM_U32_HIGH_BITS));
 }
 
 static UINT64 er_tpm_get_le64(const UINT8* bytes) {
@@ -77,25 +86,25 @@ static UINT64 er_tpm_get_le64(const UINT8* bytes) {
 }
 
 static UINT16 er_tpm_get_be16(const UINT8* bytes) {
-  return (UINT16)(((UINT16)bytes[0] << ER_TPM_BYTE_BITS) | (UINT16)bytes[1]);
+  return (UINT16)(((UINT16)bytes[ER_TPM_BYTE0_INDEX] << ER_TPM_BYTE_BITS) | (UINT16)bytes[ER_TPM_BYTE1_INDEX]);
 }
 
 static UINT32 er_tpm_get_be32(const UINT8* bytes) {
-  return (UINT32)(((UINT32)bytes[0] << ER_TPM_U32_HIGH_BITS) |
-                  ((UINT32)bytes[1] << ER_TPM_U32_MID_BITS) |
-                  ((UINT32)bytes[2] << ER_TPM_BYTE_BITS) | (UINT32)bytes[3]);
+  return (UINT32)(((UINT32)bytes[ER_TPM_BYTE0_INDEX] << ER_TPM_U32_HIGH_BITS) |
+                  ((UINT32)bytes[ER_TPM_BYTE1_INDEX] << ER_TPM_U32_MID_BITS) |
+                  ((UINT32)bytes[ER_TPM_BYTE2_INDEX] << ER_TPM_BYTE_BITS) | (UINT32)bytes[ER_TPM_BYTE3_INDEX]);
 }
 
 static void er_tpm_put_be16(UINT8* dst, UINT16 value) {
-  dst[0] = (UINT8)((value >> ER_TPM_BYTE_BITS) & ER_TPM_BYTE_MASK);
-  dst[1] = (UINT8)(value & ER_TPM_BYTE_MASK);
+  dst[ER_TPM_BYTE0_INDEX] = (UINT8)((value >> ER_TPM_BYTE_BITS) & ER_TPM_BYTE_MASK);
+  dst[ER_TPM_BYTE1_INDEX] = (UINT8)(value & ER_TPM_BYTE_MASK);
 }
 
 static void er_tpm_put_be32(UINT8* dst, UINT32 value) {
-  dst[0] = (UINT8)((value >> ER_TPM_U32_HIGH_BITS) & ER_TPM_BYTE_MASK);
-  dst[1] = (UINT8)((value >> ER_TPM_U32_MID_BITS) & ER_TPM_BYTE_MASK);
-  dst[2] = (UINT8)((value >> ER_TPM_BYTE_BITS) & ER_TPM_BYTE_MASK);
-  dst[3] = (UINT8)(value & ER_TPM_BYTE_MASK);
+  dst[ER_TPM_BYTE0_INDEX] = (UINT8)((value >> ER_TPM_U32_HIGH_BITS) & ER_TPM_BYTE_MASK);
+  dst[ER_TPM_BYTE1_INDEX] = (UINT8)((value >> ER_TPM_U32_MID_BITS) & ER_TPM_BYTE_MASK);
+  dst[ER_TPM_BYTE2_INDEX] = (UINT8)((value >> ER_TPM_BYTE_BITS) & ER_TPM_BYTE_MASK);
+  dst[ER_TPM_BYTE3_INDEX] = (UINT8)(value & ER_TPM_BYTE_MASK);
 }
 
 static void er_tpm_write_empty_auth_area(UINT8* out_command, UINT32* offset) {
@@ -181,7 +190,7 @@ UINT8 er_tpm_parse_tpm2_table(UINT64 tpm2_address, ErTpm2Info* out_info) {
     return 0;
   }
   er_mem_zero((UINT8*)out_info, (UINTN)sizeof(*out_info));
-  length = er_tpm_get_le32(table + 4u);
+  length = er_tpm_get_le32(table + ER_TPM_ACPI_TABLE_LENGTH_OFFSET);
   if (length < ER_TPM_TPM2_MIN_LEN ||
       er_tpm_get_le32(table) != er_acpi_signature("TPM2") ||
       er_acpi_checksum_valid(table, (UINTN)length) == 0u) {
@@ -359,12 +368,12 @@ UINT8 er_tpm_build_startup_command(UINT16 startup_type,
                                    UINT8* out_command, UINT32 command_capacity,
                                    UINT32* out_command_len) {
   if (out_command_len == 0 ||
-      er_tpm_build_header(ER_TPM_ST_NO_SESSIONS, 12u, ER_TPM_CC_STARTUP,
+      er_tpm_build_header(ER_TPM_ST_NO_SESSIONS, ER_TPM_STARTUP_COMMAND_LEN, ER_TPM_CC_STARTUP,
                           out_command, command_capacity) == 0u) {
     return 0;
   }
   er_tpm_put_be16(out_command + ER_TPM_HEADER_LEN, startup_type);
-  *out_command_len = 12u;
+  *out_command_len = ER_TPM_STARTUP_COMMAND_LEN;
   return 1;
 }
 
@@ -442,12 +451,12 @@ UINT8 er_tpm_build_get_random_command(UINT16 bytes_requested,
                                       UINT8* out_command, UINT32 command_capacity,
                                       UINT32* out_command_len) {
   if (out_command_len == 0 || bytes_requested == 0u ||
-      er_tpm_build_header(ER_TPM_ST_NO_SESSIONS, 12u, ER_TPM_CC_GET_RANDOM,
+      er_tpm_build_header(ER_TPM_ST_NO_SESSIONS, ER_TPM_GET_RANDOM_COMMAND_LEN, ER_TPM_CC_GET_RANDOM,
                           out_command, command_capacity) == 0u) {
     return 0;
   }
   er_tpm_put_be16(out_command + ER_TPM_HEADER_LEN, bytes_requested);
-  *out_command_len = 12u;
+  *out_command_len = ER_TPM_GET_RANDOM_COMMAND_LEN;
   return 1;
 }
 
@@ -455,12 +464,12 @@ UINT8 er_tpm_build_read_public_command(UINT32 handle,
                                        UINT8* out_command, UINT32 command_capacity,
                                        UINT32* out_command_len) {
   if (out_command_len == 0 || handle == 0u ||
-      er_tpm_build_header(ER_TPM_ST_NO_SESSIONS, 14u, ER_TPM_CC_READ_PUBLIC,
+      er_tpm_build_header(ER_TPM_ST_NO_SESSIONS, ER_TPM_READ_PUBLIC_COMMAND_LEN, ER_TPM_CC_READ_PUBLIC,
                           out_command, command_capacity) == 0u) {
     return 0;
   }
   er_tpm_put_be32(out_command + ER_TPM_HEADER_LEN, handle);
-  *out_command_len = 14u;
+  *out_command_len = ER_TPM_READ_PUBLIC_COMMAND_LEN;
   return 1;
 }
 
@@ -480,7 +489,7 @@ UINT8 er_tpm_build_sign_p256_sha256_command(UINT32 handle,
   offset = ER_TPM_HEADER_LEN;
   er_tpm_put_be32(out_command + offset, handle);
   offset += ER_TPM_U32_BYTES;
-  er_tpm_put_be32(out_command + offset, 9u);
+  er_tpm_put_be32(out_command + offset, ER_TPM_PW_AUTH_AREA_LEN);
   offset += ER_TPM_U32_BYTES;
   er_tpm_put_be32(out_command + offset, ER_TPM_RS_PW);
   offset += ER_TPM_U32_BYTES;
