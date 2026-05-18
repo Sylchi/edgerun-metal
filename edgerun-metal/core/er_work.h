@@ -12,7 +12,9 @@
 
 #define ER_HASH_LEN 32u
 #define ER_NODE_ID_LEN 32u
+#define ER_IDENTITY_MATERIAL_MAX 64u
 #define ER_PUBLIC_KEY_LEN 32u
+#define ER_P256_PUBLIC_KEY_LEN 64u
 #define ER_SIGNATURE_LEN 64u
 #define ER_CHANNEL_ADDRESS_MAX 64u
 #define ER_CHANNEL_LABEL_MAX 32u
@@ -75,6 +77,15 @@
 #define ER_CAPABILITY_RISK_RAW_DEVICE 0x00000008u
 #define ER_CAPABILITY_RISK_HOST_PRIVILEGE 0x00000010u
 
+#define ER_IDENTITY_TYPE_PUBLIC_KEY 1u
+#define ER_IDENTITY_TYPE_HASH 2u
+
+#define ER_IDENTITY_BACKING_ED25519 1u
+#define ER_IDENTITY_BACKING_P256 2u
+#define ER_IDENTITY_BACKING_TPM_P256 3u
+#define ER_IDENTITY_BACKING_HASH 4u
+#define ER_IDENTITY_BACKING_EPHEMERAL_HASH 5u
+
 typedef struct {
   UINT8 bytes[ER_HASH_LEN];
 } ErHash;
@@ -84,13 +95,17 @@ typedef struct {
 } ErNodeId;
 
 typedef struct {
-  UINT8 bytes[ER_PUBLIC_KEY_LEN];
-} ErPublicKey;
+  UINT16 identity_type;
+  UINT16 backing_type;
+  UINT16 material_len;
+  UINT16 reserved;
+  UINT8 material[ER_IDENTITY_MATERIAL_MAX];
+} ErIdentity;
 
 typedef struct {
   UINT16 algorithm;
   UINT16 signature_len;
-  ErPublicKey public_key;
+  ErIdentity identity;
   UINT8 signature[ER_SIGNATURE_LEN];
 } ErWorkSignature;
 
@@ -98,7 +113,7 @@ typedef struct {
   UINT16 abi_version;
   UINT16 role;
   ErNodeId node_id;
-  ErPublicKey public_key;
+  ErIdentity identity;
 } ErNodeIdentity;
 
 typedef struct {
@@ -130,7 +145,7 @@ typedef struct {
   UINT16 department;
   UINT16 reserved;
   ErHash request_id;
-  ErPublicKey user;
+  ErIdentity user;
   UINT64 user_sequence;
   ErNodeId recipient;
   ErHash payload_hash;
@@ -144,7 +159,7 @@ typedef struct {
   UINT16 abi_version;
   UINT16 relay_count;
   ErHash admission_id;
-  ErPublicKey user;
+  ErIdentity user;
   ErNodeIdentity admission_node;
   ErHash request_hash;
   ErHash route_commitment;
@@ -190,7 +205,7 @@ typedef struct {
   ErHash route_id;
   ErHash request_hash;
   ErHash admission_hash;
-  ErPublicKey user;
+  ErIdentity user;
   ErNodeId source_node_id;
   ErNodeId target_node_id;
   ErNodeId relay_node_id;

@@ -1,4 +1,5 @@
 #include "er_work_route.h"
+#include "er_identity.h"
 #include "er_mem.h"
 
 /*
@@ -92,13 +93,6 @@ static UINT8 er_work_node_equal(const ErNodeId* left, const ErNodeId* right) {
   return er_mem_equal(left->bytes, right->bytes, ER_NODE_ID_LEN);
 }
 
-static UINT8 er_work_public_key_equal(const ErPublicKey* left, const ErPublicKey* right) {
-  if (left == 0 || right == 0) {
-    return 0;
-  }
-  return er_mem_equal(left->bytes, right->bytes, ER_PUBLIC_KEY_LEN);
-}
-
 static UINT8 er_work_hash_nonzero(const ErHash* value) {
   if (value == 0) {
     return 0;
@@ -165,6 +159,8 @@ static UINT8 er_work_hash_admission(const ErCryptoProvider* crypto,
       admission->abi_version != ER_WORK_ABI_VERSION ||
       admission->admission_node.abi_version != ER_WORK_ABI_VERSION ||
       admission->admission_node.role != ER_NODE_ROLE_ADMISSION ||
+      er_identity_valid(&admission->user) == 0u ||
+      er_identity_valid(&admission->admission_node.identity) == 0u ||
       er_work_hash_nonzero(&admission->admission_id) == 0u ||
       er_work_hash_nonzero(&admission->request_hash) == 0u ||
       er_work_hash_nonzero(&admission->route_commitment) == 0u ||
@@ -211,6 +207,7 @@ static UINT8 er_work_admitted_route_id(const ErCryptoProvider* crypto,
   if (crypto == 0 || route == 0 || out_route_id == 0 ||
       route->abi_version != ER_WORK_ABI_VERSION ||
       route->relay_count == 0u || route->relay_count > ER_ROUTE_RELAY_MAX ||
+      er_identity_valid(&route->user) == 0u ||
       er_work_hash_nonzero(&route->request_hash) == 0u ||
       er_work_hash_nonzero(&route->admission_hash) == 0u ||
       er_work_node_nonzero(&route->source_node_id) == 0u ||
@@ -240,8 +237,8 @@ static UINT8 er_work_admitted_route_id(const ErCryptoProvider* crypto,
   spans[ER_WORK_ADMITTED_REQUEST_SPAN].len = ER_HASH_LEN;
   spans[ER_WORK_ADMITTED_ADMISSION_SPAN].bytes = route->admission_hash.bytes;
   spans[ER_WORK_ADMITTED_ADMISSION_SPAN].len = ER_HASH_LEN;
-  spans[ER_WORK_ADMITTED_USER_SPAN].bytes = route->user.bytes;
-  spans[ER_WORK_ADMITTED_USER_SPAN].len = ER_PUBLIC_KEY_LEN;
+  spans[ER_WORK_ADMITTED_USER_SPAN].bytes = (const UINT8*)&route->user;
+  spans[ER_WORK_ADMITTED_USER_SPAN].len = (UINTN)sizeof(route->user);
   spans[ER_WORK_ADMITTED_SOURCE_SPAN].bytes = route->source_node_id.bytes;
   spans[ER_WORK_ADMITTED_SOURCE_SPAN].len = ER_NODE_ID_LEN;
   spans[ER_WORK_ADMITTED_TARGET_SPAN].bytes = route->target_node_id.bytes;
@@ -283,7 +280,7 @@ UINT8 er_work_admitted_route_from_admission(const ErCryptoProvider* crypto,
       admission->abi_version != ER_WORK_ABI_VERSION ||
       er_work_hash_nonzero(&request->request_id) == 0u ||
       er_work_hash_nonzero(&admission->request_hash) == 0u ||
-      er_work_public_key_equal(&request->user, &admission->user) == 0u ||
+      er_identity_equal(&request->user, &admission->user) == 0u ||
       admission->valid_until_ms > request->valid_until_ms ||
       er_work_relay_path_valid(admission) == 0u ||
       er_work_node_equal(&admission->relay_path[0], relay_node_id) == 0u ||

@@ -21,12 +21,12 @@ typedef struct {
 
 typedef UINT8 (*ErCryptoHashFn)(void* ctx, const UINT8* domain, UINTN domain_len,
                                 const ErByteSpan* spans, UINTN span_count, ErHash* out_hash);
-typedef UINT8 (*ErCryptoSealFn)(void* ctx, const ErPublicKey* recipient, const ErByteSpan* aad,
+typedef UINT8 (*ErCryptoSealFn)(void* ctx, const ErIdentity* recipient, const ErByteSpan* aad,
                                 const ErByteSpan* plaintext, ErMutableBytes* sealed_out);
-typedef UINT8 (*ErCryptoOpenFn)(void* ctx, const ErPublicKey* recipient, const ErByteSpan* aad,
+typedef UINT8 (*ErCryptoOpenFn)(void* ctx, const ErIdentity* recipient, const ErByteSpan* aad,
                                 const ErByteSpan* sealed, ErMutableBytes* plaintext_out);
 typedef UINT8 (*ErCryptoSignFn)(void* ctx, const ErByteSpan* preimage, ErWorkSignature* out_signature);
-typedef UINT8 (*ErCryptoVerifyFn)(void* ctx, const ErPublicKey* public_key, const ErByteSpan* preimage,
+typedef UINT8 (*ErCryptoVerifyFn)(void* ctx, const ErIdentity* identity, const ErByteSpan* preimage,
                                   const ErWorkSignature* signature);
 
 typedef struct {

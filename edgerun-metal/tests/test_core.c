@@ -8,6 +8,7 @@
 #include "er_bus.h"
 #include "er_crypto_blake3.h"
 #include "er_device_identity.h"
+#include "er_identity.h"
 #include "er_hw_relay.h"
 #include "er_native_eth.h"
 #include "er_native_boot.h"
@@ -2247,8 +2248,12 @@ static void test_app_identity_routes(void) {
 
 static void test_device_relay_identity(void) {
   ErCryptoProvider crypto;
-  ErPublicKey hardware_key;
-  ErPublicKey ephemeral_key;
+  UINT8 hardware_key[ER_P256_PUBLIC_KEY_LEN];
+  UINT8 ephemeral_key[ER_PUBLIC_KEY_LEN];
+  UINT8 hash_material[ER_HASH_LEN];
+  ErIdentity hardware_identity;
+  ErIdentity ephemeral_identity;
+  ErIdentity hash_identity;
   ErHash program_hash;
   ErHash other_program_hash;
   ErDeviceIdentity hardware_device;
@@ -2265,30 +2270,66 @@ static void test_device_relay_identity(void) {
   crypto.sign = 0;
   crypto.verify = 0;
 
-  test_fill_bytes(hardware_key.bytes, ER_PUBLIC_KEY_LEN, 0x21u);
-  test_fill_bytes(ephemeral_key.bytes, ER_PUBLIC_KEY_LEN, 0x41u);
+  test_fill_bytes(hardware_key, ER_P256_PUBLIC_KEY_LEN, 0x21u);
+  test_fill_bytes(ephemeral_key, ER_PUBLIC_KEY_LEN, 0x41u);
+  test_fill_bytes(hash_material, ER_HASH_LEN, 0x51u);
   test_fill_bytes(program_hash.bytes, ER_HASH_LEN, 0x61u);
   test_fill_bytes(other_program_hash.bytes, ER_HASH_LEN, 0x62u);
 
+  check_int64("identity prepare tpm p256",
+              er_identity_prepare(ER_IDENTITY_TYPE_PUBLIC_KEY,
+                                  ER_IDENTITY_BACKING_TPM_P256,
+                                  hardware_key, ER_P256_PUBLIC_KEY_LEN,
+                                  &hardware_identity),
+              1);
+  check_int64("identity prepare ed25519",
+              er_identity_prepare(ER_IDENTITY_TYPE_PUBLIC_KEY,
+                                  ER_IDENTITY_BACKING_ED25519,
+                                  ephemeral_key, ER_PUBLIC_KEY_LEN,
+                                  &ephemeral_identity),
+              1);
+  check_int64("identity prepare hash",
+              er_identity_prepare(ER_IDENTITY_TYPE_HASH,
+                                  ER_IDENTITY_BACKING_HASH,
+                                  hash_material, ER_HASH_LEN,
+                                  &hash_identity),
+              1);
+  check_int64("identity reject p256 short",
+              er_identity_prepare(ER_IDENTITY_TYPE_PUBLIC_KEY,
+                                  ER_IDENTITY_BACKING_TPM_P256,
+                                  hardware_key, ER_PUBLIC_KEY_LEN,
+                                  &hardware_identity),
+              0);
+  check_int64("identity reject hash as ed25519",
+              er_identity_prepare(ER_IDENTITY_TYPE_HASH,
+                                  ER_IDENTITY_BACKING_ED25519,
+                                  hash_material, ER_HASH_LEN,
+                                  &hash_identity),
+              0);
+
   check_int64("device identity hardware prepare",
               er_device_identity_prepare(ER_DEVICE_IDENTITY_KIND_HARDWARE,
-                                         &hardware_key, &hardware_device),
+                                         &hardware_identity, &hardware_device),
               1);
   check_int64("device identity ephemeral prepare",
               er_device_identity_prepare(ER_DEVICE_IDENTITY_KIND_EPHEMERAL,
-                                         &ephemeral_key, &ephemeral_device),
+                                         &ephemeral_identity, &ephemeral_device),
               1);
   check_int64("device identity reject kind",
-              er_device_identity_prepare(99u, &hardware_key, &hardware_device), 0);
-  er_mem_zero(hardware_key.bytes, ER_PUBLIC_KEY_LEN);
+              er_device_identity_prepare(99u, &hardware_identity, &hardware_device), 0);
+  er_mem_zero(hardware_identity.material, ER_IDENTITY_MATERIAL_MAX);
   check_int64("device identity reject zero key",
               er_device_identity_prepare(ER_DEVICE_IDENTITY_KIND_HARDWARE,
-                                         &hardware_key, &hardware_device),
+                                         &hardware_identity, &hardware_device),
               0);
-  test_fill_bytes(hardware_key.bytes, ER_PUBLIC_KEY_LEN, 0x21u);
+  test_fill_bytes(hardware_key, ER_P256_PUBLIC_KEY_LEN, 0x21u);
+  (void)er_identity_prepare(ER_IDENTITY_TYPE_PUBLIC_KEY,
+                            ER_IDENTITY_BACKING_TPM_P256,
+                            hardware_key, ER_P256_PUBLIC_KEY_LEN,
+                            &hardware_identity);
   check_int64("device identity hardware restore",
               er_device_identity_prepare(ER_DEVICE_IDENTITY_KIND_HARDWARE,
-                                         &hardware_key, &hardware_device),
+                                         &hardware_identity, &hardware_device),
               1);
 
   check_int64("device relay hardware derive",
@@ -2299,8 +2340,11 @@ static void test_device_relay_identity(void) {
   check_int64("device relay trust kind", hardware_relay.trust_kind,
               ER_DEVICE_IDENTITY_KIND_HARDWARE);
   check_int64("device relay role", hardware_relay.relay_node.role, ER_NODE_ROLE_RELAY);
-  check_uint64("device relay public key byte0",
-               hardware_relay.relay_node.public_key.bytes[0], 0x21u);
+  check_int64("device relay identity backing",
+              hardware_relay.relay_node.identity.backing_type,
+              ER_IDENTITY_BACKING_TPM_P256);
+  check_uint64("device relay identity byte0",
+               hardware_relay.relay_node.identity.material[0], 0x21u);
   check_int64("device relay deterministic derive",
               er_device_relay_identity_derive(&crypto, &hardware_device,
                                               &program_hash, &hardware_relay_again),
@@ -2346,6 +2390,8 @@ static void test_work_admitted_relay_route(void) {
   ErHash channel_id;
   ErHash input_hash;
   ErHash previous_transit_hash;
+  UINT8 user_material[ER_PUBLIC_KEY_LEN];
+  UINT8 admission_material[ER_PUBLIC_KEY_LEN];
   ErAdmittedRoute route;
   ErAdmittedRoute route_again;
   ErRelayForwardIntent intent;
@@ -2374,12 +2420,19 @@ static void test_work_admitted_relay_route(void) {
   test_fill_bytes(channel_id.bytes, ER_HASH_LEN, 0x66u);
   test_fill_bytes(input_hash.bytes, ER_HASH_LEN, 0x77u);
   test_fill_bytes(previous_transit_hash.bytes, ER_HASH_LEN, 0x88u);
+  test_fill_bytes(user_material, ER_PUBLIC_KEY_LEN, 0x92u);
+  test_fill_bytes(admission_material, ER_PUBLIC_KEY_LEN, 0xa2u);
 
   request.abi_version = ER_WORK_ABI_VERSION;
   request.work_type = ER_WORK_TYPE_CAPABILITY_INVOKE;
   request.department = ER_DEPARTMENT_CAPABILITY;
   test_fill_bytes(request.request_id.bytes, ER_HASH_LEN, 0x91u);
-  test_fill_bytes(request.user.bytes, ER_PUBLIC_KEY_LEN, 0x92u);
+  check_int64("work request user identity",
+              er_identity_prepare(ER_IDENTITY_TYPE_PUBLIC_KEY,
+                                  ER_IDENTITY_BACKING_ED25519,
+                                  user_material, ER_PUBLIC_KEY_LEN,
+                                  &request.user),
+              1);
   request.user_sequence = 3u;
   request.recipient = target_node_id;
   test_fill_bytes(request.payload_hash.bytes, ER_HASH_LEN, 0x93u);
@@ -2394,7 +2447,12 @@ static void test_work_admitted_relay_route(void) {
   admission.admission_node.abi_version = ER_WORK_ABI_VERSION;
   admission.admission_node.role = ER_NODE_ROLE_ADMISSION;
   test_fill_bytes(admission.admission_node.node_id.bytes, ER_NODE_ID_LEN, 0xa2u);
-  test_fill_bytes(admission.admission_node.public_key.bytes, ER_PUBLIC_KEY_LEN, 0xa2u);
+  check_int64("work admission node identity",
+              er_identity_prepare(ER_IDENTITY_TYPE_PUBLIC_KEY,
+                                  ER_IDENTITY_BACKING_ED25519,
+                                  admission_material, ER_PUBLIC_KEY_LEN,
+                                  &admission.admission_node.identity),
+              1);
   test_fill_bytes(admission.request_hash.bytes, ER_HASH_LEN, 0xa3u);
   test_fill_bytes(admission.route_commitment.bytes, ER_HASH_LEN, 0xa4u);
   admission.channel.abi_version = ER_WORK_ABI_VERSION;
