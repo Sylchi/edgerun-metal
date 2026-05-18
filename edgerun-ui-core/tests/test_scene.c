@@ -149,6 +149,7 @@ void run_shell_tests(void);
 void run_component_tests(void);
 void run_demo_apps_tests(void);
 void run_initial_setup_tests(void);
+void run_asset_tests(void);
 void run_node_tests(void);
 void run_preset_code_tests(void);
 void run_record_codec_tests(void);
@@ -606,6 +607,7 @@ int main(void) {
   run_text_tests();
   run_demo_apps_tests();
   run_initial_setup_tests();
+  run_asset_tests();
   run_preset_code_tests();
   run_record_codec_tests();
   run_spacing_tests();

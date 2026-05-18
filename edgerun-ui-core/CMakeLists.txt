@@ -11,6 +11,7 @@ if(NOT TARGET vrfont)
 endif()
 
 add_library(er_ui_core
+  src/er_ui_assets.c
   src/er_ui_components.c
   src/er_ui_demo_apps.c
   src/er_ui_icon.c
@@ -44,6 +45,7 @@ if(ER_UI_CORE_BUILD_TESTS)
   enable_testing()
 
 add_executable(er_ui_core_tests
+    tests/test_assets.c
     tests/test_components.c
     tests/test_demo_apps.c
     tests/test_initial_setup.c
