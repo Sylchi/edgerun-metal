@@ -17,6 +17,7 @@
 #include "er_netlog.h"
 #include "er_ps2_keyboard.h"
 #include "er_relay_packet.h"
+#include "er_render_endpoint.h"
 #include "er_tpm.h"
 #include "er_work_route.h"
 #include "er_gfx_console.h"
@@ -3950,10 +3951,12 @@ static void test_work_admitted_relay_route(void) {
   ErRelayAccountingClaim claim;
   ErCapabilityEnvelopeHeader capability_header;
   ErCapabilityEnvelopeHeader bad_capability_header;
+  ErRenderEndpointCapture render_capture;
+  ErRenderEndpointCapture render_capture_again;
+  ErAdmittedRoute bad_render_route;
   ErHash session_id;
   ErHash invocation_id;
   ErHash capability_id;
-  ErHash scene_hash;
 
   crypto.ctx = (void*)(UINTN)11u;
   crypto.hash = test_hash;
@@ -3978,7 +3981,6 @@ static void test_work_admitted_relay_route(void) {
   test_fill_bytes(session_id.bytes, ER_HASH_LEN, 0xc1u);
   test_fill_bytes(invocation_id.bytes, ER_HASH_LEN, 0xd1u);
   test_fill_bytes(capability_id.bytes, ER_HASH_LEN, 0xe1u);
-  test_fill_bytes(scene_hash.bytes, ER_HASH_LEN, 0xf1u);
   test_fill_bytes(user_material, ER_PUBLIC_KEY_LEN, 0x92u);
   test_fill_bytes(admission_material, ER_PUBLIC_KEY_LEN, 0xa2u);
 
@@ -4140,9 +4142,9 @@ static void test_work_admitted_relay_route(void) {
                                                          &capability_id,
                                                          &source_node_id,
                                                          &target_node_id,
-                                                         11u,
+                                                         envelope.sequence,
                                                          120000u,
-                                                         &scene_hash,
+                                                         &envelope.packet_hash,
                                                          64u,
                                                          &capability_header),
               1);
@@ -4162,6 +4164,62 @@ static void test_work_admitted_relay_route(void) {
   er_mem_zero(bad_capability_header.payload_hash.bytes, ER_HASH_LEN);
   check_int64("work capability reject zero payload hash",
               er_work_capability_envelope_header_valid(&bad_capability_header), 0);
+
+  check_int64("render endpoint capture",
+              er_render_endpoint_capture(&crypto, &route, &envelope,
+                                         &capability_header, &render_capture),
+              1);
+  check_int64("render capture abi", render_capture.abi_version,
+              ER_RENDER_ENDPOINT_ABI_VERSION);
+  check_hash_equal("render capture route", &render_capture.route_id,
+                   &route.route_id);
+  check_hash_equal("render capture capability",
+                   &render_capture.capability_id, &capability_id);
+  check_hash_equal("render capture scene hash", &render_capture.scene_hash,
+                   &envelope.packet_hash);
+  check_node_id_equal("render capture source", &render_capture.source_node_id,
+                      &source_node_id);
+  check_node_id_equal("render capture target", &render_capture.target_node_id,
+                      &target_node_id);
+  check_uint64("render capture sequence", render_capture.sequence,
+               envelope.sequence);
+  check_uint64("render capture scene bytes", render_capture.scene_bytes, 64u);
+  check_int64("render endpoint deterministic",
+              er_render_endpoint_capture(&crypto, &route, &envelope,
+                                         &capability_header,
+                                         &render_capture_again),
+              1);
+  check_hash_equal("render capture deterministic id",
+                   &render_capture_again.capture_id,
+                   &render_capture.capture_id);
+  bad_capability_header = capability_header;
+  bad_capability_header.content_type = ER_CAPABILITY_CONTENT_OBJECT;
+  check_int64("render endpoint reject object content",
+              er_render_endpoint_capture(&crypto, &route, &envelope,
+                                         &bad_capability_header,
+                                         &render_capture_again),
+              0);
+  bad_capability_header = capability_header;
+  bad_capability_header.target_node_id = wrong_relay_node_id;
+  check_int64("render endpoint reject target mismatch",
+              er_render_endpoint_capture(&crypto, &route, &envelope,
+                                         &bad_capability_header,
+                                         &render_capture_again),
+              0);
+  bad_capability_header = capability_header;
+  ++bad_capability_header.sequence;
+  check_int64("render endpoint reject sequence mismatch",
+              er_render_endpoint_capture(&crypto, &route, &envelope,
+                                         &bad_capability_header,
+                                         &render_capture_again),
+              0);
+  bad_render_route = route;
+  bad_render_route.department = ER_DEPARTMENT_STORAGE;
+  check_int64("render endpoint reject department",
+              er_render_endpoint_capture(&crypto, &bad_render_route, &envelope,
+                                         &capability_header,
+                                         &render_capture_again),
+              0);
 }
 
 static void test_boot_profiles(void) {
