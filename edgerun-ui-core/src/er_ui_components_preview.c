@@ -519,6 +519,70 @@ static er_ui_status_t er_ui_component_showcase_card_emit(
   return status;
 }
 
+static float er_ui_component_showcase_card_height(const er_ui_component_spec_t* spec) {
+  if (!spec) return ER_UI_COMPONENT_SHOWCASE_CARD_H;
+  if (er_ui_component_streq(spec->slug, "card") ||
+      er_ui_component_streq(spec->slug, "chart") ||
+      er_ui_component_streq(spec->slug, "data-table") ||
+      er_ui_component_streq(spec->slug, "table") ||
+      er_ui_component_streq(spec->slug, "calendar") ||
+      er_ui_component_streq(spec->slug, "date-picker") ||
+      er_ui_component_streq(spec->slug, "form") ||
+      er_ui_component_streq(spec->slug, "sheet") ||
+      er_ui_component_streq(spec->slug, "dialog") ||
+      er_ui_component_streq(spec->slug, "alert-dialog") ||
+      er_ui_component_streq(spec->slug, "combobox") ||
+      er_ui_component_streq(spec->slug, "navigation-menu")) {
+    return 292.0f;
+  }
+  if (er_ui_component_streq(spec->slug, "accordion") ||
+      er_ui_component_streq(spec->slug, "collapsible") ||
+      er_ui_component_streq(spec->slug, "context-menu") ||
+      er_ui_component_streq(spec->slug, "dropdown-menu") ||
+      er_ui_component_streq(spec->slug, "popover") ||
+      er_ui_component_streq(spec->slug, "radio-group") ||
+      er_ui_component_streq(spec->slug, "scroll-area") ||
+      er_ui_component_streq(spec->slug, "tabs") ||
+      er_ui_component_streq(spec->slug, "textarea")) {
+    return 250.0f;
+  }
+  if (er_ui_component_streq(spec->slug, "button") ||
+      er_ui_component_streq(spec->slug, "button-group") ||
+      er_ui_component_streq(spec->slug, "badge") ||
+      er_ui_component_streq(spec->slug, "avatar") ||
+      er_ui_component_streq(spec->slug, "separator") ||
+      er_ui_component_streq(spec->slug, "skeleton") ||
+      er_ui_component_streq(spec->slug, "spinner") ||
+      er_ui_component_streq(spec->slug, "switch") ||
+      er_ui_component_streq(spec->slug, "toggle") ||
+      er_ui_component_streq(spec->slug, "toggle-group")) {
+    return 176.0f;
+  }
+  return ER_UI_COMPONENT_SHOWCASE_CARD_H;
+}
+
+static size_t er_ui_component_showcase_column_count(er_ui_bounds_t bounds) {
+  size_t columns = (size_t)((bounds.w + ER_UI_COMPONENT_SHOWCASE_GRID_GAP) /
+                            (ER_UI_COMPONENT_SHOWCASE_GRID_MIN_CARD_W + ER_UI_COMPONENT_SHOWCASE_GRID_GAP));
+  if (columns < 1u) columns = 1u;
+  if (columns > ER_UI_COMPONENT_SHOWCASE_GRID_MAX_COLUMNS) columns = ER_UI_COMPONENT_SHOWCASE_GRID_MAX_COLUMNS;
+  return columns;
+}
+
+static er_ui_bounds_t er_ui_component_showcase_masonry_cell(
+  er_ui_bounds_t content,
+  const float* column_y,
+  size_t column,
+  size_t column_count,
+  float height) {
+  float gap_total = ER_UI_COMPONENT_SHOWCASE_GRID_GAP * (float)(column_count - 1u);
+  float card_w = (content.w - gap_total) / (float)column_count;
+  return er_ui_bounds(content.x + (card_w + ER_UI_COMPONENT_SHOWCASE_GRID_GAP) * (float)column,
+                      column_y[column],
+                      card_w,
+                      height);
+}
+
 er_ui_status_t er_ui_component_showcase_emit(
   er_ui_scene_t* scene,
   vr_font_face_t* font,
@@ -534,15 +598,23 @@ er_ui_status_t er_ui_component_showcase_emit(
   er_ui_status_t status = er_ui_scene_push_rect(scene, er_ui_rect_fill(bounds.x, bounds.y, bounds.w, bounds.h, 0.0f, theme.colors.bg));
   if (status != ER_UI_OK) return status;
   er_ui_bounds_t grid_bounds = er_ui_bounds_inset(bounds, ER_UI_COMPONENT_SHOWCASE_GRID_GAP, ER_UI_COMPONENT_SHOWCASE_GRID_GAP);
-  er_ui_responsive_grid_t grid = er_ui_responsive_grid(grid_bounds,
-                                                       ER_UI_COMPONENT_SHOWCASE_GRID_MIN_CARD_W,
-                                                       ER_UI_COMPONENT_SHOWCASE_GRID_MAX_COLUMNS,
-                                                       ER_UI_COMPONENT_SHOWCASE_GRID_GAP,
-                                                       ER_UI_COMPONENT_SHOWCASE_GRID_GAP);
-  if (grid.columns == 0u) return ER_UI_ERR_INVALID_ARGUMENT;
-  float row_h = ER_UI_COMPONENT_SHOWCASE_CARD_H;
-  float content_h = er_ui_responsive_grid_height(grid, er_ui_component_count(), row_h);
-  er_ui_scroll_viewport_t viewport = er_ui_scroll_viewport(grid.bounds,
+  size_t columns = er_ui_component_showcase_column_count(grid_bounds);
+  float measure_y[ER_UI_COMPONENT_SHOWCASE_GRID_MAX_COLUMNS] = {0};
+  for (size_t i = 0u; i < columns; ++i) measure_y[i] = grid_bounds.y;
+  for (size_t i = 0u; i < er_ui_component_count(); ++i) {
+    const er_ui_component_spec_t* spec = er_ui_component_at(i);
+    size_t column = 0u;
+    for (size_t j = 1u; j < columns; ++j) {
+      if (measure_y[j] < measure_y[column]) column = j;
+    }
+    measure_y[column] += er_ui_component_showcase_card_height(spec) + ER_UI_COMPONENT_SHOWCASE_GRID_GAP;
+  }
+  float content_bottom = measure_y[0u];
+  for (size_t i = 1u; i < columns; ++i) {
+    if (measure_y[i] > content_bottom) content_bottom = measure_y[i];
+  }
+  float content_h = er_ui_float_max(content_bottom - grid_bounds.y - ER_UI_COMPONENT_SHOWCASE_GRID_GAP, 1.0f);
+  er_ui_scroll_viewport_t viewport = er_ui_scroll_viewport(grid_bounds,
                                                            content_h,
                                                            0.0f,
                                                            ER_UI_COMPONENT_SHOWCASE_SCROLL_THUMB_MIN_H);
@@ -550,15 +622,21 @@ er_ui_status_t er_ui_component_showcase_emit(
                                                  viewport.viewport.x, viewport.viewport.y,
                                                  viewport.viewport.w, viewport.viewport.h));
   if (status != ER_UI_OK) return status;
-  er_ui_responsive_grid_t content_grid = grid;
-  content_grid.bounds = viewport.content;
+  float column_y[ER_UI_COMPONENT_SHOWCASE_GRID_MAX_COLUMNS] = {0};
+  for (size_t i = 0u; i < columns; ++i) column_y[i] = viewport.content.y;
   bool pushed = false;
   status = er_ui_scene_push_clip(scene, er_ui_clip(viewport.viewport.x, viewport.viewport.y, viewport.viewport.w, viewport.viewport.h), &pushed);
   if (status != ER_UI_OK) return status;
   for (size_t i = 0u; i < er_ui_component_count(); ++i) {
     const er_ui_component_spec_t* spec = er_ui_component_at(i);
-    er_ui_bounds_t card = er_ui_responsive_grid_cell(content_grid, i, row_h);
     if (!spec) continue;
+    size_t column = 0u;
+    for (size_t j = 1u; j < columns; ++j) {
+      if (column_y[j] < column_y[column]) column = j;
+    }
+    float card_h = er_ui_component_showcase_card_height(spec);
+    er_ui_bounds_t card = er_ui_component_showcase_masonry_cell(viewport.content, column_y, column, columns, card_h);
+    column_y[column] += card_h + ER_UI_COMPONENT_SHOWCASE_GRID_GAP;
     if (card.y >= viewport.viewport.y + viewport.viewport.h || card.y + card.h <= viewport.viewport.y) continue;
     status = er_ui_component_showcase_card_emit(scene,
                                                 font,
