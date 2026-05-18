@@ -8,9 +8,9 @@
 extern "C" {
 #endif
 
-#define ER_UI_DEMO_APP_RESOURCES_ID 0xED020001u
-#define ER_UI_DEMO_APP_NETWORK_ID 0xED020002u
-#define ER_UI_DEMO_APP_PEOPLE_ID 0xED020003u
+#define ER_UI_DEMO_APP_LEDGER_ID 0xED020001u
+#define ER_UI_DEMO_APP_PAYMENTS_ID 0xED020002u
+#define ER_UI_DEMO_APP_ACCESS_ID 0xED020003u
 
 typedef struct {
   er_ui_shell_state_t shell;
