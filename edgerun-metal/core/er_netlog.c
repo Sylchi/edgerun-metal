@@ -87,6 +87,7 @@ static void er_netlog_clear_text(void) {
   g_text_len = 0;
 }
 
+//@optimizer-ignore-function UEFI UDP4 completion requires bounded firmware Poll calls while transmit is busy
 static UINT8 er_netlog_wait_idle(UINT32 poll_limit) {
   UINT32 i;
 
@@ -131,6 +132,7 @@ static void er_netlog_zero_config(EFI_UDP4_CONFIG_DATA* config) {
   config->RemotePort = ER_NETLOG_PORT;
 }
 
+//@optimizer-ignore-function UEFI UDP4 setup must probe firmware service-binding handles until a usable child is found
 void er_netlog_init(EFI_SYSTEM_TABLE* st) {
   EFI_HANDLE* handles = 0;
   UINTN handle_count = 0;
@@ -263,6 +265,7 @@ void er_netlog_write_bytes(const UINT8* data, UINTN len) {
   (void)er_netlog_write_bytes_wait(data, len, ER_NETLOG_BEST_EFFORT_POLLS);
 }
 
+//@optimizer-ignore-function UDP4 transmit fragments must copy into stable storage and call firmware Transmit per datagram
 UINT8 er_netlog_write_bytes_wait(const UINT8* data, UINTN len, UINT32 poll_limit) {
   UINTN remaining = len;
   UINTN offset = 0;
