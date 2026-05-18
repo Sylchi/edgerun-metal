@@ -1407,6 +1407,208 @@ static size_t er_blake3_chunk_len(const ErBlake3Hasher* hasher) {
   return ((size_t)hasher->blocks_compressed * ER_BLAKE3_BLOCK_LEN) + hasher->block_len;
 }
 
+static uint8_t er_blake3_ready_for_full_chunks(const ErBlake3Hasher* hasher) {
+  return (uint8_t)(hasher->block_len == 0u && hasher->blocks_compressed == 0u);
+}
+
+#if defined(ER_BLAKE3_USE_AVX512)
+static uint8_t er_blake3_consume_avx512_subtree32(ErBlake3Hasher* hasher,
+                                                  const uint8_t** bytes,
+                                                  size_t* len) {
+  uint32_t cvs[ER_BLAKE3_AVX512_LANES][ER_BLAKE3_CV_WORDS];
+  uint32_t left_cv[ER_BLAKE3_CV_WORDS];
+  uint32_t right_cv[ER_BLAKE3_CV_WORDS];
+  uint32_t subtree_cv[ER_BLAKE3_CV_WORDS];
+
+  if (er_blake3_ready_for_full_chunks(hasher) == 0u ||
+      (hasher->chunk_counter & ER_BLAKE3_AVX512_SUBTREE32_MASK) != 0u ||
+      *len <= (ER_BLAKE3_AVX512_SUBTREE32_CHUNKS * ER_BLAKE3_CHUNK_LEN)) {
+    return 2u;
+  }
+
+  er_blake3_avx512_compress16_full_chunks(*bytes, hasher->chunk_counter, hasher->flags, cvs);
+  er_blake3_subtree16_cv(cvs, left_cv);
+  er_blake3_avx512_compress16_full_chunks(*bytes + (ER_BLAKE3_AVX512_LANES * ER_BLAKE3_CHUNK_LEN),
+                                          hasher->chunk_counter + ER_BLAKE3_AVX512_LANES,
+                                          hasher->flags, cvs);
+  er_blake3_subtree16_cv(cvs, right_cv);
+  hasher->chunk_counter += ER_BLAKE3_AVX512_SUBTREE32_CHUNKS;
+  er_blake3_parent_cv(left_cv, right_cv, subtree_cv);
+  if (er_blake3_push_cv_at_level(hasher, subtree_cv, hasher->chunk_counter,
+                                 ER_BLAKE3_AVX512_SUBTREE32_LEVEL) == 0u) {
+    return 0u;
+  }
+  *bytes += ER_BLAKE3_AVX512_SUBTREE32_CHUNKS * ER_BLAKE3_CHUNK_LEN;
+  *len -= ER_BLAKE3_AVX512_SUBTREE32_CHUNKS * ER_BLAKE3_CHUNK_LEN;
+  return 1u;
+}
+
+static uint8_t er_blake3_consume_avx512_subtree16(ErBlake3Hasher* hasher,
+                                                  const uint8_t** bytes,
+                                                  size_t* len) {
+  uint32_t cvs[ER_BLAKE3_AVX512_LANES][ER_BLAKE3_CV_WORDS];
+  uint32_t subtree_cv[ER_BLAKE3_CV_WORDS];
+
+  if (er_blake3_ready_for_full_chunks(hasher) == 0u ||
+      (hasher->chunk_counter & ER_BLAKE3_AVX2_SUBTREE16_MASK) != 0u ||
+      *len <= (ER_BLAKE3_AVX512_LANES * ER_BLAKE3_CHUNK_LEN)) {
+    return 2u;
+  }
+
+  er_blake3_avx512_compress16_full_chunks(*bytes, hasher->chunk_counter, hasher->flags, cvs);
+  hasher->chunk_counter += ER_BLAKE3_AVX512_LANES;
+  er_blake3_subtree16_cv(cvs, subtree_cv);
+  if (er_blake3_push_cv_at_level(hasher, subtree_cv, hasher->chunk_counter,
+                                 ER_BLAKE3_AVX2_SUBTREE16_LEVEL) == 0u) {
+    return 0u;
+  }
+  *bytes += ER_BLAKE3_AVX512_LANES * ER_BLAKE3_CHUNK_LEN;
+  *len -= ER_BLAKE3_AVX512_LANES * ER_BLAKE3_CHUNK_LEN;
+  return 1u;
+}
+#endif
+
+#if defined(ER_BLAKE3_USE_AVX2)
+static uint8_t er_blake3_consume_avx2_subtree16(ErBlake3Hasher* hasher,
+                                                const uint8_t** bytes,
+                                                size_t* len) {
+  uint32_t cvs[ER_BLAKE3_AVX2_SUBTREE16_CHUNKS][ER_BLAKE3_CV_WORDS];
+  uint32_t subtree_cv[ER_BLAKE3_CV_WORDS];
+
+  if (er_blake3_ready_for_full_chunks(hasher) == 0u ||
+      (hasher->chunk_counter & ER_BLAKE3_AVX2_SUBTREE16_MASK) != 0u ||
+      *len <= (ER_BLAKE3_AVX2_SUBTREE16_CHUNKS * ER_BLAKE3_CHUNK_LEN)) {
+    return 2u;
+  }
+
+  er_blake3_avx2_compress8_full_chunks(*bytes, hasher->chunk_counter, hasher->flags, cvs);
+  er_blake3_avx2_compress8_full_chunks(*bytes + (ER_BLAKE3_AVX2_LANES * ER_BLAKE3_CHUNK_LEN),
+                                       hasher->chunk_counter + ER_BLAKE3_AVX2_LANES,
+                                       hasher->flags, &cvs[ER_BLAKE3_AVX2_LANES]);
+  hasher->chunk_counter += ER_BLAKE3_AVX2_SUBTREE16_CHUNKS;
+  er_blake3_subtree16_cv(cvs, subtree_cv);
+  if (er_blake3_push_cv_at_level(hasher, subtree_cv, hasher->chunk_counter,
+                                 ER_BLAKE3_AVX2_SUBTREE16_LEVEL) == 0u) {
+    return 0u;
+  }
+  *bytes += ER_BLAKE3_AVX2_SUBTREE16_CHUNKS * ER_BLAKE3_CHUNK_LEN;
+  *len -= ER_BLAKE3_AVX2_SUBTREE16_CHUNKS * ER_BLAKE3_CHUNK_LEN;
+  return 1u;
+}
+
+static uint8_t er_blake3_consume_avx2_subtree8(ErBlake3Hasher* hasher,
+                                               const uint8_t** bytes,
+                                               size_t* len) {
+  uint32_t cvs[ER_BLAKE3_AVX2_LANES][ER_BLAKE3_CV_WORDS];
+  uint32_t subtree_cv[ER_BLAKE3_CV_WORDS];
+
+  if (er_blake3_ready_for_full_chunks(hasher) == 0u ||
+      (hasher->chunk_counter & ER_BLAKE3_AVX2_CHUNK_GROUP_MASK) != 0u ||
+      *len <= (ER_BLAKE3_AVX2_LANES * ER_BLAKE3_CHUNK_LEN)) {
+    return 2u;
+  }
+
+  er_blake3_avx2_compress8_full_chunks(*bytes, hasher->chunk_counter, hasher->flags, cvs);
+  hasher->chunk_counter += ER_BLAKE3_AVX2_LANES;
+  er_blake3_subtree8_cv(cvs, subtree_cv);
+  if (er_blake3_push_cv_at_level(hasher, subtree_cv, hasher->chunk_counter,
+                                 ER_BLAKE3_AVX2_CHUNK_GROUP_LEVEL) == 0u) {
+    return 0u;
+  }
+  *bytes += ER_BLAKE3_AVX2_LANES * ER_BLAKE3_CHUNK_LEN;
+  *len -= ER_BLAKE3_AVX2_LANES * ER_BLAKE3_CHUNK_LEN;
+  return 1u;
+}
+#endif
+
+#if defined(ER_BLAKE3_USE_SSE2)
+static uint8_t er_blake3_consume_sse2_lanes(ErBlake3Hasher* hasher,
+                                            const uint8_t** bytes,
+                                            size_t* len) {
+  uint32_t cvs[ER_BLAKE3_SSE2_LANES][ER_BLAKE3_CV_WORDS];
+  size_t lane;
+
+  if (er_blake3_ready_for_full_chunks(hasher) == 0u ||
+      *len <= (ER_BLAKE3_SSE2_LANES * ER_BLAKE3_CHUNK_LEN)) {
+    return 2u;
+  }
+
+  er_blake3_sse2_compress4_full_chunks(*bytes, hasher->chunk_counter, hasher->flags, cvs);
+  for (lane = 0u; lane < ER_BLAKE3_SSE2_LANES; ++lane) {
+    ++hasher->chunk_counter;
+    if (er_blake3_push_cv(hasher, cvs[lane], hasher->chunk_counter) == 0u) {
+      return 0u;
+    }
+  }
+  *bytes += ER_BLAKE3_SSE2_LANES * ER_BLAKE3_CHUNK_LEN;
+  *len -= ER_BLAKE3_SSE2_LANES * ER_BLAKE3_CHUNK_LEN;
+  return 1u;
+}
+#endif
+
+static uint8_t er_blake3_consume_full_chunks(ErBlake3Hasher* hasher,
+                                             const uint8_t** bytes,
+                                             size_t* len) {
+  uint8_t consumed;
+
+#if defined(ER_BLAKE3_USE_AVX512)
+  consumed = er_blake3_consume_avx512_subtree32(hasher, bytes, len);
+  if (consumed != 2u) return consumed;
+  consumed = er_blake3_consume_avx512_subtree16(hasher, bytes, len);
+  if (consumed != 2u) return consumed;
+#endif
+
+#if defined(ER_BLAKE3_USE_AVX2)
+  consumed = er_blake3_consume_avx2_subtree16(hasher, bytes, len);
+  if (consumed != 2u) return consumed;
+  consumed = er_blake3_consume_avx2_subtree8(hasher, bytes, len);
+  if (consumed != 2u) return consumed;
+#endif
+
+#if defined(ER_BLAKE3_USE_SSE2)
+  consumed = er_blake3_consume_sse2_lanes(hasher, bytes, len);
+  if (consumed != 2u) return consumed;
+#endif
+
+  return 2u;
+}
+
+static uint8_t er_blake3_flush_full_block(ErBlake3Hasher* hasher) {
+  uint32_t flags;
+
+  if (hasher->block_len != ER_BLAKE3_BLOCK_LEN) {
+    return 1u;
+  }
+  if (er_blake3_chunk_len(hasher) == ER_BLAKE3_CHUNK_LEN) {
+    return er_blake3_finish_chunk(hasher);
+  }
+
+  flags = hasher->flags;
+  if (hasher->blocks_compressed == 0u) {
+    flags |= ER_BLAKE3_CHUNK_START;
+  }
+  er_blake3_compress_cv(hasher->chunk_cv, hasher->block, hasher->chunk_counter,
+                        ER_BLAKE3_BLOCK_LEN, flags, hasher->chunk_cv);
+  ++hasher->blocks_compressed;
+  hasher->block_len = 0u;
+  er_blake3_zero(hasher->block, ER_BLAKE3_BLOCK_LEN);
+  return 1u;
+}
+
+static void er_blake3_append_block_bytes(ErBlake3Hasher* hasher,
+                                         const uint8_t** bytes,
+                                         size_t* len) {
+  size_t take = ER_BLAKE3_BLOCK_LEN - hasher->block_len;
+
+  if (take > *len) {
+    take = *len;
+  }
+  er_blake3_copy(&hasher->block[hasher->block_len], *bytes, take);
+  hasher->block_len += take;
+  *bytes += take;
+  *len -= take;
+}
+
 void er_blake3_init(ErBlake3Hasher* hasher) {
   if (hasher == 0) {
     return;
@@ -1416,147 +1618,26 @@ void er_blake3_init(ErBlake3Hasher* hasher) {
   er_blake3_reset_chunk(hasher);
 }
 
-//@optimizer-ignore-function BLAKE3 streaming update hot loop intentionally dispatches compression helpers
 uint8_t er_blake3_update(ErBlake3Hasher* hasher, const uint8_t* bytes, size_t len) {
-  size_t take;
-  uint32_t flags;
+  uint8_t consumed;
 
   if (hasher == 0 || (len > 0u && bytes == 0)) {
     return 0u;
   }
 
   while (len > 0u) {
-#if defined(ER_BLAKE3_USE_AVX512)
-    if (hasher->block_len == 0u && hasher->blocks_compressed == 0u &&
-        (hasher->chunk_counter & ER_BLAKE3_AVX512_SUBTREE32_MASK) == 0u &&
-        len > (ER_BLAKE3_AVX512_SUBTREE32_CHUNKS * ER_BLAKE3_CHUNK_LEN)) {
-      uint32_t cvs[ER_BLAKE3_AVX512_LANES][ER_BLAKE3_CV_WORDS];
-      uint32_t left_cv[ER_BLAKE3_CV_WORDS];
-      uint32_t right_cv[ER_BLAKE3_CV_WORDS];
-      uint32_t subtree_cv[ER_BLAKE3_CV_WORDS];
-
-      er_blake3_avx512_compress16_full_chunks(bytes, hasher->chunk_counter, hasher->flags, cvs);
-      er_blake3_subtree16_cv(cvs, left_cv);
-      er_blake3_avx512_compress16_full_chunks(bytes + (ER_BLAKE3_AVX512_LANES * ER_BLAKE3_CHUNK_LEN),
-                                              hasher->chunk_counter + ER_BLAKE3_AVX512_LANES,
-                                              hasher->flags, cvs);
-      er_blake3_subtree16_cv(cvs, right_cv);
-      hasher->chunk_counter += ER_BLAKE3_AVX512_SUBTREE32_CHUNKS;
-      er_blake3_parent_cv(left_cv, right_cv, subtree_cv);
-      if (er_blake3_push_cv_at_level(hasher, subtree_cv, hasher->chunk_counter,
-                                     ER_BLAKE3_AVX512_SUBTREE32_LEVEL) == 0u) {
-        return 0u;
-      }
-      bytes += ER_BLAKE3_AVX512_SUBTREE32_CHUNKS * ER_BLAKE3_CHUNK_LEN;
-      len -= ER_BLAKE3_AVX512_SUBTREE32_CHUNKS * ER_BLAKE3_CHUNK_LEN;
+    consumed = er_blake3_consume_full_chunks(hasher, &bytes, &len);
+    if (consumed == 0u) {
+      return 0u;
+    }
+    if (consumed == 1u) {
       continue;
     }
 
-    if (hasher->block_len == 0u && hasher->blocks_compressed == 0u &&
-        (hasher->chunk_counter & ER_BLAKE3_AVX2_SUBTREE16_MASK) == 0u &&
-        len > (ER_BLAKE3_AVX512_LANES * ER_BLAKE3_CHUNK_LEN)) {
-      uint32_t cvs[ER_BLAKE3_AVX512_LANES][ER_BLAKE3_CV_WORDS];
-      uint32_t subtree_cv[ER_BLAKE3_CV_WORDS];
-
-      er_blake3_avx512_compress16_full_chunks(bytes, hasher->chunk_counter, hasher->flags, cvs);
-      hasher->chunk_counter += ER_BLAKE3_AVX512_LANES;
-      er_blake3_subtree16_cv(cvs, subtree_cv);
-      if (er_blake3_push_cv_at_level(hasher, subtree_cv, hasher->chunk_counter,
-                                     ER_BLAKE3_AVX2_SUBTREE16_LEVEL) == 0u) {
-        return 0u;
-      }
-      bytes += ER_BLAKE3_AVX512_LANES * ER_BLAKE3_CHUNK_LEN;
-      len -= ER_BLAKE3_AVX512_LANES * ER_BLAKE3_CHUNK_LEN;
-      continue;
+    if (er_blake3_flush_full_block(hasher) == 0u) {
+      return 0u;
     }
-#endif
-
-#if defined(ER_BLAKE3_USE_AVX2)
-    if (hasher->block_len == 0u && hasher->blocks_compressed == 0u &&
-        (hasher->chunk_counter & ER_BLAKE3_AVX2_SUBTREE16_MASK) == 0u &&
-        len > (ER_BLAKE3_AVX2_SUBTREE16_CHUNKS * ER_BLAKE3_CHUNK_LEN)) {
-      uint32_t cvs[ER_BLAKE3_AVX2_SUBTREE16_CHUNKS][ER_BLAKE3_CV_WORDS];
-      uint32_t subtree_cv[ER_BLAKE3_CV_WORDS];
-
-      er_blake3_avx2_compress8_full_chunks(bytes, hasher->chunk_counter, hasher->flags, cvs);
-      er_blake3_avx2_compress8_full_chunks(bytes + (ER_BLAKE3_AVX2_LANES * ER_BLAKE3_CHUNK_LEN),
-                                           hasher->chunk_counter + ER_BLAKE3_AVX2_LANES,
-                                           hasher->flags, &cvs[ER_BLAKE3_AVX2_LANES]);
-      hasher->chunk_counter += ER_BLAKE3_AVX2_SUBTREE16_CHUNKS;
-      er_blake3_subtree16_cv(cvs, subtree_cv);
-      if (er_blake3_push_cv_at_level(hasher, subtree_cv, hasher->chunk_counter,
-                                     ER_BLAKE3_AVX2_SUBTREE16_LEVEL) == 0u) {
-        return 0u;
-      }
-      bytes += ER_BLAKE3_AVX2_SUBTREE16_CHUNKS * ER_BLAKE3_CHUNK_LEN;
-      len -= ER_BLAKE3_AVX2_SUBTREE16_CHUNKS * ER_BLAKE3_CHUNK_LEN;
-      continue;
-    }
-
-    if (hasher->block_len == 0u && hasher->blocks_compressed == 0u &&
-        (hasher->chunk_counter & ER_BLAKE3_AVX2_CHUNK_GROUP_MASK) == 0u &&
-        len > (ER_BLAKE3_AVX2_LANES * ER_BLAKE3_CHUNK_LEN)) {
-      uint32_t cvs[ER_BLAKE3_AVX2_LANES][ER_BLAKE3_CV_WORDS];
-      uint32_t subtree_cv[ER_BLAKE3_CV_WORDS];
-
-      er_blake3_avx2_compress8_full_chunks(bytes, hasher->chunk_counter, hasher->flags, cvs);
-      hasher->chunk_counter += ER_BLAKE3_AVX2_LANES;
-      er_blake3_subtree8_cv(cvs, subtree_cv);
-      if (er_blake3_push_cv_at_level(hasher, subtree_cv, hasher->chunk_counter,
-                                     ER_BLAKE3_AVX2_CHUNK_GROUP_LEVEL) == 0u) {
-        return 0u;
-      }
-      bytes += ER_BLAKE3_AVX2_LANES * ER_BLAKE3_CHUNK_LEN;
-      len -= ER_BLAKE3_AVX2_LANES * ER_BLAKE3_CHUNK_LEN;
-      continue;
-    }
-#endif
-
-#if defined(ER_BLAKE3_USE_SSE2)
-    if (hasher->block_len == 0u && hasher->blocks_compressed == 0u &&
-        len > (ER_BLAKE3_SSE2_LANES * ER_BLAKE3_CHUNK_LEN)) {
-      uint32_t cvs[ER_BLAKE3_SSE2_LANES][ER_BLAKE3_CV_WORDS];
-      size_t lane;
-
-      er_blake3_sse2_compress4_full_chunks(bytes, hasher->chunk_counter, hasher->flags, cvs);
-      for (lane = 0u; lane < ER_BLAKE3_SSE2_LANES; ++lane) {
-        ++hasher->chunk_counter;
-        if (er_blake3_push_cv(hasher, cvs[lane], hasher->chunk_counter) == 0u) {
-          return 0u;
-        }
-      }
-      bytes += ER_BLAKE3_SSE2_LANES * ER_BLAKE3_CHUNK_LEN;
-      len -= ER_BLAKE3_SSE2_LANES * ER_BLAKE3_CHUNK_LEN;
-      continue;
-    }
-#endif
-
-    if (hasher->block_len == ER_BLAKE3_BLOCK_LEN) {
-      if (er_blake3_chunk_len(hasher) == ER_BLAKE3_CHUNK_LEN) {
-        if (er_blake3_finish_chunk(hasher) == 0u) {
-          return 0u;
-        }
-        continue;
-      }
-      flags = hasher->flags;
-      if (hasher->blocks_compressed == 0u) {
-        flags |= ER_BLAKE3_CHUNK_START;
-      }
-      er_blake3_compress_cv(hasher->chunk_cv, hasher->block, hasher->chunk_counter,
-                            ER_BLAKE3_BLOCK_LEN, flags, hasher->chunk_cv);
-      ++hasher->blocks_compressed;
-      hasher->block_len = 0u;
-      er_blake3_zero(hasher->block, ER_BLAKE3_BLOCK_LEN);
-    }
-
-    take = ER_BLAKE3_BLOCK_LEN - hasher->block_len;
-    if (take > len) {
-      take = len;
-    }
-    er_blake3_copy(&hasher->block[hasher->block_len], bytes, take);
-    hasher->block_len += take;
-    bytes += take;
-    len -= take;
+    er_blake3_append_block_bytes(hasher, &bytes, &len);
   }
 
   return 1u;
