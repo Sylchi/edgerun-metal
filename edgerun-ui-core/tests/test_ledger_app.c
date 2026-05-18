@@ -8,6 +8,7 @@ static const uint32_t ER_TEST_LEDGER_ACTION_BASE = 0xED024000u;
 static const uint32_t ER_TEST_LEDGER_INVEST_BUTTON_ID = ER_TEST_LEDGER_ACTION_BASE + 2u;
 static const uint32_t ER_TEST_LEDGER_SAVE_THRESHOLD_BUTTON_ID = ER_TEST_LEDGER_ACTION_BASE + 8u;
 static const float ER_TEST_LEDGER_BUTTON_LABEL_MIN_CENTER_X = 0.25f;
+static const er_ui_bounds_t ER_TEST_LEDGER_COMPACT_BOUNDS = {240.0f, 80.0f, 760.0f, 760.0f};
 
 static const er_ui_hit_t* test_ledger_find_hit(const er_ui_scene_t* scene, uint32_t id) {
   if (!scene) return NULL;
@@ -51,6 +52,15 @@ static bool test_ledger_hit_label_starts_centered(const er_ui_scene_t* scene, ui
   return found && min_x >= hit->x + hit->w * ER_TEST_LEDGER_BUTTON_LABEL_MIN_CENTER_X;
 }
 
+static bool test_ledger_hits_stay_inside(const er_ui_scene_t* scene, er_ui_bounds_t bounds) {
+  if (!scene) return false;
+  for (size_t h = 0u; h < scene->hit_count; ++h) {
+    const er_ui_hit_t* hit = &scene->hits[h];
+    if (hit->x < bounds.x || hit->y < bounds.y || hit->x + hit->w > bounds.x + bounds.w || hit->y + hit->h > bounds.y + bounds.h) return false;
+  }
+  return true;
+}
+
 static void test_ledger_app_state_and_surface_switching(void) {
   er_ui_ledger_app_state_t apps = {0};
   er_ui_runtime_state_t runtime = {0};
@@ -88,6 +98,21 @@ static void test_ledger_app_state_and_surface_switching(void) {
               "ledger app: save threshold label is centered in button");
   expect_true(test_ledger_hit_label_starts_centered(&scene, ER_TEST_LEDGER_INVEST_BUTTON_ID),
               "ledger app: review order label is centered in button");
+
+  er_ui_scene_clear_commands(&scene);
+  expect_status(er_ui_ledger_app_emit_scene(&apps, &scene, font, ER_TEST_LEDGER_COMPACT_BOUNDS, theme), ER_UI_OK,
+                "ledger app: compact offset scene emits");
+  stats = er_ui_scene_stats(&scene);
+  expect_size(stats.hits, ER_TEST_LEDGER_APP_HITS, "ledger app: compact scene emits expected hits");
+  expect_true(test_ledger_hit_has_fill_rect(&scene, ER_TEST_LEDGER_SAVE_THRESHOLD_BUTTON_ID),
+              "ledger app: compact save threshold action is visibly rendered");
+  expect_true(test_ledger_hit_has_fill_rect(&scene, ER_TEST_LEDGER_INVEST_BUTTON_ID),
+              "ledger app: compact review order action is visibly rendered");
+  expect_true(test_ledger_hits_stay_inside(&scene, ER_TEST_LEDGER_COMPACT_BOUNDS), "ledger app: compact hits stay inside surface bounds");
+
+  er_ui_scene_clear_commands(&scene);
+  expect_status(er_ui_ledger_app_emit_scene(&apps, &scene, font, er_ui_bounds(0.0f, 0.0f, 1600.0f, 900.0f), theme), ER_UI_OK,
+                "ledger app: scene re-emits for pointer interaction");
 
   er_ui_action_t down = er_ui_runtime_pointer_down(&runtime, &scene, 40.0f, 138.0f);
   expect_size(down.kind, ER_UI_ACTION_FOCUSED, "ledger app: nav pointer down focuses");
