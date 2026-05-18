@@ -235,6 +235,7 @@ typedef int (*ErWasmUiDecodeRecord)(const UINT8* bytes, er_ui_scene_t* scene);
 #define ER_WASM_OP_I64_LT_U 0x54u
 #define ER_WASM_OP_I64_ADD 0x7cu
 #define ER_WASM_OP_I64_AND 0x83u
+#define ER_WASM_OP_I32_WRAP_I64 0xa7u
 
 enum {
   ER_IMPORT_KIND_NONE = 0,
@@ -1198,6 +1199,10 @@ static int er_scan_matching_end(const UINT8* data, UINT32 size, UINT32 start_pc,
       }
       continue;
     }
+
+    if (op == ER_WASM_OP_I32_WRAP_I64) {
+      continue;
+    }
   }
 
   return -1;
@@ -1520,7 +1525,7 @@ static int er_wasm_parse_code_section(ErReader* r, ErWasmModule* module) {
           er_reader_read_u8(r, &local_type) != 0) {
         return -1;
       }
-      if (local_type != ER_WASM_VALTYPE_I64) {
+      if (local_type != ER_WASM_VALTYPE_I64 && local_type != ER_WASM_VALTYPE_I32) {
         return -1;
       }
       local_total += local_repeat;
@@ -1933,6 +1938,13 @@ int er_wasm_execute_i64(ErWasmModule* module, UINT32 function_index, INT64* resu
         }
         value = stack[--stack_size];
         stack[stack_size++] = (value == 0) ? 1 : 0;
+      } else if (op == ER_WASM_OP_I32_WRAP_I64) {
+        INT64 value = 0;
+        if (stack_size < 1) {
+          return -1;
+        }
+        value = stack[--stack_size];
+        stack[stack_size++] = (INT64)(UINT64)((UINT32)value);
       } else if (op == ER_WASM_OP_CALL) {
         UINT32 type_index_local = 0;
         if (er_reader_read_u32_leb(&code, &target) != 0) {
