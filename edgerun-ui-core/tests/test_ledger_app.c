@@ -7,16 +7,19 @@ static const size_t ER_TEST_LEDGER_APP_HITS = 6u;
 static const uint32_t ER_TEST_LEDGER_ACTION_BASE = 0xED024000u;
 static const uint32_t ER_TEST_LEDGER_INVEST_BUTTON_ID = ER_TEST_LEDGER_ACTION_BASE + 2u;
 static const uint32_t ER_TEST_LEDGER_SAVE_THRESHOLD_BUTTON_ID = ER_TEST_LEDGER_ACTION_BASE + 8u;
+static const float ER_TEST_LEDGER_BUTTON_LABEL_MIN_CENTER_X = 0.25f;
+
+static const er_ui_hit_t* test_ledger_find_hit(const er_ui_scene_t* scene, uint32_t id) {
+  if (!scene) return NULL;
+  for (size_t h = 0u; h < scene->hit_count; ++h) {
+    if (scene->hits[h].id == id) return &scene->hits[h];
+  }
+  return NULL;
+}
 
 static bool test_ledger_hit_has_fill_rect(const er_ui_scene_t* scene, uint32_t id) {
-  const er_ui_hit_t* hit = NULL;
+  const er_ui_hit_t* hit = test_ledger_find_hit(scene, id);
   if (!scene) return false;
-  for (size_t h = 0u; h < scene->hit_count; ++h) {
-    if (scene->hits[h].id == id) {
-      hit = &scene->hits[h];
-      break;
-    }
-  }
   if (!hit) return false;
   for (size_t r = 0u; r < scene->rect_count; ++r) {
     const er_ui_rect_t* rect = &scene->rects[r];
@@ -29,6 +32,23 @@ static bool test_ledger_hit_has_fill_rect(const er_ui_scene_t* scene, uint32_t i
     }
   }
   return false;
+}
+
+static bool test_ledger_hit_label_starts_centered(const er_ui_scene_t* scene, uint32_t id) {
+  const er_ui_hit_t* hit = test_ledger_find_hit(scene, id);
+  bool found = false;
+  float min_x = 0.0f;
+  if (!scene || !hit) return false;
+  for (size_t q = 0u; q < scene->text_quad_count; ++q) {
+    const er_ui_quad_t* quad = &scene->text_quads[q];
+    bool overlaps_x = quad->x < hit->x + hit->w && quad->x + quad->w > hit->x;
+    bool overlaps_y = quad->y < hit->y + hit->h && quad->y + quad->h > hit->y;
+    if (overlaps_x && overlaps_y) {
+      if (!found || quad->x < min_x) min_x = quad->x;
+      found = true;
+    }
+  }
+  return found && min_x >= hit->x + hit->w * ER_TEST_LEDGER_BUTTON_LABEL_MIN_CENTER_X;
 }
 
 static void test_ledger_app_state_and_surface_switching(void) {
@@ -64,6 +84,10 @@ static void test_ledger_app_state_and_surface_switching(void) {
               "ledger app: save threshold action is visibly rendered");
   expect_true(test_ledger_hit_has_fill_rect(&scene, ER_TEST_LEDGER_INVEST_BUTTON_ID),
               "ledger app: review order action is visibly rendered");
+  expect_true(test_ledger_hit_label_starts_centered(&scene, ER_TEST_LEDGER_SAVE_THRESHOLD_BUTTON_ID),
+              "ledger app: save threshold label is centered in button");
+  expect_true(test_ledger_hit_label_starts_centered(&scene, ER_TEST_LEDGER_INVEST_BUTTON_ID),
+              "ledger app: review order label is centered in button");
 
   er_ui_action_t down = er_ui_runtime_pointer_down(&runtime, &scene, 40.0f, 138.0f);
   expect_size(down.kind, ER_UI_ACTION_FOCUSED, "ledger app: nav pointer down focuses");
