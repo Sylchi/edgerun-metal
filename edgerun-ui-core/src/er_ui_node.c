@@ -12,6 +12,11 @@ static const float ER_UI_NODE_MASONRY_STEP_HEIGHT_RATIO = 0.18f;
 enum { ER_UI_NODE_MASONRY_STEP_COUNT = 3u };
 enum { ER_UI_NODE_BENTO_MAX_ROWS = ER_UI_NODE_MAX_CHILDREN * ER_UI_NODE_MAX_CHILDREN };
 enum { ER_UI_NODE_TEXT_BUDGET = 128u };
+enum {
+  ER_UI_NODE_RESIZABLE_FIRST_INDEX = 0u,
+  ER_UI_NODE_RESIZABLE_SECOND_INDEX = 1u,
+  ER_UI_NODE_RESIZABLE_THIRD_INDEX = 2u
+};
 
 static er_ui_node_t er_ui_node_base(er_ui_node_kind_t kind) {
   er_ui_node_t node = {0};
@@ -2378,20 +2383,32 @@ static er_ui_status_t er_ui_node_render_resizable(
 
   er_ui_status_t status = er_ui_shadcn_card_emit(scene, first, theme);
   if (status != ER_UI_OK) return status;
-  status = er_ui_node_render_text(scene, font, er_ui_node_label_or_default(node, 0u, "One"), er_ui_bounds(first.x + 12.0f, first.y + 8.0f, first.w - 24.0f, 28.0f),
-                                  theme.colors.text);
+  status = er_ui_node_render_text(
+    scene,
+    font,
+    er_ui_node_label_or_default(node, ER_UI_NODE_RESIZABLE_FIRST_INDEX, "One"),
+    er_ui_bounds(first.x + 12.0f, first.y + 8.0f, first.w - 24.0f, 28.0f),
+    theme.colors.text);
   if (status != ER_UI_OK) return status;
   status = er_ui_shadcn_separator_emit(scene, divider, theme);
   if (status != ER_UI_OK) return status;
   status = er_ui_shadcn_card_emit(scene, second, theme);
   if (status != ER_UI_OK) return status;
-  status = er_ui_node_render_text(scene, font, er_ui_node_label_or_default(node, 1u, "Two"), er_ui_bounds(second.x + 12.0f, second.y + 8.0f, second.w - 24.0f, 24.0f),
-                                  theme.colors.text);
+  status = er_ui_node_render_text(
+    scene,
+    font,
+    er_ui_node_label_or_default(node, ER_UI_NODE_RESIZABLE_SECOND_INDEX, "Two"),
+    er_ui_bounds(second.x + 12.0f, second.y + 8.0f, second.w - 24.0f, 24.0f),
+    theme.colors.text);
   if (status != ER_UI_OK) return status;
   status = er_ui_shadcn_card_emit(scene, third, theme);
   if (status != ER_UI_OK) return status;
-  return er_ui_node_render_text(scene, font, er_ui_node_label_or_default(node, 2u, "Three"), er_ui_bounds(third.x + 12.0f, third.y + 8.0f, third.w - 24.0f, 24.0f),
-                                theme.colors.text);
+  return er_ui_node_render_text(
+    scene,
+    font,
+    er_ui_node_label_or_default(node, ER_UI_NODE_RESIZABLE_THIRD_INDEX, "Three"),
+    er_ui_bounds(third.x + 12.0f, third.y + 8.0f, third.w - 24.0f, 24.0f),
+    theme.colors.text);
 }
 
 static er_ui_status_t er_ui_node_render_sidebar(
