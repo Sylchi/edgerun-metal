@@ -1,20 +1,34 @@
 #include "er_ui_theme.h"
 
+#define ER_UI_RGB_BLACK 0u, 0u, 0u
+#define ER_UI_RGB_SLATE_50 250u, 250u, 250u
+#define ER_UI_RGB_SLATE_400 161u, 161u, 170u
+#define ER_UI_RGB_SLATE_700 63u, 63u, 70u
+#define ER_UI_RGB_SLATE_800 39u, 39u, 42u
+#define ER_UI_RGB_SLATE_900 24u, 24u, 27u
+#define ER_UI_RGB_SLATE_950 9u, 9u, 11u
+#define ER_UI_RGB_SKY_50 240u, 249u, 255u
+#define ER_UI_RGB_CYAN_600 8u, 145u, 178u
+#define ER_UI_RGB_EMERALD_500 16u, 185u, 129u
+#define ER_UI_RGB_AMBER_500 245u, 158u, 11u
+#define ER_UI_RGB_VIOLET_500 139u, 92u, 246u
+#define ER_UI_RGB_ROSE_600 225u, 29u, 72u
+
 static const float ER_UI_CARD_RADIUS_MAX = 8.0f;
 
-er_ui_color4_t er_ui_palette_black(void) { return er_ui_color_rgb_u8(0u, 0u, 0u); }
-er_ui_color4_t er_ui_palette_slate_50(void) { return er_ui_color_rgb_u8(250u, 250u, 250u); }
-er_ui_color4_t er_ui_palette_slate_400(void) { return er_ui_color_rgb_u8(161u, 161u, 170u); }
-er_ui_color4_t er_ui_palette_slate_700(void) { return er_ui_color_rgb_u8(63u, 63u, 70u); }
-er_ui_color4_t er_ui_palette_slate_800(void) { return er_ui_color_rgb_u8(39u, 39u, 42u); }
-er_ui_color4_t er_ui_palette_slate_900(void) { return er_ui_color_rgb_u8(24u, 24u, 27u); }
-er_ui_color4_t er_ui_palette_slate_950(void) { return er_ui_color_rgb_u8(9u, 9u, 11u); }
-er_ui_color4_t er_ui_palette_sky_50(void) { return er_ui_color_rgb_u8(240u, 249u, 255u); }
-er_ui_color4_t er_ui_palette_cyan_600(void) { return er_ui_color_rgb_u8(8u, 145u, 178u); }
-er_ui_color4_t er_ui_palette_emerald_500(void) { return er_ui_color_rgb_u8(16u, 185u, 129u); }
-er_ui_color4_t er_ui_palette_amber_500(void) { return er_ui_color_rgb_u8(245u, 158u, 11u); }
-er_ui_color4_t er_ui_palette_violet_500(void) { return er_ui_color_rgb_u8(139u, 92u, 246u); }
-er_ui_color4_t er_ui_palette_rose_600(void) { return er_ui_color_rgb_u8(225u, 29u, 72u); }
+er_ui_color4_t er_ui_palette_black(void) { return er_ui_color_rgb_u8(ER_UI_RGB_BLACK); }
+er_ui_color4_t er_ui_palette_slate_50(void) { return er_ui_color_rgb_u8(ER_UI_RGB_SLATE_50); }
+er_ui_color4_t er_ui_palette_slate_400(void) { return er_ui_color_rgb_u8(ER_UI_RGB_SLATE_400); }
+er_ui_color4_t er_ui_palette_slate_700(void) { return er_ui_color_rgb_u8(ER_UI_RGB_SLATE_700); }
+er_ui_color4_t er_ui_palette_slate_800(void) { return er_ui_color_rgb_u8(ER_UI_RGB_SLATE_800); }
+er_ui_color4_t er_ui_palette_slate_900(void) { return er_ui_color_rgb_u8(ER_UI_RGB_SLATE_900); }
+er_ui_color4_t er_ui_palette_slate_950(void) { return er_ui_color_rgb_u8(ER_UI_RGB_SLATE_950); }
+er_ui_color4_t er_ui_palette_sky_50(void) { return er_ui_color_rgb_u8(ER_UI_RGB_SKY_50); }
+er_ui_color4_t er_ui_palette_cyan_600(void) { return er_ui_color_rgb_u8(ER_UI_RGB_CYAN_600); }
+er_ui_color4_t er_ui_palette_emerald_500(void) { return er_ui_color_rgb_u8(ER_UI_RGB_EMERALD_500); }
+er_ui_color4_t er_ui_palette_amber_500(void) { return er_ui_color_rgb_u8(ER_UI_RGB_AMBER_500); }
+er_ui_color4_t er_ui_palette_violet_500(void) { return er_ui_color_rgb_u8(ER_UI_RGB_VIOLET_500); }
+er_ui_color4_t er_ui_palette_rose_600(void) { return er_ui_color_rgb_u8(ER_UI_RGB_ROSE_600); }
 
 static er_ui_color4_t er_ui_palette_bg(void) { return er_ui_palette_slate_950(); }
 static er_ui_color4_t er_ui_palette_sidebar(void) { return er_ui_color_with_alpha(er_ui_palette_black(), 0.86f); }

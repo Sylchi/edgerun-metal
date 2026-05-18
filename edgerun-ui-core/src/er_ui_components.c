@@ -20,6 +20,7 @@
 #define ER_UI_SHADCN_PREVIEW_FIELD_EMAIL_ID (ER_UI_SHADCN_DEMO_PREVIEW_BASE_ID + 11u)
 #define ER_UI_SHADCN_PREVIEW_INPUT_GROUP_FIELD_ID (ER_UI_SHADCN_DEMO_PREVIEW_BASE_ID + 12u)
 #define ER_UI_SHADCN_PREVIEW_INPUT_GROUP_BUTTON_ID (ER_UI_SHADCN_DEMO_PREVIEW_BASE_ID + 13u)
+#define ER_UI_SHADCN_PREVIEW_INPUT_GROUP_BUTTON_H 40.0f
 #define ER_UI_SHADCN_PREVIEW_ALERT_DIALOG_CANCEL_ID (ER_UI_SHADCN_DEMO_PREVIEW_BASE_ID + 90u)
 #define ER_UI_SHADCN_PREVIEW_ALERT_DIALOG_CONFIRM_ID (ER_UI_SHADCN_DEMO_PREVIEW_BASE_ID + 91u)
 #define ER_UI_SHADCN_PREVIEW_BREADCRUMB_CURRENT_INDEX 2u
@@ -2432,7 +2433,10 @@ er_ui_status_t er_ui_shadcn_component_scene_preview_emit(
     er_ui_status_t status = er_ui_shadcn_field_emit(scene, font, er_ui_bounds(bounds.x, bounds.y, er_ui_float_max(bounds.w - 92.0f, 96.0f), 58.0f), theme, "URL",
                                                     "https://example.com", ER_UI_SHADCN_PREVIEW_INPUT_GROUP_FIELD_ID, false);
     if (status != ER_UI_OK) return status;
-    return er_ui_shadcn_button_emit(scene, font, er_ui_bounds(bounds.x + er_ui_float_max(bounds.w - 84.0f, 104.0f), bounds.y + 18.0f, 80.0f, 40.0f), theme, "Copy",
+    return er_ui_shadcn_button_emit(scene, font,
+                                    er_ui_bounds(bounds.x + er_ui_float_max(bounds.w - 84.0f, 104.0f), bounds.y + 18.0f, 80.0f,
+                                                 ER_UI_SHADCN_PREVIEW_INPUT_GROUP_BUTTON_H),
+                                    theme, "Copy",
                                     ER_UI_SHADCN_PREVIEW_INPUT_GROUP_BUTTON_ID, ER_UI_SHADCN_BUTTON_SECONDARY, ER_UI_SHADCN_BUTTON_SIZE_SM, true);
   }
   if (er_ui_shadcn_streq(slug, "input-otp")) {
