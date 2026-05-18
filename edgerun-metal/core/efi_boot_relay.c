@@ -63,10 +63,10 @@ static UINT8 er_ui_boot_prepare_endpoint_for_route(const ErAdmittedRoute* route,
   }
 }
 
-static UINT8 er_ui_boot_prepare_route_envelope(const ErAdmittedRoute* route,
-                                               const ErHash* packet_hash,
-                                               UINT64 sequence,
-                                               ErChannelEnvelopeHeader* out_envelope) {
+UINT8 er_ui_boot_prepare_route_envelope(const ErAdmittedRoute* route,
+                                        const ErHash* packet_hash,
+                                        UINT64 sequence,
+                                        ErChannelEnvelopeHeader* out_envelope) {
   if (route == 0 || packet_hash == 0 || out_envelope == 0) {
     return 0u;
   }
@@ -175,13 +175,47 @@ static UINT8 er_ui_boot_decode_native_render_scene(ErUiBootRenderContext* render
   return 1u;
 }
 
+static UINT8 er_ui_boot_storage_store_needs_replacement(const ErStorageEndpointObjectStore* store,
+                                                        const ErVfsObjectPacket* packet) {
+  if (store == 0 || packet == 0 ||
+      store->abi_version != ER_WORK_ABI_VERSION ||
+      store->complete == 0u ||
+      packet->header.packet_index != 0u) {
+    return 0u;
+  }
+  return (UINT8)(er_hash_equal(&store->object_id,
+                               &packet->header.object_id) == 0u);
+}
+
+static UINT8 er_ui_boot_prepare_active_app_storage_store(ErUiBootAppContext* app,
+                                                         const ErVfsObjectPacket* packet) {
+  if (app == 0 || packet == 0) {
+    return 0u;
+  }
+  if (app->storage.app_store.abi_version != ER_WORK_ABI_VERSION ||
+      er_ui_boot_storage_store_needs_replacement(&app->storage.app_store,
+                                                 packet) != 0u) {
+    return er_storage_endpoint_object_store_init(&app->storage.app_store,
+                                                 app->storage.app_packets,
+                                                 ER_UI_BOOT_PACKAGE_OBJECT_PACKET_CAPACITY);
+  }
+  return 1u;
+}
+
 static UINT8 er_ui_boot_capture_native_storage_object(ErUiBootRenderContext* render,
                                                       const ErAdmittedRoute* route,
                                                       const ErNativeEndpointIntent* intent) {
   ErCryptoProvider crypto;
   ErChannelEnvelopeHeader envelope;
+  ErUiBootAppContext* active_app;
 
   if (render == 0 || route == 0 || intent == 0) {
+    return 0u;
+  }
+  active_app = er_ui_boot_relay_active_app(render);
+  if (active_app == 0 ||
+      er_ui_boot_prepare_active_app_storage_store(active_app,
+                                                 &intent->object_packet) == 0u) {
     return 0u;
   }
 
@@ -189,9 +223,10 @@ static UINT8 er_ui_boot_capture_native_storage_object(ErUiBootRenderContext* ren
   if (er_ui_boot_prepare_route_envelope(route, &intent->packet.payload_hash,
                                         intent->packet.sequence,
                                         &envelope) == 0u ||
-      er_storage_endpoint_capture_object_packet(&crypto, route, &envelope,
-                                                &intent->object_packet,
-                                                &render->native_relay_last_storage_capture) == 0u) {
+      er_storage_endpoint_store_object_packet(&crypto, route, &envelope,
+                                              &intent->object_packet,
+                                              &active_app->storage.app_store,
+                                              &render->native_relay_last_storage_capture) == 0u) {
     return 0u;
   }
   ++render->native_relay_stats.storage_object_packets;

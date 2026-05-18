@@ -1,5 +1,7 @@
 #include "test_core_internal.h"
 
+ErWasmHostCalls g_host_calls = {0};
+
 #include "test_core_basic.c"
 #include "test_core_pci_mmio.c"
 #include "test_core_virtio.c"
@@ -40,6 +42,7 @@ int main(void) {
   test_epoch_clock_rollover();
   test_ui_wasm_app_runner();
   test_ui_wasm_app_multiple_runtimes();
+  test_ui_boot_package_loads_from_endpoint_storage();
   test_vfs_object_packets();
   test_storage_endpoint_object_store();
   test_app_identity_routes();

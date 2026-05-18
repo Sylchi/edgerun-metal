@@ -12,6 +12,26 @@ static const UINT8 g_ui_boot_counter_manifest[] = {
   'e', 'r'
 };
 
+enum {
+  ER_UI_BOOT_PACKAGE_APP_SEQUENCE = 1u,
+  ER_UI_BOOT_PACKAGE_MANIFEST_SEQUENCE = 2u
+};
+
+static UINT8 er_ui_boot_seed_package_object_store(const ErCryptoProvider* crypto,
+                                                  const ErAdmittedRoute* route,
+                                                  const ErVfsObjectPacket* packet,
+                                                  UINT64 sequence,
+                                                  ErStorageEndpointObjectStore* store) {
+  ErChannelEnvelopeHeader envelope;
+
+  if (er_ui_boot_prepare_route_envelope(route, &packet->header.packet_id,
+                                        sequence, &envelope) == 0u) {
+    return 0u;
+  }
+  return er_storage_endpoint_store_object_packet(crypto, route, &envelope,
+                                                 packet, store, 0);
+}
+
 UINT8 er_ui_boot_append_wasm_scene(er_ui_scene_t* scene, const er_ui_scene_t* wasm_scene) {
   size_t i;
 
@@ -114,6 +134,7 @@ UINT8 er_ui_boot_load_wasm_counter_package(UINT8* module_memory,
                                                   UINT32 module_memory_size,
                                                   UINT8* manifest_memory,
                                                   UINT32 manifest_memory_size,
+                                                  ErUiBootPackageStorage* storage,
                                                   UINT32 app_index,
                                                   ErAppLoadedPackage* out_loaded) {
   ErCryptoProvider crypto;
@@ -129,14 +150,21 @@ UINT8 er_ui_boot_load_wasm_counter_package(UINT8* module_memory,
   ErAppPackageStorageResponse manifest_response;
   ErAppPackageStorageObject app_object;
   ErAppPackageStorageObject manifest_object;
-  ErAppPackageObjectLoad app_load;
-  ErAppPackageObjectLoad manifest_load;
 
-  if (module_memory == 0 || manifest_memory == 0 || out_loaded == 0 ||
+  if (module_memory == 0 || manifest_memory == 0 || storage == 0 ||
+      out_loaded == 0 ||
       module_memory_size == 0u || manifest_memory_size == 0u) {
     return 0u;
   }
   er_crypto_blake3_provider(&crypto);
+  if (er_storage_endpoint_object_store_init(&storage->app_store,
+                                            storage->app_packets,
+                                            ER_UI_BOOT_PACKAGE_OBJECT_PACKET_CAPACITY) == 0u ||
+      er_storage_endpoint_object_store_init(&storage->manifest_store,
+                                            storage->manifest_packets,
+                                            ER_UI_BOOT_PACKAGE_OBJECT_PACKET_CAPACITY) == 0u) {
+    return 0u;
+  }
   if (er_vfs_prepare_object_label_ref(&crypto, g_ui_boot_counter_wasm_label,
                                       (UINTN)sizeof(g_ui_boot_counter_wasm_label) - 1u,
                                       g_edgerun_ui_counter_wasm,
@@ -164,14 +192,6 @@ UINT8 er_ui_boot_load_wasm_counter_package(UINT8* module_memory,
                                    0u, 0u, 1u, &manifest_packet) == 0u) {
     return 0u;
   }
-  app_load.packets = &app_packet;
-  app_load.packet_count = 1u;
-  app_load.bytes = module_memory;
-  app_load.capacity = module_memory_size;
-  manifest_load.packets = &manifest_packet;
-  manifest_load.packet_count = 1u;
-  manifest_load.bytes = manifest_memory;
-  manifest_load.capacity = manifest_memory_size;
   if (er_ui_boot_prepare_storage_retrieve_route(ER_UI_WASM_STORAGE_APP_ROUTE_ID_SEED,
                                                 app_index, &app_route) == 0u ||
       er_ui_boot_prepare_storage_retrieve_route(ER_UI_WASM_STORAGE_MANIFEST_ROUTE_ID_SEED,
@@ -181,25 +201,30 @@ UINT8 er_ui_boot_load_wasm_counter_package(UINT8* module_memory,
                                             &storage_source) == 0u) {
     return 0u;
   }
-  er_mem_zero((UINT8*)&app_response, (UINTN)sizeof(app_response));
-  app_response.abi_version = ER_APP_ABI_VERSION;
-  app_response.retrieve_route_id = storage_source.app_retrieve_route_id;
-  app_response.object_id = package.app_object_id;
-  app_response.object_len = package.app_object_len;
-  app_response.packets = app_load.packets;
-  app_response.packet_count = app_load.packet_count;
-  app_response.bytes = app_load.bytes;
-  app_response.capacity = app_load.capacity;
-  er_mem_zero((UINT8*)&manifest_response, (UINTN)sizeof(manifest_response));
-  manifest_response.abi_version = ER_APP_ABI_VERSION;
-  manifest_response.retrieve_route_id = storage_source.manifest_retrieve_route_id;
-  manifest_response.object_id = package.manifest_object_id;
-  manifest_response.object_len = package.manifest_object_len;
-  manifest_response.packets = manifest_load.packets;
-  manifest_response.packet_count = manifest_load.packet_count;
-  manifest_response.bytes = manifest_load.bytes;
-  manifest_response.capacity = manifest_load.capacity;
-  if (er_app_prepare_package_storage_object(&app_response,
+  if (er_ui_boot_seed_package_object_store(&crypto, &app_route, &app_packet,
+                                           ER_UI_BOOT_PACKAGE_APP_SEQUENCE,
+                                           &storage->app_store) == 0u ||
+      er_ui_boot_seed_package_object_store(&crypto, &manifest_route,
+                                           &manifest_packet,
+                                           ER_UI_BOOT_PACKAGE_MANIFEST_SEQUENCE,
+                                           &storage->manifest_store) == 0u ||
+      er_storage_endpoint_prepare_package_storage_response(&crypto,
+                                                           &storage->app_store,
+                                                           &storage_source.app_retrieve_route_id,
+                                                           &package.app_object_id,
+                                                           package.app_object_len,
+                                                           module_memory,
+                                                           module_memory_size,
+                                                           &app_response) == 0u ||
+      er_storage_endpoint_prepare_package_storage_response(&crypto,
+                                                           &storage->manifest_store,
+                                                           &storage_source.manifest_retrieve_route_id,
+                                                           &package.manifest_object_id,
+                                                           package.manifest_object_len,
+                                                           manifest_memory,
+                                                           manifest_memory_size,
+                                                           &manifest_response) == 0u ||
+      er_app_prepare_package_storage_object(&app_response,
                                             &storage_source.app_retrieve_route_id,
                                             &package.app_object_id,
                                             package.app_object_len,
@@ -218,6 +243,7 @@ UINT8 er_ui_boot_load_wasm_counter_package(UINT8* module_memory,
 }
 
 UINT8 er_ui_boot_prepare_wasm_counter(ErUiWasmAppRuntime* runtime,
+                                             ErUiBootPackageStorage* storage,
                                              ErAppUiPresentation* presentation,
                                              er_ui_scene_t* wasm_scene,
                                              UINT8* memory,
@@ -230,13 +256,15 @@ UINT8 er_ui_boot_prepare_wasm_counter(ErUiWasmAppRuntime* runtime,
                                              const er_ui_scene_budget_t* scene_budget) {
   ErAppLoadedPackage loaded_package;
 
-  if (runtime == 0 || presentation == 0 || wasm_scene == 0 || memory == 0 ||
-      module_memory == 0 || manifest_memory == 0 || memory_size == 0u ||
+  if (runtime == 0 || storage == 0 || presentation == 0 ||
+      wasm_scene == 0 || memory == 0 || module_memory == 0 ||
+      manifest_memory == 0 || memory_size == 0u ||
       module_memory_size == 0u || manifest_memory_size == 0u || scene_budget == 0) {
     return 0u;
   }
   if (er_ui_boot_load_wasm_counter_package(module_memory, module_memory_size,
                                            manifest_memory, manifest_memory_size,
+                                           storage,
                                            app_index, &loaded_package) == 0u) {
     return 0u;
   }
@@ -294,6 +322,7 @@ UINT8 er_ui_boot_prepare_app_contexts(ErUiBootAppContext* apps,
       return 0u;
     }
     if (er_ui_boot_prepare_wasm_counter(&apps[i].runtime,
+                                        &apps[i].storage,
                                         &apps[i].presentation,
                                         &apps[i].scene,
                                         g_ui_boot_app_memory[i],
