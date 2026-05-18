@@ -153,7 +153,12 @@ er_ui_bounds_t er_ui_row_text_rect(er_ui_bounds_t row, float trailing_reserved_w
 er_ui_component_padding_t er_ui_app_surface_padding_for_width(float width);
 er_ui_bounds_t er_ui_app_surface_content_rect(er_ui_bounds_t bounds);
 er_ui_bounds_t er_ui_system_surface_safe_rect(er_ui_bounds_t bounds);
-er_ui_bounds_t er_ui_centered_system_panel(er_ui_bounds_t safe, float min_w, float max_w, float preferred_h, float min_h);
+er_ui_bounds_t er_ui_centered_system_panel(
+  er_ui_bounds_t safe,
+  float min_w,
+  float max_w,
+  float preferred_h,
+  float min_h);
 er_ui_bounds_t er_ui_scroll_content_rect(er_ui_bounds_t bounds, const float padding_trbl[4u]);
 er_ui_bounds_t er_ui_scrollbar_track_rect(er_ui_bounds_t bounds, er_ui_bounds_t content);
 er_ui_bounds_t er_ui_scrollbar_hit_rect(er_ui_bounds_t track);
