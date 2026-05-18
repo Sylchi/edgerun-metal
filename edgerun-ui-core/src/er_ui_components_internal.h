@@ -25,6 +25,9 @@
 #define ER_UI_COMPONENT_ICON_ROW_TITLE_Y 24.0f
 #define ER_UI_COMPONENT_ICON_ROW_DETAIL_Y 46.0f
 #define ER_UI_COMPONENT_ROW_SEPARATOR_H 1.0f
+#define ER_UI_COMPONENT_TEXT_ADVANCE 7.0f
+#define ER_UI_COMPONENT_TEXT_PAD_X 10.0f
+#define ER_UI_COMPONENT_CONTROL_ICON_RESERVED_W 34.0f
 #define ER_UI_COMPONENT_BADGED_CARD_ICON_X 16.0f
 #define ER_UI_COMPONENT_BADGED_CARD_ICON_Y 18.0f
 #define ER_UI_COMPONENT_BADGED_CARD_BADGE_X 16.0f
@@ -173,6 +176,14 @@ er_ui_status_t er_ui_component_push_ascii_text(
   const char* text,
   float x,
   float y,
+  er_ui_color4_t color);
+er_ui_status_t er_ui_component_push_ascii_text_clipped(
+  er_ui_scene_t* scene,
+  vr_font_face_t* font,
+  const char* text,
+  float x,
+  float y,
+  float max_w,
   er_ui_color4_t color);
 er_ui_status_t er_ui_component_push_icon(
   er_ui_scene_t* scene,

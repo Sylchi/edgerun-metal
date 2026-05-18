@@ -4,9 +4,6 @@
 #include "er_ui_spacing.h"
 
 #define ER_UI_LEDGER_ARRAY_COUNT(values) (sizeof(values) / sizeof((values)[0]))
-#define ER_UI_LEDGER_RGB_SUCCESS 16u, 185u, 129u
-#define ER_UI_LEDGER_RGB_DANGER 239u, 68u, 68u
-#define ER_UI_LEDGER_RGB_WARNING 245u, 158u, 11u
 #define ER_UI_LEDGER_DASHBOARD_MAX_COLUMNS_LIMIT 4u
 
 static const float ER_UI_LEDGER_MARGIN = 12.0f;
@@ -72,6 +69,7 @@ static const uint32_t ER_UI_LEDGER_CATALOG_BUTTON_ID = ER_UI_LEDGER_ACTION_BASE 
 static const uint32_t ER_UI_LEDGER_GOAL_BUTTON_ID = ER_UI_LEDGER_ACTION_BASE + 256u;
 
 typedef struct {
+  er_ui_resolved_theme_t theme;
   er_ui_color4_t bg;
   er_ui_color4_t panel;
   er_ui_color4_t panel_alt;
@@ -181,22 +179,23 @@ static const uint8_t ER_UI_LEDGER_QR_DOTS[][2u] = {
   {0u, 9u}, {1u, 9u}, {2u, 9u}, {4u, 9u}, {6u, 9u}, {7u, 9u}, {9u, 9u}
 };
 
-static er_ui_ledger_colors_t er_ui_ledger_colors(void) {
+static er_ui_ledger_colors_t er_ui_ledger_colors(er_ui_resolved_theme_t theme) {
   er_ui_ledger_colors_t colors;
-  colors.bg = er_ui_shadcn_neutral_dark_background();
-  colors.panel = er_ui_shadcn_neutral_dark_card();
-  colors.panel_alt = er_ui_shadcn_neutral_dark_secondary();
-  colors.field = er_ui_shadcn_neutral_dark_input_fill();
-  colors.border = er_ui_shadcn_neutral_dark_border();
-  colors.ring = er_ui_shadcn_neutral_dark_ring();
-  colors.text = er_ui_shadcn_neutral_dark_foreground();
-  colors.muted = er_ui_shadcn_neutral_dark_muted_foreground();
-  colors.subtle = er_ui_shadcn_neutral_dark_subtle_foreground();
-  colors.button = er_ui_shadcn_neutral_dark_primary();
-  colors.button_text = er_ui_shadcn_neutral_dark_primary_foreground();
-  colors.success = er_ui_color_rgb_u8(ER_UI_LEDGER_RGB_SUCCESS);
-  colors.danger = er_ui_color_rgb_u8(ER_UI_LEDGER_RGB_DANGER);
-  colors.warning = er_ui_color_rgb_u8(ER_UI_LEDGER_RGB_WARNING);
+  colors.theme = theme;
+  colors.bg = theme.shadcn.colors.background;
+  colors.panel = theme.shadcn.colors.card;
+  colors.panel_alt = theme.shadcn.colors.secondary;
+  colors.field = er_ui_color_with_alpha(theme.shadcn.colors.input, 0.30f);
+  colors.border = theme.shadcn.colors.border;
+  colors.ring = theme.shadcn.colors.ring;
+  colors.text = theme.shadcn.colors.foreground;
+  colors.muted = theme.shadcn.colors.muted_foreground;
+  colors.subtle = er_ui_color_with_alpha(theme.shadcn.colors.foreground, 0.42f);
+  colors.button = theme.shadcn.colors.primary;
+  colors.button_text = theme.shadcn.colors.primary_foreground;
+  colors.success = theme.colors.success;
+  colors.danger = theme.colors.danger;
+  colors.warning = theme.colors.warning;
   return colors;
 }
 
@@ -251,10 +250,6 @@ static er_ui_status_t er_ui_ledger_border(er_ui_scene_t* scene, er_ui_bounds_t b
   return er_ui_scene_push_rect(scene, er_ui_rect_border(bounds.x, bounds.y, bounds.w, bounds.h, radius, color));
 }
 
-static er_ui_resolved_theme_t er_ui_ledger_component_theme(void) {
-  return er_ui_resolved_theme_user_default();
-}
-
 static er_ui_bounds_t er_ui_ledger_card_content_rect(er_ui_bounds_t bounds) {
   return er_ui_bounds_inset_ltrb(bounds,
                                  ER_UI_SHADCN_CARD_PAD_X,
@@ -285,8 +280,7 @@ static er_ui_status_t er_ui_ledger_nav_row(
 }
 
 static er_ui_status_t er_ui_ledger_card(er_ui_scene_t* scene, er_ui_bounds_t bounds, er_ui_ledger_colors_t colors) {
-  (void)colors;
-  return er_ui_component_card_emit(scene, bounds, er_ui_ledger_component_theme());
+  return er_ui_component_card_emit(scene, bounds, colors.theme);
 }
 
 static er_ui_status_t er_ui_ledger_card_with_header(
@@ -378,12 +372,11 @@ static er_ui_status_t er_ui_ledger_button(
   er_ui_ledger_colors_t colors,
   const char* label,
   uint32_t id) {
-  (void)colors;
   return er_ui_component_button_emit(
     scene,
     font,
     bounds,
-    er_ui_ledger_component_theme(),
+    colors.theme,
     label,
     id,
     ER_UI_COMPONENT_BUTTON_DEFAULT,
@@ -399,12 +392,11 @@ static er_ui_status_t er_ui_ledger_field(
   const char* label,
   const char* value,
   bool selectable) {
-  (void)colors;
   er_ui_bounds_t component_bounds = er_ui_bounds(bounds.x, bounds.y - 18.0f, bounds.w, bounds.h + 18.0f);
   if (selectable) {
-    return er_ui_component_select_static_emit(scene, font, component_bounds, er_ui_ledger_component_theme(), label, value, false);
+    return er_ui_component_select_static_emit(scene, font, component_bounds, colors.theme, label, value, false);
   }
-  return er_ui_component_field_static_emit(scene, font, component_bounds, er_ui_ledger_component_theme(), label, value, false);
+  return er_ui_component_field_static_emit(scene, font, component_bounds, colors.theme, label, value, false);
 }
 
 static er_ui_status_t er_ui_ledger_field_rows(
@@ -439,8 +431,7 @@ static er_ui_status_t er_ui_ledger_progress(
   er_ui_bounds_t bounds,
   er_ui_ledger_colors_t colors,
   float value) {
-  (void)colors;
-  return er_ui_component_progress_emit(scene, bounds, er_ui_ledger_component_theme(), value);
+  return er_ui_component_progress_emit(scene, bounds, colors.theme, value);
 }
 
 static er_ui_status_t er_ui_ledger_slider(
@@ -453,9 +444,9 @@ static er_ui_status_t er_ui_ledger_slider(
   status = er_ui_ledger_progress(scene, bounds, colors, value);
   if (status != ER_UI_OK) return status;
   er_ui_bounds_t thumb = er_ui_bounds(bounds.x + bounds.w * value - 8.0f, bounds.y - 7.0f, 16.0f, 16.0f);
-  status = er_ui_ledger_rect(scene, thumb, 8.0f, er_ui_shadcn_neutral_dark_foreground());
+  status = er_ui_ledger_rect(scene, thumb, 8.0f, colors.theme.shadcn.colors.foreground);
   if (status != ER_UI_OK) return status;
-  return er_ui_ledger_border(scene, thumb, 8.0f, er_ui_shadcn_neutral_dark_primary());
+  return er_ui_ledger_border(scene, thumb, 8.0f, colors.theme.shadcn.colors.primary);
 }
 
 static er_ui_status_t er_ui_ledger_bottom_button(
@@ -637,7 +628,7 @@ static er_ui_status_t er_ui_ledger_payout_card(
     if (status != ER_UI_OK) return status;
     status = er_ui_ledger_rect(scene, notes, ER_UI_SHADCN_RADIUS_MD, colors.field);
     if (status != ER_UI_OK) return status;
-    status = er_ui_ledger_border(scene, notes, ER_UI_SHADCN_RADIUS_MD, er_ui_shadcn_neutral_dark_input());
+    status = er_ui_ledger_border(scene, notes, ER_UI_SHADCN_RADIUS_MD, colors.theme.shadcn.colors.input);
     if (status != ER_UI_OK) return status;
     status = er_ui_ledger_text_clipped(scene, font, "Add any notes for this payout configuration...", notes.x + 10.0f, notes.y + 24.0f, notes.w - 20.0f, colors.muted);
     if (status != ER_UI_OK) return status;
@@ -909,7 +900,7 @@ static er_ui_status_t er_ui_ledger_payout_preferences_card(
   er_ui_bounds_t paypal = er_ui_bounds(bank.x + bank.w + ER_UI_LEDGER_GAP, bank.y, bank.w, bank.h);
   status = er_ui_ledger_rect(scene, bank, ER_UI_SHADCN_RADIUS_MD, colors.field);
   if (status != ER_UI_OK) return status;
-  status = er_ui_ledger_border(scene, bank, ER_UI_SHADCN_RADIUS_MD, er_ui_shadcn_neutral_dark_input());
+  status = er_ui_ledger_border(scene, bank, ER_UI_SHADCN_RADIUS_MD, colors.theme.shadcn.colors.input);
   if (status != ER_UI_OK) return status;
   status = er_ui_ledger_rect(scene, er_ui_bounds(bank.x + 10.0f, bank.y + 17.0f, 10.0f, 10.0f), 5.0f, colors.text);
   if (status != ER_UI_OK) return status;
@@ -1307,9 +1298,8 @@ er_ui_status_t er_ui_ledger_app_emit_scene(
   vr_font_face_t* font,
   er_ui_bounds_t bounds,
   er_ui_resolved_theme_t theme) {
-  (void)theme;
   if (!state || !scene || !font || !er_ui_bounds_valid(bounds)) return ER_UI_ERR_INVALID_ARGUMENT;
-  er_ui_ledger_colors_t colors = er_ui_ledger_colors();
+  er_ui_ledger_colors_t colors = er_ui_ledger_colors(theme);
   uint32_t focused_id = er_ui_workspace_focused_surface_id(&state->shell);
   scene->clear = colors.bg;
   er_ui_status_t status = er_ui_ledger_rect(scene, bounds, 0.0f, colors.bg);
