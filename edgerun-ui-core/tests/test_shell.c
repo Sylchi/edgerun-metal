@@ -7,6 +7,7 @@ static const size_t ER_TEST_SHELL_MIN_CHROME_RECTS = 6u;
 static const size_t ER_TEST_SHELL_MIN_CHROME_HITS = 5u;
 static const size_t ER_TEST_SHELL_MIN_ICON_QUADS = 5u;
 static const size_t ER_TEST_SHELL_MIN_FONT_ICON_QUADS = 3u;
+static const float ER_TEST_SHELL_PANEL_PAD = 8.0f;
 
 static bool shell_scene_has_hit_id(const er_ui_scene_t* scene, uint32_t id) {
   if (!scene) return false;
@@ -16,11 +17,20 @@ static bool shell_scene_has_hit_id(const er_ui_scene_t* scene, uint32_t id) {
   return false;
 }
 
+static const er_ui_drop_target_t* shell_scene_drop_target(const er_ui_scene_t* scene, uint32_t scope_id) {
+  if (!scene) return NULL;
+  for (size_t i = 0u; i < scene->drop_target_count; ++i) {
+    if (scene->drop_targets[i].scope_id == scope_id) return &scene->drop_targets[i];
+  }
+  return NULL;
+}
+
 void run_shell_tests(void) {
   er_ui_shell_state_t shell = {0};
   er_ui_runtime_state_t runtime = {0};
   er_ui_scene_t scene = {0};
   er_ui_bounds_t surface_bounds = {0};
+  er_ui_bounds_t focused_bounds = {0};
   er_ui_resolved_theme_t theme = er_ui_resolved_theme_user_default();
   bool changed = false;
 
@@ -41,6 +51,12 @@ void run_shell_tests(void) {
   expect_true(er_ui_workspace_surface_bounds(&shell, workspace, ER_TEST_SHELL_SECOND_SURFACE_ID, &surface_bounds), "workspace: surface bounds resolve");
   expect_float(surface_bounds.x, 200.0f, "workspace: second tile x splits width");
   expect_float(surface_bounds.w, 200.0f, "workspace: tile width splits evenly");
+  expect_true(er_ui_workspace_focused_surface_bounds(&shell, er_ui_bounds(0.0f, 0.0f, 400.0f, 300.0f), &focused_bounds),
+              "workspace: focused surface bounds resolve");
+  expect_float(focused_bounds.x, 0.0f, "workspace: focused tile x matches focused surface");
+  expect_float(focused_bounds.y, workspace.y, "workspace: focused tile y matches workspace");
+  expect_float(focused_bounds.w, surface_bounds.w, "workspace: focused tile width matches surface tile width");
+  expect_float(focused_bounds.h, workspace.h, "workspace: focused tile height matches workspace");
 
   expect_status(er_ui_scene_init_with_allocator(&scene, theme.colors.bg, er_ui_test_allocator()), ER_UI_OK, "shell scene: init succeeds");
   expect_status(er_ui_shell_emit_scene(&shell, &scene, er_ui_bounds(0.0f, 0.0f, 400.0f, 300.0f), theme), ER_UI_OK,
@@ -49,6 +65,18 @@ void run_shell_tests(void) {
   expect_true(scene.hit_count >= ER_TEST_SHELL_MIN_CHROME_HITS, "shell scene: launcher tabs and closes emit hits");
   expect_size(scene.drop_target_count, ER_TEST_SHELL_SURFACE_COUNT, "shell scene: surface tiles emit drop targets");
   expect_true(scene.icon_quad_count >= ER_TEST_SHELL_MIN_ICON_QUADS, "shell scene: launcher tabs and closes emit Tabler icon quads");
+  const er_ui_drop_target_t* first_drop = shell_scene_drop_target(&scene, ER_TEST_SHELL_FIRST_SURFACE_ID);
+  const er_ui_drop_target_t* second_drop = shell_scene_drop_target(&scene, ER_TEST_SHELL_SECOND_SURFACE_ID);
+  expect_true(first_drop != NULL, "shell scene: focused surface drop target emits");
+  expect_true(second_drop != NULL, "shell scene: second surface drop target emits");
+  if (first_drop && second_drop) {
+    expect_float(first_drop->x, focused_bounds.x + ER_TEST_SHELL_PANEL_PAD, "shell scene: first drop x matches first tile inset");
+    expect_float(first_drop->y, focused_bounds.y + ER_TEST_SHELL_PANEL_PAD, "shell scene: first drop y matches workspace inset");
+    expect_float(first_drop->w, focused_bounds.w - (ER_TEST_SHELL_PANEL_PAD * 2.0f), "shell scene: first drop width matches tile inset");
+    expect_float(first_drop->h, focused_bounds.h - (ER_TEST_SHELL_PANEL_PAD * 2.0f), "shell scene: first drop height matches tile inset");
+    expect_float(second_drop->x, surface_bounds.x + ER_TEST_SHELL_PANEL_PAD, "shell scene: second drop x matches second tile inset");
+    expect_float(second_drop->w, surface_bounds.w - (ER_TEST_SHELL_PANEL_PAD * 2.0f), "shell scene: second drop width matches tile inset");
+  }
 
   er_ui_hit_t hit = {0};
   expect_true(er_ui_scene_hit_test(&scene, 12.0f, 12.0f, &hit), "shell scene: launcher hit is queryable");

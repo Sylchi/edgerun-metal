@@ -35,6 +35,13 @@ static size_t er_ui_workspace_find_surface(const er_ui_shell_state_t* state, uin
   return (size_t)-1;
 }
 
+static bool er_ui_shell_workspace_bounds(er_ui_bounds_t shell_bounds, er_ui_bounds_t* out_bounds) {
+  if (!out_bounds || !er_ui_bounds_valid(shell_bounds)) return false;
+  er_ui_bounds_t tabs = er_ui_bounds(shell_bounds.x, shell_bounds.y + ER_UI_SHELL_TOPBAR_HEIGHT, shell_bounds.w, ER_UI_WORKSPACE_TAB_HEIGHT);
+  *out_bounds = er_ui_bounds(tabs.x, tabs.y + tabs.h, tabs.w, shell_bounds.h - ER_UI_SHELL_TOPBAR_HEIGHT - ER_UI_WORKSPACE_TAB_HEIGHT);
+  return er_ui_bounds_valid(*out_bounds);
+}
+
 er_ui_status_t er_ui_shell_state_init(er_ui_shell_state_t* state) {
   er_ui_allocator_t allocator = {0};
   return er_ui_shell_state_init_with_allocator(state, allocator);
@@ -217,12 +224,9 @@ bool er_ui_workspace_surface_bounds(const er_ui_shell_state_t* state, er_ui_boun
 
 bool er_ui_workspace_focused_surface_bounds(const er_ui_shell_state_t* state, er_ui_bounds_t shell_bounds, er_ui_bounds_t* out_bounds) {
   if (!state || !out_bounds || state->focused_surface_id == 0u || !er_ui_bounds_valid(shell_bounds)) return false;
-  er_ui_bounds_t tabs = er_ui_bounds(shell_bounds.x, shell_bounds.y + ER_UI_SHELL_TOPBAR_HEIGHT, shell_bounds.w, ER_UI_WORKSPACE_TAB_HEIGHT);
-  er_ui_bounds_t workspace = er_ui_bounds(shell_bounds.x, tabs.y + tabs.h, shell_bounds.w,
-                                          shell_bounds.h - ER_UI_SHELL_TOPBAR_HEIGHT - ER_UI_WORKSPACE_TAB_HEIGHT);
-  if (!er_ui_bounds_valid(workspace)) return false;
-  *out_bounds = er_ui_bounds_inset(workspace, ER_UI_SHELL_PAD, ER_UI_SHELL_PAD);
-  return er_ui_bounds_valid(*out_bounds);
+  er_ui_bounds_t workspace = {0};
+  if (!er_ui_shell_workspace_bounds(shell_bounds, &workspace)) return false;
+  return er_ui_workspace_surface_bounds(state, workspace, state->focused_surface_id, out_bounds);
 }
 
 static er_ui_status_t er_ui_shell_emit_topbar(er_ui_scene_t* scene, er_ui_bounds_t bounds, er_ui_resolved_theme_t theme) {
@@ -279,24 +283,29 @@ static er_ui_status_t er_ui_shell_emit_workspace(
     if (status != ER_UI_OK) return status;
   }
 
-  er_ui_bounds_t focused = {0};
-  if (er_ui_workspace_focused_surface_bounds(state, bounds, &focused)) {
-    status = er_ui_scene_push_rect(scene, er_ui_rect_linear_gradient(focused.x, focused.y, focused.w, focused.h, theme.radius.panel,
-                                                                     er_ui_color_with_alpha(theme.colors.panel, 0.96f),
-                                                                     er_ui_color_with_alpha(theme.colors.row, 0.54f)));
-    if (status != ER_UI_OK) return status;
-    status = er_ui_scene_push_rect(scene, er_ui_rect_border(focused.x, focused.y, focused.w, focused.h, theme.radius.panel, er_ui_color_with_alpha(theme.colors.border, 0.58f)));
-    if (status != ER_UI_OK) return status;
-    er_ui_bounds_t drop = er_ui_bounds_inset(focused, ER_UI_WORKSPACE_PANEL_PAD, ER_UI_WORKSPACE_PANEL_PAD);
-    if (!er_ui_bounds_valid(drop)) return ER_UI_ERR_INVALID_ARGUMENT;
+  er_ui_bounds_t workspace = {0};
+  if (er_ui_shell_workspace_bounds(bounds, &workspace)) {
     for (size_t i = 0u; i < state->surface_count; ++i) {
-      status = er_ui_scene_push_drop_target(scene, er_ui_drop_target(state->surfaces[i].id, i, drop.x, drop.y, drop.w, drop.h));
+      uint32_t id = state->surfaces[i].id;
+      er_ui_bounds_t surface = {0};
+      if (!er_ui_workspace_surface_bounds(state, workspace, id, &surface)) return ER_UI_ERR_INVALID_ARGUMENT;
+      er_ui_color4_t panel_top = id == state->focused_surface_id ? theme.colors.panel : theme.colors.row;
+      er_ui_color4_t panel_bottom = id == state->focused_surface_id ? theme.colors.row : theme.colors.panel;
+      er_ui_color4_t border = id == state->focused_surface_id ? theme.colors.border : theme.colors.muted;
+      status = er_ui_scene_push_rect(scene, er_ui_rect_linear_gradient(surface.x, surface.y, surface.w, surface.h, theme.radius.panel,
+                                                                       er_ui_color_with_alpha(panel_top, 0.96f),
+                                                                       er_ui_color_with_alpha(panel_bottom, 0.54f)));
       if (status != ER_UI_OK) return status;
-    }
-    if (status != ER_UI_OK) return status;
-    if (emit_surface) {
-      status = emit_surface(state->focused_surface_id, scene, font, drop, theme, user);
+      status = er_ui_scene_push_rect(scene, er_ui_rect_border(surface.x, surface.y, surface.w, surface.h, theme.radius.panel, er_ui_color_with_alpha(border, 0.58f)));
       if (status != ER_UI_OK) return status;
+      er_ui_bounds_t drop = er_ui_bounds_inset(surface, ER_UI_WORKSPACE_PANEL_PAD, ER_UI_WORKSPACE_PANEL_PAD);
+      if (!er_ui_bounds_valid(drop)) return ER_UI_ERR_INVALID_ARGUMENT;
+      status = er_ui_scene_push_drop_target(scene, er_ui_drop_target(id, i, drop.x, drop.y, drop.w, drop.h));
+      if (status != ER_UI_OK) return status;
+      if (id == state->focused_surface_id && emit_surface) {
+        status = emit_surface(id, scene, font, drop, theme, user);
+        if (status != ER_UI_OK) return status;
+      }
     }
   }
   return ER_UI_OK;
