@@ -13,6 +13,7 @@ Implemented portable slices:
 - required `vrfont` integration for converting variable-font vertex batches into scene text quads
 - Rust-compatible UI record codec for deterministic setup/admission records using caller-owned buffers
 - initial setup and YubiKey grant ceremony state machines plus reusable node-surface builders
+- fingerprint, TPM, YubiKey, and user-device admission grant records using the Rust setup record format
 - cursor-based opacity and translation for grouped commands
 - scene budgets for native, browser, and public showcase frames
 - deterministic tests for validation, clipping, topmost interaction queries, transition easing, budget checks, painter output, theme resolution, and varfont text-quad emission
