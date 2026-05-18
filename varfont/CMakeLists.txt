@@ -18,6 +18,12 @@ add_library(vrfont
   src/vr_font_freestanding.c
   src/vr_font.c
   src/vr_font_utils.c
+  src/vr_font_axes.c
+  src/vr_font_cmap.c
+  src/vr_font_gvar.c
+  src/vr_font_gvar_apply.c
+  src/vr_font_kern.c
+  src/vr_font_tables.c
   src/vr_font_shape.c
   src/vr_font_raster.c
   src/vr_font_raster_geometry.c
