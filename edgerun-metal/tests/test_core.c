@@ -25,6 +25,7 @@ int main(void) {
   test_virtio_mmio_transport();
   test_virtio_modern_pci_transport_registers();
   test_virtio_split_queue();
+  test_virtio_blk_mmio();
   test_virtio_net_mmio();
   test_virtio_gpu_mmio();
   test_net_frame_builders();
