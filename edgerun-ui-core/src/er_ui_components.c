@@ -2695,9 +2695,8 @@ static er_ui_status_t er_ui_component_labeled_control_frame(
   if (!er_ui_bounds_valid(control)) return ER_UI_ERR_INVALID_ARGUMENT;
   status = er_ui_scene_push_hit(scene, er_ui_hit(hit_kind, id, control.x, control.y, control.w, control.h));
   if (status != ER_UI_OK) return status;
-  status = er_ui_scene_push_rect(scene, er_ui_rect_fill(control.x, control.y, control.w, control.h, theme.radius.control, fill));
-  if (status != ER_UI_OK) return status;
-  status = er_ui_scene_push_rect(scene, er_ui_rect_border(control.x, control.y, control.w, control.h, theme.radius.control, er_ui_color_with_alpha(theme.colors.border, border_alpha)));
+  status = er_ui_component_fill_border(scene, control, theme.radius.control, fill,
+                                       er_ui_color_with_alpha(theme.colors.border, border_alpha));
   if (status != ER_UI_OK) return status;
   *out_control = control;
   return ER_UI_OK;
