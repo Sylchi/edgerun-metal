@@ -67,6 +67,11 @@ typedef struct {
 } ErAppPackageStorageSource;
 
 typedef struct {
+  ErHash retrieve_route_id;
+  ErAppPackageObjectLoad object;
+} ErAppPackageStorageObject;
+
+typedef struct {
   UINT16 abi_version;
   UINT16 reserved;
   ErHash app_object_id;
@@ -200,6 +205,13 @@ UINT8 er_app_prepare_package_storage_source(const ErCryptoProvider* crypto,
                                             const ErAdmittedRoute* manifest_route,
                                             const ErAdmittedRoute* ui_assets_route,
                                             ErAppPackageStorageSource* out_source);
+UINT8 er_app_load_package_from_storage_source(const ErCryptoProvider* crypto,
+                                              const ErAppPackageManifest* package,
+                                              const ErAppPackageStorageSource* source,
+                                              const ErAppPackageStorageObject* app_object,
+                                              const ErAppPackageStorageObject* manifest_object,
+                                              const ErAppPackageStorageObject* ui_assets_object,
+                                              ErAppLoadedPackage* out_loaded);
 UINT8 er_app_derive_identity_from_package(const ErCryptoProvider* crypto,
                                           const ErAppPackageManifest* package,
                                           const ErHash* admission_id,
