@@ -7,7 +7,7 @@
 #include "er_boot_profile.h"
 #include "er_gfx_console.h"
 #include "er_tpm.h"
-#include "er_ui_gop_renderer.h"
+#include "er_ui_surface_renderer.h"
 #include "er_ui_components.h"
 #include "er_ui_demo_apps.h"
 #include "er_ui_metal.h"
@@ -1187,17 +1187,17 @@ static er_ui_status_t er_build_ui_boot_scene(er_ui_scene_t* scene,
 
 static UINT8 er_ui_boot_render_scene(er_ui_demo_apps_state_t* demo_state,
                                      vr_font_face_t* font,
-                                     ErUiGopMode mode,
-                                     const ErUiGopTilePlan* tile_plan,
-                                     ErUiGopMemoryPlan memory_plan,
+                                     ErUiSurfaceMode mode,
+                                     const ErUiSurfaceTilePlan* tile_plan,
+                                     ErUiSurfaceMemoryPlan memory_plan,
                                      er_ui_scene_budget_t scene_budget,
-                                     ErUiGopFrameBudget frame_budget,
+                                     ErUiSurfaceFrameBudget frame_budget,
                                      er_ui_resolved_theme_t theme) {
   er_ui_scene_t scene = {0};
   er_ui_scene_stats_t scene_stats;
   er_ui_scene_budget_violation_t scene_violation;
-  ErUiGopRenderStats render_stats;
-  ErUiGopFrameBudgetViolation frame_violation;
+  ErUiSurfaceRenderStats render_stats;
+  ErUiSurfaceFrameBudgetViolation frame_violation;
 
   if (demo_state == 0 || font == 0 || tile_plan == 0) {
     return 0u;
@@ -1228,7 +1228,7 @@ static UINT8 er_ui_boot_render_scene(er_ui_demo_apps_state_t* demo_state,
     return 0u;
   }
 
-  if (er_ui_gop_render_stats_first_budget_violation(render_stats, frame_budget, &frame_violation) != 0u) {
+  if (er_ui_surface_render_stats_first_budget_violation(render_stats, frame_budget, &frame_violation) != 0u) {
     er_print("ui renderer: frame budget exceeded ");
     er_print(frame_violation.name);
     er_print(" actual=");
@@ -1260,12 +1260,12 @@ static UINT8 er_ui_boot_render_scene(er_ui_demo_apps_state_t* demo_state,
 
 static void er_run_ui_profile(EFI_SYSTEM_TABLE* SystemTable) {
   er_ui_scene_budget_t scene_budget;
-  ErUiGopMode mode;
-  ErUiGopFrameBudget frame_budget;
-  ErUiGopTilePlan tile_plan;
-  ErUiGopMemoryPlan memory_plan;
-  ErUiGopMemoryBudget memory_budget;
-  ErUiGopMemoryBudgetViolation memory_violation;
+  ErUiSurfaceMode mode;
+  ErUiSurfaceFrameBudget frame_budget;
+  ErUiSurfaceTilePlan tile_plan;
+  ErUiSurfaceMemoryPlan memory_plan;
+  ErUiSurfaceMemoryBudget memory_budget;
+  ErUiSurfaceMemoryBudgetViolation memory_violation;
   er_ui_resolved_theme_t theme = er_ui_resolved_theme(
     ER_UI_STYLE_AUTHORITY_USER,
     (er_ui_style_preset_t){ER_UI_COLOR_SCHEME_DARK, ER_UI_ACCENT_NEUTRAL, ER_UI_RADIUS_DEFAULT});
@@ -1309,7 +1309,7 @@ static void er_run_ui_profile(EFI_SYSTEM_TABLE* SystemTable) {
   }
 
   scene_budget = er_ui_scene_budget_native_interactive_frame();
-  if (er_ui_gop_memory_plan_from_tile_plan(&tile_plan, ER_UI_BOOT_BACKING_BUFFERS,
+  if (er_ui_surface_memory_plan_from_tile_plan(&tile_plan, ER_UI_BOOT_BACKING_BUFFERS,
                                            ER_UI_BOOT_COMMAND_BYTES, ER_UI_BOOT_GLYPH_CACHE_BYTES,
                                            ER_UI_BOOT_SURFACE_BYTES, &memory_plan) == 0u) {
     er_println("ui renderer: memory plan failed");
@@ -1324,7 +1324,7 @@ static void er_run_ui_profile(EFI_SYSTEM_TABLE* SystemTable) {
   memory_budget.glyph_cache_bytes = ER_UI_BOOT_GLYPH_CACHE_BYTES;
   memory_budget.surface_bytes = ER_UI_BOOT_SURFACE_BYTES;
   memory_budget.total_bytes = ER_UI_BOOT_MEMORY_BUDGET_BYTES;
-  if (er_ui_gop_memory_plan_first_budget_violation(memory_plan, memory_budget, &memory_violation) != 0u) {
+  if (er_ui_surface_memory_plan_first_budget_violation(memory_plan, memory_budget, &memory_violation) != 0u) {
     er_print("ui renderer: memory budget exceeded ");
     er_print(memory_violation.name);
     er_print(" actual=");
@@ -1335,7 +1335,7 @@ static void er_run_ui_profile(EFI_SYSTEM_TABLE* SystemTable) {
     vr_font_face_destroy(font);
     return;
   }
-  frame_budget = er_ui_gop_frame_budget_from_plan(&tile_plan, scene_budget, ER_UI_BOOT_RENDER_OVERDRAW_BUDGET);
+  frame_budget = er_ui_surface_frame_budget_from_plan(&tile_plan, scene_budget, ER_UI_BOOT_RENDER_OVERDRAW_BUDGET);
 
   if (er_ui_demo_apps_state_init(&demo_state, er_ui_boot_allocator()) != ER_UI_OK) {
     er_println("ui renderer: demo app state failed");
