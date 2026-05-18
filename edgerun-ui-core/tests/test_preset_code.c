@@ -1,5 +1,13 @@
 #include "test_common.h"
 
+#define ER_UI_TEST_ARRAY_COUNT(values) (sizeof(values) / sizeof((values)[0]))
+#define ER_UI_TEST_STYLE_FAMILY_COUNT 7u
+#define ER_UI_TEST_STYLE_TOKEN_COUNT 27u
+#define ER_UI_TEST_FIRST_INDEX 0u
+#define ER_UI_TEST_SERA_INDEX 6u
+#define ER_UI_TEST_DESTRUCTIVE_TOKEN_INDEX 15u
+#define ER_UI_TEST_CHART_FIVE_TOKEN_INDEX 26u
+
 typedef struct {
   er_ui_style_family_t family;
   const char* code;
@@ -21,7 +29,7 @@ static void test_preset_codes_encode_captured_families(void) {
   };
   char code[ER_UI_PRESET_CODE_MAX_LEN];
   size_t len = 0u;
-  for (size_t i = 0u; i < sizeof(expected) / sizeof(expected[0]); ++i) {
+  for (size_t i = 0u; i < ER_UI_TEST_ARRAY_COUNT(expected); ++i) {
     er_ui_preset_recipe_t recipe = er_ui_preset_recipe_for_style_family(expected[i].family);
     expect_preset_status(er_ui_preset_encode(recipe, code, sizeof(code), &len), ER_UI_OK, "preset code: family encodes");
     expect_string(code, expected[i].code, "preset code: captured code matches Rust");
@@ -75,28 +83,28 @@ static void test_preset_code_encodes_live_sera_deltas(void) {
 }
 
 static void test_source_captures_preserve_provenance(void) {
-  expect_size(er_ui_extracted_source_capture_count(), 7u, "source captures: count");
-  const er_ui_extracted_source_capture_t* first = er_ui_extracted_source_capture_at(0u);
+  expect_size(er_ui_extracted_source_capture_count(), ER_UI_TEST_STYLE_FAMILY_COUNT, "source captures: count");
+  const er_ui_extracted_source_capture_t* first = er_ui_extracted_source_capture_at(ER_UI_TEST_FIRST_INDEX);
   expect_true(first != 0, "source captures: first exists");
   expect_string(first->path, "ui.html", "source captures: first path");
   expect_true(first->has_style_family && first->style_family == ER_UI_STYLE_FAMILY_MIRA, "source captures: first family");
   expect_string(first->preset_code, "b1D0eCA4", "source captures: first preset code");
-  const er_ui_extracted_source_capture_t* sera = er_ui_extracted_source_capture_at(6u);
+  const er_ui_extracted_source_capture_t* sera = er_ui_extracted_source_capture_at(ER_UI_TEST_SERA_INDEX);
   expect_true(sera != 0, "source captures: Sera exists");
   expect_string(sera->path, "sera.html", "source captures: Sera path");
   expect_string(sera->project_slug, "radix-sera", "source captures: Sera slug");
   expect_string(sera->preset_recipe.base_color, "taupe", "source captures: Sera recipe base color");
-  expect_true(er_ui_extracted_source_capture_at(7u) == 0, "source captures: out of range is null");
+  expect_true(er_ui_extracted_source_capture_at(ER_UI_TEST_STYLE_FAMILY_COUNT) == 0, "source captures: out of range is null");
 }
 
 static void test_style_family_specs_and_colors(void) {
-  expect_size(er_ui_style_family_spec_count(), 7u, "style family: spec count");
+  expect_size(er_ui_style_family_spec_count(), ER_UI_TEST_STYLE_FAMILY_COUNT, "style family: spec count");
   const er_ui_style_family_spec_t* vega = er_ui_style_family_spec_for_family(ER_UI_STYLE_FAMILY_VEGA);
   expect_true(vega != 0, "style family: Vega spec exists");
   expect_string(vega->name, "Vega", "style family: Vega name");
   expect_string(vega->preset_code, "bIkeymG", "style family: Vega preset code");
   expect_string(vega->role, "structured blue-black system surface", "style family: Vega role");
-  const er_ui_style_family_spec_t* sera = er_ui_style_family_spec_at(6u);
+  const er_ui_style_family_spec_t* sera = er_ui_style_family_spec_at(ER_UI_TEST_SERA_INDEX);
   expect_true(sera != 0 && sera->family == ER_UI_STYLE_FAMILY_SERA, "style family: Sera spec by index");
   expect_string(sera->base_color, "taupe", "style family: Sera base color");
   er_ui_semantic_colors_t colors = er_ui_colors_for_style_family(ER_UI_STYLE_FAMILY_SERA);
@@ -109,9 +117,9 @@ static void test_style_family_specs_and_colors(void) {
 }
 
 static void test_extracted_style_tokens_preserve_classes_and_roles(void) {
-  expect_size(er_ui_extracted_style_token_count(), 27u, "style tokens: count");
+  expect_size(er_ui_extracted_style_token_count(), ER_UI_TEST_STYLE_TOKEN_COUNT, "style tokens: count");
   expect_string(er_ui_extracted_style_token_kind_label(ER_UI_EXTRACTED_STYLE_TOKEN_ACTION), "Action", "style tokens: kind label");
-  const er_ui_extracted_style_token_t* background = er_ui_extracted_style_token_at(0u);
+  const er_ui_extracted_style_token_t* background = er_ui_extracted_style_token_at(ER_UI_TEST_FIRST_INDEX);
   expect_true(background != 0, "style tokens: background exists");
   expect_string(background->name, "background", "style tokens: background name");
   expect_string(background->css_var, "--background", "style tokens: background css var");
@@ -120,17 +128,17 @@ static void test_extracted_style_tokens_preserve_classes_and_roles(void) {
   expect_true(er_ui_extracted_style_token_has_class(background, "bg-bg"), "style tokens: background alias class");
   expect_true(!er_ui_extracted_style_token_has_class(background, "text-muted"), "style tokens: background rejects unrelated class");
 
-  const er_ui_extracted_style_token_t* destructive = er_ui_extracted_style_token_at(15u);
+  const er_ui_extracted_style_token_t* destructive = er_ui_extracted_style_token_at(ER_UI_TEST_DESTRUCTIVE_TOKEN_INDEX);
   expect_true(destructive != 0, "style tokens: destructive exists");
   expect_string(destructive->css_var, "--destructive", "style tokens: destructive css var");
   expect_true(destructive->kind == ER_UI_EXTRACTED_STYLE_TOKEN_STATUS, "style tokens: destructive kind");
   expect_true(er_ui_extracted_style_token_has_class(destructive, "aria-invalid:border-destructive"), "style tokens: destructive aria class");
 
-  const er_ui_extracted_style_token_t* chart = er_ui_extracted_style_token_at(26u);
+  const er_ui_extracted_style_token_t* chart = er_ui_extracted_style_token_at(ER_UI_TEST_CHART_FIVE_TOKEN_INDEX);
   expect_true(chart != 0, "style tokens: chart five exists");
   expect_string(chart->name, "chart 5", "style tokens: chart five name");
   expect_true(er_ui_extracted_style_token_has_class(chart, "text-chart-5"), "style tokens: chart five text class");
-  expect_true(er_ui_extracted_style_token_at(27u) == 0, "style tokens: out of range is null");
+  expect_true(er_ui_extracted_style_token_at(ER_UI_TEST_STYLE_TOKEN_COUNT) == 0, "style tokens: out of range is null");
 }
 
 void run_preset_code_tests(void) {
