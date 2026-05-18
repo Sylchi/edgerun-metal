@@ -11,6 +11,16 @@ static const char ER_UI_YUBIKEY_STATUS_WAITING[] = "waiting for YubiKey signatur
 static const char ER_UI_YUBIKEY_STATUS_BAD_PIN[] = "PIV PIN must be 6 to 8 digits";
 static const char ER_UI_MASKED_VALUE[] = "masked";
 static const char ER_UI_EMPTY_VALUE[] = "";
+static const uint8_t ER_UI_FINGERPRINT_RECORD_MAGIC[] = {'E', 'R', 'F', 'G', '1'};
+static const uint8_t ER_UI_TPM_RECORD_MAGIC[] = {'E', 'R', 'T', 'D', '1'};
+static const uint8_t ER_UI_YUBIKEY_RECORD_MAGIC[] = {'E', 'R', 'Y', 'U', '1'};
+static const uint8_t ER_UI_DEVICE_GRANT_RECORD_MAGIC[] = {'E', 'R', 'D', 'G', '1'};
+static const uint8_t ER_UI_DEVICE_GRANT_DOMAIN[] = "edgerun:v1:ui:initial-setup:user-device-admission-grant";
+
+typedef enum {
+  ER_UI_SETUP_SPAN_STRING = 0,
+  ER_UI_SETUP_SPAN_BYTES
+} er_ui_setup_span_kind_t;
 
 static size_t er_ui_setup_cstr_len(const char* value) {
   if (!value) return 0u;
@@ -45,6 +55,175 @@ static er_ui_status_t er_ui_setup_add(er_ui_node_t* parent, er_ui_node_t* child)
 
 static er_ui_node_t er_ui_setup_field(const char* label, bool has_value, uint32_t id) {
   return er_ui_node_field(label, has_value ? ER_UI_MASKED_VALUE : ER_UI_EMPTY_VALUE, id);
+}
+
+static bool er_ui_setup_string_span_valid(er_ui_initial_setup_string_span_t value) {
+  return value.bytes || value.len == 0u;
+}
+
+static bool er_ui_setup_byte_span_valid(er_ui_initial_setup_byte_span_t value) {
+  return value.bytes || value.len == 0u;
+}
+
+static er_ui_record_status_t er_ui_setup_record_done(er_ui_record_writer_t* writer, size_t* out_len) {
+  if (!out_len) return ER_UI_RECORD_ERR_INVALID_ARGUMENT;
+  *out_len = er_ui_record_writer_len(writer);
+  return ER_UI_RECORD_OK;
+}
+
+static er_ui_record_status_t er_ui_setup_write_string_span(er_ui_record_writer_t* writer, er_ui_initial_setup_string_span_t value) {
+  if (!er_ui_setup_string_span_valid(value)) return ER_UI_RECORD_ERR_INVALID_ARGUMENT;
+  return er_ui_record_write_string(writer, value.bytes, value.len);
+}
+
+static er_ui_record_status_t er_ui_setup_write_byte_span(er_ui_record_writer_t* writer, er_ui_initial_setup_byte_span_t value) {
+  if (!er_ui_setup_byte_span_valid(value)) return ER_UI_RECORD_ERR_INVALID_ARGUMENT;
+  return er_ui_record_write_bytes(writer, value.bytes, value.len);
+}
+
+static er_ui_record_status_t er_ui_setup_write_byte_vec(
+  er_ui_record_writer_t* writer,
+  const er_ui_initial_setup_byte_span_t* values,
+  size_t count) {
+  if (!values && count > 0u) return ER_UI_RECORD_ERR_INVALID_ARGUMENT;
+  er_ui_record_status_t status = er_ui_record_write_vec_len(writer, count);
+  if (status != ER_UI_RECORD_OK) return status;
+  for (size_t i = 0u; i < count; ++i) {
+    status = er_ui_setup_write_byte_span(writer, values[i]);
+    if (status != ER_UI_RECORD_OK) return status;
+  }
+  return ER_UI_RECORD_OK;
+}
+
+static er_ui_record_status_t er_ui_setup_write_string_vec(
+  er_ui_record_writer_t* writer,
+  const er_ui_initial_setup_string_span_t* values,
+  size_t count) {
+  if (!values && count > 0u) return ER_UI_RECORD_ERR_INVALID_ARGUMENT;
+  er_ui_record_status_t status = er_ui_record_write_vec_len(writer, count);
+  if (status != ER_UI_RECORD_OK) return status;
+  for (size_t i = 0u; i < count; ++i) {
+    status = er_ui_setup_write_string_span(writer, values[i]);
+    if (status != ER_UI_RECORD_OK) return status;
+  }
+  return ER_UI_RECORD_OK;
+}
+
+static er_ui_record_status_t er_ui_setup_read_string_span(er_ui_record_reader_t* reader, er_ui_initial_setup_string_span_t* out_value) {
+  if (!out_value) return ER_UI_RECORD_ERR_INVALID_ARGUMENT;
+  return er_ui_record_read_string(reader, &out_value->bytes, &out_value->len);
+}
+
+static er_ui_record_status_t er_ui_setup_read_byte_span(er_ui_record_reader_t* reader, er_ui_initial_setup_byte_span_t* out_value) {
+  if (!out_value) return ER_UI_RECORD_ERR_INVALID_ARGUMENT;
+  return er_ui_record_read_bytes(reader, &out_value->bytes, &out_value->len);
+}
+
+static er_ui_record_status_t er_ui_setup_read_vec_header(
+  er_ui_record_reader_t* reader,
+  const void* values,
+  size_t capacity,
+  size_t* out_count,
+  size_t* count) {
+  if (!out_count) return ER_UI_RECORD_ERR_INVALID_ARGUMENT;
+  er_ui_record_status_t status = er_ui_record_read_vec_len(reader, count);
+  if (status != ER_UI_RECORD_OK) return status;
+  if ((!values && *count > 0u) || *count > capacity) return ER_UI_RECORD_ERR_NO_SPACE;
+  return ER_UI_RECORD_OK;
+}
+
+static er_ui_record_status_t er_ui_setup_read_span_vec(
+  er_ui_record_reader_t* reader,
+  void* values,
+  size_t capacity,
+  size_t* out_count,
+  er_ui_setup_span_kind_t kind) {
+  size_t count = 0u;
+  er_ui_record_status_t status = er_ui_setup_read_vec_header(reader, values, capacity, out_count, &count);
+  if (status != ER_UI_RECORD_OK) return status;
+  for (size_t i = 0u; i < count; ++i) {
+    switch (kind) {
+      case ER_UI_SETUP_SPAN_STRING:
+        status = er_ui_setup_read_string_span(reader, &((er_ui_initial_setup_string_span_t*)values)[i]);
+        break;
+      case ER_UI_SETUP_SPAN_BYTES:
+        status = er_ui_setup_read_byte_span(reader, &((er_ui_initial_setup_byte_span_t*)values)[i]);
+        break;
+      default:
+        status = ER_UI_RECORD_ERR_INVALID_ARGUMENT;
+        break;
+    }
+    if (status != ER_UI_RECORD_OK) return status;
+  }
+  *out_count = count;
+  return ER_UI_RECORD_OK;
+}
+
+static er_ui_record_status_t er_ui_setup_read_string_vec(
+  er_ui_record_reader_t* reader,
+  er_ui_initial_setup_string_span_t* values,
+  size_t capacity,
+  size_t* out_count) {
+  return er_ui_setup_read_span_vec(reader, values, capacity, out_count, ER_UI_SETUP_SPAN_STRING);
+}
+
+static er_ui_record_status_t er_ui_setup_read_byte_vec(
+  er_ui_record_reader_t* reader,
+  er_ui_initial_setup_byte_span_t* values,
+  size_t capacity,
+  size_t* out_count) {
+  return er_ui_setup_read_span_vec(reader, values, capacity, out_count, ER_UI_SETUP_SPAN_BYTES);
+}
+
+static er_ui_record_status_t er_ui_setup_write_device_grant_fields(
+  er_ui_record_writer_t* writer,
+  const er_ui_user_device_admission_grant_t* value,
+  bool include_signature) {
+  er_ui_record_status_t status = er_ui_setup_write_byte_span(writer, value->user_public_key);
+  if (status != ER_UI_RECORD_OK) return status;
+  status = er_ui_setup_write_string_span(writer, value->user_key_label);
+  if (status != ER_UI_RECORD_OK) return status;
+  status = er_ui_setup_write_byte_span(writer, value->device_public_key);
+  if (status != ER_UI_RECORD_OK) return status;
+  status = er_ui_setup_write_string_span(writer, value->device_key_label);
+  if (status != ER_UI_RECORD_OK) return status;
+  status = er_ui_setup_write_string_span(writer, value->fingerprint_template_ref);
+  if (status != ER_UI_RECORD_OK) return status;
+  status = er_ui_setup_write_string_vec(writer, value->allowed_roles, value->allowed_roles_count);
+  if (status != ER_UI_RECORD_OK) return status;
+  status = er_ui_setup_write_string_vec(writer, value->allowed_hardware_scopes, value->allowed_hardware_scopes_count);
+  if (status != ER_UI_RECORD_OK) return status;
+  status = er_ui_record_write_bool(writer, value->presence_required);
+  if (status != ER_UI_RECORD_OK) return status;
+  status = er_ui_record_write_array_32(writer, value->policy_hash);
+  if (status != ER_UI_RECORD_OK) return status;
+  status = er_ui_record_write_u64(writer, value->issued_at_secs);
+  if (status != ER_UI_RECORD_OK) return status;
+  status = er_ui_record_write_u64(writer, value->expires_at_secs);
+  if (status != ER_UI_RECORD_OK || !include_signature) return status;
+  return er_ui_setup_write_byte_span(writer, value->user_signature);
+}
+
+static er_ui_record_status_t er_ui_setup_write_device_grant_record(
+  const er_ui_user_device_admission_grant_t* value,
+  uint8_t* out,
+  size_t capacity,
+  size_t* out_len,
+  const uint8_t* magic,
+  size_t magic_len,
+  bool include_domain,
+  bool include_signature) {
+  if (!value) return ER_UI_RECORD_ERR_INVALID_ARGUMENT;
+  er_ui_record_writer_t writer = {0};
+  er_ui_record_status_t status = er_ui_record_writer_init(&writer, out, capacity, magic, magic_len);
+  if (status != ER_UI_RECORD_OK) return status;
+  if (include_domain) {
+    status = er_ui_record_write_bytes(&writer, ER_UI_DEVICE_GRANT_DOMAIN, sizeof(ER_UI_DEVICE_GRANT_DOMAIN) - 1u);
+    if (status != ER_UI_RECORD_OK) return status;
+  }
+  status = er_ui_setup_write_device_grant_fields(&writer, value, include_signature);
+  if (status != ER_UI_RECORD_OK) return status;
+  return er_ui_setup_record_done(&writer, out_len);
 }
 
 er_ui_status_t er_ui_initial_setup_state_init(
@@ -275,4 +454,165 @@ er_ui_status_t er_ui_yubikey_grant_build_surface(const er_ui_yubikey_grant_state
   status_code = er_ui_setup_add(&out_surface->root, &out_surface->nodes[7]);
   if (status_code != ER_UI_OK) return status_code;
   return er_ui_setup_add(&out_surface->root, &out_surface->nodes[8]);
+}
+
+er_ui_record_status_t er_ui_fingerprint_presence_ref_write(
+  const er_ui_fingerprint_presence_ref_t* value,
+  uint8_t* out,
+  size_t capacity,
+  size_t* out_len) {
+  if (!value) return ER_UI_RECORD_ERR_INVALID_ARGUMENT;
+  er_ui_record_writer_t writer = {0};
+  er_ui_record_status_t status = er_ui_record_writer_init(&writer, out, capacity, ER_UI_FINGERPRINT_RECORD_MAGIC, sizeof(ER_UI_FINGERPRINT_RECORD_MAGIC));
+  if (status != ER_UI_RECORD_OK) return status;
+  status = er_ui_setup_write_string_span(&writer, value->provider);
+  if (status != ER_UI_RECORD_OK) return status;
+  status = er_ui_setup_write_string_span(&writer, value->template_ref);
+  if (status != ER_UI_RECORD_OK) return status;
+  return er_ui_setup_record_done(&writer, out_len);
+}
+
+er_ui_record_status_t er_ui_fingerprint_presence_ref_read(
+  const uint8_t* bytes,
+  size_t byte_len,
+  er_ui_fingerprint_presence_ref_t* out_value) {
+  if (!out_value) return ER_UI_RECORD_ERR_INVALID_ARGUMENT;
+  er_ui_record_reader_t reader = {0};
+  er_ui_record_status_t status = er_ui_record_reader_init(&reader, bytes, byte_len, ER_UI_FINGERPRINT_RECORD_MAGIC, sizeof(ER_UI_FINGERPRINT_RECORD_MAGIC));
+  if (status != ER_UI_RECORD_OK) return status;
+  status = er_ui_setup_read_string_span(&reader, &out_value->provider);
+  if (status != ER_UI_RECORD_OK) return status;
+  status = er_ui_setup_read_string_span(&reader, &out_value->template_ref);
+  if (status != ER_UI_RECORD_OK) return status;
+  return er_ui_record_reader_finish(&reader);
+}
+
+er_ui_record_status_t er_ui_tpm_device_authority_ref_write(
+  const er_ui_tpm_device_authority_ref_t* value,
+  uint8_t* out,
+  size_t capacity,
+  size_t* out_len) {
+  if (!value) return ER_UI_RECORD_ERR_INVALID_ARGUMENT;
+  er_ui_record_writer_t writer = {0};
+  er_ui_record_status_t status = er_ui_record_writer_init(&writer, out, capacity, ER_UI_TPM_RECORD_MAGIC, sizeof(ER_UI_TPM_RECORD_MAGIC));
+  if (status != ER_UI_RECORD_OK) return status;
+  status = er_ui_setup_write_string_span(&writer, value->key_name);
+  if (status != ER_UI_RECORD_OK) return status;
+  status = er_ui_setup_write_byte_span(&writer, value->public_key);
+  if (status != ER_UI_RECORD_OK) return status;
+  return er_ui_setup_record_done(&writer, out_len);
+}
+
+er_ui_record_status_t er_ui_tpm_device_authority_ref_read(
+  const uint8_t* bytes,
+  size_t byte_len,
+  er_ui_tpm_device_authority_ref_t* out_value) {
+  if (!out_value) return ER_UI_RECORD_ERR_INVALID_ARGUMENT;
+  er_ui_record_reader_t reader = {0};
+  er_ui_record_status_t status = er_ui_record_reader_init(&reader, bytes, byte_len, ER_UI_TPM_RECORD_MAGIC, sizeof(ER_UI_TPM_RECORD_MAGIC));
+  if (status != ER_UI_RECORD_OK) return status;
+  status = er_ui_setup_read_string_span(&reader, &out_value->key_name);
+  if (status != ER_UI_RECORD_OK) return status;
+  status = er_ui_setup_read_byte_span(&reader, &out_value->public_key);
+  if (status != ER_UI_RECORD_OK) return status;
+  return er_ui_record_reader_finish(&reader);
+}
+
+er_ui_record_status_t er_ui_yubikey_user_authority_ref_write(
+  const er_ui_yubikey_user_authority_ref_t* value,
+  uint8_t* out,
+  size_t capacity,
+  size_t* out_len) {
+  if (!value) return ER_UI_RECORD_ERR_INVALID_ARGUMENT;
+  er_ui_record_writer_t writer = {0};
+  er_ui_record_status_t status = er_ui_record_writer_init(&writer, out, capacity, ER_UI_YUBIKEY_RECORD_MAGIC, sizeof(ER_UI_YUBIKEY_RECORD_MAGIC));
+  if (status != ER_UI_RECORD_OK) return status;
+  status = er_ui_setup_write_string_span(&writer, value->slot);
+  if (status != ER_UI_RECORD_OK) return status;
+  status = er_ui_setup_write_byte_span(&writer, value->public_key);
+  if (status != ER_UI_RECORD_OK) return status;
+  status = er_ui_setup_write_byte_vec(&writer, value->attestation_chain, value->attestation_chain_count);
+  if (status != ER_UI_RECORD_OK) return status;
+  return er_ui_setup_record_done(&writer, out_len);
+}
+
+er_ui_record_status_t er_ui_yubikey_user_authority_ref_read(
+  const uint8_t* bytes,
+  size_t byte_len,
+  er_ui_yubikey_user_authority_ref_t* out_value,
+  er_ui_initial_setup_byte_span_t* attestation_chain,
+  size_t attestation_chain_capacity) {
+  if (!out_value) return ER_UI_RECORD_ERR_INVALID_ARGUMENT;
+  er_ui_record_reader_t reader = {0};
+  er_ui_record_status_t status = er_ui_record_reader_init(&reader, bytes, byte_len, ER_UI_YUBIKEY_RECORD_MAGIC, sizeof(ER_UI_YUBIKEY_RECORD_MAGIC));
+  if (status != ER_UI_RECORD_OK) return status;
+  out_value->attestation_chain = attestation_chain;
+  out_value->attestation_chain_capacity = attestation_chain_capacity;
+  status = er_ui_setup_read_string_span(&reader, &out_value->slot);
+  if (status != ER_UI_RECORD_OK) return status;
+  status = er_ui_setup_read_byte_span(&reader, &out_value->public_key);
+  if (status != ER_UI_RECORD_OK) return status;
+  status = er_ui_setup_read_byte_vec(&reader, attestation_chain, attestation_chain_capacity, &out_value->attestation_chain_count);
+  if (status != ER_UI_RECORD_OK) return status;
+  return er_ui_record_reader_finish(&reader);
+}
+
+er_ui_record_status_t er_ui_user_device_admission_grant_signing_preimage_write(
+  const er_ui_user_device_admission_grant_t* value,
+  uint8_t* out,
+  size_t capacity,
+  size_t* out_len) {
+  return er_ui_setup_write_device_grant_record(value, out, capacity, out_len, 0, 0u, true, false);
+}
+
+er_ui_record_status_t er_ui_user_device_admission_grant_write(
+  const er_ui_user_device_admission_grant_t* value,
+  uint8_t* out,
+  size_t capacity,
+  size_t* out_len) {
+  return er_ui_setup_write_device_grant_record(value, out, capacity, out_len, ER_UI_DEVICE_GRANT_RECORD_MAGIC,
+                                              sizeof(ER_UI_DEVICE_GRANT_RECORD_MAGIC), false, true);
+}
+
+er_ui_record_status_t er_ui_user_device_admission_grant_read(
+  const uint8_t* bytes,
+  size_t byte_len,
+  er_ui_user_device_admission_grant_t* out_value,
+  er_ui_initial_setup_string_span_t* allowed_roles,
+  size_t allowed_roles_capacity,
+  er_ui_initial_setup_string_span_t* allowed_hardware_scopes,
+  size_t allowed_hardware_scopes_capacity) {
+  if (!out_value) return ER_UI_RECORD_ERR_INVALID_ARGUMENT;
+  er_ui_record_reader_t reader = {0};
+  er_ui_record_status_t status = er_ui_record_reader_init(&reader, bytes, byte_len, ER_UI_DEVICE_GRANT_RECORD_MAGIC, sizeof(ER_UI_DEVICE_GRANT_RECORD_MAGIC));
+  if (status != ER_UI_RECORD_OK) return status;
+  out_value->allowed_roles = allowed_roles;
+  out_value->allowed_roles_capacity = allowed_roles_capacity;
+  out_value->allowed_hardware_scopes = allowed_hardware_scopes;
+  out_value->allowed_hardware_scopes_capacity = allowed_hardware_scopes_capacity;
+  status = er_ui_setup_read_byte_span(&reader, &out_value->user_public_key);
+  if (status != ER_UI_RECORD_OK) return status;
+  status = er_ui_setup_read_string_span(&reader, &out_value->user_key_label);
+  if (status != ER_UI_RECORD_OK) return status;
+  status = er_ui_setup_read_byte_span(&reader, &out_value->device_public_key);
+  if (status != ER_UI_RECORD_OK) return status;
+  status = er_ui_setup_read_string_span(&reader, &out_value->device_key_label);
+  if (status != ER_UI_RECORD_OK) return status;
+  status = er_ui_setup_read_string_span(&reader, &out_value->fingerprint_template_ref);
+  if (status != ER_UI_RECORD_OK) return status;
+  status = er_ui_setup_read_string_vec(&reader, allowed_roles, allowed_roles_capacity, &out_value->allowed_roles_count);
+  if (status != ER_UI_RECORD_OK) return status;
+  status = er_ui_setup_read_string_vec(&reader, allowed_hardware_scopes, allowed_hardware_scopes_capacity, &out_value->allowed_hardware_scopes_count);
+  if (status != ER_UI_RECORD_OK) return status;
+  status = er_ui_record_read_bool(&reader, &out_value->presence_required);
+  if (status != ER_UI_RECORD_OK) return status;
+  status = er_ui_record_read_array_32(&reader, out_value->policy_hash);
+  if (status != ER_UI_RECORD_OK) return status;
+  status = er_ui_record_read_u64(&reader, &out_value->issued_at_secs);
+  if (status != ER_UI_RECORD_OK) return status;
+  status = er_ui_record_read_u64(&reader, &out_value->expires_at_secs);
+  if (status != ER_UI_RECORD_OK) return status;
+  status = er_ui_setup_read_byte_span(&reader, &out_value->user_signature);
+  if (status != ER_UI_RECORD_OK) return status;
+  return er_ui_record_reader_finish(&reader);
 }

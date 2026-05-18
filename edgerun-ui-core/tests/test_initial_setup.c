@@ -8,6 +8,49 @@ static er_ui_action_t test_button_action(uint32_t id) {
   return action;
 }
 
+static void expect_initial_record_status(er_ui_record_status_t got, er_ui_record_status_t expected, const char* name) {
+  expect_true(got == expected, name);
+}
+
+static er_ui_initial_setup_string_span_t test_str_span(const char* value) {
+  er_ui_initial_setup_string_span_t span = {0};
+  span.bytes = value;
+  while (value[span.len] != '\0') span.len++;
+  return span;
+}
+
+static er_ui_initial_setup_byte_span_t test_byte_span(const uint8_t* bytes, size_t len) {
+  er_ui_initial_setup_byte_span_t span = {0};
+  span.bytes = bytes;
+  span.len = len;
+  return span;
+}
+
+static void expect_initial_string_span(er_ui_initial_setup_string_span_t got, const char* expected, const char* name) {
+  size_t len = 0u;
+  bool same;
+  while (expected[len] != '\0') len++;
+  same = got.len == len;
+  for (size_t i = 0u; same && i < len; ++i) same = got.bytes[i] == expected[i];
+  expect_true(same, name);
+}
+
+static void expect_initial_byte_span(er_ui_initial_setup_byte_span_t got, const uint8_t* expected, size_t expected_len, const char* name) {
+  bool same = got.len == expected_len;
+  for (size_t i = 0u; same && i < expected_len; ++i) same = got.bytes[i] == expected[i];
+  expect_true(same, name);
+}
+
+static bool test_bytes_contains_run(const uint8_t* bytes, size_t bytes_len, uint8_t value, size_t run_len) {
+  size_t run = 0u;
+  if (run_len == 0u || bytes_len < run_len) return false;
+  for (size_t i = 0u; i < bytes_len; ++i) {
+    run = bytes[i] == value ? run + 1u : 0u;
+    if (run >= run_len) return true;
+  }
+  return false;
+}
+
 static void test_initial_setup_state_validates_and_emits_intent(void) {
   char password[64];
   char confirm[64];
@@ -89,8 +132,109 @@ static void test_yubikey_grant_validates_pin_and_surface(void) {
   expect_string(surface.nodes[5].label, "signed", "yubikey: signed badge label");
 }
 
+static void test_authority_records_round_trip_without_allocation(void) {
+  uint8_t out[1024];
+  size_t len = 0u;
+  const uint8_t public_key[] = {1u, 2u, 3u, 4u};
+  const uint8_t tpm_key[] = {9u, 8u, 7u};
+  const uint8_t attestation_a[] = {10u, 11u};
+  const uint8_t attestation_b[] = {12u, 13u, 14u};
+  er_ui_fingerprint_presence_ref_t fingerprint = {test_str_span("goodix"), test_str_span("template-a")};
+  er_ui_tpm_device_authority_ref_t tpm = {test_str_span("tpm:0x81000001"), test_byte_span(tpm_key, sizeof(tpm_key))};
+  er_ui_initial_setup_byte_span_t chain[] = {test_byte_span(attestation_a, sizeof(attestation_a)), test_byte_span(attestation_b, sizeof(attestation_b))};
+  er_ui_yubikey_user_authority_ref_t yubikey = {0};
+  yubikey.slot = test_str_span("9c");
+  yubikey.public_key = test_byte_span(public_key, sizeof(public_key));
+  yubikey.attestation_chain = chain;
+  yubikey.attestation_chain_count = sizeof(chain) / sizeof(chain[0]);
+  yubikey.attestation_chain_capacity = sizeof(chain) / sizeof(chain[0]);
+
+  expect_initial_record_status(er_ui_fingerprint_presence_ref_write(&fingerprint, out, sizeof(out), &len), ER_UI_RECORD_OK,
+                               "initial setup records: fingerprint writes");
+  expect_size(out[0], 'E', "initial setup records: fingerprint magic starts with E");
+  er_ui_fingerprint_presence_ref_t parsed_fingerprint = {0};
+  expect_initial_record_status(er_ui_fingerprint_presence_ref_read(out, len, &parsed_fingerprint), ER_UI_RECORD_OK,
+                               "initial setup records: fingerprint reads");
+  expect_initial_string_span(parsed_fingerprint.provider, "goodix", "initial setup records: fingerprint provider");
+  expect_initial_string_span(parsed_fingerprint.template_ref, "template-a", "initial setup records: fingerprint template");
+
+  expect_initial_record_status(er_ui_tpm_device_authority_ref_write(&tpm, out, sizeof(out), &len), ER_UI_RECORD_OK,
+                               "initial setup records: tpm writes");
+  er_ui_tpm_device_authority_ref_t parsed_tpm = {0};
+  expect_initial_record_status(er_ui_tpm_device_authority_ref_read(out, len, &parsed_tpm), ER_UI_RECORD_OK,
+                               "initial setup records: tpm reads");
+  expect_initial_string_span(parsed_tpm.key_name, "tpm:0x81000001", "initial setup records: tpm key name");
+  expect_initial_byte_span(parsed_tpm.public_key, tpm_key, sizeof(tpm_key), "initial setup records: tpm public key");
+
+  expect_initial_record_status(er_ui_yubikey_user_authority_ref_write(&yubikey, out, sizeof(out), &len), ER_UI_RECORD_OK,
+                               "initial setup records: yubikey writes");
+  er_ui_initial_setup_byte_span_t parsed_chain[2];
+  er_ui_yubikey_user_authority_ref_t parsed_yubikey = {0};
+  expect_initial_record_status(er_ui_yubikey_user_authority_ref_read(out, len, &parsed_yubikey, parsed_chain, sizeof(parsed_chain) / sizeof(parsed_chain[0])),
+                               ER_UI_RECORD_OK, "initial setup records: yubikey reads");
+  expect_initial_string_span(parsed_yubikey.slot, "9c", "initial setup records: yubikey slot");
+  expect_initial_byte_span(parsed_yubikey.public_key, public_key, sizeof(public_key), "initial setup records: yubikey public key");
+  expect_size(parsed_yubikey.attestation_chain_count, 2u, "initial setup records: yubikey chain count");
+  expect_initial_byte_span(parsed_yubikey.attestation_chain[1], attestation_b, sizeof(attestation_b), "initial setup records: yubikey second chain");
+  expect_initial_record_status(er_ui_yubikey_user_authority_ref_read(out, len, &parsed_yubikey, parsed_chain, 1u), ER_UI_RECORD_ERR_NO_SPACE,
+                               "initial setup records: yubikey reports small chain array");
+}
+
+static void test_device_grant_record_and_signing_preimage(void) {
+  uint8_t out[2048];
+  uint8_t preimage[2048];
+  size_t len = 0u;
+  size_t preimage_len = 0u;
+  const uint8_t user_key[] = {1u, 1u, 1u, 1u};
+  const uint8_t device_key[] = {2u, 2u, 2u};
+  const uint8_t signature[] = {3u, 3u, 3u, 3u, 3u};
+  er_ui_initial_setup_string_span_t roles[] = {test_str_span("admission:device"), test_str_span("notary:device")};
+  er_ui_initial_setup_string_span_t scopes[] = {test_str_span("tpm:sign"), test_str_span("fingerprint:presence")};
+  er_ui_user_device_admission_grant_t grant = {0};
+  grant.user_public_key = test_byte_span(user_key, sizeof(user_key));
+  grant.user_key_label = test_str_span("9c");
+  grant.device_public_key = test_byte_span(device_key, sizeof(device_key));
+  grant.device_key_label = test_str_span("tpm:0x81000001");
+  grant.fingerprint_template_ref = test_str_span("template-a");
+  grant.allowed_roles = roles;
+  grant.allowed_roles_count = sizeof(roles) / sizeof(roles[0]);
+  grant.allowed_roles_capacity = sizeof(roles) / sizeof(roles[0]);
+  grant.allowed_hardware_scopes = scopes;
+  grant.allowed_hardware_scopes_count = sizeof(scopes) / sizeof(scopes[0]);
+  grant.allowed_hardware_scopes_capacity = sizeof(scopes) / sizeof(scopes[0]);
+  grant.presence_required = true;
+  for (size_t i = 0u; i < ER_UI_INITIAL_SETUP_POLICY_HASH_LEN; ++i) grant.policy_hash[i] = (uint8_t)(i + 1u);
+  grant.issued_at_secs = 10u;
+  grant.expires_at_secs = 20u;
+  grant.user_signature = test_byte_span(signature, sizeof(signature));
+
+  expect_initial_record_status(er_ui_user_device_admission_grant_write(&grant, out, sizeof(out), &len), ER_UI_RECORD_OK,
+                               "initial setup records: device grant writes");
+  er_ui_initial_setup_string_span_t parsed_roles[2];
+  er_ui_initial_setup_string_span_t parsed_scopes[2];
+  er_ui_user_device_admission_grant_t parsed = {0};
+  expect_initial_record_status(er_ui_user_device_admission_grant_read(out, len, &parsed, parsed_roles, sizeof(parsed_roles) / sizeof(parsed_roles[0]),
+                                                                      parsed_scopes, sizeof(parsed_scopes) / sizeof(parsed_scopes[0])),
+                               ER_UI_RECORD_OK, "initial setup records: device grant reads");
+  expect_initial_byte_span(parsed.user_public_key, user_key, sizeof(user_key), "initial setup records: grant user key");
+  expect_initial_string_span(parsed.allowed_roles[1], "notary:device", "initial setup records: grant second role");
+  expect_true(parsed.presence_required, "initial setup records: grant presence flag");
+  expect_size((size_t)parsed.expires_at_secs, 20u, "initial setup records: grant expiry");
+  expect_initial_byte_span(parsed.user_signature, signature, sizeof(signature), "initial setup records: grant signature");
+  expect_initial_record_status(er_ui_user_device_admission_grant_read(out, len, &parsed, parsed_roles, 1u, parsed_scopes, 2u), ER_UI_RECORD_ERR_NO_SPACE,
+                               "initial setup records: grant reports small role array");
+
+  expect_initial_record_status(er_ui_user_device_admission_grant_signing_preimage_write(&grant, preimage, sizeof(preimage), &preimage_len),
+                               ER_UI_RECORD_OK, "initial setup records: grant preimage writes");
+  expect_true(preimage_len > 0u && preimage_len != len, "initial setup records: preimage is distinct from persisted record");
+  expect_true(!test_bytes_contains_run(preimage, preimage_len, 3u, sizeof(signature)),
+              "initial setup records: preimage does not include signature bytes");
+}
+
 void run_initial_setup_tests(void) {
   test_initial_setup_state_validates_and_emits_intent();
   test_initial_setup_surface_emits_fields_and_button();
   test_yubikey_grant_validates_pin_and_surface();
+  test_authority_records_round_trip_without_allocation();
+  test_device_grant_record_and_signing_preimage();
 }
