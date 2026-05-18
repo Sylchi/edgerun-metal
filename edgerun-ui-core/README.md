@@ -10,7 +10,7 @@ Implemented portable slices:
 - shadcn demo catalog and parity metadata ported from the Rust UI core source, including 57 component specs, slots, states, identifier resolution, and port mappings
 - reusable EdgeRun component contracts ported from Rust, including stable selectors, state matrices, projected input fields, and accessibility role/label metadata
 - semantic palette/theme records for color schemes, accents, radius scales, density, and token resolution
-- shadcn preset-code recipes, base62 encode/decode parity, and extracted source-capture provenance
+- shadcn preset-code recipes, base62 encode/decode parity, style-family palettes/specs, and extracted source-capture provenance
 - required `vrfont` integration for converting variable-font vertex batches into scene text quads
 - Rust-compatible UI record codec for deterministic setup/admission records using caller-owned buffers
 - initial setup and YubiKey grant ceremony state machines plus reusable node-surface builders
