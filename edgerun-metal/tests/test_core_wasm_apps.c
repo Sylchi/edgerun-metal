@@ -1,0 +1,252 @@
+#include "test_core_internal.h"
+
+static void test_ui_wasm_app_runner(void) {
+  static UINT8 memory[65536];
+  static const UINT8 input_packet[] = {'k', 'e', 'y', '1'};
+  ErWasmHostCalls host = {0};
+  ErUiWasmAppRuntime runtime;
+  ErAppUiPresentation presentation;
+  er_ui_scene_t scene;
+  er_ui_key_t key;
+  er_ui_key_t invalid_key;
+  er_ui_key_modifiers_t modifiers;
+  INT64 result = 0;
+
+  test_prepare_wasm_ui_presentation(&presentation);
+
+  check_int64("ui wasm app scene init",
+              er_ui_scene_init_with_allocator(&scene, er_ui_color_rgb_u8(0u, 0u, 0u),
+                                              test_ui_allocator()),
+              ER_UI_OK);
+  er_mem_zero((UINT8*)&runtime, (UINTN)sizeof(runtime));
+  runtime.memory = memory;
+  runtime.memory_size = (UINT32)sizeof(memory);
+  runtime.relay_inbox_base = 0u;
+  runtime.relay_inbox_len = 1024u;
+  runtime.relay_outbox_base = 1024u;
+  runtime.relay_outbox_len = 2048u;
+  runtime.presentation = &presentation;
+  runtime.scene = &scene;
+  runtime.input_epoch_modifier.tick_stride = 2u;
+  runtime.execute_epoch_modifier.tick_stride = 4u;
+  runtime.input_len = ER_UI_WASM_INPUT_PACKET_LEN;
+  runtime.input_sequence = ER_UI_WASM_INPUT_SEQUENCE_MAX;
+  check_int64("ui wasm app prepare",
+              er_ui_wasm_app_prepare(g_edgerun_ui_counter_wasm, ER_UI_COUNTER_WASM_SIZE,
+                                     &host, &runtime),
+              0);
+  check_uint64("ui wasm app prepared input len", runtime.input_len, 0u);
+  check_uint64("ui wasm app prepared input sequence", runtime.input_sequence, 0u);
+  check_uint64("ui wasm app prepared clock tick", runtime.settlement_clock.now.tick, 0u);
+  check_uint64("ui wasm app input epoch stride", runtime.input_epoch_modifier.tick_stride, 2u);
+  check_uint64("ui wasm app execute epoch stride", runtime.execute_epoch_modifier.tick_stride, 4u);
+  check_int64("ui wasm app deliver input",
+              er_ui_wasm_app_deliver_input(&runtime, input_packet,
+                                           (UINT32)sizeof(input_packet)),
+              0);
+  check_uint64("ui wasm app inbox byte0", memory[0], (UINT8)'k');
+  check_uint64("ui wasm app inbox byte3", memory[3], (UINT8)'1');
+  check_uint64("ui wasm app inbox zeroed", memory[4], 0u);
+  check_uint64("ui wasm app input len", runtime.input_len, sizeof(input_packet));
+  check_uint64("ui wasm app input sequence", runtime.input_sequence, 1u);
+  check_uint64("ui wasm app input epoch tick", runtime.last_input_epoch.tick, 2u);
+  check_int64("ui wasm app reject oversized input",
+              er_ui_wasm_app_deliver_input(&runtime, input_packet,
+                                           runtime.relay_inbox_len + 1u),
+              -1);
+  check_uint64("ui wasm app rejected input sequence", runtime.input_sequence, 1u);
+  check_uint64("ui wasm app rejected input epoch tick", runtime.last_input_epoch.tick, 2u);
+  key.kind = ER_UI_KEY_OTHER;
+  key.codepoint = (UINT32)'A';
+  modifiers = er_ui_key_modifiers(true, true, false, false);
+  check_int64("ui wasm app deliver key input",
+              er_ui_wasm_app_deliver_key_input(&runtime, key, modifiers), 0);
+  check_uint64("ui wasm app key input abi", memory[ER_UI_WASM_INPUT_ABI_OFFSET],
+               ER_UI_WASM_INPUT_ABI_VERSION);
+  check_uint64("ui wasm app key input kind", memory[ER_UI_WASM_INPUT_KIND_OFFSET],
+               ER_UI_WASM_INPUT_KIND_KEY);
+  check_uint64("ui wasm app key input key", memory[ER_UI_WASM_INPUT_KEY_KIND_OFFSET],
+               ER_UI_KEY_OTHER);
+  check_uint64("ui wasm app key input codepoint", memory[ER_UI_WASM_INPUT_KEY_CODEPOINT_OFFSET],
+               (UINT8)'A');
+  check_uint64("ui wasm app key input modifiers", memory[ER_UI_WASM_INPUT_MODIFIERS_OFFSET],
+               ER_UI_WASM_INPUT_MODIFIER_SHIFT | ER_UI_WASM_INPUT_MODIFIER_CTRL);
+  check_uint64("ui wasm app key input len", runtime.input_len, ER_UI_WASM_INPUT_PACKET_LEN);
+  check_uint64("ui wasm app key input sequence field",
+               memory[ER_UI_WASM_INPUT_SEQUENCE_OFFSET], 2u);
+  check_uint64("ui wasm app key input sequence", runtime.input_sequence, 2u);
+  check_uint64("ui wasm app key input epoch field",
+               memory[ER_UI_WASM_INPUT_EPOCH_TICK_OFFSET], 4u);
+  check_uint64("ui wasm app key input epoch high byte",
+               memory[ER_UI_WASM_INPUT_EPOCH_TICK_OFFSET + 4u], 0u);
+  check_uint64("ui wasm app key input slot field",
+               memory[ER_UI_WASM_INPUT_EPOCH_SLOT_OFFSET], 0u);
+  check_uint64("ui wasm app key input era field",
+               memory[ER_UI_WASM_INPUT_EPOCH_ERA_OFFSET], 0u);
+  check_uint64("ui wasm app key input epoch tick", runtime.last_input_epoch.tick, 4u);
+  invalid_key.kind = (er_ui_key_kind_t)(ER_UI_KEY_OTHER + 1u);
+  invalid_key.codepoint = 0u;
+  check_int64("ui wasm app reject invalid key input",
+              er_ui_wasm_app_deliver_key_input(&runtime, invalid_key, modifiers), -1);
+  check_uint64("ui wasm app invalid key sequence", runtime.input_sequence, 2u);
+  runtime.input_sequence = ER_UI_WASM_INPUT_SEQUENCE_MAX;
+  check_int64("ui wasm app deliver wrapped key input",
+              er_ui_wasm_app_deliver_key_input(&runtime, key, modifiers), 0);
+  check_uint64("ui wasm app wrapped key input sequence field",
+               memory[ER_UI_WASM_INPUT_SEQUENCE_OFFSET], 1u);
+  check_uint64("ui wasm app wrapped key input sequence", runtime.input_sequence, 1u);
+  check_uint64("ui wasm app wrapped key input epoch field",
+               memory[ER_UI_WASM_INPUT_EPOCH_TICK_OFFSET], 6u);
+  check_uint64("ui wasm app wrapped input epoch tick", runtime.last_input_epoch.tick, 6u);
+  check_int64("ui wasm app execute", er_ui_wasm_app_execute(&runtime, &result),
+              0);
+  check_uint64("ui wasm app result", (UINT64)result,
+               ER_WASM_UI_COMMAND_LIST_HEADER_LEN +
+                 ER_WASM_UI_RECT_RECORD_LEN +
+                 ER_WASM_UI_HIT_RECORD_LEN +
+                 ER_WASM_UI_QUAD_RECORD_LEN);
+  check_uint64("ui wasm app emitted", runtime.emitted, 1u);
+  check_int64("ui wasm app render capture abi",
+              runtime.last_render_capture.abi_version,
+              ER_RENDER_ENDPOINT_ABI_VERSION);
+  check_int64("ui wasm app render scene abi",
+              runtime.last_render_scene.abi_version,
+              ER_RENDER_ENDPOINT_ABI_VERSION);
+  check_hash_equal("ui wasm app render route",
+                   &runtime.last_render_capture.route_id,
+                   &presentation.route_hash);
+  check_hash_equal("ui wasm app render capture scene hash",
+                   &runtime.last_render_scene.scene_hash,
+                   &runtime.last_render_capture.scene_hash);
+  check_uint64("ui wasm app render scene rects",
+               runtime.last_render_scene.scene_stats.rects, 1u);
+  check_uint64("ui wasm app render scene hits",
+               runtime.last_render_scene.scene_stats.hits, 1u);
+  check_uint64("ui wasm app render scene text",
+               runtime.last_render_scene.scene_stats.text_quads, 1u);
+  check_uint64("ui wasm app execute epoch tick", runtime.last_execute_epoch.tick, 10u);
+  check_uint64("ui wasm app rects", scene.rect_count, 1u);
+  check_uint64("ui wasm app hits", scene.hit_count, 1u);
+  check_uint64("ui wasm app text", scene.text_quad_count, 1u);
+  check_int64("ui wasm app hit kind", scene.hits[0].kind, ER_UI_HIT_BUTTON);
+  check_uint64("ui wasm app hit id from input sequence", scene.hits[0].id, 1u);
+  memory[4096] = 0x5au;
+  check_int64("ui wasm app execute again", er_ui_wasm_app_execute(&runtime, &result),
+              0);
+  check_uint64("ui wasm app persistent memory", memory[4096], 0x5au);
+  check_uint64("ui wasm app emitted again", runtime.emitted, 1u);
+  check_uint64("ui wasm app execute again epoch tick", runtime.last_execute_epoch.tick, 14u);
+  check_uint64("ui wasm app rects after rerun", scene.rect_count, 1u);
+  check_uint64("ui wasm app hits after rerun", scene.hit_count, 1u);
+  check_uint64("ui wasm app text after rerun", scene.text_quad_count, 1u);
+  check_int64("ui wasm app reject second prepare",
+              er_ui_wasm_app_prepare(g_edgerun_ui_counter_wasm, ER_UI_COUNTER_WASM_SIZE,
+                                     &host, &runtime),
+              -1);
+  er_ui_scene_destroy(&scene);
+}
+
+static void test_ui_wasm_app_multiple_runtimes(void) {
+  static UINT8 memory_a[65536];
+  static UINT8 memory_b[65536];
+  ErWasmHostCalls host = {0};
+  ErUiWasmAppRuntime runtime_a;
+  ErUiWasmAppRuntime runtime_b;
+  ErAppUiPresentation presentation_a;
+  ErAppUiPresentation presentation_b;
+  er_ui_scene_t scene_a;
+  er_ui_scene_t scene_b;
+  er_ui_key_t key;
+  er_ui_key_modifiers_t modifiers;
+  INT64 result_a = 0;
+  INT64 result_b = 0;
+
+  test_prepare_wasm_ui_presentation(&presentation_a);
+  test_prepare_wasm_ui_presentation(&presentation_b);
+  check_int64("ui wasm multi scene a init",
+              er_ui_scene_init_with_allocator(&scene_a, er_ui_color_rgb_u8(0u, 0u, 0u),
+                                              test_ui_allocator()),
+              ER_UI_OK);
+  check_int64("ui wasm multi scene b init",
+              er_ui_scene_init_with_allocator(&scene_b, er_ui_color_rgb_u8(0u, 0u, 0u),
+                                              test_ui_allocator()),
+              ER_UI_OK);
+
+  er_mem_zero(memory_a, (UINTN)sizeof(memory_a));
+  er_mem_zero(memory_b, (UINTN)sizeof(memory_b));
+  er_mem_zero((UINT8*)&runtime_a, (UINTN)sizeof(runtime_a));
+  er_mem_zero((UINT8*)&runtime_b, (UINTN)sizeof(runtime_b));
+  runtime_a.memory = memory_a;
+  runtime_a.memory_size = (UINT32)sizeof(memory_a);
+  runtime_a.relay_inbox_base = 0u;
+  runtime_a.relay_inbox_len = 1024u;
+  runtime_a.relay_outbox_base = 1024u;
+  runtime_a.relay_outbox_len = 2048u;
+  runtime_a.presentation = &presentation_a;
+  runtime_a.scene = &scene_a;
+  runtime_b.memory = memory_b;
+  runtime_b.memory_size = (UINT32)sizeof(memory_b);
+  runtime_b.relay_inbox_base = 0u;
+  runtime_b.relay_inbox_len = 1024u;
+  runtime_b.relay_outbox_base = 1024u;
+  runtime_b.relay_outbox_len = 2048u;
+  runtime_b.presentation = &presentation_b;
+  runtime_b.scene = &scene_b;
+
+  check_int64("ui wasm multi prepare a",
+              er_ui_wasm_app_prepare(g_edgerun_ui_counter_wasm, ER_UI_COUNTER_WASM_SIZE,
+                                     &host, &runtime_a),
+              0);
+  check_int64("ui wasm multi prepare b",
+              er_ui_wasm_app_prepare(g_edgerun_ui_counter_wasm, ER_UI_COUNTER_WASM_SIZE,
+                                     &host, &runtime_b),
+              0);
+
+  key.kind = ER_UI_KEY_OTHER;
+  key.codepoint = (UINT32)'Z';
+  modifiers = er_ui_key_modifiers(false, false, false, false);
+  check_int64("ui wasm multi input a",
+              er_ui_wasm_app_deliver_key_input(&runtime_a, key, modifiers), 0);
+  check_int64("ui wasm multi input b1",
+              er_ui_wasm_app_deliver_key_input(&runtime_b, key, modifiers), 0);
+  check_int64("ui wasm multi input b2",
+              er_ui_wasm_app_deliver_key_input(&runtime_b, key, modifiers), 0);
+
+  check_int64("ui wasm multi execute a",
+              er_ui_wasm_app_execute(&runtime_a, &result_a), 0);
+  check_int64("ui wasm multi execute b",
+              er_ui_wasm_app_execute(&runtime_b, &result_b), 0);
+  check_uint64("ui wasm multi result a", (UINT64)result_a,
+               ER_WASM_UI_COMMAND_LIST_HEADER_LEN +
+                 ER_WASM_UI_RECT_RECORD_LEN +
+                 ER_WASM_UI_HIT_RECORD_LEN +
+                 ER_WASM_UI_QUAD_RECORD_LEN);
+  check_uint64("ui wasm multi result b", (UINT64)result_b,
+               ER_WASM_UI_COMMAND_LIST_HEADER_LEN +
+                 ER_WASM_UI_RECT_RECORD_LEN +
+                 ER_WASM_UI_HIT_RECORD_LEN +
+                 ER_WASM_UI_QUAD_RECORD_LEN);
+  check_uint64("ui wasm multi scene a rects", scene_a.rect_count, 1u);
+  check_uint64("ui wasm multi scene b rects", scene_b.rect_count, 1u);
+  check_uint64("ui wasm multi scene a hit id", scene_a.hits[0].id, 1u);
+  check_uint64("ui wasm multi scene b hit id", scene_b.hits[0].id, 2u);
+  check_uint64("ui wasm multi memory a sequence",
+               memory_a[ER_UI_WASM_INPUT_SEQUENCE_OFFSET], 1u);
+  check_uint64("ui wasm multi memory b sequence",
+               memory_b[ER_UI_WASM_INPUT_SEQUENCE_OFFSET], 2u);
+  check_uint64("ui wasm multi emitted a", runtime_a.emitted, 1u);
+  check_uint64("ui wasm multi emitted b", runtime_b.emitted, 1u);
+  check_hash_equal("ui wasm multi render route a",
+                   &runtime_a.last_render_capture.route_id,
+                   &presentation_a.route_hash);
+  check_hash_equal("ui wasm multi render route b",
+                   &runtime_b.last_render_capture.route_id,
+                   &presentation_b.route_hash);
+  check_uint64("ui wasm multi render scene a hits",
+               runtime_a.last_render_scene.scene_stats.hits, 1u);
+  check_uint64("ui wasm multi render scene b hits",
+               runtime_b.last_render_scene.scene_stats.hits, 1u);
+
+  er_ui_scene_destroy(&scene_b);
+  er_ui_scene_destroy(&scene_a);
+}
