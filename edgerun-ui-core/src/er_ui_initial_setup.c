@@ -30,6 +30,23 @@ typedef enum {
   ER_UI_SETUP_SPAN_BYTES
 } er_ui_setup_span_kind_t;
 
+static bool er_ui_initial_setup_state_init_args_valid(
+  const er_ui_initial_setup_state_t* state,
+  const char* password,
+  size_t password_capacity,
+  const char* confirm_password,
+  size_t confirm_password_capacity,
+  const char* status,
+  size_t status_capacity) {
+  return state != 0 &&
+         password != 0 &&
+         password_capacity > 0u &&
+         confirm_password != 0 &&
+         confirm_password_capacity > 0u &&
+         status != 0 &&
+         status_capacity > 0u;
+}
+
 typedef enum {
   ER_UI_SETUP_SURFACE_STATUS_CARD = 0,
   ER_UI_SETUP_SURFACE_STATUS_HEADER,
@@ -271,7 +288,7 @@ er_ui_status_t er_ui_initial_setup_state_init(
   size_t confirm_password_capacity,
   char* status,
   size_t status_capacity) {
-  if (!state || !password || password_capacity == 0u || !confirm_password || confirm_password_capacity == 0u || !status || status_capacity == 0u) {
+  if (!er_ui_initial_setup_state_init_args_valid(state, password, password_capacity, confirm_password, confirm_password_capacity, status, status_capacity)) {
     return ER_UI_ERR_INVALID_ARGUMENT;
   }
   *state = (er_ui_initial_setup_state_t){0};
