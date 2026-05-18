@@ -140,7 +140,16 @@ int test_main_path(void) {
 C
 printf '\177ELFtest' > "${TMP_DIR}/release.efi"
 
-report="$("${REPO_INSPECT}" "${TMP_DIR}")"
+report="$(REPO_INSPECT_THREADS=2 "${REPO_INSPECT}" "${TMP_DIR}")"
+if REPO_INSPECT_THREADS=0 "${REPO_INSPECT}" "${TMP_DIR}" >/dev/null 2>"${TMP_DIR}/invalid_threads.err"; then
+  printf 'invalid thread count accepted\n' >&2
+  exit 1
+fi
+
+case "$(cat "${TMP_DIR}/invalid_threads.err")" in
+  *"REPO_INSPECT_THREADS must be an integer from 1 to 32"* ) ;;
+  * ) printf 'missing invalid thread count diagnostic\n' >&2; exit 1 ;;
+esac
 
 case "${report}" in
   *"files:         7"* ) ;;

@@ -26,6 +26,7 @@
 #define ERI_DUP_BLOCK_LINES 6u
 #define ERI_MIN_THREAD_COUNT 1u
 #define ERI_MAX_THREAD_COUNT 32u
+#define ERI_THREAD_ENV "REPO_INSPECT_THREADS"
 #define ERI_OPTIMIZER_IGNORE_TAG "@optimizer-ignore"
 #define ERI_OPTIMIZER_IGNORE_FUNCTION_TAG "@optimizer-ignore-function"
 #define ERI_OPTIMIZER_IGNORE_CONSTANT_TAG "@optimizer-ignore-constant"
@@ -3414,10 +3415,31 @@ static void eri_analyze_cleanup(EriPackages* packages, EriFunctions* funcs, EriF
 }
 
 static uint8_t eri_host_thread_count(size_t* out_count) {
+  const char* env = getenv(ERI_THREAD_ENV);
   long online = sysconf(_SC_NPROCESSORS_ONLN);
   size_t threads;
 
-  if (out_count == NULL || online < (long)ERI_MIN_THREAD_COUNT) {
+  if (out_count == NULL) {
+    return 0u;
+  }
+  if (env != NULL && env[0] != 0) {
+    char* end = NULL;
+    unsigned long requested;
+
+    errno = 0;
+    requested = strtoul(env, &end, 10);
+    if (end == env || *end != 0 || errno == ERANGE ||
+        requested < (unsigned long)ERI_MIN_THREAD_COUNT ||
+        requested > (unsigned long)ERI_MAX_THREAD_COUNT) {
+      fprintf(stderr, "repo-inspect: %s must be an integer from %u to %u\n",
+              ERI_THREAD_ENV, ERI_MIN_THREAD_COUNT, ERI_MAX_THREAD_COUNT);
+      return 0u;
+    }
+    *out_count = (size_t)requested;
+    return 1u;
+  }
+  if (online < (long)ERI_MIN_THREAD_COUNT) {
+    fprintf(stderr, "repo-inspect: cannot determine online CPU count\n");
     return 0u;
   }
   threads = (size_t)online;
@@ -3975,6 +3997,8 @@ static void eri_usage(const char* argv0) {
   printf("Builds a virtual file snapshot, then reports C LOC, package size,\n");
   printf("binary artifacts, test signals, duplicate blocks, dead-code candidates,\n");
   printf("CPU cost signals, and simple code smells.\n");
+  printf("Set %s to an integer from %u to %u to choose worker count.\n",
+         ERI_THREAD_ENV, ERI_MIN_THREAD_COUNT, ERI_MAX_THREAD_COUNT);
 }
 
 int main(int argc, char** argv) {
