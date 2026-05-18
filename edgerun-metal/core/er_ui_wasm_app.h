@@ -28,6 +28,8 @@ typedef struct {
 int er_ui_wasm_app_prepare(const UINT8* module_data, UINT32 module_size,
                            const ErWasmHostCalls* host_template,
                            ErUiWasmAppRuntime* runtime);
+int er_ui_wasm_app_deliver_input(ErUiWasmAppRuntime* runtime, const UINT8* bytes,
+                                 UINT32 len);
 int er_ui_wasm_app_execute(ErUiWasmAppRuntime* runtime, INT64* out_result);
 int er_ui_wasm_app_run(const UINT8* module_data, UINT32 module_size,
                        const ErWasmHostCalls* host_template,
