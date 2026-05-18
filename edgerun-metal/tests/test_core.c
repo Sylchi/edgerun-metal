@@ -4367,7 +4367,7 @@ static void test_ui_demo_apps_switching(void) {
 
   check_int64("ui demo state init", er_ui_demo_apps_state_init(&apps, test_ui_allocator()), ER_UI_OK);
   check_uint64("ui demo app count", er_ui_workspace_surface_count(&apps.shell), 3u);
-  check_uint64("ui demo initial focus", er_ui_workspace_focused_surface_id(&apps.shell), ER_UI_DEMO_APP_RESOURCES_ID);
+  check_uint64("ui demo initial focus", er_ui_workspace_focused_surface_id(&apps.shell), ER_UI_DEMO_APP_LEDGER_ID);
   check_int64("ui demo focused bounds",
               er_ui_workspace_focused_surface_bounds(&apps.shell, er_ui_bounds(0.0f, 0.0f, 1600.0f, 900.0f), &focused),
               1);
@@ -4382,16 +4382,16 @@ static void test_ui_demo_apps_switching(void) {
               ER_UI_OK);
   stats = er_ui_scene_stats(&scene);
   check_int64("ui demo emits rects", stats.rects > 0u, 1);
-  check_int64("ui demo emits hits", stats.hits > 3u, 1);
+  check_int64("ui demo emits hits", stats.hits > 6u, 1);
   check_int64("ui demo emits text", stats.text_quads > 0u, 1);
 
-  down = er_ui_runtime_pointer_down(&runtime, &scene, 150.0f, 52.0f);
-  check_int64("ui demo tab down focus", down.kind, ER_UI_ACTION_FOCUSED);
-  up = er_ui_runtime_pointer_up(&runtime, &scene, 150.0f, 52.0f);
-  check_int64("ui demo tab up select", up.kind, ER_UI_ACTION_TAB_SELECTED);
-  check_int64("ui demo apply network tab", er_ui_demo_apps_apply_action(&apps, up, &changed), ER_UI_OK);
+  down = er_ui_runtime_pointer_down(&runtime, &scene, 40.0f, 138.0f);
+  check_int64("ui demo nav down focus", down.kind, ER_UI_ACTION_FOCUSED);
+  up = er_ui_runtime_pointer_up(&runtime, &scene, 40.0f, 138.0f);
+  check_int64("ui demo nav up select", up.kind, ER_UI_ACTION_TAB_SELECTED);
+  check_int64("ui demo apply payments nav", er_ui_demo_apps_apply_action(&apps, up, &changed), ER_UI_OK);
   check_int64("ui demo tab changed", changed, 1);
-  check_uint64("ui demo network focus", er_ui_workspace_focused_surface_id(&apps.shell), ER_UI_DEMO_APP_NETWORK_ID);
+  check_uint64("ui demo payments focus", er_ui_workspace_focused_surface_id(&apps.shell), ER_UI_DEMO_APP_PAYMENTS_ID);
 
   er_ui_scene_destroy(&scene);
   er_ui_runtime_state_destroy(&runtime);
@@ -4423,13 +4423,13 @@ static void test_ps2_keyboard_set1_decoder(void) {
   check_int64("ps2 decode surface 1",
               er_ps2_keyboard_decode_set1(&state, 0x02u, &action), 1);
   check_int64("ps2 surface action", action.kind, ER_PS2_KEYBOARD_ACTION_SELECT_SURFACE);
-  check_uint64("ps2 resources surface", action.surface_id, ER_UI_DEMO_APP_RESOURCES_ID);
+  check_uint64("ps2 ledger surface", action.surface_id, ER_UI_DEMO_APP_LEDGER_ID);
   check_int64("ps2 decode surface 2",
               er_ps2_keyboard_decode_set1(&state, 0x03u, &action), 1);
-  check_uint64("ps2 network surface", action.surface_id, ER_UI_DEMO_APP_NETWORK_ID);
+  check_uint64("ps2 payments surface", action.surface_id, ER_UI_DEMO_APP_PAYMENTS_ID);
   check_int64("ps2 decode surface 3",
               er_ps2_keyboard_decode_set1(&state, 0x04u, &action), 1);
-  check_uint64("ps2 people surface", action.surface_id, ER_UI_DEMO_APP_PEOPLE_ID);
+  check_uint64("ps2 access surface", action.surface_id, ER_UI_DEMO_APP_ACCESS_ID);
 
   check_int64("ps2 extended prefix",
               er_ps2_keyboard_decode_set1(&state, 0xe0u, &action), 1);

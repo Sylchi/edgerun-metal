@@ -3,7 +3,7 @@
 
 static const er_ui_color4_t ER_TEST_DEMO_BG = {0.01f, 0.012f, 0.015f, 1.0f};
 static const size_t ER_TEST_DEMO_APP_SURFACE_COUNT = 3u;
-static const size_t ER_TEST_DEMO_APP_MIN_HITS = 3u;
+static const size_t ER_TEST_DEMO_APP_MIN_HITS = 6u;
 
 static void test_demo_apps_state_and_surface_switching(void) {
   er_ui_demo_apps_state_t apps = {0};
@@ -20,7 +20,7 @@ static void test_demo_apps_state_and_surface_switching(void) {
 
   expect_status(er_ui_demo_apps_state_init(&apps, er_ui_test_allocator()), ER_UI_OK, "demo apps: state init succeeds");
   expect_size(er_ui_workspace_surface_count(&apps.shell), ER_TEST_DEMO_APP_SURFACE_COUNT, "demo apps: three surfaces are registered");
-  expect_u32(er_ui_workspace_focused_surface_id(&apps.shell), ER_UI_DEMO_APP_RESOURCES_ID, "demo apps: resources starts focused");
+  expect_u32(er_ui_workspace_focused_surface_id(&apps.shell), ER_UI_DEMO_APP_LEDGER_ID, "demo apps: ledger starts focused");
   expect_true(er_ui_workspace_focused_surface_bounds(&apps.shell, er_ui_bounds(0.0f, 0.0f, 1600.0f, 900.0f), &focused),
               "demo apps: focused surface bounds resolve");
   expect_true(focused.w > 0.0f && focused.h > 0.0f, "demo apps: focused surface bounds are positive");
@@ -35,13 +35,13 @@ static void test_demo_apps_state_and_surface_switching(void) {
   expect_true(stats.hits > ER_TEST_DEMO_APP_MIN_HITS, "demo apps: scene emits hits");
   expect_true(stats.text_quads > 0u, "demo apps: scene emits text");
 
-  er_ui_action_t down = er_ui_runtime_pointer_down(&runtime, &scene, 150.0f, 52.0f);
-  expect_size(down.kind, ER_UI_ACTION_FOCUSED, "demo apps: tab pointer down focuses");
-  er_ui_action_t up = er_ui_runtime_pointer_up(&runtime, &scene, 150.0f, 52.0f);
-  expect_size(up.kind, ER_UI_ACTION_TAB_SELECTED, "demo apps: tab pointer up selects");
+  er_ui_action_t down = er_ui_runtime_pointer_down(&runtime, &scene, 40.0f, 138.0f);
+  expect_size(down.kind, ER_UI_ACTION_FOCUSED, "demo apps: nav pointer down focuses");
+  er_ui_action_t up = er_ui_runtime_pointer_up(&runtime, &scene, 40.0f, 138.0f);
+  expect_size(up.kind, ER_UI_ACTION_TAB_SELECTED, "demo apps: nav pointer up selects");
   expect_status(er_ui_demo_apps_apply_action(&apps, up, &changed), ER_UI_OK, "demo apps: selected tab action applies");
   expect_true(changed, "demo apps: tab action reports state change");
-  expect_u32(er_ui_workspace_focused_surface_id(&apps.shell), ER_UI_DEMO_APP_NETWORK_ID, "demo apps: network surface becomes focused");
+  expect_u32(er_ui_workspace_focused_surface_id(&apps.shell), ER_UI_DEMO_APP_PAYMENTS_ID, "demo apps: payments surface becomes focused");
 
   er_ui_scene_destroy(&scene);
   er_ui_runtime_state_destroy(&runtime);
