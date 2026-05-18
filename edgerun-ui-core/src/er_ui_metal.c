@@ -130,10 +130,10 @@ er_ui_status_t er_ui_edgerun_metal_surface_emit(
   er_ui_resolved_theme_t theme,
   const er_ui_shadcn_demo_gallery_state_t* state) {
   static const char* const tabs[] = {"Executor", "Buses", "Renderer", "Components"};
-  static const char* const route_hops[] = {"firmware", "executor", "ui-core", "gop"};
+  static const char* const route_hops[] = {"device", "executor", "ui-core", "scanout"};
   static const char* const bus_headers[] = {"Bus", "Addressing", "Status"};
   static const char* const bus_cells[] = {
-    "GOP", "framebuffer", "mapped",
+    "Display", "scanout surface", "admitted",
     "ACPI", "tables", "scanned",
     "PCI", "config space", "captured"
   };
@@ -175,24 +175,24 @@ er_ui_status_t er_ui_edgerun_metal_surface_emit(
     er_ui_bounds_t compact_footer = er_ui_bounds(content.x, content.y + content.h - layout.toast_h, content.w, layout.toast_h);
     if (!er_ui_bounds_valid(compact_showcase)) return ER_UI_ERR_INVALID_ARGUMENT;
 
-    status = er_ui_shadcn_panel_header_emit(scene, font, compact_header, theme, "EdgeRun UI Core", "shadcn catalog rendered by GOP", "COMPACT", ER_UI_METAL_HEADER_ACTION_ID);
+    status = er_ui_shadcn_panel_header_emit(scene, font, compact_header, theme, "EdgeRun UI Core", "scene catalog rendered by admitted display relay", "COMPACT", ER_UI_METAL_HEADER_ACTION_ID);
     if (status != ER_UI_OK) return status;
     status = er_ui_metal_emit_icon_bar(scene, font, icon_bar, theme);
     if (status != ER_UI_OK) return status;
     status = er_ui_shadcn_showcase_emit(scene, font, compact_showcase, theme, "dialog", state);
     if (status != ER_UI_OK) return status;
-    return er_ui_shadcn_toast_emit(scene, font, compact_footer, theme, "UI-core shadcn components, node icons, hits, text, and GOP rendering are active.",
+    return er_ui_shadcn_toast_emit(scene, font, compact_footer, theme, "UI-core emits scenes; the device display relay owns scanout.",
                                    theme.colors.accent);
   }
 
-  status = er_ui_shadcn_panel_header_emit(scene, font, header, theme, "EdgeRun Metal", "GOP rendering UI-core components", "READY", ER_UI_METAL_HEADER_ACTION_ID);
+  status = er_ui_shadcn_panel_header_emit(scene, font, header, theme, "EdgeRun Metal", "UI scene commands admitted to display relay", "READY", ER_UI_METAL_HEADER_ACTION_ID);
   if (status != ER_UI_OK) return status;
   status = er_ui_shadcn_tabs_emit(scene, font, tabs_bounds, theme, tabs, sizeof(tabs) / sizeof(tabs[0]), 3u, ER_UI_METAL_TAB_BASE_ID);
   if (status != ER_UI_OK) return status;
 
   float metric_w = (metric_row.w - layout.block_gap * 2.0f) / ER_UI_METAL_METRIC_COLUMNS;
-  status = er_ui_shadcn_metric_card_emit(scene, font, er_ui_bounds(metric_row.x, metric_row.y, metric_w, metric_row.h), theme, "Renderer", "GOP",
-                                         "CPU tile renderer active", true, 0.82f, theme.colors.accent);
+  status = er_ui_shadcn_metric_card_emit(scene, font, er_ui_bounds(metric_row.x, metric_row.y, metric_w, metric_row.h), theme, "Display", "Relay",
+                                         "scanout surface active", true, 0.82f, theme.colors.accent);
   if (status != ER_UI_OK) return status;
   status = er_ui_shadcn_metric_card_emit(scene, font, er_ui_bounds(metric_row.x + metric_w + layout.block_gap, metric_row.y, metric_w, metric_row.h), theme,
                                          "Executor", "WASM", "drivers run as bounded apps", true, 0.58f, theme.colors.info);
