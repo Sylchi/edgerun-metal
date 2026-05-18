@@ -7,6 +7,10 @@ enum {
   ER_UI_SPACING_PAD_LEFT = 3u
 };
 
+static er_ui_bounds_t er_ui_empty_bounds(void) {
+  return er_ui_bounds(0.0f, 0.0f, 0.0f, 0.0f);
+}
+
 er_ui_component_padding_t er_ui_component_padding_for_density(er_ui_component_density_t density) {
   switch (density) {
     case ER_UI_COMPONENT_DENSITY_DENSE:
@@ -134,8 +138,8 @@ float er_ui_responsive_grid_height(er_ui_responsive_grid_t grid, size_t item_cou
 }
 
 er_ui_bounds_t er_ui_responsive_grid_span(er_ui_responsive_grid_t grid, size_t index, size_t column_span, float row_h) {
-  if (grid.columns == 0u || grid.column_w <= 0.0f || row_h <= 0.0f || !er_ui_bounds_valid(grid.bounds)) return er_ui_bounds(0.0f, 0.0f, 0.0f, 0.0f);
-  if (column_span == 0u) return er_ui_bounds(0.0f, 0.0f, 0.0f, 0.0f);
+  if (grid.columns == 0u || grid.column_w <= 0.0f || row_h <= 0.0f || !er_ui_bounds_valid(grid.bounds)) return er_ui_empty_bounds();
+  if (column_span == 0u) return er_ui_empty_bounds();
   size_t column = index % grid.columns;
   size_t row = index / grid.columns;
   size_t remaining_columns = grid.columns - column;
@@ -172,12 +176,12 @@ er_ui_bounds_t er_ui_uniform_grid_cell(er_ui_uniform_grid_t grid, size_t index) 
 
 er_ui_bounds_t er_ui_uniform_grid_span(er_ui_uniform_grid_t grid, size_t index, size_t column_span, size_t row_span) {
   if (grid.columns == 0u || grid.rows == 0u || grid.cell_w <= 0.0f || grid.cell_h <= 0.0f || !er_ui_bounds_valid(grid.bounds)) {
-    return er_ui_bounds(0.0f, 0.0f, 0.0f, 0.0f);
+    return er_ui_empty_bounds();
   }
-  if (column_span == 0u || row_span == 0u) return er_ui_bounds(0.0f, 0.0f, 0.0f, 0.0f);
+  if (column_span == 0u || row_span == 0u) return er_ui_empty_bounds();
   size_t column = index % grid.columns;
   size_t row = index / grid.columns;
-  if (row >= grid.rows) return er_ui_bounds(0.0f, 0.0f, 0.0f, 0.0f);
+  if (row >= grid.rows) return er_ui_empty_bounds();
   size_t available_columns = grid.columns - column;
   size_t available_rows = grid.rows - row;
   size_t columns = column_span < available_columns ? column_span : available_columns;
@@ -201,7 +205,7 @@ er_ui_vertical_flow_t er_ui_vertical_flow(er_ui_bounds_t bounds, float gap) {
 }
 
 er_ui_bounds_t er_ui_vertical_flow_next(er_ui_vertical_flow_t* flow, float preferred_h) {
-  if (!flow || preferred_h <= 0.0f || !er_ui_bounds_valid(flow->bounds)) return er_ui_bounds(0.0f, 0.0f, 0.0f, 0.0f);
+  if (!flow || preferred_h <= 0.0f || !er_ui_bounds_valid(flow->bounds)) return er_ui_empty_bounds();
   float remaining_h = er_ui_float_max(flow->bounds.y + flow->bounds.h - flow->cursor_y, 0.0f);
   float h = er_ui_float_min(preferred_h, remaining_h);
   er_ui_bounds_t item = er_ui_bounds(flow->bounds.x, flow->cursor_y, flow->bounds.w, h);
@@ -210,7 +214,7 @@ er_ui_bounds_t er_ui_vertical_flow_next(er_ui_vertical_flow_t* flow, float prefe
 }
 
 er_ui_bounds_t er_ui_vertical_flow_remaining(const er_ui_vertical_flow_t* flow) {
-  if (!flow || !er_ui_bounds_valid(flow->bounds)) return er_ui_bounds(0.0f, 0.0f, 0.0f, 0.0f);
+  if (!flow || !er_ui_bounds_valid(flow->bounds)) return er_ui_empty_bounds();
   float h = er_ui_float_max(flow->bounds.y + flow->bounds.h - flow->cursor_y, 0.0f);
   return er_ui_bounds(flow->bounds.x, flow->cursor_y, flow->bounds.w, h);
 }
