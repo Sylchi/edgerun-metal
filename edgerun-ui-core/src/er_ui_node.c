@@ -1941,35 +1941,6 @@ static er_ui_status_t er_ui_node_render_children(
   er_ui_scene_t* scene,
   vr_font_face_t* font,
   er_ui_bounds_t bounds,
-  er_ui_resolved_theme_t theme,
-  bool row) {
-  if (!node) return ER_UI_ERR_INVALID_ARGUMENT;
-  if (node->child_count == 0u) return ER_UI_OK;
-  er_ui_bounds_t content = er_ui_bounds_inset(bounds, node->padding, node->padding);
-  float total_gap = node->gap * (float)(node->child_count - 1u);
-  float step = row ? (content.w - total_gap) / (float)node->child_count : (content.h - total_gap) / (float)node->child_count;
-  if (step <= 0.0f) return ER_UI_ERR_INVALID_ARGUMENT;
-  for (size_t i = 0u; i < node->child_count; ++i) {
-    er_ui_bounds_t child_bounds = content;
-    if (row) {
-      child_bounds.x = content.x + (step + node->gap) * (float)i;
-      child_bounds.w = step;
-    } else {
-      child_bounds.y = content.y + (step + node->gap) * (float)i;
-      child_bounds.h = step;
-    }
-    er_ui_status_t status = er_ui_node_render(node->children[i], scene, font, child_bounds, theme);
-    if (status != ER_UI_OK) return status;
-  }
-  return ER_UI_OK;
-}
-
-//@optimizer-ignore-function grid layout must compute and render each child cell in declaration order
-static er_ui_status_t er_ui_node_render_grid(
-  const er_ui_node_t* node,
-  er_ui_scene_t* scene,
-  vr_font_face_t* font,
-  er_ui_bounds_t bounds,
   er_ui_resolved_theme_t theme) {
   if (!node) return ER_UI_ERR_INVALID_ARGUMENT;
   if (node->child_count == 0u) return ER_UI_OK;
@@ -1997,9 +1968,7 @@ static er_ui_status_t er_ui_node_render_scroll_area(
   bool pushed = false;
   er_ui_status_t status = er_ui_scene_push_clip(scene, er_ui_clip(bounds.x, bounds.y, bounds.w, bounds.h), &pushed);
   if (status != ER_UI_OK) return status;
-  er_ui_bounds_t scrolled = bounds;
-  scrolled.y -= node->number;
-  status = er_ui_node_render_children(node, scene, font, scrolled, theme, false);
+  status = er_ui_node_render_children(node, scene, font, bounds, theme);
   if (pushed) er_ui_scene_pop_clip(scene);
   return status;
 }
@@ -2955,17 +2924,17 @@ er_ui_status_t er_ui_node_render(
     case ER_UI_NODE_ROW: {
       er_ui_status_t status = er_ui_node_emit_background_gradient(node, scene, rect, theme);
       if (status != ER_UI_OK) return status;
-      return er_ui_node_render_children(node, scene, font, rect, theme, true);
+      return er_ui_node_render_children(node, scene, font, rect, theme);
     }
     case ER_UI_NODE_COLUMN: {
       er_ui_status_t status = er_ui_node_emit_background_gradient(node, scene, rect, theme);
       if (status != ER_UI_OK) return status;
-      return er_ui_node_render_children(node, scene, font, rect, theme, false);
+      return er_ui_node_render_children(node, scene, font, rect, theme);
     }
     case ER_UI_NODE_CARD: {
       er_ui_status_t status = er_ui_node_emit_card_surface(node, scene, rect, theme);
       if (status != ER_UI_OK) return status;
-      return er_ui_node_render_children(node, scene, font, rect, theme, false);
+      return er_ui_node_render_children(node, scene, font, rect, theme);
     }
     case ER_UI_NODE_ICON:
       return er_ui_node_render_icon(scene, er_ui_node_center_square(rect, 20.0f), node->icon, node->color.a > 0.0f ? node->color : theme.colors.muted);
@@ -3119,7 +3088,7 @@ er_ui_status_t er_ui_node_render(
     case ER_UI_NODE_BENTO_GRID: {
       er_ui_status_t status = er_ui_node_emit_background_gradient(node, scene, rect, theme);
       if (status != ER_UI_OK) return status;
-      return er_ui_node_render_grid(node, scene, font, rect, theme);
+      return er_ui_node_render_children(node, scene, font, rect, theme);
     }
     case ER_UI_NODE_SCROLL_AREA:
       return er_ui_node_render_scroll_area(node, scene, font, rect, theme);
