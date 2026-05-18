@@ -72,6 +72,7 @@ static const uint32_t ER_UI_LEDGER_INVEST_BUTTON_ID = ER_UI_LEDGER_ACTION_BASE +
 static const uint32_t ER_UI_LEDGER_TRANSFER_BUTTON_ID = ER_UI_LEDGER_ACTION_BASE + 4u;
 static const uint32_t ER_UI_LEDGER_SAVE_THRESHOLD_BUTTON_ID = ER_UI_LEDGER_ACTION_BASE + 8u;
 static const uint32_t ER_UI_LEDGER_DASHBOARD_SCROLL_ID = ER_UI_LEDGER_ACTION_BASE + 16u;
+static const uint32_t ER_UI_LEDGER_CREATE_RELEASE_BUTTON_ID = ER_UI_LEDGER_ACTION_BASE + 32u;
 
 typedef struct {
   er_ui_color4_t bg;
@@ -844,6 +845,57 @@ static er_ui_status_t er_ui_ledger_account_summary_card(
   return er_ui_ledger_text_clipped(scene, font, "Move money between accounts.", transfer.x + 12.0f, transfer.y + 48.0f, transfer.w - 24.0f, colors.muted);
 }
 
+static er_ui_status_t er_ui_ledger_release_card(
+  er_ui_scene_t* scene,
+  vr_font_face_t* font,
+  er_ui_bounds_t bounds,
+  er_ui_ledger_colors_t colors) {
+  er_ui_status_t status = er_ui_ledger_card(scene, bounds, colors);
+  if (status != ER_UI_OK) return status;
+  er_ui_bounds_t content = er_ui_component_content_rect(bounds, ER_UI_COMPONENT_DENSITY_DEFAULT);
+  er_ui_bounds_t icon = er_ui_bounds(content.x, content.y + 18.0f, 34.0f, 34.0f);
+  status = er_ui_ledger_rect(scene, icon, 7.0f, colors.field);
+  if (status != ER_UI_OK) return status;
+  status = er_ui_ledger_icon(scene, er_ui_bounds(icon.x + 9.0f, icon.y + 9.0f, 16.0f, 16.0f), ER_UI_ICON_MESSAGE_PLUS, colors.text);
+  if (status != ER_UI_OK) return status;
+  status = er_ui_ledger_text_clipped(scene, font, "Distribute Track", content.x, content.y + 86.0f, content.w, colors.text);
+  if (status != ER_UI_OK) return status;
+  status = er_ui_ledger_text_clipped(scene, font, "Upload your first master and start reaching listeners.", content.x, content.y + 112.0f, content.w, colors.muted);
+  if (status != ER_UI_OK) return status;
+  return er_ui_ledger_button(scene, font,
+                             er_ui_bounds(content.x, bounds.y + bounds.h - 50.0f, er_ui_float_min(content.w, 144.0f), ER_UI_LEDGER_BUTTON_H),
+                             colors, "Create Release", ER_UI_LEDGER_CREATE_RELEASE_BUTTON_ID);
+}
+
+static er_ui_status_t er_ui_ledger_claimable_card(
+  er_ui_scene_t* scene,
+  vr_font_face_t* font,
+  er_ui_bounds_t bounds,
+  er_ui_ledger_colors_t colors) {
+  er_ui_status_t status = er_ui_ledger_card_with_header(scene, font, bounds, colors, "Claimable Balance", 0);
+  if (status != ER_UI_OK) return status;
+  er_ui_bounds_t content = er_ui_component_content_rect(bounds, ER_UI_COMPONENT_DENSITY_DEFAULT);
+  status = er_ui_ledger_text_clipped(scene, font, "$0.00", content.x, content.y + 70.0f, content.w, colors.text);
+  if (status != ER_UI_OK) return status;
+  er_ui_bounds_t pill = er_ui_bounds(content.x, content.y + 88.0f, 112.0f, 24.0f);
+  status = er_ui_ledger_rect(scene, pill, 12.0f, colors.field);
+  if (status != ER_UI_OK) return status;
+  status = er_ui_ledger_rect(scene, er_ui_bounds(pill.x + 10.0f, pill.y + 9.0f, 6.0f, 6.0f), 3.0f, colors.warning);
+  if (status != ER_UI_OK) return status;
+  status = er_ui_ledger_text_clipped(scene, font, "Pending Setup", pill.x + 22.0f, pill.y + 16.0f, pill.w - 28.0f, colors.text);
+  if (status != ER_UI_OK) return status;
+  er_ui_bounds_t summary = er_ui_bounds(content.x, content.y + 124.0f, content.w, 76.0f);
+  status = er_ui_ledger_rect(scene, summary, 7.0f, colors.panel_alt);
+  if (status != ER_UI_OK) return status;
+  status = er_ui_ledger_text_clipped(scene, font, "Net Royalties", summary.x + 12.0f, summary.y + 24.0f, summary.w * 0.52f, colors.muted);
+  if (status != ER_UI_OK) return status;
+  status = er_ui_ledger_text_right_clipped(scene, font, "$0.00", summary.x + summary.w - 12.0f, summary.y + 24.0f, summary.w * 0.32f, colors.text);
+  if (status != ER_UI_OK) return status;
+  status = er_ui_ledger_text_clipped(scene, font, "Ready to Claim", summary.x + 12.0f, summary.y + 54.0f, summary.w * 0.52f, colors.muted);
+  if (status != ER_UI_OK) return status;
+  return er_ui_ledger_text_right_clipped(scene, font, "$0.00 USD", summary.x + summary.w - 12.0f, summary.y + 54.0f, summary.w * 0.38f, colors.text);
+}
+
 static er_ui_status_t er_ui_ledger_transfer_card(
   er_ui_scene_t* scene,
   vr_font_face_t* font,
@@ -907,9 +959,13 @@ static er_ui_status_t er_ui_ledger_dashboard(
   size_t summary_rows = er_ui_responsive_grid_row_count(grid, summary_cards);
   size_t detail_index = summary_rows * grid.columns;
   size_t transaction_span = grid.columns > 2u ? grid.columns - 1u : 1u;
-  size_t row_count = er_ui_responsive_grid_row_count(grid, detail_index + transaction_span + 1u);
+  size_t account_index = detail_index + transaction_span;
+  size_t release_index = account_index + 1u;
+  size_t claimable_index = release_index + 1u;
+  size_t item_count = claimable_index + 1u;
+  size_t row_count = er_ui_responsive_grid_row_count(grid, item_count);
   float row_h = er_ui_float_max(er_ui_responsive_grid_row_height(grid, row_count), ER_UI_LEDGER_DASHBOARD_ROW_MIN_H);
-  float content_h = er_ui_responsive_grid_height(grid, detail_index + transaction_span + 1u, row_h);
+  float content_h = er_ui_responsive_grid_height(grid, item_count, row_h);
   er_ui_scroll_viewport_t viewport = er_ui_scroll_viewport(grid.bounds, content_h, scroll, ER_UI_LEDGER_SCROLL_THUMB_MIN_H);
   er_ui_status_t hit_status = er_ui_scene_push_hit(scene, er_ui_hit(ER_UI_HIT_SCROLL_AREA, ER_UI_LEDGER_DASHBOARD_SCROLL_ID,
                                                                     viewport.viewport.x, viewport.viewport.y,
@@ -935,9 +991,15 @@ static er_ui_status_t er_ui_ledger_dashboard(
     status = er_ui_ledger_transactions_card(scene, font, er_ui_responsive_grid_span(content_grid, detail_index, transaction_span, row_h), colors);
   }
   if (status == ER_UI_OK && summary_cards == ER_UI_LEDGER_DASHBOARD_WIDE_SUMMARY_CARDS) {
-    status = er_ui_ledger_account_summary_card(scene, font, er_ui_responsive_grid_cell(content_grid, detail_index + transaction_span, row_h), colors);
+    status = er_ui_ledger_account_summary_card(scene, font, er_ui_responsive_grid_cell(content_grid, account_index, row_h), colors);
   } else if (status == ER_UI_OK) {
-    status = er_ui_ledger_invest_card(scene, font, er_ui_responsive_grid_cell(content_grid, detail_index + transaction_span, row_h), colors);
+    status = er_ui_ledger_invest_card(scene, font, er_ui_responsive_grid_cell(content_grid, account_index, row_h), colors);
+  }
+  if (status == ER_UI_OK) {
+    status = er_ui_ledger_release_card(scene, font, er_ui_responsive_grid_cell(content_grid, release_index, row_h), colors);
+  }
+  if (status == ER_UI_OK) {
+    status = er_ui_ledger_claimable_card(scene, font, er_ui_responsive_grid_cell(content_grid, claimable_index, row_h), colors);
   }
   if (pushed) er_ui_scene_pop_clip(scene);
   if (status != ER_UI_OK) return status;
