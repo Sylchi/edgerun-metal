@@ -12,7 +12,8 @@ static void test_bundled_asset_packs_validate(void) {
   expect_asset_status(er_ui_asset_pack_validate(tabler, limits), ER_UI_ASSET_PACK_OK, "assets: bundled Tabler/Inter pack validates");
   expect_asset_status(er_ui_asset_pack_validate(lucide, limits), ER_UI_ASSET_PACK_OK, "assets: bundled Lucide/Geist pack validates");
   expect_string(lucide.name, "edgerun-lucide-geist", "assets: Lucide/Geist pack name");
-  expect_string(lucide.fonts.faces[0u].name, "Geist", "assets: bundled Geist face");
+  const er_ui_font_face_spec_t* bundled_face = lucide.fonts.faces;
+  expect_string(bundled_face->name, "Geist", "assets: bundled Geist face");
   expect_size(tabler.icons.entry_count, (size_t)ER_UI_ICON_COUNT, "assets: bundled icon coverage count");
   expect_size(tabler.components.component_count, (size_t)ER_UI_COMPONENT_KIND_COUNT, "assets: bundled component coverage count");
   expect_string(er_ui_component_kind_label(ER_UI_COMPONENT_KIND_EDGERUN_DOMAIN), "EdgeRun Domain", "assets: component kind label");
@@ -21,7 +22,11 @@ static void test_bundled_asset_packs_validate(void) {
 static void test_icon_pack_rejects_missing_or_mismatched_icons(void) {
   er_ui_asset_limits_t limits = er_ui_asset_limits_default();
   er_ui_asset_pack_spec_t pack = er_ui_tabler_inter_asset_pack();
-  er_ui_icon_pack_entry_t mismatched[2u] = {{ER_UI_ICON_ACTIVITY, "activity"}, {ER_UI_ICON_APP, "apps"}};
+  //@optimizer-ignore icon fixture array intentionally injects a provider-name mismatch into validated pack metadata
+  er_ui_icon_pack_entry_t mismatched[2u] = {
+    {ER_UI_ICON_ACTIVITY, "activity"},
+    {ER_UI_ICON_APP, "apps"},
+  };
 
   pack.icons.entry_count = (size_t)ER_UI_ICON_COUNT - 1u;
   expect_asset_status(er_ui_asset_pack_validate(pack, limits), ER_UI_ASSET_PACK_MISSING_REQUIRED_ICON,

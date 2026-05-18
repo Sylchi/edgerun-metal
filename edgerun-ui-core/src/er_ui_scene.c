@@ -539,21 +539,35 @@ bool er_ui_scene_stats_fits_budget(er_ui_scene_stats_t stats, er_ui_scene_budget
   return !er_ui_scene_first_budget_violation(stats, budget, NULL);
 }
 
-bool er_ui_scene_first_budget_violation(er_ui_scene_stats_t stats, er_ui_scene_budget_t budget, er_ui_scene_budget_violation_t* out_violation) {
-  static const char* const names[] = {"rects", "hits", "drag_sources", "drop_targets", "transitions", "icon_quads", "text_quads"};
-  const size_t actual[] = {stats.rects, stats.hits, stats.drag_sources, stats.drop_targets, stats.transitions, stats.icon_quads, stats.text_quads};
-  const size_t limits[] = {budget.rects, budget.hits, budget.drag_sources, budget.drop_targets, budget.transitions, budget.icon_quads, budget.text_quads};
-  const size_t count = sizeof(actual) / sizeof(actual[0]);
+typedef struct {
+  const char* name;
+  size_t actual;
+  size_t limit;
+} er_ui_scene_budget_entry_t;
 
-  for (size_t i = 0u; i < count; ++i) {
-    if (actual[i] > limits[i]) {
+bool er_ui_scene_first_budget_violation(er_ui_scene_stats_t stats, er_ui_scene_budget_t budget, er_ui_scene_budget_violation_t* out_violation) {
+  const er_ui_scene_budget_entry_t entries[] = {
+    {"rects", stats.rects, budget.rects},
+    {"hits", stats.hits, budget.hits},
+    {"drag_sources", stats.drag_sources, budget.drag_sources},
+    {"drop_targets", stats.drop_targets, budget.drop_targets},
+    {"transitions", stats.transitions, budget.transitions},
+    {"icon_quads", stats.icon_quads, budget.icon_quads},
+    {"text_quads", stats.text_quads, budget.text_quads},
+  };
+  const er_ui_scene_budget_entry_t* entry = entries;
+  const er_ui_scene_budget_entry_t* end = entries + (sizeof(entries) / sizeof(entries[0]));
+
+  while (entry < end) {
+    if (entry->actual > entry->limit) {
       if (out_violation) {
-        out_violation->name = names[i];
-        out_violation->actual = actual[i];
-        out_violation->limit = limits[i];
+        out_violation->name = entry->name;
+        out_violation->actual = entry->actual;
+        out_violation->limit = entry->limit;
       }
       return true;
     }
+    entry++;
   }
   return false;
 }

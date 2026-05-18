@@ -53,7 +53,11 @@ void er_ui_runtime_clear_focus_scope(er_ui_runtime_state_t* state, uint32_t open
 static size_t er_ui_cstr_len(const char* text) {
   size_t len = 0u;
   if (!text) return 0u;
-  while (text[len] != '\0') len++;
+  const char* cursor = text;
+  while (*cursor != '\0') {
+    len++;
+    cursor++;
+  }
   return len;
 }
 
