@@ -3,7 +3,7 @@
 
 static const er_ui_color4_t ER_TEST_DEMO_BG = {0.01f, 0.012f, 0.015f, 1.0f};
 static const size_t ER_TEST_DEMO_APP_SURFACE_COUNT = 3u;
-static const size_t ER_TEST_DEMO_APP_MIN_HITS = 6u;
+static const size_t ER_TEST_DEMO_APP_HITS = 6u;
 
 static void test_demo_apps_state_and_surface_switching(void) {
   er_ui_demo_apps_state_t apps = {0};
@@ -32,7 +32,7 @@ static void test_demo_apps_state_and_surface_switching(void) {
 
   er_ui_scene_stats_t stats = er_ui_scene_stats(&scene);
   expect_true(stats.rects > 0u, "demo apps: scene emits rects");
-  expect_true(stats.hits > ER_TEST_DEMO_APP_MIN_HITS, "demo apps: scene emits hits");
+  expect_size(stats.hits, ER_TEST_DEMO_APP_HITS, "demo apps: scene emits expected hits");
   expect_true(stats.text_quads > 0u, "demo apps: scene emits text");
 
   er_ui_action_t down = er_ui_runtime_pointer_down(&runtime, &scene, 40.0f, 138.0f);

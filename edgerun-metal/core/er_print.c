@@ -28,6 +28,7 @@
 
 static EFI_SYSTEM_TABLE* g_st;
 static UINT8 g_serial_ready;
+static UINT8 g_firmware_console_enabled = 1u;
 
 static inline void er_io_out8(UINT16 port, UINT8 value) {
   __asm__ __volatile__("outb %0, %1" : : "a"(value), "Nd"(port));
@@ -80,6 +81,7 @@ static void er_serial_write(const char* s) {
 
 void er_print_set_system_table(EFI_SYSTEM_TABLE* st) {
   g_st = st;
+  g_firmware_console_enabled = 1u;
   er_serial_init();
   er_gfx_console_init(st);
   er_netlog_init(st);
@@ -90,6 +92,10 @@ void er_print_set_system_table(EFI_SYSTEM_TABLE* st) {
   } else {
     er_println("netlog: unavailable");
   }
+}
+
+void er_print_set_firmware_console_enabled(UINT8 enabled) {
+  g_firmware_console_enabled = (UINT8)(enabled != 0u);
 }
 
 void er_print(const char* s) {
@@ -105,7 +111,7 @@ void er_print(const char* s) {
   er_netlog_write_text(s);
   er_gfx_console_write(s);
 
-  if (g_st == 0 || g_st->ConOut == 0 || g_st->ConOut->OutputString == 0) {
+  if (g_firmware_console_enabled == 0u || g_st == 0 || g_st->ConOut == 0 || g_st->ConOut->OutputString == 0) {
     return;
   }
 
