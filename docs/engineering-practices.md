@@ -27,7 +27,7 @@ make check
 
 - repository structure through `tools/repo-check.sh`
 - repository-policy tests through `tests/repo-check-tests.sh`
-- all `edgerun-metal` boot profiles build with warnings as errors
+- the `edgerun-metal` OS image builds with warnings as errors
 - `varfont` builds with CMake and Ninja
 - `varfont` tests pass through CTest
 - `edgerun-ui-core` builds with CMake and Ninja

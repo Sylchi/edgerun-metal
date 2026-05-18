@@ -2,9 +2,9 @@
 #define ER_UI_GOP_PLANNING_H
 
 /*
- * Purpose: keep GOP surface validation, tile planning, dirty tracking, and frame budget logic
+ * Purpose: keep bootstrap surface validation, tile planning, dirty tracking, and frame budget logic
  * out of the pixel rasterizer body.
- * Intention: leave er_ui_gop_renderer.c focused on drawing primitives and GOP integration.
+ * Intention: leave the compatibility surface renderer focused on drawing primitives.
  */
 
 UINT8 er_ui_gop_surface_valid(const ErUiGopSurface* surface) {

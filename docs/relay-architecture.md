@@ -202,7 +202,7 @@ user-authored Wasm app
 
 The first concrete milestones are:
 
-1. Add a native profile loop around the existing native ingress polling helper.
+1. Add OS-loop polling around the existing native ingress helper.
 2. Decode accepted packets into `edgerun-work` records and reject packets that are not admitted work traffic.
 3. Convert verified admission-defined routes into `ErRelayForwardIntent`.
 4. Add an assigned render capability endpoint adapter that can capture scene hashes before drawing.

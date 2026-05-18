@@ -1,4 +1,4 @@
-.PHONY: all run run-native run-tpm clean print-path netboot ui native tpm gpu rebuild-profile check test-core wasm-modules
+.PHONY: all run clean print-path netboot os rebuild-image check test-core wasm-modules
 
 CC = clang
 HOST_CC ?= clang
@@ -15,11 +15,8 @@ VARFONT_DIR := ../varfont
 CRYPTO_DIR := ../edgerun-crypto
 GENERATED_DIR := $(BUILD_DIR)/generated
 
-# Boot profiles are defined in core/er_boot_profile.h:
-#   4 = ui:     VirtIO GPU-backed UI runtime, Wasm UI app, PS/2 input loop
-#   5 = native: QEMU microvm VirtIO-MMIO erwire-over-Ethernet probe
-#   6 = tpm:    QEMU swtpm/TPM2 CRB direct command probe
-#   7 = gpu:    VirtIO GPU/VGA PCI framebuffer probe
+# ER_BOOT_PROFILE=4 selects the OS path: VirtIO GPU UI runtime, Wasm apps, PS/2 input,
+# storage-bound package loading, and relay/device endpoint work.
 ER_BOOT_PROFILE ?= 4
 
 CFLAGS := -std=c11 -Wall -Werror -ffreestanding -fshort-wchar -fno-builtin -fno-stack-protector -mno-red-zone -fuse-ld=lld -target x86_64-pc-windows-msvc \
@@ -30,7 +27,7 @@ HOST_CFLAGS := -std=c11 -Wall -Wextra -Werror -O2 -DER_ENABLE_TEST_HOOKS=1 -I$(C
 HOST_LDFLAGS ?= $(if $(MOLD),-fuse-ld=mold,)
 
 SRCS := core/efi_main.c core/er_boot_profile.c core/er_print.c core/er_gfx_console.c core/er_ui_gop_renderer.c core/er_ui_wasm_app.c core/er_epoch_clock.c core/er_freestanding.c core/er_netlog.c core/er_crypto.c core/er_crypto_blake3.c core/er_mem.c core/er_vfs.c core/er_app.c core/er_identity.c core/er_device_identity.c core/er_work_route.c core/er_render_endpoint.c core/er_tpm.c core/er_hw_relay.c core/er_relay_packet.c core/er_bus.c core/er_ps2_keyboard.c core/er_acpi.c core/erwire.c core/er_native_boot.c core/wasm_vm.c core/er_pci.c core/er_mmio.c core/er_virtio.c core/er_virtio_net.c core/er_virtio_gpu.c core/er_net_frame.c core/er_native_eth.c
-UI_SRCS := $(UI_CORE_DIR)/src/er_ui_primitives.c $(UI_CORE_DIR)/src/er_ui_scene.c $(UI_CORE_DIR)/src/er_ui_painter.c $(UI_CORE_DIR)/src/er_ui_theme.c $(UI_CORE_DIR)/src/er_ui_text.c $(UI_CORE_DIR)/src/er_ui_runtime.c $(UI_CORE_DIR)/src/er_ui_components.c $(UI_CORE_DIR)/src/er_ui_icon.c $(UI_CORE_DIR)/src/er_ui_shell.c $(UI_CORE_DIR)/src/er_ui_ledger_app.c $(UI_CORE_DIR)/src/er_ui_metal.c $(UI_CORE_DIR)/src/er_ui_node.c
+UI_SRCS := $(UI_CORE_DIR)/src/er_ui_primitives.c $(UI_CORE_DIR)/src/er_ui_scene.c $(UI_CORE_DIR)/src/er_ui_painter.c $(UI_CORE_DIR)/src/er_ui_theme.c $(UI_CORE_DIR)/src/er_ui_text.c $(UI_CORE_DIR)/src/er_ui_spacing.c $(UI_CORE_DIR)/src/er_ui_runtime.c $(UI_CORE_DIR)/src/er_ui_components.c $(UI_CORE_DIR)/src/er_ui_icon.c $(UI_CORE_DIR)/src/er_ui_shell.c $(UI_CORE_DIR)/src/er_ui_ledger_app.c $(UI_CORE_DIR)/src/er_ui_metal.c $(UI_CORE_DIR)/src/er_ui_node.c
 VARFONT_SRCS := $(VARFONT_DIR)/src/vr_font.c $(VARFONT_DIR)/src/vr_font_utils.c $(VARFONT_DIR)/src/vr_font_shape.c $(VARFONT_DIR)/src/vr_font_raster.c $(VARFONT_DIR)/src/vr_font_atlas.c
 CRYPTO_SRCS := $(CRYPTO_DIR)/src/er_blake3.c
 CRYPTO_ASM_SRCS := $(CRYPTO_DIR)/../third_party/blake3/c/blake3_sse2_x86-64_windows_gnu.S
@@ -61,25 +58,16 @@ IFACE ?=
 
 all: wasm-modules $(FONT_HEADER) $(FONT_BAKED_HEADER) $(EFI_OUT) $(EFI_BOOT)
 
-ui:
-	$(MAKE) rebuild-profile ER_BOOT_PROFILE=4
+os:
+	$(MAKE) rebuild-image ER_BOOT_PROFILE=4
 
-native:
-	$(MAKE) rebuild-profile ER_BOOT_PROFILE=5
-
-tpm:
-	$(MAKE) rebuild-profile ER_BOOT_PROFILE=6
-
-gpu:
-	$(MAKE) rebuild-profile ER_BOOT_PROFILE=7
-
-rebuild-profile:
+rebuild-image:
 	rm -f $(OBJS) $(UI_OBJS) $(VARFONT_OBJS) $(CRYPTO_OBJS) $(CRYPTO_ASM_OBJS) $(EFI_OUT) $(EFI_BOOT)
 	$(MAKE) all ER_BOOT_PROFILE=$(ER_BOOT_PROFILE)
 
 netboot: $(NETBOOT_BIN) $(PXE4011_BIN)
 
-check: ui native tpm gpu test-core
+check: os test-core
 
 test-core: $(CORE_TEST_BIN)
 	./$(CORE_TEST_BIN)
@@ -156,12 +144,6 @@ $(EFI_BOOT): $(EFI_OUT)
 
 run: $(EFI_BOOT)
 	./scripts/run-qemu.sh
-
-run-native: native
-	QEMU_NATIVE=1 ./scripts/run-qemu.sh
-
-run-tpm: tpm
-	QEMU_TPM=1 ./scripts/run-qemu.sh
 
 clean:
 	rm -rf $(BUILD_DIR)

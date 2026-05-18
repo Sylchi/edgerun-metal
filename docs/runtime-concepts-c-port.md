@@ -105,13 +105,11 @@ Secure IPC routes bind source app node id, target node id, capability id, route 
 
 ## Render Concepts
 
-Rendering is a budgeted runtime capability, not an unbounded local privilege. User-authored apps submit UI state that resolves through `edgerun-ui-core` components into bounded scene/display-list data. The metal renderer draws that admitted scene to a dumb framebuffer or endpoint-owned VirtIO GPU surface.
+Rendering is a budgeted runtime capability, not an unbounded local privilege. User-authored apps submit UI state that resolves through `edgerun-ui-core` components into bounded scene/display-list data. The durable renderer path is an endpoint-owned VirtIO GPU surface.
 
 Apps cannot draw arbitrary pixels or create arbitrary overlapping windows. They submit predetermined component state, and the shell places that state into admitted layout regions. Transitions are selected from predetermined transition kinds. Overlays are reserved for system prompts, OSD, secure confirmation, and other trusted shell surfaces.
 
-The 4K120 CPU rendering target is a first-class architecture constraint. A 3840x2160 RGBA frame is about 33.2 MiB, and full-screen writes at 120 Hz are about 3.98 GiB/s. That is feasible for simple linear writes on desktop memory, but normal UI must rely on retained scenes, dirty tiles, cached glyphs, and bounded alpha blending. The renderer must account bytes written, dirty tiles, primitive count, glyph count, and app render budgets before accepting work.
-
-See `docs/metal-renderer-4k120.md` for the display architecture.
+The renderer must account bytes written, dirty tiles, primitive count, glyph count, and app render budgets before accepting work. Firmware GOP remains a compatibility bootstrap surface only; it is not the OS renderer architecture.
 
 ## VFS Concepts
 
@@ -143,7 +141,7 @@ The completed C foundation is:
 - explicit crypto provider hooks for seal/open/hash/sign/verify
 - bounded Wasm relay send/receive imports with app identity, admission, token, memory-window, and packet-byte budget checks
 - bounded capability envelope header preparation and validation for render/input/object/device-style capability payloads
-- deterministic render endpoint capture, scene payload hashing, endpoint-owned scene decode, and GOP surface presentation after admitted route, channel envelope, and render capability header verification
+- deterministic render endpoint capture, scene payload hashing, and endpoint-owned scene decode after admitted route, channel envelope, and render capability header verification
 - backend-neutral UI scene records, component surfaces, variable-font text quads, and GOP/VirtIO GPU rendering foundations
 - concurrent boot-local Wasm UI app contexts with isolated preallocated memory, presentation identity, scene state, and per-runtime `ui_emit` dispatch
 - boot-local Wasm UI app launch from validated package-loaded bytes stored in persistent per-app module buffers
@@ -151,4 +149,4 @@ The completed C foundation is:
 - typed storage endpoint response adaptation that checks route ids, object ids, lengths, packet lists, and caller-owned destination memory before package bytes become launch input
 - Wasm relay-send proof for render capability invocation payloads under admitted packet shape, source identity, token, and packet-byte budget checks
 
-The next C milestone is to replace embedded package packet sources with real admitted storage endpoint responses for saved user-authored app packages, carry the decoded render endpoint scene path into the boot UI/native ingress loop, and add the VirtIO GPU endpoint adapter. No host listener, host capture path, host filesystem persistence, or host networking model belongs in the runtime core.
+The next C milestone is to replace embedded package packet sources with real admitted storage endpoint responses for saved user-authored app packages, carry the decoded render endpoint scene path into the OS loop, and add the VirtIO GPU endpoint adapter. No host listener, host capture path, host filesystem persistence, firmware-networking dependency, or debug boot profile belongs in the runtime core.

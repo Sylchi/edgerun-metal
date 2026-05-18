@@ -6,11 +6,11 @@ ESP_DIR="${BUILD_DIR}/esp"
 QEMU_WIDTH="${QEMU_WIDTH:-1280}"
 QEMU_HEIGHT="${QEMU_HEIGHT:-720}"
 QEMU_REFRESH="${QEMU_REFRESH:-60}"
-QEMU_NATIVE="${QEMU_NATIVE:-0}"
+QEMU_VIRTIO_NET="${QEMU_VIRTIO_NET:-1}"
 QEMU_TPM="${QEMU_TPM:-0}"
 QEMU_VIRTIO_GPU="${QEMU_VIRTIO_GPU:-1}"
 QEMU_TPM_PERSIST_STATE="${QEMU_TPM_PERSIST_STATE:-0}"
-QEMU_CAPTURE="${QEMU_CAPTURE:-${BUILD_DIR}/native-erwire.pcap}"
+QEMU_CAPTURE="${QEMU_CAPTURE:-}"
 QEMU_TPM_STATE_DIR="${QEMU_TPM_STATE_DIR:-${BUILD_DIR}/swtpm-state}"
 QEMU_TPM_SOCKET="${QEMU_TPM_SOCKET:-${BUILD_DIR}/swtpm.sock}"
 QEMU_TPM_PIDFILE="${QEMU_TPM_PIDFILE:-${BUILD_DIR}/swtpm.pid}"
@@ -123,21 +123,25 @@ else
   )
 fi
 
-if [[ "${QEMU_NATIVE}" == "1" ]]; then
+QEMU_NET_ARGS=()
+if [[ "${QEMU_VIRTIO_NET}" == "1" ]]; then
+  QEMU_NET_ARGS=(
+    -netdev user,id=edgerun0
+    -device virtio-net-pci,netdev=edgerun0,mac=02:21:22:23:24:25,disable-legacy=on
+  )
+fi
+
+QEMU_CAPTURE_ARGS=()
+if [[ -n "${QEMU_CAPTURE}" ]]; then
+  if [[ "${QEMU_VIRTIO_NET}" != "1" ]]; then
+    echo "QEMU_CAPTURE requires QEMU_VIRTIO_NET=1." >&2
+    exit 1
+  fi
   mkdir -p "$(dirname "${QEMU_CAPTURE}")"
   rm -f "${QEMU_CAPTURE}"
-  qemu-system-x86_64 \
-    -m 1024 \
-    "${QEMU_DISPLAY_ARGS[@]}" \
-    -drive if=pflash,format=raw,readonly=on,file="${OVMF_CODE}" \
-    -drive if=pflash,format=raw,file="${OVMF_VARS_WRITABLE}" \
-    -drive format=raw,file=fat:rw:"${ESP_DIR}",media=disk \
-    -netdev user,id=edgerun0 \
-    -device virtio-net-pci,netdev=edgerun0,mac=02:21:22:23:24:25,disable-legacy=on \
-    -object "filter-dump,id=edgerun-native-dump,netdev=edgerun0,file=${QEMU_CAPTURE}" \
-    "${QEMU_TPM_ARGS[@]}" \
-    -serial mon:stdio
-  exit 0
+  QEMU_CAPTURE_ARGS=(
+    -object "filter-dump,id=edgerun-os-net-dump,netdev=edgerun0,file=${QEMU_CAPTURE}"
+  )
 fi
 
 qemu-system-x86_64 \
@@ -146,5 +150,7 @@ qemu-system-x86_64 \
   -drive if=pflash,format=raw,readonly=on,file="${OVMF_CODE}" \
   -drive if=pflash,format=raw,file="${OVMF_VARS_WRITABLE}" \
   -drive format=raw,file=fat:rw:"${ESP_DIR}",media=disk \
+  "${QEMU_NET_ARGS[@]}" \
+  "${QEMU_CAPTURE_ARGS[@]}" \
   "${QEMU_TPM_ARGS[@]}" \
   -serial mon:stdio

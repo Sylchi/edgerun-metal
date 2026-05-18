@@ -29,11 +29,10 @@ Confirmed working:
 - Wasm VM runs on real hardware
 - PCI config-space hostcalls exist
 - COM1 serial mirror exists for `er_print`
-- Boot profiles exist: `ui`, `native`, `tpm`, `gpu`
+- A single OS boot path exists; native VirtIO and TPM code are device capabilities, not separate debug paths
 - Wasm module headers are generated from tracked WAT sources
 - Generated build artifacts are ignored by Git
-- GOP and VirtIO GPU UI rendering paths exist for scene-backed app surfaces
-- The renderer architecture targets CPU-driven 4K120 from the start; see `docs/metal-renderer-4k120.md`
+- VirtIO GPU UI rendering paths exist for scene-backed app surfaces
 
 ## Current objective
 
@@ -41,7 +40,7 @@ Netboot is now support infrastructure. Do not keep redesigning it unless it bloc
 
 The real work is the relay core that lets user-authored Wasm apps run with polished UI:
 
-1. Keep the UI runtime and active hardware profiles stable.
+1. Keep the OS runtime stable.
 2. Use native VirtIO-net as the first EdgeRun Ethernet ingress.
 3. Parse incoming erwire packets without firmware networking.
 4. Verify admitted render capability work before dispatching it to GOP or VirtIO GPU endpoint adapters.
@@ -85,31 +84,25 @@ sudo pacman -S ccache mold wabt
 `ccache` accelerates repeat local builds. `mold` is used only for hosted Linux
 tools and tests; the UEFI binary still links with LLVM `lld`.
 
-## Build profiles
+## Build OS Image
 
-Default build is the interactive `ui` profile:
+Default build is the OS image:
 
 ```bash
 make -C edgerun-metal
 ```
 
-Explicit profiles:
+Explicit OS build:
 
 ```bash
 make -C edgerun-metal wasm-modules
-make -C edgerun-metal ui
-make -C edgerun-metal native
-make -C edgerun-metal tpm
-make -C edgerun-metal gpu
+make -C edgerun-metal os
 ```
 
-Profiles:
+Boot path:
 
 ```text
-ui     = VirtIO GPU-backed UI runtime, Wasm UI app, PS/2 input loop
-native = QEMU microvm VirtIO-MMIO erwire-over-Ethernet probe
-tpm    = QEMU swtpm/TPM2 CRB direct command probe
-gpu    = VirtIO GPU/VGA PCI framebuffer probe
+os = VirtIO GPU-backed UI runtime, Wasm apps, PS/2 input, storage-bound package loading, relay/device endpoints
 ```
 
 Output:
@@ -169,12 +162,12 @@ Bootfile:        BOOTX64.EFI or EFI/BOOT/BOOTX64.EFI
 
 ## Local next goal
 
-Build and test the default UI profile:
+Build and test the OS image:
 
 ```bash
 cd /home/ken/edgerun-c
 git pull --ff-only origin main
-make -C edgerun-metal ui
+make -C edgerun-metal os
 ```
 
 Expected real-hardware screen output:
@@ -182,13 +175,13 @@ Expected real-hardware screen output:
 ```text
 EdgeRun Metal Core v0.2
 UEFI boot OK
-boot profile: ui
+boot path: os
 ui renderer: init font
 ui renderer: render scene
 boot services: exiting
 ```
 
-Retired bring-up profiles are covered by host tests instead of boot targets.
+Retired bring-up paths are covered by host tests instead of boot targets.
 
 ## Bus model
 
@@ -260,11 +253,11 @@ Current limits:
 
 Status: implemented as the first native relay transport proof.
 
-The native profile can bring up VirtIO-net and submit EdgeRun Ethernet frames with EtherType `0x88b5`.
+The runtime can bring up VirtIO-net and submit EdgeRun Ethernet frames with EtherType `0x88b5`.
 
 ### Native Relay Ingress
 
-Status: host-tested ingress records implemented; admission-defined route verification, native profile loop, and device adapters are next.
+Status: host-tested ingress records implemented; admission-defined route verification, OS loop integration, and device adapters are next.
 
 `er_native_boot_poll_relay_ingress` accepts native erwire packets and records accepted, malformed, or empty ingress deterministically. The durable path must decode `edgerun-work` records, verify signed admissions, then hand assigned local endpoint adapters only already-admitted work.
 
@@ -276,9 +269,9 @@ The Wasm interpreter supports `edgerun.relay/send` and `edgerun.relay/recv` impo
 
 ### User-authored UI apps
 
-Status: UI foundations, concurrent local Wasm app contexts, content-addressed app package records, bounded object packet reassembly, package object loading, boot-local package-loaded app launch, admitted storage-source binding, storage endpoint response adaptation, storage-bound package loading, Wasm render capability relay-send proof, render endpoint capture, endpoint-owned scene decode, and GOP surface presentation implemented; boot/native loop integration and VirtIO GPU endpoint submission are next.
+Status: UI foundations, concurrent local Wasm app contexts, content-addressed app package records, bounded object packet reassembly, package object loading, boot-local package-loaded app launch, admitted storage-source binding, storage endpoint response adaptation, storage-bound package loading, Wasm render capability relay-send proof, render endpoint capture, and endpoint-owned scene decode implemented; OS loop integration and VirtIO GPU endpoint submission are next.
 
-`edgerun-ui-core`, `varfont`, the GOP renderer, and the VirtIO GPU profile now provide enough scene, text, theme, component, and framebuffer machinery to target real app surfaces instead of diagnostics. The boot UI profile can now keep multiple Wasm UI app runtimes resident at once, each with preallocated memory, presentation identity, scene state, and its own `ui_emit` context. `er_app` can now prepare package manifests from content-addressed app code, manifest, and UI asset object refs without deriving package identity from labels. `er_vfs` can reassemble loaded object packets into bounded memory after validating packet and object hashes, and `er_app` can load those package objects into caller-owned buffers before launch. The boot UI app path now uses typed storage endpoint responses, the storage-bound package loader, and persistent per-app loaded module bytes before preparing each resident Wasm runtime. Saved package sources now bind package ids to admitted storage-retrieve route ids, and storage-bound package loading rejects endpoint responses that do not match those route ids or expected object identities. Wasm fixtures can now emit render capability invocation packets through `edgerun.relay/send` under the same outbox, admission, token, and packet-byte budget checks as other app relay traffic, and `er_render_endpoint` can capture those packets only after route, channel envelope, source/target, sequence, and scene hash verification. The render endpoint can now verify the scene payload hash, decode the payload into endpoint-owned scene state, and present it to a GOP surface with deterministic presentation records. The next proof should wire that path into the boot/native loop and add the VirtIO GPU endpoint adapter.
+`edgerun-ui-core`, `varfont`, and the VirtIO GPU path now provide enough scene, text, theme, component, and framebuffer machinery to target real app surfaces instead of diagnostics. The OS path can keep multiple Wasm UI app runtimes resident at once, each with preallocated memory, presentation identity, scene state, and its own `ui_emit` context. `er_app` can now prepare package manifests from content-addressed app code, manifest, and UI asset object refs without deriving package identity from labels. `er_vfs` can reassemble loaded object packets into bounded memory after validating packet and object hashes, and `er_app` can load those package objects into caller-owned buffers before launch. The boot app path now uses typed storage endpoint responses, the storage-bound package loader, and persistent per-app loaded module bytes before preparing each resident Wasm runtime. Saved package sources now bind package ids to admitted storage-retrieve route ids, and storage-bound package loading rejects endpoint responses that do not match those route ids or expected object identities. Wasm fixtures can now emit render capability invocation packets through `edgerun.relay/send` under the same outbox, admission, token, and packet-byte budget checks as other app relay traffic, and `er_render_endpoint` can capture and decode those packets only after route, channel envelope, source/target, sequence, and scene hash verification. The next proof should wire that endpoint-owned scene into the OS loop and add the VirtIO GPU endpoint adapter.
 
 ## Next milestones
 
@@ -296,14 +289,4 @@ Use `NEXT_CORE_WORK.md` and `../docs/coherent-system-milestones.md` as the activ
 
 ## ExitBootServices policy
 
-Do not call `ExitBootServices` yet.
-
-Stay in UEFI app mode until:
-
-- boot output is stable
-- serial mirror is proven
-- native erwire ingress works
-- admission-defined route verification can hand admitted packets to VirtIO endpoint adapters
-- storage and render endpoint proofs exist
-
-Only exit Boot Services when firmware services actively block ownership of hardware.
+The OS path should exit Boot Services as soon as the runtime has prepared the memory and device state it needs to keep running. Do not add new firmware-service dependencies to relay, rendering, storage, input, scheduling, or app execution.
