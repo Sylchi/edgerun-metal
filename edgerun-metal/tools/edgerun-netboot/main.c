@@ -304,28 +304,6 @@ static const char *mode_name(uint8_t mode) {
     return "unknown";
 }
 
-static bool parse_mac(const char *s, uint8_t *out) {
-    unsigned int b0, b1, b2, b3, b4, b5;
-    int consumed = -1;
-
-    if (s == NULL || *s == '\0') {
-        return false;
-    }
-    if (sscanf(s, "%2x:%2x:%2x:%2x:%2x:%2x%n", &b0, &b1, &b2, &b3, &b4, &b5, &consumed) != NETBOOT_MAC_BYTES) {
-        return false;
-    }
-    if (s[consumed] != '\0') {
-        return false;
-    }
-    out[NETBOOT_BYTE0] = (uint8_t)b0;
-    out[NETBOOT_BYTE1] = (uint8_t)b1;
-    out[NETBOOT_BYTE2] = (uint8_t)b2;
-    out[NETBOOT_BYTE3] = (uint8_t)b3;
-    out[NETBOOT_BYTE4] = (uint8_t)b4;
-    out[NETBOOT_BYTE5] = (uint8_t)b5;
-    return true;
-}
-
 static bool mac_match(const uint8_t *a, const uint8_t *b) {
     return memcmp(a, b, NETBOOT_MAC_BYTES) == 0;
 }
@@ -1062,51 +1040,23 @@ static void handle_tftp(int sock, const uint8_t *pkt, size_t len, const struct s
     close(tfd);
 }
 
-static bool parse_bool_value(const char *value) {
-    if (value == NULL) {
-        return true;
-    }
-    if (strcasecmp(value, "1") == 0) {
-        return true;
-    }
-    if (strcasecmp(value, "true") == 0 || strcasecmp(value, "yes") == 0 || strcasecmp(value, "on") == 0) {
-        return true;
-    }
-    return false;
-}
-
-static bool parse_mode_arg(const char *value, uint8_t *mode) {
-    if (strcasecmp(value, "auto") == 0) {
-        *mode = MODE_AUTO;
-        return true;
-    }
-    if (strcasecmp(value, "http") == 0) {
-        *mode = MODE_HTTP;
-        return true;
-    }
-    if (strcasecmp(value, "tftp") == 0) {
-        *mode = MODE_TFTP;
-        return true;
-    }
-    return false;
-}
-
 int main(int argc, char **argv) {
-    const char *iface = NULL;
-    const char *efi_path = NULL;
-    const char *client_ip = CLIENT_IP_DEFAULT;
-    const char *mgmt_ip = MGMT_IP_DEFAULT;
+    NetbootConfig config;
+    const char *iface;
+    const char *efi_path;
+    const char *client_ip;
+    const char *mgmt_ip;
     const char *boot_url_host = SERVER_IP;
-    uint16_t http_port = HTTP_PORT_DEFAULT;
-    bool explicit_http_port = false;
-    uint8_t mode = MODE_AUTO;
-    bool setup_interface = false;
-    uint8_t allow_mac[NETBOOT_MAC_BYTES];
-    bool has_allow_mac = false;
-    uint8_t mgmt_mac[NETBOOT_MAC_BYTES];
-    bool has_mgmt_mac = false;
-    bool mgmt_dhcp = false;
-    bool force_http_for_pxe = false;
+    uint16_t http_port;
+    bool explicit_http_port;
+    uint8_t mode;
+    bool setup_interface;
+    const uint8_t *allow_mac;
+    bool has_allow_mac;
+    const uint8_t *mgmt_mac;
+    bool has_mgmt_mac;
+    bool mgmt_dhcp;
+    bool force_http_for_pxe;
     bool has_assigned_client = false;
     uint8_t assigned_mac[NETBOOT_MAC_BYTES];
     bool has_assigned_mgmt_client = false;
@@ -1120,273 +1070,35 @@ int main(int argc, char **argv) {
     char efi_abs_path[NETBOOT_ABSOLUTE_PATH_BUFFER_SIZE];
     bool running = true;
     bool seen_client = false;
-    bool parse_done;
     uint8_t buf[NETBOOT_IO_BUFFER_SIZE];
     const char *prog = argv[0];
-    int i;
+    int parse_status;
 
     if (prog == NULL) {
         prog = "edgerun-netboot";
     }
 
-    for (i = 1; i < argc; i++) {
-        if (strcmp(argv[i], "--help") == 0) {
-            usage(prog);
-            return 0;
-        }
-        if (strcmp(argv[i], "--iface") == 0) {
-            if (i + 1 >= argc) {
-                log_line("--iface requires an argument");
-                usage(prog);
-                return 1;
-            }
-            iface = argv[++i];
-            continue;
-        }
-        if (strcmp(argv[i], "--efi") == 0) {
-            if (i + 1 >= argc) {
-                log_line("--efi requires an argument");
-                usage(prog);
-                return 1;
-            }
-            efi_path = argv[++i];
-            continue;
-        }
-        if (strcmp(argv[i], "--http-port") == 0) {
-            char *end = NULL;
-            long val;
-            if (i + 1 >= argc) {
-                log_line("--http-port requires an argument");
-                usage(prog);
-                return 1;
-            }
-            val = strtol(argv[++i], &end, NETBOOT_STRTOL_BASE_DECIMAL);
-            if (end == NULL || *end != '\0' || val <= 0 || val > NETBOOT_TCP_PORT_MAX) {
-                log_line("invalid --http-port value");
-                usage(prog);
-                return 1;
-            }
-            http_port = (uint16_t)val;
-            explicit_http_port = true;
-            continue;
-        }
-        if (strcmp(argv[i], "--setup-iface") == 0) {
-            setup_interface = true;
-            continue;
-        }
-        if (strcmp(argv[i], "--mgmt-dhcp") == 0) {
-            mgmt_dhcp = true;
-            continue;
-        }
-        if (strncmp(argv[i], NETBOOT_OPT_MGMT_DHCP_EQ, NETBOOT_LITERAL_LEN(NETBOOT_OPT_MGMT_DHCP_EQ)) == 0) {
-            mgmt_dhcp = parse_bool_value(argv[i] + NETBOOT_LITERAL_LEN(NETBOOT_OPT_MGMT_DHCP_EQ));
-            continue;
-        }
-        if (strcmp(argv[i], "--http") == 0) {
-            mode = MODE_HTTP;
-            continue;
-        }
-        if (strcmp(argv[i], "--tftp") == 0) {
-            mode = MODE_TFTP;
-            continue;
-        }
-        if (strcmp(argv[i], "--auto") == 0) {
-            mode = MODE_AUTO;
-            continue;
-        }
-        if (strcmp(argv[i], "--mode") == 0) {
-            uint8_t parsed;
-            if (i + 1 >= argc) {
-                log_line("--mode requires an argument");
-                usage(prog);
-                return 1;
-            }
-            parse_done = parse_mode_arg(argv[++i], &parsed);
-            if (!parse_done) {
-                log_line("--mode expects auto|http|tftp");
-                usage(prog);
-                return 1;
-            }
-            mode = parsed;
-            continue;
-        }
-        if (strcmp(argv[i], "--allow-mac") == 0) {
-            if (i + 1 >= argc) {
-                log_line("--allow-mac requires an argument");
-                usage(prog);
-                return 1;
-            }
-            {
-                const char *mac_arg = argv[++i];
-                if (*mac_arg == '\0') {
-                    has_allow_mac = false;
-                    continue;
-                }
-                if (!parse_mac(mac_arg, allow_mac)) {
-                    log_line("invalid --allow-mac value");
-                    usage(prog);
-                    return 1;
-                }
-                has_allow_mac = true;
-            }
-            continue;
-        }
-        if (strcmp(argv[i], "--mgmt-mac") == 0) {
-            if (i + 1 >= argc) {
-                log_line("--mgmt-mac requires an argument");
-                usage(prog);
-                return 1;
-            }
-            {
-                const char *mac_arg = argv[++i];
-                if (*mac_arg == '\0') {
-                    has_mgmt_mac = false;
-                    continue;
-                }
-                if (!parse_mac(mac_arg, mgmt_mac)) {
-                    log_line("invalid --mgmt-mac value");
-                    usage(prog);
-                    return 1;
-                }
-                has_mgmt_mac = true;
-            }
-            continue;
-        }
-        if (strcmp(argv[i], "--client-ip") == 0) {
-            struct in_addr tmp;
-            if (i + 1 >= argc) {
-                log_line("--client-ip requires an argument");
-                usage(prog);
-                return 1;
-            }
-            client_ip = argv[++i];
-            if (inet_pton(AF_INET, client_ip, &tmp) != 1) {
-                log_line("invalid --client-ip value");
-                usage(prog);
-                return 1;
-            }
-            continue;
-        }
-        if (strcmp(argv[i], "--mgmt-ip") == 0) {
-            struct in_addr tmp;
-            if (i + 1 >= argc) {
-                log_line("--mgmt-ip requires an argument");
-                usage(prog);
-                return 1;
-            }
-            mgmt_ip = argv[++i];
-            if (inet_pton(AF_INET, mgmt_ip, &tmp) != 1) {
-                log_line("invalid --mgmt-ip value");
-                usage(prog);
-                return 1;
-            }
-            continue;
-        }
-        if (strcmp(argv[i], "--force-http-for-pxe") == 0) {
-            force_http_for_pxe = true;
-            continue;
-        }
-        if (strncmp(argv[i], NETBOOT_OPT_FORCE_HTTP_FOR_PXE_EQ,
-                    NETBOOT_LITERAL_LEN(NETBOOT_OPT_FORCE_HTTP_FOR_PXE_EQ)) == 0) {
-            force_http_for_pxe =
-                parse_bool_value(argv[i] + NETBOOT_LITERAL_LEN(NETBOOT_OPT_FORCE_HTTP_FOR_PXE_EQ));
-            continue;
-        }
-        if (strncmp(argv[i], NETBOOT_OPT_CLIENT_IP_EQ, NETBOOT_LITERAL_LEN(NETBOOT_OPT_CLIENT_IP_EQ)) == 0) {
-            struct in_addr tmp;
-            client_ip = argv[i] + NETBOOT_LITERAL_LEN(NETBOOT_OPT_CLIENT_IP_EQ);
-            if (inet_pton(AF_INET, client_ip, &tmp) != 1) {
-                log_line("invalid --client-ip value");
-                usage(prog);
-                return 1;
-            }
-            continue;
-        }
-        if (strncmp(argv[i], NETBOOT_OPT_MGMT_IP_EQ, NETBOOT_LITERAL_LEN(NETBOOT_OPT_MGMT_IP_EQ)) == 0) {
-            struct in_addr tmp;
-            mgmt_ip = argv[i] + NETBOOT_LITERAL_LEN(NETBOOT_OPT_MGMT_IP_EQ);
-            if (inet_pton(AF_INET, mgmt_ip, &tmp) != 1) {
-                log_line("invalid --mgmt-ip value");
-                usage(prog);
-                return 1;
-            }
-            continue;
-        }
-        if (strncmp(argv[i], NETBOOT_OPT_ALLOW_MAC_EQ, NETBOOT_LITERAL_LEN(NETBOOT_OPT_ALLOW_MAC_EQ)) == 0) {
-            const char *mac_arg = argv[i] + NETBOOT_LITERAL_LEN(NETBOOT_OPT_ALLOW_MAC_EQ);
-            if (*mac_arg == '\0') {
-                has_allow_mac = false;
-                continue;
-            }
-            if (!parse_mac(mac_arg, allow_mac)) {
-                log_line("invalid --allow-mac value");
-                usage(prog);
-                return 1;
-            }
-            has_allow_mac = true;
-            continue;
-        }
-        if (strncmp(argv[i], NETBOOT_OPT_MGMT_MAC_EQ, NETBOOT_LITERAL_LEN(NETBOOT_OPT_MGMT_MAC_EQ)) == 0) {
-            const char *mac_arg = argv[i] + NETBOOT_LITERAL_LEN(NETBOOT_OPT_MGMT_MAC_EQ);
-            if (*mac_arg == '\0') {
-                has_mgmt_mac = false;
-                continue;
-            }
-            if (!parse_mac(mac_arg, mgmt_mac)) {
-                log_line("invalid --mgmt-mac value");
-                usage(prog);
-                return 1;
-            }
-            has_mgmt_mac = true;
-            continue;
-        }
-        if (strncmp(argv[i], NETBOOT_OPT_MODE_EQ, NETBOOT_LITERAL_LEN(NETBOOT_OPT_MODE_EQ)) == 0) {
-            uint8_t parsed;
-            parse_done = parse_mode_arg(argv[i] + NETBOOT_LITERAL_LEN(NETBOOT_OPT_MODE_EQ), &parsed);
-            if (!parse_done) {
-                log_line("--mode expects auto|http|tftp");
-                usage(prog);
-                return 1;
-            }
-            mode = parsed;
-            continue;
-        }
-        if (strncmp(argv[i], NETBOOT_OPT_IFACE_EQ, NETBOOT_LITERAL_LEN(NETBOOT_OPT_IFACE_EQ)) == 0) {
-            iface = argv[i] + NETBOOT_LITERAL_LEN(NETBOOT_OPT_IFACE_EQ);
-            continue;
-        }
-        if (strncmp(argv[i], NETBOOT_OPT_EFI_EQ, NETBOOT_LITERAL_LEN(NETBOOT_OPT_EFI_EQ)) == 0) {
-            efi_path = argv[i] + NETBOOT_LITERAL_LEN(NETBOOT_OPT_EFI_EQ);
-            continue;
-        }
-        if (strncmp(argv[i], NETBOOT_OPT_HTTP_PORT_EQ, NETBOOT_LITERAL_LEN(NETBOOT_OPT_HTTP_PORT_EQ)) == 0) {
-            char *end = NULL;
-            long val = strtol(argv[i] + NETBOOT_LITERAL_LEN(NETBOOT_OPT_HTTP_PORT_EQ),
-                              &end, NETBOOT_STRTOL_BASE_DECIMAL);
-            if (end == NULL || *end != '\0' || val <= 0 || val > NETBOOT_TCP_PORT_MAX) {
-                log_line("invalid --http-port value");
-                usage(prog);
-                return 1;
-            }
-            http_port = (uint16_t)val;
-            explicit_http_port = true;
-            continue;
-        }
-        log_line("unknown option: %s", argv[i]);
-        usage(prog);
+    parse_status = netboot_parse_args(argc, argv, prog, &config);
+    if (parse_status == 2) {
+        return 0;
+    }
+    if (parse_status != 0) {
         return 1;
     }
-
-    if (iface == NULL) {
-        log_line("missing --iface");
-        usage(prog);
-        return 1;
-    }
-    if (efi_path == NULL) {
-        log_line("missing --efi");
-        usage(prog);
-        return 1;
-    }
+    iface = config.iface;
+    efi_path = config.efi_path;
+    client_ip = config.client_ip;
+    mgmt_ip = config.mgmt_ip;
+    http_port = config.http_port;
+    explicit_http_port = config.explicit_http_port;
+    mode = config.mode;
+    setup_interface = config.setup_interface;
+    allow_mac = config.allow_mac;
+    has_allow_mac = config.has_allow_mac;
+    mgmt_mac = config.mgmt_mac;
+    has_mgmt_mac = config.has_mgmt_mac;
+    mgmt_dhcp = config.mgmt_dhcp;
+    force_http_for_pxe = config.force_http_for_pxe;
 
     if (!make_absolute_path(efi_path, efi_abs_path, sizeof(efi_abs_path))) {
         log_line("unable to resolve EFI path: %s", efi_path);
