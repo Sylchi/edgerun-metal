@@ -23,6 +23,7 @@ static uint32_t erc_be32(const unsigned char* p) {
   return ((uint32_t)p[0] << 24u) | ((uint32_t)p[1] << 16u) | ((uint32_t)p[2] << 8u) | (uint32_t)p[3];
 }
 
+//@optimizer-ignore-function repository path validation must scan every path component
 static int erc_has_component(const char* path, const char* component) {
   size_t component_len = strlen(component);
   const char* p = path;
@@ -58,6 +59,7 @@ static int erc_join(char* out, size_t out_len, const char* a, const char* b) {
   return n > 0 && (size_t)n < out_len;
 }
 
+//@optimizer-ignore-function nested git check must recursively scan repository directories
 static int erc_scan_nested_git(const char* root, const char* rel) {
   char path[4096];
   DIR* dir;
@@ -155,6 +157,7 @@ static unsigned char* erc_read_file(const char* path, size_t* out_len) {
   return bytes;
 }
 
+//@optimizer-ignore-function git index check must parse each tracked entry and fail immediately on violations
 static int erc_scan_index(const char* root) {
   char index_path[4096];
   unsigned char* index_bytes;

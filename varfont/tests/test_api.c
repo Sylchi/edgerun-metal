@@ -191,6 +191,7 @@ static void test_batch_and_bake_validation(vr_font_face_t* face) {
         test_expect(vert_count == 0, "api: atlas batch can emit zero vertices");
       } else {
         for (size_t i = 0; i < range_count; ++i) {
+          //@optimizer-ignore atlas range test verifies vertex counts align to glyph triangle groups
           test_expect((ranges[i].vertex_count % VR_FONT_VERTICES_PER_GLYPH) == 0, "api: atlas range vertex counts align to triangles");
           test_expect(ranges[i].atlas_id < vr_font_atlas_count(face), "api: atlas id is in-bounds");
         }

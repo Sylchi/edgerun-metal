@@ -829,6 +829,7 @@ bool er_ui_component_state_matrix_has_state(const er_ui_component_state_matrix_t
   return false;
 }
 
+//@optimizer-ignore-function component field metadata lookup is a fixed switch over known component ids
 static bool er_ui_component_field_set_for(
   er_ui_component_test_id_t component,
   const er_ui_component_projected_field_t** out_fields,
@@ -859,6 +860,7 @@ bool er_ui_component_projection_contract_for(er_ui_component_test_id_t component
   if (!out_contract) return false;
   const er_ui_component_projected_field_t* fields = 0;
   size_t field_count = 0u;
+  //@optimizer-ignore component field metadata lookup is a fixed switch over known component ids
   if (!er_ui_component_field_set_for(component, &fields, &field_count)) return false;
   out_contract->component = component;
   out_contract->fields = fields;
@@ -887,6 +889,7 @@ size_t er_ui_component_projection_required_field_count(const er_ui_component_pro
   return count;
 }
 
+//@optimizer-ignore-function component accessibility metadata lookup is a fixed switch over known component ids
 static bool er_ui_component_accessibility_set_for(
   er_ui_component_test_id_t component,
   er_ui_component_a11y_role_t* out_role,
@@ -919,6 +922,7 @@ bool er_ui_component_accessibility_metadata_for(er_ui_component_test_id_t compon
   er_ui_component_a11y_role_t role = ER_UI_COMPONENT_A11Y_GENERIC;
   const char* const* label_fields = 0;
   size_t label_field_count = 0u;
+  //@optimizer-ignore component accessibility metadata lookup is a fixed switch over known component ids
   if (!er_ui_component_accessibility_set_for(component, &role, &label_fields, &label_field_count)) return false;
   out_metadata->component = component;
   out_metadata->role = role;

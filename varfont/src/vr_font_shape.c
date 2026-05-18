@@ -27,6 +27,7 @@ static void vr_shape_free(vr_font_face_t* face, void* ptr, size_t size) {
   vr_dealloc(face, ptr, size, 8u);
 }
 
+//@optimizer-ignore-function atlas range storage grows capacity geometrically with overflow checks
 static vr_status_t vr_reserve_u32_size_t_pairs(vr_font_face_t* face, uint32_t** ids, size_t** counts, size_t* cap, size_t needed) {
   if (needed <= *cap) {
     return VR_OK;
@@ -237,6 +238,7 @@ vr_status_t vr_font_free_shaped(vr_font_face_t* face, vr_shaped_glyph_t* glyphs,
   return VR_OK;
 }
 
+//@optimizer-ignore-function vertex batch building must bake and emit each shaped glyph quad in order
 vr_status_t vr_font_build_vertex_batch(
   vr_font_face_t* face,
   const vr_shaped_glyph_t* shaped,

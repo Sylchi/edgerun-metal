@@ -96,6 +96,7 @@ static er_ui_metal_layout_t er_ui_metal_layout_for_bounds(er_ui_bounds_t bounds)
   };
 }
 
+//@optimizer-ignore-function fixed metal toolbar must render each icon button in order
 static er_ui_status_t er_ui_metal_emit_icon_bar(
   er_ui_scene_t* scene,
   vr_font_face_t* font,

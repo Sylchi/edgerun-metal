@@ -276,6 +276,7 @@ static uint8_t eri_vfs_add(EriVfs* vfs, const char* path, uint8_t* bytes, size_t
   return 1;
 }
 
+//@optimizer-ignore-function VFS teardown must release each loaded path and byte buffer
 static void eri_vfs_free(EriVfs* vfs) {
   size_t i;
 
@@ -481,6 +482,7 @@ static uint8_t eri_read_file(const char* full, uint8_t** out_bytes, size_t* out_
   return 1;
 }
 
+//@optimizer-ignore-function repo inspection must recursively load each regular file into the analysis VFS
 static uint8_t eri_load_dir(EriVfs* vfs, const char* root, const char* rel) {
   char full[ERI_MAX_PATH * 2u];
   DIR* dir;
@@ -585,6 +587,7 @@ static void eri_add_finding(EriFindings* findings, const char* path, uint32_t li
   ++findings->len;
 }
 
+//@optimizer-ignore-function findings teardown must release each duplicated finding path
 static void eri_findings_free(EriFindings* findings) {
   size_t i;
 
@@ -618,6 +621,7 @@ static uint8_t eri_add_function(EriFunctions* funcs, const char* path, const cha
   return 1;
 }
 
+//@optimizer-ignore-function function table teardown must release each duplicated path and function name
 static void eri_functions_free(EriFunctions* funcs) {
   size_t i;
 
@@ -649,6 +653,7 @@ static uint8_t eri_add_source_file(EriSourceFiles* sources, const char* path, ui
   return 1;
 }
 
+//@optimizer-ignore-function source table teardown must release each duplicated path
 static void eri_sources_free(EriSourceFiles* sources) {
   size_t i;
 
@@ -827,6 +832,7 @@ static uint8_t eri_common_numeric_literal(uint64_t value) {
   return (uint8_t)(value <= 2u || value == 8u || value == 16u || value == 32u || value == 64u);
 }
 
+//@optimizer-ignore-function magic-number scan must inspect each token-like numeric literal on the line
 static uint8_t eri_line_has_magic_number(const char* line, char* out_literal, size_t out_cap) {
   const char* trim = eri_ltrim(line);
   size_t i;
@@ -1011,6 +1017,7 @@ static uint8_t eri_line_has_math_primitive_smell(const char* path, const char* r
 
 static uint8_t eri_line_has_any_token(const char* line, const char* const* tokens, size_t len);
 
+//@optimizer-ignore-function host filesystem smell scan must check each disallowed runtime token
 static uint8_t eri_line_has_host_fs_runtime_smell(const char* path, const char* structural_line) {
   static const char* tokens[] = {
     "fopen(", "freopen(", "open(", "openat(", "read(", "write(", "close(",
@@ -1294,6 +1301,7 @@ static uint8_t eri_line_has_expensive_domain_call(const char* line) {
   return eri_line_has_any_token(line, tokens, sizeof(tokens) / sizeof(tokens[0]));
 }
 
+//@optimizer-ignore-function CPU-cost analysis must scan every line while maintaining loop nesting state
 static void eri_scan_cpu_costs(const EriVfsFile* file, EriFindings* findings) {
   const uint8_t* bytes = file->bytes;
   size_t len = file->len;
@@ -1439,6 +1447,7 @@ static void eri_scan_cpu_costs(const EriVfsFile* file, EriFindings* findings) {
   }
 }
 
+//@optimizer-ignore-function line metric analysis must scan every byte and every source line once
 static void eri_scan_line_metrics(const uint8_t* bytes, size_t len, EriTotals* file_totals,
                                   EriFindings* findings, const char* path) {
   size_t pos = 0u;
@@ -1673,6 +1682,7 @@ static void eri_scan_line_metrics(const uint8_t* bytes, size_t len, EriTotals* f
   }
 }
 
+//@optimizer-ignore-function function analysis must scan every line and brace transition in each C source file
 static void eri_scan_functions(const EriVfsFile* file, EriFunctions* funcs, EriFindings* findings) {
   const uint8_t* bytes = file->bytes;
   size_t len = file->len;
@@ -1738,6 +1748,7 @@ static void eri_scan_functions(const EriVfsFile* file, EriFunctions* funcs, EriF
   }
 }
 
+//@optimizer-ignore-function function reference analysis must compare every known function name against source bytes
 static void eri_count_function_refs(const EriVfs* vfs, EriFunctions* funcs) {
   size_t f;
 
@@ -1856,6 +1867,7 @@ static uint8_t eri_measure_stripped_size(const EriVfsFile* file, uint64_t* out_s
   return 1;
 }
 
+//@optimizer-ignore-function release-size report must measure each discovered binary artifact
 static void eri_measure_binary_release_sizes(EriBinaries* bins) {
   size_t i;
 
@@ -1869,6 +1881,7 @@ static void eri_measure_binary_release_sizes(EriBinaries* bins) {
   }
 }
 
+//@optimizer-ignore-function coverage signal scan must compare each source byte against the searched word
 static uint8_t eri_file_contains_word(const EriVfsFile* file, const char* word) {
   size_t len = strlen(word);
   size_t pos;
@@ -1992,6 +2005,7 @@ static EriWorldviewPackage* eri_worldview_package_get(EriWorldviewPackages* pack
   return &packages->items[packages->len - 1u];
 }
 
+//@optimizer-ignore-function coverage proxy must compare implementations, tests, and function references exhaustively
 static void eri_mark_test_signals(const EriVfs* vfs, EriSourceFiles* sources, const EriFunctions* funcs) {
   size_t i;
 
@@ -2106,6 +2120,7 @@ static uint8_t eri_add_dup_block_ref(EriDupBlockRefs* refs, uint64_t hash, const
   return 1;
 }
 
+//@optimizer-ignore-function duplicate reference teardown must release each duplicated block path
 static void eri_dup_refs_free(EriDupBlockRefs* refs) {
   size_t i;
 
@@ -2115,6 +2130,7 @@ static void eri_dup_refs_free(EriDupBlockRefs* refs) {
   free(refs->items);
 }
 
+//@optimizer-ignore-function duplicate collection must allocate stable path copies for each reported pair
 static uint8_t eri_add_duplicate(EriDuplicates* duplicates, const EriDupBlockRef* a, const EriDupBlockRef* b) {
   EriDuplicate* grown;
 
@@ -2140,6 +2156,7 @@ static uint8_t eri_add_duplicate(EriDuplicates* duplicates, const EriDupBlockRef
   return 1;
 }
 
+//@optimizer-ignore-function duplicate teardown must release both path copies for each reported pair
 static void eri_duplicates_free(EriDuplicates* duplicates) {
   size_t i;
 
@@ -2280,6 +2297,7 @@ static uint8_t eri_dup_line_is_ignored(EriDupIgnoreState* state, const uint8_t* 
   return 0u;
 }
 
+//@optimizer-ignore-function duplicate analysis must normalize each line and build rolling block references
 static uint8_t eri_collect_file_blocks(const EriVfsFile* file, EriDupBlockRefs* refs) {
   uint64_t* hashes = NULL;
   uint32_t* lines = NULL;
@@ -2531,6 +2549,7 @@ static uint8_t eri_same_duplicate_region(const EriDuplicate* a, const EriDuplica
                    eri_lines_near(a->line_b, b->line_b) != 0u);
 }
 
+//@optimizer-ignore-function duplicate compaction must release adjacent duplicate path copies while preserving stable order
 static void eri_compact_duplicates(EriDuplicates* duplicates) {
   size_t read_i;
   size_t write_i = 0u;
@@ -2820,6 +2839,7 @@ static uint8_t eri_collect_worldview_packages(const EriFindings* findings, EriWo
   return 1;
 }
 
+//@optimizer-ignore-function duplicate collection must scan each source block reference and adjacent equal hash group
 static uint8_t eri_collect_duplicates(const EriVfs* vfs, EriDuplicates* duplicates) {
   EriDupBlockRefs refs;
   size_t i;
@@ -2895,6 +2915,7 @@ static void eri_analyze_cleanup(EriPackages* packages, EriFunctions* funcs, EriF
   free(bins->items);
 }
 
+//@optimizer-ignore-function repo analysis orchestrates per-file metric, function, and CPU scans over the VFS snapshot
 static uint8_t eri_analyze(const EriVfs* vfs) {
   EriTotals totals;
   EriPackages packages;

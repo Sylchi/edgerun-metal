@@ -32,6 +32,7 @@ static void test_shape_ascii_text(void) {
   if (shaped_count > 0) {
     bool any_visible = false;
     for (size_t i = 0; i < shaped_count; ++i) {
+      //@optimizer-ignore shape test scans shaped glyph output for the first visible glyph
       if (shaped[i].glyph != 0u && shaped[i].x_advance > 0.0f) {
         any_visible = true;
         break;

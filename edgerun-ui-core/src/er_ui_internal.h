@@ -43,6 +43,7 @@ static inline void er_ui_allocator_free(er_ui_allocator_t allocator, void* ptr, 
   if (ptr && er_ui_allocator_is_valid(allocator)) allocator.free(allocator.user, ptr, size, align);
 }
 
+//@optimizer-ignore-function allocator reserve grows capacity geometrically with overflow checks
 static inline bool er_ui_allocator_reserve(er_ui_allocator_t allocator, void** data, size_t* capacity, size_t count, size_t item_size,
                                            size_t initial_capacity, size_t align) {
   if (!data || !capacity) return false;
