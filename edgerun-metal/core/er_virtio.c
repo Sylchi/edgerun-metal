@@ -494,6 +494,19 @@ UINT8 er_virtio_config_read16(const ErVirtioMmioTransport* transport, UINT64 off
   return er_bus_read16(&transport->address, ER_VIRTIO_MMIO_CONFIG_OFFSET + offset, out_value);
 }
 
+UINT8 er_virtio_config_read32(const ErVirtioMmioTransport* transport, UINT64 offset, UINT32* out_value) {
+  if (transport == 0 || out_value == 0) {
+    return 0;
+  }
+  if (transport->transport_kind == ER_VIRTIO_TRANSPORT_KIND_MODERN_PCI) {
+    if (transport->device.present == 0u) {
+      return 0;
+    }
+    return er_bus_read32(&transport->device.address, offset, out_value);
+  }
+  return er_bus_read32(&transport->address, ER_VIRTIO_MMIO_CONFIG_OFFSET + offset, out_value);
+}
+
 UINT8 er_virtio_mmio_negotiate_features(const ErVirtioMmioTransport* transport, UINT64 supported_features,
                                         ErVirtioFeatureSet* out_features) {
   UINT64 host = 0;

@@ -22,6 +22,7 @@
 #include "er_ui_demo_apps.h"
 #include "er_ui_text.h"
 #include "er_virtio.h"
+#include "er_virtio_gpu.h"
 #include "er_virtio_net.h"
 #include "er_vfs.h"
 #include "erwire.h"
