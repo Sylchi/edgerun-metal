@@ -20,6 +20,11 @@ add_library(vrfont
   src/vr_font_utils.c
   src/vr_font_shape.c
   src/vr_font_raster.c
+  src/vr_font_raster_geometry.c
+  src/vr_font_raster_glyph.c
+  src/vr_font_raster_msdf.c
+  src/vr_font_raster_outline.c
+  src/vr_font_raster_storage.c
   src/vr_font_atlas.c
 )
 if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
