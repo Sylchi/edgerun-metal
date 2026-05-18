@@ -1365,6 +1365,7 @@ static void er_run_ui_profile(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE* SystemTa
   render_context.wasm_scene_ready = 1u;
 
   er_gfx_console_set_enabled(0u);
+  er_print_set_firmware_console_enabled(0u);
   er_println("ui renderer: render scene");
   if (er_ui_boot_render_scene(&scene, &demo_state, &render_context) == 0u) {
     er_ui_scene_destroy(&wasm_scene);
