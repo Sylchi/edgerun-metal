@@ -480,6 +480,33 @@ UINT8 er_app_prepare_package_storage_source(const ErCryptoProvider* crypto,
                                           &out_source->source_id);
 }
 
+UINT8 er_app_prepare_package_storage_object(const ErAppPackageStorageResponse* response,
+                                            const ErHash* expected_route_id,
+                                            const ErHash* expected_object_id,
+                                            UINT64 expected_object_len,
+                                            ErAppPackageStorageObject* out_object) {
+  if (response == 0 || expected_route_id == 0 || expected_object_id == 0 ||
+      out_object == 0 ||
+      response->abi_version != ER_APP_ABI_VERSION ||
+      response->object_len == 0u ||
+      response->packet_count == 0u ||
+      response->packets == 0 ||
+      response->bytes == 0 ||
+      response->capacity < response->object_len ||
+      er_app_hash_equal(&response->retrieve_route_id, expected_route_id) == 0u ||
+      er_app_hash_equal(&response->object_id, expected_object_id) == 0u ||
+      response->object_len != expected_object_len) {
+    return 0;
+  }
+  er_mem_zero((UINT8*)out_object, (UINTN)sizeof(*out_object));
+  out_object->retrieve_route_id = response->retrieve_route_id;
+  out_object->object.packets = response->packets;
+  out_object->object.packet_count = response->packet_count;
+  out_object->object.bytes = response->bytes;
+  out_object->object.capacity = response->capacity;
+  return 1;
+}
+
 UINT8 er_app_load_package_from_storage_source(const ErCryptoProvider* crypto,
                                               const ErAppPackageManifest* package,
                                               const ErAppPackageStorageSource* source,

@@ -74,6 +74,18 @@ typedef struct {
 typedef struct {
   UINT16 abi_version;
   UINT16 reserved;
+  ErHash retrieve_route_id;
+  ErHash object_id;
+  UINT64 object_len;
+  const ErVfsObjectPacket* packets;
+  UINT32 packet_count;
+  UINT8* bytes;
+  UINTN capacity;
+} ErAppPackageStorageResponse;
+
+typedef struct {
+  UINT16 abi_version;
+  UINT16 reserved;
   ErHash app_object_id;
   ErHash manifest_hash;
   ErHash admission_id;
@@ -205,6 +217,11 @@ UINT8 er_app_prepare_package_storage_source(const ErCryptoProvider* crypto,
                                             const ErAdmittedRoute* manifest_route,
                                             const ErAdmittedRoute* ui_assets_route,
                                             ErAppPackageStorageSource* out_source);
+UINT8 er_app_prepare_package_storage_object(const ErAppPackageStorageResponse* response,
+                                            const ErHash* expected_route_id,
+                                            const ErHash* expected_object_id,
+                                            UINT64 expected_object_len,
+                                            ErAppPackageStorageObject* out_object);
 UINT8 er_app_load_package_from_storage_source(const ErCryptoProvider* crypto,
                                               const ErAppPackageManifest* package,
                                               const ErAppPackageStorageSource* source,

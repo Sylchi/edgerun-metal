@@ -1204,6 +1204,8 @@ static UINT8 er_ui_boot_load_wasm_counter_package(UINT8* module_memory,
   ErAdmittedRoute app_route;
   ErAdmittedRoute manifest_route;
   ErAppPackageStorageSource storage_source;
+  ErAppPackageStorageResponse app_response;
+  ErAppPackageStorageResponse manifest_response;
   ErAppPackageStorageObject app_object;
   ErAppPackageStorageObject manifest_object;
   ErAppPackageObjectLoad app_load;
@@ -1258,10 +1260,36 @@ static UINT8 er_ui_boot_load_wasm_counter_package(UINT8* module_memory,
                                             &storage_source) == 0u) {
     return 0u;
   }
-  app_object.retrieve_route_id = storage_source.app_retrieve_route_id;
-  app_object.object = app_load;
-  manifest_object.retrieve_route_id = storage_source.manifest_retrieve_route_id;
-  manifest_object.object = manifest_load;
+  er_mem_zero((UINT8*)&app_response, (UINTN)sizeof(app_response));
+  app_response.abi_version = ER_APP_ABI_VERSION;
+  app_response.retrieve_route_id = storage_source.app_retrieve_route_id;
+  app_response.object_id = package.app_object_id;
+  app_response.object_len = package.app_object_len;
+  app_response.packets = app_load.packets;
+  app_response.packet_count = app_load.packet_count;
+  app_response.bytes = app_load.bytes;
+  app_response.capacity = app_load.capacity;
+  er_mem_zero((UINT8*)&manifest_response, (UINTN)sizeof(manifest_response));
+  manifest_response.abi_version = ER_APP_ABI_VERSION;
+  manifest_response.retrieve_route_id = storage_source.manifest_retrieve_route_id;
+  manifest_response.object_id = package.manifest_object_id;
+  manifest_response.object_len = package.manifest_object_len;
+  manifest_response.packets = manifest_load.packets;
+  manifest_response.packet_count = manifest_load.packet_count;
+  manifest_response.bytes = manifest_load.bytes;
+  manifest_response.capacity = manifest_load.capacity;
+  if (er_app_prepare_package_storage_object(&app_response,
+                                            &storage_source.app_retrieve_route_id,
+                                            &package.app_object_id,
+                                            package.app_object_len,
+                                            &app_object) == 0u ||
+      er_app_prepare_package_storage_object(&manifest_response,
+                                            &storage_source.manifest_retrieve_route_id,
+                                            &package.manifest_object_id,
+                                            package.manifest_object_len,
+                                            &manifest_object) == 0u) {
+    return 0u;
+  }
   return er_app_load_package_from_storage_source(&crypto, &package,
                                                  &storage_source, &app_object,
                                                  &manifest_object, 0,
