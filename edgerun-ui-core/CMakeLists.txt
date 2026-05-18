@@ -13,6 +13,7 @@ endif()
 add_library(er_ui_core
   src/er_ui_assets.c
   src/er_ui_components_catalog.c
+  src/er_ui_components_catalog_data.c
   src/er_ui_components_contracts.c
   src/er_ui_components_emit.c
   src/er_ui_components_internal.c

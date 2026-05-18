@@ -166,6 +166,7 @@ bool er_ui_component_streq(const char* a, const char* b);
 bool er_ui_component_list_contains(const char* const* values, size_t count, const char* value);
 bool er_ui_component_range_starts_with(const char* start, const char* end, const char* prefix, size_t prefix_len);
 bool er_ui_component_ends_with_len(const char* start, const char* end, const char* suffix, size_t suffix_len);
+const er_ui_component_spec_t* er_ui_component_catalog_data_at(size_t index);
 er_ui_status_t er_ui_component_push_ascii_text(
   er_ui_scene_t* scene,
   vr_font_face_t* font,
