@@ -38,27 +38,27 @@ typedef struct {
 static const char ER_UI_PRESET_ALPHABET[] = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
 static const char ER_UI_PRESET_RADIUS_NONE_STYLE[] = "none";
 
-static const char* const ER_UI_PRESET_THEME_COLORS[] = {
+static const char *const ER_UI_PRESET_THEME_COLORS[] = {
   "neutral", "stone", "zinc", "gray", "amber", "blue", "cyan", "emerald", "fuchsia", "green", "indigo", "lime", "orange",
   "pink", "purple", "red", "rose", "sky", "teal", "violet", "yellow", "mauve", "olive", "mist", "taupe"
 };
-static const char* const ER_UI_PRESET_BASE_COLORS[] = {"neutral", "stone", "zinc", "gray", "mauve", "olive", "mist", "taupe"};
-static const char* const ER_UI_PRESET_FONTS[] = {
+static const char *const ER_UI_PRESET_BASE_COLORS[] = {"neutral", "stone", "zinc", "gray", "mauve", "olive", "mist", "taupe"};
+static const char *const ER_UI_PRESET_FONTS[] = {
   "inter", "noto-sans", "nunito-sans", "figtree", "roboto", "raleway", "dm-sans", "public-sans", "outfit", "jetbrains-mono",
   "geist", "geist-mono", "lora", "merriweather", "playfair-display", "noto-serif", "roboto-slab", "oxanium", "manrope",
   "space-grotesk", "montserrat", "ibm-plex-sans", "source-sans-3", "instrument-sans", "eb-garamond", "instrument-serif"
 };
-static const char* const ER_UI_PRESET_HEADING_FONTS[] = {
+static const char *const ER_UI_PRESET_HEADING_FONTS[] = {
   "inherit", "inter", "noto-sans", "nunito-sans", "figtree", "roboto", "raleway", "dm-sans", "public-sans", "outfit",
   "jetbrains-mono", "geist", "geist-mono", "lora", "merriweather", "playfair-display", "noto-serif", "roboto-slab",
   "oxanium", "manrope", "space-grotesk", "montserrat", "ibm-plex-sans", "source-sans-3", "instrument-sans", "eb-garamond",
   "instrument-serif"
 };
-static const char* const ER_UI_PRESET_MENU_COLORS[] = {"default", "inverted", "default-translucent", "inverted-translucent"};
-static const char* const ER_UI_PRESET_MENU_ACCENTS[] = {"subtle", "bold"};
-static const char* const ER_UI_PRESET_RADII[] = {"default", "none", "small", "medium", "large"};
-static const char* const ER_UI_PRESET_ICON_LIBRARIES[] = {"lucide", "hugeicons", "tabler", "phosphor", "remixicon"};
-static const char* const ER_UI_PRESET_STYLES[] = {"nova", "vega", "maia", "lyra", "mira", "luma", "sera"};
+static const char *const ER_UI_PRESET_MENU_COLORS[] = {"default", "inverted", "default-translucent", "inverted-translucent"};
+static const char *const ER_UI_PRESET_MENU_ACCENTS[] = {"subtle", "bold"};
+static const char *const ER_UI_PRESET_RADII[] = {"default", "none", "small", "medium", "large"};
+static const char *const ER_UI_PRESET_ICON_LIBRARIES[] = {"lucide", "hugeicons", "tabler", "phosphor", "remixicon"};
+static const char *const ER_UI_PRESET_STYLES[] = {"nova", "vega", "maia", "lyra", "mira", "luma", "sera"};
 
 #define ER_UI_PRESET_RECIPE_VEGA {"vega", "neutral", "neutral", "neutral", "lucide", "inter", "inherit", "default", "default", "default", "subtle"}
 #define ER_UI_PRESET_RECIPE_NOVA {"nova", "neutral", "neutral", "neutral", "lucide", "geist", "inherit", "default", "default", "default", "subtle"}
@@ -179,33 +179,33 @@ static const er_ui_style_family_spec_t ER_UI_STYLE_FAMILY_SPECS[ER_UI_STYLE_FAMI
   {ER_UI_STYLE_FAMILY_SERA, "Sera", "b4xFeBLg4O", "taupe", "warm rose collaboration surface"}
 };
 
-static const char* const ER_UI_STYLE_TOKEN_CLASSES_BACKGROUND[] = {"bg-background", "bg-bg"};
-static const char* const ER_UI_STYLE_TOKEN_CLASSES_CARD[] = {"bg-card", "bg-panel"};
-static const char* const ER_UI_STYLE_TOKEN_CLASSES_CARD_FOREGROUND[] = {"text-card-foreground"};
-static const char* const ER_UI_STYLE_TOKEN_CLASSES_POPOVER[] = {"bg-popover"};
-static const char* const ER_UI_STYLE_TOKEN_CLASSES_POPOVER_FOREGROUND[] = {"text-popover-foreground"};
-static const char* const ER_UI_STYLE_TOKEN_CLASSES_MUTED[] = {"bg-muted", "bg-row"};
-static const char* const ER_UI_STYLE_TOKEN_CLASSES_FOREGROUND[] = {"text-foreground", "text-text"};
-static const char* const ER_UI_STYLE_TOKEN_CLASSES_MUTED_FOREGROUND[] = {"text-muted-foreground", "text-muted"};
-static const char* const ER_UI_STYLE_TOKEN_CLASSES_BORDER[] = {"border-border", "border"};
-static const char* const ER_UI_STYLE_TOKEN_CLASSES_PRIMARY[] = {"bg-primary", "text-primary"};
-static const char* const ER_UI_STYLE_TOKEN_CLASSES_PRIMARY_FOREGROUND[] = {"text-primary-foreground"};
-static const char* const ER_UI_STYLE_TOKEN_CLASSES_SECONDARY[] = {"bg-secondary"};
-static const char* const ER_UI_STYLE_TOKEN_CLASSES_SECONDARY_FOREGROUND[] = {"text-secondary-foreground"};
-static const char* const ER_UI_STYLE_TOKEN_CLASSES_ACCENT[] = {"bg-accent", "text-accent"};
-static const char* const ER_UI_STYLE_TOKEN_CLASSES_ACCENT_FOREGROUND[] = {"text-accent-foreground"};
-static const char* const ER_UI_STYLE_TOKEN_CLASSES_DESTRUCTIVE[] = {"text-destructive", "aria-invalid:border-destructive"};
-static const char* const ER_UI_STYLE_TOKEN_CLASSES_DESTRUCTIVE_FOREGROUND[] = {"text-destructive-foreground"};
-static const char* const ER_UI_STYLE_TOKEN_CLASSES_SUCCESS[] = {"text-success", "bg-success"};
-static const char* const ER_UI_STYLE_TOKEN_CLASSES_WARNING[] = {"text-warning", "bg-warning"};
-static const char* const ER_UI_STYLE_TOKEN_CLASSES_INFO[] = {"text-info", "bg-info"};
-static const char* const ER_UI_STYLE_TOKEN_CLASSES_INPUT[] = {"border-input", "bg-input"};
-static const char* const ER_UI_STYLE_TOKEN_CLASSES_RING[] = {"border-ring", "focus-visible:ring-ring/50"};
-static const char* const ER_UI_STYLE_TOKEN_CLASSES_CHART_1[] = {"bg-chart-1", "text-chart-1"};
-static const char* const ER_UI_STYLE_TOKEN_CLASSES_CHART_2[] = {"bg-chart-2", "text-chart-2"};
-static const char* const ER_UI_STYLE_TOKEN_CLASSES_CHART_3[] = {"bg-chart-3", "text-chart-3"};
-static const char* const ER_UI_STYLE_TOKEN_CLASSES_CHART_4[] = {"bg-chart-4", "text-chart-4"};
-static const char* const ER_UI_STYLE_TOKEN_CLASSES_CHART_5[] = {"bg-chart-5", "text-chart-5"};
+static const char *const ER_UI_STYLE_TOKEN_CLASSES_BACKGROUND[] = {"bg-background", "bg-bg"};
+static const char *const ER_UI_STYLE_TOKEN_CLASSES_CARD[] = {"bg-card", "bg-panel"};
+static const char *const ER_UI_STYLE_TOKEN_CLASSES_CARD_FOREGROUND[] = {"text-card-foreground"};
+static const char *const ER_UI_STYLE_TOKEN_CLASSES_POPOVER[] = {"bg-popover"};
+static const char *const ER_UI_STYLE_TOKEN_CLASSES_POPOVER_FOREGROUND[] = {"text-popover-foreground"};
+static const char *const ER_UI_STYLE_TOKEN_CLASSES_MUTED[] = {"bg-muted", "bg-row"};
+static const char *const ER_UI_STYLE_TOKEN_CLASSES_FOREGROUND[] = {"text-foreground", "text-text"};
+static const char *const ER_UI_STYLE_TOKEN_CLASSES_MUTED_FOREGROUND[] = {"text-muted-foreground", "text-muted"};
+static const char *const ER_UI_STYLE_TOKEN_CLASSES_BORDER[] = {"border-border", "border"};
+static const char *const ER_UI_STYLE_TOKEN_CLASSES_PRIMARY[] = {"bg-primary", "text-primary"};
+static const char *const ER_UI_STYLE_TOKEN_CLASSES_PRIMARY_FOREGROUND[] = {"text-primary-foreground"};
+static const char *const ER_UI_STYLE_TOKEN_CLASSES_SECONDARY[] = {"bg-secondary"};
+static const char *const ER_UI_STYLE_TOKEN_CLASSES_SECONDARY_FOREGROUND[] = {"text-secondary-foreground"};
+static const char *const ER_UI_STYLE_TOKEN_CLASSES_ACCENT[] = {"bg-accent", "text-accent"};
+static const char *const ER_UI_STYLE_TOKEN_CLASSES_ACCENT_FOREGROUND[] = {"text-accent-foreground"};
+static const char *const ER_UI_STYLE_TOKEN_CLASSES_DESTRUCTIVE[] = {"text-destructive", "aria-invalid:border-destructive"};
+static const char *const ER_UI_STYLE_TOKEN_CLASSES_DESTRUCTIVE_FOREGROUND[] = {"text-destructive-foreground"};
+static const char *const ER_UI_STYLE_TOKEN_CLASSES_SUCCESS[] = {"text-success", "bg-success"};
+static const char *const ER_UI_STYLE_TOKEN_CLASSES_WARNING[] = {"text-warning", "bg-warning"};
+static const char *const ER_UI_STYLE_TOKEN_CLASSES_INFO[] = {"text-info", "bg-info"};
+static const char *const ER_UI_STYLE_TOKEN_CLASSES_INPUT[] = {"border-input", "bg-input"};
+static const char *const ER_UI_STYLE_TOKEN_CLASSES_RING[] = {"border-ring", "focus-visible:ring-ring/50"};
+static const char *const ER_UI_STYLE_TOKEN_CLASSES_CHART_1[] = {"bg-chart-1", "text-chart-1"};
+static const char *const ER_UI_STYLE_TOKEN_CLASSES_CHART_2[] = {"bg-chart-2", "text-chart-2"};
+static const char *const ER_UI_STYLE_TOKEN_CLASSES_CHART_3[] = {"bg-chart-3", "text-chart-3"};
+static const char *const ER_UI_STYLE_TOKEN_CLASSES_CHART_4[] = {"bg-chart-4", "text-chart-4"};
+static const char *const ER_UI_STYLE_TOKEN_CLASSES_CHART_5[] = {"bg-chart-5", "text-chart-5"};
 
 #define ER_UI_STYLE_TOKEN(name, kind, css_var, classes, role) \
   {(name), (kind), (css_var), (classes), sizeof(classes) / sizeof((classes)[0]), (role)}

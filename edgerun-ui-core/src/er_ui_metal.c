@@ -442,15 +442,15 @@ er_ui_status_t er_ui_edgerun_metal_surface_emit(
   er_ui_bounds_t bounds,
   er_ui_resolved_theme_t theme,
   const er_ui_shadcn_demo_gallery_state_t* state) {
-  static const char* const tabs[] = {"Executor", "Buses", "Renderer", "Components"};
-  static const char* const route_hops[] = {"device", "executor", "ui-core", "scanout"};
-  static const char* const bus_headers[] = {"Bus", "Addressing", "Status"};
-  static const char* const bus_cells[] = {
+  static const char *const tabs[] = {"Executor", "Buses", "Renderer", "Components"};
+  static const char *const route_hops[] = {"device", "executor", "ui-core", "scanout"};
+  static const char *const bus_headers[] = {"Bus", "Addressing", "Status"};
+  static const char *const bus_cells[] = {
     "Display", "scanout surface", "admitted",
     "ACPI", "tables", "scanned",
     "PCI", "config space", "captured"
   };
-  static const char* const budget_labels[] = {"memory", "tiles", "commands", "glyphs"};
+  static const char *const budget_labels[] = {"memory", "tiles", "commands", "glyphs"};
   static const float budget_values[] = {0.42f, 0.58f, 0.36f, 0.64f};
 
   if (!scene || !font || !er_ui_bounds_valid(bounds)) return ER_UI_ERR_INVALID_ARGUMENT;

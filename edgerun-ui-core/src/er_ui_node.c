@@ -2198,7 +2198,11 @@ static er_ui_status_t er_ui_node_render_sheet(
 static size_t er_ui_node_ascii_len(const char* text) {
   size_t len = 0u;
   if (!text) return 0u;
-  while (text[len]) len++;
+  const char* cursor = text;
+  while (*cursor) {
+    len++;
+    cursor++;
+  }
   return len;
 }
 
