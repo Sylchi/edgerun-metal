@@ -143,10 +143,10 @@ The completed C foundation is:
 - bounded capability envelope header preparation and validation for render/input/object/device-style capability payloads
 - deterministic render endpoint capture, scene payload hashing, and endpoint-owned scene decode after admitted route, channel envelope, and render capability header verification
 - backend-neutral UI scene records, component surfaces, variable-font text quads, and GOP/VirtIO GPU rendering foundations
-- concurrent boot-local Wasm UI app contexts with isolated preallocated memory, presentation identity, scene state, and per-runtime `ui_emit` dispatch
+- concurrent boot-local Wasm UI app contexts with isolated preallocated memory, presentation identity, endpoint-owned scene state, and per-runtime `ui_emit` dispatch through render endpoint capture/decode
 - boot-local Wasm UI app launch from validated package-loaded bytes stored in persistent per-app module buffers
 - saved package source records that bind package launch provenance to admitted storage-retrieve route ids
 - typed storage endpoint response adaptation that checks route ids, object ids, lengths, packet lists, and caller-owned destination memory before package bytes become launch input
 - Wasm relay-send proof for render capability invocation payloads under admitted packet shape, source identity, token, and packet-byte budget checks
 
-The next C milestone is to replace embedded package packet sources with real admitted storage endpoint responses for saved user-authored app packages, carry the decoded render endpoint scene path into the OS loop, and add the VirtIO GPU endpoint adapter. No host listener, host capture path, host filesystem persistence, firmware-networking dependency, or debug boot profile belongs in the runtime core.
+The next C milestone is to replace embedded package packet sources with real admitted storage endpoint responses for saved user-authored app packages, connect relay ingress to the decoded render endpoint scene path, and add the VirtIO GPU endpoint adapter. No host listener, host capture path, host filesystem persistence, firmware-networking dependency, or debug boot profile belongs in the runtime core.

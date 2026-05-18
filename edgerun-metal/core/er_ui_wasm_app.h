@@ -3,6 +3,7 @@
 
 #include "er_app.h"
 #include "er_epoch_clock.h"
+#include "er_render_endpoint.h"
 #include "er_ui_runtime.h"
 #include "wasm_vm.h"
 
@@ -49,6 +50,8 @@ typedef struct {
   ErEpochClockModifier execute_epoch_modifier;
   ErEpochStamp last_input_epoch;
   ErEpochStamp last_execute_epoch;
+  ErRenderEndpointCapture last_render_capture;
+  ErRenderEndpointScene last_render_scene;
   UINT32 input_len;
   UINT32 input_sequence;
   er_ui_scene_stats_t emitted_stats;
