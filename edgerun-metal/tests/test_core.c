@@ -3953,10 +3953,23 @@ static void test_work_admitted_relay_route(void) {
   ErCapabilityEnvelopeHeader bad_capability_header;
   ErRenderEndpointCapture render_capture;
   ErRenderEndpointCapture render_capture_again;
+  ErRenderEndpointCapture bad_render_capture;
+  ErRenderEndpointScene render_scene;
+  ErRenderEndpointScene render_scene_again;
+  ErRenderEndpointPresentation presentation;
+  ErRenderEndpointPresentation presentation_again;
   ErAdmittedRoute bad_render_route;
   ErHash session_id;
   ErHash invocation_id;
   ErHash capability_id;
+  ErHash scene_payload_hash;
+  UINT8 scene_payload[ER_WASM_UI_COMMAND_LIST_HEADER_LEN +
+                      ER_WASM_UI_RECT_RECORD_LEN +
+                      ER_WASM_UI_HIT_RECORD_LEN +
+                      ER_WASM_UI_QUAD_RECORD_LEN];
+  er_ui_scene_t endpoint_scene;
+  UINT32 pixels[64u * 64u];
+  ErUiGopSurface surface;
 
   crypto.ctx = (void*)(UINTN)11u;
   crypto.hash = test_hash;
@@ -3964,6 +3977,12 @@ static void test_work_admitted_relay_route(void) {
   crypto.open = 0;
   crypto.sign = 0;
   crypto.verify = 0;
+  test_write_wasm_ui_scene_packet(scene_payload, (UINT32)sizeof(scene_payload));
+  check_int64("render scene payload hash",
+              er_render_endpoint_scene_payload_hash(&crypto, scene_payload,
+                                                    (UINT32)sizeof(scene_payload),
+                                                    &scene_payload_hash),
+              1);
 
   er_mem_zero((UINT8*)&request, (UINTN)sizeof(request));
   er_mem_zero((UINT8*)&admission, (UINTN)sizeof(admission));
@@ -4039,7 +4058,7 @@ static void test_work_admitted_relay_route(void) {
   envelope.from = source_node_id;
   envelope.to = target_node_id;
   envelope.route_hash = admission.route_commitment;
-  test_fill_bytes(envelope.packet_hash.bytes, ER_HASH_LEN, 0xb1u);
+  envelope.packet_hash = scene_payload_hash;
   envelope.sequence = 1u;
   test_fill_bytes(envelope.previous_message_hash.bytes, ER_HASH_LEN, 0xb2u);
 
@@ -4073,7 +4092,7 @@ static void test_work_admitted_relay_route(void) {
   er_mem_zero(envelope.packet_hash.bytes, ER_HASH_LEN);
   check_int64("work envelope reject packet hash",
               er_work_verify_channel_envelope_for_route(&envelope, &route), 0);
-  test_fill_bytes(envelope.packet_hash.bytes, ER_HASH_LEN, 0xb1u);
+  envelope.packet_hash = scene_payload_hash;
   envelope.packet_kind = ER_WORK_TYPE_CAPABILITY_CLOSE;
   check_int64("work envelope reject packet kind",
               er_work_verify_channel_envelope_for_route(&envelope, &route), 0);
@@ -4145,7 +4164,7 @@ static void test_work_admitted_relay_route(void) {
                                                          envelope.sequence,
                                                          120000u,
                                                          &envelope.packet_hash,
-                                                         64u,
+                                                         (UINT32)sizeof(scene_payload),
                                                          &capability_header),
               1);
   check_int64("work render capability valid",
@@ -4176,14 +4195,15 @@ static void test_work_admitted_relay_route(void) {
   check_hash_equal("render capture capability",
                    &render_capture.capability_id, &capability_id);
   check_hash_equal("render capture scene hash", &render_capture.scene_hash,
-                   &envelope.packet_hash);
+                   &scene_payload_hash);
   check_node_id_equal("render capture source", &render_capture.source_node_id,
                       &source_node_id);
   check_node_id_equal("render capture target", &render_capture.target_node_id,
                       &target_node_id);
   check_uint64("render capture sequence", render_capture.sequence,
                envelope.sequence);
-  check_uint64("render capture scene bytes", render_capture.scene_bytes, 64u);
+  check_uint64("render capture scene bytes", render_capture.scene_bytes,
+               (UINT64)sizeof(scene_payload));
   check_int64("render endpoint deterministic",
               er_render_endpoint_capture(&crypto, &route, &envelope,
                                          &capability_header,
@@ -4220,6 +4240,104 @@ static void test_work_admitted_relay_route(void) {
                                          &capability_header,
                                          &render_capture_again),
               0);
+
+  check_int64("render endpoint scene init",
+              er_ui_scene_init_with_allocator(&endpoint_scene,
+                                              er_ui_color_rgb_u8(0u, 0u, 0u),
+                                              test_ui_allocator()),
+              ER_UI_OK);
+  check_int64("render endpoint decode scene payload",
+              er_render_endpoint_decode_scene_payload(&crypto, &render_capture,
+                                                      scene_payload,
+                                                      (UINT32)sizeof(scene_payload),
+                                                      &endpoint_scene,
+                                                      &render_scene),
+              1);
+  check_int64("render endpoint scene abi", render_scene.abi_version,
+              ER_RENDER_ENDPOINT_ABI_VERSION);
+  check_hash_equal("render endpoint scene capture", &render_scene.capture_id,
+                   &render_capture.capture_id);
+  check_hash_equal("render endpoint scene hash", &render_scene.scene_hash,
+                   &scene_payload_hash);
+  check_uint64("render endpoint scene rects", render_scene.scene_stats.rects,
+               1u);
+  check_uint64("render endpoint scene hits", render_scene.scene_stats.hits,
+               1u);
+  check_uint64("render endpoint scene text", render_scene.scene_stats.text_quads,
+               1u);
+  check_uint64("render endpoint decoded rect count", endpoint_scene.rect_count,
+               1u);
+  check_uint64("render endpoint decoded hit count", endpoint_scene.hit_count,
+               1u);
+  check_int64("render endpoint decode deterministic",
+              er_render_endpoint_decode_scene_payload(&crypto, &render_capture,
+                                                      scene_payload,
+                                                      (UINT32)sizeof(scene_payload),
+                                                      &endpoint_scene,
+                                                      &render_scene_again),
+              1);
+  check_hash_equal("render endpoint scene deterministic id",
+                   &render_scene_again.scene_id, &render_scene.scene_id);
+  scene_payload[0] ^= 1u;
+  check_int64("render endpoint reject tampered scene payload",
+              er_render_endpoint_decode_scene_payload(&crypto, &render_capture,
+                                                      scene_payload,
+                                                      (UINT32)sizeof(scene_payload),
+                                                      &endpoint_scene,
+                                                      &render_scene_again),
+              0);
+  scene_payload[0] ^= 1u;
+  bad_render_capture = render_capture;
+  ++bad_render_capture.scene_bytes;
+  check_int64("render endpoint reject scene byte mismatch",
+              er_render_endpoint_decode_scene_payload(&crypto, &bad_render_capture,
+                                                      scene_payload,
+                                                      (UINT32)sizeof(scene_payload),
+                                                      &endpoint_scene,
+                                                      &render_scene_again),
+              0);
+
+  er_mem_zero((UINT8*)pixels, (UINTN)sizeof(pixels));
+  surface.pixels = pixels;
+  surface.width = 64u;
+  surface.height = 64u;
+  surface.stride = 64u;
+  surface.pixel_format = ER_UI_GOP_PIXEL_RGBX;
+  check_int64("render endpoint present gop surface",
+              er_render_endpoint_present_gop_surface(&crypto, &render_capture,
+                                                     &render_scene, &endpoint_scene,
+                                                     &surface, 0,
+                                                     &presentation),
+              1);
+  check_int64("render endpoint presentation abi", presentation.abi_version,
+              ER_RENDER_ENDPOINT_ABI_VERSION);
+  check_hash_equal("render endpoint presentation scene",
+                   &presentation.scene_id, &render_scene.scene_id);
+  check_uint64("render endpoint presentation width", presentation.width, 64u);
+  check_uint64("render endpoint presentation height", presentation.height, 64u);
+  check_uint64("render endpoint presentation rects",
+               presentation.render_stats.rects, 1u);
+  check_uint64("render endpoint presentation wrote pixels",
+               presentation.render_stats.pixels_written > 0u ? 1u : 0u, 1u);
+  er_mem_zero((UINT8*)pixels, (UINTN)sizeof(pixels));
+  check_int64("render endpoint present deterministic",
+              er_render_endpoint_present_gop_surface(&crypto, &render_capture,
+                                                     &render_scene, &endpoint_scene,
+                                                     &surface, 0,
+                                                     &presentation_again),
+              1);
+  check_hash_equal("render endpoint presentation deterministic id",
+                   &presentation_again.presentation_id,
+                   &presentation.presentation_id);
+  render_scene_again = render_scene;
+  render_scene_again.capture_id.bytes[0] ^= 1u;
+  check_int64("render endpoint reject presentation capture mismatch",
+              er_render_endpoint_present_gop_surface(&crypto, &render_capture,
+                                                     &render_scene_again,
+                                                     &endpoint_scene, &surface,
+                                                     0, &presentation_again),
+              0);
+  er_ui_scene_destroy(&endpoint_scene);
 }
 
 static void test_boot_profiles(void) {

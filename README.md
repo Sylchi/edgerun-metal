@@ -48,7 +48,10 @@ identities before bytes can launch. Wasm fixtures can emit render capability
 invocation packets through `edgerun.relay/send` under the same outbox, admission,
 token, and packet-byte budget checks used for app relay traffic, and render
 endpoint capture now accepts those packets only after admission-defined route,
-channel envelope, source/target, sequence, and scene hash verification.
+channel envelope, source/target, sequence, and scene hash verification. The
+render endpoint can now verify the scene payload hash, decode the payload into
+endpoint-owned scene state, and present it to a GOP surface with deterministic
+presentation records.
 Replacing firmware boot-service networking with runtime-owned drivers is the
 immediate infrastructure step:
 

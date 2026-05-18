@@ -143,7 +143,7 @@ The completed C foundation is:
 - explicit crypto provider hooks for seal/open/hash/sign/verify
 - bounded Wasm relay send/receive imports with app identity, admission, token, memory-window, and packet-byte budget checks
 - bounded capability envelope header preparation and validation for render/input/object/device-style capability payloads
-- deterministic render endpoint capture after admitted route, channel envelope, and render capability header verification
+- deterministic render endpoint capture, scene payload hashing, endpoint-owned scene decode, and GOP surface presentation after admitted route, channel envelope, and render capability header verification
 - backend-neutral UI scene records, component surfaces, variable-font text quads, and GOP/VirtIO GPU rendering foundations
 - concurrent boot-local Wasm UI app contexts with isolated preallocated memory, presentation identity, scene state, and per-runtime `ui_emit` dispatch
 - boot-local Wasm UI app launch from validated package-loaded bytes stored in persistent per-app module buffers
@@ -151,4 +151,4 @@ The completed C foundation is:
 - typed storage endpoint response adaptation that checks route ids, object ids, lengths, packet lists, and caller-owned destination memory before package bytes become launch input
 - Wasm relay-send proof for render capability invocation payloads under admitted packet shape, source identity, token, and packet-byte budget checks
 
-The next C milestone is to replace embedded package packet sources with real admitted storage endpoint responses for saved user-authored app packages, feed relay-sent render capability captures into an endpoint-owned renderer, and verify the same path from native ingress. No host listener, host capture path, host filesystem persistence, or host networking model belongs in the runtime core.
+The next C milestone is to replace embedded package packet sources with real admitted storage endpoint responses for saved user-authored app packages, carry the decoded render endpoint scene path into the boot UI/native ingress loop, and add the VirtIO GPU endpoint adapter. No host listener, host capture path, host filesystem persistence, or host networking model belongs in the runtime core.
