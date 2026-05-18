@@ -23,7 +23,8 @@ static const float ER_UI_LEDGER_GAP = 16.0f;
 static const float ER_UI_LEDGER_MIN_SIDE_W = 160.0f;
 static const float ER_UI_LEDGER_SIDE_W = 220.0f;
 static const float ER_UI_LEDGER_STACKED_SIDE_H = 160.0f;
-static const float ER_UI_LEDGER_MIN_CARD_W = 312.0f;
+static const float ER_UI_LEDGER_MIN_CARD_W = 240.0f;
+static const float ER_UI_LEDGER_NARROW_CARD_W = 280.0f;
 static const size_t ER_UI_LEDGER_DASHBOARD_MAX_COLUMNS = 4u;
 static const size_t ER_UI_LEDGER_DASHBOARD_WIDE_SUMMARY_CARDS = 4u;
 static const size_t ER_UI_LEDGER_DASHBOARD_COMPACT_SUMMARY_CARDS = 3u;
@@ -40,6 +41,11 @@ static const float ER_UI_LEDGER_BAR_GAP = 12.0f;
 static const float ER_UI_LEDGER_BAR_MAX_H = 104.0f;
 static const float ER_UI_LEDGER_PROGRESS_H = 4.0f;
 static const float ER_UI_LEDGER_TRANSACTION_H = 42.0f;
+static const float ER_UI_LEDGER_TRANSACTION_COMPACT_W = 520.0f;
+static const float ER_UI_LEDGER_TRANSACTION_TILE = 32.0f;
+static const float ER_UI_LEDGER_TRANSACTION_TILE_ICON = 16.0f;
+static const float ER_UI_LEDGER_TRANSACTION_TEXT_GAP = 12.0f;
+static const float ER_UI_LEDGER_TRANSACTION_AMOUNT_GAP = 16.0f;
 static const float ER_UI_LEDGER_QR_CELL = 7.0f;
 static const float ER_UI_LEDGER_TEXT_ADVANCE = 7.0f;
 static const float ER_UI_LEDGER_TEXT_CLIP_ASCENT = 20.0f;
@@ -547,7 +553,7 @@ static er_ui_status_t er_ui_ledger_contribution_card(
                                                         "Contribution History",
                                                         "Last 6 months of activity");
   if (status != ER_UI_OK) return status;
-  if (bounds.h < ER_UI_LEDGER_DENSE_CARD_H) {
+  if (bounds.h < ER_UI_LEDGER_DENSE_CARD_H || bounds.w < ER_UI_LEDGER_NARROW_CARD_W) {
     status = er_ui_ledger_progress(scene, er_ui_bounds(bounds.x + 16.0f, bounds.y + 76.0f, bounds.w - 32.0f, ER_UI_LEDGER_PROGRESS_H), colors, 0.76f);
     if (status != ER_UI_OK) return status;
     status = er_ui_ledger_text_clipped(scene, font, "May 25, 2024", bounds.x + 16.0f, bounds.y + 108.0f, bounds.w * 0.48f, colors.text);
@@ -596,8 +602,8 @@ static er_ui_status_t er_ui_ledger_payout_card(
                                                         "Payout Threshold",
                                                         "Minimum balance required before payout");
   if (status != ER_UI_OK) return status;
-  bool dense = bounds.h < ER_UI_LEDGER_DENSE_FORM_H;
-  bool compact = bounds.h < 260.0f;
+  bool dense = bounds.h < ER_UI_LEDGER_DENSE_FORM_H || bounds.w < ER_UI_LEDGER_NARROW_CARD_W;
+  bool compact = bounds.h < 260.0f || bounds.w < ER_UI_LEDGER_NARROW_CARD_W;
   if (dense) {
     status = er_ui_ledger_text_clipped(scene, font, "Minimum Payout Amount", bounds.x + 16.0f, bounds.y + 74.0f, bounds.w * 0.52f, colors.text);
     if (status != ER_UI_OK) return status;
@@ -649,7 +655,7 @@ static er_ui_status_t er_ui_ledger_targets_card(
                                                         "Savings Targets",
                                                         "Active milestones for 2024");
   if (status != ER_UI_OK) return status;
-  if (bounds.h >= ER_UI_LEDGER_DENSE_CARD_H) {
+  if (bounds.h >= ER_UI_LEDGER_DENSE_CARD_H && bounds.w >= ER_UI_LEDGER_NARROW_CARD_W) {
     er_ui_bounds_t new_goal = er_ui_bounds(bounds.x + bounds.w - 82.0f, bounds.y + 12.0f, 66.0f, 28.0f);
     status = er_ui_ledger_rect(scene, new_goal, 7.0f, colors.field);
     if (status != ER_UI_OK) return status;
@@ -697,8 +703,8 @@ static er_ui_status_t er_ui_ledger_invest_card(
   };
   er_ui_status_t status = er_ui_ledger_card_with_header(scene, font, bounds, colors, "Buy Investment", 0);
   if (status != ER_UI_OK) return status;
-  bool dense = bounds.h < ER_UI_LEDGER_DENSE_FORM_H;
-  bool compact = bounds.h < 260.0f;
+  bool dense = bounds.h < ER_UI_LEDGER_DENSE_FORM_H || bounds.w < ER_UI_LEDGER_NARROW_CARD_W;
+  bool compact = bounds.h < 260.0f || bounds.w < ER_UI_LEDGER_NARROW_CARD_W;
   status = er_ui_ledger_field_rows(scene, font, bounds, colors, rows, ER_UI_LEDGER_ARRAY_COUNT(rows), compact ? 54.0f : 76.0f, compact ? 50.0f : 72.0f);
   if (status != ER_UI_OK) return status;
   if (dense) {
@@ -738,37 +744,49 @@ static er_ui_status_t er_ui_ledger_transactions_card(
   if (status != ER_UI_OK) return status;
   status = er_ui_ledger_text_clipped(scene, font, "View All", view_all.x + 9.0f, view_all.y + 19.0f, view_all.w - 18.0f, colors.text);
   if (status != ER_UI_OK) return status;
+  er_ui_bounds_t content = er_ui_component_content_rect(bounds, ER_UI_COMPONENT_DENSITY_DEFAULT);
+  bool compact = bounds.w < ER_UI_LEDGER_TRANSACTION_COMPACT_W;
   float y = bounds.y + 76.0f;
   const er_ui_ledger_transaction_t* row = ER_UI_LEDGER_TRANSACTIONS;
   const er_ui_ledger_transaction_t* end = ER_UI_LEDGER_TRANSACTIONS + ER_UI_LEDGER_ARRAY_COUNT(ER_UI_LEDGER_TRANSACTIONS);
   while (row < end) {
     if (y + ER_UI_LEDGER_TRANSACTION_H > bounds.y + bounds.h - 12.0f) break;
-    er_ui_bounds_t tile = er_ui_bounds(bounds.x + 16.0f, y + 6.0f, 32.0f, 32.0f);
+    er_ui_bounds_t tile = er_ui_bounds(content.x, y + 6.0f, ER_UI_LEDGER_TRANSACTION_TILE, ER_UI_LEDGER_TRANSACTION_TILE);
     er_ui_color4_t amount = row->positive ? colors.success : colors.text;
     status = er_ui_ledger_rect(scene, tile, 7.0f, colors.field);
     if (status != ER_UI_OK) return status;
-    status = er_ui_ledger_icon(scene, er_ui_bounds(tile.x + 8.0f, tile.y + 8.0f, 16.0f, 16.0f), row->icon, colors.text);
+    er_ui_bounds_t icon = er_ui_bounds(tile.x + (tile.w - ER_UI_LEDGER_TRANSACTION_TILE_ICON) * 0.5f,
+                                       tile.y + (tile.h - ER_UI_LEDGER_TRANSACTION_TILE_ICON) * 0.5f,
+                                       ER_UI_LEDGER_TRANSACTION_TILE_ICON,
+                                       ER_UI_LEDGER_TRANSACTION_TILE_ICON);
+    status = er_ui_ledger_icon(scene, icon, row->icon, colors.text);
     if (status != ER_UI_OK) return status;
-    float amount_right = bounds.x + bounds.w - 34.0f;
+    float amount_right = compact ? content.x + content.w : bounds.x + bounds.w - 34.0f;
     float amount_w = (float)er_ui_ascii_len(row->amount) * ER_UI_LEDGER_TEXT_ADVANCE;
+    float text_x = tile.x + tile.w + ER_UI_LEDGER_TRANSACTION_TEXT_GAP;
     float date_right = amount_right - amount_w - 52.0f;
-    float text_w = er_ui_float_max(date_right - (bounds.x + 60.0f) - 16.0f, 1.0f);
-    status = er_ui_ledger_text_clipped(scene, font, row->name, bounds.x + 60.0f, y + 18.0f, text_w, colors.text);
+    float text_right = compact ? amount_right - amount_w - ER_UI_LEDGER_TRANSACTION_AMOUNT_GAP : date_right - ER_UI_LEDGER_TRANSACTION_AMOUNT_GAP;
+    float text_w = er_ui_float_max(text_right - text_x, 1.0f);
+    status = er_ui_ledger_text_clipped(scene, font, row->name, text_x, y + 18.0f, text_w, colors.text);
     if (status != ER_UI_OK) return status;
-    status = er_ui_ledger_text_clipped(scene, font, row->kind, bounds.x + 60.0f, y + 36.0f, text_w, colors.muted);
+    status = er_ui_ledger_text_clipped(scene, font, row->kind, text_x, y + 36.0f, compact ? content.w - tile.w - ER_UI_LEDGER_TRANSACTION_TEXT_GAP : text_w,
+                                       colors.muted);
     if (status != ER_UI_OK) return status;
-    status = er_ui_ledger_text_right_clipped(scene, font, row->date, date_right, y + 26.0f, bounds.w * 0.26f, colors.muted);
-    if (status != ER_UI_OK) return status;
+    if (!compact) {
+      status = er_ui_ledger_text_right_clipped(scene, font, row->date, date_right, y + 26.0f, bounds.w * 0.26f, colors.muted);
+      if (status != ER_UI_OK) return status;
+    }
     status = er_ui_ledger_text_right_clipped(scene, font, row->amount, amount_right, y + 26.0f, bounds.w * 0.28f, amount);
     if (status != ER_UI_OK) return status;
-    status = er_ui_ledger_rect(scene, er_ui_bounds(bounds.x + bounds.w - 22.0f, y + 21.0f, ER_UI_LEDGER_DOT_SIZE, ER_UI_LEDGER_DOT_SIZE),
-                               ER_UI_LEDGER_DOT_SIZE * 0.5f, colors.muted);
-    if (status != ER_UI_OK) return status;
-    status = er_ui_ledger_rect(scene, er_ui_bounds(bounds.x + bounds.w - 14.0f, y + 21.0f, ER_UI_LEDGER_DOT_SIZE, ER_UI_LEDGER_DOT_SIZE),
-                               ER_UI_LEDGER_DOT_SIZE * 0.5f, colors.muted);
-    if (status != ER_UI_OK) return status;
-    status = er_ui_ledger_rect(scene, er_ui_bounds(bounds.x + 16.0f, y + ER_UI_LEDGER_TRANSACTION_H - 1.0f,
-                                                  bounds.w - 32.0f, 1.0f), 0.0f, colors.border);
+    if (!compact) {
+      status = er_ui_ledger_rect(scene, er_ui_bounds(bounds.x + bounds.w - 22.0f, y + 21.0f, ER_UI_LEDGER_DOT_SIZE, ER_UI_LEDGER_DOT_SIZE),
+                                 ER_UI_LEDGER_DOT_SIZE * 0.5f, colors.muted);
+      if (status != ER_UI_OK) return status;
+      status = er_ui_ledger_rect(scene, er_ui_bounds(bounds.x + bounds.w - 14.0f, y + 21.0f, ER_UI_LEDGER_DOT_SIZE, ER_UI_LEDGER_DOT_SIZE),
+                                 ER_UI_LEDGER_DOT_SIZE * 0.5f, colors.muted);
+      if (status != ER_UI_OK) return status;
+    }
+    status = er_ui_ledger_rect(scene, er_ui_bounds(content.x, y + ER_UI_LEDGER_TRANSACTION_H - 1.0f, content.w, 1.0f), 0.0f, colors.border);
     if (status != ER_UI_OK) return status;
     y += ER_UI_LEDGER_TRANSACTION_H;
     row++;
