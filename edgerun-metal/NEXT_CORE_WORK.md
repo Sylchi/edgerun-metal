@@ -26,6 +26,7 @@ See `../docs/relay-architecture.md` for the cross-project model and `../docs/coh
 - `er_app` can bind a launchable saved package source to admitted storage-retrieve route ids for the package's app, manifest, and optional UI asset objects.
 - `er_app` can load a package from storage-bound object responses only when each retrieved object matches the source's admitted route id.
 - `er_app` can adapt typed storage endpoint object responses into package storage objects only when the response route id, object id, object length, packet list, and caller-owned destination memory match the package source and manifest.
+- `er_work` can prepare and validate capability envelope headers, and the Wasm relay fixture can emit a render capability invocation through `edgerun.relay/send` under the existing outbox, admission, token, and packet-byte budget checks.
 
 ## Architecture rule
 
@@ -152,19 +153,19 @@ Proof:
 
 ### M6: User-authored Wasm UI app proof
 
-Status: relay hostcall foundation, concurrent local Wasm UI app contexts, content-addressed app package records, validated package object loading, boot-local package-loaded app launch, admitted storage-source binding, storage endpoint response adaptation, and storage-bound package loading implemented; relay-routed render packets are next.
+Status: relay hostcall foundation, concurrent local Wasm UI app contexts, content-addressed app package records, validated package object loading, boot-local package-loaded app launch, admitted storage-source binding, storage endpoint response adaptation, storage-bound package loading, and Wasm render capability relay-send proof implemented; render endpoint verification and capture are next.
 
 - Keep bounded Wasm imports for relay send/receive as the durable app boundary.
 - Keep each loaded app in an explicit runtime context with preallocated memory, presentation identity, scene state, and app-switcher selection.
 - Replace the embedded package packet source with real endpoint responses that satisfy the admitted storage-source route ids and object identities for saved user-authored app packages.
-- Have the app emit a render capability packet over relay send.
+- Connect render capability packets from relay send to admission-defined render endpoint verification and capture.
 - Feed input or completion packets back through relay receive.
 - Move driver modules away from direct PCI/MMIO hostcalls as the durable ABI.
 - Keep direct bus hostcalls only for bring-up until relay device endpoints are proven.
 
 Proof:
 
-- Wasm fixture emits an app UI scene or scene-delta packet through relay send.
+- Wasm fixture emits an app UI scene or scene-delta capability packet through relay send.
 - Wasm fixture receives a completion or input packet through relay receive.
 - Tests prove memory bounds, packet bounds, admission/budget checks, and budget failures.
 

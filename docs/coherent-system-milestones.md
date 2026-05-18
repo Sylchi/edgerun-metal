@@ -41,6 +41,7 @@ The shared contract is what lets these parts interoperate. The admissions remain
 - `edgerun-ui-core` provides backend-neutral UI scene records.
 - `wasm_vm` runs bounded Wasm modules with explicit hostcalls, including bounded `edgerun.relay/send` and `edgerun.relay/recv` imports.
 - Relay sends are validated against serialized packet shape, app identity, admission id, budget token, and packet-byte budget before host relay dispatch.
+- `er_work` can prepare and validate bounded capability envelope headers, including render capability invocations for app-authored scene payloads.
 - `varfont`, `edgerun-ui-core`, the GOP renderer, and the VirtIO GPU profile provide enough UI/text/rendering foundation for polished app surfaces.
 - The boot UI proof can hold multiple Wasm UI apps concurrently as explicit runtime contexts with isolated preallocated memory, presentation identity, scene state, and app-switcher selection.
 - App package identity is derived from app code, manifest, and UI asset object ids and lengths. Labels can name those objects inside manifests, but labels do not define package identity.

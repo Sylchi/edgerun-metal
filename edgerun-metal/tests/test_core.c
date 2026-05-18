@@ -412,6 +412,36 @@ static INT64 test_vm_relay_send(const UINT8* bytes, UINT32 len) {
   return (INT64)len;
 }
 
+static INT64 test_vm_relay_send_render(const UINT8* bytes, UINT32 len) {
+  const UINT8* payload = 0;
+  const ErCapabilityEnvelopeHeader* header = 0;
+  UINT32 payload_len = 0u;
+
+  if (bytes == 0) {
+    return 0;
+  }
+  check_uint64("wasm render relay send len", len,
+               ER_RELAY_PACKET_HEADER_LEN + sizeof(ErCapabilityEnvelopeHeader));
+  check_int64("wasm render relay packet valid",
+              er_relay_packet_valid(bytes, len), 1);
+  check_int64("wasm render relay payload view",
+              er_relay_packet_payload(bytes, len, &payload, &payload_len), 1);
+  check_uint64("wasm render relay payload len", payload_len,
+               sizeof(ErCapabilityEnvelopeHeader));
+  header = (const ErCapabilityEnvelopeHeader*)payload;
+  check_int64("wasm render capability valid",
+              er_work_capability_envelope_header_valid(header), 1);
+  check_uint64("wasm render capability kind", header->kind,
+               ER_CAPABILITY_PACKET_INVOKE);
+  check_uint64("wasm render capability operation", header->operation,
+               ER_WORK_TYPE_CAPABILITY_INVOKE);
+  check_uint64("wasm render capability content", header->content_type,
+               ER_CAPABILITY_CONTENT_RENDER);
+  check_uint64("wasm render capability risk", header->risk_flags,
+               ER_CAPABILITY_RISK_NONE);
+  return (INT64)len;
+}
+
 static INT64 test_vm_relay_recv(UINT8* bytes, UINT32 capacity) {
   if (bytes == 0) {
     return 0;
@@ -2432,6 +2462,7 @@ static void test_wasm_relay_imports(void) {
   };
   static const UINT8 payload[] = {'p', 'i', 'n', 'g'};
   static UINT8 memory[65536];
+  UINT8 wasm_render_import_test[sizeof(wasm_relay_import_test)];
   ErWasmHostCalls host = {0};
   ErWasmLinearMemory linear_memory;
   ErWasmModule module;
@@ -2441,11 +2472,19 @@ static void test_wasm_relay_imports(void) {
   ErHash token;
   ErHash route;
   ErHash payload_hash;
+  ErHash session_id;
+  ErHash invocation_id;
+  ErHash capability_id;
+  ErHash scene_hash;
+  ErCapabilityEnvelopeHeader render_header;
   ErAppBudget budget;
   ErAppUsage usage;
+  ErAppUsage charge_probe;
   UINT32 main_index = 0;
   UINT32 packet_len = 0u;
   INT64 result = 0;
+  UINTN i;
+  UINT8 patched_render_len = 0u;
 
   er_mem_zero(memory, (UINTN)sizeof(memory));
   test_fill_bytes(source.bytes, ER_NODE_ID_LEN, 0x11u);
@@ -2454,6 +2493,10 @@ static void test_wasm_relay_imports(void) {
   test_fill_bytes(token.bytes, ER_HASH_LEN, 0x71u);
   test_fill_bytes(route.bytes, ER_HASH_LEN, 0x91u);
   test_fill_bytes(payload_hash.bytes, ER_HASH_LEN, 0xb1u);
+  test_fill_bytes(session_id.bytes, ER_HASH_LEN, 0xc1u);
+  test_fill_bytes(invocation_id.bytes, ER_HASH_LEN, 0xd1u);
+  test_fill_bytes(capability_id.bytes, ER_HASH_LEN, 0xe1u);
+  test_fill_bytes(scene_hash.bytes, ER_HASH_LEN, 0xf1u);
   check_int64("wasm relay linear memory prepare",
               er_wasm_prepare_linear_memory(memory, (UINT32)sizeof(memory),
                                             0u, 1024u, 1024u, 2048u,
@@ -2510,11 +2553,89 @@ static void test_wasm_relay_imports(void) {
   check_uint64("wasm relay usage unchanged after source mismatch", usage.packet_bytes, 0u);
   usage.app_node_id = source;
 
+  check_uint64("wasm render capability payload size",
+               sizeof(ErCapabilityEnvelopeHeader), 232u);
+  er_mem_copy(wasm_render_import_test, wasm_relay_import_test,
+              (UINTN)sizeof(wasm_render_import_test));
+  for (i = 0u; i + 4u < sizeof(wasm_render_import_test); ++i) {
+    if (wasm_render_import_test[i] == 0x42u &&
+        wasm_render_import_test[i + 1u] == 0xecu &&
+        wasm_render_import_test[i + 2u] == 0x01u &&
+        wasm_render_import_test[i + 3u] == 0x10u &&
+        wasm_render_import_test[i + 4u] == 0x00u) {
+      wasm_render_import_test[i + 1u] = 0xd0u;
+      wasm_render_import_test[i + 2u] = 0x03u;
+      patched_render_len = 1u;
+    }
+  }
+  check_uint64("wasm render import patch", patched_render_len, 1u);
+  check_int64("wasm render capability prepare",
+              er_work_prepare_capability_envelope_header(ER_CAPABILITY_PACKET_INVOKE,
+                                                         ER_WORK_TYPE_CAPABILITY_INVOKE,
+                                                         ER_CAPABILITY_CONTENT_RENDER,
+                                                         ER_CAPABILITY_RISK_NONE,
+                                                         &session_id,
+                                                         &invocation_id,
+                                                         &capability_id,
+                                                         &source,
+                                                         &target,
+                                                         7u,
+                                                         1000u,
+                                                         &scene_hash,
+                                                         (UINT32)sizeof(payload),
+                                                         &render_header),
+              1);
+  er_mem_zero(memory, (UINTN)sizeof(memory));
+  host.relay_send = test_vm_relay_send_render;
+  budget.max_packet_bytes =
+      ER_RELAY_PACKET_HEADER_LEN + sizeof(ErCapabilityEnvelopeHeader);
+  usage.packet_bytes = 0u;
+  check_int64("wasm render relay init",
+              er_wasm_init(&module, wasm_render_import_test,
+                           (UINT32)sizeof(wasm_render_import_test), &host),
+              0);
+  check_int64("wasm render relay find main",
+              er_wasm_find_main(&module, &main_index), 0);
+  check_int64("wasm render relay packet prepare after init",
+              er_relay_packet_prepare(memory + 1024u,
+                                      (UINT32)sizeof(memory) - 1024u,
+                                      &source, &target, &admission, &token, &route,
+                                      10u, 1u,
+                                      (UINT64)sizeof(ErCapabilityEnvelopeHeader),
+                                      &payload_hash,
+                                      (const UINT8*)&render_header,
+                                      (UINT32)sizeof(render_header),
+                                      &packet_len),
+              1);
+  check_uint64("wasm render relay packet len", packet_len,
+               ER_RELAY_PACKET_HEADER_LEN + sizeof(ErCapabilityEnvelopeHeader));
+  check_int64("wasm render relay packet valid after init",
+              er_relay_packet_valid(memory + 1024u, packet_len), 1);
+  check_int64("wasm render relay packet authorized",
+              er_relay_packet_authorized_for_app(memory + 1024u, packet_len,
+                                                 &usage, &budget),
+              1);
+  charge_probe = usage;
+  check_int64("wasm render relay charge probe",
+              er_app_usage_charge(&charge_probe, &budget,
+                                  ER_APP_BUDGET_PACKET_BYTE, packet_len),
+              1);
+  check_int64("wasm render relay execute",
+              er_wasm_execute_i64(&module, main_index, &result), 0);
+  check_uint64("wasm render relay result", (UINT64)result,
+               ER_RELAY_PACKET_HEADER_LEN +
+               sizeof(ErCapabilityEnvelopeHeader) + 4u);
+  check_uint64("wasm render relay usage charged", usage.packet_bytes,
+               ER_RELAY_PACKET_HEADER_LEN + sizeof(ErCapabilityEnvelopeHeader));
+
   check_int64("wasm relay shifted outbox prepare",
               er_wasm_prepare_linear_memory(memory, (UINT32)sizeof(memory),
                                             0u, 1024u, 2048u, 2048u,
                                             &linear_memory),
               0);
+  host.relay_send = test_vm_relay_send;
+  budget.max_packet_bytes = ER_RELAY_PACKET_HEADER_LEN + 4u;
+  usage.packet_bytes = 0u;
   host.linear_memory = linear_memory;
   check_int64("wasm relay shifted outbox init",
               er_wasm_init(&module, wasm_relay_import_test,
@@ -3827,6 +3948,12 @@ static void test_work_admitted_relay_route(void) {
   ErRelayTransitHop hop_again;
   ErRelayTransitHop hop_changed;
   ErRelayAccountingClaim claim;
+  ErCapabilityEnvelopeHeader capability_header;
+  ErCapabilityEnvelopeHeader bad_capability_header;
+  ErHash session_id;
+  ErHash invocation_id;
+  ErHash capability_id;
+  ErHash scene_hash;
 
   crypto.ctx = (void*)(UINTN)11u;
   crypto.hash = test_hash;
@@ -3848,6 +3975,10 @@ static void test_work_admitted_relay_route(void) {
   test_fill_bytes(channel_id.bytes, ER_HASH_LEN, 0x66u);
   test_fill_bytes(input_hash.bytes, ER_HASH_LEN, 0x77u);
   test_fill_bytes(previous_transit_hash.bytes, ER_HASH_LEN, 0x88u);
+  test_fill_bytes(session_id.bytes, ER_HASH_LEN, 0xc1u);
+  test_fill_bytes(invocation_id.bytes, ER_HASH_LEN, 0xd1u);
+  test_fill_bytes(capability_id.bytes, ER_HASH_LEN, 0xe1u);
+  test_fill_bytes(scene_hash.bytes, ER_HASH_LEN, 0xf1u);
   test_fill_bytes(user_material, ER_PUBLIC_KEY_LEN, 0x92u);
   test_fill_bytes(admission_material, ER_PUBLIC_KEY_LEN, 0xa2u);
 
@@ -3998,6 +4129,39 @@ static void test_work_admitted_relay_route(void) {
                                                      &route.admission_hash,
                                                      0u, 2u, 1u, &claim),
               0);
+
+  check_int64("work render capability envelope",
+              er_work_prepare_capability_envelope_header(ER_CAPABILITY_PACKET_INVOKE,
+                                                         ER_WORK_TYPE_CAPABILITY_INVOKE,
+                                                         ER_CAPABILITY_CONTENT_RENDER,
+                                                         ER_CAPABILITY_RISK_NONE,
+                                                         &session_id,
+                                                         &invocation_id,
+                                                         &capability_id,
+                                                         &source_node_id,
+                                                         &target_node_id,
+                                                         11u,
+                                                         120000u,
+                                                         &scene_hash,
+                                                         64u,
+                                                         &capability_header),
+              1);
+  check_int64("work render capability valid",
+              er_work_capability_envelope_header_valid(&capability_header), 1);
+  check_uint64("work render capability content",
+               capability_header.content_type, ER_CAPABILITY_CONTENT_RENDER);
+  bad_capability_header = capability_header;
+  bad_capability_header.content_type = 99u;
+  check_int64("work capability reject content",
+              er_work_capability_envelope_header_valid(&bad_capability_header), 0);
+  bad_capability_header = capability_header;
+  bad_capability_header.risk_flags = ER_CAPABILITY_RISK_HOST_PRIVILEGE << 1u;
+  check_int64("work capability reject unknown risk",
+              er_work_capability_envelope_header_valid(&bad_capability_header), 0);
+  bad_capability_header = capability_header;
+  er_mem_zero(bad_capability_header.payload_hash.bytes, ER_HASH_LEN);
+  check_int64("work capability reject zero payload hash",
+              er_work_capability_envelope_header_valid(&bad_capability_header), 0);
 }
 
 static void test_boot_profiles(void) {

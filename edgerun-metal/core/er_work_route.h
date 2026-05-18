@@ -39,5 +39,20 @@ UINT8 er_work_prepare_relay_accounting_claim(const ErRelayTransitHop* hop,
                                              UINT64 unit_price,
                                              UINT64 receipt_base,
                                              ErRelayAccountingClaim* out_claim);
+UINT8 er_work_prepare_capability_envelope_header(UINT16 kind,
+                                                 UINT16 operation,
+                                                 UINT16 content_type,
+                                                 UINT32 risk_flags,
+                                                 const ErHash* session_id,
+                                                 const ErHash* invocation_id,
+                                                 const ErHash* capability_id,
+                                                 const ErNodeId* source_node_id,
+                                                 const ErNodeId* target_node_id,
+                                                 UINT64 sequence,
+                                                 UINT64 timestamp_ms,
+                                                 const ErHash* payload_hash,
+                                                 UINT32 payload_len,
+                                                 ErCapabilityEnvelopeHeader* out_header);
+UINT8 er_work_capability_envelope_header_valid(const ErCapabilityEnvelopeHeader* header);
 
 #endif
