@@ -17,6 +17,7 @@
 #define ER_UI_LEDGER_RGB_SUCCESS 16u, 185u, 129u
 #define ER_UI_LEDGER_RGB_DANGER 239u, 68u, 68u
 #define ER_UI_LEDGER_RGB_WARNING 245u, 158u, 11u
+#define ER_UI_LEDGER_DASHBOARD_MAX_COLUMNS_LIMIT 4u
 
 static const float ER_UI_LEDGER_MARGIN = 24.0f;
 static const float ER_UI_LEDGER_GAP = 16.0f;
@@ -26,7 +27,8 @@ static const float ER_UI_LEDGER_STACKED_SIDE_H = 160.0f;
 static const float ER_UI_LEDGER_MIN_CARD_W = 240.0f;
 static const float ER_UI_LEDGER_DASHBOARD_MIN_CARD_W = 300.0f;
 static const float ER_UI_LEDGER_NARROW_CARD_W = 280.0f;
-static const size_t ER_UI_LEDGER_DASHBOARD_MAX_COLUMNS = 4u;
+static const size_t ER_UI_LEDGER_DASHBOARD_MAX_COLUMNS = ER_UI_LEDGER_DASHBOARD_MAX_COLUMNS_LIMIT;
+static const size_t ER_UI_LEDGER_DASHBOARD_MASONRY_COLUMNS = 3u;
 static const size_t ER_UI_LEDGER_DASHBOARD_WIDE_SUMMARY_CARDS = 4u;
 static const size_t ER_UI_LEDGER_DASHBOARD_COMPACT_SUMMARY_CARDS = 3u;
 static const size_t ER_UI_LEDGER_ACCESS_MAX_COLUMNS = 2u;
@@ -61,12 +63,18 @@ static const float ER_UI_LEDGER_COMPACT_NAV_Y = 92.0f;
 static const float ER_UI_LEDGER_DENSE_CARD_H = 180.0f;
 static const float ER_UI_LEDGER_DENSE_FORM_H = 190.0f;
 static const float ER_UI_LEDGER_DASHBOARD_ROW_MIN_H = 300.0f;
+static const float ER_UI_LEDGER_DASHBOARD_CARD_H = 248.0f;
+static const float ER_UI_LEDGER_DASHBOARD_FORM_H = 300.0f;
+static const float ER_UI_LEDGER_DASHBOARD_TALL_H = 356.0f;
 static const float ER_UI_LEDGER_SCROLL_THUMB_MIN_H = 32.0f;
 static const float ER_UI_LEDGER_FIELD_PAD_X = 10.0f;
 static const float ER_UI_LEDGER_DOT_SIZE = 4.0f;
 static const float ER_UI_LEDGER_SELECT_CHEVRON_W = 14.0f;
 static const float ER_UI_LEDGER_SELECT_CHEVRON_H = 14.0f;
 static const size_t ER_UI_LEDGER_ACTIVITY_BAR_COUNT = 7u;
+static const size_t ER_UI_LEDGER_STOCK_CHART_GUIDE_COUNT = 7u;
+static const size_t ER_UI_LEDGER_STOCK_CHART_SEGMENT_COUNT = 6u;
+static const size_t ER_UI_LEDGER_POWER_BAR_COUNT = 8u;
 static const uint32_t ER_UI_LEDGER_ACTION_BASE = 0xED024000u;
 static const uint32_t ER_UI_LEDGER_PAYOUT_SLIDER_ID = ER_UI_LEDGER_ACTION_BASE + 1u;
 static const uint32_t ER_UI_LEDGER_INVEST_BUTTON_ID = ER_UI_LEDGER_ACTION_BASE + 2u;
@@ -74,6 +82,9 @@ static const uint32_t ER_UI_LEDGER_TRANSFER_BUTTON_ID = ER_UI_LEDGER_ACTION_BASE
 static const uint32_t ER_UI_LEDGER_SAVE_THRESHOLD_BUTTON_ID = ER_UI_LEDGER_ACTION_BASE + 8u;
 static const uint32_t ER_UI_LEDGER_DASHBOARD_SCROLL_ID = ER_UI_LEDGER_ACTION_BASE + 16u;
 static const uint32_t ER_UI_LEDGER_CREATE_RELEASE_BUTTON_ID = ER_UI_LEDGER_ACTION_BASE + 32u;
+static const uint32_t ER_UI_LEDGER_PAYOUT_SETTINGS_BUTTON_ID = ER_UI_LEDGER_ACTION_BASE + 64u;
+static const uint32_t ER_UI_LEDGER_CATALOG_BUTTON_ID = ER_UI_LEDGER_ACTION_BASE + 128u;
+static const uint32_t ER_UI_LEDGER_GOAL_BUTTON_ID = ER_UI_LEDGER_ACTION_BASE + 256u;
 
 typedef struct {
   er_ui_color4_t bg;
@@ -128,6 +139,10 @@ typedef struct {
   const char* value;
   bool selectable;
 } er_ui_ledger_field_row_t;
+
+typedef struct {
+  er_ui_vertical_flow_t columns[ER_UI_LEDGER_DASHBOARD_MAX_COLUMNS_LIMIT];
+} er_ui_ledger_dashboard_columns_t;
 
 static er_ui_status_t er_ui_ledger_sidebar(
   er_ui_scene_t* scene,
@@ -897,6 +912,147 @@ static er_ui_status_t er_ui_ledger_claimable_card(
   return er_ui_ledger_text_right_clipped(scene, font, "$0.00 USD", summary.x + summary.w - 12.0f, summary.y + 54.0f, summary.w * 0.38f, colors.text);
 }
 
+static er_ui_status_t er_ui_ledger_payout_preferences_card(
+  er_ui_scene_t* scene,
+  vr_font_face_t* font,
+  er_ui_bounds_t bounds,
+  er_ui_ledger_colors_t colors) {
+  er_ui_status_t status = er_ui_ledger_card_with_header(scene, font, bounds, colors, "Payout Preferences", "Receiving Method");
+  if (status != ER_UI_OK) return status;
+  er_ui_bounds_t content = er_ui_component_content_rect(bounds, ER_UI_COMPONENT_DENSITY_DEFAULT);
+  status = er_ui_ledger_field(scene, font, er_ui_bounds(content.x, content.y + 76.0f, content.w, ER_UI_LEDGER_FIELD_H),
+                              colors, "Account Holder Name", "Synthetic Horizons Music LLC", false);
+  if (status != ER_UI_OK) return status;
+  er_ui_bounds_t bank = er_ui_bounds(content.x, content.y + 134.0f, content.w * 0.5f - ER_UI_LEDGER_GAP * 0.5f, 54.0f);
+  er_ui_bounds_t paypal = er_ui_bounds(bank.x + bank.w + ER_UI_LEDGER_GAP, bank.y, bank.w, bank.h);
+  status = er_ui_ledger_rect(scene, bank, 7.0f, colors.field);
+  if (status != ER_UI_OK) return status;
+  status = er_ui_ledger_border(scene, bank, 7.0f, colors.border);
+  if (status != ER_UI_OK) return status;
+  status = er_ui_ledger_rect(scene, er_ui_bounds(bank.x + 10.0f, bank.y + 17.0f, 10.0f, 10.0f), 5.0f, colors.text);
+  if (status != ER_UI_OK) return status;
+  status = er_ui_ledger_text_clipped(scene, font, "Bank Transfer", bank.x + 28.0f, bank.y + 24.0f, bank.w - 36.0f, colors.text);
+  if (status != ER_UI_OK) return status;
+  status = er_ui_ledger_text_clipped(scene, font, "SWIFT / IBAN", bank.x + 28.0f, bank.y + 44.0f, bank.w - 36.0f, colors.muted);
+  if (status != ER_UI_OK) return status;
+  status = er_ui_ledger_rect(scene, paypal, 7.0f, colors.panel);
+  if (status != ER_UI_OK) return status;
+  status = er_ui_ledger_border(scene, paypal, 7.0f, colors.border);
+  if (status != ER_UI_OK) return status;
+  status = er_ui_ledger_text_clipped(scene, font, "PayPal", paypal.x + 14.0f, paypal.y + 24.0f, paypal.w - 28.0f, colors.text);
+  if (status != ER_UI_OK) return status;
+  status = er_ui_ledger_field(scene, font, er_ui_bounds(content.x, content.y + 222.0f, content.w, ER_UI_LEDGER_FIELD_H),
+                              colors, "IBAN / Account Number", "DE89 3704 0044 ...", false);
+  if (status != ER_UI_OK) return status;
+  return er_ui_ledger_button(scene, font,
+                             er_ui_bounds(content.x, bounds.y + bounds.h - 50.0f, content.w, ER_UI_LEDGER_BUTTON_H),
+                             colors, "Save Payout Settings", ER_UI_LEDGER_PAYOUT_SETTINGS_BUTTON_ID);
+}
+
+static er_ui_status_t er_ui_ledger_stock_performance_card(
+  er_ui_scene_t* scene,
+  vr_font_face_t* font,
+  er_ui_bounds_t bounds,
+  er_ui_ledger_colors_t colors) {
+  er_ui_status_t status = er_ui_ledger_card_with_header(scene, font, bounds, colors, "Stock Performance", "6-month price history.");
+  if (status != ER_UI_OK) return status;
+  er_ui_bounds_t content = er_ui_component_content_rect(bounds, ER_UI_COMPONENT_DENSITY_DEFAULT);
+  status = er_ui_ledger_field(scene, font, er_ui_bounds(content.x, content.y + 72.0f, content.w, ER_UI_LEDGER_FIELD_H), colors, "Ticker", "VOO", true);
+  if (status != ER_UI_OK) return status;
+  er_ui_bounds_t chart = er_ui_bounds(content.x, content.y + 126.0f, content.w, bounds.h - 158.0f);
+  status = er_ui_ledger_rect(scene, chart, 7.0f, colors.panel_alt);
+  if (status != ER_UI_OK) return status;
+  float guide_step = (chart.h - 36.0f) / (float)ER_UI_LEDGER_STOCK_CHART_SEGMENT_COUNT;
+  for (size_t i = 0u; i < ER_UI_LEDGER_STOCK_CHART_GUIDE_COUNT; ++i) {
+    float y = chart.y + 18.0f + (float)i * guide_step;
+    status = er_ui_ledger_rect(scene, er_ui_bounds(chart.x + 12.0f, y, chart.w - 24.0f, 1.0f), 0.0f, er_ui_color_with_alpha(colors.border, 0.45f));
+    if (status != ER_UI_OK) return status;
+  }
+  float step = chart.w / (float)ER_UI_LEDGER_STOCK_CHART_SEGMENT_COUNT;
+  for (size_t i = 0u; i < ER_UI_LEDGER_STOCK_CHART_SEGMENT_COUNT; ++i) {
+    float left_h = 38.0f + ER_UI_LEDGER_ACTIVITY_VALUES[i] * 42.0f;
+    float right_h = 38.0f + ER_UI_LEDGER_ACTIVITY_VALUES[i + 1u] * 42.0f;
+    float x = chart.x + step * (float)i;
+    float w = step + 1.0f;
+    float y = chart.y + chart.h - er_ui_float_max(left_h, right_h) - 10.0f;
+    float h = er_ui_float_max(left_h, right_h);
+    status = er_ui_ledger_rect(scene, er_ui_bounds(x, y, w, h), 0.0f, er_ui_color_with_alpha(colors.subtle, 0.46f));
+    if (status != ER_UI_OK) return status;
+  }
+  return ER_UI_OK;
+}
+
+static er_ui_status_t er_ui_ledger_power_card(
+  er_ui_scene_t* scene,
+  vr_font_face_t* font,
+  er_ui_bounds_t bounds,
+  er_ui_ledger_colors_t colors) {
+  er_ui_status_t status = er_ui_ledger_card_with_header(scene, font, bounds, colors, "Power Usage", "Whole Home");
+  if (status != ER_UI_OK) return status;
+  er_ui_bounds_t content = er_ui_component_content_rect(bounds, ER_UI_COMPONENT_DENSITY_DEFAULT);
+  er_ui_bounds_t chart = er_ui_bounds(content.x, content.y + 72.0f, content.w, 112.0f);
+  float bar_gap = 10.0f;
+  float bar_w = (chart.w - bar_gap * (float)(ER_UI_LEDGER_POWER_BAR_COUNT - 1u)) / (float)ER_UI_LEDGER_POWER_BAR_COUNT;
+  for (size_t i = 0u; i < ER_UI_LEDGER_POWER_BAR_COUNT; ++i) {
+    float value = i < ER_UI_LEDGER_ACTIVITY_BAR_COUNT ? ER_UI_LEDGER_ACTIVITY_VALUES[i] : 0.58f;
+    float h = 88.0f * value;
+    status = er_ui_ledger_rect(scene, er_ui_bounds(chart.x + (bar_w + bar_gap) * (float)i, chart.y + chart.h - h, bar_w, h), 4.0f, colors.subtle);
+    if (status != ER_UI_OK) return status;
+  }
+  status = er_ui_ledger_text_clipped(scene, font, "Currently Using", content.x, content.y + 212.0f, content.w * 0.48f, colors.muted);
+  if (status != ER_UI_OK) return status;
+  status = er_ui_ledger_text_clipped(scene, font, "3.4 kW", content.x, content.y + 236.0f, content.w * 0.48f, colors.text);
+  if (status != ER_UI_OK) return status;
+  status = er_ui_ledger_text_right_clipped(scene, font, "85%", content.x + content.w, content.y + 236.0f, content.w * 0.32f, colors.text);
+  if (status != ER_UI_OK) return status;
+  return er_ui_ledger_progress(scene, er_ui_bounds(content.x, bounds.y + bounds.h - 30.0f, content.w, ER_UI_LEDGER_PROGRESS_H), colors, 0.85f);
+}
+
+static er_ui_status_t er_ui_ledger_catalog_card(
+  er_ui_scene_t* scene,
+  vr_font_face_t* font,
+  er_ui_bounds_t bounds,
+  er_ui_ledger_colors_t colors) {
+  er_ui_status_t status = er_ui_ledger_card(scene, bounds, colors);
+  if (status != ER_UI_OK) return status;
+  er_ui_bounds_t content = er_ui_component_content_rect(bounds, ER_UI_COMPONENT_DENSITY_DEFAULT);
+  er_ui_bounds_t icon = er_ui_bounds(bounds.x + bounds.w * 0.5f - 17.0f, content.y + 20.0f, 34.0f, 34.0f);
+  status = er_ui_ledger_rect(scene, icon, 7.0f, colors.field);
+  if (status != ER_UI_OK) return status;
+  status = er_ui_ledger_icon(scene, er_ui_bounds(icon.x + 9.0f, icon.y + 9.0f, 16.0f, 16.0f), ER_UI_ICON_STORAGE, colors.text);
+  if (status != ER_UI_OK) return status;
+  status = er_ui_ledger_text_clipped(scene, font, "Explore Catalog", content.x, content.y + 94.0f, content.w, colors.text);
+  if (status != ER_UI_OK) return status;
+  status = er_ui_ledger_text_clipped(scene, font, "Check your ISRC codes, metadata, and assets before going live.", content.x, content.y + 122.0f, content.w, colors.muted);
+  if (status != ER_UI_OK) return status;
+  return er_ui_ledger_button(scene, font,
+                             er_ui_bounds(bounds.x + bounds.w * 0.5f - 60.0f, bounds.y + bounds.h - 54.0f, 120.0f, ER_UI_LEDGER_BUTTON_H),
+                             colors, "View Catalog", ER_UI_LEDGER_CATALOG_BUTTON_ID);
+}
+
+static er_ui_status_t er_ui_ledger_milestone_card(
+  er_ui_scene_t* scene,
+  vr_font_face_t* font,
+  er_ui_bounds_t bounds,
+  er_ui_ledger_colors_t colors) {
+  er_ui_status_t status = er_ui_ledger_card_with_header(scene, font, bounds, colors, "Set a new milestone", "Define your financial target and pace.");
+  if (status != ER_UI_OK) return status;
+  er_ui_bounds_t content = er_ui_component_content_rect(bounds, ER_UI_COMPONENT_DENSITY_DEFAULT);
+  status = er_ui_ledger_field(scene, font, er_ui_bounds(content.x, content.y + 78.0f, content.w, ER_UI_LEDGER_FIELD_H),
+                              colors, "Goal Name", "e.g. Home Downpayment", false);
+  if (status != ER_UI_OK) return status;
+  er_ui_bounds_t amount = er_ui_bounds(content.x, content.y + 136.0f, content.w * 0.5f - ER_UI_LEDGER_GAP * 0.5f, ER_UI_LEDGER_FIELD_H);
+  er_ui_bounds_t date = er_ui_bounds(amount.x + amount.w + ER_UI_LEDGER_GAP, amount.y, amount.w, amount.h);
+  status = er_ui_ledger_field(scene, font, amount, colors, "Target Amount", "$15,000", false);
+  if (status != ER_UI_OK) return status;
+  status = er_ui_ledger_field(scene, font, date, colors, "Target Date", "Dec 2025", false);
+  if (status != ER_UI_OK) return status;
+  status = er_ui_ledger_button(scene, font, er_ui_bounds(content.x, bounds.y + bounds.h - 88.0f, content.w, ER_UI_LEDGER_BUTTON_H),
+                               colors, "Create Goal", ER_UI_LEDGER_GOAL_BUTTON_ID);
+  if (status != ER_UI_OK) return status;
+  return er_ui_ledger_rect(scene, er_ui_bounds(content.x, bounds.y + bounds.h - 42.0f, content.w, ER_UI_LEDGER_BUTTON_H), 7.0f, colors.field);
+}
+
 static er_ui_status_t er_ui_ledger_transfer_card(
   er_ui_scene_t* scene,
   vr_font_face_t* font,
@@ -955,6 +1111,76 @@ static er_ui_status_t er_ui_ledger_dashboard(
   if (status != ER_UI_OK) return status;
 
   if (grid.columns == 0u) return ER_UI_ERR_INVALID_ARGUMENT;
+  if (grid.columns >= ER_UI_LEDGER_DASHBOARD_MASONRY_COLUMNS) {
+    float content_h = ER_UI_LEDGER_DASHBOARD_FORM_H * 3.0f + ER_UI_LEDGER_DASHBOARD_TALL_H +
+                      ER_UI_LEDGER_DASHBOARD_CARD_H * 2.0f + ER_UI_LEDGER_GAP * 5.0f;
+    er_ui_scroll_viewport_t viewport = er_ui_scroll_viewport(grid.bounds, content_h, scroll, ER_UI_LEDGER_SCROLL_THUMB_MIN_H);
+    er_ui_status_t hit_status = er_ui_scene_push_hit(scene, er_ui_hit(ER_UI_HIT_SCROLL_AREA, ER_UI_LEDGER_DASHBOARD_SCROLL_ID,
+                                                                      viewport.viewport.x, viewport.viewport.y,
+                                                                      viewport.viewport.w, viewport.viewport.h));
+    if (hit_status != ER_UI_OK) return hit_status;
+    bool pushed = false;
+    status = er_ui_scene_push_clip(scene, er_ui_clip(viewport.viewport.x, viewport.viewport.y, viewport.viewport.w, viewport.viewport.h), &pushed);
+    if (status != ER_UI_OK) return status;
+
+    er_ui_ledger_dashboard_columns_t masonry = {0};
+    for (size_t i = 0u; i < grid.columns; ++i) {
+      er_ui_bounds_t column = er_ui_bounds(
+        viewport.content.x + (grid.column_w + grid.gap_x) * (float)i,
+        viewport.content.y,
+        grid.column_w,
+        content_h);
+      masonry.columns[i] = er_ui_vertical_flow(column, ER_UI_LEDGER_GAP);
+    }
+
+    status = er_ui_ledger_targets_card(scene, font, er_ui_vertical_flow_next(&masonry.columns[0u], ER_UI_LEDGER_DASHBOARD_FORM_H), colors);
+    if (status == ER_UI_OK) {
+      status = er_ui_ledger_transactions_card(scene, font, er_ui_vertical_flow_next(&masonry.columns[0u], ER_UI_LEDGER_DASHBOARD_TALL_H), colors);
+    }
+    if (status == ER_UI_OK) {
+      status = er_ui_ledger_contribution_card(scene, font, er_ui_vertical_flow_next(&masonry.columns[0u], ER_UI_LEDGER_DASHBOARD_CARD_H), colors);
+    }
+    if (status == ER_UI_OK) {
+      status = er_ui_ledger_release_card(scene, font, er_ui_vertical_flow_next(&masonry.columns[0u], ER_UI_LEDGER_DASHBOARD_CARD_H), colors);
+    }
+
+    if (status == ER_UI_OK) {
+      status = er_ui_ledger_payout_card(scene, font, er_ui_vertical_flow_next(&masonry.columns[1u], ER_UI_LEDGER_DASHBOARD_FORM_H), colors);
+    }
+    if (status == ER_UI_OK) {
+      status = er_ui_ledger_invest_card(scene, font, er_ui_vertical_flow_next(&masonry.columns[1u], ER_UI_LEDGER_DASHBOARD_FORM_H), colors);
+    }
+    if (status == ER_UI_OK) {
+      status = er_ui_ledger_transfer_card(scene, font, er_ui_vertical_flow_next(&masonry.columns[1u], ER_UI_LEDGER_DASHBOARD_FORM_H), colors);
+    }
+    if (status == ER_UI_OK) {
+      status = er_ui_ledger_claimable_card(scene, font, er_ui_vertical_flow_next(&masonry.columns[1u], ER_UI_LEDGER_DASHBOARD_CARD_H), colors);
+    }
+
+    if (status == ER_UI_OK) {
+      status = er_ui_ledger_access_card(scene, font, er_ui_vertical_flow_next(&masonry.columns[2u], ER_UI_LEDGER_DASHBOARD_FORM_H), colors);
+    }
+    if (status == ER_UI_OK) {
+      status = er_ui_ledger_payout_preferences_card(scene, font, er_ui_vertical_flow_next(&masonry.columns[2u], ER_UI_LEDGER_DASHBOARD_FORM_H), colors);
+    }
+    if (status == ER_UI_OK) {
+      status = er_ui_ledger_stock_performance_card(scene, font, er_ui_vertical_flow_next(&masonry.columns[2u], ER_UI_LEDGER_DASHBOARD_FORM_H), colors);
+    }
+    if (status == ER_UI_OK) {
+      status = er_ui_ledger_power_card(scene, font, er_ui_vertical_flow_next(&masonry.columns[2u], ER_UI_LEDGER_DASHBOARD_FORM_H), colors);
+    }
+    if (status == ER_UI_OK) {
+      status = er_ui_ledger_catalog_card(scene, font, er_ui_vertical_flow_next(&masonry.columns[2u], ER_UI_LEDGER_DASHBOARD_CARD_H), colors);
+    }
+    if (status == ER_UI_OK) {
+      status = er_ui_ledger_milestone_card(scene, font, er_ui_vertical_flow_next(&masonry.columns[2u], ER_UI_LEDGER_DASHBOARD_FORM_H), colors);
+    }
+
+    if (pushed) er_ui_scene_pop_clip(scene);
+    if (status != ER_UI_OK) return status;
+    return er_ui_ledger_scrollbar(scene, colors, viewport);
+  }
+
   size_t summary_cards = grid.columns >= ER_UI_LEDGER_DASHBOARD_WIDE_SUMMARY_CARDS ? ER_UI_LEDGER_DASHBOARD_WIDE_SUMMARY_CARDS :
                                                                             ER_UI_LEDGER_DASHBOARD_COMPACT_SUMMARY_CARDS;
   size_t summary_rows = er_ui_responsive_grid_row_count(grid, summary_cards);
