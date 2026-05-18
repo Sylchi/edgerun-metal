@@ -2592,6 +2592,7 @@ static void test_wasm_ui_emit_import(void) {
 
 static void test_ui_wasm_app_runner(void) {
   static UINT8 memory[65536];
+  static const UINT8 input_packet[] = {'k', 'e', 'y', '1'};
   ErWasmHostCalls host = {0};
   ErUiWasmAppRuntime runtime;
   ErAppUiPresentation presentation;
@@ -2617,6 +2618,17 @@ static void test_ui_wasm_app_runner(void) {
               er_ui_wasm_app_prepare(g_edgerun_ui_counter_wasm, ER_UI_COUNTER_WASM_SIZE,
                                      &host, &runtime),
               0);
+  check_int64("ui wasm app deliver input",
+              er_ui_wasm_app_deliver_input(&runtime, input_packet,
+                                           (UINT32)sizeof(input_packet)),
+              0);
+  check_uint64("ui wasm app inbox byte0", memory[0], (UINT8)'k');
+  check_uint64("ui wasm app inbox byte3", memory[3], (UINT8)'1');
+  check_uint64("ui wasm app inbox zeroed", memory[4], 0u);
+  check_int64("ui wasm app reject oversized input",
+              er_ui_wasm_app_deliver_input(&runtime, input_packet,
+                                           runtime.relay_inbox_len + 1u),
+              -1);
   check_int64("ui wasm app execute", er_ui_wasm_app_execute(&runtime, &result),
               0);
   check_uint64("ui wasm app result", (UINT64)result,

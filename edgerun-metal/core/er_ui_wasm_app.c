@@ -3,6 +3,21 @@
 
 static ErUiWasmAppRuntime* g_active_runtime;
 
+static int er_ui_wasm_app_memory_window(const ErUiWasmAppRuntime* runtime, UINT32 base,
+                                        UINT32 len, UINT8** out_bytes) {
+  UINT64 end;
+
+  if (runtime == 0 || runtime->memory == 0 || out_bytes == 0 || len == 0u) {
+    return -1;
+  }
+  end = (UINT64)base + (UINT64)len;
+  if (end > (UINT64)runtime->memory_size) {
+    return -1;
+  }
+  *out_bytes = runtime->memory + base;
+  return 0;
+}
+
 static INT64 er_ui_wasm_app_emit_host(const UINT8* bytes, UINT32 len,
                                       const er_ui_scene_stats_t* stats) {
   if (bytes == 0 || stats == 0 || g_active_runtime == 0 ||
@@ -53,6 +68,21 @@ int er_ui_wasm_app_prepare(const UINT8* module_data, UINT32 module_size,
     return -1;
   }
   runtime->prepared = 1u;
+  return 0;
+}
+
+int er_ui_wasm_app_deliver_input(ErUiWasmAppRuntime* runtime, const UINT8* bytes,
+                                 UINT32 len) {
+  UINT8* inbox = 0;
+
+  if (runtime == 0 || bytes == 0 || len == 0u || runtime->prepared == 0u ||
+      len > runtime->relay_inbox_len ||
+      er_ui_wasm_app_memory_window(runtime, runtime->relay_inbox_base,
+                                   runtime->relay_inbox_len, &inbox) != 0) {
+    return -1;
+  }
+  er_mem_zero(inbox, (UINTN)runtime->relay_inbox_len);
+  er_mem_copy(inbox, bytes, (UINTN)len);
   return 0;
 }
 
