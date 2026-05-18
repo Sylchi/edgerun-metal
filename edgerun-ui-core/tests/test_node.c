@@ -99,6 +99,87 @@
 #define ER_UI_TEST_NODE_RENDER_TABLE_ID 8200u
 #define ER_UI_TEST_NODE_RENDER_LIST_ROW_ID 8300u
 #define ER_UI_TEST_NODE_RENDER_FIELD_ID 8400u
+#define ER_UI_TEST_NODE_RENDER_TEXT_AREA_ID 8401u
+#define ER_UI_TEST_NODE_RENDER_TABS_ID 8500u
+#define ER_UI_TEST_NODE_RENDER_TABS_SELECTED_INDEX 1u
+#define ER_UI_TEST_NODE_RENDER_CHART_ID 8600u
+#define ER_UI_TEST_NODE_RENDER_CHART_ACTIVE_INDEX 1u
+#define ER_UI_TEST_NODE_RENDER_COMMAND_ID 8700u
+#define ER_UI_TEST_NODE_RENDER_TREE_ID 8800u
+#define ER_UI_TEST_NODE_RENDER_IDENTITY_ID 8801u
+#define ER_UI_TEST_NODE_RENDER_CONTACT_ID 8802u
+#define ER_UI_TEST_NODE_RENDER_THREAD_ID 8803u
+#define ER_UI_TEST_NODE_RENDER_ATTACHMENT_ID 8804u
+#define ER_UI_TEST_NODE_RENDER_GRANT_ID 8805u
+#define ER_UI_TEST_NODE_RENDER_PROOF_ID 8806u
+#define ER_UI_TEST_NODE_RENDER_ROUTE_PACKAGE_ID 8807u
+#define ER_UI_TEST_NODE_RENDER_RECEIPT_ID 8808u
+#define ER_UI_TEST_NODE_RENDER_PANEL_ID 8809u
+#define ER_UI_TEST_NODE_RENDER_TRANSACTION_ID 8810u
+#define ER_UI_TEST_NODE_RENDER_MENU_ID 8811u
+#define ER_UI_TEST_NODE_RENDER_CONTROL_ID 8812u
+#define ER_UI_TEST_NODE_RENDER_GRID_COLUMNS 2u
+#define ER_UI_TEST_NODE_RENDER_GRID_THIRD_CHILD 2u
+#define ER_UI_TEST_NODE_RENDER_SCROLL_ID 8813u
+#define ER_UI_TEST_NODE_RENDER_SCROLL_FIRST_ROW_ID 8814u
+#define ER_UI_TEST_NODE_RENDER_SCROLL_SECOND_ROW_ID 8815u
+#define ER_UI_TEST_NODE_RENDER_SCROLL_FIRST_CHILD 0u
+#define ER_UI_TEST_NODE_RENDER_REORDERABLE_ID 8816u
+#define ER_UI_TEST_NODE_RENDER_REORDER_GROUP_ID 42u
+#define ER_UI_TEST_NODE_RENDER_REORDER_INDEX 3u
+#define ER_UI_TEST_NODE_RENDER_TRANSITION_ID 8910u
+#define ER_UI_TEST_NODE_RENDER_TRANSITION_MS 160u
+#define ER_UI_TEST_NODE_RENDER_ICON_BUTTON_ID 8817u
+#define ER_UI_TEST_NODE_RENDER_BUTTON_GROUP_ID 8818u
+#define ER_UI_TEST_NODE_RENDER_TOGGLE_GROUP_ID 8821u
+#define ER_UI_TEST_NODE_RENDER_PAGINATION_ID 8824u
+#define ER_UI_TEST_NODE_RENDER_PAGINATION_SELECTED_INDEX 0u
+#define ER_UI_TEST_NODE_RENDER_COLLAPSIBLE_ID 8828u
+#define ER_UI_TEST_NODE_RENDER_ACCORDION_ID 8831u
+#define ER_UI_TEST_NODE_RENDER_POPOVER_ID 8833u
+#define ER_UI_TEST_NODE_RENDER_SHEET_ID 8835u
+#define ER_UI_TEST_NODE_RENDER_MENUBAR_ID 8837u
+#define ER_UI_TEST_NODE_RENDER_RADIO_GROUP_ID 8840u
+#define ER_UI_TEST_NODE_RENDER_RADIO_SELECTED_INDEX 0u
+#define ER_UI_TEST_NODE_RENDER_INPUT_GROUP_ID 8843u
+#define ER_UI_TEST_NODE_RENDER_INPUT_OTP_ID 8845u
+#define ER_UI_TEST_NODE_RENDER_INPUT_OTP_FOCUSED_INDEX 5u
+#define ER_UI_TEST_NODE_RENDER_NAVIGATION_ID 8852u
+#define ER_UI_TEST_NODE_RENDER_NAVIGATION_SELECTED_INDEX 1u
+#define ER_UI_TEST_NODE_RENDER_SIDEBAR_ID 8856u
+#define ER_UI_TEST_NODE_RENDER_SIDEBAR_SELECTED_INDEX 0u
+#define ER_UI_TEST_NODE_RENDER_DRAWER_ID 8860u
+#define ER_UI_TEST_NODE_RENDER_DROPDOWN_ID 8862u
+#define ER_UI_TEST_NODE_RENDER_DROPDOWN_SELECTED_INDEX 1u
+#define ER_UI_TEST_NODE_RENDER_CONTEXT_MENU_ID 8865u
+#define ER_UI_TEST_NODE_RENDER_CONTEXT_SELECTED_INDEX 2u
+#define ER_UI_TEST_NODE_RENDER_DATE_PICKER_ID 8868u
+#define ER_UI_TEST_NODE_RENDER_DATE_SELECTED_INDEX 2u
+#define ER_UI_TEST_NODE_RENDER_CAROUSEL_ID 8874u
+#define ER_UI_TEST_NODE_RENDER_CALENDAR_ID 8876u
+#define ER_UI_TEST_NODE_RENDER_COMBOBOX_ID 8882u
+#define ER_UI_TEST_NODE_RENDER_COMBOBOX_SELECTED_INDEX 1u
+#define ER_UI_TEST_NODE_RENDER_CONVERSATION_ID 8890u
+#define ER_UI_TEST_NODE_RENDER_BUTTON_GROUP_HITS 3u
+#define ER_UI_TEST_NODE_RENDER_TOGGLE_TOTAL_HITS 6u
+#define ER_UI_TEST_NODE_RENDER_PAGINATION_TOTAL_HITS 10u
+#define ER_UI_TEST_NODE_RENDER_COLLAPSIBLE_TOTAL_HITS 13u
+#define ER_UI_TEST_NODE_RENDER_ACCORDION_TOTAL_HITS 15u
+#define ER_UI_TEST_NODE_RENDER_TWO_HITS 2u
+#define ER_UI_TEST_NODE_RENDER_MENUBAR_HITS 3u
+#define ER_UI_TEST_NODE_RENDER_RADIO_HITS 3u
+#define ER_UI_TEST_NODE_RENDER_INPUT_OTP_HITS 5u
+#define ER_UI_TEST_NODE_RENDER_NAVIGATION_HITS 4u
+#define ER_UI_TEST_NODE_RENDER_SIDEBAR_HITS 3u
+#define ER_UI_TEST_NODE_RENDER_SONNER_ICON_QUADS 4u
+#define ER_UI_TEST_NODE_RENDER_DROPDOWN_HITS 3u
+#define ER_UI_TEST_NODE_RENDER_CONTEXT_HITS 3u
+#define ER_UI_TEST_NODE_RENDER_DATE_PICKER_HITS 5u
+#define ER_UI_TEST_NODE_RENDER_CALENDAR_HITS 6u
+#define ER_UI_TEST_NODE_RENDER_COMBOBOX_HITS 5u
+#define ER_UI_TEST_NODE_RENDER_CHAT_ICON_QUADS 3u
+#define ER_UI_TEST_NODE_RENDER_ONE_HIT 1u
+#define ER_UI_TEST_NODE_RENDER_GRADIENT_RECT_OFFSET 1u
 #define ER_UI_TEST_NODE_MASONRY_COLUMNS 2u
 #define ER_UI_TEST_NODE_MASONRY_CHILDREN 4u
 #define ER_UI_TEST_NODE_MASONRY_THIRD_CHILD 2u
@@ -684,31 +765,33 @@ void run_node_tests(void) {
     er_ui_node_t empty = er_ui_node_empty("No results", "Try another filter.");
     er_ui_node_t list_row = er_ui_node_list_row("Billing", "Command B", ER_UI_TEST_NODE_RENDER_LIST_ROW_ID, true);
     er_ui_node_t field = er_ui_node_field("Email", "name@example.com", ER_UI_TEST_NODE_RENDER_FIELD_ID);
-    er_ui_node_t text_area = er_ui_node_text_area("Message", "Type your message here.", 8401u);
+    er_ui_node_t text_area = er_ui_node_text_area("Message", "Type your message here.", ER_UI_TEST_NODE_RENDER_TEXT_AREA_ID);
     const char* const tab_labels[] = {"Account", "Billing", "Team"};
-    er_ui_node_t tabs = er_ui_node_tabs(tab_labels, 3u, 1u, 8500u);
+    er_ui_node_t tabs =
+        er_ui_node_tabs(tab_labels, ER_UI_TEST_NODE_ARRAY_COUNT(tab_labels), ER_UI_TEST_NODE_RENDER_TABS_SELECTED_INDEX, ER_UI_TEST_NODE_RENDER_TABS_ID);
     const char* const chart_labels[] = {"Jan", "Feb", "Mar"};
     const float chart_values[] = {0.25f, 0.72f, 0.54f};
-    er_ui_node_t chart = er_ui_node_bar_chart("Visitors", chart_labels, chart_values, 3u, 8600u, 1u);
-    er_ui_node_t command = er_ui_node_command_palette("Search components...", 8700u);
-    er_ui_node_t tree_item = er_ui_node_tree_item("src", "expanded", 1u, true, 8800u);
+    er_ui_node_t chart = er_ui_node_bar_chart("Visitors", chart_labels, chart_values, ER_UI_TEST_NODE_ARRAY_COUNT(chart_labels),
+                                              ER_UI_TEST_NODE_RENDER_CHART_ID, ER_UI_TEST_NODE_RENDER_CHART_ACTIVE_INDEX);
+    er_ui_node_t command = er_ui_node_command_palette("Search components...", ER_UI_TEST_NODE_RENDER_COMMAND_ID);
+    er_ui_node_t tree_item = er_ui_node_tree_item("src", "expanded", ER_UI_TEST_NODE_TREE_DEPTH, true, ER_UI_TEST_NODE_RENDER_TREE_ID);
     er_ui_node_t section = er_ui_node_section("Proof", "Verified rows");
-    er_ui_node_t identity = er_ui_node_identity_card("Ken", "browser-node", "personal", 8801u);
-    er_ui_node_t contact = er_ui_node_contact_card("Ada", "publisher", 8802u);
-    er_ui_node_t thread = er_ui_node_thread_row("Sync complete", "Drive import finished", true, 8803u);
-    er_ui_node_t attachment = er_ui_node_attachment_preview("manifest.rkyv", "package manifest", 8804u);
-    er_ui_node_t grant = er_ui_node_capability_grant_row("Mail", "contacts:read", "granted", 8805u);
-    er_ui_node_t proof = er_ui_node_proof_event_row("Package hash", "b3:abc123", "verified", 8806u);
+    er_ui_node_t identity = er_ui_node_identity_card("Ken", "browser-node", "personal", ER_UI_TEST_NODE_RENDER_IDENTITY_ID);
+    er_ui_node_t contact = er_ui_node_contact_card("Ada", "publisher", ER_UI_TEST_NODE_RENDER_CONTACT_ID);
+    er_ui_node_t thread = er_ui_node_thread_row("Sync complete", "Drive import finished", true, ER_UI_TEST_NODE_RENDER_THREAD_ID);
+    er_ui_node_t attachment = er_ui_node_attachment_preview("manifest.rkyv", "package manifest", ER_UI_TEST_NODE_RENDER_ATTACHMENT_ID);
+    er_ui_node_t grant = er_ui_node_capability_grant_row("Mail", "contacts:read", "granted", ER_UI_TEST_NODE_RENDER_GRANT_ID);
+    er_ui_node_t proof = er_ui_node_proof_event_row("Package hash", "b3:abc123", "verified", ER_UI_TEST_NODE_RENDER_PROOF_ID);
     const char* const route_hops[] = {"browser", "admission", "relay"};
-    er_ui_node_t route = er_ui_node_route_path("Admission route", route_hops, 3u);
-    er_ui_node_t package = er_ui_node_package_card("Docs", "cache-ok", "b3:def456", 8807u);
-    er_ui_node_t receipt = er_ui_node_receipt_row("Retrieval", "4 units", "settled", 8808u);
-    er_ui_node_t panel = er_ui_node_panel_header("Dashboard", "Reusable UI primitives", "Run", 8809u);
+    er_ui_node_t route = er_ui_node_route_path("Admission route", route_hops, ER_UI_TEST_NODE_ARRAY_COUNT(route_hops));
+    er_ui_node_t package = er_ui_node_package_card("Docs", "cache-ok", "b3:def456", ER_UI_TEST_NODE_RENDER_ROUTE_PACKAGE_ID);
+    er_ui_node_t receipt = er_ui_node_receipt_row("Retrieval", "4 units", "settled", ER_UI_TEST_NODE_RENDER_RECEIPT_ID);
+    er_ui_node_t panel = er_ui_node_panel_header("Dashboard", "Reusable UI primitives", "Run", ER_UI_TEST_NODE_RENDER_PANEL_ID);
     er_ui_node_t metric = er_ui_node_metric_card("Budget", "184", "units reserved", true, 0.64f, theme.colors.accent);
-    er_ui_node_t transaction = er_ui_node_transaction_row("Storage", "verified retrieval", "today", "8 units", false, 8810u);
-    er_ui_node_t menu = er_ui_node_menu_item("Verify package", "content hash", "new", true, theme.colors.accent, 8811u);
-    er_ui_node_t control = er_ui_node_control_row("Cache package", "avoid repeated retrieval", "enabled", 8812u);
-    er_ui_node_t grid = er_ui_node_grid(2u);
+    er_ui_node_t transaction = er_ui_node_transaction_row("Storage", "verified retrieval", "today", "8 units", false, ER_UI_TEST_NODE_RENDER_TRANSACTION_ID);
+    er_ui_node_t menu = er_ui_node_menu_item("Verify package", "content hash", "new", true, theme.colors.accent, ER_UI_TEST_NODE_RENDER_MENU_ID);
+    er_ui_node_t control = er_ui_node_control_row("Cache package", "avoid repeated retrieval", "enabled", ER_UI_TEST_NODE_RENDER_CONTROL_ID);
+    er_ui_node_t grid = er_ui_node_grid(ER_UI_TEST_NODE_RENDER_GRID_COLUMNS);
     er_ui_node_set_gap(&grid, 4.0f);
     er_ui_node_t grid_badge_a = er_ui_node_badge("One", ER_UI_SHADCN_BADGE_DEFAULT);
     er_ui_node_t grid_badge_b = er_ui_node_badge("Two", ER_UI_SHADCN_BADGE_SECONDARY);
@@ -716,90 +799,116 @@ void run_node_tests(void) {
     expect_status(er_ui_node_add_child(&grid, &grid_badge_a), ER_UI_OK, "node: grid accepts first child");
     expect_status(er_ui_node_add_child(&grid, &grid_badge_b), ER_UI_OK, "node: grid accepts second child");
     expect_status(er_ui_node_add_child(&grid, &grid_badge_c), ER_UI_OK, "node: grid accepts third child");
-    expect_status(er_ui_node_child_bounds(&grid, 2u, er_ui_bounds(0.0f, 0.0f, 260.0f, 80.0f), &resolved_child), ER_UI_OK,
+    expect_status(er_ui_node_child_bounds(&grid, ER_UI_TEST_NODE_RENDER_GRID_THIRD_CHILD, er_ui_bounds(0.0f, 0.0f, 260.0f, 80.0f), &resolved_child),
+                  ER_UI_OK,
                   "node: grid child bounds resolve");
     expect_float(resolved_child.x, 0.0f, "node: grid child bounds x wraps");
     expect_float(resolved_child.y, 42.0f, "node: grid child bounds y wraps");
     expect_float(resolved_child.w, 128.0f, "node: grid child bounds width divides columns");
     expect_float(resolved_child.h, 38.0f, "node: grid child bounds height divides rows");
-    er_ui_node_t scroll = er_ui_node_scroll_area(20.0f, 8813u);
+    er_ui_node_t scroll = er_ui_node_scroll_area(20.0f, ER_UI_TEST_NODE_RENDER_SCROLL_ID);
     er_ui_node_set_gap(&scroll, 4.0f);
-    er_ui_node_t scroll_a = er_ui_node_list_row("Top", "scrolled", 8814u, false);
-    er_ui_node_t scroll_b = er_ui_node_list_row("Bottom", "visible", 8815u, true);
+    er_ui_node_t scroll_a = er_ui_node_list_row("Top", "scrolled", ER_UI_TEST_NODE_RENDER_SCROLL_FIRST_ROW_ID, false);
+    er_ui_node_t scroll_b = er_ui_node_list_row("Bottom", "visible", ER_UI_TEST_NODE_RENDER_SCROLL_SECOND_ROW_ID, true);
     expect_status(er_ui_node_add_child(&scroll, &scroll_a), ER_UI_OK, "node: scroll accepts first child");
     expect_status(er_ui_node_add_child(&scroll, &scroll_b), ER_UI_OK, "node: scroll accepts second child");
-    expect_status(er_ui_node_child_bounds(&scroll, 0u, er_ui_bounds(0.0f, 2560.0f, 260.0f, 64.0f), &resolved_child), ER_UI_OK,
+    expect_status(er_ui_node_child_bounds(&scroll, ER_UI_TEST_NODE_RENDER_SCROLL_FIRST_CHILD, er_ui_bounds(0.0f, 2560.0f, 260.0f, 64.0f),
+                                          &resolved_child),
+                  ER_UI_OK,
                   "node: scroll child bounds resolve offset");
     expect_float(resolved_child.y, 2540.0f, "node: scroll child bounds applies offset");
     er_ui_node_t spacer = er_ui_node_spacer();
     er_ui_node_t tooltip = er_ui_node_tooltip("Verify package");
     er_ui_node_t dialog = er_ui_node_dialog("Run network app", "Verify signed package bytes first.", theme.colors.accent);
     er_ui_node_t ring = er_ui_node_progress_ring(0.58f, theme.colors.success);
-    er_ui_node_t reorderable = er_ui_node_list_row("Drag me", "reorderable", 8816u, false);
-    er_ui_node_set_reorderable(&reorderable, 42u, 8816u, 3u);
+    er_ui_node_t reorderable = er_ui_node_list_row("Drag me", "reorderable", ER_UI_TEST_NODE_RENDER_REORDERABLE_ID, false);
+    er_ui_node_set_reorderable(&reorderable, ER_UI_TEST_NODE_RENDER_REORDER_GROUP_ID, ER_UI_TEST_NODE_RENDER_REORDERABLE_ID,
+                               ER_UI_TEST_NODE_RENDER_REORDER_INDEX);
     er_ui_node_t gradient_card = er_ui_node_card();
     er_ui_node_set_background_gradient(&gradient_card, theme.colors.panel, theme.colors.active);
-    er_ui_node_set_transition(&gradient_card, er_ui_transition_opacity(8910u, 0.0f, 1.0f, 160u));
+    er_ui_node_set_transition(&gradient_card, er_ui_transition_opacity(ER_UI_TEST_NODE_RENDER_TRANSITION_ID, 0.0f, 1.0f,
+                                                                       ER_UI_TEST_NODE_RENDER_TRANSITION_MS));
     er_ui_node_t gradient_label = er_ui_node_text("Gradient card");
     expect_status(er_ui_node_add_child(&gradient_card, &gradient_label), ER_UI_OK, "node: gradient card accepts child");
     er_ui_node_t icon = er_ui_node_icon(ER_UI_ICON_TRUST, "Trust", theme.colors.accent);
-    er_ui_node_t icon_button = er_ui_node_icon_button(ER_UI_ICON_SEARCH, "Search", 8817u, ER_UI_SHADCN_BUTTON_GHOST);
+    er_ui_node_t icon_button = er_ui_node_icon_button(ER_UI_ICON_SEARCH, "Search", ER_UI_TEST_NODE_RENDER_ICON_BUTTON_ID, ER_UI_SHADCN_BUTTON_GHOST);
     const char* const render_button_group_labels[] = {"Copy", "Paste", "More"};
-    er_ui_node_t button_group = er_ui_node_button_group(render_button_group_labels, 3u, 8818u);
+    er_ui_node_t button_group =
+        er_ui_node_button_group(render_button_group_labels, ER_UI_TEST_NODE_ARRAY_COUNT(render_button_group_labels), ER_UI_TEST_NODE_RENDER_BUTTON_GROUP_ID);
     const char* const render_toggle_group_labels[] = {"B", "I", "U"};
-    er_ui_node_t toggle_group = er_ui_node_toggle_group(render_toggle_group_labels, 3u, 1u, 8821u);
+    er_ui_node_t toggle_group = er_ui_node_toggle_group(render_toggle_group_labels, ER_UI_TEST_NODE_ARRAY_COUNT(render_toggle_group_labels),
+                                                        ER_UI_TEST_NODE_TOGGLE_SELECTED_INDEX, ER_UI_TEST_NODE_RENDER_TOGGLE_GROUP_ID);
     const char* const render_pagination_labels[] = {"1", "2"};
-    er_ui_node_t pagination = er_ui_node_pagination(render_pagination_labels, 2u, 0u, 8824u);
+    er_ui_node_t pagination = er_ui_node_pagination(render_pagination_labels, ER_UI_TEST_NODE_ARRAY_COUNT(render_pagination_labels),
+                                                    ER_UI_TEST_NODE_RENDER_PAGINATION_SELECTED_INDEX, ER_UI_TEST_NODE_RENDER_PAGINATION_ID);
     const char* const render_collapsible_titles[] = {"Accordion", "Collapsible"};
     const char* const render_collapsible_details[] = {"one open item", "disclosure rows"};
-    er_ui_node_t collapsible = er_ui_node_collapsible("Disclosure", render_collapsible_titles, render_collapsible_details, 2u, true, 8828u);
+    er_ui_node_t collapsible = er_ui_node_collapsible("Disclosure", render_collapsible_titles, render_collapsible_details,
+                                                      ER_UI_TEST_NODE_ARRAY_COUNT(render_collapsible_titles), true,
+                                                      ER_UI_TEST_NODE_RENDER_COLLAPSIBLE_ID);
     const char* const render_accordion_titles[] = {"Is it accessible?", "Is it styled?"};
     const char* const render_accordion_bodies[] = {"Yes, each trigger is exposed.", "It uses shared shadcn primitives."};
-    er_ui_node_t accordion = er_ui_node_accordion(render_accordion_titles, render_accordion_bodies, 2u, 8831u);
+    er_ui_node_t accordion = er_ui_node_accordion(render_accordion_titles, render_accordion_bodies, ER_UI_TEST_NODE_ARRAY_COUNT(render_accordion_titles),
+                                                  ER_UI_TEST_NODE_RENDER_ACCORDION_ID);
     er_ui_node_t hover_card = er_ui_node_hover_card("ER", "UI core", "Variable font rendering stays required.", theme.colors.accent);
-    er_ui_node_t popover = er_ui_node_popover("Open popover", "Dimensions", "Set layout constraints.", "Width", "100%", 8833u);
-    er_ui_node_t sheet = er_ui_node_sheet("Profile", "Update local profile.", "Name", "EdgeRun", "Save changes", 8835u);
+    er_ui_node_t popover = er_ui_node_popover("Open popover", "Dimensions", "Set layout constraints.", "Width", "100%", ER_UI_TEST_NODE_RENDER_POPOVER_ID);
+    er_ui_node_t sheet = er_ui_node_sheet("Profile", "Update local profile.", "Name", "EdgeRun", "Save changes", ER_UI_TEST_NODE_RENDER_SHEET_ID);
     const char* const render_kbd_keys[] = {"Ctrl", "K"};
-    er_ui_node_t kbd = er_ui_node_kbd(render_kbd_keys, 2u, "Open command palette");
+    er_ui_node_t kbd = er_ui_node_kbd(render_kbd_keys, ER_UI_TEST_NODE_ARRAY_COUNT(render_kbd_keys), "Open command palette");
     const char* const render_menubar_items[] = {"File", "Edit", "View"};
-    er_ui_node_t menubar = er_ui_node_menubar(render_menubar_items, 3u, 1u, 8837u);
+    er_ui_node_t menubar = er_ui_node_menubar(render_menubar_items, ER_UI_TEST_NODE_ARRAY_COUNT(render_menubar_items),
+                                              ER_UI_TEST_NODE_MENUBAR_SELECTED_INDEX, ER_UI_TEST_NODE_RENDER_MENUBAR_ID);
     const char* const render_radio_group_labels[] = {"Default", "Comfortable", "Compact"};
-    er_ui_node_t radio_group = er_ui_node_radio_group(render_radio_group_labels, 3u, 0u, 8840u);
-    er_ui_node_t input_group = er_ui_node_input_group("URL", "https://edgerun.local", "Copy", 8843u);
+    er_ui_node_t radio_group = er_ui_node_radio_group(render_radio_group_labels, ER_UI_TEST_NODE_ARRAY_COUNT(render_radio_group_labels),
+                                                      ER_UI_TEST_NODE_RENDER_RADIO_SELECTED_INDEX, ER_UI_TEST_NODE_RENDER_RADIO_GROUP_ID);
+    er_ui_node_t input_group = er_ui_node_input_group("URL", "https://edgerun.local", "Copy", ER_UI_TEST_NODE_RENDER_INPUT_GROUP_ID);
     const char* const render_otp_values[] = {"1", "2", "3", "-", "4", ""};
-    er_ui_node_t input_otp = er_ui_node_input_otp(render_otp_values, 6u, 5u, 8845u);
+    er_ui_node_t input_otp = er_ui_node_input_otp(render_otp_values, ER_UI_TEST_NODE_ARRAY_COUNT(render_otp_values),
+                                                 ER_UI_TEST_NODE_RENDER_INPUT_OTP_FOCUSED_INDEX, ER_UI_TEST_NODE_RENDER_INPUT_OTP_ID);
     const char* const render_nav_tabs[] = {"Docs", "Components", "Examples"};
-    er_ui_node_t navigation_menu =
-      er_ui_node_navigation_menu(render_nav_tabs, 3u, 1u, "Components", "Reusable primitives", "Accordion", "Disclosure rows", 8852u);
+    er_ui_node_t navigation_menu = er_ui_node_navigation_menu(render_nav_tabs, ER_UI_TEST_NODE_ARRAY_COUNT(render_nav_tabs),
+                                                              ER_UI_TEST_NODE_RENDER_NAVIGATION_SELECTED_INDEX, "Components", "Reusable primitives",
+                                                              "Accordion", "Disclosure rows", ER_UI_TEST_NODE_RENDER_NAVIGATION_ID);
     const char* const render_resizable_labels[] = {"One", "Two", "Three"};
-    er_ui_node_t resizable = er_ui_node_resizable(render_resizable_labels, 3u);
+    er_ui_node_t resizable = er_ui_node_resizable(render_resizable_labels, ER_UI_TEST_NODE_ARRAY_COUNT(render_resizable_labels));
     const char* const render_sidebar_items[] = {"Dashboard", "Transactions", "Settings"};
-    er_ui_node_t sidebar = er_ui_node_sidebar("App", "Workspace", render_sidebar_items, 3u, 0u, "Dashboard", "Proof-aware activity", 8856u);
+    er_ui_node_t sidebar = er_ui_node_sidebar("App", "Workspace", render_sidebar_items, ER_UI_TEST_NODE_ARRAY_COUNT(render_sidebar_items),
+                                              ER_UI_TEST_NODE_RENDER_SIDEBAR_SELECTED_INDEX, "Dashboard", "Proof-aware activity",
+                                              ER_UI_TEST_NODE_RENDER_SIDEBAR_ID);
     const char* const render_sonner_messages[] = {"Event created", "Upload failed"};
     const er_ui_icon_t render_sonner_icons[] = {ER_UI_ICON_CHECK, ER_UI_ICON_WARNING};
     const er_ui_color4_t render_sonner_colors[] = {theme.colors.success, theme.colors.danger};
-    er_ui_node_t sonner = er_ui_node_sonner(render_sonner_messages, render_sonner_icons, render_sonner_colors, 2u);
+    er_ui_node_t sonner = er_ui_node_sonner(render_sonner_messages, render_sonner_icons, render_sonner_colors,
+                                            ER_UI_TEST_NODE_ARRAY_COUNT(render_sonner_messages));
     er_ui_node_t aspect = er_ui_node_aspect_ratio("Preview", ER_UI_ICON_FILE);
     er_ui_node_t alert_dialog = er_ui_node_alert_dialog("Are you absolutely sure?", "This action cannot be undone.", ER_UI_ICON_WARNING);
     er_ui_node_t direction = er_ui_node_direction("Left to right", "Right to left");
-    er_ui_node_t drawer = er_ui_node_drawer("Drawer", "Adjust display density.", "Density", 0.42f, 8860u);
+    er_ui_node_t drawer = er_ui_node_drawer("Drawer", "Adjust display density.", "Density", 0.42f, ER_UI_TEST_NODE_RENDER_DRAWER_ID);
     const char* const render_dropdown_labels[] = {"Profile", "Billing", "Logout"};
     const char* const render_dropdown_shortcuts[] = {"P", "B", ""};
-    er_ui_node_t dropdown_menu = er_ui_node_dropdown_menu(render_dropdown_labels, render_dropdown_shortcuts, 3u, 1u, 8862u);
-    er_ui_node_t context_menu = er_ui_node_context_menu("Actions", "Right click options", render_dropdown_labels, render_dropdown_shortcuts, 3u, 2u, 8865u);
+    er_ui_node_t dropdown_menu = er_ui_node_dropdown_menu(render_dropdown_labels, render_dropdown_shortcuts, ER_UI_TEST_NODE_ARRAY_COUNT(render_dropdown_labels),
+                                                          ER_UI_TEST_NODE_RENDER_DROPDOWN_SELECTED_INDEX, ER_UI_TEST_NODE_RENDER_DROPDOWN_ID);
+    er_ui_node_t context_menu =
+        er_ui_node_context_menu("Actions", "Right click options", render_dropdown_labels, render_dropdown_shortcuts,
+                                ER_UI_TEST_NODE_ARRAY_COUNT(render_dropdown_labels), ER_UI_TEST_NODE_RENDER_CONTEXT_SELECTED_INDEX,
+                                ER_UI_TEST_NODE_RENDER_CONTEXT_MENU_ID);
     const char* const render_date_days[] = {"12", "13", "14", "15"};
-    er_ui_node_t date_picker = er_ui_node_date_picker("Pick a date", "May 2026", render_date_days, 4u, 2u, 8868u);
+    er_ui_node_t date_picker = er_ui_node_date_picker("Pick a date", "May 2026", render_date_days, ER_UI_TEST_NODE_ARRAY_COUNT(render_date_days),
+                                                      ER_UI_TEST_NODE_RENDER_DATE_SELECTED_INDEX, ER_UI_TEST_NODE_RENDER_DATE_PICKER_ID);
     const char* const render_carousel_items[] = {"One", "Two", "Three"};
-    er_ui_node_t carousel = er_ui_node_carousel(render_carousel_items, 3u, 8874u);
-    er_ui_node_t calendar = er_ui_node_calendar("May 2026", render_date_days, 4u, 2u, 8876u);
+    er_ui_node_t carousel = er_ui_node_carousel(render_carousel_items, ER_UI_TEST_NODE_ARRAY_COUNT(render_carousel_items), ER_UI_TEST_NODE_RENDER_CAROUSEL_ID);
+    er_ui_node_t calendar = er_ui_node_calendar("May 2026", render_date_days, ER_UI_TEST_NODE_ARRAY_COUNT(render_date_days),
+                                                ER_UI_TEST_NODE_RENDER_DATE_SELECTED_INDEX, ER_UI_TEST_NODE_RENDER_CALENDAR_ID);
     const char* const render_combobox_options[] = {"Apple", "Banana", "Cherry"};
-    er_ui_node_t combobox = er_ui_node_combobox("Fruit", "Banana", "Search fruit...", render_combobox_options, 3u, 1u, 8882u);
+    er_ui_node_t combobox = er_ui_node_combobox("Fruit", "Banana", "Search fruit...", render_combobox_options,
+                                                ER_UI_TEST_NODE_ARRAY_COUNT(render_combobox_options), ER_UI_TEST_NODE_RENDER_COMBOBOX_SELECTED_INDEX,
+                                                ER_UI_TEST_NODE_RENDER_COMBOBOX_ID);
     const char* const render_diff_lines[] = {"@@ -1,2 +1,2 @@", "-old", "+new", "*** End Patch"};
-    er_ui_node_t diff_body = er_ui_node_diff_body(render_diff_lines, 4u, true);
+    er_ui_node_t diff_body = er_ui_node_diff_body(render_diff_lines, ER_UI_TEST_NODE_ARRAY_COUNT(render_diff_lines), true);
     er_ui_node_t chat_message = er_ui_node_chat_message(ER_UI_SHADCN_CHAT_ROLE_ASSISTANT, "Response", "Done");
     er_ui_node_t chat_timeline = er_ui_node_chat_message(ER_UI_SHADCN_CHAT_ROLE_TOOL_RUNNING, "Started", "shell");
-    er_ui_node_t chat_diff = er_ui_node_chat_diff_message("Patch", render_diff_lines, 4u, true);
-    er_ui_node_t conversation = er_ui_node_conversation(8.0f, 8890u);
+    er_ui_node_t chat_diff = er_ui_node_chat_diff_message("Patch", render_diff_lines, ER_UI_TEST_NODE_ARRAY_COUNT(render_diff_lines), true);
+    er_ui_node_t conversation = er_ui_node_conversation(8.0f, ER_UI_TEST_NODE_RENDER_CONVERSATION_ID);
     er_ui_node_t conversation_a = er_ui_node_chat_message(ER_UI_SHADCN_CHAT_ROLE_USER, "", "Run tests");
     er_ui_node_t conversation_b = er_ui_node_chat_message(ER_UI_SHADCN_CHAT_ROLE_ASSISTANT, "Response", "Tests passed");
     expect_status(er_ui_node_add_child(&conversation, &conversation_a), ER_UI_OK, "node: render conversation accepts first child");
@@ -891,19 +1000,19 @@ void run_node_tests(void) {
     size_t hits_before_groups = scene.hit_count;
     expect_status(er_ui_node_render(&button_group, &scene, face, er_ui_bounds(160.0f, 2870.0f, 210.0f, 38.0f), theme), ER_UI_OK,
                   "node: button group renders");
-    expect_size(scene.hit_count, hits_before_groups + 3u, "node: button group emits button hits");
+    expect_size(scene.hit_count, hits_before_groups + ER_UI_TEST_NODE_RENDER_BUTTON_GROUP_HITS, "node: button group emits button hits");
     expect_status(er_ui_node_render(&toggle_group, &scene, face, er_ui_bounds(0.0f, 2994.0f, 126.0f, 38.0f), theme), ER_UI_OK,
                   "node: toggle group renders");
-    expect_size(scene.hit_count, hits_before_groups + 6u, "node: toggle group emits button hits");
+    expect_size(scene.hit_count, hits_before_groups + ER_UI_TEST_NODE_RENDER_TOGGLE_TOTAL_HITS, "node: toggle group emits button hits");
     expect_status(er_ui_node_render(&pagination, &scene, face, er_ui_bounds(140.0f, 2994.0f, 212.0f, 40.0f), theme), ER_UI_OK,
                   "node: pagination renders");
-    expect_size(scene.hit_count, hits_before_groups + 10u, "node: pagination emits navigation hits");
+    expect_size(scene.hit_count, hits_before_groups + ER_UI_TEST_NODE_RENDER_PAGINATION_TOTAL_HITS, "node: pagination emits navigation hits");
     expect_status(er_ui_node_render(&collapsible, &scene, face, er_ui_bounds(0.0f, 3044.0f, 320.0f, 148.0f), theme), ER_UI_OK,
                   "node: collapsible renders");
-    expect_size(scene.hit_count, hits_before_groups + 13u, "node: collapsible emits trigger and row hits");
+    expect_size(scene.hit_count, hits_before_groups + ER_UI_TEST_NODE_RENDER_COLLAPSIBLE_TOTAL_HITS, "node: collapsible emits trigger and row hits");
     expect_status(er_ui_node_render(&accordion, &scene, face, er_ui_bounds(0.0f, 3204.0f, 340.0f, 156.0f), theme), ER_UI_OK,
                   "node: accordion renders");
-    expect_size(scene.hit_count, hits_before_groups + 15u, "node: accordion emits item trigger hits");
+    expect_size(scene.hit_count, hits_before_groups + ER_UI_TEST_NODE_RENDER_ACCORDION_TOTAL_HITS, "node: accordion emits item trigger hits");
     size_t text_before_hover = scene.text_quad_count;
     expect_status(er_ui_node_render(&hover_card, &scene, face, er_ui_bounds(0.0f, 3372.0f, 320.0f, 88.0f), theme), ER_UI_OK,
                   "node: hover card renders");
@@ -911,11 +1020,11 @@ void run_node_tests(void) {
     size_t hits_before_popover = scene.hit_count;
     expect_status(er_ui_node_render(&popover, &scene, face, er_ui_bounds(0.0f, 3472.0f, 320.0f, 170.0f), theme), ER_UI_OK,
                   "node: popover renders");
-    expect_size(scene.hit_count, hits_before_popover + 2u, "node: popover emits trigger and field hits");
+    expect_size(scene.hit_count, hits_before_popover + ER_UI_TEST_NODE_RENDER_TWO_HITS, "node: popover emits trigger and field hits");
     size_t hits_before_sheet = scene.hit_count;
     expect_status(er_ui_node_render(&sheet, &scene, face, er_ui_bounds(0.0f, 3654.0f, 320.0f, 196.0f), theme), ER_UI_OK,
                   "node: sheet renders");
-    expect_size(scene.hit_count, hits_before_sheet + 2u, "node: sheet emits field and button hits");
+    expect_size(scene.hit_count, hits_before_sheet + ER_UI_TEST_NODE_RENDER_TWO_HITS, "node: sheet emits field and button hits");
     size_t rects_before_kbd = scene.rect_count;
     expect_status(er_ui_node_render(&kbd, &scene, face, er_ui_bounds(0.0f, 3862.0f, 320.0f, 40.0f), theme), ER_UI_OK,
                   "node: kbd renders");
@@ -923,23 +1032,23 @@ void run_node_tests(void) {
     size_t hits_before_menubar = scene.hit_count;
     expect_status(er_ui_node_render(&menubar, &scene, face, er_ui_bounds(0.0f, 3914.0f, 300.0f, 46.0f), theme), ER_UI_OK,
                   "node: menubar renders");
-    expect_size(scene.hit_count, hits_before_menubar + 3u, "node: menubar emits item hits");
+    expect_size(scene.hit_count, hits_before_menubar + ER_UI_TEST_NODE_RENDER_MENUBAR_HITS, "node: menubar emits item hits");
     size_t hits_before_radio_group = scene.hit_count;
     expect_status(er_ui_node_render(&radio_group, &scene, face, er_ui_bounds(0.0f, 3972.0f, 260.0f, 106.0f), theme), ER_UI_OK,
                   "node: radio group renders");
-    expect_size(scene.hit_count, hits_before_radio_group + 3u, "node: radio group emits radio hits");
+    expect_size(scene.hit_count, hits_before_radio_group + ER_UI_TEST_NODE_RENDER_RADIO_HITS, "node: radio group emits radio hits");
     size_t hits_before_input_group = scene.hit_count;
     expect_status(er_ui_node_render(&input_group, &scene, face, er_ui_bounds(0.0f, 4090.0f, 340.0f, 58.0f), theme), ER_UI_OK,
                   "node: input group renders");
-    expect_size(scene.hit_count, hits_before_input_group + 2u, "node: input group emits field and button hits");
+    expect_size(scene.hit_count, hits_before_input_group + ER_UI_TEST_NODE_RENDER_TWO_HITS, "node: input group emits field and button hits");
     size_t hits_before_input_otp = scene.hit_count;
     expect_status(er_ui_node_render(&input_otp, &scene, face, er_ui_bounds(0.0f, 4160.0f, 300.0f, 52.0f), theme), ER_UI_OK,
                   "node: input otp renders");
-    expect_size(scene.hit_count, hits_before_input_otp + 5u, "node: input otp emits editable cell hits");
+    expect_size(scene.hit_count, hits_before_input_otp + ER_UI_TEST_NODE_RENDER_INPUT_OTP_HITS, "node: input otp emits editable cell hits");
     size_t hits_before_navigation_menu = scene.hit_count;
     expect_status(er_ui_node_render(&navigation_menu, &scene, face, er_ui_bounds(0.0f, 4224.0f, 360.0f, 154.0f), theme), ER_UI_OK,
                   "node: navigation menu renders");
-    expect_size(scene.hit_count, hits_before_navigation_menu + 4u, "node: navigation menu emits tab and row hits");
+    expect_size(scene.hit_count, hits_before_navigation_menu + ER_UI_TEST_NODE_RENDER_NAVIGATION_HITS, "node: navigation menu emits tab and row hits");
     size_t rects_before_resizable = scene.rect_count;
     expect_status(er_ui_node_render(&resizable, &scene, face, er_ui_bounds(0.0f, 4390.0f, 360.0f, 112.0f), theme), ER_UI_OK,
                   "node: resizable renders");
@@ -947,11 +1056,12 @@ void run_node_tests(void) {
     size_t hits_before_sidebar = scene.hit_count;
     expect_status(er_ui_node_render(&sidebar, &scene, face, er_ui_bounds(0.0f, 4514.0f, 420.0f, 176.0f), theme), ER_UI_OK,
                   "node: sidebar renders");
-    expect_size(scene.hit_count, hits_before_sidebar + 3u, "node: sidebar emits menu item hits");
+    expect_size(scene.hit_count, hits_before_sidebar + ER_UI_TEST_NODE_RENDER_SIDEBAR_HITS, "node: sidebar emits menu item hits");
     size_t icon_quads_before_sonner = scene.icon_quad_count;
     expect_status(er_ui_node_render(&sonner, &scene, face, er_ui_bounds(0.0f, 4702.0f, 300.0f, 112.0f), theme), ER_UI_OK,
                   "node: sonner renders");
-    expect_size(scene.icon_quad_count, icon_quads_before_sonner + 4u, "node: sonner emits toast chrome and status icon quads");
+    expect_size(scene.icon_quad_count, icon_quads_before_sonner + ER_UI_TEST_NODE_RENDER_SONNER_ICON_QUADS,
+                "node: sonner emits toast chrome and status icon quads");
     size_t icon_quads_before_aspect = scene.icon_quad_count;
     expect_status(er_ui_node_render(&aspect, &scene, face, er_ui_bounds(0.0f, 4826.0f, 320.0f, 180.0f), theme), ER_UI_OK,
                   "node: aspect ratio renders");
@@ -969,35 +1079,35 @@ void run_node_tests(void) {
     size_t hits_before_drawer = scene.hit_count;
     expect_status(er_ui_node_render(&drawer, &scene, face, er_ui_bounds(0.0f, 5256.0f, 320.0f, 184.0f), theme), ER_UI_OK,
                   "node: drawer renders");
-    expect_size(scene.hit_count, hits_before_drawer + 2u, "node: drawer emits slider and button hits");
+    expect_size(scene.hit_count, hits_before_drawer + ER_UI_TEST_NODE_RENDER_TWO_HITS, "node: drawer emits slider and button hits");
     size_t hits_before_dropdown = scene.hit_count;
     expect_status(er_ui_node_render(&dropdown_menu, &scene, face, er_ui_bounds(0.0f, 5452.0f, 260.0f, 144.0f), theme), ER_UI_OK,
                   "node: dropdown menu renders");
-    expect_size(scene.hit_count, hits_before_dropdown + 3u, "node: dropdown menu emits item hits");
+    expect_size(scene.hit_count, hits_before_dropdown + ER_UI_TEST_NODE_RENDER_DROPDOWN_HITS, "node: dropdown menu emits item hits");
     size_t hits_before_context = scene.hit_count;
     expect_status(er_ui_node_render(&context_menu, &scene, face, er_ui_bounds(0.0f, 5608.0f, 280.0f, 220.0f), theme), ER_UI_OK,
                   "node: context menu renders");
-    expect_size(scene.hit_count, hits_before_context + 3u, "node: context menu emits item hits");
+    expect_size(scene.hit_count, hits_before_context + ER_UI_TEST_NODE_RENDER_CONTEXT_HITS, "node: context menu emits item hits");
     size_t hits_before_date_picker = scene.hit_count;
     expect_status(er_ui_node_render(&date_picker, &scene, face, er_ui_bounds(0.0f, 5840.0f, 300.0f, 128.0f), theme), ER_UI_OK,
                   "node: date picker renders");
-    expect_size(scene.hit_count, hits_before_date_picker + 5u, "node: date picker emits trigger and day hits");
+    expect_size(scene.hit_count, hits_before_date_picker + ER_UI_TEST_NODE_RENDER_DATE_PICKER_HITS, "node: date picker emits trigger and day hits");
     size_t hits_before_carousel = scene.hit_count;
     size_t icons_before_carousel = scene.icon_quad_count;
     expect_status(er_ui_node_render(&carousel, &scene, face, er_ui_bounds(0.0f, 5980.0f, 420.0f, 96.0f), theme), ER_UI_OK,
                   "node: carousel renders");
-    expect_size(scene.hit_count, hits_before_carousel + 2u, "node: carousel emits previous and next hits");
-    expect_size(scene.icon_quad_count, icons_before_carousel + 2u, "node: carousel emits chevron icons");
+    expect_size(scene.hit_count, hits_before_carousel + ER_UI_TEST_NODE_RENDER_TWO_HITS, "node: carousel emits previous and next hits");
+    expect_size(scene.icon_quad_count, icons_before_carousel + ER_UI_TEST_NODE_RENDER_TWO_HITS, "node: carousel emits chevron icons");
     size_t hits_before_calendar = scene.hit_count;
     size_t icons_before_calendar = scene.icon_quad_count;
     expect_status(er_ui_node_render(&calendar, &scene, face, er_ui_bounds(0.0f, 6088.0f, 320.0f, 150.0f), theme), ER_UI_OK,
                   "node: calendar renders");
-    expect_size(scene.hit_count, hits_before_calendar + 6u, "node: calendar emits navigation and day hits");
-    expect_size(scene.icon_quad_count, icons_before_calendar + 2u, "node: calendar emits navigation icons");
+    expect_size(scene.hit_count, hits_before_calendar + ER_UI_TEST_NODE_RENDER_CALENDAR_HITS, "node: calendar emits navigation and day hits");
+    expect_size(scene.icon_quad_count, icons_before_calendar + ER_UI_TEST_NODE_RENDER_TWO_HITS, "node: calendar emits navigation icons");
     size_t hits_before_combobox = scene.hit_count;
     expect_status(er_ui_node_render(&combobox, &scene, face, er_ui_bounds(0.0f, 6250.0f, 300.0f, 250.0f), theme), ER_UI_OK,
                   "node: combobox renders");
-    expect_size(scene.hit_count, hits_before_combobox + 5u, "node: combobox emits select, command, and option hits");
+    expect_size(scene.hit_count, hits_before_combobox + ER_UI_TEST_NODE_RENDER_COMBOBOX_HITS, "node: combobox emits select, command, and option hits");
     size_t text_before_diff = scene.text_quad_count;
     expect_status(er_ui_node_render(&diff_body, &scene, face, er_ui_bounds(0.0f, 6512.0f, 360.0f, 128.0f), theme), ER_UI_OK,
                   "node: diff body renders");
@@ -1010,29 +1120,30 @@ void run_node_tests(void) {
                   "node: chat timeline message renders");
     expect_status(er_ui_node_render(&chat_diff, &scene, face, er_ui_bounds(0.0f, 6868.0f, 380.0f, 154.0f), theme), ER_UI_OK,
                   "node: chat diff message renders");
-    expect_true(scene.icon_quad_count >= icons_before_chat + 3u, "node: chat messages emit role icons");
+    expect_true(scene.icon_quad_count >= icons_before_chat + ER_UI_TEST_NODE_RENDER_CHAT_ICON_QUADS, "node: chat messages emit role icons");
     expect_true(scene.text_quad_count > text_before_chat, "node: chat messages emit variable font text");
     size_t hits_before_conversation = scene.hit_count;
     expect_status(er_ui_node_render(&conversation, &scene, face, er_ui_bounds(0.0f, 7034.0f, 380.0f, 220.0f), theme), ER_UI_OK,
                   "node: conversation renders");
-    expect_size(scene.hit_count, hits_before_conversation + 1u, "node: conversation emits scroll hit");
+    expect_size(scene.hit_count, hits_before_conversation + ER_UI_TEST_NODE_RENDER_ONE_HIT, "node: conversation emits scroll hit");
     size_t drag_sources_before = scene.drag_source_count;
     size_t drop_targets_before = scene.drop_target_count;
     expect_status(er_ui_node_render(&reorderable, &scene, face, er_ui_bounds(0.0f, 2930.0f, 260.0f, 52.0f), theme), ER_UI_OK,
                   "node: reorderable row renders");
-    expect_size(scene.drag_source_count, drag_sources_before + 1u, "node: reorderable emits drag source");
-    expect_size(scene.drop_target_count, drop_targets_before + 1u, "node: reorderable emits drop target");
-    expect_size(scene.drag_sources[drag_sources_before].scope_id, 42u, "node: drag source scope is preserved");
-    expect_size(scene.drag_sources[drag_sources_before].item_id, 8816u, "node: drag source item is preserved");
-    expect_size(scene.drop_targets[drop_targets_before].index, 3u, "node: drop target index is preserved");
+    expect_size(scene.drag_source_count, drag_sources_before + ER_UI_TEST_NODE_RENDER_ONE_HIT, "node: reorderable emits drag source");
+    expect_size(scene.drop_target_count, drop_targets_before + ER_UI_TEST_NODE_RENDER_ONE_HIT, "node: reorderable emits drop target");
+    expect_size(scene.drag_sources[drag_sources_before].scope_id, ER_UI_TEST_NODE_RENDER_REORDER_GROUP_ID, "node: drag source scope is preserved");
+    expect_size(scene.drag_sources[drag_sources_before].item_id, ER_UI_TEST_NODE_RENDER_REORDERABLE_ID, "node: drag source item is preserved");
+    expect_size(scene.drop_targets[drop_targets_before].index, ER_UI_TEST_NODE_RENDER_REORDER_INDEX, "node: drop target index is preserved");
     size_t rects_before_gradient = scene.rect_count;
     size_t transitions_before_gradient = scene.transition_count;
     expect_status(er_ui_node_render(&gradient_card, &scene, face, er_ui_bounds(280.0f, 2930.0f, 220.0f, 90.0f), theme), ER_UI_OK,
                   "node: gradient transition card renders");
-    expect_size(scene.transition_count, transitions_before_gradient + 1u, "node: transition decorator emits transition");
-    expect_size(scene.transitions[transitions_before_gradient].id, 8910u, "node: transition decorator preserves id");
+    expect_size(scene.transition_count, transitions_before_gradient + ER_UI_TEST_NODE_RENDER_ONE_HIT, "node: transition decorator emits transition");
+    expect_size(scene.transitions[transitions_before_gradient].id, ER_UI_TEST_NODE_RENDER_TRANSITION_ID, "node: transition decorator preserves id");
     expect_true(scene.rect_count > rects_before_gradient, "node: gradient card emits rects");
-    expect_size(scene.rects[rects_before_gradient + 1u].mode, ER_UI_RECT_LINEAR_GRADIENT, "node: gradient card emits linear gradient background");
+    expect_size(scene.rects[rects_before_gradient + ER_UI_TEST_NODE_RENDER_GRADIENT_RECT_OFFSET].mode, ER_UI_RECT_LINEAR_GRADIENT,
+                "node: gradient card emits linear gradient background");
 
     expect_true(scene.rect_count > 0u, "node: render emits rect geometry");
     expect_true(scene.hit_count > 0u, "node: render emits hit targets");
