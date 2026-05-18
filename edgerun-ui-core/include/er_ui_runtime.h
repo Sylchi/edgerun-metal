@@ -188,9 +188,20 @@ size_t er_ui_text_buffer_cursor_chars(const er_ui_text_buffer_t* buffer);
 
 er_ui_status_t er_ui_text_buffer_set_text(er_ui_text_buffer_t* buffer, const char* text);
 er_ui_status_t er_ui_text_buffer_insert(er_ui_text_buffer_t* buffer, const char* text);
-er_ui_status_t er_ui_text_buffer_handle_text_input(er_ui_text_buffer_t* buffer, const char* text, er_ui_text_buffer_action_t* out_action);
-er_ui_status_t er_ui_text_buffer_handle_key(er_ui_text_buffer_t* buffer, er_ui_key_t key, bool shift, er_ui_text_buffer_action_t* out_action);
-er_ui_status_t er_ui_text_buffer_handle_key_with_modifiers(er_ui_text_buffer_t* buffer, er_ui_key_t key, er_ui_key_modifiers_t modifiers, er_ui_text_buffer_action_t* out_action);
+er_ui_status_t er_ui_text_buffer_handle_text_input(
+  er_ui_text_buffer_t* buffer,
+  const char* text,
+  er_ui_text_buffer_action_t* out_action);
+er_ui_status_t er_ui_text_buffer_handle_key(
+  er_ui_text_buffer_t* buffer,
+  er_ui_key_t key,
+  bool shift,
+  er_ui_text_buffer_action_t* out_action);
+er_ui_status_t er_ui_text_buffer_handle_key_with_modifiers(
+  er_ui_text_buffer_t* buffer,
+  er_ui_key_t key,
+  er_ui_key_modifiers_t modifiers,
+  er_ui_text_buffer_action_t* out_action);
 
 void er_ui_text_buffer_delete_before_cursor(er_ui_text_buffer_t* buffer);
 void er_ui_text_buffer_delete_after_cursor(er_ui_text_buffer_t* buffer);
@@ -202,15 +213,25 @@ void er_ui_text_buffer_move_cursor_right(er_ui_text_buffer_t* buffer);
 void er_ui_text_buffer_move_cursor_to_start(er_ui_text_buffer_t* buffer);
 void er_ui_text_buffer_move_cursor_to_end(er_ui_text_buffer_t* buffer);
 
-er_ui_status_t er_ui_text_buffer_value_with_cursor(const er_ui_text_buffer_t* buffer, const char* marker, char** out_text);
-er_ui_status_t er_ui_text_buffer_display_value(const er_ui_text_buffer_t* buffer, const char* placeholder, const char* cursor_marker, char** out_text);
+er_ui_status_t er_ui_text_buffer_value_with_cursor(
+  const er_ui_text_buffer_t* buffer,
+  const char* marker,
+  char** out_text);
+er_ui_status_t er_ui_text_buffer_display_value(
+  const er_ui_text_buffer_t* buffer,
+  const char* placeholder,
+  const char* cursor_marker,
+  char** out_text);
 void er_ui_text_buffer_free_text(const er_ui_text_buffer_t* buffer, char* text);
 
 er_ui_status_t er_ui_runtime_state_init(er_ui_runtime_state_t* state);
 er_ui_status_t er_ui_runtime_state_init_with_allocator(er_ui_runtime_state_t* state, er_ui_allocator_t allocator);
 void er_ui_runtime_state_destroy(er_ui_runtime_state_t* state);
 float er_ui_runtime_transition_value(const er_ui_runtime_state_t* state, er_ui_transition_t spec);
-er_ui_status_t er_ui_runtime_sync_transitions(er_ui_runtime_state_t* state, const er_ui_scene_t* scene, bool* out_changed);
+er_ui_status_t er_ui_runtime_sync_transitions(
+  er_ui_runtime_state_t* state,
+  const er_ui_scene_t* scene,
+  bool* out_changed);
 bool er_ui_runtime_advance_transitions(er_ui_runtime_state_t* state, uint32_t delta_ms);
 bool er_ui_runtime_transitions_active(const er_ui_runtime_state_t* state);
 
@@ -218,7 +239,11 @@ float er_ui_runtime_scroll_offset(const er_ui_runtime_state_t* state, uint32_t i
 bool er_ui_runtime_toggle_value(const er_ui_runtime_state_t* state, uint32_t id, bool fallback);
 float er_ui_runtime_slider_value(const er_ui_runtime_state_t* state, uint32_t id, float fallback);
 bool er_ui_runtime_open_value(const er_ui_runtime_state_t* state, uint32_t id, bool fallback);
-size_t er_ui_runtime_selected_tab_index(const er_ui_runtime_state_t* state, uint32_t base_id, size_t len, size_t fallback);
+size_t er_ui_runtime_selected_tab_index(
+  const er_ui_runtime_state_t* state,
+  uint32_t base_id,
+  size_t len,
+  size_t fallback);
 const char* er_ui_runtime_text_value(const er_ui_runtime_state_t* state, uint32_t id, const char* fallback);
 
 er_ui_status_t er_ui_runtime_set_scroll_offset(er_ui_runtime_state_t* state, uint32_t id, float offset);
@@ -232,19 +257,36 @@ bool er_ui_runtime_is_focusable_hit(er_ui_hit_t hit);
 bool er_ui_runtime_is_text_hit(er_ui_hit_t hit);
 bool er_ui_runtime_focused(const er_ui_runtime_state_t* state, er_ui_hit_t* out_hit);
 void er_ui_runtime_clear_focus(er_ui_runtime_state_t* state);
-er_ui_status_t er_ui_runtime_set_focus_scope(er_ui_runtime_state_t* state, uint32_t open_id, const er_ui_hit_t* hits, size_t hit_count);
+er_ui_status_t er_ui_runtime_set_focus_scope(
+  er_ui_runtime_state_t* state,
+  uint32_t open_id,
+  const er_ui_hit_t* hits,
+  size_t hit_count);
 void er_ui_runtime_clear_focus_scope(er_ui_runtime_state_t* state, uint32_t open_id);
 bool er_ui_runtime_active_focus_scope_id(const er_ui_runtime_state_t* state, uint32_t* out_open_id);
 bool er_ui_runtime_hit_allowed_by_focus_scope(const er_ui_runtime_state_t* state, er_ui_hit_t hit);
 bool er_ui_runtime_focus_first(er_ui_runtime_state_t* state, const er_ui_scene_t* scene, er_ui_hit_t* out_hit);
-bool er_ui_runtime_focus_next(er_ui_runtime_state_t* state, const er_ui_scene_t* scene, bool reverse, er_ui_hit_t* out_hit);
+bool er_ui_runtime_focus_next(
+  er_ui_runtime_state_t* state,
+  const er_ui_scene_t* scene,
+  bool reverse,
+  er_ui_hit_t* out_hit);
 
 bool er_ui_action_needs_redraw(er_ui_action_t action);
 er_ui_action_t er_ui_runtime_pointer_down(er_ui_runtime_state_t* state, const er_ui_scene_t* scene, float x, float y);
 er_ui_action_t er_ui_runtime_pointer_move(er_ui_runtime_state_t* state, const er_ui_scene_t* scene, float x, float y);
 er_ui_action_t er_ui_runtime_pointer_up(er_ui_runtime_state_t* state, const er_ui_scene_t* scene, float x, float y);
-er_ui_action_t er_ui_runtime_wheel(er_ui_runtime_state_t* state, const er_ui_scene_t* scene, float x, float y, float delta_y);
-er_ui_action_t er_ui_runtime_key_down(er_ui_runtime_state_t* state, const er_ui_scene_t* scene, er_ui_key_t key, er_ui_key_modifiers_t modifiers);
+er_ui_action_t er_ui_runtime_wheel(
+  er_ui_runtime_state_t* state,
+  const er_ui_scene_t* scene,
+  float x,
+  float y,
+  float delta_y);
+er_ui_action_t er_ui_runtime_key_down(
+  er_ui_runtime_state_t* state,
+  const er_ui_scene_t* scene,
+  er_ui_key_t key,
+  er_ui_key_modifiers_t modifiers);
 er_ui_action_t er_ui_runtime_blur(er_ui_runtime_state_t* state);
 
 #ifdef __cplusplus

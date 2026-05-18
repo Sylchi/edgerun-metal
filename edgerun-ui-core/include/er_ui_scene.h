@@ -230,15 +230,55 @@ er_ui_color4_t er_ui_color_with_alpha(er_ui_color4_t color, float alpha);
 er_ui_rect_t er_ui_rect_fill(float x, float y, float w, float h, float radius, er_ui_color4_t color);
 er_ui_rect_t er_ui_rect_border(float x, float y, float w, float h, float radius, er_ui_color4_t color);
 er_ui_rect_t er_ui_rect_shadow(float x, float y, float w, float h, float radius, er_ui_color4_t color, float shadow);
-er_ui_rect_t er_ui_rect_linear_gradient(float x, float y, float w, float h, float radius, er_ui_color4_t from, er_ui_color4_t to);
+er_ui_rect_t er_ui_rect_linear_gradient(
+  float x,
+  float y,
+  float w,
+  float h,
+  float radius,
+  er_ui_color4_t from,
+  er_ui_color4_t to);
 
 er_ui_clip_t er_ui_clip(float x, float y, float w, float h);
 er_ui_hit_t er_ui_hit(er_ui_hit_kind_t kind, uint32_t id, float x, float y, float w, float h);
-er_ui_drag_source_t er_ui_drag_source(uint32_t scope_id, uint32_t item_id, size_t index, float x, float y, float w, float h);
+er_ui_drag_source_t er_ui_drag_source(
+  uint32_t scope_id,
+  uint32_t item_id,
+  size_t index,
+  float x,
+  float y,
+  float w,
+  float h);
 er_ui_drop_target_t er_ui_drop_target(uint32_t scope_id, size_t index, float x, float y, float w, float h);
-er_ui_quad_t er_ui_quad(float x, float y, float w, float h, float u0, float v0, float u1, float v1, er_ui_color4_t color);
-er_ui_quad_t er_ui_quad_atlas(float x, float y, float w, float h, float u0, float v0, float u1, float v1, uint32_t atlas_id, er_ui_color4_t color);
-er_ui_transition_t er_ui_transition(uint32_t id, er_ui_transition_property_t property, float from, float to, uint32_t duration_ms, uint32_t delay_ms, er_ui_transition_easing_t easing);
+er_ui_quad_t er_ui_quad(
+  float x,
+  float y,
+  float w,
+  float h,
+  float u0,
+  float v0,
+  float u1,
+  float v1,
+  er_ui_color4_t color);
+er_ui_quad_t er_ui_quad_atlas(
+  float x,
+  float y,
+  float w,
+  float h,
+  float u0,
+  float v0,
+  float u1,
+  float v1,
+  uint32_t atlas_id,
+  er_ui_color4_t color);
+er_ui_transition_t er_ui_transition(
+  uint32_t id,
+  er_ui_transition_property_t property,
+  float from,
+  float to,
+  uint32_t duration_ms,
+  uint32_t delay_ms,
+  er_ui_transition_easing_t easing);
 er_ui_transition_t er_ui_transition_opacity(uint32_t id, float from, float to, uint32_t duration_ms);
 er_ui_transition_t er_ui_transition_translate_x(uint32_t id, float from, float to, uint32_t duration_ms);
 er_ui_transition_t er_ui_transition_translate_y(uint32_t id, float from, float to, uint32_t duration_ms);
