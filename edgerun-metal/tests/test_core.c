@@ -2982,6 +2982,18 @@ static void test_vfs_object_packets(void) {
 
 static void test_app_identity_routes(void) {
   ErCryptoProvider crypto;
+  static const UINT8 app_bytes[] = {'w', 'a', 's', 'm', '-', 'u', 'i'};
+  static const UINT8 manifest_bytes[] = {'m', 'a', 'n', 'i', 'f', 'e', 's', 't'};
+  static const UINT8 ui_assets_bytes[] = {'a', 's', 's', 'e', 't', 's'};
+  ErVfsObjectLabelRef app_ref;
+  ErVfsObjectLabelRef app_alias_ref;
+  ErVfsObjectLabelRef app_bad_label_ref;
+  ErVfsObjectLabelRef manifest_ref;
+  ErVfsObjectLabelRef manifest_alias_ref;
+  ErVfsObjectLabelRef ui_assets_ref;
+  ErAppPackageManifest package;
+  ErAppPackageManifest package_alias;
+  ErAppPackageManifest package_without_assets;
   ErHash app_object_id;
   ErHash manifest_hash;
   ErHash admission_id;
@@ -3010,6 +3022,68 @@ static void test_app_identity_routes(void) {
   crypto.sign = 0;
   crypto.verify = 0;
 
+  check_int64("app package app ref",
+              er_vfs_prepare_object_label_ref(&crypto, "apps/counter.wasm", 17,
+                                              app_bytes, sizeof(app_bytes), &app_ref),
+              1);
+  check_int64("app package app alias ref",
+              er_vfs_prepare_object_label_ref(&crypto, "drafts/main.wasm", 16,
+                                              app_bytes, sizeof(app_bytes), &app_alias_ref),
+              1);
+  check_int64("app package manifest ref",
+              er_vfs_prepare_object_label_ref(&crypto, "apps/counter.manifest", 21,
+                                              manifest_bytes, sizeof(manifest_bytes), &manifest_ref),
+              1);
+  check_int64("app package manifest alias ref",
+              er_vfs_prepare_object_label_ref(&crypto, "drafts/app.manifest", 19,
+                                              manifest_bytes, sizeof(manifest_bytes),
+                                              &manifest_alias_ref),
+              1);
+  check_int64("app package assets ref",
+              er_vfs_prepare_object_label_ref(&crypto, "apps/counter.assets", 19,
+                                              ui_assets_bytes, sizeof(ui_assets_bytes),
+                                              &ui_assets_ref),
+              1);
+  check_int64("app package prepare",
+              er_app_prepare_package_manifest(&crypto, &app_ref, &manifest_ref,
+                                              &ui_assets_ref, &package),
+              1);
+  check_int64("app package abi", package.abi_version, ER_APP_ABI_VERSION);
+  check_int64("app package kind", package.app_kind, ER_APP_KIND_USER);
+  check_hash_equal("app package app object", &package.app_object_id,
+                   &app_ref.object_id);
+  check_hash_equal("app package manifest object", &package.manifest_object_id,
+                   &manifest_ref.object_id);
+  check_uint64("app package app len", package.app_object_len, sizeof(app_bytes));
+  check_uint64("app package manifest len", package.manifest_object_len,
+               sizeof(manifest_bytes));
+  check_uint64("app package assets len", package.ui_assets_object_len,
+               sizeof(ui_assets_bytes));
+  check_int64("app package alias prepare",
+              er_app_prepare_package_manifest(&crypto, &app_alias_ref,
+                                              &manifest_alias_ref,
+                                              &ui_assets_ref, &package_alias),
+              1);
+  check_hash_equal("app package labels ignored", &package_alias.package_id,
+                   &package.package_id);
+  check_int64("app package without assets",
+              er_app_prepare_package_manifest(&crypto, &app_ref, &manifest_ref,
+                                              0, &package_without_assets),
+              1);
+  check_hash_not_equal("app package assets affect id",
+                       &package_without_assets.package_id, &package.package_id);
+  check_int64("app package reject missing manifest",
+              er_app_prepare_package_manifest(&crypto, &app_ref, 0,
+                                              &ui_assets_ref, &package_alias),
+              0);
+  app_bad_label_ref = app_ref;
+  app_bad_label_ref.label[0] = '/';
+  check_int64("app package reject invalid label ref",
+              er_app_prepare_package_manifest(&crypto, &app_bad_label_ref,
+                                              &manifest_ref, &ui_assets_ref,
+                                              &package_alias),
+              0);
+
   for (i = 0; i < ER_HASH_LEN; ++i) {
     app_object_id.bytes[i] = (UINT8)(0x10u + i);
     manifest_hash.bytes[i] = (UINT8)(0x30u + i);
@@ -3032,6 +3106,15 @@ static void test_app_identity_routes(void) {
               1);
   check_int64("app identity abi", identity.abi_version, ER_APP_ABI_VERSION);
   check_int64("app identity nonce", identity.instance_nonce[0], 0xd0);
+  check_int64("app identity from package",
+              er_app_derive_identity_from_package(&crypto, &package, &admission_id,
+                                                  nonce, ER_APP_INSTANCE_NONCE_LEN,
+                                                  &identity),
+              1);
+  check_hash_equal("app identity package object", &identity.app_object_id,
+                   &package.app_object_id);
+  check_hash_equal("app identity package manifest", &identity.manifest_hash,
+                   &package.manifest_object_id);
 
   check_int64("app ipc route",
               er_app_prepare_ipc_route_binding(&crypto, &identity, &target_node_id, &capability_id,

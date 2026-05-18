@@ -33,7 +33,7 @@ The shared contract is what lets these parts interoperate. The admissions remain
 ## Current Baseline
 
 - `er_work` defines the C mirror of `edgerun-work` node identities, channel endpoints, work requests, admissions, capability envelopes, and relay transit records.
-- `er_app` defines content-addressed Wasm app identity, budget, usage, schedule, launch allocation, and IPC route binding.
+- `er_app` defines content-addressed Wasm app package manifests, identity, budget, usage, schedule, launch allocation, and IPC route binding.
 - `er_vfs` defines object packets, object labels, and transform refs without host filesystem authority.
 - `erwire` carries typed packets and can send/parse native EdgeRun Ethernet frames.
 - `er_hw_relay` encodes firmware UDP, native Ethernet, and VirtIO endpoints.
@@ -43,6 +43,7 @@ The shared contract is what lets these parts interoperate. The admissions remain
 - Relay sends are validated against serialized packet shape, app identity, admission id, budget token, and packet-byte budget before host relay dispatch.
 - `varfont`, `edgerun-ui-core`, the GOP renderer, and the VirtIO GPU profile provide enough UI/text/rendering foundation for polished app surfaces.
 - The boot UI proof can hold multiple Wasm UI apps concurrently as explicit runtime contexts with isolated preallocated memory, presentation identity, scene state, and app-switcher selection.
+- App package identity is derived from app code, manifest, and UI asset object ids and lengths. Labels can name those objects inside manifests, but labels do not define package identity.
 
 ## Milestone 1: Object-Only Storage And App Packaging Contract
 
@@ -53,6 +54,7 @@ Work:
 - Audit runtime code for host path, file, socket, or descriptor concepts outside tools and boot compatibility.
 - Keep `er_vfs` labels as manifest labels only.
 - Treat user-authored Wasm apps, manifests, UI assets, and fonts as content-addressed objects.
+- Prepare app package manifests from object refs, not host paths.
 - Add docs or tests showing labels resolve to object ids, not authority.
 - Ensure storage work accepts typed object payloads only when carried by an admitted storage or capability route.
 
@@ -60,6 +62,7 @@ Proof:
 
 - Host tests reject invalid labels and path traversal.
 - Host tests prove identical bytes produce identical object ids independent of label.
+- Host tests prove identical package objects produce identical package ids independent of labels.
 - Tests prove app identity and asset references come from object ids, not paths.
 - Route tests must start from signed admissions, not packet-class inference.
 

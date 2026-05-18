@@ -19,6 +19,7 @@ See `../docs/relay-architecture.md` for the cross-project model and `../docs/coh
 - Relay sends are checked against app source identity, admission id, budget token, packet validity, and packet-byte budget before leaving the VM.
 - `edgerun-ui-core`, the GOP renderer, the VirtIO GPU profile, and `varfont` provide enough UI machinery to target polished app surfaces instead of diagnostic rectangles.
 - The boot UI proof can prepare multiple Wasm UI app runtimes at once. Each app has its own preallocated linear memory, presentation identity, scene, and `ui_emit` host context, and the shell app switcher selects which context receives input and contributes scene output.
+- `er_app` can build content-addressed app package manifests from VFS object refs for app code, manifests, and UI assets. Package identity is derived from object ids and lengths, not labels.
 
 ## Architecture rule
 
@@ -60,11 +61,12 @@ The first endpoint adapters may acknowledge or capture packets before they imple
 
 ### M1: Object-only storage and app packaging contract
 
-Status: partly implemented; VFS object packets and labels exist, but the audit and app packaging proof are next.
+Status: package manifest contract implemented; storage endpoint loading and broader audit are next.
 
 - Audit runtime surfaces for host path/file/socket/descriptor concepts.
 - Keep VFS labels as object labels only.
 - Prove labels map to object ids, and object ids do not depend on labels.
+- Keep app package identity derived from app, manifest, and UI asset object ids and lengths, never from labels.
 - Keep storage work restricted to typed object payloads carried by admitted storage or capability routes.
 - Treat user-authored app Wasm, UI assets, fonts, and manifests as content-addressed objects, never host paths.
 
@@ -72,6 +74,7 @@ Proof:
 
 - VFS tests reject traversal and invalid labels.
 - VFS tests show same bytes produce same object id with different labels.
+- App package tests show same objects with different labels produce the same package id.
 - Route tests start from signed admissions, not packet-class inference.
 
 ### M2: Native relay ingress
@@ -139,11 +142,11 @@ Proof:
 
 ### M6: User-authored Wasm UI app proof
 
-Status: relay hostcall foundation and concurrent local Wasm UI app contexts implemented; content-addressed app packaging and relay-routed render packets are next.
+Status: relay hostcall foundation, concurrent local Wasm UI app contexts, and content-addressed app package records implemented; storage-backed loading and relay-routed render packets are next.
 
 - Keep bounded Wasm imports for relay send/receive as the durable app boundary.
 - Keep each loaded app in an explicit runtime context with preallocated memory, presentation identity, scene state, and app-switcher selection.
-- Package a small user-authored Wasm app as content-addressed input.
+- Load a small user-authored Wasm app from an `ErAppPackageManifest` whose app code, manifest, and UI assets are content-addressed VFS objects.
 - Have the app emit a render capability packet over relay send.
 - Feed input or completion packets back through relay receive.
 - Move driver modules away from direct PCI/MMIO hostcalls as the durable ABI.
