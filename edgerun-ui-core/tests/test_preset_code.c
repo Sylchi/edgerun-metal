@@ -89,9 +89,29 @@ static void test_source_captures_preserve_provenance(void) {
   expect_true(er_ui_extracted_source_capture_at(7u) == 0, "source captures: out of range is null");
 }
 
+static void test_style_family_specs_and_colors(void) {
+  expect_size(er_ui_style_family_spec_count(), 7u, "style family: spec count");
+  const er_ui_style_family_spec_t* vega = er_ui_style_family_spec_for_family(ER_UI_STYLE_FAMILY_VEGA);
+  expect_true(vega != 0, "style family: Vega spec exists");
+  expect_string(vega->name, "Vega", "style family: Vega name");
+  expect_string(vega->preset_code, "bIkeymG", "style family: Vega preset code");
+  expect_string(vega->role, "structured blue-black system surface", "style family: Vega role");
+  const er_ui_style_family_spec_t* sera = er_ui_style_family_spec_at(6u);
+  expect_true(sera != 0 && sera->family == ER_UI_STYLE_FAMILY_SERA, "style family: Sera spec by index");
+  expect_string(sera->base_color, "taupe", "style family: Sera base color");
+  er_ui_semantic_colors_t colors = er_ui_colors_for_style_family(ER_UI_STYLE_FAMILY_SERA);
+  expect_float(colors.bg.r, 0.047f, "style family: Sera bg red");
+  expect_float(colors.text.g, 0.981f, "style family: Sera text green");
+  expect_float(colors.border.a, 0.1f, "style family: Sera border alpha");
+  colors = er_ui_colors_for_style_family(ER_UI_STYLE_FAMILY_MAIA);
+  expect_float(colors.accent.g, 0.74f, "style family: Maia accent green");
+  expect_true(er_ui_style_family_spec_for_family(ER_UI_STYLE_FAMILY_COUNT) == 0, "style family: invalid spec is null");
+}
+
 void run_preset_code_tests(void) {
   test_preset_codes_encode_captured_families();
   test_preset_code_decodes_sera_and_validates_shape();
   test_preset_code_encodes_live_sera_deltas();
   test_source_captures_preserve_provenance();
+  test_style_family_specs_and_colors();
 }

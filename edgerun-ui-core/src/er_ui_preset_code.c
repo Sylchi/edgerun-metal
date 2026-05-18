@@ -61,6 +61,84 @@ static const char* const ER_UI_PRESET_STYLES[] = {"nova", "vega", "maia", "lyra"
 #define ER_UI_PRESET_RECIPE_MIRA {"mira", "neutral", "neutral", "neutral", "hugeicons", "inter", "inherit", "default", "default", "default", "subtle"}
 #define ER_UI_PRESET_RECIPE_LUMA {"luma", "neutral", "neutral", "neutral", "lucide", "inter", "inherit", "default", "default", "default", "subtle"}
 #define ER_UI_PRESET_RECIPE_SERA {"sera", "taupe", "taupe", "taupe", "lucide", "noto-sans", "playfair-display", "default", "none", "default", "subtle"}
+#define ER_UI_PRESET_COLOR(r, g, b, a) ((er_ui_color4_t){(r), (g), (b), (a)})
+#define ER_UI_PRESET_COLORS_MIRA                                                                                                                        \
+  {                                                                                                                                                      \
+    ER_UI_PRESET_COLOR(0.035f, 0.035f, 0.035f, 1.0f), ER_UI_PRESET_COLOR(0.055f, 0.055f, 0.055f, 0.98f),                                                 \
+      ER_UI_PRESET_COLOR(0.048f, 0.048f, 0.048f, 0.98f), ER_UI_PRESET_COLOR(0.091f, 0.091f, 0.091f, 0.96f),                                             \
+      ER_UI_PRESET_COLOR(0.125f, 0.125f, 0.125f, 0.92f), ER_UI_PRESET_COLOR(0.245f, 0.245f, 0.245f, 0.88f),                                             \
+      ER_UI_PRESET_COLOR(0.118f, 0.118f, 0.118f, 0.98f), ER_UI_PRESET_COLOR(0.925f, 0.925f, 0.925f, 1.0f),                                             \
+      ER_UI_PRESET_COLOR(0.63f, 0.63f, 0.63f, 1.0f), ER_UI_PRESET_COLOR(0.235f, 0.235f, 0.235f, 0.78f),                                                 \
+      ER_UI_PRESET_COLOR(0.82f, 0.82f, 0.82f, 1.0f), ER_UI_PRESET_COLOR(0.055f, 0.055f, 0.055f, 1.0f),                                                  \
+      ER_UI_PRESET_COLOR(0.0f, 0.74f, 0.54f, 1.0f), ER_UI_PRESET_COLOR(0.93f, 0.62f, 0.06f, 1.0f),                                                      \
+      ER_UI_PRESET_COLOR(0.86f, 0.15f, 0.15f, 1.0f), ER_UI_PRESET_COLOR(0.55f, 0.43f, 0.95f, 1.0f)                                                      \
+  }
+#define ER_UI_PRESET_COLORS_VEGA                                                                                                                        \
+  {                                                                                                                                                      \
+    ER_UI_PRESET_COLOR(0.026f, 0.034f, 0.046f, 1.0f), ER_UI_PRESET_COLOR(0.035f, 0.045f, 0.062f, 0.98f),                                                \
+      ER_UI_PRESET_COLOR(0.031f, 0.04f, 0.056f, 0.98f), ER_UI_PRESET_COLOR(0.065f, 0.079f, 0.103f, 0.96f),                                             \
+      ER_UI_PRESET_COLOR(0.094f, 0.113f, 0.145f, 0.92f), ER_UI_PRESET_COLOR(0.1f, 0.22f, 0.36f, 0.78f),                                                 \
+      ER_UI_PRESET_COLOR(0.055f, 0.068f, 0.091f, 0.98f), ER_UI_PRESET_COLOR(0.92f, 0.95f, 0.98f, 1.0f),                                                 \
+      ER_UI_PRESET_COLOR(0.59f, 0.66f, 0.74f, 1.0f), ER_UI_PRESET_COLOR(0.19f, 0.25f, 0.34f, 0.78f),                                                    \
+      ER_UI_PRESET_COLOR(0.3f, 0.63f, 0.95f, 1.0f), ER_UI_PRESET_COLOR(0.02f, 0.04f, 0.07f, 1.0f),                                                      \
+      ER_UI_PRESET_COLOR(0.0f, 0.74f, 0.54f, 1.0f), ER_UI_PRESET_COLOR(0.93f, 0.62f, 0.06f, 1.0f),                                                      \
+      ER_UI_PRESET_COLOR(0.86f, 0.15f, 0.15f, 1.0f), ER_UI_PRESET_COLOR(0.44f, 0.58f, 0.95f, 1.0f)                                                      \
+  }
+#define ER_UI_PRESET_COLORS_NOVA                                                                                                                        \
+  {                                                                                                                                                      \
+    ER_UI_PRESET_COLOR(0.028f, 0.028f, 0.031f, 1.0f), ER_UI_PRESET_COLOR(0.042f, 0.042f, 0.047f, 0.98f),                                                \
+      ER_UI_PRESET_COLOR(0.039f, 0.039f, 0.043f, 0.98f), ER_UI_PRESET_COLOR(0.083f, 0.083f, 0.092f, 0.96f),                                             \
+      ER_UI_PRESET_COLOR(0.121f, 0.121f, 0.134f, 0.92f), ER_UI_PRESET_COLOR(0.02f, 0.27f, 0.32f, 0.72f),                                                \
+      ER_UI_PRESET_COLOR(0.105f, 0.105f, 0.115f, 0.98f), ER_UI_PRESET_COLOR(0.94f, 0.95f, 0.96f, 1.0f),                                                 \
+      ER_UI_PRESET_COLOR(0.63f, 0.65f, 0.68f, 1.0f), ER_UI_PRESET_COLOR(0.23f, 0.24f, 0.26f, 0.78f),                                                    \
+      ER_UI_PRESET_COLOR(0.08f, 0.76f, 0.86f, 1.0f), ER_UI_PRESET_COLOR(0.02f, 0.04f, 0.05f, 1.0f),                                                     \
+      ER_UI_PRESET_COLOR(0.0f, 0.74f, 0.54f, 1.0f), ER_UI_PRESET_COLOR(0.93f, 0.62f, 0.06f, 1.0f),                                                      \
+      ER_UI_PRESET_COLOR(0.86f, 0.15f, 0.15f, 1.0f), ER_UI_PRESET_COLOR(0.55f, 0.43f, 0.95f, 1.0f)                                                      \
+  }
+#define ER_UI_PRESET_COLORS_MAIA                                                                                                                        \
+  {                                                                                                                                                      \
+    ER_UI_PRESET_COLOR(0.028f, 0.035f, 0.031f, 1.0f), ER_UI_PRESET_COLOR(0.037f, 0.048f, 0.042f, 0.98f),                                                \
+      ER_UI_PRESET_COLOR(0.034f, 0.044f, 0.039f, 0.98f), ER_UI_PRESET_COLOR(0.071f, 0.091f, 0.08f, 0.96f),                                              \
+      ER_UI_PRESET_COLOR(0.103f, 0.133f, 0.116f, 0.92f), ER_UI_PRESET_COLOR(0.0f, 0.32f, 0.2f, 0.72f),                                                  \
+      ER_UI_PRESET_COLOR(0.063f, 0.083f, 0.072f, 0.98f), ER_UI_PRESET_COLOR(0.92f, 0.96f, 0.93f, 1.0f),                                                 \
+      ER_UI_PRESET_COLOR(0.6f, 0.69f, 0.63f, 1.0f), ER_UI_PRESET_COLOR(0.18f, 0.29f, 0.22f, 0.78f),                                                     \
+      ER_UI_PRESET_COLOR(0.0f, 0.74f, 0.54f, 1.0f), ER_UI_PRESET_COLOR(0.02f, 0.05f, 0.035f, 1.0f),                                                     \
+      ER_UI_PRESET_COLOR(0.0f, 0.74f, 0.54f, 1.0f), ER_UI_PRESET_COLOR(0.93f, 0.62f, 0.06f, 1.0f),                                                      \
+      ER_UI_PRESET_COLOR(0.86f, 0.15f, 0.15f, 1.0f), ER_UI_PRESET_COLOR(0.55f, 0.43f, 0.95f, 1.0f)                                                      \
+  }
+#define ER_UI_PRESET_COLORS_LYRA                                                                                                                        \
+  {                                                                                                                                                      \
+    ER_UI_PRESET_COLOR(0.033f, 0.03f, 0.049f, 1.0f), ER_UI_PRESET_COLOR(0.046f, 0.041f, 0.066f, 0.98f),                                                 \
+      ER_UI_PRESET_COLOR(0.042f, 0.037f, 0.061f, 0.98f), ER_UI_PRESET_COLOR(0.084f, 0.075f, 0.119f, 0.96f),                                             \
+      ER_UI_PRESET_COLOR(0.122f, 0.108f, 0.17f, 0.92f), ER_UI_PRESET_COLOR(0.28f, 0.18f, 0.52f, 0.72f),                                                 \
+      ER_UI_PRESET_COLOR(0.073f, 0.064f, 0.103f, 0.98f), ER_UI_PRESET_COLOR(0.95f, 0.93f, 0.99f, 1.0f),                                                 \
+      ER_UI_PRESET_COLOR(0.67f, 0.62f, 0.76f, 1.0f), ER_UI_PRESET_COLOR(0.25f, 0.2f, 0.36f, 0.78f),                                                     \
+      ER_UI_PRESET_COLOR(0.55f, 0.43f, 0.95f, 1.0f), ER_UI_PRESET_COLOR(0.03f, 0.02f, 0.05f, 1.0f),                                                     \
+      ER_UI_PRESET_COLOR(0.0f, 0.74f, 0.54f, 1.0f), ER_UI_PRESET_COLOR(0.93f, 0.62f, 0.06f, 1.0f),                                                      \
+      ER_UI_PRESET_COLOR(0.86f, 0.15f, 0.15f, 1.0f), ER_UI_PRESET_COLOR(0.55f, 0.43f, 0.95f, 1.0f)                                                      \
+  }
+#define ER_UI_PRESET_COLORS_LUMA                                                                                                                        \
+  {                                                                                                                                                      \
+    ER_UI_PRESET_COLOR(0.047f, 0.04f, 0.032f, 1.0f), ER_UI_PRESET_COLOR(0.066f, 0.055f, 0.042f, 0.98f),                                                 \
+      ER_UI_PRESET_COLOR(0.06f, 0.051f, 0.039f, 0.98f), ER_UI_PRESET_COLOR(0.118f, 0.097f, 0.07f, 0.96f),                                               \
+      ER_UI_PRESET_COLOR(0.166f, 0.132f, 0.09f, 0.92f), ER_UI_PRESET_COLOR(0.42f, 0.26f, 0.04f, 0.72f),                                                  \
+      ER_UI_PRESET_COLOR(0.104f, 0.085f, 0.061f, 0.98f), ER_UI_PRESET_COLOR(0.98f, 0.94f, 0.88f, 1.0f),                                                 \
+      ER_UI_PRESET_COLOR(0.75f, 0.67f, 0.56f, 1.0f), ER_UI_PRESET_COLOR(0.34f, 0.25f, 0.15f, 0.78f),                                                    \
+      ER_UI_PRESET_COLOR(0.93f, 0.62f, 0.06f, 1.0f), ER_UI_PRESET_COLOR(0.06f, 0.04f, 0.01f, 1.0f),                                                     \
+      ER_UI_PRESET_COLOR(0.0f, 0.74f, 0.54f, 1.0f), ER_UI_PRESET_COLOR(0.93f, 0.62f, 0.06f, 1.0f),                                                      \
+      ER_UI_PRESET_COLOR(0.86f, 0.15f, 0.15f, 1.0f), ER_UI_PRESET_COLOR(0.55f, 0.43f, 0.95f, 1.0f)                                                      \
+  }
+#define ER_UI_PRESET_COLORS_SERA                                                                                                                        \
+  {                                                                                                                                                      \
+    ER_UI_PRESET_COLOR(0.047f, 0.039f, 0.036f, 1.0f), ER_UI_PRESET_COLOR(0.114f, 0.094f, 0.086f, 0.98f),                                                \
+      ER_UI_PRESET_COLOR(0.047f, 0.039f, 0.036f, 0.98f), ER_UI_PRESET_COLOR(0.114f, 0.094f, 0.086f, 0.96f),                                             \
+      ER_UI_PRESET_COLOR(0.169f, 0.142f, 0.134f, 0.92f), ER_UI_PRESET_COLOR(0.169f, 0.142f, 0.134f, 0.88f),                                             \
+      ER_UI_PRESET_COLOR(0.114f, 0.094f, 0.086f, 0.98f), ER_UI_PRESET_COLOR(0.985f, 0.981f, 0.976f, 1.0f),                                              \
+      ER_UI_PRESET_COLOR(0.67f, 0.628f, 0.612f, 1.0f), ER_UI_PRESET_COLOR(1.0f, 1.0f, 1.0f, 0.1f),                                                      \
+      ER_UI_PRESET_COLOR(0.911f, 0.894f, 0.89f, 1.0f), ER_UI_PRESET_COLOR(0.114f, 0.094f, 0.086f, 1.0f),                                                \
+      ER_UI_PRESET_COLOR(0.0f, 0.74f, 0.54f, 1.0f), ER_UI_PRESET_COLOR(0.93f, 0.62f, 0.06f, 1.0f),                                                      \
+      ER_UI_PRESET_COLOR(0.86f, 0.15f, 0.15f, 1.0f), ER_UI_PRESET_COLOR(0.55f, 0.43f, 0.95f, 1.0f)                                                      \
+  }
 
 static const er_ui_preset_field_t ER_UI_PRESET_FIELDS[ER_UI_PRESET_FIELD_COUNT] = {
   {"menuColor", ER_UI_PRESET_MENU_COLORS, sizeof(ER_UI_PRESET_MENU_COLORS) / sizeof(ER_UI_PRESET_MENU_COLORS[0]), 3u},
@@ -73,6 +151,26 @@ static const er_ui_preset_field_t ER_UI_PRESET_FIELDS[ER_UI_PRESET_FIELD_COUNT] 
   {"style", ER_UI_PRESET_STYLES, sizeof(ER_UI_PRESET_STYLES) / sizeof(ER_UI_PRESET_STYLES[0]), 6u},
   {"chartColor", ER_UI_PRESET_THEME_COLORS, sizeof(ER_UI_PRESET_THEME_COLORS) / sizeof(ER_UI_PRESET_THEME_COLORS[0]), 6u},
   {"fontHeading", ER_UI_PRESET_HEADING_FONTS, sizeof(ER_UI_PRESET_HEADING_FONTS) / sizeof(ER_UI_PRESET_HEADING_FONTS[0]), 5u}
+};
+
+static const er_ui_semantic_colors_t ER_UI_STYLE_FAMILY_COLORS[ER_UI_STYLE_FAMILY_COUNT] = {
+  ER_UI_PRESET_COLORS_VEGA,
+  ER_UI_PRESET_COLORS_NOVA,
+  ER_UI_PRESET_COLORS_MAIA,
+  ER_UI_PRESET_COLORS_LYRA,
+  ER_UI_PRESET_COLORS_MIRA,
+  ER_UI_PRESET_COLORS_LUMA,
+  ER_UI_PRESET_COLORS_SERA
+};
+
+static const er_ui_style_family_spec_t ER_UI_STYLE_FAMILY_SPECS[ER_UI_STYLE_FAMILY_COUNT] = {
+  {ER_UI_STYLE_FAMILY_VEGA, "Vega", "bIkeymG", "neutral", "structured blue-black system surface"},
+  {ER_UI_STYLE_FAMILY_NOVA, "Nova", "b2fA", "neutral", "neutral graphite system surface"},
+  {ER_UI_STYLE_FAMILY_MAIA, "Maia", "bbVKFP6", "neutral", "green policy and trust surface"},
+  {ER_UI_STYLE_FAMILY_LYRA, "Lyra", "buFznsW", "neutral", "violet creative and agent surface"},
+  {ER_UI_STYLE_FAMILY_MIRA, "Mira", "b1D0eCA4", "neutral", "neutral high-contrast default surface"},
+  {ER_UI_STYLE_FAMILY_LUMA, "Luma", "b1VlIttI", "neutral", "warm finance and publishing surface"},
+  {ER_UI_STYLE_FAMILY_SERA, "Sera", "b4xFeBLg4O", "taupe", "warm rose collaboration surface"}
 };
 
 static bool er_ui_preset_cstr_eq(const char* a, const char* b) {
@@ -188,6 +286,25 @@ er_ui_preset_recipe_t er_ui_preset_recipe_for_style_family(er_ui_style_family_t 
     default:
       return (er_ui_preset_recipe_t)ER_UI_PRESET_RECIPE_NOVA;
   }
+}
+
+er_ui_semantic_colors_t er_ui_colors_for_style_family(er_ui_style_family_t family) {
+  if ((size_t)family >= ER_UI_STYLE_FAMILY_COUNT) return ER_UI_STYLE_FAMILY_COLORS[ER_UI_STYLE_FAMILY_NOVA];
+  return ER_UI_STYLE_FAMILY_COLORS[family];
+}
+
+size_t er_ui_style_family_spec_count(void) {
+  return ER_UI_STYLE_FAMILY_COUNT;
+}
+
+const er_ui_style_family_spec_t* er_ui_style_family_spec_at(size_t index) {
+  if (index >= er_ui_style_family_spec_count()) return 0;
+  return &ER_UI_STYLE_FAMILY_SPECS[index];
+}
+
+const er_ui_style_family_spec_t* er_ui_style_family_spec_for_family(er_ui_style_family_t family) {
+  if ((size_t)family >= ER_UI_STYLE_FAMILY_COUNT) return 0;
+  return &ER_UI_STYLE_FAMILY_SPECS[family];
 }
 
 er_ui_status_t er_ui_preset_encode(er_ui_preset_recipe_t recipe, char* out, size_t capacity, size_t* out_len) {

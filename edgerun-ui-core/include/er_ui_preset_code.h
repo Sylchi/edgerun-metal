@@ -1,7 +1,7 @@
 #ifndef ER_UI_PRESET_CODE_H
 #define ER_UI_PRESET_CODE_H
 
-#include "er_ui_scene.h"
+#include "er_ui_theme.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -44,7 +44,19 @@ typedef struct {
   const char* role;
 } er_ui_extracted_source_capture_t;
 
+typedef struct {
+  er_ui_style_family_t family;
+  const char* name;
+  const char* preset_code;
+  const char* base_color;
+  const char* role;
+} er_ui_style_family_spec_t;
+
 er_ui_preset_recipe_t er_ui_preset_recipe_for_style_family(er_ui_style_family_t family);
+er_ui_semantic_colors_t er_ui_colors_for_style_family(er_ui_style_family_t family);
+size_t er_ui_style_family_spec_count(void);
+const er_ui_style_family_spec_t* er_ui_style_family_spec_at(size_t index);
+const er_ui_style_family_spec_t* er_ui_style_family_spec_for_family(er_ui_style_family_t family);
 er_ui_status_t er_ui_preset_encode(er_ui_preset_recipe_t recipe, char* out, size_t capacity, size_t* out_len);
 er_ui_status_t er_ui_preset_decode(const char* preset_code, er_ui_preset_recipe_t* out_recipe);
 bool er_ui_preset_recipe_matches_code(er_ui_preset_recipe_t recipe, const char* preset_code);
