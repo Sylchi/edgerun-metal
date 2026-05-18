@@ -1012,10 +1012,7 @@ er_ui_status_t er_ui_node_validate_composition(const er_ui_node_t* node, er_ui_n
 static er_ui_bounds_t er_ui_node_resolve_bounds(const er_ui_node_t* node, er_ui_bounds_t bounds);
 
 typedef struct {
-  er_ui_bounds_t content;
-  float cell_w;
-  float cell_h;
-  size_t columns;
+  er_ui_uniform_grid_t grid;
 } er_ui_node_grid_layout_t;
 
 static er_ui_status_t er_ui_node_grid_layout(const er_ui_node_t* node, er_ui_bounds_t bounds, er_ui_node_grid_layout_t* out_layout) {
@@ -1025,26 +1022,14 @@ static er_ui_status_t er_ui_node_grid_layout(const er_ui_node_t* node, er_ui_bou
   if (columns > node->child_count) columns = node->child_count;
   size_t rows = (node->child_count + columns - 1u) / columns;
   er_ui_bounds_t content = er_ui_bounds_inset(bounds, node->padding, node->padding);
-  float total_gap_x = node->gap * (float)(columns - 1u);
-  float total_gap_y = node->gap * (float)(rows - 1u);
-  float cell_w = (content.w - total_gap_x) / (float)columns;
-  float cell_h = (content.h - total_gap_y) / (float)rows;
-  if (cell_w <= 0.0f || cell_h <= 0.0f) return ER_UI_ERR_INVALID_ARGUMENT;
-  out_layout->content = content;
-  out_layout->cell_w = cell_w;
-  out_layout->cell_h = cell_h;
-  out_layout->columns = columns;
+  er_ui_uniform_grid_t grid = er_ui_uniform_grid(content, columns, rows, node->gap, node->gap);
+  if (grid.columns == 0u) return ER_UI_ERR_INVALID_ARGUMENT;
+  out_layout->grid = grid;
   return ER_UI_OK;
 }
 
-static er_ui_bounds_t er_ui_node_grid_cell_bounds(const er_ui_node_grid_layout_t* layout, float gap, size_t child_index) {
-  size_t col = child_index % layout->columns;
-  size_t row = child_index / layout->columns;
-  return er_ui_bounds(
-    layout->content.x + (layout->cell_w + gap) * (float)col,
-    layout->content.y + (layout->cell_h + gap) * (float)row,
-    layout->cell_w,
-    layout->cell_h);
+static er_ui_bounds_t er_ui_node_grid_cell_bounds(const er_ui_node_grid_layout_t* layout, size_t child_index) {
+  return er_ui_uniform_grid_cell(layout->grid, child_index);
 }
 
 static float er_ui_node_child_requested_height(const er_ui_node_t* child, float width, size_t child_index) {
@@ -1218,7 +1203,7 @@ static er_ui_status_t er_ui_node_grid_child_bounds(
   er_ui_node_grid_layout_t layout;
   er_ui_status_t status = er_ui_node_grid_layout(node, bounds, &layout);
   if (status != ER_UI_OK) return status;
-  er_ui_bounds_t child_bounds = er_ui_node_grid_cell_bounds(&layout, node->gap, child_index);
+  er_ui_bounds_t child_bounds = er_ui_node_grid_cell_bounds(&layout, child_index);
   *out_bounds = er_ui_node_resolve_bounds(node->children[child_index], child_bounds);
   return ER_UI_OK;
 }
