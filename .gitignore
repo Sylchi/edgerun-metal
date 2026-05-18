@@ -6,3 +6,6 @@ machine-report*.txt
 .build/
 edgerun-metal/build/
 varfont/build/
+
+# local upstream UI reference tree; keep it out of this repo's history
+ui/shadcn-ui/
