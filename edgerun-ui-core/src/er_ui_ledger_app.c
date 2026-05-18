@@ -23,7 +23,8 @@ static const float ER_UI_LEDGER_GAP = 16.0f;
 static const float ER_UI_LEDGER_MIN_SIDE_W = 160.0f;
 static const float ER_UI_LEDGER_SIDE_W = 220.0f;
 static const float ER_UI_LEDGER_STACKED_SIDE_H = 160.0f;
-static const float ER_UI_LEDGER_MIN_CARD_W = 300.0f;
+static const float ER_UI_LEDGER_MIN_CARD_W = 240.0f;
+static const float ER_UI_LEDGER_DASHBOARD_MIN_CARD_W = 300.0f;
 static const float ER_UI_LEDGER_NARROW_CARD_W = 280.0f;
 static const size_t ER_UI_LEDGER_DASHBOARD_MAX_COLUMNS = 4u;
 static const size_t ER_UI_LEDGER_DASHBOARD_WIDE_SUMMARY_CARDS = 4u;
@@ -941,7 +942,7 @@ static er_ui_status_t er_ui_ledger_dashboard(
   float available_h = er_ui_float_max(layout.content.y + layout.content.h - grid_y - ER_UI_LEDGER_MARGIN, 1.0f);
   er_ui_responsive_grid_t grid = er_ui_responsive_grid(
     er_ui_bounds(layout.content.x, grid_y, layout.content.w, available_h),
-    ER_UI_LEDGER_MIN_CARD_W,
+    ER_UI_LEDGER_DASHBOARD_MIN_CARD_W,
     ER_UI_LEDGER_DASHBOARD_MAX_COLUMNS,
     ER_UI_LEDGER_GAP,
     ER_UI_LEDGER_GAP);
