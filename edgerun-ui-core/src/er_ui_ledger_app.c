@@ -49,6 +49,7 @@ static const float ER_UI_LEDGER_FIELD_PAD_X = 10.0f;
 static const float ER_UI_LEDGER_DOT_SIZE = 4.0f;
 static const float ER_UI_LEDGER_SELECT_CHEVRON_W = 14.0f;
 static const float ER_UI_LEDGER_SELECT_CHEVRON_H = 14.0f;
+static const size_t ER_UI_LEDGER_ACTIVITY_BAR_COUNT = 7u;
 static const size_t ER_UI_LEDGER_TEXT_CAP = 96u;
 static const uint32_t ER_UI_LEDGER_ACTION_BASE = 0xED024000u;
 static const uint32_t ER_UI_LEDGER_PAYOUT_SLIDER_ID = ER_UI_LEDGER_ACTION_BASE + 1u;
@@ -144,6 +145,8 @@ static const er_ui_ledger_transaction_t ER_UI_LEDGER_TRANSACTIONS[] = {
   {"Uber Technologies", "Transport", "Oct 11", "-$24.10", ER_UI_ICON_ROUTE, false},
   {"Netflix Subscription", "Entertainment", "Oct 10", "-$19.99", ER_UI_ICON_APP, false}
 };
+
+static const float ER_UI_LEDGER_ACTIVITY_VALUES[] = {0.34f, 0.48f, 0.28f, 0.58f, 0.38f, 0.44f, 0.68f};
 
 //@optimizer-ignore-constant fixed QR preview module coordinates are deterministic design data, not executable arithmetic
 static const uint8_t ER_UI_LEDGER_QR_DOTS[][2u] = {
@@ -691,6 +694,40 @@ static er_ui_status_t er_ui_ledger_access_card(
                              colors, "Update Security", ER_UI_LEDGER_TRANSFER_BUTTON_ID);
 }
 
+static er_ui_status_t er_ui_ledger_account_summary_card(
+  er_ui_scene_t* scene,
+  vr_font_face_t* font,
+  er_ui_bounds_t bounds,
+  er_ui_ledger_colors_t colors) {
+  er_ui_status_t status = er_ui_ledger_card_with_header(scene, font, bounds, colors, "Card Balance", "Available account buffer");
+  if (status != ER_UI_OK) return status;
+  status = er_ui_ledger_text(scene, font, "US$12.94", bounds.x + 16.0f, bounds.y + 86.0f, colors.text);
+  if (status != ER_UI_OK) return status;
+  status = er_ui_ledger_text(scene, font, "US$11,337.06 available", bounds.x + 16.0f, bounds.y + 112.0f, colors.muted);
+  if (status != ER_UI_OK) return status;
+  er_ui_bounds_t activity = er_ui_bounds(bounds.x + 16.0f, bounds.y + 148.0f, bounds.w - 32.0f, 92.0f);
+  status = er_ui_ledger_rect(scene, activity, 7.0f, colors.panel_alt);
+  if (status != ER_UI_OK) return status;
+  status = er_ui_ledger_text(scene, font, "Yearly Activity", activity.x + 12.0f, activity.y + 24.0f, colors.muted);
+  if (status != ER_UI_OK) return status;
+  float bar_gap = 8.0f;
+  float bar_w = (activity.w - 24.0f - bar_gap * (float)(ER_UI_LEDGER_ACTIVITY_BAR_COUNT - 1u)) / (float)ER_UI_LEDGER_ACTIVITY_BAR_COUNT;
+  if (bar_w <= 0.0f) return ER_UI_ERR_INVALID_ARGUMENT;
+  for (size_t i = 0u; i < ER_UI_LEDGER_ACTIVITY_BAR_COUNT; ++i) {
+    float bar_h = 34.0f * ER_UI_LEDGER_ACTIVITY_VALUES[i];
+    float x = activity.x + 12.0f + (bar_w + bar_gap) * (float)i;
+    status = er_ui_ledger_rect(scene, er_ui_bounds(x, activity.y + 70.0f - bar_h, bar_w, bar_h), 3.0f, colors.subtle);
+    if (status != ER_UI_OK) return status;
+  }
+  if (bounds.h < 320.0f) return ER_UI_OK;
+  er_ui_bounds_t transfer = er_ui_bounds(bounds.x + 16.0f, bounds.y + bounds.h - 94.0f, bounds.w - 32.0f, 76.0f);
+  status = er_ui_ledger_rect(scene, transfer, 7.0f, colors.panel_alt);
+  if (status != ER_UI_OK) return status;
+  status = er_ui_ledger_text(scene, font, "Transfer Funds", transfer.x + 12.0f, transfer.y + 24.0f, colors.text);
+  if (status != ER_UI_OK) return status;
+  return er_ui_ledger_text(scene, font, "Move money between accounts.", transfer.x + 12.0f, transfer.y + 48.0f, colors.muted);
+}
+
 static er_ui_status_t er_ui_ledger_transfer_card(
   er_ui_scene_t* scene,
   vr_font_face_t* font,
@@ -761,7 +798,9 @@ static er_ui_status_t er_ui_ledger_dashboard(
   size_t transaction_span = grid.columns > 2u ? grid.columns - 1u : 1u;
   status = er_ui_ledger_transactions_card(scene, font, er_ui_responsive_grid_span(grid, detail_index, transaction_span, row_h), colors);
   if (status != ER_UI_OK) return status;
-  if (summary_cards == ER_UI_LEDGER_DASHBOARD_WIDE_SUMMARY_CARDS) return ER_UI_OK;
+  if (summary_cards == ER_UI_LEDGER_DASHBOARD_WIDE_SUMMARY_CARDS) {
+    return er_ui_ledger_account_summary_card(scene, font, er_ui_responsive_grid_cell(grid, detail_index + transaction_span, row_h), colors);
+  }
   return er_ui_ledger_invest_card(scene, font, er_ui_responsive_grid_cell(grid, detail_index + transaction_span, row_h), colors);
 }
 
