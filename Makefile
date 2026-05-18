@@ -1,4 +1,4 @@
-.PHONY: all check clean repo-check repo-test repo-check-bin repo-inspect repo-progress erwire-decode erwire-test crypto-configure crypto-build crypto-test crypto-bench crypto-bench-avx2 crypto-bench-avx512 crypto-bench-avx512-threads crypto-bench-native-threads crypto-bench-sota edgerun-metal edgerun-os edgerun-check varfont-configure varfont-build varfont-test ui-core-configure ui-core-build ui-core-test
+.PHONY: all check clean er-build repo-check repo-test repo-check-bin repo-inspect repo-progress erwire-decode erwire-test crypto-configure crypto-build crypto-test crypto-bench crypto-bench-avx2 crypto-bench-avx512 crypto-bench-avx512-threads crypto-bench-native-threads crypto-bench-sota edgerun-metal edgerun-os edgerun-check varfont-configure varfont-build varfont-test ui-core-configure ui-core-build ui-core-test
 
 ifeq ($(origin CC),default)
 CC := clang
@@ -39,33 +39,30 @@ all: edgerun-metal
 
 check: repo-check repo-test crypto-test edgerun-check varfont-test ui-core-test
 
-repo-check: repo-check-bin
-	./.build/repo-check .
-
-repo-test: repo-check-bin repo-inspect
-	./tests/repo-check-tests.sh
-	./tests/repo-inspect-tests.sh
-	./tests/repo-progress-tests.sh
-	./tests/er-math-tests.sh
-	$(MAKE) erwire-test
-
-repo-check-bin:
+er-build:
 	mkdir -p .build
-	$(CCACHE_PREFIX) $(HOST_CC) -std=c11 -Wall -Wextra -Werror -O2 $(HOST_LDFLAGS) -o .build/repo-check tools/repo-check.c
+	$(CCACHE_PREFIX) $(HOST_CC) -std=c11 -Wall -Wextra -Werror -O2 $(HOST_LDFLAGS) -o .build/er-build tools/er-build/main.c
 
-repo-inspect:
-	mkdir -p .build
-	$(CCACHE_PREFIX) $(HOST_CC) -std=c11 -Wall -Wextra -Werror -O2 -pthread $(HOST_LDFLAGS) -o .build/repo-inspect tools/repo-inspect/repo_inspect_main.c
+repo-check: er-build
+	./.build/er-build repo-check
+
+repo-test: er-build
+	./.build/er-build repo-test
+
+repo-check-bin: er-build
+	./.build/er-build repo-check-bin
+
+repo-inspect: er-build
+	./.build/er-build repo-inspect
 
 repo-progress:
 	./tools/repo-progress.sh $(REPO_PROGRESS_SCOPE) $(REPO_PROGRESS_TEST)
 
-erwire-decode:
-	mkdir -p .build
-	$(CCACHE_PREFIX) $(HOST_CC) -std=c11 -Wall -Wextra -Werror -O2 $(HOST_LDFLAGS) -o .build/erwire-decode tools/erwire-decode.c
+erwire-decode: er-build
+	./.build/er-build erwire-decode
 
-erwire-test: erwire-decode
-	./tests/erwire-decode-tests.sh
+erwire-test: er-build
+	./.build/er-build erwire-test
 
 crypto-configure:
 	cmake -S edgerun-crypto -B $(CRYPTO_BUILD_DIR) -G "$(CRYPTO_CMAKE_GENERATOR)" $(CMAKE_TOOLCHAIN_ARGS)
@@ -73,8 +70,8 @@ crypto-configure:
 crypto-build: crypto-configure
 	cmake --build $(CRYPTO_BUILD_DIR)
 
-crypto-test: crypto-build
-	ctest --test-dir $(CRYPTO_BUILD_DIR) --output-on-failure
+crypto-test: er-build
+	./.build/er-build crypto-test
 
 crypto-bench: crypto-build
 	cmake --build $(CRYPTO_BUILD_DIR) --target bench

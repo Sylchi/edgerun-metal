@@ -25,13 +25,14 @@ make check
 
 `make check` verifies:
 
-- repository structure through `tools/repo-check.sh`
+- repository structure through `tools/repo-check.c`
 - repository-policy tests through `tests/repo-check-tests.sh`
 - the `edgerun-metal` OS image builds with warnings as errors
 - `varfont` builds with CMake and Ninja
 - `varfont` tests pass through CTest
 - `edgerun-ui-core` builds with CMake and Ninja
 - `edgerun-ui-core` tests pass through CTest
+- `edgerun-crypto` tests through the repository-owned `tools/er-build` runner
 
 ## Tooling
 
@@ -46,8 +47,10 @@ Use current, deterministic tools already available on the machine:
 - `git status --short --branch` before and after changes
 
 The Makefile wrappers discover `ccache` and `mold` automatically and keep the
-tool selections overridable through make variables. Keep that behavior when
-adding new build targets.
+tool selections overridable through make variables. `tools/er-build` is the
+repository-owned build runner for migrated targets; prefer adding new repository
+tooling and hosted test orchestration there instead of adding new shell or CMake
+orchestration.
 
 ## Test Policy
 

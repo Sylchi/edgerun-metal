@@ -319,13 +319,16 @@ The preferred local build tools are:
 - `ccache` when available for repeated C builds
 - `mold` when available for hosted Linux test/tool executables
 - `wat2wasm` for source-first metal Wasm module fixtures
-- `CMake` with `Ninja` for `edgerun-crypto`, `varfont`, and `edgerun-ui-core`
+- `CMake` with `Ninja` for `varfont`, `edgerun-ui-core`, and hosted crypto benchmarks
 - `ctest --output-on-failure` for tests
 - `rg` for repository search
 
 The root Makefile auto-detects `ccache` and `mold`. Override with `CCACHE=`,
 `MOLD=`, `HOST_CC=`, or `CC=` when a specific environment needs different tools.
 UEFI/EFI links stay on LLVM `lld`; `mold` is only used for hosted binaries.
+The repository-owned `tools/er-build` runner is the migration path away from
+external build orchestration. The Makefile builds `.build/er-build` and delegates
+repository policy/tool targets and `crypto-test` to it.
 
 ## Common Commands
 
@@ -380,15 +383,14 @@ make edgerun-os
 Build and test `edgerun-crypto`:
 
 ```bash
-cmake -S edgerun-crypto -B .build/edgerun-crypto -G Ninja
-cmake --build .build/edgerun-crypto
-ctest --test-dir .build/edgerun-crypto --output-on-failure
+make crypto-test
 ```
 
-The root Makefile wraps the same flow:
+`crypto-test` is built and run directly by `.build/er-build`; it does not use
+CMake, Ninja, or CTest. CMake remains available for hosted crypto benchmarking:
 
 ```bash
-make crypto-test
+make crypto-build
 ```
 
 Run hosted BLAKE3 comparison benchmarks:
