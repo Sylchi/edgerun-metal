@@ -24,7 +24,7 @@ typedef uint8_t BOOLEAN;
 #ifndef EFIAPI
 #if defined(_MSC_VER)
 #define EFIAPI __cdecl
-#elif defined(__GNUC__) || defined(__clang__)
+#elif (defined(__GNUC__) || defined(__clang__)) && (defined(__x86_64__) || defined(_M_X64))
 #define EFIAPI __attribute__((ms_abi))
 #else
 #define EFIAPI

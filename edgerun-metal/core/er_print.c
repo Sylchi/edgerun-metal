@@ -26,6 +26,12 @@
 #define ER_PRINT_DEC_BUF_CHARS 24u
 #define ER_PRINT_DEC_BASE 10u
 
+#if defined(ER_TARGET_X86_64) || defined(__x86_64__) || defined(_M_X64)
+#define ER_PRINT_SERIAL_PORT_SUPPORTED 1u
+#else
+#define ER_PRINT_SERIAL_PORT_SUPPORTED 0u
+#endif
+
 static EFI_SYSTEM_TABLE* g_st;
 static UINT8 g_serial_ready;
 static UINT8 g_firmware_console_enabled = 1u;
@@ -36,10 +42,18 @@ static UINT64 g_test_serial_byte_count;
 #endif
 
 static inline void er_io_out8(UINT16 port, UINT8 value) {
+#if ER_PRINT_SERIAL_PORT_SUPPORTED
   __asm__ __volatile__("outb %0, %1" : : "a"(value), "Nd"(port));
+#else
+  (void)port;
+  (void)value;
+#endif
 }
 
 static void er_serial_init(void) {
+  if (ER_PRINT_SERIAL_PORT_SUPPORTED == 0u) {
+    return;
+  }
   if (g_serial_ready != 0) {
     return;
   }
@@ -58,7 +72,11 @@ static void er_serial_init(void) {
 #ifndef ER_ENABLE_TEST_HOOKS
 static inline UINT8 er_io_in8(UINT16 port) {
   UINT8 value = 0;
+#if ER_PRINT_SERIAL_PORT_SUPPORTED
   __asm__ __volatile__("inb %1, %0" : "=a"(value) : "Nd"(port));
+#else
+  (void)port;
+#endif
   return value;
 }
 #endif
@@ -73,6 +91,9 @@ static void er_serial_putc(char c) {
   ++g_test_serial_byte_count;
   return;
 #else
+  if (ER_PRINT_SERIAL_PORT_SUPPORTED == 0u) {
+    return;
+  }
   er_serial_init();
   while ((er_io_in8((UINT16)(ER_COM1_PORT + ER_SERIAL_LINE_STATUS_OFFSET)) & ER_SERIAL_TX_READY_MASK) == 0u &&
          spins < ER_SERIAL_TX_WAIT_SPINS) {

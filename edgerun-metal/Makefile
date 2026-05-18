@@ -1,4 +1,4 @@
-.PHONY: all run clean print-path netboot os rebuild-image check test-core wasm-modules qemu-config-check
+.PHONY: all run clean print-path print-config netboot os rebuild-image check test-core wasm-modules qemu-config-check
 
 CC = clang
 HOST_CC ?= clang
@@ -6,10 +6,10 @@ CCACHE ?= $(shell command -v ccache 2>/dev/null)
 MOLD ?= $(shell command -v mold 2>/dev/null)
 CCACHE_PREFIX := $(if $(CCACHE),$(CCACHE),)
 
+ER_METAL_ARCH ?= x86_64
 BUILD_DIR := build
 ESP_DIR := $(BUILD_DIR)/esp
 EFI_OUT := $(BUILD_DIR)/edgerun-metal.efi
-EFI_BOOT := $(ESP_DIR)/EFI/BOOT/BOOTX64.EFI
 UI_CORE_DIR := ../edgerun-ui-core
 VARFONT_DIR := ../varfont
 CRYPTO_DIR := ../edgerun-crypto
@@ -19,9 +19,26 @@ GENERATED_DIR := $(BUILD_DIR)/generated
 # storage-bound package loading, and relay/device endpoint work.
 ER_BOOT_PROFILE ?= 4
 
-CFLAGS := -std=c11 -Wall -Werror -ffreestanding -fshort-wchar -fno-builtin -fno-stack-protector -mno-red-zone -fuse-ld=lld -target x86_64-pc-windows-msvc \
+ifeq ($(ER_METAL_ARCH),x86_64)
+ER_METAL_TARGET := x86_64-pc-windows-msvc
+ER_METAL_BOOT_EFI := BOOTX64.EFI
+ER_METAL_ARCH_CFLAGS := -mno-red-zone -DER_TARGET_X86_64=1
+ER_METAL_CRYPTO_DEFS := -DER_BLAKE3_USE_UPSTREAM_ASM=1
+CRYPTO_ASM_SRCS := $(CRYPTO_DIR)/../third_party/blake3/c/blake3_sse2_x86-64_windows_gnu.S
+else ifeq ($(ER_METAL_ARCH),aarch64)
+ER_METAL_TARGET := aarch64-unknown-windows-msvc
+ER_METAL_BOOT_EFI := BOOTAA64.EFI
+ER_METAL_ARCH_CFLAGS := -DER_TARGET_AARCH64=1
+ER_METAL_CRYPTO_DEFS :=
+CRYPTO_ASM_SRCS :=
+else
+$(error unsupported ER_METAL_ARCH '$(ER_METAL_ARCH)')
+endif
+
+EFI_BOOT := $(ESP_DIR)/EFI/BOOT/$(ER_METAL_BOOT_EFI)
+CFLAGS := -std=c11 -Wall -Werror -ffreestanding -fshort-wchar -fno-builtin -fno-stack-protector -fuse-ld=lld -target $(ER_METAL_TARGET) $(ER_METAL_ARCH_CFLAGS) \
           -I$(CURDIR)/core -I$(CURDIR) -I$(CURDIR)/../include -I$(CURDIR)/$(GENERATED_DIR) -I$(CURDIR)/$(CRYPTO_DIR)/include -I$(CURDIR)/$(UI_CORE_DIR)/include -I$(CURDIR)/$(VARFONT_DIR)/include -DER_BOOT_PROFILE=$(ER_BOOT_PROFILE)
-CRYPTO_CFLAGS := $(CFLAGS) -O3 -DER_BLAKE3_USE_UPSTREAM_ASM=1
+CRYPTO_CFLAGS := $(CFLAGS) -O3 $(ER_METAL_CRYPTO_DEFS)
 LDFLAGS := -nostdlib -Wl,/SUBSYSTEM:EFI_APPLICATION,/ENTRY:efi_main
 HOST_CFLAGS := -std=c11 -Wall -Wextra -Werror -O2 -DER_ENABLE_TEST_HOOKS=1 -I$(CURDIR)/core -I$(CURDIR)/../include -I$(CURDIR)/$(GENERATED_DIR) -I$(CURDIR)/$(CRYPTO_DIR)/include -I$(CURDIR)/$(UI_CORE_DIR)/include -I$(CURDIR)/$(VARFONT_DIR)/include
 HOST_LDFLAGS ?= $(if $(MOLD),-fuse-ld=mold,)
@@ -30,7 +47,6 @@ SRCS := core/efi_main.c core/efi_boot_memory.c core/efi_boot_diagnostics.c core/
 UI_SRCS := $(UI_CORE_DIR)/src/er_ui_assets.c $(UI_CORE_DIR)/src/er_ui_components_catalog.c $(UI_CORE_DIR)/src/er_ui_components_catalog_data.c $(UI_CORE_DIR)/src/er_ui_components_contracts.c $(UI_CORE_DIR)/src/er_ui_components_emit.c $(UI_CORE_DIR)/src/er_ui_components_internal.c $(UI_CORE_DIR)/src/er_ui_components_preview.c $(UI_CORE_DIR)/src/er_ui_components_state.c $(UI_CORE_DIR)/src/er_ui_icon.c $(UI_CORE_DIR)/src/er_ui_initial_setup.c $(UI_CORE_DIR)/src/er_ui_ledger_app.c $(UI_CORE_DIR)/src/er_ui_metal.c $(UI_CORE_DIR)/src/er_ui_node.c $(UI_CORE_DIR)/src/er_ui_node_accessibility.c $(UI_CORE_DIR)/src/er_ui_node_layout.c $(UI_CORE_DIR)/src/er_ui_node_render.c $(UI_CORE_DIR)/src/er_ui_node_render_controls.c $(UI_CORE_DIR)/src/er_ui_node_render_conversation.c $(UI_CORE_DIR)/src/er_ui_node_render_panels.c $(UI_CORE_DIR)/src/er_ui_painter.c $(UI_CORE_DIR)/src/er_ui_primitives.c $(UI_CORE_DIR)/src/er_ui_preset_code.c $(UI_CORE_DIR)/src/er_ui_record_codec.c $(UI_CORE_DIR)/src/er_ui_runtime_focus.c $(UI_CORE_DIR)/src/er_ui_runtime_input.c $(UI_CORE_DIR)/src/er_ui_runtime_internal.c $(UI_CORE_DIR)/src/er_ui_runtime_state.c $(UI_CORE_DIR)/src/er_ui_runtime_text.c $(UI_CORE_DIR)/src/er_ui_scene.c $(UI_CORE_DIR)/src/er_ui_shell.c $(UI_CORE_DIR)/src/er_ui_spacing.c $(UI_CORE_DIR)/src/er_ui_theme.c $(UI_CORE_DIR)/src/er_ui_text.c
 VARFONT_SRCS := $(VARFONT_DIR)/src/vr_font.c $(VARFONT_DIR)/src/vr_font_utils.c $(VARFONT_DIR)/src/vr_font_axes.c $(VARFONT_DIR)/src/vr_font_cmap.c $(VARFONT_DIR)/src/vr_font_gvar.c $(VARFONT_DIR)/src/vr_font_gvar_apply.c $(VARFONT_DIR)/src/vr_font_kern.c $(VARFONT_DIR)/src/vr_font_tables.c $(VARFONT_DIR)/src/vr_font_shape.c $(VARFONT_DIR)/src/vr_font_raster.c $(VARFONT_DIR)/src/vr_font_raster_geometry.c $(VARFONT_DIR)/src/vr_font_raster_glyph.c $(VARFONT_DIR)/src/vr_font_raster_msdf.c $(VARFONT_DIR)/src/vr_font_raster_outline.c $(VARFONT_DIR)/src/vr_font_raster_storage.c $(VARFONT_DIR)/src/vr_font_atlas.c
 CRYPTO_SRCS := $(CRYPTO_DIR)/src/er_blake3.c
-CRYPTO_ASM_SRCS := $(CRYPTO_DIR)/../third_party/blake3/c/blake3_sse2_x86-64_windows_gnu.S
 OBJS := $(patsubst %.c,$(BUILD_DIR)/%.o,$(SRCS))
 UI_OBJS := $(patsubst $(UI_CORE_DIR)/src/%.c,$(BUILD_DIR)/ui-core/%.o,$(UI_SRCS))
 VARFONT_OBJS := $(patsubst $(VARFONT_DIR)/src/%.c,$(BUILD_DIR)/varfont/%.o,$(VARFONT_SRCS))
@@ -160,3 +176,10 @@ clean:
 
 print-path:
 	@printf '%s\n' "$(abspath $(EFI_BOOT))"
+
+print-config:
+	@printf 'ER_METAL_ARCH=%s\n' "$(ER_METAL_ARCH)"
+	@printf 'ER_METAL_TARGET=%s\n' "$(ER_METAL_TARGET)"
+	@printf 'ER_METAL_BOOT_EFI=%s\n' "$(ER_METAL_BOOT_EFI)"
+	@printf 'EFI_BOOT=%s\n' "$(abspath $(EFI_BOOT))"
+	@printf 'CRYPTO_ASM_SRCS=%s\n' "$(CRYPTO_ASM_SRCS)"

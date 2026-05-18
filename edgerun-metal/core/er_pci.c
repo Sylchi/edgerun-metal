@@ -40,14 +40,29 @@
 #define ER_PCI_BAR_MMIO_BASE_MASK 0xfffffff0u
 #define ER_PCI_BAR_HIGH_SHIFT 32u
 
+#if defined(ER_TARGET_X86_64) || defined(__x86_64__) || defined(_M_X64)
+#define ER_PCI_CONFIG_PORT_SUPPORTED 1u
+#else
+#define ER_PCI_CONFIG_PORT_SUPPORTED 0u
+#endif
+
 static inline UINT32 er_in32(UINT16 port) {
   UINT32 value = 0;
+#if ER_PCI_CONFIG_PORT_SUPPORTED
   __asm__ __volatile__("inl %1, %0" : "=a"(value) : "Nd"(port));
+#else
+  (void)port;
+#endif
   return value;
 }
 
 static inline void er_out32(UINT16 port, UINT32 value) {
+#if ER_PCI_CONFIG_PORT_SUPPORTED
   __asm__ __volatile__("outl %0, %1" : : "a"(value), "Nd"(port));
+#else
+  (void)port;
+  (void)value;
+#endif
 }
 
 UINT8 er_pci_config_access_valid(INT64 bus_i, INT64 dev_i, INT64 func_i, INT64 offset_i) {
@@ -100,6 +115,9 @@ INT64 er_pci_read32(INT64 bus_i, INT64 dev_i, INT64 func_i, INT64 offset_i) {
   if (address < 0) {
     return -1;
   }
+  if (ER_PCI_CONFIG_PORT_SUPPORTED == 0u) {
+    return -1;
+  }
 
   er_out32((UINT16)ER_PCI_CONFIG_ADDRESS_PORT, (UINT32)address);
   return (INT64)(UINT32)er_in32((UINT16)ER_PCI_CONFIG_DATA_PORT);
@@ -109,6 +127,9 @@ void er_pci_write32(INT64 bus_i, INT64 dev_i, INT64 func_i, INT64 offset_i, INT6
   INT64 address = er_pci_config_address(bus_i, dev_i, func_i, offset_i);
 
   if (address < 0) {
+    return;
+  }
+  if (ER_PCI_CONFIG_PORT_SUPPORTED == 0u) {
     return;
   }
 
