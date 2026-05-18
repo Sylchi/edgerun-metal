@@ -149,6 +149,7 @@
 #define ER_UI_TEST_NODE_RENDER_NAVIGATION_SELECTED_INDEX 1u
 #define ER_UI_TEST_NODE_RENDER_SIDEBAR_ID 8856u
 #define ER_UI_TEST_NODE_RENDER_SIDEBAR_SELECTED_INDEX 0u
+#define ER_UI_TEST_NODE_RENDER_SIDEBAR_NARROW_W 220.0f
 #define ER_UI_TEST_NODE_RENDER_DRAWER_ID 8860u
 #define ER_UI_TEST_NODE_RENDER_DROPDOWN_ID 8862u
 #define ER_UI_TEST_NODE_RENDER_DROPDOWN_SELECTED_INDEX 1u
@@ -1070,8 +1071,12 @@ void run_node_tests(void) {
     expect_status(er_ui_node_render(&sidebar, &scene, face, er_ui_bounds(0.0f, 4514.0f, 420.0f, 176.0f), theme), ER_UI_OK,
                   "node: sidebar renders");
     expect_size(scene.hit_count, hits_before_sidebar + ER_UI_TEST_NODE_RENDER_SIDEBAR_HITS, "node: sidebar emits menu item hits");
+    hits_before_sidebar = scene.hit_count;
+    expect_status(er_ui_node_render(&sidebar, &scene, face, er_ui_bounds(0.0f, 4702.0f, ER_UI_TEST_NODE_RENDER_SIDEBAR_NARROW_W, 220.0f), theme), ER_UI_OK,
+                  "node: sidebar renders narrow stacked layout");
+    expect_size(scene.hit_count, hits_before_sidebar + ER_UI_TEST_NODE_RENDER_SIDEBAR_HITS, "node: stacked sidebar emits menu item hits");
     size_t icon_quads_before_sonner = scene.icon_quad_count;
-    expect_status(er_ui_node_render(&sonner, &scene, face, er_ui_bounds(0.0f, 4702.0f, 300.0f, 112.0f), theme), ER_UI_OK,
+    expect_status(er_ui_node_render(&sonner, &scene, face, er_ui_bounds(0.0f, 4934.0f, 300.0f, 112.0f), theme), ER_UI_OK,
                   "node: sonner renders");
     expect_size(scene.icon_quad_count, icon_quads_before_sonner + ER_UI_TEST_NODE_RENDER_SONNER_ICON_QUADS,
                 "node: sonner emits toast chrome and status icon quads");
