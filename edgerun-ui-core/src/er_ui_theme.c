@@ -13,8 +13,47 @@
 #define ER_UI_RGB_AMBER_500 245u, 158u, 11u
 #define ER_UI_RGB_VIOLET_500 139u, 92u, 246u
 #define ER_UI_RGB_ROSE_600 225u, 29u, 72u
+#define ER_UI_RGB_SHADCN_NEUTRAL_BACKGROUND 10u, 10u, 10u
+#define ER_UI_RGB_SHADCN_NEUTRAL_CARD 23u, 23u, 23u
+#define ER_UI_RGB_SHADCN_NEUTRAL_FOREGROUND 250u, 250u, 250u
+#define ER_UI_RGB_SHADCN_NEUTRAL_PRIMARY 229u, 229u, 229u
+#define ER_UI_RGB_SHADCN_NEUTRAL_SECONDARY 38u, 38u, 38u
+#define ER_UI_RGB_SHADCN_NEUTRAL_MUTED_FOREGROUND 161u, 161u, 161u
+#define ER_UI_RGB_SHADCN_NEUTRAL_RING 115u, 115u, 115u
+#define ER_UI_RGB_SHADCN_CHART_1 38u, 38u, 38u
+#define ER_UI_RGB_SHADCN_CHART_2 82u, 82u, 82u
+#define ER_UI_RGB_SHADCN_CHART_3 115u, 115u, 115u
+#define ER_UI_RGB_SHADCN_CHART_4 161u, 161u, 161u
+#define ER_UI_RGB_SHADCN_CHART_5 229u, 229u, 229u
 
-static const float ER_UI_CARD_RADIUS_MAX = 8.0f;
+static const float ER_UI_RADIUS_NONE_VALUE = 0.0f;
+static const float ER_UI_RADIUS_COMPACT_CONTROL = 6.0f;
+static const float ER_UI_RADIUS_COMPACT_CARD = 8.0f;
+static const float ER_UI_RADIUS_COMPACT_PANEL = 8.0f;
+static const float ER_UI_RADIUS_DEFAULT_CONTROL = 8.0f;
+static const float ER_UI_RADIUS_DEFAULT_CARD = 14.0f;
+static const float ER_UI_RADIUS_DEFAULT_PANEL = 14.0f;
+static const float ER_UI_RADIUS_SOFT_CONTROL = 14.0f;
+static const float ER_UI_RADIUS_SOFT_PANEL = 18.0f;
+static const float ER_UI_RADIUS_PILL = 999.0f;
+static const float ER_UI_SHADCN_BORDER_ALPHA = 0.10f;
+static const float ER_UI_SHADCN_INPUT_ALPHA = 0.15f;
+static const float ER_UI_SHADCN_INPUT_FILL_ALPHA = 0.30f;
+static const float ER_UI_SHADCN_ACTIVE_ALPHA = 0.50f;
+static const float ER_UI_ACCENT_ACTIVE_ALPHA = 0.42f;
+static const float ER_UI_SHADCN_RADIUS_SM = 6.0f;
+static const float ER_UI_SHADCN_RADIUS_MD = 8.0f;
+static const float ER_UI_SHADCN_RADIUS_LG = 10.0f;
+static const float ER_UI_SHADCN_RADIUS_XL = 14.0f;
+static const float ER_UI_SHADCN_CARD_PAD = 24.0f;
+static const float ER_UI_SHADCN_CARD_GAP = 24.0f;
+static const float ER_UI_SHADCN_FIELD_GAP = 12.0f;
+static const float ER_UI_SHADCN_CONTROL_H = 36.0f;
+static const float ER_UI_SHADCN_CONTROL_PAD_X = 10.0f;
+static const float ER_UI_SHADCN_BUTTON_H_SM = 32.0f;
+static const float ER_UI_SHADCN_BUTTON_H_LG = 40.0f;
+static const float ER_UI_SHADCN_PROGRESS_H = 6.0f;
+static const float ER_UI_SHADCN_SLIDER_THUMB = 16.0f;
 
 er_ui_color4_t er_ui_palette_black(void) { return er_ui_color_rgb_u8(ER_UI_RGB_BLACK); }
 er_ui_color4_t er_ui_palette_slate_50(void) { return er_ui_color_rgb_u8(ER_UI_RGB_SLATE_50); }
@@ -30,13 +69,7 @@ er_ui_color4_t er_ui_palette_amber_500(void) { return er_ui_color_rgb_u8(ER_UI_R
 er_ui_color4_t er_ui_palette_violet_500(void) { return er_ui_color_rgb_u8(ER_UI_RGB_VIOLET_500); }
 er_ui_color4_t er_ui_palette_rose_600(void) { return er_ui_color_rgb_u8(ER_UI_RGB_ROSE_600); }
 
-static er_ui_color4_t er_ui_palette_bg(void) { return er_ui_palette_slate_950(); }
-static er_ui_color4_t er_ui_palette_sidebar(void) { return er_ui_color_with_alpha(er_ui_palette_black(), 0.86f); }
-static er_ui_color4_t er_ui_palette_topbar(void) { return er_ui_color_with_alpha(er_ui_palette_black(), 0.82f); }
-static er_ui_color4_t er_ui_palette_row(void) { return er_ui_color_with_alpha(er_ui_palette_slate_800(), 0.62f); }
 static er_ui_color4_t er_ui_palette_active_row(void) { return er_ui_color_with_alpha(er_ui_palette_slate_700(), 0.72f); }
-static er_ui_color4_t er_ui_palette_panel(void) { return er_ui_color_with_alpha(er_ui_palette_slate_900(), 0.88f); }
-static er_ui_color4_t er_ui_palette_composer(void) { return er_ui_color_with_alpha(er_ui_palette_slate_800(), 0.42f); }
 
 er_ui_radius_preset_t er_ui_radius_preset_next(er_ui_radius_preset_t preset) {
   switch (preset) {
@@ -88,17 +121,17 @@ er_ui_color4_t er_ui_accent_color(er_ui_accent_preset_t accent) {
 
 er_ui_radius_scale_t er_ui_radius_scale_from_preset(er_ui_radius_preset_t preset) {
   switch (preset) {
-    case ER_UI_RADIUS_NONE: return (er_ui_radius_scale_t){0.0f, 0.0f, 0.0f, 0.0f};
-    case ER_UI_RADIUS_COMPACT: return (er_ui_radius_scale_t){6.0f, 6.0f, 8.0f, 999.0f};
-    case ER_UI_RADIUS_SOFT: return (er_ui_radius_scale_t){14.0f, ER_UI_CARD_RADIUS_MAX, 18.0f, 999.0f};
+    case ER_UI_RADIUS_NONE: return (er_ui_radius_scale_t){ER_UI_RADIUS_NONE_VALUE, ER_UI_RADIUS_NONE_VALUE, ER_UI_RADIUS_NONE_VALUE, ER_UI_RADIUS_NONE_VALUE};
+    case ER_UI_RADIUS_COMPACT: return (er_ui_radius_scale_t){ER_UI_RADIUS_COMPACT_CONTROL, ER_UI_RADIUS_COMPACT_CARD, ER_UI_RADIUS_COMPACT_PANEL, ER_UI_RADIUS_PILL};
+    case ER_UI_RADIUS_SOFT: return (er_ui_radius_scale_t){ER_UI_RADIUS_SOFT_CONTROL, ER_UI_RADIUS_DEFAULT_CARD, ER_UI_RADIUS_SOFT_PANEL, ER_UI_RADIUS_PILL};
     case ER_UI_RADIUS_DEFAULT:
-    default: return (er_ui_radius_scale_t){10.0f, 8.0f, 12.0f, 999.0f};
+    default: return (er_ui_radius_scale_t){ER_UI_RADIUS_DEFAULT_CONTROL, ER_UI_RADIUS_DEFAULT_CARD, ER_UI_RADIUS_DEFAULT_PANEL, ER_UI_RADIUS_PILL};
   }
 }
 
 er_ui_semantic_colors_t er_ui_semantic_colors_with_accent(er_ui_semantic_colors_t colors, er_ui_color4_t accent) {
   colors.accent = accent;
-  colors.active = er_ui_color_with_alpha(accent, 0.42f);
+  colors.active = er_ui_color_with_alpha(accent, ER_UI_ACCENT_ACTIVE_ALPHA);
   return colors;
 }
 
@@ -133,23 +166,101 @@ er_ui_semantic_colors_t er_ui_semantic_colors_for_scheme(er_ui_color_scheme_t sc
       break;
     case ER_UI_COLOR_SCHEME_DARK:
     default:
-      colors.bg = er_ui_palette_bg();
-      colors.sidebar = er_ui_palette_sidebar();
-      colors.topbar = er_ui_palette_topbar();
-      colors.panel = er_ui_palette_panel();
-      colors.row = er_ui_palette_row();
-      colors.active = er_ui_palette_active_row();
-      colors.composer = er_ui_palette_composer();
-      colors.text = er_ui_palette_slate_50();
-      colors.muted = er_ui_palette_slate_400();
-      colors.border = er_ui_color_with_alpha(er_ui_palette_slate_700(), 0.32f);
-      colors.accent = er_ui_palette_cyan_600();
+      return er_ui_semantic_colors_from_shadcn(er_ui_shadcn_neutral_dark_vega());
       break;
   }
   colors.accent_text = er_ui_palette_sky_50();
   colors.success = er_ui_palette_emerald_500();
   colors.warning = er_ui_palette_amber_500();
   colors.danger = er_ui_palette_rose_600();
+  colors.info = er_ui_palette_violet_500();
+  return colors;
+}
+
+er_ui_shadcn_colors_t er_ui_shadcn_neutral_dark_colors(void) {
+  er_ui_shadcn_colors_t colors = {0};
+  colors.background = er_ui_color_rgb_u8(ER_UI_RGB_SHADCN_NEUTRAL_BACKGROUND);
+  colors.foreground = er_ui_color_rgb_u8(ER_UI_RGB_SHADCN_NEUTRAL_FOREGROUND);
+  colors.card = er_ui_color_rgb_u8(ER_UI_RGB_SHADCN_NEUTRAL_CARD);
+  colors.card_foreground = colors.foreground;
+  colors.popover = colors.card;
+  colors.popover_foreground = colors.foreground;
+  colors.primary = er_ui_color_rgb_u8(ER_UI_RGB_SHADCN_NEUTRAL_PRIMARY);
+  colors.primary_foreground = colors.card;
+  colors.secondary = er_ui_color_rgb_u8(ER_UI_RGB_SHADCN_NEUTRAL_SECONDARY);
+  colors.secondary_foreground = colors.foreground;
+  colors.muted = colors.secondary;
+  colors.muted_foreground = er_ui_color_rgb_u8(ER_UI_RGB_SHADCN_NEUTRAL_MUTED_FOREGROUND);
+  colors.accent = colors.secondary;
+  colors.accent_foreground = colors.foreground;
+  colors.destructive = er_ui_palette_rose_600();
+  colors.destructive_foreground = colors.foreground;
+  colors.border = er_ui_color_rgba(1.0f, 1.0f, 1.0f, ER_UI_SHADCN_BORDER_ALPHA);
+  colors.input = er_ui_color_rgba(1.0f, 1.0f, 1.0f, ER_UI_SHADCN_INPUT_ALPHA);
+  colors.ring = er_ui_color_rgb_u8(ER_UI_RGB_SHADCN_NEUTRAL_RING);
+  colors.sidebar = colors.card;
+  colors.sidebar_foreground = colors.foreground;
+  colors.sidebar_primary = colors.primary;
+  colors.sidebar_primary_foreground = colors.primary_foreground;
+  colors.sidebar_accent = colors.secondary;
+  colors.sidebar_accent_foreground = colors.foreground;
+  colors.sidebar_border = colors.border;
+  colors.sidebar_ring = colors.ring;
+  colors.chart_1 = er_ui_color_rgb_u8(ER_UI_RGB_SHADCN_CHART_1);
+  colors.chart_2 = er_ui_color_rgb_u8(ER_UI_RGB_SHADCN_CHART_2);
+  colors.chart_3 = er_ui_color_rgb_u8(ER_UI_RGB_SHADCN_CHART_3);
+  colors.chart_4 = er_ui_color_rgb_u8(ER_UI_RGB_SHADCN_CHART_4);
+  colors.chart_5 = er_ui_color_rgb_u8(ER_UI_RGB_SHADCN_CHART_5);
+  return colors;
+}
+
+er_ui_shadcn_radius_t er_ui_shadcn_default_radius(void) {
+  er_ui_shadcn_radius_t radius = {ER_UI_SHADCN_RADIUS_SM, ER_UI_SHADCN_RADIUS_MD, ER_UI_SHADCN_RADIUS_LG, ER_UI_SHADCN_RADIUS_XL};
+  return radius;
+}
+
+er_ui_shadcn_metrics_t er_ui_shadcn_vega_metrics(void) {
+  er_ui_shadcn_metrics_t metrics = {0};
+  metrics.card_pad_x = ER_UI_SHADCN_CARD_PAD;
+  metrics.card_pad_y = ER_UI_SHADCN_CARD_PAD;
+  metrics.card_gap = ER_UI_SHADCN_CARD_GAP;
+  metrics.field_gap = ER_UI_SHADCN_FIELD_GAP;
+  metrics.control_h = ER_UI_SHADCN_CONTROL_H;
+  metrics.control_pad_x = ER_UI_SHADCN_CONTROL_PAD_X;
+  metrics.button_h_sm = ER_UI_SHADCN_BUTTON_H_SM;
+  metrics.button_h_default = ER_UI_SHADCN_CONTROL_H;
+  metrics.button_h_lg = ER_UI_SHADCN_BUTTON_H_LG;
+  metrics.icon_button = ER_UI_SHADCN_CONTROL_H;
+  metrics.progress_h = ER_UI_SHADCN_PROGRESS_H;
+  metrics.slider_thumb = ER_UI_SHADCN_SLIDER_THUMB;
+  return metrics;
+}
+
+er_ui_shadcn_design_system_t er_ui_shadcn_neutral_dark_vega(void) {
+  er_ui_shadcn_design_system_t design = {0};
+  design.colors = er_ui_shadcn_neutral_dark_colors();
+  design.radius = er_ui_shadcn_default_radius();
+  design.metrics = er_ui_shadcn_vega_metrics();
+  return design;
+}
+
+er_ui_semantic_colors_t er_ui_semantic_colors_from_shadcn(er_ui_shadcn_design_system_t design) {
+  er_ui_semantic_colors_t colors = {0};
+  colors.bg = design.colors.background;
+  colors.sidebar = design.colors.sidebar;
+  colors.topbar = er_ui_color_with_alpha(design.colors.background, ER_UI_SHADCN_INPUT_FILL_ALPHA);
+  colors.panel = design.colors.card;
+  colors.row = design.colors.secondary;
+  colors.active = er_ui_color_with_alpha(design.colors.muted, ER_UI_SHADCN_ACTIVE_ALPHA);
+  colors.composer = er_ui_color_with_alpha(design.colors.input, ER_UI_SHADCN_INPUT_FILL_ALPHA);
+  colors.text = design.colors.foreground;
+  colors.muted = design.colors.muted_foreground;
+  colors.border = design.colors.border;
+  colors.accent = design.colors.primary;
+  colors.accent_text = design.colors.primary_foreground;
+  colors.success = er_ui_palette_emerald_500();
+  colors.warning = er_ui_palette_amber_500();
+  colors.danger = design.colors.destructive;
   colors.info = er_ui_palette_violet_500();
   return colors;
 }
@@ -168,6 +279,7 @@ er_ui_resolved_theme_t er_ui_resolved_theme(er_ui_style_authority_t authority, e
   er_ui_resolved_theme_t theme = {0};
   theme.authority = authority;
   theme.preset = preset;
+  theme.shadcn = er_ui_shadcn_neutral_dark_vega();
   theme.colors = er_ui_semantic_colors_for_scheme(preset.scheme);
   if (preset.accent != ER_UI_ACCENT_NEUTRAL) theme.colors = er_ui_semantic_colors_with_accent(theme.colors, er_ui_accent_color(preset.accent));
   theme.radius = er_ui_radius_scale_from_preset(preset.radius);
@@ -198,5 +310,43 @@ er_ui_color4_t er_ui_theme_color(er_ui_resolved_theme_t theme, er_ui_color_token
     case ER_UI_COLOR_TOKEN_DANGER: return theme.colors.danger;
     case ER_UI_COLOR_TOKEN_INFO:
     default: return theme.colors.info;
+  }
+}
+
+er_ui_color4_t er_ui_shadcn_theme_color(er_ui_resolved_theme_t theme, er_ui_shadcn_color_token_t token) {
+  switch (token) {
+    case ER_UI_SHADCN_COLOR_BACKGROUND: return theme.shadcn.colors.background;
+    case ER_UI_SHADCN_COLOR_FOREGROUND: return theme.shadcn.colors.foreground;
+    case ER_UI_SHADCN_COLOR_CARD: return theme.shadcn.colors.card;
+    case ER_UI_SHADCN_COLOR_CARD_FOREGROUND: return theme.shadcn.colors.card_foreground;
+    case ER_UI_SHADCN_COLOR_POPOVER: return theme.shadcn.colors.popover;
+    case ER_UI_SHADCN_COLOR_POPOVER_FOREGROUND: return theme.shadcn.colors.popover_foreground;
+    case ER_UI_SHADCN_COLOR_PRIMARY: return theme.shadcn.colors.primary;
+    case ER_UI_SHADCN_COLOR_PRIMARY_FOREGROUND: return theme.shadcn.colors.primary_foreground;
+    case ER_UI_SHADCN_COLOR_SECONDARY: return theme.shadcn.colors.secondary;
+    case ER_UI_SHADCN_COLOR_SECONDARY_FOREGROUND: return theme.shadcn.colors.secondary_foreground;
+    case ER_UI_SHADCN_COLOR_MUTED: return theme.shadcn.colors.muted;
+    case ER_UI_SHADCN_COLOR_MUTED_FOREGROUND: return theme.shadcn.colors.muted_foreground;
+    case ER_UI_SHADCN_COLOR_ACCENT: return theme.shadcn.colors.accent;
+    case ER_UI_SHADCN_COLOR_ACCENT_FOREGROUND: return theme.shadcn.colors.accent_foreground;
+    case ER_UI_SHADCN_COLOR_DESTRUCTIVE: return theme.shadcn.colors.destructive;
+    case ER_UI_SHADCN_COLOR_DESTRUCTIVE_FOREGROUND: return theme.shadcn.colors.destructive_foreground;
+    case ER_UI_SHADCN_COLOR_BORDER: return theme.shadcn.colors.border;
+    case ER_UI_SHADCN_COLOR_INPUT: return theme.shadcn.colors.input;
+    case ER_UI_SHADCN_COLOR_RING: return theme.shadcn.colors.ring;
+    case ER_UI_SHADCN_COLOR_SIDEBAR: return theme.shadcn.colors.sidebar;
+    case ER_UI_SHADCN_COLOR_SIDEBAR_FOREGROUND: return theme.shadcn.colors.sidebar_foreground;
+    case ER_UI_SHADCN_COLOR_SIDEBAR_PRIMARY: return theme.shadcn.colors.sidebar_primary;
+    case ER_UI_SHADCN_COLOR_SIDEBAR_PRIMARY_FOREGROUND: return theme.shadcn.colors.sidebar_primary_foreground;
+    case ER_UI_SHADCN_COLOR_SIDEBAR_ACCENT: return theme.shadcn.colors.sidebar_accent;
+    case ER_UI_SHADCN_COLOR_SIDEBAR_ACCENT_FOREGROUND: return theme.shadcn.colors.sidebar_accent_foreground;
+    case ER_UI_SHADCN_COLOR_SIDEBAR_BORDER: return theme.shadcn.colors.sidebar_border;
+    case ER_UI_SHADCN_COLOR_SIDEBAR_RING: return theme.shadcn.colors.sidebar_ring;
+    case ER_UI_SHADCN_COLOR_CHART_1: return theme.shadcn.colors.chart_1;
+    case ER_UI_SHADCN_COLOR_CHART_2: return theme.shadcn.colors.chart_2;
+    case ER_UI_SHADCN_COLOR_CHART_3: return theme.shadcn.colors.chart_3;
+    case ER_UI_SHADCN_COLOR_CHART_4: return theme.shadcn.colors.chart_4;
+    case ER_UI_SHADCN_COLOR_CHART_5:
+    default: return theme.shadcn.colors.chart_5;
   }
 }
