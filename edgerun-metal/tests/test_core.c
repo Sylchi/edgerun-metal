@@ -2613,9 +2613,11 @@ static void test_ui_wasm_app_runner(void) {
   runtime.relay_outbox_len = 2048u;
   runtime.presentation = &presentation;
   runtime.scene = &scene;
-  check_int64("ui wasm app runner",
-              er_ui_wasm_app_run(g_edgerun_ui_counter_wasm, ER_UI_COUNTER_WASM_SIZE,
-                                 &host, &runtime, &result),
+  check_int64("ui wasm app prepare",
+              er_ui_wasm_app_prepare(g_edgerun_ui_counter_wasm, ER_UI_COUNTER_WASM_SIZE,
+                                     &host, &runtime),
+              0);
+  check_int64("ui wasm app execute", er_ui_wasm_app_execute(&runtime, &result),
               0);
   check_uint64("ui wasm app result", (UINT64)result,
                ER_WASM_UI_COMMAND_LIST_HEADER_LEN +
@@ -2627,6 +2629,15 @@ static void test_ui_wasm_app_runner(void) {
   check_uint64("ui wasm app hits", scene.hit_count, 1u);
   check_uint64("ui wasm app text", scene.text_quad_count, 1u);
   check_int64("ui wasm app hit kind", scene.hits[0].kind, ER_UI_HIT_BUTTON);
+  memory[4096] = 0x5au;
+  check_int64("ui wasm app execute again", er_ui_wasm_app_execute(&runtime, &result),
+              0);
+  check_uint64("ui wasm app persistent memory", memory[4096], 0x5au);
+  check_uint64("ui wasm app emitted again", runtime.emitted, 1u);
+  check_int64("ui wasm app reject second prepare",
+              er_ui_wasm_app_prepare(g_edgerun_ui_counter_wasm, ER_UI_COUNTER_WASM_SIZE,
+                                     &host, &runtime),
+              -1);
   er_ui_scene_destroy(&scene);
 }
 

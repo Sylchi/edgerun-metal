@@ -18,10 +18,17 @@ typedef struct {
   UINT32 relay_outbox_len;
   const ErAppUiPresentation* presentation;
   er_ui_scene_t* scene;
+  ErWasmModule module;
+  UINT32 main_index;
   er_ui_scene_stats_t emitted_stats;
   UINT8 emitted;
+  UINT8 prepared;
 } ErUiWasmAppRuntime;
 
+int er_ui_wasm_app_prepare(const UINT8* module_data, UINT32 module_size,
+                           const ErWasmHostCalls* host_template,
+                           ErUiWasmAppRuntime* runtime);
+int er_ui_wasm_app_execute(ErUiWasmAppRuntime* runtime, INT64* out_result);
 int er_ui_wasm_app_run(const UINT8* module_data, UINT32 module_size,
                        const ErWasmHostCalls* host_template,
                        ErUiWasmAppRuntime* runtime, INT64* out_result);
