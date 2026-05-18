@@ -52,7 +52,7 @@ repo-check-bin:
 
 repo-inspect:
 	mkdir -p .build
-	$(CCACHE_PREFIX) $(HOST_CC) -std=c11 -Wall -Wextra -Werror -O2 $(HOST_LDFLAGS) -o .build/repo-inspect tools/repo-inspect.c
+	$(CCACHE_PREFIX) $(HOST_CC) -std=c11 -Wall -Wextra -Werror -O2 -pthread $(HOST_LDFLAGS) -o .build/repo-inspect tools/repo-inspect.c
 
 erwire-decode:
 	mkdir -p .build
