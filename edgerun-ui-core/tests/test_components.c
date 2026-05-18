@@ -75,7 +75,7 @@ static void test_shadcn_render_primitives(void) {
                 "shadcn render: switch emits");
   expect_status(er_ui_shadcn_separator_emit(&scene, er_ui_bounds(72.0f, 231.0f, 132.0f, 1.0f), theme), ER_UI_OK,
                 "shadcn render: separator emits");
-  const char* const tabs[] = {"Preview", "Code", "A11y"};
+  const char *const tabs[] = {"Preview", "Code", "A11y"};
   expect_status(er_ui_shadcn_tabs_emit(&scene, face, er_ui_bounds(232.0f, 224.0f, 180.0f, 38.0f), theme, tabs, ER_UI_TEST_ARRAY_COUNT(tabs),
                                        ER_UI_TEST_SHADCN_TABS_ACTIVE_INDEX, ER_UI_TEST_SHADCN_TABS_ID),
                 ER_UI_OK, "shadcn render: tabs emit");
@@ -85,8 +85,8 @@ static void test_shadcn_render_primitives(void) {
   expect_status(er_ui_shadcn_radio_emit(&scene, face, er_ui_bounds(420.0f, 202.0f, 180.0f, 30.0f), theme, "Default", true,
                                         ER_UI_TEST_SHADCN_RADIO_ID),
                 ER_UI_OK, "shadcn render: radio emits");
-  const char* const headers[] = {"Invoice", "Status"};
-  const char* const cells[] = {"INV001", "Paid", "INV002", "Pending"};
+  const char *const headers[] = {"Invoice", "Status"};
+  const char *const cells[] = {"INV001", "Paid", "INV002", "Pending"};
   expect_status(er_ui_shadcn_table_emit(&scene, face, er_ui_bounds(420.0f, 238.0f, 180.0f, 96.0f), theme, headers,
                                         ER_UI_TEST_ARRAY_COUNT(headers), cells, ER_UI_TEST_ARRAY_COUNT(headers), ER_UI_TEST_SHADCN_TABLE_ID),
                 ER_UI_OK, "shadcn render: table emits");
@@ -100,12 +100,12 @@ static void test_shadcn_render_primitives(void) {
                 ER_UI_OK, "shadcn render: alert emits");
   expect_status(er_ui_shadcn_avatar_emit(&scene, face, er_ui_bounds(606.0f, 96.0f, 42.0f, 42.0f), theme, "ER", theme.colors.accent, true),
                 ER_UI_OK, "shadcn render: avatar emits");
-  const char* const crumbs[] = {"Docs", "Components", "Breadcrumb"};
+  const char *const crumbs[] = {"Docs", "Components", "Breadcrumb"};
   expect_status(er_ui_shadcn_breadcrumb_emit(&scene, face, er_ui_bounds(606.0f, 146.0f, 220.0f, 32.0f), theme, crumbs,
                                              ER_UI_TEST_ARRAY_COUNT(crumbs), ER_UI_TEST_SHADCN_BREADCRUMB_CURRENT_INDEX,
                                              ER_UI_TEST_SHADCN_BREADCRUMB_ID),
                 ER_UI_OK, "shadcn render: breadcrumb emits");
-  const char* const chart_labels[] = {"Jan", "Feb", "Mar"};
+  const char *const chart_labels[] = {"Jan", "Feb", "Mar"};
   const float chart_values[] = {0.4f, 0.8f, 0.6f};
   expect_status(er_ui_shadcn_bar_chart_emit(&scene, face, er_ui_bounds(606.0f, 186.0f, 180.0f, 120.0f), theme, "Visitors", chart_labels,
                                             chart_values, ER_UI_TEST_ARRAY_COUNT(chart_labels), ER_UI_TEST_SHADCN_CHART_ID,

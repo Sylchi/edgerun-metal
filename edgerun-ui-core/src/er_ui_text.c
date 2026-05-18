@@ -104,11 +104,13 @@ er_ui_status_t er_ui_scene_push_ascii_text(
 
   uint32_t codepoints[ER_UI_TEXT_ASCII_STACK_CAPACITY];
   size_t count = 0u;
-  while (text[count] != '\0') {
+  const char* cursor = text;
+  while (*cursor != '\0') {
     if (count >= max_codepoints) return ER_UI_ERR_INVALID_ARGUMENT;
-    unsigned char byte = (unsigned char)text[count];
+    unsigned char byte = (unsigned char)*cursor;
     codepoints[count] = byte < ER_UI_TEXT_ASCII_LIMIT ? (uint32_t)byte : (uint32_t)'?';
     count++;
+    cursor++;
   }
   return er_ui_scene_push_varfont_text(scene, face, codepoints, count, x, y, color);
 }
