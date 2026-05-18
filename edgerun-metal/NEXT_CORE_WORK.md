@@ -1,6 +1,6 @@
 # EdgeRun Metal: next core work
 
-The metal core is now a relay runtime for user-authored Wasm apps, not a local driver experiment. Netboot, GOP, PCI scans, and direct hostcalls are support surfaces. The product architecture is the `edgerun-work` protocol carried by erwire between apps, UI renderers, input, drivers, storage, and hardware capabilities.
+The metal core is now an OS runtime for user-authored Wasm apps, not a set of local driver experiments. Netboot, GOP, PCI scans, and direct hostcalls are support surfaces. The product architecture is the `edgerun-work` protocol carried by erwire between apps, UI renderers, input, drivers, storage, and hardware capabilities.
 
 See `../docs/relay-architecture.md` for the cross-project model and `../docs/coherent-system-milestones.md` for the proof checklist.
 
@@ -10,24 +10,24 @@ See `../docs/relay-architecture.md` for the cross-project model and `../docs/coh
 - EdgeRun Metal Core starts on real hardware.
 - The embedded Wasm VM executes bounded modules.
 - PCI config-space and MMIO read hostcall foundations exist.
-- GOP and VirtIO GPU rendering surfaces exist through `edgerun-ui-core`.
+- VirtIO GPU rendering surfaces exist through `edgerun-ui-core`; GOP is only bootstrap compatibility.
 - Native VirtIO-net can submit EdgeRun Ethernet frames with EtherType `0x88b5`.
 - `erwire` packets can be parsed from native Ethernet frames.
 - Hardware relay endpoints exist for firmware UDP, native Ethernet, and VirtIO queues.
 - Native relay ingress polling can produce deterministic ingress records for none, malformed, and accepted packets.
 - Wasm modules can call bounded `edgerun.relay/send` and `edgerun.relay/recv` imports through declared inbox/outbox memory windows.
 - Relay sends are checked against app source identity, admission id, budget token, packet validity, and packet-byte budget before leaving the VM.
-- `edgerun-ui-core`, the GOP renderer, the VirtIO GPU profile, and `varfont` provide enough UI machinery to target polished app surfaces instead of diagnostic rectangles.
-- The boot UI proof can prepare multiple Wasm UI app runtimes at once. Each app has its own preallocated linear memory, presentation identity, scene, and `ui_emit` host context, and the shell app switcher selects which context receives input and contributes scene output.
+- `edgerun-ui-core`, VirtIO GPU rendering, and `varfont` provide enough UI machinery to target polished app surfaces instead of diagnostic rectangles.
+- The OS path can prepare multiple Wasm UI app runtimes at once. Each app has its own preallocated linear memory, presentation identity, scene, and `ui_emit` host context, and the shell app switcher selects which context receives input and contributes scene output.
 - `er_app` can build content-addressed app package manifests from VFS object refs for app code, manifests, and UI assets. Package identity is derived from object ids and lengths, not labels.
 - `er_vfs` can reassemble canonical object packet sequences into bounded caller-owned memory while validating packet order, offsets, payload hashes, packet ids, object id, and output capacity.
 - `er_app` can load app package objects from validated VFS packets into caller-owned buffers, then reject package id mismatches, object id mismatches, tampered object bytes, and unexpected asset payloads.
-- The boot UI profile now packages the embedded Wasm UI app as VFS object packets and loads it through the storage-bound package loader into persistent per-app module buffers before preparing each runtime.
+- The OS boot path packages the embedded Wasm UI app as VFS object packets and loads it through the storage-bound package loader into persistent per-app module buffers before preparing each runtime.
 - `er_app` can bind a launchable saved package source to admitted storage-retrieve route ids for the package's app, manifest, and optional UI asset objects.
 - `er_app` can load a package from storage-bound object responses only when each retrieved object matches the source's admitted route id.
 - `er_app` can adapt typed storage endpoint object responses into package storage objects only when the response route id, object id, object length, packet list, and caller-owned destination memory match the package source and manifest.
 - `er_work` can prepare and validate capability envelope headers, and the Wasm relay fixture can emit a render capability invocation through `edgerun.relay/send` under the existing outbox, admission, token, and packet-byte budget checks.
-- `er_render_endpoint` can capture admitted render capability work only after the admitted route, channel envelope, render capability header, source/target nodes, sequence, and scene hash line up; it can then verify the scene payload hash, decode the endpoint-owned UI scene, and present it to a GOP surface with deterministic presentation records.
+- `er_render_endpoint` can capture admitted render capability work only after the admitted route, channel envelope, render capability header, source/target nodes, sequence, and scene hash line up; it can then verify the scene payload hash and decode the endpoint-owned UI scene.
 
 ## Architecture rule
 
@@ -91,12 +91,12 @@ Proof:
 
 ### M2: Native relay ingress
 
-Status: partially implemented; native profile loop and QEMU acknowledgement are next.
+Status: partially implemented; OS loop integration and QEMU acknowledgement are next.
 
 - `er_native_boot_poll_relay_ingress` polls `erwire_poll_native_eth`.
 - Invalid accepted Ethernet frames are reported as malformed ingress records.
 - Accepted packets preserve packet kind, payload length, ingress endpoint, sequence, and packet hash inputs without granting authority from ingress locality.
-- Next: call the ingress helper from the native profile loop and decode admitted work traffic before acknowledgement or transit packets.
+- Next: call the ingress helper from the OS loop and decode admitted work traffic before acknowledgement or transit packets.
 
 Proof:
 
@@ -126,11 +126,11 @@ Proof:
 
 ### M4: Render adapter
 
-Status: deterministic render capture, scene payload verification, endpoint-owned scene decode, and GOP surface presentation implemented; VirtIO GPU endpoint submission is next.
+Status: deterministic render capture, scene payload verification, and endpoint-owned scene decode implemented; VirtIO GPU endpoint submission is next.
 
 - Accept admitted render capability work at a render endpoint.
 - Deterministically capture scene metadata or scene hashes after admission-defined route verification.
-- Connect the captured scene path to the existing GOP and VirtIO GPU rendering surfaces.
+- Connect the captured scene path to the VirtIO GPU endpoint.
 - Use the endpoint-owned decoded scene as the render handoff, not app-owned framebuffer memory.
 - Keep apps targeting admitted UI scene packets, not framebuffers.
 
@@ -138,7 +138,7 @@ Proof:
 
 - Unit test feeds admitted render capability work through erwire and the route verifier to render.
 - QEMU or host proof shows an app-authored scene produces the same scene hash before endpoint-specific drawing.
-- Core test verifies scene payload hash mismatch rejection, endpoint-owned scene decode, and deterministic GOP surface presentation records.
+- Core test verifies scene payload hash mismatch rejection and endpoint-owned scene decode.
 
 ### M5: Storage adapter
 
@@ -156,12 +156,12 @@ Proof:
 
 ### M6: User-authored Wasm UI app proof
 
-Status: relay hostcall foundation, concurrent local Wasm UI app contexts, content-addressed app package records, validated package object loading, boot-local package-loaded app launch, admitted storage-source binding, storage endpoint response adaptation, storage-bound package loading, Wasm render capability relay-send proof, render endpoint capture, endpoint-owned scene decode, and GOP surface presentation implemented; boot/native loop integration and VirtIO GPU endpoint submission are next.
+Status: relay hostcall foundation, concurrent local Wasm UI app contexts, content-addressed app package records, validated package object loading, boot-local package-loaded app launch, admitted storage-source binding, storage endpoint response adaptation, storage-bound package loading, Wasm render capability relay-send proof, render endpoint capture, and endpoint-owned scene decode implemented; OS loop integration and VirtIO GPU endpoint submission are next.
 
 - Keep bounded Wasm imports for relay send/receive as the durable app boundary.
 - Keep each loaded app in an explicit runtime context with preallocated memory, presentation identity, scene state, and app-switcher selection.
 - Replace the embedded package packet source with real endpoint responses that satisfy the admitted storage-source route ids and object identities for saved user-authored app packages.
-- Connect render endpoint GOP presentation into the boot/native loop and add VirtIO GPU endpoint submission.
+- Connect render endpoint scene decode into the OS loop and add VirtIO GPU endpoint submission.
 - Feed input or completion packets back through relay receive.
 - Move driver modules away from direct PCI/MMIO hostcalls as the durable ABI.
 - Keep direct bus hostcalls only for bring-up until relay device endpoints are proven.
@@ -177,7 +177,7 @@ Proof:
 Status: not started.
 
 - Emit the same UI scene-class packet to two admitted renderer routes.
-- Render locally through GOP and remotely or virtually through a second renderer endpoint.
+- Render locally through VirtIO GPU and remotely or virtually through a second renderer endpoint.
 - Route input back as input capability packets.
 
 Proof:
@@ -201,6 +201,6 @@ Proof:
 
 ## Freeze rule
 
-Do not destabilize the active UI, native, TPM, and GPU profiles unless a change is directly required for the relay runtime.
+Do not reintroduce standalone native, TPM, or GPU debug boot profiles. Device code belongs behind the OS path and relay endpoint adapters.
 
-Do not call `ExitBootServices` yet. Dropping EFI Boot Services becomes justified when the native relay path owns enough hardware to boot, log, receive, verify admitted routes, and hand packets to endpoint adapters without firmware services.
+Exit Boot Services becomes mandatory once the OS path has prepared the memory and runtime-owned devices needed to keep running. New work should remove firmware-service dependencies from relay, rendering, storage, input, scheduling, and app execution instead of adding compatibility paths.

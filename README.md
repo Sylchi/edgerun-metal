@@ -49,9 +49,8 @@ invocation packets through `edgerun.relay/send` under the same outbox, admission
 token, and packet-byte budget checks used for app relay traffic, and render
 endpoint capture now accepts those packets only after admission-defined route,
 channel envelope, source/target, sequence, and scene hash verification. The
-render endpoint can now verify the scene payload hash, decode the payload into
-endpoint-owned scene state, and present it to a GOP surface with deterministic
-presentation records.
+render endpoint can now verify the scene payload hash and decode the payload into
+endpoint-owned scene state for a VirtIO GPU renderer endpoint.
 Replacing firmware boot-service networking with runtime-owned drivers is the
 immediate infrastructure step:
 
@@ -223,7 +222,7 @@ Primary data references:
 ├── docs/                  repository structure and engineering intent
 ├── tools/                 repository maintenance tools
 ├── tests/                 repository maintenance tests
-├── edgerun-metal/         freestanding UEFI runtime and boot profiles
+├── edgerun-metal/         freestanding UEFI OS runtime
 ├── edgerun-ui-core/       portable UI scene records and command buffer tests
 ├── varfont/               variable-font C library and tests
 └── .build/                local generated builds, ignored
@@ -305,14 +304,11 @@ The decoder reads raw erwire packets from standard input, prints packet kind/seq
 
 It is host tooling only; runtime code still emits binary erwire packets without depending on host OS APIs.
 
-Build individual `edgerun-metal` profiles:
+Build the `edgerun-metal` OS image:
 
 ```bash
 make -C edgerun-metal wasm-modules
-make edgerun-ui
-make edgerun-native
-make edgerun-tpm
-make edgerun-gpu
+make edgerun-os
 ```
 
 Build and test `varfont`:

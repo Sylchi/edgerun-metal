@@ -1,4 +1,4 @@
-.PHONY: all check clean repo-check repo-test repo-check-bin repo-inspect repo-progress erwire-decode erwire-test crypto-configure crypto-build crypto-test crypto-bench crypto-bench-avx2 crypto-bench-avx512 crypto-bench-avx512-threads crypto-bench-native-threads crypto-bench-sota edgerun-metal edgerun-ui edgerun-native edgerun-tpm edgerun-gpu edgerun-check varfont-configure varfont-build varfont-test ui-core-configure ui-core-build ui-core-test
+.PHONY: all check clean repo-check repo-test repo-check-bin repo-inspect repo-progress erwire-decode erwire-test crypto-configure crypto-build crypto-test crypto-bench crypto-bench-avx2 crypto-bench-avx512 crypto-bench-avx512-threads crypto-bench-native-threads crypto-bench-sota edgerun-metal edgerun-os edgerun-check varfont-configure varfont-build varfont-test ui-core-configure ui-core-build ui-core-test
 
 ifeq ($(origin CC),default)
 CC := clang
@@ -101,17 +101,8 @@ crypto-bench-sota: crypto-bench-avx512 crypto-bench-avx512-threads
 edgerun-metal:
 	$(MAKE) -C edgerun-metal
 
-edgerun-ui:
-	$(MAKE) -C edgerun-metal ui
-
-edgerun-native:
-	$(MAKE) -C edgerun-metal native
-
-edgerun-tpm:
-	$(MAKE) -C edgerun-metal tpm
-
-edgerun-gpu:
-	$(MAKE) -C edgerun-metal gpu
+edgerun-os:
+	$(MAKE) -C edgerun-metal os
 
 edgerun-check:
 	$(MAKE) -C edgerun-metal check

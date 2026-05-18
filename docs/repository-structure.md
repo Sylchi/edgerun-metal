@@ -23,7 +23,7 @@ Intention: keep the repository source-first, with generated output ignored and n
 
 ## Project Areas
 
-`edgerun-metal/` exists to build the freestanding EFI runtime, embedded Wasm host, real-hardware boot profiles, and runtime-owned binary telemetry protocol. Its generated EFI artifacts are allowed only under `edgerun-metal/build/`, which is ignored.
+`edgerun-metal/` exists to build the freestanding EFI OS runtime, embedded Wasm host, runtime-owned device paths, and runtime-owned binary telemetry protocol. Its generated EFI artifacts are allowed only under `edgerun-metal/build/`, which is ignored.
 
 `edgerun-crypto/` exists to hold reusable freestanding cryptographic primitives shared by runtime, tools, and libraries. It must not depend on the EFI runtime or project-specific provider boundaries. Generated build output must use `.build/edgerun-crypto/`.
 

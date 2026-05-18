@@ -3956,8 +3956,6 @@ static void test_work_admitted_relay_route(void) {
   ErRenderEndpointCapture bad_render_capture;
   ErRenderEndpointScene render_scene;
   ErRenderEndpointScene render_scene_again;
-  ErRenderEndpointPresentation presentation;
-  ErRenderEndpointPresentation presentation_again;
   ErAdmittedRoute bad_render_route;
   ErHash session_id;
   ErHash invocation_id;
@@ -3968,8 +3966,6 @@ static void test_work_admitted_relay_route(void) {
                       ER_WASM_UI_HIT_RECORD_LEN +
                       ER_WASM_UI_QUAD_RECORD_LEN];
   er_ui_scene_t endpoint_scene;
-  UINT32 pixels[64u * 64u];
-  ErUiGopSurface surface;
 
   crypto.ctx = (void*)(UINTN)11u;
   crypto.hash = test_hash;
@@ -4297,63 +4293,20 @@ static void test_work_admitted_relay_route(void) {
                                                       &render_scene_again),
               0);
 
-  er_mem_zero((UINT8*)pixels, (UINTN)sizeof(pixels));
-  surface.pixels = pixels;
-  surface.width = 64u;
-  surface.height = 64u;
-  surface.stride = 64u;
-  surface.pixel_format = ER_UI_GOP_PIXEL_RGBX;
-  check_int64("render endpoint present gop surface",
-              er_render_endpoint_present_gop_surface(&crypto, &render_capture,
-                                                     &render_scene, &endpoint_scene,
-                                                     &surface, 0,
-                                                     &presentation),
-              1);
-  check_int64("render endpoint presentation abi", presentation.abi_version,
-              ER_RENDER_ENDPOINT_ABI_VERSION);
-  check_hash_equal("render endpoint presentation scene",
-                   &presentation.scene_id, &render_scene.scene_id);
-  check_uint64("render endpoint presentation width", presentation.width, 64u);
-  check_uint64("render endpoint presentation height", presentation.height, 64u);
-  check_uint64("render endpoint presentation rects",
-               presentation.render_stats.rects, 1u);
-  check_uint64("render endpoint presentation wrote pixels",
-               presentation.render_stats.pixels_written > 0u ? 1u : 0u, 1u);
-  er_mem_zero((UINT8*)pixels, (UINTN)sizeof(pixels));
-  check_int64("render endpoint present deterministic",
-              er_render_endpoint_present_gop_surface(&crypto, &render_capture,
-                                                     &render_scene, &endpoint_scene,
-                                                     &surface, 0,
-                                                     &presentation_again),
-              1);
-  check_hash_equal("render endpoint presentation deterministic id",
-                   &presentation_again.presentation_id,
-                   &presentation.presentation_id);
-  render_scene_again = render_scene;
-  render_scene_again.capture_id.bytes[0] ^= 1u;
-  check_int64("render endpoint reject presentation capture mismatch",
-              er_render_endpoint_present_gop_surface(&crypto, &render_capture,
-                                                     &render_scene_again,
-                                                     &endpoint_scene, &surface,
-                                                     0, &presentation_again),
-              0);
   er_ui_scene_destroy(&endpoint_scene);
 }
 
 static void test_boot_profiles(void) {
-  check_int64("boot profile ui valid", er_boot_profile_valid(ER_BOOT_PROFILE_UI), 1);
-  check_int64("boot profile native valid", er_boot_profile_valid(ER_BOOT_PROFILE_NATIVE), 1);
-  check_int64("boot profile tpm valid", er_boot_profile_valid(ER_BOOT_PROFILE_TPM), 1);
-  check_int64("boot profile gpu valid", er_boot_profile_valid(ER_BOOT_PROFILE_GPU), 1);
+  check_int64("boot profile os valid", er_boot_profile_valid(ER_BOOT_PROFILE_OS), 1);
   check_int64("boot profile retired smoke rejected", er_boot_profile_valid(0u), 0);
   check_int64("boot profile retired pci rejected", er_boot_profile_valid(1u), 0);
   check_int64("boot profile retired quiet rejected", er_boot_profile_valid(2u), 0);
   check_int64("boot profile retired mmio rejected", er_boot_profile_valid(3u), 0);
+  check_int64("boot profile retired native rejected", er_boot_profile_valid(5u), 0);
+  check_int64("boot profile retired tpm rejected", er_boot_profile_valid(6u), 0);
+  check_int64("boot profile retired gpu rejected", er_boot_profile_valid(7u), 0);
   check_int64("boot profile invalid rejected", er_boot_profile_valid(255u), 0);
-  check_cstr("boot profile ui label", er_boot_profile_label(ER_BOOT_PROFILE_UI), "ui");
-  check_cstr("boot profile native label", er_boot_profile_label(ER_BOOT_PROFILE_NATIVE), "native");
-  check_cstr("boot profile tpm label", er_boot_profile_label(ER_BOOT_PROFILE_TPM), "tpm");
-  check_cstr("boot profile gpu label", er_boot_profile_label(ER_BOOT_PROFILE_GPU), "gpu");
+  check_cstr("boot profile os label", er_boot_profile_label(ER_BOOT_PROFILE_OS), "os");
   check_cstr("boot profile retired label", er_boot_profile_label(0u), "invalid");
   check_cstr("boot profile invalid label", er_boot_profile_label(255u), "invalid");
 }

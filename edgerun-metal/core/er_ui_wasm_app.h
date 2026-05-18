@@ -8,7 +8,7 @@
 
 /*
  * Purpose: run admitted freestanding WASM UI apps into EdgeRun UI scenes.
- * Intention: keep boot profiles from owning the ui_emit hostcall bridge and scene decode plumbing.
+ * Intention: keep the OS loop from owning the ui_emit hostcall bridge and scene decode plumbing.
  */
 
 #define ER_UI_WASM_INPUT_ABI_VERSION 2u

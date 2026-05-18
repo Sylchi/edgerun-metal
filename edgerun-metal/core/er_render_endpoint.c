@@ -10,7 +10,6 @@
 static const UINT8 g_render_capture_domain[] = "edgerun:c:v1:render:endpoint-capture";
 static const UINT8 g_render_scene_payload_domain[] = "edgerun:c:v1:render:scene-payload";
 static const UINT8 g_render_scene_domain[] = "edgerun:c:v1:render:endpoint-scene";
-static const UINT8 g_render_presentation_domain[] = "edgerun:c:v1:render:endpoint-presentation";
 
 enum {
   ER_RENDER_ENDPOINT_U64_BYTES = 8u,
@@ -46,20 +45,7 @@ enum {
   ER_RENDER_ENDPOINT_SCENE_HASH_SPAN = 1u,
   ER_RENDER_ENDPOINT_SCENE_SOURCE_SPAN = 2u,
   ER_RENDER_ENDPOINT_SCENE_TARGET_SPAN = 3u,
-  ER_RENDER_ENDPOINT_SCENE_FIELDS_SPAN = 4u,
-  ER_RENDER_ENDPOINT_PRESENT_FIELD_BYTES = ER_RENDER_ENDPOINT_U64_BYTES * 7u,
-  ER_RENDER_ENDPOINT_PRESENT_SEQUENCE_OFFSET = 0u,
-  ER_RENDER_ENDPOINT_PRESENT_WIDTH_OFFSET = 8u,
-  ER_RENDER_ENDPOINT_PRESENT_HEIGHT_OFFSET = 16u,
-  ER_RENDER_ENDPOINT_PRESENT_STRIDE_OFFSET = 24u,
-  ER_RENDER_ENDPOINT_PRESENT_FORMAT_OFFSET = 32u,
-  ER_RENDER_ENDPOINT_PRESENT_PIXELS_OFFSET = 40u,
-  ER_RENDER_ENDPOINT_PRESENT_BYTES_OFFSET = 48u,
-  ER_RENDER_ENDPOINT_PRESENT_SPAN_COUNT = 4u,
-  ER_RENDER_ENDPOINT_PRESENT_SCENE_SPAN = 0u,
-  ER_RENDER_ENDPOINT_PRESENT_CAPTURE_SPAN = 1u,
-  ER_RENDER_ENDPOINT_PRESENT_RENDERER_SPAN = 2u,
-  ER_RENDER_ENDPOINT_PRESENT_FIELDS_SPAN = 3u
+  ER_RENDER_ENDPOINT_SCENE_FIELDS_SPAN = 4u
 };
 
 static void er_render_put_be(UINT8* dst, UINT64 value, UINTN byte_count) {
@@ -98,14 +84,6 @@ static UINT8 er_render_capture_valid(const ErRenderEndpointCapture* capture) {
                  capture->abi_version == ER_RENDER_ENDPOINT_ABI_VERSION &&
                  er_mem_any_nonzero(capture->capture_id.bytes, ER_HASH_LEN) != 0u &&
                  er_mem_any_nonzero(capture->scene_hash.bytes, ER_HASH_LEN) != 0u);
-}
-
-static UINT8 er_render_scene_valid(const ErRenderEndpointScene* scene) {
-  return (UINT8)(scene != 0 &&
-                 scene->abi_version == ER_RENDER_ENDPOINT_ABI_VERSION &&
-                 er_mem_any_nonzero(scene->scene_id.bytes, ER_HASH_LEN) != 0u &&
-                 er_mem_any_nonzero(scene->capture_id.bytes, ER_HASH_LEN) != 0u &&
-                 er_mem_any_nonzero(scene->scene_hash.bytes, ER_HASH_LEN) != 0u);
 }
 
 static UINT8 er_render_route_accepts_capability(const ErAdmittedRoute* route) {
@@ -208,46 +186,6 @@ static UINT8 er_render_endpoint_scene_id(const ErCryptoProvider* crypto,
                         out_scene_id);
 }
 
-static UINT8 er_render_endpoint_presentation_id(const ErCryptoProvider* crypto,
-                                                const ErRenderEndpointPresentation* presentation,
-                                                ErHash* out_presentation_id) {
-  UINT8 fields[ER_RENDER_ENDPOINT_PRESENT_FIELD_BYTES];
-  ErByteSpan spans[ER_RENDER_ENDPOINT_PRESENT_SPAN_COUNT];
-
-  if (crypto == 0 || presentation == 0 || out_presentation_id == 0) {
-    return 0;
-  }
-  er_render_put_be64(&fields[ER_RENDER_ENDPOINT_PRESENT_SEQUENCE_OFFSET],
-                     presentation->sequence);
-  er_render_put_be64(&fields[ER_RENDER_ENDPOINT_PRESENT_WIDTH_OFFSET],
-                     (UINT64)presentation->width);
-  er_render_put_be64(&fields[ER_RENDER_ENDPOINT_PRESENT_HEIGHT_OFFSET],
-                     (UINT64)presentation->height);
-  er_render_put_be64(&fields[ER_RENDER_ENDPOINT_PRESENT_STRIDE_OFFSET],
-                     (UINT64)presentation->stride);
-  er_render_put_be64(&fields[ER_RENDER_ENDPOINT_PRESENT_FORMAT_OFFSET],
-                     (UINT64)presentation->pixel_format);
-  er_render_put_be64(&fields[ER_RENDER_ENDPOINT_PRESENT_PIXELS_OFFSET],
-                     presentation->render_stats.pixels_written);
-  er_render_put_be64(&fields[ER_RENDER_ENDPOINT_PRESENT_BYTES_OFFSET],
-                     presentation->render_stats.bytes_written);
-  spans[ER_RENDER_ENDPOINT_PRESENT_SCENE_SPAN].bytes =
-      presentation->scene_id.bytes;
-  spans[ER_RENDER_ENDPOINT_PRESENT_SCENE_SPAN].len = ER_HASH_LEN;
-  spans[ER_RENDER_ENDPOINT_PRESENT_CAPTURE_SPAN].bytes =
-      presentation->capture_id.bytes;
-  spans[ER_RENDER_ENDPOINT_PRESENT_CAPTURE_SPAN].len = ER_HASH_LEN;
-  spans[ER_RENDER_ENDPOINT_PRESENT_RENDERER_SPAN].bytes =
-      presentation->renderer_node_id.bytes;
-  spans[ER_RENDER_ENDPOINT_PRESENT_RENDERER_SPAN].len = ER_NODE_ID_LEN;
-  spans[ER_RENDER_ENDPOINT_PRESENT_FIELDS_SPAN].bytes = fields;
-  spans[ER_RENDER_ENDPOINT_PRESENT_FIELDS_SPAN].len = (UINTN)sizeof(fields);
-  return er_crypto_hash(crypto, g_render_presentation_domain,
-                        (UINTN)(sizeof(g_render_presentation_domain) - 1u),
-                        spans, ER_RENDER_ENDPOINT_PRESENT_SPAN_COUNT,
-                        out_presentation_id);
-}
-
 UINT8 er_render_endpoint_scene_payload_hash(const ErCryptoProvider* crypto,
                                             const UINT8* bytes,
                                             UINT32 len,
@@ -330,43 +268,4 @@ UINT8 er_render_endpoint_decode_scene_payload(const ErCryptoProvider* crypto,
   out_endpoint_scene->scene_stats = stats;
   return er_render_endpoint_scene_id(crypto, out_endpoint_scene,
                                      &out_endpoint_scene->scene_id);
-}
-
-UINT8 er_render_endpoint_present_gop_surface(const ErCryptoProvider* crypto,
-                                             const ErRenderEndpointCapture* capture,
-                                             const ErRenderEndpointScene* endpoint_scene,
-                                             er_ui_scene_t* scene,
-                                             ErUiGopSurface* surface,
-                                             const vr_font_face_t* font,
-                                             ErRenderEndpointPresentation* out_presentation) {
-  ErUiGopRenderStats stats;
-
-  if (crypto == 0 || er_render_capture_valid(capture) == 0u ||
-      er_render_scene_valid(endpoint_scene) == 0u || scene == 0 ||
-      er_ui_gop_surface_valid(surface) == 0u || out_presentation == 0 ||
-      er_render_hash_equal(&endpoint_scene->capture_id,
-                           &capture->capture_id) == 0u ||
-      er_render_hash_equal(&endpoint_scene->scene_hash,
-                           &capture->scene_hash) == 0u ||
-      endpoint_scene->sequence != capture->sequence ||
-      er_ui_gop_surface_render_scene_with_font_stats(surface, scene, font,
-                                                     &stats) == 0u) {
-    return 0;
-  }
-
-  er_mem_zero((UINT8*)out_presentation,
-              (UINTN)sizeof(*out_presentation));
-  out_presentation->abi_version = ER_RENDER_ENDPOINT_ABI_VERSION;
-  out_presentation->scene_id = endpoint_scene->scene_id;
-  out_presentation->capture_id = capture->capture_id;
-  out_presentation->scene_hash = capture->scene_hash;
-  out_presentation->renderer_node_id = capture->target_node_id;
-  out_presentation->sequence = capture->sequence;
-  out_presentation->width = surface->width;
-  out_presentation->height = surface->height;
-  out_presentation->stride = surface->stride;
-  out_presentation->pixel_format = surface->pixel_format;
-  out_presentation->render_stats = stats;
-  return er_render_endpoint_presentation_id(crypto, out_presentation,
-                                            &out_presentation->presentation_id);
 }

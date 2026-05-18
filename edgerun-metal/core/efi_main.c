@@ -9,7 +9,6 @@
 #include "er_boot_profile.h"
 #include "er_gfx_console.h"
 #include "er_ps2_keyboard.h"
-#include "er_tpm.h"
 #include "er_ui_surface_renderer.h"
 #include "er_ui_components.h"
 #include "er_ui_ledger_app.h"
@@ -17,14 +16,12 @@
 #include "er_ui_theme.h"
 #include "er_ui_wasm_app.h"
 #include "er_virtio_gpu.h"
-#include "erwire.h"
-#include "er_native_boot.h"
 #include "font_geist.h"
 #include "wasm_vm.h"
 #include "wasm_ui_counter_module.h"
 
 #ifndef ER_BOOT_PROFILE
-#define ER_BOOT_PROFILE ER_BOOT_PROFILE_UI
+#define ER_BOOT_PROFILE ER_BOOT_PROFILE_OS
 #endif
 
 #define ER_CONSOLE_MIN_COLUMNS 80u
@@ -118,8 +115,8 @@ static UINT8 g_ui_boot_app_module_memory[ER_UI_BOOT_APP_COUNT][ER_UI_BOOT_APP_MO
 static UINT8 g_ui_boot_app_manifest_memory[ER_UI_BOOT_APP_COUNT][ER_UI_BOOT_APP_MANIFEST_BYTES];
 static UINT8 g_ui_boot_arena[ER_UI_BOOT_ARENA_SIZE];
 static UINT8 g_efi_memory_map[ER_EFI_MEMORY_MAP_BYTES];
-static UINT32 g_gpu_profile_framebuffer[ER_GPU_PROFILE_FRAMEBUFFER_WIDTH_MAX *
-                                        ER_GPU_PROFILE_FRAMEBUFFER_HEIGHT_MAX];
+static UINT32 g_virtio_gpu_framebuffer[ER_GPU_PROFILE_FRAMEBUFFER_WIDTH_MAX *
+                                       ER_GPU_PROFILE_FRAMEBUFFER_HEIGHT_MAX];
 static UINTN g_ui_boot_arena_used;
 static UINT8 g_log_u64_stage = ER_LOG_U64_STAGE_IDLE;
 static UINT8 g_log_hex_stage = ER_LOG_HEX_STAGE_ID;
@@ -569,26 +566,6 @@ static void er_halt_forever(void) {
   }
 }
 
-static void er_wait_for_key_then_halt(EFI_SYSTEM_TABLE* SystemTable) {
-  EFI_INPUT_KEY key;
-  EFIAPI_KEY_FN read_key = 0;
-
-  if (SystemTable != 0 && SystemTable->ConIn != 0) {
-    read_key = SystemTable->ConIn->ReadKeyStroke;
-  }
-
-  if (read_key != 0) {
-    for (;;) {
-      if (read_key(SystemTable->ConIn, &key) == EFI_SUCCESS) {
-        return;
-      }
-      er_halt_once();
-    }
-  } else {
-    er_halt_forever();
-  }
-}
-
 static UINT8 er_exit_boot_services(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE* SystemTable) {
   UINTN attempt;
 
@@ -653,36 +630,7 @@ static void er_install_hostcalls(void) {
   g_host_calls.memory_size = (UINT32)sizeof(g_wasm_driver_memory);
 }
 
-static void er_run_native_profile(void) {
-  ErNativeBootState native_state;
-  UINT32 mac_index;
-  UINT64 transport_base;
-
-  er_println("boot profile: native");
-  if (er_native_boot_configure_pci_erwire_eth_sink(&native_state) == 0u &&
-      er_native_boot_configure_qemu_microvm_erwire_eth_sink(&native_state) == 0u) {
-    er_println("native transport: virtio net unavailable");
-    return;
-  }
-  transport_base = native_state.net->transport.address.base;
-  if (transport_base == 0u) {
-    transport_base = native_state.net->transport.common.address.base;
-  }
-  er_print("native transport: virtio net ");
-  er_print_u64_hex(transport_base);
-  er_print(" mac=");
-  for (mac_index = 0u; mac_index < ER_NET_MAC_LEN; ++mac_index) {
-    if (mac_index != 0u) {
-      er_print(":");
-    }
-    er_print_u64_hex((UINT64)native_state.net->mac[mac_index]);
-  }
-  er_println("");
-  erwire_send_text("native-erwire-l2-ready");
-  er_println("native transport: erwire EdgeRun Ethernet frame submitted");
-}
-
-static UINT8 er_gpu_profile_wait_ok(ErVirtioGpu* gpu) {
+static UINT8 er_virtio_gpu_wait_ok(ErVirtioGpu* gpu) {
   UINT32 poll_count;
 
   for (poll_count = 0u; poll_count < ER_GPU_PROFILE_POLL_LIMIT; ++poll_count) {
@@ -693,8 +641,8 @@ static UINT8 er_gpu_profile_wait_ok(ErVirtioGpu* gpu) {
   return 0u;
 }
 
-static UINT8 er_gpu_profile_wait_display_info(ErVirtioGpu* gpu,
-                                              ErVirtioGpuDisplayInfo* out_info) {
+static UINT8 er_virtio_gpu_wait_display_info(ErVirtioGpu* gpu,
+                                             ErVirtioGpuDisplayInfo* out_info) {
   UINT32 poll_count;
 
   if (out_info == 0) {
@@ -713,9 +661,9 @@ static UINT8 er_ui_boot_gpu_present(const ErUiBootRenderContext* render) {
     return 0u;
   }
   if (er_virtio_gpu_submit_framebuffer_transfer(render->gpu, render->framebuffer) == 0u ||
-      er_gpu_profile_wait_ok(render->gpu) == 0u ||
+      er_virtio_gpu_wait_ok(render->gpu) == 0u ||
       er_virtio_gpu_submit_framebuffer_flush(render->gpu, render->framebuffer) == 0u ||
-      er_gpu_profile_wait_ok(render->gpu) == 0u) {
+      er_virtio_gpu_wait_ok(render->gpu) == 0u) {
     return 0u;
   }
   return 1u;
@@ -734,17 +682,17 @@ static UINT8 er_ui_boot_gpu_prepare_scanout(ErVirtioGpu* gpu,
                                      ER_GPU_PROFILE_FRAMEBUFFER_WIDTH,
                                      ER_GPU_PROFILE_FRAMEBUFFER_HEIGHT,
                                      ER_GPU_PROFILE_FRAMEBUFFER_WIDTH,
-                                     g_gpu_profile_framebuffer,
+                                     g_virtio_gpu_framebuffer,
                                      ER_GPU_PROFILE_FRAMEBUFFER_WIDTH_MAX *
                                          ER_GPU_PROFILE_FRAMEBUFFER_HEIGHT_MAX) == 0u) {
     return 0u;
   }
   if (er_virtio_gpu_submit_framebuffer_create(gpu, framebuffer) == 0u ||
-      er_gpu_profile_wait_ok(gpu) == 0u ||
+      er_virtio_gpu_wait_ok(gpu) == 0u ||
       er_virtio_gpu_submit_framebuffer_attach(gpu, framebuffer) == 0u ||
-      er_gpu_profile_wait_ok(gpu) == 0u ||
+      er_virtio_gpu_wait_ok(gpu) == 0u ||
       er_virtio_gpu_submit_framebuffer_set_scanout(gpu, framebuffer) == 0u ||
-      er_gpu_profile_wait_ok(gpu) == 0u) {
+      er_virtio_gpu_wait_ok(gpu) == 0u) {
     return 0u;
   }
   surface->pixels = framebuffer->pixels;
@@ -759,307 +707,6 @@ static UINT8 er_ui_boot_gpu_prepare_scanout(ErVirtioGpu* gpu,
   out_mode->pixel_format = ER_UI_SURFACE_PIXEL_BGRX;
   return (UINT8)(er_ui_surface_valid(surface) != 0u &&
                  er_ui_surface_mode_valid(out_mode) != 0u);
-}
-
-static UINT8 er_gpu_profile_render_component_scene_to_framebuffer(ErVirtioGpuFramebuffer* framebuffer,
-                                                                  vr_font_face_t* font,
-                                                                  er_ui_resolved_theme_t theme,
-                                                                  ErUiSurfaceRenderStats* out_stats) {
-  er_ui_scene_t scene = {0};
-  ErUiSurface surface;
-  er_ui_scene_stats_t scene_stats;
-  er_ui_component_gallery_state_t gallery_state;
-
-  if (framebuffer == 0 || framebuffer->initialized == 0u || framebuffer->pixels == 0 || font == 0 ||
-      framebuffer->width == 0u || framebuffer->height == 0u) {
-    if (out_stats != 0) {
-      *out_stats = (ErUiSurfaceRenderStats){0};
-    }
-    return 0u;
-  }
-
-  er_ui_component_gallery_state_init(&gallery_state);
-  if (er_ui_scene_init_with_allocator(&scene, theme.colors.bg, er_ui_boot_allocator()) != ER_UI_OK ||
-      er_ui_edgerun_metal_surface_emit(&scene, font,
-                                       er_ui_bounds(0.0f, 0.0f, (float)framebuffer->width, (float)framebuffer->height),
-                                       theme, &gallery_state) != ER_UI_OK) {
-    er_ui_scene_destroy(&scene);
-    if (out_stats != 0) {
-      *out_stats = (ErUiSurfaceRenderStats){0};
-    }
-    return 0u;
-  }
-  scene_stats = er_ui_scene_stats(&scene);
-  if (scene_stats.rects == 0u || scene_stats.text_quads == 0u) {
-    er_ui_scene_destroy(&scene);
-    if (out_stats != 0) {
-      *out_stats = (ErUiSurfaceRenderStats){0};
-    }
-    return 0u;
-  }
-
-  surface.pixels = framebuffer->pixels;
-  surface.width = framebuffer->width;
-  surface.height = framebuffer->height;
-  surface.stride = framebuffer->stride_pixels;
-  surface.pixel_format = ER_UI_SURFACE_PIXEL_BGRX;
-  if (er_ui_surface_render_scene_with_font_stats(&surface, &scene, font, out_stats) == 0u) {
-    er_ui_scene_destroy(&scene);
-    return 0u;
-  }
-  er_ui_scene_destroy(&scene);
-  return 1u;
-}
-
-static UINT8 er_gpu_profile_flush_framebuffer(ErVirtioGpu* gpu, UINT32 width, UINT32 height) {
-  ErVirtioGpuFramebuffer framebuffer;
-  ErUiSurfaceRenderStats render_stats;
-  er_ui_resolved_theme_t theme = er_ui_resolved_theme(
-    ER_UI_STYLE_AUTHORITY_USER,
-    (er_ui_style_preset_t){ER_UI_COLOR_SCHEME_DARK, ER_UI_ACCENT_NEUTRAL, ER_UI_RADIUS_DEFAULT});
-  vr_font_face_t* font = 0;
-
-  if (er_virtio_gpu_framebuffer_init(&framebuffer, ER_GPU_PROFILE_RESOURCE_ID,
-                                     ER_GPU_PROFILE_SCANOUT_ID,
-                                     ER_VIRTIO_GPU_FORMAT_B8G8R8X8_UNORM,
-                                     width, height, width,
-                                     g_gpu_profile_framebuffer,
-                                     ER_GPU_PROFILE_FRAMEBUFFER_WIDTH_MAX *
-                                         ER_GPU_PROFILE_FRAMEBUFFER_HEIGHT_MAX) == 0u) {
-    er_println("gpu framebuffer: unsupported dimensions");
-    return 0u;
-  }
-  if (er_ui_boot_create_font(height, &font) == 0u) {
-    er_println("gpu framebuffer: font failed");
-    return 0u;
-  }
-  if (er_gpu_profile_render_component_scene_to_framebuffer(&framebuffer, font, theme, &render_stats) == 0u) {
-    er_println("gpu framebuffer: scene render failed");
-    vr_font_face_destroy(font);
-    return 0u;
-  }
-  if (er_virtio_gpu_submit_framebuffer_create(gpu, &framebuffer) == 0u ||
-      er_gpu_profile_wait_ok(gpu) == 0u) {
-    er_println("gpu framebuffer: create failed");
-    vr_font_face_destroy(font);
-    return 0u;
-  }
-  if (er_virtio_gpu_submit_framebuffer_attach(gpu, &framebuffer) == 0u ||
-      er_gpu_profile_wait_ok(gpu) == 0u) {
-    er_println("gpu framebuffer: attach failed");
-    vr_font_face_destroy(font);
-    return 0u;
-  }
-  if (er_virtio_gpu_submit_framebuffer_set_scanout(gpu, &framebuffer) == 0u ||
-      er_gpu_profile_wait_ok(gpu) == 0u) {
-    er_println("gpu framebuffer: scanout failed");
-    vr_font_face_destroy(font);
-    return 0u;
-  }
-  if (er_virtio_gpu_submit_framebuffer_transfer(gpu, &framebuffer) == 0u ||
-      er_gpu_profile_wait_ok(gpu) == 0u) {
-    er_println("gpu framebuffer: transfer failed");
-    vr_font_face_destroy(font);
-    return 0u;
-  }
-  if (er_virtio_gpu_submit_framebuffer_flush(gpu, &framebuffer) == 0u ||
-      er_gpu_profile_wait_ok(gpu) == 0u) {
-    er_println("gpu framebuffer: flush failed");
-    vr_font_face_destroy(font);
-    return 0u;
-  }
-  er_print("gpu framebuffer: scene bytes=");
-  er_print_u64_dec(render_stats.bytes_written);
-  er_print(" rects=");
-  er_print_u64_dec(render_stats.rects);
-  er_print(" text=");
-  er_print_u64_dec(render_stats.text_quads);
-  er_println("");
-  vr_font_face_destroy(font);
-  return 1u;
-}
-
-static void er_run_gpu_profile(void) {
-  ErVirtioGpu gpu;
-  ErVirtioGpuDisplayInfo display_info;
-  UINT64 transport_base;
-
-  er_println("boot profile: gpu");
-  if (er_virtio_gpu_init_first_pci(&gpu) == 0u) {
-    er_println("gpu transport: virtio gpu unavailable");
-    return;
-  }
-  transport_base = gpu.transport.address.base;
-  if (transport_base == 0u) {
-    transport_base = gpu.transport.common.address.base;
-  }
-  er_print("gpu transport: virtio gpu ");
-  er_print_u64_hex(transport_base);
-  er_print(" scanouts=");
-  er_print_u64_dec((UINT64)gpu.config.num_scanouts);
-  er_print(" capsets=");
-  er_print_u64_dec((UINT64)gpu.config.num_capsets);
-  er_print(" controlq=");
-  er_print_u64_dec((UINT64)gpu.control_queue_size);
-  er_print(" cursorq=");
-  er_print_u64_dec((UINT64)gpu.cursor_queue_size);
-  er_println("");
-
-  if (er_virtio_gpu_submit_get_display_info(&gpu) == 0u) {
-    er_println("gpu display: submit failed");
-    return;
-  }
-  er_mem_zero((UINT8*)&display_info, (UINTN)sizeof(display_info));
-  if (er_gpu_profile_wait_display_info(&gpu, &display_info) == 0u) {
-    er_println("gpu display: poll timeout");
-    return;
-  }
-  er_print("gpu display: scanout0 enabled=");
-  er_print_u64_dec((UINT64)display_info.scanouts[0].enabled);
-  er_print(" width=");
-  er_print_u64_dec((UINT64)display_info.scanouts[0].rect.width);
-  er_print(" height=");
-  er_print_u64_dec((UINT64)display_info.scanouts[0].rect.height);
-  er_println("");
-  er_print("gpu framebuffer: target width=");
-  er_print_u64_dec((UINT64)ER_GPU_PROFILE_FRAMEBUFFER_WIDTH);
-  er_print(" height=");
-  er_print_u64_dec((UINT64)ER_GPU_PROFILE_FRAMEBUFFER_HEIGHT);
-  er_println("");
-  if (er_gpu_profile_flush_framebuffer(&gpu, ER_GPU_PROFILE_FRAMEBUFFER_WIDTH,
-                                       ER_GPU_PROFILE_FRAMEBUFFER_HEIGHT) != 0u) {
-    er_println("gpu framebuffer: flushed");
-  }
-}
-
-static void er_run_tpm_profile(EFI_SYSTEM_TABLE* SystemTable) {
-  ErAcpiRsdpInfo rsdp;
-  ErAcpiTableList tables;
-  ErTpm2Info tpm2;
-  ErTpmCrbTransport crb;
-  ErTpmP256Primary primary;
-  UINT8 command[ER_TPM_PROFILE_COMMAND_BYTES];
-  UINT8 response[ER_TPM_PROFILE_RESPONSE_BYTES];
-  UINT8 random[ER_TPM_PROFILE_DIGEST_BYTES];
-  UINT8 digest[ER_TPM_PROFILE_DIGEST_BYTES];
-  UINT8 signature[ER_TPM_PROFILE_SIGNATURE_BYTES];
-  UINT32 command_len = 0u;
-  UINT32 response_len = 0u;
-  UINT32 random_len = 0u;
-  UINT32 code;
-  UINT32 i;
-
-  er_println("boot profile: tpm");
-  if (er_acpi_find_rsdp(SystemTable, &rsdp) == 0u ||
-      er_acpi_enumerate_tables(&rsdp, &tables) == 0u ||
-      er_tpm_find_tpm2_table(&tables, &tpm2) == 0u) {
-    er_println("tpm: ACPI TPM2 unavailable");
-    return;
-  }
-
-  er_print("tpm: TPM2 control=");
-  er_print_u64_hex(tpm2.control_area);
-  er_print(" start_method=");
-  er_print_u64_dec((UINT64)tpm2.start_method);
-  er_println("");
-
-  if (er_tpm_crb_from_tpm2_info(&tpm2, &crb) == 0u) {
-    er_println("tpm: CRB transport unavailable");
-    return;
-  }
-
-  er_print("tpm: CRB cmd=");
-  er_print_u64_hex(crb.command_buffer);
-  er_print(" rsp=");
-  er_print_u64_hex(crb.response_buffer);
-  er_println("");
-
-  if (er_tpm_build_startup_command(ER_TPM_SU_CLEAR, command,
-                                   (UINT32)sizeof(command), &command_len) == 0u ||
-      er_tpm_crb_transact(&crb, command, command_len, response,
-                          (UINT32)sizeof(response), &response_len) == 0u) {
-    er_println("tpm: Startup command failed");
-    return;
-  }
-  code = er_tpm_response_code(response, response_len);
-  er_print("tpm: Startup rc=");
-  er_print_u64_hex((UINT64)code);
-  er_println("");
-  if (code != ER_TPM_RC_SUCCESS && code != ER_TPM_RC_INITIALIZE) {
-    return;
-  }
-
-  if (er_tpm_build_get_random_command(ER_TPM_PROFILE_RANDOM_REQUEST_BYTES, command, (UINT32)sizeof(command),
-                                      &command_len) == 0u ||
-      er_tpm_crb_transact(&crb, command, command_len, response,
-                          (UINT32)sizeof(response), &response_len) == 0u ||
-      er_tpm_parse_get_random_response(response, response_len, random,
-                                       (UINT32)sizeof(random), &random_len) == 0u) {
-    er_println("tpm: GetRandom command failed");
-    return;
-  }
-
-  er_print("tpm: GetRandom bytes=");
-  er_print_u64_dec((UINT64)random_len);
-  er_print(" first=");
-  er_print_u64_hex((UINT64)random[0]);
-  er_print(" last=");
-  er_print_u64_hex((UINT64)random[random_len - 1u]);
-  er_println("");
-
-  if (er_tpm_build_create_primary_p256_signing_command(command,
-                                                       (UINT32)sizeof(command),
-                                                       &command_len) == 0u ||
-      er_tpm_crb_transact(&crb, command, command_len, response,
-                          (UINT32)sizeof(response), &response_len) == 0u ||
-      er_tpm_parse_create_primary_p256_response(response, response_len, &primary) == 0u) {
-    er_println("tpm: CreatePrimary P-256 failed");
-    return;
-  }
-  er_print("tpm: CreatePrimary handle=");
-  er_print_u64_hex((UINT64)primary.handle);
-  er_print(" pub0=");
-  er_print_u64_hex((UINT64)primary.public_key[0]);
-  er_print(" pub63=");
-  er_print_u64_hex((UINT64)primary.public_key[ER_TPM_P256_PUBLIC_KEY_LEN - 1u]);
-  er_println("");
-
-  for (i = 0u; i < (UINT32)sizeof(digest); ++i) {
-    digest[i] = (UINT8)i;
-  }
-  if (er_tpm_build_sign_p256_sha256_command(primary.handle, digest, command,
-                                            (UINT32)sizeof(command),
-                                            &command_len) == 0u ||
-      er_tpm_crb_transact(&crb, command, command_len, response,
-                          (UINT32)sizeof(response), &response_len) == 0u) {
-    er_println("tpm: Sign P-256 failed");
-    return;
-  }
-  code = er_tpm_response_code(response, response_len);
-  if (code != ER_TPM_RC_SUCCESS) {
-    er_print("tpm: Sign rc=");
-    er_print_u64_hex((UINT64)code);
-    er_println("");
-    return;
-  }
-  if (er_tpm_parse_p256_sha256_signature_response(response, response_len,
-                                                  signature) == 0u) {
-    er_println("tpm: Sign P-256 parse failed");
-    return;
-  }
-  er_print("tpm: Sign bytes=64 first=");
-  er_print_u64_hex((UINT64)signature[0]);
-  er_print(" last=");
-  er_print_u64_hex((UINT64)signature[ER_TPM_PROFILE_SIGNATURE_BYTES - 1u]);
-  er_println("");
-
-  if (er_tpm_build_flush_context_command(primary.handle, command,
-                                         (UINT32)sizeof(command),
-                                         &command_len) != 0u) {
-    (void)er_tpm_crb_transact(&crb, command, command_len, response,
-                              (UINT32)sizeof(response), &response_len);
-  }
-  er_println("tpm: CRB direct command path ok");
 }
 
 static UINT8 er_ui_boot_append_wasm_scene(er_ui_scene_t* scene, const er_ui_scene_t* wasm_scene) {
@@ -1607,7 +1254,7 @@ static void er_ui_boot_input_loop(er_ui_ledger_app_state_t* ledger_state,
   }
 }
 
-static void er_run_ui_profile(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE* SystemTable) {
+static void er_run_os_path(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE* SystemTable) {
   er_ui_scene_budget_t scene_budget;
   ErUiSurfaceMode mode;
   ErUiSurfaceFrameBudget frame_budget;
@@ -1631,7 +1278,7 @@ static void er_run_ui_profile(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE* SystemTa
 
   er_mem_zero((UINT8*)apps, (UINTN)sizeof(apps));
 
-  er_println("boot profile: ui");
+  er_println("boot path: os");
   if (er_virtio_gpu_init_first_pci(&gpu) == 0u) {
     er_println("ui renderer: virtio gpu unavailable");
     return;
@@ -1641,7 +1288,7 @@ static void er_run_ui_profile(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE* SystemTa
     return;
   }
   er_mem_zero((UINT8*)&display_info, (UINTN)sizeof(display_info));
-  if (er_gpu_profile_wait_display_info(&gpu, &display_info) == 0u) {
+  if (er_virtio_gpu_wait_display_info(&gpu, &display_info) == 0u) {
     er_println("ui renderer: virtio gpu display poll failed");
     return;
   }
@@ -1754,35 +1401,20 @@ static void er_run_ui_profile(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE* SystemTa
   er_ui_boot_input_loop(&ledger_state, &runtime, &scene, &render_context);
 }
 
-static void er_run_invalid_profile(void) {
-  er_print("invalid boot profile: ");
+static void er_run_invalid_boot_path(void) {
+  er_print("invalid boot path: ");
   er_print_u64_dec((UINT64)ER_BOOT_PROFILE);
   er_println("");
   er_halt_forever();
 }
 
-static void er_run_boot_profile(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE* SystemTable) {
-  if (ER_BOOT_PROFILE == ER_BOOT_PROFILE_UI) {
-    er_run_ui_profile(ImageHandle, SystemTable);
+static void er_run_boot_path(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE* SystemTable) {
+  if (ER_BOOT_PROFILE == ER_BOOT_PROFILE_OS) {
+    er_run_os_path(ImageHandle, SystemTable);
     return;
   }
 
-  if (ER_BOOT_PROFILE == ER_BOOT_PROFILE_NATIVE) {
-    er_run_native_profile();
-    return;
-  }
-
-  if (ER_BOOT_PROFILE == ER_BOOT_PROFILE_TPM) {
-    er_run_tpm_profile(SystemTable);
-    return;
-  }
-
-  if (ER_BOOT_PROFILE == ER_BOOT_PROFILE_GPU) {
-    er_run_gpu_profile();
-    return;
-  }
-
-  er_run_invalid_profile();
+  er_run_invalid_boot_path();
 }
 
 EFI_STATUS EFIAPI efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE* SystemTable) {
@@ -1797,12 +1429,9 @@ EFI_STATUS EFIAPI efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE* SystemTable
   er_println("UEFI boot OK");
   er_log_acpi(SystemTable);
 
-  er_run_boot_profile(ImageHandle, SystemTable);
-  if (ER_BOOT_PROFILE == ER_BOOT_PROFILE_UI) {
+  er_run_boot_path(ImageHandle, SystemTable);
+  if (ER_BOOT_PROFILE == ER_BOOT_PROFILE_OS) {
     return EFI_SUCCESS;
   }
-
-  er_println("Press any key to halt...");
-  er_wait_for_key_then_halt(SystemTable);
   return EFI_SUCCESS;
 }

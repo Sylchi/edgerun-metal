@@ -42,9 +42,9 @@ The shared contract is what lets these parts interoperate. The admissions remain
 - `wasm_vm` runs bounded Wasm modules with explicit hostcalls, including bounded `edgerun.relay/send` and `edgerun.relay/recv` imports.
 - Relay sends are validated against serialized packet shape, app identity, admission id, budget token, and packet-byte budget before host relay dispatch.
 - `er_work` can prepare and validate bounded capability envelope headers, including render capability invocations for app-authored scene payloads.
-- `er_render_endpoint` can deterministically capture admitted render capability work, verify scene payload hashes, decode endpoint-owned UI scenes, and present those scenes to a GOP surface after route, channel envelope, and render capability header verification.
-- `varfont`, `edgerun-ui-core`, the GOP renderer, and the VirtIO GPU profile provide enough UI/text/rendering foundation for polished app surfaces.
-- The boot UI proof can hold multiple Wasm UI apps concurrently as explicit runtime contexts with isolated preallocated memory, presentation identity, scene state, and app-switcher selection.
+- `er_render_endpoint` can deterministically capture admitted render capability work, verify scene payload hashes, and decode endpoint-owned UI scenes after route, channel envelope, and render capability header verification.
+- `varfont`, `edgerun-ui-core`, and the VirtIO GPU path provide enough UI/text/rendering foundation for polished app surfaces.
+- The OS path can hold multiple Wasm UI apps concurrently as explicit runtime contexts with isolated preallocated memory, presentation identity, scene state, and app-switcher selection.
 - App package identity is derived from app code, manifest, and UI asset object ids and lengths. Labels can name those objects inside manifests, but labels do not define package identity.
 - VFS object packet reassembly validates packet order, offsets, payload hashes, packet ids, object id, and output capacity before returning loaded bytes.
 - App package loading reassembles app code, manifest, and optional UI asset objects into caller-owned buffers and verifies they match the package manifest.
@@ -87,7 +87,7 @@ Work:
 - Build an ingress `ErChannelEndpoint` from the VirtIO-net MAC.
 - Reject malformed packets immediately.
 - Preserve packet kind, payload, sequence, payload hash inputs, and ingress endpoint without treating the ingress transport as authority.
-- Next: call the helper from the native profile loop.
+- Next: call the helper from the OS loop.
 
 Proof:
 
@@ -139,14 +139,14 @@ Work:
 
 - Define the first render payload as a bounded scene or scene-delta capability envelope.
 - Add a VirtIO GPU endpoint adapter behind an admitted render capability route.
-- Deterministic capture of admitted render scene metadata, scene payload hash verification, endpoint-owned scene decode, and GOP surface presentation are implemented.
+- Deterministic capture of admitted render scene metadata, scene payload hash verification, and endpoint-owned scene decode are implemented.
 - Then add minimal VirtIO GPU command queue submission.
 
 Proof:
 
 - Unit test feeds admitted render capability work through erwire and the route verifier to the render adapter.
 - QEMU proof shows net ingress carries admitted render work to the GPU endpoint.
-- UI proof renders the same scene locally through GOP and through the render endpoint path.
+- UI proof renders the same scene through the VirtIO GPU endpoint path.
 
 ## Milestone 6: Wasm Relay ABI
 
@@ -180,7 +180,7 @@ Work:
 Proof:
 
 - Test proves both renderer routes receive the same scene hash.
-- Local proof renders through GOP.
+- Local proof renders through VirtIO GPU.
 - QEMU or host proof renders or captures through a second renderer endpoint.
 - Input packet returns to the app route with ordered sequence.
 
@@ -202,16 +202,16 @@ Proof:
 - Completion packet returns over erwire.
 - The same driver packet can be routed locally or through native Ethernet without changing the driver ABI.
 
-## Milestone 9: Exit Boot Services Readiness
+## Milestone 9: Exit Boot Services
 
-Goal: drop EFI Boot Services only after native relay ownership is proven.
+Goal: drop EFI Boot Services on the OS path and keep running through runtime-owned devices.
 
 Work:
 
-- Native logging works without firmware networking.
-- Native receive path works through VirtIO-net.
+- Runtime logging works without firmware networking.
+- Receive path works through VirtIO-net.
 - Native storage endpoint can persist sealed object packets.
-- Native render endpoint can show basic status.
+- Render endpoint presents through VirtIO GPU.
 - Device discovery, memory ownership, interrupts, and timers have native replacements or explicit minimal stubs.
 
 Proof:

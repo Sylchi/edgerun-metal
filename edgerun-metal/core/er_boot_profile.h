@@ -4,10 +4,7 @@
 #include "er_types.h"
 
 enum {
-  ER_BOOT_PROFILE_UI = 4u,
-  ER_BOOT_PROFILE_NATIVE = 5u,
-  ER_BOOT_PROFILE_TPM = 6u,
-  ER_BOOT_PROFILE_GPU = 7u
+  ER_BOOT_PROFILE_OS = 4u
 };
 
 const char* er_boot_profile_label(UINT32 profile);
