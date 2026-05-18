@@ -72,6 +72,8 @@
 #define ER_GPU_PROFILE_FRAMEBUFFER_HEIGHT 720u
 #define ER_GPU_PROFILE_RESOURCE_ID 1u
 #define ER_GPU_PROFILE_SCANOUT_ID 0u
+#define ER_UI_BOOT_GPU_RESOURCE_ID 2u
+#define ER_UI_BOOT_GPU_SCANOUT_ID 0u
 #define ER_GPU_PROFILE_TOP_COLOR 0x0040d0e0u
 #define ER_GPU_PROFILE_BOTTOM_COLOR 0x00202020u
 #define ER_TPM_PROFILE_COMMAND_BYTES 128u
@@ -110,6 +112,9 @@ static UINT64 g_log_func = 0;
 typedef struct {
   vr_font_face_t* font;
   ErUiSurfaceMode mode;
+  ErUiSurface* surface;
+  ErVirtioGpu* gpu;
+  const ErVirtioGpuFramebuffer* framebuffer;
   const ErUiSurfaceTilePlan* tile_plan;
   ErUiSurfaceMemoryPlan memory_plan;
   er_ui_scene_budget_t scene_budget;
@@ -670,6 +675,59 @@ static UINT8 er_gpu_profile_wait_display_info(ErVirtioGpu* gpu,
   return 0u;
 }
 
+static UINT8 er_ui_boot_gpu_present(const ErUiBootRenderContext* render) {
+  if (render == 0 || render->gpu == 0 || render->framebuffer == 0) {
+    return 0u;
+  }
+  if (er_virtio_gpu_submit_framebuffer_transfer(render->gpu, render->framebuffer) == 0u ||
+      er_gpu_profile_wait_ok(render->gpu) == 0u ||
+      er_virtio_gpu_submit_framebuffer_flush(render->gpu, render->framebuffer) == 0u ||
+      er_gpu_profile_wait_ok(render->gpu) == 0u) {
+    return 0u;
+  }
+  return 1u;
+}
+
+static UINT8 er_ui_boot_gpu_prepare_scanout(ErVirtioGpu* gpu,
+                                            ErVirtioGpuFramebuffer* framebuffer,
+                                            ErUiSurface* surface,
+                                            ErUiSurfaceMode* out_mode) {
+  if (gpu == 0 || framebuffer == 0 || surface == 0 || out_mode == 0) {
+    return 0u;
+  }
+  if (er_virtio_gpu_framebuffer_init(framebuffer, ER_UI_BOOT_GPU_RESOURCE_ID,
+                                     ER_UI_BOOT_GPU_SCANOUT_ID,
+                                     ER_VIRTIO_GPU_FORMAT_B8G8R8X8_UNORM,
+                                     ER_GPU_PROFILE_FRAMEBUFFER_WIDTH,
+                                     ER_GPU_PROFILE_FRAMEBUFFER_HEIGHT,
+                                     ER_GPU_PROFILE_FRAMEBUFFER_WIDTH,
+                                     g_gpu_profile_framebuffer,
+                                     ER_GPU_PROFILE_FRAMEBUFFER_WIDTH_MAX *
+                                         ER_GPU_PROFILE_FRAMEBUFFER_HEIGHT_MAX) == 0u) {
+    return 0u;
+  }
+  if (er_virtio_gpu_submit_framebuffer_create(gpu, framebuffer) == 0u ||
+      er_gpu_profile_wait_ok(gpu) == 0u ||
+      er_virtio_gpu_submit_framebuffer_attach(gpu, framebuffer) == 0u ||
+      er_gpu_profile_wait_ok(gpu) == 0u ||
+      er_virtio_gpu_submit_framebuffer_set_scanout(gpu, framebuffer) == 0u ||
+      er_gpu_profile_wait_ok(gpu) == 0u) {
+    return 0u;
+  }
+  surface->pixels = framebuffer->pixels;
+  surface->width = framebuffer->width;
+  surface->height = framebuffer->height;
+  surface->stride = framebuffer->stride_pixels;
+  surface->pixel_format = ER_UI_SURFACE_PIXEL_BGRX;
+  out_mode->width = framebuffer->width;
+  out_mode->height = framebuffer->height;
+  out_mode->stride = framebuffer->stride_pixels;
+  out_mode->refresh_hz = 1u;
+  out_mode->pixel_format = ER_UI_SURFACE_PIXEL_BGRX;
+  return (UINT8)(er_ui_surface_valid(surface) != 0u &&
+                 er_ui_surface_mode_valid(out_mode) != 0u);
+}
+
 static UINT8 er_gpu_profile_render_component_scene_to_framebuffer(ErVirtioGpuFramebuffer* framebuffer,
                                                                   vr_font_face_t* font,
                                                                   er_ui_resolved_theme_t theme,
@@ -1098,7 +1156,8 @@ static UINT8 er_ui_boot_render_scene(er_ui_scene_t* scene,
   ErUiSurfaceRenderStats render_stats;
   ErUiSurfaceFrameBudgetViolation frame_violation;
 
-  if (scene == 0 || ledger_state == 0 || render == 0 || render->font == 0 || render->tile_plan == 0) {
+  if (scene == 0 || ledger_state == 0 || render == 0 || render->font == 0 ||
+      render->surface == 0 || render->tile_plan == 0) {
     return 0u;
   }
 
@@ -1127,8 +1186,12 @@ static UINT8 er_ui_boot_render_scene(er_ui_scene_t* scene,
     return 0u;
   }
 
-  if (er_ui_gop_renderer_render_scene_with_font_stats(scene, render->font, &render_stats) == 0u) {
+  if (er_ui_surface_render_scene_with_font_stats(render->surface, scene, render->font, &render_stats) == 0u) {
     er_println("ui renderer: render failed");
+    return 0u;
+  }
+  if (er_ui_boot_gpu_present(render) == 0u) {
+    er_println("ui renderer: virtio gpu present failed");
     return 0u;
   }
 
@@ -1261,23 +1324,40 @@ static void er_run_ui_profile(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE* SystemTa
   er_ui_scene_t wasm_scene = {0};
   er_ui_runtime_state_t runtime = {0};
   er_ui_ledger_app_state_t ledger_state = {0};
+  ErVirtioGpu gpu;
+  ErVirtioGpuFramebuffer framebuffer;
+  ErVirtioGpuDisplayInfo display_info;
+  ErUiSurface surface;
   ErAppUiPresentation wasm_presentation;
   ErUiWasmAppRuntime wasm_runtime;
   ErUiBootRenderContext render_context = {0};
   vr_font_face_t* font = 0;
 
   er_println("boot profile: ui");
-  if (er_ui_gop_renderer_init(SystemTable) == 0u) {
-    er_println("ui renderer: GOP unavailable");
+  if (er_virtio_gpu_init_first_pci(&gpu) == 0u) {
+    er_println("ui renderer: virtio gpu unavailable");
     return;
   }
-
-  if (er_ui_gop_renderer_mode(&mode) == 0u) {
-    er_println("ui renderer: mode unavailable");
+  if (er_virtio_gpu_submit_get_display_info(&gpu) == 0u) {
+    er_println("ui renderer: virtio gpu display submit failed");
     return;
   }
-  if (er_ui_gop_renderer_tile_plan(ER_UI_BOOT_TILE_WIDTH, ER_UI_BOOT_TILE_HEIGHT,
-                                   ER_UI_BOOT_MAX_DIRTY_TILES, &tile_plan) == 0u ||
+  er_mem_zero((UINT8*)&display_info, (UINTN)sizeof(display_info));
+  if (er_gpu_profile_wait_display_info(&gpu, &display_info) == 0u) {
+    er_println("ui renderer: virtio gpu display poll failed");
+    return;
+  }
+  er_print("ui renderer: virtio gpu scanout0 width=");
+  er_print_u64_dec((UINT64)display_info.scanouts[0].rect.width);
+  er_print(" height=");
+  er_print_u64_dec((UINT64)display_info.scanouts[0].rect.height);
+  er_println("");
+  if (er_ui_boot_gpu_prepare_scanout(&gpu, &framebuffer, &surface, &mode) == 0u) {
+    er_println("ui renderer: virtio gpu scanout failed");
+    return;
+  }
+  if (er_ui_surface_tile_plan(&surface, ER_UI_BOOT_TILE_WIDTH, ER_UI_BOOT_TILE_HEIGHT,
+                              ER_UI_BOOT_MAX_DIRTY_TILES, &tile_plan) == 0u ||
       tile_plan.tile_count > ER_UI_BOOT_MAX_TILE_MARKS) {
     er_println("ui renderer: tile plan failed");
     return;
@@ -1318,6 +1398,9 @@ static void er_run_ui_profile(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE* SystemTa
   frame_budget = er_ui_surface_frame_budget_from_plan(&tile_plan, scene_budget, ER_UI_BOOT_RENDER_OVERDRAW_BUDGET);
   render_context.font = font;
   render_context.mode = mode;
+  render_context.surface = &surface;
+  render_context.gpu = &gpu;
+  render_context.framebuffer = &framebuffer;
   render_context.tile_plan = &tile_plan;
   render_context.memory_plan = memory_plan;
   render_context.scene_budget = scene_budget;
@@ -1364,25 +1447,19 @@ static void er_run_ui_profile(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE* SystemTa
   render_context.wasm_runtime = &wasm_runtime;
   render_context.wasm_scene_ready = 1u;
 
+  er_println("ui renderer: first frame deferred until boot services exit");
+  er_println("boot services: exiting");
   er_gfx_console_set_enabled(0u);
   er_print_set_firmware_console_enabled(0u);
-  er_println("ui renderer: render scene");
-  if (er_ui_boot_render_scene(&scene, &ledger_state, &render_context) == 0u) {
-    er_ui_scene_destroy(&wasm_scene);
-    er_ui_scene_destroy(&scene);
-    er_ui_runtime_state_destroy(&runtime);
-    er_ui_ledger_app_state_destroy(&ledger_state);
-    vr_font_face_destroy(font);
-    return;
-  }
-
-  er_println("boot services: exiting");
   if (er_exit_boot_services(ImageHandle, SystemTable) == 0u) {
     er_ui_scene_destroy(&wasm_scene);
     er_ui_scene_destroy(&scene);
     er_ui_runtime_state_destroy(&runtime);
     er_ui_ledger_app_state_destroy(&ledger_state);
     vr_font_face_destroy(font);
+    er_halt_forever();
+  }
+  if (er_ui_boot_render_scene(&scene, &ledger_state, &render_context) == 0u) {
     er_halt_forever();
   }
   er_ui_boot_input_loop(&ledger_state, &runtime, &scene, &render_context);
