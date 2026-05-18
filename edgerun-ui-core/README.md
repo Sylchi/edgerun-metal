@@ -12,6 +12,7 @@ Implemented portable slices:
 - semantic palette/theme records for color schemes, accents, radius scales, density, and token resolution
 - shadcn preset-code recipes, base62 encode/decode parity, style-family palettes/specs, extracted style tokens, and source-capture provenance
 - shared spacing and sizing contracts for rows, controls, app surfaces, system panels, overlays, and scroll geometry
+- runtime-replaceable UI asset pack contracts for icons, fonts, emoji, and extracted component coverage
 - required `vrfont` integration for converting variable-font vertex batches into scene text quads
 - Rust-compatible UI record codec for deterministic setup/admission records using caller-owned buffers
 - initial setup and YubiKey grant ceremony state machines plus reusable node-surface builders

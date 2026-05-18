@@ -2,6 +2,7 @@
 #define ER_UI_TEST_COMMON_H
 
 #include "er_ui_painter.h"
+#include "er_ui_assets.h"
 #include "er_ui_components.h"
 #include "er_ui_initial_setup.h"
 #include "er_ui_metal.h"
