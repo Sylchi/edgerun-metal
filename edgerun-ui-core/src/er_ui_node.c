@@ -2025,7 +2025,7 @@ static er_ui_status_t er_ui_node_render_collapsible(
   float pad = 12.0f;
   float header_h = er_ui_float_min(36.0f, bounds.h - pad * 2.0f);
   if (header_h <= 0.0f) return ER_UI_ERR_INVALID_ARGUMENT;
-  er_ui_bounds_t inner = er_ui_bounds(bounds.x + pad, bounds.y + pad, bounds.w - pad * 2.0f, bounds.h - pad * 2.0f);
+  er_ui_bounds_t inner = er_ui_bounds_inset(bounds, pad, pad);
   if (!er_ui_bounds_valid(inner)) return ER_UI_ERR_INVALID_ARGUMENT;
   er_ui_bounds_t title = er_ui_bounds(inner.x, inner.y, er_ui_float_max(0.0f, inner.w - header_h - 8.0f), header_h);
   er_ui_bounds_t trigger = er_ui_bounds(inner.x + inner.w - header_h, inner.y, header_h, header_h);
@@ -2060,7 +2060,7 @@ static er_ui_status_t er_ui_node_render_accordion(
   if (status != ER_UI_OK) return status;
 
   float pad = 8.0f;
-  er_ui_bounds_t inner = er_ui_bounds(bounds.x + pad, bounds.y + pad, bounds.w - pad * 2.0f, bounds.h - pad * 2.0f);
+  er_ui_bounds_t inner = er_ui_bounds_inset(bounds, pad, pad);
   if (!er_ui_bounds_valid(inner)) return ER_UI_ERR_INVALID_ARGUMENT;
   float header_h = 40.0f;
   float body_h = 28.0f;
@@ -2147,7 +2147,7 @@ static er_ui_status_t er_ui_node_render_sheet(
   er_ui_status_t status = er_ui_component_card_emit(scene, bounds, theme);
   if (status != ER_UI_OK) return status;
   float pad = 16.0f;
-  er_ui_bounds_t inner = er_ui_bounds(bounds.x + pad, bounds.y + pad, bounds.w - pad * 2.0f, bounds.h - pad * 2.0f);
+  er_ui_bounds_t inner = er_ui_bounds_inset(bounds, pad, pad);
   if (!er_ui_bounds_valid(inner)) return ER_UI_ERR_INVALID_ARGUMENT;
   status = er_ui_node_render_text(scene, font, node->label, er_ui_bounds(inner.x, inner.y, inner.w, 24.0f), theme.colors.text);
   if (status != ER_UI_OK) return status;
@@ -2502,7 +2502,7 @@ static er_ui_status_t er_ui_node_render_drawer(
   er_ui_status_t status = er_ui_component_card_emit(scene, bounds, theme);
   if (status != ER_UI_OK) return status;
   float pad = 16.0f;
-  er_ui_bounds_t inner = er_ui_bounds(bounds.x + pad, bounds.y + pad, bounds.w - pad * 2.0f, bounds.h - pad * 2.0f);
+  er_ui_bounds_t inner = er_ui_bounds_inset(bounds, pad, pad);
   if (!er_ui_bounds_valid(inner)) return ER_UI_ERR_INVALID_ARGUMENT;
   status = er_ui_node_render_text(scene, font, node->label, er_ui_bounds(inner.x, inner.y, inner.w, 24.0f), theme.colors.text);
   if (status != ER_UI_OK) return status;
@@ -2554,7 +2554,7 @@ static er_ui_status_t er_ui_node_render_context_menu(
   er_ui_status_t status = er_ui_component_card_emit(scene, bounds, theme);
   if (status != ER_UI_OK) return status;
   float pad = 12.0f;
-  er_ui_bounds_t inner = er_ui_bounds(bounds.x + pad, bounds.y + pad, bounds.w - pad * 2.0f, bounds.h - pad * 2.0f);
+  er_ui_bounds_t inner = er_ui_bounds_inset(bounds, pad, pad);
   if (!er_ui_bounds_valid(inner)) return ER_UI_ERR_INVALID_ARGUMENT;
   status = er_ui_node_render_text(scene, font, node->label, er_ui_bounds(inner.x, inner.y, inner.w, 24.0f), theme.colors.text);
   if (status != ER_UI_OK) return status;
@@ -2650,7 +2650,7 @@ static er_ui_status_t er_ui_node_render_calendar(
   er_ui_status_t status = er_ui_component_card_emit(scene, bounds, theme);
   if (status != ER_UI_OK) return status;
   float pad = 12.0f;
-  er_ui_bounds_t inner = er_ui_bounds(bounds.x + pad, bounds.y + pad, bounds.w - pad * 2.0f, bounds.h - pad * 2.0f);
+  er_ui_bounds_t inner = er_ui_bounds_inset(bounds, pad, pad);
   if (!er_ui_bounds_valid(inner)) return ER_UI_ERR_INVALID_ARGUMENT;
 
   er_ui_bounds_t prev = er_ui_bounds(inner.x, inner.y, 36.0f, 36.0f);
