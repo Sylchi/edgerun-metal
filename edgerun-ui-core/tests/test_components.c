@@ -39,6 +39,7 @@
 #define ER_UI_TEST_COMPONENT_STOCK_BUTTON_INDEX 2u
 #define ER_UI_TEST_COMPONENT_SLIDER_ACTION_ID (ER_UI_COMPONENT_PREVIEW_BASE_ID + 943u)
 #define ER_UI_TEST_COMPONENT_UNRELATED_BUTTON_ID 42u
+#define ER_UI_TEST_COMPONENT_NARROW_ID_OFFSET 80u
 #define ER_UI_TEST_APP_STORE_CARD_REQUIRED_FIELDS 3u
 #define ER_UI_TEST_METAL_BOARD_BASE_ID (ER_UI_COMPONENT_PREVIEW_BASE_ID + 4600u)
 #define ER_UI_TEST_METAL_PAYOUT_SELECT_ID (ER_UI_TEST_METAL_BOARD_BASE_ID + 120u)
@@ -117,6 +118,30 @@ static void test_component_render_primitives(void) {
                 ER_UI_OK, "component render: narrow passive select emits");
   expect_true(test_component_text_max_x_since(&scene, narrow_text_start) <= narrow_select.x + narrow_select.w,
               "component render: narrow passive select text stays inside control");
+  er_ui_bounds_t narrow_choice = er_ui_bounds(232.0f, 384.0f, 112.0f, 32.0f);
+  narrow_text_start = scene.text_quad_count;
+  expect_status(er_ui_component_checkbox_emit(&scene, face, narrow_choice, theme, "Cache verified bytes before retrieval", true,
+                                           ER_UI_TEST_COMPONENT_CHECKBOX_ID + ER_UI_TEST_COMPONENT_NARROW_ID_OFFSET),
+                ER_UI_OK, "component render: narrow checkbox emits");
+  expect_true(test_component_text_max_x_since(&scene, narrow_text_start) <= narrow_choice.x + narrow_choice.w,
+              "component render: narrow checkbox text stays inside control");
+  er_ui_bounds_t narrow_tabs = er_ui_bounds(232.0f, 422.0f, 132.0f, 34.0f);
+  const char *const narrow_tab_labels[] = {"Overview", "Transactions", "Settings"};
+  narrow_text_start = scene.text_quad_count;
+  expect_status(er_ui_component_tabs_emit(&scene, face, narrow_tabs, theme, narrow_tab_labels, ER_UI_TEST_ARRAY_COUNT(narrow_tab_labels),
+                                       ER_UI_TEST_COMPONENT_TABS_ACTIVE_INDEX, ER_UI_TEST_COMPONENT_TABS_ID + ER_UI_TEST_COMPONENT_NARROW_ID_OFFSET),
+                ER_UI_OK, "component render: narrow tabs emit");
+  expect_true(test_component_text_max_x_since(&scene, narrow_text_start) <= narrow_tabs.x + narrow_tabs.w,
+              "component render: narrow tab labels stay inside segmented control");
+  er_ui_bounds_t narrow_table = er_ui_bounds(232.0f, 462.0f, 132.0f, 82.0f);
+  const char *const narrow_headers[] = {"Destination", "Status"};
+  const char *const narrow_cells[] = {"Main settlement account", "Pending review"};
+  narrow_text_start = scene.text_quad_count;
+  expect_status(er_ui_component_table_emit(&scene, face, narrow_table, theme, narrow_headers, ER_UI_TEST_ARRAY_COUNT(narrow_headers),
+                                        narrow_cells, 1u, ER_UI_TEST_COMPONENT_TABLE_ID + ER_UI_TEST_COMPONENT_NARROW_ID_OFFSET),
+                ER_UI_OK, "component render: narrow table emits");
+  expect_true(test_component_text_max_x_since(&scene, narrow_text_start) <= narrow_table.x + narrow_table.w,
+              "component render: narrow table text stays inside card");
   expect_status(er_ui_component_checkbox_emit(&scene, face, er_ui_bounds(16.0f, 180.0f, 188.0f, 32.0f), theme, "Cache verified bytes", true,
                                            ER_UI_TEST_COMPONENT_CHECKBOX_ID),
                 ER_UI_OK, "component render: checkbox emits");
