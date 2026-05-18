@@ -62,6 +62,13 @@ static UINT32 er_ui_wasm_app_next_input_sequence(UINT32 current) {
   return current + 1u;
 }
 
+static ErEpochClockModifier er_ui_wasm_app_effective_modifier(ErEpochClockModifier modifier) {
+  if (modifier.tick_stride == 0u) {
+    return er_epoch_clock_default_modifier();
+  }
+  return modifier;
+}
+
 static int er_ui_wasm_app_commit_input(ErUiWasmAppRuntime* runtime,
                                        const UINT8* bytes, UINT32 len,
                                        UINT32 sequence) {
@@ -73,7 +80,8 @@ static int er_ui_wasm_app_commit_input(ErUiWasmAppRuntime* runtime,
                                    runtime->relay_inbox_len, &inbox) != 0) {
     return -1;
   }
-  if (er_epoch_clock_advance(&runtime->settlement_clock, 0) == 0u) {
+  if (er_epoch_clock_advance_with_modifier(&runtime->settlement_clock,
+                                           &runtime->input_epoch_modifier, 0) == 0u) {
     return -1;
   }
   er_mem_zero(inbox, (UINTN)runtime->relay_inbox_len);
@@ -119,6 +127,10 @@ int er_ui_wasm_app_prepare(const UINT8* module_data, UINT32 module_size,
   if (er_epoch_clock_init(&clock_limits, &runtime->settlement_clock) == 0u) {
     return -1;
   }
+  runtime->input_epoch_modifier =
+    er_ui_wasm_app_effective_modifier(runtime->input_epoch_modifier);
+  runtime->execute_epoch_modifier =
+    er_ui_wasm_app_effective_modifier(runtime->execute_epoch_modifier);
   runtime->input_len = 0u;
   runtime->input_sequence = 0u;
   runtime->emitted = 0u;
@@ -199,7 +211,8 @@ int er_ui_wasm_app_execute(ErUiWasmAppRuntime* runtime, INT64* out_result) {
     return -1;
   }
   g_active_runtime = 0;
-  if (er_epoch_clock_advance(&runtime->settlement_clock, 0) == 0u) {
+  if (er_epoch_clock_advance_with_modifier(&runtime->settlement_clock,
+                                           &runtime->execute_epoch_modifier, 0) == 0u) {
     return -1;
   }
   runtime->last_execute_epoch = runtime->settlement_clock.now;

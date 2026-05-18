@@ -60,6 +60,8 @@
 #define ER_UI_WASM_APP_NODE_ID_SEED 0x70u
 #define ER_UI_WASM_RELAY_NODE_ID_SEED 0x90u
 #define ER_UI_WASM_ROUTE_HASH_SEED 0xb0u
+#define ER_UI_WASM_PS2_INPUT_EPOCH_STRIDE 1u
+#define ER_UI_WASM_EXECUTE_EPOCH_STRIDE 2u
 #define ER_UI_WASM_COUNTER_PACKET_BYTES (ER_WASM_UI_COMMAND_LIST_HEADER_LEN + \
                                          ER_WASM_UI_RECT_RECORD_LEN + \
                                          ER_WASM_UI_HIT_RECORD_LEN + \
@@ -1394,6 +1396,8 @@ static UINT8 er_ui_boot_prepare_wasm_counter(ErUiWasmAppRuntime* runtime,
   runtime->relay_outbox_len = ER_UI_WASM_RELAY_OUTBOX_BYTES;
   runtime->presentation = presentation;
   runtime->scene = wasm_scene;
+  runtime->input_epoch_modifier.tick_stride = ER_UI_WASM_PS2_INPUT_EPOCH_STRIDE;
+  runtime->execute_epoch_modifier.tick_stride = ER_UI_WASM_EXECUTE_EPOCH_STRIDE;
   if (er_ui_wasm_app_prepare(g_edgerun_ui_counter_wasm, ER_UI_COUNTER_WASM_SIZE,
                              &g_host_calls, runtime) != 0) {
     return 0u;
