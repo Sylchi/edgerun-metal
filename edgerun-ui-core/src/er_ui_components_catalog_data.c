@@ -210,6 +210,21 @@ static const char* const states_data_table[] = {
   "loading",
   "empty",
 };
+static const char* const slots_invoice_card[] = {
+  "card",
+  "card-header",
+  "badge",
+  "table",
+  "scroll-area",
+  "card-footer",
+  "button",
+};
+static const char* const states_invoice_card[] = {
+  "pending",
+  "paid",
+  "overflow-x",
+  "actionable",
+};
 static const char* const slots_date_picker[] = {
   "popover",
   "calendar",
@@ -764,6 +779,14 @@ static const er_ui_component_spec_t component_catalog[] = {
     "data_table_node",
     slots_data_table,
     states_data_table),
+  ER_UI_COMPONENT_ENTRY(
+    "Invoice Card",
+    "invoice-card",
+    ER_UI_COMPONENT_CATEGORY_DATA_DISPLAY,
+    "Card",
+    "invoice_card",
+    slots_invoice_card,
+    states_invoice_card),
   ER_UI_COMPONENT_ENTRY(
     "Date Picker",
     "date-picker",

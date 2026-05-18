@@ -266,6 +266,30 @@ er_ui_status_t er_ui_component_scene_preview_emit(
     }
     return ER_UI_OK;
   }
+  if (er_ui_component_streq(slug, "invoice-card")) {
+    const char *const items[] = {"Design System License", "Priority Support", "Custom Components"};
+    const char *const quantities[] = {"1", "12", "3"};
+    const char *const rates[] = {"$499.00", "$99.00", "$250.00"};
+    const char *const amounts[] = {"$499.00", "$1,188.00", "$750.00"};
+    return er_ui_component_invoice_card_emit(scene,
+                                             font,
+                                             er_ui_bounds(bounds.x, bounds.y, er_ui_float_min(bounds.w, 520.0f), er_ui_float_min(bounds.h, 500.0f)),
+                                             theme,
+                                             "Invoice #INV-2847",
+                                             "Due March 30, 2026",
+                                             "Pending",
+                                             items,
+                                             quantities,
+                                             rates,
+                                             amounts,
+                                             ER_UI_COMPONENT_ARRAY_COUNT(items),
+                                             "$2,437.00",
+                                             "$0.00",
+                                             "$2,437.00",
+                                             "Download PDF",
+                                             "Pay Now",
+                                             ER_UI_COMPONENT_PREVIEW_INVOICE_ID);
+  }
   if (er_ui_component_streq(slug, "item")) {
     return er_ui_component_list_row_emit(scene, font, er_ui_bounds(bounds.x, bounds.y, er_ui_float_min(bounds.w, 280.0f), 52.0f), theme, "Payment successful",
                                       "Stripe payout completed", ER_UI_COMPONENT_PREVIEW_ITEM_ID, false);
@@ -537,6 +561,7 @@ static float er_ui_component_showcase_card_height(const er_ui_component_spec_t* 
   if (er_ui_component_streq(spec->slug, "card") ||
       er_ui_component_streq(spec->slug, "chart") ||
       er_ui_component_streq(spec->slug, "data-table") ||
+      er_ui_component_streq(spec->slug, "invoice-card") ||
       er_ui_component_streq(spec->slug, "table") ||
       er_ui_component_streq(spec->slug, "calendar") ||
       er_ui_component_streq(spec->slug, "date-picker") ||
@@ -546,7 +571,7 @@ static float er_ui_component_showcase_card_height(const er_ui_component_spec_t* 
       er_ui_component_streq(spec->slug, "alert-dialog") ||
       er_ui_component_streq(spec->slug, "combobox") ||
       er_ui_component_streq(spec->slug, "navigation-menu")) {
-    return 330.0f;
+    return er_ui_component_streq(spec->slug, "invoice-card") ? 560.0f : 330.0f;
   }
   if (er_ui_component_streq(spec->slug, "accordion") ||
       er_ui_component_streq(spec->slug, "collapsible") ||
