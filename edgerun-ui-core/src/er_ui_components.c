@@ -10,11 +10,24 @@
 #define ER_UI_SHADCN_EMPTY_COUNT 0u
 #define ER_UI_SHADCN_ARRAY_COUNT(values) (sizeof(values) / sizeof((values)[0]))
 #define ER_UI_SHADCN_IDENTIFIER_CAPACITY ER_UI_SHADCN_TEXT_CAPACITY
+#define ER_UI_SHADCN_PREVIEW_BREADCRUMB_ID (ER_UI_SHADCN_DEMO_PREVIEW_BASE_ID + 1u)
+#define ER_UI_SHADCN_PREVIEW_BUTTON_DEFAULT_ID (ER_UI_SHADCN_DEMO_PREVIEW_BASE_ID + 2u)
+#define ER_UI_SHADCN_PREVIEW_BUTTON_SECONDARY_ID (ER_UI_SHADCN_DEMO_PREVIEW_BASE_ID + 3u)
+#define ER_UI_SHADCN_PREVIEW_BUTTON_GHOST_ID (ER_UI_SHADCN_DEMO_PREVIEW_BASE_ID + 4u)
+#define ER_UI_SHADCN_PREVIEW_CHECKBOX_TERMS_ID (ER_UI_SHADCN_DEMO_PREVIEW_BASE_ID + 6u)
+#define ER_UI_SHADCN_PREVIEW_CHECKBOX_EMAILS_ID (ER_UI_SHADCN_DEMO_PREVIEW_BASE_ID + 7u)
+#define ER_UI_SHADCN_PREVIEW_COMMAND_ID (ER_UI_SHADCN_DEMO_PREVIEW_BASE_ID + 8u)
+#define ER_UI_SHADCN_PREVIEW_FIELD_EMAIL_ID (ER_UI_SHADCN_DEMO_PREVIEW_BASE_ID + 11u)
+#define ER_UI_SHADCN_PREVIEW_INPUT_GROUP_FIELD_ID (ER_UI_SHADCN_DEMO_PREVIEW_BASE_ID + 12u)
+#define ER_UI_SHADCN_PREVIEW_INPUT_GROUP_BUTTON_ID (ER_UI_SHADCN_DEMO_PREVIEW_BASE_ID + 13u)
 #define ER_UI_SHADCN_PREVIEW_ALERT_DIALOG_CANCEL_ID (ER_UI_SHADCN_DEMO_PREVIEW_BASE_ID + 90u)
 #define ER_UI_SHADCN_PREVIEW_ALERT_DIALOG_CONFIRM_ID (ER_UI_SHADCN_DEMO_PREVIEW_BASE_ID + 91u)
 #define ER_UI_SHADCN_PREVIEW_BREADCRUMB_CURRENT_INDEX 2u
+#define ER_UI_SHADCN_PREVIEW_DATE_PICKER_ID (ER_UI_SHADCN_DEMO_PREVIEW_BASE_ID + 66u)
 #define ER_UI_SHADCN_PREVIEW_CALENDAR_DAY_BASE_ID (ER_UI_SHADCN_DEMO_PREVIEW_BASE_ID + 48u)
 #define ER_UI_SHADCN_PREVIEW_CALENDAR_SELECTED_INDEX 2u
+#define ER_UI_SHADCN_PREVIEW_DRAWER_SLIDER_ID (ER_UI_SHADCN_DEMO_PREVIEW_BASE_ID + 34u)
+#define ER_UI_SHADCN_PREVIEW_DRAWER_SUBMIT_ID (ER_UI_SHADCN_DEMO_PREVIEW_BASE_ID + 35u)
 #define ER_UI_SHADCN_PREVIEW_CHART_ID (ER_UI_SHADCN_DEMO_PREVIEW_BASE_ID + 120u)
 #define ER_UI_SHADCN_PREVIEW_CHART_ACTIVE_INDEX 3u
 #define ER_UI_SHADCN_PREVIEW_BUTTON_GROUP_ID (ER_UI_SHADCN_DEMO_PREVIEW_BASE_ID + 27u)
@@ -27,6 +40,7 @@
 #define ER_UI_SHADCN_PREVIEW_COMBOBOX_SEARCH_ID (ER_UI_SHADCN_DEMO_PREVIEW_BASE_ID + 60u)
 #define ER_UI_SHADCN_PREVIEW_COMBOBOX_RESULT_ID (ER_UI_SHADCN_DEMO_PREVIEW_BASE_ID + 61u)
 #define ER_UI_SHADCN_PREVIEW_TABLE_ID (ER_UI_SHADCN_DEMO_PREVIEW_BASE_ID + 43u)
+#define ER_UI_SHADCN_PREVIEW_INPUT_OTP_BASE_ID (ER_UI_SHADCN_DEMO_PREVIEW_BASE_ID + 80u)
 
 static bool er_ui_shadcn_streq(const char* a, const char* b) {
   if (!a || !b) return false;
@@ -2227,20 +2241,21 @@ er_ui_status_t er_ui_shadcn_component_scene_preview_emit(
     return er_ui_shadcn_badge_emit(scene, font, er_ui_bounds(bounds.x, bounds.y + 34.0f, 112.0f, 26.0f), theme, "Destructive", ER_UI_SHADCN_BADGE_DESTRUCTIVE);
   }
   if (er_ui_shadcn_streq(slug, "button")) {
-    er_ui_status_t status = er_ui_shadcn_button_emit(scene, font, er_ui_bounds(bounds.x, bounds.y, 96.0f, 42.0f), theme, "Button", ER_UI_SHADCN_DEMO_PREVIEW_BASE_ID + 2u,
+    er_ui_status_t status = er_ui_shadcn_button_emit(scene, font, er_ui_bounds(bounds.x, bounds.y, 96.0f, 42.0f), theme, "Button",
+                                                     ER_UI_SHADCN_PREVIEW_BUTTON_DEFAULT_ID,
                                                      ER_UI_SHADCN_BUTTON_DEFAULT, ER_UI_SHADCN_BUTTON_SIZE_DEFAULT, true);
     if (status != ER_UI_OK) return status;
     status = er_ui_shadcn_button_emit(scene, font, er_ui_bounds(bounds.x + 106.0f, bounds.y, 116.0f, 42.0f), theme, "Secondary",
-                                      ER_UI_SHADCN_DEMO_PREVIEW_BASE_ID + 3u, ER_UI_SHADCN_BUTTON_SECONDARY, ER_UI_SHADCN_BUTTON_SIZE_DEFAULT, true);
+                                      ER_UI_SHADCN_PREVIEW_BUTTON_SECONDARY_ID, ER_UI_SHADCN_BUTTON_SECONDARY, ER_UI_SHADCN_BUTTON_SIZE_DEFAULT, true);
     if (status != ER_UI_OK) return status;
     return er_ui_shadcn_button_emit(scene, font, er_ui_bounds(bounds.x + 232.0f, bounds.y, 86.0f, 42.0f), theme, "Ghost",
-                                    ER_UI_SHADCN_DEMO_PREVIEW_BASE_ID + 4u, ER_UI_SHADCN_BUTTON_GHOST, ER_UI_SHADCN_BUTTON_SIZE_DEFAULT, true);
+                                    ER_UI_SHADCN_PREVIEW_BUTTON_GHOST_ID, ER_UI_SHADCN_BUTTON_GHOST, ER_UI_SHADCN_BUTTON_SIZE_DEFAULT, true);
   }
   if (er_ui_shadcn_streq(slug, "breadcrumb")) {
     const char* const labels[] = {"Docs", "Components", "Breadcrumb"};
     return er_ui_shadcn_breadcrumb_emit(scene, font, er_ui_bounds(bounds.x, bounds.y, er_ui_float_min(bounds.w, 320.0f), 34.0f), theme, labels,
                                         ER_UI_SHADCN_ARRAY_COUNT(labels), ER_UI_SHADCN_PREVIEW_BREADCRUMB_CURRENT_INDEX,
-                                        ER_UI_SHADCN_DEMO_PREVIEW_BASE_ID + 1u);
+                                        ER_UI_SHADCN_PREVIEW_BREADCRUMB_ID);
   }
   if (er_ui_shadcn_streq(slug, "button-group")) {
     const char* const labels[] = {"Copy", "Paste", "More"};
@@ -2250,7 +2265,7 @@ er_ui_status_t er_ui_shadcn_component_scene_preview_emit(
   if (er_ui_shadcn_streq(slug, "calendar") || er_ui_shadcn_streq(slug, "date-picker")) {
     er_ui_status_t status = ER_UI_OK;
     if (er_ui_shadcn_streq(slug, "date-picker")) {
-      status = er_ui_shadcn_button_emit(scene, font, er_ui_bounds(bounds.x, bounds.y, 120.0f, 38.0f), theme, "Pick a date", ER_UI_SHADCN_DEMO_PREVIEW_BASE_ID + 66u,
+      status = er_ui_shadcn_button_emit(scene, font, er_ui_bounds(bounds.x, bounds.y, 120.0f, 38.0f), theme, "Pick a date", ER_UI_SHADCN_PREVIEW_DATE_PICKER_ID,
                                         ER_UI_SHADCN_BUTTON_SECONDARY, ER_UI_SHADCN_BUTTON_SIZE_SM, true);
       if (status != ER_UI_OK) return status;
       bounds.y += 46.0f;
@@ -2279,12 +2294,12 @@ er_ui_status_t er_ui_shadcn_component_scene_preview_emit(
   }
   if (er_ui_shadcn_streq(slug, "carousel")) {
     er_ui_status_t status = ER_UI_OK;
-    for (size_t i = 0u; i < 3u; ++i) {
+    const char* const labels[] = {"1", "2", "3"};
+    for (size_t i = 0u; i < ER_UI_SHADCN_ARRAY_COUNT(labels); ++i) {
       er_ui_bounds_t card = er_ui_bounds(bounds.x + (float)i * 72.0f, bounds.y, 60.0f, 72.0f);
       status = er_ui_shadcn_card_emit(scene, card, theme);
       if (status != ER_UI_OK) return status;
-      char label[2] = {(char)('1' + (char)i), '\0'};
-      status = er_ui_shadcn_push_ascii_text(scene, font, label, card.x + 26.0f, card.y + 42.0f, theme.colors.text);
+      status = er_ui_shadcn_push_ascii_text(scene, font, labels[i], card.x + 26.0f, card.y + 42.0f, theme.colors.text);
       if (status != ER_UI_OK) return status;
     }
     return ER_UI_OK;
@@ -2298,10 +2313,10 @@ er_ui_status_t er_ui_shadcn_component_scene_preview_emit(
   }
   if (er_ui_shadcn_streq(slug, "checkbox")) {
     er_ui_status_t status = er_ui_shadcn_checkbox_emit(scene, font, er_ui_bounds(bounds.x, bounds.y, bounds.w, 32.0f), theme, "Accept terms and conditions", true,
-                                                       ER_UI_SHADCN_DEMO_PREVIEW_BASE_ID + 6u);
+                                                       ER_UI_SHADCN_PREVIEW_CHECKBOX_TERMS_ID);
     if (status != ER_UI_OK) return status;
     return er_ui_shadcn_checkbox_emit(scene, font, er_ui_bounds(bounds.x, bounds.y + 38.0f, bounds.w, 32.0f), theme, "Receive security emails", false,
-                                      ER_UI_SHADCN_DEMO_PREVIEW_BASE_ID + 7u);
+                                      ER_UI_SHADCN_PREVIEW_CHECKBOX_EMAILS_ID);
   }
   if (er_ui_shadcn_streq(slug, "context-menu") || er_ui_shadcn_streq(slug, "dropdown-menu")) {
     er_ui_status_t status = er_ui_shadcn_list_row_emit(scene, font, er_ui_bounds(bounds.x, bounds.y, er_ui_float_min(bounds.w, 220.0f), 44.0f), theme, "Profile", "Command P",
@@ -2336,7 +2351,7 @@ er_ui_status_t er_ui_shadcn_component_scene_preview_emit(
   }
   if (er_ui_shadcn_streq(slug, "command")) {
     return er_ui_shadcn_field_emit(scene, font, er_ui_bounds(bounds.x, bounds.y, er_ui_float_min(bounds.w, 300.0f), 58.0f), theme, "Command",
-                                   "Type a command or search...", ER_UI_SHADCN_DEMO_PREVIEW_BASE_ID + 8u, false);
+                                   "Type a command or search...", ER_UI_SHADCN_PREVIEW_COMMAND_ID, false);
   }
   if (er_ui_shadcn_streq(slug, "data-table") || er_ui_shadcn_streq(slug, "table")) {
     const char* const headers[] = {"Invoice", "Status", "Amount"};
@@ -2368,14 +2383,14 @@ er_ui_status_t er_ui_shadcn_component_scene_preview_emit(
     status = er_ui_shadcn_push_ascii_text(scene, font, "Set your daily activity target.", card.x + 16.0f, card.y + 52.0f, theme.colors.muted);
     if (status != ER_UI_OK) return status;
     status = er_ui_shadcn_slider_emit(scene, font, er_ui_bounds(card.x + 16.0f, card.y + 70.0f, card.w - 32.0f, 42.0f), theme, "Calories", 0.58f,
-                                      ER_UI_SHADCN_DEMO_PREVIEW_BASE_ID + 34u);
+                                      ER_UI_SHADCN_PREVIEW_DRAWER_SLIDER_ID);
     if (status != ER_UI_OK) return status;
     return er_ui_shadcn_button_emit(scene, font, er_ui_bounds(card.x + 16.0f, card.y + 112.0f, 88.0f, 34.0f), theme, "Submit",
-                                    ER_UI_SHADCN_DEMO_PREVIEW_BASE_ID + 35u, ER_UI_SHADCN_BUTTON_DEFAULT, ER_UI_SHADCN_BUTTON_SIZE_SM, true);
+                                    ER_UI_SHADCN_PREVIEW_DRAWER_SUBMIT_ID, ER_UI_SHADCN_BUTTON_DEFAULT, ER_UI_SHADCN_BUTTON_SIZE_SM, true);
   }
   if (er_ui_shadcn_streq(slug, "field") || er_ui_shadcn_streq(slug, "input")) {
     return er_ui_shadcn_field_emit(scene, font, er_ui_bounds(bounds.x, bounds.y, bounds.w, 58.0f), theme, "Email", "name@example.com",
-                                   ER_UI_SHADCN_DEMO_PREVIEW_BASE_ID + 11u, false);
+                                   ER_UI_SHADCN_PREVIEW_FIELD_EMAIL_ID, false);
   }
   if (er_ui_shadcn_streq(slug, "hover-card")) {
     er_ui_status_t status = er_ui_shadcn_avatar_emit(scene, font, er_ui_bounds(bounds.x, bounds.y, 42.0f, 42.0f), theme, "ER", theme.colors.accent, false);
@@ -2388,21 +2403,21 @@ er_ui_status_t er_ui_shadcn_component_scene_preview_emit(
   }
   if (er_ui_shadcn_streq(slug, "input-group")) {
     er_ui_status_t status = er_ui_shadcn_field_emit(scene, font, er_ui_bounds(bounds.x, bounds.y, er_ui_float_max(bounds.w - 92.0f, 96.0f), 58.0f), theme, "URL",
-                                                    "https://example.com", ER_UI_SHADCN_DEMO_PREVIEW_BASE_ID + 12u, false);
+                                                    "https://example.com", ER_UI_SHADCN_PREVIEW_INPUT_GROUP_FIELD_ID, false);
     if (status != ER_UI_OK) return status;
     return er_ui_shadcn_button_emit(scene, font, er_ui_bounds(bounds.x + er_ui_float_max(bounds.w - 84.0f, 104.0f), bounds.y + 18.0f, 80.0f, 40.0f), theme, "Copy",
-                                    ER_UI_SHADCN_DEMO_PREVIEW_BASE_ID + 13u, ER_UI_SHADCN_BUTTON_SECONDARY, ER_UI_SHADCN_BUTTON_SIZE_SM, true);
+                                    ER_UI_SHADCN_PREVIEW_INPUT_GROUP_BUTTON_ID, ER_UI_SHADCN_BUTTON_SECONDARY, ER_UI_SHADCN_BUTTON_SIZE_SM, true);
   }
   if (er_ui_shadcn_streq(slug, "input-otp")) {
     const char* const values[] = {"1", "2", "3", "-", "", "", ""};
-    for (size_t i = 0u; i < 7u; ++i) {
+    for (size_t i = 0u; i < ER_UI_SHADCN_ARRAY_COUNT(values); ++i) {
       if (er_ui_shadcn_streq(values[i], "-")) {
         er_ui_status_t status = er_ui_shadcn_push_ascii_text(scene, font, "-", bounds.x + (float)i * 42.0f + 12.0f, bounds.y + 36.0f, theme.colors.muted);
         if (status != ER_UI_OK) return status;
         continue;
       }
       er_ui_status_t status = er_ui_shadcn_field_emit(scene, font, er_ui_bounds(bounds.x + (float)i * 42.0f, bounds.y, 36.0f, 52.0f), theme, "", values[i],
-                                                      ER_UI_SHADCN_DEMO_PREVIEW_BASE_ID + 80u + (uint32_t)i, false);
+                                                      ER_UI_SHADCN_PREVIEW_INPUT_OTP_BASE_ID + (uint32_t)i, false);
       if (status != ER_UI_OK) return status;
     }
     return ER_UI_OK;
