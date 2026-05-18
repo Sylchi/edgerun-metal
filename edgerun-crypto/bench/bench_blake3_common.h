@@ -13,6 +13,22 @@ typedef struct {
 } BenchCase;
 
 #define BENCH_RUNS 5u
+#define BENCH_NS_PER_SECOND 1000000000ull
+#define BENCH_BYTES_PER_KIB 1024u
+#define BENCH_SMALL_BYTES 64u
+#define BENCH_64K_BYTES (64u * BENCH_BYTES_PER_KIB)
+#define BENCH_1M_BYTES (BENCH_BYTES_PER_KIB * BENCH_BYTES_PER_KIB)
+#define BENCH_8M_BYTES (8u * BENCH_1M_BYTES)
+#define BENCH_64M_BYTES (64u * BENCH_1M_BYTES)
+#define BENCH_SMALL_ITERATIONS 500000u
+#define BENCH_CHUNK_ITERATIONS 100000u
+#define BENCH_64K_ITERATIONS 5000u
+#define BENCH_1M_ITERATIONS 500u
+#define BENCH_8M_ITERATIONS 64u
+#define BENCH_64M_ITERATIONS 8u
+#define BENCH_PATTERN_MULTIPLIER 131u
+#define BENCH_PATTERN_ADDEND 17u
+#define BENCH_PATTERN_BYTE_MASK 0xffu
 
 static volatile uint8_t g_bench_sink;
 
@@ -22,14 +38,14 @@ static uint64_t bench_now_ns(void) {
   if (clock_gettime(CLOCK_MONOTONIC, &ts) != 0) {
     return 0u;
   }
-  return ((uint64_t)ts.tv_sec * 1000000000ull) + (uint64_t)ts.tv_nsec;
+  return ((uint64_t)ts.tv_sec * BENCH_NS_PER_SECOND) + (uint64_t)ts.tv_nsec;
 }
 
 static void bench_fill(uint8_t* bytes, size_t len) {
   size_t i;
 
   for (i = 0u; i < len; ++i) {
-    bytes[i] = (uint8_t)((i * 131u + 17u) & 0xffu);
+    bytes[i] = (uint8_t)((i * BENCH_PATTERN_MULTIPLIER + BENCH_PATTERN_ADDEND) & BENCH_PATTERN_BYTE_MASK);
   }
 }
 
@@ -76,8 +92,8 @@ static uint8_t bench_run_case(const BenchCase* c, const uint8_t* bytes) {
     }
   }
 
-  seconds = (double)best_ns / 1000000000.0;
-  mib = ((double)c->bytes_len * (double)c->iterations) / (1024.0 * 1024.0);
+  seconds = (double)best_ns / (double)BENCH_NS_PER_SECOND;
+  mib = ((double)c->bytes_len * (double)c->iterations) / ((double)BENCH_BYTES_PER_KIB * (double)BENCH_BYTES_PER_KIB);
   ns_per_byte = (double)best_ns / ((double)c->bytes_len * (double)c->iterations);
   printf("%-10s %9zu bytes x %-8zu best-of-%u %9.2f MiB/s %8.3f ns/B\n",
          c->name, c->bytes_len, c->iterations, (unsigned)BENCH_RUNS, mib / seconds, ns_per_byte);
@@ -86,12 +102,12 @@ static uint8_t bench_run_case(const BenchCase* c, const uint8_t* bytes) {
 
 int main(void) {
   static const BenchCase cases[] = {
-    {"small", 64u, 500000u},
-    {"chunk", BENCH_BLAKE3_CHUNK_LEN, 100000u},
-    {"64k", 65536u, 5000u},
-    {"1m", 1048576u, 500u},
-    {"8m", 8388608u, 64u},
-    {"64m", 67108864u, 8u}
+    {"small", BENCH_SMALL_BYTES, BENCH_SMALL_ITERATIONS},
+    {"chunk", BENCH_BLAKE3_CHUNK_LEN, BENCH_CHUNK_ITERATIONS},
+    {"64k", BENCH_64K_BYTES, BENCH_64K_ITERATIONS},
+    {"1m", BENCH_1M_BYTES, BENCH_1M_ITERATIONS},
+    {"8m", BENCH_8M_BYTES, BENCH_8M_ITERATIONS},
+    {"64m", BENCH_64M_BYTES, BENCH_64M_ITERATIONS}
   };
   uint8_t* bytes;
   size_t max_len = 0u;
