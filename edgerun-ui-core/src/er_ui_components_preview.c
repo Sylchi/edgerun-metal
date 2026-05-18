@@ -28,19 +28,24 @@ er_ui_status_t er_ui_component_scene_preview_emit(
                                    "You can add components to your app using the CLI.", theme.colors.warning);
   }
   if (er_ui_component_streq(slug, "alert-dialog") || er_ui_component_streq(slug, "dialog")) {
-    er_ui_status_t status = er_ui_component_card_emit(scene, er_ui_bounds(bounds.x, bounds.y, er_ui_float_min(bounds.w, 360.0f), 150.0f), theme);
+    er_ui_bounds_t card = er_ui_bounds(bounds.x, bounds.y, er_ui_float_min(bounds.w, 360.0f), 150.0f);
+    er_ui_status_t status = er_ui_component_card_emit(scene, card, theme);
     if (status != ER_UI_OK) return status;
     const char* title = er_ui_component_streq(slug, "alert-dialog") ? "Are you absolutely sure?" : "Edit profile";
     const char* body = er_ui_component_streq(slug, "alert-dialog") ? "This action cannot be undone." : "Make changes to your profile here.";
-    status = er_ui_component_push_ascii_text(scene, font, title, bounds.x + 18.0f, bounds.y + 32.0f, theme.colors.text);
+    status = er_ui_component_push_ascii_text_clipped(scene, font, title, card.x + 18.0f, card.y + 32.0f, card.w - 36.0f, theme.colors.text);
     if (status != ER_UI_OK) return status;
-    status = er_ui_component_push_ascii_text(scene, font, body, bounds.x + 18.0f, bounds.y + 56.0f, theme.colors.muted);
+    status = er_ui_component_push_ascii_text_clipped(scene, font, body, card.x + 18.0f, card.y + 56.0f, card.w - 36.0f, theme.colors.muted);
     if (status != ER_UI_OK) return status;
-    status = er_ui_component_button_emit(scene, font, er_ui_bounds(bounds.x + 160.0f, bounds.y + 96.0f, 80.0f, 40.0f), theme, "Cancel",
-                                      ER_UI_COMPONENT_PREVIEW_ALERT_DIALOG_CANCEL_ID, ER_UI_COMPONENT_BUTTON_SECONDARY, ER_UI_COMPONENT_BUTTON_SIZE_SM, true);
+    float confirm_w = 82.0f;
+    float cancel_w = 76.0f;
+    float button_y = card.y + card.h - 50.0f;
+    float confirm_x = card.x + card.w - 18.0f - confirm_w;
+    status = er_ui_component_button_emit(scene, font, er_ui_bounds(confirm_x - 8.0f - cancel_w, button_y, cancel_w, 36.0f), theme, "Cancel",
+	                                      ER_UI_COMPONENT_PREVIEW_ALERT_DIALOG_CANCEL_ID, ER_UI_COMPONENT_BUTTON_SECONDARY, ER_UI_COMPONENT_BUTTON_SIZE_SM, true);
     if (status != ER_UI_OK) return status;
-    return er_ui_component_button_emit(scene, font, er_ui_bounds(bounds.x + 248.0f, bounds.y + 96.0f, 84.0f, 40.0f), theme, "Confirm",
-                                    ER_UI_COMPONENT_PREVIEW_ALERT_DIALOG_CONFIRM_ID, ER_UI_COMPONENT_BUTTON_DEFAULT, ER_UI_COMPONENT_BUTTON_SIZE_SM, true);
+    return er_ui_component_button_emit(scene, font, er_ui_bounds(confirm_x, button_y, confirm_w, 36.0f), theme, "Confirm",
+	                                    ER_UI_COMPONENT_PREVIEW_ALERT_DIALOG_CONFIRM_ID, ER_UI_COMPONENT_BUTTON_DEFAULT, ER_UI_COMPONENT_BUTTON_SIZE_SM, true);
   }
   if (er_ui_component_streq(slug, "aspect-ratio")) {
     er_ui_bounds_t card = er_ui_bounds(bounds.x, bounds.y, er_ui_float_min(bounds.w, 260.0f), 146.0f);
@@ -66,18 +71,22 @@ er_ui_status_t er_ui_component_scene_preview_emit(
     return er_ui_component_badge_emit(scene, font, er_ui_bounds(bounds.x, bounds.y + 34.0f, 112.0f, 26.0f), theme, "Destructive", ER_UI_COMPONENT_BADGE_DESTRUCTIVE);
   }
   if (er_ui_component_streq(slug, "button")) {
-    er_ui_status_t status = er_ui_component_button_emit(scene, font, er_ui_bounds(bounds.x, bounds.y, 96.0f, 42.0f), theme, "Button",
+    float gap = 8.0f;
+    float default_w = er_ui_float_min(78.0f, bounds.w * 0.30f);
+    float secondary_w = er_ui_float_min(104.0f, bounds.w * 0.42f);
+    float ghost_w = er_ui_float_max(bounds.w - default_w - secondary_w - gap * 2.0f, 58.0f);
+    er_ui_status_t status = er_ui_component_button_emit(scene, font, er_ui_bounds(bounds.x, bounds.y, default_w, 42.0f), theme, "Button",
                                                      ER_UI_COMPONENT_PREVIEW_BUTTON_DEFAULT_ID,
                                                      ER_UI_COMPONENT_BUTTON_DEFAULT, ER_UI_COMPONENT_BUTTON_SIZE_DEFAULT, true);
     if (status != ER_UI_OK) return status;
-    status = er_ui_component_button_emit(scene, font, er_ui_bounds(bounds.x + 106.0f, bounds.y, 116.0f, 42.0f), theme, "Secondary",
-                                      ER_UI_COMPONENT_PREVIEW_BUTTON_SECONDARY_ID, ER_UI_COMPONENT_BUTTON_SECONDARY, ER_UI_COMPONENT_BUTTON_SIZE_DEFAULT, true);
+    status = er_ui_component_button_emit(scene, font, er_ui_bounds(bounds.x + default_w + gap, bounds.y, secondary_w, 42.0f), theme, "Secondary",
+	                                      ER_UI_COMPONENT_PREVIEW_BUTTON_SECONDARY_ID, ER_UI_COMPONENT_BUTTON_SECONDARY, ER_UI_COMPONENT_BUTTON_SIZE_DEFAULT, true);
     if (status != ER_UI_OK) return status;
-    return er_ui_component_button_emit(scene, font, er_ui_bounds(bounds.x + 232.0f, bounds.y, 86.0f, 42.0f), theme, "Ghost",
-                                    ER_UI_COMPONENT_PREVIEW_BUTTON_GHOST_ID, ER_UI_COMPONENT_BUTTON_GHOST, ER_UI_COMPONENT_BUTTON_SIZE_DEFAULT, true);
+    return er_ui_component_button_emit(scene, font, er_ui_bounds(bounds.x + default_w + secondary_w + gap * 2.0f, bounds.y, ghost_w, 42.0f), theme, "Ghost",
+	                                    ER_UI_COMPONENT_PREVIEW_BUTTON_GHOST_ID, ER_UI_COMPONENT_BUTTON_GHOST, ER_UI_COMPONENT_BUTTON_SIZE_DEFAULT, true);
   }
   if (er_ui_component_streq(slug, "breadcrumb")) {
-    const char *const labels[] = {"Docs", "Components", "Breadcrumb"};
+    const char *const labels[] = {"Docs", "UI", "Breadcrumb"};
     return er_ui_component_breadcrumb_emit(scene, font, er_ui_bounds(bounds.x, bounds.y, er_ui_float_min(bounds.w, 320.0f), 34.0f), theme, labels,
                                         ER_UI_COMPONENT_ARRAY_COUNT(labels), ER_UI_COMPONENT_PREVIEW_BREADCRUMB_CURRENT_INDEX,
                                         ER_UI_COMPONENT_PREVIEW_BREADCRUMB_ID);
@@ -115,7 +124,7 @@ er_ui_status_t er_ui_component_scene_preview_emit(
     if (status != ER_UI_OK) return status;
     status = er_ui_component_push_ascii_text(scene, font, "Create project", bounds.x + 16.0f, bounds.y + 28.0f, theme.colors.text);
     if (status != ER_UI_OK) return status;
-    return er_ui_component_push_ascii_text(scene, font, "Deploy your new project in one click.", bounds.x + 16.0f, bounds.y + 52.0f, theme.colors.muted);
+    return er_ui_component_push_ascii_text_clipped(scene, font, "Deploy in one click.", bounds.x + 16.0f, bounds.y + 52.0f, bounds.w - 32.0f, theme.colors.muted);
   }
   if (er_ui_component_streq(slug, "carousel")) {
     er_ui_status_t status = ER_UI_OK;
@@ -471,7 +480,11 @@ static er_ui_status_t er_ui_component_showcase_card_emit(
   if (!scene || !font || !spec || !selected || !er_ui_bounds_valid(bounds)) return ER_UI_ERR_INVALID_ARGUMENT;
   er_ui_status_t status = er_ui_scene_push_hit(scene, er_ui_hit(ER_UI_HIT_LIST_ROW, id, bounds.x, bounds.y, bounds.w, bounds.h));
   if (status != ER_UI_OK) return status;
-  status = er_ui_component_card_emit(scene, bounds, theme);
+  status = er_ui_scene_push_rect(scene, er_ui_rect_fill(bounds.x, bounds.y, bounds.w, bounds.h, theme.shadcn.radius.xl,
+                                                       er_ui_color_with_alpha(theme.shadcn.colors.card, 1.0f)));
+  if (status != ER_UI_OK) return status;
+  status = er_ui_scene_push_rect(scene, er_ui_rect_border(bounds.x, bounds.y, bounds.w, bounds.h, theme.shadcn.radius.xl,
+                                                         er_ui_color_with_alpha(theme.shadcn.colors.border, 1.8f)));
   if (status != ER_UI_OK) return status;
   if (er_ui_component_streq(spec->slug, selected->slug)) {
     status = er_ui_scene_push_rect(scene, er_ui_rect_border(bounds.x, bounds.y, bounds.w, bounds.h, theme.shadcn.radius.xl,
@@ -533,7 +546,7 @@ static float er_ui_component_showcase_card_height(const er_ui_component_spec_t* 
       er_ui_component_streq(spec->slug, "alert-dialog") ||
       er_ui_component_streq(spec->slug, "combobox") ||
       er_ui_component_streq(spec->slug, "navigation-menu")) {
-    return 292.0f;
+    return 330.0f;
   }
   if (er_ui_component_streq(spec->slug, "accordion") ||
       er_ui_component_streq(spec->slug, "collapsible") ||
@@ -544,7 +557,7 @@ static float er_ui_component_showcase_card_height(const er_ui_component_spec_t* 
       er_ui_component_streq(spec->slug, "scroll-area") ||
       er_ui_component_streq(spec->slug, "tabs") ||
       er_ui_component_streq(spec->slug, "textarea")) {
-    return 250.0f;
+    return 286.0f;
   }
   if (er_ui_component_streq(spec->slug, "button") ||
       er_ui_component_streq(spec->slug, "button-group") ||
@@ -556,7 +569,7 @@ static float er_ui_component_showcase_card_height(const er_ui_component_spec_t* 
       er_ui_component_streq(spec->slug, "switch") ||
       er_ui_component_streq(spec->slug, "toggle") ||
       er_ui_component_streq(spec->slug, "toggle-group")) {
-    return 176.0f;
+    return 210.0f;
   }
   return ER_UI_COMPONENT_SHOWCASE_CARD_H;
 }
