@@ -6,6 +6,7 @@
  * Intention: keep render endpoints as adapters for verified relay work, not app-owned framebuffers.
  */
 
+#include "er_ui_gop_renderer.h"
 #include "er_work_route.h"
 
 #define ER_RENDER_ENDPOINT_ABI_VERSION 1u
@@ -26,10 +27,56 @@ typedef struct {
   UINT32 risk_flags;
 } ErRenderEndpointCapture;
 
+typedef struct {
+  UINT16 abi_version;
+  UINT16 reserved;
+  ErHash scene_id;
+  ErHash capture_id;
+  ErHash scene_hash;
+  ErNodeId source_node_id;
+  ErNodeId target_node_id;
+  UINT64 sequence;
+  UINT32 scene_bytes;
+  er_ui_scene_stats_t scene_stats;
+} ErRenderEndpointScene;
+
+typedef struct {
+  UINT16 abi_version;
+  UINT16 reserved;
+  ErHash presentation_id;
+  ErHash scene_id;
+  ErHash capture_id;
+  ErHash scene_hash;
+  ErNodeId renderer_node_id;
+  UINT64 sequence;
+  UINT32 width;
+  UINT32 height;
+  UINT32 stride;
+  ErUiGopPixelFormat pixel_format;
+  ErUiGopRenderStats render_stats;
+} ErRenderEndpointPresentation;
+
+UINT8 er_render_endpoint_scene_payload_hash(const ErCryptoProvider* crypto,
+                                            const UINT8* bytes,
+                                            UINT32 len,
+                                            ErHash* out_hash);
 UINT8 er_render_endpoint_capture(const ErCryptoProvider* crypto,
                                  const ErAdmittedRoute* route,
                                  const ErChannelEnvelopeHeader* envelope,
                                  const ErCapabilityEnvelopeHeader* capability,
                                  ErRenderEndpointCapture* out_capture);
+UINT8 er_render_endpoint_decode_scene_payload(const ErCryptoProvider* crypto,
+                                              const ErRenderEndpointCapture* capture,
+                                              const UINT8* bytes,
+                                              UINT32 len,
+                                              er_ui_scene_t* out_scene,
+                                              ErRenderEndpointScene* out_endpoint_scene);
+UINT8 er_render_endpoint_present_gop_surface(const ErCryptoProvider* crypto,
+                                             const ErRenderEndpointCapture* capture,
+                                             const ErRenderEndpointScene* endpoint_scene,
+                                             er_ui_scene_t* scene,
+                                             ErUiGopSurface* surface,
+                                             const vr_font_face_t* font,
+                                             ErRenderEndpointPresentation* out_presentation);
 
 #endif
