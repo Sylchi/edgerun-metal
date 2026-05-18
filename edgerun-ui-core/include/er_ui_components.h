@@ -237,7 +237,9 @@ bool er_ui_shadcn_parity_contract_for_slug(const char* slug, er_ui_shadcn_parity
 bool er_ui_shadcn_contract_supports_slot(const er_ui_shadcn_parity_contract_t* contract, const char* slot);
 bool er_ui_shadcn_contract_supports_state(const er_ui_shadcn_parity_contract_t* contract, const char* state);
 bool er_ui_shadcn_contract_supports_variant(const er_ui_shadcn_parity_contract_t* contract, const char* variant);
-bool er_ui_shadcn_contract_supports_interaction(const er_ui_shadcn_parity_contract_t* contract, const char* interaction);
+bool er_ui_shadcn_contract_supports_interaction(
+  const er_ui_shadcn_parity_contract_t* contract,
+  const char* interaction);
 const char* er_ui_component_selector(er_ui_component_test_id_t component);
 const char* er_ui_component_name(er_ui_component_test_id_t component);
 const er_ui_component_test_id_t* er_ui_component_test_ids(size_t* out_count);
@@ -331,9 +333,21 @@ er_ui_status_t er_ui_shadcn_checkbox_emit(
   const char* label,
   bool checked,
   uint32_t id);
-er_ui_status_t er_ui_shadcn_progress_emit(er_ui_scene_t* scene, er_ui_bounds_t bounds, er_ui_resolved_theme_t theme, float value);
-er_ui_status_t er_ui_shadcn_switch_emit(er_ui_scene_t* scene, er_ui_bounds_t bounds, er_ui_resolved_theme_t theme, bool checked, uint32_t id);
-er_ui_status_t er_ui_shadcn_separator_emit(er_ui_scene_t* scene, er_ui_bounds_t bounds, er_ui_resolved_theme_t theme);
+er_ui_status_t er_ui_shadcn_progress_emit(
+  er_ui_scene_t* scene,
+  er_ui_bounds_t bounds,
+  er_ui_resolved_theme_t theme,
+  float value);
+er_ui_status_t er_ui_shadcn_switch_emit(
+  er_ui_scene_t* scene,
+  er_ui_bounds_t bounds,
+  er_ui_resolved_theme_t theme,
+  bool checked,
+  uint32_t id);
+er_ui_status_t er_ui_shadcn_separator_emit(
+  er_ui_scene_t* scene,
+  er_ui_bounds_t bounds,
+  er_ui_resolved_theme_t theme);
 er_ui_status_t er_ui_shadcn_tabs_emit(
   er_ui_scene_t* scene,
   vr_font_face_t* font,
@@ -399,7 +413,12 @@ er_ui_status_t er_ui_shadcn_dialog_emit(
   const char* title,
   const char* body,
   er_ui_color4_t accent);
-er_ui_status_t er_ui_shadcn_progress_ring_emit(er_ui_scene_t* scene, er_ui_bounds_t bounds, er_ui_resolved_theme_t theme, float value, er_ui_color4_t color);
+er_ui_status_t er_ui_shadcn_progress_ring_emit(
+  er_ui_scene_t* scene,
+  er_ui_bounds_t bounds,
+  er_ui_resolved_theme_t theme,
+  float value,
+  er_ui_color4_t color);
 er_ui_status_t er_ui_shadcn_alert_emit(
   er_ui_scene_t* scene,
   vr_font_face_t* font,

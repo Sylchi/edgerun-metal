@@ -137,9 +137,13 @@ er_ui_asset_pack_status_t er_ui_asset_pack_validate(er_ui_asset_pack_spec_t pack
 
 er_ui_asset_pack_spec_t er_ui_tabler_inter_asset_pack(void);
 er_ui_asset_pack_spec_t er_ui_lucide_geist_asset_pack(void);
-er_ui_asset_pack_status_t er_ui_asset_pack_runtime_init(er_ui_asset_pack_runtime_t* runtime, er_ui_asset_pack_spec_t active,
-                                                        er_ui_asset_limits_t limits);
-er_ui_asset_pack_status_t er_ui_asset_pack_runtime_replace(er_ui_asset_pack_runtime_t* runtime, er_ui_asset_pack_spec_t replacement);
+er_ui_asset_pack_status_t er_ui_asset_pack_runtime_init(
+  er_ui_asset_pack_runtime_t* runtime,
+  er_ui_asset_pack_spec_t active,
+  er_ui_asset_limits_t limits);
+er_ui_asset_pack_status_t er_ui_asset_pack_runtime_replace(
+  er_ui_asset_pack_runtime_t* runtime,
+  er_ui_asset_pack_spec_t replacement);
 
 #ifdef __cplusplus
 }

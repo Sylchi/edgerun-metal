@@ -222,7 +222,11 @@ er_ui_node_t er_ui_node_row(void);
 er_ui_node_t er_ui_node_column(void);
 er_ui_node_t er_ui_node_card(void);
 er_ui_node_t er_ui_node_icon(er_ui_icon_t icon, const char* label, er_ui_color4_t color);
-er_ui_node_t er_ui_node_icon_button(er_ui_icon_t icon, const char* label, uint32_t id, er_ui_shadcn_button_variant_t variant);
+er_ui_node_t er_ui_node_icon_button(
+  er_ui_icon_t icon,
+  const char* label,
+  uint32_t id,
+  er_ui_shadcn_button_variant_t variant);
 er_ui_node_t er_ui_node_text(const char* value);
 er_ui_node_t er_ui_node_badge(const char* label, er_ui_shadcn_badge_variant_t variant);
 er_ui_node_t er_ui_node_button(const char* label, uint32_t id, er_ui_shadcn_button_variant_t variant);
@@ -238,9 +242,22 @@ er_ui_node_t er_ui_node_alert(const char* title, const char* body, er_ui_color4_
 er_ui_node_t er_ui_node_avatar(const char* label, er_ui_color4_t color, bool online);
 er_ui_node_t er_ui_node_progress(float value);
 er_ui_node_t er_ui_node_switch(bool checked, uint32_t id);
-er_ui_node_t er_ui_node_toggle_group(const char* const* labels, size_t label_count, size_t selected, uint32_t base_id);
-er_ui_node_t er_ui_node_table(const char* const* headers, size_t header_count, const char* const* cells, size_t row_count, uint32_t id_base);
-er_ui_node_t er_ui_node_breadcrumb(const char* const* labels, size_t label_count, size_t selected, uint32_t base_id);
+er_ui_node_t er_ui_node_toggle_group(
+  const char* const* labels,
+  size_t label_count,
+  size_t selected,
+  uint32_t base_id);
+er_ui_node_t er_ui_node_table(
+  const char* const* headers,
+  size_t header_count,
+  const char* const* cells,
+  size_t row_count,
+  uint32_t id_base);
+er_ui_node_t er_ui_node_breadcrumb(
+  const char* const* labels,
+  size_t label_count,
+  size_t selected,
+  uint32_t base_id);
 er_ui_node_t er_ui_node_toast(const char* message, er_ui_color4_t accent);
 er_ui_node_t er_ui_node_toast_icon(const char* message, er_ui_icon_t icon, er_ui_color4_t accent);
 er_ui_node_t er_ui_node_empty(const char* title, const char* body);
@@ -248,7 +265,13 @@ er_ui_node_t er_ui_node_list_row(const char* title, const char* detail, uint32_t
 er_ui_node_t er_ui_node_field(const char* label, const char* value, uint32_t id);
 er_ui_node_t er_ui_node_text_area(const char* label, const char* value, uint32_t id);
 er_ui_node_t er_ui_node_tabs(const char* const* labels, size_t label_count, size_t selected, uint32_t base_id);
-er_ui_node_t er_ui_node_bar_chart(const char* title, const char* const* labels, const float* values, size_t value_count, uint32_t base_id, size_t selected);
+er_ui_node_t er_ui_node_bar_chart(
+  const char* title,
+  const char* const* labels,
+  const float* values,
+  size_t value_count,
+  uint32_t base_id,
+  size_t selected);
 er_ui_node_t er_ui_node_command_palette(const char* placeholder, uint32_t id);
 er_ui_node_t er_ui_node_tree_item(const char* label, const char* detail, uint8_t depth, bool expanded, uint32_t id);
 er_ui_node_t er_ui_node_section(const char* title, const char* detail);
@@ -259,48 +282,152 @@ er_ui_node_t er_ui_node_attachment_preview(const char* name, const char* kind, u
 er_ui_node_t er_ui_node_capability_grant_row(const char* app, const char* capability, const char* state, uint32_t id);
 er_ui_node_t er_ui_node_proof_event_row(const char* title, const char* hash, const char* status_text, uint32_t id);
 er_ui_node_t er_ui_node_pagination(const char* const* pages, size_t page_count, size_t selected, uint32_t base_id);
-er_ui_node_t er_ui_node_collapsible(const char* title, const char* const* row_titles, const char* const* row_details, size_t row_count, bool open,
-                                    uint32_t base_id);
-er_ui_node_t er_ui_node_accordion(const char* const* item_titles, const char* const* item_bodies, size_t item_count, uint32_t base_id);
-er_ui_node_t er_ui_node_hover_card(const char* label, const char* detail, const char* body, er_ui_color4_t color);
-er_ui_node_t er_ui_node_popover(const char* button_label, const char* title, const char* detail, const char* field_label, const char* field_value,
-                                uint32_t base_id);
-er_ui_node_t er_ui_node_sheet(const char* title, const char* detail, const char* field_label, const char* field_value, const char* button_label,
-                              uint32_t base_id);
+er_ui_node_t er_ui_node_collapsible(
+  const char* title,
+  const char* const* row_titles,
+  const char* const* row_details,
+  size_t row_count,
+  bool open,
+  uint32_t base_id);
+er_ui_node_t er_ui_node_accordion(
+  const char* const* item_titles,
+  const char* const* item_bodies,
+  size_t item_count,
+  uint32_t base_id);
+er_ui_node_t er_ui_node_hover_card(
+  const char* label,
+  const char* detail,
+  const char* body,
+  er_ui_color4_t color);
+er_ui_node_t er_ui_node_popover(
+  const char* button_label,
+  const char* title,
+  const char* detail,
+  const char* field_label,
+  const char* field_value,
+  uint32_t base_id);
+er_ui_node_t er_ui_node_sheet(
+  const char* title,
+  const char* detail,
+  const char* field_label,
+  const char* field_value,
+  const char* button_label,
+  uint32_t base_id);
 er_ui_node_t er_ui_node_kbd(const char* const* keys, size_t key_count, const char* label);
 er_ui_node_t er_ui_node_menubar(const char* const* items, size_t item_count, size_t selected, uint32_t base_id);
 er_ui_node_t er_ui_node_radio_group(const char* const* labels, size_t label_count, size_t selected, uint32_t base_id);
 er_ui_node_t er_ui_node_input_group(const char* label, const char* value, const char* button_label, uint32_t id);
-er_ui_node_t er_ui_node_input_otp(const char* const* values, size_t value_count, size_t focused_index, uint32_t base_id);
-er_ui_node_t er_ui_node_navigation_menu(const char* const* tabs, size_t tab_count, size_t selected, const char* title, const char* detail,
-                                        const char* row_title, const char* row_detail, uint32_t base_id);
+er_ui_node_t er_ui_node_input_otp(
+  const char* const* values,
+  size_t value_count,
+  size_t focused_index,
+  uint32_t base_id);
+er_ui_node_t er_ui_node_navigation_menu(
+  const char* const* tabs,
+  size_t tab_count,
+  size_t selected,
+  const char* title,
+  const char* detail,
+  const char* row_title,
+  const char* row_detail,
+  uint32_t base_id);
 er_ui_node_t er_ui_node_resizable(const char* const* labels, size_t label_count);
-er_ui_node_t er_ui_node_sidebar(const char* title, const char* detail, const char* const* items, size_t item_count, size_t selected, const char* main_title,
-                                const char* main_detail, uint32_t base_id);
-er_ui_node_t er_ui_node_sonner(const char* const* messages, const er_ui_icon_t* icons, const er_ui_color4_t* accents, size_t message_count);
+er_ui_node_t er_ui_node_sidebar(
+  const char* title,
+  const char* detail,
+  const char* const* items,
+  size_t item_count,
+  size_t selected,
+  const char* main_title,
+  const char* main_detail,
+  uint32_t base_id);
+er_ui_node_t er_ui_node_sonner(
+  const char* const* messages,
+  const er_ui_icon_t* icons,
+  const er_ui_color4_t* accents,
+  size_t message_count);
 er_ui_node_t er_ui_node_aspect_ratio(const char* label, er_ui_icon_t icon);
 er_ui_node_t er_ui_node_alert_dialog(const char* title, const char* body, er_ui_icon_t icon);
 er_ui_node_t er_ui_node_direction(const char* ltr_text, const char* rtl_text);
-er_ui_node_t er_ui_node_drawer(const char* title, const char* detail, const char* slider_label, float value, uint32_t base_id);
-er_ui_node_t er_ui_node_dropdown_menu(const char* const* labels, const char* const* shortcuts, size_t item_count, size_t selected, uint32_t base_id);
-er_ui_node_t er_ui_node_context_menu(const char* title, const char* detail, const char* const* labels, const char* const* shortcuts, size_t item_count,
-                                     size_t selected, uint32_t base_id);
-er_ui_node_t er_ui_node_date_picker(const char* label, const char* month, const char* const* days, size_t day_count, size_t selected, uint32_t base_id);
+er_ui_node_t er_ui_node_drawer(
+  const char* title,
+  const char* detail,
+  const char* slider_label,
+  float value,
+  uint32_t base_id);
+er_ui_node_t er_ui_node_dropdown_menu(
+  const char* const* labels,
+  const char* const* shortcuts,
+  size_t item_count,
+  size_t selected,
+  uint32_t base_id);
+er_ui_node_t er_ui_node_context_menu(
+  const char* title,
+  const char* detail,
+  const char* const* labels,
+  const char* const* shortcuts,
+  size_t item_count,
+  size_t selected,
+  uint32_t base_id);
+er_ui_node_t er_ui_node_date_picker(
+  const char* label,
+  const char* month,
+  const char* const* days,
+  size_t day_count,
+  size_t selected,
+  uint32_t base_id);
 er_ui_node_t er_ui_node_carousel(const char* const* items, size_t item_count, uint32_t base_id);
-er_ui_node_t er_ui_node_calendar(const char* month, const char* const* days, size_t day_count, size_t selected, uint32_t base_id);
-er_ui_node_t er_ui_node_combobox(const char* label, const char* value, const char* placeholder, const char* const* options, size_t option_count,
-                                 size_t selected, uint32_t base_id);
+er_ui_node_t er_ui_node_calendar(
+  const char* month,
+  const char* const* days,
+  size_t day_count,
+  size_t selected,
+  uint32_t base_id);
+er_ui_node_t er_ui_node_combobox(
+  const char* label,
+  const char* value,
+  const char* placeholder,
+  const char* const* options,
+  size_t option_count,
+  size_t selected,
+  uint32_t base_id);
 er_ui_node_t er_ui_node_diff_body(const char* const* lines, size_t line_count, bool truncated);
 er_ui_node_t er_ui_node_chat_message(er_ui_shadcn_chat_role_t role, const char* heading, const char* detail);
-er_ui_node_t er_ui_node_chat_diff_message(const char* heading, const char* const* lines, size_t line_count, bool truncated);
+er_ui_node_t er_ui_node_chat_diff_message(
+  const char* heading,
+  const char* const* lines,
+  size_t line_count,
+  bool truncated);
 er_ui_node_t er_ui_node_conversation(float scroll_offset_px, uint32_t scroll_id);
 er_ui_node_t er_ui_node_route_path(const char* label, const char* const* hops, size_t hop_count);
 er_ui_node_t er_ui_node_package_card(const char* name, const char* policy, const char* hash, uint32_t id);
 er_ui_node_t er_ui_node_receipt_row(const char* label, const char* amount, const char* status_text, uint32_t id);
-er_ui_node_t er_ui_node_panel_header(const char* title, const char* subtitle, const char* action_label, uint32_t action_id);
-er_ui_node_t er_ui_node_metric_card(const char* title, const char* value, const char* detail, bool has_progress, float progress, er_ui_color4_t accent);
-er_ui_node_t er_ui_node_transaction_row(const char* title, const char* subtitle, const char* date, const char* amount, bool positive, uint32_t id);
-er_ui_node_t er_ui_node_menu_item(const char* label, const char* detail, const char* badge, bool selected, er_ui_color4_t accent, uint32_t id);
+er_ui_node_t er_ui_node_panel_header(
+  const char* title,
+  const char* subtitle,
+  const char* action_label,
+  uint32_t action_id);
+er_ui_node_t er_ui_node_metric_card(
+  const char* title,
+  const char* value,
+  const char* detail,
+  bool has_progress,
+  float progress,
+  er_ui_color4_t accent);
+er_ui_node_t er_ui_node_transaction_row(
+  const char* title,
+  const char* subtitle,
+  const char* date,
+  const char* amount,
+  bool positive,
+  uint32_t id);
+er_ui_node_t er_ui_node_menu_item(
+  const char* label,
+  const char* detail,
+  const char* badge,
+  bool selected,
+  er_ui_color4_t accent,
+  uint32_t id);
 er_ui_node_t er_ui_node_control_row(const char* label, const char* detail, const char* accessory, uint32_t id);
 er_ui_node_t er_ui_node_grid(size_t columns);
 er_ui_node_t er_ui_node_masonry(size_t columns);
@@ -316,19 +443,39 @@ er_ui_node_t* er_ui_node_set_padding(er_ui_node_t* node, float padding);
 er_ui_node_t* er_ui_node_set_margin(er_ui_node_t* node, float margin);
 er_ui_node_t* er_ui_node_set_spacing(er_ui_node_t* node, float padding, float gap, float margin);
 er_ui_node_t* er_ui_node_set_grid_span(er_ui_node_t* node, size_t column_span, size_t row_span);
-er_ui_node_t* er_ui_node_set_background_gradient(er_ui_node_t* node, er_ui_color4_t from, er_ui_color4_t to);
+er_ui_node_t* er_ui_node_set_background_gradient(
+  er_ui_node_t* node,
+  er_ui_color4_t from,
+  er_ui_color4_t to);
 er_ui_node_t* er_ui_node_set_transition(er_ui_node_t* node, er_ui_transition_t transition);
-er_ui_node_t* er_ui_node_set_draggable(er_ui_node_t* node, uint32_t scope_id, uint32_t item_id, size_t index);
+er_ui_node_t* er_ui_node_set_draggable(
+  er_ui_node_t* node,
+  uint32_t scope_id,
+  uint32_t item_id,
+  size_t index);
 er_ui_node_t* er_ui_node_set_drop_target(er_ui_node_t* node, uint32_t scope_id, size_t index);
-er_ui_node_t* er_ui_node_set_reorderable(er_ui_node_t* node, uint32_t scope_id, uint32_t item_id, size_t index);
+er_ui_node_t* er_ui_node_set_reorderable(
+  er_ui_node_t* node,
+  uint32_t scope_id,
+  uint32_t item_id,
+  size_t index);
 er_ui_status_t er_ui_node_add_child(er_ui_node_t* parent, er_ui_node_t* child);
 const char* er_ui_node_kind_label(er_ui_node_kind_t kind);
 const char* er_ui_node_composition_issue_label(er_ui_node_composition_issue_kind_t kind);
-er_ui_status_t er_ui_node_validate_composition(const er_ui_node_t* node, er_ui_node_composition_issue_t* out_issue);
-er_ui_status_t er_ui_node_child_bounds(const er_ui_node_t* node, size_t child_index, er_ui_bounds_t bounds, er_ui_bounds_t* out_bounds);
+er_ui_status_t er_ui_node_validate_composition(
+  const er_ui_node_t* node,
+  er_ui_node_composition_issue_t* out_issue);
+er_ui_status_t er_ui_node_child_bounds(
+  const er_ui_node_t* node,
+  size_t child_index,
+  er_ui_bounds_t bounds,
+  er_ui_bounds_t* out_bounds);
 const char* er_ui_a11y_role_label(er_ui_a11y_role_t role);
 er_ui_status_t er_ui_node_accessibility(const er_ui_node_t* node, er_ui_a11y_node_t* out_a11y);
-er_ui_status_t er_ui_node_accessibility_child(const er_ui_node_t* node, size_t child_index, er_ui_a11y_node_t* out_a11y);
+er_ui_status_t er_ui_node_accessibility_child(
+  const er_ui_node_t* node,
+  size_t child_index,
+  er_ui_a11y_node_t* out_a11y);
 er_ui_status_t er_ui_node_render(
   const er_ui_node_t* node,
   er_ui_scene_t* scene,
