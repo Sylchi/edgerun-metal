@@ -37,7 +37,12 @@ enum {
 
 typedef struct {
   char* qemu_binary;
+  char* machine;
+  char* cpu;
   char* display;
+  char* display_device;
+  char* boot_file;
+  char* esp_drive_if;
   char* ovmf_code;
   char* ovmf_vars;
   char* capture;
@@ -137,7 +142,12 @@ static int er_qemu_parse_u32(const char* value, uint32_t* out) {
 static void er_qemu_config_destroy(ErQemuConfig* config) {
   if (config == NULL) return;
   er_qemu_free_string(&config->qemu_binary);
+  er_qemu_free_string(&config->machine);
+  er_qemu_free_string(&config->cpu);
   er_qemu_free_string(&config->display);
+  er_qemu_free_string(&config->display_device);
+  er_qemu_free_string(&config->boot_file);
+  er_qemu_free_string(&config->esp_drive_if);
   er_qemu_free_string(&config->ovmf_code);
   er_qemu_free_string(&config->ovmf_vars);
   er_qemu_free_string(&config->capture);
@@ -150,7 +160,12 @@ static void er_qemu_config_destroy(ErQemuConfig* config) {
 
 static int er_qemu_apply_config(ErQemuConfig* config, const char* key, const char* value, const char* path, unsigned int line) {
   if (strcmp(key, "qemu_binary") == 0) return er_qemu_set_string(&config->qemu_binary, value);
+  if (strcmp(key, "machine") == 0) return er_qemu_set_string(&config->machine, value);
+  if (strcmp(key, "cpu") == 0) return er_qemu_set_string(&config->cpu, value);
   if (strcmp(key, "display") == 0) return er_qemu_set_string(&config->display, value);
+  if (strcmp(key, "display_device") == 0) return er_qemu_set_string(&config->display_device, value);
+  if (strcmp(key, "boot_file") == 0) return er_qemu_set_string(&config->boot_file, value);
+  if (strcmp(key, "esp_drive_if") == 0) return er_qemu_set_string(&config->esp_drive_if, value);
   if (strcmp(key, "ovmf_code") == 0) return er_qemu_set_string(&config->ovmf_code, value);
   if (strcmp(key, "ovmf_vars") == 0) return er_qemu_set_string(&config->ovmf_vars, value);
   if (strcmp(key, "capture") == 0) return er_qemu_set_string(&config->capture, value);
@@ -232,6 +247,7 @@ static int er_qemu_file_exists(const char* path) {
 
 static int er_qemu_validate_config(const ErQemuConfig* config, const char* esp_dir) {
   char boot_path[ER_QEMU_PATH_MAX];
+  const char* boot_file;
 
   if (er_qemu_string_empty(config->qemu_binary) != 0) {
     fprintf(stderr, "qemu.conf: qemu_binary is required\n");
@@ -253,7 +269,8 @@ static int er_qemu_validate_config(const ErQemuConfig* config, const char* esp_d
     fprintf(stderr, "qemu.conf: ovmf_vars does not exist: %s\n", config->ovmf_vars ? config->ovmf_vars : "");
     return 0;
   }
-  if (snprintf(boot_path, sizeof(boot_path), "%s/EFI/BOOT/BOOTX64.EFI", esp_dir) >= (int)sizeof(boot_path)) {
+  boot_file = er_qemu_string_empty(config->boot_file) != 0 ? "BOOTX64.EFI" : config->boot_file;
+  if (snprintf(boot_path, sizeof(boot_path), "%s/EFI/BOOT/%s", esp_dir, boot_file) >= (int)sizeof(boot_path)) {
     fprintf(stderr, "ESP path is too long\n");
     return 0;
   }
@@ -390,10 +407,16 @@ static int er_qemu_build_args(const ErQemuConfig* config, const char* esp_dir, c
 
   snprintf(memory, sizeof(memory), "%u", config->memory_mb);
   if (!er_qemu_args_add(args, config->qemu_binary)) return 0;
+  if (er_qemu_string_empty(config->machine) == 0 &&
+      (!er_qemu_args_add(args, "-machine") || !er_qemu_args_add(args, config->machine))) return 0;
+  if (er_qemu_string_empty(config->cpu) == 0 &&
+      (!er_qemu_args_add(args, "-cpu") || !er_qemu_args_add(args, config->cpu))) return 0;
   if (!er_qemu_args_add(args, "-m") || !er_qemu_args_add(args, memory)) return 0;
   if (!er_qemu_args_add(args, "-display") || !er_qemu_args_add(args, config->display)) return 0;
-  if (!er_qemu_args_add(args, "-vga") || !er_qemu_args_add(args, "none")) return 0;
-  if (config->virtio_gpu != 0) {
+  if (er_qemu_string_empty(config->display_device) == 0) {
+    device = er_qemu_dup_cstr(config->display_device);
+  } else if (config->virtio_gpu != 0) {
+    if (!er_qemu_args_add(args, "-vga") || !er_qemu_args_add(args, "none")) return 0;
     device = er_qemu_format_arg("virtio-vga,disable-legacy=on,xres=%u,yres=%u", config->width, config->height);
   } else {
     device = er_qemu_format_arg("VGA,xres=%u,yres=%u,refresh_rate=%u", config->width, config->height, config->refresh);
@@ -403,7 +426,11 @@ static int er_qemu_build_args(const ErQemuConfig* config, const char* esp_dir, c
   if (drive == NULL || !er_qemu_args_add(args, "-drive") || !er_qemu_args_add_owned(args, drive)) return 0;
   drive = er_qemu_format_arg("if=pflash,format=raw,file=%s", vars_copy);
   if (drive == NULL || !er_qemu_args_add(args, "-drive") || !er_qemu_args_add_owned(args, drive)) return 0;
-  drive = er_qemu_format_arg("format=raw,file=fat:rw:%s,media=disk", esp_dir);
+  if (er_qemu_string_empty(config->esp_drive_if) == 0) {
+    drive = er_qemu_format_arg("if=%s,format=raw,file=fat:rw:%s,media=disk", config->esp_drive_if, esp_dir);
+  } else {
+    drive = er_qemu_format_arg("format=raw,file=fat:rw:%s,media=disk", esp_dir);
+  }
   if (drive == NULL || !er_qemu_args_add(args, "-drive") || !er_qemu_args_add_owned(args, drive)) return 0;
   if (config->virtio_net != 0) {
     char* netdev = er_qemu_format_arg("user,id=%s", config->net_id);

@@ -1,4 +1,5 @@
 #include "er_pci.h"
+#include "er_mem.h"
 
 /*
  * Purpose: implement x86 PCI config-space access and pure BAR register decoding.
@@ -40,11 +41,13 @@
 #define ER_PCI_BAR_MMIO_BASE_MASK 0xfffffff0u
 #define ER_PCI_BAR_HIGH_SHIFT 32u
 
-#if defined(ER_TARGET_X86_64) || defined(__x86_64__) || defined(_M_X64)
+#if (defined(ER_TARGET_X86_64) || defined(__x86_64__) || defined(_M_X64)) && !defined(ER_ENABLE_TEST_HOOKS)
 #define ER_PCI_CONFIG_PORT_SUPPORTED 1u
 #else
 #define ER_PCI_CONFIG_PORT_SUPPORTED 0u
 #endif
+
+static ErAcpiMcfgInfo g_pci_mcfg;
 
 static inline UINT32 er_in32(UINT16 port) {
   UINT32 value = 0;
@@ -89,6 +92,32 @@ UINT8 er_pci_config_access_valid(INT64 bus_i, INT64 dev_i, INT64 func_i, INT64 o
   return 1;
 }
 
+UINT8 er_pci_configure_mcfg(const ErAcpiMcfgInfo* mcfg) {
+  er_mem_zero((UINT8*)&g_pci_mcfg, (UINTN)sizeof(g_pci_mcfg));
+  if (mcfg == 0 || mcfg->found == 0u || mcfg->checksum_valid == 0u || mcfg->allocation_count == 0u) {
+    return 0;
+  }
+
+  g_pci_mcfg = *mcfg;
+  return 1;
+}
+
+UINT8 er_pci_configure_mcfg_from_acpi(EFI_SYSTEM_TABLE* st) {
+  ErAcpiRsdpInfo rsdp;
+  ErAcpiTableList tables;
+  ErAcpiTableInfo mcfg_table;
+  ErAcpiMcfgInfo mcfg;
+
+  if (er_acpi_find_rsdp(st, &rsdp) == 0u ||
+      er_acpi_enumerate_tables(&rsdp, &tables) == 0u ||
+      er_acpi_find_table(&tables, er_acpi_signature("MCFG"), &mcfg_table) == 0u ||
+      er_acpi_parse_mcfg(mcfg_table.address, &mcfg) == 0u) {
+    return er_pci_configure_mcfg(0);
+  }
+
+  return er_pci_configure_mcfg(&mcfg);
+}
+
 INT64 er_pci_config_address(INT64 bus_i, INT64 dev_i, INT64 func_i, INT64 offset_i) {
   UINT32 bus;
   UINT32 dev;
@@ -109,13 +138,55 @@ INT64 er_pci_config_address(INT64 bus_i, INT64 dev_i, INT64 func_i, INT64 offset
   return (INT64)address;
 }
 
+static UINT8 er_pci_ecam_address(INT64 bus_i, INT64 dev_i, INT64 func_i, INT64 offset_i, UINT64* out_address) {
+  if (er_pci_config_access_valid(bus_i, dev_i, func_i, offset_i) == 0u) {
+    if (out_address != 0) {
+      *out_address = 0;
+    }
+    return 0;
+  }
+
+  return er_acpi_mcfg_config_address(&g_pci_mcfg, 0u, (UINT8)bus_i, (UINT8)dev_i, (UINT8)func_i,
+                                     (UINT16)offset_i, out_address);
+}
+
+static UINT8 er_pci_ecam_read32(INT64 bus_i, INT64 dev_i, INT64 func_i, INT64 offset_i, UINT32* out_value) {
+  UINT64 address = 0;
+  const volatile UINT32* register32;
+
+  if (out_value == 0 || er_pci_ecam_address(bus_i, dev_i, func_i, offset_i, &address) == 0u) {
+    return 0;
+  }
+
+  register32 = (const volatile UINT32*)(UINTN)address;
+  *out_value = *register32;
+  return 1;
+}
+
+static UINT8 er_pci_ecam_write32(INT64 bus_i, INT64 dev_i, INT64 func_i, INT64 offset_i, UINT32 value) {
+  UINT64 address = 0;
+  volatile UINT32* register32;
+
+  if (er_pci_ecam_address(bus_i, dev_i, func_i, offset_i, &address) == 0u) {
+    return 0;
+  }
+
+  register32 = (volatile UINT32*)(UINTN)address;
+  *register32 = value;
+  return 1;
+}
+
 INT64 er_pci_read32(INT64 bus_i, INT64 dev_i, INT64 func_i, INT64 offset_i) {
   INT64 address = er_pci_config_address(bus_i, dev_i, func_i, offset_i);
+  UINT32 value = 0;
 
   if (address < 0) {
     return -1;
   }
   if (ER_PCI_CONFIG_PORT_SUPPORTED == 0u) {
+    if (er_pci_ecam_read32(bus_i, dev_i, func_i, offset_i, &value) != 0u) {
+      return (INT64)value;
+    }
     return -1;
   }
 
@@ -130,6 +201,7 @@ void er_pci_write32(INT64 bus_i, INT64 dev_i, INT64 func_i, INT64 offset_i, INT6
     return;
   }
   if (ER_PCI_CONFIG_PORT_SUPPORTED == 0u) {
+    (void)er_pci_ecam_write32(bus_i, dev_i, func_i, offset_i, (UINT32)value_i);
     return;
   }
 

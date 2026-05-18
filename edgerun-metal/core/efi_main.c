@@ -27,6 +27,7 @@ EFI_STATUS EFIAPI efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE* SystemTable
   er_println("EdgeRun Metal Core v0.2");
   er_println("UEFI boot OK");
   er_log_acpi(SystemTable);
+  (void)er_pci_configure_mcfg_from_acpi(SystemTable);
 
   er_run_boot_path(ImageHandle, SystemTable);
   if (ER_BOOT_PROFILE == ER_BOOT_PROFILE_OS) {

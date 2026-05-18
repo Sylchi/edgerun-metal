@@ -196,12 +196,19 @@ static void test_native_eth_endpoint(void) {
 }
 
 static void test_acpi_tables(void) {
+  enum {
+    PCI_TEST_ECAM_DWORDS = 1024u,
+    PCI_TEST_DEVICE_ID = 0x56781234u,
+    PCI_TEST_INVALID_ID = 0xffffffffu,
+    PCI_TEST_COMMAND_VALUE = ER_PCI_COMMAND_MEMORY_SPACE | ER_PCI_COMMAND_BUS_MASTER
+  };
   static UINT8 rsdp[36];
   static UINT8 xsdt[68];
   static UINT8 fadt[132];
   static UINT8 madt[74];
   static UINT8 mcfg[60];
   static UINT8 hpet[56];
+  static UINT32 pci_ecam[PCI_TEST_ECAM_DWORDS];
   EFI_CONFIGURATION_TABLE config[1];
   EFI_SYSTEM_TABLE st;
   ErAcpiRsdpInfo rsdp_info;
@@ -378,6 +385,20 @@ static void test_acpi_tables(void) {
   check_int64("acpi mcfg reject bus",
               er_acpi_mcfg_config_address(&mcfg_info, 0u, 64u, 0u, 0u, 0u, &ecam_address),
               0);
+  er_mem_zero((UINT8*)pci_ecam, (UINTN)sizeof(pci_ecam));
+  mcfg_info.allocations[0].base_address = (UINT64)(UINTN)pci_ecam;
+  mcfg_info.allocations[0].end_bus = 0u;
+  pci_ecam[ER_PCI_ID_OFFSET / sizeof(UINT32)] = PCI_TEST_DEVICE_ID;
+  check_int64("pci configure mcfg", er_pci_configure_mcfg(&mcfg_info), 1);
+  check_uint64("pci ecam read id", er_pci_cfg_read32(0u, 0u, 0u, ER_PCI_ID_OFFSET),
+               PCI_TEST_DEVICE_ID);
+  er_pci_write32(0u, 0u, 0u, ER_PCI_COMMAND_STATUS_OFFSET, PCI_TEST_COMMAND_VALUE);
+  check_uint64("pci ecam write command",
+               pci_ecam[ER_PCI_COMMAND_STATUS_OFFSET / sizeof(UINT32)],
+               PCI_TEST_COMMAND_VALUE);
+  check_uint64("pci ecam reject bus", er_pci_cfg_read32(1u, 0u, 0u, ER_PCI_ID_OFFSET),
+               PCI_TEST_INVALID_ID);
+  check_int64("pci clear mcfg", er_pci_configure_mcfg(0), 0);
   check_int64("acpi find hpet", er_acpi_find_table(&table_list, er_acpi_signature("HPET"), &found_table), 1);
   check_uint64("acpi hpet address", found_table.address, (UINT64)(UINTN)hpet);
   check_int64("acpi parse hpet", er_acpi_parse_hpet(found_table.address, &hpet_info), 1);
