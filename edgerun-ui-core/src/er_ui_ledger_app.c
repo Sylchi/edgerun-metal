@@ -843,21 +843,15 @@ static er_ui_status_t er_ui_ledger_transfer_card(
 
 static er_ui_status_t er_ui_ledger_scrollbar(
   er_ui_scene_t* scene,
-  er_ui_bounds_t viewport,
   er_ui_ledger_colors_t colors,
-  float content_h,
-  float scroll) {
-  if (content_h <= viewport.h) return ER_UI_OK;
-  er_ui_bounds_t track = er_ui_scrollbar_track_rect(viewport, viewport);
-  er_ui_bounds_t hit = er_ui_scrollbar_hit_rect(track);
-  er_ui_status_t status = er_ui_scene_push_hit(scene, er_ui_hit(ER_UI_HIT_SCROLLBAR, ER_UI_LEDGER_DASHBOARD_SCROLL_ID, hit.x, hit.y, hit.w, hit.h));
+  er_ui_scroll_viewport_t viewport) {
+  if (!viewport.scrollable) return ER_UI_OK;
+  er_ui_status_t status = er_ui_scene_push_hit(scene, er_ui_hit(ER_UI_HIT_SCROLLBAR, ER_UI_LEDGER_DASHBOARD_SCROLL_ID,
+                                                               viewport.hit.x, viewport.hit.y, viewport.hit.w, viewport.hit.h));
   if (status != ER_UI_OK) return status;
-  status = er_ui_ledger_rect(scene, track, ER_UI_SCROLLBAR_TRACK_W * 0.5f, er_ui_color_with_alpha(colors.border, 0.5f));
+  status = er_ui_ledger_rect(scene, viewport.track, ER_UI_SCROLLBAR_TRACK_W * 0.5f, er_ui_color_with_alpha(colors.border, 0.5f));
   if (status != ER_UI_OK) return status;
-  float thumb_h = er_ui_float_max(viewport.h * (viewport.h / content_h), ER_UI_LEDGER_SCROLL_THUMB_MIN_H);
-  thumb_h = er_ui_float_min(thumb_h, track.h);
-  float thumb_y = track.y + (track.h - thumb_h) * er_ui_float_clamp(scroll, 0.0f, 1.0f);
-  return er_ui_ledger_rect(scene, er_ui_bounds(track.x, thumb_y, track.w, thumb_h), ER_UI_SCROLLBAR_TRACK_W * 0.5f, colors.muted);
+  return er_ui_ledger_rect(scene, viewport.thumb, ER_UI_SCROLLBAR_TRACK_W * 0.5f, colors.muted);
 }
 
 static er_ui_status_t er_ui_ledger_dashboard(
@@ -895,14 +889,15 @@ static er_ui_status_t er_ui_ledger_dashboard(
   size_t row_count = er_ui_responsive_grid_row_count(grid, detail_index + transaction_span + 1u);
   float row_h = er_ui_float_max(er_ui_responsive_grid_row_height(grid, row_count), ER_UI_LEDGER_DASHBOARD_ROW_MIN_H);
   float content_h = er_ui_responsive_grid_height(grid, detail_index + transaction_span + 1u, row_h);
-  float scroll_px = er_ui_float_max(content_h - grid.bounds.h, 0.0f) * er_ui_float_clamp(scroll, 0.0f, 1.0f);
+  er_ui_scroll_viewport_t viewport = er_ui_scroll_viewport(grid.bounds, content_h, scroll, ER_UI_LEDGER_SCROLL_THUMB_MIN_H);
   er_ui_status_t hit_status = er_ui_scene_push_hit(scene, er_ui_hit(ER_UI_HIT_SCROLL_AREA, ER_UI_LEDGER_DASHBOARD_SCROLL_ID,
-                                                                    grid.bounds.x, grid.bounds.y, grid.bounds.w, grid.bounds.h));
+                                                                    viewport.viewport.x, viewport.viewport.y,
+                                                                    viewport.viewport.w, viewport.viewport.h));
   if (hit_status != ER_UI_OK) return hit_status;
   er_ui_responsive_grid_t content_grid = grid;
-  content_grid.bounds.y -= scroll_px;
+  content_grid.bounds = viewport.content;
   bool pushed = false;
-  status = er_ui_scene_push_clip(scene, er_ui_clip(grid.bounds.x, grid.bounds.y, grid.bounds.w, grid.bounds.h), &pushed);
+  status = er_ui_scene_push_clip(scene, er_ui_clip(viewport.viewport.x, viewport.viewport.y, viewport.viewport.w, viewport.viewport.h), &pushed);
   if (status != ER_UI_OK) return status;
   size_t cell_index = 0u;
   status = er_ui_ledger_contribution_card(scene, font, er_ui_responsive_grid_cell(content_grid, cell_index, row_h), colors);
@@ -925,7 +920,7 @@ static er_ui_status_t er_ui_ledger_dashboard(
   }
   if (pushed) er_ui_scene_pop_clip(scene);
   if (status != ER_UI_OK) return status;
-  status = er_ui_ledger_scrollbar(scene, grid.bounds, colors, content_h, scroll);
+  status = er_ui_ledger_scrollbar(scene, colors, viewport);
   return status;
 }
 

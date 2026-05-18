@@ -270,3 +270,21 @@ er_ui_bounds_t er_ui_scrollbar_track_rect(er_ui_bounds_t bounds, er_ui_bounds_t 
 er_ui_bounds_t er_ui_scrollbar_hit_rect(er_ui_bounds_t track) {
   return er_ui_bounds(track.x - (ER_UI_SCROLLBAR_HIT_W - track.w), track.y, ER_UI_SCROLLBAR_HIT_W, track.h);
 }
+
+er_ui_scroll_viewport_t er_ui_scroll_viewport(er_ui_bounds_t viewport, float content_h, float scroll, float min_thumb_h) {
+  er_ui_scroll_viewport_t result = {0};
+  if (!er_ui_bounds_valid(viewport) || content_h < 0.0f || min_thumb_h < 0.0f) return result;
+  result.viewport = viewport;
+  result.overflow_h = er_ui_float_max(content_h - viewport.h, 0.0f);
+  result.scroll_px = result.overflow_h * er_ui_float_clamp(scroll, 0.0f, 1.0f);
+  result.content = er_ui_bounds(viewport.x, viewport.y - result.scroll_px, viewport.w, content_h);
+  result.scrollable = content_h > viewport.h;
+  if (!result.scrollable) return result;
+  result.track = er_ui_scrollbar_track_rect(viewport, viewport);
+  result.hit = er_ui_scrollbar_hit_rect(result.track);
+  float thumb_h = er_ui_float_max(viewport.h * (viewport.h / content_h), min_thumb_h);
+  thumb_h = er_ui_float_min(thumb_h, result.track.h);
+  float thumb_y = result.track.y + (result.track.h - thumb_h) * er_ui_float_clamp(scroll, 0.0f, 1.0f);
+  result.thumb = er_ui_bounds(result.track.x, thumb_y, result.track.w, thumb_h);
+  return result;
+}

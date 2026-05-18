@@ -178,6 +178,17 @@ typedef struct {
   float gap;
 } er_ui_vertical_flow_t;
 
+typedef struct {
+  er_ui_bounds_t viewport;
+  er_ui_bounds_t content;
+  er_ui_bounds_t track;
+  er_ui_bounds_t hit;
+  er_ui_bounds_t thumb;
+  float overflow_h;
+  float scroll_px;
+  bool scrollable;
+} er_ui_scroll_viewport_t;
+
 er_ui_component_padding_t er_ui_component_padding_for_density(er_ui_component_density_t density);
 er_ui_spacing_t er_ui_spacing_default(void);
 er_ui_responsive_sidecar_t er_ui_responsive_sidecar(
@@ -218,6 +229,11 @@ er_ui_bounds_t er_ui_centered_system_panel(
 er_ui_bounds_t er_ui_scroll_content_rect(er_ui_bounds_t bounds, const float padding_trbl[4u]);
 er_ui_bounds_t er_ui_scrollbar_track_rect(er_ui_bounds_t bounds, er_ui_bounds_t content);
 er_ui_bounds_t er_ui_scrollbar_hit_rect(er_ui_bounds_t track);
+er_ui_scroll_viewport_t er_ui_scroll_viewport(
+  er_ui_bounds_t viewport,
+  float content_h,
+  float scroll,
+  float min_thumb_h);
 
 #ifdef __cplusplus
 }
