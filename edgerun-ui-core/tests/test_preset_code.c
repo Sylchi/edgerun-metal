@@ -108,10 +108,36 @@ static void test_style_family_specs_and_colors(void) {
   expect_true(er_ui_style_family_spec_for_family(ER_UI_STYLE_FAMILY_COUNT) == 0, "style family: invalid spec is null");
 }
 
+static void test_extracted_style_tokens_preserve_classes_and_roles(void) {
+  expect_size(er_ui_extracted_style_token_count(), 27u, "style tokens: count");
+  expect_string(er_ui_extracted_style_token_kind_label(ER_UI_EXTRACTED_STYLE_TOKEN_ACTION), "Action", "style tokens: kind label");
+  const er_ui_extracted_style_token_t* background = er_ui_extracted_style_token_at(0u);
+  expect_true(background != 0, "style tokens: background exists");
+  expect_string(background->name, "background", "style tokens: background name");
+  expect_string(background->css_var, "--background", "style tokens: background css var");
+  expect_true(background->kind == ER_UI_EXTRACTED_STYLE_TOKEN_SURFACE, "style tokens: background kind");
+  expect_true(er_ui_extracted_style_token_has_class(background, "bg-background"), "style tokens: background primary class");
+  expect_true(er_ui_extracted_style_token_has_class(background, "bg-bg"), "style tokens: background alias class");
+  expect_true(!er_ui_extracted_style_token_has_class(background, "text-muted"), "style tokens: background rejects unrelated class");
+
+  const er_ui_extracted_style_token_t* destructive = er_ui_extracted_style_token_at(15u);
+  expect_true(destructive != 0, "style tokens: destructive exists");
+  expect_string(destructive->css_var, "--destructive", "style tokens: destructive css var");
+  expect_true(destructive->kind == ER_UI_EXTRACTED_STYLE_TOKEN_STATUS, "style tokens: destructive kind");
+  expect_true(er_ui_extracted_style_token_has_class(destructive, "aria-invalid:border-destructive"), "style tokens: destructive aria class");
+
+  const er_ui_extracted_style_token_t* chart = er_ui_extracted_style_token_at(26u);
+  expect_true(chart != 0, "style tokens: chart five exists");
+  expect_string(chart->name, "chart 5", "style tokens: chart five name");
+  expect_true(er_ui_extracted_style_token_has_class(chart, "text-chart-5"), "style tokens: chart five text class");
+  expect_true(er_ui_extracted_style_token_at(27u) == 0, "style tokens: out of range is null");
+}
+
 void run_preset_code_tests(void) {
   test_preset_codes_encode_captured_families();
   test_preset_code_decodes_sera_and_validates_shape();
   test_preset_code_encodes_live_sera_deltas();
   test_source_captures_preserve_provenance();
   test_style_family_specs_and_colors();
+  test_extracted_style_tokens_preserve_classes_and_roles();
 }

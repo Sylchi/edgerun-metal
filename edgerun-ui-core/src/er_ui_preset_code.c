@@ -173,6 +173,82 @@ static const er_ui_style_family_spec_t ER_UI_STYLE_FAMILY_SPECS[ER_UI_STYLE_FAMI
   {ER_UI_STYLE_FAMILY_SERA, "Sera", "b4xFeBLg4O", "taupe", "warm rose collaboration surface"}
 };
 
+static const char* const ER_UI_STYLE_TOKEN_CLASSES_BACKGROUND[] = {"bg-background", "bg-bg"};
+static const char* const ER_UI_STYLE_TOKEN_CLASSES_CARD[] = {"bg-card", "bg-panel"};
+static const char* const ER_UI_STYLE_TOKEN_CLASSES_CARD_FOREGROUND[] = {"text-card-foreground"};
+static const char* const ER_UI_STYLE_TOKEN_CLASSES_POPOVER[] = {"bg-popover"};
+static const char* const ER_UI_STYLE_TOKEN_CLASSES_POPOVER_FOREGROUND[] = {"text-popover-foreground"};
+static const char* const ER_UI_STYLE_TOKEN_CLASSES_MUTED[] = {"bg-muted", "bg-row"};
+static const char* const ER_UI_STYLE_TOKEN_CLASSES_FOREGROUND[] = {"text-foreground", "text-text"};
+static const char* const ER_UI_STYLE_TOKEN_CLASSES_MUTED_FOREGROUND[] = {"text-muted-foreground", "text-muted"};
+static const char* const ER_UI_STYLE_TOKEN_CLASSES_BORDER[] = {"border-border", "border"};
+static const char* const ER_UI_STYLE_TOKEN_CLASSES_PRIMARY[] = {"bg-primary", "text-primary"};
+static const char* const ER_UI_STYLE_TOKEN_CLASSES_PRIMARY_FOREGROUND[] = {"text-primary-foreground"};
+static const char* const ER_UI_STYLE_TOKEN_CLASSES_SECONDARY[] = {"bg-secondary"};
+static const char* const ER_UI_STYLE_TOKEN_CLASSES_SECONDARY_FOREGROUND[] = {"text-secondary-foreground"};
+static const char* const ER_UI_STYLE_TOKEN_CLASSES_ACCENT[] = {"bg-accent", "text-accent"};
+static const char* const ER_UI_STYLE_TOKEN_CLASSES_ACCENT_FOREGROUND[] = {"text-accent-foreground"};
+static const char* const ER_UI_STYLE_TOKEN_CLASSES_DESTRUCTIVE[] = {"text-destructive", "aria-invalid:border-destructive"};
+static const char* const ER_UI_STYLE_TOKEN_CLASSES_DESTRUCTIVE_FOREGROUND[] = {"text-destructive-foreground"};
+static const char* const ER_UI_STYLE_TOKEN_CLASSES_SUCCESS[] = {"text-success", "bg-success"};
+static const char* const ER_UI_STYLE_TOKEN_CLASSES_WARNING[] = {"text-warning", "bg-warning"};
+static const char* const ER_UI_STYLE_TOKEN_CLASSES_INFO[] = {"text-info", "bg-info"};
+static const char* const ER_UI_STYLE_TOKEN_CLASSES_INPUT[] = {"border-input", "bg-input"};
+static const char* const ER_UI_STYLE_TOKEN_CLASSES_RING[] = {"border-ring", "focus-visible:ring-ring/50"};
+static const char* const ER_UI_STYLE_TOKEN_CLASSES_CHART_1[] = {"bg-chart-1", "text-chart-1"};
+static const char* const ER_UI_STYLE_TOKEN_CLASSES_CHART_2[] = {"bg-chart-2", "text-chart-2"};
+static const char* const ER_UI_STYLE_TOKEN_CLASSES_CHART_3[] = {"bg-chart-3", "text-chart-3"};
+static const char* const ER_UI_STYLE_TOKEN_CLASSES_CHART_4[] = {"bg-chart-4", "text-chart-4"};
+static const char* const ER_UI_STYLE_TOKEN_CLASSES_CHART_5[] = {"bg-chart-5", "text-chart-5"};
+
+#define ER_UI_STYLE_TOKEN(name, kind, css_var, classes, role) \
+  {(name), (kind), (css_var), (classes), sizeof(classes) / sizeof((classes)[0]), (role)}
+
+static const er_ui_extracted_style_token_t ER_UI_EXTRACTED_STYLE_TOKENS[] = {
+  ER_UI_STYLE_TOKEN("background", ER_UI_EXTRACTED_STYLE_TOKEN_SURFACE, "--background", ER_UI_STYLE_TOKEN_CLASSES_BACKGROUND, "page and canvas background"),
+  ER_UI_STYLE_TOKEN("card", ER_UI_EXTRACTED_STYLE_TOKEN_SURFACE, "--card", ER_UI_STYLE_TOKEN_CLASSES_CARD, "dashboard cards, modals, and framed tools"),
+  ER_UI_STYLE_TOKEN("card foreground", ER_UI_EXTRACTED_STYLE_TOKEN_TEXT, "--card-foreground", ER_UI_STYLE_TOKEN_CLASSES_CARD_FOREGROUND,
+                    "primary text on card surfaces"),
+  ER_UI_STYLE_TOKEN("popover", ER_UI_EXTRACTED_STYLE_TOKEN_SURFACE, "--popover", ER_UI_STYLE_TOKEN_CLASSES_POPOVER,
+                    "floating menus, tooltips, and anchored overlays"),
+  ER_UI_STYLE_TOKEN("popover foreground", ER_UI_EXTRACTED_STYLE_TOKEN_TEXT, "--popover-foreground", ER_UI_STYLE_TOKEN_CLASSES_POPOVER_FOREGROUND,
+                    "primary text inside floating overlays"),
+  ER_UI_STYLE_TOKEN("muted", ER_UI_EXTRACTED_STYLE_TOKEN_SURFACE, "--muted", ER_UI_STYLE_TOKEN_CLASSES_MUTED,
+                    "secondary rows, icon wells, subdued controls"),
+  ER_UI_STYLE_TOKEN("foreground", ER_UI_EXTRACTED_STYLE_TOKEN_TEXT, "--foreground", ER_UI_STYLE_TOKEN_CLASSES_FOREGROUND, "primary text"),
+  ER_UI_STYLE_TOKEN("muted foreground", ER_UI_EXTRACTED_STYLE_TOKEN_TEXT, "--muted-foreground", ER_UI_STYLE_TOKEN_CLASSES_MUTED_FOREGROUND,
+                    "labels, descriptions, helper text"),
+  ER_UI_STYLE_TOKEN("border", ER_UI_EXTRACTED_STYLE_TOKEN_BORDER, "--border", ER_UI_STYLE_TOKEN_CLASSES_BORDER,
+                    "card, input, separator, and control outlines"),
+  ER_UI_STYLE_TOKEN("primary", ER_UI_EXTRACTED_STYLE_TOKEN_ACTION, "--primary", ER_UI_STYLE_TOKEN_CLASSES_PRIMARY, "main action and high-emphasis state"),
+  ER_UI_STYLE_TOKEN("primary foreground", ER_UI_EXTRACTED_STYLE_TOKEN_TEXT, "--primary-foreground", ER_UI_STYLE_TOKEN_CLASSES_PRIMARY_FOREGROUND,
+                    "text on primary action surfaces"),
+  ER_UI_STYLE_TOKEN("secondary", ER_UI_EXTRACTED_STYLE_TOKEN_SURFACE, "--secondary", ER_UI_STYLE_TOKEN_CLASSES_SECONDARY,
+                    "low-emphasis button and row surfaces"),
+  ER_UI_STYLE_TOKEN("secondary foreground", ER_UI_EXTRACTED_STYLE_TOKEN_TEXT, "--secondary-foreground", ER_UI_STYLE_TOKEN_CLASSES_SECONDARY_FOREGROUND,
+                    "text on low-emphasis secondary surfaces"),
+  ER_UI_STYLE_TOKEN("accent", ER_UI_EXTRACTED_STYLE_TOKEN_ACTION, "--accent", ER_UI_STYLE_TOKEN_CLASSES_ACCENT,
+                    "hover, selected, and emphasized interactive state"),
+  ER_UI_STYLE_TOKEN("accent foreground", ER_UI_EXTRACTED_STYLE_TOKEN_TEXT, "--accent-foreground", ER_UI_STYLE_TOKEN_CLASSES_ACCENT_FOREGROUND,
+                    "text on accent hover and selected surfaces"),
+  ER_UI_STYLE_TOKEN("destructive", ER_UI_EXTRACTED_STYLE_TOKEN_STATUS, "--destructive", ER_UI_STYLE_TOKEN_CLASSES_DESTRUCTIVE,
+                    "danger zone and validation state"),
+  ER_UI_STYLE_TOKEN("destructive foreground", ER_UI_EXTRACTED_STYLE_TOKEN_TEXT, "--destructive-foreground", ER_UI_STYLE_TOKEN_CLASSES_DESTRUCTIVE_FOREGROUND,
+                    "text on destructive action surfaces"),
+  ER_UI_STYLE_TOKEN("success", ER_UI_EXTRACTED_STYLE_TOKEN_STATUS, "--success", ER_UI_STYLE_TOKEN_CLASSES_SUCCESS,
+                    "verified, paid, completed, and positive receipt states"),
+  ER_UI_STYLE_TOKEN("warning", ER_UI_EXTRACTED_STYLE_TOKEN_STATUS, "--warning", ER_UI_STYLE_TOKEN_CLASSES_WARNING, "pending, budget, and caution states"),
+  ER_UI_STYLE_TOKEN("info", ER_UI_EXTRACTED_STYLE_TOKEN_STATUS, "--info", ER_UI_STYLE_TOKEN_CLASSES_INFO,
+                    "neutral informational and policy reference states"),
+  ER_UI_STYLE_TOKEN("input", ER_UI_EXTRACTED_STYLE_TOKEN_SURFACE, "--input", ER_UI_STYLE_TOKEN_CLASSES_INPUT, "input border and disabled input fill"),
+  ER_UI_STYLE_TOKEN("ring", ER_UI_EXTRACTED_STYLE_TOKEN_BORDER, "--ring", ER_UI_STYLE_TOKEN_CLASSES_RING, "keyboard focus and validation ring"),
+  ER_UI_STYLE_TOKEN("chart 1", ER_UI_EXTRACTED_STYLE_TOKEN_STATUS, "--chart-1", ER_UI_STYLE_TOKEN_CLASSES_CHART_1, "first chart series color"),
+  ER_UI_STYLE_TOKEN("chart 2", ER_UI_EXTRACTED_STYLE_TOKEN_STATUS, "--chart-2", ER_UI_STYLE_TOKEN_CLASSES_CHART_2, "second chart series color"),
+  ER_UI_STYLE_TOKEN("chart 3", ER_UI_EXTRACTED_STYLE_TOKEN_STATUS, "--chart-3", ER_UI_STYLE_TOKEN_CLASSES_CHART_3, "third chart series color"),
+  ER_UI_STYLE_TOKEN("chart 4", ER_UI_EXTRACTED_STYLE_TOKEN_STATUS, "--chart-4", ER_UI_STYLE_TOKEN_CLASSES_CHART_4, "fourth chart series color"),
+  ER_UI_STYLE_TOKEN("chart 5", ER_UI_EXTRACTED_STYLE_TOKEN_STATUS, "--chart-5", ER_UI_STYLE_TOKEN_CLASSES_CHART_5, "fifth chart series color")
+};
+
 static bool er_ui_preset_cstr_eq(const char* a, const char* b) {
   if (!a || !b) return false;
   size_t i = 0u;
@@ -305,6 +381,34 @@ const er_ui_style_family_spec_t* er_ui_style_family_spec_at(size_t index) {
 const er_ui_style_family_spec_t* er_ui_style_family_spec_for_family(er_ui_style_family_t family) {
   if ((size_t)family >= ER_UI_STYLE_FAMILY_COUNT) return 0;
   return &ER_UI_STYLE_FAMILY_SPECS[family];
+}
+
+const char* er_ui_extracted_style_token_kind_label(er_ui_extracted_style_token_kind_t kind) {
+  switch (kind) {
+    case ER_UI_EXTRACTED_STYLE_TOKEN_SURFACE: return "Surface";
+    case ER_UI_EXTRACTED_STYLE_TOKEN_TEXT: return "Text";
+    case ER_UI_EXTRACTED_STYLE_TOKEN_BORDER: return "Border";
+    case ER_UI_EXTRACTED_STYLE_TOKEN_ACTION: return "Action";
+    case ER_UI_EXTRACTED_STYLE_TOKEN_STATUS: return "Status";
+    default: return "";
+  }
+}
+
+size_t er_ui_extracted_style_token_count(void) {
+  return sizeof(ER_UI_EXTRACTED_STYLE_TOKENS) / sizeof(ER_UI_EXTRACTED_STYLE_TOKENS[0]);
+}
+
+const er_ui_extracted_style_token_t* er_ui_extracted_style_token_at(size_t index) {
+  if (index >= er_ui_extracted_style_token_count()) return 0;
+  return &ER_UI_EXTRACTED_STYLE_TOKENS[index];
+}
+
+bool er_ui_extracted_style_token_has_class(const er_ui_extracted_style_token_t* token, const char* class_name) {
+  if (!token || !class_name) return false;
+  for (size_t i = 0u; i < token->class_name_count; ++i) {
+    if (er_ui_preset_cstr_eq(token->class_names[i], class_name)) return true;
+  }
+  return false;
 }
 
 er_ui_status_t er_ui_preset_encode(er_ui_preset_recipe_t recipe, char* out, size_t capacity, size_t* out_len) {
