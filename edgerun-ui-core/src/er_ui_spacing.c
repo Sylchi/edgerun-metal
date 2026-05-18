@@ -131,6 +131,30 @@ er_ui_bounds_t er_ui_responsive_grid_span(er_ui_responsive_grid_t grid, size_t i
     row_h);
 }
 
+er_ui_vertical_flow_t er_ui_vertical_flow(er_ui_bounds_t bounds, float gap) {
+  er_ui_vertical_flow_t flow = {0};
+  if (!er_ui_bounds_valid(bounds) || gap < 0.0f) return flow;
+  flow.bounds = bounds;
+  flow.cursor_y = bounds.y;
+  flow.gap = gap;
+  return flow;
+}
+
+er_ui_bounds_t er_ui_vertical_flow_next(er_ui_vertical_flow_t* flow, float preferred_h) {
+  if (!flow || preferred_h <= 0.0f || !er_ui_bounds_valid(flow->bounds)) return er_ui_bounds(0.0f, 0.0f, 0.0f, 0.0f);
+  float remaining_h = er_ui_float_max(flow->bounds.y + flow->bounds.h - flow->cursor_y, 0.0f);
+  float h = er_ui_float_min(preferred_h, remaining_h);
+  er_ui_bounds_t item = er_ui_bounds(flow->bounds.x, flow->cursor_y, flow->bounds.w, h);
+  flow->cursor_y += h + flow->gap;
+  return item;
+}
+
+er_ui_bounds_t er_ui_vertical_flow_remaining(const er_ui_vertical_flow_t* flow) {
+  if (!flow || !er_ui_bounds_valid(flow->bounds)) return er_ui_bounds(0.0f, 0.0f, 0.0f, 0.0f);
+  float h = er_ui_float_max(flow->bounds.y + flow->bounds.h - flow->cursor_y, 0.0f);
+  return er_ui_bounds(flow->bounds.x, flow->cursor_y, flow->bounds.w, h);
+}
+
 er_ui_bounds_t er_ui_row_icon_slot(er_ui_bounds_t row) {
   return er_ui_bounds_with_height_centered(er_ui_bounds(row.x + ER_UI_ROW_PAD_X, row.y, ER_UI_ROW_ICON, row.h), ER_UI_ROW_ICON);
 }

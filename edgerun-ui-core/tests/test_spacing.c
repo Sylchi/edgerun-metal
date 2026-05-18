@@ -16,6 +16,9 @@ static const float ER_TEST_SIDECAR_PREFERRED_SIDE_W = 220.0f;
 static const float ER_TEST_SIDECAR_MIN_MAIN_W = 300.0f;
 static const float ER_TEST_SIDECAR_GAP = 24.0f;
 static const float ER_TEST_SIDECAR_STACKED_H = 120.0f;
+static const float ER_TEST_VERTICAL_FLOW_GAP = 12.0f;
+static const float ER_TEST_VERTICAL_FLOW_FIRST_H = 110.0f;
+static const float ER_TEST_VERTICAL_FLOW_SECOND_H = 80.0f;
 
 static void test_spacing_default_matches_tokens(void) {
   er_ui_spacing_t spacing = er_ui_spacing_default();
@@ -103,6 +106,21 @@ static void test_responsive_sidecar_adapts_without_fixed_content_math(void) {
   expect_float(stacked.main.y, stacked.side.y + stacked.side.h + ER_TEST_SIDECAR_GAP, "spacing: stacked sidecar main follows vertical gap");
 }
 
+static void test_vertical_flow_allocates_stack_and_remaining_bounds(void) {
+  er_ui_vertical_flow_t flow = er_ui_vertical_flow(er_ui_bounds(10.0f, 20.0f, 320.0f, 260.0f), ER_TEST_VERTICAL_FLOW_GAP);
+  er_ui_bounds_t first = er_ui_vertical_flow_next(&flow, ER_TEST_VERTICAL_FLOW_FIRST_H);
+  er_ui_bounds_t second = er_ui_vertical_flow_next(&flow, ER_TEST_VERTICAL_FLOW_SECOND_H);
+  er_ui_bounds_t remaining = er_ui_vertical_flow_remaining(&flow);
+  expect_bounds(first, er_ui_bounds(10.0f, 20.0f, 320.0f, ER_TEST_VERTICAL_FLOW_FIRST_H), "spacing: vertical flow first item");
+  expect_bounds(second,
+                er_ui_bounds(10.0f, 20.0f + ER_TEST_VERTICAL_FLOW_FIRST_H + ER_TEST_VERTICAL_FLOW_GAP, 320.0f, ER_TEST_VERTICAL_FLOW_SECOND_H),
+                "spacing: vertical flow second item");
+  expect_bounds(remaining,
+                er_ui_bounds(10.0f, second.y + second.h + ER_TEST_VERTICAL_FLOW_GAP, 320.0f,
+                             260.0f - ER_TEST_VERTICAL_FLOW_FIRST_H - ER_TEST_VERTICAL_FLOW_SECOND_H - ER_TEST_VERTICAL_FLOW_GAP * 2.0f),
+                "spacing: vertical flow remaining item");
+}
+
 static void test_system_panel_and_row_geometry(void) {
   er_ui_bounds_t row = er_ui_bounds(10.0f, 20.0f, 360.0f, ER_UI_ROW_H);
   er_ui_bounds_t icon = er_ui_row_icon_slot(row);
@@ -141,6 +159,7 @@ void run_spacing_tests(void) {
   test_responsive_app_surface_spacing();
   test_responsive_grid_derives_columns_from_available_width();
   test_responsive_sidecar_adapts_without_fixed_content_math();
+  test_vertical_flow_allocates_stack_and_remaining_bounds();
   test_system_panel_and_row_geometry();
   test_scroll_geometry_uses_shared_padding_and_hit_contract();
 }
