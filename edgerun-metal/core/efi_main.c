@@ -165,6 +165,29 @@ static vr_font_allocator_t er_ui_boot_font_allocator(void) {
   return allocator;
 }
 
+static UINT8 er_ui_boot_create_font(UINT32 height, vr_font_face_t** out_font) {
+  vr_font_config_t font_cfg;
+
+  if (out_font == 0) {
+    return 0u;
+  }
+  *out_font = 0;
+  g_ui_boot_arena_used = 0u;
+  font_cfg.px_size = height <= ER_UI_BOOT_LOW_HEIGHT_MAX ? ER_UI_BOOT_SMALL_FONT_PX : ER_UI_BOOT_LARGE_FONT_PX;
+  font_cfg.atlas_width = ER_UI_BOOT_FONT_ATLAS_SIZE;
+  font_cfg.atlas_height = ER_UI_BOOT_FONT_ATLAS_SIZE;
+  font_cfg.atlas_pad = ER_UI_BOOT_FONT_ATLAS_PAD;
+  font_cfg.atlas_format = VR_FONT_ATLAS_FORMAT_ALPHA8;
+  font_cfg.allocator = er_ui_boot_font_allocator();
+  font_cfg.gl.user = 0;
+  font_cfg.gl.create_texture = 0;
+  font_cfg.gl.update_texture = 0;
+  font_cfg.gl.destroy_texture = 0;
+  return (UINT8)(vr_font_face_create_from_memory(out_font, g_er_font_geist_ttf,
+                                                ER_FONT_GEIST_TTF_SIZE, &font_cfg) == VR_OK &&
+                 *out_font != 0);
+}
+
 static er_ui_status_t er_build_ui_boot_scene(er_ui_scene_t* scene,
                                              er_ui_demo_apps_state_t* demo_state,
                                              vr_font_face_t* font,
@@ -922,7 +945,6 @@ static UINT8 er_gpu_profile_flush_framebuffer(ErVirtioGpu* gpu, UINT32 width, UI
   er_ui_resolved_theme_t theme = er_ui_resolved_theme(
     ER_UI_STYLE_AUTHORITY_USER,
     (er_ui_style_preset_t){ER_UI_COLOR_SCHEME_DARK, ER_UI_ACCENT_NEUTRAL, ER_UI_RADIUS_DEFAULT});
-  vr_font_config_t font_cfg;
   vr_font_face_t* font = 0;
 
   if (er_virtio_gpu_framebuffer_init(&framebuffer, ER_GPU_PROFILE_RESOURCE_ID,
@@ -935,18 +957,7 @@ static UINT8 er_gpu_profile_flush_framebuffer(ErVirtioGpu* gpu, UINT32 width, UI
     er_println("gpu framebuffer: unsupported dimensions");
     return 0u;
   }
-  g_ui_boot_arena_used = 0u;
-  font_cfg.px_size = height <= ER_UI_BOOT_LOW_HEIGHT_MAX ? ER_UI_BOOT_SMALL_FONT_PX : ER_UI_BOOT_LARGE_FONT_PX;
-  font_cfg.atlas_width = ER_UI_BOOT_FONT_ATLAS_SIZE;
-  font_cfg.atlas_height = ER_UI_BOOT_FONT_ATLAS_SIZE;
-  font_cfg.atlas_pad = ER_UI_BOOT_FONT_ATLAS_PAD;
-  font_cfg.atlas_format = VR_FONT_ATLAS_FORMAT_ALPHA8;
-  font_cfg.allocator = er_ui_boot_font_allocator();
-  font_cfg.gl.user = 0;
-  font_cfg.gl.create_texture = 0;
-  font_cfg.gl.update_texture = 0;
-  font_cfg.gl.destroy_texture = 0;
-  if (vr_font_face_create_from_memory(&font, g_er_font_geist_ttf, ER_FONT_GEIST_TTF_SIZE, &font_cfg) != VR_OK || font == 0) {
+  if (er_ui_boot_create_font(height, &font) == 0u) {
     er_println("gpu framebuffer: font failed");
     return 0u;
   }
@@ -1372,7 +1383,6 @@ static void er_run_ui_profile(EFI_SYSTEM_TABLE* SystemTable) {
     ER_UI_STYLE_AUTHORITY_USER,
     (er_ui_style_preset_t){ER_UI_COLOR_SCHEME_DARK, ER_UI_ACCENT_NEUTRAL, ER_UI_RADIUS_DEFAULT});
   er_ui_demo_apps_state_t demo_state = {0};
-  vr_font_config_t font_cfg;
   vr_font_face_t* font = 0;
   EFIAPI_KEY_FN read_key = 0;
 
@@ -1382,7 +1392,6 @@ static void er_run_ui_profile(EFI_SYSTEM_TABLE* SystemTable) {
     return;
   }
 
-  g_ui_boot_arena_used = 0u;
   if (er_ui_gop_renderer_mode(&mode) == 0u) {
     er_println("ui renderer: mode unavailable");
     return;
@@ -1393,19 +1402,8 @@ static void er_run_ui_profile(EFI_SYSTEM_TABLE* SystemTable) {
     er_println("ui renderer: tile plan failed");
     return;
   }
-  font_cfg.px_size = mode.height <= ER_UI_BOOT_LOW_HEIGHT_MAX ? ER_UI_BOOT_SMALL_FONT_PX : ER_UI_BOOT_LARGE_FONT_PX;
-  font_cfg.atlas_width = ER_UI_BOOT_FONT_ATLAS_SIZE;
-  font_cfg.atlas_height = ER_UI_BOOT_FONT_ATLAS_SIZE;
-  font_cfg.atlas_pad = ER_UI_BOOT_FONT_ATLAS_PAD;
-  font_cfg.atlas_format = VR_FONT_ATLAS_FORMAT_ALPHA8;
-  font_cfg.allocator = er_ui_boot_font_allocator();
-  font_cfg.gl.user = 0;
-  font_cfg.gl.create_texture = 0;
-  font_cfg.gl.update_texture = 0;
-  font_cfg.gl.destroy_texture = 0;
-
   er_println("ui renderer: init font");
-  if (vr_font_face_create_from_memory(&font, g_er_font_geist_ttf, ER_FONT_GEIST_TTF_SIZE, &font_cfg) != VR_OK || font == 0) {
+  if (er_ui_boot_create_font(mode.height, &font) == 0u) {
     er_println("ui renderer: font failed");
     return;
   }
