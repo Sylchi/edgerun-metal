@@ -55,6 +55,11 @@
 #define ER_GPU_PROFILE_SCANOUT_ID 0u
 #define ER_GPU_PROFILE_TOP_COLOR 0x0040d0e0u
 #define ER_GPU_PROFILE_BOTTOM_COLOR 0x00202020u
+#define ER_TPM_PROFILE_COMMAND_BYTES 128u
+#define ER_TPM_PROFILE_RESPONSE_BYTES 512u
+#define ER_TPM_PROFILE_RANDOM_REQUEST_BYTES 16u
+#define ER_TPM_PROFILE_DIGEST_BYTES 32u
+#define ER_TPM_PROFILE_SIGNATURE_BYTES 64u
 #define ER_MMIO_PROBE_REG0_OFFSET 0x00u
 #define ER_MMIO_PROBE_REG1_OFFSET 0x04u
 #define ER_MMIO_PROBE_REG2_OFFSET 0x08u
@@ -1066,11 +1071,11 @@ static void er_run_tpm_profile(EFI_SYSTEM_TABLE* SystemTable) {
   ErTpm2Info tpm2;
   ErTpmCrbTransport crb;
   ErTpmP256Primary primary;
-  UINT8 command[128];
-  UINT8 response[512];
-  UINT8 random[32];
-  UINT8 digest[32];
-  UINT8 signature[64];
+  UINT8 command[ER_TPM_PROFILE_COMMAND_BYTES];
+  UINT8 response[ER_TPM_PROFILE_RESPONSE_BYTES];
+  UINT8 random[ER_TPM_PROFILE_DIGEST_BYTES];
+  UINT8 digest[ER_TPM_PROFILE_DIGEST_BYTES];
+  UINT8 signature[ER_TPM_PROFILE_SIGNATURE_BYTES];
   UINT32 command_len = 0u;
   UINT32 response_len = 0u;
   UINT32 random_len = 0u;
@@ -1117,7 +1122,7 @@ static void er_run_tpm_profile(EFI_SYSTEM_TABLE* SystemTable) {
     return;
   }
 
-  if (er_tpm_build_get_random_command(16u, command, (UINT32)sizeof(command),
+  if (er_tpm_build_get_random_command(ER_TPM_PROFILE_RANDOM_REQUEST_BYTES, command, (UINT32)sizeof(command),
                                       &command_len) == 0u ||
       er_tpm_crb_transact(&crb, command, command_len, response,
                           (UINT32)sizeof(response), &response_len) == 0u ||
@@ -1178,7 +1183,7 @@ static void er_run_tpm_profile(EFI_SYSTEM_TABLE* SystemTable) {
   er_print("tpm: Sign bytes=64 first=");
   er_print_u64_hex((UINT64)signature[0]);
   er_print(" last=");
-  er_print_u64_hex((UINT64)signature[63]);
+  er_print_u64_hex((UINT64)signature[ER_TPM_PROFILE_SIGNATURE_BYTES - 1u]);
   er_println("");
 
   if (er_tpm_build_flush_context_command(primary.handle, command,
