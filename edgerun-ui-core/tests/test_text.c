@@ -3,9 +3,10 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#define ER_TEST_TEXT_EDGE_LEN 4u
+
 static const er_ui_color4_t ER_TEST_TEXT_COLOR = {0.94f, 0.96f, 0.99f, 1.0f};
 static const er_ui_color4_t ER_TEST_TEXT_BG = {0.01f, 0.012f, 0.015f, 1.0f};
-static const size_t ER_TEST_TEXT_EDGE_LEN = 4u;
 static const size_t ER_TEST_TEXT_PARTIAL_VERTEX_COUNT = 2u;
 static const uint32_t ER_TEST_TEXT_PARTIAL_ATLAS_ID = 7u;
 static const size_t ER_TEST_TEXT_UNDERSIZED_BUDGET = 3u;
@@ -20,10 +21,18 @@ static void test_text_measure_empty_and_rejects_invalid_inputs(void) {
   expect_true(metrics.line_height > 0.0f, "text measure: empty text still reports line height");
   expect_true(metrics.ascender > 0.0f, "text measure: empty text still reports ascender");
 
-  const uint32_t text[] = {'E', 'd', 'g', 'e'};
-  expect_status(er_ui_varfont_measure_text(face, text, ER_TEST_TEXT_EDGE_LEN, NULL), ER_UI_ERR_INVALID_ARGUMENT,
+  uint32_t codepoints[ER_TEST_TEXT_EDGE_LEN] = {0};
+  uint32_t* codepoint_cursor = codepoints;
+  *codepoint_cursor = 'E';
+  codepoint_cursor++;
+  *codepoint_cursor = 'd';
+  codepoint_cursor++;
+  *codepoint_cursor = 'g';
+  codepoint_cursor++;
+  *codepoint_cursor = 'e';
+  expect_status(er_ui_varfont_measure_text(face, codepoints, ER_TEST_TEXT_EDGE_LEN, NULL), ER_UI_ERR_INVALID_ARGUMENT,
                 "text measure: missing metrics output is rejected");
-  expect_status(er_ui_varfont_measure_text(NULL, text, ER_TEST_TEXT_EDGE_LEN, &metrics), ER_UI_ERR_INVALID_ARGUMENT,
+  expect_status(er_ui_varfont_measure_text(NULL, codepoints, ER_TEST_TEXT_EDGE_LEN, &metrics), ER_UI_ERR_INVALID_ARGUMENT,
                 "text measure: missing face is rejected");
   expect_status(er_ui_varfont_measure_text(face, NULL, ER_TEST_TEXT_EDGE_LEN, &metrics), ER_UI_ERR_INVALID_ARGUMENT,
                 "text measure: missing non-empty codepoint buffer is rejected");

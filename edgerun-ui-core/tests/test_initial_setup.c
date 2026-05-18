@@ -159,7 +159,8 @@ static void test_yubikey_grant_validates_pin_and_surface(void) {
   expect_status(er_ui_yubikey_grant_build_surface(&state, &surface), ER_UI_OK, "yubikey: surface builds");
   expect_size(surface.root.kind, ER_UI_NODE_CARD, "yubikey: root is card");
   expect_size(surface.root.child_count, ER_TEST_YUBIKEY_ROOT_CHILDREN, "yubikey: root child count");
-  expect_string(surface.nodes[ER_TEST_YUBIKEY_SIGNED_BADGE_NODE_INDEX].label, "signed", "yubikey: signed badge label");
+  const er_ui_node_t* signed_badge = surface.nodes + ER_TEST_YUBIKEY_SIGNED_BADGE_NODE_INDEX;
+  expect_string(signed_badge->label, "signed", "yubikey: signed badge label");
 }
 
 static void test_authority_records_round_trip_without_allocation(void) {
