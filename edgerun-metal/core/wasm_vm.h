@@ -9,6 +9,8 @@
 #define ER_WASM_LINEAR_MEMORY_BASE 0u
 #define ER_WASM_PUBLIC_REGION_RELAY_INBOX 1u
 #define ER_WASM_PUBLIC_REGION_RELAY_OUTBOX 2u
+#define ER_WASM_UI_COMMAND_ABI_VERSION 1u
+#define ER_WASM_UI_COMMAND_LIST_HEADER_LEN 36u
 
 /*
  * Purpose: define the bounded WASM interpreter ABI used by metal apps and drivers.
@@ -24,6 +26,8 @@ typedef INT64 (*er_wasm_mmio_read32)(INT64 handle, INT64 offset);
 typedef INT64 (*er_wasm_bus_exec)(const ErBusIoPacket* request, ErBusIoPacket* response);
 typedef INT64 (*er_wasm_relay_send)(const UINT8* bytes, UINT32 len);
 typedef INT64 (*er_wasm_relay_recv)(UINT8* bytes, UINT32 capacity);
+typedef INT64 (*er_wasm_ui_emit)(const UINT8* bytes, UINT32 len,
+                                 const er_ui_scene_stats_t* stats);
 
 typedef struct {
   UINT8* bytes;
@@ -45,11 +49,13 @@ typedef struct {
   er_wasm_bus_exec bus_exec;
   er_wasm_relay_send relay_send;
   er_wasm_relay_recv relay_recv;
+  er_wasm_ui_emit ui_emit;
   UINT8* memory;
   UINT32 memory_size;
   ErWasmLinearMemory linear_memory;
   ErAppUsage* app_usage;
   const ErAppBudget* app_budget;
+  const ErAppUiPresentation* ui_presentation;
 } ErWasmHostCalls;
 
 typedef struct {

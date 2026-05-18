@@ -41,6 +41,7 @@ typedef struct {
 #define ER_WASM_IMPORT_MODULE_BUS "edgerun.bus"
 #define ER_WASM_IMPORT_MODULE_RELAY "edgerun.relay"
 #define ER_WASM_IMPORT_MODULE_MEMORY "edgerun.memory"
+#define ER_WASM_IMPORT_MODULE_UI "edgerun.ui"
 #define ER_WASM_IMPORT_FIELD_U64 "u64"
 #define ER_WASM_IMPORT_FIELD_HEX "hex"
 #define ER_WASM_IMPORT_FIELD_READ32 "read32"
@@ -49,6 +50,7 @@ typedef struct {
 #define ER_WASM_IMPORT_FIELD_EXEC "exec"
 #define ER_WASM_IMPORT_FIELD_SEND "send"
 #define ER_WASM_IMPORT_FIELD_RECV "recv"
+#define ER_WASM_IMPORT_FIELD_EMIT "emit"
 #define ER_WASM_IMPORT_FIELD_REGION_BASE "region_base"
 #define ER_WASM_IMPORT_FIELD_REGION_LEN "region_len"
 #define ER_WASM_STRING_LEN(value) ((UINT8)(sizeof(value) - 1u))
@@ -61,6 +63,15 @@ typedef struct {
 #define ER_WASM_U8_MASK 0xffu
 #define ER_WASM_U8_BYTES 1u
 #define ER_WASM_U16_BYTES 2u
+#define ER_WASM_UI_HEADER_ABI_OFFSET 0u
+#define ER_WASM_UI_HEADER_COMMAND_COUNT_OFFSET 4u
+#define ER_WASM_UI_HEADER_RECT_COUNT_OFFSET 8u
+#define ER_WASM_UI_HEADER_HIT_COUNT_OFFSET 12u
+#define ER_WASM_UI_HEADER_DRAG_SOURCE_COUNT_OFFSET 16u
+#define ER_WASM_UI_HEADER_DROP_TARGET_COUNT_OFFSET 20u
+#define ER_WASM_UI_HEADER_TRANSITION_COUNT_OFFSET 24u
+#define ER_WASM_UI_HEADER_ICON_QUAD_COUNT_OFFSET 28u
+#define ER_WASM_UI_HEADER_TEXT_QUAD_COUNT_OFFSET 32u
 #define ER_WASM_U32_BYTE0 0u
 #define ER_WASM_U32_BYTE1 1u
 #define ER_WASM_U32_BYTE2 2u
@@ -162,7 +173,8 @@ enum {
   ER_IMPORT_KIND_RELAY_SEND = 8,
   ER_IMPORT_KIND_RELAY_RECV = 9,
   ER_IMPORT_KIND_MEMORY_REGION_BASE = 10,
-  ER_IMPORT_KIND_MEMORY_REGION_LEN = 11
+  ER_IMPORT_KIND_MEMORY_REGION_LEN = 11,
+  ER_IMPORT_KIND_UI_EMIT = 12
 };
 
 enum {
@@ -195,7 +207,10 @@ static const ErHostImport ER_HOST_IMPORTS[] = {
    ER_IMPORT_KIND_MEMORY_REGION_BASE},
   {ER_WASM_IMPORT_MODULE_MEMORY, ER_WASM_STRING_LEN(ER_WASM_IMPORT_MODULE_MEMORY),
    ER_WASM_IMPORT_FIELD_REGION_LEN, ER_WASM_STRING_LEN(ER_WASM_IMPORT_FIELD_REGION_LEN),
-   ER_IMPORT_KIND_MEMORY_REGION_LEN}
+   ER_IMPORT_KIND_MEMORY_REGION_LEN},
+  {ER_WASM_IMPORT_MODULE_UI, ER_WASM_STRING_LEN(ER_WASM_IMPORT_MODULE_UI),
+   ER_WASM_IMPORT_FIELD_EMIT, ER_WASM_STRING_LEN(ER_WASM_IMPORT_FIELD_EMIT),
+   ER_IMPORT_KIND_UI_EMIT}
 };
 static const UINT32 ER_HOST_IMPORT_COUNT = (UINT32)(sizeof(ER_HOST_IMPORTS) / sizeof(ER_HOST_IMPORTS[0]));
 
@@ -270,11 +285,13 @@ static void er_clear_module(ErWasmModule* module) {
   module->host.bus_exec = 0;
   module->host.relay_send = 0;
   module->host.relay_recv = 0;
+  module->host.ui_emit = 0;
   module->host.memory = 0;
   module->host.memory_size = 0;
   er_mem_zero((UINT8*)&module->host.linear_memory, (UINTN)sizeof(module->host.linear_memory));
   module->host.app_usage = 0;
   module->host.app_budget = 0;
+  module->host.ui_presentation = 0;
 }
 
 static int er_reader_init(ErReader* r, const UINT8* data, UINT32 size) {
@@ -546,6 +563,49 @@ static UINT64 er_wasm_load_u64(const UINT8* src) {
          ((UINT64)er_wasm_load_u32(src + ER_WASM_U32_BYTES) << ER_WASM_U64_HIGH32_SHIFT);
 }
 
+static UINT16 er_wasm_load_u16(const UINT8* src) {
+  return (UINT16)src[ER_WASM_U32_BYTE0] |
+         (UINT16)((UINT16)src[ER_WASM_U32_BYTE1] << ER_WASM_U32_BYTE1_SHIFT);
+}
+
+static int er_wasm_ui_command_stats(const UINT8* bytes, UINT32 len,
+                                    er_ui_scene_stats_t* out_stats) {
+  UINT64 command_count;
+  UINT64 summed_count;
+
+  if (bytes == 0 || out_stats == 0 || len != ER_WASM_UI_COMMAND_LIST_HEADER_LEN) {
+    return -1;
+  }
+  if (er_wasm_load_u16(bytes + ER_WASM_UI_HEADER_ABI_OFFSET) !=
+      ER_WASM_UI_COMMAND_ABI_VERSION) {
+    return -1;
+  }
+
+  er_mem_zero((UINT8*)out_stats, (UINTN)sizeof(*out_stats));
+  command_count = (UINT64)er_wasm_load_u32(bytes + ER_WASM_UI_HEADER_COMMAND_COUNT_OFFSET);
+  out_stats->rects = (size_t)er_wasm_load_u32(bytes + ER_WASM_UI_HEADER_RECT_COUNT_OFFSET);
+  out_stats->hits = (size_t)er_wasm_load_u32(bytes + ER_WASM_UI_HEADER_HIT_COUNT_OFFSET);
+  out_stats->drag_sources =
+      (size_t)er_wasm_load_u32(bytes + ER_WASM_UI_HEADER_DRAG_SOURCE_COUNT_OFFSET);
+  out_stats->drop_targets =
+      (size_t)er_wasm_load_u32(bytes + ER_WASM_UI_HEADER_DROP_TARGET_COUNT_OFFSET);
+  out_stats->transitions =
+      (size_t)er_wasm_load_u32(bytes + ER_WASM_UI_HEADER_TRANSITION_COUNT_OFFSET);
+  out_stats->icon_quads =
+      (size_t)er_wasm_load_u32(bytes + ER_WASM_UI_HEADER_ICON_QUAD_COUNT_OFFSET);
+  out_stats->text_quads =
+      (size_t)er_wasm_load_u32(bytes + ER_WASM_UI_HEADER_TEXT_QUAD_COUNT_OFFSET);
+
+  summed_count = (UINT64)out_stats->rects + (UINT64)out_stats->hits +
+                 (UINT64)out_stats->drag_sources + (UINT64)out_stats->drop_targets +
+                 (UINT64)out_stats->transitions + (UINT64)out_stats->icon_quads +
+                 (UINT64)out_stats->text_quads;
+  if (command_count == 0u || command_count != summed_count) {
+    return -1;
+  }
+  return 0;
+}
+
 static void er_wasm_store_u32(UINT8* dst, UINT32 value) {
   dst[ER_WASM_U32_BYTE0] = (UINT8)(value & ER_WASM_U8_MASK);
   dst[ER_WASM_U32_BYTE1] = (UINT8)((value >> ER_WASM_U32_BYTE1_SHIFT) & ER_WASM_U8_MASK);
@@ -689,11 +749,13 @@ int er_wasm_init(ErWasmModule* module, const UINT8* data, UINT32 size, const ErW
     module->host.bus_exec = host->bus_exec;
     module->host.relay_send = host->relay_send;
     module->host.relay_recv = host->relay_recv;
+    module->host.ui_emit = host->ui_emit;
     module->host.memory = host->memory;
     module->host.memory_size = host->memory_size;
     module->host.linear_memory = host->linear_memory;
     module->host.app_usage = host->app_usage;
     module->host.app_budget = host->app_budget;
+    module->host.ui_presentation = host->ui_presentation;
     if (host->linear_memory.bytes != 0) {
       if (er_wasm_linear_memory_valid(&host->linear_memory) == 0) {
         return -1;
@@ -1653,6 +1715,47 @@ int er_wasm_execute_i64(ErWasmModule* module, UINT32 function_index, INT64* resu
             } else {
               stack[stack_size++] = (INT64)(UINT64)region_len;
             }
+          } else if (import_kind == ER_IMPORT_KIND_UI_EMIT) {
+            INT64 value = 0;
+            INT64 ptr = 0;
+            INT64 len = 0;
+            UINT8* bytes = 0;
+            er_ui_scene_stats_t stats;
+
+            if (param_count_call != 2 || result_count != 1) {
+              return -1;
+            }
+            if (result_type != ER_WASM_VALTYPE_I64) {
+              return -1;
+            }
+            if (stack_size < 2) {
+              return -1;
+            }
+            if (module->host.ui_emit == 0 || module->host.ui_presentation == 0) {
+              return -1;
+            }
+            len = stack[--stack_size];
+            ptr = stack[--stack_size];
+            if (ptr < 0 || len < 0 || (UINT64)len > (UINT64)ER_WASM_U32_MASK) {
+              return -1;
+            }
+            if (er_wasm_memory_window_range(module, (UINT64)ptr, (UINT32)len,
+                                            module->linear_memory.relay_outbox_base,
+                                            module->linear_memory.relay_outbox_len,
+                                            &bytes) != 0) {
+              return -1;
+            }
+            if (er_wasm_ui_command_stats(bytes, (UINT32)len, &stats) != 0 ||
+                er_app_ui_scene_fits_presentation(stats,
+                                                  module->host.ui_presentation) == 0u) {
+              return -1;
+            }
+
+            value = module->host.ui_emit((const UINT8*)bytes, (UINT32)len, &stats);
+            if (stack_size >= ER_WASM_STACK_MAX) {
+              return -1;
+            }
+            stack[stack_size++] = value;
           } else {
             return -1;
           }
