@@ -42,6 +42,24 @@ er_ui_status_t er_ui_component_push_ascii_text(
   return er_ui_scene_push_ascii_text(scene, font, text, ER_UI_COMPONENT_TEXT_CAPACITY, x, y, color);
 }
 
+er_ui_status_t er_ui_component_push_ascii_text_clipped(
+  er_ui_scene_t* scene,
+  vr_font_face_t* font,
+  const char* text,
+  float x,
+  float y,
+  float max_w,
+  er_ui_color4_t color) {
+  if (!scene || !font || !text) return ER_UI_ERR_INVALID_ARGUMENT;
+  if (max_w <= 0.0f) return ER_UI_OK;
+  size_t len = er_ui_ascii_len(text);
+  size_t max_chars = (size_t)(max_w / ER_UI_COMPONENT_TEXT_ADVANCE);
+  if (max_chars == 0u) return ER_UI_OK;
+  if (max_chars >= len) return er_ui_component_push_ascii_text(scene, font, text, x, y, color);
+  if (max_chars > ER_UI_COMPONENT_TEXT_CAPACITY) max_chars = ER_UI_COMPONENT_TEXT_CAPACITY;
+  return er_ui_scene_push_ascii_text_n(scene, font, text, max_chars, x, y, color);
+}
+
 er_ui_status_t er_ui_component_push_icon(
   er_ui_scene_t* scene,
   er_ui_bounds_t bounds,

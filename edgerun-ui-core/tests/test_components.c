@@ -62,6 +62,16 @@ static bool test_component_hit_before(const er_ui_hit_t* a, const er_ui_hit_t* b
   return a && b && a->y + a->h <= b->y;
 }
 
+static float test_component_text_max_x_since(const er_ui_scene_t* scene, size_t first_quad) {
+  float max_x = 0.0f;
+  if (!scene) return max_x;
+  for (size_t i = first_quad; i < scene->text_quad_count; ++i) {
+    float right = scene->text_quads[i].x + scene->text_quads[i].w;
+    if (right > max_x) max_x = right;
+  }
+  return max_x;
+}
+
 static void test_component_render_primitives(void) {
   er_ui_scene_t scene = {0};
   expect_status(er_ui_scene_init_with_allocator(&scene, er_ui_palette_slate_950(), er_ui_test_allocator()), ER_UI_OK,
@@ -101,6 +111,12 @@ static void test_component_render_primitives(void) {
   expect_status(er_ui_component_field_static_emit(&scene, face, er_ui_bounds(232.0f, 260.0f, 160.0f, 58.0f), theme, "Account", "Studio", false),
                 ER_UI_OK, "component render: passive field emits");
   expect_size(scene.hit_count, passive_hit_count, "component render: passive controls do not emit hits");
+  er_ui_bounds_t narrow_select = er_ui_bounds(232.0f, 322.0f, 108.0f, 58.0f);
+  size_t narrow_text_start = scene.text_quad_count;
+  expect_status(er_ui_component_select_static_emit(&scene, face, narrow_select, theme, "Currency", "USD - United States Dollar", false),
+                ER_UI_OK, "component render: narrow passive select emits");
+  expect_true(test_component_text_max_x_since(&scene, narrow_text_start) <= narrow_select.x + narrow_select.w,
+              "component render: narrow passive select text stays inside control");
   expect_status(er_ui_component_checkbox_emit(&scene, face, er_ui_bounds(16.0f, 180.0f, 188.0f, 32.0f), theme, "Cache verified bytes", true,
                                            ER_UI_TEST_COMPONENT_CHECKBOX_ID),
                 ER_UI_OK, "component render: checkbox emits");
