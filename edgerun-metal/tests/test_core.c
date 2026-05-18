@@ -27,6 +27,7 @@
 #include "font_geist.h"
 #include "wasm_vm.h"
 #include "wasm_driver_bus_probe_module.h"
+#include "wasm_ui_counter_module.h"
 
 /*
  * Purpose: test pure EdgeRun Metal core helpers outside firmware.
@@ -412,6 +413,19 @@ static INT64 test_vm_relay_recv(UINT8* bytes, UINT32 capacity) {
   bytes[2] = (UINT8)'n';
   bytes[3] = (UINT8)'g';
   return 4;
+}
+
+static INT64 test_vm_ui_emit(const UINT8* bytes, UINT32 len,
+                             const er_ui_scene_stats_t* stats) {
+  if (bytes == 0 || stats == 0) {
+    return 0;
+  }
+  check_uint64("wasm ui emit len", len, ER_WASM_UI_COMMAND_LIST_HEADER_LEN);
+  check_uint64("wasm ui emit abi lo", bytes[0], ER_WASM_UI_COMMAND_ABI_VERSION);
+  check_uint64("wasm ui emit rects", stats->rects, 1u);
+  check_uint64("wasm ui emit hits", stats->hits, 1u);
+  check_uint64("wasm ui emit text", stats->text_quads, 1u);
+  return (INT64)len;
 }
 
 static void test_bar_decode(void) {
@@ -2041,6 +2055,80 @@ static void test_wasm_relay_imports(void) {
               er_wasm_execute_i64(&module, main_index, &result), -1);
 }
 
+static void test_wasm_ui_emit_import(void) {
+  /*
+   * Purpose: prove authored WASM apps can emit UI command lists through admission.
+   * Intention: the VM validates public outbox bounds and presentation budget before host UI work.
+   */
+  static UINT8 memory[65536];
+  ErWasmHostCalls host = {0};
+  ErWasmLinearMemory linear_memory;
+  ErWasmModule module;
+  ErAppUiPresentation presentation;
+  UINT32 main_index = 0;
+  INT64 result = 0;
+
+  er_mem_zero(memory, (UINTN)sizeof(memory));
+  er_mem_zero((UINT8*)&presentation, (UINTN)sizeof(presentation));
+  presentation.abi_version = ER_APP_ABI_VERSION;
+  test_fill_bytes(presentation.presentation_id.bytes, ER_HASH_LEN, 0x10u);
+  test_fill_bytes(presentation.jurisdiction_id.bytes, ER_HASH_LEN, 0x30u);
+  test_fill_bytes(presentation.admission_id.bytes, ER_HASH_LEN, 0x50u);
+  test_fill_bytes(presentation.app_node_id.bytes, ER_NODE_ID_LEN, 0x70u);
+  test_fill_bytes(presentation.ui_relay_node_id.bytes, ER_NODE_ID_LEN, 0x90u);
+  test_fill_bytes(presentation.route_hash.bytes, ER_HASH_LEN, 0xb0u);
+  presentation.sequence = 1u;
+  presentation.max_rects = 1u;
+  presentation.max_hits = 1u;
+  presentation.max_text_quads = 1u;
+
+  check_int64("wasm ui linear memory prepare",
+              er_wasm_prepare_linear_memory(memory, (UINT32)sizeof(memory),
+                                            0u, 1024u, 1024u, 2048u,
+                                            &linear_memory),
+              0);
+  host.linear_memory = linear_memory;
+  host.ui_emit = test_vm_ui_emit;
+  host.ui_presentation = &presentation;
+  check_int64("wasm ui init",
+              er_wasm_init(&module, g_edgerun_ui_counter_wasm,
+                           ER_UI_COUNTER_WASM_SIZE, &host),
+              0);
+  check_int64("wasm ui find main", er_wasm_find_main(&module, &main_index), 0);
+  check_int64("wasm ui main index", main_index, 1);
+  check_int64("wasm ui execute", er_wasm_execute_i64(&module, main_index, &result), 0);
+  check_uint64("wasm ui result", (UINT64)result, ER_WASM_UI_COMMAND_LIST_HEADER_LEN);
+  check_uint64("wasm ui command count", memory[1028], 3u);
+
+  presentation.max_text_quads = 0u;
+  check_int64("wasm ui reject over presentation budget",
+              er_wasm_execute_i64(&module, main_index, &result), -1);
+  presentation.max_text_quads = 1u;
+  host.ui_presentation = 0;
+  check_int64("wasm ui reject missing presentation",
+              er_wasm_init(&module, g_edgerun_ui_counter_wasm,
+                           ER_UI_COUNTER_WASM_SIZE, &host),
+              0);
+  check_int64("wasm ui execute reject missing presentation",
+              er_wasm_execute_i64(&module, main_index, &result), -1);
+
+  host.ui_presentation = &presentation;
+  check_int64("wasm ui shifted outbox prepare",
+              er_wasm_prepare_linear_memory(memory, (UINT32)sizeof(memory),
+                                            0u, 1024u, 2048u, 2048u,
+                                            &linear_memory),
+              0);
+  host.linear_memory = linear_memory;
+  check_int64("wasm ui shifted outbox init",
+              er_wasm_init(&module, g_edgerun_ui_counter_wasm,
+                           ER_UI_COUNTER_WASM_SIZE, &host),
+              0);
+  check_int64("wasm ui shifted outbox find main",
+              er_wasm_find_main(&module, &main_index), 0);
+  check_int64("wasm ui reject emit outside outbox",
+              er_wasm_execute_i64(&module, main_index, &result), -1);
+}
+
 static void test_vfs_object_packets(void) {
   static const UINT8 object_bytes[] = {'a', 'b', 'c', 'd', 'e', 'f'};
   ErCryptoProvider crypto;
@@ -3535,6 +3623,7 @@ int main(void) {
   test_wasm_public_region_imports();
   test_relay_packets();
   test_wasm_relay_imports();
+  test_wasm_ui_emit_import();
   test_vfs_object_packets();
   test_app_identity_routes();
   test_device_relay_identity();
