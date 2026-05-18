@@ -9,7 +9,7 @@
 static const UINT8 g_object_domain[] = "edgerun:c:v1:vfs:object";
 static const UINT8 g_payload_domain[] = "edgerun:c:v1:vfs:object-payload";
 static const UINT8 g_packet_domain[] = "edgerun:c:v1:vfs:object-packet";
-static const UINT8 g_label_ref_domain[] = "edgerun:c:v1:vfs:object-label";
+static const UINT8 g_manifest_ref_domain[] = "edgerun:c:v1:vfs:object-label";
 static const UINT8 g_transform_domain[] = "edgerun:c:v1:vfs:object-transform";
 
 enum {
@@ -27,7 +27,13 @@ enum {
   ER_VFS_U8_MASK = 0xffu,
   ER_VFS_U32_MASK = 0xffffffffu,
   ER_VFS_LABEL_REF_SPAN_COUNT = 3u,
+  ER_VFS_LABEL_REF_LABEL_SPAN = 0u,
+  ER_VFS_LABEL_REF_OBJECT_ID_SPAN = 1u,
+  ER_VFS_LABEL_REF_OBJECT_LEN_SPAN = 2u,
   ER_VFS_TRANSFORM_REF_SPAN_COUNT = 3u,
+  ER_VFS_TRANSFORM_PLAINTEXT_ID_SPAN = 0u,
+  ER_VFS_TRANSFORM_TRANSPORT_ID_SPAN = 1u,
+  ER_VFS_TRANSFORM_FIELDS_SPAN = 2u,
   ER_VFS_TRANSFORM_U16_FIELD_COUNT = 2u,
   ER_VFS_TRANSFORM_U64_FIELD_COUNT = 2u,
   ER_VFS_TRANSFORM_FIELD_BYTES =
@@ -69,6 +75,15 @@ static void er_vfs_put_transform_field64(UINT8** cursor, UINT64 value) {
   *cursor += ER_VFS_U64_FIELD_BYTES;
 }
 
+static void er_vfs_set_span(ErByteSpan* span, const UINT8* bytes, UINTN len) {
+  span->bytes = bytes;
+  span->len = len;
+}
+
+static UINT8 er_vfs_char_is_slash(char value) {
+  return (UINT8)(value == '/' ? 1u : 0u);
+}
+
 UINT8 er_vfs_label_valid(const char* label, UINTN label_len) {
   UINTN i;
   UINT8 last_was_slash = 0;
@@ -76,16 +91,18 @@ UINT8 er_vfs_label_valid(const char* label, UINTN label_len) {
   if (label == 0 || label_len == 0u || label_len > ER_VFS_LABEL_MAX) {
     return 0;
   }
-  if (label[0] == '/' || label[label_len - 1u] == '/') {
+  if (er_vfs_char_is_slash(*label) != 0u ||
+      er_vfs_char_is_slash(*(label + label_len - 1u)) != 0u) {
     return 0;
   }
   for (i = 0; i < label_len; ++i) {
-    char c = label[i];
+    const char* label_at = label + i;
+    char c = *label_at;
 
     if (c == 0 || c == '\\') {
       return 0;
     }
-    if (c == '/') {
+    if (er_vfs_char_is_slash(c) != 0u) {
       if (last_was_slash != 0u) {
         return 0;
       }
@@ -93,10 +110,10 @@ UINT8 er_vfs_label_valid(const char* label, UINTN label_len) {
       continue;
     }
     if (c == '.') {
-      UINT8 at_part_start = (i == 0u || label[i - 1u] == '/') ? 1u : 0u;
-      UINT8 at_part_end = (i + 1u == label_len || label[i + 1u] == '/') ? 1u : 0u;
-      UINT8 dotdot = (i + 1u < label_len && label[i + 1u] == '.' &&
-                      (i + 2u == label_len || label[i + 2u] == '/')) ? 1u : 0u;
+      UINT8 at_part_start = (i == 0u || er_vfs_char_is_slash(*(label_at - 1u)) != 0u) ? 1u : 0u;
+      UINT8 at_part_end = (i + 1u == label_len || er_vfs_char_is_slash(*(label_at + 1u)) != 0u) ? 1u : 0u;
+      UINT8 dotdot = (i + 1u < label_len && *(label_at + 1u) == '.' &&
+                      (i + 2u == label_len || er_vfs_char_is_slash(*(label_at + 2u)) != 0u)) ? 1u : 0u;
 
       if (at_part_start != 0u && (at_part_end != 0u || dotdot != 0u)) {
         return 0;
@@ -195,6 +212,8 @@ UINT8 er_vfs_prepare_object_label_ref_from_object(const ErCryptoProvider* crypto
                                                   UINT64 object_len, ErVfsObjectLabelRef* out_ref) {
   UINT8 len_be[8];
   ErByteSpan spans[ER_VFS_LABEL_REF_SPAN_COUNT];
+  const UINT8* manifest_bytes;
+  UINTN manifest_len;
 
   if (out_ref == 0 || crypto == 0 || object_id == 0 || er_vfs_label_valid(label, label_len) == 0u) {
     return 0;
@@ -207,13 +226,12 @@ UINT8 er_vfs_prepare_object_label_ref_from_object(const ErCryptoProvider* crypto
   out_ref->object_len = object_len;
 
   er_vfs_put_be64(len_be, out_ref->object_len);
-  spans[0].bytes = (const UINT8*)label;
-  spans[0].len = label_len;
-  spans[1].bytes = out_ref->object_id.bytes;
-  spans[1].len = ER_HASH_LEN;
-  spans[2].bytes = len_be;
-  spans[2].len = (UINTN)sizeof(len_be);
-  return er_crypto_hash(crypto, g_label_ref_domain, (UINTN)(sizeof(g_label_ref_domain) - 1u),
+  manifest_bytes = (const UINT8*)label;
+  manifest_len = label_len;
+  er_vfs_set_span(&spans[ER_VFS_LABEL_REF_LABEL_SPAN], manifest_bytes, manifest_len);
+  er_vfs_set_span(&spans[ER_VFS_LABEL_REF_OBJECT_ID_SPAN], out_ref->object_id.bytes, ER_HASH_LEN);
+  er_vfs_set_span(&spans[ER_VFS_LABEL_REF_OBJECT_LEN_SPAN], len_be, (UINTN)sizeof(len_be));
+  return er_crypto_hash(crypto, g_manifest_ref_domain, (UINTN)(sizeof(g_manifest_ref_domain) - 1u),
                         spans, ER_VFS_LABEL_REF_SPAN_COUNT, &out_ref->label_hash);
 }
 
@@ -245,12 +263,9 @@ UINT8 er_vfs_prepare_transform_ref(const ErCryptoProvider* crypto, const ErHash*
   er_vfs_put_transform_field16(&field_cursor, seal_kind);
   er_vfs_put_transform_field64(&field_cursor, plaintext_len);
   er_vfs_put_transform_field64(&field_cursor, transport_len);
-  spans[0].bytes = plaintext_object_id->bytes;
-  spans[0].len = ER_HASH_LEN;
-  spans[1].bytes = transport_object_id->bytes;
-  spans[1].len = ER_HASH_LEN;
-  spans[2].bytes = fields;
-  spans[2].len = (UINTN)sizeof(fields);
+  er_vfs_set_span(&spans[ER_VFS_TRANSFORM_PLAINTEXT_ID_SPAN], plaintext_object_id->bytes, ER_HASH_LEN);
+  er_vfs_set_span(&spans[ER_VFS_TRANSFORM_TRANSPORT_ID_SPAN], transport_object_id->bytes, ER_HASH_LEN);
+  er_vfs_set_span(&spans[ER_VFS_TRANSFORM_FIELDS_SPAN], fields, (UINTN)sizeof(fields));
   return er_crypto_hash(crypto, g_transform_domain, (UINTN)(sizeof(g_transform_domain) - 1u),
                         spans, ER_VFS_TRANSFORM_REF_SPAN_COUNT, &out_ref->transform_hash);
 }
