@@ -7,7 +7,7 @@
  */
 
 #include "er_types.h"
-#include "er_ui_demo_apps.h"
+#include "er_ui_ledger_app.h"
 #include "er_ui_runtime.h"
 
 typedef enum {

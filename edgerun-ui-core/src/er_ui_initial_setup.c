@@ -376,7 +376,7 @@ er_ui_status_t er_ui_initial_setup_build_surface(const er_ui_initial_setup_state
   out_surface->nodes[ER_UI_SETUP_SURFACE_TITLE] = er_ui_node_text("Initial Setup");
   out_surface->nodes[ER_UI_SETUP_SURFACE_STATUS_BADGE] = er_ui_node_badge(
     state->configured ? "ready" : "required",
-    state->configured ? ER_UI_SHADCN_BADGE_DEFAULT : ER_UI_SHADCN_BADGE_SECONDARY);
+    state->configured ? ER_UI_COMPONENT_BADGE_DEFAULT : ER_UI_COMPONENT_BADGE_SECONDARY);
   out_surface->nodes[ER_UI_SETUP_SURFACE_STATUS_TEXT] = er_ui_node_text(status);
   out_surface->nodes[ER_UI_SETUP_SURFACE_PROGRESS] =
     er_ui_node_progress(state->configured ? ER_UI_INITIAL_SETUP_PROGRESS_DONE : ER_UI_INITIAL_SETUP_PROGRESS_WAITING);
@@ -391,7 +391,7 @@ er_ui_status_t er_ui_initial_setup_build_surface(const er_ui_initial_setup_state
   out_surface->nodes[ER_UI_SETUP_SURFACE_CONFIRM_FIELD] =
     er_ui_setup_field("Confirm password", state->confirm_password_len > 0u, ER_UI_INITIAL_SETUP_CONFIRM_FIELD_ID);
   out_surface->nodes[ER_UI_SETUP_SURFACE_CREATE_BUTTON] =
-    er_ui_node_button(state->busy ? "Working" : "Create", ER_UI_INITIAL_SETUP_CREATE_BUTTON_ID, ER_UI_SHADCN_BUTTON_DEFAULT);
+    er_ui_node_button(state->busy ? "Working" : "Create", ER_UI_INITIAL_SETUP_CREATE_BUTTON_ID, ER_UI_COMPONENT_BUTTON_DEFAULT);
   er_ui_status_t status_code =
     er_ui_setup_add(&out_surface->nodes[ER_UI_SETUP_SURFACE_STATUS_HEADER], &out_surface->nodes[ER_UI_SETUP_SURFACE_TITLE]);
   if (status_code != ER_UI_OK) return status_code;
@@ -495,11 +495,11 @@ er_ui_status_t er_ui_yubikey_grant_build_surface(const er_ui_yubikey_grant_state
   out_surface->nodes[ER_UI_YUBIKEY_SURFACE_STATUS_TEXT] = er_ui_node_text(status);
   out_surface->nodes[ER_UI_YUBIKEY_SURFACE_STATUS_BADGE] = er_ui_node_badge(
     state->signed_grant ? ER_UI_YUBIKEY_STATUS_SIGNED : "required",
-    state->signed_grant ? ER_UI_SHADCN_BADGE_DEFAULT : ER_UI_SHADCN_BADGE_SECONDARY);
+    state->signed_grant ? ER_UI_COMPONENT_BADGE_DEFAULT : ER_UI_COMPONENT_BADGE_SECONDARY);
   out_surface->nodes[ER_UI_YUBIKEY_SURFACE_SEPARATOR] = er_ui_node_separator();
   out_surface->nodes[ER_UI_YUBIKEY_SURFACE_PIN_FIELD] = er_ui_setup_field("PIV PIN", state->pin_len > 0u, ER_UI_YUBIKEY_GRANT_PIN_FIELD_ID);
   out_surface->nodes[ER_UI_YUBIKEY_SURFACE_SIGN_BUTTON] =
-    er_ui_node_button(state->busy ? "Signing" : "Sign", ER_UI_YUBIKEY_GRANT_SIGN_BUTTON_ID, ER_UI_SHADCN_BUTTON_DEFAULT);
+    er_ui_node_button(state->busy ? "Signing" : "Sign", ER_UI_YUBIKEY_GRANT_SIGN_BUTTON_ID, ER_UI_COMPONENT_BUTTON_DEFAULT);
   er_ui_status_t status_code =
     er_ui_setup_add(&out_surface->nodes[ER_UI_YUBIKEY_SURFACE_COPY], &out_surface->nodes[ER_UI_YUBIKEY_SURFACE_TITLE]);
   if (status_code != ER_UI_OK) return status_code;

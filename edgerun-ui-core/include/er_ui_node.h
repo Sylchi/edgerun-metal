@@ -103,15 +103,15 @@ typedef enum {
 typedef struct er_ui_node_t er_ui_node_t;
 
 typedef enum {
-  ER_UI_SHADCN_CHAT_ROLE_USER = 0,
-  ER_UI_SHADCN_CHAT_ROLE_ASSISTANT,
-  ER_UI_SHADCN_CHAT_ROLE_REASONING,
-  ER_UI_SHADCN_CHAT_ROLE_DIFF,
-  ER_UI_SHADCN_CHAT_ROLE_TOOL_RUNNING,
-  ER_UI_SHADCN_CHAT_ROLE_TOOL_SUCCESS,
-  ER_UI_SHADCN_CHAT_ROLE_TOOL_ERROR,
-  ER_UI_SHADCN_CHAT_ROLE_ERROR
-} er_ui_shadcn_chat_role_t;
+  ER_UI_COMPONENT_CHAT_ROLE_USER = 0,
+  ER_UI_COMPONENT_CHAT_ROLE_ASSISTANT,
+  ER_UI_COMPONENT_CHAT_ROLE_REASONING,
+  ER_UI_COMPONENT_CHAT_ROLE_DIFF,
+  ER_UI_COMPONENT_CHAT_ROLE_TOOL_RUNNING,
+  ER_UI_COMPONENT_CHAT_ROLE_TOOL_SUCCESS,
+  ER_UI_COMPONENT_CHAT_ROLE_TOOL_ERROR,
+  ER_UI_COMPONENT_CHAT_ROLE_ERROR
+} er_ui_component_chat_role_t;
 
 typedef enum {
   ER_UI_NODE_COMPOSITION_OK = 0,
@@ -200,9 +200,9 @@ struct er_ui_node_t {
   uint32_t id;
   bool active;
   float number;
-  er_ui_shadcn_button_variant_t button_variant;
-  er_ui_shadcn_button_size_t button_size;
-  er_ui_shadcn_badge_variant_t badge_variant;
+  er_ui_component_button_variant_t button_variant;
+  er_ui_component_button_size_t button_size;
+  er_ui_component_badge_variant_t badge_variant;
   er_ui_icon_t icon;
   er_ui_color4_t color;
   bool has_background_gradient;
@@ -226,10 +226,10 @@ er_ui_node_t er_ui_node_icon_button(
   er_ui_icon_t icon,
   const char* label,
   uint32_t id,
-  er_ui_shadcn_button_variant_t variant);
+  er_ui_component_button_variant_t variant);
 er_ui_node_t er_ui_node_text(const char* value);
-er_ui_node_t er_ui_node_badge(const char* label, er_ui_shadcn_badge_variant_t variant);
-er_ui_node_t er_ui_node_button(const char* label, uint32_t id, er_ui_shadcn_button_variant_t variant);
+er_ui_node_t er_ui_node_badge(const char* label, er_ui_component_badge_variant_t variant);
+er_ui_node_t er_ui_node_button(const char* label, uint32_t id, er_ui_component_button_variant_t variant);
 er_ui_node_t er_ui_node_card_summary(const char* title, const char* detail);
 er_ui_node_t er_ui_node_button_group(const char* const* labels, size_t label_count, uint32_t base_id);
 er_ui_node_t er_ui_node_checkbox(const char* label, bool checked, uint32_t id);
@@ -392,7 +392,7 @@ er_ui_node_t er_ui_node_combobox(
   size_t selected,
   uint32_t base_id);
 er_ui_node_t er_ui_node_diff_body(const char* const* lines, size_t line_count, bool truncated);
-er_ui_node_t er_ui_node_chat_message(er_ui_shadcn_chat_role_t role, const char* heading, const char* detail);
+er_ui_node_t er_ui_node_chat_message(er_ui_component_chat_role_t role, const char* heading, const char* detail);
 er_ui_node_t er_ui_node_chat_diff_message(
   const char* heading,
   const char* const* lines,

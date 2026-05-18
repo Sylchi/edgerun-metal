@@ -1,4 +1,4 @@
-#include "er_ui_demo_apps.h"
+#include "er_ui_ledger_app.h"
 #include "er_ui_painter.h"
 
 #define ER_UI_LEDGER_ARRAY_COUNT(values) (sizeof(values) / sizeof((values)[0]))
@@ -88,9 +88,9 @@ typedef struct {
 } er_ui_ledger_transaction_t;
 
 static const er_ui_ledger_nav_item_t ER_UI_LEDGER_NAV_ITEMS[] = {
-  {ER_UI_DEMO_APP_LEDGER_ID, "Dashboard", ER_UI_ICON_APP},
-  {ER_UI_DEMO_APP_PAYMENTS_ID, "Payments", ER_UI_ICON_WALLET},
-  {ER_UI_DEMO_APP_ACCESS_ID, "Access", ER_UI_ICON_LOCK}
+  {ER_UI_LEDGER_APP_LEDGER_ID, "Dashboard", ER_UI_ICON_APP},
+  {ER_UI_LEDGER_APP_PAYMENTS_ID, "Payments", ER_UI_ICON_WALLET},
+  {ER_UI_LEDGER_APP_ACCESS_ID, "Access", ER_UI_ICON_LOCK}
 };
 
 static const er_ui_ledger_bar_t ER_UI_LEDGER_CONTRIBUTIONS[] = {
@@ -546,41 +546,41 @@ static er_ui_status_t er_ui_ledger_access(
   return er_ui_ledger_targets_card(scene, font, er_ui_bounds(content_x + content_w * 0.52f, bounds.y + 72.0f, content_w * 0.48f, 300.0f), colors);
 }
 
-er_ui_status_t er_ui_demo_apps_state_init(er_ui_demo_apps_state_t* state, er_ui_allocator_t allocator) {
+er_ui_status_t er_ui_ledger_app_state_init(er_ui_ledger_app_state_t* state, er_ui_allocator_t allocator) {
   er_ui_status_t status;
   if (!state) return ER_UI_ERR_INVALID_ARGUMENT;
   status = er_ui_shell_state_init_with_allocator(&state->shell, allocator);
   if (status != ER_UI_OK) return status;
-  er_ui_shadcn_demo_gallery_state_init(&state->gallery);
-  status = er_ui_workspace_add_named_surface(&state->shell, ER_UI_DEMO_APP_LEDGER_ID, "Dashboard");
+  er_ui_component_gallery_state_init(&state->gallery);
+  status = er_ui_workspace_add_named_surface(&state->shell, ER_UI_LEDGER_APP_LEDGER_ID, "Dashboard");
   if (status != ER_UI_OK) return status;
-  status = er_ui_workspace_add_named_surface(&state->shell, ER_UI_DEMO_APP_PAYMENTS_ID, "Payments");
+  status = er_ui_workspace_add_named_surface(&state->shell, ER_UI_LEDGER_APP_PAYMENTS_ID, "Payments");
   if (status != ER_UI_OK) return status;
-  status = er_ui_workspace_add_named_surface(&state->shell, ER_UI_DEMO_APP_ACCESS_ID, "Access");
+  status = er_ui_workspace_add_named_surface(&state->shell, ER_UI_LEDGER_APP_ACCESS_ID, "Access");
   if (status != ER_UI_OK) return status;
-  return er_ui_workspace_focus_surface(&state->shell, ER_UI_DEMO_APP_LEDGER_ID);
+  return er_ui_workspace_focus_surface(&state->shell, ER_UI_LEDGER_APP_LEDGER_ID);
 }
 
-void er_ui_demo_apps_state_destroy(er_ui_demo_apps_state_t* state) {
+void er_ui_ledger_app_state_destroy(er_ui_ledger_app_state_t* state) {
   if (!state) return;
   er_ui_shell_state_destroy(&state->shell);
 }
 
-er_ui_status_t er_ui_demo_apps_apply_action(er_ui_demo_apps_state_t* state, er_ui_action_t action, bool* out_changed) {
+er_ui_status_t er_ui_ledger_app_apply_action(er_ui_ledger_app_state_t* state, er_ui_action_t action, bool* out_changed) {
   bool gallery_changed;
   er_ui_status_t status;
   if (out_changed) *out_changed = false;
   if (!state) return ER_UI_ERR_INVALID_ARGUMENT;
 
-  gallery_changed = er_ui_shadcn_demo_gallery_apply_action(&state->gallery, action);
+  gallery_changed = er_ui_component_gallery_apply_action(&state->gallery, action);
   status = er_ui_shell_apply_action(&state->shell, action, out_changed);
   if (status != ER_UI_OK) return status;
   if (out_changed && gallery_changed) *out_changed = true;
   return ER_UI_OK;
 }
 
-er_ui_status_t er_ui_demo_apps_emit_scene(
-  er_ui_demo_apps_state_t* state,
+er_ui_status_t er_ui_ledger_app_emit_scene(
+  er_ui_ledger_app_state_t* state,
   er_ui_scene_t* scene,
   vr_font_face_t* font,
   er_ui_bounds_t bounds,
@@ -593,11 +593,11 @@ er_ui_status_t er_ui_demo_apps_emit_scene(
   er_ui_status_t status = er_ui_ledger_rect(scene, bounds, 0.0f, colors.bg);
   if (status != ER_UI_OK) return status;
   switch (focused_id) {
-    case ER_UI_DEMO_APP_PAYMENTS_ID:
+    case ER_UI_LEDGER_APP_PAYMENTS_ID:
       return er_ui_ledger_payments(scene, font, bounds, colors, focused_id);
-    case ER_UI_DEMO_APP_ACCESS_ID:
+    case ER_UI_LEDGER_APP_ACCESS_ID:
       return er_ui_ledger_access(scene, font, bounds, colors, focused_id);
-    case ER_UI_DEMO_APP_LEDGER_ID:
+    case ER_UI_LEDGER_APP_LEDGER_ID:
     default:
       return er_ui_ledger_dashboard(scene, font, bounds, colors, focused_id);
   }

@@ -12,7 +12,7 @@ er_ui_status_t er_ui_edgerun_metal_surface_emit(
   vr_font_face_t* font,
   er_ui_bounds_t bounds,
   er_ui_resolved_theme_t theme,
-  const er_ui_shadcn_demo_gallery_state_t* state);
+  const er_ui_component_gallery_state_t* state);
 
 #ifdef __cplusplus
 }

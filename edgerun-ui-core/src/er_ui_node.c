@@ -27,9 +27,9 @@ static er_ui_node_t er_ui_node_base(er_ui_node_kind_t kind) {
   node.column_span = 1u;
   node.row_span = 1u;
   node.active = true;
-  node.button_size = ER_UI_SHADCN_BUTTON_SIZE_DEFAULT;
-  node.button_variant = ER_UI_SHADCN_BUTTON_DEFAULT;
-  node.badge_variant = ER_UI_SHADCN_BADGE_DEFAULT;
+  node.button_size = ER_UI_COMPONENT_BUTTON_SIZE_DEFAULT;
+  node.button_variant = ER_UI_COMPONENT_BUTTON_DEFAULT;
+  node.badge_variant = ER_UI_COMPONENT_BADGE_DEFAULT;
   return node;
 }
 
@@ -73,13 +73,13 @@ er_ui_node_t er_ui_node_icon(er_ui_icon_t icon, const char* label, er_ui_color4_
   return node;
 }
 
-er_ui_node_t er_ui_node_icon_button(er_ui_icon_t icon, const char* label, uint32_t id, er_ui_shadcn_button_variant_t variant) {
+er_ui_node_t er_ui_node_icon_button(er_ui_icon_t icon, const char* label, uint32_t id, er_ui_component_button_variant_t variant) {
   er_ui_node_t node = er_ui_node_base(ER_UI_NODE_ICON_BUTTON);
   node.icon = icon;
   node.label = label;
   node.id = id;
   node.button_variant = variant;
-  node.button_size = ER_UI_SHADCN_BUTTON_SIZE_ICON;
+  node.button_size = ER_UI_COMPONENT_BUTTON_SIZE_ICON;
   return node;
 }
 
@@ -89,14 +89,14 @@ er_ui_node_t er_ui_node_text(const char* value) {
   return node;
 }
 
-er_ui_node_t er_ui_node_badge(const char* label, er_ui_shadcn_badge_variant_t variant) {
+er_ui_node_t er_ui_node_badge(const char* label, er_ui_component_badge_variant_t variant) {
   er_ui_node_t node = er_ui_node_base(ER_UI_NODE_BADGE);
   node.label = label;
   node.badge_variant = variant;
   return node;
 }
 
-er_ui_node_t er_ui_node_button(const char* label, uint32_t id, er_ui_shadcn_button_variant_t variant) {
+er_ui_node_t er_ui_node_button(const char* label, uint32_t id, er_ui_component_button_variant_t variant) {
   er_ui_node_t node = er_ui_node_base(ER_UI_NODE_BUTTON);
   node.label = label;
   node.id = id;
@@ -610,7 +610,7 @@ er_ui_node_t er_ui_node_diff_body(const char* const* lines, size_t line_count, b
   return node;
 }
 
-er_ui_node_t er_ui_node_chat_message(er_ui_shadcn_chat_role_t role, const char* heading, const char* detail) {
+er_ui_node_t er_ui_node_chat_message(er_ui_component_chat_role_t role, const char* heading, const char* detail) {
   er_ui_node_t node = er_ui_node_base(ER_UI_NODE_CHAT_MESSAGE);
   node.selected = (size_t)role;
   node.label = heading;
@@ -620,7 +620,7 @@ er_ui_node_t er_ui_node_chat_message(er_ui_shadcn_chat_role_t role, const char* 
 
 er_ui_node_t er_ui_node_chat_diff_message(const char* heading, const char* const* lines, size_t line_count, bool truncated) {
   er_ui_node_t node = er_ui_node_base(ER_UI_NODE_CHAT_MESSAGE);
-  node.selected = (size_t)ER_UI_SHADCN_CHAT_ROLE_DIFF;
+  node.selected = (size_t)ER_UI_COMPONENT_CHAT_ROLE_DIFF;
   node.label = heading;
   node.labels = lines;
   node.label_count = line_count;
@@ -1305,54 +1305,54 @@ static er_ui_status_t er_ui_node_menu_item_accessibility(const er_ui_node_t* nod
   return ER_UI_OK;
 }
 
-static const char* er_ui_shadcn_chat_role_label(er_ui_shadcn_chat_role_t role) {
+static const char* er_ui_component_chat_role_label(er_ui_component_chat_role_t role) {
   switch (role) {
-    case ER_UI_SHADCN_CHAT_ROLE_USER: return "user";
-    case ER_UI_SHADCN_CHAT_ROLE_ASSISTANT: return "assistant";
-    case ER_UI_SHADCN_CHAT_ROLE_REASONING: return "reasoning";
-    case ER_UI_SHADCN_CHAT_ROLE_DIFF: return "diff";
-    case ER_UI_SHADCN_CHAT_ROLE_TOOL_RUNNING: return "tool running";
-    case ER_UI_SHADCN_CHAT_ROLE_TOOL_SUCCESS: return "tool ok";
-    case ER_UI_SHADCN_CHAT_ROLE_TOOL_ERROR: return "tool failed";
-    case ER_UI_SHADCN_CHAT_ROLE_ERROR: return "error";
+    case ER_UI_COMPONENT_CHAT_ROLE_USER: return "user";
+    case ER_UI_COMPONENT_CHAT_ROLE_ASSISTANT: return "assistant";
+    case ER_UI_COMPONENT_CHAT_ROLE_REASONING: return "reasoning";
+    case ER_UI_COMPONENT_CHAT_ROLE_DIFF: return "diff";
+    case ER_UI_COMPONENT_CHAT_ROLE_TOOL_RUNNING: return "tool running";
+    case ER_UI_COMPONENT_CHAT_ROLE_TOOL_SUCCESS: return "tool ok";
+    case ER_UI_COMPONENT_CHAT_ROLE_TOOL_ERROR: return "tool failed";
+    case ER_UI_COMPONENT_CHAT_ROLE_ERROR: return "error";
     default: return "assistant";
   }
 }
 
-static er_ui_shadcn_badge_variant_t er_ui_shadcn_chat_role_badge(er_ui_shadcn_chat_role_t role) {
+static er_ui_component_badge_variant_t er_ui_component_chat_role_badge(er_ui_component_chat_role_t role) {
   switch (role) {
-    case ER_UI_SHADCN_CHAT_ROLE_TOOL_ERROR:
-    case ER_UI_SHADCN_CHAT_ROLE_ERROR: return ER_UI_SHADCN_BADGE_DESTRUCTIVE;
-    case ER_UI_SHADCN_CHAT_ROLE_TOOL_RUNNING: return ER_UI_SHADCN_BADGE_DEFAULT;
-    case ER_UI_SHADCN_CHAT_ROLE_DIFF:
-    case ER_UI_SHADCN_CHAT_ROLE_REASONING:
-    case ER_UI_SHADCN_CHAT_ROLE_TOOL_SUCCESS: return ER_UI_SHADCN_BADGE_SECONDARY;
-    case ER_UI_SHADCN_CHAT_ROLE_USER:
-    case ER_UI_SHADCN_CHAT_ROLE_ASSISTANT:
-    default: return ER_UI_SHADCN_BADGE_OUTLINE;
+    case ER_UI_COMPONENT_CHAT_ROLE_TOOL_ERROR:
+    case ER_UI_COMPONENT_CHAT_ROLE_ERROR: return ER_UI_COMPONENT_BADGE_DESTRUCTIVE;
+    case ER_UI_COMPONENT_CHAT_ROLE_TOOL_RUNNING: return ER_UI_COMPONENT_BADGE_DEFAULT;
+    case ER_UI_COMPONENT_CHAT_ROLE_DIFF:
+    case ER_UI_COMPONENT_CHAT_ROLE_REASONING:
+    case ER_UI_COMPONENT_CHAT_ROLE_TOOL_SUCCESS: return ER_UI_COMPONENT_BADGE_SECONDARY;
+    case ER_UI_COMPONENT_CHAT_ROLE_USER:
+    case ER_UI_COMPONENT_CHAT_ROLE_ASSISTANT:
+    default: return ER_UI_COMPONENT_BADGE_OUTLINE;
   }
 }
 
-static er_ui_icon_t er_ui_shadcn_chat_role_icon(er_ui_shadcn_chat_role_t role) {
+static er_ui_icon_t er_ui_component_chat_role_icon(er_ui_component_chat_role_t role) {
   switch (role) {
-    case ER_UI_SHADCN_CHAT_ROLE_USER: return ER_UI_ICON_USER;
-    case ER_UI_SHADCN_CHAT_ROLE_ASSISTANT: return ER_UI_ICON_CHAT;
-    case ER_UI_SHADCN_CHAT_ROLE_REASONING: return ER_UI_ICON_SPARKLES;
-    case ER_UI_SHADCN_CHAT_ROLE_DIFF: return ER_UI_ICON_FILE;
-    case ER_UI_SHADCN_CHAT_ROLE_TOOL_RUNNING: return ER_UI_ICON_TERMINAL;
-    case ER_UI_SHADCN_CHAT_ROLE_TOOL_SUCCESS: return ER_UI_ICON_CHECK;
-    case ER_UI_SHADCN_CHAT_ROLE_TOOL_ERROR:
-    case ER_UI_SHADCN_CHAT_ROLE_ERROR: return ER_UI_ICON_WARNING;
+    case ER_UI_COMPONENT_CHAT_ROLE_USER: return ER_UI_ICON_USER;
+    case ER_UI_COMPONENT_CHAT_ROLE_ASSISTANT: return ER_UI_ICON_CHAT;
+    case ER_UI_COMPONENT_CHAT_ROLE_REASONING: return ER_UI_ICON_SPARKLES;
+    case ER_UI_COMPONENT_CHAT_ROLE_DIFF: return ER_UI_ICON_FILE;
+    case ER_UI_COMPONENT_CHAT_ROLE_TOOL_RUNNING: return ER_UI_ICON_TERMINAL;
+    case ER_UI_COMPONENT_CHAT_ROLE_TOOL_SUCCESS: return ER_UI_ICON_CHECK;
+    case ER_UI_COMPONENT_CHAT_ROLE_TOOL_ERROR:
+    case ER_UI_COMPONENT_CHAT_ROLE_ERROR: return ER_UI_ICON_WARNING;
     default: return ER_UI_ICON_CHAT;
   }
 }
 
-static bool er_ui_shadcn_chat_role_timeline(er_ui_shadcn_chat_role_t role) {
-  return role == ER_UI_SHADCN_CHAT_ROLE_REASONING ||
-         role == ER_UI_SHADCN_CHAT_ROLE_TOOL_RUNNING ||
-         role == ER_UI_SHADCN_CHAT_ROLE_TOOL_SUCCESS ||
-         role == ER_UI_SHADCN_CHAT_ROLE_TOOL_ERROR ||
-         role == ER_UI_SHADCN_CHAT_ROLE_ERROR;
+static bool er_ui_component_chat_role_timeline(er_ui_component_chat_role_t role) {
+  return role == ER_UI_COMPONENT_CHAT_ROLE_REASONING ||
+         role == ER_UI_COMPONENT_CHAT_ROLE_TOOL_RUNNING ||
+         role == ER_UI_COMPONENT_CHAT_ROLE_TOOL_SUCCESS ||
+         role == ER_UI_COMPONENT_CHAT_ROLE_TOOL_ERROR ||
+         role == ER_UI_COMPONENT_CHAT_ROLE_ERROR;
 }
 
 er_ui_status_t er_ui_node_accessibility(const er_ui_node_t* node, er_ui_a11y_node_t* out_a11y) {
@@ -1537,7 +1537,7 @@ er_ui_status_t er_ui_node_accessibility(const er_ui_node_t* node, er_ui_a11y_nod
       if (node->active) out.states |= ER_UI_A11Y_STATE_HAS_VALUE;
       break;
     case ER_UI_NODE_CHAT_MESSAGE:
-      out = er_ui_a11y_base(ER_UI_A11Y_GROUP, er_ui_shadcn_chat_role_label((er_ui_shadcn_chat_role_t)node->selected), false, 0u);
+      out = er_ui_a11y_base(ER_UI_A11Y_GROUP, er_ui_component_chat_role_label((er_ui_component_chat_role_t)node->selected), false, 0u);
       er_ui_a11y_set_value(&out, node->detail ? node->detail : node->label);
       break;
     case ER_UI_NODE_TABS:
@@ -1703,8 +1703,8 @@ er_ui_status_t er_ui_node_accessibility_child(const er_ui_node_t* node, size_t c
     return ER_UI_OK;
   }
   if (node->kind == ER_UI_NODE_CHAT_MESSAGE) {
-    er_ui_shadcn_chat_role_t role = (er_ui_shadcn_chat_role_t)node->selected;
-    if (role == ER_UI_SHADCN_CHAT_ROLE_DIFF) {
+    er_ui_component_chat_role_t role = (er_ui_component_chat_role_t)node->selected;
+    if (role == ER_UI_COMPONENT_CHAT_ROLE_DIFF) {
       if (!node->labels || child_index >= node->label_count + 1u + (node->active ? 1u : 0u)) return ER_UI_ERR_INVALID_ARGUMENT;
       if (child_index == 0u) {
         *out_a11y = er_ui_a11y_base(ER_UI_A11Y_TEXT, node->label, false, 0u);
@@ -1902,7 +1902,7 @@ static er_ui_status_t er_ui_node_emit_background_gradient(const er_ui_node_t* no
 
 static er_ui_status_t er_ui_node_emit_card_surface(const er_ui_node_t* node, er_ui_scene_t* scene, er_ui_bounds_t bounds, er_ui_resolved_theme_t theme) {
   if (!node || !scene) return ER_UI_ERR_INVALID_ARGUMENT;
-  if (!node->has_background_gradient) return er_ui_shadcn_card_emit(scene, bounds, theme);
+  if (!node->has_background_gradient) return er_ui_component_card_emit(scene, bounds, theme);
   er_ui_status_t status = er_ui_scene_push_rect(scene, er_ui_rect_shadow(bounds.x, bounds.y, bounds.w, bounds.h, theme.radius.card,
                                                                          er_ui_color_rgba(0.0f, 0.0f, 0.0f, 0.10f), 18.0f));
   if (status != ER_UI_OK) return status;
@@ -2024,8 +2024,8 @@ static er_ui_status_t er_ui_node_render_toast(
   er_ui_bounds_t bounds,
   er_ui_resolved_theme_t theme) {
   if (!node || !scene || !font || !node->label || !er_ui_bounds_valid(bounds)) return ER_UI_ERR_INVALID_ARGUMENT;
-  if (!node->active) return er_ui_shadcn_toast_emit(scene, font, bounds, theme, node->label, node->color);
-  er_ui_status_t status = er_ui_shadcn_card_emit(scene, bounds, theme);
+  if (!node->active) return er_ui_component_toast_emit(scene, font, bounds, theme, node->label, node->color);
+  er_ui_status_t status = er_ui_component_card_emit(scene, bounds, theme);
   if (status != ER_UI_OK) return status;
   er_ui_bounds_t icon_box = er_ui_bounds(bounds.x + 10.0f, bounds.y + (bounds.h - 28.0f) * 0.5f, 28.0f, 28.0f);
   status = er_ui_scene_push_rect(scene, er_ui_rect_fill(icon_box.x, icon_box.y, icon_box.w, icon_box.h, 8.0f, er_ui_color_with_alpha(node->color, 0.18f)));
@@ -2042,7 +2042,7 @@ static er_ui_status_t er_ui_node_render_card_summary(
   er_ui_bounds_t bounds,
   er_ui_resolved_theme_t theme) {
   if (!node || !scene || !font || !node->label || !node->detail || !er_ui_bounds_valid(bounds)) return ER_UI_ERR_INVALID_ARGUMENT;
-  er_ui_status_t status = er_ui_shadcn_card_emit(scene, bounds, theme);
+  er_ui_status_t status = er_ui_component_card_emit(scene, bounds, theme);
   if (status != ER_UI_OK) return status;
   float pad = 16.0f;
   status = er_ui_node_render_text(scene, font, node->label, er_ui_bounds(bounds.x + pad, bounds.y + pad, bounds.w - pad * 2.0f, 26.0f),
@@ -2060,7 +2060,7 @@ static er_ui_status_t er_ui_node_render_collapsible(
   er_ui_resolved_theme_t theme) {
   if (!node || !scene || !font || !node->label || !er_ui_bounds_valid(bounds)) return ER_UI_ERR_INVALID_ARGUMENT;
   if (node->active && node->row_count > 0u && (!node->labels || !node->cells)) return ER_UI_ERR_INVALID_ARGUMENT;
-  er_ui_status_t status = er_ui_shadcn_card_emit(scene, bounds, theme);
+  er_ui_status_t status = er_ui_component_card_emit(scene, bounds, theme);
   if (status != ER_UI_OK) return status;
 
   float pad = 12.0f;
@@ -2072,7 +2072,7 @@ static er_ui_status_t er_ui_node_render_collapsible(
   er_ui_bounds_t trigger = er_ui_bounds(inner.x + inner.w - header_h, inner.y, header_h, header_h);
   status = er_ui_node_render_text(scene, font, node->label, title, theme.colors.text);
   if (status != ER_UI_OK) return status;
-  status = er_ui_shadcn_button_emit(scene, font, trigger, theme, "", node->id, ER_UI_SHADCN_BUTTON_GHOST, ER_UI_SHADCN_BUTTON_SIZE_ICON, true);
+  status = er_ui_component_button_emit(scene, font, trigger, theme, "", node->id, ER_UI_COMPONENT_BUTTON_GHOST, ER_UI_COMPONENT_BUTTON_SIZE_ICON, true);
   if (status != ER_UI_OK) return status;
   status = er_ui_node_render_icon(scene, er_ui_node_center_square(trigger, 16.0f), ER_UI_ICON_CHEVRON_RIGHT, theme.colors.text);
   if (status != ER_UI_OK || !node->active) return status;
@@ -2081,7 +2081,7 @@ static er_ui_status_t er_ui_node_render_collapsible(
   float row_h = 44.0f;
   for (size_t i = 0u; i < node->row_count; ++i) {
     er_ui_bounds_t row = er_ui_bounds(inner.x, row_y, inner.w, row_h);
-    status = er_ui_shadcn_list_row_emit(scene, font, row, theme, node->labels[i], node->cells[i], node->id + 1u + (uint32_t)i, false);
+    status = er_ui_component_list_row_emit(scene, font, row, theme, node->labels[i], node->cells[i], node->id + 1u + (uint32_t)i, false);
     if (status != ER_UI_OK) return status;
     row_y += row_h + node->gap;
   }
@@ -2097,7 +2097,7 @@ static er_ui_status_t er_ui_node_render_accordion(
   er_ui_resolved_theme_t theme) {
   if (!node || !scene || !font || !er_ui_bounds_valid(bounds)) return ER_UI_ERR_INVALID_ARGUMENT;
   if (node->row_count == 0u || !node->labels || !node->cells) return ER_UI_ERR_INVALID_ARGUMENT;
-  er_ui_status_t status = er_ui_shadcn_card_emit(scene, bounds, theme);
+  er_ui_status_t status = er_ui_component_card_emit(scene, bounds, theme);
   if (status != ER_UI_OK) return status;
 
   float pad = 8.0f;
@@ -2113,7 +2113,7 @@ static er_ui_status_t er_ui_node_render_accordion(
     er_ui_bounds_t trigger = er_ui_bounds(header.x + header.w - header_h, header.y, header_h, header_h);
     status = er_ui_node_render_text(scene, font, node->labels[i], title, theme.colors.text);
     if (status != ER_UI_OK) return status;
-    status = er_ui_shadcn_button_emit(scene, font, trigger, theme, "", node->id + (uint32_t)i, ER_UI_SHADCN_BUTTON_GHOST, ER_UI_SHADCN_BUTTON_SIZE_ICON, true);
+    status = er_ui_component_button_emit(scene, font, trigger, theme, "", node->id + (uint32_t)i, ER_UI_COMPONENT_BUTTON_GHOST, ER_UI_COMPONENT_BUTTON_SIZE_ICON, true);
     if (status != ER_UI_OK) return status;
     status = er_ui_node_render_icon(scene, er_ui_node_center_square(trigger, 16.0f), ER_UI_ICON_CHEVRON_RIGHT, theme.colors.text);
     if (status != ER_UI_OK) return status;
@@ -2123,7 +2123,7 @@ static er_ui_status_t er_ui_node_render_accordion(
     if (status != ER_UI_OK) return status;
     y += body_h + node->gap;
     if (i + 1u < node->row_count) {
-      status = er_ui_shadcn_separator_emit(scene, er_ui_bounds(inner.x, y, inner.w, divider_h), theme);
+      status = er_ui_component_separator_emit(scene, er_ui_bounds(inner.x, y, inner.w, divider_h), theme);
       if (status != ER_UI_OK) return status;
       y += divider_h + node->gap;
     }
@@ -2139,7 +2139,7 @@ static er_ui_status_t er_ui_node_render_hover_card(
   er_ui_resolved_theme_t theme) {
   if (!node || !scene || !font || !node->label || !node->detail || !node->aux || !er_ui_bounds_valid(bounds)) return ER_UI_ERR_INVALID_ARGUMENT;
   float avatar_size = er_ui_float_min(42.0f, bounds.h);
-  er_ui_status_t status = er_ui_shadcn_avatar_emit(scene, font, er_ui_bounds(bounds.x, bounds.y, avatar_size, avatar_size), theme, node->label, node->color, false);
+  er_ui_status_t status = er_ui_component_avatar_emit(scene, font, er_ui_bounds(bounds.x, bounds.y, avatar_size, avatar_size), theme, node->label, node->color, false);
   if (status != ER_UI_OK) return status;
   float text_x = bounds.x + avatar_size + 12.0f;
   float text_w = er_ui_float_max(bounds.w - avatar_size - 12.0f, 0.0f);
@@ -2160,19 +2160,19 @@ static er_ui_status_t er_ui_node_render_popover(
     return ER_UI_ERR_INVALID_ARGUMENT;
   }
   er_ui_bounds_t button = er_ui_bounds(bounds.x, bounds.y, er_ui_float_min(bounds.w, 136.0f), 38.0f);
-  er_ui_status_t status = er_ui_shadcn_button_emit(scene, font, button, theme, node->label, node->id, ER_UI_SHADCN_BUTTON_SECONDARY,
-                                                   ER_UI_SHADCN_BUTTON_SIZE_SM, true);
+  er_ui_status_t status = er_ui_component_button_emit(scene, font, button, theme, node->label, node->id, ER_UI_COMPONENT_BUTTON_SECONDARY,
+                                                   ER_UI_COMPONENT_BUTTON_SIZE_SM, true);
   if (status != ER_UI_OK) return status;
 
   er_ui_bounds_t card = er_ui_bounds(bounds.x, bounds.y + button.h + node->gap, er_ui_float_min(bounds.w, 320.0f), er_ui_float_max(bounds.h - button.h - node->gap, 96.0f));
-  status = er_ui_shadcn_card_emit(scene, card, theme);
+  status = er_ui_component_card_emit(scene, card, theme);
   if (status != ER_UI_OK) return status;
   float pad = 12.0f;
   status = er_ui_node_render_text(scene, font, node->value, er_ui_bounds(card.x + pad, card.y + pad, card.w - pad * 2.0f, 22.0f), theme.colors.text);
   if (status != ER_UI_OK) return status;
   status = er_ui_node_render_text(scene, font, node->detail, er_ui_bounds(card.x + pad, card.y + 34.0f, card.w - pad * 2.0f, 22.0f), theme.colors.muted);
   if (status != ER_UI_OK) return status;
-  return er_ui_shadcn_field_emit(scene, font, er_ui_bounds(card.x + pad, card.y + 62.0f, card.w - pad * 2.0f, 54.0f), theme, node->aux, node->extra,
+  return er_ui_component_field_emit(scene, font, er_ui_bounds(card.x + pad, card.y + 62.0f, card.w - pad * 2.0f, 54.0f), theme, node->aux, node->extra,
                                  node->id + 1u, false);
 }
 
@@ -2185,7 +2185,7 @@ static er_ui_status_t er_ui_node_render_sheet(
   if (!node || !scene || !font || !node->label || !node->detail || !node->aux || !node->extra || !node->value || !er_ui_bounds_valid(bounds)) {
     return ER_UI_ERR_INVALID_ARGUMENT;
   }
-  er_ui_status_t status = er_ui_shadcn_card_emit(scene, bounds, theme);
+  er_ui_status_t status = er_ui_component_card_emit(scene, bounds, theme);
   if (status != ER_UI_OK) return status;
   float pad = 16.0f;
   er_ui_bounds_t inner = er_ui_bounds(bounds.x + pad, bounds.y + pad, bounds.w - pad * 2.0f, bounds.h - pad * 2.0f);
@@ -2194,10 +2194,10 @@ static er_ui_status_t er_ui_node_render_sheet(
   if (status != ER_UI_OK) return status;
   status = er_ui_node_render_text(scene, font, node->detail, er_ui_bounds(inner.x, inner.y + 26.0f, inner.w, 22.0f), theme.colors.muted);
   if (status != ER_UI_OK) return status;
-  status = er_ui_shadcn_field_emit(scene, font, er_ui_bounds(inner.x, inner.y + 58.0f, inner.w, 54.0f), theme, node->aux, node->extra, node->id, false);
+  status = er_ui_component_field_emit(scene, font, er_ui_bounds(inner.x, inner.y + 58.0f, inner.w, 54.0f), theme, node->aux, node->extra, node->id, false);
   if (status != ER_UI_OK) return status;
-  return er_ui_shadcn_button_emit(scene, font, er_ui_bounds(inner.x, inner.y + 124.0f, er_ui_float_min(inner.w, 160.0f), 40.0f), theme, node->value,
-                                  node->id + 1u, ER_UI_SHADCN_BUTTON_DEFAULT, ER_UI_SHADCN_BUTTON_SIZE_DEFAULT, true);
+  return er_ui_component_button_emit(scene, font, er_ui_bounds(inner.x, inner.y + 124.0f, er_ui_float_min(inner.w, 160.0f), 40.0f), theme, node->value,
+                                  node->id + 1u, ER_UI_COMPONENT_BUTTON_DEFAULT, ER_UI_COMPONENT_BUTTON_SIZE_DEFAULT, true);
 }
 
 static size_t er_ui_node_ascii_len(const char* text) {
@@ -2223,7 +2223,7 @@ static er_ui_status_t er_ui_node_render_kbd(
   float badge_y = bounds.y + (bounds.h - badge_h) * 0.5f;
   for (size_t i = 0u; i < node->label_count; ++i) {
     float badge_w = 22.0f + (float)er_ui_node_ascii_len(node->labels[i]) * 8.0f;
-    er_ui_status_t status = er_ui_shadcn_badge_emit(scene, font, er_ui_bounds(x, badge_y, badge_w, badge_h), theme, node->labels[i], ER_UI_SHADCN_BADGE_SECONDARY);
+    er_ui_status_t status = er_ui_component_badge_emit(scene, font, er_ui_bounds(x, badge_y, badge_w, badge_h), theme, node->labels[i], ER_UI_COMPONENT_BADGE_SECONDARY);
     if (status != ER_UI_OK) return status;
     x += badge_w + node->gap;
   }
@@ -2249,8 +2249,8 @@ static er_ui_status_t er_ui_node_render_menubar(
   if (item_w <= 0.0f) return ER_UI_ERR_INVALID_ARGUMENT;
   for (size_t i = 0u; i < node->label_count; ++i) {
     er_ui_bounds_t item = er_ui_bounds(bounds.x + pad + (item_w + node->gap) * (float)i, bounds.y + pad, item_w, inner_h);
-    er_ui_shadcn_button_variant_t variant = i == node->selected ? ER_UI_SHADCN_BUTTON_SECONDARY : ER_UI_SHADCN_BUTTON_GHOST;
-    status = er_ui_shadcn_button_emit(scene, font, item, theme, node->labels[i], node->id + (uint32_t)i, variant, ER_UI_SHADCN_BUTTON_SIZE_SM, true);
+    er_ui_component_button_variant_t variant = i == node->selected ? ER_UI_COMPONENT_BUTTON_SECONDARY : ER_UI_COMPONENT_BUTTON_GHOST;
+    status = er_ui_component_button_emit(scene, font, item, theme, node->labels[i], node->id + (uint32_t)i, variant, ER_UI_COMPONENT_BUTTON_SIZE_SM, true);
     if (status != ER_UI_OK) return status;
   }
   return ER_UI_OK;
@@ -2266,7 +2266,7 @@ static er_ui_status_t er_ui_node_render_radio_group(
   float row_h = 30.0f;
   float y = bounds.y;
   for (size_t i = 0u; i < node->label_count; ++i) {
-    er_ui_status_t status = er_ui_shadcn_radio_emit(scene, font, er_ui_bounds(bounds.x, y, bounds.w, row_h), theme, node->labels[i], i == node->selected,
+    er_ui_status_t status = er_ui_component_radio_emit(scene, font, er_ui_bounds(bounds.x, y, bounds.w, row_h), theme, node->labels[i], i == node->selected,
                                                     node->id + (uint32_t)i);
     if (status != ER_UI_OK) return status;
     y += row_h + node->gap;
@@ -2285,9 +2285,9 @@ static er_ui_status_t er_ui_node_render_input_group(
   float field_w = er_ui_float_max(bounds.w - button_w - node->gap, 1.0f);
   er_ui_bounds_t field = er_ui_bounds(bounds.x, bounds.y, field_w, bounds.h);
   er_ui_bounds_t button = er_ui_bounds(bounds.x + field_w + node->gap, bounds.y + 9.0f, button_w, er_ui_float_max(bounds.h - 18.0f, 24.0f));
-  er_ui_status_t status = er_ui_shadcn_field_emit(scene, font, field, theme, node->label, node->value, node->id, false);
+  er_ui_status_t status = er_ui_component_field_emit(scene, font, field, theme, node->label, node->value, node->id, false);
   if (status != ER_UI_OK) return status;
-  return er_ui_shadcn_button_emit(scene, font, button, theme, node->detail, node->id + 1u, ER_UI_SHADCN_BUTTON_SECONDARY, ER_UI_SHADCN_BUTTON_SIZE_SM, true);
+  return er_ui_component_button_emit(scene, font, button, theme, node->detail, node->id + 1u, ER_UI_COMPONENT_BUTTON_SECONDARY, ER_UI_COMPONENT_BUTTON_SIZE_SM, true);
 }
 
 //@optimizer-ignore-function OTP input rendering must visit each visible character cell
@@ -2312,7 +2312,7 @@ static er_ui_status_t er_ui_node_render_input_otp(
       continue;
     }
     er_ui_bounds_t cell = er_ui_bounds(x, bounds.y, cell_w, bounds.h);
-    er_ui_status_t status = er_ui_shadcn_field_emit(scene, font, cell, theme, "", value, node->id + (uint32_t)i, false);
+    er_ui_status_t status = er_ui_component_field_emit(scene, font, cell, theme, "", value, node->id + (uint32_t)i, false);
     if (status != ER_UI_OK) return status;
     if (i == node->selected) {
       status = er_ui_scene_push_rect(scene, er_ui_rect_border(cell.x, cell.y + 18.0f, cell.w, er_ui_float_max(cell.h - 18.0f, 24.0f), theme.radius.control,
@@ -2341,20 +2341,20 @@ static er_ui_status_t er_ui_node_render_navigation_menu(
   if (item_w <= 0.0f) return ER_UI_ERR_INVALID_ARGUMENT;
   for (size_t i = 0u; i < node->label_count; ++i) {
     er_ui_bounds_t item = er_ui_bounds(bounds.x + (item_w + 4.0f) * (float)i, bounds.y, item_w, nav_h);
-    er_ui_shadcn_button_variant_t variant = i == node->selected ? ER_UI_SHADCN_BUTTON_SECONDARY : ER_UI_SHADCN_BUTTON_GHOST;
-    er_ui_status_t status = er_ui_shadcn_button_emit(scene, font, item, theme, node->labels[i], node->id + (uint32_t)i, variant, ER_UI_SHADCN_BUTTON_SIZE_SM, true);
+    er_ui_component_button_variant_t variant = i == node->selected ? ER_UI_COMPONENT_BUTTON_SECONDARY : ER_UI_COMPONENT_BUTTON_GHOST;
+    er_ui_status_t status = er_ui_component_button_emit(scene, font, item, theme, node->labels[i], node->id + (uint32_t)i, variant, ER_UI_COMPONENT_BUTTON_SIZE_SM, true);
     if (status != ER_UI_OK) return status;
   }
 
   er_ui_bounds_t card = er_ui_bounds(bounds.x, bounds.y + nav_h + gap, er_ui_float_min(bounds.w, 340.0f), er_ui_float_max(bounds.h - nav_h - gap, 92.0f));
-  er_ui_status_t status = er_ui_shadcn_card_emit(scene, card, theme);
+  er_ui_status_t status = er_ui_component_card_emit(scene, card, theme);
   if (status != ER_UI_OK) return status;
   float pad = 12.0f;
   status = er_ui_node_render_text(scene, font, node->label, er_ui_bounds(card.x + pad, card.y + pad, card.w - pad * 2.0f, 22.0f), theme.colors.text);
   if (status != ER_UI_OK) return status;
   status = er_ui_node_render_text(scene, font, node->detail, er_ui_bounds(card.x + pad, card.y + 34.0f, card.w - pad * 2.0f, 22.0f), theme.colors.muted);
   if (status != ER_UI_OK) return status;
-  return er_ui_shadcn_list_row_emit(scene, font, er_ui_bounds(card.x + pad, card.y + 62.0f, card.w - pad * 2.0f, 44.0f), theme, node->aux, node->extra,
+  return er_ui_component_list_row_emit(scene, font, er_ui_bounds(card.x + pad, card.y + 62.0f, card.w - pad * 2.0f, 44.0f), theme, node->aux, node->extra,
                                     node->id + (uint32_t)node->label_count, false);
 }
 
@@ -2381,7 +2381,7 @@ static er_ui_status_t er_ui_node_render_resizable(
   er_ui_bounds_t second = er_ui_bounds(right.x, right.y, right.w, stacked_h);
   er_ui_bounds_t third = er_ui_bounds(right.x, right.y + stacked_h + gap, right.w, stacked_h);
 
-  er_ui_status_t status = er_ui_shadcn_card_emit(scene, first, theme);
+  er_ui_status_t status = er_ui_component_card_emit(scene, first, theme);
   if (status != ER_UI_OK) return status;
   status = er_ui_node_render_text(
     scene,
@@ -2390,9 +2390,9 @@ static er_ui_status_t er_ui_node_render_resizable(
     er_ui_bounds(first.x + 12.0f, first.y + 8.0f, first.w - 24.0f, 28.0f),
     theme.colors.text);
   if (status != ER_UI_OK) return status;
-  status = er_ui_shadcn_separator_emit(scene, divider, theme);
+  status = er_ui_component_separator_emit(scene, divider, theme);
   if (status != ER_UI_OK) return status;
-  status = er_ui_shadcn_card_emit(scene, second, theme);
+  status = er_ui_component_card_emit(scene, second, theme);
   if (status != ER_UI_OK) return status;
   status = er_ui_node_render_text(
     scene,
@@ -2401,7 +2401,7 @@ static er_ui_status_t er_ui_node_render_resizable(
     er_ui_bounds(second.x + 12.0f, second.y + 8.0f, second.w - 24.0f, 24.0f),
     theme.colors.text);
   if (status != ER_UI_OK) return status;
-  status = er_ui_shadcn_card_emit(scene, third, theme);
+  status = er_ui_component_card_emit(scene, third, theme);
   if (status != ER_UI_OK) return status;
   return er_ui_node_render_text(
     scene,
@@ -2424,7 +2424,7 @@ static er_ui_status_t er_ui_node_render_sidebar(
   float side_w = er_ui_float_min(176.0f, bounds.w * 0.45f);
   er_ui_bounds_t side = er_ui_bounds(bounds.x, bounds.y, side_w, bounds.h);
   er_ui_bounds_t main = er_ui_bounds(bounds.x + side_w + node->gap, bounds.y, er_ui_float_max(bounds.w - side_w - node->gap, 1.0f), bounds.h);
-  er_ui_status_t status = er_ui_shadcn_card_emit(scene, side, theme);
+  er_ui_status_t status = er_ui_component_card_emit(scene, side, theme);
   if (status != ER_UI_OK) return status;
   status = er_ui_node_render_text(scene, font, node->label, er_ui_bounds(side.x + 12.0f, side.y + 8.0f, side.w - 24.0f, 22.0f), theme.colors.text);
   if (status != ER_UI_OK) return status;
@@ -2432,12 +2432,12 @@ static er_ui_status_t er_ui_node_render_sidebar(
   if (status != ER_UI_OK) return status;
   float y = side.y + 54.0f;
   for (size_t i = 0u; i < node->label_count; ++i) {
-    status = er_ui_shadcn_menu_item_emit(scene, font, er_ui_bounds(side.x + 8.0f, y, side.w - 16.0f, 34.0f), theme, node->labels[i], "", "", i == node->selected,
+    status = er_ui_component_menu_item_emit(scene, font, er_ui_bounds(side.x + 8.0f, y, side.w - 16.0f, 34.0f), theme, node->labels[i], "", "", i == node->selected,
                                          theme.colors.accent, node->id + (uint32_t)i);
     if (status != ER_UI_OK) return status;
     y += 38.0f;
   }
-  status = er_ui_shadcn_card_emit(scene, main, theme);
+  status = er_ui_component_card_emit(scene, main, theme);
   if (status != ER_UI_OK) return status;
   status = er_ui_node_render_text(scene, font, node->value, er_ui_bounds(main.x + 16.0f, main.y + 14.0f, main.w - 32.0f, 24.0f), theme.colors.text);
   if (status != ER_UI_OK) return status;
@@ -2459,7 +2459,7 @@ static er_ui_status_t er_ui_node_render_sonner(
   float w = er_ui_float_min(bounds.w, 280.0f);
   for (size_t i = 0u; i < node->label_count; ++i) {
     er_ui_bounds_t toast = er_ui_bounds(bounds.x, y, w, toast_h);
-    er_ui_status_t status = er_ui_shadcn_toast_emit(scene, font, toast, theme, node->labels[i], node->colors[i]);
+    er_ui_status_t status = er_ui_component_toast_emit(scene, font, toast, theme, node->labels[i], node->colors[i]);
     if (status != ER_UI_OK) return status;
     status = er_ui_node_render_icon(scene, er_ui_bounds(toast.x + 10.0f, toast.y + 16.0f, 16.0f, 16.0f), node->icons[i], node->colors[i]);
     if (status != ER_UI_OK) return status;
@@ -2475,7 +2475,7 @@ static er_ui_status_t er_ui_node_render_aspect_ratio(
   er_ui_bounds_t bounds,
   er_ui_resolved_theme_t theme) {
   if (!node || !scene || !font || !node->label || !er_ui_bounds_valid(bounds)) return ER_UI_ERR_INVALID_ARGUMENT;
-  er_ui_status_t status = er_ui_shadcn_card_emit(scene, bounds, theme);
+  er_ui_status_t status = er_ui_component_card_emit(scene, bounds, theme);
   if (status != ER_UI_OK) return status;
   float pad = 0.0f;
   float max_w = bounds.w - pad * 2.0f;
@@ -2502,7 +2502,7 @@ static er_ui_status_t er_ui_node_render_alert_dialog(
   er_ui_bounds_t bounds,
   er_ui_resolved_theme_t theme) {
   if (!node || !scene || !font || !node->label || !node->detail || !er_ui_bounds_valid(bounds)) return ER_UI_ERR_INVALID_ARGUMENT;
-  er_ui_status_t status = er_ui_shadcn_card_emit(scene, bounds, theme);
+  er_ui_status_t status = er_ui_component_card_emit(scene, bounds, theme);
   if (status != ER_UI_OK) return status;
   er_ui_bounds_t icon_box = er_ui_bounds(bounds.x + 18.0f, bounds.y + 18.0f, 36.0f, 36.0f);
   status = er_ui_scene_push_rect(scene, er_ui_rect_fill(icon_box.x, icon_box.y, icon_box.w, icon_box.h, 10.0f, er_ui_color_with_alpha(theme.colors.warning, 0.24f)));
@@ -2513,7 +2513,7 @@ static er_ui_status_t er_ui_node_render_alert_dialog(
   if (status != ER_UI_OK) return status;
   status = er_ui_node_render_text(scene, font, node->detail, er_ui_bounds(bounds.x + 66.0f, bounds.y + 48.0f, bounds.w - 84.0f, 44.0f), theme.colors.muted);
   if (status != ER_UI_OK) return status;
-  return er_ui_shadcn_separator_emit(scene, er_ui_bounds(bounds.x + 18.0f, bounds.y + 92.0f, bounds.w - 36.0f, 1.0f), theme);
+  return er_ui_component_separator_emit(scene, er_ui_bounds(bounds.x + 18.0f, bounds.y + 92.0f, bounds.w - 36.0f, 1.0f), theme);
 }
 
 static er_ui_status_t er_ui_node_render_direction(
@@ -2527,7 +2527,7 @@ static er_ui_status_t er_ui_node_render_direction(
   if (row_h <= 0.0f) return ER_UI_ERR_INVALID_ARGUMENT;
   float badge_w = 44.0f;
   er_ui_bounds_t ltr_badge = er_ui_bounds(bounds.x, bounds.y + 1.0f, badge_w, 26.0f);
-  er_ui_status_t status = er_ui_shadcn_badge_emit(scene, font, ltr_badge, theme, "LTR", ER_UI_SHADCN_BADGE_DEFAULT);
+  er_ui_status_t status = er_ui_component_badge_emit(scene, font, ltr_badge, theme, "LTR", ER_UI_COMPONENT_BADGE_DEFAULT);
   if (status != ER_UI_OK) return status;
   status = er_ui_node_render_text(scene, font, node->label, er_ui_bounds(bounds.x + badge_w + node->gap, bounds.y, bounds.w - badge_w - node->gap, row_h),
                                   theme.colors.text);
@@ -2538,7 +2538,7 @@ static er_ui_status_t er_ui_node_render_direction(
   float rtl_text_w = er_ui_float_max(bounds.w - badge_w - node->gap, 0.0f);
   status = er_ui_node_render_text(scene, font, node->detail, er_ui_bounds(bounds.x, y, rtl_text_w, row_h), theme.colors.text);
   if (status != ER_UI_OK) return status;
-  return er_ui_shadcn_badge_emit(scene, font, rtl_badge, theme, "RTL", ER_UI_SHADCN_BADGE_SECONDARY);
+  return er_ui_component_badge_emit(scene, font, rtl_badge, theme, "RTL", ER_UI_COMPONENT_BADGE_SECONDARY);
 }
 
 static er_ui_status_t er_ui_node_render_drawer(
@@ -2548,7 +2548,7 @@ static er_ui_status_t er_ui_node_render_drawer(
   er_ui_bounds_t bounds,
   er_ui_resolved_theme_t theme) {
   if (!node || !scene || !font || !node->label || !node->detail || !node->aux || !er_ui_bounds_valid(bounds)) return ER_UI_ERR_INVALID_ARGUMENT;
-  er_ui_status_t status = er_ui_shadcn_card_emit(scene, bounds, theme);
+  er_ui_status_t status = er_ui_component_card_emit(scene, bounds, theme);
   if (status != ER_UI_OK) return status;
   float pad = 16.0f;
   er_ui_bounds_t inner = er_ui_bounds(bounds.x + pad, bounds.y + pad, bounds.w - pad * 2.0f, bounds.h - pad * 2.0f);
@@ -2557,10 +2557,10 @@ static er_ui_status_t er_ui_node_render_drawer(
   if (status != ER_UI_OK) return status;
   status = er_ui_node_render_text(scene, font, node->detail, er_ui_bounds(inner.x, inner.y + 26.0f, inner.w, 22.0f), theme.colors.muted);
   if (status != ER_UI_OK) return status;
-  status = er_ui_shadcn_slider_emit(scene, font, er_ui_bounds(inner.x, inner.y + 62.0f, inner.w, 48.0f), theme, node->aux, node->number, node->id);
+  status = er_ui_component_slider_emit(scene, font, er_ui_bounds(inner.x, inner.y + 62.0f, inner.w, 48.0f), theme, node->aux, node->number, node->id);
   if (status != ER_UI_OK) return status;
-  return er_ui_shadcn_button_emit(scene, font, er_ui_bounds(inner.x, inner.y + 122.0f, er_ui_float_min(inner.w, 120.0f), 40.0f), theme, "Submit",
-                                  node->id + 1u, ER_UI_SHADCN_BUTTON_DEFAULT, ER_UI_SHADCN_BUTTON_SIZE_SM, true);
+  return er_ui_component_button_emit(scene, font, er_ui_bounds(inner.x, inner.y + 122.0f, er_ui_float_min(inner.w, 120.0f), 40.0f), theme, "Submit",
+                                  node->id + 1u, ER_UI_COMPONENT_BUTTON_DEFAULT, ER_UI_COMPONENT_BUTTON_SIZE_SM, true);
 }
 
 static er_ui_status_t er_ui_node_render_menu_items(
@@ -2574,7 +2574,7 @@ static er_ui_status_t er_ui_node_render_menu_items(
   float y = bounds.y;
   for (size_t i = 0u; i < node->label_count; ++i) {
     const char* shortcut = node->cells ? node->cells[i] : "";
-    er_ui_status_t status = er_ui_shadcn_menu_item_emit(scene, font, er_ui_bounds(bounds.x, y, bounds.w, row_h), theme, node->labels[i], shortcut, "",
+    er_ui_status_t status = er_ui_component_menu_item_emit(scene, font, er_ui_bounds(bounds.x, y, bounds.w, row_h), theme, node->labels[i], shortcut, "",
                                                         i == node->selected, theme.colors.accent, node->id + (uint32_t)i);
     if (status != ER_UI_OK) return status;
     y += row_h + node->gap;
@@ -2600,7 +2600,7 @@ static er_ui_status_t er_ui_node_render_context_menu(
   if (!node || !scene || !font || !node->label || !node->detail || !node->labels || node->label_count == 0u || !er_ui_bounds_valid(bounds)) {
     return ER_UI_ERR_INVALID_ARGUMENT;
   }
-  er_ui_status_t status = er_ui_shadcn_card_emit(scene, bounds, theme);
+  er_ui_status_t status = er_ui_component_card_emit(scene, bounds, theme);
   if (status != ER_UI_OK) return status;
   float pad = 12.0f;
   er_ui_bounds_t inner = er_ui_bounds(bounds.x + pad, bounds.y + pad, bounds.w - pad * 2.0f, bounds.h - pad * 2.0f);
@@ -2623,13 +2623,13 @@ static er_ui_status_t er_ui_node_render_date_picker(
     return ER_UI_ERR_INVALID_ARGUMENT;
   }
   er_ui_bounds_t trigger = er_ui_bounds(bounds.x, bounds.y, er_ui_float_min(bounds.w, 140.0f), 38.0f);
-  er_ui_status_t status = er_ui_shadcn_button_emit(scene, font, trigger, theme, node->label, node->id, ER_UI_SHADCN_BUTTON_SECONDARY,
-                                                   ER_UI_SHADCN_BUTTON_SIZE_SM, true);
+  er_ui_status_t status = er_ui_component_button_emit(scene, font, trigger, theme, node->label, node->id, ER_UI_COMPONENT_BUTTON_SECONDARY,
+                                                   ER_UI_COMPONENT_BUTTON_SIZE_SM, true);
   if (status != ER_UI_OK) return status;
 
   er_ui_bounds_t card = er_ui_bounds(bounds.x, bounds.y + trigger.h + node->gap, er_ui_float_min(bounds.w, 360.0f),
                                      er_ui_float_max(bounds.h - trigger.h - node->gap, 84.0f));
-  status = er_ui_shadcn_card_emit(scene, card, theme);
+  status = er_ui_component_card_emit(scene, card, theme);
   if (status != ER_UI_OK) return status;
   float pad = 12.0f;
   er_ui_bounds_t inner = er_ui_bounds(card.x + pad, card.y + pad, card.w - pad * 2.0f, card.h - pad * 2.0f);
@@ -2643,9 +2643,9 @@ static er_ui_status_t er_ui_node_render_date_picker(
   if (day_w <= 0.0f) return ER_UI_ERR_INVALID_ARGUMENT;
   float day_y = inner.y + 32.0f;
   for (size_t i = 0u; i < node->label_count; ++i) {
-    er_ui_shadcn_button_variant_t variant = i == node->selected ? ER_UI_SHADCN_BUTTON_SECONDARY : ER_UI_SHADCN_BUTTON_GHOST;
-    status = er_ui_shadcn_button_emit(scene, font, er_ui_bounds(inner.x + (day_w + gap) * (float)i, day_y, day_w, 38.0f), theme, node->labels[i],
-                                      node->id + 1u + (uint32_t)i, variant, ER_UI_SHADCN_BUTTON_SIZE_SM, true);
+    er_ui_component_button_variant_t variant = i == node->selected ? ER_UI_COMPONENT_BUTTON_SECONDARY : ER_UI_COMPONENT_BUTTON_GHOST;
+    status = er_ui_component_button_emit(scene, font, er_ui_bounds(inner.x + (day_w + gap) * (float)i, day_y, day_w, 38.0f), theme, node->labels[i],
+                                      node->id + 1u + (uint32_t)i, variant, ER_UI_COMPONENT_BUTTON_SIZE_SM, true);
     if (status != ER_UI_OK) return status;
   }
   return ER_UI_OK;
@@ -2666,7 +2666,7 @@ static er_ui_status_t er_ui_node_render_carousel(
   if (button_w <= 0.0f || card_w <= 0.0f) return ER_UI_ERR_INVALID_ARGUMENT;
 
   er_ui_bounds_t prev = er_ui_bounds(bounds.x, bounds.y + (bounds.h - button_w) * 0.5f, button_w, button_w);
-  er_ui_status_t status = er_ui_shadcn_button_emit(scene, font, prev, theme, "", node->id, ER_UI_SHADCN_BUTTON_GHOST, ER_UI_SHADCN_BUTTON_SIZE_ICON, true);
+  er_ui_status_t status = er_ui_component_button_emit(scene, font, prev, theme, "", node->id, ER_UI_COMPONENT_BUTTON_GHOST, ER_UI_COMPONENT_BUTTON_SIZE_ICON, true);
   if (status != ER_UI_OK) return status;
   status = er_ui_node_render_icon(scene, er_ui_node_center_square(prev, 16.0f), ER_UI_ICON_CHEVRON_RIGHT, theme.colors.text);
   if (status != ER_UI_OK) return status;
@@ -2674,7 +2674,7 @@ static er_ui_status_t er_ui_node_render_carousel(
   float x = bounds.x + button_w + gap;
   for (size_t i = 0u; i < node->label_count; ++i) {
     er_ui_bounds_t card = er_ui_bounds(x, bounds.y, card_w, bounds.h);
-    status = er_ui_shadcn_card_emit(scene, card, theme);
+    status = er_ui_component_card_emit(scene, card, theme);
     if (status != ER_UI_OK) return status;
     status = er_ui_node_render_text(scene, font, node->labels[i], er_ui_bounds(card.x + 16.0f, card.y + (card.h - 28.0f) * 0.5f, card.w - 32.0f, 28.0f),
                                     theme.colors.text);
@@ -2683,7 +2683,7 @@ static er_ui_status_t er_ui_node_render_carousel(
   }
 
   er_ui_bounds_t next = er_ui_bounds(x, bounds.y + (bounds.h - button_w) * 0.5f, button_w, button_w);
-  status = er_ui_shadcn_button_emit(scene, font, next, theme, "", node->id + 1u, ER_UI_SHADCN_BUTTON_GHOST, ER_UI_SHADCN_BUTTON_SIZE_ICON, true);
+  status = er_ui_component_button_emit(scene, font, next, theme, "", node->id + 1u, ER_UI_COMPONENT_BUTTON_GHOST, ER_UI_COMPONENT_BUTTON_SIZE_ICON, true);
   if (status != ER_UI_OK) return status;
   return er_ui_node_render_icon(scene, er_ui_node_center_square(next, 16.0f), ER_UI_ICON_CHEVRON_RIGHT, theme.colors.text);
 }
@@ -2696,21 +2696,21 @@ static er_ui_status_t er_ui_node_render_calendar(
   er_ui_bounds_t bounds,
   er_ui_resolved_theme_t theme) {
   if (!node || !scene || !font || !node->label || !node->labels || node->label_count == 0u || !er_ui_bounds_valid(bounds)) return ER_UI_ERR_INVALID_ARGUMENT;
-  er_ui_status_t status = er_ui_shadcn_card_emit(scene, bounds, theme);
+  er_ui_status_t status = er_ui_component_card_emit(scene, bounds, theme);
   if (status != ER_UI_OK) return status;
   float pad = 12.0f;
   er_ui_bounds_t inner = er_ui_bounds(bounds.x + pad, bounds.y + pad, bounds.w - pad * 2.0f, bounds.h - pad * 2.0f);
   if (!er_ui_bounds_valid(inner)) return ER_UI_ERR_INVALID_ARGUMENT;
 
   er_ui_bounds_t prev = er_ui_bounds(inner.x, inner.y, 36.0f, 36.0f);
-  status = er_ui_shadcn_button_emit(scene, font, prev, theme, "", node->id, ER_UI_SHADCN_BUTTON_GHOST, ER_UI_SHADCN_BUTTON_SIZE_ICON, true);
+  status = er_ui_component_button_emit(scene, font, prev, theme, "", node->id, ER_UI_COMPONENT_BUTTON_GHOST, ER_UI_COMPONENT_BUTTON_SIZE_ICON, true);
   if (status != ER_UI_OK) return status;
   status = er_ui_node_render_icon(scene, er_ui_node_center_square(prev, 16.0f), ER_UI_ICON_CHEVRON_RIGHT, theme.colors.text);
   if (status != ER_UI_OK) return status;
   status = er_ui_node_render_text(scene, font, node->label, er_ui_bounds(inner.x + 44.0f, inner.y + 4.0f, inner.w - 88.0f, 28.0f), theme.colors.text);
   if (status != ER_UI_OK) return status;
   er_ui_bounds_t next = er_ui_bounds(inner.x + inner.w - 36.0f, inner.y, 36.0f, 36.0f);
-  status = er_ui_shadcn_button_emit(scene, font, next, theme, "", node->id + 1u, ER_UI_SHADCN_BUTTON_GHOST, ER_UI_SHADCN_BUTTON_SIZE_ICON, true);
+  status = er_ui_component_button_emit(scene, font, next, theme, "", node->id + 1u, ER_UI_COMPONENT_BUTTON_GHOST, ER_UI_COMPONENT_BUTTON_SIZE_ICON, true);
   if (status != ER_UI_OK) return status;
   status = er_ui_node_render_icon(scene, er_ui_node_center_square(next, 16.0f), ER_UI_ICON_CHEVRON_RIGHT, theme.colors.text);
   if (status != ER_UI_OK) return status;
@@ -2728,9 +2728,9 @@ static er_ui_status_t er_ui_node_render_calendar(
   size_t col = 0u;
   size_t row = 0u;
   for (size_t i = 0u; i < node->label_count; ++i) {
-    er_ui_shadcn_button_variant_t variant = i == node->selected ? ER_UI_SHADCN_BUTTON_SECONDARY : ER_UI_SHADCN_BUTTON_GHOST;
-    status = er_ui_shadcn_button_emit(scene, font, er_ui_bounds(inner.x + (cell_w + gap) * (float)col, day_y + 38.0f * (float)row, cell_w, 34.0f), theme,
-                                      node->labels[i], node->id + 2u + (uint32_t)i, variant, ER_UI_SHADCN_BUTTON_SIZE_SM, true);
+    er_ui_component_button_variant_t variant = i == node->selected ? ER_UI_COMPONENT_BUTTON_SECONDARY : ER_UI_COMPONENT_BUTTON_GHOST;
+    status = er_ui_component_button_emit(scene, font, er_ui_bounds(inner.x + (cell_w + gap) * (float)col, day_y + 38.0f * (float)row, cell_w, 34.0f), theme,
+                                      node->labels[i], node->id + 2u + (uint32_t)i, variant, ER_UI_COMPONENT_BUTTON_SIZE_SM, true);
     if (status != ER_UI_OK) return status;
     ++col;
     if (col == 7u) {
@@ -2751,15 +2751,15 @@ static er_ui_status_t er_ui_node_render_combobox(
       !er_ui_bounds_valid(bounds)) {
     return ER_UI_ERR_INVALID_ARGUMENT;
   }
-  er_ui_status_t status = er_ui_shadcn_select_emit(scene, font, er_ui_bounds(bounds.x, bounds.y, bounds.w, 46.0f), theme, node->label, node->value,
+  er_ui_status_t status = er_ui_component_select_emit(scene, font, er_ui_bounds(bounds.x, bounds.y, bounds.w, 46.0f), theme, node->label, node->value,
                                                    node->id, false);
   if (status != ER_UI_OK) return status;
-  status = er_ui_shadcn_command_palette_emit(scene, font, er_ui_bounds(bounds.x, bounds.y + 46.0f + node->gap, bounds.w, 46.0f), theme, node->detail,
+  status = er_ui_component_command_palette_emit(scene, font, er_ui_bounds(bounds.x, bounds.y + 46.0f + node->gap, bounds.w, 46.0f), theme, node->detail,
                                              node->id + 1u);
   if (status != ER_UI_OK) return status;
   float y = bounds.y + 46.0f + node->gap + 46.0f + node->gap;
   for (size_t i = 0u; i < node->label_count; ++i) {
-    status = er_ui_shadcn_menu_item_emit(scene, font, er_ui_bounds(bounds.x, y, bounds.w, 44.0f), theme, node->labels[i], "", "",
+    status = er_ui_component_menu_item_emit(scene, font, er_ui_bounds(bounds.x, y, bounds.w, 44.0f), theme, node->labels[i], "", "",
                                          i == node->selected, theme.colors.accent, node->id + 2u + (uint32_t)i);
     if (status != ER_UI_OK) return status;
     y += 44.0f + node->gap;
@@ -2811,16 +2811,16 @@ static er_ui_status_t er_ui_node_render_chat_header(
   vr_font_face_t* font,
   er_ui_bounds_t bounds,
   er_ui_resolved_theme_t theme,
-  er_ui_shadcn_chat_role_t role,
+  er_ui_component_chat_role_t role,
   const char* heading,
   float icon_size) {
   if (!scene || !font || !heading || !er_ui_bounds_valid(bounds)) return ER_UI_ERR_INVALID_ARGUMENT;
   er_ui_status_t status = er_ui_node_render_icon(scene, er_ui_bounds(bounds.x, bounds.y + (bounds.h - icon_size) * 0.5f, icon_size, icon_size),
-                                                 er_ui_shadcn_chat_role_icon(role), theme.colors.muted);
+                                                 er_ui_component_chat_role_icon(role), theme.colors.muted);
   if (status != ER_UI_OK) return status;
   float badge_x = bounds.x + icon_size + 8.0f;
-  status = er_ui_shadcn_badge_emit(scene, font, er_ui_bounds(badge_x, bounds.y + (bounds.h - 24.0f) * 0.5f, 92.0f, 24.0f), theme,
-                                   er_ui_shadcn_chat_role_label(role), er_ui_shadcn_chat_role_badge(role));
+  status = er_ui_component_badge_emit(scene, font, er_ui_bounds(badge_x, bounds.y + (bounds.h - 24.0f) * 0.5f, 92.0f, 24.0f), theme,
+                                   er_ui_component_chat_role_label(role), er_ui_component_chat_role_badge(role));
   if (status != ER_UI_OK) return status;
   return er_ui_node_render_text(scene, font, heading, er_ui_bounds(badge_x + 100.0f, bounds.y, er_ui_float_max(bounds.w - badge_x - 100.0f, 0.0f), bounds.h),
                                 theme.colors.muted);
@@ -2833,10 +2833,10 @@ static er_ui_status_t er_ui_node_render_chat_message(
   er_ui_bounds_t bounds,
   er_ui_resolved_theme_t theme) {
   if (!node || !scene || !font || !node->label || !er_ui_bounds_valid(bounds)) return ER_UI_ERR_INVALID_ARGUMENT;
-  er_ui_shadcn_chat_role_t role = (er_ui_shadcn_chat_role_t)node->selected;
-  if (role == ER_UI_SHADCN_CHAT_ROLE_DIFF) {
+  er_ui_component_chat_role_t role = (er_ui_component_chat_role_t)node->selected;
+  if (role == ER_UI_COMPONENT_CHAT_ROLE_DIFF) {
     if (!node->labels || node->label_count == 0u) return ER_UI_ERR_INVALID_ARGUMENT;
-    er_ui_status_t status = er_ui_shadcn_card_emit(scene, bounds, theme);
+    er_ui_status_t status = er_ui_component_card_emit(scene, bounds, theme);
     if (status != ER_UI_OK) return status;
     float pad = 12.0f;
     er_ui_bounds_t header = er_ui_bounds(bounds.x + pad, bounds.y + pad, bounds.w - pad * 2.0f, 28.0f);
@@ -2847,18 +2847,18 @@ static er_ui_status_t er_ui_node_render_chat_message(
   }
 
   if (!node->detail) return ER_UI_ERR_INVALID_ARGUMENT;
-  if (er_ui_shadcn_chat_role_timeline(role)) {
+  if (er_ui_component_chat_role_timeline(role)) {
     er_ui_status_t status = er_ui_scene_push_rect(scene, er_ui_rect_fill(bounds.x, bounds.y, bounds.w, bounds.h, theme.radius.card, theme.colors.bg));
     if (status != ER_UI_OK) return status;
     status = er_ui_scene_push_rect(scene, er_ui_rect_border(bounds.x, bounds.y, bounds.w, bounds.h, theme.radius.card, er_ui_color_with_alpha(theme.colors.border, 0.42f)));
     if (status != ER_UI_OK) return status;
     float pad = 12.0f;
-    status = er_ui_node_render_icon(scene, er_ui_bounds(bounds.x + pad, bounds.y + pad, 20.0f, 20.0f), er_ui_shadcn_chat_role_icon(role), theme.colors.muted);
+    status = er_ui_node_render_icon(scene, er_ui_bounds(bounds.x + pad, bounds.y + pad, 20.0f, 20.0f), er_ui_component_chat_role_icon(role), theme.colors.muted);
     if (status != ER_UI_OK) return status;
     float text_x = bounds.x + pad + 32.0f;
     er_ui_bounds_t header = er_ui_bounds(text_x, bounds.y + pad - 2.0f, bounds.w - text_x + bounds.x - pad, 28.0f);
-    status = er_ui_shadcn_badge_emit(scene, font, er_ui_bounds(header.x, header.y + 2.0f, 92.0f, 24.0f), theme, er_ui_shadcn_chat_role_label(role),
-                                     er_ui_shadcn_chat_role_badge(role));
+    status = er_ui_component_badge_emit(scene, font, er_ui_bounds(header.x, header.y + 2.0f, 92.0f, 24.0f), theme, er_ui_component_chat_role_label(role),
+                                     er_ui_component_chat_role_badge(role));
     if (status != ER_UI_OK) return status;
     status = er_ui_node_render_text(scene, font, node->label, er_ui_bounds(header.x + 100.0f, header.y, er_ui_float_max(header.w - 100.0f, 0.0f), header.h),
                                     theme.colors.muted);
@@ -2867,7 +2867,7 @@ static er_ui_status_t er_ui_node_render_chat_message(
                                   theme.colors.text);
   }
 
-  er_ui_status_t status = er_ui_shadcn_card_emit(scene, bounds, theme);
+  er_ui_status_t status = er_ui_component_card_emit(scene, bounds, theme);
   if (status != ER_UI_OK) return status;
   float pad = 12.0f;
   status = er_ui_node_render_chat_header(scene, font, er_ui_bounds(bounds.x + pad, bounds.y + pad, bounds.w - pad * 2.0f, 28.0f), theme, role, node->label, 16.0f);
@@ -2890,9 +2890,9 @@ static er_ui_status_t er_ui_node_render_label_group(
   if (item_w <= 0.0f) return ER_UI_ERR_INVALID_ARGUMENT;
   for (size_t i = 0u; i < node->label_count; ++i) {
     er_ui_bounds_t item = er_ui_bounds(bounds.x + (item_w + gap) * (float)i, bounds.y, item_w, bounds.h);
-    er_ui_shadcn_button_variant_t variant = ER_UI_SHADCN_BUTTON_SECONDARY;
-    if (toggle_group && i != node->selected) variant = ER_UI_SHADCN_BUTTON_GHOST;
-    er_ui_status_t status = er_ui_shadcn_button_emit(scene, font, item, theme, node->labels[i], node->id + (uint32_t)i, variant, ER_UI_SHADCN_BUTTON_SIZE_SM, true);
+    er_ui_component_button_variant_t variant = ER_UI_COMPONENT_BUTTON_SECONDARY;
+    if (toggle_group && i != node->selected) variant = ER_UI_COMPONENT_BUTTON_GHOST;
+    er_ui_status_t status = er_ui_component_button_emit(scene, font, item, theme, node->labels[i], node->id + (uint32_t)i, variant, ER_UI_COMPONENT_BUTTON_SIZE_SM, true);
     if (status != ER_UI_OK) return status;
   }
   return ER_UI_OK;
@@ -2919,19 +2919,19 @@ static er_ui_status_t er_ui_node_render_pagination(
     page_w *= scale;
   }
   float x = bounds.x;
-  er_ui_status_t status = er_ui_shadcn_button_emit(scene, font, er_ui_bounds(x, bounds.y, previous_w, bounds.h), theme, "Previous", node->id,
-                                                   ER_UI_SHADCN_BUTTON_GHOST, ER_UI_SHADCN_BUTTON_SIZE_DEFAULT, false);
+  er_ui_status_t status = er_ui_component_button_emit(scene, font, er_ui_bounds(x, bounds.y, previous_w, bounds.h), theme, "Previous", node->id,
+                                                   ER_UI_COMPONENT_BUTTON_GHOST, ER_UI_COMPONENT_BUTTON_SIZE_DEFAULT, false);
   if (status != ER_UI_OK) return status;
   x += previous_w + gap;
   for (size_t i = 0u; i < node->label_count; ++i) {
-    er_ui_shadcn_button_variant_t variant = i == node->selected ? ER_UI_SHADCN_BUTTON_SECONDARY : ER_UI_SHADCN_BUTTON_GHOST;
-    status = er_ui_shadcn_button_emit(scene, font, er_ui_bounds(x, bounds.y, page_w, bounds.h), theme, node->labels[i], node->id + 1u + (uint32_t)i,
-                                      variant, ER_UI_SHADCN_BUTTON_SIZE_DEFAULT, true);
+    er_ui_component_button_variant_t variant = i == node->selected ? ER_UI_COMPONENT_BUTTON_SECONDARY : ER_UI_COMPONENT_BUTTON_GHOST;
+    status = er_ui_component_button_emit(scene, font, er_ui_bounds(x, bounds.y, page_w, bounds.h), theme, node->labels[i], node->id + 1u + (uint32_t)i,
+                                      variant, ER_UI_COMPONENT_BUTTON_SIZE_DEFAULT, true);
     if (status != ER_UI_OK) return status;
     x += page_w + gap;
   }
-  return er_ui_shadcn_button_emit(scene, font, er_ui_bounds(x, bounds.y, next_w, bounds.h), theme, "Next", node->id + 1u + (uint32_t)node->label_count,
-                                  ER_UI_SHADCN_BUTTON_GHOST, ER_UI_SHADCN_BUTTON_SIZE_DEFAULT, true);
+  return er_ui_component_button_emit(scene, font, er_ui_bounds(x, bounds.y, next_w, bounds.h), theme, "Next", node->id + 1u + (uint32_t)node->label_count,
+                                  ER_UI_COMPONENT_BUTTON_GHOST, ER_UI_COMPONENT_BUTTON_SIZE_DEFAULT, true);
 }
 
 static er_ui_bounds_t er_ui_node_center_square(er_ui_bounds_t bounds, float size) {
@@ -2972,76 +2972,76 @@ er_ui_status_t er_ui_node_render(
     case ER_UI_NODE_TEXT:
       return er_ui_node_render_text(scene, font, node->label, rect, theme.colors.text);
     case ER_UI_NODE_BADGE:
-      return er_ui_shadcn_badge_emit(scene, font, rect, theme, node->label, node->badge_variant);
+      return er_ui_component_badge_emit(scene, font, rect, theme, node->label, node->badge_variant);
     case ER_UI_NODE_BUTTON:
-      return er_ui_shadcn_button_emit(scene, font, rect, theme, node->label, node->id, node->button_variant, node->button_size, node->active);
+      return er_ui_component_button_emit(scene, font, rect, theme, node->label, node->id, node->button_variant, node->button_size, node->active);
     case ER_UI_NODE_CARD_SUMMARY:
       return er_ui_node_render_card_summary(node, scene, font, rect, theme);
     case ER_UI_NODE_BUTTON_GROUP:
       return er_ui_node_render_label_group(node, scene, font, rect, theme, false);
     case ER_UI_NODE_ICON_BUTTON: {
-      er_ui_status_t status = er_ui_shadcn_button_emit(scene, font, rect, theme, "", node->id, node->button_variant, ER_UI_SHADCN_BUTTON_SIZE_ICON, node->active);
+      er_ui_status_t status = er_ui_component_button_emit(scene, font, rect, theme, "", node->id, node->button_variant, ER_UI_COMPONENT_BUTTON_SIZE_ICON, node->active);
       if (status != ER_UI_OK) return status;
       return er_ui_node_render_icon(scene, er_ui_node_center_square(rect, 16.0f), node->icon, theme.colors.text);
     }
     case ER_UI_NODE_CHECKBOX:
-      return er_ui_shadcn_checkbox_emit(scene, font, rect, theme, node->label, node->active, node->id);
+      return er_ui_component_checkbox_emit(scene, font, rect, theme, node->label, node->active, node->id);
     case ER_UI_NODE_RADIO:
-      return er_ui_shadcn_radio_emit(scene, font, rect, theme, node->label, node->active, node->id);
+      return er_ui_component_radio_emit(scene, font, rect, theme, node->label, node->active, node->id);
     case ER_UI_NODE_SELECT:
-      return er_ui_shadcn_select_emit(scene, font, rect, theme, node->label, node->value, node->id, false);
+      return er_ui_component_select_emit(scene, font, rect, theme, node->label, node->value, node->id, false);
     case ER_UI_NODE_SLIDER:
-      return er_ui_shadcn_slider_emit(scene, font, rect, theme, node->label, node->number, node->id);
+      return er_ui_component_slider_emit(scene, font, rect, theme, node->label, node->number, node->id);
     case ER_UI_NODE_SEPARATOR:
-      return er_ui_shadcn_separator_emit(scene, rect, theme);
+      return er_ui_component_separator_emit(scene, rect, theme);
     case ER_UI_NODE_SKELETON:
-      return er_ui_shadcn_skeleton_emit(scene, rect, theme);
+      return er_ui_component_skeleton_emit(scene, rect, theme);
     case ER_UI_NODE_ALERT:
-      return er_ui_shadcn_alert_emit(scene, font, rect, theme, node->label, node->detail, node->color);
+      return er_ui_component_alert_emit(scene, font, rect, theme, node->label, node->detail, node->color);
     case ER_UI_NODE_AVATAR:
-      return er_ui_shadcn_avatar_emit(scene, font, rect, theme, node->label, node->color, node->active);
+      return er_ui_component_avatar_emit(scene, font, rect, theme, node->label, node->color, node->active);
     case ER_UI_NODE_PROGRESS:
-      return er_ui_shadcn_progress_emit(scene, rect, theme, node->number);
+      return er_ui_component_progress_emit(scene, rect, theme, node->number);
     case ER_UI_NODE_SWITCH:
-      return er_ui_shadcn_switch_emit(scene, rect, theme, node->active, node->id);
+      return er_ui_component_switch_emit(scene, rect, theme, node->active, node->id);
     case ER_UI_NODE_TOGGLE_GROUP:
       return er_ui_node_render_label_group(node, scene, font, rect, theme, true);
     case ER_UI_NODE_TABLE:
-      return er_ui_shadcn_table_emit(scene, font, rect, theme, node->labels, node->label_count, node->cells, node->row_count, node->id);
+      return er_ui_component_table_emit(scene, font, rect, theme, node->labels, node->label_count, node->cells, node->row_count, node->id);
     case ER_UI_NODE_BREADCRUMB:
-      return er_ui_shadcn_breadcrumb_emit(scene, font, rect, theme, node->labels, node->label_count, node->selected, node->id);
+      return er_ui_component_breadcrumb_emit(scene, font, rect, theme, node->labels, node->label_count, node->selected, node->id);
     case ER_UI_NODE_TOAST:
       return er_ui_node_render_toast(node, scene, font, rect, theme);
     case ER_UI_NODE_EMPTY:
-      return er_ui_shadcn_empty_emit(scene, font, rect, theme, node->label, node->detail);
+      return er_ui_component_empty_emit(scene, font, rect, theme, node->label, node->detail);
     case ER_UI_NODE_LIST_ROW:
-      return er_ui_shadcn_list_row_emit(scene, font, rect, theme, node->label, node->detail, node->id, node->active);
+      return er_ui_component_list_row_emit(scene, font, rect, theme, node->label, node->detail, node->id, node->active);
     case ER_UI_NODE_FIELD:
-      return er_ui_shadcn_field_emit(scene, font, rect, theme, node->label, node->value, node->id, false);
+      return er_ui_component_field_emit(scene, font, rect, theme, node->label, node->value, node->id, false);
     case ER_UI_NODE_TEXT_AREA:
-      return er_ui_shadcn_field_emit(scene, font, rect, theme, node->label, node->value, node->id, true);
+      return er_ui_component_field_emit(scene, font, rect, theme, node->label, node->value, node->id, true);
     case ER_UI_NODE_TABS:
-      return er_ui_shadcn_tabs_emit(scene, font, rect, theme, node->labels, node->label_count, node->selected, node->id);
+      return er_ui_component_tabs_emit(scene, font, rect, theme, node->labels, node->label_count, node->selected, node->id);
     case ER_UI_NODE_BAR_CHART:
-      return er_ui_shadcn_bar_chart_emit(scene, font, rect, theme, node->label, node->labels, node->values, node->value_count, node->id, node->selected);
+      return er_ui_component_bar_chart_emit(scene, font, rect, theme, node->label, node->labels, node->values, node->value_count, node->id, node->selected);
     case ER_UI_NODE_COMMAND_PALETTE:
-      return er_ui_shadcn_command_palette_emit(scene, font, rect, theme, node->label, node->id);
+      return er_ui_component_command_palette_emit(scene, font, rect, theme, node->label, node->id);
     case ER_UI_NODE_TREE_ITEM:
-      return er_ui_shadcn_tree_item_emit(scene, font, rect, theme, node->label, node->detail, (uint8_t)node->number, node->active, node->id);
+      return er_ui_component_tree_item_emit(scene, font, rect, theme, node->label, node->detail, (uint8_t)node->number, node->active, node->id);
     case ER_UI_NODE_SECTION:
-      return er_ui_shadcn_section_header_emit(scene, font, rect, theme, node->label, node->detail);
+      return er_ui_component_section_header_emit(scene, font, rect, theme, node->label, node->detail);
     case ER_UI_NODE_IDENTITY_CARD:
-      return er_ui_shadcn_identity_card_emit(scene, font, rect, theme, node->label, node->value, node->detail, node->id);
+      return er_ui_component_identity_card_emit(scene, font, rect, theme, node->label, node->value, node->detail, node->id);
     case ER_UI_NODE_CONTACT_CARD:
-      return er_ui_shadcn_contact_card_emit(scene, font, rect, theme, node->label, node->detail, node->id);
+      return er_ui_component_contact_card_emit(scene, font, rect, theme, node->label, node->detail, node->id);
     case ER_UI_NODE_THREAD_ROW:
-      return er_ui_shadcn_thread_row_emit(scene, font, rect, theme, node->label, node->detail, node->active, node->id);
+      return er_ui_component_thread_row_emit(scene, font, rect, theme, node->label, node->detail, node->active, node->id);
     case ER_UI_NODE_ATTACHMENT_PREVIEW:
-      return er_ui_shadcn_attachment_preview_emit(scene, font, rect, theme, node->label, node->detail, node->id);
+      return er_ui_component_attachment_preview_emit(scene, font, rect, theme, node->label, node->detail, node->id);
     case ER_UI_NODE_CAPABILITY_GRANT_ROW:
-      return er_ui_shadcn_capability_grant_row_emit(scene, font, rect, theme, node->label, node->value, node->detail, node->id);
+      return er_ui_component_capability_grant_row_emit(scene, font, rect, theme, node->label, node->value, node->detail, node->id);
     case ER_UI_NODE_PROOF_EVENT_ROW:
-      return er_ui_shadcn_proof_event_row_emit(scene, font, rect, theme, node->label, node->value, node->detail, node->id);
+      return er_ui_component_proof_event_row_emit(scene, font, rect, theme, node->label, node->value, node->detail, node->id);
     case ER_UI_NODE_PAGINATION:
       return er_ui_node_render_pagination(node, scene, font, rect, theme);
     case ER_UI_NODE_COLLAPSIBLE:
@@ -3099,21 +3099,21 @@ er_ui_status_t er_ui_node_render(
     case ER_UI_NODE_CONVERSATION:
       return er_ui_node_render_scroll_area(node, scene, font, rect, theme);
     case ER_UI_NODE_ROUTE_PATH:
-      return er_ui_shadcn_route_path_emit(scene, font, rect, theme, node->label, node->labels, node->label_count);
+      return er_ui_component_route_path_emit(scene, font, rect, theme, node->label, node->labels, node->label_count);
     case ER_UI_NODE_PACKAGE_CARD:
-      return er_ui_shadcn_package_card_emit(scene, font, rect, theme, node->label, node->value, node->detail, node->id);
+      return er_ui_component_package_card_emit(scene, font, rect, theme, node->label, node->value, node->detail, node->id);
     case ER_UI_NODE_RECEIPT_ROW:
-      return er_ui_shadcn_receipt_row_emit(scene, font, rect, theme, node->label, node->value, node->detail, node->id);
+      return er_ui_component_receipt_row_emit(scene, font, rect, theme, node->label, node->value, node->detail, node->id);
     case ER_UI_NODE_PANEL_HEADER:
-      return er_ui_shadcn_panel_header_emit(scene, font, rect, theme, node->label, node->detail, node->value, node->id);
+      return er_ui_component_panel_header_emit(scene, font, rect, theme, node->label, node->detail, node->value, node->id);
     case ER_UI_NODE_METRIC_CARD:
-      return er_ui_shadcn_metric_card_emit(scene, font, rect, theme, node->label, node->value, node->detail, node->active, node->number, node->color);
+      return er_ui_component_metric_card_emit(scene, font, rect, theme, node->label, node->value, node->detail, node->active, node->number, node->color);
     case ER_UI_NODE_TRANSACTION_ROW:
-      return er_ui_shadcn_transaction_row_emit(scene, font, rect, theme, node->label, node->value, node->aux, node->detail, node->active, node->id);
+      return er_ui_component_transaction_row_emit(scene, font, rect, theme, node->label, node->value, node->aux, node->detail, node->active, node->id);
     case ER_UI_NODE_MENU_ITEM:
-      return er_ui_shadcn_menu_item_emit(scene, font, rect, theme, node->label, node->detail, node->value, node->active, node->color, node->id);
+      return er_ui_component_menu_item_emit(scene, font, rect, theme, node->label, node->detail, node->value, node->active, node->color, node->id);
     case ER_UI_NODE_CONTROL_ROW:
-      return er_ui_shadcn_control_row_emit(scene, font, rect, theme, node->label, node->detail, node->value, node->id);
+      return er_ui_component_control_row_emit(scene, font, rect, theme, node->label, node->detail, node->value, node->id);
     case ER_UI_NODE_GRID:
     case ER_UI_NODE_MASONRY:
     case ER_UI_NODE_BENTO_GRID: {
@@ -3126,11 +3126,11 @@ er_ui_status_t er_ui_node_render(
     case ER_UI_NODE_SPACER:
       return ER_UI_OK;
     case ER_UI_NODE_TOOLTIP:
-      return er_ui_shadcn_tooltip_emit(scene, font, rect, theme, node->label);
+      return er_ui_component_tooltip_emit(scene, font, rect, theme, node->label);
     case ER_UI_NODE_DIALOG:
-      return er_ui_shadcn_dialog_emit(scene, font, rect, theme, node->label, node->detail, node->color);
+      return er_ui_component_dialog_emit(scene, font, rect, theme, node->label, node->detail, node->color);
     case ER_UI_NODE_PROGRESS_RING:
-      return er_ui_shadcn_progress_ring_emit(scene, rect, theme, node->number, node->color);
+      return er_ui_component_progress_ring_emit(scene, rect, theme, node->number, node->color);
     default:
       return ER_UI_ERR_INVALID_ARGUMENT;
   }
