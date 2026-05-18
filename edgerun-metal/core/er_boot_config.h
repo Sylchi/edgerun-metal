@@ -9,12 +9,14 @@
 #include "er_identity.h"
 #include "er_work.h"
 
-#define ER_BOOT_CONFIG_ABI_VERSION 1u
+#define ER_BOOT_CONFIG_ABI_VERSION 2u
 #define ER_BOOT_CONFIG_CHANNEL_CAPACITY 8u
+#define ER_BOOT_CONFIG_FIRMWARE_SOURCE_CAPACITY 8u
 #define ER_BOOT_CONFIG_GENERATION_INVALID 0u
 #define ER_BOOT_CONFIG_LABEL_MAX ER_CHANNEL_LABEL_MAX
 #define ER_BOOT_CONFIG_WIFI_SSID_MAX 32u
 #define ER_BOOT_CONFIG_WIFI_FIXED_SSID_LEN 7u
+#define ER_BOOT_CONFIG_FIRMWARE_PATH_MAX 96u
 
 #define ER_BOOT_CONFIG_CHANNEL_DISABLED 0u
 #define ER_BOOT_CONFIG_CHANNEL_ENABLED 1u
@@ -25,6 +27,9 @@
 #define ER_BOOT_CONFIG_WIFI_ROLE_STA 3u
 
 #define ER_BOOT_CONFIG_WIFI_SECURITY_OPEN 1u
+
+#define ER_BOOT_CONFIG_FIRMWARE_SOURCE_DISABLED 0u
+#define ER_BOOT_CONFIG_FIRMWARE_SOURCE_EFI_PARTITION 1u
 
 typedef struct {
   UINT8 enabled;
@@ -38,11 +43,23 @@ typedef struct {
 } ErBootRelayChannelConfig;
 
 typedef struct {
+  UINT8 enabled;
+  UINT8 source_kind;
+  UINT16 pci_vendor_id;
+  UINT16 pci_device_id;
+  UINT16 path_len;
+  char path[ER_BOOT_CONFIG_FIRMWARE_PATH_MAX];
+} ErBootFirmwareSourceConfig;
+
+typedef struct {
   UINT16 abi_version;
   UINT16 channel_count;
+  UINT16 firmware_source_count;
+  UINT16 reserved;
   UINT32 generation;
   ErIdentity admission_identity;
   ErBootRelayChannelConfig channels[ER_BOOT_CONFIG_CHANNEL_CAPACITY];
+  ErBootFirmwareSourceConfig firmware_sources[ER_BOOT_CONFIG_FIRMWARE_SOURCE_CAPACITY];
 } ErBootConfig;
 
 void er_boot_config_init(ErBootConfig* config);
@@ -54,6 +71,14 @@ UINT8 er_boot_config_add_open_wifi_channel(ErBootConfig* config,
                                            UINT8 wifi_role,
                                            const char* label,
                                            UINT16 label_len);
+UINT8 er_boot_config_add_efi_firmware_source(ErBootConfig* config,
+                                             UINT16 pci_vendor_id,
+                                             UINT16 pci_device_id,
+                                             const char* path,
+                                             UINT16 path_len);
+const ErBootFirmwareSourceConfig* er_boot_config_find_efi_firmware_source(const ErBootConfig* config,
+                                                                          UINT16 pci_vendor_id,
+                                                                          UINT16 pci_device_id);
 UINT8 er_boot_config_valid(const ErBootConfig* config);
 const char* er_boot_config_wifi_fixed_ssid(void);
 

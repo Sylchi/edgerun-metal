@@ -41,6 +41,58 @@ static UINT8 er_boot_config_label_valid(const char* label, UINT16 label_len) {
   return 1u;
 }
 
+static UINT8 er_boot_config_firmware_path_char_valid(char c) {
+  if (c >= 'a' && c <= 'z') {
+    return 1u;
+  }
+  if (c >= 'A' && c <= 'Z') {
+    return 1u;
+  }
+  if (c >= '0' && c <= '9') {
+    return 1u;
+  }
+
+  switch (c) {
+    case '/':
+    case '-':
+    case '_':
+    case '.':
+      return 1u;
+    default:
+      return 0u;
+  }
+}
+
+static UINT8 er_boot_config_firmware_path_valid(const char* path, UINT16 path_len) {
+  UINT16 i;
+
+  if (path == 0 || path_len == 0u || path_len > ER_BOOT_CONFIG_FIRMWARE_PATH_MAX) {
+    return 0u;
+  }
+  if (path[0] == '/' || path[path_len - 1u] == '/') {
+    return 0u;
+  }
+  for (i = 0u; i < path_len; ++i) {
+    if (path[i] == 0 || er_boot_config_firmware_path_char_valid(path[i]) == 0u) {
+      return 0u;
+    }
+  }
+  return 1u;
+}
+
+static UINT8 er_boot_config_firmware_source_valid(const ErBootFirmwareSourceConfig* source) {
+  if (source == 0 ||
+      source->enabled != ER_BOOT_CONFIG_CHANNEL_ENABLED ||
+      source->source_kind != ER_BOOT_CONFIG_FIRMWARE_SOURCE_EFI_PARTITION ||
+      source->pci_vendor_id == 0u ||
+      source->pci_device_id == 0u ||
+      er_boot_config_firmware_path_valid(source->path, source->path_len) == 0u) {
+    return 0u;
+  }
+
+  return 1u;
+}
+
 static void er_boot_config_set_fixed_wifi_ssid(ErBootRelayChannelConfig* channel) {
   if (channel == 0) {
     return;
@@ -114,15 +166,69 @@ UINT8 er_boot_config_add_open_wifi_channel(ErBootConfig* config,
   return 1u;
 }
 
+UINT8 er_boot_config_add_efi_firmware_source(ErBootConfig* config,
+                                             UINT16 pci_vendor_id,
+                                             UINT16 pci_device_id,
+                                             const char* path,
+                                             UINT16 path_len) {
+  ErBootFirmwareSourceConfig* source;
+
+  if (config == 0 ||
+      config->firmware_source_count >= ER_BOOT_CONFIG_FIRMWARE_SOURCE_CAPACITY ||
+      pci_vendor_id == 0u ||
+      pci_device_id == 0u ||
+      er_boot_config_firmware_path_valid(path, path_len) == 0u) {
+    return 0u;
+  }
+
+  source = &config->firmware_sources[config->firmware_source_count];
+  er_mem_zero((UINT8*)source, (UINTN)sizeof(*source));
+  source->enabled = ER_BOOT_CONFIG_CHANNEL_ENABLED;
+  source->source_kind = ER_BOOT_CONFIG_FIRMWARE_SOURCE_EFI_PARTITION;
+  source->pci_vendor_id = pci_vendor_id;
+  source->pci_device_id = pci_device_id;
+  source->path_len = path_len;
+  er_mem_copy((UINT8*)source->path, (const UINT8*)path, path_len);
+  config->firmware_source_count += 1u;
+  return 1u;
+}
+
+const ErBootFirmwareSourceConfig* er_boot_config_find_efi_firmware_source(const ErBootConfig* config,
+                                                                          UINT16 pci_vendor_id,
+                                                                          UINT16 pci_device_id) {
+  UINT16 i;
+  const ErBootFirmwareSourceConfig* source;
+
+  if (config == 0 ||
+      pci_vendor_id == 0u ||
+      pci_device_id == 0u ||
+      config->firmware_source_count > ER_BOOT_CONFIG_FIRMWARE_SOURCE_CAPACITY) {
+    return 0;
+  }
+
+  for (i = 0u; i < config->firmware_source_count; ++i) {
+    source = &config->firmware_sources[i];
+    if (er_boot_config_firmware_source_valid(source) != 0u &&
+        source->pci_vendor_id == pci_vendor_id &&
+        source->pci_device_id == pci_device_id) {
+      return source;
+    }
+  }
+
+  return 0;
+}
+
 UINT8 er_boot_config_valid(const ErBootConfig* config) {
   UINT16 i;
   const ErBootRelayChannelConfig* channel;
+  const ErBootFirmwareSourceConfig* firmware_source;
 
   if (config == 0 ||
       config->abi_version != ER_BOOT_CONFIG_ABI_VERSION ||
       config->generation == ER_BOOT_CONFIG_GENERATION_INVALID ||
       config->channel_count == 0u ||
       config->channel_count > ER_BOOT_CONFIG_CHANNEL_CAPACITY ||
+      config->firmware_source_count > ER_BOOT_CONFIG_FIRMWARE_SOURCE_CAPACITY ||
       er_identity_valid(&config->admission_identity) == 0u) {
     return 0u;
   }
@@ -154,6 +260,14 @@ UINT8 er_boot_config_valid(const ErBootConfig* config) {
         break;
     }
   }
+
+  for (i = 0u; i < config->firmware_source_count; ++i) {
+    firmware_source = &config->firmware_sources[i];
+    if (er_boot_config_firmware_source_valid(firmware_source) == 0u) {
+      return 0u;
+    }
+  }
+
   return 1u;
 }
 
