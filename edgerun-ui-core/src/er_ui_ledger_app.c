@@ -616,7 +616,7 @@ static er_ui_status_t er_ui_ledger_dashboard(
   if (status != ER_UI_OK) return status;
 
   if (grid.columns == 0u) return ER_UI_ERR_INVALID_ARGUMENT;
-  size_t summary_rows = (ER_UI_LEDGER_DASHBOARD_MAX_COLUMNS + grid.columns - 1u) / grid.columns;
+  size_t summary_rows = er_ui_responsive_grid_row_count(grid, ER_UI_LEDGER_DASHBOARD_MAX_COLUMNS);
   size_t row_count = summary_rows + 1u;
   float row_h = er_ui_float_max((available_h - ER_UI_LEDGER_GAP * (float)(row_count - 1u)) / (float)row_count, 1.0f);
   size_t cell_index = 0u;
@@ -629,7 +629,7 @@ static er_ui_status_t er_ui_ledger_dashboard(
   status = er_ui_ledger_targets_card(scene, font, er_ui_responsive_grid_cell(grid, cell_index, row_h), colors);
   if (status != ER_UI_OK) return status;
   cell_index++;
-  size_t detail_index = ((cell_index + grid.columns - 1u) / grid.columns) * grid.columns;
+  size_t detail_index = er_ui_responsive_grid_row_count(grid, cell_index) * grid.columns;
   size_t transaction_span = grid.columns > 1u ? grid.columns - 1u : 1u;
   status = er_ui_ledger_transactions_card(scene, font, er_ui_responsive_grid_span(grid, detail_index, transaction_span, row_h), colors);
   if (status != ER_UI_OK) return status;
