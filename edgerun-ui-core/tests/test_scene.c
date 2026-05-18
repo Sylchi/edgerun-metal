@@ -13,6 +13,44 @@ int g_tests_failed = 0;
 static const float ER_TEST_EPSILON = 0.0001f;
 static const er_ui_color4_t ER_TEST_BG = {0.01f, 0.012f, 0.015f, 1.0f};
 static const er_ui_color4_t ER_TEST_TEXT = {0.94f, 0.96f, 0.99f, 1.0f};
+static const uint32_t ER_TEST_FONT_ATLAS_SIZE = 512u;
+static const uint32_t ER_TEST_SCENE_HIT_ID = 7u;
+static const uint32_t ER_TEST_SCENE_TRANSITION_ID = 90u;
+static const uint32_t ER_TEST_SCENE_TRANSITION_MS = 120u;
+static const size_t ER_TEST_SCENE_SPARSE_RECT_COUNT = 20u;
+static const size_t ER_TEST_SCENE_SPARSE_RECT_NEXT_COUNT = 21u;
+static const uint32_t ER_TEST_QUERY_SCOPE_ID = 10u;
+static const uint32_t ER_TEST_QUERY_OTHER_SCOPE_ID = 11u;
+static const uint32_t ER_TEST_QUERY_FIRST_ID = 1u;
+static const uint32_t ER_TEST_QUERY_SECOND_ID = 2u;
+static const float ER_TEST_QUERY_BOX_SIZE = 30.0f;
+static const size_t ER_TEST_QUERY_FIRST_INDEX = 0u;
+static const size_t ER_TEST_QUERY_SECOND_INDEX = 1u;
+static const uint32_t ER_TEST_CLIPPED_HIT_ID = 8u;
+static const uint32_t ER_TEST_CURSOR_HIT_ID = 3u;
+static const uint32_t ER_TEST_TRANSITION_IGNORED_ZERO_ID = 1u;
+static const uint32_t ER_TEST_TRANSITION_IGNORED_LONG_ID = 2u;
+static const uint32_t ER_TEST_TRANSITION_VALID_ID = 3u;
+static const uint32_t ER_TEST_TRANSITION_VALID_MS = 160u;
+static const size_t ER_TEST_BUDGET_ACTUAL_RECTS = 11u;
+static const size_t ER_TEST_BUDGET_ACTUAL_HITS = 4u;
+static const size_t ER_TEST_BUDGET_LIMIT_RECTS = 10u;
+static const uint8_t ER_TEST_COLOR_U8_MAX = 255u;
+static const uint8_t ER_TEST_COLOR_U8_MID = 128u;
+static const uint32_t ER_TEST_SCHEME_UNKNOWN_CODE = 99u;
+static const size_t ER_TEST_PAINTER_PANEL_RECT_COUNT = 4u;
+static const size_t ER_TEST_PAINTER_PANEL_BORDER_INDEX = 3u;
+static const size_t ER_TEST_PAINTER_HORIZONTAL_DIVIDER_INDEX = 4u;
+static const size_t ER_TEST_PAINTER_VERTICAL_DIVIDER_INDEX = 5u;
+static const uint32_t ER_TEST_PAINTER_HIT_ID = 44u;
+static const uint32_t ER_TEST_PAINTER_DRAG_SCOPE_ID = 9u;
+static const uint32_t ER_TEST_PAINTER_DRAG_ITEM_ID = 10u;
+static const uint32_t ER_TEST_PAINTER_TRANSITION_ID = 123u;
+static const uint32_t ER_TEST_VARFONT_ATLAS_ID = 7u;
+static const uint32_t ER_TEST_VARFONT_TEXT_ATLAS_SIZE = 256u;
+static const size_t ER_TEST_VARFONT_TEXT_LEN = 3u;
+static const size_t ER_TEST_ASCII_SHORT_BUDGET = 3u;
+static const size_t ER_TEST_ASCII_OVERSIZED_BUDGET = 300u;
 
 void expect_true(bool condition, const char* name) {
   g_tests_total++;
@@ -131,8 +169,8 @@ vr_font_face_t* er_ui_test_open_font(float px_size, const char* load_message, co
 
   vr_font_config_t cfg = {0};
   cfg.px_size = px_size;
-  cfg.atlas_width = 512u;
-  cfg.atlas_height = 512u;
+  cfg.atlas_width = ER_TEST_FONT_ATLAS_SIZE;
+  cfg.atlas_height = ER_TEST_FONT_ATLAS_SIZE;
   cfg.atlas_pad = VR_FONT_DEFAULT_ATLAS_PADDING;
   cfg.atlas_format = VR_FONT_ATLAS_FORMAT_ALPHA8;
   cfg.allocator = er_ui_test_vr_allocator();
@@ -162,9 +200,10 @@ static void test_scene_stats_and_clear(void) {
 
   expect_status(er_ui_scene_push_rect(&scene, er_ui_rect_fill(0.0f, 0.0f, 10.0f, 10.0f, 0.0f, ER_TEST_TEXT)), ER_UI_OK,
                 "scene: push rect succeeds");
-  expect_status(er_ui_scene_push_hit(&scene, er_ui_hit(ER_UI_HIT_BUTTON, 7u, 1.0f, 1.0f, 8.0f, 8.0f)), ER_UI_OK,
+  expect_status(er_ui_scene_push_hit(&scene, er_ui_hit(ER_UI_HIT_BUTTON, ER_TEST_SCENE_HIT_ID, 1.0f, 1.0f, 8.0f, 8.0f)), ER_UI_OK,
                 "scene: push hit succeeds");
-  expect_status(er_ui_scene_push_transition(&scene, er_ui_transition_opacity(90u, 0.0f, 1.0f, 120u)), ER_UI_OK,
+  expect_status(er_ui_scene_push_transition(&scene, er_ui_transition_opacity(ER_TEST_SCENE_TRANSITION_ID, 0.0f, 1.0f, ER_TEST_SCENE_TRANSITION_MS)),
+                ER_UI_OK,
                 "scene: push transition succeeds");
   bool pushed = false;
   expect_status(er_ui_scene_push_clip(&scene, er_ui_clip(0.0f, 0.0f, 5.0f, 5.0f), &pushed), ER_UI_OK,
@@ -192,11 +231,11 @@ static void test_scene_reserve_handles_large_public_count(void) {
   er_ui_scene_t scene = {0};
   expect_status(er_ui_scene_init_with_allocator(&scene, ER_TEST_BG, er_ui_test_allocator()), ER_UI_OK, "reserve: init succeeds");
 
-  scene.rect_count = 20u;
+  scene.rect_count = ER_TEST_SCENE_SPARSE_RECT_COUNT;
   expect_status(er_ui_scene_push_rect(&scene, er_ui_rect_fill(0.0f, 0.0f, 10.0f, 10.0f, 0.0f, ER_TEST_TEXT)), ER_UI_OK,
                 "reserve: sparse public count grows enough capacity");
-  expect_true(scene.rect_capacity > 20u, "reserve: capacity covers inserted sparse index");
-  expect_size(scene.rect_count, 21u, "reserve: count advances from public count");
+  expect_true(scene.rect_capacity > ER_TEST_SCENE_SPARSE_RECT_COUNT, "reserve: capacity covers inserted sparse index");
+  expect_size(scene.rect_count, ER_TEST_SCENE_SPARSE_RECT_NEXT_COUNT, "reserve: count advances from public count");
 
   er_ui_scene_destroy(&scene);
 }
@@ -205,29 +244,35 @@ static void test_scene_topmost_queries(void) {
   er_ui_scene_t scene = {0};
   expect_status(er_ui_scene_init_with_allocator(&scene, ER_TEST_BG, er_ui_test_allocator()), ER_UI_OK, "query: init succeeds");
 
-  expect_status(er_ui_scene_push_hit(&scene, er_ui_hit(ER_UI_HIT_BUTTON, 1u, 0.0f, 0.0f, 30.0f, 30.0f)), ER_UI_OK,
+  expect_status(er_ui_scene_push_hit(&scene, er_ui_hit(ER_UI_HIT_BUTTON, ER_TEST_QUERY_FIRST_ID, 0.0f, 0.0f, ER_TEST_QUERY_BOX_SIZE, ER_TEST_QUERY_BOX_SIZE)), ER_UI_OK,
                 "query: first hit push succeeds");
-  expect_status(er_ui_scene_push_hit(&scene, er_ui_hit(ER_UI_HIT_BUTTON, 2u, 0.0f, 0.0f, 30.0f, 30.0f)), ER_UI_OK,
+  expect_status(er_ui_scene_push_hit(&scene, er_ui_hit(ER_UI_HIT_BUTTON, ER_TEST_QUERY_SECOND_ID, 0.0f, 0.0f, ER_TEST_QUERY_BOX_SIZE, ER_TEST_QUERY_BOX_SIZE)), ER_UI_OK,
                 "query: second hit push succeeds");
-  expect_status(er_ui_scene_push_drag_source(&scene, er_ui_drag_source(10u, 1u, 0u, 0.0f, 0.0f, 30.0f, 30.0f)), ER_UI_OK,
+  expect_status(er_ui_scene_push_drag_source(&scene, er_ui_drag_source(ER_TEST_QUERY_SCOPE_ID, ER_TEST_QUERY_FIRST_ID, ER_TEST_QUERY_FIRST_INDEX, 0.0f,
+                                                                       0.0f, ER_TEST_QUERY_BOX_SIZE, ER_TEST_QUERY_BOX_SIZE)),
+                ER_UI_OK,
                 "query: first drag source push succeeds");
-  expect_status(er_ui_scene_push_drag_source(&scene, er_ui_drag_source(10u, 2u, 1u, 0.0f, 0.0f, 30.0f, 30.0f)), ER_UI_OK,
+  expect_status(er_ui_scene_push_drag_source(&scene, er_ui_drag_source(ER_TEST_QUERY_SCOPE_ID, ER_TEST_QUERY_SECOND_ID, ER_TEST_QUERY_SECOND_INDEX, 0.0f,
+                                                                       0.0f, ER_TEST_QUERY_BOX_SIZE, ER_TEST_QUERY_BOX_SIZE)),
+                ER_UI_OK,
                 "query: second drag source push succeeds");
-  expect_status(er_ui_scene_push_drop_target(&scene, er_ui_drop_target(10u, 0u, 0.0f, 0.0f, 30.0f, 30.0f)), ER_UI_OK,
+  expect_status(er_ui_scene_push_drop_target(&scene, er_ui_drop_target(ER_TEST_QUERY_SCOPE_ID, ER_TEST_QUERY_FIRST_INDEX, 0.0f, 0.0f, ER_TEST_QUERY_BOX_SIZE, ER_TEST_QUERY_BOX_SIZE)),
+                ER_UI_OK,
                 "query: first drop target push succeeds");
-  expect_status(er_ui_scene_push_drop_target(&scene, er_ui_drop_target(10u, 1u, 0.0f, 0.0f, 30.0f, 30.0f)), ER_UI_OK,
+  expect_status(er_ui_scene_push_drop_target(&scene, er_ui_drop_target(ER_TEST_QUERY_SCOPE_ID, ER_TEST_QUERY_SECOND_INDEX, 0.0f, 0.0f, ER_TEST_QUERY_BOX_SIZE, ER_TEST_QUERY_BOX_SIZE)),
+                ER_UI_OK,
                 "query: second drop target push succeeds");
 
   er_ui_hit_t hit = {0};
   er_ui_drag_source_t source = {0};
   er_ui_drop_target_t target = {0};
   expect_true(er_ui_scene_hit_test(&scene, 4.0f, 4.0f, &hit), "query: hit is found");
-  expect_u32(hit.id, 2u, "query: latest hit is topmost");
+  expect_u32(hit.id, ER_TEST_QUERY_SECOND_ID, "query: latest hit is topmost");
   expect_true(er_ui_scene_drag_source_at(&scene, 4.0f, 4.0f, &source), "query: drag source is found");
-  expect_u32(source.item_id, 2u, "query: latest drag source is topmost");
-  expect_true(er_ui_scene_drop_target_at(&scene, 4.0f, 4.0f, 10u, &target), "query: drop target is found");
-  expect_size(target.index, 1u, "query: latest scoped drop target is topmost");
-  expect_true(!er_ui_scene_drop_target_at(&scene, 4.0f, 4.0f, 11u, &target), "query: drop target scope is enforced");
+  expect_u32(source.item_id, ER_TEST_QUERY_SECOND_ID, "query: latest drag source is topmost");
+  expect_true(er_ui_scene_drop_target_at(&scene, 4.0f, 4.0f, ER_TEST_QUERY_SCOPE_ID, &target), "query: drop target is found");
+  expect_size(target.index, ER_TEST_QUERY_SECOND_INDEX, "query: latest scoped drop target is topmost");
+  expect_true(!er_ui_scene_drop_target_at(&scene, 4.0f, 4.0f, ER_TEST_QUERY_OTHER_SCOPE_ID, &target), "query: drop target scope is enforced");
 
   er_ui_scene_destroy(&scene);
 }
@@ -256,7 +301,7 @@ static void test_scene_validation_and_clipping(void) {
   expect_true(pushed, "clip: clip was pushed");
   expect_status(er_ui_scene_push_rect(&scene, er_ui_rect_shadow(0.0f, 0.0f, 20.0f, 20.0f, 12.0f, ER_TEST_TEXT, 6.0f)), ER_UI_OK,
                 "clip: clipped rect push succeeds");
-  expect_status(er_ui_scene_push_hit(&scene, er_ui_hit(ER_UI_HIT_BUTTON, 8u, 0.0f, 0.0f, 20.0f, 20.0f)), ER_UI_OK,
+  expect_status(er_ui_scene_push_hit(&scene, er_ui_hit(ER_UI_HIT_BUTTON, ER_TEST_CLIPPED_HIT_ID, 0.0f, 0.0f, 20.0f, 20.0f)), ER_UI_OK,
                 "clip: clipped hit push succeeds");
   expect_status(er_ui_scene_push_text_quad(&scene, er_ui_quad(0.0f, 0.0f, 20.0f, 10.0f, 0.0f, 0.0f, 1.0f, 1.0f, ER_TEST_TEXT)), ER_UI_OK,
                 "clip: clipped text quad push succeeds");
@@ -282,7 +327,7 @@ static void test_scene_cursor_mutations(void) {
   er_ui_scene_cursor_t cursor = er_ui_scene_cursor(&scene);
   expect_status(er_ui_scene_push_rect(&scene, er_ui_rect_fill(1.0f, 2.0f, 4.0f, 4.0f, 0.0f, ER_TEST_TEXT)), ER_UI_OK,
                 "cursor: later rect push succeeds");
-  expect_status(er_ui_scene_push_hit(&scene, er_ui_hit(ER_UI_HIT_BUTTON, 3u, 1.0f, 2.0f, 4.0f, 4.0f)), ER_UI_OK,
+  expect_status(er_ui_scene_push_hit(&scene, er_ui_hit(ER_UI_HIT_BUTTON, ER_TEST_CURSOR_HIT_ID, 1.0f, 2.0f, 4.0f, 4.0f)), ER_UI_OK,
                 "cursor: later hit push succeeds");
   expect_status(er_ui_scene_push_icon_quad(&scene, er_ui_quad(1.0f, 2.0f, 4.0f, 4.0f, 0.0f, 0.0f, 1.0f, 1.0f, ER_TEST_TEXT)), ER_UI_OK,
                 "cursor: later icon push succeeds");
@@ -309,30 +354,32 @@ static void test_transition_and_budget_contracts(void) {
 
   er_ui_scene_t scene = {0};
   expect_status(er_ui_scene_init_with_allocator(&scene, ER_TEST_BG, er_ui_test_allocator()), ER_UI_OK, "transition: init succeeds");
-  expect_status(er_ui_scene_push_transition(&scene, er_ui_transition_opacity(1u, 0.0f, 1.0f, 0u)), ER_UI_OK,
+  expect_status(er_ui_scene_push_transition(&scene, er_ui_transition_opacity(ER_TEST_TRANSITION_IGNORED_ZERO_ID, 0.0f, 1.0f, 0u)), ER_UI_OK,
                 "transition: zero duration ignored without error");
-  expect_status(er_ui_scene_push_transition(&scene, er_ui_transition_opacity(2u, 0.0f, 1.0f, ER_UI_SCENE_TRANSITION_MAX_DURATION_MS + 1u)), ER_UI_OK,
+  expect_status(er_ui_scene_push_transition(&scene, er_ui_transition_opacity(ER_TEST_TRANSITION_IGNORED_LONG_ID, 0.0f, 1.0f,
+                                                                             ER_UI_SCENE_TRANSITION_MAX_DURATION_MS + 1u)),
+                ER_UI_OK,
                 "transition: excessive duration ignored without error");
-  expect_status(er_ui_scene_push_transition(&scene, er_ui_transition_translate_y(3u, -8.0f, 0.0f, 160u)), ER_UI_OK,
+  expect_status(er_ui_scene_push_transition(&scene, er_ui_transition_translate_y(ER_TEST_TRANSITION_VALID_ID, -8.0f, 0.0f, ER_TEST_TRANSITION_VALID_MS)), ER_UI_OK,
                 "transition: valid transition accepted");
   expect_size(scene.transition_count, 1u, "transition: only valid transition inserted");
   er_ui_scene_destroy(&scene);
 
-  er_ui_scene_stats_t stats = {11u, 4u, 0u, 0u, 0u, 0u, 0u, 0u};
-  er_ui_scene_budget_t budget = {10u, 8u, 1u, 1u, 1u, 1u, 1u};
+  er_ui_scene_stats_t stats = {ER_TEST_BUDGET_ACTUAL_RECTS, ER_TEST_BUDGET_ACTUAL_HITS, 0u, 0u, 0u, 0u, 0u, 0u};
+  er_ui_scene_budget_t budget = {ER_TEST_BUDGET_LIMIT_RECTS, 8u, 1u, 1u, 1u, 1u, 1u};
   er_ui_scene_budget_violation_t violation = {0};
   expect_true(er_ui_scene_first_budget_violation(stats, budget, &violation), "budget: violation is reported");
   expect_true(strcmp(violation.name, "rects") == 0, "budget: first violation names rects");
-  expect_size(violation.actual, 11u, "budget: violation actual is reported");
-  expect_size(violation.limit, 10u, "budget: violation limit is reported");
+  expect_size(violation.actual, ER_TEST_BUDGET_ACTUAL_RECTS, "budget: violation actual is reported");
+  expect_size(violation.limit, ER_TEST_BUDGET_LIMIT_RECTS, "budget: violation limit is reported");
   expect_true(!er_ui_scene_stats_fits_budget(stats, budget), "budget: over-budget stats do not fit");
   expect_true(er_ui_scene_stats_fits_budget(stats, er_ui_scene_budget_native_interactive_frame()), "budget: native frame budget accepts fixture");
 }
 
 static void test_color_helpers_and_scheme_codes(void) {
-  er_ui_color4_t color = er_ui_color_rgb_u8(255u, 128u, 0u);
+  er_ui_color4_t color = er_ui_color_rgb_u8(ER_TEST_COLOR_U8_MAX, ER_TEST_COLOR_U8_MID, 0u);
   expect_float(color.r, 1.0f, "color: u8 red converts to float");
-  expect_float(color.g, 128.0f / 255.0f, "color: u8 green converts to float");
+  expect_float(color.g, (float)ER_TEST_COLOR_U8_MID / (float)ER_TEST_COLOR_U8_MAX, "color: u8 green converts to float");
   expect_float(color.b, 0.0f, "color: u8 blue converts to float");
   expect_float(color.a, 1.0f, "color: rgb helper sets alpha");
   color = er_ui_color_with_alpha(color, 0.25f);
@@ -340,7 +387,7 @@ static void test_color_helpers_and_scheme_codes(void) {
 
   expect_true(er_ui_color_scheme_from_code(1u) == ER_UI_COLOR_SCHEME_LIGHT, "scheme: light code decodes");
   expect_true(er_ui_color_scheme_from_code(2u) == ER_UI_COLOR_SCHEME_TERMINAL, "scheme: terminal code decodes");
-  expect_true(er_ui_color_scheme_from_code(99u) == ER_UI_COLOR_SCHEME_DARK, "scheme: unknown code decodes dark");
+  expect_true(er_ui_color_scheme_from_code(ER_TEST_SCHEME_UNKNOWN_CODE) == ER_UI_COLOR_SCHEME_DARK, "scheme: unknown code decodes dark");
   expect_u32(er_ui_color_scheme_code(ER_UI_COLOR_SCHEME_LIGHT), 1u, "scheme: light code encodes");
   expect_u32(er_ui_color_scheme_code(ER_UI_COLOR_SCHEME_TERMINAL), 2u, "scheme: terminal code encodes");
   expect_u32(er_ui_color_scheme_code(ER_UI_COLOR_SCHEME_DARK), 0u, "scheme: dark code encodes");
@@ -417,24 +464,27 @@ static void test_painter_facade_pushes_scene_commands(void) {
 
   expect_status(er_ui_painter_panel(&painter, er_ui_bounds(0.0f, 0.0f, 30.0f, 20.0f), 6.0f, ER_TEST_TEXT, border), ER_UI_OK,
                 "painter: panel succeeds");
-  expect_size(scene.rect_count, 4u, "painter: panel emits fill and border");
-  expect_true(scene.rects[3].mode == ER_UI_RECT_BORDER, "painter: panel second rect is border");
-  expect_float(scene.rects[3].color.g, border.g, "painter: panel border color stored");
+  expect_size(scene.rect_count, ER_TEST_PAINTER_PANEL_RECT_COUNT, "painter: panel emits fill and border");
+  expect_true(scene.rects[ER_TEST_PAINTER_PANEL_BORDER_INDEX].mode == ER_UI_RECT_BORDER, "painter: panel second rect is border");
+  expect_float(scene.rects[ER_TEST_PAINTER_PANEL_BORDER_INDEX].color.g, border.g, "painter: panel border color stored");
 
   expect_status(er_ui_painter_divider(&painter, 5.0f, 6.0f, 50.0f, ER_UI_AXIS_HORIZONTAL, border), ER_UI_OK,
                 "painter: horizontal divider succeeds");
-  expect_float(scene.rects[4].w, 50.0f, "painter: horizontal divider width stored");
-  expect_float(scene.rects[4].h, 1.0f, "painter: horizontal divider height stored");
+  expect_float(scene.rects[ER_TEST_PAINTER_HORIZONTAL_DIVIDER_INDEX].w, 50.0f, "painter: horizontal divider width stored");
+  expect_float(scene.rects[ER_TEST_PAINTER_HORIZONTAL_DIVIDER_INDEX].h, 1.0f, "painter: horizontal divider height stored");
   expect_status(er_ui_painter_divider(&painter, 7.0f, 8.0f, 30.0f, ER_UI_AXIS_VERTICAL, border), ER_UI_OK,
                 "painter: vertical divider succeeds");
-  expect_float(scene.rects[5].w, 1.0f, "painter: vertical divider width stored");
-  expect_float(scene.rects[5].h, 30.0f, "painter: vertical divider height stored");
+  expect_float(scene.rects[ER_TEST_PAINTER_VERTICAL_DIVIDER_INDEX].w, 1.0f, "painter: vertical divider width stored");
+  expect_float(scene.rects[ER_TEST_PAINTER_VERTICAL_DIVIDER_INDEX].h, 30.0f, "painter: vertical divider height stored");
 
-  expect_status(er_ui_painter_hit(&painter, ER_UI_HIT_BUTTON, 44u, er_ui_bounds(1.0f, 2.0f, 3.0f, 4.0f)), ER_UI_OK,
+  expect_status(er_ui_painter_hit(&painter, ER_UI_HIT_BUTTON, ER_TEST_PAINTER_HIT_ID, er_ui_bounds(1.0f, 2.0f, 3.0f, 4.0f)), ER_UI_OK,
                 "painter: hit succeeds");
-  expect_status(er_ui_painter_drag_source(&painter, 9u, 10u, 1u, er_ui_bounds(2.0f, 3.0f, 4.0f, 5.0f)), ER_UI_OK,
+  expect_status(er_ui_painter_drag_source(&painter, ER_TEST_PAINTER_DRAG_SCOPE_ID, ER_TEST_PAINTER_DRAG_ITEM_ID, ER_TEST_QUERY_SECOND_INDEX,
+                                          er_ui_bounds(2.0f, 3.0f, 4.0f, 5.0f)),
+                ER_UI_OK,
                 "painter: drag source succeeds");
-  expect_status(er_ui_painter_drop_target(&painter, 9u, 2u, er_ui_bounds(3.0f, 4.0f, 5.0f, 6.0f)), ER_UI_OK,
+  expect_status(er_ui_painter_drop_target(&painter, ER_TEST_PAINTER_DRAG_SCOPE_ID, ER_TEST_QUERY_SECOND_ID, er_ui_bounds(3.0f, 4.0f, 5.0f, 6.0f)),
+                ER_UI_OK,
                 "painter: drop target succeeds");
   expect_size(scene.hit_count, 1u, "painter: hit count increments");
   expect_size(scene.drag_source_count, 1u, "painter: drag source count increments");
@@ -446,7 +496,8 @@ static void test_painter_facade_pushes_scene_commands(void) {
                 ER_UI_OK, "painter: icon quad succeeds");
   expect_status(er_ui_painter_text_quad(&painter, er_ui_bounds(0.0f, 20.0f, 16.0f, 16.0f), 0.0f, 0.0f, 1.0f, 1.0f, ER_TEST_TEXT),
                 ER_UI_OK, "painter: text quad succeeds");
-  expect_status(er_ui_painter_transition(&painter, er_ui_transition_opacity(123u, 0.0f, 1.0f, 120u)), ER_UI_OK,
+  expect_status(er_ui_painter_transition(&painter, er_ui_transition_opacity(ER_TEST_PAINTER_TRANSITION_ID, 0.0f, 1.0f, ER_TEST_SCENE_TRANSITION_MS)),
+                ER_UI_OK,
                 "painter: transition succeeds");
   expect_size(scene.icon_quad_count, 2u, "painter: icon quad count increments");
   expect_u32(scene.icon_quads[0].atlas_id, er_ui_icon_atlas_id(ER_UI_ICON_SEARCH), "painter: semantic icon stores atlas id");
@@ -507,12 +558,12 @@ static void test_varfont_vertices_emit_text_quads(void) {
   expect_status(er_ui_scene_init_with_allocator(&scene, ER_TEST_BG, er_ui_test_allocator()), ER_UI_OK, "varfont: scene init succeeds");
 
   vr_vertex_t vertices[VR_FONT_VERTICES_PER_GLYPH] = {
-    {10.0f, 20.0f, 0.10f, 0.20f, 1.0f, 1.0f, 1.0f, 1.0f, 7u},
-    {18.0f, 20.0f, 0.30f, 0.20f, 1.0f, 1.0f, 1.0f, 1.0f, 7u},
-    {18.0f, 32.0f, 0.30f, 0.50f, 1.0f, 1.0f, 1.0f, 1.0f, 7u},
-    {10.0f, 20.0f, 0.10f, 0.20f, 1.0f, 1.0f, 1.0f, 1.0f, 7u},
-    {18.0f, 32.0f, 0.30f, 0.50f, 1.0f, 1.0f, 1.0f, 1.0f, 7u},
-    {10.0f, 32.0f, 0.10f, 0.50f, 1.0f, 1.0f, 1.0f, 1.0f, 7u},
+    {10.0f, 20.0f, 0.10f, 0.20f, 1.0f, 1.0f, 1.0f, 1.0f, ER_TEST_VARFONT_ATLAS_ID},
+    {18.0f, 20.0f, 0.30f, 0.20f, 1.0f, 1.0f, 1.0f, 1.0f, ER_TEST_VARFONT_ATLAS_ID},
+    {18.0f, 32.0f, 0.30f, 0.50f, 1.0f, 1.0f, 1.0f, 1.0f, ER_TEST_VARFONT_ATLAS_ID},
+    {10.0f, 20.0f, 0.10f, 0.20f, 1.0f, 1.0f, 1.0f, 1.0f, ER_TEST_VARFONT_ATLAS_ID},
+    {18.0f, 32.0f, 0.30f, 0.50f, 1.0f, 1.0f, 1.0f, 1.0f, ER_TEST_VARFONT_ATLAS_ID},
+    {10.0f, 32.0f, 0.10f, 0.50f, 1.0f, 1.0f, 1.0f, 1.0f, ER_TEST_VARFONT_ATLAS_ID},
   };
 
   expect_status(er_ui_scene_push_varfont_vertices(&scene, vertices, VR_FONT_VERTICES_PER_GLYPH, ER_TEST_TEXT), ER_UI_OK,
@@ -524,7 +575,7 @@ static void test_varfont_vertices_emit_text_quads(void) {
   expect_float(scene.text_quads[0].h, 12.0f, "varfont: quad height derived");
   expect_float(scene.text_quads[0].u0, 0.10f, "varfont: quad u0 copied");
   expect_float(scene.text_quads[0].v1, 0.50f, "varfont: quad v1 copied");
-  expect_u32(scene.text_quads[0].atlas_id, 7u, "varfont: atlas id copied");
+  expect_u32(scene.text_quads[0].atlas_id, ER_TEST_VARFONT_ATLAS_ID, "varfont: atlas id copied");
   expect_status(er_ui_scene_push_varfont_vertices(&scene, vertices, 1u, ER_TEST_TEXT), ER_UI_ERR_INVALID_ARGUMENT,
                 "varfont: partial vertex batch is rejected");
 
@@ -545,8 +596,8 @@ static void test_varfont_memory_face_emits_ui_text(void) {
 
   vr_font_config_t cfg = {0};
   cfg.px_size = 24.0f;
-  cfg.atlas_width = 256u;
-  cfg.atlas_height = 256u;
+  cfg.atlas_width = ER_TEST_VARFONT_TEXT_ATLAS_SIZE;
+  cfg.atlas_height = ER_TEST_VARFONT_TEXT_ATLAS_SIZE;
   cfg.atlas_pad = VR_FONT_DEFAULT_ATLAS_PADDING;
   cfg.atlas_format = VR_FONT_ATLAS_FORMAT_ALPHA8;
   cfg.allocator = er_ui_test_vr_allocator();
@@ -562,23 +613,23 @@ static void test_varfont_memory_face_emits_ui_text(void) {
 
   const uint32_t text[] = {'R', 'u', 'n'};
   er_ui_varfont_text_metrics_t measured = {0};
-  expect_status(er_ui_varfont_measure_text(face, text, 3u, &measured), ER_UI_OK, "varfont text: measure succeeds");
+  expect_status(er_ui_varfont_measure_text(face, text, ER_TEST_VARFONT_TEXT_LEN, &measured), ER_UI_OK, "varfont text: measure succeeds");
   expect_true(measured.advance_width > 0.0f, "varfont text: measured advance is positive");
   expect_true(measured.line_height > 0.0f, "varfont text: measured line height is positive");
   expect_true(measured.ascender > 0.0f, "varfont text: measured ascender is positive");
   expect_status(er_ui_varfont_measure_text(face, NULL, 1u, &measured), ER_UI_ERR_INVALID_ARGUMENT,
                 "varfont text: measure rejects missing codepoints");
 
-  expect_status(er_ui_scene_push_varfont_text(&scene, face, text, 3u, 4.0f, 40.0f, ER_TEST_TEXT), ER_UI_OK,
+  expect_status(er_ui_scene_push_varfont_text(&scene, face, text, ER_TEST_VARFONT_TEXT_LEN, 4.0f, 40.0f, ER_TEST_TEXT), ER_UI_OK,
                 "varfont text: shaped text emits scene quads");
   expect_true(scene.text_quad_count > 0u, "varfont text: emitted at least one quad");
   size_t text_quads_before_ascii = scene.text_quad_count;
   expect_status(er_ui_scene_push_ascii_text(&scene, face, "ASCII", 8u, 4.0f, 68.0f, ER_TEST_TEXT), ER_UI_OK,
                 "varfont text: ascii helper emits text");
   expect_true(scene.text_quad_count > text_quads_before_ascii, "varfont text: ascii helper emits quads");
-  expect_status(er_ui_scene_push_ascii_text(&scene, face, "too long", 3u, 4.0f, 92.0f, ER_TEST_TEXT), ER_UI_ERR_INVALID_ARGUMENT,
+  expect_status(er_ui_scene_push_ascii_text(&scene, face, "too long", ER_TEST_ASCII_SHORT_BUDGET, 4.0f, 92.0f, ER_TEST_TEXT), ER_UI_ERR_INVALID_ARGUMENT,
                 "varfont text: ascii helper enforces caller budget");
-  expect_status(er_ui_scene_push_ascii_text(&scene, face, "wide", 300u, 4.0f, 116.0f, ER_TEST_TEXT), ER_UI_ERR_INVALID_ARGUMENT,
+  expect_status(er_ui_scene_push_ascii_text(&scene, face, "wide", ER_TEST_ASCII_OVERSIZED_BUDGET, 4.0f, 116.0f, ER_TEST_TEXT), ER_UI_ERR_INVALID_ARGUMENT,
                 "varfont text: ascii helper rejects oversized stack budget");
   size_t atlas_count = vr_font_atlas_count(face);
   expect_true(atlas_count > 0u, "varfont text: atlas page was created");
