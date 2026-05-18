@@ -11,8 +11,26 @@
 enum {
   ERC_INDEX_HEADER_BYTES = 12,
   ERC_INDEX_ENTRY_BASE_BYTES = 62,
+  ERC_INDEX_MODE_OFFSET = 24,
+  ERC_INDEX_FLAGS_OFFSET = 60,
+  ERC_INDEX_FLAGS_BYTES = 2,
+  ERC_INDEX_NAME_LEN_MASK = 0x0fff,
+  ERC_INDEX_EXTENDED_NAME_LEN = 0x0fff,
+  ERC_INDEX_ENTRY_ALIGNMENT = 8,
+  ERC_GIT_DIRC_MAGIC_BYTES = 4,
+  ERC_BE32_BYTE_SHIFT_1 = 8,
+  ERC_BE32_BYTE_SHIFT_2 = 16,
+  ERC_BE32_BYTE_SHIFT_3 = 24,
+  ERC_BE32_BYTE_INDEX_0 = 0,
+  ERC_BE32_BYTE_INDEX_1 = 1,
+  ERC_BE32_BYTE_INDEX_2 = 2,
+  ERC_BE32_BYTE_INDEX_3 = 3,
   ERC_GITLINK_MODE = 0160000
 };
+
+static const char ERC_BUILD_ARTIFACT_DIR[] = ".build/";
+static const char ERC_VARFONT_BUILD_ARTIFACT_DIR[] = "varfont/build/";
+static const char ERC_METAL_BUILD_ARTIFACT_DIR[] = "edgerun-metal/build/";
 
 static int erc_fail(const char* message) {
   fprintf(stderr, "repo-check: %s\n", message);
@@ -20,7 +38,10 @@ static int erc_fail(const char* message) {
 }
 
 static uint32_t erc_be32(const unsigned char* p) {
-  return ((uint32_t)p[0] << 24u) | ((uint32_t)p[1] << 16u) | ((uint32_t)p[2] << 8u) | (uint32_t)p[3];
+  return ((uint32_t)p[ERC_BE32_BYTE_INDEX_0] << ERC_BE32_BYTE_SHIFT_3) |
+         ((uint32_t)p[ERC_BE32_BYTE_INDEX_1] << ERC_BE32_BYTE_SHIFT_2) |
+         ((uint32_t)p[ERC_BE32_BYTE_INDEX_2] << ERC_BE32_BYTE_SHIFT_1) |
+         (uint32_t)p[ERC_BE32_BYTE_INDEX_3];
 }
 
 //@optimizer-ignore-function repository path validation must scan every path component
@@ -47,9 +68,9 @@ static int erc_has_component(const char* path, const char* component) {
 }
 
 static int erc_is_tracked_build_artifact(const char* path) {
-  return strncmp(path, ".build/", 7u) == 0 ||
-         strncmp(path, "varfont/build/", 14u) == 0 ||
-         strncmp(path, "edgerun-metal/build/", 20u) == 0;
+  return strncmp(path, ERC_BUILD_ARTIFACT_DIR, sizeof(ERC_BUILD_ARTIFACT_DIR) - 1u) == 0 ||
+         strncmp(path, ERC_VARFONT_BUILD_ARTIFACT_DIR, sizeof(ERC_VARFONT_BUILD_ARTIFACT_DIR) - 1u) == 0 ||
+         strncmp(path, ERC_METAL_BUILD_ARTIFACT_DIR, sizeof(ERC_METAL_BUILD_ARTIFACT_DIR) - 1u) == 0;
 }
 
 static int erc_join(char* out, size_t out_len, const char* a, const char* b) {
@@ -173,7 +194,7 @@ static int erc_scan_index(const char* root) {
   if (index_bytes == NULL) {
     return 0;
   }
-  if (index_len < ERC_INDEX_HEADER_BYTES || memcmp(index_bytes, "DIRC", 4u) != 0) {
+  if (index_len < ERC_INDEX_HEADER_BYTES || memcmp(index_bytes, "DIRC", ERC_GIT_DIRC_MAGIC_BYTES) != 0) {
     free(index_bytes);
     return erc_fail("Git index is not readable");
   }
@@ -189,11 +210,12 @@ static int erc_scan_index(const char* root) {
       free(index_bytes);
       return erc_fail("Git index entry is truncated");
     }
-    mode = erc_be32(index_bytes + offset + 24u);
-    flags = (uint16_t)(((uint16_t)index_bytes[offset + 60u] << 8u) | (uint16_t)index_bytes[offset + 61u]);
+    mode = erc_be32(index_bytes + offset + ERC_INDEX_MODE_OFFSET);
+    flags = (uint16_t)(((uint16_t)index_bytes[offset + ERC_INDEX_FLAGS_OFFSET] << ERC_BE32_BYTE_SHIFT_1) |
+                       (uint16_t)index_bytes[offset + ERC_INDEX_FLAGS_OFFSET + ERC_INDEX_FLAGS_BYTES - 1u]);
     name = (const char*)(index_bytes + offset + ERC_INDEX_ENTRY_BASE_BYTES);
-    name_len = (size_t)(flags & 0x0fffu);
-    if (name_len == 0x0fffu) {
+    name_len = (size_t)(flags & ERC_INDEX_NAME_LEN_MASK);
+    if (name_len == ERC_INDEX_EXTENDED_NAME_LEN) {
       const unsigned char* end = memchr(name, '\0', index_len - offset - ERC_INDEX_ENTRY_BASE_BYTES);
       if (end == NULL) {
         free(index_bytes);
@@ -214,7 +236,7 @@ static int erc_scan_index(const char* root) {
       return erc_fail("generated build artifacts must not be tracked");
     }
     entry_len = ERC_INDEX_ENTRY_BASE_BYTES + name_len + 1u;
-    entry_len = (entry_len + 7u) & ~7u;
+    entry_len = (entry_len + (ERC_INDEX_ENTRY_ALIGNMENT - 1u)) & ~(ERC_INDEX_ENTRY_ALIGNMENT - 1u);
     offset += entry_len;
   }
   free(index_bytes);
