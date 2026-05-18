@@ -14,6 +14,7 @@ add_library(er_ui_core
   src/er_ui_components.c
   src/er_ui_demo_apps.c
   src/er_ui_icon.c
+  src/er_ui_initial_setup.c
   src/er_ui_metal.c
   src/er_ui_node.c
   src/er_ui_painter.c
@@ -43,6 +44,7 @@ if(ER_UI_CORE_BUILD_TESTS)
 add_executable(er_ui_core_tests
     tests/test_components.c
     tests/test_demo_apps.c
+    tests/test_initial_setup.c
     tests/test_node.c
     tests/test_record_codec.c
     tests/test_shell.c
