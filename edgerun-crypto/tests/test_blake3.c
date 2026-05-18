@@ -7,17 +7,34 @@
 static int g_failed = 0;
 static int g_total = 0;
 
+#define ER_TEST_HEX_DECIMAL_BASE 10u
+#define ER_TEST_HEX_INVALID_NIBBLE 0xffu
+#define ER_TEST_HEX_MAX_NIBBLE 0x0fu
+#define ER_TEST_HEX_BYTE_SHIFT 4u
+#define ER_TEST_HEX_CHARS_PER_BYTE 2u
+#define ER_TEST_LARGE_BYTES (ER_BLAKE3_CHUNK_LEN * 4u)
+#define ER_TEST_HUGE_BYTES (ER_BLAKE3_CHUNK_LEN * 64u)
+#define ER_TEST_LARGE_HASH_BYTES 1255u
+#define ER_TEST_STREAM_STEP_BYTES 3331u
+#define ER_TEST_INCREMENTAL_FIRST_BYTES 17u
+#define ER_TEST_BULK_BYTES (8u * 1024u * 1024u)
+#define ER_TEST_PARALLEL_JOBS 8u
+#define ER_TEST_PATTERN_MULTIPLIER 131u
+#define ER_TEST_PATTERN_ADDEND 17u
+#define ER_TEST_PATTERN_BYTE_MASK 0xffu
+#define ER_TEST_PRIME_WRAP 251u
+
 static uint8_t hex_nibble(char c) {
   if (c >= '0' && c <= '9') {
     return (uint8_t)(c - '0');
   }
   if (c >= 'a' && c <= 'f') {
-    return (uint8_t)(c - 'a' + 10);
+    return (uint8_t)(c - 'a' + ER_TEST_HEX_DECIMAL_BASE);
   }
   if (c >= 'A' && c <= 'F') {
-    return (uint8_t)(c - 'A' + 10);
+    return (uint8_t)(c - 'A' + ER_TEST_HEX_DECIMAL_BASE);
   }
-  return 0xffu;
+  return ER_TEST_HEX_INVALID_NIBBLE;
 }
 
 static void check_hash_hex(const char* name, const uint8_t actual[ER_BLAKE3_OUT_LEN], const char* expected_hex) {
@@ -28,10 +45,10 @@ static void check_hash_hex(const char* name, const uint8_t actual[ER_BLAKE3_OUT_
 
   ++g_total;
   for (i = 0u; i < ER_BLAKE3_OUT_LEN; ++i) {
-    high = hex_nibble(expected_hex[i * 2u]);
-    low = hex_nibble(expected_hex[(i * 2u) + 1u]);
-    expected = (uint8_t)((high << 4u) | low);
-    if (high > 0x0fu || low > 0x0fu || actual[i] != expected) {
+    high = hex_nibble(expected_hex[i * ER_TEST_HEX_CHARS_PER_BYTE]);
+    low = hex_nibble(expected_hex[(i * ER_TEST_HEX_CHARS_PER_BYTE) + 1u]);
+    expected = (uint8_t)((high << ER_TEST_HEX_BYTE_SHIFT) | low);
+    if (high > ER_TEST_HEX_MAX_NIBBLE || low > ER_TEST_HEX_MAX_NIBBLE || actual[i] != expected) {
       fprintf(stderr, "FAIL %s: byte %zu got 0x%02x expected 0x%02x\n", name, i, actual[i], expected);
       ++g_failed;
       return;
@@ -75,8 +92,8 @@ static uint8_t run_jobs_inline(void* user, ErBlake3JobFn job_fn, void* const* jo
 
 int main(void) {
   static const uint8_t abc[] = {'a', 'b', 'c'};
-  uint8_t large[4096];
-  uint8_t huge[65536];
+  uint8_t large[ER_TEST_LARGE_BYTES];
+  uint8_t huge[ER_TEST_HUGE_BYTES];
   uint8_t digest[ER_BLAKE3_OUT_LEN];
   uint8_t streaming_digest[ER_BLAKE3_OUT_LEN];
   uint8_t* bulk;
@@ -92,20 +109,20 @@ int main(void) {
   //@optimizer-ignore deterministic test fixture pattern intentionally wraps at a prime byte value
   for (i = 0u; i < sizeof(large); ++i) {
     //@optimizer-ignore deterministic test fixture pattern intentionally wraps at a prime byte value
-    large[i] = (uint8_t)(i % 251u);
+    large[i] = (uint8_t)(i % ER_TEST_PRIME_WRAP);
   }
   //@optimizer-ignore deterministic test fixture pattern intentionally wraps at a prime byte value
   for (i = 0u; i < sizeof(huge); ++i) {
     //@optimizer-ignore deterministic test fixture pattern intentionally wraps at a prime byte value
-    huge[i] = (uint8_t)(i % 251u);
+    huge[i] = (uint8_t)(i % ER_TEST_PRIME_WRAP);
   }
-  check_int("large hash", er_blake3_hash_bytes(large, 1255u, digest), 1);
+  check_int("large hash", er_blake3_hash_bytes(large, ER_TEST_LARGE_HASH_BYTES, digest), 1);
   check_hash_hex("large digest", digest, "8b929b2d329f8795b15060a2e5d087ea507aeba8dcf19fb00eb92ceb890d179e");
 
-  check_int("full chunk hash", er_blake3_hash_bytes(large, 1024u, digest), 1);
+  check_int("full chunk hash", er_blake3_hash_bytes(large, ER_BLAKE3_CHUNK_LEN, digest), 1);
   check_hash_hex("full chunk digest", digest, "42214739f095a406f3fc83deb889744ac00df831c10daa55189b5d121c855af7");
 
-  check_int("chunk plus one hash", er_blake3_hash_bytes(large, 1025u, digest), 1);
+  check_int("chunk plus one hash", er_blake3_hash_bytes(large, ER_BLAKE3_CHUNK_LEN + 1u, digest), 1);
   check_hash_hex("chunk plus one digest", digest, "d00278ae47eb27b34faecf67b4fe263f82d5412916c1ffd97c8cb7fb814b8444");
 
   check_int("four chunk hash", er_blake3_hash_bytes(large, sizeof(large), digest), 1);
@@ -114,8 +131,8 @@ int main(void) {
   check_int("many chunk hash", er_blake3_hash_bytes(huge, sizeof(huge), digest), 1);
   check_hash_hex("many chunk digest", digest, "68d647e619a930e7b1082f74f334b0c65a315725569bdc123f0ee11881717bfe");
   er_blake3_init(&hasher);
-  for (i = 0u; i < sizeof(huge); i += 3331u) {
-    size_t take = 3331u;
+  for (i = 0u; i < sizeof(huge); i += ER_TEST_STREAM_STEP_BYTES) {
+    size_t take = ER_TEST_STREAM_STEP_BYTES;
 
     if (take > sizeof(huge) - i) {
       take = sizeof(huge) - i;
@@ -126,27 +143,29 @@ int main(void) {
   check_bytes("many chunk streaming digest", digest, streaming_digest, ER_BLAKE3_OUT_LEN);
 
   er_blake3_init(&hasher);
-  check_int("update a", er_blake3_update(&hasher, large, 17u), 1);
-  check_int("update b", er_blake3_update(&hasher, &large[17], 1255u - 17u), 1);
+  check_int("update a", er_blake3_update(&hasher, large, ER_TEST_INCREMENTAL_FIRST_BYTES), 1);
+  check_int("update b", er_blake3_update(&hasher, &large[ER_TEST_INCREMENTAL_FIRST_BYTES],
+                                         ER_TEST_LARGE_HASH_BYTES - ER_TEST_INCREMENTAL_FIRST_BYTES), 1);
   check_int("final", er_blake3_final(&hasher, digest), 1);
   check_hash_hex("incremental digest", digest, "8b929b2d329f8795b15060a2e5d087ea507aeba8dcf19fb00eb92ceb890d179e");
 
-  bulk = (uint8_t*)malloc(8388608u);
+  bulk = (uint8_t*)malloc(ER_TEST_BULK_BYTES);
   check_int("bulk alloc", bulk != 0, 1);
   if (bulk != 0) {
-    for (i = 0u; i < 8388608u; ++i) {
-      bulk[i] = (uint8_t)((i * 131u + 17u) & 0xffu);
+    for (i = 0u; i < ER_TEST_BULK_BYTES; ++i) {
+      bulk[i] = (uint8_t)(
+        (i * ER_TEST_PATTERN_MULTIPLIER + ER_TEST_PATTERN_ADDEND) & ER_TEST_PATTERN_BYTE_MASK);
     }
-    check_int("bulk hash", er_blake3_hash_bytes(bulk, 8388608u, digest), 1);
-    check_int("bulk parallel hash", er_blake3_hash_bytes_parallel(bulk, 8388608u, streaming_digest,
-                                                                  run_jobs_inline, 0, 8u), 1);
+    check_int("bulk hash", er_blake3_hash_bytes(bulk, ER_TEST_BULK_BYTES, digest), 1);
+    check_int("bulk parallel hash", er_blake3_hash_bytes_parallel(bulk, ER_TEST_BULK_BYTES, streaming_digest,
+                                                                  run_jobs_inline, 0, ER_TEST_PARALLEL_JOBS), 1);
     check_bytes("bulk parallel digest", digest, streaming_digest, ER_BLAKE3_OUT_LEN);
     er_blake3_init(&hasher);
-    for (i = 0u; i < 8388608u; i += 3331u) {
-      size_t take = 3331u;
+    for (i = 0u; i < ER_TEST_BULK_BYTES; i += ER_TEST_STREAM_STEP_BYTES) {
+      size_t take = ER_TEST_STREAM_STEP_BYTES;
 
-      if (take > 8388608u - i) {
-        take = 8388608u - i;
+      if (take > ER_TEST_BULK_BYTES - i) {
+        take = ER_TEST_BULK_BYTES - i;
       }
       check_int("bulk update", er_blake3_update(&hasher, &bulk[i], take), 1);
     }
