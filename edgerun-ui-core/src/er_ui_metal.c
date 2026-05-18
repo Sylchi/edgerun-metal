@@ -47,7 +47,8 @@ static const float ER_UI_METAL_PROOF_Y = 840.0f;
 static const float ER_UI_METAL_COMPACT_PROOF_Y = 608.0f;
 static const float ER_UI_METAL_ROW_H = 76.0f;
 static const float ER_UI_METAL_COMPACT_ROW_H = 54.0f;
-static const float ER_UI_METAL_METRIC_COLUMNS = 3.0f;
+static const float ER_UI_METAL_METRIC_MIN_W = 660.0f;
+static const size_t ER_UI_METAL_METRIC_COLUMN_COUNT = 3u;
 static const float ER_UI_METAL_COMPACT_MAX_WIDTH = 2400.0f;
 static const uint32_t ER_UI_METAL_TAB_BASE_ID = ER_UI_COMPONENT_PREVIEW_BASE_ID + 4100u;
 static const uint32_t ER_UI_METAL_HEADER_ACTION_ID = ER_UI_COMPONENT_PREVIEW_BASE_ID + 4200u;
@@ -62,6 +63,9 @@ static const uint32_t ER_UI_METAL_BOARD_BASE_ID = ER_UI_COMPONENT_PREVIEW_BASE_I
 #define ER_UI_METAL_COMPONENTS_BUTTON_ID (ER_UI_METAL_BOARD_BASE_ID + 60u)
 #define ER_UI_METAL_SEARCH_COMMAND_ID (ER_UI_METAL_BOARD_BASE_ID + 61u)
 #define ER_UI_METAL_SELECTED_TAB_INDEX 3u
+#define ER_UI_METAL_DISPLAY_METRIC_INDEX 0u
+#define ER_UI_METAL_EXECUTOR_METRIC_INDEX 1u
+#define ER_UI_METAL_HARDWARE_METRIC_INDEX 2u
 #define ER_UI_METAL_BUS_TABLE_ROWS 3u
 #define ER_UI_METAL_FRAME_BUDGET_ID (ER_UI_METAL_ROUTE_BASE_ID + 100u)
 #define ER_UI_METAL_ROUTE_SEARCH_ID (ER_UI_METAL_ROUTE_BASE_ID + 200u)
@@ -472,19 +476,6 @@ er_ui_status_t er_ui_edgerun_metal_surface_emit(
     bounds.y + layout.screen_pad,
     bounds.w - layout.screen_pad * 2.0f,
     bounds.h - layout.screen_pad * 2.0f);
-  er_ui_bounds_t header = er_ui_bounds(content.x, content.y, content.w, layout.header_h);
-  er_ui_bounds_t tabs_bounds = er_ui_bounds(content.x, header.y + header.h + layout.tab_y_gap, layout.tab_w, layout.tab_h);
-  er_ui_bounds_t metric_row = er_ui_bounds(content.x, tabs_bounds.y + tabs_bounds.h + layout.block_gap, content.w, layout.metric_h);
-  float lower_y = metric_row.y + metric_row.h + layout.block_gap;
-  float lower_h = layout.compact ? content.y + content.h - layout.toast_h - layout.block_gap - lower_y : ER_UI_METAL_LOWER_H;
-  if (lower_h <= 0.0f) return ER_UI_ERR_INVALID_ARGUMENT;
-  er_ui_bounds_t lower = er_ui_bounds(content.x, lower_y, content.w, lower_h);
-  er_ui_bounds_t left = er_ui_bounds(lower.x, lower.y, layout.left_w, lower.h);
-  float showcase_x = left.x + left.w + layout.block_gap;
-  float showcase_w = lower.w - left.w - layout.block_gap;
-  er_ui_bounds_t showcase = er_ui_bounds(showcase_x, lower.y, showcase_w, lower.h);
-  er_ui_bounds_t footer = er_ui_bounds(content.x, content.y + content.h - layout.toast_h, content.w, layout.toast_h);
-  if (!er_ui_bounds_valid(showcase)) return ER_UI_ERR_INVALID_ARGUMENT;
 
   if (layout.compact) {
     er_ui_responsive_sidecar_t compact = er_ui_responsive_sidecar(
@@ -510,20 +501,64 @@ er_ui_status_t er_ui_edgerun_metal_surface_emit(
     return ER_UI_OK;
   }
 
+  er_ui_bounds_t header = er_ui_bounds(content.x, content.y, content.w, layout.header_h);
+  er_ui_bounds_t tabs_bounds = er_ui_bounds(content.x, header.y + header.h + layout.tab_y_gap, layout.tab_w, layout.tab_h);
+  er_ui_bounds_t metric_seed = er_ui_bounds(content.x, tabs_bounds.y + tabs_bounds.h + layout.block_gap, content.w, layout.metric_h);
+  er_ui_responsive_grid_t metric_grid =
+    er_ui_responsive_grid(metric_seed, ER_UI_METAL_METRIC_MIN_W, ER_UI_METAL_METRIC_COLUMN_COUNT, layout.block_gap, layout.block_gap);
+  if (metric_grid.columns == 0u) return ER_UI_ERR_INVALID_ARGUMENT;
+  size_t metric_rows = (ER_UI_METAL_METRIC_COLUMN_COUNT + metric_grid.columns - 1u) / metric_grid.columns;
+  float metric_row_h = layout.metric_h * (float)metric_rows + layout.block_gap * (float)(metric_rows - 1u);
+  er_ui_bounds_t metric_row = er_ui_bounds(metric_seed.x, metric_seed.y, metric_seed.w, metric_row_h);
+  metric_grid = er_ui_responsive_grid(metric_row, ER_UI_METAL_METRIC_MIN_W, ER_UI_METAL_METRIC_COLUMN_COUNT, layout.block_gap, layout.block_gap);
+  float lower_y = metric_row.y + metric_row.h + layout.block_gap;
+  float lower_h = ER_UI_METAL_LOWER_H;
+  if (lower_h <= 0.0f) return ER_UI_ERR_INVALID_ARGUMENT;
+  er_ui_bounds_t lower = er_ui_bounds(content.x, lower_y, content.w, lower_h);
+  er_ui_bounds_t left = er_ui_bounds(lower.x, lower.y, layout.left_w, lower.h);
+  float showcase_x = left.x + left.w + layout.block_gap;
+  float showcase_w = lower.w - left.w - layout.block_gap;
+  er_ui_bounds_t showcase = er_ui_bounds(showcase_x, lower.y, showcase_w, lower.h);
+  er_ui_bounds_t footer = er_ui_bounds(content.x, content.y + content.h - layout.toast_h, content.w, layout.toast_h);
+  if (!er_ui_bounds_valid(showcase)) return ER_UI_ERR_INVALID_ARGUMENT;
+
   status = er_ui_component_panel_header_emit(scene, font, header, theme, "EdgeRun Metal", "UI scene commands admitted to display relay", "READY", ER_UI_METAL_HEADER_ACTION_ID);
   if (status != ER_UI_OK) return status;
   status = er_ui_component_tabs_emit(scene, font, tabs_bounds, theme, tabs, sizeof(tabs) / sizeof(tabs[0]), ER_UI_METAL_SELECTED_TAB_INDEX, ER_UI_METAL_TAB_BASE_ID);
   if (status != ER_UI_OK) return status;
 
-  float metric_w = (metric_row.w - layout.block_gap * 2.0f) / ER_UI_METAL_METRIC_COLUMNS;
-  status = er_ui_component_metric_card_emit(scene, font, er_ui_bounds(metric_row.x, metric_row.y, metric_w, metric_row.h), theme, "Display", "Relay",
-                                         "scanout surface active", true, 0.82f, theme.colors.accent);
+  status = er_ui_component_metric_card_emit(scene,
+                                            font,
+                                            er_ui_responsive_grid_cell(metric_grid, ER_UI_METAL_DISPLAY_METRIC_INDEX, layout.metric_h),
+                                            theme,
+                                            "Display",
+                                            "Relay",
+                                            "scanout surface active",
+                                            true,
+                                            0.82f,
+                                            theme.colors.accent);
   if (status != ER_UI_OK) return status;
-  status = er_ui_component_metric_card_emit(scene, font, er_ui_bounds(metric_row.x + metric_w + layout.block_gap, metric_row.y, metric_w, metric_row.h), theme,
-                                         "Executor", "WASM", "drivers run as bounded apps", true, 0.58f, theme.colors.info);
+  status = er_ui_component_metric_card_emit(scene,
+                                            font,
+                                            er_ui_responsive_grid_cell(metric_grid, ER_UI_METAL_EXECUTOR_METRIC_INDEX, layout.metric_h),
+                                            theme,
+                                            "Executor",
+                                            "WASM",
+                                            "drivers run as bounded apps",
+                                            true,
+                                            0.58f,
+                                            theme.colors.info);
   if (status != ER_UI_OK) return status;
-  status = er_ui_component_metric_card_emit(scene, font, er_ui_bounds(metric_row.x + (metric_w + layout.block_gap) * 2.0f, metric_row.y, metric_w, metric_row.h), theme,
-                                         "Hardware", "Buses", "addressed byte routes", true, 0.64f, theme.colors.success);
+  status = er_ui_component_metric_card_emit(scene,
+                                            font,
+                                            er_ui_responsive_grid_cell(metric_grid, ER_UI_METAL_HARDWARE_METRIC_INDEX, layout.metric_h),
+                                            theme,
+                                            "Hardware",
+                                            "Buses",
+                                            "addressed byte routes",
+                                            true,
+                                            0.64f,
+                                            theme.colors.success);
   if (status != ER_UI_OK) return status;
 
   status = er_ui_component_route_path_emit(scene, font, er_ui_bounds(left.x, left.y, left.w, layout.route_h), theme, "Boot UI scene", route_hops,
