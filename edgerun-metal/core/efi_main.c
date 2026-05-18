@@ -163,6 +163,13 @@ static vr_font_allocator_t er_ui_boot_font_allocator(void) {
   return allocator;
 }
 
+static er_ui_status_t er_build_ui_boot_scene(er_ui_scene_t* scene,
+                                             er_ui_demo_apps_state_t* demo_state,
+                                             vr_font_face_t* font,
+                                             UINT32 width,
+                                             UINT32 height,
+                                             er_ui_resolved_theme_t theme);
+
 static void er_print_u64_field(const char* label, UINT64 value) {
   er_print("    ");
   er_print(label);
@@ -715,6 +722,7 @@ static void er_scan_pci_function(UINT32 bus, UINT32 dev, UINT32 func) {
 
 typedef UINT8 (*ErPciFunctionVisitor)(UINT32 bus, UINT32 dev, UINT32 func);
 
+//@optimizer-ignore-function boot PCI discovery must scan the bounded bus/device/function config-space grid
 static UINT8 er_visit_pci_functions(ErPciFunctionVisitor visitor) {
   UINT32 bus;
   UINT32 dev;
@@ -856,16 +864,16 @@ static UINT8 er_gpu_profile_wait_display_info(ErVirtioGpu* gpu,
   return 0u;
 }
 
-static UINT8 er_gpu_profile_render_scene_to_framebuffer(ErVirtioGpuFramebuffer* framebuffer,
-                                                        ErUiSurfaceRenderStats* out_stats) {
-  er_ui_rect_t rects[4];
-  er_ui_scene_t scene;
+static UINT8 er_gpu_profile_render_demo_scene_to_framebuffer(ErVirtioGpuFramebuffer* framebuffer,
+                                                             er_ui_demo_apps_state_t* demo_state,
+                                                             vr_font_face_t* font,
+                                                             er_ui_resolved_theme_t theme,
+                                                             ErUiSurfaceRenderStats* out_stats) {
+  er_ui_scene_t scene = {0};
   ErUiSurface surface;
-  float width;
-  float height;
-  float band_h;
+  er_ui_scene_stats_t scene_stats;
 
-  if (framebuffer == 0 || framebuffer->initialized == 0u || framebuffer->pixels == 0 ||
+  if (framebuffer == 0 || framebuffer->initialized == 0u || framebuffer->pixels == 0 || demo_state == 0 || font == 0 ||
       framebuffer->width == 0u || framebuffer->height == 0u) {
     if (out_stats != 0) {
       *out_stats = (ErUiSurfaceRenderStats){0};
@@ -873,37 +881,44 @@ static UINT8 er_gpu_profile_render_scene_to_framebuffer(ErVirtioGpuFramebuffer* 
     return 0u;
   }
 
-  width = (float)framebuffer->width;
-  height = (float)framebuffer->height;
-  band_h = height * 0.18f;
-  rects[0] = er_ui_rect_fill(0.0f, 0.0f, width, height, 0.0f, er_ui_color_rgb_u8(18u, 24u, 28u));
-  rects[1] = er_ui_rect_linear_gradient(0.0f, 0.0f, width, band_h, 0.0f,
-                                        er_ui_color_rgb_u8(54u, 188u, 206u),
-                                        er_ui_color_rgb_u8(28u, 72u, 86u));
-  rects[2] = er_ui_rect_fill(width * 0.06f, band_h + height * 0.10f,
-                             width * 0.42f, height * 0.22f, 10.0f,
-                             er_ui_color_rgb_u8(38u, 47u, 54u));
-  rects[3] = er_ui_rect_border(width * 0.06f, band_h + height * 0.10f,
-                               width * 0.42f, height * 0.22f, 10.0f,
-                               er_ui_color_rgb_u8(84u, 210u, 226u));
-
-  er_mem_zero((UINT8*)&scene, (UINTN)sizeof(scene));
-  scene.clear = er_ui_color_rgb_u8(18u, 24u, 28u);
-  scene.rects = rects;
-  scene.rect_count = (UINTN)(sizeof(rects) / sizeof(rects[0]));
-  scene.rect_capacity = scene.rect_count;
+  if (er_build_ui_boot_scene(&scene, demo_state, font, framebuffer->width, framebuffer->height, theme) != ER_UI_OK) {
+    er_ui_scene_destroy(&scene);
+    if (out_stats != 0) {
+      *out_stats = (ErUiSurfaceRenderStats){0};
+    }
+    return 0u;
+  }
+  scene_stats = er_ui_scene_stats(&scene);
+  if (scene_stats.rects == 0u || scene_stats.text_quads == 0u) {
+    er_ui_scene_destroy(&scene);
+    if (out_stats != 0) {
+      *out_stats = (ErUiSurfaceRenderStats){0};
+    }
+    return 0u;
+  }
 
   surface.pixels = framebuffer->pixels;
   surface.width = framebuffer->width;
   surface.height = framebuffer->height;
   surface.stride = framebuffer->stride_pixels;
   surface.pixel_format = ER_UI_SURFACE_PIXEL_BGRX;
-  return er_ui_surface_render_scene_with_font_stats(&surface, &scene, 0, out_stats);
+  if (er_ui_surface_render_scene_with_font_stats(&surface, &scene, font, out_stats) == 0u) {
+    er_ui_scene_destroy(&scene);
+    return 0u;
+  }
+  er_ui_scene_destroy(&scene);
+  return 1u;
 }
 
 static UINT8 er_gpu_profile_flush_framebuffer(ErVirtioGpu* gpu, UINT32 width, UINT32 height) {
   ErVirtioGpuFramebuffer framebuffer;
   ErUiSurfaceRenderStats render_stats;
+  er_ui_resolved_theme_t theme = er_ui_resolved_theme(
+    ER_UI_STYLE_AUTHORITY_USER,
+    (er_ui_style_preset_t){ER_UI_COLOR_SCHEME_DARK, ER_UI_ACCENT_NEUTRAL, ER_UI_RADIUS_DEFAULT});
+  er_ui_demo_apps_state_t demo_state = {0};
+  vr_font_config_t font_cfg;
+  vr_font_face_t* font = 0;
 
   if (er_virtio_gpu_framebuffer_init(&framebuffer, ER_GPU_PROFILE_RESOURCE_ID,
                                      ER_GPU_PROFILE_SCANOUT_ID,
@@ -915,40 +930,76 @@ static UINT8 er_gpu_profile_flush_framebuffer(ErVirtioGpu* gpu, UINT32 width, UI
     er_println("gpu framebuffer: unsupported dimensions");
     return 0u;
   }
-  if (er_gpu_profile_render_scene_to_framebuffer(&framebuffer, &render_stats) == 0u) {
+  g_ui_boot_arena_used = 0u;
+  font_cfg.px_size = height <= ER_UI_BOOT_LOW_HEIGHT_MAX ? ER_UI_BOOT_SMALL_FONT_PX : ER_UI_BOOT_LARGE_FONT_PX;
+  font_cfg.atlas_width = ER_UI_BOOT_FONT_ATLAS_SIZE;
+  font_cfg.atlas_height = ER_UI_BOOT_FONT_ATLAS_SIZE;
+  font_cfg.atlas_pad = ER_UI_BOOT_FONT_ATLAS_PAD;
+  font_cfg.atlas_format = VR_FONT_ATLAS_FORMAT_ALPHA8;
+  font_cfg.allocator = er_ui_boot_font_allocator();
+  font_cfg.gl.user = 0;
+  font_cfg.gl.create_texture = 0;
+  font_cfg.gl.update_texture = 0;
+  font_cfg.gl.destroy_texture = 0;
+  if (vr_font_face_create_from_memory(&font, g_er_font_geist_ttf, ER_FONT_GEIST_TTF_SIZE, &font_cfg) != VR_OK || font == 0) {
+    er_println("gpu framebuffer: font failed");
+    return 0u;
+  }
+  if (er_ui_demo_apps_state_init(&demo_state, er_ui_boot_allocator()) != ER_UI_OK) {
+    er_println("gpu framebuffer: demo app state failed");
+    vr_font_face_destroy(font);
+    return 0u;
+  }
+  if (er_gpu_profile_render_demo_scene_to_framebuffer(&framebuffer, &demo_state, font, theme, &render_stats) == 0u) {
     er_println("gpu framebuffer: scene render failed");
+    er_ui_demo_apps_state_destroy(&demo_state);
+    vr_font_face_destroy(font);
     return 0u;
   }
   if (er_virtio_gpu_submit_framebuffer_create(gpu, &framebuffer) == 0u ||
       er_gpu_profile_wait_ok(gpu) == 0u) {
     er_println("gpu framebuffer: create failed");
+    er_ui_demo_apps_state_destroy(&demo_state);
+    vr_font_face_destroy(font);
     return 0u;
   }
   if (er_virtio_gpu_submit_framebuffer_attach(gpu, &framebuffer) == 0u ||
       er_gpu_profile_wait_ok(gpu) == 0u) {
     er_println("gpu framebuffer: attach failed");
+    er_ui_demo_apps_state_destroy(&demo_state);
+    vr_font_face_destroy(font);
     return 0u;
   }
   if (er_virtio_gpu_submit_framebuffer_set_scanout(gpu, &framebuffer) == 0u ||
       er_gpu_profile_wait_ok(gpu) == 0u) {
     er_println("gpu framebuffer: scanout failed");
+    er_ui_demo_apps_state_destroy(&demo_state);
+    vr_font_face_destroy(font);
     return 0u;
   }
   if (er_virtio_gpu_submit_framebuffer_transfer(gpu, &framebuffer) == 0u ||
       er_gpu_profile_wait_ok(gpu) == 0u) {
     er_println("gpu framebuffer: transfer failed");
+    er_ui_demo_apps_state_destroy(&demo_state);
+    vr_font_face_destroy(font);
     return 0u;
   }
   if (er_virtio_gpu_submit_framebuffer_flush(gpu, &framebuffer) == 0u ||
       er_gpu_profile_wait_ok(gpu) == 0u) {
     er_println("gpu framebuffer: flush failed");
+    er_ui_demo_apps_state_destroy(&demo_state);
+    vr_font_face_destroy(font);
     return 0u;
   }
   er_print("gpu framebuffer: scene bytes=");
   er_print_u64_dec(render_stats.bytes_written);
   er_print(" rects=");
   er_print_u64_dec(render_stats.rects);
+  er_print(" text=");
+  er_print_u64_dec(render_stats.text_quads);
   er_println("");
+  er_ui_demo_apps_state_destroy(&demo_state);
+  vr_font_face_destroy(font);
   return 1u;
 }
 
@@ -1430,6 +1481,7 @@ static void er_run_ui_profile(EFI_SYSTEM_TABLE* SystemTable) {
       if (er_ui_boot_action_from_key(&demo_state, key, &action) != 0u &&
           er_ui_demo_apps_apply_action(&demo_state, action, &changed) == ER_UI_OK &&
           changed) {
+        //@optimizer-ignore interactive UI loop redraws only after a state-changing input action
         if (er_ui_boot_render_scene(&demo_state, font, mode, &tile_plan, memory_plan, scene_budget,
                                     frame_budget, theme) == 0u) {
           break;

@@ -82,21 +82,24 @@ static uint8_t* er_embed_read_file(const char* path, size_t* out_len) {
 
 static int er_embed_write_bytes(FILE* out, const uint8_t* bytes, size_t len, size_t bytes_per_line) {
   size_t i;
+  size_t line_remaining = 0u;
 
   for (i = 0u; i < len; ++i) {
-    if ((i % bytes_per_line) == 0u) {
+    if (line_remaining == 0u) {
       if (fprintf(out, "  ") < 0) {
         return 0;
       }
+      line_remaining = bytes_per_line;
     }
     if (fprintf(out, "0x%02x", (unsigned int)bytes[i]) < 0) {
       return 0;
     }
+    --line_remaining;
     if (i + 1u < len) {
       if (fprintf(out, ",") < 0) {
         return 0;
       }
-      if (((i + 1u) % bytes_per_line) == 0u) {
+      if (line_remaining == 0u) {
         if (fprintf(out, "\n") < 0) {
           return 0;
         }

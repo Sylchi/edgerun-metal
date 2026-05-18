@@ -45,9 +45,11 @@ static bool send_tftp_error(int sock, const struct sockaddr_in *client, uint16_t
 }
 
 static bool wait_for_ack(int sock, const struct sockaddr_in *peer, uint16_t expected_block) {
+    const time_t timeout_seconds = (time_t)(TFTP_TIMEOUT_MS / 1000u);
+    const suseconds_t timeout_microseconds = (suseconds_t)((TFTP_TIMEOUT_MS - ((uint32_t)timeout_seconds * 1000u)) * 1000u);
     while (true) {
         fd_set fds;
-        struct timeval tv = {(time_t)(TFTP_TIMEOUT_MS / 1000u), (suseconds_t)((TFTP_TIMEOUT_MS % 1000u) * 1000u)};
+        struct timeval tv = {timeout_seconds, timeout_microseconds};
         struct sockaddr_in src;
         socklen_t src_len = (socklen_t)sizeof(src);
         uint8_t buf[TFTP_PACKET_BYTES];
@@ -119,6 +121,7 @@ static bool transfer_boot_file(const char *path, int tfd, const struct sockaddr_
     bool ok = false;
     bool sent_zero = false;
     bool done = false;
+    bool needs_zero_final_block;
 
     fp = fopen(path, "rb");
     if (fp == NULL) {
@@ -154,13 +157,14 @@ static bool transfer_boot_file(const char *path, int tfd, const struct sockaddr_
         }
     }
     fclose(fp);
+    needs_zero_final_block = (file_size % TFTP_BLOCK_SIZE) == 0u;
 
     while (!done) {
         size_t left = (offset < file_size) ? (file_size - offset) : 0u;
         size_t chunk = (left > TFTP_BLOCK_SIZE) ? TFTP_BLOCK_SIZE : left;
 
         if (offset >= file_size) {
-            if (sent_zero || (file_size % TFTP_BLOCK_SIZE) != 0u) {
+            if (sent_zero || !needs_zero_final_block) {
                 ok = true;
                 break;
             }

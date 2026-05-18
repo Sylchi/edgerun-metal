@@ -445,6 +445,7 @@ static int netboot_validate_config(const NetbootConfig *config, const char *prog
     return 0;
 }
 
+//@optimizer-ignore-function host CLI parser must classify each argv entry against every supported option family
 static int netboot_parse_args(int argc, char **argv, const char *prog, NetbootConfig *config) {
     int parse_result;
     int i;

@@ -143,6 +143,7 @@ void er_print_u64_hex(UINT64 value) {
   er_print(buf);
 }
 
+//@optimizer-ignore-function decimal logging must emit each digit from the integer value without libc formatting
 void er_print_u64_dec(UINT64 value) {
   char buf[ER_PRINT_DEC_BUF_CHARS];
   int i = 0;

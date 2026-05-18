@@ -112,6 +112,7 @@ int main(void) {
     int fd;
     int one = 1;
     struct sockaddr_in a;
+    struct sockaddr_in dst;
 
     fd = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
     if (fd < 0) { perror("socket"); return 1; }
@@ -128,6 +129,10 @@ int main(void) {
         perror("bind 4011");
         return 1;
     }
+    memset(&dst, 0, sizeof(dst));
+    dst.sin_family = AF_INET;
+    dst.sin_port = htons(DHCP_CLIENT_PORT);
+    dst.sin_addr.s_addr = INADDR_BROADCAST;
 
     printf("edgerun-pxe4011 listening udp/%u boot=%s server=%s\n", PORT, BOOT_FILE, SERVER_IP);
     fflush(stdout);
@@ -135,7 +140,7 @@ int main(void) {
     for (;;) {
         uint8_t buf[PXE_RECV_BUFFER_SIZE];
         pkt_t reply;
-        struct sockaddr_in src, dst;
+        struct sockaddr_in src;
         socklen_t sl = sizeof(src);
         ssize_t got = recvfrom(fd, buf, sizeof(buf), 0, (struct sockaddr *)&src, &sl);
         size_t len;
@@ -147,11 +152,6 @@ int main(void) {
         if (req->op != DHCP_OP_BOOTREQUEST || req->magic != htonl(MAGIC)) continue;
 
         len = build(&reply, req);
-
-        memset(&dst, 0, sizeof(dst));
-        dst.sin_family = AF_INET;
-        dst.sin_port = htons(DHCP_CLIENT_PORT);
-        dst.sin_addr.s_addr = INADDR_BROADCAST;
 
         mac(m, sizeof(m), req->chaddr);
         printf("edgerun-pxe4011 request xid=0x%08x mac=%s -> %s\n", ntohl(req->xid), m, BOOT_FILE);
