@@ -14,6 +14,7 @@
 #include "er_ps2_keyboard.h"
 #include "er_native_boot.h"
 #include "er_render_endpoint.h"
+#include "er_storage_endpoint.h"
 #include "er_ui_surface_renderer.h"
 #include "er_ui_components.h"
 #include "er_ui_ledger_app.h"
@@ -72,6 +73,8 @@
 #define ER_UI_WASM_STORAGE_SOURCE_NODE_OFFSET 3u
 #define ER_UI_WASM_STORAGE_TARGET_NODE_OFFSET 4u
 #define ER_UI_WASM_STORAGE_RELAY_NODE_OFFSET 5u
+#define ER_UI_WASM_STORAGE_CHANNEL_ID_OFFSET 6u
+#define ER_UI_WASM_STORAGE_ROUTE_COMMITMENT_OFFSET 7u
 #define ER_UI_WASM_STORAGE_ROUTE_BUDGET 2u
 #define ER_UI_WASM_APP_SEED_STRIDE 0x10u
 #define ER_UI_WASM_PS2_INPUT_EPOCH_STRIDE 1u
@@ -127,6 +130,7 @@ typedef struct {
   UINT64 unsupported;
   UINT64 render_capability;
   UINT64 render_scenes;
+  UINT64 storage_object_packets;
   UINT64 transit_hops;
   UINT64 transit_emitted;
 } ErUiBootNativeRelayStats;
@@ -151,6 +155,7 @@ typedef struct {
   ErRelayTransitHop native_relay_last_transit;
   ErRenderEndpointCapture native_relay_last_render_capture;
   ErRenderEndpointScene native_relay_last_render_scene;
+  ErStorageEndpointObjectCapture native_relay_last_storage_capture;
 } ErUiBootRenderContext;
 
 extern ErWasmHostCalls g_host_calls;
