@@ -48,7 +48,7 @@ The shared contract is what lets these parts interoperate. The admissions remain
 - App package loading reassembles app code, manifest, and optional UI asset objects into caller-owned buffers and verifies they match the package manifest.
 - The boot UI proof now routes its embedded Wasm UI app through VFS object packets and storage-bound app package loading before each runtime prepares the module from persistent per-app bytes.
 - App package storage sources bind a package id to admitted storage-retrieve route ids for the app, manifest, and optional UI assets, so saved package launch has a route-provenance contract before endpoint-backed retrieval lands.
-- Storage-bound package loading now verifies those route ids before delegating to package object loading, so retrieved endpoint packets cannot launch under the wrong saved-package source.
+- Storage endpoint object responses are adapted into package storage objects only when their route id, object id, length, packet list, and caller-owned destination memory satisfy the saved-package source and manifest before bytes can launch.
 
 ## Milestone 1: Object-Only Storage And App Packaging Contract
 

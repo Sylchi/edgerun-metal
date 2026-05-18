@@ -43,7 +43,8 @@ against package manifests in caller-owned memory. The boot UI app path now uses
 the storage-bound package loader before preparing each resident Wasm runtime.
 Saved app package sources now bind package launch provenance to admitted
 storage-retrieve route ids, and storage-bound package loading rejects retrieved
-packet sets that do not match those route ids before bytes can launch.
+endpoint responses that do not match those route ids or expected object
+identities before bytes can launch.
 Replacing firmware boot-service networking with runtime-owned drivers is the
 immediate infrastructure step:
 
