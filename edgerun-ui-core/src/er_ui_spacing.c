@@ -23,6 +23,11 @@ er_ui_component_padding_t er_ui_component_padding_for_density(er_ui_component_de
   }
 }
 
+er_ui_bounds_t er_ui_component_content_rect(er_ui_bounds_t bounds, er_ui_component_density_t density) {
+  er_ui_component_padding_t pad = er_ui_component_padding_for_density(density);
+  return er_ui_bounds_inset(bounds, pad.x, pad.y);
+}
+
 er_ui_spacing_t er_ui_spacing_default(void) {
   er_ui_spacing_t spacing = {0};
   spacing.card_radius_max = ER_UI_CARD_RADIUS_MAX;
