@@ -57,9 +57,9 @@ Tests must be added with behavior changes and with new repository tooling. If co
 
 Keep documentation close to the decision:
 
-- root workflow and commands belong in `README.md`
+- all first-party workflow, commands, and runtime-area summaries belong in root `README.md`
 - repository-wide rules belong in `agents.md`
 - structure and engineering intent belong in `docs/`
-- project-specific usage belongs in each project README
+- detailed architecture belongs in named `docs/` files, not nested READMEs
 
 When a workflow changes, update the command wrapper and documentation in the same change.

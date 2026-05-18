@@ -15,6 +15,7 @@ Intention: remove parallel implementations by forcing every app, UI, driver, sto
 - One hardware model: endpoint adapters own local queues, registers, DMA, and firmware compatibility.
 - One routing model: signed `WorkAdmission` records define relay paths; relay intents and transit records only move and prove admitted packets.
 - One compatibility model: hardware, network, storage, scheduling, user policy, and application layers share record shapes and proofs without sharing authority.
+- One recipient-validation model: relay acceptance never implies recipient acceptance; every destination jurisdiction can reject relayed traffic independently.
 
 ## Authority Rule
 
@@ -24,11 +25,16 @@ No layer may turn its local authority into global authority.
 - Network relays may move packets and produce transit evidence only.
 - Storage nodes may verify and store admitted typed object payloads only.
 - UI renderers may draw admitted scene/render capability payloads only.
+- Apps may accept only work that matches their own admission, capability, state, budget, and sequence rules.
+- Drivers may accept only device-operation or completion traffic that matches their own admission, protocol state, budget, and sequence rules.
 - Schedulers may allocate local time, memory, and execution slots only.
 - Human relationship, group, and organization policy may admit access inside their own social or administrative scope only.
 - Settlement may pay verified receipts and proofs only.
 
-The shared contract is what lets these parts interoperate. The admissions remain scoped to their jurisdictions.
+The shared contract is what lets these parts interoperate. The admissions remain
+scoped to their jurisdictions. A device or relay can move junk toward another
+jurisdiction, but that app, driver, renderer, or storage endpoint can reject it
+without weakening the transport proof.
 
 ## Current Baseline
 
@@ -53,170 +59,166 @@ The shared contract is what lets these parts interoperate. The admissions remain
 - App package storage sources bind a package id to admitted storage-retrieve route ids for the app, manifest, and optional UI assets, so saved package launch has a route-provenance contract before endpoint-backed retrieval lands.
 - Storage endpoint object responses are adapted into package storage objects only when their route id, object id, length, packet list, and caller-owned destination memory satisfy the saved-package source and manifest before bytes can launch.
 
-## Milestone 1: Object-Only Storage And App Packaging Contract
+## Current Target
 
-Goal: make it impossible for runtime storage or app packaging work to look like host file work.
+The active target is one OS/runtime proof, not independent component
+milestones:
 
-Work:
+```text
+EdgeRun EtherType frame on VirtIO-net
+  -> erwire parser
+  -> admitted work packet decode
+  -> admission-defined route verification
+  -> render endpoint scene decode and VirtIO GPU submission
+  -> storage endpoint object response path
+  -> bounded Wasm app relay receive for input or completion
+```
 
-- Audit runtime code for host path, file, socket, or descriptor concepts outside tools and boot compatibility.
-- Keep `er_vfs` labels as manifest labels only.
-- Treat user-authored Wasm apps, manifests, UI assets, and fonts as content-addressed objects.
-- Prepare app package manifests from object refs, not host paths.
-- Reassemble loaded package objects into caller-owned memory from validated object packets.
-- Use loaded package objects as the only input shape for launching saved or authored apps.
-- Add docs or tests showing labels resolve to object ids, not authority.
-- Ensure storage work accepts typed object payloads only when carried by an admitted storage or capability route.
+The first endpoint adapters may still acknowledge or capture packets before full
+device behavior is complete. The required invariant is one ingress, one carriage
+protocol, admission-defined routes, and typed endpoint adapters.
 
-Proof:
+## Active Proof Tracks
 
-- Host tests reject invalid labels and path traversal.
-- Host tests prove identical bytes produce identical object ids independent of label.
-- Host tests prove identical package objects produce identical package ids independent of labels.
-- Host tests reject tampered, out-of-order, and over-capacity object packet loads.
-- Host tests reject app package loads with package id mismatches, tampered manifest bytes, or unexpected assets.
-- Tests prove app identity and asset references come from object ids, not paths.
-- Route tests must start from signed admissions, not packet-class inference.
+### P1: Content-Addressed App And Storage Path
 
-## Milestone 2: Native Relay Ingress
+Status: package manifests, bounded object packet reassembly, package object
+loading, admitted storage-source binding, storage endpoint response adaptation,
+and storage-bound package loading are implemented.
 
-Goal: receive erwire over native VirtIO-net without EFI networking.
+Next work:
 
-Work:
-
-- Poll `erwire_poll_native_eth` through the native ingress helper.
-- Build an ingress `ErChannelEndpoint` from the VirtIO-net MAC.
-- Reject malformed packets immediately.
-- Preserve packet kind, payload bytes, sequence, payload hash inputs, and ingress endpoint without treating the ingress transport as authority.
-- Decode accepted relay packet payloads against admitted routes into endpoint intents.
-- Next: call the helper from the OS loop.
+- Replace embedded package packet sources with real endpoint responses that satisfy admitted storage-source route ids and object identities.
+- Keep VFS labels as manifest labels only; labels must never become path authority or package identity.
+- Keep app package identity derived from app, manifest, and UI asset object ids and lengths.
+- Audit runtime surfaces for host path, file, socket, or descriptor concepts outside tools and boot compatibility.
+- Keep storage work restricted to typed object payloads carried by admitted storage or capability routes.
 
 Proof:
 
-- QEMU pcap contains EdgeRun EtherType `0x88b5` packets.
-- Core tests cover accepted packets, malformed packets, empty polls, retained payload bytes, and render capability endpoint-intent classification.
-- Remaining proof: native run emits a deterministic relay-ingress acknowledgement or transit packet.
+- VFS tests reject traversal and invalid labels.
+- VFS tests prove identical bytes produce identical object ids independent of label.
+- App package tests prove identical objects with different labels produce the same package id.
+- VFS tests reject tampered, out-of-order, or over-capacity object packet loads.
+- App package load tests reject package id mismatches, tampered manifest bytes, wrong route ids, and unexpected asset objects.
 
-## Milestone 3: Admission-Defined Route Verification
+### P2: Native Relay Ingress And Route Dispatch
 
-Goal: turn admitted `edgerun-work` traffic into relay intents only after route verification.
+Status: native ingress polling, accepted-payload retention, malformed/empty
+classification, and first render endpoint-intent decode are implemented.
 
-Work:
+Next work:
 
-- Decode accepted erwire payloads as relay packets carrying the corresponding `edgerun-work` record.
-- Verify `NetworkMessage` department, work type, recipient, first relay, and route commitment against the signed admission path.
-- Build `ErRelayForwardIntent` or local endpoint intent only from the verified admission-defined route and local endpoint mapping.
-- Reject packet-class matches without a valid admission.
-- Keep endpoint movement inside `er_hw_relay` or device-specific adapters.
-
-Proof:
-
-- Tests prove admitted storage work can produce a VirtIO block intent.
-- Tests prove admitted render capability work can produce a native render endpoint intent; VirtIO GPU command intent remains next.
-- Tests prove packet-class matches without a valid admission produce no intent.
-- Tests prove malformed or unsupported admitted endpoints are rejected deterministically.
-
-## Milestone 4: VirtIO Storage Endpoint
-
-Goal: make storage a relay endpoint before making it a full disk driver.
-
-Work:
-
-- Add a VirtIO block endpoint adapter behind an admitted storage or object capability route.
-- First implementation may capture or acknowledge object packets deterministically.
-- Then add minimal VirtIO block request queue submission.
-- Keep the adapter object-based; no file paths or filesystem calls.
+- Call the native ingress helper from the OS loop.
+- Decode accepted erwire payloads as admitted work packets, not packet-class guesses.
+- Verify `NetworkMessage` and `CapabilityEnvelope` payloads against signed `WorkAdmission` records.
+- Verify jurisdiction before producing a local endpoint intent.
+- Emit deterministic relay acknowledgement or transit records from decoded admitted work.
 
 Proof:
 
-- Unit test feeds admitted storage/object work through erwire and the route verifier to the storage adapter.
-- QEMU proof shows net ingress carries admitted storage work to the block endpoint.
+- QEMU pcap shows EtherType `0x88b5` and erwire `ERW1`.
+- Core tests cover accepted, malformed, and empty native ingress paths with retained payload bytes.
+- Core tests cover render endpoint-intent decode, unsupported route classification, malformed route rejection, malformed packet rejection, empty ingress, and null output rejection.
+- Packet-class matches without a valid admission produce no endpoint intent.
+
+### P3: Render Endpoint To VirtIO GPU
+
+Status: deterministic render capture, scene payload hash verification,
+endpoint-owned scene decode, and OS-loop consumption of endpoint-owned app
+scenes are implemented.
+
+Next work:
+
+- Connect relay ingress to the same render endpoint scene decode path used by local Wasm UI app dispatch.
+- Submit decoded endpoint-owned scenes through the VirtIO GPU endpoint.
+- Keep GOP as bootstrap compatibility, not the durable renderer architecture.
+- Keep apps targeting admitted UI scene packets, never framebuffers.
+
+Proof:
+
+- Unit tests feed admitted render capability work through erwire and route verification into the render endpoint.
+- Core tests reject scene payload hash mismatches and verify endpoint-owned scene decode.
+- QEMU or host proof shows the same app-authored scene hash before endpoint-specific drawing.
+- UI proof renders through the VirtIO GPU endpoint path.
+
+### P4: Storage Endpoint To Object Runtime
+
+Status: package loading can consume storage-bound object responses after route,
+object id, length, packet list, and destination memory validation.
+
+Next work:
+
+- Accept admitted storage/object work at the storage endpoint.
+- Start with deterministic acknowledgement or capture after admission-defined route verification.
+- Connect accepted endpoint responses to saved user-authored app package launch.
+- Add VirtIO block queue support after the object endpoint contract is proven.
+- Keep storage as sealed object movement, not a filesystem API.
+
+Proof:
+
+- Unit tests feed admitted object work through erwire and route verification to storage.
+- QEMU proof carries admitted storage work from native ingress to the storage endpoint.
 - Later QEMU proof writes and reads the same content-addressed object bytes through VirtIO block.
 
-## Milestone 5: VirtIO Render Endpoint
+### P5: Wasm App Relay Loop
 
-Goal: make UI rendering a relay endpoint before making it a full compositor.
+Status: bounded `edgerun.relay/send` and `edgerun.relay/recv`, concurrent local
+Wasm UI app contexts, content-addressed package launch, Wasm render capability
+relay-send proof, render endpoint capture, and endpoint-owned scene decode are
+implemented.
 
-Work:
+Next work:
 
-- Define the first render payload as a bounded scene or scene-delta capability envelope.
-- Add a VirtIO GPU endpoint adapter behind an admitted render capability route.
-- Deterministic capture of admitted render scene metadata, scene payload hash verification, and endpoint-owned scene decode are implemented.
-- Then add minimal VirtIO GPU command queue submission.
-
-Proof:
-
-- Unit test feeds admitted render capability work through erwire and the route verifier to the render adapter.
-- QEMU proof shows net ingress carries admitted render work to the GPU endpoint.
-- UI proof renders the same scene through the VirtIO GPU endpoint path.
-
-## Milestone 6: Wasm Relay ABI
-
-Goal: make relay send/receive the durable app and driver hostcall surface.
-
-Work:
-
-- Add bounded Wasm imports for relay send and relay receive.
-- Charge app packet-byte and IPC budgets for relay traffic.
-- Keep direct PCI/MMIO hostcalls only as bring-up scaffolding.
-- Move driver fixtures from direct bus operations toward device-operation packets.
+- Feed input or completion packets back to apps through relay receive.
+- Keep each loaded app in an explicit runtime context with preallocated memory, presentation identity, scene state, and app-switcher selection.
+- Move driver modules away from direct PCI/MMIO hostcalls as the durable ABI.
+- Keep direct bus hostcalls only for bring-up until relay device endpoints are proven.
 
 Proof:
 
-- Wasm fixture emits an object packet over relay send.
-- Wasm fixture emits a render capability packet over relay send.
-- Wasm fixture receives a completion or input packet over relay receive.
-- Tests prove memory bounds, packet size bounds, and budget failures are fatal.
+- Wasm fixture emits an app UI scene or scene-delta capability packet through relay send.
+- Wasm fixture receives a completion or input packet through relay receive.
+- Tests prove memory bounds, packet bounds, admission checks, token checks, and budget failures.
 
-## Milestone 7: Distributed UI
+### P6: Distributed UI
 
-Goal: prove app logic and UI rendering are location-independent.
+Status: not started.
 
-Work:
+Next work:
 
-- Give one app two admitted render routes.
-- Emit the same scene payload to both routes.
-- Route input events back as input capability packets.
+- Emit the same UI scene-class packet to two admitted renderer routes.
+- Render locally through VirtIO GPU and remotely or virtually through a second renderer endpoint.
+- Route input back as input capability packets.
 - Keep shell placement and focus policy outside app authority.
 
 Proof:
 
-- Test proves both renderer routes receive the same scene hash.
-- Local proof renders through VirtIO GPU.
-- QEMU or host proof renders or captures through a second renderer endpoint.
-- Input packet returns to the app route with ordered sequence.
+- Both renderer routes receive the same scene hash.
+- Input returns on an ordered input capability route.
 
-## Milestone 8: Remote Driver
+### P7: Remote Driver
 
-Goal: prove driver logic and hardware attachment are location-independent.
+Status: not started.
 
-Work:
+Next work:
 
 - Run driver logic as Wasm.
 - Submit device-operation packets over erwire.
-- Execute operations at the device endpoint that owns local hardware.
+- Execute the operation at a device endpoint that owns the local hardware queue.
 - Return completions over erwire.
 
 Proof:
 
-- Driver Wasm emits a device-operation packet without direct bus hostcalls.
-- Device endpoint executes or captures the operation deterministically.
-- Completion packet returns over erwire.
-- The same driver packet can be routed locally or through native Ethernet without changing the driver ABI.
+- The driver uses relay send/receive, not direct bus hostcalls, for its durable ABI.
+- The same device-operation packet can route locally or remotely without changing the driver ABI.
 
-## Milestone 9: Exit Boot Services
+## Freeze Rule
 
-Goal: drop EFI Boot Services on the OS path and keep running through runtime-owned devices.
+Do not reintroduce standalone native, TPM, GPU, storage, or networking debug boot
+profiles. Device code belongs behind the OS path and relay endpoint adapters.
 
-Work:
-
-- Runtime logging works without firmware networking.
-- Receive path works through VirtIO-net.
-- Native storage endpoint can persist sealed object packets.
-- Render endpoint presents through VirtIO GPU.
-- Device discovery, memory ownership, interrupts, and timers have native replacements or explicit minimal stubs.
-
-Proof:
-
-- QEMU native proof boots, logs, receives, routes, persists or captures storage, and renders or captures UI without using EFI network services.
-- No production path depends on host libc, host files, or firmware networking for relay operation.
+Exit Boot Services becomes mandatory once the OS path has prepared the memory
+and runtime-owned devices needed to keep running. New work should remove
+firmware-service dependencies from relay, rendering, storage, input, scheduling,
+and app execution instead of adding compatibility paths.

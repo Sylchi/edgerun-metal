@@ -24,7 +24,7 @@ The contract has three parts:
 - Jurisdiction: a signed admission says which local authority accepted that intent for its own resources, route scope, budget, and policy window.
 - Evidence: ordered messages, transit hashes, delivery proofs, receipts, and typed payload checks prove what happened without trusting the mover.
 
-No admission is global authority. A storage admission can authorize storage work for its storage domain, but it cannot grant UI focus, decrypt user data, spend another budget, select an unrelated relay path, or command hardware outside that jurisdiction. A scheduler admission can allocate time and memory for a local execution slot, but it cannot turn packet movement into user intent. A human relationship or organization policy admission can authorize access within that social scope, but it does not become a device driver or storage root.
+No admission is global authority. A storage admission can authorize storage work for its storage domain, but it cannot grant UI focus, decrypt user data, spend another budget, select an unrelated relay path, or command hardware outside that jurisdiction. A device admission can authorize local queue, register, DMA, and interrupt work, but it cannot force a driver or app to accept a relayed payload. A driver admission governs the driver's own logic, state, budgets, and accepted device-operation protocol. An app admission governs the app's execution slot, capabilities, state, and accepted input/work protocol. A scheduler admission can allocate time and memory for a local execution slot, but it cannot turn packet movement into user intent. A human relationship or organization policy admission can authorize access within that social scope, but it does not become a device driver or storage root.
 
 Global compatibility comes from every jurisdiction using the same record shapes, identity rules, hashes, ordered channels, and proof surfaces. Local authority remains local; interoperability comes from the shared verification contract.
 
@@ -41,6 +41,12 @@ An EdgeRun node is an addressable capability endpoint with an Ed25519 identity. 
 - Relay node: moves packets between channel endpoints and records transit.
 
 Locality does not grant authority. A driver running on one machine can drive a device attached to another machine only through an admitted route to that device capability. An app running on one machine can render on another machine only through an admitted route to that UI renderer capability.
+
+Relay acceptance is not recipient acceptance. A device, NIC, storage endpoint, or
+relay can move bytes toward another jurisdiction, but the receiving app, driver,
+renderer, or storage authority validates its own admission, capability, budget,
+sequence, payload shape, and hash checks before accepting the work. Relaying
+junk is a transport event; accepting it is a recipient-jurisdiction decision.
 
 ## Packet Shape
 
@@ -102,7 +108,9 @@ The shell owns placement, focus, secure prompts, and compositor policy. Apps sub
 
 ## Driver Relay
 
-Drivers are Wasm modules, not trusted local kernel code. A driver packet has the same authority model as an app packet:
+Drivers are Wasm modules with their own jurisdiction, not trusted local kernel
+code. A driver packet has the same cross-jurisdiction verification model as an
+app packet:
 
 ```text
 Wasm driver
@@ -114,7 +122,7 @@ Wasm driver
   -> local bus or queue adapter
 ```
 
-The device endpoint is the only component that touches local hardware registers, DMA rings, or VirtIO queues. It is an adapter from admitted relay packets to a concrete local transport.
+The device endpoint is the only component that touches local hardware registers, DMA rings, or VirtIO queues. It is an adapter from admitted relay packets to a concrete local transport. Its authority ends at the device jurisdiction: it may deliver device bytes or operation results to a driver, but the driver jurisdiction can reject anything that does not match its own protocol state, sequence, budget, or capability expectations.
 
 This means a VirtIO-net device can act as a native relay ingress while other VirtIO devices are local adapters for admitted capability endpoints:
 

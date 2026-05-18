@@ -33,9 +33,13 @@ run_in_repo() {
 
 expect_pass() {
   local name="$1"
+  local setup_fn="${2:-}"
   local repo_dir="${TMP_DIR}/${name}"
 
   init_repo "${repo_dir}"
+  if [[ -n "${setup_fn}" ]]; then
+    "${setup_fn}" "${repo_dir}"
+  fi
   run_in_repo "${repo_dir}"
 }
 
@@ -79,10 +83,29 @@ add_tracked_build_artifact() {
   git -C "${repo_dir}" add -f .build/out/file.o
 }
 
+add_nested_readme() {
+  local repo_dir="$1"
+
+  mkdir -p "${repo_dir}/docs"
+  printf 'conflicting docs\n' > "${repo_dir}/docs/README.md"
+  git -C "${repo_dir}" add docs/README.md
+}
+
+add_vendor_readmes() {
+  local repo_dir="$1"
+
+  mkdir -p "${repo_dir}/third_party/pkg" "${repo_dir}/ui/shadcn-ui/pkg"
+  printf 'vendor docs\n' > "${repo_dir}/third_party/pkg/README.md"
+  printf 'vendor ui docs\n' > "${repo_dir}/ui/shadcn-ui/pkg/README.md"
+  git -C "${repo_dir}" add third_party/pkg/README.md ui/shadcn-ui/pkg/README.md
+}
+
 expect_pass clean_repo
+expect_pass vendor_readmes add_vendor_readmes
 expect_fail nested_git_dir add_nested_git_dir
 expect_fail gitmodules_file add_gitmodules_file
 expect_fail gitlink_entry add_gitlink
 expect_fail tracked_build_artifact add_tracked_build_artifact
+expect_fail nested_readme add_nested_readme
 
 printf 'repo-check tests passed\n'
