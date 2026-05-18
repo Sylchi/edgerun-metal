@@ -18,6 +18,7 @@ static const ErUiIconMapping g_icon_mappings[ER_UI_ICON_COUNT] = {
   {"bell", "bell", "bell"},
   {"chat", "message-circle", "message-circle"},
   {"check", "check", "check"},
+  {"chevron-left", "chevron-left", "chevron-left"},
   {"chevron-right", "chevron-right", "chevron-right"},
   {"code", "code", "code"},
   {"cpu", "cpu", "cpu"},

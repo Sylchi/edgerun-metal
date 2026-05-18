@@ -21,7 +21,8 @@ static const char ER_UI_REQUIRED_FONT_CHARS[] =
 //@optimizer-ignore-constant provider manifest is indexed by the guarded er_ui_icon_t enum and mirrors the bundled Tabler asset contract
 static const er_ui_icon_pack_entry_t ER_UI_TABLER_ICON_ENTRIES[ER_UI_ICON_COUNT] = {
   {ER_UI_ICON_ACTIVITY, "activity"},      {ER_UI_ICON_APP, "apps"},           {ER_UI_ICON_BELL, "bell"},
-  {ER_UI_ICON_CHAT, "message-circle"},    {ER_UI_ICON_CHECK, "check"},        {ER_UI_ICON_CHEVRON_RIGHT, "chevron-right"},
+  {ER_UI_ICON_CHAT, "message-circle"},    {ER_UI_ICON_CHECK, "check"},        {ER_UI_ICON_CHEVRON_LEFT, "chevron-left"},
+  {ER_UI_ICON_CHEVRON_RIGHT, "chevron-right"},
   {ER_UI_ICON_CODE, "code"},              {ER_UI_ICON_CPU, "cpu"},            {ER_UI_ICON_DATABASE, "database"},
   {ER_UI_ICON_EYE, "eye"},                {ER_UI_ICON_FILE, "file"},          {ER_UI_ICON_KEY, "key"},
   {ER_UI_ICON_LOCK, "lock"},              {ER_UI_ICON_MENU, "menu-2"},        {ER_UI_ICON_MESSAGE_PLUS, "message-plus"},
@@ -36,7 +37,8 @@ static const er_ui_icon_pack_entry_t ER_UI_TABLER_ICON_ENTRIES[ER_UI_ICON_COUNT]
 //@optimizer-ignore-constant provider manifest is indexed by the guarded er_ui_icon_t enum and mirrors the bundled Lucide asset contract
 static const er_ui_icon_pack_entry_t ER_UI_LUCIDE_ICON_ENTRIES[ER_UI_ICON_COUNT] = {
   {ER_UI_ICON_ACTIVITY, "activity"},       {ER_UI_ICON_APP, "app-window"},        {ER_UI_ICON_BELL, "bell"},
-  {ER_UI_ICON_CHAT, "message-circle"},     {ER_UI_ICON_CHECK, "check"},           {ER_UI_ICON_CHEVRON_RIGHT, "chevron-right"},
+  {ER_UI_ICON_CHAT, "message-circle"},     {ER_UI_ICON_CHECK, "check"},           {ER_UI_ICON_CHEVRON_LEFT, "chevron-left"},
+  {ER_UI_ICON_CHEVRON_RIGHT, "chevron-right"},
   {ER_UI_ICON_CODE, "code"},               {ER_UI_ICON_CPU, "cpu"},               {ER_UI_ICON_DATABASE, "database"},
   {ER_UI_ICON_EYE, "eye"},                 {ER_UI_ICON_FILE, "file"},             {ER_UI_ICON_KEY, "key"},
   {ER_UI_ICON_LOCK, "lock"},               {ER_UI_ICON_MENU, "menu"},             {ER_UI_ICON_MESSAGE_PLUS, "message-circle-plus"},

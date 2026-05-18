@@ -2668,7 +2668,7 @@ static er_ui_status_t er_ui_node_render_carousel(
   er_ui_bounds_t prev = er_ui_bounds(bounds.x, bounds.y + (bounds.h - button_w) * 0.5f, button_w, button_w);
   er_ui_status_t status = er_ui_component_button_emit(scene, font, prev, theme, "", node->id, ER_UI_COMPONENT_BUTTON_GHOST, ER_UI_COMPONENT_BUTTON_SIZE_ICON, true);
   if (status != ER_UI_OK) return status;
-  status = er_ui_node_render_icon(scene, er_ui_node_center_square(prev, 16.0f), ER_UI_ICON_CHEVRON_RIGHT, theme.colors.text);
+  status = er_ui_node_render_icon(scene, er_ui_node_center_square(prev, 16.0f), ER_UI_ICON_CHEVRON_LEFT, theme.colors.text);
   if (status != ER_UI_OK) return status;
 
   float x = bounds.x + button_w + gap;
@@ -2705,7 +2705,7 @@ static er_ui_status_t er_ui_node_render_calendar(
   er_ui_bounds_t prev = er_ui_bounds(inner.x, inner.y, 36.0f, 36.0f);
   status = er_ui_component_button_emit(scene, font, prev, theme, "", node->id, ER_UI_COMPONENT_BUTTON_GHOST, ER_UI_COMPONENT_BUTTON_SIZE_ICON, true);
   if (status != ER_UI_OK) return status;
-  status = er_ui_node_render_icon(scene, er_ui_node_center_square(prev, 16.0f), ER_UI_ICON_CHEVRON_RIGHT, theme.colors.text);
+  status = er_ui_node_render_icon(scene, er_ui_node_center_square(prev, 16.0f), ER_UI_ICON_CHEVRON_LEFT, theme.colors.text);
   if (status != ER_UI_OK) return status;
   status = er_ui_node_render_text(scene, font, node->label, er_ui_bounds(inner.x + 44.0f, inner.y + 4.0f, inner.w - 88.0f, 28.0f), theme.colors.text);
   if (status != ER_UI_OK) return status;

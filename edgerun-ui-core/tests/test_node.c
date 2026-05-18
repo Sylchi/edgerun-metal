@@ -1109,12 +1109,20 @@ void run_node_tests(void) {
                   "node: carousel renders");
     expect_size(scene.hit_count, hits_before_carousel + ER_UI_TEST_NODE_RENDER_TWO_HITS, "node: carousel emits previous and next hits");
     expect_size(scene.icon_quad_count, icons_before_carousel + ER_UI_TEST_NODE_RENDER_TWO_HITS, "node: carousel emits chevron icons");
+    const er_ui_quad_t* carousel_previous_icon = scene.icon_quads + icons_before_carousel;
+    const er_ui_quad_t* carousel_next_icon = carousel_previous_icon + 1u;
+    expect_u32(carousel_previous_icon->atlas_id, er_ui_icon_atlas_id(ER_UI_ICON_CHEVRON_LEFT), "node: carousel previous icon points left");
+    expect_u32(carousel_next_icon->atlas_id, er_ui_icon_atlas_id(ER_UI_ICON_CHEVRON_RIGHT), "node: carousel next icon points right");
     size_t hits_before_calendar = scene.hit_count;
     size_t icons_before_calendar = scene.icon_quad_count;
     expect_status(er_ui_node_render(&calendar, &scene, face, er_ui_bounds(0.0f, 6088.0f, 320.0f, 150.0f), theme), ER_UI_OK,
                   "node: calendar renders");
     expect_size(scene.hit_count, hits_before_calendar + ER_UI_TEST_NODE_RENDER_CALENDAR_HITS, "node: calendar emits navigation and day hits");
     expect_size(scene.icon_quad_count, icons_before_calendar + ER_UI_TEST_NODE_RENDER_TWO_HITS, "node: calendar emits navigation icons");
+    const er_ui_quad_t* calendar_previous_icon = scene.icon_quads + icons_before_calendar;
+    const er_ui_quad_t* calendar_next_icon = calendar_previous_icon + 1u;
+    expect_u32(calendar_previous_icon->atlas_id, er_ui_icon_atlas_id(ER_UI_ICON_CHEVRON_LEFT), "node: calendar previous icon points left");
+    expect_u32(calendar_next_icon->atlas_id, er_ui_icon_atlas_id(ER_UI_ICON_CHEVRON_RIGHT), "node: calendar next icon points right");
     size_t hits_before_combobox = scene.hit_count;
     expect_status(er_ui_node_render(&combobox, &scene, face, er_ui_bounds(0.0f, 6250.0f, 300.0f, 250.0f), theme), ER_UI_OK,
                   "node: combobox renders");
