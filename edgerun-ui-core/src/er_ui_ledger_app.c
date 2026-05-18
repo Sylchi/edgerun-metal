@@ -45,6 +45,8 @@ static const float ER_UI_LEDGER_TEXT_ADVANCE = 7.0f;
 static const float ER_UI_LEDGER_BUTTON_TEXT_PAD_X = 14.0f;
 static const float ER_UI_LEDGER_BUTTON_TEXT_MIN_START_RATIO = 0.30f;
 static const float ER_UI_LEDGER_CARD_PAD = 16.0f;
+static const float ER_UI_LEDGER_COMPACT_NAV_GAP = 8.0f;
+static const float ER_UI_LEDGER_COMPACT_NAV_Y = 92.0f;
 static const float ER_UI_LEDGER_FIELD_PAD_X = 10.0f;
 static const float ER_UI_LEDGER_DOT_SIZE = 4.0f;
 static const float ER_UI_LEDGER_SELECT_CHEVRON_W = 14.0f;
@@ -399,6 +401,7 @@ static er_ui_status_t er_ui_ledger_sidebar(
   float x = bounds.x + 18.0f;
   float y = bounds.y + 34.0f;
   er_ui_painter_t painter = er_ui_painter(scene);
+  bool compact = bounds.h <= ER_UI_LEDGER_STACKED_SIDE_H;
 
   status = er_ui_ledger_rect(scene, bounds, 0.0f, er_ui_color_rgb_u8(ER_UI_LEDGER_RGB_SIDEBAR));
   if (status != ER_UI_OK) return status;
@@ -411,6 +414,32 @@ static er_ui_status_t er_ui_ledger_sidebar(
   //@optimizer-ignore nav renderer intentionally emits one hit, icon, and label per fixed surface
   const er_ui_ledger_nav_item_t* nav = ER_UI_LEDGER_NAV_ITEMS;
   const er_ui_ledger_nav_item_t* nav_end = ER_UI_LEDGER_NAV_ITEMS + ER_UI_LEDGER_ARRAY_COUNT(ER_UI_LEDGER_NAV_ITEMS);
+  if (compact) {
+    float nav_w = (bounds.w - 36.0f - ER_UI_LEDGER_COMPACT_NAV_GAP * (float)(ER_UI_LEDGER_ARRAY_COUNT(ER_UI_LEDGER_NAV_ITEMS) - 1u)) /
+                  (float)ER_UI_LEDGER_ARRAY_COUNT(ER_UI_LEDGER_NAV_ITEMS);
+    size_t nav_index = 0u;
+    while (nav < nav_end) {
+      er_ui_bounds_t row = er_ui_bounds(x + (nav_w + ER_UI_LEDGER_COMPACT_NAV_GAP) * (float)nav_index,
+                                        bounds.y + ER_UI_LEDGER_COMPACT_NAV_Y,
+                                        nav_w,
+                                        ER_UI_LEDGER_NAV_ROW_H);
+      er_ui_color4_t fill = nav->id == focused_id ? colors.field : er_ui_color_with_alpha(colors.field, 0.0f);
+      er_ui_color4_t color = nav->id == focused_id ? colors.text : colors.muted;
+      status = er_ui_scene_push_hit(scene, er_ui_hit(ER_UI_HIT_WORKSPACE_TAB, nav->id, row.x, row.y, row.w, row.h));
+      if (status != ER_UI_OK) return status;
+      status = er_ui_ledger_rect(scene, row, 7.0f, fill);
+      if (status != ER_UI_OK) return status;
+      status = er_ui_painter_icon(&painter, er_ui_bounds(row.x + 10.0f, row.y + 8.0f, 16.0f, 16.0f),
+                                  nav->icon, color);
+      if (status != ER_UI_OK) return status;
+      status = er_ui_ledger_text(scene, font, nav->label, row.x + 34.0f, row.y + 22.0f, color);
+      if (status != ER_UI_OK) return status;
+      nav++;
+      nav_index++;
+    }
+    return ER_UI_OK;
+  }
+
   while (nav < nav_end) {
     er_ui_bounds_t row = er_ui_bounds(x - 6.0f, y,
                                       bounds.w - 24.0f, ER_UI_LEDGER_NAV_ROW_H);
