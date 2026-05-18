@@ -120,61 +120,12 @@ static UINT8 er_app_add_overflows(UINT64 current, UINT64 amount) {
   return (UINT64)(current + amount) < current ? 1u : 0u;
 }
 
-static UINT8 er_app_node_nonzero(const ErNodeId* node_id) {
-  UINTN i;
-
-  if (node_id == 0) {
-    return 0;
-  }
-  for (i = 0u; i < ER_NODE_ID_LEN; ++i) {
-    if (node_id->bytes[i] != 0u) {
-      return 1;
-    }
-  }
-  return 0;
-}
-
-static UINT8 er_app_hash_equal(const ErHash* left, const ErHash* right) {
-  UINTN i;
-
-  if (left == 0 || right == 0) {
-    return 0;
-  }
-  for (i = 0u; i < ER_HASH_LEN; ++i) {
-    if (left->bytes[i] != right->bytes[i]) {
-      return 0;
-    }
-  }
-  return 1;
-}
-
-static UINT8 er_app_hash_nonzero(const ErHash* hash) {
-  if (hash == 0) {
-    return 0;
-  }
-  return er_mem_any_nonzero(hash->bytes, ER_HASH_LEN);
-}
-
-static UINT8 er_app_node_equal(const ErNodeId* left, const ErNodeId* right) {
-  UINTN i;
-
-  if (left == 0 || right == 0) {
-    return 0;
-  }
-  for (i = 0u; i < ER_NODE_ID_LEN; ++i) {
-    if (left->bytes[i] != right->bytes[i]) {
-      return 0;
-    }
-  }
-  return 1;
-}
-
 static UINT8 er_app_label_ref_valid(const ErVfsObjectLabelRef* object_ref) {
   return (UINT8)(object_ref != 0 &&
                  object_ref->abi_version == ER_VFS_ABI_VERSION &&
                  object_ref->object_len != 0u &&
                  er_vfs_label_valid(object_ref->label, object_ref->label_len) != 0u &&
-                 er_app_hash_nonzero(&object_ref->object_id) != 0u);
+                 er_hash_nonzero(&object_ref->object_id) != 0u);
 }
 
 static UINT8 er_app_scene_budget_nonzero(er_ui_scene_budget_t budget) {
@@ -228,18 +179,18 @@ static UINT8 er_app_package_manifest_valid(const ErCryptoProvider* crypto,
 
   if (package == 0 || package->abi_version != ER_APP_ABI_VERSION ||
       package->app_kind != ER_APP_KIND_USER ||
-      er_app_hash_nonzero(&package->package_id) == 0u ||
-      er_app_hash_nonzero(&package->app_object_id) == 0u ||
-      er_app_hash_nonzero(&package->manifest_object_id) == 0u ||
+      er_hash_nonzero(&package->package_id) == 0u ||
+      er_hash_nonzero(&package->app_object_id) == 0u ||
+      er_hash_nonzero(&package->manifest_object_id) == 0u ||
       package->app_object_len == 0u ||
       package->manifest_object_len == 0u) {
     return 0;
   }
   if (package->ui_assets_object_len == 0u) {
-    if (er_app_hash_nonzero(&package->ui_assets_object_id) != 0u) {
+    if (er_hash_nonzero(&package->ui_assets_object_id) != 0u) {
       return 0;
     }
-  } else if (er_app_hash_nonzero(&package->ui_assets_object_id) == 0u) {
+  } else if (er_hash_nonzero(&package->ui_assets_object_id) == 0u) {
     return 0;
   }
   if (er_app_package_hash(crypto, &package->app_object_id,
@@ -251,7 +202,7 @@ static UINT8 er_app_package_manifest_valid(const ErCryptoProvider* crypto,
                           &expected_package_id) == 0u) {
     return 0;
   }
-  return er_app_hash_equal(&expected_package_id, &package->package_id);
+  return er_hash_equal(&expected_package_id, &package->package_id);
 }
 
 static UINT8 er_app_load_package_object(const ErCryptoProvider* crypto,
@@ -269,7 +220,7 @@ static UINT8 er_app_load_package_object(const ErCryptoProvider* crypto,
                                      load->bytes, load->capacity, out_len,
                                      &loaded_object_id) == 0u ||
       *out_len != (UINTN)expected_object_len ||
-      er_app_hash_equal(&loaded_object_id, expected_object_id) == 0u) {
+      er_hash_equal(&loaded_object_id, expected_object_id) == 0u) {
     return 0;
   }
   return 1;
@@ -282,12 +233,12 @@ static UINT8 er_app_storage_retrieve_route_valid(const ErAdmittedRoute* route) {
                  route->department == ER_DEPARTMENT_STORAGE &&
                  route->work_type == ER_WORK_TYPE_OBJECT_RETRIEVE &&
                  route->admitted_budget != 0u &&
-                 er_app_hash_nonzero(&route->route_id) != 0u &&
-                 er_app_hash_nonzero(&route->request_hash) != 0u &&
-                 er_app_hash_nonzero(&route->admission_hash) != 0u &&
-                 er_app_node_nonzero(&route->source_node_id) != 0u &&
-                 er_app_node_nonzero(&route->target_node_id) != 0u &&
-                 er_app_node_nonzero(&route->relay_node_id) != 0u);
+                 er_hash_nonzero(&route->route_id) != 0u &&
+                 er_hash_nonzero(&route->request_hash) != 0u &&
+                 er_hash_nonzero(&route->admission_hash) != 0u &&
+                 er_node_id_nonzero(&route->source_node_id) != 0u &&
+                 er_node_id_nonzero(&route->target_node_id) != 0u &&
+                 er_node_id_nonzero(&route->relay_node_id) != 0u);
 }
 
 static UINT8 er_app_package_storage_source_id(const ErCryptoProvider* crypto,
@@ -328,16 +279,16 @@ static UINT8 er_app_package_storage_source_valid(const ErCryptoProvider* crypto,
       source->abi_version != ER_APP_ABI_VERSION ||
       source->app_kind != ER_APP_KIND_USER ||
       er_app_package_manifest_valid(crypto, package) == 0u ||
-      er_app_hash_equal(&source->package_id, &package->package_id) == 0u ||
-      er_app_hash_nonzero(&source->app_retrieve_route_id) == 0u ||
-      er_app_hash_nonzero(&source->manifest_retrieve_route_id) == 0u) {
+      er_hash_equal(&source->package_id, &package->package_id) == 0u ||
+      er_hash_nonzero(&source->app_retrieve_route_id) == 0u ||
+      er_hash_nonzero(&source->manifest_retrieve_route_id) == 0u) {
     return 0;
   }
   if (package->ui_assets_object_len == 0u) {
-    if (er_app_hash_nonzero(&source->ui_assets_retrieve_route_id) != 0u) {
+    if (er_hash_nonzero(&source->ui_assets_retrieve_route_id) != 0u) {
       return 0;
     }
-  } else if (er_app_hash_nonzero(&source->ui_assets_retrieve_route_id) == 0u) {
+  } else if (er_hash_nonzero(&source->ui_assets_retrieve_route_id) == 0u) {
     return 0;
   }
   if (er_app_package_storage_source_id(crypto, &source->package_id,
@@ -347,7 +298,7 @@ static UINT8 er_app_package_storage_source_valid(const ErCryptoProvider* crypto,
                                        &expected_source_id) == 0u) {
     return 0;
   }
-  return er_app_hash_equal(&source->source_id, &expected_source_id);
+  return er_hash_equal(&source->source_id, &expected_source_id);
 }
 
 UINT8 er_app_prepare_package_manifest(const ErCryptoProvider* crypto,
@@ -493,8 +444,8 @@ UINT8 er_app_prepare_package_storage_object(const ErAppPackageStorageResponse* r
       response->packets == 0 ||
       response->bytes == 0 ||
       response->capacity < response->object_len ||
-      er_app_hash_equal(&response->retrieve_route_id, expected_route_id) == 0u ||
-      er_app_hash_equal(&response->object_id, expected_object_id) == 0u ||
+      er_hash_equal(&response->retrieve_route_id, expected_route_id) == 0u ||
+      er_hash_equal(&response->object_id, expected_object_id) == 0u ||
       response->object_len != expected_object_len) {
     return 0;
   }
@@ -518,15 +469,15 @@ UINT8 er_app_load_package_from_storage_source(const ErCryptoProvider* crypto,
 
   if (app_object == 0 || manifest_object == 0 ||
       er_app_package_storage_source_valid(crypto, package, source) == 0u ||
-      er_app_hash_equal(&app_object->retrieve_route_id,
+      er_hash_equal(&app_object->retrieve_route_id,
                         &source->app_retrieve_route_id) == 0u ||
-      er_app_hash_equal(&manifest_object->retrieve_route_id,
+      er_hash_equal(&manifest_object->retrieve_route_id,
                         &source->manifest_retrieve_route_id) == 0u) {
     return 0;
   }
   if (package->ui_assets_object_len != 0u) {
     if (ui_assets_object == 0 ||
-        er_app_hash_equal(&ui_assets_object->retrieve_route_id,
+        er_hash_equal(&ui_assets_object->retrieve_route_id,
                           &source->ui_assets_retrieve_route_id) == 0u) {
       return 0;
     }
@@ -865,13 +816,13 @@ UINT8 er_app_prepare_execution_jurisdiction(const ErCryptoProvider* crypto,
       budget->abi_version != ER_APP_ABI_VERSION ||
       allocation->abi_version != ER_APP_ABI_VERSION ||
       budget->app_kind != ER_APP_KIND_USER ||
-      er_app_node_nonzero(parent_relay_node_id) == 0u) {
+      er_node_id_nonzero(parent_relay_node_id) == 0u) {
     return 0;
   }
-  if (er_app_hash_equal(&identity->admission_id, &budget->admission_id) == 0u ||
-      er_app_hash_equal(&identity->admission_id, &allocation->admission_id) == 0u ||
-      er_app_hash_equal(&budget->budget_id, &allocation->budget_id) == 0u ||
-      er_app_node_equal(&identity->app_node_id, &allocation->app_node_id) == 0u) {
+  if (er_hash_equal(&identity->admission_id, &budget->admission_id) == 0u ||
+      er_hash_equal(&identity->admission_id, &allocation->admission_id) == 0u ||
+      er_hash_equal(&budget->budget_id, &allocation->budget_id) == 0u ||
+      er_node_id_equal(&identity->app_node_id, &allocation->app_node_id) == 0u) {
     return 0;
   }
   if (allocation->app_address_base != ER_APP_ADDRESS_BASE ||
@@ -947,11 +898,11 @@ UINT8 er_app_prepare_ui_presentation(const ErCryptoProvider* crypto,
   if (crypto == 0 || jurisdiction == 0 || ui_relay_node_id == 0 ||
       route_hash == 0 || out_presentation == 0 ||
       jurisdiction->abi_version != ER_APP_ABI_VERSION ||
-      er_app_node_nonzero(&jurisdiction->app_node_id) == 0u ||
-      er_mem_any_nonzero(jurisdiction->jurisdiction_id.bytes, ER_HASH_LEN) == 0u ||
-      er_mem_any_nonzero(jurisdiction->admission_id.bytes, ER_HASH_LEN) == 0u ||
-      er_app_node_nonzero(ui_relay_node_id) == 0u ||
-      er_mem_any_nonzero(route_hash->bytes, ER_HASH_LEN) == 0u ||
+      er_node_id_nonzero(&jurisdiction->app_node_id) == 0u ||
+      er_hash_nonzero(&jurisdiction->jurisdiction_id) == 0u ||
+      er_hash_nonzero(&jurisdiction->admission_id) == 0u ||
+      er_node_id_nonzero(ui_relay_node_id) == 0u ||
+      er_hash_nonzero(route_hash) == 0u ||
       er_app_scene_budget_nonzero(scene_budget) == 0u ||
       sequence == 0u) {
     return 0;
@@ -1004,12 +955,12 @@ UINT8 er_app_ui_scene_fits_presentation(er_ui_scene_stats_t stats,
                                         const ErAppUiPresentation* presentation) {
   if (presentation == 0 ||
       presentation->abi_version != ER_APP_ABI_VERSION ||
-      er_app_node_nonzero(&presentation->app_node_id) == 0u ||
-      er_app_node_nonzero(&presentation->ui_relay_node_id) == 0u ||
-      er_mem_any_nonzero(presentation->jurisdiction_id.bytes, ER_HASH_LEN) == 0u ||
-      er_mem_any_nonzero(presentation->admission_id.bytes, ER_HASH_LEN) == 0u ||
-      er_mem_any_nonzero(presentation->presentation_id.bytes, ER_HASH_LEN) == 0u ||
-      er_mem_any_nonzero(presentation->route_hash.bytes, ER_HASH_LEN) == 0u ||
+      er_node_id_nonzero(&presentation->app_node_id) == 0u ||
+      er_node_id_nonzero(&presentation->ui_relay_node_id) == 0u ||
+      er_hash_nonzero(&presentation->jurisdiction_id) == 0u ||
+      er_hash_nonzero(&presentation->admission_id) == 0u ||
+      er_hash_nonzero(&presentation->presentation_id) == 0u ||
+      er_hash_nonzero(&presentation->route_hash) == 0u ||
       presentation->sequence == 0u) {
     return 0;
   }

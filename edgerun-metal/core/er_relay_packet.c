@@ -117,12 +117,12 @@ UINT8 er_relay_packet_prepare(UINT8* packet, UINT32 packet_capacity,
       er_relay_packet_cost_valid(payload_len, cost_per_byte, max_total_cost) == 0u) {
     return 0;
   }
-  if (er_mem_any_nonzero(source_node_id->bytes, ER_NODE_ID_LEN) == 0u ||
-      er_mem_any_nonzero(target_node_id->bytes, ER_NODE_ID_LEN) == 0u ||
-      er_mem_any_nonzero(admission_id->bytes, ER_HASH_LEN) == 0u ||
-      er_mem_any_nonzero(token_id->bytes, ER_HASH_LEN) == 0u ||
-      er_mem_any_nonzero(route_hash->bytes, ER_HASH_LEN) == 0u ||
-      er_mem_any_nonzero(payload_hash->bytes, ER_HASH_LEN) == 0u) {
+  if (er_node_id_nonzero(source_node_id) == 0u ||
+      er_node_id_nonzero(target_node_id) == 0u ||
+      er_hash_nonzero(admission_id) == 0u ||
+      er_hash_nonzero(token_id) == 0u ||
+      er_hash_nonzero(route_hash) == 0u ||
+      er_hash_nonzero(payload_hash) == 0u) {
     return 0;
   }
 

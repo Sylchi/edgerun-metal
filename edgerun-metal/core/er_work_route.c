@@ -84,34 +84,6 @@ static void er_work_put_be64(UINT8* dst, UINT64 value) {
   er_work_put_be(dst, value, ER_WORK_ROUTE_U64_BYTES);
 }
 
-static UINT8 er_work_hash_equal(const ErHash* left, const ErHash* right) {
-  if (left == 0 || right == 0) {
-    return 0;
-  }
-  return er_mem_equal(left->bytes, right->bytes, ER_HASH_LEN);
-}
-
-static UINT8 er_work_node_equal(const ErNodeId* left, const ErNodeId* right) {
-  if (left == 0 || right == 0) {
-    return 0;
-  }
-  return er_mem_equal(left->bytes, right->bytes, ER_NODE_ID_LEN);
-}
-
-static UINT8 er_work_hash_nonzero(const ErHash* value) {
-  if (value == 0) {
-    return 0;
-  }
-  return er_mem_any_nonzero(value->bytes, ER_HASH_LEN);
-}
-
-static UINT8 er_work_node_nonzero(const ErNodeId* value) {
-  if (value == 0) {
-    return 0;
-  }
-  return er_mem_any_nonzero(value->bytes, ER_NODE_ID_LEN);
-}
-
 static UINT8 er_work_capability_kind_valid(UINT16 kind) {
   switch (kind) {
     case ER_CAPABILITY_PACKET_REQUEST:
@@ -160,7 +132,7 @@ static UINT8 er_work_endpoint_valid(const ErChannelEndpoint* endpoint) {
       endpoint->kind == 0u ||
       endpoint->address_len > ER_CHANNEL_ADDRESS_MAX ||
       endpoint->label_len > ER_CHANNEL_LABEL_MAX ||
-      er_work_hash_nonzero(&endpoint->channel_id) == 0u) {
+      er_hash_nonzero(&endpoint->channel_id) == 0u) {
     return 0;
   }
   return 1;
@@ -174,7 +146,7 @@ static UINT8 er_work_relay_path_valid(const ErWorkAdmission* admission) {
     return 0;
   }
   for (i = 0u; i < admission->relay_count; ++i) {
-    if (er_work_node_nonzero(&admission->relay_path[i]) == 0u) {
+    if (er_node_id_nonzero(&admission->relay_path[i]) == 0u) {
       return 0;
     }
   }
@@ -189,7 +161,7 @@ static UINT8 er_work_relay_in_admission(const ErWorkAdmission* admission,
     return 0;
   }
   for (i = 0u; i < admission->relay_count; ++i) {
-    if (er_work_node_equal(&admission->relay_path[i], relay_node_id) != 0u) {
+    if (er_node_id_equal(&admission->relay_path[i], relay_node_id) != 0u) {
       return 1;
     }
   }
@@ -209,9 +181,9 @@ static UINT8 er_work_hash_admission(const ErCryptoProvider* crypto,
       admission->admission_node.role != ER_NODE_ROLE_ADMISSION ||
       er_identity_valid(&admission->user) == 0u ||
       er_identity_valid(&admission->admission_node.identity) == 0u ||
-      er_work_hash_nonzero(&admission->admission_id) == 0u ||
-      er_work_hash_nonzero(&admission->request_hash) == 0u ||
-      er_work_hash_nonzero(&admission->route_commitment) == 0u ||
+      er_hash_nonzero(&admission->admission_id) == 0u ||
+      er_hash_nonzero(&admission->request_hash) == 0u ||
+      er_hash_nonzero(&admission->route_commitment) == 0u ||
       er_work_endpoint_valid(&admission->channel) == 0u ||
       er_work_relay_path_valid(admission) == 0u ||
       admission->admitted_budget == 0u) {
@@ -256,15 +228,15 @@ static UINT8 er_work_admitted_route_id(const ErCryptoProvider* crypto,
       route->abi_version != ER_WORK_ABI_VERSION ||
       route->relay_count == 0u || route->relay_count > ER_ROUTE_RELAY_MAX ||
       er_identity_valid(&route->user) == 0u ||
-      er_work_hash_nonzero(&route->request_hash) == 0u ||
-      er_work_hash_nonzero(&route->admission_hash) == 0u ||
-      er_work_node_nonzero(&route->source_node_id) == 0u ||
-      er_work_node_nonzero(&route->target_node_id) == 0u ||
-      er_work_node_nonzero(&route->relay_node_id) == 0u ||
-      er_work_hash_nonzero(&route->channel_id) == 0u ||
-      er_work_hash_nonzero(&route->admission_route_commitment) == 0u ||
-      er_work_hash_nonzero(&route->target_route_commitment) == 0u ||
-      er_work_hash_nonzero(&route->policy_hash) == 0u ||
+      er_hash_nonzero(&route->request_hash) == 0u ||
+      er_hash_nonzero(&route->admission_hash) == 0u ||
+      er_node_id_nonzero(&route->source_node_id) == 0u ||
+      er_node_id_nonzero(&route->target_node_id) == 0u ||
+      er_node_id_nonzero(&route->relay_node_id) == 0u ||
+      er_hash_nonzero(&route->channel_id) == 0u ||
+      er_hash_nonzero(&route->admission_route_commitment) == 0u ||
+      er_hash_nonzero(&route->target_route_commitment) == 0u ||
+      er_hash_nonzero(&route->policy_hash) == 0u ||
       route->admitted_budget == 0u) {
     return 0;
   }
@@ -326,15 +298,15 @@ UINT8 er_work_admitted_route_from_admission(const ErCryptoProvider* crypto,
       relay_node_id == 0 || out_route == 0 ||
       request->abi_version != ER_WORK_ABI_VERSION ||
       admission->abi_version != ER_WORK_ABI_VERSION ||
-      er_work_hash_nonzero(&request->request_id) == 0u ||
-      er_work_hash_nonzero(&admission->request_hash) == 0u ||
+      er_hash_nonzero(&request->request_id) == 0u ||
+      er_hash_nonzero(&admission->request_hash) == 0u ||
       er_identity_equal(&request->user, &admission->user) == 0u ||
       admission->valid_until_ms > request->valid_until_ms ||
       er_work_relay_path_valid(admission) == 0u ||
-      er_work_node_equal(&admission->relay_path[0], relay_node_id) == 0u ||
+      er_node_id_equal(&admission->relay_path[0], relay_node_id) == 0u ||
       er_work_relay_in_admission(admission, &request->recipient) != 0u ||
-      er_work_node_nonzero(source_node_id) == 0u ||
-      er_work_node_nonzero(&request->recipient) == 0u ||
+      er_node_id_nonzero(source_node_id) == 0u ||
+      er_node_id_nonzero(&request->recipient) == 0u ||
       target_role == 0u) {
     return 0;
   }
@@ -370,11 +342,11 @@ UINT8 er_work_verify_channel_envelope_for_route(const ErChannelEnvelopeHeader* e
   if (envelope == 0 || route == 0 ||
       envelope->abi_version != ER_WORK_ABI_VERSION ||
       route->abi_version != ER_WORK_ABI_VERSION ||
-      er_work_hash_equal(&envelope->channel_id, &route->channel_id) == 0u ||
-      er_work_node_equal(&envelope->from, &route->source_node_id) == 0u ||
-      er_work_node_equal(&envelope->to, &route->target_node_id) == 0u ||
-      er_work_hash_equal(&envelope->route_hash, &route->target_route_commitment) == 0u ||
-      er_work_hash_nonzero(&envelope->packet_hash) == 0u ||
+      er_hash_equal(&envelope->channel_id, &route->channel_id) == 0u ||
+      er_node_id_equal(&envelope->from, &route->source_node_id) == 0u ||
+      er_node_id_equal(&envelope->to, &route->target_node_id) == 0u ||
+      er_hash_equal(&envelope->route_hash, &route->target_route_commitment) == 0u ||
+      er_hash_nonzero(&envelope->packet_hash) == 0u ||
       envelope->packet_kind != route->work_type || envelope->sequence == 0u) {
     return 0;
   }
@@ -394,10 +366,10 @@ UINT8 er_work_prepare_relay_forward_intent(const ErWorkAdmission* admission,
       er_work_endpoint_valid(from_endpoint) == 0u ||
       er_work_endpoint_valid(to_endpoint) == 0u ||
       er_work_relay_in_admission(admission, current_relay_node_id) == 0u ||
-      er_work_hash_equal(&envelope->channel_id, &admission->channel.channel_id) == 0u ||
-      er_work_hash_equal(&to_endpoint->channel_id, &admission->channel.channel_id) == 0u ||
-      er_work_hash_equal(&envelope->route_hash, &admission->route_commitment) == 0u ||
-      er_work_hash_nonzero(&envelope->packet_hash) == 0u ||
+      er_hash_equal(&envelope->channel_id, &admission->channel.channel_id) == 0u ||
+      er_hash_equal(&to_endpoint->channel_id, &admission->channel.channel_id) == 0u ||
+      er_hash_equal(&envelope->route_hash, &admission->route_commitment) == 0u ||
+      er_hash_nonzero(&envelope->packet_hash) == 0u ||
       envelope->sequence == 0u) {
     return 0;
   }
@@ -423,11 +395,11 @@ UINT8 er_work_ordered_message_input_hash(const ErCryptoProvider* crypto,
 
   if (crypto == 0 || envelope == 0 || out_hash == 0 ||
       envelope->abi_version != ER_WORK_ABI_VERSION ||
-      er_work_hash_nonzero(&envelope->channel_id) == 0u ||
-      er_work_node_nonzero(&envelope->from) == 0u ||
-      er_work_node_nonzero(&envelope->to) == 0u ||
-      er_work_hash_nonzero(&envelope->route_hash) == 0u ||
-      er_work_hash_nonzero(&envelope->packet_hash) == 0u ||
+      er_hash_nonzero(&envelope->channel_id) == 0u ||
+      er_node_id_nonzero(&envelope->from) == 0u ||
+      er_node_id_nonzero(&envelope->to) == 0u ||
+      er_hash_nonzero(&envelope->route_hash) == 0u ||
+      er_hash_nonzero(&envelope->packet_hash) == 0u ||
       envelope->sequence == 0u) {
     return 0;
   }
@@ -464,13 +436,13 @@ UINT8 er_work_prepare_relay_transit_hop(const ErCryptoProvider* crypto,
   if (crypto == 0 || intent == 0 || input_hash == 0 ||
       previous_transit_hash == 0 || out_hop == 0 ||
       intent->abi_version != ER_WORK_ABI_VERSION ||
-      er_work_node_nonzero(&intent->relay_node_id) == 0u ||
-      er_work_node_nonzero(&intent->source_node_id) == 0u ||
-      er_work_node_nonzero(&intent->target_node_id) == 0u ||
-      er_work_hash_nonzero(&intent->to.channel_id) == 0u ||
-      er_work_hash_nonzero(&intent->route_hash) == 0u ||
-      er_work_hash_nonzero(&intent->packet_hash) == 0u ||
-      er_work_hash_nonzero(input_hash) == 0u ||
+      er_node_id_nonzero(&intent->relay_node_id) == 0u ||
+      er_node_id_nonzero(&intent->source_node_id) == 0u ||
+      er_node_id_nonzero(&intent->target_node_id) == 0u ||
+      er_hash_nonzero(&intent->to.channel_id) == 0u ||
+      er_hash_nonzero(&intent->route_hash) == 0u ||
+      er_hash_nonzero(&intent->packet_hash) == 0u ||
+      er_hash_nonzero(input_hash) == 0u ||
       intent->sequence == 0u) {
     return 0;
   }
@@ -523,9 +495,9 @@ UINT8 er_work_prepare_relay_accounting_claim(const ErRelayTransitHop* hop,
 
   if (hop == 0 || request_hash == 0 || admission_hash == 0 || out_claim == 0 ||
       hop->abi_version != ER_WORK_ABI_VERSION ||
-      er_work_hash_nonzero(&hop->transit_hash) == 0u ||
-      er_work_hash_nonzero(request_hash) == 0u ||
-      er_work_hash_nonzero(admission_hash) == 0u ||
+      er_hash_nonzero(&hop->transit_hash) == 0u ||
+      er_hash_nonzero(request_hash) == 0u ||
+      er_hash_nonzero(admission_hash) == 0u ||
       packet_bytes == 0u || unit_price == 0u) {
     return 0;
   }
@@ -561,14 +533,14 @@ UINT8 er_work_capability_envelope_header_valid(const ErCapabilityEnvelopeHeader*
       er_work_capability_operation_valid(header->operation) == 0u ||
       er_work_capability_content_valid(header->content_type) == 0u ||
       er_work_capability_risk_flags_valid(header->risk_flags) == 0u ||
-      er_work_hash_nonzero(&header->session_id) == 0u ||
-      er_work_hash_nonzero(&header->invocation_id) == 0u ||
-      er_work_hash_nonzero(&header->capability_id) == 0u ||
-      er_work_node_nonzero(&header->source_node_id) == 0u ||
-      er_work_node_nonzero(&header->target_node_id) == 0u ||
+      er_hash_nonzero(&header->session_id) == 0u ||
+      er_hash_nonzero(&header->invocation_id) == 0u ||
+      er_hash_nonzero(&header->capability_id) == 0u ||
+      er_node_id_nonzero(&header->source_node_id) == 0u ||
+      er_node_id_nonzero(&header->target_node_id) == 0u ||
       header->sequence == 0u ||
       header->timestamp_ms == 0u ||
-      er_work_hash_nonzero(&header->payload_hash) == 0u ||
+      er_hash_nonzero(&header->payload_hash) == 0u ||
       header->payload_len == 0u) {
     return 0;
   }

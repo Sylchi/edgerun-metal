@@ -94,6 +94,62 @@ typedef struct {
   UINT8 bytes[ER_NODE_ID_LEN];
 } ErNodeId;
 
+static inline UINT8 er_hash_equal(const ErHash* left, const ErHash* right) {
+  UINTN i;
+
+  if (left == 0 || right == 0) {
+    return 0u;
+  }
+  for (i = 0u; i < ER_HASH_LEN; ++i) {
+    if (left->bytes[i] != right->bytes[i]) {
+      return 0u;
+    }
+  }
+  return 1u;
+}
+
+static inline UINT8 er_hash_nonzero(const ErHash* value) {
+  UINTN i;
+
+  if (value == 0) {
+    return 0u;
+  }
+  for (i = 0u; i < ER_HASH_LEN; ++i) {
+    if (value->bytes[i] != 0u) {
+      return 1u;
+    }
+  }
+  return 0u;
+}
+
+static inline UINT8 er_node_id_equal(const ErNodeId* left, const ErNodeId* right) {
+  UINTN i;
+
+  if (left == 0 || right == 0) {
+    return 0u;
+  }
+  for (i = 0u; i < ER_NODE_ID_LEN; ++i) {
+    if (left->bytes[i] != right->bytes[i]) {
+      return 0u;
+    }
+  }
+  return 1u;
+}
+
+static inline UINT8 er_node_id_nonzero(const ErNodeId* value) {
+  UINTN i;
+
+  if (value == 0) {
+    return 0u;
+  }
+  for (i = 0u; i < ER_NODE_ID_LEN; ++i) {
+    if (value->bytes[i] != 0u) {
+      return 1u;
+    }
+  }
+  return 0u;
+}
+
 typedef struct {
   UINT16 identity_type;
   UINT16 backing_type;

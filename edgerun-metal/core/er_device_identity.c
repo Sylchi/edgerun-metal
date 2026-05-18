@@ -66,7 +66,7 @@ UINT8 er_device_relay_identity_derive(const ErCryptoProvider* crypto,
       device_identity->abi_version != ER_WORK_ABI_VERSION ||
       er_device_identity_kind_valid(device_identity->kind) == 0u ||
       er_identity_valid(&device_identity->identity) == 0u ||
-      er_mem_any_nonzero(measured_program_hash->bytes, ER_HASH_LEN) == 0u) {
+      er_hash_nonzero(measured_program_hash) == 0u) {
     return 0;
   }
 
