@@ -10,6 +10,13 @@
 #define ER_UI_SHADCN_EMPTY_COUNT 0u
 #define ER_UI_SHADCN_ARRAY_COUNT(values) (sizeof(values) / sizeof((values)[0]))
 #define ER_UI_SHADCN_IDENTIFIER_CAPACITY ER_UI_SHADCN_TEXT_CAPACITY
+#define ER_UI_SHADCN_PREVIEW_ALERT_DIALOG_CANCEL_ID (ER_UI_SHADCN_DEMO_PREVIEW_BASE_ID + 90u)
+#define ER_UI_SHADCN_PREVIEW_ALERT_DIALOG_CONFIRM_ID (ER_UI_SHADCN_DEMO_PREVIEW_BASE_ID + 91u)
+#define ER_UI_SHADCN_PREVIEW_BREADCRUMB_CURRENT_INDEX 2u
+#define ER_UI_SHADCN_PREVIEW_CALENDAR_DAY_BASE_ID (ER_UI_SHADCN_DEMO_PREVIEW_BASE_ID + 48u)
+#define ER_UI_SHADCN_PREVIEW_CALENDAR_SELECTED_INDEX 2u
+#define ER_UI_SHADCN_PREVIEW_CHART_ID (ER_UI_SHADCN_DEMO_PREVIEW_BASE_ID + 120u)
+#define ER_UI_SHADCN_PREVIEW_CHART_ACTIVE_INDEX 3u
 
 static bool er_ui_shadcn_streq(const char* a, const char* b) {
   if (!a || !b) return false;
@@ -1514,11 +1521,15 @@ er_ui_status_t er_ui_shadcn_progress_ring_emit(er_ui_scene_t* scene, er_ui_bound
   er_ui_status_t status = er_ui_scene_push_rect(scene, er_ui_rect_border(x, y, size, size, size * 0.5f, er_ui_color_with_alpha(theme.colors.border, 0.70f)));
   if (status != ER_UI_OK) return status;
   float clamped = er_ui_float_clamp(value, 0.0f, 1.0f);
-  size_t segments = (size_t)(clamped * 12.0f + 0.5f);
-  const float px[12] = {0.50f, 0.70f, 0.84f, 0.90f, 0.84f, 0.70f, 0.50f, 0.30f, 0.16f, 0.10f, 0.16f, 0.30f};
-  const float py[12] = {0.06f, 0.10f, 0.24f, 0.44f, 0.64f, 0.80f, 0.86f, 0.80f, 0.64f, 0.44f, 0.24f, 0.10f};
-  for (size_t i = 0u; i < segments && i < 12u; ++i) {
-    status = er_ui_scene_push_rect(scene, er_ui_rect_fill(x + size * px[i] - t * 0.5f, y + size * py[i] - t * 0.5f, t, t, t * 0.5f, color));
+  const struct { float x; float y; } points[] = {
+    {0.50f, 0.06f}, {0.70f, 0.10f}, {0.84f, 0.24f}, {0.90f, 0.44f},
+    {0.84f, 0.64f}, {0.70f, 0.80f}, {0.50f, 0.86f}, {0.30f, 0.80f},
+    {0.16f, 0.64f}, {0.10f, 0.44f}, {0.16f, 0.24f}, {0.30f, 0.10f},
+  };
+  const size_t point_count = ER_UI_SHADCN_ARRAY_COUNT(points);
+  size_t segments = (size_t)(clamped * (float)point_count + 0.5f);
+  for (size_t i = 0u; i < segments && i < point_count; ++i) {
+    status = er_ui_scene_push_rect(scene, er_ui_rect_fill(x + size * points[i].x - t * 0.5f, y + size * points[i].y - t * 0.5f, t, t, t * 0.5f, color));
     if (status != ER_UI_OK) return status;
   }
   return ER_UI_OK;
@@ -2177,10 +2188,10 @@ er_ui_status_t er_ui_shadcn_component_scene_preview_emit(
     status = er_ui_shadcn_push_ascii_text(scene, font, body, bounds.x + 18.0f, bounds.y + 56.0f, theme.colors.muted);
     if (status != ER_UI_OK) return status;
     status = er_ui_shadcn_button_emit(scene, font, er_ui_bounds(bounds.x + 160.0f, bounds.y + 96.0f, 80.0f, 40.0f), theme, "Cancel",
-                                      ER_UI_SHADCN_DEMO_PREVIEW_BASE_ID + 90u, ER_UI_SHADCN_BUTTON_SECONDARY, ER_UI_SHADCN_BUTTON_SIZE_SM, true);
+                                      ER_UI_SHADCN_PREVIEW_ALERT_DIALOG_CANCEL_ID, ER_UI_SHADCN_BUTTON_SECONDARY, ER_UI_SHADCN_BUTTON_SIZE_SM, true);
     if (status != ER_UI_OK) return status;
     return er_ui_shadcn_button_emit(scene, font, er_ui_bounds(bounds.x + 248.0f, bounds.y + 96.0f, 84.0f, 40.0f), theme, "Confirm",
-                                    ER_UI_SHADCN_DEMO_PREVIEW_BASE_ID + 91u, ER_UI_SHADCN_BUTTON_DEFAULT, ER_UI_SHADCN_BUTTON_SIZE_SM, true);
+                                    ER_UI_SHADCN_PREVIEW_ALERT_DIALOG_CONFIRM_ID, ER_UI_SHADCN_BUTTON_DEFAULT, ER_UI_SHADCN_BUTTON_SIZE_SM, true);
   }
   if (er_ui_shadcn_streq(slug, "aspect-ratio")) {
     er_ui_bounds_t card = er_ui_bounds(bounds.x, bounds.y, er_ui_float_min(bounds.w, 260.0f), 146.0f);
@@ -2217,12 +2228,14 @@ er_ui_status_t er_ui_shadcn_component_scene_preview_emit(
   }
   if (er_ui_shadcn_streq(slug, "breadcrumb")) {
     const char* const labels[] = {"Docs", "Components", "Breadcrumb"};
-    return er_ui_shadcn_breadcrumb_emit(scene, font, er_ui_bounds(bounds.x, bounds.y, er_ui_float_min(bounds.w, 320.0f), 34.0f), theme, labels, 3u, 2u,
+    return er_ui_shadcn_breadcrumb_emit(scene, font, er_ui_bounds(bounds.x, bounds.y, er_ui_float_min(bounds.w, 320.0f), 34.0f), theme, labels,
+                                        ER_UI_SHADCN_ARRAY_COUNT(labels), ER_UI_SHADCN_PREVIEW_BREADCRUMB_CURRENT_INDEX,
                                         ER_UI_SHADCN_DEMO_PREVIEW_BASE_ID + 1u);
   }
   if (er_ui_shadcn_streq(slug, "button-group")) {
     const char* const labels[] = {"Copy", "Paste", "More"};
-    return er_ui_shadcn_tabs_emit(scene, font, er_ui_bounds(bounds.x, bounds.y, 210.0f, 38.0f), theme, labels, 3u, 0u, ER_UI_SHADCN_DEMO_PREVIEW_BASE_ID + 27u);
+    return er_ui_shadcn_tabs_emit(scene, font, er_ui_bounds(bounds.x, bounds.y, 210.0f, 38.0f), theme, labels, ER_UI_SHADCN_ARRAY_COUNT(labels), 0u,
+                                  ER_UI_SHADCN_DEMO_PREVIEW_BASE_ID + 27u);
   }
   if (er_ui_shadcn_streq(slug, "calendar") || er_ui_shadcn_streq(slug, "date-picker")) {
     er_ui_status_t status = ER_UI_OK;
@@ -2238,10 +2251,11 @@ er_ui_status_t er_ui_shadcn_component_scene_preview_emit(
     status = er_ui_shadcn_push_ascii_text(scene, font, "June 2025", card.x + 14.0f, card.y + 26.0f, theme.colors.text);
     if (status != ER_UI_OK) return status;
     const char* const days[] = {"8", "9", "10", "11", "12", "13", "14"};
-    for (size_t i = 0u; i < 7u; ++i) {
+    for (size_t i = 0u; i < ER_UI_SHADCN_ARRAY_COUNT(days); ++i) {
       status = er_ui_shadcn_button_emit(scene, font, er_ui_bounds(card.x + 10.0f + (float)i * 34.0f, card.y + 58.0f, 30.0f, 34.0f), theme, days[i],
-                                        ER_UI_SHADCN_DEMO_PREVIEW_BASE_ID + 48u + (uint32_t)i,
-                                        i == 2u ? ER_UI_SHADCN_BUTTON_SECONDARY : ER_UI_SHADCN_BUTTON_GHOST, ER_UI_SHADCN_BUTTON_SIZE_SM, true);
+                                        ER_UI_SHADCN_PREVIEW_CALENDAR_DAY_BASE_ID + (uint32_t)i,
+                                        i == ER_UI_SHADCN_PREVIEW_CALENDAR_SELECTED_INDEX ? ER_UI_SHADCN_BUTTON_SECONDARY : ER_UI_SHADCN_BUTTON_GHOST,
+                                        ER_UI_SHADCN_BUTTON_SIZE_SM, true);
       if (status != ER_UI_OK) return status;
     }
     return ER_UI_OK;
@@ -2268,8 +2282,9 @@ er_ui_status_t er_ui_shadcn_component_scene_preview_emit(
   if (er_ui_shadcn_streq(slug, "chart")) {
     const char* const labels[] = {"Jan", "Feb", "Mar", "Apr", "May", "Jun"};
     const float values[] = {0.42f, 0.68f, 0.51f, 0.82f, 0.56f, 0.74f};
-    return er_ui_shadcn_bar_chart_emit(scene, font, er_ui_bounds(bounds.x, bounds.y, er_ui_float_min(bounds.w, 360.0f), 160.0f), theme, "Visitors", labels, values, 6u,
-                                       ER_UI_SHADCN_DEMO_PREVIEW_BASE_ID + 120u, 3u);
+    _Static_assert(ER_UI_SHADCN_ARRAY_COUNT(labels) == ER_UI_SHADCN_ARRAY_COUNT(values), "chart preview arrays must match");
+    return er_ui_shadcn_bar_chart_emit(scene, font, er_ui_bounds(bounds.x, bounds.y, er_ui_float_min(bounds.w, 360.0f), 160.0f), theme, "Visitors", labels, values,
+                                       ER_UI_SHADCN_ARRAY_COUNT(values), ER_UI_SHADCN_PREVIEW_CHART_ID, ER_UI_SHADCN_PREVIEW_CHART_ACTIVE_INDEX);
   }
   if (er_ui_shadcn_streq(slug, "checkbox")) {
     er_ui_status_t status = er_ui_shadcn_checkbox_emit(scene, font, er_ui_bounds(bounds.x, bounds.y, bounds.w, 32.0f), theme, "Accept terms and conditions", true,
