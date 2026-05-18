@@ -156,13 +156,6 @@ static bool er_ui_component_range_starts_with(const char* start, const char* end
   return true;
 }
 
-static size_t er_ui_component_ascii_len(const char* value) {
-  size_t len = 0u;
-  if (!value) return 0u;
-  while (value[len]) len++;
-  return len;
-}
-
 static bool er_ui_component_ends_with_len(const char* start, const char* end, const char* suffix, size_t suffix_len) {
   if (!start || !end || !suffix || end < start || (size_t)(end - start) <= suffix_len) return false;
   const char* candidate = end - suffix_len;
@@ -2672,7 +2665,7 @@ er_ui_status_t er_ui_component_button_emit(
                                                            er_ui_color_with_alpha(er_ui_component_button_border(theme, variant), active ? 0.32f : 0.18f)));
     if (status != ER_UI_OK) return status;
   }
-  float text_w = (float)er_ui_component_ascii_len(label) * 7.0f;
+  float text_w = (float)er_ui_ascii_len(label) * 7.0f;
   float text_x = rect.x + (rect.w - text_w) * 0.5f;
   if (text_x < rect.x + 10.0f) text_x = rect.x + 10.0f;
   return er_ui_component_push_ascii_text(scene, font, label, text_x, rect.y + rect.h * 0.62f, er_ui_component_button_text(theme, variant));
@@ -3395,7 +3388,7 @@ er_ui_status_t er_ui_component_panel_header_emit(
     status = er_ui_component_push_ascii_text(scene, font, subtitle, bounds.x, bounds.y + 40.0f, theme.colors.muted);
     if (status != ER_UI_OK) return status;
   }
-  if (action_label && er_ui_component_ascii_len(action_label) > 0u) {
+  if (action_label && er_ui_ascii_len(action_label) > 0u) {
     status = er_ui_component_button_emit(scene, font, er_ui_bounds(bounds.x + bounds.w - 96.0f, bounds.y + 4.0f, 96.0f, 36.0f), theme, action_label, action_id,
                                       ER_UI_COMPONENT_BUTTON_SECONDARY, ER_UI_COMPONENT_BUTTON_SIZE_SM, true);
     if (status != ER_UI_OK) return status;

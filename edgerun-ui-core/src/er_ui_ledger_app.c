@@ -194,17 +194,6 @@ static er_ui_status_t er_ui_ledger_text(
   return er_ui_scene_push_ascii_text(scene, font, text, ER_UI_LEDGER_TEXT_CAP, x, y, color);
 }
 
-static size_t er_ui_ledger_ascii_len(const char* text) {
-  size_t len = 0u;
-  const char* cursor = text;
-  if (!text) return 0u;
-  while (*cursor) {
-    len++;
-    cursor++;
-  }
-  return len;
-}
-
 static er_ui_status_t er_ui_ledger_text_right(
   er_ui_scene_t* scene,
   vr_font_face_t* font,
@@ -212,7 +201,7 @@ static er_ui_status_t er_ui_ledger_text_right(
   float right_x,
   float y,
   er_ui_color4_t color) {
-  float text_w = (float)er_ui_ledger_ascii_len(text) * ER_UI_LEDGER_TEXT_ADVANCE;
+  float text_w = (float)er_ui_ascii_len(text) * ER_UI_LEDGER_TEXT_ADVANCE;
   return er_ui_ledger_text(scene, font, text, right_x - text_w, y, color);
 }
 
@@ -356,7 +345,7 @@ static er_ui_status_t er_ui_ledger_button(
   if (status != ER_UI_OK) return status;
   status = er_ui_ledger_rect(scene, bounds, 7.0f, colors.button);
   if (status != ER_UI_OK) return status;
-  float text_w = (float)er_ui_ledger_ascii_len(label) * ER_UI_LEDGER_TEXT_ADVANCE;
+  float text_w = (float)er_ui_ascii_len(label) * ER_UI_LEDGER_TEXT_ADVANCE;
   float text_x = bounds.x + (bounds.w - text_w) * 0.5f;
   if (text_x < bounds.x + ER_UI_LEDGER_BUTTON_TEXT_PAD_X) text_x = bounds.x + ER_UI_LEDGER_BUTTON_TEXT_PAD_X;
   if (text_x < bounds.x + bounds.w * ER_UI_LEDGER_BUTTON_TEXT_MIN_START_RATIO) {
@@ -735,7 +724,7 @@ static er_ui_status_t er_ui_ledger_transactions_card(
     status = er_ui_ledger_text(scene, font, row->kind, bounds.x + 60.0f, y + 36.0f, colors.muted);
     if (status != ER_UI_OK) return status;
     float amount_right = bounds.x + bounds.w - 34.0f;
-    float amount_w = (float)er_ui_ledger_ascii_len(row->amount) * ER_UI_LEDGER_TEXT_ADVANCE;
+    float amount_w = (float)er_ui_ascii_len(row->amount) * ER_UI_LEDGER_TEXT_ADVANCE;
     float date_right = amount_right - amount_w - 52.0f;
     status = er_ui_ledger_text_right(scene, font, row->date, date_right, y + 26.0f, colors.muted);
     if (status != ER_UI_OK) return status;

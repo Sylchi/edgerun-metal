@@ -86,3 +86,14 @@ bool er_ui_bounds_valid(er_ui_bounds_t bounds) {
   return er_ui_float_is_finite_value(bounds.x) && er_ui_float_is_finite_value(bounds.y) && er_ui_float_is_finite_value(bounds.w) &&
          er_ui_float_is_finite_value(bounds.h) && bounds.w > 0.0f && bounds.h > 0.0f;
 }
+
+size_t er_ui_ascii_len(const char* text) {
+  size_t len = 0u;
+  const char* cursor = text;
+  if (!text) return 0u;
+  while (*cursor) {
+    len++;
+    cursor++;
+  }
+  return len;
+}

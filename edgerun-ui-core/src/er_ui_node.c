@@ -2159,17 +2159,6 @@ static er_ui_status_t er_ui_node_render_sheet(
                                   node->id + 1u, ER_UI_COMPONENT_BUTTON_DEFAULT, ER_UI_COMPONENT_BUTTON_SIZE_DEFAULT, true);
 }
 
-static size_t er_ui_node_ascii_len(const char* text) {
-  size_t len = 0u;
-  if (!text) return 0u;
-  const char* cursor = text;
-  while (*cursor) {
-    len++;
-    cursor++;
-  }
-  return len;
-}
-
 static er_ui_status_t er_ui_node_render_kbd(
   const er_ui_node_t* node,
   er_ui_scene_t* scene,
@@ -2181,7 +2170,7 @@ static er_ui_status_t er_ui_node_render_kbd(
   float badge_h = er_ui_float_min(bounds.h, 28.0f);
   float badge_y = bounds.y + (bounds.h - badge_h) * 0.5f;
   for (size_t i = 0u; i < node->label_count; ++i) {
-    float badge_w = 22.0f + (float)er_ui_node_ascii_len(node->labels[i]) * 8.0f;
+    float badge_w = 22.0f + (float)er_ui_ascii_len(node->labels[i]) * 8.0f;
     er_ui_status_t status = er_ui_component_badge_emit(scene, font, er_ui_bounds(x, badge_y, badge_w, badge_h), theme, node->labels[i], ER_UI_COMPONENT_BADGE_SECONDARY);
     if (status != ER_UI_OK) return status;
     x += badge_w + node->gap;
