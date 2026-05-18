@@ -16,7 +16,7 @@ CRYPTO_DIR := ../edgerun-crypto
 GENERATED_DIR := $(BUILD_DIR)/generated
 
 # Boot profiles are defined in core/er_boot_profile.h:
-#   4 = ui:     GOP-backed UI runtime, Wasm UI app, PS/2 input loop
+#   4 = ui:     VirtIO GPU-backed UI runtime, Wasm UI app, PS/2 input loop
 #   5 = native: QEMU microvm VirtIO-MMIO erwire-over-Ethernet probe
 #   6 = tpm:    QEMU swtpm/TPM2 CRB direct command probe
 #   7 = gpu:    VirtIO GPU/VGA PCI framebuffer probe
