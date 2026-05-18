@@ -7,7 +7,11 @@ QEMU_WIDTH="${QEMU_WIDTH:-1280}"
 QEMU_HEIGHT="${QEMU_HEIGHT:-720}"
 QEMU_REFRESH="${QEMU_REFRESH:-60}"
 QEMU_NATIVE="${QEMU_NATIVE:-0}"
+QEMU_TPM="${QEMU_TPM:-0}"
 QEMU_CAPTURE="${QEMU_CAPTURE:-${BUILD_DIR}/native-erwire.pcap}"
+QEMU_TPM_STATE_DIR="${QEMU_TPM_STATE_DIR:-${BUILD_DIR}/swtpm-state}"
+QEMU_TPM_SOCKET="${QEMU_TPM_SOCKET:-${BUILD_DIR}/swtpm.sock}"
+QEMU_TPM_PIDFILE="${QEMU_TPM_PIDFILE:-${BUILD_DIR}/swtpm.pid}"
 if [[ -z "${OVMF_CODE:-}" ]]; then
   for candidate in \
     "/usr/share/OVMF/OVMF_CODE.fd" \
@@ -52,11 +56,48 @@ fi
 
 OVMF_VARS_WRITABLE="$(mktemp /tmp/edgerun-ovmf-vars.XXXXXX.fd)"
 cp "${OVMF_VARS}" "${OVMF_VARS_WRITABLE}"
-trap 'rm -f "${OVMF_VARS_WRITABLE}"' EXIT
+TPM_PID=""
+cleanup() {
+  if [[ -n "${TPM_PID}" ]]; then
+    kill "${TPM_PID}" 2>/dev/null || true
+  fi
+  rm -f "${OVMF_VARS_WRITABLE}" "${QEMU_TPM_SOCKET}" "${QEMU_TPM_PIDFILE}"
+}
+trap cleanup EXIT
 
 if [[ ! -f "${ESP_DIR}/EFI/BOOT/BOOTX64.EFI" ]]; then
   echo "Missing ${ESP_DIR}/EFI/BOOT/BOOTX64.EFI. Run make first." >&2
   exit 1
+fi
+
+QEMU_TPM_ARGS=()
+if [[ "${QEMU_TPM}" == "1" ]]; then
+  TPM_WAIT=0
+  mkdir -p "${QEMU_TPM_STATE_DIR}" "$(dirname "${QEMU_TPM_SOCKET}")"
+  rm -f "${QEMU_TPM_SOCKET}" "${QEMU_TPM_PIDFILE}"
+  swtpm socket \
+    --tpm2 \
+    --tpmstate "dir=${QEMU_TPM_STATE_DIR}" \
+    --ctrl "type=unixio,path=${QEMU_TPM_SOCKET}" \
+    --pid "file=${QEMU_TPM_PIDFILE}" \
+    --daemon
+  TPM_PID="$(cat "${QEMU_TPM_PIDFILE}" 2>/dev/null || true)"
+  while [[ "${TPM_WAIT}" -lt 50 ]]; do
+    if [[ -S "${QEMU_TPM_SOCKET}" ]]; then
+      break
+    fi
+    TPM_WAIT=$((TPM_WAIT + 1))
+    sleep 0.1
+  done
+  if [[ ! -S "${QEMU_TPM_SOCKET}" ]]; then
+    echo "swtpm socket did not become ready: ${QEMU_TPM_SOCKET}" >&2
+    exit 1
+  fi
+  QEMU_TPM_ARGS=(
+    -chardev "socket,id=chrtpm,path=${QEMU_TPM_SOCKET}"
+    -tpmdev "emulator,id=tpm0,chardev=chrtpm"
+    -device "tpm-crb,tpmdev=tpm0"
+  )
 fi
 
 if [[ "${QEMU_NATIVE}" == "1" ]]; then
@@ -72,6 +113,7 @@ if [[ "${QEMU_NATIVE}" == "1" ]]; then
     -netdev user,id=edgerun0 \
     -device virtio-net-pci,netdev=edgerun0,mac=02:21:22:23:24:25,disable-legacy=on \
     -object "filter-dump,id=edgerun-native-dump,netdev=edgerun0,file=${QEMU_CAPTURE}" \
+    "${QEMU_TPM_ARGS[@]}" \
     -serial mon:stdio
   exit 0
 fi
@@ -83,4 +125,5 @@ qemu-system-x86_64 \
   -drive if=pflash,format=raw,readonly=on,file="${OVMF_CODE}" \
   -drive if=pflash,format=raw,file="${OVMF_VARS_WRITABLE}" \
   -drive format=raw,file=fat:rw:"${ESP_DIR}",media=disk \
+  "${QEMU_TPM_ARGS[@]}" \
   -serial mon:stdio

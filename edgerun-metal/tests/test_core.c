@@ -2408,6 +2408,7 @@ static void test_work_admitted_relay_route(void) {
 static void test_boot_profiles(void) {
   check_int64("boot profile smoke valid", er_boot_profile_valid(ER_BOOT_PROFILE_SMOKE), 1);
   check_int64("boot profile native valid", er_boot_profile_valid(ER_BOOT_PROFILE_NATIVE), 1);
+  check_int64("boot profile tpm valid", er_boot_profile_valid(ER_BOOT_PROFILE_TPM), 1);
   check_int64("boot profile invalid rejected", er_boot_profile_valid(255u), 0);
   check_cstr("boot profile smoke label", er_boot_profile_label(ER_BOOT_PROFILE_SMOKE), "smoke");
   check_cstr("boot profile pci label", er_boot_profile_label(ER_BOOT_PROFILE_PCI), "pci");
@@ -2415,6 +2416,7 @@ static void test_boot_profiles(void) {
   check_cstr("boot profile mmio label", er_boot_profile_label(ER_BOOT_PROFILE_MMIO), "mmio");
   check_cstr("boot profile ui label", er_boot_profile_label(ER_BOOT_PROFILE_UI), "ui");
   check_cstr("boot profile native label", er_boot_profile_label(ER_BOOT_PROFILE_NATIVE), "native");
+  check_cstr("boot profile tpm label", er_boot_profile_label(ER_BOOT_PROFILE_TPM), "tpm");
   check_cstr("boot profile invalid label", er_boot_profile_label(255u), "invalid");
 }
 

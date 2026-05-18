@@ -250,6 +250,8 @@ UINT8 er_tpm_crb_transact(ErTpmCrbTransport* transport,
   UINT8 header[ER_TPM_HEADER_LEN];
   UINT32 response_len;
   UINT32 polls;
+  UINT32 poll_index;
+  UINT32 poll_limit;
 
   if (transport == 0 || command == 0 || response == 0 || out_response_len == 0 ||
       er_tpm_crb_sane(transport) == 0u ||
@@ -272,9 +274,23 @@ UINT8 er_tpm_crb_transact(ErTpmCrbTransport* transport,
   er_tpm_mmio_write32(transport->control_area + ER_TPM_CRB_CTRL_CANCEL_OFFSET, 0u);
   er_tpm_mmio_write32(transport->control_area + ER_TPM_CRB_CTRL_START_OFFSET,
                       ER_TPM_CRB_CTRL_START);
+  if (polls != 0u &&
+      er_tpm_wait_u32_clear(transport->control_area + ER_TPM_CRB_CTRL_START_OFFSET,
+                            ER_TPM_CRB_CTRL_START, polls) == 0u) {
+    return 0;
+  }
 
-  er_tpm_mmio_read_bytes(transport->response_buffer, header, ER_TPM_HEADER_LEN);
-  response_len = er_tpm_get_be32(header + ER_TPM_RESPONSE_SIZE_OFFSET);
+  poll_limit = polls == 0u ? 1u : polls;
+  response_len = 0u;
+  for (poll_index = 0u; poll_index < poll_limit; ++poll_index) {
+    er_tpm_mmio_read_bytes(transport->response_buffer, header, ER_TPM_HEADER_LEN);
+    response_len = er_tpm_get_be32(header + ER_TPM_RESPONSE_SIZE_OFFSET);
+    if (response_len >= ER_TPM_HEADER_LEN &&
+        response_len <= transport->response_buffer_size &&
+        response_len <= response_capacity) {
+      break;
+    }
+  }
   if (response_len < ER_TPM_HEADER_LEN ||
       response_len > transport->response_buffer_size ||
       response_len > response_capacity) {
