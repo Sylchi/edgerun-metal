@@ -9,6 +9,11 @@
 #define ER_VIRTIO_GPU_CONFIG_EVENTS_READ_OFFSET 0u
 #define ER_VIRTIO_GPU_CONFIG_NUM_SCANOUTS_OFFSET 8u
 #define ER_VIRTIO_GPU_CONFIG_NUM_CAPSETS_OFFSET 12u
+#define ER_VIRTIO_GPU_CONTROL_REQUEST_DESC 0u
+#define ER_VIRTIO_GPU_CONTROL_RESPONSE_DESC 1u
+#define ER_VIRTIO_GPU_CONTROL_DESC_COUNT 2u
+#define ER_VIRTIO_GPU_CONTROL_REQUEST_SIZE 256u
+#define ER_VIRTIO_GPU_CONTROL_RESPONSE_SIZE 512u
 
 #if defined(_MSC_VER)
 #define ER_VIRTIO_GPU_ALIGN16 __declspec(align(16))
@@ -20,16 +25,63 @@ typedef struct ER_VIRTIO_GPU_ALIGN16 {
   ErVirtioQueueDesc items[ER_VIRTIO_QUEUE_SIZE];
 } ErVirtioGpuDescTable;
 
+typedef struct {
+  ErVirtioGpuControlHeader header;
+  UINT32 resource_id;
+  UINT32 format;
+  UINT32 width;
+  UINT32 height;
+} ErVirtioGpuResourceCreate2d;
+
+typedef struct {
+  UINT64 addr;
+  UINT32 length;
+  UINT32 padding;
+} ErVirtioGpuMemEntry;
+
+typedef struct {
+  ErVirtioGpuControlHeader header;
+  UINT32 resource_id;
+  UINT32 nr_entries;
+  ErVirtioGpuMemEntry entry;
+} ErVirtioGpuResourceAttachBackingOne;
+
+typedef struct {
+  ErVirtioGpuControlHeader header;
+  ErVirtioGpuRect rect;
+  UINT32 scanout_id;
+  UINT32 resource_id;
+} ErVirtioGpuSetScanout;
+
+typedef struct {
+  ErVirtioGpuControlHeader header;
+  ErVirtioGpuRect rect;
+  UINT64 offset;
+  UINT32 resource_id;
+  UINT32 padding;
+} ErVirtioGpuTransferToHost2d;
+
+typedef struct {
+  ErVirtioGpuControlHeader header;
+  ErVirtioGpuRect rect;
+  UINT32 resource_id;
+  UINT32 padding;
+} ErVirtioGpuResourceFlush;
+
 static ErVirtioGpuDescTable g_control_desc;
 static ErVirtioQueueAvail g_control_avail;
 static ErVirtioQueueUsed g_control_used;
 static ErVirtioGpuDescTable g_cursor_desc;
 static ErVirtioQueueAvail g_cursor_avail;
 static ErVirtioQueueUsed g_cursor_used;
+static UINT8 g_control_request[ER_VIRTIO_GPU_CONTROL_REQUEST_SIZE];
+static UINT8 g_control_response[ER_VIRTIO_GPU_CONTROL_RESPONSE_SIZE];
 
 static void er_virtio_gpu_reset_storage(void) {
   er_virtio_queue_clear(g_control_desc.items, &g_control_avail, &g_control_used);
   er_virtio_queue_clear(g_cursor_desc.items, &g_cursor_avail, &g_cursor_used);
+  er_mem_zero(g_control_request, (UINTN)sizeof(g_control_request));
+  er_mem_zero(g_control_response, (UINTN)sizeof(g_control_response));
 }
 
 static UINT8 er_virtio_gpu_configure_queue(const ErVirtioMmioTransport* transport, UINT16 queue,
@@ -54,6 +106,34 @@ static UINT8 er_virtio_gpu_read_config(ErVirtioGpu* gpu) {
                  er_virtio_config_read32(&gpu->transport,
                                          ER_VIRTIO_GPU_CONFIG_NUM_CAPSETS_OFFSET,
                                          &gpu->config.num_capsets) != 0u);
+}
+
+static ErVirtioGpuControlHeader er_virtio_gpu_control_header(UINT32 type) {
+  ErVirtioGpuControlHeader header;
+
+  er_mem_zero((UINT8*)&header, (UINTN)sizeof(header));
+  header.type = type;
+  return header;
+}
+
+static ErVirtioGpuRect er_virtio_gpu_rect(UINT32 width, UINT32 height) {
+  ErVirtioGpuRect rect;
+
+  er_mem_zero((UINT8*)&rect, (UINTN)sizeof(rect));
+  rect.width = width;
+  rect.height = height;
+  return rect;
+}
+
+static UINT8 er_virtio_gpu_submit_request(ErVirtioGpu* gpu, const UINT8* request, UINT32 request_len) {
+  er_mem_zero(g_control_request, (UINTN)sizeof(g_control_request));
+  er_mem_zero(g_control_response, (UINTN)sizeof(g_control_response));
+  if (request == 0 || request_len == 0u || request_len > (UINT32)sizeof(g_control_request)) {
+    return 0;
+  }
+  er_mem_copy(g_control_request, request, (UINTN)request_len);
+  return er_virtio_gpu_submit_control(gpu, g_control_request, request_len,
+                                      g_control_response, (UINT32)sizeof(g_control_response));
 }
 
 static UINT8 er_virtio_gpu_init_transport(const ErVirtioMmioTransport* transport, ErVirtioGpu* out_gpu) {
@@ -90,6 +170,8 @@ static UINT8 er_virtio_gpu_init_transport(const ErVirtioMmioTransport* transport
   }
   out_gpu->control_queue_size = control_queue_size;
   out_gpu->cursor_queue_size = cursor_queue_size;
+  out_gpu->control_last_used_idx = 0u;
+  out_gpu->control_pending = 0u;
   if (er_virtio_mmio_read_status(&out_gpu->transport, &status) == 0u ||
       er_virtio_mmio_write_status(&out_gpu->transport,
                                   (UINT8)(status | ER_VIRTIO_STATUS_DRIVER_OK)) == 0u) {
@@ -135,6 +217,181 @@ UINT8 er_virtio_gpu_init_first_pci(ErVirtioGpu* out_gpu) {
   return er_virtio_gpu_init_transport(&transport, out_gpu);
 }
 
+UINT8 er_virtio_gpu_submit_control(ErVirtioGpu* gpu, const UINT8* request, UINT32 request_len,
+                                   UINT8* response, UINT32 response_len) {
+  if (gpu == 0 || gpu->initialized == 0u || request == 0 || request_len == 0u ||
+      response == 0 || response_len == 0u ||
+      gpu->control_queue_size < ER_VIRTIO_GPU_CONTROL_DESC_COUNT) {
+    return 0;
+  }
+  if (gpu->control_pending != 0u) {
+    ++gpu->stats.control_busy;
+    return 0;
+  }
+  g_control_desc.items[ER_VIRTIO_GPU_CONTROL_REQUEST_DESC].addr = (UINT64)(UINTN)request;
+  g_control_desc.items[ER_VIRTIO_GPU_CONTROL_REQUEST_DESC].len = request_len;
+  g_control_desc.items[ER_VIRTIO_GPU_CONTROL_REQUEST_DESC].flags = ER_VIRTIO_DESC_F_NEXT;
+  g_control_desc.items[ER_VIRTIO_GPU_CONTROL_REQUEST_DESC].next = ER_VIRTIO_GPU_CONTROL_RESPONSE_DESC;
+  g_control_desc.items[ER_VIRTIO_GPU_CONTROL_RESPONSE_DESC].addr = (UINT64)(UINTN)response;
+  g_control_desc.items[ER_VIRTIO_GPU_CONTROL_RESPONSE_DESC].len = response_len;
+  g_control_desc.items[ER_VIRTIO_GPU_CONTROL_RESPONSE_DESC].flags = ER_VIRTIO_DESC_F_WRITE;
+  g_control_desc.items[ER_VIRTIO_GPU_CONTROL_RESPONSE_DESC].next = 0u;
+  if (er_virtio_queue_post_descriptor(&g_control_avail, gpu->control_queue_size,
+                                      ER_VIRTIO_GPU_CONTROL_REQUEST_DESC) == 0u ||
+      er_virtio_mmio_notify_queue(&gpu->transport, ER_VIRTIO_GPU_CONTROL_QUEUE) == 0u) {
+    er_virtio_queue_clear(g_control_desc.items, 0, 0);
+    return 0;
+  }
+  gpu->control_pending = 1u;
+  ++gpu->stats.control_submitted;
+  return 1;
+}
+
+UINT8 er_virtio_gpu_poll_control(ErVirtioGpu* gpu, UINT32* out_response_len) {
+  ErVirtioQueueUsedElem elem;
+
+  if (gpu == 0 || gpu->initialized == 0u || out_response_len == 0) {
+    return 0;
+  }
+  *out_response_len = 0u;
+  if (er_virtio_queue_take_next_used(&g_control_used, gpu->control_queue_size,
+                                     &gpu->control_last_used_idx, &elem) == 0u) {
+    return 0;
+  }
+  gpu->control_pending = 0u;
+  if (elem.id != ER_VIRTIO_GPU_CONTROL_REQUEST_DESC) {
+    ++gpu->stats.control_invalid;
+    return 0;
+  }
+  *out_response_len = elem.len;
+  ++gpu->stats.control_completed;
+  return 1;
+}
+
+UINT8 er_virtio_gpu_submit_get_display_info(ErVirtioGpu* gpu) {
+  ErVirtioGpuControlHeader header;
+
+  header = er_virtio_gpu_control_header(ER_VIRTIO_GPU_CMD_GET_DISPLAY_INFO);
+  return er_virtio_gpu_submit_request(gpu, (const UINT8*)&header, (UINT32)sizeof(header));
+}
+
+UINT8 er_virtio_gpu_poll_ok_nodata(ErVirtioGpu* gpu) {
+  UINT32 response_len = 0;
+  ErVirtioGpuControlHeader header;
+
+  er_mem_zero((UINT8*)&header, (UINTN)sizeof(header));
+  if (er_virtio_gpu_poll_control(gpu, &response_len) == 0u ||
+      response_len < (UINT32)sizeof(header)) {
+    return 0;
+  }
+  er_mem_copy((UINT8*)&header, g_control_response, (UINTN)sizeof(header));
+  return (UINT8)(header.type == ER_VIRTIO_GPU_RESP_OK_NODATA);
+}
+
+UINT8 er_virtio_gpu_poll_display_info(ErVirtioGpu* gpu, ErVirtioGpuDisplayInfo* out_info) {
+  UINT32 response_len = 0;
+  ErVirtioGpuControlHeader header;
+
+  er_mem_zero((UINT8*)&header, (UINTN)sizeof(header));
+  if (out_info == 0 ||
+      er_virtio_gpu_poll_control(gpu, &response_len) == 0u ||
+      response_len < (UINT32)sizeof(ErVirtioGpuControlHeader)) {
+    return 0;
+  }
+  er_mem_copy((UINT8*)&header, g_control_response, (UINTN)sizeof(header));
+  if (header.type != ER_VIRTIO_GPU_RESP_OK_DISPLAY_INFO) {
+    return 0;
+  }
+  er_mem_copy((UINT8*)out_info, g_control_response, (UINTN)sizeof(*out_info));
+  return 1;
+}
+
+UINT8 er_virtio_gpu_submit_resource_create_2d(ErVirtioGpu* gpu, UINT32 resource_id,
+                                             UINT32 format, UINT32 width, UINT32 height) {
+  ErVirtioGpuResourceCreate2d request;
+
+  if (resource_id == 0u || width == 0u || height == 0u) {
+    return 0;
+  }
+  er_mem_zero((UINT8*)&request, (UINTN)sizeof(request));
+  request.header = er_virtio_gpu_control_header(ER_VIRTIO_GPU_CMD_RESOURCE_CREATE_2D);
+  request.resource_id = resource_id;
+  request.format = format;
+  request.width = width;
+  request.height = height;
+  return er_virtio_gpu_submit_request(gpu, (const UINT8*)&request, (UINT32)sizeof(request));
+}
+
+UINT8 er_virtio_gpu_submit_resource_attach_backing(ErVirtioGpu* gpu, UINT32 resource_id,
+                                                  UINT64 addr, UINT32 len) {
+  ErVirtioGpuResourceAttachBackingOne request;
+
+  if (resource_id == 0u || addr == 0u || len == 0u) {
+    return 0;
+  }
+  er_mem_zero((UINT8*)&request, (UINTN)sizeof(request));
+  request.header = er_virtio_gpu_control_header(ER_VIRTIO_GPU_CMD_RESOURCE_ATTACH_BACKING);
+  request.resource_id = resource_id;
+  request.nr_entries = 1u;
+  request.entry.addr = addr;
+  request.entry.length = len;
+  return er_virtio_gpu_submit_request(gpu, (const UINT8*)&request, (UINT32)sizeof(request));
+}
+
+UINT8 er_virtio_gpu_submit_set_scanout(ErVirtioGpu* gpu, UINT32 scanout_id, UINT32 resource_id,
+                                       UINT32 width, UINT32 height) {
+  ErVirtioGpuSetScanout request;
+
+  if (resource_id == 0u || width == 0u || height == 0u) {
+    return 0;
+  }
+  er_mem_zero((UINT8*)&request, (UINTN)sizeof(request));
+  request.header = er_virtio_gpu_control_header(ER_VIRTIO_GPU_CMD_SET_SCANOUT);
+  request.rect = er_virtio_gpu_rect(width, height);
+  request.scanout_id = scanout_id;
+  request.resource_id = resource_id;
+  return er_virtio_gpu_submit_request(gpu, (const UINT8*)&request, (UINT32)sizeof(request));
+}
+
+UINT8 er_virtio_gpu_submit_transfer_to_host_2d(ErVirtioGpu* gpu, UINT32 resource_id,
+                                              UINT32 width, UINT32 height) {
+  ErVirtioGpuTransferToHost2d request;
+
+  if (resource_id == 0u || width == 0u || height == 0u) {
+    return 0;
+  }
+  er_mem_zero((UINT8*)&request, (UINTN)sizeof(request));
+  request.header = er_virtio_gpu_control_header(ER_VIRTIO_GPU_CMD_TRANSFER_TO_HOST_2D);
+  request.rect = er_virtio_gpu_rect(width, height);
+  request.offset = 0u;
+  request.resource_id = resource_id;
+  return er_virtio_gpu_submit_request(gpu, (const UINT8*)&request, (UINT32)sizeof(request));
+}
+
+UINT8 er_virtio_gpu_submit_resource_flush(ErVirtioGpu* gpu, UINT32 resource_id,
+                                          UINT32 width, UINT32 height) {
+  ErVirtioGpuResourceFlush request;
+
+  if (resource_id == 0u || width == 0u || height == 0u) {
+    return 0;
+  }
+  er_mem_zero((UINT8*)&request, (UINTN)sizeof(request));
+  request.header = er_virtio_gpu_control_header(ER_VIRTIO_GPU_CMD_RESOURCE_FLUSH);
+  request.rect = er_virtio_gpu_rect(width, height);
+  request.resource_id = resource_id;
+  return er_virtio_gpu_submit_request(gpu, (const UINT8*)&request, (UINT32)sizeof(request));
+}
+
+ErVirtioGpuStats er_virtio_gpu_stats(ErVirtioGpu* gpu) {
+  ErVirtioGpuStats stats;
+
+  er_mem_zero((UINT8*)&stats, (UINTN)sizeof(stats));
+  if (gpu != 0) {
+    stats = gpu->stats;
+  }
+  return stats;
+}
+
 #if defined(ER_ENABLE_TEST_HOOKS)
 ErVirtioQueueDesc* er_virtio_gpu_test_control_desc(void) {
   return g_control_desc.items;
@@ -158,5 +415,13 @@ ErVirtioQueueAvail* er_virtio_gpu_test_cursor_avail(void) {
 
 ErVirtioQueueUsed* er_virtio_gpu_test_cursor_used(void) {
   return &g_cursor_used;
+}
+
+UINT8* er_virtio_gpu_test_control_request(void) {
+  return g_control_request;
+}
+
+UINT8* er_virtio_gpu_test_control_response(void) {
+  return g_control_response;
 }
 #endif
