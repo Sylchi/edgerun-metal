@@ -20,15 +20,20 @@
 #define ER_PCI_INVALID_ID 0xffffffffu
 #define ER_PCI_INVALID_VENDOR_ID 0xffffu
 #define ER_PCI_VENDOR_ID_MASK 0xffffu
+#define ER_PCI_DEVICE_ID_SHIFT 16u
 #define ER_PCI_CLASS_CODE_SHIFT 24u
 #define ER_PCI_SUBCLASS_SHIFT 16u
 #define ER_PCI_REG_BYTE_MASK 0xffu
 #define ER_PCI_HEADER_MULTIFUNCTION_BIT 0x00800000u
 #define ER_PCI_NVIDIA_VENDOR_ID 0x10deu
+#define ER_PCI_REALTEK_VENDOR_ID 0x10ecu
+#define ER_PCI_REALTEK_RTL8922AE_DEVICE_ID 0x8922u
+#define ER_PCI_REALTEK_RTL8922AE_VS_DEVICE_ID 0x892bu
 #define ER_PCI_CLASS_MASS_STORAGE 0x01u
 #define ER_PCI_SUBCLASS_NVME 0x08u
 #define ER_PCI_CLASS_NETWORK 0x02u
 #define ER_PCI_SUBCLASS_ETHERNET 0x00u
+#define ER_PCI_SUBCLASS_OTHER_NETWORK 0x80u
 #define ER_PCI_CLASS_DISPLAY 0x03u
 #define ER_PCI_BAR_IO_SPACE_BIT 0x1u
 #define ER_PCI_BAR_IO_BASE_MASK 0xfffffffcu
@@ -233,6 +238,10 @@ UINT16 er_pci_vendor_id(UINT32 id) {
   return (UINT16)(id & ER_PCI_VENDOR_ID_MASK);
 }
 
+UINT16 er_pci_device_id(UINT32 id) {
+  return (UINT16)(id >> ER_PCI_DEVICE_ID_SHIFT);
+}
+
 UINT8 er_pci_class_code(UINT32 class_rev) {
   return (UINT8)((class_rev >> ER_PCI_CLASS_CODE_SHIFT) & ER_PCI_REG_BYTE_MASK);
 }
@@ -267,6 +276,7 @@ UINT8 er_pci_command_bus_master_enabled(UINT32 command_status) {
 
 UINT8 er_pci_classify_target(UINT32 id, UINT32 class_rev) {
   UINT16 vendor = er_pci_vendor_id(id);
+  UINT16 device = er_pci_device_id(id);
   UINT8 class_code = er_pci_class_code(class_rev);
   UINT8 subclass = er_pci_subclass(class_rev);
 
@@ -278,12 +288,26 @@ UINT8 er_pci_classify_target(UINT32 id, UINT32 class_rev) {
     return ER_PCI_TARGET_KIND_NVIDIA;
   }
 
+  if (vendor == ER_PCI_REALTEK_VENDOR_ID) {
+    switch (device) {
+      case ER_PCI_REALTEK_RTL8922AE_DEVICE_ID:
+      case ER_PCI_REALTEK_RTL8922AE_VS_DEVICE_ID:
+        return ER_PCI_TARGET_KIND_WIFI;
+      default:
+        break;
+    }
+  }
+
   if (class_code == ER_PCI_CLASS_MASS_STORAGE && subclass == ER_PCI_SUBCLASS_NVME) {
     return ER_PCI_TARGET_KIND_NVME;
   }
 
   if (class_code == ER_PCI_CLASS_NETWORK && subclass == ER_PCI_SUBCLASS_ETHERNET) {
     return ER_PCI_TARGET_KIND_ETHERNET;
+  }
+
+  if (class_code == ER_PCI_CLASS_NETWORK && subclass == ER_PCI_SUBCLASS_OTHER_NETWORK) {
+    return ER_PCI_TARGET_KIND_WIFI;
   }
 
   if (class_code == ER_PCI_CLASS_DISPLAY) {

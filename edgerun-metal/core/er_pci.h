@@ -36,6 +36,7 @@
 #define ER_PCI_TARGET_KIND_NVME 2u
 #define ER_PCI_TARGET_KIND_ETHERNET 3u
 #define ER_PCI_TARGET_KIND_DISPLAY 4u
+#define ER_PCI_TARGET_KIND_WIFI 5u
 
 typedef struct {
   UINT8 kind;
@@ -70,6 +71,7 @@ void er_pci_write32(INT64 bus_i, INT64 dev_i, INT64 func_i, INT64 offset_i, INT6
 UINT32 er_pci_cfg_read32(UINT32 bus, UINT32 dev, UINT32 func, UINT32 offset);
 UINT8 er_pci_device_present(UINT32 id);
 UINT16 er_pci_vendor_id(UINT32 id);
+UINT16 er_pci_device_id(UINT32 id);
 UINT8 er_pci_class_code(UINT32 class_rev);
 UINT8 er_pci_subclass(UINT32 class_rev);
 UINT8 er_pci_header_multifunction(UINT32 header_cacheline);
