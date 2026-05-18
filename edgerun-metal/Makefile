@@ -1,4 +1,4 @@
-.PHONY: all run clean print-path netboot os rebuild-image check test-core wasm-modules
+.PHONY: all run clean print-path netboot os rebuild-image check test-core wasm-modules qemu-config-check
 
 CC = clang
 HOST_CC ?= clang
@@ -52,6 +52,9 @@ NETBOOT_SRC := tools/edgerun-netboot/main.c
 NETBOOT_BIN := $(BUILD_DIR)/edgerun-netboot
 PXE4011_SRC := tools/edgerun-pxe4011/main.c
 PXE4011_BIN := $(BUILD_DIR)/edgerun-pxe4011
+QEMU_RUN_SRC := tools/qemu-run/main.c
+QEMU_RUN_BIN := $(BUILD_DIR)/edgerun-qemu-run
+QEMU_CONFIG := qemu.conf
 CORE_TEST_SRC := tests/test_core.c core/er_boot_profile.c core/er_pci.c core/er_mmio.c core/er_crypto.c core/er_crypto_blake3.c $(CRYPTO_SRCS) core/er_mem.c core/er_vfs.c core/er_app.c core/er_identity.c core/er_device_identity.c core/er_work_route.c core/er_render_endpoint.c core/er_tpm.c core/er_hw_relay.c core/er_relay_packet.c core/er_bus.c core/er_ps2_keyboard.c core/er_acpi.c core/er_netlog.c core/er_gfx_console.c core/er_ui_gop_renderer.c core/er_ui_wasm_app.c core/er_epoch_clock.c core/erwire.c core/er_native_boot.c core/wasm_vm.c core/er_virtio.c core/er_virtio_net.c core/er_virtio_gpu.c core/er_net_frame.c core/er_native_eth.c $(UI_SRCS) $(VARFONT_SRCS)
 CORE_TEST_BIN := $(BUILD_DIR)/test-core
 IFACE ?=
@@ -67,7 +70,7 @@ rebuild-image:
 
 netboot: $(NETBOOT_BIN) $(PXE4011_BIN)
 
-check: os test-core
+check: os test-core qemu-config-check
 
 test-core: $(CORE_TEST_BIN)
 	./$(CORE_TEST_BIN)
@@ -134,6 +137,10 @@ $(PXE4011_BIN): $(PXE4011_SRC)
 	mkdir -p $(dir $@)
 	$(CCACHE_PREFIX) $(HOST_CC) $(HOST_CFLAGS) $(HOST_LDFLAGS) -o $@ $<
 
+$(QEMU_RUN_BIN): $(QEMU_RUN_SRC)
+	mkdir -p $(dir $@)
+	$(CCACHE_PREFIX) $(HOST_CC) $(HOST_CFLAGS) $(HOST_LDFLAGS) -o $@ $<
+
 $(CORE_TEST_BIN): $(CORE_TEST_SRC) $(HDRS) $(UI_HDRS) $(VARFONT_HDRS) $(CRYPTO_HDRS) $(WASM_MODULE_HEADERS) $(FONT_HEADER)
 	mkdir -p $(dir $@)
 	$(CCACHE_PREFIX) $(HOST_CC) $(HOST_CFLAGS) $(HOST_LDFLAGS) -o $@ $(CORE_TEST_SRC)
@@ -142,8 +149,11 @@ $(EFI_BOOT): $(EFI_OUT)
 	mkdir -p $(dir $@)
 	cp $< $@
 
-run: $(EFI_BOOT)
-	./scripts/run-qemu.sh
+run: $(EFI_BOOT) $(QEMU_RUN_BIN) $(QEMU_CONFIG)
+	./$(QEMU_RUN_BIN) $(QEMU_CONFIG) $(abspath $(ESP_DIR))
+
+qemu-config-check: $(EFI_BOOT) $(QEMU_RUN_BIN) $(QEMU_CONFIG)
+	./$(QEMU_RUN_BIN) --check $(QEMU_CONFIG) $(abspath $(ESP_DIR))
 
 clean:
 	rm -rf $(BUILD_DIR)
