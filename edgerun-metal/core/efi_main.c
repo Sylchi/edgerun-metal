@@ -3,6 +3,8 @@
 #include "er_pci.h"
 #include "er_mmio.h"
 #include "er_mem.h"
+#include "er_app.h"
+#include "er_crypto_blake3.h"
 #include "er_acpi.h"
 #include "er_boot_profile.h"
 #include "er_gfx_console.h"
@@ -48,6 +50,8 @@
 #define ER_WASM_DRIVER_MEMORY_BYTES (64u * 1024u)
 #define ER_UI_BOOT_APP_COUNT 2u
 #define ER_UI_BOOT_APP_MEMORY_BYTES (64u * 1024u)
+#define ER_UI_BOOT_APP_MODULE_BYTES 1024u
+#define ER_UI_BOOT_APP_MANIFEST_BYTES 256u
 #define ER_UI_WASM_RELAY_INBOX_BASE 0u
 #define ER_UI_WASM_RELAY_INBOX_BYTES 1024u
 #define ER_UI_WASM_RELAY_OUTBOX_BASE 1024u
@@ -102,6 +106,8 @@ enum {
 static ErWasmHostCalls g_host_calls = {0};
 static UINT8 g_wasm_driver_memory[ER_WASM_DRIVER_MEMORY_BYTES];
 static UINT8 g_ui_boot_app_memory[ER_UI_BOOT_APP_COUNT][ER_UI_BOOT_APP_MEMORY_BYTES];
+static UINT8 g_ui_boot_app_module_memory[ER_UI_BOOT_APP_COUNT][ER_UI_BOOT_APP_MODULE_BYTES];
+static UINT8 g_ui_boot_app_manifest_memory[ER_UI_BOOT_APP_COUNT][ER_UI_BOOT_APP_MANIFEST_BYTES];
 static UINT8 g_ui_boot_arena[ER_UI_BOOT_ARENA_SIZE];
 static UINT8 g_efi_memory_map[ER_EFI_MEMORY_MAP_BYTES];
 static UINT32 g_gpu_profile_framebuffer[ER_GPU_PROFILE_FRAMEBUFFER_WIDTH_MAX *
@@ -112,6 +118,14 @@ static UINT8 g_log_hex_stage = ER_LOG_HEX_STAGE_ID;
 static UINT64 g_log_bus = 0;
 static UINT64 g_log_dev = 0;
 static UINT64 g_log_func = 0;
+
+static const char g_ui_boot_counter_wasm_label[] = "apps/counter.wasm";
+static const char g_ui_boot_counter_manifest_label[] = "apps/counter.manifest";
+static const UINT8 g_ui_boot_counter_manifest[] = {
+  'e', 'd', 'g', 'e', 'r', 'u', 'n', ':',
+  'u', 'i', ':', 'c', 'o', 'u', 'n', 't',
+  'e', 'r'
+};
 
 typedef struct {
   ErAppUiPresentation presentation;
@@ -1138,15 +1152,85 @@ static UINT8 er_ui_boot_execute_wasm_counter(ErUiWasmAppRuntime* runtime) {
   return 1u;
 }
 
+static UINT8 er_ui_boot_load_wasm_counter_package(UINT8* module_memory,
+                                                  UINT32 module_memory_size,
+                                                  UINT8* manifest_memory,
+                                                  UINT32 manifest_memory_size,
+                                                  ErAppLoadedPackage* out_loaded) {
+  ErCryptoProvider crypto;
+  ErVfsObjectLabelRef app_ref;
+  ErVfsObjectLabelRef manifest_ref;
+  ErAppPackageManifest package;
+  ErVfsObjectPacket app_packet;
+  ErVfsObjectPacket manifest_packet;
+  ErAppPackageObjectLoad app_load;
+  ErAppPackageObjectLoad manifest_load;
+
+  if (module_memory == 0 || manifest_memory == 0 || out_loaded == 0 ||
+      module_memory_size == 0u || manifest_memory_size == 0u) {
+    return 0u;
+  }
+  er_crypto_blake3_provider(&crypto);
+  if (er_vfs_prepare_object_label_ref(&crypto, g_ui_boot_counter_wasm_label,
+                                      (UINTN)sizeof(g_ui_boot_counter_wasm_label) - 1u,
+                                      g_edgerun_ui_counter_wasm,
+                                      ER_UI_COUNTER_WASM_SIZE, &app_ref) == 0u) {
+    return 0u;
+  }
+  if (er_vfs_prepare_object_label_ref(&crypto, g_ui_boot_counter_manifest_label,
+                                      (UINTN)sizeof(g_ui_boot_counter_manifest_label) - 1u,
+                                      g_ui_boot_counter_manifest,
+                                      (UINTN)sizeof(g_ui_boot_counter_manifest),
+                                      &manifest_ref) == 0u) {
+    return 0u;
+  }
+  if (er_app_prepare_package_manifest(&crypto, &app_ref, &manifest_ref, 0,
+                                      &package) == 0u) {
+    return 0u;
+  }
+  if (er_vfs_prepare_object_packet(&crypto, g_edgerun_ui_counter_wasm,
+                                   ER_UI_COUNTER_WASM_SIZE, 0u, 0u, 1u,
+                                   &app_packet) == 0u) {
+    return 0u;
+  }
+  if (er_vfs_prepare_object_packet(&crypto, g_ui_boot_counter_manifest,
+                                   (UINTN)sizeof(g_ui_boot_counter_manifest),
+                                   0u, 0u, 1u, &manifest_packet) == 0u) {
+    return 0u;
+  }
+  app_load.packets = &app_packet;
+  app_load.packet_count = 1u;
+  app_load.bytes = module_memory;
+  app_load.capacity = module_memory_size;
+  manifest_load.packets = &manifest_packet;
+  manifest_load.packet_count = 1u;
+  manifest_load.bytes = manifest_memory;
+  manifest_load.capacity = manifest_memory_size;
+  return er_app_load_package_objects(&crypto, &package, &app_load,
+                                     &manifest_load, 0, out_loaded);
+}
+
 static UINT8 er_ui_boot_prepare_wasm_counter(ErUiWasmAppRuntime* runtime,
                                              ErAppUiPresentation* presentation,
                                              er_ui_scene_t* wasm_scene,
                                              UINT8* memory,
                                              UINT32 memory_size,
+                                             UINT8* module_memory,
+                                             UINT32 module_memory_size,
+                                             UINT8* manifest_memory,
+                                             UINT32 manifest_memory_size,
                                              UINT32 app_index,
                                              const er_ui_scene_budget_t* scene_budget) {
+  ErAppLoadedPackage loaded_package;
+
   if (runtime == 0 || presentation == 0 || wasm_scene == 0 || memory == 0 ||
-      memory_size == 0u || scene_budget == 0) {
+      module_memory == 0 || manifest_memory == 0 || memory_size == 0u ||
+      module_memory_size == 0u || manifest_memory_size == 0u || scene_budget == 0) {
+    return 0u;
+  }
+  if (er_ui_boot_load_wasm_counter_package(module_memory, module_memory_size,
+                                           manifest_memory, manifest_memory_size,
+                                           &loaded_package) == 0u) {
     return 0u;
   }
   er_ui_boot_prepare_wasm_presentation(scene_budget, app_index, presentation);
@@ -1161,7 +1245,12 @@ static UINT8 er_ui_boot_prepare_wasm_counter(ErUiWasmAppRuntime* runtime,
   runtime->scene = wasm_scene;
   runtime->input_epoch_modifier.tick_stride = ER_UI_WASM_PS2_INPUT_EPOCH_STRIDE;
   runtime->execute_epoch_modifier.tick_stride = ER_UI_WASM_EXECUTE_EPOCH_STRIDE;
-  if (er_ui_wasm_app_prepare(g_edgerun_ui_counter_wasm, ER_UI_COUNTER_WASM_SIZE,
+  if (loaded_package.app_len == 0u ||
+      loaded_package.app_len > (UINTN)module_memory_size) {
+    return 0u;
+  }
+  if (er_ui_wasm_app_prepare(loaded_package.app_bytes,
+                             (UINT32)loaded_package.app_len,
                              &g_host_calls, runtime) != 0) {
     return 0u;
   }
@@ -1202,6 +1291,10 @@ static UINT8 er_ui_boot_prepare_app_contexts(ErUiBootAppContext* apps,
                                         &apps[i].scene,
                                         g_ui_boot_app_memory[i],
                                         ER_UI_BOOT_APP_MEMORY_BYTES,
+                                        g_ui_boot_app_module_memory[i],
+                                        ER_UI_BOOT_APP_MODULE_BYTES,
+                                        g_ui_boot_app_manifest_memory[i],
+                                        ER_UI_BOOT_APP_MANIFEST_BYTES,
                                         i,
                                         scene_budget) == 0u) {
       er_ui_boot_destroy_app_contexts(apps, i + 1u);
