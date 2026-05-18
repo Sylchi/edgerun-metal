@@ -2553,7 +2553,7 @@ static void test_wasm_ui_emit_import(void) {
                            ER_UI_COUNTER_WASM_SIZE, &host),
               0);
   check_int64("wasm ui find main", er_wasm_find_main(&module, &main_index), 0);
-  check_int64("wasm ui main index", main_index, 1);
+  check_int64("wasm ui main index", main_index, 2);
   check_int64("wasm ui execute", er_wasm_execute_i64(&module, main_index, &result), 0);
   check_uint64("wasm ui result", (UINT64)result,
                ER_WASM_UI_COMMAND_LIST_HEADER_LEN +
@@ -2561,6 +2561,7 @@ static void test_wasm_ui_emit_import(void) {
                  ER_WASM_UI_HIT_RECORD_LEN +
                  ER_WASM_UI_QUAD_RECORD_LEN);
   check_uint64("wasm ui command count", memory[1028], 3u);
+  check_uint64("wasm ui empty input hit id", memory[1124], 0u);
 
   presentation.max_text_quads = 0u;
   check_int64("wasm ui reject over presentation budget",
@@ -2587,8 +2588,9 @@ static void test_wasm_ui_emit_import(void) {
               0);
   check_int64("wasm ui shifted outbox find main",
               er_wasm_find_main(&module, &main_index), 0);
-  check_int64("wasm ui reject emit outside outbox",
-              er_wasm_execute_i64(&module, main_index, &result), -1);
+  check_int64("wasm ui shifted outbox execute",
+              er_wasm_execute_i64(&module, main_index, &result), 0);
+  check_uint64("wasm ui shifted outbox command count", memory[2052], 3u);
 }
 
 static void test_epoch_clock_rollover(void) {
@@ -2807,6 +2809,7 @@ static void test_ui_wasm_app_runner(void) {
   check_uint64("ui wasm app hits", scene.hit_count, 1u);
   check_uint64("ui wasm app text", scene.text_quad_count, 1u);
   check_int64("ui wasm app hit kind", scene.hits[0].kind, ER_UI_HIT_BUTTON);
+  check_uint64("ui wasm app hit id from input sequence", scene.hits[0].id, 1u);
   memory[4096] = 0x5au;
   check_int64("ui wasm app execute again", er_ui_wasm_app_execute(&runtime, &result),
               0);
