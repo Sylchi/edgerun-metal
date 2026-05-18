@@ -9,6 +9,7 @@
 #define ER_UI_SHADCN_SUFFIX_JS_LEN 3u
 #define ER_UI_SHADCN_EMPTY_COUNT 0u
 #define ER_UI_SHADCN_ARRAY_COUNT(values) (sizeof(values) / sizeof((values)[0]))
+#define ER_UI_SHADCN_IDENTIFIER_CAPACITY ER_UI_SHADCN_TEXT_CAPACITY
 
 static bool er_ui_shadcn_streq(const char* a, const char* b) {
   if (!a || !b) return false;
@@ -20,6 +21,19 @@ static bool er_ui_shadcn_list_contains(const char* const* values, size_t count, 
   if (!values || !value) return false;
   for (size_t i = 0u; i < count; ++i) if (er_ui_shadcn_streq(values[i], value)) return true;
   return false;
+}
+
+static bool er_ui_shadcn_range_starts_with(const char* start, const char* end, const char* prefix, size_t prefix_len) {
+  if (!start || !end || !prefix || end < start || (size_t)(end - start) < prefix_len) return false;
+  const char* cursor = start;
+  const char* prefix_cursor = prefix;
+  const char* prefix_end = prefix + prefix_len;
+  while (prefix_cursor < prefix_end) {
+    if (*cursor != *prefix_cursor) return false;
+    cursor++;
+    prefix_cursor++;
+  }
+  return true;
 }
 
 static size_t er_ui_shadcn_ascii_len(const char* value) {
@@ -518,13 +532,15 @@ static char er_ui_shadcn_lower(char c) { return er_ui_shadcn_is_upper(c) ? (char
 
 static bool er_ui_shadcn_normalize_identifier(const char* identifier, char* out, size_t cap, bool* out_from_path) {
   if (!identifier || !out || cap == 0u || !out_from_path) return false;
+  static const char data_slot_prefix[] = "data-slot=";
+  const size_t data_slot_prefix_len = ER_UI_SHADCN_ARRAY_COUNT(data_slot_prefix) - 1u;
   const char* start = identifier;
   while (*start == ' ' || *start == '\t' || *start == '\n' || *start == '\r') start++;
   const char* end = start;
   while (*end) end++;
   while (end > start && (end[-1] == ' ' || end[-1] == '\t' || end[-1] == '\n' || end[-1] == '\r')) end--;
-  if ((size_t)(end - start) >= 10u && start[0]=='d' && start[1]=='a' && start[2]=='t' && start[3]=='a' && start[4]=='-' && start[5]=='s' && start[6]=='l' && start[7]=='o' && start[8]=='t' && start[9]=='=') {
-    start += 10u;
+  if (er_ui_shadcn_range_starts_with(start, end, data_slot_prefix, data_slot_prefix_len)) {
+    start += data_slot_prefix_len;
     while (start < end && (*start == '\"' || *start == '\'')) start++;
     while (end > start && (end[-1] == '\"' || end[-1] == '\'')) end--;
   }
@@ -570,7 +586,7 @@ bool er_ui_shadcn_resolve_demo_identifier(const char* identifier, er_ui_shadcn_r
   while (*trimmed == ' ' || *trimmed == '\t' || *trimmed == '\n' || *trimmed == '\r') trimmed++;
   const er_ui_shadcn_demo_spec_t* direct_source = er_ui_shadcn_find_demo_by_source_component(trimmed);
   if (direct_source) { out_resolved->spec = direct_source; out_resolved->kind = ER_UI_SHADCN_RESOLVE_SOURCE_COMPONENT; return true; }
-  char normalized[128u];
+  char normalized[ER_UI_SHADCN_IDENTIFIER_CAPACITY];
   bool from_path = false;
   if (!er_ui_shadcn_normalize_identifier(identifier, normalized, sizeof(normalized), &from_path)) return false;
   const er_ui_shadcn_demo_spec_t* by_slug = er_ui_shadcn_find_demo_by_slug(normalized);
@@ -993,9 +1009,9 @@ static bool er_ui_shadcn_gallery_set_slider(er_ui_shadcn_demo_gallery_state_t* s
 void er_ui_shadcn_demo_gallery_state_init(er_ui_shadcn_demo_gallery_state_t* state) {
   if (!state) return;
   *state = (er_ui_shadcn_demo_gallery_state_t){0};
-  state->contribution_bar = 5u;
-  state->stock_bar = 5u;
-  state->power_bar = 6u;
+  state->contribution_bar = ER_UI_SHADCN_CHART_CONTRIBUTION_DEFAULT_INDEX;
+  state->stock_bar = ER_UI_SHADCN_CHART_STOCK_DEFAULT_INDEX;
+  state->power_bar = ER_UI_SHADCN_CHART_POWER_DEFAULT_INDEX;
 }
 
 size_t er_ui_shadcn_option_index(uint32_t id, uint32_t base, size_t len, bool* out_has_index) {
@@ -1021,21 +1037,21 @@ bool er_ui_shadcn_demo_gallery_apply_action(er_ui_shadcn_demo_gallery_state_t* s
   if (action.kind != ER_UI_ACTION_ACTIVATED || !action.has_hit) return false;
   if (action.hit.kind == ER_UI_HIT_MENU_ITEM) {
     bool has_index = false;
-    size_t index = er_ui_shadcn_option_index(action.hit.id, ER_UI_SHADCN_SELECT_CURRENCY_BASE_ID, 3u, &has_index);
+    size_t index = er_ui_shadcn_option_index(action.hit.id, ER_UI_SHADCN_SELECT_CURRENCY_BASE_ID, ER_UI_SHADCN_SELECT_CURRENCY_COUNT, &has_index);
     if (has_index) {
       state->currency_index = index;
       state->has_open_select = false;
       state->open_select = 0u;
       return true;
     }
-    index = er_ui_shadcn_option_index(action.hit.id, ER_UI_SHADCN_SELECT_ORDER_BASE_ID, 3u, &has_index);
+    index = er_ui_shadcn_option_index(action.hit.id, ER_UI_SHADCN_SELECT_ORDER_BASE_ID, ER_UI_SHADCN_SELECT_ORDER_COUNT, &has_index);
     if (has_index) {
       state->order_index = index;
       state->has_open_select = false;
       state->open_select = 0u;
       return true;
     }
-    index = er_ui_shadcn_option_index(action.hit.id, ER_UI_SHADCN_SELECT_TICKER_BASE_ID, 4u, &has_index);
+    index = er_ui_shadcn_option_index(action.hit.id, ER_UI_SHADCN_SELECT_TICKER_BASE_ID, ER_UI_SHADCN_SELECT_TICKER_COUNT, &has_index);
     if (has_index) {
       state->ticker_index = index;
       state->has_open_select = false;
@@ -1045,17 +1061,17 @@ bool er_ui_shadcn_demo_gallery_apply_action(er_ui_shadcn_demo_gallery_state_t* s
   }
   if (action.hit.kind == ER_UI_HIT_BUTTON) {
     bool has_index = false;
-    size_t index = er_ui_shadcn_option_index(action.hit.id, ER_UI_SHADCN_CHART_CONTRIBUTION_BASE_ID, 7u, &has_index);
+    size_t index = er_ui_shadcn_option_index(action.hit.id, ER_UI_SHADCN_CHART_CONTRIBUTION_BASE_ID, ER_UI_SHADCN_CHART_CONTRIBUTION_COUNT, &has_index);
     if (has_index) {
       state->contribution_bar = index;
       return true;
     }
-    index = er_ui_shadcn_option_index(action.hit.id, ER_UI_SHADCN_CHART_STOCK_BASE_ID, 8u, &has_index);
+    index = er_ui_shadcn_option_index(action.hit.id, ER_UI_SHADCN_CHART_STOCK_BASE_ID, ER_UI_SHADCN_CHART_STOCK_COUNT, &has_index);
     if (has_index) {
       state->stock_bar = index;
       return true;
     }
-    index = er_ui_shadcn_option_index(action.hit.id, ER_UI_SHADCN_CHART_POWER_BASE_ID, 8u, &has_index);
+    index = er_ui_shadcn_option_index(action.hit.id, ER_UI_SHADCN_CHART_POWER_BASE_ID, ER_UI_SHADCN_CHART_POWER_COUNT, &has_index);
     if (has_index) {
       state->power_bar = index;
       return true;
