@@ -1,0 +1,134 @@
+#include "er_boot_services.h"
+#include "er_mem.h"
+
+void er_boot_services_report_init(ErBootServicesReport* report) {
+  if (report == 0) {
+    return;
+  }
+  er_mem_zero((UINT8*)report, (UINTN)sizeof(*report));
+  report->secure_boot_state = ER_BOOT_SECURE_BOOT_UNKNOWN;
+  report->config_state = ER_BOOT_CONFIG_UNKNOWN;
+  report->selected_authority = ER_BOOT_AUTHORITY_PROFILE_CAPACITY;
+}
+
+UINT8 er_boot_services_set_tpm_limits(ErBootServicesReport* report,
+                                      const ErTpmNvLimits* limits) {
+  if (report == 0 || limits == 0 ||
+      limits->has_nv_index_max == 0u ||
+      limits->has_nv_buffer_max == 0u) {
+    return 0u;
+  }
+  report->tpm_present = 1u;
+  report->tpm_nv_limits = *limits;
+  return 1u;
+}
+
+UINT8 er_boot_services_add_pci_device(ErBootServicesReport* report,
+                                      const ErPciDeviceSnapshot* snapshot) {
+  ErBootDetectedDevice* device;
+
+  if (report == 0 || snapshot == 0 ||
+      snapshot->present == 0u ||
+      report->device_count >= ER_BOOT_DETECTED_DEVICE_CAPACITY) {
+    return 0u;
+  }
+
+  device = &report->devices[report->device_count];
+  er_mem_zero((UINT8*)device, (UINTN)sizeof(*device));
+  device->present = 1u;
+  device->kind = er_pci_classify_target(snapshot->id, snapshot->class_revision);
+  device->vendor_id = er_pci_vendor_id(snapshot->id);
+  device->bus = snapshot->bus;
+  device->dev = snapshot->dev;
+  device->func = snapshot->func;
+  device->class_revision = snapshot->class_revision;
+  report->device_count += 1u;
+  return 1u;
+}
+
+UINT8 er_boot_services_add_authority(ErBootServicesReport* report,
+                                     UINT32 tpm_persistent_handle,
+                                     UINT32 efivar_config_generation,
+                                     UINT8 config_state) {
+  ErBootAuthorityProfile* authority;
+
+  if (report == 0 ||
+      tpm_persistent_handle == ER_BOOT_AUTHORITY_HANDLE_INVALID ||
+      efivar_config_generation == ER_BOOT_EFIVAR_CONFIG_GENERATION_INVALID ||
+      config_state != ER_BOOT_CONFIG_PRESENT ||
+      report->authority_count >= ER_BOOT_AUTHORITY_PROFILE_CAPACITY) {
+    return 0u;
+  }
+
+  authority = &report->authorities[report->authority_count];
+  er_mem_zero((UINT8*)authority, (UINTN)sizeof(*authority));
+  authority->present = 1u;
+  authority->config_state = config_state;
+  authority->tpm_persistent_handle = tpm_persistent_handle;
+  authority->efivar_config_generation = efivar_config_generation;
+  report->authority_count += 1u;
+  if (report->config_state == ER_BOOT_CONFIG_UNKNOWN ||
+      report->config_state == ER_BOOT_CONFIG_MISSING) {
+    report->config_state = ER_BOOT_CONFIG_PRESENT;
+  }
+  return 1u;
+}
+
+UINT8 er_boot_services_select_authority(ErBootServicesReport* report,
+                                        UINT32 authority_index) {
+  if (report == 0 ||
+      authority_index >= report->authority_count ||
+      authority_index >= ER_BOOT_AUTHORITY_PROFILE_CAPACITY ||
+      report->authorities[authority_index].present == 0u) {
+    return 0u;
+  }
+  report->selected_authority = (UINT8)authority_index;
+  return 1u;
+}
+
+ErBootServicesAction er_boot_services_decide_action(const ErBootServicesReport* report) {
+  if (report == 0 ||
+      report->secure_boot_state != ER_BOOT_SECURE_BOOT_VERIFIED ||
+      report->tpm_present == 0u ||
+      report->config_state == ER_BOOT_CONFIG_INVALID) {
+    return ER_BOOT_SERVICES_ACTION_HALT;
+  }
+
+  switch (report->authority_count) {
+    case 0u:
+      return ER_BOOT_SERVICES_ACTION_CONFIGURE_AUTHORITY;
+    case 1u:
+      if (report->authorities[0].present == 0u ||
+          report->authorities[0].config_state != ER_BOOT_CONFIG_PRESENT) {
+        return ER_BOOT_SERVICES_ACTION_HALT;
+      }
+      return ER_BOOT_SERVICES_ACTION_ENTER_RUNTIME;
+    default:
+      break;
+  }
+
+  if (report->selected_authority >= report->authority_count ||
+      report->selected_authority >= ER_BOOT_AUTHORITY_PROFILE_CAPACITY) {
+    return ER_BOOT_SERVICES_ACTION_SELECT_AUTHORITY;
+  }
+  if (report->authorities[report->selected_authority].present == 0u ||
+      report->authorities[report->selected_authority].config_state != ER_BOOT_CONFIG_PRESENT) {
+    return ER_BOOT_SERVICES_ACTION_HALT;
+  }
+  return ER_BOOT_SERVICES_ACTION_ENTER_RUNTIME;
+}
+
+const char* er_boot_services_action_label(ErBootServicesAction action) {
+  switch (action) {
+    case ER_BOOT_SERVICES_ACTION_HALT:
+      return "halt";
+    case ER_BOOT_SERVICES_ACTION_CONFIGURE_AUTHORITY:
+      return "configure-authority";
+    case ER_BOOT_SERVICES_ACTION_SELECT_AUTHORITY:
+      return "select-authority";
+    case ER_BOOT_SERVICES_ACTION_ENTER_RUNTIME:
+      return "enter-runtime";
+    default:
+      return "invalid";
+  }
+}
