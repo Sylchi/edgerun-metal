@@ -132,6 +132,7 @@ static UINT8 er_virtio_pci_cap_prepare_address(UINT32 bus, UINT32 dev, UINT32 fu
                                        &cap->address);
 }
 
+//@optimizer-ignore-function VirtIO PCI discovery must walk the bounded hardware capability linked list
 static UINT8 er_virtio_pci_read_caps(UINT32 bus, UINT32 dev, UINT32 func,
                                      ErVirtioMmioTransport* out_transport) {
   UINT8 cap_ptr;
@@ -346,6 +347,7 @@ UINT8 er_virtio_pci_transport_init(UINT32 bus, UINT32 dev, UINT32 func,
   return 1;
 }
 
+//@optimizer-ignore-function VirtIO PCI discovery must scan the bounded bus/device/function config-space grid
 UINT8 er_virtio_pci_find_transport(UINT32 expected_device_type,
                                    ErVirtioMmioTransport* out_transport) {
   UINT32 bus;
