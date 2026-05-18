@@ -25,6 +25,16 @@ The runtime input slice includes:
 - pointer, wheel, key, drag/drop, activation, escape, and blur dispatch returning canonical `er_ui_action_t` records
 - tiled workspace scene emission publishes one drop target per surface tile, so apps can rely on core-owned surface placement
 
+## Component System
+
+App and shell surfaces should compose `er_ui_shadcn_*_emit` and
+`er_ui_*_prompt_emit` component functions instead of drawing one-off rectangles,
+ASCII glyphs, and ad hoc hit targets. Components own their visual density,
+radius, borders, semantic hits, projected-state contracts, and Tabler-compatible
+canonical icon IDs. Direct `er_ui_scene_push_*` calls are reserved for renderer
+primitives, component internals, workspace placement, and genuinely new
+component implementations that are then reused by surfaces.
+
 Production code is freestanding:
 
 - `src/` does not depend on host libc allocation, string, or math APIs.

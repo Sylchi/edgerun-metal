@@ -580,6 +580,18 @@ er_ui_status_t er_ui_shadcn_bar_chart_emit(
   size_t value_count,
   uint32_t base_id,
   size_t selected);
+er_ui_status_t er_ui_network_app_prompt_emit(
+  er_ui_scene_t* scene,
+  vr_font_face_t* font,
+  er_ui_bounds_t bounds,
+  er_ui_resolved_theme_t theme,
+  const char* app_name,
+  const char* package_size,
+  const char* retrieval_cost,
+  const char* policy_hash,
+  uint32_t run_once_id,
+  uint32_t verify_cache_id,
+  uint32_t cancel_id);
 bool er_ui_shadcn_component_scene_preview_available(const char* slug);
 er_ui_status_t er_ui_shadcn_component_scene_preview_emit(
   er_ui_scene_t* scene,

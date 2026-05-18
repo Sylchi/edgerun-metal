@@ -68,6 +68,7 @@ static void test_shadcn_render_primitives(void) {
   expect_true(scene.rect_count >= 8u, "shadcn render: primitives emit geometry");
   expect_true(scene.hit_count >= 10u, "shadcn render: interactive primitives emit hits");
   expect_true(scene.text_quad_count > 0u, "shadcn render: primitives use variable font text");
+  expect_true(scene.icon_quad_count > 0u, "shadcn render: primitives use canonical Tabler-compatible icons");
   expect_status(er_ui_shadcn_button_emit(&scene, NULL, er_ui_bounds(0.0f, 0.0f, 40.0f, 40.0f), theme, "Nope", 9u,
                                          ER_UI_SHADCN_BUTTON_DEFAULT, ER_UI_SHADCN_BUTTON_SIZE_DEFAULT, true),
                 ER_UI_ERR_INVALID_ARGUMENT, "shadcn render: missing variable font is rejected");

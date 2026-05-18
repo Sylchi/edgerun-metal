@@ -1,4 +1,5 @@
 #include "er_ui_shell.h"
+#include "er_ui_components.h"
 #include "er_ui_internal.h"
 
 static const size_t ER_UI_SHELL_INITIAL_SURFACE_CAP = 4u;
@@ -347,22 +348,6 @@ static er_ui_status_t er_ui_shell_emit_text_labels(
   return ER_UI_OK;
 }
 
-static er_ui_status_t er_ui_shell_emit_prompt_button(
-  er_ui_scene_t* scene,
-  vr_font_face_t* font,
-  er_ui_bounds_t bounds,
-  uint32_t id,
-  const char* label,
-  er_ui_color4_t fill,
-  er_ui_color4_t text,
-  float radius) {
-  er_ui_status_t status = er_ui_scene_push_rect(scene, er_ui_rect_fill(bounds.x, bounds.y, bounds.w, bounds.h, radius, fill));
-  if (status != ER_UI_OK) return status;
-  status = er_ui_scene_push_hit(scene, er_ui_hit(ER_UI_HIT_BUTTON, id, bounds.x, bounds.y, bounds.w, bounds.h));
-  if (status != ER_UI_OK) return status;
-  return er_ui_shell_push_ascii_text(scene, font, label, bounds.x + 14.0f, bounds.y + 27.0f, text);
-}
-
 static er_ui_status_t er_ui_shell_emit_network_app_prompt(
   const er_ui_shell_state_t* state,
   er_ui_scene_t* scene,
@@ -381,47 +366,18 @@ static er_ui_status_t er_ui_shell_emit_network_app_prompt(
   if (panel_w <= 0.0f || bounds.h <= ER_UI_NETWORK_APP_PROMPT_HEIGHT) return ER_UI_ERR_INVALID_ARGUMENT;
   er_ui_bounds_t panel = er_ui_bounds(bounds.x + (bounds.w - panel_w) * 0.5f, bounds.y + (bounds.h - ER_UI_NETWORK_APP_PROMPT_HEIGHT) * 0.5f,
                                       panel_w, ER_UI_NETWORK_APP_PROMPT_HEIGHT);
-  status = er_ui_scene_push_rect(scene, er_ui_rect_fill(panel.x, panel.y, panel.w, panel.h, theme.radius.panel, theme.colors.panel));
-  if (status != ER_UI_OK) return status;
-  status = er_ui_scene_push_rect(scene, er_ui_rect_border(panel.x, panel.y, panel.w, panel.h, theme.radius.panel, theme.colors.border));
-  if (status != ER_UI_OK) return status;
-
-  float text_x = panel.x + 24.0f;
-  float y = panel.y + 44.0f;
-  status = er_ui_shell_push_ascii_text(scene, font, "This app runs from EdgeRun network storage.", text_x, y, theme.colors.text);
-  if (status != ER_UI_OK) return status;
-  y += 34.0f;
-  status = er_ui_shell_push_ascii_text(scene, font, "Your browser node retrieves signed package bytes,", text_x, y, theme.colors.muted);
-  if (status != ER_UI_OK) return status;
-  y += 28.0f;
-  status = er_ui_shell_push_ascii_text(scene, font, "verifies hashes, and runs locally.", text_x, y, theme.colors.muted);
-  if (status != ER_UI_OK) return status;
-  y += 28.0f;
-  status = er_ui_shell_push_ascii_text(scene, font, "Retrieval cost is deterministic from package size", text_x, y, theme.colors.muted);
-  if (status != ER_UI_OK) return status;
-  y += 28.0f;
-  status = er_ui_shell_push_ascii_text(scene, font, "and the active policy schedule.", text_x, y, theme.colors.muted);
-  if (status != ER_UI_OK) return status;
-  y += 28.0f;
-  status = er_ui_shell_push_ascii_text(scene, font, "Cache verified bytes locally to avoid repeated", text_x, y, theme.colors.muted);
-  if (status != ER_UI_OK) return status;
-  y += 28.0f;
-  status = er_ui_shell_push_ascii_text(scene, font, "retrieval payments.", text_x, y, theme.colors.muted);
-  if (status != ER_UI_OK) return status;
-
-  float button_y = panel.y + panel.h - 58.0f;
-  er_ui_bounds_t run_once = er_ui_bounds(panel.x + 24.0f, button_y, 112.0f, 38.0f);
-  er_ui_bounds_t verify_cache = er_ui_bounds(run_once.x + run_once.w + 10.0f, button_y, 154.0f, 38.0f);
-  er_ui_bounds_t cancel = er_ui_bounds(verify_cache.x + verify_cache.w + 10.0f, button_y, 92.0f, 38.0f);
-
-  status = er_ui_shell_emit_prompt_button(scene, font, run_once, ER_UI_NETWORK_APP_PROMPT_RUN_ONCE_ID, "Run once", theme.colors.row, theme.colors.text,
-                                          theme.radius.control);
-  if (status != ER_UI_OK) return status;
-  status = er_ui_shell_emit_prompt_button(scene, font, verify_cache, ER_UI_NETWORK_APP_PROMPT_VERIFY_CACHE_ID, "Verify & cache", theme.colors.accent,
-                                          theme.colors.accent_text, theme.radius.control);
-  if (status != ER_UI_OK) return status;
-  return er_ui_shell_emit_prompt_button(scene, font, cancel, ER_UI_NETWORK_APP_PROMPT_CANCEL_ID, "Cancel", theme.colors.row, theme.colors.text,
-                                        theme.radius.control);
+  return er_ui_network_app_prompt_emit(
+    scene,
+    font,
+    panel,
+    theme,
+    "Network app",
+    "Signed package",
+    "Policy priced",
+    "blake3 policy verified before launch",
+    ER_UI_NETWORK_APP_PROMPT_RUN_ONCE_ID,
+    ER_UI_NETWORK_APP_PROMPT_VERIFY_CACHE_ID,
+    ER_UI_NETWORK_APP_PROMPT_CANCEL_ID);
 }
 
 static er_ui_status_t er_ui_shell_emit_scene_base(

@@ -110,10 +110,11 @@ void run_shell_tests(void) {
       expect_true(shell_scene_has_hit_id(&scene, ER_UI_NETWORK_APP_PROMPT_RUN_ONCE_ID), "shell prompt: run once hit emits");
       expect_true(shell_scene_has_hit_id(&scene, ER_UI_NETWORK_APP_PROMPT_VERIFY_CACHE_ID), "shell prompt: verify cache hit emits");
       expect_true(shell_scene_has_hit_id(&scene, ER_UI_NETWORK_APP_PROMPT_CANCEL_ID), "shell prompt: cancel hit emits");
+      expect_true(scene.icon_quad_count > 0u, "shell prompt: reusable prompt emits canonical icon quads");
 
-      action = er_ui_runtime_pointer_down(&runtime, &scene, 66.0f, 316.0f);
+      action = er_ui_runtime_pointer_down(&runtime, &scene, 250.0f, 316.0f);
       expect_true(action.kind == ER_UI_ACTION_FOCUSED, "shell prompt: pointer down focuses run once");
-      action = er_ui_runtime_pointer_up(&runtime, &scene, 66.0f, 316.0f);
+      action = er_ui_runtime_pointer_up(&runtime, &scene, 250.0f, 316.0f);
       expect_true(action.kind == ER_UI_ACTION_ACTIVATED, "shell prompt: pointer up activates run once");
       expect_status(er_ui_shell_apply_action(&shell, action, &changed), ER_UI_OK, "shell prompt: run once action applies");
       expect_true(changed, "shell prompt: run once reports changed");
@@ -140,9 +141,9 @@ void run_shell_tests(void) {
       er_ui_scene_clear_commands(&scene);
       expect_status(er_ui_shell_emit_scene_with_font(&shell, &scene, er_ui_bounds(0.0f, 0.0f, 640.0f, 400.0f), theme, face), ER_UI_OK,
                     "shell prompt: scene re-emits for cancel");
-      action = er_ui_runtime_pointer_down(&runtime, &scene, 360.0f, 316.0f);
+      action = er_ui_runtime_pointer_down(&runtime, &scene, 512.0f, 316.0f);
       expect_true(action.kind == ER_UI_ACTION_FOCUSED, "shell prompt: pointer down focuses cancel");
-      action = er_ui_runtime_pointer_up(&runtime, &scene, 360.0f, 316.0f);
+      action = er_ui_runtime_pointer_up(&runtime, &scene, 512.0f, 316.0f);
       expect_true(action.kind == ER_UI_ACTION_ACTIVATED, "shell prompt: pointer up activates cancel");
       expect_status(er_ui_shell_apply_action(&shell, action, &changed), ER_UI_OK, "shell prompt: cancel button applies");
       expect_true(changed, "shell prompt: cancel button reports changed");
