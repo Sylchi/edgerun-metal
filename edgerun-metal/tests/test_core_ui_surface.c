@@ -19,6 +19,44 @@ static void test_gfx_console_disabled_path(void) {
   check_int64("gfx console disabled path reached", 1, 1);
 }
 
+static UINT64 g_print_test_firmware_byte_count;
+
+static EFI_STATUS test_print_output_string(EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL* self,
+                                           const CHAR16* text) {
+  UINTN i;
+
+  (void)self;
+  if (text == 0) {
+    return 1u;
+  }
+  for (i = 0u; text[i] != 0u; ++i) {
+    ++g_print_test_firmware_byte_count;
+  }
+  return 0u;
+}
+
+static void test_print_routes_firmware_before_serial(void) {
+  EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL conout;
+  EFI_SYSTEM_TABLE st;
+
+  er_mem_zero((UINT8*)&conout, (UINTN)sizeof(conout));
+  er_mem_zero((UINT8*)&st, (UINTN)sizeof(st));
+  g_print_test_firmware_byte_count = 0u;
+  conout.OutputString = test_print_output_string;
+  st.ConOut = &conout;
+
+  er_print_test_reset(&st);
+  er_print("firmware");
+  check_uint64("print firmware route bytes", g_print_test_firmware_byte_count, 8u);
+  check_uint64("print firmware route skips serial",
+               er_print_test_serial_byte_count(), 0u);
+
+  er_print_set_firmware_console_enabled(0u);
+  er_print("serial");
+  check_uint64("print serial route after firmware disabled",
+               er_print_test_serial_byte_count(), 6u);
+}
+
 static void test_ui_surface_renderer_surface(void) {
   UINT32 pixels[24] = {0};
   ErUiSurface surface;
