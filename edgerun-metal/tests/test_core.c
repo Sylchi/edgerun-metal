@@ -41,6 +41,7 @@ int main(void) {
   test_ui_wasm_app_runner();
   test_ui_wasm_app_multiple_runtimes();
   test_vfs_object_packets();
+  test_storage_endpoint_object_store();
   test_app_identity_routes();
   test_device_relay_identity();
   test_work_admitted_relay_route();

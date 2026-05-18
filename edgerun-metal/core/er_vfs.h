@@ -84,6 +84,8 @@ UINT8 er_vfs_label_valid(const char* label, UINTN label_len);
 UINT8 er_vfs_prepare_object_packet(const ErCryptoProvider* crypto, const UINT8* object_bytes, UINTN object_len,
                                    UINTN offset, UINT32 packet_index, UINT32 packet_count,
                                    ErVfsObjectPacket* out_packet);
+UINT8 er_vfs_object_packet_valid(const ErCryptoProvider* crypto,
+                                 const ErVfsObjectPacket* packet);
 UINT8 er_vfs_assemble_object_packets(const ErCryptoProvider* crypto,
                                      const ErVfsObjectPacket* packets,
                                      UINT32 packet_count,

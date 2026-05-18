@@ -117,6 +117,188 @@ static void test_vfs_object_packets(void) {
   check_int64("vfs transform seal", transform.seal_kind, ER_VFS_SEAL_AES256_GCM);
 }
 
+static void test_prepare_storage_endpoint_route(ErAdmittedRoute* route,
+                                                UINT8 seed) {
+  enum {
+    TEST_STORAGE_ENDPOINT_ADMITTED_BUDGET = 4096u
+  };
+
+  er_mem_zero((UINT8*)route, (UINTN)sizeof(*route));
+  route->abi_version = ER_WORK_ABI_VERSION;
+  route->role = ER_NODE_ROLE_STORAGE;
+  route->department = ER_DEPARTMENT_STORAGE;
+  route->work_type = ER_WORK_TYPE_OBJECT_RETRIEVE;
+  route->admitted_budget = TEST_STORAGE_ENDPOINT_ADMITTED_BUDGET;
+  test_fill_bytes(route->route_id.bytes, ER_HASH_LEN, seed);
+  test_fill_bytes(route->request_hash.bytes, ER_HASH_LEN, (UINT8)(seed + 1u));
+  test_fill_bytes(route->admission_hash.bytes, ER_HASH_LEN, (UINT8)(seed + 2u));
+  test_fill_bytes(route->target_route_commitment.bytes, ER_HASH_LEN,
+                  (UINT8)(seed + 3u));
+  test_fill_bytes(route->channel_id.bytes, ER_HASH_LEN, (UINT8)(seed + 4u));
+  test_fill_bytes(route->source_node_id.bytes, ER_NODE_ID_LEN,
+                  (UINT8)(seed + 5u));
+  test_fill_bytes(route->target_node_id.bytes, ER_NODE_ID_LEN,
+                  (UINT8)(seed + 6u));
+  test_fill_bytes(route->relay_node_id.bytes, ER_NODE_ID_LEN,
+                  (UINT8)(seed + 7u));
+}
+
+static void test_prepare_storage_endpoint_envelope(const ErAdmittedRoute* route,
+                                                   const ErHash* packet_id,
+                                                   UINT64 sequence,
+                                                   ErChannelEnvelopeHeader* envelope) {
+  er_mem_zero((UINT8*)envelope, (UINTN)sizeof(*envelope));
+  envelope->abi_version = ER_WORK_ABI_VERSION;
+  envelope->packet_kind = route->work_type;
+  envelope->channel_id = route->channel_id;
+  envelope->from = route->source_node_id;
+  envelope->to = route->target_node_id;
+  envelope->route_hash = route->target_route_commitment;
+  envelope->packet_hash = *packet_id;
+  envelope->sequence = sequence;
+}
+
+static void test_storage_endpoint_object_store(void) {
+  enum {
+    STORAGE_TEST_ROUTE_SEED = 0x41u,
+    STORAGE_TEST_OTHER_ROUTE_SEED = 0x51u,
+    STORAGE_TEST_SEQUENCE_BASE = 10u,
+    STORAGE_TEST_PACKET_CAPACITY = 2u,
+    STORAGE_TEST_OBJECT_BYTES = ER_VFS_OBJECT_PACKET_BYTES + 17u
+  };
+  ErCryptoProvider crypto;
+  ErAdmittedRoute route;
+  ErAdmittedRoute other_route;
+  ErChannelEnvelopeHeader envelope;
+  ErVfsObjectPacket packets[STORAGE_TEST_PACKET_CAPACITY];
+  ErVfsObjectPacket store_packets[STORAGE_TEST_PACKET_CAPACITY];
+  ErStorageEndpointObjectStore store;
+  ErStorageEndpointObjectCapture capture;
+  ErAppPackageStorageResponse response;
+  ErAppPackageStorageObject storage_object;
+  UINT8 object_bytes[STORAGE_TEST_OBJECT_BYTES];
+  UINT8 loaded_bytes[STORAGE_TEST_OBJECT_BYTES];
+  UINTN i;
+
+  crypto.ctx = (void*)(UINTN)7u;
+  crypto.hash = test_hash;
+  crypto.seal = 0;
+  crypto.open = 0;
+  crypto.sign = 0;
+  crypto.verify = 0;
+
+  for (i = 0u; i < (UINTN)sizeof(object_bytes); ++i) {
+    object_bytes[i] = (UINT8)(i + 3u);
+  }
+  test_prepare_storage_endpoint_route(&route, STORAGE_TEST_ROUTE_SEED);
+  test_prepare_storage_endpoint_route(&other_route, STORAGE_TEST_OTHER_ROUTE_SEED);
+  check_int64("storage endpoint packet 0",
+              er_vfs_prepare_object_packet(&crypto, object_bytes,
+                                           (UINTN)sizeof(object_bytes),
+                                           0u, 0u,
+                                           STORAGE_TEST_PACKET_CAPACITY,
+                                           &packets[0]),
+              1);
+  check_int64("storage endpoint packet 1",
+              er_vfs_prepare_object_packet(&crypto, object_bytes,
+                                           (UINTN)sizeof(object_bytes),
+                                           ER_VFS_OBJECT_PACKET_BYTES, 1u,
+                                           STORAGE_TEST_PACKET_CAPACITY,
+                                           &packets[1]),
+              1);
+  check_int64("storage endpoint single packet valid",
+              er_vfs_object_packet_valid(&crypto, &packets[0]), 1);
+  packets[1].bytes[0] ^= 1u;
+  check_int64("storage endpoint single packet reject tamper",
+              er_vfs_object_packet_valid(&crypto, &packets[1]), 0);
+  packets[1].bytes[0] ^= 1u;
+
+  check_int64("storage endpoint store init",
+              er_storage_endpoint_object_store_init(&store, store_packets,
+                                                    STORAGE_TEST_PACKET_CAPACITY),
+              1);
+  test_prepare_storage_endpoint_envelope(&route, &packets[0].header.packet_id,
+                                         STORAGE_TEST_SEQUENCE_BASE, &envelope);
+  check_int64("storage endpoint store packet 0",
+              er_storage_endpoint_store_object_packet(&crypto, &route,
+                                                      &envelope, &packets[0],
+                                                      &store, &capture),
+              1);
+  check_uint64("storage endpoint incomplete", store.complete, 0u);
+  check_hash_equal("storage endpoint capture route", &capture.route_id,
+                   &route.route_id);
+  check_int64("storage endpoint reject duplicate",
+              er_storage_endpoint_store_object_packet(&crypto, &route,
+                                                      &envelope, &packets[0],
+                                                      &store, &capture),
+              0);
+  check_int64("storage endpoint reject incomplete response",
+              er_storage_endpoint_prepare_package_storage_response(&crypto,
+                                                                   &store,
+                                                                   &route.route_id,
+                                                                   &packets[0].header.object_id,
+                                                                   packets[0].header.object_len,
+                                                                   loaded_bytes,
+                                                                   (UINTN)sizeof(loaded_bytes),
+                                                                   &response),
+              0);
+
+  test_prepare_storage_endpoint_envelope(&other_route,
+                                         &packets[1].header.packet_id,
+                                         STORAGE_TEST_SEQUENCE_BASE + 1u,
+                                         &envelope);
+  check_int64("storage endpoint reject wrong route",
+              er_storage_endpoint_store_object_packet(&crypto, &other_route,
+                                                      &envelope, &packets[1],
+                                                      &store, &capture),
+              0);
+  test_prepare_storage_endpoint_envelope(&route, &packets[1].header.packet_id,
+                                         STORAGE_TEST_SEQUENCE_BASE + 1u,
+                                         &envelope);
+  check_int64("storage endpoint store packet 1",
+              er_storage_endpoint_store_object_packet(&crypto, &route,
+                                                      &envelope, &packets[1],
+                                                      &store, &capture),
+              1);
+  check_uint64("storage endpoint complete", store.complete, 1u);
+  check_int64("storage endpoint response",
+              er_storage_endpoint_prepare_package_storage_response(&crypto,
+                                                                   &store,
+                                                                   &route.route_id,
+                                                                   &packets[0].header.object_id,
+                                                                   packets[0].header.object_len,
+                                                                   loaded_bytes,
+                                                                   (UINTN)sizeof(loaded_bytes),
+                                                                   &response),
+              1);
+  check_hash_equal("storage endpoint response route",
+                   &response.retrieve_route_id, &route.route_id);
+  check_uint64("storage endpoint response packet count",
+               response.packet_count, STORAGE_TEST_PACKET_CAPACITY);
+  check_int64("storage endpoint package object",
+              er_app_prepare_package_storage_object(&response,
+                                                    &route.route_id,
+                                                    &packets[0].header.object_id,
+                                                    packets[0].header.object_len,
+                                                    &storage_object),
+              1);
+  check_int64("storage endpoint loaded first byte",
+              loaded_bytes[0], object_bytes[0]);
+  check_int64("storage endpoint loaded split byte",
+              loaded_bytes[ER_VFS_OBJECT_PACKET_BYTES],
+              object_bytes[ER_VFS_OBJECT_PACKET_BYTES]);
+  check_int64("storage endpoint reject wrong response id",
+              er_storage_endpoint_prepare_package_storage_response(&crypto,
+                                                                   &store,
+                                                                   &route.route_id,
+                                                                   &packets[1].header.packet_id,
+                                                                   packets[0].header.object_len,
+                                                                   loaded_bytes,
+                                                                   (UINTN)sizeof(loaded_bytes),
+                                                                   &response),
+              0);
+}
+
 static void test_app_identity_routes(void) {
   ErCryptoProvider crypto;
   static const UINT8 app_bytes[] = {'w', 'a', 's', 'm', '-', 'u', 'i'};
