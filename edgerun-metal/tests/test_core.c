@@ -2383,6 +2383,7 @@ static void test_relay_packets(void) {
   ErHash payload_hash;
   ErAppBudget budget;
   ErAppUsage usage;
+  ErRelayPacketHeader decoded_header;
   const UINT8* parsed_payload = 0;
   UINT32 parsed_payload_len = 0u;
   UINT32 packet_len = 0u;
@@ -2414,6 +2415,29 @@ static void test_relay_packets(void) {
   check_int64("relay packet payload",
               er_relay_packet_payload(packet, packet_len, &parsed_payload, &parsed_payload_len),
               1);
+  check_int64("relay packet decode header",
+              er_relay_packet_decode_header(packet, packet_len, &decoded_header), 1);
+  check_uint64("relay packet decoded abi", decoded_header.abi_version,
+               ER_RELAY_PACKET_ABI_VERSION);
+  check_uint64("relay packet decoded kind", decoded_header.packet_kind,
+               ER_RELAY_PACKET_KIND_BYTES);
+  check_node_id_equal("relay packet decoded source",
+                      &decoded_header.source_node_id, &source);
+  check_node_id_equal("relay packet decoded target",
+                      &decoded_header.target_node_id, &target);
+  check_hash_equal("relay packet decoded admission",
+                   &decoded_header.admission_id, &admission);
+  check_hash_equal("relay packet decoded token",
+                   &decoded_header.token_id, &token);
+  check_hash_equal("relay packet decoded route",
+                   &decoded_header.route_hash, &route);
+  check_hash_equal("relay packet decoded payload hash",
+                   &decoded_header.payload_hash, &payload_hash);
+  check_uint64("relay packet decoded sequence", decoded_header.sequence, 7u);
+  check_uint64("relay packet decoded cost", decoded_header.cost_per_byte, 3u);
+  check_uint64("relay packet decoded max cost", decoded_header.max_total_cost, 12u);
+  check_uint64("relay packet decoded payload len", decoded_header.payload_len,
+               sizeof(payload));
   check_uint64("relay packet payload len", parsed_payload_len, sizeof(payload));
   check_uint64("relay packet payload byte0", parsed_payload[0], payload[0]);
   check_uint64("relay packet payload byte3", parsed_payload[3], payload[3]);
@@ -2430,6 +2454,8 @@ static void test_relay_packets(void) {
 
   packet[0] = 0xffu;
   check_int64("relay packet reject abi", er_relay_packet_valid(packet, packet_len), 0);
+  check_int64("relay packet reject decode bad abi",
+              er_relay_packet_decode_header(packet, packet_len, &decoded_header), 0);
   packet[0] = 1u;
   check_int64("relay packet reject short len", er_relay_packet_valid(packet, packet_len - 1u), 0);
   er_mem_zero(packet + ER_RELAY_PACKET_HEADER_LEN - ER_HASH_LEN, ER_HASH_LEN);
@@ -4695,6 +4721,8 @@ static void test_native_boot_erwire_eth_sink(void) {
   check_uint64("native boot relay kind", ingress.header.Kind, ERWIRE_KIND_VFS_OBJECT_PACKET);
   check_uint64("native boot relay seq", ingress.header.Seq, 0u);
   check_uint64("native boot relay payload len", ingress.payload_len, NATIVE_BOOT_TEST_PAYLOAD_LEN);
+  check_uint64("native boot relay payload0", ingress.payload[0], payload[0]);
+  check_uint64("native boot relay payload3", ingress.payload[3], payload[3]);
   check_uint64("native boot relay ingress mac", ingress.ingress.address[0], peer_mac[0]);
 
   rx_buffer = er_virtio_net_test_rx_buffer(NATIVE_BOOT_TEST_BAD_RX_DESC);
@@ -4715,6 +4743,163 @@ static void test_native_boot_erwire_eth_sink(void) {
               er_native_boot_poll_relay_ingress(&state, &crypto, &ingress), 1);
   check_int64("native boot relay none", ingress.status, ER_NATIVE_RELAY_INGRESS_NONE);
   erwire_clear_native_eth_sink();
+}
+
+static void test_native_boot_endpoint_intent(void) {
+  enum {
+    NATIVE_INTENT_PACKET_SEQUENCE = 12u,
+    NATIVE_INTENT_COST_PER_BYTE = 1u,
+    NATIVE_INTENT_MAX_TOTAL_COST = sizeof(ErCapabilityEnvelopeHeader)
+  };
+  ErAdmittedRoute route;
+  ErAdmittedRoute bad_route;
+  ErNativeRelayIngress ingress;
+  ErNativeEndpointIntent intent;
+  ErCapabilityEnvelopeHeader capability;
+  ErHash session_id;
+  ErHash invocation_id;
+  ErHash capability_id;
+  ErHash token_id;
+  ErHash scene_hash;
+  UINT32 packet_len = 0u;
+
+  er_mem_zero((UINT8*)&route, (UINTN)sizeof(route));
+  er_mem_zero((UINT8*)&ingress, (UINTN)sizeof(ingress));
+  route.abi_version = ER_WORK_ABI_VERSION;
+  route.role = ER_NODE_ROLE_CAPABILITY;
+  route.department = ER_DEPARTMENT_CAPABILITY;
+  route.work_type = ER_WORK_TYPE_CAPABILITY_INVOKE;
+  test_fill_bytes(route.source_node_id.bytes, ER_NODE_ID_LEN, 0x21u);
+  test_fill_bytes(route.target_node_id.bytes, ER_NODE_ID_LEN, 0x41u);
+  test_fill_bytes(route.admission_hash.bytes, ER_HASH_LEN, 0x61u);
+  test_fill_bytes(route.target_route_commitment.bytes, ER_HASH_LEN, 0x81u);
+  test_fill_bytes(token_id.bytes, ER_HASH_LEN, 0xa1u);
+  test_fill_bytes(session_id.bytes, ER_HASH_LEN, 0xc1u);
+  test_fill_bytes(invocation_id.bytes, ER_HASH_LEN, 0xd1u);
+  test_fill_bytes(capability_id.bytes, ER_HASH_LEN, 0xe1u);
+  test_fill_bytes(scene_hash.bytes, ER_HASH_LEN, 0xf1u);
+
+  check_int64("native endpoint capability prepare",
+              er_work_prepare_capability_envelope_header(ER_CAPABILITY_PACKET_INVOKE,
+                                                         ER_WORK_TYPE_CAPABILITY_INVOKE,
+                                                         ER_CAPABILITY_CONTENT_RENDER,
+                                                         ER_CAPABILITY_RISK_NONE,
+                                                         &session_id,
+                                                         &invocation_id,
+                                                         &capability_id,
+                                                         &route.source_node_id,
+                                                         &route.target_node_id,
+                                                         NATIVE_INTENT_PACKET_SEQUENCE,
+                                                         1000u,
+                                                         &scene_hash,
+                                                         256u,
+                                                         &capability),
+              1);
+  check_int64("native endpoint relay packet prepare",
+              er_relay_packet_prepare(ingress.payload,
+                                      (UINT32)sizeof(ingress.payload),
+                                      &route.source_node_id,
+                                      &route.target_node_id,
+                                      &route.admission_hash,
+                                      &token_id,
+                                      &route.target_route_commitment,
+                                      NATIVE_INTENT_PACKET_SEQUENCE,
+                                      NATIVE_INTENT_COST_PER_BYTE,
+                                      NATIVE_INTENT_MAX_TOTAL_COST,
+                                      &scene_hash,
+                                      (const UINT8*)&capability,
+                                      (UINT32)sizeof(capability),
+                                      &packet_len),
+              1);
+  ingress.status = ER_NATIVE_RELAY_INGRESS_ACCEPTED;
+  ingress.payload_len = packet_len;
+  check_int64("native endpoint decode render intent",
+              er_native_boot_decode_endpoint_intent(&ingress, &route, &intent), 1);
+  check_int64("native endpoint render intent kind",
+              intent.kind, ER_NATIVE_ENDPOINT_INTENT_RENDER_CAPABILITY);
+  check_node_id_equal("native endpoint render intent source",
+                      &intent.packet.source_node_id, &route.source_node_id);
+  check_node_id_equal("native endpoint render intent target",
+                      &intent.capability.target_node_id, &route.target_node_id);
+  check_hash_equal("native endpoint render intent admission",
+                   &intent.packet.admission_id, &route.admission_hash);
+  check_hash_equal("native endpoint render intent route",
+                   &intent.packet.route_hash, &route.target_route_commitment);
+  check_uint64("native endpoint render intent packet sequence",
+               intent.packet.sequence, NATIVE_INTENT_PACKET_SEQUENCE);
+  check_uint64("native endpoint render intent content",
+               intent.capability.content_type, ER_CAPABILITY_CONTENT_RENDER);
+
+  bad_route = route;
+  bad_route.department = ER_DEPARTMENT_STORAGE;
+  check_int64("native endpoint decode unsupported route",
+              er_native_boot_decode_endpoint_intent(&ingress, &bad_route, &intent), 1);
+  check_int64("native endpoint unsupported route kind",
+              intent.kind, ER_NATIVE_ENDPOINT_INTENT_UNSUPPORTED);
+
+  bad_route = route;
+  bad_route.admission_hash.bytes[0] ^= 1u;
+  check_int64("native endpoint decode malformed route",
+              er_native_boot_decode_endpoint_intent(&ingress, &bad_route, &intent), 1);
+  check_int64("native endpoint malformed route kind",
+              intent.kind, ER_NATIVE_ENDPOINT_INTENT_MALFORMED);
+
+  capability.sequence = NATIVE_INTENT_PACKET_SEQUENCE + 1u;
+  check_int64("native endpoint relay packet prepare bad sequence",
+              er_relay_packet_prepare(ingress.payload,
+                                      (UINT32)sizeof(ingress.payload),
+                                      &route.source_node_id,
+                                      &route.target_node_id,
+                                      &route.admission_hash,
+                                      &token_id,
+                                      &route.target_route_commitment,
+                                      NATIVE_INTENT_PACKET_SEQUENCE,
+                                      NATIVE_INTENT_COST_PER_BYTE,
+                                      NATIVE_INTENT_MAX_TOTAL_COST,
+                                      &scene_hash,
+                                      (const UINT8*)&capability,
+                                      (UINT32)sizeof(capability),
+                                      &packet_len),
+              1);
+  ingress.payload_len = packet_len;
+  check_int64("native endpoint decode sequence mismatch",
+              er_native_boot_decode_endpoint_intent(&ingress, &route, &intent), 1);
+  check_int64("native endpoint sequence mismatch kind",
+              intent.kind, ER_NATIVE_ENDPOINT_INTENT_MALFORMED);
+  capability.sequence = NATIVE_INTENT_PACKET_SEQUENCE;
+  check_int64("native endpoint relay packet prepare restored",
+              er_relay_packet_prepare(ingress.payload,
+                                      (UINT32)sizeof(ingress.payload),
+                                      &route.source_node_id,
+                                      &route.target_node_id,
+                                      &route.admission_hash,
+                                      &token_id,
+                                      &route.target_route_commitment,
+                                      NATIVE_INTENT_PACKET_SEQUENCE,
+                                      NATIVE_INTENT_COST_PER_BYTE,
+                                      NATIVE_INTENT_MAX_TOTAL_COST,
+                                      &scene_hash,
+                                      (const UINT8*)&capability,
+                                      (UINT32)sizeof(capability),
+                                      &packet_len),
+              1);
+  ingress.payload_len = packet_len;
+
+  ingress.payload[0] = 0xffu;
+  check_int64("native endpoint decode malformed packet",
+              er_native_boot_decode_endpoint_intent(&ingress, &route, &intent), 1);
+  check_int64("native endpoint malformed packet kind",
+              intent.kind, ER_NATIVE_ENDPOINT_INTENT_MALFORMED);
+  ingress.payload[0] = (UINT8)ER_RELAY_PACKET_ABI_VERSION;
+
+  ingress.status = ER_NATIVE_RELAY_INGRESS_NONE;
+  ingress.payload_len = 0u;
+  check_int64("native endpoint decode none",
+              er_native_boot_decode_endpoint_intent(&ingress, &route, &intent), 1);
+  check_int64("native endpoint none kind",
+              intent.kind, ER_NATIVE_ENDPOINT_INTENT_NONE);
+  check_int64("native endpoint reject null intent",
+              er_native_boot_decode_endpoint_intent(&ingress, &route, 0), 0);
 }
 
 static void test_netlog_disabled_path(void) {
@@ -5398,6 +5583,7 @@ int main(void) {
   test_erwire_native_eth_sink();
   test_erwire_parse_and_native_poll();
   test_native_boot_erwire_eth_sink();
+  test_native_boot_endpoint_intent();
   test_netlog_disabled_path();
   test_gfx_console_disabled_path();
   test_ui_surface_renderer_surface();
