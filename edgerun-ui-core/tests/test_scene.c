@@ -152,6 +152,7 @@ void run_initial_setup_tests(void);
 void run_node_tests(void);
 void run_preset_code_tests(void);
 void run_record_codec_tests(void);
+void run_spacing_tests(void);
 void run_text_tests(void);
 
 static void test_scene_stats_and_clear(void) {
@@ -607,6 +608,7 @@ int main(void) {
   run_initial_setup_tests();
   run_preset_code_tests();
   run_record_codec_tests();
+  run_spacing_tests();
   run_shell_tests();
   run_runtime_tests();
   run_component_tests();
