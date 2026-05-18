@@ -3,12 +3,12 @@
 #include "er_ui_spacing.h"
 
 #define ER_UI_LEDGER_ARRAY_COUNT(values) (sizeof(values) / sizeof((values)[0]))
-#define ER_UI_LEDGER_RGB_BG 8u, 8u, 8u
-#define ER_UI_LEDGER_RGB_SIDEBAR 12u, 12u, 12u
-#define ER_UI_LEDGER_RGB_PANEL 24u, 24u, 24u
-#define ER_UI_LEDGER_RGB_PANEL_ALT 30u, 30u, 30u
-#define ER_UI_LEDGER_RGB_FIELD 35u, 35u, 35u
-#define ER_UI_LEDGER_RGB_BORDER 45u, 45u, 45u
+#define ER_UI_LEDGER_RGB_BG 10u, 10u, 10u
+#define ER_UI_LEDGER_RGB_SIDEBAR 14u, 14u, 14u
+#define ER_UI_LEDGER_RGB_PANEL 27u, 27u, 27u
+#define ER_UI_LEDGER_RGB_PANEL_ALT 34u, 34u, 34u
+#define ER_UI_LEDGER_RGB_FIELD 38u, 38u, 38u
+#define ER_UI_LEDGER_RGB_BORDER 58u, 58u, 58u
 #define ER_UI_LEDGER_RGB_TEXT 245u, 245u, 245u
 #define ER_UI_LEDGER_RGB_MUTED 166u, 166u, 166u
 #define ER_UI_LEDGER_RGB_SUBTLE 122u, 122u, 122u
@@ -44,6 +44,8 @@ static const float ER_UI_LEDGER_BUTTON_TEXT_PAD_X = 14.0f;
 static const float ER_UI_LEDGER_CARD_PAD = 16.0f;
 static const float ER_UI_LEDGER_FIELD_PAD_X = 10.0f;
 static const float ER_UI_LEDGER_DOT_SIZE = 4.0f;
+static const float ER_UI_LEDGER_SELECT_CHEVRON_W = 14.0f;
+static const float ER_UI_LEDGER_SELECT_CHEVRON_H = 14.0f;
 static const size_t ER_UI_LEDGER_TEXT_CAP = 96u;
 static const uint32_t ER_UI_LEDGER_ACTION_BASE = 0xED024000u;
 static const uint32_t ER_UI_LEDGER_PAYOUT_SLIDER_ID = ER_UI_LEDGER_ACTION_BASE + 1u;
@@ -102,6 +104,7 @@ typedef struct {
 typedef struct {
   const char* label;
   const char* value;
+  bool selectable;
 } er_ui_ledger_field_row_t;
 
 static er_ui_status_t er_ui_ledger_sidebar(
@@ -294,6 +297,15 @@ static er_ui_status_t er_ui_ledger_icon(
   return er_ui_painter_icon(&painter, bounds, icon, color);
 }
 
+static er_ui_status_t er_ui_ledger_select_chevron(
+  er_ui_scene_t* scene,
+  er_ui_bounds_t field,
+  er_ui_ledger_colors_t colors) {
+  float x = field.x + field.w - ER_UI_LEDGER_FIELD_PAD_X - ER_UI_LEDGER_SELECT_CHEVRON_W;
+  float y = field.y + (field.h - ER_UI_LEDGER_SELECT_CHEVRON_H) * 0.5f;
+  return er_ui_ledger_icon(scene, er_ui_bounds(x, y, ER_UI_LEDGER_SELECT_CHEVRON_W, ER_UI_LEDGER_SELECT_CHEVRON_H), ER_UI_ICON_CHEVRON_RIGHT, colors.muted);
+}
+
 static er_ui_status_t er_ui_ledger_button(
   er_ui_scene_t* scene,
   vr_font_face_t* font,
@@ -317,14 +329,18 @@ static er_ui_status_t er_ui_ledger_field(
   er_ui_bounds_t bounds,
   er_ui_ledger_colors_t colors,
   const char* label,
-  const char* value) {
+  const char* value,
+  bool selectable) {
   er_ui_status_t status = er_ui_ledger_text(scene, font, label, bounds.x, bounds.y - 8.0f, colors.text);
   if (status != ER_UI_OK) return status;
   status = er_ui_ledger_rect(scene, bounds, 7.0f, colors.field);
   if (status != ER_UI_OK) return status;
   status = er_ui_ledger_border(scene, bounds, 7.0f, colors.border);
   if (status != ER_UI_OK) return status;
-  return er_ui_ledger_text(scene, font, value, bounds.x + ER_UI_LEDGER_FIELD_PAD_X, bounds.y + 21.0f, colors.text);
+  status = er_ui_ledger_text(scene, font, value, bounds.x + ER_UI_LEDGER_FIELD_PAD_X, bounds.y + 21.0f, colors.text);
+  if (status != ER_UI_OK) return status;
+  if (!selectable) return ER_UI_OK;
+  return er_ui_ledger_select_chevron(scene, bounds, colors);
 }
 
 static er_ui_status_t er_ui_ledger_field_rows(
@@ -346,7 +362,7 @@ static er_ui_status_t er_ui_ledger_field_rows(
     status = er_ui_ledger_field(scene, font,
                                 er_ui_bounds(bounds.x + 16.0f, y,
                                              bounds.w - 32.0f, ER_UI_LEDGER_FIELD_H),
-                                colors, row->label, row->value);
+                                colors, row->label, row->value, row->selectable);
     if (status != ER_UI_OK) return status;
     y += row_gap;
     row++;
@@ -472,7 +488,7 @@ static er_ui_status_t er_ui_ledger_payout_card(
   er_ui_bounds_t bounds,
   er_ui_ledger_colors_t colors) {
   er_ui_ledger_field_row_t rows[] = {
-    {"Currency", "USD - United States Dollar"}
+    {"Currency", "USD - United States Dollar", true}
   };
   er_ui_status_t status = er_ui_ledger_card_with_header(scene, font, bounds, colors,
                                                         "Payout Threshold",
@@ -561,8 +577,8 @@ static er_ui_status_t er_ui_ledger_invest_card(
   er_ui_bounds_t bounds,
   er_ui_ledger_colors_t colors) {
   er_ui_ledger_field_row_t rows[] = {
-    {"Amount to Invest", "$ 1,000.00"},
-    {"Order Type", "Market Order"}
+    {"Amount to Invest", "$ 1,000.00", false},
+    {"Order Type", "Market Order", true}
   };
   er_ui_status_t status = er_ui_ledger_card_with_header(scene, font, bounds, colors, "Buy Investment", 0);
   if (status != ER_UI_OK) return status;
@@ -644,8 +660,8 @@ static er_ui_status_t er_ui_ledger_access_card(
   er_ui_bounds_t bounds,
   er_ui_ledger_colors_t colors) {
   er_ui_ledger_field_row_t rows[] = {
-    {"Email Address", "artist@studio.inc"},
-    {"Password", "************"}
+    {"Email Address", "artist@studio.inc", false},
+    {"Password", "************", false}
   };
   er_ui_status_t status = er_ui_ledger_card_with_header(scene, font, bounds, colors, "Account Access", 0);
   if (status != ER_UI_OK) return status;
@@ -662,8 +678,8 @@ static er_ui_status_t er_ui_ledger_transfer_card(
   er_ui_bounds_t bounds,
   er_ui_ledger_colors_t colors) {
   er_ui_ledger_field_row_t rows[] = {
-    {"Amount", "$ 1,200.00"},
-    {"From", "Main Checking"}
+    {"Amount", "$ 1,200.00", false},
+    {"From", "Main Checking", true}
   };
   er_ui_status_t status = er_ui_ledger_card_with_header(scene, font, bounds, colors,
                                                         "Transfer Funds",
