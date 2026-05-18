@@ -19,12 +19,15 @@ enum {
   ER_UI_RECORD_UTF8_2_MAX = 0xDFu,
   ER_UI_RECORD_UTF8_3_MIN = 0xE0u,
   ER_UI_RECORD_UTF8_3_MAX = 0xEFu,
+  ER_UI_RECORD_UTF8_SURROGATE_MIN = 0xEDu,
   ER_UI_RECORD_UTF8_4_MIN = 0xF0u,
   ER_UI_RECORD_UTF8_4_MAX = 0xF4u,
   ER_UI_RECORD_UTF8_E0_CONT_MIN = 0xA0u,
   ER_UI_RECORD_UTF8_ED_CONT_MAX = 0x9Fu,
   ER_UI_RECORD_UTF8_F0_CONT_MIN = 0x90u,
-  ER_UI_RECORD_UTF8_F4_CONT_MAX = 0x8Fu
+  ER_UI_RECORD_UTF8_F4_CONT_MAX = 0x8Fu,
+  ER_UI_RECORD_UTF8_2_BYTES = 2u,
+  ER_UI_RECORD_UTF8_3_BYTES = 3u
 };
 
 static bool er_ui_record_bytes_equal(const uint8_t* a, const uint8_t* b, size_t len) {
@@ -104,21 +107,21 @@ static bool er_ui_record_utf8_valid(const uint8_t* bytes, size_t len) {
       if ((b1 & ER_UI_RECORD_UTF8_CONT_MASK) != ER_UI_RECORD_UTF8_CONT_TAG) return false;
       offset += 2u;
     } else if (b0 >= ER_UI_RECORD_UTF8_3_MIN && b0 <= ER_UI_RECORD_UTF8_3_MAX) {
-      if (offset + 2u >= len) return false;
+      if (offset + (ER_UI_RECORD_UTF8_3_BYTES - 1u) >= len) return false;
       uint8_t b1 = bytes[offset + ER_UI_RECORD_BOOL_TRUE];
-      uint8_t b2 = bytes[offset + 2u];
+      uint8_t b2 = bytes[offset + (ER_UI_RECORD_UTF8_3_BYTES - 1u)];
       if ((b1 & ER_UI_RECORD_UTF8_CONT_MASK) != ER_UI_RECORD_UTF8_CONT_TAG ||
           (b2 & ER_UI_RECORD_UTF8_CONT_MASK) != ER_UI_RECORD_UTF8_CONT_TAG) {
         return false;
       }
       if (b0 == ER_UI_RECORD_UTF8_3_MIN && b1 < ER_UI_RECORD_UTF8_E0_CONT_MIN) return false;
-      if (b0 == 0xEDu && b1 > ER_UI_RECORD_UTF8_ED_CONT_MAX) return false;
-      offset += 3u;
+      if (b0 == ER_UI_RECORD_UTF8_SURROGATE_MIN && b1 > ER_UI_RECORD_UTF8_ED_CONT_MAX) return false;
+      offset += ER_UI_RECORD_UTF8_3_BYTES;
     } else if (b0 >= ER_UI_RECORD_UTF8_4_MIN && b0 <= ER_UI_RECORD_UTF8_4_MAX) {
-      if (offset + 3u >= len) return false;
+      if (offset + (ER_UI_RECORD_U32_BYTES - 1u) >= len) return false;
       uint8_t b1 = bytes[offset + ER_UI_RECORD_BOOL_TRUE];
-      uint8_t b2 = bytes[offset + 2u];
-      uint8_t b3 = bytes[offset + 3u];
+      uint8_t b2 = bytes[offset + ER_UI_RECORD_UTF8_2_BYTES];
+      uint8_t b3 = bytes[offset + ER_UI_RECORD_UTF8_3_BYTES];
       if ((b1 & ER_UI_RECORD_UTF8_CONT_MASK) != ER_UI_RECORD_UTF8_CONT_TAG ||
           (b2 & ER_UI_RECORD_UTF8_CONT_MASK) != ER_UI_RECORD_UTF8_CONT_TAG ||
           (b3 & ER_UI_RECORD_UTF8_CONT_MASK) != ER_UI_RECORD_UTF8_CONT_TAG) {
