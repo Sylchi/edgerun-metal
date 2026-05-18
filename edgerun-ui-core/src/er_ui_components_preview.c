@@ -459,6 +459,66 @@ er_ui_status_t er_ui_component_scene_preview_emit(
   return ER_UI_ERR_INVALID_ARGUMENT;
 }
 
+static er_ui_status_t er_ui_component_showcase_card_emit(
+  er_ui_scene_t* scene,
+  vr_font_face_t* font,
+  er_ui_bounds_t bounds,
+  er_ui_resolved_theme_t theme,
+  const er_ui_component_spec_t* spec,
+  const er_ui_component_spec_t* selected,
+  const er_ui_component_gallery_state_t* state,
+  uint32_t id) {
+  if (!scene || !font || !spec || !selected || !er_ui_bounds_valid(bounds)) return ER_UI_ERR_INVALID_ARGUMENT;
+  er_ui_status_t status = er_ui_scene_push_hit(scene, er_ui_hit(ER_UI_HIT_LIST_ROW, id, bounds.x, bounds.y, bounds.w, bounds.h));
+  if (status != ER_UI_OK) return status;
+  status = er_ui_component_card_emit(scene, bounds, theme);
+  if (status != ER_UI_OK) return status;
+  if (er_ui_component_streq(spec->slug, selected->slug)) {
+    status = er_ui_scene_push_rect(scene, er_ui_rect_border(bounds.x, bounds.y, bounds.w, bounds.h, theme.shadcn.radius.xl,
+                                                           er_ui_color_with_alpha(theme.shadcn.colors.ring, 0.72f)));
+    if (status != ER_UI_OK) return status;
+  }
+  er_ui_bounds_t content = er_ui_bounds_inset(bounds, ER_UI_COMPONENT_SHOWCASE_CARD_PAD, ER_UI_COMPONENT_SHOWCASE_CARD_PAD);
+  status = er_ui_component_push_ascii_text_clipped(scene, font, spec->name, content.x, content.y + 16.0f, content.w, theme.colors.text);
+  if (status != ER_UI_OK) return status;
+  if (content.h >= ER_UI_COMPONENT_SHOWCASE_CARD_DETAIL_MIN_H) {
+    status = er_ui_component_push_ascii_text_clipped(scene, font, er_ui_component_category_label(spec->category),
+                                                     content.x, content.y + 34.0f, content.w, theme.colors.muted);
+    if (status != ER_UI_OK) return status;
+  }
+  er_ui_bounds_t preview = er_ui_bounds(content.x,
+                                        content.y + ER_UI_COMPONENT_SHOWCASE_CARD_HEADER_H,
+                                        content.w,
+                                        content.h - ER_UI_COMPONENT_SHOWCASE_CARD_HEADER_H);
+  if (preview.h < ER_UI_COMPONENT_SHOWCASE_CARD_PREVIEW_MIN_H || preview.w < ER_UI_COMPONENT_SHOWCASE_CARD_PREVIEW_MIN_W) {
+    status = er_ui_scene_push_rect(scene, er_ui_rect_fill(preview.x,
+                                                         preview.y + er_ui_float_max(preview.h * 0.20f, 0.0f),
+                                                         er_ui_float_min(preview.w, 72.0f),
+                                                         er_ui_float_max(preview.h * 0.16f, 3.0f),
+                                                         theme.shadcn.radius.sm,
+                                                         theme.shadcn.colors.muted));
+    if (status != ER_UI_OK) return status;
+    status = er_ui_scene_push_rect(scene, er_ui_rect_fill(preview.x,
+                                                         preview.y + er_ui_float_max(preview.h * 0.48f, 0.0f),
+                                                         er_ui_float_min(preview.w * 0.74f, 96.0f),
+                                                         er_ui_float_max(preview.h * 0.16f, 3.0f),
+                                                         theme.shadcn.radius.sm,
+                                                         er_ui_color_with_alpha(theme.shadcn.colors.muted, 0.72f)));
+    if (status != ER_UI_OK) return status;
+    return er_ui_component_badge_emit(scene, font,
+                                      er_ui_bounds(content.x, bounds.y + bounds.h - 30.0f, er_ui_float_min(content.w, 88.0f), 22.0f),
+                                      theme,
+                                      er_ui_component_status_label(spec->status),
+                                      ER_UI_COMPONENT_BADGE_SECONDARY);
+  }
+  bool pushed = false;
+  status = er_ui_scene_push_clip(scene, er_ui_clip(preview.x, preview.y, preview.w, preview.h), &pushed);
+  if (status != ER_UI_OK) return status;
+  status = er_ui_component_scene_preview_emit(scene, font, preview, theme, spec->slug, state);
+  if (pushed) er_ui_scene_pop_clip(scene);
+  return status;
+}
+
 er_ui_status_t er_ui_component_showcase_emit(
   er_ui_scene_t* scene,
   vr_font_face_t* font,
@@ -473,42 +533,32 @@ er_ui_status_t er_ui_component_showcase_emit(
 
   er_ui_status_t status = er_ui_scene_push_rect(scene, er_ui_rect_fill(bounds.x, bounds.y, bounds.w, bounds.h, 0.0f, theme.colors.bg));
   if (status != ER_UI_OK) return status;
-  er_ui_bounds_t content = er_ui_bounds_inset(bounds, ER_UI_COMPONENT_SHOWCASE_INSET, ER_UI_COMPONENT_SHOWCASE_INSET);
-  er_ui_responsive_sidecar_t layout = er_ui_responsive_sidecar(
-    content,
-    ER_UI_COMPONENT_SHOWCASE_MIN_LIST_W,
-    ER_UI_COMPONENT_SHOWCASE_PREFERRED_LIST_W,
-    ER_UI_COMPONENT_SHOWCASE_MIN_PREVIEW_W,
-    ER_UI_COMPONENT_SHOWCASE_INSET,
-    ER_UI_COMPONENT_SHOWCASE_STACKED_LIST_H);
-  if (!er_ui_bounds_valid(layout.side) || !er_ui_bounds_valid(layout.main)) return ER_UI_ERR_INVALID_ARGUMENT;
-  er_ui_bounds_t list = layout.side;
-  er_ui_bounds_t preview = layout.main;
-  status = er_ui_component_card_emit(scene, list, theme);
+  er_ui_bounds_t grid_bounds = er_ui_bounds_inset(bounds, ER_UI_COMPONENT_SHOWCASE_GRID_GAP, ER_UI_COMPONENT_SHOWCASE_GRID_GAP);
+  er_ui_responsive_grid_t grid = er_ui_responsive_grid(grid_bounds,
+                                                       ER_UI_COMPONENT_SHOWCASE_GRID_MIN_CARD_W,
+                                                       ER_UI_COMPONENT_SHOWCASE_GRID_MAX_COLUMNS,
+                                                       ER_UI_COMPONENT_SHOWCASE_GRID_GAP,
+                                                       ER_UI_COMPONENT_SHOWCASE_GRID_GAP);
+  if (grid.columns == 0u) return ER_UI_ERR_INVALID_ARGUMENT;
+  size_t rows = er_ui_responsive_grid_row_count(grid, er_ui_component_count());
+  float row_h = er_ui_responsive_grid_row_height(grid, rows);
+  if (row_h <= 0.0f) return ER_UI_ERR_INVALID_ARGUMENT;
+  bool pushed = false;
+  status = er_ui_scene_push_clip(scene, er_ui_clip(bounds.x, bounds.y, bounds.w, bounds.h), &pushed);
   if (status != ER_UI_OK) return status;
-  status = er_ui_component_push_ascii_text(scene, font, "component components", list.x + 14.0f, list.y + 28.0f, theme.colors.text);
-  if (status != ER_UI_OK) return status;
-  size_t visible = er_ui_float_min((float)ER_UI_COMPONENT_COUNT, (list.h - 48.0f) / 24.0f);
-  for (size_t i = 0u; i < visible; ++i) {
+  for (size_t i = 0u; i < er_ui_component_count(); ++i) {
     const er_ui_component_spec_t* spec = er_ui_component_at(i);
     if (!spec) continue;
-    er_ui_bounds_t row = er_ui_bounds(list.x + 8.0f, list.y + 44.0f + (float)i * 24.0f, list.w - 16.0f, 22.0f);
-    status = er_ui_scene_push_hit(scene, er_ui_hit(ER_UI_HIT_LIST_ROW, ER_UI_COMPONENT_SHOWCASE_ROW_BASE_ID + (uint32_t)i, row.x, row.y, row.w, row.h));
-    if (status != ER_UI_OK) return status;
-    if (er_ui_component_streq(spec->slug, selected->slug)) {
-      status = er_ui_scene_push_rect(scene, er_ui_rect_fill(row.x, row.y, row.w, row.h, theme.radius.control, er_ui_color_with_alpha(theme.colors.active, 0.54f)));
-      if (status != ER_UI_OK) return status;
-    }
-    status = er_ui_component_push_ascii_text(scene, font, spec->name, row.x + 8.0f, row.y + 16.0f, theme.colors.text);
-    if (status != ER_UI_OK) return status;
+    status = er_ui_component_showcase_card_emit(scene,
+                                                font,
+                                                er_ui_responsive_grid_cell(grid, i, row_h),
+                                                theme,
+                                                spec,
+                                                selected,
+                                                state,
+                                                ER_UI_COMPONENT_SHOWCASE_ROW_BASE_ID + (uint32_t)i);
+    if (status != ER_UI_OK) break;
   }
-
-  status = er_ui_component_card_emit(scene, preview, theme);
-  if (status != ER_UI_OK) return status;
-  status = er_ui_component_push_ascii_text(scene, font, selected->name, preview.x + 18.0f, preview.y + 30.0f, theme.colors.text);
-  if (status != ER_UI_OK) return status;
-  status = er_ui_component_push_ascii_text(scene, font, er_ui_component_category_label(selected->category), preview.x + 18.0f, preview.y + 54.0f, theme.colors.muted);
-  if (status != ER_UI_OK) return status;
-  er_ui_bounds_t body = er_ui_bounds(preview.x + 18.0f, preview.y + 76.0f, preview.w - 36.0f, preview.h - 94.0f);
-  return er_ui_component_scene_preview_emit(scene, font, body, theme, selected->slug, state);
+  if (pushed) er_ui_scene_pop_clip(scene);
+  return status;
 }

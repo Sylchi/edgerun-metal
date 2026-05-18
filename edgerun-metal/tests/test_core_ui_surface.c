@@ -577,7 +577,7 @@ static void test_ui_ledger_app_switching(void) {
               ER_UI_OK);
   stats = er_ui_scene_stats(&scene);
   check_int64("ui ledger emits rects", stats.rects > 0u, 1);
-  check_uint64("ui ledger emits hits", stats.hits, 6u);
+  check_uint64("ui ledger emits hits", stats.hits, 21u);
   check_int64("ui ledger emits text", stats.text_quads > 0u, 1);
 
   down = er_ui_runtime_pointer_down(&runtime, &scene, 40.0f, 138.0f);

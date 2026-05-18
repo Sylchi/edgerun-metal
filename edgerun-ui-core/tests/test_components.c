@@ -42,14 +42,6 @@
 #define ER_UI_TEST_COMPONENT_NARROW_ID_OFFSET 80u
 #define ER_UI_TEST_APP_STORE_CARD_REQUIRED_FIELDS 3u
 #define ER_UI_TEST_METAL_BOARD_BASE_ID (ER_UI_COMPONENT_PREVIEW_BASE_ID + 4600u)
-#define ER_UI_TEST_METAL_PAYOUT_SELECT_ID (ER_UI_TEST_METAL_BOARD_BASE_ID + 120u)
-#define ER_UI_TEST_METAL_PAYOUT_SLIDER_ID (ER_UI_TEST_METAL_BOARD_BASE_ID + 121u)
-#define ER_UI_TEST_METAL_PAYOUT_NOTES_ID (ER_UI_TEST_METAL_BOARD_BASE_ID + 122u)
-#define ER_UI_TEST_METAL_PAYOUT_SAVE_ID (ER_UI_TEST_METAL_BOARD_BASE_ID + 123u)
-#define ER_UI_TEST_METAL_INVEST_AMOUNT_ID (ER_UI_TEST_METAL_BOARD_BASE_ID + 140u)
-#define ER_UI_TEST_METAL_INVEST_ORDER_ID (ER_UI_TEST_METAL_BOARD_BASE_ID + 141u)
-#define ER_UI_TEST_METAL_INVEST_REVIEW_ID (ER_UI_TEST_METAL_BOARD_BASE_ID + 143u)
-#define ER_UI_TEST_METAL_COMPACT_FIRST_FORM_HIT_Y_MIN 150.0f
 
 static const er_ui_hit_t* test_component_find_hit(const er_ui_scene_t* scene, uint32_t id) {
   if (!scene) return NULL;
@@ -57,10 +49,6 @@ static const er_ui_hit_t* test_component_find_hit(const er_ui_scene_t* scene, ui
     if (scene->hits[i].id == id) return &scene->hits[i];
   }
   return NULL;
-}
-
-static bool test_component_hit_before(const er_ui_hit_t* a, const er_ui_hit_t* b) {
-  return a && b && a->y + a->h <= b->y;
 }
 
 static float test_component_text_max_x_since(const er_ui_scene_t* scene, size_t first_quad) {
@@ -272,23 +260,9 @@ static void test_component_render_primitives(void) {
   expect_true(scene.hit_count > 0u, "metal surface: narrow compact layout emits controls");
   er_ui_scene_clear_commands(&scene);
   expect_status(er_ui_edgerun_metal_surface_emit(&scene, face, er_ui_bounds(0.0f, 0.0f, 1280.0f, 720.0f), theme, &state), ER_UI_OK,
-                "metal surface: qemu 720p scene re-emits for compact control checks");
-  const er_ui_hit_t* payout_select = test_component_find_hit(&scene, ER_UI_TEST_METAL_PAYOUT_SELECT_ID);
-  const er_ui_hit_t* payout_slider = test_component_find_hit(&scene, ER_UI_TEST_METAL_PAYOUT_SLIDER_ID);
-  const er_ui_hit_t* payout_notes = test_component_find_hit(&scene, ER_UI_TEST_METAL_PAYOUT_NOTES_ID);
-  const er_ui_hit_t* payout_save = test_component_find_hit(&scene, ER_UI_TEST_METAL_PAYOUT_SAVE_ID);
-  const er_ui_hit_t* invest_amount = test_component_find_hit(&scene, ER_UI_TEST_METAL_INVEST_AMOUNT_ID);
-  const er_ui_hit_t* invest_order = test_component_find_hit(&scene, ER_UI_TEST_METAL_INVEST_ORDER_ID);
-  const er_ui_hit_t* invest_review = test_component_find_hit(&scene, ER_UI_TEST_METAL_INVEST_REVIEW_ID);
-  expect_true(payout_select && payout_select->y >= ER_UI_TEST_METAL_COMPACT_FIRST_FORM_HIT_Y_MIN,
-              "metal surface: compact payout controls clear card title band");
-  expect_true(invest_amount && invest_amount->y >= ER_UI_TEST_METAL_COMPACT_FIRST_FORM_HIT_Y_MIN,
-              "metal surface: compact investment controls clear card title band");
-  expect_true(test_component_hit_before(payout_select, payout_slider), "metal surface: compact payout select precedes slider");
-  expect_true(test_component_hit_before(payout_slider, payout_notes), "metal surface: compact payout slider precedes notes field");
-  expect_true(test_component_hit_before(payout_notes, payout_save), "metal surface: compact payout notes precede save action");
-  expect_true(test_component_hit_before(invest_amount, invest_order), "metal surface: compact investment amount precedes order select");
-  expect_true(test_component_hit_before(invest_order, invest_review), "metal surface: compact investment order precedes review action");
+                "metal surface: qemu 720p scene re-emits for component gallery checks");
+  expect_true(test_component_find_hit(&scene, ER_UI_COMPONENT_SHOWCASE_ROW_BASE_ID) != NULL,
+              "metal surface: compact gallery exposes component cards");
 
   for (size_t i = 0u; i < er_ui_component_count(); ++i) {
     const er_ui_component_spec_t* spec = er_ui_component_at(i);
