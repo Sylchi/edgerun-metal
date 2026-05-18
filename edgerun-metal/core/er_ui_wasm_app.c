@@ -1,4 +1,5 @@
 #include "er_ui_wasm_app.h"
+#include "er_crypto_blake3.h"
 #include "er_mem.h"
 
 #define ER_UI_WASM_U32_BYTE0 0u
@@ -76,6 +77,116 @@ static ErEpochClockModifier er_ui_wasm_app_effective_modifier(ErEpochClockModifi
   return modifier;
 }
 
+static UINT8 er_ui_wasm_app_stats_equal(er_ui_scene_stats_t left,
+                                        er_ui_scene_stats_t right) {
+  return (UINT8)(left.rects == right.rects &&
+                 left.hits == right.hits &&
+                 left.drag_sources == right.drag_sources &&
+                 left.drop_targets == right.drop_targets &&
+                 left.transitions == right.transitions &&
+                 left.icon_quads == right.icon_quads &&
+                 left.text_quads == right.text_quads);
+}
+
+static UINT8 er_ui_wasm_app_prepare_render_route(const ErAppUiPresentation* presentation,
+                                                 ErAdmittedRoute* out_route) {
+  if (presentation == 0 || out_route == 0 ||
+      presentation->abi_version != ER_APP_ABI_VERSION) {
+    return 0u;
+  }
+  er_mem_zero((UINT8*)out_route, (UINTN)sizeof(*out_route));
+  out_route->abi_version = ER_WORK_ABI_VERSION;
+  out_route->role = ER_NODE_ROLE_CAPABILITY;
+  out_route->route_id = presentation->route_hash;
+  out_route->request_hash = presentation->presentation_id;
+  out_route->admission_hash = presentation->admission_id;
+  out_route->source_node_id = presentation->app_node_id;
+  out_route->target_node_id = presentation->ui_relay_node_id;
+  out_route->relay_node_id = presentation->ui_relay_node_id;
+  out_route->channel_id = presentation->presentation_id;
+  out_route->relay_count = 1u;
+  out_route->department = ER_DEPARTMENT_CAPABILITY;
+  out_route->work_type = ER_WORK_TYPE_CAPABILITY_INVOKE;
+  out_route->admission_route_commitment = presentation->route_hash;
+  out_route->target_route_commitment = presentation->route_hash;
+  out_route->policy_hash = presentation->jurisdiction_id;
+  out_route->admitted_budget = presentation->max_rects + presentation->max_hits +
+                               presentation->max_drag_sources +
+                               presentation->max_drop_targets +
+                               presentation->max_transitions +
+                               presentation->max_icon_quads +
+                               presentation->max_text_quads;
+  out_route->valid_until_ms = presentation->sequence;
+  out_route->relay_path[0] = presentation->ui_relay_node_id;
+  return (UINT8)(out_route->admitted_budget != 0u);
+}
+
+static UINT8 er_ui_wasm_app_prepare_render_envelope(const ErAppUiPresentation* presentation,
+                                                    const ErHash* scene_hash,
+                                                    ErChannelEnvelopeHeader* out_envelope) {
+  if (presentation == 0 || scene_hash == 0 || out_envelope == 0) {
+    return 0u;
+  }
+  er_mem_zero((UINT8*)out_envelope, (UINTN)sizeof(*out_envelope));
+  out_envelope->abi_version = ER_WORK_ABI_VERSION;
+  out_envelope->packet_kind = ER_WORK_TYPE_CAPABILITY_INVOKE;
+  out_envelope->channel_id = presentation->presentation_id;
+  out_envelope->from = presentation->app_node_id;
+  out_envelope->to = presentation->ui_relay_node_id;
+  out_envelope->route_hash = presentation->route_hash;
+  out_envelope->packet_hash = *scene_hash;
+  out_envelope->sequence = presentation->sequence;
+  out_envelope->previous_message_hash = presentation->jurisdiction_id;
+  return 1u;
+}
+
+static UINT8 er_ui_wasm_app_decode_render_endpoint(ErUiWasmAppRuntime* runtime,
+                                                   const UINT8* bytes,
+                                                   UINT32 len,
+                                                   const er_ui_scene_stats_t* stats) {
+  ErCryptoProvider crypto;
+  ErHash scene_hash;
+  ErAdmittedRoute route;
+  ErChannelEnvelopeHeader envelope;
+  ErCapabilityEnvelopeHeader capability;
+
+  if (runtime == 0 || runtime->presentation == 0 || runtime->scene == 0 ||
+      bytes == 0 || len == 0u || stats == 0) {
+    return 0u;
+  }
+  er_crypto_blake3_provider(&crypto);
+  if (er_render_endpoint_scene_payload_hash(&crypto, bytes, len,
+                                            &scene_hash) == 0u ||
+      er_ui_wasm_app_prepare_render_route(runtime->presentation,
+                                          &route) == 0u ||
+      er_ui_wasm_app_prepare_render_envelope(runtime->presentation,
+                                             &scene_hash, &envelope) == 0u ||
+      er_work_prepare_capability_envelope_header(ER_CAPABILITY_PACKET_INVOKE,
+                                                 ER_WORK_TYPE_CAPABILITY_INVOKE,
+                                                 ER_CAPABILITY_CONTENT_RENDER,
+                                                 ER_CAPABILITY_RISK_NONE,
+                                                 &runtime->presentation->jurisdiction_id,
+                                                 &runtime->presentation->presentation_id,
+                                                 &runtime->presentation->admission_id,
+                                                 &runtime->presentation->app_node_id,
+                                                 &runtime->presentation->ui_relay_node_id,
+                                                 runtime->presentation->sequence,
+                                                 runtime->settlement_clock.now.tick + 1u,
+                                                 &scene_hash, len,
+                                                 &capability) == 0u ||
+      er_render_endpoint_capture(&crypto, &route, &envelope, &capability,
+                                 &runtime->last_render_capture) == 0u ||
+      er_render_endpoint_decode_scene_payload(&crypto, &runtime->last_render_capture,
+                                              bytes, len, runtime->scene,
+                                              &runtime->last_render_scene) == 0u ||
+      er_ui_wasm_app_stats_equal(runtime->last_render_scene.scene_stats,
+                                 *stats) == 0u) {
+    return 0u;
+  }
+  runtime->emitted_stats = runtime->last_render_scene.scene_stats;
+  return 1u;
+}
+
 static int er_ui_wasm_app_prepare_input_window(ErUiWasmAppRuntime* runtime,
                                                UINT32 len, UINT8** out_inbox) {
   if (runtime == 0 || len == 0u || runtime->prepared == 0u ||
@@ -138,8 +249,7 @@ static INT64 er_ui_wasm_app_emit_host(void* user, const UINT8* bytes, UINT32 len
   if (bytes == 0 || stats == 0 || runtime == 0 || runtime->scene == 0) {
     return -1;
   }
-  if (er_wasm_ui_command_decode(bytes, len, runtime->scene,
-                                &runtime->emitted_stats) != 0) {
+  if (er_ui_wasm_app_decode_render_endpoint(runtime, bytes, len, stats) == 0u) {
     return -1;
   }
   runtime->emitted = 1u;
@@ -163,6 +273,8 @@ int er_ui_wasm_app_prepare(const UINT8* module_data, UINT32 module_size,
   er_mem_zero((UINT8*)&runtime->emitted_stats, (UINTN)sizeof(runtime->emitted_stats));
   er_mem_zero((UINT8*)&runtime->last_input_epoch, (UINTN)sizeof(runtime->last_input_epoch));
   er_mem_zero((UINT8*)&runtime->last_execute_epoch, (UINTN)sizeof(runtime->last_execute_epoch));
+  er_mem_zero((UINT8*)&runtime->last_render_capture, (UINTN)sizeof(runtime->last_render_capture));
+  er_mem_zero((UINT8*)&runtime->last_render_scene, (UINTN)sizeof(runtime->last_render_scene));
   clock_limits = er_epoch_clock_default_limits();
   if (er_epoch_clock_init(&clock_limits, &runtime->settlement_clock) == 0u) {
     return -1;
@@ -256,6 +368,8 @@ int er_ui_wasm_app_execute(ErUiWasmAppRuntime* runtime, INT64* out_result) {
   }
   er_ui_scene_clear_commands(runtime->scene);
   er_mem_zero((UINT8*)&runtime->emitted_stats, (UINTN)sizeof(runtime->emitted_stats));
+  er_mem_zero((UINT8*)&runtime->last_render_capture, (UINTN)sizeof(runtime->last_render_capture));
+  er_mem_zero((UINT8*)&runtime->last_render_scene, (UINTN)sizeof(runtime->last_render_scene));
   runtime->emitted = 0u;
   if (er_wasm_execute_i64(&runtime->module, runtime->main_index, &result) != 0 ||
       runtime->emitted == 0u) {

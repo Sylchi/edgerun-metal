@@ -156,12 +156,12 @@ Proof:
 
 ### M6: User-authored Wasm UI app proof
 
-Status: relay hostcall foundation, concurrent local Wasm UI app contexts, content-addressed app package records, validated package object loading, boot-local package-loaded app launch, admitted storage-source binding, storage endpoint response adaptation, storage-bound package loading, Wasm render capability relay-send proof, render endpoint capture, and endpoint-owned scene decode implemented; OS loop integration and VirtIO GPU endpoint submission are next.
+Status: relay hostcall foundation, concurrent local Wasm UI app contexts, content-addressed app package records, validated package object loading, boot-local package-loaded app launch, admitted storage-source binding, storage endpoint response adaptation, storage-bound package loading, Wasm render capability relay-send proof, render endpoint capture, endpoint-owned scene decode, and OS loop consumption of endpoint-owned app scenes implemented; relay-ingress route integration and VirtIO GPU endpoint submission are next.
 
 - Keep bounded Wasm imports for relay send/receive as the durable app boundary.
 - Keep each loaded app in an explicit runtime context with preallocated memory, presentation identity, scene state, and app-switcher selection.
 - Replace the embedded package packet source with real endpoint responses that satisfy the admitted storage-source route ids and object identities for saved user-authored app packages.
-- Connect render endpoint scene decode into the OS loop and add VirtIO GPU endpoint submission.
+- Connect relay ingress to the same render endpoint scene decode path and add VirtIO GPU endpoint submission.
 - Feed input or completion packets back through relay receive.
 - Move driver modules away from direct PCI/MMIO hostcalls as the durable ABI.
 - Keep direct bus hostcalls only for bring-up until relay device endpoints are proven.

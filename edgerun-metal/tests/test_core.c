@@ -2928,6 +2928,24 @@ static void test_ui_wasm_app_runner(void) {
                  ER_WASM_UI_HIT_RECORD_LEN +
                  ER_WASM_UI_QUAD_RECORD_LEN);
   check_uint64("ui wasm app emitted", runtime.emitted, 1u);
+  check_int64("ui wasm app render capture abi",
+              runtime.last_render_capture.abi_version,
+              ER_RENDER_ENDPOINT_ABI_VERSION);
+  check_int64("ui wasm app render scene abi",
+              runtime.last_render_scene.abi_version,
+              ER_RENDER_ENDPOINT_ABI_VERSION);
+  check_hash_equal("ui wasm app render route",
+                   &runtime.last_render_capture.route_id,
+                   &presentation.route_hash);
+  check_hash_equal("ui wasm app render capture scene hash",
+                   &runtime.last_render_scene.scene_hash,
+                   &runtime.last_render_capture.scene_hash);
+  check_uint64("ui wasm app render scene rects",
+               runtime.last_render_scene.scene_stats.rects, 1u);
+  check_uint64("ui wasm app render scene hits",
+               runtime.last_render_scene.scene_stats.hits, 1u);
+  check_uint64("ui wasm app render scene text",
+               runtime.last_render_scene.scene_stats.text_quads, 1u);
   check_uint64("ui wasm app execute epoch tick", runtime.last_execute_epoch.tick, 10u);
   check_uint64("ui wasm app rects", scene.rect_count, 1u);
   check_uint64("ui wasm app hits", scene.hit_count, 1u);
@@ -3040,6 +3058,16 @@ static void test_ui_wasm_app_multiple_runtimes(void) {
                memory_b[ER_UI_WASM_INPUT_SEQUENCE_OFFSET], 2u);
   check_uint64("ui wasm multi emitted a", runtime_a.emitted, 1u);
   check_uint64("ui wasm multi emitted b", runtime_b.emitted, 1u);
+  check_hash_equal("ui wasm multi render route a",
+                   &runtime_a.last_render_capture.route_id,
+                   &presentation_a.route_hash);
+  check_hash_equal("ui wasm multi render route b",
+                   &runtime_b.last_render_capture.route_id,
+                   &presentation_b.route_hash);
+  check_uint64("ui wasm multi render scene a hits",
+               runtime_a.last_render_scene.scene_stats.hits, 1u);
+  check_uint64("ui wasm multi render scene b hits",
+               runtime_b.last_render_scene.scene_stats.hits, 1u);
 
   er_ui_scene_destroy(&scene_b);
   er_ui_scene_destroy(&scene_a);

@@ -43,6 +43,7 @@ The shared contract is what lets these parts interoperate. The admissions remain
 - Relay sends are validated against serialized packet shape, app identity, admission id, budget token, and packet-byte budget before host relay dispatch.
 - `er_work` can prepare and validate bounded capability envelope headers, including render capability invocations for app-authored scene payloads.
 - `er_render_endpoint` can deterministically capture admitted render capability work, verify scene payload hashes, and decode endpoint-owned UI scenes after route, channel envelope, and render capability header verification.
+- Wasm UI app `ui_emit` dispatch now passes through render endpoint capture/decode before the OS loop consumes app scene state.
 - `varfont`, `edgerun-ui-core`, and the VirtIO GPU path provide enough UI/text/rendering foundation for polished app surfaces.
 - The OS path can hold multiple Wasm UI apps concurrently as explicit runtime contexts with isolated preallocated memory, presentation identity, scene state, and app-switcher selection.
 - App package identity is derived from app code, manifest, and UI asset object ids and lengths. Labels can name those objects inside manifests, but labels do not define package identity.
