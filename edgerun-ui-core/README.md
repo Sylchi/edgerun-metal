@@ -35,6 +35,17 @@ canonical icon IDs. Direct `er_ui_scene_push_*` calls are reserved for renderer
 primitives, component internals, workspace placement, and genuinely new
 component implementations that are then reused by surfaces.
 
+Layout primitives are first-class nodes: use `er_ui_node_row`,
+`er_ui_node_column`, `er_ui_node_grid`, `er_ui_node_masonry`,
+`er_ui_node_bento_grid`, and `er_ui_node_scroll_area` for app structure.
+`er_ui_node_set_spacing` defines padding, gap, and margin together; bento items
+use `er_ui_node_set_grid_span`; draggable/reorderable surfaces use
+`er_ui_node_set_draggable`, `er_ui_node_set_drop_target`, or
+`er_ui_node_set_reorderable`. Visual polish that belongs to a reusable node is
+also declared on the node with `er_ui_node_set_background_gradient` and
+`er_ui_node_set_transition`, so gradients and motion stay in the component
+system rather than scattered across app surfaces.
+
 Production code is freestanding:
 
 - `src/` does not depend on host libc allocation, string, or math APIs.

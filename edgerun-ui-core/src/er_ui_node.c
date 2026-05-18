@@ -1,11 +1,22 @@
 #include "er_ui_node.h"
 #include "er_ui_painter.h"
 
+static const float ER_UI_NODE_DEFAULT_GAP = 8.0f;
+static const float ER_UI_NODE_CARD_PADDING = 12.0f;
+static const float ER_UI_NODE_BENTO_CELL_ASPECT = 0.75f;
+static const float ER_UI_NODE_MASONRY_DEFAULT_HEIGHT_RATIO = 0.78f;
+static const float ER_UI_NODE_MASONRY_STEP_HEIGHT_RATIO = 0.18f;
+enum { ER_UI_NODE_MASONRY_STEP_COUNT = 3u };
+enum { ER_UI_NODE_BENTO_MAX_ROWS = ER_UI_NODE_MAX_CHILDREN * ER_UI_NODE_MAX_CHILDREN };
+
 static er_ui_node_t er_ui_node_base(er_ui_node_kind_t kind) {
   er_ui_node_t node = {0};
   node.kind = kind;
-  node.gap = 8.0f;
+  node.gap = ER_UI_NODE_DEFAULT_GAP;
   node.padding = 0.0f;
+  node.margin = 0.0f;
+  node.column_span = 1u;
+  node.row_span = 1u;
   node.active = true;
   node.button_size = ER_UI_SHADCN_BUTTON_SIZE_DEFAULT;
   node.button_variant = ER_UI_SHADCN_BUTTON_DEFAULT;
@@ -23,7 +34,7 @@ er_ui_node_t er_ui_node_column(void) {
 
 er_ui_node_t er_ui_node_card(void) {
   er_ui_node_t node = er_ui_node_base(ER_UI_NODE_CARD);
-  node.padding = 12.0f;
+  node.padding = ER_UI_NODE_CARD_PADDING;
   return node;
 }
 
@@ -777,6 +788,40 @@ er_ui_node_t* er_ui_node_set_padding(er_ui_node_t* node, float padding) {
   return node;
 }
 
+er_ui_node_t* er_ui_node_set_margin(er_ui_node_t* node, float margin) {
+  if (!node) return node;
+  node->margin = er_ui_float_max(margin, 0.0f);
+  return node;
+}
+
+er_ui_node_t* er_ui_node_set_spacing(er_ui_node_t* node, float padding, float gap, float margin) {
+  er_ui_node_set_padding(node, padding);
+  er_ui_node_set_gap(node, gap);
+  return er_ui_node_set_margin(node, margin);
+}
+
+er_ui_node_t* er_ui_node_set_grid_span(er_ui_node_t* node, size_t column_span, size_t row_span) {
+  if (!node) return node;
+  node->column_span = column_span == 0u ? 1u : column_span;
+  node->row_span = row_span == 0u ? 1u : row_span;
+  return node;
+}
+
+er_ui_node_t* er_ui_node_set_background_gradient(er_ui_node_t* node, er_ui_color4_t from, er_ui_color4_t to) {
+  if (!node) return node;
+  node->has_background_gradient = true;
+  node->background_gradient_from = from;
+  node->background_gradient_to = to;
+  return node;
+}
+
+er_ui_node_t* er_ui_node_set_transition(er_ui_node_t* node, er_ui_transition_t transition) {
+  if (!node) return node;
+  node->has_transition = true;
+  node->transition = transition;
+  return node;
+}
+
 er_ui_node_t* er_ui_node_set_draggable(er_ui_node_t* node, uint32_t scope_id, uint32_t item_id, size_t index) {
   if (!node) return node;
   node->has_drag_source = true;
@@ -1003,6 +1048,142 @@ static er_ui_bounds_t er_ui_node_grid_cell_bounds(const er_ui_node_grid_layout_t
     layout->cell_h);
 }
 
+static float er_ui_node_child_requested_height(const er_ui_node_t* child, float width, size_t child_index) {
+  if (child && er_ui_bounds_valid(child->bounds)) return child->bounds.h;
+  float step = (float)(child_index % ER_UI_NODE_MASONRY_STEP_COUNT);
+  return width * (ER_UI_NODE_MASONRY_DEFAULT_HEIGHT_RATIO + ER_UI_NODE_MASONRY_STEP_HEIGHT_RATIO * step);
+}
+
+//@optimizer-ignore-function masonry layout must place each prior child into the current shortest column
+static er_ui_status_t er_ui_node_masonry_child_bounds(
+  const er_ui_node_t* node,
+  size_t child_index,
+  er_ui_bounds_t bounds,
+  er_ui_bounds_t* out_bounds) {
+  if (!node || !out_bounds) return ER_UI_ERR_INVALID_ARGUMENT;
+  if (child_index >= node->child_count || !node->children[child_index]) return ER_UI_ERR_INVALID_ARGUMENT;
+  if (node->child_count == 0u) return ER_UI_ERR_INVALID_ARGUMENT;
+  size_t columns = node->selected == 0u ? 1u : node->selected;
+  if (columns > ER_UI_NODE_MAX_CHILDREN) columns = ER_UI_NODE_MAX_CHILDREN;
+  if (columns > node->child_count) columns = node->child_count;
+  er_ui_bounds_t content = er_ui_bounds_inset(bounds, node->padding, node->padding);
+  float total_gap_x = node->gap * (float)(columns - 1u);
+  float column_w = (content.w - total_gap_x) / (float)columns;
+  if (column_w <= 0.0f || content.h <= 0.0f) return ER_UI_ERR_INVALID_ARGUMENT;
+  float heights[ER_UI_NODE_MAX_CHILDREN] = {0};
+  er_ui_bounds_t selected = content;
+  for (size_t i = 0u; i <= child_index; ++i) {
+    size_t column = 0u;
+    float min_height = heights[0];
+    for (size_t candidate = 1u; candidate < columns; ++candidate) {
+      if (heights[candidate] < min_height) {
+        column = candidate;
+        min_height = heights[candidate];
+      }
+    }
+    float requested_h = er_ui_node_child_requested_height(node->children[i], column_w, i);
+    er_ui_bounds_t placed = er_ui_bounds(content.x + (column_w + node->gap) * (float)column, content.y + heights[column], column_w, requested_h);
+    if (i == child_index) selected = placed;
+    heights[column] += requested_h + node->gap;
+  }
+  *out_bounds = er_ui_node_resolve_bounds(node->children[child_index], selected);
+  return ER_UI_OK;
+}
+
+static size_t er_ui_node_child_column_span(const er_ui_node_t* child, size_t columns) {
+  size_t span = child && child->column_span > 0u ? child->column_span : 1u;
+  return span > columns ? columns : span;
+}
+
+static size_t er_ui_node_child_row_span(const er_ui_node_t* child) {
+  return child && child->row_span > 0u ? child->row_span : 1u;
+}
+
+//@optimizer-ignore-function bento layout must test every cell covered by a candidate span
+static bool er_ui_node_bento_cells_available(
+  const bool occupied[ER_UI_NODE_BENTO_MAX_ROWS][ER_UI_NODE_MAX_CHILDREN],
+  size_t row,
+  size_t column,
+  size_t row_span,
+  size_t column_span,
+  size_t columns) {
+  if (column + column_span > columns) return false;
+  if (row + row_span > ER_UI_NODE_BENTO_MAX_ROWS) return false;
+  for (size_t y = row; y < row + row_span; ++y) {
+    for (size_t x = column; x < column + column_span; ++x) {
+      if (occupied[y][x]) return false;
+    }
+  }
+  return true;
+}
+
+//@optimizer-ignore-function bento layout must mark every occupied cell covered by a placed span
+static void er_ui_node_bento_mark_cells(
+  bool occupied[ER_UI_NODE_BENTO_MAX_ROWS][ER_UI_NODE_MAX_CHILDREN],
+  size_t row,
+  size_t column,
+  size_t row_span,
+  size_t column_span) {
+  for (size_t y = row; y < row + row_span; ++y) {
+    for (size_t x = column; x < column + column_span; ++x) occupied[y][x] = true;
+  }
+}
+
+//@optimizer-ignore-function bento layout must scan bounded rows and columns to find the first fitting span
+static er_ui_status_t er_ui_node_bento_find_cell(
+  const bool occupied[ER_UI_NODE_BENTO_MAX_ROWS][ER_UI_NODE_MAX_CHILDREN],
+  size_t row_span,
+  size_t column_span,
+  size_t columns,
+  size_t* out_row,
+  size_t* out_column) {
+  if (!out_row || !out_column) return ER_UI_ERR_INVALID_ARGUMENT;
+  for (size_t row = 0u; row < ER_UI_NODE_BENTO_MAX_ROWS; ++row) {
+    for (size_t column = 0u; column < columns; ++column) {
+      if (er_ui_node_bento_cells_available(occupied, row, column, row_span, column_span, columns)) {
+        *out_row = row;
+        *out_column = column;
+        return ER_UI_OK;
+      }
+    }
+  }
+  return ER_UI_ERR_INVALID_ARGUMENT;
+}
+
+static er_ui_status_t er_ui_node_bento_child_bounds(
+  const er_ui_node_t* node,
+  size_t child_index,
+  er_ui_bounds_t bounds,
+  er_ui_bounds_t* out_bounds) {
+  if (!node || !out_bounds) return ER_UI_ERR_INVALID_ARGUMENT;
+  if (child_index >= node->child_count || !node->children[child_index]) return ER_UI_ERR_INVALID_ARGUMENT;
+  size_t columns = node->selected == 0u ? 1u : node->selected;
+  if (columns > ER_UI_NODE_MAX_CHILDREN) columns = ER_UI_NODE_MAX_CHILDREN;
+  er_ui_bounds_t content = er_ui_bounds_inset(bounds, node->padding, node->padding);
+  float total_gap_x = node->gap * (float)(columns - 1u);
+  float cell_w = (content.w - total_gap_x) / (float)columns;
+  float cell_h = cell_w * ER_UI_NODE_BENTO_CELL_ASPECT;
+  if (cell_w <= 0.0f || cell_h <= 0.0f) return ER_UI_ERR_INVALID_ARGUMENT;
+  bool occupied[ER_UI_NODE_BENTO_MAX_ROWS][ER_UI_NODE_MAX_CHILDREN] = {{false}};
+  er_ui_bounds_t selected = content;
+  for (size_t i = 0u; i <= child_index; ++i) {
+    const er_ui_node_t* child = node->children[i];
+    size_t col_span = er_ui_node_child_column_span(child, columns);
+    size_t row_span = er_ui_node_child_row_span(child);
+    size_t row = 0u;
+    size_t column = 0u;
+    er_ui_status_t cell_status = er_ui_node_bento_find_cell(occupied, row_span, col_span, columns, &row, &column);
+    if (cell_status != ER_UI_OK) return cell_status;
+    float w = cell_w * (float)col_span + node->gap * (float)(col_span - 1u);
+    float h = cell_h * (float)row_span + node->gap * (float)(row_span - 1u);
+    er_ui_bounds_t placed = er_ui_bounds(content.x + (cell_w + node->gap) * (float)column, content.y + (cell_h + node->gap) * (float)row, w, h);
+    if (i == child_index) selected = placed;
+    er_ui_node_bento_mark_cells(occupied, row, column, row_span, col_span);
+  }
+  *out_bounds = er_ui_node_resolve_bounds(node->children[child_index], selected);
+  return ER_UI_OK;
+}
+
 static er_ui_status_t er_ui_node_linear_child_bounds(
   const er_ui_node_t* node,
   size_t child_index,
@@ -1063,9 +1244,11 @@ er_ui_status_t er_ui_node_child_bounds(const er_ui_node_t* node, size_t child_in
     case ER_UI_NODE_CARD:
       return er_ui_node_linear_child_bounds(node, child_index, rect, false, out_bounds);
     case ER_UI_NODE_GRID:
-    case ER_UI_NODE_MASONRY:
-    case ER_UI_NODE_BENTO_GRID:
       return er_ui_node_grid_child_bounds(node, child_index, rect, out_bounds);
+    case ER_UI_NODE_MASONRY:
+      return er_ui_node_masonry_child_bounds(node, child_index, rect, out_bounds);
+    case ER_UI_NODE_BENTO_GRID:
+      return er_ui_node_bento_child_bounds(node, child_index, rect, out_bounds);
     case ER_UI_NODE_SCROLL_AREA:
     case ER_UI_NODE_CONVERSATION:
       return er_ui_node_scrolled_child_bounds(node, child_index, rect, out_bounds);
@@ -1697,8 +1880,42 @@ er_ui_status_t er_ui_node_accessibility_child(const er_ui_node_t* node, size_t c
 
 static er_ui_bounds_t er_ui_node_resolve_bounds(const er_ui_node_t* node, er_ui_bounds_t bounds) {
   if (!node) return bounds;
-  if (er_ui_bounds_valid(node->bounds)) return node->bounds;
-  return bounds;
+  er_ui_bounds_t resolved = er_ui_bounds_valid(node->bounds) ? node->bounds : bounds;
+  if (node->margin > 0.0f) return er_ui_bounds_inset(resolved, node->margin, node->margin);
+  return resolved;
+}
+
+static er_ui_status_t er_ui_node_emit_chrome(const er_ui_node_t* node, er_ui_scene_t* scene, er_ui_bounds_t bounds, er_ui_resolved_theme_t theme) {
+  if (!node || !scene) return ER_UI_ERR_INVALID_ARGUMENT;
+  (void)bounds;
+  (void)theme;
+  if (node->has_transition) {
+    er_ui_status_t status = er_ui_scene_push_transition(scene, node->transition);
+    if (status != ER_UI_OK) return status;
+  }
+  return ER_UI_OK;
+}
+
+static er_ui_status_t er_ui_node_emit_background_gradient(const er_ui_node_t* node, er_ui_scene_t* scene, er_ui_bounds_t bounds, er_ui_resolved_theme_t theme) {
+  if (!node || !scene) return ER_UI_ERR_INVALID_ARGUMENT;
+  if (node->has_background_gradient) {
+    return er_ui_scene_push_rect(scene,
+                                 er_ui_rect_linear_gradient(bounds.x, bounds.y, bounds.w, bounds.h, theme.radius.card, node->background_gradient_from,
+                                                           node->background_gradient_to));
+  }
+  return ER_UI_OK;
+}
+
+static er_ui_status_t er_ui_node_emit_card_surface(const er_ui_node_t* node, er_ui_scene_t* scene, er_ui_bounds_t bounds, er_ui_resolved_theme_t theme) {
+  if (!node || !scene) return ER_UI_ERR_INVALID_ARGUMENT;
+  if (!node->has_background_gradient) return er_ui_shadcn_card_emit(scene, bounds, theme);
+  er_ui_status_t status = er_ui_scene_push_rect(scene, er_ui_rect_shadow(bounds.x, bounds.y, bounds.w, bounds.h, theme.radius.card,
+                                                                         er_ui_color_rgba(0.0f, 0.0f, 0.0f, 0.10f), 18.0f));
+  if (status != ER_UI_OK) return status;
+  status = er_ui_node_emit_background_gradient(node, scene, bounds, theme);
+  if (status != ER_UI_OK) return status;
+  return er_ui_scene_push_rect(scene, er_ui_rect_border(bounds.x, bounds.y, bounds.w, bounds.h, theme.radius.card,
+                                                       er_ui_color_with_alpha(theme.colors.border, 0.42f)));
 }
 
 static er_ui_status_t er_ui_node_emit_interaction(const er_ui_node_t* node, er_ui_scene_t* scene, er_ui_bounds_t bounds) {
@@ -1724,6 +1941,7 @@ static er_ui_status_t er_ui_node_emit_interaction(const er_ui_node_t* node, er_u
   return ER_UI_OK;
 }
 
+//@optimizer-ignore-function node layout must recursively render each child in declaration order
 static er_ui_status_t er_ui_node_render_children(
   const er_ui_node_t* node,
   er_ui_scene_t* scene,
@@ -1752,6 +1970,7 @@ static er_ui_status_t er_ui_node_render_children(
   return ER_UI_OK;
 }
 
+//@optimizer-ignore-function grid layout must compute and render each child cell in declaration order
 static er_ui_status_t er_ui_node_render_grid(
   const er_ui_node_t* node,
   er_ui_scene_t* scene,
@@ -1760,11 +1979,10 @@ static er_ui_status_t er_ui_node_render_grid(
   er_ui_resolved_theme_t theme) {
   if (!node) return ER_UI_ERR_INVALID_ARGUMENT;
   if (node->child_count == 0u) return ER_UI_OK;
-  er_ui_node_grid_layout_t layout;
-  er_ui_status_t layout_status = er_ui_node_grid_layout(node, bounds, &layout);
-  if (layout_status != ER_UI_OK) return layout_status;
   for (size_t i = 0u; i < node->child_count; ++i) {
-    er_ui_bounds_t child_bounds = er_ui_node_grid_cell_bounds(&layout, node->gap, i);
+    er_ui_bounds_t child_bounds = {0};
+    er_ui_status_t bounds_status = er_ui_node_child_bounds(node, i, bounds, &child_bounds);
+    if (bounds_status != ER_UI_OK) return bounds_status;
     er_ui_status_t status = er_ui_node_render(node->children[i], scene, font, child_bounds, theme);
     if (status != ER_UI_OK) return status;
   }
@@ -1876,6 +2094,7 @@ static er_ui_status_t er_ui_node_render_collapsible(
   return ER_UI_OK;
 }
 
+//@optimizer-ignore-function accordion rendering must visit each row to emit header, trigger, and expanded body
 static er_ui_status_t er_ui_node_render_accordion(
   const er_ui_node_t* node,
   er_ui_scene_t* scene,
@@ -2073,6 +2292,7 @@ static er_ui_status_t er_ui_node_render_input_group(
   return er_ui_shadcn_button_emit(scene, font, button, theme, node->detail, node->id + 1u, ER_UI_SHADCN_BUTTON_SECONDARY, ER_UI_SHADCN_BUTTON_SIZE_SM, true);
 }
 
+//@optimizer-ignore-function OTP input rendering must visit each visible character cell
 static er_ui_status_t er_ui_node_render_input_otp(
   const er_ui_node_t* node,
   er_ui_scene_t* scene,
@@ -2214,6 +2434,7 @@ static er_ui_status_t er_ui_node_render_sidebar(
   return er_ui_node_render_text(scene, font, node->aux, er_ui_bounds(main.x + 16.0f, main.y + 40.0f, main.w - 32.0f, 22.0f), theme.colors.muted);
 }
 
+//@optimizer-ignore-function sonner rendering must visit each queued toast and its icon
 static er_ui_status_t er_ui_node_render_sonner(
   const er_ui_node_t* node,
   er_ui_scene_t* scene,
@@ -2420,6 +2641,7 @@ static er_ui_status_t er_ui_node_render_date_picker(
   return ER_UI_OK;
 }
 
+//@optimizer-ignore-function carousel rendering must visit each visible slide card in order
 static er_ui_status_t er_ui_node_render_carousel(
   const er_ui_node_t* node,
   er_ui_scene_t* scene,
@@ -2456,6 +2678,7 @@ static er_ui_status_t er_ui_node_render_carousel(
   return er_ui_node_render_icon(scene, er_ui_node_center_square(next, 16.0f), ER_UI_ICON_CHEVRON_RIGHT, theme.colors.text);
 }
 
+//@optimizer-ignore-function calendar rendering must visit each weekday header and day cell
 static er_ui_status_t er_ui_node_render_calendar(
   const er_ui_node_t* node,
   er_ui_scene_t* scene,
@@ -2492,13 +2715,18 @@ static er_ui_status_t er_ui_node_render_calendar(
     if (status != ER_UI_OK) return status;
   }
   float day_y = header_y + 28.0f;
+  size_t col = 0u;
+  size_t row = 0u;
   for (size_t i = 0u; i < node->label_count; ++i) {
-    size_t col = i % 7u;
-    size_t row = i / 7u;
     er_ui_shadcn_button_variant_t variant = i == node->selected ? ER_UI_SHADCN_BUTTON_SECONDARY : ER_UI_SHADCN_BUTTON_GHOST;
     status = er_ui_shadcn_button_emit(scene, font, er_ui_bounds(inner.x + (cell_w + gap) * (float)col, day_y + 38.0f * (float)row, cell_w, 34.0f), theme,
                                       node->labels[i], node->id + 2u + (uint32_t)i, variant, ER_UI_SHADCN_BUTTON_SIZE_SM, true);
     if (status != ER_UI_OK) return status;
+    ++col;
+    if (col == 7u) {
+      col = 0u;
+      ++row;
+    }
   }
   return ER_UI_OK;
 }
@@ -2546,6 +2774,7 @@ static er_ui_color4_t er_ui_node_diff_line_color(const char* line, er_ui_resolve
   return theme.colors.text;
 }
 
+//@optimizer-ignore-function diff viewer rendering must visit each visible diff line
 static er_ui_status_t er_ui_node_render_diff_body(
   const er_ui_node_t* node,
   er_ui_scene_t* scene,
@@ -2708,15 +2937,23 @@ er_ui_status_t er_ui_node_render(
   er_ui_resolved_theme_t theme) {
   if (!node || !scene || !font || !er_ui_bounds_valid(bounds)) return ER_UI_ERR_INVALID_ARGUMENT;
   er_ui_bounds_t rect = er_ui_node_resolve_bounds(node, bounds);
+  er_ui_status_t chrome_status = er_ui_node_emit_chrome(node, scene, rect, theme);
+  if (chrome_status != ER_UI_OK) return chrome_status;
   er_ui_status_t interaction_status = er_ui_node_emit_interaction(node, scene, rect);
   if (interaction_status != ER_UI_OK) return interaction_status;
   switch (node->kind) {
-    case ER_UI_NODE_ROW:
+    case ER_UI_NODE_ROW: {
+      er_ui_status_t status = er_ui_node_emit_background_gradient(node, scene, rect, theme);
+      if (status != ER_UI_OK) return status;
       return er_ui_node_render_children(node, scene, font, rect, theme, true);
-    case ER_UI_NODE_COLUMN:
+    }
+    case ER_UI_NODE_COLUMN: {
+      er_ui_status_t status = er_ui_node_emit_background_gradient(node, scene, rect, theme);
+      if (status != ER_UI_OK) return status;
       return er_ui_node_render_children(node, scene, font, rect, theme, false);
+    }
     case ER_UI_NODE_CARD: {
-      er_ui_status_t status = er_ui_shadcn_card_emit(scene, rect, theme);
+      er_ui_status_t status = er_ui_node_emit_card_surface(node, scene, rect, theme);
       if (status != ER_UI_OK) return status;
       return er_ui_node_render_children(node, scene, font, rect, theme, false);
     }
@@ -2869,8 +3106,11 @@ er_ui_status_t er_ui_node_render(
       return er_ui_shadcn_control_row_emit(scene, font, rect, theme, node->label, node->detail, node->value, node->id);
     case ER_UI_NODE_GRID:
     case ER_UI_NODE_MASONRY:
-    case ER_UI_NODE_BENTO_GRID:
+    case ER_UI_NODE_BENTO_GRID: {
+      er_ui_status_t status = er_ui_node_emit_background_gradient(node, scene, rect, theme);
+      if (status != ER_UI_OK) return status;
       return er_ui_node_render_grid(node, scene, font, rect, theme);
+    }
     case ER_UI_NODE_SCROLL_AREA:
       return er_ui_node_render_scroll_area(node, scene, font, rect, theme);
     case ER_UI_NODE_SPACER:
