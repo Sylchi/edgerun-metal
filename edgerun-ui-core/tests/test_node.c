@@ -90,6 +90,53 @@ void run_node_tests(void) {
   expect_status(er_ui_node_child_bounds(&button, 0u, er_ui_bounds(0.0f, 0.0f, 80.0f, 30.0f), &resolved_child), ER_UI_ERR_INVALID_ARGUMENT,
                 "node: leaf child bounds are rejected");
 
+  er_ui_node_t spaced_row = er_ui_node_row();
+  er_ui_node_set_spacing(&spaced_row, 6.0f, 4.0f, 3.0f);
+  er_ui_node_t spaced_a = er_ui_node_skeleton();
+  er_ui_node_t spaced_b = er_ui_node_skeleton();
+  expect_status(er_ui_node_add_child(&spaced_row, &spaced_a), ER_UI_OK, "node: spaced row accepts first child");
+  expect_status(er_ui_node_add_child(&spaced_row, &spaced_b), ER_UI_OK, "node: spaced row accepts second child");
+  expect_status(er_ui_node_child_bounds(&spaced_row, 0u, er_ui_bounds(0.0f, 0.0f, 220.0f, 80.0f), &resolved_child), ER_UI_OK,
+                "node: spacing helper applies margin and padding");
+  expect_float(resolved_child.x, 9.0f, "node: spacing child x includes margin and padding");
+  expect_float(resolved_child.y, 9.0f, "node: spacing child y includes margin and padding");
+  expect_float(resolved_child.w, 99.0f, "node: spacing child width subtracts margin padding and gap");
+  expect_float(resolved_child.h, 62.0f, "node: spacing child height subtracts margin and padding");
+
+  er_ui_node_t masonry = er_ui_node_masonry(2u);
+  er_ui_node_set_gap(&masonry, 10.0f);
+  er_ui_node_t masonry_children[4u];
+  for (size_t i = 0u; i < 4u; ++i) {
+    masonry_children[i] = er_ui_node_skeleton();
+    expect_status(er_ui_node_add_child(&masonry, &masonry_children[i]), ER_UI_OK, "node: masonry accepts child");
+  }
+  expect_status(er_ui_node_child_bounds(&masonry, 2u, er_ui_bounds(0.0f, 0.0f, 200.0f, 300.0f), &resolved_child), ER_UI_OK,
+                "node: masonry child bounds use shortest column");
+  expect_float(resolved_child.x, 0.0f, "node: masonry third child x is first column");
+  expect_float(resolved_child.y, 84.1f, "node: masonry third child stacks below first column");
+  expect_float(resolved_child.w, 95.0f, "node: masonry child width divides columns");
+  expect_float(resolved_child.h, 108.3f, "node: masonry child height varies deterministically");
+
+  er_ui_node_t bento = er_ui_node_bento_grid(4u);
+  er_ui_node_set_gap(&bento, 8.0f);
+  er_ui_node_t bento_a = er_ui_node_skeleton();
+  er_ui_node_t bento_b = er_ui_node_skeleton();
+  er_ui_node_t bento_c = er_ui_node_skeleton();
+  er_ui_node_set_grid_span(&bento_a, 2u, 2u);
+  er_ui_node_set_grid_span(&bento_c, 2u, 1u);
+  expect_status(er_ui_node_add_child(&bento, &bento_a), ER_UI_OK, "node: bento accepts wide child");
+  expect_status(er_ui_node_add_child(&bento, &bento_b), ER_UI_OK, "node: bento accepts compact child");
+  expect_status(er_ui_node_add_child(&bento, &bento_c), ER_UI_OK, "node: bento accepts second wide child");
+  expect_status(er_ui_node_child_bounds(&bento, 0u, er_ui_bounds(0.0f, 0.0f, 400.0f, 300.0f), &resolved_child), ER_UI_OK,
+                "node: bento first child bounds resolve");
+  expect_float(resolved_child.w, 196.0f, "node: bento child spans columns");
+  expect_float(resolved_child.h, 149.0f, "node: bento child spans rows");
+  expect_status(er_ui_node_child_bounds(&bento, 2u, er_ui_bounds(0.0f, 0.0f, 400.0f, 300.0f), &resolved_child), ER_UI_OK,
+                "node: bento packs around occupied cells");
+  expect_float(resolved_child.x, 204.0f, "node: bento third child x skips occupied cells");
+  expect_float(resolved_child.y, 78.5f, "node: bento third child y fills open row");
+  expect_float(resolved_child.w, 196.0f, "node: bento third child spans columns");
+
   er_ui_a11y_node_t a11y = {0};
   expect_status(er_ui_node_accessibility(&button, &a11y), ER_UI_OK, "node: button accessibility maps");
   expect_size(a11y.role, ER_UI_A11Y_BUTTON, "node: button accessibility role");
@@ -515,6 +562,11 @@ void run_node_tests(void) {
     er_ui_node_t ring = er_ui_node_progress_ring(0.58f, theme.colors.success);
     er_ui_node_t reorderable = er_ui_node_list_row("Drag me", "reorderable", 8816u, false);
     er_ui_node_set_reorderable(&reorderable, 42u, 8816u, 3u);
+    er_ui_node_t gradient_card = er_ui_node_card();
+    er_ui_node_set_background_gradient(&gradient_card, theme.colors.panel, theme.colors.active);
+    er_ui_node_set_transition(&gradient_card, er_ui_transition_opacity(8910u, 0.0f, 1.0f, 160u));
+    er_ui_node_t gradient_label = er_ui_node_text("Gradient card");
+    expect_status(er_ui_node_add_child(&gradient_card, &gradient_label), ER_UI_OK, "node: gradient card accepts child");
     er_ui_node_t icon = er_ui_node_icon(ER_UI_ICON_TRUST, "Trust", theme.colors.accent);
     er_ui_node_t icon_button = er_ui_node_icon_button(ER_UI_ICON_SEARCH, "Search", 8817u, ER_UI_SHADCN_BUTTON_GHOST);
     const char* const render_button_group_labels[] = {"Copy", "Paste", "More"};
@@ -798,6 +850,14 @@ void run_node_tests(void) {
     expect_size(scene.drag_sources[drag_sources_before].scope_id, 42u, "node: drag source scope is preserved");
     expect_size(scene.drag_sources[drag_sources_before].item_id, 8816u, "node: drag source item is preserved");
     expect_size(scene.drop_targets[drop_targets_before].index, 3u, "node: drop target index is preserved");
+    size_t rects_before_gradient = scene.rect_count;
+    size_t transitions_before_gradient = scene.transition_count;
+    expect_status(er_ui_node_render(&gradient_card, &scene, face, er_ui_bounds(280.0f, 2930.0f, 220.0f, 90.0f), theme), ER_UI_OK,
+                  "node: gradient transition card renders");
+    expect_size(scene.transition_count, transitions_before_gradient + 1u, "node: transition decorator emits transition");
+    expect_size(scene.transitions[transitions_before_gradient].id, 8910u, "node: transition decorator preserves id");
+    expect_true(scene.rect_count > rects_before_gradient, "node: gradient card emits rects");
+    expect_size(scene.rects[rects_before_gradient + 1u].mode, ER_UI_RECT_LINEAR_GRADIENT, "node: gradient card emits linear gradient background");
 
     expect_true(scene.rect_count > 0u, "node: render emits rect geometry");
     expect_true(scene.hit_count > 0u, "node: render emits hit targets");
