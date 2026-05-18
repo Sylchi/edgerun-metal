@@ -551,3 +551,108 @@ static void test_native_boot_endpoint_intent(void) {
   check_int64("native endpoint reject null intent",
               er_native_boot_decode_endpoint_intent(&ingress, &route, 0), 0);
 }
+
+static void test_os_native_relay_dispatch(void) {
+  enum {
+    OS_RELAY_PACKET_SEQUENCE = 1u,
+    OS_RELAY_COST_PER_BYTE = 1u,
+    OS_RELAY_MAX_TOTAL_COST = sizeof(ErCapabilityEnvelopeHeader)
+  };
+  ErAppUiPresentation presentation;
+  ErUiBootAppContext app;
+  ErUiBootRenderContext render;
+  ErNativeRelayIngress ingress;
+  ErAdmittedRoute route;
+  ErCapabilityEnvelopeHeader capability;
+  ErHash token_id;
+  ErHash scene_hash;
+  UINT32 packet_len = 0u;
+  UINT8 redraw = 1u;
+
+  test_prepare_wasm_ui_presentation(&presentation);
+  er_mem_zero((UINT8*)&app, (UINTN)sizeof(app));
+  app.ready = 1u;
+  app.runtime.presentation = &presentation;
+  er_mem_zero((UINT8*)&render, (UINTN)sizeof(render));
+  render.apps = &app;
+  render.app_count = 1u;
+  render.active_app = 0u;
+  er_mem_zero((UINT8*)&ingress, (UINTN)sizeof(ingress));
+
+  ingress.status = ER_NATIVE_RELAY_INGRESS_NONE;
+  check_int64("os relay dispatch none",
+              er_ui_boot_dispatch_native_relay_ingress(&render, &ingress,
+                                                       &redraw), 1);
+  check_uint64("os relay dispatch none count",
+               render.native_relay_stats.none, 1u);
+  check_uint64("os relay dispatch none redraw", redraw, 0u);
+
+  ingress.status = ER_NATIVE_RELAY_INGRESS_MALFORMED;
+  check_int64("os relay dispatch malformed",
+              er_ui_boot_dispatch_native_relay_ingress(&render, &ingress,
+                                                       &redraw), 1);
+  check_uint64("os relay dispatch malformed count",
+               render.native_relay_stats.malformed, 1u);
+
+  check_int64("os relay dispatch prepare route",
+              er_ui_wasm_app_prepare_render_route(&presentation, &route), 1);
+  test_fill_bytes(token_id.bytes, ER_HASH_LEN, 0xa1u);
+  test_fill_bytes(scene_hash.bytes, ER_HASH_LEN, 0xf1u);
+  check_int64("os relay dispatch capability prepare",
+              er_work_prepare_capability_envelope_header(ER_CAPABILITY_PACKET_INVOKE,
+                                                         ER_WORK_TYPE_CAPABILITY_INVOKE,
+                                                         ER_CAPABILITY_CONTENT_RENDER,
+                                                         ER_CAPABILITY_RISK_NONE,
+                                                         &presentation.jurisdiction_id,
+                                                         &presentation.presentation_id,
+                                                         &presentation.admission_id,
+                                                         &route.source_node_id,
+                                                         &route.target_node_id,
+                                                         OS_RELAY_PACKET_SEQUENCE,
+                                                         1000u,
+                                                         &scene_hash,
+                                                         256u,
+                                                         &capability),
+              1);
+  check_int64("os relay dispatch packet prepare",
+              er_relay_packet_prepare(ingress.payload,
+                                      (UINT32)sizeof(ingress.payload),
+                                      &route.source_node_id,
+                                      &route.target_node_id,
+                                      &route.admission_hash,
+                                      &token_id,
+                                      &route.target_route_commitment,
+                                      OS_RELAY_PACKET_SEQUENCE,
+                                      OS_RELAY_COST_PER_BYTE,
+                                      OS_RELAY_MAX_TOTAL_COST,
+                                      &scene_hash,
+                                      (const UINT8*)&capability,
+                                      (UINT32)sizeof(capability),
+                                      &packet_len),
+              1);
+  ingress.status = ER_NATIVE_RELAY_INGRESS_ACCEPTED;
+  ingress.payload_len = packet_len;
+  check_int64("os relay dispatch render intent",
+              er_ui_boot_dispatch_native_relay_ingress(&render, &ingress,
+                                                       &redraw), 1);
+  check_uint64("os relay dispatch render count",
+               render.native_relay_stats.render_capability, 1u);
+  check_uint64("os relay dispatch render redraw", redraw, 0u);
+
+  ingress.payload[0] = 0xffu;
+  check_int64("os relay dispatch malformed accepted",
+              er_ui_boot_dispatch_native_relay_ingress(&render, &ingress,
+                                                       &redraw), 1);
+  check_uint64("os relay dispatch malformed accepted count",
+               render.native_relay_stats.malformed, 2u);
+
+  check_int64("os relay dispatch reject null render",
+              er_ui_boot_dispatch_native_relay_ingress(0, &ingress, &redraw),
+              0);
+  check_int64("os relay dispatch reject null ingress",
+              er_ui_boot_dispatch_native_relay_ingress(&render, 0, &redraw),
+              0);
+  check_int64("os relay dispatch reject null redraw",
+              er_ui_boot_dispatch_native_relay_ingress(&render, &ingress, 0),
+              0);
+}

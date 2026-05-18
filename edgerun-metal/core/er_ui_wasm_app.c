@@ -88,8 +88,8 @@ static UINT8 er_ui_wasm_app_stats_equal(er_ui_scene_stats_t left,
                  left.text_quads == right.text_quads);
 }
 
-static UINT8 er_ui_wasm_app_prepare_render_route(const ErAppUiPresentation* presentation,
-                                                 ErAdmittedRoute* out_route) {
+UINT8 er_ui_wasm_app_prepare_render_route(const ErAppUiPresentation* presentation,
+                                          ErAdmittedRoute* out_route) {
   if (presentation == 0 || out_route == 0 ||
       presentation->abi_version != ER_APP_ABI_VERSION) {
     return 0u;

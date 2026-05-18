@@ -12,6 +12,7 @@
 #include "er_boot_profile.h"
 #include "er_gfx_console.h"
 #include "er_ps2_keyboard.h"
+#include "er_native_boot.h"
 #include "er_ui_surface_renderer.h"
 #include "er_ui_components.h"
 #include "er_ui_ledger_app.h"
@@ -119,6 +120,14 @@ typedef struct {
 } ErUiBootAppContext;
 
 typedef struct {
+  UINT64 polls;
+  UINT64 none;
+  UINT64 malformed;
+  UINT64 unsupported;
+  UINT64 render_capability;
+} ErUiBootNativeRelayStats;
+
+typedef struct {
   vr_font_face_t* font;
   ErUiSurfaceMode mode;
   ErUiSurface* surface;
@@ -132,6 +141,8 @@ typedef struct {
   ErUiBootAppContext* apps;
   UINT32 app_count;
   UINT32 active_app;
+  ErNativeBootState* native_relay;
+  ErUiBootNativeRelayStats native_relay_stats;
 } ErUiBootRenderContext;
 
 extern ErWasmHostCalls g_host_calls;
@@ -210,6 +221,11 @@ UINT8 er_ui_boot_apply_input(er_ui_ledger_app_state_t* ledger_state,
                              ErUiBootRenderContext* render,
                              ErPs2KeyboardAction input,
                              UINT8* out_redraw);
+UINT8 er_ui_boot_dispatch_native_relay_ingress(ErUiBootRenderContext* render,
+                                               const ErNativeRelayIngress* ingress,
+                                               UINT8* out_redraw);
+UINT8 er_ui_boot_poll_native_relay(ErUiBootRenderContext* render,
+                                   UINT8* out_redraw);
 void er_ui_boot_input_loop(er_ui_ledger_app_state_t* ledger_state,
                            er_ui_runtime_state_t* runtime,
                            er_ui_scene_t* scene,
