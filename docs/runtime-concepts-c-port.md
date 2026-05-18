@@ -145,5 +145,6 @@ The completed C foundation is:
 - backend-neutral UI scene records, component surfaces, variable-font text quads, and GOP/VirtIO GPU rendering foundations
 - concurrent boot-local Wasm UI app contexts with isolated preallocated memory, presentation identity, scene state, and per-runtime `ui_emit` dispatch
 - boot-local Wasm UI app launch from validated package-loaded bytes stored in persistent per-app module buffers
+- saved package source records that bind package launch provenance to admitted storage-retrieve route ids
 
-The next C milestone is to replace embedded package packet sources with admitted storage work for saved user-authored app packages, send admitted scene packets through relay send, verify the route at native ingress, and hand the scene to an endpoint-owned renderer. No host listener, host capture path, host filesystem persistence, or host networking model belongs in the runtime core.
+The next C milestone is to replace embedded package packet sources with admitted storage endpoint responses for saved user-authored app packages, send admitted scene packets through relay send, verify the route at native ingress, and hand the scene to an endpoint-owned renderer. No host listener, host capture path, host filesystem persistence, or host networking model belongs in the runtime core.

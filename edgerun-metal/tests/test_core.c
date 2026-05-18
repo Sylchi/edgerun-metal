@@ -3063,6 +3063,13 @@ static void test_app_identity_routes(void) {
   ErAppPackageManifest package_without_assets;
   ErAppPackageManifest package_bad_id;
   ErAppLoadedPackage loaded_package;
+  ErAppPackageStorageSource storage_source;
+  ErAppPackageStorageSource storage_source_again;
+  ErAppPackageStorageSource package_without_assets_source;
+  ErAdmittedRoute app_retrieve_route;
+  ErAdmittedRoute manifest_retrieve_route;
+  ErAdmittedRoute ui_assets_retrieve_route;
+  ErAdmittedRoute bad_retrieve_route;
   ErHash app_object_id;
   ErHash manifest_hash;
   ErHash admission_id;
@@ -3230,6 +3237,91 @@ static void test_app_identity_routes(void) {
                                           &loaded_package),
               0);
   manifest_load.packets = &manifest_packet;
+
+  er_mem_zero((UINT8*)&app_retrieve_route, (UINTN)sizeof(app_retrieve_route));
+  app_retrieve_route.abi_version = ER_WORK_ABI_VERSION;
+  app_retrieve_route.role = ER_NODE_ROLE_STORAGE;
+  app_retrieve_route.department = ER_DEPARTMENT_STORAGE;
+  app_retrieve_route.work_type = ER_WORK_TYPE_OBJECT_RETRIEVE;
+  app_retrieve_route.admitted_budget = 32u;
+  test_fill_bytes(app_retrieve_route.route_id.bytes, ER_HASH_LEN, 0x11u);
+  test_fill_bytes(app_retrieve_route.request_hash.bytes, ER_HASH_LEN, 0x12u);
+  test_fill_bytes(app_retrieve_route.admission_hash.bytes, ER_HASH_LEN, 0x13u);
+  test_fill_bytes(app_retrieve_route.source_node_id.bytes, ER_NODE_ID_LEN, 0x14u);
+  test_fill_bytes(app_retrieve_route.target_node_id.bytes, ER_NODE_ID_LEN, 0x15u);
+  test_fill_bytes(app_retrieve_route.relay_node_id.bytes, ER_NODE_ID_LEN, 0x16u);
+  manifest_retrieve_route = app_retrieve_route;
+  test_fill_bytes(manifest_retrieve_route.route_id.bytes, ER_HASH_LEN, 0x21u);
+  test_fill_bytes(manifest_retrieve_route.request_hash.bytes, ER_HASH_LEN, 0x22u);
+  ui_assets_retrieve_route = app_retrieve_route;
+  test_fill_bytes(ui_assets_retrieve_route.route_id.bytes, ER_HASH_LEN, 0x31u);
+  test_fill_bytes(ui_assets_retrieve_route.request_hash.bytes, ER_HASH_LEN, 0x32u);
+  check_int64("app package storage source",
+              er_app_prepare_package_storage_source(&crypto, &package,
+                                                    &app_retrieve_route,
+                                                    &manifest_retrieve_route,
+                                                    &ui_assets_retrieve_route,
+                                                    &storage_source),
+              1);
+  check_int64("app package storage source abi", storage_source.abi_version,
+              ER_APP_ABI_VERSION);
+  check_hash_equal("app package storage source package",
+                   &storage_source.package_id, &package.package_id);
+  check_hash_equal("app package storage app route",
+                   &storage_source.app_retrieve_route_id,
+                   &app_retrieve_route.route_id);
+  check_hash_equal("app package storage manifest route",
+                   &storage_source.manifest_retrieve_route_id,
+                   &manifest_retrieve_route.route_id);
+  check_hash_equal("app package storage assets route",
+                   &storage_source.ui_assets_retrieve_route_id,
+                   &ui_assets_retrieve_route.route_id);
+  check_int64("app package storage source deterministic",
+              er_app_prepare_package_storage_source(&crypto, &package,
+                                                    &app_retrieve_route,
+                                                    &manifest_retrieve_route,
+                                                    &ui_assets_retrieve_route,
+                                                    &storage_source_again),
+              1);
+  check_hash_equal("app package storage source id deterministic",
+                   &storage_source_again.source_id, &storage_source.source_id);
+  check_int64("app package storage source without assets",
+              er_app_prepare_package_storage_source(&crypto,
+                                                    &package_without_assets,
+                                                    &app_retrieve_route,
+                                                    &manifest_retrieve_route,
+                                                    0,
+                                                    &package_without_assets_source),
+              1);
+  check_hash_not_equal("app package storage source assets affect id",
+                       &package_without_assets_source.source_id,
+                       &storage_source.source_id);
+  check_int64("app package storage reject extra assets route",
+              er_app_prepare_package_storage_source(&crypto,
+                                                    &package_without_assets,
+                                                    &app_retrieve_route,
+                                                    &manifest_retrieve_route,
+                                                    &ui_assets_retrieve_route,
+                                                    &storage_source_again),
+              0);
+  bad_retrieve_route = app_retrieve_route;
+  bad_retrieve_route.work_type = ER_WORK_TYPE_OBJECT_STORE;
+  check_int64("app package storage reject store route",
+              er_app_prepare_package_storage_source(&crypto, &package,
+                                                    &bad_retrieve_route,
+                                                    &manifest_retrieve_route,
+                                                    &ui_assets_retrieve_route,
+                                                    &storage_source_again),
+              0);
+  bad_retrieve_route = app_retrieve_route;
+  bad_retrieve_route.department = ER_DEPARTMENT_RETRIEVAL;
+  check_int64("app package storage reject wrong department",
+              er_app_prepare_package_storage_source(&crypto, &package,
+                                                    &bad_retrieve_route,
+                                                    &manifest_retrieve_route,
+                                                    &ui_assets_retrieve_route,
+                                                    &storage_source_again),
+              0);
 
   for (i = 0; i < ER_HASH_LEN; ++i) {
     app_object_id.bytes[i] = (UINT8)(0x10u + i);

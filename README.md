@@ -40,7 +40,9 @@ manifests, and UI assets by content object identity instead of labels.
 Bounded VFS object packet reassembly now validates loaded object bytes before
 they can become runtime input, and app package loading checks those bytes
 against package manifests in caller-owned memory. The boot UI app path now uses
-that package loader before preparing each resident Wasm runtime.
+that package loader before preparing each resident Wasm runtime. Saved app
+package sources now bind package launch provenance to admitted storage-retrieve
+route ids before storage endpoint integration supplies the packets.
 Replacing firmware boot-service networking with runtime-owned drivers is the
 immediate infrastructure step:
 
