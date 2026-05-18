@@ -59,7 +59,12 @@ enum {
   ER_WORK_TRANSIT_ROUTE_SPAN = 4u,
   ER_WORK_TRANSIT_PACKET_SPAN = 5u,
   ER_WORK_TRANSIT_SEQUENCE_SPAN = 6u,
-  ER_WORK_TRANSIT_PREVIOUS_SPAN = 7u
+  ER_WORK_TRANSIT_PREVIOUS_SPAN = 7u,
+  ER_WORK_CAPABILITY_RISK_KNOWN_MASK = ER_CAPABILITY_RISK_LOCALITY_AUTHORITY |
+                                       ER_CAPABILITY_RISK_UNSEALED_TRANSPORT |
+                                       ER_CAPABILITY_RISK_PLAINTEXT_DURABLE |
+                                       ER_CAPABILITY_RISK_RAW_DEVICE |
+                                       ER_CAPABILITY_RISK_HOST_PRIVILEGE
 };
 
 static void er_work_put_be(UINT8* dst, UINT64 value, UINTN byte_count) {
@@ -105,6 +110,49 @@ static UINT8 er_work_node_nonzero(const ErNodeId* value) {
     return 0;
   }
   return er_mem_any_nonzero(value->bytes, ER_NODE_ID_LEN);
+}
+
+static UINT8 er_work_capability_kind_valid(UINT16 kind) {
+  switch (kind) {
+    case ER_CAPABILITY_PACKET_REQUEST:
+    case ER_CAPABILITY_PACKET_INVOKE:
+    case ER_CAPABILITY_PACKET_EVENT:
+    case ER_CAPABILITY_PACKET_CLOSE:
+      return 1;
+    default:
+      return 0;
+  }
+}
+
+static UINT8 er_work_capability_operation_valid(UINT16 operation) {
+  switch (operation) {
+    case ER_WORK_TYPE_CAPABILITY_REQUEST:
+    case ER_WORK_TYPE_CAPABILITY_INVOKE:
+    case ER_WORK_TYPE_CAPABILITY_EVENT:
+    case ER_WORK_TYPE_CAPABILITY_CLOSE:
+      return 1;
+    default:
+      return 0;
+  }
+}
+
+static UINT8 er_work_capability_content_valid(UINT16 content_type) {
+  switch (content_type) {
+    case ER_CAPABILITY_CONTENT_OPAQUE:
+    case ER_CAPABILITY_CONTENT_CONTROL:
+    case ER_CAPABILITY_CONTENT_VIDEO:
+    case ER_CAPABILITY_CONTENT_AUDIO:
+    case ER_CAPABILITY_CONTENT_INPUT:
+    case ER_CAPABILITY_CONTENT_RENDER:
+    case ER_CAPABILITY_CONTENT_OBJECT:
+      return 1;
+    default:
+      return 0;
+  }
+}
+
+static UINT8 er_work_capability_risk_flags_valid(UINT32 risk_flags) {
+  return (UINT8)((risk_flags & ~ER_WORK_CAPABILITY_RISK_KNOWN_MASK) == 0u);
 }
 
 static UINT8 er_work_endpoint_valid(const ErChannelEndpoint* endpoint) {
@@ -504,4 +552,66 @@ UINT8 er_work_prepare_relay_accounting_claim(const ErRelayTransitHop* hop,
   out_claim->total_claim = amount + receipt_base;
   out_claim->sequence = hop->sequence;
   return 1;
+}
+
+UINT8 er_work_capability_envelope_header_valid(const ErCapabilityEnvelopeHeader* header) {
+  if (header == 0 ||
+      header->abi_version != ER_WORK_ABI_VERSION ||
+      er_work_capability_kind_valid(header->kind) == 0u ||
+      er_work_capability_operation_valid(header->operation) == 0u ||
+      er_work_capability_content_valid(header->content_type) == 0u ||
+      er_work_capability_risk_flags_valid(header->risk_flags) == 0u ||
+      er_work_hash_nonzero(&header->session_id) == 0u ||
+      er_work_hash_nonzero(&header->invocation_id) == 0u ||
+      er_work_hash_nonzero(&header->capability_id) == 0u ||
+      er_work_node_nonzero(&header->source_node_id) == 0u ||
+      er_work_node_nonzero(&header->target_node_id) == 0u ||
+      header->sequence == 0u ||
+      header->timestamp_ms == 0u ||
+      er_work_hash_nonzero(&header->payload_hash) == 0u ||
+      header->payload_len == 0u) {
+    return 0;
+  }
+  return 1;
+}
+
+UINT8 er_work_prepare_capability_envelope_header(UINT16 kind,
+                                                 UINT16 operation,
+                                                 UINT16 content_type,
+                                                 UINT32 risk_flags,
+                                                 const ErHash* session_id,
+                                                 const ErHash* invocation_id,
+                                                 const ErHash* capability_id,
+                                                 const ErNodeId* source_node_id,
+                                                 const ErNodeId* target_node_id,
+                                                 UINT64 sequence,
+                                                 UINT64 timestamp_ms,
+                                                 const ErHash* payload_hash,
+                                                 UINT32 payload_len,
+                                                 ErCapabilityEnvelopeHeader* out_header) {
+  if (out_header == 0 ||
+      session_id == 0 ||
+      invocation_id == 0 ||
+      capability_id == 0 ||
+      source_node_id == 0 ||
+      target_node_id == 0 ||
+      payload_hash == 0) {
+    return 0;
+  }
+  er_mem_zero((UINT8*)out_header, (UINTN)sizeof(*out_header));
+  out_header->abi_version = ER_WORK_ABI_VERSION;
+  out_header->kind = kind;
+  out_header->operation = operation;
+  out_header->content_type = content_type;
+  out_header->risk_flags = risk_flags;
+  out_header->session_id = *session_id;
+  out_header->invocation_id = *invocation_id;
+  out_header->capability_id = *capability_id;
+  out_header->source_node_id = *source_node_id;
+  out_header->target_node_id = *target_node_id;
+  out_header->sequence = sequence;
+  out_header->timestamp_ms = timestamp_ms;
+  out_header->payload_hash = *payload_hash;
+  out_header->payload_len = payload_len;
+  return er_work_capability_envelope_header_valid(out_header);
 }

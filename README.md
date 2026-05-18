@@ -44,7 +44,9 @@ the storage-bound package loader before preparing each resident Wasm runtime.
 Saved app package sources now bind package launch provenance to admitted
 storage-retrieve route ids, and storage-bound package loading rejects retrieved
 endpoint responses that do not match those route ids or expected object
-identities before bytes can launch.
+identities before bytes can launch. Wasm fixtures can emit render capability
+invocation packets through `edgerun.relay/send` under the same outbox, admission,
+token, and packet-byte budget checks used for app relay traffic.
 Replacing firmware boot-service networking with runtime-owned drivers is the
 immediate infrastructure step:
 
