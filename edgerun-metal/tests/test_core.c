@@ -19,6 +19,7 @@
 #include "er_work_route.h"
 #include "er_gfx_console.h"
 #include "er_ui_surface_renderer.h"
+#include "er_ui_tabler_icon_atlas.h"
 #include "er_ui_demo_apps.h"
 #include "er_ui_text.h"
 #include "er_virtio.h"
@@ -3649,6 +3650,36 @@ static void test_ui_surface_renderer_surface(void) {
   scene.icon_quads = 0;
   scene.icon_quad_count = 0u;
   scene.icon_quad_capacity = 0u;
+  {
+    UINT32 icon_pixels[576] = {0};
+    ErUiSurface icon_surface;
+    er_ui_scene_t icon_scene;
+    er_ui_quad_t tabler_icon[1];
+    ErUiTablerIconRect search_rect;
+    UINT64 visible_icon_pixels = 0u;
+
+    icon_surface.pixels = icon_pixels;
+    icon_surface.width = 24u;
+    icon_surface.height = 24u;
+    icon_surface.stride = 24u;
+    icon_surface.pixel_format = ER_UI_SURFACE_PIXEL_RGBX;
+    icon_scene = (er_ui_scene_t){0};
+    icon_scene.clear = er_ui_color_rgb_u8(0u, 0u, 0u);
+    tabler_icon[0] = er_ui_quad_atlas(0.0f, 0.0f, 24.0f, 24.0f, 0.0f, 0.0f, 1.0f, 1.0f,
+                                      er_ui_icon_atlas_id(ER_UI_ICON_SEARCH), er_ui_color_rgb_u8(255u, 255u, 255u));
+    icon_scene.icon_quads = tabler_icon;
+    icon_scene.icon_quad_count = 1u;
+    icon_scene.icon_quad_capacity = 1u;
+    check_int64("ui surface tabler search rect", er_ui_tabler_icon_rect(ER_UI_ICON_SEARCH, &search_rect), 1);
+    check_uint64("ui surface tabler search atlas x", search_rect.x, 120u);
+    check_int64("ui surface render tabler icon", er_ui_surface_render_scene_with_font_stats(&icon_surface, &icon_scene, 0, &stats), 1);
+    check_uint64("ui surface tabler icon stats", stats.icon_quads, 1u);
+    for (i = 0u; i < 576u; ++i) {
+      if (icon_pixels[i] != 0u) ++visible_icon_pixels;
+    }
+    check_int64("ui surface tabler icon draws real atlas pixels", visible_icon_pixels > 20u, 1);
+    check_int64("ui surface tabler icon keeps transparent interior", visible_icon_pixels < 260u, 1);
+  }
   check_int64("ui surface dirty reset for scene", er_ui_surface_dirty_tiles_reset(&tile_plan, tile_marks, 4u, &dirty_tiles), 1);
   check_int64("ui surface dirty mark scene",
               er_ui_surface_dirty_tiles_mark_scene(&tile_plan, &scene, tile_marks, 4u, &dirty_tiles),

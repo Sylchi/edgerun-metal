@@ -40,6 +40,7 @@ void run_shell_tests(void) {
   expect_true(scene.rect_count >= 6u, "shell scene: chrome and surfaces emit rects");
   expect_true(scene.hit_count >= 5u, "shell scene: launcher tabs and closes emit hits");
   expect_size(scene.drop_target_count, 2u, "shell scene: surface tiles emit drop targets");
+  expect_true(scene.icon_quad_count >= 5u, "shell scene: launcher tabs and closes emit Tabler icon quads");
 
   er_ui_hit_t hit = {0};
   expect_true(er_ui_scene_hit_test(&scene, 12.0f, 12.0f, &hit), "shell scene: launcher hit is queryable");
@@ -95,6 +96,7 @@ void run_shell_tests(void) {
       expect_status(er_ui_shell_emit_scene_with_font(&shell, &scene, er_ui_bounds(0.0f, 0.0f, 640.0f, 400.0f), theme, face), ER_UI_OK,
                     "shell font: normal shell emits with variable font");
       expect_true(scene.text_quad_count > 0u, "shell font: normal shell emits variable font text");
+      expect_true(scene.icon_quad_count >= 3u, "shell font: normal shell emits icon-backed chrome");
       expect_true(!shell_scene_has_hit_id(&scene, ER_UI_NETWORK_APP_PROMPT_RUN_ONCE_ID), "shell font: prompt actions are absent until host opens prompt");
 
       er_ui_scene_clear_commands(&scene);
