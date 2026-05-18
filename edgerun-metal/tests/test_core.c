@@ -1057,6 +1057,74 @@ static void test_virtio_net_mmio(void) {
   check_uint64("virtio net rx invalid", stats.rx_invalid, 0u);
 }
 
+static void test_virtio_gpu_mmio(void) {
+  enum {
+    VIRTIO_GPU_TEST_MMIO_DWORDS = 128u,
+    VIRTIO_GPU_TEST_QUEUE_MAX = ER_VIRTIO_QUEUE_SIZE,
+    VIRTIO_GPU_TEST_EVENTS_READ = 1u,
+    VIRTIO_GPU_TEST_SCANOUTS = 2u,
+    VIRTIO_GPU_TEST_CAPSETS = 3u,
+    VIRTIO_GPU_TEST_CONFIG_EVENTS_READ_DWORD =
+        (ER_VIRTIO_MMIO_CONFIG_OFFSET + 0u) / sizeof(UINT32),
+    VIRTIO_GPU_TEST_CONFIG_SCANOUTS_DWORD =
+        (ER_VIRTIO_MMIO_CONFIG_OFFSET + 8u) / sizeof(UINT32),
+    VIRTIO_GPU_TEST_CONFIG_CAPSETS_DWORD =
+        (ER_VIRTIO_MMIO_CONFIG_OFFSET + 12u) / sizeof(UINT32)
+  };
+  UINT32 regs[VIRTIO_GPU_TEST_MMIO_DWORDS] = {0};
+  ErVirtioGpu gpu;
+  ErVirtioQueueDesc* control_desc;
+  ErVirtioQueueAvail* control_avail;
+  ErVirtioQueueUsed* control_used;
+  ErVirtioQueueDesc* cursor_desc;
+  ErVirtioQueueAvail* cursor_avail;
+  ErVirtioQueueUsed* cursor_used;
+
+  er_mmio_reset();
+  regs[ER_VIRTIO_MMIO_MAGIC_VALUE_OFFSET / sizeof(UINT32)] = ER_VIRTIO_MMIO_MAGIC;
+  regs[ER_VIRTIO_MMIO_VERSION_OFFSET / sizeof(UINT32)] = ER_VIRTIO_MMIO_VERSION_MODERN;
+  regs[ER_VIRTIO_MMIO_DEVICE_ID_OFFSET / sizeof(UINT32)] = ER_VIRTIO_DEVICE_TYPE_GPU;
+  regs[ER_VIRTIO_MMIO_VENDOR_OFFSET / sizeof(UINT32)] = ER_VIRTIO_MMIO_VENDOR_ANY;
+  regs[ER_VIRTIO_MMIO_DEVICE_FEATURES_OFFSET / sizeof(UINT32)] = 1u;
+  regs[ER_VIRTIO_MMIO_QUEUE_NUM_MAX_OFFSET / sizeof(UINT32)] = VIRTIO_GPU_TEST_QUEUE_MAX;
+  regs[VIRTIO_GPU_TEST_CONFIG_EVENTS_READ_DWORD] = VIRTIO_GPU_TEST_EVENTS_READ;
+  regs[VIRTIO_GPU_TEST_CONFIG_SCANOUTS_DWORD] = VIRTIO_GPU_TEST_SCANOUTS;
+  regs[VIRTIO_GPU_TEST_CONFIG_CAPSETS_DWORD] = VIRTIO_GPU_TEST_CAPSETS;
+
+  check_int64("virtio gpu init",
+              er_virtio_gpu_init_mmio((UINT64)(UINTN)regs, (UINT64)sizeof(regs), &gpu),
+              1);
+  check_int64("virtio gpu initialized", gpu.initialized, 1);
+  check_uint64("virtio gpu features", gpu.features, ER_VIRTIO_F_VERSION_1);
+  check_uint64("virtio gpu control queue size", gpu.control_queue_size, ER_VIRTIO_QUEUE_SIZE);
+  check_uint64("virtio gpu cursor queue size", gpu.cursor_queue_size, ER_VIRTIO_QUEUE_SIZE);
+  check_uint64("virtio gpu events read", gpu.config.events_read, VIRTIO_GPU_TEST_EVENTS_READ);
+  check_uint64("virtio gpu scanouts", gpu.config.num_scanouts, VIRTIO_GPU_TEST_SCANOUTS);
+  check_uint64("virtio gpu capsets", gpu.config.num_capsets, VIRTIO_GPU_TEST_CAPSETS);
+  check_uint64("virtio gpu status driver ok",
+               regs[ER_VIRTIO_MMIO_STATUS_OFFSET / sizeof(UINT32)],
+               ER_VIRTIO_STATUS_ACKNOWLEDGE | ER_VIRTIO_STATUS_DRIVER |
+               ER_VIRTIO_STATUS_FEATURES_OK | ER_VIRTIO_STATUS_DRIVER_OK);
+  check_uint64("virtio gpu final queue select",
+               regs[ER_VIRTIO_MMIO_QUEUE_SEL_OFFSET / sizeof(UINT32)],
+               ER_VIRTIO_GPU_CURSOR_QUEUE);
+  check_uint64("virtio gpu queue ready",
+               regs[ER_VIRTIO_MMIO_QUEUE_READY_OFFSET / sizeof(UINT32)], 1u);
+
+  control_desc = er_virtio_gpu_test_control_desc();
+  control_avail = er_virtio_gpu_test_control_avail();
+  control_used = er_virtio_gpu_test_control_used();
+  cursor_desc = er_virtio_gpu_test_cursor_desc();
+  cursor_avail = er_virtio_gpu_test_cursor_avail();
+  cursor_used = er_virtio_gpu_test_cursor_used();
+  check_uint64("virtio gpu control desc clear", control_desc[0].addr, 0u);
+  check_uint64("virtio gpu control avail clear", control_avail->idx, 0u);
+  check_uint64("virtio gpu control used clear", control_used->idx, 0u);
+  check_uint64("virtio gpu cursor desc clear", cursor_desc[0].addr, 0u);
+  check_uint64("virtio gpu cursor avail clear", cursor_avail->idx, 0u);
+  check_uint64("virtio gpu cursor used clear", cursor_used->idx, 0u);
+}
+
 static void test_net_frame_builders(void) {
   enum {
     NET_TEST_UDP_PAYLOAD_LEN = 3u,
@@ -3685,6 +3753,7 @@ int main(void) {
   test_virtio_modern_pci_transport_registers();
   test_virtio_split_queue();
   test_virtio_net_mmio();
+  test_virtio_gpu_mmio();
   test_net_frame_builders();
   test_native_eth_endpoint();
   test_wasm_mmio_imports();
