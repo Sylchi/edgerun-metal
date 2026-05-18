@@ -306,13 +306,21 @@ void er_ui_scene_translate_since(er_ui_scene_t* scene, er_ui_scene_cursor_t curs
 
 bool er_ui_scene_hit_test(const er_ui_scene_t* scene, float x, float y, er_ui_hit_t* out_hit);
 bool er_ui_scene_drag_source_at(const er_ui_scene_t* scene, float x, float y, er_ui_drag_source_t* out_source);
-bool er_ui_scene_drop_target_at(const er_ui_scene_t* scene, float x, float y, uint32_t scope_id, er_ui_drop_target_t* out_target);
+bool er_ui_scene_drop_target_at(
+  const er_ui_scene_t* scene,
+  float x,
+  float y,
+  uint32_t scope_id,
+  er_ui_drop_target_t* out_target);
 
 er_ui_scene_budget_t er_ui_scene_budget_native_interactive_frame(void);
 er_ui_scene_budget_t er_ui_scene_budget_browser_interactive_frame(void);
 er_ui_scene_budget_t er_ui_scene_budget_public_showcase_frame(void);
 bool er_ui_scene_stats_fits_budget(er_ui_scene_stats_t stats, er_ui_scene_budget_t budget);
-bool er_ui_scene_first_budget_violation(er_ui_scene_stats_t stats, er_ui_scene_budget_t budget, er_ui_scene_budget_violation_t* out_violation);
+bool er_ui_scene_first_budget_violation(
+  er_ui_scene_stats_t stats,
+  er_ui_scene_budget_t budget,
+  er_ui_scene_budget_violation_t* out_violation);
 
 er_ui_color_scheme_t er_ui_color_scheme_from_code(uint32_t code);
 uint32_t er_ui_color_scheme_code(er_ui_color_scheme_t scheme);

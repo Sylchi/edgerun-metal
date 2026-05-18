@@ -22,7 +22,11 @@ er_ui_status_t er_ui_varfont_measure_text(
   size_t codepoint_count,
   er_ui_varfont_text_metrics_t* out_metrics);
 
-er_ui_status_t er_ui_scene_push_varfont_vertices(er_ui_scene_t* scene, const vr_vertex_t* vertices, size_t vertex_count, er_ui_color4_t color);
+er_ui_status_t er_ui_scene_push_varfont_vertices(
+  er_ui_scene_t* scene,
+  const vr_vertex_t* vertices,
+  size_t vertex_count,
+  er_ui_color4_t color);
 er_ui_status_t er_ui_scene_push_varfont_text(
   er_ui_scene_t* scene,
   vr_font_face_t* face,

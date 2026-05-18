@@ -64,8 +64,15 @@ er_ui_status_t er_ui_workspace_remove_surface(er_ui_shell_state_t* state, uint32
 er_ui_status_t er_ui_workspace_focus_surface(er_ui_shell_state_t* state, uint32_t surface_id);
 size_t er_ui_workspace_surface_count(const er_ui_shell_state_t* state);
 uint32_t er_ui_workspace_focused_surface_id(const er_ui_shell_state_t* state);
-bool er_ui_workspace_surface_bounds(const er_ui_shell_state_t* state, er_ui_bounds_t workspace_bounds, uint32_t surface_id, er_ui_bounds_t* out_bounds);
-bool er_ui_workspace_focused_surface_bounds(const er_ui_shell_state_t* state, er_ui_bounds_t shell_bounds, er_ui_bounds_t* out_bounds);
+bool er_ui_workspace_surface_bounds(
+  const er_ui_shell_state_t* state,
+  er_ui_bounds_t workspace_bounds,
+  uint32_t surface_id,
+  er_ui_bounds_t* out_bounds);
+bool er_ui_workspace_focused_surface_bounds(
+  const er_ui_shell_state_t* state,
+  er_ui_bounds_t shell_bounds,
+  er_ui_bounds_t* out_bounds);
 
 typedef er_ui_status_t (*er_ui_shell_surface_emit_fn)(
   uint32_t surface_id,
