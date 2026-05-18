@@ -4,6 +4,32 @@
 static const er_ui_color4_t ER_TEST_LEDGER_BG = {0.01f, 0.012f, 0.015f, 1.0f};
 static const size_t ER_TEST_LEDGER_APP_SURFACE_COUNT = 3u;
 static const size_t ER_TEST_LEDGER_APP_HITS = 6u;
+static const uint32_t ER_TEST_LEDGER_ACTION_BASE = 0xED024000u;
+static const uint32_t ER_TEST_LEDGER_INVEST_BUTTON_ID = ER_TEST_LEDGER_ACTION_BASE + 2u;
+static const uint32_t ER_TEST_LEDGER_SAVE_THRESHOLD_BUTTON_ID = ER_TEST_LEDGER_ACTION_BASE + 8u;
+
+static bool test_ledger_hit_has_fill_rect(const er_ui_scene_t* scene, uint32_t id) {
+  const er_ui_hit_t* hit = NULL;
+  if (!scene) return false;
+  for (size_t h = 0u; h < scene->hit_count; ++h) {
+    if (scene->hits[h].id == id) {
+      hit = &scene->hits[h];
+      break;
+    }
+  }
+  if (!hit) return false;
+  for (size_t r = 0u; r < scene->rect_count; ++r) {
+    const er_ui_rect_t* rect = &scene->rects[r];
+    if (rect->mode == ER_UI_RECT_FILL &&
+        rect->x == hit->x &&
+        rect->y == hit->y &&
+        rect->w == hit->w &&
+        rect->h == hit->h) {
+      return true;
+    }
+  }
+  return false;
+}
 
 static void test_ledger_app_state_and_surface_switching(void) {
   er_ui_ledger_app_state_t apps = {0};
@@ -34,6 +60,10 @@ static void test_ledger_app_state_and_surface_switching(void) {
   expect_true(stats.rects > 0u, "ledger app: scene emits rects");
   expect_size(stats.hits, ER_TEST_LEDGER_APP_HITS, "ledger app: scene emits expected hits");
   expect_true(stats.text_quads > 0u, "ledger app: scene emits text");
+  expect_true(test_ledger_hit_has_fill_rect(&scene, ER_TEST_LEDGER_SAVE_THRESHOLD_BUTTON_ID),
+              "ledger app: save threshold action is visibly rendered");
+  expect_true(test_ledger_hit_has_fill_rect(&scene, ER_TEST_LEDGER_INVEST_BUTTON_ID),
+              "ledger app: review order action is visibly rendered");
 
   er_ui_action_t down = er_ui_runtime_pointer_down(&runtime, &scene, 40.0f, 138.0f);
   expect_size(down.kind, ER_UI_ACTION_FOCUSED, "ledger app: nav pointer down focuses");

@@ -37,6 +37,7 @@ static const uint32_t ER_UI_LEDGER_ACTION_BASE = 0xED024000u;
 static const uint32_t ER_UI_LEDGER_PAYOUT_SLIDER_ID = ER_UI_LEDGER_ACTION_BASE + 1u;
 static const uint32_t ER_UI_LEDGER_INVEST_BUTTON_ID = ER_UI_LEDGER_ACTION_BASE + 2u;
 static const uint32_t ER_UI_LEDGER_TRANSFER_BUTTON_ID = ER_UI_LEDGER_ACTION_BASE + 4u;
+static const uint32_t ER_UI_LEDGER_SAVE_THRESHOLD_BUTTON_ID = ER_UI_LEDGER_ACTION_BASE + 8u;
 
 typedef struct {
   er_ui_color4_t bg;
@@ -422,9 +423,10 @@ static er_ui_status_t er_ui_ledger_payout_card(
   if (status != ER_UI_OK) return status;
   status = er_ui_ledger_rect(scene, er_ui_bounds(slider.x + slider.w * 0.25f - 4.0f, slider.y - 4.0f, 8.0f, 8.0f), 999.0f, colors.text);
   if (status != ER_UI_OK) return status;
-  return er_ui_scene_push_hit(scene, er_ui_hit(ER_UI_HIT_BUTTON, ER_UI_LEDGER_ACTION_BASE + 8u,
-                                              bounds.x + 16.0f, bounds.y + bounds.h - 48.0f,
-                                              bounds.w - 32.0f, ER_UI_LEDGER_BUTTON_H));
+  return er_ui_ledger_button(scene, font,
+                             er_ui_bounds(bounds.x + 16.0f, bounds.y + bounds.h - 48.0f,
+                                          bounds.w - 32.0f, ER_UI_LEDGER_BUTTON_H),
+                             colors, "Save Threshold", ER_UI_LEDGER_SAVE_THRESHOLD_BUTTON_ID);
 }
 
 static er_ui_status_t er_ui_ledger_targets_card(
@@ -479,9 +481,10 @@ static er_ui_status_t er_ui_ledger_invest_card(
   if (status != ER_UI_OK) return status;
   status = er_ui_ledger_text(scene, font, "$12,450.00", bounds.x + bounds.w - 106.0f, bounds.y + 248.0f, colors.text);
   if (status != ER_UI_OK) return status;
-  return er_ui_scene_push_hit(scene, er_ui_hit(ER_UI_HIT_BUTTON, ER_UI_LEDGER_INVEST_BUTTON_ID,
-                                              bounds.x + 16.0f, bounds.y + bounds.h - 48.0f,
-                                              bounds.w - 32.0f, ER_UI_LEDGER_BUTTON_H));
+  return er_ui_ledger_button(scene, font,
+                             er_ui_bounds(bounds.x + 16.0f, bounds.y + bounds.h - 48.0f,
+                                          bounds.w - 32.0f, ER_UI_LEDGER_BUTTON_H),
+                             colors, "Review Order", ER_UI_LEDGER_INVEST_BUTTON_ID);
 }
 
 static er_ui_status_t er_ui_ledger_transactions_card(
