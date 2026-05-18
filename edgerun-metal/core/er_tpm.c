@@ -26,7 +26,12 @@ enum {
   ER_TPM_U32_BYTES = 4u,
   ER_TPM_U64_HIGH_OFFSET = 4u,
   ER_TPM_BYTE_BITS = 8u,
+  ER_TPM_U32_MID_BITS = 16u,
+  ER_TPM_U32_HIGH_BITS = 24u,
+  ER_TPM_U64_HIGH_BITS = 32u,
   ER_TPM_BYTE_MASK = 0xffu,
+  ER_TPM_MMIO_PAGE_MASK = 0xfffu,
+  ER_TPM_MMIO_PAGE_BASE_MIN = 0x1000u,
   ER_TPM_RESPONSE_CODE_OFFSET = 6u,
   ER_TPM_RESPONSE_SIZE_OFFSET = 2u,
   ER_TPM_TPM2B_LEN_BYTES = 2u,
@@ -45,6 +50,9 @@ enum {
   ER_TPM_SIGN_COMMAND_LEN = 73u,
   ER_TPM_FLUSH_CONTEXT_COMMAND_LEN = 14u,
   ER_TPM_SIGNATURE_MAX_COMPONENT_LEN = 32u,
+  ER_TPM_START_METHOD_CRB = 6u,
+  ER_TPM_START_METHOD_CRB_WITH_ACPI = 7u,
+  ER_TPM_START_METHOD_CRB_WITH_SMC = 8u,
   ER_TPM_TPMA_OBJECT_FIXED_TPM = 0x00000002u,
   ER_TPM_TPMA_OBJECT_FIXED_PARENT = 0x00000010u,
   ER_TPM_TPMA_OBJECT_SENSITIVE_DATA_ORIGIN = 0x00000020u,
@@ -59,12 +67,13 @@ static UINT16 er_tpm_get_le16(const UINT8* bytes) {
 
 static UINT32 er_tpm_get_le32(const UINT8* bytes) {
   return (UINT32)((UINT32)bytes[0] | ((UINT32)bytes[1] << ER_TPM_BYTE_BITS) |
-                  ((UINT32)bytes[2] << 16u) | ((UINT32)bytes[3] << 24u));
+                  ((UINT32)bytes[2] << ER_TPM_U32_MID_BITS) |
+                  ((UINT32)bytes[3] << ER_TPM_U32_HIGH_BITS));
 }
 
 static UINT64 er_tpm_get_le64(const UINT8* bytes) {
   return (UINT64)er_tpm_get_le32(bytes) |
-         ((UINT64)er_tpm_get_le32(bytes + ER_TPM_U64_HIGH_OFFSET) << 32u);
+         ((UINT64)er_tpm_get_le32(bytes + ER_TPM_U64_HIGH_OFFSET) << ER_TPM_U64_HIGH_BITS);
 }
 
 static UINT16 er_tpm_get_be16(const UINT8* bytes) {
@@ -72,7 +81,8 @@ static UINT16 er_tpm_get_be16(const UINT8* bytes) {
 }
 
 static UINT32 er_tpm_get_be32(const UINT8* bytes) {
-  return (UINT32)(((UINT32)bytes[0] << 24u) | ((UINT32)bytes[1] << 16u) |
+  return (UINT32)(((UINT32)bytes[0] << ER_TPM_U32_HIGH_BITS) |
+                  ((UINT32)bytes[1] << ER_TPM_U32_MID_BITS) |
                   ((UINT32)bytes[2] << ER_TPM_BYTE_BITS) | (UINT32)bytes[3]);
 }
 
@@ -82,8 +92,8 @@ static void er_tpm_put_be16(UINT8* dst, UINT16 value) {
 }
 
 static void er_tpm_put_be32(UINT8* dst, UINT32 value) {
-  dst[0] = (UINT8)((value >> 24u) & ER_TPM_BYTE_MASK);
-  dst[1] = (UINT8)((value >> 16u) & ER_TPM_BYTE_MASK);
+  dst[0] = (UINT8)((value >> ER_TPM_U32_HIGH_BITS) & ER_TPM_BYTE_MASK);
+  dst[1] = (UINT8)((value >> ER_TPM_U32_MID_BITS) & ER_TPM_BYTE_MASK);
   dst[2] = (UINT8)((value >> ER_TPM_BYTE_BITS) & ER_TPM_BYTE_MASK);
   dst[3] = (UINT8)(value & ER_TPM_BYTE_MASK);
 }
@@ -146,8 +156,8 @@ static UINT8 er_tpm_wait_u32_clear(UINT64 address, UINT32 mask, UINT32 polls) {
 
 static UINT8 er_tpm_crb_sane(const ErTpmCrbTransport* transport) {
   if (transport == 0 || transport->control_area == 0u ||
-      transport->command_buffer < 0x1000u ||
-      transport->response_buffer < 0x1000u ||
+      transport->command_buffer < ER_TPM_MMIO_PAGE_BASE_MIN ||
+      transport->response_buffer < ER_TPM_MMIO_PAGE_BASE_MIN ||
       transport->command_buffer < transport->control_area ||
       transport->response_buffer < transport->control_area ||
       transport->command_buffer - transport->control_area >= ER_TPM_CRB_MMIO_SPAN_MAX ||
@@ -204,9 +214,9 @@ UINT8 er_tpm2_info_is_crb(const ErTpm2Info* info) {
     return 0;
   }
   switch (info->start_method) {
-    case 6u:
-    case 7u:
-    case 8u:
+    case ER_TPM_START_METHOD_CRB:
+    case ER_TPM_START_METHOD_CRB_WITH_ACPI:
+    case ER_TPM_START_METHOD_CRB_WITH_SMC:
       return 1;
     default:
       return 0;
@@ -251,22 +261,22 @@ UINT8 er_tpm_crb_from_tpm2_info(const ErTpm2Info* info, ErTpmCrbTransport* out_t
     return 0;
   }
 
-  if ((info->control_area & 0xfffu) != 0u &&
+  if ((info->control_area & ER_TPM_MMIO_PAGE_MASK) != 0u &&
       info->control_area < ER_TPM_CRB_CTRL_REQ_OFFSET) {
     return 0;
   }
-  first_base = ((info->control_area & 0xfffu) == 0u) ?
+  first_base = ((info->control_area & ER_TPM_MMIO_PAGE_MASK) == 0u) ?
       info->control_area :
       info->control_area - ER_TPM_CRB_CTRL_REQ_OFFSET;
   if (er_tpm_crb_from_register_base(first_base, out_transport) != 0u) {
     return 1;
   }
 
-  if (((info->control_area & 0xfffu) == 0u) &&
+  if (((info->control_area & ER_TPM_MMIO_PAGE_MASK) == 0u) &&
       info->control_area < ER_TPM_CRB_CTRL_REQ_OFFSET) {
     return 0;
   }
-  second_base = ((info->control_area & 0xfffu) == 0u) ?
+  second_base = ((info->control_area & ER_TPM_MMIO_PAGE_MASK) == 0u) ?
       info->control_area - ER_TPM_CRB_CTRL_REQ_OFFSET :
       info->control_area;
   return er_tpm_crb_from_register_base(second_base, out_transport);
