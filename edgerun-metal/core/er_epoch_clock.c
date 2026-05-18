@@ -8,6 +8,31 @@ static UINT8 er_epoch_clock_limits_valid(const ErEpochClockLimits* limits) {
                  limits->epochs_per_era != 0u);
 }
 
+static UINT8 er_epoch_power_of_two(UINT64 value) {
+  return (UINT8)(value != 0u && (value & (value - 1u)) == 0u);
+}
+
+static UINT8 er_epoch_limit_shift(UINT64 value, UINT8* out_shift) {
+  UINT8 shift = 0u;
+
+  if (er_epoch_power_of_two(value) == 0u || out_shift == 0) {
+    return 0u;
+  }
+  while (value > 1u) {
+    value >>= 1u;
+    ++shift;
+  }
+  *out_shift = shift;
+  return 1u;
+}
+
+static UINT8 er_epoch_clock_limits_power_of_two(const ErEpochClockLimits* limits) {
+  return (UINT8)(er_epoch_clock_limits_valid(limits) != 0u &&
+                 er_epoch_power_of_two(limits->ticks_per_slot) != 0u &&
+                 er_epoch_power_of_two(limits->slots_per_epoch) != 0u &&
+                 er_epoch_power_of_two(limits->epochs_per_era) != 0u);
+}
+
 static UINT8 er_epoch_clock_modifier_valid(const ErEpochClockModifier* modifier) {
   return (UINT8)(modifier != 0 && modifier->tick_stride != 0u);
 }
@@ -39,11 +64,24 @@ ErEpochClockModifier er_epoch_clock_default_modifier(void) {
 }
 
 UINT8 er_epoch_clock_init(const ErEpochClockLimits* limits, ErEpochClock* out_clock) {
-  if (er_epoch_clock_limits_valid(limits) == 0u || out_clock == 0) {
+  UINT8 tick_shift = 0u;
+  UINT8 slot_shift = 0u;
+  UINT8 epoch_shift = 0u;
+
+  if (er_epoch_clock_limits_power_of_two(limits) == 0u || out_clock == 0 ||
+      er_epoch_limit_shift(limits->ticks_per_slot, &tick_shift) == 0u ||
+      er_epoch_limit_shift(limits->slots_per_epoch, &slot_shift) == 0u ||
+      er_epoch_limit_shift(limits->epochs_per_era, &epoch_shift) == 0u) {
     return 0u;
   }
   er_mem_zero((UINT8*)out_clock, (UINTN)sizeof(*out_clock));
   out_clock->limits = *limits;
+  out_clock->tick_mask = limits->ticks_per_slot - 1u;
+  out_clock->slot_mask = limits->slots_per_epoch - 1u;
+  out_clock->epoch_mask = limits->epochs_per_era - 1u;
+  out_clock->tick_shift = tick_shift;
+  out_clock->slot_shift = slot_shift;
+  out_clock->epoch_shift = epoch_shift;
   return 1u;
 }
 
@@ -68,7 +106,7 @@ UINT8 er_epoch_clock_advance_with_modifier(ErEpochClock* clock,
   UINT64 next_epoch;
   UINT64 next_era;
 
-  if (clock == 0 || er_epoch_clock_limits_valid(&clock->limits) == 0u) {
+  if (clock == 0 || er_epoch_clock_limits_power_of_two(&clock->limits) == 0u) {
     return 0u;
   }
   if (er_epoch_clock_modifier_valid(modifier) == 0u) {
@@ -85,8 +123,8 @@ UINT8 er_epoch_clock_advance_with_modifier(ErEpochClock* clock,
   next_epoch = clock->now.epoch;
   next_slot = clock->now.slot;
   total_ticks = clock->now.tick + modifier->tick_stride;
-  next_tick = total_ticks % clock->limits.ticks_per_slot;
-  slot_steps = total_ticks / clock->limits.ticks_per_slot;
+  next_tick = total_ticks & clock->tick_mask;
+  slot_steps = total_ticks >> clock->tick_shift;
   if (slot_steps == 0u) {
     clock->now.tick = next_tick;
     return 1u;
@@ -96,8 +134,8 @@ UINT8 er_epoch_clock_advance_with_modifier(ErEpochClock* clock,
   }
 
   total_slots = next_slot + slot_steps;
-  next_slot = total_slots % clock->limits.slots_per_epoch;
-  epoch_steps = total_slots / clock->limits.slots_per_epoch;
+  next_slot = total_slots & clock->slot_mask;
+  epoch_steps = total_slots >> clock->slot_shift;
   if (epoch_steps == 0u) {
     clock->now.tick = next_tick;
     clock->now.slot = next_slot;
@@ -111,8 +149,8 @@ UINT8 er_epoch_clock_advance_with_modifier(ErEpochClock* clock,
   }
 
   total_epochs = next_epoch + epoch_steps;
-  next_epoch = total_epochs % clock->limits.epochs_per_era;
-  era_steps = total_epochs / clock->limits.epochs_per_era;
+  next_epoch = total_epochs & clock->epoch_mask;
+  era_steps = total_epochs >> clock->epoch_shift;
   if (era_steps == 0u) {
     clock->now.tick = next_tick;
     clock->now.slot = next_slot;
