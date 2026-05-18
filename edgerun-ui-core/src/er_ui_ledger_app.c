@@ -224,6 +224,27 @@ static er_ui_status_t er_ui_ledger_border(er_ui_scene_t* scene, er_ui_bounds_t b
   return er_ui_scene_push_rect(scene, er_ui_rect_border(bounds.x, bounds.y, bounds.w, bounds.h, radius, color));
 }
 
+static er_ui_status_t er_ui_ledger_nav_row(
+  er_ui_scene_t* scene,
+  vr_font_face_t* font,
+  er_ui_bounds_t row,
+  er_ui_ledger_colors_t colors,
+  const er_ui_ledger_nav_item_t* nav,
+  uint32_t focused_id) {
+  if (!scene || !font || !nav || !er_ui_bounds_valid(row)) return ER_UI_ERR_INVALID_ARGUMENT;
+  er_ui_color4_t fill = nav->id == focused_id ? colors.field : er_ui_color_with_alpha(colors.field, 0.0f);
+  er_ui_color4_t color = nav->id == focused_id ? colors.text : colors.muted;
+  er_ui_painter_t painter = er_ui_painter(scene);
+  er_ui_status_t status = er_ui_scene_push_hit(scene, er_ui_hit(ER_UI_HIT_WORKSPACE_TAB, nav->id, row.x, row.y, row.w, row.h));
+  if (status != ER_UI_OK) return status;
+  status = er_ui_ledger_rect(scene, row, 7.0f, fill);
+  if (status != ER_UI_OK) return status;
+  status = er_ui_painter_icon(&painter, er_ui_bounds(row.x + 10.0f, row.y + 8.0f, 16.0f, 16.0f),
+                              nav->icon, color);
+  if (status != ER_UI_OK) return status;
+  return er_ui_ledger_text(scene, font, nav->label, row.x + 34.0f, row.y + 22.0f, color);
+}
+
 static er_ui_status_t er_ui_ledger_card(er_ui_scene_t* scene, er_ui_bounds_t bounds, er_ui_ledger_colors_t colors) {
   er_ui_status_t status = er_ui_scene_push_rect(scene, er_ui_rect_shadow(bounds.x, bounds.y + 6.0f, bounds.w, bounds.h,
                                                                         ER_UI_LEDGER_CARD_RADIUS,
@@ -910,7 +931,7 @@ static er_ui_status_t er_ui_ledger_access(
     er_ui_float_max(layout.content.h - ER_UI_LEDGER_SURFACE_BODY_Y - ER_UI_LEDGER_MARGIN, 1.0f));
   er_ui_responsive_grid_t grid = er_ui_responsive_grid(body, ER_UI_LEDGER_MIN_CARD_W, ER_UI_LEDGER_ACCESS_MAX_COLUMNS, ER_UI_LEDGER_GAP, ER_UI_LEDGER_GAP);
   if (grid.columns == 0u) return ER_UI_ERR_INVALID_ARGUMENT;
-  float row_h = er_ui_float_max(body.h, 1.0f);
+  float row_h = er_ui_float_max(er_ui_responsive_grid_row_height(grid, er_ui_responsive_grid_row_count(grid, 2u)), 1.0f);
   status = er_ui_ledger_access_card(scene, font, er_ui_responsive_grid_cell(grid, 0u, row_h), colors);
   if (status != ER_UI_OK) return status;
   return er_ui_ledger_targets_card(scene, font, er_ui_responsive_grid_cell(grid, 1u, row_h), colors);
