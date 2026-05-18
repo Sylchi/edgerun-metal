@@ -548,8 +548,8 @@ er_ui_status_t er_ui_edgerun_metal_surface_emit(
   er_ui_responsive_grid_t metric_grid =
     er_ui_responsive_grid(metric_seed, ER_UI_METAL_METRIC_MIN_W, ER_UI_METAL_METRIC_COLUMN_COUNT, layout.block_gap, layout.block_gap);
   if (metric_grid.columns == 0u) return ER_UI_ERR_INVALID_ARGUMENT;
-  size_t metric_rows = (ER_UI_METAL_METRIC_COLUMN_COUNT + metric_grid.columns - 1u) / metric_grid.columns;
-  float metric_row_h = layout.metric_h * (float)metric_rows + layout.block_gap * (float)(metric_rows - 1u);
+  float metric_row_h = er_ui_responsive_grid_height(metric_grid, ER_UI_METAL_METRIC_COLUMN_COUNT, layout.metric_h);
+  if (metric_row_h <= 0.0f) return ER_UI_ERR_INVALID_ARGUMENT;
   er_ui_bounds_t metric_row = er_ui_bounds(metric_seed.x, metric_seed.y, metric_seed.w, metric_row_h);
   metric_grid = er_ui_responsive_grid(metric_row, ER_UI_METAL_METRIC_MIN_W, ER_UI_METAL_METRIC_COLUMN_COUNT, layout.block_gap, layout.block_gap);
   float lower_y = metric_row.y + metric_row.h + layout.block_gap;
