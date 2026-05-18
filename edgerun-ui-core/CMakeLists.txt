@@ -12,7 +12,12 @@ endif()
 
 add_library(er_ui_core
   src/er_ui_assets.c
-  src/er_ui_components.c
+  src/er_ui_components_catalog.c
+  src/er_ui_components_contracts.c
+  src/er_ui_components_emit.c
+  src/er_ui_components_internal.c
+  src/er_ui_components_preview.c
+  src/er_ui_components_state.c
   src/er_ui_ledger_app.c
   src/er_ui_icon.c
   src/er_ui_initial_setup.c
