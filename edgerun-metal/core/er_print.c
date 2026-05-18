@@ -29,15 +29,14 @@
 static EFI_SYSTEM_TABLE* g_st;
 static UINT8 g_serial_ready;
 static UINT8 g_firmware_console_enabled = 1u;
+static UINT8 g_serial_direct_enabled = 1u;
+
+#ifdef ER_ENABLE_TEST_HOOKS
+static UINT64 g_test_serial_byte_count;
+#endif
 
 static inline void er_io_out8(UINT16 port, UINT8 value) {
   __asm__ __volatile__("outb %0, %1" : : "a"(value), "Nd"(port));
-}
-
-static inline UINT8 er_io_in8(UINT16 port) {
-  UINT8 value = 0;
-  __asm__ __volatile__("inb %1, %0" : "=a"(value) : "Nd"(port));
-  return value;
 }
 
 static void er_serial_init(void) {
@@ -56,15 +55,31 @@ static void er_serial_init(void) {
   g_serial_ready = 1;
 }
 
-static void er_serial_putc(char c) {
-  UINT32 spins = 0;
+#ifndef ER_ENABLE_TEST_HOOKS
+static inline UINT8 er_io_in8(UINT16 port) {
+  UINT8 value = 0;
+  __asm__ __volatile__("inb %1, %0" : "=a"(value) : "Nd"(port));
+  return value;
+}
+#endif
 
+static void er_serial_putc(char c) {
+#ifndef ER_ENABLE_TEST_HOOKS
+  UINT32 spins = 0;
+#endif
+
+#ifdef ER_ENABLE_TEST_HOOKS
+  (void)c;
+  ++g_test_serial_byte_count;
+  return;
+#else
   er_serial_init();
   while ((er_io_in8((UINT16)(ER_COM1_PORT + ER_SERIAL_LINE_STATUS_OFFSET)) & ER_SERIAL_TX_READY_MASK) == 0u &&
          spins < ER_SERIAL_TX_WAIT_SPINS) {
     ++spins;
   }
   er_io_out8((UINT16)ER_COM1_PORT, (UINT8)c);
+#endif
 }
 
 static void er_serial_write(const char* s) {
@@ -82,6 +97,7 @@ static void er_serial_write(const char* s) {
 void er_print_set_system_table(EFI_SYSTEM_TABLE* st) {
   g_st = st;
   g_firmware_console_enabled = 1u;
+  g_serial_direct_enabled = 0u;
   er_serial_init();
   er_gfx_console_init(st);
   er_netlog_init(st);
@@ -96,7 +112,22 @@ void er_print_set_system_table(EFI_SYSTEM_TABLE* st) {
 
 void er_print_set_firmware_console_enabled(UINT8 enabled) {
   g_firmware_console_enabled = (UINT8)(enabled != 0u);
+  g_serial_direct_enabled = (UINT8)(enabled == 0u);
 }
+
+#ifdef ER_ENABLE_TEST_HOOKS
+void er_print_test_reset(EFI_SYSTEM_TABLE* st) {
+  g_st = st;
+  g_serial_ready = 1u;
+  g_firmware_console_enabled = 1u;
+  g_serial_direct_enabled = 0u;
+  g_test_serial_byte_count = 0u;
+}
+
+UINT64 er_print_test_serial_byte_count(void) {
+  return g_test_serial_byte_count;
+}
+#endif
 
 void er_print(const char* s) {
   CHAR16 out[ER_PRINT_FW_BUFFER_CHARS];
@@ -107,7 +138,12 @@ void er_print(const char* s) {
     return;
   }
 
-  er_serial_write(s);
+  if (g_serial_direct_enabled != 0u ||
+      g_st == 0 ||
+      g_st->ConOut == 0 ||
+      g_st->ConOut->OutputString == 0) {
+    er_serial_write(s);
+  }
   er_netlog_write_text(s);
   er_gfx_console_write(s);
 
@@ -133,7 +169,7 @@ void er_println(const char* s) {
 
 void er_print_u64_hex(UINT64 value) {
   char buf[ER_PRINT_HEX_BUF_CHARS];
-  const char hex_digits[16] = "0123456789abcdef";
+  const char hex_digits[] = "0123456789abcdef";
   int i = 0;
   UINTN n;
 

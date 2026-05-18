@@ -25,6 +25,27 @@
 - Use `main` only. Do not create, switch to, or continue work on feature branches unless the user explicitly asks for a temporary archival branch.
 - Commit and push finished work directly to `main`; do not leave implementation work stranded on side branches.
 
+## Friction Prevention
+
+- Treat the implementation as the source of truth. Read the actual code before changing docs, roadmap text, or architecture descriptions.
+- When the user points to a reference implementation, screenshot, copied text, or another repo, inspect that reference directly and port the relevant behavior instead of approximating it.
+- Do not invent parallel systems, alternate terminology, or new architecture when an existing project concept already covers the task.
+- For broad prompts such as `continue`, `improve`, `fix`, or `get to work`, choose the highest-impact concrete task, state that task briefly, and execute it through verification.
+- Material progress means removing wrong code, reducing real complexity, improving a working path, or making a visible/testable behavior better. Avoid tiny cosmetic edits unless they unblock a larger goal.
+- Prefer consolidation and deletion over adding another layer. If two files, docs, APIs, or concepts conflict, reconcile them to one canonical version.
+- If the task is architectural, update code and tests first; update documentation only after the implemented behavior is clear.
+- If the task is documentation, verify the documentation against current code before editing and remove stale/conflicting claims instead of expanding them.
+- If the user corrects direction, treat the correction as higher priority than earlier plans and re-read the relevant code before continuing.
+- Do not keep retrying a failing build, test, or QEMU run without changing the hypothesis. Capture the specific failure, inspect the responsible code, then make a targeted fix.
+
+## UI And Visual Work
+
+- UI work must be reference-driven. Use the provided screenshot, reference repo, component source, theme tokens, icon set, and font assets as concrete inputs.
+- Do not hand-wave visual parity. Compare the rendered result against the reference and list the remaining visual differences before claiming the task is done.
+- Use the actual component system and renderer paths that are meant to ship. Do not create a separate demo-only surface that bypasses the real UI architecture.
+- For shadcn-style work, port the component structure, spacing, states, icons, and theme values from the canonical source instead of making approximate lookalikes.
+- Run the relevant render path or screenshot/QEMU check when visual output is changed. If visual verification cannot run, report that explicitly.
+
 ## Enforcement
 
 - Fail fast on unsupported, uncertain, or partial states.

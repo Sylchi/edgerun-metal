@@ -10,4 +10,9 @@ void er_println(const char* s);
 void er_print_u64_dec(UINT64 value);
 void er_print_u64_hex(UINT64 value);
 
+#ifdef ER_ENABLE_TEST_HOOKS
+void er_print_test_reset(EFI_SYSTEM_TABLE* st);
+UINT64 er_print_test_serial_byte_count(void);
+#endif
+
 #endif

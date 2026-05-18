@@ -58,11 +58,11 @@ UINT8 er_ui_boot_render_scene(er_ui_scene_t* scene,
   }
 
   er_ui_scene_clear_commands(scene);
-  if (er_ui_edgerun_metal_surface_emit(scene,
-                                       render->font,
-                                       er_ui_bounds(0.0f, 0.0f, (float)render->mode.width, (float)render->mode.height),
-                                       render->theme,
-                                       &ledger_state->gallery) != ER_UI_OK) {
+  if (er_ui_ledger_app_emit_scene(ledger_state,
+                                  scene,
+                                  render->font,
+                                  er_ui_bounds(0.0f, 0.0f, (float)render->mode.width, (float)render->mode.height),
+                                  render->theme) != ER_UI_OK) {
     er_println("ui renderer: scene build failed");
     return 0u;
   }
