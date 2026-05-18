@@ -8,6 +8,7 @@
 
 #include "er_crypto.h"
 #include "er_work.h"
+#include "er_ui_scene.h"
 
 #define ER_APP_ABI_VERSION 1u
 #define ER_APP_INSTANCE_NONCE_LEN 32u
@@ -117,6 +118,25 @@ typedef struct {
   UINT64 public_outbox_len;
 } ErAppExecutionJurisdiction;
 
+typedef struct {
+  UINT16 abi_version;
+  UINT16 reserved;
+  ErHash presentation_id;
+  ErHash jurisdiction_id;
+  ErHash admission_id;
+  ErNodeId app_node_id;
+  ErNodeId ui_relay_node_id;
+  ErHash route_hash;
+  UINT64 sequence;
+  UINT64 max_rects;
+  UINT64 max_hits;
+  UINT64 max_drag_sources;
+  UINT64 max_drop_targets;
+  UINT64 max_transitions;
+  UINT64 max_icon_quads;
+  UINT64 max_text_quads;
+} ErAppUiPresentation;
+
 UINT8 er_app_derive_identity(const ErCryptoProvider* crypto, const ErHash* app_object_id,
                              const ErHash* manifest_hash, const ErHash* admission_id,
                              const UINT8* instance_nonce, UINTN instance_nonce_len,
@@ -148,5 +168,14 @@ UINT8 er_app_prepare_execution_jurisdiction(const ErCryptoProvider* crypto,
                                             UINT64 public_outbox_base,
                                             UINT64 public_outbox_len,
                                             ErAppExecutionJurisdiction* out_jurisdiction);
+UINT8 er_app_prepare_ui_presentation(const ErCryptoProvider* crypto,
+                                     const ErAppExecutionJurisdiction* jurisdiction,
+                                     const ErNodeId* ui_relay_node_id,
+                                     const ErHash* route_hash,
+                                     er_ui_scene_budget_t scene_budget,
+                                     UINT64 sequence,
+                                     ErAppUiPresentation* out_presentation);
+UINT8 er_app_ui_scene_fits_presentation(er_ui_scene_stats_t stats,
+                                        const ErAppUiPresentation* presentation);
 
 #endif

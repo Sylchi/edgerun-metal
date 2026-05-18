@@ -13,6 +13,7 @@ static const UINT8 g_app_budget_domain[] = "edgerun:c:v1:app:budget";
 static const UINT8 g_app_schedule_domain[] = "edgerun:c:v1:app:schedule-slot";
 static const UINT8 g_app_launch_allocation_domain[] = "edgerun:c:v1:app:launch-allocation";
 static const UINT8 g_app_execution_jurisdiction_domain[] = "edgerun:c:v1:app:execution-jurisdiction";
+static const UINT8 g_app_ui_presentation_domain[] = "edgerun:c:v1:app:ui-presentation";
 
 enum {
   ER_APP_BYTE_BITS = 8u,
@@ -66,7 +67,16 @@ enum {
   ER_APP_EXECUTION_INBOX_BASE_OFFSET = 48u,
   ER_APP_EXECUTION_INBOX_LEN_OFFSET = 56u,
   ER_APP_EXECUTION_OUTBOX_BASE_OFFSET = 64u,
-  ER_APP_EXECUTION_OUTBOX_LEN_OFFSET = 72u
+  ER_APP_EXECUTION_OUTBOX_LEN_OFFSET = 72u,
+  ER_APP_UI_PRESENTATION_SPAN_COUNT = 5u,
+  ER_APP_UI_PRESENTATION_JURISDICTION_SPAN = 0u,
+  ER_APP_UI_PRESENTATION_APP_SPAN = 1u,
+  ER_APP_UI_PRESENTATION_RELAY_SPAN = 2u,
+  ER_APP_UI_PRESENTATION_ROUTE_SPAN = 3u,
+  ER_APP_UI_PRESENTATION_FIELDS_SPAN = 4u,
+  ER_APP_UI_PRESENTATION_U64_FIELD_COUNT = 8u,
+  ER_APP_UI_PRESENTATION_U64_FIELDS_BYTES =
+      ER_APP_U64_FIELD_BYTES * ER_APP_UI_PRESENTATION_U64_FIELD_COUNT
 };
 
 static void er_app_put_be(UINT8* dst, UINT64 value, UINTN byte_count) {
@@ -135,6 +145,20 @@ static UINT8 er_app_node_equal(const ErNodeId* left, const ErNodeId* right) {
     }
   }
   return 1;
+}
+
+static UINT8 er_app_scene_budget_nonzero(er_ui_scene_budget_t budget) {
+  return (UINT8)(budget.rects != 0u ||
+                 budget.hits != 0u ||
+                 budget.drag_sources != 0u ||
+                 budget.drop_targets != 0u ||
+                 budget.transitions != 0u ||
+                 budget.icon_quads != 0u ||
+                 budget.text_quads != 0u);
+}
+
+static UINT8 er_app_scene_count_fits(UINT64 actual, UINT64 limit) {
+  return (UINT8)(actual <= limit);
 }
 
 static void er_app_prepare_identity_budget_spans(const ErAppIdentity* identity, const ErAppBudget* budget,
@@ -510,4 +534,98 @@ UINT8 er_app_prepare_execution_jurisdiction(const ErCryptoProvider* crypto,
   return er_crypto_hash(crypto, g_app_execution_jurisdiction_domain,
                         (UINTN)(sizeof(g_app_execution_jurisdiction_domain) - 1u),
                         spans, ER_APP_EXECUTION_SPAN_COUNT, &out_jurisdiction->jurisdiction_id);
+}
+
+UINT8 er_app_prepare_ui_presentation(const ErCryptoProvider* crypto,
+                                     const ErAppExecutionJurisdiction* jurisdiction,
+                                     const ErNodeId* ui_relay_node_id,
+                                     const ErHash* route_hash,
+                                     er_ui_scene_budget_t scene_budget,
+                                     UINT64 sequence,
+                                     ErAppUiPresentation* out_presentation) {
+  UINT8 fields[ER_APP_UI_PRESENTATION_U64_FIELDS_BYTES];
+  UINT8* cursor = fields;
+  ErByteSpan spans[ER_APP_UI_PRESENTATION_SPAN_COUNT];
+
+  if (crypto == 0 || jurisdiction == 0 || ui_relay_node_id == 0 ||
+      route_hash == 0 || out_presentation == 0 ||
+      jurisdiction->abi_version != ER_APP_ABI_VERSION ||
+      er_app_node_nonzero(&jurisdiction->app_node_id) == 0u ||
+      er_mem_any_nonzero(jurisdiction->jurisdiction_id.bytes, ER_HASH_LEN) == 0u ||
+      er_mem_any_nonzero(jurisdiction->admission_id.bytes, ER_HASH_LEN) == 0u ||
+      er_app_node_nonzero(ui_relay_node_id) == 0u ||
+      er_mem_any_nonzero(route_hash->bytes, ER_HASH_LEN) == 0u ||
+      er_app_scene_budget_nonzero(scene_budget) == 0u ||
+      sequence == 0u) {
+    return 0;
+  }
+
+  er_app_put_budget_field(&cursor, sequence);
+  er_app_put_budget_field(&cursor, (UINT64)scene_budget.rects);
+  er_app_put_budget_field(&cursor, (UINT64)scene_budget.hits);
+  er_app_put_budget_field(&cursor, (UINT64)scene_budget.drag_sources);
+  er_app_put_budget_field(&cursor, (UINT64)scene_budget.drop_targets);
+  er_app_put_budget_field(&cursor, (UINT64)scene_budget.transitions);
+  er_app_put_budget_field(&cursor, (UINT64)scene_budget.icon_quads);
+  er_app_put_budget_field(&cursor, (UINT64)scene_budget.text_quads);
+
+  spans[ER_APP_UI_PRESENTATION_JURISDICTION_SPAN].bytes =
+      jurisdiction->jurisdiction_id.bytes;
+  spans[ER_APP_UI_PRESENTATION_JURISDICTION_SPAN].len = ER_HASH_LEN;
+  spans[ER_APP_UI_PRESENTATION_APP_SPAN].bytes = jurisdiction->app_node_id.bytes;
+  spans[ER_APP_UI_PRESENTATION_APP_SPAN].len = ER_NODE_ID_LEN;
+  spans[ER_APP_UI_PRESENTATION_RELAY_SPAN].bytes = ui_relay_node_id->bytes;
+  spans[ER_APP_UI_PRESENTATION_RELAY_SPAN].len = ER_NODE_ID_LEN;
+  spans[ER_APP_UI_PRESENTATION_ROUTE_SPAN].bytes = route_hash->bytes;
+  spans[ER_APP_UI_PRESENTATION_ROUTE_SPAN].len = ER_HASH_LEN;
+  spans[ER_APP_UI_PRESENTATION_FIELDS_SPAN].bytes = fields;
+  spans[ER_APP_UI_PRESENTATION_FIELDS_SPAN].len = (UINTN)sizeof(fields);
+
+  er_mem_zero((UINT8*)out_presentation, (UINTN)sizeof(*out_presentation));
+  out_presentation->abi_version = ER_APP_ABI_VERSION;
+  out_presentation->jurisdiction_id = jurisdiction->jurisdiction_id;
+  out_presentation->admission_id = jurisdiction->admission_id;
+  out_presentation->app_node_id = jurisdiction->app_node_id;
+  out_presentation->ui_relay_node_id = *ui_relay_node_id;
+  out_presentation->route_hash = *route_hash;
+  out_presentation->sequence = sequence;
+  out_presentation->max_rects = (UINT64)scene_budget.rects;
+  out_presentation->max_hits = (UINT64)scene_budget.hits;
+  out_presentation->max_drag_sources = (UINT64)scene_budget.drag_sources;
+  out_presentation->max_drop_targets = (UINT64)scene_budget.drop_targets;
+  out_presentation->max_transitions = (UINT64)scene_budget.transitions;
+  out_presentation->max_icon_quads = (UINT64)scene_budget.icon_quads;
+  out_presentation->max_text_quads = (UINT64)scene_budget.text_quads;
+
+  return er_crypto_hash(crypto, g_app_ui_presentation_domain,
+                        (UINTN)(sizeof(g_app_ui_presentation_domain) - 1u),
+                        spans, ER_APP_UI_PRESENTATION_SPAN_COUNT,
+                        &out_presentation->presentation_id);
+}
+
+UINT8 er_app_ui_scene_fits_presentation(er_ui_scene_stats_t stats,
+                                        const ErAppUiPresentation* presentation) {
+  if (presentation == 0 ||
+      presentation->abi_version != ER_APP_ABI_VERSION ||
+      er_app_node_nonzero(&presentation->app_node_id) == 0u ||
+      er_app_node_nonzero(&presentation->ui_relay_node_id) == 0u ||
+      er_mem_any_nonzero(presentation->jurisdiction_id.bytes, ER_HASH_LEN) == 0u ||
+      er_mem_any_nonzero(presentation->admission_id.bytes, ER_HASH_LEN) == 0u ||
+      er_mem_any_nonzero(presentation->presentation_id.bytes, ER_HASH_LEN) == 0u ||
+      er_mem_any_nonzero(presentation->route_hash.bytes, ER_HASH_LEN) == 0u ||
+      presentation->sequence == 0u) {
+    return 0;
+  }
+  return (UINT8)(er_app_scene_count_fits((UINT64)stats.rects, presentation->max_rects) != 0u &&
+                 er_app_scene_count_fits((UINT64)stats.hits, presentation->max_hits) != 0u &&
+                 er_app_scene_count_fits((UINT64)stats.drag_sources,
+                                         presentation->max_drag_sources) != 0u &&
+                 er_app_scene_count_fits((UINT64)stats.drop_targets,
+                                         presentation->max_drop_targets) != 0u &&
+                 er_app_scene_count_fits((UINT64)stats.transitions,
+                                         presentation->max_transitions) != 0u &&
+                 er_app_scene_count_fits((UINT64)stats.icon_quads,
+                                         presentation->max_icon_quads) != 0u &&
+                 er_app_scene_count_fits((UINT64)stats.text_quads,
+                                         presentation->max_text_quads) != 0u);
 }

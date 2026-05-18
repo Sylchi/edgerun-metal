@@ -2107,6 +2107,7 @@ static void test_app_identity_routes(void) {
   ErHash route_hash;
   ErNodeId target_node_id;
   ErNodeId parent_relay_node_id;
+  ErNodeId ui_relay_node_id;
   ErAppIdentity identity;
   ErAppIpcRouteBinding binding;
   ErAppBudget budget;
@@ -2114,6 +2115,9 @@ static void test_app_identity_routes(void) {
   ErAppScheduleSlot slot;
   ErAppLaunchAllocation allocation;
   ErAppExecutionJurisdiction jurisdiction;
+  ErAppUiPresentation presentation;
+  er_ui_scene_budget_t scene_budget;
+  er_ui_scene_stats_t scene_stats;
   UINT8 nonce[ER_APP_INSTANCE_NONCE_LEN];
   UINTN i;
 
@@ -2132,6 +2136,7 @@ static void test_app_identity_routes(void) {
     route_hash.bytes[i] = (UINT8)(0x90u + i);
     target_node_id.bytes[i] = (UINT8)(0xb0u + i);
     parent_relay_node_id.bytes[i] = (UINT8)(0xc0u + i);
+    ui_relay_node_id.bytes[i] = (UINT8)(0xe0u + i);
     nonce[i] = (UINT8)(0xd0u + i);
   }
 
@@ -2238,6 +2243,53 @@ static void test_app_identity_routes(void) {
                                                     &parent_relay_node_id, 0u, 1024u,
                                                     4096u, 1u, &jurisdiction),
               0);
+
+  scene_budget.rects = 2u;
+  scene_budget.hits = 1u;
+  scene_budget.drag_sources = 0u;
+  scene_budget.drop_targets = 0u;
+  scene_budget.transitions = 1u;
+  scene_budget.icon_quads = 1u;
+  scene_budget.text_quads = 3u;
+  check_int64("app ui presentation prepare",
+              er_app_prepare_ui_presentation(&crypto, &jurisdiction, &ui_relay_node_id,
+                                             &route_hash, scene_budget, 12u, &presentation),
+              1);
+  check_int64("app ui presentation abi", presentation.abi_version, ER_APP_ABI_VERSION);
+  check_node_id_equal("app ui presentation app", &presentation.app_node_id,
+                      &identity.app_node_id);
+  check_node_id_equal("app ui presentation relay", &presentation.ui_relay_node_id,
+                      &ui_relay_node_id);
+  check_uint64("app ui presentation text budget", presentation.max_text_quads, 3u);
+  scene_stats.rects = 2u;
+  scene_stats.hits = 1u;
+  scene_stats.drag_sources = 0u;
+  scene_stats.drop_targets = 0u;
+  scene_stats.transitions = 1u;
+  scene_stats.clips = 100u;
+  scene_stats.icon_quads = 1u;
+  scene_stats.text_quads = 3u;
+  check_int64("app ui scene fits presentation",
+              er_app_ui_scene_fits_presentation(scene_stats, &presentation), 1);
+  scene_stats.text_quads = 4u;
+  check_int64("app ui scene rejects over text budget",
+              er_app_ui_scene_fits_presentation(scene_stats, &presentation), 0);
+  scene_stats.text_quads = 3u;
+  scene_stats.rects = 3u;
+  check_int64("app ui scene rejects over rect budget",
+              er_app_ui_scene_fits_presentation(scene_stats, &presentation), 0);
+  scene_budget.rects = 0u;
+  scene_budget.hits = 0u;
+  scene_budget.drag_sources = 0u;
+  scene_budget.drop_targets = 0u;
+  scene_budget.transitions = 0u;
+  scene_budget.icon_quads = 0u;
+  scene_budget.text_quads = 0u;
+  check_int64("app ui presentation reject zero budget",
+              er_app_prepare_ui_presentation(&crypto, &jurisdiction, &ui_relay_node_id,
+                                             &route_hash, scene_budget, 12u, &presentation),
+              0);
+
   er_mem_zero(parent_relay_node_id.bytes, ER_NODE_ID_LEN);
   check_int64("app execution reject zero parent",
               er_app_prepare_execution_jurisdiction(&crypto, &identity, &budget, &allocation,
