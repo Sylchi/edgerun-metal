@@ -87,6 +87,7 @@ static void test_pci_device_classification(void) {
   check_int64("pci absent vendor", er_pci_device_present(0x1234ffffu), 0);
   check_int64("pci present", er_pci_device_present(0x1db610deu), 1);
   check_int64("pci vendor", er_pci_vendor_id(0x1db610deu), 0x10de);
+  check_int64("pci device", er_pci_device_id(0x892210ecu), 0x8922);
   check_int64("pci class", er_pci_class_code(0x030000a1u), 0x03);
   check_int64("pci subclass", er_pci_subclass(0x01080200u), 0x08);
   check_int64("pci header single", er_pci_header_multifunction(0x00000000u), 0);
@@ -110,6 +111,9 @@ static void test_pci_device_classification(void) {
   check_int64("pci classify nvidia", er_pci_classify_target(0x1db610deu, 0x03000000u), ER_PCI_TARGET_KIND_NVIDIA);
   check_int64("pci classify nvme", er_pci_classify_target(0x12348086u, 0x01080200u), ER_PCI_TARGET_KIND_NVME);
   check_int64("pci classify ethernet", er_pci_classify_target(0x12348086u, 0x02000000u), ER_PCI_TARGET_KIND_ETHERNET);
+  check_int64("pci classify rtl8922ae", er_pci_classify_target(0x892210ecu, 0x02800000u), ER_PCI_TARGET_KIND_WIFI);
+  check_int64("pci classify rtl8922ae vs", er_pci_classify_target(0x892b10ecu, 0x02800000u), ER_PCI_TARGET_KIND_WIFI);
+  check_int64("pci classify generic wifi", er_pci_classify_target(0x12348086u, 0x02800000u), ER_PCI_TARGET_KIND_WIFI);
   check_int64("pci classify display", er_pci_classify_target(0x12348086u, 0x03000000u), ER_PCI_TARGET_KIND_DISPLAY);
   check_int64("pci classify other", er_pci_classify_target(0x12348086u, 0x0c033000u), ER_PCI_TARGET_KIND_NONE);
 

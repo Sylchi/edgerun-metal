@@ -4,6 +4,7 @@ ErWasmHostCalls g_host_calls = {0};
 
 #include "test_core_basic.c"
 #include "test_core_pci_mmio.c"
+#include "test_core_rtw89.c"
 #include "test_core_virtio.c"
 #include "test_core_platform.c"
 #include "test_core_wasm_imports.c"
@@ -24,6 +25,7 @@ int main(void) {
   test_acpi_tables();
   test_tpm_crb_direct_transport();
   test_pci_device_classification();
+  test_rtw89_pci_prepare();
   test_mmio_handles();
   test_bus_addresses();
   test_virtio_mmio_transport();

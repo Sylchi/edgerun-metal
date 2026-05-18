@@ -23,6 +23,7 @@
 #include "er_ps2_keyboard.h"
 #include "er_relay_packet.h"
 #include "er_render_endpoint.h"
+#include "er_rtw89.h"
 #include "er_seal.h"
 #include "er_storage_endpoint.h"
 #include "er_tpm.h"
