@@ -22,6 +22,7 @@
 #include "er_ui_surface_renderer.h"
 #include "er_ui_tabler_icon_atlas.h"
 #include "er_ui_demo_apps.h"
+#include "er_ui_wasm_app.h"
 #include "er_ui_text.h"
 #include "er_virtio.h"
 #include "er_virtio_gpu.h"
@@ -503,6 +504,21 @@ static void test_write_wasm_ui_scene_packet(UINT8* bytes, UINT32 len) {
   test_put_le32(bytes + quad_offset + 40u, 0x3f800000u);
   test_put_le32(bytes + quad_offset + 44u, 0x3f800000u);
   test_put_le32(bytes + quad_offset + 48u, 0x3f800000u);
+}
+
+static void test_prepare_wasm_ui_presentation(ErAppUiPresentation* presentation) {
+  er_mem_zero((UINT8*)presentation, (UINTN)sizeof(*presentation));
+  presentation->abi_version = ER_APP_ABI_VERSION;
+  test_fill_bytes(presentation->presentation_id.bytes, ER_HASH_LEN, 0x10u);
+  test_fill_bytes(presentation->jurisdiction_id.bytes, ER_HASH_LEN, 0x30u);
+  test_fill_bytes(presentation->admission_id.bytes, ER_HASH_LEN, 0x50u);
+  test_fill_bytes(presentation->app_node_id.bytes, ER_NODE_ID_LEN, 0x70u);
+  test_fill_bytes(presentation->ui_relay_node_id.bytes, ER_NODE_ID_LEN, 0x90u);
+  test_fill_bytes(presentation->route_hash.bytes, ER_HASH_LEN, 0xb0u);
+  presentation->sequence = 1u;
+  presentation->max_rects = 1u;
+  presentation->max_hits = 1u;
+  presentation->max_text_quads = 1u;
 }
 
 static void test_wasm_ui_command_stats_records(void) {
@@ -2521,18 +2537,7 @@ static void test_wasm_ui_emit_import(void) {
   INT64 result = 0;
 
   er_mem_zero(memory, (UINTN)sizeof(memory));
-  er_mem_zero((UINT8*)&presentation, (UINTN)sizeof(presentation));
-  presentation.abi_version = ER_APP_ABI_VERSION;
-  test_fill_bytes(presentation.presentation_id.bytes, ER_HASH_LEN, 0x10u);
-  test_fill_bytes(presentation.jurisdiction_id.bytes, ER_HASH_LEN, 0x30u);
-  test_fill_bytes(presentation.admission_id.bytes, ER_HASH_LEN, 0x50u);
-  test_fill_bytes(presentation.app_node_id.bytes, ER_NODE_ID_LEN, 0x70u);
-  test_fill_bytes(presentation.ui_relay_node_id.bytes, ER_NODE_ID_LEN, 0x90u);
-  test_fill_bytes(presentation.route_hash.bytes, ER_HASH_LEN, 0xb0u);
-  presentation.sequence = 1u;
-  presentation.max_rects = 1u;
-  presentation.max_hits = 1u;
-  presentation.max_text_quads = 1u;
+  test_prepare_wasm_ui_presentation(&presentation);
 
   check_int64("wasm ui linear memory prepare",
               er_wasm_prepare_linear_memory(memory, (UINT32)sizeof(memory),
@@ -2583,6 +2588,46 @@ static void test_wasm_ui_emit_import(void) {
               er_wasm_find_main(&module, &main_index), 0);
   check_int64("wasm ui reject emit outside outbox",
               er_wasm_execute_i64(&module, main_index, &result), -1);
+}
+
+static void test_ui_wasm_app_runner(void) {
+  static UINT8 memory[65536];
+  ErWasmHostCalls host = {0};
+  ErUiWasmAppRuntime runtime;
+  ErAppUiPresentation presentation;
+  er_ui_scene_t scene;
+  INT64 result = 0;
+
+  test_prepare_wasm_ui_presentation(&presentation);
+
+  check_int64("ui wasm app scene init",
+              er_ui_scene_init_with_allocator(&scene, er_ui_color_rgb_u8(0u, 0u, 0u),
+                                              test_ui_allocator()),
+              ER_UI_OK);
+  er_mem_zero((UINT8*)&runtime, (UINTN)sizeof(runtime));
+  runtime.memory = memory;
+  runtime.memory_size = (UINT32)sizeof(memory);
+  runtime.relay_inbox_base = 0u;
+  runtime.relay_inbox_len = 1024u;
+  runtime.relay_outbox_base = 1024u;
+  runtime.relay_outbox_len = 2048u;
+  runtime.presentation = &presentation;
+  runtime.scene = &scene;
+  check_int64("ui wasm app runner",
+              er_ui_wasm_app_run(g_edgerun_ui_counter_wasm, ER_UI_COUNTER_WASM_SIZE,
+                                 &host, &runtime, &result),
+              0);
+  check_uint64("ui wasm app result", (UINT64)result,
+               ER_WASM_UI_COMMAND_LIST_HEADER_LEN +
+                 ER_WASM_UI_RECT_RECORD_LEN +
+                 ER_WASM_UI_HIT_RECORD_LEN +
+                 ER_WASM_UI_QUAD_RECORD_LEN);
+  check_uint64("ui wasm app emitted", runtime.emitted, 1u);
+  check_uint64("ui wasm app rects", scene.rect_count, 1u);
+  check_uint64("ui wasm app hits", scene.hit_count, 1u);
+  check_uint64("ui wasm app text", scene.text_quad_count, 1u);
+  check_int64("ui wasm app hit kind", scene.hits[0].kind, ER_UI_HIT_BUTTON);
+  er_ui_scene_destroy(&scene);
 }
 
 static void test_vfs_object_packets(void) {
@@ -4232,6 +4277,7 @@ int main(void) {
   test_wasm_relay_imports();
   test_wasm_ui_command_stats_records();
   test_wasm_ui_emit_import();
+  test_ui_wasm_app_runner();
   test_vfs_object_packets();
   test_app_identity_routes();
   test_device_relay_identity();

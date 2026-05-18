@@ -13,6 +13,7 @@
 #include "er_ui_demo_apps.h"
 #include "er_ui_metal.h"
 #include "er_ui_theme.h"
+#include "er_ui_wasm_app.h"
 #include "er_virtio_gpu.h"
 #include "erwire.h"
 #include "er_native_boot.h"
@@ -109,9 +110,6 @@ static UINT8 g_log_hex_stage = ER_LOG_HEX_STAGE_ID;
 static UINT64 g_log_bus = 0;
 static UINT64 g_log_dev = 0;
 static UINT64 g_log_func = 0;
-static er_ui_scene_t* g_ui_wasm_emit_scene = 0;
-static UINT8 g_ui_wasm_emit_ready = 0u;
-static er_ui_scene_stats_t g_ui_wasm_emit_stats;
 
 typedef struct {
   vr_font_face_t* font;
@@ -896,18 +894,6 @@ static INT64 er_wasm_bus_exec_host(const ErBusIoPacket* request, ErBusIoPacket* 
   return (INT64)er_bus_execute_io_packet(request, response);
 }
 
-static INT64 er_ui_boot_wasm_emit_host(const UINT8* bytes, UINT32 len,
-                                       const er_ui_scene_stats_t* stats) {
-  if (bytes == 0 || stats == 0 || g_ui_wasm_emit_scene == 0) {
-    return -1;
-  }
-  if (er_wasm_ui_command_decode(bytes, len, g_ui_wasm_emit_scene, &g_ui_wasm_emit_stats) != 0) {
-    return -1;
-  }
-  g_ui_wasm_emit_ready = 1u;
-  return (INT64)(UINT64)len;
-}
-
 static void er_install_hostcalls(void) {
   g_host_calls.log_u64 = er_log_u64;
   g_host_calls.log_hex = er_log_hex;
@@ -1372,50 +1358,34 @@ static void er_ui_boot_prepare_wasm_presentation(const er_ui_scene_budget_t* sce
 
 static UINT8 er_ui_boot_run_wasm_counter(er_ui_scene_t* wasm_scene,
                                          const er_ui_scene_budget_t* scene_budget) {
-  ErWasmHostCalls host;
-  ErWasmLinearMemory linear_memory;
-  ErWasmModule module;
+  ErUiWasmAppRuntime runtime;
   ErAppUiPresentation presentation;
-  UINT32 main_index = 0u;
   INT64 main_result = 0;
 
   if (wasm_scene == 0 || scene_budget == 0) {
     return 0u;
   }
-  er_mem_zero(g_wasm_driver_memory, (UINTN)sizeof(g_wasm_driver_memory));
-  if (er_wasm_prepare_linear_memory(g_wasm_driver_memory, (UINT32)sizeof(g_wasm_driver_memory),
-                                    ER_UI_WASM_RELAY_INBOX_BASE,
-                                    ER_UI_WASM_RELAY_INBOX_BYTES,
-                                    ER_UI_WASM_RELAY_OUTBOX_BASE,
-                                    ER_UI_WASM_RELAY_OUTBOX_BYTES,
-                                    &linear_memory) != 0) {
-    return 0u;
-  }
   er_ui_boot_prepare_wasm_presentation(scene_budget, &presentation);
-  host = g_host_calls;
-  host.linear_memory = linear_memory;
-  host.memory = g_wasm_driver_memory;
-  host.memory_size = (UINT32)sizeof(g_wasm_driver_memory);
-  host.ui_emit = er_ui_boot_wasm_emit_host;
-  host.ui_presentation = &presentation;
-  g_ui_wasm_emit_scene = wasm_scene;
-  g_ui_wasm_emit_ready = 0u;
-  er_mem_zero((UINT8*)&g_ui_wasm_emit_stats, (UINTN)sizeof(g_ui_wasm_emit_stats));
-  if (er_wasm_init(&module, g_edgerun_ui_counter_wasm, ER_UI_COUNTER_WASM_SIZE, &host) != 0 ||
-      er_wasm_find_main(&module, &main_index) != 0 ||
-      er_wasm_execute_i64(&module, main_index, &main_result) != 0 ||
-      main_result != (INT64)(UINT64)ER_UI_WASM_COUNTER_PACKET_BYTES ||
-      g_ui_wasm_emit_ready == 0u) {
-    g_ui_wasm_emit_scene = 0;
+  er_mem_zero((UINT8*)&runtime, (UINTN)sizeof(runtime));
+  runtime.memory = g_wasm_driver_memory;
+  runtime.memory_size = (UINT32)sizeof(g_wasm_driver_memory);
+  runtime.relay_inbox_base = ER_UI_WASM_RELAY_INBOX_BASE;
+  runtime.relay_inbox_len = ER_UI_WASM_RELAY_INBOX_BYTES;
+  runtime.relay_outbox_base = ER_UI_WASM_RELAY_OUTBOX_BASE;
+  runtime.relay_outbox_len = ER_UI_WASM_RELAY_OUTBOX_BYTES;
+  runtime.presentation = &presentation;
+  runtime.scene = wasm_scene;
+  if (er_ui_wasm_app_run(g_edgerun_ui_counter_wasm, ER_UI_COUNTER_WASM_SIZE,
+                         &g_host_calls, &runtime, &main_result) != 0 ||
+      main_result != (INT64)(UINT64)ER_UI_WASM_COUNTER_PACKET_BYTES) {
     return 0u;
   }
-  g_ui_wasm_emit_scene = 0;
   er_print("ui renderer: wasm scene rects=");
-  er_print_u64_dec((UINT64)g_ui_wasm_emit_stats.rects);
+  er_print_u64_dec((UINT64)runtime.emitted_stats.rects);
   er_print(" hits=");
-  er_print_u64_dec((UINT64)g_ui_wasm_emit_stats.hits);
+  er_print_u64_dec((UINT64)runtime.emitted_stats.hits);
   er_print(" text=");
-  er_print_u64_dec((UINT64)g_ui_wasm_emit_stats.text_quads);
+  er_print_u64_dec((UINT64)runtime.emitted_stats.text_quads);
   er_println("");
   return 1u;
 }
