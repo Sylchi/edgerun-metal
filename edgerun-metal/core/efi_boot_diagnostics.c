@@ -307,11 +307,23 @@ void er_log_hex(UINT64 value) {
 }
 
 void er_halt_once(void) {
+#if defined(ER_TARGET_X86_64)
   __asm__ __volatile__("hlt");
+#elif defined(ER_TARGET_AARCH64)
+  __asm__ __volatile__("wfi");
+#else
+#error unsupported metal architecture
+#endif
 }
 
 void er_pause_once(void) {
+#if defined(ER_TARGET_X86_64)
   __asm__ __volatile__("pause");
+#elif defined(ER_TARGET_AARCH64)
+  __asm__ __volatile__("yield");
+#else
+#error unsupported metal architecture
+#endif
 }
 
 void er_halt_forever(void) {

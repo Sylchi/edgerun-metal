@@ -22,34 +22,71 @@ enum {
   ER_BUS_IO_PORT_DWORD_MAX = ER_BUS_IO_PORT_SPACE_BYTES - ER_BUS_WIDTH32_BYTES
 };
 
+#if defined(ER_TARGET_X86_64) || defined(__x86_64__) || defined(_M_X64)
+#define ER_BUS_IO_PORT_SUPPORTED 1u
+#else
+#define ER_BUS_IO_PORT_SUPPORTED 0u
+#endif
+
+static UINT8 er_bus_io_port_supported(void) {
+  return ER_BUS_IO_PORT_SUPPORTED;
+}
+
 static inline UINT8 er_bus_in8(UINT16 port) {
   UINT8 value = 0;
+#if ER_BUS_IO_PORT_SUPPORTED
   __asm__ __volatile__("inb %1, %0" : "=a"(value) : "Nd"(port));
+#else
+  (void)port;
+#endif
   return value;
 }
 
 static inline UINT16 er_bus_in16(UINT16 port) {
   UINT16 value = 0;
+#if ER_BUS_IO_PORT_SUPPORTED
   __asm__ __volatile__("inw %1, %0" : "=a"(value) : "Nd"(port));
+#else
+  (void)port;
+#endif
   return value;
 }
 
 static inline UINT32 er_bus_in32(UINT16 port) {
   UINT32 value = 0;
+#if ER_BUS_IO_PORT_SUPPORTED
   __asm__ __volatile__("inl %1, %0" : "=a"(value) : "Nd"(port));
+#else
+  (void)port;
+#endif
   return value;
 }
 
 static inline void er_bus_out8(UINT16 port, UINT8 value) {
+#if ER_BUS_IO_PORT_SUPPORTED
   __asm__ __volatile__("outb %0, %1" : : "a"(value), "Nd"(port));
+#else
+  (void)port;
+  (void)value;
+#endif
 }
 
 static inline void er_bus_out16(UINT16 port, UINT16 value) {
+#if ER_BUS_IO_PORT_SUPPORTED
   __asm__ __volatile__("outw %0, %1" : : "a"(value), "Nd"(port));
+#else
+  (void)port;
+  (void)value;
+#endif
 }
 
 static inline void er_bus_out32(UINT16 port, UINT32 value) {
+#if ER_BUS_IO_PORT_SUPPORTED
   __asm__ __volatile__("outl %0, %1" : : "a"(value), "Nd"(port));
+#else
+  (void)port;
+  (void)value;
+#endif
 }
 
 static UINT8 er_bus_access_valid(UINT32 access_flags) {
@@ -548,6 +585,9 @@ UINT8 er_bus_read8(const ErBusAddress* address, UINT64 offset, UINT8* out_value)
   }
 
   if (address->bus_kind == ER_BUS_KIND_IO_PORT) {
+    if (er_bus_io_port_supported() == 0u) {
+      return 0;
+    }
     *out_value = er_bus_in8((UINT16)(address->port + offset));
     return 1;
   }
@@ -585,6 +625,9 @@ UINT8 er_bus_read16(const ErBusAddress* address, UINT64 offset, UINT16* out_valu
   }
 
   if (address->bus_kind == ER_BUS_KIND_IO_PORT) {
+    if (er_bus_io_port_supported() == 0u) {
+      return 0;
+    }
     *out_value = er_bus_in16((UINT16)(address->port + offset));
     return 1;
   }
@@ -628,6 +671,9 @@ UINT8 er_bus_read32(const ErBusAddress* address, UINT64 offset, UINT32* out_valu
   }
 
   if (address->bus_kind == ER_BUS_KIND_IO_PORT) {
+    if (er_bus_io_port_supported() == 0u) {
+      return 0;
+    }
     *out_value = er_bus_in32((UINT16)address->port);
     return 1;
   }
@@ -657,6 +703,9 @@ UINT8 er_bus_write8(const ErBusAddress* address, UINT64 offset, UINT8 value) {
   }
 
   if (address->bus_kind == ER_BUS_KIND_IO_PORT) {
+    if (er_bus_io_port_supported() == 0u) {
+      return 0;
+    }
     er_bus_out8((UINT16)(address->port + offset), value);
     return 1;
   }
@@ -686,6 +735,9 @@ UINT8 er_bus_write16(const ErBusAddress* address, UINT64 offset, UINT16 value) {
   }
 
   if (address->bus_kind == ER_BUS_KIND_IO_PORT) {
+    if (er_bus_io_port_supported() == 0u) {
+      return 0;
+    }
     er_bus_out16((UINT16)(address->port + offset), value);
     return 1;
   }
@@ -726,6 +778,9 @@ UINT8 er_bus_write32(const ErBusAddress* address, UINT64 offset, UINT32 value) {
   }
 
   if (address->bus_kind == ER_BUS_KIND_IO_PORT) {
+    if (er_bus_io_port_supported() == 0u) {
+      return 0;
+    }
     er_bus_out32((UINT16)address->port, value);
     return 1;
   }

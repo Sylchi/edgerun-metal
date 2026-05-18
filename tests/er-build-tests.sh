@@ -32,6 +32,11 @@ case "$repo_plan" in
   * ) printf 'missing erwire test step\n' >&2; exit 1 ;;
 esac
 
+case "$repo_plan" in
+  *"+ ./tests/metal-arch-build-tests.sh"* ) ;;
+  * ) printf 'missing metal architecture build test step\n' >&2; exit 1 ;;
+esac
+
 crypto_plan=$("$ER_BUILD" --print-plan crypto-test)
 
 case "$crypto_plan" in

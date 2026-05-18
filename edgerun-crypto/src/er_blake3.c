@@ -126,10 +126,12 @@ static const uint32_t g_er_blake3_iv[ER_BLAKE3_CV_WORDS] = {
   ER_BLAKE3_IV4, ER_BLAKE3_IV5, ER_BLAKE3_IV6, ER_BLAKE3_IV7
 };
 
+#if defined(ER_BLAKE3_USE_AVX512) || defined(ER_BLAKE3_USE_AVX2) || defined(ER_BLAKE3_USE_SSE2)
 //@optimizer-ignore-constant BLAKE3 message permutation table copied from the specification
 static const uint8_t g_er_blake3_msg_perm[ER_BLAKE3_BLOCK_WORDS] = {
   2u, 6u, 3u, 10u, 7u, 0u, 4u, 13u, 1u, 11u, 12u, 5u, 9u, 14u, 15u, 8u //@optimizer-ignore BLAKE3 message word permutation
 };
+#endif
 
 static uint32_t er_blake3_load32(const uint8_t bytes[ER_BLAKE3_WORD_BYTES]);
 
@@ -1407,9 +1409,11 @@ static size_t er_blake3_chunk_len(const ErBlake3Hasher* hasher) {
   return ((size_t)hasher->blocks_compressed * ER_BLAKE3_BLOCK_LEN) + hasher->block_len;
 }
 
+#if defined(ER_BLAKE3_USE_AVX512) || defined(ER_BLAKE3_USE_AVX2) || defined(ER_BLAKE3_USE_SSE2)
 static uint8_t er_blake3_ready_for_full_chunks(const ErBlake3Hasher* hasher) {
   return (uint8_t)(hasher->block_len == 0u && hasher->blocks_compressed == 0u);
 }
+#endif
 
 #if defined(ER_BLAKE3_USE_AVX512)
 static uint8_t er_blake3_consume_avx512_subtree32(ErBlake3Hasher* hasher,
@@ -1549,7 +1553,9 @@ static uint8_t er_blake3_consume_sse2_lanes(ErBlake3Hasher* hasher,
 static uint8_t er_blake3_consume_full_chunks(ErBlake3Hasher* hasher,
                                              const uint8_t** bytes,
                                              size_t* len) {
+#if defined(ER_BLAKE3_USE_AVX512) || defined(ER_BLAKE3_USE_AVX2) || defined(ER_BLAKE3_USE_SSE2)
   uint8_t consumed;
+#endif
 
 #if defined(ER_BLAKE3_USE_AVX512)
   consumed = er_blake3_consume_avx512_subtree32(hasher, bytes, len);
