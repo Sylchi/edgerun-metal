@@ -14,6 +14,16 @@ typedef struct {
   vr_baked_glyph_t baked;
 } BakedGlyph;
 
+enum {
+  FONT_BAKE_ARGC = 3,
+  FONT_BAKE_BYTES_PER_LINE = 16u,
+  FONT_BAKE_BYTES_PER_LINE_LAST_INDEX = FONT_BAKE_BYTES_PER_LINE - 1u,
+  FONT_BAKE_ATLAS_SIZE = 1024u,
+  FONT_BAKE_ASCII_FIRST = 32u,
+  FONT_BAKE_ASCII_LAST = 126u,
+  FONT_BAKE_ASCII_GLYPH_COUNT = FONT_BAKE_ASCII_LAST - FONT_BAKE_ASCII_FIRST + 1u
+};
+
 static void* host_alloc(void* user, size_t size, size_t align) {
   (void)user;
   (void)align;
@@ -76,9 +86,9 @@ static int write_u8_array(FILE* out, const char* name, const uint8_t* bytes, siz
 
   if (fprintf(out, "static const UINT8 %s[] = {\n", name) < 0) return 0;
   for (i = 0u; i < count; ++i) {
-    if ((i % 16u) == 0u && fprintf(out, "  ") < 0) return 0;
+    if ((i % FONT_BAKE_BYTES_PER_LINE) == 0u && fprintf(out, "  ") < 0) return 0;
     if (fprintf(out, "0x%02x,", bytes[i]) < 0) return 0;
-    if ((i % 16u) == 15u || i + 1u == count) {
+    if ((i % FONT_BAKE_BYTES_PER_LINE) == FONT_BAKE_BYTES_PER_LINE_LAST_INDEX || i + 1u == count) {
       if (fprintf(out, "\n") < 0) return 0;
     } else if (fprintf(out, " ") < 0) {
       return 0;
@@ -95,7 +105,7 @@ static int write_float(FILE* out, float value) {
 }
 
 int main(int argc, char** argv) {
-  if (argc != 3) {
+  if (argc != FONT_BAKE_ARGC) {
     fprintf(stderr, "usage: %s <font.ttf> <output.h>\n", argv[0]);
     return 2;
   }
@@ -109,8 +119,8 @@ int main(int argc, char** argv) {
 
   vr_font_config_t cfg = {0};
   cfg.px_size = 72.0f;
-  cfg.atlas_width = 1024u;
-  cfg.atlas_height = 1024u;
+  cfg.atlas_width = FONT_BAKE_ATLAS_SIZE;
+  cfg.atlas_height = FONT_BAKE_ATLAS_SIZE;
   cfg.atlas_pad = 2u;
   cfg.atlas_format = VR_FONT_ATLAS_FORMAT_ALPHA8;
   cfg.allocator.user = NULL;
@@ -125,9 +135,9 @@ int main(int argc, char** argv) {
     return 1;
   }
 
-  BakedGlyph glyphs[95];
+  BakedGlyph glyphs[FONT_BAKE_ASCII_GLYPH_COUNT];
   size_t glyph_count = 0u;
-  for (uint32_t cp = 32u; cp <= 126u; ++cp) {
+  for (uint32_t cp = FONT_BAKE_ASCII_FIRST; cp <= FONT_BAKE_ASCII_LAST; ++cp) {
     vr_shaped_glyph_t* shaped = NULL;
     size_t shaped_count = 0u;
     if (vr_font_shape_text(face, &cp, 1u, &shaped, &shaped_count) != VR_OK || shaped_count == 0u) {
