@@ -30,7 +30,11 @@ add_library(er_ui_core
   src/er_ui_primitives.c
   src/er_ui_preset_code.c
   src/er_ui_record_codec.c
-  src/er_ui_runtime.c
+  src/er_ui_runtime_focus.c
+  src/er_ui_runtime_input.c
+  src/er_ui_runtime_internal.c
+  src/er_ui_runtime_state.c
+  src/er_ui_runtime_text.c
   src/er_ui_scene.c
   src/er_ui_shell.c
   src/er_ui_spacing.c
