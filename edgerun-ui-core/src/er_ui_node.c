@@ -2,6 +2,9 @@
 #include "er_ui_painter.h"
 
 static const float ER_UI_NODE_DEFAULT_GAP = 8.0f;
+static const float ER_UI_NODE_DROPDOWN_GAP = 4.0f;
+static const float ER_UI_NODE_MENU_GAP = 8.0f;
+static const float ER_UI_NODE_CAROUSEL_GAP = 12.0f;
 static const float ER_UI_NODE_CARD_PADDING = 12.0f;
 static const float ER_UI_NODE_BENTO_CELL_ASPECT = 0.75f;
 static const float ER_UI_NODE_MASONRY_DEFAULT_HEIGHT_RATIO = 0.78f;
@@ -21,6 +24,24 @@ static er_ui_node_t er_ui_node_base(er_ui_node_kind_t kind) {
   node.button_size = ER_UI_SHADCN_BUTTON_SIZE_DEFAULT;
   node.button_variant = ER_UI_SHADCN_BUTTON_DEFAULT;
   node.badge_variant = ER_UI_SHADCN_BADGE_DEFAULT;
+  return node;
+}
+
+static er_ui_node_t er_ui_node_option_list(
+  er_ui_node_kind_t kind,
+  const char* const* labels,
+  const char* const* cells,
+  size_t item_count,
+  size_t selected,
+  uint32_t base_id,
+  float gap) {
+  er_ui_node_t node = er_ui_node_base(kind);
+  node.labels = labels;
+  node.cells = cells;
+  node.label_count = item_count;
+  node.selected = selected;
+  node.id = base_id;
+  node.gap = gap;
   return node;
 }
 
@@ -537,73 +558,40 @@ er_ui_node_t er_ui_node_drawer(const char* title, const char* detail, const char
 }
 
 er_ui_node_t er_ui_node_dropdown_menu(const char* const* labels, const char* const* shortcuts, size_t item_count, size_t selected, uint32_t base_id) {
-  er_ui_node_t node = er_ui_node_base(ER_UI_NODE_DROPDOWN_MENU);
-  node.labels = labels;
-  node.cells = shortcuts;
-  node.label_count = item_count;
-  node.selected = selected;
-  node.id = base_id;
-  node.gap = 4.0f;
-  return node;
+  return er_ui_node_option_list(ER_UI_NODE_DROPDOWN_MENU, labels, shortcuts, item_count, selected, base_id, ER_UI_NODE_DROPDOWN_GAP);
 }
 
 er_ui_node_t er_ui_node_context_menu(const char* title, const char* detail, const char* const* labels, const char* const* shortcuts, size_t item_count,
                                      size_t selected, uint32_t base_id) {
-  er_ui_node_t node = er_ui_node_base(ER_UI_NODE_CONTEXT_MENU);
+  er_ui_node_t node = er_ui_node_option_list(ER_UI_NODE_CONTEXT_MENU, labels, shortcuts, item_count, selected, base_id, ER_UI_NODE_MENU_GAP);
   node.label = title;
   node.detail = detail;
-  node.labels = labels;
-  node.cells = shortcuts;
-  node.label_count = item_count;
-  node.selected = selected;
-  node.id = base_id;
-  node.gap = 8.0f;
   return node;
 }
 
 er_ui_node_t er_ui_node_date_picker(const char* label, const char* month, const char* const* days, size_t day_count, size_t selected, uint32_t base_id) {
-  er_ui_node_t node = er_ui_node_base(ER_UI_NODE_DATE_PICKER);
+  er_ui_node_t node = er_ui_node_option_list(ER_UI_NODE_DATE_PICKER, days, NULL, day_count, selected, base_id, ER_UI_NODE_MENU_GAP);
   node.label = label;
   node.detail = month;
-  node.labels = days;
-  node.label_count = day_count;
-  node.selected = selected;
-  node.id = base_id;
-  node.gap = 8.0f;
   return node;
 }
 
 er_ui_node_t er_ui_node_carousel(const char* const* items, size_t item_count, uint32_t base_id) {
-  er_ui_node_t node = er_ui_node_base(ER_UI_NODE_CAROUSEL);
-  node.labels = items;
-  node.label_count = item_count;
-  node.id = base_id;
-  node.gap = 12.0f;
-  return node;
+  return er_ui_node_option_list(ER_UI_NODE_CAROUSEL, items, NULL, item_count, 0u, base_id, ER_UI_NODE_CAROUSEL_GAP);
 }
 
 er_ui_node_t er_ui_node_calendar(const char* month, const char* const* days, size_t day_count, size_t selected, uint32_t base_id) {
-  er_ui_node_t node = er_ui_node_base(ER_UI_NODE_CALENDAR);
+  er_ui_node_t node = er_ui_node_option_list(ER_UI_NODE_CALENDAR, days, NULL, day_count, selected, base_id, ER_UI_NODE_MENU_GAP);
   node.label = month;
-  node.labels = days;
-  node.label_count = day_count;
-  node.selected = selected;
-  node.id = base_id;
-  node.gap = 8.0f;
   return node;
 }
 
 er_ui_node_t er_ui_node_combobox(const char* label, const char* value, const char* placeholder, const char* const* options, size_t option_count,
                                  size_t selected, uint32_t base_id) {
-  er_ui_node_t node = er_ui_node_base(ER_UI_NODE_COMBOBOX);
+  er_ui_node_t node = er_ui_node_option_list(ER_UI_NODE_COMBOBOX, options, NULL, option_count, selected, base_id, ER_UI_NODE_MENU_GAP);
   node.label = label;
   node.value = value;
   node.detail = placeholder;
-  node.labels = options;
-  node.label_count = option_count;
-  node.selected = selected;
-  node.id = base_id;
-  node.gap = 8.0f;
   return node;
 }
 
