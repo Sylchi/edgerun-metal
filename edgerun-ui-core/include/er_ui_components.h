@@ -55,6 +55,45 @@ typedef enum {
 } er_ui_shadcn_button_size_t;
 
 typedef enum {
+  ER_UI_COMPONENT_NETWORK_APP_PROMPT = 0,
+  ER_UI_COMPONENT_APP_STORE_CARD,
+  ER_UI_COMPONENT_TRUST_MANAGER_ACTIONS,
+  ER_UI_COMPONENT_RUNTIME_EVENT_ROW,
+  ER_UI_COMPONENT_PACKAGE_PROOF_ROW,
+  ER_UI_COMPONENT_IMPORT_SYNC_SOURCE_ROW,
+  ER_UI_COMPONENT_PUBLISH_FROM_NODE_ROW,
+  ER_UI_COMPONENT_NODE_INSTANCE_ROW,
+  ER_UI_COMPONENT_ADMISSION_POLICY_ROW,
+  ER_UI_COMPONENT_ROUTE_BUDGET_ROW,
+  ER_UI_COMPONENT_DATA_TABLE_CONTROLS,
+  ER_UI_COMPONENT_ICON_ONLY_BUTTON,
+  ER_UI_COMPONENT_SEGMENTED_CONTROL,
+  ER_UI_COMPONENT_RECEIPT_PAYMENT_ROW,
+  ER_UI_COMPONENT_CAPABILITY_GRANT_DETAIL_ROW,
+  ER_UI_COMPONENT_SYSTEM_SURFACE_STATE_PANEL
+} er_ui_component_test_id_t;
+
+typedef enum {
+  ER_UI_COMPONENT_STATE_DEFAULT = 0,
+  ER_UI_COMPONENT_STATE_HOVER,
+  ER_UI_COMPONENT_STATE_FOCUS,
+  ER_UI_COMPONENT_STATE_ACTIVE,
+  ER_UI_COMPONENT_STATE_DISABLED,
+  ER_UI_COMPONENT_STATE_LOADING,
+  ER_UI_COMPONENT_STATE_ERROR
+} er_ui_component_state_t;
+
+typedef enum {
+  ER_UI_COMPONENT_A11Y_GENERIC = 0,
+  ER_UI_COMPONENT_A11Y_GROUP,
+  ER_UI_COMPONENT_A11Y_BUTTON,
+  ER_UI_COMPONENT_A11Y_DIALOG,
+  ER_UI_COMPONENT_A11Y_LIST_ITEM,
+  ER_UI_COMPONENT_A11Y_STATUS,
+  ER_UI_COMPONENT_A11Y_TAB_LIST
+} er_ui_component_a11y_role_t;
+
+typedef enum {
   ER_UI_SHADCN_BADGE_DEFAULT = 0,
   ER_UI_SHADCN_BADGE_SECONDARY,
   ER_UI_SHADCN_BADGE_DESTRUCTIVE,
@@ -108,7 +147,33 @@ typedef struct {
   bool compound;
 } er_ui_shadcn_parity_contract_t;
 
+typedef struct {
+  const char* name;
+  bool required;
+} er_ui_component_projected_field_t;
+
+typedef struct {
+  er_ui_component_test_id_t component;
+  const er_ui_component_projected_field_t* fields;
+  size_t field_count;
+} er_ui_component_projection_contract_t;
+
+typedef struct {
+  er_ui_component_test_id_t component;
+  const er_ui_component_state_t* states;
+  size_t state_count;
+} er_ui_component_state_matrix_t;
+
+typedef struct {
+  er_ui_component_test_id_t component;
+  er_ui_component_a11y_role_t role;
+  const char* const* label_fields;
+  size_t label_field_count;
+} er_ui_component_accessibility_metadata_t;
+
 #define ER_UI_SHADCN_DEMO_COUNT 57u
+#define ER_UI_COMPONENT_TEST_ID_COUNT 16u
+#define ER_UI_COMPONENT_STATE_COUNT 7u
 #define ER_UI_SHADCN_DEMO_PREVIEW_BASE_ID 18000u
 #define ER_UI_SHADCN_SELECT_CURRENCY_BASE_ID (ER_UI_SHADCN_DEMO_PREVIEW_BASE_ID + 1100u)
 #define ER_UI_SHADCN_SELECT_ORDER_BASE_ID (ER_UI_SHADCN_DEMO_PREVIEW_BASE_ID + 1120u)
@@ -164,6 +229,36 @@ bool er_ui_shadcn_contract_supports_slot(const er_ui_shadcn_parity_contract_t* c
 bool er_ui_shadcn_contract_supports_state(const er_ui_shadcn_parity_contract_t* contract, const char* state);
 bool er_ui_shadcn_contract_supports_variant(const er_ui_shadcn_parity_contract_t* contract, const char* variant);
 bool er_ui_shadcn_contract_supports_interaction(const er_ui_shadcn_parity_contract_t* contract, const char* interaction);
+const char* er_ui_component_selector(er_ui_component_test_id_t component);
+const char* er_ui_component_name(er_ui_component_test_id_t component);
+const er_ui_component_test_id_t* er_ui_component_test_ids(size_t* out_count);
+const char* er_ui_component_state_selector(er_ui_component_state_t state);
+const char* er_ui_component_state_label(er_ui_component_state_t state);
+const er_ui_component_state_t* er_ui_component_states(size_t* out_count);
+const char* er_ui_component_a11y_role_label(er_ui_component_a11y_role_t role);
+bool er_ui_component_state_matrix_for(
+  er_ui_component_test_id_t component,
+  er_ui_component_state_matrix_t* out_matrix);
+bool er_ui_component_state_matrix_has_state(
+  const er_ui_component_state_matrix_t* matrix,
+  er_ui_component_state_t state);
+bool er_ui_component_projection_contract_for(
+  er_ui_component_test_id_t component,
+  er_ui_component_projection_contract_t* out_contract);
+bool er_ui_component_projection_contract_has_field(
+  const er_ui_component_projection_contract_t* contract,
+  const char* name);
+bool er_ui_component_projection_contract_requires_field(
+  const er_ui_component_projection_contract_t* contract,
+  const char* name);
+size_t er_ui_component_projection_required_field_count(
+  const er_ui_component_projection_contract_t* contract);
+bool er_ui_component_accessibility_metadata_for(
+  er_ui_component_test_id_t component,
+  er_ui_component_accessibility_metadata_t* out_metadata);
+bool er_ui_component_accessibility_metadata_has_label_field(
+  const er_ui_component_accessibility_metadata_t* metadata,
+  const char* name);
 void er_ui_shadcn_demo_gallery_state_init(er_ui_shadcn_demo_gallery_state_t* state);
 bool er_ui_shadcn_demo_gallery_apply_action(er_ui_shadcn_demo_gallery_state_t* state, er_ui_action_t action);
 bool er_ui_shadcn_demo_gallery_select_open(const er_ui_shadcn_demo_gallery_state_t* state, uint32_t id);

@@ -8,6 +8,7 @@ Implemented portable slices:
 - colors, rects, clips, hits, drag sources, drop targets, icon/text quads, and transitions
 - painter facade for panels, soft cards, dividers, hits, drag/drop regions, quads, and transitions
 - shadcn demo catalog and parity metadata ported from the Rust UI core source, including 57 component specs, slots, states, identifier resolution, and port mappings
+- reusable EdgeRun component contracts ported from Rust, including stable selectors, state matrices, projected input fields, and accessibility role/label metadata
 - semantic palette/theme records for color schemes, accents, radius scales, density, and token resolution
 - required `vrfont` integration for converting variable-font vertex batches into scene text quads
 - cursor-based opacity and translation for grouped commands
@@ -22,6 +23,7 @@ The runtime input slice includes:
 - runtime state for transitions, scroll offsets, toggles, sliders, open values, selected tabs, text values, and deterministic tests
 - focus state, focusable/text hit classification, open focus scopes, scoped focus cycling, and deterministic tests
 - pointer, wheel, key, drag/drop, activation, escape, and blur dispatch returning canonical `er_ui_action_t` records
+- tiled workspace scene emission publishes one drop target per surface tile, so apps can rely on core-owned surface placement
 
 Production code is freestanding:
 

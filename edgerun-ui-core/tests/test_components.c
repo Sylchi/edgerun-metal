@@ -249,6 +249,72 @@ void run_component_tests(void) {
   expect_true(er_ui_shadcn_count_by_category(ER_UI_SHADCN_CATEGORY_FOUNDATION) > 0u, "shadcn progress: foundation category populated");
   expect_true(er_ui_shadcn_count_by_category(ER_UI_SHADCN_CATEGORY_OVERLAY) > 0u, "shadcn progress: overlay category populated");
 
+  size_t component_count = 0u;
+  const er_ui_component_test_id_t* component_ids = er_ui_component_test_ids(&component_count);
+  expect_true(component_ids != 0, "component contracts: ids are exposed");
+  expect_size(component_count, ER_UI_COMPONENT_TEST_ID_COUNT, "component contracts: id count matches Rust source");
+  expect_string(er_ui_component_selector(ER_UI_COMPONENT_NETWORK_APP_PROMPT), "edgerun.network_app_prompt",
+                "component contracts: network prompt selector matches Rust source");
+  expect_string(er_ui_component_name(ER_UI_COMPONENT_SYSTEM_SURFACE_STATE_PANEL), "SystemSurfaceStatePanel",
+                "component contracts: state panel name matches Rust source");
+  expect_string(er_ui_component_state_selector(ER_UI_COMPONENT_STATE_LOADING), "state.loading",
+                "component contracts: state selector matches Rust source");
+  expect_string(er_ui_component_state_label(ER_UI_COMPONENT_STATE_ERROR), "Error",
+                "component contracts: state label matches Rust source");
+  expect_string(er_ui_component_a11y_role_label(ER_UI_COMPONENT_A11Y_TAB_LIST), "tab-list",
+                "component contracts: a11y role label matches Rust source");
+
+  size_t state_count = 0u;
+  const er_ui_component_state_t* states = er_ui_component_states(&state_count);
+  expect_true(states != 0, "component contracts: states are exposed");
+  expect_size(state_count, ER_UI_COMPONENT_STATE_COUNT, "component contracts: state count matches Rust source");
+
+  er_ui_component_state_matrix_t matrix = {0};
+  expect_true(er_ui_component_state_matrix_for(ER_UI_COMPONENT_SEGMENTED_CONTROL, &matrix),
+              "component contracts: segmented control state matrix exists");
+  expect_size(matrix.state_count, ER_UI_COMPONENT_STATE_COUNT, "component contracts: every component covers full state matrix");
+  expect_true(er_ui_component_state_matrix_has_state(&matrix, ER_UI_COMPONENT_STATE_DISABLED),
+              "component contracts: disabled state is covered");
+  expect_true(er_ui_component_state_matrix_has_state(&matrix, ER_UI_COMPONENT_STATE_ERROR),
+              "component contracts: error state is covered");
+
+  er_ui_component_projection_contract_t projection = {0};
+  expect_true(er_ui_component_projection_contract_for(ER_UI_COMPONENT_APP_STORE_CARD, &projection),
+              "component contracts: app store card projection exists");
+  expect_true(er_ui_component_projection_contract_requires_field(&projection, "name"),
+              "component contracts: app store card name is required");
+  expect_true(er_ui_component_projection_contract_requires_field(&projection, "run_id"),
+              "component contracts: app store card run id is required");
+  expect_true(er_ui_component_projection_contract_has_field(&projection, "app_policy_hash"),
+              "component contracts: app store card policy hash is projected");
+  expect_true(!er_ui_component_projection_contract_requires_field(&projection, "developer"),
+              "component contracts: app store card developer remains optional");
+  expect_size(er_ui_component_projection_required_field_count(&projection), 3u,
+              "component contracts: app store card required count matches Rust source");
+  expect_true(er_ui_component_projection_contract_for(ER_UI_COMPONENT_DATA_TABLE_CONTROLS, &projection),
+              "component contracts: data table controls projection exists");
+  expect_true(er_ui_component_projection_contract_requires_field(&projection, "filter_id"),
+              "component contracts: data table filter id is required");
+  expect_true(er_ui_component_projection_contract_requires_field(&projection, "columns"),
+              "component contracts: data table columns are required");
+
+  er_ui_component_accessibility_metadata_t metadata = {0};
+  expect_true(er_ui_component_accessibility_metadata_for(ER_UI_COMPONENT_NETWORK_APP_PROMPT, &metadata),
+              "component contracts: network prompt accessibility exists");
+  expect_true(metadata.role == ER_UI_COMPONENT_A11Y_DIALOG, "component contracts: network prompt is a dialog");
+  expect_true(er_ui_component_accessibility_metadata_has_label_field(&metadata, "app_name"),
+              "component contracts: network prompt labels by app name");
+  expect_true(er_ui_component_accessibility_metadata_for(ER_UI_COMPONENT_SYSTEM_SURFACE_STATE_PANEL, &metadata),
+              "component contracts: state panel accessibility exists");
+  expect_true(metadata.role == ER_UI_COMPONENT_A11Y_STATUS, "component contracts: state panel is a status");
+  expect_true(er_ui_component_accessibility_metadata_has_label_field(&metadata, "detail"),
+              "component contracts: state panel detail participates in label");
+  expect_true(er_ui_component_accessibility_metadata_for(ER_UI_COMPONENT_ICON_ONLY_BUTTON, &metadata),
+              "component contracts: icon-only button accessibility exists");
+  expect_true(metadata.role == ER_UI_COMPONENT_A11Y_BUTTON, "component contracts: icon-only button is a button");
+  expect_true(er_ui_component_accessibility_metadata_has_label_field(&metadata, "label"),
+              "component contracts: icon-only button requires a projected label");
+
   for (size_t i = 0u; i < er_ui_shadcn_demo_count(); ++i) {
     const er_ui_shadcn_demo_spec_t* spec = er_ui_shadcn_demo_at(i);
     expect_true(spec != 0, "shadcn catalog: indexed spec exists");
