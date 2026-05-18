@@ -11,6 +11,7 @@ static const float ER_UI_NODE_MASONRY_DEFAULT_HEIGHT_RATIO = 0.78f;
 static const float ER_UI_NODE_MASONRY_STEP_HEIGHT_RATIO = 0.18f;
 enum { ER_UI_NODE_MASONRY_STEP_COUNT = 3u };
 enum { ER_UI_NODE_BENTO_MAX_ROWS = ER_UI_NODE_MAX_CHILDREN * ER_UI_NODE_MAX_CHILDREN };
+enum { ER_UI_NODE_TEXT_BUDGET = 128u };
 
 static er_ui_node_t er_ui_node_base(er_ui_node_kind_t kind) {
   er_ui_node_t node = {0};
@@ -2000,7 +2001,7 @@ static er_ui_status_t er_ui_node_render_scroll_area(
 
 static er_ui_status_t er_ui_node_render_text(er_ui_scene_t* scene, vr_font_face_t* font, const char* text, er_ui_bounds_t bounds, er_ui_color4_t color) {
   if (!scene || !font || !text || !er_ui_bounds_valid(bounds)) return ER_UI_ERR_INVALID_ARGUMENT;
-  return er_ui_scene_push_ascii_text(scene, font, text, 128u, bounds.x, bounds.y + er_ui_float_min(bounds.h * 0.62f, 22.0f), color);
+  return er_ui_scene_push_ascii_text(scene, font, text, ER_UI_NODE_TEXT_BUDGET, bounds.x, bounds.y + er_ui_float_min(bounds.h * 0.62f, 22.0f), color);
 }
 
 static er_ui_status_t er_ui_node_render_icon(er_ui_scene_t* scene, er_ui_bounds_t bounds, er_ui_icon_t icon, er_ui_color4_t color) {
