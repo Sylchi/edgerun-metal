@@ -1,6 +1,7 @@
 #include "er_ui_metal.h"
 #include "er_ui_node.h"
 #include "er_ui_painter.h"
+#include "er_ui_spacing.h"
 
 static const float ER_UI_METAL_SCREEN_PAD = 120.0f;
 static const float ER_UI_METAL_COMPACT_SCREEN_PAD = 28.0f;
@@ -19,6 +20,11 @@ static const float ER_UI_METAL_COMPACT_METRIC_H = 132.0f;
 static const float ER_UI_METAL_LOWER_H = 1020.0f;
 static const float ER_UI_METAL_LEFT_W = 900.0f;
 static const float ER_UI_METAL_COMPACT_LEFT_W = 460.0f;
+static const float ER_UI_METAL_COMPACT_RAIL_MIN_W = 160.0f;
+static const float ER_UI_METAL_COMPACT_RAIL_W = 176.0f;
+static const float ER_UI_METAL_COMPACT_MAIN_MIN_W = 220.0f;
+static const float ER_UI_METAL_COMPACT_RAIL_STACKED_H = 560.0f;
+static const float ER_UI_METAL_COMPACT_TOPBAR_H = 52.0f;
 static const float ER_UI_METAL_TOAST_H = 86.0f;
 static const float ER_UI_METAL_COMPACT_TOAST_H = 54.0f;
 static const float ER_UI_METAL_ROUTE_H = 156.0f;
@@ -481,13 +487,20 @@ er_ui_status_t er_ui_edgerun_metal_surface_emit(
   if (!er_ui_bounds_valid(showcase)) return ER_UI_ERR_INVALID_ARGUMENT;
 
   if (layout.compact) {
-    er_ui_bounds_t rail = er_ui_bounds(content.x, content.y, 176.0f, content.h);
-    er_ui_bounds_t main = er_ui_bounds(rail.x + rail.w + layout.block_gap, content.y, content.w - rail.w - layout.block_gap, content.h);
-    er_ui_bounds_t topbar = er_ui_bounds(main.x, main.y, main.w, 52.0f);
-    er_ui_bounds_t board = er_ui_bounds(main.x, topbar.y + topbar.h + layout.block_gap, main.w, main.h - topbar.h - layout.block_gap);
+    er_ui_responsive_sidecar_t compact = er_ui_responsive_sidecar(
+      content,
+      ER_UI_METAL_COMPACT_RAIL_MIN_W,
+      ER_UI_METAL_COMPACT_RAIL_W,
+      ER_UI_METAL_COMPACT_MAIN_MIN_W,
+      layout.block_gap,
+      ER_UI_METAL_COMPACT_RAIL_STACKED_H);
+    if (!er_ui_bounds_valid(compact.side) || !er_ui_bounds_valid(compact.main)) return ER_UI_ERR_INVALID_ARGUMENT;
+    er_ui_vertical_flow_t main_flow = er_ui_vertical_flow(compact.main, layout.block_gap);
+    er_ui_bounds_t topbar = er_ui_vertical_flow_next(&main_flow, ER_UI_METAL_COMPACT_TOPBAR_H);
+    er_ui_bounds_t board = er_ui_vertical_flow_remaining(&main_flow);
     if (!er_ui_bounds_valid(board)) return ER_UI_ERR_INVALID_ARGUMENT;
 
-    status = er_ui_metal_emit_style_rail(scene, font, rail, theme);
+    status = er_ui_metal_emit_style_rail(scene, font, compact.side, theme);
     if (status != ER_UI_OK) return status;
     status = er_ui_metal_emit_showcase_topbar(scene, font, topbar, theme);
     if (status != ER_UI_OK) return status;
