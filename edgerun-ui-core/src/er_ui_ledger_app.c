@@ -319,6 +319,14 @@ static er_ui_status_t er_ui_ledger_begin_surface(
   return ER_UI_OK;
 }
 
+static er_ui_bounds_t er_ui_ledger_surface_body(er_ui_ledger_content_layout_t layout) {
+  return er_ui_bounds(
+    layout.content.x,
+    layout.content.y + ER_UI_LEDGER_SURFACE_BODY_Y,
+    layout.content.w,
+    er_ui_float_max(layout.content.h - ER_UI_LEDGER_SURFACE_BODY_Y - ER_UI_LEDGER_MARGIN, 1.0f));
+}
+
 static er_ui_status_t er_ui_ledger_icon(
   er_ui_scene_t* scene,
   er_ui_bounds_t bounds,
@@ -761,9 +769,7 @@ static er_ui_status_t er_ui_ledger_access_card(
   if (status != ER_UI_OK) return status;
   status = er_ui_ledger_field_rows(scene, font, bounds, colors, rows, ER_UI_LEDGER_ARRAY_COUNT(rows), 76.0f, 72.0f);
   if (status != ER_UI_OK) return status;
-  return er_ui_ledger_button(scene, font, er_ui_bounds(bounds.x + 16.0f, bounds.y + bounds.h - 48.0f, bounds.w - 32.0f,
-                                                       ER_UI_LEDGER_BUTTON_H),
-                             colors, "Update Security", ER_UI_LEDGER_TRANSFER_BUTTON_ID);
+  return er_ui_ledger_bottom_button(scene, font, bounds, colors, "Update Security", ER_UI_LEDGER_TRANSFER_BUTTON_ID, 48.0f);
 }
 
 static er_ui_status_t er_ui_ledger_account_summary_card(
@@ -815,9 +821,7 @@ static er_ui_status_t er_ui_ledger_transfer_card(
   if (status != ER_UI_OK) return status;
   status = er_ui_ledger_field_rows(scene, font, bounds, colors, rows, ER_UI_LEDGER_ARRAY_COUNT(rows), 88.0f, 72.0f);
   if (status != ER_UI_OK) return status;
-  return er_ui_ledger_button(scene, font, er_ui_bounds(bounds.x + 16.0f, bounds.y + bounds.h - 48.0f, bounds.w - 32.0f,
-                                                       ER_UI_LEDGER_BUTTON_H),
-                             colors, "Schedule Transfer", ER_UI_LEDGER_TRANSFER_BUTTON_ID);
+  return er_ui_ledger_bottom_button(scene, font, bounds, colors, "Schedule Transfer", ER_UI_LEDGER_TRANSFER_BUTTON_ID, 48.0f);
 }
 
 static er_ui_status_t er_ui_ledger_dashboard(
@@ -885,11 +889,7 @@ static er_ui_status_t er_ui_ledger_payments(
   er_ui_ledger_content_layout_t layout;
   er_ui_status_t status = er_ui_ledger_begin_surface(scene, font, bounds, colors, focused_id, "Payments", &layout);
   if (status != ER_UI_OK) return status;
-  er_ui_bounds_t body = er_ui_bounds(
-    layout.content.x,
-    layout.content.y + ER_UI_LEDGER_SURFACE_BODY_Y,
-    layout.content.w,
-    er_ui_float_max(layout.content.h - ER_UI_LEDGER_SURFACE_BODY_Y - ER_UI_LEDGER_MARGIN, 1.0f));
+  er_ui_bounds_t body = er_ui_ledger_surface_body(layout);
   er_ui_vertical_flow_t flow = er_ui_vertical_flow(body, ER_UI_LEDGER_GAP);
   status = er_ui_ledger_transfer_card(scene, font, er_ui_vertical_flow_next(&flow, ER_UI_LEDGER_FORM_CARD_H), colors);
   if (status != ER_UI_OK) return status;
@@ -905,11 +905,7 @@ static er_ui_status_t er_ui_ledger_access(
   er_ui_ledger_content_layout_t layout;
   er_ui_status_t status = er_ui_ledger_begin_surface(scene, font, bounds, colors, focused_id, "Access", &layout);
   if (status != ER_UI_OK) return status;
-  er_ui_bounds_t body = er_ui_bounds(
-    layout.content.x,
-    layout.content.y + ER_UI_LEDGER_SURFACE_BODY_Y,
-    layout.content.w,
-    er_ui_float_max(layout.content.h - ER_UI_LEDGER_SURFACE_BODY_Y - ER_UI_LEDGER_MARGIN, 1.0f));
+  er_ui_bounds_t body = er_ui_ledger_surface_body(layout);
   er_ui_responsive_grid_t grid = er_ui_responsive_grid(body, ER_UI_LEDGER_MIN_CARD_W, ER_UI_LEDGER_ACCESS_MAX_COLUMNS, ER_UI_LEDGER_GAP, ER_UI_LEDGER_GAP);
   if (grid.columns == 0u) return ER_UI_ERR_INVALID_ARGUMENT;
   float row_h = er_ui_float_max(er_ui_responsive_grid_row_height(grid, er_ui_responsive_grid_row_count(grid, 2u)), 1.0f);
