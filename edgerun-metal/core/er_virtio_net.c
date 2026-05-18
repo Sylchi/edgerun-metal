@@ -96,15 +96,6 @@ static void er_virtio_net_reset_storage(void) {
   er_mem_zero((UINT8*)&g_tx_buffers, (UINTN)sizeof(g_tx_buffers));
 }
 
-static UINT8 er_virtio_net_configure_queue(const ErVirtioMmioTransport* transport, UINT16 queue,
-                                           ErVirtioQueueDesc* desc, ErVirtioQueueAvail* avail,
-                                           ErVirtioQueueUsed* used, UINT16* out_queue_size) {
-  return er_virtio_mmio_configure_split_queue(transport, queue, ER_VIRTIO_QUEUE_SIZE,
-                                             ER_VIRTIO_QUEUE_SIZE, (UINT64)(UINTN)desc,
-                                             (UINT64)(UINTN)avail, (UINT64)(UINTN)used,
-                                             out_queue_size);
-}
-
 static void er_virtio_net_init_rx_queue(ErVirtioNet* net) {
   UINT16 i;
 
@@ -208,12 +199,12 @@ static UINT8 er_virtio_net_init_transport(const ErVirtioMmioTransport* transport
     out_net->link_up = 1;
   }
 
-  if (er_virtio_net_configure_queue(&out_net->transport, ER_VIRTIO_NET_RX_QUEUE,
-                                    g_rx_desc.items, &g_rx_avail, &g_rx_used,
-                                    &rx_queue_size) == 0u ||
-      er_virtio_net_configure_queue(&out_net->transport, ER_VIRTIO_NET_TX_QUEUE,
-                                    g_tx_desc.items, &g_tx_avail, &g_tx_used,
-                                    &tx_queue_size) == 0u) {
+  if (er_virtio_configure_driver_queue(&out_net->transport, ER_VIRTIO_NET_RX_QUEUE,
+                                       g_rx_desc.items, &g_rx_avail, &g_rx_used,
+                                       &rx_queue_size) == 0u ||
+      er_virtio_configure_driver_queue(&out_net->transport, ER_VIRTIO_NET_TX_QUEUE,
+                                       g_tx_desc.items, &g_tx_avail, &g_tx_used,
+                                       &tx_queue_size) == 0u) {
     (void)er_virtio_mmio_write_status(&out_net->transport, ER_VIRTIO_STATUS_FAILED);
     return 0;
   }

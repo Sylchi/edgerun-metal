@@ -37,6 +37,16 @@ static void er_native_boot_clear_eth_sink(void) {
   er_mem_zero((UINT8*)&g_native_boot_eth, (UINTN)sizeof(g_native_boot_eth));
 }
 
+static void er_native_boot_set_eth_sink_state(ErNativeBootState* state) {
+  if (state == 0) {
+    return;
+  }
+  state->initialized = 1u;
+  state->erwire_sink_ready = 1u;
+  state->net = &g_native_boot_net;
+  state->eth = &g_native_boot_eth;
+}
+
 UINT8 er_native_boot_configure_erwire_eth_sink(UINT64 mmio_base, UINT64 mmio_len,
                                                const UINT8* peer_mac,
                                                ErNativeBootState* out_state) {
@@ -50,12 +60,7 @@ UINT8 er_native_boot_configure_erwire_eth_sink(UINT64 mmio_base, UINT64 mmio_len
     return 0;
   }
 
-  if (out_state != 0) {
-    out_state->initialized = 1u;
-    out_state->erwire_sink_ready = 1u;
-    out_state->net = &g_native_boot_net;
-    out_state->eth = &g_native_boot_eth;
-  }
+  er_native_boot_set_eth_sink_state(out_state);
   return 1;
 }
 
@@ -69,12 +74,7 @@ UINT8 er_native_boot_configure_pci_erwire_eth_sink(ErNativeBootState* out_state)
     return 0;
   }
 
-  if (out_state != 0) {
-    out_state->initialized = 1u;
-    out_state->erwire_sink_ready = 1u;
-    out_state->net = &g_native_boot_net;
-    out_state->eth = &g_native_boot_eth;
-  }
+  er_native_boot_set_eth_sink_state(out_state);
   return 1;
 }
 
