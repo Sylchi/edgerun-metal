@@ -2668,6 +2668,9 @@ static void test_ui_wasm_app_runner(void) {
               0);
   check_uint64("ui wasm app persistent memory", memory[4096], 0x5au);
   check_uint64("ui wasm app emitted again", runtime.emitted, 1u);
+  check_uint64("ui wasm app rects after rerun", scene.rect_count, 1u);
+  check_uint64("ui wasm app hits after rerun", scene.hit_count, 1u);
+  check_uint64("ui wasm app text after rerun", scene.text_quad_count, 1u);
   check_int64("ui wasm app reject second prepare",
               er_ui_wasm_app_prepare(g_edgerun_ui_counter_wasm, ER_UI_COUNTER_WASM_SIZE,
                                      &host, &runtime),
