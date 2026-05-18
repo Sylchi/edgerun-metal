@@ -37,19 +37,16 @@ static bool test_ledger_hit_has_fill_rect(const er_ui_scene_t* scene, uint32_t i
 
 static bool test_ledger_hit_label_starts_centered(const er_ui_scene_t* scene, uint32_t id) {
   const er_ui_hit_t* hit = test_ledger_find_hit(scene, id);
-  bool found = false;
-  float min_x = 0.0f;
   if (!scene || !hit) return false;
   for (size_t q = 0u; q < scene->text_quad_count; ++q) {
     const er_ui_quad_t* quad = &scene->text_quads[q];
     bool overlaps_x = quad->x < hit->x + hit->w && quad->x + quad->w > hit->x;
     bool overlaps_y = quad->y < hit->y + hit->h && quad->y + quad->h > hit->y;
-    if (overlaps_x && overlaps_y) {
-      if (!found || quad->x < min_x) min_x = quad->x;
-      found = true;
+    if (overlaps_x && overlaps_y && quad->x >= hit->x + hit->w * ER_TEST_LEDGER_BUTTON_LABEL_MIN_CENTER_X) {
+      return true;
     }
   }
-  return found && min_x >= hit->x + hit->w * ER_TEST_LEDGER_BUTTON_LABEL_MIN_CENTER_X;
+  return false;
 }
 
 static bool test_ledger_hits_stay_inside(const er_ui_scene_t* scene, er_ui_bounds_t bounds) {
