@@ -25,7 +25,6 @@ static const size_t ER_UI_LEDGER_DASHBOARD_COMPACT_SUMMARY_CARDS = 3u;
 static const size_t ER_UI_LEDGER_ACCESS_MAX_COLUMNS = 2u;
 static const float ER_UI_LEDGER_SURFACE_BODY_Y = 58.0f;
 static const float ER_UI_LEDGER_FORM_CARD_H = 286.0f;
-static const float ER_UI_LEDGER_CARD_RADIUS = ER_UI_SHADCN_RADIUS_XL;
 static const float ER_UI_LEDGER_NAV_ROW_H = 34.0f;
 static const float ER_UI_LEDGER_FIELD_H = ER_UI_SHADCN_CONTROL_H;
 static const float ER_UI_LEDGER_BUTTON_H = ER_UI_SHADCN_CONTROL_H;
@@ -44,8 +43,6 @@ static const float ER_UI_LEDGER_QR_CELL = 7.0f;
 static const float ER_UI_LEDGER_TEXT_ADVANCE = 7.0f;
 static const float ER_UI_LEDGER_TEXT_CLIP_ASCENT = 20.0f;
 static const float ER_UI_LEDGER_TEXT_CLIP_DESCENT = 6.0f;
-static const float ER_UI_LEDGER_BUTTON_TEXT_PAD_X = 14.0f;
-static const float ER_UI_LEDGER_BUTTON_TEXT_MIN_START_RATIO = 0.30f;
 static const float ER_UI_LEDGER_CARD_PAD = ER_UI_SHADCN_CARD_PAD_X;
 static const float ER_UI_LEDGER_CARD_TITLE_Y = 10.0f;
 static const float ER_UI_LEDGER_CARD_SUBTITLE_Y = 32.0f;
@@ -58,10 +55,7 @@ static const float ER_UI_LEDGER_DASHBOARD_CARD_H = 216.0f;
 static const float ER_UI_LEDGER_DASHBOARD_FORM_H = 266.0f;
 static const float ER_UI_LEDGER_DASHBOARD_TALL_H = 322.0f;
 static const float ER_UI_LEDGER_SCROLL_THUMB_MIN_H = 32.0f;
-static const float ER_UI_LEDGER_FIELD_PAD_X = 10.0f;
 static const float ER_UI_LEDGER_DOT_SIZE = 4.0f;
-static const float ER_UI_LEDGER_SELECT_CHEVRON_W = 14.0f;
-static const float ER_UI_LEDGER_SELECT_CHEVRON_H = 14.0f;
 static const size_t ER_UI_LEDGER_ACTIVITY_BAR_COUNT = 7u;
 static const size_t ER_UI_LEDGER_STOCK_CHART_GUIDE_COUNT = 7u;
 static const size_t ER_UI_LEDGER_STOCK_CHART_SEGMENT_COUNT = 6u;
@@ -257,6 +251,10 @@ static er_ui_status_t er_ui_ledger_border(er_ui_scene_t* scene, er_ui_bounds_t b
   return er_ui_scene_push_rect(scene, er_ui_rect_border(bounds.x, bounds.y, bounds.w, bounds.h, radius, color));
 }
 
+static er_ui_resolved_theme_t er_ui_ledger_component_theme(void) {
+  return er_ui_resolved_theme_user_default();
+}
+
 static er_ui_bounds_t er_ui_ledger_card_content_rect(er_ui_bounds_t bounds) {
   return er_ui_bounds_inset_ltrb(bounds,
                                  ER_UI_SHADCN_CARD_PAD_X,
@@ -287,13 +285,8 @@ static er_ui_status_t er_ui_ledger_nav_row(
 }
 
 static er_ui_status_t er_ui_ledger_card(er_ui_scene_t* scene, er_ui_bounds_t bounds, er_ui_ledger_colors_t colors) {
-  er_ui_status_t status = er_ui_scene_push_rect(scene, er_ui_rect_shadow(bounds.x, bounds.y + 1.0f, bounds.w, bounds.h,
-                                                                        ER_UI_LEDGER_CARD_RADIUS,
-                                                                        er_ui_color_rgba(0.0f, 0.0f, 0.0f, 0.10f), 2.0f));
-  if (status != ER_UI_OK) return status;
-  status = er_ui_ledger_rect(scene, bounds, ER_UI_LEDGER_CARD_RADIUS, colors.panel);
-  if (status != ER_UI_OK) return status;
-  return er_ui_ledger_border(scene, bounds, ER_UI_LEDGER_CARD_RADIUS, colors.border);
+  (void)colors;
+  return er_ui_component_card_emit(scene, bounds, er_ui_ledger_component_theme());
 }
 
 static er_ui_status_t er_ui_ledger_card_with_header(
@@ -378,15 +371,6 @@ static er_ui_status_t er_ui_ledger_icon(
   return er_ui_painter_icon(&painter, bounds, icon, color);
 }
 
-static er_ui_status_t er_ui_ledger_select_chevron(
-  er_ui_scene_t* scene,
-  er_ui_bounds_t field,
-  er_ui_ledger_colors_t colors) {
-  float x = field.x + field.w - ER_UI_LEDGER_FIELD_PAD_X - ER_UI_LEDGER_SELECT_CHEVRON_W;
-  float y = field.y + (field.h - ER_UI_LEDGER_SELECT_CHEVRON_H) * 0.5f;
-  return er_ui_ledger_icon(scene, er_ui_bounds(x, y, ER_UI_LEDGER_SELECT_CHEVRON_W, ER_UI_LEDGER_SELECT_CHEVRON_H), ER_UI_ICON_CHEVRON_RIGHT, colors.muted);
-}
-
 static er_ui_status_t er_ui_ledger_button(
   er_ui_scene_t* scene,
   vr_font_face_t* font,
@@ -394,17 +378,17 @@ static er_ui_status_t er_ui_ledger_button(
   er_ui_ledger_colors_t colors,
   const char* label,
   uint32_t id) {
-  er_ui_status_t status = er_ui_scene_push_hit(scene, er_ui_hit(ER_UI_HIT_BUTTON, id, bounds.x, bounds.y, bounds.w, bounds.h));
-  if (status != ER_UI_OK) return status;
-  status = er_ui_ledger_rect(scene, bounds, ER_UI_SHADCN_RADIUS_MD, colors.button);
-  if (status != ER_UI_OK) return status;
-  float text_w = (float)er_ui_ascii_len(label) * ER_UI_LEDGER_TEXT_ADVANCE;
-  float text_x = bounds.x + (bounds.w - text_w) * 0.5f;
-  if (text_x < bounds.x + ER_UI_LEDGER_BUTTON_TEXT_PAD_X) text_x = bounds.x + ER_UI_LEDGER_BUTTON_TEXT_PAD_X;
-  if (text_x < bounds.x + bounds.w * ER_UI_LEDGER_BUTTON_TEXT_MIN_START_RATIO) {
-    text_x = bounds.x + bounds.w * ER_UI_LEDGER_BUTTON_TEXT_MIN_START_RATIO;
-  }
-  return er_ui_ledger_text_clipped(scene, font, label, text_x, bounds.y + 22.0f, bounds.x + bounds.w - text_x - ER_UI_LEDGER_BUTTON_TEXT_PAD_X, colors.button_text);
+  (void)colors;
+  return er_ui_component_button_emit(
+    scene,
+    font,
+    bounds,
+    er_ui_ledger_component_theme(),
+    label,
+    id,
+    ER_UI_COMPONENT_BUTTON_DEFAULT,
+    ER_UI_COMPONENT_BUTTON_SIZE_DEFAULT,
+    true);
 }
 
 static er_ui_status_t er_ui_ledger_field(
@@ -415,17 +399,12 @@ static er_ui_status_t er_ui_ledger_field(
   const char* label,
   const char* value,
   bool selectable) {
-  er_ui_status_t status = er_ui_ledger_text_clipped(scene, font, label, bounds.x, bounds.y - 8.0f, bounds.w, colors.text);
-  if (status != ER_UI_OK) return status;
-  status = er_ui_ledger_rect(scene, bounds, ER_UI_SHADCN_RADIUS_MD, colors.field);
-  if (status != ER_UI_OK) return status;
-  status = er_ui_ledger_border(scene, bounds, ER_UI_SHADCN_RADIUS_MD, er_ui_shadcn_neutral_dark_input());
-  if (status != ER_UI_OK) return status;
-  float value_w = bounds.w - ER_UI_LEDGER_FIELD_PAD_X * 2.0f - (selectable ? ER_UI_LEDGER_SELECT_CHEVRON_W + ER_UI_LEDGER_FIELD_PAD_X : 0.0f);
-  status = er_ui_ledger_text_clipped(scene, font, value, bounds.x + ER_UI_LEDGER_FIELD_PAD_X, bounds.y + 21.0f, value_w, colors.text);
-  if (status != ER_UI_OK) return status;
-  if (!selectable) return ER_UI_OK;
-  return er_ui_ledger_select_chevron(scene, bounds, colors);
+  (void)colors;
+  er_ui_bounds_t component_bounds = er_ui_bounds(bounds.x, bounds.y - 18.0f, bounds.w, bounds.h + 18.0f);
+  if (selectable) {
+    return er_ui_component_select_static_emit(scene, font, component_bounds, er_ui_ledger_component_theme(), label, value, false);
+  }
+  return er_ui_component_field_static_emit(scene, font, component_bounds, er_ui_ledger_component_theme(), label, value, false);
 }
 
 static er_ui_status_t er_ui_ledger_field_rows(
@@ -460,9 +439,8 @@ static er_ui_status_t er_ui_ledger_progress(
   er_ui_bounds_t bounds,
   er_ui_ledger_colors_t colors,
   float value) {
-  er_ui_status_t status = er_ui_ledger_rect(scene, bounds, 999.0f, colors.panel_alt);
-  if (status != ER_UI_OK) return status;
-  return er_ui_ledger_rect(scene, er_ui_bounds(bounds.x, bounds.y, bounds.w * value, bounds.h), 999.0f, colors.button);
+  (void)colors;
+  return er_ui_component_progress_emit(scene, bounds, er_ui_ledger_component_theme(), value);
 }
 
 static er_ui_status_t er_ui_ledger_slider(
@@ -474,7 +452,10 @@ static er_ui_status_t er_ui_ledger_slider(
   if (status != ER_UI_OK) return status;
   status = er_ui_ledger_progress(scene, bounds, colors, value);
   if (status != ER_UI_OK) return status;
-  return er_ui_ledger_rect(scene, er_ui_bounds(bounds.x + bounds.w * value - 8.0f, bounds.y - 7.0f, 16.0f, 16.0f), 999.0f, colors.button);
+  er_ui_bounds_t thumb = er_ui_bounds(bounds.x + bounds.w * value - 8.0f, bounds.y - 7.0f, 16.0f, 16.0f);
+  status = er_ui_ledger_rect(scene, thumb, 8.0f, er_ui_shadcn_neutral_dark_foreground());
+  if (status != ER_UI_OK) return status;
+  return er_ui_ledger_border(scene, thumb, 8.0f, er_ui_shadcn_neutral_dark_primary());
 }
 
 static er_ui_status_t er_ui_ledger_bottom_button(

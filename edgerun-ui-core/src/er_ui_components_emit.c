@@ -58,6 +58,7 @@ static er_ui_status_t er_ui_component_labeled_control_frame(
   const char* label,
   er_ui_hit_kind_t hit_kind,
   uint32_t id,
+  bool interactive,
   float control_h,
   er_ui_color4_t fill,
   float border_alpha,
@@ -67,8 +68,10 @@ static er_ui_status_t er_ui_component_labeled_control_frame(
   if (status != ER_UI_OK) return status;
   er_ui_bounds_t control = er_ui_bounds(bounds.x, bounds.y + 18.0f, bounds.w, control_h);
   if (!er_ui_bounds_valid(control)) return ER_UI_ERR_INVALID_ARGUMENT;
-  status = er_ui_scene_push_hit(scene, er_ui_hit(hit_kind, id, control.x, control.y, control.w, control.h));
-  if (status != ER_UI_OK) return status;
+  if (interactive) {
+    status = er_ui_scene_push_hit(scene, er_ui_hit(hit_kind, id, control.x, control.y, control.w, control.h));
+    if (status != ER_UI_OK) return status;
+  }
   (void)border_alpha;
   status = er_ui_component_fill_border(scene, control, theme.shadcn.radius.md, fill, theme.shadcn.colors.input);
   if (status != ER_UI_OK) return status;
@@ -90,13 +93,35 @@ er_ui_status_t er_ui_component_select_emit(
     open ? er_ui_color_with_alpha(theme.shadcn.colors.muted, 0.72f) : er_ui_color_with_alpha(theme.shadcn.colors.input, 0.30f);
   er_ui_bounds_t control;
   er_ui_status_t status = er_ui_component_labeled_control_frame(
-    scene, font, bounds, theme, label, ER_UI_HIT_SELECT, id, er_ui_float_min(bounds.h - 18.0f, theme.shadcn.metrics.control_h), fill, 0.40f, &control);
+    scene, font, bounds, theme, label, ER_UI_HIT_SELECT, id, true, er_ui_float_min(bounds.h - 18.0f, theme.shadcn.metrics.control_h), fill, 0.40f, &control);
   if (status != ER_UI_OK) return status;
   status = er_ui_component_push_ascii_text(scene, font, value, control.x + theme.shadcn.metrics.control_pad_x, control.y + 23.0f,
                                            theme.shadcn.colors.foreground);
   if (status != ER_UI_OK) return status;
   return er_ui_component_push_icon(scene, er_ui_bounds(control.x + control.w - 24.0f, control.y + (control.h - 16.0f) * 0.5f, 16.0f, 16.0f),
                                 open ? ER_UI_ICON_X : ER_UI_ICON_CHEVRON_RIGHT, theme.shadcn.colors.muted_foreground);
+}
+
+er_ui_status_t er_ui_component_select_static_emit(
+  er_ui_scene_t* scene,
+  vr_font_face_t* font,
+  er_ui_bounds_t bounds,
+  er_ui_resolved_theme_t theme,
+  const char* label,
+  const char* value,
+  bool open) {
+  if (!scene || !font || !label || !value || !er_ui_bounds_valid(bounds)) return ER_UI_ERR_INVALID_ARGUMENT;
+  er_ui_color4_t fill =
+    open ? er_ui_color_with_alpha(theme.shadcn.colors.muted, 0.72f) : er_ui_color_with_alpha(theme.shadcn.colors.input, 0.30f);
+  er_ui_bounds_t control;
+  er_ui_status_t status = er_ui_component_labeled_control_frame(
+    scene, font, bounds, theme, label, ER_UI_HIT_SELECT, 0u, false, er_ui_float_min(bounds.h - 18.0f, theme.shadcn.metrics.control_h), fill, 0.40f, &control);
+  if (status != ER_UI_OK) return status;
+  status = er_ui_component_push_ascii_text(scene, font, value, control.x + theme.shadcn.metrics.control_pad_x, control.y + 23.0f,
+                                           theme.shadcn.colors.foreground);
+  if (status != ER_UI_OK) return status;
+  return er_ui_component_push_icon(scene, er_ui_bounds(control.x + control.w - 24.0f, control.y + (control.h - 16.0f) * 0.5f, 16.0f, 16.0f),
+                                  open ? ER_UI_ICON_X : ER_UI_ICON_CHEVRON_RIGHT, theme.shadcn.colors.muted_foreground);
 }
 
 er_ui_status_t er_ui_component_slider_emit(
@@ -162,6 +187,36 @@ er_ui_status_t er_ui_component_field_emit(
     label,
     hit_kind,
     id,
+    true,
+    er_ui_float_max(bounds.h - 18.0f, 24.0f),
+    er_ui_color_with_alpha(theme.shadcn.colors.input, 0.30f),
+    0.44f,
+    &control);
+  if (status != ER_UI_OK) return status;
+  return er_ui_component_push_ascii_text(scene, font, value, control.x + theme.shadcn.metrics.control_pad_x, control.y + 23.0f,
+                                         theme.shadcn.colors.foreground);
+}
+
+er_ui_status_t er_ui_component_field_static_emit(
+  er_ui_scene_t* scene,
+  vr_font_face_t* font,
+  er_ui_bounds_t bounds,
+  er_ui_resolved_theme_t theme,
+  const char* label,
+  const char* value,
+  bool text_area) {
+  if (!scene || !font || !label || !value || !er_ui_bounds_valid(bounds)) return ER_UI_ERR_INVALID_ARGUMENT;
+  er_ui_hit_kind_t hit_kind = text_area ? ER_UI_HIT_TEXT_AREA : ER_UI_HIT_INPUT;
+  er_ui_bounds_t control;
+  er_ui_status_t status = er_ui_component_labeled_control_frame(
+    scene,
+    font,
+    bounds,
+    theme,
+    label,
+    hit_kind,
+    0u,
+    false,
     er_ui_float_max(bounds.h - 18.0f, 24.0f),
     er_ui_color_with_alpha(theme.shadcn.colors.input, 0.30f),
     0.44f,

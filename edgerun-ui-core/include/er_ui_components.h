@@ -306,6 +306,14 @@ er_ui_status_t er_ui_component_select_emit(
   const char* value,
   uint32_t id,
   bool open);
+er_ui_status_t er_ui_component_select_static_emit(
+  er_ui_scene_t* scene,
+  vr_font_face_t* font,
+  er_ui_bounds_t bounds,
+  er_ui_resolved_theme_t theme,
+  const char* label,
+  const char* value,
+  bool open);
 er_ui_status_t er_ui_component_slider_emit(
   er_ui_scene_t* scene,
   vr_font_face_t* font,
@@ -329,6 +337,14 @@ er_ui_status_t er_ui_component_field_emit(
   const char* label,
   const char* value,
   uint32_t id,
+  bool text_area);
+er_ui_status_t er_ui_component_field_static_emit(
+  er_ui_scene_t* scene,
+  vr_font_face_t* font,
+  er_ui_bounds_t bounds,
+  er_ui_resolved_theme_t theme,
+  const char* label,
+  const char* value,
   bool text_area);
 er_ui_status_t er_ui_component_checkbox_emit(
   er_ui_scene_t* scene,
