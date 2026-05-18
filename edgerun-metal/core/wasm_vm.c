@@ -72,6 +72,26 @@ typedef struct {
 #define ER_WASM_UI_HEADER_TRANSITION_COUNT_OFFSET 24u
 #define ER_WASM_UI_HEADER_ICON_QUAD_COUNT_OFFSET 28u
 #define ER_WASM_UI_HEADER_TEXT_QUAD_COUNT_OFFSET 32u
+#define ER_WASM_FLOAT_EXPONENT_MASK 0x7f800000u
+#define ER_WASM_UI_RECT_MODE_MIN 0u
+#define ER_WASM_UI_RECT_MODE_MAX 3u
+#define ER_WASM_UI_HIT_KIND_MIN 0u
+#define ER_WASM_UI_HIT_KIND_MAX 24u
+#define ER_WASM_UI_TRANSITION_PROPERTY_MIN 0u
+#define ER_WASM_UI_TRANSITION_PROPERTY_MAX 2u
+#define ER_WASM_UI_TRANSITION_EASING_MIN 0u
+#define ER_WASM_UI_TRANSITION_EASING_MAX 3u
+#define ER_WASM_UI_RECT_RECORD_MODE_OFFSET 52u
+#define ER_WASM_UI_HIT_RECORD_KIND_OFFSET 0u
+#define ER_WASM_UI_HIT_RECORD_FLOAT_OFFSET 8u
+#define ER_WASM_UI_DRAG_SOURCE_RECORD_FLOAT_OFFSET 12u
+#define ER_WASM_UI_DROP_TARGET_RECORD_FLOAT_OFFSET 8u
+#define ER_WASM_UI_TRANSITION_RECORD_PROPERTY_OFFSET 4u
+#define ER_WASM_UI_TRANSITION_RECORD_FLOAT_OFFSET 8u
+#define ER_WASM_UI_TRANSITION_RECORD_DURATION_OFFSET 16u
+#define ER_WASM_UI_TRANSITION_RECORD_EASING_OFFSET 24u
+#define ER_WASM_UI_QUAD_RECORD_ATLAS_ID_OFFSET 32u
+#define ER_WASM_UI_RECORD_FLOAT_BYTES 4u
 #define ER_WASM_U32_BYTE0 0u
 #define ER_WASM_U32_BYTE1 1u
 #define ER_WASM_U32_BYTE2 2u
@@ -569,12 +589,171 @@ static UINT16 er_wasm_load_u16(const UINT8* src) {
          (UINT16)((UINT16)src[ER_WASM_U32_BYTE1] << ER_WASM_U32_BYTE1_SHIFT);
 }
 
-static int er_wasm_ui_command_stats(const UINT8* bytes, UINT32 len,
-                                    er_ui_scene_stats_t* out_stats) {
+static int er_wasm_checked_add_u32(UINT32 left, UINT32 right, UINT32* out_value) {
+  if (out_value == 0 || left > ER_WASM_U32_MASK - right) {
+    return -1;
+  }
+  *out_value = left + right;
+  return 0;
+}
+
+static int er_wasm_checked_mul_u32(UINT32 left, UINT32 right, UINT32* out_value) {
+  if (out_value == 0 || (right != 0u && left > ER_WASM_U32_MASK / right)) {
+    return -1;
+  }
+  *out_value = left * right;
+  return 0;
+}
+
+static int er_wasm_add_record_span(UINT32 count, UINT32 record_len, UINT32* inout_len) {
+  UINT32 bytes = 0;
+
+  if (inout_len == 0 ||
+      er_wasm_checked_mul_u32(count, record_len, &bytes) != 0 ||
+      er_wasm_checked_add_u32(*inout_len, bytes, inout_len) != 0) {
+    return -1;
+  }
+  return 0;
+}
+
+static int er_wasm_u32_in_range(UINT32 value, UINT32 min_value, UINT32 max_value) {
+  if (value < min_value || value > max_value) {
+    return -1;
+  }
+  return 0;
+}
+
+static int er_wasm_float_bits_finite(UINT32 bits) {
+  if ((bits & ER_WASM_FLOAT_EXPONENT_MASK) == ER_WASM_FLOAT_EXPONENT_MASK) {
+    return -1;
+  }
+  return 0;
+}
+
+static int er_wasm_validate_float_record(const UINT8* bytes, UINT32 len,
+                                         UINT32 float_bytes_begin,
+                                         UINT32 float_bytes_end) {
+  UINT32 offset = float_bytes_begin;
+
+  if (bytes == 0 || float_bytes_begin > float_bytes_end || float_bytes_end > len) {
+    return -1;
+  }
+  while (offset < float_bytes_end) {
+    if (float_bytes_end - offset < ER_WASM_UI_RECORD_FLOAT_BYTES ||
+        er_wasm_float_bits_finite(er_wasm_load_u32(bytes + offset)) != 0) {
+      return -1;
+    }
+    offset += ER_WASM_UI_RECORD_FLOAT_BYTES;
+  }
+  return 0;
+}
+
+static int er_wasm_validate_ui_rect_record(const UINT8* bytes) {
+  if (bytes == 0 ||
+      er_wasm_validate_float_record(bytes, ER_WASM_UI_RECT_RECORD_LEN, 0u,
+                                    ER_WASM_UI_RECT_RECORD_MODE_OFFSET) != 0 ||
+      er_wasm_u32_in_range(er_wasm_load_u32(bytes + ER_WASM_UI_RECT_RECORD_MODE_OFFSET),
+                           ER_WASM_UI_RECT_MODE_MIN, ER_WASM_UI_RECT_MODE_MAX) != 0 ||
+      er_wasm_validate_float_record(bytes, ER_WASM_UI_RECT_RECORD_LEN,
+                                    ER_WASM_UI_RECT_RECORD_MODE_OFFSET +
+                                      ER_WASM_U32_BYTES,
+                                    ER_WASM_UI_RECT_RECORD_LEN) != 0) {
+    return -1;
+  }
+  return 0;
+}
+
+static int er_wasm_validate_ui_hit_record(const UINT8* bytes) {
+  if (bytes == 0 ||
+      er_wasm_u32_in_range(er_wasm_load_u32(bytes + ER_WASM_UI_HIT_RECORD_KIND_OFFSET),
+                           ER_WASM_UI_HIT_KIND_MIN, ER_WASM_UI_HIT_KIND_MAX) != 0 ||
+      er_wasm_validate_float_record(bytes, ER_WASM_UI_HIT_RECORD_LEN,
+                                    ER_WASM_UI_HIT_RECORD_FLOAT_OFFSET,
+                                    ER_WASM_UI_HIT_RECORD_LEN) != 0) {
+    return -1;
+  }
+  return 0;
+}
+
+static int er_wasm_validate_ui_drag_source_record(const UINT8* bytes) {
+  if (bytes == 0 ||
+      er_wasm_validate_float_record(bytes, ER_WASM_UI_DRAG_SOURCE_RECORD_LEN,
+                                    ER_WASM_UI_DRAG_SOURCE_RECORD_FLOAT_OFFSET,
+                                    ER_WASM_UI_DRAG_SOURCE_RECORD_LEN) != 0) {
+    return -1;
+  }
+  return 0;
+}
+
+static int er_wasm_validate_ui_drop_target_record(const UINT8* bytes) {
+  if (bytes == 0 ||
+      er_wasm_validate_float_record(bytes, ER_WASM_UI_DROP_TARGET_RECORD_LEN,
+                                    ER_WASM_UI_DROP_TARGET_RECORD_FLOAT_OFFSET,
+                                    ER_WASM_UI_DROP_TARGET_RECORD_LEN) != 0) {
+    return -1;
+  }
+  return 0;
+}
+
+static int er_wasm_validate_ui_transition_record(const UINT8* bytes) {
+  if (bytes == 0 ||
+      er_wasm_u32_in_range(er_wasm_load_u32(bytes + ER_WASM_UI_TRANSITION_RECORD_PROPERTY_OFFSET),
+                           ER_WASM_UI_TRANSITION_PROPERTY_MIN,
+                           ER_WASM_UI_TRANSITION_PROPERTY_MAX) != 0 ||
+      er_wasm_validate_float_record(bytes, ER_WASM_UI_TRANSITION_RECORD_LEN,
+                                    ER_WASM_UI_TRANSITION_RECORD_FLOAT_OFFSET,
+                                    ER_WASM_UI_TRANSITION_RECORD_DURATION_OFFSET) != 0 ||
+      er_wasm_u32_in_range(er_wasm_load_u32(bytes + ER_WASM_UI_TRANSITION_RECORD_EASING_OFFSET),
+                           ER_WASM_UI_TRANSITION_EASING_MIN,
+                           ER_WASM_UI_TRANSITION_EASING_MAX) != 0) {
+    return -1;
+  }
+  return 0;
+}
+
+static int er_wasm_validate_ui_quad_record(const UINT8* bytes) {
+  if (bytes == 0 ||
+      er_wasm_validate_float_record(bytes, ER_WASM_UI_QUAD_RECORD_LEN, 0u,
+                                    ER_WASM_UI_QUAD_RECORD_ATLAS_ID_OFFSET) != 0 ||
+      er_wasm_validate_float_record(bytes, ER_WASM_UI_QUAD_RECORD_LEN,
+                                    ER_WASM_UI_QUAD_RECORD_ATLAS_ID_OFFSET +
+                                      ER_WASM_U32_BYTES,
+                                    ER_WASM_UI_QUAD_RECORD_LEN) != 0) {
+    return -1;
+  }
+  return 0;
+}
+
+static int er_wasm_validate_records(const UINT8* bytes, UINT32 count, UINT32 record_len,
+                                    int (*validate_record)(const UINT8*)) {
+  UINT32 index = 0;
+
+  if (bytes == 0 || validate_record == 0) {
+    return -1;
+  }
+  for (index = 0; index < count; index++) {
+    if (validate_record(bytes + (index * record_len)) != 0) {
+      return -1;
+    }
+  }
+  return 0;
+}
+
+int er_wasm_ui_command_stats(const UINT8* bytes, UINT32 len,
+                             er_ui_scene_stats_t* out_stats) {
   UINT64 command_count;
   UINT64 summed_count;
+  UINT32 expected_len = ER_WASM_UI_COMMAND_LIST_HEADER_LEN;
+  UINT32 rect_count = 0;
+  UINT32 hit_count = 0;
+  UINT32 drag_source_count = 0;
+  UINT32 drop_target_count = 0;
+  UINT32 transition_count = 0;
+  UINT32 icon_quad_count = 0;
+  UINT32 text_quad_count = 0;
+  UINT32 offset = ER_WASM_UI_COMMAND_LIST_HEADER_LEN;
 
-  if (bytes == 0 || out_stats == 0 || len != ER_WASM_UI_COMMAND_LIST_HEADER_LEN) {
+  if (bytes == 0 || out_stats == 0 || len < ER_WASM_UI_COMMAND_LIST_HEADER_LEN) {
     return -1;
   }
   if (er_wasm_load_u16(bytes + ER_WASM_UI_HEADER_ABI_OFFSET) !=
@@ -584,24 +763,78 @@ static int er_wasm_ui_command_stats(const UINT8* bytes, UINT32 len,
 
   er_mem_zero((UINT8*)out_stats, (UINTN)sizeof(*out_stats));
   command_count = (UINT64)er_wasm_load_u32(bytes + ER_WASM_UI_HEADER_COMMAND_COUNT_OFFSET);
-  out_stats->rects = (size_t)er_wasm_load_u32(bytes + ER_WASM_UI_HEADER_RECT_COUNT_OFFSET);
-  out_stats->hits = (size_t)er_wasm_load_u32(bytes + ER_WASM_UI_HEADER_HIT_COUNT_OFFSET);
-  out_stats->drag_sources =
-      (size_t)er_wasm_load_u32(bytes + ER_WASM_UI_HEADER_DRAG_SOURCE_COUNT_OFFSET);
-  out_stats->drop_targets =
-      (size_t)er_wasm_load_u32(bytes + ER_WASM_UI_HEADER_DROP_TARGET_COUNT_OFFSET);
-  out_stats->transitions =
-      (size_t)er_wasm_load_u32(bytes + ER_WASM_UI_HEADER_TRANSITION_COUNT_OFFSET);
-  out_stats->icon_quads =
-      (size_t)er_wasm_load_u32(bytes + ER_WASM_UI_HEADER_ICON_QUAD_COUNT_OFFSET);
-  out_stats->text_quads =
-      (size_t)er_wasm_load_u32(bytes + ER_WASM_UI_HEADER_TEXT_QUAD_COUNT_OFFSET);
+  rect_count = er_wasm_load_u32(bytes + ER_WASM_UI_HEADER_RECT_COUNT_OFFSET);
+  hit_count = er_wasm_load_u32(bytes + ER_WASM_UI_HEADER_HIT_COUNT_OFFSET);
+  drag_source_count = er_wasm_load_u32(bytes + ER_WASM_UI_HEADER_DRAG_SOURCE_COUNT_OFFSET);
+  drop_target_count = er_wasm_load_u32(bytes + ER_WASM_UI_HEADER_DROP_TARGET_COUNT_OFFSET);
+  transition_count = er_wasm_load_u32(bytes + ER_WASM_UI_HEADER_TRANSITION_COUNT_OFFSET);
+  icon_quad_count = er_wasm_load_u32(bytes + ER_WASM_UI_HEADER_ICON_QUAD_COUNT_OFFSET);
+  text_quad_count = er_wasm_load_u32(bytes + ER_WASM_UI_HEADER_TEXT_QUAD_COUNT_OFFSET);
+  out_stats->rects = (size_t)rect_count;
+  out_stats->hits = (size_t)hit_count;
+  out_stats->drag_sources = (size_t)drag_source_count;
+  out_stats->drop_targets = (size_t)drop_target_count;
+  out_stats->transitions = (size_t)transition_count;
+  out_stats->icon_quads = (size_t)icon_quad_count;
+  out_stats->text_quads = (size_t)text_quad_count;
 
   summed_count = (UINT64)out_stats->rects + (UINT64)out_stats->hits +
                  (UINT64)out_stats->drag_sources + (UINT64)out_stats->drop_targets +
                  (UINT64)out_stats->transitions + (UINT64)out_stats->icon_quads +
                  (UINT64)out_stats->text_quads;
   if (command_count == 0u || command_count != summed_count) {
+    return -1;
+  }
+  if (er_wasm_add_record_span(rect_count, ER_WASM_UI_RECT_RECORD_LEN, &expected_len) != 0 ||
+      er_wasm_add_record_span(hit_count, ER_WASM_UI_HIT_RECORD_LEN, &expected_len) != 0 ||
+      er_wasm_add_record_span(drag_source_count, ER_WASM_UI_DRAG_SOURCE_RECORD_LEN,
+                              &expected_len) != 0 ||
+      er_wasm_add_record_span(drop_target_count, ER_WASM_UI_DROP_TARGET_RECORD_LEN,
+                              &expected_len) != 0 ||
+      er_wasm_add_record_span(transition_count, ER_WASM_UI_TRANSITION_RECORD_LEN,
+                              &expected_len) != 0 ||
+      er_wasm_add_record_span(icon_quad_count, ER_WASM_UI_QUAD_RECORD_LEN,
+                              &expected_len) != 0 ||
+      er_wasm_add_record_span(text_quad_count, ER_WASM_UI_QUAD_RECORD_LEN,
+                              &expected_len) != 0 ||
+      len != expected_len) {
+    return -1;
+  }
+  if (er_wasm_validate_records(bytes + offset, rect_count, ER_WASM_UI_RECT_RECORD_LEN,
+                               er_wasm_validate_ui_rect_record) != 0) {
+    return -1;
+  }
+  offset += rect_count * ER_WASM_UI_RECT_RECORD_LEN;
+  if (er_wasm_validate_records(bytes + offset, hit_count, ER_WASM_UI_HIT_RECORD_LEN,
+                               er_wasm_validate_ui_hit_record) != 0) {
+    return -1;
+  }
+  offset += hit_count * ER_WASM_UI_HIT_RECORD_LEN;
+  if (er_wasm_validate_records(bytes + offset, drag_source_count,
+                               ER_WASM_UI_DRAG_SOURCE_RECORD_LEN,
+                               er_wasm_validate_ui_drag_source_record) != 0) {
+    return -1;
+  }
+  offset += drag_source_count * ER_WASM_UI_DRAG_SOURCE_RECORD_LEN;
+  if (er_wasm_validate_records(bytes + offset, drop_target_count,
+                               ER_WASM_UI_DROP_TARGET_RECORD_LEN,
+                               er_wasm_validate_ui_drop_target_record) != 0) {
+    return -1;
+  }
+  offset += drop_target_count * ER_WASM_UI_DROP_TARGET_RECORD_LEN;
+  if (er_wasm_validate_records(bytes + offset, transition_count,
+                               ER_WASM_UI_TRANSITION_RECORD_LEN,
+                               er_wasm_validate_ui_transition_record) != 0) {
+    return -1;
+  }
+  offset += transition_count * ER_WASM_UI_TRANSITION_RECORD_LEN;
+  if (er_wasm_validate_records(bytes + offset, icon_quad_count, ER_WASM_UI_QUAD_RECORD_LEN,
+                               er_wasm_validate_ui_quad_record) != 0) {
+    return -1;
+  }
+  offset += icon_quad_count * ER_WASM_UI_QUAD_RECORD_LEN;
+  if (er_wasm_validate_records(bytes + offset, text_quad_count, ER_WASM_UI_QUAD_RECORD_LEN,
+                               er_wasm_validate_ui_quad_record) != 0) {
     return -1;
   }
   return 0;

@@ -11,6 +11,12 @@
 #define ER_WASM_PUBLIC_REGION_RELAY_OUTBOX 2u
 #define ER_WASM_UI_COMMAND_ABI_VERSION 1u
 #define ER_WASM_UI_COMMAND_LIST_HEADER_LEN 36u
+#define ER_WASM_UI_RECT_RECORD_LEN 60u
+#define ER_WASM_UI_HIT_RECORD_LEN 24u
+#define ER_WASM_UI_DRAG_SOURCE_RECORD_LEN 28u
+#define ER_WASM_UI_DROP_TARGET_RECORD_LEN 24u
+#define ER_WASM_UI_TRANSITION_RECORD_LEN 28u
+#define ER_WASM_UI_QUAD_RECORD_LEN 52u
 
 /*
  * Purpose: define the bounded WASM interpreter ABI used by metal apps and drivers.
@@ -91,6 +97,7 @@ int er_wasm_prepare_linear_memory(UINT8* bytes, UINT32 address_len,
                                   ErWasmLinearMemory* out_memory);
 int er_wasm_linear_memory_public_region(const ErWasmLinearMemory* memory, UINT32 region_id,
                                         UINT32* out_base, UINT32* out_len);
+int er_wasm_ui_command_stats(const UINT8* bytes, UINT32 len, er_ui_scene_stats_t* out_stats);
 int er_wasm_init(ErWasmModule* module, const UINT8* data, UINT32 size, const ErWasmHostCalls* host);
 int er_wasm_find_main(ErWasmModule* module, UINT32* main_index);
 int er_wasm_execute_i64(ErWasmModule* module, UINT32 function_index, INT64* result);
