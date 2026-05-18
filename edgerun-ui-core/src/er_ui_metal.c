@@ -346,16 +346,16 @@ static er_ui_status_t er_ui_metal_emit_component_board(
   status = er_ui_metal_emit_title_icon(scene, font, er_ui_bounds(c1.x + 14.0f, c1.y + 14.0f, c1.w - 28.0f, 22.0f), theme,
                                        "Payout Threshold", ER_UI_ICON_WALLET, theme.colors.accent);
   if (status != ER_UI_OK) return status;
-  status = er_ui_component_select_emit(scene, font, er_ui_bounds(c1.x + 14.0f, c1.y + 18.0f, c1.w - 28.0f, 58.0f), theme,
+  status = er_ui_component_select_emit(scene, font, er_ui_bounds(c1.x + 14.0f, c1.y + 48.0f, c1.w - 28.0f, 58.0f), theme,
                                     "Preferred Currency", "USD - United States Dollar", ER_UI_METAL_BOARD_BASE_ID + 120u, false);
   if (status != ER_UI_OK) return status;
-  status = er_ui_component_slider_emit(scene, font, er_ui_bounds(c1.x + 14.0f, c1.y + 92.0f, c1.w - 28.0f, 70.0f), theme,
+  status = er_ui_component_slider_emit(scene, font, er_ui_bounds(c1.x + 14.0f, c1.y + 112.0f, c1.w - 28.0f, 58.0f), theme,
                                     "Minimum Payout Amount", 0.24f, ER_UI_METAL_BOARD_BASE_ID + 121u);
   if (status != ER_UI_OK) return status;
-  status = er_ui_component_field_emit(scene, font, er_ui_bounds(c1.x + 14.0f, c1.y + 168.0f, c1.w - 28.0f, 72.0f), theme,
+  status = er_ui_component_field_emit(scene, font, er_ui_bounds(c1.x + 14.0f, c1.y + 174.0f, c1.w - 28.0f, 58.0f), theme,
                                    "Notes", "Monthly threshold", ER_UI_METAL_BOARD_BASE_ID + 122u, false);
   if (status != ER_UI_OK) return status;
-  status = er_ui_component_button_emit(scene, font, er_ui_bounds(c1.x + 14.0f, c1.y + 246.0f, c1.w - 28.0f, 32.0f), theme, "Save Threshold",
+  status = er_ui_component_button_emit(scene, font, er_ui_bounds(c1.x + 14.0f, c1.y + 242.0f, c1.w - 28.0f, 32.0f), theme, "Save Threshold",
                                     ER_UI_METAL_BOARD_BASE_ID + 123u, ER_UI_COMPONENT_BUTTON_DEFAULT, ER_UI_COMPONENT_BUTTON_SIZE_SM, true);
   if (status != ER_UI_OK) return status;
 
@@ -372,13 +372,13 @@ static er_ui_status_t er_ui_metal_emit_component_board(
   status = er_ui_metal_emit_title_icon(scene, font, er_ui_bounds(c3.x + 14.0f, c3.y + 14.0f, c3.w - 28.0f, 22.0f), theme,
                                        "Buy Investment", ER_UI_ICON_WALLET, theme.colors.accent);
   if (status != ER_UI_OK) return status;
-  status = er_ui_component_field_emit(scene, font, er_ui_bounds(c3.x + 14.0f, c3.y + 14.0f, c3.w - 28.0f, 58.0f), theme,
+  status = er_ui_component_field_emit(scene, font, er_ui_bounds(c3.x + 14.0f, c3.y + 48.0f, c3.w - 28.0f, 58.0f), theme,
                                    "Amount to Invest", "$1,000.00", ER_UI_METAL_BOARD_BASE_ID + 140u, false);
   if (status != ER_UI_OK) return status;
-  status = er_ui_component_select_emit(scene, font, er_ui_bounds(c3.x + 14.0f, c3.y + 84.0f, c3.w - 28.0f, 58.0f), theme,
+  status = er_ui_component_select_emit(scene, font, er_ui_bounds(c3.x + 14.0f, c3.y + 112.0f, c3.w - 28.0f, 58.0f), theme,
                                     "Order Type", "Market Order", ER_UI_METAL_BOARD_BASE_ID + 141u, false);
   if (status != ER_UI_OK) return status;
-  er_ui_bounds_t estimate = er_ui_bounds(c3.x + 14.0f, c3.y + 158.0f, c3.w - 28.0f, 58.0f);
+  er_ui_bounds_t estimate = er_ui_bounds(c3.x + 14.0f, c3.y + 178.0f, c3.w - 28.0f, 50.0f);
   status = er_ui_scene_push_rect(scene, er_ui_rect_fill(estimate.x, estimate.y, estimate.w, estimate.h, theme.radius.control, er_ui_color_with_alpha(theme.colors.row, 0.58f)));
   if (status != ER_UI_OK) return status;
   status = er_ui_scene_push_ascii_text(scene, font, "Estimated Shares", 96u, estimate.x + 12.0f, estimate.y + 23.0f, theme.colors.muted);
@@ -389,7 +389,7 @@ static er_ui_status_t er_ui_metal_emit_component_board(
   if (status != ER_UI_OK) return status;
   status = er_ui_scene_push_ascii_text(scene, font, "$12,450", 24u, estimate.x + estimate.w - 82.0f, estimate.y + 45.0f, theme.colors.text);
   if (status != ER_UI_OK) return status;
-  status = er_ui_component_button_emit(scene, font, er_ui_bounds(c3.x + 14.0f, c3.y + 236.0f, c3.w - 28.0f, 34.0f), theme, "Review Order",
+  status = er_ui_component_button_emit(scene, font, er_ui_bounds(c3.x + 14.0f, c3.y + 238.0f, c3.w - 28.0f, 34.0f), theme, "Review Order",
                                     ER_UI_METAL_BOARD_BASE_ID + 143u, ER_UI_COMPONENT_BUTTON_DEFAULT, ER_UI_COMPONENT_BUTTON_SIZE_SM, true);
   if (status != ER_UI_OK) return status;
 
