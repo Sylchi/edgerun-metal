@@ -20,9 +20,11 @@ void er_run_os_path(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE* SystemTable) {
   ErVirtioGpuDisplayInfo display_info;
   ErUiSurface surface;
   ErUiBootRenderContext render_context = {0};
+  ErNativeBootState native_relay;
   vr_font_face_t* font = 0;
 
   er_mem_zero((UINT8*)apps, (UINTN)sizeof(apps));
+  er_mem_zero((UINT8*)&native_relay, (UINTN)sizeof(native_relay));
 
   er_println("boot path: os");
   if (er_virtio_gpu_init_first_pci(&gpu) == 0u) {
@@ -128,6 +130,16 @@ void er_run_os_path(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE* SystemTable) {
     vr_font_face_destroy(font);
     return;
   }
+  if (er_native_boot_configure_pci_erwire_eth_sink(&native_relay) == 0u) {
+    er_println("relay ingress: virtio net unavailable");
+    er_ui_boot_destroy_app_contexts(apps, ER_UI_BOOT_APP_COUNT);
+    er_ui_scene_destroy(&scene);
+    er_ui_runtime_state_destroy(&runtime);
+    er_ui_ledger_app_state_destroy(&ledger_state);
+    vr_font_face_destroy(font);
+    return;
+  }
+  render_context.native_relay = &native_relay;
 
   er_println("ui renderer: first frame deferred until boot services exit");
   er_println("boot services: exiting");

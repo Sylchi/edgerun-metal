@@ -34,6 +34,7 @@
 #include "er_virtio_net.h"
 #include "er_vfs.h"
 #include "erwire.h"
+#include "efi_boot_internal.h"
 #include "font_geist.h"
 #include "wasm_vm.h"
 #include "wasm_driver_bus_probe_module.h"

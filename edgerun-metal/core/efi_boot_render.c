@@ -189,8 +189,16 @@ void er_ui_boot_input_loop(er_ui_ledger_app_state_t* ledger_state,
 
   for (;;) {
     ErPs2KeyboardAction input;
+    UINT8 relay_redraw = 0u;
     UINT8 redraw = 0u;
 
+    if (er_ui_boot_poll_native_relay(render, &relay_redraw) == 0u) {
+      er_halt_forever();
+    }
+    if (relay_redraw != 0u &&
+        er_ui_boot_render_scene(scene, ledger_state, render) == 0u) {
+      er_halt_forever();
+    }
     if (er_ps2_keyboard_poll(&keyboard, &input) == 0u) {
       er_halt_forever();
     }

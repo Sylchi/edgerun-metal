@@ -62,6 +62,8 @@ typedef struct {
 int er_ui_wasm_app_prepare(const UINT8* module_data, UINT32 module_size,
                            const ErWasmHostCalls* host_template,
                            ErUiWasmAppRuntime* runtime);
+UINT8 er_ui_wasm_app_prepare_render_route(const ErAppUiPresentation* presentation,
+                                          ErAdmittedRoute* out_route);
 int er_ui_wasm_app_deliver_input(ErUiWasmAppRuntime* runtime, const UINT8* bytes,
                                  UINT32 len);
 int er_ui_wasm_app_deliver_key_input(ErUiWasmAppRuntime* runtime, er_ui_key_t key,
