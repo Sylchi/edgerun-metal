@@ -8,7 +8,10 @@
 #define ER_UI_WASM_U32_BYTE1_SHIFT 8u
 #define ER_UI_WASM_U32_BYTE2_SHIFT 16u
 #define ER_UI_WASM_U32_BYTE3_SHIFT 24u
+#define ER_UI_WASM_U64_HIGH_OFFSET 4u
+#define ER_UI_WASM_U64_HIGH_SHIFT 32u
 #define ER_UI_WASM_U8_MASK 0xffu
+#define ER_UI_WASM_U32_MASK 0xffffffffu
 
 static ErUiWasmAppRuntime* g_active_runtime;
 
@@ -20,6 +23,12 @@ static void er_ui_wasm_app_store_u32(UINT8* dst, UINT32 value) {
     (UINT8)((value >> ER_UI_WASM_U32_BYTE2_SHIFT) & ER_UI_WASM_U8_MASK);
   dst[ER_UI_WASM_U32_BYTE3] =
     (UINT8)((value >> ER_UI_WASM_U32_BYTE3_SHIFT) & ER_UI_WASM_U8_MASK);
+}
+
+static void er_ui_wasm_app_store_u64(UINT8* dst, UINT64 value) {
+  er_ui_wasm_app_store_u32(dst, (UINT32)(value & ER_UI_WASM_U32_MASK));
+  er_ui_wasm_app_store_u32(dst + ER_UI_WASM_U64_HIGH_OFFSET,
+                           (UINT32)(value >> ER_UI_WASM_U64_HIGH_SHIFT));
 }
 
 static UINT32 er_ui_wasm_app_modifier_bits(er_ui_key_modifiers_t modifiers) {
@@ -69,27 +78,59 @@ static ErEpochClockModifier er_ui_wasm_app_effective_modifier(ErEpochClockModifi
   return modifier;
 }
 
+static int er_ui_wasm_app_prepare_input_window(ErUiWasmAppRuntime* runtime,
+                                               UINT32 len, UINT8** out_inbox) {
+  if (runtime == 0 || len == 0u || runtime->prepared == 0u ||
+      len > runtime->relay_inbox_len ||
+      er_ui_wasm_app_memory_window(runtime, runtime->relay_inbox_base,
+                                   runtime->relay_inbox_len, out_inbox) != 0) {
+    return -1;
+  }
+  return 0;
+}
+
+static void er_ui_wasm_app_stamp_epoch_input(UINT8* bytes,
+                                             ErEpochStamp epoch) {
+  er_ui_wasm_app_store_u64(bytes + ER_UI_WASM_INPUT_EPOCH_TICK_OFFSET, epoch.tick);
+  er_ui_wasm_app_store_u64(bytes + ER_UI_WASM_INPUT_EPOCH_SLOT_OFFSET, epoch.slot);
+  er_ui_wasm_app_store_u64(bytes + ER_UI_WASM_INPUT_EPOCH_EPOCH_OFFSET, epoch.epoch);
+  er_ui_wasm_app_store_u64(bytes + ER_UI_WASM_INPUT_EPOCH_ERA_OFFSET, epoch.era);
+}
+
+static int er_ui_wasm_app_commit_prepared_input(ErUiWasmAppRuntime* runtime,
+                                                UINT8* inbox, const UINT8* bytes,
+                                                UINT32 len, UINT32 sequence,
+                                                ErEpochStamp epoch) {
+  if (runtime == 0 || inbox == 0 || bytes == 0 || len == 0u) {
+    return -1;
+  }
+  er_mem_zero(inbox, (UINTN)runtime->relay_inbox_len);
+  er_mem_copy(inbox, bytes, (UINTN)len);
+  runtime->last_input_epoch = epoch;
+  runtime->input_len = len;
+  runtime->input_sequence = sequence;
+  return 0;
+}
+
 static int er_ui_wasm_app_commit_input(ErUiWasmAppRuntime* runtime,
                                        const UINT8* bytes, UINT32 len,
                                        UINT32 sequence) {
   UINT8* inbox = 0;
+  ErEpochStamp epoch;
 
-  if (runtime == 0 || bytes == 0 || len == 0u || runtime->prepared == 0u ||
-      len > runtime->relay_inbox_len ||
-      er_ui_wasm_app_memory_window(runtime, runtime->relay_inbox_base,
-                                   runtime->relay_inbox_len, &inbox) != 0) {
+  if (bytes == 0) {
+    return -1;
+  }
+  if (er_ui_wasm_app_prepare_input_window(runtime, len, &inbox) != 0) {
     return -1;
   }
   if (er_epoch_clock_advance_with_modifier(&runtime->settlement_clock,
                                            &runtime->input_epoch_modifier, 0) == 0u) {
     return -1;
   }
-  er_mem_zero(inbox, (UINTN)runtime->relay_inbox_len);
-  er_mem_copy(inbox, bytes, (UINTN)len);
-  runtime->last_input_epoch = runtime->settlement_clock.now;
-  runtime->input_len = len;
-  runtime->input_sequence = sequence;
-  return 0;
+  epoch = runtime->settlement_clock.now;
+  return er_ui_wasm_app_commit_prepared_input(runtime, inbox, bytes, len, sequence,
+                                             epoch);
 }
 
 static INT64 er_ui_wasm_app_emit_host(const UINT8* bytes, UINT32 len,
@@ -172,12 +213,22 @@ int er_ui_wasm_app_deliver_input(ErUiWasmAppRuntime* runtime, const UINT8* bytes
 int er_ui_wasm_app_deliver_key_input(ErUiWasmAppRuntime* runtime, er_ui_key_t key,
                                      er_ui_key_modifiers_t modifiers) {
   UINT8 packet[ER_UI_WASM_INPUT_PACKET_LEN];
+  UINT8* inbox = 0;
   UINT32 sequence;
+  ErEpochStamp epoch;
 
   if (runtime == 0 || key.kind > ER_UI_KEY_OTHER) {
     return -1;
   }
+  if (er_ui_wasm_app_prepare_input_window(runtime, (UINT32)sizeof(packet), &inbox) != 0) {
+    return -1;
+  }
   sequence = er_ui_wasm_app_next_input_sequence(runtime->input_sequence);
+  if (er_epoch_clock_advance_with_modifier(&runtime->settlement_clock,
+                                           &runtime->input_epoch_modifier, 0) == 0u) {
+    return -1;
+  }
+  epoch = runtime->settlement_clock.now;
   er_mem_zero(packet, (UINTN)sizeof(packet));
   er_ui_wasm_app_store_u32(packet + ER_UI_WASM_INPUT_ABI_OFFSET,
                            ER_UI_WASM_INPUT_ABI_VERSION);
@@ -190,8 +241,10 @@ int er_ui_wasm_app_deliver_key_input(ErUiWasmAppRuntime* runtime, er_ui_key_t ke
   er_ui_wasm_app_store_u32(packet + ER_UI_WASM_INPUT_MODIFIERS_OFFSET,
                            er_ui_wasm_app_modifier_bits(modifiers));
   er_ui_wasm_app_store_u32(packet + ER_UI_WASM_INPUT_SEQUENCE_OFFSET, sequence);
-  return er_ui_wasm_app_commit_input(runtime, packet, (UINT32)sizeof(packet),
-                                     sequence);
+  er_ui_wasm_app_stamp_epoch_input(packet, epoch);
+  return er_ui_wasm_app_commit_prepared_input(runtime, inbox, packet,
+                                             (UINT32)sizeof(packet), sequence,
+                                             epoch);
 }
 
 int er_ui_wasm_app_execute(ErUiWasmAppRuntime* runtime, INT64* out_result) {
