@@ -24,6 +24,7 @@ add_library(er_ui_core
   src/er_ui_runtime.c
   src/er_ui_scene.c
   src/er_ui_shell.c
+  src/er_ui_spacing.c
   src/er_ui_theme.c
   src/er_ui_text.c
 )
@@ -53,6 +54,7 @@ add_executable(er_ui_core_tests
     tests/test_runtime.c
     tests/test_scene.c
     tests/test_text.c
+    tests/test_spacing.c
   )
 
   target_link_libraries(er_ui_core_tests PRIVATE er_ui_core)
