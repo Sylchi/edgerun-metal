@@ -83,12 +83,17 @@ static uint8_t* read_file(const char* path, size_t* out_size) {
 
 static int write_u8_array(FILE* out, const char* name, const uint8_t* bytes, size_t count) {
   size_t i;
+  size_t line_remaining = 0u;
 
   if (fprintf(out, "static const UINT8 %s[] = {\n", name) < 0) return 0;
   for (i = 0u; i < count; ++i) {
-    if ((i % FONT_BAKE_BYTES_PER_LINE) == 0u && fprintf(out, "  ") < 0) return 0;
+    if (line_remaining == 0u) {
+      if (fprintf(out, "  ") < 0) return 0;
+      line_remaining = FONT_BAKE_BYTES_PER_LINE;
+    }
     if (fprintf(out, "0x%02x,", bytes[i]) < 0) return 0;
-    if ((i % FONT_BAKE_BYTES_PER_LINE) == FONT_BAKE_BYTES_PER_LINE_LAST_INDEX || i + 1u == count) {
+    --line_remaining;
+    if (line_remaining == 0u || i + 1u == count) {
       if (fprintf(out, "\n") < 0) return 0;
     } else if (fprintf(out, " ") < 0) {
       return 0;
@@ -104,6 +109,7 @@ static int write_float(FILE* out, float value) {
   return fprintf(out, "%.9gf", value) >= 0;
 }
 
+//@optimizer-ignore-function font bake tool must shape, bake, and emit each fixed ASCII glyph for generated atlas metadata
 int main(int argc, char** argv) {
   if (argc != FONT_BAKE_ARGC) {
     fprintf(stderr, "usage: %s <font.ttf> <output.h>\n", argv[0]);

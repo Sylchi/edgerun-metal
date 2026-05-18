@@ -434,6 +434,7 @@ UINT8 er_virtio_gpu_framebuffer_init(ErVirtioGpuFramebuffer* framebuffer, UINT32
   return 1;
 }
 
+//@optimizer-ignore-function VirtIO framebuffer clear must write every pixel in scanout memory
 void er_virtio_gpu_framebuffer_clear(ErVirtioGpuFramebuffer* framebuffer, UINT32 color) {
   UINT32 x;
   UINT32 y;
@@ -448,6 +449,7 @@ void er_virtio_gpu_framebuffer_clear(ErVirtioGpuFramebuffer* framebuffer, UINT32
   }
 }
 
+//@optimizer-ignore-function VirtIO framebuffer diagnostic fill must write every pixel in scanout memory
 void er_virtio_gpu_framebuffer_fill_halves(ErVirtioGpuFramebuffer* framebuffer,
                                            UINT32 top_color, UINT32 bottom_color) {
   UINT32 x;
