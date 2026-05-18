@@ -10,6 +10,7 @@
 #include "er_crypto_blake3.h"
 #include "er_acpi.h"
 #include "er_boot_profile.h"
+#include "er_boot_services.h"
 #include "er_gfx_console.h"
 #include "er_ps2_keyboard.h"
 #include "er_native_boot.h"
@@ -259,8 +260,10 @@ void er_ui_boot_input_loop(er_ui_ledger_app_state_t* ledger_state,
                            er_ui_scene_t* scene,
                            ErUiBootRenderContext* render);
 
-void er_run_os_path(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE* SystemTable);
+void er_run_os_path(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE* SystemTable,
+                    const ErBootServicesReport* boot_report);
 void er_run_invalid_boot_path(void);
-void er_run_boot_path(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE* SystemTable);
+void er_run_boot_path(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE* SystemTable,
+                      const ErBootServicesReport* boot_report);
 
 #endif

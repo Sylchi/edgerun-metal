@@ -116,6 +116,8 @@ typedef EFI_STATUS (*EFIAPI_LOCATE_PROTOCOL_FN)(EFI_GUID* Protocol, void* Regist
 typedef EFI_STATUS (*EFIAPI_FREE_POOL_FN)(void* Buffer);
 typedef EFI_STATUS (*EFIAPI_GET_MEMORY_MAP_FN)(UINTN* MemoryMapSize, void* MemoryMap, UINTN* MapKey, UINTN* DescriptorSize, UINT32* DescriptorVersion);
 typedef EFI_STATUS (*EFIAPI_EXIT_BOOT_SERVICES_FN)(EFI_HANDLE ImageHandle, UINTN MapKey);
+typedef EFI_STATUS (EFIAPI *EFIAPI_GET_VARIABLE_FN)(CHAR16* VariableName, EFI_GUID* VendorGuid, UINT32* Attributes,
+                                                    UINTN* DataSize, void* Data);
 
 struct EFI_BOOT_SERVICES {
   EFI_TABLE_HEADER Hdr;
@@ -158,6 +160,24 @@ struct EFI_BOOT_SERVICES {
   EFIAPI_LOCATE_HANDLE_BUFFER_FN LocateHandleBuffer;
   EFIAPI_LOCATE_PROTOCOL_FN LocateProtocol;
 };
+
+typedef struct {
+  EFI_TABLE_HEADER Hdr;
+  void* GetTime;
+  void* SetTime;
+  void* GetWakeupTime;
+  void* SetWakeupTime;
+  void* SetVirtualAddressMap;
+  void* ConvertPointer;
+  EFIAPI_GET_VARIABLE_FN GetVariable;
+  void* GetNextVariableName;
+  void* SetVariable;
+  void* GetNextHighMonotonicCount;
+  void* ResetSystem;
+  void* UpdateCapsule;
+  void* QueryCapsuleCapabilities;
+  void* QueryVariableInfo;
+} EFI_RUNTIME_SERVICES;
 
 typedef enum {
   PixelRedGreenBlueReserved8BitPerColor = 0,
@@ -289,7 +309,7 @@ typedef struct {
   EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL* ConOut;
   EFI_HANDLE StandardErrorHandle;
   void* StdErr;
-  void* RuntimeServices;
+  EFI_RUNTIME_SERVICES* RuntimeServices;
   EFI_BOOT_SERVICES* BootServices;
   UINTN NumberOfTableEntries;
   EFI_CONFIGURATION_TABLE* ConfigurationTable;
@@ -300,6 +320,7 @@ typedef struct {
 #define EFI_BUFFER_TOO_SMALL ((EFI_STATUS)(EFI_ERROR_MASK | 5u))
 #define EFI_NOT_READY ((EFI_STATUS)(EFI_ERROR_MASK | 6u))
 #define EFI_INVALID_PARAMETER ((EFI_STATUS)(EFI_ERROR_MASK | 2u))
+#define EFI_NOT_FOUND ((EFI_STATUS)(EFI_ERROR_MASK | 14u))
 #define EVT_NOTIFY_SIGNAL 0x00000200u
 #define TPL_CALLBACK 8u
 

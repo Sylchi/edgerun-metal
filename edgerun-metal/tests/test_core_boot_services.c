@@ -1,5 +1,26 @@
+static UINT8 g_test_secure_boot_value = 1u;
+
+static EFI_STATUS EFIAPI test_boot_services_get_variable(CHAR16* VariableName,
+                                                         EFI_GUID* VendorGuid,
+                                                         UINT32* Attributes,
+                                                         UINTN* DataSize,
+                                                         void* Data) {
+  (void)VariableName;
+  (void)VendorGuid;
+  (void)Attributes;
+
+  if (DataSize == 0 || Data == 0 || *DataSize < 1u) {
+    return EFI_INVALID_PARAMETER;
+  }
+  *(UINT8*)Data = g_test_secure_boot_value;
+  *DataSize = 1u;
+  return EFI_SUCCESS;
+}
+
 static void test_boot_services_boundary(void) {
   ErBootServicesReport report;
+  EFI_RUNTIME_SERVICES runtime_services;
+  EFI_SYSTEM_TABLE system_table;
   ErTpmNvLimits limits;
   ErPciDeviceSnapshot snapshot;
 
@@ -12,6 +33,24 @@ static void test_boot_services_boundary(void) {
               er_boot_services_decide_action(&report), ER_BOOT_SERVICES_ACTION_HALT);
   check_cstr("boot services halt label",
              er_boot_services_action_label(ER_BOOT_SERVICES_ACTION_HALT), "halt");
+  check_int64("boot services runtime denied",
+              er_boot_services_runtime_entry_allowed(&report), 0);
+
+  er_mem_zero((UINT8*)&runtime_services, (UINTN)sizeof(runtime_services));
+  er_mem_zero((UINT8*)&system_table, (UINTN)sizeof(system_table));
+  runtime_services.GetVariable = test_boot_services_get_variable;
+  system_table.RuntimeServices = &runtime_services;
+  g_test_secure_boot_value = 1u;
+  check_int64("boot services probe secure boot",
+              er_boot_services_probe_secure_boot(&system_table, &report), 1);
+  check_uint64("boot services secure boot verified",
+               report.secure_boot_state, ER_BOOT_SECURE_BOOT_VERIFIED);
+
+  g_test_secure_boot_value = 0u;
+  check_int64("boot services probe secure boot disabled",
+              er_boot_services_probe_secure_boot(&system_table, &report), 1);
+  check_uint64("boot services secure boot disabled",
+               report.secure_boot_state, ER_BOOT_SECURE_BOOT_DISABLED);
 
   report.secure_boot_state = ER_BOOT_SECURE_BOOT_VERIFIED;
   er_mem_zero((UINT8*)&limits, (UINTN)sizeof(limits));
@@ -56,6 +95,8 @@ static void test_boot_services_boundary(void) {
   check_int64("boot services selected enters runtime",
               er_boot_services_decide_action(&report),
               ER_BOOT_SERVICES_ACTION_ENTER_RUNTIME);
+  check_int64("boot services runtime allowed",
+              er_boot_services_runtime_entry_allowed(&report), 1);
 
   er_mem_zero((UINT8*)&snapshot, (UINTN)sizeof(snapshot));
   snapshot.present = 1u;

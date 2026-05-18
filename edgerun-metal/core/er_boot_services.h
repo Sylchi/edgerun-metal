@@ -66,6 +66,8 @@ typedef struct {
 } ErBootServicesReport;
 
 void er_boot_services_report_init(ErBootServicesReport* report);
+UINT8 er_boot_services_probe_secure_boot(EFI_SYSTEM_TABLE* system_table,
+                                         ErBootServicesReport* report);
 UINT8 er_boot_services_set_tpm_limits(ErBootServicesReport* report,
                                       const ErTpmNvLimits* limits);
 UINT8 er_boot_services_add_pci_device(ErBootServicesReport* report,
@@ -78,5 +80,6 @@ UINT8 er_boot_services_select_authority(ErBootServicesReport* report,
                                         UINT32 authority_index);
 ErBootServicesAction er_boot_services_decide_action(const ErBootServicesReport* report);
 const char* er_boot_services_action_label(ErBootServicesAction action);
+UINT8 er_boot_services_runtime_entry_allowed(const ErBootServicesReport* report);
 
 #endif

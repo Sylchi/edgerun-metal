@@ -1,6 +1,19 @@
 #include "er_boot_services.h"
 #include "er_mem.h"
 
+//@optimizer-ignore-constant UEFI global variable GUID bytes are fixed by the UEFI specification
+static EFI_GUID g_er_efi_global_variable_guid = {
+  0x8be4df61u,
+  0x93cau,
+  0x11d2u,
+  {0xaau, 0x0du, 0x00u, 0xe0u, 0x98u, 0x03u, 0x2bu, 0x8cu}
+};
+
+static CHAR16 g_er_efi_secure_boot_name[] = {
+  (CHAR16)'S', (CHAR16)'e', (CHAR16)'c', (CHAR16)'u', (CHAR16)'r',
+  (CHAR16)'e', (CHAR16)'B', (CHAR16)'o', (CHAR16)'o', (CHAR16)'t', 0u
+};
+
 void er_boot_services_report_init(ErBootServicesReport* report) {
   if (report == 0) {
     return;
@@ -9,6 +22,40 @@ void er_boot_services_report_init(ErBootServicesReport* report) {
   report->secure_boot_state = ER_BOOT_SECURE_BOOT_UNKNOWN;
   report->config_state = ER_BOOT_CONFIG_UNKNOWN;
   report->selected_authority = ER_BOOT_AUTHORITY_PROFILE_CAPACITY;
+}
+
+UINT8 er_boot_services_probe_secure_boot(EFI_SYSTEM_TABLE* system_table,
+                                         ErBootServicesReport* report) {
+  UINT8 secure_boot;
+  UINTN data_size;
+  EFI_STATUS status;
+
+  if (system_table == 0 || system_table->RuntimeServices == 0 ||
+      system_table->RuntimeServices->GetVariable == 0 || report == 0) {
+    return 0u;
+  }
+
+  secure_boot = 0u;
+  data_size = 1u;
+  status = system_table->RuntimeServices->GetVariable(g_er_efi_secure_boot_name,
+                                                      &g_er_efi_global_variable_guid,
+                                                      0, &data_size, &secure_boot);
+  if (status != EFI_SUCCESS || data_size != 1u) {
+    report->secure_boot_state = ER_BOOT_SECURE_BOOT_UNKNOWN;
+    return 0u;
+  }
+
+  switch (secure_boot) {
+    case 0u:
+      report->secure_boot_state = ER_BOOT_SECURE_BOOT_DISABLED;
+      return 1u;
+    case 1u:
+      report->secure_boot_state = ER_BOOT_SECURE_BOOT_VERIFIED;
+      return 1u;
+    default:
+      report->secure_boot_state = ER_BOOT_SECURE_BOOT_UNKNOWN;
+      return 0u;
+  }
 }
 
 UINT8 er_boot_services_set_tpm_limits(ErBootServicesReport* report,
@@ -131,4 +178,8 @@ const char* er_boot_services_action_label(ErBootServicesAction action) {
     default:
       return "invalid";
   }
+}
+
+UINT8 er_boot_services_runtime_entry_allowed(const ErBootServicesReport* report) {
+  return (UINT8)(er_boot_services_decide_action(report) == ER_BOOT_SERVICES_ACTION_ENTER_RUNTIME);
 }
