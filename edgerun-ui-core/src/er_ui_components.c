@@ -1657,7 +1657,9 @@ const er_ui_shadcn_demo_spec_t* er_ui_shadcn_demo_at(size_t index) {
 size_t er_ui_shadcn_demo_count(void) { return ER_UI_SHADCN_DEMO_COUNT; }
 
 bool er_ui_shadcn_demo_has_native_renderer(const er_ui_shadcn_demo_spec_t* spec) {
-  return spec && (spec->status == ER_UI_SHADCN_STATUS_NATIVE_PRIMITIVE || spec->status == ER_UI_SHADCN_STATUS_EXACT_PORT);
+  return spec
+    && (spec->status == ER_UI_SHADCN_STATUS_NATIVE_PRIMITIVE
+      || spec->status == ER_UI_SHADCN_STATUS_EXACT_PORT);
 }
 
 bool er_ui_shadcn_demo_is_exact_port(const er_ui_shadcn_demo_spec_t* spec) {
@@ -1673,17 +1675,27 @@ bool er_ui_shadcn_demo_uses_state(const er_ui_shadcn_demo_spec_t* spec, const ch
 }
 
 const er_ui_shadcn_demo_spec_t* er_ui_shadcn_find_demo_by_slug(const char* slug) {
-  for (size_t i = 0u; i < ER_UI_SHADCN_DEMO_COUNT; ++i) if (er_ui_shadcn_streq(shadcn_demo_components[i].slug, slug)) return &shadcn_demo_components[i];
+  for (size_t i = 0u; i < ER_UI_SHADCN_DEMO_COUNT; ++i) {
+    if (er_ui_shadcn_streq(shadcn_demo_components[i].slug, slug)) {
+      return &shadcn_demo_components[i];
+    }
+  }
   return 0;
 }
 
 const er_ui_shadcn_demo_spec_t* er_ui_shadcn_find_demo_by_source_component(const char* source_component) {
-  for (size_t i = 0u; i < ER_UI_SHADCN_DEMO_COUNT; ++i) if (er_ui_shadcn_streq(shadcn_demo_components[i].source_component, source_component)) return &shadcn_demo_components[i];
+  for (size_t i = 0u; i < ER_UI_SHADCN_DEMO_COUNT; ++i) {
+    if (er_ui_shadcn_streq(shadcn_demo_components[i].source_component, source_component)) {
+      return &shadcn_demo_components[i];
+    }
+  }
   return 0;
 }
 
 static bool er_ui_shadcn_is_upper(char c) { return c >= 'A' && c <= 'Z'; }
-static char er_ui_shadcn_lower(char c) { return er_ui_shadcn_is_upper(c) ? (char)(c + 32) : c; }
+static char er_ui_shadcn_lower(char c) {
+  return er_ui_shadcn_is_upper(c) ? (char)(c + 32) : c;
+}
 
 static bool er_ui_shadcn_normalize_identifier(const char* identifier, char* out, size_t cap, bool* out_from_path) {
   if (!identifier || !out || cap == 0u || !out_from_path) return false;
@@ -1705,23 +1717,36 @@ static bool er_ui_shadcn_normalize_identifier(const char* identifier, char* out,
     if (*p == '/') { *out_from_path = true; last = p + 1; }
   }
   start = last;
-  if (er_ui_shadcn_ends_with_len(start, end, ".tsx", ER_UI_SHADCN_SUFFIX_TSX_LEN)) end -= ER_UI_SHADCN_SUFFIX_TSX_LEN;
-  else if (er_ui_shadcn_ends_with_len(start, end, ".jsx", ER_UI_SHADCN_SUFFIX_JSX_LEN)) end -= ER_UI_SHADCN_SUFFIX_JSX_LEN;
-  else if (er_ui_shadcn_ends_with_len(start, end, ".ts", ER_UI_SHADCN_SUFFIX_TS_LEN)) end -= ER_UI_SHADCN_SUFFIX_TS_LEN;
-  else if (er_ui_shadcn_ends_with_len(start, end, ".js", ER_UI_SHADCN_SUFFIX_JS_LEN)) end -= ER_UI_SHADCN_SUFFIX_JS_LEN;
+  if (er_ui_shadcn_ends_with_len(start, end, ".tsx", ER_UI_SHADCN_SUFFIX_TSX_LEN)) {
+    end -= ER_UI_SHADCN_SUFFIX_TSX_LEN;
+  } else if (er_ui_shadcn_ends_with_len(start, end, ".jsx", ER_UI_SHADCN_SUFFIX_JSX_LEN)) {
+    end -= ER_UI_SHADCN_SUFFIX_JSX_LEN;
+  } else if (er_ui_shadcn_ends_with_len(start, end, ".ts", ER_UI_SHADCN_SUFFIX_TS_LEN)) {
+    end -= ER_UI_SHADCN_SUFFIX_TS_LEN;
+  } else if (er_ui_shadcn_ends_with_len(start, end, ".js", ER_UI_SHADCN_SUFFIX_JS_LEN)) {
+    end -= ER_UI_SHADCN_SUFFIX_JS_LEN;
+  }
   bool needs_kebab = false;
-  for (const char* p = start; p < end; ++p) if (er_ui_shadcn_is_upper(*p) || *p == '_' || *p == ' ') needs_kebab = true;
+  for (const char* p = start; p < end; ++p) {
+    if (er_ui_shadcn_is_upper(*p) || *p == '_' || *p == ' ') needs_kebab = true;
+  }
   size_t n = 0u;
   bool previous_was_separator = true;
   for (const char* p = start; p < end; ++p) {
     char ch = *p;
     if (needs_kebab && (ch == '_' || ch == ' ')) {
-      if (!previous_was_separator) { if (n + 1u >= cap) return false; out[n++] = '-'; }
+      if (!previous_was_separator) {
+        if (n + 1u >= cap) return false;
+        out[n++] = '-';
+      }
       previous_was_separator = true;
       continue;
     }
     if (needs_kebab && er_ui_shadcn_is_upper(ch)) {
-      if (!previous_was_separator) { if (n + 1u >= cap) return false; out[n++] = '-'; }
+      if (!previous_was_separator) {
+        if (n + 1u >= cap) return false;
+        out[n++] = '-';
+      }
       if (n + 1u >= cap) return false;
       out[n++] = er_ui_shadcn_lower(ch);
       previous_was_separator = false;
@@ -1740,16 +1765,35 @@ bool er_ui_shadcn_resolve_demo_identifier(const char* identifier, er_ui_shadcn_r
   const char* trimmed = identifier;
   while (*trimmed == ' ' || *trimmed == '\t' || *trimmed == '\n' || *trimmed == '\r') trimmed++;
   const er_ui_shadcn_demo_spec_t* direct_source = er_ui_shadcn_find_demo_by_source_component(trimmed);
-  if (direct_source) { out_resolved->spec = direct_source; out_resolved->kind = ER_UI_SHADCN_RESOLVE_SOURCE_COMPONENT; return true; }
+  if (direct_source) {
+    out_resolved->spec = direct_source;
+    out_resolved->kind = ER_UI_SHADCN_RESOLVE_SOURCE_COMPONENT;
+    return true;
+  }
   char normalized[ER_UI_SHADCN_IDENTIFIER_CAPACITY];
   bool from_path = false;
   if (!er_ui_shadcn_normalize_identifier(identifier, normalized, sizeof(normalized), &from_path)) return false;
   const er_ui_shadcn_demo_spec_t* by_slug = er_ui_shadcn_find_demo_by_slug(normalized);
-  if (by_slug) { out_resolved->spec = by_slug; out_resolved->kind = from_path ? ER_UI_SHADCN_RESOLVE_MODULE_PATH : ER_UI_SHADCN_RESOLVE_SLUG; return true; }
+  if (by_slug) {
+    out_resolved->spec = by_slug;
+    out_resolved->kind = from_path ? ER_UI_SHADCN_RESOLVE_MODULE_PATH : ER_UI_SHADCN_RESOLVE_SLUG;
+    return true;
+  }
   const er_ui_shadcn_demo_spec_t* by_source = er_ui_shadcn_find_demo_by_source_component(normalized);
-  if (by_source) { out_resolved->spec = by_source; out_resolved->kind = ER_UI_SHADCN_RESOLVE_SOURCE_COMPONENT; return true; }
-  for (size_t i = 0u; i < ER_UI_SHADCN_DEMO_COUNT; ++i) {
-    if (er_ui_shadcn_demo_uses_slot(&shadcn_demo_components[i], normalized)) { out_resolved->spec = &shadcn_demo_components[i]; out_resolved->kind = ER_UI_SHADCN_RESOLVE_SLOT; return true; }
+  if (by_source) {
+    out_resolved->spec = by_source;
+    out_resolved->kind = ER_UI_SHADCN_RESOLVE_SOURCE_COMPONENT;
+    return true;
+  }
+  const er_ui_shadcn_demo_spec_t* demo = shadcn_demo_components;
+  const er_ui_shadcn_demo_spec_t* end = shadcn_demo_components + ER_UI_SHADCN_DEMO_COUNT;
+  while (demo < end) {
+    if (er_ui_shadcn_demo_uses_slot(demo, normalized)) {
+      out_resolved->spec = demo;
+      out_resolved->kind = ER_UI_SHADCN_RESOLVE_SLOT;
+      return true;
+    }
+    demo++;
   }
   return false;
 }
@@ -1771,10 +1815,27 @@ bool er_ui_shadcn_port_mapping_for_identifier(const char* identifier, er_ui_shad
 }
 
 size_t er_ui_shadcn_native_demo_count(void) {
-  size_t count = 0u; for (size_t i = 0u; i < ER_UI_SHADCN_DEMO_COUNT; ++i) if (er_ui_shadcn_demo_has_native_renderer(&shadcn_demo_components[i])) count++; return count;
+  size_t count = 0u;
+  const er_ui_shadcn_demo_spec_t* demo = shadcn_demo_components;
+  const er_ui_shadcn_demo_spec_t* end = shadcn_demo_components + ER_UI_SHADCN_DEMO_COUNT;
+  while (demo < end) {
+    if (demo->status == ER_UI_SHADCN_STATUS_NATIVE_PRIMITIVE
+      || demo->status == ER_UI_SHADCN_STATUS_EXACT_PORT) {
+      count++;
+    }
+    demo++;
+  }
+  return count;
 }
 size_t er_ui_shadcn_exact_demo_count(void) {
-  size_t count = 0u; for (size_t i = 0u; i < ER_UI_SHADCN_DEMO_COUNT; ++i) if (er_ui_shadcn_demo_is_exact_port(&shadcn_demo_components[i])) count++; return count;
+  size_t count = 0u;
+  const er_ui_shadcn_demo_spec_t* demo = shadcn_demo_components;
+  const er_ui_shadcn_demo_spec_t* end = shadcn_demo_components + ER_UI_SHADCN_DEMO_COUNT;
+  while (demo < end) {
+    if (demo->status == ER_UI_SHADCN_STATUS_EXACT_PORT) count++;
+    demo++;
+  }
+  return count;
 }
 size_t er_ui_shadcn_count_by_category(er_ui_shadcn_demo_category_t category) {
   size_t count = 0u;
@@ -1798,27 +1859,82 @@ size_t er_ui_shadcn_count_by_status(er_ui_shadcn_demo_status_t status) {
 }
 static const char* const* er_ui_shadcn_variants_for_slug(const char* slug, size_t* out_count) {
   if (!out_count) return 0;
-  if (er_ui_shadcn_streq(slug, "alert")) { *out_count = sizeof(alert_variants) / sizeof(alert_variants[0]); return alert_variants; }
-  if (er_ui_shadcn_streq(slug, "badge")) { *out_count = sizeof(badge_variants) / sizeof(badge_variants[0]); return badge_variants; }
-  if (er_ui_shadcn_streq(slug, "button")) { *out_count = sizeof(button_variants) / sizeof(button_variants[0]); return button_variants; }
-  if (er_ui_shadcn_streq(slug, "button-group")) { *out_count = sizeof(orientation_variants) / sizeof(orientation_variants[0]); return orientation_variants; }
-  if (er_ui_shadcn_streq(slug, "separator")) { *out_count = sizeof(orientation_variants) / sizeof(orientation_variants[0]); return orientation_variants; }
-  if (er_ui_shadcn_streq(slug, "resizable")) { *out_count = sizeof(orientation_variants) / sizeof(orientation_variants[0]); return orientation_variants; }
+  if (er_ui_shadcn_streq(slug, "alert")) {
+    *out_count = ER_UI_SHADCN_ARRAY_COUNT(alert_variants);
+    return alert_variants;
+  }
+  if (er_ui_shadcn_streq(slug, "badge")) {
+    *out_count = ER_UI_SHADCN_ARRAY_COUNT(badge_variants);
+    return badge_variants;
+  }
+  if (er_ui_shadcn_streq(slug, "button")) {
+    *out_count = ER_UI_SHADCN_ARRAY_COUNT(button_variants);
+    return button_variants;
+  }
+  if (er_ui_shadcn_streq(slug, "button-group")) {
+    *out_count = ER_UI_SHADCN_ARRAY_COUNT(orientation_variants);
+    return orientation_variants;
+  }
+  if (er_ui_shadcn_streq(slug, "separator")) {
+    *out_count = ER_UI_SHADCN_ARRAY_COUNT(orientation_variants);
+    return orientation_variants;
+  }
+  if (er_ui_shadcn_streq(slug, "resizable")) {
+    *out_count = ER_UI_SHADCN_ARRAY_COUNT(orientation_variants);
+    return orientation_variants;
+  }
   static const char* const card_variants[] = {"default", "sm"};
-  if (er_ui_shadcn_streq(slug, "card")) { *out_count = sizeof(card_variants) / sizeof(card_variants[0]); return card_variants; }
-  if (er_ui_shadcn_streq(slug, "direction")) { *out_count = sizeof(direction_variants) / sizeof(direction_variants[0]); return direction_variants; }
-  if (er_ui_shadcn_streq(slug, "field")) { *out_count = sizeof(field_variants) / sizeof(field_variants[0]); return field_variants; }
-  if (er_ui_shadcn_streq(slug, "input")) { *out_count = sizeof(field_variants) / sizeof(field_variants[0]); return field_variants; }
-  if (er_ui_shadcn_streq(slug, "input-group")) { *out_count = sizeof(field_variants) / sizeof(field_variants[0]); return field_variants; }
-  if (er_ui_shadcn_streq(slug, "native-select")) { *out_count = sizeof(field_variants) / sizeof(field_variants[0]); return field_variants; }
-  if (er_ui_shadcn_streq(slug, "select")) { *out_count = sizeof(field_variants) / sizeof(field_variants[0]); return field_variants; }
-  if (er_ui_shadcn_streq(slug, "textarea")) { *out_count = sizeof(field_variants) / sizeof(field_variants[0]); return field_variants; }
-  if (er_ui_shadcn_streq(slug, "sheet")) { *out_count = sizeof(sheet_sides) / sizeof(sheet_sides[0]); return sheet_sides; }
-  if (er_ui_shadcn_streq(slug, "sonner")) { *out_count = sizeof(toast_variants) / sizeof(toast_variants[0]); return toast_variants; }
-  if (er_ui_shadcn_streq(slug, "toast")) { *out_count = sizeof(toast_variants) / sizeof(toast_variants[0]); return toast_variants; }
+  if (er_ui_shadcn_streq(slug, "card")) {
+    *out_count = ER_UI_SHADCN_ARRAY_COUNT(card_variants);
+    return card_variants;
+  }
+  if (er_ui_shadcn_streq(slug, "direction")) {
+    *out_count = ER_UI_SHADCN_ARRAY_COUNT(direction_variants);
+    return direction_variants;
+  }
+  if (er_ui_shadcn_streq(slug, "field")) {
+    *out_count = ER_UI_SHADCN_ARRAY_COUNT(field_variants);
+    return field_variants;
+  }
+  if (er_ui_shadcn_streq(slug, "input")) {
+    *out_count = ER_UI_SHADCN_ARRAY_COUNT(field_variants);
+    return field_variants;
+  }
+  if (er_ui_shadcn_streq(slug, "input-group")) {
+    *out_count = ER_UI_SHADCN_ARRAY_COUNT(field_variants);
+    return field_variants;
+  }
+  if (er_ui_shadcn_streq(slug, "native-select")) {
+    *out_count = ER_UI_SHADCN_ARRAY_COUNT(field_variants);
+    return field_variants;
+  }
+  if (er_ui_shadcn_streq(slug, "select")) {
+    *out_count = ER_UI_SHADCN_ARRAY_COUNT(field_variants);
+    return field_variants;
+  }
+  if (er_ui_shadcn_streq(slug, "textarea")) {
+    *out_count = ER_UI_SHADCN_ARRAY_COUNT(field_variants);
+    return field_variants;
+  }
+  if (er_ui_shadcn_streq(slug, "sheet")) {
+    *out_count = ER_UI_SHADCN_ARRAY_COUNT(sheet_sides);
+    return sheet_sides;
+  }
+  if (er_ui_shadcn_streq(slug, "sonner")) {
+    *out_count = ER_UI_SHADCN_ARRAY_COUNT(toast_variants);
+    return toast_variants;
+  }
+  if (er_ui_shadcn_streq(slug, "toast")) {
+    *out_count = ER_UI_SHADCN_ARRAY_COUNT(toast_variants);
+    return toast_variants;
+  }
   static const char* const toggle_group_variants[] = {"single", "multiple"};
-  if (er_ui_shadcn_streq(slug, "toggle-group")) { *out_count = sizeof(toggle_group_variants) / sizeof(toggle_group_variants[0]); return toggle_group_variants; }
-  *out_count = 0u; return no_variants;
+  if (er_ui_shadcn_streq(slug, "toggle-group")) {
+    *out_count = ER_UI_SHADCN_ARRAY_COUNT(toggle_group_variants);
+    return toggle_group_variants;
+  }
+  *out_count = 0u;
+  return no_variants;
 }
 
 static const char* const* er_ui_shadcn_interactions_for_slug(const char* slug, size_t* out_count) {
