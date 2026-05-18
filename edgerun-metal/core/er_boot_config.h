@@ -1,0 +1,42 @@
+#ifndef ER_BOOT_CONFIG_H
+#define ER_BOOT_CONFIG_H
+
+/*
+ * Purpose: describe EFI-partition boot configuration consumed before runtime entry.
+ * Intention: keep mutable relay policy out of TPM storage while preserving explicit admission authority.
+ */
+
+#include "er_identity.h"
+#include "er_work.h"
+
+#define ER_BOOT_CONFIG_ABI_VERSION 1u
+#define ER_BOOT_CONFIG_CHANNEL_CAPACITY 8u
+#define ER_BOOT_CONFIG_GENERATION_INVALID 0u
+#define ER_BOOT_CONFIG_LABEL_MAX ER_CHANNEL_LABEL_MAX
+
+#define ER_BOOT_CONFIG_CHANNEL_DISABLED 0u
+#define ER_BOOT_CONFIG_CHANNEL_ENABLED 1u
+
+typedef struct {
+  UINT8 enabled;
+  UINT8 channel_kind;
+  UINT16 label_len;
+  char label[ER_BOOT_CONFIG_LABEL_MAX];
+} ErBootRelayChannelConfig;
+
+typedef struct {
+  UINT16 abi_version;
+  UINT16 channel_count;
+  UINT32 generation;
+  ErIdentity admission_identity;
+  ErBootRelayChannelConfig channels[ER_BOOT_CONFIG_CHANNEL_CAPACITY];
+} ErBootConfig;
+
+void er_boot_config_init(ErBootConfig* config);
+UINT8 er_boot_config_set_admission_identity(ErBootConfig* config,
+                                            const ErIdentity* admission_identity);
+UINT8 er_boot_config_add_channel(ErBootConfig* config, UINT8 channel_kind,
+                                 const char* label, UINT16 label_len);
+UINT8 er_boot_config_valid(const ErBootConfig* config);
+
+#endif
