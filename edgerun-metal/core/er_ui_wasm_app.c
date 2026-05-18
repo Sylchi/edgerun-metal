@@ -1,7 +1,44 @@
 #include "er_ui_wasm_app.h"
 #include "er_mem.h"
 
+#define ER_UI_WASM_U32_BYTE0 0u
+#define ER_UI_WASM_U32_BYTE1 1u
+#define ER_UI_WASM_U32_BYTE2 2u
+#define ER_UI_WASM_U32_BYTE3 3u
+#define ER_UI_WASM_U32_BYTE1_SHIFT 8u
+#define ER_UI_WASM_U32_BYTE2_SHIFT 16u
+#define ER_UI_WASM_U32_BYTE3_SHIFT 24u
+#define ER_UI_WASM_U8_MASK 0xffu
+
 static ErUiWasmAppRuntime* g_active_runtime;
+
+static void er_ui_wasm_app_store_u32(UINT8* dst, UINT32 value) {
+  dst[ER_UI_WASM_U32_BYTE0] = (UINT8)(value & ER_UI_WASM_U8_MASK);
+  dst[ER_UI_WASM_U32_BYTE1] =
+    (UINT8)((value >> ER_UI_WASM_U32_BYTE1_SHIFT) & ER_UI_WASM_U8_MASK);
+  dst[ER_UI_WASM_U32_BYTE2] =
+    (UINT8)((value >> ER_UI_WASM_U32_BYTE2_SHIFT) & ER_UI_WASM_U8_MASK);
+  dst[ER_UI_WASM_U32_BYTE3] =
+    (UINT8)((value >> ER_UI_WASM_U32_BYTE3_SHIFT) & ER_UI_WASM_U8_MASK);
+}
+
+static UINT32 er_ui_wasm_app_modifier_bits(er_ui_key_modifiers_t modifiers) {
+  UINT32 bits = 0u;
+
+  if (modifiers.shift) {
+    bits |= ER_UI_WASM_INPUT_MODIFIER_SHIFT;
+  }
+  if (modifiers.ctrl) {
+    bits |= ER_UI_WASM_INPUT_MODIFIER_CTRL;
+  }
+  if (modifiers.alt) {
+    bits |= ER_UI_WASM_INPUT_MODIFIER_ALT;
+  }
+  if (modifiers.meta) {
+    bits |= ER_UI_WASM_INPUT_MODIFIER_META;
+  }
+  return bits;
+}
 
 static int er_ui_wasm_app_memory_window(const ErUiWasmAppRuntime* runtime, UINT32 base,
                                         UINT32 len, UINT8** out_bytes) {
@@ -84,6 +121,27 @@ int er_ui_wasm_app_deliver_input(ErUiWasmAppRuntime* runtime, const UINT8* bytes
   er_mem_zero(inbox, (UINTN)runtime->relay_inbox_len);
   er_mem_copy(inbox, bytes, (UINTN)len);
   return 0;
+}
+
+int er_ui_wasm_app_deliver_key_input(ErUiWasmAppRuntime* runtime, er_ui_key_t key,
+                                     er_ui_key_modifiers_t modifiers) {
+  UINT8 packet[ER_UI_WASM_INPUT_PACKET_LEN];
+
+  if (key.kind > ER_UI_KEY_OTHER) {
+    return -1;
+  }
+  er_mem_zero(packet, (UINTN)sizeof(packet));
+  er_ui_wasm_app_store_u32(packet + ER_UI_WASM_INPUT_ABI_OFFSET,
+                           ER_UI_WASM_INPUT_ABI_VERSION);
+  er_ui_wasm_app_store_u32(packet + ER_UI_WASM_INPUT_KIND_OFFSET,
+                           (UINT32)ER_UI_WASM_INPUT_KIND_KEY);
+  er_ui_wasm_app_store_u32(packet + ER_UI_WASM_INPUT_KEY_KIND_OFFSET,
+                           (UINT32)key.kind);
+  er_ui_wasm_app_store_u32(packet + ER_UI_WASM_INPUT_KEY_CODEPOINT_OFFSET,
+                           key.codepoint);
+  er_ui_wasm_app_store_u32(packet + ER_UI_WASM_INPUT_MODIFIERS_OFFSET,
+                           er_ui_wasm_app_modifier_bits(modifiers));
+  return er_ui_wasm_app_deliver_input(runtime, packet, (UINT32)sizeof(packet));
 }
 
 int er_ui_wasm_app_execute(ErUiWasmAppRuntime* runtime, INT64* out_result) {
