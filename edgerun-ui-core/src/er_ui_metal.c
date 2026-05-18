@@ -3,7 +3,7 @@
 #include "er_ui_painter.h"
 
 static const float ER_UI_METAL_SCREEN_PAD = 120.0f;
-static const float ER_UI_METAL_COMPACT_SCREEN_PAD = 48.0f;
+static const float ER_UI_METAL_COMPACT_SCREEN_PAD = 28.0f;
 static const float ER_UI_METAL_HEADER_H = 116.0f;
 static const float ER_UI_METAL_COMPACT_HEADER_H = 76.0f;
 static const float ER_UI_METAL_TAB_Y_GAP = 28.0f;
@@ -13,7 +13,7 @@ static const float ER_UI_METAL_COMPACT_TAB_W = 560.0f;
 static const float ER_UI_METAL_TAB_H = 48.0f;
 static const float ER_UI_METAL_COMPACT_TAB_H = 42.0f;
 static const float ER_UI_METAL_BLOCK_GAP = 32.0f;
-static const float ER_UI_METAL_COMPACT_BLOCK_GAP = 20.0f;
+static const float ER_UI_METAL_COMPACT_BLOCK_GAP = 14.0f;
 static const float ER_UI_METAL_METRIC_H = 176.0f;
 static const float ER_UI_METAL_COMPACT_METRIC_H = 132.0f;
 static const float ER_UI_METAL_LOWER_H = 1020.0f;
@@ -126,6 +126,99 @@ static er_ui_status_t er_ui_metal_emit_icon_bar(
   return ER_UI_OK;
 }
 
+static er_ui_status_t er_ui_metal_panel(
+  er_ui_scene_t* scene,
+  er_ui_bounds_t bounds,
+  er_ui_resolved_theme_t theme) {
+  er_ui_status_t status = er_ui_scene_push_rect(scene, er_ui_rect_linear_gradient(bounds.x, bounds.y, bounds.w, bounds.h, theme.radius.card,
+                                                                                 er_ui_color_with_alpha(theme.colors.panel, 0.98f),
+                                                                                 er_ui_color_with_alpha(theme.colors.row, 0.42f)));
+  if (status != ER_UI_OK) return status;
+  return er_ui_scene_push_rect(scene, er_ui_rect_border(bounds.x, bounds.y, bounds.w, bounds.h, theme.radius.card,
+                                                       er_ui_color_with_alpha(theme.colors.border, 0.70f)));
+}
+
+static er_ui_status_t er_ui_metal_emit_label_value(
+  er_ui_scene_t* scene,
+  vr_font_face_t* font,
+  er_ui_bounds_t bounds,
+  er_ui_resolved_theme_t theme,
+  const char* label,
+  const char* value) {
+  er_ui_status_t status = er_ui_scene_push_ascii_text(scene, font, label, 96u, bounds.x, bounds.y + 18.0f, theme.colors.muted);
+  if (status != ER_UI_OK) return status;
+  return er_ui_scene_push_ascii_text(scene, font, value, 96u, bounds.x, bounds.y + 40.0f, theme.colors.text);
+}
+
+static er_ui_status_t er_ui_metal_emit_title_icon(
+  er_ui_scene_t* scene,
+  vr_font_face_t* font,
+  er_ui_bounds_t bounds,
+  er_ui_resolved_theme_t theme,
+  const char* title,
+  er_ui_icon_t icon,
+  er_ui_color4_t color) {
+  er_ui_painter_t painter = er_ui_painter(scene);
+  er_ui_status_t status = er_ui_painter_icon(&painter, er_ui_bounds(bounds.x, bounds.y + 2.0f, 18.0f, 18.0f), icon, color);
+  if (status != ER_UI_OK) return status;
+  return er_ui_scene_push_ascii_text(scene, font, title, 96u, bounds.x + 28.0f, bounds.y + 19.0f, theme.colors.text);
+}
+
+static er_ui_status_t er_ui_metal_emit_progress_metric(
+  er_ui_scene_t* scene,
+  vr_font_face_t* font,
+  er_ui_bounds_t bounds,
+  er_ui_resolved_theme_t theme,
+  const char* title,
+  const char* value,
+  const char* caption,
+  float progress,
+  er_ui_icon_t icon,
+  er_ui_color4_t color) {
+  er_ui_status_t status = er_ui_metal_panel(scene, bounds, theme);
+  if (status != ER_UI_OK) return status;
+  status = er_ui_metal_emit_title_icon(scene, font, er_ui_bounds(bounds.x + 16.0f, bounds.y + 14.0f, bounds.w - 32.0f, 22.0f), theme, title, icon, color);
+  if (status != ER_UI_OK) return status;
+  float value_y = bounds.h < 120.0f ? bounds.y + 56.0f : bounds.y + 76.0f;
+  float bar_y = bounds.h < 120.0f ? bounds.y + bounds.h - 24.0f : bounds.y + bounds.h - 42.0f;
+  float caption_y = bounds.h < 120.0f ? bounds.y + bounds.h - 6.0f : bounds.y + bounds.h - 16.0f;
+  status = er_ui_scene_push_ascii_text(scene, font, value, 96u, bounds.x + 16.0f, value_y, theme.colors.text);
+  if (status != ER_UI_OK) return status;
+  float bar_x = bounds.x + 16.0f;
+  float bar_w = bounds.w - 32.0f;
+  status = er_ui_scene_push_rect(scene, er_ui_rect_fill(bar_x, bar_y, bar_w, 4.0f, 2.0f, er_ui_color_with_alpha(theme.colors.border, 0.56f)));
+  if (status != ER_UI_OK) return status;
+  status = er_ui_scene_push_rect(scene, er_ui_rect_fill(bar_x, bar_y, bar_w * progress, 4.0f, 2.0f, color));
+  if (status != ER_UI_OK) return status;
+  return er_ui_scene_push_ascii_text(scene, font, caption, 96u, bounds.x + 16.0f, caption_y, theme.colors.muted);
+}
+
+static er_ui_status_t er_ui_metal_emit_transaction_row(
+  er_ui_scene_t* scene,
+  vr_font_face_t* font,
+  er_ui_bounds_t bounds,
+  er_ui_resolved_theme_t theme,
+  const char* name,
+  const char* meta,
+  const char* amount,
+  er_ui_icon_t icon,
+  er_ui_color4_t amount_color,
+  uint32_t id) {
+  er_ui_painter_t painter = er_ui_painter(scene);
+  er_ui_status_t status = er_ui_scene_push_hit(scene, er_ui_hit(ER_UI_HIT_TRANSACTION_ROW, id, bounds.x, bounds.y, bounds.w, bounds.h));
+  if (status != ER_UI_OK) return status;
+  status = er_ui_scene_push_rect(scene, er_ui_rect_fill(bounds.x, bounds.y, bounds.w, bounds.h, theme.radius.control,
+                                                       er_ui_color_with_alpha(theme.colors.row, 0.34f)));
+  if (status != ER_UI_OK) return status;
+  status = er_ui_painter_icon(&painter, er_ui_bounds(bounds.x + 12.0f, bounds.y + 12.0f, 18.0f, 18.0f), icon, theme.colors.muted);
+  if (status != ER_UI_OK) return status;
+  status = er_ui_scene_push_ascii_text(scene, font, name, 96u, bounds.x + 42.0f, bounds.y + 18.0f, theme.colors.text);
+  if (status != ER_UI_OK) return status;
+  status = er_ui_scene_push_ascii_text(scene, font, meta, 96u, bounds.x + 42.0f, bounds.y + 39.0f, theme.colors.muted);
+  if (status != ER_UI_OK) return status;
+  return er_ui_scene_push_ascii_text(scene, font, amount, 32u, bounds.x + bounds.w - 96.0f, bounds.y + 29.0f, amount_color);
+}
+
 static er_ui_status_t er_ui_metal_emit_rail_item(
   er_ui_scene_t* scene,
   vr_font_face_t* font,
@@ -166,7 +259,9 @@ static er_ui_status_t er_ui_metal_emit_style_rail(
     ER_UI_ICON_ROUTE,
     ER_UI_ICON_MENU
   };
-  er_ui_status_t status = er_ui_scene_push_rect(scene, er_ui_rect_fill(bounds.x, bounds.y, bounds.w, bounds.h, theme.radius.panel, theme.colors.sidebar));
+  er_ui_status_t status = er_ui_scene_push_rect(scene, er_ui_rect_linear_gradient(bounds.x, bounds.y, bounds.w, bounds.h, theme.radius.panel,
+                                                                                 er_ui_color_with_alpha(theme.colors.sidebar, 0.98f),
+                                                                                 er_ui_color_with_alpha(theme.colors.panel, 0.86f)));
   if (status != ER_UI_OK) return status;
   status = er_ui_scene_push_rect(scene, er_ui_rect_border(bounds.x, bounds.y, bounds.w, bounds.h, theme.radius.panel, er_ui_color_with_alpha(theme.colors.border, 0.54f)));
   if (status != ER_UI_OK) return status;
@@ -190,15 +285,15 @@ static er_ui_status_t er_ui_metal_emit_showcase_topbar(
   er_ui_bounds_t bounds,
   er_ui_resolved_theme_t theme) {
   er_ui_painter_t painter = er_ui_painter(scene);
-  er_ui_status_t status = er_ui_scene_push_rect(scene, er_ui_rect_fill(bounds.x, bounds.y, bounds.w, bounds.h, theme.radius.panel, er_ui_color_with_alpha(theme.colors.bg, 0.96f)));
+  er_ui_status_t status = er_ui_scene_push_rect(scene, er_ui_rect_fill(bounds.x, bounds.y, bounds.w, bounds.h, theme.radius.panel, er_ui_color_with_alpha(theme.colors.panel, 0.52f)));
   if (status != ER_UI_OK) return status;
   status = er_ui_painter_icon(&painter, er_ui_bounds(bounds.x + 12.0f, bounds.y + 15.0f, 20.0f, 20.0f), ER_UI_ICON_SPARKLES, theme.colors.accent);
   if (status != ER_UI_OK) return status;
-  status = er_ui_shadcn_button_emit(scene, font, er_ui_bounds(bounds.x + 44.0f, bounds.y + 9.0f, 96.0f, 34.0f), theme, "Components",
+  status = er_ui_shadcn_button_emit(scene, font, er_ui_bounds(bounds.x + 42.0f, bounds.y + 9.0f, 112.0f, 34.0f), theme, "Components",
                                     ER_UI_METAL_BOARD_BASE_ID + 60u, ER_UI_SHADCN_BUTTON_GHOST, ER_UI_SHADCN_BUTTON_SIZE_SM, true);
   if (status != ER_UI_OK) return status;
-  status = er_ui_shadcn_command_palette_emit(scene, font, er_ui_bounds(bounds.x + 154.0f, bounds.y + 7.0f, bounds.w - 430.0f, 38.0f), theme,
-                                             "Search components, blocks, charts...", ER_UI_METAL_BOARD_BASE_ID + 61u);
+  status = er_ui_shadcn_command_palette_emit(scene, font, er_ui_bounds(bounds.x + 166.0f, bounds.y + 7.0f, bounds.w - 446.0f, 38.0f), theme,
+                                             "Search components...", ER_UI_METAL_BOARD_BASE_ID + 61u);
   if (status != ER_UI_OK) return status;
   status = er_ui_metal_emit_icon_bar(scene, font, er_ui_bounds(bounds.x + bounds.w - 252.0f, bounds.y + 8.0f, 252.0f, 36.0f), theme);
   if (status != ER_UI_OK) return status;
@@ -213,29 +308,30 @@ static er_ui_status_t er_ui_metal_emit_component_board(
   er_ui_resolved_theme_t theme) {
   static const char* const months[] = {"Dec", "Jan", "Feb", "Mar", "Apr", "May"};
   static const float month_values[] = {0.42f, 0.66f, 0.48f, 0.78f, 0.38f, 0.84f};
-  static const char* const tx_headers[] = {"Name", "Date", "Amount"};
-  static const char* const tx_cells[] = {
-    "Blue Bottle", "Today", "-$6.50",
-    "Stripe Payout", "Oct 12", "+$4,200",
-    "Netflix", "Oct 10", "-$19.99"
-  };
-  float gap = 14.0f;
+  float gap = 12.0f;
   float col_w = (bounds.w - gap * 3.0f) * 0.25f;
-  er_ui_bounds_t c0 = er_ui_bounds(bounds.x, bounds.y, col_w, 288.0f);
-  er_ui_bounds_t c1 = er_ui_bounds(bounds.x + (col_w + gap), bounds.y, col_w, 288.0f);
+  er_ui_bounds_t c0 = er_ui_bounds(bounds.x, bounds.y, col_w, 286.0f);
+  er_ui_bounds_t c1 = er_ui_bounds(bounds.x + (col_w + gap), bounds.y, col_w, 286.0f);
   er_ui_bounds_t c2 = er_ui_bounds(bounds.x + (col_w + gap) * 2.0f, bounds.y, col_w, 198.0f);
-  er_ui_bounds_t c3 = er_ui_bounds(bounds.x + (col_w + gap) * 3.0f, bounds.y, col_w, 288.0f);
-  er_ui_bounds_t wide = er_ui_bounds(c1.x, bounds.y + 302.0f, col_w * 2.0f + gap, 198.0f);
-  er_ui_status_t status = er_ui_shadcn_card_emit(scene, c0, theme);
+  er_ui_bounds_t c3 = er_ui_bounds(bounds.x + (col_w + gap) * 3.0f, bounds.y, col_w, 286.0f);
+  er_ui_bounds_t wide = er_ui_bounds(c1.x, bounds.y + 298.0f, col_w * 2.0f + gap, 196.0f);
+  er_ui_status_t status = er_ui_metal_panel(scene, c0, theme);
   if (status != ER_UI_OK) return status;
   status = er_ui_shadcn_bar_chart_emit(scene, font, er_ui_bounds(c0.x + 14.0f, c0.y + 14.0f, c0.w - 28.0f, 164.0f), theme,
                                        "Contribution History", months, month_values, 6u, ER_UI_METAL_BOARD_BASE_ID + 100u, 5u);
   if (status != ER_UI_OK) return status;
-  status = er_ui_shadcn_metric_card_emit(scene, font, er_ui_bounds(c0.x + 14.0f, c0.y + 190.0f, c0.w - 28.0f, 72.0f), theme,
-                                         "Upcoming", "May 25, 2024", "", false, 0.0f, theme.colors.accent);
+  er_ui_bounds_t upcoming = er_ui_bounds(c0.x + 14.0f, c0.y + 190.0f, c0.w - 28.0f, 72.0f);
+  status = er_ui_scene_push_rect(scene, er_ui_rect_fill(upcoming.x, upcoming.y, upcoming.w, upcoming.h, theme.radius.control,
+                                                       er_ui_color_with_alpha(theme.colors.row, 0.48f)));
+  if (status != ER_UI_OK) return status;
+  status = er_ui_metal_emit_label_value(scene, font, er_ui_bounds(upcoming.x + 14.0f, upcoming.y + 8.0f, upcoming.w - 28.0f, 52.0f), theme,
+                                        "Upcoming", "May 25, 2024");
   if (status != ER_UI_OK) return status;
 
-  status = er_ui_shadcn_card_emit(scene, c1, theme);
+  status = er_ui_metal_panel(scene, c1, theme);
+  if (status != ER_UI_OK) return status;
+  status = er_ui_metal_emit_title_icon(scene, font, er_ui_bounds(c1.x + 14.0f, c1.y + 14.0f, c1.w - 28.0f, 22.0f), theme,
+                                       "Payout Threshold", ER_UI_ICON_WALLET, theme.colors.accent);
   if (status != ER_UI_OK) return status;
   status = er_ui_shadcn_select_emit(scene, font, er_ui_bounds(c1.x + 14.0f, c1.y + 18.0f, c1.w - 28.0f, 58.0f), theme,
                                     "Preferred Currency", "USD - United States Dollar", ER_UI_METAL_BOARD_BASE_ID + 120u, false);
@@ -250,13 +346,18 @@ static er_ui_status_t er_ui_metal_emit_component_board(
                                     ER_UI_METAL_BOARD_BASE_ID + 123u, ER_UI_SHADCN_BUTTON_DEFAULT, ER_UI_SHADCN_BUTTON_SIZE_SM, true);
   if (status != ER_UI_OK) return status;
 
-  status = er_ui_shadcn_metric_card_emit(scene, font, c2, theme, "Savings Targets", "$420,000", "65% achieved", true, 0.65f, theme.colors.success);
+  status = er_ui_metal_emit_progress_metric(scene, font, c2, theme, "Savings Targets", "$420,000", "65% achieved",
+                                            0.65f, ER_UI_ICON_STORAGE, theme.colors.success);
   if (status != ER_UI_OK) return status;
-  status = er_ui_shadcn_metric_card_emit(scene, font, er_ui_bounds(c2.x, c2.y + c2.h + gap, c2.w, 86.0f), theme,
-                                         "Real Estate", "$85,000", "32% achieved", true, 0.32f, theme.colors.info);
+  er_ui_bounds_t c2b = er_ui_bounds(c2.x, c2.y + c2.h + gap, c2.w, 86.0f);
+  status = er_ui_metal_emit_progress_metric(scene, font, c2b, theme, "Real Estate", "$85,000", "32% achieved",
+                                            0.32f, ER_UI_ICON_DATABASE, theme.colors.info);
   if (status != ER_UI_OK) return status;
 
-  status = er_ui_shadcn_card_emit(scene, c3, theme);
+  status = er_ui_metal_panel(scene, c3, theme);
+  if (status != ER_UI_OK) return status;
+  status = er_ui_metal_emit_title_icon(scene, font, er_ui_bounds(c3.x + 14.0f, c3.y + 14.0f, c3.w - 28.0f, 22.0f), theme,
+                                       "Buy Investment", ER_UI_ICON_WALLET, theme.colors.accent);
   if (status != ER_UI_OK) return status;
   status = er_ui_shadcn_field_emit(scene, font, er_ui_bounds(c3.x + 14.0f, c3.y + 14.0f, c3.w - 28.0f, 58.0f), theme,
                                    "Amount to Invest", "$1,000.00", ER_UI_METAL_BOARD_BASE_ID + 140u, false);
@@ -264,19 +365,62 @@ static er_ui_status_t er_ui_metal_emit_component_board(
   status = er_ui_shadcn_select_emit(scene, font, er_ui_bounds(c3.x + 14.0f, c3.y + 84.0f, c3.w - 28.0f, 58.0f), theme,
                                     "Order Type", "Market Order", ER_UI_METAL_BOARD_BASE_ID + 141u, false);
   if (status != ER_UI_OK) return status;
-  status = er_ui_shadcn_receipt_row_emit(scene, font, er_ui_bounds(c3.x + 14.0f, c3.y + 158.0f, c3.w - 28.0f, 54.0f), theme,
-                                         "Estimated Shares", "1.95", "VOO", ER_UI_METAL_BOARD_BASE_ID + 142u);
+  er_ui_bounds_t estimate = er_ui_bounds(c3.x + 14.0f, c3.y + 158.0f, c3.w - 28.0f, 58.0f);
+  status = er_ui_scene_push_rect(scene, er_ui_rect_fill(estimate.x, estimate.y, estimate.w, estimate.h, theme.radius.control, er_ui_color_with_alpha(theme.colors.row, 0.58f)));
   if (status != ER_UI_OK) return status;
-  status = er_ui_shadcn_button_emit(scene, font, er_ui_bounds(c3.x + 14.0f, c3.y + 238.0f, c3.w - 28.0f, 34.0f), theme, "Review Order",
+  status = er_ui_scene_push_ascii_text(scene, font, "Estimated Shares", 96u, estimate.x + 12.0f, estimate.y + 23.0f, theme.colors.muted);
+  if (status != ER_UI_OK) return status;
+  status = er_ui_scene_push_ascii_text(scene, font, "1.95", 16u, estimate.x + estimate.w - 42.0f, estimate.y + 23.0f, theme.colors.text);
+  if (status != ER_UI_OK) return status;
+  status = er_ui_scene_push_ascii_text(scene, font, "Buying Power", 96u, estimate.x + 12.0f, estimate.y + 45.0f, theme.colors.muted);
+  if (status != ER_UI_OK) return status;
+  status = er_ui_scene_push_ascii_text(scene, font, "$12,450", 24u, estimate.x + estimate.w - 82.0f, estimate.y + 45.0f, theme.colors.text);
+  if (status != ER_UI_OK) return status;
+  status = er_ui_shadcn_button_emit(scene, font, er_ui_bounds(c3.x + 14.0f, c3.y + 236.0f, c3.w - 28.0f, 34.0f), theme, "Review Order",
                                     ER_UI_METAL_BOARD_BASE_ID + 143u, ER_UI_SHADCN_BUTTON_DEFAULT, ER_UI_SHADCN_BUTTON_SIZE_SM, true);
   if (status != ER_UI_OK) return status;
 
-  status = er_ui_shadcn_table_emit(scene, font, wide, theme, tx_headers, 3u, tx_cells, 3u, ER_UI_METAL_BOARD_BASE_ID + 160u);
+  status = er_ui_metal_panel(scene, wide, theme);
   if (status != ER_UI_OK) return status;
-  status = er_ui_shadcn_empty_emit(scene, font, er_ui_bounds(c0.x, c0.y + c0.h + gap, c0.w, 198.0f), theme,
+  status = er_ui_metal_emit_title_icon(scene, font, er_ui_bounds(wide.x + 16.0f, wide.y + 16.0f, wide.w - 32.0f, 22.0f), theme,
+                                       "Recent Transactions", ER_UI_ICON_ACTIVITY, theme.colors.accent);
+  if (status != ER_UI_OK) return status;
+  status = er_ui_shadcn_button_emit(scene, font, er_ui_bounds(wide.x + wide.w - 86.0f, wide.y + 12.0f, 68.0f, 30.0f), theme, "View All",
+                                    ER_UI_METAL_BOARD_BASE_ID + 159u, ER_UI_SHADCN_BUTTON_SECONDARY, ER_UI_SHADCN_BUTTON_SIZE_SM, true);
+  if (status != ER_UI_OK) return status;
+  status = er_ui_metal_emit_transaction_row(scene, font, er_ui_bounds(wide.x + 16.0f, wide.y + 54.0f, wide.w - 32.0f, 42.0f), theme,
+                                            "Blue Bottle Coffee", "Today, 10:24 AM", "-$6.50", ER_UI_ICON_DATABASE, theme.colors.text,
+                                            ER_UI_METAL_BOARD_BASE_ID + 160u);
+  if (status != ER_UI_OK) return status;
+  status = er_ui_metal_emit_transaction_row(scene, font, er_ui_bounds(wide.x + 16.0f, wide.y + 102.0f, wide.w - 32.0f, 42.0f), theme,
+                                            "Stripe Payout", "Oct 12", "+$4,200", ER_UI_ICON_WALLET, theme.colors.success,
+                                            ER_UI_METAL_BOARD_BASE_ID + 161u);
+  if (status != ER_UI_OK) return status;
+  status = er_ui_metal_emit_transaction_row(scene, font, er_ui_bounds(wide.x + 16.0f, wide.y + 150.0f, wide.w - 32.0f, 34.0f), theme,
+                                            "Netflix", "Oct 10", "-$19.99", ER_UI_ICON_FILE, theme.colors.text,
+                                            ER_UI_METAL_BOARD_BASE_ID + 162u);
+  if (status != ER_UI_OK) return status;
+  er_ui_bounds_t empty = er_ui_bounds(c0.x, c0.y + c0.h + gap, c0.w, 196.0f);
+  status = er_ui_metal_panel(scene, empty, theme);
+  if (status != ER_UI_OK) return status;
+  er_ui_painter_t painter = er_ui_painter(scene);
+  status = er_ui_painter_icon(&painter, er_ui_bounds(empty.x + empty.w * 0.5f - 14.0f, empty.y + 30.0f, 28.0f, 28.0f),
+                              ER_UI_ICON_MESSAGE_PLUS, theme.colors.accent);
+  if (status != ER_UI_OK) return status;
+  status = er_ui_shadcn_empty_emit(scene, font, er_ui_bounds(empty.x + 14.0f, empty.y + 24.0f, empty.w - 28.0f, empty.h - 48.0f), theme,
                                    "Distribute Track", "Upload your first master to reach listeners.");
   if (status != ER_UI_OK) return status;
-  return er_ui_shadcn_card_emit(scene, er_ui_bounds(c3.x, c3.y + c3.h + gap, c3.w, 198.0f), theme);
+  er_ui_bounds_t access = er_ui_bounds(c3.x, c3.y + c3.h + gap, c3.w, 196.0f);
+  status = er_ui_metal_panel(scene, access, theme);
+  if (status != ER_UI_OK) return status;
+  status = er_ui_metal_emit_title_icon(scene, font, er_ui_bounds(access.x + 16.0f, access.y + 16.0f, access.w - 32.0f, 22.0f), theme,
+                                       "Account Access", ER_UI_ICON_LOCK, theme.colors.accent);
+  if (status != ER_UI_OK) return status;
+  status = er_ui_shadcn_field_emit(scene, font, er_ui_bounds(access.x + 16.0f, access.y + 48.0f, access.w - 32.0f, 58.0f), theme,
+                                   "Email Address", "artist@studio.inc", ER_UI_METAL_BOARD_BASE_ID + 180u, false);
+  if (status != ER_UI_OK) return status;
+  return er_ui_shadcn_button_emit(scene, font, er_ui_bounds(access.x + 16.0f, access.y + 146.0f, access.w - 32.0f, 34.0f), theme,
+                                  "Update Security", ER_UI_METAL_BOARD_BASE_ID + 181u, ER_UI_SHADCN_BUTTON_DEFAULT, ER_UI_SHADCN_BUTTON_SIZE_SM, true);
 }
 
 er_ui_status_t er_ui_edgerun_metal_surface_emit(
