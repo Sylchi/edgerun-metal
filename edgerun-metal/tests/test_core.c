@@ -2617,10 +2617,14 @@ static void test_ui_wasm_app_runner(void) {
   runtime.relay_outbox_len = 2048u;
   runtime.presentation = &presentation;
   runtime.scene = &scene;
+  runtime.input_len = ER_UI_WASM_INPUT_PACKET_LEN;
+  runtime.input_sequence = ER_UI_WASM_INPUT_SEQUENCE_MAX;
   check_int64("ui wasm app prepare",
               er_ui_wasm_app_prepare(g_edgerun_ui_counter_wasm, ER_UI_COUNTER_WASM_SIZE,
                                      &host, &runtime),
               0);
+  check_uint64("ui wasm app prepared input len", runtime.input_len, 0u);
+  check_uint64("ui wasm app prepared input sequence", runtime.input_sequence, 0u);
   check_int64("ui wasm app deliver input",
               er_ui_wasm_app_deliver_input(&runtime, input_packet,
                                            (UINT32)sizeof(input_packet)),
@@ -2628,10 +2632,13 @@ static void test_ui_wasm_app_runner(void) {
   check_uint64("ui wasm app inbox byte0", memory[0], (UINT8)'k');
   check_uint64("ui wasm app inbox byte3", memory[3], (UINT8)'1');
   check_uint64("ui wasm app inbox zeroed", memory[4], 0u);
+  check_uint64("ui wasm app input len", runtime.input_len, sizeof(input_packet));
+  check_uint64("ui wasm app input sequence", runtime.input_sequence, 1u);
   check_int64("ui wasm app reject oversized input",
               er_ui_wasm_app_deliver_input(&runtime, input_packet,
                                            runtime.relay_inbox_len + 1u),
               -1);
+  check_uint64("ui wasm app rejected input sequence", runtime.input_sequence, 1u);
   key.kind = ER_UI_KEY_OTHER;
   key.codepoint = (UINT32)'A';
   modifiers = er_ui_key_modifiers(true, true, false, false);
@@ -2647,10 +2654,21 @@ static void test_ui_wasm_app_runner(void) {
                (UINT8)'A');
   check_uint64("ui wasm app key input modifiers", memory[ER_UI_WASM_INPUT_MODIFIERS_OFFSET],
                ER_UI_WASM_INPUT_MODIFIER_SHIFT | ER_UI_WASM_INPUT_MODIFIER_CTRL);
+  check_uint64("ui wasm app key input len", runtime.input_len, ER_UI_WASM_INPUT_PACKET_LEN);
+  check_uint64("ui wasm app key input sequence field",
+               memory[ER_UI_WASM_INPUT_SEQUENCE_OFFSET], 2u);
+  check_uint64("ui wasm app key input sequence", runtime.input_sequence, 2u);
   invalid_key.kind = (er_ui_key_kind_t)(ER_UI_KEY_OTHER + 1u);
   invalid_key.codepoint = 0u;
   check_int64("ui wasm app reject invalid key input",
               er_ui_wasm_app_deliver_key_input(&runtime, invalid_key, modifiers), -1);
+  check_uint64("ui wasm app invalid key sequence", runtime.input_sequence, 2u);
+  runtime.input_sequence = ER_UI_WASM_INPUT_SEQUENCE_MAX;
+  check_int64("ui wasm app deliver wrapped key input",
+              er_ui_wasm_app_deliver_key_input(&runtime, key, modifiers), 0);
+  check_uint64("ui wasm app wrapped key input sequence field",
+               memory[ER_UI_WASM_INPUT_SEQUENCE_OFFSET], 1u);
+  check_uint64("ui wasm app wrapped key input sequence", runtime.input_sequence, 1u);
   check_int64("ui wasm app execute", er_ui_wasm_app_execute(&runtime, &result),
               0);
   check_uint64("ui wasm app result", (UINT64)result,

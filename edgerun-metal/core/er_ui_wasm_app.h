@@ -17,11 +17,12 @@
 #define ER_UI_WASM_INPUT_KEY_KIND_OFFSET 8u
 #define ER_UI_WASM_INPUT_KEY_CODEPOINT_OFFSET 12u
 #define ER_UI_WASM_INPUT_MODIFIERS_OFFSET 16u
-#define ER_UI_WASM_INPUT_RESERVED_OFFSET 20u
+#define ER_UI_WASM_INPUT_SEQUENCE_OFFSET 20u
 #define ER_UI_WASM_INPUT_MODIFIER_SHIFT 0x01u
 #define ER_UI_WASM_INPUT_MODIFIER_CTRL 0x02u
 #define ER_UI_WASM_INPUT_MODIFIER_ALT 0x04u
 #define ER_UI_WASM_INPUT_MODIFIER_META 0x08u
+#define ER_UI_WASM_INPUT_SEQUENCE_MAX 0xffffffffu
 
 typedef enum {
   ER_UI_WASM_INPUT_KIND_KEY = 1u
@@ -38,6 +39,8 @@ typedef struct {
   er_ui_scene_t* scene;
   ErWasmModule module;
   UINT32 main_index;
+  UINT32 input_len;
+  UINT32 input_sequence;
   er_ui_scene_stats_t emitted_stats;
   UINT8 emitted;
   UINT8 prepared;

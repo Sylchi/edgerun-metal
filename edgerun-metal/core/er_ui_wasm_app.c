@@ -55,6 +55,31 @@ static int er_ui_wasm_app_memory_window(const ErUiWasmAppRuntime* runtime, UINT3
   return 0;
 }
 
+static UINT32 er_ui_wasm_app_next_input_sequence(UINT32 current) {
+  if (current == ER_UI_WASM_INPUT_SEQUENCE_MAX) {
+    return 1u;
+  }
+  return current + 1u;
+}
+
+static int er_ui_wasm_app_commit_input(ErUiWasmAppRuntime* runtime,
+                                       const UINT8* bytes, UINT32 len,
+                                       UINT32 sequence) {
+  UINT8* inbox = 0;
+
+  if (runtime == 0 || bytes == 0 || len == 0u || runtime->prepared == 0u ||
+      len > runtime->relay_inbox_len ||
+      er_ui_wasm_app_memory_window(runtime, runtime->relay_inbox_base,
+                                   runtime->relay_inbox_len, &inbox) != 0) {
+    return -1;
+  }
+  er_mem_zero(inbox, (UINTN)runtime->relay_inbox_len);
+  er_mem_copy(inbox, bytes, (UINTN)len);
+  runtime->input_len = len;
+  runtime->input_sequence = sequence;
+  return 0;
+}
+
 static INT64 er_ui_wasm_app_emit_host(const UINT8* bytes, UINT32 len,
                                       const er_ui_scene_stats_t* stats) {
   if (bytes == 0 || stats == 0 || g_active_runtime == 0 ||
@@ -83,6 +108,8 @@ int er_ui_wasm_app_prepare(const UINT8* module_data, UINT32 module_size,
   }
   er_mem_zero(runtime->memory, (UINTN)runtime->memory_size);
   er_mem_zero((UINT8*)&runtime->emitted_stats, (UINTN)sizeof(runtime->emitted_stats));
+  runtime->input_len = 0u;
+  runtime->input_sequence = 0u;
   runtime->emitted = 0u;
   if (er_wasm_prepare_linear_memory(runtime->memory, runtime->memory_size,
                                     runtime->relay_inbox_base,
@@ -110,26 +137,24 @@ int er_ui_wasm_app_prepare(const UINT8* module_data, UINT32 module_size,
 
 int er_ui_wasm_app_deliver_input(ErUiWasmAppRuntime* runtime, const UINT8* bytes,
                                  UINT32 len) {
-  UINT8* inbox = 0;
+  UINT32 sequence;
 
-  if (runtime == 0 || bytes == 0 || len == 0u || runtime->prepared == 0u ||
-      len > runtime->relay_inbox_len ||
-      er_ui_wasm_app_memory_window(runtime, runtime->relay_inbox_base,
-                                   runtime->relay_inbox_len, &inbox) != 0) {
+  if (runtime == 0) {
     return -1;
   }
-  er_mem_zero(inbox, (UINTN)runtime->relay_inbox_len);
-  er_mem_copy(inbox, bytes, (UINTN)len);
-  return 0;
+  sequence = er_ui_wasm_app_next_input_sequence(runtime->input_sequence);
+  return er_ui_wasm_app_commit_input(runtime, bytes, len, sequence);
 }
 
 int er_ui_wasm_app_deliver_key_input(ErUiWasmAppRuntime* runtime, er_ui_key_t key,
                                      er_ui_key_modifiers_t modifiers) {
   UINT8 packet[ER_UI_WASM_INPUT_PACKET_LEN];
+  UINT32 sequence;
 
-  if (key.kind > ER_UI_KEY_OTHER) {
+  if (runtime == 0 || key.kind > ER_UI_KEY_OTHER) {
     return -1;
   }
+  sequence = er_ui_wasm_app_next_input_sequence(runtime->input_sequence);
   er_mem_zero(packet, (UINTN)sizeof(packet));
   er_ui_wasm_app_store_u32(packet + ER_UI_WASM_INPUT_ABI_OFFSET,
                            ER_UI_WASM_INPUT_ABI_VERSION);
@@ -141,7 +166,9 @@ int er_ui_wasm_app_deliver_key_input(ErUiWasmAppRuntime* runtime, er_ui_key_t ke
                            key.codepoint);
   er_ui_wasm_app_store_u32(packet + ER_UI_WASM_INPUT_MODIFIERS_OFFSET,
                            er_ui_wasm_app_modifier_bits(modifiers));
-  return er_ui_wasm_app_deliver_input(runtime, packet, (UINT32)sizeof(packet));
+  er_ui_wasm_app_store_u32(packet + ER_UI_WASM_INPUT_SEQUENCE_OFFSET, sequence);
+  return er_ui_wasm_app_commit_input(runtime, packet, (UINT32)sizeof(packet),
+                                     sequence);
 }
 
 int er_ui_wasm_app_execute(ErUiWasmAppRuntime* runtime, INT64* out_result) {
