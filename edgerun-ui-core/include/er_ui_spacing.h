@@ -183,6 +183,8 @@ er_ui_responsive_grid_t er_ui_responsive_grid(
   size_t max_columns,
   float gap_x,
   float gap_y);
+size_t er_ui_responsive_grid_row_count(er_ui_responsive_grid_t grid, size_t item_count);
+float er_ui_responsive_grid_height(er_ui_responsive_grid_t grid, size_t item_count, float row_h);
 er_ui_bounds_t er_ui_responsive_grid_cell(er_ui_responsive_grid_t grid, size_t index, float row_h);
 er_ui_bounds_t er_ui_responsive_grid_span(er_ui_responsive_grid_t grid, size_t index, size_t column_span, float row_h);
 er_ui_vertical_flow_t er_ui_vertical_flow(er_ui_bounds_t bounds, float gap);

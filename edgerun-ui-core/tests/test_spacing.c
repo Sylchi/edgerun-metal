@@ -11,6 +11,9 @@ static const size_t ER_TEST_RESPONSIVE_GRID_MAX_COLUMNS = 3u;
 static const size_t ER_TEST_RESPONSIVE_GRID_SECOND_ROW_FIRST_INDEX = 3u;
 static const size_t ER_TEST_RESPONSIVE_GRID_SECOND_ROW_SECOND_INDEX = 4u;
 static const size_t ER_TEST_RESPONSIVE_GRID_SPAN_COLUMNS = 2u;
+static const size_t ER_TEST_RESPONSIVE_GRID_ITEM_COUNT = 5u;
+static const size_t ER_TEST_RESPONSIVE_GRID_EXPECTED_ROWS = 2u;
+static const float ER_TEST_RESPONSIVE_GRID_ROW_H = 96.0f;
 static const float ER_TEST_SIDECAR_MIN_SIDE_W = 160.0f;
 static const float ER_TEST_SIDECAR_PREFERRED_SIDE_W = 220.0f;
 static const float ER_TEST_SIDECAR_MIN_MAIN_W = 300.0f;
@@ -65,11 +68,20 @@ static void test_responsive_grid_derives_columns_from_available_width(void) {
   expect_float(narrow.column_w, 360.0f, "spacing: narrow responsive grid stretches column");
   expect_size(wide.columns, ER_TEST_RESPONSIVE_GRID_MAX_COLUMNS, "spacing: wide responsive grid uses max fitting columns");
   expect_float(wide.column_w, (720.0f - 32.0f) / 3.0f, "spacing: wide responsive grid derives column width");
-  expect_bounds(er_ui_responsive_grid_cell(wide, ER_TEST_RESPONSIVE_GRID_SECOND_ROW_SECOND_INDEX, 96.0f),
-                er_ui_bounds(10.0f + wide.column_w + 16.0f, 20.0f + 96.0f + 18.0f, wide.column_w, 96.0f),
+  expect_size(er_ui_responsive_grid_row_count(wide, ER_TEST_RESPONSIVE_GRID_ITEM_COUNT),
+              ER_TEST_RESPONSIVE_GRID_EXPECTED_ROWS,
+              "spacing: responsive grid row count wraps items by columns");
+  expect_float(er_ui_responsive_grid_height(wide, ER_TEST_RESPONSIVE_GRID_ITEM_COUNT, ER_TEST_RESPONSIVE_GRID_ROW_H),
+               ER_TEST_RESPONSIVE_GRID_ROW_H * 2.0f + 18.0f,
+               "spacing: responsive grid height includes row gaps");
+  expect_bounds(er_ui_responsive_grid_cell(wide, ER_TEST_RESPONSIVE_GRID_SECOND_ROW_SECOND_INDEX, ER_TEST_RESPONSIVE_GRID_ROW_H),
+                er_ui_bounds(10.0f + wide.column_w + 16.0f, 20.0f + ER_TEST_RESPONSIVE_GRID_ROW_H + 18.0f, wide.column_w,
+                             ER_TEST_RESPONSIVE_GRID_ROW_H),
                 "spacing: responsive grid cell wraps by derived column count");
-  expect_bounds(er_ui_responsive_grid_span(wide, ER_TEST_RESPONSIVE_GRID_SECOND_ROW_FIRST_INDEX, ER_TEST_RESPONSIVE_GRID_SPAN_COLUMNS, 96.0f),
-                er_ui_bounds(10.0f, 20.0f + 96.0f + 18.0f, wide.column_w * 2.0f + 16.0f, 96.0f),
+  expect_bounds(er_ui_responsive_grid_span(wide, ER_TEST_RESPONSIVE_GRID_SECOND_ROW_FIRST_INDEX, ER_TEST_RESPONSIVE_GRID_SPAN_COLUMNS,
+                                           ER_TEST_RESPONSIVE_GRID_ROW_H),
+                er_ui_bounds(10.0f, 20.0f + ER_TEST_RESPONSIVE_GRID_ROW_H + 18.0f, wide.column_w * 2.0f + 16.0f,
+                             ER_TEST_RESPONSIVE_GRID_ROW_H),
                 "spacing: responsive grid span derives width from columns");
 }
 
