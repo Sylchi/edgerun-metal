@@ -1939,28 +1939,130 @@ static const char* const* er_ui_shadcn_variants_for_slug(const char* slug, size_
 
 static const char* const* er_ui_shadcn_interactions_for_slug(const char* slug, size_t* out_count) {
   if (!out_count) return 0;
-  if (er_ui_shadcn_streq(slug, "accordion") || er_ui_shadcn_streq(slug, "collapsible")) { *out_count = sizeof(disclosure_interactions) / sizeof(disclosure_interactions[0]); return disclosure_interactions; }
-  if (er_ui_shadcn_streq(slug, "alert-dialog") || er_ui_shadcn_streq(slug, "dialog") || er_ui_shadcn_streq(slug, "drawer") || er_ui_shadcn_streq(slug, "hover-card") || er_ui_shadcn_streq(slug, "popover") || er_ui_shadcn_streq(slug, "sheet") || er_ui_shadcn_streq(slug, "tooltip")) { *out_count = sizeof(overlay_interactions) / sizeof(overlay_interactions[0]); return overlay_interactions; }
-  if (er_ui_shadcn_streq(slug, "button") || er_ui_shadcn_streq(slug, "button-group") || er_ui_shadcn_streq(slug, "pagination") || er_ui_shadcn_streq(slug, "toggle") || er_ui_shadcn_streq(slug, "toggle-group")) { *out_count = sizeof(click_interactions) / sizeof(click_interactions[0]); return click_interactions; }
-  if (er_ui_shadcn_streq(slug, "calendar") || er_ui_shadcn_streq(slug, "carousel") || er_ui_shadcn_streq(slug, "checkbox") || er_ui_shadcn_streq(slug, "combobox") || er_ui_shadcn_streq(slug, "command") || er_ui_shadcn_streq(slug, "date-picker") || er_ui_shadcn_streq(slug, "menubar") || er_ui_shadcn_streq(slug, "navigation-menu") || er_ui_shadcn_streq(slug, "radio-group") || er_ui_shadcn_streq(slug, "select") || er_ui_shadcn_streq(slug, "tabs")) { *out_count = sizeof(collection_interactions) / sizeof(collection_interactions[0]); return collection_interactions; }
-  if (er_ui_shadcn_streq(slug, "context-menu") || er_ui_shadcn_streq(slug, "dropdown-menu")) { *out_count = sizeof(menu_interactions) / sizeof(menu_interactions[0]); return menu_interactions; }
-  if (er_ui_shadcn_streq(slug, "field") || er_ui_shadcn_streq(slug, "input") || er_ui_shadcn_streq(slug, "input-group") || er_ui_shadcn_streq(slug, "input-otp") || er_ui_shadcn_streq(slug, "native-select") || er_ui_shadcn_streq(slug, "textarea")) { *out_count = sizeof(input_interactions) / sizeof(input_interactions[0]); return input_interactions; }
-  if (er_ui_shadcn_streq(slug, "resizable") || er_ui_shadcn_streq(slug, "slider")) { *out_count = sizeof(drag_interactions) / sizeof(drag_interactions[0]); return drag_interactions; }
-  *out_count = sizeof(static_interactions) / sizeof(static_interactions[0]); return static_interactions;
+  if (er_ui_shadcn_streq(slug, "accordion")
+    || er_ui_shadcn_streq(slug, "collapsible")) {
+    *out_count = ER_UI_SHADCN_ARRAY_COUNT(disclosure_interactions);
+    return disclosure_interactions;
+  }
+  if (er_ui_shadcn_streq(slug, "alert-dialog")
+    || er_ui_shadcn_streq(slug, "dialog")
+    || er_ui_shadcn_streq(slug, "drawer")
+    || er_ui_shadcn_streq(slug, "hover-card")
+    || er_ui_shadcn_streq(slug, "popover")
+    || er_ui_shadcn_streq(slug, "sheet")
+    || er_ui_shadcn_streq(slug, "tooltip")) {
+    *out_count = ER_UI_SHADCN_ARRAY_COUNT(overlay_interactions);
+    return overlay_interactions;
+  }
+  if (er_ui_shadcn_streq(slug, "button")
+    || er_ui_shadcn_streq(slug, "button-group")
+    || er_ui_shadcn_streq(slug, "pagination")
+    || er_ui_shadcn_streq(slug, "toggle")
+    || er_ui_shadcn_streq(slug, "toggle-group")) {
+    *out_count = ER_UI_SHADCN_ARRAY_COUNT(click_interactions);
+    return click_interactions;
+  }
+  if (er_ui_shadcn_streq(slug, "calendar")
+    || er_ui_shadcn_streq(slug, "carousel")
+    || er_ui_shadcn_streq(slug, "checkbox")
+    || er_ui_shadcn_streq(slug, "combobox")
+    || er_ui_shadcn_streq(slug, "command")
+    || er_ui_shadcn_streq(slug, "date-picker")
+    || er_ui_shadcn_streq(slug, "menubar")
+    || er_ui_shadcn_streq(slug, "navigation-menu")
+    || er_ui_shadcn_streq(slug, "radio-group")
+    || er_ui_shadcn_streq(slug, "select")
+    || er_ui_shadcn_streq(slug, "tabs")) {
+    *out_count = ER_UI_SHADCN_ARRAY_COUNT(collection_interactions);
+    return collection_interactions;
+  }
+  if (er_ui_shadcn_streq(slug, "context-menu")
+    || er_ui_shadcn_streq(slug, "dropdown-menu")) {
+    *out_count = ER_UI_SHADCN_ARRAY_COUNT(menu_interactions);
+    return menu_interactions;
+  }
+  if (er_ui_shadcn_streq(slug, "field")
+    || er_ui_shadcn_streq(slug, "input")
+    || er_ui_shadcn_streq(slug, "input-group")
+    || er_ui_shadcn_streq(slug, "input-otp")
+    || er_ui_shadcn_streq(slug, "native-select")
+    || er_ui_shadcn_streq(slug, "textarea")) {
+    *out_count = ER_UI_SHADCN_ARRAY_COUNT(input_interactions);
+    return input_interactions;
+  }
+  if (er_ui_shadcn_streq(slug, "resizable")
+    || er_ui_shadcn_streq(slug, "slider")) {
+    *out_count = ER_UI_SHADCN_ARRAY_COUNT(drag_interactions);
+    return drag_interactions;
+  }
+  *out_count = ER_UI_SHADCN_ARRAY_COUNT(static_interactions);
+  return static_interactions;
 }
 
 static const char* const* er_ui_shadcn_keyboard_for_slug(const char* slug, size_t* out_count) {
   if (!out_count) return 0;
   static const char* const enter_space_keyboard[] = {"Enter", "Space"};
-  if (er_ui_shadcn_streq(slug, "accordion") || er_ui_shadcn_streq(slug, "button") || er_ui_shadcn_streq(slug, "button-group") || er_ui_shadcn_streq(slug, "checkbox") || er_ui_shadcn_streq(slug, "collapsible") || er_ui_shadcn_streq(slug, "toggle")) { *out_count = sizeof(enter_space_keyboard) / sizeof(enter_space_keyboard[0]); return enter_space_keyboard; }
-  if (er_ui_shadcn_streq(slug, "alert-dialog") || er_ui_shadcn_streq(slug, "dialog")) { *out_count = sizeof(dialog_keyboard) / sizeof(dialog_keyboard[0]); return dialog_keyboard; }
-  if (er_ui_shadcn_streq(slug, "context-menu") || er_ui_shadcn_streq(slug, "dropdown-menu") || er_ui_shadcn_streq(slug, "command") || er_ui_shadcn_streq(slug, "combobox") || er_ui_shadcn_streq(slug, "select")) { *out_count = sizeof(menu_keyboard) / sizeof(menu_keyboard[0]); return menu_keyboard; }
-  if (er_ui_shadcn_streq(slug, "calendar") || er_ui_shadcn_streq(slug, "carousel") || er_ui_shadcn_streq(slug, "menubar") || er_ui_shadcn_streq(slug, "navigation-menu") || er_ui_shadcn_streq(slug, "pagination") || er_ui_shadcn_streq(slug, "radio-group") || er_ui_shadcn_streq(slug, "tabs") || er_ui_shadcn_streq(slug, "toggle-group")) { *out_count = sizeof(horizontal_keyboard) / sizeof(horizontal_keyboard[0]); return horizontal_keyboard; }
-  if (er_ui_shadcn_streq(slug, "date-picker") || er_ui_shadcn_streq(slug, "drawer") || er_ui_shadcn_streq(slug, "hover-card") || er_ui_shadcn_streq(slug, "popover") || er_ui_shadcn_streq(slug, "sheet") || er_ui_shadcn_streq(slug, "tooltip")) { *out_count = sizeof(overlay_keyboard) / sizeof(overlay_keyboard[0]); return overlay_keyboard; }
-  if (er_ui_shadcn_streq(slug, "field") || er_ui_shadcn_streq(slug, "input") || er_ui_shadcn_streq(slug, "input-group") || er_ui_shadcn_streq(slug, "native-select") || er_ui_shadcn_streq(slug, "textarea")) { *out_count = sizeof(text_input_keyboard) / sizeof(text_input_keyboard[0]); return text_input_keyboard; }
-  if (er_ui_shadcn_streq(slug, "input-otp")) { *out_count = sizeof(input_otp_keyboard) / sizeof(input_otp_keyboard[0]); return input_otp_keyboard; }
-  if (er_ui_shadcn_streq(slug, "resizable") || er_ui_shadcn_streq(slug, "slider")) { *out_count = sizeof(slider_keyboard) / sizeof(slider_keyboard[0]); return slider_keyboard; }
-  *out_count = 0u; return no_keyboard;
+  if (er_ui_shadcn_streq(slug, "accordion")
+    || er_ui_shadcn_streq(slug, "button")
+    || er_ui_shadcn_streq(slug, "button-group")
+    || er_ui_shadcn_streq(slug, "checkbox")
+    || er_ui_shadcn_streq(slug, "collapsible")
+    || er_ui_shadcn_streq(slug, "toggle")) {
+    *out_count = ER_UI_SHADCN_ARRAY_COUNT(enter_space_keyboard);
+    return enter_space_keyboard;
+  }
+  if (er_ui_shadcn_streq(slug, "alert-dialog")
+    || er_ui_shadcn_streq(slug, "dialog")) {
+    *out_count = ER_UI_SHADCN_ARRAY_COUNT(dialog_keyboard);
+    return dialog_keyboard;
+  }
+  if (er_ui_shadcn_streq(slug, "context-menu")
+    || er_ui_shadcn_streq(slug, "dropdown-menu")
+    || er_ui_shadcn_streq(slug, "command")
+    || er_ui_shadcn_streq(slug, "combobox")
+    || er_ui_shadcn_streq(slug, "select")) {
+    *out_count = ER_UI_SHADCN_ARRAY_COUNT(menu_keyboard);
+    return menu_keyboard;
+  }
+  if (er_ui_shadcn_streq(slug, "calendar")
+    || er_ui_shadcn_streq(slug, "carousel")
+    || er_ui_shadcn_streq(slug, "menubar")
+    || er_ui_shadcn_streq(slug, "navigation-menu")
+    || er_ui_shadcn_streq(slug, "pagination")
+    || er_ui_shadcn_streq(slug, "radio-group")
+    || er_ui_shadcn_streq(slug, "tabs")
+    || er_ui_shadcn_streq(slug, "toggle-group")) {
+    *out_count = ER_UI_SHADCN_ARRAY_COUNT(horizontal_keyboard);
+    return horizontal_keyboard;
+  }
+  if (er_ui_shadcn_streq(slug, "date-picker")
+    || er_ui_shadcn_streq(slug, "drawer")
+    || er_ui_shadcn_streq(slug, "hover-card")
+    || er_ui_shadcn_streq(slug, "popover")
+    || er_ui_shadcn_streq(slug, "sheet")
+    || er_ui_shadcn_streq(slug, "tooltip")) {
+    *out_count = ER_UI_SHADCN_ARRAY_COUNT(overlay_keyboard);
+    return overlay_keyboard;
+  }
+  if (er_ui_shadcn_streq(slug, "field")
+    || er_ui_shadcn_streq(slug, "input")
+    || er_ui_shadcn_streq(slug, "input-group")
+    || er_ui_shadcn_streq(slug, "native-select")
+    || er_ui_shadcn_streq(slug, "textarea")) {
+    *out_count = ER_UI_SHADCN_ARRAY_COUNT(text_input_keyboard);
+    return text_input_keyboard;
+  }
+  if (er_ui_shadcn_streq(slug, "input-otp")) {
+    *out_count = ER_UI_SHADCN_ARRAY_COUNT(input_otp_keyboard);
+    return input_otp_keyboard;
+  }
+  if (er_ui_shadcn_streq(slug, "resizable")
+    || er_ui_shadcn_streq(slug, "slider")) {
+    *out_count = ER_UI_SHADCN_ARRAY_COUNT(slider_keyboard);
+    return slider_keyboard;
+  }
+  *out_count = 0u;
+  return no_keyboard;
 }
 
 static const char* er_ui_shadcn_aria_pattern_for_slug(const char* slug) {
