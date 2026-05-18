@@ -38,6 +38,25 @@ typedef struct {
 } ErAppPackageManifest;
 
 typedef struct {
+  const ErVfsObjectPacket* packets;
+  UINT32 packet_count;
+  UINT8* bytes;
+  UINTN capacity;
+} ErAppPackageObjectLoad;
+
+typedef struct {
+  UINT16 abi_version;
+  UINT16 app_kind;
+  ErHash package_id;
+  UINT8* app_bytes;
+  UINTN app_len;
+  UINT8* manifest_bytes;
+  UINTN manifest_len;
+  UINT8* ui_assets_bytes;
+  UINTN ui_assets_len;
+} ErAppLoadedPackage;
+
+typedef struct {
   UINT16 abi_version;
   UINT16 reserved;
   ErHash app_object_id;
@@ -159,6 +178,12 @@ UINT8 er_app_prepare_package_manifest(const ErCryptoProvider* crypto,
                                       const ErVfsObjectLabelRef* manifest_object,
                                       const ErVfsObjectLabelRef* ui_assets_object,
                                       ErAppPackageManifest* out_package);
+UINT8 er_app_load_package_objects(const ErCryptoProvider* crypto,
+                                  const ErAppPackageManifest* package,
+                                  const ErAppPackageObjectLoad* app_object,
+                                  const ErAppPackageObjectLoad* manifest_object,
+                                  const ErAppPackageObjectLoad* ui_assets_object,
+                                  ErAppLoadedPackage* out_loaded);
 UINT8 er_app_derive_identity_from_package(const ErCryptoProvider* crypto,
                                           const ErAppPackageManifest* package,
                                           const ErHash* admission_id,

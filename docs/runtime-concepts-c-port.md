@@ -91,7 +91,7 @@ The admission node's authority is jurisdictional. A storage admission governs st
 
 ## App Concepts
 
-Apps are WASM blobs loaded from content-addressed object storage. `ErAppPackageManifest` binds app code, app manifest, and optional UI asset objects by object id and length; package identity ignores VFS labels. The runtime identity for an executing app is derived from the app object id, manifest object id, admission id, and an instance nonce. This keeps identity tied to admitted execution rather than a host process, path, user account, or filesystem location.
+Apps are WASM blobs loaded from content-addressed object storage. `ErAppPackageManifest` binds app code, app manifest, and optional UI asset objects by object id and length; package identity ignores VFS labels. `er_app_load_package_objects` loads those objects from validated VFS packets into caller-owned buffers and rejects package/object mismatches before any bytes can become runtime input. The runtime identity for an executing app is derived from the app object id, manifest object id, admission id, and an instance nonce. This keeps identity tied to admitted execution rather than a host process, path, user account, or filesystem location.
 
 Secure IPC routes bind source app node id, target node id, capability id, route hash, admission id, sequence base, and capability risk flags. Payloads for those routes must be sealed to the recipient capability or app identity before they cross a relay boundary. App IPC route binding rejects nonzero capability risk flags.
 
@@ -138,6 +138,7 @@ The completed C foundation is:
 - `erwire` packet carriage for those records
 - memory-only object packet assembly
 - bounded object packet reassembly for loaded app/package bytes
+- app package object loading from validated VFS packets into caller-owned buffers
 - app package ids derived from object ids and lengths rather than labels
 - explicit crypto provider hooks for seal/open/hash/sign/verify
 - bounded Wasm relay send/receive imports with app identity, admission, token, memory-window, and packet-byte budget checks

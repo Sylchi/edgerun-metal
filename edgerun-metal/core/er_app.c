@@ -181,17 +181,102 @@ static UINT8 er_app_scene_budget_nonzero(er_ui_scene_budget_t budget) {
                  budget.text_quads != 0u);
 }
 
+static UINT8 er_app_package_hash(const ErCryptoProvider* crypto,
+                                 const ErHash* app_object_id,
+                                 UINT64 app_object_len,
+                                 const ErHash* manifest_object_id,
+                                 UINT64 manifest_object_len,
+                                 const ErHash* ui_assets_object_id,
+                                 UINT64 ui_assets_object_len,
+                                 ErHash* out_package_id) {
+  UINT8 fields[ER_APP_PACKAGE_FIELD_BYTES];
+  UINT8* cursor = fields;
+  ErByteSpan spans[ER_APP_PACKAGE_SPAN_COUNT];
+
+  if (crypto == 0 || app_object_id == 0 || manifest_object_id == 0 ||
+      ui_assets_object_id == 0 || out_package_id == 0) {
+    return 0;
+  }
+  er_app_put_be16(cursor, ER_APP_KIND_USER);
+  cursor += ER_APP_U16_FIELD_BYTES;
+  er_app_put_budget_field(&cursor, app_object_len);
+  er_app_put_budget_field(&cursor, manifest_object_len);
+  er_app_put_budget_field(&cursor, ui_assets_object_len);
+
+  spans[ER_APP_PACKAGE_FIELDS_SPAN].bytes = fields;
+  spans[ER_APP_PACKAGE_FIELDS_SPAN].len = (UINTN)sizeof(fields);
+  spans[ER_APP_PACKAGE_APP_OBJECT_SPAN].bytes = app_object_id->bytes;
+  spans[ER_APP_PACKAGE_APP_OBJECT_SPAN].len = ER_HASH_LEN;
+  spans[ER_APP_PACKAGE_MANIFEST_OBJECT_SPAN].bytes = manifest_object_id->bytes;
+  spans[ER_APP_PACKAGE_MANIFEST_OBJECT_SPAN].len = ER_HASH_LEN;
+  spans[ER_APP_PACKAGE_UI_ASSETS_OBJECT_SPAN].bytes = ui_assets_object_id->bytes;
+  spans[ER_APP_PACKAGE_UI_ASSETS_OBJECT_SPAN].len = ER_HASH_LEN;
+  return er_crypto_hash(crypto, g_app_package_domain,
+                        (UINTN)(sizeof(g_app_package_domain) - 1u),
+                        spans, ER_APP_PACKAGE_SPAN_COUNT, out_package_id);
+}
+
+static UINT8 er_app_package_manifest_valid(const ErCryptoProvider* crypto,
+                                           const ErAppPackageManifest* package) {
+  ErHash expected_package_id;
+
+  if (package == 0 || package->abi_version != ER_APP_ABI_VERSION ||
+      package->app_kind != ER_APP_KIND_USER ||
+      er_app_hash_nonzero(&package->package_id) == 0u ||
+      er_app_hash_nonzero(&package->app_object_id) == 0u ||
+      er_app_hash_nonzero(&package->manifest_object_id) == 0u ||
+      package->app_object_len == 0u ||
+      package->manifest_object_len == 0u) {
+    return 0;
+  }
+  if (package->ui_assets_object_len == 0u) {
+    if (er_app_hash_nonzero(&package->ui_assets_object_id) != 0u) {
+      return 0;
+    }
+  } else if (er_app_hash_nonzero(&package->ui_assets_object_id) == 0u) {
+    return 0;
+  }
+  if (er_app_package_hash(crypto, &package->app_object_id,
+                          package->app_object_len,
+                          &package->manifest_object_id,
+                          package->manifest_object_len,
+                          &package->ui_assets_object_id,
+                          package->ui_assets_object_len,
+                          &expected_package_id) == 0u) {
+    return 0;
+  }
+  return er_app_hash_equal(&expected_package_id, &package->package_id);
+}
+
+static UINT8 er_app_load_package_object(const ErCryptoProvider* crypto,
+                                        const ErAppPackageObjectLoad* load,
+                                        const ErHash* expected_object_id,
+                                        UINT64 expected_object_len,
+                                        UINTN* out_len) {
+  ErHash loaded_object_id;
+
+  if (load == 0 || expected_object_id == 0 || out_len == 0 ||
+      expected_object_len == 0u) {
+    return 0;
+  }
+  if (er_vfs_assemble_object_packets(crypto, load->packets, load->packet_count,
+                                     load->bytes, load->capacity, out_len,
+                                     &loaded_object_id) == 0u ||
+      *out_len != (UINTN)expected_object_len ||
+      er_app_hash_equal(&loaded_object_id, expected_object_id) == 0u) {
+    return 0;
+  }
+  return 1;
+}
+
 UINT8 er_app_prepare_package_manifest(const ErCryptoProvider* crypto,
                                       const ErVfsObjectLabelRef* app_object,
                                       const ErVfsObjectLabelRef* manifest_object,
                                       const ErVfsObjectLabelRef* ui_assets_object,
                                       ErAppPackageManifest* out_package) {
-  UINT8 fields[ER_APP_PACKAGE_FIELD_BYTES];
-  UINT8* cursor = fields;
   ErHash zero_hash;
   const ErHash* ui_assets_object_id = &zero_hash;
   UINT64 ui_assets_object_len = 0u;
-  ErByteSpan spans[ER_APP_PACKAGE_SPAN_COUNT];
 
   if (crypto == 0 || out_package == 0 ||
       er_app_label_ref_valid(app_object) == 0u ||
@@ -217,22 +302,61 @@ UINT8 er_app_prepare_package_manifest(const ErCryptoProvider* crypto,
   out_package->ui_assets_object_id = *ui_assets_object_id;
   out_package->ui_assets_object_len = ui_assets_object_len;
 
-  er_app_put_be16(cursor, ER_APP_KIND_USER);
-  cursor += ER_APP_U16_FIELD_BYTES;
-  er_app_put_budget_field(&cursor, out_package->app_object_len);
-  er_app_put_budget_field(&cursor, out_package->manifest_object_len);
-  er_app_put_budget_field(&cursor, out_package->ui_assets_object_len);
+  return er_app_package_hash(crypto, &out_package->app_object_id,
+                             out_package->app_object_len,
+                             &out_package->manifest_object_id,
+                             out_package->manifest_object_len,
+                             &out_package->ui_assets_object_id,
+                             out_package->ui_assets_object_len,
+                             &out_package->package_id);
+}
 
-  spans[ER_APP_PACKAGE_FIELDS_SPAN].bytes = fields;
-  spans[ER_APP_PACKAGE_FIELDS_SPAN].len = (UINTN)sizeof(fields);
-  spans[ER_APP_PACKAGE_APP_OBJECT_SPAN].bytes = out_package->app_object_id.bytes;
-  spans[ER_APP_PACKAGE_APP_OBJECT_SPAN].len = ER_HASH_LEN;
-  spans[ER_APP_PACKAGE_MANIFEST_OBJECT_SPAN].bytes = out_package->manifest_object_id.bytes;
-  spans[ER_APP_PACKAGE_MANIFEST_OBJECT_SPAN].len = ER_HASH_LEN;
-  spans[ER_APP_PACKAGE_UI_ASSETS_OBJECT_SPAN].bytes = out_package->ui_assets_object_id.bytes;
-  spans[ER_APP_PACKAGE_UI_ASSETS_OBJECT_SPAN].len = ER_HASH_LEN;
-  return er_crypto_hash(crypto, g_app_package_domain, (UINTN)(sizeof(g_app_package_domain) - 1u),
-                        spans, ER_APP_PACKAGE_SPAN_COUNT, &out_package->package_id);
+UINT8 er_app_load_package_objects(const ErCryptoProvider* crypto,
+                                  const ErAppPackageManifest* package,
+                                  const ErAppPackageObjectLoad* app_object,
+                                  const ErAppPackageObjectLoad* manifest_object,
+                                  const ErAppPackageObjectLoad* ui_assets_object,
+                                  ErAppLoadedPackage* out_loaded) {
+  UINTN app_len = 0u;
+  UINTN manifest_len = 0u;
+  UINTN ui_assets_len = 0u;
+
+  if (crypto == 0 || out_loaded == 0 ||
+      er_app_package_manifest_valid(crypto, package) == 0u) {
+    return 0;
+  }
+  if (er_app_load_package_object(crypto, app_object, &package->app_object_id,
+                                 package->app_object_len, &app_len) == 0u ||
+      er_app_load_package_object(crypto, manifest_object,
+                                 &package->manifest_object_id,
+                                 package->manifest_object_len,
+                                 &manifest_len) == 0u) {
+    return 0;
+  }
+  if (package->ui_assets_object_len != 0u) {
+    if (er_app_load_package_object(crypto, ui_assets_object,
+                                   &package->ui_assets_object_id,
+                                   package->ui_assets_object_len,
+                                   &ui_assets_len) == 0u) {
+      return 0;
+    }
+  } else if (ui_assets_object != 0) {
+    return 0;
+  }
+
+  er_mem_zero((UINT8*)out_loaded, (UINTN)sizeof(*out_loaded));
+  out_loaded->abi_version = ER_APP_ABI_VERSION;
+  out_loaded->app_kind = ER_APP_KIND_USER;
+  out_loaded->package_id = package->package_id;
+  out_loaded->app_bytes = app_object->bytes;
+  out_loaded->app_len = app_len;
+  out_loaded->manifest_bytes = manifest_object->bytes;
+  out_loaded->manifest_len = manifest_len;
+  if (ui_assets_object != 0) {
+    out_loaded->ui_assets_bytes = ui_assets_object->bytes;
+    out_loaded->ui_assets_len = ui_assets_len;
+  }
+  return 1;
 }
 
 UINT8 er_app_derive_identity_from_package(const ErCryptoProvider* crypto,
@@ -241,13 +365,7 @@ UINT8 er_app_derive_identity_from_package(const ErCryptoProvider* crypto,
                                           const UINT8* instance_nonce,
                                           UINTN instance_nonce_len,
                                           ErAppIdentity* out_identity) {
-  if (package == 0 || package->abi_version != ER_APP_ABI_VERSION ||
-      package->app_kind != ER_APP_KIND_USER ||
-      er_app_hash_nonzero(&package->package_id) == 0u ||
-      er_app_hash_nonzero(&package->app_object_id) == 0u ||
-      er_app_hash_nonzero(&package->manifest_object_id) == 0u ||
-      package->app_object_len == 0u ||
-      package->manifest_object_len == 0u) {
+  if (er_app_package_manifest_valid(crypto, package) == 0u) {
     return 0;
   }
   return er_app_derive_identity(crypto, &package->app_object_id,
