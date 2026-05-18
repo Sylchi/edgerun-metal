@@ -20,6 +20,7 @@
 #include "wasm_vm.h"
 #include "wasm_test_module.h"
 #include "wasm_pci_scan_module.h"
+#include "wasm_ui_counter_module.h"
 
 #ifndef ER_BOOT_PROFILE
 #define ER_BOOT_PROFILE ER_BOOT_PROFILE_SMOKE
@@ -47,6 +48,21 @@
 #define ER_EFI_MEMORY_MAP_BYTES (128u * 1024u)
 #define ER_EFI_EXIT_BOOT_SERVICES_ATTEMPTS 2u
 #define ER_WASM_DRIVER_MEMORY_BYTES (64u * 1024u)
+#define ER_UI_WASM_RELAY_INBOX_BASE 0u
+#define ER_UI_WASM_RELAY_INBOX_BYTES 1024u
+#define ER_UI_WASM_RELAY_OUTBOX_BASE 1024u
+#define ER_UI_WASM_RELAY_OUTBOX_BYTES 2048u
+#define ER_UI_WASM_PRESENTATION_SEQUENCE 1u
+#define ER_UI_WASM_PRESENTATION_ID_SEED 0x10u
+#define ER_UI_WASM_JURISDICTION_ID_SEED 0x30u
+#define ER_UI_WASM_ADMISSION_ID_SEED 0x50u
+#define ER_UI_WASM_APP_NODE_ID_SEED 0x70u
+#define ER_UI_WASM_RELAY_NODE_ID_SEED 0x90u
+#define ER_UI_WASM_ROUTE_HASH_SEED 0xb0u
+#define ER_UI_WASM_COUNTER_PACKET_BYTES (ER_WASM_UI_COMMAND_LIST_HEADER_LEN + \
+                                         ER_WASM_UI_RECT_RECORD_LEN + \
+                                         ER_WASM_UI_HIT_RECORD_LEN + \
+                                         ER_WASM_UI_QUAD_RECORD_LEN)
 #define ER_ACPI_SIGNATURE_BYTES 4u
 #define ER_BYTE_MASK 0xffu
 #define ER_GPU_PROFILE_POLL_LIMIT 1000000u
@@ -93,6 +109,9 @@ static UINT8 g_log_hex_stage = ER_LOG_HEX_STAGE_ID;
 static UINT64 g_log_bus = 0;
 static UINT64 g_log_dev = 0;
 static UINT64 g_log_func = 0;
+static er_ui_scene_t* g_ui_wasm_emit_scene = 0;
+static UINT8 g_ui_wasm_emit_ready = 0u;
+static er_ui_scene_stats_t g_ui_wasm_emit_stats;
 
 typedef struct {
   vr_font_face_t* font;
@@ -102,6 +121,8 @@ typedef struct {
   er_ui_scene_budget_t scene_budget;
   ErUiSurfaceFrameBudget frame_budget;
   er_ui_resolved_theme_t theme;
+  const er_ui_scene_t* wasm_scene;
+  UINT8 wasm_scene_ready;
 } ErUiBootRenderContext;
 
 static void er_reset_log_state(void) {
@@ -167,6 +188,17 @@ static er_ui_allocator_t er_ui_boot_allocator(void) {
   allocator.alloc = er_ui_boot_alloc;
   allocator.free = er_ui_boot_free;
   return allocator;
+}
+
+static void er_fill_nonzero_bytes(UINT8* bytes, UINTN len, UINT8 seed) {
+  UINTN i;
+
+  if (bytes == 0) {
+    return;
+  }
+  for (i = 0u; i < len; ++i) {
+    bytes[i] = (UINT8)(seed + (UINT8)i);
+  }
 }
 
 static vr_font_allocator_t er_ui_boot_font_allocator(void) {
@@ -864,6 +896,18 @@ static INT64 er_wasm_bus_exec_host(const ErBusIoPacket* request, ErBusIoPacket* 
   return (INT64)er_bus_execute_io_packet(request, response);
 }
 
+static INT64 er_ui_boot_wasm_emit_host(const UINT8* bytes, UINT32 len,
+                                       const er_ui_scene_stats_t* stats) {
+  if (bytes == 0 || stats == 0 || g_ui_wasm_emit_scene == 0) {
+    return -1;
+  }
+  if (er_wasm_ui_command_decode(bytes, len, g_ui_wasm_emit_scene, &g_ui_wasm_emit_stats) != 0) {
+    return -1;
+  }
+  g_ui_wasm_emit_ready = 1u;
+  return (INT64)(UINT64)len;
+}
+
 static void er_install_hostcalls(void) {
   g_host_calls.log_u64 = er_log_u64;
   g_host_calls.log_hex = er_log_hex;
@@ -1253,6 +1297,129 @@ static void er_run_mmio_profile(void) {
   er_run_mmio_probe();
 }
 
+static UINT8 er_ui_boot_append_wasm_scene(er_ui_scene_t* scene, const er_ui_scene_t* wasm_scene) {
+  size_t i;
+
+  if (scene == 0 || wasm_scene == 0) {
+    return 0u;
+  }
+  for (i = 0u; i < wasm_scene->rect_count; ++i) {
+    if (er_ui_scene_push_rect(scene, wasm_scene->rects[i]) != ER_UI_OK) {
+      return 0u;
+    }
+  }
+  for (i = 0u; i < wasm_scene->hit_count; ++i) {
+    if (er_ui_scene_push_hit(scene, wasm_scene->hits[i]) != ER_UI_OK) {
+      return 0u;
+    }
+  }
+  for (i = 0u; i < wasm_scene->drag_source_count; ++i) {
+    if (er_ui_scene_push_drag_source(scene, wasm_scene->drag_sources[i]) != ER_UI_OK) {
+      return 0u;
+    }
+  }
+  for (i = 0u; i < wasm_scene->drop_target_count; ++i) {
+    if (er_ui_scene_push_drop_target(scene, wasm_scene->drop_targets[i]) != ER_UI_OK) {
+      return 0u;
+    }
+  }
+  for (i = 0u; i < wasm_scene->transition_count; ++i) {
+    if (er_ui_scene_push_transition(scene, wasm_scene->transitions[i]) != ER_UI_OK) {
+      return 0u;
+    }
+  }
+  for (i = 0u; i < wasm_scene->icon_quad_count; ++i) {
+    if (er_ui_scene_push_icon_quad(scene, wasm_scene->icon_quads[i]) != ER_UI_OK) {
+      return 0u;
+    }
+  }
+  for (i = 0u; i < wasm_scene->text_quad_count; ++i) {
+    if (er_ui_scene_push_text_quad(scene, wasm_scene->text_quads[i]) != ER_UI_OK) {
+      return 0u;
+    }
+  }
+  return 1u;
+}
+
+static void er_ui_boot_prepare_wasm_presentation(const er_ui_scene_budget_t* scene_budget,
+                                                 ErAppUiPresentation* out_presentation) {
+  if (scene_budget == 0 || out_presentation == 0) {
+    return;
+  }
+  er_mem_zero((UINT8*)out_presentation, (UINTN)sizeof(*out_presentation));
+  out_presentation->abi_version = ER_APP_ABI_VERSION;
+  er_fill_nonzero_bytes(out_presentation->presentation_id.bytes, ER_HASH_LEN,
+                        ER_UI_WASM_PRESENTATION_ID_SEED);
+  er_fill_nonzero_bytes(out_presentation->jurisdiction_id.bytes, ER_HASH_LEN,
+                        ER_UI_WASM_JURISDICTION_ID_SEED);
+  er_fill_nonzero_bytes(out_presentation->admission_id.bytes, ER_HASH_LEN,
+                        ER_UI_WASM_ADMISSION_ID_SEED);
+  er_fill_nonzero_bytes(out_presentation->app_node_id.bytes, ER_NODE_ID_LEN,
+                        ER_UI_WASM_APP_NODE_ID_SEED);
+  er_fill_nonzero_bytes(out_presentation->ui_relay_node_id.bytes, ER_NODE_ID_LEN,
+                        ER_UI_WASM_RELAY_NODE_ID_SEED);
+  er_fill_nonzero_bytes(out_presentation->route_hash.bytes, ER_HASH_LEN,
+                        ER_UI_WASM_ROUTE_HASH_SEED);
+  out_presentation->sequence = ER_UI_WASM_PRESENTATION_SEQUENCE;
+  out_presentation->max_rects = (UINT64)scene_budget->rects;
+  out_presentation->max_hits = (UINT64)scene_budget->hits;
+  out_presentation->max_drag_sources = (UINT64)scene_budget->drag_sources;
+  out_presentation->max_drop_targets = (UINT64)scene_budget->drop_targets;
+  out_presentation->max_transitions = (UINT64)scene_budget->transitions;
+  out_presentation->max_icon_quads = (UINT64)scene_budget->icon_quads;
+  out_presentation->max_text_quads = (UINT64)scene_budget->text_quads;
+}
+
+static UINT8 er_ui_boot_run_wasm_counter(er_ui_scene_t* wasm_scene,
+                                         const er_ui_scene_budget_t* scene_budget) {
+  ErWasmHostCalls host;
+  ErWasmLinearMemory linear_memory;
+  ErWasmModule module;
+  ErAppUiPresentation presentation;
+  UINT32 main_index = 0u;
+  INT64 main_result = 0;
+
+  if (wasm_scene == 0 || scene_budget == 0) {
+    return 0u;
+  }
+  er_mem_zero(g_wasm_driver_memory, (UINTN)sizeof(g_wasm_driver_memory));
+  if (er_wasm_prepare_linear_memory(g_wasm_driver_memory, (UINT32)sizeof(g_wasm_driver_memory),
+                                    ER_UI_WASM_RELAY_INBOX_BASE,
+                                    ER_UI_WASM_RELAY_INBOX_BYTES,
+                                    ER_UI_WASM_RELAY_OUTBOX_BASE,
+                                    ER_UI_WASM_RELAY_OUTBOX_BYTES,
+                                    &linear_memory) != 0) {
+    return 0u;
+  }
+  er_ui_boot_prepare_wasm_presentation(scene_budget, &presentation);
+  host = g_host_calls;
+  host.linear_memory = linear_memory;
+  host.memory = g_wasm_driver_memory;
+  host.memory_size = (UINT32)sizeof(g_wasm_driver_memory);
+  host.ui_emit = er_ui_boot_wasm_emit_host;
+  host.ui_presentation = &presentation;
+  g_ui_wasm_emit_scene = wasm_scene;
+  g_ui_wasm_emit_ready = 0u;
+  er_mem_zero((UINT8*)&g_ui_wasm_emit_stats, (UINTN)sizeof(g_ui_wasm_emit_stats));
+  if (er_wasm_init(&module, g_edgerun_ui_counter_wasm, ER_UI_COUNTER_WASM_SIZE, &host) != 0 ||
+      er_wasm_find_main(&module, &main_index) != 0 ||
+      er_wasm_execute_i64(&module, main_index, &main_result) != 0 ||
+      main_result != (INT64)(UINT64)ER_UI_WASM_COUNTER_PACKET_BYTES ||
+      g_ui_wasm_emit_ready == 0u) {
+    g_ui_wasm_emit_scene = 0;
+    return 0u;
+  }
+  g_ui_wasm_emit_scene = 0;
+  er_print("ui renderer: wasm scene rects=");
+  er_print_u64_dec((UINT64)g_ui_wasm_emit_stats.rects);
+  er_print(" hits=");
+  er_print_u64_dec((UINT64)g_ui_wasm_emit_stats.hits);
+  er_print(" text=");
+  er_print_u64_dec((UINT64)g_ui_wasm_emit_stats.text_quads);
+  er_println("");
+  return 1u;
+}
+
 static UINT8 er_ui_boot_render_scene(er_ui_scene_t* scene,
                                      er_ui_demo_apps_state_t* demo_state,
                                      const ErUiBootRenderContext* render) {
@@ -1270,6 +1437,11 @@ static UINT8 er_ui_boot_render_scene(er_ui_scene_t* scene,
                                  er_ui_bounds(0.0f, 0.0f, (float)render->mode.width, (float)render->mode.height),
                                  render->theme) != ER_UI_OK) {
     er_println("ui renderer: scene build failed");
+    return 0u;
+  }
+  if (render->wasm_scene_ready != 0u &&
+      er_ui_boot_append_wasm_scene(scene, render->wasm_scene) == 0u) {
+    er_println("ui renderer: wasm scene append failed");
     return 0u;
   }
 
@@ -1406,6 +1578,7 @@ static void er_run_ui_profile(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE* SystemTa
     ER_UI_STYLE_AUTHORITY_USER,
     (er_ui_style_preset_t){ER_UI_COLOR_SCHEME_DARK, ER_UI_ACCENT_NEUTRAL, ER_UI_RADIUS_DEFAULT});
   er_ui_scene_t scene = {0};
+  er_ui_scene_t wasm_scene = {0};
   er_ui_runtime_state_t runtime = {0};
   er_ui_demo_apps_state_t demo_state = {0};
   ErUiBootRenderContext render_context = {0};
@@ -1487,9 +1660,29 @@ static void er_run_ui_profile(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE* SystemTa
     vr_font_face_destroy(font);
     return;
   }
+  if (er_ui_scene_init_with_allocator(&wasm_scene, theme.colors.bg, er_ui_boot_allocator()) != ER_UI_OK) {
+    er_println("ui renderer: wasm scene state failed");
+    er_ui_scene_destroy(&scene);
+    er_ui_runtime_state_destroy(&runtime);
+    er_ui_demo_apps_state_destroy(&demo_state);
+    vr_font_face_destroy(font);
+    return;
+  }
+  if (er_ui_boot_run_wasm_counter(&wasm_scene, &scene_budget) == 0u) {
+    er_println("ui renderer: wasm scene failed");
+    er_ui_scene_destroy(&wasm_scene);
+    er_ui_scene_destroy(&scene);
+    er_ui_runtime_state_destroy(&runtime);
+    er_ui_demo_apps_state_destroy(&demo_state);
+    vr_font_face_destroy(font);
+    return;
+  }
+  render_context.wasm_scene = &wasm_scene;
+  render_context.wasm_scene_ready = 1u;
 
   er_println("ui renderer: render scene");
   if (er_ui_boot_render_scene(&scene, &demo_state, &render_context) == 0u) {
+    er_ui_scene_destroy(&wasm_scene);
     er_ui_scene_destroy(&scene);
     er_ui_runtime_state_destroy(&runtime);
     er_ui_demo_apps_state_destroy(&demo_state);
@@ -1500,6 +1693,7 @@ static void er_run_ui_profile(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE* SystemTa
   er_gfx_console_set_enabled(0u);
   er_println("boot services: exiting");
   if (er_exit_boot_services(ImageHandle, SystemTable) == 0u) {
+    er_ui_scene_destroy(&wasm_scene);
     er_ui_scene_destroy(&scene);
     er_ui_runtime_state_destroy(&runtime);
     er_ui_demo_apps_state_destroy(&demo_state);
