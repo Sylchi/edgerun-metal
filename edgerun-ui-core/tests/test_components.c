@@ -22,6 +22,8 @@
 #define ER_UI_TEST_COMPONENT_MIN_INITIAL_HITS 10u
 #define ER_UI_TEST_COMPONENT_MIN_SHOWCASE_HITS 20u
 #define ER_UI_TEST_COMPONENT_MIN_SHOWCASE_TEXT_QUADS 20u
+#define ER_UI_TEST_COMPONENT_COMPACT_SHOWCASE_W 420.0f
+#define ER_UI_TEST_COMPONENT_COMPACT_SHOWCASE_H 360.0f
 #define ER_UI_TEST_COMPONENT_MIN_METAL_HITS 20u
 #define ER_UI_TEST_COMPONENT_MIN_METAL_TEXT_QUADS 80u
 #define ER_UI_TEST_COMPONENT_MIN_METAL_ICON_QUADS 6u
@@ -169,6 +171,12 @@ static void test_component_render_primitives(void) {
                 "component showcase: component reference emits");
   expect_true(scene.hit_count >= ER_UI_TEST_COMPONENT_MIN_SHOWCASE_HITS, "component showcase: catalog rows and preview controls emit hits");
   expect_true(scene.text_quad_count > ER_UI_TEST_COMPONENT_MIN_SHOWCASE_TEXT_QUADS, "component showcase: catalog and preview use variable font text");
+  er_ui_scene_clear_commands(&scene);
+  expect_status(er_ui_component_showcase_emit(&scene, face, er_ui_bounds(0.0f, 280.0f, ER_UI_TEST_COMPONENT_COMPACT_SHOWCASE_W,
+                                                                          ER_UI_TEST_COMPONENT_COMPACT_SHOWCASE_H),
+                                              theme, "button", &state),
+                ER_UI_OK, "component showcase: compact stacked reference emits");
+  expect_true(scene.hit_count > 0u, "component showcase: compact catalog and preview emit hits");
 
   er_ui_scene_clear_commands(&scene);
   expect_status(er_ui_edgerun_metal_surface_emit(&scene, face, er_ui_bounds(0.0f, 0.0f, 3840.0f, 2160.0f), theme, &state), ER_UI_OK,
