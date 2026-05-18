@@ -11,6 +11,7 @@
 #define ER_EPOCH_CLOCK_DEFAULT_TICKS_PER_SLOT 1024u
 #define ER_EPOCH_CLOCK_DEFAULT_SLOTS_PER_EPOCH 1024u
 #define ER_EPOCH_CLOCK_DEFAULT_EPOCHS_PER_ERA 1024u
+#define ER_EPOCH_CLOCK_DEFAULT_STRIDE 1u
 
 typedef struct {
   UINT64 tick;
@@ -36,9 +37,17 @@ typedef struct {
   ErEpochClockLimits limits;
 } ErEpochClock;
 
+typedef struct {
+  UINT64 tick_stride;
+} ErEpochClockModifier;
+
 ErEpochClockLimits er_epoch_clock_default_limits(void);
+ErEpochClockModifier er_epoch_clock_default_modifier(void);
 UINT8 er_epoch_clock_init(const ErEpochClockLimits* limits, ErEpochClock* out_clock);
 UINT8 er_epoch_clock_advance(ErEpochClock* clock, ErEpochBoundary* out_boundary);
+UINT8 er_epoch_clock_advance_with_modifier(ErEpochClock* clock,
+                                           const ErEpochClockModifier* modifier,
+                                           ErEpochBoundary* out_boundary);
 INT32 er_epoch_stamp_compare(ErEpochStamp left, ErEpochStamp right);
 
 #endif
