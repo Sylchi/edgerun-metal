@@ -1,5 +1,32 @@
 #include "test_common.h"
 
+static const size_t ER_TEST_INITIAL_SETUP_PASSWORD_CAPACITY = 64u;
+static const size_t ER_TEST_INITIAL_SETUP_CONFIRM_CAPACITY = 64u;
+static const size_t ER_TEST_INITIAL_SETUP_STATUS_CAPACITY = 96u;
+static const size_t ER_TEST_INITIAL_SETUP_CONFIGURED_GENERATION = 128u;
+static const size_t ER_TEST_INITIAL_SETUP_ROOT_CHILDREN = 2u;
+static const size_t ER_TEST_INITIAL_SETUP_PASSWORD_NODE_INDEX = 11u;
+static const size_t ER_TEST_INITIAL_SETUP_CREATE_NODE_INDEX = 13u;
+static const size_t ER_TEST_YUBIKEY_PIN_CAPACITY = 16u;
+static const size_t ER_TEST_YUBIKEY_PIN_MAX_LEN = 8u;
+static const size_t ER_TEST_YUBIKEY_ROOT_CHILDREN = 4u;
+static const size_t ER_TEST_YUBIKEY_SIGNED_BADGE_NODE_INDEX = 5u;
+static const size_t ER_TEST_INITIAL_SETUP_RECORD_CAPACITY = 1024u;
+static const size_t ER_TEST_DEVICE_GRANT_RECORD_CAPACITY = 2048u;
+static const size_t ER_TEST_ATTESTATION_CHAIN_COUNT = 2u;
+static const size_t ER_TEST_PARSED_CHAIN_CAPACITY = 2u;
+static const size_t ER_TEST_SMALL_CHAIN_CAPACITY = 1u;
+static const size_t ER_TEST_PARSED_LIST_CAPACITY = 2u;
+static const size_t ER_TEST_SMALL_LIST_CAPACITY = 1u;
+static const uint8_t ER_TEST_SIGNATURE_BYTE = 3u;
+static const uint64_t ER_TEST_GRANT_ISSUED_AT_SECS = 10u;
+static const uint64_t ER_TEST_GRANT_EXPIRES_AT_SECS = 20u;
+
+static size_t test_array_count_size(const void* values, size_t bytes, size_t element_size) {
+  (void)values;
+  return bytes / element_size;
+}
+
 static er_ui_action_t test_button_action(uint32_t id) {
   er_ui_action_t action = {0};
   action.kind = ER_UI_ACTION_ACTIVATED;
@@ -52,9 +79,9 @@ static bool test_bytes_contains_run(const uint8_t* bytes, size_t bytes_len, uint
 }
 
 static void test_initial_setup_state_validates_and_emits_intent(void) {
-  char password[64];
-  char confirm[64];
-  char status[96];
+  char password[ER_TEST_INITIAL_SETUP_PASSWORD_CAPACITY];
+  char confirm[ER_TEST_INITIAL_SETUP_CONFIRM_CAPACITY];
+  char status[ER_TEST_INITIAL_SETUP_STATUS_CAPACITY];
   er_ui_initial_setup_state_t state = {0};
   expect_status(er_ui_initial_setup_state_init(&state, password, sizeof(password), confirm, sizeof(confirm), status, sizeof(status)), ER_UI_OK,
                 "initial setup: state init succeeds");
@@ -77,7 +104,8 @@ static void test_initial_setup_state_validates_and_emits_intent(void) {
   expect_size(intent.password_len, state.password_len, "initial setup: intent password length");
   expect_true(state.busy, "initial setup: valid submit marks busy");
 
-  expect_status(er_ui_initial_setup_mark_configured(&state, 128u), ER_UI_OK, "initial setup: mark configured succeeds");
+  expect_status(er_ui_initial_setup_mark_configured(&state, ER_TEST_INITIAL_SETUP_CONFIGURED_GENERATION), ER_UI_OK,
+                "initial setup: mark configured succeeds");
   expect_true(state.configured, "initial setup: configured flag set");
   expect_true(!state.busy, "initial setup: configured clears busy");
   expect_size(state.password_len, 0u, "initial setup: configured clears password");
@@ -85,9 +113,9 @@ static void test_initial_setup_state_validates_and_emits_intent(void) {
 }
 
 static void test_initial_setup_surface_emits_fields_and_button(void) {
-  char password[64];
-  char confirm[64];
-  char status[96];
+  char password[ER_TEST_INITIAL_SETUP_PASSWORD_CAPACITY];
+  char confirm[ER_TEST_INITIAL_SETUP_CONFIRM_CAPACITY];
+  char status[ER_TEST_INITIAL_SETUP_STATUS_CAPACITY];
   er_ui_initial_setup_state_t state = {0};
   er_ui_initial_setup_surface_t surface = {0};
   expect_status(er_ui_initial_setup_state_init(&state, password, sizeof(password), confirm, sizeof(confirm), status, sizeof(status)), ER_UI_OK,
@@ -95,19 +123,21 @@ static void test_initial_setup_surface_emits_fields_and_button(void) {
   expect_status(er_ui_initial_setup_set_password(&state, "correct horse battery"), ER_UI_OK, "initial setup surface: password stores");
   expect_status(er_ui_initial_setup_build_surface(&state, &surface), ER_UI_OK, "initial setup surface: builds");
   expect_size(surface.root.kind, ER_UI_NODE_COLUMN, "initial setup surface: root is column");
-  expect_size(surface.root.child_count, 2u, "initial setup surface: root child count");
+  expect_size(surface.root.child_count, ER_TEST_INITIAL_SETUP_ROOT_CHILDREN, "initial setup surface: root child count");
   er_ui_a11y_node_t a11y = {0};
-  expect_status(er_ui_node_accessibility(&surface.nodes[11], &a11y), ER_UI_OK, "initial setup surface: password field a11y");
+  expect_status(er_ui_node_accessibility(&surface.nodes[ER_TEST_INITIAL_SETUP_PASSWORD_NODE_INDEX], &a11y), ER_UI_OK,
+                "initial setup surface: password field a11y");
   expect_size(a11y.role, ER_UI_A11Y_TEXTBOX, "initial setup surface: password field role");
   expect_true(a11y.has_id && a11y.id == ER_UI_INITIAL_SETUP_PASSWORD_FIELD_ID, "initial setup surface: password field id");
-  expect_string(surface.nodes[11].value, "masked", "initial setup surface: password value is masked");
-  expect_status(er_ui_node_accessibility(&surface.nodes[13], &a11y), ER_UI_OK, "initial setup surface: create button a11y");
+  expect_string(surface.nodes[ER_TEST_INITIAL_SETUP_PASSWORD_NODE_INDEX].value, "masked", "initial setup surface: password value is masked");
+  expect_status(er_ui_node_accessibility(&surface.nodes[ER_TEST_INITIAL_SETUP_CREATE_NODE_INDEX], &a11y), ER_UI_OK,
+                "initial setup surface: create button a11y");
   expect_true(a11y.has_id && a11y.id == ER_UI_INITIAL_SETUP_CREATE_BUTTON_ID, "initial setup surface: create button id");
 }
 
 static void test_yubikey_grant_validates_pin_and_surface(void) {
-  char pin[16];
-  char status[96];
+  char pin[ER_TEST_YUBIKEY_PIN_CAPACITY];
+  char status[ER_TEST_INITIAL_SETUP_STATUS_CAPACITY];
   er_ui_yubikey_grant_state_t state = {0};
   expect_status(er_ui_yubikey_grant_state_init(&state, pin, sizeof(pin), status, sizeof(status)), ER_UI_OK, "yubikey: state init succeeds");
   expect_status(er_ui_yubikey_grant_set_pin(&state, "12a345"), ER_UI_OK, "yubikey: pin filters digits");
@@ -121,19 +151,19 @@ static void test_yubikey_grant_validates_pin_and_surface(void) {
   intent = er_ui_yubikey_grant_handle_action(&state, test_button_action(ER_UI_YUBIKEY_GRANT_SIGN_BUTTON_ID));
   expect_size(intent.kind, ER_UI_YUBIKEY_GRANT_INTENT_SIGN_GRANT, "yubikey: valid pin emits sign intent");
   expect_true(intent.has_pin, "yubikey: intent has pin");
-  expect_size(intent.pin_len, 8u, "yubikey: intent pin length");
+  expect_size(intent.pin_len, ER_TEST_YUBIKEY_PIN_MAX_LEN, "yubikey: intent pin length");
 
   expect_status(er_ui_yubikey_grant_mark_signed(&state, "grant signed"), ER_UI_OK, "yubikey: mark signed succeeds");
   expect_true(state.signed_grant, "yubikey: signed flag set");
   er_ui_initial_setup_surface_t surface = {0};
   expect_status(er_ui_yubikey_grant_build_surface(&state, &surface), ER_UI_OK, "yubikey: surface builds");
   expect_size(surface.root.kind, ER_UI_NODE_CARD, "yubikey: root is card");
-  expect_size(surface.root.child_count, 4u, "yubikey: root child count");
-  expect_string(surface.nodes[5].label, "signed", "yubikey: signed badge label");
+  expect_size(surface.root.child_count, ER_TEST_YUBIKEY_ROOT_CHILDREN, "yubikey: root child count");
+  expect_string(surface.nodes[ER_TEST_YUBIKEY_SIGNED_BADGE_NODE_INDEX].label, "signed", "yubikey: signed badge label");
 }
 
 static void test_authority_records_round_trip_without_allocation(void) {
-  uint8_t out[1024];
+  uint8_t out[ER_TEST_INITIAL_SETUP_RECORD_CAPACITY];
   size_t len = 0u;
   const uint8_t public_key[] = {1u, 2u, 3u, 4u};
   const uint8_t tpm_key[] = {9u, 8u, 7u};
@@ -146,8 +176,8 @@ static void test_authority_records_round_trip_without_allocation(void) {
   yubikey.slot = test_str_span("9c");
   yubikey.public_key = test_byte_span(public_key, sizeof(public_key));
   yubikey.attestation_chain = chain;
-  yubikey.attestation_chain_count = sizeof(chain) / sizeof(chain[0]);
-  yubikey.attestation_chain_capacity = sizeof(chain) / sizeof(chain[0]);
+  yubikey.attestation_chain_count = test_array_count_size(chain, sizeof(chain), sizeof(chain[0]));
+  yubikey.attestation_chain_capacity = test_array_count_size(chain, sizeof(chain), sizeof(chain[0]));
 
   expect_initial_record_status(er_ui_fingerprint_presence_ref_write(&fingerprint, out, sizeof(out), &len), ER_UI_RECORD_OK,
                                "initial setup records: fingerprint writes");
@@ -168,21 +198,22 @@ static void test_authority_records_round_trip_without_allocation(void) {
 
   expect_initial_record_status(er_ui_yubikey_user_authority_ref_write(&yubikey, out, sizeof(out), &len), ER_UI_RECORD_OK,
                                "initial setup records: yubikey writes");
-  er_ui_initial_setup_byte_span_t parsed_chain[2];
+  er_ui_initial_setup_byte_span_t parsed_chain[ER_TEST_PARSED_CHAIN_CAPACITY];
   er_ui_yubikey_user_authority_ref_t parsed_yubikey = {0};
-  expect_initial_record_status(er_ui_yubikey_user_authority_ref_read(out, len, &parsed_yubikey, parsed_chain, sizeof(parsed_chain) / sizeof(parsed_chain[0])),
+  expect_initial_record_status(er_ui_yubikey_user_authority_ref_read(out, len, &parsed_yubikey, parsed_chain,
+                                                                     test_array_count_size(parsed_chain, sizeof(parsed_chain), sizeof(parsed_chain[0]))),
                                ER_UI_RECORD_OK, "initial setup records: yubikey reads");
   expect_initial_string_span(parsed_yubikey.slot, "9c", "initial setup records: yubikey slot");
   expect_initial_byte_span(parsed_yubikey.public_key, public_key, sizeof(public_key), "initial setup records: yubikey public key");
-  expect_size(parsed_yubikey.attestation_chain_count, 2u, "initial setup records: yubikey chain count");
+  expect_size(parsed_yubikey.attestation_chain_count, ER_TEST_ATTESTATION_CHAIN_COUNT, "initial setup records: yubikey chain count");
   expect_initial_byte_span(parsed_yubikey.attestation_chain[1], attestation_b, sizeof(attestation_b), "initial setup records: yubikey second chain");
-  expect_initial_record_status(er_ui_yubikey_user_authority_ref_read(out, len, &parsed_yubikey, parsed_chain, 1u), ER_UI_RECORD_ERR_NO_SPACE,
-                               "initial setup records: yubikey reports small chain array");
+  expect_initial_record_status(er_ui_yubikey_user_authority_ref_read(out, len, &parsed_yubikey, parsed_chain, ER_TEST_SMALL_CHAIN_CAPACITY),
+                               ER_UI_RECORD_ERR_NO_SPACE, "initial setup records: yubikey reports small chain array");
 }
 
 static void test_device_grant_record_and_signing_preimage(void) {
-  uint8_t out[2048];
-  uint8_t preimage[2048];
+  uint8_t out[ER_TEST_DEVICE_GRANT_RECORD_CAPACITY];
+  uint8_t preimage[ER_TEST_DEVICE_GRANT_RECORD_CAPACITY];
   size_t len = 0u;
   size_t preimage_len = 0u;
   const uint8_t user_key[] = {1u, 1u, 1u, 1u};
@@ -197,37 +228,41 @@ static void test_device_grant_record_and_signing_preimage(void) {
   grant.device_key_label = test_str_span("tpm:0x81000001");
   grant.fingerprint_template_ref = test_str_span("template-a");
   grant.allowed_roles = roles;
-  grant.allowed_roles_count = sizeof(roles) / sizeof(roles[0]);
-  grant.allowed_roles_capacity = sizeof(roles) / sizeof(roles[0]);
+  grant.allowed_roles_count = test_array_count_size(roles, sizeof(roles), sizeof(roles[0]));
+  grant.allowed_roles_capacity = test_array_count_size(roles, sizeof(roles), sizeof(roles[0]));
   grant.allowed_hardware_scopes = scopes;
-  grant.allowed_hardware_scopes_count = sizeof(scopes) / sizeof(scopes[0]);
-  grant.allowed_hardware_scopes_capacity = sizeof(scopes) / sizeof(scopes[0]);
+  grant.allowed_hardware_scopes_count = test_array_count_size(scopes, sizeof(scopes), sizeof(scopes[0]));
+  grant.allowed_hardware_scopes_capacity = test_array_count_size(scopes, sizeof(scopes), sizeof(scopes[0]));
   grant.presence_required = true;
   for (size_t i = 0u; i < ER_UI_INITIAL_SETUP_POLICY_HASH_LEN; ++i) grant.policy_hash[i] = (uint8_t)(i + 1u);
-  grant.issued_at_secs = 10u;
-  grant.expires_at_secs = 20u;
+  grant.issued_at_secs = ER_TEST_GRANT_ISSUED_AT_SECS;
+  grant.expires_at_secs = ER_TEST_GRANT_EXPIRES_AT_SECS;
   grant.user_signature = test_byte_span(signature, sizeof(signature));
 
   expect_initial_record_status(er_ui_user_device_admission_grant_write(&grant, out, sizeof(out), &len), ER_UI_RECORD_OK,
                                "initial setup records: device grant writes");
-  er_ui_initial_setup_string_span_t parsed_roles[2];
-  er_ui_initial_setup_string_span_t parsed_scopes[2];
+  er_ui_initial_setup_string_span_t parsed_roles[ER_TEST_PARSED_LIST_CAPACITY];
+  er_ui_initial_setup_string_span_t parsed_scopes[ER_TEST_PARSED_LIST_CAPACITY];
   er_ui_user_device_admission_grant_t parsed = {0};
-  expect_initial_record_status(er_ui_user_device_admission_grant_read(out, len, &parsed, parsed_roles, sizeof(parsed_roles) / sizeof(parsed_roles[0]),
-                                                                      parsed_scopes, sizeof(parsed_scopes) / sizeof(parsed_scopes[0])),
+  expect_initial_record_status(er_ui_user_device_admission_grant_read(out, len, &parsed, parsed_roles,
+                                                                      test_array_count_size(parsed_roles, sizeof(parsed_roles), sizeof(parsed_roles[0])),
+                                                                      parsed_scopes,
+                                                                      test_array_count_size(parsed_scopes, sizeof(parsed_scopes), sizeof(parsed_scopes[0]))),
                                ER_UI_RECORD_OK, "initial setup records: device grant reads");
   expect_initial_byte_span(parsed.user_public_key, user_key, sizeof(user_key), "initial setup records: grant user key");
   expect_initial_string_span(parsed.allowed_roles[1], "notary:device", "initial setup records: grant second role");
   expect_true(parsed.presence_required, "initial setup records: grant presence flag");
-  expect_size((size_t)parsed.expires_at_secs, 20u, "initial setup records: grant expiry");
+  expect_size((size_t)parsed.expires_at_secs, (size_t)ER_TEST_GRANT_EXPIRES_AT_SECS, "initial setup records: grant expiry");
   expect_initial_byte_span(parsed.user_signature, signature, sizeof(signature), "initial setup records: grant signature");
-  expect_initial_record_status(er_ui_user_device_admission_grant_read(out, len, &parsed, parsed_roles, 1u, parsed_scopes, 2u), ER_UI_RECORD_ERR_NO_SPACE,
+  expect_initial_record_status(er_ui_user_device_admission_grant_read(out, len, &parsed, parsed_roles, ER_TEST_SMALL_LIST_CAPACITY, parsed_scopes,
+                                                                      ER_TEST_PARSED_LIST_CAPACITY),
+                               ER_UI_RECORD_ERR_NO_SPACE,
                                "initial setup records: grant reports small role array");
 
   expect_initial_record_status(er_ui_user_device_admission_grant_signing_preimage_write(&grant, preimage, sizeof(preimage), &preimage_len),
                                ER_UI_RECORD_OK, "initial setup records: grant preimage writes");
   expect_true(preimage_len > 0u && preimage_len != len, "initial setup records: preimage is distinct from persisted record");
-  expect_true(!test_bytes_contains_run(preimage, preimage_len, 3u, sizeof(signature)),
+  expect_true(!test_bytes_contains_run(preimage, preimage_len, ER_TEST_SIGNATURE_BYTE, sizeof(signature)),
               "initial setup records: preimage does not include signature bytes");
 }
 

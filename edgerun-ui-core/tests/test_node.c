@@ -1,5 +1,58 @@
 #include "test_common.h"
 
+#define ER_UI_TEST_NODE_ARRAY_COUNT(values) (sizeof(values) / sizeof((values)[0]))
+#define ER_UI_TEST_NODE_DEPLOY_BUTTON_ID 8001u
+#define ER_UI_TEST_NODE_ICON_BUTTON_ID 8007u
+#define ER_UI_TEST_NODE_BUTTON_GROUP_ID 8008u
+#define ER_UI_TEST_NODE_BUTTON_GROUP_CHILD_INDEX 2u
+#define ER_UI_TEST_NODE_BUTTON_GROUP_CHILD_ID 8010u
+#define ER_UI_TEST_NODE_TOGGLE_GROUP_ID 8011u
+#define ER_UI_TEST_NODE_TOGGLE_SELECTED_INDEX 1u
+#define ER_UI_TEST_NODE_PAGINATION_ID 8018u
+#define ER_UI_TEST_NODE_PAGINATION_SELECTED_INDEX 1u
+#define ER_UI_TEST_NODE_PAGINATION_NEXT_INDEX 3u
+#define ER_UI_TEST_NODE_PAGINATION_NEXT_ID 8021u
+#define ER_UI_TEST_NODE_COLLAPSIBLE_ID 8022u
+#define ER_UI_TEST_NODE_COLLAPSIBLE_TRIGGER_INDEX 0u
+#define ER_UI_TEST_NODE_COLLAPSIBLE_ROW_INDEX 2u
+#define ER_UI_TEST_NODE_COLLAPSIBLE_ROW_ID 8024u
+#define ER_UI_TEST_NODE_ACCORDION_ID 8025u
+#define ER_UI_TEST_NODE_ACCORDION_ITEM_INDEX 1u
+#define ER_UI_TEST_NODE_ACCORDION_ITEM_ID 8026u
+#define ER_UI_TEST_NODE_POPOVER_ID 8027u
+#define ER_UI_TEST_NODE_POPOVER_FIELD_ID 8028u
+#define ER_UI_TEST_NODE_POPOVER_TRIGGER_INDEX 0u
+#define ER_UI_TEST_NODE_POPOVER_FIELD_INDEX 1u
+#define ER_UI_TEST_NODE_SHEET_ID 8029u
+#define ER_UI_TEST_NODE_SHEET_FIELD_INDEX 0u
+#define ER_UI_TEST_NODE_SHEET_BUTTON_INDEX 1u
+#define ER_UI_TEST_NODE_SHEET_BUTTON_ID 8030u
+#define ER_UI_TEST_NODE_MENUBAR_ID 8031u
+#define ER_UI_TEST_NODE_MENUBAR_SELECTED_INDEX 1u
+#define ER_UI_TEST_NODE_MENUBAR_SELECTED_ID 8032u
+#define ER_UI_TEST_NODE_RADIO_GROUP_ID 8034u
+#define ER_UI_TEST_NODE_RADIO_SELECTED_INDEX 2u
+#define ER_UI_TEST_NODE_RADIO_SELECTED_ID 8036u
+#define ER_UI_TEST_NODE_INPUT_GROUP_ID 8038u
+#define ER_UI_TEST_NODE_INPUT_GROUP_FIELD_INDEX 0u
+#define ER_UI_TEST_NODE_INPUT_GROUP_BUTTON_INDEX 1u
+#define ER_UI_TEST_NODE_INPUT_GROUP_BUTTON_ID 8039u
+#define ER_UI_TEST_NODE_INPUT_OTP_ID 8040u
+#define ER_UI_TEST_NODE_INPUT_OTP_FOCUSED_INDEX 4u
+#define ER_UI_TEST_NODE_INPUT_OTP_FOCUSED_ID 8044u
+#define ER_UI_TEST_NODE_INPUT_OTP_SEPARATOR_INDEX 3u
+#define ER_UI_TEST_NODE_NAVIGATION_ID 8048u
+#define ER_UI_TEST_NODE_NAVIGATION_SELECTED_INDEX 1u
+#define ER_UI_TEST_NODE_NAVIGATION_SELECTED_ID 8049u
+#define ER_UI_TEST_NODE_MASONRY_COLUMNS 2u
+#define ER_UI_TEST_NODE_MASONRY_CHILDREN 4u
+#define ER_UI_TEST_NODE_MASONRY_THIRD_CHILD 2u
+#define ER_UI_TEST_NODE_BENTO_COLUMNS 4u
+#define ER_UI_TEST_NODE_BENTO_WIDE_COL_SPAN 2u
+#define ER_UI_TEST_NODE_BENTO_WIDE_ROW_SPAN 2u
+#define ER_UI_TEST_NODE_BENTO_ROW_SPAN 1u
+#define ER_UI_TEST_NODE_BENTO_THIRD_CHILD 2u
+
 void run_node_tests(void) {
   er_ui_node_t root = er_ui_node_card();
   er_ui_node_set_padding(&root, 10.0f);
@@ -8,7 +61,7 @@ void run_node_tests(void) {
   er_ui_node_t row = er_ui_node_row();
   er_ui_node_set_gap(&row, 6.0f);
   er_ui_node_t badge = er_ui_node_badge("Native", ER_UI_SHADCN_BADGE_SECONDARY);
-  er_ui_node_t button = er_ui_node_button("Deploy", 8001u, ER_UI_SHADCN_BUTTON_DEFAULT);
+  er_ui_node_t button = er_ui_node_button("Deploy", ER_UI_TEST_NODE_DEPLOY_BUTTON_ID, ER_UI_SHADCN_BUTTON_DEFAULT);
   expect_status(er_ui_node_add_child(&row, &badge), ER_UI_OK, "node: row accepts badge child");
   expect_status(er_ui_node_add_child(&row, &button), ER_UI_OK, "node: row accepts button child");
   expect_status(er_ui_node_add_child(&root, &title), ER_UI_OK, "node: card accepts title child");
@@ -103,27 +156,27 @@ void run_node_tests(void) {
   expect_float(resolved_child.w, 99.0f, "node: spacing child width subtracts margin padding and gap");
   expect_float(resolved_child.h, 62.0f, "node: spacing child height subtracts margin and padding");
 
-  er_ui_node_t masonry = er_ui_node_masonry(2u);
+  er_ui_node_t masonry = er_ui_node_masonry(ER_UI_TEST_NODE_MASONRY_COLUMNS);
   er_ui_node_set_gap(&masonry, 10.0f);
-  er_ui_node_t masonry_children[4u];
-  for (size_t i = 0u; i < 4u; ++i) {
+  er_ui_node_t masonry_children[ER_UI_TEST_NODE_MASONRY_CHILDREN];
+  for (size_t i = 0u; i < ER_UI_TEST_NODE_ARRAY_COUNT(masonry_children); ++i) {
     masonry_children[i] = er_ui_node_skeleton();
     expect_status(er_ui_node_add_child(&masonry, &masonry_children[i]), ER_UI_OK, "node: masonry accepts child");
   }
-  expect_status(er_ui_node_child_bounds(&masonry, 2u, er_ui_bounds(0.0f, 0.0f, 200.0f, 300.0f), &resolved_child), ER_UI_OK,
+  expect_status(er_ui_node_child_bounds(&masonry, ER_UI_TEST_NODE_MASONRY_THIRD_CHILD, er_ui_bounds(0.0f, 0.0f, 200.0f, 300.0f), &resolved_child), ER_UI_OK,
                 "node: masonry child bounds use shortest column");
   expect_float(resolved_child.x, 0.0f, "node: masonry third child x is first column");
   expect_float(resolved_child.y, 84.1f, "node: masonry third child stacks below first column");
   expect_float(resolved_child.w, 95.0f, "node: masonry child width divides columns");
   expect_float(resolved_child.h, 108.3f, "node: masonry child height varies deterministically");
 
-  er_ui_node_t bento = er_ui_node_bento_grid(4u);
+  er_ui_node_t bento = er_ui_node_bento_grid(ER_UI_TEST_NODE_BENTO_COLUMNS);
   er_ui_node_set_gap(&bento, 8.0f);
   er_ui_node_t bento_a = er_ui_node_skeleton();
   er_ui_node_t bento_b = er_ui_node_skeleton();
   er_ui_node_t bento_c = er_ui_node_skeleton();
-  er_ui_node_set_grid_span(&bento_a, 2u, 2u);
-  er_ui_node_set_grid_span(&bento_c, 2u, 1u);
+  er_ui_node_set_grid_span(&bento_a, ER_UI_TEST_NODE_BENTO_WIDE_COL_SPAN, ER_UI_TEST_NODE_BENTO_WIDE_ROW_SPAN);
+  er_ui_node_set_grid_span(&bento_c, ER_UI_TEST_NODE_BENTO_WIDE_COL_SPAN, ER_UI_TEST_NODE_BENTO_ROW_SPAN);
   expect_status(er_ui_node_add_child(&bento, &bento_a), ER_UI_OK, "node: bento accepts wide child");
   expect_status(er_ui_node_add_child(&bento, &bento_b), ER_UI_OK, "node: bento accepts compact child");
   expect_status(er_ui_node_add_child(&bento, &bento_c), ER_UI_OK, "node: bento accepts second wide child");
@@ -131,7 +184,7 @@ void run_node_tests(void) {
                 "node: bento first child bounds resolve");
   expect_float(resolved_child.w, 196.0f, "node: bento child spans columns");
   expect_float(resolved_child.h, 149.0f, "node: bento child spans rows");
-  expect_status(er_ui_node_child_bounds(&bento, 2u, er_ui_bounds(0.0f, 0.0f, 400.0f, 300.0f), &resolved_child), ER_UI_OK,
+  expect_status(er_ui_node_child_bounds(&bento, ER_UI_TEST_NODE_BENTO_THIRD_CHILD, er_ui_bounds(0.0f, 0.0f, 400.0f, 300.0f), &resolved_child), ER_UI_OK,
                 "node: bento packs around occupied cells");
   expect_float(resolved_child.x, 204.0f, "node: bento third child x skips occupied cells");
   expect_float(resolved_child.y, 78.5f, "node: bento third child y fills open row");
@@ -140,7 +193,7 @@ void run_node_tests(void) {
   er_ui_a11y_node_t a11y = {0};
   expect_status(er_ui_node_accessibility(&button, &a11y), ER_UI_OK, "node: button accessibility maps");
   expect_size(a11y.role, ER_UI_A11Y_BUTTON, "node: button accessibility role");
-  expect_true(a11y.has_id && a11y.id == 8001u, "node: button accessibility id");
+  expect_true(a11y.has_id && a11y.id == ER_UI_TEST_NODE_DEPLOY_BUTTON_ID, "node: button accessibility id");
   expect_true(a11y.label == button.label, "node: button accessibility label is borrowed");
 
   er_ui_node_t icon_a11y = er_ui_node_icon(ER_UI_ICON_TRUST, NULL, er_ui_color_rgba(0.0f, 0.0f, 0.0f, 1.0f));
@@ -148,10 +201,10 @@ void run_node_tests(void) {
   expect_size(a11y.role, ER_UI_A11Y_IMAGE, "node: icon accessibility role");
   expect_string(a11y.label, "trust", "node: icon accessibility uses canonical label fallback");
 
-  er_ui_node_t icon_button_a11y = er_ui_node_icon_button(ER_UI_ICON_SEARCH, "Search", 8007u, ER_UI_SHADCN_BUTTON_GHOST);
+  er_ui_node_t icon_button_a11y = er_ui_node_icon_button(ER_UI_ICON_SEARCH, "Search", ER_UI_TEST_NODE_ICON_BUTTON_ID, ER_UI_SHADCN_BUTTON_GHOST);
   expect_status(er_ui_node_accessibility(&icon_button_a11y, &a11y), ER_UI_OK, "node: icon button accessibility maps");
   expect_size(a11y.role, ER_UI_A11Y_BUTTON, "node: icon button accessibility role");
-  expect_true(a11y.has_id && a11y.id == 8007u, "node: icon button accessibility id");
+  expect_true(a11y.has_id && a11y.id == ER_UI_TEST_NODE_ICON_BUTTON_ID, "node: icon button accessibility id");
 
   er_ui_node_t toast_icon_a11y = er_ui_node_toast_icon("Saved", ER_UI_ICON_CHECK, er_ui_color_rgba(0.0f, 0.5f, 0.2f, 1.0f));
   expect_status(er_ui_node_accessibility(&toast_icon_a11y, &a11y), ER_UI_OK, "node: icon toast accessibility maps");
@@ -165,52 +218,64 @@ void run_node_tests(void) {
   expect_true(a11y.value == card_summary_a11y.detail, "node: card summary detail is borrowed");
 
   const char* const button_group_labels[] = {"Copy", "Paste", "More"};
-  er_ui_node_t button_group_a11y = er_ui_node_button_group(button_group_labels, 3u, 8008u);
+  er_ui_node_t button_group_a11y =
+      er_ui_node_button_group(button_group_labels, ER_UI_TEST_NODE_ARRAY_COUNT(button_group_labels), ER_UI_TEST_NODE_BUTTON_GROUP_ID);
   expect_status(er_ui_node_accessibility(&button_group_a11y, &a11y), ER_UI_OK, "node: button group accessibility maps");
   expect_size(a11y.role, ER_UI_A11Y_GROUP, "node: button group accessibility role");
-  expect_status(er_ui_node_accessibility_child(&button_group_a11y, 2u, &a11y), ER_UI_OK, "node: button group child accessibility maps");
+  expect_status(er_ui_node_accessibility_child(&button_group_a11y, ER_UI_TEST_NODE_BUTTON_GROUP_CHILD_INDEX, &a11y), ER_UI_OK,
+                "node: button group child accessibility maps");
   expect_size(a11y.role, ER_UI_A11Y_BUTTON, "node: button group child accessibility role");
-  expect_true(a11y.has_id && a11y.id == 8010u, "node: button group child id");
+  expect_true(a11y.has_id && a11y.id == ER_UI_TEST_NODE_BUTTON_GROUP_CHILD_ID, "node: button group child id");
 
   const char* const toggle_group_labels[] = {"B", "I", "U"};
-  er_ui_node_t toggle_group_a11y = er_ui_node_toggle_group(toggle_group_labels, 3u, 1u, 8011u);
+  er_ui_node_t toggle_group_a11y = er_ui_node_toggle_group(toggle_group_labels, ER_UI_TEST_NODE_ARRAY_COUNT(toggle_group_labels),
+                                                           ER_UI_TEST_NODE_TOGGLE_SELECTED_INDEX, ER_UI_TEST_NODE_TOGGLE_GROUP_ID);
   expect_status(er_ui_node_accessibility(&toggle_group_a11y, &a11y), ER_UI_OK, "node: toggle group accessibility maps");
   expect_size(a11y.role, ER_UI_A11Y_GROUP, "node: toggle group accessibility role");
-  expect_status(er_ui_node_accessibility_child(&toggle_group_a11y, 1u, &a11y), ER_UI_OK, "node: toggle group child accessibility maps");
+  expect_status(er_ui_node_accessibility_child(&toggle_group_a11y, ER_UI_TEST_NODE_TOGGLE_SELECTED_INDEX, &a11y), ER_UI_OK,
+                "node: toggle group child accessibility maps");
   expect_size(a11y.role, ER_UI_A11Y_BUTTON, "node: toggle group child accessibility role");
   expect_true((a11y.states & ER_UI_A11Y_STATE_SELECTED) != 0u, "node: toggle group selected child state");
 
   const char* const pagination_labels[] = {"1", "2"};
-  er_ui_node_t pagination_a11y = er_ui_node_pagination(pagination_labels, 2u, 0u, 8018u);
+  er_ui_node_t pagination_a11y = er_ui_node_pagination(pagination_labels, ER_UI_TEST_NODE_ARRAY_COUNT(pagination_labels), 0u,
+                                                       ER_UI_TEST_NODE_PAGINATION_ID);
   expect_status(er_ui_node_accessibility(&pagination_a11y, &a11y), ER_UI_OK, "node: pagination accessibility maps");
   expect_size(a11y.role, ER_UI_A11Y_NAVIGATION, "node: pagination accessibility role");
-  expect_status(er_ui_node_accessibility_child(&pagination_a11y, 1u, &a11y), ER_UI_OK, "node: selected page accessibility maps");
+  expect_status(er_ui_node_accessibility_child(&pagination_a11y, ER_UI_TEST_NODE_PAGINATION_SELECTED_INDEX, &a11y), ER_UI_OK,
+                "node: selected page accessibility maps");
   expect_size(a11y.role, ER_UI_A11Y_BUTTON, "node: selected page accessibility role");
   expect_true((a11y.states & ER_UI_A11Y_STATE_CURRENT) != 0u, "node: selected page current state");
-  expect_status(er_ui_node_accessibility_child(&pagination_a11y, 3u, &a11y), ER_UI_OK, "node: next page accessibility maps");
-  expect_true(a11y.has_id && a11y.id == 8021u, "node: next page accessibility id");
+  expect_status(er_ui_node_accessibility_child(&pagination_a11y, ER_UI_TEST_NODE_PAGINATION_NEXT_INDEX, &a11y), ER_UI_OK,
+                "node: next page accessibility maps");
+  expect_true(a11y.has_id && a11y.id == ER_UI_TEST_NODE_PAGINATION_NEXT_ID, "node: next page accessibility id");
 
   const char* const collapsible_titles[] = {"Typography", "Spacing"};
   const char* const collapsible_details[] = {"Variable font", "Stable gaps"};
-  er_ui_node_t collapsible_a11y = er_ui_node_collapsible("Foundations", collapsible_titles, collapsible_details, 2u, true, 8022u);
+  er_ui_node_t collapsible_a11y = er_ui_node_collapsible("Foundations", collapsible_titles, collapsible_details,
+                                                         ER_UI_TEST_NODE_ARRAY_COUNT(collapsible_titles), true, ER_UI_TEST_NODE_COLLAPSIBLE_ID);
   expect_status(er_ui_node_accessibility(&collapsible_a11y, &a11y), ER_UI_OK, "node: collapsible accessibility maps");
   expect_size(a11y.role, ER_UI_A11Y_GROUP, "node: collapsible accessibility role");
   expect_true((a11y.states & ER_UI_A11Y_STATE_EXPANDED) != 0u, "node: collapsible expanded state");
-  expect_status(er_ui_node_accessibility_child(&collapsible_a11y, 0u, &a11y), ER_UI_OK, "node: collapsible trigger accessibility maps");
+  expect_status(er_ui_node_accessibility_child(&collapsible_a11y, ER_UI_TEST_NODE_COLLAPSIBLE_TRIGGER_INDEX, &a11y), ER_UI_OK,
+                "node: collapsible trigger accessibility maps");
   expect_size(a11y.role, ER_UI_A11Y_BUTTON, "node: collapsible trigger accessibility role");
-  expect_true(a11y.has_id && a11y.id == 8022u, "node: collapsible trigger id");
-  expect_status(er_ui_node_accessibility_child(&collapsible_a11y, 2u, &a11y), ER_UI_OK, "node: collapsible row accessibility maps");
+  expect_true(a11y.has_id && a11y.id == ER_UI_TEST_NODE_COLLAPSIBLE_ID, "node: collapsible trigger id");
+  expect_status(er_ui_node_accessibility_child(&collapsible_a11y, ER_UI_TEST_NODE_COLLAPSIBLE_ROW_INDEX, &a11y), ER_UI_OK,
+                "node: collapsible row accessibility maps");
   expect_size(a11y.role, ER_UI_A11Y_LIST_ITEM, "node: collapsible row accessibility role");
-  expect_true(a11y.has_id && a11y.id == 8024u, "node: collapsible row id");
+  expect_true(a11y.has_id && a11y.id == ER_UI_TEST_NODE_COLLAPSIBLE_ROW_ID, "node: collapsible row id");
 
   const char* const accordion_titles[] = {"Product", "Billing"};
   const char* const accordion_bodies[] = {"Network app storage", "Proof-backed receipts"};
-  er_ui_node_t accordion_a11y = er_ui_node_accordion(accordion_titles, accordion_bodies, 2u, 8025u);
+  er_ui_node_t accordion_a11y =
+      er_ui_node_accordion(accordion_titles, accordion_bodies, ER_UI_TEST_NODE_ARRAY_COUNT(accordion_titles), ER_UI_TEST_NODE_ACCORDION_ID);
   expect_status(er_ui_node_accessibility(&accordion_a11y, &a11y), ER_UI_OK, "node: accordion accessibility maps");
   expect_size(a11y.role, ER_UI_A11Y_GROUP, "node: accordion accessibility role");
-  expect_status(er_ui_node_accessibility_child(&accordion_a11y, 1u, &a11y), ER_UI_OK, "node: accordion item accessibility maps");
+  expect_status(er_ui_node_accessibility_child(&accordion_a11y, ER_UI_TEST_NODE_ACCORDION_ITEM_INDEX, &a11y), ER_UI_OK,
+                "node: accordion item accessibility maps");
   expect_size(a11y.role, ER_UI_A11Y_BUTTON, "node: accordion item accessibility role");
-  expect_true(a11y.has_id && a11y.id == 8026u, "node: accordion item id");
+  expect_true(a11y.has_id && a11y.id == ER_UI_TEST_NODE_ACCORDION_ITEM_ID, "node: accordion item id");
   expect_true((a11y.states & ER_UI_A11Y_STATE_EXPANDED) != 0u, "node: accordion item expanded state");
 
   er_ui_node_t hover_a11y = er_ui_node_hover_card("ER", "UI", "Reusable shadcn primitive.", er_ui_color_rgba(0.1f, 0.2f, 0.3f, 1.0f));
@@ -219,79 +284,94 @@ void run_node_tests(void) {
   expect_true(a11y.label == hover_a11y.label, "node: hover card label is borrowed");
   expect_true((a11y.states & ER_UI_A11Y_STATE_HAS_VALUE) != 0u, "node: hover card detail value state");
 
-  er_ui_node_t popover_a11y = er_ui_node_popover("Open popover", "Dimensions", "Set layout constraints.", "Width", "100%", 8027u);
+  er_ui_node_t popover_a11y = er_ui_node_popover("Open popover", "Dimensions", "Set layout constraints.", "Width", "100%", ER_UI_TEST_NODE_POPOVER_ID);
   expect_status(er_ui_node_accessibility(&popover_a11y, &a11y), ER_UI_OK, "node: popover accessibility maps");
   expect_size(a11y.role, ER_UI_A11Y_DIALOG, "node: popover accessibility role");
   expect_true(a11y.label == popover_a11y.value, "node: popover title is borrowed");
-  expect_status(er_ui_node_accessibility_child(&popover_a11y, 0u, &a11y), ER_UI_OK, "node: popover trigger accessibility maps");
+  expect_status(er_ui_node_accessibility_child(&popover_a11y, ER_UI_TEST_NODE_POPOVER_TRIGGER_INDEX, &a11y), ER_UI_OK,
+                "node: popover trigger accessibility maps");
   expect_size(a11y.role, ER_UI_A11Y_BUTTON, "node: popover trigger accessibility role");
-  expect_true(a11y.has_id && a11y.id == 8027u, "node: popover trigger id");
-  expect_status(er_ui_node_accessibility_child(&popover_a11y, 1u, &a11y), ER_UI_OK, "node: popover field accessibility maps");
+  expect_true(a11y.has_id && a11y.id == ER_UI_TEST_NODE_POPOVER_ID, "node: popover trigger id");
+  expect_status(er_ui_node_accessibility_child(&popover_a11y, ER_UI_TEST_NODE_POPOVER_FIELD_INDEX, &a11y), ER_UI_OK,
+                "node: popover field accessibility maps");
   expect_size(a11y.role, ER_UI_A11Y_TEXTBOX, "node: popover field accessibility role");
-  expect_true(a11y.has_id && a11y.id == 8028u, "node: popover field id");
+  expect_true(a11y.has_id && a11y.id == ER_UI_TEST_NODE_POPOVER_FIELD_ID, "node: popover field id");
 
-  er_ui_node_t sheet_a11y = er_ui_node_sheet("Profile", "Update local profile.", "Name", "EdgeRun", "Save changes", 8029u);
+  er_ui_node_t sheet_a11y = er_ui_node_sheet("Profile", "Update local profile.", "Name", "EdgeRun", "Save changes", ER_UI_TEST_NODE_SHEET_ID);
   expect_status(er_ui_node_accessibility(&sheet_a11y, &a11y), ER_UI_OK, "node: sheet accessibility maps");
   expect_size(a11y.role, ER_UI_A11Y_DIALOG, "node: sheet accessibility role");
   expect_true(a11y.label == sheet_a11y.label, "node: sheet title is borrowed");
-  expect_status(er_ui_node_accessibility_child(&sheet_a11y, 0u, &a11y), ER_UI_OK, "node: sheet field accessibility maps");
+  expect_status(er_ui_node_accessibility_child(&sheet_a11y, ER_UI_TEST_NODE_SHEET_FIELD_INDEX, &a11y), ER_UI_OK,
+                "node: sheet field accessibility maps");
   expect_size(a11y.role, ER_UI_A11Y_TEXTBOX, "node: sheet field accessibility role");
-  expect_true(a11y.has_id && a11y.id == 8029u, "node: sheet field id");
-  expect_status(er_ui_node_accessibility_child(&sheet_a11y, 1u, &a11y), ER_UI_OK, "node: sheet button accessibility maps");
+  expect_true(a11y.has_id && a11y.id == ER_UI_TEST_NODE_SHEET_ID, "node: sheet field id");
+  expect_status(er_ui_node_accessibility_child(&sheet_a11y, ER_UI_TEST_NODE_SHEET_BUTTON_INDEX, &a11y), ER_UI_OK,
+                "node: sheet button accessibility maps");
   expect_size(a11y.role, ER_UI_A11Y_BUTTON, "node: sheet button accessibility role");
-  expect_true(a11y.has_id && a11y.id == 8030u, "node: sheet button id");
+  expect_true(a11y.has_id && a11y.id == ER_UI_TEST_NODE_SHEET_BUTTON_ID, "node: sheet button id");
 
   const char* const kbd_keys[] = {"Cmd", "K"};
-  er_ui_node_t kbd_a11y = er_ui_node_kbd(kbd_keys, 2u, "Open command palette");
+  er_ui_node_t kbd_a11y = er_ui_node_kbd(kbd_keys, ER_UI_TEST_NODE_ARRAY_COUNT(kbd_keys), "Open command palette");
   expect_status(er_ui_node_accessibility(&kbd_a11y, &a11y), ER_UI_OK, "node: kbd accessibility maps");
   expect_size(a11y.role, ER_UI_A11Y_GROUP, "node: kbd accessibility role");
   expect_true(a11y.label == kbd_a11y.label, "node: kbd label is borrowed");
 
   const char* const menubar_items[] = {"File", "Edit", "View"};
-  er_ui_node_t menubar_a11y = er_ui_node_menubar(menubar_items, 3u, 1u, 8031u);
+  er_ui_node_t menubar_a11y =
+      er_ui_node_menubar(menubar_items, ER_UI_TEST_NODE_ARRAY_COUNT(menubar_items), ER_UI_TEST_NODE_MENUBAR_SELECTED_INDEX, ER_UI_TEST_NODE_MENUBAR_ID);
   expect_status(er_ui_node_accessibility(&menubar_a11y, &a11y), ER_UI_OK, "node: menubar accessibility maps");
   expect_size(a11y.role, ER_UI_A11Y_NAVIGATION, "node: menubar accessibility role");
-  expect_status(er_ui_node_accessibility_child(&menubar_a11y, 1u, &a11y), ER_UI_OK, "node: menubar item accessibility maps");
+  expect_status(er_ui_node_accessibility_child(&menubar_a11y, ER_UI_TEST_NODE_MENUBAR_SELECTED_INDEX, &a11y), ER_UI_OK,
+                "node: menubar item accessibility maps");
   expect_size(a11y.role, ER_UI_A11Y_BUTTON, "node: menubar item accessibility role");
-  expect_true(a11y.has_id && a11y.id == 8032u, "node: menubar item id");
+  expect_true(a11y.has_id && a11y.id == ER_UI_TEST_NODE_MENUBAR_SELECTED_ID, "node: menubar item id");
   expect_true((a11y.states & ER_UI_A11Y_STATE_SELECTED) != 0u, "node: menubar selected item state");
 
   const char* const radio_group_labels[] = {"Default", "Comfortable", "Compact"};
-  er_ui_node_t radio_group_a11y = er_ui_node_radio_group(radio_group_labels, 3u, 2u, 8034u);
+  er_ui_node_t radio_group_a11y = er_ui_node_radio_group(radio_group_labels, ER_UI_TEST_NODE_ARRAY_COUNT(radio_group_labels),
+                                                         ER_UI_TEST_NODE_RADIO_SELECTED_INDEX, ER_UI_TEST_NODE_RADIO_GROUP_ID);
   expect_status(er_ui_node_accessibility(&radio_group_a11y, &a11y), ER_UI_OK, "node: radio group accessibility maps");
   expect_size(a11y.role, ER_UI_A11Y_GROUP, "node: radio group accessibility role");
-  expect_status(er_ui_node_accessibility_child(&radio_group_a11y, 2u, &a11y), ER_UI_OK, "node: radio group item accessibility maps");
+  expect_status(er_ui_node_accessibility_child(&radio_group_a11y, ER_UI_TEST_NODE_RADIO_SELECTED_INDEX, &a11y), ER_UI_OK,
+                "node: radio group item accessibility maps");
   expect_size(a11y.role, ER_UI_A11Y_RADIO, "node: radio group item accessibility role");
-  expect_true(a11y.has_id && a11y.id == 8036u, "node: radio group item id");
+  expect_true(a11y.has_id && a11y.id == ER_UI_TEST_NODE_RADIO_SELECTED_ID, "node: radio group item id");
   expect_true((a11y.states & ER_UI_A11Y_STATE_CHECKED) != 0u, "node: radio group selected item state");
 
-  er_ui_node_t input_group_a11y = er_ui_node_input_group("URL", "https://edgerun.local", "Copy", 8038u);
+  er_ui_node_t input_group_a11y = er_ui_node_input_group("URL", "https://edgerun.local", "Copy", ER_UI_TEST_NODE_INPUT_GROUP_ID);
   expect_status(er_ui_node_accessibility(&input_group_a11y, &a11y), ER_UI_OK, "node: input group accessibility maps");
   expect_size(a11y.role, ER_UI_A11Y_GROUP, "node: input group accessibility role");
-  expect_status(er_ui_node_accessibility_child(&input_group_a11y, 0u, &a11y), ER_UI_OK, "node: input group field accessibility maps");
+  expect_status(er_ui_node_accessibility_child(&input_group_a11y, ER_UI_TEST_NODE_INPUT_GROUP_FIELD_INDEX, &a11y), ER_UI_OK,
+                "node: input group field accessibility maps");
   expect_size(a11y.role, ER_UI_A11Y_TEXTBOX, "node: input group field accessibility role");
-  expect_true(a11y.has_id && a11y.id == 8038u, "node: input group field id");
-  expect_status(er_ui_node_accessibility_child(&input_group_a11y, 1u, &a11y), ER_UI_OK, "node: input group button accessibility maps");
+  expect_true(a11y.has_id && a11y.id == ER_UI_TEST_NODE_INPUT_GROUP_ID, "node: input group field id");
+  expect_status(er_ui_node_accessibility_child(&input_group_a11y, ER_UI_TEST_NODE_INPUT_GROUP_BUTTON_INDEX, &a11y), ER_UI_OK,
+                "node: input group button accessibility maps");
   expect_size(a11y.role, ER_UI_A11Y_BUTTON, "node: input group button accessibility role");
-  expect_true(a11y.has_id && a11y.id == 8039u, "node: input group button id");
+  expect_true(a11y.has_id && a11y.id == ER_UI_TEST_NODE_INPUT_GROUP_BUTTON_ID, "node: input group button id");
 
   const char* const otp_values[] = {"1", "2", "3", "-", "4", "5"};
-  er_ui_node_t otp_a11y = er_ui_node_input_otp(otp_values, 6u, 4u, 8040u);
+  er_ui_node_t otp_a11y =
+      er_ui_node_input_otp(otp_values, ER_UI_TEST_NODE_ARRAY_COUNT(otp_values), ER_UI_TEST_NODE_INPUT_OTP_FOCUSED_INDEX, ER_UI_TEST_NODE_INPUT_OTP_ID);
   expect_status(er_ui_node_accessibility(&otp_a11y, &a11y), ER_UI_OK, "node: input otp accessibility maps");
   expect_size(a11y.role, ER_UI_A11Y_GROUP, "node: input otp accessibility role");
-  expect_status(er_ui_node_accessibility_child(&otp_a11y, 4u, &a11y), ER_UI_OK, "node: input otp digit accessibility maps");
+  expect_status(er_ui_node_accessibility_child(&otp_a11y, ER_UI_TEST_NODE_INPUT_OTP_FOCUSED_INDEX, &a11y), ER_UI_OK,
+                "node: input otp digit accessibility maps");
   expect_size(a11y.role, ER_UI_A11Y_TEXTBOX, "node: input otp digit accessibility role");
-  expect_true(a11y.has_id && a11y.id == 8044u, "node: input otp digit id");
+  expect_true(a11y.has_id && a11y.id == ER_UI_TEST_NODE_INPUT_OTP_FOCUSED_ID, "node: input otp digit id");
   expect_true((a11y.states & ER_UI_A11Y_STATE_FOCUSED) != 0u, "node: input otp focused digit state");
-  expect_status(er_ui_node_accessibility_child(&otp_a11y, 3u, &a11y), ER_UI_ERR_INVALID_ARGUMENT, "node: input otp separator is not focusable");
+  expect_status(er_ui_node_accessibility_child(&otp_a11y, ER_UI_TEST_NODE_INPUT_OTP_SEPARATOR_INDEX, &a11y), ER_UI_ERR_INVALID_ARGUMENT,
+                "node: input otp separator is not focusable");
 
   const char* const nav_tabs[] = {"Docs", "Components", "Examples"};
-  er_ui_node_t nav_a11y = er_ui_node_navigation_menu(nav_tabs, 3u, 1u, "Components", "Reusable primitives", "Accordion", "Disclosure rows", 8048u);
+  er_ui_node_t nav_a11y = er_ui_node_navigation_menu(nav_tabs, ER_UI_TEST_NODE_ARRAY_COUNT(nav_tabs), ER_UI_TEST_NODE_NAVIGATION_SELECTED_INDEX,
+                                                     "Components", "Reusable primitives", "Accordion", "Disclosure rows", ER_UI_TEST_NODE_NAVIGATION_ID);
   expect_status(er_ui_node_accessibility(&nav_a11y, &a11y), ER_UI_OK, "node: navigation menu accessibility maps");
   expect_size(a11y.role, ER_UI_A11Y_NAVIGATION, "node: navigation menu accessibility role");
-  expect_status(er_ui_node_accessibility_child(&nav_a11y, 1u, &a11y), ER_UI_OK, "node: navigation menu tab accessibility maps");
+  expect_status(er_ui_node_accessibility_child(&nav_a11y, ER_UI_TEST_NODE_NAVIGATION_SELECTED_INDEX, &a11y), ER_UI_OK,
+                "node: navigation menu tab accessibility maps");
   expect_size(a11y.role, ER_UI_A11Y_BUTTON, "node: navigation menu tab role");
-  expect_true(a11y.has_id && a11y.id == 8049u, "node: navigation menu selected tab id");
+  expect_true(a11y.has_id && a11y.id == ER_UI_TEST_NODE_NAVIGATION_SELECTED_ID, "node: navigation menu selected tab id");
   expect_true((a11y.states & ER_UI_A11Y_STATE_SELECTED) != 0u, "node: navigation menu selected tab state");
   expect_status(er_ui_node_accessibility_child(&nav_a11y, 3u, &a11y), ER_UI_OK, "node: navigation menu row accessibility maps");
   expect_size(a11y.role, ER_UI_A11Y_LIST_ITEM, "node: navigation menu row role");
