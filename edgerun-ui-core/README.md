@@ -11,6 +11,7 @@ Implemented portable slices:
 - reusable EdgeRun component contracts ported from Rust, including stable selectors, state matrices, projected input fields, and accessibility role/label metadata
 - semantic palette/theme records for color schemes, accents, radius scales, density, and token resolution
 - required `vrfont` integration for converting variable-font vertex batches into scene text quads
+- Rust-compatible UI record codec for deterministic setup/admission records using caller-owned buffers
 - cursor-based opacity and translation for grouped commands
 - scene budgets for native, browser, and public showcase frames
 - deterministic tests for validation, clipping, topmost interaction queries, transition easing, budget checks, painter output, theme resolution, and varfont text-quad emission
