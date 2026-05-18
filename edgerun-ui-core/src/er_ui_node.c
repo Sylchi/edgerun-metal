@@ -1976,6 +1976,21 @@ static er_ui_status_t er_ui_node_render_icon(er_ui_scene_t* scene, er_ui_bounds_
 
 static er_ui_bounds_t er_ui_node_center_square(er_ui_bounds_t bounds, float size);
 
+static er_ui_status_t er_ui_node_card_inner(
+  er_ui_scene_t* scene,
+  er_ui_bounds_t bounds,
+  er_ui_resolved_theme_t theme,
+  float pad,
+  er_ui_bounds_t* out_inner) {
+  if (!out_inner) return ER_UI_ERR_INVALID_ARGUMENT;
+  er_ui_status_t status = er_ui_component_card_emit(scene, bounds, theme);
+  if (status != ER_UI_OK) return status;
+  er_ui_bounds_t inner = er_ui_bounds_inset(bounds, pad, pad);
+  if (!er_ui_bounds_valid(inner)) return ER_UI_ERR_INVALID_ARGUMENT;
+  *out_inner = inner;
+  return ER_UI_OK;
+}
+
 static er_ui_status_t er_ui_node_render_toast(
   const er_ui_node_t* node,
   er_ui_scene_t* scene,
@@ -2019,14 +2034,12 @@ static er_ui_status_t er_ui_node_render_collapsible(
   er_ui_resolved_theme_t theme) {
   if (!node || !scene || !font || !node->label || !er_ui_bounds_valid(bounds)) return ER_UI_ERR_INVALID_ARGUMENT;
   if (node->active && node->row_count > 0u && (!node->labels || !node->cells)) return ER_UI_ERR_INVALID_ARGUMENT;
-  er_ui_status_t status = er_ui_component_card_emit(scene, bounds, theme);
-  if (status != ER_UI_OK) return status;
-
   float pad = 12.0f;
   float header_h = er_ui_float_min(36.0f, bounds.h - pad * 2.0f);
   if (header_h <= 0.0f) return ER_UI_ERR_INVALID_ARGUMENT;
-  er_ui_bounds_t inner = er_ui_bounds_inset(bounds, pad, pad);
-  if (!er_ui_bounds_valid(inner)) return ER_UI_ERR_INVALID_ARGUMENT;
+  er_ui_bounds_t inner;
+  er_ui_status_t status = er_ui_node_card_inner(scene, bounds, theme, pad, &inner);
+  if (status != ER_UI_OK) return status;
   er_ui_bounds_t title = er_ui_bounds(inner.x, inner.y, er_ui_float_max(0.0f, inner.w - header_h - 8.0f), header_h);
   er_ui_bounds_t trigger = er_ui_bounds(inner.x + inner.w - header_h, inner.y, header_h, header_h);
   status = er_ui_node_render_text(scene, font, node->label, title, theme.colors.text);
@@ -2056,12 +2069,10 @@ static er_ui_status_t er_ui_node_render_accordion(
   er_ui_resolved_theme_t theme) {
   if (!node || !scene || !font || !er_ui_bounds_valid(bounds)) return ER_UI_ERR_INVALID_ARGUMENT;
   if (node->row_count == 0u || !node->labels || !node->cells) return ER_UI_ERR_INVALID_ARGUMENT;
-  er_ui_status_t status = er_ui_component_card_emit(scene, bounds, theme);
-  if (status != ER_UI_OK) return status;
-
   float pad = 8.0f;
-  er_ui_bounds_t inner = er_ui_bounds_inset(bounds, pad, pad);
-  if (!er_ui_bounds_valid(inner)) return ER_UI_ERR_INVALID_ARGUMENT;
+  er_ui_bounds_t inner;
+  er_ui_status_t status = er_ui_node_card_inner(scene, bounds, theme, pad, &inner);
+  if (status != ER_UI_OK) return status;
   float header_h = 40.0f;
   float body_h = 28.0f;
   float divider_h = 1.0f;
@@ -2144,11 +2155,10 @@ static er_ui_status_t er_ui_node_render_sheet(
   if (!node || !scene || !font || !node->label || !node->detail || !node->aux || !node->extra || !node->value || !er_ui_bounds_valid(bounds)) {
     return ER_UI_ERR_INVALID_ARGUMENT;
   }
-  er_ui_status_t status = er_ui_component_card_emit(scene, bounds, theme);
-  if (status != ER_UI_OK) return status;
   float pad = 16.0f;
-  er_ui_bounds_t inner = er_ui_bounds_inset(bounds, pad, pad);
-  if (!er_ui_bounds_valid(inner)) return ER_UI_ERR_INVALID_ARGUMENT;
+  er_ui_bounds_t inner;
+  er_ui_status_t status = er_ui_node_card_inner(scene, bounds, theme, pad, &inner);
+  if (status != ER_UI_OK) return status;
   status = er_ui_node_render_text(scene, font, node->label, er_ui_bounds(inner.x, inner.y, inner.w, 24.0f), theme.colors.text);
   if (status != ER_UI_OK) return status;
   status = er_ui_node_render_text(scene, font, node->detail, er_ui_bounds(inner.x, inner.y + 26.0f, inner.w, 22.0f), theme.colors.muted);
@@ -2499,11 +2509,10 @@ static er_ui_status_t er_ui_node_render_drawer(
   er_ui_bounds_t bounds,
   er_ui_resolved_theme_t theme) {
   if (!node || !scene || !font || !node->label || !node->detail || !node->aux || !er_ui_bounds_valid(bounds)) return ER_UI_ERR_INVALID_ARGUMENT;
-  er_ui_status_t status = er_ui_component_card_emit(scene, bounds, theme);
-  if (status != ER_UI_OK) return status;
   float pad = 16.0f;
-  er_ui_bounds_t inner = er_ui_bounds_inset(bounds, pad, pad);
-  if (!er_ui_bounds_valid(inner)) return ER_UI_ERR_INVALID_ARGUMENT;
+  er_ui_bounds_t inner;
+  er_ui_status_t status = er_ui_node_card_inner(scene, bounds, theme, pad, &inner);
+  if (status != ER_UI_OK) return status;
   status = er_ui_node_render_text(scene, font, node->label, er_ui_bounds(inner.x, inner.y, inner.w, 24.0f), theme.colors.text);
   if (status != ER_UI_OK) return status;
   status = er_ui_node_render_text(scene, font, node->detail, er_ui_bounds(inner.x, inner.y + 26.0f, inner.w, 22.0f), theme.colors.muted);
@@ -2551,11 +2560,10 @@ static er_ui_status_t er_ui_node_render_context_menu(
   if (!node || !scene || !font || !node->label || !node->detail || !node->labels || node->label_count == 0u || !er_ui_bounds_valid(bounds)) {
     return ER_UI_ERR_INVALID_ARGUMENT;
   }
-  er_ui_status_t status = er_ui_component_card_emit(scene, bounds, theme);
-  if (status != ER_UI_OK) return status;
   float pad = 12.0f;
-  er_ui_bounds_t inner = er_ui_bounds_inset(bounds, pad, pad);
-  if (!er_ui_bounds_valid(inner)) return ER_UI_ERR_INVALID_ARGUMENT;
+  er_ui_bounds_t inner;
+  er_ui_status_t status = er_ui_node_card_inner(scene, bounds, theme, pad, &inner);
+  if (status != ER_UI_OK) return status;
   status = er_ui_node_render_text(scene, font, node->label, er_ui_bounds(inner.x, inner.y, inner.w, 24.0f), theme.colors.text);
   if (status != ER_UI_OK) return status;
   status = er_ui_node_render_text(scene, font, node->detail, er_ui_bounds(inner.x, inner.y + 24.0f, inner.w, 22.0f), theme.colors.muted);
@@ -2647,11 +2655,10 @@ static er_ui_status_t er_ui_node_render_calendar(
   er_ui_bounds_t bounds,
   er_ui_resolved_theme_t theme) {
   if (!node || !scene || !font || !node->label || !node->labels || node->label_count == 0u || !er_ui_bounds_valid(bounds)) return ER_UI_ERR_INVALID_ARGUMENT;
-  er_ui_status_t status = er_ui_component_card_emit(scene, bounds, theme);
-  if (status != ER_UI_OK) return status;
   float pad = 12.0f;
-  er_ui_bounds_t inner = er_ui_bounds_inset(bounds, pad, pad);
-  if (!er_ui_bounds_valid(inner)) return ER_UI_ERR_INVALID_ARGUMENT;
+  er_ui_bounds_t inner;
+  er_ui_status_t status = er_ui_node_card_inner(scene, bounds, theme, pad, &inner);
+  if (status != ER_UI_OK) return status;
 
   er_ui_bounds_t prev = er_ui_bounds(inner.x, inner.y, 36.0f, 36.0f);
   status = er_ui_component_button_emit(scene, font, prev, theme, "", node->id, ER_UI_COMPONENT_BUTTON_GHOST, ER_UI_COMPONENT_BUTTON_SIZE_ICON, true);
