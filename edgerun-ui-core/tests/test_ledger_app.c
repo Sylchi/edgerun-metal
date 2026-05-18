@@ -5,6 +5,7 @@ static const er_ui_color4_t ER_TEST_LEDGER_BG = {0.01f, 0.012f, 0.015f, 1.0f};
 static const size_t ER_TEST_LEDGER_APP_SURFACE_COUNT = 3u;
 static const size_t ER_TEST_LEDGER_APP_HITS = 6u;
 static const size_t ER_TEST_LEDGER_ACCESS_HITS = 4u;
+static const size_t ER_TEST_LEDGER_PAYMENTS_HITS = 4u;
 static const uint32_t ER_TEST_LEDGER_ACTION_BASE = 0xED024000u;
 static const uint32_t ER_TEST_LEDGER_INVEST_BUTTON_ID = ER_TEST_LEDGER_ACTION_BASE + 2u;
 static const uint32_t ER_TEST_LEDGER_SAVE_THRESHOLD_BUTTON_ID = ER_TEST_LEDGER_ACTION_BASE + 8u;
@@ -124,6 +125,15 @@ static void test_ledger_app_state_and_surface_switching(void) {
   expect_size(stats.hits, ER_TEST_LEDGER_ACCESS_HITS, "ledger app: stacked access scene emits expected hits");
   expect_true(test_ledger_hits_stay_inside(&scene, ER_TEST_LEDGER_STACKED_BOUNDS), "ledger app: stacked access hits stay inside surface bounds");
   expect_status(er_ui_workspace_focus_surface(&apps.shell, ER_UI_LEDGER_APP_LEDGER_ID), ER_UI_OK, "ledger app: dashboard refocuses");
+
+  expect_status(er_ui_workspace_focus_surface(&apps.shell, ER_UI_LEDGER_APP_PAYMENTS_ID), ER_UI_OK, "ledger app: payments surface focuses");
+  er_ui_scene_clear_commands(&scene);
+  expect_status(er_ui_ledger_app_emit_scene(&apps, &scene, font, ER_TEST_LEDGER_STACKED_BOUNDS, theme), ER_UI_OK,
+                "ledger app: stacked payments scene emits");
+  stats = er_ui_scene_stats(&scene);
+  expect_size(stats.hits, ER_TEST_LEDGER_PAYMENTS_HITS, "ledger app: stacked payments scene emits expected hits");
+  expect_true(test_ledger_hits_stay_inside(&scene, ER_TEST_LEDGER_STACKED_BOUNDS), "ledger app: stacked payments hits stay inside surface bounds");
+  expect_status(er_ui_workspace_focus_surface(&apps.shell, ER_UI_LEDGER_APP_LEDGER_ID), ER_UI_OK, "ledger app: dashboard refocuses again");
 
   er_ui_scene_clear_commands(&scene);
   expect_status(er_ui_ledger_app_emit_scene(&apps, &scene, font, er_ui_bounds(0.0f, 0.0f, 1600.0f, 900.0f), theme), ER_UI_OK,
