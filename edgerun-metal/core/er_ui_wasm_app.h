@@ -2,6 +2,7 @@
 #define ER_UI_WASM_APP_H
 
 #include "er_app.h"
+#include "er_epoch_clock.h"
 #include "er_ui_runtime.h"
 #include "wasm_vm.h"
 
@@ -39,6 +40,9 @@ typedef struct {
   er_ui_scene_t* scene;
   ErWasmModule module;
   UINT32 main_index;
+  ErEpochClock settlement_clock;
+  ErEpochStamp last_input_epoch;
+  ErEpochStamp last_execute_epoch;
   UINT32 input_len;
   UINT32 input_sequence;
   er_ui_scene_stats_t emitted_stats;

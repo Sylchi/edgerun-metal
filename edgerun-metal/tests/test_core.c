@@ -8,6 +8,7 @@
 #include "er_bus.h"
 #include "er_crypto_blake3.h"
 #include "er_device_identity.h"
+#include "er_epoch_clock.h"
 #include "er_identity.h"
 #include "er_hw_relay.h"
 #include "er_native_eth.h"
@@ -2590,6 +2591,62 @@ static void test_wasm_ui_emit_import(void) {
               er_wasm_execute_i64(&module, main_index, &result), -1);
 }
 
+static void test_epoch_clock_rollover(void) {
+  ErEpochClockLimits limits;
+  ErEpochClock clock;
+  ErEpochBoundary boundary;
+  ErEpochStamp earlier;
+  ErEpochStamp later;
+
+  limits.ticks_per_slot = 2u;
+  limits.slots_per_epoch = 3u;
+  limits.epochs_per_era = 2u;
+
+  check_int64("epoch rejects null limits", er_epoch_clock_init(0, &clock), 0);
+  limits.ticks_per_slot = 0u;
+  check_int64("epoch rejects zero tick limit", er_epoch_clock_init(&limits, &clock), 0);
+  limits.ticks_per_slot = 2u;
+  check_int64("epoch init", er_epoch_clock_init(&limits, &clock), 1);
+  check_uint64("epoch initial tick", clock.now.tick, 0u);
+
+  check_int64("epoch advance 1", er_epoch_clock_advance(&clock, &boundary), 1);
+  check_uint64("epoch tick 1", clock.now.tick, 1u);
+  check_uint64("epoch slot boundary clear", boundary.slot_boundary, 0u);
+
+  check_int64("epoch advance slot boundary", er_epoch_clock_advance(&clock, &boundary), 1);
+  check_uint64("epoch tick reset", clock.now.tick, 0u);
+  check_uint64("epoch slot 1", clock.now.slot, 1u);
+  check_uint64("epoch slot boundary set", boundary.slot_boundary, 1u);
+  check_uint64("epoch boundary no epoch", boundary.epoch_boundary, 0u);
+
+  check_int64("epoch advance 3", er_epoch_clock_advance(&clock, &boundary), 1);
+  check_int64("epoch advance 4", er_epoch_clock_advance(&clock, &boundary), 1);
+  check_int64("epoch advance epoch boundary", er_epoch_clock_advance(&clock, &boundary), 1);
+  check_int64("epoch advance epoch boundary complete", er_epoch_clock_advance(&clock, &boundary), 1);
+  check_uint64("epoch slot reset", clock.now.slot, 0u);
+  check_uint64("epoch epoch 1", clock.now.epoch, 1u);
+  check_uint64("epoch boundary epoch set", boundary.epoch_boundary, 1u);
+  check_uint64("epoch boundary no era", boundary.era_boundary, 0u);
+
+  check_int64("epoch advance 7", er_epoch_clock_advance(&clock, &boundary), 1);
+  check_int64("epoch advance 8", er_epoch_clock_advance(&clock, &boundary), 1);
+  check_int64("epoch advance 9", er_epoch_clock_advance(&clock, &boundary), 1);
+  check_int64("epoch advance 10", er_epoch_clock_advance(&clock, &boundary), 1);
+  check_int64("epoch advance era boundary", er_epoch_clock_advance(&clock, &boundary), 1);
+  check_int64("epoch advance era boundary complete", er_epoch_clock_advance(&clock, &boundary), 1);
+  check_uint64("epoch era 1", clock.now.era, 1u);
+  check_uint64("epoch epoch reset", clock.now.epoch, 0u);
+  check_uint64("epoch era boundary set", boundary.era_boundary, 1u);
+
+  earlier = clock.now;
+  later = clock.now;
+  later.tick = 1u;
+  check_int64("epoch compare less", er_epoch_stamp_compare(earlier, later), -1);
+  check_int64("epoch compare equal", er_epoch_stamp_compare(earlier, earlier), 0);
+  check_int64("epoch compare greater", er_epoch_stamp_compare(later, earlier), 1);
+  check_int64("epoch reject invalid advance", er_epoch_clock_advance(0, &boundary), 0);
+}
+
 static void test_ui_wasm_app_runner(void) {
   static UINT8 memory[65536];
   static const UINT8 input_packet[] = {'k', 'e', 'y', '1'};
@@ -2625,6 +2682,7 @@ static void test_ui_wasm_app_runner(void) {
               0);
   check_uint64("ui wasm app prepared input len", runtime.input_len, 0u);
   check_uint64("ui wasm app prepared input sequence", runtime.input_sequence, 0u);
+  check_uint64("ui wasm app prepared clock tick", runtime.settlement_clock.now.tick, 0u);
   check_int64("ui wasm app deliver input",
               er_ui_wasm_app_deliver_input(&runtime, input_packet,
                                            (UINT32)sizeof(input_packet)),
@@ -2634,11 +2692,13 @@ static void test_ui_wasm_app_runner(void) {
   check_uint64("ui wasm app inbox zeroed", memory[4], 0u);
   check_uint64("ui wasm app input len", runtime.input_len, sizeof(input_packet));
   check_uint64("ui wasm app input sequence", runtime.input_sequence, 1u);
+  check_uint64("ui wasm app input epoch tick", runtime.last_input_epoch.tick, 1u);
   check_int64("ui wasm app reject oversized input",
               er_ui_wasm_app_deliver_input(&runtime, input_packet,
                                            runtime.relay_inbox_len + 1u),
               -1);
   check_uint64("ui wasm app rejected input sequence", runtime.input_sequence, 1u);
+  check_uint64("ui wasm app rejected input epoch tick", runtime.last_input_epoch.tick, 1u);
   key.kind = ER_UI_KEY_OTHER;
   key.codepoint = (UINT32)'A';
   modifiers = er_ui_key_modifiers(true, true, false, false);
@@ -2658,6 +2718,7 @@ static void test_ui_wasm_app_runner(void) {
   check_uint64("ui wasm app key input sequence field",
                memory[ER_UI_WASM_INPUT_SEQUENCE_OFFSET], 2u);
   check_uint64("ui wasm app key input sequence", runtime.input_sequence, 2u);
+  check_uint64("ui wasm app key input epoch tick", runtime.last_input_epoch.tick, 2u);
   invalid_key.kind = (er_ui_key_kind_t)(ER_UI_KEY_OTHER + 1u);
   invalid_key.codepoint = 0u;
   check_int64("ui wasm app reject invalid key input",
@@ -2669,6 +2730,7 @@ static void test_ui_wasm_app_runner(void) {
   check_uint64("ui wasm app wrapped key input sequence field",
                memory[ER_UI_WASM_INPUT_SEQUENCE_OFFSET], 1u);
   check_uint64("ui wasm app wrapped key input sequence", runtime.input_sequence, 1u);
+  check_uint64("ui wasm app wrapped input epoch tick", runtime.last_input_epoch.tick, 3u);
   check_int64("ui wasm app execute", er_ui_wasm_app_execute(&runtime, &result),
               0);
   check_uint64("ui wasm app result", (UINT64)result,
@@ -2677,6 +2739,7 @@ static void test_ui_wasm_app_runner(void) {
                  ER_WASM_UI_HIT_RECORD_LEN +
                  ER_WASM_UI_QUAD_RECORD_LEN);
   check_uint64("ui wasm app emitted", runtime.emitted, 1u);
+  check_uint64("ui wasm app execute epoch tick", runtime.last_execute_epoch.tick, 4u);
   check_uint64("ui wasm app rects", scene.rect_count, 1u);
   check_uint64("ui wasm app hits", scene.hit_count, 1u);
   check_uint64("ui wasm app text", scene.text_quad_count, 1u);
@@ -2686,6 +2749,7 @@ static void test_ui_wasm_app_runner(void) {
               0);
   check_uint64("ui wasm app persistent memory", memory[4096], 0x5au);
   check_uint64("ui wasm app emitted again", runtime.emitted, 1u);
+  check_uint64("ui wasm app execute again epoch tick", runtime.last_execute_epoch.tick, 5u);
   check_uint64("ui wasm app rects after rerun", scene.rect_count, 1u);
   check_uint64("ui wasm app hits after rerun", scene.hit_count, 1u);
   check_uint64("ui wasm app text after rerun", scene.text_quad_count, 1u);
@@ -4343,6 +4407,7 @@ int main(void) {
   test_wasm_relay_imports();
   test_wasm_ui_command_stats_records();
   test_wasm_ui_emit_import();
+  test_epoch_clock_rollover();
   test_ui_wasm_app_runner();
   test_vfs_object_packets();
   test_app_identity_routes();

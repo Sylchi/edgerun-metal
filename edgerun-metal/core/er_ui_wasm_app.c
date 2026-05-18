@@ -73,8 +73,12 @@ static int er_ui_wasm_app_commit_input(ErUiWasmAppRuntime* runtime,
                                    runtime->relay_inbox_len, &inbox) != 0) {
     return -1;
   }
+  if (er_epoch_clock_advance(&runtime->settlement_clock, 0) == 0u) {
+    return -1;
+  }
   er_mem_zero(inbox, (UINTN)runtime->relay_inbox_len);
   er_mem_copy(inbox, bytes, (UINTN)len);
+  runtime->last_input_epoch = runtime->settlement_clock.now;
   runtime->input_len = len;
   runtime->input_sequence = sequence;
   return 0;
@@ -99,6 +103,7 @@ int er_ui_wasm_app_prepare(const UINT8* module_data, UINT32 module_size,
                            ErUiWasmAppRuntime* runtime) {
   ErWasmHostCalls host;
   ErWasmLinearMemory linear_memory;
+  ErEpochClockLimits clock_limits;
 
   if (module_data == 0 || module_size == 0u || host_template == 0 ||
       runtime == 0 || runtime->memory == 0 || runtime->memory_size == 0u ||
@@ -108,6 +113,12 @@ int er_ui_wasm_app_prepare(const UINT8* module_data, UINT32 module_size,
   }
   er_mem_zero(runtime->memory, (UINTN)runtime->memory_size);
   er_mem_zero((UINT8*)&runtime->emitted_stats, (UINTN)sizeof(runtime->emitted_stats));
+  er_mem_zero((UINT8*)&runtime->last_input_epoch, (UINTN)sizeof(runtime->last_input_epoch));
+  er_mem_zero((UINT8*)&runtime->last_execute_epoch, (UINTN)sizeof(runtime->last_execute_epoch));
+  clock_limits = er_epoch_clock_default_limits();
+  if (er_epoch_clock_init(&clock_limits, &runtime->settlement_clock) == 0u) {
+    return -1;
+  }
   runtime->input_len = 0u;
   runtime->input_sequence = 0u;
   runtime->emitted = 0u;
@@ -188,6 +199,10 @@ int er_ui_wasm_app_execute(ErUiWasmAppRuntime* runtime, INT64* out_result) {
     return -1;
   }
   g_active_runtime = 0;
+  if (er_epoch_clock_advance(&runtime->settlement_clock, 0) == 0u) {
+    return -1;
+  }
+  runtime->last_execute_epoch = runtime->settlement_clock.now;
   *out_result = result;
   return 0;
 }
