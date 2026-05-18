@@ -8,6 +8,7 @@ QEMU_HEIGHT="${QEMU_HEIGHT:-720}"
 QEMU_REFRESH="${QEMU_REFRESH:-60}"
 QEMU_NATIVE="${QEMU_NATIVE:-0}"
 QEMU_TPM="${QEMU_TPM:-0}"
+QEMU_VIRTIO_GPU="${QEMU_VIRTIO_GPU:-0}"
 QEMU_TPM_PERSIST_STATE="${QEMU_TPM_PERSIST_STATE:-0}"
 QEMU_CAPTURE="${QEMU_CAPTURE:-${BUILD_DIR}/native-erwire.pcap}"
 QEMU_TPM_STATE_DIR="${QEMU_TPM_STATE_DIR:-${BUILD_DIR}/swtpm-state}"
@@ -109,13 +110,25 @@ if [[ "${QEMU_TPM}" == "1" ]]; then
   )
 fi
 
+QEMU_DISPLAY_ARGS=()
+if [[ "${QEMU_VIRTIO_GPU}" == "1" ]]; then
+  QEMU_DISPLAY_ARGS=(
+    -vga none
+    -device "virtio-vga,disable-legacy=on,xres=${QEMU_WIDTH},yres=${QEMU_HEIGHT}"
+  )
+else
+  QEMU_DISPLAY_ARGS=(
+    -vga none
+    -device "VGA,xres=${QEMU_WIDTH},yres=${QEMU_HEIGHT},refresh_rate=${QEMU_REFRESH}"
+  )
+fi
+
 if [[ "${QEMU_NATIVE}" == "1" ]]; then
   mkdir -p "$(dirname "${QEMU_CAPTURE}")"
   rm -f "${QEMU_CAPTURE}"
   qemu-system-x86_64 \
     -m 1024 \
-    -vga none \
-    -device "VGA,xres=${QEMU_WIDTH},yres=${QEMU_HEIGHT},refresh_rate=${QEMU_REFRESH}" \
+    "${QEMU_DISPLAY_ARGS[@]}" \
     -drive if=pflash,format=raw,readonly=on,file="${OVMF_CODE}" \
     -drive if=pflash,format=raw,file="${OVMF_VARS_WRITABLE}" \
     -drive format=raw,file=fat:rw:"${ESP_DIR}",media=disk \
@@ -129,8 +142,7 @@ fi
 
 qemu-system-x86_64 \
   -m 1024 \
-  -vga none \
-  -device "VGA,xres=${QEMU_WIDTH},yres=${QEMU_HEIGHT},refresh_rate=${QEMU_REFRESH}" \
+  "${QEMU_DISPLAY_ARGS[@]}" \
   -drive if=pflash,format=raw,readonly=on,file="${OVMF_CODE}" \
   -drive if=pflash,format=raw,file="${OVMF_VARS_WRITABLE}" \
   -drive format=raw,file=fat:rw:"${ESP_DIR}",media=disk \

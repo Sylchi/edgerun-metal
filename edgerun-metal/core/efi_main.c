@@ -12,6 +12,7 @@
 #include "er_ui_demo_apps.h"
 #include "er_ui_metal.h"
 #include "er_ui_theme.h"
+#include "er_virtio_gpu.h"
 #include "erwire.h"
 #include "er_native_boot.h"
 #include "font_geist.h"
@@ -820,6 +821,32 @@ static void er_run_native_profile(void) {
   er_println("native transport: erwire EdgeRun Ethernet frame submitted");
 }
 
+static void er_run_gpu_profile(void) {
+  ErVirtioGpu gpu;
+  UINT64 transport_base;
+
+  er_println("boot profile: gpu");
+  if (er_virtio_gpu_init_first_pci(&gpu) == 0u) {
+    er_println("gpu transport: virtio gpu unavailable");
+    return;
+  }
+  transport_base = gpu.transport.address.base;
+  if (transport_base == 0u) {
+    transport_base = gpu.transport.common.address.base;
+  }
+  er_print("gpu transport: virtio gpu ");
+  er_print_u64_hex(transport_base);
+  er_print(" scanouts=");
+  er_print_u64_dec((UINT64)gpu.config.num_scanouts);
+  er_print(" capsets=");
+  er_print_u64_dec((UINT64)gpu.config.num_capsets);
+  er_print(" controlq=");
+  er_print_u64_dec((UINT64)gpu.control_queue_size);
+  er_print(" cursorq=");
+  er_print_u64_dec((UINT64)gpu.cursor_queue_size);
+  er_println("");
+}
+
 static void er_run_tpm_profile(EFI_SYSTEM_TABLE* SystemTable) {
   ErAcpiRsdpInfo rsdp;
   ErAcpiTableList tables;
@@ -1298,6 +1325,11 @@ static void er_run_boot_profile(EFI_SYSTEM_TABLE* SystemTable) {
 
   if (ER_BOOT_PROFILE == ER_BOOT_PROFILE_TPM) {
     er_run_tpm_profile(SystemTable);
+    return;
+  }
+
+  if (ER_BOOT_PROFILE == ER_BOOT_PROFILE_GPU) {
+    er_run_gpu_profile();
     return;
   }
 
