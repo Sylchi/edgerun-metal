@@ -243,6 +243,22 @@ typedef struct {
   uint8_t failed;
 } EriAnalysisJobs;
 
+typedef struct {
+  const EriVfs* vfs;
+  EriDupBlockRefs* refs;
+  pthread_mutex_t mutex;
+  size_t next_index;
+  uint8_t failed;
+} EriDuplicateJobs;
+
+typedef struct {
+  EriBinaries* bins;
+  const char* strip_command;
+  pthread_mutex_t mutex;
+  size_t next_index;
+  uint8_t failed;
+} EriBinaryJobs;
+
 static char* eri_strdup_len(const char* s, size_t len) {
   char* out = (char*)malloc(len + 1u);
 
@@ -1850,21 +1866,23 @@ static uint8_t eri_file_size(const char* path, uint64_t* out_size) {
   return 1;
 }
 
-static uint8_t eri_measure_stripped_size(const EriVfsFile* file, uint64_t* out_size) {
+static const char* eri_find_strip_command(void) {
+  if (eri_command_exists("llvm-strip") != 0u) {
+    return "llvm-strip";
+  }
+  if (eri_command_exists("strip") != 0u) {
+    return "strip";
+  }
+  return NULL;
+}
+
+static uint8_t eri_measure_stripped_size(const EriVfsFile* file, const char* strip_command, uint64_t* out_size) {
   char tmpl[] = "/tmp/repo-inspect-strip-XXXXXX";
   char command[ERI_MAX_PATH * 3u];
-  const char* strip_command = NULL;
   int fd;
   int rc;
 
-  if (file == NULL || out_size == NULL) {
-    return 0;
-  }
-  if (eri_command_exists("llvm-strip") != 0u) {
-    strip_command = "llvm-strip";
-  } else if (eri_command_exists("strip") != 0u) {
-    strip_command = "strip";
-  } else {
+  if (file == NULL || strip_command == NULL || out_size == NULL) {
     return 0;
   }
 
@@ -1887,18 +1905,75 @@ static uint8_t eri_measure_stripped_size(const EriVfsFile* file, uint64_t* out_s
   return 1;
 }
 
-//@optimizer-ignore-function release-size report must measure each discovered binary artifact
-static void eri_measure_binary_release_sizes(EriBinaries* bins) {
-  size_t i;
+//@optimizer-ignore-function binary worker must claim each artifact and run strip on an isolated temporary copy
+static void* eri_binary_worker(void* arg) {
+  EriBinaryJobs* jobs = (EriBinaryJobs*)arg;
 
-  for (i = 0; i < bins->len; ++i) {
+  for (;;) {
+    size_t index;
     uint64_t stripped_size;
 
-    if (eri_measure_stripped_size(bins->items[i].file, &stripped_size) != 0u) {
-      bins->items[i].stripped_size = stripped_size;
-      bins->items[i].stripped_available = 1u;
+    if (pthread_mutex_lock(&jobs->mutex) != 0) {
+      return NULL;
+    }
+    if (jobs->failed != 0u || jobs->next_index >= jobs->bins->len) {
+      if (pthread_mutex_unlock(&jobs->mutex) != 0) {
+        jobs->failed = 1u;
+      }
+      return NULL;
+    }
+    index = jobs->next_index;
+    ++jobs->next_index;
+    if (pthread_mutex_unlock(&jobs->mutex) != 0) {
+      jobs->failed = 1u;
+      return NULL;
+    }
+
+    if (eri_measure_stripped_size(jobs->bins->items[index].file, jobs->strip_command, &stripped_size) != 0u) {
+      jobs->bins->items[index].stripped_size = stripped_size;
+      jobs->bins->items[index].stripped_available = 1u;
     }
   }
+}
+
+//@optimizer-ignore-function release-size report must measure each discovered binary artifact
+static void eri_measure_binary_release_sizes(EriBinaries* bins, size_t thread_count) {
+  EriBinaryJobs jobs;
+  pthread_t threads[ERI_MAX_THREAD_COUNT];
+  size_t started = 0u;
+  size_t i;
+
+  if (bins->len == 0u) {
+    return;
+  }
+  memset(&jobs, 0, sizeof(jobs));
+  jobs.bins = bins;
+  jobs.strip_command = eri_find_strip_command();
+  if (jobs.strip_command == NULL) {
+    return;
+  }
+  if (thread_count > bins->len) {
+    thread_count = bins->len;
+  }
+  if (pthread_mutex_init(&jobs.mutex, NULL) != 0) {
+    return;
+  }
+  for (i = 0u; i < thread_count; ++i) {
+    if (pthread_create(&threads[i], NULL, eri_binary_worker, &jobs) != 0) {
+      if (pthread_mutex_lock(&jobs.mutex) == 0) {
+        jobs.failed = 1u;
+        (void)pthread_mutex_unlock(&jobs.mutex);
+      }
+      break;
+    }
+    ++started;
+  }
+  for (i = 0u; i < started; ++i) {
+    if (pthread_join(threads[i], NULL) != 0) {
+      jobs.failed = 1u;
+    }
+  }
+  (void)pthread_mutex_destroy(&jobs.mutex);
 }
 
 //@optimizer-ignore-function coverage signal scan must compare each source byte against the searched word
@@ -2379,6 +2454,7 @@ static uint8_t eri_collect_file_blocks(const EriVfsFile* file, EriDupBlockRefs* 
       if (eri_add_dup_block_ref(refs, block_hash, file->path, lines[i]) == 0u) {
         free(hashes);
         free(lines);
+        free(segments);
         return 0;
       }
     }
@@ -2387,6 +2463,27 @@ static uint8_t eri_collect_file_blocks(const EriVfsFile* file, EriDupBlockRefs* 
   free(lines);
   free(segments);
   return 1;
+}
+
+static uint8_t eri_append_dup_refs_move(EriDupBlockRefs* dst, EriDupBlockRefs* src) {
+  EriDupBlockRef* grown;
+
+  if (src->len == 0u) {
+    return 1u;
+  }
+  if (dst->len + src->len > dst->cap) {
+    grown = (EriDupBlockRef*)eri_grow(dst->items, sizeof(dst->items[0]), &dst->cap, dst->len + src->len);
+    if (grown == NULL) {
+      return 0u;
+    }
+    dst->items = grown;
+  }
+  memcpy(dst->items + dst->len, src->items, sizeof(src->items[0]) * src->len);
+  dst->len += src->len;
+  src->items = NULL;
+  src->len = 0u;
+  src->cap = 0u;
+  return 1u;
 }
 
 static int eri_cmp_pkg(const void* a, const void* b) {
@@ -2859,22 +2956,111 @@ static uint8_t eri_collect_worldview_packages(const EriFindings* findings, EriWo
   return 1;
 }
 
+//@optimizer-ignore-function duplicate worker must claim and scan each VFS file for normalized block refs
+static void* eri_duplicate_worker(void* arg) {
+  EriDuplicateJobs* jobs = (EriDuplicateJobs*)arg;
+
+  for (;;) {
+    size_t index;
+    const EriVfsFile* file;
+
+    if (pthread_mutex_lock(&jobs->mutex) != 0) {
+      return NULL;
+    }
+    if (jobs->failed != 0u || jobs->next_index >= jobs->vfs->len) {
+      if (pthread_mutex_unlock(&jobs->mutex) != 0) {
+        jobs->failed = 1u;
+      }
+      return NULL;
+    }
+    index = jobs->next_index;
+    ++jobs->next_index;
+    if (pthread_mutex_unlock(&jobs->mutex) != 0) {
+      jobs->failed = 1u;
+      return NULL;
+    }
+
+    file = &jobs->vfs->files[index];
+    if (eri_is_build_path(file->path) == 0u && eri_is_c_impl(file->path) &&
+        eri_is_generated_header(file->path, file->bytes, file->len) == 0u &&
+        eri_collect_file_blocks(file, &jobs->refs[index]) == 0u) {
+      if (pthread_mutex_lock(&jobs->mutex) != 0) {
+        return NULL;
+      }
+      jobs->failed = 1u;
+      (void)pthread_mutex_unlock(&jobs->mutex);
+      return NULL;
+    }
+  }
+}
+
+//@optimizer-ignore-function duplicate block refs are gathered in parallel then merged by VFS index for stable output
+static uint8_t eri_collect_duplicate_refs_parallel(const EriVfs* vfs, EriDupBlockRefs* refs,
+                                                   size_t thread_count) {
+  EriDupBlockRefs* file_refs;
+  EriDuplicateJobs jobs;
+  pthread_t threads[ERI_MAX_THREAD_COUNT];
+  size_t started = 0u;
+  size_t i;
+  uint8_t ok = 1u;
+
+  file_refs = (EriDupBlockRefs*)calloc(vfs->len == 0u ? 1u : vfs->len, sizeof(file_refs[0]));
+  if (file_refs == NULL) {
+    return 0u;
+  }
+  memset(&jobs, 0, sizeof(jobs));
+  jobs.vfs = vfs;
+  jobs.refs = file_refs;
+  if (pthread_mutex_init(&jobs.mutex, NULL) != 0) {
+    free(file_refs);
+    return 0u;
+  }
+  for (i = 0u; i < thread_count; ++i) {
+    if (pthread_create(&threads[i], NULL, eri_duplicate_worker, &jobs) != 0) {
+      if (pthread_mutex_lock(&jobs.mutex) == 0) {
+        jobs.failed = 1u;
+        (void)pthread_mutex_unlock(&jobs.mutex);
+      }
+      ok = 0u;
+      break;
+    }
+    ++started;
+  }
+  for (i = 0u; i < started; ++i) {
+    if (pthread_join(threads[i], NULL) != 0) {
+      ok = 0u;
+    }
+  }
+  if (pthread_mutex_destroy(&jobs.mutex) != 0) {
+    ok = 0u;
+  }
+  if (jobs.failed != 0u) {
+    ok = 0u;
+  }
+  if (ok != 0u) {
+    for (i = 0u; i < vfs->len; ++i) {
+      if (eri_append_dup_refs_move(refs, &file_refs[i]) == 0u) {
+        ok = 0u;
+        break;
+      }
+    }
+  }
+  for (i = 0u; i < vfs->len; ++i) {
+    eri_dup_refs_free(&file_refs[i]);
+  }
+  free(file_refs);
+  return ok;
+}
+
 //@optimizer-ignore-function duplicate collection must scan each source block reference and adjacent equal hash group
-static uint8_t eri_collect_duplicates(const EriVfs* vfs, EriDuplicates* duplicates) {
+static uint8_t eri_collect_duplicates(const EriVfs* vfs, EriDuplicates* duplicates, size_t thread_count) {
   EriDupBlockRefs refs;
   size_t i;
 
   memset(&refs, 0, sizeof(refs));
-  for (i = 0; i < vfs->len; ++i) {
-    const EriVfsFile* file = &vfs->files[i];
-
-    if (eri_is_build_path(file->path) == 0u && eri_is_c_impl(file->path) &&
-        eri_is_generated_header(file->path, file->bytes, file->len) == 0u) {
-      if (eri_collect_file_blocks(file, &refs) == 0u) {
-        eri_dup_refs_free(&refs);
-        return 0;
-      }
-    }
+  if (eri_collect_duplicate_refs_parallel(vfs, &refs, thread_count) == 0u) {
+    eri_dup_refs_free(&refs);
+    return 0;
   }
   qsort(refs.items, refs.len, sizeof(refs.items[0]), eri_cmp_dup_ref);
   for (i = 1u; i < refs.len; ++i) {
@@ -3211,8 +3397,8 @@ static uint8_t eri_analyze(const EriVfs* vfs) {
 
   eri_count_function_refs(vfs, &funcs);
   eri_mark_test_signals(vfs, &sources, &funcs);
-  eri_measure_binary_release_sizes(&bins);
-  if (eri_collect_duplicates(vfs, &duplicates) == 0u) {
+  eri_measure_binary_release_sizes(&bins, thread_count);
+  if (eri_collect_duplicates(vfs, &duplicates, thread_count) == 0u) {
     eri_analyze_cleanup(&packages, &funcs, &findings, &bins, &sources, &coverage_packages,
                         &smell_packages, &cpu_packages, &worldview_packages, &duplicates);
     return 0;
