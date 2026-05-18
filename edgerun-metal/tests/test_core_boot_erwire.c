@@ -751,6 +751,7 @@ static void test_os_native_relay_dispatch(void) {
     OS_RELAY_SCENE_BG_R = 0u,
     OS_RELAY_SCENE_BG_G = 0u,
     OS_RELAY_SCENE_BG_B = 0u,
+    OS_RELAY_ACTIVE_APP_INDEX = 0u,
     OS_RELAY_STORAGE_PAYLOAD_BYTES = sizeof(ErVfsObjectPacketHeader) + 6u
   };
   ErAppUiPresentation presentation;
@@ -760,11 +761,15 @@ static void test_os_native_relay_dispatch(void) {
   ErNativeRelayIngress ingress;
   ErAdmittedRoute route;
   ErAdmittedRoute storage_route;
+  ErAdmittedRoute wrong_storage_route;
   ErCapabilityEnvelopeHeader capability;
   ErVfsObjectPacket object_packet;
   ErCryptoProvider crypto;
   ErHash token_id;
   ErHash scene_hash;
+  ErAppLoadedPackage loaded_package;
+  UINT8 module_memory[ER_UI_BOOT_APP_MODULE_BYTES];
+  UINT8 manifest_memory[ER_UI_BOOT_APP_MANIFEST_BYTES];
   UINT8 object_bytes[6] = {'s', 't', 'o', 'r', 'e', '1'};
   UINT8 storage_payload[OS_RELAY_STORAGE_PAYLOAD_BYTES];
   UINT8 scene_payload[ER_WASM_UI_COMMAND_LIST_HEADER_LEN +
@@ -901,9 +906,22 @@ static void test_os_native_relay_dispatch(void) {
               1);
   check_uint64("os relay dispatch render redraw", redraw, 1u);
 
+  check_int64("os relay dispatch seed app storage",
+              er_ui_boot_load_wasm_counter_package(module_memory,
+                                                   (UINT32)sizeof(module_memory),
+                                                   manifest_memory,
+                                                   (UINT32)sizeof(manifest_memory),
+                                                   &app.storage,
+                                                   OS_RELAY_ACTIVE_APP_INDEX,
+                                                   &loaded_package),
+              1);
+  check_uint64("os relay dispatch seeded app store complete",
+               app.storage.app_store.complete, 1u);
+
   check_int64("os relay dispatch storage route prepare",
               er_ui_boot_prepare_storage_retrieve_route(ER_UI_WASM_STORAGE_APP_ROUTE_ID_SEED,
-                                                        0u, &storage_route),
+                                                        OS_RELAY_ACTIVE_APP_INDEX,
+                                                        &storage_route),
               1);
   check_int64("os relay dispatch storage packet prepare",
               er_vfs_prepare_object_packet(&crypto, object_bytes,
@@ -952,6 +970,14 @@ static void test_os_native_relay_dispatch(void) {
   check_int64("os relay dispatch storage capture nonzero",
               er_hash_nonzero(&render.native_relay_last_storage_capture.capture_hash),
               1);
+  check_uint64("os relay dispatch storage store complete",
+               app.storage.app_store.complete, 1u);
+  check_hash_equal("os relay dispatch storage store route",
+                   &app.storage.app_store.route_id,
+                   &storage_route.route_id);
+  check_hash_equal("os relay dispatch storage store object",
+                   &app.storage.app_store.object_id,
+                   &object_packet.header.object_id);
   check_uint64("os relay dispatch storage transit count",
                render.native_relay_stats.transit_hops, 2u);
   check_hash_equal("os relay dispatch storage transit packet",
@@ -959,12 +985,40 @@ static void test_os_native_relay_dispatch(void) {
                    &ingress.packet_hash);
   check_uint64("os relay dispatch storage redraw", redraw, 0u);
 
+  check_int64("os relay dispatch wrong storage route prepare",
+              er_ui_boot_prepare_storage_retrieve_route(ER_UI_WASM_STORAGE_APP_ROUTE_ID_SEED,
+                                                        1u, &wrong_storage_route),
+              1);
+  ingress.ingress.channel_id = wrong_storage_route.channel_id;
+  check_int64("os relay dispatch wrong storage relay prepare",
+              er_relay_packet_prepare(ingress.payload,
+                                      (UINT32)sizeof(ingress.payload),
+                                      &wrong_storage_route.source_node_id,
+                                      &wrong_storage_route.target_node_id,
+                                      &wrong_storage_route.admission_hash,
+                                      &token_id,
+                                      &wrong_storage_route.target_route_commitment,
+                                      OS_RELAY_PACKET_SEQUENCE,
+                                      OS_RELAY_COST_PER_BYTE,
+                                      (UINT32)sizeof(storage_payload),
+                                      &object_packet.header.packet_id,
+                                      storage_payload,
+                                      (UINT32)sizeof(storage_payload),
+                                      &packet_len),
+              1);
+  ingress.payload_len = packet_len;
+  check_int64("os relay dispatch wrong storage route",
+              er_ui_boot_dispatch_native_relay_ingress(&render, &ingress,
+                                                       &redraw), 1);
+  check_uint64("os relay dispatch wrong storage malformed",
+               render.native_relay_stats.malformed, 2u);
+
   ingress.payload[0] = 0xffu;
   check_int64("os relay dispatch malformed accepted",
               er_ui_boot_dispatch_native_relay_ingress(&render, &ingress,
                                                        &redraw), 1);
   check_uint64("os relay dispatch malformed accepted count",
-               render.native_relay_stats.malformed, 2u);
+               render.native_relay_stats.malformed, 3u);
 
   check_int64("os relay dispatch reject null render",
               er_ui_boot_dispatch_native_relay_ingress(0, &ingress, &redraw),

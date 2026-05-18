@@ -55,6 +55,7 @@
 #define ER_UI_BOOT_APP_MEMORY_BYTES (64u * 1024u)
 #define ER_UI_BOOT_APP_MODULE_BYTES 1024u
 #define ER_UI_BOOT_APP_MANIFEST_BYTES 256u
+#define ER_UI_BOOT_PACKAGE_OBJECT_PACKET_CAPACITY 1u
 #define ER_UI_WASM_RELAY_INBOX_BASE 0u
 #define ER_UI_WASM_RELAY_INBOX_BYTES 1024u
 #define ER_UI_WASM_RELAY_OUTBOX_BASE 1024u
@@ -117,8 +118,16 @@ enum {
 };
 
 typedef struct {
+  ErStorageEndpointObjectStore app_store;
+  ErStorageEndpointObjectStore manifest_store;
+  ErVfsObjectPacket app_packets[ER_UI_BOOT_PACKAGE_OBJECT_PACKET_CAPACITY];
+  ErVfsObjectPacket manifest_packets[ER_UI_BOOT_PACKAGE_OBJECT_PACKET_CAPACITY];
+} ErUiBootPackageStorage;
+
+typedef struct {
   ErAppUiPresentation presentation;
   ErUiWasmAppRuntime runtime;
+  ErUiBootPackageStorage storage;
   er_ui_scene_t scene;
   UINT8 ready;
 } ErUiBootAppContext;
@@ -195,14 +204,20 @@ void er_ui_boot_prepare_wasm_presentation(const er_ui_scene_budget_t* scene_budg
                                           UINT32 app_index,
                                           ErAppUiPresentation* out_presentation);
 UINT8 er_ui_boot_prepare_storage_retrieve_route(UINT8 route_seed, UINT32 app_index, ErAdmittedRoute* out_route);
+UINT8 er_ui_boot_prepare_route_envelope(const ErAdmittedRoute* route,
+                                        const ErHash* packet_hash,
+                                        UINT64 sequence,
+                                        ErChannelEnvelopeHeader* out_envelope);
 UINT8 er_ui_boot_execute_wasm_counter(ErUiWasmAppRuntime* runtime);
 UINT8 er_ui_boot_load_wasm_counter_package(UINT8* module_memory,
                                            UINT32 module_memory_size,
                                            UINT8* manifest_memory,
                                            UINT32 manifest_memory_size,
+                                           ErUiBootPackageStorage* storage,
                                            UINT32 app_index,
                                            ErAppLoadedPackage* out_loaded);
 UINT8 er_ui_boot_prepare_wasm_counter(ErUiWasmAppRuntime* runtime,
+                                      ErUiBootPackageStorage* storage,
                                       ErAppUiPresentation* presentation,
                                       er_ui_scene_t* wasm_scene,
                                       UINT8* memory,
