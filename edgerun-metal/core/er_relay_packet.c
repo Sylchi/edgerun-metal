@@ -179,6 +179,36 @@ UINT8 er_relay_packet_valid(const UINT8* packet, UINT32 packet_len) {
   return er_relay_packet_cost_valid(payload_len, cost_per_byte, max_total_cost);
 }
 
+UINT8 er_relay_packet_decode_header(const UINT8* packet, UINT32 packet_len,
+                                    ErRelayPacketHeader* out_header) {
+  if (out_header == 0 || er_relay_packet_valid(packet, packet_len) == 0u) {
+    return 0;
+  }
+  er_mem_zero((UINT8*)out_header, (UINTN)sizeof(*out_header));
+  out_header->abi_version = er_relay_packet_read_u16(packet + ER_RELAY_PACKET_ABI_OFFSET);
+  out_header->packet_kind = er_relay_packet_read_u16(packet + ER_RELAY_PACKET_KIND_OFFSET);
+  er_mem_copy(out_header->source_node_id.bytes,
+              packet + ER_RELAY_PACKET_SOURCE_OFFSET, ER_NODE_ID_LEN);
+  er_mem_copy(out_header->target_node_id.bytes,
+              packet + ER_RELAY_PACKET_TARGET_OFFSET, ER_NODE_ID_LEN);
+  er_mem_copy(out_header->admission_id.bytes,
+              packet + ER_RELAY_PACKET_ADMISSION_OFFSET, ER_HASH_LEN);
+  er_mem_copy(out_header->token_id.bytes,
+              packet + ER_RELAY_PACKET_TOKEN_OFFSET, ER_HASH_LEN);
+  er_mem_copy(out_header->route_hash.bytes,
+              packet + ER_RELAY_PACKET_ROUTE_OFFSET, ER_HASH_LEN);
+  out_header->sequence = er_relay_packet_read_u64(packet + ER_RELAY_PACKET_SEQUENCE_OFFSET);
+  out_header->cost_per_byte =
+      er_relay_packet_read_u64(packet + ER_RELAY_PACKET_COST_PER_BYTE_OFFSET);
+  out_header->max_total_cost =
+      er_relay_packet_read_u64(packet + ER_RELAY_PACKET_MAX_TOTAL_COST_OFFSET);
+  out_header->payload_len =
+      er_relay_packet_read_u32(packet + ER_RELAY_PACKET_PAYLOAD_LEN_OFFSET);
+  er_mem_copy(out_header->payload_hash.bytes,
+              packet + ER_RELAY_PACKET_PAYLOAD_HASH_OFFSET, ER_HASH_LEN);
+  return 1;
+}
+
 UINT8 er_relay_packet_authorized_for_app(const UINT8* packet, UINT32 packet_len,
                                          const ErAppUsage* usage,
                                          const ErAppBudget* budget) {

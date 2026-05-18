@@ -14,7 +14,7 @@ See `../docs/relay-architecture.md` for the cross-project model and `../docs/coh
 - Native VirtIO-net can submit EdgeRun Ethernet frames with EtherType `0x88b5`.
 - `erwire` packets can be parsed from native Ethernet frames.
 - Hardware relay endpoints exist for firmware UDP, native Ethernet, and VirtIO queues.
-- Native relay ingress polling can produce deterministic ingress records for none, malformed, and accepted packets.
+- Native relay ingress polling can produce deterministic ingress records for none, malformed, and accepted packets, preserving the accepted erwire payload bytes for route decoding.
 - Wasm modules can call bounded `edgerun.relay/send` and `edgerun.relay/recv` imports through declared inbox/outbox memory windows.
 - Relay sends are checked against app source identity, admission id, budget token, packet validity, and packet-byte budget before leaving the VM.
 - `edgerun-ui-core`, VirtIO GPU rendering, and `varfont` provide enough UI machinery to target polished app surfaces instead of diagnostic rectangles.
@@ -28,6 +28,7 @@ See `../docs/relay-architecture.md` for the cross-project model and `../docs/coh
 - `er_app` can adapt typed storage endpoint object responses into package storage objects only when the response route id, object id, object length, packet list, and caller-owned destination memory match the package source and manifest.
 - `er_work` can prepare and validate capability envelope headers, and the Wasm relay fixture can emit a render capability invocation through `edgerun.relay/send` under the existing outbox, admission, token, and packet-byte budget checks.
 - `er_render_endpoint` can capture admitted render capability work only after the admitted route, channel envelope, render capability header, source/target nodes, sequence, and scene hash line up; it can then verify the scene payload hash and decode the endpoint-owned UI scene.
+- Native relay ingress can decode an accepted relay packet against an admitted capability route and classify it as a render endpoint intent, unsupported endpoint work, malformed traffic, or no ingress.
 
 ## Architecture rule
 
@@ -91,35 +92,37 @@ Proof:
 
 ### M2: Native relay ingress
 
-Status: partially implemented; OS loop integration and QEMU acknowledgement are next.
+Status: implemented through payload retention and endpoint-intent decode; OS loop integration and QEMU acknowledgement are next.
 
 - `er_native_boot_poll_relay_ingress` polls `erwire_poll_native_eth`.
 - Invalid accepted Ethernet frames are reported as malformed ingress records.
-- Accepted packets preserve packet kind, payload length, ingress endpoint, sequence, and packet hash inputs without granting authority from ingress locality.
-- Next: call the ingress helper from the OS loop and decode admitted work traffic before acknowledgement or transit packets.
+- Accepted packets preserve packet kind, payload bytes, payload length, ingress endpoint, sequence, and packet hash inputs without granting authority from ingress locality.
+- Accepted relay packet payloads can now be decoded as admitted render capability endpoint intents.
+- Next: call the ingress helper from the OS loop and emit acknowledgement or transit packets from decoded admitted work.
 
 Proof:
 
 - QEMU pcap shows EtherType `0x88b5` and erwire `ERW1`.
 - Core tests cover malformed and accepted native erwire packets.
-- Core tests cover native ingress statuses for accepted, malformed, and empty polls.
+- Core tests cover native ingress statuses for accepted, malformed, and empty polls, including retained payload bytes.
+- Core tests cover accepted render capability endpoint-intent decode, unsupported route classification, malformed route rejection, malformed packet rejection, empty ingress, and null output rejection.
 - Remaining proof: native run emits a deterministic relay acknowledgement or transit packet.
 
 ### M3: Admission-defined route verification
 
-Status: route primitives implemented; native ingress decode, signed-record verification, and endpoint intent selection are next.
+Status: route primitives and first native render endpoint-intent selection implemented; signed admission-record verification, storage intent selection, and OS-loop dispatch are next.
 
-- Decode accepted erwire payloads as `edgerun-work` records.
+- Decode accepted erwire payloads as relay packets carrying `edgerun-work` records.
 - Verify `NetworkMessage` and `CapabilityEnvelope` payloads against a signed `WorkAdmission` path.
 - Verify the admission's jurisdiction before producing a local endpoint intent.
-- Convert verified admission-defined routes into a local endpoint intent.
+- Convert verified admission-defined routes into a local endpoint intent; render capability intent exists first.
 - Keep `er_hw_relay` limited to endpoint encoding and movement.
 - Reject packet-class matches without a valid admission.
 
 Proof:
 
 - Admitted storage work can produce a VirtIO block intent.
-- Admitted render capability work can produce a VirtIO GPU intent.
+- Admitted render capability work can produce a native render endpoint intent; VirtIO GPU command intent is next.
 - A valid admission for one jurisdiction cannot authorize another jurisdiction's endpoint.
 - Packet-class matches without a valid admission produce no intent.
 - Malformed or unsupported admitted endpoints are rejected deterministically.

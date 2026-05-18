@@ -41,6 +41,8 @@ UINT8 er_relay_packet_prepare(UINT8* packet, UINT32 packet_capacity,
                               UINT32 payload_len,
                               UINT32* out_packet_len);
 UINT8 er_relay_packet_valid(const UINT8* packet, UINT32 packet_len);
+UINT8 er_relay_packet_decode_header(const UINT8* packet, UINT32 packet_len,
+                                    ErRelayPacketHeader* out_header);
 UINT8 er_relay_packet_authorized_for_app(const UINT8* packet, UINT32 packet_len,
                                          const ErAppUsage* usage,
                                          const ErAppBudget* budget);

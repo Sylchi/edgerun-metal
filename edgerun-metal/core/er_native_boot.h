@@ -9,6 +9,7 @@
 #include "er_types.h"
 #include "er_crypto.h"
 #include "er_hw_relay.h"
+#include "er_relay_packet.h"
 #include "erwire.h"
 #include "er_virtio_net.h"
 #include "er_native_eth.h"
@@ -34,9 +35,23 @@ typedef struct {
   ErNativeRelayIngressStatus status;
   ErwirePacketHeader header;
   UINT32 payload_len;
+  UINT8 payload[ERWIRE_MAX_PAYLOAD];
   ErHash packet_hash;
   ErChannelEndpoint ingress;
 } ErNativeRelayIngress;
+
+typedef enum {
+  ER_NATIVE_ENDPOINT_INTENT_NONE = 0,
+  ER_NATIVE_ENDPOINT_INTENT_RENDER_CAPABILITY = 1,
+  ER_NATIVE_ENDPOINT_INTENT_UNSUPPORTED = 2,
+  ER_NATIVE_ENDPOINT_INTENT_MALFORMED = 3
+} ErNativeEndpointIntentKind;
+
+typedef struct {
+  ErNativeEndpointIntentKind kind;
+  ErRelayPacketHeader packet;
+  ErCapabilityEnvelopeHeader capability;
+} ErNativeEndpointIntent;
 
 UINT8 er_native_boot_configure_erwire_eth_sink(UINT64 mmio_base, UINT64 mmio_len,
                                                const UINT8* peer_mac,
@@ -46,5 +61,8 @@ UINT8 er_native_boot_configure_qemu_microvm_erwire_eth_sink(ErNativeBootState* o
 UINT8 er_native_boot_poll_relay_ingress(const ErNativeBootState* state,
                                         const ErCryptoProvider* crypto,
                                         ErNativeRelayIngress* out_ingress);
+UINT8 er_native_boot_decode_endpoint_intent(const ErNativeRelayIngress* ingress,
+                                            const ErAdmittedRoute* route,
+                                            ErNativeEndpointIntent* out_intent);
 
 #endif

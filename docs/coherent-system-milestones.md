@@ -37,7 +37,7 @@ The shared contract is what lets these parts interoperate. The admissions remain
 - `er_vfs` defines object packets, object labels, transform refs, and bounded object packet reassembly without host filesystem authority.
 - `erwire` carries typed packets and can send/parse native EdgeRun Ethernet frames.
 - `er_hw_relay` encodes firmware UDP, native Ethernet, and VirtIO endpoints.
-- `er_native_boot` can poll native erwire ingress into deterministic accepted, malformed, or empty records.
+- `er_native_boot` can poll native erwire ingress into deterministic accepted, malformed, or empty records, preserve accepted payload bytes, and classify admitted render capability relay packets as native endpoint intents.
 - `edgerun-ui-core` provides backend-neutral UI scene records.
 - `wasm_vm` runs bounded Wasm modules with explicit hostcalls, including bounded `edgerun.relay/send` and `edgerun.relay/recv` imports.
 - Relay sends are validated against serialized packet shape, app identity, admission id, budget token, and packet-byte budget before host relay dispatch.
@@ -87,13 +87,14 @@ Work:
 - Poll `erwire_poll_native_eth` through the native ingress helper.
 - Build an ingress `ErChannelEndpoint` from the VirtIO-net MAC.
 - Reject malformed packets immediately.
-- Preserve packet kind, payload, sequence, payload hash inputs, and ingress endpoint without treating the ingress transport as authority.
+- Preserve packet kind, payload bytes, sequence, payload hash inputs, and ingress endpoint without treating the ingress transport as authority.
+- Decode accepted relay packet payloads against admitted routes into endpoint intents.
 - Next: call the helper from the OS loop.
 
 Proof:
 
 - QEMU pcap contains EdgeRun EtherType `0x88b5` packets.
-- Core tests cover accepted packets, malformed packets, and empty polls.
+- Core tests cover accepted packets, malformed packets, empty polls, retained payload bytes, and render capability endpoint-intent classification.
 - Remaining proof: native run emits a deterministic relay-ingress acknowledgement or transit packet.
 
 ## Milestone 3: Admission-Defined Route Verification
@@ -102,16 +103,16 @@ Goal: turn admitted `edgerun-work` traffic into relay intents only after route v
 
 Work:
 
-- Decode the payload as the corresponding `edgerun-work` record.
+- Decode accepted erwire payloads as relay packets carrying the corresponding `edgerun-work` record.
 - Verify `NetworkMessage` department, work type, recipient, first relay, and route commitment against the signed admission path.
-- Build `ErRelayForwardIntent` only from the verified admission-defined route and local endpoint mapping.
+- Build `ErRelayForwardIntent` or local endpoint intent only from the verified admission-defined route and local endpoint mapping.
 - Reject packet-class matches without a valid admission.
 - Keep endpoint movement inside `er_hw_relay` or device-specific adapters.
 
 Proof:
 
 - Tests prove admitted storage work can produce a VirtIO block intent.
-- Tests prove admitted render capability work can produce a VirtIO GPU intent.
+- Tests prove admitted render capability work can produce a native render endpoint intent; VirtIO GPU command intent remains next.
 - Tests prove packet-class matches without a valid admission produce no intent.
 - Tests prove malformed or unsupported admitted endpoints are rejected deterministically.
 

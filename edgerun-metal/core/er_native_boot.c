@@ -1,5 +1,6 @@
 #include "er_native_boot.h"
 #include "er_mem.h"
+#include "er_work_route.h"
 
 enum {
   ER_NATIVE_BOOT_QEMU_MICROVM_CANDIDATES = 2u,
@@ -145,6 +146,9 @@ UINT8 er_native_boot_poll_relay_ingress(const ErNativeBootState* state,
   }
 
   out_ingress->payload_len = payload_len;
+  if (payload_len > 0u) {
+    er_mem_copy(out_ingress->payload, payload, (UINTN)payload_len);
+  }
   if (er_native_boot_hash_ingress_packet(crypto, &out_ingress->header,
                                          payload, payload_len,
                                          &out_ingress->packet_hash) == 0u ||
@@ -155,5 +159,99 @@ UINT8 er_native_boot_poll_relay_ingress(const ErNativeBootState* state,
     return 0;
   }
   out_ingress->status = ER_NATIVE_RELAY_INGRESS_ACCEPTED;
+  return 1;
+}
+
+static UINT8 er_native_boot_hash_equal(const ErHash* left,
+                                       const ErHash* right) {
+  if (left == 0 || right == 0) {
+    return 0u;
+  }
+  return er_mem_equal(left->bytes, right->bytes, ER_HASH_LEN);
+}
+
+static UINT8 er_native_boot_node_equal(const ErNodeId* left,
+                                       const ErNodeId* right) {
+  if (left == 0 || right == 0) {
+    return 0u;
+  }
+  return er_mem_equal(left->bytes, right->bytes, ER_NODE_ID_LEN);
+}
+
+static UINT8 er_native_boot_relay_packet_matches_route(const ErRelayPacketHeader* packet,
+                                                       const ErAdmittedRoute* route) {
+  if (packet == 0 || route == 0 ||
+      packet->abi_version != ER_RELAY_PACKET_ABI_VERSION ||
+      packet->packet_kind != ER_RELAY_PACKET_KIND_BYTES ||
+      route->abi_version != ER_WORK_ABI_VERSION ||
+      packet->sequence == 0u ||
+      er_native_boot_node_equal(&packet->source_node_id,
+                                &route->source_node_id) == 0u ||
+      er_native_boot_node_equal(&packet->target_node_id,
+                                &route->target_node_id) == 0u ||
+      er_native_boot_hash_equal(&packet->admission_id,
+                                &route->admission_hash) == 0u ||
+      er_native_boot_hash_equal(&packet->route_hash,
+                                &route->target_route_commitment) == 0u) {
+    return 0u;
+  }
+  return 1u;
+}
+
+static UINT8 er_native_boot_route_is_render_capability(const ErAdmittedRoute* route) {
+  return (UINT8)(route != 0 &&
+                 route->abi_version == ER_WORK_ABI_VERSION &&
+                 route->role == ER_NODE_ROLE_CAPABILITY &&
+                 route->department == ER_DEPARTMENT_CAPABILITY &&
+                 route->work_type == ER_WORK_TYPE_CAPABILITY_INVOKE);
+}
+
+UINT8 er_native_boot_decode_endpoint_intent(const ErNativeRelayIngress* ingress,
+                                            const ErAdmittedRoute* route,
+                                            ErNativeEndpointIntent* out_intent) {
+  const UINT8* payload = 0;
+  UINT32 payload_len = 0u;
+
+  if (out_intent == 0) {
+    return 0;
+  }
+  er_mem_zero((UINT8*)out_intent, (UINTN)sizeof(*out_intent));
+  if (ingress == 0 || route == 0) {
+    return 0;
+  }
+  if (ingress->status == ER_NATIVE_RELAY_INGRESS_NONE) {
+    out_intent->kind = ER_NATIVE_ENDPOINT_INTENT_NONE;
+    return 1;
+  }
+  if (ingress->status != ER_NATIVE_RELAY_INGRESS_ACCEPTED ||
+      ingress->payload_len == 0u ||
+      er_relay_packet_decode_header(ingress->payload, ingress->payload_len,
+                                    &out_intent->packet) == 0u ||
+      er_relay_packet_payload(ingress->payload, ingress->payload_len,
+                              &payload, &payload_len) == 0u ||
+      er_native_boot_relay_packet_matches_route(&out_intent->packet,
+                                                route) == 0u) {
+    out_intent->kind = ER_NATIVE_ENDPOINT_INTENT_MALFORMED;
+    return 1;
+  }
+  if (er_native_boot_route_is_render_capability(route) == 0u ||
+      payload_len != (UINT32)sizeof(out_intent->capability)) {
+    out_intent->kind = ER_NATIVE_ENDPOINT_INTENT_UNSUPPORTED;
+    return 1;
+  }
+  er_mem_copy((UINT8*)&out_intent->capability, payload,
+              (UINTN)sizeof(out_intent->capability));
+  if (er_work_capability_envelope_header_valid(&out_intent->capability) == 0u ||
+      out_intent->capability.content_type != ER_CAPABILITY_CONTENT_RENDER ||
+      out_intent->capability.risk_flags != ER_CAPABILITY_RISK_NONE ||
+      out_intent->capability.sequence != out_intent->packet.sequence ||
+      er_native_boot_node_equal(&out_intent->capability.source_node_id,
+                                &route->source_node_id) == 0u ||
+      er_native_boot_node_equal(&out_intent->capability.target_node_id,
+                                &route->target_node_id) == 0u) {
+    out_intent->kind = ER_NATIVE_ENDPOINT_INTENT_MALFORMED;
+    return 1;
+  }
+  out_intent->kind = ER_NATIVE_ENDPOINT_INTENT_RENDER_CAPABILITY;
   return 1;
 }
