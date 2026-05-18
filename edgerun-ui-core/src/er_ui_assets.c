@@ -15,7 +15,8 @@ enum {
   ER_UI_BUNDLED_FONT_ATLAS_SIDE = 1024u
 };
 
-static const char ER_UI_REQUIRED_FONT_CHARS[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_.:/#@[](){}<>+=%$!?&, ";
+static const char ER_UI_REQUIRED_FONT_CHARS[] =
+  "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_.:/#@[](){}<>+=%$!?&, ";
 
 //@optimizer-ignore-constant provider manifest is indexed by the guarded er_ui_icon_t enum and mirrors the bundled Tabler asset contract
 static const er_ui_icon_pack_entry_t ER_UI_TABLER_ICON_ENTRIES[ER_UI_ICON_COUNT] = {
@@ -50,9 +51,15 @@ static const er_ui_icon_pack_entry_t ER_UI_LUCIDE_ICON_ENTRIES[ER_UI_ICON_COUNT]
 static const er_ui_font_face_spec_t ER_UI_INTER_FONT_FACES[] = {{"Inter", true, ER_UI_REQUIRED_FONT_CHARS}};
 static const er_ui_font_face_spec_t ER_UI_GEIST_FONT_FACES[] = {{"Geist", true, ER_UI_REQUIRED_FONT_CHARS}};
 
-static const er_ui_emoji_spec_t ER_UI_REQUIRED_EMOJI[] = {{"check", "check"},     {"warning", "warning"}, {"locked", "locked"},
-                                                         {"unlocked", "unlocked"}, {"route", "route"},     {"storage", "storage"},
-                                                         {"payment", "payment"},   {"proof", "proof"}};
+static const er_ui_emoji_spec_t ER_UI_REQUIRED_EMOJI[] = {
+  {"check", "check"},
+  {"warning", "warning"},
+  {"locked", "locked"},
+  {"unlocked", "unlocked"},
+  {"route", "route"},
+  {"storage", "storage"},
+  {"payment", "payment"},
+  {"proof", "proof"}};
 
 static const er_ui_component_pack_entry_t ER_UI_COMPONENT_ENTRIES[ER_UI_COMPONENT_KIND_COUNT] = {
   {"shell", ER_UI_COMPONENT_KIND_SHELL},
@@ -185,9 +192,15 @@ er_ui_asset_pack_status_t er_ui_font_pack_validate(er_ui_font_pack_spec_t pack, 
   er_ui_asset_pack_status_t status = er_ui_asset_validate_name(pack.name, limits);
   const er_ui_font_face_spec_t* default_face = 0;
   if (status != ER_UI_ASSET_PACK_OK) return status;
-  if (pack.face_count == 0u || pack.face_count > limits.max_font_faces) return ER_UI_ASSET_PACK_FONT_FACE_COUNT_EXCEEDED;
-  if (pack.atlas_width == 0u || pack.atlas_height == 0u || pack.atlas_width > limits.max_font_atlas_side ||
-      pack.atlas_height > limits.max_font_atlas_side || pack.atlas_bytes == 0u || pack.atlas_bytes > limits.max_font_atlas_bytes) {
+  if (pack.face_count == 0u || pack.face_count > limits.max_font_faces) {
+    return ER_UI_ASSET_PACK_FONT_FACE_COUNT_EXCEEDED;
+  }
+  if (pack.atlas_width == 0u ||
+      pack.atlas_height == 0u ||
+      pack.atlas_width > limits.max_font_atlas_side ||
+      pack.atlas_height > limits.max_font_atlas_side ||
+      pack.atlas_bytes == 0u ||
+      pack.atlas_bytes > limits.max_font_atlas_bytes) {
     return ER_UI_ASSET_PACK_INVALID_FONT_ATLAS;
   }
   for (size_t i = 0u; i < pack.face_count; i++) {
@@ -195,7 +208,9 @@ er_ui_asset_pack_status_t er_ui_font_pack_validate(er_ui_font_pack_spec_t pack, 
   }
   if (!default_face) return ER_UI_ASSET_PACK_MISSING_DEFAULT_FONT_FACE;
   for (size_t i = 0u; ER_UI_REQUIRED_FONT_CHARS[i] != '\0'; i++) {
-    if (!er_ui_assets_cstr_contains_char(default_face->covered_chars, ER_UI_REQUIRED_FONT_CHARS[i])) return ER_UI_ASSET_PACK_MISSING_FONT_CHAR;
+    if (!er_ui_assets_cstr_contains_char(default_face->covered_chars, ER_UI_REQUIRED_FONT_CHARS[i])) {
+      return ER_UI_ASSET_PACK_MISSING_FONT_CHAR;
+    }
   }
   return ER_UI_ASSET_PACK_OK;
 }
@@ -255,10 +270,19 @@ er_ui_asset_pack_status_t er_ui_asset_pack_validate(er_ui_asset_pack_spec_t pack
 er_ui_asset_pack_spec_t er_ui_tabler_inter_asset_pack(void) {
   return (er_ui_asset_pack_spec_t){
     "edgerun-tabler-inter",
-    {"tabler-svg", ER_UI_ICON_PROVIDER_TABLER, ER_UI_TABLER_ICON_ENTRIES, ER_UI_ICON_COUNT, ER_UI_BUNDLED_ICON_ATLAS_W, ER_UI_BUNDLED_ICON_ATLAS_H,
+    {"tabler-svg",
+     ER_UI_ICON_PROVIDER_TABLER,
+     ER_UI_TABLER_ICON_ENTRIES,
+     ER_UI_ICON_COUNT,
+     ER_UI_BUNDLED_ICON_ATLAS_W,
+     ER_UI_BUNDLED_ICON_ATLAS_H,
      ER_UI_BUNDLED_ICON_ATLAS_W * ER_UI_BUNDLED_ICON_ATLAS_H},
-    {"inter", ER_UI_INTER_FONT_FACES, sizeof(ER_UI_INTER_FONT_FACES) / sizeof(ER_UI_INTER_FONT_FACES[0]), ER_UI_BUNDLED_FONT_ATLAS_SIDE,
-     ER_UI_BUNDLED_FONT_ATLAS_SIDE, ER_UI_BUNDLED_FONT_ATLAS_SIDE * ER_UI_BUNDLED_FONT_ATLAS_SIDE},
+    {"inter",
+     ER_UI_INTER_FONT_FACES,
+     sizeof(ER_UI_INTER_FONT_FACES) / sizeof(ER_UI_INTER_FONT_FACES[0]),
+     ER_UI_BUNDLED_FONT_ATLAS_SIDE,
+     ER_UI_BUNDLED_FONT_ATLAS_SIDE,
+     ER_UI_BUNDLED_FONT_ATLAS_SIDE * ER_UI_BUNDLED_FONT_ATLAS_SIDE},
     {"edgerun-semantic-emoji", ER_UI_REQUIRED_EMOJI, sizeof(ER_UI_REQUIRED_EMOJI) / sizeof(ER_UI_REQUIRED_EMOJI[0])},
     {"edgerun-components", ER_UI_COMPONENT_ENTRIES, ER_UI_COMPONENT_KIND_COUNT}};
 }
@@ -266,16 +290,27 @@ er_ui_asset_pack_spec_t er_ui_tabler_inter_asset_pack(void) {
 er_ui_asset_pack_spec_t er_ui_lucide_geist_asset_pack(void) {
   return (er_ui_asset_pack_spec_t){
     "edgerun-lucide-geist",
-    {"lucide-svg", ER_UI_ICON_PROVIDER_LUCIDE, ER_UI_LUCIDE_ICON_ENTRIES, ER_UI_ICON_COUNT, ER_UI_BUNDLED_ICON_ATLAS_W, ER_UI_BUNDLED_ICON_ATLAS_H,
+    {"lucide-svg",
+     ER_UI_ICON_PROVIDER_LUCIDE,
+     ER_UI_LUCIDE_ICON_ENTRIES,
+     ER_UI_ICON_COUNT,
+     ER_UI_BUNDLED_ICON_ATLAS_W,
+     ER_UI_BUNDLED_ICON_ATLAS_H,
      ER_UI_BUNDLED_ICON_ATLAS_W * ER_UI_BUNDLED_ICON_ATLAS_H},
-    {"geist", ER_UI_GEIST_FONT_FACES, sizeof(ER_UI_GEIST_FONT_FACES) / sizeof(ER_UI_GEIST_FONT_FACES[0]), ER_UI_BUNDLED_FONT_ATLAS_SIDE,
-     ER_UI_BUNDLED_FONT_ATLAS_SIDE, ER_UI_BUNDLED_FONT_ATLAS_SIDE * ER_UI_BUNDLED_FONT_ATLAS_SIDE},
+    {"geist",
+     ER_UI_GEIST_FONT_FACES,
+     sizeof(ER_UI_GEIST_FONT_FACES) / sizeof(ER_UI_GEIST_FONT_FACES[0]),
+     ER_UI_BUNDLED_FONT_ATLAS_SIDE,
+     ER_UI_BUNDLED_FONT_ATLAS_SIDE,
+     ER_UI_BUNDLED_FONT_ATLAS_SIDE * ER_UI_BUNDLED_FONT_ATLAS_SIDE},
     {"edgerun-semantic-emoji", ER_UI_REQUIRED_EMOJI, sizeof(ER_UI_REQUIRED_EMOJI) / sizeof(ER_UI_REQUIRED_EMOJI[0])},
     {"edgerun-components", ER_UI_COMPONENT_ENTRIES, ER_UI_COMPONENT_KIND_COUNT}};
 }
 
-er_ui_asset_pack_status_t er_ui_asset_pack_runtime_init(er_ui_asset_pack_runtime_t* runtime, er_ui_asset_pack_spec_t active,
-                                                        er_ui_asset_limits_t limits) {
+er_ui_asset_pack_status_t er_ui_asset_pack_runtime_init(
+  er_ui_asset_pack_runtime_t* runtime,
+  er_ui_asset_pack_spec_t active,
+  er_ui_asset_limits_t limits) {
   er_ui_asset_pack_status_t status;
   if (!runtime) return ER_UI_ASSET_PACK_EMPTY_NAME;
   status = er_ui_asset_pack_validate(active, limits);
@@ -285,7 +320,9 @@ er_ui_asset_pack_status_t er_ui_asset_pack_runtime_init(er_ui_asset_pack_runtime
   return ER_UI_ASSET_PACK_OK;
 }
 
-er_ui_asset_pack_status_t er_ui_asset_pack_runtime_replace(er_ui_asset_pack_runtime_t* runtime, er_ui_asset_pack_spec_t replacement) {
+er_ui_asset_pack_status_t er_ui_asset_pack_runtime_replace(
+  er_ui_asset_pack_runtime_t* runtime,
+  er_ui_asset_pack_spec_t replacement) {
   er_ui_asset_pack_status_t status;
   if (!runtime) return ER_UI_ASSET_PACK_EMPTY_NAME;
   status = er_ui_asset_pack_validate(replacement, runtime->limits);
