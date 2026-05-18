@@ -10,6 +10,7 @@ static const er_ui_color4_t ER_TEST_TEXT_BG = {0.01f, 0.012f, 0.015f, 1.0f};
 static const size_t ER_TEST_TEXT_PARTIAL_VERTEX_COUNT = 2u;
 static const uint32_t ER_TEST_TEXT_PARTIAL_ATLAS_ID = 7u;
 static const size_t ER_TEST_TEXT_UNDERSIZED_BUDGET = 3u;
+static const size_t ER_TEST_TEXT_OVERSIZED_BUDGET = 300u;
 
 static void test_text_measure_empty_and_rejects_invalid_inputs(void) {
   vr_font_face_t* face = er_ui_test_open_font(24.0f, "text measure: bundled font bytes load", "text measure: font opens");
@@ -62,9 +63,13 @@ static void test_text_vertex_and_ascii_helpers_validate_boundaries(void) {
                   "text helpers: empty ascii text fits zero budget");
     expect_status(er_ui_scene_push_ascii_text(&scene, face, "Edge", ER_TEST_TEXT_EDGE_LEN, 4.0f, 48.0f, ER_TEST_TEXT_COLOR), ER_UI_OK,
                   "text helpers: ascii text fits exact budget");
+    expect_status(er_ui_scene_push_ascii_text_n(&scene, face, "Ledger", ER_TEST_TEXT_EDGE_LEN, 4.0f, 60.0f, ER_TEST_TEXT_COLOR), ER_UI_OK,
+                  "text helpers: counted ascii text emits prefix");
     expect_true(scene.text_quad_count > 0u, "text helpers: ascii text emits quads");
     expect_status(er_ui_scene_push_ascii_text(&scene, face, "Edge", ER_TEST_TEXT_UNDERSIZED_BUDGET, 4.0f, 72.0f, ER_TEST_TEXT_COLOR),
                   ER_UI_ERR_INVALID_ARGUMENT, "text helpers: ascii text rejects undersized budget");
+    expect_status(er_ui_scene_push_ascii_text_n(&scene, face, "Ledger", ER_TEST_TEXT_OVERSIZED_BUDGET, 4.0f, 84.0f, ER_TEST_TEXT_COLOR),
+                  ER_UI_ERR_INVALID_ARGUMENT, "text helpers: counted ascii text rejects oversized count");
     expect_status(er_ui_scene_push_ascii_text(&scene, face, NULL, ER_TEST_TEXT_EDGE_LEN, 4.0f, 96.0f, ER_TEST_TEXT_COLOR),
                   ER_UI_ERR_INVALID_ARGUMENT, "text helpers: ascii text rejects missing string");
 
