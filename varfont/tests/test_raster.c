@@ -11,11 +11,16 @@ static const uint16_t VR_RASTER_TEST_MAX_Y = 80u;
 static const uint16_t VR_RASTER_TEST_ZERO_COUNT = 0u;
 static const uint8_t VR_RASTER_TEST_ALPHA_HIGH = 240u;
 static const uint8_t VR_RASTER_TEST_ALPHA_LOW = 16u;
+static const uint8_t VR_RASTER_TEST_ALPHA_MID_LOW = 32u;
+static const uint8_t VR_RASTER_TEST_ALPHA_MID_HIGH = 224u;
 static const uint8_t VR_RASTER_TEST_ALPHA_MAX = 255u;
 static const uint8_t VR_RASTER_TEST_CHANNEL_INDEX_R = 0u;
 static const uint8_t VR_RASTER_TEST_CHANNEL_INDEX_G = 1u;
 static const uint8_t VR_RASTER_TEST_CHANNEL_INDEX_B = 2u;
 static const size_t VR_RASTER_TEST_MSDF_CHANNEL_COUNT = 3u;
+static const float VR_RASTER_TEST_HEAVY_SIZE = 58.0f;
+static const float VR_RASTER_TEST_HEAVY_WEIGHT = 900.0f;
+static const char* const VR_RASTER_TEST_WEIGHT_AXIS = "wght";
 
 static void test_init_synthetic_face(vr_font_face_t* face) {
   vr_font_config_t cfg = test_default_font_config();
@@ -56,6 +61,24 @@ static bool test_msdf_has_variation(const uint8_t* bitmap, int w, int h) {
   return false;
 }
 
+static bool test_msdf_has_distance_ramp(const uint8_t* bitmap, int w, int h) {
+  size_t total = (size_t)w * (size_t)h * VR_RASTER_TEST_MSDF_CHANNEL_COUNT;
+  bool has_low = false;
+  bool has_mid = false;
+  bool has_high = false;
+  for (size_t i = 0u; i < total; ++i) {
+    uint8_t value = bitmap[i];
+    if (value <= VR_RASTER_TEST_ALPHA_LOW) {
+      has_low = true;
+    } else if (value >= VR_RASTER_TEST_ALPHA_HIGH) {
+      has_high = true;
+    } else if (value >= VR_RASTER_TEST_ALPHA_MID_LOW && value <= VR_RASTER_TEST_ALPHA_MID_HIGH) {
+      has_mid = true;
+    }
+  }
+  return has_low && has_mid && has_high;
+}
+
 static bool test_bitmap_equal(const uint8_t* a, const uint8_t* b, size_t count) {
   for (size_t i = 0u; i < count; ++i) {
     if (a[i] != b[i]) {
@@ -63,6 +86,17 @@ static bool test_bitmap_equal(const uint8_t* a, const uint8_t* b, size_t count) 
     }
   }
   return true;
+}
+
+static size_t test_bitmap_covered_count(const uint8_t* bitmap, int w, int h, uint8_t threshold) {
+  size_t total = (size_t)w * (size_t)h;
+  size_t covered = 0u;
+  for (size_t i = 0u; i < total; ++i) {
+    if (bitmap[i] >= threshold) {
+      ++covered;
+    }
+  }
+  return covered;
 }
 
 static void test_rasterize_square_outline(void) {
@@ -247,6 +281,7 @@ static void test_rasterize_msdf_mode_outputs_channels(void) {
     size_t channel_count = (size_t)out_w * (size_t)out_h * VR_RASTER_TEST_MSDF_CHANNEL_COUNT;
     test_expect(channel_count > 0u, "raster: msdf mode emits non-zero output bytes");
     test_expect(test_msdf_has_variation(bitmap, out_w, out_h), "raster: msdf mode channels diverge");
+    test_expect(test_msdf_has_distance_ramp(bitmap, out_w, out_h), "raster: msdf mode preserves low/mid/high distance ramp");
     (void)vr_free_bitmap(face, bitmap, out_w, out_h, VR_FONT_ATLAS_FORMAT_MSDF_RGB);
   }
 
@@ -309,6 +344,56 @@ static void test_rasterize_alpha_mode_matches_legacy_interface(void) {
   test_close_face(face);
 }
 
+static void test_rasterize_heavy_z_stays_legible(void) {
+  vr_font_face_t* face = test_open_default_face();
+  test_expect(face != NULL, "raster: default face opens for heavy z");
+  if (!face) {
+    return;
+  }
+
+  vr_status_t st = vr_font_set_size(face, VR_RASTER_TEST_HEAVY_SIZE);
+  test_expect_status(st, VR_OK, "raster: heavy z size applies");
+  st = vr_font_set_axis(face, VR_RASTER_TEST_WEIGHT_AXIS, VR_RASTER_TEST_HEAVY_WEIGHT);
+  test_expect_status(st, VR_OK, "raster: heavy z weight applies");
+
+  uint16_t glyph_id = vr_find_glyph_id(face, (uint32_t)'z');
+  test_expect(glyph_id != 0u, "raster: z glyph maps");
+  if (glyph_id == 0u) {
+    test_close_face(face);
+    return;
+  }
+
+  vr_glyph_outline_t outline = {0};
+  st = vr_load_glyph_outline(face, glyph_id, &outline);
+  if (st != VR_OK) {
+    test_expect_status(st, VR_OK, "raster: heavy z outline loads");
+    test_close_face(face);
+    return;
+  }
+  st = vr_apply_gvar_variation(face, glyph_id, &outline);
+  test_expect_status(st, VR_OK, "raster: heavy z variation applies");
+
+  uint8_t* bitmap = NULL;
+  int out_w = VR_RASTER_TEST_ZERO_COUNT;
+  int out_h = VR_RASTER_TEST_ZERO_COUNT;
+  int out_left = VR_RASTER_TEST_ZERO_COUNT;
+  int out_top = VR_RASTER_TEST_ZERO_COUNT;
+  st = vr_rasterize_outline(face, &outline, &bitmap, &out_w, &out_h, &out_left, &out_top);
+  test_expect_status(st, VR_OK, "raster: heavy z rasterizes");
+  if (st == VR_OK) {
+    size_t covered = test_bitmap_covered_count(bitmap, out_w, out_h, VR_RASTER_TEST_ALPHA_HIGH);
+    size_t total = (size_t)out_w * (size_t)out_h;
+    test_expect(covered > 0u, "raster: heavy z has covered pixels");
+    test_expect(covered < total, "raster: heavy z keeps background pixels in bounds");
+    test_expect(bitmap[(size_t)(out_h / 2) * (size_t)out_w + (size_t)(out_w / 2)] >= VR_RASTER_TEST_ALPHA_LOW,
+                "raster: heavy z diagonal reaches center");
+    (void)vr_free_bitmap(face, bitmap, out_w, out_h, VR_FONT_ATLAS_FORMAT_ALPHA8);
+  }
+
+  vr_free_outline(face, &outline);
+  test_close_face(face);
+}
+
 static void test_rasterize_mode_invalid_format_rejected(void) {
   vr_font_face_t face = {0};
   test_init_synthetic_face(&face);
@@ -355,5 +440,6 @@ void run_raster_tests(void) {
   test_rasterize_real_font_outline();
   test_rasterize_msdf_mode_outputs_channels();
   test_rasterize_alpha_mode_matches_legacy_interface();
+  test_rasterize_heavy_z_stays_legible();
   test_rasterize_mode_invalid_format_rejected();
 }

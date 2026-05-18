@@ -64,6 +64,7 @@ add_executable(vrfont_tests
   tests/test_api.c
   tests/test_cmap.c
   tests/test_raster.c
+  tests/test_vr_font_freestanding.c
 )
 target_link_libraries(vrfont_tests PRIVATE vrfont)
 if(UNIX)

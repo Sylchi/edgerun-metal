@@ -4,6 +4,7 @@
 #include <SDL2/SDL.h>
 
 #include <stdbool.h>
+#include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -41,10 +42,11 @@ typedef struct {
   SDL_Vertex** layer_vertices;
   size_t* layer_vertex_counts;
   bool sdl_ready;
+  const char* snapshot_path;
 } sdl_demo_app_t;
 
-static const uint16_t VR_UI_WINDOW_WIDTH = 960u;
-static const uint16_t VR_UI_WINDOW_HEIGHT = 240u;
+static const uint16_t VR_UI_WINDOW_WIDTH = 1120u;
+static const uint16_t VR_UI_WINDOW_HEIGHT = 320u;
 static const uint32_t VR_TEXTURE_SLOT_INITIAL_CAP = 16u;
 static const uint32_t VR_RENDER_DELAY_MS = 16u;
 static const uint32_t VR_UTF8_MAX_ASCII = 0x80u;
@@ -55,7 +57,7 @@ static const uint8_t VR_UI_BACKGROUND_GREEN = 0u;
 static const uint8_t VR_UI_BACKGROUND_BLUE = 0u;
 static const uint8_t VR_UI_BACKGROUND_ALPHA = 255u;
 static const uint8_t VR_MSDF_RECON_TEXTURE_CHANNELS = 3u;
-static const float VR_MSDF_RECON_SPREAD = 1.0f;
+static const float VR_MSDF_RECON_SPREAD = 2.0f;
 static const float VR_MSDF_RECON_MID_ALPHA = 128.0f;
 static const float VR_MSDF_RECON_EDGE_SCALE = 255.0f;
 static const uint8_t VR_MSDF_RECON_AA_SUBSAMPLES = 8u;
@@ -65,18 +67,97 @@ static const float VR_MSDF_RECON_ALPHA_MAX = 255.0f;
 static const uint8_t VR_MSDF_RECON_BORDER_SAMPLE_COUNT = 4u;
 static const char* const VR_FALLBACK_FONT_PATH = "fonts/Geist[wght].ttf";
 static const char* const VR_DEFAULT_TEXT = "Geist variable font in SDL";
+static const char* const VR_DEMO_SNAPSHOT_FLAG = "--snapshot";
+static const char* const VR_DEMO_ALPHA8_FLAG = "--alpha8";
+static const char* const VR_DEMO_MSDF_FLAG = "--msdf";
 static const float VR_TEXT_RENDER_X = 40.0f;
 static const int32_t VR_SDL_RENDERER_INDEX_AUTO = -1;
+static const uint8_t VR_SDL_BYTES_PER_PIXEL_RGBA = 4u;
+static const size_t VR_DEMO_MAX_FILE_BYTES = 64u * 1024u * 1024u;
 typedef enum {
   VR_DEMO_LAYER_COUNT = 4u
 } vr_demo_constants_t;
 
 static const demo_layer_t VR_DEMO_LAYERS[VR_DEMO_LAYER_COUNT] = {
-  {26.0f, 250.0f, VR_TEXT_RENDER_X, 48.0f},
-  {34.0f, 400.0f, VR_TEXT_RENDER_X, 86.0f},
-  {46.0f, 700.0f, VR_TEXT_RENDER_X, 128.0f},
-  {58.0f, 900.0f, VR_TEXT_RENDER_X, 176.0f},
+  {26.0f, 250.0f, VR_TEXT_RENDER_X, 54.0f},
+  {38.0f, 400.0f, VR_TEXT_RENDER_X, 112.0f},
+  {52.0f, 700.0f, VR_TEXT_RENDER_X, 188.0f},
+  {68.0f, 900.0f, VR_TEXT_RENDER_X, 282.0f},
 };
+
+static void* demo_alloc(void* user, size_t size, size_t align) {
+  (void)user;
+  (void)align;
+  return malloc(size);
+}
+
+static void* demo_realloc(void* user, void* ptr, size_t old_size, size_t new_size, size_t align) {
+  (void)user;
+  (void)old_size;
+  (void)align;
+  return realloc(ptr, new_size);
+}
+
+static void demo_free(void* user, void* ptr, size_t size, size_t align) {
+  (void)user;
+  (void)size;
+  (void)align;
+  free(ptr);
+}
+
+static uint8_t* demo_read_file_bytes(const char* path, size_t* out_size) {
+  if (!path || !out_size) {
+    return NULL;
+  }
+  *out_size = 0u;
+  FILE* file = fopen(path, "rb");
+  if (!file) {
+    return NULL;
+  }
+  if (fseek(file, 0, SEEK_END) != 0) {
+    fclose(file);
+    return NULL;
+  }
+  long file_size = ftell(file);
+  if (file_size <= 0 || (size_t)file_size > VR_DEMO_MAX_FILE_BYTES) {
+    fclose(file);
+    return NULL;
+  }
+  if (fseek(file, 0, SEEK_SET) != 0) {
+    fclose(file);
+    return NULL;
+  }
+
+  uint8_t* bytes = (uint8_t*)malloc((size_t)file_size);
+  if (!bytes) {
+    fclose(file);
+    return NULL;
+  }
+  size_t read_count = fread(bytes, 1u, (size_t)file_size, file);
+  fclose(file);
+  if (read_count != (size_t)file_size) {
+    free(bytes);
+    return NULL;
+  }
+  *out_size = (size_t)file_size;
+  return bytes;
+}
+
+static vr_status_t demo_create_face_from_path(vr_font_face_t** out_face, const char* path, const vr_font_config_t* cfg) {
+  if (!out_face || !path || !cfg) {
+    return VR_ERR_INVALID_FONT;
+  }
+  *out_face = NULL;
+  size_t font_size = 0u;
+  uint8_t* font_bytes = demo_read_file_bytes(path, &font_size);
+  if (!font_bytes) {
+    return VR_ERR_IO;
+  }
+  vr_status_t st = vr_font_face_create_from_memory(out_face, font_bytes, font_size, cfg);
+  free(font_bytes);
+  return st;
+}
+
 static void sdl_free_demo_layers(vr_font_face_t* face, demo_layer_render_t* layers, size_t count);
 
 static void sdl_demo_release(sdl_demo_app_t* app) {
@@ -518,6 +599,81 @@ static SDL_Vertex* build_render_vertices(const vr_vertex_t* verts, size_t vertex
   return rv;
 }
 
+static bool sdl_render_demo_frame(sdl_demo_app_t* app) {
+  SDL_SetRenderDrawColor(
+    app->renderer,
+    VR_UI_BACKGROUND_RED,
+    VR_UI_BACKGROUND_GREEN,
+    VR_UI_BACKGROUND_BLUE,
+    VR_UI_BACKGROUND_ALPHA);
+  SDL_RenderClear(app->renderer);
+
+  for (size_t l = 0u; l < VR_DEMO_LAYER_COUNT; ++l) {
+    if (app->layer_render_data[l].range_count == 0u || app->layer_vertex_counts[l] == 0u) {
+      continue;
+    }
+    for (size_t r = 0u; r < app->layer_render_data[l].range_count; ++r) {
+      const vr_vertex_atlas_range_t* range = &app->layer_render_data[l].ranges[r];
+      if (range->vertex_count == 0u) {
+        continue;
+      }
+      if (range->start_vertex + range->vertex_count > app->layer_render_data[l].vertex_count) {
+        fprintf(stderr, "fatal: malformed atlas range\n");
+        return false;
+      }
+
+      uint32_t tex = 0u;
+      if (vr_font_atlas_texture(app->face, range->atlas_id, &tex) != VR_OK) {
+        fprintf(stderr, "fatal: invalid atlas id in range %zu\n", r);
+        return false;
+      }
+      if (tex >= app->gl_iface.texture_cap || !app->gl_iface.textures[tex]) {
+        fprintf(stderr, "fatal: missing texture for atlas id %u\n", range->atlas_id);
+        return false;
+      }
+
+      SDL_Vertex* batch_start = app->layer_vertices[l] + range->start_vertex;
+      int batch_count = (int)range->vertex_count;
+      if (SDL_RenderGeometry(
+            app->renderer,
+            app->gl_iface.textures[tex],
+            batch_start,
+            batch_count,
+            NULL,
+            0) != 0) {
+        fprintf(stderr, "fatal: SDL_RenderGeometry failed: %s\n", SDL_GetError());
+        return false;
+      }
+    }
+  }
+
+  SDL_RenderPresent(app->renderer);
+  return true;
+}
+
+static bool sdl_save_snapshot(SDL_Renderer* renderer, const char* path) {
+  if (!renderer || !path) {
+    return false;
+  }
+  SDL_Surface* surface = SDL_CreateRGBSurfaceWithFormat(0, VR_UI_WINDOW_WIDTH, VR_UI_WINDOW_HEIGHT, VR_SDL_BYTES_PER_PIXEL_RGBA * CHAR_BIT, SDL_PIXELFORMAT_RGBA8888);
+  if (!surface) {
+    fprintf(stderr, "fatal: failed to allocate snapshot surface: %s\n", SDL_GetError());
+    return false;
+  }
+  if (SDL_RenderReadPixels(renderer, NULL, SDL_PIXELFORMAT_RGBA8888, surface->pixels, surface->pitch) != 0) {
+    fprintf(stderr, "fatal: failed to read snapshot pixels: %s\n", SDL_GetError());
+    SDL_FreeSurface(surface);
+    return false;
+  }
+  if (SDL_SaveBMP(surface, path) != 0) {
+    fprintf(stderr, "fatal: failed to save snapshot '%s': %s\n", path, SDL_GetError());
+    SDL_FreeSurface(surface);
+    return false;
+  }
+  SDL_FreeSurface(surface);
+  return true;
+}
+
 static uint32_t utf8_to_codepoints(const char* text, uint32_t** out_codepoints, size_t* out_count) {
   if (!text || !out_codepoints || !out_count) return 0u;
 
@@ -546,9 +702,37 @@ static uint32_t utf8_to_codepoints(const char* text, uint32_t** out_codepoints, 
 }
 
 int main(int argc, char** argv) {
-  const bool using_default_font = (argc <= 1);
-  const char* font_path = using_default_font ? VR_FALLBACK_FONT_PATH : argv[1];
-  const char* text = argc > 2 ? argv[2] : VR_DEFAULT_TEXT;
+  const char* font_path = NULL;
+  const char* text = NULL;
+  const char* snapshot_path = NULL;
+  vr_font_atlas_format_t demo_atlas_format = VR_FONT_DEFAULT_ATLAS_FORMAT;
+  for (int arg = 1; arg < argc; ++arg) {
+    if (strcmp(argv[arg], VR_DEMO_SNAPSHOT_FLAG) == 0) {
+      if (arg + 1 >= argc) {
+        fprintf(stderr, "fatal: --snapshot requires an output BMP path\n");
+        return 1;
+      }
+      snapshot_path = argv[++arg];
+    } else if (strcmp(argv[arg], VR_DEMO_ALPHA8_FLAG) == 0) {
+      demo_atlas_format = VR_FONT_ATLAS_FORMAT_ALPHA8;
+    } else if (strcmp(argv[arg], VR_DEMO_MSDF_FLAG) == 0) {
+      demo_atlas_format = VR_FONT_ATLAS_FORMAT_MSDF_RGB;
+    } else if (!font_path) {
+      font_path = argv[arg];
+    } else if (!text) {
+      text = argv[arg];
+    } else {
+      fprintf(stderr, "fatal: unexpected argument '%s'\n", argv[arg]);
+      return 1;
+    }
+  }
+  const bool using_default_font = (font_path == NULL);
+  if (!font_path) {
+    font_path = VR_FALLBACK_FONT_PATH;
+  }
+  if (!text) {
+    text = VR_DEFAULT_TEXT;
+  }
   int exit_code = 1;
 
   sdl_demo_app_t app = {
@@ -562,6 +746,7 @@ int main(int argc, char** argv) {
     .layer_vertices = NULL,
     .layer_vertex_counts = NULL,
     .sdl_ready = false,
+    .snapshot_path = snapshot_path,
   };
   app.gl_iface.next_texture_id = 1u;
 
@@ -578,7 +763,7 @@ int main(int argc, char** argv) {
     SDL_WINDOWPOS_CENTERED,
     VR_UI_WINDOW_WIDTH,
     VR_UI_WINDOW_HEIGHT,
-    SDL_WINDOW_SHOWN);
+    app.snapshot_path ? SDL_WINDOW_HIDDEN : SDL_WINDOW_SHOWN);
   if (!app.window) {
     fprintf(stderr, "fatal: SDL_CreateWindow failed: %s\n", SDL_GetError());
     goto cleanup;
@@ -609,11 +794,12 @@ int main(int argc, char** argv) {
     .atlas_width = VR_FONT_DEFAULT_ATLAS_DIMENSION,
     .atlas_height = VR_FONT_DEFAULT_ATLAS_DIMENSION,
     .atlas_pad = VR_FONT_DEFAULT_ATLAS_PADDING,
-    .atlas_format = VR_FONT_DEFAULT_ATLAS_FORMAT,
+    .atlas_format = demo_atlas_format,
+    .allocator = {NULL, demo_alloc, demo_realloc, demo_free},
     .gl = gi,
   };
   app.gl_iface.atlas_format = cfg.atlas_format;
-  st = vr_font_face_create(&app.face, font_path, &cfg);
+  st = demo_create_face_from_path(&app.face, font_path, &cfg);
   if (st != VR_OK) {
     fprintf(stderr, "fatal: failed to load face '%s' status=%u\n", font_path, st);
     if (using_default_font) {
@@ -663,6 +849,17 @@ int main(int argc, char** argv) {
     }
   }
 
+  if (app.snapshot_path) {
+    if (!sdl_render_demo_frame(&app)) {
+      goto cleanup;
+    }
+    if (!sdl_save_snapshot(app.renderer, app.snapshot_path)) {
+      goto cleanup;
+    }
+    exit_code = 0;
+    goto cleanup;
+  }
+
   bool running = true;
   while (running) {
     SDL_Event e;
@@ -674,61 +871,7 @@ int main(int argc, char** argv) {
       }
     }
 
-    SDL_SetRenderDrawColor(
-      app.renderer,
-      VR_UI_BACKGROUND_RED,
-      VR_UI_BACKGROUND_GREEN,
-      VR_UI_BACKGROUND_BLUE,
-      VR_UI_BACKGROUND_ALPHA);
-    SDL_RenderClear(app.renderer);
-
-    for (size_t l = 0u; l < VR_DEMO_LAYER_COUNT; ++l) {
-      if (app.layer_render_data[l].range_count == 0u || app.layer_vertex_counts[l] == 0u) {
-        continue;
-      }
-      for (size_t r = 0u; r < app.layer_render_data[l].range_count; ++r) {
-        const vr_vertex_atlas_range_t* range = &app.layer_render_data[l].ranges[r];
-        if (range->vertex_count == 0u) {
-          continue;
-        }
-        if (range->start_vertex + range->vertex_count > app.layer_render_data[l].vertex_count) {
-          fprintf(stderr, "fatal: malformed atlas range\n");
-          running = false;
-          break;
-        }
-
-        uint32_t tex = 0u;
-        if (vr_font_atlas_texture(app.face, range->atlas_id, &tex) != VR_OK) {
-          fprintf(stderr, "fatal: invalid atlas id in range %zu\n", r);
-          running = false;
-          break;
-        }
-        if (tex >= app.gl_iface.texture_cap || !app.gl_iface.textures[tex]) {
-          fprintf(stderr, "fatal: missing texture for atlas id %u\n", range->atlas_id);
-          running = false;
-          break;
-        }
-
-        SDL_Vertex* batch_start = app.layer_vertices[l] + range->start_vertex;
-        int batch_count = (int)range->vertex_count;
-        if (SDL_RenderGeometry(
-              app.renderer,
-              app.gl_iface.textures[tex],
-              batch_start,
-              batch_count,
-              NULL,
-              0) != 0) {
-          fprintf(stderr, "fatal: SDL_RenderGeometry failed: %s\n", SDL_GetError());
-          running = false;
-          break;
-        }
-      }
-      if (!running) {
-        break;
-      }
-    }
-
-    SDL_RenderPresent(app.renderer);
+    running = sdl_render_demo_frame(&app);
     SDL_Delay(VR_RENDER_DELAY_MS);
   }
 
