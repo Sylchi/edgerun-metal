@@ -23,7 +23,7 @@ static const float ER_UI_LEDGER_GAP = 16.0f;
 static const float ER_UI_LEDGER_MIN_SIDE_W = 160.0f;
 static const float ER_UI_LEDGER_SIDE_W = 220.0f;
 static const float ER_UI_LEDGER_STACKED_SIDE_H = 160.0f;
-static const float ER_UI_LEDGER_MIN_CARD_W = 240.0f;
+static const float ER_UI_LEDGER_MIN_CARD_W = 300.0f;
 static const float ER_UI_LEDGER_NARROW_CARD_W = 280.0f;
 static const size_t ER_UI_LEDGER_DASHBOARD_MAX_COLUMNS = 4u;
 static const size_t ER_UI_LEDGER_DASHBOARD_WIDE_SUMMARY_CARDS = 4u;
@@ -59,7 +59,7 @@ static const float ER_UI_LEDGER_COMPACT_NAV_GAP = 8.0f;
 static const float ER_UI_LEDGER_COMPACT_NAV_Y = 92.0f;
 static const float ER_UI_LEDGER_DENSE_CARD_H = 180.0f;
 static const float ER_UI_LEDGER_DENSE_FORM_H = 190.0f;
-static const float ER_UI_LEDGER_DASHBOARD_ROW_MIN_H = 228.0f;
+static const float ER_UI_LEDGER_DASHBOARD_ROW_MIN_H = 300.0f;
 static const float ER_UI_LEDGER_SCROLL_THUMB_MIN_H = 32.0f;
 static const float ER_UI_LEDGER_FIELD_PAD_X = 10.0f;
 static const float ER_UI_LEDGER_DOT_SIZE = 4.0f;
@@ -960,7 +960,9 @@ static er_ui_status_t er_ui_ledger_dashboard(
   size_t detail_index = summary_rows * grid.columns;
   size_t transaction_span = grid.columns > 2u ? grid.columns - 1u : 1u;
   size_t account_index = detail_index + transaction_span;
-  size_t release_index = account_index + 1u;
+  bool invest_in_summary = summary_cards == ER_UI_LEDGER_DASHBOARD_WIDE_SUMMARY_CARDS;
+  size_t invest_index = account_index + 1u;
+  size_t release_index = invest_in_summary ? account_index + 1u : invest_index + 1u;
   size_t claimable_index = release_index + 1u;
   size_t item_count = claimable_index + 1u;
   size_t row_count = er_ui_responsive_grid_row_count(grid, item_count);
@@ -983,17 +985,18 @@ static er_ui_status_t er_ui_ledger_dashboard(
   cell_index++;
   if (status == ER_UI_OK) status = er_ui_ledger_targets_card(scene, font, er_ui_responsive_grid_cell(content_grid, cell_index, row_h), colors);
   cell_index++;
-  if (status == ER_UI_OK && summary_cards == ER_UI_LEDGER_DASHBOARD_WIDE_SUMMARY_CARDS) {
+  if (status == ER_UI_OK && invest_in_summary) {
     status = er_ui_ledger_invest_card(scene, font, er_ui_responsive_grid_cell(content_grid, cell_index, row_h), colors);
     cell_index++;
   }
   if (status == ER_UI_OK) {
     status = er_ui_ledger_transactions_card(scene, font, er_ui_responsive_grid_span(content_grid, detail_index, transaction_span, row_h), colors);
   }
-  if (status == ER_UI_OK && summary_cards == ER_UI_LEDGER_DASHBOARD_WIDE_SUMMARY_CARDS) {
+  if (status == ER_UI_OK) {
     status = er_ui_ledger_account_summary_card(scene, font, er_ui_responsive_grid_cell(content_grid, account_index, row_h), colors);
-  } else if (status == ER_UI_OK) {
-    status = er_ui_ledger_invest_card(scene, font, er_ui_responsive_grid_cell(content_grid, account_index, row_h), colors);
+  }
+  if (status == ER_UI_OK && !invest_in_summary) {
+    status = er_ui_ledger_invest_card(scene, font, er_ui_responsive_grid_cell(content_grid, invest_index, row_h), colors);
   }
   if (status == ER_UI_OK) {
     status = er_ui_ledger_release_card(scene, font, er_ui_responsive_grid_cell(content_grid, release_index, row_h), colors);
