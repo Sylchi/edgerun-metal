@@ -3,12 +3,12 @@
 #include "er_ui_spacing.h"
 
 #define ER_UI_LEDGER_ARRAY_COUNT(values) (sizeof(values) / sizeof((values)[0]))
-#define ER_UI_LEDGER_RGB_BG 10u, 10u, 10u
-#define ER_UI_LEDGER_RGB_SIDEBAR 14u, 14u, 14u
-#define ER_UI_LEDGER_RGB_PANEL 27u, 27u, 27u
-#define ER_UI_LEDGER_RGB_PANEL_ALT 34u, 34u, 34u
-#define ER_UI_LEDGER_RGB_FIELD 38u, 38u, 38u
-#define ER_UI_LEDGER_RGB_BORDER 58u, 58u, 58u
+#define ER_UI_LEDGER_RGB_BG 6u, 6u, 6u
+#define ER_UI_LEDGER_RGB_SIDEBAR 16u, 16u, 16u
+#define ER_UI_LEDGER_RGB_PANEL 24u, 24u, 24u
+#define ER_UI_LEDGER_RGB_PANEL_ALT 31u, 31u, 31u
+#define ER_UI_LEDGER_RGB_FIELD 34u, 34u, 34u
+#define ER_UI_LEDGER_RGB_BORDER 46u, 46u, 46u
 #define ER_UI_LEDGER_RGB_TEXT 245u, 245u, 245u
 #define ER_UI_LEDGER_RGB_MUTED 166u, 166u, 166u
 #define ER_UI_LEDGER_RGB_SUBTLE 122u, 122u, 122u
@@ -19,20 +19,21 @@
 #define ER_UI_LEDGER_RGB_WARNING 245u, 158u, 11u
 #define ER_UI_LEDGER_DASHBOARD_MAX_COLUMNS_LIMIT 4u
 
-static const float ER_UI_LEDGER_MARGIN = 24.0f;
-static const float ER_UI_LEDGER_GAP = 16.0f;
-static const float ER_UI_LEDGER_MIN_SIDE_W = 160.0f;
-static const float ER_UI_LEDGER_SIDE_W = 220.0f;
-static const float ER_UI_LEDGER_STACKED_SIDE_H = 160.0f;
+static const float ER_UI_LEDGER_MARGIN = 12.0f;
+static const float ER_UI_LEDGER_GAP = 12.0f;
+static const float ER_UI_LEDGER_MIN_SIDE_W = 136.0f;
+static const float ER_UI_LEDGER_SIDE_W = 168.0f;
+static const float ER_UI_LEDGER_STACKED_SIDE_H = 132.0f;
 static const float ER_UI_LEDGER_MIN_CARD_W = 240.0f;
-static const float ER_UI_LEDGER_DASHBOARD_MIN_CARD_W = 300.0f;
+static const float ER_UI_LEDGER_DASHBOARD_MIN_CARD_W = 244.0f;
 static const float ER_UI_LEDGER_NARROW_CARD_W = 280.0f;
 static const size_t ER_UI_LEDGER_DASHBOARD_MAX_COLUMNS = ER_UI_LEDGER_DASHBOARD_MAX_COLUMNS_LIMIT;
 static const size_t ER_UI_LEDGER_DASHBOARD_MASONRY_COLUMNS = 3u;
+static const size_t ER_UI_LEDGER_DASHBOARD_DETAILS_COLUMN = 3u;
 static const size_t ER_UI_LEDGER_DASHBOARD_WIDE_SUMMARY_CARDS = 4u;
 static const size_t ER_UI_LEDGER_DASHBOARD_COMPACT_SUMMARY_CARDS = 3u;
 static const size_t ER_UI_LEDGER_ACCESS_MAX_COLUMNS = 2u;
-static const float ER_UI_LEDGER_SURFACE_BODY_Y = 72.0f;
+static const float ER_UI_LEDGER_SURFACE_BODY_Y = 58.0f;
 static const float ER_UI_LEDGER_FORM_CARD_H = 286.0f;
 static const float ER_UI_LEDGER_CARD_RADIUS = 8.0f;
 static const float ER_UI_LEDGER_NAV_ROW_H = 34.0f;
@@ -63,9 +64,9 @@ static const float ER_UI_LEDGER_COMPACT_NAV_Y = 92.0f;
 static const float ER_UI_LEDGER_DENSE_CARD_H = 180.0f;
 static const float ER_UI_LEDGER_DENSE_FORM_H = 190.0f;
 static const float ER_UI_LEDGER_DASHBOARD_ROW_MIN_H = 300.0f;
-static const float ER_UI_LEDGER_DASHBOARD_CARD_H = 248.0f;
-static const float ER_UI_LEDGER_DASHBOARD_FORM_H = 300.0f;
-static const float ER_UI_LEDGER_DASHBOARD_TALL_H = 356.0f;
+static const float ER_UI_LEDGER_DASHBOARD_CARD_H = 216.0f;
+static const float ER_UI_LEDGER_DASHBOARD_FORM_H = 266.0f;
+static const float ER_UI_LEDGER_DASHBOARD_TALL_H = 322.0f;
 static const float ER_UI_LEDGER_SCROLL_THUMB_MIN_H = 32.0f;
 static const float ER_UI_LEDGER_FIELD_PAD_X = 10.0f;
 static const float ER_UI_LEDGER_DOT_SIZE = 4.0f;
@@ -497,23 +498,23 @@ static er_ui_status_t er_ui_ledger_sidebar(
   er_ui_ledger_colors_t colors,
   uint32_t focused_id) {
   er_ui_status_t status;
-  float x = bounds.x + 18.0f;
-  float y = bounds.y + 34.0f;
+  float x = bounds.x + 14.0f;
+  float y = bounds.y + 24.0f;
   bool compact = bounds.h <= ER_UI_LEDGER_STACKED_SIDE_H;
 
   status = er_ui_ledger_rect(scene, bounds, 0.0f, er_ui_color_rgb_u8(ER_UI_LEDGER_RGB_SIDEBAR));
   if (status != ER_UI_OK) return status;
-  status = er_ui_ledger_text_clipped(scene, font, "EdgeRun Ledger", x, y, bounds.w - 36.0f, colors.text);
+  status = er_ui_ledger_text_clipped(scene, font, "EdgeRun Ledger", x, y, bounds.w - 28.0f, colors.text);
   if (status != ER_UI_OK) return status;
-  status = er_ui_ledger_text_clipped(scene, font, "local settlement console", x, y + 24.0f, bounds.w - 36.0f, colors.muted);
+  status = er_ui_ledger_text_clipped(scene, font, "local settlement console", x, y + 22.0f, bounds.w - 28.0f, colors.muted);
   if (status != ER_UI_OK) return status;
 
-  y += 62.0f;
+  y += 52.0f;
   //@optimizer-ignore nav renderer intentionally emits one hit, icon, and label per fixed surface
   const er_ui_ledger_nav_item_t* nav = ER_UI_LEDGER_NAV_ITEMS;
   const er_ui_ledger_nav_item_t* nav_end = ER_UI_LEDGER_NAV_ITEMS + ER_UI_LEDGER_ARRAY_COUNT(ER_UI_LEDGER_NAV_ITEMS);
   if (compact) {
-    float nav_w = (bounds.w - 36.0f - ER_UI_LEDGER_COMPACT_NAV_GAP * (float)(ER_UI_LEDGER_ARRAY_COUNT(ER_UI_LEDGER_NAV_ITEMS) - 1u)) /
+    float nav_w = (bounds.w - 28.0f - ER_UI_LEDGER_COMPACT_NAV_GAP * (float)(ER_UI_LEDGER_ARRAY_COUNT(ER_UI_LEDGER_NAV_ITEMS) - 1u)) /
                   (float)ER_UI_LEDGER_ARRAY_COUNT(ER_UI_LEDGER_NAV_ITEMS);
     size_t nav_index = 0u;
     while (nav < nav_end) {
@@ -531,7 +532,7 @@ static er_ui_status_t er_ui_ledger_sidebar(
 
   while (nav < nav_end) {
     er_ui_bounds_t row = er_ui_bounds(x - 6.0f, y,
-                                      bounds.w - 24.0f, ER_UI_LEDGER_NAV_ROW_H);
+                                      bounds.w - 16.0f, ER_UI_LEDGER_NAV_ROW_H);
     //@optimizer-ignore fixed sidebar navigation renders one deterministic item per surface row
     status = er_ui_ledger_nav_row(scene, font, row, colors, nav, focused_id);
     if (status != ER_UI_OK) return status;
@@ -539,26 +540,26 @@ static er_ui_status_t er_ui_ledger_sidebar(
     nav++;
   }
 
-  er_ui_bounds_t qr_card = er_ui_bounds(bounds.x + 18.0f, bounds.y + bounds.h - 194.0f, bounds.w - 36.0f, 156.0f);
+  er_ui_bounds_t qr_card = er_ui_bounds(bounds.x + 14.0f, bounds.y + bounds.h - 170.0f, bounds.w - 28.0f, 144.0f);
   status = er_ui_ledger_card(scene, qr_card, colors);
   if (status != ER_UI_OK) return status;
-  status = er_ui_ledger_rect(scene, er_ui_bounds(qr_card.x + 58.0f, qr_card.y + 18.0f, 84.0f, 84.0f), 8.0f, colors.button);
+  status = er_ui_ledger_rect(scene, er_ui_bounds(qr_card.x + 42.0f, qr_card.y + 14.0f, 84.0f, 84.0f), 8.0f, colors.button);
   if (status != ER_UI_OK) return status;
   //@optimizer-ignore QR preview intentionally emits one deterministic rectangle per dark module
   const uint8_t(*dot)[2u] = ER_UI_LEDGER_QR_DOTS;
   const uint8_t(*dot_end)[2u] = ER_UI_LEDGER_QR_DOTS + ER_UI_LEDGER_ARRAY_COUNT(ER_UI_LEDGER_QR_DOTS);
   while (dot < dot_end) {
     status = er_ui_ledger_rect(scene,
-                               er_ui_bounds(qr_card.x + 62.0f + (float)(*dot)[0u] * ER_UI_LEDGER_QR_CELL,
-                                            qr_card.y + 28.0f + (float)(*dot)[1u] * ER_UI_LEDGER_QR_CELL,
+                               er_ui_bounds(qr_card.x + 46.0f + (float)(*dot)[0u] * ER_UI_LEDGER_QR_CELL,
+                                            qr_card.y + 24.0f + (float)(*dot)[1u] * ER_UI_LEDGER_QR_CELL,
                                             ER_UI_LEDGER_QR_CELL - 1.0f, ER_UI_LEDGER_QR_CELL - 1.0f),
                                0.0f, colors.bg);
     if (status != ER_UI_OK) return status;
     dot++;
   }
-  status = er_ui_ledger_text_clipped(scene, font, "Pair mobile device", qr_card.x + 24.0f, qr_card.y + 124.0f, qr_card.w - 48.0f, colors.text);
+  status = er_ui_ledger_text_clipped(scene, font, "Pair mobile device", qr_card.x + 14.0f, qr_card.y + 114.0f, qr_card.w - 28.0f, colors.text);
   if (status != ER_UI_OK) return status;
-  return er_ui_ledger_text_clipped(scene, font, "scan local access key", qr_card.x + 24.0f, qr_card.y + 146.0f, qr_card.w - 48.0f, colors.muted);
+  return er_ui_ledger_text_clipped(scene, font, "scan local access key", qr_card.x + 14.0f, qr_card.y + 134.0f, qr_card.w - 28.0f, colors.muted);
 }
 
 static er_ui_status_t er_ui_ledger_contribution_card(
@@ -1094,7 +1095,7 @@ static er_ui_status_t er_ui_ledger_dashboard(
   er_ui_ledger_content_layout_t layout = er_ui_ledger_content_layout(bounds);
   if (!er_ui_bounds_valid(layout.sidebar) || !er_ui_bounds_valid(layout.content)) return ER_UI_ERR_INVALID_ARGUMENT;
   float top_y = layout.content.y + ER_UI_LEDGER_MARGIN;
-  float grid_y = top_y + 58.0f;
+  float grid_y = top_y + 44.0f;
   float available_h = er_ui_float_max(layout.content.y + layout.content.h - grid_y - ER_UI_LEDGER_MARGIN, 1.0f);
   er_ui_responsive_grid_t grid = er_ui_responsive_grid(
     er_ui_bounds(layout.content.x, grid_y, layout.content.w, available_h),
@@ -1105,9 +1106,9 @@ static er_ui_status_t er_ui_ledger_dashboard(
 
   er_ui_status_t status = er_ui_ledger_sidebar(scene, font, layout.sidebar, colors, focused_id);
   if (status != ER_UI_OK) return status;
-  status = er_ui_ledger_text_clipped(scene, font, "Dashboard", layout.content.x, top_y + 14.0f, layout.content.w, colors.text);
+  status = er_ui_ledger_text_clipped(scene, font, "Dashboard", layout.content.x, top_y + 12.0f, layout.content.w, colors.text);
   if (status != ER_UI_OK) return status;
-  status = er_ui_ledger_text_clipped(scene, font, "settlement, royalties, and device-local accounting", layout.content.x, top_y + 38.0f, layout.content.w, colors.muted);
+  status = er_ui_ledger_text_clipped(scene, font, "settlement, royalties, and device-local accounting", layout.content.x, top_y + 34.0f, layout.content.w, colors.muted);
   if (status != ER_UI_OK) return status;
 
   if (grid.columns == 0u) return ER_UI_ERR_INVALID_ARGUMENT;
@@ -1124,6 +1125,7 @@ static er_ui_status_t er_ui_ledger_dashboard(
     if (status != ER_UI_OK) return status;
 
     er_ui_ledger_dashboard_columns_t masonry = {0};
+    size_t details_column = grid.columns >= ER_UI_LEDGER_DASHBOARD_MAX_COLUMNS ? ER_UI_LEDGER_DASHBOARD_DETAILS_COLUMN : 2u;
     for (size_t i = 0u; i < grid.columns; ++i) {
       er_ui_bounds_t column = er_ui_bounds(
         viewport.content.x + (grid.column_w + grid.gap_x) * (float)i,
@@ -1151,10 +1153,10 @@ static er_ui_status_t er_ui_ledger_dashboard(
       status = er_ui_ledger_invest_card(scene, font, er_ui_vertical_flow_next(&masonry.columns[1u], ER_UI_LEDGER_DASHBOARD_FORM_H), colors);
     }
     if (status == ER_UI_OK) {
-      status = er_ui_ledger_transfer_card(scene, font, er_ui_vertical_flow_next(&masonry.columns[1u], ER_UI_LEDGER_DASHBOARD_FORM_H), colors);
+      status = er_ui_ledger_account_summary_card(scene, font, er_ui_vertical_flow_next(&masonry.columns[1u], ER_UI_LEDGER_DASHBOARD_FORM_H), colors);
     }
     if (status == ER_UI_OK) {
-      status = er_ui_ledger_claimable_card(scene, font, er_ui_vertical_flow_next(&masonry.columns[1u], ER_UI_LEDGER_DASHBOARD_CARD_H), colors);
+      status = er_ui_ledger_transfer_card(scene, font, er_ui_vertical_flow_next(&masonry.columns[1u], ER_UI_LEDGER_DASHBOARD_FORM_H), colors);
     }
 
     if (status == ER_UI_OK) {
@@ -1164,16 +1166,20 @@ static er_ui_status_t er_ui_ledger_dashboard(
       status = er_ui_ledger_payout_preferences_card(scene, font, er_ui_vertical_flow_next(&masonry.columns[2u], ER_UI_LEDGER_DASHBOARD_FORM_H), colors);
     }
     if (status == ER_UI_OK) {
-      status = er_ui_ledger_stock_performance_card(scene, font, er_ui_vertical_flow_next(&masonry.columns[2u], ER_UI_LEDGER_DASHBOARD_FORM_H), colors);
-    }
-    if (status == ER_UI_OK) {
       status = er_ui_ledger_power_card(scene, font, er_ui_vertical_flow_next(&masonry.columns[2u], ER_UI_LEDGER_DASHBOARD_FORM_H), colors);
     }
     if (status == ER_UI_OK) {
-      status = er_ui_ledger_catalog_card(scene, font, er_ui_vertical_flow_next(&masonry.columns[2u], ER_UI_LEDGER_DASHBOARD_CARD_H), colors);
+      status = er_ui_ledger_claimable_card(scene, font, er_ui_vertical_flow_next(&masonry.columns[2u], ER_UI_LEDGER_DASHBOARD_CARD_H), colors);
+    }
+
+    if (status == ER_UI_OK) {
+      status = er_ui_ledger_stock_performance_card(scene, font, er_ui_vertical_flow_next(&masonry.columns[details_column], ER_UI_LEDGER_DASHBOARD_FORM_H), colors);
     }
     if (status == ER_UI_OK) {
-      status = er_ui_ledger_milestone_card(scene, font, er_ui_vertical_flow_next(&masonry.columns[2u], ER_UI_LEDGER_DASHBOARD_FORM_H), colors);
+      status = er_ui_ledger_catalog_card(scene, font, er_ui_vertical_flow_next(&masonry.columns[details_column], ER_UI_LEDGER_DASHBOARD_CARD_H), colors);
+    }
+    if (status == ER_UI_OK) {
+      status = er_ui_ledger_milestone_card(scene, font, er_ui_vertical_flow_next(&masonry.columns[details_column], ER_UI_LEDGER_DASHBOARD_FORM_H), colors);
     }
 
     if (pushed) er_ui_scene_pop_clip(scene);
