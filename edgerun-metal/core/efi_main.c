@@ -43,6 +43,8 @@
 #define ER_UI_BOOT_GLYPH_CACHE_BYTES (1024u * 1024u)
 #define ER_UI_BOOT_SURFACE_BYTES 0u
 #define ER_UI_BOOT_MEMORY_BUDGET_BYTES (128u * 1024u * 1024u)
+#define ER_EFI_MEMORY_MAP_BYTES (128u * 1024u)
+#define ER_EFI_EXIT_BOOT_SERVICES_ATTEMPTS 2u
 #define ER_WASM_DRIVER_MEMORY_BYTES (64u * 1024u)
 #define ER_ACPI_SIGNATURE_BYTES 4u
 #define ER_BYTE_MASK 0xffu
@@ -63,12 +65,6 @@
 #define ER_MMIO_PROBE_REG0_OFFSET 0x00u
 #define ER_MMIO_PROBE_REG1_OFFSET 0x04u
 #define ER_MMIO_PROBE_REG2_OFFSET 0x08u
-#define ER_EFI_SCAN_ESC 0x17u
-#define ER_EFI_SCAN_LEFT 0x03u
-#define ER_EFI_SCAN_RIGHT 0x04u
-#define ER_EFI_KEY_TAB 0x09u
-#define ER_EFI_KEY_ENTER 0x0du
-
 enum {
   ER_LOG_U64_STAGE_IDLE = 0u,
   ER_LOG_U64_STAGE_PCI_FIELDS = 3u,
@@ -87,6 +83,7 @@ enum {
 static ErWasmHostCalls g_host_calls = {0};
 static UINT8 g_wasm_driver_memory[ER_WASM_DRIVER_MEMORY_BYTES];
 static UINT8 g_ui_boot_arena[ER_UI_BOOT_ARENA_SIZE];
+static UINT8 g_efi_memory_map[ER_EFI_MEMORY_MAP_BYTES];
 static UINT32 g_gpu_profile_framebuffer[ER_GPU_PROFILE_FRAMEBUFFER_WIDTH_MAX *
                                         ER_GPU_PROFILE_FRAMEBUFFER_HEIGHT_MAX];
 static UINTN g_ui_boot_arena_used;
@@ -525,6 +522,54 @@ static void er_wait_for_key_then_halt(EFI_SYSTEM_TABLE* SystemTable) {
   } else {
     er_halt_forever();
   }
+}
+
+static UINT8 er_exit_boot_services(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE* SystemTable) {
+  UINTN attempt;
+
+  if (SystemTable == 0 || SystemTable->BootServices == 0 ||
+      SystemTable->BootServices->GetMemoryMap == 0 ||
+      SystemTable->BootServices->ExitBootServices == 0) {
+    er_println("boot services: unavailable");
+    return 0u;
+  }
+
+  for (attempt = 0u; attempt < ER_EFI_EXIT_BOOT_SERVICES_ATTEMPTS; ++attempt) {
+    UINTN map_size = sizeof(g_efi_memory_map);
+    UINTN map_key = 0u;
+    UINTN descriptor_size = 0u;
+    UINT32 descriptor_version = 0u;
+    EFI_STATUS status = SystemTable->BootServices->GetMemoryMap(
+      &map_size,
+      g_efi_memory_map,
+      &map_key,
+      &descriptor_size,
+      &descriptor_version);
+
+    if (status == EFI_BUFFER_TOO_SMALL) {
+      er_println("boot services: memory map buffer too small");
+      return 0u;
+    }
+    if (status != EFI_SUCCESS) {
+      er_print("boot services: GetMemoryMap failed ");
+      er_print_u64_hex(status);
+      er_println("");
+      return 0u;
+    }
+
+    status = SystemTable->BootServices->ExitBootServices(ImageHandle, map_key);
+    if (status == EFI_SUCCESS) {
+      return 1u;
+    }
+    if (status != EFI_INVALID_PARAMETER || attempt + 1u == ER_EFI_EXIT_BOOT_SERVICES_ATTEMPTS) {
+      er_print("boot services: ExitBootServices failed ");
+      er_print_u64_hex(status);
+      er_println("");
+      return 0u;
+    }
+  }
+
+  return 0u;
 }
 
 static int er_run_module(const UINT8* module_data, UINT32 module_size, const char* module_name) {
@@ -1200,92 +1245,6 @@ static void er_run_mmio_profile(void) {
   er_run_mmio_probe();
 }
 
-static er_ui_action_t er_ui_boot_tab_action(UINT32 surface_id) {
-  er_ui_action_t action;
-  er_mem_zero((UINT8*)&action, (UINTN)sizeof(action));
-  action.kind = ER_UI_ACTION_TAB_SELECTED;
-  action.id = surface_id;
-  return action;
-}
-
-static UINT32 er_ui_boot_next_app_id(UINT32 current) {
-  switch (current) {
-    case ER_UI_DEMO_APP_RESOURCES_ID:
-      return ER_UI_DEMO_APP_NETWORK_ID;
-    case ER_UI_DEMO_APP_NETWORK_ID:
-      return ER_UI_DEMO_APP_PEOPLE_ID;
-    case ER_UI_DEMO_APP_PEOPLE_ID:
-      return ER_UI_DEMO_APP_RESOURCES_ID;
-    default:
-      return ER_UI_DEMO_APP_RESOURCES_ID;
-  }
-}
-
-static UINT32 er_ui_boot_prev_app_id(UINT32 current) {
-  switch (current) {
-    case ER_UI_DEMO_APP_RESOURCES_ID:
-      return ER_UI_DEMO_APP_PEOPLE_ID;
-    case ER_UI_DEMO_APP_NETWORK_ID:
-      return ER_UI_DEMO_APP_RESOURCES_ID;
-    case ER_UI_DEMO_APP_PEOPLE_ID:
-      return ER_UI_DEMO_APP_NETWORK_ID;
-    default:
-      return ER_UI_DEMO_APP_RESOURCES_ID;
-  }
-}
-
-static UINT8 er_ui_boot_direct_app_id(CHAR16 key, UINT32* out_surface_id) {
-  if (out_surface_id == 0) {
-    return 0u;
-  }
-  switch (key) {
-    case '1':
-      *out_surface_id = ER_UI_DEMO_APP_RESOURCES_ID;
-      return 1u;
-    case '2':
-      *out_surface_id = ER_UI_DEMO_APP_NETWORK_ID;
-      return 1u;
-    case '3':
-      *out_surface_id = ER_UI_DEMO_APP_PEOPLE_ID;
-      return 1u;
-    default:
-      return 0u;
-  }
-}
-
-static UINT8 er_ui_boot_action_from_key(const er_ui_demo_apps_state_t* demo_state,
-                                        EFI_INPUT_KEY key,
-                                        er_ui_action_t* out_action) {
-  UINT32 surface_id = 0u;
-  UINT32 focused_id;
-
-  if (demo_state == 0 || out_action == 0) {
-    return 0u;
-  }
-
-  if (er_ui_boot_direct_app_id(key.UnicodeChar, &surface_id) != 0u) {
-    *out_action = er_ui_boot_tab_action(surface_id);
-    return 1u;
-  }
-
-  focused_id = er_ui_workspace_focused_surface_id(&demo_state->shell);
-  if (key.UnicodeChar == ER_EFI_KEY_TAB || key.UnicodeChar == ER_EFI_KEY_ENTER ||
-      key.ScanCode == ER_EFI_SCAN_RIGHT) {
-    *out_action = er_ui_boot_tab_action(er_ui_boot_next_app_id(focused_id));
-    return 1u;
-  }
-  if (key.ScanCode == ER_EFI_SCAN_LEFT) {
-    *out_action = er_ui_boot_tab_action(er_ui_boot_prev_app_id(focused_id));
-    return 1u;
-  }
-
-  return 0u;
-}
-
-static UINT8 er_ui_boot_key_exits(EFI_INPUT_KEY key) {
-  return key.ScanCode == ER_EFI_SCAN_ESC || key.UnicodeChar == 'q' || key.UnicodeChar == 'Q';
-}
-
 static er_ui_status_t er_build_ui_boot_scene(er_ui_scene_t* scene,
                                              er_ui_demo_apps_state_t* demo_state,
                                              vr_font_face_t* font,
@@ -1376,7 +1335,7 @@ static UINT8 er_ui_boot_render_scene(er_ui_demo_apps_state_t* demo_state,
   return 1u;
 }
 
-static void er_run_ui_profile(EFI_SYSTEM_TABLE* SystemTable) {
+static void er_run_ui_profile(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE* SystemTable) {
   er_ui_scene_budget_t scene_budget;
   ErUiSurfaceMode mode;
   ErUiSurfaceFrameBudget frame_budget;
@@ -1389,7 +1348,6 @@ static void er_run_ui_profile(EFI_SYSTEM_TABLE* SystemTable) {
     (er_ui_style_preset_t){ER_UI_COLOR_SCHEME_DARK, ER_UI_ACCENT_NEUTRAL, ER_UI_RADIUS_DEFAULT});
   er_ui_demo_apps_state_t demo_state = {0};
   vr_font_face_t* font = 0;
-  EFIAPI_KEY_FN read_key = 0;
 
   er_println("boot profile: ui");
   if (er_ui_gop_renderer_init(SystemTable) == 0u) {
@@ -1457,43 +1415,13 @@ static void er_run_ui_profile(EFI_SYSTEM_TABLE* SystemTable) {
   }
 
   er_gfx_console_set_enabled(0u);
-  er_println("ui renderer: interactive");
-  er_println("ui input: 1 resources, 2 network, 3 people, tab/right next, left previous, esc/q exit");
-
-  if (SystemTable != 0 && SystemTable->ConIn != 0) {
-    read_key = SystemTable->ConIn->ReadKeyStroke;
-  }
-  if (read_key == 0) {
-    er_println("ui input: unavailable");
+  er_println("boot services: exiting");
+  if (er_exit_boot_services(ImageHandle, SystemTable) == 0u) {
     er_ui_demo_apps_state_destroy(&demo_state);
     vr_font_face_destroy(font);
-    return;
+    er_halt_forever();
   }
-
-  for (;;) {
-    EFI_INPUT_KEY key;
-    if (read_key(SystemTable->ConIn, &key) != EFI_SUCCESS) {
-      er_halt_once();
-    } else if (er_ui_boot_key_exits(key) != 0u) {
-      break;
-    } else {
-      er_ui_action_t action;
-      bool changed = false;
-      if (er_ui_boot_action_from_key(&demo_state, key, &action) != 0u &&
-          er_ui_demo_apps_apply_action(&demo_state, action, &changed) == ER_UI_OK &&
-          changed) {
-        //@optimizer-ignore interactive UI loop redraws only after a state-changing input action
-        if (er_ui_boot_render_scene(&demo_state, font, mode, &tile_plan, memory_plan, scene_budget,
-                                    frame_budget, theme) == 0u) {
-          break;
-        }
-      }
-    }
-  }
-
-  er_ui_demo_apps_state_destroy(&demo_state);
-  vr_font_face_destroy(font);
-  er_println("ui renderer: exited");
+  er_halt_forever();
 }
 
 static void er_run_invalid_profile(void) {
@@ -1503,9 +1431,9 @@ static void er_run_invalid_profile(void) {
   er_halt_forever();
 }
 
-static void er_run_boot_profile(EFI_SYSTEM_TABLE* SystemTable) {
+static void er_run_boot_profile(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE* SystemTable) {
   if (ER_BOOT_PROFILE == ER_BOOT_PROFILE_UI) {
-    er_run_ui_profile(SystemTable);
+    er_run_ui_profile(ImageHandle, SystemTable);
     return;
   }
 
@@ -1559,7 +1487,7 @@ EFI_STATUS EFIAPI efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE* SystemTable
   er_println("UEFI boot OK");
   er_log_acpi(SystemTable);
 
-  er_run_boot_profile(SystemTable);
+  er_run_boot_profile(ImageHandle, SystemTable);
   if (ER_BOOT_PROFILE == ER_BOOT_PROFILE_UI) {
     return EFI_SUCCESS;
   }

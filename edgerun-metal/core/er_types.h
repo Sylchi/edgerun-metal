@@ -114,6 +114,8 @@ typedef EFI_STATUS (*EFIAPI_HANDLE_PROTOCOL_FN)(EFI_HANDLE Handle, EFI_GUID* Pro
 typedef EFI_STATUS (*EFIAPI_LOCATE_HANDLE_BUFFER_FN)(EFI_LOCATE_SEARCH_TYPE SearchType, EFI_GUID* Protocol, void* SearchKey, UINTN* NoHandles, EFI_HANDLE** Buffer);
 typedef EFI_STATUS (*EFIAPI_LOCATE_PROTOCOL_FN)(EFI_GUID* Protocol, void* Registration, void** Interface);
 typedef EFI_STATUS (*EFIAPI_FREE_POOL_FN)(void* Buffer);
+typedef EFI_STATUS (*EFIAPI_GET_MEMORY_MAP_FN)(UINTN* MemoryMapSize, void* MemoryMap, UINTN* MapKey, UINTN* DescriptorSize, UINT32* DescriptorVersion);
+typedef EFI_STATUS (*EFIAPI_EXIT_BOOT_SERVICES_FN)(EFI_HANDLE ImageHandle, UINTN MapKey);
 
 struct EFI_BOOT_SERVICES {
   EFI_TABLE_HEADER Hdr;
@@ -121,7 +123,7 @@ struct EFI_BOOT_SERVICES {
   void* RestoreTPL;
   void* AllocatePages;
   void* FreePages;
-  void* GetMemoryMap;
+  EFIAPI_GET_MEMORY_MAP_FN GetMemoryMap;
   void* AllocatePool;
   EFIAPI_FREE_POOL_FN FreePool;
   EFIAPI_CREATE_EVENT_FN CreateEvent;
@@ -143,7 +145,7 @@ struct EFI_BOOT_SERVICES {
   void* StartImage;
   void* Exit;
   void* UnloadImage;
-  void* ExitBootServices;
+  EFIAPI_EXIT_BOOT_SERVICES_FN ExitBootServices;
   void* GetNextMonotonicCount;
   void* Stall;
   void* SetWatchdogTimer;
@@ -295,7 +297,9 @@ typedef struct {
 
 #define EFI_SUCCESS 0
 #define EFI_ERROR_MASK 0x8000000000000000ull
+#define EFI_BUFFER_TOO_SMALL ((EFI_STATUS)(EFI_ERROR_MASK | 5u))
 #define EFI_NOT_READY ((EFI_STATUS)(EFI_ERROR_MASK | 6u))
+#define EFI_INVALID_PARAMETER ((EFI_STATUS)(EFI_ERROR_MASK | 2u))
 #define EVT_NOTIFY_SIGNAL 0x00000200u
 #define TPL_CALLBACK 8u
 
