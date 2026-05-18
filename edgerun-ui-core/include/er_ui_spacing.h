@@ -162,6 +162,12 @@ typedef struct {
   bool stacked;
 } er_ui_responsive_sidecar_t;
 
+typedef struct {
+  er_ui_bounds_t bounds;
+  float cursor_y;
+  float gap;
+} er_ui_vertical_flow_t;
+
 er_ui_component_padding_t er_ui_component_padding_for_density(er_ui_component_density_t density);
 er_ui_spacing_t er_ui_spacing_default(void);
 er_ui_responsive_sidecar_t er_ui_responsive_sidecar(
@@ -179,6 +185,9 @@ er_ui_responsive_grid_t er_ui_responsive_grid(
   float gap_y);
 er_ui_bounds_t er_ui_responsive_grid_cell(er_ui_responsive_grid_t grid, size_t index, float row_h);
 er_ui_bounds_t er_ui_responsive_grid_span(er_ui_responsive_grid_t grid, size_t index, size_t column_span, float row_h);
+er_ui_vertical_flow_t er_ui_vertical_flow(er_ui_bounds_t bounds, float gap);
+er_ui_bounds_t er_ui_vertical_flow_next(er_ui_vertical_flow_t* flow, float preferred_h);
+er_ui_bounds_t er_ui_vertical_flow_remaining(const er_ui_vertical_flow_t* flow);
 er_ui_bounds_t er_ui_row_icon_slot(er_ui_bounds_t row);
 er_ui_bounds_t er_ui_row_text_rect(er_ui_bounds_t row, float trailing_reserved_w);
 er_ui_component_padding_t er_ui_app_surface_padding_for_width(float width);

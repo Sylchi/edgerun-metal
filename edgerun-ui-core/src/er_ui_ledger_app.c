@@ -25,6 +25,9 @@ static const float ER_UI_LEDGER_SIDE_W = 220.0f;
 static const float ER_UI_LEDGER_STACKED_SIDE_H = 160.0f;
 static const float ER_UI_LEDGER_MIN_CARD_W = 220.0f;
 static const size_t ER_UI_LEDGER_DASHBOARD_MAX_COLUMNS = 3u;
+static const size_t ER_UI_LEDGER_ACCESS_MAX_COLUMNS = 2u;
+static const float ER_UI_LEDGER_SURFACE_BODY_Y = 72.0f;
+static const float ER_UI_LEDGER_FORM_CARD_H = 286.0f;
 static const float ER_UI_LEDGER_CARD_RADIUS = 8.0f;
 static const float ER_UI_LEDGER_NAV_ROW_H = 34.0f;
 static const float ER_UI_LEDGER_FIELD_H = 32.0f;
@@ -642,15 +645,15 @@ static er_ui_status_t er_ui_ledger_payments(
   er_ui_ledger_content_layout_t layout;
   er_ui_status_t status = er_ui_ledger_begin_surface(scene, font, bounds, colors, focused_id, "Payments", &layout);
   if (status != ER_UI_OK) return status;
-  status = er_ui_ledger_transfer_card(scene, font,
-                                      er_ui_bounds(layout.content.x, layout.content.y + 72.0f,
-                                                   layout.content.w * 0.48f, 286.0f),
-                                      colors);
+  er_ui_bounds_t body = er_ui_bounds(
+    layout.content.x,
+    layout.content.y + ER_UI_LEDGER_SURFACE_BODY_Y,
+    layout.content.w,
+    er_ui_float_max(layout.content.h - ER_UI_LEDGER_SURFACE_BODY_Y - ER_UI_LEDGER_MARGIN, 1.0f));
+  er_ui_vertical_flow_t flow = er_ui_vertical_flow(body, ER_UI_LEDGER_GAP);
+  status = er_ui_ledger_transfer_card(scene, font, er_ui_vertical_flow_next(&flow, ER_UI_LEDGER_FORM_CARD_H), colors);
   if (status != ER_UI_OK) return status;
-  return er_ui_ledger_transactions_card(scene, font,
-                                        er_ui_bounds(layout.content.x, layout.content.y + 374.0f,
-                                                     layout.content.w, 306.0f),
-                                        colors);
+  return er_ui_ledger_transactions_card(scene, font, er_ui_vertical_flow_remaining(&flow), colors);
 }
 
 static er_ui_status_t er_ui_ledger_access(
@@ -662,16 +665,17 @@ static er_ui_status_t er_ui_ledger_access(
   er_ui_ledger_content_layout_t layout;
   er_ui_status_t status = er_ui_ledger_begin_surface(scene, font, bounds, colors, focused_id, "Access", &layout);
   if (status != ER_UI_OK) return status;
-  status = er_ui_ledger_access_card(scene, font,
-                                    er_ui_bounds(layout.content.x, layout.content.y + 72.0f,
-                                                 layout.content.w * 0.48f, 286.0f),
-                                    colors);
+  er_ui_bounds_t body = er_ui_bounds(
+    layout.content.x,
+    layout.content.y + ER_UI_LEDGER_SURFACE_BODY_Y,
+    layout.content.w,
+    er_ui_float_max(layout.content.h - ER_UI_LEDGER_SURFACE_BODY_Y - ER_UI_LEDGER_MARGIN, 1.0f));
+  er_ui_responsive_grid_t grid = er_ui_responsive_grid(body, ER_UI_LEDGER_MIN_CARD_W, ER_UI_LEDGER_ACCESS_MAX_COLUMNS, ER_UI_LEDGER_GAP, ER_UI_LEDGER_GAP);
+  if (grid.columns == 0u) return ER_UI_ERR_INVALID_ARGUMENT;
+  float row_h = er_ui_float_max(body.h, 1.0f);
+  status = er_ui_ledger_access_card(scene, font, er_ui_responsive_grid_cell(grid, 0u, row_h), colors);
   if (status != ER_UI_OK) return status;
-  return er_ui_ledger_targets_card(scene, font,
-                                   er_ui_bounds(layout.content.x + layout.content.w * 0.52f,
-                                                layout.content.y + 72.0f,
-                                                layout.content.w * 0.48f, 300.0f),
-                                   colors);
+  return er_ui_ledger_targets_card(scene, font, er_ui_responsive_grid_cell(grid, 1u, row_h), colors);
 }
 
 er_ui_status_t er_ui_ledger_app_state_init(er_ui_ledger_app_state_t* state, er_ui_allocator_t allocator) {
