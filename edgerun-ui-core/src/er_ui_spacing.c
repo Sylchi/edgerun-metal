@@ -54,6 +54,41 @@ er_ui_spacing_t er_ui_spacing_default(void) {
   return spacing;
 }
 
+er_ui_responsive_sidecar_t er_ui_responsive_sidecar(
+  er_ui_bounds_t bounds,
+  float min_side_w,
+  float preferred_side_w,
+  float min_main_w,
+  float gap,
+  float stacked_side_h) {
+  er_ui_responsive_sidecar_t layout = {0};
+  if (!er_ui_bounds_valid(bounds) || min_side_w <= 0.0f || preferred_side_w < min_side_w || min_main_w <= 0.0f || gap < 0.0f || stacked_side_h <= 0.0f) {
+    return layout;
+  }
+
+  float preferred_total_w = preferred_side_w + gap + min_main_w;
+  if (bounds.w >= preferred_total_w) {
+    layout.side = er_ui_bounds(bounds.x, bounds.y, preferred_side_w, bounds.h);
+    layout.main = er_ui_bounds(bounds.x + preferred_side_w + gap, bounds.y, bounds.w - preferred_side_w - gap, bounds.h);
+    return layout;
+  }
+
+  float minimum_total_w = min_side_w + gap + min_main_w;
+  if (bounds.w >= minimum_total_w) {
+    float side_w = er_ui_float_max(min_side_w, bounds.w - gap - min_main_w);
+    layout.side = er_ui_bounds(bounds.x, bounds.y, side_w, bounds.h);
+    layout.main = er_ui_bounds(bounds.x + side_w + gap, bounds.y, bounds.w - side_w - gap, bounds.h);
+    return layout;
+  }
+
+  layout.stacked = true;
+  float side_h = er_ui_float_min(stacked_side_h, bounds.h);
+  float main_y = bounds.y + side_h + gap;
+  layout.side = er_ui_bounds(bounds.x, bounds.y, bounds.w, side_h);
+  layout.main = er_ui_bounds(bounds.x, main_y, bounds.w, er_ui_float_max(bounds.y + bounds.h - main_y, 0.0f));
+  return layout;
+}
+
 er_ui_responsive_grid_t er_ui_responsive_grid(
   er_ui_bounds_t bounds,
   float min_column_w,
