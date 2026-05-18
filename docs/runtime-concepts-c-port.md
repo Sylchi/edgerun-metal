@@ -146,5 +146,6 @@ The completed C foundation is:
 - concurrent boot-local Wasm UI app contexts with isolated preallocated memory, presentation identity, scene state, and per-runtime `ui_emit` dispatch
 - boot-local Wasm UI app launch from validated package-loaded bytes stored in persistent per-app module buffers
 - saved package source records that bind package launch provenance to admitted storage-retrieve route ids
+- storage-bound package loading that checks retrieved object route ids before package bytes become launch input
 
 The next C milestone is to replace embedded package packet sources with admitted storage endpoint responses for saved user-authored app packages, send admitted scene packets through relay send, verify the route at native ingress, and hand the scene to an endpoint-owned renderer. No host listener, host capture path, host filesystem persistence, or host networking model belongs in the runtime core.

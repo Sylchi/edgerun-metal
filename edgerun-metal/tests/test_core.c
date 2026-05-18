@@ -3066,6 +3066,11 @@ static void test_app_identity_routes(void) {
   ErAppPackageStorageSource storage_source;
   ErAppPackageStorageSource storage_source_again;
   ErAppPackageStorageSource package_without_assets_source;
+  ErAppPackageStorageSource bad_storage_source;
+  ErAppPackageStorageObject app_storage_object;
+  ErAppPackageStorageObject manifest_storage_object;
+  ErAppPackageStorageObject ui_assets_storage_object;
+  ErAppPackageStorageObject bad_storage_object;
   ErAdmittedRoute app_retrieve_route;
   ErAdmittedRoute manifest_retrieve_route;
   ErAdmittedRoute ui_assets_retrieve_route;
@@ -3285,6 +3290,46 @@ static void test_app_identity_routes(void) {
               1);
   check_hash_equal("app package storage source id deterministic",
                    &storage_source_again.source_id, &storage_source.source_id);
+  app_storage_object.retrieve_route_id = storage_source.app_retrieve_route_id;
+  app_storage_object.object = app_load;
+  manifest_storage_object.retrieve_route_id =
+      storage_source.manifest_retrieve_route_id;
+  manifest_storage_object.object = manifest_load;
+  ui_assets_storage_object.retrieve_route_id =
+      storage_source.ui_assets_retrieve_route_id;
+  ui_assets_storage_object.object = ui_assets_load;
+  check_int64("app package storage load",
+              er_app_load_package_from_storage_source(&crypto, &package,
+                                                      &storage_source,
+                                                      &app_storage_object,
+                                                      &manifest_storage_object,
+                                                      &ui_assets_storage_object,
+                                                      &loaded_package),
+              1);
+  check_hash_equal("app package storage load package",
+                   &loaded_package.package_id, &package.package_id);
+  check_uint64("app package storage load app len", loaded_package.app_len,
+               sizeof(app_bytes));
+  bad_storage_object = app_storage_object;
+  bad_storage_object.retrieve_route_id = manifest_storage_object.retrieve_route_id;
+  check_int64("app package storage load reject route mismatch",
+              er_app_load_package_from_storage_source(&crypto, &package,
+                                                      &storage_source,
+                                                      &bad_storage_object,
+                                                      &manifest_storage_object,
+                                                      &ui_assets_storage_object,
+                                                      &loaded_package),
+              0);
+  bad_storage_source = storage_source;
+  bad_storage_source.source_id.bytes[0] ^= 1u;
+  check_int64("app package storage load reject source id",
+              er_app_load_package_from_storage_source(&crypto, &package,
+                                                      &bad_storage_source,
+                                                      &app_storage_object,
+                                                      &manifest_storage_object,
+                                                      &ui_assets_storage_object,
+                                                      &loaded_package),
+              0);
   check_int64("app package storage source without assets",
               er_app_prepare_package_storage_source(&crypto,
                                                     &package_without_assets,
@@ -3296,6 +3341,30 @@ static void test_app_identity_routes(void) {
   check_hash_not_equal("app package storage source assets affect id",
                        &package_without_assets_source.source_id,
                        &storage_source.source_id);
+  app_storage_object.retrieve_route_id =
+      package_without_assets_source.app_retrieve_route_id;
+  manifest_storage_object.retrieve_route_id =
+      package_without_assets_source.manifest_retrieve_route_id;
+  check_int64("app package storage load without assets",
+              er_app_load_package_from_storage_source(&crypto,
+                                                      &package_without_assets,
+                                                      &package_without_assets_source,
+                                                      &app_storage_object,
+                                                      &manifest_storage_object,
+                                                      0,
+                                                      &loaded_package),
+              1);
+  check_uint64("app package storage load no assets len",
+               loaded_package.ui_assets_len, 0u);
+  check_int64("app package storage load reject extra assets",
+              er_app_load_package_from_storage_source(&crypto,
+                                                      &package_without_assets,
+                                                      &package_without_assets_source,
+                                                      &app_storage_object,
+                                                      &manifest_storage_object,
+                                                      &ui_assets_storage_object,
+                                                      &loaded_package),
+              0);
   check_int64("app package storage reject extra assets route",
               er_app_prepare_package_storage_source(&crypto,
                                                     &package_without_assets,

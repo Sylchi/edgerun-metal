@@ -24,6 +24,7 @@ See `../docs/relay-architecture.md` for the cross-project model and `../docs/coh
 - `er_app` can load app package objects from validated VFS packets into caller-owned buffers, then reject package id mismatches, object id mismatches, tampered object bytes, and unexpected asset payloads.
 - The boot UI profile now packages the embedded Wasm UI app as VFS object packets and loads it through `er_app_load_package_objects` into persistent per-app module buffers before preparing each runtime.
 - `er_app` can bind a launchable saved package source to admitted storage-retrieve route ids for the package's app, manifest, and optional UI asset objects.
+- `er_app` can load a package from storage-bound object responses only when each retrieved object matches the source's admitted route id.
 
 ## Architecture rule
 
@@ -150,7 +151,7 @@ Proof:
 
 ### M6: User-authored Wasm UI app proof
 
-Status: relay hostcall foundation, concurrent local Wasm UI app contexts, content-addressed app package records, validated package object loading, boot-local package-loaded app launch, and admitted storage-source binding implemented; storage endpoint integration and relay-routed render packets are next.
+Status: relay hostcall foundation, concurrent local Wasm UI app contexts, content-addressed app package records, validated package object loading, boot-local package-loaded app launch, admitted storage-source binding, and storage-bound package loading implemented; storage endpoint integration and relay-routed render packets are next.
 
 - Keep bounded Wasm imports for relay send/receive as the durable app boundary.
 - Keep each loaded app in an explicit runtime context with preallocated memory, presentation identity, scene state, and app-switcher selection.
