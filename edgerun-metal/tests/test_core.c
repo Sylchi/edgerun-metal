@@ -2723,6 +2723,8 @@ static void test_ui_wasm_app_runner(void) {
   runtime.relay_outbox_len = 2048u;
   runtime.presentation = &presentation;
   runtime.scene = &scene;
+  runtime.input_epoch_modifier.tick_stride = 2u;
+  runtime.execute_epoch_modifier.tick_stride = 4u;
   runtime.input_len = ER_UI_WASM_INPUT_PACKET_LEN;
   runtime.input_sequence = ER_UI_WASM_INPUT_SEQUENCE_MAX;
   check_int64("ui wasm app prepare",
@@ -2732,6 +2734,8 @@ static void test_ui_wasm_app_runner(void) {
   check_uint64("ui wasm app prepared input len", runtime.input_len, 0u);
   check_uint64("ui wasm app prepared input sequence", runtime.input_sequence, 0u);
   check_uint64("ui wasm app prepared clock tick", runtime.settlement_clock.now.tick, 0u);
+  check_uint64("ui wasm app input epoch stride", runtime.input_epoch_modifier.tick_stride, 2u);
+  check_uint64("ui wasm app execute epoch stride", runtime.execute_epoch_modifier.tick_stride, 4u);
   check_int64("ui wasm app deliver input",
               er_ui_wasm_app_deliver_input(&runtime, input_packet,
                                            (UINT32)sizeof(input_packet)),
@@ -2741,13 +2745,13 @@ static void test_ui_wasm_app_runner(void) {
   check_uint64("ui wasm app inbox zeroed", memory[4], 0u);
   check_uint64("ui wasm app input len", runtime.input_len, sizeof(input_packet));
   check_uint64("ui wasm app input sequence", runtime.input_sequence, 1u);
-  check_uint64("ui wasm app input epoch tick", runtime.last_input_epoch.tick, 1u);
+  check_uint64("ui wasm app input epoch tick", runtime.last_input_epoch.tick, 2u);
   check_int64("ui wasm app reject oversized input",
               er_ui_wasm_app_deliver_input(&runtime, input_packet,
                                            runtime.relay_inbox_len + 1u),
               -1);
   check_uint64("ui wasm app rejected input sequence", runtime.input_sequence, 1u);
-  check_uint64("ui wasm app rejected input epoch tick", runtime.last_input_epoch.tick, 1u);
+  check_uint64("ui wasm app rejected input epoch tick", runtime.last_input_epoch.tick, 2u);
   key.kind = ER_UI_KEY_OTHER;
   key.codepoint = (UINT32)'A';
   modifiers = er_ui_key_modifiers(true, true, false, false);
@@ -2767,7 +2771,7 @@ static void test_ui_wasm_app_runner(void) {
   check_uint64("ui wasm app key input sequence field",
                memory[ER_UI_WASM_INPUT_SEQUENCE_OFFSET], 2u);
   check_uint64("ui wasm app key input sequence", runtime.input_sequence, 2u);
-  check_uint64("ui wasm app key input epoch tick", runtime.last_input_epoch.tick, 2u);
+  check_uint64("ui wasm app key input epoch tick", runtime.last_input_epoch.tick, 4u);
   invalid_key.kind = (er_ui_key_kind_t)(ER_UI_KEY_OTHER + 1u);
   invalid_key.codepoint = 0u;
   check_int64("ui wasm app reject invalid key input",
@@ -2779,7 +2783,7 @@ static void test_ui_wasm_app_runner(void) {
   check_uint64("ui wasm app wrapped key input sequence field",
                memory[ER_UI_WASM_INPUT_SEQUENCE_OFFSET], 1u);
   check_uint64("ui wasm app wrapped key input sequence", runtime.input_sequence, 1u);
-  check_uint64("ui wasm app wrapped input epoch tick", runtime.last_input_epoch.tick, 3u);
+  check_uint64("ui wasm app wrapped input epoch tick", runtime.last_input_epoch.tick, 6u);
   check_int64("ui wasm app execute", er_ui_wasm_app_execute(&runtime, &result),
               0);
   check_uint64("ui wasm app result", (UINT64)result,
@@ -2788,7 +2792,7 @@ static void test_ui_wasm_app_runner(void) {
                  ER_WASM_UI_HIT_RECORD_LEN +
                  ER_WASM_UI_QUAD_RECORD_LEN);
   check_uint64("ui wasm app emitted", runtime.emitted, 1u);
-  check_uint64("ui wasm app execute epoch tick", runtime.last_execute_epoch.tick, 4u);
+  check_uint64("ui wasm app execute epoch tick", runtime.last_execute_epoch.tick, 10u);
   check_uint64("ui wasm app rects", scene.rect_count, 1u);
   check_uint64("ui wasm app hits", scene.hit_count, 1u);
   check_uint64("ui wasm app text", scene.text_quad_count, 1u);
@@ -2798,7 +2802,7 @@ static void test_ui_wasm_app_runner(void) {
               0);
   check_uint64("ui wasm app persistent memory", memory[4096], 0x5au);
   check_uint64("ui wasm app emitted again", runtime.emitted, 1u);
-  check_uint64("ui wasm app execute again epoch tick", runtime.last_execute_epoch.tick, 5u);
+  check_uint64("ui wasm app execute again epoch tick", runtime.last_execute_epoch.tick, 14u);
   check_uint64("ui wasm app rects after rerun", scene.rect_count, 1u);
   check_uint64("ui wasm app hits after rerun", scene.hit_count, 1u);
   check_uint64("ui wasm app text after rerun", scene.text_quad_count, 1u);

@@ -41,6 +41,8 @@ typedef struct {
   ErWasmModule module;
   UINT32 main_index;
   ErEpochClock settlement_clock;
+  ErEpochClockModifier input_epoch_modifier;
+  ErEpochClockModifier execute_epoch_modifier;
   ErEpochStamp last_input_epoch;
   ErEpochStamp last_execute_epoch;
   UINT32 input_len;
