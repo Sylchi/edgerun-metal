@@ -2595,6 +2595,7 @@ static void test_epoch_clock_rollover(void) {
   ErEpochClockLimits limits;
   ErEpochClock clock;
   ErEpochBoundary boundary;
+  ErEpochClockModifier modifier;
   ErEpochStamp earlier;
   ErEpochStamp later;
 
@@ -2645,6 +2646,50 @@ static void test_epoch_clock_rollover(void) {
   check_int64("epoch compare equal", er_epoch_stamp_compare(earlier, earlier), 0);
   check_int64("epoch compare greater", er_epoch_stamp_compare(later, earlier), 1);
   check_int64("epoch reject invalid advance", er_epoch_clock_advance(0, &boundary), 0);
+
+  check_int64("epoch reinit for modifier", er_epoch_clock_init(&limits, &clock), 1);
+  modifier = er_epoch_clock_default_modifier();
+  check_uint64("epoch default stride", modifier.tick_stride, 1u);
+  modifier.tick_stride = 5u;
+  check_int64("epoch modifier advance",
+              er_epoch_clock_advance_with_modifier(&clock, &modifier, &boundary), 1);
+  check_uint64("epoch modifier tick", clock.now.tick, 1u);
+  check_uint64("epoch modifier slot", clock.now.slot, 2u);
+  check_uint64("epoch modifier slot boundary", boundary.slot_boundary, 1u);
+  check_uint64("epoch modifier epoch boundary", boundary.epoch_boundary, 0u);
+  modifier.tick_stride = 7u;
+  check_int64("epoch modifier crosses epoch and era",
+              er_epoch_clock_advance_with_modifier(&clock, &modifier, &boundary), 1);
+  check_uint64("epoch modifier final tick", clock.now.tick, 0u);
+  check_uint64("epoch modifier final slot", clock.now.slot, 0u);
+  check_uint64("epoch modifier final epoch", clock.now.epoch, 0u);
+  check_uint64("epoch modifier final era", clock.now.era, 1u);
+  check_uint64("epoch modifier epoch boundary", boundary.epoch_boundary, 1u);
+  check_uint64("epoch modifier era boundary", boundary.era_boundary, 1u);
+  modifier.tick_stride = 0u;
+  check_int64("epoch reject zero stride",
+              er_epoch_clock_advance_with_modifier(&clock, &modifier, &boundary), 0);
+  clock.now.tick = 1u;
+  modifier.tick_stride = UINT64_MAX;
+  check_int64("epoch reject tick overflow",
+              er_epoch_clock_advance_with_modifier(&clock, &modifier, &boundary), 0);
+  check_uint64("epoch tick overflow unchanged", clock.now.tick, 1u);
+  clock.now.tick = 0u;
+  clock.now.slot = UINT64_MAX;
+  modifier.tick_stride = 2u;
+  check_int64("epoch reject slot overflow",
+              er_epoch_clock_advance_with_modifier(&clock, &modifier, &boundary), 0);
+  check_uint64("epoch slot overflow unchanged", clock.now.slot, UINT64_MAX);
+  clock.now.slot = 2u;
+  clock.now.epoch = UINT64_MAX;
+  check_int64("epoch reject epoch overflow",
+              er_epoch_clock_advance_with_modifier(&clock, &modifier, &boundary), 0);
+  check_uint64("epoch epoch overflow unchanged", clock.now.epoch, UINT64_MAX);
+  clock.now.epoch = 1u;
+  clock.now.era = UINT64_MAX;
+  check_int64("epoch reject era overflow",
+              er_epoch_clock_advance_with_modifier(&clock, &modifier, &boundary), 0);
+  check_uint64("epoch era overflow unchanged", clock.now.era, UINT64_MAX);
 }
 
 static void test_ui_wasm_app_runner(void) {

@@ -8,6 +8,10 @@ static UINT8 er_epoch_clock_limits_valid(const ErEpochClockLimits* limits) {
                  limits->epochs_per_era != 0u);
 }
 
+static UINT8 er_epoch_clock_modifier_valid(const ErEpochClockModifier* modifier) {
+  return (UINT8)(modifier != 0 && modifier->tick_stride != 0u);
+}
+
 static INT32 er_epoch_compare_u64(UINT64 left, UINT64 right) {
   if (left < right) {
     return -1;
@@ -27,6 +31,13 @@ ErEpochClockLimits er_epoch_clock_default_limits(void) {
   return limits;
 }
 
+ErEpochClockModifier er_epoch_clock_default_modifier(void) {
+  ErEpochClockModifier modifier;
+
+  modifier.tick_stride = ER_EPOCH_CLOCK_DEFAULT_STRIDE;
+  return modifier;
+}
+
 UINT8 er_epoch_clock_init(const ErEpochClockLimits* limits, ErEpochClock* out_clock) {
   if (er_epoch_clock_limits_valid(limits) == 0u || out_clock == 0) {
     return 0u;
@@ -37,39 +48,92 @@ UINT8 er_epoch_clock_init(const ErEpochClockLimits* limits, ErEpochClock* out_cl
 }
 
 UINT8 er_epoch_clock_advance(ErEpochClock* clock, ErEpochBoundary* out_boundary) {
+  ErEpochClockModifier modifier;
+
+  modifier = er_epoch_clock_default_modifier();
+  return er_epoch_clock_advance_with_modifier(clock, &modifier, out_boundary);
+}
+
+UINT8 er_epoch_clock_advance_with_modifier(ErEpochClock* clock,
+                                           const ErEpochClockModifier* modifier,
+                                           ErEpochBoundary* out_boundary) {
+  UINT64 total_ticks;
+  UINT64 slot_steps;
+  UINT64 total_slots;
+  UINT64 epoch_steps;
+  UINT64 total_epochs;
+  UINT64 era_steps;
+  UINT64 next_tick;
+  UINT64 next_slot;
+  UINT64 next_epoch;
+  UINT64 next_era;
+
   if (clock == 0 || er_epoch_clock_limits_valid(&clock->limits) == 0u) {
+    return 0u;
+  }
+  if (er_epoch_clock_modifier_valid(modifier) == 0u) {
+    return 0u;
+  }
+  if (modifier->tick_stride > UINT64_MAX - clock->now.tick) {
     return 0u;
   }
   if (out_boundary != 0) {
     er_mem_zero((UINT8*)out_boundary, (UINTN)sizeof(*out_boundary));
   }
 
-  ++clock->now.tick;
-  if (clock->now.tick < clock->limits.ticks_per_slot) {
+  next_era = clock->now.era;
+  next_epoch = clock->now.epoch;
+  next_slot = clock->now.slot;
+  total_ticks = clock->now.tick + modifier->tick_stride;
+  next_tick = total_ticks % clock->limits.ticks_per_slot;
+  slot_steps = total_ticks / clock->limits.ticks_per_slot;
+  if (slot_steps == 0u) {
+    clock->now.tick = next_tick;
     return 1u;
   }
+  if (slot_steps > UINT64_MAX - next_slot) {
+    return 0u;
+  }
 
-  clock->now.tick = 0u;
-  ++clock->now.slot;
+  total_slots = next_slot + slot_steps;
+  next_slot = total_slots % clock->limits.slots_per_epoch;
+  epoch_steps = total_slots / clock->limits.slots_per_epoch;
+  if (epoch_steps == 0u) {
+    clock->now.tick = next_tick;
+    clock->now.slot = next_slot;
+    if (out_boundary != 0) {
+      out_boundary->slot_boundary = 1u;
+    }
+    return 1u;
+  }
+  if (epoch_steps > UINT64_MAX - next_epoch) {
+    return 0u;
+  }
+
+  total_epochs = next_epoch + epoch_steps;
+  next_epoch = total_epochs % clock->limits.epochs_per_era;
+  era_steps = total_epochs / clock->limits.epochs_per_era;
+  if (era_steps == 0u) {
+    clock->now.tick = next_tick;
+    clock->now.slot = next_slot;
+    clock->now.epoch = next_epoch;
+    if (out_boundary != 0) {
+      out_boundary->slot_boundary = 1u;
+      out_boundary->epoch_boundary = 1u;
+    }
+    return 1u;
+  }
+  if (era_steps > UINT64_MAX - next_era) {
+    return 0u;
+  }
+  next_era += era_steps;
+  clock->now.tick = next_tick;
+  clock->now.slot = next_slot;
+  clock->now.epoch = next_epoch;
+  clock->now.era = next_era;
   if (out_boundary != 0) {
     out_boundary->slot_boundary = 1u;
-  }
-  if (clock->now.slot < clock->limits.slots_per_epoch) {
-    return 1u;
-  }
-
-  clock->now.slot = 0u;
-  ++clock->now.epoch;
-  if (out_boundary != 0) {
     out_boundary->epoch_boundary = 1u;
-  }
-  if (clock->now.epoch < clock->limits.epochs_per_era) {
-    return 1u;
-  }
-
-  clock->now.epoch = 0u;
-  ++clock->now.era;
-  if (out_boundary != 0) {
     out_boundary->era_boundary = 1u;
   }
   return 1u;
