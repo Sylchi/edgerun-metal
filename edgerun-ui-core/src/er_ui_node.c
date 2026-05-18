@@ -1,11 +1,16 @@
 #include "er_ui_node.h"
 #include "er_ui_painter.h"
+#include "er_ui_spacing.h"
 
 static const float ER_UI_NODE_DEFAULT_GAP = 8.0f;
 static const float ER_UI_NODE_DROPDOWN_GAP = 4.0f;
 static const float ER_UI_NODE_MENU_GAP = 8.0f;
 static const float ER_UI_NODE_CAROUSEL_GAP = 12.0f;
 static const float ER_UI_NODE_CARD_PADDING = 12.0f;
+static const float ER_UI_NODE_SIDEBAR_MIN_SIDE_W = 120.0f;
+static const float ER_UI_NODE_SIDEBAR_PREFERRED_SIDE_W = 176.0f;
+static const float ER_UI_NODE_SIDEBAR_MIN_MAIN_W = 120.0f;
+static const float ER_UI_NODE_SIDEBAR_STACKED_SIDE_H = 96.0f;
 static const float ER_UI_NODE_BENTO_CELL_ASPECT = 0.75f;
 static const float ER_UI_NODE_MASONRY_DEFAULT_HEIGHT_RATIO = 0.78f;
 static const float ER_UI_NODE_MASONRY_STEP_HEIGHT_RATIO = 0.18f;
@@ -2390,9 +2395,12 @@ static er_ui_status_t er_ui_node_render_sidebar(
       !er_ui_bounds_valid(bounds)) {
     return ER_UI_ERR_INVALID_ARGUMENT;
   }
-  float side_w = er_ui_float_min(176.0f, bounds.w * 0.45f);
-  er_ui_bounds_t side = er_ui_bounds(bounds.x, bounds.y, side_w, bounds.h);
-  er_ui_bounds_t main = er_ui_bounds(bounds.x + side_w + node->gap, bounds.y, er_ui_float_max(bounds.w - side_w - node->gap, 1.0f), bounds.h);
+  er_ui_responsive_sidecar_t layout =
+    er_ui_responsive_sidecar(bounds, ER_UI_NODE_SIDEBAR_MIN_SIDE_W, ER_UI_NODE_SIDEBAR_PREFERRED_SIDE_W, ER_UI_NODE_SIDEBAR_MIN_MAIN_W, node->gap,
+                             ER_UI_NODE_SIDEBAR_STACKED_SIDE_H);
+  if (!er_ui_bounds_valid(layout.side) || !er_ui_bounds_valid(layout.main)) return ER_UI_ERR_INVALID_ARGUMENT;
+  er_ui_bounds_t side = layout.side;
+  er_ui_bounds_t main = layout.main;
   er_ui_status_t status = er_ui_component_card_emit(scene, side, theme);
   if (status != ER_UI_OK) return status;
   status = er_ui_node_render_text(scene, font, node->label, er_ui_bounds(side.x + 12.0f, side.y + 8.0f, side.w - 24.0f, 22.0f), theme.colors.text);
