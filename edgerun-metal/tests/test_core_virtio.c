@@ -329,6 +329,128 @@ static void test_virtio_split_queue(void) {
               er_virtio_queue_take_next_used(&used, 4u, &last_used_idx, &elem), 0);
 }
 
+static void test_virtio_blk_mmio(void) {
+  enum {
+    VIRTIO_BLK_TEST_MMIO_DWORDS = 128u,
+    VIRTIO_BLK_TEST_QUEUE_MAX = ER_VIRTIO_QUEUE_SIZE,
+    VIRTIO_BLK_TEST_CAPACITY = 64u,
+    VIRTIO_BLK_TEST_SECTOR = 2u,
+    VIRTIO_BLK_TEST_BAD_SECTOR = VIRTIO_BLK_TEST_CAPACITY,
+    VIRTIO_BLK_TEST_NOTIFY_QUEUE = ER_VIRTIO_BLK_QUEUE,
+    VIRTIO_BLK_TEST_DATA_BYTES = ER_VIRTIO_BLK_SECTOR_BYTES
+  };
+  UINT32 regs[VIRTIO_BLK_TEST_MMIO_DWORDS] = {0};
+  ErVirtioBlk blk;
+  ErVirtioBlkStats stats;
+  ErVirtioQueueDesc* desc;
+  ErVirtioQueueAvail* avail;
+  ErVirtioQueueUsed* used;
+  ErVirtioBlkRequestHeader* request;
+  UINT8* status_byte;
+  UINT8 read_data[VIRTIO_BLK_TEST_DATA_BYTES] = {0};
+  UINT8 write_data[VIRTIO_BLK_TEST_DATA_BYTES] = {0};
+  UINT8 status = ER_VIRTIO_BLK_STATUS_IOERR;
+
+  er_mmio_reset();
+  regs[ER_VIRTIO_MMIO_MAGIC_VALUE_OFFSET / sizeof(UINT32)] = ER_VIRTIO_MMIO_MAGIC;
+  regs[ER_VIRTIO_MMIO_VERSION_OFFSET / sizeof(UINT32)] = ER_VIRTIO_MMIO_VERSION_MODERN;
+  regs[ER_VIRTIO_MMIO_DEVICE_ID_OFFSET / sizeof(UINT32)] = ER_VIRTIO_DEVICE_TYPE_BLK;
+  regs[ER_VIRTIO_MMIO_VENDOR_OFFSET / sizeof(UINT32)] = ER_VIRTIO_MMIO_VENDOR_ANY;
+  regs[ER_VIRTIO_MMIO_DEVICE_FEATURES_OFFSET / sizeof(UINT32)] = 1u;
+  regs[ER_VIRTIO_MMIO_QUEUE_NUM_MAX_OFFSET / sizeof(UINT32)] = VIRTIO_BLK_TEST_QUEUE_MAX;
+  regs[ER_VIRTIO_MMIO_CONFIG_OFFSET / sizeof(UINT32)] = VIRTIO_BLK_TEST_CAPACITY;
+
+  check_int64("virtio blk init",
+              er_virtio_blk_init_mmio((UINT64)(UINTN)regs, (UINT64)sizeof(regs),
+                                      &blk),
+              1);
+  check_int64("virtio blk initialized", blk.initialized, 1);
+  check_uint64("virtio blk features", blk.features, ER_VIRTIO_F_VERSION_1);
+  check_uint64("virtio blk capacity", blk.capacity_sectors,
+               VIRTIO_BLK_TEST_CAPACITY);
+  check_uint64("virtio blk queue size", blk.queue_size, ER_VIRTIO_QUEUE_SIZE);
+  check_uint64("virtio blk status driver ok",
+               regs[ER_VIRTIO_MMIO_STATUS_OFFSET / sizeof(UINT32)],
+               ER_VIRTIO_STATUS_ACKNOWLEDGE | ER_VIRTIO_STATUS_DRIVER |
+               ER_VIRTIO_STATUS_FEATURES_OK | ER_VIRTIO_STATUS_DRIVER_OK);
+  check_int64("virtio blk deterministic reinit",
+              er_virtio_blk_init_mmio((UINT64)(UINTN)regs, (UINT64)sizeof(regs),
+                                      &blk),
+              1);
+
+  desc = er_virtio_blk_test_desc();
+  avail = er_virtio_blk_test_avail();
+  used = er_virtio_blk_test_used();
+  request = er_virtio_blk_test_request();
+  status_byte = er_virtio_blk_test_status();
+  check_uint64("virtio blk desc clear", desc[0].addr, 0u);
+  check_uint64("virtio blk avail clear", avail->idx, 0u);
+  check_uint64("virtio blk used clear", used->idx, 0u);
+
+  check_int64("virtio blk submit read",
+              er_virtio_blk_submit_read(&blk, VIRTIO_BLK_TEST_SECTOR,
+                                        read_data,
+                                        (UINT32)sizeof(read_data)),
+              1);
+  check_uint64("virtio blk read type", request->type, ER_VIRTIO_BLK_REQ_READ);
+  check_uint64("virtio blk read sector", request->sector, VIRTIO_BLK_TEST_SECTOR);
+  check_uint64("virtio blk read avail idx", avail->idx, 1u);
+  check_uint64("virtio blk read avail head", avail->ring[0], 0u);
+  check_uint64("virtio blk head flags", desc[0].flags, ER_VIRTIO_DESC_F_NEXT);
+  check_uint64("virtio blk head next", desc[0].next, 1u);
+  check_uint64("virtio blk read data addr", desc[1].addr, (UINT64)(UINTN)read_data);
+  check_uint64("virtio blk read data len", desc[1].len, sizeof(read_data));
+  check_uint64("virtio blk read data flags",
+               desc[1].flags, ER_VIRTIO_DESC_F_NEXT | ER_VIRTIO_DESC_F_WRITE);
+  check_uint64("virtio blk status flags", desc[2].flags, ER_VIRTIO_DESC_F_WRITE);
+  check_uint64("virtio blk notify",
+               regs[ER_VIRTIO_MMIO_QUEUE_NOTIFY_OFFSET / sizeof(UINT32)],
+               VIRTIO_BLK_TEST_NOTIFY_QUEUE);
+  check_int64("virtio blk reject busy",
+              er_virtio_blk_submit_read(&blk, VIRTIO_BLK_TEST_SECTOR,
+                                        read_data,
+                                        (UINT32)sizeof(read_data)),
+              0);
+  *status_byte = ER_VIRTIO_BLK_STATUS_OK;
+  used->ring[0].id = 0u;
+  used->ring[0].len = (UINT32)sizeof(*status_byte);
+  used->idx = 1u;
+  check_int64("virtio blk poll read ok", er_virtio_blk_poll(&blk, &status), 1);
+  check_uint64("virtio blk poll read status", status, ER_VIRTIO_BLK_STATUS_OK);
+
+  check_int64("virtio blk submit write",
+              er_virtio_blk_submit_write(&blk, VIRTIO_BLK_TEST_SECTOR,
+                                         write_data,
+                                         (UINT32)sizeof(write_data)),
+              1);
+  check_uint64("virtio blk write type", request->type, ER_VIRTIO_BLK_REQ_WRITE);
+  check_uint64("virtio blk write data addr", desc[1].addr, (UINT64)(UINTN)write_data);
+  check_uint64("virtio blk write data flags", desc[1].flags, ER_VIRTIO_DESC_F_NEXT);
+  *status_byte = ER_VIRTIO_BLK_STATUS_IOERR;
+  used->ring[1].id = 0u;
+  used->ring[1].len = (UINT32)sizeof(*status_byte);
+  used->idx = 2u;
+  check_int64("virtio blk poll write ioerr", er_virtio_blk_poll(&blk, &status), 0);
+  check_uint64("virtio blk poll write status", status, ER_VIRTIO_BLK_STATUS_IOERR);
+
+  check_int64("virtio blk reject unaligned len",
+              er_virtio_blk_submit_read(&blk, VIRTIO_BLK_TEST_SECTOR,
+                                        read_data,
+                                        (UINT32)sizeof(read_data) - 1u),
+              0);
+  check_int64("virtio blk reject out of range",
+              er_virtio_blk_submit_read(&blk, VIRTIO_BLK_TEST_BAD_SECTOR,
+                                        read_data,
+                                        (UINT32)sizeof(read_data)),
+              0);
+  stats = er_virtio_blk_stats(&blk);
+  check_uint64("virtio blk submitted", stats.submitted, 2u);
+  check_uint64("virtio blk completed", stats.completed, 1u);
+  check_uint64("virtio blk failed", stats.failed, 1u);
+  check_uint64("virtio blk busy", stats.busy, 1u);
+  check_uint64("virtio blk invalid", stats.invalid, 2u);
+}
+
 static void test_virtio_net_mmio(void) {
   enum {
     VIRTIO_NET_TEST_MMIO_DWORDS = 128u,

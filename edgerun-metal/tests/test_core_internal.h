@@ -31,6 +31,7 @@
 #include "er_ui_wasm_app.h"
 #include "er_ui_text.h"
 #include "er_virtio.h"
+#include "er_virtio_blk.h"
 #include "er_virtio_gpu.h"
 #include "er_virtio_net.h"
 #include "er_vfs.h"
