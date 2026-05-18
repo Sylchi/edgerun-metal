@@ -155,8 +155,9 @@ signed EFI + Secure Boot + TPM measured boot
 
 The boot boundary is deliberately split in two. While UEFI Boot Services are
 available, EdgeRun may probe firmware tables, inspect PCI/MMIO topology, verify
-Secure Boot state, talk to the TPM, read EFI variables, and select or create the
-authority profile for this boot. After `ExitBootServices`, the runtime must use
+Secure Boot state, talk to the TPM, read boot configuration from the EFI
+partition, and select or create the authority profile for this boot. After
+`ExitBootServices`, the runtime must use
 only runtime-owned drivers and the selected handoff record; it must not rely on
 firmware services for storage, networking, rendering, input, or authority
 decisions.
@@ -164,13 +165,23 @@ decisions.
 The first boot screen is therefore a setup and handoff surface, not the final
 runtime shell. It should show system information, detected devices, TPM
 capability facts, Secure Boot state, and available authority profiles. If no
-authority exists, setup creates one as a TPM-held persistent authority key and
-writes mutable configuration to EFI variables. TPM storage is for keys and
-hardware-rooted identity material; EFI variables carry boot configuration and
-profile selection metadata. If multiple authority profiles exist, the user
+authority exists, setup creates one as a TPM-held persistent authority key.
+Mutable configuration lives on the EFI partition: which relay channels are
+available, which local interface speaks native EdgeRun frames, which interface
+may run regular TCP/IP compatibility traffic, and which admission public key this
+device will do work for. TPM storage is for keys and hardware-rooted identity
+material, not relay policy. If multiple authority profiles exist, the user
 selects one before the runtime starts. If Secure Boot or TPM state cannot be
-verified, boot fails instead of silently continuing under an ambiguous
-authority.
+verified, boot fails instead of silently continuing under an ambiguous authority.
+
+Recipient sealing should be hybrid. Small one-recipient payloads can be sealed
+directly to the recipient. Durable objects, large payloads, or anything with
+more than one recipient should be encrypted once with a content key, then only
+that content key should be wrapped to each recipient and bound to the admission,
+route, payload hash, and channel metadata. That keeps relays and storage
+opaque, avoids re-encrypting the same object for every route, and lets the same
+sealed object move over native EdgeRun channels or TCP/IP compatibility channels
+without changing the object's durable identity.
 
 This makes hardware resources identity-routed and auditable without giving the
 TPM, firmware vendor, or network operator authority over the user's device. They

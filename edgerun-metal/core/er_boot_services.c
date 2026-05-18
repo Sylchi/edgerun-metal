@@ -95,13 +95,13 @@ UINT8 er_boot_services_add_pci_device(ErBootServicesReport* report,
 
 UINT8 er_boot_services_add_authority(ErBootServicesReport* report,
                                      UINT32 tpm_persistent_handle,
-                                     UINT32 efivar_config_generation,
+                                     UINT32 boot_config_generation,
                                      UINT8 config_state) {
   ErBootAuthorityProfile* authority;
 
   if (report == 0 ||
       tpm_persistent_handle == ER_BOOT_AUTHORITY_HANDLE_INVALID ||
-      efivar_config_generation == ER_BOOT_EFIVAR_CONFIG_GENERATION_INVALID ||
+      boot_config_generation == ER_BOOT_CONFIG_GENERATION_INVALID ||
       config_state != ER_BOOT_CONFIG_PRESENT ||
       report->authority_count >= ER_BOOT_AUTHORITY_PROFILE_CAPACITY) {
     return 0u;
@@ -112,7 +112,7 @@ UINT8 er_boot_services_add_authority(ErBootServicesReport* report,
   authority->present = 1u;
   authority->config_state = config_state;
   authority->tpm_persistent_handle = tpm_persistent_handle;
-  authority->efivar_config_generation = efivar_config_generation;
+  authority->boot_config_generation = boot_config_generation;
   report->authority_count += 1u;
   if (report->config_state == ER_BOOT_CONFIG_UNKNOWN ||
       report->config_state == ER_BOOT_CONFIG_MISSING) {

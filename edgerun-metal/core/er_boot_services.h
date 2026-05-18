@@ -13,7 +13,7 @@
 #define ER_BOOT_DETECTED_DEVICE_CAPACITY 32u
 
 #define ER_BOOT_AUTHORITY_HANDLE_INVALID 0u
-#define ER_BOOT_EFIVAR_CONFIG_GENERATION_INVALID 0u
+#define ER_BOOT_CONFIG_GENERATION_INVALID 0u
 
 typedef enum {
   ER_BOOT_SECURE_BOOT_UNKNOWN = 0,
@@ -50,7 +50,7 @@ typedef struct {
   UINT8 config_state;
   UINT16 reserved;
   UINT32 tpm_persistent_handle;
-  UINT32 efivar_config_generation;
+  UINT32 boot_config_generation;
 } ErBootAuthorityProfile;
 
 typedef struct {
@@ -74,7 +74,7 @@ UINT8 er_boot_services_add_pci_device(ErBootServicesReport* report,
                                       const ErPciDeviceSnapshot* snapshot);
 UINT8 er_boot_services_add_authority(ErBootServicesReport* report,
                                      UINT32 tpm_persistent_handle,
-                                     UINT32 efivar_config_generation,
+                                     UINT32 boot_config_generation,
                                      UINT8 config_state);
 UINT8 er_boot_services_select_authority(ErBootServicesReport* report,
                                         UINT32 authority_index);
