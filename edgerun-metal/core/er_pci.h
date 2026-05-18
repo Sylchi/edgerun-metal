@@ -7,6 +7,7 @@
  */
 
 #include "er_types.h"
+#include "er_acpi.h"
 
 #define ER_PCI_BAR_KIND_NONE 0u
 #define ER_PCI_BAR_KIND_IO 1u
@@ -61,6 +62,8 @@ typedef struct {
 } ErPciDeviceSnapshot;
 
 UINT8 er_pci_config_access_valid(INT64 bus_i, INT64 dev_i, INT64 func_i, INT64 offset_i);
+UINT8 er_pci_configure_mcfg(const ErAcpiMcfgInfo* mcfg);
+UINT8 er_pci_configure_mcfg_from_acpi(EFI_SYSTEM_TABLE* st);
 INT64 er_pci_config_address(INT64 bus_i, INT64 dev_i, INT64 func_i, INT64 offset_i);
 INT64 er_pci_read32(INT64 bus_i, INT64 dev_i, INT64 func_i, INT64 offset_i);
 void er_pci_write32(INT64 bus_i, INT64 dev_i, INT64 func_i, INT64 offset_i, INT64 value_i);
