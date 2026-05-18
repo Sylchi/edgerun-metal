@@ -17,6 +17,16 @@
 #define ER_UI_SHADCN_PREVIEW_CALENDAR_SELECTED_INDEX 2u
 #define ER_UI_SHADCN_PREVIEW_CHART_ID (ER_UI_SHADCN_DEMO_PREVIEW_BASE_ID + 120u)
 #define ER_UI_SHADCN_PREVIEW_CHART_ACTIVE_INDEX 3u
+#define ER_UI_SHADCN_PREVIEW_BUTTON_GROUP_ID (ER_UI_SHADCN_DEMO_PREVIEW_BASE_ID + 27u)
+#define ER_UI_SHADCN_PREVIEW_CONTEXT_PROFILE_ID (ER_UI_SHADCN_DEMO_PREVIEW_BASE_ID + 9u)
+#define ER_UI_SHADCN_PREVIEW_CONTEXT_BILLING_ID (ER_UI_SHADCN_DEMO_PREVIEW_BASE_ID + 10u)
+#define ER_UI_SHADCN_PREVIEW_CONTEXT_LOGOUT_ID (ER_UI_SHADCN_DEMO_PREVIEW_BASE_ID + 11u)
+#define ER_UI_SHADCN_PREVIEW_COLLAPSIBLE_PRIMITIVES_ID (ER_UI_SHADCN_DEMO_PREVIEW_BASE_ID + 31u)
+#define ER_UI_SHADCN_PREVIEW_COLLAPSIBLE_COLORS_ID (ER_UI_SHADCN_DEMO_PREVIEW_BASE_ID + 32u)
+#define ER_UI_SHADCN_PREVIEW_COMBOBOX_SELECT_ID (ER_UI_SHADCN_DEMO_PREVIEW_BASE_ID + 59u)
+#define ER_UI_SHADCN_PREVIEW_COMBOBOX_SEARCH_ID (ER_UI_SHADCN_DEMO_PREVIEW_BASE_ID + 60u)
+#define ER_UI_SHADCN_PREVIEW_COMBOBOX_RESULT_ID (ER_UI_SHADCN_DEMO_PREVIEW_BASE_ID + 61u)
+#define ER_UI_SHADCN_PREVIEW_TABLE_ID (ER_UI_SHADCN_DEMO_PREVIEW_BASE_ID + 43u)
 
 static bool er_ui_shadcn_streq(const char* a, const char* b) {
   if (!a || !b) return false;
@@ -2235,7 +2245,7 @@ er_ui_status_t er_ui_shadcn_component_scene_preview_emit(
   if (er_ui_shadcn_streq(slug, "button-group")) {
     const char* const labels[] = {"Copy", "Paste", "More"};
     return er_ui_shadcn_tabs_emit(scene, font, er_ui_bounds(bounds.x, bounds.y, 210.0f, 38.0f), theme, labels, ER_UI_SHADCN_ARRAY_COUNT(labels), 0u,
-                                  ER_UI_SHADCN_DEMO_PREVIEW_BASE_ID + 27u);
+                                  ER_UI_SHADCN_PREVIEW_BUTTON_GROUP_ID);
   }
   if (er_ui_shadcn_streq(slug, "calendar") || er_ui_shadcn_streq(slug, "date-picker")) {
     er_ui_status_t status = ER_UI_OK;
@@ -2295,13 +2305,13 @@ er_ui_status_t er_ui_shadcn_component_scene_preview_emit(
   }
   if (er_ui_shadcn_streq(slug, "context-menu") || er_ui_shadcn_streq(slug, "dropdown-menu")) {
     er_ui_status_t status = er_ui_shadcn_list_row_emit(scene, font, er_ui_bounds(bounds.x, bounds.y, er_ui_float_min(bounds.w, 220.0f), 44.0f), theme, "Profile", "Command P",
-                                                       ER_UI_SHADCN_DEMO_PREVIEW_BASE_ID + 9u, false);
+                                                       ER_UI_SHADCN_PREVIEW_CONTEXT_PROFILE_ID, false);
     if (status != ER_UI_OK) return status;
     status = er_ui_shadcn_list_row_emit(scene, font, er_ui_bounds(bounds.x, bounds.y + 48.0f, er_ui_float_min(bounds.w, 220.0f), 44.0f), theme, "Billing", "Command B",
-                                        ER_UI_SHADCN_DEMO_PREVIEW_BASE_ID + 10u, true);
+                                        ER_UI_SHADCN_PREVIEW_CONTEXT_BILLING_ID, true);
     if (status != ER_UI_OK) return status;
     return er_ui_shadcn_list_row_emit(scene, font, er_ui_bounds(bounds.x, bounds.y + 96.0f, er_ui_float_min(bounds.w, 220.0f), 44.0f), theme, "Log out", "Shift Command Q",
-                                      ER_UI_SHADCN_DEMO_PREVIEW_BASE_ID + 11u, false);
+                                      ER_UI_SHADCN_PREVIEW_CONTEXT_LOGOUT_ID, false);
   }
   if (er_ui_shadcn_streq(slug, "collapsible")) {
     er_ui_status_t status = er_ui_shadcn_card_emit(scene, er_ui_bounds(bounds.x, bounds.y, er_ui_float_min(bounds.w, 360.0f), 150.0f), theme);
@@ -2309,20 +2319,20 @@ er_ui_status_t er_ui_shadcn_component_scene_preview_emit(
     status = er_ui_shadcn_push_ascii_text(scene, font, "@peduarte starred 3 repositories", bounds.x + 14.0f, bounds.y + 26.0f, theme.colors.text);
     if (status != ER_UI_OK) return status;
     status = er_ui_shadcn_list_row_emit(scene, font, er_ui_bounds(bounds.x + 10.0f, bounds.y + 44.0f, 300.0f, 44.0f), theme, "@radix-ui/primitives",
-                                        "Open source UI components", ER_UI_SHADCN_DEMO_PREVIEW_BASE_ID + 31u, false);
+                                        "Open source UI components", ER_UI_SHADCN_PREVIEW_COLLAPSIBLE_PRIMITIVES_ID, false);
     if (status != ER_UI_OK) return status;
     return er_ui_shadcn_list_row_emit(scene, font, er_ui_bounds(bounds.x + 10.0f, bounds.y + 92.0f, 300.0f, 44.0f), theme, "@radix-ui/colors",
-                                      "Beautiful color scales", ER_UI_SHADCN_DEMO_PREVIEW_BASE_ID + 32u, false);
+                                      "Beautiful color scales", ER_UI_SHADCN_PREVIEW_COLLAPSIBLE_COLORS_ID, false);
   }
   if (er_ui_shadcn_streq(slug, "combobox")) {
     er_ui_status_t status = er_ui_shadcn_select_emit(scene, font, er_ui_bounds(bounds.x, bounds.y, 240.0f, 62.0f), theme, "Framework", "Select framework...",
-                                                     ER_UI_SHADCN_DEMO_PREVIEW_BASE_ID + 59u, false);
+                                                     ER_UI_SHADCN_PREVIEW_COMBOBOX_SELECT_ID, false);
     if (status != ER_UI_OK) return status;
     status = er_ui_shadcn_field_emit(scene, font, er_ui_bounds(bounds.x, bounds.y + 70.0f, 240.0f, 54.0f), theme, "Search", "Search framework...",
-                                     ER_UI_SHADCN_DEMO_PREVIEW_BASE_ID + 60u, false);
+                                     ER_UI_SHADCN_PREVIEW_COMBOBOX_SEARCH_ID, false);
     if (status != ER_UI_OK) return status;
     return er_ui_shadcn_list_row_emit(scene, font, er_ui_bounds(bounds.x, bounds.y + 130.0f, 240.0f, 44.0f), theme, "Next.js", "selected",
-                                      ER_UI_SHADCN_DEMO_PREVIEW_BASE_ID + 61u, true);
+                                      ER_UI_SHADCN_PREVIEW_COMBOBOX_RESULT_ID, true);
   }
   if (er_ui_shadcn_streq(slug, "command")) {
     return er_ui_shadcn_field_emit(scene, font, er_ui_bounds(bounds.x, bounds.y, er_ui_float_min(bounds.w, 300.0f), 58.0f), theme, "Command",
@@ -2331,8 +2341,10 @@ er_ui_status_t er_ui_shadcn_component_scene_preview_emit(
   if (er_ui_shadcn_streq(slug, "data-table") || er_ui_shadcn_streq(slug, "table")) {
     const char* const headers[] = {"Invoice", "Status", "Amount"};
     const char* const cells[] = {"INV001", "Paid", "$250.00", "INV002", "Pending", "$150.00"};
-    return er_ui_shadcn_table_emit(scene, font, er_ui_bounds(bounds.x, bounds.y, er_ui_float_min(bounds.w, 360.0f), 112.0f), theme, headers, 3u, cells, 2u,
-                                   ER_UI_SHADCN_DEMO_PREVIEW_BASE_ID + 43u);
+    _Static_assert(ER_UI_SHADCN_ARRAY_COUNT(cells) % ER_UI_SHADCN_ARRAY_COUNT(headers) == 0u, "table preview cells must fill rows");
+    return er_ui_shadcn_table_emit(scene, font, er_ui_bounds(bounds.x, bounds.y, er_ui_float_min(bounds.w, 360.0f), 112.0f), theme, headers,
+                                   ER_UI_SHADCN_ARRAY_COUNT(headers), cells, ER_UI_SHADCN_ARRAY_COUNT(cells) / ER_UI_SHADCN_ARRAY_COUNT(headers),
+                                   ER_UI_SHADCN_PREVIEW_TABLE_ID);
   }
   if (er_ui_shadcn_streq(slug, "empty")) {
     return er_ui_shadcn_empty_emit(scene, font, er_ui_bounds(bounds.x, bounds.y, er_ui_float_min(bounds.w, 280.0f), 120.0f), theme, "No results found",
