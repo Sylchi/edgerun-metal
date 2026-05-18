@@ -1,4 +1,4 @@
-.PHONY: all run run-native clean print-path netboot smoke pci quiet mmio ui native rebuild-profile check test-core wasm-modules
+.PHONY: all run run-native run-tpm clean print-path netboot smoke pci quiet mmio ui native tpm rebuild-profile check test-core wasm-modules
 
 CC = clang
 HOST_CC ?= clang
@@ -22,6 +22,7 @@ GENERATED_DIR := $(BUILD_DIR)/generated
 #   3 = mmio:  read-only NVIDIA BAR0 probe
 #   4 = ui:    GOP-backed UI rectangle scene
 #   5 = native: QEMU microvm VirtIO-MMIO erwire-over-Ethernet probe
+#   6 = tpm:   QEMU swtpm/TPM2 CRB direct command probe
 ER_BOOT_PROFILE ?= 0
 
 CFLAGS := -std=c11 -Wall -Werror -ffreestanding -fshort-wchar -fno-builtin -fno-stack-protector -mno-red-zone -fuse-ld=lld -target x86_64-pc-windows-msvc \
@@ -81,13 +82,16 @@ ui:
 native:
 	$(MAKE) rebuild-profile ER_BOOT_PROFILE=5
 
+tpm:
+	$(MAKE) rebuild-profile ER_BOOT_PROFILE=6
+
 rebuild-profile:
 	rm -f $(OBJS) $(UI_OBJS) $(VARFONT_OBJS) $(CRYPTO_OBJS) $(CRYPTO_ASM_OBJS) $(EFI_OUT) $(EFI_BOOT)
 	$(MAKE) all ER_BOOT_PROFILE=$(ER_BOOT_PROFILE)
 
 netboot: $(NETBOOT_BIN) $(PXE4011_BIN)
 
-check: smoke pci mmio quiet ui test-core
+check: smoke pci mmio quiet ui tpm test-core
 
 test-core: $(CORE_TEST_BIN)
 	./$(CORE_TEST_BIN)
@@ -174,6 +178,9 @@ run: $(EFI_BOOT)
 
 run-native: native
 	QEMU_NATIVE=1 ./scripts/run-qemu.sh
+
+run-tpm: tpm
+	QEMU_TPM=1 ./scripts/run-qemu.sh
 
 clean:
 	rm -rf $(BUILD_DIR)

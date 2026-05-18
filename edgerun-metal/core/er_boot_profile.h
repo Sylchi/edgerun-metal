@@ -9,7 +9,8 @@ enum {
   ER_BOOT_PROFILE_QUIET = 2u,
   ER_BOOT_PROFILE_MMIO = 3u,
   ER_BOOT_PROFILE_UI = 4u,
-  ER_BOOT_PROFILE_NATIVE = 5u
+  ER_BOOT_PROFILE_NATIVE = 5u,
+  ER_BOOT_PROFILE_TPM = 6u
 };
 
 const char* er_boot_profile_label(UINT32 profile);

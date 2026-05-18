@@ -6,6 +6,7 @@
 #include "er_acpi.h"
 #include "er_boot_profile.h"
 #include "er_gfx_console.h"
+#include "er_tpm.h"
 #include "er_ui_gop_renderer.h"
 #include "er_ui_components.h"
 #include "er_ui_metal.h"
@@ -816,6 +817,79 @@ static void er_run_native_profile(void) {
   er_println("native transport: erwire EdgeRun Ethernet frame submitted");
 }
 
+static void er_run_tpm_profile(EFI_SYSTEM_TABLE* SystemTable) {
+  ErAcpiRsdpInfo rsdp;
+  ErAcpiTableList tables;
+  ErTpm2Info tpm2;
+  ErTpmCrbTransport crb;
+  UINT8 command[ER_TPM_HEADER_LEN + 16u];
+  UINT8 response[256];
+  UINT8 random[32];
+  UINT32 command_len = 0u;
+  UINT32 response_len = 0u;
+  UINT32 random_len = 0u;
+  UINT32 code;
+
+  er_println("boot profile: tpm");
+  if (er_acpi_find_rsdp(SystemTable, &rsdp) == 0u ||
+      er_acpi_enumerate_tables(&rsdp, &tables) == 0u ||
+      er_tpm_find_tpm2_table(&tables, &tpm2) == 0u) {
+    er_println("tpm: ACPI TPM2 unavailable");
+    return;
+  }
+
+  er_print("tpm: TPM2 control=");
+  er_print_u64_hex(tpm2.control_area);
+  er_print(" start_method=");
+  er_print_u64_dec((UINT64)tpm2.start_method);
+  er_println("");
+
+  if (er_tpm_crb_from_tpm2_info(&tpm2, &crb) == 0u) {
+    er_println("tpm: CRB transport unavailable");
+    return;
+  }
+
+  er_print("tpm: CRB cmd=");
+  er_print_u64_hex(crb.command_buffer);
+  er_print(" rsp=");
+  er_print_u64_hex(crb.response_buffer);
+  er_println("");
+
+  if (er_tpm_build_startup_command(ER_TPM_SU_CLEAR, command,
+                                   (UINT32)sizeof(command), &command_len) == 0u ||
+      er_tpm_crb_transact(&crb, command, command_len, response,
+                          (UINT32)sizeof(response), &response_len) == 0u) {
+    er_println("tpm: Startup command failed");
+    return;
+  }
+  code = er_tpm_response_code(response, response_len);
+  er_print("tpm: Startup rc=");
+  er_print_u64_hex((UINT64)code);
+  er_println("");
+  if (code != ER_TPM_RC_SUCCESS && code != ER_TPM_RC_INITIALIZE) {
+    return;
+  }
+
+  if (er_tpm_build_get_random_command(16u, command, (UINT32)sizeof(command),
+                                      &command_len) == 0u ||
+      er_tpm_crb_transact(&crb, command, command_len, response,
+                          (UINT32)sizeof(response), &response_len) == 0u ||
+      er_tpm_parse_get_random_response(response, response_len, random,
+                                       (UINT32)sizeof(random), &random_len) == 0u) {
+    er_println("tpm: GetRandom command failed");
+    return;
+  }
+
+  er_print("tpm: GetRandom bytes=");
+  er_print_u64_dec((UINT64)random_len);
+  er_print(" first=");
+  er_print_u64_hex((UINT64)random[0]);
+  er_print(" last=");
+  er_print_u64_hex((UINT64)random[random_len - 1u]);
+  er_println("");
+  er_println("tpm: CRB direct command path ok");
+}
+
 static void er_run_mmio_profile(void) {
   er_println("boot profile: mmio");
   er_run_mmio_probe();
@@ -1049,6 +1123,11 @@ static void er_run_boot_profile(EFI_SYSTEM_TABLE* SystemTable) {
 
   if (ER_BOOT_PROFILE == ER_BOOT_PROFILE_NATIVE) {
     er_run_native_profile();
+    return;
+  }
+
+  if (ER_BOOT_PROFILE == ER_BOOT_PROFILE_TPM) {
+    er_run_tpm_profile(SystemTable);
     return;
   }
 
