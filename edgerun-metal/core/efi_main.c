@@ -46,6 +46,14 @@
 #define ER_WASM_DRIVER_MEMORY_BYTES (64u * 1024u)
 #define ER_ACPI_SIGNATURE_BYTES 4u
 #define ER_BYTE_MASK 0xffu
+#define ER_GPU_PROFILE_POLL_LIMIT 1000000u
+#define ER_GPU_PROFILE_FRAMEBUFFER_WIDTH_MAX 640u
+#define ER_GPU_PROFILE_FRAMEBUFFER_HEIGHT_MAX 480u
+#define ER_GPU_PROFILE_BYTES_PER_PIXEL 4u
+#define ER_GPU_PROFILE_RESOURCE_ID 1u
+#define ER_GPU_PROFILE_SCANOUT_ID 0u
+#define ER_GPU_PROFILE_TOP_COLOR 0x0040d0e0u
+#define ER_GPU_PROFILE_BOTTOM_COLOR 0x00202020u
 #define ER_MMIO_PROBE_REG0_OFFSET 0x00u
 #define ER_MMIO_PROBE_REG1_OFFSET 0x04u
 #define ER_MMIO_PROBE_REG2_OFFSET 0x08u
@@ -73,6 +81,8 @@ enum {
 static ErWasmHostCalls g_host_calls = {0};
 static UINT8 g_wasm_driver_memory[ER_WASM_DRIVER_MEMORY_BYTES];
 static UINT8 g_ui_boot_arena[ER_UI_BOOT_ARENA_SIZE];
+static UINT32 g_gpu_profile_framebuffer[ER_GPU_PROFILE_FRAMEBUFFER_WIDTH_MAX *
+                                        ER_GPU_PROFILE_FRAMEBUFFER_HEIGHT_MAX];
 static UINTN g_ui_boot_arena_used;
 static UINT8 g_log_u64_stage = ER_LOG_U64_STAGE_IDLE;
 static UINT8 g_log_hex_stage = ER_LOG_HEX_STAGE_ID;
@@ -821,8 +831,102 @@ static void er_run_native_profile(void) {
   er_println("native transport: erwire EdgeRun Ethernet frame submitted");
 }
 
+static UINT8 er_gpu_profile_wait_ok(ErVirtioGpu* gpu) {
+  UINT32 poll_count;
+
+  for (poll_count = 0u; poll_count < ER_GPU_PROFILE_POLL_LIMIT; ++poll_count) {
+    if (er_virtio_gpu_poll_ok_nodata(gpu) != 0u) {
+      return 1u;
+    }
+  }
+  return 0u;
+}
+
+static UINT8 er_gpu_profile_wait_display_info(ErVirtioGpu* gpu,
+                                              ErVirtioGpuDisplayInfo* out_info) {
+  UINT32 poll_count;
+
+  if (out_info == 0) {
+    return 0u;
+  }
+  for (poll_count = 0u; poll_count < ER_GPU_PROFILE_POLL_LIMIT; ++poll_count) {
+    if (er_virtio_gpu_poll_display_info(gpu, out_info) != 0u) {
+      return 1u;
+    }
+  }
+  return 0u;
+}
+
+static UINT8 er_gpu_profile_framebuffer_len(UINT32 width, UINT32 height, UINT32* out_len) {
+  if (out_len == 0 || width == 0u || height == 0u ||
+      width > ER_GPU_PROFILE_FRAMEBUFFER_WIDTH_MAX ||
+      height > ER_GPU_PROFILE_FRAMEBUFFER_HEIGHT_MAX) {
+    return 0u;
+  }
+  *out_len = width * height * ER_GPU_PROFILE_BYTES_PER_PIXEL;
+  return 1u;
+}
+
+static void er_gpu_profile_fill_framebuffer(UINT32 width, UINT32 height) {
+  UINT32 x;
+  UINT32 y;
+  UINT32 half_height = height / 2u;
+
+  for (y = 0u; y < height; ++y) {
+    for (x = 0u; x < width; ++x) {
+      g_gpu_profile_framebuffer[(UINTN)y * width + x] =
+          (y < half_height) ? ER_GPU_PROFILE_TOP_COLOR : ER_GPU_PROFILE_BOTTOM_COLOR;
+    }
+  }
+}
+
+static UINT8 er_gpu_profile_flush_framebuffer(ErVirtioGpu* gpu, UINT32 width, UINT32 height) {
+  UINT32 backing_len = 0;
+
+  if (er_gpu_profile_framebuffer_len(width, height, &backing_len) == 0u) {
+    er_println("gpu framebuffer: unsupported dimensions");
+    return 0u;
+  }
+  er_gpu_profile_fill_framebuffer(width, height);
+  if (er_virtio_gpu_submit_resource_create_2d(gpu, ER_GPU_PROFILE_RESOURCE_ID,
+                                             ER_VIRTIO_GPU_FORMAT_B8G8R8X8_UNORM,
+                                             width, height) == 0u ||
+      er_gpu_profile_wait_ok(gpu) == 0u) {
+    er_println("gpu framebuffer: create failed");
+    return 0u;
+  }
+  if (er_virtio_gpu_submit_resource_attach_backing(
+          gpu, ER_GPU_PROFILE_RESOURCE_ID,
+          (UINT64)(UINTN)g_gpu_profile_framebuffer, backing_len) == 0u ||
+      er_gpu_profile_wait_ok(gpu) == 0u) {
+    er_println("gpu framebuffer: attach failed");
+    return 0u;
+  }
+  if (er_virtio_gpu_submit_set_scanout(gpu, ER_GPU_PROFILE_SCANOUT_ID,
+                                      ER_GPU_PROFILE_RESOURCE_ID,
+                                      width, height) == 0u ||
+      er_gpu_profile_wait_ok(gpu) == 0u) {
+    er_println("gpu framebuffer: scanout failed");
+    return 0u;
+  }
+  if (er_virtio_gpu_submit_transfer_to_host_2d(gpu, ER_GPU_PROFILE_RESOURCE_ID,
+                                              width, height) == 0u ||
+      er_gpu_profile_wait_ok(gpu) == 0u) {
+    er_println("gpu framebuffer: transfer failed");
+    return 0u;
+  }
+  if (er_virtio_gpu_submit_resource_flush(gpu, ER_GPU_PROFILE_RESOURCE_ID,
+                                          width, height) == 0u ||
+      er_gpu_profile_wait_ok(gpu) == 0u) {
+    er_println("gpu framebuffer: flush failed");
+    return 0u;
+  }
+  return 1u;
+}
+
 static void er_run_gpu_profile(void) {
   ErVirtioGpu gpu;
+  ErVirtioGpuDisplayInfo display_info;
   UINT64 transport_base;
 
   er_println("boot profile: gpu");
@@ -845,6 +949,27 @@ static void er_run_gpu_profile(void) {
   er_print(" cursorq=");
   er_print_u64_dec((UINT64)gpu.cursor_queue_size);
   er_println("");
+
+  if (er_virtio_gpu_submit_get_display_info(&gpu) == 0u) {
+    er_println("gpu display: submit failed");
+    return;
+  }
+  er_mem_zero((UINT8*)&display_info, (UINTN)sizeof(display_info));
+  if (er_gpu_profile_wait_display_info(&gpu, &display_info) == 0u) {
+    er_println("gpu display: poll timeout");
+    return;
+  }
+  er_print("gpu display: scanout0 enabled=");
+  er_print_u64_dec((UINT64)display_info.scanouts[0].enabled);
+  er_print(" width=");
+  er_print_u64_dec((UINT64)display_info.scanouts[0].rect.width);
+  er_print(" height=");
+  er_print_u64_dec((UINT64)display_info.scanouts[0].rect.height);
+  er_println("");
+  if (er_gpu_profile_flush_framebuffer(&gpu, display_info.scanouts[0].rect.width,
+                                       display_info.scanouts[0].rect.height) != 0u) {
+    er_println("gpu framebuffer: flushed");
+  }
 }
 
 static void er_run_tpm_profile(EFI_SYSTEM_TABLE* SystemTable) {

@@ -1064,6 +1064,7 @@ static void test_virtio_gpu_mmio(void) {
     VIRTIO_GPU_TEST_EVENTS_READ = 1u,
     VIRTIO_GPU_TEST_SCANOUTS = 2u,
     VIRTIO_GPU_TEST_CAPSETS = 3u,
+    VIRTIO_GPU_TEST_CONTROL_RESPONSE_SIZE = 512u,
     VIRTIO_GPU_TEST_CONFIG_EVENTS_READ_DWORD =
         (ER_VIRTIO_MMIO_CONFIG_OFFSET + 0u) / sizeof(UINT32),
     VIRTIO_GPU_TEST_CONFIG_SCANOUTS_DWORD =
@@ -1079,6 +1080,11 @@ static void test_virtio_gpu_mmio(void) {
   ErVirtioQueueDesc* cursor_desc;
   ErVirtioQueueAvail* cursor_avail;
   ErVirtioQueueUsed* cursor_used;
+  UINT8* control_request;
+  UINT8* control_response;
+  ErVirtioGpuDisplayInfo display_info;
+  ErVirtioGpuControlHeader control_header;
+  ErVirtioGpuStats gpu_stats;
 
   er_mmio_reset();
   regs[ER_VIRTIO_MMIO_MAGIC_VALUE_OFFSET / sizeof(UINT32)] = ER_VIRTIO_MMIO_MAGIC;
@@ -1117,12 +1123,121 @@ static void test_virtio_gpu_mmio(void) {
   cursor_desc = er_virtio_gpu_test_cursor_desc();
   cursor_avail = er_virtio_gpu_test_cursor_avail();
   cursor_used = er_virtio_gpu_test_cursor_used();
+  control_request = er_virtio_gpu_test_control_request();
   check_uint64("virtio gpu control desc clear", control_desc[0].addr, 0u);
   check_uint64("virtio gpu control avail clear", control_avail->idx, 0u);
   check_uint64("virtio gpu control used clear", control_used->idx, 0u);
   check_uint64("virtio gpu cursor desc clear", cursor_desc[0].addr, 0u);
   check_uint64("virtio gpu cursor avail clear", cursor_avail->idx, 0u);
   check_uint64("virtio gpu cursor used clear", cursor_used->idx, 0u);
+
+  check_int64("virtio gpu display submit", er_virtio_gpu_submit_get_display_info(&gpu), 1);
+  er_mem_zero((UINT8*)&control_header, (UINTN)sizeof(control_header));
+  er_mem_copy((UINT8*)&control_header, control_request, (UINTN)sizeof(control_header));
+  check_uint64("virtio gpu display request type", control_header.type,
+               ER_VIRTIO_GPU_CMD_GET_DISPLAY_INFO);
+  check_uint64("virtio gpu control avail idx", control_avail->idx, 1u);
+  check_uint64("virtio gpu control avail desc", control_avail->ring[0], 0u);
+  check_uint64("virtio gpu control request len", control_desc[0].len,
+               (UINT32)sizeof(ErVirtioGpuControlHeader));
+  check_uint64("virtio gpu control request flags", control_desc[0].flags, ER_VIRTIO_DESC_F_NEXT);
+  check_uint64("virtio gpu control request next", control_desc[0].next, 1u);
+  check_uint64("virtio gpu control response len", control_desc[1].len,
+               VIRTIO_GPU_TEST_CONTROL_RESPONSE_SIZE);
+  check_uint64("virtio gpu control response flags", control_desc[1].flags, ER_VIRTIO_DESC_F_WRITE);
+  check_uint64("virtio gpu control notify",
+               regs[ER_VIRTIO_MMIO_QUEUE_NOTIFY_OFFSET / sizeof(UINT32)],
+               ER_VIRTIO_GPU_CONTROL_QUEUE);
+  check_int64("virtio gpu display busy rejected", er_virtio_gpu_submit_get_display_info(&gpu), 0);
+  gpu_stats = er_virtio_gpu_stats(&gpu);
+  check_uint64("virtio gpu submitted", gpu_stats.control_submitted, 1u);
+  check_uint64("virtio gpu busy", gpu_stats.control_busy, 1u);
+
+  control_response = er_virtio_gpu_test_control_response();
+  er_mem_zero((UINT8*)&display_info, (UINTN)sizeof(display_info));
+  display_info.header.type = ER_VIRTIO_GPU_RESP_OK_DISPLAY_INFO;
+  display_info.scanouts[0].rect.width = 800u;
+  display_info.scanouts[0].rect.height = 600u;
+  display_info.scanouts[0].enabled = 1u;
+  er_mem_copy(control_response, (const UINT8*)&display_info, (UINTN)sizeof(display_info));
+  control_used->ring[0].id = 0u;
+  control_used->ring[0].len = (UINT32)sizeof(display_info);
+  control_used->idx = 1u;
+  er_mem_zero((UINT8*)&display_info, (UINTN)sizeof(display_info));
+  check_int64("virtio gpu display poll", er_virtio_gpu_poll_display_info(&gpu, &display_info), 1);
+  check_uint64("virtio gpu display response type", display_info.header.type,
+               ER_VIRTIO_GPU_RESP_OK_DISPLAY_INFO);
+  check_uint64("virtio gpu display width", display_info.scanouts[0].rect.width, 800u);
+  check_uint64("virtio gpu display height", display_info.scanouts[0].rect.height, 600u);
+  check_uint64("virtio gpu display enabled", display_info.scanouts[0].enabled, 1u);
+  gpu_stats = er_virtio_gpu_stats(&gpu);
+  check_uint64("virtio gpu completed", gpu_stats.control_completed, 1u);
+
+  check_int64("virtio gpu create resource",
+              er_virtio_gpu_submit_resource_create_2d(&gpu, 7u,
+                                                      ER_VIRTIO_GPU_FORMAT_B8G8R8X8_UNORM,
+                                                      800u, 600u),
+              1);
+  er_mem_zero((UINT8*)&control_header, (UINTN)sizeof(control_header));
+  er_mem_copy((UINT8*)&control_header, control_request, (UINTN)sizeof(control_header));
+  check_uint64("virtio gpu create request type", control_header.type,
+               ER_VIRTIO_GPU_CMD_RESOURCE_CREATE_2D);
+  check_int64("virtio gpu reject create zero resource",
+              er_virtio_gpu_submit_resource_create_2d(&gpu, 0u,
+                                                      ER_VIRTIO_GPU_FORMAT_B8G8R8X8_UNORM,
+                                                      800u, 600u),
+              0);
+  control_header.type = ER_VIRTIO_GPU_RESP_OK_NODATA;
+  er_mem_copy(control_response, (const UINT8*)&control_header, (UINTN)sizeof(control_header));
+  control_used->ring[1].id = 0u;
+  control_used->ring[1].len = (UINT32)sizeof(control_header);
+  control_used->idx = 2u;
+  check_int64("virtio gpu create ok", er_virtio_gpu_poll_ok_nodata(&gpu), 1);
+
+  check_int64("virtio gpu attach backing",
+              er_virtio_gpu_submit_resource_attach_backing(&gpu, 7u, 0x1000u, 800u * 600u * 4u),
+              1);
+  er_mem_zero((UINT8*)&control_header, (UINTN)sizeof(control_header));
+  er_mem_copy((UINT8*)&control_header, control_request, (UINTN)sizeof(control_header));
+  check_uint64("virtio gpu attach request type", control_header.type,
+               ER_VIRTIO_GPU_CMD_RESOURCE_ATTACH_BACKING);
+  control_header.type = ER_VIRTIO_GPU_RESP_OK_NODATA;
+  er_mem_copy(control_response, (const UINT8*)&control_header, (UINTN)sizeof(control_header));
+  control_used->ring[2].id = 0u;
+  control_used->ring[2].len = (UINT32)sizeof(control_header);
+  control_used->idx = 3u;
+  check_int64("virtio gpu attach ok", er_virtio_gpu_poll_ok_nodata(&gpu), 1);
+
+  check_int64("virtio gpu set scanout", er_virtio_gpu_submit_set_scanout(&gpu, 0u, 7u, 800u, 600u), 1);
+  er_mem_zero((UINT8*)&control_header, (UINTN)sizeof(control_header));
+  er_mem_copy((UINT8*)&control_header, control_request, (UINTN)sizeof(control_header));
+  check_uint64("virtio gpu scanout request type", control_header.type,
+               ER_VIRTIO_GPU_CMD_SET_SCANOUT);
+  control_header.type = ER_VIRTIO_GPU_RESP_OK_NODATA;
+  er_mem_copy(control_response, (const UINT8*)&control_header, (UINTN)sizeof(control_header));
+  control_used->ring[3].id = 0u;
+  control_used->ring[3].len = (UINT32)sizeof(control_header);
+  control_used->idx = 4u;
+  check_int64("virtio gpu scanout ok", er_virtio_gpu_poll_ok_nodata(&gpu), 1);
+
+  check_int64("virtio gpu transfer",
+              er_virtio_gpu_submit_transfer_to_host_2d(&gpu, 7u, 800u, 600u), 1);
+  er_mem_zero((UINT8*)&control_header, (UINTN)sizeof(control_header));
+  er_mem_copy((UINT8*)&control_header, control_request, (UINTN)sizeof(control_header));
+  check_uint64("virtio gpu transfer request type", control_header.type,
+               ER_VIRTIO_GPU_CMD_TRANSFER_TO_HOST_2D);
+  control_header.type = ER_VIRTIO_GPU_RESP_OK_NODATA;
+  er_mem_copy(control_response, (const UINT8*)&control_header, (UINTN)sizeof(control_header));
+  control_used->ring[4].id = 0u;
+  control_used->ring[4].len = (UINT32)sizeof(control_header);
+  control_used->idx = 5u;
+  check_int64("virtio gpu transfer ok", er_virtio_gpu_poll_ok_nodata(&gpu), 1);
+
+  check_int64("virtio gpu flush", er_virtio_gpu_submit_resource_flush(&gpu, 7u, 800u, 600u), 1);
+  er_mem_zero((UINT8*)&control_header, (UINTN)sizeof(control_header));
+  er_mem_copy((UINT8*)&control_header, control_request, (UINTN)sizeof(control_header));
+  check_uint64("virtio gpu flush request type", control_header.type,
+               ER_VIRTIO_GPU_CMD_RESOURCE_FLUSH);
 }
 
 static void test_net_frame_builders(void) {
