@@ -1,4 +1,5 @@
 #include "er_gfx_console.h"
+#include "er_mem.h"
 
 /*
  * Purpose: draw a small fixed-cell terminal directly into GOP framebuffer memory.
@@ -46,20 +47,46 @@ static UINT32 er_gfx_rgb(UINT8 r, UINT8 g, UINT8 b) {
   return ((UINT32)r << ER_GFX_RGB_SHIFT_R) | ((UINT32)g << ER_GFX_RGB_SHIFT_G) | (UINT32)b;
 }
 
-static void er_gfx_put_pixel(UINT32 x, UINT32 y, UINT32 color) {
-  if (x >= g_width || y >= g_height) {
-    return;
-  }
-  g_pixels[((UINTN)y * (UINTN)g_stride) + (UINTN)x] = color;
+static UINT32 er_gfx_console_width(void) {
+  return ER_GFX_COLS * ER_GFX_CELL_W * g_scale;
 }
 
+static UINT32 er_gfx_console_height(void) {
+  return ER_GFX_ROWS * ER_GFX_CELL_H * g_scale;
+}
+
+static UINT32 er_gfx_visible_width(UINT32 x, UINT32 w) {
+  if (x >= g_width) {
+    return 0u;
+  }
+  if (w > g_width - x) {
+    return g_width - x;
+  }
+  return w;
+}
+
+static UINT32 er_gfx_visible_height(UINT32 y, UINT32 h) {
+  if (y >= g_height) {
+    return 0u;
+  }
+  if (h > g_height - y) {
+    return g_height - y;
+  }
+  return h;
+}
+
+//@optimizer-ignore-function GOP framebuffer fill must visit each visible pixel in the rectangle
 static void er_gfx_fill_rect(UINT32 x, UINT32 y, UINT32 w, UINT32 h, UINT32 color) {
+  UINT32 clipped_w = er_gfx_visible_width(x, w);
+  UINT32 clipped_h = er_gfx_visible_height(y, h);
   UINT32 yy;
   UINT32 xx;
 
-  for (yy = 0; yy < h; ++yy) {
-    for (xx = 0; xx < w; ++xx) {
-      er_gfx_put_pixel(x + xx, y + yy, color);
+  for (yy = 0u; yy < clipped_h; ++yy) {
+    UINT32* row = &g_pixels[((UINTN)(y + yy) * (UINTN)g_stride) + (UINTN)x];
+
+    for (xx = 0u; xx < clipped_w; ++xx) {
+      row[xx] = color;
     }
   }
 }
@@ -128,6 +155,7 @@ static UINT8 er_gfx_row_bits(char c, UINTN row) {
   return glyph[row];
 }
 
+//@optimizer-ignore-function 5x7 glyph raster must test each glyph bit before painting framebuffer pixels
 static void er_gfx_draw_cell(UINTN col, UINTN row, char c) {
   UINT32 bg = er_gfx_rgb(ER_GFX_COLOR_BLACK, ER_GFX_COLOR_BLACK, ER_GFX_COLOR_BLACK);
   UINT32 fg = er_gfx_rgb(ER_GFX_COLOR_WHITE, ER_GFX_COLOR_WHITE, ER_GFX_COLOR_WHITE);
@@ -147,6 +175,7 @@ static void er_gfx_draw_cell(UINTN col, UINTN row, char c) {
   }
 }
 
+//@optimizer-ignore-function full console repaint is limited to initialization after GOP discovery
 static void er_gfx_redraw(void) {
   UINTN row;
   UINTN col;
@@ -160,21 +189,54 @@ static void er_gfx_redraw(void) {
   }
 }
 
-static void er_gfx_scroll(void) {
-  UINTN row;
+static void er_gfx_clear_cell_row(UINTN row) {
   UINTN col;
 
-  for (row = 1; row < ER_GFX_ROWS; ++row) {
-    for (col = 0; col < ER_GFX_COLS; ++col) {
-      g_cells[row - 1u][col] = g_cells[row][col];
+  for (col = 0u; col < ER_GFX_COLS; ++col) {
+    g_cells[row][col] = ' ';
+  }
+}
+
+static void er_gfx_scroll_cells(void) {
+  er_mem_copy((UINT8*)&g_cells[0][0], (const UINT8*)&g_cells[1][0],
+              (UINTN)((ER_GFX_ROWS - 1u) * ER_GFX_COLS));
+  er_gfx_clear_cell_row(ER_GFX_ROWS - 1u);
+}
+
+//@optimizer-ignore-function GOP framebuffer scroll must copy each visible pixel row in place
+static void er_gfx_scroll_framebuffer(void) {
+  UINT32 scroll_px = ER_GFX_CELL_H * g_scale;
+  UINT32 visible_w = er_gfx_visible_width(g_origin_x, er_gfx_console_width());
+  UINT32 visible_h = er_gfx_visible_height(g_origin_y, er_gfx_console_height());
+  UINT32 black = er_gfx_rgb(ER_GFX_COLOR_BLACK, ER_GFX_COLOR_BLACK, ER_GFX_COLOR_BLACK);
+  UINT32 y;
+  UINT32 x;
+
+  if (visible_w == 0u || visible_h == 0u) {
+    return;
+  }
+  if (scroll_px >= visible_h) {
+    er_gfx_fill_rect(g_origin_x, g_origin_y, visible_w, visible_h, black);
+    return;
+  }
+
+  for (y = 0u; y + scroll_px < visible_h; ++y) {
+    UINT32* dst = &g_pixels[((UINTN)(g_origin_y + y) * (UINTN)g_stride) + (UINTN)g_origin_x];
+    UINT32* src = &g_pixels[((UINTN)(g_origin_y + y + scroll_px) * (UINTN)g_stride) + (UINTN)g_origin_x];
+
+    for (x = 0u; x < visible_w; ++x) {
+      dst[x] = src[x];
     }
   }
-  for (col = 0; col < ER_GFX_COLS; ++col) {
-    g_cells[ER_GFX_ROWS - 1u][col] = ' ';
-  }
+
+  er_gfx_fill_rect(g_origin_x, g_origin_y + visible_h - scroll_px, visible_w, scroll_px, black);
+}
+
+static void er_gfx_scroll(void) {
+  er_gfx_scroll_cells();
+  er_gfx_scroll_framebuffer();
   g_row = ER_GFX_ROWS - 1u;
   g_col = 0;
-  er_gfx_redraw();
 }
 
 static void er_gfx_newline(void) {
@@ -211,7 +273,6 @@ void er_gfx_console_init(EFI_SYSTEM_TABLE* st) {
   UINT32 scale_x;
   UINT32 scale_y;
   UINTN row;
-  UINTN col;
 
   g_ready = 0;
   if (st == 0 || st->BootServices == 0 || st->BootServices->LocateProtocol == 0) {
@@ -251,9 +312,7 @@ void er_gfx_console_init(EFI_SYSTEM_TABLE* st) {
     (g_height - (ER_GFX_ROWS * ER_GFX_CELL_H * g_scale)) / ER_GFX_CENTER_DIVISOR : 0u;
 
   for (row = 0; row < ER_GFX_ROWS; ++row) {
-    for (col = 0; col < ER_GFX_COLS; ++col) {
-      g_cells[row][col] = ' ';
-    }
+    er_gfx_clear_cell_row(row);
   }
   g_col = 0;
   g_row = 0;
