@@ -51,6 +51,8 @@
 #define VR_UTILS_CMAP_UNKNOWN_FORMAT_ID 99u
 #define VR_UTILS_TEST_GLYPH_ID_MAPPED 0x005Au
 #define VR_UTILS_TEST_CODEPOINT_42 42u
+#define VR_UTILS_BE16_HIGH_BYTE_SAMPLE 0x80ffu
+#define VR_UTILS_BE32_HIGH_BYTE_SAMPLE 0x80ff7e01u
 
 static void set_u16_be(uint8_t* out, size_t offset, uint16_t value) {
   out[offset] = (uint8_t)(value >> 8u);
@@ -62,6 +64,20 @@ static void set_u32_be(uint8_t* out, size_t offset, uint32_t value) {
   out[offset + 1u] = (uint8_t)(value >> 16u);
   out[offset + 2u] = (uint8_t)(value >> 8u);
   out[offset + 3u] = (uint8_t)value;
+}
+
+static void test_big_endian_helpers_preserve_high_bits(void) {
+  uint8_t bytes[4];
+
+  set_u32_be(bytes, 0u, VR_UTILS_BE32_HIGH_BYTE_SAMPLE);
+  test_expect_u32_eq(
+    vr_u32(bytes), VR_UTILS_BE32_HIGH_BYTE_SAMPLE, "cmap: u32 helper preserves high byte bits");
+  test_expect_u32_eq(
+    vr_tag(bytes), VR_UTILS_BE32_HIGH_BYTE_SAMPLE, "cmap: tag helper preserves high byte bits");
+
+  set_u16_be(bytes, 0u, VR_UTILS_BE16_HIGH_BYTE_SAMPLE);
+  test_expect_u32_eq(
+    vr_u16(bytes), VR_UTILS_BE16_HIGH_BYTE_SAMPLE, "cmap: u16 helper preserves high byte bits");
 }
 
 static void test_free_cmap_payload(vr_font_face_t* face, uint8_t* storage) {
@@ -540,6 +556,7 @@ static void test_parse_cmap_invalid_offset_rejected(void) {
 }
 
 void run_cmap_tests(void) {
+  test_big_endian_helpers_preserve_high_bits();
   test_glyph_lookup_format4_delta();
   test_glyph_lookup_format4_range_offset();
   test_glyph_lookup_format4_missing_range_offset_entry();

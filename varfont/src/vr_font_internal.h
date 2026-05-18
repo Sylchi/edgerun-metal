@@ -5,7 +5,16 @@
 
 #include <stdbool.h>
 
-#define VR_TABLE_TAG(a,b,c,d) (((uint32_t)(a)<<24)|((uint32_t)(b)<<16)|((uint32_t)(c)<<8)|((uint32_t)(d)))
+#define VR_FONT_BYTE_SHIFT_1 8u
+#define VR_FONT_BYTE_SHIFT_2 16u
+#define VR_FONT_BYTE_SHIFT_3 24u
+#define VR_FONT_BYTE_INDEX_0 0u
+#define VR_FONT_BYTE_INDEX_1 1u
+#define VR_FONT_BYTE_INDEX_2 2u
+#define VR_FONT_BYTE_INDEX_3 3u
+#define VR_TABLE_TAG(a,b,c,d) \
+  (((uint32_t)(a) << VR_FONT_BYTE_SHIFT_3) | ((uint32_t)(b) << VR_FONT_BYTE_SHIFT_2) | \
+   ((uint32_t)(c) << VR_FONT_BYTE_SHIFT_1) | ((uint32_t)(d)))
 #define VR_FONT_ALIGN_U8 1u
 #define VR_FONT_ALIGN_U16 2u
 #define VR_FONT_ALIGN_U32 4u
@@ -223,7 +232,8 @@ struct vr_font_face_t {
 };
 
 static inline uint16_t vr_u16(const uint8_t* p) {
-  return (uint16_t)(p[0] << 8 | p[1]);
+  return (uint16_t)(((uint16_t)p[VR_FONT_BYTE_INDEX_0] << VR_FONT_BYTE_SHIFT_1) |
+                    (uint16_t)p[VR_FONT_BYTE_INDEX_1]);
 }
 
 static inline int16_t vr_i16(const uint8_t* p) {
@@ -231,11 +241,17 @@ static inline int16_t vr_i16(const uint8_t* p) {
 }
 
 static inline uint32_t vr_u32(const uint8_t* p) {
-  return (uint32_t)(p[0] << 24 | p[1] << 16 | p[2] << 8 | p[3]);
+  return ((uint32_t)p[VR_FONT_BYTE_INDEX_0] << VR_FONT_BYTE_SHIFT_3) |
+         ((uint32_t)p[VR_FONT_BYTE_INDEX_1] << VR_FONT_BYTE_SHIFT_2) |
+         ((uint32_t)p[VR_FONT_BYTE_INDEX_2] << VR_FONT_BYTE_SHIFT_1) |
+         (uint32_t)p[VR_FONT_BYTE_INDEX_3];
 }
 
 static inline uint32_t vr_tag(const uint8_t* p) {
-  return ((uint32_t)p[0] << 24) | ((uint32_t)p[1] << 16) | ((uint32_t)p[2] << 8) | (uint32_t)p[3];
+  return ((uint32_t)p[VR_FONT_BYTE_INDEX_0] << VR_FONT_BYTE_SHIFT_3) |
+         ((uint32_t)p[VR_FONT_BYTE_INDEX_1] << VR_FONT_BYTE_SHIFT_2) |
+         ((uint32_t)p[VR_FONT_BYTE_INDEX_2] << VR_FONT_BYTE_SHIFT_1) |
+         (uint32_t)p[VR_FONT_BYTE_INDEX_3];
 }
 
 bool vr_allocator_valid(vr_font_allocator_t allocator);
