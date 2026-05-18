@@ -151,6 +151,17 @@ UINT8 er_virtio_mmio_configure_split_queue(const ErVirtioMmioTransport* transpor
                                            UINT16 max_queue_size, UINT16 min_queue_size,
                                            UINT64 desc, UINT64 driver, UINT64 device,
                                            UINT16* out_queue_size);
+static inline UINT8 er_virtio_configure_driver_queue(const ErVirtioMmioTransport* transport,
+                                                     UINT16 queue,
+                                                     ErVirtioQueueDesc* desc,
+                                                     ErVirtioQueueAvail* avail,
+                                                     ErVirtioQueueUsed* used,
+                                                     UINT16* out_queue_size) {
+  return er_virtio_mmio_configure_split_queue(transport, queue, ER_VIRTIO_QUEUE_SIZE,
+                                             ER_VIRTIO_QUEUE_SIZE, (UINT64)(UINTN)desc,
+                                             (UINT64)(UINTN)avail, (UINT64)(UINTN)used,
+                                             out_queue_size);
+}
 UINT8 er_virtio_mmio_notify_queue(const ErVirtioMmioTransport* transport, UINT16 queue);
 UINT8 er_virtio_mmio_take_interrupt_status(const ErVirtioMmioTransport* transport, UINT8* out_status);
 

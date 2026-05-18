@@ -85,15 +85,6 @@ static void er_virtio_gpu_reset_storage(void) {
   er_mem_zero(g_control_response, (UINTN)sizeof(g_control_response));
 }
 
-static UINT8 er_virtio_gpu_configure_queue(const ErVirtioMmioTransport* transport, UINT16 queue,
-                                           ErVirtioQueueDesc* desc, ErVirtioQueueAvail* avail,
-                                           ErVirtioQueueUsed* used, UINT16* out_queue_size) {
-  return er_virtio_mmio_configure_split_queue(transport, queue, ER_VIRTIO_QUEUE_SIZE,
-                                             ER_VIRTIO_QUEUE_SIZE, (UINT64)(UINTN)desc,
-                                             (UINT64)(UINTN)avail, (UINT64)(UINTN)used,
-                                             out_queue_size);
-}
-
 static UINT8 er_virtio_gpu_read_config(ErVirtioGpu* gpu) {
   if (gpu == 0) {
     return 0;
@@ -160,12 +151,12 @@ static UINT8 er_virtio_gpu_init_transport(const ErVirtioMmioTransport* transport
   out_gpu->host_features = features.host;
   out_gpu->features = features.driver;
   if (er_virtio_gpu_read_config(out_gpu) == 0u ||
-      er_virtio_gpu_configure_queue(&out_gpu->transport, ER_VIRTIO_GPU_CONTROL_QUEUE,
-                                    g_control_desc.items, &g_control_avail, &g_control_used,
-                                    &control_queue_size) == 0u ||
-      er_virtio_gpu_configure_queue(&out_gpu->transport, ER_VIRTIO_GPU_CURSOR_QUEUE,
-                                    g_cursor_desc.items, &g_cursor_avail, &g_cursor_used,
-                                    &cursor_queue_size) == 0u) {
+      er_virtio_configure_driver_queue(&out_gpu->transport, ER_VIRTIO_GPU_CONTROL_QUEUE,
+                                       g_control_desc.items, &g_control_avail, &g_control_used,
+                                       &control_queue_size) == 0u ||
+      er_virtio_configure_driver_queue(&out_gpu->transport, ER_VIRTIO_GPU_CURSOR_QUEUE,
+                                       g_cursor_desc.items, &g_cursor_avail, &g_cursor_used,
+                                       &cursor_queue_size) == 0u) {
     (void)er_virtio_mmio_write_status(&out_gpu->transport, ER_VIRTIO_STATUS_FAILED);
     return 0;
   }
