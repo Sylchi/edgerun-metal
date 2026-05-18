@@ -18,6 +18,9 @@ add_library(er_ui_core
   src/er_ui_initial_setup.c
   src/er_ui_metal.c
   src/er_ui_node.c
+  src/er_ui_node_accessibility.c
+  src/er_ui_node_layout.c
+  src/er_ui_node_render.c
   src/er_ui_painter.c
   src/er_ui_primitives.c
   src/er_ui_preset_code.c
