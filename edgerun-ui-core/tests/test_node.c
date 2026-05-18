@@ -776,7 +776,7 @@ void run_node_tests(void) {
     size_t icon_quads_before_sonner = scene.icon_quad_count;
     expect_status(er_ui_node_render(&sonner, &scene, face, er_ui_bounds(0.0f, 4702.0f, 300.0f, 112.0f), theme), ER_UI_OK,
                   "node: sonner renders");
-    expect_size(scene.icon_quad_count, icon_quads_before_sonner + 2u, "node: sonner emits toast icon quads");
+    expect_size(scene.icon_quad_count, icon_quads_before_sonner + 4u, "node: sonner emits toast chrome and status icon quads");
     size_t icon_quads_before_aspect = scene.icon_quad_count;
     expect_status(er_ui_node_render(&aspect, &scene, face, er_ui_bounds(0.0f, 4826.0f, 320.0f, 180.0f), theme), ER_UI_OK,
                   "node: aspect ratio renders");

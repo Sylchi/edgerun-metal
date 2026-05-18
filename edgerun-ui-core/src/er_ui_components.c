@@ -1403,9 +1403,10 @@ er_ui_status_t er_ui_shadcn_toast_emit(
   if (!scene || !font || !message || !er_ui_bounds_valid(bounds)) return ER_UI_ERR_INVALID_ARGUMENT;
   er_ui_status_t status = er_ui_shadcn_card_emit(scene, bounds, theme);
   if (status != ER_UI_OK) return status;
-  status = er_ui_scene_push_rect(scene, er_ui_rect_fill(bounds.x + 12.0f, bounds.y + (bounds.h - 10.0f) * 0.5f, 10.0f, 10.0f, 5.0f, accent));
+  status = er_ui_shadcn_icon_tile(scene, er_ui_bounds(bounds.x + 10.0f, bounds.y + (bounds.h - 28.0f) * 0.5f, 28.0f, 28.0f), theme,
+                                  ER_UI_ICON_BELL, accent);
   if (status != ER_UI_OK) return status;
-  return er_ui_shadcn_push_ascii_text(scene, font, message, bounds.x + 32.0f, bounds.y + bounds.h * 0.60f, theme.colors.text);
+  return er_ui_shadcn_push_ascii_text(scene, font, message, bounds.x + 48.0f, bounds.y + bounds.h * 0.60f, theme.colors.text);
 }
 
 er_ui_status_t er_ui_shadcn_empty_emit(
@@ -1449,9 +1450,7 @@ er_ui_status_t er_ui_shadcn_dialog_emit(
   if (!scene || !font || !title || !body || !er_ui_bounds_valid(bounds)) return ER_UI_ERR_INVALID_ARGUMENT;
   er_ui_status_t status = er_ui_shadcn_card_emit(scene, bounds, theme);
   if (status != ER_UI_OK) return status;
-  status = er_ui_scene_push_rect(scene, er_ui_rect_fill(bounds.x + 18.0f, bounds.y + 18.0f, 34.0f, 34.0f, 10.0f, er_ui_color_with_alpha(accent, 0.28f)));
-  if (status != ER_UI_OK) return status;
-  status = er_ui_shadcn_push_ascii_text(scene, font, "!", bounds.x + 31.0f, bounds.y + 40.0f, accent);
+  status = er_ui_shadcn_icon_tile(scene, er_ui_bounds(bounds.x + 18.0f, bounds.y + 18.0f, 34.0f, 34.0f), theme, ER_UI_ICON_WARNING, accent);
   if (status != ER_UI_OK) return status;
   status = er_ui_shadcn_push_ascii_text(scene, font, title, bounds.x + 64.0f, bounds.y + 32.0f, theme.colors.text);
   if (status != ER_UI_OK) return status;
@@ -1492,7 +1491,7 @@ er_ui_status_t er_ui_shadcn_alert_emit(
   if (status != ER_UI_OK) return status;
   status = er_ui_scene_push_rect(scene, er_ui_rect_border(bounds.x, bounds.y, bounds.w, bounds.h, theme.radius.card, er_ui_color_with_alpha(theme.colors.border, 0.46f)));
   if (status != ER_UI_OK) return status;
-  status = er_ui_scene_push_rect(scene, er_ui_rect_fill(bounds.x + 12.0f, bounds.y + 15.0f, 10.0f, 10.0f, 5.0f, accent));
+  status = er_ui_shadcn_push_icon(scene, er_ui_bounds(bounds.x + 12.0f, bounds.y + 14.0f, 16.0f, 16.0f), ER_UI_ICON_WARNING, accent);
   if (status != ER_UI_OK) return status;
   status = er_ui_shadcn_push_ascii_text(scene, font, title, bounds.x + 34.0f, bounds.y + 24.0f, theme.colors.text);
   if (status != ER_UI_OK) return status;
@@ -1556,10 +1555,8 @@ er_ui_status_t er_ui_shadcn_command_palette_emit(
   if (status != ER_UI_OK) return status;
   status = er_ui_scene_push_rect(scene, er_ui_rect_border(bounds.x, bounds.y, bounds.w, bounds.h, theme.radius.control, er_ui_color_with_alpha(theme.colors.border, 0.54f)));
   if (status != ER_UI_OK) return status;
-  float icon_y = bounds.y + (bounds.h - 14.0f) * 0.5f;
-  status = er_ui_scene_push_rect(scene, er_ui_rect_border(bounds.x + 14.0f, icon_y, 10.0f, 10.0f, 5.0f, theme.colors.muted));
-  if (status != ER_UI_OK) return status;
-  status = er_ui_scene_push_rect(scene, er_ui_rect_fill(bounds.x + 23.0f, icon_y + 10.0f, 7.0f, 2.0f, 1.0f, theme.colors.muted));
+  status = er_ui_shadcn_push_icon(scene, er_ui_bounds(bounds.x + 14.0f, bounds.y + (bounds.h - 16.0f) * 0.5f, 16.0f, 16.0f),
+                                  ER_UI_ICON_SEARCH, theme.colors.muted);
   if (status != ER_UI_OK) return status;
   return er_ui_shadcn_push_ascii_text(scene, font, placeholder, bounds.x + 44.0f, bounds.y + bounds.h * 0.62f, theme.colors.muted);
 }
@@ -1758,7 +1755,9 @@ er_ui_status_t er_ui_shadcn_route_path_emit(
   float y = bounds.y + 45.0f;
   for (size_t i = 0u; i < hop_count; ++i) {
     if (x > bounds.x + bounds.w - 80.0f) break;
-    status = er_ui_scene_push_rect(scene, er_ui_rect_fill(x, y, 22.0f, 22.0f, 11.0f, er_ui_color_with_alpha(theme.colors.accent, 0.28f)));
+    status = er_ui_shadcn_icon_tile(scene, er_ui_bounds(x, y, 22.0f, 22.0f), theme,
+                                    i == 0u ? ER_UI_ICON_APP : (i + 1u == hop_count ? ER_UI_ICON_NETWORK : ER_UI_ICON_ROUTE),
+                                    theme.colors.accent);
     if (status != ER_UI_OK) return status;
     status = er_ui_shadcn_push_ascii_text(scene, font, hops[i], x + 28.0f, y + 18.0f, theme.colors.muted);
     if (status != ER_UI_OK) return status;

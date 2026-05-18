@@ -1,11 +1,17 @@
 #include "er_ui_demo_apps.h"
 
 static const float ER_UI_DEMO_APP_PAD = 24.0f;
+static const float ER_UI_DEMO_APP_COMPACT_PAD = 10.0f;
 static const float ER_UI_DEMO_APP_GAP = 16.0f;
+static const float ER_UI_DEMO_APP_COMPACT_GAP = 8.0f;
 static const float ER_UI_DEMO_APP_HEADER_H = 86.0f;
+static const float ER_UI_DEMO_APP_COMPACT_HEADER_H = 46.0f;
 static const float ER_UI_DEMO_APP_CARD_H = 128.0f;
+static const float ER_UI_DEMO_APP_COMPACT_CARD_H = 82.0f;
 static const float ER_UI_DEMO_APP_ROW_H = 58.0f;
+static const float ER_UI_DEMO_APP_COMPACT_ROW_H = 44.0f;
 static const uint32_t ER_UI_DEMO_APP_ACTION_BASE_ID = 0xED021000u;
+static const float ER_UI_DEMO_APP_COMPACT_MAX_W = 720.0f;
 
 static er_ui_status_t er_ui_demo_emit_resources(
   er_ui_scene_t* scene,
@@ -16,26 +22,44 @@ static er_ui_status_t er_ui_demo_emit_resources(
   static const float chart_values[] = {0.46f, 0.64f, 0.31f, 0.72f};
   er_ui_status_t status;
   float metric_w;
-  er_ui_bounds_t content = er_ui_bounds_inset(bounds, ER_UI_DEMO_APP_PAD, ER_UI_DEMO_APP_PAD);
-  er_ui_bounds_t header = er_ui_bounds(content.x, content.y, content.w, ER_UI_DEMO_APP_HEADER_H);
-  er_ui_bounds_t metrics = er_ui_bounds(content.x, header.y + header.h + ER_UI_DEMO_APP_GAP, content.w, ER_UI_DEMO_APP_CARD_H);
-  er_ui_bounds_t chart = er_ui_bounds(content.x, metrics.y + metrics.h + ER_UI_DEMO_APP_GAP, content.w, 210.0f);
-  er_ui_bounds_t receipt = er_ui_bounds(content.x, chart.y + chart.h + ER_UI_DEMO_APP_GAP, content.w, ER_UI_DEMO_APP_ROW_H);
+  bool compact = bounds.w <= ER_UI_DEMO_APP_COMPACT_MAX_W;
+  float pad = compact ? ER_UI_DEMO_APP_COMPACT_PAD : ER_UI_DEMO_APP_PAD;
+  float gap = compact ? ER_UI_DEMO_APP_COMPACT_GAP : ER_UI_DEMO_APP_GAP;
+  float header_h = compact ? ER_UI_DEMO_APP_COMPACT_HEADER_H : ER_UI_DEMO_APP_HEADER_H;
+  float card_h = compact ? ER_UI_DEMO_APP_COMPACT_CARD_H : ER_UI_DEMO_APP_CARD_H;
+  float row_h = compact ? ER_UI_DEMO_APP_COMPACT_ROW_H : ER_UI_DEMO_APP_ROW_H;
+  er_ui_bounds_t content = er_ui_bounds_inset(bounds, pad, pad);
+  er_ui_bounds_t header = er_ui_bounds(content.x, content.y, content.w, header_h);
+  er_ui_bounds_t metrics = er_ui_bounds(content.x, header.y + header.h + gap, content.w, card_h);
+  float chart_h = compact ? content.h - header.h - card_h - row_h - gap * 3.0f : 210.0f;
+  if (chart_h < 96.0f) chart_h = 96.0f;
+  er_ui_bounds_t chart = er_ui_bounds(content.x, metrics.y + metrics.h + gap, content.w, chart_h);
+  er_ui_bounds_t receipt = er_ui_bounds(content.x, chart.y + chart.h + gap, content.w, row_h);
 
   status = er_ui_shadcn_panel_header_emit(scene, font, header, theme, "Resources", "local device budgets admitted to apps", "Admit route",
                                           ER_UI_DEMO_APP_ACTION_BASE_ID + 1u);
   if (status != ER_UI_OK) return status;
 
-  metric_w = (metrics.w - ER_UI_DEMO_APP_GAP * 2.0f) / 3.0f;
-  status = er_ui_shadcn_metric_card_emit(scene, font, er_ui_bounds(metrics.x, metrics.y, metric_w, metrics.h), theme, "CPU", "46%",
-                                         "mintable compute window", true, 0.46f, theme.colors.info);
-  if (status != ER_UI_OK) return status;
-  status = er_ui_shadcn_metric_card_emit(scene, font, er_ui_bounds(metrics.x + metric_w + ER_UI_DEMO_APP_GAP, metrics.y, metric_w, metrics.h), theme,
-                                         "Memory", "64%", "linear pages reserved", true, 0.64f, theme.colors.accent);
-  if (status != ER_UI_OK) return status;
-  status = er_ui_shadcn_metric_card_emit(scene, font, er_ui_bounds(metrics.x + (metric_w + ER_UI_DEMO_APP_GAP) * 2.0f, metrics.y, metric_w, metrics.h), theme,
-                                         "Storage", "72%", "cache bytes available", true, 0.72f, theme.colors.success);
-  if (status != ER_UI_OK) return status;
+  if (compact) {
+    metric_w = (metrics.w - gap) * 0.5f;
+    status = er_ui_shadcn_metric_card_emit(scene, font, er_ui_bounds(metrics.x, metrics.y, metric_w, metrics.h), theme, "CPU", "46%",
+                                           "", true, 0.46f, theme.colors.info);
+    if (status != ER_UI_OK) return status;
+    status = er_ui_shadcn_metric_card_emit(scene, font, er_ui_bounds(metrics.x + metric_w + gap, metrics.y, metric_w, metrics.h), theme,
+                                           "Memory", "64%", "", true, 0.64f, theme.colors.accent);
+    if (status != ER_UI_OK) return status;
+  } else {
+    metric_w = (metrics.w - gap * 2.0f) / 3.0f;
+    status = er_ui_shadcn_metric_card_emit(scene, font, er_ui_bounds(metrics.x, metrics.y, metric_w, metrics.h), theme, "CPU", "46%",
+                                           "mintable compute window", true, 0.46f, theme.colors.info);
+    if (status != ER_UI_OK) return status;
+    status = er_ui_shadcn_metric_card_emit(scene, font, er_ui_bounds(metrics.x + metric_w + gap, metrics.y, metric_w, metrics.h), theme,
+                                           "Memory", "64%", "linear pages reserved", true, 0.64f, theme.colors.accent);
+    if (status != ER_UI_OK) return status;
+    status = er_ui_shadcn_metric_card_emit(scene, font, er_ui_bounds(metrics.x + (metric_w + gap) * 2.0f, metrics.y, metric_w, metrics.h), theme,
+                                           "Storage", "72%", "cache bytes available", true, 0.72f, theme.colors.success);
+    if (status != ER_UI_OK) return status;
+  }
 
   status = er_ui_shadcn_bar_chart_emit(scene, font, chart, theme, "Jurisdiction budget", chart_labels, chart_values,
                                        sizeof(chart_values) / sizeof(chart_values[0]), ER_UI_DEMO_APP_ACTION_BASE_ID + 20u, 1u);
