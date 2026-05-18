@@ -51,6 +51,19 @@
     slots, \
     states, \
     ER_UI_SHADCN_EMPTY_COUNT)
+#define ER_UI_COMPONENT_FIELD_SET(fields) \
+  do { \
+    *out_fields = fields; \
+    *out_count = ER_UI_SHADCN_ARRAY_COUNT(fields); \
+    return true; \
+  } while (0)
+#define ER_UI_COMPONENT_A11Y_SET(role, labels) \
+  do { \
+    *out_role = role; \
+    *out_label_fields = labels; \
+    *out_count = ER_UI_SHADCN_ARRAY_COUNT(labels); \
+    return true; \
+  } while (0)
 #define ER_UI_SHADCN_IDENTIFIER_CAPACITY ER_UI_SHADCN_TEXT_CAPACITY
 #define ER_UI_SHADCN_PREVIEW_BREADCRUMB_ID (ER_UI_SHADCN_DEMO_PREVIEW_BASE_ID + 1u)
 #define ER_UI_SHADCN_PREVIEW_BUTTON_DEFAULT_ID (ER_UI_SHADCN_DEMO_PREVIEW_BASE_ID + 2u)
@@ -2135,9 +2148,15 @@ bool er_ui_shadcn_parity_contract_for_slug(const char* slug, er_ui_shadcn_parity
 
 size_t er_ui_shadcn_exact_parity_count(void) {
   size_t count = 0u;
-  for (size_t i = 0u; i < ER_UI_SHADCN_DEMO_COUNT; ++i) {
+  const er_ui_shadcn_demo_spec_t* demo = shadcn_demo_components;
+  const er_ui_shadcn_demo_spec_t* end = shadcn_demo_components + ER_UI_SHADCN_DEMO_COUNT;
+  while (demo < end) {
     er_ui_shadcn_parity_contract_t contract = {0};
-    if (er_ui_shadcn_demo_is_exact_port(&shadcn_demo_components[i]) && er_ui_shadcn_parity_contract_for_slug(shadcn_demo_components[i].slug, &contract)) count++;
+    if (demo->status == ER_UI_SHADCN_STATUS_EXACT_PORT
+      && er_ui_shadcn_parity_contract_for_slug(demo->slug, &contract)) {
+      count++;
+    }
+    demo++;
   }
   return count;
 }
@@ -2151,7 +2170,9 @@ bool er_ui_shadcn_contract_supports_state(const er_ui_shadcn_parity_contract_t* 
 bool er_ui_shadcn_contract_supports_variant(const er_ui_shadcn_parity_contract_t* contract, const char* variant) {
   return contract && er_ui_shadcn_list_contains(contract->variants, contract->variant_count, variant);
 }
-bool er_ui_shadcn_contract_supports_interaction(const er_ui_shadcn_parity_contract_t* contract, const char* interaction) {
+bool er_ui_shadcn_contract_supports_interaction(
+  const er_ui_shadcn_parity_contract_t* contract,
+  const char* interaction) {
   return contract && er_ui_shadcn_list_contains(contract->interactions, contract->interaction_count, interaction);
 }
 
@@ -2248,7 +2269,9 @@ const char* er_ui_component_a11y_role_label(er_ui_component_a11y_role_t role) {
   }
 }
 
-bool er_ui_component_state_matrix_for(er_ui_component_test_id_t component, er_ui_component_state_matrix_t* out_matrix) {
+bool er_ui_component_state_matrix_for(
+  er_ui_component_test_id_t component,
+  er_ui_component_state_matrix_t* out_matrix) {
   if (!out_matrix || component >= ER_UI_COMPONENT_TEST_ID_COUNT) return false;
   out_matrix->component = component;
   out_matrix->states = component_states;
@@ -2256,9 +2279,13 @@ bool er_ui_component_state_matrix_for(er_ui_component_test_id_t component, er_ui
   return true;
 }
 
-bool er_ui_component_state_matrix_has_state(const er_ui_component_state_matrix_t* matrix, er_ui_component_state_t state) {
+bool er_ui_component_state_matrix_has_state(
+  const er_ui_component_state_matrix_t* matrix,
+  er_ui_component_state_t state) {
   if (!matrix || !matrix->states) return false;
-  for (size_t i = 0u; i < matrix->state_count; ++i) if (matrix->states[i] == state) return true;
+  for (size_t i = 0u; i < matrix->state_count; ++i) {
+    if (matrix->states[i] == state) return true;
+  }
   return false;
 }
 
@@ -2269,27 +2296,45 @@ static bool er_ui_component_field_set_for(
   size_t* out_count) {
   if (!out_fields || !out_count) return false;
   switch (component) {
-    case ER_UI_COMPONENT_NETWORK_APP_PROMPT: *out_fields = network_app_prompt_fields; *out_count = sizeof(network_app_prompt_fields) / sizeof(network_app_prompt_fields[0]); return true;
-    case ER_UI_COMPONENT_APP_STORE_CARD: *out_fields = app_store_card_fields; *out_count = sizeof(app_store_card_fields) / sizeof(app_store_card_fields[0]); return true;
-    case ER_UI_COMPONENT_TRUST_MANAGER_ACTIONS: *out_fields = trust_manager_action_fields; *out_count = sizeof(trust_manager_action_fields) / sizeof(trust_manager_action_fields[0]); return true;
-    case ER_UI_COMPONENT_RUNTIME_EVENT_ROW: *out_fields = runtime_event_row_fields; *out_count = sizeof(runtime_event_row_fields) / sizeof(runtime_event_row_fields[0]); return true;
-    case ER_UI_COMPONENT_PACKAGE_PROOF_ROW: *out_fields = package_proof_row_fields; *out_count = sizeof(package_proof_row_fields) / sizeof(package_proof_row_fields[0]); return true;
-    case ER_UI_COMPONENT_IMPORT_SYNC_SOURCE_ROW: *out_fields = import_sync_source_row_fields; *out_count = sizeof(import_sync_source_row_fields) / sizeof(import_sync_source_row_fields[0]); return true;
-    case ER_UI_COMPONENT_PUBLISH_FROM_NODE_ROW: *out_fields = publish_from_node_row_fields; *out_count = sizeof(publish_from_node_row_fields) / sizeof(publish_from_node_row_fields[0]); return true;
-    case ER_UI_COMPONENT_NODE_INSTANCE_ROW: *out_fields = node_instance_row_fields; *out_count = sizeof(node_instance_row_fields) / sizeof(node_instance_row_fields[0]); return true;
-    case ER_UI_COMPONENT_ADMISSION_POLICY_ROW: *out_fields = admission_policy_row_fields; *out_count = sizeof(admission_policy_row_fields) / sizeof(admission_policy_row_fields[0]); return true;
-    case ER_UI_COMPONENT_ROUTE_BUDGET_ROW: *out_fields = route_budget_row_fields; *out_count = sizeof(route_budget_row_fields) / sizeof(route_budget_row_fields[0]); return true;
-    case ER_UI_COMPONENT_DATA_TABLE_CONTROLS: *out_fields = data_table_control_fields; *out_count = sizeof(data_table_control_fields) / sizeof(data_table_control_fields[0]); return true;
-    case ER_UI_COMPONENT_ICON_ONLY_BUTTON: *out_fields = icon_only_button_fields; *out_count = sizeof(icon_only_button_fields) / sizeof(icon_only_button_fields[0]); return true;
-    case ER_UI_COMPONENT_SEGMENTED_CONTROL: *out_fields = segmented_control_fields; *out_count = sizeof(segmented_control_fields) / sizeof(segmented_control_fields[0]); return true;
-    case ER_UI_COMPONENT_RECEIPT_PAYMENT_ROW: *out_fields = receipt_payment_row_fields; *out_count = sizeof(receipt_payment_row_fields) / sizeof(receipt_payment_row_fields[0]); return true;
-    case ER_UI_COMPONENT_CAPABILITY_GRANT_DETAIL_ROW: *out_fields = capability_grant_row_fields; *out_count = sizeof(capability_grant_row_fields) / sizeof(capability_grant_row_fields[0]); return true;
-    case ER_UI_COMPONENT_SYSTEM_SURFACE_STATE_PANEL: *out_fields = system_surface_state_panel_fields; *out_count = sizeof(system_surface_state_panel_fields) / sizeof(system_surface_state_panel_fields[0]); return true;
+    case ER_UI_COMPONENT_NETWORK_APP_PROMPT:
+      ER_UI_COMPONENT_FIELD_SET(network_app_prompt_fields);
+    case ER_UI_COMPONENT_APP_STORE_CARD:
+      ER_UI_COMPONENT_FIELD_SET(app_store_card_fields);
+    case ER_UI_COMPONENT_TRUST_MANAGER_ACTIONS:
+      ER_UI_COMPONENT_FIELD_SET(trust_manager_action_fields);
+    case ER_UI_COMPONENT_RUNTIME_EVENT_ROW:
+      ER_UI_COMPONENT_FIELD_SET(runtime_event_row_fields);
+    case ER_UI_COMPONENT_PACKAGE_PROOF_ROW:
+      ER_UI_COMPONENT_FIELD_SET(package_proof_row_fields);
+    case ER_UI_COMPONENT_IMPORT_SYNC_SOURCE_ROW:
+      ER_UI_COMPONENT_FIELD_SET(import_sync_source_row_fields);
+    case ER_UI_COMPONENT_PUBLISH_FROM_NODE_ROW:
+      ER_UI_COMPONENT_FIELD_SET(publish_from_node_row_fields);
+    case ER_UI_COMPONENT_NODE_INSTANCE_ROW:
+      ER_UI_COMPONENT_FIELD_SET(node_instance_row_fields);
+    case ER_UI_COMPONENT_ADMISSION_POLICY_ROW:
+      ER_UI_COMPONENT_FIELD_SET(admission_policy_row_fields);
+    case ER_UI_COMPONENT_ROUTE_BUDGET_ROW:
+      ER_UI_COMPONENT_FIELD_SET(route_budget_row_fields);
+    case ER_UI_COMPONENT_DATA_TABLE_CONTROLS:
+      ER_UI_COMPONENT_FIELD_SET(data_table_control_fields);
+    case ER_UI_COMPONENT_ICON_ONLY_BUTTON:
+      ER_UI_COMPONENT_FIELD_SET(icon_only_button_fields);
+    case ER_UI_COMPONENT_SEGMENTED_CONTROL:
+      ER_UI_COMPONENT_FIELD_SET(segmented_control_fields);
+    case ER_UI_COMPONENT_RECEIPT_PAYMENT_ROW:
+      ER_UI_COMPONENT_FIELD_SET(receipt_payment_row_fields);
+    case ER_UI_COMPONENT_CAPABILITY_GRANT_DETAIL_ROW:
+      ER_UI_COMPONENT_FIELD_SET(capability_grant_row_fields);
+    case ER_UI_COMPONENT_SYSTEM_SURFACE_STATE_PANEL:
+      ER_UI_COMPONENT_FIELD_SET(system_surface_state_panel_fields);
     default: return false;
   }
 }
 
-bool er_ui_component_projection_contract_for(er_ui_component_test_id_t component, er_ui_component_projection_contract_t* out_contract) {
+bool er_ui_component_projection_contract_for(
+  er_ui_component_test_id_t component,
+  er_ui_component_projection_contract_t* out_contract) {
   if (!out_contract) return false;
   const er_ui_component_projected_field_t* fields = 0;
   size_t field_count = 0u;
@@ -2301,16 +2346,24 @@ bool er_ui_component_projection_contract_for(er_ui_component_test_id_t component
   return true;
 }
 
-bool er_ui_component_projection_contract_has_field(const er_ui_component_projection_contract_t* contract, const char* name) {
+bool er_ui_component_projection_contract_has_field(
+  const er_ui_component_projection_contract_t* contract,
+  const char* name) {
   if (!contract || !contract->fields || !name) return false;
-  for (size_t i = 0u; i < contract->field_count; ++i) if (er_ui_shadcn_streq(contract->fields[i].name, name)) return true;
+  for (size_t i = 0u; i < contract->field_count; ++i) {
+    if (er_ui_shadcn_streq(contract->fields[i].name, name)) return true;
+  }
   return false;
 }
 
-bool er_ui_component_projection_contract_requires_field(const er_ui_component_projection_contract_t* contract, const char* name) {
+bool er_ui_component_projection_contract_requires_field(
+  const er_ui_component_projection_contract_t* contract,
+  const char* name) {
   if (!contract || !contract->fields || !name) return false;
   for (size_t i = 0u; i < contract->field_count; ++i) {
-    if (contract->fields[i].required && er_ui_shadcn_streq(contract->fields[i].name, name)) return true;
+    if (contract->fields[i].required && er_ui_shadcn_streq(contract->fields[i].name, name)) {
+      return true;
+    }
   }
   return false;
 }
@@ -2330,27 +2383,45 @@ static bool er_ui_component_accessibility_set_for(
   size_t* out_count) {
   if (!out_role || !out_label_fields || !out_count) return false;
   switch (component) {
-    case ER_UI_COMPONENT_NETWORK_APP_PROMPT: *out_role = ER_UI_COMPONENT_A11Y_DIALOG; *out_label_fields = network_app_prompt_labels; *out_count = sizeof(network_app_prompt_labels) / sizeof(network_app_prompt_labels[0]); return true;
-    case ER_UI_COMPONENT_APP_STORE_CARD: *out_role = ER_UI_COMPONENT_A11Y_LIST_ITEM; *out_label_fields = app_store_card_labels; *out_count = sizeof(app_store_card_labels) / sizeof(app_store_card_labels[0]); return true;
-    case ER_UI_COMPONENT_TRUST_MANAGER_ACTIONS: *out_role = ER_UI_COMPONENT_A11Y_GROUP; *out_label_fields = trust_manager_action_labels; *out_count = sizeof(trust_manager_action_labels) / sizeof(trust_manager_action_labels[0]); return true;
-    case ER_UI_COMPONENT_RUNTIME_EVENT_ROW: *out_role = ER_UI_COMPONENT_A11Y_LIST_ITEM; *out_label_fields = runtime_event_row_labels; *out_count = sizeof(runtime_event_row_labels) / sizeof(runtime_event_row_labels[0]); return true;
-    case ER_UI_COMPONENT_PACKAGE_PROOF_ROW: *out_role = ER_UI_COMPONENT_A11Y_LIST_ITEM; *out_label_fields = package_proof_row_labels; *out_count = sizeof(package_proof_row_labels) / sizeof(package_proof_row_labels[0]); return true;
-    case ER_UI_COMPONENT_IMPORT_SYNC_SOURCE_ROW: *out_role = ER_UI_COMPONENT_A11Y_LIST_ITEM; *out_label_fields = import_sync_source_row_labels; *out_count = sizeof(import_sync_source_row_labels) / sizeof(import_sync_source_row_labels[0]); return true;
-    case ER_UI_COMPONENT_PUBLISH_FROM_NODE_ROW: *out_role = ER_UI_COMPONENT_A11Y_LIST_ITEM; *out_label_fields = publish_from_node_row_labels; *out_count = sizeof(publish_from_node_row_labels) / sizeof(publish_from_node_row_labels[0]); return true;
-    case ER_UI_COMPONENT_NODE_INSTANCE_ROW: *out_role = ER_UI_COMPONENT_A11Y_LIST_ITEM; *out_label_fields = node_instance_row_labels; *out_count = sizeof(node_instance_row_labels) / sizeof(node_instance_row_labels[0]); return true;
-    case ER_UI_COMPONENT_ADMISSION_POLICY_ROW: *out_role = ER_UI_COMPONENT_A11Y_LIST_ITEM; *out_label_fields = admission_policy_row_labels; *out_count = sizeof(admission_policy_row_labels) / sizeof(admission_policy_row_labels[0]); return true;
-    case ER_UI_COMPONENT_ROUTE_BUDGET_ROW: *out_role = ER_UI_COMPONENT_A11Y_LIST_ITEM; *out_label_fields = route_budget_row_labels; *out_count = sizeof(route_budget_row_labels) / sizeof(route_budget_row_labels[0]); return true;
-    case ER_UI_COMPONENT_DATA_TABLE_CONTROLS: *out_role = ER_UI_COMPONENT_A11Y_GROUP; *out_label_fields = data_table_control_labels; *out_count = sizeof(data_table_control_labels) / sizeof(data_table_control_labels[0]); return true;
-    case ER_UI_COMPONENT_ICON_ONLY_BUTTON: *out_role = ER_UI_COMPONENT_A11Y_BUTTON; *out_label_fields = icon_only_button_labels; *out_count = sizeof(icon_only_button_labels) / sizeof(icon_only_button_labels[0]); return true;
-    case ER_UI_COMPONENT_SEGMENTED_CONTROL: *out_role = ER_UI_COMPONENT_A11Y_TAB_LIST; *out_label_fields = segmented_control_labels; *out_count = sizeof(segmented_control_labels) / sizeof(segmented_control_labels[0]); return true;
-    case ER_UI_COMPONENT_RECEIPT_PAYMENT_ROW: *out_role = ER_UI_COMPONENT_A11Y_LIST_ITEM; *out_label_fields = receipt_payment_row_labels; *out_count = sizeof(receipt_payment_row_labels) / sizeof(receipt_payment_row_labels[0]); return true;
-    case ER_UI_COMPONENT_CAPABILITY_GRANT_DETAIL_ROW: *out_role = ER_UI_COMPONENT_A11Y_LIST_ITEM; *out_label_fields = capability_grant_row_labels; *out_count = sizeof(capability_grant_row_labels) / sizeof(capability_grant_row_labels[0]); return true;
-    case ER_UI_COMPONENT_SYSTEM_SURFACE_STATE_PANEL: *out_role = ER_UI_COMPONENT_A11Y_STATUS; *out_label_fields = system_surface_state_panel_labels; *out_count = sizeof(system_surface_state_panel_labels) / sizeof(system_surface_state_panel_labels[0]); return true;
+    case ER_UI_COMPONENT_NETWORK_APP_PROMPT:
+      ER_UI_COMPONENT_A11Y_SET(ER_UI_COMPONENT_A11Y_DIALOG, network_app_prompt_labels);
+    case ER_UI_COMPONENT_APP_STORE_CARD:
+      ER_UI_COMPONENT_A11Y_SET(ER_UI_COMPONENT_A11Y_LIST_ITEM, app_store_card_labels);
+    case ER_UI_COMPONENT_TRUST_MANAGER_ACTIONS:
+      ER_UI_COMPONENT_A11Y_SET(ER_UI_COMPONENT_A11Y_GROUP, trust_manager_action_labels);
+    case ER_UI_COMPONENT_RUNTIME_EVENT_ROW:
+      ER_UI_COMPONENT_A11Y_SET(ER_UI_COMPONENT_A11Y_LIST_ITEM, runtime_event_row_labels);
+    case ER_UI_COMPONENT_PACKAGE_PROOF_ROW:
+      ER_UI_COMPONENT_A11Y_SET(ER_UI_COMPONENT_A11Y_LIST_ITEM, package_proof_row_labels);
+    case ER_UI_COMPONENT_IMPORT_SYNC_SOURCE_ROW:
+      ER_UI_COMPONENT_A11Y_SET(ER_UI_COMPONENT_A11Y_LIST_ITEM, import_sync_source_row_labels);
+    case ER_UI_COMPONENT_PUBLISH_FROM_NODE_ROW:
+      ER_UI_COMPONENT_A11Y_SET(ER_UI_COMPONENT_A11Y_LIST_ITEM, publish_from_node_row_labels);
+    case ER_UI_COMPONENT_NODE_INSTANCE_ROW:
+      ER_UI_COMPONENT_A11Y_SET(ER_UI_COMPONENT_A11Y_LIST_ITEM, node_instance_row_labels);
+    case ER_UI_COMPONENT_ADMISSION_POLICY_ROW:
+      ER_UI_COMPONENT_A11Y_SET(ER_UI_COMPONENT_A11Y_LIST_ITEM, admission_policy_row_labels);
+    case ER_UI_COMPONENT_ROUTE_BUDGET_ROW:
+      ER_UI_COMPONENT_A11Y_SET(ER_UI_COMPONENT_A11Y_LIST_ITEM, route_budget_row_labels);
+    case ER_UI_COMPONENT_DATA_TABLE_CONTROLS:
+      ER_UI_COMPONENT_A11Y_SET(ER_UI_COMPONENT_A11Y_GROUP, data_table_control_labels);
+    case ER_UI_COMPONENT_ICON_ONLY_BUTTON:
+      ER_UI_COMPONENT_A11Y_SET(ER_UI_COMPONENT_A11Y_BUTTON, icon_only_button_labels);
+    case ER_UI_COMPONENT_SEGMENTED_CONTROL:
+      ER_UI_COMPONENT_A11Y_SET(ER_UI_COMPONENT_A11Y_TAB_LIST, segmented_control_labels);
+    case ER_UI_COMPONENT_RECEIPT_PAYMENT_ROW:
+      ER_UI_COMPONENT_A11Y_SET(ER_UI_COMPONENT_A11Y_LIST_ITEM, receipt_payment_row_labels);
+    case ER_UI_COMPONENT_CAPABILITY_GRANT_DETAIL_ROW:
+      ER_UI_COMPONENT_A11Y_SET(ER_UI_COMPONENT_A11Y_LIST_ITEM, capability_grant_row_labels);
+    case ER_UI_COMPONENT_SYSTEM_SURFACE_STATE_PANEL:
+      ER_UI_COMPONENT_A11Y_SET(ER_UI_COMPONENT_A11Y_STATUS, system_surface_state_panel_labels);
     default: return false;
   }
 }
 
-bool er_ui_component_accessibility_metadata_for(er_ui_component_test_id_t component, er_ui_component_accessibility_metadata_t* out_metadata) {
+bool er_ui_component_accessibility_metadata_for(
+  er_ui_component_test_id_t component,
+  er_ui_component_accessibility_metadata_t* out_metadata) {
   if (!out_metadata) return false;
   er_ui_component_a11y_role_t role = ER_UI_COMPONENT_A11Y_GENERIC;
   const char* const* label_fields = 0;
@@ -2364,7 +2435,9 @@ bool er_ui_component_accessibility_metadata_for(er_ui_component_test_id_t compon
   return true;
 }
 
-bool er_ui_component_accessibility_metadata_has_label_field(const er_ui_component_accessibility_metadata_t* metadata, const char* name) {
+bool er_ui_component_accessibility_metadata_has_label_field(
+  const er_ui_component_accessibility_metadata_t* metadata,
+  const char* name) {
   if (!metadata || !metadata->label_fields || !name) return false;
   return er_ui_shadcn_list_contains(metadata->label_fields, metadata->label_field_count, name);
 }
@@ -2380,7 +2453,10 @@ static float er_ui_shadcn_clamp01(float value) {
   return er_math_clamp01f(value);
 }
 
-static bool er_ui_shadcn_gallery_set_slider(er_ui_shadcn_demo_gallery_state_t* state, uint32_t id, float value) {
+static bool er_ui_shadcn_gallery_set_slider(
+  er_ui_shadcn_demo_gallery_state_t* state,
+  uint32_t id,
+  float value) {
   if (!state) return false;
   for (size_t i = 0u; i < state->slider_count; ++i) {
     if (state->sliders[i].id == id) {
@@ -2389,7 +2465,10 @@ static bool er_ui_shadcn_gallery_set_slider(er_ui_shadcn_demo_gallery_state_t* s
     }
   }
   if (state->slider_count >= ER_UI_SHADCN_GALLERY_SLIDER_CAPACITY) return false;
-  state->sliders[state->slider_count++] = (er_ui_shadcn_slider_value_t){id, er_ui_shadcn_clamp01(value)};
+  state->sliders[state->slider_count++] = (er_ui_shadcn_slider_value_t){
+    id,
+    er_ui_shadcn_clamp01(value)
+  };
   return true;
 }
 
@@ -2424,21 +2503,33 @@ bool er_ui_shadcn_demo_gallery_apply_action(er_ui_shadcn_demo_gallery_state_t* s
   if (action.kind != ER_UI_ACTION_ACTIVATED || !action.has_hit) return false;
   if (action.hit.kind == ER_UI_HIT_MENU_ITEM) {
     bool has_index = false;
-    size_t index = er_ui_shadcn_option_index(action.hit.id, ER_UI_SHADCN_SELECT_CURRENCY_BASE_ID, ER_UI_SHADCN_SELECT_CURRENCY_COUNT, &has_index);
+    size_t index = er_ui_shadcn_option_index(
+      action.hit.id,
+      ER_UI_SHADCN_SELECT_CURRENCY_BASE_ID,
+      ER_UI_SHADCN_SELECT_CURRENCY_COUNT,
+      &has_index);
     if (has_index) {
       state->currency_index = index;
       state->has_open_select = false;
       state->open_select = 0u;
       return true;
     }
-    index = er_ui_shadcn_option_index(action.hit.id, ER_UI_SHADCN_SELECT_ORDER_BASE_ID, ER_UI_SHADCN_SELECT_ORDER_COUNT, &has_index);
+    index = er_ui_shadcn_option_index(
+      action.hit.id,
+      ER_UI_SHADCN_SELECT_ORDER_BASE_ID,
+      ER_UI_SHADCN_SELECT_ORDER_COUNT,
+      &has_index);
     if (has_index) {
       state->order_index = index;
       state->has_open_select = false;
       state->open_select = 0u;
       return true;
     }
-    index = er_ui_shadcn_option_index(action.hit.id, ER_UI_SHADCN_SELECT_TICKER_BASE_ID, ER_UI_SHADCN_SELECT_TICKER_COUNT, &has_index);
+    index = er_ui_shadcn_option_index(
+      action.hit.id,
+      ER_UI_SHADCN_SELECT_TICKER_BASE_ID,
+      ER_UI_SHADCN_SELECT_TICKER_COUNT,
+      &has_index);
     if (has_index) {
       state->ticker_index = index;
       state->has_open_select = false;
@@ -2448,17 +2539,29 @@ bool er_ui_shadcn_demo_gallery_apply_action(er_ui_shadcn_demo_gallery_state_t* s
   }
   if (action.hit.kind == ER_UI_HIT_BUTTON) {
     bool has_index = false;
-    size_t index = er_ui_shadcn_option_index(action.hit.id, ER_UI_SHADCN_CHART_CONTRIBUTION_BASE_ID, ER_UI_SHADCN_CHART_CONTRIBUTION_COUNT, &has_index);
+    size_t index = er_ui_shadcn_option_index(
+      action.hit.id,
+      ER_UI_SHADCN_CHART_CONTRIBUTION_BASE_ID,
+      ER_UI_SHADCN_CHART_CONTRIBUTION_COUNT,
+      &has_index);
     if (has_index) {
       state->contribution_bar = index;
       return true;
     }
-    index = er_ui_shadcn_option_index(action.hit.id, ER_UI_SHADCN_CHART_STOCK_BASE_ID, ER_UI_SHADCN_CHART_STOCK_COUNT, &has_index);
+    index = er_ui_shadcn_option_index(
+      action.hit.id,
+      ER_UI_SHADCN_CHART_STOCK_BASE_ID,
+      ER_UI_SHADCN_CHART_STOCK_COUNT,
+      &has_index);
     if (has_index) {
       state->stock_bar = index;
       return true;
     }
-    index = er_ui_shadcn_option_index(action.hit.id, ER_UI_SHADCN_CHART_POWER_BASE_ID, ER_UI_SHADCN_CHART_POWER_COUNT, &has_index);
+    index = er_ui_shadcn_option_index(
+      action.hit.id,
+      ER_UI_SHADCN_CHART_POWER_BASE_ID,
+      ER_UI_SHADCN_CHART_POWER_COUNT,
+      &has_index);
     if (has_index) {
       state->power_bar = index;
       return true;
