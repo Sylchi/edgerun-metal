@@ -259,6 +259,14 @@ typedef struct {
   uint8_t failed;
 } EriBinaryJobs;
 
+typedef struct {
+  const EriVfs* vfs;
+  EriFunctions* funcs;
+  pthread_mutex_t mutex;
+  size_t next_index;
+  uint8_t failed;
+} EriFunctionRefJobs;
+
 static char* eri_strdup_len(const char* s, size_t len) {
   char* out = (char*)malloc(len + 1u);
 
@@ -1784,37 +1792,100 @@ static void eri_scan_functions(const EriVfsFile* file, EriFunctions* funcs, EriF
   }
 }
 
-//@optimizer-ignore-function function reference analysis must compare every known function name against source bytes
-static void eri_count_function_refs(const EriVfs* vfs, EriFunctions* funcs) {
-  size_t f;
+static uint32_t eri_count_function_ref_hits(const EriVfs* vfs, const char* name) {
+  size_t name_len = strlen(name);
+  size_t file_i;
+  uint32_t calls = 0u;
 
-  for (f = 0; f < funcs->len; ++f) {
-    size_t name_len = strlen(funcs->items[f].name);
-    size_t file_i;
+  for (file_i = 0; file_i < vfs->len; ++file_i) {
+    const EriVfsFile* file = &vfs->files[file_i];
+    size_t pos;
 
-    for (file_i = 0; file_i < vfs->len; ++file_i) {
-      const EriVfsFile* file = &vfs->files[file_i];
-      size_t pos;
+    if (eri_is_build_path(file->path) != 0u || !eri_is_c_source(file->path)) {
+      continue;
+    }
+    for (pos = 0u; pos + name_len < file->len; ++pos) {
+      uint8_t before_ok;
+      uint8_t after_ok;
 
-      if (eri_is_build_path(file->path) != 0u || !eri_is_c_source(file->path)) {
+      if (memcmp(file->bytes + pos, name, name_len) != 0) {
         continue;
       }
-      for (pos = 0u; pos + name_len < file->len; ++pos) {
-        uint8_t before_ok;
-        uint8_t after_ok;
-
-        if (memcmp(file->bytes + pos, funcs->items[f].name, name_len) != 0) {
-          continue;
-        }
-        before_ok = pos == 0u || !(isalnum((unsigned char)file->bytes[pos - 1u]) || file->bytes[pos - 1u] == '_');
-        after_ok = pos + name_len >= file->len ||
-                   !(isalnum((unsigned char)file->bytes[pos + name_len]) || file->bytes[pos + name_len] == '_');
-        if (before_ok != 0u && after_ok != 0u) {
-          ++funcs->items[f].calls;
-        }
+      before_ok = pos == 0u || !(isalnum((unsigned char)file->bytes[pos - 1u]) || file->bytes[pos - 1u] == '_');
+      after_ok = pos + name_len >= file->len ||
+                 !(isalnum((unsigned char)file->bytes[pos + name_len]) || file->bytes[pos + name_len] == '_');
+      if (before_ok != 0u && after_ok != 0u) {
+        ++calls;
       }
     }
   }
+  return calls;
+}
+
+//@optimizer-ignore-function function reference worker compares each claimed function name against every source byte
+static void* eri_function_ref_worker(void* arg) {
+  EriFunctionRefJobs* jobs = (EriFunctionRefJobs*)arg;
+
+  for (;;) {
+    size_t index;
+
+    if (pthread_mutex_lock(&jobs->mutex) != 0) {
+      return NULL;
+    }
+    if (jobs->failed != 0u || jobs->next_index >= jobs->funcs->len) {
+      if (pthread_mutex_unlock(&jobs->mutex) != 0) {
+        jobs->failed = 1u;
+      }
+      return NULL;
+    }
+    index = jobs->next_index;
+    ++jobs->next_index;
+    if (pthread_mutex_unlock(&jobs->mutex) != 0) {
+      jobs->failed = 1u;
+      return NULL;
+    }
+    jobs->funcs->items[index].calls = eri_count_function_ref_hits(jobs->vfs, jobs->funcs->items[index].name);
+  }
+}
+
+//@optimizer-ignore-function function reference analysis must compare every known function name against source bytes
+static uint8_t eri_count_function_refs(const EriVfs* vfs, EriFunctions* funcs, size_t thread_count) {
+  EriFunctionRefJobs jobs;
+  pthread_t threads[ERI_MAX_THREAD_COUNT];
+  size_t started = 0u;
+  size_t i;
+
+  if (funcs->len == 0u) {
+    return 1u;
+  }
+  if (thread_count > funcs->len) {
+    thread_count = funcs->len;
+  }
+  memset(&jobs, 0, sizeof(jobs));
+  jobs.vfs = vfs;
+  jobs.funcs = funcs;
+  if (pthread_mutex_init(&jobs.mutex, NULL) != 0) {
+    return 0u;
+  }
+  for (i = 0u; i < thread_count; ++i) {
+    if (pthread_create(&threads[i], NULL, eri_function_ref_worker, &jobs) != 0) {
+      if (pthread_mutex_lock(&jobs.mutex) == 0) {
+        jobs.failed = 1u;
+        (void)pthread_mutex_unlock(&jobs.mutex);
+      }
+      break;
+    }
+    ++started;
+  }
+  for (i = 0u; i < started; ++i) {
+    if (pthread_join(threads[i], NULL) != 0) {
+      jobs.failed = 1u;
+    }
+  }
+  if (pthread_mutex_destroy(&jobs.mutex) != 0) {
+    jobs.failed = 1u;
+  }
+  return jobs.failed == 0u ? 1u : 0u;
 }
 
 static void eri_add_binary(EriBinaries* bins, const EriVfsFile* file) {
@@ -3395,7 +3466,11 @@ static uint8_t eri_analyze(const EriVfs* vfs) {
   }
   free(file_results);
 
-  eri_count_function_refs(vfs, &funcs);
+  if (eri_count_function_refs(vfs, &funcs, thread_count) == 0u) {
+    eri_analyze_cleanup(&packages, &funcs, &findings, &bins, &sources, &coverage_packages,
+                        &smell_packages, &cpu_packages, &worldview_packages, &duplicates);
+    return 0;
+  }
   eri_mark_test_signals(vfs, &sources, &funcs);
   eri_measure_binary_release_sizes(&bins, thread_count);
   if (eri_collect_duplicates(vfs, &duplicates, thread_count) == 0u) {
