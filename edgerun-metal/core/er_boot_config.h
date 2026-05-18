@@ -13,15 +13,28 @@
 #define ER_BOOT_CONFIG_CHANNEL_CAPACITY 8u
 #define ER_BOOT_CONFIG_GENERATION_INVALID 0u
 #define ER_BOOT_CONFIG_LABEL_MAX ER_CHANNEL_LABEL_MAX
+#define ER_BOOT_CONFIG_WIFI_SSID_MAX 32u
+#define ER_BOOT_CONFIG_WIFI_FIXED_SSID_LEN 7u
 
 #define ER_BOOT_CONFIG_CHANNEL_DISABLED 0u
 #define ER_BOOT_CONFIG_CHANNEL_ENABLED 1u
+
+#define ER_BOOT_CONFIG_WIFI_ROLE_NONE 0u
+#define ER_BOOT_CONFIG_WIFI_ROLE_AUTO 1u
+#define ER_BOOT_CONFIG_WIFI_ROLE_AP 2u
+#define ER_BOOT_CONFIG_WIFI_ROLE_STA 3u
+
+#define ER_BOOT_CONFIG_WIFI_SECURITY_OPEN 1u
 
 typedef struct {
   UINT8 enabled;
   UINT8 channel_kind;
   UINT16 label_len;
+  UINT8 wifi_role;
+  UINT8 wifi_security;
+  UINT16 ssid_len;
   char label[ER_BOOT_CONFIG_LABEL_MAX];
+  char ssid[ER_BOOT_CONFIG_WIFI_SSID_MAX];
 } ErBootRelayChannelConfig;
 
 typedef struct {
@@ -37,6 +50,11 @@ UINT8 er_boot_config_set_admission_identity(ErBootConfig* config,
                                             const ErIdentity* admission_identity);
 UINT8 er_boot_config_add_channel(ErBootConfig* config, UINT8 channel_kind,
                                  const char* label, UINT16 label_len);
+UINT8 er_boot_config_add_open_wifi_channel(ErBootConfig* config,
+                                           UINT8 wifi_role,
+                                           const char* label,
+                                           UINT16 label_len);
 UINT8 er_boot_config_valid(const ErBootConfig* config);
+const char* er_boot_config_wifi_fixed_ssid(void);
 
 #endif
