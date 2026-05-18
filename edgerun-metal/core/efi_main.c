@@ -856,8 +856,54 @@ static UINT8 er_gpu_profile_wait_display_info(ErVirtioGpu* gpu,
   return 0u;
 }
 
+static UINT8 er_gpu_profile_render_scene_to_framebuffer(ErVirtioGpuFramebuffer* framebuffer,
+                                                        ErUiSurfaceRenderStats* out_stats) {
+  er_ui_rect_t rects[4];
+  er_ui_scene_t scene;
+  ErUiSurface surface;
+  float width;
+  float height;
+  float band_h;
+
+  if (framebuffer == 0 || framebuffer->initialized == 0u || framebuffer->pixels == 0 ||
+      framebuffer->width == 0u || framebuffer->height == 0u) {
+    if (out_stats != 0) {
+      *out_stats = (ErUiSurfaceRenderStats){0};
+    }
+    return 0u;
+  }
+
+  width = (float)framebuffer->width;
+  height = (float)framebuffer->height;
+  band_h = height * 0.18f;
+  rects[0] = er_ui_rect_fill(0.0f, 0.0f, width, height, 0.0f, er_ui_color_rgb_u8(18u, 24u, 28u));
+  rects[1] = er_ui_rect_linear_gradient(0.0f, 0.0f, width, band_h, 0.0f,
+                                        er_ui_color_rgb_u8(54u, 188u, 206u),
+                                        er_ui_color_rgb_u8(28u, 72u, 86u));
+  rects[2] = er_ui_rect_fill(width * 0.06f, band_h + height * 0.10f,
+                             width * 0.42f, height * 0.22f, 10.0f,
+                             er_ui_color_rgb_u8(38u, 47u, 54u));
+  rects[3] = er_ui_rect_border(width * 0.06f, band_h + height * 0.10f,
+                               width * 0.42f, height * 0.22f, 10.0f,
+                               er_ui_color_rgb_u8(84u, 210u, 226u));
+
+  er_mem_zero((UINT8*)&scene, (UINTN)sizeof(scene));
+  scene.clear = er_ui_color_rgb_u8(18u, 24u, 28u);
+  scene.rects = rects;
+  scene.rect_count = (UINTN)(sizeof(rects) / sizeof(rects[0]));
+  scene.rect_capacity = scene.rect_count;
+
+  surface.pixels = framebuffer->pixels;
+  surface.width = framebuffer->width;
+  surface.height = framebuffer->height;
+  surface.stride = framebuffer->stride_pixels;
+  surface.pixel_format = ER_UI_SURFACE_PIXEL_BGRX;
+  return er_ui_surface_render_scene_with_font_stats(&surface, &scene, 0, out_stats);
+}
+
 static UINT8 er_gpu_profile_flush_framebuffer(ErVirtioGpu* gpu, UINT32 width, UINT32 height) {
   ErVirtioGpuFramebuffer framebuffer;
+  ErUiSurfaceRenderStats render_stats;
 
   if (er_virtio_gpu_framebuffer_init(&framebuffer, ER_GPU_PROFILE_RESOURCE_ID,
                                      ER_GPU_PROFILE_SCANOUT_ID,
@@ -869,8 +915,10 @@ static UINT8 er_gpu_profile_flush_framebuffer(ErVirtioGpu* gpu, UINT32 width, UI
     er_println("gpu framebuffer: unsupported dimensions");
     return 0u;
   }
-  er_virtio_gpu_framebuffer_fill_halves(&framebuffer, ER_GPU_PROFILE_TOP_COLOR,
-                                        ER_GPU_PROFILE_BOTTOM_COLOR);
+  if (er_gpu_profile_render_scene_to_framebuffer(&framebuffer, &render_stats) == 0u) {
+    er_println("gpu framebuffer: scene render failed");
+    return 0u;
+  }
   if (er_virtio_gpu_submit_framebuffer_create(gpu, &framebuffer) == 0u ||
       er_gpu_profile_wait_ok(gpu) == 0u) {
     er_println("gpu framebuffer: create failed");
@@ -896,6 +944,11 @@ static UINT8 er_gpu_profile_flush_framebuffer(ErVirtioGpu* gpu, UINT32 width, UI
     er_println("gpu framebuffer: flush failed");
     return 0u;
   }
+  er_print("gpu framebuffer: scene bytes=");
+  er_print_u64_dec(render_stats.bytes_written);
+  er_print(" rects=");
+  er_print_u64_dec(render_stats.rects);
+  er_println("");
   return 1u;
 }
 

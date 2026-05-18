@@ -1098,6 +1098,10 @@ static void test_virtio_gpu_mmio(void) {
   ErVirtioGpuStats gpu_stats;
   ErVirtioGpuFramebuffer framebuffer;
   UINT32 framebuffer_pixels[VIRTIO_GPU_TEST_FB_PIXELS] = {0};
+  ErUiSurface ui_surface;
+  ErUiSurfaceRenderStats ui_render_stats;
+  er_ui_rect_t ui_rects[1];
+  er_ui_scene_t ui_scene;
 
   er_mmio_reset();
   regs[ER_VIRTIO_MMIO_MAGIC_VALUE_OFFSET / sizeof(UINT32)] = ER_VIRTIO_MMIO_MAGIC;
@@ -1301,6 +1305,25 @@ static void test_virtio_gpu_mmio(void) {
                VIRTIO_GPU_TEST_FB_TOP_COLOR);
   check_uint64("virtio gpu framebuffer bottom", framebuffer_pixels[4],
                VIRTIO_GPU_TEST_FB_BOTTOM_COLOR);
+  er_mem_zero((UINT8*)&ui_scene, (UINTN)sizeof(ui_scene));
+  ui_rects[0] = er_ui_rect_fill(0.0f, 0.0f, 2.0f, 1.0f, 0.0f,
+                                er_ui_color_rgb_u8(255u, 0u, 0u));
+  ui_scene.clear = er_ui_color_rgb_u8(0u, 0u, 0u);
+  ui_scene.rects = ui_rects;
+  ui_scene.rect_count = 1u;
+  ui_scene.rect_capacity = 1u;
+  ui_surface.pixels = framebuffer.pixels;
+  ui_surface.width = framebuffer.width;
+  ui_surface.height = framebuffer.height;
+  ui_surface.stride = framebuffer.stride_pixels;
+  ui_surface.pixel_format = ER_UI_SURFACE_PIXEL_BGRX;
+  check_int64("virtio gpu framebuffer surface scene",
+              er_ui_surface_render_scene_with_font_stats(&ui_surface, &ui_scene, 0, &ui_render_stats),
+              1);
+  check_uint64("virtio gpu framebuffer surface bytes", ui_render_stats.bytes_written, 32u);
+  check_uint64("virtio gpu framebuffer surface rects", ui_render_stats.rects, 1u);
+  check_uint64("virtio gpu framebuffer surface bgrx red", framebuffer_pixels[0], 0x000000ffu);
+  check_uint64("virtio gpu framebuffer surface clear", framebuffer_pixels[4], 0u);
   check_int64("virtio gpu framebuffer create",
               er_virtio_gpu_submit_framebuffer_create(&gpu, &framebuffer), 1);
   er_mem_zero((UINT8*)&control_header, (UINTN)sizeof(control_header));
