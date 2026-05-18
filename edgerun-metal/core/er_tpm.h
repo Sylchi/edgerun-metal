@@ -25,16 +25,24 @@
 #define ER_TPM_RC_METAL_UNSUPPORTED 0xfffffffau
 
 #define ER_TPM_CC_STARTUP 0x00000144u
+#define ER_TPM_CC_CREATE_PRIMARY 0x00000131u
 #define ER_TPM_CC_GET_RANDOM 0x0000017Bu
 #define ER_TPM_CC_READ_PUBLIC 0x00000173u
 #define ER_TPM_CC_SIGN 0x0000015Du
+#define ER_TPM_CC_FLUSH_CONTEXT 0x00000165u
 
 #define ER_TPM_SU_CLEAR 0x0000u
 #define ER_TPM_RS_PW 0x40000009u
+#define ER_TPM_RH_OWNER 0x40000001u
 #define ER_TPM_RH_NULL 0x40000007u
 
+#define ER_TPM_ALG_NULL 0x0010u
 #define ER_TPM_ALG_SHA256 0x000Bu
 #define ER_TPM_ALG_ECDSA 0x0018u
+#define ER_TPM_ALG_ECC 0x0023u
+#define ER_TPM_ECC_NIST_P256 0x0003u
+
+#define ER_TPM_P256_PUBLIC_KEY_LEN 64u
 
 typedef struct {
   UINT8 found;
@@ -53,6 +61,11 @@ typedef struct {
   UINT32 timeout_polls;
 } ErTpmCrbTransport;
 
+typedef struct {
+  UINT32 handle;
+  UINT8 public_key[ER_TPM_P256_PUBLIC_KEY_LEN];
+} ErTpmP256Primary;
+
 UINT8 er_tpm_parse_tpm2_table(UINT64 tpm2_address, ErTpm2Info* out_info);
 UINT8 er_tpm_find_tpm2_table(const ErAcpiTableList* tables, ErTpm2Info* out_info);
 UINT8 er_tpm2_info_is_crb(const ErTpm2Info* info);
@@ -67,6 +80,9 @@ UINT8 er_tpm_crb_transact(ErTpmCrbTransport* transport,
 UINT8 er_tpm_build_startup_command(UINT16 startup_type,
                                    UINT8* out_command, UINT32 command_capacity,
                                    UINT32* out_command_len);
+UINT8 er_tpm_build_create_primary_p256_signing_command(UINT8* out_command,
+                                                       UINT32 command_capacity,
+                                                       UINT32* out_command_len);
 UINT8 er_tpm_build_get_random_command(UINT16 bytes_requested,
                                       UINT8* out_command, UINT32 command_capacity,
                                       UINT32* out_command_len);
@@ -78,12 +94,18 @@ UINT8 er_tpm_build_sign_p256_sha256_command(UINT32 handle,
                                             UINT8* out_command,
                                             UINT32 command_capacity,
                                             UINT32* out_command_len);
+UINT8 er_tpm_build_flush_context_command(UINT32 handle,
+                                         UINT8* out_command, UINT32 command_capacity,
+                                         UINT32* out_command_len);
 
 UINT32 er_tpm_response_code(const UINT8* response, UINT32 response_len);
 UINT8 er_tpm_response_success(const UINT8* response, UINT32 response_len);
 UINT8 er_tpm_parse_get_random_response(const UINT8* response, UINT32 response_len,
                                        UINT8* out_random, UINT32 random_capacity,
                                        UINT32* out_random_len);
+UINT8 er_tpm_parse_create_primary_p256_response(const UINT8* response,
+                                                UINT32 response_len,
+                                                ErTpmP256Primary* out_primary);
 UINT8 er_tpm_parse_p256_sha256_signature_response(const UINT8* response,
                                                   UINT32 response_len,
                                                   UINT8 out_signature[64]);

@@ -822,13 +822,17 @@ static void er_run_tpm_profile(EFI_SYSTEM_TABLE* SystemTable) {
   ErAcpiTableList tables;
   ErTpm2Info tpm2;
   ErTpmCrbTransport crb;
-  UINT8 command[ER_TPM_HEADER_LEN + 16u];
-  UINT8 response[256];
+  ErTpmP256Primary primary;
+  UINT8 command[128];
+  UINT8 response[512];
   UINT8 random[32];
+  UINT8 digest[32];
+  UINT8 signature[64];
   UINT32 command_len = 0u;
   UINT32 response_len = 0u;
   UINT32 random_len = 0u;
   UINT32 code;
+  UINT32 i;
 
   er_println("boot profile: tpm");
   if (er_acpi_find_rsdp(SystemTable, &rsdp) == 0u ||
@@ -887,6 +891,59 @@ static void er_run_tpm_profile(EFI_SYSTEM_TABLE* SystemTable) {
   er_print(" last=");
   er_print_u64_hex((UINT64)random[random_len - 1u]);
   er_println("");
+
+  if (er_tpm_build_create_primary_p256_signing_command(command,
+                                                       (UINT32)sizeof(command),
+                                                       &command_len) == 0u ||
+      er_tpm_crb_transact(&crb, command, command_len, response,
+                          (UINT32)sizeof(response), &response_len) == 0u ||
+      er_tpm_parse_create_primary_p256_response(response, response_len, &primary) == 0u) {
+    er_println("tpm: CreatePrimary P-256 failed");
+    return;
+  }
+  er_print("tpm: CreatePrimary handle=");
+  er_print_u64_hex((UINT64)primary.handle);
+  er_print(" pub0=");
+  er_print_u64_hex((UINT64)primary.public_key[0]);
+  er_print(" pub63=");
+  er_print_u64_hex((UINT64)primary.public_key[ER_TPM_P256_PUBLIC_KEY_LEN - 1u]);
+  er_println("");
+
+  for (i = 0u; i < (UINT32)sizeof(digest); ++i) {
+    digest[i] = (UINT8)i;
+  }
+  if (er_tpm_build_sign_p256_sha256_command(primary.handle, digest, command,
+                                            (UINT32)sizeof(command),
+                                            &command_len) == 0u ||
+      er_tpm_crb_transact(&crb, command, command_len, response,
+                          (UINT32)sizeof(response), &response_len) == 0u) {
+    er_println("tpm: Sign P-256 failed");
+    return;
+  }
+  code = er_tpm_response_code(response, response_len);
+  if (code != ER_TPM_RC_SUCCESS) {
+    er_print("tpm: Sign rc=");
+    er_print_u64_hex((UINT64)code);
+    er_println("");
+    return;
+  }
+  if (er_tpm_parse_p256_sha256_signature_response(response, response_len,
+                                                  signature) == 0u) {
+    er_println("tpm: Sign P-256 parse failed");
+    return;
+  }
+  er_print("tpm: Sign bytes=64 first=");
+  er_print_u64_hex((UINT64)signature[0]);
+  er_print(" last=");
+  er_print_u64_hex((UINT64)signature[63]);
+  er_println("");
+
+  if (er_tpm_build_flush_context_command(primary.handle, command,
+                                         (UINT32)sizeof(command),
+                                         &command_len) != 0u) {
+    (void)er_tpm_crb_transact(&crb, command, command_len, response,
+                              (UINT32)sizeof(response), &response_len);
+  }
   er_println("tpm: CRB direct command path ok");
 }
 
