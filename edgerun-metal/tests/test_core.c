@@ -2771,6 +2771,14 @@ static void test_ui_wasm_app_runner(void) {
   check_uint64("ui wasm app key input sequence field",
                memory[ER_UI_WASM_INPUT_SEQUENCE_OFFSET], 2u);
   check_uint64("ui wasm app key input sequence", runtime.input_sequence, 2u);
+  check_uint64("ui wasm app key input epoch field",
+               memory[ER_UI_WASM_INPUT_EPOCH_TICK_OFFSET], 4u);
+  check_uint64("ui wasm app key input epoch high byte",
+               memory[ER_UI_WASM_INPUT_EPOCH_TICK_OFFSET + 4u], 0u);
+  check_uint64("ui wasm app key input slot field",
+               memory[ER_UI_WASM_INPUT_EPOCH_SLOT_OFFSET], 0u);
+  check_uint64("ui wasm app key input era field",
+               memory[ER_UI_WASM_INPUT_EPOCH_ERA_OFFSET], 0u);
   check_uint64("ui wasm app key input epoch tick", runtime.last_input_epoch.tick, 4u);
   invalid_key.kind = (er_ui_key_kind_t)(ER_UI_KEY_OTHER + 1u);
   invalid_key.codepoint = 0u;
@@ -2783,6 +2791,8 @@ static void test_ui_wasm_app_runner(void) {
   check_uint64("ui wasm app wrapped key input sequence field",
                memory[ER_UI_WASM_INPUT_SEQUENCE_OFFSET], 1u);
   check_uint64("ui wasm app wrapped key input sequence", runtime.input_sequence, 1u);
+  check_uint64("ui wasm app wrapped key input epoch field",
+               memory[ER_UI_WASM_INPUT_EPOCH_TICK_OFFSET], 6u);
   check_uint64("ui wasm app wrapped input epoch tick", runtime.last_input_epoch.tick, 6u);
   check_int64("ui wasm app execute", er_ui_wasm_app_execute(&runtime, &result),
               0);
