@@ -26,6 +26,8 @@ enum {
   ER_VFS_BE_BYTE3 = 3u,
   ER_VFS_U8_MASK = 0xffu,
   ER_VFS_U32_MASK = 0xffffffffu,
+  ER_VFS_PACKET_INDEX_MAX = 0xffffu,
+  ER_VFS_PACKET_COUNT_MAX = 0x10000u,
   ER_VFS_LABEL_REF_SPAN_COUNT = 3u,
   ER_VFS_LABEL_REF_LABEL_SPAN = 0u,
   ER_VFS_LABEL_REF_OBJECT_ID_SPAN = 1u,
@@ -78,6 +80,20 @@ static void er_vfs_put_transform_field64(UINT8** cursor, UINT64 value) {
 static void er_vfs_set_span(ErByteSpan* span, const UINT8* bytes, UINTN len) {
   span->bytes = bytes;
   span->len = len;
+}
+
+static UINT8 er_vfs_hash_equal(const ErHash* left, const ErHash* right) {
+  UINTN i;
+
+  if (left == 0 || right == 0) {
+    return 0;
+  }
+  for (i = 0u; i < ER_HASH_LEN; ++i) {
+    if (left->bytes[i] != right->bytes[i]) {
+      return 0;
+    }
+  }
+  return 1;
 }
 
 static UINT8 er_vfs_char_is_slash(char value) {
@@ -136,16 +152,74 @@ static UINT8 er_vfs_hash_object(const ErCryptoProvider* crypto, const UINT8* obj
   return er_crypto_hash(crypto, g_object_domain, (UINTN)(sizeof(g_object_domain) - 1u), &span, 1u, out_hash);
 }
 
+static UINT8 er_vfs_hash_payload(const ErCryptoProvider* crypto, const UINT8* payload_bytes,
+                                 UINTN payload_len, ErHash* out_hash) {
+  ErByteSpan payload_span;
+
+  if (payload_len > 0u && payload_bytes == 0) {
+    return 0;
+  }
+  payload_span.bytes = payload_bytes;
+  payload_span.len = payload_len;
+  return er_crypto_hash(crypto, g_payload_domain, (UINTN)(sizeof(g_payload_domain) - 1u),
+                        &payload_span, 1u, out_hash);
+}
+
+static UINT8 er_vfs_hash_packet_id(const ErCryptoProvider* crypto, UINT16 abi_version,
+                                   UINT32 packet_index, UINT32 packet_count,
+                                   UINT64 offset, const ErHash* object_id,
+                                   const ErHash* payload_hash, ErHash* out_hash) {
+  UINT8 packet_preimage[ER_VFS_PACKET_PREIMAGE_BYTES];
+  ErByteSpan packet_span;
+
+  if (object_id == 0 || payload_hash == 0 || out_hash == 0) {
+    return 0;
+  }
+  er_vfs_put_be16(&packet_preimage[ER_VFS_PACKET_ABI_OFFSET], abi_version);
+  er_vfs_put_be32(&packet_preimage[ER_VFS_PACKET_INDEX_OFFSET], packet_index);
+  er_vfs_put_be32(&packet_preimage[ER_VFS_PACKET_COUNT_OFFSET], packet_count);
+  er_vfs_put_be64(&packet_preimage[ER_VFS_PACKET_OBJECT_OFFSET_OFFSET], offset);
+  er_mem_copy(&packet_preimage[ER_VFS_PACKET_OBJECT_ID_OFFSET], object_id->bytes, ER_HASH_LEN);
+  er_mem_copy(&packet_preimage[ER_VFS_PACKET_PAYLOAD_HASH_OFFSET], payload_hash->bytes, ER_HASH_LEN);
+  er_vfs_set_span(&packet_span, packet_preimage, (UINTN)sizeof(packet_preimage));
+  return er_crypto_hash(crypto, g_packet_domain, (UINTN)(sizeof(g_packet_domain) - 1u),
+                        &packet_span, 1u, out_hash);
+}
+
+static UINT32 er_vfs_expected_packet_bytes(UINT64 object_len, UINT32 packet_index) {
+  UINT64 offset = (UINT64)packet_index * (UINT64)ER_VFS_OBJECT_PACKET_BYTES;
+  UINT64 remaining;
+
+  if (offset >= object_len) {
+    return 0u;
+  }
+  remaining = object_len - offset;
+  if (remaining > ER_VFS_OBJECT_PACKET_BYTES) {
+    return ER_VFS_OBJECT_PACKET_BYTES;
+  }
+  return (UINT32)remaining;
+}
+
+static UINT32 er_vfs_expected_packet_count(UINT64 object_len) {
+  UINT64 full_packets = object_len / ER_VFS_OBJECT_PACKET_BYTES;
+  UINT64 remainder = object_len % ER_VFS_OBJECT_PACKET_BYTES;
+
+  if (object_len == 0u) {
+    return 1u;
+  }
+  return (UINT32)(full_packets + (remainder == 0u ? 0u : 1u));
+}
+
 UINT8 er_vfs_prepare_object_packet(const ErCryptoProvider* crypto, const UINT8* object_bytes, UINTN object_len,
                                    UINTN offset, UINT32 packet_index, UINT32 packet_count,
                                    ErVfsObjectPacket* out_packet) {
   UINTN remaining;
   UINTN chunk_len;
-  UINT8 packet_preimage[ER_VFS_PACKET_PREIMAGE_BYTES];
-  ErByteSpan payload_span;
-  ErByteSpan packet_spans[1];
 
-  if (out_packet == 0 || packet_count == 0u || packet_index >= packet_count) {
+  if (out_packet == 0 || packet_count == 0u ||
+      packet_count > ER_VFS_PACKET_COUNT_MAX ||
+      packet_index >= packet_count ||
+      packet_index > ER_VFS_PACKET_INDEX_MAX) {
     return 0;
   }
   if (object_len > 0u && object_bytes == 0) {
@@ -176,23 +250,93 @@ UINT8 er_vfs_prepare_object_packet(const ErCryptoProvider* crypto, const UINT8* 
     return 0;
   }
 
-  payload_span.bytes = out_packet->bytes;
-  payload_span.len = chunk_len;
-  if (er_crypto_hash(crypto, g_payload_domain, (UINTN)(sizeof(g_payload_domain) - 1u),
-                     &payload_span, 1u, &out_packet->header.payload_hash) == 0u) {
+  if (er_vfs_hash_payload(crypto, out_packet->bytes, chunk_len,
+                          &out_packet->header.payload_hash) == 0u) {
     return 0;
   }
 
-  er_vfs_put_be16(&packet_preimage[ER_VFS_PACKET_ABI_OFFSET], out_packet->header.abi_version);
-  er_vfs_put_be32(&packet_preimage[ER_VFS_PACKET_INDEX_OFFSET], packet_index);
-  er_vfs_put_be32(&packet_preimage[ER_VFS_PACKET_COUNT_OFFSET], packet_count);
-  er_vfs_put_be64(&packet_preimage[ER_VFS_PACKET_OBJECT_OFFSET_OFFSET], out_packet->header.offset);
-  er_mem_copy(&packet_preimage[ER_VFS_PACKET_OBJECT_ID_OFFSET], out_packet->header.object_id.bytes, ER_HASH_LEN);
-  er_mem_copy(&packet_preimage[ER_VFS_PACKET_PAYLOAD_HASH_OFFSET], out_packet->header.payload_hash.bytes, ER_HASH_LEN);
-  packet_spans[0].bytes = packet_preimage;
-  packet_spans[0].len = (UINTN)sizeof(packet_preimage);
-  return er_crypto_hash(crypto, g_packet_domain, (UINTN)(sizeof(g_packet_domain) - 1u),
-                        packet_spans, 1u, &out_packet->header.packet_id);
+  return er_vfs_hash_packet_id(crypto, out_packet->header.abi_version, packet_index,
+                               packet_count, out_packet->header.offset,
+                               &out_packet->header.object_id,
+                               &out_packet->header.payload_hash,
+                               &out_packet->header.packet_id);
+}
+
+UINT8 er_vfs_assemble_object_packets(const ErCryptoProvider* crypto,
+                                     const ErVfsObjectPacket* packets,
+                                     UINT32 packet_count,
+                                     UINT8* out_object_bytes,
+                                     UINTN out_object_capacity,
+                                     UINTN* out_object_len,
+                                     ErHash* out_object_id) {
+  UINT32 i;
+  UINT64 object_len;
+  ErHash object_id;
+
+  if (crypto == 0 || packets == 0 || packet_count == 0u ||
+      packet_count > ER_VFS_PACKET_COUNT_MAX ||
+      out_object_bytes == 0 || out_object_len == 0 || out_object_id == 0) {
+    return 0;
+  }
+  object_len = packets[0].header.object_len;
+  object_id = packets[0].header.object_id;
+  if (object_len > (UINT64)out_object_capacity ||
+      object_len > (UINT64)((UINTN)packet_count * ER_VFS_OBJECT_PACKET_BYTES)) {
+    return 0;
+  }
+  if (packet_count != er_vfs_expected_packet_count(object_len)) {
+    return 0;
+  }
+
+  for (i = 0u; i < packet_count; ++i) {
+    const ErVfsObjectPacket* packet = &packets[i];
+    UINT32 expected_bytes;
+    UINT64 expected_offset = (UINT64)i * (UINT64)ER_VFS_OBJECT_PACKET_BYTES;
+    ErHash expected_payload_hash;
+    ErHash expected_packet_id;
+
+    if (packet->header.abi_version != ER_VFS_ABI_VERSION ||
+        packet->header.packet_index != (UINT16)i ||
+        packet->header.packet_count != packet_count ||
+        packet->header.object_len != object_len ||
+        packet->header.offset != expected_offset ||
+        er_vfs_hash_equal(&packet->header.object_id, &object_id) == 0u) {
+      return 0;
+    }
+    expected_bytes = er_vfs_expected_packet_bytes(object_len, i);
+    if (packet->header.bytes_len != expected_bytes ||
+        packet->header.bytes_len > ER_VFS_OBJECT_PACKET_BYTES) {
+      return 0;
+    }
+    if (er_vfs_hash_payload(crypto, packet->bytes, packet->header.bytes_len,
+                            &expected_payload_hash) == 0u ||
+        er_vfs_hash_equal(&expected_payload_hash,
+                          &packet->header.payload_hash) == 0u) {
+      return 0;
+    }
+    if (er_vfs_hash_packet_id(crypto, packet->header.abi_version,
+                              packet->header.packet_index,
+                              packet->header.packet_count,
+                              packet->header.offset,
+                              &packet->header.object_id,
+                              &packet->header.payload_hash,
+                              &expected_packet_id) == 0u ||
+        er_vfs_hash_equal(&expected_packet_id,
+                          &packet->header.packet_id) == 0u) {
+      return 0;
+    }
+    if (packet->header.bytes_len != 0u) {
+      er_mem_copy(out_object_bytes + expected_offset, packet->bytes,
+                  packet->header.bytes_len);
+    }
+  }
+  if (er_vfs_hash_object(crypto, out_object_bytes, (UINTN)object_len,
+                         out_object_id) == 0u ||
+      er_vfs_hash_equal(out_object_id, &object_id) == 0u) {
+    return 0;
+  }
+  *out_object_len = (UINTN)object_len;
+  return 1;
 }
 
 UINT8 er_vfs_prepare_object_label_ref(const ErCryptoProvider* crypto, const char* label, UINTN label_len,

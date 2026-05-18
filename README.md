@@ -37,6 +37,8 @@ rendering, input, and device work. The current boot UI proof can keep multiple
 Wasm UI apps resident in isolated preallocated runtime contexts and switch the
 active app context from shell selection. App package records now bind app code,
 manifests, and UI assets by content object identity instead of labels.
+Bounded VFS object packet reassembly now validates loaded object bytes before
+they can become runtime input.
 Replacing firmware boot-service networking with runtime-owned drivers is the
 immediate infrastructure step:
 

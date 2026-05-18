@@ -276,9 +276,9 @@ The Wasm interpreter supports `edgerun.relay/send` and `edgerun.relay/recv` impo
 
 ### User-authored UI apps
 
-Status: UI foundations, concurrent local Wasm app contexts, and content-addressed app package records implemented; storage-backed loading is next.
+Status: UI foundations, concurrent local Wasm app contexts, content-addressed app package records, and bounded object packet reassembly implemented; storage endpoint integration is next.
 
-`edgerun-ui-core`, `varfont`, the GOP renderer, and the VirtIO GPU profile now provide enough scene, text, theme, component, and framebuffer machinery to target real app surfaces instead of diagnostics. The boot UI profile can now keep multiple Wasm UI app runtimes resident at once, each with preallocated memory, presentation identity, scene state, and its own `ui_emit` context. `er_app` can now prepare package manifests from content-addressed app code, manifest, and UI asset object refs without deriving package identity from labels. The next proof should load a small user-authored Wasm app from those objects, let it emit admitted scene or scene-delta packets, and render the result through an endpoint-owned renderer.
+`edgerun-ui-core`, `varfont`, the GOP renderer, and the VirtIO GPU profile now provide enough scene, text, theme, component, and framebuffer machinery to target real app surfaces instead of diagnostics. The boot UI profile can now keep multiple Wasm UI app runtimes resident at once, each with preallocated memory, presentation identity, scene state, and its own `ui_emit` context. `er_app` can now prepare package manifests from content-addressed app code, manifest, and UI asset object refs without deriving package identity from labels. `er_vfs` can reassemble loaded object packets into bounded memory after validating packet and object hashes. The next proof should load a small user-authored Wasm app from those objects, let it emit admitted scene or scene-delta packets, and render the result through an endpoint-owned renderer.
 
 ## Next milestones
 
