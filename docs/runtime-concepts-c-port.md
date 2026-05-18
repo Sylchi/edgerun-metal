@@ -15,11 +15,11 @@ These are concept sources only. The C runtime owns its ABI, memory model, and im
 
 ## Runtime Rules
 
-- The bare metal executor is a relay node. Its job is moving packets between addressed endpoints.
-- The relay node does not interpret app data, grant authority, admit work, own trust policy, or hold recipient keys.
-- The relay node may store opaque encrypted bytes and forward sealed packets. Storage is just another packet/address operation.
-- Data movement happens through admitted work and relay paths.
-- A boundary is crossed only through a relay controlled by an admission node.
+- The OS runtime hosts multiple jurisdictions: devices, drivers, apps, storage, renderers, input, schedulers, and relays each govern only their own state and resources.
+- Relays move packets between jurisdictions. They do not turn relay acceptance into recipient acceptance.
+- A device may admit and relay bytes to a driver or app, including bytes the recipient later rejects as malformed, unauthorized, over-budget, stale, or irrelevant to its own jurisdiction.
+- Apps and drivers validate traffic at their own boundaries. Their admissions, capabilities, budgets, sequencing rules, and payload checks decide whether received work is accepted.
+- Data movement happens through admitted work and relay paths, but each crossed jurisdiction performs its own validation.
 - Admissions are scoped jurisdictions, not global authority. An admission can authorize only the resources, relationships, route scope, budget, and policy window governed by its signer.
 - Plaintext is an active in-memory state only. It is never a storage or transport format.
 - Anything that can persist or leave the local authority boundary is sealed first.
@@ -33,11 +33,14 @@ These are concept sources only. The C runtime owns its ABI, memory model, and im
 - App launch reserves exactly the memory budget before execution. That backing range is bound to the app's deterministic app-local address range.
 - There are no opaque system apps. Every app is a content-addressed WASM object with identity, admission, schedule, and budget records.
 
-## Relay Executor
+## Jurisdictions And Relay Execution
 
-The bare metal executor uses `ER_NODE_ROLE_BARE_METAL_EXECUTOR`, which is an alias for `ER_NODE_ROLE_RELAY`. It is not a compute authority, storage authority, admission authority, or app authority.
+The bare metal executor can act as a relay, device endpoint, app host, storage
+endpoint, renderer host, and scheduler host, but those are separate
+jurisdictions. A relay role moves bytes; it does not inherit app, driver,
+device, storage, render, or admission authority.
 
-The executor handles packet movement:
+The relay role handles packet movement:
 
 - receive a packet from an address
 - match it to admitted route metadata
@@ -45,7 +48,13 @@ The executor handles packet movement:
 - optionally store or retrieve opaque sealed bytes by content address
 - emit relay transit records for audit/hash-chain continuity
 
-Everything above that belongs outside the executor. Apps, admissions, manifests, capability policy, object sealing, and recipient keys are protocol state carried in packets or held by the parties that own them.
+Recipient jurisdictions then validate what arrived. A device endpoint can accept
+traffic on its local queue and forward it to a driver, but the driver can still
+reject the packet. A shell or renderer can receive a render route packet, but
+the app or renderer jurisdiction accepts only payloads that match its own
+capability, budget, sequence, and scene/object checks. Apps, admissions,
+manifests, capability policy, object sealing, and recipient keys are protocol
+state carried in packets or held by the parties that own them.
 
 The first hardware-backed channel endpoint is UEFI UDP4. The endpoint address is encoded as IPv4 bytes plus a big-endian UDP port in `ErChannelEndpoint.address`. The default boot relay target is `10.42.0.1:9000`, matching the existing firmware UDP transmit path. This is a real hardware/firmware packet path, but still only a relay path: the executor forwards opaque `erwire` packets and does not gain authority from the NIC, firmware stack, or local machine.
 
@@ -55,7 +64,7 @@ ACPI is the firmware-described hardware topology surface. The executor discovers
 
 ## Hardware Buses
 
-Hardware communication uses explicit bus addresses and bounded operation packets. Drivers are WASM apps; the bare-metal executor is not where device policy or driver state lives. A driver app sends a packet that names the bus address, access width, offset, and value, and the executor validates the bounds before performing the transaction.
+Hardware communication uses explicit bus addresses and bounded operation packets. Drivers are WASM apps with their own jurisdictions; device endpoints own local queue/register access; the relay between them owns only packet movement. A driver app sends a packet that names the bus address, access width, offset, and value, and the endpoint validates the bounds before performing the transaction.
 
 `ErBusAddress` describes a concrete address on a hardware bus. The first supported bus kinds are PCI config space, MMIO, and x86 I/O ports. PCI config addresses bind bus, device, and function. MMIO addresses bind a physical base, byte length, and BAR index. I/O port addresses bind a base port and byte range.
 
@@ -69,7 +78,11 @@ This layer intentionally does not model capability routes. It is the dumb hardwa
 
 Drivers and user-authored apps are WASM modules executed by the metal interpreter. The interpreter owns no device policy; it gives the module bounded linear memory and explicit imports. The bring-up driver import is `edgerun.bus.exec(req_ptr, resp_ptr)`, where both pointers refer to `ErBusIoPacket` records inside the module's linear memory. The executor validates the pointed-to memory ranges, executes the addressed transaction, writes the response packet, and returns a numeric success status.
 
-This lets a NIC driver build descriptor/register transactions as data, pass them to the dumb bus executor, and keep driver state in admitted WASM memory. Device-specific logic remains app code; the executor remains a packet and bus transaction runner.
+This lets a NIC driver build descriptor/register transactions as data, relay
+them to the endpoint that owns the local hardware, and keep driver state in
+admitted WASM memory. Device-specific logic remains inside the driver
+jurisdiction; hardware access remains inside the device jurisdiction; the relay
+between them remains a packet mover.
 
 The durable app boundary is relay send/receive, not direct device access. `edgerun.relay/send(ptr, len)` is valid only for bytes inside the module's declared outbox window and only when the serialized relay packet matches the app identity, admission id, budget token, and packet-byte budget. `edgerun.relay/recv(ptr, capacity)` is valid only for the declared inbox window. This is the path user-authored apps should use for UI render packets, input events, storage/object work, and later driver/device operations.
 
@@ -79,7 +92,17 @@ The durable app boundary is relay send/receive, not direct device access. `edger
 
 `WorkAdmission` is the policy decision. It commits to the request hash, admitted route, channel, relay path, budget, policy hash, validity, and admission node.
 
-The admission node's authority is jurisdictional. A storage admission governs storage work for its storage domain. A render admission governs render access for a renderer or shell scope. A scheduler admission governs local time and memory slots. A human relationship, group, or organization admission governs access inside that social scope. None of these admissions can authorize a different layer by implication; cross-jurisdiction work must carry the relevant signed intent and admission for the destination authority.
+The admission node's authority is jurisdictional. A storage admission governs
+storage work for its storage domain. A render admission governs render access
+for a renderer or shell scope. A device admission governs local queues,
+registers, DMA, and interrupts. A driver admission governs that driver's logic,
+state, budgets, and accepted device-operation protocol. An app admission governs
+that app's execution slot, capabilities, state, and accepted input/work
+protocol. A scheduler admission governs local time and memory slots. A human
+relationship, group, or organization admission governs access inside that social
+scope. None of these admissions can authorize a different layer by implication;
+cross-jurisdiction work must carry the relevant signed intent and admission for
+the destination authority.
 
 `ChannelEnvelope` carries an admitted packet over a channel. The channel is an abstraction; in this runtime it starts as memory and firmware transports, not OS sockets.
 

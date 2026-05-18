@@ -2,7 +2,7 @@
 
 The metal core is now an OS runtime for user-authored Wasm apps, not a set of local driver experiments. Netboot, GOP, PCI scans, and direct hostcalls are support surfaces. The product architecture is the `edgerun-work` protocol carried by erwire between apps, UI renderers, input, drivers, storage, and hardware capabilities.
 
-See `../docs/relay-architecture.md` for the cross-project model and `../docs/coherent-system-milestones.md` for the proof checklist.
+See `../docs/relay-architecture.md` for the runtime architecture and `../docs/coherent-system-milestones.md` for the proof checklist.
 
 ## Proven baseline
 

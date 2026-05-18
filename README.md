@@ -1,11 +1,12 @@
 # edgerun-c
 
-This repository contains four C projects:
+This repository contains one EdgeRun OS and runtime implementation in C. The
+top-level directories are cooperating runtime areas, not separate products:
 
-- `edgerun-metal`: a freestanding x86_64 UEFI runtime that boots as `BOOTX64.EFI` and runs embedded Wasm modules with native hostcalls.
-- `edgerun-crypto`: reusable freestanding crypto primitives, currently centered on BLAKE3 hashing.
-- `varfont`: a zero-dependency variable-font renderer library with parser, shaping, rasterization, atlas, and test coverage.
-- `edgerun-ui-core`: the C port of EdgeRun's platform-neutral UI scene command buffer.
+- `edgerun-metal`: the freestanding x86_64 UEFI OS runtime that boots as `BOOTX64.EFI`, hosts Wasm apps, and owns runtime device paths.
+- `edgerun-crypto`: freestanding cryptographic primitives used by the runtime, tools, and tests, currently centered on BLAKE3 hashing.
+- `varfont`: the freestanding variable-font renderer used by the UI runtime for text shaping, rasterization, atlas output, and test coverage.
+- `edgerun-ui-core`: the platform-neutral UI scene, component, input, and rendering contract consumed by the metal runtime.
 
 ## Why This Work Exists
 
@@ -222,15 +223,80 @@ Primary data references:
 ├── docs/                  repository structure and engineering intent
 ├── tools/                 repository maintenance tools
 ├── tests/                 repository maintenance tests
-├── edgerun-metal/         freestanding UEFI OS runtime
-├── edgerun-ui-core/       portable UI scene records and command buffer tests
-├── varfont/               variable-font C library and tests
+├── edgerun-metal/         freestanding UEFI OS runtime and device adapters
+├── edgerun-crypto/        freestanding crypto used by the runtime
+├── edgerun-ui-core/       portable UI scene/component/input runtime
+├── varfont/               variable-font renderer used by UI text paths
 └── .build/                local generated builds, ignored
 ```
 
 Generated build output must stay out of source directories. Use `.build/` for local CMake builds and `edgerun-metal/build/` for EFI artifacts produced by the metal Makefile.
 
 This is one Git repository. Do not add nested `.git` directories, `.gitmodules`, or submodule gitlinks.
+
+`README.md` is the only first-party README. Runtime-area details that affect
+commands, behavior, status, or workflow belong here so the repository does not
+grow conflicting area READMEs. Deeper architecture and design intent belong in
+`docs/`.
+
+## Runtime Area Notes
+
+`edgerun-metal` is the bootable OS runtime. Real hardware boot is confirmed on
+an MSI X570/Ryzen 5600X desktop with an RTX 5060 Ti and PXE/TFTP served from an
+Arch Linux laptop at `10.42.0.1`; the client uses `10.42.0.2`. The proven path
+is:
+
+```text
+firmware -> BOOTX64.EFI -> EdgeRun Metal Core -> Wasm VM -> hostcalls
+```
+
+The active OS path is:
+
+```text
+os = VirtIO GPU-backed UI runtime, Wasm apps, PS/2 input,
+     storage-bound package loading, relay/device endpoints
+```
+
+Netboot is support infrastructure. Do not redesign it unless it blocks boot.
+The durable runtime work is relay-routed UI, input, storage, driver, and device
+traffic through `erwire`.
+
+Hardware bring-up order:
+
+```text
+1. PCI config scan
+2. BAR discovery
+3. Read-only MMIO mapping
+4. ACPI table discovery
+5. Interrupts
+6. DMA
+7. Device endpoint adapters
+```
+
+These are adapter-enabling steps. They are not the app or driver ABI. Apps and
+drivers talk through `erwire` relay packets; endpoint adapters translate
+admitted packets into local hardware operations.
+
+`edgerun-ui-core` owns the portable UI scene, component, input, layout, theme,
+asset, and render-budget contracts consumed by the OS runtime. App and shell
+surfaces should compose `er_ui_component_*_emit`, `er_ui_*_prompt_emit`, and
+layout nodes such as `er_ui_node_row`, `er_ui_node_column`, `er_ui_node_grid`,
+`er_ui_node_masonry`, `er_ui_node_bento_grid`, and `er_ui_node_scroll_area`.
+Direct `er_ui_scene_push_*` calls are for renderer primitives, component
+internals, workspace placement, and reusable component implementation.
+
+`varfont` provides the freestanding variable-font parser, shaper, rasterizer,
+atlas, and UI vertex generation path used by UI text. Production font creation
+uses `vr_font_face_create_from_memory`; hosted file loading belongs in tests or
+tools before calling the library. CMap support is currently formats 4 and 12;
+complex shaping such as GSUB, GPOS, Bidi, and CFF2 is not yet implemented.
+
+`edgerun-crypto` provides freestanding BLAKE3 hashing for the runtime. It does
+not depend on the EFI runtime, `ErCryptoProvider`, or libc memory routines.
+
+The netboot helper is a host tool that provides DHCP/TFTP for EFI PXE boot. It
+listens on UDP 67 and UDP 69, serves `BOOTX64.EFI`, can prepare an interface
+with `--setup-iface`, and logs relevant PXE vendor options.
 
 ## Required Tools
 
@@ -253,7 +319,7 @@ The preferred local build tools are:
 - `ccache` when available for repeated C builds
 - `mold` when available for hosted Linux test/tool executables
 - `wat2wasm` for source-first metal Wasm module fixtures
-- `CMake` with `Ninja` for `varfont` and `edgerun-ui-core`
+- `CMake` with `Ninja` for `edgerun-crypto`, `varfont`, and `edgerun-ui-core`
 - `ctest --output-on-failure` for tests
 - `rg` for repository search
 
@@ -270,7 +336,7 @@ make
 ```
 
 Hosted CMake builds are for development, testing, and benchmarking only. Runtime
-code stays freestanding and is pulled into `edgerun-metal` directly.
+code stays freestanding and is pulled into the OS image directly.
 
 Run all local checks:
 
@@ -311,6 +377,30 @@ make -C edgerun-metal wasm-modules
 make edgerun-os
 ```
 
+Build and test `edgerun-crypto`:
+
+```bash
+cmake -S edgerun-crypto -B .build/edgerun-crypto -G Ninja
+cmake --build .build/edgerun-crypto
+ctest --test-dir .build/edgerun-crypto --output-on-failure
+```
+
+The root Makefile wraps the same flow:
+
+```bash
+make crypto-test
+```
+
+Run hosted BLAKE3 comparison benchmarks:
+
+```bash
+make crypto-bench-sota
+```
+
+The benchmark target is hosted-only. It fetches official upstream BLAKE3 into
+`.build/blake3-upstream`, prints the upstream commit, and runs matching
+freestanding and upstream benchmark paths.
+
 Build and test `varfont`:
 
 ```bash
@@ -337,6 +427,52 @@ The root Makefile wraps the same flow:
 
 ```bash
 make ui-core-test
+```
+
+Run the hosted `varfont` demo when SDL2 and the Geist font are available:
+
+```bash
+./.build/varfont/vrfont_demo varfont/fonts/Geist[wght].ttf
+```
+
+Download the Geist variable font for hosted demos:
+
+```bash
+mkdir -p varfont/fonts
+curl -L -o varfont/fonts/Geist[wght].ttf https://raw.githubusercontent.com/vercel/geist-font/main/fonts/Geist/variable/Geist%5Bwght%5D.ttf
+```
+
+Build the host-side PXE helper:
+
+```bash
+make -C edgerun-metal netboot
+```
+
+Prepare an interface manually when needed:
+
+```bash
+sudo ip link set <iface> down
+sudo ip addr flush dev <iface>
+sudo ip addr add 10.42.0.1/24 dev <iface>
+sudo ip link set <iface> up
+```
+
+Run the helper from `edgerun-metal/`:
+
+```bash
+sudo ./build/edgerun-netboot --iface <iface> --efi build/esp/EFI/BOOT/BOOTX64.EFI
+```
+
+If NetworkManager interferes, temporarily disable management for the interface:
+
+```bash
+nmcli dev set <iface> managed no
+```
+
+Inspect PXE packets:
+
+```bash
+sudo tcpdump -i <iface> -n -vvv -s0 'udp port 67 or udp port 68 or udp port 69'
 ```
 
 Clean generated local output:
