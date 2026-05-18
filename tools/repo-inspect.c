@@ -267,6 +267,15 @@ typedef struct {
   uint8_t failed;
 } EriFunctionRefJobs;
 
+typedef struct {
+  const EriVfs* vfs;
+  EriSourceFiles* sources;
+  const EriFunctions* funcs;
+  pthread_mutex_t mutex;
+  size_t next_index;
+  uint8_t failed;
+} EriTestSignalJobs;
+
 static char* eri_strdup_len(const char* s, size_t len) {
   char* out = (char*)malloc(len + 1u);
 
@@ -2171,48 +2180,112 @@ static EriWorldviewPackage* eri_worldview_package_get(EriWorldviewPackages* pack
   return &packages->items[packages->len - 1u];
 }
 
-//@optimizer-ignore-function coverage proxy must compare implementations, tests, and function references exhaustively
-static void eri_mark_test_signals(const EriVfs* vfs, EriSourceFiles* sources, const EriFunctions* funcs) {
-  size_t i;
+static void eri_mark_source_test_signal(const EriVfs* vfs, EriSourceFiles* sources,
+                                        const EriFunctions* funcs, size_t source_index) {
+  char stem[128];
+  size_t t;
+  size_t f;
 
-  for (i = 0; i < sources->len; ++i) {
-    char stem[128];
-    size_t t;
-    size_t f;
+  if (sources->items[source_index].is_test != 0u || !eri_is_c_impl(sources->items[source_index].path)) {
+    return;
+  }
+  eri_basename_no_ext(sources->items[source_index].path, stem, sizeof(stem));
+  for (t = 0; t < vfs->len && sources->items[source_index].has_test_signal == 0u; ++t) {
+    const EriVfsFile* test_file = &vfs->files[t];
 
-    if (sources->items[i].is_test != 0u || !eri_is_c_impl(sources->items[i].path)) {
+    if (eri_is_build_path(test_file->path) != 0u || eri_is_test_path(test_file->path) == 0u ||
+        eri_is_binary_like(test_file) != 0u) {
       continue;
     }
-    eri_basename_no_ext(sources->items[i].path, stem, sizeof(stem));
-    for (t = 0; t < vfs->len && sources->items[i].has_test_signal == 0u; ++t) {
+    if (strstr(test_file->path, stem) != NULL || eri_file_contains_word(test_file, stem) != 0u) {
+      sources->items[source_index].has_test_signal = 1u;
+    }
+  }
+  for (f = 0; f < funcs->len && sources->items[source_index].has_test_signal == 0u; ++f) {
+    if (strcmp(funcs->items[f].path, sources->items[source_index].path) != 0) {
+      continue;
+    }
+    if (strlen(funcs->items[f].name) < 8u || strcmp(funcs->items[f].name, "main") == 0) {
+      continue;
+    }
+    for (t = 0; t < vfs->len; ++t) {
       const EriVfsFile* test_file = &vfs->files[t];
 
-      if (eri_is_build_path(test_file->path) != 0u || eri_is_test_path(test_file->path) == 0u ||
-          eri_is_binary_like(test_file) != 0u) {
-        continue;
-      }
-      if (strstr(test_file->path, stem) != NULL || eri_file_contains_word(test_file, stem) != 0u) {
-        sources->items[i].has_test_signal = 1u;
-      }
-    }
-    for (f = 0; f < funcs->len && sources->items[i].has_test_signal == 0u; ++f) {
-      if (strcmp(funcs->items[f].path, sources->items[i].path) != 0) {
-        continue;
-      }
-      if (strlen(funcs->items[f].name) < 8u || strcmp(funcs->items[f].name, "main") == 0) {
-        continue;
-      }
-      for (t = 0; t < vfs->len; ++t) {
-        const EriVfsFile* test_file = &vfs->files[t];
-
-        if (eri_is_build_path(test_file->path) == 0u && eri_is_test_path(test_file->path) != 0u &&
-            eri_is_binary_like(test_file) == 0u && eri_file_contains_word(test_file, funcs->items[f].name) != 0u) {
-          sources->items[i].has_test_signal = 1u;
-          break;
-        }
+      if (eri_is_build_path(test_file->path) == 0u && eri_is_test_path(test_file->path) != 0u &&
+          eri_is_binary_like(test_file) == 0u && eri_file_contains_word(test_file, funcs->items[f].name) != 0u) {
+        sources->items[source_index].has_test_signal = 1u;
+        break;
       }
     }
   }
+}
+
+//@optimizer-ignore-function test-signal worker claims source slots and compares each against tests and function refs
+static void* eri_test_signal_worker(void* arg) {
+  EriTestSignalJobs* jobs = (EriTestSignalJobs*)arg;
+
+  for (;;) {
+    size_t index;
+
+    if (pthread_mutex_lock(&jobs->mutex) != 0) {
+      return NULL;
+    }
+    if (jobs->failed != 0u || jobs->next_index >= jobs->sources->len) {
+      if (pthread_mutex_unlock(&jobs->mutex) != 0) {
+        jobs->failed = 1u;
+      }
+      return NULL;
+    }
+    index = jobs->next_index;
+    ++jobs->next_index;
+    if (pthread_mutex_unlock(&jobs->mutex) != 0) {
+      jobs->failed = 1u;
+      return NULL;
+    }
+    eri_mark_source_test_signal(jobs->vfs, jobs->sources, jobs->funcs, index);
+  }
+}
+
+//@optimizer-ignore-function coverage proxy must compare implementations, tests, and function references exhaustively
+static uint8_t eri_mark_test_signals(const EriVfs* vfs, EriSourceFiles* sources,
+                                     const EriFunctions* funcs, size_t thread_count) {
+  EriTestSignalJobs jobs;
+  pthread_t threads[ERI_MAX_THREAD_COUNT];
+  size_t started = 0u;
+  size_t i;
+
+  if (sources->len == 0u) {
+    return 1u;
+  }
+  if (thread_count > sources->len) {
+    thread_count = sources->len;
+  }
+  memset(&jobs, 0, sizeof(jobs));
+  jobs.vfs = vfs;
+  jobs.sources = sources;
+  jobs.funcs = funcs;
+  if (pthread_mutex_init(&jobs.mutex, NULL) != 0) {
+    return 0u;
+  }
+  for (i = 0u; i < thread_count; ++i) {
+    if (pthread_create(&threads[i], NULL, eri_test_signal_worker, &jobs) != 0) {
+      if (pthread_mutex_lock(&jobs.mutex) == 0) {
+        jobs.failed = 1u;
+        (void)pthread_mutex_unlock(&jobs.mutex);
+      }
+      break;
+    }
+    ++started;
+  }
+  for (i = 0u; i < started; ++i) {
+    if (pthread_join(threads[i], NULL) != 0) {
+      jobs.failed = 1u;
+    }
+  }
+  if (pthread_mutex_destroy(&jobs.mutex) != 0) {
+    jobs.failed = 1u;
+  }
+  return jobs.failed == 0u ? 1u : 0u;
 }
 
 static uint64_t eri_hash_bytes(const char* bytes, size_t len) {
@@ -3471,7 +3544,11 @@ static uint8_t eri_analyze(const EriVfs* vfs) {
                         &smell_packages, &cpu_packages, &worldview_packages, &duplicates);
     return 0;
   }
-  eri_mark_test_signals(vfs, &sources, &funcs);
+  if (eri_mark_test_signals(vfs, &sources, &funcs, thread_count) == 0u) {
+    eri_analyze_cleanup(&packages, &funcs, &findings, &bins, &sources, &coverage_packages,
+                        &smell_packages, &cpu_packages, &worldview_packages, &duplicates);
+    return 0;
+  }
   eri_measure_binary_release_sizes(&bins, thread_count);
   if (eri_collect_duplicates(vfs, &duplicates, thread_count) == 0u) {
     eri_analyze_cleanup(&packages, &funcs, &findings, &bins, &sources, &coverage_packages,
