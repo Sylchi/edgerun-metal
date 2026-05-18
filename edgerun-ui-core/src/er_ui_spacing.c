@@ -1,5 +1,12 @@
 #include "er_ui_spacing.h"
 
+enum {
+  ER_UI_SPACING_PAD_TOP = 0u,
+  ER_UI_SPACING_PAD_RIGHT = 1u,
+  ER_UI_SPACING_PAD_BOTTOM = 2u,
+  ER_UI_SPACING_PAD_LEFT = 3u
+};
+
 er_ui_component_padding_t er_ui_component_padding_for_density(er_ui_component_density_t density) {
   switch (density) {
     case ER_UI_COMPONENT_DENSITY_DENSE:
@@ -83,10 +90,10 @@ er_ui_bounds_t er_ui_centered_system_panel(er_ui_bounds_t safe, float min_w, flo
 
 er_ui_bounds_t er_ui_scroll_content_rect(er_ui_bounds_t bounds, const float padding_trbl[4u]) {
   if (!padding_trbl) return er_ui_bounds(bounds.x, bounds.y, 0.0f, 0.0f);
-  float top = padding_trbl[0u];
-  float right = padding_trbl[1u];
-  float bottom = padding_trbl[2u];
-  float left = padding_trbl[3u];
+  float top = padding_trbl[ER_UI_SPACING_PAD_TOP];
+  float right = padding_trbl[ER_UI_SPACING_PAD_RIGHT];
+  float bottom = padding_trbl[ER_UI_SPACING_PAD_BOTTOM];
+  float left = padding_trbl[ER_UI_SPACING_PAD_LEFT];
   return er_ui_bounds(bounds.x + left, bounds.y + top, er_ui_float_max(bounds.w - left - right - ER_UI_SCROLLBAR_RESERVED_W, 0.0f),
                       er_ui_float_max(bounds.h - top - bottom, 0.0f));
 }

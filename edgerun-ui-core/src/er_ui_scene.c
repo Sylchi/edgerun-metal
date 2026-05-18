@@ -8,6 +8,29 @@ static const float ER_UI_MAX_SCALE = 1.0f;
 static const float ER_UI_HALF = 0.5f;
 static const size_t ER_UI_INITIAL_CAPACITY = 8u;
 static const size_t ER_UI_ALIGN_F32 = 4u;
+enum {
+  ER_UI_SCENE_NATIVE_RECTS = 2000u,
+  ER_UI_SCENE_NATIVE_TEXT_QUADS = 900u,
+  ER_UI_SCENE_NATIVE_ICON_QUADS = 160u,
+  ER_UI_SCENE_NATIVE_CLIPS = 160u,
+  ER_UI_SCENE_NATIVE_HITS = 240u,
+  ER_UI_SCENE_NATIVE_TRANSITIONS = 1200u,
+  ER_UI_SCENE_NATIVE_VERTICES = 8000u,
+  ER_UI_SCENE_BROWSER_RECTS = 1400u,
+  ER_UI_SCENE_BROWSER_TEXT_QUADS = 600u,
+  ER_UI_SCENE_BROWSER_ICON_QUADS = 96u,
+  ER_UI_SCENE_BROWSER_CLIPS = 96u,
+  ER_UI_SCENE_BROWSER_HITS = 160u,
+  ER_UI_SCENE_BROWSER_TRANSITIONS = 800u,
+  ER_UI_SCENE_BROWSER_VERTICES = 5000u,
+  ER_UI_SCENE_SHOWCASE_RECTS = 1000u,
+  ER_UI_SCENE_SHOWCASE_TEXT_QUADS = 420u,
+  ER_UI_SCENE_SHOWCASE_ICON_QUADS = 80u,
+  ER_UI_SCENE_SHOWCASE_CLIPS = 80u,
+  ER_UI_SCENE_SHOWCASE_HITS = 120u,
+  ER_UI_SCENE_SHOWCASE_TRANSITIONS = 640u,
+  ER_UI_SCENE_SHOWCASE_VERTICES = 3600u
+};
 
 static bool er_ui_valid_geometry(float x, float y, float w, float h) {
   return er_ui_bounds_valid(er_ui_bounds(x, y, w, h));
@@ -495,17 +518,20 @@ bool er_ui_scene_drop_target_at(const er_ui_scene_t* scene, float x, float y, ui
 }
 
 er_ui_scene_budget_t er_ui_scene_budget_native_interactive_frame(void) {
-  er_ui_scene_budget_t budget = {2000u, 900u, 160u, 160u, 240u, 1200u, 8000u};
+  er_ui_scene_budget_t budget = {ER_UI_SCENE_NATIVE_RECTS, ER_UI_SCENE_NATIVE_TEXT_QUADS, ER_UI_SCENE_NATIVE_ICON_QUADS, ER_UI_SCENE_NATIVE_CLIPS,
+                                 ER_UI_SCENE_NATIVE_HITS, ER_UI_SCENE_NATIVE_TRANSITIONS, ER_UI_SCENE_NATIVE_VERTICES};
   return budget;
 }
 
 er_ui_scene_budget_t er_ui_scene_budget_browser_interactive_frame(void) {
-  er_ui_scene_budget_t budget = {1400u, 600u, 96u, 96u, 160u, 800u, 5000u};
+  er_ui_scene_budget_t budget = {ER_UI_SCENE_BROWSER_RECTS, ER_UI_SCENE_BROWSER_TEXT_QUADS, ER_UI_SCENE_BROWSER_ICON_QUADS, ER_UI_SCENE_BROWSER_CLIPS,
+                                 ER_UI_SCENE_BROWSER_HITS, ER_UI_SCENE_BROWSER_TRANSITIONS, ER_UI_SCENE_BROWSER_VERTICES};
   return budget;
 }
 
 er_ui_scene_budget_t er_ui_scene_budget_public_showcase_frame(void) {
-  er_ui_scene_budget_t budget = {1000u, 420u, 80u, 80u, 120u, 640u, 3600u};
+  er_ui_scene_budget_t budget = {ER_UI_SCENE_SHOWCASE_RECTS, ER_UI_SCENE_SHOWCASE_TEXT_QUADS, ER_UI_SCENE_SHOWCASE_ICON_QUADS, ER_UI_SCENE_SHOWCASE_CLIPS,
+                                 ER_UI_SCENE_SHOWCASE_HITS, ER_UI_SCENE_SHOWCASE_TRANSITIONS, ER_UI_SCENE_SHOWCASE_VERTICES};
   return budget;
 }
 

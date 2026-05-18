@@ -13,11 +13,18 @@ static const float ER_UI_WORKSPACE_PANEL_PAD = 8.0f;
 static const float ER_UI_NETWORK_APP_PROMPT_WIDTH = 560.0f;
 static const float ER_UI_NETWORK_APP_PROMPT_HEIGHT = 328.0f;
 static const size_t ER_UI_SHELL_TEXT_MAX_CODEPOINTS = 192u;
+enum {
+  ER_UI_SHELL_SURFACE_GROWTH_FACTOR = 4u,
+  ER_UI_SHELL_U32_DECIMAL_MAX_DIGITS = 10u,
+  ER_UI_SHELL_DECIMAL_RADIX = 10u,
+  ER_UI_SHELL_SURFACE_LABEL_CAP = 24u,
+  ER_UI_SHELL_SURFACE_LABEL_PREFIX_LEN = 8u
+};
 
 static bool er_ui_shell_reserve_surfaces(er_ui_shell_state_t* state, size_t count) {
   if (!state || count < state->surface_capacity) return true;
   return er_ui_allocator_reserve(state->allocator, (void**)&state->surfaces, &state->surface_capacity, count, sizeof(*state->surfaces),
-                                 ER_UI_SHELL_INITIAL_SURFACE_CAP, 4u);
+                                 ER_UI_SHELL_INITIAL_SURFACE_CAP, ER_UI_SHELL_SURFACE_GROWTH_FACTOR);
 }
 
 static size_t er_ui_workspace_find_surface(const er_ui_shell_state_t* state, uint32_t surface_id) {
@@ -43,7 +50,7 @@ er_ui_status_t er_ui_shell_state_init_with_allocator(er_ui_shell_state_t* state,
 void er_ui_shell_state_destroy(er_ui_shell_state_t* state) {
   if (!state) return;
   er_ui_allocator_t allocator = state->allocator;
-  er_ui_allocator_free(allocator, state->surfaces, state->surface_capacity * sizeof(*state->surfaces), 4u);
+  er_ui_allocator_free(allocator, state->surfaces, state->surface_capacity * sizeof(*state->surfaces), ER_UI_SHELL_SURFACE_GROWTH_FACTOR);
   er_ui_mem_zero(state, sizeof(*state));
 }
 
@@ -301,11 +308,11 @@ static er_ui_status_t er_ui_shell_push_ascii_text(er_ui_scene_t* scene, vr_font_
 
 static size_t er_ui_shell_u32_to_ascii(uint32_t value, char* out, size_t out_capacity) {
   if (!out || out_capacity == 0u) return 0u;
-  char reversed[10u];
+  char reversed[ER_UI_SHELL_U32_DECIMAL_MAX_DIGITS];
   size_t count = 0u;
   do {
-    reversed[count++] = (char)('0' + (value % 10u));
-    value /= 10u;
+    reversed[count++] = (char)('0' + (value % ER_UI_SHELL_DECIMAL_RADIX));
+    value /= ER_UI_SHELL_DECIMAL_RADIX;
   } while (value != 0u && count < sizeof(reversed));
   if (count + 1u > out_capacity) return 0u;
   for (size_t i = 0u; i < count; ++i) out[i] = reversed[count - 1u - i];
@@ -327,8 +334,8 @@ static er_ui_status_t er_ui_shell_push_surface_label(
       return er_ui_shell_push_ascii_text(scene, font, state->surfaces[index].title, x, y, color);
     }
   }
-  char label[24u] = {'S', 'u', 'r', 'f', 'a', 'c', 'e', ' ', '\0'};
-  size_t prefix_len = 8u;
+  char label[ER_UI_SHELL_SURFACE_LABEL_CAP] = {'S', 'u', 'r', 'f', 'a', 'c', 'e', ' ', '\0'};
+  size_t prefix_len = ER_UI_SHELL_SURFACE_LABEL_PREFIX_LEN;
   size_t digits = er_ui_shell_u32_to_ascii(surface_id, label + prefix_len, sizeof(label) - prefix_len);
   if (digits == 0u) return ER_UI_ERR_INVALID_ARGUMENT;
   return er_ui_shell_push_ascii_text(scene, font, label, x, y, color);
