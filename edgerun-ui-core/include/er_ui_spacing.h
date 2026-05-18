@@ -157,6 +157,16 @@ typedef struct {
 } er_ui_responsive_grid_t;
 
 typedef struct {
+  er_ui_bounds_t bounds;
+  size_t columns;
+  size_t rows;
+  float cell_w;
+  float cell_h;
+  float gap_x;
+  float gap_y;
+} er_ui_uniform_grid_t;
+
+typedef struct {
   er_ui_bounds_t side;
   er_ui_bounds_t main;
   bool stacked;
@@ -187,6 +197,9 @@ size_t er_ui_responsive_grid_row_count(er_ui_responsive_grid_t grid, size_t item
 float er_ui_responsive_grid_height(er_ui_responsive_grid_t grid, size_t item_count, float row_h);
 er_ui_bounds_t er_ui_responsive_grid_cell(er_ui_responsive_grid_t grid, size_t index, float row_h);
 er_ui_bounds_t er_ui_responsive_grid_span(er_ui_responsive_grid_t grid, size_t index, size_t column_span, float row_h);
+er_ui_uniform_grid_t er_ui_uniform_grid(er_ui_bounds_t bounds, size_t columns, size_t rows, float gap_x, float gap_y);
+er_ui_bounds_t er_ui_uniform_grid_cell(er_ui_uniform_grid_t grid, size_t index);
+er_ui_bounds_t er_ui_uniform_grid_span(er_ui_uniform_grid_t grid, size_t index, size_t column_span, size_t row_span);
 er_ui_vertical_flow_t er_ui_vertical_flow(er_ui_bounds_t bounds, float gap);
 er_ui_bounds_t er_ui_vertical_flow_next(er_ui_vertical_flow_t* flow, float preferred_h);
 er_ui_bounds_t er_ui_vertical_flow_remaining(const er_ui_vertical_flow_t* flow);

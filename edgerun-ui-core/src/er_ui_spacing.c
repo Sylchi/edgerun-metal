@@ -143,6 +143,49 @@ er_ui_bounds_t er_ui_responsive_grid_span(er_ui_responsive_grid_t grid, size_t i
     row_h);
 }
 
+er_ui_uniform_grid_t er_ui_uniform_grid(er_ui_bounds_t bounds, size_t columns, size_t rows, float gap_x, float gap_y) {
+  er_ui_uniform_grid_t grid = {0};
+  if (!er_ui_bounds_valid(bounds) || columns == 0u || rows == 0u || gap_x < 0.0f || gap_y < 0.0f) return grid;
+  float total_gap_x = gap_x * (float)(columns - 1u);
+  float total_gap_y = gap_y * (float)(rows - 1u);
+  float cell_w = (bounds.w - total_gap_x) / (float)columns;
+  float cell_h = (bounds.h - total_gap_y) / (float)rows;
+  if (cell_w <= 0.0f || cell_h <= 0.0f) return grid;
+  grid.bounds = bounds;
+  grid.columns = columns;
+  grid.rows = rows;
+  grid.cell_w = cell_w;
+  grid.cell_h = cell_h;
+  grid.gap_x = gap_x;
+  grid.gap_y = gap_y;
+  return grid;
+}
+
+er_ui_bounds_t er_ui_uniform_grid_cell(er_ui_uniform_grid_t grid, size_t index) {
+  return er_ui_uniform_grid_span(grid, index, 1u, 1u);
+}
+
+er_ui_bounds_t er_ui_uniform_grid_span(er_ui_uniform_grid_t grid, size_t index, size_t column_span, size_t row_span) {
+  if (grid.columns == 0u || grid.rows == 0u || grid.cell_w <= 0.0f || grid.cell_h <= 0.0f || !er_ui_bounds_valid(grid.bounds)) {
+    return er_ui_bounds(0.0f, 0.0f, 0.0f, 0.0f);
+  }
+  if (column_span == 0u || row_span == 0u) return er_ui_bounds(0.0f, 0.0f, 0.0f, 0.0f);
+  size_t column = index % grid.columns;
+  size_t row = index / grid.columns;
+  if (row >= grid.rows) return er_ui_bounds(0.0f, 0.0f, 0.0f, 0.0f);
+  size_t available_columns = grid.columns - column;
+  size_t available_rows = grid.rows - row;
+  size_t columns = column_span < available_columns ? column_span : available_columns;
+  size_t rows = row_span < available_rows ? row_span : available_rows;
+  float width = grid.cell_w * (float)columns + grid.gap_x * (float)(columns - 1u);
+  float height = grid.cell_h * (float)rows + grid.gap_y * (float)(rows - 1u);
+  return er_ui_bounds(
+    grid.bounds.x + (grid.cell_w + grid.gap_x) * (float)column,
+    grid.bounds.y + (grid.cell_h + grid.gap_y) * (float)row,
+    width,
+    height);
+}
+
 er_ui_vertical_flow_t er_ui_vertical_flow(er_ui_bounds_t bounds, float gap) {
   er_ui_vertical_flow_t flow = {0};
   if (!er_ui_bounds_valid(bounds) || gap < 0.0f) return flow;

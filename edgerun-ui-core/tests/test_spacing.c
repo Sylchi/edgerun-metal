@@ -14,6 +14,11 @@ static const size_t ER_TEST_RESPONSIVE_GRID_SPAN_COLUMNS = 2u;
 static const size_t ER_TEST_RESPONSIVE_GRID_ITEM_COUNT = 5u;
 static const size_t ER_TEST_RESPONSIVE_GRID_EXPECTED_ROWS = 2u;
 static const float ER_TEST_RESPONSIVE_GRID_ROW_H = 96.0f;
+static const size_t ER_TEST_UNIFORM_GRID_COLUMNS = 3u;
+static const size_t ER_TEST_UNIFORM_GRID_ROWS = 2u;
+static const size_t ER_TEST_UNIFORM_GRID_SECOND_ROW_FIRST_INDEX = 3u;
+static const size_t ER_TEST_UNIFORM_GRID_SECOND_ROW_SECOND_INDEX = 4u;
+static const size_t ER_TEST_UNIFORM_GRID_SPAN_COLUMNS = 2u;
 static const float ER_TEST_SIDECAR_MIN_SIDE_W = 160.0f;
 static const float ER_TEST_SIDECAR_PREFERRED_SIDE_W = 220.0f;
 static const float ER_TEST_SIDECAR_MIN_MAIN_W = 300.0f;
@@ -118,6 +123,24 @@ static void test_responsive_sidecar_adapts_without_fixed_content_math(void) {
   expect_float(stacked.main.y, stacked.side.y + stacked.side.h + ER_TEST_SIDECAR_GAP, "spacing: stacked sidecar main follows vertical gap");
 }
 
+static void test_uniform_grid_divides_exact_tracks_without_callsite_math(void) {
+  er_ui_uniform_grid_t grid = er_ui_uniform_grid(er_ui_bounds(10.0f, 20.0f, 720.0f, 260.0f),
+                                                ER_TEST_UNIFORM_GRID_COLUMNS,
+                                                ER_TEST_UNIFORM_GRID_ROWS,
+                                                16.0f,
+                                                18.0f);
+  expect_size(grid.columns, ER_TEST_UNIFORM_GRID_COLUMNS, "spacing: uniform grid preserves exact columns");
+  expect_size(grid.rows, ER_TEST_UNIFORM_GRID_ROWS, "spacing: uniform grid preserves exact rows");
+  expect_float(grid.cell_w, (720.0f - 32.0f) / 3.0f, "spacing: uniform grid derives cell width");
+  expect_float(grid.cell_h, (260.0f - 18.0f) / 2.0f, "spacing: uniform grid derives cell height");
+  expect_bounds(er_ui_uniform_grid_cell(grid, ER_TEST_UNIFORM_GRID_SECOND_ROW_SECOND_INDEX),
+                er_ui_bounds(10.0f + grid.cell_w + 16.0f, 20.0f + grid.cell_h + 18.0f, grid.cell_w, grid.cell_h),
+                "spacing: uniform grid cell wraps by exact columns");
+  expect_bounds(er_ui_uniform_grid_span(grid, ER_TEST_UNIFORM_GRID_SECOND_ROW_FIRST_INDEX, ER_TEST_UNIFORM_GRID_SPAN_COLUMNS, 1u),
+                er_ui_bounds(10.0f, 20.0f + grid.cell_h + 18.0f, grid.cell_w * 2.0f + 16.0f, grid.cell_h),
+                "spacing: uniform grid span derives exact track bounds");
+}
+
 static void test_vertical_flow_allocates_stack_and_remaining_bounds(void) {
   er_ui_vertical_flow_t flow = er_ui_vertical_flow(er_ui_bounds(10.0f, 20.0f, 320.0f, 260.0f), ER_TEST_VERTICAL_FLOW_GAP);
   er_ui_bounds_t first = er_ui_vertical_flow_next(&flow, ER_TEST_VERTICAL_FLOW_FIRST_H);
@@ -171,6 +194,7 @@ void run_spacing_tests(void) {
   test_responsive_app_surface_spacing();
   test_responsive_grid_derives_columns_from_available_width();
   test_responsive_sidecar_adapts_without_fixed_content_math();
+  test_uniform_grid_divides_exact_tracks_without_callsite_math();
   test_vertical_flow_allocates_stack_and_remaining_bounds();
   test_system_panel_and_row_geometry();
   test_scroll_geometry_uses_shared_padding_and_hit_contract();
