@@ -35,6 +35,12 @@ typedef struct {
 typedef struct {
   ErEpochStamp now;
   ErEpochClockLimits limits;
+  UINT64 tick_mask;
+  UINT64 slot_mask;
+  UINT64 epoch_mask;
+  UINT8 tick_shift;
+  UINT8 slot_shift;
+  UINT8 epoch_shift;
 } ErEpochClock;
 
 typedef struct {
