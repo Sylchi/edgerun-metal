@@ -81,8 +81,8 @@ static void er_ui_gop_stats_add(ErUiGopRenderStats* dst, const ErUiGopRenderStat
   dst->rejected_primitives += src->rejected_primitives;
 }
 
-static UINT8 er_ui_gop_memory_violation(const char* name, UINT64 actual, UINT64 limit,
-                                        ErUiGopMemoryBudgetViolation* out_violation) {
+static UINT8 er_ui_gop_budget_violation(const char* name, UINT64 actual, UINT64 limit,
+                                        ErUiGopBudgetViolation* out_violation) {
   if (actual <= limit) {
     return 0u;
   }
@@ -94,17 +94,14 @@ static UINT8 er_ui_gop_memory_violation(const char* name, UINT64 actual, UINT64 
   return 1u;
 }
 
+static UINT8 er_ui_gop_memory_violation(const char* name, UINT64 actual, UINT64 limit,
+                                        ErUiGopMemoryBudgetViolation* out_violation) {
+  return er_ui_gop_budget_violation(name, actual, limit, out_violation);
+}
+
 static UINT8 er_ui_gop_frame_violation(const char* name, UINT64 actual, UINT64 limit,
                                        ErUiGopFrameBudgetViolation* out_violation) {
-  if (actual <= limit) {
-    return 0u;
-  }
-  if (out_violation != 0) {
-    out_violation->name = name;
-    out_violation->actual = actual;
-    out_violation->limit = limit;
-  }
-  return 1u;
+  return er_ui_gop_budget_violation(name, actual, limit, out_violation);
 }
 
 static INT64 er_ui_gop_floor_i64(float value) {
@@ -680,17 +677,21 @@ static const UINT8* er_ui_gop_sample_texel(const UINT8* pixels, UINT32 width, UI
   return pixels + (((UINTN)y * (UINTN)width + (UINTN)x) * bytes_per_pixel);
 }
 
-static UINT8 er_ui_gop_sample_alpha8(const vr_font_atlas_view_t* atlas, float u, float v) {
-  const UINT8* px;
-
-  if (atlas == 0) {
-    return 0u;
-  }
-  px = er_ui_gop_sample_texel(atlas->pixels, atlas->width, atlas->height, atlas->bytes_per_pixel, u, v);
+static UINT8 er_ui_gop_sample_alpha_texel(const UINT8* pixels, UINT32 width, UINT32 height,
+                                          UINT32 bytes_per_pixel, float u, float v) {
+  const UINT8* px = er_ui_gop_sample_texel(pixels, width, height, bytes_per_pixel, u, v);
   if (px == 0) {
     return 0u;
   }
   return px[0];
+}
+
+static UINT8 er_ui_gop_sample_alpha8(const vr_font_atlas_view_t* atlas, float u, float v) {
+  if (atlas == 0) {
+    return 0u;
+  }
+  return er_ui_gop_sample_alpha_texel(atlas->pixels, atlas->width, atlas->height,
+                                      atlas->bytes_per_pixel, u, v);
 }
 
 static UINT8 er_ui_gop_sample_msdf_alpha(const vr_font_atlas_view_t* atlas, float u, float v) {
@@ -737,16 +738,11 @@ static UINT8 er_ui_gop_sample_atlas_alpha(const vr_font_atlas_view_t* atlas, flo
 }
 
 static UINT8 er_ui_gop_sample_boot_atlas_alpha(const ErUiGopAlphaAtlas* atlas, float u, float v) {
-  const UINT8* px;
-
   if (atlas == 0) {
     return 0u;
   }
-  px = er_ui_gop_sample_texel(atlas->pixels, atlas->width, atlas->height, atlas->bytes_per_pixel, u, v);
-  if (px == 0) {
-    return 0u;
-  }
-  return px[0];
+  return er_ui_gop_sample_alpha_texel(atlas->pixels, atlas->width, atlas->height,
+                                      atlas->bytes_per_pixel, u, v);
 }
 
 typedef UINT8 (*ErUiGopTextAlphaSampler)(const void* context, float u, float v);

@@ -75,7 +75,9 @@ typedef struct {
   const char* name;
   UINT64 actual;
   UINT64 limit;
-} ErUiGopFrameBudgetViolation;
+} ErUiGopBudgetViolation;
+
+typedef ErUiGopBudgetViolation ErUiGopFrameBudgetViolation;
 
 typedef struct {
   UINT32 width;
@@ -126,11 +128,7 @@ typedef struct {
   UINT64 total_bytes;
 } ErUiGopMemoryBudget;
 
-typedef struct {
-  const char* name;
-  UINT64 actual;
-  UINT64 limit;
-} ErUiGopMemoryBudgetViolation;
+typedef ErUiGopBudgetViolation ErUiGopMemoryBudgetViolation;
 
 typedef struct {
   UINT32* tile_ids;
