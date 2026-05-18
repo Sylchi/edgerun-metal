@@ -33,13 +33,14 @@
 #define ER_UI_TEST_COMPONENT_MIN_METAL_ICON_QUADS 6u
 #define ER_UI_TEST_COMPONENT_NARROW_METAL_W 800.0f
 #define ER_UI_TEST_COMPONENT_NARROW_METAL_H 720.0f
-#define ER_UI_TEST_COMPONENT_COUNT 58u
+#define ER_UI_TEST_COMPONENT_COUNT 59u
 #define ER_UI_TEST_COMPONENT_KEYBOARD_COUNT 2u
 #define ER_UI_TEST_COMPONENT_ORDER_OPTION_INDEX 1u
 #define ER_UI_TEST_COMPONENT_STOCK_BUTTON_INDEX 2u
 #define ER_UI_TEST_COMPONENT_SLIDER_ACTION_ID (ER_UI_COMPONENT_PREVIEW_BASE_ID + 943u)
 #define ER_UI_TEST_COMPONENT_UNRELATED_BUTTON_ID 42u
 #define ER_UI_TEST_COMPONENT_NARROW_ID_OFFSET 80u
+#define ER_UI_TEST_COMPONENT_INVOICE_ID_OFFSET 240u
 #define ER_UI_TEST_APP_STORE_CARD_REQUIRED_FIELDS 3u
 #define ER_UI_TEST_METAL_BOARD_BASE_ID (ER_UI_COMPONENT_PREVIEW_BASE_ID + 4600u)
 
@@ -152,8 +153,18 @@ static void test_component_render_primitives(void) {
   const char *const headers[] = {"Invoice", "Status"};
   const char *const cells[] = {"INV001", "Paid", "INV002", "Pending"};
   expect_status(er_ui_component_table_emit(&scene, face, er_ui_bounds(420.0f, 238.0f, 180.0f, 96.0f), theme, headers,
-                                        ER_UI_TEST_ARRAY_COUNT(headers), cells, ER_UI_TEST_ARRAY_COUNT(headers), ER_UI_TEST_COMPONENT_TABLE_ID),
+	                                        ER_UI_TEST_ARRAY_COUNT(headers), cells, ER_UI_TEST_ARRAY_COUNT(headers), ER_UI_TEST_COMPONENT_TABLE_ID),
                 ER_UI_OK, "component render: table emits");
+  const char *const invoice_items[] = {"Design System License", "Priority Support", "Custom Components"};
+  const char *const invoice_qty[] = {"1", "12", "3"};
+  const char *const invoice_rates[] = {"$499.00", "$99.00", "$250.00"};
+  const char *const invoice_amounts[] = {"$499.00", "$1,188.00", "$750.00"};
+  expect_status(er_ui_component_invoice_card_emit(&scene, face, er_ui_bounds(880.0f, 16.0f, 420.0f, 500.0f), theme,
+                                                  "Invoice #INV-2847", "Due March 30, 2026", "Pending",
+                                                  invoice_items, invoice_qty, invoice_rates, invoice_amounts,
+                                                  ER_UI_TEST_ARRAY_COUNT(invoice_items), "$2,437.00", "$0.00", "$2,437.00",
+                                                  "Download PDF", "Pay Now", ER_UI_TEST_COMPONENT_TABLE_ID + ER_UI_TEST_COMPONENT_INVOICE_ID_OFFSET),
+                ER_UI_OK, "component render: invoice card emits composed billing surface");
   expect_status(er_ui_component_skeleton_emit(&scene, er_ui_bounds(420.0f, 340.0f, 120.0f, 16.0f), theme), ER_UI_OK,
                 "component render: skeleton emits");
   expect_status(er_ui_component_toast_emit(&scene, face, er_ui_bounds(420.0f, 362.0f, 180.0f, 44.0f), theme, "Scheduled", theme.colors.accent), ER_UI_OK,
@@ -206,6 +217,7 @@ static void test_component_render_primitives(void) {
   expect_true(er_ui_component_scene_preview_available("spinner"), "component scene preview: spinner is available");
   expect_true(er_ui_component_scene_preview_available("tabs"), "component scene preview: tabs are available");
   expect_true(er_ui_component_scene_preview_available("data-table"), "component scene preview: data table is available");
+  expect_true(er_ui_component_scene_preview_available("invoice-card"), "component scene preview: invoice card is available");
   expect_true(er_ui_component_scene_preview_available("radio-group"), "component scene preview: radio group is available");
   expect_true(er_ui_component_scene_preview_available("toast"), "component scene preview: toast is available");
   expect_true(!er_ui_component_scene_preview_available("unknown-component"), "component scene preview: unknown body is not claimed");
@@ -215,6 +227,8 @@ static void test_component_render_primitives(void) {
                 ER_UI_OK, "component scene preview: table body emits");
   expect_status(er_ui_component_scene_preview_emit(&scene, face, er_ui_bounds(420.0f, 646.0f, 240.0f, 132.0f), theme, "calendar", NULL),
                 ER_UI_OK, "component scene preview: calendar body emits");
+  expect_status(er_ui_component_scene_preview_emit(&scene, face, er_ui_bounds(8.0f, 1070.0f, 420.0f, 500.0f), theme, "invoice-card", NULL),
+                ER_UI_OK, "component scene preview: invoice card body emits");
   expect_status(er_ui_component_scene_preview_emit(&scene, face, er_ui_bounds(420.0f, 82.0f, 180.0f, 58.0f), theme, "accordion", NULL),
                 ER_UI_OK, "component scene preview: accordion body emits");
   expect_status(er_ui_component_scene_preview_emit(&scene, face, er_ui_bounds(420.0f, 782.0f, 180.0f, 58.0f), theme, "unknown-component", NULL),

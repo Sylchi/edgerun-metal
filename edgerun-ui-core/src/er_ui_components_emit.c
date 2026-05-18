@@ -398,6 +398,133 @@ er_ui_status_t er_ui_component_table_emit(
   return ER_UI_OK;
 }
 
+//@optimizer-ignore-function invoice card intentionally lays out parallel row data and summary values in visual table order
+er_ui_status_t er_ui_component_invoice_card_emit(
+  er_ui_scene_t* scene,
+  vr_font_face_t* font,
+  er_ui_bounds_t bounds,
+  er_ui_resolved_theme_t theme,
+  const char* invoice,
+  const char* due,
+  const char* status_text,
+  const char* const* items,
+  const char* const* quantities,
+  const char* const* rates,
+  const char* const* amounts,
+  size_t row_count,
+  const char* subtotal,
+  const char* tax,
+  const char* total,
+  const char* secondary_action,
+  const char* primary_action,
+  uint32_t id_base) {
+  if (!scene || !font || !invoice || !due || !status_text || !items || !quantities || !rates || !amounts ||
+      !subtotal || !tax || !total || !secondary_action || !primary_action || row_count == 0u ||
+      !er_ui_bounds_valid(bounds)) {
+    return ER_UI_ERR_INVALID_ARGUMENT;
+  }
+
+  er_ui_status_t status = er_ui_component_card_emit(scene, bounds, theme);
+  if (status != ER_UI_OK) return status;
+
+  float pad = 24.0f;
+  if (bounds.w < 360.0f) pad = 16.0f;
+  er_ui_bounds_t inner = er_ui_bounds_inset(bounds, pad, pad);
+  if (!er_ui_bounds_valid(inner)) return ER_UI_ERR_INVALID_ARGUMENT;
+
+  float badge_w = er_ui_float_min(112.0f, inner.w * 0.34f);
+  status = er_ui_component_push_ascii_text_clipped(scene, font, invoice, inner.x, inner.y + 28.0f, inner.w - badge_w - 16.0f, theme.colors.text);
+  if (status != ER_UI_OK) return status;
+  status = er_ui_component_push_ascii_text_clipped(scene, font, due, inner.x, inner.y + 58.0f, inner.w, theme.colors.muted);
+  if (status != ER_UI_OK) return status;
+  status = er_ui_component_badge_emit(scene, font, er_ui_bounds(inner.x + inner.w - badge_w, inner.y + 4.0f, badge_w, 32.0f),
+                                      theme, status_text, ER_UI_COMPONENT_BADGE_SECONDARY);
+  if (status != ER_UI_OK) return status;
+
+  float table_y = inner.y + 108.0f;
+  float item_w = er_ui_float_max(inner.w * 0.48f, 116.0f);
+  float qty_w = er_ui_float_max(inner.w * 0.10f, 32.0f);
+  float rate_w = er_ui_float_max(inner.w * 0.18f, 62.0f);
+  float amount_w = er_ui_float_max(inner.w - item_w - qty_w - rate_w, 70.0f);
+  if (item_w + qty_w + rate_w + amount_w > inner.w) {
+    amount_w = er_ui_float_max(inner.w * 0.22f, 64.0f);
+    rate_w = er_ui_float_max(inner.w * 0.18f, 56.0f);
+    qty_w = er_ui_float_max(inner.w * 0.10f, 28.0f);
+    item_w = er_ui_float_max(inner.w - qty_w - rate_w - amount_w, 92.0f);
+  }
+  float qty_x = inner.x + item_w;
+  float rate_x = qty_x + qty_w;
+  float amount_x = rate_x + rate_w;
+  status = er_ui_component_push_ascii_text_clipped(scene, font, "Item", inner.x + 10.0f, table_y, item_w - 12.0f, theme.colors.text);
+  if (status != ER_UI_OK) return status;
+  status = er_ui_component_push_ascii_text_clipped(scene, font, "Qty", qty_x, table_y, qty_w - 8.0f, theme.colors.text);
+  if (status != ER_UI_OK) return status;
+  status = er_ui_component_push_ascii_text_clipped(scene, font, "Rate", rate_x, table_y, rate_w - 8.0f, theme.colors.text);
+  if (status != ER_UI_OK) return status;
+  status = er_ui_component_push_ascii_text_clipped(scene, font, "Amount", amount_x, table_y, amount_w, theme.colors.text);
+  if (status != ER_UI_OK) return status;
+  status = er_ui_component_separator_emit(scene, er_ui_bounds(inner.x, table_y + 26.0f, inner.w, 1.0f), theme);
+  if (status != ER_UI_OK) return status;
+
+  float row_h = 42.0f;
+  for (size_t r = 0u; r < row_count; ++r) {
+    float row_y = table_y + 42.0f + row_h * (float)r;
+    er_ui_bounds_t row_hit = er_ui_bounds(inner.x, row_y - 18.0f, inner.w, row_h);
+    status = er_ui_scene_push_hit(scene, er_ui_hit(ER_UI_HIT_TRANSACTION_ROW, id_base + (uint32_t)r, row_hit.x, row_hit.y, row_hit.w, row_hit.h));
+    if (status != ER_UI_OK) return status;
+    status = er_ui_component_push_ascii_text_clipped(scene, font, items[r], inner.x + 10.0f, row_y, item_w - 12.0f, theme.colors.text);
+    if (status != ER_UI_OK) return status;
+    status = er_ui_component_push_ascii_text_clipped(scene, font, quantities[r], qty_x, row_y, qty_w - 8.0f, theme.colors.text);
+    if (status != ER_UI_OK) return status;
+    status = er_ui_component_push_ascii_text_clipped(scene, font, rates[r], rate_x, row_y, rate_w - 8.0f, theme.colors.text);
+    if (status != ER_UI_OK) return status;
+    status = er_ui_component_push_ascii_text_clipped(scene, font, amounts[r], amount_x, row_y, amount_w, theme.colors.text);
+    if (status != ER_UI_OK) return status;
+    status = er_ui_component_separator_emit(scene, er_ui_bounds(inner.x, row_y + 18.0f, inner.w, 1.0f), theme);
+    if (status != ER_UI_OK) return status;
+  }
+
+  float summary_y = table_y + 42.0f + row_h * (float)row_count + 8.0f;
+  const char* const labels[] = {"Subtotal", "Tax", "Total Due"};
+  const char* const values[] = {subtotal, tax, total};
+  const char* const* label_cursor = labels;
+  const char* const* value_cursor = values;
+  for (size_t i = 0u; i < ER_UI_COMPONENT_ARRAY_COUNT(labels); ++i) {
+    float y = summary_y + 38.0f * (float)i;
+    status = er_ui_component_push_ascii_text_clipped(scene, font, *label_cursor, rate_x, y, rate_w - 8.0f, theme.colors.text);
+    if (status != ER_UI_OK) return status;
+    status = er_ui_component_push_ascii_text_clipped(scene, font, *value_cursor, amount_x, y, amount_w, theme.colors.text);
+    if (status != ER_UI_OK) return status;
+    status = er_ui_component_separator_emit(scene, er_ui_bounds(inner.x, y + 18.0f, inner.w, 1.0f), theme);
+    if (status != ER_UI_OK) return status;
+    label_cursor++;
+    value_cursor++;
+  }
+
+  float overflow_y = bounds.y + bounds.h - 82.0f;
+  float track_w = er_ui_float_max(inner.w - 28.0f, 24.0f);
+  status = er_ui_scene_push_rect(scene, er_ui_rect_fill(inner.x, overflow_y, inner.w, 12.0f, 0.0f, er_ui_color_with_alpha(theme.shadcn.colors.muted, 0.62f)));
+  if (status != ER_UI_OK) return status;
+  status = er_ui_scene_push_rect(scene, er_ui_rect_fill(inner.x + 24.0f, overflow_y + 3.0f, er_ui_float_max(track_w - 54.0f, 12.0f), 6.0f, 999.0f,
+                                                       theme.shadcn.colors.muted_foreground));
+  if (status != ER_UI_OK) return status;
+  status = er_ui_component_push_ascii_text(scene, font, "<", inner.x + 6.0f, overflow_y + 10.0f, theme.colors.text);
+  if (status != ER_UI_OK) return status;
+  status = er_ui_component_push_ascii_text(scene, font, ">", inner.x + inner.w - 14.0f, overflow_y + 10.0f, theme.colors.text);
+  if (status != ER_UI_OK) return status;
+
+  float footer_y = bounds.y + bounds.h - 58.0f;
+  status = er_ui_component_separator_emit(scene, er_ui_bounds(bounds.x, footer_y - 10.0f, bounds.w, 1.0f), theme);
+  if (status != ER_UI_OK) return status;
+  status = er_ui_component_button_emit(scene, font, er_ui_bounds(inner.x, footer_y, 134.0f, 40.0f), theme, secondary_action,
+                                      id_base + ER_UI_COMPONENT_INVOICE_SECONDARY_ACTION_OFFSET, ER_UI_COMPONENT_BUTTON_SECONDARY,
+                                      ER_UI_COMPONENT_BUTTON_SIZE_DEFAULT, true);
+  if (status != ER_UI_OK) return status;
+  return er_ui_component_button_emit(scene, font, er_ui_bounds(inner.x + inner.w - 104.0f, footer_y, 104.0f, 40.0f), theme, primary_action,
+                                    id_base + ER_UI_COMPONENT_INVOICE_PRIMARY_ACTION_OFFSET, ER_UI_COMPONENT_BUTTON_DEFAULT,
+                                    ER_UI_COMPONENT_BUTTON_SIZE_DEFAULT, true);
+}
+
 er_ui_status_t er_ui_component_skeleton_emit(er_ui_scene_t* scene, er_ui_bounds_t bounds, er_ui_resolved_theme_t theme) {
   if (!scene || !er_ui_bounds_valid(bounds)) return ER_UI_ERR_INVALID_ARGUMENT;
   return er_ui_scene_push_rect(scene, er_ui_rect_fill(bounds.x, bounds.y, bounds.w, bounds.h, theme.shadcn.radius.md, theme.shadcn.colors.muted));

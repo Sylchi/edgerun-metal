@@ -171,7 +171,7 @@ typedef struct {
   size_t label_field_count;
 } er_ui_component_accessibility_metadata_t;
 
-#define ER_UI_COMPONENT_COUNT 58u
+#define ER_UI_COMPONENT_COUNT 59u
 #define ER_UI_COMPONENT_SHADCN_REFERENCE_COUNT 55u
 #define ER_UI_COMPONENT_TEST_ID_COUNT 16u
 #define ER_UI_COMPONENT_STATE_COUNT 7u
@@ -404,6 +404,25 @@ er_ui_status_t er_ui_component_table_emit(
   size_t header_count,
   const char* const* cells,
   size_t row_count,
+  uint32_t id_base);
+er_ui_status_t er_ui_component_invoice_card_emit(
+  er_ui_scene_t* scene,
+  vr_font_face_t* font,
+  er_ui_bounds_t bounds,
+  er_ui_resolved_theme_t theme,
+  const char* invoice,
+  const char* due,
+  const char* status_text,
+  const char* const* items,
+  const char* const* quantities,
+  const char* const* rates,
+  const char* const* amounts,
+  size_t row_count,
+  const char* subtotal,
+  const char* tax,
+  const char* total,
+  const char* secondary_action,
+  const char* primary_action,
   uint32_t id_base);
 er_ui_status_t er_ui_component_skeleton_emit(er_ui_scene_t* scene, er_ui_bounds_t bounds, er_ui_resolved_theme_t theme);
 er_ui_status_t er_ui_component_spinner_emit(er_ui_scene_t* scene, er_ui_bounds_t bounds, er_ui_resolved_theme_t theme);
