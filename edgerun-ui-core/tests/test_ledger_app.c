@@ -3,7 +3,7 @@
 
 static const er_ui_color4_t ER_TEST_LEDGER_BG = {0.01f, 0.012f, 0.015f, 1.0f};
 static const size_t ER_TEST_LEDGER_APP_SURFACE_COUNT = 3u;
-static const size_t ER_TEST_LEDGER_APP_HITS = 8u;
+static const size_t ER_TEST_LEDGER_APP_HITS = 10u;
 static const size_t ER_TEST_LEDGER_COMPACT_DASHBOARD_HITS = 7u;
 static const size_t ER_TEST_LEDGER_SCROLLED_DASHBOARD_HITS = 7u;
 static const size_t ER_TEST_LEDGER_ACCESS_HITS = 4u;
