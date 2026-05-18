@@ -1,4 +1,4 @@
-.PHONY: all check clean repo-check repo-test repo-check-bin repo-inspect erwire-decode erwire-test crypto-configure crypto-build crypto-test crypto-bench crypto-bench-avx2 crypto-bench-avx512 crypto-bench-avx512-threads crypto-bench-native-threads crypto-bench-sota edgerun-metal edgerun-smoke edgerun-pci edgerun-quiet edgerun-ui edgerun-check varfont-configure varfont-build varfont-test ui-core-configure ui-core-build ui-core-test
+.PHONY: all check clean repo-check repo-test repo-check-bin repo-inspect repo-progress erwire-decode erwire-test crypto-configure crypto-build crypto-test crypto-bench crypto-bench-avx2 crypto-bench-avx512 crypto-bench-avx512-threads crypto-bench-native-threads crypto-bench-sota edgerun-metal edgerun-smoke edgerun-pci edgerun-quiet edgerun-ui edgerun-check varfont-configure varfont-build varfont-test ui-core-configure ui-core-build ui-core-test
 
 ifeq ($(origin CC),default)
 CC := clang
@@ -32,6 +32,8 @@ CRYPTO_NATIVE_THREADS_BUILD_DIR ?= .build/edgerun-crypto-native-threads
 VARFONT_CMAKE_GENERATOR ?= Ninja
 UI_CORE_CMAKE_GENERATOR ?= Ninja
 CRYPTO_CMAKE_GENERATOR ?= Ninja
+REPO_PROGRESS_SCOPE ?= edgerun-ui-core
+REPO_PROGRESS_TEST ?=
 
 all: edgerun-metal
 
@@ -43,6 +45,7 @@ repo-check: repo-check-bin
 repo-test: repo-check-bin repo-inspect
 	./tests/repo-check-tests.sh
 	./tests/repo-inspect-tests.sh
+	./tests/repo-progress-tests.sh
 	./tests/er-math-tests.sh
 	$(MAKE) erwire-test
 
@@ -53,6 +56,9 @@ repo-check-bin:
 repo-inspect:
 	mkdir -p .build
 	$(CCACHE_PREFIX) $(HOST_CC) -std=c11 -Wall -Wextra -Werror -O2 -pthread $(HOST_LDFLAGS) -o .build/repo-inspect tools/repo-inspect.c
+
+repo-progress:
+	./tools/repo-progress.sh $(REPO_PROGRESS_SCOPE) $(REPO_PROGRESS_TEST)
 
 erwire-decode:
 	mkdir -p .build
