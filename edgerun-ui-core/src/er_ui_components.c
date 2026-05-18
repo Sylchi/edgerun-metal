@@ -2242,7 +2242,8 @@ er_ui_status_t er_ui_network_app_prompt_emit(
   uint32_t run_once_id,
   uint32_t verify_cache_id,
   uint32_t cancel_id) {
-  if (!scene || !font || !app_name || !package_size || !retrieval_cost || !policy_hash || !er_ui_bounds_valid(bounds)) return ER_UI_ERR_INVALID_ARGUMENT;
+  if (!scene || !font || !app_name || !package_size || !retrieval_cost) return ER_UI_ERR_INVALID_ARGUMENT;
+  if (!policy_hash || !er_ui_bounds_valid(bounds)) return ER_UI_ERR_INVALID_ARGUMENT;
   er_ui_status_t status = er_ui_shadcn_card_emit(scene, bounds, theme);
   if (status != ER_UI_OK) return status;
 
