@@ -13,7 +13,7 @@ enum {
   ER_DEVICE_RELAY_SPAN_COUNT = 3u,
   ER_DEVICE_RELAY_TYPE_SPAN = 0u,
   ER_DEVICE_RELAY_PROGRAM_SPAN = 1u,
-  ER_DEVICE_RELAY_PUBLIC_KEY_SPAN = 2u,
+  ER_DEVICE_RELAY_IDENTITY_SPAN = 2u,
   ER_DEVICE_BYTE_BITS = 8u,
   ER_DEVICE_U8_MASK = 0xffu
 };
@@ -38,18 +38,18 @@ static void er_device_span_set(ErByteSpan* span, const UINT8* bytes, UINTN len) 
   span->len = len;
 }
 
-UINT8 er_device_identity_prepare(UINT16 kind, const ErPublicKey* public_key,
+UINT8 er_device_identity_prepare(UINT16 kind, const ErIdentity* identity,
                                  ErDeviceIdentity* out_identity) {
-  if (public_key == 0 || out_identity == 0 ||
+  if (identity == 0 || out_identity == 0 ||
       er_device_identity_kind_valid(kind) == 0u ||
-      er_mem_any_nonzero(public_key->bytes, ER_PUBLIC_KEY_LEN) == 0u) {
+      er_identity_valid(identity) == 0u) {
     return 0;
   }
 
   er_mem_zero((UINT8*)out_identity, (UINTN)sizeof(*out_identity));
   out_identity->abi_version = ER_WORK_ABI_VERSION;
   out_identity->kind = kind;
-  out_identity->public_key = *public_key;
+  out_identity->identity = *identity;
   return 1;
 }
 
@@ -65,7 +65,7 @@ UINT8 er_device_relay_identity_derive(const ErCryptoProvider* crypto,
       out_relay_identity == 0 ||
       device_identity->abi_version != ER_WORK_ABI_VERSION ||
       er_device_identity_kind_valid(device_identity->kind) == 0u ||
-      er_mem_any_nonzero(device_identity->public_key.bytes, ER_PUBLIC_KEY_LEN) == 0u ||
+      er_identity_valid(&device_identity->identity) == 0u ||
       er_mem_any_nonzero(measured_program_hash->bytes, ER_HASH_LEN) == 0u) {
     return 0;
   }
@@ -73,8 +73,9 @@ UINT8 er_device_relay_identity_derive(const ErCryptoProvider* crypto,
   er_device_put_u16(type_bytes, device_identity->kind);
   er_device_span_set(&spans[ER_DEVICE_RELAY_TYPE_SPAN], type_bytes, (UINTN)sizeof(type_bytes));
   er_device_span_set(&spans[ER_DEVICE_RELAY_PROGRAM_SPAN], measured_program_hash->bytes, ER_HASH_LEN);
-  er_device_span_set(&spans[ER_DEVICE_RELAY_PUBLIC_KEY_SPAN],
-                     device_identity->public_key.bytes, ER_PUBLIC_KEY_LEN);
+  er_device_span_set(&spans[ER_DEVICE_RELAY_IDENTITY_SPAN],
+                     (const UINT8*)&device_identity->identity,
+                     (UINTN)sizeof(device_identity->identity));
 
   if (er_crypto_hash(crypto, g_device_relay_node_domain,
                      (UINTN)(sizeof(g_device_relay_node_domain) - 1u),
@@ -88,7 +89,7 @@ UINT8 er_device_relay_identity_derive(const ErCryptoProvider* crypto,
   out_relay_identity->program_hash = *measured_program_hash;
   out_relay_identity->relay_node.abi_version = ER_WORK_ABI_VERSION;
   out_relay_identity->relay_node.role = ER_NODE_ROLE_RELAY;
-  out_relay_identity->relay_node.public_key = device_identity->public_key;
+  out_relay_identity->relay_node.identity = device_identity->identity;
   er_mem_copy(out_relay_identity->relay_node.node_id.bytes, node_hash.bytes, ER_NODE_ID_LEN);
   return 1;
 }
