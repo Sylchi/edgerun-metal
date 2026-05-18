@@ -19,6 +19,7 @@ add_library(er_ui_core
   src/er_ui_node.c
   src/er_ui_painter.c
   src/er_ui_primitives.c
+  src/er_ui_preset_code.c
   src/er_ui_record_codec.c
   src/er_ui_runtime.c
   src/er_ui_scene.c
@@ -46,6 +47,7 @@ add_executable(er_ui_core_tests
     tests/test_demo_apps.c
     tests/test_initial_setup.c
     tests/test_node.c
+    tests/test_preset_code.c
     tests/test_record_codec.c
     tests/test_shell.c
     tests/test_runtime.c

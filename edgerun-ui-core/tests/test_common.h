@@ -7,6 +7,7 @@
 #include "er_ui_metal.h"
 #include "er_ui_node.h"
 #include "er_ui_primitives.h"
+#include "er_ui_preset_code.h"
 #include "er_ui_record_codec.h"
 #include "er_ui_scene.h"
 #include "er_ui_shell.h"
