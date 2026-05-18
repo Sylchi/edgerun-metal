@@ -136,12 +136,16 @@ static er_ui_status_t er_ui_shadcn_icon_tile(
   er_ui_icon_t icon,
   er_ui_color4_t color) {
   if (!scene || !er_ui_bounds_valid(bounds)) return ER_UI_ERR_INVALID_ARGUMENT;
-  er_ui_status_t status = er_ui_scene_push_rect(scene, er_ui_rect_fill(bounds.x, bounds.y, bounds.w, bounds.h, 7.0f, er_ui_color_with_alpha(color, 0.18f)));
+  er_ui_rect_t tile_fill =
+    er_ui_rect_fill(bounds.x, bounds.y, bounds.w, bounds.h, 7.0f, er_ui_color_with_alpha(color, 0.18f));
+  er_ui_status_t status = er_ui_scene_push_rect(scene, tile_fill);
   if (status != ER_UI_OK) return status;
   (void)theme;
   float icon_size = er_ui_float_min(bounds.w, bounds.h) - 10.0f;
   if (icon_size < 8.0f) icon_size = er_ui_float_min(bounds.w, bounds.h);
-  er_ui_bounds_t icon_bounds = er_ui_bounds(bounds.x + (bounds.w - icon_size) * 0.5f, bounds.y + (bounds.h - icon_size) * 0.5f, icon_size, icon_size);
+  float icon_x = bounds.x + (bounds.w - icon_size) * 0.5f;
+  float icon_y = bounds.y + (bounds.h - icon_size) * 0.5f;
+  er_ui_bounds_t icon_bounds = er_ui_bounds(icon_x, icon_y, icon_size, icon_size);
   return er_ui_shadcn_push_icon(scene, icon_bounds, icon, color);
 }
 
@@ -159,10 +163,12 @@ static er_ui_status_t er_ui_shadcn_row_body_emit(
   er_ui_color4_t fill) {
   if (!scene || !font || !title || !detail || !er_ui_bounds_valid(bounds)) return ER_UI_ERR_INVALID_ARGUMENT;
   if (has_hit) {
-    er_ui_status_t status = er_ui_scene_push_hit(scene, er_ui_hit(hit_kind, id, bounds.x, bounds.y, bounds.w, bounds.h));
+    er_ui_hit_t hit = er_ui_hit(hit_kind, id, bounds.x, bounds.y, bounds.w, bounds.h);
+    er_ui_status_t status = er_ui_scene_push_hit(scene, hit);
     if (status != ER_UI_OK) return status;
   }
-  er_ui_status_t status = er_ui_scene_push_rect(scene, er_ui_rect_fill(bounds.x, bounds.y, bounds.w, bounds.h, radius, fill));
+  er_ui_rect_t background = er_ui_rect_fill(bounds.x, bounds.y, bounds.w, bounds.h, radius, fill);
+  er_ui_status_t status = er_ui_scene_push_rect(scene, background);
   if (status != ER_UI_OK) return status;
   status = er_ui_shadcn_push_ascii_text(scene, font, title, bounds.x + 12.0f, bounds.y + 22.0f, theme.colors.text);
   if (status != ER_UI_OK) return status;
@@ -487,7 +493,14 @@ static const char* const menu_keyboard[] = {"Enter", "Space", "Escape", "ArrowUp
 static const char* const horizontal_keyboard[] = {"Enter", "Space", "ArrowLeft", "ArrowRight", "Home", "End"};
 static const char* const overlay_keyboard[] = {"Escape", "Tab", "Shift+Tab"};
 static const char* const dialog_keyboard[] = {"Escape", "Tab", "Shift+Tab", "Enter"};
-static const char* const input_otp_keyboard[] = {"Tab", "Shift+Tab", "ArrowLeft", "ArrowRight", "Backspace", "Input", "Paste"};
+static const char* const input_otp_keyboard[] = {
+  "Tab",
+  "Shift+Tab",
+  "ArrowLeft",
+  "ArrowRight",
+  "Backspace",
+  "Input",
+  "Paste"};
 static const char* const slider_keyboard[] = {"ArrowLeft", "ArrowRight", "Home", "End", "PageUp", "PageDown"};
 static const char* const button_variants[] = {"default", "destructive", "outline", "secondary", "ghost", "link"};
 static const char* const badge_variants[] = {"default", "secondary", "destructive", "outline"};
