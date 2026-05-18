@@ -190,6 +190,58 @@ static UINT8 er_native_boot_route_is_render_capability(const ErAdmittedRoute* ro
                  route->work_type == ER_WORK_TYPE_CAPABILITY_INVOKE);
 }
 
+static UINT8 er_native_boot_route_is_storage_object(const ErAdmittedRoute* route) {
+  return (UINT8)(route != 0 &&
+                 route->abi_version == ER_WORK_ABI_VERSION &&
+                 route->role == ER_NODE_ROLE_STORAGE &&
+                 route->department == ER_DEPARTMENT_STORAGE &&
+                 route->work_type == ER_WORK_TYPE_OBJECT_RETRIEVE);
+}
+
+static UINT8 er_native_boot_object_packet_header_valid(const ErVfsObjectPacket* packet) {
+  return (UINT8)(packet != 0 &&
+                 packet->header.abi_version == ER_VFS_ABI_VERSION &&
+                 packet->header.packet_count == 1u &&
+                 packet->header.packet_index == 0u &&
+                 packet->header.object_len != 0u &&
+                 packet->header.bytes_len != 0u &&
+                 packet->header.bytes_len <= ER_VFS_OBJECT_PACKET_BYTES &&
+                 er_hash_nonzero(&packet->header.object_id) != 0u &&
+                 er_hash_nonzero(&packet->header.payload_hash) != 0u &&
+                 er_hash_nonzero(&packet->header.packet_id) != 0u);
+}
+
+static UINT8 er_native_boot_decode_storage_object_intent(const UINT8* payload,
+                                                         UINT32 payload_len,
+                                                         ErNativeEndpointIntent* out_intent) {
+  UINT32 bytes_len;
+
+  if (payload == 0 || out_intent == 0 ||
+      payload_len < (UINT32)sizeof(out_intent->object_packet.header) ||
+      payload_len > (UINT32)sizeof(out_intent->object_packet.header) +
+                    ER_VFS_OBJECT_PACKET_BYTES) {
+    out_intent->kind = ER_NATIVE_ENDPOINT_INTENT_UNSUPPORTED;
+    return 1u;
+  }
+  bytes_len = payload_len - (UINT32)sizeof(out_intent->object_packet.header);
+  er_mem_copy((UINT8*)&out_intent->object_packet.header, payload,
+              (UINTN)sizeof(out_intent->object_packet.header));
+  if (bytes_len > 0u) {
+    er_mem_copy(out_intent->object_packet.bytes,
+                payload + (UINT32)sizeof(out_intent->object_packet.header),
+                (UINTN)bytes_len);
+  }
+  if (er_native_boot_object_packet_header_valid(&out_intent->object_packet) == 0u ||
+      out_intent->object_packet.header.bytes_len != bytes_len ||
+      er_hash_equal(&out_intent->packet.payload_hash,
+                    &out_intent->object_packet.header.packet_id) == 0u) {
+    out_intent->kind = ER_NATIVE_ENDPOINT_INTENT_MALFORMED;
+    return 1u;
+  }
+  out_intent->kind = ER_NATIVE_ENDPOINT_INTENT_STORAGE_OBJECT_PACKET;
+  return 1u;
+}
+
 UINT8 er_native_boot_decode_endpoint_intent(const ErNativeRelayIngress* ingress,
                                             const ErAdmittedRoute* route,
                                             ErNativeEndpointIntent* out_intent) {
@@ -217,6 +269,10 @@ UINT8 er_native_boot_decode_endpoint_intent(const ErNativeRelayIngress* ingress,
                                                 route) == 0u) {
     out_intent->kind = ER_NATIVE_ENDPOINT_INTENT_MALFORMED;
     return 1;
+  }
+  if (er_native_boot_route_is_storage_object(route) != 0u) {
+    return er_native_boot_decode_storage_object_intent(payload, payload_len,
+                                                       out_intent);
   }
   if (er_native_boot_route_is_render_capability(route) == 0u ||
       payload_len < (UINT32)sizeof(out_intent->capability)) {

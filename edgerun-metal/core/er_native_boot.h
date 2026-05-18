@@ -44,13 +44,15 @@ typedef enum {
   ER_NATIVE_ENDPOINT_INTENT_NONE = 0,
   ER_NATIVE_ENDPOINT_INTENT_RENDER_CAPABILITY = 1,
   ER_NATIVE_ENDPOINT_INTENT_UNSUPPORTED = 2,
-  ER_NATIVE_ENDPOINT_INTENT_MALFORMED = 3
+  ER_NATIVE_ENDPOINT_INTENT_MALFORMED = 3,
+  ER_NATIVE_ENDPOINT_INTENT_STORAGE_OBJECT_PACKET = 4
 } ErNativeEndpointIntentKind;
 
 typedef struct {
   ErNativeEndpointIntentKind kind;
   ErRelayPacketHeader packet;
   ErCapabilityEnvelopeHeader capability;
+  ErVfsObjectPacket object_packet;
   UINT32 scene_payload_len;
   UINT8 scene_payload[ERWIRE_MAX_PAYLOAD];
 } ErNativeEndpointIntent;

@@ -49,9 +49,11 @@ int main(void) {
   test_erwire_parse_and_native_poll();
   test_native_boot_erwire_eth_sink();
   test_native_boot_endpoint_intent();
+  test_native_boot_storage_endpoint_intent();
   test_os_native_relay_dispatch();
   test_netlog_disabled_path();
   test_gfx_console_disabled_path();
+  test_print_routes_firmware_before_serial();
   test_ui_surface_renderer_surface();
   test_ui_surface_renderer_4k_tile_plan();
   test_ui_surface_renderer_varfont_text();

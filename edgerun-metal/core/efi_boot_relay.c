@@ -6,6 +6,7 @@
  */
 
 static const char g_er_ui_boot_render_endpoint_label[] = "render-endpoint";
+static const char g_er_ui_boot_storage_endpoint_label[] = "storage-endpoint";
 
 enum {
   ER_UI_BOOT_RELAY_FIRST_HOP_INDEX = 0u
@@ -20,9 +21,12 @@ static ErUiBootAppContext* er_ui_boot_relay_active_app(ErUiBootRenderContext* re
   return &render->apps[render->active_app];
 }
 
-static UINT8 er_ui_boot_prepare_render_endpoint(const ErAdmittedRoute* route,
+static UINT8 er_ui_boot_prepare_memory_endpoint(const ErAdmittedRoute* route,
+                                                const char* label,
+                                                UINT16 label_len,
                                                 ErChannelEndpoint* out_endpoint) {
   if (route == 0 || out_endpoint == 0 ||
+      label == 0 || label_len == 0u ||
       route->abi_version != ER_WORK_ABI_VERSION ||
       er_hash_nonzero(&route->channel_id) == 0u) {
     return 0u;
@@ -32,11 +36,31 @@ static UINT8 er_ui_boot_prepare_render_endpoint(const ErAdmittedRoute* route,
   out_endpoint->abi_version = ER_WORK_ABI_VERSION;
   out_endpoint->kind = ER_CHANNEL_KIND_MEMORY;
   out_endpoint->channel_id = route->channel_id;
-  out_endpoint->label_len = (UINT16)(sizeof(g_er_ui_boot_render_endpoint_label) - 1u);
-  er_mem_copy((UINT8*)out_endpoint->label,
-              (const UINT8*)g_er_ui_boot_render_endpoint_label,
-              (UINTN)(sizeof(g_er_ui_boot_render_endpoint_label) - 1u));
+  out_endpoint->label_len = label_len;
+  er_mem_copy((UINT8*)out_endpoint->label, (const UINT8*)label,
+              (UINTN)label_len);
   return 1u;
+}
+
+static UINT8 er_ui_boot_prepare_endpoint_for_route(const ErAdmittedRoute* route,
+                                                   ErChannelEndpoint* out_endpoint) {
+  if (route == 0) {
+    return 0u;
+  }
+  switch (route->role) {
+    case ER_NODE_ROLE_CAPABILITY:
+      return er_ui_boot_prepare_memory_endpoint(route,
+                                                g_er_ui_boot_render_endpoint_label,
+                                                (UINT16)(sizeof(g_er_ui_boot_render_endpoint_label) - 1u),
+                                                out_endpoint);
+    case ER_NODE_ROLE_STORAGE:
+      return er_ui_boot_prepare_memory_endpoint(route,
+                                                g_er_ui_boot_storage_endpoint_label,
+                                                (UINT16)(sizeof(g_er_ui_boot_storage_endpoint_label) - 1u),
+                                                out_endpoint);
+    default:
+      return 0u;
+  }
 }
 
 static UINT8 er_ui_boot_prepare_route_envelope(const ErAdmittedRoute* route,
@@ -89,7 +113,7 @@ static UINT8 er_ui_boot_prepare_native_relay_transit(ErUiBootRenderContext* rend
   intent.source_node_id = route->source_node_id;
   intent.target_node_id = route->target_node_id;
   intent.from = ingress->ingress;
-  if (er_ui_boot_prepare_render_endpoint(route, &intent.to) == 0u) {
+  if (er_ui_boot_prepare_endpoint_for_route(route, &intent.to) == 0u) {
     return 0u;
   }
   intent.route_hash = route->target_route_commitment;
@@ -151,6 +175,46 @@ static UINT8 er_ui_boot_decode_native_render_scene(ErUiBootRenderContext* render
   return 1u;
 }
 
+static UINT8 er_ui_boot_capture_native_storage_object(ErUiBootRenderContext* render,
+                                                      const ErAdmittedRoute* route,
+                                                      const ErNativeEndpointIntent* intent) {
+  ErCryptoProvider crypto;
+  ErChannelEnvelopeHeader envelope;
+
+  if (render == 0 || route == 0 || intent == 0) {
+    return 0u;
+  }
+
+  er_crypto_blake3_provider(&crypto);
+  if (er_ui_boot_prepare_route_envelope(route, &intent->packet.payload_hash,
+                                        intent->packet.sequence,
+                                        &envelope) == 0u ||
+      er_storage_endpoint_capture_object_packet(&crypto, route, &envelope,
+                                                &intent->object_packet,
+                                                &render->native_relay_last_storage_capture) == 0u) {
+    return 0u;
+  }
+  ++render->native_relay_stats.storage_object_packets;
+  return 1u;
+}
+
+static UINT8 er_ui_boot_try_storage_intent(ErUiBootRenderContext* render,
+                                           const ErNativeRelayIngress* ingress,
+                                           ErNativeEndpointIntent* out_intent,
+                                           ErAdmittedRoute* out_route) {
+  if (render == 0 || ingress == 0 || out_intent == 0 || out_route == 0) {
+    return 0u;
+  }
+  if (er_ui_boot_prepare_storage_retrieve_route(ER_UI_WASM_STORAGE_APP_ROUTE_ID_SEED,
+                                                render->active_app,
+                                                out_route) == 0u ||
+      er_native_boot_decode_endpoint_intent(ingress, out_route,
+                                            out_intent) == 0u) {
+    return 0u;
+  }
+  return 1u;
+}
+
 UINT8 er_ui_boot_dispatch_native_relay_ingress(ErUiBootRenderContext* render,
                                                const ErNativeRelayIngress* ingress,
                                                UINT8* out_redraw) {
@@ -187,6 +251,10 @@ UINT8 er_ui_boot_dispatch_native_relay_ingress(ErUiBootRenderContext* render,
       er_native_boot_decode_endpoint_intent(ingress, &route, &intent) == 0u) {
     return 0u;
   }
+  if (intent.kind == ER_NATIVE_ENDPOINT_INTENT_MALFORMED &&
+      er_ui_boot_try_storage_intent(render, ingress, &intent, &route) == 0u) {
+    return 0u;
+  }
 
   switch (intent.kind) {
     case ER_NATIVE_ENDPOINT_INTENT_NONE:
@@ -200,6 +268,14 @@ UINT8 er_ui_boot_dispatch_native_relay_ingress(ErUiBootRenderContext* render,
         return 0u;
       }
       ++render->native_relay_stats.render_capability;
+      return 1u;
+    case ER_NATIVE_ENDPOINT_INTENT_STORAGE_OBJECT_PACKET:
+      if (er_ui_boot_prepare_native_relay_transit(render, ingress, &route,
+                                                  &intent.packet) == 0u ||
+          er_ui_boot_capture_native_storage_object(render, &route,
+                                                  &intent) == 0u) {
+        return 0u;
+      }
       return 1u;
     case ER_NATIVE_ENDPOINT_INTENT_UNSUPPORTED:
       if (er_ui_boot_prepare_native_relay_transit(render, ingress, &route,
