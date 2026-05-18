@@ -1065,6 +1065,17 @@ static void test_virtio_gpu_mmio(void) {
     VIRTIO_GPU_TEST_SCANOUTS = 2u,
     VIRTIO_GPU_TEST_CAPSETS = 3u,
     VIRTIO_GPU_TEST_CONTROL_RESPONSE_SIZE = 512u,
+    VIRTIO_GPU_TEST_FB_RESOURCE_ID = 9u,
+    VIRTIO_GPU_TEST_FB_SCANOUT_ID = 0u,
+    VIRTIO_GPU_TEST_FB_WIDTH = 3u,
+    VIRTIO_GPU_TEST_FB_HEIGHT = 2u,
+    VIRTIO_GPU_TEST_FB_STRIDE = 4u,
+    VIRTIO_GPU_TEST_FB_PIXELS = VIRTIO_GPU_TEST_FB_STRIDE * VIRTIO_GPU_TEST_FB_HEIGHT,
+    VIRTIO_GPU_TEST_FB_BYTES =
+        VIRTIO_GPU_TEST_FB_PIXELS * ER_VIRTIO_GPU_FRAMEBUFFER_BYTES_PER_PIXEL,
+    VIRTIO_GPU_TEST_FB_CLEAR_COLOR = 0x00112233u,
+    VIRTIO_GPU_TEST_FB_TOP_COLOR = 0x00445566u,
+    VIRTIO_GPU_TEST_FB_BOTTOM_COLOR = 0x00778899u,
     VIRTIO_GPU_TEST_CONFIG_EVENTS_READ_DWORD =
         (ER_VIRTIO_MMIO_CONFIG_OFFSET + 0u) / sizeof(UINT32),
     VIRTIO_GPU_TEST_CONFIG_SCANOUTS_DWORD =
@@ -1085,6 +1096,8 @@ static void test_virtio_gpu_mmio(void) {
   ErVirtioGpuDisplayInfo display_info;
   ErVirtioGpuControlHeader control_header;
   ErVirtioGpuStats gpu_stats;
+  ErVirtioGpuFramebuffer framebuffer;
+  UINT32 framebuffer_pixels[VIRTIO_GPU_TEST_FB_PIXELS] = {0};
 
   er_mmio_reset();
   regs[ER_VIRTIO_MMIO_MAGIC_VALUE_OFFSET / sizeof(UINT32)] = ER_VIRTIO_MMIO_MAGIC;
@@ -1237,6 +1250,110 @@ static void test_virtio_gpu_mmio(void) {
   er_mem_zero((UINT8*)&control_header, (UINTN)sizeof(control_header));
   er_mem_copy((UINT8*)&control_header, control_request, (UINTN)sizeof(control_header));
   check_uint64("virtio gpu flush request type", control_header.type,
+               ER_VIRTIO_GPU_CMD_RESOURCE_FLUSH);
+  control_header.type = ER_VIRTIO_GPU_RESP_OK_NODATA;
+  er_mem_copy(control_response, (const UINT8*)&control_header, (UINTN)sizeof(control_header));
+  control_used->ring[5].id = 0u;
+  control_used->ring[5].len = (UINT32)sizeof(control_header);
+  control_used->idx = 6u;
+  check_int64("virtio gpu flush ok", er_virtio_gpu_poll_ok_nodata(&gpu), 1);
+
+  check_int64("virtio gpu framebuffer init",
+              er_virtio_gpu_framebuffer_init(&framebuffer, VIRTIO_GPU_TEST_FB_RESOURCE_ID,
+                                             VIRTIO_GPU_TEST_FB_SCANOUT_ID,
+                                             ER_VIRTIO_GPU_FORMAT_B8G8R8X8_UNORM,
+                                             VIRTIO_GPU_TEST_FB_WIDTH,
+                                             VIRTIO_GPU_TEST_FB_HEIGHT,
+                                             VIRTIO_GPU_TEST_FB_STRIDE,
+                                             framebuffer_pixels,
+                                             VIRTIO_GPU_TEST_FB_PIXELS),
+              1);
+  check_uint64("virtio gpu framebuffer bytes", framebuffer.byte_len, VIRTIO_GPU_TEST_FB_BYTES);
+  check_int64("virtio gpu framebuffer reject stride",
+              er_virtio_gpu_framebuffer_init(&framebuffer, VIRTIO_GPU_TEST_FB_RESOURCE_ID,
+                                             VIRTIO_GPU_TEST_FB_SCANOUT_ID,
+                                             ER_VIRTIO_GPU_FORMAT_B8G8R8X8_UNORM,
+                                             VIRTIO_GPU_TEST_FB_WIDTH,
+                                             VIRTIO_GPU_TEST_FB_HEIGHT,
+                                             VIRTIO_GPU_TEST_FB_WIDTH - 1u,
+                                             framebuffer_pixels,
+                                             VIRTIO_GPU_TEST_FB_PIXELS),
+              0);
+  check_int64("virtio gpu framebuffer reinit",
+              er_virtio_gpu_framebuffer_init(&framebuffer, VIRTIO_GPU_TEST_FB_RESOURCE_ID,
+                                             VIRTIO_GPU_TEST_FB_SCANOUT_ID,
+                                             ER_VIRTIO_GPU_FORMAT_B8G8R8X8_UNORM,
+                                             VIRTIO_GPU_TEST_FB_WIDTH,
+                                             VIRTIO_GPU_TEST_FB_HEIGHT,
+                                             VIRTIO_GPU_TEST_FB_STRIDE,
+                                             framebuffer_pixels,
+                                             VIRTIO_GPU_TEST_FB_PIXELS),
+              1);
+  er_virtio_gpu_framebuffer_clear(&framebuffer, VIRTIO_GPU_TEST_FB_CLEAR_COLOR);
+  check_uint64("virtio gpu framebuffer clear first", framebuffer_pixels[0],
+               VIRTIO_GPU_TEST_FB_CLEAR_COLOR);
+  check_uint64("virtio gpu framebuffer clear stride gap", framebuffer_pixels[3], 0u);
+  check_uint64("virtio gpu framebuffer clear second row", framebuffer_pixels[4],
+               VIRTIO_GPU_TEST_FB_CLEAR_COLOR);
+  er_virtio_gpu_framebuffer_fill_halves(&framebuffer, VIRTIO_GPU_TEST_FB_TOP_COLOR,
+                                        VIRTIO_GPU_TEST_FB_BOTTOM_COLOR);
+  check_uint64("virtio gpu framebuffer top", framebuffer_pixels[0],
+               VIRTIO_GPU_TEST_FB_TOP_COLOR);
+  check_uint64("virtio gpu framebuffer bottom", framebuffer_pixels[4],
+               VIRTIO_GPU_TEST_FB_BOTTOM_COLOR);
+  check_int64("virtio gpu framebuffer create",
+              er_virtio_gpu_submit_framebuffer_create(&gpu, &framebuffer), 1);
+  er_mem_zero((UINT8*)&control_header, (UINTN)sizeof(control_header));
+  er_mem_copy((UINT8*)&control_header, control_request, (UINTN)sizeof(control_header));
+  check_uint64("virtio gpu framebuffer create type", control_header.type,
+               ER_VIRTIO_GPU_CMD_RESOURCE_CREATE_2D);
+  control_header.type = ER_VIRTIO_GPU_RESP_OK_NODATA;
+  er_mem_copy(control_response, (const UINT8*)&control_header, (UINTN)sizeof(control_header));
+  control_used->ring[6].id = 0u;
+  control_used->ring[6].len = (UINT32)sizeof(control_header);
+  control_used->idx = 7u;
+  check_int64("virtio gpu framebuffer create ok", er_virtio_gpu_poll_ok_nodata(&gpu), 1);
+  check_int64("virtio gpu framebuffer attach",
+              er_virtio_gpu_submit_framebuffer_attach(&gpu, &framebuffer), 1);
+  er_mem_zero((UINT8*)&control_header, (UINTN)sizeof(control_header));
+  er_mem_copy((UINT8*)&control_header, control_request, (UINTN)sizeof(control_header));
+  check_uint64("virtio gpu framebuffer attach type", control_header.type,
+               ER_VIRTIO_GPU_CMD_RESOURCE_ATTACH_BACKING);
+  control_header.type = ER_VIRTIO_GPU_RESP_OK_NODATA;
+  er_mem_copy(control_response, (const UINT8*)&control_header, (UINTN)sizeof(control_header));
+  control_used->ring[7].id = 0u;
+  control_used->ring[7].len = (UINT32)sizeof(control_header);
+  control_used->idx = 8u;
+  check_int64("virtio gpu framebuffer attach ok", er_virtio_gpu_poll_ok_nodata(&gpu), 1);
+  check_int64("virtio gpu framebuffer scanout",
+              er_virtio_gpu_submit_framebuffer_set_scanout(&gpu, &framebuffer), 1);
+  er_mem_zero((UINT8*)&control_header, (UINTN)sizeof(control_header));
+  er_mem_copy((UINT8*)&control_header, control_request, (UINTN)sizeof(control_header));
+  check_uint64("virtio gpu framebuffer scanout type", control_header.type,
+               ER_VIRTIO_GPU_CMD_SET_SCANOUT);
+  control_header.type = ER_VIRTIO_GPU_RESP_OK_NODATA;
+  er_mem_copy(control_response, (const UINT8*)&control_header, (UINTN)sizeof(control_header));
+  control_used->ring[8].id = 0u;
+  control_used->ring[8].len = (UINT32)sizeof(control_header);
+  control_used->idx = 9u;
+  check_int64("virtio gpu framebuffer scanout ok", er_virtio_gpu_poll_ok_nodata(&gpu), 1);
+  check_int64("virtio gpu framebuffer transfer",
+              er_virtio_gpu_submit_framebuffer_transfer(&gpu, &framebuffer), 1);
+  er_mem_zero((UINT8*)&control_header, (UINTN)sizeof(control_header));
+  er_mem_copy((UINT8*)&control_header, control_request, (UINTN)sizeof(control_header));
+  check_uint64("virtio gpu framebuffer transfer type", control_header.type,
+               ER_VIRTIO_GPU_CMD_TRANSFER_TO_HOST_2D);
+  control_header.type = ER_VIRTIO_GPU_RESP_OK_NODATA;
+  er_mem_copy(control_response, (const UINT8*)&control_header, (UINTN)sizeof(control_header));
+  control_used->ring[9].id = 0u;
+  control_used->ring[9].len = (UINT32)sizeof(control_header);
+  control_used->idx = 10u;
+  check_int64("virtio gpu framebuffer transfer ok", er_virtio_gpu_poll_ok_nodata(&gpu), 1);
+  check_int64("virtio gpu framebuffer flush",
+              er_virtio_gpu_submit_framebuffer_flush(&gpu, &framebuffer), 1);
+  er_mem_zero((UINT8*)&control_header, (UINTN)sizeof(control_header));
+  er_mem_copy((UINT8*)&control_header, control_request, (UINTN)sizeof(control_header));
+  check_uint64("virtio gpu framebuffer flush type", control_header.type,
                ER_VIRTIO_GPU_CMD_RESOURCE_FLUSH);
 }
 

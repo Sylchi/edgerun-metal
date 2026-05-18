@@ -49,7 +49,6 @@
 #define ER_GPU_PROFILE_POLL_LIMIT 1000000u
 #define ER_GPU_PROFILE_FRAMEBUFFER_WIDTH_MAX 640u
 #define ER_GPU_PROFILE_FRAMEBUFFER_HEIGHT_MAX 480u
-#define ER_GPU_PROFILE_BYTES_PER_PIXEL 4u
 #define ER_GPU_PROFILE_RESOURCE_ID 1u
 #define ER_GPU_PROFILE_SCANOUT_ID 0u
 #define ER_GPU_PROFILE_TOP_COLOR 0x0040d0e0u
@@ -857,66 +856,42 @@ static UINT8 er_gpu_profile_wait_display_info(ErVirtioGpu* gpu,
   return 0u;
 }
 
-static UINT8 er_gpu_profile_framebuffer_len(UINT32 width, UINT32 height, UINT32* out_len) {
-  if (out_len == 0 || width == 0u || height == 0u ||
-      width > ER_GPU_PROFILE_FRAMEBUFFER_WIDTH_MAX ||
-      height > ER_GPU_PROFILE_FRAMEBUFFER_HEIGHT_MAX) {
-    return 0u;
-  }
-  *out_len = width * height * ER_GPU_PROFILE_BYTES_PER_PIXEL;
-  return 1u;
-}
-
-static void er_gpu_profile_fill_framebuffer(UINT32 width, UINT32 height) {
-  UINT32 x;
-  UINT32 y;
-  UINT32 half_height = height / 2u;
-
-  for (y = 0u; y < height; ++y) {
-    for (x = 0u; x < width; ++x) {
-      g_gpu_profile_framebuffer[(UINTN)y * width + x] =
-          (y < half_height) ? ER_GPU_PROFILE_TOP_COLOR : ER_GPU_PROFILE_BOTTOM_COLOR;
-    }
-  }
-}
-
 static UINT8 er_gpu_profile_flush_framebuffer(ErVirtioGpu* gpu, UINT32 width, UINT32 height) {
-  UINT32 backing_len = 0;
+  ErVirtioGpuFramebuffer framebuffer;
 
-  if (er_gpu_profile_framebuffer_len(width, height, &backing_len) == 0u) {
+  if (er_virtio_gpu_framebuffer_init(&framebuffer, ER_GPU_PROFILE_RESOURCE_ID,
+                                     ER_GPU_PROFILE_SCANOUT_ID,
+                                     ER_VIRTIO_GPU_FORMAT_B8G8R8X8_UNORM,
+                                     width, height, width,
+                                     g_gpu_profile_framebuffer,
+                                     ER_GPU_PROFILE_FRAMEBUFFER_WIDTH_MAX *
+                                         ER_GPU_PROFILE_FRAMEBUFFER_HEIGHT_MAX) == 0u) {
     er_println("gpu framebuffer: unsupported dimensions");
     return 0u;
   }
-  er_gpu_profile_fill_framebuffer(width, height);
-  if (er_virtio_gpu_submit_resource_create_2d(gpu, ER_GPU_PROFILE_RESOURCE_ID,
-                                             ER_VIRTIO_GPU_FORMAT_B8G8R8X8_UNORM,
-                                             width, height) == 0u ||
+  er_virtio_gpu_framebuffer_fill_halves(&framebuffer, ER_GPU_PROFILE_TOP_COLOR,
+                                        ER_GPU_PROFILE_BOTTOM_COLOR);
+  if (er_virtio_gpu_submit_framebuffer_create(gpu, &framebuffer) == 0u ||
       er_gpu_profile_wait_ok(gpu) == 0u) {
     er_println("gpu framebuffer: create failed");
     return 0u;
   }
-  if (er_virtio_gpu_submit_resource_attach_backing(
-          gpu, ER_GPU_PROFILE_RESOURCE_ID,
-          (UINT64)(UINTN)g_gpu_profile_framebuffer, backing_len) == 0u ||
+  if (er_virtio_gpu_submit_framebuffer_attach(gpu, &framebuffer) == 0u ||
       er_gpu_profile_wait_ok(gpu) == 0u) {
     er_println("gpu framebuffer: attach failed");
     return 0u;
   }
-  if (er_virtio_gpu_submit_set_scanout(gpu, ER_GPU_PROFILE_SCANOUT_ID,
-                                      ER_GPU_PROFILE_RESOURCE_ID,
-                                      width, height) == 0u ||
+  if (er_virtio_gpu_submit_framebuffer_set_scanout(gpu, &framebuffer) == 0u ||
       er_gpu_profile_wait_ok(gpu) == 0u) {
     er_println("gpu framebuffer: scanout failed");
     return 0u;
   }
-  if (er_virtio_gpu_submit_transfer_to_host_2d(gpu, ER_GPU_PROFILE_RESOURCE_ID,
-                                              width, height) == 0u ||
+  if (er_virtio_gpu_submit_framebuffer_transfer(gpu, &framebuffer) == 0u ||
       er_gpu_profile_wait_ok(gpu) == 0u) {
     er_println("gpu framebuffer: transfer failed");
     return 0u;
   }
-  if (er_virtio_gpu_submit_resource_flush(gpu, ER_GPU_PROFILE_RESOURCE_ID,
-                                          width, height) == 0u ||
+  if (er_virtio_gpu_submit_framebuffer_flush(gpu, &framebuffer) == 0u ||
       er_gpu_profile_wait_ok(gpu) == 0u) {
     er_println("gpu framebuffer: flush failed");
     return 0u;
