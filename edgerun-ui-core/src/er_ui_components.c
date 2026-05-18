@@ -2608,7 +2608,7 @@ er_ui_status_t er_ui_shadcn_panel_header_emit(
     status = er_ui_shadcn_push_ascii_text(scene, font, subtitle, bounds.x, bounds.y + 40.0f, theme.colors.muted);
     if (status != ER_UI_OK) return status;
   }
-  if (action_label && action_label[0]) {
+  if (action_label && er_ui_shadcn_ascii_len(action_label) > 0u) {
     status = er_ui_shadcn_button_emit(scene, font, er_ui_bounds(bounds.x + bounds.w - 96.0f, bounds.y + 4.0f, 96.0f, 36.0f), theme, action_label, action_id,
                                       ER_UI_SHADCN_BUTTON_SECONDARY, ER_UI_SHADCN_BUTTON_SIZE_SM, true);
     if (status != ER_UI_OK) return status;
@@ -2994,12 +2994,15 @@ er_ui_status_t er_ui_shadcn_component_scene_preview_emit(
   if (er_ui_shadcn_streq(slug, "carousel")) {
     er_ui_status_t status = ER_UI_OK;
     const char *const labels[] = {"1", "2", "3"};
+    const char* const* label_cursor = labels;
     for (size_t i = 0u; i < ER_UI_SHADCN_ARRAY_COUNT(labels); ++i) {
+      const char* label = *label_cursor;
       er_ui_bounds_t card = er_ui_bounds(bounds.x + (float)i * 72.0f, bounds.y, 60.0f, 72.0f);
       status = er_ui_shadcn_card_emit(scene, card, theme);
       if (status != ER_UI_OK) return status;
-      status = er_ui_shadcn_push_ascii_text(scene, font, labels[i], card.x + 26.0f, card.y + 42.0f, theme.colors.text);
+      status = er_ui_shadcn_push_ascii_text(scene, font, label, card.x + 26.0f, card.y + 42.0f, theme.colors.text);
       if (status != ER_UI_OK) return status;
+      label_cursor++;
     }
     return ER_UI_OK;
   }
@@ -3111,16 +3114,20 @@ er_ui_status_t er_ui_shadcn_component_scene_preview_emit(
                                     ER_UI_SHADCN_PREVIEW_INPUT_GROUP_BUTTON_ID, ER_UI_SHADCN_BUTTON_SECONDARY, ER_UI_SHADCN_BUTTON_SIZE_SM, true);
   }
   if (er_ui_shadcn_streq(slug, "input-otp")) {
-    const char* const values[] = {"1", "2", "3", "-", "", "", ""};
+    const char *const values[] = {"1", "2", "3", "-", "", "", ""};
+    const char* const* value_cursor = values;
     for (size_t i = 0u; i < ER_UI_SHADCN_ARRAY_COUNT(values); ++i) {
-      if (er_ui_shadcn_streq(values[i], "-")) {
+      const char* value = *value_cursor;
+      if (er_ui_shadcn_streq(value, "-")) {
         er_ui_status_t status = er_ui_shadcn_push_ascii_text(scene, font, "-", bounds.x + (float)i * 42.0f + 12.0f, bounds.y + 36.0f, theme.colors.muted);
         if (status != ER_UI_OK) return status;
+        value_cursor++;
         continue;
       }
-      er_ui_status_t status = er_ui_shadcn_field_emit(scene, font, er_ui_bounds(bounds.x + (float)i * 42.0f, bounds.y, 36.0f, 52.0f), theme, "", values[i],
+      er_ui_status_t status = er_ui_shadcn_field_emit(scene, font, er_ui_bounds(bounds.x + (float)i * 42.0f, bounds.y, 36.0f, 52.0f), theme, "", value,
                                                       ER_UI_SHADCN_PREVIEW_INPUT_OTP_BASE_ID + (uint32_t)i, false);
       if (status != ER_UI_OK) return status;
+      value_cursor++;
     }
     return ER_UI_OK;
   }
@@ -3142,7 +3149,7 @@ er_ui_status_t er_ui_shadcn_component_scene_preview_emit(
                                    ER_UI_SHADCN_PREVIEW_LABEL_FIELD_ID, false);
   }
   if (er_ui_shadcn_streq(slug, "menubar")) {
-    const char* const labels[] = {"File", "Edit", "View", "Profiles"};
+    const char *const labels[] = {"File", "Edit", "View", "Profiles"};
     return er_ui_shadcn_tabs_emit(scene, font, er_ui_bounds(bounds.x, bounds.y, er_ui_float_min(bounds.w, 360.0f), 38.0f), theme, labels,
                                   ER_UI_SHADCN_ARRAY_COUNT(labels), 0u, ER_UI_SHADCN_PREVIEW_MENUBAR_ID);
   }
@@ -3165,7 +3172,7 @@ er_ui_status_t er_ui_shadcn_component_scene_preview_emit(
                                     ER_UI_SHADCN_BUTTON_GHOST, ER_UI_SHADCN_BUTTON_SIZE_DEFAULT, true);
   }
   if (er_ui_shadcn_streq(slug, "navigation-menu")) {
-    const char* const labels[] = {"Getting started", "Components", "Docs"};
+    const char *const labels[] = {"Getting started", "Components", "Docs"};
     er_ui_status_t status = er_ui_shadcn_tabs_emit(scene, font, er_ui_bounds(bounds.x, bounds.y, er_ui_float_min(bounds.w, 360.0f), 38.0f), theme, labels,
                                                    ER_UI_SHADCN_ARRAY_COUNT(labels), 0u, ER_UI_SHADCN_PREVIEW_NAVIGATION_TABS_ID);
     if (status != ER_UI_OK) return status;
@@ -3287,7 +3294,7 @@ er_ui_status_t er_ui_shadcn_component_scene_preview_emit(
                                    theme.colors.danger);
   }
   if (er_ui_shadcn_streq(slug, "tabs")) {
-    const char* const labels[] = {"Account", "Password", "Settings"};
+    const char *const labels[] = {"Account", "Password", "Settings"};
     return er_ui_shadcn_tabs_emit(scene, font, er_ui_bounds(bounds.x, bounds.y, er_ui_float_min(bounds.w, 330.0f), 38.0f), theme, labels,
                                   ER_UI_SHADCN_ARRAY_COUNT(labels), 0u, ER_UI_SHADCN_PREVIEW_TABS_ID);
   }
@@ -3303,7 +3310,7 @@ er_ui_status_t er_ui_shadcn_component_scene_preview_emit(
     return er_ui_shadcn_switch_emit(scene, er_ui_bounds(bounds.x, bounds.y, 44.0f, 24.0f), theme, true, ER_UI_SHADCN_PREVIEW_TOGGLE_ID);
   }
   if (er_ui_shadcn_streq(slug, "toggle-group")) {
-    const char* const labels[] = {"B", "I", "U"};
+    const char *const labels[] = {"B", "I", "U"};
     return er_ui_shadcn_tabs_emit(scene, font, er_ui_bounds(bounds.x, bounds.y, 126.0f, 38.0f), theme, labels,
                                   ER_UI_SHADCN_ARRAY_COUNT(labels), 0u, ER_UI_SHADCN_PREVIEW_TOGGLE_GROUP_ID);
   }
