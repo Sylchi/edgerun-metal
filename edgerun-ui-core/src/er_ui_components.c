@@ -235,7 +235,9 @@ static er_ui_status_t er_ui_component_row_body_emit(
   const char* title,
   const char* detail,
   float radius,
-  er_ui_color4_t fill) {
+  er_ui_color4_t fill,
+  float title_y,
+  float detail_y) {
   if (!scene || !font || !title || !detail || !er_ui_bounds_valid(bounds)) return ER_UI_ERR_INVALID_ARGUMENT;
   if (has_hit) {
     er_ui_hit_t hit = er_ui_hit(hit_kind, id, bounds.x, bounds.y, bounds.w, bounds.h);
@@ -245,10 +247,10 @@ static er_ui_status_t er_ui_component_row_body_emit(
   er_ui_rect_t background = er_ui_rect_fill(bounds.x, bounds.y, bounds.w, bounds.h, radius, fill);
   er_ui_status_t status = er_ui_scene_push_rect(scene, background);
   if (status != ER_UI_OK) return status;
-  status = er_ui_component_push_ascii_text(scene, font, title, bounds.x + 12.0f, bounds.y + 22.0f, theme.colors.text);
+  status = er_ui_component_push_ascii_text(scene, font, title, bounds.x + 12.0f, bounds.y + title_y, theme.colors.text);
   if (status != ER_UI_OK) return status;
   if (detail[0]) {
-    status = er_ui_component_push_ascii_text(scene, font, detail, bounds.x + 12.0f, bounds.y + 44.0f, theme.colors.muted);
+    status = er_ui_component_push_ascii_text(scene, font, detail, bounds.x + 12.0f, bounds.y + detail_y, theme.colors.muted);
     if (status != ER_UI_OK) return status;
   }
   return ER_UI_OK;
@@ -2880,14 +2882,9 @@ er_ui_status_t er_ui_component_list_row_emit(
   uint32_t id,
   bool selected) {
   if (!scene || !font || !title || !detail || !er_ui_bounds_valid(bounds)) return ER_UI_ERR_INVALID_ARGUMENT;
-  er_ui_status_t status = er_ui_scene_push_hit(scene, er_ui_hit(ER_UI_HIT_LIST_ROW, id, bounds.x, bounds.y, bounds.w, bounds.h));
-  if (status != ER_UI_OK) return status;
   er_ui_color4_t fill = selected ? er_ui_color_with_alpha(theme.colors.active, 0.54f) : er_ui_color_with_alpha(theme.colors.row, 0.34f);
-  status = er_ui_scene_push_rect(scene, er_ui_rect_fill(bounds.x, bounds.y, bounds.w, bounds.h, theme.radius.control, fill));
-  if (status != ER_UI_OK) return status;
-  status = er_ui_component_push_ascii_text(scene, font, title, bounds.x + 12.0f, bounds.y + 20.0f, theme.colors.text);
-  if (status != ER_UI_OK) return status;
-  return er_ui_component_push_ascii_text(scene, font, detail, bounds.x + 12.0f, bounds.y + 40.0f, theme.colors.muted);
+  return er_ui_component_row_body_emit(scene, font, bounds, theme, ER_UI_HIT_LIST_ROW, id, true, title, detail, theme.radius.control, fill,
+                                       20.0f, 40.0f);
 }
 
 er_ui_status_t er_ui_component_radio_emit(
@@ -3448,7 +3445,7 @@ er_ui_status_t er_ui_component_transaction_row_emit(
   uint32_t id) {
   if (!scene || !font || !title || !subtitle || !date || !amount || !er_ui_bounds_valid(bounds)) return ER_UI_ERR_INVALID_ARGUMENT;
   er_ui_status_t status = er_ui_component_row_body_emit(scene, font, bounds, theme, ER_UI_HIT_TRANSACTION_ROW, id, true, title, subtitle, 0.0f,
-                                                     theme.colors.panel);
+                                                     theme.colors.panel, 22.0f, 44.0f);
   if (status != ER_UI_OK) return status;
   status = er_ui_component_push_ascii_text(scene, font, date, bounds.x + bounds.w - 170.0f, bounds.y + 22.0f, theme.colors.muted);
   if (status != ER_UI_OK) return status;
@@ -3470,7 +3467,8 @@ er_ui_status_t er_ui_component_menu_item_emit(
   uint32_t id) {
   if (!scene || !font || !label || !detail || !badge || !er_ui_bounds_valid(bounds)) return ER_UI_ERR_INVALID_ARGUMENT;
   er_ui_color4_t fill = selected ? er_ui_color_with_alpha(accent, 0.18f) : theme.colors.panel;
-  er_ui_status_t status = er_ui_component_row_body_emit(scene, font, bounds, theme, ER_UI_HIT_MENU_ITEM, id, true, label, detail, theme.radius.control, fill);
+  er_ui_status_t status = er_ui_component_row_body_emit(scene, font, bounds, theme, ER_UI_HIT_MENU_ITEM, id, true, label, detail, theme.radius.control, fill,
+                                                        22.0f, 44.0f);
   if (status != ER_UI_OK) return status;
   if (badge[0]) {
     return er_ui_component_badge_emit(scene, font, er_ui_bounds(bounds.x + bounds.w - 84.0f, bounds.y + 17.0f, 72.0f, 24.0f), theme, badge,
@@ -3490,7 +3488,7 @@ er_ui_status_t er_ui_component_control_row_emit(
   uint32_t id) {
   if (!scene || !font || !label || !detail || !accessory || !er_ui_bounds_valid(bounds)) return ER_UI_ERR_INVALID_ARGUMENT;
   er_ui_status_t status = er_ui_component_row_body_emit(scene, font, bounds, theme, ER_UI_HIT_LIST_ROW, id, id != 0u, label, detail, 0.0f,
-                                                     theme.colors.panel);
+                                                     theme.colors.panel, 22.0f, 44.0f);
   if (status != ER_UI_OK) return status;
   if (accessory[0]) {
     status = er_ui_component_push_ascii_text(scene, font, accessory, bounds.x + bounds.w - 116.0f, bounds.y + 34.0f, theme.colors.muted);
