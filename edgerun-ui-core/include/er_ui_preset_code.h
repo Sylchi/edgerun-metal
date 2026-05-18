@@ -52,11 +52,33 @@ typedef struct {
   const char* role;
 } er_ui_style_family_spec_t;
 
+typedef enum {
+  ER_UI_EXTRACTED_STYLE_TOKEN_SURFACE = 0,
+  ER_UI_EXTRACTED_STYLE_TOKEN_TEXT,
+  ER_UI_EXTRACTED_STYLE_TOKEN_BORDER,
+  ER_UI_EXTRACTED_STYLE_TOKEN_ACTION,
+  ER_UI_EXTRACTED_STYLE_TOKEN_STATUS,
+  ER_UI_EXTRACTED_STYLE_TOKEN_KIND_COUNT
+} er_ui_extracted_style_token_kind_t;
+
+typedef struct {
+  const char* name;
+  er_ui_extracted_style_token_kind_t kind;
+  const char* css_var;
+  const char* const* class_names;
+  size_t class_name_count;
+  const char* role;
+} er_ui_extracted_style_token_t;
+
 er_ui_preset_recipe_t er_ui_preset_recipe_for_style_family(er_ui_style_family_t family);
 er_ui_semantic_colors_t er_ui_colors_for_style_family(er_ui_style_family_t family);
 size_t er_ui_style_family_spec_count(void);
 const er_ui_style_family_spec_t* er_ui_style_family_spec_at(size_t index);
 const er_ui_style_family_spec_t* er_ui_style_family_spec_for_family(er_ui_style_family_t family);
+const char* er_ui_extracted_style_token_kind_label(er_ui_extracted_style_token_kind_t kind);
+size_t er_ui_extracted_style_token_count(void);
+const er_ui_extracted_style_token_t* er_ui_extracted_style_token_at(size_t index);
+bool er_ui_extracted_style_token_has_class(const er_ui_extracted_style_token_t* token, const char* class_name);
 er_ui_status_t er_ui_preset_encode(er_ui_preset_recipe_t recipe, char* out, size_t capacity, size_t* out_len);
 er_ui_status_t er_ui_preset_decode(const char* preset_code, er_ui_preset_recipe_t* out_recipe);
 bool er_ui_preset_recipe_matches_code(er_ui_preset_recipe_t recipe, const char* preset_code);
