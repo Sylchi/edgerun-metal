@@ -1,5 +1,38 @@
 #include "test_common.h"
 
+#define ER_UI_TEST_ARRAY_COUNT(values) (sizeof(values) / sizeof((values)[0]))
+#define ER_UI_TEST_SHADCN_BUTTON_ID 3001u
+#define ER_UI_TEST_SHADCN_SELECT_ID 3002u
+#define ER_UI_TEST_SHADCN_SLIDER_ID 3003u
+#define ER_UI_TEST_SHADCN_FIELD_ID 3004u
+#define ER_UI_TEST_SHADCN_TEXTAREA_ID 3005u
+#define ER_UI_TEST_SHADCN_CHECKBOX_ID 3006u
+#define ER_UI_TEST_SHADCN_SWITCH_ID 3007u
+#define ER_UI_TEST_SHADCN_TABS_ID 3010u
+#define ER_UI_TEST_SHADCN_LIST_ROW_ID 3013u
+#define ER_UI_TEST_SHADCN_RADIO_ID 3014u
+#define ER_UI_TEST_SHADCN_TABLE_ID 3015u
+#define ER_UI_TEST_SHADCN_BREADCRUMB_ID 3020u
+#define ER_UI_TEST_SHADCN_CHART_ID 3024u
+#define ER_UI_TEST_SHADCN_INVALID_BUTTON_ID 9u
+#define ER_UI_TEST_SHADCN_TABS_ACTIVE_INDEX 1u
+#define ER_UI_TEST_SHADCN_BREADCRUMB_CURRENT_INDEX 2u
+#define ER_UI_TEST_SHADCN_CHART_ACTIVE_INDEX 1u
+#define ER_UI_TEST_SHADCN_MIN_INITIAL_RECTS 8u
+#define ER_UI_TEST_SHADCN_MIN_INITIAL_HITS 10u
+#define ER_UI_TEST_SHADCN_MIN_SHOWCASE_HITS 20u
+#define ER_UI_TEST_SHADCN_MIN_SHOWCASE_TEXT_QUADS 20u
+#define ER_UI_TEST_SHADCN_MIN_METAL_HITS 20u
+#define ER_UI_TEST_SHADCN_MIN_METAL_TEXT_QUADS 80u
+#define ER_UI_TEST_SHADCN_MIN_METAL_ICON_QUADS 6u
+#define ER_UI_TEST_SHADCN_DEMO_COUNT 57u
+#define ER_UI_TEST_SHADCN_KEYBOARD_COUNT 2u
+#define ER_UI_TEST_SHADCN_ORDER_OPTION_INDEX 1u
+#define ER_UI_TEST_SHADCN_STOCK_BUTTON_INDEX 2u
+#define ER_UI_TEST_SHADCN_SLIDER_ACTION_ID (ER_UI_SHADCN_DEMO_PREVIEW_BASE_ID + 943u)
+#define ER_UI_TEST_SHADCN_UNRELATED_BUTTON_ID 42u
+#define ER_UI_TEST_APP_STORE_CARD_REQUIRED_FIELDS 3u
+
 static void test_shadcn_render_primitives(void) {
   er_ui_scene_t scene = {0};
   expect_status(er_ui_scene_init_with_allocator(&scene, er_ui_palette_slate_950(), er_ui_test_allocator()), ER_UI_OK,
@@ -15,38 +48,47 @@ static void test_shadcn_render_primitives(void) {
   er_ui_resolved_theme_t theme = er_ui_resolved_theme_user_default();
   expect_status(er_ui_shadcn_card_emit(&scene, er_ui_bounds(4.0f, 4.0f, 220.0f, 156.0f), theme), ER_UI_OK,
                 "shadcn render: card emits");
-  expect_status(er_ui_shadcn_button_emit(&scene, face, er_ui_bounds(16.0f, 16.0f, 128.0f, 48.0f), theme, "Deploy", 3001u,
+  expect_status(er_ui_shadcn_button_emit(&scene, face, er_ui_bounds(16.0f, 16.0f, 128.0f, 48.0f), theme, "Deploy", ER_UI_TEST_SHADCN_BUTTON_ID,
                                          ER_UI_SHADCN_BUTTON_DEFAULT, ER_UI_SHADCN_BUTTON_SIZE_DEFAULT, true),
                 ER_UI_OK, "shadcn render: button emits");
-  expect_status(er_ui_shadcn_select_emit(&scene, face, er_ui_bounds(16.0f, 66.0f, 188.0f, 62.0f), theme, "Currency", "USD", 3002u, true),
+  expect_status(er_ui_shadcn_select_emit(&scene, face, er_ui_bounds(16.0f, 66.0f, 188.0f, 62.0f), theme, "Currency", "USD",
+                                         ER_UI_TEST_SHADCN_SELECT_ID, true),
                 ER_UI_OK, "shadcn render: select emits");
-  expect_status(er_ui_shadcn_slider_emit(&scene, face, er_ui_bounds(16.0f, 126.0f, 188.0f, 48.0f), theme, "Minimum payout", 0.42f, 3003u),
+  expect_status(er_ui_shadcn_slider_emit(&scene, face, er_ui_bounds(16.0f, 126.0f, 188.0f, 48.0f), theme, "Minimum payout", 0.42f,
+                                         ER_UI_TEST_SHADCN_SLIDER_ID),
                 ER_UI_OK, "shadcn render: slider emits");
   expect_status(er_ui_shadcn_badge_emit(&scene, face, er_ui_bounds(232.0f, 16.0f, 88.0f, 26.0f), theme, "Active",
                                         ER_UI_SHADCN_BADGE_SECONDARY),
                 ER_UI_OK, "shadcn render: badge emits");
-  expect_status(er_ui_shadcn_field_emit(&scene, face, er_ui_bounds(232.0f, 48.0f, 160.0f, 58.0f), theme, "Name", "EdgeRun", 3004u, false),
+  expect_status(er_ui_shadcn_field_emit(&scene, face, er_ui_bounds(232.0f, 48.0f, 160.0f, 58.0f), theme, "Name", "EdgeRun",
+                                        ER_UI_TEST_SHADCN_FIELD_ID, false),
                 ER_UI_OK, "shadcn render: field emits");
-  expect_status(er_ui_shadcn_field_emit(&scene, face, er_ui_bounds(232.0f, 110.0f, 160.0f, 86.0f), theme, "Notes", "Verified cache", 3005u, true),
+  expect_status(er_ui_shadcn_field_emit(&scene, face, er_ui_bounds(232.0f, 110.0f, 160.0f, 86.0f), theme, "Notes", "Verified cache",
+                                        ER_UI_TEST_SHADCN_TEXTAREA_ID, true),
                 ER_UI_OK, "shadcn render: textarea emits");
-  expect_status(er_ui_shadcn_checkbox_emit(&scene, face, er_ui_bounds(16.0f, 180.0f, 188.0f, 32.0f), theme, "Cache verified bytes", true, 3006u),
+  expect_status(er_ui_shadcn_checkbox_emit(&scene, face, er_ui_bounds(16.0f, 180.0f, 188.0f, 32.0f), theme, "Cache verified bytes", true,
+                                           ER_UI_TEST_SHADCN_CHECKBOX_ID),
                 ER_UI_OK, "shadcn render: checkbox emits");
   expect_status(er_ui_shadcn_progress_emit(&scene, er_ui_bounds(232.0f, 204.0f, 160.0f, 8.0f), theme, 0.64f), ER_UI_OK,
                 "shadcn render: progress emits");
-  expect_status(er_ui_shadcn_switch_emit(&scene, er_ui_bounds(16.0f, 220.0f, 44.0f, 24.0f), theme, true, 3007u), ER_UI_OK,
+  expect_status(er_ui_shadcn_switch_emit(&scene, er_ui_bounds(16.0f, 220.0f, 44.0f, 24.0f), theme, true, ER_UI_TEST_SHADCN_SWITCH_ID), ER_UI_OK,
                 "shadcn render: switch emits");
   expect_status(er_ui_shadcn_separator_emit(&scene, er_ui_bounds(72.0f, 231.0f, 132.0f, 1.0f), theme), ER_UI_OK,
                 "shadcn render: separator emits");
   const char* const tabs[] = {"Preview", "Code", "A11y"};
-  expect_status(er_ui_shadcn_tabs_emit(&scene, face, er_ui_bounds(232.0f, 224.0f, 180.0f, 38.0f), theme, tabs, 3u, 1u, 3010u), ER_UI_OK,
-                "shadcn render: tabs emit");
-  expect_status(er_ui_shadcn_list_row_emit(&scene, face, er_ui_bounds(420.0f, 148.0f, 180.0f, 48.0f), theme, "Billing", "Command B", 3013u, true),
+  expect_status(er_ui_shadcn_tabs_emit(&scene, face, er_ui_bounds(232.0f, 224.0f, 180.0f, 38.0f), theme, tabs, ER_UI_TEST_ARRAY_COUNT(tabs),
+                                       ER_UI_TEST_SHADCN_TABS_ACTIVE_INDEX, ER_UI_TEST_SHADCN_TABS_ID),
+                ER_UI_OK, "shadcn render: tabs emit");
+  expect_status(er_ui_shadcn_list_row_emit(&scene, face, er_ui_bounds(420.0f, 148.0f, 180.0f, 48.0f), theme, "Billing", "Command B",
+                                           ER_UI_TEST_SHADCN_LIST_ROW_ID, true),
                 ER_UI_OK, "shadcn render: list row emits");
-  expect_status(er_ui_shadcn_radio_emit(&scene, face, er_ui_bounds(420.0f, 202.0f, 180.0f, 30.0f), theme, "Default", true, 3014u),
+  expect_status(er_ui_shadcn_radio_emit(&scene, face, er_ui_bounds(420.0f, 202.0f, 180.0f, 30.0f), theme, "Default", true,
+                                        ER_UI_TEST_SHADCN_RADIO_ID),
                 ER_UI_OK, "shadcn render: radio emits");
   const char* const headers[] = {"Invoice", "Status"};
   const char* const cells[] = {"INV001", "Paid", "INV002", "Pending"};
-  expect_status(er_ui_shadcn_table_emit(&scene, face, er_ui_bounds(420.0f, 238.0f, 180.0f, 96.0f), theme, headers, 2u, cells, 2u, 3015u),
+  expect_status(er_ui_shadcn_table_emit(&scene, face, er_ui_bounds(420.0f, 238.0f, 180.0f, 96.0f), theme, headers,
+                                        ER_UI_TEST_ARRAY_COUNT(headers), cells, ER_UI_TEST_ARRAY_COUNT(headers), ER_UI_TEST_SHADCN_TABLE_ID),
                 ER_UI_OK, "shadcn render: table emits");
   expect_status(er_ui_shadcn_skeleton_emit(&scene, er_ui_bounds(420.0f, 340.0f, 120.0f, 16.0f), theme), ER_UI_OK,
                 "shadcn render: skeleton emits");
@@ -59,17 +101,22 @@ static void test_shadcn_render_primitives(void) {
   expect_status(er_ui_shadcn_avatar_emit(&scene, face, er_ui_bounds(606.0f, 96.0f, 42.0f, 42.0f), theme, "ER", theme.colors.accent, true),
                 ER_UI_OK, "shadcn render: avatar emits");
   const char* const crumbs[] = {"Docs", "Components", "Breadcrumb"};
-  expect_status(er_ui_shadcn_breadcrumb_emit(&scene, face, er_ui_bounds(606.0f, 146.0f, 220.0f, 32.0f), theme, crumbs, 3u, 2u, 3020u),
+  expect_status(er_ui_shadcn_breadcrumb_emit(&scene, face, er_ui_bounds(606.0f, 146.0f, 220.0f, 32.0f), theme, crumbs,
+                                             ER_UI_TEST_ARRAY_COUNT(crumbs), ER_UI_TEST_SHADCN_BREADCRUMB_CURRENT_INDEX,
+                                             ER_UI_TEST_SHADCN_BREADCRUMB_ID),
                 ER_UI_OK, "shadcn render: breadcrumb emits");
   const char* const chart_labels[] = {"Jan", "Feb", "Mar"};
   const float chart_values[] = {0.4f, 0.8f, 0.6f};
-  expect_status(er_ui_shadcn_bar_chart_emit(&scene, face, er_ui_bounds(606.0f, 186.0f, 180.0f, 120.0f), theme, "Visitors", chart_labels, chart_values, 3u, 3024u, 1u),
+  expect_status(er_ui_shadcn_bar_chart_emit(&scene, face, er_ui_bounds(606.0f, 186.0f, 180.0f, 120.0f), theme, "Visitors", chart_labels,
+                                            chart_values, ER_UI_TEST_ARRAY_COUNT(chart_labels), ER_UI_TEST_SHADCN_CHART_ID,
+                                            ER_UI_TEST_SHADCN_CHART_ACTIVE_INDEX),
                 ER_UI_OK, "shadcn render: bar chart emits");
-  expect_true(scene.rect_count >= 8u, "shadcn render: primitives emit geometry");
-  expect_true(scene.hit_count >= 10u, "shadcn render: interactive primitives emit hits");
+  expect_true(scene.rect_count >= ER_UI_TEST_SHADCN_MIN_INITIAL_RECTS, "shadcn render: primitives emit geometry");
+  expect_true(scene.hit_count >= ER_UI_TEST_SHADCN_MIN_INITIAL_HITS, "shadcn render: interactive primitives emit hits");
   expect_true(scene.text_quad_count > 0u, "shadcn render: primitives use variable font text");
   expect_true(scene.icon_quad_count > 0u, "shadcn render: primitives use canonical Tabler-compatible icons");
-  expect_status(er_ui_shadcn_button_emit(&scene, NULL, er_ui_bounds(0.0f, 0.0f, 40.0f, 40.0f), theme, "Nope", 9u,
+  expect_status(er_ui_shadcn_button_emit(&scene, NULL, er_ui_bounds(0.0f, 0.0f, 40.0f, 40.0f), theme, "Nope",
+                                         ER_UI_TEST_SHADCN_INVALID_BUTTON_ID,
                                          ER_UI_SHADCN_BUTTON_DEFAULT, ER_UI_SHADCN_BUTTON_SIZE_DEFAULT, true),
                 ER_UI_ERR_INVALID_ARGUMENT, "shadcn render: missing variable font is rejected");
   expect_true(er_ui_shadcn_component_scene_preview_available("button"), "shadcn scene preview: button is available");
@@ -99,27 +146,27 @@ static void test_shadcn_render_primitives(void) {
   er_ui_shadcn_demo_gallery_state_init(&state);
   expect_status(er_ui_shadcn_showcase_emit(&scene, face, er_ui_bounds(0.0f, 280.0f, 720.0f, 360.0f), theme, "button", &state), ER_UI_OK,
                 "shadcn showcase: component reference emits");
-  expect_true(scene.hit_count >= 20u, "shadcn showcase: catalog rows and preview controls emit hits");
-  expect_true(scene.text_quad_count > 20u, "shadcn showcase: catalog and preview use variable font text");
+  expect_true(scene.hit_count >= ER_UI_TEST_SHADCN_MIN_SHOWCASE_HITS, "shadcn showcase: catalog rows and preview controls emit hits");
+  expect_true(scene.text_quad_count > ER_UI_TEST_SHADCN_MIN_SHOWCASE_TEXT_QUADS, "shadcn showcase: catalog and preview use variable font text");
 
   er_ui_scene_clear_commands(&scene);
   expect_status(er_ui_edgerun_metal_surface_emit(&scene, face, er_ui_bounds(0.0f, 0.0f, 3840.0f, 2160.0f), theme, &state), ER_UI_OK,
                 "metal surface: ui-core owns boot scene composition");
-  expect_true(scene.hit_count >= 20u, "metal surface: showcase and controls emit hits");
-  expect_true(scene.text_quad_count > 80u, "metal surface: boot UI emits variable font text");
+  expect_true(scene.hit_count >= ER_UI_TEST_SHADCN_MIN_METAL_HITS, "metal surface: showcase and controls emit hits");
+  expect_true(scene.text_quad_count > ER_UI_TEST_SHADCN_MIN_METAL_TEXT_QUADS, "metal surface: boot UI emits variable font text");
   expect_true(er_ui_scene_stats_fits_budget(er_ui_scene_stats(&scene), er_ui_scene_budget_native_interactive_frame()),
               "metal surface: boot scene fits native frame budget");
   er_ui_scene_clear_commands(&scene);
   expect_status(er_ui_edgerun_metal_surface_emit(&scene, face, er_ui_bounds(0.0f, 0.0f, 1920.0f, 1080.0f), theme, &state), ER_UI_OK,
                 "metal surface: qemu 1080p scene emits");
-  expect_true(scene.hit_count >= 20u, "metal surface: qemu 1080p controls emit hits");
+  expect_true(scene.hit_count >= ER_UI_TEST_SHADCN_MIN_METAL_HITS, "metal surface: qemu 1080p controls emit hits");
   expect_true(er_ui_scene_stats_fits_budget(er_ui_scene_stats(&scene), er_ui_scene_budget_native_interactive_frame()),
               "metal surface: qemu 1080p scene fits native frame budget");
   er_ui_scene_clear_commands(&scene);
   expect_status(er_ui_edgerun_metal_surface_emit(&scene, face, er_ui_bounds(0.0f, 0.0f, 1280.0f, 720.0f), theme, &state), ER_UI_OK,
                 "metal surface: qemu 720p scene emits");
-  expect_true(scene.hit_count >= 20u, "metal surface: qemu 720p controls emit hits");
-  expect_true(scene.icon_quad_count >= 6u, "metal surface: qemu 720p icon nodes emit quads");
+  expect_true(scene.hit_count >= ER_UI_TEST_SHADCN_MIN_METAL_HITS, "metal surface: qemu 720p controls emit hits");
+  expect_true(scene.icon_quad_count >= ER_UI_TEST_SHADCN_MIN_METAL_ICON_QUADS, "metal surface: qemu 720p icon nodes emit quads");
   expect_true(er_ui_scene_stats_fits_budget(er_ui_scene_stats(&scene), er_ui_scene_budget_native_interactive_frame()),
               "metal surface: qemu 720p scene fits native frame budget");
 
@@ -137,7 +184,7 @@ static void test_shadcn_render_primitives(void) {
 }
 
 void run_component_tests(void) {
-  expect_size(er_ui_shadcn_demo_count(), 57u, "shadcn catalog: component count matches Rust source");
+  expect_size(er_ui_shadcn_demo_count(), ER_UI_TEST_SHADCN_DEMO_COUNT, "shadcn catalog: component count matches Rust source");
   expect_true(er_ui_shadcn_find_demo_by_slug("accordion") != 0, "shadcn catalog: accordion exists");
   expect_true(er_ui_shadcn_find_demo_by_slug("tooltip") != 0, "shadcn catalog: tooltip exists");
   expect_true(er_ui_shadcn_find_demo_by_slug("data-table") != 0, "shadcn catalog: data-table exists");
@@ -156,7 +203,7 @@ void run_component_tests(void) {
   expect_true(er_ui_shadcn_contract_supports_variant(&contract, "destructive"), "shadcn parity: button destructive variant exists");
   expect_true(er_ui_shadcn_contract_supports_variant(&contract, "ghost"), "shadcn parity: button ghost variant exists");
   expect_true(er_ui_shadcn_contract_supports_interaction(&contract, "click"), "shadcn parity: button click interaction exists");
-  expect_size(contract.keyboard_count, 2u, "shadcn parity: button keyboard count matches");
+  expect_size(contract.keyboard_count, ER_UI_TEST_SHADCN_KEYBOARD_COUNT, "shadcn parity: button keyboard count matches");
 
   er_ui_shadcn_resolved_demo_t resolved = {0};
   expect_true(er_ui_shadcn_resolve_demo_identifier("button", &resolved), "shadcn resolve: slug resolves");
@@ -215,37 +262,39 @@ void run_component_tests(void) {
   action = (er_ui_action_t){0};
   action.kind = ER_UI_ACTION_ACTIVATED;
   action.has_hit = true;
-  action.hit = er_ui_hit(ER_UI_HIT_MENU_ITEM, ER_UI_SHADCN_SELECT_ORDER_BASE_ID + 1u, 0.0f, 0.0f, 1.0f, 1.0f);
+  action.hit = er_ui_hit(ER_UI_HIT_MENU_ITEM, ER_UI_SHADCN_SELECT_ORDER_BASE_ID + ER_UI_TEST_SHADCN_ORDER_OPTION_INDEX, 0.0f, 0.0f, 1.0f, 1.0f);
   expect_true(er_ui_shadcn_demo_gallery_apply_action(&state, action), "shadcn preview state: order option applies");
-  expect_size(state.order_index, 1u, "shadcn preview state: order option index matches");
+  expect_size(state.order_index, ER_UI_TEST_SHADCN_ORDER_OPTION_INDEX, "shadcn preview state: order option index matches");
   expect_true(!state.has_open_select, "shadcn preview state: select closes after menu selection");
 
   action = (er_ui_action_t){0};
   action.kind = ER_UI_ACTION_SLIDER_CHANGED;
-  action.id = ER_UI_SHADCN_DEMO_PREVIEW_BASE_ID + 943u;
+  action.id = ER_UI_TEST_SHADCN_SLIDER_ACTION_ID;
   action.float_value = 0.72f;
   expect_true(er_ui_shadcn_demo_gallery_apply_action(&state, action), "shadcn preview state: slider action applies");
-  expect_true(er_ui_shadcn_demo_gallery_slider(&state, ER_UI_SHADCN_DEMO_PREVIEW_BASE_ID + 943u, 0.0f) > 0.71f, "shadcn preview state: slider value is stored");
+  expect_true(er_ui_shadcn_demo_gallery_slider(&state, ER_UI_TEST_SHADCN_SLIDER_ACTION_ID, 0.0f) > 0.71f,
+              "shadcn preview state: slider value is stored");
   action.float_value = 1.2f;
   expect_true(er_ui_shadcn_demo_gallery_apply_action(&state, action), "shadcn preview state: slider clamp action applies");
-  expect_true(er_ui_shadcn_demo_gallery_slider(&state, ER_UI_SHADCN_DEMO_PREVIEW_BASE_ID + 943u, 0.0f) == 1.0f, "shadcn preview state: slider value clamps high");
+  expect_true(er_ui_shadcn_demo_gallery_slider(&state, ER_UI_TEST_SHADCN_SLIDER_ACTION_ID, 0.0f) == 1.0f,
+              "shadcn preview state: slider value clamps high");
 
   action = (er_ui_action_t){0};
   action.kind = ER_UI_ACTION_ACTIVATED;
   action.has_hit = true;
-  action.hit = er_ui_hit(ER_UI_HIT_BUTTON, ER_UI_SHADCN_CHART_STOCK_BASE_ID + 2u, 0.0f, 0.0f, 1.0f, 1.0f);
+  action.hit = er_ui_hit(ER_UI_HIT_BUTTON, ER_UI_SHADCN_CHART_STOCK_BASE_ID + ER_UI_TEST_SHADCN_STOCK_BUTTON_INDEX, 0.0f, 0.0f, 1.0f, 1.0f);
   expect_true(er_ui_shadcn_demo_gallery_apply_action(&state, action), "shadcn preview state: chart button applies");
-  expect_size(state.stock_bar, 2u, "shadcn preview state: stock chart index matches");
+  expect_size(state.stock_bar, ER_UI_TEST_SHADCN_STOCK_BUTTON_INDEX, "shadcn preview state: stock chart index matches");
 
   action = (er_ui_action_t){0};
   action.kind = ER_UI_ACTION_ACTIVATED;
   action.has_hit = true;
-  action.hit = er_ui_hit(ER_UI_HIT_BUTTON, 42u, 0.0f, 0.0f, 1.0f, 1.0f);
+  action.hit = er_ui_hit(ER_UI_HIT_BUTTON, ER_UI_TEST_SHADCN_UNRELATED_BUTTON_ID, 0.0f, 0.0f, 1.0f, 1.0f);
   expect_true(!er_ui_shadcn_demo_gallery_apply_action(&state, action), "shadcn preview state: unrelated action is rejected");
 
-  expect_size(er_ui_shadcn_native_demo_count(), 57u, "shadcn progress: native count matches Rust source");
-  expect_size(er_ui_shadcn_exact_demo_count(), 57u, "shadcn progress: exact count matches Rust source");
-  expect_size(er_ui_shadcn_exact_parity_count(), 57u, "shadcn progress: parity count matches Rust source");
+  expect_size(er_ui_shadcn_native_demo_count(), ER_UI_TEST_SHADCN_DEMO_COUNT, "shadcn progress: native count matches Rust source");
+  expect_size(er_ui_shadcn_exact_demo_count(), ER_UI_TEST_SHADCN_DEMO_COUNT, "shadcn progress: exact count matches Rust source");
+  expect_size(er_ui_shadcn_exact_parity_count(), ER_UI_TEST_SHADCN_DEMO_COUNT, "shadcn progress: parity count matches Rust source");
   expect_size(er_ui_shadcn_count_by_status(ER_UI_SHADCN_STATUS_NATIVE_PRIMITIVE), 0u, "shadcn progress: native primitive count matches Rust source");
   expect_true(er_ui_shadcn_count_by_category(ER_UI_SHADCN_CATEGORY_FOUNDATION) > 0u, "shadcn progress: foundation category populated");
   expect_true(er_ui_shadcn_count_by_category(ER_UI_SHADCN_CATEGORY_OVERLAY) > 0u, "shadcn progress: overlay category populated");
@@ -290,7 +339,7 @@ void run_component_tests(void) {
               "component contracts: app store card policy hash is projected");
   expect_true(!er_ui_component_projection_contract_requires_field(&projection, "developer"),
               "component contracts: app store card developer remains optional");
-  expect_size(er_ui_component_projection_required_field_count(&projection), 3u,
+  expect_size(er_ui_component_projection_required_field_count(&projection), ER_UI_TEST_APP_STORE_CARD_REQUIRED_FIELDS,
               "component contracts: app store card required count matches Rust source");
   expect_true(er_ui_component_projection_contract_for(ER_UI_COMPONENT_DATA_TABLE_CONTROLS, &projection),
               "component contracts: data table controls projection exists");
