@@ -44,6 +44,20 @@ typedef struct {
 } EriVfs;
 
 typedef struct {
+  char* path;
+  uint8_t executable;
+  uint8_t* bytes;
+  size_t len;
+  uint8_t loaded;
+} EriLoadEntry;
+
+typedef struct {
+  EriLoadEntry* items;
+  size_t len;
+  size_t cap;
+} EriLoadEntries;
+
+typedef struct {
   uint64_t files;
   uint64_t bytes;
   uint64_t total_lines;
@@ -275,6 +289,16 @@ typedef struct {
   size_t next_index;
   uint8_t failed;
 } EriTestSignalJobs;
+
+typedef struct {
+  const char* root;
+  EriLoadEntries* entries;
+  pthread_mutex_t mutex;
+  size_t next_index;
+  uint8_t failed;
+} EriLoadJobs;
+
+static uint8_t eri_host_thread_count(size_t* out_count);
 
 static char* eri_strdup_len(const char* s, size_t len) {
   char* out = (char*)malloc(len + 1u);
@@ -535,8 +559,39 @@ static uint8_t eri_read_file(const char* full, uint8_t** out_bytes, size_t* out_
   return 1;
 }
 
-//@optimizer-ignore-function repo inspection must recursively load each regular file into the analysis VFS
-static uint8_t eri_load_dir(EriVfs* vfs, const char* root, const char* rel) {
+static uint8_t eri_load_entries_add(EriLoadEntries* entries, const char* path, uint8_t executable) {
+  EriLoadEntry* grown;
+
+  if (entries->len + 1u > entries->cap) {
+    grown = (EriLoadEntry*)eri_grow(entries->items, sizeof(entries->items[0]), &entries->cap, entries->len + 1u);
+    if (grown == NULL) {
+      return 0u;
+    }
+    entries->items = grown;
+  }
+  memset(&entries->items[entries->len], 0, sizeof(entries->items[entries->len]));
+  entries->items[entries->len].path = eri_strdup(path);
+  if (entries->items[entries->len].path == NULL) {
+    return 0u;
+  }
+  entries->items[entries->len].executable = executable;
+  ++entries->len;
+  return 1u;
+}
+
+//@optimizer-ignore-function load-entry teardown must release every queued path and any unread VFS bytes
+static void eri_load_entries_free(EriLoadEntries* entries) {
+  size_t i;
+
+  for (i = 0u; i < entries->len; ++i) {
+    free(entries->items[i].path);
+    free(entries->items[i].bytes);
+  }
+  free(entries->items);
+}
+
+//@optimizer-ignore-function repo inspection must recursively enumerate each regular file before parallel reads
+static uint8_t eri_collect_dir_entries(EriLoadEntries* entries, const char* root, const char* rel) {
   char full[ERI_MAX_PATH * 2u];
   DIR* dir;
   struct dirent* entry;
@@ -573,26 +628,119 @@ static uint8_t eri_load_dir(EriVfs* vfs, const char* root, const char* rel) {
       continue;
     }
     if (S_ISDIR(st.st_mode)) {
-      if (eri_load_dir(vfs, root, child_rel) == 0u) {
+      if (eri_collect_dir_entries(entries, root, child_rel) == 0u) {
         closedir(dir);
         return 0;
       }
     } else if (S_ISREG(st.st_mode)) {
-      uint8_t* bytes = NULL;
-      size_t len = 0u;
       uint8_t executable = (st.st_mode & 0111) != 0 ? 1u : 0u;
 
-      if (eri_read_file(child_full, &bytes, &len) != 0u) {
-        if (eri_vfs_add(vfs, child_rel, bytes, len, executable) == 0u) {
-          free(bytes);
-          closedir(dir);
-          return 0;
-        }
+      if (eri_load_entries_add(entries, child_rel, executable) == 0u) {
+        closedir(dir);
+        return 0;
       }
     }
   }
   closedir(dir);
   return 1;
+}
+
+//@optimizer-ignore-function load worker claims each queued file and reads its bytes into a stable slot
+static void* eri_load_worker(void* arg) {
+  EriLoadJobs* jobs = (EriLoadJobs*)arg;
+
+  for (;;) {
+    size_t index;
+    char full[ERI_MAX_PATH * 2u];
+
+    if (pthread_mutex_lock(&jobs->mutex) != 0) {
+      return NULL;
+    }
+    if (jobs->failed != 0u || jobs->next_index >= jobs->entries->len) {
+      if (pthread_mutex_unlock(&jobs->mutex) != 0) {
+        jobs->failed = 1u;
+      }
+      return NULL;
+    }
+    index = jobs->next_index;
+    ++jobs->next_index;
+    if (pthread_mutex_unlock(&jobs->mutex) != 0) {
+      jobs->failed = 1u;
+      return NULL;
+    }
+    snprintf(full, sizeof(full), "%s/%s", jobs->root, jobs->entries->items[index].path);
+    if (eri_read_file(full, &jobs->entries->items[index].bytes, &jobs->entries->items[index].len) != 0u) {
+      jobs->entries->items[index].loaded = 1u;
+    }
+  }
+}
+
+//@optimizer-ignore-function VFS loading reads queued files in parallel then merges loaded files in traversal order
+static uint8_t eri_read_entries_parallel(EriLoadEntries* entries, const char* root, size_t thread_count) {
+  EriLoadJobs jobs;
+  pthread_t threads[ERI_MAX_THREAD_COUNT];
+  size_t started = 0u;
+  size_t i;
+
+  if (entries->len == 0u) {
+    return 1u;
+  }
+  if (thread_count > entries->len) {
+    thread_count = entries->len;
+  }
+  memset(&jobs, 0, sizeof(jobs));
+  jobs.root = root;
+  jobs.entries = entries;
+  if (pthread_mutex_init(&jobs.mutex, NULL) != 0) {
+    return 0u;
+  }
+  for (i = 0u; i < thread_count; ++i) {
+    if (pthread_create(&threads[i], NULL, eri_load_worker, &jobs) != 0) {
+      if (pthread_mutex_lock(&jobs.mutex) == 0) {
+        jobs.failed = 1u;
+        (void)pthread_mutex_unlock(&jobs.mutex);
+      }
+      break;
+    }
+    ++started;
+  }
+  for (i = 0u; i < started; ++i) {
+    if (pthread_join(threads[i], NULL) != 0) {
+      jobs.failed = 1u;
+    }
+  }
+  if (pthread_mutex_destroy(&jobs.mutex) != 0) {
+    jobs.failed = 1u;
+  }
+  return jobs.failed == 0u ? 1u : 0u;
+}
+
+//@optimizer-ignore-function repo inspection loads every enumerated regular file into the analysis VFS
+static uint8_t eri_load_dir(EriVfs* vfs, const char* root, const char* rel) {
+  EriLoadEntries entries;
+  size_t thread_count;
+  size_t i;
+
+  memset(&entries, 0, sizeof(entries));
+  if (eri_host_thread_count(&thread_count) == 0u ||
+      eri_collect_dir_entries(&entries, root, rel) == 0u ||
+      eri_read_entries_parallel(&entries, root, thread_count) == 0u) {
+    eri_load_entries_free(&entries);
+    return 0u;
+  }
+  for (i = 0u; i < entries.len; ++i) {
+    if (entries.items[i].loaded == 0u) {
+      continue;
+    }
+    if (eri_vfs_add(vfs, entries.items[i].path, entries.items[i].bytes,
+                    entries.items[i].len, entries.items[i].executable) == 0u) {
+      eri_load_entries_free(&entries);
+      return 0u;
+    }
+    entries.items[i].bytes = NULL;
+  }
+  eri_load_entries_free(&entries);
+  return 1u;
 }
 
 static EriPackage* eri_package_get(EriPackages* packages, const char* path) {
