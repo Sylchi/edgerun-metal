@@ -56,6 +56,9 @@ static void test_component_padding_density_tokens_are_monotonic(void) {
   expect_true(normal.y < spacious.y, "spacing: default y smaller than spacious");
   expect_float(normal.x, ER_UI_CARD_PAD_X, "spacing: default x follows card pad");
   expect_float(normal.y, ER_UI_CARD_PAD_Y, "spacing: default y follows card pad");
+  expect_bounds(er_ui_component_content_rect(er_ui_bounds(10.0f, 20.0f, 220.0f, 140.0f), ER_UI_COMPONENT_DENSITY_DEFAULT),
+                er_ui_bounds(10.0f + normal.x, 20.0f + normal.y, 220.0f - normal.x * 2.0f, 140.0f - normal.y * 2.0f),
+                "spacing: component content rect follows density padding");
 }
 
 static void test_responsive_app_surface_spacing(void) {

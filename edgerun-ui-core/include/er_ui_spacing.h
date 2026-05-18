@@ -190,6 +190,7 @@ typedef struct {
 } er_ui_scroll_viewport_t;
 
 er_ui_component_padding_t er_ui_component_padding_for_density(er_ui_component_density_t density);
+er_ui_bounds_t er_ui_component_content_rect(er_ui_bounds_t bounds, er_ui_component_density_t density);
 er_ui_spacing_t er_ui_spacing_default(void);
 er_ui_responsive_sidecar_t er_ui_responsive_sidecar(
   er_ui_bounds_t bounds,

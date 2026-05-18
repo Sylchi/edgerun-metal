@@ -47,6 +47,8 @@ static const float ER_UI_LEDGER_TEXT_CLIP_DESCENT = 6.0f;
 static const float ER_UI_LEDGER_BUTTON_TEXT_PAD_X = 14.0f;
 static const float ER_UI_LEDGER_BUTTON_TEXT_MIN_START_RATIO = 0.30f;
 static const float ER_UI_LEDGER_CARD_PAD = 16.0f;
+static const float ER_UI_LEDGER_CARD_TITLE_Y = 12.0f;
+static const float ER_UI_LEDGER_CARD_SUBTITLE_Y = 34.0f;
 static const float ER_UI_LEDGER_COMPACT_NAV_GAP = 8.0f;
 static const float ER_UI_LEDGER_COMPACT_NAV_Y = 92.0f;
 static const float ER_UI_LEDGER_DENSE_CARD_H = 180.0f;
@@ -279,10 +281,11 @@ static er_ui_status_t er_ui_ledger_card_with_header(
   const char* subtitle) {
   er_ui_status_t status = er_ui_ledger_card(scene, bounds, colors);
   if (status != ER_UI_OK) return status;
-  status = er_ui_ledger_text_clipped(scene, font, title, bounds.x + 16.0f, bounds.y + 26.0f, bounds.w - 32.0f, colors.text);
+  er_ui_bounds_t content = er_ui_component_content_rect(bounds, ER_UI_COMPONENT_DENSITY_DEFAULT);
+  status = er_ui_ledger_text_clipped(scene, font, title, content.x, content.y + ER_UI_LEDGER_CARD_TITLE_Y, content.w, colors.text);
   if (status != ER_UI_OK) return status;
   if (subtitle == 0) return ER_UI_OK;
-  return er_ui_ledger_text_clipped(scene, font, subtitle, bounds.x + 16.0f, bounds.y + 48.0f, bounds.w - 32.0f, colors.muted);
+  return er_ui_ledger_text_clipped(scene, font, subtitle, content.x, content.y + ER_UI_LEDGER_CARD_SUBTITLE_Y, content.w, colors.muted);
 }
 
 static er_ui_status_t er_ui_ledger_subtile(
@@ -413,13 +416,13 @@ static er_ui_status_t er_ui_ledger_field_rows(
   er_ui_status_t status = ER_UI_OK;
   if (rows == 0 && row_count != 0u) return ER_UI_ERR_INVALID_ARGUMENT;
   if (row_count == 0u) return ER_UI_OK;
+  er_ui_bounds_t content = er_ui_component_content_rect(bounds, ER_UI_COMPONENT_DENSITY_DEFAULT);
   const er_ui_ledger_field_row_t* row = rows;
   const er_ui_ledger_field_row_t* end = rows + row_count;
   float y = bounds.y + first_y;
   while (row < end) {
     status = er_ui_ledger_field(scene, font,
-                                er_ui_bounds(bounds.x + 16.0f, y,
-                                             bounds.w - 32.0f, ER_UI_LEDGER_FIELD_H),
+                                er_ui_bounds(content.x, y, content.w, ER_UI_LEDGER_FIELD_H),
                                 colors, row->label, row->value, row->selectable);
     if (status != ER_UI_OK) return status;
     y += row_gap;
@@ -458,9 +461,9 @@ static er_ui_status_t er_ui_ledger_bottom_button(
   const char* label,
   uint32_t id,
   float bottom_inset) {
+  er_ui_bounds_t content = er_ui_component_content_rect(bounds, ER_UI_COMPONENT_DENSITY_DEFAULT);
   return er_ui_ledger_button(scene, font,
-                             er_ui_bounds(bounds.x + 16.0f, bounds.y + bounds.h - bottom_inset,
-                                          bounds.w - 32.0f, ER_UI_LEDGER_BUTTON_H),
+                             er_ui_bounds(content.x, bounds.y + bounds.h - bottom_inset, content.w, ER_UI_LEDGER_BUTTON_H),
                              colors, label, id);
 }
 
