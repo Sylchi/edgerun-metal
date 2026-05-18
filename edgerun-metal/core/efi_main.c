@@ -6,6 +6,7 @@
 #include "er_acpi.h"
 #include "er_boot_profile.h"
 #include "er_gfx_console.h"
+#include "er_ps2_keyboard.h"
 #include "er_tpm.h"
 #include "er_ui_surface_renderer.h"
 #include "er_ui_components.h"
@@ -92,6 +93,16 @@ static UINT8 g_log_hex_stage = ER_LOG_HEX_STAGE_ID;
 static UINT64 g_log_bus = 0;
 static UINT64 g_log_dev = 0;
 static UINT64 g_log_func = 0;
+
+typedef struct {
+  vr_font_face_t* font;
+  ErUiSurfaceMode mode;
+  const ErUiSurfaceTilePlan* tile_plan;
+  ErUiSurfaceMemoryPlan memory_plan;
+  er_ui_scene_budget_t scene_budget;
+  ErUiSurfaceFrameBudget frame_budget;
+  er_ui_resolved_theme_t theme;
+} ErUiBootRenderContext;
 
 static void er_reset_log_state(void) {
   g_log_u64_stage = ER_LOG_U64_STAGE_IDLE;
@@ -189,13 +200,6 @@ static UINT8 er_ui_boot_create_font(UINT32 height, vr_font_face_t** out_font) {
                                                 ER_FONT_GEIST_TTF_SIZE, &font_cfg) == VR_OK &&
                  *out_font != 0);
 }
-
-static er_ui_status_t er_build_ui_boot_scene(er_ui_scene_t* scene,
-                                             er_ui_demo_apps_state_t* demo_state,
-                                             vr_font_face_t* font,
-                                             UINT32 width,
-                                             UINT32 height,
-                                             er_ui_resolved_theme_t theme);
 
 static void er_print_u64_field(const char* label, UINT64 value) {
   er_print("    ");
@@ -496,6 +500,10 @@ static void er_log_hex(UINT64 value) {
 
 static void er_halt_once(void) {
   __asm__ __volatile__("hlt");
+}
+
+static void er_pause_once(void) {
+  __asm__ __volatile__("pause");
 }
 
 static void er_halt_forever(void) {
@@ -1245,49 +1253,28 @@ static void er_run_mmio_profile(void) {
   er_run_mmio_probe();
 }
 
-static er_ui_status_t er_build_ui_boot_scene(er_ui_scene_t* scene,
-                                             er_ui_demo_apps_state_t* demo_state,
-                                             vr_font_face_t* font,
-                                             UINT32 width,
-                                             UINT32 height,
-                                             er_ui_resolved_theme_t theme) {
-  er_ui_status_t status;
-
-  if (scene == 0 || demo_state == 0 || font == 0) {
-    return ER_UI_ERR_INVALID_ARGUMENT;
-  }
-
-  status = er_ui_scene_init_with_allocator(scene, theme.colors.bg, er_ui_boot_allocator());
-  if (status != ER_UI_OK) return status;
-  return er_ui_demo_apps_emit_scene(demo_state, scene, font, er_ui_bounds(0.0f, 0.0f, (float)width, (float)height), theme);
-}
-
-static UINT8 er_ui_boot_render_scene(er_ui_demo_apps_state_t* demo_state,
-                                     vr_font_face_t* font,
-                                     ErUiSurfaceMode mode,
-                                     const ErUiSurfaceTilePlan* tile_plan,
-                                     ErUiSurfaceMemoryPlan memory_plan,
-                                     er_ui_scene_budget_t scene_budget,
-                                     ErUiSurfaceFrameBudget frame_budget,
-                                     er_ui_resolved_theme_t theme) {
-  er_ui_scene_t scene = {0};
+static UINT8 er_ui_boot_render_scene(er_ui_scene_t* scene,
+                                     er_ui_demo_apps_state_t* demo_state,
+                                     const ErUiBootRenderContext* render) {
   er_ui_scene_stats_t scene_stats;
   er_ui_scene_budget_violation_t scene_violation;
   ErUiSurfaceRenderStats render_stats;
   ErUiSurfaceFrameBudgetViolation frame_violation;
 
-  if (demo_state == 0 || font == 0 || tile_plan == 0) {
+  if (scene == 0 || demo_state == 0 || render == 0 || render->font == 0 || render->tile_plan == 0) {
     return 0u;
   }
 
-  if (er_build_ui_boot_scene(&scene, demo_state, font, mode.width, mode.height, theme) != ER_UI_OK) {
+  er_ui_scene_clear_commands(scene);
+  if (er_ui_demo_apps_emit_scene(demo_state, scene, render->font,
+                                 er_ui_bounds(0.0f, 0.0f, (float)render->mode.width, (float)render->mode.height),
+                                 render->theme) != ER_UI_OK) {
     er_println("ui renderer: scene build failed");
-    er_ui_scene_destroy(&scene);
     return 0u;
   }
 
-  scene_stats = er_ui_scene_stats(&scene);
-  if (er_ui_scene_first_budget_violation(scene_stats, scene_budget, &scene_violation)) {
+  scene_stats = er_ui_scene_stats(scene);
+  if (er_ui_scene_first_budget_violation(scene_stats, render->scene_budget, &scene_violation)) {
     er_print("ui renderer: scene budget exceeded ");
     er_print(scene_violation.name);
     er_print(" actual=");
@@ -1295,17 +1282,15 @@ static UINT8 er_ui_boot_render_scene(er_ui_demo_apps_state_t* demo_state,
     er_print(" limit=");
     er_print_u64_dec((UINT64)scene_violation.limit);
     er_println("");
-    er_ui_scene_destroy(&scene);
     return 0u;
   }
 
-  if (er_ui_gop_renderer_render_scene_with_font_stats(&scene, font, &render_stats) == 0u) {
+  if (er_ui_gop_renderer_render_scene_with_font_stats(scene, render->font, &render_stats) == 0u) {
     er_println("ui renderer: render failed");
-    er_ui_scene_destroy(&scene);
     return 0u;
   }
 
-  if (er_ui_surface_render_stats_first_budget_violation(render_stats, frame_budget, &frame_violation) != 0u) {
+  if (er_ui_surface_render_stats_first_budget_violation(render_stats, render->frame_budget, &frame_violation) != 0u) {
     er_print("ui renderer: frame budget exceeded ");
     er_print(frame_violation.name);
     er_print(" actual=");
@@ -1313,7 +1298,6 @@ static UINT8 er_ui_boot_render_scene(er_ui_demo_apps_state_t* demo_state,
     er_print(" limit=");
     er_print_u64_dec(frame_violation.limit);
     er_println("");
-    er_ui_scene_destroy(&scene);
     return 0u;
   }
 
@@ -1326,13 +1310,88 @@ static UINT8 er_ui_boot_render_scene(er_ui_demo_apps_state_t* demo_state,
   er_print(" text=");
   er_print_u64_dec(render_stats.text_quads);
   er_print(" tile_bytes=");
-  er_print_u64_dec(tile_plan->max_tile_bytes);
+  er_print_u64_dec(render->tile_plan->max_tile_bytes);
   er_print(" mem=");
-  er_print_u64_dec(memory_plan.total_bytes);
+  er_print_u64_dec(render->memory_plan.total_bytes);
   er_println("");
 
-  er_ui_scene_destroy(&scene);
   return 1u;
+}
+
+static er_ui_action_t er_ui_boot_action_from_ps2(er_ui_runtime_state_t* runtime,
+                                                 const er_ui_scene_t* scene,
+                                                 ErPs2KeyboardAction input) {
+  er_ui_action_t action = {0};
+
+  action.kind = ER_UI_ACTION_NONE;
+  if (input.kind == ER_PS2_KEYBOARD_ACTION_UI_KEY) {
+    return er_ui_runtime_key_down(runtime, scene, input.key, input.modifiers);
+  }
+  if (input.kind == ER_PS2_KEYBOARD_ACTION_SELECT_SURFACE) {
+    action.kind = ER_UI_ACTION_TAB_SELECTED;
+    action.id = input.surface_id;
+  }
+  return action;
+}
+
+static UINT8 er_ui_boot_apply_input(er_ui_demo_apps_state_t* demo_state,
+                                    er_ui_runtime_state_t* runtime,
+                                    er_ui_scene_t* scene,
+                                    ErPs2KeyboardAction input,
+                                    UINT8* out_redraw) {
+  er_ui_action_t action;
+  bool changed = false;
+
+  if (out_redraw == 0) {
+    return 0u;
+  }
+  *out_redraw = 0u;
+  if (demo_state == 0 || runtime == 0 || scene == 0) {
+    return 0u;
+  }
+  if (input.kind == ER_PS2_KEYBOARD_ACTION_NONE) {
+    return 1u;
+  }
+  action = er_ui_boot_action_from_ps2(runtime, scene, input);
+  if (action.kind == ER_UI_ACTION_NONE) {
+    return 1u;
+  }
+  if (er_ui_demo_apps_apply_action(demo_state, action, &changed) != ER_UI_OK) {
+    return 0u;
+  }
+  *out_redraw = (UINT8)(changed || er_ui_action_needs_redraw(action));
+  return 1u;
+}
+
+//@optimizer-ignore-function post-ExitBootServices input loop must poll PS/2 I/O and redraw after accepted key events
+static void er_ui_boot_input_loop(er_ui_demo_apps_state_t* demo_state,
+                                  er_ui_runtime_state_t* runtime,
+                                  er_ui_scene_t* scene,
+                                  const ErUiBootRenderContext* render) {
+  ErPs2KeyboardState keyboard = {0};
+
+  for (;;) {
+    ErPs2KeyboardAction input;
+    UINT8 redraw = 0u;
+
+    if (er_ps2_keyboard_poll(&keyboard, &input) == 0u) {
+      er_halt_forever();
+    }
+    if (input.kind == ER_PS2_KEYBOARD_ACTION_QUIT) {
+      er_halt_forever();
+    }
+    if (input.kind == ER_PS2_KEYBOARD_ACTION_NONE) {
+      er_pause_once();
+      continue;
+    }
+    if (er_ui_boot_apply_input(demo_state, runtime, scene, input, &redraw) == 0u) {
+      er_halt_forever();
+    }
+    if (redraw != 0u &&
+        er_ui_boot_render_scene(scene, demo_state, render) == 0u) {
+      er_halt_forever();
+    }
+  }
 }
 
 static void er_run_ui_profile(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE* SystemTable) {
@@ -1346,7 +1405,10 @@ static void er_run_ui_profile(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE* SystemTa
   er_ui_resolved_theme_t theme = er_ui_resolved_theme(
     ER_UI_STYLE_AUTHORITY_USER,
     (er_ui_style_preset_t){ER_UI_COLOR_SCHEME_DARK, ER_UI_ACCENT_NEUTRAL, ER_UI_RADIUS_DEFAULT});
+  er_ui_scene_t scene = {0};
+  er_ui_runtime_state_t runtime = {0};
   er_ui_demo_apps_state_t demo_state = {0};
+  ErUiBootRenderContext render_context = {0};
   vr_font_face_t* font = 0;
 
   er_println("boot profile: ui");
@@ -1399,16 +1461,37 @@ static void er_run_ui_profile(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE* SystemTa
     return;
   }
   frame_budget = er_ui_surface_frame_budget_from_plan(&tile_plan, scene_budget, ER_UI_BOOT_RENDER_OVERDRAW_BUDGET);
+  render_context.font = font;
+  render_context.mode = mode;
+  render_context.tile_plan = &tile_plan;
+  render_context.memory_plan = memory_plan;
+  render_context.scene_budget = scene_budget;
+  render_context.frame_budget = frame_budget;
+  render_context.theme = theme;
 
   if (er_ui_demo_apps_state_init(&demo_state, er_ui_boot_allocator()) != ER_UI_OK) {
     er_println("ui renderer: demo app state failed");
     vr_font_face_destroy(font);
     return;
   }
+  if (er_ui_runtime_state_init_with_allocator(&runtime, er_ui_boot_allocator()) != ER_UI_OK) {
+    er_println("ui renderer: runtime state failed");
+    er_ui_demo_apps_state_destroy(&demo_state);
+    vr_font_face_destroy(font);
+    return;
+  }
+  if (er_ui_scene_init_with_allocator(&scene, theme.colors.bg, er_ui_boot_allocator()) != ER_UI_OK) {
+    er_println("ui renderer: scene state failed");
+    er_ui_runtime_state_destroy(&runtime);
+    er_ui_demo_apps_state_destroy(&demo_state);
+    vr_font_face_destroy(font);
+    return;
+  }
 
   er_println("ui renderer: render scene");
-  if (er_ui_boot_render_scene(&demo_state, font, mode, &tile_plan, memory_plan, scene_budget,
-                              frame_budget, theme) == 0u) {
+  if (er_ui_boot_render_scene(&scene, &demo_state, &render_context) == 0u) {
+    er_ui_scene_destroy(&scene);
+    er_ui_runtime_state_destroy(&runtime);
     er_ui_demo_apps_state_destroy(&demo_state);
     vr_font_face_destroy(font);
     return;
@@ -1417,11 +1500,13 @@ static void er_run_ui_profile(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE* SystemTa
   er_gfx_console_set_enabled(0u);
   er_println("boot services: exiting");
   if (er_exit_boot_services(ImageHandle, SystemTable) == 0u) {
+    er_ui_scene_destroy(&scene);
+    er_ui_runtime_state_destroy(&runtime);
     er_ui_demo_apps_state_destroy(&demo_state);
     vr_font_face_destroy(font);
     er_halt_forever();
   }
-  er_halt_forever();
+  er_ui_boot_input_loop(&demo_state, &runtime, &scene, &render_context);
 }
 
 static void er_run_invalid_profile(void) {
