@@ -753,6 +753,8 @@ void run_node_tests(void) {
     er_ui_resolved_theme_t theme = er_ui_resolved_theme_user_default();
     expect_status(er_ui_node_render(&root, &scene, face, er_ui_bounds(0.0f, 0.0f, 320.0f, 160.0f), theme), ER_UI_OK,
                   "node: card tree renders");
+    expect_status(er_ui_node_render(&outer_card, &scene, face, er_ui_bounds(0.0f, 0.0f, 320.0f, 160.0f), theme), ER_UI_ERR_INVALID_ARGUMENT,
+                  "node: render enforces composition validation");
 
     er_ui_node_t alert = er_ui_node_alert("Heads up", "Reusable components stay in UI core.", theme.colors.warning);
     er_ui_node_t avatar = er_ui_node_avatar("ER", theme.colors.accent, true);

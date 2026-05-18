@@ -2915,6 +2915,9 @@ er_ui_status_t er_ui_node_render(
   er_ui_bounds_t bounds,
   er_ui_resolved_theme_t theme) {
   if (!node || !scene || !font || !er_ui_bounds_valid(bounds)) return ER_UI_ERR_INVALID_ARGUMENT;
+  er_ui_node_composition_issue_t composition_issue = {0};
+  er_ui_status_t composition_status = er_ui_node_validate_composition(node, &composition_issue);
+  if (composition_status != ER_UI_OK) return composition_status;
   er_ui_bounds_t rect = er_ui_node_resolve_bounds(node, bounds);
   er_ui_status_t chrome_status = er_ui_node_emit_chrome(node, scene, rect, theme);
   if (chrome_status != ER_UI_OK) return chrome_status;
