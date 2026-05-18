@@ -2,6 +2,7 @@
 #define ER_UI_PRIMITIVES_H
 
 #include <stdbool.h>
+#include <stddef.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -24,6 +25,7 @@ er_ui_bounds_t er_ui_bounds_bottom(er_ui_bounds_t bounds, float h);
 bool er_ui_bounds_contains(er_ui_bounds_t bounds, float x, float y);
 bool er_ui_bounds_intersect(er_ui_bounds_t a, er_ui_bounds_t b, er_ui_bounds_t* out_bounds);
 bool er_ui_bounds_valid(er_ui_bounds_t bounds);
+size_t er_ui_ascii_len(const char* text);
 float er_ui_float_clamp(float value, float min_value, float max_value);
 float er_ui_float_min(float a, float b);
 float er_ui_float_max(float a, float b);

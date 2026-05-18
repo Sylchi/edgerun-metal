@@ -8,6 +8,7 @@
 #include <string.h>
 
 #define ER_TEST_VARFONT_TEXT_LEN 3u
+#define ER_TEST_ASCII_LEDGER_LEN 6u
 
 int g_tests_total = 0;
 int g_tests_failed = 0;
@@ -442,6 +443,9 @@ static void test_primitive_bounds_helpers(void) {
   expect_true(er_ui_bounds_valid(bounds), "bounds: valid geometry is accepted");
   expect_true(!er_ui_bounds_valid(er_ui_bounds(0.0f, 0.0f, 0.0f, 1.0f)), "bounds: zero width is invalid");
   expect_true(!er_ui_float_is_finite_value(NAN), "bounds: nan is not finite");
+  expect_size(er_ui_ascii_len(NULL), 0u, "primitives: null ascii len is zero");
+  expect_size(er_ui_ascii_len(""), 0u, "primitives: empty ascii len is zero");
+  expect_size(er_ui_ascii_len("Ledger"), ER_TEST_ASCII_LEDGER_LEN, "primitives: ascii len counts bytes");
 }
 
 static void test_painter_facade_pushes_scene_commands(void) {
