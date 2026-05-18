@@ -2016,13 +2016,13 @@ static er_ui_status_t er_ui_node_render_card_summary(
   er_ui_bounds_t bounds,
   er_ui_resolved_theme_t theme) {
   if (!node || !scene || !font || !node->label || !node->detail || !er_ui_bounds_valid(bounds)) return ER_UI_ERR_INVALID_ARGUMENT;
-  er_ui_status_t status = er_ui_component_card_emit(scene, bounds, theme);
-  if (status != ER_UI_OK) return status;
   float pad = 16.0f;
-  status = er_ui_node_render_text(scene, font, node->label, er_ui_bounds(bounds.x + pad, bounds.y + pad, bounds.w - pad * 2.0f, 26.0f),
-                                  theme.colors.text);
+  er_ui_bounds_t inner;
+  er_ui_status_t status = er_ui_node_card_inner(scene, bounds, theme, pad, &inner);
   if (status != ER_UI_OK) return status;
-  return er_ui_node_render_text(scene, font, node->detail, er_ui_bounds(bounds.x + pad, bounds.y + pad + 28.0f, bounds.w - pad * 2.0f, 24.0f),
+  status = er_ui_node_render_text(scene, font, node->label, er_ui_bounds(inner.x, inner.y, inner.w, 26.0f), theme.colors.text);
+  if (status != ER_UI_OK) return status;
+  return er_ui_node_render_text(scene, font, node->detail, er_ui_bounds(inner.x, inner.y + 28.0f, inner.w, 24.0f),
                                 theme.colors.muted);
 }
 
