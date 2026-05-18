@@ -2,8 +2,9 @@
 #define ER_UI_GOP_RENDERER_H
 
 /*
- * Purpose: render platform-neutral EdgeRun UI scenes into a UEFI GOP framebuffer.
- * Intention: keep the metal display backend explicit, testable, and independent of host APIs.
+ * Purpose: compatibility declarations for the GOP-backed display adapter and legacy surface names.
+ * Intention: new software surface code should include er_ui_surface_renderer.h so GOP remains
+ * only the firmware scanout provider, not the UI renderer model.
  */
 
 #include "er_types.h"
