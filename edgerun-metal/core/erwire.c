@@ -88,6 +88,7 @@ static void erwire_write_u32(UINT8** cursor, UINT32 value) {
   *cursor += ERWIRE_U32_BYTES;
 }
 
+//@optimizer-ignore-function CRC32 must fold every payload byte through the bit-serial polynomial
 static UINT32 erwire_crc32(const UINT8* data, UINT32 len) {
   UINT32 crc = ERWIRE_CRC32_INITIAL;
   UINT32 i;

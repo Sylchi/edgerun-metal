@@ -1454,6 +1454,7 @@ UINT8 er_ui_gop_surface_render_scene_tile_with_font_stats(ErUiGopSurface* surfac
   return 1u;
 }
 
+//@optimizer-ignore-function dirty rendering must redraw each requested tile deterministically
 UINT8 er_ui_gop_surface_render_scene_dirty_tiles_with_font_stats(ErUiGopSurface* surface,
                                                                  const er_ui_scene_t* scene,
                                                                  const vr_font_face_t* font,
