@@ -29,7 +29,7 @@ Confirmed working:
 - Wasm VM runs on real hardware
 - PCI config-space hostcalls exist
 - COM1 serial mirror exists for `er_print`
-- Boot profiles exist: `smoke`, `pci`, `quiet`, `mmio`, `ui`
+- Boot profiles exist: `ui`, `native`, `tpm`, `gpu`
 - Wasm module headers are generated from tracked WAT sources
 - Generated build artifacts are ignored by Git
 - GOP-backed UI rectangle scene renderer exists for the `ui` profile
@@ -41,7 +41,7 @@ Netboot is now support infrastructure. Do not keep redesigning it unless it bloc
 
 The real work is the relay core:
 
-1. Keep known boot profiles stable.
+1. Keep the UI runtime and active hardware profiles stable.
 2. Use native VirtIO-net as the first EdgeRun Ethernet ingress.
 3. Parse incoming erwire packets without firmware networking.
 4. Verify admitted storage work before dispatching it to VirtIO block endpoint adapters.
@@ -87,7 +87,7 @@ tools and tests; the UEFI binary still links with LLVM `lld`.
 
 ## Build profiles
 
-Default build is `smoke` profile:
+Default build is the interactive `ui` profile:
 
 ```bash
 make -C edgerun-metal
@@ -97,21 +97,19 @@ Explicit profiles:
 
 ```bash
 make -C edgerun-metal wasm-modules
-make -C edgerun-metal smoke
-make -C edgerun-metal pci
-make -C edgerun-metal quiet
-make -C edgerun-metal mmio
 make -C edgerun-metal ui
+make -C edgerun-metal native
+make -C edgerun-metal tpm
+make -C edgerun-metal gpu
 ```
 
 Profiles:
 
 ```text
-smoke = banner + test Wasm only
-pci   = concise PCI target scan: NVIDIA / NVMe / Ethernet
-quiet = minimal halt-ready boot
-mmio  = conservative read-only NVIDIA BAR0 probe
-ui    = GOP-backed UI-core component scene
+ui     = GOP-backed UI runtime, Wasm UI app, PS/2 input loop
+native = QEMU microvm VirtIO-MMIO erwire-over-Ethernet probe
+tpm    = QEMU swtpm/TPM2 CRB direct command probe
+gpu    = VirtIO GPU/VGA PCI framebuffer probe
 ```
 
 Output:
@@ -171,12 +169,12 @@ Bootfile:        BOOTX64.EFI or EFI/BOOT/BOOTX64.EFI
 
 ## Local next goal
 
-Build and test the `pci` profile:
+Build and test the default UI profile:
 
 ```bash
 cd /home/ken/edgerun-c
 git pull --ff-only origin main
-make -C edgerun-metal pci
+make -C edgerun-metal ui
 ```
 
 Expected real-hardware screen output:
@@ -184,16 +182,13 @@ Expected real-hardware screen output:
 ```text
 EdgeRun Metal Core v0.2
 UEFI boot OK
-boot profile: pci
-PCI target scan: nvidia/nvme/ethernet
-  target: nvidia ...
-  target: nvme ...
-  target: ethernet ...
-PCI target scan done
-Press any key to halt...
+boot profile: ui
+ui renderer: init font
+ui renderer: render scene
+boot services: exiting
 ```
 
-If build fails with unused profile functions, the fix is to avoid preprocessor-removing profile calls or mark unused functions intentionally. Current intended code path uses runtime `if`/profile dispatch so all profile functions remain referenced.
+Retired bring-up profiles are covered by host tests instead of boot targets.
 
 ## Bus model
 
@@ -237,11 +232,9 @@ These are adapter-enabling steps. They are not the app or driver ABI. Apps and d
 
 ## Proven bring-up
 
-### Concise PCI target scanner
+### PCI target classification
 
-Status: implemented in native profile `pci`.
-
-Targets:
+Status: covered by host tests and active VirtIO PCI paths.
 
 - NVIDIA vendor `0x10de`
 - NVMe class `0x0108xx`
@@ -249,7 +242,7 @@ Targets:
 
 ### MMIO read-only hostcalls
 
-Status: implemented as bring-up scaffolding.
+Status: covered by host tests and used by active native device paths.
 
 ```text
 edgerun.mmio.map(phys, len) -> handle
@@ -261,9 +254,7 @@ Current limits:
 - read-only only
 - fixed native handle table
 - range and alignment validation before reads
-- `mmio` profile maps only a fixed 4 KiB BAR0 window
 - no Boot Services memory ownership changes
-- no MMIO writes yet
 
 ### Native erwire over VirtIO-net
 

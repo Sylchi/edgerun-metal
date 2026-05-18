@@ -287,11 +287,10 @@ Build individual `edgerun-metal` profiles:
 
 ```bash
 make -C edgerun-metal wasm-modules
-make edgerun-smoke
-make edgerun-pci
-make edgerun-quiet
-make -C edgerun-metal mmio
 make edgerun-ui
+make edgerun-native
+make edgerun-tpm
+make edgerun-gpu
 ```
 
 Build and test `varfont`:

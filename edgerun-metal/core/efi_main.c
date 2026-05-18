@@ -19,15 +19,12 @@
 #include "er_native_boot.h"
 #include "font_geist.h"
 #include "wasm_vm.h"
-#include "wasm_test_module.h"
-#include "wasm_pci_scan_module.h"
 #include "wasm_ui_counter_module.h"
 
 #ifndef ER_BOOT_PROFILE
-#define ER_BOOT_PROFILE ER_BOOT_PROFILE_SMOKE
+#define ER_BOOT_PROFILE ER_BOOT_PROFILE_UI
 #endif
 
-#define ER_MMIO_PROBE_WINDOW_LEN 0x1000u
 #define ER_CONSOLE_MIN_COLUMNS 80u
 #define ER_CONSOLE_MIN_ROWS 25u
 #define ER_UI_BOOT_ARENA_SIZE (4u * 1024u * 1024u)
@@ -82,9 +79,6 @@
 #define ER_TPM_PROFILE_RANDOM_REQUEST_BYTES 16u
 #define ER_TPM_PROFILE_DIGEST_BYTES 32u
 #define ER_TPM_PROFILE_SIGNATURE_BYTES 64u
-#define ER_MMIO_PROBE_REG0_OFFSET 0x00u
-#define ER_MMIO_PROBE_REG1_OFFSET 0x04u
-#define ER_MMIO_PROBE_REG2_OFFSET 0x08u
 enum {
   ER_LOG_U64_STAGE_IDLE = 0u,
   ER_LOG_U64_STAGE_PCI_FIELDS = 3u,
@@ -125,14 +119,6 @@ typedef struct {
   ErUiWasmAppRuntime* wasm_runtime;
   UINT8 wasm_scene_ready;
 } ErUiBootRenderContext;
-
-static void er_reset_log_state(void) {
-  g_log_u64_stage = ER_LOG_U64_STAGE_IDLE;
-  g_log_hex_stage = ER_LOG_HEX_STAGE_ID;
-  g_log_bus = 0;
-  g_log_dev = 0;
-  g_log_func = 0;
-}
 
 static void* er_ui_boot_alloc(void* user, size_t size, size_t align) {
   UINTN mask;
@@ -613,286 +599,6 @@ static UINT8 er_exit_boot_services(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE* Sys
   return 0u;
 }
 
-static int er_run_module(const UINT8* module_data, UINT32 module_size, const char* module_name) {
-  ErWasmModule module;
-  UINT32 main_index = 0;
-  INT64 main_result = 0;
-
-  if (er_wasm_init(&module, module_data, module_size, &g_host_calls) != 0) {
-    er_println("Wasm module load failed");
-    return -1;
-  }
-
-  er_println(module_name);
-  er_println("Wasm module loaded");
-
-  if (er_wasm_find_main(&module, &main_index) != 0) {
-    er_println("Wasm export missing: main");
-    return -1;
-  }
-
-  er_println("Wasm export found: main");
-
-  if (er_wasm_execute_i64(&module, main_index, &main_result) != 0) {
-    er_println("Wasm VM execution failed");
-    return -1;
-  }
-
-  er_println("Wasm VM OK");
-  er_print("wasm main() returned: ");
-  if (main_result < 0) {
-    er_print("-");
-    er_print_u64_dec((UINT64)(-main_result));
-  } else {
-    er_print_u64_dec((UINT64)main_result);
-  }
-  er_println("");
-
-  return 0;
-}
-
-static void er_print_pci_value(const char* label, UINT32 value) {
-  er_print("    ");
-  er_print(label);
-  er_print(": ");
-  er_print_u64_hex((UINT64)value);
-  er_print("\r\n");
-}
-
-static void er_print_pci_bar_value(UINTN index, UINT32 value) {
-  er_print("    BAR");
-  er_print_u64_dec((UINT64)index);
-  er_print(": ");
-  er_print_u64_hex((UINT64)value);
-  er_print("\r\n");
-}
-
-static void er_print_pci_bars(const ErPciDeviceSnapshot* snapshot) {
-  UINTN i;
-
-  for (i = 0u; i < ER_PCI_BAR_COUNT; ++i) {
-    er_print_pci_bar_value(i, snapshot->bars[i]);
-  }
-}
-
-static void er_print_bar_kind(UINT8 kind) {
-  switch (kind) {
-    case ER_PCI_BAR_KIND_IO:
-      er_print("io");
-      break;
-    case ER_PCI_BAR_KIND_MMIO32:
-      er_print("mmio32");
-      break;
-    case ER_PCI_BAR_KIND_MMIO64:
-      er_print("mmio64");
-      break;
-    default:
-      er_print("none");
-      break;
-  }
-}
-
-static const char* er_pci_target_label(UINT8 target_kind) {
-  switch (target_kind) {
-    case ER_PCI_TARGET_KIND_NVIDIA:
-      return "nvidia";
-    case ER_PCI_TARGET_KIND_NVME:
-      return "nvme";
-    case ER_PCI_TARGET_KIND_ETHERNET:
-      return "ethernet";
-    case ER_PCI_TARGET_KIND_DISPLAY:
-      return "display";
-    default:
-      return "unknown";
-  }
-}
-
-static void er_print_mmio_read32(INT64 handle, UINT32 offset) {
-  INT64 value = er_mmio_read32(handle, (INT64)offset);
-
-  er_print("    mmio[");
-  er_print_u64_hex((UINT64)offset);
-  er_print("]: ");
-  if (value < 0) {
-    er_println("read failed");
-    return;
-  }
-
-  er_print_u64_hex((UINT64)value);
-  er_println("");
-}
-
-static void er_print_pci_location(const char* prefix, const char* label, const ErPciDeviceSnapshot* snapshot) {
-  er_print(prefix);
-  er_print(label);
-  er_print(" bus=");
-  er_print_u64_hex((UINT64)snapshot->bus);
-  er_print(" dev=");
-  er_print_u64_hex((UINT64)snapshot->dev);
-  er_print(" func=");
-  er_print_u64_hex((UINT64)snapshot->func);
-  er_print("\r\n");
-}
-
-static void er_probe_mmio_readonly(const char* label, const ErPciDeviceSnapshot* snapshot) {
-  ErPciBarSelection selection;
-  INT64 handle;
-
-  if (snapshot == 0 || snapshot->present == 0u) {
-    return;
-  }
-
-  selection = er_pci_select_first_mmio_bar(snapshot->bars);
-
-  er_print_pci_location("  mmio target: ", label, snapshot);
-  er_print_u64_field("command/status", (UINT64)snapshot->command_status);
-
-  if (er_pci_command_memory_enabled(snapshot->command_status) == 0u) {
-    er_println("    BAR skipped: memory decoding disabled");
-    return;
-  }
-
-  if (selection.found == 0u) {
-    er_println("    BAR skipped: no usable MMIO BAR");
-    return;
-  }
-
-  er_print("    BAR index: ");
-  er_print_u64_dec((UINT64)selection.index);
-  er_print("\r\n");
-  er_print("    BAR kind: ");
-  er_print_bar_kind(selection.info.kind);
-  er_print("\r\n");
-  er_print_u64_field("BAR base", selection.info.base);
-  er_print_u64_field("BAR window", (UINT64)ER_MMIO_PROBE_WINDOW_LEN);
-
-  handle = er_mmio_map((INT64)selection.info.base, (INT64)ER_MMIO_PROBE_WINDOW_LEN);
-  if (handle < 0) {
-    er_println("    BAR map failed");
-    return;
-  }
-
-  er_print("    BAR handle: ");
-  er_print_u64_dec((UINT64)handle);
-  er_print("\r\n");
-  er_print_mmio_read32(handle, ER_MMIO_PROBE_REG0_OFFSET);
-  er_print_mmio_read32(handle, ER_MMIO_PROBE_REG1_OFFSET);
-  er_print_mmio_read32(handle, ER_MMIO_PROBE_REG2_OFFSET);
-}
-
-static void er_print_pci_target(const char* label, const ErPciDeviceSnapshot* snapshot) {
-  if (snapshot == 0 || snapshot->present == 0u) {
-    return;
-  }
-
-  er_print_pci_location("  target: ", label, snapshot);
-
-  er_print_pci_value("id", snapshot->id);
-  er_print_pci_value("command/status", snapshot->command_status);
-  er_print_pci_value("class/revision", snapshot->class_revision);
-  er_print_pci_value("header/cacheline", snapshot->header_cacheline);
-  er_print_pci_bars(snapshot);
-}
-
-static void erwire_send_pci_snapshot(UINT8 target_kind, const ErPciDeviceSnapshot* snapshot) {
-  if (snapshot == 0 || snapshot->present == 0u) {
-    return;
-  }
-  erwire_send_pci_device(snapshot->bus, snapshot->dev, snapshot->func, (UINT32)target_kind, snapshot->id,
-                         snapshot->command_status, snapshot->class_revision, snapshot->header_cacheline,
-                         snapshot->bars);
-}
-
-static UINT8 er_scan_mmio_probe_function(UINT32 bus, UINT32 dev, UINT32 func) {
-  ErPciDeviceSnapshot snapshot;
-  UINT8 target_kind;
-
-  if (er_pci_read_snapshot(bus, dev, func, &snapshot) == 0u) {
-    return 0;
-  }
-
-  target_kind = er_pci_classify_target(snapshot.id, snapshot.class_revision);
-  if (target_kind == ER_PCI_TARGET_KIND_NVIDIA) {
-    er_probe_mmio_readonly("nvidia", &snapshot);
-    return 1;
-  }
-
-  return 0;
-}
-
-static void er_scan_pci_function(UINT32 bus, UINT32 dev, UINT32 func) {
-  ErPciDeviceSnapshot snapshot;
-  UINT8 target_kind;
-
-  if (er_pci_read_snapshot(bus, dev, func, &snapshot) == 0u) {
-    return;
-  }
-
-  target_kind = er_pci_classify_target(snapshot.id, snapshot.class_revision);
-  if (target_kind != ER_PCI_TARGET_KIND_NONE) {
-    erwire_send_pci_snapshot(target_kind, &snapshot);
-    er_print_pci_target(er_pci_target_label(target_kind), &snapshot);
-    return;
-  }
-}
-
-typedef UINT8 (*ErPciFunctionVisitor)(UINT32 bus, UINT32 dev, UINT32 func);
-
-//@optimizer-ignore-function boot PCI discovery must scan the bounded bus/device/function config-space grid
-static UINT8 er_visit_pci_functions(ErPciFunctionVisitor visitor) {
-  UINT32 bus;
-  UINT32 dev;
-
-  if (visitor == 0) {
-    return 0;
-  }
-
-  for (bus = 0; bus < ER_PCI_BUS_COUNT; ++bus) {
-    for (dev = 0; dev < ER_PCI_DEVICE_COUNT; ++dev) {
-      UINT32 id0 = er_pci_cfg_read32(bus, dev, 0u, ER_PCI_ID_OFFSET);
-      UINT32 header0;
-      UINT32 max_func;
-      UINT32 func;
-
-      if (er_pci_device_present(id0) == 0u) {
-        continue;
-      }
-
-      header0 = er_pci_cfg_read32(bus, dev, 0u, ER_PCI_HEADER_CACHELINE_OFFSET);
-      max_func = er_pci_function_count(header0);
-
-      for (func = 0; func < max_func; ++func) {
-        if (visitor(bus, dev, func) != 0u) {
-          return 1;
-        }
-      }
-    }
-  }
-
-  return 0;
-}
-
-static UINT8 er_scan_pci_target_visitor(UINT32 bus, UINT32 dev, UINT32 func) {
-  er_scan_pci_function(bus, dev, func);
-  return 0;
-}
-
-static void er_scan_pci_targets(void) {
-  er_println("PCI target scan: nvidia/nvme/ethernet");
-  (void)er_visit_pci_functions(er_scan_pci_target_visitor);
-  er_println("PCI target scan done");
-}
-
-static void er_run_mmio_probe(void) {
-  er_println("MMIO read-only probe: nvidia MMIO BAR");
-  if (er_visit_pci_functions(er_scan_mmio_probe_function) != 0u) {
-    er_println("MMIO read-only probe done");
-    return;
-  }
-
-  er_println("MMIO read-only probe: no NVIDIA target found");
-}
-
 static INT64 er_wasm_bus_exec_host(const ErBusIoPacket* request, ErBusIoPacket* response) {
   return (INT64)er_bus_execute_io_packet(request, response);
 }
@@ -907,22 +613,6 @@ static void er_install_hostcalls(void) {
   g_host_calls.bus_exec = er_wasm_bus_exec_host;
   g_host_calls.memory = g_wasm_driver_memory;
   g_host_calls.memory_size = (UINT32)sizeof(g_wasm_driver_memory);
-}
-
-static void er_run_smoke_profile(void) {
-  er_println("boot profile: smoke");
-  er_reset_log_state();
-  er_run_module(g_edgerun_test_wasm, ER_TEST_WASM_SIZE, "test_return_123");
-}
-
-static void er_run_pci_profile(void) {
-  er_println("boot profile: pci");
-  er_scan_pci_targets();
-}
-
-static void er_run_quiet_profile(void) {
-  er_println("boot profile: quiet");
-  er_println("halt ready");
 }
 
 static void er_run_native_profile(void) {
@@ -1279,11 +969,6 @@ static void er_run_tpm_profile(EFI_SYSTEM_TABLE* SystemTable) {
                               (UINT32)sizeof(response), &response_len);
   }
   er_println("tpm: CRB direct command path ok");
-}
-
-static void er_run_mmio_profile(void) {
-  er_println("boot profile: mmio");
-  er_run_mmio_probe();
 }
 
 static UINT8 er_ui_boot_append_wasm_scene(er_ui_scene_t* scene, const er_ui_scene_t* wasm_scene) {
@@ -1715,21 +1400,6 @@ static void er_run_boot_profile(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE* System
     return;
   }
 
-  if (ER_BOOT_PROFILE == ER_BOOT_PROFILE_PCI) {
-    er_run_pci_profile();
-    return;
-  }
-
-  if (ER_BOOT_PROFILE == ER_BOOT_PROFILE_QUIET) {
-    er_run_quiet_profile();
-    return;
-  }
-
-  if (ER_BOOT_PROFILE == ER_BOOT_PROFILE_MMIO) {
-    er_run_mmio_profile();
-    return;
-  }
-
   if (ER_BOOT_PROFILE == ER_BOOT_PROFILE_NATIVE) {
     er_run_native_profile();
     return;
@@ -1742,11 +1412,6 @@ static void er_run_boot_profile(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE* System
 
   if (ER_BOOT_PROFILE == ER_BOOT_PROFILE_GPU) {
     er_run_gpu_profile();
-    return;
-  }
-
-  if (ER_BOOT_PROFILE == ER_BOOT_PROFILE_SMOKE) {
-    er_run_smoke_profile();
     return;
   }
 

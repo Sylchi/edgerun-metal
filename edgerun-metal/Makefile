@@ -1,4 +1,4 @@
-.PHONY: all run run-native run-tpm clean print-path netboot smoke pci quiet mmio ui native tpm gpu rebuild-profile check test-core wasm-modules
+.PHONY: all run run-native run-tpm clean print-path netboot ui native tpm gpu rebuild-profile check test-core wasm-modules
 
 CC = clang
 HOST_CC ?= clang
@@ -16,15 +16,11 @@ CRYPTO_DIR := ../edgerun-crypto
 GENERATED_DIR := $(BUILD_DIR)/generated
 
 # Boot profiles are defined in core/er_boot_profile.h:
-#   0 = smoke: banner + test Wasm only
-#   1 = pci:   PCI scan module
-#   2 = quiet: minimal halt-ready boot
-#   3 = mmio:  read-only NVIDIA BAR0 probe
-#   4 = ui:    GOP-backed UI rectangle scene
+#   4 = ui:     GOP-backed UI runtime, Wasm UI app, PS/2 input loop
 #   5 = native: QEMU microvm VirtIO-MMIO erwire-over-Ethernet probe
-#   6 = tpm:   QEMU swtpm/TPM2 CRB direct command probe
-#   7 = gpu:   VirtIO GPU/VGA PCI probe
-ER_BOOT_PROFILE ?= 0
+#   6 = tpm:    QEMU swtpm/TPM2 CRB direct command probe
+#   7 = gpu:    VirtIO GPU/VGA PCI framebuffer probe
+ER_BOOT_PROFILE ?= 4
 
 CFLAGS := -std=c11 -Wall -Werror -ffreestanding -fshort-wchar -fno-builtin -fno-stack-protector -mno-red-zone -fuse-ld=lld -target x86_64-pc-windows-msvc \
           -I$(CURDIR)/core -I$(CURDIR) -I$(CURDIR)/../include -I$(CURDIR)/$(GENERATED_DIR) -I$(CURDIR)/$(CRYPTO_DIR)/include -I$(CURDIR)/$(UI_CORE_DIR)/include -I$(CURDIR)/$(VARFONT_DIR)/include -DER_BOOT_PROFILE=$(ER_BOOT_PROFILE)
@@ -49,7 +45,7 @@ VARFONT_HDRS := $(wildcard $(VARFONT_DIR)/include/*.h) $(wildcard $(VARFONT_DIR)
 CRYPTO_HDRS := $(wildcard $(CRYPTO_DIR)/include/*.h)
 EMBED_HEADER_SRC := tools/embed-header/main.c
 EMBED_HEADER_BIN := $(BUILD_DIR)/embed-header
-WASM_MODULE_HEADERS := core/wasm_test_module.h core/wasm_pci_scan_module.h core/wasm_driver_bus_probe_module.h core/wasm_ui_counter_module.h
+WASM_MODULE_HEADERS := core/wasm_driver_bus_probe_module.h core/wasm_ui_counter_module.h
 FONT_HEADER := $(GENERATED_DIR)/font_geist.h
 FONT_BAKED_HEADER := $(GENERATED_DIR)/font_geist_baked.h
 FONT_SOURCE := $(VARFONT_DIR)/fonts/Geist[wght].ttf
@@ -64,18 +60,6 @@ CORE_TEST_BIN := $(BUILD_DIR)/test-core
 IFACE ?=
 
 all: wasm-modules $(FONT_HEADER) $(FONT_BAKED_HEADER) $(EFI_OUT) $(EFI_BOOT)
-
-smoke:
-	$(MAKE) rebuild-profile ER_BOOT_PROFILE=0
-
-pci:
-	$(MAKE) rebuild-profile ER_BOOT_PROFILE=1
-
-quiet:
-	$(MAKE) rebuild-profile ER_BOOT_PROFILE=2
-
-mmio:
-	$(MAKE) rebuild-profile ER_BOOT_PROFILE=3
 
 ui:
 	$(MAKE) rebuild-profile ER_BOOT_PROFILE=4
@@ -95,7 +79,7 @@ rebuild-profile:
 
 netboot: $(NETBOOT_BIN) $(PXE4011_BIN)
 
-check: smoke pci mmio quiet ui tpm gpu test-core
+check: ui native tpm gpu test-core
 
 test-core: $(CORE_TEST_BIN)
 	./$(CORE_TEST_BIN)
@@ -106,14 +90,6 @@ $(EMBED_HEADER_BIN): $(EMBED_HEADER_SRC)
 	mkdir -p $(dir $@)
 	$(CCACHE_PREFIX) $(HOST_CC) $(HOST_CFLAGS) $(HOST_LDFLAGS) -o $@ $<
 
-$(GENERATED_DIR)/test_return_123.wasm: modules/test_return_123/test_return_123.wat
-	mkdir -p $(dir $@)
-	wat2wasm $< -o $@
-
-$(GENERATED_DIR)/pci_scan.wasm: modules/pci_scan/pci_scan.wat
-	mkdir -p $(dir $@)
-	wat2wasm $< -o $@
-
 $(GENERATED_DIR)/driver_bus_probe.wasm: modules/driver_bus_probe/driver_bus_probe.wat
 	mkdir -p $(dir $@)
 	wat2wasm $< -o $@
@@ -121,12 +97,6 @@ $(GENERATED_DIR)/driver_bus_probe.wasm: modules/driver_bus_probe/driver_bus_prob
 $(GENERATED_DIR)/ui_counter.wasm: modules/ui_counter/ui_counter.wat
 	mkdir -p $(dir $@)
 	wat2wasm $< -o $@
-
-core/wasm_test_module.h: $(GENERATED_DIR)/test_return_123.wasm $(EMBED_HEADER_BIN)
-	$(EMBED_HEADER_BIN) wasm $< $@ WASM_TEST_MODULE_H g_edgerun_test_wasm ER_TEST_WASM_SIZE modules/test_return_123/test_return_123.wat
-
-core/wasm_pci_scan_module.h: $(GENERATED_DIR)/pci_scan.wasm $(EMBED_HEADER_BIN)
-	$(EMBED_HEADER_BIN) wasm $< $@ WASM_PCI_SCAN_MODULE_H g_edgerun_pci_scan_wasm ER_PCI_SCAN_WASM_SIZE modules/pci_scan/pci_scan.wat
 
 core/wasm_driver_bus_probe_module.h: $(GENERATED_DIR)/driver_bus_probe.wasm $(EMBED_HEADER_BIN)
 	$(EMBED_HEADER_BIN) wasm $< $@ WASM_DRIVER_BUS_PROBE_MODULE_H g_edgerun_driver_bus_probe_wasm ER_DRIVER_BUS_PROBE_WASM_SIZE modules/driver_bus_probe/driver_bus_probe.wat
