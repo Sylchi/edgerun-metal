@@ -25,6 +25,85 @@
 #define ERWIRE_KIND_BUS_IO_RESPONSE 24u
 #define ERWIRE_MAX_PAYLOAD 1024u
 #define ERWIRE_HASH_LEN 32u
+#define ERWIRE_STREAM_STATE_COUNT 16u
+#define ERWIRE_LE_BYTE_SHIFT_1 8u
+#define ERWIRE_LE_BYTE_SHIFT_2 16u
+#define ERWIRE_LE_BYTE_SHIFT_3 24u
+#define ERWIRE_U64_HIGH_WORD_SHIFT 32u
+#define ERWIRE_BYTE_INDEX_0 0u
+#define ERWIRE_BYTE_INDEX_1 1u
+#define ERWIRE_BYTE_INDEX_2 2u
+#define ERWIRE_BYTE_INDEX_3 3u
+#define ERWIRE_U32_SIZE 4u
+#define ERWIRE_ASCII_PRINTABLE_MIN 0x20u
+#define ERWIRE_ASCII_PRINTABLE_MAX 0x7fu
+#define ERWIRE_BUS_KIND_PCI_CONFIG 1u
+#define ERWIRE_BUS_KIND_MMIO 2u
+#define ERWIRE_BUS_KIND_IO_PORT 3u
+#define ERWIRE_BUS_STATUS_OK 0u
+#define ERWIRE_BUS_STATUS_DENIED 1u
+#define ERWIRE_BUS_STATUS_INVALID_ADDRESS 2u
+#define ERWIRE_BUS_STATUS_INVALID_OPERATION 3u
+#define ERWIRE_BUS_STATUS_IO_FAILED 4u
+#define ERWIRE_BUS_ACCESS_READ32 0x00000001u
+#define ERWIRE_BUS_ACCESS_WRITE32 0x00000002u
+#define ERWIRE_BUS_ACCESS_READ8 0x00000004u
+#define ERWIRE_BUS_ACCESS_WRITE8 0x00000008u
+#define ERWIRE_BUS_ACCESS_READ16 0x00000010u
+#define ERWIRE_BUS_ACCESS_WRITE16 0x00000020u
+#define ERWIRE_HEADER_MAGIC_OFFSET 0u
+#define ERWIRE_HEADER_VERSION_OFFSET 4u
+#define ERWIRE_HEADER_SIZE_OFFSET 6u
+#define ERWIRE_HEADER_STREAM_ID_OFFSET 8u
+#define ERWIRE_HEADER_SEQ_OFFSET 12u
+#define ERWIRE_HEADER_KIND_OFFSET 16u
+#define ERWIRE_HEADER_FLAGS_OFFSET 18u
+#define ERWIRE_HEADER_PAYLOAD_LEN_OFFSET 20u
+#define ERWIRE_HEADER_PAYLOAD_CRC_OFFSET 24u
+#define ERWIRE_PCI_PAYLOAD_SIZE 56u
+#define ERWIRE_PCI_BUS_OFFSET 0u
+#define ERWIRE_PCI_DEV_OFFSET 4u
+#define ERWIRE_PCI_FUNC_OFFSET 8u
+#define ERWIRE_PCI_TARGET_OFFSET 12u
+#define ERWIRE_PCI_ID_OFFSET 16u
+#define ERWIRE_PCI_COMMAND_OFFSET 20u
+#define ERWIRE_PCI_CLASS_OFFSET 24u
+#define ERWIRE_PCI_BAR_COUNT 6u
+#define ERWIRE_PCI_BAR_BASE_OFFSET 32u
+#define ERWIRE_BLOB_META_SIZE 12u
+#define ERWIRE_BLOB_TOTAL_OFFSET 4u
+#define ERWIRE_BLOB_CHUNK_OFFSET 8u
+#define ERWIRE_BUS_ADDRESS_KIND_OFFSET 2u
+#define ERWIRE_BUS_ADDRESS_PCI_BUS_OFFSET 8u
+#define ERWIRE_BUS_ADDRESS_PCI_DEV_OFFSET 12u
+#define ERWIRE_BUS_ADDRESS_PCI_FUNC_OFFSET 16u
+#define ERWIRE_BUS_ADDRESS_MMIO_BAR_OFFSET 20u
+#define ERWIRE_BUS_ADDRESS_IO_PORT_OFFSET 24u
+#define ERWIRE_BUS_ADDRESS_MMIO_BASE_OFFSET 32u
+#define ERWIRE_BUS_ADDRESS_MMIO_LEN_OFFSET 40u
+#define ERWIRE_BUS_OP_OFFSET 16u
+#define ERWIRE_BUS_STATUS_OFFSET 4u
+#define ERWIRE_BUS_PACKET_ID_OFFSET 8u
+#define ERWIRE_BUS_OP_ACCESS_OFFSET 4u
+#define ERWIRE_BUS_OP_ADDRESS_OFFSET 8u
+#define ERWIRE_BUS_OP32_PAYLOAD_SIZE 96u
+#define ERWIRE_BUS_OP32_OFFSET_OFFSET 56u
+#define ERWIRE_BUS_OP32_VALUE_OFFSET 64u
+#define ERWIRE_BUS_OP32_RESULT_OFFSET 88u
+#define ERWIRE_BUS_IO_PAYLOAD_SIZE 104u
+#define ERWIRE_BUS_IO_WIDTH_OFFSET 8u
+#define ERWIRE_BUS_IO_ADDRESS_OFFSET 16u
+#define ERWIRE_BUS_IO_OFFSET_OFFSET 64u
+#define ERWIRE_BUS_IO_VALUE_OFFSET 72u
+#define ERWIRE_BUS_IO_RESULT_OFFSET 96u
+#define ERWIRE_PORT_PARSE_BASE 10
+#define ERWIRE_PORT_MAX 65535ul
+#define ERWIRE_DEFAULT_UDP_PORT 9000u
+#define ERWIRE_ARGC_STDIN 1
+#define ERWIRE_ARGC_UDP_DEFAULT 2
+#define ERWIRE_ARGC_UDP_PORT 3
+#define ERWIRE_ARG_UDP 1
+#define ERWIRE_ARG_PORT 2
 
 typedef struct {
   uint32_t stream_id;
@@ -33,7 +112,7 @@ typedef struct {
 } ErwireStreamState;
 
 static uint8_t g_packet[ERWIRE_HEADER_SIZE + ERWIRE_MAX_PAYLOAD];
-static ErwireStreamState g_streams[16];
+static ErwireStreamState g_streams[ERWIRE_STREAM_STATE_COUNT];
 static volatile sig_atomic_t g_stop;
 static uint32_t g_packet_count;
 static uint32_t g_gap_count;
@@ -41,16 +120,20 @@ static uint32_t g_bad_crc_count;
 static uint32_t g_invalid_count;
 
 static uint16_t er_get_u16(const uint8_t* bytes) {
-  return (uint16_t)((uint16_t)bytes[0] | ((uint16_t)bytes[1] << 8));
+  return (uint16_t)((uint16_t)bytes[ERWIRE_BYTE_INDEX_0] |
+                    ((uint16_t)bytes[ERWIRE_BYTE_INDEX_1] << ERWIRE_LE_BYTE_SHIFT_1));
 }
 
 static uint32_t er_get_u32(const uint8_t* bytes) {
-  return (uint32_t)bytes[0] | ((uint32_t)bytes[1] << 8) |
-         ((uint32_t)bytes[2] << 16) | ((uint32_t)bytes[3] << 24);
+  return (uint32_t)bytes[ERWIRE_BYTE_INDEX_0] |
+         ((uint32_t)bytes[ERWIRE_BYTE_INDEX_1] << ERWIRE_LE_BYTE_SHIFT_1) |
+         ((uint32_t)bytes[ERWIRE_BYTE_INDEX_2] << ERWIRE_LE_BYTE_SHIFT_2) |
+         ((uint32_t)bytes[ERWIRE_BYTE_INDEX_3] << ERWIRE_LE_BYTE_SHIFT_3);
 }
 
 static uint64_t er_get_u64(const uint8_t* bytes) {
-  return (uint64_t)er_get_u32(bytes) | ((uint64_t)er_get_u32(bytes + 4) << 32);
+  return (uint64_t)er_get_u32(bytes) |
+         ((uint64_t)er_get_u32(bytes + ERWIRE_U32_SIZE) << ERWIRE_U64_HIGH_WORD_SHIFT);
 }
 
 //@optimizer-ignore-function CRC32 decoder must fold every payload byte through the bit-serial polynomial
@@ -95,11 +178,11 @@ static const char* er_kind_name(uint16_t kind) {
 
 static const char* er_bus_kind_name(uint16_t kind) {
   switch (kind) {
-    case 1:
+    case ERWIRE_BUS_KIND_PCI_CONFIG:
       return "pci_config";
-    case 2:
+    case ERWIRE_BUS_KIND_MMIO:
       return "mmio";
-    case 3:
+    case ERWIRE_BUS_KIND_IO_PORT:
       return "io_port";
     default:
       return "unknown";
@@ -108,15 +191,15 @@ static const char* er_bus_kind_name(uint16_t kind) {
 
 static const char* er_bus_status_name(uint32_t status) {
   switch (status) {
-    case 0:
+    case ERWIRE_BUS_STATUS_OK:
       return "ok";
-    case 1:
+    case ERWIRE_BUS_STATUS_DENIED:
       return "denied";
-    case 2:
+    case ERWIRE_BUS_STATUS_INVALID_ADDRESS:
       return "invalid_address";
-    case 3:
+    case ERWIRE_BUS_STATUS_INVALID_OPERATION:
       return "invalid_operation";
-    case 4:
+    case ERWIRE_BUS_STATUS_IO_FAILED:
       return "io_failed";
     default:
       return "unknown";
@@ -125,17 +208,17 @@ static const char* er_bus_status_name(uint32_t status) {
 
 static const char* er_bus_access_name(uint32_t access) {
   switch (access) {
-    case 0x00000001u:
+    case ERWIRE_BUS_ACCESS_READ32:
       return "read32";
-    case 0x00000002u:
+    case ERWIRE_BUS_ACCESS_WRITE32:
       return "write32";
-    case 0x00000004u:
+    case ERWIRE_BUS_ACCESS_READ8:
       return "read8";
-    case 0x00000008u:
+    case ERWIRE_BUS_ACCESS_WRITE8:
       return "write8";
-    case 0x00000010u:
+    case ERWIRE_BUS_ACCESS_READ16:
       return "read16";
-    case 0x00000020u:
+    case ERWIRE_BUS_ACCESS_WRITE16:
       return "write16";
     default:
       return "unknown";
@@ -145,12 +228,12 @@ static const char* er_bus_access_name(uint32_t access) {
 static ErwireStreamState* er_stream_state(uint32_t stream_id) {
   uint32_t i;
 
-  for (i = 0; i < 16u; ++i) {
+  for (i = 0; i < ERWIRE_STREAM_STATE_COUNT; ++i) {
     if (g_streams[i].used != 0u && g_streams[i].stream_id == stream_id) {
       return &g_streams[i];
     }
   }
-  for (i = 0; i < 16u; ++i) {
+  for (i = 0; i < ERWIRE_STREAM_STATE_COUNT; ++i) {
     if (g_streams[i].used == 0u) {
       g_streams[i].used = 1u;
       g_streams[i].stream_id = stream_id;
@@ -186,7 +269,7 @@ static void er_print_text_payload(const uint8_t* payload, uint32_t len) {
       printf("\\n");
     } else if (c == '"' || c == '\\') {
       printf("\\%c", (char)c);
-    } else if (c >= 0x20u && c < 0x7fu) {
+    } else if (c >= ERWIRE_ASCII_PRINTABLE_MIN && c < ERWIRE_ASCII_PRINTABLE_MAX) {
       putchar((int)c);
     } else {
       printf("\\x%02x", c);
@@ -198,23 +281,27 @@ static void er_print_text_payload(const uint8_t* payload, uint32_t len) {
 static void er_print_pci_payload(const uint8_t* payload, uint32_t len) {
   uint32_t i;
 
-  if (len < 56u) {
+  if (len < ERWIRE_PCI_PAYLOAD_SIZE) {
     printf(" pci=truncated");
     return;
   }
   printf(" bus=%u dev=%u func=%u target=%u id=0x%08x cmd=0x%08x class=0x%08x",
-         er_get_u32(payload + 0), er_get_u32(payload + 4), er_get_u32(payload + 8),
-         er_get_u32(payload + 12), er_get_u32(payload + 16), er_get_u32(payload + 20),
-         er_get_u32(payload + 24));
-  for (i = 0; i < 6u; ++i) {
-    printf(" bar%u=0x%08x", i, er_get_u32(payload + 32u + (i * 4u)));
+         er_get_u32(payload + ERWIRE_PCI_BUS_OFFSET),
+         er_get_u32(payload + ERWIRE_PCI_DEV_OFFSET),
+         er_get_u32(payload + ERWIRE_PCI_FUNC_OFFSET),
+         er_get_u32(payload + ERWIRE_PCI_TARGET_OFFSET),
+         er_get_u32(payload + ERWIRE_PCI_ID_OFFSET),
+         er_get_u32(payload + ERWIRE_PCI_COMMAND_OFFSET),
+         er_get_u32(payload + ERWIRE_PCI_CLASS_OFFSET));
+  for (i = 0; i < ERWIRE_PCI_BAR_COUNT; ++i) {
+    printf(" bar%u=0x%08x", i, er_get_u32(payload + ERWIRE_PCI_BAR_BASE_OFFSET + (i * ERWIRE_U32_SIZE)));
   }
 }
 
 static void er_print_blob_payload(const uint8_t* payload, uint32_t len) {
   uint32_t i;
 
-  if (len < ERWIRE_HASH_LEN + 12u) {
+  if (len < ERWIRE_HASH_LEN + ERWIRE_BLOB_META_SIZE) {
     printf(" blob=truncated");
     return;
   }
@@ -224,24 +311,26 @@ static void er_print_blob_payload(const uint8_t* payload, uint32_t len) {
   }
   printf(" offset=%u total=%u chunk=%u",
          er_get_u32(payload + ERWIRE_HASH_LEN),
-         er_get_u32(payload + ERWIRE_HASH_LEN + 4u),
-         er_get_u32(payload + ERWIRE_HASH_LEN + 8u));
+         er_get_u32(payload + ERWIRE_HASH_LEN + ERWIRE_BLOB_TOTAL_OFFSET),
+         er_get_u32(payload + ERWIRE_HASH_LEN + ERWIRE_BLOB_CHUNK_OFFSET));
 }
 
 static void er_print_bus_address(const uint8_t* address) {
-  uint16_t bus_kind = er_get_u16(address + 2);
+  uint16_t bus_kind = er_get_u16(address + ERWIRE_BUS_ADDRESS_KIND_OFFSET);
 
   printf(" bus_kind=%s(%u)", er_bus_kind_name(bus_kind), bus_kind);
-  if (bus_kind == 1u) {
+  if (bus_kind == ERWIRE_BUS_KIND_PCI_CONFIG) {
     printf(" bus=%u dev=%u func=%u",
-           er_get_u32(address + 8), er_get_u32(address + 12), er_get_u32(address + 16));
-  } else if (bus_kind == 2u) {
+           er_get_u32(address + ERWIRE_BUS_ADDRESS_PCI_BUS_OFFSET),
+           er_get_u32(address + ERWIRE_BUS_ADDRESS_PCI_DEV_OFFSET),
+           er_get_u32(address + ERWIRE_BUS_ADDRESS_PCI_FUNC_OFFSET));
+  } else if (bus_kind == ERWIRE_BUS_KIND_MMIO) {
     printf(" bar=%u base=0x%016llx len=%llu",
-           er_get_u32(address + 20),
-           (unsigned long long)er_get_u64(address + 32),
-           (unsigned long long)er_get_u64(address + 40));
-  } else if (bus_kind == 3u) {
-    printf(" port=0x%04x", er_get_u32(address + 24));
+           er_get_u32(address + ERWIRE_BUS_ADDRESS_MMIO_BAR_OFFSET),
+           (unsigned long long)er_get_u64(address + ERWIRE_BUS_ADDRESS_MMIO_BASE_OFFSET),
+           (unsigned long long)er_get_u64(address + ERWIRE_BUS_ADDRESS_MMIO_LEN_OFFSET));
+  } else if (bus_kind == ERWIRE_BUS_KIND_IO_PORT) {
+    printf(" port=0x%04x", er_get_u32(address + ERWIRE_BUS_ADDRESS_IO_PORT_OFFSET));
   }
 }
 
@@ -250,18 +339,20 @@ static void er_print_bus_op32_payload(const uint8_t* payload, uint32_t len) {
   uint32_t status;
   uint32_t access;
 
-  if (len < 96u) {
+  if (len < ERWIRE_BUS_OP32_PAYLOAD_SIZE) {
     printf(" bus_op32=truncated");
     return;
   }
-  status = er_get_u32(payload + 4);
-  op = payload + 16;
-  access = er_get_u32(op + 4);
+  status = er_get_u32(payload + ERWIRE_BUS_STATUS_OFFSET);
+  op = payload + ERWIRE_BUS_OP_OFFSET;
+  access = er_get_u32(op + ERWIRE_BUS_OP_ACCESS_OFFSET);
   printf(" packet_id=%llu status=%s(%u) access=%s offset=%llu value=0x%08x result=0x%08x",
-         (unsigned long long)er_get_u64(payload + 8), er_bus_status_name(status), status,
-         er_bus_access_name(access), (unsigned long long)er_get_u64(op + 56),
-         er_get_u32(op + 64), er_get_u32(payload + 88));
-  er_print_bus_address(op + 8);
+         (unsigned long long)er_get_u64(payload + ERWIRE_BUS_PACKET_ID_OFFSET),
+         er_bus_status_name(status), status,
+         er_bus_access_name(access), (unsigned long long)er_get_u64(op + ERWIRE_BUS_OP32_OFFSET_OFFSET),
+         er_get_u32(op + ERWIRE_BUS_OP32_VALUE_OFFSET),
+         er_get_u32(payload + ERWIRE_BUS_OP32_RESULT_OFFSET));
+  er_print_bus_address(op + ERWIRE_BUS_OP_ADDRESS_OFFSET);
 }
 
 static void er_print_bus_io_payload(const uint8_t* payload, uint32_t len) {
@@ -269,19 +360,21 @@ static void er_print_bus_io_payload(const uint8_t* payload, uint32_t len) {
   uint32_t status;
   uint32_t access;
 
-  if (len < 104u) {
+  if (len < ERWIRE_BUS_IO_PAYLOAD_SIZE) {
     printf(" bus_io=truncated");
     return;
   }
-  status = er_get_u32(payload + 4);
-  op = payload + 16;
-  access = er_get_u32(op + 4);
+  status = er_get_u32(payload + ERWIRE_BUS_STATUS_OFFSET);
+  op = payload + ERWIRE_BUS_OP_OFFSET;
+  access = er_get_u32(op + ERWIRE_BUS_OP_ACCESS_OFFSET);
   printf(" packet_id=%llu status=%s(%u) access=%s width=%u offset=%llu value=0x%08x result=0x%08x",
-         (unsigned long long)er_get_u64(payload + 8), er_bus_status_name(status), status,
-         er_bus_access_name(access), er_get_u32(op + 8),
-         (unsigned long long)er_get_u64(op + 64),
-         er_get_u32(op + 72), er_get_u32(payload + 96));
-  er_print_bus_address(op + 16);
+         (unsigned long long)er_get_u64(payload + ERWIRE_BUS_PACKET_ID_OFFSET),
+         er_bus_status_name(status), status,
+         er_bus_access_name(access), er_get_u32(op + ERWIRE_BUS_IO_WIDTH_OFFSET),
+         (unsigned long long)er_get_u64(op + ERWIRE_BUS_IO_OFFSET_OFFSET),
+         er_get_u32(op + ERWIRE_BUS_IO_VALUE_OFFSET),
+         er_get_u32(payload + ERWIRE_BUS_IO_RESULT_OFFSET));
+  er_print_bus_address(op + ERWIRE_BUS_IO_ADDRESS_OFFSET);
 }
 
 static int er_decode_packet(const uint8_t* packet, uint32_t len) {
@@ -302,15 +395,15 @@ static int er_decode_packet(const uint8_t* packet, uint32_t len) {
     return 1;
   }
 
-  magic = er_get_u32(packet + 0);
-  version = er_get_u16(packet + 4);
-  header_size = er_get_u16(packet + 6);
-  stream_id = er_get_u32(packet + 8);
-  seq = er_get_u32(packet + 12);
-  kind = er_get_u16(packet + 16);
-  flags = er_get_u16(packet + 18);
-  payload_len = er_get_u32(packet + 20);
-  payload_crc = er_get_u32(packet + 24);
+  magic = er_get_u32(packet + ERWIRE_HEADER_MAGIC_OFFSET);
+  version = er_get_u16(packet + ERWIRE_HEADER_VERSION_OFFSET);
+  header_size = er_get_u16(packet + ERWIRE_HEADER_SIZE_OFFSET);
+  stream_id = er_get_u32(packet + ERWIRE_HEADER_STREAM_ID_OFFSET);
+  seq = er_get_u32(packet + ERWIRE_HEADER_SEQ_OFFSET);
+  kind = er_get_u16(packet + ERWIRE_HEADER_KIND_OFFSET);
+  flags = er_get_u16(packet + ERWIRE_HEADER_FLAGS_OFFSET);
+  payload_len = er_get_u32(packet + ERWIRE_HEADER_PAYLOAD_LEN_OFFSET);
+  payload_crc = er_get_u32(packet + ERWIRE_HEADER_PAYLOAD_CRC_OFFSET);
 
   if (magic != ERWIRE_MAGIC || version != ERWIRE_VERSION ||
       header_size != ERWIRE_HEADER_SIZE || payload_len > ERWIRE_MAX_PAYLOAD ||
@@ -365,8 +458,8 @@ static int er_parse_port(const char* s, uint16_t* out_port) {
     return -1;
   }
 
-  value = strtoul(s, &end, 10);
-  if (end == s || end == 0 || *end != '\0' || value > 65535ul) {
+  value = strtoul(s, &end, ERWIRE_PORT_PARSE_BASE);
+  if (end == s || end == 0 || *end != '\0' || value > ERWIRE_PORT_MAX) {
     return -1;
   }
 
@@ -389,7 +482,7 @@ static int er_decode_stdin(void) {
       return 1;
     }
 
-    payload_len = er_get_u32(g_packet + 20);
+    payload_len = er_get_u32(g_packet + ERWIRE_HEADER_PAYLOAD_LEN_OFFSET);
     if (payload_len > ERWIRE_MAX_PAYLOAD) {
       fprintf(stderr, "erwire-decode: payload too large\n");
       return 1;
@@ -458,18 +551,18 @@ static void er_usage(const char* argv0) {
 }
 
 int main(int argc, char** argv) {
-  if (argc == 1) {
+  if (argc == ERWIRE_ARGC_STDIN) {
     return er_decode_stdin();
   }
 
-  if (argc == 2 && strcmp(argv[1], "--udp") == 0) {
-    return er_decode_udp(9000u);
+  if (argc == ERWIRE_ARGC_UDP_DEFAULT && strcmp(argv[ERWIRE_ARG_UDP], "--udp") == 0) {
+    return er_decode_udp(ERWIRE_DEFAULT_UDP_PORT);
   }
 
-  if (argc == 3 && strcmp(argv[1], "--udp") == 0) {
+  if (argc == ERWIRE_ARGC_UDP_PORT && strcmp(argv[ERWIRE_ARG_UDP], "--udp") == 0) {
     uint16_t port = 0;
 
-    if (er_parse_port(argv[2], &port) != 0) {
+    if (er_parse_port(argv[ERWIRE_ARG_PORT], &port) != 0) {
       er_usage(argv[0]);
       return 1;
     }
