@@ -430,6 +430,7 @@ static void er_ui_gop_draw_point(ErUiGopSurface* surface, INT32 x, INT32 y, UINT
   er_ui_gop_fill_rect(surface, x0, y0, x1, y1, color, stats);
 }
 
+//@optimizer-ignore-function Bresenham icon line raster must emit each covered point in order
 static void er_ui_gop_draw_line(ErUiGopSurface* surface, INT32 x0, INT32 y0, INT32 x1, INT32 y1,
                                 UINT32 stroke, er_ui_color4_t color, const ErUiGopPixelRect* clip,
                                 ErUiGopRenderStats* stats) {
@@ -481,6 +482,7 @@ static void er_ui_gop_icon_rect(ErUiGopSurface* surface, UINT32 x0, UINT32 y0, U
   er_ui_gop_icon_line(surface, x0, y0, w, h, ax, by, ax, ay, stroke, color, clip, stats);
 }
 
+//@optimizer-ignore-function icon circle raster must test each pixel in the bounded icon radius box
 static void er_ui_gop_icon_circle(ErUiGopSurface* surface, UINT32 x0, UINT32 y0, UINT32 w, UINT32 h,
                                   INT32 cx24, INT32 cy24, INT32 r24, UINT32 stroke,
                                   er_ui_color4_t color, const ErUiGopPixelRect* clip, ErUiGopRenderStats* stats) {
@@ -722,6 +724,7 @@ static UINT8 er_ui_gop_sample_text_font_alpha(const void* context, float u, floa
   return er_ui_gop_sample_atlas_alpha((const vr_font_atlas_view_t*)context, u, v);
 }
 
+//@optimizer-ignore-function text alpha raster must sample and blend each covered framebuffer pixel
 static void er_ui_gop_render_text_quad_sampled(ErUiGopSurface* surface, const er_ui_quad_t* quad,
                                                ErUiGopTextAlphaSampler sampler, const void* sampler_context,
                                                const ErUiGopPixelRect* clip, ErUiGopRenderStats* stats) {
@@ -1011,6 +1014,7 @@ UINT8 er_ui_gop_dirty_tiles_reset(const ErUiGopTilePlan* plan, UINT8* tile_marks
   return 1u;
 }
 
+//@optimizer-ignore-function dirty tracking must mark every tile overlapped by the changed rectangle
 UINT8 er_ui_gop_dirty_tiles_mark_rect(const ErUiGopTilePlan* plan, float x, float y, float w, float h,
                                       UINT8* tile_marks, UINT64 tile_mark_count,
                                       ErUiGopDirtyTileList* list) {
@@ -1300,6 +1304,7 @@ UINT32 er_ui_gop_pack_rgb(ErUiGopPixelFormat format, UINT8 r, UINT8 g, UINT8 b) 
          (UINT32)b;
 }
 
+//@optimizer-ignore-function GOP clear must write each framebuffer pixel in the target rectangle
 static UINT8 er_ui_gop_surface_clear_rect_stats(ErUiGopSurface* surface, er_ui_color4_t color,
                                                 const ErUiGopPixelRect* clip,
                                                 ErUiGopRenderStats* stats) {
@@ -1362,6 +1367,7 @@ UINT8 er_ui_gop_surface_render_scene_with_atlas(ErUiGopSurface* surface, const e
   return er_ui_gop_surface_render_scene_with_atlas_stats(surface, scene, atlas, 0);
 }
 
+//@optimizer-ignore-function scene rendering must visit each recorded primitive stream in deterministic order
 static UINT8 er_ui_gop_surface_render_scene_with_atlas_clip_stats(ErUiGopSurface* surface,
                                                                   const er_ui_scene_t* scene,
                                                                   const ErUiGopAlphaAtlas* atlas,
@@ -1408,6 +1414,7 @@ UINT8 er_ui_gop_surface_render_scene_with_font_stats(ErUiGopSurface* surface, co
   return er_ui_gop_surface_render_scene_tile_with_font_stats(surface, scene, font, 0, 0u, out_stats);
 }
 
+//@optimizer-ignore-function font-backed scene rendering must visit each text quad after base primitive rendering
 UINT8 er_ui_gop_surface_render_scene_tile_with_font_stats(ErUiGopSurface* surface, const er_ui_scene_t* scene,
                                                           const vr_font_face_t* font,
                                                           const ErUiGopTilePlan* plan, UINT32 tile_id,
