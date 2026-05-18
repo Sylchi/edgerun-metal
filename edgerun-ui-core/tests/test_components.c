@@ -201,9 +201,9 @@ void run_component_tests(void) {
   expect_size(state.currency_index, 0u, "shadcn preview state: currency default matches Rust");
   expect_size(state.order_index, 0u, "shadcn preview state: order default matches Rust");
   expect_size(state.ticker_index, 0u, "shadcn preview state: ticker default matches Rust");
-  expect_size(state.contribution_bar, 5u, "shadcn preview state: contribution bar default matches Rust");
-  expect_size(state.stock_bar, 5u, "shadcn preview state: stock bar default matches Rust");
-  expect_size(state.power_bar, 6u, "shadcn preview state: power bar default matches Rust");
+  expect_size(state.contribution_bar, ER_UI_SHADCN_CHART_CONTRIBUTION_DEFAULT_INDEX, "shadcn preview state: contribution bar default matches Rust");
+  expect_size(state.stock_bar, ER_UI_SHADCN_CHART_STOCK_DEFAULT_INDEX, "shadcn preview state: stock bar default matches Rust");
+  expect_size(state.power_bar, ER_UI_SHADCN_CHART_POWER_DEFAULT_INDEX, "shadcn preview state: power bar default matches Rust");
 
   er_ui_action_t action = {0};
   action.kind = ER_UI_ACTION_OPEN_CHANGED;
