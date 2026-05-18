@@ -44,6 +44,43 @@
 #define ER_UI_TEST_NODE_NAVIGATION_ID 8048u
 #define ER_UI_TEST_NODE_NAVIGATION_SELECTED_INDEX 1u
 #define ER_UI_TEST_NODE_NAVIGATION_SELECTED_ID 8049u
+#define ER_UI_TEST_NODE_NAVIGATION_ROW_INDEX 3u
+#define ER_UI_TEST_NODE_NAVIGATION_ROW_ID 8051u
+#define ER_UI_TEST_NODE_SIDEBAR_ID 8052u
+#define ER_UI_TEST_NODE_SIDEBAR_SELECTED_INDEX 0u
+#define ER_UI_TEST_NODE_SIDEBAR_MAIN_INDEX 3u
+#define ER_UI_TEST_NODE_SONNER_TOAST_INDEX 1u
+#define ER_UI_TEST_NODE_DIRECTION_RTL_INDEX 1u
+#define ER_UI_TEST_NODE_DRAWER_ID 8059u
+#define ER_UI_TEST_NODE_DRAWER_SLIDER_INDEX 0u
+#define ER_UI_TEST_NODE_DRAWER_BUTTON_INDEX 1u
+#define ER_UI_TEST_NODE_DRAWER_BUTTON_ID 8060u
+#define ER_UI_TEST_NODE_DROPDOWN_ID 8061u
+#define ER_UI_TEST_NODE_DROPDOWN_SELECTED_INDEX 1u
+#define ER_UI_TEST_NODE_DROPDOWN_SELECTED_ID 8062u
+#define ER_UI_TEST_NODE_CONTEXT_MENU_ID 8064u
+#define ER_UI_TEST_NODE_CONTEXT_SELECTED_INDEX 2u
+#define ER_UI_TEST_NODE_CONTEXT_SELECTED_ID 8066u
+#define ER_UI_TEST_NODE_DATE_PICKER_ID 8068u
+#define ER_UI_TEST_NODE_DATE_TRIGGER_INDEX 0u
+#define ER_UI_TEST_NODE_DATE_SELECTED_INDEX 2u
+#define ER_UI_TEST_NODE_DATE_SELECTED_CHILD_INDEX 3u
+#define ER_UI_TEST_NODE_DATE_SELECTED_ID 8071u
+#define ER_UI_TEST_NODE_CAROUSEL_ID 8074u
+#define ER_UI_TEST_NODE_CAROUSEL_PREVIOUS_INDEX 0u
+#define ER_UI_TEST_NODE_CAROUSEL_NEXT_INDEX 4u
+#define ER_UI_TEST_NODE_CAROUSEL_NEXT_ID 8075u
+#define ER_UI_TEST_NODE_CALENDAR_ID 8076u
+#define ER_UI_TEST_NODE_CALENDAR_PREVIOUS_INDEX 0u
+#define ER_UI_TEST_NODE_CALENDAR_SELECTED_CHILD_INDEX 4u
+#define ER_UI_TEST_NODE_CALENDAR_SELECTED_ID 8080u
+#define ER_UI_TEST_NODE_COMBOBOX_ID 8082u
+#define ER_UI_TEST_NODE_COMBOBOX_SELECTED_INDEX 1u
+#define ER_UI_TEST_NODE_COMBOBOX_SELECTED_CHILD_INDEX 3u
+#define ER_UI_TEST_NODE_COMBOBOX_SELECTED_ID 8085u
+#define ER_UI_TEST_NODE_DIFF_LINE_INDEX 2u
+#define ER_UI_TEST_NODE_DIFF_TRUNCATED_INDEX 4u
+#define ER_UI_TEST_NODE_CHAT_DIFF_LINE_INDEX 3u
 #define ER_UI_TEST_NODE_MASONRY_COLUMNS 2u
 #define ER_UI_TEST_NODE_MASONRY_CHILDREN 4u
 #define ER_UI_TEST_NODE_MASONRY_THIRD_CHILD 2u
@@ -373,34 +410,40 @@ void run_node_tests(void) {
   expect_size(a11y.role, ER_UI_A11Y_BUTTON, "node: navigation menu tab role");
   expect_true(a11y.has_id && a11y.id == ER_UI_TEST_NODE_NAVIGATION_SELECTED_ID, "node: navigation menu selected tab id");
   expect_true((a11y.states & ER_UI_A11Y_STATE_SELECTED) != 0u, "node: navigation menu selected tab state");
-  expect_status(er_ui_node_accessibility_child(&nav_a11y, 3u, &a11y), ER_UI_OK, "node: navigation menu row accessibility maps");
+  expect_status(er_ui_node_accessibility_child(&nav_a11y, ER_UI_TEST_NODE_NAVIGATION_ROW_INDEX, &a11y), ER_UI_OK,
+                "node: navigation menu row accessibility maps");
   expect_size(a11y.role, ER_UI_A11Y_LIST_ITEM, "node: navigation menu row role");
-  expect_true(a11y.has_id && a11y.id == 8051u, "node: navigation menu row id");
+  expect_true(a11y.has_id && a11y.id == ER_UI_TEST_NODE_NAVIGATION_ROW_ID, "node: navigation menu row id");
 
   const char* const resizable_labels[] = {"One", "Two", "Three"};
-  er_ui_node_t resizable_a11y = er_ui_node_resizable(resizable_labels, 3u);
+  er_ui_node_t resizable_a11y = er_ui_node_resizable(resizable_labels, ER_UI_TEST_NODE_ARRAY_COUNT(resizable_labels));
   expect_status(er_ui_node_accessibility(&resizable_a11y, &a11y), ER_UI_OK, "node: resizable accessibility maps");
   expect_size(a11y.role, ER_UI_A11Y_GROUP, "node: resizable accessibility role");
 
   const char* const sidebar_items[] = {"Dashboard", "Transactions", "Settings"};
-  er_ui_node_t sidebar_a11y = er_ui_node_sidebar("App", "Workspace", sidebar_items, 3u, 0u, "Dashboard", "Proof-aware activity", 8052u);
+  er_ui_node_t sidebar_a11y = er_ui_node_sidebar("App", "Workspace", sidebar_items, ER_UI_TEST_NODE_ARRAY_COUNT(sidebar_items),
+                                                 ER_UI_TEST_NODE_SIDEBAR_SELECTED_INDEX, "Dashboard", "Proof-aware activity",
+                                                 ER_UI_TEST_NODE_SIDEBAR_ID);
   expect_status(er_ui_node_accessibility(&sidebar_a11y, &a11y), ER_UI_OK, "node: sidebar accessibility maps");
   expect_size(a11y.role, ER_UI_A11Y_NAVIGATION, "node: sidebar accessibility role");
-  expect_status(er_ui_node_accessibility_child(&sidebar_a11y, 0u, &a11y), ER_UI_OK, "node: sidebar selected item accessibility maps");
+  expect_status(er_ui_node_accessibility_child(&sidebar_a11y, ER_UI_TEST_NODE_SIDEBAR_SELECTED_INDEX, &a11y), ER_UI_OK,
+                "node: sidebar selected item accessibility maps");
   expect_size(a11y.role, ER_UI_A11Y_MENU_ITEM, "node: sidebar selected item role");
   expect_true((a11y.states & ER_UI_A11Y_STATE_SELECTED) != 0u, "node: sidebar selected item state");
-  expect_status(er_ui_node_accessibility_child(&sidebar_a11y, 3u, &a11y), ER_UI_OK, "node: sidebar main panel accessibility maps");
+  expect_status(er_ui_node_accessibility_child(&sidebar_a11y, ER_UI_TEST_NODE_SIDEBAR_MAIN_INDEX, &a11y), ER_UI_OK,
+                "node: sidebar main panel accessibility maps");
   expect_size(a11y.role, ER_UI_A11Y_GROUP, "node: sidebar main panel role");
 
   const char* const sonner_messages[] = {"Event created", "Upload failed"};
   const er_ui_icon_t sonner_icons[] = {ER_UI_ICON_CHECK, ER_UI_ICON_WARNING};
   const er_ui_color4_t sonner_colors[] = {er_ui_color_rgba(0.0f, 0.5f, 0.2f, 1.0f), er_ui_color_rgba(0.8f, 0.2f, 0.1f, 1.0f)};
-  er_ui_node_t sonner_a11y = er_ui_node_sonner(sonner_messages, sonner_icons, sonner_colors, 2u);
+  er_ui_node_t sonner_a11y = er_ui_node_sonner(sonner_messages, sonner_icons, sonner_colors, ER_UI_TEST_NODE_ARRAY_COUNT(sonner_messages));
   expect_status(er_ui_node_accessibility(&sonner_a11y, &a11y), ER_UI_OK, "node: sonner accessibility maps");
   expect_size(a11y.role, ER_UI_A11Y_STATUS, "node: sonner accessibility role");
-  expect_status(er_ui_node_accessibility_child(&sonner_a11y, 1u, &a11y), ER_UI_OK, "node: sonner toast accessibility maps");
+  expect_status(er_ui_node_accessibility_child(&sonner_a11y, ER_UI_TEST_NODE_SONNER_TOAST_INDEX, &a11y), ER_UI_OK,
+                "node: sonner toast accessibility maps");
   expect_size(a11y.role, ER_UI_A11Y_STATUS, "node: sonner toast accessibility role");
-  expect_true(a11y.label == sonner_messages[1], "node: sonner toast label is borrowed");
+  expect_true(a11y.label == sonner_messages[ER_UI_TEST_NODE_SONNER_TOAST_INDEX], "node: sonner toast label is borrowed");
 
   er_ui_node_t aspect_a11y = er_ui_node_aspect_ratio("Preview", ER_UI_ICON_FILE);
   expect_status(er_ui_node_accessibility(&aspect_a11y, &a11y), ER_UI_OK, "node: aspect ratio accessibility maps");
@@ -415,89 +458,111 @@ void run_node_tests(void) {
   er_ui_node_t direction_a11y = er_ui_node_direction("Left to right", "Right to left");
   expect_status(er_ui_node_accessibility(&direction_a11y, &a11y), ER_UI_OK, "node: direction accessibility maps");
   expect_size(a11y.role, ER_UI_A11Y_GROUP, "node: direction accessibility role");
-  expect_status(er_ui_node_accessibility_child(&direction_a11y, 1u, &a11y), ER_UI_OK, "node: direction child accessibility maps");
+  expect_status(er_ui_node_accessibility_child(&direction_a11y, ER_UI_TEST_NODE_DIRECTION_RTL_INDEX, &a11y), ER_UI_OK,
+                "node: direction child accessibility maps");
   expect_size(a11y.role, ER_UI_A11Y_TEXT, "node: direction child role");
   expect_true(a11y.label == direction_a11y.detail, "node: direction rtl text is borrowed");
 
-  er_ui_node_t drawer_a11y = er_ui_node_drawer("Drawer", "Adjust display density.", "Density", 0.42f, 8059u);
+  er_ui_node_t drawer_a11y = er_ui_node_drawer("Drawer", "Adjust display density.", "Density", 0.42f, ER_UI_TEST_NODE_DRAWER_ID);
   expect_status(er_ui_node_accessibility(&drawer_a11y, &a11y), ER_UI_OK, "node: drawer accessibility maps");
   expect_size(a11y.role, ER_UI_A11Y_DIALOG, "node: drawer accessibility role");
   expect_true((a11y.states & ER_UI_A11Y_STATE_OPEN) != 0u, "node: drawer open state");
-  expect_status(er_ui_node_accessibility_child(&drawer_a11y, 0u, &a11y), ER_UI_OK, "node: drawer slider accessibility maps");
+  expect_status(er_ui_node_accessibility_child(&drawer_a11y, ER_UI_TEST_NODE_DRAWER_SLIDER_INDEX, &a11y), ER_UI_OK,
+                "node: drawer slider accessibility maps");
   expect_size(a11y.role, ER_UI_A11Y_SLIDER, "node: drawer slider role");
-  expect_true(a11y.has_id && a11y.id == 8059u, "node: drawer slider id");
-  expect_status(er_ui_node_accessibility_child(&drawer_a11y, 1u, &a11y), ER_UI_OK, "node: drawer button accessibility maps");
+  expect_true(a11y.has_id && a11y.id == ER_UI_TEST_NODE_DRAWER_ID, "node: drawer slider id");
+  expect_status(er_ui_node_accessibility_child(&drawer_a11y, ER_UI_TEST_NODE_DRAWER_BUTTON_INDEX, &a11y), ER_UI_OK,
+                "node: drawer button accessibility maps");
   expect_size(a11y.role, ER_UI_A11Y_BUTTON, "node: drawer button role");
-  expect_true(a11y.has_id && a11y.id == 8060u, "node: drawer button id");
+  expect_true(a11y.has_id && a11y.id == ER_UI_TEST_NODE_DRAWER_BUTTON_ID, "node: drawer button id");
 
   const char* const dropdown_labels[] = {"Profile", "Billing", "Logout"};
   const char* const dropdown_shortcuts[] = {"P", "B", ""};
-  er_ui_node_t dropdown_a11y = er_ui_node_dropdown_menu(dropdown_labels, dropdown_shortcuts, 3u, 1u, 8061u);
+  er_ui_node_t dropdown_a11y = er_ui_node_dropdown_menu(dropdown_labels, dropdown_shortcuts, ER_UI_TEST_NODE_ARRAY_COUNT(dropdown_labels),
+                                                        ER_UI_TEST_NODE_DROPDOWN_SELECTED_INDEX, ER_UI_TEST_NODE_DROPDOWN_ID);
   expect_status(er_ui_node_accessibility(&dropdown_a11y, &a11y), ER_UI_OK, "node: dropdown menu accessibility maps");
   expect_size(a11y.role, ER_UI_A11Y_NAVIGATION, "node: dropdown menu accessibility role");
-  expect_status(er_ui_node_accessibility_child(&dropdown_a11y, 1u, &a11y), ER_UI_OK, "node: dropdown menu item accessibility maps");
+  expect_status(er_ui_node_accessibility_child(&dropdown_a11y, ER_UI_TEST_NODE_DROPDOWN_SELECTED_INDEX, &a11y), ER_UI_OK,
+                "node: dropdown menu item accessibility maps");
   expect_size(a11y.role, ER_UI_A11Y_MENU_ITEM, "node: dropdown menu item role");
-  expect_true(a11y.has_id && a11y.id == 8062u, "node: dropdown menu item id");
+  expect_true(a11y.has_id && a11y.id == ER_UI_TEST_NODE_DROPDOWN_SELECTED_ID, "node: dropdown menu item id");
   expect_true((a11y.states & ER_UI_A11Y_STATE_SELECTED) != 0u, "node: dropdown menu selected state");
 
-  er_ui_node_t context_menu_a11y = er_ui_node_context_menu("Actions", "Right click options", dropdown_labels, dropdown_shortcuts, 3u, 2u, 8064u);
+  er_ui_node_t context_menu_a11y = er_ui_node_context_menu("Actions", "Right click options", dropdown_labels, dropdown_shortcuts,
+                                                           ER_UI_TEST_NODE_ARRAY_COUNT(dropdown_labels), ER_UI_TEST_NODE_CONTEXT_SELECTED_INDEX,
+                                                           ER_UI_TEST_NODE_CONTEXT_MENU_ID);
   expect_status(er_ui_node_accessibility(&context_menu_a11y, &a11y), ER_UI_OK, "node: context menu accessibility maps");
   expect_size(a11y.role, ER_UI_A11Y_NAVIGATION, "node: context menu accessibility role");
-  expect_status(er_ui_node_accessibility_child(&context_menu_a11y, 2u, &a11y), ER_UI_OK, "node: context menu item accessibility maps");
+  expect_status(er_ui_node_accessibility_child(&context_menu_a11y, ER_UI_TEST_NODE_CONTEXT_SELECTED_INDEX, &a11y), ER_UI_OK,
+                "node: context menu item accessibility maps");
   expect_size(a11y.role, ER_UI_A11Y_MENU_ITEM, "node: context menu item role");
-  expect_true(a11y.has_id && a11y.id == 8066u, "node: context menu item id");
+  expect_true(a11y.has_id && a11y.id == ER_UI_TEST_NODE_CONTEXT_SELECTED_ID, "node: context menu item id");
   expect_true((a11y.states & ER_UI_A11Y_STATE_SELECTED) != 0u, "node: context menu selected state");
 
   const char* const date_days[] = {"12", "13", "14", "15"};
-  er_ui_node_t date_picker_a11y = er_ui_node_date_picker("Pick a date", "May 2026", date_days, 4u, 2u, 8068u);
+  er_ui_node_t date_picker_a11y =
+      er_ui_node_date_picker("Pick a date", "May 2026", date_days, ER_UI_TEST_NODE_ARRAY_COUNT(date_days), ER_UI_TEST_NODE_DATE_SELECTED_INDEX,
+                             ER_UI_TEST_NODE_DATE_PICKER_ID);
   expect_status(er_ui_node_accessibility(&date_picker_a11y, &a11y), ER_UI_OK, "node: date picker accessibility maps");
   expect_size(a11y.role, ER_UI_A11Y_COMBOBOX, "node: date picker accessibility role");
   expect_true((a11y.states & ER_UI_A11Y_STATE_OPEN) != 0u, "node: date picker open state");
-  expect_status(er_ui_node_accessibility_child(&date_picker_a11y, 0u, &a11y), ER_UI_OK, "node: date picker trigger accessibility maps");
+  expect_status(er_ui_node_accessibility_child(&date_picker_a11y, ER_UI_TEST_NODE_DATE_TRIGGER_INDEX, &a11y), ER_UI_OK,
+                "node: date picker trigger accessibility maps");
   expect_size(a11y.role, ER_UI_A11Y_BUTTON, "node: date picker trigger role");
-  expect_true(a11y.has_id && a11y.id == 8068u, "node: date picker trigger id");
-  expect_status(er_ui_node_accessibility_child(&date_picker_a11y, 3u, &a11y), ER_UI_OK, "node: date picker day accessibility maps");
-  expect_true(a11y.has_id && a11y.id == 8071u, "node: date picker day id");
+  expect_true(a11y.has_id && a11y.id == ER_UI_TEST_NODE_DATE_PICKER_ID, "node: date picker trigger id");
+  expect_status(er_ui_node_accessibility_child(&date_picker_a11y, ER_UI_TEST_NODE_DATE_SELECTED_CHILD_INDEX, &a11y), ER_UI_OK,
+                "node: date picker day accessibility maps");
+  expect_true(a11y.has_id && a11y.id == ER_UI_TEST_NODE_DATE_SELECTED_ID, "node: date picker day id");
   expect_true((a11y.states & ER_UI_A11Y_STATE_SELECTED) != 0u, "node: date picker selected day state");
 
   const char* const carousel_items[] = {"One", "Two", "Three"};
-  er_ui_node_t carousel_a11y = er_ui_node_carousel(carousel_items, 3u, 8074u);
+  er_ui_node_t carousel_a11y = er_ui_node_carousel(carousel_items, ER_UI_TEST_NODE_ARRAY_COUNT(carousel_items), ER_UI_TEST_NODE_CAROUSEL_ID);
   expect_status(er_ui_node_accessibility(&carousel_a11y, &a11y), ER_UI_OK, "node: carousel accessibility maps");
   expect_size(a11y.role, ER_UI_A11Y_GROUP, "node: carousel accessibility role");
-  expect_status(er_ui_node_accessibility_child(&carousel_a11y, 0u, &a11y), ER_UI_OK, "node: carousel previous accessibility maps");
+  expect_status(er_ui_node_accessibility_child(&carousel_a11y, ER_UI_TEST_NODE_CAROUSEL_PREVIOUS_INDEX, &a11y), ER_UI_OK,
+                "node: carousel previous accessibility maps");
   expect_size(a11y.role, ER_UI_A11Y_BUTTON, "node: carousel previous role");
-  expect_true(a11y.has_id && a11y.id == 8074u, "node: carousel previous id");
-  expect_status(er_ui_node_accessibility_child(&carousel_a11y, 4u, &a11y), ER_UI_OK, "node: carousel next accessibility maps");
-  expect_true(a11y.has_id && a11y.id == 8075u, "node: carousel next id");
+  expect_true(a11y.has_id && a11y.id == ER_UI_TEST_NODE_CAROUSEL_ID, "node: carousel previous id");
+  expect_status(er_ui_node_accessibility_child(&carousel_a11y, ER_UI_TEST_NODE_CAROUSEL_NEXT_INDEX, &a11y), ER_UI_OK,
+                "node: carousel next accessibility maps");
+  expect_true(a11y.has_id && a11y.id == ER_UI_TEST_NODE_CAROUSEL_NEXT_ID, "node: carousel next id");
 
-  er_ui_node_t calendar_a11y = er_ui_node_calendar("May 2026", date_days, 4u, 2u, 8076u);
+  er_ui_node_t calendar_a11y =
+      er_ui_node_calendar("May 2026", date_days, ER_UI_TEST_NODE_ARRAY_COUNT(date_days), ER_UI_TEST_NODE_DATE_SELECTED_INDEX, ER_UI_TEST_NODE_CALENDAR_ID);
   expect_status(er_ui_node_accessibility(&calendar_a11y, &a11y), ER_UI_OK, "node: calendar accessibility maps");
   expect_size(a11y.role, ER_UI_A11Y_GROUP, "node: calendar accessibility role");
-  expect_status(er_ui_node_accessibility_child(&calendar_a11y, 0u, &a11y), ER_UI_OK, "node: calendar previous accessibility maps");
-  expect_true(a11y.has_id && a11y.id == 8076u, "node: calendar previous id");
-  expect_status(er_ui_node_accessibility_child(&calendar_a11y, 4u, &a11y), ER_UI_OK, "node: calendar day accessibility maps");
-  expect_true(a11y.has_id && a11y.id == 8080u, "node: calendar day id");
+  expect_status(er_ui_node_accessibility_child(&calendar_a11y, ER_UI_TEST_NODE_CALENDAR_PREVIOUS_INDEX, &a11y), ER_UI_OK,
+                "node: calendar previous accessibility maps");
+  expect_true(a11y.has_id && a11y.id == ER_UI_TEST_NODE_CALENDAR_ID, "node: calendar previous id");
+  expect_status(er_ui_node_accessibility_child(&calendar_a11y, ER_UI_TEST_NODE_CALENDAR_SELECTED_CHILD_INDEX, &a11y), ER_UI_OK,
+                "node: calendar day accessibility maps");
+  expect_true(a11y.has_id && a11y.id == ER_UI_TEST_NODE_CALENDAR_SELECTED_ID, "node: calendar day id");
   expect_true((a11y.states & ER_UI_A11Y_STATE_SELECTED) != 0u, "node: calendar selected day state");
 
   const char* const combobox_options[] = {"Apple", "Banana", "Cherry"};
-  er_ui_node_t combobox_a11y = er_ui_node_combobox("Fruit", "Banana", "Search fruit...", combobox_options, 3u, 1u, 8082u);
+  er_ui_node_t combobox_a11y = er_ui_node_combobox("Fruit", "Banana", "Search fruit...", combobox_options,
+                                                   ER_UI_TEST_NODE_ARRAY_COUNT(combobox_options), ER_UI_TEST_NODE_COMBOBOX_SELECTED_INDEX,
+                                                   ER_UI_TEST_NODE_COMBOBOX_ID);
   expect_status(er_ui_node_accessibility(&combobox_a11y, &a11y), ER_UI_OK, "node: combobox accessibility maps");
   expect_size(a11y.role, ER_UI_A11Y_COMBOBOX, "node: combobox accessibility role");
   expect_true((a11y.states & ER_UI_A11Y_STATE_OPEN) != 0u, "node: combobox open state");
-  expect_status(er_ui_node_accessibility_child(&combobox_a11y, 3u, &a11y), ER_UI_OK, "node: combobox option accessibility maps");
+  expect_status(er_ui_node_accessibility_child(&combobox_a11y, ER_UI_TEST_NODE_COMBOBOX_SELECTED_CHILD_INDEX, &a11y), ER_UI_OK,
+                "node: combobox option accessibility maps");
   expect_size(a11y.role, ER_UI_A11Y_MENU_ITEM, "node: combobox option role");
-  expect_true(a11y.has_id && a11y.id == 8085u, "node: combobox option id");
+  expect_true(a11y.has_id && a11y.id == ER_UI_TEST_NODE_COMBOBOX_SELECTED_ID, "node: combobox option id");
   expect_true((a11y.states & ER_UI_A11Y_STATE_SELECTED) != 0u, "node: combobox selected option state");
 
   const char* const diff_lines[] = {"@@ -1,2 +1,2 @@", "-old", "+new", " context"};
-  er_ui_node_t diff_body_a11y = er_ui_node_diff_body(diff_lines, 4u, true);
+  er_ui_node_t diff_body_a11y = er_ui_node_diff_body(diff_lines, ER_UI_TEST_NODE_ARRAY_COUNT(diff_lines), true);
   expect_status(er_ui_node_accessibility(&diff_body_a11y, &a11y), ER_UI_OK, "node: diff body accessibility maps");
   expect_size(a11y.role, ER_UI_A11Y_GROUP, "node: diff body accessibility role");
   expect_true((a11y.states & ER_UI_A11Y_STATE_HAS_VALUE) != 0u, "node: diff body truncated state is exposed");
-  expect_status(er_ui_node_accessibility_child(&diff_body_a11y, 2u, &a11y), ER_UI_OK, "node: diff body line accessibility maps");
+  expect_status(er_ui_node_accessibility_child(&diff_body_a11y, ER_UI_TEST_NODE_DIFF_LINE_INDEX, &a11y), ER_UI_OK,
+                "node: diff body line accessibility maps");
   expect_size(a11y.role, ER_UI_A11Y_TEXT, "node: diff body line role");
-  expect_true(a11y.label == diff_lines[2], "node: diff body line label is borrowed");
-  expect_status(er_ui_node_accessibility_child(&diff_body_a11y, 4u, &a11y), ER_UI_OK, "node: diff body truncated accessibility maps");
+  expect_true(a11y.label == diff_lines[ER_UI_TEST_NODE_DIFF_LINE_INDEX], "node: diff body line label is borrowed");
+  expect_status(er_ui_node_accessibility_child(&diff_body_a11y, ER_UI_TEST_NODE_DIFF_TRUNCATED_INDEX, &a11y), ER_UI_OK,
+                "node: diff body truncated accessibility maps");
   expect_string(a11y.label, "[diff preview truncated]", "node: diff body truncated label");
 
   er_ui_node_t chat_message_a11y = er_ui_node_chat_message(ER_UI_SHADCN_CHAT_ROLE_ASSISTANT, "Response", "Done");
@@ -505,9 +570,10 @@ void run_node_tests(void) {
   expect_size(a11y.role, ER_UI_A11Y_GROUP, "node: chat message accessibility role");
   expect_string(a11y.label, "assistant", "node: chat message role label maps");
   expect_true(a11y.value == chat_message_a11y.detail, "node: chat message detail is borrowed");
-  er_ui_node_t chat_diff_a11y = er_ui_node_chat_diff_message("Patch", diff_lines, 4u, true);
-  expect_status(er_ui_node_accessibility_child(&chat_diff_a11y, 3u, &a11y), ER_UI_OK, "node: chat diff line accessibility maps");
-  expect_true(a11y.label == diff_lines[2], "node: chat diff line label is borrowed");
+  er_ui_node_t chat_diff_a11y = er_ui_node_chat_diff_message("Patch", diff_lines, ER_UI_TEST_NODE_ARRAY_COUNT(diff_lines), true);
+  expect_status(er_ui_node_accessibility_child(&chat_diff_a11y, ER_UI_TEST_NODE_CHAT_DIFF_LINE_INDEX, &a11y), ER_UI_OK,
+                "node: chat diff line accessibility maps");
+  expect_true(a11y.label == diff_lines[ER_UI_TEST_NODE_DIFF_LINE_INDEX], "node: chat diff line label is borrowed");
 
   er_ui_node_t conversation_a11y = er_ui_node_conversation(12.0f, 8090u);
   er_ui_node_t conversation_child_a = er_ui_node_chat_message(ER_UI_SHADCN_CHAT_ROLE_USER, "", "Run tests");
