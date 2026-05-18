@@ -57,4 +57,29 @@ case "$crypto_plan" in
   * ) printf 'missing direct crypto test execution step\n' >&2; exit 1 ;;
 esac
 
+varfont_plan=$("$ER_BUILD" --print-plan varfont-test)
+
+case "$varfont_plan" in
+  *"cmake"* | *"ninja"* | *"ctest"* )
+    printf 'varfont-test plan still depends on external build orchestration\n' >&2
+    exit 1
+    ;;
+  * ) ;;
+esac
+
+case "$varfont_plan" in
+  *"+ clang -std=c11 -Wall -Wextra -Werror -O2 -o .build/er-build-out/varfont/vrfont_tests -ffreestanding -fno-builtin -fno-stack-protector -Ivarfont/include -Iinclude -Ivarfont/src -DVRFONT_PROJECT_ROOT=\"varfont\""* ) ;;
+  * ) printf 'missing direct varfont test compile step\n' >&2; exit 1 ;;
+esac
+
+case "$varfont_plan" in
+  *"varfont/tests/test_runner.c"*"varfont/src/vr_font_atlas.c"*" -lm"* ) ;;
+  * ) printf 'missing varfont test source set\n' >&2; exit 1 ;;
+esac
+
+case "$varfont_plan" in
+  *"+ .build/er-build-out/varfont/vrfont_tests"* ) ;;
+  * ) printf 'missing direct varfont test execution step\n' >&2; exit 1 ;;
+esac
+
 printf 'er-build tests passed\n'

@@ -319,7 +319,7 @@ The preferred local build tools are:
 - `ccache` when available for repeated C builds
 - `mold` when available for hosted Linux test/tool executables
 - `wat2wasm` for source-first metal Wasm module fixtures
-- `CMake` with `Ninja` for `varfont`, `edgerun-ui-core`, and hosted crypto benchmarks
+- `CMake` with `Ninja` for `edgerun-ui-core`, hosted demos, and hosted benchmarks
 - `ctest --output-on-failure` for tests
 - `rg` for repository search
 
@@ -406,15 +406,14 @@ freestanding and upstream benchmark paths.
 Build and test `varfont`:
 
 ```bash
-cmake --preset dev -S varfont
-cmake --build .build/varfont
-ctest --test-dir .build/varfont --output-on-failure
+make varfont-test
 ```
 
-The root Makefile wraps the same flow:
+`varfont-test` is built and run directly by `.build/er-build`; it does not use
+CMake, Ninja, or CTest. CMake remains available for the hosted SDL demo:
 
 ```bash
-make varfont-test
+make varfont-build
 ```
 
 Build and test `edgerun-ui-core`:
@@ -449,6 +448,17 @@ Build the host-side PXE helper:
 ```bash
 make -C edgerun-metal netboot
 ```
+
+Build the metal UEFI image for a specific boot architecture:
+
+```bash
+make -C edgerun-metal ER_METAL_ARCH=x86_64
+make -C edgerun-metal ER_METAL_ARCH=aarch64
+```
+
+The x86_64 removable-media path is `edgerun-metal/build/esp/EFI/BOOT/BOOTX64.EFI`.
+The AArch64 removable-media path for Raspberry Pi 4B UEFI is
+`edgerun-metal/build/esp/EFI/BOOT/BOOTAA64.EFI`.
 
 Prepare an interface manually when needed:
 
