@@ -7,9 +7,38 @@ static const size_t ER_UI_RUNTIME_INITIAL_CAPACITY = 8u;
 static const float ER_UI_DRAG_START_THRESHOLD_PX = 5.0f;
 static const float ER_UI_WHEEL_SCROLL_SCALE = 900.0f;
 static const float ER_UI_KEY_SLIDER_STEP = 0.05f;
+static const uint32_t ER_UI_CODEPOINT_C0_LAST = 0x1Fu;
 static const uint32_t ER_UI_CODEPOINT_ASCII_DELETE = 0x7Fu;
 static const uint32_t ER_UI_CODEPOINT_C1_FIRST = 0x80u;
 static const uint32_t ER_UI_CODEPOINT_C1_LAST = 0x9Fu;
+
+enum {
+  ER_UI_UTF8_ASCII_MAX = 0x7Fu,
+  ER_UI_UTF8_CONT_MASK = 0xC0u,
+  ER_UI_UTF8_CONT_TAG = 0x80u,
+  ER_UI_UTF8_2_MIN = 0xC2u,
+  ER_UI_UTF8_2_MAX = 0xDFu,
+  ER_UI_UTF8_3_MIN = 0xE0u,
+  ER_UI_UTF8_3_MAX = 0xEFu,
+  ER_UI_UTF8_SURROGATE_MIN = 0xEDu,
+  ER_UI_UTF8_4_MIN = 0xF0u,
+  ER_UI_UTF8_4_MAX = 0xF4u,
+  ER_UI_UTF8_E0_CONT_MIN = 0xA0u,
+  ER_UI_UTF8_F0_CONT_MIN = 0x90u,
+  ER_UI_UTF8_F4_CONT_MAX = 0x8Fu,
+  ER_UI_UTF8_2_BYTES = 2u,
+  ER_UI_UTF8_3_BYTES = 3u,
+  ER_UI_UTF8_4_BYTES = 4u,
+  ER_UI_UTF8_2_PAYLOAD_MASK = 0x1Fu,
+  ER_UI_UTF8_3_PAYLOAD_MASK = 0x0Fu,
+  ER_UI_UTF8_4_PAYLOAD_MASK = 0x07u,
+  ER_UI_UTF8_CONT_PAYLOAD_MASK = 0x3Fu,
+  ER_UI_UTF8_CONT_SHIFT = 6u,
+  ER_UI_UTF8_3_LEAD_SHIFT = 12u,
+  ER_UI_UTF8_4_LEAD_SHIFT = 18u
+};
+
+enum { ER_UI_RUNTIME_RESERVE_GROWTH_FACTOR = 4u };
 
 typedef struct {
   uint32_t codepoint;
@@ -52,7 +81,7 @@ static bool er_ui_text_reserve(er_ui_text_buffer_t* buffer, size_t byte_len) {
 }
 
 static bool er_ui_runtime_reserve(er_ui_allocator_t allocator, void** data, size_t* capacity, size_t count, size_t item_size) {
-  return er_ui_allocator_reserve(allocator, data, capacity, count, item_size, ER_UI_RUNTIME_INITIAL_CAPACITY, 4u);
+  return er_ui_allocator_reserve(allocator, data, capacity, count, item_size, ER_UI_RUNTIME_INITIAL_CAPACITY, ER_UI_RUNTIME_RESERVE_GROWTH_FACTOR);
 }
 
 static float er_ui_runtime_clamp_float(float value, float min_value, float max_value) {
@@ -334,44 +363,50 @@ static bool er_ui_utf8_decode_one(const char* text, size_t available, er_ui_utf8
   if (!text || available == 0u || !out_char) return false;
 
   const unsigned char b0 = (unsigned char)text[0];
-  if (b0 <= 0x7Fu) {
+  if (b0 <= ER_UI_UTF8_ASCII_MAX) {
     out_char->codepoint = b0;
     out_char->byte_len = 1u;
     return true;
   }
 
-  if (b0 >= 0xC2u && b0 <= 0xDFu) {
-    if (available < 2u) return false;
+  if (b0 >= ER_UI_UTF8_2_MIN && b0 <= ER_UI_UTF8_2_MAX) {
+    if (available < ER_UI_UTF8_2_BYTES) return false;
     const unsigned char b1 = (unsigned char)text[1];
-    if ((b1 & 0xC0u) != 0x80u) return false;
-    out_char->codepoint = ((uint32_t)(b0 & 0x1Fu) << 6u) | (uint32_t)(b1 & 0x3Fu);
-    out_char->byte_len = 2u;
+    if ((b1 & ER_UI_UTF8_CONT_MASK) != ER_UI_UTF8_CONT_TAG) return false;
+    out_char->codepoint = ((uint32_t)(b0 & ER_UI_UTF8_2_PAYLOAD_MASK) << ER_UI_UTF8_CONT_SHIFT) |
+                          (uint32_t)(b1 & ER_UI_UTF8_CONT_PAYLOAD_MASK);
+    out_char->byte_len = ER_UI_UTF8_2_BYTES;
     return true;
   }
 
-  if (b0 >= 0xE0u && b0 <= 0xEFu) {
-    if (available < 3u) return false;
+  if (b0 >= ER_UI_UTF8_3_MIN && b0 <= ER_UI_UTF8_3_MAX) {
+    if (available < ER_UI_UTF8_3_BYTES) return false;
     const unsigned char b1 = (unsigned char)text[1];
-    const unsigned char b2 = (unsigned char)text[2];
-    if ((b1 & 0xC0u) != 0x80u || (b2 & 0xC0u) != 0x80u) return false;
-    if (b0 == 0xE0u && b1 < 0xA0u) return false;
-    if (b0 == 0xEDu && b1 >= 0xA0u) return false;
-    out_char->codepoint = ((uint32_t)(b0 & 0x0Fu) << 12u) | ((uint32_t)(b1 & 0x3Fu) << 6u) | (uint32_t)(b2 & 0x3Fu);
-    out_char->byte_len = 3u;
+    const unsigned char b2 = (unsigned char)text[ER_UI_UTF8_2_BYTES];
+    if ((b1 & ER_UI_UTF8_CONT_MASK) != ER_UI_UTF8_CONT_TAG || (b2 & ER_UI_UTF8_CONT_MASK) != ER_UI_UTF8_CONT_TAG) return false;
+    if (b0 == ER_UI_UTF8_3_MIN && b1 < ER_UI_UTF8_E0_CONT_MIN) return false;
+    if (b0 == ER_UI_UTF8_SURROGATE_MIN && b1 >= ER_UI_UTF8_E0_CONT_MIN) return false;
+    out_char->codepoint = ((uint32_t)(b0 & ER_UI_UTF8_3_PAYLOAD_MASK) << ER_UI_UTF8_3_LEAD_SHIFT) |
+                          ((uint32_t)(b1 & ER_UI_UTF8_CONT_PAYLOAD_MASK) << ER_UI_UTF8_CONT_SHIFT) |
+                          (uint32_t)(b2 & ER_UI_UTF8_CONT_PAYLOAD_MASK);
+    out_char->byte_len = ER_UI_UTF8_3_BYTES;
     return true;
   }
 
-  if (b0 >= 0xF0u && b0 <= 0xF4u) {
-    if (available < 4u) return false;
+  if (b0 >= ER_UI_UTF8_4_MIN && b0 <= ER_UI_UTF8_4_MAX) {
+    if (available < ER_UI_UTF8_4_BYTES) return false;
     const unsigned char b1 = (unsigned char)text[1];
-    const unsigned char b2 = (unsigned char)text[2];
-    const unsigned char b3 = (unsigned char)text[3];
-    if ((b1 & 0xC0u) != 0x80u || (b2 & 0xC0u) != 0x80u || (b3 & 0xC0u) != 0x80u) return false;
-    if (b0 == 0xF0u && b1 < 0x90u) return false;
-    if (b0 == 0xF4u && b1 > 0x8Fu) return false;
-    out_char->codepoint = ((uint32_t)(b0 & 0x07u) << 18u) | ((uint32_t)(b1 & 0x3Fu) << 12u) |
-                          ((uint32_t)(b2 & 0x3Fu) << 6u) | (uint32_t)(b3 & 0x3Fu);
-    out_char->byte_len = 4u;
+    const unsigned char b2 = (unsigned char)text[ER_UI_UTF8_2_BYTES];
+    const unsigned char b3 = (unsigned char)text[ER_UI_UTF8_3_BYTES];
+    if ((b1 & ER_UI_UTF8_CONT_MASK) != ER_UI_UTF8_CONT_TAG || (b2 & ER_UI_UTF8_CONT_MASK) != ER_UI_UTF8_CONT_TAG ||
+        (b3 & ER_UI_UTF8_CONT_MASK) != ER_UI_UTF8_CONT_TAG) return false;
+    if (b0 == ER_UI_UTF8_4_MIN && b1 < ER_UI_UTF8_F0_CONT_MIN) return false;
+    if (b0 == ER_UI_UTF8_4_MAX && b1 > ER_UI_UTF8_F4_CONT_MAX) return false;
+    out_char->codepoint = ((uint32_t)(b0 & ER_UI_UTF8_4_PAYLOAD_MASK) << ER_UI_UTF8_4_LEAD_SHIFT) |
+                          ((uint32_t)(b1 & ER_UI_UTF8_CONT_PAYLOAD_MASK) << ER_UI_UTF8_3_LEAD_SHIFT) |
+                          ((uint32_t)(b2 & ER_UI_UTF8_CONT_PAYLOAD_MASK) << ER_UI_UTF8_CONT_SHIFT) |
+                          (uint32_t)(b3 & ER_UI_UTF8_CONT_PAYLOAD_MASK);
+    out_char->byte_len = ER_UI_UTF8_4_BYTES;
     return true;
   }
 
@@ -424,7 +459,7 @@ static size_t er_ui_text_char_count(const er_ui_text_buffer_t* buffer) {
 }
 
 static bool er_ui_codepoint_is_control(uint32_t codepoint) {
-  return codepoint <= 0x1Fu || codepoint == ER_UI_CODEPOINT_ASCII_DELETE ||
+  return codepoint <= ER_UI_CODEPOINT_C0_LAST || codepoint == ER_UI_CODEPOINT_ASCII_DELETE ||
          (codepoint >= ER_UI_CODEPOINT_C1_FIRST && codepoint <= ER_UI_CODEPOINT_C1_LAST);
 }
 
