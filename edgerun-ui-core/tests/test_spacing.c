@@ -11,6 +11,11 @@ static const size_t ER_TEST_RESPONSIVE_GRID_MAX_COLUMNS = 3u;
 static const size_t ER_TEST_RESPONSIVE_GRID_SECOND_ROW_FIRST_INDEX = 3u;
 static const size_t ER_TEST_RESPONSIVE_GRID_SECOND_ROW_SECOND_INDEX = 4u;
 static const size_t ER_TEST_RESPONSIVE_GRID_SPAN_COLUMNS = 2u;
+static const float ER_TEST_SIDECAR_MIN_SIDE_W = 160.0f;
+static const float ER_TEST_SIDECAR_PREFERRED_SIDE_W = 220.0f;
+static const float ER_TEST_SIDECAR_MIN_MAIN_W = 300.0f;
+static const float ER_TEST_SIDECAR_GAP = 24.0f;
+static const float ER_TEST_SIDECAR_STACKED_H = 120.0f;
 
 static void test_spacing_default_matches_tokens(void) {
   er_ui_spacing_t spacing = er_ui_spacing_default();
@@ -65,6 +70,39 @@ static void test_responsive_grid_derives_columns_from_available_width(void) {
                 "spacing: responsive grid span derives width from columns");
 }
 
+static void test_responsive_sidecar_adapts_without_fixed_content_math(void) {
+  er_ui_responsive_sidecar_t wide = er_ui_responsive_sidecar(
+    er_ui_bounds(10.0f, 20.0f, 760.0f, 420.0f),
+    ER_TEST_SIDECAR_MIN_SIDE_W,
+    ER_TEST_SIDECAR_PREFERRED_SIDE_W,
+    ER_TEST_SIDECAR_MIN_MAIN_W,
+    ER_TEST_SIDECAR_GAP,
+    ER_TEST_SIDECAR_STACKED_H);
+  er_ui_responsive_sidecar_t compressed = er_ui_responsive_sidecar(
+    er_ui_bounds(10.0f, 20.0f, 500.0f, 420.0f),
+    ER_TEST_SIDECAR_MIN_SIDE_W,
+    ER_TEST_SIDECAR_PREFERRED_SIDE_W,
+    ER_TEST_SIDECAR_MIN_MAIN_W,
+    ER_TEST_SIDECAR_GAP,
+    ER_TEST_SIDECAR_STACKED_H);
+  er_ui_responsive_sidecar_t stacked = er_ui_responsive_sidecar(
+    er_ui_bounds(10.0f, 20.0f, 420.0f, 420.0f),
+    ER_TEST_SIDECAR_MIN_SIDE_W,
+    ER_TEST_SIDECAR_PREFERRED_SIDE_W,
+    ER_TEST_SIDECAR_MIN_MAIN_W,
+    ER_TEST_SIDECAR_GAP,
+    ER_TEST_SIDECAR_STACKED_H);
+  expect_true(!wide.stacked, "spacing: wide sidecar remains horizontal");
+  expect_bounds(wide.side, er_ui_bounds(10.0f, 20.0f, ER_TEST_SIDECAR_PREFERRED_SIDE_W, 420.0f), "spacing: wide sidecar uses preferred side");
+  expect_float(wide.main.x, wide.side.x + wide.side.w + ER_TEST_SIDECAR_GAP, "spacing: wide sidecar main follows side gap");
+  expect_true(!compressed.stacked, "spacing: compressed sidecar remains horizontal");
+  expect_float(compressed.side.w, ER_TEST_SIDECAR_MIN_SIDE_W + 16.0f, "spacing: compressed sidecar shares extra width");
+  expect_float(compressed.main.w, ER_TEST_SIDECAR_MIN_MAIN_W, "spacing: compressed sidecar preserves main minimum");
+  expect_true(stacked.stacked, "spacing: narrow sidecar stacks");
+  expect_bounds(stacked.side, er_ui_bounds(10.0f, 20.0f, 420.0f, ER_TEST_SIDECAR_STACKED_H), "spacing: stacked sidecar side becomes top region");
+  expect_float(stacked.main.y, stacked.side.y + stacked.side.h + ER_TEST_SIDECAR_GAP, "spacing: stacked sidecar main follows vertical gap");
+}
+
 static void test_system_panel_and_row_geometry(void) {
   er_ui_bounds_t row = er_ui_bounds(10.0f, 20.0f, 360.0f, ER_UI_ROW_H);
   er_ui_bounds_t icon = er_ui_row_icon_slot(row);
@@ -102,6 +140,7 @@ void run_spacing_tests(void) {
   test_component_padding_density_tokens_are_monotonic();
   test_responsive_app_surface_spacing();
   test_responsive_grid_derives_columns_from_available_width();
+  test_responsive_sidecar_adapts_without_fixed_content_math();
   test_system_panel_and_row_geometry();
   test_scroll_geometry_uses_shared_padding_and_hit_contract();
 }

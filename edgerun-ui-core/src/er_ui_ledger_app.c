@@ -20,7 +20,9 @@
 
 static const float ER_UI_LEDGER_MARGIN = 24.0f;
 static const float ER_UI_LEDGER_GAP = 16.0f;
+static const float ER_UI_LEDGER_MIN_SIDE_W = 160.0f;
 static const float ER_UI_LEDGER_SIDE_W = 220.0f;
+static const float ER_UI_LEDGER_STACKED_SIDE_H = 160.0f;
 static const float ER_UI_LEDGER_MIN_CARD_W = 220.0f;
 static const size_t ER_UI_LEDGER_DASHBOARD_MAX_COLUMNS = 3u;
 static const float ER_UI_LEDGER_CARD_RADIUS = 8.0f;
@@ -86,8 +88,8 @@ typedef struct {
 } er_ui_ledger_transaction_t;
 
 typedef struct {
-  float content_x;
-  float content_w;
+  er_ui_bounds_t sidebar;
+  er_ui_bounds_t content;
 } er_ui_ledger_content_layout_t;
 
 typedef struct {
@@ -218,8 +220,15 @@ static er_ui_status_t er_ui_ledger_card_with_header(
 
 static er_ui_ledger_content_layout_t er_ui_ledger_content_layout(er_ui_bounds_t bounds) {
   er_ui_ledger_content_layout_t layout;
-  layout.content_x = bounds.x + ER_UI_LEDGER_SIDE_W + ER_UI_LEDGER_MARGIN;
-  layout.content_w = bounds.x + bounds.w - layout.content_x - ER_UI_LEDGER_MARGIN;
+  er_ui_responsive_sidecar_t sidecar = er_ui_responsive_sidecar(
+    bounds,
+    ER_UI_LEDGER_MIN_SIDE_W,
+    ER_UI_LEDGER_SIDE_W,
+    ER_UI_LEDGER_MIN_CARD_W,
+    ER_UI_LEDGER_MARGIN,
+    ER_UI_LEDGER_STACKED_SIDE_H);
+  layout.sidebar = sidecar.side;
+  layout.content = sidecar.main;
   return layout;
 }
 
@@ -235,10 +244,10 @@ static er_ui_status_t er_ui_ledger_begin_surface(
   er_ui_status_t status;
   if (out_layout == 0) return ER_UI_ERR_INVALID_ARGUMENT;
   layout = er_ui_ledger_content_layout(bounds);
-  status = er_ui_ledger_sidebar(scene, font, er_ui_bounds(bounds.x, bounds.y, ER_UI_LEDGER_SIDE_W, bounds.h),
-                                colors, focused_id);
+  if (!er_ui_bounds_valid(layout.sidebar) || !er_ui_bounds_valid(layout.content)) return ER_UI_ERR_INVALID_ARGUMENT;
+  status = er_ui_ledger_sidebar(scene, font, layout.sidebar, colors, focused_id);
   if (status != ER_UI_OK) return status;
-  status = er_ui_ledger_text(scene, font, title, layout.content_x, bounds.y + 40.0f, colors.text);
+  status = er_ui_ledger_text(scene, font, title, layout.content.x, layout.content.y + 40.0f, colors.text);
   if (status != ER_UI_OK) return status;
   *out_layout = layout;
   return ER_UI_OK;
@@ -584,24 +593,23 @@ static er_ui_status_t er_ui_ledger_dashboard(
   er_ui_bounds_t bounds,
   er_ui_ledger_colors_t colors,
   uint32_t focused_id) {
-  float content_x = bounds.x + ER_UI_LEDGER_SIDE_W + ER_UI_LEDGER_MARGIN;
-  float content_w = er_ui_float_max(bounds.x + bounds.w - content_x - ER_UI_LEDGER_MARGIN, 0.0f);
-  float top_y = bounds.y + ER_UI_LEDGER_MARGIN;
+  er_ui_ledger_content_layout_t layout = er_ui_ledger_content_layout(bounds);
+  if (!er_ui_bounds_valid(layout.sidebar) || !er_ui_bounds_valid(layout.content)) return ER_UI_ERR_INVALID_ARGUMENT;
+  float top_y = layout.content.y + ER_UI_LEDGER_MARGIN;
   float grid_y = top_y + 58.0f;
-  float available_h = er_ui_float_max(bounds.y + bounds.h - grid_y - ER_UI_LEDGER_MARGIN, 1.0f);
+  float available_h = er_ui_float_max(layout.content.y + layout.content.h - grid_y - ER_UI_LEDGER_MARGIN, 1.0f);
   er_ui_responsive_grid_t grid = er_ui_responsive_grid(
-    er_ui_bounds(content_x, grid_y, content_w, available_h),
+    er_ui_bounds(layout.content.x, grid_y, layout.content.w, available_h),
     ER_UI_LEDGER_MIN_CARD_W,
     ER_UI_LEDGER_DASHBOARD_MAX_COLUMNS,
     ER_UI_LEDGER_GAP,
     ER_UI_LEDGER_GAP);
 
-  er_ui_status_t status = er_ui_ledger_sidebar(scene, font, er_ui_bounds(bounds.x, bounds.y, ER_UI_LEDGER_SIDE_W, bounds.h),
-                                               colors, focused_id);
+  er_ui_status_t status = er_ui_ledger_sidebar(scene, font, layout.sidebar, colors, focused_id);
   if (status != ER_UI_OK) return status;
-  status = er_ui_ledger_text(scene, font, "Dashboard", content_x, top_y + 14.0f, colors.text);
+  status = er_ui_ledger_text(scene, font, "Dashboard", layout.content.x, top_y + 14.0f, colors.text);
   if (status != ER_UI_OK) return status;
-  status = er_ui_ledger_text(scene, font, "settlement, royalties, and device-local accounting", content_x, top_y + 38.0f, colors.muted);
+  status = er_ui_ledger_text(scene, font, "settlement, royalties, and device-local accounting", layout.content.x, top_y + 38.0f, colors.muted);
   if (status != ER_UI_OK) return status;
 
   if (grid.columns == 0u) return ER_UI_ERR_INVALID_ARGUMENT;
@@ -635,13 +643,13 @@ static er_ui_status_t er_ui_ledger_payments(
   er_ui_status_t status = er_ui_ledger_begin_surface(scene, font, bounds, colors, focused_id, "Payments", &layout);
   if (status != ER_UI_OK) return status;
   status = er_ui_ledger_transfer_card(scene, font,
-                                      er_ui_bounds(layout.content_x, bounds.y + 72.0f,
-                                                   layout.content_w * 0.48f, 286.0f),
+                                      er_ui_bounds(layout.content.x, layout.content.y + 72.0f,
+                                                   layout.content.w * 0.48f, 286.0f),
                                       colors);
   if (status != ER_UI_OK) return status;
   return er_ui_ledger_transactions_card(scene, font,
-                                        er_ui_bounds(layout.content_x, bounds.y + 374.0f,
-                                                     layout.content_w, 306.0f),
+                                        er_ui_bounds(layout.content.x, layout.content.y + 374.0f,
+                                                     layout.content.w, 306.0f),
                                         colors);
 }
 
@@ -655,14 +663,14 @@ static er_ui_status_t er_ui_ledger_access(
   er_ui_status_t status = er_ui_ledger_begin_surface(scene, font, bounds, colors, focused_id, "Access", &layout);
   if (status != ER_UI_OK) return status;
   status = er_ui_ledger_access_card(scene, font,
-                                    er_ui_bounds(layout.content_x, bounds.y + 72.0f,
-                                                 layout.content_w * 0.48f, 286.0f),
+                                    er_ui_bounds(layout.content.x, layout.content.y + 72.0f,
+                                                 layout.content.w * 0.48f, 286.0f),
                                     colors);
   if (status != ER_UI_OK) return status;
   return er_ui_ledger_targets_card(scene, font,
-                                   er_ui_bounds(layout.content_x + layout.content_w * 0.52f,
-                                                bounds.y + 72.0f,
-                                                layout.content_w * 0.48f, 300.0f),
+                                   er_ui_bounds(layout.content.x + layout.content.w * 0.52f,
+                                                layout.content.y + 72.0f,
+                                                layout.content.w * 0.48f, 300.0f),
                                    colors);
 }
 

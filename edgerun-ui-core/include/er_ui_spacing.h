@@ -156,8 +156,21 @@ typedef struct {
   float gap_y;
 } er_ui_responsive_grid_t;
 
+typedef struct {
+  er_ui_bounds_t side;
+  er_ui_bounds_t main;
+  bool stacked;
+} er_ui_responsive_sidecar_t;
+
 er_ui_component_padding_t er_ui_component_padding_for_density(er_ui_component_density_t density);
 er_ui_spacing_t er_ui_spacing_default(void);
+er_ui_responsive_sidecar_t er_ui_responsive_sidecar(
+  er_ui_bounds_t bounds,
+  float min_side_w,
+  float preferred_side_w,
+  float min_main_w,
+  float gap,
+  float stacked_side_h);
 er_ui_responsive_grid_t er_ui_responsive_grid(
   er_ui_bounds_t bounds,
   float min_column_w,
