@@ -3,6 +3,8 @@
 
 #include "er_ui_primitives.h"
 
+#include <stddef.h>
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -146,8 +148,24 @@ typedef struct {
   float min_touch_target;
 } er_ui_spacing_t;
 
+typedef struct {
+  er_ui_bounds_t bounds;
+  size_t columns;
+  float column_w;
+  float gap_x;
+  float gap_y;
+} er_ui_responsive_grid_t;
+
 er_ui_component_padding_t er_ui_component_padding_for_density(er_ui_component_density_t density);
 er_ui_spacing_t er_ui_spacing_default(void);
+er_ui_responsive_grid_t er_ui_responsive_grid(
+  er_ui_bounds_t bounds,
+  float min_column_w,
+  size_t max_columns,
+  float gap_x,
+  float gap_y);
+er_ui_bounds_t er_ui_responsive_grid_cell(er_ui_responsive_grid_t grid, size_t index, float row_h);
+er_ui_bounds_t er_ui_responsive_grid_span(er_ui_responsive_grid_t grid, size_t index, size_t column_span, float row_h);
 er_ui_bounds_t er_ui_row_icon_slot(er_ui_bounds_t row);
 er_ui_bounds_t er_ui_row_text_rect(er_ui_bounds_t row, float trailing_reserved_w);
 er_ui_component_padding_t er_ui_app_surface_padding_for_width(float width);

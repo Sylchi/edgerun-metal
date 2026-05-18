@@ -54,6 +54,48 @@ er_ui_spacing_t er_ui_spacing_default(void) {
   return spacing;
 }
 
+er_ui_responsive_grid_t er_ui_responsive_grid(
+  er_ui_bounds_t bounds,
+  float min_column_w,
+  size_t max_columns,
+  float gap_x,
+  float gap_y) {
+  er_ui_responsive_grid_t grid = {0};
+  if (!er_ui_bounds_valid(bounds) || min_column_w <= 0.0f || max_columns == 0u || gap_x < 0.0f || gap_y < 0.0f) return grid;
+  grid.bounds = bounds;
+  grid.columns = 1u;
+  grid.gap_x = gap_x;
+  grid.gap_y = gap_y;
+  while (grid.columns < max_columns) {
+    size_t next_columns = grid.columns + 1u;
+    float required_w = min_column_w * (float)next_columns + gap_x * (float)(next_columns - 1u);
+    if (required_w > bounds.w) break;
+    grid.columns = next_columns;
+  }
+  float total_gap = gap_x * (float)(grid.columns - 1u);
+  grid.column_w = er_ui_float_max((bounds.w - total_gap) / (float)grid.columns, 0.0f);
+  return grid;
+}
+
+er_ui_bounds_t er_ui_responsive_grid_cell(er_ui_responsive_grid_t grid, size_t index, float row_h) {
+  return er_ui_responsive_grid_span(grid, index, 1u, row_h);
+}
+
+er_ui_bounds_t er_ui_responsive_grid_span(er_ui_responsive_grid_t grid, size_t index, size_t column_span, float row_h) {
+  if (grid.columns == 0u || grid.column_w <= 0.0f || row_h <= 0.0f || !er_ui_bounds_valid(grid.bounds)) return er_ui_bounds(0.0f, 0.0f, 0.0f, 0.0f);
+  if (column_span == 0u) return er_ui_bounds(0.0f, 0.0f, 0.0f, 0.0f);
+  size_t column = index % grid.columns;
+  size_t row = index / grid.columns;
+  size_t remaining_columns = grid.columns - column;
+  size_t span = column_span < remaining_columns ? column_span : remaining_columns;
+  float width = grid.column_w * (float)span + grid.gap_x * (float)(span - 1u);
+  return er_ui_bounds(
+    grid.bounds.x + (grid.column_w + grid.gap_x) * (float)column,
+    grid.bounds.y + (row_h + grid.gap_y) * (float)row,
+    width,
+    row_h);
+}
+
 er_ui_bounds_t er_ui_row_icon_slot(er_ui_bounds_t row) {
   return er_ui_bounds_with_height_centered(er_ui_bounds(row.x + ER_UI_ROW_PAD_X, row.y, ER_UI_ROW_ICON, row.h), ER_UI_ROW_ICON);
 }
