@@ -144,6 +144,7 @@ UINT8 er_virtio_mmio_read_status(const ErVirtioMmioTransport* transport, UINT8* 
 UINT8 er_virtio_mmio_write_status(const ErVirtioMmioTransport* transport, UINT8 status);
 UINT8 er_virtio_config_read8(const ErVirtioMmioTransport* transport, UINT64 offset, UINT8* out_value);
 UINT8 er_virtio_config_read16(const ErVirtioMmioTransport* transport, UINT64 offset, UINT16* out_value);
+UINT8 er_virtio_config_read32(const ErVirtioMmioTransport* transport, UINT64 offset, UINT32* out_value);
 UINT8 er_virtio_mmio_negotiate_features(const ErVirtioMmioTransport* transport, UINT64 supported_features,
                                         ErVirtioFeatureSet* out_features);
 UINT8 er_virtio_mmio_configure_split_queue(const ErVirtioMmioTransport* transport, UINT16 queue,
