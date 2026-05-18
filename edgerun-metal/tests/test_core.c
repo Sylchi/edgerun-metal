@@ -424,8 +424,10 @@ static INT64 test_vm_relay_recv(UINT8* bytes, UINT32 capacity) {
   return 4;
 }
 
-static INT64 test_vm_ui_emit(const UINT8* bytes, UINT32 len,
+static INT64 test_vm_ui_emit(void* user, const UINT8* bytes, UINT32 len,
                              const er_ui_scene_stats_t* stats) {
+  (void)user;
+
   if (bytes == 0 || stats == 0) {
     return 0;
   }
@@ -2826,6 +2828,101 @@ static void test_ui_wasm_app_runner(void) {
   er_ui_scene_destroy(&scene);
 }
 
+static void test_ui_wasm_app_multiple_runtimes(void) {
+  static UINT8 memory_a[65536];
+  static UINT8 memory_b[65536];
+  ErWasmHostCalls host = {0};
+  ErUiWasmAppRuntime runtime_a;
+  ErUiWasmAppRuntime runtime_b;
+  ErAppUiPresentation presentation_a;
+  ErAppUiPresentation presentation_b;
+  er_ui_scene_t scene_a;
+  er_ui_scene_t scene_b;
+  er_ui_key_t key;
+  er_ui_key_modifiers_t modifiers;
+  INT64 result_a = 0;
+  INT64 result_b = 0;
+
+  test_prepare_wasm_ui_presentation(&presentation_a);
+  test_prepare_wasm_ui_presentation(&presentation_b);
+  check_int64("ui wasm multi scene a init",
+              er_ui_scene_init_with_allocator(&scene_a, er_ui_color_rgb_u8(0u, 0u, 0u),
+                                              test_ui_allocator()),
+              ER_UI_OK);
+  check_int64("ui wasm multi scene b init",
+              er_ui_scene_init_with_allocator(&scene_b, er_ui_color_rgb_u8(0u, 0u, 0u),
+                                              test_ui_allocator()),
+              ER_UI_OK);
+
+  er_mem_zero(memory_a, (UINTN)sizeof(memory_a));
+  er_mem_zero(memory_b, (UINTN)sizeof(memory_b));
+  er_mem_zero((UINT8*)&runtime_a, (UINTN)sizeof(runtime_a));
+  er_mem_zero((UINT8*)&runtime_b, (UINTN)sizeof(runtime_b));
+  runtime_a.memory = memory_a;
+  runtime_a.memory_size = (UINT32)sizeof(memory_a);
+  runtime_a.relay_inbox_base = 0u;
+  runtime_a.relay_inbox_len = 1024u;
+  runtime_a.relay_outbox_base = 1024u;
+  runtime_a.relay_outbox_len = 2048u;
+  runtime_a.presentation = &presentation_a;
+  runtime_a.scene = &scene_a;
+  runtime_b.memory = memory_b;
+  runtime_b.memory_size = (UINT32)sizeof(memory_b);
+  runtime_b.relay_inbox_base = 0u;
+  runtime_b.relay_inbox_len = 1024u;
+  runtime_b.relay_outbox_base = 1024u;
+  runtime_b.relay_outbox_len = 2048u;
+  runtime_b.presentation = &presentation_b;
+  runtime_b.scene = &scene_b;
+
+  check_int64("ui wasm multi prepare a",
+              er_ui_wasm_app_prepare(g_edgerun_ui_counter_wasm, ER_UI_COUNTER_WASM_SIZE,
+                                     &host, &runtime_a),
+              0);
+  check_int64("ui wasm multi prepare b",
+              er_ui_wasm_app_prepare(g_edgerun_ui_counter_wasm, ER_UI_COUNTER_WASM_SIZE,
+                                     &host, &runtime_b),
+              0);
+
+  key.kind = ER_UI_KEY_OTHER;
+  key.codepoint = (UINT32)'Z';
+  modifiers = er_ui_key_modifiers(false, false, false, false);
+  check_int64("ui wasm multi input a",
+              er_ui_wasm_app_deliver_key_input(&runtime_a, key, modifiers), 0);
+  check_int64("ui wasm multi input b1",
+              er_ui_wasm_app_deliver_key_input(&runtime_b, key, modifiers), 0);
+  check_int64("ui wasm multi input b2",
+              er_ui_wasm_app_deliver_key_input(&runtime_b, key, modifiers), 0);
+
+  check_int64("ui wasm multi execute a",
+              er_ui_wasm_app_execute(&runtime_a, &result_a), 0);
+  check_int64("ui wasm multi execute b",
+              er_ui_wasm_app_execute(&runtime_b, &result_b), 0);
+  check_uint64("ui wasm multi result a", (UINT64)result_a,
+               ER_WASM_UI_COMMAND_LIST_HEADER_LEN +
+                 ER_WASM_UI_RECT_RECORD_LEN +
+                 ER_WASM_UI_HIT_RECORD_LEN +
+                 ER_WASM_UI_QUAD_RECORD_LEN);
+  check_uint64("ui wasm multi result b", (UINT64)result_b,
+               ER_WASM_UI_COMMAND_LIST_HEADER_LEN +
+                 ER_WASM_UI_RECT_RECORD_LEN +
+                 ER_WASM_UI_HIT_RECORD_LEN +
+                 ER_WASM_UI_QUAD_RECORD_LEN);
+  check_uint64("ui wasm multi scene a rects", scene_a.rect_count, 1u);
+  check_uint64("ui wasm multi scene b rects", scene_b.rect_count, 1u);
+  check_uint64("ui wasm multi scene a hit id", scene_a.hits[0].id, 1u);
+  check_uint64("ui wasm multi scene b hit id", scene_b.hits[0].id, 2u);
+  check_uint64("ui wasm multi memory a sequence",
+               memory_a[ER_UI_WASM_INPUT_SEQUENCE_OFFSET], 1u);
+  check_uint64("ui wasm multi memory b sequence",
+               memory_b[ER_UI_WASM_INPUT_SEQUENCE_OFFSET], 2u);
+  check_uint64("ui wasm multi emitted a", runtime_a.emitted, 1u);
+  check_uint64("ui wasm multi emitted b", runtime_b.emitted, 1u);
+
+  er_ui_scene_destroy(&scene_b);
+  er_ui_scene_destroy(&scene_a);
+}
+
 static void test_vfs_object_packets(void) {
   static const UINT8 object_bytes[] = {'a', 'b', 'c', 'd', 'e', 'f'};
   ErCryptoProvider crypto;
@@ -4476,6 +4573,7 @@ int main(void) {
   test_wasm_ui_emit_import();
   test_epoch_clock_rollover();
   test_ui_wasm_app_runner();
+  test_ui_wasm_app_multiple_runtimes();
   test_vfs_object_packets();
   test_app_identity_routes();
   test_device_relay_identity();

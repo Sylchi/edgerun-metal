@@ -67,9 +67,11 @@ This layer intentionally does not model capability routes. It is the dumb hardwa
 
 ## WASM Driver Runtime
 
-Drivers are WASM modules executed by the metal interpreter. The interpreter owns no device policy; it gives the module bounded linear memory and explicit imports. The first driver-grade import is `edgerun.bus.exec(req_ptr, resp_ptr)`, where both pointers refer to `ErBusIoPacket` records inside the module's linear memory. The executor validates the pointed-to memory ranges, executes the addressed transaction, writes the response packet, and returns a numeric success status.
+Drivers and user-authored apps are WASM modules executed by the metal interpreter. The interpreter owns no device policy; it gives the module bounded linear memory and explicit imports. The bring-up driver import is `edgerun.bus.exec(req_ptr, resp_ptr)`, where both pointers refer to `ErBusIoPacket` records inside the module's linear memory. The executor validates the pointed-to memory ranges, executes the addressed transaction, writes the response packet, and returns a numeric success status.
 
 This lets a NIC driver build descriptor/register transactions as data, pass them to the dumb bus executor, and keep driver state in admitted WASM memory. Device-specific logic remains app code; the executor remains a packet and bus transaction runner.
+
+The durable app boundary is relay send/receive, not direct device access. `edgerun.relay/send(ptr, len)` is valid only for bytes inside the module's declared outbox window and only when the serialized relay packet matches the app identity, admission id, budget token, and packet-byte budget. `edgerun.relay/recv(ptr, capacity)` is valid only for the declared inbox window. This is the path user-authored apps should use for UI render packets, input events, storage/object work, and later driver/device operations.
 
 ## Work Concepts
 
@@ -103,7 +105,7 @@ Secure IPC routes bind source app node id, target node id, capability id, route 
 
 ## Render Concepts
 
-Rendering is a budgeted runtime capability, not an unbounded local privilege. Apps submit UI state that resolves through `edgerun-ui-core` components into bounded scene/display-list data. The metal renderer draws that admitted scene to a dumb framebuffer.
+Rendering is a budgeted runtime capability, not an unbounded local privilege. User-authored apps submit UI state that resolves through `edgerun-ui-core` components into bounded scene/display-list data. The metal renderer draws that admitted scene to a dumb framebuffer or endpoint-owned VirtIO GPU surface.
 
 Apps cannot draw arbitrary pixels or create arbitrary overlapping windows. They submit predetermined component state, and the shell places that state into admitted layout regions. Transitions are selected from predetermined transition kinds. Overlays are reserved for system prompts, OSD, secure confirmation, and other trusted shell surfaces.
 
@@ -129,12 +131,15 @@ The runtime can hold plaintext buffers while work is active, but only sealed tra
 
 ## First C Milestone
 
-The first C milestone is:
+The completed C foundation is:
 
 - fixed ABI records for work, channel, capability, relay transit, VFS object packet, object label ref, and transform ref
 - app identity and IPC route records for content-addressed WASM execution
 - `erwire` packet carriage for those records
 - memory-only object packet assembly
 - explicit crypto provider hooks for seal/open/hash/sign/verify
+- bounded Wasm relay send/receive imports with app identity, admission, token, memory-window, and packet-byte budget checks
+- backend-neutral UI scene records, component surfaces, variable-font text quads, and GOP/VirtIO GPU rendering foundations
+- concurrent boot-local Wasm UI app contexts with isolated preallocated memory, presentation identity, scene state, and per-runtime `ui_emit` dispatch
 
-No host listener, host capture path, host filesystem persistence, or host networking model belongs in the runtime core.
+The next C milestone is to package user-authored Wasm UI apps as content-addressed input, save and load those app objects through admitted storage work, send admitted scene packets through relay send, verify the route at native ingress, and hand the scene to an endpoint-owned renderer. No host listener, host capture path, host filesystem persistence, or host networking model belongs in the runtime core.

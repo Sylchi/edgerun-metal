@@ -46,6 +46,8 @@
 #define ER_EFI_MEMORY_MAP_BYTES (128u * 1024u)
 #define ER_EFI_EXIT_BOOT_SERVICES_ATTEMPTS 2u
 #define ER_WASM_DRIVER_MEMORY_BYTES (64u * 1024u)
+#define ER_UI_BOOT_APP_COUNT 2u
+#define ER_UI_BOOT_APP_MEMORY_BYTES (64u * 1024u)
 #define ER_UI_WASM_RELAY_INBOX_BASE 0u
 #define ER_UI_WASM_RELAY_INBOX_BYTES 1024u
 #define ER_UI_WASM_RELAY_OUTBOX_BASE 1024u
@@ -57,6 +59,7 @@
 #define ER_UI_WASM_APP_NODE_ID_SEED 0x70u
 #define ER_UI_WASM_RELAY_NODE_ID_SEED 0x90u
 #define ER_UI_WASM_ROUTE_HASH_SEED 0xb0u
+#define ER_UI_WASM_APP_SEED_STRIDE 0x10u
 #define ER_UI_WASM_PS2_INPUT_EPOCH_STRIDE 1u
 #define ER_UI_WASM_EXECUTE_EPOCH_STRIDE 2u
 #define ER_UI_WASM_COUNTER_PACKET_BYTES (ER_WASM_UI_COMMAND_LIST_HEADER_LEN + \
@@ -98,6 +101,7 @@ enum {
 
 static ErWasmHostCalls g_host_calls = {0};
 static UINT8 g_wasm_driver_memory[ER_WASM_DRIVER_MEMORY_BYTES];
+static UINT8 g_ui_boot_app_memory[ER_UI_BOOT_APP_COUNT][ER_UI_BOOT_APP_MEMORY_BYTES];
 static UINT8 g_ui_boot_arena[ER_UI_BOOT_ARENA_SIZE];
 static UINT8 g_efi_memory_map[ER_EFI_MEMORY_MAP_BYTES];
 static UINT32 g_gpu_profile_framebuffer[ER_GPU_PROFILE_FRAMEBUFFER_WIDTH_MAX *
@@ -110,6 +114,13 @@ static UINT64 g_log_dev = 0;
 static UINT64 g_log_func = 0;
 
 typedef struct {
+  ErAppUiPresentation presentation;
+  ErUiWasmAppRuntime runtime;
+  er_ui_scene_t scene;
+  UINT8 ready;
+} ErUiBootAppContext;
+
+typedef struct {
   vr_font_face_t* font;
   ErUiSurfaceMode mode;
   ErUiSurface* surface;
@@ -120,9 +131,9 @@ typedef struct {
   er_ui_scene_budget_t scene_budget;
   ErUiSurfaceFrameBudget frame_budget;
   er_ui_resolved_theme_t theme;
-  const er_ui_scene_t* wasm_scene;
-  ErUiWasmAppRuntime* wasm_runtime;
-  UINT8 wasm_scene_ready;
+  ErUiBootAppContext* apps;
+  UINT32 app_count;
+  UINT32 active_app;
 } ErUiBootRenderContext;
 
 static void* er_ui_boot_alloc(void* user, size_t size, size_t align) {
@@ -1073,7 +1084,12 @@ static UINT8 er_ui_boot_append_wasm_scene(er_ui_scene_t* scene, const er_ui_scen
   return 1u;
 }
 
+static UINT8 er_ui_boot_app_seed(UINT8 seed, UINT32 app_index) {
+  return (UINT8)(seed + (UINT8)(app_index * ER_UI_WASM_APP_SEED_STRIDE));
+}
+
 static void er_ui_boot_prepare_wasm_presentation(const er_ui_scene_budget_t* scene_budget,
+                                                 UINT32 app_index,
                                                  ErAppUiPresentation* out_presentation) {
   if (scene_budget == 0 || out_presentation == 0) {
     return;
@@ -1081,18 +1097,18 @@ static void er_ui_boot_prepare_wasm_presentation(const er_ui_scene_budget_t* sce
   er_mem_zero((UINT8*)out_presentation, (UINTN)sizeof(*out_presentation));
   out_presentation->abi_version = ER_APP_ABI_VERSION;
   er_fill_nonzero_bytes(out_presentation->presentation_id.bytes, ER_HASH_LEN,
-                        ER_UI_WASM_PRESENTATION_ID_SEED);
+                        er_ui_boot_app_seed(ER_UI_WASM_PRESENTATION_ID_SEED, app_index));
   er_fill_nonzero_bytes(out_presentation->jurisdiction_id.bytes, ER_HASH_LEN,
-                        ER_UI_WASM_JURISDICTION_ID_SEED);
+                        er_ui_boot_app_seed(ER_UI_WASM_JURISDICTION_ID_SEED, app_index));
   er_fill_nonzero_bytes(out_presentation->admission_id.bytes, ER_HASH_LEN,
-                        ER_UI_WASM_ADMISSION_ID_SEED);
+                        er_ui_boot_app_seed(ER_UI_WASM_ADMISSION_ID_SEED, app_index));
   er_fill_nonzero_bytes(out_presentation->app_node_id.bytes, ER_NODE_ID_LEN,
-                        ER_UI_WASM_APP_NODE_ID_SEED);
+                        er_ui_boot_app_seed(ER_UI_WASM_APP_NODE_ID_SEED, app_index));
   er_fill_nonzero_bytes(out_presentation->ui_relay_node_id.bytes, ER_NODE_ID_LEN,
-                        ER_UI_WASM_RELAY_NODE_ID_SEED);
+                        er_ui_boot_app_seed(ER_UI_WASM_RELAY_NODE_ID_SEED, app_index));
   er_fill_nonzero_bytes(out_presentation->route_hash.bytes, ER_HASH_LEN,
-                        ER_UI_WASM_ROUTE_HASH_SEED);
-  out_presentation->sequence = ER_UI_WASM_PRESENTATION_SEQUENCE;
+                        er_ui_boot_app_seed(ER_UI_WASM_ROUTE_HASH_SEED, app_index));
+  out_presentation->sequence = ER_UI_WASM_PRESENTATION_SEQUENCE + (UINT64)app_index;
   out_presentation->max_rects = (UINT64)scene_budget->rects;
   out_presentation->max_hits = (UINT64)scene_budget->hits;
   out_presentation->max_drag_sources = (UINT64)scene_budget->drag_sources;
@@ -1125,14 +1141,18 @@ static UINT8 er_ui_boot_execute_wasm_counter(ErUiWasmAppRuntime* runtime) {
 static UINT8 er_ui_boot_prepare_wasm_counter(ErUiWasmAppRuntime* runtime,
                                              ErAppUiPresentation* presentation,
                                              er_ui_scene_t* wasm_scene,
+                                             UINT8* memory,
+                                             UINT32 memory_size,
+                                             UINT32 app_index,
                                              const er_ui_scene_budget_t* scene_budget) {
-  if (runtime == 0 || presentation == 0 || wasm_scene == 0 || scene_budget == 0) {
+  if (runtime == 0 || presentation == 0 || wasm_scene == 0 || memory == 0 ||
+      memory_size == 0u || scene_budget == 0) {
     return 0u;
   }
-  er_ui_boot_prepare_wasm_presentation(scene_budget, presentation);
+  er_ui_boot_prepare_wasm_presentation(scene_budget, app_index, presentation);
   er_mem_zero((UINT8*)runtime, (UINTN)sizeof(*runtime));
-  runtime->memory = g_wasm_driver_memory;
-  runtime->memory_size = (UINT32)sizeof(g_wasm_driver_memory);
+  runtime->memory = memory;
+  runtime->memory_size = memory_size;
   runtime->relay_inbox_base = ER_UI_WASM_RELAY_INBOX_BASE;
   runtime->relay_inbox_len = ER_UI_WASM_RELAY_INBOX_BYTES;
   runtime->relay_outbox_base = ER_UI_WASM_RELAY_OUTBOX_BASE;
@@ -1148,9 +1168,98 @@ static UINT8 er_ui_boot_prepare_wasm_counter(ErUiWasmAppRuntime* runtime,
   return er_ui_boot_execute_wasm_counter(runtime);
 }
 
+static void er_ui_boot_destroy_app_contexts(ErUiBootAppContext* apps, UINT32 app_count) {
+  UINT32 i;
+
+  if (apps == 0) {
+    return;
+  }
+  for (i = 0u; i < app_count; ++i) {
+    er_ui_scene_destroy(&apps[i].scene);
+    er_mem_zero((UINT8*)&apps[i], (UINTN)sizeof(apps[i]));
+  }
+}
+
+static UINT8 er_ui_boot_prepare_app_contexts(ErUiBootAppContext* apps,
+                                             UINT32 app_count,
+                                             const er_ui_scene_budget_t* scene_budget,
+                                             er_ui_color4_t clear) {
+  UINT32 i;
+
+  if (apps == 0 || app_count == 0u || scene_budget == 0 ||
+      app_count > ER_UI_BOOT_APP_COUNT) {
+    return 0u;
+  }
+  for (i = 0u; i < app_count; ++i) {
+    er_mem_zero((UINT8*)&apps[i], (UINTN)sizeof(apps[i]));
+    if (er_ui_scene_init_with_allocator(&apps[i].scene, clear,
+                                        er_ui_boot_allocator()) != ER_UI_OK) {
+      er_ui_boot_destroy_app_contexts(apps, i);
+      return 0u;
+    }
+    if (er_ui_boot_prepare_wasm_counter(&apps[i].runtime,
+                                        &apps[i].presentation,
+                                        &apps[i].scene,
+                                        g_ui_boot_app_memory[i],
+                                        ER_UI_BOOT_APP_MEMORY_BYTES,
+                                        i,
+                                        scene_budget) == 0u) {
+      er_ui_boot_destroy_app_contexts(apps, i + 1u);
+      return 0u;
+    }
+    apps[i].ready = 1u;
+  }
+  return 1u;
+}
+
+static ErUiBootAppContext* er_ui_boot_active_app(ErUiBootRenderContext* render) {
+  if (render == 0 || render->apps == 0 || render->app_count == 0u ||
+      render->active_app >= render->app_count ||
+      render->apps[render->active_app].ready == 0u) {
+    return 0;
+  }
+  return &render->apps[render->active_app];
+}
+
+static const ErUiBootAppContext* er_ui_boot_active_app_const(const ErUiBootRenderContext* render) {
+  if (render == 0 || render->apps == 0 || render->app_count == 0u ||
+      render->active_app >= render->app_count ||
+      render->apps[render->active_app].ready == 0u) {
+    return 0;
+  }
+  return &render->apps[render->active_app];
+}
+
+static UINT8 er_ui_boot_switch_app_for_surface(ErUiBootRenderContext* render, UINT32 surface_id) {
+  UINT32 app_index;
+
+  if (render == 0 || render->apps == 0 || render->app_count == 0u) {
+    return 0u;
+  }
+  switch (surface_id) {
+    case ER_UI_LEDGER_APP_LEDGER_ID:
+      app_index = 0u;
+      break;
+    case ER_UI_LEDGER_APP_PAYMENTS_ID:
+      app_index = render->app_count > 1u ? 1u : 0u;
+      break;
+    case ER_UI_LEDGER_APP_ACCESS_ID:
+      app_index = 0u;
+      break;
+    default:
+      return 1u;
+  }
+  if (app_index >= render->app_count || render->apps[app_index].ready == 0u) {
+    return 0u;
+  }
+  render->active_app = app_index;
+  return 1u;
+}
+
 static UINT8 er_ui_boot_render_scene(er_ui_scene_t* scene,
                                      er_ui_ledger_app_state_t* ledger_state,
                                      const ErUiBootRenderContext* render) {
+  const ErUiBootAppContext* active_app;
   er_ui_scene_stats_t scene_stats;
   er_ui_scene_budget_violation_t scene_violation;
   ErUiSurfaceRenderStats render_stats;
@@ -1168,8 +1277,9 @@ static UINT8 er_ui_boot_render_scene(er_ui_scene_t* scene,
     er_println("ui renderer: scene build failed");
     return 0u;
   }
-  if (render->wasm_scene_ready != 0u &&
-      er_ui_boot_append_wasm_scene(scene, render->wasm_scene) == 0u) {
+  active_app = er_ui_boot_active_app_const(render);
+  if (active_app != 0 &&
+      er_ui_boot_append_wasm_scene(scene, &active_app->scene) == 0u) {
     er_println("ui renderer: wasm scene append failed");
     return 0u;
   }
@@ -1207,6 +1317,8 @@ static UINT8 er_ui_boot_render_scene(er_ui_scene_t* scene,
   }
 
   er_print("ui renderer: app=");
+  er_print_u64_dec((UINT64)render->active_app);
+  er_print(" surface=");
   er_print_u64_dec((UINT64)er_ui_workspace_focused_surface_id(&ledger_state->shell));
   er_print(" bytes=");
   er_print_u64_dec(render_stats.bytes_written);
@@ -1242,9 +1354,10 @@ static er_ui_action_t er_ui_boot_action_from_ps2(er_ui_runtime_state_t* runtime,
 static UINT8 er_ui_boot_apply_input(er_ui_ledger_app_state_t* ledger_state,
                                     er_ui_runtime_state_t* runtime,
                                     er_ui_scene_t* scene,
-                                    const ErUiBootRenderContext* render,
+                                    ErUiBootRenderContext* render,
                                     ErPs2KeyboardAction input,
                                     UINT8* out_redraw) {
+  ErUiBootAppContext* active_app;
   er_ui_action_t action;
   bool changed = false;
 
@@ -1258,11 +1371,17 @@ static UINT8 er_ui_boot_apply_input(er_ui_ledger_app_state_t* ledger_state,
   if (input.kind == ER_PS2_KEYBOARD_ACTION_NONE) {
     return 1u;
   }
-  if (input.kind == ER_PS2_KEYBOARD_ACTION_UI_KEY && render != 0 &&
-      render->wasm_runtime != 0) {
-    if (er_ui_wasm_app_deliver_key_input(render->wasm_runtime,
+  if (input.kind == ER_PS2_KEYBOARD_ACTION_SELECT_SURFACE) {
+    if (er_ui_boot_switch_app_for_surface(render, input.surface_id) == 0u) {
+      return 0u;
+    }
+    *out_redraw = 1u;
+  }
+  active_app = er_ui_boot_active_app(render);
+  if (input.kind == ER_PS2_KEYBOARD_ACTION_UI_KEY && active_app != 0) {
+    if (er_ui_wasm_app_deliver_key_input(&active_app->runtime,
                                          input.key, input.modifiers) != 0 ||
-        er_ui_boot_execute_wasm_counter(render->wasm_runtime) == 0u) {
+        er_ui_boot_execute_wasm_counter(&active_app->runtime) == 0u) {
       return 0u;
     }
     *out_redraw = 1u;
@@ -1282,7 +1401,7 @@ static UINT8 er_ui_boot_apply_input(er_ui_ledger_app_state_t* ledger_state,
 static void er_ui_boot_input_loop(er_ui_ledger_app_state_t* ledger_state,
                                   er_ui_runtime_state_t* runtime,
                                   er_ui_scene_t* scene,
-                                  const ErUiBootRenderContext* render) {
+                                  ErUiBootRenderContext* render) {
   ErPs2KeyboardState keyboard = {0};
 
   for (;;) {
@@ -1321,17 +1440,17 @@ static void er_run_ui_profile(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE* SystemTa
     ER_UI_STYLE_AUTHORITY_USER,
     (er_ui_style_preset_t){ER_UI_COLOR_SCHEME_DARK, ER_UI_ACCENT_NEUTRAL, ER_UI_RADIUS_DEFAULT});
   er_ui_scene_t scene = {0};
-  er_ui_scene_t wasm_scene = {0};
   er_ui_runtime_state_t runtime = {0};
   er_ui_ledger_app_state_t ledger_state = {0};
+  ErUiBootAppContext apps[ER_UI_BOOT_APP_COUNT];
   ErVirtioGpu gpu;
   ErVirtioGpuFramebuffer framebuffer;
   ErVirtioGpuDisplayInfo display_info;
   ErUiSurface surface;
-  ErAppUiPresentation wasm_presentation;
-  ErUiWasmAppRuntime wasm_runtime;
   ErUiBootRenderContext render_context = {0};
   vr_font_face_t* font = 0;
+
+  er_mem_zero((UINT8*)apps, (UINTN)sizeof(apps));
 
   er_println("boot profile: ui");
   if (er_virtio_gpu_init_first_pci(&gpu) == 0u) {
@@ -1406,6 +1525,9 @@ static void er_run_ui_profile(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE* SystemTa
   render_context.scene_budget = scene_budget;
   render_context.frame_budget = frame_budget;
   render_context.theme = theme;
+  render_context.apps = apps;
+  render_context.app_count = ER_UI_BOOT_APP_COUNT;
+  render_context.active_app = 0u;
 
   if (er_ui_ledger_app_state_init(&ledger_state, er_ui_boot_allocator()) != ER_UI_OK) {
     er_println("ui renderer: ledger app state failed");
@@ -1425,34 +1547,22 @@ static void er_run_ui_profile(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE* SystemTa
     vr_font_face_destroy(font);
     return;
   }
-  if (er_ui_scene_init_with_allocator(&wasm_scene, theme.colors.bg, er_ui_boot_allocator()) != ER_UI_OK) {
-    er_println("ui renderer: wasm scene state failed");
+  if (er_ui_boot_prepare_app_contexts(apps, ER_UI_BOOT_APP_COUNT, &scene_budget,
+                                      theme.colors.bg) == 0u) {
+    er_println("ui renderer: app contexts failed");
     er_ui_scene_destroy(&scene);
     er_ui_runtime_state_destroy(&runtime);
     er_ui_ledger_app_state_destroy(&ledger_state);
     vr_font_face_destroy(font);
     return;
   }
-  if (er_ui_boot_prepare_wasm_counter(&wasm_runtime, &wasm_presentation,
-                                      &wasm_scene, &scene_budget) == 0u) {
-    er_println("ui renderer: wasm scene failed");
-    er_ui_scene_destroy(&wasm_scene);
-    er_ui_scene_destroy(&scene);
-    er_ui_runtime_state_destroy(&runtime);
-    er_ui_ledger_app_state_destroy(&ledger_state);
-    vr_font_face_destroy(font);
-    return;
-  }
-  render_context.wasm_scene = &wasm_scene;
-  render_context.wasm_runtime = &wasm_runtime;
-  render_context.wasm_scene_ready = 1u;
 
   er_println("ui renderer: first frame deferred until boot services exit");
   er_println("boot services: exiting");
   er_gfx_console_set_enabled(0u);
   er_print_set_firmware_console_enabled(0u);
   if (er_exit_boot_services(ImageHandle, SystemTable) == 0u) {
-    er_ui_scene_destroy(&wasm_scene);
+    er_ui_boot_destroy_app_contexts(apps, ER_UI_BOOT_APP_COUNT);
     er_ui_scene_destroy(&scene);
     er_ui_runtime_state_destroy(&runtime);
     er_ui_ledger_app_state_destroy(&ledger_state);

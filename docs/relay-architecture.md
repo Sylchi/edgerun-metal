@@ -186,15 +186,17 @@ New work should extend one of those surfaces instead of adding a second route, I
 
 ## Near-Term Proof
 
-The proof that this architecture is real is not a full OS. It is a relay chain in QEMU:
+The proof that this architecture is real is not a full OS. It is a user-authored app with a beautiful UI moving through the same relay chain that storage, input, and device work will use:
 
 ```text
-Wasm or host test emits erwire packet
+user-authored Wasm app
+  -> admitted render capability packet
+  -> erwire packet
   -> VirtIO net receives EdgeRun EtherType frame
   -> native erwire parser accepts packet
   -> work payload is decoded as admitted protocol traffic
   -> admission-defined route is verified
-  -> VirtIO block or VirtIO GPU adapter consumes packet
+  -> render endpoint captures or draws the scene
   -> transit/result packet is emitted back over erwire
 ```
 
@@ -203,10 +205,11 @@ The first concrete milestones are:
 1. Add a native profile loop around the existing native ingress polling helper.
 2. Decode accepted packets into `edgerun-work` records and reject packets that are not admitted work traffic.
 3. Convert verified admission-defined routes into `ErRelayForwardIntent`.
-4. Add assigned storage/render capability endpoint adapters.
-5. Add Wasm hostcalls that send and receive erwire relay packets, replacing direct device hostcalls as the driver/app boundary.
-6. Prove one app can render the same UI scene to more than one renderer route.
-7. Prove one Wasm driver can submit device work to a device endpoint reached through a relay route.
+4. Add an assigned render capability endpoint adapter that can capture scene hashes before drawing.
+5. Package and run user-authored Wasm UI apps through relay send/receive, using the existing concurrent runtime-context shape instead of a singleton UI app.
+6. Add assigned storage capability endpoint adapters for object payloads so app code, manifests, UI assets, and saved authoring state can be loaded from objects.
+7. Prove one app can render the same UI scene to more than one renderer route.
+8. Prove one Wasm driver can submit device work to a device endpoint reached through a relay route.
 
 ## Coherence Checklist
 

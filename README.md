@@ -1,8 +1,9 @@
 # edgerun-c
 
-This repository contains three C projects:
+This repository contains four C projects:
 
 - `edgerun-metal`: a freestanding x86_64 UEFI runtime that boots as `BOOTX64.EFI` and runs embedded Wasm modules with native hostcalls.
+- `edgerun-crypto`: reusable freestanding crypto primitives, currently centered on BLAKE3 hashing.
 - `varfont`: a zero-dependency variable-font renderer library with parser, shaping, rasterization, atlas, and test coverage.
 - `edgerun-ui-core`: the C port of EdgeRun's platform-neutral UI scene command buffer.
 
@@ -30,8 +31,12 @@ VirtIO networking and direct Ethernet delivery. If a wrong MAC address receives
 sealed content, it still cannot decrypt it, authorize it, forge recipient
 proofs, or make it payable.
 
-The goal of the metal work is to replace firmware boot-service networking with
-runtime-owned drivers:
+The goal of the metal work is to make user-authored Wasm apps feel native:
+beautiful, budgeted UI surfaces; explicit admissions; and relay-routed storage,
+rendering, input, and device work. The current boot UI proof can keep multiple
+Wasm UI apps resident in isolated preallocated runtime contexts and switch the
+active app context from shell selection. Replacing firmware boot-service
+networking with runtime-owned drivers is the immediate infrastructure step:
 
 1. Discover PCI/MMIO devices from ACPI and PCI configuration space.
 2. Bring up VirtIO queues in freestanding C.

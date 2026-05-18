@@ -39,16 +39,20 @@ The shared contract is what lets these parts interoperate. The admissions remain
 - `er_hw_relay` encodes firmware UDP, native Ethernet, and VirtIO endpoints.
 - `er_native_boot` can poll native erwire ingress into deterministic accepted, malformed, or empty records.
 - `edgerun-ui-core` provides backend-neutral UI scene records.
-- `wasm_vm` runs bounded Wasm modules with explicit hostcalls.
+- `wasm_vm` runs bounded Wasm modules with explicit hostcalls, including bounded `edgerun.relay/send` and `edgerun.relay/recv` imports.
+- Relay sends are validated against serialized packet shape, app identity, admission id, budget token, and packet-byte budget before host relay dispatch.
+- `varfont`, `edgerun-ui-core`, the GOP renderer, and the VirtIO GPU profile provide enough UI/text/rendering foundation for polished app surfaces.
+- The boot UI proof can hold multiple Wasm UI apps concurrently as explicit runtime contexts with isolated preallocated memory, presentation identity, scene state, and app-switcher selection.
 
-## Milestone 1: Object-Only Storage Contract
+## Milestone 1: Object-Only Storage And App Packaging Contract
 
-Goal: make it impossible for runtime storage work to look like host file work.
+Goal: make it impossible for runtime storage or app packaging work to look like host file work.
 
 Work:
 
 - Audit runtime code for host path, file, socket, or descriptor concepts outside tools and boot compatibility.
 - Keep `er_vfs` labels as manifest labels only.
+- Treat user-authored Wasm apps, manifests, UI assets, and fonts as content-addressed objects.
 - Add docs or tests showing labels resolve to object ids, not authority.
 - Ensure storage work accepts typed object payloads only when carried by an admitted storage or capability route.
 
@@ -56,6 +60,7 @@ Proof:
 
 - Host tests reject invalid labels and path traversal.
 - Host tests prove identical bytes produce identical object ids independent of label.
+- Tests prove app identity and asset references come from object ids, not paths.
 - Route tests must start from signed admissions, not packet-class inference.
 
 ## Milestone 2: Native Relay Ingress

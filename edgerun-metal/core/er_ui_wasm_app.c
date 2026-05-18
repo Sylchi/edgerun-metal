@@ -13,8 +13,6 @@
 #define ER_UI_WASM_U8_MASK 0xffu
 #define ER_UI_WASM_U32_MASK 0xffffffffu
 
-static ErUiWasmAppRuntime* g_active_runtime;
-
 static void er_ui_wasm_app_store_u32(UINT8* dst, UINT32 value) {
   dst[ER_UI_WASM_U32_BYTE0] = (UINT8)(value & ER_UI_WASM_U8_MASK);
   dst[ER_UI_WASM_U32_BYTE1] =
@@ -133,17 +131,18 @@ static int er_ui_wasm_app_commit_input(ErUiWasmAppRuntime* runtime,
                                              epoch);
 }
 
-static INT64 er_ui_wasm_app_emit_host(const UINT8* bytes, UINT32 len,
+static INT64 er_ui_wasm_app_emit_host(void* user, const UINT8* bytes, UINT32 len,
                                       const er_ui_scene_stats_t* stats) {
-  if (bytes == 0 || stats == 0 || g_active_runtime == 0 ||
-      g_active_runtime->scene == 0) {
+  ErUiWasmAppRuntime* runtime = (ErUiWasmAppRuntime*)user;
+
+  if (bytes == 0 || stats == 0 || runtime == 0 || runtime->scene == 0) {
     return -1;
   }
-  if (er_wasm_ui_command_decode(bytes, len, g_active_runtime->scene,
-                                &g_active_runtime->emitted_stats) != 0) {
+  if (er_wasm_ui_command_decode(bytes, len, runtime->scene,
+                                &runtime->emitted_stats) != 0) {
     return -1;
   }
-  g_active_runtime->emitted = 1u;
+  runtime->emitted = 1u;
   return (INT64)(UINT64)len;
 }
 
@@ -157,7 +156,7 @@ int er_ui_wasm_app_prepare(const UINT8* module_data, UINT32 module_size,
   if (module_data == 0 || module_size == 0u || host_template == 0 ||
       runtime == 0 || runtime->memory == 0 || runtime->memory_size == 0u ||
       runtime->presentation == 0 || runtime->scene == 0 ||
-      g_active_runtime != 0 || runtime->prepared != 0u) {
+      runtime->prepared != 0u) {
     return -1;
   }
   er_mem_zero(runtime->memory, (UINTN)runtime->memory_size);
@@ -189,6 +188,7 @@ int er_ui_wasm_app_prepare(const UINT8* module_data, UINT32 module_size,
   host.memory = runtime->memory;
   host.memory_size = runtime->memory_size;
   host.ui_emit = er_ui_wasm_app_emit_host;
+  host.ui_emit_user = runtime;
   host.ui_presentation = runtime->presentation;
 
   if (er_wasm_init(&runtime->module, module_data, module_size, &host) != 0 ||
@@ -251,19 +251,16 @@ int er_ui_wasm_app_execute(ErUiWasmAppRuntime* runtime, INT64* out_result) {
   INT64 result = 0;
 
   if (runtime == 0 || out_result == 0 || runtime->prepared == 0u ||
-      runtime->scene == 0 || g_active_runtime != 0) {
+      runtime->scene == 0) {
     return -1;
   }
   er_ui_scene_clear_commands(runtime->scene);
   er_mem_zero((UINT8*)&runtime->emitted_stats, (UINTN)sizeof(runtime->emitted_stats));
   runtime->emitted = 0u;
-  g_active_runtime = runtime;
   if (er_wasm_execute_i64(&runtime->module, runtime->main_index, &result) != 0 ||
       runtime->emitted == 0u) {
-    g_active_runtime = 0;
     return -1;
   }
-  g_active_runtime = 0;
   if (er_epoch_clock_advance_with_modifier(&runtime->settlement_clock,
                                            &runtime->execute_epoch_modifier, 0) == 0u) {
     return -1;

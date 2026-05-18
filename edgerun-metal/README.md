@@ -32,21 +32,21 @@ Confirmed working:
 - Boot profiles exist: `ui`, `native`, `tpm`, `gpu`
 - Wasm module headers are generated from tracked WAT sources
 - Generated build artifacts are ignored by Git
-- GOP-backed UI rectangle scene renderer exists for the `ui` profile
+- GOP and VirtIO GPU UI rendering paths exist for scene-backed app surfaces
 - The renderer architecture targets CPU-driven 4K120 from the start; see `docs/metal-renderer-4k120.md`
 
 ## Current objective
 
 Netboot is now support infrastructure. Do not keep redesigning it unless it blocks boot.
 
-The real work is the relay core:
+The real work is the relay core that lets user-authored Wasm apps run with polished UI:
 
 1. Keep the UI runtime and active hardware profiles stable.
 2. Use native VirtIO-net as the first EdgeRun Ethernet ingress.
 3. Parse incoming erwire packets without firmware networking.
-4. Verify admitted storage work before dispatching it to VirtIO block endpoint adapters.
-5. Verify admitted render capability work before dispatching it to VirtIO GPU endpoint adapters.
-6. Move app, UI, driver, storage, and device work through one erwire relay model.
+4. Verify admitted render capability work before dispatching it to GOP or VirtIO GPU endpoint adapters.
+5. Verify admitted storage work before dispatching it to object storage or VirtIO block endpoint adapters.
+6. Move app-authored UI, input, driver, storage, and device work through one erwire relay model.
 
 The cross-project architecture is documented in `../docs/relay-architecture.md`.
 
@@ -106,7 +106,7 @@ make -C edgerun-metal gpu
 Profiles:
 
 ```text
-ui     = GOP-backed UI runtime, Wasm UI app, PS/2 input loop
+ui     = VirtIO GPU-backed UI runtime, Wasm UI app, PS/2 input loop
 native = QEMU microvm VirtIO-MMIO erwire-over-Ethernet probe
 tpm    = QEMU swtpm/TPM2 CRB direct command probe
 gpu    = VirtIO GPU/VGA PCI framebuffer probe
@@ -268,16 +268,28 @@ Status: host-tested ingress records implemented; admission-defined route verific
 
 `er_native_boot_poll_relay_ingress` accepts native erwire packets and records accepted, malformed, or empty ingress deterministically. The durable path must decode `edgerun-work` records, verify signed admissions, then hand assigned local endpoint adapters only already-admitted work.
 
+### Wasm relay app boundary
+
+Status: bounded relay imports implemented; app-authored UI proof is next.
+
+The Wasm interpreter supports `edgerun.relay/send` and `edgerun.relay/recv` imports through declared inbox/outbox windows. Relay send validates the serialized relay packet, source app node id, admission id, budget token, and packet-byte budget before calling the host relay hook. This is the correct app boundary; direct PCI/MMIO/bus imports remain bring-up scaffolding for drivers until relay device endpoints are proven.
+
+### User-authored UI apps
+
+Status: UI foundations and concurrent local Wasm app contexts implemented; product packaging proof is next.
+
+`edgerun-ui-core`, `varfont`, the GOP renderer, and the VirtIO GPU profile now provide enough scene, text, theme, component, and framebuffer machinery to target real app surfaces instead of diagnostics. The boot UI profile can now keep multiple Wasm UI app runtimes resident at once, each with preallocated memory, presentation identity, scene state, and its own `ui_emit` context. The next proof should package a small user-authored Wasm app as content-addressed input, let it emit admitted scene or scene-delta packets, and render the result through an endpoint-owned renderer.
+
 ## Next milestones
 
 Use `NEXT_CORE_WORK.md` and `../docs/coherent-system-milestones.md` as the active checklist. In short:
 
 ```text
-1. Object-only storage contract
+1. Object-only storage and app packaging contract
 2. Native relay ingress loop and admission-defined acknowledgement
-3. Admission-defined VirtIO storage endpoint adapter
-4. Admission-defined VirtIO render endpoint adapter
-5. Wasm relay hostcalls
+3. Admission-defined render endpoint capture for app UI scenes
+4. Admission-defined storage endpoint capture for app/object payloads
+5. User-authored Wasm UI app proof
 6. Distributed UI proof
 7. Remote driver proof
 ```
