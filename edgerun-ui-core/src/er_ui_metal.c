@@ -4,7 +4,7 @@
 #include "er_ui_spacing.h"
 
 static const float ER_UI_METAL_SCREEN_PAD = 120.0f;
-static const float ER_UI_METAL_COMPACT_SCREEN_PAD = 28.0f;
+static const float ER_UI_METAL_COMPACT_SCREEN_PAD = 0.0f;
 static const float ER_UI_METAL_HEADER_H = 116.0f;
 static const float ER_UI_METAL_COMPACT_HEADER_H = 76.0f;
 static const float ER_UI_METAL_TAB_Y_GAP = 28.0f;
@@ -14,18 +14,18 @@ static const float ER_UI_METAL_COMPACT_TAB_W = 560.0f;
 static const float ER_UI_METAL_TAB_H = 48.0f;
 static const float ER_UI_METAL_COMPACT_TAB_H = 42.0f;
 static const float ER_UI_METAL_BLOCK_GAP = 32.0f;
-static const float ER_UI_METAL_COMPACT_BLOCK_GAP = 14.0f;
+static const float ER_UI_METAL_COMPACT_BLOCK_GAP = 18.0f;
 static const float ER_UI_METAL_METRIC_H = 176.0f;
 static const float ER_UI_METAL_COMPACT_METRIC_H = 132.0f;
 static const float ER_UI_METAL_LOWER_H = 1020.0f;
 static const float ER_UI_METAL_LEFT_W = 900.0f;
 static const float ER_UI_METAL_COMPACT_LEFT_W = 460.0f;
 static const float ER_UI_METAL_COMPACT_RAIL_MIN_W = 160.0f;
-static const float ER_UI_METAL_COMPACT_RAIL_W = 176.0f;
+static const float ER_UI_METAL_COMPACT_RAIL_W = 224.0f;
 static const float ER_UI_METAL_COMPACT_MAIN_MIN_W = 220.0f;
 static const float ER_UI_METAL_COMPACT_RAIL_STACKED_H = 560.0f;
-static const float ER_UI_METAL_COMPACT_TOPBAR_H = 52.0f;
-static const float ER_UI_METAL_TOPBAR_LEFT_W = 154.0f;
+static const float ER_UI_METAL_COMPACT_TOPBAR_H = 64.0f;
+static const float ER_UI_METAL_TOPBAR_LEFT_W = 184.0f;
 static const float ER_UI_METAL_TOPBAR_GAP = 12.0f;
 static const float ER_UI_METAL_TOPBAR_PAD_Y = 7.0f;
 static const float ER_UI_METAL_TOPBAR_COMMAND_MIN_W = 220.0f;
@@ -185,14 +185,16 @@ static er_ui_status_t er_ui_metal_emit_rail_item(
   uint32_t id) {
   er_ui_status_t status = er_ui_scene_push_hit(scene, er_ui_hit(ER_UI_HIT_BUTTON, id, bounds.x, bounds.y, bounds.w, bounds.h));
   if (status != ER_UI_OK) return status;
-  status = er_ui_scene_push_rect(scene, er_ui_rect_fill(bounds.x, bounds.y, bounds.w, bounds.h, theme.radius.control, er_ui_color_with_alpha(theme.colors.row, 0.34f)));
+  status = er_ui_scene_push_rect(scene, er_ui_rect_fill(bounds.x, bounds.y, bounds.w, bounds.h, theme.radius.control, er_ui_color_with_alpha(theme.shadcn.colors.card, 0.96f)));
   if (status != ER_UI_OK) return status;
-  status = er_ui_scene_push_ascii_text(scene, font, label, ER_UI_METAL_TEXT_BUDGET, bounds.x + 10.0f, bounds.y + 19.0f, theme.colors.muted);
+  status = er_ui_scene_push_rect(scene, er_ui_rect_border(bounds.x, bounds.y, bounds.w, bounds.h, theme.radius.control, er_ui_color_with_alpha(theme.shadcn.colors.border, 1.65f)));
   if (status != ER_UI_OK) return status;
-  status = er_ui_scene_push_ascii_text(scene, font, value, ER_UI_METAL_TEXT_BUDGET, bounds.x + 10.0f, bounds.y + 38.0f, theme.colors.text);
+  status = er_ui_scene_push_ascii_text(scene, font, label, ER_UI_METAL_TEXT_BUDGET, bounds.x + 12.0f, bounds.y + 18.0f, theme.colors.muted);
+  if (status != ER_UI_OK) return status;
+  status = er_ui_scene_push_ascii_text(scene, font, value, ER_UI_METAL_TEXT_BUDGET, bounds.x + 12.0f, bounds.y + 39.0f, theme.colors.text);
   if (status != ER_UI_OK) return status;
   er_ui_painter_t painter = er_ui_painter(scene);
-  return er_ui_painter_icon(&painter, er_ui_bounds(bounds.x + bounds.w - 30.0f, bounds.y + 13.0f, 18.0f, 18.0f), icon, theme.colors.muted);
+  return er_ui_painter_icon(&painter, er_ui_bounds(bounds.x + bounds.w - 32.0f, bounds.y + 13.0f, 18.0f, 18.0f), icon, theme.colors.muted);
 }
 
 //@optimizer-ignore-function the 720p showcase rail intentionally lists style controls in visual order
@@ -214,24 +216,24 @@ static er_ui_status_t er_ui_metal_emit_style_rail(
     ER_UI_ICON_ROUTE,
     ER_UI_ICON_MENU
   };
-  er_ui_status_t status = er_ui_scene_push_rect(scene, er_ui_rect_linear_gradient(bounds.x, bounds.y, bounds.w, bounds.h, theme.radius.panel,
-                                                                                 er_ui_color_with_alpha(theme.colors.sidebar, 0.98f),
-                                                                                 er_ui_color_with_alpha(theme.colors.panel, 0.86f)));
+  er_ui_status_t status = er_ui_scene_push_rect(scene, er_ui_rect_fill(bounds.x, bounds.y, bounds.w, bounds.h, 0.0f,
+                                                                       er_ui_color_with_alpha(theme.shadcn.colors.background, 0.98f)));
   if (status != ER_UI_OK) return status;
-  status = er_ui_scene_push_rect(scene, er_ui_rect_border(bounds.x, bounds.y, bounds.w, bounds.h, theme.radius.panel, er_ui_color_with_alpha(theme.colors.border, 0.54f)));
+  status = er_ui_scene_push_rect(scene, er_ui_rect_border(bounds.x, bounds.y, bounds.w, bounds.h, 0.0f,
+                                                         er_ui_color_with_alpha(theme.shadcn.colors.border, 1.7f)));
   if (status != ER_UI_OK) return status;
-  status = er_ui_scene_push_ascii_text(scene, font, "Menu", ER_UI_METAL_MENU_TEXT_BUDGET, bounds.x + 12.0f, bounds.y + 28.0f, theme.colors.text);
+  status = er_ui_scene_push_ascii_text(scene, font, "Menu", ER_UI_METAL_MENU_TEXT_BUDGET, bounds.x + 20.0f, bounds.y + 34.0f, theme.colors.text);
   if (status != ER_UI_OK) return status;
   for (size_t i = 0u; i < sizeof(labels) / sizeof(labels[0]); ++i) {
-    er_ui_bounds_t row = er_ui_bounds(bounds.x + 8.0f, bounds.y + 44.0f + (float)i * 48.0f, bounds.w - 16.0f, 42.0f);
+    er_ui_bounds_t row = er_ui_bounds(bounds.x + 14.0f, bounds.y + 56.0f + (float)i * 56.0f, bounds.w - 28.0f, 48.0f);
     status = er_ui_metal_emit_rail_item(scene, font, row, theme, labels[i], values[i], icons[i], ER_UI_METAL_BOARD_BASE_ID + (uint32_t)i);
     if (status != ER_UI_OK) return status;
   }
-  status = er_ui_component_button_emit(scene, font, er_ui_bounds(bounds.x + 8.0f, bounds.y + bounds.h - 84.0f, bounds.w - 16.0f, 32.0f), theme,
-                                    "Shuffle", ER_UI_METAL_SHUFFLE_BUTTON_ID, ER_UI_COMPONENT_BUTTON_SECONDARY, ER_UI_COMPONENT_BUTTON_SIZE_SM, true);
+  status = er_ui_component_button_emit(scene, font, er_ui_bounds(bounds.x + 14.0f, bounds.y + bounds.h - 92.0f, bounds.w - 28.0f, 34.0f), theme,
+	                                    "Shuffle", ER_UI_METAL_SHUFFLE_BUTTON_ID, ER_UI_COMPONENT_BUTTON_SECONDARY, ER_UI_COMPONENT_BUTTON_SIZE_SM, true);
   if (status != ER_UI_OK) return status;
-  return er_ui_component_button_emit(scene, font, er_ui_bounds(bounds.x + 8.0f, bounds.y + bounds.h - 44.0f, bounds.w - 16.0f, 32.0f), theme,
-                                  "Get Code", ER_UI_METAL_GET_CODE_BUTTON_ID, ER_UI_COMPONENT_BUTTON_DEFAULT, ER_UI_COMPONENT_BUTTON_SIZE_SM, true);
+  return er_ui_component_button_emit(scene, font, er_ui_bounds(bounds.x + 14.0f, bounds.y + bounds.h - 48.0f, bounds.w - 28.0f, 34.0f), theme,
+	                                  "Get Code", ER_UI_METAL_GET_CODE_BUTTON_ID, ER_UI_COMPONENT_BUTTON_DEFAULT, ER_UI_COMPONENT_BUTTON_SIZE_SM, true);
 }
 
 static er_ui_status_t er_ui_metal_emit_showcase_topbar(
@@ -240,12 +242,16 @@ static er_ui_status_t er_ui_metal_emit_showcase_topbar(
   er_ui_bounds_t bounds,
   er_ui_resolved_theme_t theme) {
   er_ui_painter_t painter = er_ui_painter(scene);
-  er_ui_status_t status = er_ui_scene_push_rect(scene, er_ui_rect_fill(bounds.x, bounds.y, bounds.w, bounds.h, theme.radius.panel, er_ui_color_with_alpha(theme.colors.panel, 0.52f)));
+  er_ui_status_t status = er_ui_scene_push_rect(scene, er_ui_rect_fill(bounds.x, bounds.y, bounds.w, bounds.h, 0.0f,
+                                                                       er_ui_color_with_alpha(theme.shadcn.colors.background, 0.98f)));
   if (status != ER_UI_OK) return status;
-  status = er_ui_painter_icon(&painter, er_ui_bounds(bounds.x + 12.0f, bounds.y + 15.0f, 20.0f, 20.0f), ER_UI_ICON_SPARKLES, theme.colors.accent);
+  status = er_ui_scene_push_rect(scene, er_ui_rect_border(bounds.x, bounds.y, bounds.w, bounds.h, 0.0f,
+                                                         er_ui_color_with_alpha(theme.shadcn.colors.border, 1.65f)));
   if (status != ER_UI_OK) return status;
-  status = er_ui_component_button_emit(scene, font, er_ui_bounds(bounds.x + 42.0f, bounds.y + 9.0f, 112.0f, 34.0f), theme, "Components",
-                                    ER_UI_METAL_COMPONENTS_BUTTON_ID, ER_UI_COMPONENT_BUTTON_GHOST, ER_UI_COMPONENT_BUTTON_SIZE_SM, true);
+  status = er_ui_painter_icon(&painter, er_ui_bounds(bounds.x + 18.0f, bounds.y + 21.0f, 20.0f, 20.0f), ER_UI_ICON_SPARKLES, theme.colors.accent);
+  if (status != ER_UI_OK) return status;
+  status = er_ui_component_button_emit(scene, font, er_ui_bounds(bounds.x + 52.0f, bounds.y + 14.0f, 126.0f, 38.0f), theme, "Components",
+	                                    ER_UI_METAL_COMPONENTS_BUTTON_ID, ER_UI_COMPONENT_BUTTON_GHOST, ER_UI_COMPONENT_BUTTON_SIZE_SM, true);
   if (status != ER_UI_OK) return status;
   er_ui_bounds_t tools = er_ui_bounds(
     bounds.x + ER_UI_METAL_TOPBAR_LEFT_W + ER_UI_METAL_TOPBAR_GAP,
