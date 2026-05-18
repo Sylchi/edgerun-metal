@@ -320,6 +320,18 @@ static void test_put_le64(UINT8* dst, UINT64 value) {
   test_put_le32(dst + 4, (UINT32)(value >> 32));
 }
 
+static void test_put_be16(UINT8* dst, UINT16 value) {
+  dst[0] = (UINT8)((value >> 8) & 0xffu);
+  dst[1] = (UINT8)(value & 0xffu);
+}
+
+static void test_put_be32(UINT8* dst, UINT32 value) {
+  dst[0] = (UINT8)((value >> 24) & 0xffu);
+  dst[1] = (UINT8)((value >> 16) & 0xffu);
+  dst[2] = (UINT8)((value >> 8) & 0xffu);
+  dst[3] = (UINT8)(value & 0xffu);
+}
+
 static void test_fill_bytes(UINT8* dst, UINTN len, UINT8 seed) {
   UINTN i;
 
@@ -1430,6 +1442,7 @@ static void test_tpm_crb_direct_transport(void) {
   static UINT8 response_buffer[256];
   ErTpm2Info info;
   ErTpmCrbTransport transport;
+  ErTpmP256Primary primary;
   UINT8 command[128];
   UINT8 response[256];
   UINT8 random[32];
@@ -1439,6 +1452,7 @@ static void test_tpm_crb_direct_transport(void) {
   UINT32 response_len = 0u;
   UINT32 random_len = 0u;
   UINT32 response_body_len;
+  UINT32 offset;
 
   er_mem_zero(tpm2, (UINTN)sizeof(tpm2));
   er_mem_zero(crb, (UINTN)sizeof(crb));
@@ -1533,6 +1547,60 @@ static void test_tpm_crb_direct_transport(void) {
   check_uint64("tpm random byte0", random[0], 0xaau);
   check_uint64("tpm random byte3", random[3], 0xddu);
 
+  check_int64("tpm create primary command",
+              er_tpm_build_create_primary_p256_signing_command(
+                  command, (UINT32)sizeof(command), &command_len),
+              1);
+  check_uint64("tpm create primary len", command_len, 65u);
+  check_uint64("tpm create primary command code", command[9], 0x31u);
+  check_uint64("tpm create primary owner", command[13], 0x01u);
+  check_uint64("tpm create primary auth bytes", command[17], 9u);
+  check_uint64("tpm create primary ecc type", command[35], 0x00u);
+  check_uint64("tpm create primary ecc type lo", command[36], 0x23u);
+
+  er_mem_zero(response_buffer, (UINTN)sizeof(response_buffer));
+  response_buffer[0] = 0x80u;
+  response_buffer[1] = 0x02u;
+  test_put_be32(response_buffer + 2u, 126u);
+  test_put_be32(response_buffer + 6u, ER_TPM_RC_SUCCESS);
+  test_put_be32(response_buffer + 10u, 0x80000000u);
+  test_put_be32(response_buffer + 14u, 90u);
+  offset = 18u;
+  test_put_be16(response_buffer + offset, 88u);
+  offset += 2u;
+  test_put_be16(response_buffer + offset, ER_TPM_ALG_ECC);
+  offset += 2u;
+  test_put_be16(response_buffer + offset, ER_TPM_ALG_SHA256);
+  offset += 2u;
+  test_put_be32(response_buffer + offset, 0x00040472u);
+  offset += 4u;
+  test_put_be16(response_buffer + offset, 0u);
+  offset += 2u;
+  test_put_be16(response_buffer + offset, ER_TPM_ALG_NULL);
+  offset += 2u;
+  test_put_be16(response_buffer + offset, ER_TPM_ALG_ECDSA);
+  offset += 2u;
+  test_put_be16(response_buffer + offset, ER_TPM_ALG_SHA256);
+  offset += 2u;
+  test_put_be16(response_buffer + offset, ER_TPM_ECC_NIST_P256);
+  offset += 2u;
+  test_put_be16(response_buffer + offset, ER_TPM_ALG_NULL);
+  offset += 2u;
+  test_put_be16(response_buffer + offset, 32u);
+  offset += 2u;
+  test_fill_bytes(response_buffer + offset, 32u, 0x71u);
+  offset += 32u;
+  test_put_be16(response_buffer + offset, 32u);
+  offset += 2u;
+  test_fill_bytes(response_buffer + offset, 32u, 0x91u);
+  check_int64("tpm parse create primary",
+              er_tpm_parse_create_primary_p256_response(response_buffer, 126u,
+                                                        &primary),
+              1);
+  check_uint64("tpm primary handle", primary.handle, 0x80000000u);
+  check_uint64("tpm primary public x0", primary.public_key[0], 0x71u);
+  check_uint64("tpm primary public y0", primary.public_key[32], 0x91u);
+
   check_int64("tpm read public command",
               er_tpm_build_read_public_command(0x81000001u, command,
                                                (UINT32)sizeof(command),
@@ -1579,6 +1647,47 @@ static void test_tpm_crb_direct_transport(void) {
   check_uint64("tpm signature pads r", signature[0], 0u);
   check_uint64("tpm signature r first", signature[1], 0x41u);
   check_uint64("tpm signature s first", signature[32], 0x61u);
+
+  er_mem_zero(response_buffer, (UINTN)sizeof(response_buffer));
+  response_buffer[0] = 0x80u;
+  response_buffer[1] = 0x02u;
+  test_put_be32(response_buffer + 2u, 10u + 4u + response_body_len + 9u);
+  test_put_be32(response_buffer + 6u, ER_TPM_RC_SUCCESS);
+  test_put_be32(response_buffer + 10u, response_body_len);
+  response_buffer[14] = 0x00u;
+  response_buffer[15] = 0x18u;
+  response_buffer[16] = 0x00u;
+  response_buffer[17] = 0x0bu;
+  response_buffer[18] = 0u;
+  response_buffer[19] = 31u;
+  test_fill_bytes(response_buffer + 20u, 31u, 0x51u);
+  response_buffer[51] = 0u;
+  response_buffer[52] = 32u;
+  test_fill_bytes(response_buffer + 53u, 32u, 0x71u);
+  response_buffer[85] = 0x40u;
+  response_buffer[86] = 0x00u;
+  response_buffer[87] = 0x00u;
+  response_buffer[88] = 0x09u;
+  response_buffer[89] = 0u;
+  response_buffer[90] = 0u;
+  response_buffer[91] = 0u;
+  response_buffer[92] = 0u;
+  response_buffer[93] = 0u;
+  check_int64("tpm parse sessions signature",
+              er_tpm_parse_p256_sha256_signature_response(
+                  response_buffer, 10u + 4u + response_body_len + 9u, signature),
+              1);
+  check_uint64("tpm sessions signature pads r", signature[0], 0u);
+  check_uint64("tpm sessions signature r first", signature[1], 0x51u);
+  check_uint64("tpm sessions signature s first", signature[32], 0x71u);
+
+  check_int64("tpm flush command",
+              er_tpm_build_flush_context_command(0x80000000u, command,
+                                                 (UINT32)sizeof(command),
+                                                 &command_len),
+              1);
+  check_uint64("tpm flush len", command_len, 14u);
+  check_uint64("tpm flush code", command[9], 0x65u);
 }
 
 static void test_wasm_mmio_imports(void) {

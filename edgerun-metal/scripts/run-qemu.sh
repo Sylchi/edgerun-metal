@@ -8,6 +8,7 @@ QEMU_HEIGHT="${QEMU_HEIGHT:-720}"
 QEMU_REFRESH="${QEMU_REFRESH:-60}"
 QEMU_NATIVE="${QEMU_NATIVE:-0}"
 QEMU_TPM="${QEMU_TPM:-0}"
+QEMU_TPM_PERSIST_STATE="${QEMU_TPM_PERSIST_STATE:-0}"
 QEMU_CAPTURE="${QEMU_CAPTURE:-${BUILD_DIR}/native-erwire.pcap}"
 QEMU_TPM_STATE_DIR="${QEMU_TPM_STATE_DIR:-${BUILD_DIR}/swtpm-state}"
 QEMU_TPM_SOCKET="${QEMU_TPM_SOCKET:-${BUILD_DIR}/swtpm.sock}"
@@ -57,11 +58,15 @@ fi
 OVMF_VARS_WRITABLE="$(mktemp /tmp/edgerun-ovmf-vars.XXXXXX.fd)"
 cp "${OVMF_VARS}" "${OVMF_VARS_WRITABLE}"
 TPM_PID=""
+TPM_STATE_OWNED=""
 cleanup() {
   if [[ -n "${TPM_PID}" ]]; then
     kill "${TPM_PID}" 2>/dev/null || true
   fi
   rm -f "${OVMF_VARS_WRITABLE}" "${QEMU_TPM_SOCKET}" "${QEMU_TPM_PIDFILE}"
+  if [[ -n "${TPM_STATE_OWNED}" ]]; then
+    rm -rf "${QEMU_TPM_STATE_DIR}"
+  fi
 }
 trap cleanup EXIT
 
@@ -73,6 +78,10 @@ fi
 QEMU_TPM_ARGS=()
 if [[ "${QEMU_TPM}" == "1" ]]; then
   TPM_WAIT=0
+  if [[ "${QEMU_TPM_PERSIST_STATE}" != "1" ]]; then
+    QEMU_TPM_STATE_DIR="$(mktemp -d /tmp/edgerun-swtpm-state.XXXXXX)"
+    TPM_STATE_OWNED=1
+  fi
   mkdir -p "${QEMU_TPM_STATE_DIR}" "$(dirname "${QEMU_TPM_SOCKET}")"
   rm -f "${QEMU_TPM_SOCKET}" "${QEMU_TPM_PIDFILE}"
   swtpm socket \

@@ -31,8 +31,26 @@ enum {
   ER_TPM_RESPONSE_SIZE_OFFSET = 2u,
   ER_TPM_TPM2B_LEN_BYTES = 2u,
   ER_TPM_RANDOM_BYTES_OFFSET = 12u,
+  ER_TPM_AUTH_VALUE_LEN = 9u,
+  ER_TPM_CREATE_PRIMARY_COMMAND_LEN = 65u,
+  ER_TPM_CREATE_PRIMARY_PUBLIC_LEN = 24u,
+  ER_TPM_CREATE_PRIMARY_PARAMS_LEN = 38u,
+  ER_TPM_EMPTY_SENSITIVE_CREATE_LEN = 4u,
+  ER_TPM_EMPTY_SENSITIVE_CREATE_FIELD_LEN = 6u,
+  ER_TPM_PUBLIC_AUTH_POLICY_OFFSET = 8u,
+  ER_TPM_P256_POINT_BYTES = 32u,
+  ER_TPM_P256_PUBLIC_MIN_LEN = 24u,
+  ER_TPM_TPMT_PUBLIC_FIXED_LEN = 10u,
+  ER_TPM_ECC_PARAMS_LEN = 10u,
   ER_TPM_SIGN_COMMAND_LEN = 73u,
-  ER_TPM_SIGNATURE_MAX_COMPONENT_LEN = 32u
+  ER_TPM_FLUSH_CONTEXT_COMMAND_LEN = 14u,
+  ER_TPM_SIGNATURE_MAX_COMPONENT_LEN = 32u,
+  ER_TPM_TPMA_OBJECT_FIXED_TPM = 0x00000002u,
+  ER_TPM_TPMA_OBJECT_FIXED_PARENT = 0x00000010u,
+  ER_TPM_TPMA_OBJECT_SENSITIVE_DATA_ORIGIN = 0x00000020u,
+  ER_TPM_TPMA_OBJECT_USER_WITH_AUTH = 0x00000040u,
+  ER_TPM_TPMA_OBJECT_NODA = 0x00000400u,
+  ER_TPM_TPMA_OBJECT_SIGN_ENCRYPT = 0x00040000u
 };
 
 static UINT16 er_tpm_get_le16(const UINT8* bytes) {
@@ -68,6 +86,17 @@ static void er_tpm_put_be32(UINT8* dst, UINT32 value) {
   dst[1] = (UINT8)((value >> 16u) & ER_TPM_BYTE_MASK);
   dst[2] = (UINT8)((value >> ER_TPM_BYTE_BITS) & ER_TPM_BYTE_MASK);
   dst[3] = (UINT8)(value & ER_TPM_BYTE_MASK);
+}
+
+static void er_tpm_write_empty_auth_area(UINT8* out_command, UINT32* offset) {
+  er_tpm_put_be32(out_command + *offset, ER_TPM_RS_PW);
+  *offset += ER_TPM_U32_BYTES;
+  er_tpm_put_be16(out_command + *offset, 0u);
+  *offset += ER_TPM_U16_BYTES;
+  out_command[*offset] = 0u;
+  *offset += 1u;
+  er_tpm_put_be16(out_command + *offset, 0u);
+  *offset += ER_TPM_U16_BYTES;
 }
 
 static UINT32 er_tpm_mmio_read32(UINT64 address) {
@@ -329,6 +358,76 @@ UINT8 er_tpm_build_startup_command(UINT16 startup_type,
   return 1;
 }
 
+UINT8 er_tpm_build_create_primary_p256_signing_command(UINT8* out_command,
+                                                       UINT32 command_capacity,
+                                                       UINT32* out_command_len) {
+  UINT32 offset;
+  UINT32 object_attributes;
+
+  if (out_command_len == 0 ||
+      er_tpm_build_header(ER_TPM_ST_SESSIONS, ER_TPM_CREATE_PRIMARY_COMMAND_LEN,
+                          ER_TPM_CC_CREATE_PRIMARY, out_command, command_capacity) == 0u) {
+    return 0;
+  }
+
+  object_attributes = ER_TPM_TPMA_OBJECT_FIXED_TPM |
+                      ER_TPM_TPMA_OBJECT_FIXED_PARENT |
+                      ER_TPM_TPMA_OBJECT_SENSITIVE_DATA_ORIGIN |
+                      ER_TPM_TPMA_OBJECT_USER_WITH_AUTH |
+                      ER_TPM_TPMA_OBJECT_NODA |
+                      ER_TPM_TPMA_OBJECT_SIGN_ENCRYPT;
+
+  offset = ER_TPM_HEADER_LEN;
+  er_tpm_put_be32(out_command + offset, ER_TPM_RH_OWNER);
+  offset += ER_TPM_U32_BYTES;
+  er_tpm_put_be32(out_command + offset, ER_TPM_AUTH_VALUE_LEN);
+  offset += ER_TPM_U32_BYTES;
+  er_tpm_write_empty_auth_area(out_command, &offset);
+
+  er_tpm_put_be16(out_command + offset, ER_TPM_EMPTY_SENSITIVE_CREATE_LEN);
+  offset += ER_TPM_U16_BYTES;
+  er_tpm_put_be16(out_command + offset, 0u);
+  offset += ER_TPM_U16_BYTES;
+  er_tpm_put_be16(out_command + offset, 0u);
+  offset += ER_TPM_U16_BYTES;
+
+  er_tpm_put_be16(out_command + offset, ER_TPM_CREATE_PRIMARY_PUBLIC_LEN);
+  offset += ER_TPM_U16_BYTES;
+  er_tpm_put_be16(out_command + offset, ER_TPM_ALG_ECC);
+  offset += ER_TPM_U16_BYTES;
+  er_tpm_put_be16(out_command + offset, ER_TPM_ALG_SHA256);
+  offset += ER_TPM_U16_BYTES;
+  er_tpm_put_be32(out_command + offset, object_attributes);
+  offset += ER_TPM_U32_BYTES;
+  er_tpm_put_be16(out_command + offset, 0u);
+  offset += ER_TPM_U16_BYTES;
+  er_tpm_put_be16(out_command + offset, ER_TPM_ALG_NULL);
+  offset += ER_TPM_U16_BYTES;
+  er_tpm_put_be16(out_command + offset, ER_TPM_ALG_ECDSA);
+  offset += ER_TPM_U16_BYTES;
+  er_tpm_put_be16(out_command + offset, ER_TPM_ALG_SHA256);
+  offset += ER_TPM_U16_BYTES;
+  er_tpm_put_be16(out_command + offset, ER_TPM_ECC_NIST_P256);
+  offset += ER_TPM_U16_BYTES;
+  er_tpm_put_be16(out_command + offset, ER_TPM_ALG_NULL);
+  offset += ER_TPM_U16_BYTES;
+  er_tpm_put_be16(out_command + offset, 0u);
+  offset += ER_TPM_U16_BYTES;
+  er_tpm_put_be16(out_command + offset, 0u);
+  offset += ER_TPM_U16_BYTES;
+
+  er_tpm_put_be16(out_command + offset, 0u);
+  offset += ER_TPM_U16_BYTES;
+  er_tpm_put_be32(out_command + offset, 0u);
+  offset += ER_TPM_U32_BYTES;
+
+  if (offset != ER_TPM_CREATE_PRIMARY_COMMAND_LEN) {
+    return 0;
+  }
+  *out_command_len = offset;
+  return 1;
+}
+
 UINT8 er_tpm_build_get_random_command(UINT16 bytes_requested,
                                       UINT8* out_command, UINT32 command_capacity,
                                       UINT32* out_command_len) {
@@ -398,6 +497,19 @@ UINT8 er_tpm_build_sign_p256_sha256_command(UINT32 handle,
   return 1;
 }
 
+UINT8 er_tpm_build_flush_context_command(UINT32 handle,
+                                         UINT8* out_command, UINT32 command_capacity,
+                                         UINT32* out_command_len) {
+  if (out_command_len == 0 || handle == 0u ||
+      er_tpm_build_header(ER_TPM_ST_NO_SESSIONS, ER_TPM_FLUSH_CONTEXT_COMMAND_LEN,
+                          ER_TPM_CC_FLUSH_CONTEXT, out_command, command_capacity) == 0u) {
+    return 0;
+  }
+  er_tpm_put_be32(out_command + ER_TPM_HEADER_LEN, handle);
+  *out_command_len = ER_TPM_FLUSH_CONTEXT_COMMAND_LEN;
+  return 1;
+}
+
 UINT32 er_tpm_response_code(const UINT8* response, UINT32 response_len) {
   UINT32 claimed_len;
 
@@ -434,6 +546,97 @@ UINT8 er_tpm_parse_get_random_response(const UINT8* response, UINT32 response_le
   return 1;
 }
 
+static UINT8 er_tpm_read_tpm2b_bounds(const UINT8* bytes, UINT32 len, UINT32* cursor,
+                                      const UINT8** out_bytes, UINT32* out_len);
+
+static UINT8 er_tpm_parse_p256_public_area(const UINT8* public_area,
+                                           UINT32 public_area_len,
+                                           UINT8 out_public_key[ER_TPM_P256_PUBLIC_KEY_LEN]) {
+  UINT32 cursor;
+  UINT32 auth_policy_len;
+  UINT32 x_len;
+  UINT32 y_len;
+  const UINT8* x;
+  const UINT8* y;
+
+  if (public_area == 0 || out_public_key == 0 ||
+      public_area_len < ER_TPM_P256_PUBLIC_MIN_LEN ||
+      er_tpm_get_be16(public_area) != ER_TPM_ALG_ECC ||
+      er_tpm_get_be16(public_area + 2u) != ER_TPM_ALG_SHA256) {
+    return 0;
+  }
+
+  auth_policy_len = er_tpm_get_be16(public_area + ER_TPM_PUBLIC_AUTH_POLICY_OFFSET);
+  if (public_area_len < ER_TPM_TPMT_PUBLIC_FIXED_LEN + auth_policy_len +
+      ER_TPM_ECC_PARAMS_LEN + ER_TPM_TPM2B_LEN_BYTES + ER_TPM_TPM2B_LEN_BYTES) {
+    return 0;
+  }
+
+  cursor = ER_TPM_TPMT_PUBLIC_FIXED_LEN + auth_policy_len;
+  if (er_tpm_get_be16(public_area + cursor) != ER_TPM_ALG_NULL ||
+      er_tpm_get_be16(public_area + cursor + 2u) != ER_TPM_ALG_ECDSA ||
+      er_tpm_get_be16(public_area + cursor + 4u) != ER_TPM_ALG_SHA256 ||
+      er_tpm_get_be16(public_area + cursor + 6u) != ER_TPM_ECC_NIST_P256 ||
+      er_tpm_get_be16(public_area + cursor + 8u) != ER_TPM_ALG_NULL) {
+    return 0;
+  }
+  cursor += ER_TPM_ECC_PARAMS_LEN;
+
+  if (er_tpm_read_tpm2b_bounds(public_area, public_area_len, &cursor, &x, &x_len) == 0u ||
+      er_tpm_read_tpm2b_bounds(public_area, public_area_len, &cursor, &y, &y_len) == 0u ||
+      cursor != public_area_len ||
+      x_len == 0u || y_len == 0u ||
+      x_len > ER_TPM_P256_POINT_BYTES || y_len > ER_TPM_P256_POINT_BYTES) {
+    return 0;
+  }
+
+  er_mem_zero(out_public_key, ER_TPM_P256_PUBLIC_KEY_LEN);
+  er_mem_copy(out_public_key + (ER_TPM_P256_POINT_BYTES - x_len), x, x_len);
+  er_mem_copy(out_public_key + ER_TPM_P256_POINT_BYTES +
+              (ER_TPM_P256_POINT_BYTES - y_len), y, y_len);
+  return 1;
+}
+
+UINT8 er_tpm_parse_create_primary_p256_response(const UINT8* response,
+                                                UINT32 response_len,
+                                                ErTpmP256Primary* out_primary) {
+  UINT16 tag;
+  UINT32 cursor;
+  UINT32 parameter_size;
+  UINT32 parameter_end;
+  const UINT8* public_area;
+  UINT32 public_area_len;
+
+  if (response == 0 || out_primary == 0 ||
+      er_tpm_response_success(response, response_len) == 0u ||
+      response_len < ER_TPM_HEADER_LEN + ER_TPM_U32_BYTES + ER_TPM_TPM2B_LEN_BYTES) {
+    return 0;
+  }
+
+  er_mem_zero((UINT8*)out_primary, (UINTN)sizeof(*out_primary));
+  tag = er_tpm_get_be16(response);
+  cursor = ER_TPM_HEADER_LEN;
+  out_primary->handle = er_tpm_get_be32(response + cursor);
+  cursor += ER_TPM_U32_BYTES;
+
+  parameter_end = response_len;
+  if (tag == ER_TPM_ST_SESSIONS && response_len - cursor >= ER_TPM_U32_BYTES) {
+    parameter_size = er_tpm_get_be32(response + cursor);
+    if (parameter_size <= response_len - cursor - ER_TPM_U32_BYTES) {
+      cursor += ER_TPM_U32_BYTES;
+      parameter_end = cursor + parameter_size;
+    }
+  }
+
+  if (er_tpm_read_tpm2b_bounds(response, parameter_end, &cursor,
+                               &public_area, &public_area_len) == 0u ||
+      out_primary->handle == 0u) {
+    return 0;
+  }
+  return er_tpm_parse_p256_public_area(public_area, public_area_len,
+                                       out_primary->public_key);
+}
+
 static UINT8 er_tpm_read_tpm2b(const UINT8* bytes, UINT32 len, UINT32* cursor,
                                const UINT8** out_bytes, UINT32* out_len) {
   UINT32 item_len;
@@ -454,6 +657,11 @@ static UINT8 er_tpm_read_tpm2b(const UINT8* bytes, UINT32 len, UINT32* cursor,
   return 1;
 }
 
+static UINT8 er_tpm_read_tpm2b_bounds(const UINT8* bytes, UINT32 len, UINT32* cursor,
+                                      const UINT8** out_bytes, UINT32* out_len) {
+  return er_tpm_read_tpm2b(bytes, len, cursor, out_bytes, out_len);
+}
+
 UINT8 er_tpm_parse_p256_sha256_signature_response(const UINT8* response,
                                                   UINT32 response_len,
                                                   UINT8 out_signature[64]) {
@@ -461,6 +669,8 @@ UINT8 er_tpm_parse_p256_sha256_signature_response(const UINT8* response,
   UINT16 scheme;
   UINT16 hash;
   UINT32 cursor;
+  UINT32 parameter_end;
+  UINT32 parameter_size;
   const UINT8* r;
   const UINT8* s;
   UINT32 r_len;
@@ -471,8 +681,19 @@ UINT8 er_tpm_parse_p256_sha256_signature_response(const UINT8* response,
     return 0;
   }
   tag = er_tpm_get_be16(response);
-  cursor = tag == ER_TPM_ST_SESSIONS ? 14u : ER_TPM_HEADER_LEN;
-  if (response_len - cursor < 4u) {
+  cursor = ER_TPM_HEADER_LEN;
+  parameter_end = response_len;
+  if (tag == ER_TPM_ST_SESSIONS) {
+    if (response_len - cursor < ER_TPM_U32_BYTES) {
+      return 0;
+    }
+    parameter_size = er_tpm_get_be32(response + cursor);
+    cursor += ER_TPM_U32_BYTES;
+    if (parameter_size <= response_len - cursor) {
+      parameter_end = cursor + parameter_size;
+    }
+  }
+  if (cursor > parameter_end || parameter_end - cursor < 4u) {
     return 0;
   }
   scheme = er_tpm_get_be16(response + cursor);
@@ -480,11 +701,11 @@ UINT8 er_tpm_parse_p256_sha256_signature_response(const UINT8* response,
   hash = er_tpm_get_be16(response + cursor);
   cursor += ER_TPM_U16_BYTES;
   if (scheme != ER_TPM_ALG_ECDSA || hash != ER_TPM_ALG_SHA256 ||
-      er_tpm_read_tpm2b(response, response_len, &cursor, &r, &r_len) == 0u ||
-      er_tpm_read_tpm2b(response, response_len, &cursor, &s, &s_len) == 0u ||
+      er_tpm_read_tpm2b(response, parameter_end, &cursor, &r, &r_len) == 0u ||
+      er_tpm_read_tpm2b(response, parameter_end, &cursor, &s, &s_len) == 0u ||
       r_len > ER_TPM_SIGNATURE_MAX_COMPONENT_LEN ||
       s_len > ER_TPM_SIGNATURE_MAX_COMPONENT_LEN ||
-      cursor != response_len) {
+      cursor != parameter_end) {
     return 0;
   }
 
