@@ -21,6 +21,7 @@ See `../docs/relay-architecture.md` for the cross-project model and `../docs/coh
 - The boot UI proof can prepare multiple Wasm UI app runtimes at once. Each app has its own preallocated linear memory, presentation identity, scene, and `ui_emit` host context, and the shell app switcher selects which context receives input and contributes scene output.
 - `er_app` can build content-addressed app package manifests from VFS object refs for app code, manifests, and UI assets. Package identity is derived from object ids and lengths, not labels.
 - `er_vfs` can reassemble canonical object packet sequences into bounded caller-owned memory while validating packet order, offsets, payload hashes, packet ids, object id, and output capacity.
+- `er_app` can load app package objects from validated VFS packets into caller-owned buffers, then reject package id mismatches, object id mismatches, tampered object bytes, and unexpected asset payloads.
 
 ## Architecture rule
 
@@ -62,13 +63,14 @@ The first endpoint adapters may acknowledge or capture packets before they imple
 
 ### M1: Object-only storage and app packaging contract
 
-Status: package manifest contract and bounded object packet reassembly implemented; storage endpoint loading and broader audit are next.
+Status: package manifest contract, bounded object packet reassembly, and package object loading implemented; storage endpoint integration and broader audit are next.
 
 - Audit runtime surfaces for host path/file/socket/descriptor concepts.
 - Keep VFS labels as object labels only.
 - Prove labels map to object ids, and object ids do not depend on labels.
 - Keep app package identity derived from app, manifest, and UI asset object ids and lengths, never from labels.
 - Load package objects through validated object packet reassembly into caller-owned memory before handing bytes to a Wasm runtime.
+- Connect admitted storage endpoint responses to package object loading.
 - Keep storage work restricted to typed object payloads carried by admitted storage or capability routes.
 - Treat user-authored app Wasm, UI assets, fonts, and manifests as content-addressed objects, never host paths.
 
@@ -78,6 +80,7 @@ Proof:
 - VFS tests show same bytes produce same object id with different labels.
 - App package tests show same objects with different labels produce the same package id.
 - VFS tests reject tampered, out-of-order, or over-capacity object packet loads.
+- App package load tests reject package id mismatches, tampered manifest bytes, and unexpected asset objects.
 - Route tests start from signed admissions, not packet-class inference.
 
 ### M2: Native relay ingress
@@ -145,7 +148,7 @@ Proof:
 
 ### M6: User-authored Wasm UI app proof
 
-Status: relay hostcall foundation, concurrent local Wasm UI app contexts, and content-addressed app package records implemented; storage-backed loading and relay-routed render packets are next.
+Status: relay hostcall foundation, concurrent local Wasm UI app contexts, content-addressed app package records, and validated package object loading implemented; storage endpoint integration and relay-routed render packets are next.
 
 - Keep bounded Wasm imports for relay send/receive as the durable app boundary.
 - Keep each loaded app in an explicit runtime context with preallocated memory, presentation identity, scene state, and app-switcher selection.

@@ -38,7 +38,8 @@ Wasm UI apps resident in isolated preallocated runtime contexts and switch the
 active app context from shell selection. App package records now bind app code,
 manifests, and UI assets by content object identity instead of labels.
 Bounded VFS object packet reassembly now validates loaded object bytes before
-they can become runtime input.
+they can become runtime input, and app package loading checks those bytes
+against package manifests in caller-owned memory.
 Replacing firmware boot-service networking with runtime-owned drivers is the
 immediate infrastructure step:
 

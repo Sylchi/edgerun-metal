@@ -3051,9 +3051,18 @@ static void test_app_identity_routes(void) {
   ErVfsObjectLabelRef manifest_ref;
   ErVfsObjectLabelRef manifest_alias_ref;
   ErVfsObjectLabelRef ui_assets_ref;
+  ErVfsObjectPacket app_packet;
+  ErVfsObjectPacket manifest_packet;
+  ErVfsObjectPacket ui_assets_packet;
+  ErVfsObjectPacket tampered_manifest_packet;
+  ErAppPackageObjectLoad app_load;
+  ErAppPackageObjectLoad manifest_load;
+  ErAppPackageObjectLoad ui_assets_load;
   ErAppPackageManifest package;
   ErAppPackageManifest package_alias;
   ErAppPackageManifest package_without_assets;
+  ErAppPackageManifest package_bad_id;
+  ErAppLoadedPackage loaded_package;
   ErHash app_object_id;
   ErHash manifest_hash;
   ErHash admission_id;
@@ -3072,6 +3081,9 @@ static void test_app_identity_routes(void) {
   ErAppUiPresentation presentation;
   er_ui_scene_budget_t scene_budget;
   er_ui_scene_stats_t scene_stats;
+  UINT8 loaded_app_bytes[sizeof(app_bytes)];
+  UINT8 loaded_manifest_bytes[sizeof(manifest_bytes)];
+  UINT8 loaded_ui_assets_bytes[sizeof(ui_assets_bytes)];
   UINT8 nonce[ER_APP_INSTANCE_NONCE_LEN];
   UINTN i;
 
@@ -3143,6 +3155,81 @@ static void test_app_identity_routes(void) {
                                               &manifest_ref, &ui_assets_ref,
                                               &package_alias),
               0);
+  check_int64("app package app packet",
+              er_vfs_prepare_object_packet(&crypto, app_bytes, sizeof(app_bytes),
+                                           0u, 0u, 1u, &app_packet),
+              1);
+  check_int64("app package manifest packet",
+              er_vfs_prepare_object_packet(&crypto, manifest_bytes,
+                                           sizeof(manifest_bytes), 0u, 0u, 1u,
+                                           &manifest_packet),
+              1);
+  check_int64("app package assets packet",
+              er_vfs_prepare_object_packet(&crypto, ui_assets_bytes,
+                                           sizeof(ui_assets_bytes), 0u, 0u, 1u,
+                                           &ui_assets_packet),
+              1);
+  app_load.packets = &app_packet;
+  app_load.packet_count = 1u;
+  app_load.bytes = loaded_app_bytes;
+  app_load.capacity = sizeof(loaded_app_bytes);
+  manifest_load.packets = &manifest_packet;
+  manifest_load.packet_count = 1u;
+  manifest_load.bytes = loaded_manifest_bytes;
+  manifest_load.capacity = sizeof(loaded_manifest_bytes);
+  ui_assets_load.packets = &ui_assets_packet;
+  ui_assets_load.packet_count = 1u;
+  ui_assets_load.bytes = loaded_ui_assets_bytes;
+  ui_assets_load.capacity = sizeof(loaded_ui_assets_bytes);
+  check_int64("app package load",
+              er_app_load_package_objects(&crypto, &package, &app_load,
+                                          &manifest_load, &ui_assets_load,
+                                          &loaded_package),
+              1);
+  check_int64("app package load abi", loaded_package.abi_version,
+              ER_APP_ABI_VERSION);
+  check_hash_equal("app package load package id", &loaded_package.package_id,
+                   &package.package_id);
+  check_uint64("app package load app len", loaded_package.app_len,
+               sizeof(app_bytes));
+  check_uint64("app package load manifest len", loaded_package.manifest_len,
+               sizeof(manifest_bytes));
+  check_uint64("app package load assets len", loaded_package.ui_assets_len,
+               sizeof(ui_assets_bytes));
+  check_int64("app package load app byte", loaded_package.app_bytes[0],
+              app_bytes[0]);
+  check_int64("app package load manifest byte",
+              loaded_package.manifest_bytes[0], manifest_bytes[0]);
+  check_int64("app package load assets byte",
+              loaded_package.ui_assets_bytes[0], ui_assets_bytes[0]);
+  check_int64("app package load without assets",
+              er_app_load_package_objects(&crypto, &package_without_assets,
+                                          &app_load, &manifest_load, 0,
+                                          &loaded_package),
+              1);
+  check_uint64("app package load no assets len",
+               loaded_package.ui_assets_len, 0u);
+  check_int64("app package load reject extra assets",
+              er_app_load_package_objects(&crypto, &package_without_assets,
+                                          &app_load, &manifest_load,
+                                          &ui_assets_load, &loaded_package),
+              0);
+  package_bad_id = package;
+  package_bad_id.package_id.bytes[0] ^= 1u;
+  check_int64("app package load reject package id",
+              er_app_load_package_objects(&crypto, &package_bad_id, &app_load,
+                                          &manifest_load, &ui_assets_load,
+                                          &loaded_package),
+              0);
+  tampered_manifest_packet = manifest_packet;
+  tampered_manifest_packet.bytes[0] ^= 1u;
+  manifest_load.packets = &tampered_manifest_packet;
+  check_int64("app package load reject manifest bytes",
+              er_app_load_package_objects(&crypto, &package, &app_load,
+                                          &manifest_load, &ui_assets_load,
+                                          &loaded_package),
+              0);
+  manifest_load.packets = &manifest_packet;
 
   for (i = 0; i < ER_HASH_LEN; ++i) {
     app_object_id.bytes[i] = (UINT8)(0x10u + i);

@@ -45,6 +45,7 @@ The shared contract is what lets these parts interoperate. The admissions remain
 - The boot UI proof can hold multiple Wasm UI apps concurrently as explicit runtime contexts with isolated preallocated memory, presentation identity, scene state, and app-switcher selection.
 - App package identity is derived from app code, manifest, and UI asset object ids and lengths. Labels can name those objects inside manifests, but labels do not define package identity.
 - VFS object packet reassembly validates packet order, offsets, payload hashes, packet ids, object id, and output capacity before returning loaded bytes.
+- App package loading reassembles app code, manifest, and optional UI asset objects into caller-owned buffers and verifies they match the package manifest.
 
 ## Milestone 1: Object-Only Storage And App Packaging Contract
 
@@ -57,6 +58,7 @@ Work:
 - Treat user-authored Wasm apps, manifests, UI assets, and fonts as content-addressed objects.
 - Prepare app package manifests from object refs, not host paths.
 - Reassemble loaded package objects into caller-owned memory from validated object packets.
+- Use loaded package objects as the only input shape for launching saved or authored apps.
 - Add docs or tests showing labels resolve to object ids, not authority.
 - Ensure storage work accepts typed object payloads only when carried by an admitted storage or capability route.
 
@@ -66,6 +68,7 @@ Proof:
 - Host tests prove identical bytes produce identical object ids independent of label.
 - Host tests prove identical package objects produce identical package ids independent of labels.
 - Host tests reject tampered, out-of-order, and over-capacity object packet loads.
+- Host tests reject app package loads with package id mismatches, tampered manifest bytes, or unexpected assets.
 - Tests prove app identity and asset references come from object ids, not paths.
 - Route tests must start from signed admissions, not packet-class inference.
 
