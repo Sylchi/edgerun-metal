@@ -125,6 +125,8 @@ typedef struct {
   UINT64 malformed;
   UINT64 unsupported;
   UINT64 render_capability;
+  UINT64 transit_hops;
+  UINT64 transit_emitted;
 } ErUiBootNativeRelayStats;
 
 typedef struct {
@@ -143,6 +145,7 @@ typedef struct {
   UINT32 active_app;
   ErNativeBootState* native_relay;
   ErUiBootNativeRelayStats native_relay_stats;
+  ErRelayTransitHop native_relay_last_transit;
 } ErUiBootRenderContext;
 
 extern ErWasmHostCalls g_host_calls;

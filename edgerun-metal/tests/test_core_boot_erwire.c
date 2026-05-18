@@ -556,7 +556,12 @@ static void test_os_native_relay_dispatch(void) {
   enum {
     OS_RELAY_PACKET_SEQUENCE = 1u,
     OS_RELAY_COST_PER_BYTE = 1u,
-    OS_RELAY_MAX_TOTAL_COST = sizeof(ErCapabilityEnvelopeHeader)
+    OS_RELAY_MAX_TOTAL_COST = sizeof(ErCapabilityEnvelopeHeader),
+    OS_RELAY_TOKEN_SEED = 0xa1u,
+    OS_RELAY_SCENE_SEED = 0xf1u,
+    OS_RELAY_PACKET_HASH_SEED = 0xc1u,
+    OS_RELAY_TIMESTAMP_MS = 1000u,
+    OS_RELAY_SCENE_PAYLOAD_LEN = 256u
   };
   ErAppUiPresentation presentation;
   ErUiBootAppContext app;
@@ -596,8 +601,14 @@ static void test_os_native_relay_dispatch(void) {
 
   check_int64("os relay dispatch prepare route",
               er_ui_wasm_app_prepare_render_route(&presentation, &route), 1);
-  test_fill_bytes(token_id.bytes, ER_HASH_LEN, 0xa1u);
-  test_fill_bytes(scene_hash.bytes, ER_HASH_LEN, 0xf1u);
+  test_fill_bytes(token_id.bytes, ER_HASH_LEN, OS_RELAY_TOKEN_SEED);
+  test_fill_bytes(scene_hash.bytes, ER_HASH_LEN, OS_RELAY_SCENE_SEED);
+  test_fill_bytes(ingress.packet_hash.bytes, ER_HASH_LEN,
+                  OS_RELAY_PACKET_HASH_SEED);
+  ingress.ingress.abi_version = ER_WORK_ABI_VERSION;
+  ingress.ingress.kind = ER_CHANNEL_KIND_NATIVE_ETH;
+  ingress.ingress.channel_id = route.channel_id;
+  ingress.ingress.address_len = ER_HW_RELAY_NATIVE_ETH_ADDR_LEN;
   check_int64("os relay dispatch capability prepare",
               er_work_prepare_capability_envelope_header(ER_CAPABILITY_PACKET_INVOKE,
                                                          ER_WORK_TYPE_CAPABILITY_INVOKE,
@@ -609,9 +620,9 @@ static void test_os_native_relay_dispatch(void) {
                                                          &route.source_node_id,
                                                          &route.target_node_id,
                                                          OS_RELAY_PACKET_SEQUENCE,
-                                                         1000u,
+                                                         OS_RELAY_TIMESTAMP_MS,
                                                          &scene_hash,
-                                                         256u,
+                                                         OS_RELAY_SCENE_PAYLOAD_LEN,
                                                          &capability),
               1);
   check_int64("os relay dispatch packet prepare",
@@ -637,6 +648,25 @@ static void test_os_native_relay_dispatch(void) {
                                                        &redraw), 1);
   check_uint64("os relay dispatch render count",
                render.native_relay_stats.render_capability, 1u);
+  check_uint64("os relay dispatch transit count",
+               render.native_relay_stats.transit_hops, 1u);
+  check_uint64("os relay dispatch transit not emitted without native sink",
+               render.native_relay_stats.transit_emitted, 0u);
+  check_node_id_equal("os relay dispatch transit relay",
+                      &render.native_relay_last_transit.relay_node_id,
+                      &route.relay_node_id);
+  check_hash_equal("os relay dispatch transit channel",
+                   &render.native_relay_last_transit.channel_id,
+                   &route.channel_id);
+  check_hash_equal("os relay dispatch transit packet",
+                   &render.native_relay_last_transit.packet_hash,
+                   &ingress.packet_hash);
+  check_uint64("os relay dispatch transit sequence",
+               render.native_relay_last_transit.sequence,
+               OS_RELAY_PACKET_SEQUENCE);
+  check_int64("os relay dispatch transit hash nonzero",
+              er_hash_nonzero(&render.native_relay_last_transit.transit_hash),
+              1);
   check_uint64("os relay dispatch render redraw", redraw, 0u);
 
   ingress.payload[0] = 0xffu;
