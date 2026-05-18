@@ -1323,10 +1323,24 @@ size_t er_ui_shadcn_exact_demo_count(void) {
   size_t count = 0u; for (size_t i = 0u; i < ER_UI_SHADCN_DEMO_COUNT; ++i) if (er_ui_shadcn_demo_is_exact_port(&shadcn_demo_components[i])) count++; return count;
 }
 size_t er_ui_shadcn_count_by_category(er_ui_shadcn_demo_category_t category) {
-  size_t count = 0u; for (size_t i = 0u; i < ER_UI_SHADCN_DEMO_COUNT; ++i) if (shadcn_demo_components[i].category == category) count++; return count;
+  size_t count = 0u;
+  const er_ui_shadcn_demo_spec_t* demo = shadcn_demo_components;
+  const er_ui_shadcn_demo_spec_t* end = shadcn_demo_components + ER_UI_SHADCN_DEMO_COUNT;
+  while (demo < end) {
+    if (demo->category == category) count++;
+    demo++;
+  }
+  return count;
 }
 size_t er_ui_shadcn_count_by_status(er_ui_shadcn_demo_status_t status) {
-  size_t count = 0u; for (size_t i = 0u; i < ER_UI_SHADCN_DEMO_COUNT; ++i) if (shadcn_demo_components[i].status == status) count++; return count;
+  size_t count = 0u;
+  const er_ui_shadcn_demo_spec_t* demo = shadcn_demo_components;
+  const er_ui_shadcn_demo_spec_t* end = shadcn_demo_components + ER_UI_SHADCN_DEMO_COUNT;
+  while (demo < end) {
+    if (demo->status == status) count++;
+    demo++;
+  }
+  return count;
 }
 static const char* const* er_ui_shadcn_variants_for_slug(const char* slug, size_t* out_count) {
   if (!out_count) return 0;
@@ -2045,7 +2059,9 @@ er_ui_status_t er_ui_shadcn_tabs_emit(
   er_ui_status_t status = er_ui_scene_push_rect(scene, er_ui_rect_fill(bounds.x, bounds.y, bounds.w, bounds.h, theme.radius.control, er_ui_color_with_alpha(theme.colors.row, 0.42f)));
   if (status != ER_UI_OK) return status;
   float tab_w = bounds.w / (float)label_count;
+  const char* const* label_cursor = labels;
   for (size_t i = 0u; i < label_count; ++i) {
+    const char* label = *label_cursor;
     er_ui_bounds_t tab = er_ui_bounds(bounds.x + tab_w * (float)i, bounds.y, tab_w, bounds.h);
     status = er_ui_scene_push_hit(scene, er_ui_hit(ER_UI_HIT_TAB, base_id + (uint32_t)i, tab.x, tab.y, tab.w, tab.h));
     if (status != ER_UI_OK) return status;
@@ -2053,8 +2069,9 @@ er_ui_status_t er_ui_shadcn_tabs_emit(
       status = er_ui_scene_push_rect(scene, er_ui_rect_fill(tab.x + 3.0f, tab.y + 3.0f, tab.w - 6.0f, tab.h - 6.0f, theme.radius.control, theme.colors.panel));
       if (status != ER_UI_OK) return status;
     }
-    status = er_ui_shadcn_push_ascii_text(scene, font, labels[i], tab.x + 12.0f, tab.y + tab.h * 0.62f, i == selected ? theme.colors.text : theme.colors.muted);
+    status = er_ui_shadcn_push_ascii_text(scene, font, label, tab.x + 12.0f, tab.y + tab.h * 0.62f, i == selected ? theme.colors.text : theme.colors.muted);
     if (status != ER_UI_OK) return status;
+    label_cursor++;
   }
   return ER_UI_OK;
 }
@@ -2278,12 +2295,15 @@ er_ui_status_t er_ui_shadcn_breadcrumb_emit(
   uint32_t base_id) {
   if (!scene || !font || (!labels && label_count > 0u) || label_count == 0u || !er_ui_bounds_valid(bounds)) return ER_UI_ERR_INVALID_ARGUMENT;
   float x = bounds.x;
+  const char* const* label_cursor = labels;
   for (size_t i = 0u; i < label_count; ++i) {
+    const char* label = *label_cursor;
     er_ui_status_t status = er_ui_scene_push_hit(scene, er_ui_hit(ER_UI_HIT_BREADCRUMB, base_id + (uint32_t)i, x, bounds.y, 96.0f, bounds.h));
     if (status != ER_UI_OK) return status;
-    status = er_ui_shadcn_push_ascii_text(scene, font, labels[i], x, bounds.y + bounds.h * 0.62f, i == selected ? theme.colors.text : theme.colors.muted);
+    status = er_ui_shadcn_push_ascii_text(scene, font, label, x, bounds.y + bounds.h * 0.62f, i == selected ? theme.colors.text : theme.colors.muted);
     if (status != ER_UI_OK) return status;
     x += 82.0f;
+    label_cursor++;
     if (i + 1u < label_count) {
       status = er_ui_shadcn_push_ascii_text(scene, font, "/", x - 18.0f, bounds.y + bounds.h * 0.62f, theme.colors.muted);
       if (status != ER_UI_OK) return status;
@@ -2504,15 +2524,18 @@ er_ui_status_t er_ui_shadcn_route_path_emit(
   if (status != ER_UI_OK) return status;
   float x = bounds.x + 16.0f;
   float y = bounds.y + 45.0f;
+  const char* const* hop_cursor = hops;
   for (size_t i = 0u; i < hop_count; ++i) {
+    const char* hop = *hop_cursor;
     if (x > bounds.x + bounds.w - 80.0f) break;
     status = er_ui_shadcn_icon_tile(scene, er_ui_bounds(x, y, 22.0f, 22.0f), theme,
                                     i == 0u ? ER_UI_ICON_APP : (i + 1u == hop_count ? ER_UI_ICON_NETWORK : ER_UI_ICON_ROUTE),
                                     theme.colors.accent);
     if (status != ER_UI_OK) return status;
-    status = er_ui_shadcn_push_ascii_text(scene, font, hops[i], x + 28.0f, y + 18.0f, theme.colors.muted);
+    status = er_ui_shadcn_push_ascii_text(scene, font, hop, x + 28.0f, y + 18.0f, theme.colors.muted);
     if (status != ER_UI_OK) return status;
     x += 112.0f;
+    hop_cursor++;
     if (i + 1u < hop_count) {
       status = er_ui_shadcn_push_icon(scene, er_ui_bounds(x - 25.0f, y + 3.0f, 16.0f, 16.0f), ER_UI_ICON_CHEVRON_RIGHT, theme.colors.muted);
       if (status != ER_UI_OK) return status;
@@ -2705,8 +2728,11 @@ er_ui_status_t er_ui_shadcn_bar_chart_emit(
   if (bar_w < 4.0f) bar_w = 4.0f;
   float base_y = bounds.y + bounds.h - 22.0f;
   float max_h = er_ui_float_max(bounds.h - 48.0f, 8.0f);
+  const char* const* label_cursor = labels;
+  const float* value_cursor = values;
   for (size_t i = 0u; i < value_count; ++i) {
-    float v = er_ui_shadcn_clamp01(values[i]);
+    const char* label = *label_cursor;
+    float v = er_ui_shadcn_clamp01(*value_cursor);
     float h = er_ui_float_max(max_h * v, 2.0f);
     float x = bounds.x + (bar_w + gap) * (float)i;
     er_ui_color4_t fill = i == selected ? theme.colors.accent : er_ui_color_with_alpha(theme.colors.accent, 0.48f);
@@ -2714,8 +2740,10 @@ er_ui_status_t er_ui_shadcn_bar_chart_emit(
     if (status != ER_UI_OK) return status;
     status = er_ui_scene_push_rect(scene, er_ui_rect_fill(x, base_y - h, bar_w, h, 4.0f, fill));
     if (status != ER_UI_OK) return status;
-    status = er_ui_shadcn_push_ascii_text(scene, font, labels[i], x, base_y + 14.0f, theme.colors.muted);
+    status = er_ui_shadcn_push_ascii_text(scene, font, label, x, base_y + 14.0f, theme.colors.muted);
     if (status != ER_UI_OK) return status;
+    label_cursor++;
+    value_cursor++;
   }
   return ER_UI_OK;
 }
@@ -2923,13 +2951,13 @@ er_ui_status_t er_ui_shadcn_component_scene_preview_emit(
                                     ER_UI_SHADCN_PREVIEW_BUTTON_GHOST_ID, ER_UI_SHADCN_BUTTON_GHOST, ER_UI_SHADCN_BUTTON_SIZE_DEFAULT, true);
   }
   if (er_ui_shadcn_streq(slug, "breadcrumb")) {
-    const char* const labels[] = {"Docs", "Components", "Breadcrumb"};
+    const char *const labels[] = {"Docs", "Components", "Breadcrumb"};
     return er_ui_shadcn_breadcrumb_emit(scene, font, er_ui_bounds(bounds.x, bounds.y, er_ui_float_min(bounds.w, 320.0f), 34.0f), theme, labels,
                                         ER_UI_SHADCN_ARRAY_COUNT(labels), ER_UI_SHADCN_PREVIEW_BREADCRUMB_CURRENT_INDEX,
                                         ER_UI_SHADCN_PREVIEW_BREADCRUMB_ID);
   }
   if (er_ui_shadcn_streq(slug, "button-group")) {
-    const char* const labels[] = {"Copy", "Paste", "More"};
+    const char *const labels[] = {"Copy", "Paste", "More"};
     return er_ui_shadcn_tabs_emit(scene, font, er_ui_bounds(bounds.x, bounds.y, 210.0f, 38.0f), theme, labels, ER_UI_SHADCN_ARRAY_COUNT(labels), 0u,
                                   ER_UI_SHADCN_PREVIEW_BUTTON_GROUP_ID);
   }
@@ -2946,7 +2974,7 @@ er_ui_status_t er_ui_shadcn_component_scene_preview_emit(
     if (status != ER_UI_OK) return status;
     status = er_ui_shadcn_push_ascii_text(scene, font, "June 2025", card.x + 14.0f, card.y + 26.0f, theme.colors.text);
     if (status != ER_UI_OK) return status;
-    const char* const days[] = {"8", "9", "10", "11", "12", "13", "14"};
+    const char *const days[] = {"8", "9", "10", "11", "12", "13", "14"};
     for (size_t i = 0u; i < ER_UI_SHADCN_ARRAY_COUNT(days); ++i) {
       status = er_ui_shadcn_button_emit(scene, font, er_ui_bounds(card.x + 10.0f + (float)i * 34.0f, card.y + 58.0f, 30.0f, 34.0f), theme, days[i],
                                         ER_UI_SHADCN_PREVIEW_CALENDAR_DAY_BASE_ID + (uint32_t)i,
@@ -2965,7 +2993,7 @@ er_ui_status_t er_ui_shadcn_component_scene_preview_emit(
   }
   if (er_ui_shadcn_streq(slug, "carousel")) {
     er_ui_status_t status = ER_UI_OK;
-    const char* const labels[] = {"1", "2", "3"};
+    const char *const labels[] = {"1", "2", "3"};
     for (size_t i = 0u; i < ER_UI_SHADCN_ARRAY_COUNT(labels); ++i) {
       er_ui_bounds_t card = er_ui_bounds(bounds.x + (float)i * 72.0f, bounds.y, 60.0f, 72.0f);
       status = er_ui_shadcn_card_emit(scene, card, theme);
@@ -2976,7 +3004,7 @@ er_ui_status_t er_ui_shadcn_component_scene_preview_emit(
     return ER_UI_OK;
   }
   if (er_ui_shadcn_streq(slug, "chart")) {
-    const char* const labels[] = {"Jan", "Feb", "Mar", "Apr", "May", "Jun"};
+    const char *const labels[] = {"Jan", "Feb", "Mar", "Apr", "May", "Jun"};
     const float values[] = {0.42f, 0.68f, 0.51f, 0.82f, 0.56f, 0.74f};
     _Static_assert(ER_UI_SHADCN_ARRAY_COUNT(labels) == ER_UI_SHADCN_ARRAY_COUNT(values), "chart preview arrays must match");
     return er_ui_shadcn_bar_chart_emit(scene, font, er_ui_bounds(bounds.x, bounds.y, er_ui_float_min(bounds.w, 360.0f), 160.0f), theme, "Visitors", labels, values,
@@ -3025,8 +3053,8 @@ er_ui_status_t er_ui_shadcn_component_scene_preview_emit(
                                    "Type a command or search...", ER_UI_SHADCN_PREVIEW_COMMAND_ID, false);
   }
   if (er_ui_shadcn_streq(slug, "data-table") || er_ui_shadcn_streq(slug, "table")) {
-    const char* const headers[] = {"Invoice", "Status", "Amount"};
-    const char* const cells[] = {"INV001", "Paid", "$250.00", "INV002", "Pending", "$150.00"};
+    const char *const headers[] = {"Invoice", "Status", "Amount"};
+    const char *const cells[] = {"INV001", "Paid", "$250.00", "INV002", "Pending", "$150.00"};
     _Static_assert(ER_UI_SHADCN_ARRAY_COUNT(cells) % ER_UI_SHADCN_ARRAY_COUNT(headers) == 0u, "table preview cells must fill rows");
     return er_ui_shadcn_table_emit(scene, font, er_ui_bounds(bounds.x, bounds.y, er_ui_float_min(bounds.w, 360.0f), 112.0f), theme, headers,
                                    ER_UI_SHADCN_ARRAY_COUNT(headers), cells, ER_UI_SHADCN_ARRAY_COUNT(cells) / ER_UI_SHADCN_ARRAY_COUNT(headers),
