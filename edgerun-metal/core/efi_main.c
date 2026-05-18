@@ -9,6 +9,7 @@
 #include "er_tpm.h"
 #include "er_ui_gop_renderer.h"
 #include "er_ui_components.h"
+#include "er_ui_demo_apps.h"
 #include "er_ui_metal.h"
 #include "er_ui_theme.h"
 #include "erwire.h"
@@ -956,7 +957,7 @@ static er_ui_status_t er_build_ui_boot_scene(er_ui_scene_t* scene, vr_font_face_
   er_ui_resolved_theme_t theme = er_ui_resolved_theme(
     ER_UI_STYLE_AUTHORITY_USER,
     (er_ui_style_preset_t){ER_UI_COLOR_SCHEME_DARK, ER_UI_ACCENT_NEUTRAL, ER_UI_RADIUS_DEFAULT});
-  er_ui_shadcn_demo_gallery_state_t gallery_state = {0};
+  er_ui_demo_apps_state_t demo_state;
   er_ui_status_t status;
 
   if (scene == 0 || font == 0) {
@@ -965,8 +966,11 @@ static er_ui_status_t er_build_ui_boot_scene(er_ui_scene_t* scene, vr_font_face_
 
   status = er_ui_scene_init_with_allocator(scene, theme.colors.bg, er_ui_boot_allocator());
   if (status != ER_UI_OK) return status;
-  er_ui_shadcn_demo_gallery_state_init(&gallery_state);
-  return er_ui_edgerun_metal_surface_emit(scene, font, er_ui_bounds(0.0f, 0.0f, (float)width, (float)height), theme, &gallery_state);
+  status = er_ui_demo_apps_state_init(&demo_state, er_ui_boot_allocator());
+  if (status != ER_UI_OK) return status;
+  status = er_ui_demo_apps_emit_scene(&demo_state, scene, font, er_ui_bounds(0.0f, 0.0f, (float)width, (float)height), theme);
+  er_ui_demo_apps_state_destroy(&demo_state);
+  return status;
 }
 
 static void er_run_ui_profile(EFI_SYSTEM_TABLE* SystemTable) {

@@ -19,6 +19,7 @@
 #include "er_work_route.h"
 #include "er_gfx_console.h"
 #include "er_ui_gop_renderer.h"
+#include "er_ui_demo_apps.h"
 #include "er_ui_text.h"
 #include "er_virtio.h"
 #include "er_virtio_net.h"
@@ -3602,6 +3603,73 @@ static void test_ui_gop_renderer_varfont_text(void) {
   vr_font_face_destroy(font);
 }
 
+static void test_ui_demo_apps_switching(void) {
+  er_ui_demo_apps_state_t apps;
+  er_ui_runtime_state_t runtime;
+  er_ui_scene_t scene;
+  er_ui_scene_stats_t stats;
+  er_ui_bounds_t focused;
+  er_ui_resolved_theme_t theme = er_ui_resolved_theme(
+    ER_UI_STYLE_AUTHORITY_USER,
+    (er_ui_style_preset_t){ER_UI_COLOR_SCHEME_DARK, ER_UI_ACCENT_NEUTRAL, ER_UI_RADIUS_DEFAULT});
+  vr_font_config_t cfg;
+  vr_font_face_t* font = 0;
+  er_ui_action_t down;
+  er_ui_action_t up;
+  bool changed = false;
+
+  cfg.px_size = 24.0f;
+  cfg.atlas_width = 512u;
+  cfg.atlas_height = 512u;
+  cfg.atlas_pad = 2u;
+  cfg.atlas_format = VR_FONT_ATLAS_FORMAT_ALPHA8;
+  cfg.allocator = test_vr_allocator();
+  cfg.gl.user = 0;
+  cfg.gl.create_texture = 0;
+  cfg.gl.update_texture = 0;
+  cfg.gl.destroy_texture = 0;
+
+  check_int64("ui demo font create",
+              vr_font_face_create_from_memory(&font, g_er_font_geist_ttf, ER_FONT_GEIST_TTF_SIZE, &cfg),
+              VR_OK);
+  if (font == 0) {
+    return;
+  }
+
+  check_int64("ui demo state init", er_ui_demo_apps_state_init(&apps, test_ui_allocator()), ER_UI_OK);
+  check_uint64("ui demo app count", er_ui_workspace_surface_count(&apps.shell), 3u);
+  check_uint64("ui demo initial focus", er_ui_workspace_focused_surface_id(&apps.shell), ER_UI_DEMO_APP_RESOURCES_ID);
+  check_int64("ui demo focused bounds",
+              er_ui_workspace_focused_surface_bounds(&apps.shell, er_ui_bounds(0.0f, 0.0f, 1600.0f, 900.0f), &focused),
+              1);
+  check_int64("ui demo focused bounds positive", focused.w > 0.0f && focused.h > 0.0f, 1);
+
+  check_int64("ui demo runtime init", er_ui_runtime_state_init_with_allocator(&runtime, test_ui_allocator()), ER_UI_OK);
+  check_int64("ui demo scene init",
+              er_ui_scene_init_with_allocator(&scene, theme.colors.bg, test_ui_allocator()),
+              ER_UI_OK);
+  check_int64("ui demo emit",
+              er_ui_demo_apps_emit_scene(&apps, &scene, font, er_ui_bounds(0.0f, 0.0f, 1600.0f, 900.0f), theme),
+              ER_UI_OK);
+  stats = er_ui_scene_stats(&scene);
+  check_int64("ui demo emits rects", stats.rects > 0u, 1);
+  check_int64("ui demo emits hits", stats.hits > 3u, 1);
+  check_int64("ui demo emits text", stats.text_quads > 0u, 1);
+
+  down = er_ui_runtime_pointer_down(&runtime, &scene, 150.0f, 52.0f);
+  check_int64("ui demo tab down focus", down.kind, ER_UI_ACTION_FOCUSED);
+  up = er_ui_runtime_pointer_up(&runtime, &scene, 150.0f, 52.0f);
+  check_int64("ui demo tab up select", up.kind, ER_UI_ACTION_TAB_SELECTED);
+  check_int64("ui demo apply network tab", er_ui_demo_apps_apply_action(&apps, up, &changed), ER_UI_OK);
+  check_int64("ui demo tab changed", changed, 1);
+  check_uint64("ui demo network focus", er_ui_workspace_focused_surface_id(&apps.shell), ER_UI_DEMO_APP_NETWORK_ID);
+
+  er_ui_scene_destroy(&scene);
+  er_ui_runtime_state_destroy(&runtime);
+  er_ui_demo_apps_state_destroy(&apps);
+  vr_font_face_destroy(font);
+}
+
 int main(void) {
   test_mem_helpers();
   test_blake3();
@@ -3638,6 +3706,7 @@ int main(void) {
   test_ui_gop_renderer_surface();
   test_ui_gop_renderer_4k_tile_plan();
   test_ui_gop_renderer_varfont_text();
+  test_ui_demo_apps_switching();
 
   if (g_failed != 0) {
     fprintf(stderr, "FAILED %d/%d checks\n", g_failed, g_total);
