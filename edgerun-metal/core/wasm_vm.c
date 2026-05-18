@@ -666,6 +666,7 @@ static int er_scan_matching_end(const UINT8* data, UINT32 size, UINT32 start_pc,
   return -1;
 }
 
+//@optimizer-ignore-function Wasm module initialization must parse each declared section and type entry
 int er_wasm_init(ErWasmModule* module, const UINT8* data, UINT32 size, const ErWasmHostCalls* host) {
   ErReader r;
   ErFuncType temp_type[ER_WASM_MAX_FUNCTIONS];
@@ -1096,6 +1097,7 @@ int er_wasm_find_main(ErWasmModule* module, UINT32* main_index) {
   return 0;
 }
 
+//@optimizer-ignore-function Wasm interpreter must dispatch bytecode, invoke host calls, and scan structured control blocks
 int er_wasm_execute_i64(ErWasmModule* module, UINT32 function_index, INT64* result) {
   if (module == 0 || result == 0) {
     return -1;
