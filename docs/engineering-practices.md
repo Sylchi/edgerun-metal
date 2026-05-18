@@ -28,8 +28,7 @@ make check
 - repository structure through `tools/repo-check.c`
 - repository-policy tests through `tests/repo-check-tests.sh`
 - the `edgerun-metal` OS image builds with warnings as errors
-- `varfont` builds with CMake and Ninja
-- `varfont` tests pass through CTest
+- `varfont` tests through the repository-owned `tools/er-build` runner
 - `edgerun-ui-core` builds with CMake and Ninja
 - `edgerun-ui-core` tests pass through CTest
 - `edgerun-crypto` tests through the repository-owned `tools/er-build` runner
@@ -42,7 +41,7 @@ Use current, deterministic tools already available on the machine:
 - `clang` and `lld` for freestanding EFI builds
 - `ccache` for repeat local C builds when available
 - `mold` for hosted Linux test/tool links when available; do not use it for EFI links
-- `CMake` and `Ninja` for `varfont` and `edgerun-ui-core`
+- `CMake` and `Ninja` for `edgerun-ui-core` and hosted demos
 - `ctest --output-on-failure` for test execution
 - `git status --short --branch` before and after changes
 

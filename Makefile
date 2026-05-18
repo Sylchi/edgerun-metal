@@ -110,8 +110,8 @@ varfont-configure:
 varfont-build: varfont-configure
 	cmake --build $(VARFONT_BUILD_DIR)
 
-varfont-test: varfont-build
-	ctest --test-dir $(VARFONT_BUILD_DIR) --output-on-failure
+varfont-test: er-build
+	./.build/er-build varfont-test
 
 ui-core-configure:
 	cmake -S edgerun-ui-core -B $(UI_CORE_BUILD_DIR) -G "$(UI_CORE_CMAKE_GENERATOR)" $(CMAKE_TOOLCHAIN_ARGS)

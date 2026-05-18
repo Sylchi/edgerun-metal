@@ -28,10 +28,12 @@ static const char ERB_DEFAULT_CC[] = "clang";
 static const char ERB_BUILD_DIR[] = ".build";
 static const char ERB_INTERNAL_BUILD_DIR[] = ".build/er-build-out";
 static const char ERB_CRYPTO_BUILD_DIR[] = ".build/er-build-out/crypto";
+static const char ERB_VARFONT_BUILD_DIR[] = ".build/er-build-out/varfont";
 static const char ERB_REPO_CHECK_BIN[] = ".build/repo-check";
 static const char ERB_REPO_INSPECT_BIN[] = ".build/repo-inspect";
 static const char ERB_ERWIRE_DECODE_BIN[] = ".build/erwire-decode";
 static const char ERB_CRYPTO_TEST_BIN[] = ".build/er-build-out/crypto/test_blake3";
+static const char ERB_VARFONT_TEST_BIN[] = ".build/er-build-out/varfont/vrfont_tests";
 
 typedef struct {
   const char* items[ERB_MAX_ARGC];
@@ -126,7 +128,10 @@ static int erb_prepare_dirs(void) {
   if (erb_mkdir_one(ERB_INTERNAL_BUILD_DIR) != 0) {
     return 1;
   }
-  return erb_mkdir_one(ERB_CRYPTO_BUILD_DIR);
+  if (erb_mkdir_one(ERB_CRYPTO_BUILD_DIR) != 0) {
+    return 1;
+  }
+  return erb_mkdir_one(ERB_VARFONT_BUILD_DIR);
 }
 
 static int erb_compile_common(ErbArgs* args, const char* output) {
@@ -227,8 +232,8 @@ static int erb_target_repo_test(int print_plan) {
       erb_run_program("./tests/repo-inspect-tests.sh", print_plan) != 0 ||
       erb_run_program("./tests/repo-progress-tests.sh", print_plan) != 0 ||
       erb_run_program("./tests/er-build-tests.sh", print_plan) != 0 ||
-      erb_run_program("./tests/er-math-tests.sh", print_plan) != 0 ||
       erb_run_program("./tests/metal-arch-build-tests.sh", print_plan) != 0 ||
+      erb_run_program("./tests/er-math-tests.sh", print_plan) != 0 ||
       erb_run_program("./tests/erwire-decode-tests.sh", print_plan) != 0) {
     return 1;
   }
@@ -252,10 +257,60 @@ static int erb_target_crypto_test(int print_plan) {
   return erb_run_program(ERB_CRYPTO_TEST_BIN, print_plan);
 }
 
+static int erb_target_varfont_test(int print_plan) {
+  ErbArgs args;
+
+  if (erb_prepare_dirs() != 0 || erb_compile_common(&args, ERB_VARFONT_TEST_BIN) != 0) {
+    return 1;
+  }
+  if (erb_args_push(&args, "-ffreestanding") != 0 ||
+      erb_args_push(&args, "-fno-builtin") != 0 ||
+      erb_args_push(&args, "-fno-stack-protector") != 0 ||
+      erb_args_push(&args, "-Ivarfont/include") != 0 ||
+      erb_args_push(&args, "-Iinclude") != 0 ||
+      erb_args_push(&args, "-Ivarfont/src") != 0 ||
+      erb_args_push(&args, "-DVRFONT_PROJECT_ROOT=\"varfont\"") != 0 ||
+      erb_args_push(&args, "varfont/tests/test_runner.c") != 0 ||
+      erb_args_push(&args, "varfont/tests/test_common.c") != 0 ||
+      erb_args_push(&args, "varfont/tests/test_validation.c") != 0 ||
+      erb_args_push(&args, "varfont/tests/test_axes.c") != 0 ||
+      erb_args_push(&args, "varfont/tests/test_shape.c") != 0 ||
+      erb_args_push(&args, "varfont/tests/test_atlas_cache.c") != 0 ||
+      erb_args_push(&args, "varfont/tests/test_api.c") != 0 ||
+      erb_args_push(&args, "varfont/tests/test_cmap.c") != 0 ||
+      erb_args_push(&args, "varfont/tests/test_raster.c") != 0 ||
+      erb_args_push(&args, "varfont/tests/test_vr_font_freestanding.c") != 0 ||
+      erb_args_push(&args, "varfont/src/vr_font_freestanding.c") != 0 ||
+      erb_args_push(&args, "varfont/src/vr_font.c") != 0 ||
+      erb_args_push(&args, "varfont/src/vr_font_utils.c") != 0 ||
+      erb_args_push(&args, "varfont/src/vr_font_axes.c") != 0 ||
+      erb_args_push(&args, "varfont/src/vr_font_cmap.c") != 0 ||
+      erb_args_push(&args, "varfont/src/vr_font_gvar.c") != 0 ||
+      erb_args_push(&args, "varfont/src/vr_font_gvar_apply.c") != 0 ||
+      erb_args_push(&args, "varfont/src/vr_font_kern.c") != 0 ||
+      erb_args_push(&args, "varfont/src/vr_font_tables.c") != 0 ||
+      erb_args_push(&args, "varfont/src/vr_font_shape.c") != 0 ||
+      erb_args_push(&args, "varfont/src/vr_font_raster.c") != 0 ||
+      erb_args_push(&args, "varfont/src/vr_font_raster_geometry.c") != 0 ||
+      erb_args_push(&args, "varfont/src/vr_font_raster_glyph.c") != 0 ||
+      erb_args_push(&args, "varfont/src/vr_font_raster_msdf.c") != 0 ||
+      erb_args_push(&args, "varfont/src/vr_font_raster_outline.c") != 0 ||
+      erb_args_push(&args, "varfont/src/vr_font_raster_storage.c") != 0 ||
+      erb_args_push(&args, "varfont/src/vr_font_atlas.c") != 0 ||
+      erb_args_push(&args, "-lm") != 0) {
+    return 1;
+  }
+  if (erb_run_args(&args, print_plan) != 0) {
+    return 1;
+  }
+  return erb_run_program(ERB_VARFONT_TEST_BIN, print_plan);
+}
+
 static int erb_usage(void) {
   fprintf(stderr,
           "usage: er-build [--print-plan] <target>\n"
-          "targets: repo-check-bin repo-inspect erwire-decode erwire-test repo-check repo-test crypto-test\n");
+          "targets: repo-check-bin repo-inspect erwire-decode erwire-test\n"
+          "         repo-check repo-test crypto-test varfont-test\n");
   return 2;
 }
 
@@ -295,6 +350,9 @@ int main(int argc, char** argv) {
   }
   if (strcmp(target, "crypto-test") == 0) {
     return erb_target_crypto_test(print_plan);
+  }
+  if (strcmp(target, "varfont-test") == 0) {
+    return erb_target_varfont_test(print_plan);
   }
   return erb_usage();
 }
