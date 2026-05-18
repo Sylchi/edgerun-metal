@@ -210,6 +210,20 @@ static er_ui_status_t er_ui_component_icon_tile(
   return er_ui_component_push_icon(scene, icon_bounds, icon, color);
 }
 
+static er_ui_status_t er_ui_component_fill_border(
+  er_ui_scene_t* scene,
+  er_ui_bounds_t bounds,
+  float radius,
+  er_ui_color4_t fill,
+  er_ui_color4_t border) {
+  if (!scene || !er_ui_bounds_valid(bounds)) return ER_UI_ERR_INVALID_ARGUMENT;
+  er_ui_status_t status = er_ui_scene_push_rect(scene, er_ui_rect_fill(bounds.x, bounds.y, bounds.w, bounds.h, radius,
+                                                                       fill));
+  if (status != ER_UI_OK) return status;
+  return er_ui_scene_push_rect(scene, er_ui_rect_border(bounds.x, bounds.y, bounds.w, bounds.h, radius,
+                                                       border));
+}
+
 static er_ui_status_t er_ui_component_row_body_emit(
   er_ui_scene_t* scene,
   vr_font_face_t* font,
@@ -2977,9 +2991,8 @@ er_ui_status_t er_ui_component_tooltip_emit(
   er_ui_resolved_theme_t theme,
   const char* text) {
   if (!scene || !font || !text || !er_ui_bounds_valid(bounds)) return ER_UI_ERR_INVALID_ARGUMENT;
-  er_ui_status_t status = er_ui_scene_push_rect(scene, er_ui_rect_fill(bounds.x, bounds.y, bounds.w, bounds.h, theme.radius.card, theme.colors.topbar));
-  if (status != ER_UI_OK) return status;
-  status = er_ui_scene_push_rect(scene, er_ui_rect_border(bounds.x, bounds.y, bounds.w, bounds.h, theme.radius.card, er_ui_color_with_alpha(theme.colors.border, 0.72f)));
+  er_ui_status_t status = er_ui_component_fill_border(scene, bounds, theme.radius.card, theme.colors.topbar,
+                                                      er_ui_color_with_alpha(theme.colors.border, 0.72f));
   if (status != ER_UI_OK) return status;
   return er_ui_component_push_ascii_text(scene, font, text, bounds.x + 10.0f, bounds.y + bounds.h * 0.62f, theme.colors.text);
 }
@@ -3036,9 +3049,8 @@ er_ui_status_t er_ui_component_alert_emit(
   const char* body,
   er_ui_color4_t accent) {
   if (!scene || !font || !title || !body || !er_ui_bounds_valid(bounds)) return ER_UI_ERR_INVALID_ARGUMENT;
-  er_ui_status_t status = er_ui_scene_push_rect(scene, er_ui_rect_fill(bounds.x, bounds.y, bounds.w, bounds.h, theme.radius.card, er_ui_color_with_alpha(theme.colors.row, 0.28f)));
-  if (status != ER_UI_OK) return status;
-  status = er_ui_scene_push_rect(scene, er_ui_rect_border(bounds.x, bounds.y, bounds.w, bounds.h, theme.radius.card, er_ui_color_with_alpha(theme.colors.border, 0.46f)));
+  er_ui_status_t status = er_ui_component_fill_border(scene, bounds, theme.radius.card, er_ui_color_with_alpha(theme.colors.row, 0.28f),
+                                                      er_ui_color_with_alpha(theme.colors.border, 0.46f));
   if (status != ER_UI_OK) return status;
   status = er_ui_component_push_icon(scene, er_ui_bounds(bounds.x + 12.0f, bounds.y + 14.0f, 16.0f, 16.0f), ER_UI_ICON_WARNING, accent);
   if (status != ER_UI_OK) return status;
@@ -3103,9 +3115,7 @@ er_ui_status_t er_ui_component_command_palette_emit(
   if (!scene || !font || !placeholder || !er_ui_bounds_valid(bounds)) return ER_UI_ERR_INVALID_ARGUMENT;
   er_ui_status_t status = er_ui_scene_push_hit(scene, er_ui_hit(ER_UI_HIT_INPUT, id, bounds.x, bounds.y, bounds.w, bounds.h));
   if (status != ER_UI_OK) return status;
-  status = er_ui_scene_push_rect(scene, er_ui_rect_fill(bounds.x, bounds.y, bounds.w, bounds.h, theme.radius.control, theme.colors.composer));
-  if (status != ER_UI_OK) return status;
-  status = er_ui_scene_push_rect(scene, er_ui_rect_border(bounds.x, bounds.y, bounds.w, bounds.h, theme.radius.control, er_ui_color_with_alpha(theme.colors.border, 0.54f)));
+  status = er_ui_component_fill_border(scene, bounds, theme.radius.control, theme.colors.composer, er_ui_color_with_alpha(theme.colors.border, 0.54f));
   if (status != ER_UI_OK) return status;
   status = er_ui_component_push_icon(scene, er_ui_bounds(bounds.x + 14.0f, bounds.y + (bounds.h - 16.0f) * 0.5f, 16.0f, 16.0f),
                                   ER_UI_ICON_SEARCH, theme.colors.muted);
