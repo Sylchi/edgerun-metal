@@ -27,6 +27,13 @@ static const float ER_TEST_SIDECAR_STACKED_H = 120.0f;
 static const float ER_TEST_VERTICAL_FLOW_GAP = 12.0f;
 static const float ER_TEST_VERTICAL_FLOW_FIRST_H = 110.0f;
 static const float ER_TEST_VERTICAL_FLOW_SECOND_H = 80.0f;
+static const float ER_TEST_SCROLL_VIEWPORT_CONTENT_H = 360.0f;
+static const float ER_TEST_SCROLL_VIEWPORT_VALUE = 0.25f;
+static const float ER_TEST_SCROLL_VIEWPORT_MIN_THUMB_H = 30.0f;
+static const float ER_TEST_SCROLL_VIEWPORT_OVERFLOW_H = 180.0f;
+static const float ER_TEST_SCROLL_VIEWPORT_OFFSET_Y = 45.0f;
+static const float ER_TEST_SCROLL_VIEWPORT_THUMB_H = 90.0f;
+static const float ER_TEST_SCROLL_VIEWPORT_THUMB_Y = 42.5f;
 
 static void test_spacing_default_matches_tokens(void) {
   er_ui_spacing_t spacing = er_ui_spacing_default();
@@ -189,6 +196,16 @@ static void test_scroll_geometry_uses_shared_padding_and_hit_contract(void) {
   expect_float(hit.w, ER_UI_SCROLLBAR_HIT_W, "spacing: scrollbar hit width");
   expect_float(hit.h, track.h, "spacing: scrollbar hit height");
   expect_true(hit.x <= track.x, "spacing: scrollbar hit covers track");
+
+  er_ui_scroll_viewport_t viewport =
+    er_ui_scroll_viewport(bounds, ER_TEST_SCROLL_VIEWPORT_CONTENT_H, ER_TEST_SCROLL_VIEWPORT_VALUE, ER_TEST_SCROLL_VIEWPORT_MIN_THUMB_H);
+  expect_true(viewport.scrollable, "spacing: scroll viewport reports overflow");
+  expect_float(viewport.overflow_h, ER_TEST_SCROLL_VIEWPORT_OVERFLOW_H, "spacing: scroll viewport overflow height");
+  expect_float(viewport.scroll_px, ER_TEST_SCROLL_VIEWPORT_OFFSET_Y, "spacing: scroll viewport pixel offset");
+  expect_bounds(viewport.content, er_ui_bounds(bounds.x, bounds.y - ER_TEST_SCROLL_VIEWPORT_OFFSET_Y, bounds.w, ER_TEST_SCROLL_VIEWPORT_CONTENT_H),
+                "spacing: scroll viewport content bounds");
+  expect_bounds(viewport.thumb, er_ui_bounds(track.x, ER_TEST_SCROLL_VIEWPORT_THUMB_Y, track.w, ER_TEST_SCROLL_VIEWPORT_THUMB_H),
+                "spacing: scroll viewport thumb bounds");
 }
 
 void run_spacing_tests(void) {
