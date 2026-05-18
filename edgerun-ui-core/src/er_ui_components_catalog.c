@@ -1,5 +1,63 @@
 #include "er_ui_components_internal.h"
 
+static const char* const er_ui_component_shadcn_reference_slugs[ER_UI_COMPONENT_SHADCN_REFERENCE_COUNT] = {
+  "accordion",
+  "alert",
+  "alert-dialog",
+  "aspect-ratio",
+  "avatar",
+  "badge",
+  "breadcrumb",
+  "button",
+  "button-group",
+  "calendar",
+  "card",
+  "carousel",
+  "chart",
+  "checkbox",
+  "collapsible",
+  "combobox",
+  "command",
+  "context-menu",
+  "dialog",
+  "direction",
+  "drawer",
+  "dropdown-menu",
+  "empty",
+  "field",
+  "hover-card",
+  "input",
+  "input-group",
+  "input-otp",
+  "item",
+  "kbd",
+  "label",
+  "menubar",
+  "native-select",
+  "navigation-menu",
+  "pagination",
+  "popover",
+  "progress",
+  "radio-group",
+  "resizable",
+  "scroll-area",
+  "select",
+  "separator",
+  "sheet",
+  "sidebar",
+  "skeleton",
+  "slider",
+  "sonner",
+  "spinner",
+  "switch",
+  "table",
+  "tabs",
+  "textarea",
+  "toggle",
+  "toggle-group",
+  "tooltip",
+};
+
 const char* er_ui_component_category_label(er_ui_component_category_t category) {
   switch (category) {
     case ER_UI_COMPONENT_CATEGORY_FOUNDATION: return "Foundation";
@@ -38,6 +96,23 @@ const er_ui_component_spec_t* er_ui_component_at(size_t index) {
 }
 
 size_t er_ui_component_count(void) { return ER_UI_COMPONENT_COUNT; }
+
+const char* er_ui_component_shadcn_reference_source(void) {
+  return "ui/shadcn-ui/apps/v4/registry/bases/base/ui";
+}
+
+size_t er_ui_component_shadcn_reference_count(void) {
+  return ER_UI_COMPONENT_SHADCN_REFERENCE_COUNT;
+}
+
+const char* er_ui_component_shadcn_reference_at(size_t index) {
+  if (index >= ER_UI_COMPONENT_SHADCN_REFERENCE_COUNT) return 0;
+  return er_ui_component_shadcn_reference_slugs[index];
+}
+
+bool er_ui_component_shadcn_reference_covered(const char* slug) {
+  return er_ui_component_find_by_slug(slug) != 0;
+}
 
 bool er_ui_component_has_native_renderer(const er_ui_component_spec_t* spec) {
   return spec

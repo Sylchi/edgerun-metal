@@ -257,6 +257,15 @@ static void test_component_render_primitives(void) {
 
 void run_component_tests(void) {
   expect_size(er_ui_component_count(), ER_UI_TEST_COMPONENT_COUNT, "component catalog: component count matches Rust source");
+  expect_string(er_ui_component_shadcn_reference_source(), "ui/shadcn-ui/apps/v4/registry/bases/base/ui",
+                "component catalog: shadcn reference source is recorded");
+  expect_size(er_ui_component_shadcn_reference_count(), ER_UI_COMPONENT_SHADCN_REFERENCE_COUNT,
+              "component catalog: shadcn base component count is recorded");
+  expect_string(er_ui_component_shadcn_reference_at(0u), "accordion", "component catalog: shadcn reference starts sorted");
+  expect_string(er_ui_component_shadcn_reference_at(ER_UI_COMPONENT_SHADCN_REFERENCE_COUNT - 1u), "tooltip",
+                "component catalog: shadcn reference ends sorted");
+  expect_true(er_ui_component_shadcn_reference_covered("button"), "component catalog: shadcn button is covered");
+  expect_true(!er_ui_component_shadcn_reference_covered("spinner"), "component catalog: shadcn spinner gap is explicit");
   expect_true(er_ui_component_find_by_slug("accordion") != 0, "component catalog: accordion exists");
   expect_true(er_ui_component_find_by_slug("tooltip") != 0, "component catalog: tooltip exists");
   expect_true(er_ui_component_find_by_slug("data-table") != 0, "component catalog: data-table exists");
