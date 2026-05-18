@@ -15,6 +15,13 @@
 #define ER_UI_COMPONENT_SHOWCASE_MIN_PREVIEW_W 220.0f
 #define ER_UI_COMPONENT_SHOWCASE_INSET 16.0f
 #define ER_UI_COMPONENT_SHOWCASE_STACKED_LIST_H 168.0f
+#define ER_UI_COMPONENT_ICON_ROW_TILE_X 12.0f
+#define ER_UI_COMPONENT_ICON_ROW_TILE_Y 15.0f
+#define ER_UI_COMPONENT_ICON_ROW_TILE_SIZE 28.0f
+#define ER_UI_COMPONENT_ICON_ROW_TEXT_X 48.0f
+#define ER_UI_COMPONENT_ICON_ROW_TITLE_Y 24.0f
+#define ER_UI_COMPONENT_ICON_ROW_DETAIL_Y 46.0f
+#define ER_UI_COMPONENT_ROW_SEPARATOR_H 1.0f
 #define ER_UI_COMPONENT_SPEC( \
   title, \
   slug, \
@@ -217,6 +224,23 @@ static er_ui_status_t er_ui_component_fill_border(
                                                        border));
 }
 
+static er_ui_status_t er_ui_component_row_frame_emit(
+  er_ui_scene_t* scene,
+  er_ui_bounds_t bounds,
+  er_ui_hit_kind_t hit_kind,
+  uint32_t id,
+  bool has_hit,
+  float radius,
+  er_ui_color4_t fill) {
+  if (!scene || !er_ui_bounds_valid(bounds)) return ER_UI_ERR_INVALID_ARGUMENT;
+  if (has_hit) {
+    er_ui_hit_t hit = er_ui_hit(hit_kind, id, bounds.x, bounds.y, bounds.w, bounds.h);
+    er_ui_status_t status = er_ui_scene_push_hit(scene, hit);
+    if (status != ER_UI_OK) return status;
+  }
+  return er_ui_scene_push_rect(scene, er_ui_rect_fill(bounds.x, bounds.y, bounds.w, bounds.h, radius, fill));
+}
+
 static er_ui_status_t er_ui_component_row_body_emit(
   er_ui_scene_t* scene,
   vr_font_face_t* font,
@@ -232,13 +256,7 @@ static er_ui_status_t er_ui_component_row_body_emit(
   float title_y,
   float detail_y) {
   if (!scene || !font || !title || !detail || !er_ui_bounds_valid(bounds)) return ER_UI_ERR_INVALID_ARGUMENT;
-  if (has_hit) {
-    er_ui_hit_t hit = er_ui_hit(hit_kind, id, bounds.x, bounds.y, bounds.w, bounds.h);
-    er_ui_status_t status = er_ui_scene_push_hit(scene, hit);
-    if (status != ER_UI_OK) return status;
-  }
-  er_ui_rect_t background = er_ui_rect_fill(bounds.x, bounds.y, bounds.w, bounds.h, radius, fill);
-  er_ui_status_t status = er_ui_scene_push_rect(scene, background);
+  er_ui_status_t status = er_ui_component_row_frame_emit(scene, bounds, hit_kind, id, has_hit, radius, fill);
   if (status != ER_UI_OK) return status;
   status = er_ui_component_push_ascii_text(scene, font, title, bounds.x + 12.0f, bounds.y + title_y, theme.colors.text);
   if (status != ER_UI_OK) return status;
@@ -247,6 +265,81 @@ static er_ui_status_t er_ui_component_row_body_emit(
     if (status != ER_UI_OK) return status;
   }
   return ER_UI_OK;
+}
+
+typedef struct {
+  er_ui_hit_kind_t hit_kind;
+  uint32_t id;
+  float radius;
+  er_ui_color4_t fill;
+  er_ui_icon_t icon;
+  er_ui_color4_t icon_color;
+  er_ui_bounds_t icon_bounds;
+  float text_x;
+  float title_y;
+  float detail_y;
+  bool border;
+  bool separator;
+} er_ui_component_icon_text_row_t;
+
+static er_ui_component_icon_text_row_t er_ui_component_icon_text_row(
+  er_ui_hit_kind_t hit_kind,
+  uint32_t id,
+  float radius,
+  er_ui_color4_t fill,
+  er_ui_icon_t icon,
+  er_ui_color4_t icon_color,
+  er_ui_bounds_t bounds,
+  float tile_y,
+  float text_x,
+  float title_y,
+  float detail_y,
+  bool border,
+  bool separator) {
+  er_ui_component_icon_text_row_t row = {
+    hit_kind,
+    id,
+    radius,
+    fill,
+    icon,
+    icon_color,
+    er_ui_bounds(bounds.x + ER_UI_COMPONENT_ICON_ROW_TILE_X, bounds.y + tile_y,
+                 ER_UI_COMPONENT_ICON_ROW_TILE_SIZE, ER_UI_COMPONENT_ICON_ROW_TILE_SIZE),
+    text_x,
+    title_y,
+    detail_y,
+    border,
+    separator};
+  return row;
+}
+
+static er_ui_status_t er_ui_component_icon_text_row_emit(
+  er_ui_scene_t* scene,
+  vr_font_face_t* font,
+  er_ui_bounds_t bounds,
+  er_ui_resolved_theme_t theme,
+  const er_ui_component_icon_text_row_t* row,
+  const char* title,
+  const char* detail) {
+  if (!scene || !font || !row || !title || !detail || !er_ui_bounds_valid(bounds) || !er_ui_bounds_valid(row->icon_bounds)) {
+    return ER_UI_ERR_INVALID_ARGUMENT;
+  }
+  er_ui_status_t status = er_ui_component_row_frame_emit(scene, bounds, row->hit_kind, row->id, true, row->radius, row->fill);
+  if (status != ER_UI_OK) return status;
+  if (row->border) {
+    status = er_ui_scene_push_rect(scene, er_ui_rect_border(bounds.x, bounds.y, bounds.w, bounds.h, row->radius,
+                                                           er_ui_color_with_alpha(theme.colors.border, 0.68f)));
+    if (status != ER_UI_OK) return status;
+  }
+  status = er_ui_component_icon_tile(scene, row->icon_bounds, theme, row->icon, row->icon_color);
+  if (status != ER_UI_OK) return status;
+  status = er_ui_component_push_ascii_text(scene, font, title, bounds.x + row->text_x, bounds.y + row->title_y, theme.colors.text);
+  if (status != ER_UI_OK) return status;
+  status = er_ui_component_push_ascii_text(scene, font, detail, bounds.x + row->text_x, bounds.y + row->detail_y, theme.colors.muted);
+  if (status != ER_UI_OK) return status;
+  if (!row->separator) return ER_UI_OK;
+  return er_ui_component_separator_emit(scene, er_ui_bounds(bounds.x, bounds.y + bounds.h - ER_UI_COMPONENT_ROW_SEPARATOR_H,
+                                                           bounds.w, ER_UI_COMPONENT_ROW_SEPARATOR_H), theme);
 }
 
 static er_ui_color4_t er_ui_component_button_fill(er_ui_resolved_theme_t theme, er_ui_component_button_variant_t variant) {
@@ -3204,17 +3297,12 @@ er_ui_status_t er_ui_component_thread_row_emit(
   bool unread,
   uint32_t id) {
   if (!scene || !font || !title || !last_message || !er_ui_bounds_valid(bounds)) return ER_UI_ERR_INVALID_ARGUMENT;
-  er_ui_status_t status = er_ui_scene_push_hit(scene, er_ui_hit(ER_UI_HIT_LIST_ROW, id, bounds.x, bounds.y, bounds.w, bounds.h));
-  if (status != ER_UI_OK) return status;
   er_ui_color4_t fill = unread ? er_ui_color_with_alpha(theme.colors.active, 0.58f) : theme.colors.panel;
-  status = er_ui_scene_push_rect(scene, er_ui_rect_fill(bounds.x, bounds.y, bounds.w, bounds.h, theme.radius.card, fill));
-  if (status != ER_UI_OK) return status;
-  status = er_ui_component_icon_tile(scene, er_ui_bounds(bounds.x + 12.0f, bounds.y + 14.0f, 28.0f, 28.0f), theme, ER_UI_ICON_CHAT,
-                                  unread ? theme.colors.accent : theme.colors.muted);
-  if (status != ER_UI_OK) return status;
-  status = er_ui_component_push_ascii_text(scene, font, title, bounds.x + 48.0f, bounds.y + 24.0f, theme.colors.text);
-  if (status != ER_UI_OK) return status;
-  return er_ui_component_push_ascii_text(scene, font, last_message, bounds.x + 48.0f, bounds.y + 46.0f, theme.colors.muted);
+  er_ui_component_icon_text_row_t row = er_ui_component_icon_text_row(
+    ER_UI_HIT_LIST_ROW, id, theme.radius.card, fill, ER_UI_ICON_CHAT,
+    unread ? theme.colors.accent : theme.colors.muted, bounds, 14.0f, ER_UI_COMPONENT_ICON_ROW_TEXT_X,
+    ER_UI_COMPONENT_ICON_ROW_TITLE_Y, ER_UI_COMPONENT_ICON_ROW_DETAIL_Y, false, false);
+  return er_ui_component_icon_text_row_emit(scene, font, bounds, theme, &row, title, last_message);
 }
 
 er_ui_status_t er_ui_component_attachment_preview_emit(
@@ -3226,17 +3314,10 @@ er_ui_status_t er_ui_component_attachment_preview_emit(
   const char* kind,
   uint32_t id) {
   if (!scene || !font || !name || !kind || !er_ui_bounds_valid(bounds)) return ER_UI_ERR_INVALID_ARGUMENT;
-  er_ui_status_t status = er_ui_scene_push_hit(scene, er_ui_hit(ER_UI_HIT_LIST_ROW, id, bounds.x, bounds.y, bounds.w, bounds.h));
-  if (status != ER_UI_OK) return status;
-  status = er_ui_scene_push_rect(scene, er_ui_rect_fill(bounds.x, bounds.y, bounds.w, bounds.h, theme.radius.card, theme.colors.row));
-  if (status != ER_UI_OK) return status;
-  status = er_ui_scene_push_rect(scene, er_ui_rect_border(bounds.x, bounds.y, bounds.w, bounds.h, theme.radius.card, er_ui_color_with_alpha(theme.colors.border, 0.68f)));
-  if (status != ER_UI_OK) return status;
-  status = er_ui_component_icon_tile(scene, er_ui_bounds(bounds.x + 12.0f, bounds.y + 12.0f, 28.0f, 28.0f), theme, ER_UI_ICON_FILE, theme.colors.accent);
-  if (status != ER_UI_OK) return status;
-  status = er_ui_component_push_ascii_text(scene, font, name, bounds.x + 52.0f, bounds.y + 25.0f, theme.colors.text);
-  if (status != ER_UI_OK) return status;
-  return er_ui_component_push_ascii_text(scene, font, kind, bounds.x + 52.0f, bounds.y + 47.0f, theme.colors.muted);
+  er_ui_component_icon_text_row_t row = er_ui_component_icon_text_row(
+    ER_UI_HIT_LIST_ROW, id, theme.radius.card, theme.colors.row, ER_UI_ICON_FILE, theme.colors.accent, bounds,
+    12.0f, 52.0f, 25.0f, 47.0f, true, false);
+  return er_ui_component_icon_text_row_emit(scene, font, bounds, theme, &row, name, kind);
 }
 
 er_ui_status_t er_ui_component_capability_grant_row_emit(
@@ -3249,19 +3330,16 @@ er_ui_status_t er_ui_component_capability_grant_row_emit(
   const char* state,
   uint32_t id) {
   if (!scene || !font || !app || !capability || !state || !er_ui_bounds_valid(bounds)) return ER_UI_ERR_INVALID_ARGUMENT;
-  er_ui_status_t status = er_ui_scene_push_hit(scene, er_ui_hit(ER_UI_HIT_LIST_ROW, id, bounds.x, bounds.y, bounds.w, bounds.h));
-  if (status != ER_UI_OK) return status;
-  status = er_ui_scene_push_rect(scene, er_ui_rect_fill(bounds.x, bounds.y, bounds.w, bounds.h, 0.0f, theme.colors.panel));
-  if (status != ER_UI_OK) return status;
-  status = er_ui_component_icon_tile(scene, er_ui_bounds(bounds.x + 12.0f, bounds.y + 15.0f, 28.0f, 28.0f), theme, ER_UI_ICON_KEY, theme.colors.info);
-  if (status != ER_UI_OK) return status;
-  status = er_ui_component_push_ascii_text(scene, font, app, bounds.x + 48.0f, bounds.y + 24.0f, theme.colors.text);
-  if (status != ER_UI_OK) return status;
-  status = er_ui_component_push_ascii_text(scene, font, capability, bounds.x + 48.0f, bounds.y + 46.0f, theme.colors.muted);
+  er_ui_component_icon_text_row_t row = er_ui_component_icon_text_row(
+    ER_UI_HIT_LIST_ROW, id, 0.0f, theme.colors.panel, ER_UI_ICON_KEY, theme.colors.info, bounds,
+    ER_UI_COMPONENT_ICON_ROW_TILE_Y, ER_UI_COMPONENT_ICON_ROW_TEXT_X, ER_UI_COMPONENT_ICON_ROW_TITLE_Y,
+    ER_UI_COMPONENT_ICON_ROW_DETAIL_Y, false, false);
+  er_ui_status_t status = er_ui_component_icon_text_row_emit(scene, font, bounds, theme, &row, app, capability);
   if (status != ER_UI_OK) return status;
   status = er_ui_component_badge_emit(scene, font, er_ui_bounds(bounds.x + bounds.w - 96.0f, bounds.y + 18.0f, 84.0f, 24.0f), theme, state, ER_UI_COMPONENT_BADGE_DEFAULT);
   if (status != ER_UI_OK) return status;
-  return er_ui_component_separator_emit(scene, er_ui_bounds(bounds.x, bounds.y + bounds.h - 1.0f, bounds.w, 1.0f), theme);
+  return er_ui_component_separator_emit(scene, er_ui_bounds(bounds.x, bounds.y + bounds.h - ER_UI_COMPONENT_ROW_SEPARATOR_H,
+                                                           bounds.w, ER_UI_COMPONENT_ROW_SEPARATOR_H), theme);
 }
 
 er_ui_status_t er_ui_component_proof_event_row_emit(
@@ -3274,19 +3352,16 @@ er_ui_status_t er_ui_component_proof_event_row_emit(
   const char* status_text,
   uint32_t id) {
   if (!scene || !font || !title || !hash || !status_text || !er_ui_bounds_valid(bounds)) return ER_UI_ERR_INVALID_ARGUMENT;
-  er_ui_status_t status = er_ui_scene_push_hit(scene, er_ui_hit(ER_UI_HIT_LIST_ROW, id, bounds.x, bounds.y, bounds.w, bounds.h));
-  if (status != ER_UI_OK) return status;
-  status = er_ui_scene_push_rect(scene, er_ui_rect_fill(bounds.x, bounds.y, bounds.w, bounds.h, 0.0f, theme.colors.panel));
-  if (status != ER_UI_OK) return status;
-  status = er_ui_component_icon_tile(scene, er_ui_bounds(bounds.x + 12.0f, bounds.y + 15.0f, 28.0f, 28.0f), theme, ER_UI_ICON_CHECK, theme.colors.success);
-  if (status != ER_UI_OK) return status;
-  status = er_ui_component_push_ascii_text(scene, font, title, bounds.x + 48.0f, bounds.y + 24.0f, theme.colors.text);
-  if (status != ER_UI_OK) return status;
-  status = er_ui_component_push_ascii_text(scene, font, hash, bounds.x + 48.0f, bounds.y + 46.0f, theme.colors.muted);
+  er_ui_component_icon_text_row_t row = er_ui_component_icon_text_row(
+    ER_UI_HIT_LIST_ROW, id, 0.0f, theme.colors.panel, ER_UI_ICON_CHECK, theme.colors.success, bounds,
+    ER_UI_COMPONENT_ICON_ROW_TILE_Y, ER_UI_COMPONENT_ICON_ROW_TEXT_X, ER_UI_COMPONENT_ICON_ROW_TITLE_Y,
+    ER_UI_COMPONENT_ICON_ROW_DETAIL_Y, false, false);
+  er_ui_status_t status = er_ui_component_icon_text_row_emit(scene, font, bounds, theme, &row, title, hash);
   if (status != ER_UI_OK) return status;
   status = er_ui_component_badge_emit(scene, font, er_ui_bounds(bounds.x + bounds.w - 96.0f, bounds.y + 18.0f, 84.0f, 24.0f), theme, status_text, ER_UI_COMPONENT_BADGE_DEFAULT);
   if (status != ER_UI_OK) return status;
-  return er_ui_component_separator_emit(scene, er_ui_bounds(bounds.x, bounds.y + bounds.h - 1.0f, bounds.w, 1.0f), theme);
+  return er_ui_component_separator_emit(scene, er_ui_bounds(bounds.x, bounds.y + bounds.h - ER_UI_COMPONENT_ROW_SEPARATOR_H,
+                                                           bounds.w, ER_UI_COMPONENT_ROW_SEPARATOR_H), theme);
 }
 
 er_ui_status_t er_ui_component_route_path_emit(

@@ -14,6 +14,10 @@
 #define ER_UI_TEST_COMPONENT_TABLE_ID 3015u
 #define ER_UI_TEST_COMPONENT_BREADCRUMB_ID 3020u
 #define ER_UI_TEST_COMPONENT_CHART_ID 3024u
+#define ER_UI_TEST_COMPONENT_THREAD_ROW_ID 3030u
+#define ER_UI_TEST_COMPONENT_ATTACHMENT_ID 3031u
+#define ER_UI_TEST_COMPONENT_GRANT_ROW_ID 3032u
+#define ER_UI_TEST_COMPONENT_PROOF_ROW_ID 3033u
 #define ER_UI_TEST_COMPONENT_INVALID_BUTTON_ID 9u
 #define ER_UI_TEST_COMPONENT_TABS_ACTIVE_INDEX 1u
 #define ER_UI_TEST_COMPONENT_BREADCRUMB_CURRENT_INDEX 2u
@@ -121,6 +125,18 @@ static void test_component_render_primitives(void) {
                 "component render: toast emits");
   expect_status(er_ui_component_empty_emit(&scene, face, er_ui_bounds(420.0f, 412.0f, 180.0f, 110.0f), theme, "No results", "Try another filter"), ER_UI_OK,
                 "component render: empty emits");
+  expect_status(er_ui_component_thread_row_emit(&scene, face, er_ui_bounds(606.0f, 332.0f, 220.0f, 58.0f), theme, "Settlement", "Payout approved",
+                                             true, ER_UI_TEST_COMPONENT_THREAD_ROW_ID),
+                ER_UI_OK, "component render: thread row emits through icon row primitive");
+  expect_status(er_ui_component_attachment_preview_emit(&scene, face, er_ui_bounds(606.0f, 396.0f, 220.0f, 58.0f), theme, "manifest.json", "Signed bundle",
+                                                     ER_UI_TEST_COMPONENT_ATTACHMENT_ID),
+                ER_UI_OK, "component render: attachment preview emits through icon row primitive");
+  expect_status(er_ui_component_capability_grant_row_emit(&scene, face, er_ui_bounds(606.0f, 460.0f, 260.0f, 58.0f), theme, "Builder",
+                                                       "cache.read", "Active", ER_UI_TEST_COMPONENT_GRANT_ROW_ID),
+                ER_UI_OK, "component render: grant row emits through icon row primitive");
+  expect_status(er_ui_component_proof_event_row_emit(&scene, face, er_ui_bounds(606.0f, 524.0f, 260.0f, 58.0f), theme, "Receipt sealed",
+                                                  "0x91af", "OK", ER_UI_TEST_COMPONENT_PROOF_ROW_ID),
+                ER_UI_OK, "component render: proof row emits through icon row primitive");
   expect_status(er_ui_component_alert_emit(&scene, face, er_ui_bounds(606.0f, 16.0f, 220.0f, 72.0f), theme, "Heads up", "Reusable components", theme.colors.warning),
                 ER_UI_OK, "component render: alert emits");
   expect_status(er_ui_component_avatar_emit(&scene, face, er_ui_bounds(606.0f, 96.0f, 42.0f, 42.0f), theme, "ER", theme.colors.accent, true),
