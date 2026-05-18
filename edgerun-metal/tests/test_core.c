@@ -2927,9 +2927,16 @@ static void test_vfs_object_packets(void) {
   static const UINT8 object_bytes[] = {'a', 'b', 'c', 'd', 'e', 'f'};
   ErCryptoProvider crypto;
   ErVfsObjectPacket packet;
+  ErVfsObjectPacket packets[2];
+  ErVfsObjectPacket tampered_packets[2];
   ErVfsObjectLabelRef ref;
   ErVfsObjectLabelRef ref_from_object;
   ErVfsObjectTransformRef transform;
+  UINT8 large_object[1500];
+  UINT8 assembled[1500];
+  ErHash assembled_object_id;
+  UINTN assembled_len = 0u;
+  UINTN i;
 
   crypto.ctx = (void*)(UINTN)5u;
   crypto.hash = test_hash;
@@ -2953,6 +2960,59 @@ static void test_vfs_object_packets(void) {
   check_uint64("vfs packet bytes len", packet.header.bytes_len, 4);
   check_int64("vfs packet byte0", packet.bytes[0], 'c');
   check_int64("vfs packet byte3", packet.bytes[3], 'f');
+
+  for (i = 0u; i < sizeof(large_object); ++i) {
+    large_object[i] = (UINT8)(i & 0xffu);
+  }
+  check_int64("vfs object packet 0",
+              er_vfs_prepare_object_packet(&crypto, large_object,
+                                           sizeof(large_object), 0u, 0u, 2u,
+                                           &packets[0]),
+              1);
+  check_int64("vfs object packet 1",
+              er_vfs_prepare_object_packet(&crypto, large_object,
+                                           sizeof(large_object),
+                                           ER_VFS_OBJECT_PACKET_BYTES, 1u, 2u,
+                                           &packets[1]),
+              1);
+  check_int64("vfs assemble object",
+              er_vfs_assemble_object_packets(&crypto, packets, 2u, assembled,
+                                             sizeof(assembled), &assembled_len,
+                                             &assembled_object_id),
+              1);
+  check_uint64("vfs assemble len", assembled_len, sizeof(large_object));
+  check_hash_equal("vfs assemble object id", &assembled_object_id,
+                   &packets[0].header.object_id);
+  check_int64("vfs assemble first byte", assembled[0], large_object[0]);
+  check_int64("vfs assemble split byte",
+              assembled[ER_VFS_OBJECT_PACKET_BYTES],
+              large_object[ER_VFS_OBJECT_PACKET_BYTES]);
+  check_int64("vfs assemble last byte",
+              assembled[sizeof(large_object) - 1u],
+              large_object[sizeof(large_object) - 1u]);
+  tampered_packets[0] = packets[0];
+  tampered_packets[1] = packets[1];
+  tampered_packets[1].bytes[0] ^= 1u;
+  check_int64("vfs assemble reject payload tamper",
+              er_vfs_assemble_object_packets(&crypto, tampered_packets, 2u,
+                                             assembled, sizeof(assembled),
+                                             &assembled_len,
+                                             &assembled_object_id),
+              0);
+  tampered_packets[0] = packets[1];
+  tampered_packets[1] = packets[0];
+  check_int64("vfs assemble reject packet order",
+              er_vfs_assemble_object_packets(&crypto, tampered_packets, 2u,
+                                             assembled, sizeof(assembled),
+                                             &assembled_len,
+                                             &assembled_object_id),
+              0);
+  check_int64("vfs assemble reject short buffer",
+              er_vfs_assemble_object_packets(&crypto, packets, 2u, assembled,
+                                             sizeof(assembled) - 1u,
+                                             &assembled_len,
+                                             &assembled_object_id),
+              0);
 
   check_int64("vfs label ref", er_vfs_prepare_object_label_ref(&crypto, "app/data.bin", 12, object_bytes, sizeof(object_bytes), &ref), 1);
   check_int64("vfs label ref abi", ref.abi_version, ER_VFS_ABI_VERSION);

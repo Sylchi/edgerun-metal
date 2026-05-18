@@ -117,7 +117,7 @@ See `docs/metal-renderer-4k120.md` for the display architecture.
 
 The VFS is an in-memory object graph, not a filesystem API.
 
-Objects are content-addressed byte ranges. File paths are labels inside a sealed manifest, not host paths. Object packets split bytes into bounded chunks with object id, offset, count, payload hash, and packet id.
+Objects are content-addressed byte ranges. File paths are labels inside a sealed manifest, not host paths. Object packets split bytes into bounded chunks with object id, offset, count, payload hash, and packet id. Loading an object means reassembling the canonical packet sequence into caller-owned memory after validating packet order, offsets, payload hashes, packet ids, object id, and capacity.
 
 Sealing transforms plaintext objects into transport objects. The transform record binds:
 
@@ -137,6 +137,7 @@ The completed C foundation is:
 - app package, identity, and IPC route records for content-addressed WASM execution
 - `erwire` packet carriage for those records
 - memory-only object packet assembly
+- bounded object packet reassembly for loaded app/package bytes
 - app package ids derived from object ids and lengths rather than labels
 - explicit crypto provider hooks for seal/open/hash/sign/verify
 - bounded Wasm relay send/receive imports with app identity, admission, token, memory-window, and packet-byte budget checks
