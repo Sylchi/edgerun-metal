@@ -1,4 +1,4 @@
-.PHONY: all run run-aarch64 clean print-path print-config netboot os rebuild-image check test-core wasm-modules qemu-config-check qemu-aarch64-config-check
+.PHONY: all run run-aarch64 qemu-aarch64-smoke clean print-path print-config netboot os rebuild-image check test-core wasm-modules qemu-config-check qemu-aarch64-config-check
 
 CC = clang
 HOST_CC ?= clang
@@ -72,6 +72,11 @@ QEMU_RUN_SRC := tools/qemu-run/main.c
 QEMU_RUN_BIN := $(BUILD_DIR)/edgerun-qemu-run
 QEMU_CONFIG := qemu.conf
 QEMU_AARCH64_CONFIG := qemu-aarch64.conf
+QEMU_AARCH64_SMOKE_CONFIG := qemu-aarch64-smoke.conf
+QEMU_AARCH64_SMOKE_LOG := build/aarch64/qemu-aarch64-smoke.log
+QEMU_AARCH64_SMOKE_TIMEOUT ?= 30
+QEMU_AARCH64_SMOKE_READY := boot services: fatal action=halt
+QEMU_SMOKE_SRC := tools/qemu-smoke.sh
 CORE_TEST_SRC := tests/test_core.c core/efi_boot_memory.c core/efi_boot_relay.c core/efi_boot_routes.c core/efi_boot_wasm.c core/er_boot_config.c core/er_boot_profile.c core/er_boot_services.c core/er_pci.c core/er_mmio.c core/er_crypto.c core/er_crypto_blake3.c $(CRYPTO_SRCS) core/er_mem.c core/er_vfs.c core/er_app.c core/er_identity.c core/er_device_identity.c core/er_work_route.c core/er_render_endpoint.c core/er_storage_endpoint.c core/er_seal.c core/er_tpm.c core/er_hw_relay.c core/er_relay_packet.c core/er_bus.c core/er_ps2_keyboard.c core/er_acpi.c core/er_print.c core/er_netlog.c core/er_gfx_console.c core/er_ui_gop_renderer.c core/er_ui_wasm_app.c core/er_epoch_clock.c core/erwire.c core/er_native_boot.c core/wasm_vm.c core/wasm_vm_reader.c core/wasm_vm_memory_ui.c core/wasm_vm_execute.c core/er_virtio.c core/er_virtio_blk.c core/er_virtio_net.c core/er_virtio_gpu.c core/er_net_frame.c core/er_native_eth.c $(UI_SRCS) $(VARFONT_SRCS)
 CORE_TEST_BIN := $(BUILD_DIR)/test-core
 IFACE ?=
@@ -181,6 +186,11 @@ qemu-aarch64-config-check: $(QEMU_AARCH64_CONFIG)
 	$(MAKE) all ER_METAL_ARCH=aarch64 BUILD_DIR=build/aarch64
 	$(MAKE) build/aarch64/edgerun-qemu-run BUILD_DIR=build/aarch64
 	./build/aarch64/edgerun-qemu-run --check $(QEMU_AARCH64_CONFIG) $(abspath build/aarch64/esp)
+
+qemu-aarch64-smoke: $(QEMU_AARCH64_SMOKE_CONFIG) $(QEMU_SMOKE_SRC)
+	$(MAKE) all ER_METAL_ARCH=aarch64 BUILD_DIR=build/aarch64
+	$(MAKE) build/aarch64/edgerun-qemu-run BUILD_DIR=build/aarch64
+	$(QEMU_SMOKE_SRC) ./build/aarch64/edgerun-qemu-run $(QEMU_AARCH64_SMOKE_CONFIG) $(abspath build/aarch64/esp) $(QEMU_AARCH64_SMOKE_LOG) $(QEMU_AARCH64_SMOKE_TIMEOUT) "$(QEMU_AARCH64_SMOKE_READY)"
 
 clean:
 	rm -rf $(BUILD_DIR)
