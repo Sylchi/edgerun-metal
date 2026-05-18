@@ -1,5 +1,6 @@
 #include "er_ui_components.h"
 #include "er_ui_painter.h"
+#include "er_ui_spacing.h"
 #include "er_math.h"
 
 #define ER_UI_COMPONENT_TEXT_CAPACITY 128u
@@ -9,6 +10,11 @@
 #define ER_UI_COMPONENT_SUFFIX_JS_LEN 3u
 #define ER_UI_COMPONENT_EMPTY_COUNT 0u
 #define ER_UI_COMPONENT_ARRAY_COUNT(values) (sizeof(values) / sizeof((values)[0]))
+#define ER_UI_COMPONENT_SHOWCASE_MIN_LIST_W 160.0f
+#define ER_UI_COMPONENT_SHOWCASE_PREFERRED_LIST_W 260.0f
+#define ER_UI_COMPONENT_SHOWCASE_MIN_PREVIEW_W 220.0f
+#define ER_UI_COMPONENT_SHOWCASE_INSET 16.0f
+#define ER_UI_COMPONENT_SHOWCASE_STACKED_LIST_H 168.0f
 #define ER_UI_COMPONENT_SPEC( \
   title, \
   slug, \
@@ -4117,8 +4123,17 @@ er_ui_status_t er_ui_component_showcase_emit(
 
   er_ui_status_t status = er_ui_scene_push_rect(scene, er_ui_rect_fill(bounds.x, bounds.y, bounds.w, bounds.h, 0.0f, theme.colors.bg));
   if (status != ER_UI_OK) return status;
-  er_ui_bounds_t list = er_ui_bounds(bounds.x + 16.0f, bounds.y + 16.0f, er_ui_float_min(260.0f, bounds.w * 0.36f), bounds.h - 32.0f);
-  er_ui_bounds_t preview = er_ui_bounds(list.x + list.w + 16.0f, bounds.y + 16.0f, bounds.w - list.w - 48.0f, bounds.h - 32.0f);
+  er_ui_bounds_t content = er_ui_bounds_inset(bounds, ER_UI_COMPONENT_SHOWCASE_INSET, ER_UI_COMPONENT_SHOWCASE_INSET);
+  er_ui_responsive_sidecar_t layout = er_ui_responsive_sidecar(
+    content,
+    ER_UI_COMPONENT_SHOWCASE_MIN_LIST_W,
+    ER_UI_COMPONENT_SHOWCASE_PREFERRED_LIST_W,
+    ER_UI_COMPONENT_SHOWCASE_MIN_PREVIEW_W,
+    ER_UI_COMPONENT_SHOWCASE_INSET,
+    ER_UI_COMPONENT_SHOWCASE_STACKED_LIST_H);
+  if (!er_ui_bounds_valid(layout.side) || !er_ui_bounds_valid(layout.main)) return ER_UI_ERR_INVALID_ARGUMENT;
+  er_ui_bounds_t list = layout.side;
+  er_ui_bounds_t preview = layout.main;
   status = er_ui_component_card_emit(scene, list, theme);
   if (status != ER_UI_OK) return status;
   status = er_ui_component_push_ascii_text(scene, font, "component components", list.x + 14.0f, list.y + 28.0f, theme.colors.text);
