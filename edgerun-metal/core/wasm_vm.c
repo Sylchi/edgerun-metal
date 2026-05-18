@@ -1220,6 +1220,7 @@ static int er_wasm_init_host(ErWasmModule* module, const ErWasmHostCalls* host) 
     module->host.relay_send = host->relay_send;
     module->host.relay_recv = host->relay_recv;
     module->host.ui_emit = host->ui_emit;
+    module->host.ui_emit_user = host->ui_emit_user;
     module->host.memory = host->memory;
     module->host.memory_size = host->memory_size;
     module->host.linear_memory = host->linear_memory;
@@ -2273,7 +2274,9 @@ int er_wasm_execute_i64(ErWasmModule* module, UINT32 function_index, INT64* resu
               return -1;
             }
 
-            value = module->host.ui_emit((const UINT8*)bytes, (UINT32)len, &stats);
+            value = module->host.ui_emit(module->host.ui_emit_user,
+                                         (const UINT8*)bytes, (UINT32)len,
+                                         &stats);
             if (stack_size >= ER_WASM_STACK_MAX) {
               return -1;
             }

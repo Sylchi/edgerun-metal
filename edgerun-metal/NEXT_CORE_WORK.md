@@ -1,6 +1,6 @@
 # EdgeRun Metal: next core work
 
-The metal core is now a relay runtime, not a local driver experiment. Netboot, GOP, PCI scans, and direct hostcalls are support surfaces. The product architecture is the `edgerun-work` protocol carried by erwire between apps, UI renderers, drivers, storage, and hardware capabilities.
+The metal core is now a relay runtime for user-authored Wasm apps, not a local driver experiment. Netboot, GOP, PCI scans, and direct hostcalls are support surfaces. The product architecture is the `edgerun-work` protocol carried by erwire between apps, UI renderers, input, drivers, storage, and hardware capabilities.
 
 See `../docs/relay-architecture.md` for the cross-project model and `../docs/coherent-system-milestones.md` for the proof checklist.
 
@@ -10,11 +10,15 @@ See `../docs/relay-architecture.md` for the cross-project model and `../docs/coh
 - EdgeRun Metal Core starts on real hardware.
 - The embedded Wasm VM executes bounded modules.
 - PCI config-space and MMIO read hostcall foundations exist.
-- GOP-backed UI rendering exists through `edgerun-ui-core`.
+- GOP and VirtIO GPU rendering surfaces exist through `edgerun-ui-core`.
 - Native VirtIO-net can submit EdgeRun Ethernet frames with EtherType `0x88b5`.
 - `erwire` packets can be parsed from native Ethernet frames.
 - Hardware relay endpoints exist for firmware UDP, native Ethernet, and VirtIO queues.
 - Native relay ingress polling can produce deterministic ingress records for none, malformed, and accepted packets.
+- Wasm modules can call bounded `edgerun.relay/send` and `edgerun.relay/recv` imports through declared inbox/outbox memory windows.
+- Relay sends are checked against app source identity, admission id, budget token, packet validity, and packet-byte budget before leaving the VM.
+- `edgerun-ui-core`, the GOP renderer, the VirtIO GPU profile, and `varfont` provide enough UI machinery to target polished app surfaces instead of diagnostic rectangles.
+- The boot UI proof can prepare multiple Wasm UI app runtimes at once. Each app has its own preallocated linear memory, presentation identity, scene, and `ui_emit` host context, and the shell app switcher selects which context receives input and contributes scene output.
 
 ## Architecture rule
 
@@ -37,7 +41,7 @@ Local hostcalls are allowed only as temporary proof scaffolding. The durable app
 
 ## Current target
 
-Make VirtIO-net the first native relay ingress and carry admitted `edgerun-work` packets to local endpoint adapters.
+Make VirtIO-net the first native relay ingress and carry admitted `edgerun-work` packets from user-authored Wasm apps to local endpoint adapters. The first product proof should show an app emitting beautiful UI state through a render capability route, not owning a framebuffer or depending on a special local IPC path.
 
 Target QEMU proof:
 
@@ -46,22 +50,23 @@ EdgeRun EtherType frame on VirtIO-net
   -> erwire parser
   -> work packet decode
   -> admission-defined route verification
-  -> assigned VirtIO block endpoint for admitted storage/object work
-  -> assigned VirtIO GPU endpoint for admitted render capability work
+  -> assigned render endpoint for admitted UI scene work
+  -> assigned storage endpoint for admitted object work
 ```
 
 The first endpoint adapters may acknowledge or capture packets before they implement full device behavior. The important proof is one ingress, one carriage protocol, admission-defined routes, and typed local endpoint adapters.
 
 ## Immediate milestones
 
-### M1: Object-only storage contract
+### M1: Object-only storage and app packaging contract
 
-Status: next.
+Status: partly implemented; VFS object packets and labels exist, but the audit and app packaging proof are next.
 
 - Audit runtime surfaces for host path/file/socket/descriptor concepts.
 - Keep VFS labels as object labels only.
 - Prove labels map to object ids, and object ids do not depend on labels.
 - Keep storage work restricted to typed object payloads carried by admitted storage or capability routes.
+- Treat user-authored app Wasm, UI assets, fonts, and manifests as content-addressed objects, never host paths.
 
 Proof:
 
@@ -87,7 +92,7 @@ Proof:
 
 ### M3: Admission-defined route verification
 
-Status: next.
+Status: route primitives implemented; native ingress decode, signed-record verification, and endpoint intent selection are next.
 
 - Decode accepted erwire payloads as `edgerun-work` records.
 - Verify `NetworkMessage` and `CapabilityEnvelope` payloads against a signed `WorkAdmission` path.
@@ -104,11 +109,25 @@ Proof:
 - Packet-class matches without a valid admission produce no intent.
 - Malformed or unsupported admitted endpoints are rejected deterministically.
 
-### M4: Storage adapter
+### M4: Render adapter
 
 Status: next.
 
-- Accept admitted storage/object work at the VirtIO block endpoint.
+- Accept admitted render capability work at a render endpoint.
+- Start with deterministic capture of scene metadata or scene hashes after admission-defined route verification.
+- Then connect the captured scene path to the existing GOP and VirtIO GPU rendering surfaces.
+- Keep apps targeting admitted UI scene packets, not framebuffers.
+
+Proof:
+
+- Unit test feeds admitted render capability work through erwire and the route verifier to render.
+- QEMU or host proof shows an app-authored scene produces the same scene hash before endpoint-specific drawing.
+
+### M5: Storage adapter
+
+Status: next.
+
+- Accept admitted storage/object work at the storage endpoint.
 - Start with deterministic acknowledgement or capture after admission-defined route verification.
 - Then add real VirtIO block request queue support.
 - Keep storage as sealed object movement, not a filesystem API.
@@ -118,33 +137,23 @@ Proof:
 - Unit test feeds admitted object work through erwire and the route verifier to storage.
 - QEMU proof carries admitted storage work from net ingress to the VirtIO block endpoint.
 
-### M5: Render adapter
+### M6: User-authored Wasm UI app proof
 
-Status: next.
+Status: relay hostcall foundation and concurrent local Wasm UI app contexts implemented; content-addressed app packaging and relay-routed render packets are next.
 
-- Accept admitted render capability work at the VirtIO GPU endpoint.
-- Start with deterministic acknowledgement or capture after admission-defined route verification.
-- Then add the smallest VirtIO GPU command queue path.
-- Keep apps targeting admitted UI scene packets, not framebuffers.
-
-Proof:
-
-- Unit test feeds admitted render capability work through erwire and the route verifier to render.
-- QEMU proof carries admitted render work from net ingress to the VirtIO GPU endpoint.
-
-### M6: Wasm relay hostcalls
-
-Status: not started.
-
-- Add bounded Wasm imports for relay send/receive.
+- Keep bounded Wasm imports for relay send/receive as the durable app boundary.
+- Keep each loaded app in an explicit runtime context with preallocated memory, presentation identity, scene state, and app-switcher selection.
+- Package a small user-authored Wasm app as content-addressed input.
+- Have the app emit a render capability packet over relay send.
+- Feed input or completion packets back through relay receive.
 - Move driver modules away from direct PCI/MMIO hostcalls as the durable ABI.
 - Keep direct bus hostcalls only for bring-up until relay device endpoints are proven.
 
 Proof:
 
-- Wasm fixture emits object and render packets through relay send.
+- Wasm fixture emits an app UI scene or scene-delta packet through relay send.
 - Wasm fixture receives a completion or input packet through relay receive.
-- Tests prove memory bounds, packet bounds, and budget failures.
+- Tests prove memory bounds, packet bounds, admission/budget checks, and budget failures.
 
 ### M7: Distributed UI proof
 

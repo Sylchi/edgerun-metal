@@ -32,7 +32,7 @@ typedef INT64 (*er_wasm_mmio_read32)(INT64 handle, INT64 offset);
 typedef INT64 (*er_wasm_bus_exec)(const ErBusIoPacket* request, ErBusIoPacket* response);
 typedef INT64 (*er_wasm_relay_send)(const UINT8* bytes, UINT32 len);
 typedef INT64 (*er_wasm_relay_recv)(UINT8* bytes, UINT32 capacity);
-typedef INT64 (*er_wasm_ui_emit)(const UINT8* bytes, UINT32 len,
+typedef INT64 (*er_wasm_ui_emit)(void* user, const UINT8* bytes, UINT32 len,
                                  const er_ui_scene_stats_t* stats);
 
 typedef struct {
@@ -56,6 +56,7 @@ typedef struct {
   er_wasm_relay_send relay_send;
   er_wasm_relay_recv relay_recv;
   er_wasm_ui_emit ui_emit;
+  void* ui_emit_user;
   UINT8* memory;
   UINT32 memory_size;
   ErWasmLinearMemory linear_memory;
