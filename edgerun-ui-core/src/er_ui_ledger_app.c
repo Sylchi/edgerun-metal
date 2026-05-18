@@ -449,7 +449,6 @@ static er_ui_status_t er_ui_ledger_sidebar(
   er_ui_status_t status;
   float x = bounds.x + 18.0f;
   float y = bounds.y + 34.0f;
-  er_ui_painter_t painter = er_ui_painter(scene);
   bool compact = bounds.h <= ER_UI_LEDGER_STACKED_SIDE_H;
 
   status = er_ui_ledger_rect(scene, bounds, 0.0f, er_ui_color_rgb_u8(ER_UI_LEDGER_RGB_SIDEBAR));
@@ -472,16 +471,7 @@ static er_ui_status_t er_ui_ledger_sidebar(
                                         bounds.y + ER_UI_LEDGER_COMPACT_NAV_Y,
                                         nav_w,
                                         ER_UI_LEDGER_NAV_ROW_H);
-      er_ui_color4_t fill = nav->id == focused_id ? colors.field : er_ui_color_with_alpha(colors.field, 0.0f);
-      er_ui_color4_t color = nav->id == focused_id ? colors.text : colors.muted;
-      status = er_ui_scene_push_hit(scene, er_ui_hit(ER_UI_HIT_WORKSPACE_TAB, nav->id, row.x, row.y, row.w, row.h));
-      if (status != ER_UI_OK) return status;
-      status = er_ui_ledger_rect(scene, row, 7.0f, fill);
-      if (status != ER_UI_OK) return status;
-      status = er_ui_painter_icon(&painter, er_ui_bounds(row.x + 10.0f, row.y + 8.0f, 16.0f, 16.0f),
-                                  nav->icon, color);
-      if (status != ER_UI_OK) return status;
-      status = er_ui_ledger_text(scene, font, nav->label, row.x + 34.0f, row.y + 22.0f, color);
+      status = er_ui_ledger_nav_row(scene, font, row, colors, nav, focused_id);
       if (status != ER_UI_OK) return status;
       nav++;
       nav_index++;
@@ -492,17 +482,8 @@ static er_ui_status_t er_ui_ledger_sidebar(
   while (nav < nav_end) {
     er_ui_bounds_t row = er_ui_bounds(x - 6.0f, y,
                                       bounds.w - 24.0f, ER_UI_LEDGER_NAV_ROW_H);
-    er_ui_color4_t fill = nav->id == focused_id ? colors.field : er_ui_color_with_alpha(colors.field, 0.0f);
-    er_ui_color4_t color = nav->id == focused_id ? colors.text : colors.muted;
-    status = er_ui_scene_push_hit(scene, er_ui_hit(ER_UI_HIT_WORKSPACE_TAB, nav->id, row.x, row.y, row.w, row.h));
-    if (status != ER_UI_OK) return status;
-    status = er_ui_ledger_rect(scene, row, 7.0f, fill);
-    if (status != ER_UI_OK) return status;
-    //@optimizer-ignore fixed sidebar navigation renders one deterministic icon per surface row
-    status = er_ui_painter_icon(&painter, er_ui_bounds(row.x + 10.0f, row.y + 8.0f, 16.0f, 16.0f),
-                                nav->icon, color);
-    if (status != ER_UI_OK) return status;
-    status = er_ui_ledger_text(scene, font, nav->label, row.x + 34.0f, row.y + 22.0f, color);
+    //@optimizer-ignore fixed sidebar navigation renders one deterministic item per surface row
+    status = er_ui_ledger_nav_row(scene, font, row, colors, nav, focused_id);
     if (status != ER_UI_OK) return status;
     y += ER_UI_LEDGER_NAV_ROW_H + 4.0f;
     nav++;
