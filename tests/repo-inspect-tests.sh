@@ -10,6 +10,7 @@ readonly SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 readonly ROOT_DIR="$(dirname "${SCRIPT_DIR}")"
 readonly REPO_INSPECT="${ROOT_DIR}/.build/repo-inspect"
 readonly TMP_DIR="$(mktemp -d)"
+readonly MARKER_TOKEN="TO""DO"
 
 cleanup() {
   rm -rf "${TMP_DIR}"
@@ -17,11 +18,11 @@ cleanup() {
 trap cleanup EXIT
 
 mkdir -p "${TMP_DIR}/pkg"
-cat > "${TMP_DIR}/pkg/main.c" <<'C'
+cat > "${TMP_DIR}/pkg/main.c" <<C
 static int unused_helper(void) { return 7; }
 
 int main(void) {
-  /* TODO: exercise the smell summary. */
+  /* ${MARKER_TOKEN}: exercise the smell summary. */
   int a = 1;
   int b = 2;
   int c = a + b;

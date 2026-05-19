@@ -63,12 +63,15 @@ typedef struct {
     unsigned char *data;
     size_t len;
     bool text;
+    mode_t mode;
 } MemoryFile;
 
 typedef struct {
     char *path;
     unsigned char *data;
     size_t len;
+    mode_t mode;
+    bool mode_known;
 } Proposal;
 
 typedef struct {
@@ -223,6 +226,13 @@ static bool path_is_c_like(const char *path) {
 }
 
 static bool path_is_summary_candidate(const char *path) {
+    const char *base = strrchr(path, '/');
+    base = base ? base + 1 : path;
+    if (strcmp(base, "Makefile") == 0 ||
+        strcmp(base, "CMakeLists.txt") == 0 ||
+        strcmp(base, "AGENTS.md") == 0) {
+        return true;
+    }
     const char *dot = strrchr(path, '.');
     if (!dot) return false;
     return strcmp(dot, ".c") == 0 ||
@@ -361,7 +371,7 @@ static unsigned char *read_file_bytes(const char *path, size_t *len_out, bool *t
     return data;
 }
 
-static void workspace_add_file(Workspace *ws, const char *rel, unsigned char *data, size_t len, bool text) {
+static void workspace_add_file(Workspace *ws, const char *rel, unsigned char *data, size_t len, bool text, mode_t mode) {
     if (ws->file_count == ws->file_cap) {
         ws->file_cap = ws->file_cap ? ws->file_cap * 2 : 256;
         ws->files = xrealloc(ws->files, ws->file_cap * sizeof(ws->files[0]));
@@ -371,6 +381,7 @@ static void workspace_add_file(Workspace *ws, const char *rel, unsigned char *da
         .data = data,
         .len = len,
         .text = text,
+        .mode = mode,
     };
 }
 
@@ -419,7 +430,7 @@ static void scan_dir(Workspace *ws, const char *rel) {
             size_t len = 0;
             bool text = false;
             unsigned char *data = read_file_bytes(child_abs, &len, &text);
-            if (data) workspace_add_file(ws, child_rel, data, len, text);
+            if (data) workspace_add_file(ws, child_rel, data, len, text, st.st_mode);
         }
     }
     closedir(dir);
@@ -450,6 +461,14 @@ static void upsert_proposal(Workspace *ws, const char *path, const unsigned char
         p->path = xstrdup(path);
         p->data = NULL;
         p->len = 0;
+        MemoryFile *existing = find_file(ws, path);
+        if (existing) {
+            p->mode = existing->mode;
+            p->mode_known = true;
+        } else {
+            p->mode = 0;
+            p->mode_known = false;
+        }
     }
     free(p->data);
     p->data = xmalloc(len + 1);
@@ -790,27 +809,79 @@ static void append_related_summaries(Buffer *out, Workspace *ws, const FileSumma
     }
 }
 
+static bool summary_query_is_workspace(const char *query) {
+    return contains_case_insensitive(query, strlen(query), "workspace") ||
+           contains_case_insensitive(query, strlen(query), "repo") ||
+           contains_case_insensitive(query, strlen(query), "project");
+}
+
+static bool summary_matches_query(const FileSummary *summary, const char *query) {
+    if (!query || !*query) return true;
+    if (contains_case_insensitive(summary->path, strlen(summary->path), query)) return true;
+    if (contains_case_insensitive(summary->text, strlen(summary->text), query)) return true;
+    if (summary_query_is_workspace(query)) {
+        return starts_with(summary->path, "codex/") ||
+               starts_with(summary->path, "tools/") ||
+               starts_with(summary->path, "tests/") ||
+               starts_with(summary->path, "docs/") ||
+               strcmp(summary->path, "Makefile") == 0 ||
+               strcmp(summary->path, "AGENTS.md") == 0 ||
+               strcmp(summary->path, "README.md") == 0;
+    }
+    return false;
+}
+
 static char *workspace_summary_query_new(Workspace *ws, const char *query, size_t limit) {
     Buffer out;
     buffer_init(&out);
+    bool *emitted_flags = xmalloc(ws->summary_count * sizeof(emitted_flags[0]));
+    memset(emitted_flags, 0, ws->summary_count * sizeof(emitted_flags[0]));
     if (!query || !*query) {
         buffer_appendf(&out, "summary index: %zu files\n", ws->summary_count);
         query = "";
     }
     size_t emitted = 0;
+    if (summary_query_is_workspace(query)) {
+        static const char *preferred[] = {
+            "AGENTS.md",
+            "README.md",
+            "Makefile",
+            "codex/README.md",
+            "codex/src/edgerun_c.c",
+            "codex/src/edgerun_c_agent.c",
+            "tools/repo-progress.sh",
+            "tools/er-build/main.c",
+            "docs/repository-structure.md",
+            NULL
+        };
+        for (size_t p = 0; preferred[p] && (limit == 0 || emitted < limit); p++) {
+            for (size_t i = 0; i < ws->summary_count; i++) {
+                FileSummary *summary = &ws->summaries[i];
+                if (!emitted_flags[i] && strcmp(summary->path, preferred[p]) == 0) {
+                    buffer_appendf(&out, "\n[%zu] %s\n", emitted + 1, summary->path);
+                    buffer_append_excerpt(&out, summary->text, SUMMARY_TEXT_BYTES);
+                    append_related_summaries(&out, ws, summary);
+                    emitted_flags[i] = true;
+                    emitted++;
+                    break;
+                }
+            }
+        }
+    }
     for (size_t i = 0; i < ws->summary_count && (limit == 0 || emitted < limit); i++) {
+        if (emitted_flags[i]) continue;
         FileSummary *summary = &ws->summaries[i];
-        if (*query &&
-            !contains_case_insensitive(summary->path, strlen(summary->path), query) &&
-            !contains_case_insensitive(summary->text, strlen(summary->text), query)) {
+        if (!summary_matches_query(summary, query)) {
             continue;
         }
         buffer_appendf(&out, "\n[%zu] %s\n", emitted + 1, summary->path);
         buffer_append_excerpt(&out, summary->text, SUMMARY_TEXT_BYTES);
         append_related_summaries(&out, ws, summary);
+        emitted_flags[i] = true;
         emitted++;
     }
     if (emitted == 0) buffer_append(&out, "no matching summaries\n", 22);
+    free(emitted_flags);
     return out.data ? out.data : xstrdup("");
 }
 
@@ -1090,7 +1161,7 @@ static void ensure_parent_dirs(const char *path) {
     }
 }
 
-static void write_bytes_atomicish(const char *path, const unsigned char *data, size_t len) {
+static void write_bytes_atomicish(const char *path, const unsigned char *data, size_t len, mode_t mode, bool mode_known) {
     char tmp[PATH_MAX];
     int n = snprintf(tmp, sizeof(tmp), "%s.tmp.%ld", path, (long)getpid());
     if (n < 0 || n >= PATH_MAX) die("temp path too long");
@@ -1106,6 +1177,10 @@ static void write_bytes_atomicish(const char *path, const unsigned char *data, s
         unlink(tmp);
         die("close failed for %s", tmp);
     }
+    if (mode_known && chmod(tmp, mode & 0777) != 0) {
+        unlink(tmp);
+        die("chmod failed for %s: %s", tmp, strerror(errno));
+    }
     if (rename(tmp, path) != 0) {
         unlink(tmp);
         die("rename failed for %s: %s", path, strerror(errno));
@@ -1120,7 +1195,7 @@ static void cmd_commit(Workspace *ws) {
     for (size_t i = 0; i < ws->proposal_count; i++) {
         char abs[PATH_MAX];
         join_path(abs, ws->root, ws->proposals[i].path);
-        write_bytes_atomicish(abs, ws->proposals[i].data, ws->proposals[i].len);
+        write_bytes_atomicish(abs, ws->proposals[i].data, ws->proposals[i].len, ws->proposals[i].mode, ws->proposals[i].mode_known);
         printf("wrote %s (%zu bytes)\n", ws->proposals[i].path, ws->proposals[i].len);
     }
     discard_all(ws);
@@ -1263,7 +1338,7 @@ static int write_all_proposals(Workspace *ws) {
     for (size_t i = 0; i < ws->proposal_count; i++) {
         char abs[PATH_MAX];
         join_path(abs, ws->root, ws->proposals[i].path);
-        write_bytes_atomicish(abs, ws->proposals[i].data, ws->proposals[i].len);
+        write_bytes_atomicish(abs, ws->proposals[i].data, ws->proposals[i].len, ws->proposals[i].mode, ws->proposals[i].mode_known);
         printf("status: wrote %s (%zu bytes)\n", ws->proposals[i].path, ws->proposals[i].len);
     }
     return 0;
