@@ -632,6 +632,12 @@ static int erwc_c_parse_main_statement(ErWcCParser* parser,
     return 0;
   }
   *parser = before_statement;
+  if (erwc_c_parse_store_statement(parser, module, func, "store64",
+                                   ERWC_OP_I64_STORE, 3u) == 0) {
+    *out_parsed = 1u;
+    return 0;
+  }
+  *parser = before_statement;
   if (erwc_c_parse_if_statement(parser, module, func) == 0) {
     *out_parsed = 1u;
     return 0;

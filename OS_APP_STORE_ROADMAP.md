@@ -38,7 +38,7 @@ identity-routed encrypted storage.
 - [x] Separate driver package admission from user app admission.
 - [x] Define the first driver ABI for PCI discovery, MMIO, and bus packets.
 - [x] Add event/interrupt delivery model for Wasm drivers.
-- [ ] Move one simple device path from native C fixture to a Wasm driver package.
+- [x] Move one simple device path from native C fixture to a Wasm driver package.
 - [ ] Enforce driver memory and device access policy through admission.
 
 ## Milestone 5: Encrypted Identity Relay
