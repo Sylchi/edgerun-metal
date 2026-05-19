@@ -58,7 +58,6 @@ int erwc_compile_path(const char* input_path, const char* output_path) {
   ErWcModule module;
   ErWcBuffer out;
   int root;
-  int rc = 1;
 
   memset(&parse, 0, sizeof(parse));
   if (erwc_read_file(input_path, &source) != 0) {
@@ -66,24 +65,25 @@ int erwc_compile_path(const char* input_path, const char* output_path) {
   }
   if (erwc_tokenize(&source, &parse) != 0) {
     fprintf(stderr, "wasm-compile: %s: tokenization failed\n", input_path);
-    goto done;
+    free(source.bytes);
+    return 1;
   }
   root = erwc_parse_tree(&parse);
   if (root < 0 || erwc_build_module(&parse, root, &module) != 0) {
     fprintf(stderr, "wasm-compile: %s: unsupported WAT subset\n", input_path);
-    goto done;
+    free(source.bytes);
+    return 1;
   }
   if (erwc_validate_contract(&module) != 0) {
     fprintf(stderr, "wasm-compile: %s: module contract rejected\n", input_path);
-    goto done;
+    free(source.bytes);
+    return 1;
   }
   if (erwc_emit_wasm(&module, &out) != 0) {
     fprintf(stderr, "wasm-compile: %s: emit failed\n", input_path);
-    goto done;
+    free(source.bytes);
+    return 1;
   }
-  rc = erwc_write_file(output_path, &out);
-
-done:
   free(source.bytes);
-  return rc;
+  return erwc_write_file(output_path, &out);
 }

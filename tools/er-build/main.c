@@ -231,6 +231,9 @@ static const char* erb_default_progress_test(const char* scope) {
   if (strcmp(scope, "edgerun-metal") == 0) {
     return "edgerun-check";
   }
+  if (strcmp(scope, "tools/wasm-compile") == 0) {
+    return "repo-test";
+  }
   if (strcmp(scope, "codex") == 0) {
     return "codex-test";
   }

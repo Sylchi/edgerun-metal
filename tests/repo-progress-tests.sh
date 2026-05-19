@@ -66,6 +66,12 @@ case "$font_output" in
   *) printf 'ui-owned varfont scope did not choose varfont-test\n' >&2; exit 1 ;;
 esac
 
+wasm_output=$("$REPO_PROGRESS" --print-plan repo-progress tools/wasm-compile)
+case "$wasm_output" in
+  *"+ make repo-test"*) ;;
+  *) printf 'wasm compiler scope did not choose repo-test\n' >&2; exit 1 ;;
+esac
+
 unknown_out="${TMP_DIR}/repo-progress-unknown.out"
 unknown_err="${TMP_DIR}/repo-progress-unknown.err"
 if "$REPO_PROGRESS" --print-plan repo-progress docs >"$unknown_out" 2>"$unknown_err"; then
