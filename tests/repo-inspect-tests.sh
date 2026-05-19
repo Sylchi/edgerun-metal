@@ -153,12 +153,12 @@ case "$(cat "${TMP_DIR}/invalid_threads.err")" in
 esac
 
 case "${report}" in
-  *"files:         7"* ) ;;
-  * ) printf 'missing source file count\n%s\n' "${report}" >&2; exit 1 ;;
+  *"repo-inspect"*"Inventory"*"C files: 7"* ) ;;
+  * ) printf 'missing compact source inventory\n%s\n' "${report}" >&2; exit 1 ;;
 esac
 
 case "${report}" in
-  *"pkg"*"loc"* ) ;;
+  *"top packages:"*"pkg"*"loc"* ) ;;
   * ) printf 'missing package report\n%s\n' "${report}" >&2; exit 1 ;;
 esac
 
@@ -168,7 +168,7 @@ case "${report}" in
 esac
 
 case "${report}" in
-  *"Optimized stripped release sizes"*"original"*"stripped"* ) ;;
+  *"Release binaries"*"original"*"stripped"* ) ;;
   * ) printf 'missing stripped size report\n%s\n' "${report}" >&2; exit 1 ;;
 esac
 
@@ -183,33 +183,33 @@ case "${report}" in
 esac
 
 case "${report}" in
-  *"Static test coverage proxy"*".    "* | *"Static test coverage proxy"* ) ;;
+  *"Tests"*"static proxy"* ) ;;
   * ) printf 'missing coverage section\n%s\n' "${report}" >&2; exit 1 ;;
 esac
 
 case "${report}" in
-  *"Potential duplication"*".c:"*"resembles"* ) ;;
-  * ) printf 'missing duplication candidate\n%s\n' "${report}" >&2; exit 1 ;;
+  *"Issues by group"*"duplication:"*".c:"*"resembles"* ) ;;
+  * ) printf 'missing grouped duplication candidate\n%s\n' "${report}" >&2; exit 1 ;;
 esac
 
 case "${report}" in
-  *"CPU cost signals"*"nested loops"*"division/modulo"* ) ;;
-  * ) printf 'missing CPU cost summary\n%s\n' "${report}" >&2; exit 1 ;;
+  *"CPU cost:"*"nested loops"*"division/modulo"* ) ;;
+  * ) printf 'missing grouped CPU cost summary\n%s\n' "${report}" >&2; exit 1 ;;
 esac
 
 case "${report}" in
-  *"focused CPU-cost candidates:"*"[cpu-nested-loop]"*"[cpu-alloc-in-loop]"* ) ;;
-  * ) printf 'missing focused CPU cost candidates\n%s\n' "${report}" >&2; exit 1 ;;
+  *"CPU cost:"*"samples:"*"[cpu-nested-loop]"*"[cpu-alloc-in-loop]"* ) ;;
+  * ) printf 'missing grouped CPU cost samples\n%s\n' "${report}" >&2; exit 1 ;;
 esac
 
 case "${report}" in
-  *"package hotspots:"*"nonprod"* ) ;;
-  * ) printf 'missing package hotspot summary\n%s\n' "${report}" >&2; exit 1 ;;
+  *"hotspots:"*"nonprod"* ) ;;
+  * ) printf 'missing compact hotspot summary\n%s\n' "${report}" >&2; exit 1 ;;
 esac
 
 case "${report}" in
-  *"magic numbers"*"string-indexing"*"math primitives"* ) ;;
-  * ) printf 'missing magic/string smell summary\n%s\n' "${report}" >&2; exit 1 ;;
+  *"smells:"*"magic numbers"*"string-indexing"*"math primitives"* ) ;;
+  * ) printf 'missing grouped magic/string smell summary\n%s\n' "${report}" >&2; exit 1 ;;
 esac
 
 case "${report}" in

@@ -368,21 +368,20 @@ static uint8_t eri_analyze(const EriVfs* vfs) {
     return 0;
   }
 
-  printf("repo-inspect report\n");
-  printf("===================\n\n");
-  printf("C source snapshot\n");
-  printf("  files:         %llu\n", (unsigned long long)totals.files);
-  printf("  bytes:         ");
+  printf("repo-inspect\n");
+  printf("============\n\n");
+  printf("Inventory\n");
+  printf("  C files: %llu  code: %llu loc  total: %llu lines  comments: %llu  blanks: %llu  bytes: ",
+         (unsigned long long)totals.files,
+         (unsigned long long)totals.code_lines,
+         (unsigned long long)totals.total_lines,
+         (unsigned long long)totals.comment_lines,
+         (unsigned long long)totals.blank_lines);
   eri_print_size(totals.bytes);
   printf("\n");
-  printf("  total lines:   %llu\n", (unsigned long long)totals.total_lines);
-  printf("  code lines:    %llu\n", (unsigned long long)totals.code_lines);
-  printf("  comment lines: %llu\n", (unsigned long long)totals.comment_lines);
-  printf("  blank lines:   %llu\n\n", (unsigned long long)totals.blank_lines);
-
-  printf("Biggest packages by C code lines\n");
-  for (i = 0; i < packages.len && i < ERI_TOP_LIMIT; ++i) {
-    printf("  %-24s %6llu loc  %4llu files  ", packages.items[i].name,
+  printf("  top packages:\n");
+  for (i = 0; i < packages.len && i < ERI_HOTSPOT_LIMIT; ++i) {
+    printf("    %-24s %6llu loc  %4llu files  ", packages.items[i].name,
            (unsigned long long)packages.items[i].code_lines,
            (unsigned long long)packages.items[i].files);
     eri_print_size(packages.items[i].bytes);
@@ -390,13 +389,13 @@ static uint8_t eri_analyze(const EriVfs* vfs) {
   }
   printf("\n");
 
-  printf("Static test coverage proxy\n");
-  printf("  heuristic: implementation .c files with same-stem tests or test references\n");
-  for (i = 0; i < coverage_packages.len && i < ERI_TOP_LIMIT; ++i) {
+  printf("Tests\n");
+  printf("  static proxy: implementation .c files with same-stem tests or test references\n");
+  for (i = 0; i < coverage_packages.len && i < ERI_HOTSPOT_LIMIT; ++i) {
     const EriCoveragePackage* pkg = &coverage_packages.items[i];
     uint64_t pct = pkg->source_files == 0u ? 100u : (pkg->tested_source_files * 100u) / pkg->source_files;
 
-    printf("  %-24s %3llu%%  %3llu/%-3llu impl files signaled  C tests: %3llu files, %5llu loc\n",
+    printf("    %-24s %3llu%%  %3llu/%-3llu impl signaled  tests: %3llu files, %5llu loc\n",
            pkg->package, (unsigned long long)pct,
            (unsigned long long)pkg->tested_source_files,
            (unsigned long long)pkg->source_files,
@@ -405,13 +404,13 @@ static uint8_t eri_analyze(const EriVfs* vfs) {
   }
   printf("\n");
 
-  printf("Optimized stripped release sizes\n");
-  printf("  original is on-disk size; stripped is measured from a temporary copy when strip is available\n");
+  printf("Release binaries\n");
+  printf("  stripped size is measured from a temporary copy when strip is available\n");
   if (bins.len == 0u) {
-    printf("  none found in VFS snapshot\n");
+    printf("    none found in VFS snapshot\n");
   } else {
-    for (i = 0; i < bins.len && i < ERI_TOP_LIMIT; ++i) {
-      printf("  %-56s original ", bins.items[i].file->path);
+    for (i = 0; i < bins.len && i < ERI_HOTSPOT_LIMIT; ++i) {
+      printf("    %-56s original ", bins.items[i].file->path);
       eri_print_size(bins.items[i].size);
       printf("  stripped ");
       if (bins.items[i].stripped_available != 0u) {
@@ -424,67 +423,61 @@ static uint8_t eri_analyze(const EriVfs* vfs) {
   }
   printf("\n");
 
-  printf("Potential duplication\n");
-  printf("  heuristic: repeated %u-line normalized C blocks; adjacent windows are compacted;"
-         " reasoned optimizer ignores are honored\n",
+  printf("Issues by group\n");
+  printf("  duplication: %llu production, %llu mixed test/source, %llu test-only candidates\n",
+         (unsigned long long)eri_count_duplicate_rank(&duplicates, 0u),
+         (unsigned long long)eri_count_duplicate_rank(&duplicates, 1u),
+         (unsigned long long)eri_count_duplicate_rank(&duplicates, 2u));
+  printf("    heuristic: repeated %u-line normalized C blocks; adjacent windows compacted; reasoned ignores honored\n",
          ERI_DUP_BLOCK_LINES);
   if (duplicates.len == 0u) {
-    printf("  none found\n");
+    printf("    none\n");
   } else {
-    uint64_t production_pairs = eri_count_duplicate_rank(&duplicates, 0u);
-    uint64_t mixed_pairs = eri_count_duplicate_rank(&duplicates, 1u);
-    uint64_t test_pairs = eri_count_duplicate_rank(&duplicates, 2u);
-
-    printf("  candidates: %llu production, %llu mixed test/source, %llu test-only\n",
-           (unsigned long long)production_pairs,
-           (unsigned long long)mixed_pairs,
-           (unsigned long long)test_pairs);
-    for (i = 0; i < duplicates.len && i < ERI_TOP_LIMIT; ++i) {
-      printf("  %s:%u resembles %s:%u\n",
+    for (i = 0; i < duplicates.len && i < ERI_SAMPLE_LIMIT; ++i) {
+      printf("    %s:%u resembles %s:%u\n",
              duplicates.items[i].path_a, duplicates.items[i].line_a,
              duplicates.items[i].path_b, duplicates.items[i].line_b);
     }
-    if (duplicates.len > ERI_TOP_LIMIT) {
-      printf("  ... %llu more candidate blocks\n", (unsigned long long)(duplicates.len - ERI_TOP_LIMIT));
+    if (duplicates.len > ERI_SAMPLE_LIMIT) {
+      printf("    ... %llu more duplicate candidates\n", (unsigned long long)(duplicates.len - ERI_SAMPLE_LIMIT));
     }
   }
   printf("\n");
 
-  printf("Dead-code candidates\n");
+  printf("  dead code: static functions with no extra references\n");
   {
     size_t shown = 0u;
-    for (i = 0; i < funcs.len && shown < ERI_TOP_LIMIT; ++i) {
+    for (i = 0; i < funcs.len && shown < ERI_DEAD_CODE_SAMPLE_LIMIT; ++i) {
       if (funcs.items[i].is_static != 0u && funcs.items[i].calls <= 1u) {
-        printf("  %s:%u static %s appears unreferenced\n",
+        printf("    %s:%u static %s appears unreferenced\n",
                funcs.items[i].path, funcs.items[i].line, funcs.items[i].name);
         ++shown;
       }
     }
     if (shown == 0u) {
-      printf("  none from static-function heuristic\n");
+      printf("    none\n");
     }
   }
   printf("\n");
 
-  printf("Content-addressed VFS worldview risks\n");
-  printf("  heuristic: runtime APIs should prefer VFS object hashes/lengths over host paths or mutable names\n");
+  printf("  worldview: %llu findings (%llu host FS/process, %llu path identity, %llu legacy object ids, %llu raw object APIs, %llu WASM32-sized offset reviews)\n",
+         (unsigned long long)eri_count_worldview_findings(&findings),
+         (unsigned long long)eri_count_findings_kind(&findings, "world-host-fs"),
+         (unsigned long long)eri_count_findings_kind(&findings, "world-path-identity"),
+         (unsigned long long)eri_count_findings_kind(&findings, "world-legacy-object-id"),
+         (unsigned long long)eri_count_findings_kind(&findings, "world-raw-object-api"),
+         (unsigned long long)eri_count_findings_kind(&findings, "world-wasm64-offset"));
   if (eri_count_worldview_findings(&findings) == 0u) {
-    printf("  none from current heuristics\n");
+    printf("    none\n");
   } else {
-    printf("  summary: %llu host FS/process, %llu path identity, %llu legacy object ids, %llu raw object APIs, %llu WASM32-sized offset reviews\n",
-           (unsigned long long)eri_count_findings_kind(&findings, "world-host-fs"),
-           (unsigned long long)eri_count_findings_kind(&findings, "world-path-identity"),
-           (unsigned long long)eri_count_findings_kind(&findings, "world-legacy-object-id"),
-           (unsigned long long)eri_count_findings_kind(&findings, "world-raw-object-api"),
-           (unsigned long long)eri_count_findings_kind(&findings, "world-wasm64-offset"));
-    printf("  package hotspots:\n");
-    for (i = 0; i < worldview_packages.len && i < ERI_TOP_LIMIT; ++i) {
+    printf("    hotspots:\n");
+    for (i = 0; i < worldview_packages.len && i < ERI_HOTSPOT_LIMIT; ++i) {
       const EriWorldviewPackage* pkg = &worldview_packages.items[i];
 
       if (eri_worldview_package_score(pkg) == 0u) {
         continue;
       }
-      printf("    %-24s score %5llu  host-fs %3llu  path-id %3llu  obj-id %3llu  raw-api %3llu  u64 %3llu  nonprod %4llu\n",
+      printf("      %-24s score %5llu  host-fs %3llu  path-id %3llu  obj-id %3llu  raw-api %3llu  u64 %3llu  nonprod %4llu\n",
              pkg->package,
              (unsigned long long)eri_worldview_package_score(pkg),
              (unsigned long long)pkg->host_fs_runtime,
@@ -494,31 +487,30 @@ static uint8_t eri_analyze(const EriVfs* vfs) {
              (unsigned long long)pkg->wasm64_offsets,
              (unsigned long long)pkg->nonprod_findings);
     }
-    printf("  focused worldview candidates:\n");
-    eri_print_worldview_finding_samples(&findings, ERI_TOP_LIMIT);
+    printf("    samples:\n");
+    eri_print_worldview_finding_samples(&findings, ERI_SAMPLE_LIMIT);
   }
   printf("\n");
 
-  printf("CPU cost signals\n");
-  printf("  heuristic: loop-local review targets; use reasoned line/function/constant optimizer ignores for intentional hot paths\n");
+  printf("  CPU cost: %llu findings (%llu nested loops, %llu calls in loops, %llu division/modulo in loops, %llu memory ops in loops, %llu allocations in loops, %llu I/O ops in loops)\n",
+         (unsigned long long)eri_count_cpu_findings(&findings),
+         (unsigned long long)eri_count_findings_kind(&findings, "cpu-nested-loop"),
+         (unsigned long long)eri_count_findings_kind(&findings, "cpu-call-in-loop"),
+         (unsigned long long)eri_count_findings_kind(&findings, "cpu-div-in-loop"),
+         (unsigned long long)eri_count_findings_kind(&findings, "cpu-memory-in-loop"),
+         (unsigned long long)eri_count_findings_kind(&findings, "cpu-alloc-in-loop"),
+         (unsigned long long)eri_count_findings_kind(&findings, "cpu-io-in-loop"));
   if (eri_count_cpu_findings(&findings) == 0u) {
-    printf("  none from current heuristics\n");
+    printf("    none\n");
   } else {
-    printf("  summary: %llu nested loops, %llu calls in loops, %llu division/modulo in loops, %llu memory ops in loops, %llu allocations in loops, %llu I/O ops in loops\n",
-           (unsigned long long)eri_count_findings_kind(&findings, "cpu-nested-loop"),
-           (unsigned long long)eri_count_findings_kind(&findings, "cpu-call-in-loop"),
-           (unsigned long long)eri_count_findings_kind(&findings, "cpu-div-in-loop"),
-           (unsigned long long)eri_count_findings_kind(&findings, "cpu-memory-in-loop"),
-           (unsigned long long)eri_count_findings_kind(&findings, "cpu-alloc-in-loop"),
-           (unsigned long long)eri_count_findings_kind(&findings, "cpu-io-in-loop"));
-    printf("  package hotspots:\n");
-    for (i = 0; i < cpu_packages.len && i < ERI_TOP_LIMIT; ++i) {
+    printf("    hotspots:\n");
+    for (i = 0; i < cpu_packages.len && i < ERI_HOTSPOT_LIMIT; ++i) {
       const EriCpuPackage* pkg = &cpu_packages.items[i];
 
       if (eri_cpu_package_score(pkg) == 0u) {
         continue;
       }
-      printf("    %-24s score %5llu  nested %3llu  calls %4llu  div/mod %3llu  mem %3llu  alloc %3llu  io %3llu  nonprod %4llu\n",
+      printf("      %-24s score %5llu  nested %3llu  calls %4llu  div/mod %3llu  mem %3llu  alloc %3llu  io %3llu  nonprod %4llu\n",
              pkg->package,
              (unsigned long long)eri_cpu_package_score(pkg),
              (unsigned long long)pkg->nested_loops,
@@ -529,33 +521,33 @@ static uint8_t eri_analyze(const EriVfs* vfs) {
              (unsigned long long)pkg->io_ops_in_loops,
              (unsigned long long)pkg->nonprod_findings);
     }
-    printf("  focused CPU-cost candidates:\n");
-    eri_print_cpu_finding_samples(&findings, ERI_TOP_LIMIT);
+    printf("    samples:\n");
+    eri_print_cpu_finding_samples(&findings, ERI_SAMPLE_LIMIT);
   }
   printf("\n");
 
-  printf("Code smells and review targets\n");
-  if (findings.len == 0u) {
-    printf("  none from current heuristics\n");
+  printf("  smells: %llu findings (%llu large files, %llu long functions, %llu markers, %llu ignore misuse, %llu gotos, %llu magic numbers, %llu string-indexing, %llu math primitives, %llu long lines)\n",
+         (unsigned long long)eri_count_smell_findings(&findings),
+         (unsigned long long)eri_count_findings_kind(&findings, "large-file"),
+         (unsigned long long)eri_count_findings_kind(&findings, "long-function"),
+         (unsigned long long)eri_count_findings_kind(&findings, "marker"),
+         (unsigned long long)eri_count_findings_kind(&findings, "ignore-misuse"),
+         (unsigned long long)eri_count_findings_kind(&findings, "goto"),
+         (unsigned long long)eri_count_findings_kind(&findings, "magic-number"),
+         (unsigned long long)eri_count_findings_kind(&findings, "string-indexing"),
+         (unsigned long long)eri_count_findings_kind(&findings, "math-primitive"),
+         (unsigned long long)eri_count_findings_kind(&findings, "long-line"));
+  if (eri_count_smell_findings(&findings) == 0u) {
+    printf("    none\n");
   } else {
-    printf("  summary: %llu large files, %llu long functions, %llu markers, %llu ignore misuse, %llu gotos, %llu magic numbers, %llu string-indexing, %llu math primitives, %llu long lines\n",
-           (unsigned long long)eri_count_findings_kind(&findings, "large-file"),
-           (unsigned long long)eri_count_findings_kind(&findings, "long-function"),
-           (unsigned long long)eri_count_findings_kind(&findings, "marker"),
-           (unsigned long long)eri_count_findings_kind(&findings, "ignore-misuse"),
-           (unsigned long long)eri_count_findings_kind(&findings, "goto"),
-           (unsigned long long)eri_count_findings_kind(&findings, "magic-number"),
-           (unsigned long long)eri_count_findings_kind(&findings, "string-indexing"),
-           (unsigned long long)eri_count_findings_kind(&findings, "math-primitive"),
-           (unsigned long long)eri_count_findings_kind(&findings, "long-line"));
-    printf("  package hotspots:\n");
-    for (i = 0; i < smell_packages.len && i < ERI_TOP_LIMIT; ++i) {
+    printf("    hotspots:\n");
+    for (i = 0; i < smell_packages.len && i < ERI_HOTSPOT_LIMIT; ++i) {
       const EriSmellPackage* pkg = &smell_packages.items[i];
 
       if (eri_smell_package_score(pkg) == 0u) {
         continue;
       }
-      printf("    %-24s score %5llu  large %2llu  funcs %2llu  markers %2llu  gotos %2llu  magic %4llu  str-index %3llu  math %3llu  long-lines %4llu  nonprod %4llu\n",
+      printf("      %-24s score %5llu  large %2llu  funcs %2llu  markers %2llu  gotos %2llu  magic %4llu  str-index %3llu  math %3llu  long-lines %4llu  nonprod %4llu\n",
              pkg->package,
              (unsigned long long)eri_smell_package_score(pkg),
              (unsigned long long)pkg->large_files,
@@ -568,23 +560,14 @@ static uint8_t eri_analyze(const EriVfs* vfs) {
              (unsigned long long)pkg->long_lines,
              (unsigned long long)pkg->nonprod_findings);
     }
-    printf("  focused magic-number candidates:\n");
-    eri_print_finding_kind_samples(&findings, "magic-number", ERI_TOP_LIMIT);
-    printf("  focused string-indexing candidates:\n");
-    eri_print_finding_kind_samples(&findings, "string-indexing", ERI_TOP_LIMIT);
-    printf("  focused math primitive candidates:\n");
-    eri_print_finding_kind_samples(&findings, "math-primitive", ERI_TOP_LIMIT);
-    for (i = 0; i < findings.len && i < ERI_TOP_LIMIT * 2u; ++i) {
-      if (eri_finding_is_cpu_cost(&findings.items[i]) != 0u ||
-          eri_finding_is_worldview_risk(&findings.items[i]) != 0u) {
-        continue;
-      }
-      printf("  %s:%u [%s] %s\n", findings.items[i].path, findings.items[i].line,
-             findings.items[i].kind, findings.items[i].text);
-    }
-    if (findings.len > ERI_TOP_LIMIT * 2u) {
-      printf("  ... %llu more findings\n", (unsigned long long)(findings.len - (ERI_TOP_LIMIT * 2u)));
-    }
+    printf("    samples:\n");
+    eri_print_smell_finding_samples(&findings, ERI_SAMPLE_LIMIT);
+    printf("    focused magic-number candidates:\n");
+    eri_print_finding_kind_samples(&findings, "magic-number", ERI_SAMPLE_LIMIT);
+    printf("    focused string-indexing candidates:\n");
+    eri_print_finding_kind_samples(&findings, "string-indexing", ERI_SAMPLE_LIMIT);
+    printf("    focused math primitive candidates:\n");
+    eri_print_finding_kind_samples(&findings, "math-primitive", ERI_SAMPLE_LIMIT);
   }
 
   eri_analyze_cleanup(&packages, &funcs, &findings, &bins, &sources, &coverage_packages,
