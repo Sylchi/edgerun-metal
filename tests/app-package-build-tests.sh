@@ -68,6 +68,11 @@ cmp "${OUTPUT_WASM}" "${TMP_DIR}/first.wasm"
 cmp "${OUTPUT_IDENTITY}" "${TMP_DIR}/first.identity"
 "${ER_BUILD}" app-verify "${PACKAGE_DIR}"
 
+GENERATED_USER_APP="${ROOT_DIR}/.build/edgerun-metal/generated/user_app.wasm"
+rm -f "${GENERATED_USER_APP}"
+make -C "${ROOT_DIR}/edgerun-metal" ../.build/edgerun-metal/generated/user_app.wasm
+cmp "${OUTPUT_WASM}" "${GENERATED_USER_APP}"
+
 mkdir "${TMP_DIR}/tampered-source"
 cp "${PACKAGE_DIR}/app.c" "${TMP_DIR}/tampered-source/app.c"
 cp "${PACKAGE_DIR}/app.manifest" "${TMP_DIR}/tampered-source/app.manifest"

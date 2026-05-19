@@ -56,6 +56,7 @@ VARFONT_HDRS := $(wildcard $(VARFONT_DIR)/include/*.h) $(wildcard $(VARFONT_DIR)
 CRYPTO_HDRS := $(wildcard $(CRYPTO_DIR)/include/*.h)
 EMBED_HEADER_SRC := ../tools/embed-header/main.c
 EMBED_HEADER_BIN := $(BUILD_DIR)/embed-header
+ER_BUILD_BIN := ../.build/er-build
 WASM_COMPILE_SRCS := ../tools/wasm-compile/main.c ../tools/wasm-compile/wasm_compile_c.c ../tools/wasm-compile/wasm_compile_common.c ../tools/wasm-compile/wasm_compile_contract.c ../tools/wasm-compile/wasm_compile_emit.c ../tools/wasm-compile/wasm_compile_io.c ../tools/wasm-compile/wasm_compile_module.c ../tools/wasm-compile/wasm_compile_parse.c
 WASM_COMPILE_HDRS := ../tools/wasm-compile/wasm_compile.h
 WASM_COMPILE_BIN := $(BUILD_DIR)/wasm-compile
@@ -67,8 +68,11 @@ WASM_MODULE_HEADERS := $(GENERATED_DIR)/wasm_driver_bus_probe_module.h $(GENERAT
                        $(GENERATED_DIR)/wasm_c_hostcall_ui_emit_module.h
 DRIVER_BUS_PROBE_SOURCE := modules/driver_bus_probe/app/app.c
 DRIVER_BUS_PROBE_MANIFEST := modules/driver_bus_probe/app/app.manifest
-USER_APP_SOURCE := ../tests/fixtures/app-package/app/app.c
-USER_APP_MANIFEST := ../tests/fixtures/app-package/app/app.manifest
+USER_APP_PACKAGE_DIR := ../tests/fixtures/app-package/app
+USER_APP_SOURCE := $(USER_APP_PACKAGE_DIR)/app.c
+USER_APP_MANIFEST := $(USER_APP_PACKAGE_DIR)/app.manifest
+USER_APP_PACKAGE_WASM := $(USER_APP_PACKAGE_DIR)/.build/app.wasm
+USER_APP_PACKAGE_IDENTITY := $(USER_APP_PACKAGE_DIR)/.build/package.identity
 FONT_HEADER := $(GENERATED_DIR)/font_geist.h
 FONT_BAKED_HEADER := $(GENERATED_DIR)/font_geist_baked.h
 FONT_SOURCE := $(VARFONT_DIR)/fonts/Geist[wght].ttf
@@ -137,6 +141,13 @@ $(WASM_COMPILE_BIN): $(WASM_COMPILE_SRCS) $(WASM_COMPILE_HDRS)
 	mkdir -p $(dir $@)
 	$(HOST_CC) $(HOST_CFLAGS) $(HOST_LDFLAGS) -o $@ $(WASM_COMPILE_SRCS)
 
+$(ER_BUILD_BIN): ../tools/er-build/main.c ../tools/er-build/package_identity.c ../tools/er-build/package_identity.h ../edgerun-crypto/src/er_blake3.c ../edgerun-crypto/include/er_blake3.h
+	$(MAKE) -C .. er-build
+
+$(USER_APP_PACKAGE_WASM) $(USER_APP_PACKAGE_IDENTITY): $(USER_APP_SOURCE) $(USER_APP_MANIFEST) $(ER_BUILD_BIN)
+	cd .. && ./.build/er-build app-build tests/fixtures/app-package/app
+	cd .. && ./.build/er-build app-verify tests/fixtures/app-package/app
+
 $(GENERATED_DIR)/driver_bus_probe.wasm: $(DRIVER_BUS_PROBE_SOURCE) $(DRIVER_BUS_PROBE_MANIFEST) $(WASM_COMPILE_BIN)
 	mkdir -p $(dir $@)
 	$(WASM_COMPILE_BIN) $< $@
@@ -145,9 +156,9 @@ $(GENERATED_DIR)/ui_counter.wasm: modules/ui_counter/ui_counter.wat $(WASM_COMPI
 	mkdir -p $(dir $@)
 	$(WASM_COMPILE_BIN) $< $@
 
-$(GENERATED_DIR)/user_app.wasm: $(USER_APP_SOURCE) $(USER_APP_MANIFEST) $(WASM_COMPILE_BIN)
+$(GENERATED_DIR)/user_app.wasm: $(USER_APP_PACKAGE_WASM) $(USER_APP_PACKAGE_IDENTITY)
 	mkdir -p $(dir $@)
-	$(WASM_COMPILE_BIN) $(USER_APP_SOURCE) $@
+	cp $(USER_APP_PACKAGE_WASM) $@
 
 $(GENERATED_DIR)/c_hostcall_bus_exec.wasm: modules/c_hostcall_bus_exec/c_hostcall_bus_exec.c $(WASM_COMPILE_BIN)
 	mkdir -p $(dir $@)
