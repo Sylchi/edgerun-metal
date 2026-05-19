@@ -48,6 +48,9 @@ static const char *AGENT_INSTRUCTIONS =
     "Do not ask the user to run git status, git diff, build, or test commands. "
     "After you propose changes, the host writes only those proposals, runs scoped repo-progress verification, "
     "and creates a git commit only after verification passes. "
+    "A turn that ends with only analysis, planning, or review is not material progress; "
+    "when you have enough context, call propose_change for one concrete improvement. "
+    "The host may continue the loop after checkpoints so useful work keeps accumulating. "
     "Do not claim tests were run unless the host reports test output.";
 
 typedef struct {
@@ -114,6 +117,8 @@ typedef struct {
     const char *model;
     size_t turns;
     size_t tool_calls;
+    size_t checkpoints;
+    size_t review_only_turns;
     size_t proposals_before_commit;
     int commit_status;
 } AgentRunSummary;
@@ -1125,6 +1130,9 @@ static void print_agent_summary(const AgentRunSummary *summary) {
     printf("  %smodel:%s %s\n", color_code(stdout, ANSI_CYAN), color_code(stdout, ANSI_RESET), summary->model);
     printf("  %sturns:%s %zu\n", color_code(stdout, ANSI_CYAN), color_code(stdout, ANSI_RESET), summary->turns);
     printf("  %stool calls:%s %zu\n", color_code(stdout, ANSI_CYAN), color_code(stdout, ANSI_RESET), summary->tool_calls);
+    printf("  %scheckpoints:%s %zu\n", color_code(stdout, ANSI_CYAN), color_code(stdout, ANSI_RESET), summary->checkpoints);
+    printf("  %sreview-only turns:%s %zu\n",
+           color_code(stdout, ANSI_CYAN), color_code(stdout, ANSI_RESET), summary->review_only_turns);
     printf("  %sproposals before commit:%s %zu\n",
            color_code(stdout, ANSI_CYAN), color_code(stdout, ANSI_RESET), summary->proposals_before_commit);
     if (summary->commit_status == 0) {
@@ -1132,6 +1140,32 @@ static void print_agent_summary(const AgentRunSummary *summary) {
     } else {
         print_icon_line(stdout, "❌", ANSI_RED, "verified commit flow failed with status %d", summary->commit_status);
     }
+}
+
+static char *host_continue_message_new(Workspace *ws, bool checkpoint_committed) {
+    char *status = repo_status_text_new(ws);
+    Buffer b;
+    buffer_init(&b);
+    if (checkpoint_committed) {
+        buffer_append(&b,
+            "Host checkpoint completed: the previous proposal batch verified and committed. "
+            "Continue the autonomous work loop. Pick the next concrete repo improvement, inspect only the context needed, "
+            "and stage another material change with propose_change. Do not stop at a review or plan.\n\n",
+            strlen("Host checkpoint completed: the previous proposal batch verified and committed. "
+                   "Continue the autonomous work loop. Pick the next concrete repo improvement, inspect only the context needed, "
+                   "and stage another material change with propose_change. Do not stop at a review or plan.\n\n"));
+    } else {
+        buffer_append(&b,
+            "Host progress check: the turn ended with no pending proposals, so no code was saved. "
+            "This client is meant to keep working, not hand back a review. Choose one concrete implementation step now, "
+            "use the repo tools for missing context, and call propose_change. Do not answer with a plan-only response.\n\n",
+            strlen("Host progress check: the turn ended with no pending proposals, so no code was saved. "
+                   "This client is meant to keep working, not hand back a review. Choose one concrete implementation step now, "
+                   "use the repo tools for missing context, and call propose_change. Do not answer with a plan-only response.\n\n"));
+    }
+    buffer_append(&b, status, strlen(status));
+    free(status);
+    return b.data;
 }
 
 static void trim_newline(char *s) {
@@ -1654,6 +1688,8 @@ static int run_agent_prompt(Workspace *ws, const char *prompt) {
         .model = model,
         .turns = 0,
         .tool_calls = 0,
+        .checkpoints = 0,
+        .review_only_turns = 0,
         .proposals_before_commit = 0,
         .commit_status = 0,
     };
@@ -1676,12 +1712,28 @@ static int run_agent_prompt(Workspace *ws, const char *prompt) {
             putchar('\n');
             agent_turn_free(&turn);
             summary.proposals_before_commit = ws->proposal_count;
+            if (ws->proposal_count == 0) {
+                summary.review_only_turns++;
+                summary.commit_status = 0;
+                print_agent_summary(&summary);
+                char *continue_message = host_continue_message_new(ws, false);
+                json_items_push(&history, user_item_json_new(continue_message));
+                free(continue_message);
+                continue;
+            }
             summary.commit_status = cmd_commit_verified(ws);
             print_agent_summary(&summary);
-            json_items_free(&history);
-            free(auth.access_token);
-            free(auth.account_id);
-            return summary.commit_status;
+            if (summary.commit_status != 0) {
+                json_items_free(&history);
+                free(auth.access_token);
+                free(auth.account_id);
+                return summary.commit_status;
+            }
+            summary.checkpoints++;
+            char *continue_message = host_continue_message_new(ws, true);
+            json_items_push(&history, user_item_json_new(continue_message));
+            free(continue_message);
+            continue;
         }
         for (size_t i = 0; i < turn.tool_count; i++) {
             bool ok = false;

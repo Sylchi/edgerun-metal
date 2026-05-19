@@ -471,6 +471,8 @@ static int run_agent_prompt(Workspace *ws, const char *prompt) {
         .model = model,
         .turns = 0,
         .tool_calls = 0,
+        .checkpoints = 0,
+        .review_only_turns = 0,
         .proposals_before_commit = 0,
         .commit_status = 0,
     };
@@ -493,12 +495,28 @@ static int run_agent_prompt(Workspace *ws, const char *prompt) {
             putchar('\n');
             agent_turn_free(&turn);
             summary.proposals_before_commit = ws->proposal_count;
+            if (ws->proposal_count == 0) {
+                summary.review_only_turns++;
+                summary.commit_status = 0;
+                print_agent_summary(&summary);
+                char *continue_message = host_continue_message_new(ws, false);
+                json_items_push(&history, user_item_json_new(continue_message));
+                free(continue_message);
+                continue;
+            }
             summary.commit_status = cmd_commit_verified(ws);
             print_agent_summary(&summary);
-            json_items_free(&history);
-            free(auth.access_token);
-            free(auth.account_id);
-            return summary.commit_status;
+            if (summary.commit_status != 0) {
+                json_items_free(&history);
+                free(auth.access_token);
+                free(auth.account_id);
+                return summary.commit_status;
+            }
+            summary.checkpoints++;
+            char *continue_message = host_continue_message_new(ws, true);
+            json_items_push(&history, user_item_json_new(continue_message));
+            free(continue_message);
+            continue;
         }
         for (size_t i = 0; i < turn.tool_count; i++) {
             bool ok = false;
