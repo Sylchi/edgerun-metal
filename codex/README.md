@@ -50,6 +50,25 @@ make -C codex
 
 The binary is written to `.build/codex`.
 
+## Zsh shortcut
+
+Source the zsh helper once from your shell startup file:
+
+```zsh
+source /path/to/repo/codex/edgerun-c.zsh
+```
+
+After that, call prompt mode without spelling out `.build/codex --prompt`:
+
+```zsh
+codex inspect edgerun-c and explain what it can do
+codex --root /path/to/repo find the Codex client entry point
+```
+
+The helper builds `.build/codex` when the binary is missing or older than the C
+sources. Use `codex repl` for the interactive workspace REPL, or `codex raw ...`
+to pass exact arguments to the compiled binary.
+
 ## Run
 
 ```sh
