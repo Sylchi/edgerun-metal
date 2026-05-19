@@ -162,6 +162,22 @@ export i64 main(void) {
 }
 CAPP
 
+cat > "${TMP_DIR}/ui-helper-call.c" <<'CAPP'
+extern i64 ui_emit(i64, i64) __import("edgerun.ui", "emit");
+const i64 OUTBOX = 1024;
+const i64 LEN_OFFSET = 0;
+memory(1);
+i64 emit_packet(i64 ptr, i64 len) {
+  store32(ptr, LEN_OFFSET, len);
+  return ui_emit(ptr, len);
+}
+export i64 main(void) {
+  i64 ptr = OUTBOX;
+  i64 len = 172;
+  return emit_packet(ptr, len);
+}
+CAPP
+
 cat > "${TMP_DIR}/ui-region-base-call.c" <<'CAPP'
 extern i64 ui_emit(i64, i64) __import("edgerun.ui", "emit");
 extern i64 region_base(i64) __import("edgerun.memory", "region_base");
@@ -223,6 +239,10 @@ compile_twice \
   "${TMP_DIR}/ui-store64-load64-a.wasm" \
   "${TMP_DIR}/ui-store64-load64-b.wasm"
 compile_twice \
+  "${TMP_DIR}/ui-helper-call.c" \
+  "${TMP_DIR}/ui-helper-call-a.wasm" \
+  "${TMP_DIR}/ui-helper-call-b.wasm"
+compile_twice \
   "${TMP_DIR}/ui-region-base-call.c" \
   "${TMP_DIR}/ui-region-base-call-a.wasm" \
   "${TMP_DIR}/ui-region-base-call-b.wasm"
@@ -247,6 +267,7 @@ check_magic "${TMP_DIR}/ui-if-assign-a.wasm"
 check_magic "${TMP_DIR}/ui-load32-return-a.wasm"
 check_magic "${TMP_DIR}/ui-load64-local-a.wasm"
 check_magic "${TMP_DIR}/ui-store64-load64-a.wasm"
+check_magic "${TMP_DIR}/ui-helper-call-a.wasm"
 check_magic "${TMP_DIR}/ui-region-base-call-a.wasm"
 check_magic "${TMP_DIR}/ui-region-len-call-a.wasm"
 check_magic "${TMP_DIR}/bus-exec-call-a.wasm"
@@ -351,6 +372,45 @@ CAPP
 expect_reject "duplicate c local" \
   "${TMP_DIR}/bad-c-duplicate-local.c" \
   "${TMP_DIR}/bad-c-duplicate-local.wasm"
+
+cat > "${TMP_DIR}/bad-c-duplicate-param.c" <<'CAPP'
+extern i64 ui_emit(i64, i64) __import("edgerun.ui", "emit");
+memory(1);
+i64 bad(i64 value, i64 value) {
+  return value;
+}
+export i64 main(void) { return bad(1, 2); }
+CAPP
+
+expect_reject "duplicate c parameter" \
+  "${TMP_DIR}/bad-c-duplicate-param.c" \
+  "${TMP_DIR}/bad-c-duplicate-param.wasm"
+
+cat > "${TMP_DIR}/bad-c-call-arity.c" <<'CAPP'
+extern i64 ui_emit(i64, i64) __import("edgerun.ui", "emit");
+memory(1);
+i64 pick(i64 value) {
+  return value;
+}
+export i64 main(void) { return pick(1, 2); }
+CAPP
+
+expect_reject "bad c helper call arity" \
+  "${TMP_DIR}/bad-c-call-arity.c" \
+  "${TMP_DIR}/bad-c-call-arity.wasm"
+
+cat > "${TMP_DIR}/bad-c-call-before-declaration.c" <<'CAPP'
+extern i64 ui_emit(i64, i64) __import("edgerun.ui", "emit");
+memory(1);
+export i64 main(void) { return later(7); }
+i64 later(i64 value) {
+  return value;
+}
+CAPP
+
+expect_reject "c helper call before declaration" \
+  "${TMP_DIR}/bad-c-call-before-declaration.c" \
+  "${TMP_DIR}/bad-c-call-before-declaration.wasm"
 
 cat > "${TMP_DIR}/bad-c-undeclared-assignment.c" <<'CAPP'
 extern i64 ui_emit(i64, i64) __import("edgerun.ui", "emit");

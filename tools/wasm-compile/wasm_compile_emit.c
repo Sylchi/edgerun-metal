@@ -114,10 +114,13 @@ static int erwc_emit_code_section(ErWcBuffer* out, const ErWcModule* module) {
   for (i = 0u; i < module->func_count; ++i) {
     ErWcBuffer body = {{0}, 0u};
     uint32_t local_i;
-    if (erwc_emit_u32_leb(&body, module->funcs[i].local_count) != 0) {
+    if (module->funcs[i].param_count > module->funcs[i].local_count ||
+        erwc_emit_u32_leb(&body, module->funcs[i].local_count -
+                          module->funcs[i].param_count) != 0) {
       return -1;
     }
-    for (local_i = 0u; local_i < module->funcs[i].local_count; ++local_i) {
+    for (local_i = module->funcs[i].param_count;
+         local_i < module->funcs[i].local_count; ++local_i) {
       if (erwc_emit_u32_leb(&body, 1u) != 0 ||
           erwc_buffer_push(&body, module->funcs[i].locals[local_i].type) != 0) {
         return -1;
@@ -147,4 +150,3 @@ int erwc_emit_wasm(const ErWcModule* module, ErWcBuffer* out) {
   }
   return 0;
 }
-
