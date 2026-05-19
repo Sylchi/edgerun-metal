@@ -79,9 +79,9 @@ void er_run_os_path(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE* SystemTable,
       er_ble_adv_efi_init(SystemTable, &ble_adv) == 0u ||
       er_ble_adv_efi_start_advertising(&ble_adv, &ble_packet) == 0u) {
     er_println("ble adv: unavailable");
-    return;
+  } else {
+    er_println("ble adv: advertising");
   }
-  er_println("ble adv: advertising");
   if (er_virtio_gpu_init_first_pci(&gpu) == 0u) {
     er_println("ui renderer: virtio gpu unavailable");
     return;
@@ -188,14 +188,10 @@ void er_run_os_path(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE* SystemTable,
   }
   if (er_native_boot_configure_pci_erwire_eth_sink(&native_relay) == 0u) {
     er_println("relay ingress: virtio net unavailable");
-    er_ui_boot_destroy_app_contexts(apps, ER_UI_BOOT_APP_COUNT);
-    er_ui_scene_destroy(&scene);
-    er_ui_runtime_state_destroy(&runtime);
-    er_ui_ledger_app_state_destroy(&ledger_state);
-    vr_font_face_destroy(font);
-    return;
+  } else {
+    render_context.native_relay = &native_relay;
+    er_println("relay ingress: virtio net ready");
   }
-  render_context.native_relay = &native_relay;
 
   er_println("ui renderer: first frame deferred until boot services exit");
   er_println("boot services: exiting");
