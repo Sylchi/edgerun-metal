@@ -21,7 +21,8 @@
 enum {
   ERB_MAX_ARGC = 96,
   ERB_EXEC_FAILURE_STATUS = 127,
-  ERB_OUTPUT_DIR_MODE = 0777
+  ERB_OUTPUT_DIR_MODE = 0777,
+  ERB_PATH_CAP = 4096
 };
 
 static const char ERB_DEFAULT_CC[] = "clang";
@@ -35,6 +36,10 @@ static const char ERB_ERWIRE_DECODE_BIN[] = ".build/erwire-decode";
 static const char ERB_WASM_COMPILE_BIN[] = ".build/wasm-compile";
 static const char ERB_CRYPTO_TEST_BIN[] = ".build/er-build-out/crypto/test_blake3";
 static const char ERB_VARFONT_TEST_BIN[] = ".build/er-build-out/varfont/vrfont_tests";
+static const char ERB_APP_SOURCE_NAME[] = "app.c";
+static const char ERB_APP_MANIFEST_NAME[] = "app.manifest";
+static const char ERB_APP_BUILD_DIR_NAME[] = ".build";
+static const char ERB_APP_WASM_NAME[] = "app.wasm";
 
 typedef struct {
   const char* items[ERB_MAX_ARGC];
@@ -111,6 +116,34 @@ static int erb_mkdir_one(const char* path) {
   }
   fprintf(stderr, "er-build: mkdir failed for %s: %s\n", path, strerror(errno));
   return 1;
+}
+
+static int erb_path_join(char* out, size_t out_len, const char* left, const char* right) {
+  int written;
+
+  if (out == NULL || left == NULL || right == NULL || out_len == 0u ||
+      left[0] == '\0' || right[0] == '\0') {
+    return erb_fail("invalid path");
+  }
+  written = snprintf(out, out_len, "%s/%s", left, right);
+  if (written < 0 || (size_t)written >= out_len) {
+    return erb_fail("path too long");
+  }
+  return 0;
+}
+
+static int erb_require_regular_file(const char* path) {
+  struct stat st;
+
+  if (path == NULL || stat(path, &st) != 0) {
+    fprintf(stderr, "er-build: missing required file %s\n", path == NULL ? "(null)" : path);
+    return 1;
+  }
+  if (!S_ISREG(st.st_mode) || st.st_size <= 0) {
+    fprintf(stderr, "er-build: invalid required file %s\n", path);
+    return 1;
+  }
+  return 0;
 }
 
 static int erb_prepare_dirs(void) {
@@ -194,6 +227,43 @@ static int erb_build_wasm_compile(int print_plan) {
       erb_args_push(&args, "tools/wasm-compile/wasm_compile_io.c") != 0 ||
       erb_args_push(&args, "tools/wasm-compile/wasm_compile_module.c") != 0 ||
       erb_args_push(&args, "tools/wasm-compile/wasm_compile_parse.c") != 0) {
+    return 1;
+  }
+  return erb_run_args(&args, print_plan);
+}
+
+static int erb_target_app_build(const char* package_dir, int print_plan) {
+  ErbArgs args;
+  char app_source[ERB_PATH_CAP];
+  char manifest_source[ERB_PATH_CAP];
+  char package_build_dir[ERB_PATH_CAP];
+  char output_wasm[ERB_PATH_CAP];
+
+  if (package_dir == NULL || package_dir[0] == '\0') {
+    return erb_fail("app-build requires a package directory");
+  }
+  if (erb_path_join(app_source, sizeof(app_source), package_dir,
+                    ERB_APP_SOURCE_NAME) != 0 ||
+      erb_path_join(manifest_source, sizeof(manifest_source), package_dir,
+                    ERB_APP_MANIFEST_NAME) != 0 ||
+      erb_path_join(package_build_dir, sizeof(package_build_dir), package_dir,
+                    ERB_APP_BUILD_DIR_NAME) != 0 ||
+      erb_path_join(output_wasm, sizeof(output_wasm), package_build_dir,
+                    ERB_APP_WASM_NAME) != 0) {
+    return 1;
+  }
+  if (erb_require_regular_file(app_source) != 0 ||
+      erb_require_regular_file(manifest_source) != 0 ||
+      erb_build_wasm_compile(print_plan) != 0) {
+    return 1;
+  }
+  if (print_plan == 0 && erb_mkdir_one(package_build_dir) != 0) {
+    return 1;
+  }
+  erb_args_init(&args);
+  if (erb_args_push(&args, ERB_WASM_COMPILE_BIN) != 0 ||
+      erb_args_push(&args, app_source) != 0 ||
+      erb_args_push(&args, output_wasm) != 0) {
     return 1;
   }
   return erb_run_args(&args, print_plan);
@@ -368,6 +438,7 @@ static int erb_target_repo_test(int print_plan) {
       erb_run_program("./tests/repo-inspect-tests.sh", print_plan) != 0 ||
       erb_run_program("./tests/repo-progress-tests.sh", print_plan) != 0 ||
       erb_run_program("./tests/er-build-tests.sh", print_plan) != 0 ||
+      erb_run_program("./tests/app-package-build-tests.sh", print_plan) != 0 ||
       erb_run_program("./tests/wasm-compile-tests.sh", print_plan) != 0 ||
       erb_run_program("./tests/metal-arch-build-tests.sh", print_plan) != 0 ||
       erb_run_program("./tests/er-math-tests.sh", print_plan) != 0 ||
@@ -446,7 +517,8 @@ static int erb_target_varfont_test(int print_plan) {
 static int erb_usage(void) {
   fprintf(stderr,
           "usage: er-build [--print-plan] <target> [args]\n"
-          "targets: repo-check-bin repo-inspect erwire-decode erwire-test wasm-compile\n"
+          "targets: app-build <package-dir>\n"
+          "         repo-check-bin repo-inspect erwire-decode erwire-test wasm-compile\n"
           "         repo-check repo-test repo-progress <scope> [test-target]\n"
           "         crypto-test varfont-test\n");
   return 2;
@@ -477,6 +549,12 @@ int main(int argc, char** argv) {
       test_target = argv[target_index + 2];
     }
     return erb_target_repo_progress(scope, test_target, print_plan);
+  }
+  if (strcmp(target, "app-build") == 0) {
+    if (target_index + 2 != argc) {
+      return erb_usage();
+    }
+    return erb_target_app_build(argv[target_index + 1], print_plan);
   }
   if (target_index + 1 != argc) {
     return erb_usage();

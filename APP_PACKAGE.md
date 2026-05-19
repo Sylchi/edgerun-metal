@@ -29,6 +29,15 @@ Rules:
 - Package admission must use content identity from the manifest and generated
   Wasm bytes. Labels and paths are not authority.
 
+Canonical local build command:
+
+```sh
+./.build/er-build app-build app
+```
+
+The package directory must contain `app.c` and `app.manifest`. The build runner
+creates `app/.build/` and writes `app/.build/app.wasm`.
+
 Initial C subset:
 
 ```c

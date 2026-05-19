@@ -1,0 +1,5 @@
+contract=ui-app
+memory_pages=1
+imports=edgerun.ui/emit
+source=app.c
+output=.build/app.wasm
