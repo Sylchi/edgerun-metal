@@ -24,6 +24,7 @@ ErWasmHostCalls g_host_calls = {0};
 
 int main(void) {
   test_mem_helpers();
+  test_ui_boot_allocator_reuses_freed_blocks();
   test_blake3();
   test_bar_decode();
   test_pci_config_addressing();
