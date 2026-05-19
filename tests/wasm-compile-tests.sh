@@ -87,6 +87,23 @@ export i64 main(void) {
 }
 CAPP
 
+cat > "${TMP_DIR}/ui-if-assign.c" <<'CAPP'
+extern i64 ui_emit(i64, i64) __import("edgerun.ui", "emit");
+memory(1);
+export i64 main(void) {
+  i64 ptr = 0;
+  i64 len = 0;
+  if (1) {
+    ptr = 1024;
+    len = 172;
+  } else {
+    ptr = 2048;
+    len = 0;
+  }
+  return ui_emit(ptr, len);
+}
+CAPP
+
 cat > "${TMP_DIR}/ui-region-base-call.c" <<'CAPP'
 extern i64 ui_emit(i64, i64) __import("edgerun.ui", "emit");
 extern i64 region_base(i64) __import("edgerun.memory", "region_base");
@@ -128,6 +145,10 @@ compile_twice \
   "${TMP_DIR}/ui-local-assign-a.wasm" \
   "${TMP_DIR}/ui-local-assign-b.wasm"
 compile_twice \
+  "${TMP_DIR}/ui-if-assign.c" \
+  "${TMP_DIR}/ui-if-assign-a.wasm" \
+  "${TMP_DIR}/ui-if-assign-b.wasm"
+compile_twice \
   "${TMP_DIR}/ui-region-base-call.c" \
   "${TMP_DIR}/ui-region-base-call-a.wasm" \
   "${TMP_DIR}/ui-region-base-call-b.wasm"
@@ -147,6 +168,7 @@ check_magic "${TMP_DIR}/ui-emit-call-a.wasm"
 check_magic "${TMP_DIR}/ui-local-return-a.wasm"
 check_magic "${TMP_DIR}/ui-local-call-a.wasm"
 check_magic "${TMP_DIR}/ui-local-assign-a.wasm"
+check_magic "${TMP_DIR}/ui-if-assign-a.wasm"
 check_magic "${TMP_DIR}/ui-region-base-call-a.wasm"
 check_magic "${TMP_DIR}/ui-region-len-call-a.wasm"
 check_magic "${TMP_DIR}/bus-exec-call-a.wasm"
@@ -264,5 +286,21 @@ CAPP
 expect_reject "undeclared c assignment" \
   "${TMP_DIR}/bad-c-undeclared-assignment.c" \
   "${TMP_DIR}/bad-c-undeclared-assignment.wasm"
+
+cat > "${TMP_DIR}/bad-c-if-without-else.c" <<'CAPP'
+extern i64 ui_emit(i64, i64) __import("edgerun.ui", "emit");
+memory(1);
+export i64 main(void) {
+  i64 value = 0;
+  if (1) {
+    value = 1;
+  }
+  return value;
+}
+CAPP
+
+expect_reject "if without else" \
+  "${TMP_DIR}/bad-c-if-without-else.c" \
+  "${TMP_DIR}/bad-c-if-without-else.wasm"
 
 printf 'wasm-compile tests passed\n'
