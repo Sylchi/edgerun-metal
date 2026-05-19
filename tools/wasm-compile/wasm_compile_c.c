@@ -170,6 +170,23 @@ static int erwc_c_add_type(ErWcModule* module,
   return 0;
 }
 
+static const ErWcType* erwc_c_import_type(const ErWcModule* module,
+                                          const char* import_name,
+                                          uint32_t* out_function_index) {
+  for (uint32_t i = 0u; i < module->import_count; ++i) {
+    const ErWcImport* import = &module->imports[i];
+    //@optimizer-ignore imported C hostcall names require indexed lookup
+    if (strcmp(import->name, import_name) == 0) {
+      if (import->type_index >= module->type_count) {
+        return NULL;
+      }
+      *out_function_index = import->function_index;
+      return &module->types[import->type_index];
+    }
+  }
+  return NULL;
+}
+
 static int erwc_c_parse_import(ErWcCParser* parser, ErWcModule* module) {
   char result_ident[ERWC_MAX_STRING];
   char import_name[ERWC_MAX_STRING];
@@ -258,11 +275,66 @@ static int erwc_c_parse_memory(ErWcCParser* parser, ErWcModule* module) {
   return 0;
 }
 
+static int erwc_c_emit_i64_const(ErWcFunc* func, int64_t value) {
+  if (erwc_buffer_push(&func->code, ERWC_OP_I64_CONST) != 0 ||
+      erwc_emit_i64_leb(&func->code, value) != 0) {
+    return -1;
+  }
+  return 0;
+}
+
+static int erwc_c_parse_return_call(ErWcCParser* parser,
+                                    const ErWcModule* module,
+                                    ErWcFunc* func) {
+  char import_name[ERWC_MAX_STRING];
+  uint32_t function_index = 0u;
+  const ErWcType* type;
+
+  if (erwc_c_take_ident(parser, import_name, sizeof(import_name)) != 0) {
+    return -1;
+  }
+  type = erwc_c_import_type(module, import_name, &function_index);
+  if (type == NULL ||
+      type->result_count != ER_WASM_HOSTCALL_I64_RESULTS ||
+      type->result_type != ERWC_VALTYPE_I64 ||
+      erwc_c_take_literal(parser, "(") != 0) {
+    return -1;
+  }
+  for (uint32_t i = 0u; i < type->param_count; ++i) {
+    int64_t value = 0;
+    if (erwc_c_take_i64_literal(parser, &value) != 0 ||
+        erwc_c_emit_i64_const(func, value) != 0) {
+      return -1;
+    }
+    if (i + 1u < type->param_count && erwc_c_take_literal(parser, ",") != 0) {
+      return -1;
+    }
+  }
+  if (erwc_c_take_literal(parser, ")") != 0 ||
+      erwc_buffer_push(&func->code, ERWC_OP_CALL) != 0 ||
+      erwc_emit_u32_leb(&func->code, function_index) != 0) {
+    return -1;
+  }
+  return 0;
+}
+
+static int erwc_c_parse_return_expression(ErWcCParser* parser,
+                                          const ErWcModule* module,
+                                          ErWcFunc* func) {
+  ErWcCParser before_literal = *parser;
+  int64_t return_value = 0;
+
+  if (erwc_c_take_i64_literal(parser, &return_value) == 0) {
+    return erwc_c_emit_i64_const(func, return_value);
+  }
+  *parser = before_literal;
+  return erwc_c_parse_return_call(parser, module, func);
+}
+
 static int erwc_c_parse_main(ErWcCParser* parser, ErWcModule* module) {
   static const uint8_t no_params[1] = {0u};
   ErWcFunc* func;
   uint32_t type_index = 0u;
-  int64_t return_value = 0;
 
   if (module->func_count >= ERWC_MAX_FUNCS ||
       erwc_c_take_literal(parser, "export") != 0 ||
@@ -273,9 +345,6 @@ static int erwc_c_parse_main(ErWcCParser* parser, ErWcModule* module) {
       erwc_c_take_literal(parser, ")") != 0 ||
       erwc_c_take_literal(parser, "{") != 0 ||
       erwc_c_take_literal(parser, "return") != 0 ||
-      erwc_c_take_i64_literal(parser, &return_value) != 0 ||
-      erwc_c_take_literal(parser, ";") != 0 ||
-      erwc_c_take_literal(parser, "}") != 0 ||
       erwc_c_add_type(module, "main_t", no_params, 0u, ERWC_VALTYPE_I64, 1u,
                       &type_index) != 0) {
     return -1;
@@ -287,8 +356,9 @@ static int erwc_c_parse_main(ErWcCParser* parser, ErWcModule* module) {
   func->type_index = type_index;
   func->function_index = module->import_count + module->func_count;
   func->exported_main = 1u;
-  if (erwc_buffer_push(&func->code, ERWC_OP_I64_CONST) != 0 ||
-      erwc_emit_i64_leb(&func->code, return_value) != 0 ||
+  if (erwc_c_parse_return_expression(parser, module, func) != 0 ||
+      erwc_c_take_literal(parser, ";") != 0 ||
+      erwc_c_take_literal(parser, "}") != 0 ||
       erwc_buffer_push(&func->code, ERWC_OP_END) != 0) {
     return -1;
   }
