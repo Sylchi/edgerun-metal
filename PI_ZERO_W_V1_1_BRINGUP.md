@@ -24,6 +24,19 @@ Output:
 The manifest includes the expected serial baud, GPIO pins, boot banner, board
 constants, and first heartbeat line. A physical-node bring-up runner should
 treat those `serial_expect=` lines as the pass condition for first boot.
+Build the verifier with:
+
+```sh
+make pi-serial-verify
+```
+
+Then validate a captured UART log explicitly:
+
+```sh
+./.build/pi-serial-verify \
+  .build/edgerun-metal/pi-zero-w-v1_1/boot/EDGERUN-PI-ZERO-W-V1_1-BOOT.txt \
+  .build/pi-zero-w-v1_1-uart.log
+```
 
 The intended first hardware chain is:
 

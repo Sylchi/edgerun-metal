@@ -1,4 +1,4 @@
-.PHONY: all check clean er-build repo-check repo-test repo-check-bin repo-inspect repo-progress erwire-decode erwire-test codex-build codex-test crypto-configure crypto-build crypto-test crypto-bench crypto-bench-avx2 crypto-bench-avx512 crypto-bench-avx512-threads crypto-bench-native-threads metal-ui-bench os-user-app-smoke edgerun-metal edgerun-os edgerun-check varfont-configure varfont-build varfont-test ui-core-configure ui-core-build ui-core-sdl-configure ui-core-sdl-build ui-core-sdl-run ui-core-sdl-test ui-core-test
+.PHONY: all check clean er-build repo-check repo-test repo-check-bin repo-inspect repo-progress erwire-decode erwire-test pi-serial-verify codex-build codex-test crypto-configure crypto-build crypto-test crypto-bench crypto-bench-avx2 crypto-bench-avx512 crypto-bench-avx512-threads crypto-bench-native-threads metal-ui-bench os-user-app-smoke edgerun-metal edgerun-os edgerun-check varfont-configure varfont-build varfont-test ui-core-configure ui-core-build ui-core-sdl-configure ui-core-sdl-build ui-core-sdl-run ui-core-sdl-test ui-core-test
 
 CC := clang
 HOST_CC := clang
@@ -50,6 +50,9 @@ erwire-decode: er-build
 
 erwire-test: er-build
 	./.build/er-build erwire-test
+
+pi-serial-verify: er-build
+	./.build/er-build pi-serial-verify
 
 codex-build:
 	$(MAKE) -C codex CC="$(HOST_CC)"
