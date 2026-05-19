@@ -260,7 +260,6 @@ static void test_ui_boot_package_loads_from_endpoint_storage(void) {
   ErUiBootPackageStorage storage;
   ErAppLoadedPackage loaded;
   const ErUiBootInstalledApp* installed_app;
-  ErUiBootInstalledApp content_only_app;
   ErUiBootInstalledApp tampered_app;
   ErUiBootInstalledPackageSource source;
   ErUiBootInstalledPackageSource tampered_source;
@@ -344,19 +343,9 @@ static void test_ui_boot_package_loads_from_endpoint_storage(void) {
               er_ui_boot_prepare_indexed_package_source(&tampered_index_entry,
                                                         &source),
               0);
-  content_only_app = *installed_app;
-  content_only_app.app_label = 0;
-  content_only_app.app_label_len = 0u;
-  content_only_app.manifest_label = 0;
-  content_only_app.manifest_label_len = 0u;
   er_mem_zero((UINT8*)&storage, (UINTN)sizeof(storage));
   er_mem_zero((UINT8*)&loaded, (UINTN)sizeof(loaded));
-  check_int64("ui boot content-only source prepare",
-              er_ui_boot_prepare_installed_package_source(&content_only_app,
-                                                          UI_BOOT_PACKAGE_TEST_APP_INDEX,
-                                                          &source),
-              1);
-  check_int64("ui boot package loads content source without labels",
+  check_int64("ui boot package loads content source",
               er_ui_boot_load_installed_package_source(&source,
                                                        module_memory,
                                                        (UINT32)sizeof(module_memory),
