@@ -43,6 +43,8 @@ int main(void) {
   test_virtio_gpu_mmio();
   test_net_frame_builders();
   test_native_eth_endpoint();
+  test_wasm_log_imports();
+  test_wasm_pci_imports();
   test_wasm_mmio_imports();
   test_wasm_bus_exec_import();
   test_wasm_public_region_imports();
