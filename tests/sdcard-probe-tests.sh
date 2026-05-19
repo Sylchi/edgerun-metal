@@ -43,6 +43,9 @@ for expected in \
   "write-bytes: 1048576" \
   "verify-bytes: 1048576" \
   "actual-bytes: 1048576" \
+  "observed-sd-speed-class:" \
+  "observed-uhs-speed-class:" \
+  "observed-video-speed-class:" \
   "status: pass"; do
   if ! grep -q "${expected}" /tmp/sdcard-probe-ok.out; then
     printf 'sdcard-probe missing output: %s\n' "${expected}" >&2
