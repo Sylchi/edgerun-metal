@@ -72,6 +72,14 @@ exact arguments to the compiled binary.
 
 ## Run
 
+Start the interactive workspace REPL through the zsh helper:
+
+```zsh
+c repl /path/to/repo
+```
+
+or run the compiled binary directly:
+
 ```sh
 .build/codex /path/to/repo
 ```
@@ -80,13 +88,17 @@ If no path is supplied, the current directory is used.
 
 ## Prompt Codex
 
-```sh
-.build/codex --prompt "inspect edgerun-c and explain what it can do"
+Prompt mode is normally invoked through the zsh helper:
+
+```zsh
+c inspect edgerun-c and explain what it can do
+c --root /path/to/repo find the Codex client entry point
 ```
 
-or choose a root explicitly:
+The equivalent direct binary calls are:
 
 ```sh
+.build/codex --prompt "inspect edgerun-c and explain what it can do"
 .build/codex --root /path/to/repo --prompt "find the Codex client entry point"
 ```
 
