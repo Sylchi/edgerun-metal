@@ -89,6 +89,7 @@ int main(void) {
   test_print_routes_firmware_before_serial();
   test_ui_surface_renderer_surface();
   test_ui_surface_renderer_4k_tile_plan();
+  test_ui_frame_timing_4k120_budget();
   test_ui_surface_renderer_varfont_text();
   test_ui_ledger_app_switching();
   test_ps2_keyboard_set1_decoder();

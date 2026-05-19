@@ -2,15 +2,36 @@
 
 UINT8 er_ui_boot_render_scene(er_ui_scene_t* scene,
                                      er_ui_ledger_app_state_t* ledger_state,
-                                     const ErUiBootRenderContext* render) {
+                                     ErUiBootRenderContext* render) {
   er_ui_scene_stats_t scene_stats;
   er_ui_scene_budget_violation_t scene_violation;
   ErUiSurfaceRenderStats render_stats;
   ErUiSurfaceFrameBudgetViolation frame_violation;
+  ErUiFrameTiming frame_timing;
+  ErUiFrameTimingConfig timing_config;
+  ErUiFrameTimingViolation timing_violation;
+  UINT64 frame_begin_ticks = 0u;
+  UINT64 scene_end_ticks = 0u;
+  UINT64 raster_end_ticks = 0u;
+  UINT64 present_end_ticks = 0u;
+  UINT8 timing_enabled = 0u;
 
   if (scene == 0 || ledger_state == 0 || render == 0 || render->font == 0 ||
       render->surface == 0 || render->tile_plan == 0) {
     return 0u;
+  }
+
+  er_mem_zero((UINT8*)&frame_timing, (UINTN)sizeof(frame_timing));
+  if (render->frame_clock.read != 0 &&
+      er_ui_frame_timing_config_from_mode(&render->mode,
+                                          render->frame_clock.ticks_per_second,
+                                          &timing_config) != 0u) {
+    if (render->frame_clock.read(render->frame_clock.user, &frame_begin_ticks) == 0u ||
+        er_ui_frame_timing_begin(timing_config, frame_begin_ticks, &frame_timing) == 0u) {
+      er_println("ui renderer: frame clock failed");
+      return 0u;
+    }
+    timing_enabled = 1u;
   }
 
   er_ui_scene_clear_commands(scene);
@@ -21,6 +42,13 @@ UINT8 er_ui_boot_render_scene(er_ui_scene_t* scene,
                                   render->theme) != ER_UI_OK) {
     er_println("ui renderer: scene build failed");
     return 0u;
+  }
+  if (timing_enabled != 0u) {
+    if (render->frame_clock.read(render->frame_clock.user, &scene_end_ticks) == 0u ||
+        er_ui_frame_timing_finish_scene(&frame_timing, scene_end_ticks) == 0u) {
+      er_println("ui renderer: frame scene timing failed");
+      return 0u;
+    }
   }
 
   scene_stats = er_ui_scene_stats(scene);
@@ -39,9 +67,24 @@ UINT8 er_ui_boot_render_scene(er_ui_scene_t* scene,
     er_println("ui renderer: render failed");
     return 0u;
   }
+  if (timing_enabled != 0u) {
+    if (render->frame_clock.read(render->frame_clock.user, &raster_end_ticks) == 0u ||
+        er_ui_frame_timing_finish_raster(&frame_timing, raster_end_ticks) == 0u) {
+      er_println("ui renderer: frame raster timing failed");
+      return 0u;
+    }
+  }
   if (er_ui_boot_gpu_present(render) == 0u) {
     er_println("ui renderer: virtio gpu present failed");
     return 0u;
+  }
+  if (timing_enabled != 0u) {
+    if (render->frame_clock.read(render->frame_clock.user, &present_end_ticks) == 0u ||
+        er_ui_frame_timing_finish_present(&frame_timing, present_end_ticks) == 0u) {
+      er_println("ui renderer: frame present timing failed");
+      return 0u;
+    }
+    render->last_frame_timing = frame_timing;
   }
 
   if (er_ui_surface_render_stats_first_budget_violation(render_stats, render->frame_budget, &frame_violation) != 0u) {
@@ -69,6 +112,22 @@ UINT8 er_ui_boot_render_scene(er_ui_scene_t* scene,
   er_print_u64_dec(render->tile_plan->max_tile_bytes);
   er_print(" mem=");
   er_print_u64_dec(render->memory_plan.total_bytes);
+  if (timing_enabled != 0u) {
+    er_print(" frame_ns=");
+    er_print_u64_dec(frame_timing.stage_ns[ER_UI_FRAME_TIMING_STAGE_TOTAL]);
+    er_print(" target_ns=");
+    er_print_u64_dec(frame_timing.target_frame_ns);
+    er_print(" scene_ns=");
+    er_print_u64_dec(frame_timing.stage_ns[ER_UI_FRAME_TIMING_STAGE_SCENE]);
+    er_print(" raster_ns=");
+    er_print_u64_dec(frame_timing.stage_ns[ER_UI_FRAME_TIMING_STAGE_RASTER]);
+    er_print(" present_ns=");
+    er_print_u64_dec(frame_timing.stage_ns[ER_UI_FRAME_TIMING_STAGE_PRESENT]);
+    if (er_ui_frame_timing_first_budget_violation(&frame_timing, &timing_violation) != 0u) {
+      er_print(" timing_exceeded=");
+      er_print(timing_violation.name);
+    }
+  }
   er_println("");
 
   return 1u;

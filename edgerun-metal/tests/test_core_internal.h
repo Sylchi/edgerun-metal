@@ -37,6 +37,7 @@
 #include "er_work_route.h"
 #include "er_gfx_console.h"
 #include "er_ui_surface_renderer.h"
+#include "er_ui_frame_timing.h"
 #include "er_ui_tabler_icon_atlas.h"
 #include "er_ui_ledger_app.h"
 #include "er_ui_wasm_app.h"
