@@ -10,6 +10,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 #define ER_UI_SDL_WINDOW_WIDTH 1280
 #define ER_UI_SDL_WINDOW_HEIGHT 800
@@ -19,6 +20,10 @@
 #define ER_UI_SDL_FONT_SIZE 18.0f
 #define ER_UI_SDL_FONT_PAD 2u
 #define ER_UI_SDL_BYTES_PER_PIXEL 4u
+#define ER_UI_SDL_RGBA_R 0u
+#define ER_UI_SDL_RGBA_G 1u
+#define ER_UI_SDL_RGBA_B 2u
+#define ER_UI_SDL_RGBA_A 3u
 #define ER_UI_SDL_COLOR_MAX 255.0f
 #define ER_UI_SDL_COLOR_FULL 255u
 #define ER_UI_SDL_SURFACE_MAIN 1u
@@ -58,6 +63,8 @@
 #define ER_UI_SDL_SEND_TEXT_Y 25.0f
 #define ER_UI_SDL_TEXTURE_INITIAL_CAPACITY 8u
 #define ER_UI_SDL_WINDOW_EVENT_IGNORED 0u
+#define ER_UI_SDL_SELF_TEST_ARG "--self-test"
+#define ER_UI_SDL_SELF_TEST_FRAMES 2u
 
 typedef struct {
   SDL_Texture** textures;
@@ -76,6 +83,8 @@ typedef struct {
   int width;
   int height;
   bool running;
+  bool self_test;
+  uint32_t rendered_frames;
 } ErUiSdlApp;
 
 static void* er_ui_sdl_alloc(void* user, size_t size, size_t align) {
@@ -138,10 +147,11 @@ static void er_ui_sdl_ensure_texture(ErUiSdlTextureStore* store, uint32_t textur
 static void er_ui_sdl_upload_alpha_rgba(const uint8_t* pixels, int width, int height, uint8_t* rgba) {
   size_t pixel_count = (size_t)width * (size_t)height;
   for (size_t i = 0u; i < pixel_count; ++i) {
-    rgba[i * ER_UI_SDL_BYTES_PER_PIXEL] = ER_UI_SDL_COLOR_FULL;
-    rgba[i * ER_UI_SDL_BYTES_PER_PIXEL + 1u] = ER_UI_SDL_COLOR_FULL;
-    rgba[i * ER_UI_SDL_BYTES_PER_PIXEL + 2u] = ER_UI_SDL_COLOR_FULL;
-    rgba[i * ER_UI_SDL_BYTES_PER_PIXEL + 3u] = pixels ? pixels[i] : 0u;
+    size_t offset = i * ER_UI_SDL_BYTES_PER_PIXEL;
+    rgba[offset + ER_UI_SDL_RGBA_R] = ER_UI_SDL_COLOR_FULL;
+    rgba[offset + ER_UI_SDL_RGBA_G] = ER_UI_SDL_COLOR_FULL;
+    rgba[offset + ER_UI_SDL_RGBA_B] = ER_UI_SDL_COLOR_FULL;
+    rgba[offset + ER_UI_SDL_RGBA_A] = pixels ? pixels[i] : 0u;
   }
 }
 
@@ -320,6 +330,28 @@ static er_ui_status_t er_ui_sdl_emit_card(er_ui_scene_t* scene, vr_font_face_t* 
   return er_ui_sdl_text(scene, font, body, bounds.x + ER_UI_SDL_PAD, bounds.y + ER_UI_SDL_CARD_BODY_Y, theme.colors.muted);
 }
 
+static const char* er_ui_sdl_terminal_line(size_t index) {
+  switch (index) {
+    case 0u:
+      return "user  lets use edgerun-ui-core to create actual sdl ui";
+    case 1u:
+      return "agent inspecting shell, scene, text, and renderer primitives";
+    case 2u:
+      return "tool  proposed opt-in ER_UI_CORE_BUILD_SDL_HOST target";
+    case 3u:
+      return "agent rendering this surface from er_ui_shell_emit_scene";
+    case 4u:
+      return "plan  wire prompt entry, streaming events, and proposal review panes";
+    case 5u:
+      return "guard no terminal-only fallback in the graphical path";
+    case 6u:
+      return "next  replace placeholder transport with Codex client adapter";
+    default:
+      fprintf(stderr, "fatal: invalid terminal line index %zu\n", index);
+      exit(1);
+  }
+}
+
 static er_ui_status_t er_ui_sdl_emit_codex_surface(uint32_t surface_id, er_ui_scene_t* scene, vr_font_face_t* font, er_ui_bounds_t bounds, er_ui_resolved_theme_t theme, void* user) {
   (void)surface_id;
   (void)user;
@@ -343,16 +375,8 @@ static er_ui_status_t er_ui_sdl_emit_codex_surface(uint32_t surface_id, er_ui_sc
   er_ui_bounds_t transcript = er_ui_bounds(bounds.x + ER_UI_SDL_PAD, bounds.y + ER_UI_SDL_TRANSCRIPT_Y, bounds.w - ER_UI_SDL_PAD * 2.0f, bounds.h - ER_UI_SDL_COMPOSER_H - ER_UI_SDL_TRANSCRIPT_BOTTOM_PAD);
   status = er_ui_scene_push_rect(scene, er_ui_rect_fill(transcript.x, transcript.y, transcript.w, transcript.h, ER_UI_SDL_SMALL_RADIUS, theme.colors.bg));
   if (status != ER_UI_OK) return status;
-  static const char* const lines[ER_UI_SDL_TERMINAL_LINE_COUNT] = {
-    "user  lets use edgerun-ui-core to create actual sdl ui",
-    "agent inspecting shell, scene, text, and renderer primitives",
-    "tool  proposed opt-in ER_UI_CORE_BUILD_SDL_HOST target",
-    "agent rendering this surface from er_ui_shell_emit_scene",
-    "plan  wire prompt entry, streaming events, and proposal review panes",
-    "guard no terminal-only fallback in the graphical path",
-    "next  replace placeholder transport with Codex client adapter"};
   for (size_t i = 0u; i < ER_UI_SDL_TERMINAL_LINE_COUNT; ++i) {
-    status = er_ui_sdl_text(scene, font, lines[i], transcript.x + ER_UI_SDL_PAD, transcript.y + ER_UI_SDL_TRANSCRIPT_FIRST_LINE_Y + (float)i * ER_UI_SDL_LINE_H, theme.colors.text);
+    status = er_ui_sdl_text(scene, font, er_ui_sdl_terminal_line(i), transcript.x + ER_UI_SDL_PAD, transcript.y + ER_UI_SDL_TRANSCRIPT_FIRST_LINE_Y + (float)i * ER_UI_SDL_LINE_H, theme.colors.text);
     if (status != ER_UI_OK) return status;
   }
 
@@ -399,6 +423,8 @@ static void er_ui_sdl_render(ErUiSdlApp* app) {
   for (size_t i = 0u; i < app->scene.icon_quad_count; ++i) er_ui_sdl_draw_icon_quad(app, &app->scene.icon_quads[i]);
   for (size_t i = 0u; i < app->scene.text_quad_count; ++i) er_ui_sdl_draw_text_quad(app, &app->scene.text_quads[i]);
   SDL_RenderPresent(app->renderer);
+  app->rendered_frames++;
+  if (app->self_test && app->rendered_frames >= ER_UI_SDL_SELF_TEST_FRAMES) app->running = false;
 }
 
 static void er_ui_sdl_activate_hit(ErUiSdlApp* app, int x, int y) {
@@ -532,8 +558,9 @@ static void er_ui_sdl_destroy(ErUiSdlApp* app) {
   SDL_Quit();
 }
 
-int main(void) {
+int main(int argc, char** argv) {
   ErUiSdlApp app = {0};
+  if (argc > 1 && strcmp(argv[1], ER_UI_SDL_SELF_TEST_ARG) == 0) app.self_test = true;
   er_ui_sdl_init(&app);
   while (app.running) {
     SDL_Event event;
