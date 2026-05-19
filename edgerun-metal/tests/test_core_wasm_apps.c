@@ -264,6 +264,8 @@ static void test_ui_boot_package_loads_from_endpoint_storage(void) {
   ErUiBootInstalledApp tampered_app;
   ErUiBootInstalledPackageSource source;
   ErUiBootInstalledPackageSource tampered_source;
+  const ErUiBootInstalledPackageIndexEntry* index_entry;
+  ErUiBootInstalledPackageIndexEntry tampered_index_entry;
 
   er_mem_zero(module_memory, (UINTN)sizeof(module_memory));
   er_mem_zero(manifest_memory, (UINTN)sizeof(manifest_memory));
@@ -271,9 +273,13 @@ static void test_ui_boot_package_loads_from_endpoint_storage(void) {
   er_mem_zero((UINT8*)&loaded, (UINTN)sizeof(loaded));
 
   installed_app = er_ui_boot_installed_app_for_slot(UI_BOOT_PACKAGE_TEST_APP_INDEX);
+  index_entry = er_ui_boot_installed_package_index_entry_for_slot(UI_BOOT_PACKAGE_TEST_APP_INDEX);
   check_int64("ui boot installed app present", installed_app != 0, 1);
+  check_int64("ui boot installed package index present", index_entry != 0, 1);
   check_int64("ui boot installed app rejects invalid slot",
               er_ui_boot_installed_app_for_slot(ER_UI_BOOT_INSTALLED_APP_COUNT) == 0, 1);
+  check_int64("ui boot installed package index rejects invalid slot",
+              er_ui_boot_installed_package_index_entry_for_slot(ER_UI_BOOT_INSTALLED_APP_COUNT) == 0, 1);
   check_uint64("ui boot installed app len", installed_app->app_len,
                ER_USER_APP_WASM_SIZE);
   check_uint64("ui boot installed manifest len", installed_app->manifest_len,
@@ -289,6 +295,19 @@ static void test_ui_boot_package_loads_from_endpoint_storage(void) {
   check_uint64("ui boot installed package manifest len",
                installed_app->package.manifest_object_len,
                ER_USER_APP_MANIFEST_SIZE);
+  check_int64("ui boot installed index abi",
+              index_entry->abi_version, ER_APP_ABI_VERSION);
+  check_uint64("ui boot installed index slot",
+               index_entry->installed_app_slot, UI_BOOT_PACKAGE_TEST_APP_INDEX);
+  check_hash_equal("ui boot installed index package",
+                   &index_entry->package_id,
+                   &installed_app->package.package_id);
+  check_hash_equal("ui boot installed index app",
+                   &index_entry->app_ref.object_id,
+                   &installed_app->app_ref.object_id);
+  check_hash_equal("ui boot installed index manifest",
+                   &index_entry->manifest_ref.object_id,
+                   &installed_app->manifest_ref.object_id);
   check_uint64("ui boot installed app byte", installed_app->app_bytes[0],
                g_edgerun_user_app_wasm[0]);
   check_uint64("ui boot installed manifest byte", installed_app->manifest_bytes[0],
@@ -315,6 +334,15 @@ static void test_ui_boot_package_loads_from_endpoint_storage(void) {
               er_ui_boot_prepare_installed_package_source(0,
                                                           UI_BOOT_PACKAGE_TEST_APP_INDEX,
                                                           &source),
+              0);
+  check_int64("ui boot indexed source prepare",
+              er_ui_boot_prepare_indexed_package_source(index_entry, &source),
+              1);
+  tampered_index_entry = *index_entry;
+  tampered_index_entry.package_id.bytes[0] ^= 1u;
+  check_int64("ui boot indexed source rejects package mismatch",
+              er_ui_boot_prepare_indexed_package_source(&tampered_index_entry,
+                                                        &source),
               0);
   content_only_app = *installed_app;
   content_only_app.app_label = 0;

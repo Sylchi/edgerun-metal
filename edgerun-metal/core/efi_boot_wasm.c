@@ -20,6 +20,7 @@ static ErUiBootInstalledApp g_ui_boot_installed_apps[ER_UI_BOOT_INSTALLED_APP_CO
   }
 };
 
+static ErUiBootInstalledPackageIndexEntry g_ui_boot_installed_package_index[ER_UI_BOOT_INSTALLED_APP_COUNT];
 static UINT8 g_ui_boot_installed_apps_prepared;
 
 enum {
@@ -79,8 +80,45 @@ static UINT8 er_ui_boot_prepare_installed_app_registry(void) {
     if (er_ui_boot_prepare_installed_app_descriptor(&g_ui_boot_installed_apps[i]) == 0u) {
       return 0u;
     }
+    er_mem_zero((UINT8*)&g_ui_boot_installed_package_index[i],
+                (UINTN)sizeof(g_ui_boot_installed_package_index[i]));
+    g_ui_boot_installed_package_index[i].abi_version = ER_APP_ABI_VERSION;
+    g_ui_boot_installed_package_index[i].installed_app_slot = i;
+    g_ui_boot_installed_package_index[i].package_id =
+        g_ui_boot_installed_apps[i].package.package_id;
+    g_ui_boot_installed_package_index[i].app_ref =
+        g_ui_boot_installed_apps[i].app_ref;
+    g_ui_boot_installed_package_index[i].manifest_ref =
+        g_ui_boot_installed_apps[i].manifest_ref;
   }
   g_ui_boot_installed_apps_prepared = 1u;
+  return 1u;
+}
+
+static UINT8 er_ui_boot_installed_package_index_entry_valid(
+    const ErUiBootInstalledPackageIndexEntry* index_entry) {
+  const ErUiBootInstalledApp* installed_app;
+
+  if (index_entry == 0 ||
+      index_entry->abi_version != ER_APP_ABI_VERSION ||
+      index_entry->reserved != 0u ||
+      index_entry->installed_app_slot >= ER_UI_BOOT_INSTALLED_APP_COUNT ||
+      index_entry->app_ref.abi_version != ER_VFS_ABI_VERSION ||
+      index_entry->manifest_ref.abi_version != ER_VFS_ABI_VERSION ||
+      er_hash_nonzero(&index_entry->package_id) == 0u) {
+    return 0u;
+  }
+  installed_app = &g_ui_boot_installed_apps[index_entry->installed_app_slot];
+  if (er_hash_equal(&index_entry->package_id,
+                    &installed_app->package.package_id) == 0u ||
+      er_hash_equal(&index_entry->app_ref.object_id,
+                    &installed_app->app_ref.object_id) == 0u ||
+      index_entry->app_ref.object_len != installed_app->app_ref.object_len ||
+      er_hash_equal(&index_entry->manifest_ref.object_id,
+                    &installed_app->manifest_ref.object_id) == 0u ||
+      index_entry->manifest_ref.object_len != installed_app->manifest_ref.object_len) {
+    return 0u;
+  }
   return 1u;
 }
 
@@ -188,6 +226,25 @@ const ErUiBootInstalledApp* er_ui_boot_installed_app_for_slot(UINT32 app_index) 
     return 0;
   }
   return &g_ui_boot_installed_apps[app_index];
+}
+
+const ErUiBootInstalledPackageIndexEntry* er_ui_boot_installed_package_index_entry_for_slot(UINT32 app_index) {
+  if (app_index >= ER_UI_BOOT_INSTALLED_APP_COUNT ||
+      er_ui_boot_prepare_installed_app_registry() == 0u) {
+    return 0;
+  }
+  return &g_ui_boot_installed_package_index[app_index];
+}
+
+UINT8 er_ui_boot_prepare_indexed_package_source(const ErUiBootInstalledPackageIndexEntry* index_entry,
+                                                ErUiBootInstalledPackageSource* out_source) {
+  if (er_ui_boot_prepare_installed_app_registry() == 0u ||
+      er_ui_boot_installed_package_index_entry_valid(index_entry) == 0u) {
+    return 0u;
+  }
+  return er_ui_boot_prepare_installed_package_source(
+      &g_ui_boot_installed_apps[index_entry->installed_app_slot],
+      index_entry->installed_app_slot, out_source);
 }
 
 UINT8 er_ui_boot_prepare_installed_package_source(const ErUiBootInstalledApp* installed_app,
@@ -364,10 +421,20 @@ UINT8 er_ui_boot_load_user_app_package(UINT8* module_memory,
                                        ErUiBootPackageStorage* storage,
                                        UINT32 app_index,
                                        ErAppLoadedPackage* out_loaded) {
-  return er_ui_boot_load_installed_app_package(er_ui_boot_installed_app_for_slot(app_index),
-                                               module_memory, module_memory_size,
-                                               manifest_memory, manifest_memory_size,
-                                               storage, app_index, out_loaded);
+  ErUiBootInstalledPackageSource source;
+
+  if (er_ui_boot_prepare_indexed_package_source(
+          er_ui_boot_installed_package_index_entry_for_slot(app_index),
+          &source) == 0u) {
+    return 0u;
+  }
+  return er_ui_boot_load_installed_package_source(&source,
+                                                  module_memory,
+                                                  module_memory_size,
+                                                  manifest_memory,
+                                                  manifest_memory_size,
+                                                  storage,
+                                                  out_loaded);
 }
 
 UINT8 er_ui_boot_prepare_user_app(ErUiWasmAppRuntime* runtime,
