@@ -1,5 +1,60 @@
 #include "test_core_internal.h"
 
+enum {
+  TEST_WORK_ROUTE_SIGNATURE_ALGORITHM = 2u
+};
+
+static ErIdentity g_test_work_route_signer;
+
+static UINT8 test_work_route_sign(void* ctx, const ErByteSpan* preimage,
+                                  ErWorkSignature* out_signature) {
+  UINTN i;
+
+  (void)ctx;
+  if (er_identity_valid(&g_test_work_route_signer) == 0u ||
+      preimage == 0 ||
+      preimage->bytes == 0 ||
+      preimage->len == 0u ||
+      out_signature == 0) {
+    return 0u;
+  }
+  er_mem_zero((UINT8*)out_signature, (UINTN)sizeof(*out_signature));
+  out_signature->algorithm = TEST_WORK_ROUTE_SIGNATURE_ALGORITHM;
+  out_signature->signature_len = ER_SIGNATURE_LEN;
+  out_signature->identity = g_test_work_route_signer;
+  for (i = 0u; i < ER_SIGNATURE_LEN; ++i) {
+    out_signature->signature[i] =
+        (UINT8)(preimage->bytes[i % preimage->len] + (UINT8)i + 7u);
+  }
+  return 1u;
+}
+
+static UINT8 test_work_route_verify(void* ctx, const ErIdentity* identity,
+                                    const ErByteSpan* preimage,
+                                    const ErWorkSignature* signature) {
+  UINTN i;
+
+  (void)ctx;
+  if (er_identity_valid(identity) == 0u ||
+      preimage == 0 ||
+      preimage->bytes == 0 ||
+      preimage->len == 0u ||
+      signature == 0 ||
+      signature->algorithm != TEST_WORK_ROUTE_SIGNATURE_ALGORITHM ||
+      signature->signature_len != ER_SIGNATURE_LEN ||
+      er_identity_equal(&signature->identity, identity) == 0u) {
+    return 0u;
+  }
+  for (i = 0u; i < ER_SIGNATURE_LEN; ++i) {
+    UINT8 expected =
+        (UINT8)(preimage->bytes[i % preimage->len] + (UINT8)i + 7u);
+    if (signature->signature[i] != expected) {
+      return 0u;
+    }
+  }
+  return 1u;
+}
+
 static void test_device_relay_identity(void) {
   ErCryptoProvider crypto;
   UINT8 hardware_key[ER_P256_PUBLIC_KEY_LEN];
@@ -258,6 +313,16 @@ static void test_work_admitted_relay_route(void) {
   UINT8 admission_material[ER_PUBLIC_KEY_LEN];
   ErAdmittedRoute route;
   ErAdmittedRoute route_again;
+  ErWorkRouteChallenge route_challenge;
+  ErWorkRouteChallenge route_challenge_again;
+  ErWorkRouteChallenge changed_route_challenge;
+  ErWorkRouteStartProof route_start_proof;
+  ErWorkRouteStartProof tampered_route_start_proof;
+  ErEpochStamp route_challenge_issued_at;
+  ErEpochStamp route_challenge_valid_until;
+  ErEpochStamp route_challenge_now;
+  ErEpochStamp route_challenge_before;
+  ErEpochStamp route_challenge_expired;
   ErRelayForwardIntent intent;
   ErRelayTransitHop hop;
   ErRelayTransitHop hop_again;
@@ -285,8 +350,8 @@ static void test_work_admitted_relay_route(void) {
   crypto.hash = test_hash;
   crypto.seal = 0;
   crypto.open = 0;
-  crypto.sign = 0;
-  crypto.verify = 0;
+  crypto.sign = test_work_route_sign;
+  crypto.verify = test_work_route_verify;
   test_write_wasm_ui_scene_packet(scene_payload, (UINT32)sizeof(scene_payload));
   check_int64("render scene payload hash",
               er_render_endpoint_scene_payload_hash(&crypto, scene_payload,
@@ -329,6 +394,7 @@ static void test_work_admitted_relay_route(void) {
   test_fill_bytes(request.input_root.bytes, ER_HASH_LEN, 0x94u);
   request.max_total_cost = 20u;
   request.valid_until_ms = 100000u;
+  g_test_work_route_signer = request.user;
 
   admission.abi_version = ER_WORK_ABI_VERSION;
   admission.relay_count = 2u;
@@ -391,6 +457,119 @@ static void test_work_admitted_relay_route(void) {
                                                     ER_NODE_ROLE_CAPABILITY, &route_again),
               1);
   check_hash_equal("work route deterministic id", &route_again.route_id, &route.route_id);
+
+  route_challenge_issued_at.era = 1u;
+  route_challenge_issued_at.epoch = 2u;
+  route_challenge_issued_at.slot = 3u;
+  route_challenge_issued_at.tick = 4u;
+  route_challenge_valid_until.era = 1u;
+  route_challenge_valid_until.epoch = 2u;
+  route_challenge_valid_until.slot = 4u;
+  route_challenge_valid_until.tick = 0u;
+  route_challenge_now.era = 1u;
+  route_challenge_now.epoch = 2u;
+  route_challenge_now.slot = 3u;
+  route_challenge_now.tick = 8u;
+  route_challenge_before.era = 1u;
+  route_challenge_before.epoch = 2u;
+  route_challenge_before.slot = 3u;
+  route_challenge_before.tick = 3u;
+  route_challenge_expired = route_challenge_valid_until;
+
+  check_int64("work route challenge prepare",
+              er_work_route_challenge_prepare(&crypto,
+                                              &route,
+                                              route_challenge_issued_at,
+                                              route_challenge_valid_until,
+                                              &route_challenge),
+              1);
+  check_hash_equal("work route challenge route",
+                   &route_challenge.route_id,
+                   &route.route_id);
+  check_hash_equal("work route challenge admission",
+                   &route_challenge.admission_hash,
+                   &route.admission_hash);
+  check_node_id_equal("work route challenge worker",
+                      &route_challenge.worker_node_id,
+                      &source_node_id);
+  check_node_id_equal("work route challenge relay",
+                      &route_challenge.relay_node_id,
+                      &relay_node_id);
+  check_int64("work route challenge valid",
+              er_work_route_challenge_valid_at(&route_challenge,
+                                               route_challenge_now),
+              1);
+  check_int64("work route challenge rejects early",
+              er_work_route_challenge_valid_at(&route_challenge,
+                                               route_challenge_before),
+              0);
+  check_int64("work route challenge rejects expired",
+              er_work_route_challenge_valid_at(&route_challenge,
+                                               route_challenge_expired),
+              0);
+  check_int64("work route challenge deterministic",
+              er_work_route_challenge_prepare(&crypto,
+                                              &route,
+                                              route_challenge_issued_at,
+                                              route_challenge_valid_until,
+                                              &route_challenge_again),
+              1);
+  check_hash_equal("work route challenge deterministic id",
+                   &route_challenge_again.challenge_id,
+                   &route_challenge.challenge_id);
+  route_again.relay_node_id = second_relay_node_id;
+  route_again.relay_path[0] = second_relay_node_id;
+  check_int64("work route challenge changes with relay",
+              er_work_route_challenge_prepare(&crypto,
+                                              &route_again,
+                                              route_challenge_issued_at,
+                                              route_challenge_valid_until,
+                                              &changed_route_challenge),
+              1);
+  check_hash_not_equal("work route challenge relay differs",
+                       &changed_route_challenge.challenge_id,
+                       &route_challenge.challenge_id);
+  check_int64("work route start proof sign",
+              er_work_route_start_proof_sign(&crypto,
+                                             &route_challenge,
+                                             &request.user,
+                                             route_challenge_now,
+                                             &route_start_proof),
+              1);
+  check_hash_equal("work route start proof challenge",
+                   &route_start_proof.challenge_id,
+                   &route_challenge.challenge_id);
+  check_node_id_equal("work route start proof worker",
+                      &route_start_proof.worker_node_id,
+                      &source_node_id);
+  check_int64("work route start proof verify",
+              er_work_route_start_proof_verify(&crypto,
+                                               &route_challenge,
+                                               &route_start_proof,
+                                               route_challenge_now),
+              1);
+  tampered_route_start_proof = route_start_proof;
+  tampered_route_start_proof.relay_node_id.bytes[0] ^= 1u;
+  check_int64("work route start proof rejects relay tamper",
+              er_work_route_start_proof_verify(&crypto,
+                                               &route_challenge,
+                                               &tampered_route_start_proof,
+                                               route_challenge_now),
+              0);
+  tampered_route_start_proof = route_start_proof;
+  tampered_route_start_proof.signature.signature[0] ^= 1u;
+  check_int64("work route start proof rejects signature tamper",
+              er_work_route_start_proof_verify(&crypto,
+                                               &route_challenge,
+                                               &tampered_route_start_proof,
+                                               route_challenge_now),
+              0);
+  check_int64("work route start proof rejects stale clock",
+              er_work_route_start_proof_verify(&crypto,
+                                               &route_challenge,
+                                               &route_start_proof,
+                                               route_challenge_expired),
+              0);
 
   check_int64("work envelope for route",
               er_work_verify_channel_envelope_for_route(&envelope, &route), 1);
