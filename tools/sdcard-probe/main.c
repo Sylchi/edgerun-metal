@@ -71,10 +71,12 @@ typedef struct {
 typedef struct {
   uint64_t write_bytes;
   uint64_t verify_bytes;
+  uint64_t read_check_bytes;
   uint64_t first_bad_offset;
   uint64_t actual_bytes;
   double write_seconds;
   double verify_seconds;
+  double read_check_seconds;
   int failed;
   int wrapped;
 } ErsdProbeResult;
@@ -433,11 +435,60 @@ static uint64_t ersd_min_u64(uint64_t a, uint64_t b) {
   return a < b ? a : b;
 }
 
-static void ersd_print_progress(uint64_t done, uint64_t total) {
-  if (done == total || (done % ERSD_PROGRESS_BYTES) == 0u) {
-    fprintf(stderr, "sdcard-probe: checked %llu / %llu bytes\n",
-            (unsigned long long)done, (unsigned long long)total);
+static double ersd_mib_per_sec(uint64_t bytes, double seconds) {
+  if (seconds <= 0.0) {
+    return 0.0;
   }
+  return ((double)bytes / (double)ERSD_MIB_BYTES) / seconds;
+}
+
+static const char* ersd_kind_label(ErsdDeviceKind kind) {
+  switch (kind) {
+    case ERSD_DEVICE_REGULAR:
+      return "regular-file";
+    case ERSD_DEVICE_BLOCK:
+      return "block-device";
+    case ERSD_DEVICE_UNKNOWN:
+    default:
+      return "unknown";
+  }
+}
+
+static void ersd_print_progress(uint64_t done,
+                                uint64_t total,
+                                const ErsdProbeResult* result) {
+  if (done == total || (done % ERSD_PROGRESS_BYTES) == 0u) {
+    fprintf(stderr,
+            "sdcard-probe: checked %llu / %llu bytes write %.2f MiB/s verify %.2f MiB/s\n",
+            (unsigned long long)done,
+            (unsigned long long)total,
+            ersd_mib_per_sec(result->write_bytes, result->write_seconds),
+            ersd_mib_per_sec(result->verify_bytes, result->verify_seconds));
+  }
+}
+
+static void ersd_print_live_text_field(const char* label, const char* value) {
+  if (value != NULL && value[0] != '\0') {
+    fprintf(stderr, "sdcard-probe: %s: %s\n", label, value);
+  } else {
+    fprintf(stderr, "sdcard-probe: %s: unavailable\n", label);
+  }
+}
+
+static void ersd_print_live_header(const ErsdConfig* cfg,
+                                   const ErsdDeviceInfo* info,
+                                   uint64_t tested_bytes) {
+  fprintf(stderr, "sdcard-probe: target: %s\n", cfg->target);
+  fprintf(stderr, "sdcard-probe: kind: %s\n", ersd_kind_label(info->kind));
+  fprintf(stderr, "sdcard-probe: claimed-bytes: %llu\n",
+          (unsigned long long)info->claimed_bytes);
+  fprintf(stderr, "sdcard-probe: tested-bytes: %llu\n",
+          (unsigned long long)tested_bytes);
+  ersd_print_live_text_field("vendor", info->vendor);
+  ersd_print_live_text_field("model", info->model);
+  ersd_print_live_text_field("serial", info->serial);
+  ersd_print_live_text_field("cid", info->cid);
+  ersd_print_live_text_field("csd", info->csd);
 }
 
 static int ersd_probe_interleaved(int fd,
@@ -449,6 +500,8 @@ static int ersd_probe_interleaved(int fd,
   uint64_t read_limit;
   struct timespec start;
   struct timespec end;
+  struct timespec write_start;
+  struct timespec write_end;
   struct timespec verify_start;
   struct timespec verify_end;
 
@@ -458,21 +511,25 @@ static int ersd_probe_interleaved(int fd,
   memset(result, 0, sizeof(*result));
   result->first_bad_offset = bytes;
   result->actual_bytes = bytes;
-  if (clock_gettime(CLOCK_MONOTONIC, &start) != 0) {
-    return ersd_fail("clock_gettime failed");
-  }
   ersd_fill_pattern(g_ersd_block_a, block_bytes, 0u, ERSD_PATTERN_SALT_A);
   while (offset < bytes) {
     size_t span = (size_t)ersd_min_u64((uint64_t)sizeof(g_ersd_buffer),
                                        bytes - offset);
     ersd_fill_span(g_ersd_buffer, span, offset, block_bytes, ERSD_PATTERN_SALT_A);
+    if (clock_gettime(CLOCK_MONOTONIC, &write_start) != 0) {
+      return ersd_fail("clock_gettime failed");
+    }
     if (ersd_write_all_at(fd, g_ersd_buffer, span, offset) == 0) {
       result->failed = 1;
       result->first_bad_offset = offset;
       break;
     }
+    if (clock_gettime(CLOCK_MONOTONIC, &write_end) != 0) {
+      return ersd_fail("clock_gettime failed");
+    }
     offset += (uint64_t)span;
     result->write_bytes = offset;
+    result->write_seconds += ersd_seconds_since(&write_start, &write_end);
     if (clock_gettime(CLOCK_MONOTONIC, &verify_start) != 0) {
       return ersd_fail("clock_gettime failed");
     }
@@ -497,14 +554,10 @@ static int ersd_probe_interleaved(int fd,
       return ersd_fail("clock_gettime failed");
     }
     result->verify_seconds += ersd_seconds_since(&verify_start, &verify_end);
-    ersd_print_progress(offset, bytes);
+    ersd_print_progress(offset, bytes, result);
   }
-  if (clock_gettime(CLOCK_MONOTONIC, &end) != 0) {
-    return ersd_fail("clock_gettime failed");
-  }
-  result->write_seconds = ersd_seconds_since(&start, &end) - result->verify_seconds;
   read_limit = result->actual_bytes;
-  if (clock_gettime(CLOCK_MONOTONIC, &verify_start) != 0) {
+  if (clock_gettime(CLOCK_MONOTONIC, &start) != 0) {
     return ersd_fail("clock_gettime failed");
   }
   while (next_read_offset < read_limit) {
@@ -518,31 +571,13 @@ static int ersd_probe_interleaved(int fd,
       break;
     }
     next_read_offset += (uint64_t)span;
+    result->read_check_bytes = next_read_offset;
   }
-  if (clock_gettime(CLOCK_MONOTONIC, &verify_end) != 0) {
+  if (clock_gettime(CLOCK_MONOTONIC, &end) != 0) {
     return ersd_fail("clock_gettime failed");
   }
-  result->verify_seconds += ersd_seconds_since(&verify_start, &verify_end);
+  result->read_check_seconds = ersd_seconds_since(&start, &end);
   return 0;
-}
-
-static double ersd_mib_per_sec(uint64_t bytes, double seconds) {
-  if (seconds <= 0.0) {
-    return 0.0;
-  }
-  return ((double)bytes / (double)ERSD_MIB_BYTES) / seconds;
-}
-
-static const char* ersd_kind_label(ErsdDeviceKind kind) {
-  switch (kind) {
-    case ERSD_DEVICE_REGULAR:
-      return "regular-file";
-    case ERSD_DEVICE_BLOCK:
-      return "block-device";
-    case ERSD_DEVICE_UNKNOWN:
-    default:
-      return "unknown";
-  }
 }
 
 static void ersd_print_text_field(const char* label, const char* value) {
@@ -568,6 +603,7 @@ static void ersd_print_report(const ErsdConfig* cfg,
   ersd_print_text_field("csd", info->csd);
   printf("write-bytes: %llu\n", (unsigned long long)result->write_bytes);
   printf("verify-bytes: %llu\n", (unsigned long long)result->verify_bytes);
+  printf("read-check-bytes: %llu\n", (unsigned long long)result->read_check_bytes);
   printf("first-bad-offset: %llu\n", (unsigned long long)result->first_bad_offset);
   printf("actual-bytes: %llu\n", (unsigned long long)result->actual_bytes);
   printf("wrapped: %s\n", result->wrapped == 0 ? "no" : "yes");
@@ -575,6 +611,8 @@ static void ersd_print_report(const ErsdConfig* cfg,
          ersd_mib_per_sec(result->write_bytes, result->write_seconds));
   printf("verify-mib-sec: %.2f\n",
          ersd_mib_per_sec(result->verify_bytes, result->verify_seconds));
+  printf("read-check-mib-sec: %.2f\n",
+         ersd_mib_per_sec(result->read_check_bytes, result->read_check_seconds));
   printf("status: %s\n", result->failed == 0 ? "pass" : "fail");
 }
 
@@ -602,6 +640,7 @@ int main(int argc, char** argv) {
     close(fd);
     return ersd_fail("tested byte count is zero after block alignment");
   }
+  ersd_print_live_header(&cfg, &info, tested_bytes);
   if (ersd_probe_interleaved(fd, tested_bytes, cfg.block_bytes, &result) != 0) {
     close(fd);
     return 1;
