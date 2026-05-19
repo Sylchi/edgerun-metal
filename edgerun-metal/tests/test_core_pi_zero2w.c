@@ -17,7 +17,8 @@ static void test_pi_zero2w_bringup_boundary(void) {
     PI_TEST_EMMC_CMD0_VALUE = 0x00000000u,
     PI_TEST_EMMC_CMD5_VALUE = 0x05020000u,
     PI_TEST_EMMC_CMD3_VALUE = 0x031a0000u,
-    PI_TEST_EMMC_CMD52_VALUE = 0x341a0000u
+    PI_TEST_EMMC_CMD52_VALUE = 0x341a0000u,
+    PI_TEST_ZERO_W_UART_ALT5_FSEL1 = 0x00012000u
   };
 
   ErPiZero2wMmio mmio;
@@ -264,4 +265,18 @@ static void test_pi_zero2w_bringup_boundary(void) {
   check_uint64("pi zero w report storage kind",
                report.runtime_capabilities.local_storage_kind,
                ER_BOOT_LOCAL_STORAGE_KIND_SD_CARD);
+  check_uint64("pi zero w uart tx shift",
+               er_pi_gpio_fsel_shift(ER_PI_GPIO_PIN_UART_TX),
+               12u);
+  check_uint64("pi zero w uart rx shift",
+               er_pi_gpio_fsel_shift(ER_PI_GPIO_PIN_UART_RX),
+               15u);
+  check_uint64("pi zero w uart alt5 fsel",
+               er_pi_gpio_fsel_alt(
+                   er_pi_gpio_fsel_alt(0u,
+                                       ER_PI_GPIO_PIN_UART_TX,
+                                       ER_PI_GPIO_ALT5),
+                   ER_PI_GPIO_PIN_UART_RX,
+                   ER_PI_GPIO_ALT5),
+               PI_TEST_ZERO_W_UART_ALT5_FSEL1);
 }

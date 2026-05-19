@@ -28,9 +28,9 @@ Raspberry Pi firmware -> kernel.img
 ```
 
 The current `kernel.img` is the first repo-owned ARMv6 payload boundary. The
-next step is to replace the idle marker payload with serial output, board
-capability reporting, and the same SDIO command execution path used by the Pi
-radio/storage bring-up code.
+current payload initializes the BCM2835 mini UART on GPIO14/GPIO15 and prints a
+deterministic boot banner at 115200 baud. The staged `config.txt` pins
+`core_freq=250` so the mini UART divisor is explicit.
 
 ## Board Facts Captured In Code
 
@@ -39,3 +39,4 @@ radio/storage bring-up code.
 - Bluetooth runtime kind: `CYW43438 HCI UART`
 - boot architecture: `armv6`
 - owned boot payload name: `kernel.img`
+- first serial proof: mini UART, GPIO14/GPIO15, 115200 baud
