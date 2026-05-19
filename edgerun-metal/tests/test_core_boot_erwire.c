@@ -907,13 +907,13 @@ static void test_os_native_relay_dispatch(void) {
   check_uint64("os relay dispatch render redraw", redraw, 1u);
 
   check_int64("os relay dispatch seed app storage",
-              er_ui_boot_load_wasm_counter_package(module_memory,
-                                                   (UINT32)sizeof(module_memory),
-                                                   manifest_memory,
-                                                   (UINT32)sizeof(manifest_memory),
-                                                   &app.storage,
-                                                   OS_RELAY_ACTIVE_APP_INDEX,
-                                                   &loaded_package),
+              er_ui_boot_load_user_app_package(module_memory,
+                                               (UINT32)sizeof(module_memory),
+                                               manifest_memory,
+                                               (UINT32)sizeof(manifest_memory),
+                                               &app.storage,
+                                               OS_RELAY_ACTIVE_APP_INDEX,
+                                               &loaded_package),
               1);
   check_uint64("os relay dispatch seeded app store complete",
                app.storage.app_store.complete, 1u);

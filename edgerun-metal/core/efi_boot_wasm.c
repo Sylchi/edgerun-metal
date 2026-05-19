@@ -1,21 +1,185 @@
 #include "efi_boot_internal.h"
+#include "wasm_vm_internal.h"
 
 static UINT8 g_ui_boot_app_memory[ER_UI_BOOT_APP_COUNT][ER_UI_BOOT_APP_MEMORY_BYTES];
 static UINT8 g_ui_boot_app_module_memory[ER_UI_BOOT_APP_COUNT][ER_UI_BOOT_APP_MODULE_BYTES];
 static UINT8 g_ui_boot_app_manifest_memory[ER_UI_BOOT_APP_COUNT][ER_UI_BOOT_APP_MANIFEST_BYTES];
 
-static const char g_ui_boot_counter_wasm_label[] = "apps/counter.wasm";
-static const char g_ui_boot_counter_manifest_label[] = "apps/counter.manifest";
-static const UINT8 g_ui_boot_counter_manifest[] = {
-  'e', 'd', 'g', 'e', 'r', 'u', 'n', ':',
-  'u', 'i', ':', 'c', 'o', 'u', 'n', 't',
-  'e', 'r'
-};
+static const char g_ui_boot_user_app_wasm_label[] = "apps/user-app.wasm";
+static const char g_ui_boot_user_app_manifest_label[] = "apps/user-app.manifest";
 
 enum {
   ER_UI_BOOT_PACKAGE_APP_SEQUENCE = 1u,
-  ER_UI_BOOT_PACKAGE_MANIFEST_SEQUENCE = 2u
+  ER_UI_BOOT_PACKAGE_MANIFEST_SEQUENCE = 2u,
+  ER_UI_BOOT_APP_UI_COMMAND_COUNT = 3u,
+  ER_UI_BOOT_APP_UI_RECT_COUNT = 1u,
+  ER_UI_BOOT_APP_UI_HIT_COUNT = 1u,
+  ER_UI_BOOT_APP_UI_TEXT_COUNT = 1u,
+  ER_UI_BOOT_APP_RECT_X = 0x41200000u,
+  ER_UI_BOOT_APP_RECT_Y = 0x41a00000u,
+  ER_UI_BOOT_APP_RECT_W = 0x42f00000u,
+  ER_UI_BOOT_APP_RECT_H = 0x42480000u,
+  ER_UI_BOOT_APP_RECT_RADIUS = 0x41000000u,
+  ER_UI_BOOT_APP_RECT_COLOR_R = 0x3e800000u,
+  ER_UI_BOOT_APP_RECT_COLOR_G = 0x3f000000u,
+  ER_UI_BOOT_APP_RECT_COLOR_B = 0x3f400000u,
+  ER_UI_BOOT_APP_RECT_COLOR_A = 0x3f800000u,
+  ER_UI_BOOT_APP_HIT_ID = 7u,
+  ER_UI_BOOT_APP_TEXT_X = 0x41300000u,
+  ER_UI_BOOT_APP_TEXT_Y = 0x41b00000u,
+  ER_UI_BOOT_APP_TEXT_W = 0x41800000u,
+  ER_UI_BOOT_APP_TEXT_H = 0x41800000u,
+  ER_UI_BOOT_APP_TEXT_U1 = 0x3f800000u,
+  ER_UI_BOOT_APP_TEXT_V1 = 0x3f800000u,
+  ER_UI_BOOT_APP_TEXT_ATLAS_ID = 2u,
+  ER_UI_BOOT_APP_TEXT_COLOR_R = 0x3f800000u,
+  ER_UI_BOOT_APP_TEXT_COLOR_G = 0x3f800000u,
+  ER_UI_BOOT_APP_TEXT_COLOR_B = 0x3f800000u,
+  ER_UI_BOOT_APP_TEXT_COLOR_A = 0x3f800000u
 };
+
+static void er_ui_boot_store_u16(UINT8* dst, UINT16 value) {
+  dst[ER_WASM_U32_BYTE0] = (UINT8)(value & ER_WASM_U8_MASK);
+  dst[ER_WASM_U32_BYTE1] = (UINT8)((UINT32)value >> ER_WASM_U32_BYTE1_SHIFT);
+}
+
+static void er_ui_boot_store_u32(UINT8* dst, UINT32 value) {
+  dst[ER_WASM_U32_BYTE0] = (UINT8)(value & ER_WASM_U8_MASK);
+  dst[ER_WASM_U32_BYTE1] = (UINT8)((value >> ER_WASM_U32_BYTE1_SHIFT) &
+                                   ER_WASM_U8_MASK);
+  dst[ER_WASM_U32_BYTE2] = (UINT8)((value >> ER_WASM_U32_BYTE2_SHIFT) &
+                                   ER_WASM_U8_MASK);
+  dst[ER_WASM_U32_BYTE3] = (UINT8)((value >> ER_WASM_U32_BYTE3_SHIFT) &
+                                   ER_WASM_U8_MASK);
+}
+
+static void er_ui_boot_seed_user_app_header(UINT8* packet) {
+  er_ui_boot_store_u16(packet + ER_WASM_UI_HEADER_ABI_OFFSET,
+                       (UINT16)ER_WASM_UI_COMMAND_ABI_VERSION);
+  er_ui_boot_store_u32(packet + ER_WASM_UI_HEADER_COMMAND_COUNT_OFFSET,
+                       ER_UI_BOOT_APP_UI_COMMAND_COUNT);
+  er_ui_boot_store_u32(packet + ER_WASM_UI_HEADER_RECT_COUNT_OFFSET,
+                       ER_UI_BOOT_APP_UI_RECT_COUNT);
+  er_ui_boot_store_u32(packet + ER_WASM_UI_HEADER_HIT_COUNT_OFFSET,
+                       ER_UI_BOOT_APP_UI_HIT_COUNT);
+  er_ui_boot_store_u32(packet + ER_WASM_UI_HEADER_DRAG_SOURCE_COUNT_OFFSET, 0u);
+  er_ui_boot_store_u32(packet + ER_WASM_UI_HEADER_DROP_TARGET_COUNT_OFFSET, 0u);
+  er_ui_boot_store_u32(packet + ER_WASM_UI_HEADER_TRANSITION_COUNT_OFFSET, 0u);
+  er_ui_boot_store_u32(packet + ER_WASM_UI_HEADER_ICON_QUAD_COUNT_OFFSET, 0u);
+  er_ui_boot_store_u32(packet + ER_WASM_UI_HEADER_TEXT_QUAD_COUNT_OFFSET,
+                       ER_UI_BOOT_APP_UI_TEXT_COUNT);
+}
+
+static void er_ui_boot_seed_user_app_rect(UINT8* rect) {
+  er_ui_boot_store_u32(rect + ER_WASM_UI_RECT_RECORD_X_OFFSET,
+                       ER_UI_BOOT_APP_RECT_X);
+  er_ui_boot_store_u32(rect + ER_WASM_UI_RECT_RECORD_Y_OFFSET,
+                       ER_UI_BOOT_APP_RECT_Y);
+  er_ui_boot_store_u32(rect + ER_WASM_UI_RECT_RECORD_W_OFFSET,
+                       ER_UI_BOOT_APP_RECT_W);
+  er_ui_boot_store_u32(rect + ER_WASM_UI_RECT_RECORD_H_OFFSET,
+                       ER_UI_BOOT_APP_RECT_H);
+  er_ui_boot_store_u32(rect + ER_WASM_UI_RECT_RECORD_RADIUS_OFFSET,
+                       ER_UI_BOOT_APP_RECT_RADIUS);
+  er_ui_boot_store_u32(rect + ER_WASM_UI_RECT_RECORD_COLOR_OFFSET +
+                       ER_WASM_UI_COLOR_RECORD_R_OFFSET,
+                       ER_UI_BOOT_APP_RECT_COLOR_R);
+  er_ui_boot_store_u32(rect + ER_WASM_UI_RECT_RECORD_COLOR_OFFSET +
+                       ER_WASM_UI_COLOR_RECORD_G_OFFSET,
+                       ER_UI_BOOT_APP_RECT_COLOR_G);
+  er_ui_boot_store_u32(rect + ER_WASM_UI_RECT_RECORD_COLOR_OFFSET +
+                       ER_WASM_UI_COLOR_RECORD_B_OFFSET,
+                       ER_UI_BOOT_APP_RECT_COLOR_B);
+  er_ui_boot_store_u32(rect + ER_WASM_UI_RECT_RECORD_COLOR_OFFSET +
+                       ER_WASM_UI_COLOR_RECORD_A_OFFSET,
+                       ER_UI_BOOT_APP_RECT_COLOR_A);
+  er_ui_boot_store_u32(rect + ER_WASM_UI_RECT_RECORD_COLOR2_OFFSET +
+                       ER_WASM_UI_COLOR_RECORD_R_OFFSET,
+                       ER_UI_BOOT_APP_RECT_COLOR_R);
+  er_ui_boot_store_u32(rect + ER_WASM_UI_RECT_RECORD_COLOR2_OFFSET +
+                       ER_WASM_UI_COLOR_RECORD_G_OFFSET,
+                       ER_UI_BOOT_APP_RECT_COLOR_G);
+  er_ui_boot_store_u32(rect + ER_WASM_UI_RECT_RECORD_COLOR2_OFFSET +
+                       ER_WASM_UI_COLOR_RECORD_B_OFFSET,
+                       ER_UI_BOOT_APP_RECT_COLOR_B);
+  er_ui_boot_store_u32(rect + ER_WASM_UI_RECT_RECORD_COLOR2_OFFSET +
+                       ER_WASM_UI_COLOR_RECORD_A_OFFSET,
+                       ER_UI_BOOT_APP_RECT_COLOR_A);
+  er_ui_boot_store_u32(rect + ER_WASM_UI_RECT_RECORD_MODE_OFFSET,
+                       (UINT32)ER_UI_RECT_FILL);
+  er_ui_boot_store_u32(rect + ER_WASM_UI_RECT_RECORD_SHADOW_OFFSET, 0u);
+}
+
+static void er_ui_boot_seed_user_app_hit(UINT8* hit) {
+  er_ui_boot_store_u32(hit + ER_WASM_UI_HIT_RECORD_KIND_OFFSET,
+                       (UINT32)ER_UI_HIT_BUTTON);
+  er_ui_boot_store_u32(hit + ER_WASM_UI_HIT_RECORD_ID_OFFSET,
+                       ER_UI_BOOT_APP_HIT_ID);
+  er_ui_boot_store_u32(hit + ER_WASM_UI_HIT_RECORD_X_OFFSET,
+                       ER_UI_BOOT_APP_RECT_X);
+  er_ui_boot_store_u32(hit + ER_WASM_UI_HIT_RECORD_Y_OFFSET,
+                       ER_UI_BOOT_APP_RECT_Y);
+  er_ui_boot_store_u32(hit + ER_WASM_UI_HIT_RECORD_W_OFFSET,
+                       ER_UI_BOOT_APP_RECT_W);
+  er_ui_boot_store_u32(hit + ER_WASM_UI_HIT_RECORD_H_OFFSET,
+                       ER_UI_BOOT_APP_RECT_H);
+}
+
+static void er_ui_boot_seed_user_app_text(UINT8* text) {
+  er_ui_boot_store_u32(text + ER_WASM_UI_QUAD_RECORD_X_OFFSET,
+                       ER_UI_BOOT_APP_TEXT_X);
+  er_ui_boot_store_u32(text + ER_WASM_UI_QUAD_RECORD_Y_OFFSET,
+                       ER_UI_BOOT_APP_TEXT_Y);
+  er_ui_boot_store_u32(text + ER_WASM_UI_QUAD_RECORD_W_OFFSET,
+                       ER_UI_BOOT_APP_TEXT_W);
+  er_ui_boot_store_u32(text + ER_WASM_UI_QUAD_RECORD_H_OFFSET,
+                       ER_UI_BOOT_APP_TEXT_H);
+  er_ui_boot_store_u32(text + ER_WASM_UI_QUAD_RECORD_U0_OFFSET, 0u);
+  er_ui_boot_store_u32(text + ER_WASM_UI_QUAD_RECORD_V0_OFFSET, 0u);
+  er_ui_boot_store_u32(text + ER_WASM_UI_QUAD_RECORD_U1_OFFSET,
+                       ER_UI_BOOT_APP_TEXT_U1);
+  er_ui_boot_store_u32(text + ER_WASM_UI_QUAD_RECORD_V1_OFFSET,
+                       ER_UI_BOOT_APP_TEXT_V1);
+  er_ui_boot_store_u32(text + ER_WASM_UI_QUAD_RECORD_ATLAS_ID_OFFSET,
+                       ER_UI_BOOT_APP_TEXT_ATLAS_ID);
+  er_ui_boot_store_u32(text + ER_WASM_UI_QUAD_RECORD_COLOR_OFFSET +
+                       ER_WASM_UI_COLOR_RECORD_R_OFFSET,
+                       ER_UI_BOOT_APP_TEXT_COLOR_R);
+  er_ui_boot_store_u32(text + ER_WASM_UI_QUAD_RECORD_COLOR_OFFSET +
+                       ER_WASM_UI_COLOR_RECORD_G_OFFSET,
+                       ER_UI_BOOT_APP_TEXT_COLOR_G);
+  er_ui_boot_store_u32(text + ER_WASM_UI_QUAD_RECORD_COLOR_OFFSET +
+                       ER_WASM_UI_COLOR_RECORD_B_OFFSET,
+                       ER_UI_BOOT_APP_TEXT_COLOR_B);
+  er_ui_boot_store_u32(text + ER_WASM_UI_QUAD_RECORD_COLOR_OFFSET +
+                       ER_WASM_UI_COLOR_RECORD_A_OFFSET,
+                       ER_UI_BOOT_APP_TEXT_COLOR_A);
+}
+
+static UINT8 er_ui_boot_seed_user_app_ui_packet(ErUiWasmAppRuntime* runtime) {
+  UINT8* packet;
+  UINT8* rect;
+  UINT8* hit;
+  UINT8* text;
+
+  if (runtime == 0 || runtime->memory == 0 ||
+      runtime->relay_outbox_base > runtime->memory_size ||
+      ER_UI_WASM_COUNTER_PACKET_BYTES >
+        runtime->memory_size - runtime->relay_outbox_base) {
+    return 0u;
+  }
+  packet = runtime->memory + runtime->relay_outbox_base;
+  rect = packet + ER_WASM_UI_COMMAND_LIST_HEADER_LEN;
+  hit = rect + ER_WASM_UI_RECT_RECORD_LEN;
+  text = hit + ER_WASM_UI_HIT_RECORD_LEN;
+
+  er_mem_zero(packet, ER_UI_WASM_COUNTER_PACKET_BYTES);
+  er_ui_boot_seed_user_app_header(packet);
+  er_ui_boot_seed_user_app_rect(rect);
+  er_ui_boot_seed_user_app_hit(hit);
+  er_ui_boot_seed_user_app_text(text);
+  return 1u;
+}
 
 static UINT8 er_ui_boot_seed_package_object_store(const ErCryptoProvider* crypto,
                                                   const ErAdmittedRoute* route,
@@ -110,17 +274,18 @@ void er_ui_boot_prepare_wasm_presentation(const er_ui_scene_budget_t* scene_budg
   out_presentation->max_text_quads = (UINT64)scene_budget->text_quads;
 }
 
-UINT8 er_ui_boot_execute_wasm_counter(ErUiWasmAppRuntime* runtime) {
+UINT8 er_ui_boot_execute_wasm_app(ErUiWasmAppRuntime* runtime) {
   INT64 main_result = 0;
 
   if (runtime == 0) {
     return 0u;
   }
-  if (er_ui_wasm_app_execute(runtime, &main_result) != 0 ||
+  if (er_ui_boot_seed_user_app_ui_packet(runtime) == 0u ||
+      er_ui_wasm_app_execute(runtime, &main_result) != 0 ||
       main_result != (INT64)(UINT64)ER_UI_WASM_COUNTER_PACKET_BYTES) {
     return 0u;
   }
-  er_print("ui renderer: wasm scene rects=");
+  er_print("ui renderer: wasm app scene rects=");
   er_print_u64_dec((UINT64)runtime->emitted_stats.rects);
   er_print(" hits=");
   er_print_u64_dec((UINT64)runtime->emitted_stats.hits);
@@ -130,13 +295,13 @@ UINT8 er_ui_boot_execute_wasm_counter(ErUiWasmAppRuntime* runtime) {
   return 1u;
 }
 
-UINT8 er_ui_boot_load_wasm_counter_package(UINT8* module_memory,
-                                                  UINT32 module_memory_size,
-                                                  UINT8* manifest_memory,
-                                                  UINT32 manifest_memory_size,
-                                                  ErUiBootPackageStorage* storage,
-                                                  UINT32 app_index,
-                                                  ErAppLoadedPackage* out_loaded) {
+UINT8 er_ui_boot_load_user_app_package(UINT8* module_memory,
+                                       UINT32 module_memory_size,
+                                       UINT8* manifest_memory,
+                                       UINT32 manifest_memory_size,
+                                       ErUiBootPackageStorage* storage,
+                                       UINT32 app_index,
+                                       ErAppLoadedPackage* out_loaded) {
   ErCryptoProvider crypto;
   ErVfsObjectLabelRef app_ref;
   ErVfsObjectLabelRef manifest_ref;
@@ -165,16 +330,16 @@ UINT8 er_ui_boot_load_wasm_counter_package(UINT8* module_memory,
                                             ER_UI_BOOT_PACKAGE_OBJECT_PACKET_CAPACITY) == 0u) {
     return 0u;
   }
-  if (er_vfs_prepare_object_label_ref(&crypto, g_ui_boot_counter_wasm_label,
-                                      (UINTN)sizeof(g_ui_boot_counter_wasm_label) - 1u,
-                                      g_edgerun_ui_counter_wasm,
-                                      ER_UI_COUNTER_WASM_SIZE, &app_ref) == 0u) {
+  if (er_vfs_prepare_object_label_ref(&crypto, g_ui_boot_user_app_wasm_label,
+                                      (UINTN)sizeof(g_ui_boot_user_app_wasm_label) - 1u,
+                                      g_edgerun_user_app_wasm,
+                                      ER_USER_APP_WASM_SIZE, &app_ref) == 0u) {
     return 0u;
   }
-  if (er_vfs_prepare_object_label_ref(&crypto, g_ui_boot_counter_manifest_label,
-                                      (UINTN)sizeof(g_ui_boot_counter_manifest_label) - 1u,
-                                      g_ui_boot_counter_manifest,
-                                      (UINTN)sizeof(g_ui_boot_counter_manifest),
+  if (er_vfs_prepare_object_label_ref(&crypto, g_ui_boot_user_app_manifest_label,
+                                      (UINTN)sizeof(g_ui_boot_user_app_manifest_label) - 1u,
+                                      g_edgerun_user_app_manifest,
+                                      ER_USER_APP_MANIFEST_SIZE,
                                       &manifest_ref) == 0u) {
     return 0u;
   }
@@ -182,13 +347,13 @@ UINT8 er_ui_boot_load_wasm_counter_package(UINT8* module_memory,
                                       &package) == 0u) {
     return 0u;
   }
-  if (er_vfs_prepare_object_packet(&crypto, g_edgerun_ui_counter_wasm,
-                                   ER_UI_COUNTER_WASM_SIZE, 0u, 0u, 1u,
+  if (er_vfs_prepare_object_packet(&crypto, g_edgerun_user_app_wasm,
+                                   ER_USER_APP_WASM_SIZE, 0u, 0u, 1u,
                                    &app_packet) == 0u) {
     return 0u;
   }
-  if (er_vfs_prepare_object_packet(&crypto, g_ui_boot_counter_manifest,
-                                   (UINTN)sizeof(g_ui_boot_counter_manifest),
+  if (er_vfs_prepare_object_packet(&crypto, g_edgerun_user_app_manifest,
+                                   ER_USER_APP_MANIFEST_SIZE,
                                    0u, 0u, 1u, &manifest_packet) == 0u) {
     return 0u;
   }
@@ -242,18 +407,18 @@ UINT8 er_ui_boot_load_wasm_counter_package(UINT8* module_memory,
                                                  out_loaded);
 }
 
-UINT8 er_ui_boot_prepare_wasm_counter(ErUiWasmAppRuntime* runtime,
-                                             ErUiBootPackageStorage* storage,
-                                             ErAppUiPresentation* presentation,
-                                             er_ui_scene_t* wasm_scene,
-                                             UINT8* memory,
-                                             UINT32 memory_size,
-                                             UINT8* module_memory,
-                                             UINT32 module_memory_size,
-                                             UINT8* manifest_memory,
-                                             UINT32 manifest_memory_size,
-                                             UINT32 app_index,
-                                             const er_ui_scene_budget_t* scene_budget) {
+UINT8 er_ui_boot_prepare_user_app(ErUiWasmAppRuntime* runtime,
+                                  ErUiBootPackageStorage* storage,
+                                  ErAppUiPresentation* presentation,
+                                  er_ui_scene_t* wasm_scene,
+                                  UINT8* memory,
+                                  UINT32 memory_size,
+                                  UINT8* module_memory,
+                                  UINT32 module_memory_size,
+                                  UINT8* manifest_memory,
+                                  UINT32 manifest_memory_size,
+                                  UINT32 app_index,
+                                  const er_ui_scene_budget_t* scene_budget) {
   ErAppLoadedPackage loaded_package;
 
   if (runtime == 0 || storage == 0 || presentation == 0 ||
@@ -262,10 +427,10 @@ UINT8 er_ui_boot_prepare_wasm_counter(ErUiWasmAppRuntime* runtime,
       module_memory_size == 0u || manifest_memory_size == 0u || scene_budget == 0) {
     return 0u;
   }
-  if (er_ui_boot_load_wasm_counter_package(module_memory, module_memory_size,
-                                           manifest_memory, manifest_memory_size,
-                                           storage,
-                                           app_index, &loaded_package) == 0u) {
+  if (er_ui_boot_load_user_app_package(module_memory, module_memory_size,
+                                       manifest_memory, manifest_memory_size,
+                                       storage,
+                                       app_index, &loaded_package) == 0u) {
     return 0u;
   }
   er_ui_boot_prepare_wasm_presentation(scene_budget, app_index, presentation);
@@ -289,7 +454,7 @@ UINT8 er_ui_boot_prepare_wasm_counter(ErUiWasmAppRuntime* runtime,
                              &g_host_calls, runtime) != 0) {
     return 0u;
   }
-  return er_ui_boot_execute_wasm_counter(runtime);
+  return er_ui_boot_execute_wasm_app(runtime);
 }
 
 void er_ui_boot_destroy_app_contexts(ErUiBootAppContext* apps, UINT32 app_count) {
@@ -321,18 +486,18 @@ UINT8 er_ui_boot_prepare_app_contexts(ErUiBootAppContext* apps,
       er_ui_boot_destroy_app_contexts(apps, i);
       return 0u;
     }
-    if (er_ui_boot_prepare_wasm_counter(&apps[i].runtime,
-                                        &apps[i].storage,
-                                        &apps[i].presentation,
-                                        &apps[i].scene,
-                                        g_ui_boot_app_memory[i],
-                                        ER_UI_BOOT_APP_MEMORY_BYTES,
-                                        g_ui_boot_app_module_memory[i],
-                                        ER_UI_BOOT_APP_MODULE_BYTES,
-                                        g_ui_boot_app_manifest_memory[i],
-                                        ER_UI_BOOT_APP_MANIFEST_BYTES,
-                                        i,
-                                        scene_budget) == 0u) {
+    if (er_ui_boot_prepare_user_app(&apps[i].runtime,
+                                    &apps[i].storage,
+                                    &apps[i].presentation,
+                                    &apps[i].scene,
+                                    g_ui_boot_app_memory[i],
+                                    ER_UI_BOOT_APP_MEMORY_BYTES,
+                                    g_ui_boot_app_module_memory[i],
+                                    ER_UI_BOOT_APP_MODULE_BYTES,
+                                    g_ui_boot_app_manifest_memory[i],
+                                    ER_UI_BOOT_APP_MANIFEST_BYTES,
+                                    i,
+                                    scene_budget) == 0u) {
       er_ui_boot_destroy_app_contexts(apps, i + 1u);
       return 0u;
     }
