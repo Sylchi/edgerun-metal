@@ -4,17 +4,10 @@ static UINT8 g_ui_boot_app_memory[ER_UI_BOOT_APP_SLOT_CAPACITY][ER_UI_BOOT_APP_M
 static UINT8 g_ui_boot_app_module_memory[ER_UI_BOOT_APP_SLOT_CAPACITY][ER_UI_BOOT_APP_MODULE_BYTES];
 static UINT8 g_ui_boot_app_manifest_memory[ER_UI_BOOT_APP_SLOT_CAPACITY][ER_UI_BOOT_APP_MANIFEST_BYTES];
 
-static const char g_ui_boot_user_app_wasm_label[] = "apps/user-app.wasm";
-static const char g_ui_boot_user_app_manifest_label[] = "apps/user-app.manifest";
-
 static ErUiBootInstalledApp g_ui_boot_installed_apps[ER_UI_BOOT_INSTALLED_APP_COUNT] = {
   {
-    .app_label = g_ui_boot_user_app_wasm_label,
-    .app_label_len = (UINTN)sizeof(g_ui_boot_user_app_wasm_label) - 1u,
     .app_bytes = g_edgerun_user_app_wasm,
     .app_len = ER_USER_APP_WASM_SIZE,
-    .manifest_label = g_ui_boot_user_app_manifest_label,
-    .manifest_label_len = (UINTN)sizeof(g_ui_boot_user_app_manifest_label) - 1u,
     .manifest_bytes = g_edgerun_user_app_manifest,
     .manifest_len = ER_USER_APP_MANIFEST_SIZE
   }
