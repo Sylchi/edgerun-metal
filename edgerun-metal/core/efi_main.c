@@ -275,6 +275,12 @@ EFI_STATUS EFIAPI efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE* SystemTable
   } else {
     er_println("pi-zero-2w: board peripheral map ready");
   }
+#elif defined(ER_BOARD_PI_ZERO_W_V1_1)
+  if (er_pi_zero_w_v1_1_apply_boot_report(&boot_report) == 0u) {
+    er_println("pi-zero-w-v1.1: board peripheral map failed");
+  } else {
+    er_println("pi-zero-w-v1.1: board peripheral map ready");
+  }
 #endif
   er_boot_services_apply_admission(SystemTable, &boot_report);
   er_boot_services_print_report(&boot_report);

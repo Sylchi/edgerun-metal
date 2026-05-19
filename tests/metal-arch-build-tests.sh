@@ -87,6 +87,38 @@ if ! grep -q "ER_METAL_BOARD=pi-zero-2w requires ER_METAL_ARCH=aarch64" /tmp/met
   exit 1
 fi
 
+pi_zero_w_config=$(make -C "$ROOT_DIR/edgerun-metal" --no-print-directory print-config ER_METAL_ARCH=armv6 ER_METAL_BOARD=pi-zero-w-v1_1)
+
+case "$pi_zero_w_config" in
+  *"ER_METAL_BOARD=pi-zero-w-v1_1"*) ;;
+  *) printf 'pi zero w v1.1 board profile missing\n' >&2; exit 1 ;;
+esac
+
+case "$pi_zero_w_config" in
+  *"ER_METAL_TARGET=armv6-none-eabi"*) ;;
+  *) printf 'pi zero w v1.1 target triple missing\n' >&2; exit 1 ;;
+esac
+
+case "$pi_zero_w_config" in
+  *"ER_METAL_BOOT_EFI=kernel.img"*) ;;
+  *) printf 'pi zero w v1.1 boot filename missing\n' >&2; exit 1 ;;
+esac
+
+case "$pi_zero_w_config" in
+  *"ER_METAL_BOARD_BOOT_CHAIN=raspberry-pi-firmware -> kernel.img"*) ;;
+  *) printf 'pi zero w v1.1 boot chain missing\n' >&2; exit 1 ;;
+esac
+
+if make -C "$ROOT_DIR/edgerun-metal" --no-print-directory print-config ER_METAL_ARCH=aarch64 ER_METAL_BOARD=pi-zero-w-v1_1 >/tmp/metal-zero-w-board-invalid.out 2>/tmp/metal-zero-w-board-invalid.err; then
+  printf 'pi zero w v1.1 accepted aarch64 unexpectedly\n' >&2
+  exit 1
+fi
+
+if ! grep -q "ER_METAL_BOARD=pi-zero-w-v1_1 requires ER_METAL_ARCH=armv6" /tmp/metal-zero-w-board-invalid.err; then
+  printf 'pi zero w v1.1 architecture error was not explicit\n' >&2
+  exit 1
+fi
+
 if make -C "$ROOT_DIR/edgerun-metal" --no-print-directory print-config ER_METAL_ARCH=armv7 >/tmp/metal-arch-invalid.out 2>/tmp/metal-arch-invalid.err; then
   printf 'unsupported architecture unexpectedly succeeded\n' >&2
   exit 1
@@ -99,4 +131,5 @@ fi
 
 rm -f /tmp/metal-arch-invalid.out /tmp/metal-arch-invalid.err
 rm -f /tmp/metal-board-invalid.out /tmp/metal-board-invalid.err
+rm -f /tmp/metal-zero-w-board-invalid.out /tmp/metal-zero-w-board-invalid.err
 printf 'metal architecture build tests passed\n'

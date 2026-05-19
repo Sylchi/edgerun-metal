@@ -3,6 +3,10 @@
 Purpose: use six constrained AArch64 boards to prove EdgeRun's deterministic,
 budget-based OS model on real, heterogeneous hardware.
 
+Note: Pi Zero W v1.1 is a separate ARMv6 board path. Use
+`PI_ZERO_W_V1_1_BRINGUP.md` and `make -C edgerun-metal pi-zero-w-v1_1-boot`
+for those boards.
+
 The Pi Zero 2 W target is not a performance excuse. It is the opposite: it is a
 hard budget microscope. The UI target remains 4K120-class behavior by work
 units, not by repainting every pixel every tick. If a board cannot hit a target,

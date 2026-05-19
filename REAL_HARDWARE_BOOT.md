@@ -5,6 +5,8 @@ Status:
 - Raspberry Pi 4B AArch64 UEFI: build path prepared; hardware boot not yet confirmed.
 - Raspberry Pi Zero 2 W AArch64 U-Boot EFI: board profile and payload build
   path prepared; hardware boot not yet confirmed.
+- Raspberry Pi Zero W v1.1 ARMv6: board profile and first owned `kernel.img`
+  boot tree prepared; hardware boot not yet confirmed.
 
 Hardware:
 - Desktop: MSI X570 + Ryzen 5600X
@@ -85,3 +87,29 @@ so they are not confused with EdgeRun runtime dependencies.
 The Pi Zero 2 W boards are the constrained hardware swarm target for proving
 deterministic budgets, identity-routed storage, sealed package replication, and
 small-change UI work scaling.
+
+## Raspberry Pi Zero W v1.1 bring-up path
+
+The Pi Zero W v1.1 path is a different board class from Pi Zero 2 W: BCM2835,
+ARM11/ARMv6, 32-bit boot, and physical peripherals at `0x20000000`. Build its
+first staged boot tree with:
+
+```bash
+make -C edgerun-metal pi-zero-w-v1_1-boot
+```
+
+The generated boot tree is:
+
+```text
+.build/edgerun-metal/pi-zero-w-v1_1/boot/
+```
+
+The intended first boot chain is explicit:
+
+```text
+Raspberry Pi firmware -> kernel.img
+```
+
+This path does not use the Pi Zero 2 W AArch64 EFI artifact. The staged
+manifest is `EDGERUN-PI-ZERO-W-V1_1-BOOT.txt`, and the owned payload is the
+freestanding ARMv6 `kernel.img`.

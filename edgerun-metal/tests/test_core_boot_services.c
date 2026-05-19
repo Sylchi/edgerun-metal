@@ -22,6 +22,7 @@ static void test_boot_services_boundary(void) {
     BOOT_SERVICES_TEST_ADMISSION_GENERATION = 1u
   };
   ErBootServicesReport report;
+  ErBootServicesReport variant_report;
   EFI_RUNTIME_SERVICES runtime_services;
   EFI_SYSTEM_TABLE system_table;
   ErTpmNvLimits limits;
@@ -53,6 +54,13 @@ static void test_boot_services_boundary(void) {
                                                 1u,
                                                 6u),
               1);
+  er_boot_services_report_init(&variant_report);
+  check_int64("boot services set cyw43438 wifi",
+              er_boot_services_set_wifi_runtime(&variant_report,
+                                                ER_BOOT_WIFI_KIND_CYW43438_SDIO,
+                                                0u,
+                                                6u),
+              1);
   check_uint64("boot services update blocked without storage",
                report.runtime_capabilities.update_blocked_reason,
                ER_BOOT_UPDATE_BLOCKED_NO_WRITABLE_STORAGE);
@@ -66,6 +74,12 @@ static void test_boot_services_boundary(void) {
                   &report,
                   ER_BOOT_BLUETOOTH_KIND_CYW43439_HCI_UART,
                   1u),
+              1);
+  check_int64("boot services set cyw43438 bluetooth",
+              er_boot_services_set_bluetooth_runtime(
+                  &variant_report,
+                  ER_BOOT_BLUETOOTH_KIND_CYW43438_HCI_UART,
+                  0u),
               1);
   check_uint64("boot services bluetooth ready",
                report.runtime_capabilities.bluetooth_ready, 1u);

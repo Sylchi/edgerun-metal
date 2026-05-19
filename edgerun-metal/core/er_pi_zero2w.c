@@ -32,38 +32,94 @@ enum {
   ER_PI_ZERO2W_SDIO_NO_ARGUMENT = 0u
 };
 
+static const ErPiBoardProfile g_er_pi_zero2w_profile = {
+  ER_PI_ZERO2W_PERIPHERAL_BASE,
+  ER_PI_ZERO2W_PERIPHERAL_BYTES,
+  ER_PI_ZERO2W_MAILBOX_OFFSET,
+  ER_PI_ZERO2W_MAILBOX_BYTES,
+  ER_PI_ZERO2W_GPIO_OFFSET,
+  ER_PI_ZERO2W_GPIO_BYTES,
+  ER_PI_ZERO2W_SDHOST_OFFSET,
+  ER_PI_ZERO2W_SDHOST_BYTES,
+  ER_PI_ZERO2W_EMMC_OFFSET,
+  ER_PI_ZERO2W_EMMC_BYTES,
+  ER_PI_ZERO2W_AUX_OFFSET,
+  ER_PI_ZERO2W_AUX_BYTES,
+  ER_BOOT_WIFI_KIND_CYW43439_SDIO,
+  ER_BOOT_BLUETOOTH_KIND_CYW43439_HCI_UART,
+  ER_PI_ZERO2W_WIFI_DEFAULT_CHANNEL
+};
+
+static const ErPiBoardProfile g_er_pi_zero_w_v1_1_profile = {
+  ER_PI_ZERO_W_V1_1_PERIPHERAL_BASE,
+  ER_PI_ZERO_W_V1_1_PERIPHERAL_BYTES,
+  ER_PI_ZERO2W_MAILBOX_OFFSET,
+  ER_PI_ZERO2W_MAILBOX_BYTES,
+  ER_PI_ZERO2W_GPIO_OFFSET,
+  ER_PI_ZERO2W_GPIO_BYTES,
+  ER_PI_ZERO2W_SDHOST_OFFSET,
+  ER_PI_ZERO2W_SDHOST_BYTES,
+  ER_PI_ZERO2W_EMMC_OFFSET,
+  ER_PI_ZERO2W_EMMC_BYTES,
+  ER_PI_ZERO2W_AUX_OFFSET,
+  ER_PI_ZERO2W_AUX_BYTES,
+  ER_BOOT_WIFI_KIND_CYW43438_SDIO,
+  ER_BOOT_BLUETOOTH_KIND_CYW43438_HCI_UART,
+  ER_PI_ZERO_W_V1_1_WIFI_DEFAULT_CHANNEL
+};
+
+const ErPiBoardProfile* er_pi_zero2w_profile(void) {
+  return &g_er_pi_zero2w_profile;
+}
+
+const ErPiBoardProfile* er_pi_zero_w_v1_1_profile(void) {
+  return &g_er_pi_zero_w_v1_1_profile;
+}
+
+UINT64 er_pi_board_peripheral_phys(const ErPiBoardProfile* profile,
+                                   UINT64 offset) {
+  if (profile == 0) {
+    return 0u;
+  }
+  return profile->peripheral_base + offset;
+}
+
 UINT64 er_pi_zero2w_peripheral_phys(UINT64 offset) {
-  return ER_PI_ZERO2W_PERIPHERAL_BASE + offset;
+  return er_pi_board_peripheral_phys(er_pi_zero2w_profile(), offset);
 }
 
-static INT64 er_pi_zero2w_map_child(UINT64 offset, UINT64 len) {
-  return er_mmio_map((INT64)er_pi_zero2w_peripheral_phys(offset), (INT64)len);
+static INT64 er_pi_board_map_child(const ErPiBoardProfile* profile,
+                                   UINT64 offset,
+                                   UINT64 len) {
+  return er_mmio_map((INT64)er_pi_board_peripheral_phys(profile, offset),
+                     (INT64)len);
 }
 
-UINT8 er_pi_zero2w_mmio_map(ErPiZero2wMmio* out_mmio) {
-  if (out_mmio == 0) {
+UINT8 er_pi_board_mmio_map(const ErPiBoardProfile* profile,
+                           ErPiZero2wMmio* out_mmio) {
+  if (profile == 0 || out_mmio == 0) {
     return 0u;
   }
 
   out_mmio->mapped = 0u;
   out_mmio->peripheral_handle =
-      er_mmio_map((INT64)ER_PI_ZERO2W_PERIPHERAL_BASE,
-                  (INT64)ER_PI_ZERO2W_PERIPHERAL_BYTES);
+      er_mmio_map((INT64)profile->peripheral_base,
+                  (INT64)profile->peripheral_bytes);
   out_mmio->mailbox_handle =
-      er_pi_zero2w_map_child(ER_PI_ZERO2W_MAILBOX_OFFSET,
-                             ER_PI_ZERO2W_MAILBOX_BYTES);
+      er_pi_board_map_child(profile, profile->mailbox_offset,
+                            profile->mailbox_bytes);
   out_mmio->gpio_handle =
-      er_pi_zero2w_map_child(ER_PI_ZERO2W_GPIO_OFFSET,
-                             ER_PI_ZERO2W_GPIO_BYTES);
+      er_pi_board_map_child(profile, profile->gpio_offset,
+                            profile->gpio_bytes);
   out_mmio->sdhost_handle =
-      er_pi_zero2w_map_child(ER_PI_ZERO2W_SDHOST_OFFSET,
-                             ER_PI_ZERO2W_SDHOST_BYTES);
+      er_pi_board_map_child(profile, profile->sdhost_offset,
+                            profile->sdhost_bytes);
   out_mmio->emmc_handle =
-      er_pi_zero2w_map_child(ER_PI_ZERO2W_EMMC_OFFSET,
-                             ER_PI_ZERO2W_EMMC_BYTES);
+      er_pi_board_map_child(profile, profile->emmc_offset,
+                            profile->emmc_bytes);
   out_mmio->aux_handle =
-      er_pi_zero2w_map_child(ER_PI_ZERO2W_AUX_OFFSET,
-                             ER_PI_ZERO2W_AUX_BYTES);
+      er_pi_board_map_child(profile, profile->aux_offset,
+                            profile->aux_bytes);
 
   if (out_mmio->peripheral_handle <= 0 ||
       out_mmio->mailbox_handle <= 0 ||
@@ -76,6 +132,10 @@ UINT8 er_pi_zero2w_mmio_map(ErPiZero2wMmio* out_mmio) {
 
   out_mmio->mapped = 1u;
   return 1u;
+}
+
+UINT8 er_pi_zero2w_mmio_map(ErPiZero2wMmio* out_mmio) {
+  return er_pi_board_mmio_map(er_pi_zero2w_profile(), out_mmio);
 }
 
 UINT8 er_pi_mailbox_two_value_request(UINT32 tag_id,
@@ -371,24 +431,25 @@ UINT8 er_pi_zero2w_sdio_claim_plan(UINT32 relative_card_address,
   return 1u;
 }
 
-UINT8 er_pi_zero2w_apply_boot_report(ErBootServicesReport* report) {
+UINT8 er_pi_board_apply_boot_report(const ErPiBoardProfile* profile,
+                                    ErBootServicesReport* report) {
   ErPiZero2wMmio mmio;
 
-  if (report == 0) {
+  if (profile == 0 || report == 0) {
     return 0u;
   }
 
-  if (er_pi_zero2w_mmio_map(&mmio) == 0u) {
+  if (er_pi_board_mmio_map(profile, &mmio) == 0u) {
     return 0u;
   }
 
   if (er_boot_services_set_wifi_runtime(report,
-                                        ER_BOOT_WIFI_KIND_CYW43439_SDIO,
+                                        profile->wifi_kind,
                                         0u,
-                                        ER_PI_ZERO2W_WIFI_DEFAULT_CHANNEL) == 0u ||
+                                        profile->wifi_default_channel) == 0u ||
       er_boot_services_set_bluetooth_runtime(
           report,
-          ER_BOOT_BLUETOOTH_KIND_CYW43439_HCI_UART,
+          profile->bluetooth_kind,
           0u) == 0u ||
       er_boot_services_set_local_storage(
           report,
@@ -401,4 +462,12 @@ UINT8 er_pi_zero2w_apply_boot_report(ErBootServicesReport* report) {
   }
 
   return 1u;
+}
+
+UINT8 er_pi_zero2w_apply_boot_report(ErBootServicesReport* report) {
+  return er_pi_board_apply_boot_report(er_pi_zero2w_profile(), report);
+}
+
+UINT8 er_pi_zero_w_v1_1_apply_boot_report(ErBootServicesReport* report) {
+  return er_pi_board_apply_boot_report(er_pi_zero_w_v1_1_profile(), report);
 }

@@ -1,4 +1,4 @@
-.PHONY: all run run-aarch64 qemu-aarch64-smoke qemu-ephemeral-authority qemu-ephemeral-authority-smoke qemu-swtpm-persistence clean print-path print-config netboot os rebuild-image check test-core bench-ui-dirty wifi-hardware-probe wasm-modules qemu-config-check qemu-aarch64-config-check qemu-swtpm-persistence-config-check pi-zero-2w-uefi pi-zero-2w-boot
+.PHONY: all run run-aarch64 qemu-aarch64-smoke qemu-ephemeral-authority qemu-ephemeral-authority-smoke qemu-swtpm-persistence clean print-path print-config netboot os rebuild-image check test-core bench-ui-dirty wifi-hardware-probe wasm-modules qemu-config-check qemu-aarch64-config-check qemu-swtpm-persistence-config-check pi-zero-2w-uefi pi-zero-2w-boot pi-zero-w-v1_1-kernel pi-zero-w-v1_1-boot
 
 CC := clang
 HOST_CC := clang
@@ -30,6 +30,12 @@ ER_METAL_BOOT_EFI := BOOTAA64.EFI
 ER_METAL_ARCH_CFLAGS := -DER_TARGET_AARCH64=1
 ER_METAL_CRYPTO_DEFS :=
 CRYPTO_ASM_SRCS :=
+else ifeq ($(ER_METAL_ARCH),armv6)
+ER_METAL_TARGET := armv6-none-eabi
+ER_METAL_BOOT_EFI := kernel.img
+ER_METAL_ARCH_CFLAGS := -DER_TARGET_ARMV6=1
+ER_METAL_CRYPTO_DEFS :=
+CRYPTO_ASM_SRCS :=
 else
 $(error unsupported ER_METAL_ARCH '$(ER_METAL_ARCH)')
 endif
@@ -43,6 +49,12 @@ $(error ER_METAL_BOARD=pi-zero-2w requires ER_METAL_ARCH=aarch64)
 endif
 ER_METAL_BOARD_BOOT_CHAIN := raspberry-pi-firmware -> u-boot-efi -> BOOTAA64.EFI
 ER_METAL_BOARD_CFLAGS := -DER_BOARD_PI_ZERO_2W=1
+else ifeq ($(ER_METAL_BOARD),pi-zero-w-v1_1)
+ifneq ($(ER_METAL_ARCH),armv6)
+$(error ER_METAL_BOARD=pi-zero-w-v1_1 requires ER_METAL_ARCH=armv6)
+endif
+ER_METAL_BOARD_BOOT_CHAIN := raspberry-pi-firmware -> kernel.img
+ER_METAL_BOARD_CFLAGS := -DER_BOARD_PI_ZERO_W_V1_1=1
 else
 $(error unsupported ER_METAL_BOARD '$(ER_METAL_BOARD)')
 endif
@@ -110,8 +122,11 @@ QEMU_AARCH64_SMOKE_READY := boot services: fatal action=halt
 PI_ZERO_2W_BUILD_DIR := ../.build/edgerun-metal/pi-zero-2w
 PI_ZERO_2W_EFI_BOOT := $(PI_ZERO_2W_BUILD_DIR)/esp/EFI/BOOT/BOOTAA64.EFI
 PI_ZERO_2W_BOOT_DIR := $(PI_ZERO_2W_BUILD_DIR)/boot
+PI_ZERO_W_V1_1_BUILD_DIR := ../.build/edgerun-metal/pi-zero-w-v1_1
+PI_ZERO_W_V1_1_KERNEL := $(PI_ZERO_W_V1_1_BUILD_DIR)/kernel.img
+PI_ZERO_W_V1_1_BOOT_DIR := $(PI_ZERO_W_V1_1_BUILD_DIR)/boot
 PI_BOOT_STAGE_SRC := ../tools/pi-boot-stage/main.c
-PI_BOOT_STAGE_BIN := $(PI_ZERO_2W_BUILD_DIR)/pi-boot-stage
+PI_BOOT_STAGE_BIN := ../.build/edgerun-metal/pi-boot-stage
 QEMU_SMOKE_SRC := ../tools/qemu-smoke.sh
 QEMU_SWTPM_PERSIST_CONFIG := qemu-swtpm-persistence.conf
 QEMU_SWTPM_PERSIST_SCRIPT := ../tools/qemu-swtpm-persistence.sh
@@ -327,7 +342,14 @@ pi-zero-2w-uefi:
 	$(MAKE) all ER_METAL_ARCH=aarch64 ER_METAL_BOARD=pi-zero-2w BUILD_DIR=$(PI_ZERO_2W_BUILD_DIR)
 
 pi-zero-2w-boot: pi-zero-2w-uefi $(PI_BOOT_STAGE_BIN)
-	$(PI_BOOT_STAGE_BIN) $(PI_ZERO_2W_EFI_BOOT) $(PI_ZERO_2W_BOOT_DIR)
+	$(PI_BOOT_STAGE_BIN) pi-zero-2w $(PI_ZERO_2W_EFI_BOOT) $(PI_ZERO_2W_BOOT_DIR)
+
+pi-zero-w-v1_1-kernel:
+	mkdir -p $(dir $(PI_ZERO_W_V1_1_KERNEL))
+	$(CC) -std=c11 -Wall -Wextra -Werror -ffreestanding -fno-builtin -fno-stack-protector -target armv6-none-eabi -fuse-ld=lld -nostdlib -I$(CURDIR)/core -I$(CURDIR)/../include -Wl,-Ttext=0x8000 -Wl,--image-base=0x0 -Wl,--oformat,binary -o $(PI_ZERO_W_V1_1_KERNEL) core/pi_zero_w_v1_1_start.c
+
+pi-zero-w-v1_1-boot: pi-zero-w-v1_1-kernel $(PI_BOOT_STAGE_BIN)
+	$(PI_BOOT_STAGE_BIN) pi-zero-w-v1_1 $(PI_ZERO_W_V1_1_KERNEL) $(PI_ZERO_W_V1_1_BOOT_DIR)
 
 clean:
 	rm -rf $(BUILD_DIR)
