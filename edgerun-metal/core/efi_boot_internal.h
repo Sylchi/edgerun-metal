@@ -12,6 +12,7 @@
 #include "er_boot_efi_vars.h"
 #include "er_boot_profile.h"
 #include "er_boot_services.h"
+#include "er_ble_adv.h"
 #include "er_gfx_console.h"
 #include "er_ps2_keyboard.h"
 #include "er_native_boot.h"
@@ -105,6 +106,7 @@
 #define ER_TPM_PROFILE_DIGEST_BYTES 32u
 #define ER_TPM_PROFILE_SIGNATURE_BYTES 64u
 #define ER_BOOT_DEFAULT_ADMISSION_GENERATION 1u
+#define ER_BOOT_BLE_ADV_SEQUENCE 1u
 enum {
   ER_LOG_U64_STAGE_IDLE = 0u,
   ER_LOG_U64_STAGE_PCI_FIELDS = 3u,

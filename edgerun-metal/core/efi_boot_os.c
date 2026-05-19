@@ -22,7 +22,12 @@ void er_run_os_path(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE* SystemTable,
   ErUiSurface surface;
   ErUiBootRenderContext render_context = {0};
   ErNativeBootState native_relay;
+  ErBleAdvEfi ble_adv;
+  ErBleAdvPacket ble_packet;
   vr_font_face_t* font = 0;
+  static const UINT8 ble_payload[] = {
+    'e', 'd', 'g', 'e', 'r', 'u', 'n', '-', 'e', 'f', 'i', '-', 'b', 'l', 'e'
+  };
 
   er_mem_zero((UINT8*)apps, (UINTN)sizeof(apps));
   er_mem_zero((UINT8*)&native_relay, (UINTN)sizeof(native_relay));
@@ -35,6 +40,19 @@ void er_run_os_path(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE* SystemTable,
     er_println("");
     return;
   }
+  if (er_ble_adv_prepare_packet(ER_BLE_ADV_CHANNEL_ID,
+                                ER_BOOT_BLE_ADV_SEQUENCE,
+                                0u,
+                                1u,
+                                ble_payload,
+                                (UINT8)sizeof(ble_payload),
+                                &ble_packet) == 0u ||
+      er_ble_adv_efi_init(SystemTable, &ble_adv) == 0u ||
+      er_ble_adv_efi_start_advertising(&ble_adv, &ble_packet) == 0u) {
+    er_println("ble adv: unavailable");
+    return;
+  }
+  er_println("ble adv: advertising");
   if (er_virtio_gpu_init_first_pci(&gpu) == 0u) {
     er_println("ui renderer: virtio gpu unavailable");
     return;
