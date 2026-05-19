@@ -131,6 +131,45 @@ static int erwc_parse_import_decl(const ErWcParse* parse, int list_node, ErWcMod
       erwc_find_type(module, import->type_name, &import->type_index) != 0) {
     return -1;
   }
+  if (strcmp(import->module, "edgerun.log") == 0 &&
+      strcmp(import->field, "u64") == 0) {
+    import->import_kind = ERWC_IMPORT_LOG_U64;
+  } else if (strcmp(import->module, "edgerun.log") == 0 &&
+             strcmp(import->field, "hex") == 0) {
+    import->import_kind = ERWC_IMPORT_LOG_HEX;
+  } else if (strcmp(import->module, "edgerun.pci") == 0 &&
+             strcmp(import->field, "read32") == 0) {
+    import->import_kind = ERWC_IMPORT_PCI_READ32;
+  } else if (strcmp(import->module, "edgerun.pci") == 0 &&
+             strcmp(import->field, "write32") == 0) {
+    import->import_kind = ERWC_IMPORT_PCI_WRITE32;
+  } else if (strcmp(import->module, "edgerun.mmio") == 0 &&
+             strcmp(import->field, "map") == 0) {
+    import->import_kind = ERWC_IMPORT_MMIO_MAP;
+  } else if (strcmp(import->module, "edgerun.mmio") == 0 &&
+             strcmp(import->field, "read32") == 0) {
+    import->import_kind = ERWC_IMPORT_MMIO_READ32;
+  } else if (strcmp(import->module, "edgerun.bus") == 0 &&
+             strcmp(import->field, "exec") == 0) {
+    import->import_kind = ERWC_IMPORT_BUS_EXEC;
+  } else if (strcmp(import->module, "edgerun.relay") == 0 &&
+             strcmp(import->field, "send") == 0) {
+    import->import_kind = ERWC_IMPORT_RELAY_SEND;
+  } else if (strcmp(import->module, "edgerun.relay") == 0 &&
+             strcmp(import->field, "recv") == 0) {
+    import->import_kind = ERWC_IMPORT_RELAY_RECV;
+  } else if (strcmp(import->module, "edgerun.memory") == 0 &&
+             strcmp(import->field, "region_base") == 0) {
+    import->import_kind = ERWC_IMPORT_MEMORY_REGION_BASE;
+  } else if (strcmp(import->module, "edgerun.memory") == 0 &&
+             strcmp(import->field, "region_len") == 0) {
+    import->import_kind = ERWC_IMPORT_MEMORY_REGION_LEN;
+  } else if (strcmp(import->module, "edgerun.ui") == 0 &&
+             strcmp(import->field, "emit") == 0) {
+    import->import_kind = ERWC_IMPORT_UI_EMIT;
+  } else {
+    return -1;
+  }
   import->function_index = module->import_count;
   ++module->import_count;
   return 0;
@@ -404,4 +443,3 @@ int erwc_build_module(const ErWcParse* parse, int root, ErWcModule* module) {
   }
   return 0;
 }
-

@@ -30,6 +30,15 @@ enum {
   ERWC_INPUT_ARG = 1,
   ERWC_OUTPUT_ARG = 2,
   ERWC_WASM_PAGE_BYTES = 65536,
+  ERWC_CONTRACT_REQUIRED_MEMORY_PAGES = 1,
+  ERWC_CONTRACT_REQUIRED_IMPORT_COUNT = 1,
+  ERWC_HOSTCALL_NO_PARAMS = 0,
+  ERWC_HOSTCALL_UNARY_PARAMS = 1,
+  ERWC_HOSTCALL_BINARY_PARAMS = 2,
+  ERWC_HOSTCALL_NO_RESULTS = 0,
+  ERWC_HOSTCALL_I64_RESULTS = 1,
+  ERWC_PCI_READ32_PARAM_COUNT = 4,
+  ERWC_PCI_WRITE32_PARAM_COUNT = 5,
   ERWC_TYPE_FORM_FUNC = 0x60,
   ERWC_VALTYPE_I64 = 0x7e,
   ERWC_VALTYPE_I32 = 0x7f,
@@ -62,6 +71,28 @@ typedef enum {
   ERWC_TOKEN_ATOM,
   ERWC_TOKEN_STRING
 } ErWcTokenKind;
+
+typedef enum {
+  ERWC_CONTRACT_NONE,
+  ERWC_CONTRACT_UI_APP,
+  ERWC_CONTRACT_BUS_DRIVER
+} ErWcContract;
+
+typedef enum {
+  ERWC_IMPORT_NONE = 0,
+  ERWC_IMPORT_LOG_U64 = 1,
+  ERWC_IMPORT_LOG_HEX = 2,
+  ERWC_IMPORT_PCI_READ32 = 3,
+  ERWC_IMPORT_PCI_WRITE32 = 4,
+  ERWC_IMPORT_MMIO_MAP = 5,
+  ERWC_IMPORT_MMIO_READ32 = 6,
+  ERWC_IMPORT_BUS_EXEC = 7,
+  ERWC_IMPORT_RELAY_SEND = 8,
+  ERWC_IMPORT_RELAY_RECV = 9,
+  ERWC_IMPORT_MEMORY_REGION_BASE = 10,
+  ERWC_IMPORT_MEMORY_REGION_LEN = 11,
+  ERWC_IMPORT_UI_EMIT = 12
+} ErWcImportKind;
 
 typedef struct {
   ErWcTokenKind kind;
@@ -108,6 +139,7 @@ typedef struct {
   char type_name[ERWC_MAX_STRING];
   uint32_t type_index;
   uint32_t function_index;
+  ErWcImportKind import_kind;
 } ErWcImport;
 
 typedef struct {
@@ -153,6 +185,7 @@ uint8_t erwc_valtype_from_name(const char* name);
 int erwc_find_type(const ErWcModule* module, const char* name, uint32_t* out_index);
 int erwc_find_function(const ErWcModule* module, const char* name, uint32_t* out_index);
 int erwc_find_local(const ErWcFunc* func, const char* name, uint32_t* out_index);
+int erwc_validate_contract(const ErWcModule* module);
 int erwc_buffer_push(ErWcBuffer* buffer, uint8_t byte);
 int erwc_buffer_append(ErWcBuffer* buffer, const uint8_t* bytes, size_t len);
 int erwc_emit_u32_leb(ErWcBuffer* buffer, uint32_t value);

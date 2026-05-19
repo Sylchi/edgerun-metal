@@ -188,6 +188,7 @@ static int erb_build_wasm_compile(int print_plan) {
   }
   if (erb_args_push(&args, "tools/wasm-compile/main.c") != 0 ||
       erb_args_push(&args, "tools/wasm-compile/wasm_compile_common.c") != 0 ||
+      erb_args_push(&args, "tools/wasm-compile/wasm_compile_contract.c") != 0 ||
       erb_args_push(&args, "tools/wasm-compile/wasm_compile_emit.c") != 0 ||
       erb_args_push(&args, "tools/wasm-compile/wasm_compile_io.c") != 0 ||
       erb_args_push(&args, "tools/wasm-compile/wasm_compile_module.c") != 0 ||

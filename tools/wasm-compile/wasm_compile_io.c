@@ -73,6 +73,10 @@ int erwc_compile_path(const char* input_path, const char* output_path) {
     fprintf(stderr, "wasm-compile: %s: unsupported WAT subset\n", input_path);
     goto done;
   }
+  if (erwc_validate_contract(&module) != 0) {
+    fprintf(stderr, "wasm-compile: %s: module contract rejected\n", input_path);
+    goto done;
+  }
   if (erwc_emit_wasm(&module, &out) != 0) {
     fprintf(stderr, "wasm-compile: %s: emit failed\n", input_path);
     goto done;
@@ -83,4 +87,3 @@ done:
   free(source.bytes);
   return rc;
 }
-
