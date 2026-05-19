@@ -10,6 +10,12 @@ automatically. When an agent finishes with pending proposals, the host writes
 only those proposed paths, runs the matching `repo-progress` scope checks, and
 creates a git commit only if verification passes.
 
+Terminal output uses ANSI color when stdout or stderr is a terminal. Set
+`NO_COLOR=1` or `EDGERUN_C_COLOR=0` to disable color. Interactive reads apply
+lightweight C syntax highlighting for `.c` and `.h` files, and agent turns end
+with a host-side summary of turns, tool calls, proposals, and verified commit
+status.
+
 Agent mode reads local Codex auth from `CODEX_HOME/auth.json` or
 `~/.codex/auth.json`, uses `CODEX_TUI_MODEL` when set, and otherwise defaults to
 `gpt-5.5`.
