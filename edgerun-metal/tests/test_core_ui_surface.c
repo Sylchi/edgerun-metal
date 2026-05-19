@@ -621,6 +621,104 @@ static void test_ui_frame_timing_4k120_budget(void) {
               0);
 }
 
+static void test_ui_boot_dirty_render_state(void) {
+  enum {
+    BOOT_DIRTY_WIDTH = 4u,
+    BOOT_DIRTY_HEIGHT = 4u,
+    BOOT_DIRTY_STRIDE = 4u,
+    BOOT_DIRTY_TILE_WIDTH = 2u,
+    BOOT_DIRTY_TILE_HEIGHT = 2u,
+    BOOT_DIRTY_TILE_CAPACITY = 4u,
+    BOOT_DIRTY_TILE_MARKS = 4u
+  };
+  UINT32 pixels[BOOT_DIRTY_WIDTH * BOOT_DIRTY_HEIGHT] = {0};
+  UINT8 tile_marks[BOOT_DIRTY_TILE_MARKS] = {0};
+  UINT32 dirty_tile_ids[BOOT_DIRTY_TILE_CAPACITY] = {0};
+  ErUiSurface surface;
+  ErUiSurfaceTilePlan tile_plan;
+  ErUiSurfaceDirtyTileList dirty_tiles;
+  ErUiBootRenderContext render;
+  er_ui_scene_t first_scene;
+  er_ui_scene_t second_scene;
+  er_ui_scene_t previous_scene;
+
+  er_mem_zero((UINT8*)&render, (UINTN)sizeof(render));
+  er_mem_zero((UINT8*)&first_scene, (UINTN)sizeof(first_scene));
+  er_mem_zero((UINT8*)&second_scene, (UINTN)sizeof(second_scene));
+  er_mem_zero((UINT8*)&previous_scene, (UINTN)sizeof(previous_scene));
+
+  surface.pixels = pixels;
+  surface.width = BOOT_DIRTY_WIDTH;
+  surface.height = BOOT_DIRTY_HEIGHT;
+  surface.stride = BOOT_DIRTY_STRIDE;
+  surface.pixel_format = ER_UI_SURFACE_PIXEL_RGBX;
+  check_int64("ui boot dirty tile plan",
+              er_ui_surface_tile_plan(&surface,
+                                      BOOT_DIRTY_TILE_WIDTH,
+                                      BOOT_DIRTY_TILE_HEIGHT,
+                                      BOOT_DIRTY_TILE_CAPACITY,
+                                      &tile_plan),
+              1);
+  check_int64("ui boot dirty first scene init",
+              er_ui_scene_init_with_allocator(&first_scene,
+                                              er_ui_color_rgb_u8(0u, 0u, 0u),
+                                              test_ui_allocator()),
+              ER_UI_OK);
+  check_int64("ui boot dirty second scene init",
+              er_ui_scene_init_with_allocator(&second_scene,
+                                              er_ui_color_rgb_u8(0u, 0u, 0u),
+                                              test_ui_allocator()),
+              ER_UI_OK);
+  check_int64("ui boot dirty previous scene init",
+              er_ui_scene_init_with_allocator(&previous_scene,
+                                              er_ui_color_rgb_u8(0u, 0u, 0u),
+                                              test_ui_allocator()),
+              ER_UI_OK);
+  check_int64("ui boot dirty first rect",
+              er_ui_scene_push_rect(&first_scene,
+                                    er_ui_rect_fill(0.0f, 0.0f, 1.0f, 1.0f, 0.0f,
+                                                    er_ui_color_rgb_u8(255u, 0u, 0u))),
+              ER_UI_OK);
+  check_int64("ui boot dirty second rect",
+              er_ui_scene_push_rect(&second_scene,
+                                    er_ui_rect_fill(2.0f, 1.0f, 1.0f, 1.0f, 0.0f,
+                                                    er_ui_color_rgb_u8(0u, 255u, 0u))),
+              ER_UI_OK);
+
+  render.surface = &surface;
+  render.tile_plan = &tile_plan;
+  render.previous_scene = &previous_scene;
+  render.tile_marks = tile_marks;
+  render.tile_mark_count = BOOT_DIRTY_TILE_MARKS;
+  render.dirty_tile_ids = dirty_tile_ids;
+  render.dirty_tile_capacity = BOOT_DIRTY_TILE_CAPACITY;
+
+  check_int64("ui boot dirty first prepare",
+              er_ui_boot_prepare_dirty_tiles(&render, &first_scene, &dirty_tiles),
+              1);
+  check_uint64("ui boot dirty first count", dirty_tiles.count, 4u);
+  check_int64("ui boot dirty first commit",
+              er_ui_boot_commit_rendered_scene(&render, &first_scene),
+              1);
+  check_uint64("ui boot dirty previous rects", previous_scene.rect_count, 1u);
+  check_int64("ui boot dirty same prepare",
+              er_ui_boot_prepare_dirty_tiles(&render, &first_scene, &dirty_tiles),
+              1);
+  check_uint64("ui boot dirty same count", dirty_tiles.count, 0u);
+  check_int64("ui boot dirty changed prepare",
+              er_ui_boot_prepare_dirty_tiles(&render, &second_scene, &dirty_tiles),
+              1);
+  check_uint64("ui boot dirty changed count", dirty_tiles.count, 2u);
+  check_int64("ui boot dirty changed commit",
+              er_ui_boot_commit_rendered_scene(&render, &second_scene),
+              1);
+  check_uint64("ui boot dirty committed x", (UINT64)previous_scene.rects[0].x, 2u);
+
+  er_ui_scene_destroy(&previous_scene);
+  er_ui_scene_destroy(&second_scene);
+  er_ui_scene_destroy(&first_scene);
+}
+
 static void test_ui_surface_renderer_varfont_text(void) {
   vr_font_config_t cfg;
   vr_font_face_t* font = 0;

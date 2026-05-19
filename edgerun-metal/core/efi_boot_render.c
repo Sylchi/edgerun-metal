@@ -10,6 +10,7 @@ UINT8 er_ui_boot_render_scene(er_ui_scene_t* scene,
   ErUiFrameTiming frame_timing;
   ErUiFrameTimingConfig timing_config;
   ErUiFrameTimingViolation timing_violation;
+  ErUiSurfaceDirtyTileList dirty_tiles;
   UINT64 frame_begin_ticks = 0u;
   UINT64 scene_end_ticks = 0u;
   UINT64 raster_end_ticks = 0u;
@@ -17,7 +18,9 @@ UINT8 er_ui_boot_render_scene(er_ui_scene_t* scene,
   UINT8 timing_enabled = 0u;
 
   if (scene == 0 || ledger_state == 0 || render == 0 || render->font == 0 ||
-      render->surface == 0 || render->tile_plan == 0) {
+      render->surface == 0 || render->tile_plan == 0 ||
+      render->previous_scene == 0 || render->tile_marks == 0 ||
+      render->dirty_tile_ids == 0) {
     return 0u;
   }
 
@@ -63,7 +66,16 @@ UINT8 er_ui_boot_render_scene(er_ui_scene_t* scene,
     return 0u;
   }
 
-  if (er_ui_surface_render_scene_with_font_stats(render->surface, scene, render->font, &render_stats) == 0u) {
+  if (er_ui_boot_prepare_dirty_tiles(render, scene, &dirty_tiles) == 0u) {
+    er_println("ui renderer: dirty tile planning failed");
+    return 0u;
+  }
+  if (er_ui_surface_render_scene_dirty_tiles_with_font_stats(render->surface,
+                                                             scene,
+                                                             render->font,
+                                                             render->tile_plan,
+                                                             &dirty_tiles,
+                                                             &render_stats) == 0u) {
     er_println("ui renderer: render failed");
     return 0u;
   }
@@ -97,6 +109,10 @@ UINT8 er_ui_boot_render_scene(er_ui_scene_t* scene,
     er_println("");
     return 0u;
   }
+  if (er_ui_boot_commit_rendered_scene(render, scene) == 0u) {
+    er_println("ui renderer: scene commit failed");
+    return 0u;
+  }
 
   er_print("ui renderer: app=");
   er_print_u64_dec((UINT64)render->active_app);
@@ -108,6 +124,8 @@ UINT8 er_ui_boot_render_scene(er_ui_scene_t* scene,
   er_print_u64_dec(render_stats.rects);
   er_print(" text=");
   er_print_u64_dec(render_stats.text_quads);
+  er_print(" dirty=");
+  er_print_u64_dec((UINT64)dirty_tiles.count);
   er_print(" tile_bytes=");
   er_print_u64_dec(render->tile_plan->max_tile_bytes);
   er_print(" mem=");
