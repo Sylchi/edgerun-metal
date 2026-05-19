@@ -39,6 +39,38 @@ static UINT8 er_boot_services_authority_profile_ready(const ErBootAuthorityProfi
   return 1u;
 }
 
+static UINT8 er_boot_services_wifi_kind_valid(UINT8 wifi_kind) {
+  switch (wifi_kind) {
+    case ER_BOOT_WIFI_KIND_NONE:
+    case ER_BOOT_WIFI_KIND_OPEN_L2:
+    case ER_BOOT_WIFI_KIND_CYW43439_SDIO:
+      return 1u;
+    default:
+      return 0u;
+  }
+}
+
+static UINT8 er_boot_services_storage_kind_valid(UINT8 storage_kind) {
+  switch (storage_kind) {
+    case ER_BOOT_LOCAL_STORAGE_KIND_NONE:
+    case ER_BOOT_LOCAL_STORAGE_KIND_EFI_SYSTEM_PARTITION:
+    case ER_BOOT_LOCAL_STORAGE_KIND_SD_CARD:
+      return 1u;
+    default:
+      return 0u;
+  }
+}
+
+static void er_boot_services_runtime_capabilities_init(
+    ErBootRuntimeCapabilities* capabilities) {
+  if (capabilities == 0) {
+    return;
+  }
+  er_mem_zero((UINT8*)capabilities, (UINTN)sizeof(*capabilities));
+  capabilities->abi_version = ER_BOOT_RUNTIME_CAPABILITY_ABI_VERSION;
+  capabilities->update_blocked_reason = ER_BOOT_UPDATE_BLOCKED_NO_WIFI;
+}
+
 void er_boot_services_report_init(ErBootServicesReport* report) {
   if (report == 0) {
     return;
@@ -47,6 +79,7 @@ void er_boot_services_report_init(ErBootServicesReport* report) {
   report->secure_boot_state = ER_BOOT_SECURE_BOOT_UNKNOWN;
   report->config_state = ER_BOOT_CONFIG_UNKNOWN;
   report->selected_authority = ER_BOOT_AUTHORITY_PROFILE_CAPACITY;
+  er_boot_services_runtime_capabilities_init(&report->runtime_capabilities);
 }
 
 UINT8 er_boot_services_authority_label_valid(const char* label,
@@ -178,6 +211,96 @@ UINT8 er_boot_services_set_boot_admission(ErBootServicesReport* report,
       report->config_state == ER_BOOT_CONFIG_MISSING) {
     report->config_state = ER_BOOT_CONFIG_PRESENT;
   }
+  return 1u;
+}
+
+UINT8 er_boot_services_set_wifi_runtime(ErBootServicesReport* report,
+                                        UINT8 wifi_kind,
+                                        UINT8 wifi_ready,
+                                        UINT8 wifi_channel) {
+  if (report == 0 ||
+      er_boot_services_wifi_kind_valid(wifi_kind) == 0u ||
+      (wifi_kind == ER_BOOT_WIFI_KIND_NONE && wifi_ready != 0u) ||
+      (wifi_kind != ER_BOOT_WIFI_KIND_NONE && wifi_channel == 0u)) {
+    return 0u;
+  }
+  report->runtime_capabilities.abi_version =
+      ER_BOOT_RUNTIME_CAPABILITY_ABI_VERSION;
+  report->runtime_capabilities.wifi_kind = wifi_kind;
+  report->runtime_capabilities.wifi_ready = (UINT8)(wifi_ready != 0u);
+  report->runtime_capabilities.wifi_channel = wifi_channel;
+  return er_boot_services_update_runtime_capabilities(report);
+}
+
+UINT8 er_boot_services_set_local_storage(ErBootServicesReport* report,
+                                         UINT8 storage_kind,
+                                         UINT8 writable,
+                                         UINT64 block_bytes,
+                                         UINT64 block_count) {
+  if (report == 0 ||
+      er_boot_services_storage_kind_valid(storage_kind) == 0u ||
+      (storage_kind == ER_BOOT_LOCAL_STORAGE_KIND_NONE && writable != 0u) ||
+      (storage_kind != ER_BOOT_LOCAL_STORAGE_KIND_NONE &&
+       (block_bytes == 0u || block_count == 0u))) {
+    return 0u;
+  }
+  report->runtime_capabilities.abi_version =
+      ER_BOOT_RUNTIME_CAPABILITY_ABI_VERSION;
+  report->runtime_capabilities.local_storage_kind = storage_kind;
+  report->runtime_capabilities.local_storage_writable = (UINT8)(writable != 0u);
+  report->runtime_capabilities.local_storage_block_bytes = block_bytes;
+  report->runtime_capabilities.local_storage_block_count = block_count;
+  return er_boot_services_update_runtime_capabilities(report);
+}
+
+UINT8 er_boot_services_set_update_artifact_store(ErBootServicesReport* report,
+                                                 UINT8 ready,
+                                                 UINT64 capacity_bytes) {
+  if (report == 0 || (ready != 0u && capacity_bytes == 0u)) {
+    return 0u;
+  }
+  report->runtime_capabilities.abi_version =
+      ER_BOOT_RUNTIME_CAPABILITY_ABI_VERSION;
+  report->runtime_capabilities.update_artifact_store_ready =
+      (UINT8)(ready != 0u);
+  report->runtime_capabilities.update_artifact_capacity_bytes = capacity_bytes;
+  return er_boot_services_update_runtime_capabilities(report);
+}
+
+UINT8 er_boot_services_update_runtime_capabilities(ErBootServicesReport* report) {
+  ErBootRuntimeCapabilities* capabilities;
+
+  if (report == 0 ||
+      report->runtime_capabilities.abi_version !=
+          ER_BOOT_RUNTIME_CAPABILITY_ABI_VERSION ||
+      er_boot_services_wifi_kind_valid(report->runtime_capabilities.wifi_kind) == 0u ||
+      er_boot_services_storage_kind_valid(
+          report->runtime_capabilities.local_storage_kind) == 0u) {
+    return 0u;
+  }
+
+  capabilities = &report->runtime_capabilities;
+  capabilities->update_ready = 0u;
+  if (capabilities->wifi_ready == 0u ||
+      capabilities->wifi_kind == ER_BOOT_WIFI_KIND_NONE) {
+    capabilities->update_blocked_reason = ER_BOOT_UPDATE_BLOCKED_NO_WIFI;
+    return 1u;
+  }
+  if (capabilities->local_storage_writable == 0u ||
+      capabilities->local_storage_kind == ER_BOOT_LOCAL_STORAGE_KIND_NONE) {
+    capabilities->update_blocked_reason =
+        ER_BOOT_UPDATE_BLOCKED_NO_WRITABLE_STORAGE;
+    return 1u;
+  }
+  if (capabilities->update_artifact_store_ready == 0u ||
+      capabilities->update_artifact_capacity_bytes == 0u) {
+    capabilities->update_blocked_reason =
+        ER_BOOT_UPDATE_BLOCKED_NO_ARTIFACT_STORE;
+    return 1u;
+  }
+
+  capabilities->update_ready = 1u;
+  capabilities->update_blocked_reason = ER_BOOT_UPDATE_READY;
   return 1u;
 }
 

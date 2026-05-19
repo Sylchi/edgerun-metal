@@ -20,6 +20,82 @@ static UINT64 er_boot_ble_wifi_node_nonce(const ErBootServicesReport* boot_repor
   return nonce;
 }
 
+static const char* er_boot_wifi_kind_label(UINT8 wifi_kind) {
+  switch (wifi_kind) {
+    case ER_BOOT_WIFI_KIND_NONE:
+      return "none";
+    case ER_BOOT_WIFI_KIND_OPEN_L2:
+      return "open-l2";
+    case ER_BOOT_WIFI_KIND_CYW43439_SDIO:
+      return "cyw43439-sdio";
+    default:
+      return "invalid";
+  }
+}
+
+static const char* er_boot_local_storage_kind_label(UINT8 storage_kind) {
+  switch (storage_kind) {
+    case ER_BOOT_LOCAL_STORAGE_KIND_NONE:
+      return "none";
+    case ER_BOOT_LOCAL_STORAGE_KIND_EFI_SYSTEM_PARTITION:
+      return "efi-system-partition";
+    case ER_BOOT_LOCAL_STORAGE_KIND_SD_CARD:
+      return "sd-card";
+    default:
+      return "invalid";
+  }
+}
+
+static const char* er_boot_update_blocked_label(UINT8 reason) {
+  switch (reason) {
+    case ER_BOOT_UPDATE_READY:
+      return "ready";
+    case ER_BOOT_UPDATE_BLOCKED_NO_WIFI:
+      return "no-wifi";
+    case ER_BOOT_UPDATE_BLOCKED_NO_WRITABLE_STORAGE:
+      return "no-writable-storage";
+    case ER_BOOT_UPDATE_BLOCKED_NO_ARTIFACT_STORE:
+      return "no-artifact-store";
+    default:
+      return "invalid";
+  }
+}
+
+static void er_boot_log_runtime_capabilities(const ErBootServicesReport* boot_report) {
+  const ErBootRuntimeCapabilities* capabilities;
+
+  if (boot_report == 0 ||
+      boot_report->runtime_capabilities.abi_version !=
+          ER_BOOT_RUNTIME_CAPABILITY_ABI_VERSION) {
+    er_println("runtime capabilities: unavailable");
+    return;
+  }
+  capabilities = &boot_report->runtime_capabilities;
+  er_print("runtime wifi: kind=");
+  er_print(er_boot_wifi_kind_label(capabilities->wifi_kind));
+  er_print(" ready=");
+  er_print_u64_dec((UINT64)capabilities->wifi_ready);
+  er_print(" channel=");
+  er_print_u64_dec((UINT64)capabilities->wifi_channel);
+  er_println("");
+  er_print("runtime storage: kind=");
+  er_print(er_boot_local_storage_kind_label(capabilities->local_storage_kind));
+  er_print(" writable=");
+  er_print_u64_dec((UINT64)capabilities->local_storage_writable);
+  er_print(" block_bytes=");
+  er_print_u64_dec(capabilities->local_storage_block_bytes);
+  er_print(" block_count=");
+  er_print_u64_dec(capabilities->local_storage_block_count);
+  er_println("");
+  er_print("runtime update: ready=");
+  er_print_u64_dec((UINT64)capabilities->update_ready);
+  er_print(" reason=");
+  er_print(er_boot_update_blocked_label(capabilities->update_blocked_reason));
+  er_print(" artifact_capacity=");
+  er_print_u64_dec(capabilities->update_artifact_capacity_bytes);
+  er_println("");
+}
+
 void er_run_os_path(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE* SystemTable,
                     const ErBootServicesReport* boot_report) {
   er_ui_scene_budget_t scene_budget;
@@ -64,6 +140,7 @@ void er_run_os_path(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE* SystemTable,
     er_println("");
     return;
   }
+  er_boot_log_runtime_capabilities(boot_report);
   ble_node_nonce = er_boot_ble_wifi_node_nonce(boot_report);
   if (er_ble_wifi_role_advert_prepare(ER_BLE_WIFI_CAPABILITY_AP | ER_BLE_WIFI_CAPABILITY_STA,
                                       ER_BLE_WIFI_ROLE_NONE,
@@ -86,8 +163,16 @@ void er_run_os_path(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE* SystemTable,
   } else {
     er_println("ble adv: advertising");
   }
+  if (er_native_boot_configure_pci_erwire_eth_sink(&native_relay) == 0u) {
+    er_println("relay ingress: virtio net unavailable");
+  } else {
+    render_context.native_relay = &native_relay;
+    er_println("relay ingress: virtio net ready");
+  }
   if (er_virtio_gpu_init_first_pci(&gpu) == 0u) {
     er_println("ui renderer: virtio gpu unavailable");
+    er_println("boot path: headless idle");
+    er_idle_forever();
     return;
   }
   if (er_virtio_gpu_submit_get_display_info(&gpu) == 0u) {
@@ -217,13 +302,6 @@ void er_run_os_path(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE* SystemTable,
     vr_font_face_destroy(font);
     return;
   }
-  if (er_native_boot_configure_pci_erwire_eth_sink(&native_relay) == 0u) {
-    er_println("relay ingress: virtio net unavailable");
-  } else {
-    render_context.native_relay = &native_relay;
-    er_println("relay ingress: virtio net ready");
-  }
-
   er_println("ui renderer: first frame deferred until boot services exit");
   er_println("boot services: exiting");
   er_gfx_console_set_enabled(0u);
