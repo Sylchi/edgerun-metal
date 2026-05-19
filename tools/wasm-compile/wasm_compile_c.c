@@ -283,16 +283,54 @@ static int erwc_c_emit_i64_const(ErWcFunc* func, int64_t value) {
   return 0;
 }
 
-static int erwc_c_parse_return_call(ErWcCParser* parser,
-                                    const ErWcModule* module,
-                                    ErWcFunc* func) {
-  char import_name[ERWC_MAX_STRING];
+static int erwc_c_emit_local_get(ErWcFunc* func, const char* name) {
+  uint32_t local_index = 0u;
+
+  if (erwc_find_local(func, name, &local_index) != 0 ||
+      erwc_buffer_push(&func->code, ERWC_OP_LOCAL_GET) != 0 ||
+      erwc_emit_u32_leb(&func->code, local_index) != 0) {
+    return -1;
+  }
+  return 0;
+}
+
+static int erwc_c_emit_local_set(ErWcFunc* func, uint32_t local_index) {
+  if (erwc_buffer_push(&func->code, ERWC_OP_LOCAL_SET) != 0 ||
+      erwc_emit_u32_leb(&func->code, local_index) != 0) {
+    return -1;
+  }
+  return 0;
+}
+
+static int erwc_c_add_local(ErWcFunc* func, const char* name, uint32_t* out_index) {
+  ErWcLocal* local;
+  uint32_t existing_index = 0u;
+
+  if (func->local_count >= ERWC_MAX_LOCALS ||
+      strlen(name) + 1u > sizeof(func->locals[0].name) ||
+      erwc_find_local(func, name, &existing_index) == 0) {
+    return -1;
+  }
+  local = &func->locals[func->local_count];
+  memset(local, 0, sizeof(*local));
+  strcpy(local->name, name);
+  local->type = ERWC_VALTYPE_I64;
+  *out_index = func->local_count;
+  ++func->local_count;
+  return 0;
+}
+
+static int erwc_c_parse_expression(ErWcCParser* parser,
+                                   const ErWcModule* module,
+                                   ErWcFunc* func);
+
+static int erwc_c_emit_call(ErWcCParser* parser,
+                            const ErWcModule* module,
+                            ErWcFunc* func,
+                            const char* import_name) {
   uint32_t function_index = 0u;
   const ErWcType* type;
 
-  if (erwc_c_take_ident(parser, import_name, sizeof(import_name)) != 0) {
-    return -1;
-  }
   type = erwc_c_import_type(module, import_name, &function_index);
   if (type == NULL ||
       type->result_count != ER_WASM_HOSTCALL_I64_RESULTS ||
@@ -301,9 +339,7 @@ static int erwc_c_parse_return_call(ErWcCParser* parser,
     return -1;
   }
   for (uint32_t i = 0u; i < type->param_count; ++i) {
-    int64_t value = 0;
-    if (erwc_c_take_i64_literal(parser, &value) != 0 ||
-        erwc_c_emit_i64_const(func, value) != 0) {
+    if (erwc_c_parse_expression(parser, module, func) != 0) {
       return -1;
     }
     if (i + 1u < type->param_count && erwc_c_take_literal(parser, ",") != 0) {
@@ -318,17 +354,43 @@ static int erwc_c_parse_return_call(ErWcCParser* parser,
   return 0;
 }
 
-static int erwc_c_parse_return_expression(ErWcCParser* parser,
-                                          const ErWcModule* module,
-                                          ErWcFunc* func) {
+static int erwc_c_parse_expression(ErWcCParser* parser,
+                                   const ErWcModule* module,
+                                   ErWcFunc* func) {
   ErWcCParser before_literal = *parser;
+  char ident[ERWC_MAX_STRING];
   int64_t return_value = 0;
 
   if (erwc_c_take_i64_literal(parser, &return_value) == 0) {
     return erwc_c_emit_i64_const(func, return_value);
   }
   *parser = before_literal;
-  return erwc_c_parse_return_call(parser, module, func);
+  if (erwc_c_take_ident(parser, ident, sizeof(ident)) != 0) {
+    return -1;
+  }
+  erwc_c_skip_ws(parser);
+  if (parser->cur < parser->end && *parser->cur == '(') {
+    return erwc_c_emit_call(parser, module, func, ident);
+  }
+  return erwc_c_emit_local_get(func, ident);
+}
+
+static int erwc_c_parse_local_decl(ErWcCParser* parser,
+                                   const ErWcModule* module,
+                                   ErWcFunc* func) {
+  char local_name[ERWC_MAX_STRING];
+  uint32_t local_index = 0u;
+
+  if (erwc_c_take_literal(parser, "i64") != 0 ||
+      erwc_c_take_ident(parser, local_name, sizeof(local_name)) != 0 ||
+      erwc_c_take_literal(parser, "=") != 0 ||
+      erwc_c_parse_expression(parser, module, func) != 0 ||
+      erwc_c_take_literal(parser, ";") != 0 ||
+      erwc_c_add_local(func, local_name, &local_index) != 0 ||
+      erwc_c_emit_local_set(func, local_index) != 0) {
+    return -1;
+  }
+  return 0;
 }
 
 static int erwc_c_parse_main(ErWcCParser* parser, ErWcModule* module) {
@@ -344,7 +406,6 @@ static int erwc_c_parse_main(ErWcCParser* parser, ErWcModule* module) {
       erwc_c_take_literal(parser, "void") != 0 ||
       erwc_c_take_literal(parser, ")") != 0 ||
       erwc_c_take_literal(parser, "{") != 0 ||
-      erwc_c_take_literal(parser, "return") != 0 ||
       erwc_c_add_type(module, "main_t", no_params, 0u, ERWC_VALTYPE_I64, 1u,
                       &type_index) != 0) {
     return -1;
@@ -356,7 +417,15 @@ static int erwc_c_parse_main(ErWcCParser* parser, ErWcModule* module) {
   func->type_index = type_index;
   func->function_index = module->import_count + module->func_count;
   func->exported_main = 1u;
-  if (erwc_c_parse_return_expression(parser, module, func) != 0 ||
+  while (1) {
+    ErWcCParser before_decl = *parser;
+    if (erwc_c_parse_local_decl(parser, module, func) != 0) {
+      *parser = before_decl;
+      break;
+    }
+  }
+  if (erwc_c_take_literal(parser, "return") != 0 ||
+      erwc_c_parse_expression(parser, module, func) != 0 ||
       erwc_c_take_literal(parser, ";") != 0 ||
       erwc_c_take_literal(parser, "}") != 0 ||
       erwc_buffer_push(&func->code, ERWC_OP_END) != 0) {
