@@ -404,7 +404,14 @@ static void test_ui_boot_package_loads_from_endpoint_storage(void) {
   const ErAppSignedPackageIndexEntry* signed_index_entry;
   const ErAppPackageInstallRecord* install_record;
   ErAppPackageInstallRecord removed_record;
+  ErAppPackageInstallRecord remote_record;
   ErAppSignedPackageIndexEntry tampered_signed_index_entry;
+  ErAppPackageRemoteFetchSource remote_source;
+  ErAppPackageRemoteFetchSource tampered_remote_source;
+  ErIdentity remote_identity;
+  ErHash app_receipt_hash;
+  ErHash manifest_receipt_hash;
+  UINT8 remote_identity_material[ER_PUBLIC_KEY_LEN];
   er_ui_ledger_app_state_t ledger_state;
   er_ui_action_t action;
   UINT32 launch_id = 0u;
@@ -509,6 +516,60 @@ static void test_ui_boot_package_loads_from_endpoint_storage(void) {
   check_int64("ui boot package record source prepare",
               er_ui_boot_prepare_package_record_source(install_record, &source),
               1);
+  test_fill_bytes(remote_identity_material,
+                  (UINTN)sizeof(remote_identity_material), 0x73u);
+  test_fill_bytes(app_receipt_hash.bytes, ER_HASH_LEN, 0x74u);
+  test_fill_bytes(manifest_receipt_hash.bytes, ER_HASH_LEN, 0x75u);
+  check_int64("ui boot remote identity prepare",
+              er_identity_prepare(ER_IDENTITY_TYPE_PUBLIC_KEY,
+                                  ER_IDENTITY_BACKING_ED25519,
+                                  remote_identity_material,
+                                  ER_PUBLIC_KEY_LEN,
+                                  &remote_identity),
+              1);
+  check_int64("ui boot remote fetch source prepare",
+              er_ui_boot_prepare_remote_package_fetch_source(
+                  signed_index_entry,
+                  &remote_identity,
+                  &app_receipt_hash,
+                  &manifest_receipt_hash,
+                  0,
+                  &remote_source),
+              1);
+  check_hash_equal("ui boot remote fetch package",
+                   &remote_source.package_id,
+                   &signed_index_entry->index_entry.package.package_id);
+  check_int64("ui boot remote install record prepare",
+              er_ui_boot_prepare_remote_package_install_record(
+                  signed_index_entry, &remote_source,
+                  &install_record->current_entry, 2u, &remote_record),
+              1);
+  check_uint64("ui boot remote install record state",
+               remote_record.install_state,
+               ER_APP_PACKAGE_INSTALL_STATE_INSTALLED);
+  check_hash_equal("ui boot remote install receipt",
+                   &remote_record.remote_source.app_route_receipt_hash,
+                   &app_receipt_hash);
+  check_int64("ui boot remote install record loadable",
+              er_ui_boot_package_install_record_loadable(&remote_record),
+              1);
+  check_int64("ui boot remote package record source prepare",
+              er_ui_boot_prepare_package_record_source(&remote_record, &source),
+              1);
+  tampered_remote_source = remote_source;
+  tampered_remote_source.source_id.bytes[0] ^= 1u;
+  check_int64("ui boot remote install rejects source id",
+              er_ui_boot_prepare_remote_package_install_record(
+                  signed_index_entry, &tampered_remote_source,
+                  &install_record->current_entry, 2u, &remote_record),
+              0);
+  tampered_remote_source = remote_source;
+  tampered_remote_source.package_id.bytes[0] ^= 1u;
+  check_int64("ui boot remote install rejects package",
+              er_ui_boot_prepare_remote_package_install_record(
+                  signed_index_entry, &tampered_remote_source,
+                  &install_record->current_entry, 2u, &remote_record),
+              0);
   check_int64("ui boot user app surface id",
               er_ui_boot_user_app_surface_id(UI_BOOT_PACKAGE_TEST_APP_INDEX,
                                              &surface_id),

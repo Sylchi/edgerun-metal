@@ -48,4 +48,4 @@ identity-routed encrypted storage.
 - [x] Chunk, verify, cache, and garbage-collect content-addressed objects.
 - [x] Relay sealed objects without exposing plaintext to storage nodes.
 - [x] Add route receipts and accounting records.
-- [ ] Install packages fetched from another identity or device.
+- [x] Install packages fetched from another identity or device.

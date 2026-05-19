@@ -83,6 +83,17 @@ typedef struct {
 typedef struct {
   UINT16 abi_version;
   UINT16 app_kind;
+  ErIdentity remote_identity;
+  ErHash source_id;
+  ErHash package_id;
+  ErHash app_route_receipt_hash;
+  ErHash manifest_route_receipt_hash;
+  ErHash ui_assets_route_receipt_hash;
+} ErAppPackageRemoteFetchSource;
+
+typedef struct {
+  UINT16 abi_version;
+  UINT16 app_kind;
   UINT32 installed_slot;
   ErAppPackageManifest package;
   ErVfsObjectRef app_ref;
@@ -106,6 +117,7 @@ typedef struct {
   UINT64 generation;
   ErAppSignedPackageIndexEntry current_entry;
   ErAppSignedPackageIndexEntry previous_entry;
+  ErAppPackageRemoteFetchSource remote_source;
 } ErAppPackageInstallRecord;
 
 typedef struct {
@@ -307,6 +319,19 @@ UINT8 er_app_prepare_package_install_record(const ErCryptoProvider* crypto,
                                             const ErAppSignedPackageIndexEntry* current_entry,
                                             const ErAppSignedPackageIndexEntry* previous_entry,
                                             ErAppPackageInstallRecord* out_record);
+UINT8 er_app_prepare_remote_package_fetch_source(const ErCryptoProvider* crypto,
+                                                 const ErAppPackageManifest* package,
+                                                 const ErIdentity* remote_identity,
+                                                 const ErHash* app_route_receipt_hash,
+                                                 const ErHash* manifest_route_receipt_hash,
+                                                 const ErHash* ui_assets_route_receipt_hash,
+                                                 ErAppPackageRemoteFetchSource* out_source);
+UINT8 er_app_prepare_remote_package_install_record(const ErCryptoProvider* crypto,
+                                                   UINT64 generation,
+                                                   const ErAppSignedPackageIndexEntry* current_entry,
+                                                   const ErAppPackageRemoteFetchSource* remote_source,
+                                                   const ErAppSignedPackageIndexEntry* previous_entry,
+                                                   ErAppPackageInstallRecord* out_record);
 UINT8 er_app_package_install_record_loadable(const ErCryptoProvider* crypto,
                                              const ErAppPackageInstallRecord* record);
 UINT8 er_app_prepare_package_storage_object(const ErAppPackageStorageResponse* response,
