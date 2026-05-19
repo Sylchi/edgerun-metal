@@ -121,6 +121,264 @@ static void eri_file_analysis_scan(const EriVfsFile* file, EriFileAnalysis* anal
   }
 }
 
+static void eri_print_details(const EriDuplicates* duplicates, const EriFindings* findings) {
+  size_t i;
+
+  printf("\n");
+  printf("Details\n");
+  printf("  duplicates:\n");
+  if (duplicates->len == 0u) {
+    printf("    none\n");
+  } else {
+    for (i = 0u; i < duplicates->len; ++i) {
+      printf("    %s:%u resembles %s:%u\n",
+             duplicates->items[i].path_a, duplicates->items[i].line_a,
+             duplicates->items[i].path_b, duplicates->items[i].line_b);
+    }
+  }
+  printf("  findings:\n");
+  if (findings->len == 0u) {
+    printf("    none\n");
+  } else {
+    for (i = 0u; i < findings->len; ++i) {
+      printf("    %s:%u [%s] %s\n",
+             findings->items[i].path, findings->items[i].line,
+             findings->items[i].kind, findings->items[i].text);
+    }
+  }
+}
+
+static void eri_print_inventory_report(const EriTotals* totals, const EriPackages* packages) {
+  size_t i;
+
+  printf("Inventory\n");
+  printf("  C files: %llu  code: %llu loc  total: %llu lines  comments: %llu  blanks: %llu  bytes: ",
+         (unsigned long long)totals->files,
+         (unsigned long long)totals->code_lines,
+         (unsigned long long)totals->total_lines,
+         (unsigned long long)totals->comment_lines,
+         (unsigned long long)totals->blank_lines);
+  eri_print_size(totals->bytes);
+  printf("\n");
+  printf("  top packages:\n");
+  for (i = 0; i < packages->len && i < ERI_HOTSPOT_LIMIT; ++i) {
+    printf("    %-24s %6llu loc  %4llu files  ", packages->items[i].name,
+           (unsigned long long)packages->items[i].code_lines,
+           (unsigned long long)packages->items[i].files);
+    eri_print_size(packages->items[i].bytes);
+    printf("\n");
+  }
+  printf("\n");
+}
+
+static void eri_print_tests_report(const EriCoveragePackages* coverage_packages) {
+  size_t i;
+
+  printf("Tests\n");
+  printf("  static proxy: implementation .c files with same-stem tests or test references\n");
+  for (i = 0; i < coverage_packages->len && i < ERI_HOTSPOT_LIMIT; ++i) {
+    const EriCoveragePackage* pkg = &coverage_packages->items[i];
+    uint64_t pct = pkg->source_files == 0u ? 100u : (pkg->tested_source_files * 100u) / pkg->source_files;
+
+    printf("    %-24s %3llu%%  %3llu/%-3llu impl signaled  tests: %3llu files, %5llu loc\n",
+           pkg->package, (unsigned long long)pct,
+           (unsigned long long)pkg->tested_source_files,
+           (unsigned long long)pkg->source_files,
+           (unsigned long long)pkg->test_files,
+           (unsigned long long)pkg->test_code_lines);
+  }
+  printf("\n");
+}
+
+static void eri_print_release_binaries_report(const EriBinaries* bins) {
+  size_t i;
+
+  printf("Release binaries\n");
+  printf("  stripped size is measured from a temporary copy when strip is available\n");
+  if (bins->len == 0u) {
+    printf("    none found in VFS snapshot\n");
+  } else {
+    for (i = 0; i < bins->len && i < ERI_HOTSPOT_LIMIT; ++i) {
+      printf("    %-56s original ", bins->items[i].file->path);
+      eri_print_size(bins->items[i].size);
+      printf("  stripped ");
+      if (bins->items[i].stripped_available != 0u) {
+        eri_print_size(bins->items[i].stripped_size);
+      } else {
+        printf("n/a");
+      }
+      printf("\n");
+    }
+  }
+  printf("\n");
+}
+
+static void eri_print_duplication_report(const EriDuplicates* duplicates) {
+  size_t i;
+
+  printf("Issues by group\n");
+  printf("  duplication: %llu production, %llu mixed test/source, %llu test-only candidates\n",
+         (unsigned long long)eri_count_duplicate_rank(duplicates, 0u),
+         (unsigned long long)eri_count_duplicate_rank(duplicates, 1u),
+         (unsigned long long)eri_count_duplicate_rank(duplicates, 2u));
+  printf("    heuristic: repeated %u-line normalized C blocks; adjacent windows compacted; reasoned ignores honored\n",
+         ERI_DUP_BLOCK_LINES);
+  if (duplicates->len == 0u) {
+    printf("    none\n");
+  } else {
+    for (i = 0; i < duplicates->len && i < ERI_SAMPLE_LIMIT; ++i) {
+      printf("    %s:%u resembles %s:%u\n",
+             duplicates->items[i].path_a, duplicates->items[i].line_a,
+             duplicates->items[i].path_b, duplicates->items[i].line_b);
+    }
+    if (duplicates->len > ERI_SAMPLE_LIMIT) {
+      printf("    ... %llu more duplicate candidates\n", (unsigned long long)(duplicates->len - ERI_SAMPLE_LIMIT));
+    }
+  }
+  printf("\n");
+}
+
+static void eri_print_dead_code_report(const EriFunctions* funcs) {
+  size_t i;
+  size_t shown = 0u;
+
+  printf("  dead code: static functions with no extra references\n");
+  for (i = 0; i < funcs->len && shown < ERI_DEAD_CODE_SAMPLE_LIMIT; ++i) {
+    if (funcs->items[i].is_static != 0u && funcs->items[i].calls <= 1u) {
+      printf("    %s:%u static %s appears unreferenced\n",
+             funcs->items[i].path, funcs->items[i].line, funcs->items[i].name);
+      ++shown;
+    }
+  }
+  if (shown == 0u) {
+    printf("    none\n");
+  }
+  printf("\n");
+}
+
+static void eri_print_worldview_report(const EriFindings* findings,
+                                       const EriWorldviewPackages* worldview_packages) {
+  size_t i;
+
+  printf("  worldview: %llu findings (%llu host FS/process, %llu path identity, %llu legacy object ids, %llu raw object APIs, %llu WASM32-sized offset reviews)\n",
+         (unsigned long long)eri_count_worldview_findings(findings),
+         (unsigned long long)eri_count_findings_kind(findings, "world-host-fs"),
+         (unsigned long long)eri_count_findings_kind(findings, "world-path-identity"),
+         (unsigned long long)eri_count_findings_kind(findings, "world-legacy-object-id"),
+         (unsigned long long)eri_count_findings_kind(findings, "world-raw-object-api"),
+         (unsigned long long)eri_count_findings_kind(findings, "world-wasm64-offset"));
+  if (eri_count_worldview_findings(findings) == 0u) {
+    printf("    none\n");
+  } else {
+    printf("    hotspots:\n");
+    for (i = 0; i < worldview_packages->len && i < ERI_HOTSPOT_LIMIT; ++i) {
+      const EriWorldviewPackage* pkg = &worldview_packages->items[i];
+
+      if (eri_worldview_package_score(pkg) == 0u) {
+        continue;
+      }
+      printf("      %-24s score %5llu  host-fs %3llu  path-id %3llu  obj-id %3llu  raw-api %3llu  u64 %3llu  nonprod %4llu\n",
+             pkg->package,
+             (unsigned long long)eri_worldview_package_score(pkg),
+             (unsigned long long)pkg->host_fs_runtime,
+             (unsigned long long)pkg->path_identity,
+             (unsigned long long)pkg->legacy_object_ids,
+             (unsigned long long)pkg->raw_object_apis,
+             (unsigned long long)pkg->wasm64_offsets,
+             (unsigned long long)pkg->nonprod_findings);
+    }
+    printf("    samples:\n");
+    eri_print_worldview_finding_samples(findings, ERI_SAMPLE_LIMIT);
+  }
+  printf("\n");
+}
+
+static void eri_print_cpu_report(const EriFindings* findings, const EriCpuPackages* cpu_packages) {
+  size_t i;
+
+  printf("  CPU cost: %llu findings (%llu nested loops, %llu calls in loops, %llu division/modulo in loops, %llu memory ops in loops, %llu allocations in loops, %llu I/O ops in loops)\n",
+         (unsigned long long)eri_count_cpu_findings(findings),
+         (unsigned long long)eri_count_findings_kind(findings, "cpu-nested-loop"),
+         (unsigned long long)eri_count_findings_kind(findings, "cpu-call-in-loop"),
+         (unsigned long long)eri_count_findings_kind(findings, "cpu-div-in-loop"),
+         (unsigned long long)eri_count_findings_kind(findings, "cpu-memory-in-loop"),
+         (unsigned long long)eri_count_findings_kind(findings, "cpu-alloc-in-loop"),
+         (unsigned long long)eri_count_findings_kind(findings, "cpu-io-in-loop"));
+  if (eri_count_cpu_findings(findings) == 0u) {
+    printf("    none\n");
+  } else {
+    printf("    hotspots:\n");
+    for (i = 0; i < cpu_packages->len && i < ERI_HOTSPOT_LIMIT; ++i) {
+      const EriCpuPackage* pkg = &cpu_packages->items[i];
+
+      if (eri_cpu_package_score(pkg) == 0u) {
+        continue;
+      }
+      printf("      %-24s score %5llu  nested %3llu  calls %4llu  div/mod %3llu  mem %3llu  alloc %3llu  io %3llu  nonprod %4llu\n",
+             pkg->package,
+             (unsigned long long)eri_cpu_package_score(pkg),
+             (unsigned long long)pkg->nested_loops,
+             (unsigned long long)pkg->calls_in_loops,
+             (unsigned long long)pkg->divisions_in_loops,
+             (unsigned long long)pkg->memory_ops_in_loops,
+             (unsigned long long)pkg->allocations_in_loops,
+             (unsigned long long)pkg->io_ops_in_loops,
+             (unsigned long long)pkg->nonprod_findings);
+    }
+    printf("    samples:\n");
+    eri_print_cpu_finding_samples(findings, ERI_SAMPLE_LIMIT);
+  }
+  printf("\n");
+}
+
+static void eri_print_smells_report(const EriFindings* findings, const EriSmellPackages* smell_packages) {
+  size_t i;
+
+  printf("  smells: %llu findings (%llu large files, %llu long functions, %llu markers, %llu ignore misuse, %llu gotos, %llu magic numbers, %llu string-indexing, %llu math primitives, %llu long lines)\n",
+         (unsigned long long)eri_count_smell_findings(findings),
+         (unsigned long long)eri_count_findings_kind(findings, "large-file"),
+         (unsigned long long)eri_count_findings_kind(findings, "long-function"),
+         (unsigned long long)eri_count_findings_kind(findings, "marker"),
+         (unsigned long long)eri_count_findings_kind(findings, "ignore-misuse"),
+         (unsigned long long)eri_count_findings_kind(findings, "goto"),
+         (unsigned long long)eri_count_findings_kind(findings, "magic-number"),
+         (unsigned long long)eri_count_findings_kind(findings, "string-indexing"),
+         (unsigned long long)eri_count_findings_kind(findings, "math-primitive"),
+         (unsigned long long)eri_count_findings_kind(findings, "long-line"));
+  if (eri_count_smell_findings(findings) == 0u) {
+    printf("    none\n");
+  } else {
+    printf("    hotspots:\n");
+    for (i = 0; i < smell_packages->len && i < ERI_HOTSPOT_LIMIT; ++i) {
+      const EriSmellPackage* pkg = &smell_packages->items[i];
+
+      if (eri_smell_package_score(pkg) == 0u) {
+        continue;
+      }
+      printf("      %-24s score %5llu  large %2llu  funcs %2llu  markers %2llu  gotos %2llu  magic %4llu  str-index %3llu  math %3llu  long-lines %4llu  nonprod %4llu\n",
+             pkg->package,
+             (unsigned long long)eri_smell_package_score(pkg),
+             (unsigned long long)pkg->large_files,
+             (unsigned long long)pkg->long_functions,
+             (unsigned long long)pkg->markers,
+             (unsigned long long)pkg->gotos,
+             (unsigned long long)pkg->magic_numbers,
+             (unsigned long long)pkg->string_indexing,
+             (unsigned long long)pkg->math_primitives,
+             (unsigned long long)pkg->long_lines,
+             (unsigned long long)pkg->nonprod_findings);
+    }
+    printf("    samples:\n");
+    eri_print_smell_finding_samples(findings, ERI_SAMPLE_LIMIT);
+    printf("    focused magic-number candidates:\n");
+    eri_print_magic_number_finding_samples(findings, ERI_SAMPLE_LIMIT);
+    printf("    focused string-indexing candidates:\n");
+    eri_print_string_indexing_finding_samples(findings, ERI_SAMPLE_LIMIT);
+    printf("    focused math primitive candidates:\n");
+    eri_print_math_primitive_finding_samples(findings, ERI_SAMPLE_LIMIT);
+  }
+}
+
 //@optimizer-ignore-function worker must claim and analyze each VFS file index from the shared queue
 static void* eri_analysis_worker(void* arg) {
   EriAnalysisJobs* jobs = (EriAnalysisJobs*)arg;
@@ -546,6 +804,10 @@ static uint8_t eri_analyze(const EriVfs* vfs) {
     eri_print_string_indexing_finding_samples(&findings, ERI_SAMPLE_LIMIT);
     printf("    focused math primitive candidates:\n");
     eri_print_math_primitive_finding_samples(&findings, ERI_SAMPLE_LIMIT);
+  }
+
+  if (getenv(ERI_DETAIL_ENV) != NULL) {
+    eri_print_details(&duplicates, &findings);
   }
 
   eri_analyze_cleanup(&packages, &funcs, &findings, &bins, &sources, &coverage_packages,

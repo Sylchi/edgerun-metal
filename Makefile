@@ -57,8 +57,8 @@ repo-check-bin: er-build
 repo-inspect: er-build
 	./.build/er-build repo-inspect
 
-repo-progress:
-	./tools/repo-progress.sh $(REPO_PROGRESS_SCOPE) $(REPO_PROGRESS_TEST)
+repo-progress: er-build
+	./.build/er-build repo-progress $(REPO_PROGRESS_SCOPE) $(REPO_PROGRESS_TEST)
 
 erwire-decode: er-build
 	./.build/er-build erwire-decode

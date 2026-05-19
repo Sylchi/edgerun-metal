@@ -33,6 +33,13 @@
 #define ERI_MIN_THREAD_COUNT 1u
 #define ERI_MAX_THREAD_COUNT 32u
 #define ERI_THREAD_ENV "REPO_INSPECT_THREADS"
+#define ERI_DETAIL_ENV "REPO_INSPECT_DETAILS"
+#define ERI_GIT_PATH ".git"
+#define ERI_LOCAL_BUILD_PATH ".build"
+#define ERI_BUILD_PATH "build"
+#define ERI_CMAKE_DEBUG_PATH "cmake-build-debug"
+#define ERI_THIRD_PARTY_PATH "third_party"
+#define ERI_VENDOR_UI_PATH "ui/shadcn-ui"
 #define ERI_OPTIMIZER_IGNORE_TAG "@optimizer-ignore"
 #define ERI_OPTIMIZER_IGNORE_FUNCTION_TAG "@optimizer-ignore-function"
 #define ERI_OPTIMIZER_IGNORE_CONSTANT_TAG "@optimizer-ignore-constant"

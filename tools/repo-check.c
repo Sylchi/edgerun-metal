@@ -30,7 +30,6 @@ enum {
 
 static const char ERC_BUILD_ARTIFACT_DIR[] = ".build/";
 static const char ERC_VARFONT_BUILD_ARTIFACT_DIR[] = "edgerun-ui-core/varfont/build/";
-static const char ERC_METAL_BUILD_ARTIFACT_DIR[] = "edgerun-metal/build/";
 static const char ERC_ROOT_README[] = "README.md";
 static const char ERC_THIRD_PARTY_DIR[] = "third_party/";
 static const char ERC_VENDOR_UI_DIR[] = "ui/shadcn-ui/";
@@ -72,8 +71,7 @@ static int erc_has_component(const char* path, const char* component) {
 
 static int erc_is_tracked_build_artifact(const char* path) {
   return strncmp(path, ERC_BUILD_ARTIFACT_DIR, sizeof(ERC_BUILD_ARTIFACT_DIR) - 1u) == 0 ||
-         strncmp(path, ERC_VARFONT_BUILD_ARTIFACT_DIR, sizeof(ERC_VARFONT_BUILD_ARTIFACT_DIR) - 1u) == 0 ||
-         strncmp(path, ERC_METAL_BUILD_ARTIFACT_DIR, sizeof(ERC_METAL_BUILD_ARTIFACT_DIR) - 1u) == 0;
+         strncmp(path, ERC_VARFONT_BUILD_ARTIFACT_DIR, sizeof(ERC_VARFONT_BUILD_ARTIFACT_DIR) - 1u) == 0;
 }
 
 static int erc_has_readme_name(const char* path) {

@@ -18,6 +18,7 @@ static void eri_usage(const char* argv0) {
   printf("CPU cost signals, and simple code smells.\n");
   printf("Set %s to an integer from %u to %u to choose worker count.\n",
          ERI_THREAD_ENV, ERI_MIN_THREAD_COUNT, ERI_MAX_THREAD_COUNT);
+  printf("Set %s=1 to print every duplicate and finding after the summary.\n", ERI_DETAIL_ENV);
 }
 
 static const char* eri_cli_relative_scope(const char* arg) {

@@ -2,11 +2,11 @@
 set -eu
 
 ROOT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
-REPO_PROGRESS="${ROOT_DIR}/tools/repo-progress.sh"
+REPO_PROGRESS="${ROOT_DIR}/.build/er-build"
 TMP_DIR="$(mktemp -d)"
 trap 'rm -rf "$TMP_DIR"' EXIT HUP INT TERM
 
-plan_output=$("$REPO_PROGRESS" --print-plan edgerun-ui-core)
+plan_output=$("$REPO_PROGRESS" --print-plan repo-progress edgerun-ui-core)
 
 case "$plan_output" in
   *"+ git status --short --branch"*) ;;
@@ -48,19 +48,19 @@ case "$plan_output" in
   *) printf 'missing ui-core-test step\n' >&2; exit 1 ;;
 esac
 
-explicit_output=$("$REPO_PROGRESS" --print-plan docs repo-test)
+explicit_output=$("$REPO_PROGRESS" --print-plan repo-progress docs repo-test)
 case "$explicit_output" in
   *"+ make repo-test"*) ;;
   *) printf 'explicit test target was not honored\n' >&2; exit 1 ;;
 esac
 
-codex_output=$("$REPO_PROGRESS" --print-plan codex)
+codex_output=$("$REPO_PROGRESS" --print-plan repo-progress codex)
 case "$codex_output" in
   *"+ make codex-test"*) ;;
   *) printf 'codex scope did not choose codex-test\n' >&2; exit 1 ;;
 esac
 
-font_output=$("$REPO_PROGRESS" --print-plan edgerun-ui-core/varfont)
+font_output=$("$REPO_PROGRESS" --print-plan repo-progress edgerun-ui-core/varfont)
 case "$font_output" in
   *"+ make varfont-test"*) ;;
   *) printf 'ui-owned varfont scope did not choose varfont-test\n' >&2; exit 1 ;;
@@ -68,7 +68,7 @@ esac
 
 unknown_out="${TMP_DIR}/repo-progress-unknown.out"
 unknown_err="${TMP_DIR}/repo-progress-unknown.err"
-if "$REPO_PROGRESS" --print-plan docs >"$unknown_out" 2>"$unknown_err"; then
+if "$REPO_PROGRESS" --print-plan repo-progress docs >"$unknown_out" 2>"$unknown_err"; then
   printf 'unknown scope without explicit test target unexpectedly succeeded\n' >&2
   exit 1
 fi

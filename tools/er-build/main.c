@@ -208,6 +208,127 @@ static int erb_run_program_arg(const char* program, const char* arg, int print_p
   return erb_run_args(&args, print_plan);
 }
 
+static const char* erb_default_progress_test(const char* scope) {
+  if (strcmp(scope, "edgerun-ui-core") == 0) {
+    return "ui-core-test";
+  }
+  if (strcmp(scope, "edgerun-ui-core/varfont") == 0 || strcmp(scope, "varfont") == 0) {
+    return "varfont-test";
+  }
+  if (strcmp(scope, "edgerun-crypto") == 0) {
+    return "crypto-test";
+  }
+  if (strcmp(scope, "edgerun-metal") == 0) {
+    return "edgerun-check";
+  }
+  if (strcmp(scope, "codex") == 0) {
+    return "codex-test";
+  }
+  return NULL;
+}
+
+static int erb_run_progress_step(const char* title, const ErbArgs* args, int print_plan) {
+  printf("\n== %s ==\n", title);
+  return erb_run_args(args, print_plan);
+}
+
+static int erb_target_repo_progress(const char* scope, const char* test_target, int print_plan) {
+  ErbArgs args;
+  char title[256];
+
+  if (scope == NULL || scope[0] == '\0') {
+    fprintf(stderr, "er-build: repo-progress requires a scope\n");
+    return 2;
+  }
+  if (test_target == NULL || test_target[0] == '\0') {
+    test_target = erb_default_progress_test(scope);
+    if (test_target == NULL) {
+      fprintf(stderr, "er-build: no default test target for scope %s\n", scope);
+      fprintf(stderr, "er-build: pass an explicit test target\n");
+      return 2;
+    }
+  }
+
+  erb_args_init(&args);
+  if (erb_args_push(&args, "git") != 0 ||
+      erb_args_push(&args, "status") != 0 ||
+      erb_args_push(&args, "--short") != 0 ||
+      erb_args_push(&args, "--branch") != 0 ||
+      erb_run_progress_step("git status", &args, print_plan) != 0) {
+    return 1;
+  }
+
+  snprintf(title, sizeof(title), "git diff stat: %s", scope);
+  erb_args_init(&args);
+  if (erb_args_push(&args, "git") != 0 ||
+      erb_args_push(&args, "diff") != 0 ||
+      erb_args_push(&args, "--stat") != 0 ||
+      erb_args_push(&args, "--") != 0 ||
+      erb_args_push(&args, scope) != 0 ||
+      erb_run_progress_step(title, &args, print_plan) != 0) {
+    return 1;
+  }
+
+  snprintf(title, sizeof(title), "git cached diff stat: %s", scope);
+  erb_args_init(&args);
+  if (erb_args_push(&args, "git") != 0 ||
+      erb_args_push(&args, "diff") != 0 ||
+      erb_args_push(&args, "--cached") != 0 ||
+      erb_args_push(&args, "--stat") != 0 ||
+      erb_args_push(&args, "--") != 0 ||
+      erb_args_push(&args, scope) != 0 ||
+      erb_run_progress_step(title, &args, print_plan) != 0) {
+    return 1;
+  }
+
+  snprintf(title, sizeof(title), "git diff check: %s", scope);
+  erb_args_init(&args);
+  if (erb_args_push(&args, "git") != 0 ||
+      erb_args_push(&args, "diff") != 0 ||
+      erb_args_push(&args, "--check") != 0 ||
+      erb_args_push(&args, "--") != 0 ||
+      erb_args_push(&args, scope) != 0 ||
+      erb_run_progress_step(title, &args, print_plan) != 0) {
+    return 1;
+  }
+
+  snprintf(title, sizeof(title), "git cached diff check: %s", scope);
+  erb_args_init(&args);
+  if (erb_args_push(&args, "git") != 0 ||
+      erb_args_push(&args, "diff") != 0 ||
+      erb_args_push(&args, "--cached") != 0 ||
+      erb_args_push(&args, "--check") != 0 ||
+      erb_args_push(&args, "--") != 0 ||
+      erb_args_push(&args, scope) != 0 ||
+      erb_run_progress_step(title, &args, print_plan) != 0) {
+    return 1;
+  }
+
+  erb_args_init(&args);
+  if (erb_args_push(&args, "make") != 0 ||
+      erb_args_push(&args, "repo-inspect") != 0 ||
+      erb_run_progress_step("build repo-inspect", &args, print_plan) != 0) {
+    return 1;
+  }
+
+  snprintf(title, sizeof(title), "repo-inspect: %s", scope);
+  erb_args_init(&args);
+  if (erb_args_push(&args, ERB_REPO_INSPECT_BIN) != 0 ||
+      erb_args_push(&args, scope) != 0 ||
+      erb_run_progress_step(title, &args, print_plan) != 0) {
+    return 1;
+  }
+
+  snprintf(title, sizeof(title), "test target: %s", test_target);
+  erb_args_init(&args);
+  if (erb_args_push(&args, "make") != 0 ||
+      erb_args_push(&args, test_target) != 0 ||
+      erb_run_progress_step(title, &args, print_plan) != 0) {
+    return 1;
+  }
+  return 0;
+}
+
 static int erb_target_repo_check(int print_plan) {
   if (erb_build_repo_check(print_plan) != 0) {
     return 1;
@@ -308,9 +429,10 @@ static int erb_target_varfont_test(int print_plan) {
 
 static int erb_usage(void) {
   fprintf(stderr,
-          "usage: er-build [--print-plan] <target>\n"
+          "usage: er-build [--print-plan] <target> [args]\n"
           "targets: repo-check-bin repo-inspect erwire-decode erwire-test\n"
-          "         repo-check repo-test crypto-test varfont-test\n");
+          "         repo-check repo-test repo-progress <scope> [test-target]\n"
+          "         crypto-test varfont-test\n");
   return 2;
 }
 
@@ -326,10 +448,23 @@ int main(int argc, char** argv) {
     print_plan = 1;
     ++target_index;
   }
+  target = argv[target_index];
+  if (strcmp(target, "repo-progress") == 0) {
+    const char* scope;
+    const char* test_target = NULL;
+
+    if (target_index + 2 > argc || target_index + 3 < argc) {
+      return erb_usage();
+    }
+    scope = argv[target_index + 1];
+    if (target_index + 3 == argc) {
+      test_target = argv[target_index + 2];
+    }
+    return erb_target_repo_progress(scope, test_target, print_plan);
+  }
   if (target_index + 1 != argc) {
     return erb_usage();
   }
-  target = argv[target_index];
   if (strcmp(target, "repo-check-bin") == 0) {
     return erb_build_repo_check(print_plan);
   }

@@ -18,6 +18,10 @@ cleanup() {
 trap cleanup EXIT
 
 mkdir -p "${TMP_DIR}/pkg"
+mkdir -p "${TMP_DIR}/.build/generated" "${TMP_DIR}/third_party/vendor" "${TMP_DIR}/ui/shadcn-ui/pkg"
+printf 'int generated_build_file(void) { return 1; }\n' > "${TMP_DIR}/.build/generated/generated.c"
+printf 'int vendored_file(void) { return 2; }\n' > "${TMP_DIR}/third_party/vendor/vendor.c"
+printf 'int vendored_ui_file(void) { return 3; }\n' > "${TMP_DIR}/ui/shadcn-ui/pkg/vendor_ui.c"
 cat > "${TMP_DIR}/pkg/main.c" <<C
 static int unused_helper(void) { return 7; }
 
@@ -142,6 +146,7 @@ C
 printf '\177ELFtest' > "${TMP_DIR}/release.efi"
 
 report="$(REPO_INSPECT_THREADS=2 "${REPO_INSPECT}" "${TMP_DIR}")"
+detail_report="$(REPO_INSPECT_THREADS=2 REPO_INSPECT_DETAILS=1 "${REPO_INSPECT}" "${TMP_DIR}")"
 scoped_tools_report="$(cd "${ROOT_DIR}" && REPO_INSPECT_THREADS=2 "${REPO_INSPECT}" tools)"
 scoped_codex_report="$(cd "${ROOT_DIR}" && REPO_INSPECT_THREADS=2 "${REPO_INSPECT}" codex)"
 if REPO_INSPECT_THREADS=0 "${REPO_INSPECT}" "${TMP_DIR}" >/dev/null 2>"${TMP_DIR}/invalid_threads.err"; then
@@ -156,7 +161,12 @@ esac
 
 case "${report}" in
   *"repo-inspect"*"Inventory"*"C files: 7"* ) ;;
-  * ) printf 'missing compact source inventory\n%s\n' "${report}" >&2; exit 1 ;;
+  * ) printf 'missing compact source inventory or generated/vendor paths were inspected\n%s\n' "${report}" >&2; exit 1 ;;
+esac
+
+case "${detail_report}" in
+  *"Details"*"duplicates:"*"findings:"*"[magic-number]"* ) ;;
+  * ) printf 'missing detailed finding report\n%s\n' "${detail_report}" >&2; exit 1 ;;
 esac
 
 case "${report}" in
