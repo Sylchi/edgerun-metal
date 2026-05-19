@@ -139,6 +139,7 @@ typedef struct {
   uint8_t exported_main;
   ErWcLocal locals[ERWC_MAX_LOCALS];
   uint32_t local_count;
+  uint32_t param_count;
   ErWcBuffer code;
 } ErWcFunc;
 

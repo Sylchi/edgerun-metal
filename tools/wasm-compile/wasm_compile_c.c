@@ -191,6 +191,30 @@ static const ErWcType* erwc_c_import_type(const ErWcModule* module,
   return NULL;
 }
 
+static const ErWcType* erwc_c_function_type(const ErWcModule* module,
+                                            const char* function_name,
+                                            uint32_t* out_function_index) {
+  for (uint32_t i = 0u; i < module->func_count; ++i) {
+    const ErWcFunc* func = &module->funcs[i];
+    //@optimizer-ignore authored C function names require indexed lookup
+    if (strcmp(func->name, function_name) == 0 && func->name[0] != 0) {
+      if (func->type_index >= module->type_count) {
+        return NULL;
+      }
+      *out_function_index = func->function_index;
+      return &module->types[func->type_index];
+    }
+  }
+  return NULL;
+}
+
+static int erwc_c_function_name_available(const ErWcModule* module,
+                                          const char* function_name) {
+  uint32_t function_index = 0u;
+
+  return erwc_find_function(module, function_name, &function_index) == 0 ? -1 : 0;
+}
+
 static const ErWcConstant* erwc_c_find_constant(const ErWcModule* module,
                                                 const char* name) {
   for (uint32_t i = 0u; i < module->constant_count; ++i) {
@@ -325,6 +349,10 @@ static int erwc_c_emit_i32_wrap_i64(ErWcFunc* func) {
   return erwc_buffer_push(&func->code, ERWC_OP_I32_WRAP_I64);
 }
 
+static int erwc_c_parse_expression(ErWcCParser* parser,
+                                   const ErWcModule* module,
+                                   ErWcFunc* func);
+
 static int erwc_c_emit_local_get(ErWcFunc* func, const char* name) {
   uint32_t local_index = 0u;
 
@@ -362,9 +390,28 @@ static int erwc_c_add_local(ErWcFunc* func, const char* name, uint32_t* out_inde
   return 0;
 }
 
-static int erwc_c_parse_expression(ErWcCParser* parser,
-                                   const ErWcModule* module,
-                                   ErWcFunc* func);
+static int erwc_c_add_parameter(ErWcFunc* func, const char* name) {
+  uint32_t local_index = 0u;
+
+  if (erwc_c_add_local(func, name, &local_index) != 0 ||
+      local_index != func->param_count) {
+    return -1;
+  }
+  ++func->param_count;
+  return 0;
+}
+
+static int erwc_c_emit_return(ErWcCParser* parser,
+                              const ErWcModule* module,
+                              ErWcFunc* func) {
+  if (erwc_c_take_literal(parser, "return") != 0 ||
+      erwc_c_parse_expression(parser, module, func) != 0 ||
+      erwc_c_take_literal(parser, ";") != 0) {
+    return -1;
+  }
+  return 0;
+}
+
 static int erwc_c_parse_main_statement(ErWcCParser* parser,
                                        const ErWcModule* module,
                                        ErWcFunc* func,
@@ -387,6 +434,9 @@ static int erwc_c_emit_call(ErWcCParser* parser,
   const ErWcType* type;
 
   type = erwc_c_import_type(module, import_name, &function_index);
+  if (type == NULL) {
+    type = erwc_c_function_type(module, import_name, &function_index);
+  }
   if (type == NULL ||
       type->result_count != ER_WASM_HOSTCALL_I64_RESULTS ||
       type->result_type != ERWC_VALTYPE_I64 ||
@@ -603,6 +653,100 @@ static int erwc_c_parse_if_statement(ErWcCParser* parser,
   return 0;
 }
 
+static int erwc_c_parse_parameter_list(ErWcCParser* parser,
+                                       char names[ERWC_C_IMPORT_PARAM_CAP][ERWC_MAX_STRING],
+                                       uint8_t* params,
+                                       uint32_t* out_param_count) {
+  uint32_t param_count = 0u;
+
+  if (names == NULL || params == NULL || out_param_count == NULL) {
+    return -1;
+  }
+  erwc_c_skip_ws(parser);
+  if (erwc_c_take_literal(parser, "void") == 0) {
+    *out_param_count = 0u;
+    return 0;
+  }
+  while (1) {
+    char param_type[ERWC_MAX_STRING];
+    if (param_count >= ERWC_C_IMPORT_PARAM_CAP ||
+        erwc_c_take_ident(parser, param_type, sizeof(param_type)) != 0 ||
+        erwc_c_type_from_ident(param_type) != ERWC_VALTYPE_I64 ||
+        erwc_c_take_ident(parser, names[param_count],
+                          ERWC_MAX_STRING) != 0) {
+      return -1;
+    }
+    params[param_count] = ERWC_VALTYPE_I64;
+    ++param_count;
+    erwc_c_skip_ws(parser);
+    if (parser->cur < parser->end && *parser->cur == ',') {
+      ++parser->cur;
+    } else {
+      break;
+    }
+  }
+  *out_param_count = param_count;
+  return 0;
+}
+
+static int erwc_c_parse_user_function(ErWcCParser* parser,
+                                      ErWcModule* module) {
+  char function_name[ERWC_MAX_STRING];
+  char type_name[ERWC_MAX_STRING];
+  char param_names[ERWC_C_IMPORT_PARAM_CAP][ERWC_MAX_STRING];
+  uint8_t params[ERWC_C_IMPORT_PARAM_CAP];
+  uint32_t param_count = 0u;
+  uint32_t type_index = 0u;
+  ErWcFunc* func;
+
+  memset(param_names, 0, sizeof(param_names));
+  memset(params, 0, sizeof(params));
+  if (module->func_count >= ERWC_MAX_FUNCS ||
+      erwc_c_take_literal(parser, "i64") != 0 ||
+      erwc_c_take_ident(parser, function_name, sizeof(function_name)) != 0 ||
+      strcmp(function_name, "main") == 0 ||
+      erwc_c_function_name_available(module, function_name) != 0 ||
+      snprintf(type_name, sizeof(type_name), "%s_t", function_name) <= 0 ||
+      strlen(function_name) + 3u > sizeof(type_name) ||
+      erwc_c_take_literal(parser, "(") != 0 ||
+      erwc_c_parse_parameter_list(parser, param_names, params,
+                                  &param_count) != 0 ||
+      erwc_c_take_literal(parser, ")") != 0 ||
+      erwc_c_take_literal(parser, "{") != 0 ||
+      erwc_c_add_type(module, type_name, params, param_count,
+                      ERWC_VALTYPE_I64, 1u, &type_index) != 0) {
+    return -1;
+  }
+  func = &module->funcs[module->func_count];
+  memset(func, 0, sizeof(*func));
+  strcpy(func->name, function_name);
+  strcpy(func->type_name, type_name);
+  func->type_index = type_index;
+  func->function_index = module->import_count + module->func_count;
+  for (uint32_t i = 0u; i < param_count; ++i) {
+    if (erwc_c_add_parameter(func, param_names[i]) != 0) {
+      return -1;
+    }
+  }
+  while (1) {
+    uint8_t parsed_statement = 0u;
+    if (erwc_c_parse_main_statement(parser, module, func,
+                                    &parsed_statement) != 0) {
+      return -1;
+    }
+    if (parsed_statement == 0u) {
+      break;
+    }
+  }
+  if (erwc_c_emit_return(parser, module, func) != 0 ||
+      erwc_c_take_literal(parser, "}") != 0 ||
+      erwc_buffer_push(&func->code, ERWC_OP_END) != 0) {
+    return -1;
+  }
+  ++module->func_count;
+  return 0;
+}
+
 static int erwc_c_parse_main_statement(ErWcCParser* parser,
                                        const ErWcModule* module,
                                        ErWcFunc* func,
@@ -679,9 +823,7 @@ static int erwc_c_parse_main(ErWcCParser* parser, ErWcModule* module) {
       break;
     }
   }
-  if (erwc_c_take_literal(parser, "return") != 0 ||
-      erwc_c_parse_expression(parser, module, func) != 0 ||
-      erwc_c_take_literal(parser, ";") != 0 ||
+  if (erwc_c_emit_return(parser, module, func) != 0 ||
       erwc_c_take_literal(parser, "}") != 0 ||
       erwc_buffer_push(&func->code, ERWC_OP_END) != 0) {
     return -1;
@@ -721,14 +863,27 @@ int erwc_build_c_source(const ErWcSource* source, ErWcModule* module) {
       break;
     }
   }
-  if (erwc_c_parse_memory(&parser, module) != 0 ||
-      erwc_c_parse_main(&parser, module) != 0) {
+  if (erwc_c_parse_memory(&parser, module) != 0) {
+    return -1;
+  }
+  while (1) {
+    erwc_c_skip_ws(&parser);
+    if ((size_t)(parser.end - parser.cur) >= strlen("i64") &&
+        memcmp(parser.cur, "i64", strlen("i64")) == 0) {
+      if (erwc_c_parse_user_function(&parser, module) != 0) {
+        return -1;
+      }
+    } else {
+      break;
+    }
+  }
+  if (erwc_c_parse_main(&parser, module) != 0) {
     return -1;
   }
   erwc_c_skip_ws(&parser);
   if (parser.cur != parser.end ||
       module->type_count == 0u ||
-      module->func_count != ER_WASM_CONTRACT_REQUIRED_IMPORT_COUNT ||
+      module->func_count == 0u ||
       module->memory_pages != ER_WASM_CONTRACT_REQUIRED_MEMORY_PAGES) {
     return -1;
   }
