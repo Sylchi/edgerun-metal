@@ -595,6 +595,8 @@ static void ersd_print_live_header(const ErsdConfig* cfg,
   ersd_print_live_text_field("serial", info->serial);
   ersd_print_live_text_field("cid", info->cid);
   ersd_print_live_text_field("csd", info->csd);
+  fprintf(stderr,
+          "sdcard-probe: class-bounds-mb-sec: C2>=2 C4>=4 C6>=6 C10/U1/V10>=10 U3/V30>=30 V60>=60 V90>=90\n");
 }
 
 static int ersd_probe_interleaved(int fd,
@@ -719,6 +721,7 @@ static void ersd_print_report(const ErsdConfig* cfg,
   printf("write-mib-sec: %.2f\n",
          ersd_mib_per_sec(result->write_bytes, result->write_seconds));
   printf("write-mb-sec: %.2f\n", write_mb_sec);
+  printf("class-bounds-mb-sec: C2>=2 C4>=4 C6>=6 C10/U1/V10>=10 U3/V30>=30 V60>=60 V90>=90\n");
   printf("observed-sd-speed-class: %s\n", ersd_sd_speed_class(write_mb_sec));
   printf("observed-uhs-speed-class: %s\n", ersd_uhs_speed_class(write_mb_sec));
   printf("observed-video-speed-class: %s\n",
