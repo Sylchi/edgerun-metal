@@ -6,9 +6,12 @@ verified useful work.
 
 It does not mutate the repository while you search, read, or propose changes.
 Agent prompts receive host-generated repository status and workflow context
-automatically. When an agent finishes with pending proposals, the host writes
-only those proposed paths, runs the matching `repo-progress` scope checks, and
-creates a git commit only if verification passes.
+automatically. The first agent turn includes `AGENTS.md`, known `repo-progress`
+plans, a compact repository tree snapshot, and a running-process snapshot so the
+model can start work without spending tool calls on routine orientation. When an
+agent finishes with pending proposals, the host writes only those proposed paths,
+runs the matching `repo-progress` scope checks, and creates a git commit only if
+verification passes.
 
 Terminal output uses ANSI color when stdout or stderr is a terminal. Set
 `NO_COLOR=1` or `EDGERUN_C_COLOR=0` to disable color. Interactive reads apply
