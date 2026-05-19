@@ -21,22 +21,9 @@ enum {
   ERA_RELAY_INBOX_LEN = 1024,
   ERA_RELAY_OUTBOX_BASE = 1024,
   ERA_RELAY_OUTBOX_LEN = 2048,
-  ERA_SEED_UI_PACKET_LEN = ER_WASM_UI_COMMAND_LIST_HEADER_LEN +
-                           ER_WASM_UI_RECT_RECORD_LEN +
-                           ER_WASM_UI_HIT_RECORD_LEN +
-                           ER_WASM_UI_QUAD_RECORD_LEN,
-  ERA_SEED_COMMAND_COUNT = 3,
   ERA_SEED_RECT_COUNT = 1,
   ERA_SEED_HIT_COUNT = 1,
-  ERA_SEED_TEXT_QUAD_COUNT = 1,
-  ERA_UI_HEADER_ABI_OFFSET = 0,
-  ERA_UI_HEADER_COMMAND_COUNT_OFFSET = 4,
-  ERA_UI_HEADER_RECT_COUNT_OFFSET = 8,
-  ERA_UI_HEADER_HIT_COUNT_OFFSET = 12,
-  ERA_UI_HEADER_TEXT_QUAD_COUNT_OFFSET = 32,
-  ERA_UI_RECT_RECORD_MODE_OFFSET = 52,
-  ERA_UI_HIT_RECORD_KIND_OFFSET = 0,
-  ERA_UI_HIT_KIND_BUTTON = 3
+  ERA_SEED_TEXT_QUAD_COUNT = 1
 };
 
 typedef struct {
@@ -48,18 +35,6 @@ typedef struct {
 static int era_usage(const char* program) {
   fprintf(stderr, "usage: %s <app.wasm>\n", program);
   return 2;
-}
-
-static void era_put_le16(UINT8* dst, UINT16 value) {
-  dst[0] = (UINT8)(value & 0xffu);
-  dst[1] = (UINT8)((value >> 8u) & 0xffu);
-}
-
-static void era_put_le32(UINT8* dst, UINT32 value) {
-  dst[0] = (UINT8)(value & 0xffu);
-  dst[1] = (UINT8)((value >> 8u) & 0xffu);
-  dst[2] = (UINT8)((value >> 16u) & 0xffu);
-  dst[3] = (UINT8)((value >> 24u) & 0xffu);
 }
 
 static void era_fill_nonzero(UINT8* bytes, size_t len, UINT8 seed) {
@@ -119,21 +94,6 @@ static int era_read_file(const char* path, UINT8** out_bytes, UINT32* out_len) {
   *out_bytes = bytes;
   *out_len = (UINT32)size;
   return 0;
-}
-
-static void era_seed_ui_packet(UINT8* memory) {
-  UINT8* packet = memory + ERA_RELAY_OUTBOX_BASE;
-  UINT32 hit_offset = ER_WASM_UI_COMMAND_LIST_HEADER_LEN + ER_WASM_UI_RECT_RECORD_LEN;
-
-  era_put_le16(packet + ERA_UI_HEADER_ABI_OFFSET, ER_WASM_UI_COMMAND_ABI_VERSION);
-  era_put_le32(packet + ERA_UI_HEADER_COMMAND_COUNT_OFFSET, ERA_SEED_COMMAND_COUNT);
-  era_put_le32(packet + ERA_UI_HEADER_RECT_COUNT_OFFSET, ERA_SEED_RECT_COUNT);
-  era_put_le32(packet + ERA_UI_HEADER_HIT_COUNT_OFFSET, ERA_SEED_HIT_COUNT);
-  era_put_le32(packet + ERA_UI_HEADER_TEXT_QUAD_COUNT_OFFSET, ERA_SEED_TEXT_QUAD_COUNT);
-  era_put_le32(packet + ER_WASM_UI_COMMAND_LIST_HEADER_LEN +
-               ERA_UI_RECT_RECORD_MODE_OFFSET, 0u);
-  era_put_le32(packet + hit_offset + ERA_UI_HIT_RECORD_KIND_OFFSET,
-               ERA_UI_HIT_KIND_BUTTON);
 }
 
 static void era_prepare_presentation(ErAppUiPresentation* presentation) {
@@ -201,7 +161,6 @@ int main(int argc, char** argv) {
   } else if (er_wasm_find_main(&module, &main_index) != 0) {
     fprintf(stderr, "app-run: main lookup failed\n");
   } else {
-    era_seed_ui_packet(memory);
     if (er_wasm_execute_i64(&module, main_index, &result) != 0) {
       fprintf(stderr, "app-run: main execution failed\n");
     } else {

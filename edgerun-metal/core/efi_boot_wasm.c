@@ -1,5 +1,4 @@
 #include "efi_boot_internal.h"
-#include "wasm_vm_internal.h"
 
 static UINT8 g_ui_boot_app_memory[ER_UI_BOOT_APP_COUNT][ER_UI_BOOT_APP_MEMORY_BYTES];
 static UINT8 g_ui_boot_app_module_memory[ER_UI_BOOT_APP_COUNT][ER_UI_BOOT_APP_MODULE_BYTES];
@@ -10,176 +9,8 @@ static const char g_ui_boot_user_app_manifest_label[] = "apps/user-app.manifest"
 
 enum {
   ER_UI_BOOT_PACKAGE_APP_SEQUENCE = 1u,
-  ER_UI_BOOT_PACKAGE_MANIFEST_SEQUENCE = 2u,
-  ER_UI_BOOT_APP_UI_COMMAND_COUNT = 3u,
-  ER_UI_BOOT_APP_UI_RECT_COUNT = 1u,
-  ER_UI_BOOT_APP_UI_HIT_COUNT = 1u,
-  ER_UI_BOOT_APP_UI_TEXT_COUNT = 1u,
-  ER_UI_BOOT_APP_RECT_X = 0x41200000u,
-  ER_UI_BOOT_APP_RECT_Y = 0x41a00000u,
-  ER_UI_BOOT_APP_RECT_W = 0x42f00000u,
-  ER_UI_BOOT_APP_RECT_H = 0x42480000u,
-  ER_UI_BOOT_APP_RECT_RADIUS = 0x41000000u,
-  ER_UI_BOOT_APP_RECT_COLOR_R = 0x3e800000u,
-  ER_UI_BOOT_APP_RECT_COLOR_G = 0x3f000000u,
-  ER_UI_BOOT_APP_RECT_COLOR_B = 0x3f400000u,
-  ER_UI_BOOT_APP_RECT_COLOR_A = 0x3f800000u,
-  ER_UI_BOOT_APP_HIT_ID = 7u,
-  ER_UI_BOOT_APP_TEXT_X = 0x41300000u,
-  ER_UI_BOOT_APP_TEXT_Y = 0x41b00000u,
-  ER_UI_BOOT_APP_TEXT_W = 0x41800000u,
-  ER_UI_BOOT_APP_TEXT_H = 0x41800000u,
-  ER_UI_BOOT_APP_TEXT_U1 = 0x3f800000u,
-  ER_UI_BOOT_APP_TEXT_V1 = 0x3f800000u,
-  ER_UI_BOOT_APP_TEXT_ATLAS_ID = 2u,
-  ER_UI_BOOT_APP_TEXT_COLOR_R = 0x3f800000u,
-  ER_UI_BOOT_APP_TEXT_COLOR_G = 0x3f800000u,
-  ER_UI_BOOT_APP_TEXT_COLOR_B = 0x3f800000u,
-  ER_UI_BOOT_APP_TEXT_COLOR_A = 0x3f800000u
+  ER_UI_BOOT_PACKAGE_MANIFEST_SEQUENCE = 2u
 };
-
-static void er_ui_boot_store_u16(UINT8* dst, UINT16 value) {
-  dst[ER_WASM_U32_BYTE0] = (UINT8)(value & ER_WASM_U8_MASK);
-  dst[ER_WASM_U32_BYTE1] = (UINT8)((UINT32)value >> ER_WASM_U32_BYTE1_SHIFT);
-}
-
-static void er_ui_boot_store_u32(UINT8* dst, UINT32 value) {
-  dst[ER_WASM_U32_BYTE0] = (UINT8)(value & ER_WASM_U8_MASK);
-  dst[ER_WASM_U32_BYTE1] = (UINT8)((value >> ER_WASM_U32_BYTE1_SHIFT) &
-                                   ER_WASM_U8_MASK);
-  dst[ER_WASM_U32_BYTE2] = (UINT8)((value >> ER_WASM_U32_BYTE2_SHIFT) &
-                                   ER_WASM_U8_MASK);
-  dst[ER_WASM_U32_BYTE3] = (UINT8)((value >> ER_WASM_U32_BYTE3_SHIFT) &
-                                   ER_WASM_U8_MASK);
-}
-
-static void er_ui_boot_seed_user_app_header(UINT8* packet) {
-  er_ui_boot_store_u16(packet + ER_WASM_UI_HEADER_ABI_OFFSET,
-                       (UINT16)ER_WASM_UI_COMMAND_ABI_VERSION);
-  er_ui_boot_store_u32(packet + ER_WASM_UI_HEADER_COMMAND_COUNT_OFFSET,
-                       ER_UI_BOOT_APP_UI_COMMAND_COUNT);
-  er_ui_boot_store_u32(packet + ER_WASM_UI_HEADER_RECT_COUNT_OFFSET,
-                       ER_UI_BOOT_APP_UI_RECT_COUNT);
-  er_ui_boot_store_u32(packet + ER_WASM_UI_HEADER_HIT_COUNT_OFFSET,
-                       ER_UI_BOOT_APP_UI_HIT_COUNT);
-  er_ui_boot_store_u32(packet + ER_WASM_UI_HEADER_DRAG_SOURCE_COUNT_OFFSET, 0u);
-  er_ui_boot_store_u32(packet + ER_WASM_UI_HEADER_DROP_TARGET_COUNT_OFFSET, 0u);
-  er_ui_boot_store_u32(packet + ER_WASM_UI_HEADER_TRANSITION_COUNT_OFFSET, 0u);
-  er_ui_boot_store_u32(packet + ER_WASM_UI_HEADER_ICON_QUAD_COUNT_OFFSET, 0u);
-  er_ui_boot_store_u32(packet + ER_WASM_UI_HEADER_TEXT_QUAD_COUNT_OFFSET,
-                       ER_UI_BOOT_APP_UI_TEXT_COUNT);
-}
-
-static void er_ui_boot_seed_user_app_rect(UINT8* rect) {
-  er_ui_boot_store_u32(rect + ER_WASM_UI_RECT_RECORD_X_OFFSET,
-                       ER_UI_BOOT_APP_RECT_X);
-  er_ui_boot_store_u32(rect + ER_WASM_UI_RECT_RECORD_Y_OFFSET,
-                       ER_UI_BOOT_APP_RECT_Y);
-  er_ui_boot_store_u32(rect + ER_WASM_UI_RECT_RECORD_W_OFFSET,
-                       ER_UI_BOOT_APP_RECT_W);
-  er_ui_boot_store_u32(rect + ER_WASM_UI_RECT_RECORD_H_OFFSET,
-                       ER_UI_BOOT_APP_RECT_H);
-  er_ui_boot_store_u32(rect + ER_WASM_UI_RECT_RECORD_RADIUS_OFFSET,
-                       ER_UI_BOOT_APP_RECT_RADIUS);
-  er_ui_boot_store_u32(rect + ER_WASM_UI_RECT_RECORD_COLOR_OFFSET +
-                       ER_WASM_UI_COLOR_RECORD_R_OFFSET,
-                       ER_UI_BOOT_APP_RECT_COLOR_R);
-  er_ui_boot_store_u32(rect + ER_WASM_UI_RECT_RECORD_COLOR_OFFSET +
-                       ER_WASM_UI_COLOR_RECORD_G_OFFSET,
-                       ER_UI_BOOT_APP_RECT_COLOR_G);
-  er_ui_boot_store_u32(rect + ER_WASM_UI_RECT_RECORD_COLOR_OFFSET +
-                       ER_WASM_UI_COLOR_RECORD_B_OFFSET,
-                       ER_UI_BOOT_APP_RECT_COLOR_B);
-  er_ui_boot_store_u32(rect + ER_WASM_UI_RECT_RECORD_COLOR_OFFSET +
-                       ER_WASM_UI_COLOR_RECORD_A_OFFSET,
-                       ER_UI_BOOT_APP_RECT_COLOR_A);
-  er_ui_boot_store_u32(rect + ER_WASM_UI_RECT_RECORD_COLOR2_OFFSET +
-                       ER_WASM_UI_COLOR_RECORD_R_OFFSET,
-                       ER_UI_BOOT_APP_RECT_COLOR_R);
-  er_ui_boot_store_u32(rect + ER_WASM_UI_RECT_RECORD_COLOR2_OFFSET +
-                       ER_WASM_UI_COLOR_RECORD_G_OFFSET,
-                       ER_UI_BOOT_APP_RECT_COLOR_G);
-  er_ui_boot_store_u32(rect + ER_WASM_UI_RECT_RECORD_COLOR2_OFFSET +
-                       ER_WASM_UI_COLOR_RECORD_B_OFFSET,
-                       ER_UI_BOOT_APP_RECT_COLOR_B);
-  er_ui_boot_store_u32(rect + ER_WASM_UI_RECT_RECORD_COLOR2_OFFSET +
-                       ER_WASM_UI_COLOR_RECORD_A_OFFSET,
-                       ER_UI_BOOT_APP_RECT_COLOR_A);
-  er_ui_boot_store_u32(rect + ER_WASM_UI_RECT_RECORD_MODE_OFFSET,
-                       (UINT32)ER_UI_RECT_FILL);
-  er_ui_boot_store_u32(rect + ER_WASM_UI_RECT_RECORD_SHADOW_OFFSET, 0u);
-}
-
-static void er_ui_boot_seed_user_app_hit(UINT8* hit) {
-  er_ui_boot_store_u32(hit + ER_WASM_UI_HIT_RECORD_KIND_OFFSET,
-                       (UINT32)ER_UI_HIT_BUTTON);
-  er_ui_boot_store_u32(hit + ER_WASM_UI_HIT_RECORD_ID_OFFSET,
-                       ER_UI_BOOT_APP_HIT_ID);
-  er_ui_boot_store_u32(hit + ER_WASM_UI_HIT_RECORD_X_OFFSET,
-                       ER_UI_BOOT_APP_RECT_X);
-  er_ui_boot_store_u32(hit + ER_WASM_UI_HIT_RECORD_Y_OFFSET,
-                       ER_UI_BOOT_APP_RECT_Y);
-  er_ui_boot_store_u32(hit + ER_WASM_UI_HIT_RECORD_W_OFFSET,
-                       ER_UI_BOOT_APP_RECT_W);
-  er_ui_boot_store_u32(hit + ER_WASM_UI_HIT_RECORD_H_OFFSET,
-                       ER_UI_BOOT_APP_RECT_H);
-}
-
-static void er_ui_boot_seed_user_app_text(UINT8* text) {
-  er_ui_boot_store_u32(text + ER_WASM_UI_QUAD_RECORD_X_OFFSET,
-                       ER_UI_BOOT_APP_TEXT_X);
-  er_ui_boot_store_u32(text + ER_WASM_UI_QUAD_RECORD_Y_OFFSET,
-                       ER_UI_BOOT_APP_TEXT_Y);
-  er_ui_boot_store_u32(text + ER_WASM_UI_QUAD_RECORD_W_OFFSET,
-                       ER_UI_BOOT_APP_TEXT_W);
-  er_ui_boot_store_u32(text + ER_WASM_UI_QUAD_RECORD_H_OFFSET,
-                       ER_UI_BOOT_APP_TEXT_H);
-  er_ui_boot_store_u32(text + ER_WASM_UI_QUAD_RECORD_U0_OFFSET, 0u);
-  er_ui_boot_store_u32(text + ER_WASM_UI_QUAD_RECORD_V0_OFFSET, 0u);
-  er_ui_boot_store_u32(text + ER_WASM_UI_QUAD_RECORD_U1_OFFSET,
-                       ER_UI_BOOT_APP_TEXT_U1);
-  er_ui_boot_store_u32(text + ER_WASM_UI_QUAD_RECORD_V1_OFFSET,
-                       ER_UI_BOOT_APP_TEXT_V1);
-  er_ui_boot_store_u32(text + ER_WASM_UI_QUAD_RECORD_ATLAS_ID_OFFSET,
-                       ER_UI_BOOT_APP_TEXT_ATLAS_ID);
-  er_ui_boot_store_u32(text + ER_WASM_UI_QUAD_RECORD_COLOR_OFFSET +
-                       ER_WASM_UI_COLOR_RECORD_R_OFFSET,
-                       ER_UI_BOOT_APP_TEXT_COLOR_R);
-  er_ui_boot_store_u32(text + ER_WASM_UI_QUAD_RECORD_COLOR_OFFSET +
-                       ER_WASM_UI_COLOR_RECORD_G_OFFSET,
-                       ER_UI_BOOT_APP_TEXT_COLOR_G);
-  er_ui_boot_store_u32(text + ER_WASM_UI_QUAD_RECORD_COLOR_OFFSET +
-                       ER_WASM_UI_COLOR_RECORD_B_OFFSET,
-                       ER_UI_BOOT_APP_TEXT_COLOR_B);
-  er_ui_boot_store_u32(text + ER_WASM_UI_QUAD_RECORD_COLOR_OFFSET +
-                       ER_WASM_UI_COLOR_RECORD_A_OFFSET,
-                       ER_UI_BOOT_APP_TEXT_COLOR_A);
-}
-
-static UINT8 er_ui_boot_seed_user_app_ui_packet(ErUiWasmAppRuntime* runtime) {
-  UINT8* packet;
-  UINT8* rect;
-  UINT8* hit;
-  UINT8* text;
-
-  if (runtime == 0 || runtime->memory == 0 ||
-      runtime->relay_outbox_base > runtime->memory_size ||
-      ER_UI_WASM_COUNTER_PACKET_BYTES >
-        runtime->memory_size - runtime->relay_outbox_base) {
-    return 0u;
-  }
-  packet = runtime->memory + runtime->relay_outbox_base;
-  rect = packet + ER_WASM_UI_COMMAND_LIST_HEADER_LEN;
-  hit = rect + ER_WASM_UI_RECT_RECORD_LEN;
-  text = hit + ER_WASM_UI_HIT_RECORD_LEN;
-
-  er_mem_zero(packet, ER_UI_WASM_COUNTER_PACKET_BYTES);
-  er_ui_boot_seed_user_app_header(packet);
-  er_ui_boot_seed_user_app_rect(rect);
-  er_ui_boot_seed_user_app_hit(hit);
-  er_ui_boot_seed_user_app_text(text);
-  return 1u;
-}
 
 static UINT8 er_ui_boot_seed_package_object_store(const ErCryptoProvider* crypto,
                                                   const ErAdmittedRoute* route,
@@ -280,8 +111,7 @@ UINT8 er_ui_boot_execute_wasm_app(ErUiWasmAppRuntime* runtime) {
   if (runtime == 0) {
     return 0u;
   }
-  if (er_ui_boot_seed_user_app_ui_packet(runtime) == 0u ||
-      er_ui_wasm_app_execute(runtime, &main_result) != 0 ||
+  if (er_ui_wasm_app_execute(runtime, &main_result) != 0 ||
       main_result != (INT64)(UINT64)ER_UI_WASM_COUNTER_PACKET_BYTES) {
     return 0u;
   }
