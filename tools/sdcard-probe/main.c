@@ -33,15 +33,26 @@ enum {
   ERSD_IO_ALIGN_BYTES = 4096u,
   ERSD_PATH_BYTES = 512u,
   ERSD_TEXT_BYTES = 128u,
+  ERSD_ETA_TEXT_BYTES = 64u,
   ERSD_DECIMAL_BASE = 10,
   ERSD_MIN_ARGS = 3,
   ERSD_EXIT_USAGE = 2,
   ERSD_PATTERN_SALT_A = 0x51u,
   ERSD_PATTERN_SALT_SHIFT = 56u,
   ERSD_MIB_BYTES = 1048576u,
+  ERSD_MB_BYTES = 1000000u,
   ERSD_SEC_NSEC = 1000000000u,
+  ERSD_SECONDS_PER_MINUTE = 60u,
+  ERSD_SECONDS_PER_HOUR = 3600u,
   ERSD_SYSFS_SECTOR_BYTES = 512u,
-  ERSD_PROGRESS_BYTES = 268435456u
+  ERSD_PROGRESS_BYTES = 268435456u,
+  ERSD_SPEED_MB_C2 = 2u,
+  ERSD_SPEED_MB_C4 = 4u,
+  ERSD_SPEED_MB_C6 = 6u,
+  ERSD_SPEED_MB_C10 = 10u,
+  ERSD_SPEED_MB_V30 = 30u,
+  ERSD_SPEED_MB_V60 = 60u,
+  ERSD_SPEED_MB_V90 = 90u
 };
 
 typedef enum {
@@ -442,6 +453,84 @@ static double ersd_mib_per_sec(uint64_t bytes, double seconds) {
   return ((double)bytes / (double)ERSD_MIB_BYTES) / seconds;
 }
 
+static double ersd_mb_per_sec(uint64_t bytes, double seconds) {
+  if (seconds <= 0.0) {
+    return 0.0;
+  }
+  return ((double)bytes / (double)ERSD_MB_BYTES) / seconds;
+}
+
+static const char* ersd_sd_speed_class(double write_mb_sec) {
+  if (write_mb_sec >= (double)ERSD_SPEED_MB_C10) {
+    return "C10";
+  }
+  if (write_mb_sec >= (double)ERSD_SPEED_MB_C6) {
+    return "C6";
+  }
+  if (write_mb_sec >= (double)ERSD_SPEED_MB_C4) {
+    return "C4";
+  }
+  if (write_mb_sec >= (double)ERSD_SPEED_MB_C2) {
+    return "C2";
+  }
+  return "below-C2";
+}
+
+static const char* ersd_uhs_speed_class(double write_mb_sec) {
+  if (write_mb_sec >= (double)ERSD_SPEED_MB_V30) {
+    return "U3";
+  }
+  if (write_mb_sec >= (double)ERSD_SPEED_MB_C10) {
+    return "U1";
+  }
+  return "below-U1";
+}
+
+static const char* ersd_video_speed_class(double write_mb_sec) {
+  if (write_mb_sec >= (double)ERSD_SPEED_MB_V90) {
+    return "V90";
+  }
+  if (write_mb_sec >= (double)ERSD_SPEED_MB_V60) {
+    return "V60";
+  }
+  if (write_mb_sec >= (double)ERSD_SPEED_MB_V30) {
+    return "V30";
+  }
+  if (write_mb_sec >= (double)ERSD_SPEED_MB_C10) {
+    return "V10";
+  }
+  if (write_mb_sec >= (double)ERSD_SPEED_MB_C6) {
+    return "V6";
+  }
+  return "below-V6";
+}
+
+static void ersd_format_eta(double seconds, char* out, size_t out_size) {
+  unsigned long long whole_seconds;
+  unsigned long long hours;
+  unsigned long long minutes;
+
+  if (out == NULL || out_size == 0u) {
+    return;
+  }
+  if (seconds <= 0.0) {
+    snprintf(out, out_size, "unknown");
+    return;
+  }
+  whole_seconds = (unsigned long long)(seconds + 0.5);
+  hours = whole_seconds / ERSD_SECONDS_PER_HOUR;
+  whole_seconds %= ERSD_SECONDS_PER_HOUR;
+  minutes = whole_seconds / ERSD_SECONDS_PER_MINUTE;
+  whole_seconds %= ERSD_SECONDS_PER_MINUTE;
+  if (hours > 0u) {
+    snprintf(out, out_size, "%lluh%02llum%02llus", hours, minutes, whole_seconds);
+  } else if (minutes > 0u) {
+    snprintf(out, out_size, "%llum%02llus", minutes, whole_seconds);
+  } else {
+    snprintf(out, out_size, "%llus", whole_seconds);
+  }
+}
+
 static const char* ersd_kind_label(ErsdDeviceKind kind) {
   switch (kind) {
     case ERSD_DEVICE_REGULAR:
@@ -457,13 +546,30 @@ static const char* ersd_kind_label(ErsdDeviceKind kind) {
 static void ersd_print_progress(uint64_t done,
                                 uint64_t total,
                                 const ErsdProbeResult* result) {
+  double write_mb_sec;
+  double combined_seconds;
+  double eta_seconds;
+  char eta[ERSD_ETA_TEXT_BYTES];
+
   if (done == total || (done % ERSD_PROGRESS_BYTES) == 0u) {
+    write_mb_sec = ersd_mb_per_sec(result->write_bytes, result->write_seconds);
+    combined_seconds = result->write_seconds + result->verify_seconds;
+    eta_seconds = 0.0;
+    if (done > 0u && combined_seconds > 0.0 && total > done) {
+      eta_seconds = ((double)(total - done) * combined_seconds) / (double)done;
+    }
+    ersd_format_eta(eta_seconds, eta, sizeof(eta));
     fprintf(stderr,
-            "sdcard-probe: checked %llu / %llu bytes write %.2f MiB/s verify %.2f MiB/s\n",
+            "sdcard-probe: checked %llu / %llu bytes write %.2f MiB/s %.2f MB/s %s/%s/%s verify %.2f MiB/s eta-real-card %s\n",
             (unsigned long long)done,
             (unsigned long long)total,
             ersd_mib_per_sec(result->write_bytes, result->write_seconds),
-            ersd_mib_per_sec(result->verify_bytes, result->verify_seconds));
+            write_mb_sec,
+            ersd_sd_speed_class(write_mb_sec),
+            ersd_uhs_speed_class(write_mb_sec),
+            ersd_video_speed_class(write_mb_sec),
+            ersd_mib_per_sec(result->verify_bytes, result->verify_seconds),
+            eta);
   }
 }
 
@@ -592,6 +698,9 @@ static void ersd_print_report(const ErsdConfig* cfg,
                               const ErsdDeviceInfo* info,
                               const ErsdProbeResult* result,
                               uint64_t tested_bytes) {
+  double write_mb_sec = ersd_mb_per_sec(result->write_bytes,
+                                        result->write_seconds);
+
   printf("target: %s\n", cfg->target);
   printf("kind: %s\n", ersd_kind_label(info->kind));
   printf("claimed-bytes: %llu\n", (unsigned long long)info->claimed_bytes);
@@ -609,6 +718,11 @@ static void ersd_print_report(const ErsdConfig* cfg,
   printf("wrapped: %s\n", result->wrapped == 0 ? "no" : "yes");
   printf("write-mib-sec: %.2f\n",
          ersd_mib_per_sec(result->write_bytes, result->write_seconds));
+  printf("write-mb-sec: %.2f\n", write_mb_sec);
+  printf("observed-sd-speed-class: %s\n", ersd_sd_speed_class(write_mb_sec));
+  printf("observed-uhs-speed-class: %s\n", ersd_uhs_speed_class(write_mb_sec));
+  printf("observed-video-speed-class: %s\n",
+         ersd_video_speed_class(write_mb_sec));
   printf("verify-mib-sec: %.2f\n",
          ersd_mib_per_sec(result->verify_bytes, result->verify_seconds));
   printf("read-check-mib-sec: %.2f\n",
