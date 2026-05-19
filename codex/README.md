@@ -77,6 +77,24 @@ The model can stage complete-file replacements with `propose_change`. It should
 not ask for routine `git status`, build, or test commands: the host supplies
 status context and performs scoped verification automatically.
 
+## Improvement opportunities
+
+The current client already covers the core in-memory edit and verified-commit
+loop. The highest-impact next improvements are:
+
+- Decode `pclose` statuses from the streaming `curl` transport before reporting
+  failures, matching the existing `command_status_code` helper used by command
+  execution. This would turn raw wait statuses into actionable exit codes.
+- Consolidate the duplicated streaming request setup in `edgerun_c.c` and
+  `edgerun_c_agent.c` so header construction, temporary body cleanup, and SSE
+  parsing have one implementation path.
+- Add focused self-tests for SSE item ownership and response rendering. The
+  current self-test covers fence-language detection, but not streamed tool item
+  parsing, output item lifetime, or partial-line renderer flushing.
+- Split the agent wrapper into smaller files once the duplicated stream path is
+  consolidated. `edgerun_c_agent.c` currently includes the base implementation
+  and overrides selected behavior, which makes ownership harder to inspect.
+
 ## Commands
 
 - `help`
