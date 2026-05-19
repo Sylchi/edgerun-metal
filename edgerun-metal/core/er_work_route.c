@@ -11,6 +11,10 @@ static const UINT8 g_admitted_route_domain[] = "edgerun:v1:work:admitted-capabil
 static const UINT8 g_admission_hash_domain[] = "edgerun:c:v1:work:admission";
 static const UINT8 g_ordered_message_domain[] = "edgerun:v1:work:ordered-message";
 static const UINT8 g_packet_transit_domain[] = "edgerun:v1:work:packet-transit";
+static const UINT8 g_route_challenge_domain[] =
+    "edgerun:c:v1:work:route-challenge";
+static const UINT8 g_route_start_proof_domain[] =
+    "edgerun:c:v1:work:route-start-proof";
 
 enum {
   ER_WORK_ROUTE_U16_BYTES = 2u,
@@ -60,6 +64,24 @@ enum {
   ER_WORK_TRANSIT_PACKET_SPAN = 5u,
   ER_WORK_TRANSIT_SEQUENCE_SPAN = 6u,
   ER_WORK_TRANSIT_PREVIOUS_SPAN = 7u,
+  ER_WORK_EPOCH_FIELD_BYTES = ER_WORK_ROUTE_U64_BYTES * 4u,
+  ER_WORK_ROUTE_CHALLENGE_FIELD_BYTES = ER_WORK_EPOCH_FIELD_BYTES * 2u,
+  ER_WORK_ROUTE_CHALLENGE_SPAN_COUNT = 7u,
+  ER_WORK_ROUTE_CHALLENGE_ROUTE_SPAN = 0u,
+  ER_WORK_ROUTE_CHALLENGE_REQUEST_SPAN = 1u,
+  ER_WORK_ROUTE_CHALLENGE_ADMISSION_SPAN = 2u,
+  ER_WORK_ROUTE_CHALLENGE_WORKER_SPAN = 3u,
+  ER_WORK_ROUTE_CHALLENGE_RELAY_SPAN = 4u,
+  ER_WORK_ROUTE_CHALLENGE_PATH_SPAN = 5u,
+  ER_WORK_ROUTE_CHALLENGE_FIELDS_SPAN = 6u,
+  ER_WORK_ROUTE_START_PROOF_FIELD_BYTES = ER_WORK_EPOCH_FIELD_BYTES,
+  ER_WORK_ROUTE_START_PROOF_SPAN_COUNT = 6u,
+  ER_WORK_ROUTE_START_PROOF_CHALLENGE_SPAN = 0u,
+  ER_WORK_ROUTE_START_PROOF_ROUTE_SPAN = 1u,
+  ER_WORK_ROUTE_START_PROOF_WORKER_SPAN = 2u,
+  ER_WORK_ROUTE_START_PROOF_RELAY_SPAN = 3u,
+  ER_WORK_ROUTE_START_PROOF_IDENTITY_SPAN = 4u,
+  ER_WORK_ROUTE_START_PROOF_FIELDS_SPAN = 5u,
   ER_WORK_CAPABILITY_RISK_KNOWN_MASK = ER_CAPABILITY_RISK_LOCALITY_AUTHORITY |
                                        ER_CAPABILITY_RISK_UNSEALED_TRANSPORT |
                                        ER_CAPABILITY_RISK_PLAINTEXT_DURABLE |
@@ -82,6 +104,16 @@ static void er_work_put_be16(UINT8* dst, UINT16 value) {
 
 static void er_work_put_be64(UINT8* dst, UINT64 value) {
   er_work_put_be(dst, value, ER_WORK_ROUTE_U64_BYTES);
+}
+
+static void er_work_put_epoch_stamp(UINT8* dst, ErEpochStamp stamp) {
+  er_work_put_be64(dst, stamp.era);
+  dst += ER_WORK_ROUTE_U64_BYTES;
+  er_work_put_be64(dst, stamp.epoch);
+  dst += ER_WORK_ROUTE_U64_BYTES;
+  er_work_put_be64(dst, stamp.slot);
+  dst += ER_WORK_ROUTE_U64_BYTES;
+  er_work_put_be64(dst, stamp.tick);
 }
 
 static UINT8 er_work_capability_kind_valid(UINT16 kind) {
@@ -168,6 +200,32 @@ static UINT8 er_work_relay_in_admission(const ErWorkAdmission* admission,
   return 0;
 }
 
+static UINT8 er_work_admitted_route_valid(const ErAdmittedRoute* route) {
+  if (route == 0 ||
+      route->abi_version != ER_WORK_ABI_VERSION ||
+      route->relay_count == 0u ||
+      route->relay_count > ER_ROUTE_RELAY_MAX ||
+      route->role == 0u ||
+      route->department == 0u ||
+      route->work_type == 0u ||
+      er_hash_nonzero(&route->route_id) == 0u ||
+      er_hash_nonzero(&route->request_hash) == 0u ||
+      er_hash_nonzero(&route->admission_hash) == 0u ||
+      er_identity_valid(&route->user) == 0u ||
+      er_node_id_nonzero(&route->source_node_id) == 0u ||
+      er_node_id_nonzero(&route->target_node_id) == 0u ||
+      er_node_id_nonzero(&route->relay_node_id) == 0u ||
+      er_hash_nonzero(&route->channel_id) == 0u ||
+      er_hash_nonzero(&route->admission_route_commitment) == 0u ||
+      er_hash_nonzero(&route->target_route_commitment) == 0u ||
+      er_hash_nonzero(&route->policy_hash) == 0u ||
+      route->admitted_budget == 0u ||
+      route->valid_until_ms == 0u) {
+    return 0u;
+  }
+  return 1u;
+}
+
 static UINT8 er_work_hash_admission(const ErCryptoProvider* crypto,
                                     const ErWorkAdmission* admission,
                                     ErHash* out_hash) {
@@ -215,6 +273,103 @@ static UINT8 er_work_hash_admission(const ErCryptoProvider* crypto,
   return er_crypto_hash(crypto, g_admission_hash_domain,
                         (UINTN)(sizeof(g_admission_hash_domain) - 1u),
                         spans, ER_WORK_ADMISSION_HASH_SPAN_COUNT, out_hash);
+}
+
+static UINT8 er_work_route_challenge_hash(const ErCryptoProvider* crypto,
+                                          const ErAdmittedRoute* route,
+                                          ErEpochStamp issued_at,
+                                          ErEpochStamp valid_until,
+                                          ErHash* out_hash) {
+  UINT8 fields[ER_WORK_ROUTE_CHALLENGE_FIELD_BYTES];
+  UINT8* cursor = fields;
+  ErByteSpan spans[ER_WORK_ROUTE_CHALLENGE_SPAN_COUNT];
+
+  if (crypto == 0 ||
+      er_work_admitted_route_valid(route) == 0u ||
+      out_hash == 0 ||
+      er_epoch_stamp_compare(issued_at, valid_until) >= 0) {
+    return 0u;
+  }
+
+  er_work_put_epoch_stamp(cursor, issued_at);
+  cursor += ER_WORK_EPOCH_FIELD_BYTES;
+  er_work_put_epoch_stamp(cursor, valid_until);
+
+  spans[ER_WORK_ROUTE_CHALLENGE_ROUTE_SPAN].bytes = route->route_id.bytes;
+  spans[ER_WORK_ROUTE_CHALLENGE_ROUTE_SPAN].len = ER_HASH_LEN;
+  spans[ER_WORK_ROUTE_CHALLENGE_REQUEST_SPAN].bytes = route->request_hash.bytes;
+  spans[ER_WORK_ROUTE_CHALLENGE_REQUEST_SPAN].len = ER_HASH_LEN;
+  spans[ER_WORK_ROUTE_CHALLENGE_ADMISSION_SPAN].bytes =
+      route->admission_hash.bytes;
+  spans[ER_WORK_ROUTE_CHALLENGE_ADMISSION_SPAN].len = ER_HASH_LEN;
+  spans[ER_WORK_ROUTE_CHALLENGE_WORKER_SPAN].bytes =
+      route->source_node_id.bytes;
+  spans[ER_WORK_ROUTE_CHALLENGE_WORKER_SPAN].len = ER_NODE_ID_LEN;
+  spans[ER_WORK_ROUTE_CHALLENGE_RELAY_SPAN].bytes =
+      route->relay_node_id.bytes;
+  spans[ER_WORK_ROUTE_CHALLENGE_RELAY_SPAN].len = ER_NODE_ID_LEN;
+  spans[ER_WORK_ROUTE_CHALLENGE_PATH_SPAN].bytes =
+      (const UINT8*)route->relay_path;
+  spans[ER_WORK_ROUTE_CHALLENGE_PATH_SPAN].len =
+      (UINTN)route->relay_count * (UINTN)sizeof(route->relay_path[0]);
+  spans[ER_WORK_ROUTE_CHALLENGE_FIELDS_SPAN].bytes = fields;
+  spans[ER_WORK_ROUTE_CHALLENGE_FIELDS_SPAN].len = (UINTN)sizeof(fields);
+  return er_crypto_hash(crypto,
+                        g_route_challenge_domain,
+                        (UINTN)(sizeof(g_route_challenge_domain) - 1u),
+                        spans,
+                        ER_WORK_ROUTE_CHALLENGE_SPAN_COUNT,
+                        out_hash);
+}
+
+static UINT8 er_work_route_start_proof_hash(const ErCryptoProvider* crypto,
+                                            const ErWorkRouteChallenge* challenge,
+                                            const ErIdentity* worker_identity,
+                                            ErEpochStamp started_at,
+                                            ErHash* out_hash) {
+  UINT8 fields[ER_WORK_ROUTE_START_PROOF_FIELD_BYTES];
+  ErByteSpan spans[ER_WORK_ROUTE_START_PROOF_SPAN_COUNT];
+
+  if (crypto == 0 ||
+      challenge == 0 ||
+      worker_identity == 0 ||
+      out_hash == 0 ||
+      challenge->abi_version != ER_WORK_ABI_VERSION ||
+      er_hash_nonzero(&challenge->challenge_id) == 0u ||
+      er_hash_nonzero(&challenge->route_id) == 0u ||
+      er_node_id_nonzero(&challenge->worker_node_id) == 0u ||
+      er_node_id_nonzero(&challenge->relay_node_id) == 0u ||
+      er_identity_valid(worker_identity) == 0u ||
+      er_epoch_stamp_compare(started_at, challenge->issued_at) < 0 ||
+      er_epoch_stamp_compare(started_at, challenge->valid_until) >= 0) {
+    return 0u;
+  }
+
+  er_work_put_epoch_stamp(fields, started_at);
+  spans[ER_WORK_ROUTE_START_PROOF_CHALLENGE_SPAN].bytes =
+      challenge->challenge_id.bytes;
+  spans[ER_WORK_ROUTE_START_PROOF_CHALLENGE_SPAN].len = ER_HASH_LEN;
+  spans[ER_WORK_ROUTE_START_PROOF_ROUTE_SPAN].bytes =
+      challenge->route_id.bytes;
+  spans[ER_WORK_ROUTE_START_PROOF_ROUTE_SPAN].len = ER_HASH_LEN;
+  spans[ER_WORK_ROUTE_START_PROOF_WORKER_SPAN].bytes =
+      challenge->worker_node_id.bytes;
+  spans[ER_WORK_ROUTE_START_PROOF_WORKER_SPAN].len = ER_NODE_ID_LEN;
+  spans[ER_WORK_ROUTE_START_PROOF_RELAY_SPAN].bytes =
+      challenge->relay_node_id.bytes;
+  spans[ER_WORK_ROUTE_START_PROOF_RELAY_SPAN].len = ER_NODE_ID_LEN;
+  spans[ER_WORK_ROUTE_START_PROOF_IDENTITY_SPAN].bytes =
+      (const UINT8*)worker_identity;
+  spans[ER_WORK_ROUTE_START_PROOF_IDENTITY_SPAN].len =
+      (UINTN)sizeof(*worker_identity);
+  spans[ER_WORK_ROUTE_START_PROOF_FIELDS_SPAN].bytes = fields;
+  spans[ER_WORK_ROUTE_START_PROOF_FIELDS_SPAN].len = (UINTN)sizeof(fields);
+  return er_crypto_hash(crypto,
+                        g_route_start_proof_domain,
+                        (UINTN)(sizeof(g_route_start_proof_domain) - 1u),
+                        spans,
+                        ER_WORK_ROUTE_START_PROOF_SPAN_COUNT,
+                        out_hash);
 }
 
 static UINT8 er_work_admitted_route_id(const ErCryptoProvider* crypto,
@@ -524,6 +679,120 @@ UINT8 er_work_prepare_relay_accounting_claim(const ErRelayTransitHop* hop,
   out_claim->total_claim = amount + receipt_base;
   out_claim->sequence = hop->sequence;
   return 1;
+}
+
+UINT8 er_work_route_challenge_prepare(const ErCryptoProvider* crypto,
+                                      const ErAdmittedRoute* route,
+                                      ErEpochStamp issued_at,
+                                      ErEpochStamp valid_until,
+                                      ErWorkRouteChallenge* out_challenge) {
+  ErHash challenge_id;
+
+  if (out_challenge == 0 ||
+      er_work_route_challenge_hash(crypto,
+                                   route,
+                                   issued_at,
+                                   valid_until,
+                                   &challenge_id) == 0u) {
+    return 0u;
+  }
+
+  er_mem_zero((UINT8*)out_challenge, (UINTN)sizeof(*out_challenge));
+  out_challenge->abi_version = ER_WORK_ABI_VERSION;
+  out_challenge->challenge_id = challenge_id;
+  out_challenge->route_id = route->route_id;
+  out_challenge->request_hash = route->request_hash;
+  out_challenge->admission_hash = route->admission_hash;
+  out_challenge->worker_node_id = route->source_node_id;
+  out_challenge->relay_node_id = route->relay_node_id;
+  out_challenge->issued_at = issued_at;
+  out_challenge->valid_until = valid_until;
+  return 1u;
+}
+
+UINT8 er_work_route_challenge_valid_at(const ErWorkRouteChallenge* challenge,
+                                       ErEpochStamp now) {
+  if (challenge == 0 ||
+      challenge->abi_version != ER_WORK_ABI_VERSION ||
+      er_hash_nonzero(&challenge->challenge_id) == 0u ||
+      er_hash_nonzero(&challenge->route_id) == 0u ||
+      er_hash_nonzero(&challenge->request_hash) == 0u ||
+      er_hash_nonzero(&challenge->admission_hash) == 0u ||
+      er_node_id_nonzero(&challenge->worker_node_id) == 0u ||
+      er_node_id_nonzero(&challenge->relay_node_id) == 0u ||
+      er_epoch_stamp_compare(challenge->issued_at, challenge->valid_until) >= 0 ||
+      er_epoch_stamp_compare(now, challenge->issued_at) < 0 ||
+      er_epoch_stamp_compare(now, challenge->valid_until) >= 0) {
+    return 0u;
+  }
+  return 1u;
+}
+
+UINT8 er_work_route_start_proof_sign(const ErCryptoProvider* crypto,
+                                     const ErWorkRouteChallenge* challenge,
+                                     const ErIdentity* worker_identity,
+                                     ErEpochStamp started_at,
+                                     ErWorkRouteStartProof* out_proof) {
+  ErHash proof_hash;
+  ErByteSpan preimage;
+
+  if (out_proof == 0 ||
+      er_work_route_start_proof_hash(crypto,
+                                     challenge,
+                                     worker_identity,
+                                     started_at,
+                                     &proof_hash) == 0u) {
+    return 0u;
+  }
+  preimage.bytes = proof_hash.bytes;
+  preimage.len = ER_HASH_LEN;
+
+  er_mem_zero((UINT8*)out_proof, (UINTN)sizeof(*out_proof));
+  out_proof->abi_version = ER_WORK_ABI_VERSION;
+  out_proof->proof_hash = proof_hash;
+  out_proof->challenge_id = challenge->challenge_id;
+  out_proof->route_id = challenge->route_id;
+  out_proof->worker_node_id = challenge->worker_node_id;
+  out_proof->relay_node_id = challenge->relay_node_id;
+  out_proof->started_at = started_at;
+  if (er_crypto_sign(crypto, &preimage, &out_proof->signature) == 0u ||
+      er_identity_equal(&out_proof->signature.identity, worker_identity) == 0u) {
+    er_mem_zero((UINT8*)out_proof, (UINTN)sizeof(*out_proof));
+    return 0u;
+  }
+  return 1u;
+}
+
+UINT8 er_work_route_start_proof_verify(const ErCryptoProvider* crypto,
+                                       const ErWorkRouteChallenge* challenge,
+                                       const ErWorkRouteStartProof* proof,
+                                       ErEpochStamp now) {
+  ErHash expected_hash;
+  ErByteSpan preimage;
+
+  if (crypto == 0 ||
+      challenge == 0 ||
+      proof == 0 ||
+      proof->abi_version != ER_WORK_ABI_VERSION ||
+      er_work_route_challenge_valid_at(challenge, now) == 0u ||
+      er_hash_equal(&proof->challenge_id, &challenge->challenge_id) == 0u ||
+      er_hash_equal(&proof->route_id, &challenge->route_id) == 0u ||
+      er_node_id_equal(&proof->worker_node_id, &challenge->worker_node_id) == 0u ||
+      er_node_id_equal(&proof->relay_node_id, &challenge->relay_node_id) == 0u ||
+      er_work_route_start_proof_hash(crypto,
+                                     challenge,
+                                     &proof->signature.identity,
+                                     proof->started_at,
+                                     &expected_hash) == 0u ||
+      er_hash_equal(&proof->proof_hash, &expected_hash) == 0u) {
+    return 0u;
+  }
+  preimage.bytes = expected_hash.bytes;
+  preimage.len = ER_HASH_LEN;
+  return er_crypto_verify(crypto,
+                          &proof->signature.identity,
+                          &preimage,
+                          &proof->signature);
 }
 
 UINT8 er_work_capability_envelope_header_valid(const ErCapabilityEnvelopeHeader* header) {
