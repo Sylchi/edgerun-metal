@@ -3,6 +3,8 @@
 Status:
 - x86_64 UEFI: confirmed boot on real hardware.
 - Raspberry Pi 4B AArch64 UEFI: build path prepared; hardware boot not yet confirmed.
+- Raspberry Pi Zero 2 W AArch64 U-Boot EFI: board profile and payload build
+  path prepared; hardware boot not yet confirmed.
 
 Hardware:
 - Desktop: MSI X570 + Ryzen 5600X
@@ -53,3 +55,28 @@ Known remaining Pi 4B work:
 - add a Pi 4B native input path; current production input path is PS/2
 - add or select a Pi 4B native network/storage path after the UEFI console/GOP proof
 - keep x86 I/O-port access disabled on AArch64; Pi hardware paths must use MMIO/firmware-described devices
+
+## Raspberry Pi Zero 2 W bring-up path
+
+The Pi Zero 2 W path is tracked in `PI_ZERO_2W_BRINGUP.md`. Build its first
+EFI payload with:
+
+```bash
+make -C edgerun-metal pi-zero-2w-uefi
+```
+
+The generated payload is:
+
+```text
+.build/edgerun-metal/pi-zero-2w/esp/EFI/BOOT/BOOTAA64.EFI
+```
+
+The intended first boot chain is explicit:
+
+```text
+Raspberry Pi firmware -> U-Boot EFI -> BOOTAA64.EFI -> EdgeRun Metal Core
+```
+
+The Pi Zero 2 W boards are the constrained hardware swarm target for proving
+deterministic budgets, identity-routed storage, sealed package replication, and
+small-change UI work scaling.
