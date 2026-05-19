@@ -37,6 +37,7 @@ static const char ERB_REPO_CHECK_BIN[] = ".build/repo-check";
 static const char ERB_REPO_INSPECT_BIN[] = ".build/repo-inspect";
 static const char ERB_ERWIRE_DECODE_BIN[] = ".build/erwire-decode";
 static const char ERB_WASM_COMPILE_BIN[] = ".build/wasm-compile";
+static const char ERB_APP_RUN_BIN[] = ".build/app-run";
 static const char ERB_CRYPTO_TEST_BIN[] = ".build/er-build-out/crypto/test_blake3";
 static const char ERB_VARFONT_TEST_BIN[] = ".build/er-build-out/varfont/vrfont_tests";
 static const char ERB_APP_SOURCE_NAME[] = "app.c";
@@ -285,6 +286,34 @@ static int erb_build_wasm_compile(int print_plan) {
   return erb_run_args(&args, print_plan);
 }
 
+static int erb_build_app_run(int print_plan) {
+  ErbArgs args;
+
+  if (erb_prepare_dirs() != 0 || erb_compile_common(&args, ERB_APP_RUN_BIN) != 0) {
+    return 1;
+  }
+  if (erb_args_push(&args, "-ffunction-sections") != 0 ||
+      erb_args_push(&args, "-fdata-sections") != 0 ||
+      erb_args_push(&args, "-Iedgerun-metal/core") != 0 ||
+      erb_args_push(&args, "-Iinclude") != 0 ||
+      erb_args_push(&args, "-Iedgerun-ui-core/include") != 0 ||
+      erb_args_push(&args, "-Iedgerun-ui-core/varfont/include") != 0 ||
+      erb_args_push(&args, "tools/app-run/main.c") != 0 ||
+      erb_args_push(&args, "edgerun-metal/core/er_mem.c") != 0 ||
+      erb_args_push(&args, "edgerun-metal/core/er_app.c") != 0 ||
+      erb_args_push(&args, "edgerun-metal/core/er_relay_packet.c") != 0 ||
+      erb_args_push(&args, "edgerun-metal/core/wasm_vm.c") != 0 ||
+      erb_args_push(&args, "edgerun-metal/core/wasm_vm_reader.c") != 0 ||
+      erb_args_push(&args, "edgerun-metal/core/wasm_vm_memory_ui.c") != 0 ||
+      erb_args_push(&args, "edgerun-metal/core/wasm_vm_contract.c") != 0 ||
+      erb_args_push(&args, "edgerun-metal/core/wasm_vm_hostcall.c") != 0 ||
+      erb_args_push(&args, "edgerun-metal/core/wasm_vm_execute.c") != 0 ||
+      erb_args_push(&args, "-Wl,--gc-sections") != 0) {
+    return 1;
+  }
+  return erb_run_args(&args, print_plan);
+}
+
 static int erb_target_app_build(const char* package_dir, int print_plan) {
   ErbArgs args;
   char app_source[ERB_PATH_CAP];
@@ -364,6 +393,32 @@ static int erb_target_app_verify(const char* package_dir) {
   }
   return erb_verify_app_package_identity(output_identity, app_source, manifest_source,
                                          output_wasm);
+}
+
+static int erb_target_app_run(const char* package_dir, int print_plan) {
+  ErbArgs args;
+  char package_build_dir[ERB_PATH_CAP];
+  char output_wasm[ERB_PATH_CAP];
+
+  if (package_dir == NULL || package_dir[0] == '\0') {
+    return erb_fail("app-run requires a package directory");
+  }
+  if (erb_path_join(package_build_dir, sizeof(package_build_dir), package_dir,
+                    ERB_APP_BUILD_DIR_NAME) != 0 ||
+      erb_path_join(output_wasm, sizeof(output_wasm), package_build_dir,
+                    ERB_APP_WASM_NAME) != 0) {
+    return 1;
+  }
+  if (erb_target_app_verify(package_dir) != 0 ||
+      erb_build_app_run(print_plan) != 0) {
+    return 1;
+  }
+  erb_args_init(&args);
+  if (erb_args_push(&args, ERB_APP_RUN_BIN) != 0 ||
+      erb_args_push(&args, output_wasm) != 0) {
+    return 1;
+  }
+  return erb_run_args(&args, print_plan);
 }
 
 static int erb_run_program(const char* program, int print_plan) {
@@ -614,7 +669,7 @@ static int erb_target_varfont_test(int print_plan) {
 static int erb_usage(void) {
   fprintf(stderr,
           "usage: er-build [--print-plan] <target> [args]\n"
-          "targets: app-build <package-dir> app-verify <package-dir>\n"
+          "targets: app-build <package-dir> app-verify <package-dir> app-run <package-dir>\n"
           "         repo-check-bin repo-inspect erwire-decode erwire-test wasm-compile\n"
           "         repo-check repo-test repo-progress <scope> [test-target]\n"
           "         crypto-test varfont-test\n");
@@ -658,6 +713,12 @@ int main(int argc, char** argv) {
       return erb_usage();
     }
     return erb_target_app_verify(argv[target_index + 1]);
+  }
+  if (strcmp(target, "app-run") == 0) {
+    if (target_index + 2 != argc) {
+      return erb_usage();
+    }
+    return erb_target_app_run(argv[target_index + 1], print_plan);
   }
   if (target_index + 1 != argc) {
     return erb_usage();
