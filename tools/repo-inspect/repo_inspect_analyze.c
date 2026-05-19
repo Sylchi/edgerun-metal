@@ -1,18 +1,32 @@
-static void eri_analyze_cleanup(EriPackages* packages, EriFunctions* funcs, EriFindings* findings,
-                                EriBinaries* bins, EriSourceFiles* sources,
-                                EriCoveragePackages* coverage_packages, EriSmellPackages* smell_packages,
-                                EriCpuPackages* cpu_packages, EriWorldviewPackages* worldview_packages,
-                                EriDuplicates* duplicates) {
-  eri_sources_free(sources);
-  eri_duplicates_free(duplicates);
-  eri_functions_free(funcs);
-  eri_findings_free(findings);
-  free(packages->items);
-  free(coverage_packages->items);
-  free(smell_packages->items);
-  free(cpu_packages->items);
-  free(worldview_packages->items);
-  free(bins->items);
+typedef struct {
+  EriTotals totals;
+  EriPackages packages;
+  EriFunctions funcs;
+  EriFindings findings;
+  EriBinaries bins;
+  EriSourceFiles sources;
+  EriCoveragePackages coverage_packages;
+  EriSmellPackages smell_packages;
+  EriCpuPackages cpu_packages;
+  EriWorldviewPackages worldview_packages;
+  EriDuplicates duplicates;
+} EriAnalyzeState;
+
+static void eri_analyze_state_init(EriAnalyzeState* state) {
+  memset(state, 0, sizeof(*state));
+}
+
+static void eri_analyze_state_free(EriAnalyzeState* state) {
+  eri_sources_free(&state->sources);
+  eri_duplicates_free(&state->duplicates);
+  eri_functions_free(&state->funcs);
+  eri_findings_free(&state->findings);
+  free(state->packages.items);
+  free(state->coverage_packages.items);
+  free(state->smell_packages.items);
+  free(state->cpu_packages.items);
+  free(state->worldview_packages.items);
+  free(state->bins.items);
 }
 
 static uint8_t eri_append_array_move(void** dst_items, size_t* dst_len, size_t* dst_cap,
@@ -62,6 +76,15 @@ static void eri_file_analysis_free(EriFileAnalysis* analysis) {
   eri_findings_free(&analysis->findings);
 }
 
+static void eri_file_analysis_free_remaining(EriFileAnalysis* file_results,
+                                             size_t start, size_t len) {
+  size_t i;
+
+  for (i = start; i < len; ++i) {
+    eri_file_analysis_free(&file_results[i]);
+  }
+}
+
 static void eri_file_analysis_scan(const EriVfsFile* file, EriFileAnalysis* analysis) {
   memset(analysis, 0, sizeof(*analysis));
   if (eri_is_build_path(file->path) != 0u || !eri_is_c_source(file->path) ||
@@ -69,7 +92,8 @@ static void eri_file_analysis_scan(const EriVfsFile* file, EriFileAnalysis* anal
     return;
   }
   analysis->analyzed = 1u;
-  eri_scan_line_metrics(file->bytes, file->len, &analysis->totals, &analysis->findings, file->path);
+  eri_scan_line_metrics(file->bytes, file->len, &analysis->totals,
+                        &analysis->findings, file->path);
   eri_scan_functions(file, &analysis->funcs, &analysis->findings);
   eri_scan_cpu_costs(file, &analysis->findings);
   if (eri_is_c_impl(file->path) && eri_is_example_path(file->path) == 0u &&
@@ -79,8 +103,10 @@ static void eri_file_analysis_scan(const EriVfsFile* file, EriFileAnalysis* anal
     return;
   }
   if (analysis->totals.code_lines > ERI_LARGE_FILE_LINES) {
-    char text[128];
-    snprintf(text, sizeof(text), "file has %llu code lines", (unsigned long long)analysis->totals.code_lines);
+    char text[sizeof(((EriFinding*)0)->text)];
+
+    snprintf(text, sizeof(text), "file has %llu code lines",
+             (unsigned long long)analysis->totals.code_lines);
     eri_add_finding(&analysis->findings, file->path, 1u, "large-file", text);
   }
 }
@@ -142,7 +168,9 @@ static void eri_print_tests_report(const EriCoveragePackages* coverage_packages)
   printf("  static proxy: implementation .c files with same-stem tests or test references\n");
   for (i = 0; i < coverage_packages->len && i < ERI_HOTSPOT_LIMIT; ++i) {
     const EriCoveragePackage* pkg = &coverage_packages->items[i];
-    uint64_t pct = pkg->source_files == 0u ? 100u : (pkg->tested_source_files * 100u) / pkg->source_files;
+    uint64_t pct = pkg->source_files == 0u
+                     ? ERI_PERCENT_SCALE
+                     : (pkg->tested_source_files * ERI_PERCENT_SCALE) / pkg->source_files;
 
     printf("    %-24s %3llu%%  %3llu/%-3llu impl signaled  tests: %3llu files, %5llu loc\n",
            pkg->package, (unsigned long long)pct,
@@ -196,7 +224,8 @@ static void eri_print_duplication_report(const EriDuplicates* duplicates) {
              duplicates->items[i].path_b, duplicates->items[i].line_b);
     }
     if (duplicates->len > ERI_SAMPLE_LIMIT) {
-      printf("    ... %llu more duplicate candidates\n", (unsigned long long)(duplicates->len - ERI_SAMPLE_LIMIT));
+      printf("    ... %llu more duplicate candidates\n",
+             (unsigned long long)(duplicates->len - ERI_SAMPLE_LIMIT));
     }
   }
   printf("\n");
@@ -224,7 +253,9 @@ static void eri_print_worldview_report(const EriFindings* findings,
                                        const EriWorldviewPackages* worldview_packages) {
   size_t i;
 
-  printf("  worldview: %llu findings (%llu host FS/process, %llu path identity, %llu legacy object ids, %llu raw object APIs, %llu WASM32-sized offset reviews)\n",
+  printf("  worldview: %llu findings (%llu host FS/process, %llu path identity, "
+         "%llu legacy object ids, %llu raw object APIs, "
+         "%llu WASM32-sized offset reviews)\n",
          (unsigned long long)eri_count_worldview_findings(findings),
          (unsigned long long)eri_count_findings_kind(findings, "world-host-fs"),
          (unsigned long long)eri_count_findings_kind(findings, "world-path-identity"),
@@ -241,7 +272,8 @@ static void eri_print_worldview_report(const EriFindings* findings,
       if (eri_worldview_package_score(pkg) == 0u) {
         continue;
       }
-      printf("      %-24s score %5llu  host-fs %3llu  path-id %3llu  obj-id %3llu  raw-api %3llu  u64 %3llu  nonprod %4llu\n",
+      printf("      %-24s score %5llu  host-fs %3llu  path-id %3llu  "
+             "obj-id %3llu  raw-api %3llu  u64 %3llu  nonprod %4llu\n",
              pkg->package,
              (unsigned long long)eri_worldview_package_score(pkg),
              (unsigned long long)pkg->host_fs_runtime,
@@ -260,7 +292,9 @@ static void eri_print_worldview_report(const EriFindings* findings,
 static void eri_print_cpu_report(const EriFindings* findings, const EriCpuPackages* cpu_packages) {
   size_t i;
 
-  printf("  CPU cost: %llu findings (%llu nested loops, %llu calls in loops, %llu division/modulo in loops, %llu memory ops in loops, %llu allocations in loops, %llu I/O ops in loops)\n",
+  printf("  CPU cost: %llu findings (%llu nested loops, %llu calls in loops, "
+         "%llu division/modulo in loops, %llu memory ops in loops, "
+         "%llu allocations in loops, %llu I/O ops in loops)\n",
          (unsigned long long)eri_count_cpu_findings(findings),
          (unsigned long long)eri_count_findings_kind(findings, "cpu-nested-loop"),
          (unsigned long long)eri_count_findings_kind(findings, "cpu-call-in-loop"),
@@ -278,7 +312,8 @@ static void eri_print_cpu_report(const EriFindings* findings, const EriCpuPackag
       if (eri_cpu_package_score(pkg) == 0u) {
         continue;
       }
-      printf("      %-24s score %5llu  nested %3llu  calls %4llu  div/mod %3llu  mem %3llu  alloc %3llu  io %3llu  nonprod %4llu\n",
+      printf("      %-24s score %5llu  nested %3llu  calls %4llu  "
+             "div/mod %3llu  mem %3llu  alloc %3llu  io %3llu  nonprod %4llu\n",
              pkg->package,
              (unsigned long long)eri_cpu_package_score(pkg),
              (unsigned long long)pkg->nested_loops,
@@ -298,7 +333,9 @@ static void eri_print_cpu_report(const EriFindings* findings, const EriCpuPackag
 static void eri_print_smells_report(const EriFindings* findings, const EriSmellPackages* smell_packages) {
   size_t i;
 
-  printf("  smells: %llu findings (%llu large files, %llu long functions, %llu markers, %llu ignore misuse, %llu gotos, %llu magic numbers, %llu string-indexing, %llu math primitives, %llu long lines)\n",
+  printf("  smells: %llu findings (%llu large files, %llu long functions, "
+         "%llu markers, %llu ignore misuse, %llu gotos, %llu magic numbers, "
+         "%llu string-indexing, %llu math primitives, %llu long lines)\n",
          (unsigned long long)eri_count_smell_findings(findings),
          (unsigned long long)eri_count_findings_kind(findings, "large-file"),
          (unsigned long long)eri_count_findings_kind(findings, "long-function"),
@@ -319,7 +356,9 @@ static void eri_print_smells_report(const EriFindings* findings, const EriSmellP
       if (eri_smell_package_score(pkg) == 0u) {
         continue;
       }
-      printf("      %-24s score %5llu  large %2llu  funcs %2llu  markers %2llu  gotos %2llu  magic %4llu  str-index %3llu  math %3llu  long-lines %4llu  nonprod %4llu\n",
+      printf("      %-24s score %5llu  large %2llu  funcs %2llu  markers %2llu  "
+             "gotos %2llu  magic %4llu  str-index %3llu  math %3llu  "
+             "long-lines %4llu  nonprod %4llu\n",
              pkg->package,
              (unsigned long long)eri_smell_package_score(pkg),
              (unsigned long long)pkg->large_files,
@@ -340,6 +379,126 @@ static void eri_print_smells_report(const EriFindings* findings, const EriSmellP
     eri_print_string_indexing_finding_samples(findings, ERI_SAMPLE_LIMIT);
     printf("    focused math primitive candidates:\n");
     eri_print_math_primitive_finding_samples(findings, ERI_SAMPLE_LIMIT);
+  }
+}
+
+static uint8_t eri_analyze_merge_file(EriAnalyzeState* state, const EriVfsFile* file,
+                                      EriFileAnalysis* analysis) {
+  EriPackage* package;
+
+  if (eri_append_findings_move(&state->findings, &analysis->findings) == 0u ||
+      eri_append_functions_move(&state->funcs, &analysis->funcs) == 0u ||
+      eri_append_sources_move(&state->sources, &analysis->sources) == 0u) {
+    return 0u;
+  }
+
+  ++state->totals.files;
+  state->totals.bytes += file->len;
+  state->totals.total_lines += analysis->totals.total_lines;
+  state->totals.code_lines += analysis->totals.code_lines;
+  state->totals.comment_lines += analysis->totals.comment_lines;
+  state->totals.blank_lines += analysis->totals.blank_lines;
+
+  package = eri_package_get(&state->packages, file->path);
+  if (package == NULL) {
+    return 0u;
+  }
+  ++package->files;
+  package->bytes += file->len;
+  package->code_lines += analysis->totals.code_lines;
+  return 1u;
+}
+
+static uint8_t eri_analyze_merge_files(EriAnalyzeState* state, const EriVfs* vfs,
+                                       EriFileAnalysis* file_results) {
+  size_t i;
+
+  for (i = 0u; i < vfs->len; ++i) {
+    const EriVfsFile* file = &vfs->files[i];
+
+    if (eri_is_binary_like(file) != 0u) {
+      eri_add_binary(&state->bins, file);
+    }
+    if (file_results[i].analyzed == 0u) {
+      continue;
+    }
+    if (eri_analyze_merge_file(state, file, &file_results[i]) == 0u) {
+      eri_file_analysis_free_remaining(file_results, i, vfs->len);
+      return 0u;
+    }
+  }
+  return 1u;
+}
+
+static uint8_t eri_analyze_collect_coverage(EriAnalyzeState* state) {
+  size_t i;
+
+  for (i = 0u; i < state->sources.len; ++i) {
+    char package_name[ERI_PACKAGE_MAX];
+    EriCoveragePackage* coverage_package;
+
+    eri_package_name(state->sources.items[i].path, package_name, sizeof(package_name));
+    coverage_package = eri_coverage_package_get(&state->coverage_packages, package_name);
+    if (coverage_package == NULL) {
+      return 0u;
+    }
+    if (state->sources.items[i].is_test != 0u) {
+      ++coverage_package->test_files;
+      coverage_package->test_code_lines += state->sources.items[i].code_lines;
+    } else {
+      ++coverage_package->source_files;
+      coverage_package->source_code_lines += state->sources.items[i].code_lines;
+      if (state->sources.items[i].has_test_signal != 0u) {
+        ++coverage_package->tested_source_files;
+      }
+    }
+  }
+  return 1u;
+}
+
+static void eri_analyze_sort_primary_reports(EriAnalyzeState* state) {
+  qsort(state->packages.items, state->packages.len, sizeof(state->packages.items[0]), eri_cmp_pkg);
+  qsort(state->coverage_packages.items, state->coverage_packages.len,
+        sizeof(state->coverage_packages.items[0]), eri_cmp_coverage_pkg);
+  qsort(state->bins.items, state->bins.len, sizeof(state->bins.items[0]), eri_cmp_bin);
+  qsort(state->findings.items, state->findings.len, sizeof(state->findings.items[0]),
+        eri_cmp_finding);
+}
+
+static uint8_t eri_analyze_collect_reports(EriAnalyzeState* state, const EriVfs* vfs,
+                                           size_t thread_count) {
+  if (eri_count_function_refs(vfs, &state->funcs, thread_count) == 0u ||
+      eri_mark_test_signals(vfs, &state->sources, &state->funcs, thread_count) == 0u ||
+      eri_collect_duplicates(vfs, &state->duplicates, thread_count) == 0u ||
+      eri_analyze_collect_coverage(state) == 0u) {
+    return 0u;
+  }
+
+  eri_measure_binary_release_sizes(&state->bins, thread_count);
+  eri_analyze_sort_primary_reports(state);
+
+  if (eri_collect_smell_packages(&state->findings, &state->smell_packages) == 0u ||
+      eri_collect_cpu_packages(&state->findings, &state->cpu_packages) == 0u ||
+      eri_collect_worldview_packages(&state->findings, &state->worldview_packages) == 0u) {
+    return 0u;
+  }
+  return 1u;
+}
+
+static void eri_analyze_print(const EriAnalyzeState* state, const EriInspectOptions* options) {
+  printf("repo-inspect\n");
+  printf("============\n\n");
+  eri_print_inventory_report(&state->totals, &state->packages);
+  eri_print_tests_report(&state->coverage_packages);
+  eri_print_release_binaries_report(&state->bins);
+  eri_print_duplication_report(&state->duplicates);
+  eri_print_dead_code_report(&state->funcs);
+  eri_print_worldview_report(&state->findings, &state->worldview_packages);
+  eri_print_cpu_report(&state->findings, &state->cpu_packages);
+  eri_print_smells_report(&state->findings, &state->smell_packages);
+
+  if (options != NULL && options->details != 0u) {
+    eri_print_details(&state->duplicates, &state->findings);
   }
 }
 
@@ -419,20 +578,9 @@ static uint8_t eri_run_file_analysis_jobs(const EriVfs* vfs, EriFileAnalysis* fi
 
 //@optimizer-ignore-function repo analysis orchestrates per-file metric, function, and CPU scans over the VFS snapshot
 static uint8_t eri_analyze(const EriVfs* vfs, const EriInspectOptions* options) {
-  EriTotals totals;
-  EriPackages packages;
-  EriFunctions funcs;
-  EriFindings findings;
-  EriBinaries bins;
-  EriSourceFiles sources;
-  EriCoveragePackages coverage_packages;
-  EriSmellPackages smell_packages;
-  EriCpuPackages cpu_packages;
-  EriWorldviewPackages worldview_packages;
-  EriDuplicates duplicates;
+  EriAnalyzeState state;
   EriFileAnalysis* file_results;
   size_t thread_count = ERI_DEFAULT_THREAD_COUNT;
-  size_t i;
 
   file_results = (EriFileAnalysis*)calloc(vfs->len == 0u ? 1u : vfs->len, sizeof(file_results[0]));
   if (file_results == NULL) {
@@ -442,147 +590,28 @@ static uint8_t eri_analyze(const EriVfs* vfs, const EriInspectOptions* options) 
     thread_count = options->thread_count;
   }
 
-  memset(&totals, 0, sizeof(totals));
-  memset(&packages, 0, sizeof(packages));
-  memset(&funcs, 0, sizeof(funcs));
-  memset(&findings, 0, sizeof(findings));
-  memset(&bins, 0, sizeof(bins));
-  memset(&sources, 0, sizeof(sources));
-  memset(&coverage_packages, 0, sizeof(coverage_packages));
-  memset(&smell_packages, 0, sizeof(smell_packages));
-  memset(&cpu_packages, 0, sizeof(cpu_packages));
-  memset(&worldview_packages, 0, sizeof(worldview_packages));
-  memset(&duplicates, 0, sizeof(duplicates));
+  eri_analyze_state_init(&state);
 
   if (eri_run_file_analysis_jobs(vfs, file_results, thread_count) == 0u) {
-    for (i = 0u; i < vfs->len; ++i) {
-      eri_file_analysis_free(&file_results[i]);
-    }
+    eri_file_analysis_free_remaining(file_results, 0u, vfs->len);
     free(file_results);
-    eri_analyze_cleanup(&packages, &funcs, &findings, &bins, &sources, &coverage_packages,
-                        &smell_packages, &cpu_packages, &worldview_packages, &duplicates);
+    eri_analyze_state_free(&state);
     return 0u;
   }
 
-  for (i = 0; i < vfs->len; ++i) {
-    const EriVfsFile* file = &vfs->files[i];
-    EriPackage* package;
-
-    if (eri_is_binary_like(file) != 0u) {
-      eri_add_binary(&bins, file);
-    }
-    if (file_results[i].analyzed == 0u) {
-      continue;
-    }
-    if (eri_append_findings_move(&findings, &file_results[i].findings) == 0u ||
-        eri_append_functions_move(&funcs, &file_results[i].funcs) == 0u ||
-        eri_append_sources_move(&sources, &file_results[i].sources) == 0u) {
-      for (; i < vfs->len; ++i) {
-        eri_file_analysis_free(&file_results[i]);
-      }
-      free(file_results);
-      eri_analyze_cleanup(&packages, &funcs, &findings, &bins, &sources, &coverage_packages,
-                          &smell_packages, &cpu_packages, &worldview_packages, &duplicates);
-      return 0;
-    }
-
-    ++totals.files;
-    totals.bytes += file->len;
-    totals.total_lines += file_results[i].totals.total_lines;
-    totals.code_lines += file_results[i].totals.code_lines;
-    totals.comment_lines += file_results[i].totals.comment_lines;
-    totals.blank_lines += file_results[i].totals.blank_lines;
-
-    package = eri_package_get(&packages, file->path);
-    if (package == NULL) {
-      for (; i < vfs->len; ++i) {
-        eri_file_analysis_free(&file_results[i]);
-      }
-      free(file_results);
-      eri_analyze_cleanup(&packages, &funcs, &findings, &bins, &sources, &coverage_packages,
-                          &smell_packages, &cpu_packages, &worldview_packages, &duplicates);
-      return 0;
-    }
-    ++package->files;
-    package->bytes += file->len;
-    package->code_lines += file_results[i].totals.code_lines;
+  if (eri_analyze_merge_files(&state, vfs, file_results) == 0u) {
+    free(file_results);
+    eri_analyze_state_free(&state);
+    return 0u;
   }
   free(file_results);
 
-  if (eri_count_function_refs(vfs, &funcs, thread_count) == 0u) {
-    eri_analyze_cleanup(&packages, &funcs, &findings, &bins, &sources, &coverage_packages,
-                        &smell_packages, &cpu_packages, &worldview_packages, &duplicates);
-    return 0;
-  }
-  if (eri_mark_test_signals(vfs, &sources, &funcs, thread_count) == 0u) {
-    eri_analyze_cleanup(&packages, &funcs, &findings, &bins, &sources, &coverage_packages,
-                        &smell_packages, &cpu_packages, &worldview_packages, &duplicates);
-    return 0;
-  }
-  eri_measure_binary_release_sizes(&bins, thread_count);
-  if (eri_collect_duplicates(vfs, &duplicates, thread_count) == 0u) {
-    eri_analyze_cleanup(&packages, &funcs, &findings, &bins, &sources, &coverage_packages,
-                        &smell_packages, &cpu_packages, &worldview_packages, &duplicates);
-    return 0;
-  }
-  for (i = 0; i < sources.len; ++i) {
-    char package_name[ERI_PACKAGE_MAX];
-    EriCoveragePackage* coverage_package;
-
-    eri_package_name(sources.items[i].path, package_name, sizeof(package_name));
-    coverage_package = eri_coverage_package_get(&coverage_packages, package_name);
-    if (coverage_package == NULL) {
-      eri_analyze_cleanup(&packages, &funcs, &findings, &bins, &sources, &coverage_packages,
-                          &smell_packages, &cpu_packages, &worldview_packages, &duplicates);
-      return 0;
-    }
-    if (sources.items[i].is_test != 0u) {
-      ++coverage_package->test_files;
-      coverage_package->test_code_lines += sources.items[i].code_lines;
-    } else {
-      ++coverage_package->source_files;
-      coverage_package->source_code_lines += sources.items[i].code_lines;
-      if (sources.items[i].has_test_signal != 0u) {
-        ++coverage_package->tested_source_files;
-      }
-    }
-  }
-  qsort(packages.items, packages.len, sizeof(packages.items[0]), eri_cmp_pkg);
-  qsort(coverage_packages.items, coverage_packages.len, sizeof(coverage_packages.items[0]), eri_cmp_coverage_pkg);
-  qsort(bins.items, bins.len, sizeof(bins.items[0]), eri_cmp_bin);
-  qsort(findings.items, findings.len, sizeof(findings.items[0]), eri_cmp_finding);
-  if (eri_collect_smell_packages(&findings, &smell_packages) == 0u) {
-    eri_analyze_cleanup(&packages, &funcs, &findings, &bins, &sources, &coverage_packages,
-                        &smell_packages, &cpu_packages, &worldview_packages, &duplicates);
-    return 0;
-  }
-  if (eri_collect_cpu_packages(&findings, &cpu_packages) == 0u) {
-    eri_analyze_cleanup(&packages, &funcs, &findings, &bins, &sources, &coverage_packages,
-                        &smell_packages, &cpu_packages, &worldview_packages, &duplicates);
-    return 0;
-  }
-  if (eri_collect_worldview_packages(&findings, &worldview_packages) == 0u) {
-    eri_analyze_cleanup(&packages, &funcs, &findings, &bins, &sources, &coverage_packages,
-                        &smell_packages, &cpu_packages, &worldview_packages, &duplicates);
-    return 0;
+  if (eri_analyze_collect_reports(&state, vfs, thread_count) == 0u) {
+    eri_analyze_state_free(&state);
+    return 0u;
   }
 
-  printf("repo-inspect\n");
-  printf("============\n\n");
-  eri_print_inventory_report(&totals, &packages);
-  eri_print_tests_report(&coverage_packages);
-  eri_print_release_binaries_report(&bins);
-  eri_print_duplication_report(&duplicates);
-  eri_print_dead_code_report(&funcs);
-  eri_print_worldview_report(&findings, &worldview_packages);
-  eri_print_cpu_report(&findings, &cpu_packages);
-  eri_print_smells_report(&findings, &smell_packages);
-
-  if (options != NULL && options->details != 0u) {
-    eri_print_details(&duplicates, &findings);
-  }
-
-  eri_analyze_cleanup(&packages, &funcs, &findings, &bins, &sources, &coverage_packages,
-                      &smell_packages, &cpu_packages, &worldview_packages, &duplicates);
+  eri_analyze_print(&state, options);
+  eri_analyze_state_free(&state);
   return 1;
 }
