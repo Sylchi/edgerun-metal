@@ -1,4 +1,4 @@
-.PHONY: all run run-aarch64 qemu-aarch64-smoke qemu-ephemeral-authority qemu-ephemeral-authority-smoke qemu-swtpm-persistence clean print-path print-config netboot os rebuild-image check test-core wifi-hardware-probe wasm-modules qemu-config-check qemu-aarch64-config-check qemu-swtpm-persistence-config-check
+.PHONY: all run run-aarch64 qemu-aarch64-smoke qemu-ephemeral-authority qemu-ephemeral-authority-smoke qemu-swtpm-persistence clean print-path print-config netboot os rebuild-image check test-core bench-ui-dirty wifi-hardware-probe wasm-modules qemu-config-check qemu-aarch64-config-check qemu-swtpm-persistence-config-check
 
 CC := clang
 HOST_CC := clang
@@ -101,6 +101,8 @@ QEMU_EPHEMERAL_AUTHORITY_READY := ui renderer: wasm app scene rects=1 hits=1 tex
 CORE_TEST_SRC := tests/test_core.c core/efi_boot_memory.c core/efi_boot_relay.c core/efi_boot_routes.c core/efi_boot_wasm.c core/efi_boot_input.c core/efi_boot_render_state.c core/er_boot_admission_record.c core/er_boot_efi_vars.c core/er_boot_config.c core/er_boot_profile.c core/er_boot_services.c core/er_pci.c core/er_rtw89.c core/er_mt7922.c core/er_firmware_loader.c core/er_mmio.c core/er_crypto.c core/er_crypto_blake3.c $(CRYPTO_SRCS) core/er_mem.c core/er_vfs.c core/er_app.c core/er_identity.c core/er_device_identity.c core/er_driver_event.c core/er_driver_policy.c core/er_work_route.c core/er_render_endpoint.c core/er_storage_endpoint.c core/er_seal.c core/er_tpm.c core/er_hw_relay.c core/er_relay_packet.c core/er_ble_adv.c core/er_wifi_burst.c core/er_bus.c core/er_ps2_keyboard.c core/er_acpi.c core/er_print.c core/er_netlog.c core/er_gfx_console.c core/er_ui_gop_renderer.c core/er_ui_frame_timing.c core/er_ui_wasm_app.c core/er_epoch_clock.c core/erwire.c core/er_native_boot.c core/wasm_vm.c core/wasm_vm_reader.c core/wasm_vm_memory_ui.c core/wasm_vm_contract.c core/wasm_vm_hostcall.c core/wasm_vm_execute.c core/er_virtio.c core/er_virtio_blk.c core/er_virtio_net.c core/er_virtio_gpu.c core/er_net_frame.c core/er_native_eth.c $(UI_SRCS) $(VARFONT_SRCS)
 CORE_TEST_FRAGMENT_SRCS := $(wildcard tests/test_core_*.c)
 CORE_TEST_BIN := $(BUILD_DIR)/test-core
+UI_DIRTY_BENCH_SRC := tools/bench_ui_dirty.c core/efi_boot_render_state.c core/er_mem.c core/er_ui_gop_renderer.c core/er_epoch_clock.c $(UI_CORE_DIR)/src/er_ui_icon.c $(UI_CORE_DIR)/src/er_ui_primitives.c $(UI_CORE_DIR)/src/er_ui_scene.c $(UI_CORE_DIR)/src/er_ui_text.c $(VARFONT_SRCS)
+UI_DIRTY_BENCH_BIN := $(BUILD_DIR)/bench-ui-dirty
 IFACE :=
 
 all: wasm-modules $(FONT_HEADER) $(FONT_BAKED_HEADER) $(EFI_OUT) $(EFI_BOOT)
@@ -118,6 +120,9 @@ check: os test-core qemu-config-check
 
 test-core: $(CORE_TEST_BIN)
 	./$(CORE_TEST_BIN)
+
+bench-ui-dirty: $(UI_DIRTY_BENCH_BIN)
+	./$(UI_DIRTY_BENCH_BIN)
 
 wifi-hardware-probe: $(WIFI_HW_PROBE_BIN)
 	./$(WIFI_HW_PROBE_BIN)
@@ -237,6 +242,10 @@ $(WIFI_HW_PROBE_BIN): $(WIFI_HW_PROBE_SRC) core/er_mt7922.h core/er_rtw89.h
 $(CORE_TEST_BIN): $(CORE_TEST_SRC) $(CORE_TEST_FRAGMENT_SRCS) $(HDRS) $(UI_HDRS) $(VARFONT_HDRS) $(CRYPTO_HDRS) $(WASM_MODULE_HEADERS) $(FONT_HEADER)
 	mkdir -p $(dir $@)
 	$(HOST_CC) $(HOST_CFLAGS) $(HOST_LDFLAGS) -o $@ $(CORE_TEST_SRC)
+
+$(UI_DIRTY_BENCH_BIN): $(UI_DIRTY_BENCH_SRC) $(HDRS) $(UI_HDRS) $(VARFONT_HDRS) $(WASM_MODULE_HEADERS) $(FONT_HEADER)
+	mkdir -p $(dir $@)
+	$(HOST_CC) $(HOST_CFLAGS) $(HOST_LDFLAGS) -o $@ $(UI_DIRTY_BENCH_SRC)
 
 $(EFI_BOOT): $(EFI_OUT)
 	mkdir -p $(dir $@)
