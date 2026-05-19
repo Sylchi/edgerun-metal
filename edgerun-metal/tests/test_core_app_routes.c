@@ -346,6 +346,160 @@ static void test_storage_endpoint_object_store(void) {
               0);
 }
 
+static void test_storage_endpoint_object_cache(void) {
+  enum {
+    STORAGE_CACHE_ENTRY_CAPACITY = 2u,
+    STORAGE_CACHE_PACKET_STRIDE = 2u,
+    STORAGE_CACHE_PACKET_CAPACITY =
+        STORAGE_CACHE_ENTRY_CAPACITY * STORAGE_CACHE_PACKET_STRIDE,
+    STORAGE_CACHE_OBJECT_A_BYTES = ER_VFS_OBJECT_PACKET_BYTES + 11u,
+    STORAGE_CACHE_OBJECT_B_BYTES = 19u,
+    STORAGE_CACHE_TICK_A0 = 10u,
+    STORAGE_CACHE_TICK_A1 = 11u,
+    STORAGE_CACHE_TICK_B0 = 12u
+  };
+  ErCryptoProvider crypto;
+  ErStorageEndpointObjectCache cache;
+  ErStorageEndpointCacheEntry entries[STORAGE_CACHE_ENTRY_CAPACITY];
+  ErStorageEndpointCacheEntry entry;
+  ErVfsObjectPacket cache_packets[STORAGE_CACHE_PACKET_CAPACITY];
+  ErVfsObjectPacket object_a_packets[STORAGE_CACHE_PACKET_STRIDE];
+  ErVfsObjectPacket object_b_packet;
+  ErVfsObjectPacket tampered_packet;
+  UINT8 object_a[STORAGE_CACHE_OBJECT_A_BYTES];
+  UINT8 object_b[STORAGE_CACHE_OBJECT_B_BYTES];
+  UINT8 assembled[STORAGE_CACHE_OBJECT_A_BYTES];
+  UINTN assembled_len = 0u;
+  UINT32 collected = 0u;
+  UINTN i;
+
+  crypto.ctx = (void*)(UINTN)9u;
+  crypto.hash = test_hash;
+  crypto.seal = 0;
+  crypto.open = 0;
+  crypto.sign = 0;
+  crypto.verify = 0;
+
+  for (i = 0u; i < (UINTN)sizeof(object_a); ++i) {
+    object_a[i] = (UINT8)(0x31u + (UINT8)i);
+  }
+  for (i = 0u; i < (UINTN)sizeof(object_b); ++i) {
+    object_b[i] = (UINT8)(0x81u + (UINT8)i);
+  }
+  check_int64("storage cache init",
+              er_storage_endpoint_object_cache_init(&cache, entries,
+                                                    STORAGE_CACHE_ENTRY_CAPACITY,
+                                                    cache_packets,
+                                                    STORAGE_CACHE_PACKET_CAPACITY,
+                                                    STORAGE_CACHE_PACKET_STRIDE),
+              1);
+  check_int64("storage cache packet a0 prepare",
+              er_vfs_prepare_object_packet(&crypto, object_a,
+                                           (UINTN)sizeof(object_a),
+                                           0u, 0u,
+                                           STORAGE_CACHE_PACKET_STRIDE,
+                                           &object_a_packets[0]),
+              1);
+  check_int64("storage cache packet a1 prepare",
+              er_vfs_prepare_object_packet(&crypto, object_a,
+                                           (UINTN)sizeof(object_a),
+                                           ER_VFS_OBJECT_PACKET_BYTES, 1u,
+                                           STORAGE_CACHE_PACKET_STRIDE,
+                                           &object_a_packets[1]),
+              1);
+  check_int64("storage cache packet b prepare",
+              er_vfs_prepare_object_packet(&crypto, object_b,
+                                           (UINTN)sizeof(object_b),
+                                           0u, 0u, 1u, &object_b_packet),
+              1);
+
+  check_int64("storage cache add a0",
+              er_storage_endpoint_cache_object_packet(&crypto, &cache,
+                                                      &object_a_packets[0],
+                                                      STORAGE_CACHE_TICK_A0,
+                                                      &entry),
+              1);
+  check_uint64("storage cache a incomplete", entry.complete, 0u);
+  check_int64("storage cache reject duplicate a0",
+              er_storage_endpoint_cache_object_packet(&crypto, &cache,
+                                                      &object_a_packets[0],
+                                                      STORAGE_CACHE_TICK_A0,
+                                                      &entry),
+              0);
+  check_int64("storage cache reject incomplete assemble",
+              er_storage_endpoint_cache_assemble_object(&crypto, &cache,
+                                                        &object_a_packets[0].header.object_id,
+                                                        assembled,
+                                                        (UINTN)sizeof(assembled),
+                                                        &assembled_len),
+              0);
+  check_int64("storage cache add a1",
+              er_storage_endpoint_cache_object_packet(&crypto, &cache,
+                                                      &object_a_packets[1],
+                                                      STORAGE_CACHE_TICK_A1,
+                                                      &entry),
+              1);
+  check_uint64("storage cache a complete", entry.complete, 1u);
+  check_int64("storage cache assemble a",
+              er_storage_endpoint_cache_assemble_object(&crypto, &cache,
+                                                        &object_a_packets[0].header.object_id,
+                                                        assembled,
+                                                        (UINTN)sizeof(assembled),
+                                                        &assembled_len),
+              1);
+  check_uint64("storage cache assemble a len", assembled_len,
+               (UINT64)sizeof(object_a));
+  check_int64("storage cache assemble a last byte",
+              assembled[sizeof(object_a) - 1u],
+              object_a[sizeof(object_a) - 1u]);
+
+  tampered_packet = object_b_packet;
+  tampered_packet.bytes[0] ^= 1u;
+  check_int64("storage cache reject tampered packet",
+              er_storage_endpoint_cache_object_packet(&crypto, &cache,
+                                                      &tampered_packet,
+                                                      STORAGE_CACHE_TICK_B0,
+                                                      &entry),
+              0);
+  check_int64("storage cache add b",
+              er_storage_endpoint_cache_object_packet(&crypto, &cache,
+                                                      &object_b_packet,
+                                                      STORAGE_CACHE_TICK_B0,
+                                                      &entry),
+              1);
+  check_int64("storage cache pin a",
+              er_storage_endpoint_cache_set_pinned(&cache,
+                                                   &object_a_packets[0].header.object_id,
+                                                   1u),
+              1);
+  check_int64("storage cache collect one",
+              er_storage_endpoint_cache_collect(&cache, 1u, &collected), 1);
+  check_uint64("storage cache collected b", collected, 1u);
+  check_int64("storage cache b gone",
+              er_storage_endpoint_cache_find(&cache,
+                                             &object_b_packet.header.object_id,
+                                             &entry),
+              0);
+  check_int64("storage cache a retained",
+              er_storage_endpoint_cache_find(&cache,
+                                             &object_a_packets[0].header.object_id,
+                                             &entry),
+              1);
+  check_int64("storage cache unpin a",
+              er_storage_endpoint_cache_set_pinned(&cache,
+                                                   &object_a_packets[0].header.object_id,
+                                                   0u),
+              1);
+  check_int64("storage cache collect a",
+              er_storage_endpoint_cache_collect(&cache, 1u, &collected), 1);
+  check_uint64("storage cache collected a", collected, 1u);
+  check_int64("storage cache a gone",
+              er_storage_endpoint_cache_find(&cache,
+                                             &object_a_packets[0].header.object_id,
+                                             &entry),
+              0);
+}
+
 static void test_app_identity_routes(void) {
   enum {
     APP_PACKAGE_TEST_INSTALLED_SLOT = 3u

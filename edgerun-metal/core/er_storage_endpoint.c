@@ -13,7 +13,9 @@ enum {
   ER_STORAGE_CAPTURE_ROUTE_SPAN = 0u,
   ER_STORAGE_CAPTURE_OBJECT_SPAN = 1u,
   ER_STORAGE_CAPTURE_PACKET_SPAN = 2u,
-  ER_STORAGE_CAPTURE_PAYLOAD_SPAN = 3u
+  ER_STORAGE_CAPTURE_PAYLOAD_SPAN = 3u,
+  ER_STORAGE_CACHE_ENTRY_EMPTY = 0u,
+  ER_STORAGE_CACHE_ENTRY_FIRST = 0u
 };
 
 static UINT8 er_storage_endpoint_route_valid(const ErAdmittedRoute* route) {
@@ -76,6 +78,292 @@ UINT8 er_storage_endpoint_object_store_init(ErStorageEndpointObjectStore* store,
   store->abi_version = ER_WORK_ABI_VERSION;
   store->packets = packets;
   store->packet_capacity = packet_capacity;
+  return 1u;
+}
+
+static UINT8 er_storage_endpoint_cache_layout_valid(UINT32 entry_capacity,
+                                                    UINT32 packet_capacity,
+                                                    UINT32 packet_stride) {
+  if (entry_capacity == 0u || packet_capacity == 0u || packet_stride == 0u) {
+    return 0u;
+  }
+  if (entry_capacity > packet_capacity / packet_stride) {
+    return 0u;
+  }
+  return 1u;
+}
+
+static ErVfsObjectPacket* er_storage_endpoint_cache_entry_packets(
+    const ErStorageEndpointObjectCache* cache,
+    const ErStorageEndpointCacheEntry* entry) {
+  if (cache == 0 || entry == 0 || cache->packets == 0 ||
+      entry->packet_offset >= cache->packet_capacity ||
+      entry->packet_count > cache->packet_stride ||
+      entry->packet_offset + cache->packet_stride > cache->packet_capacity) {
+    return 0;
+  }
+  return cache->packets + entry->packet_offset;
+}
+
+static UINT8 er_storage_endpoint_cache_entry_used(const ErStorageEndpointCacheEntry* entry) {
+  return (UINT8)(entry != 0 &&
+                 entry->abi_version == ER_WORK_ABI_VERSION &&
+                 entry->packet_count != ER_STORAGE_CACHE_ENTRY_EMPTY &&
+                 er_hash_nonzero(&entry->object_id) != 0u);
+}
+
+static void er_storage_endpoint_cache_clear_entry(ErStorageEndpointObjectCache* cache,
+                                                  UINT32 entry_index) {
+  UINT32 packet_index;
+  UINT32 packet_offset;
+
+  if (cache == 0 || cache->entries == 0 || cache->packets == 0 ||
+      entry_index >= cache->entry_capacity) {
+    return;
+  }
+  packet_offset = entry_index * cache->packet_stride;
+  for (packet_index = 0u; packet_index < cache->packet_stride; ++packet_index) {
+    er_mem_zero((UINT8*)&cache->packets[packet_offset + packet_index],
+                (UINTN)sizeof(cache->packets[0]));
+  }
+  er_mem_zero((UINT8*)&cache->entries[entry_index],
+              (UINTN)sizeof(cache->entries[0]));
+  cache->entries[entry_index].abi_version = ER_WORK_ABI_VERSION;
+  cache->entries[entry_index].packet_offset = packet_offset;
+}
+
+static ErStorageEndpointCacheEntry* er_storage_endpoint_cache_find_mutable(
+    ErStorageEndpointObjectCache* cache,
+    const ErHash* object_id) {
+  UINT32 entry_index;
+
+  if (cache == 0 || cache->entries == 0 || object_id == 0 ||
+      er_hash_nonzero(object_id) == 0u) {
+    return 0;
+  }
+  for (entry_index = 0u; entry_index < cache->entry_capacity; ++entry_index) {
+    if (er_storage_endpoint_cache_entry_used(&cache->entries[entry_index]) != 0u &&
+        er_hash_equal(&cache->entries[entry_index].object_id, object_id) != 0u) {
+      return &cache->entries[entry_index];
+    }
+  }
+  return 0;
+}
+
+static ErStorageEndpointCacheEntry* er_storage_endpoint_cache_find_empty(
+    ErStorageEndpointObjectCache* cache) {
+  UINT32 entry_index;
+
+  if (cache == 0 || cache->entries == 0) {
+    return 0;
+  }
+  for (entry_index = 0u; entry_index < cache->entry_capacity; ++entry_index) {
+    if (er_storage_endpoint_cache_entry_used(&cache->entries[entry_index]) == 0u) {
+      return &cache->entries[entry_index];
+    }
+  }
+  return 0;
+}
+
+static UINT8 er_storage_endpoint_cache_oldest_unpinned(
+    const ErStorageEndpointObjectCache* cache,
+    UINT32* out_entry_index) {
+  UINT32 entry_index;
+  UINT32 oldest_index = ER_STORAGE_CACHE_ENTRY_FIRST;
+  UINT64 oldest_tick = 0u;
+  UINT8 found = 0u;
+
+  if (cache == 0 || cache->entries == 0 || out_entry_index == 0) {
+    return 0u;
+  }
+  for (entry_index = 0u; entry_index < cache->entry_capacity; ++entry_index) {
+    const ErStorageEndpointCacheEntry* entry = &cache->entries[entry_index];
+
+    if (er_storage_endpoint_cache_entry_used(entry) == 0u ||
+        entry->pinned != 0u) {
+      continue;
+    }
+    if (found == 0u || entry->last_used_tick < oldest_tick) {
+      oldest_tick = entry->last_used_tick;
+      oldest_index = entry_index;
+      found = 1u;
+    }
+  }
+  if (found == 0u) {
+    return 0u;
+  }
+  *out_entry_index = oldest_index;
+  return 1u;
+}
+
+UINT8 er_storage_endpoint_object_cache_init(ErStorageEndpointObjectCache* cache,
+                                            ErStorageEndpointCacheEntry* entries,
+                                            UINT32 entry_capacity,
+                                            ErVfsObjectPacket* packets,
+                                            UINT32 packet_capacity,
+                                            UINT32 packet_stride) {
+  UINT32 entry_index;
+
+  if (cache == 0 || entries == 0 || packets == 0 ||
+      er_storage_endpoint_cache_layout_valid(entry_capacity, packet_capacity,
+                                             packet_stride) == 0u) {
+    return 0u;
+  }
+  er_mem_zero((UINT8*)cache, (UINTN)sizeof(*cache));
+  er_mem_zero((UINT8*)entries,
+              (UINTN)entry_capacity * (UINTN)sizeof(entries[0]));
+  er_mem_zero((UINT8*)packets,
+              (UINTN)packet_capacity * (UINTN)sizeof(packets[0]));
+  cache->abi_version = ER_WORK_ABI_VERSION;
+  cache->entries = entries;
+  cache->entry_capacity = entry_capacity;
+  cache->packets = packets;
+  cache->packet_capacity = packet_capacity;
+  cache->packet_stride = packet_stride;
+  for (entry_index = 0u; entry_index < entry_capacity; ++entry_index) {
+    cache->entries[entry_index].abi_version = ER_WORK_ABI_VERSION;
+    cache->entries[entry_index].packet_offset = entry_index * packet_stride;
+  }
+  return 1u;
+}
+
+UINT8 er_storage_endpoint_cache_object_packet(const ErCryptoProvider* crypto,
+                                              ErStorageEndpointObjectCache* cache,
+                                              const ErVfsObjectPacket* packet,
+                                              UINT64 use_tick,
+                                              ErStorageEndpointCacheEntry* out_entry) {
+  ErStorageEndpointCacheEntry* entry;
+  ErVfsObjectPacket* entry_packets;
+  UINT32 packet_index;
+
+  if (crypto == 0 || cache == 0 || packet == 0 ||
+      cache->abi_version != ER_WORK_ABI_VERSION ||
+      cache->entries == 0 || cache->packets == 0 ||
+      use_tick == 0u ||
+      er_vfs_object_packet_valid(crypto, packet) == 0u ||
+      packet->header.packet_count > cache->packet_stride) {
+    return 0u;
+  }
+  entry = er_storage_endpoint_cache_find_mutable(cache,
+                                                 &packet->header.object_id);
+  if (entry == 0) {
+    entry = er_storage_endpoint_cache_find_empty(cache);
+  }
+  if (entry == 0) {
+    return 0u;
+  }
+  entry_packets = er_storage_endpoint_cache_entry_packets(cache, entry);
+  packet_index = packet->header.packet_index;
+  if (entry_packets == 0 ||
+      packet_index >= packet->header.packet_count ||
+      er_hash_nonzero(&entry_packets[packet_index].header.packet_id) != 0u) {
+    return 0u;
+  }
+  if (entry->packet_count == ER_STORAGE_CACHE_ENTRY_EMPTY) {
+    entry->object_id = packet->header.object_id;
+    entry->object_len = packet->header.object_len;
+    entry->packet_count = packet->header.packet_count;
+  } else if (entry->object_len != packet->header.object_len ||
+             entry->packet_count != packet->header.packet_count) {
+    return 0u;
+  }
+
+  entry_packets[packet_index] = *packet;
+  ++entry->accepted_packet_count;
+  entry->last_used_tick = use_tick;
+  entry->complete =
+      (UINT16)(entry->accepted_packet_count == entry->packet_count);
+  if (out_entry != 0) {
+    *out_entry = *entry;
+  }
+  return 1u;
+}
+
+UINT8 er_storage_endpoint_cache_find(const ErStorageEndpointObjectCache* cache,
+                                     const ErHash* object_id,
+                                     ErStorageEndpointCacheEntry* out_entry) {
+  UINT32 entry_index;
+
+  if (cache == 0 || object_id == 0 || out_entry == 0 ||
+      cache->abi_version != ER_WORK_ABI_VERSION ||
+      er_hash_nonzero(object_id) == 0u ||
+      cache->entries == 0) {
+    return 0u;
+  }
+  for (entry_index = 0u; entry_index < cache->entry_capacity; ++entry_index) {
+    const ErStorageEndpointCacheEntry* entry = &cache->entries[entry_index];
+
+    if (er_storage_endpoint_cache_entry_used(entry) != 0u &&
+        er_hash_equal(&entry->object_id, object_id) != 0u) {
+      *out_entry = *entry;
+      return 1u;
+    }
+  }
+  return 0u;
+}
+
+UINT8 er_storage_endpoint_cache_assemble_object(const ErCryptoProvider* crypto,
+                                                const ErStorageEndpointObjectCache* cache,
+                                                const ErHash* object_id,
+                                                UINT8* object_bytes,
+                                                UINTN object_capacity,
+                                                UINTN* out_object_len) {
+  ErStorageEndpointCacheEntry entry;
+  ErVfsObjectPacket* packets;
+  ErHash assembled_object_id;
+
+  if (crypto == 0 || cache == 0 || object_id == 0 ||
+      object_bytes == 0 || out_object_len == 0 ||
+      er_storage_endpoint_cache_find(cache, object_id, &entry) == 0u ||
+      entry.complete == 0u) {
+    return 0u;
+  }
+  packets = er_storage_endpoint_cache_entry_packets(cache, &entry);
+  if (packets == 0 ||
+      er_vfs_assemble_object_packets(crypto, packets, entry.packet_count,
+                                     object_bytes, object_capacity,
+                                     out_object_len,
+                                     &assembled_object_id) == 0u ||
+      er_hash_equal(&assembled_object_id, object_id) == 0u) {
+    return 0u;
+  }
+  return 1u;
+}
+
+UINT8 er_storage_endpoint_cache_set_pinned(ErStorageEndpointObjectCache* cache,
+                                           const ErHash* object_id,
+                                           UINT8 pinned) {
+  ErStorageEndpointCacheEntry* entry;
+
+  if (cache == 0 || cache->abi_version != ER_WORK_ABI_VERSION) {
+    return 0u;
+  }
+  entry = er_storage_endpoint_cache_find_mutable(cache, object_id);
+  if (entry == 0) {
+    return 0u;
+  }
+  entry->pinned = (UINT16)(pinned == 0u ? 0u : 1u);
+  return 1u;
+}
+
+UINT8 er_storage_endpoint_cache_collect(ErStorageEndpointObjectCache* cache,
+                                        UINT32 max_entries_to_collect,
+                                        UINT32* out_collected) {
+  UINT32 collected = 0u;
+  UINT32 entry_index;
+
+  if (cache == 0 || out_collected == 0 ||
+      cache->abi_version != ER_WORK_ABI_VERSION ||
+      cache->entries == 0 || cache->packets == 0 ||
+      max_entries_to_collect == 0u) {
+    return 0u;
+  }
+  while (collected < max_entries_to_collect &&
+         er_storage_endpoint_cache_oldest_unpinned(cache, &entry_index) != 0u) {
+    er_storage_endpoint_cache_clear_entry(cache, entry_index);
+    ++collected;
+  }
+  *out_collected = collected;
   return 1u;
 }
 
