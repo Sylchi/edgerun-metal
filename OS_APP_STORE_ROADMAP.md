@@ -28,7 +28,7 @@ identity-routed encrypted storage.
 ## Milestone 3: Local App Store
 
 - [x] Store packages by content identity, not labels.
-- [ ] Sign packages and verify signatures before install.
+- [x] Sign packages and verify signatures before install.
 - [x] Build a local package index.
 - [ ] Add package rollback and removal.
 - [ ] Show package identity, permissions, and provenance in the shell.

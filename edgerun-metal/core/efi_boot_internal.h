@@ -153,6 +153,7 @@ typedef struct {
   ErAdmittedRoute app_route;
   ErAdmittedRoute manifest_route;
   ErAppPackageStorageSource storage_source;
+  ErAppPackageSignature package_signature;
 } ErUiBootInstalledPackageSource;
 
 typedef struct {
@@ -242,9 +243,10 @@ UINT8 er_ui_boot_prepare_route_envelope(const ErAdmittedRoute* route,
                                         ErChannelEnvelopeHeader* out_envelope);
 UINT8 er_ui_boot_execute_wasm_app(ErUiWasmAppRuntime* runtime);
 const ErUiBootInstalledApp* er_ui_boot_installed_app_for_slot(UINT32 app_index);
-const ErAppPackageIndexEntry* er_ui_boot_installed_package_index_entry_for_slot(UINT32 app_index);
-UINT8 er_ui_boot_prepare_indexed_package_source(const ErAppPackageIndexEntry* index_entry,
-                                                ErUiBootInstalledPackageSource* out_source);
+const ErAppSignedPackageIndexEntry* er_ui_boot_installed_signed_package_index_entry_for_slot(UINT32 app_index);
+UINT8 er_ui_boot_prepare_signed_indexed_package_source(
+    const ErAppSignedPackageIndexEntry* index_entry,
+    ErUiBootInstalledPackageSource* out_source);
 UINT8 er_ui_boot_prepare_installed_package_source(const ErUiBootInstalledApp* installed_app,
                                                   UINT32 app_index,
                                                   ErUiBootInstalledPackageSource* out_source);
