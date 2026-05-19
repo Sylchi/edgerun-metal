@@ -1,6 +1,5 @@
 #include "er_print.h"
 #include "er_gfx_console.h"
-#include "er_netlog.h"
 #include "erwire.h"
 
 #define ER_COM1_PORT 0x03f8u
@@ -121,14 +120,8 @@ void er_print_set_system_table(EFI_SYSTEM_TABLE* st) {
   g_serial_direct_enabled = 0u;
   er_serial_init();
   er_gfx_console_init(st);
-  er_netlog_init(st);
   erwire_init(1u);
-  if (er_netlog_ready() != 0u) {
-    er_println("netlog: init ok 10.42.0.1:9000");
-    erwire_send_text("erwire: init ok");
-  } else {
-    er_println("netlog: unavailable");
-  }
+  erwire_send_text("erwire: init ok");
 }
 
 void er_print_set_firmware_console_enabled(UINT8 enabled) {
@@ -169,7 +162,6 @@ void er_print(const char* s) {
       g_st->ConOut->OutputString == 0) {
     er_serial_write(s);
   }
-  er_netlog_write_text(s);
   er_gfx_console_write(s);
 
   if (g_firmware_console_enabled == 0u || g_st == 0 || g_st->ConOut == 0 || g_st->ConOut->OutputString == 0) {

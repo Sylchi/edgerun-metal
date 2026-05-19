@@ -106,7 +106,6 @@ UINT8 er_hw_relay_forward_to_firmware_udp(const ErRelayForwardIntent* intent, co
   if (er_netlog_ready() == 0u) {
     return 0;
   }
-  er_netlog_flush_text();
   return er_netlog_write_bytes_wait(packet, packet_len, ER_HW_RELAY_UDP_WAIT_POLLS);
 }
 

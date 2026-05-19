@@ -15,15 +15,6 @@ static void eri_add_binary(EriBinaries* bins, const EriVfsFile* file) {
   ++bins->len;
 }
 
-static uint8_t eri_command_exists(const char* command) {
-  char check[160];
-  int rc;
-
-  snprintf(check, sizeof(check), "command -v %s >/dev/null 2>&1", command);
-  rc = system(check);
-  return rc == 0 ? 1u : 0u;
-}
-
 static uint8_t eri_write_temp_file(const char* path, const uint8_t* bytes, size_t len) {
   FILE* fp = fopen(path, "wb");
 
@@ -45,16 +36,6 @@ static uint8_t eri_file_size(const char* path, uint64_t* out_size) {
   }
   *out_size = (uint64_t)st.st_size;
   return 1;
-}
-
-static const char* eri_find_strip_command(void) {
-  if (eri_command_exists("llvm-strip") != 0u) {
-    return "llvm-strip";
-  }
-  if (eri_command_exists("strip") != 0u) {
-    return "strip";
-  }
-  return NULL;
 }
 
 static uint8_t eri_measure_stripped_size(const EriVfsFile* file, const char* strip_command, uint64_t* out_size) {
@@ -129,10 +110,7 @@ static void eri_measure_binary_release_sizes(EriBinaries* bins, size_t thread_co
   }
   memset(&jobs, 0, sizeof(jobs));
   jobs.bins = bins;
-  jobs.strip_command = eri_find_strip_command();
-  if (jobs.strip_command == NULL) {
-    return;
-  }
+  jobs.strip_command = ERI_STRIP_COMMAND;
   if (thread_count > bins->len) {
     thread_count = bins->len;
   }

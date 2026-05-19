@@ -423,14 +423,12 @@ static uint8_t eri_read_entries_parallel(EriLoadEntries* entries, const char* ro
 }
 
 //@optimizer-ignore-function repo inspection loads every enumerated regular file into the analysis VFS
-static uint8_t eri_load_dir(EriVfs* vfs, const char* root, const char* rel) {
+static uint8_t eri_load_dir(EriVfs* vfs, const char* root, const char* rel, size_t thread_count) {
   EriLoadEntries entries;
-  size_t thread_count;
   size_t i;
 
   memset(&entries, 0, sizeof(entries));
-  if (eri_host_thread_count(&thread_count) == 0u ||
-      eri_collect_dir_entries(&entries, root, rel) == 0u ||
+  if (eri_collect_dir_entries(&entries, root, rel) == 0u ||
       eri_read_entries_parallel(&entries, root, thread_count) == 0u) {
     eri_load_entries_free(&entries);
     return 0u;

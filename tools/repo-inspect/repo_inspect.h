@@ -30,14 +30,14 @@
 #define ERI_LONG_FUNCTION_LINES 120u
 #define ERI_LARGE_FILE_LINES 800u
 #define ERI_DUP_BLOCK_LINES 6u
+#define ERI_DEFAULT_THREAD_COUNT 1u
 #define ERI_MIN_THREAD_COUNT 1u
 #define ERI_MAX_THREAD_COUNT 32u
-#define ERI_THREAD_ENV "REPO_INSPECT_THREADS"
-#define ERI_DETAIL_ENV "REPO_INSPECT_DETAILS"
 #define ERI_GIT_PATH ".git"
 #define ERI_LOCAL_BUILD_PATH ".build"
 #define ERI_BUILD_PATH "build"
 #define ERI_CMAKE_DEBUG_PATH "cmake-build-debug"
+#define ERI_STRIP_COMMAND "llvm-strip"
 #define ERI_THIRD_PARTY_PATH "third_party"
 #define ERI_VENDOR_UI_PATH "ui/shadcn-ui"
 #define ERI_OPTIMIZER_IGNORE_TAG "@optimizer-ignore"
@@ -243,6 +243,11 @@ typedef struct {
 } EriDuplicates;
 
 typedef struct {
+  size_t thread_count;
+  uint8_t details;
+} EriInspectOptions;
+
+typedef struct {
   uint32_t segment;
   int brace_depth;
   int function_ignore_depth;
@@ -311,7 +316,5 @@ typedef struct {
   size_t next_index;
   uint8_t failed;
 } EriLoadJobs;
-
-static uint8_t eri_host_thread_count(size_t* out_count);
 
 #endif

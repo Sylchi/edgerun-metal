@@ -2,13 +2,11 @@
 #include "er_mem.h"
 
 /*
- * Purpose: use UEFI UDP4 service binding as an optional best-effort log sink.
- * Intention: every failure disables netlog and leaves console/serial boot output intact.
+ * Purpose: use UEFI UDP4 service binding as an explicit firmware UDP transmit path.
  */
 
 #define ER_NETLOG_PORT 9000u
 #define ER_NETLOG_MAX_DATAGRAM 1200u
-#define ER_NETLOG_BEST_EFFORT_POLLS 1u
 #define ER_NETLOG_DEFAULT_TTL 64u
 #define ER_NETLOG_TX_FRAGMENT_COUNT 1u
 #define ER_NETLOG_TX_FRAGMENT_INDEX 0u
@@ -40,8 +38,6 @@ static EFI_EVENT g_tx_event;
 static UINT8 g_ready;
 static UINT8 g_tx_busy;
 static UINT8 g_tx_buffer[ER_NETLOG_MAX_DATAGRAM];
-static UINT8 g_text_buffer[ER_NETLOG_MAX_DATAGRAM];
-static UINTN g_text_len;
 static EFI_UDP4_SESSION_DATA g_tx_session;
 static EFI_UDP4_TRANSMIT_DATA g_tx_data;
 static EFI_UDP4_COMPLETION_TOKEN g_tx_token;
@@ -56,7 +52,6 @@ static void er_netlog_disable(void) {
 
   g_ready = 0;
   g_tx_busy = 0;
-  g_text_len = 0;
   g_tx_event = 0;
   g_udp4_child = 0;
   g_udp4_binding = 0;
@@ -67,24 +62,6 @@ static void EFIAPI er_netlog_tx_done(EFI_EVENT Event, void* Context) {
   (void)Event;
   (void)Context;
   g_tx_busy = 0;
-}
-
-static UINTN er_netlog_len(const char* s) {
-  UINTN n = 0;
-
-  if (s == 0) {
-    return 0;
-  }
-
-  while (s[n] != 0) {
-    ++n;
-  }
-
-  return n;
-}
-
-static void er_netlog_clear_text(void) {
-  g_text_len = 0;
 }
 
 //@optimizer-ignore-function UEFI UDP4 completion requires bounded firmware Poll calls while transmit is busy
@@ -133,7 +110,7 @@ static void er_netlog_zero_config(EFI_UDP4_CONFIG_DATA* config) {
 }
 
 //@optimizer-ignore-function UEFI UDP4 setup must probe firmware service-binding handles until a usable child is found
-void er_netlog_init(EFI_SYSTEM_TABLE* st) {
+UINT8 er_netlog_init(EFI_SYSTEM_TABLE* st) {
   EFI_HANDLE* handles = 0;
   UINTN handle_count = 0;
   UINTN i;
@@ -142,7 +119,6 @@ void er_netlog_init(EFI_SYSTEM_TABLE* st) {
 
   g_ready = 0;
   g_tx_busy = 0;
-  er_netlog_clear_text();
   g_udp4 = 0;
   g_udp4_binding = 0;
   g_udp4_child = 0;
@@ -150,17 +126,17 @@ void er_netlog_init(EFI_SYSTEM_TABLE* st) {
   g_bs = 0;
 
   if (st == 0 || st->BootServices == 0) {
-    return;
+    return 0;
   }
 
   g_bs = st->BootServices;
   if (g_bs->LocateHandleBuffer == 0 || g_bs->HandleProtocol == 0 || g_bs->FreePool == 0 ||
       g_bs->CreateEvent == 0 || g_bs->CloseEvent == 0) {
-    return;
+    return 0;
   }
 
   if (g_bs->LocateHandleBuffer(ByProtocol, &g_udp4_service_binding_guid, 0, &handle_count, &handles) != EFI_SUCCESS) {
-    return;
+    return 0;
   }
 
   for (i = 0; i < handle_count && g_udp4 == 0; ++i) {
@@ -189,19 +165,19 @@ void er_netlog_init(EFI_SYSTEM_TABLE* st) {
   g_bs->FreePool(handles);
   if (g_udp4 == 0 || g_udp4->Configure == 0 || g_udp4->Transmit == 0) {
     er_netlog_disable();
-    return;
+    return 0;
   }
 
   er_netlog_zero_config(&config);
   if (g_udp4->Configure(g_udp4, &config) != EFI_SUCCESS) {
     er_netlog_disable();
-    return;
+    return 0;
   }
 
   if (g_bs->CreateEvent(EVT_NOTIFY_SIGNAL, TPL_CALLBACK, (void*)er_netlog_tx_done, 0, &g_tx_event) != EFI_SUCCESS ||
       g_tx_event == 0) {
     er_netlog_disable();
-    return;
+    return 0;
   }
 
   g_tx_session.SourceAddress.Addr[ER_NETLOG_IPV4_A_INDEX] = 0;
@@ -223,46 +199,11 @@ void er_netlog_init(EFI_SYSTEM_TABLE* st) {
   g_tx_token.Status = EFI_NOT_READY;
   g_tx_token.Packet.TxData = &g_tx_data;
   g_ready = 1;
+  return 1;
 }
 
 UINT8 er_netlog_ready(void) {
   return g_ready;
-}
-
-void er_netlog_write(const char* s) {
-  er_netlog_write_bytes((const UINT8*)s, er_netlog_len(s));
-}
-
-void er_netlog_flush_text(void) {
-  if (g_text_len == 0u) {
-    return;
-  }
-
-  (void)er_netlog_write_bytes_wait(g_text_buffer, g_text_len, ER_NETLOG_BEST_EFFORT_POLLS);
-  er_netlog_clear_text();
-}
-
-void er_netlog_write_text(const char* s) {
-  UINTN i;
-
-  if (s == 0) {
-    return;
-  }
-
-  for (i = 0; s[i] != 0; ++i) {
-    if (g_text_len >= ER_NETLOG_MAX_DATAGRAM) {
-      er_netlog_flush_text();
-    }
-    g_text_buffer[g_text_len] = (UINT8)s[i];
-    ++g_text_len;
-    if (s[i] == '\n') {
-      er_netlog_flush_text();
-    }
-  }
-}
-
-void er_netlog_write_bytes(const UINT8* data, UINTN len) {
-  (void)er_netlog_write_bytes_wait(data, len, ER_NETLOG_BEST_EFFORT_POLLS);
 }
 
 //@optimizer-ignore-function UDP4 transmit fragments must copy into stable storage and call firmware Transmit per datagram

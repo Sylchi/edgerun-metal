@@ -266,11 +266,10 @@ Primary data references:
 ├── AGENTS.md              repository engineering rules
 ├── Makefile               root build, test, and check entrypoints
 ├── codex/                 hosted Codex support library and tests
-├── docs/                  repository structure and engineering intent
 ├── edgerun-crypto/        freestanding crypto used by the runtime
 ├── edgerun-metal/         freestanding UEFI OS runtime and device adapters
 ├── edgerun-ui-core/       portable UI scene/component/input runtime
-├── firmware/              firmware-facing runtime source areas
+├── firmware/              admitted firmware payloads and provenance notes
 ├── include/               repository-wide freestanding C headers
 ├── tests/                 repository maintenance tests
 ├── third_party/           vendored source
@@ -283,9 +282,9 @@ all local build output, including EFI artifacts produced by the metal Makefile.
 
 This is one Git repository. Do not add nested `.git` directories, `.gitmodules`, or submodule gitlinks.
 
-`README.md` owns the project overview and command entrypoints.
-`docs/repository-structure.md` owns path responsibility. Detailed area notes
-belong in named `docs/` files, not nested READMEs.
+`README.md` owns the project overview, repository layout, and command
+entrypoints. Detailed area notes belong in named top-level documents, not
+nested READMEs.
 
 ## Runtime Area Notes
 
@@ -352,10 +351,7 @@ Use the current system toolchain:
 
 ```bash
 clang --version
-cc --version
-ccache --version
-mold --version
-wat2wasm --version
+llvm-strip --version
 cmake --version
 ninja --version
 ctest --version
@@ -364,16 +360,15 @@ ctest --version
 The preferred local build tools are:
 
 - `clang` and `lld` for `edgerun-metal`
-- `ccache` when available for repeated C builds
-- `mold` when available for hosted Linux test/tool executables
-- `wat2wasm` for source-first metal Wasm module fixtures
+- `llvm-strip` for repository release-binary size inspection
+- repository-owned `tools/wasm-compile` for source-first metal Wasm module fixtures
 - `CMake` with `Ninja` for `edgerun-ui-core`, hosted demos, and hosted benchmarks
 - `ctest --output-on-failure` for tests
 - `rg` for repository search
 
-The root Makefile auto-detects `ccache` and `mold`. Override with `CCACHE=`,
-`MOLD=`, `HOST_CC=`, or `CC=` when a specific environment needs different tools.
-UEFI/EFI links stay on LLVM `lld`; `mold` is only used for hosted binaries.
+The root Makefile uses explicit LLVM defaults and does not auto-detect host
+accelerators. UEFI/EFI links stay on LLVM `lld`; hosted binaries must remain
+outside runtime dependencies.
 The repository-owned `tools/er-build` runner is the migration path away from
 external build orchestration. The Makefile builds `.build/er-build` and delegates
 repository policy/tool targets and `crypto-test` to it.
@@ -441,15 +436,14 @@ CMake, Ninja, or CTest. CMake remains available for hosted crypto benchmarking:
 make crypto-build
 ```
 
-Run hosted BLAKE3 comparison benchmarks:
+Run hosted BLAKE3 benchmarks against the repository implementation:
 
 ```bash
-make crypto-bench-sota
+make crypto-bench
 ```
 
-The benchmark target is hosted-only. It fetches official upstream BLAKE3 into
-`.build/blake3-upstream`, prints the upstream commit, and runs matching
-freestanding and upstream benchmark paths.
+External upstream comparison fetches are not repository targets. Any benchmark
+source used by a maintained target must be vendored or implemented in-tree.
 
 Build and test `edgerun-ui-core/varfont`:
 
@@ -552,10 +546,3 @@ make clean
 - preserve public behavior unless the task explicitly changes it
 
 Keep new docs and commands aligned with those rules.
-
-Additional intent documents:
-
-- [Repository structure](docs/repository-structure.md)
-- [Engineering practices](docs/engineering-practices.md)
-- [Relay architecture](docs/relay-architecture.md)
-- [Coherent system milestones](docs/coherent-system-milestones.md)

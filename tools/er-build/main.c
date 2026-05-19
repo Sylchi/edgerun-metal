@@ -32,6 +32,7 @@ static const char ERB_VARFONT_BUILD_DIR[] = ".build/er-build-out/varfont";
 static const char ERB_REPO_CHECK_BIN[] = ".build/repo-check";
 static const char ERB_REPO_INSPECT_BIN[] = ".build/repo-inspect";
 static const char ERB_ERWIRE_DECODE_BIN[] = ".build/erwire-decode";
+static const char ERB_WASM_COMPILE_BIN[] = ".build/wasm-compile";
 static const char ERB_CRYPTO_TEST_BIN[] = ".build/er-build-out/crypto/test_blake3";
 static const char ERB_VARFONT_TEST_BIN[] = ".build/er-build-out/varfont/vrfont_tests";
 
@@ -46,15 +47,6 @@ static int erb_fail(const char* message) {
 }
 
 static const char* erb_host_cc(void) {
-  const char* host_cc = getenv("HOST_CC");
-
-  if (host_cc != NULL && host_cc[0] != '\0') {
-    return host_cc;
-  }
-  host_cc = getenv("CC");
-  if (host_cc != NULL && host_cc[0] != '\0') {
-    return host_cc;
-  }
   return ERB_DEFAULT_CC;
 }
 
@@ -183,6 +175,23 @@ static int erb_build_erwire_decode(int print_plan) {
     return 1;
   }
   if (erb_args_push(&args, "tools/erwire-decode.c") != 0) {
+    return 1;
+  }
+  return erb_run_args(&args, print_plan);
+}
+
+static int erb_build_wasm_compile(int print_plan) {
+  ErbArgs args;
+
+  if (erb_prepare_dirs() != 0 || erb_compile_common(&args, ERB_WASM_COMPILE_BIN) != 0) {
+    return 1;
+  }
+  if (erb_args_push(&args, "tools/wasm-compile/main.c") != 0 ||
+      erb_args_push(&args, "tools/wasm-compile/wasm_compile_common.c") != 0 ||
+      erb_args_push(&args, "tools/wasm-compile/wasm_compile_emit.c") != 0 ||
+      erb_args_push(&args, "tools/wasm-compile/wasm_compile_io.c") != 0 ||
+      erb_args_push(&args, "tools/wasm-compile/wasm_compile_module.c") != 0 ||
+      erb_args_push(&args, "tools/wasm-compile/wasm_compile_parse.c") != 0) {
     return 1;
   }
   return erb_run_args(&args, print_plan);
@@ -346,13 +355,15 @@ static int erb_target_erwire_test(int print_plan) {
 static int erb_target_repo_test(int print_plan) {
   if (erb_build_repo_check(print_plan) != 0 ||
       erb_build_repo_inspect(print_plan) != 0 ||
-      erb_build_erwire_decode(print_plan) != 0) {
+      erb_build_erwire_decode(print_plan) != 0 ||
+      erb_build_wasm_compile(print_plan) != 0) {
     return 1;
   }
   if (erb_run_program("./tests/repo-check-tests.sh", print_plan) != 0 ||
       erb_run_program("./tests/repo-inspect-tests.sh", print_plan) != 0 ||
       erb_run_program("./tests/repo-progress-tests.sh", print_plan) != 0 ||
       erb_run_program("./tests/er-build-tests.sh", print_plan) != 0 ||
+      erb_run_program("./tests/wasm-compile-tests.sh", print_plan) != 0 ||
       erb_run_program("./tests/metal-arch-build-tests.sh", print_plan) != 0 ||
       erb_run_program("./tests/er-math-tests.sh", print_plan) != 0 ||
       erb_run_program("./tests/erwire-decode-tests.sh", print_plan) != 0) {
@@ -430,7 +441,7 @@ static int erb_target_varfont_test(int print_plan) {
 static int erb_usage(void) {
   fprintf(stderr,
           "usage: er-build [--print-plan] <target> [args]\n"
-          "targets: repo-check-bin repo-inspect erwire-decode erwire-test\n"
+          "targets: repo-check-bin repo-inspect erwire-decode erwire-test wasm-compile\n"
           "         repo-check repo-test repo-progress <scope> [test-target]\n"
           "         crypto-test varfont-test\n");
   return 2;
@@ -473,6 +484,9 @@ int main(int argc, char** argv) {
   }
   if (strcmp(target, "erwire-decode") == 0) {
     return erb_build_erwire_decode(print_plan);
+  }
+  if (strcmp(target, "wasm-compile") == 0) {
+    return erb_build_wasm_compile(print_plan);
   }
   if (strcmp(target, "erwire-test") == 0) {
     return erb_target_erwire_test(print_plan);

@@ -145,17 +145,17 @@ int test_main_path(void) {
 C
 printf '\177ELFtest' > "${TMP_DIR}/release.efi"
 
-report="$(REPO_INSPECT_THREADS=2 "${REPO_INSPECT}" "${TMP_DIR}")"
-detail_report="$(REPO_INSPECT_THREADS=2 REPO_INSPECT_DETAILS=1 "${REPO_INSPECT}" "${TMP_DIR}")"
-scoped_tools_report="$(cd "${ROOT_DIR}" && REPO_INSPECT_THREADS=2 "${REPO_INSPECT}" tools)"
-scoped_codex_report="$(cd "${ROOT_DIR}" && REPO_INSPECT_THREADS=2 "${REPO_INSPECT}" codex)"
-if REPO_INSPECT_THREADS=0 "${REPO_INSPECT}" "${TMP_DIR}" >/dev/null 2>"${TMP_DIR}/invalid_threads.err"; then
+report="$("${REPO_INSPECT}" --threads 2 "${TMP_DIR}")"
+detail_report="$("${REPO_INSPECT}" --threads 2 --details "${TMP_DIR}")"
+scoped_tools_report="$(cd "${ROOT_DIR}" && "${REPO_INSPECT}" --threads 2 tools)"
+scoped_codex_report="$(cd "${ROOT_DIR}" && "${REPO_INSPECT}" --threads 2 codex)"
+if "${REPO_INSPECT}" --threads 0 "${TMP_DIR}" >/dev/null 2>"${TMP_DIR}/invalid_threads.err"; then
   printf 'invalid thread count accepted\n' >&2
   exit 1
 fi
 
 case "$(cat "${TMP_DIR}/invalid_threads.err")" in
-  *"REPO_INSPECT_THREADS must be an integer from 1 to 32"* ) ;;
+  *"--threads must be an integer from 1 to 32"* ) ;;
   * ) printf 'missing invalid thread count diagnostic\n' >&2; exit 1 ;;
 esac
 

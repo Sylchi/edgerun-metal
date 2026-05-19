@@ -39,7 +39,7 @@ case "$plan_output" in
 esac
 
 case "$plan_output" in
-  *"+ ./.build/repo-inspect edgerun-ui-core"*) ;;
+  *"+ .build/repo-inspect edgerun-ui-core"*) ;;
   *) printf 'missing repo-inspect step\n' >&2; exit 1 ;;
 esac
 
