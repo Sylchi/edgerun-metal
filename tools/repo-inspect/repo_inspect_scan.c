@@ -1,145 +1,180 @@
-static void eri_scan_cpu_costs(const EriVfsFile* file, EriFindings* findings) {
-  const uint8_t* bytes = file->bytes;
-  size_t len = file->len;
-  size_t pos = 0u;
-  uint32_t line_no = 1u;
-  int brace_depth = 0;
-  int loop_depth = 0;
-  int loop_brace_stack[128];
-  size_t loop_stack_len = 0u;
-  uint8_t pending_optimizer_ignore = 0u;
-  uint8_t pending_function_ignore = 0u;
-  uint8_t function_ignore_active = 0u;
-  int function_ignore_depth = 0;
+typedef struct {
+  size_t start;
+  size_t end;
+  char snippet[ERI_SCAN_SNIPPET_MAX];
+  char structural_line[ERI_SCAN_STRUCTURAL_LINE_MAX];
+} EriScanLine;
 
-  while (pos <= len) {
-    size_t start = pos;
-    size_t end;
-    size_t copy_len;
-    char snippet[256];
-    char structural_line[1024];
+typedef struct {
+  const EriVfsFile* file;
+  EriFindings* findings;
+  size_t pos;
+  uint32_t line_no;
+  int brace_depth;
+  int loop_depth;
+  int loop_brace_stack[ERI_LOOP_STACK_MAX];
+  size_t loop_stack_len;
+  uint8_t pending_optimizer_ignore;
+  uint8_t pending_function_ignore;
+  uint8_t function_ignore_active;
+  int function_ignore_depth;
+} EriCpuScanState;
+
+static uint8_t eri_scan_read_line(const uint8_t* bytes, size_t len, size_t* pos,
+                                  EriScanLine* line) {
+  size_t copy_len;
+
+  line->start = *pos;
+  while (*pos < len && bytes[*pos] != '\n') {
+    ++*pos;
+  }
+  line->end = *pos;
+  if (*pos < len && bytes[*pos] == '\n') {
+    ++*pos;
+  } else if (line->start == len) {
+    return 0u;
+  }
+  if (line->end > line->start && bytes[line->end - 1u] == '\r') {
+    --line->end;
+  }
+  copy_len = line->end - line->start;
+  if (copy_len >= sizeof(line->snippet)) {
+    copy_len = sizeof(line->snippet) - 1u;
+  }
+  memcpy(line->snippet, bytes + line->start, copy_len);
+  line->snippet[copy_len] = 0;
+  eri_copy_without_literals(bytes, line->start, line->end,
+                            line->structural_line, sizeof(line->structural_line));
+  return 1u;
+}
+
+static void eri_cpu_scan_update_context(EriCpuScanState* state,
+                                        const char* structural_line,
+                                        uint8_t has_loop_start) {
+  while (state->loop_stack_len > 0u &&
+         state->brace_depth < state->loop_brace_stack[state->loop_stack_len - 1u]) {
+    --state->loop_stack_len;
+    if (state->loop_depth > 0) {
+      --state->loop_depth;
+    }
+  }
+  eri_update_loop_context(structural_line, has_loop_start,
+                          &state->brace_depth, &state->loop_depth,
+                          state->loop_brace_stack, &state->loop_stack_len);
+}
+
+static uint8_t eri_cpu_scan_consume_pending_function_ignore(EriCpuScanState* state,
+                                                           const char* structural_line) {
+  char func_name[ERI_FUNCTION_NAME_MAX];
+  uint8_t is_static;
+
+  if (state->pending_function_ignore == 0u) {
+    return 0u;
+  }
+  if (eri_probable_function_def(structural_line, func_name, sizeof(func_name), &is_static) != 0u ||
+      strchr(structural_line, '{') != NULL) {
+    int brace_delta = eri_line_brace_delta(structural_line);
+
+    state->pending_function_ignore = 0u;
+    state->function_ignore_active = 1u;
+    state->function_ignore_depth = state->brace_depth;
+    if (brace_delta <= 0) {
+      state->function_ignore_active = 0u;
+    }
+    (void)is_static;
+    return 1u;
+  }
+  if (strchr(structural_line, ';') == NULL && strchr(structural_line, '}') == NULL) {
+    return 1u;
+  }
+  state->pending_function_ignore = 0u;
+  return 0u;
+}
+
+static uint8_t eri_cpu_scan_skip_ignored_line(EriCpuScanState* state,
+                                             const EriScanLine* line) {
+  if (state->function_ignore_active != 0u) {
+    if (state->brace_depth < state->function_ignore_depth) {
+      state->function_ignore_active = 0u;
+    }
+    return 1u;
+  }
+  if (eri_line_has_invalid_optimizer_ignore(line->structural_line) != 0u) {
+    return 1u;
+  }
+  if (eri_line_is_optimizer_ignore_function_directive(line->snippet) != 0u) {
+    state->pending_function_ignore = 1u;
+    return 1u;
+  }
+  if (eri_line_is_optimizer_ignore_directive(line->snippet) != 0u) {
+    state->pending_optimizer_ignore = 1u;
+    return 1u;
+  }
+  if (eri_cpu_scan_consume_pending_function_ignore(state, line->structural_line) != 0u) {
+    return 1u;
+  }
+  if (state->pending_optimizer_ignore != 0u ||
+      eri_line_has_optimizer_ignore(line->snippet) != 0u ||
+      eri_line_has_optimizer_ignore_constant(line->snippet) != 0u) {
+    state->pending_optimizer_ignore = 0u;
+    return 1u;
+  }
+  return 0u;
+}
+
+static void eri_cpu_scan_report_line(EriCpuScanState* state, const char* structural_line,
+                                     uint8_t has_loop_start) {
+  if (has_loop_start != 0u && state->loop_depth > 0) {
+    eri_add_finding(state->findings, state->file->path, state->line_no,
+                    "cpu-nested-loop", "nested loop may multiply CPU work");
+  }
+  if (state->loop_depth == 0) {
+    return;
+  }
+  if (eri_line_has_allocator_op(structural_line) != 0u) {
+    eri_add_finding(state->findings, state->file->path, state->line_no,
+                    "cpu-alloc-in-loop", "allocator/free operation inside loop");
+  }
+  if (eri_line_has_io_op(structural_line) != 0u) {
+    eri_add_finding(state->findings, state->file->path, state->line_no,
+                    "cpu-io-in-loop", "hardware/firmware I/O call inside loop");
+  }
+  if (eri_line_has_memory_op(structural_line) != 0u) {
+    eri_add_finding(state->findings, state->file->path, state->line_no,
+                    "cpu-memory-in-loop", "memory operation inside loop");
+  }
+  if (eri_line_has_division_or_modulo(structural_line) != 0u) {
+    eri_add_finding(state->findings, state->file->path, state->line_no,
+                    "cpu-div-in-loop", "division or modulo inside loop");
+  }
+  if (eri_line_has_expensive_domain_call(structural_line) != 0u) {
+    eri_add_finding(state->findings, state->file->path, state->line_no,
+                    "cpu-call-in-loop", "domain-heavy helper call inside loop");
+  }
+}
+
+//@optimizer-ignore-function CPU-cost analysis must scan each source line once while updating loop context
+static void eri_scan_cpu_costs(const EriVfsFile* file, EriFindings* findings) {
+  EriCpuScanState state;
+  EriScanLine line;
+
+  memset(&state, 0, sizeof(state));
+  state.file = file;
+  state.findings = findings;
+  state.line_no = 1u;
+
+  while (state.pos <= file->len) {
     uint8_t has_loop_start;
 
-    while (pos < len && bytes[pos] != '\n') {
-      ++pos;
-    }
-    end = pos;
-    if (pos < len && bytes[pos] == '\n') {
-      ++pos;
-    } else if (start == len) {
+    if (eri_scan_read_line(file->bytes, file->len, &state.pos, &line) == 0u) {
       break;
     }
-    if (end > start && bytes[end - 1u] == '\r') {
-      --end;
+    has_loop_start = eri_line_has_loop_start(line.structural_line);
+    if (eri_cpu_scan_skip_ignored_line(&state, &line) == 0u) {
+      eri_cpu_scan_report_line(&state, line.structural_line, has_loop_start);
     }
-    copy_len = end - start;
-    if (copy_len >= sizeof(snippet)) {
-      copy_len = sizeof(snippet) - 1u;
-    }
-    memcpy(snippet, bytes + start, copy_len);
-    snippet[copy_len] = 0;
-    eri_copy_without_literals(bytes, start, end, structural_line, sizeof(structural_line));
-
-    while (loop_stack_len > 0u && brace_depth < loop_brace_stack[loop_stack_len - 1u]) {
-      --loop_stack_len;
-      if (loop_depth > 0) {
-        --loop_depth;
-      }
-    }
-
-    if (function_ignore_active != 0u) {
-      has_loop_start = eri_line_has_loop_start(structural_line);
-      eri_update_loop_context(structural_line, has_loop_start, &brace_depth, &loop_depth, loop_brace_stack, &loop_stack_len);
-      if (brace_depth < function_ignore_depth) {
-        function_ignore_active = 0u;
-      }
-      ++line_no;
-      continue;
-    }
-
-    if (eri_line_has_invalid_optimizer_ignore(structural_line) != 0u) {
-      has_loop_start = eri_line_has_loop_start(structural_line);
-      eri_update_loop_context(structural_line, has_loop_start, &brace_depth, &loop_depth, loop_brace_stack, &loop_stack_len);
-      ++line_no;
-      continue;
-    }
-
-    if (eri_line_is_optimizer_ignore_function_directive(snippet) != 0u) {
-      pending_function_ignore = 1u;
-      has_loop_start = eri_line_has_loop_start(structural_line);
-      eri_update_loop_context(structural_line, has_loop_start, &brace_depth, &loop_depth, loop_brace_stack, &loop_stack_len);
-      ++line_no;
-      continue;
-    }
-
-    if (eri_line_is_optimizer_ignore_directive(snippet) != 0u) {
-      pending_optimizer_ignore = 1u;
-      has_loop_start = eri_line_has_loop_start(structural_line);
-      eri_update_loop_context(structural_line, has_loop_start, &brace_depth, &loop_depth, loop_brace_stack, &loop_stack_len);
-      ++line_no;
-      continue;
-    }
-
-    if (pending_function_ignore != 0u) {
-      char func_name[128];
-      uint8_t is_static;
-
-      if (eri_probable_function_def(structural_line, func_name, sizeof(func_name), &is_static) != 0u ||
-          strchr(structural_line, '{') != NULL) {
-        int brace_delta = eri_line_brace_delta(structural_line);
-
-        pending_function_ignore = 0u;
-        function_ignore_active = 1u;
-        has_loop_start = eri_line_has_loop_start(structural_line);
-        eri_update_loop_context(structural_line, has_loop_start, &brace_depth, &loop_depth, loop_brace_stack, &loop_stack_len);
-        function_ignore_depth = brace_depth;
-        if (brace_delta <= 0) {
-          function_ignore_active = 0u;
-        }
-        (void)is_static;
-        ++line_no;
-        continue;
-      }
-      if (strchr(structural_line, ';') == NULL && strchr(structural_line, '}') == NULL) {
-        ++line_no;
-        continue;
-      }
-      pending_function_ignore = 0u;
-    }
-
-    if (pending_optimizer_ignore != 0u || eri_line_has_optimizer_ignore(snippet) != 0u ||
-        eri_line_has_optimizer_ignore_constant(snippet) != 0u) {
-      pending_optimizer_ignore = 0u;
-      has_loop_start = eri_line_has_loop_start(structural_line);
-      eri_update_loop_context(structural_line, has_loop_start, &brace_depth, &loop_depth, loop_brace_stack, &loop_stack_len);
-      ++line_no;
-      continue;
-    }
-
-    has_loop_start = eri_line_has_loop_start(structural_line);
-    if (has_loop_start != 0u && loop_depth > 0) {
-      eri_add_finding(findings, file->path, line_no, "cpu-nested-loop", "nested loop may multiply CPU work");
-    }
-    if (loop_depth > 0) {
-      if (eri_line_has_allocator_op(structural_line) != 0u) {
-        eri_add_finding(findings, file->path, line_no, "cpu-alloc-in-loop", "allocator/free operation inside loop");
-      }
-      if (eri_line_has_io_op(structural_line) != 0u) {
-        eri_add_finding(findings, file->path, line_no, "cpu-io-in-loop", "hardware/firmware I/O call inside loop");
-      }
-      if (eri_line_has_memory_op(structural_line) != 0u) {
-        eri_add_finding(findings, file->path, line_no, "cpu-memory-in-loop", "memory operation inside loop");
-      }
-      if (eri_line_has_division_or_modulo(structural_line) != 0u) {
-        eri_add_finding(findings, file->path, line_no, "cpu-div-in-loop", "division or modulo inside loop");
-      }
-      if (eri_line_has_expensive_domain_call(structural_line) != 0u) {
-        eri_add_finding(findings, file->path, line_no, "cpu-call-in-loop", "domain-heavy helper call inside loop");
-      }
-    }
-
-    eri_update_loop_context(structural_line, has_loop_start, &brace_depth, &loop_depth, loop_brace_stack, &loop_stack_len);
-    ++line_no;
+    eri_cpu_scan_update_context(&state, line.structural_line, has_loop_start);
+    ++state.line_no;
   }
 }
 
