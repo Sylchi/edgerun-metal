@@ -6,6 +6,7 @@
 #include "er_types.h"
 
 #define ER_WASM_MAX_FUNCTIONS 16u
+#define ER_WASM_MAX_TYPE_PARAMS 5u
 #define ER_WASM_LINEAR_MEMORY_BASE 0u
 #define ER_WASM_PUBLIC_REGION_RELAY_INBOX 1u
 #define ER_WASM_PUBLIC_REGION_RELAY_OUTBOX 2u
@@ -34,6 +35,11 @@ typedef INT64 (*er_wasm_relay_send)(const UINT8* bytes, UINT32 len);
 typedef INT64 (*er_wasm_relay_recv)(UINT8* bytes, UINT32 capacity);
 typedef INT64 (*er_wasm_ui_emit)(void* user, const UINT8* bytes, UINT32 len,
                                  const er_ui_scene_stats_t* stats);
+
+typedef enum {
+  ER_WASM_MODULE_CONTRACT_UI_APP = 1,
+  ER_WASM_MODULE_CONTRACT_BUS_DRIVER = 2
+} ErWasmModuleContract;
 
 typedef struct {
   UINT8* bytes;
@@ -86,6 +92,7 @@ typedef struct {
   UINT8  function_is_import[ER_WASM_MAX_FUNCTIONS];
   UINT8  function_import_kind[ER_WASM_MAX_FUNCTIONS];
   UINT8  type_params_0[ER_WASM_MAX_FUNCTIONS];
+  UINT8  type_param_types[ER_WASM_MAX_FUNCTIONS][ER_WASM_MAX_TYPE_PARAMS];
   UINT8  type_result_count[ER_WASM_MAX_FUNCTIONS];
   UINT8  type_result_type[ER_WASM_MAX_FUNCTIONS];
   ErWasmCode code[ER_WASM_MAX_FUNCTIONS];
@@ -103,6 +110,7 @@ int er_wasm_ui_command_decode(const UINT8* bytes, UINT32 len, er_ui_scene_t* sce
                               er_ui_scene_stats_t* out_stats);
 int er_wasm_init(ErWasmModule* module, const UINT8* data, UINT32 size, const ErWasmHostCalls* host);
 int er_wasm_find_main(ErWasmModule* module, UINT32* main_index);
+int er_wasm_validate_contract(const ErWasmModule* module, ErWasmModuleContract contract);
 int er_wasm_execute_i64(ErWasmModule* module, UINT32 function_index, INT64* result);
 
 #endif

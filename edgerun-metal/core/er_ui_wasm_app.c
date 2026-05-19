@@ -304,6 +304,7 @@ int er_ui_wasm_app_prepare(const UINT8* module_data, UINT32 module_size,
   host.ui_presentation = runtime->presentation;
 
   if (er_wasm_init(&runtime->module, module_data, module_size, &host) != 0 ||
+      er_wasm_validate_contract(&runtime->module, ER_WASM_MODULE_CONTRACT_UI_APP) != 0 ||
       er_wasm_find_main(&runtime->module, &runtime->main_index) != 0) {
     return -1;
   }

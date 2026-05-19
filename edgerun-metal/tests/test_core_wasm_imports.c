@@ -24,6 +24,9 @@ static void test_wasm_mmio_imports(void) {
   host.mmio_read32 = test_vm_mmio_read32;
 
   check_int64("wasm mmio init", er_wasm_init(&module, wasm_mmio_import_test, (UINT32)sizeof(wasm_mmio_import_test), &host), 0);
+  check_int64("wasm mmio reject ui app contract",
+              er_wasm_validate_contract(&module, ER_WASM_MODULE_CONTRACT_UI_APP),
+              -1);
   check_int64("wasm mmio find main", er_wasm_find_main(&module, &main_index), 0);
   check_int64("wasm mmio main index", main_index, 2);
   check_int64("wasm mmio execute", er_wasm_execute_i64(&module, main_index, &result), 0);
@@ -101,6 +104,12 @@ static void test_wasm_bus_exec_import(void) {
               er_wasm_init(&module, g_edgerun_driver_bus_probe_wasm,
                            ER_DRIVER_BUS_PROBE_WASM_SIZE, &host),
               0);
+  check_int64("wasm bus driver contract",
+              er_wasm_validate_contract(&module, ER_WASM_MODULE_CONTRACT_BUS_DRIVER),
+              0);
+  check_int64("wasm bus reject ui app contract",
+              er_wasm_validate_contract(&module, ER_WASM_MODULE_CONTRACT_UI_APP),
+              -1);
   linear_memory.address_base = 1u;
   host.linear_memory = linear_memory;
   check_int64("wasm bus reject nonzero base",
@@ -495,6 +504,12 @@ static void test_wasm_ui_emit_import(void) {
               er_wasm_init(&module, g_edgerun_ui_counter_wasm,
                            ER_UI_COUNTER_WASM_SIZE, &host),
               0);
+  check_int64("wasm ui app contract",
+              er_wasm_validate_contract(&module, ER_WASM_MODULE_CONTRACT_UI_APP),
+              0);
+  check_int64("wasm ui reject bus driver contract",
+              er_wasm_validate_contract(&module, ER_WASM_MODULE_CONTRACT_BUS_DRIVER),
+              -1);
   check_int64("wasm ui find main", er_wasm_find_main(&module, &main_index), 0);
   check_int64("wasm ui main index", main_index, 2);
   check_int64("wasm ui execute", er_wasm_execute_i64(&module, main_index, &result), 0);

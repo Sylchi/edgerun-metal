@@ -87,6 +87,9 @@ static void er_clear_module(ErWasmModule* module) {
     module->function_is_import[i] = 0;
     module->function_import_kind[i] = ER_IMPORT_KIND_NONE;
     module->type_params_0[i] = 0;
+    for (UINT32 p = 0; p < ER_WASM_MAX_TYPE_PARAMS; ++p) {
+      module->type_param_types[i][p] = 0;
+    }
     module->type_result_count[i] = 0;
     module->type_result_type[i] = 0;
     module->code[i].body = 0;
@@ -184,6 +187,7 @@ static int er_wasm_parse_type_section(ErReader* r, ErWasmModule* module,
   if (type_count > ER_WASM_MAX_FUNCTIONS) {
     return -1;
   }
+  er_mem_zero((UINT8*)temp_type, (UINTN)sizeof(temp_type));
   for (UINT32 i = 0; i < type_count; ++i) {
     UINT8 form;
     UINT32 param_count;
@@ -203,14 +207,15 @@ static int er_wasm_parse_type_section(ErReader* r, ErWasmModule* module,
     }
 
     for (UINT32 p = 0; p < param_count; ++p) {
-      UINT8 skip;
-      if (er_reader_read_u8(r, &skip) != 0) {
+      UINT8 param_type;
+      if (er_reader_read_u8(r, &param_type) != 0) {
         return -1;
       }
-      if (skip != ER_WASM_VALTYPE_I64 && skip != ER_WASM_VALTYPE_I32 &&
-          skip != ER_WASM_VALTYPE_F32 && skip != ER_WASM_VALTYPE_F64) {
+      if (param_type != ER_WASM_VALTYPE_I64 && param_type != ER_WASM_VALTYPE_I32 &&
+          param_type != ER_WASM_VALTYPE_F32 && param_type != ER_WASM_VALTYPE_F64) {
         return -1;
       }
+      temp_type[i].param_types[p] = param_type;
     }
 
     if (er_reader_read_u32_leb(r, &result_count) != 0) {
@@ -518,6 +523,9 @@ static void er_wasm_commit_type_metadata(ErWasmModule* module,
   for (UINT32 i = 0; i < module->num_types; ++i) {
     if (i < ER_WASM_MAX_FUNCTIONS) {
       module->type_params_0[i] = func_types[i].param_count;
+      for (UINT32 p = 0; p < ER_WASM_MAX_TYPE_PARAMS; ++p) {
+        module->type_param_types[i][p] = func_types[i].param_types[p];
+      }
       module->type_result_count[i] = func_types[i].result_count;
       module->type_result_type[i] = func_types[i].result_type;
     }
