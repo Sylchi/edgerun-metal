@@ -34,7 +34,7 @@ make ER_METAL_ARCH=aarch64
 The generated removable-media boot artifact is:
 
 ```text
-edgerun-metal/build/esp/EFI/BOOT/BOOTAA64.EFI
+.build/edgerun-metal/aarch64/esp/EFI/BOOT/BOOTAA64.EFI
 ```
 
 Copy that file to the FAT EFI system partition at `EFI/BOOT/BOOTAA64.EFI` on

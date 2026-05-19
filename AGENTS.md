@@ -70,12 +70,6 @@
 - Use annotations only when the reported shape is required by a protocol, ABI, hardware register layout, cryptographic schedule, SIMD lane packing, or another explicit invariant.
 - Do not use annotations to hide incomplete work, accidental complexity, unclear ownership, or missing tests.
 
-## Progress Checks
-
-- Use `make repo-progress` for the standard `edgerun-ui-core` iteration check instead of running individual progress commands by hand.
-- `make repo-progress` runs status, scoped diff stats, scoped whitespace checks, rebuilds `repo-inspect`, runs `repo-inspect` for the scope, and runs the scope's test target.
-- For other scopes, pass `REPO_PROGRESS_SCOPE=<path>` and, when the scope is not one of the known defaults, `REPO_PROGRESS_TEST=<make-target>`.
-- Use `./tools/repo-progress.sh --print-plan <scope> [test-target]` to inspect the exact command sequence without running it.
 
 ## Multi-Agent Safety
 

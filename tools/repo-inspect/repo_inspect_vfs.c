@@ -84,19 +84,27 @@ static uint8_t eri_contains_part(const char* path, const char* part) {
 }
 
 static uint8_t eri_skip_path(const char* rel) {
+  const size_t vendor_ui_len = sizeof(ERI_VENDOR_UI_PATH) - 1u;
+
   if (rel[0] == 0) {
     return 0;
   }
-  if (eri_contains_part(rel, ".git") != 0u) {
+  if (eri_contains_part(rel, ERI_GIT_PATH) != 0u ||
+      eri_contains_part(rel, ERI_LOCAL_BUILD_PATH) != 0u ||
+      eri_contains_part(rel, ERI_BUILD_PATH) != 0u ||
+      eri_contains_part(rel, ERI_CMAKE_DEBUG_PATH) != 0u ||
+      eri_contains_part(rel, ERI_THIRD_PARTY_PATH) != 0u ||
+      (strncmp(rel, ERI_VENDOR_UI_PATH, vendor_ui_len) == 0 &&
+       (rel[vendor_ui_len] == 0 || rel[vendor_ui_len] == '/'))) {
     return 1;
   }
   return 0;
 }
 
 static uint8_t eri_is_build_path(const char* path) {
-  return eri_contains_part(path, ".build") != 0u ||
-         eri_contains_part(path, "build") != 0u ||
-         eri_contains_part(path, "cmake-build-debug") != 0u;
+  return eri_contains_part(path, ERI_LOCAL_BUILD_PATH) != 0u ||
+         eri_contains_part(path, ERI_BUILD_PATH) != 0u ||
+         eri_contains_part(path, ERI_CMAKE_DEBUG_PATH) != 0u;
 }
 
 static uint8_t eri_is_c_source(const char* path) {

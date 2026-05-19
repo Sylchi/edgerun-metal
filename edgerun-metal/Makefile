@@ -7,7 +7,7 @@ MOLD ?= $(shell command -v mold 2>/dev/null)
 CCACHE_PREFIX := $(if $(CCACHE),$(CCACHE),)
 
 ER_METAL_ARCH ?= x86_64
-BUILD_DIR := build
+BUILD_DIR ?= ../.build/edgerun-metal
 ESP_DIR := $(BUILD_DIR)/esp
 EFI_OUT := $(BUILD_DIR)/edgerun-metal.efi
 UI_CORE_DIR := ../edgerun-ui-core
@@ -75,13 +75,14 @@ WIFI_HW_PROBE_BIN := $(BUILD_DIR)/wifi-hardware-probe
 QEMU_CONFIG := qemu.conf
 QEMU_AARCH64_CONFIG := qemu-aarch64.conf
 QEMU_AARCH64_SMOKE_CONFIG := qemu-aarch64-smoke.conf
-QEMU_AARCH64_SMOKE_LOG := build/aarch64/qemu-aarch64-smoke.log
+QEMU_AARCH64_BUILD_DIR := $(BUILD_DIR)/aarch64
+QEMU_AARCH64_SMOKE_LOG := $(QEMU_AARCH64_BUILD_DIR)/qemu-aarch64-smoke.log
 QEMU_AARCH64_SMOKE_TIMEOUT ?= 30
 QEMU_AARCH64_SMOKE_READY := boot services: fatal action=halt
 QEMU_SMOKE_SRC := tools/qemu-smoke.sh
 QEMU_SWTPM_PERSIST_CONFIG := qemu-swtpm-persistence.conf
 QEMU_SWTPM_PERSIST_SCRIPT := tools/qemu-swtpm-persistence.sh
-QEMU_SWTPM_PERSIST_DIR := build/qemu-swtpm-persistence
+QEMU_SWTPM_PERSIST_DIR := $(BUILD_DIR)/qemu-swtpm-persistence
 QEMU_SWTPM_PERSIST_TIMEOUT ?= 30
 CORE_TEST_SRC := tests/test_core.c core/efi_boot_memory.c core/efi_boot_relay.c core/efi_boot_routes.c core/efi_boot_wasm.c core/er_boot_admission_record.c core/er_boot_efi_vars.c core/er_boot_config.c core/er_boot_profile.c core/er_boot_services.c core/er_pci.c core/er_rtw89.c core/er_mt7922.c core/er_firmware_loader.c core/er_mmio.c core/er_crypto.c core/er_crypto_blake3.c $(CRYPTO_SRCS) core/er_mem.c core/er_vfs.c core/er_app.c core/er_identity.c core/er_device_identity.c core/er_work_route.c core/er_render_endpoint.c core/er_storage_endpoint.c core/er_seal.c core/er_tpm.c core/er_hw_relay.c core/er_relay_packet.c core/er_ble_adv.c core/er_wifi_burst.c core/er_bus.c core/er_ps2_keyboard.c core/er_acpi.c core/er_print.c core/er_netlog.c core/er_gfx_console.c core/er_ui_gop_renderer.c core/er_ui_wasm_app.c core/er_epoch_clock.c core/erwire.c core/er_native_boot.c core/wasm_vm.c core/wasm_vm_reader.c core/wasm_vm_memory_ui.c core/wasm_vm_execute.c core/er_virtio.c core/er_virtio_blk.c core/er_virtio_net.c core/er_virtio_gpu.c core/er_net_frame.c core/er_native_eth.c $(UI_SRCS) $(VARFONT_SRCS)
 CORE_TEST_BIN := $(BUILD_DIR)/test-core
@@ -198,19 +199,19 @@ qemu-swtpm-persistence: $(EFI_BOOT) $(QEMU_RUN_BIN) $(QEMU_SMOKE_SRC) $(QEMU_SWT
 	$(QEMU_SWTPM_PERSIST_SCRIPT) $(QEMU_SMOKE_SRC) ./$(QEMU_RUN_BIN) $(QEMU_SWTPM_PERSIST_CONFIG) $(abspath $(ESP_DIR)) $(QEMU_SWTPM_PERSIST_DIR) $(QEMU_SWTPM_PERSIST_TIMEOUT)
 
 run-aarch64: $(QEMU_AARCH64_CONFIG)
-	$(MAKE) all ER_METAL_ARCH=aarch64 BUILD_DIR=build/aarch64
-	$(MAKE) build/aarch64/edgerun-qemu-run BUILD_DIR=build/aarch64
-	./build/aarch64/edgerun-qemu-run $(QEMU_AARCH64_CONFIG) $(abspath build/aarch64/esp)
+	$(MAKE) all ER_METAL_ARCH=aarch64 BUILD_DIR=$(QEMU_AARCH64_BUILD_DIR)
+	$(MAKE) $(QEMU_AARCH64_BUILD_DIR)/edgerun-qemu-run BUILD_DIR=$(QEMU_AARCH64_BUILD_DIR)
+	./$(QEMU_AARCH64_BUILD_DIR)/edgerun-qemu-run $(QEMU_AARCH64_CONFIG) $(abspath $(QEMU_AARCH64_BUILD_DIR)/esp)
 
 qemu-aarch64-config-check: $(QEMU_AARCH64_CONFIG)
-	$(MAKE) all ER_METAL_ARCH=aarch64 BUILD_DIR=build/aarch64
-	$(MAKE) build/aarch64/edgerun-qemu-run BUILD_DIR=build/aarch64
-	./build/aarch64/edgerun-qemu-run --check $(QEMU_AARCH64_CONFIG) $(abspath build/aarch64/esp)
+	$(MAKE) all ER_METAL_ARCH=aarch64 BUILD_DIR=$(QEMU_AARCH64_BUILD_DIR)
+	$(MAKE) $(QEMU_AARCH64_BUILD_DIR)/edgerun-qemu-run BUILD_DIR=$(QEMU_AARCH64_BUILD_DIR)
+	./$(QEMU_AARCH64_BUILD_DIR)/edgerun-qemu-run --check $(QEMU_AARCH64_CONFIG) $(abspath $(QEMU_AARCH64_BUILD_DIR)/esp)
 
 qemu-aarch64-smoke: $(QEMU_AARCH64_SMOKE_CONFIG) $(QEMU_SMOKE_SRC)
-	$(MAKE) all ER_METAL_ARCH=aarch64 BUILD_DIR=build/aarch64
-	$(MAKE) build/aarch64/edgerun-qemu-run BUILD_DIR=build/aarch64
-	$(QEMU_SMOKE_SRC) ./build/aarch64/edgerun-qemu-run $(QEMU_AARCH64_SMOKE_CONFIG) $(abspath build/aarch64/esp) $(QEMU_AARCH64_SMOKE_LOG) $(QEMU_AARCH64_SMOKE_TIMEOUT) "$(QEMU_AARCH64_SMOKE_READY)"
+	$(MAKE) all ER_METAL_ARCH=aarch64 BUILD_DIR=$(QEMU_AARCH64_BUILD_DIR)
+	$(MAKE) $(QEMU_AARCH64_BUILD_DIR)/edgerun-qemu-run BUILD_DIR=$(QEMU_AARCH64_BUILD_DIR)
+	$(QEMU_SMOKE_SRC) ./$(QEMU_AARCH64_BUILD_DIR)/edgerun-qemu-run $(QEMU_AARCH64_SMOKE_CONFIG) $(abspath $(QEMU_AARCH64_BUILD_DIR)/esp) $(QEMU_AARCH64_SMOKE_LOG) $(QEMU_AARCH64_SMOKE_TIMEOUT) "$(QEMU_AARCH64_SMOKE_READY)"
 
 clean:
 	rm -rf $(BUILD_DIR)

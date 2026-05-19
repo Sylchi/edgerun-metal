@@ -278,7 +278,8 @@ Primary data references:
 └── .build/                local generated builds, ignored
 ```
 
-Generated build output must stay out of source directories. Use `.build/` for local CMake builds and `edgerun-metal/build/` for EFI artifacts produced by the metal Makefile.
+Generated build output must stay out of source directories. Use `.build/` for
+all local build output, including EFI artifacts produced by the metal Makefile.
 
 This is one Git repository. Do not add nested `.git` directories, `.gitmodules`, or submodule gitlinks.
 
@@ -503,9 +504,9 @@ make -C edgerun-metal ER_METAL_ARCH=x86_64
 make -C edgerun-metal ER_METAL_ARCH=aarch64
 ```
 
-The x86_64 removable-media path is `edgerun-metal/build/esp/EFI/BOOT/BOOTX64.EFI`.
+The x86_64 removable-media path is `.build/edgerun-metal/esp/EFI/BOOT/BOOTX64.EFI`.
 The AArch64 removable-media path for Raspberry Pi 4B UEFI is
-`edgerun-metal/build/esp/EFI/BOOT/BOOTAA64.EFI`.
+`.build/edgerun-metal/aarch64/esp/EFI/BOOT/BOOTAA64.EFI`.
 
 Prepare an interface manually when needed:
 
@@ -516,10 +517,10 @@ sudo ip addr add 10.42.0.1/24 dev <iface>
 sudo ip link set <iface> up
 ```
 
-Run the helper from `edgerun-metal/`:
+Run the helper from the repository root:
 
 ```bash
-sudo ./build/edgerun-netboot --iface <iface> --efi build/esp/EFI/BOOT/BOOTX64.EFI
+sudo ./.build/edgerun-metal/edgerun-netboot --iface <iface> --efi .build/edgerun-metal/esp/EFI/BOOT/BOOTX64.EFI
 ```
 
 If NetworkManager interferes, temporarily disable management for the interface:
