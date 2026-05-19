@@ -69,7 +69,8 @@ output=.build/app.wasm
 
 Driver packages use the same source and generated-artifact layout, but their
 manifest is a distinct admission contract and they are not runnable through the
-UI app launcher:
+UI app launcher. The driver-facing packet layout is defined in
+`include/er_driver_abi.h`:
 
 ```text
 contract=bus-driver
