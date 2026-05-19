@@ -146,6 +146,44 @@ static void er_boot_services_apply_admission(EFI_SYSTEM_TABLE* SystemTable,
   }
 }
 
+static void er_boot_services_print_tpm_probe_details(EFI_SYSTEM_TABLE* SystemTable) {
+  ErAcpiRsdpInfo rsdp;
+  ErAcpiTableList tables;
+  ErTpm2Info tpm2;
+  ErTpmCrbTransport transport;
+
+  if (er_acpi_find_rsdp(SystemTable, &rsdp) == 0u ||
+      er_acpi_enumerate_tables(&rsdp, &tables) == 0u) {
+    er_println("TPM: ACPI table scan unavailable");
+    return;
+  }
+  if (er_tpm_find_tpm2_table(&tables, &tpm2) == 0u) {
+    er_println("TPM: TPM2 table missing");
+    return;
+  }
+
+  er_print("TPM: TPM2 start-method=");
+  er_print_u64_dec((UINT64)tpm2.start_method);
+  er_print(" control-area=");
+  er_print_u64_hex(tpm2.control_area);
+  er_println("");
+  if (er_tpm_crb_from_tpm2_info(&tpm2, &transport) == 0u) {
+    er_println("TPM: CRB transport unavailable");
+    return;
+  }
+  er_print("TPM: CRB transport control=");
+  er_print_u64_hex(transport.control_area);
+  er_print(" command=");
+  er_print_u64_hex(transport.command_buffer);
+  er_print(" command-size=");
+  er_print_u64_dec(transport.command_buffer_size);
+  er_print(" response=");
+  er_print_u64_hex(transport.response_buffer);
+  er_print(" response-size=");
+  er_print_u64_dec(transport.response_buffer_size);
+  er_println("");
+}
+
 void er_run_boot_path(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE* SystemTable,
                       const ErBootServicesReport* boot_report) {
   ErBootServicesAction action;
@@ -194,6 +232,7 @@ EFI_STATUS EFIAPI efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE* SystemTable
   (void)er_boot_services_probe_secure_boot(SystemTable, &boot_report);
   if (er_boot_services_probe_tpm(SystemTable, &boot_report) == 0u) {
     er_println("TPM: discovery unavailable");
+    er_boot_services_print_tpm_probe_details(SystemTable);
   } else {
     er_print("TPM: CRB present nv-index-max=");
     er_print_u64_dec((UINT64)boot_report.tpm_nv_limits.nv_index_max);
