@@ -21,6 +21,10 @@ Output:
 .build/edgerun-metal/pi-zero-w-v1_1/boot/EDGERUN-PI-ZERO-W-V1_1-BOOT.txt
 ```
 
+The manifest includes the expected serial baud, GPIO pins, boot banner, board
+constants, and first heartbeat line. A physical-node bring-up runner should
+treat those `serial_expect=` lines as the pass condition for first boot.
+
 The intended first hardware chain is:
 
 ```text

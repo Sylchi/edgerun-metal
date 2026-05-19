@@ -112,4 +112,6 @@ Raspberry Pi firmware -> kernel.img
 
 This path does not use the Pi Zero 2 W AArch64 EFI artifact. The staged
 manifest is `EDGERUN-PI-ZERO-W-V1_1-BOOT.txt`, and the owned payload is the
-freestanding ARMv6 `kernel.img`.
+freestanding ARMv6 `kernel.img`. The manifest also records the mini UART baud,
+GPIO pins, expected boot banner, board constants, and first heartbeat line so a
+bring-up harness can validate the board without guessing what success means.

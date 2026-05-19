@@ -112,6 +112,42 @@ if ! grep -q "owned_payload=kernel.img" \
   exit 1
 fi
 
+if ! grep -q "serial_baud=115200" \
+  "$ZERO_W_BOOT_DIR/EDGERUN-PI-ZERO-W-V1_1-BOOT.txt"; then
+  printf 'zero w manifest does not name serial baud\n' >&2
+  exit 1
+fi
+
+if ! grep -q "serial_gpio_tx=14" \
+  "$ZERO_W_BOOT_DIR/EDGERUN-PI-ZERO-W-V1_1-BOOT.txt"; then
+  printf 'zero w manifest does not name serial TX pin\n' >&2
+  exit 1
+fi
+
+if ! grep -q "serial_gpio_rx=15" \
+  "$ZERO_W_BOOT_DIR/EDGERUN-PI-ZERO-W-V1_1-BOOT.txt"; then
+  printf 'zero w manifest does not name serial RX pin\n' >&2
+  exit 1
+fi
+
+if ! grep -q "serial_expect=EdgeRun Pi Zero W v1.1 ARMv6 boot" \
+  "$ZERO_W_BOOT_DIR/EDGERUN-PI-ZERO-W-V1_1-BOOT.txt"; then
+  printf 'zero w manifest does not name serial banner expectation\n' >&2
+  exit 1
+fi
+
+if ! grep -q "serial_expect=peripheral_base=0x20000000" \
+  "$ZERO_W_BOOT_DIR/EDGERUN-PI-ZERO-W-V1_1-BOOT.txt"; then
+  printf 'zero w manifest does not name peripheral base expectation\n' >&2
+  exit 1
+fi
+
+if ! grep -q "serial_expect=alive=0x00000000" \
+  "$ZERO_W_BOOT_DIR/EDGERUN-PI-ZERO-W-V1_1-BOOT.txt"; then
+  printf 'zero w manifest does not name heartbeat expectation\n' >&2
+  exit 1
+fi
+
 if "$TOOL_BIN" pi-zero-vague "$PAYLOAD" "$BOOT_DIR" \
   >/tmp/pi-boot-stage-bad-board.out 2>/tmp/pi-boot-stage-bad-board.err; then
   printf 'pi-boot-stage accepted unsupported board\n' >&2
