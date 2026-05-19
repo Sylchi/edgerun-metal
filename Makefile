@@ -27,7 +27,7 @@ check: repo-check repo-test crypto-test edgerun-check varfont-test ui-core-test
 
 er-build:
 	mkdir -p .build
-	tmp=".build/er-build.$$$$.tmp"; trap 'rm -f "$$tmp"' EXIT; $(HOST_CC) -std=c11 -Wall -Wextra -Werror -O2 $(HOST_LDFLAGS) -o "$$tmp" tools/er-build/main.c; mv "$$tmp" .build/er-build
+	tmp=".build/er-build.$$$$.tmp"; trap 'rm -f "$$tmp"' EXIT; $(HOST_CC) -std=c11 -Wall -Wextra -Werror -O2 -Iedgerun-crypto/include $(HOST_LDFLAGS) -o "$$tmp" tools/er-build/main.c tools/er-build/package_identity.c edgerun-crypto/src/er_blake3.c; mv "$$tmp" .build/er-build
 
 repo-check: er-build
 	./.build/er-build repo-check
