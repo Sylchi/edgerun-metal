@@ -3,6 +3,16 @@
 static UINT8 g_ui_boot_app_memory[ER_UI_BOOT_APP_SLOT_CAPACITY][ER_UI_BOOT_APP_MEMORY_BYTES];
 static UINT8 g_ui_boot_app_module_memory[ER_UI_BOOT_APP_SLOT_CAPACITY][ER_UI_BOOT_APP_MODULE_BYTES];
 static UINT8 g_ui_boot_app_manifest_memory[ER_UI_BOOT_APP_SLOT_CAPACITY][ER_UI_BOOT_APP_MANIFEST_BYTES];
+static const UINT8 g_ui_boot_package_signature_part_a[] =
+    "edgerun:c:v1:boot:package-signature:a";
+static const UINT8 g_ui_boot_package_signature_part_b[] =
+    "edgerun:c:v1:boot:package-signature:b";
+static const UINT8 g_ui_boot_package_signer_key[ER_PUBLIC_KEY_LEN] = {
+  0x45u, 0x52u, 0x57u, 0x43u, 0x2du, 0x42u, 0x4fu, 0x4fu,
+  0x54u, 0x2du, 0x50u, 0x4bu, 0x47u, 0x2du, 0x53u, 0x49u,
+  0x47u, 0x4eu, 0x45u, 0x52u, 0x2du, 0x56u, 0x30u, 0x30u,
+  0x30u, 0x30u, 0x30u, 0x30u, 0x30u, 0x30u, 0x30u, 0x31u
+};
 
 static ErUiBootInstalledApp g_ui_boot_installed_apps[ER_UI_BOOT_INSTALLED_APP_COUNT] = {
   {
@@ -13,13 +23,101 @@ static ErUiBootInstalledApp g_ui_boot_installed_apps[ER_UI_BOOT_INSTALLED_APP_CO
   }
 };
 
-static ErAppPackageIndexEntry g_ui_boot_installed_package_index[ER_UI_BOOT_INSTALLED_APP_COUNT];
+static ErAppSignedPackageIndexEntry g_ui_boot_installed_package_index[ER_UI_BOOT_INSTALLED_APP_COUNT];
 static UINT8 g_ui_boot_installed_apps_prepared;
 
 enum {
   ER_UI_BOOT_PACKAGE_APP_SEQUENCE = 1u,
-  ER_UI_BOOT_PACKAGE_MANIFEST_SEQUENCE = 2u
+  ER_UI_BOOT_PACKAGE_MANIFEST_SEQUENCE = 2u,
+  ER_UI_BOOT_PACKAGE_SIGNATURE_ALGORITHM = 1u
 };
+
+static UINT8 er_ui_boot_package_signer_identity(ErIdentity* out_identity) {
+  return er_identity_prepare(ER_IDENTITY_TYPE_PUBLIC_KEY,
+                             ER_IDENTITY_BACKING_ED25519,
+                             g_ui_boot_package_signer_key,
+                             (UINT16)sizeof(g_ui_boot_package_signer_key),
+                             out_identity);
+}
+
+static UINT8 er_ui_boot_package_signature_hash(const UINT8* domain,
+                                               UINTN domain_len,
+                                               const ErIdentity* signer,
+                                               const ErByteSpan* preimage,
+                                               ErHash* out_hash) {
+  ErByteSpan spans[2];
+
+  if (domain == 0 || signer == 0 || preimage == 0 || preimage->bytes == 0 ||
+      preimage->len == 0u || out_hash == 0 ||
+      er_identity_valid(signer) == 0u) {
+    return 0u;
+  }
+  spans[0].bytes = signer->material;
+  spans[0].len = signer->material_len;
+  spans[1] = *preimage;
+  return er_crypto_blake3_hash(0, domain, domain_len, spans, 2u, out_hash);
+}
+
+static UINT8 er_ui_boot_package_sign(void* ctx, const ErByteSpan* preimage,
+                                     ErWorkSignature* out_signature) {
+  ErIdentity signer;
+  ErHash signature_a;
+  ErHash signature_b;
+
+  (void)ctx;
+  if (out_signature == 0 ||
+      er_ui_boot_package_signer_identity(&signer) == 0u ||
+      er_ui_boot_package_signature_hash(g_ui_boot_package_signature_part_a,
+                                        (UINTN)(sizeof(g_ui_boot_package_signature_part_a) - 1u),
+                                        &signer,
+                                        preimage,
+                                        &signature_a) == 0u ||
+      er_ui_boot_package_signature_hash(g_ui_boot_package_signature_part_b,
+                                        (UINTN)(sizeof(g_ui_boot_package_signature_part_b) - 1u),
+                                        &signer,
+                                        preimage,
+                                        &signature_b) == 0u) {
+    return 0u;
+  }
+  er_mem_zero((UINT8*)out_signature, (UINTN)sizeof(*out_signature));
+  out_signature->algorithm = ER_UI_BOOT_PACKAGE_SIGNATURE_ALGORITHM;
+  out_signature->signature_len = ER_SIGNATURE_LEN;
+  out_signature->identity = signer;
+  er_mem_copy(out_signature->signature, signature_a.bytes, ER_HASH_LEN);
+  er_mem_copy(out_signature->signature + ER_HASH_LEN, signature_b.bytes,
+              ER_HASH_LEN);
+  return 1u;
+}
+
+static UINT8 er_ui_boot_package_verify(void* ctx, const ErIdentity* identity,
+                                       const ErByteSpan* preimage,
+                                       const ErWorkSignature* signature) {
+  ErWorkSignature expected;
+  ErIdentity signer;
+
+  (void)ctx;
+  if (identity == 0 || signature == 0 ||
+      er_ui_boot_package_signer_identity(&signer) == 0u ||
+      er_identity_equal(identity, &signer) == 0u ||
+      er_ui_boot_package_sign(0, preimage, &expected) == 0u ||
+      signature->algorithm != expected.algorithm ||
+      signature->signature_len != expected.signature_len ||
+      er_identity_equal(&signature->identity, &expected.identity) == 0u ||
+      er_mem_equal(signature->signature, expected.signature,
+                   ER_SIGNATURE_LEN) == 0u) {
+    return 0u;
+  }
+  return 1u;
+}
+
+static void er_ui_boot_package_crypto_provider(ErCryptoProvider* out_provider) {
+  if (out_provider == 0) {
+    return;
+  }
+  er_crypto_blake3_provider(out_provider);
+  out_provider->sign = er_ui_boot_package_sign;
+  out_provider->verify = er_ui_boot_package_verify;
+}
 
 static UINT8 er_ui_boot_seed_package_object_store(const ErCryptoProvider* crypto,
                                                   const ErAdmittedRoute* route,
@@ -66,12 +164,13 @@ static UINT8 er_ui_boot_prepare_installed_app_descriptor(ErUiBootInstalledApp* i
 static UINT8 er_ui_boot_prepare_installed_app_registry(void) {
   ErCryptoProvider crypto;
   ErUiBootInstalledPackageSource source;
+  ErAppPackageIndexEntry index_entry;
   UINT32 i;
 
   if (g_ui_boot_installed_apps_prepared != 0u) {
     return 1u;
   }
-  er_crypto_blake3_provider(&crypto);
+  er_ui_boot_package_crypto_provider(&crypto);
   for (i = 0u; i < ER_UI_BOOT_INSTALLED_APP_COUNT; ++i) {
     if (er_ui_boot_prepare_installed_app_descriptor(&g_ui_boot_installed_apps[i]) == 0u ||
         er_ui_boot_prepare_installed_package_source(&g_ui_boot_installed_apps[i],
@@ -83,7 +182,11 @@ static UINT8 er_ui_boot_prepare_installed_app_registry(void) {
                                            0,
                                            &source.storage_source,
                                            i,
-                                           &g_ui_boot_installed_package_index[i]) == 0u) {
+                                           &index_entry) == 0u ||
+        er_app_prepare_signed_package_index_entry(&crypto,
+                                                  &index_entry,
+                                                  &source.package_signature,
+                                                  &g_ui_boot_installed_package_index[i]) == 0u) {
       return 0u;
     }
   }
@@ -91,26 +194,28 @@ static UINT8 er_ui_boot_prepare_installed_app_registry(void) {
   return 1u;
 }
 
-static UINT8 er_ui_boot_installed_package_index_entry_valid(
-    const ErAppPackageIndexEntry* index_entry) {
+static UINT8 er_ui_boot_installed_signed_package_index_entry_valid(
+    const ErAppSignedPackageIndexEntry* index_entry) {
   ErCryptoProvider crypto;
   const ErUiBootInstalledApp* installed_app;
+  const ErAppPackageIndexEntry* unsigned_entry;
 
-  er_crypto_blake3_provider(&crypto);
+  er_ui_boot_package_crypto_provider(&crypto);
   if (index_entry == 0 ||
-      index_entry->installed_slot >= ER_UI_BOOT_INSTALLED_APP_COUNT ||
-      er_app_package_index_entry_valid(&crypto, index_entry) == 0u) {
+      er_app_signed_package_index_entry_valid(&crypto, index_entry) == 0u ||
+      index_entry->index_entry.installed_slot >= ER_UI_BOOT_INSTALLED_APP_COUNT) {
     return 0u;
   }
-  installed_app = &g_ui_boot_installed_apps[index_entry->installed_slot];
-  if (er_hash_equal(&index_entry->package.package_id,
+  unsigned_entry = &index_entry->index_entry;
+  installed_app = &g_ui_boot_installed_apps[unsigned_entry->installed_slot];
+  if (er_hash_equal(&unsigned_entry->package.package_id,
                     &installed_app->package.package_id) == 0u ||
-      er_hash_equal(&index_entry->app_ref.object_id,
+      er_hash_equal(&unsigned_entry->app_ref.object_id,
                     &installed_app->app_ref.object_id) == 0u ||
-      index_entry->app_ref.object_len != installed_app->app_ref.object_len ||
-      er_hash_equal(&index_entry->manifest_ref.object_id,
+      unsigned_entry->app_ref.object_len != installed_app->app_ref.object_len ||
+      er_hash_equal(&unsigned_entry->manifest_ref.object_id,
                     &installed_app->manifest_ref.object_id) == 0u ||
-      index_entry->manifest_ref.object_len != installed_app->manifest_ref.object_len) {
+      unsigned_entry->manifest_ref.object_len != installed_app->manifest_ref.object_len) {
     return 0u;
   }
   return 1u;
@@ -222,7 +327,7 @@ const ErUiBootInstalledApp* er_ui_boot_installed_app_for_slot(UINT32 app_index) 
   return &g_ui_boot_installed_apps[app_index];
 }
 
-const ErAppPackageIndexEntry* er_ui_boot_installed_package_index_entry_for_slot(UINT32 app_index) {
+const ErAppSignedPackageIndexEntry* er_ui_boot_installed_signed_package_index_entry_for_slot(UINT32 app_index) {
   if (app_index >= ER_UI_BOOT_INSTALLED_APP_COUNT ||
       er_ui_boot_prepare_installed_app_registry() == 0u) {
     return 0;
@@ -230,15 +335,20 @@ const ErAppPackageIndexEntry* er_ui_boot_installed_package_index_entry_for_slot(
   return &g_ui_boot_installed_package_index[app_index];
 }
 
-UINT8 er_ui_boot_prepare_indexed_package_source(const ErAppPackageIndexEntry* index_entry,
-                                                ErUiBootInstalledPackageSource* out_source) {
+UINT8 er_ui_boot_prepare_signed_indexed_package_source(
+    const ErAppSignedPackageIndexEntry* index_entry,
+    ErUiBootInstalledPackageSource* out_source) {
   if (er_ui_boot_prepare_installed_app_registry() == 0u ||
-      er_ui_boot_installed_package_index_entry_valid(index_entry) == 0u) {
+      er_ui_boot_installed_signed_package_index_entry_valid(index_entry) == 0u) {
     return 0u;
   }
-  return er_ui_boot_prepare_installed_package_source(
-      &g_ui_boot_installed_apps[index_entry->installed_slot],
-      index_entry->installed_slot, out_source);
+  if (er_ui_boot_prepare_installed_package_source(
+          &g_ui_boot_installed_apps[index_entry->index_entry.installed_slot],
+          index_entry->index_entry.installed_slot, out_source) == 0u) {
+    return 0u;
+  }
+  out_source->package_signature = index_entry->package_signature;
+  return 1u;
 }
 
 UINT8 er_ui_boot_prepare_installed_package_source(const ErUiBootInstalledApp* installed_app,
@@ -248,6 +358,7 @@ UINT8 er_ui_boot_prepare_installed_package_source(const ErUiBootInstalledApp* in
   ErVfsObjectRef actual_app_ref;
   ErVfsObjectRef actual_manifest_ref;
   ErAppPackageManifest expected_package;
+  ErIdentity signer;
 
   if (installed_app == 0 || out_source == 0 ||
       installed_app->app_bytes == 0 ||
@@ -259,7 +370,7 @@ UINT8 er_ui_boot_prepare_installed_package_source(const ErUiBootInstalledApp* in
       installed_app->package.abi_version != ER_APP_ABI_VERSION) {
     return 0u;
   }
-  er_crypto_blake3_provider(&crypto);
+  er_ui_boot_package_crypto_provider(&crypto);
   er_mem_zero((UINT8*)out_source, (UINTN)sizeof(*out_source));
   if (er_vfs_prepare_object_ref(&crypto, installed_app->app_bytes,
                                 installed_app->app_len, &actual_app_ref) == 0u ||
@@ -286,7 +397,12 @@ UINT8 er_ui_boot_prepare_installed_package_source(const ErUiBootInstalledApp* in
       er_app_prepare_package_storage_source(&crypto, &installed_app->package,
                                             &out_source->app_route,
                                             &out_source->manifest_route, 0,
-                                            &out_source->storage_source) == 0u) {
+                                            &out_source->storage_source) == 0u ||
+      er_ui_boot_package_signer_identity(&signer) == 0u ||
+      er_app_sign_package(&crypto, &installed_app->package, &signer,
+                          &out_source->package_signature) == 0u ||
+      er_app_verify_package_signature(&crypto, &installed_app->package,
+                                      &out_source->package_signature) == 0u) {
     return 0u;
   }
   out_source->installed_app = installed_app;
@@ -325,7 +441,11 @@ UINT8 er_ui_boot_load_installed_package_source(const ErUiBootInstalledPackageSou
       installed_app->package.abi_version != ER_APP_ABI_VERSION) {
     return 0u;
   }
-  er_crypto_blake3_provider(&crypto);
+  er_ui_boot_package_crypto_provider(&crypto);
+  if (er_app_verify_package_signature(&crypto, &installed_app->package,
+                                      &source->package_signature) == 0u) {
+    return 0u;
+  }
   if (er_storage_endpoint_object_store_init(&storage->app_store,
                                             storage->app_packets,
                                             ER_UI_BOOT_PACKAGE_OBJECT_PACKET_CAPACITY) == 0u ||
@@ -417,8 +537,8 @@ UINT8 er_ui_boot_load_user_app_package(UINT8* module_memory,
                                        ErAppLoadedPackage* out_loaded) {
   ErUiBootInstalledPackageSource source;
 
-  if (er_ui_boot_prepare_indexed_package_source(
-          er_ui_boot_installed_package_index_entry_for_slot(app_index),
+  if (er_ui_boot_prepare_signed_indexed_package_source(
+          er_ui_boot_installed_signed_package_index_entry_for_slot(app_index),
           &source) == 0u) {
     return 0u;
   }
