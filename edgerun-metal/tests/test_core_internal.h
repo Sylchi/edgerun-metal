@@ -8,6 +8,7 @@
 #include "er_app.h"
 #include "er_blake3.h"
 #include "er_boot_config.h"
+#include "er_boot_admission_record.h"
 #include "er_boot_profile.h"
 #include "er_boot_services.h"
 #include "er_bus.h"

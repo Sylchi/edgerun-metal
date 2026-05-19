@@ -148,6 +148,23 @@ UINT8 er_boot_services_set_tpm_limits(ErBootServicesReport* report,
   return 1u;
 }
 
+UINT8 er_boot_services_set_boot_admission(ErBootServicesReport* report,
+                                          const ErCryptoProvider* crypto,
+                                          const ErBootAdmissionRecord* record) {
+  if (report == 0 ||
+      er_boot_admission_record_valid(crypto, record) == 0u) {
+    return 0u;
+  }
+
+  report->boot_admission = *record;
+  report->boot_admission_present = 1u;
+  if (report->config_state == ER_BOOT_CONFIG_UNKNOWN ||
+      report->config_state == ER_BOOT_CONFIG_MISSING) {
+    report->config_state = ER_BOOT_CONFIG_PRESENT;
+  }
+  return 1u;
+}
+
 UINT8 er_boot_services_add_pci_device(ErBootServicesReport* report,
                                       const ErPciDeviceSnapshot* snapshot) {
   ErBootDetectedDevice* device;
@@ -234,6 +251,10 @@ ErBootServicesAction er_boot_services_decide_action(const ErBootServicesReport* 
       report->tpm_present == 0u ||
       report->config_state == ER_BOOT_CONFIG_INVALID) {
     return ER_BOOT_SERVICES_ACTION_BLOCKED;
+  }
+
+  if (report->boot_admission_present != 0u) {
+    return ER_BOOT_SERVICES_ACTION_ENTER_RUNTIME;
   }
 
   switch (report->authority_count) {

@@ -12,6 +12,7 @@ ErWasmHostCalls g_host_calls = {0};
 #include "test_core_wasm_apps.c"
 #include "test_core_app_routes.c"
 #include "test_core_device_routes.c"
+#include "test_core_boot_admission_record.c"
 #include "test_core_boot_config.c"
 #include "test_core_boot_services.c"
 #include "test_core_boot_erwire.c"
@@ -53,6 +54,7 @@ int main(void) {
   test_storage_endpoint_object_store();
   test_app_identity_routes();
   test_device_relay_identity();
+  test_boot_admission_record();
   test_boot_config_and_seal_strategy();
   test_boot_services_boundary();
   test_work_admitted_relay_route();
