@@ -138,6 +138,8 @@ cat > "${TMP_DIR}/driver-package/app.manifest" <<'MANIFEST'
 contract=bus-driver
 memory_pages=1
 imports=edgerun.bus/exec
+driver_memory_bytes=65536
+driver_bus=mmio32:4096:4:read8
 source=app.c
 output=.build/app.wasm
 MANIFEST
@@ -154,6 +156,15 @@ fi
 grep '^manifest=app.manifest$' "${DRIVER_PACKAGE_DIR}/.build/package.identity" >/dev/null
 if "${ER_BUILD}" app-run "${DRIVER_PACKAGE_DIR}" >/dev/null 2>&1; then
   printf 'app-run accepted built-in bus-driver package\n' >&2
+  exit 1
+fi
+
+mkdir "${TMP_DIR}/driver-bad-policy"
+cp "${DRIVER_PACKAGE_DIR}/app.c" "${TMP_DIR}/driver-bad-policy/app.c"
+sed 's/driver_bus=mmio32:4096:4:read8/driver_bus=mmio32:8192:4:read8/' \
+  "${DRIVER_PACKAGE_DIR}/app.manifest" > "${TMP_DIR}/driver-bad-policy/app.manifest"
+if "${ER_BUILD}" app-build "${TMP_DIR}/driver-bad-policy" >/dev/null 2>&1; then
+  printf 'app-build accepted bad driver policy\n' >&2
   exit 1
 fi
 

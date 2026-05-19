@@ -146,7 +146,8 @@ int er_wasm_execute_import_call(ErWasmModule* module,
                                            ER_WASM_HOSTCALL_BINARY_PARAMS,
                                            ER_WASM_HOSTCALL_I64_RESULTS) != 0 ||
           *stack_size < ER_WASM_HOSTCALL_BINARY_PARAMS ||
-          module->host.bus_exec == 0) {
+          module->host.bus_exec == 0 ||
+          module->host.driver_policy == 0) {
         return -1;
       }
       response_ptr = stack[--(*stack_size)];
@@ -156,6 +157,10 @@ int er_wasm_execute_import_call(ErWasmModule* module,
                                &request_bytes) != 0 ||
           er_wasm_memory_range(module, (UINT64)response_ptr, (UINT32)sizeof(ErBusIoPacket),
                                &response_bytes) != 0) {
+        return -1;
+      }
+      if (er_driver_policy_bus_packet_allowed(module->host.driver_policy,
+                                              (const ErBusIoPacket*)request_bytes) == 0u) {
         return -1;
       }
       value = module->host.bus_exec((const ErBusIoPacket*)request_bytes,

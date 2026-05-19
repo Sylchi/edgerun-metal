@@ -37,6 +37,7 @@ int main(void) {
   test_mmio_handles();
   test_bus_addresses();
   test_driver_event_queue();
+  test_driver_policy();
   test_virtio_mmio_transport();
   test_virtio_modern_pci_transport_registers();
   test_virtio_split_queue();

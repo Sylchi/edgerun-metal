@@ -2,6 +2,7 @@
 #define WASM_VM_H
 
 #include "er_bus.h"
+#include "er_driver_policy.h"
 #include "er_app.h"
 #include "er_types.h"
 #include "er_wasm_contract.h"
@@ -65,6 +66,7 @@ typedef struct {
   ErAppUsage* app_usage;
   const ErAppBudget* app_budget;
   const ErAppUiPresentation* ui_presentation;
+  const ErDriverAdmissionPolicy* driver_policy;
 } ErWasmHostCalls;
 
 typedef struct {
