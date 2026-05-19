@@ -11,7 +11,7 @@ identity-routed encrypted storage.
 - [x] Runtime-test every declared hostcall.
 - [x] Build `app/app.c` into `app/.build/app.wasm` through `er-build app-build`.
 - [x] Validate app manifests against the owned app contract.
-- [ ] Generate package identity from app source, manifest, assets, and Wasm bytes.
+- [x] Generate package identity from app source, manifest, assets, and Wasm bytes.
 - [ ] Expand the C subset with local variables, loads, stores, branches, and calls.
 - [ ] Load a user-authored package from local storage into the shell.
 - [ ] Route keyboard/input events to the active Wasm UI app.

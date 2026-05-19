@@ -9,6 +9,8 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
+#include "package_identity.h"
+
 /*
  * Purpose:
  *   Provide a repository-owned build runner for deterministic local build,
@@ -41,6 +43,7 @@ static const char ERB_APP_SOURCE_NAME[] = "app.c";
 static const char ERB_APP_MANIFEST_NAME[] = "app.manifest";
 static const char ERB_APP_BUILD_DIR_NAME[] = ".build";
 static const char ERB_APP_WASM_NAME[] = "app.wasm";
+static const char ERB_APP_PACKAGE_IDENTITY_NAME[] = "package.identity";
 static const char ERB_APP_MANIFEST_EXPECTED[] =
     "contract=ui-app\n"
     "memory_pages=1\n"
@@ -288,6 +291,7 @@ static int erb_target_app_build(const char* package_dir, int print_plan) {
   char manifest_source[ERB_PATH_CAP];
   char package_build_dir[ERB_PATH_CAP];
   char output_wasm[ERB_PATH_CAP];
+  char output_identity[ERB_PATH_CAP];
 
   if (package_dir == NULL || package_dir[0] == '\0') {
     return erb_fail("app-build requires a package directory");
@@ -299,7 +303,9 @@ static int erb_target_app_build(const char* package_dir, int print_plan) {
       erb_path_join(package_build_dir, sizeof(package_build_dir), package_dir,
                     ERB_APP_BUILD_DIR_NAME) != 0 ||
       erb_path_join(output_wasm, sizeof(output_wasm), package_build_dir,
-                    ERB_APP_WASM_NAME) != 0) {
+                    ERB_APP_WASM_NAME) != 0 ||
+      erb_path_join(output_identity, sizeof(output_identity), package_build_dir,
+                    ERB_APP_PACKAGE_IDENTITY_NAME) != 0) {
     return 1;
   }
   if (erb_require_regular_file(app_source) != 0 ||
@@ -317,7 +323,14 @@ static int erb_target_app_build(const char* package_dir, int print_plan) {
       erb_args_push(&args, output_wasm) != 0) {
     return 1;
   }
-  return erb_run_args(&args, print_plan);
+  if (erb_run_args(&args, print_plan) != 0) {
+    return 1;
+  }
+  if (print_plan != 0) {
+    return 0;
+  }
+  return erb_write_app_package_identity(output_identity, app_source, manifest_source,
+                                        output_wasm);
 }
 
 static int erb_run_program(const char* program, int print_plan) {
