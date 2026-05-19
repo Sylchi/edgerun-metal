@@ -28,8 +28,25 @@ case "$repo_plan" in
 esac
 
 case "$repo_plan" in
+  *"+ ./tests/app-package-build-tests.sh"* ) ;;
+  * ) printf 'missing app package build test step\n' >&2; exit 1 ;;
+esac
+
+case "$repo_plan" in
   *"+ ./tests/erwire-decode-tests.sh"* ) ;;
   * ) printf 'missing erwire test step\n' >&2; exit 1 ;;
+esac
+
+app_package_plan=$("$ER_BUILD" --print-plan app-build "${ROOT_DIR}/tests/fixtures/app-package/app")
+
+case "$app_package_plan" in
+  *"+ clang -std=c11 -Wall -Wextra -Werror -O2 -o .build/wasm-compile"*"tools/wasm-compile/wasm_compile_parse.c"* ) ;;
+  * ) printf 'missing app-build compiler build step\n' >&2; exit 1 ;;
+esac
+
+case "$app_package_plan" in
+  *"+ .build/wasm-compile ${ROOT_DIR}/tests/fixtures/app-package/app/app.c ${ROOT_DIR}/tests/fixtures/app-package/app/.build/app.wasm"* ) ;;
+  * ) printf 'missing app-build package compile step\n' >&2; exit 1 ;;
 esac
 
 case "$repo_plan" in

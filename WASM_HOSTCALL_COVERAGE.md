@@ -47,5 +47,5 @@ Current coverage:
 - [ ] Add C declaration tests for every admitted canonical hostcall signature.
 - [x] Add C call-emission tests for `bus.exec`, `memory.region_base`, `memory.region_len`, and `ui.emit`.
 - [x] Add generated module runtime execution tests for C-emitted hostcall modules.
-- [ ] Add a package fixture that builds `app/app.c` into `app/.build/app.wasm` using the canonical package layout.
+- [x] Add a package fixture that builds `app/app.c` into `app/.build/app.wasm` using the canonical package layout.
 - [ ] Update this checklist whenever `ER_WASM_CONTRACT_IMPORTS` changes.
