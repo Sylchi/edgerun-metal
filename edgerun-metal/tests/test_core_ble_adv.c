@@ -73,6 +73,8 @@ static void test_ble_adv(void) {
   ErBleWifiRoleAdvert wifi_a;
   ErBleWifiRoleAdvert wifi_b;
   ErBleWifiRoleAdvert wifi_c;
+  ErWifiBurstPlan burst_a;
+  ErWifiBurstPlan burst_b;
   UINT8 wifi_payload[ER_BLE_ADV_PAYLOAD_BYTES];
   ErBleAdvEfi ble;
   EFI_BOOT_SERVICES boot_services;
@@ -112,6 +114,15 @@ static void test_ble_adv(void) {
 
   check_int64("ble wifi reject no capability",
               er_ble_wifi_role_advert_prepare(0u,
+                                              ER_BLE_WIFI_ROLE_NONE,
+                                              0u,
+                                              TEST_BLE_WIFI_CHANNEL,
+                                              TEST_BLE_WIFI_GROUP_ID,
+                                              TEST_BLE_WIFI_NODE_A,
+                                              &wifi_a),
+              0);
+  check_int64("ble wifi reject pending without role capability",
+              er_ble_wifi_role_advert_prepare(ER_BLE_WIFI_CAPABILITY_BURST_TX_PENDING,
                                               ER_BLE_WIFI_ROLE_NONE,
                                               0u,
                                               TEST_BLE_WIFI_CHANNEL,
@@ -203,6 +214,54 @@ static void test_ble_adv(void) {
   check_int64("ble wifi identical nonce conflicts",
               er_ble_wifi_role_decide(&wifi_b, &wifi_c),
               ER_BLE_WIFI_ROLE_DECISION_CONFLICT);
+  wifi_c = wifi_a;
+  wifi_c.group_id = TEST_BLE_WIFI_OTHER_GROUP_ID;
+  check_int64("wifi burst rejects mismatched group without pending traffic",
+              er_wifi_burst_plan_prepare(&wifi_a, &wifi_c, &burst_a), 0);
+  check_int64("wifi burst no pending traffic",
+              er_wifi_burst_plan_prepare(&wifi_a, &wifi_b, &burst_a), 1);
+  check_uint64("wifi burst closed without pending traffic", burst_a.open, 0u);
+  check_int64("ble wifi prepare local pending lower nonce",
+              er_ble_wifi_role_advert_prepare(TEST_BLE_WIFI_CAP_BOTH |
+                                              ER_BLE_WIFI_CAPABILITY_BURST_TX_PENDING,
+                                              ER_BLE_WIFI_ROLE_NONE,
+                                              3u,
+                                              TEST_BLE_WIFI_CHANNEL,
+                                              TEST_BLE_WIFI_GROUP_ID,
+                                              TEST_BLE_WIFI_NODE_A,
+                                              &wifi_a),
+              1);
+  check_int64("ble wifi prepare remote idle higher nonce",
+              er_ble_wifi_role_advert_prepare(TEST_BLE_WIFI_CAP_BOTH,
+                                              ER_BLE_WIFI_ROLE_NONE,
+                                              3u,
+                                              TEST_BLE_WIFI_CHANNEL,
+                                              TEST_BLE_WIFI_GROUP_ID,
+                                              TEST_BLE_WIFI_NODE_B,
+                                              &wifi_b),
+              1);
+  check_int64("wifi burst opens for local pending traffic",
+              er_wifi_burst_plan_prepare(&wifi_a, &wifi_b, &burst_a), 1);
+  check_uint64("wifi burst lower nonce becomes sta", burst_a.local_role, ER_BLE_WIFI_ROLE_STA);
+  check_uint64("wifi burst open", burst_a.open, 1u);
+  check_uint64("wifi burst channel", burst_a.wifi_channel, TEST_BLE_WIFI_CHANNEL);
+  check_uint64("wifi burst group", burst_a.group_id, TEST_BLE_WIFI_GROUP_ID);
+  check_uint64("wifi burst ssid length", burst_a.ssid_len, ER_WIFI_BURST_SSID_BYTES);
+  check_uint64("wifi burst ssid magic e", burst_a.ssid[0], 'E');
+  check_uint64("wifi burst ssid magic r", burst_a.ssid[1], 'R');
+  check_uint64("wifi burst ssid magic w", burst_a.ssid[2], 'W');
+  check_uint64("wifi burst ssid magic b", burst_a.ssid[3], 'B');
+  check_int64("wifi burst remote opens same session",
+              er_wifi_burst_plan_prepare(&wifi_b, &wifi_a, &burst_b), 1);
+  check_uint64("wifi burst remote becomes ap", burst_b.local_role, ER_BLE_WIFI_ROLE_AP);
+  check_uint64("wifi burst same session", burst_b.session_id, burst_a.session_id);
+  check_uint64("wifi burst same ssid length", burst_b.ssid_len, burst_a.ssid_len);
+  for (i = 0u; i < ER_WIFI_BURST_SSID_BYTES; ++i) {
+    check_uint64("wifi burst same ssid byte", burst_b.ssid[i], burst_a.ssid[i]);
+  }
+  wifi_b.node_nonce = wifi_a.node_nonce;
+  check_int64("wifi burst refuses role conflict",
+              er_wifi_burst_plan_prepare(&wifi_a, &wifi_b, &burst_b), 0);
 
   er_mem_zero((UINT8*)&g_test_ble_hc, (UINTN)sizeof(g_test_ble_hc));
   er_mem_zero((UINT8*)&boot_services, (UINTN)sizeof(boot_services));

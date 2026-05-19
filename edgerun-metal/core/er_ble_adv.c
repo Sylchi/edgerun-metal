@@ -43,7 +43,11 @@ enum {
   ER_BLE_WIFI_ROLE_PAYLOAD_GROUP_ID_OFFSET = 6u,
   ER_BLE_WIFI_ROLE_PAYLOAD_NODE_NONCE_OFFSET = 10u,
   ER_BLE_WIFI_ROLE_PAYLOAD_VERSION = 1u,
-  ER_BLE_WIFI_CAPABILITY_KNOWN_MASK = ER_BLE_WIFI_CAPABILITY_AP | ER_BLE_WIFI_CAPABILITY_STA,
+  ER_BLE_WIFI_ROLE_CAPABILITY_MASK = ER_BLE_WIFI_CAPABILITY_AP |
+                                     ER_BLE_WIFI_CAPABILITY_STA,
+  ER_BLE_WIFI_CAPABILITY_KNOWN_MASK = ER_BLE_WIFI_CAPABILITY_AP |
+                                      ER_BLE_WIFI_CAPABILITY_STA |
+                                      ER_BLE_WIFI_CAPABILITY_BURST_TX_PENDING,
   ER_BLE_WIFI_CHANNEL_INVALID = 0u,
   ER_BLE_HCI_COMMAND_OPCODE_LO_OFFSET = 0u,
   ER_BLE_HCI_COMMAND_OPCODE_HI_OFFSET = 1u,
@@ -167,7 +171,7 @@ static UINT8 er_ble_wifi_role_valid(UINT8 role) {
 }
 
 static UINT8 er_ble_wifi_role_capability_valid(UINT8 capabilities) {
-  if (capabilities == 0u ||
+  if ((capabilities & ER_BLE_WIFI_ROLE_CAPABILITY_MASK) == 0u ||
       (capabilities & (UINT8)~ER_BLE_WIFI_CAPABILITY_KNOWN_MASK) != 0u) {
     return 0u;
   }
@@ -376,6 +380,10 @@ UINT8 er_ble_wifi_role_decode_payload(const UINT8 payload[ER_BLE_ADV_PAYLOAD_BYT
                                          er_ble_adv_read_u32(payload + ER_BLE_WIFI_ROLE_PAYLOAD_GROUP_ID_OFFSET),
                                          er_ble_adv_read_u64(payload + ER_BLE_WIFI_ROLE_PAYLOAD_NODE_NONCE_OFFSET),
                                          out_advert);
+}
+
+UINT8 er_ble_wifi_role_advert_is_valid(const ErBleWifiRoleAdvert* advert) {
+  return er_ble_wifi_role_advert_valid(advert);
 }
 
 ErBleWifiRoleDecision er_ble_wifi_role_decide(const ErBleWifiRoleAdvert* local,
