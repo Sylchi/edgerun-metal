@@ -340,7 +340,10 @@ static void highlighted_process_sse_json_event(AgentTurn *turn, CodexResponseRen
         }
     } else if (strcmp(type, "response.output_item.done") == 0) {
         char *item = json_dup_balanced_value(json_find_key_value_start(event_json, "item"));
-        if (item) process_output_item_json(turn, item);
+        if (item) {
+            process_output_item_json(turn, item);
+            free(item);
+        }
     } else if (strcmp(type, "response.failed") == 0) {
         char *message = json_get_string_dup(event_json, "message");
         if (message) {
