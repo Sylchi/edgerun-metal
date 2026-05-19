@@ -112,6 +112,7 @@ UINT8 er_boot_services_add_authority_profile(ErBootServicesReport* report,
                                              UINT16 label_len);
 UINT8 er_boot_services_select_authority(ErBootServicesReport* report,
                                         UINT32 authority_index);
+UINT8 er_boot_services_report_has_ephemeral_admission(const ErBootServicesReport* report);
 ErBootServicesAction er_boot_services_decide_action(const ErBootServicesReport* report);
 const char* er_boot_services_action_label(ErBootServicesAction action);
 void er_boot_services_onboarding_model(const ErBootServicesReport* report,

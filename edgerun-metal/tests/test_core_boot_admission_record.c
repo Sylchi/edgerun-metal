@@ -7,6 +7,7 @@ static void test_boot_admission_record(void) {
   ErCryptoProvider crypto;
   ErBootAdmissionRecord local_record;
   ErBootAdmissionRecord external_record;
+  ErBootAdmissionRecord ephemeral_record;
   ErBootAdmissionRecord decoded_record;
   ErIdentity admission_identity;
   UINT8 encoded[ER_BOOT_ADMISSION_RECORD_BYTES];
@@ -90,4 +91,21 @@ static void test_boot_admission_record(void) {
                                                         0,
                                                         &external_record),
               0);
+  check_int64("boot admission prepare ephemeral authority",
+              er_boot_admission_record_prepare_ephemeral_authority(&crypto,
+                                                                   BOOT_ADMISSION_TEST_GENERATION,
+                                                                   ER_BOOT_BOOTSTRAP_CHANNEL_NATIVE_ETH,
+                                                                   BOOT_ADMISSION_TEST_VENDOR_ID,
+                                                                   BOOT_ADMISSION_TEST_DEVICE_ID,
+                                                                   4u,
+                                                                   &ephemeral_record),
+              1);
+  check_int64("boot admission ephemeral valid",
+              er_boot_admission_record_valid(&crypto, &ephemeral_record), 1);
+  check_uint64("boot admission ephemeral mode",
+               ephemeral_record.admission_mode, ER_BOOT_ADMISSION_MODE_EXTERNAL);
+  check_uint64("boot admission ephemeral identity",
+               ephemeral_record.admission_identity.identity_type, ER_IDENTITY_TYPE_HASH);
+  check_uint64("boot admission ephemeral backing",
+               ephemeral_record.admission_identity.backing_type, ER_IDENTITY_BACKING_EPHEMERAL_HASH);
 }

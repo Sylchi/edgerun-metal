@@ -50,6 +50,13 @@ UINT8 er_boot_admission_record_prepare_external(const ErCryptoProvider* crypto,
                                                 UINT16 bootstrap_pci_device_id,
                                                 const ErIdentity* admission_identity,
                                                 ErBootAdmissionRecord* out_record);
+UINT8 er_boot_admission_record_prepare_ephemeral_authority(const ErCryptoProvider* crypto,
+                                                           UINT32 generation,
+                                                           UINT8 bootstrap_channel_kind,
+                                                           UINT16 bootstrap_pci_vendor_id,
+                                                           UINT16 bootstrap_pci_device_id,
+                                                           UINT32 boot_profile,
+                                                           ErBootAdmissionRecord* out_record);
 UINT8 er_boot_admission_record_hash(const ErCryptoProvider* crypto,
                                     const ErBootAdmissionRecord* record,
                                     ErHash* out_hash);

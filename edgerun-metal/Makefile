@@ -1,4 +1,4 @@
-.PHONY: all run run-aarch64 qemu-aarch64-smoke qemu-swtpm-persistence clean print-path print-config netboot os rebuild-image check test-core wifi-hardware-probe wasm-modules qemu-config-check qemu-aarch64-config-check qemu-swtpm-persistence-config-check
+.PHONY: all run run-aarch64 qemu-aarch64-smoke qemu-ephemeral-authority qemu-ephemeral-authority-smoke qemu-swtpm-persistence clean print-path print-config netboot os rebuild-image check test-core wifi-hardware-probe wasm-modules qemu-config-check qemu-aarch64-config-check qemu-swtpm-persistence-config-check
 
 CC := clang
 HOST_CC := clang
@@ -15,6 +15,7 @@ GENERATED_DIR := $(BUILD_DIR)/generated
 # ER_BOOT_PROFILE=4 selects the OS path: VirtIO GPU UI runtime, Wasm apps, PS/2 input,
 # storage-bound package loading, and relay/device endpoint work.
 ER_BOOT_PROFILE := 4
+ER_BOOT_EPHEMERAL_AUTHORITY_ENABLED := 0
 
 ifeq ($(ER_METAL_ARCH),x86_64)
 ER_METAL_TARGET := x86_64-pc-windows-msvc
@@ -34,7 +35,7 @@ endif
 
 EFI_BOOT := $(ESP_DIR)/EFI/BOOT/$(ER_METAL_BOOT_EFI)
 CFLAGS := -std=c11 -Wall -Werror -ffreestanding -fshort-wchar -fno-builtin -fno-stack-protector -fuse-ld=lld -target $(ER_METAL_TARGET) $(ER_METAL_ARCH_CFLAGS) \
-          -I$(CURDIR)/core -I$(CURDIR) -I$(CURDIR)/../include -I$(CURDIR)/$(GENERATED_DIR) -I$(CURDIR)/$(CRYPTO_DIR)/include -I$(CURDIR)/$(UI_CORE_DIR)/include -I$(CURDIR)/$(VARFONT_DIR)/include -DER_BOOT_PROFILE=$(ER_BOOT_PROFILE)
+          -I$(CURDIR)/core -I$(CURDIR) -I$(CURDIR)/../include -I$(CURDIR)/$(GENERATED_DIR) -I$(CURDIR)/$(CRYPTO_DIR)/include -I$(CURDIR)/$(UI_CORE_DIR)/include -I$(CURDIR)/$(VARFONT_DIR)/include -DER_BOOT_PROFILE=$(ER_BOOT_PROFILE) -DER_BOOT_EPHEMERAL_AUTHORITY_ENABLED=$(ER_BOOT_EPHEMERAL_AUTHORITY_ENABLED)
 CRYPTO_CFLAGS := $(CFLAGS) -O3 $(ER_METAL_CRYPTO_DEFS)
 LDFLAGS := -nostdlib -Wl,/SUBSYSTEM:EFI_APPLICATION,/ENTRY:efi_main
 HOST_CFLAGS := -std=c11 -Wall -Wextra -Werror -O2 -DER_ENABLE_TEST_HOOKS=1 -I$(CURDIR)/core -I$(CURDIR)/../include -I$(CURDIR)/$(GENERATED_DIR) -I$(CURDIR)/$(CRYPTO_DIR)/include -I$(CURDIR)/$(UI_CORE_DIR)/include -I$(CURDIR)/$(VARFONT_DIR)/include
@@ -88,6 +89,10 @@ QEMU_SWTPM_PERSIST_CONFIG := qemu-swtpm-persistence.conf
 QEMU_SWTPM_PERSIST_SCRIPT := ../tools/qemu-swtpm-persistence.sh
 QEMU_SWTPM_PERSIST_DIR := $(BUILD_DIR)/qemu-swtpm-persistence
 QEMU_SWTPM_PERSIST_TIMEOUT := 30
+QEMU_EPHEMERAL_AUTHORITY_BUILD_DIR := ../.build/edgerun-metal-ephemeral-authority
+QEMU_EPHEMERAL_AUTHORITY_LOG := $(QEMU_EPHEMERAL_AUTHORITY_BUILD_DIR)/qemu-ephemeral-authority.log
+QEMU_EPHEMERAL_AUTHORITY_TIMEOUT := 30
+QEMU_EPHEMERAL_AUTHORITY_READY := boot path: os
 CORE_TEST_SRC := tests/test_core.c core/efi_boot_memory.c core/efi_boot_relay.c core/efi_boot_routes.c core/efi_boot_wasm.c core/er_boot_admission_record.c core/er_boot_efi_vars.c core/er_boot_config.c core/er_boot_profile.c core/er_boot_services.c core/er_pci.c core/er_rtw89.c core/er_mt7922.c core/er_firmware_loader.c core/er_mmio.c core/er_crypto.c core/er_crypto_blake3.c $(CRYPTO_SRCS) core/er_mem.c core/er_vfs.c core/er_app.c core/er_identity.c core/er_device_identity.c core/er_work_route.c core/er_render_endpoint.c core/er_storage_endpoint.c core/er_seal.c core/er_tpm.c core/er_hw_relay.c core/er_relay_packet.c core/er_ble_adv.c core/er_wifi_burst.c core/er_bus.c core/er_ps2_keyboard.c core/er_acpi.c core/er_print.c core/er_netlog.c core/er_gfx_console.c core/er_ui_gop_renderer.c core/er_ui_wasm_app.c core/er_epoch_clock.c core/erwire.c core/er_native_boot.c core/wasm_vm.c core/wasm_vm_reader.c core/wasm_vm_memory_ui.c core/wasm_vm_contract.c core/wasm_vm_hostcall.c core/wasm_vm_execute.c core/er_virtio.c core/er_virtio_blk.c core/er_virtio_net.c core/er_virtio_gpu.c core/er_net_frame.c core/er_native_eth.c $(UI_SRCS) $(VARFONT_SRCS)
 CORE_TEST_FRAGMENT_SRCS := $(wildcard tests/test_core_*.c)
 CORE_TEST_BIN := $(BUILD_DIR)/test-core
@@ -228,6 +233,16 @@ run: $(EFI_BOOT) $(QEMU_RUN_BIN) $(QEMU_CONFIG)
 qemu-config-check: $(EFI_BOOT) $(QEMU_RUN_BIN) $(QEMU_CONFIG)
 	./$(QEMU_RUN_BIN) --check $(QEMU_CONFIG) $(abspath $(ESP_DIR))
 
+qemu-ephemeral-authority:
+	$(MAKE) rebuild-image ER_BOOT_EPHEMERAL_AUTHORITY_ENABLED=1 BUILD_DIR=$(QEMU_EPHEMERAL_AUTHORITY_BUILD_DIR)
+	$(MAKE) $(QEMU_EPHEMERAL_AUTHORITY_BUILD_DIR)/edgerun-qemu-run BUILD_DIR=$(QEMU_EPHEMERAL_AUTHORITY_BUILD_DIR)
+	./$(QEMU_EPHEMERAL_AUTHORITY_BUILD_DIR)/edgerun-qemu-run $(QEMU_CONFIG) $(abspath $(QEMU_EPHEMERAL_AUTHORITY_BUILD_DIR)/esp)
+
+qemu-ephemeral-authority-smoke:
+	$(MAKE) rebuild-image ER_BOOT_EPHEMERAL_AUTHORITY_ENABLED=1 BUILD_DIR=$(QEMU_EPHEMERAL_AUTHORITY_BUILD_DIR)
+	$(MAKE) $(QEMU_EPHEMERAL_AUTHORITY_BUILD_DIR)/edgerun-qemu-run BUILD_DIR=$(QEMU_EPHEMERAL_AUTHORITY_BUILD_DIR)
+	$(QEMU_SMOKE_SRC) ./$(QEMU_EPHEMERAL_AUTHORITY_BUILD_DIR)/edgerun-qemu-run $(QEMU_CONFIG) $(abspath $(QEMU_EPHEMERAL_AUTHORITY_BUILD_DIR)/esp) $(QEMU_EPHEMERAL_AUTHORITY_LOG) $(QEMU_EPHEMERAL_AUTHORITY_TIMEOUT) "$(QEMU_EPHEMERAL_AUTHORITY_READY)"
+
 qemu-swtpm-persistence-config-check: $(EFI_BOOT) $(QEMU_RUN_BIN) $(QEMU_SWTPM_PERSIST_CONFIG)
 	mkdir -p $(QEMU_SWTPM_PERSIST_DIR)
 	./$(QEMU_RUN_BIN) --check $(QEMU_SWTPM_PERSIST_CONFIG) $(abspath $(ESP_DIR))
@@ -260,5 +275,6 @@ print-config:
 	@printf 'ER_METAL_ARCH=%s\n' "$(ER_METAL_ARCH)"
 	@printf 'ER_METAL_TARGET=%s\n' "$(ER_METAL_TARGET)"
 	@printf 'ER_METAL_BOOT_EFI=%s\n' "$(ER_METAL_BOOT_EFI)"
+	@printf 'ER_BOOT_EPHEMERAL_AUTHORITY_ENABLED=%s\n' "$(ER_BOOT_EPHEMERAL_AUTHORITY_ENABLED)"
 	@printf 'EFI_BOOT=%s\n' "$(abspath $(EFI_BOOT))"
 	@printf 'CRYPTO_ASM_SRCS=%s\n' "$(CRYPTO_ASM_SRCS)"
