@@ -262,6 +262,8 @@ static void test_ui_boot_package_loads_from_endpoint_storage(void) {
   const ErUiBootInstalledApp* installed_app;
   ErUiBootInstalledApp content_only_app;
   ErUiBootInstalledApp tampered_app;
+  ErUiBootInstalledPackageSource source;
+  ErUiBootInstalledPackageSource tampered_source;
 
   er_mem_zero(module_memory, (UINTN)sizeof(module_memory));
   er_mem_zero(manifest_memory, (UINTN)sizeof(manifest_memory));
@@ -301,6 +303,19 @@ static void test_ui_boot_package_loads_from_endpoint_storage(void) {
                                                     UI_BOOT_PACKAGE_TEST_APP_INDEX,
                                                     &loaded),
               0);
+  check_int64("ui boot installed source prepare",
+              er_ui_boot_prepare_installed_package_source(installed_app,
+                                                          UI_BOOT_PACKAGE_TEST_APP_INDEX,
+                                                          &source),
+              1);
+  check_hash_equal("ui boot installed source package",
+                   &source.storage_source.package_id,
+                   &installed_app->package.package_id);
+  check_int64("ui boot installed source rejects missing app",
+              er_ui_boot_prepare_installed_package_source(0,
+                                                          UI_BOOT_PACKAGE_TEST_APP_INDEX,
+                                                          &source),
+              0);
   content_only_app = *installed_app;
   content_only_app.app_label = 0;
   content_only_app.app_label_len = 0u;
@@ -308,16 +323,33 @@ static void test_ui_boot_package_loads_from_endpoint_storage(void) {
   content_only_app.manifest_label_len = 0u;
   er_mem_zero((UINT8*)&storage, (UINTN)sizeof(storage));
   er_mem_zero((UINT8*)&loaded, (UINTN)sizeof(loaded));
-  check_int64("ui boot package loads content refs without labels",
-              er_ui_boot_load_installed_app_package(&content_only_app,
-                                                    module_memory,
-                                                    (UINT32)sizeof(module_memory),
-                                                    manifest_memory,
-                                                    (UINT32)sizeof(manifest_memory),
-                                                    &storage,
-                                                    UI_BOOT_PACKAGE_TEST_APP_INDEX,
-                                                    &loaded),
+  check_int64("ui boot content-only source prepare",
+              er_ui_boot_prepare_installed_package_source(&content_only_app,
+                                                          UI_BOOT_PACKAGE_TEST_APP_INDEX,
+                                                          &source),
               1);
+  check_int64("ui boot package loads content source without labels",
+              er_ui_boot_load_installed_package_source(&source,
+                                                       module_memory,
+                                                       (UINT32)sizeof(module_memory),
+                                                       manifest_memory,
+                                                       (UINT32)sizeof(manifest_memory),
+                                                       &storage,
+                                                       &loaded),
+              1);
+  tampered_source = source;
+  tampered_source.storage_source.source_id.bytes[0] ^= 1u;
+  er_mem_zero((UINT8*)&storage, (UINTN)sizeof(storage));
+  er_mem_zero((UINT8*)&loaded, (UINTN)sizeof(loaded));
+  check_int64("ui boot package rejects source mismatch",
+              er_ui_boot_load_installed_package_source(&tampered_source,
+                                                       module_memory,
+                                                       (UINT32)sizeof(module_memory),
+                                                       manifest_memory,
+                                                       (UINT32)sizeof(manifest_memory),
+                                                       &storage,
+                                                       &loaded),
+              0);
   tampered_app = *installed_app;
   tampered_app.app_ref.object_id.bytes[0] ^= 1u;
   er_mem_zero((UINT8*)&storage, (UINTN)sizeof(storage));
