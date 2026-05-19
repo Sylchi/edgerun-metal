@@ -259,9 +259,35 @@ static void test_ui_boot_package_loads_from_endpoint_storage(void) {
   UINT8 manifest_memory[ER_UI_BOOT_APP_MANIFEST_BYTES];
   ErUiBootPackageStorage storage;
   ErAppLoadedPackage loaded;
+  const ErUiBootInstalledApp* installed_app;
 
   er_mem_zero(module_memory, (UINTN)sizeof(module_memory));
   er_mem_zero(manifest_memory, (UINTN)sizeof(manifest_memory));
+  er_mem_zero((UINT8*)&storage, (UINTN)sizeof(storage));
+  er_mem_zero((UINT8*)&loaded, (UINTN)sizeof(loaded));
+
+  installed_app = er_ui_boot_installed_app_for_slot(UI_BOOT_PACKAGE_TEST_APP_INDEX);
+  check_int64("ui boot installed app present", installed_app != 0, 1);
+  check_int64("ui boot installed app rejects invalid slot",
+              er_ui_boot_installed_app_for_slot(ER_UI_BOOT_APP_COUNT) == 0, 1);
+  check_uint64("ui boot installed app len", installed_app->app_len,
+               ER_USER_APP_WASM_SIZE);
+  check_uint64("ui boot installed manifest len", installed_app->manifest_len,
+               ER_USER_APP_MANIFEST_SIZE);
+  check_uint64("ui boot installed app byte", installed_app->app_bytes[0],
+               g_edgerun_user_app_wasm[0]);
+  check_uint64("ui boot installed manifest byte", installed_app->manifest_bytes[0],
+               g_edgerun_user_app_manifest[0]);
+  check_int64("ui boot installed package rejects missing descriptor",
+              er_ui_boot_load_installed_app_package(0,
+                                                    module_memory,
+                                                    (UINT32)sizeof(module_memory),
+                                                    manifest_memory,
+                                                    (UINT32)sizeof(manifest_memory),
+                                                    &storage,
+                                                    UI_BOOT_PACKAGE_TEST_APP_INDEX,
+                                                    &loaded),
+              0);
   er_mem_zero((UINT8*)&storage, (UINTN)sizeof(storage));
   er_mem_zero((UINT8*)&loaded, (UINTN)sizeof(loaded));
 
