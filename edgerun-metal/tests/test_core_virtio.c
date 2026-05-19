@@ -291,6 +291,72 @@ static void test_driver_event_queue(void) {
               0);
 }
 
+static void test_driver_policy(void) {
+  enum {
+    DRIVER_POLICY_MEMORY_BYTES = 65536u,
+    DRIVER_POLICY_MMIO_BASE = 4096u,
+    DRIVER_POLICY_MMIO_LEN = 4u,
+    DRIVER_POLICY_PACKET_ID = 21u
+  };
+  ErDriverAdmissionPolicy policy;
+  ErBusAddress mmio;
+  ErBusAddress denied_mmio;
+  ErBusIoPacket packet;
+
+  check_int64("driver policy prepare",
+              er_driver_policy_prepare_mmio32(DRIVER_POLICY_MEMORY_BYTES,
+                                              DRIVER_POLICY_MMIO_BASE,
+                                              DRIVER_POLICY_MMIO_LEN,
+                                              ER_BUS_ACCESS_READ8,
+                                              &policy),
+              1);
+  check_int64("driver policy rejects zero memory",
+              er_driver_policy_prepare_mmio32(0u, DRIVER_POLICY_MMIO_BASE,
+                                              DRIVER_POLICY_MMIO_LEN,
+                                              ER_BUS_ACCESS_READ8,
+                                              &policy),
+              0);
+  check_int64("driver policy memory allowed",
+              er_driver_policy_memory_allowed(&policy, DRIVER_POLICY_MEMORY_BYTES),
+              1);
+  check_int64("driver policy memory rejects larger",
+              er_driver_policy_memory_allowed(&policy, DRIVER_POLICY_MEMORY_BYTES + 1u),
+              0);
+
+  check_int64("driver policy mmio address",
+              er_bus_prepare_mmio32_address(DRIVER_POLICY_MMIO_BASE,
+                                            DRIVER_POLICY_MMIO_LEN,
+                                            0u, ER_BUS_ACCESS_READ8, &mmio),
+              1);
+  check_int64("driver policy packet",
+              er_bus_prepare_io_packet(DRIVER_POLICY_PACKET_ID, &mmio,
+                                       ER_BUS_ACCESS_READ8, 1u, 0u, 0u, &packet),
+              1);
+  check_int64("driver policy allows packet",
+              er_driver_policy_bus_packet_allowed(&policy, &packet),
+              1);
+  check_int64("driver policy rejects write packet",
+              er_bus_prepare_io_packet(DRIVER_POLICY_PACKET_ID, &mmio,
+                                       ER_BUS_ACCESS_WRITE8, 1u, 0u, 0u, &packet),
+              0);
+  packet.op.access = ER_BUS_ACCESS_WRITE8;
+  check_int64("driver policy denies write access",
+              er_driver_policy_bus_packet_allowed(&policy, &packet),
+              0);
+  check_int64("driver policy denied address",
+              er_bus_prepare_mmio32_address(DRIVER_POLICY_MMIO_BASE + DRIVER_POLICY_MMIO_LEN,
+                                            DRIVER_POLICY_MMIO_LEN,
+                                            0u, ER_BUS_ACCESS_READ8, &denied_mmio),
+              1);
+  check_int64("driver policy denied packet",
+              er_bus_prepare_io_packet(DRIVER_POLICY_PACKET_ID, &denied_mmio,
+                                       ER_BUS_ACCESS_READ8, 1u, 0u, 0u, &packet),
+              1);
+  check_int64("driver policy denies out of range",
+              er_driver_policy_bus_packet_allowed(&policy, &packet),
+              0);
+}
+
 static void test_virtio_mmio_transport(void) {
   enum {
     VIRTIO_TEST_MMIO_DWORDS = 128u,

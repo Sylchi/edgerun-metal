@@ -2,12 +2,18 @@
 
 ErWasmHostCalls g_host_calls = {0};
 static UINT8 g_wasm_driver_memory[ER_WASM_DRIVER_MEMORY_BYTES];
+static ErDriverAdmissionPolicy g_wasm_driver_policy;
 static UINT8 g_efi_memory_map[ER_EFI_MEMORY_MAP_BYTES];
 static UINT8 g_log_u64_stage = ER_LOG_U64_STAGE_IDLE;
 static UINT8 g_log_hex_stage = ER_LOG_HEX_STAGE_ID;
 static UINT64 g_log_bus = 0;
 static UINT64 g_log_dev = 0;
 static UINT64 g_log_func = 0;
+
+enum {
+  ER_WASM_DRIVER_BUS_PROBE_MMIO_BASE = 4096u,
+  ER_WASM_DRIVER_BUS_PROBE_MMIO_LEN = 4u
+};
 
 void er_print_u64_field(const char* label, UINT64 value) {
   er_print("    ");
@@ -385,6 +391,14 @@ INT64 er_wasm_bus_exec_host(const ErBusIoPacket* request, ErBusIoPacket* respons
 }
 
 void er_install_hostcalls(void) {
+  if (er_driver_policy_prepare_mmio32((UINT32)sizeof(g_wasm_driver_memory),
+                                      ER_WASM_DRIVER_BUS_PROBE_MMIO_BASE,
+                                      ER_WASM_DRIVER_BUS_PROBE_MMIO_LEN,
+                                      ER_BUS_ACCESS_READ8,
+                                      &g_wasm_driver_policy) == 0u) {
+    er_println("wasm driver policy: invalid admission policy");
+    return;
+  }
   g_host_calls.log_u64 = er_log_u64;
   g_host_calls.log_hex = er_log_hex;
   g_host_calls.pci_read32 = er_pci_read32;
@@ -394,4 +408,5 @@ void er_install_hostcalls(void) {
   g_host_calls.bus_exec = er_wasm_bus_exec_host;
   g_host_calls.memory = g_wasm_driver_memory;
   g_host_calls.memory_size = (UINT32)sizeof(g_wasm_driver_memory);
+  g_host_calls.driver_policy = &g_wasm_driver_policy;
 }

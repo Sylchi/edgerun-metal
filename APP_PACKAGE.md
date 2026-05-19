@@ -76,9 +76,16 @@ UI app launcher. The driver-facing packet layout is defined in
 contract=bus-driver
 memory_pages=1
 imports=edgerun.bus/exec
+driver_memory_bytes=65536
+driver_bus=mmio32:4096:4:read8
 source=app.c
 output=.build/app.wasm
 ```
+
+Driver admission binds the package to one explicit memory budget and one
+explicit bus window. The runtime rejects a driver whose linear memory does not
+match `driver_memory_bytes`, and rejects `edgerun.bus/exec` packets outside the
+admitted `driver_bus` window before native bus execution.
 
 Initial C subset:
 

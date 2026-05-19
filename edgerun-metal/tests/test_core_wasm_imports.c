@@ -121,6 +121,8 @@ static void test_wasm_bus_exec_import(void) {
   static UINT8 memory[65536];
   ErWasmHostCalls host = {0};
   ErWasmLinearMemory linear_memory;
+  ErDriverAdmissionPolicy policy;
+  ErDriverAdmissionPolicy denied_policy;
   ErWasmModule module;
   UINT32 main_index = 0;
   INT64 result = 0;
@@ -176,9 +178,18 @@ static void test_wasm_bus_exec_import(void) {
                                             0u, 1024u, 1024u, 2048u,
                                             &linear_memory),
               0);
+  check_int64("wasm bus policy prepare",
+              er_driver_policy_prepare_mmio32((UINT32)sizeof(memory), 4096u, 4u,
+                                              ER_BUS_ACCESS_READ8, &policy),
+              1);
+  check_int64("wasm bus denied policy prepare",
+              er_driver_policy_prepare_mmio32((UINT32)sizeof(memory), 8192u, 4u,
+                                              ER_BUS_ACCESS_READ8, &denied_policy),
+              1);
 
   host.bus_exec = test_vm_bus_exec;
   host.linear_memory = linear_memory;
+  host.driver_policy = &policy;
 
   check_int64("wasm bus init",
               er_wasm_init(&module, g_edgerun_driver_bus_probe_wasm,
@@ -211,6 +222,18 @@ static void test_wasm_bus_exec_import(void) {
 
   check_int64("wasm bus execute", er_wasm_execute_i64(&module, main_index, &result), 0);
   check_uint64("wasm bus result", (UINT64)result, 0x5au);
+
+  host.driver_policy = &denied_policy;
+  check_int64("wasm bus denied policy init",
+              er_wasm_init(&module, g_edgerun_driver_bus_probe_wasm,
+                           ER_DRIVER_BUS_PROBE_WASM_SIZE, &host),
+              0);
+  check_int64("wasm bus denied policy find main",
+              er_wasm_find_main(&module, &main_index),
+              0);
+  check_int64("wasm bus denied policy execute",
+              er_wasm_execute_i64(&module, main_index, &result),
+              -1);
 }
 
 static void test_wasm_public_region_imports(void) {
@@ -636,6 +659,7 @@ static void test_wasm_c_generated_hostcall_modules(void) {
   ErWasmHostCalls host = {0};
   ErWasmLinearMemory linear_memory;
   ErWasmModule module;
+  ErDriverAdmissionPolicy driver_policy;
   ErBusIoPacket* request;
   ErBusIoPacket* response;
   ErAppUiPresentation presentation;
@@ -652,9 +676,14 @@ static void test_wasm_c_generated_hostcall_modules(void) {
                                             0u, 1024u, 1024u, 2048u,
                                             &linear_memory),
               0);
+  check_int64("wasm c bus policy prepare",
+              er_driver_policy_prepare_mmio32((UINT32)sizeof(memory), 4096u, 4u,
+                                              ER_BUS_ACCESS_READ8, &driver_policy),
+              1);
 
   host.linear_memory = linear_memory;
   host.bus_exec = test_vm_bus_exec;
+  host.driver_policy = &driver_policy;
   check_int64("wasm c bus init",
               er_wasm_init(&module, g_edgerun_c_hostcall_bus_exec_wasm,
                            ER_C_HOSTCALL_BUS_EXEC_WASM_SIZE, &host),
@@ -667,7 +696,13 @@ static void test_wasm_c_generated_hostcall_modules(void) {
   request->abi_version = ER_BUS_ABI_VERSION;
   request->packet_kind = ER_BUS_PACKET_IO_REQUEST;
   request->packet_id = 1u;
+  request->op.abi_version = ER_BUS_ABI_VERSION;
+  request->op.bus_kind = ER_BUS_KIND_MMIO32;
+  request->op.access = ER_BUS_ACCESS_READ8;
   request->op.width = 1u;
+  request->op.address.abi_version = ER_BUS_ABI_VERSION;
+  request->op.address.bus_kind = ER_BUS_KIND_MMIO32;
+  request->op.address.access_flags = ER_BUS_ACCESS_READ8;
   request->op.address.base = 4096u;
   request->op.address.len = 4u;
   check_int64("wasm c bus find main", er_wasm_find_main(&module, &main_index), 0);
@@ -677,6 +712,7 @@ static void test_wasm_c_generated_hostcall_modules(void) {
   check_uint64("wasm c bus response result", response->result, 0x5au);
 
   host.bus_exec = 0;
+  host.driver_policy = 0;
   check_int64("wasm c region base init",
               er_wasm_init(&module, g_edgerun_c_hostcall_region_base_wasm,
                            ER_C_HOSTCALL_REGION_BASE_WASM_SIZE, &host),

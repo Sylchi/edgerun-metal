@@ -90,6 +90,7 @@ static void er_clear_module(ErWasmModule* module) {
   module->host.app_usage = 0;
   module->host.app_budget = 0;
   module->host.ui_presentation = 0;
+  module->host.driver_policy = 0;
 }
 
 static int er_wasm_init_host(ErWasmModule* module, const ErWasmHostCalls* host) {
@@ -111,6 +112,7 @@ static int er_wasm_init_host(ErWasmModule* module, const ErWasmHostCalls* host) 
     module->host.app_usage = host->app_usage;
     module->host.app_budget = host->app_budget;
     module->host.ui_presentation = host->ui_presentation;
+    module->host.driver_policy = host->driver_policy;
     if (host->linear_memory.bytes != 0) {
       if (er_wasm_linear_memory_valid(&host->linear_memory) == 0) {
         return -1;
@@ -128,6 +130,11 @@ static int er_wasm_init_host(ErWasmModule* module, const ErWasmHostCalls* host) 
       module->host.linear_memory = module->linear_memory;
       module->memory = host->memory;
       module->memory_size = host->memory_size;
+    }
+    if (module->host.driver_policy != 0 &&
+        er_driver_policy_memory_allowed(module->host.driver_policy,
+                                        module->memory_size) == 0u) {
+      return -1;
     }
   }
   return 0;

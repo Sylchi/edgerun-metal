@@ -1,5 +1,7 @@
 contract=bus-driver
 memory_pages=1
 imports=edgerun.bus/exec
+driver_memory_bytes=65536
+driver_bus=mmio32:4096:4:read8
 source=app.c
 output=.build/app.wasm

@@ -57,6 +57,8 @@ static const char ERB_BUS_DRIVER_MANIFEST_EXPECTED[] =
     "contract=bus-driver\n"
     "memory_pages=1\n"
     "imports=edgerun.bus/exec\n"
+    "driver_memory_bytes=65536\n"
+    "driver_bus=mmio32:4096:4:read8\n"
     "source=app.c\n"
     "output=.build/app.wasm\n";
 
@@ -318,6 +320,10 @@ static int erb_build_app_run(int print_plan) {
       erb_args_push(&args, "-Iedgerun-ui-core/varfont/include") != 0 ||
       erb_args_push(&args, "tools/app-run/main.c") != 0 ||
       erb_args_push(&args, "edgerun-metal/core/er_mem.c") != 0 ||
+      erb_args_push(&args, "edgerun-metal/core/er_pci.c") != 0 ||
+      erb_args_push(&args, "edgerun-metal/core/er_mmio.c") != 0 ||
+      erb_args_push(&args, "edgerun-metal/core/er_bus.c") != 0 ||
+      erb_args_push(&args, "edgerun-metal/core/er_driver_policy.c") != 0 ||
       erb_args_push(&args, "edgerun-metal/core/er_app.c") != 0 ||
       erb_args_push(&args, "edgerun-metal/core/er_relay_packet.c") != 0 ||
       erb_args_push(&args, "edgerun-metal/core/wasm_vm.c") != 0 ||

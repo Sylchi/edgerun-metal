@@ -8,6 +8,13 @@ The first admitted driver contract is `contract=bus-driver`. It imports only:
 edgerun.bus/exec
 ```
 
+Admission is tied to explicit package policy:
+
+```text
+driver_memory_bytes=65536
+driver_bus=mmio32:4096:4:read8
+```
+
 `edgerun.bus/exec(request_ptr, response_ptr)` accepts an
 `ER_DRIVER_ABI_BUS_PACKET_IO_BYTES` request and writes an
 `ER_DRIVER_ABI_BUS_PACKET_IO_BYTES` response in driver linear memory. The ABI
