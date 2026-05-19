@@ -6,6 +6,8 @@ static const UINT8 g_seal_plaintext_domain[] = "edgerun:c:v1:seal:plaintext";
 static const UINT8 g_seal_aad_domain[] = "edgerun:c:v1:seal:aad";
 static const UINT8 g_seal_payload_domain[] = "edgerun:c:v1:seal:payload";
 static const UINT8 g_seal_object_domain[] = "edgerun:c:v1:seal:object";
+static const UINT8 g_seal_content_key_domain[] = "edgerun:c:v1:seal:content-key";
+static const UINT8 g_seal_key_wrap_domain[] = "edgerun:c:v1:seal:key-wrap";
 
 enum {
   ER_SEAL_U16_FIELD_BYTES = 2u,
@@ -19,6 +21,7 @@ enum {
   ER_SEAL_U64_SHIFT_16 = 16u,
   ER_SEAL_U64_SHIFT_8 = 8u,
   ER_SEAL_U8_MASK = 0xffu,
+  ER_SEAL_U16_MAX = 0xffffu,
   ER_SEAL_OBJECT_SPAN_COUNT = 7u,
   ER_SEAL_OBJECT_FIELDS_SPAN = 0u,
   ER_SEAL_OBJECT_RECIPIENT_SPAN = 1u,
@@ -31,7 +34,17 @@ enum {
   ER_SEAL_OBJECT_U64_FIELD_COUNT = 2u,
   ER_SEAL_OBJECT_FIELD_BYTES =
       (ER_SEAL_U16_FIELD_BYTES * ER_SEAL_OBJECT_U16_FIELD_COUNT) +
-      (ER_SEAL_U64_FIELD_BYTES * ER_SEAL_OBJECT_U64_FIELD_COUNT)
+      (ER_SEAL_U64_FIELD_BYTES * ER_SEAL_OBJECT_U64_FIELD_COUNT),
+  ER_SEAL_KEY_WRAP_SPAN_COUNT = 6u,
+  ER_SEAL_KEY_WRAP_FIELDS_SPAN = 0u,
+  ER_SEAL_KEY_WRAP_RECIPIENT_SPAN = 1u,
+  ER_SEAL_KEY_WRAP_CONTENT_KEY_HASH_SPAN = 2u,
+  ER_SEAL_KEY_WRAP_AAD_HASH_SPAN = 3u,
+  ER_SEAL_KEY_WRAP_WRAPPED_KEY_HASH_SPAN = 4u,
+  ER_SEAL_KEY_WRAP_WRAPPED_KEY_SPAN = 5u,
+  ER_SEAL_KEY_WRAP_U16_FIELD_COUNT = 4u,
+  ER_SEAL_KEY_WRAP_FIELD_BYTES =
+      ER_SEAL_U16_FIELD_BYTES * ER_SEAL_KEY_WRAP_U16_FIELD_COUNT
 };
 
 static void er_seal_put_be16(UINT8* dst, UINT16 value) {
@@ -136,6 +149,47 @@ static UINT8 er_seal_hash_object_id(const ErCryptoProvider* crypto,
                         spans, ER_SEAL_OBJECT_SPAN_COUNT, out_hash);
 }
 
+static void er_seal_key_wrap_fields(const ErSealedContentKeyWrap* wrap,
+                                    UINT8 fields[ER_SEAL_KEY_WRAP_FIELD_BYTES]) {
+  UINT8* cursor = fields;
+
+  er_seal_write_u16(&cursor, wrap->abi_version);
+  er_seal_write_u16(&cursor, wrap->algorithm);
+  er_seal_write_u16(&cursor, wrap->reserved);
+  er_seal_write_u16(&cursor, wrap->wrapped_key_len);
+}
+
+static UINT8 er_seal_hash_key_wrap_id(const ErCryptoProvider* crypto,
+                                      const ErSealedContentKeyWrap* wrap,
+                                      const UINT8* wrapped_key,
+                                      UINTN wrapped_key_len,
+                                      ErHash* out_hash) {
+  UINT8 fields[ER_SEAL_KEY_WRAP_FIELD_BYTES];
+  ErByteSpan spans[ER_SEAL_KEY_WRAP_SPAN_COUNT];
+
+  if (crypto == 0 || wrap == 0 || wrapped_key == 0 ||
+      wrapped_key_len == 0u || out_hash == 0) {
+    return 0u;
+  }
+  er_seal_key_wrap_fields(wrap, fields);
+  er_seal_set_span(&spans[ER_SEAL_KEY_WRAP_FIELDS_SPAN],
+                   fields, (UINTN)sizeof(fields));
+  er_seal_set_span(&spans[ER_SEAL_KEY_WRAP_RECIPIENT_SPAN],
+                   (const UINT8*)&wrap->recipient,
+                   (UINTN)sizeof(wrap->recipient));
+  er_seal_set_span(&spans[ER_SEAL_KEY_WRAP_CONTENT_KEY_HASH_SPAN],
+                   wrap->content_key_hash.bytes, ER_HASH_LEN);
+  er_seal_set_span(&spans[ER_SEAL_KEY_WRAP_AAD_HASH_SPAN],
+                   wrap->wrap_aad_hash.bytes, ER_HASH_LEN);
+  er_seal_set_span(&spans[ER_SEAL_KEY_WRAP_WRAPPED_KEY_HASH_SPAN],
+                   wrap->wrapped_key_hash.bytes, ER_HASH_LEN);
+  er_seal_set_span(&spans[ER_SEAL_KEY_WRAP_WRAPPED_KEY_SPAN],
+                   wrapped_key, wrapped_key_len);
+  return er_crypto_hash(crypto, g_seal_key_wrap_domain,
+                        (UINTN)(sizeof(g_seal_key_wrap_domain) - 1u),
+                        spans, ER_SEAL_KEY_WRAP_SPAN_COUNT, out_hash);
+}
+
 ErSealStrategy er_seal_select_strategy(UINT32 recipient_count,
                                        UINT64 plaintext_len,
                                        UINT32 expected_reuse_count) {
@@ -162,6 +216,17 @@ const char* er_seal_strategy_label(ErSealStrategy strategy) {
     default:
       return "invalid";
   }
+}
+
+UINT8 er_seal_prepare_content_key(const UINT8 key_bytes[ER_SEAL_CONTENT_KEY_LEN],
+                                  ErSealContentKey* out_key) {
+  if (key_bytes == 0 || out_key == 0 ||
+      er_mem_any_nonzero(key_bytes, ER_SEAL_CONTENT_KEY_LEN) == 0u) {
+    return 0u;
+  }
+  er_mem_zero((UINT8*)out_key, (UINTN)sizeof(*out_key));
+  er_mem_copy(out_key->bytes, key_bytes, ER_SEAL_CONTENT_KEY_LEN);
+  return 1u;
 }
 
 UINT8 er_seal_prepare_content_object(const ErCryptoProvider* crypto,
@@ -265,4 +330,141 @@ UINT8 er_seal_content_object_valid(const ErCryptoProvider* crypto,
     return 0u;
   }
   return er_hash_equal(&object_id, &header->sealed_object_id);
+}
+
+UINT8 er_seal_wrap_content_key(const ErCryptoProvider* crypto,
+                               const ErIdentity* recipient,
+                               const ErByteSpan* wrap_aad,
+                               const ErSealContentKey* content_key,
+                               ErMutableBytes* wrapped_key_out,
+                               ErSealedContentKeyWrap* out_wrap) {
+  ErSealedContentKeyWrap wrap;
+  ErByteSpan key_plaintext;
+  ErHash wrap_id;
+
+  if (crypto == 0 || recipient == 0 || wrap_aad == 0 ||
+      content_key == 0 || wrapped_key_out == 0 || out_wrap == 0 ||
+      er_identity_valid(recipient) == 0u ||
+      er_mem_any_nonzero(content_key->bytes, ER_SEAL_CONTENT_KEY_LEN) == 0u) {
+    return 0u;
+  }
+  if (wrap_aad->len > 0u && wrap_aad->bytes == 0) {
+    return 0u;
+  }
+
+  er_mem_zero((UINT8*)&wrap, (UINTN)sizeof(wrap));
+  wrap.abi_version = ER_SEAL_ABI_VERSION;
+  wrap.algorithm = ER_SEAL_ALGORITHM_BLAKE3_STREAM_AUTH;
+  wrap.recipient = *recipient;
+  key_plaintext.bytes = content_key->bytes;
+  key_plaintext.len = ER_SEAL_CONTENT_KEY_LEN;
+  if (er_seal_hash_span(crypto, g_seal_content_key_domain,
+                        (UINTN)(sizeof(g_seal_content_key_domain) - 1u),
+                        content_key->bytes, ER_SEAL_CONTENT_KEY_LEN,
+                        &wrap.content_key_hash) == 0u ||
+      er_seal_hash_span(crypto, g_seal_aad_domain,
+                        (UINTN)(sizeof(g_seal_aad_domain) - 1u),
+                        wrap_aad->bytes, wrap_aad->len,
+                        &wrap.wrap_aad_hash) == 0u ||
+      er_crypto_seal(crypto, recipient, wrap_aad, &key_plaintext,
+                     wrapped_key_out) == 0u ||
+      wrapped_key_out->len == 0u ||
+      wrapped_key_out->len > wrapped_key_out->capacity ||
+      wrapped_key_out->len > ER_SEAL_U16_MAX ||
+      er_seal_hash_span(crypto, g_seal_payload_domain,
+                        (UINTN)(sizeof(g_seal_payload_domain) - 1u),
+                        wrapped_key_out->bytes, wrapped_key_out->len,
+                        &wrap.wrapped_key_hash) == 0u) {
+    return 0u;
+  }
+  wrap.wrapped_key_len = (UINT16)wrapped_key_out->len;
+  if (er_seal_hash_key_wrap_id(crypto, &wrap, wrapped_key_out->bytes,
+                               wrapped_key_out->len, &wrap_id) == 0u ||
+      er_hash_nonzero(&wrap_id) == 0u) {
+    return 0u;
+  }
+  wrap.wrap_id = wrap_id;
+  *out_wrap = wrap;
+  return 1u;
+}
+
+UINT8 er_seal_content_key_wrap_valid(const ErCryptoProvider* crypto,
+                                     const ErSealedContentKeyWrap* wrap,
+                                     const ErByteSpan* wrap_aad,
+                                     const UINT8* wrapped_key,
+                                     UINTN wrapped_key_len) {
+  ErHash aad_hash;
+  ErHash wrapped_key_hash;
+  ErHash wrap_id;
+
+  if (crypto == 0 || wrap == 0 || wrap_aad == 0 ||
+      wrapped_key == 0 || wrapped_key_len == 0u ||
+      wrapped_key_len > ER_SEAL_U16_MAX ||
+      wrap->abi_version != ER_SEAL_ABI_VERSION ||
+      wrap->algorithm != ER_SEAL_ALGORITHM_BLAKE3_STREAM_AUTH ||
+      wrap->reserved != 0u ||
+      wrap->wrapped_key_len != (UINT16)wrapped_key_len ||
+      er_identity_valid(&wrap->recipient) == 0u ||
+      er_hash_nonzero(&wrap->content_key_hash) == 0u ||
+      er_hash_nonzero(&wrap->wrap_aad_hash) == 0u ||
+      er_hash_nonzero(&wrap->wrapped_key_hash) == 0u ||
+      er_hash_nonzero(&wrap->wrap_id) == 0u) {
+    return 0u;
+  }
+  if (wrap_aad->len > 0u && wrap_aad->bytes == 0) {
+    return 0u;
+  }
+  if (er_seal_hash_span(crypto, g_seal_aad_domain,
+                        (UINTN)(sizeof(g_seal_aad_domain) - 1u),
+                        wrap_aad->bytes, wrap_aad->len,
+                        &aad_hash) == 0u ||
+      er_hash_equal(&aad_hash, &wrap->wrap_aad_hash) == 0u) {
+    return 0u;
+  }
+  if (er_seal_hash_span(crypto, g_seal_payload_domain,
+                        (UINTN)(sizeof(g_seal_payload_domain) - 1u),
+                        wrapped_key, wrapped_key_len,
+                        &wrapped_key_hash) == 0u ||
+      er_hash_equal(&wrapped_key_hash, &wrap->wrapped_key_hash) == 0u) {
+    return 0u;
+  }
+  if (er_seal_hash_key_wrap_id(crypto, wrap, wrapped_key,
+                               wrapped_key_len, &wrap_id) == 0u) {
+    return 0u;
+  }
+  return er_hash_equal(&wrap_id, &wrap->wrap_id);
+}
+
+UINT8 er_seal_open_content_key(const ErCryptoProvider* crypto,
+                               const ErSealedContentKeyWrap* wrap,
+                               const ErByteSpan* wrap_aad,
+                               const UINT8* wrapped_key,
+                               UINTN wrapped_key_len,
+                               ErSealContentKey* out_key) {
+  UINT8 opened_key_bytes[ER_SEAL_CONTENT_KEY_LEN];
+  ErByteSpan sealed_span;
+  ErMutableBytes plaintext_out;
+  ErHash content_key_hash;
+
+  if (out_key == 0 ||
+      er_seal_content_key_wrap_valid(crypto, wrap, wrap_aad, wrapped_key,
+                                     wrapped_key_len) == 0u) {
+    return 0u;
+  }
+  sealed_span.bytes = wrapped_key;
+  sealed_span.len = wrapped_key_len;
+  plaintext_out.bytes = opened_key_bytes;
+  plaintext_out.len = 0u;
+  plaintext_out.capacity = (UINTN)sizeof(opened_key_bytes);
+  if (er_crypto_open(crypto, &wrap->recipient, wrap_aad, &sealed_span,
+                     &plaintext_out) == 0u ||
+      plaintext_out.len != ER_SEAL_CONTENT_KEY_LEN ||
+      er_seal_hash_span(crypto, g_seal_content_key_domain,
+                        (UINTN)(sizeof(g_seal_content_key_domain) - 1u),
+                        opened_key_bytes, (UINTN)sizeof(opened_key_bytes),
+                        &content_key_hash) == 0u ||
+      er_hash_equal(&content_key_hash, &wrap->content_key_hash) == 0u) {
+    return 0u;
+  }
+  return er_seal_prepare_content_key(opened_key_bytes, out_key);
 }
