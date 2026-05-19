@@ -25,7 +25,9 @@ enum {
   ERB_EXEC_FAILURE_STATUS = 127,
   ERB_OUTPUT_DIR_MODE = 0777,
   ERB_PATH_CAP = 4096,
-  ERB_MANIFEST_CAP = 512
+  ERB_MANIFEST_CAP = 512,
+  ERB_PACKAGE_CONTRACT_UI_APP = 1,
+  ERB_PACKAGE_CONTRACT_BUS_DRIVER = 2
 };
 
 static const char ERB_DEFAULT_CC[] = "clang";
@@ -45,10 +47,16 @@ static const char ERB_APP_MANIFEST_NAME[] = "app.manifest";
 static const char ERB_APP_BUILD_DIR_NAME[] = ".build";
 static const char ERB_APP_WASM_NAME[] = "app.wasm";
 static const char ERB_APP_PACKAGE_IDENTITY_NAME[] = "package.identity";
-static const char ERB_APP_MANIFEST_EXPECTED[] =
+static const char ERB_UI_APP_MANIFEST_EXPECTED[] =
     "contract=ui-app\n"
     "memory_pages=1\n"
     "imports=edgerun.ui/emit\n"
+    "source=app.c\n"
+    "output=.build/app.wasm\n";
+static const char ERB_BUS_DRIVER_MANIFEST_EXPECTED[] =
+    "contract=bus-driver\n"
+    "memory_pages=1\n"
+    "imports=edgerun.bus/exec\n"
     "source=app.c\n"
     "output=.build/app.wasm\n";
 
@@ -187,17 +195,26 @@ static int erb_read_text_file(const char* path, char* out, size_t out_len) {
   return 0;
 }
 
-static int erb_validate_app_manifest(const char* path) {
+static int erb_validate_app_manifest(const char* path, int* out_contract) {
   char text[ERB_MANIFEST_CAP];
 
+  if (out_contract == NULL) {
+    return erb_fail("invalid manifest contract output");
+  }
+  *out_contract = 0;
   if (erb_read_text_file(path, text, sizeof(text)) != 0) {
     return 1;
   }
-  if (strcmp(text, ERB_APP_MANIFEST_EXPECTED) != 0) {
-    fprintf(stderr, "er-build: invalid app manifest %s\n", path);
-    return 1;
+  if (strcmp(text, ERB_UI_APP_MANIFEST_EXPECTED) == 0) {
+    *out_contract = ERB_PACKAGE_CONTRACT_UI_APP;
+    return 0;
   }
-  return 0;
+  if (strcmp(text, ERB_BUS_DRIVER_MANIFEST_EXPECTED) == 0) {
+    *out_contract = ERB_PACKAGE_CONTRACT_BUS_DRIVER;
+    return 0;
+  }
+  fprintf(stderr, "er-build: invalid app manifest %s\n", path);
+  return 1;
 }
 
 static int erb_prepare_dirs(void) {
@@ -321,6 +338,7 @@ static int erb_target_app_build(const char* package_dir, int print_plan) {
   char package_build_dir[ERB_PATH_CAP];
   char output_wasm[ERB_PATH_CAP];
   char output_identity[ERB_PATH_CAP];
+  int package_contract = 0;
 
   if (package_dir == NULL || package_dir[0] == '\0') {
     return erb_fail("app-build requires a package directory");
@@ -339,10 +357,11 @@ static int erb_target_app_build(const char* package_dir, int print_plan) {
   }
   if (erb_require_regular_file(app_source) != 0 ||
       erb_require_regular_file(manifest_source) != 0 ||
-      erb_validate_app_manifest(manifest_source) != 0 ||
+      erb_validate_app_manifest(manifest_source, &package_contract) != 0 ||
       erb_build_wasm_compile(print_plan) != 0) {
     return 1;
   }
+  (void)package_contract;
   if (print_plan == 0 && erb_mkdir_one(package_build_dir) != 0) {
     return 1;
   }
@@ -368,6 +387,7 @@ static int erb_target_app_verify(const char* package_dir) {
   char package_build_dir[ERB_PATH_CAP];
   char output_wasm[ERB_PATH_CAP];
   char output_identity[ERB_PATH_CAP];
+  int package_contract = 0;
 
   if (package_dir == NULL || package_dir[0] == '\0') {
     return erb_fail("app-verify requires a package directory");
@@ -388,26 +408,35 @@ static int erb_target_app_verify(const char* package_dir) {
       erb_require_regular_file(manifest_source) != 0 ||
       erb_require_regular_file(output_wasm) != 0 ||
       erb_require_regular_file(output_identity) != 0 ||
-      erb_validate_app_manifest(manifest_source) != 0) {
+      erb_validate_app_manifest(manifest_source, &package_contract) != 0) {
     return 1;
   }
+  (void)package_contract;
   return erb_verify_app_package_identity(output_identity, app_source, manifest_source,
                                          output_wasm);
 }
 
 static int erb_target_app_run(const char* package_dir, int print_plan) {
   ErbArgs args;
+  char manifest_source[ERB_PATH_CAP];
   char package_build_dir[ERB_PATH_CAP];
   char output_wasm[ERB_PATH_CAP];
+  int package_contract = 0;
 
   if (package_dir == NULL || package_dir[0] == '\0') {
     return erb_fail("app-run requires a package directory");
   }
-  if (erb_path_join(package_build_dir, sizeof(package_build_dir), package_dir,
+  if (erb_path_join(manifest_source, sizeof(manifest_source), package_dir,
+                    ERB_APP_MANIFEST_NAME) != 0 ||
+      erb_path_join(package_build_dir, sizeof(package_build_dir), package_dir,
                     ERB_APP_BUILD_DIR_NAME) != 0 ||
       erb_path_join(output_wasm, sizeof(output_wasm), package_build_dir,
                     ERB_APP_WASM_NAME) != 0) {
     return 1;
+  }
+  if (erb_validate_app_manifest(manifest_source, &package_contract) != 0 ||
+      package_contract != ERB_PACKAGE_CONTRACT_UI_APP) {
+    return erb_fail("app-run requires a ui-app package");
   }
   if (erb_target_app_verify(package_dir) != 0 ||
       erb_build_app_run(print_plan) != 0) {

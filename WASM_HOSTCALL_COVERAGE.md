@@ -31,7 +31,7 @@ Current coverage:
 | [x] | `edgerun.pci/write32` | `(i64, i64, i64, i64, i64) -> void` | not admitted | `test_wasm_pci_imports` | expressible, untested | missing | Decide driver contract ownership. |
 | [x] | `edgerun.mmio/map` | `(i64, i64) -> i64` | not admitted | `test_wasm_mmio_imports` | expressible, untested | missing | Decide whether this stays internal or becomes a driver contract call. |
 | [x] | `edgerun.mmio/read32` | `(i64, i64) -> i64` | not admitted | `test_wasm_mmio_imports` | expressible, untested | missing | Decide whether this stays internal or becomes a driver contract call. |
-| [x] | `edgerun.bus/exec` | `(i64, i64) -> i64` | `BUS_DRIVER` marker | `test_wasm_bus_exec_import` | `tests/wasm-compile-tests.sh` | `tests/wasm-compile-tests.sh` and `test_wasm_c_generated_hostcall_modules` | Add package workflow fixture. |
+| [x] | `edgerun.bus/exec` | `(i64, i64) -> i64` | `BUS_DRIVER` package contract | `test_wasm_bus_exec_import` | `tests/wasm-compile-tests.sh` | `tests/wasm-compile-tests.sh` and `test_wasm_c_generated_hostcall_modules` | Define device access policy. |
 | [x] | `edgerun.relay/send` | `(i64, i64) -> i64` | not admitted | `test_wasm_relay_imports` | expressible, untested | missing | Decide whether relay access is a user app contract or runtime-owned path. |
 | [x] | `edgerun.relay/recv` | `(i64, i64) -> i64` | not admitted | `test_wasm_relay_imports` | expressible, untested | missing | Decide whether relay access is a user app contract or runtime-owned path. |
 | [x] | `edgerun.memory/region_base` | `(i64) -> i64` | `UI_APP` support | `test_wasm_public_region_imports` | `tests/wasm-compile-tests.sh` | `tests/wasm-compile-tests.sh` and `test_wasm_c_generated_hostcall_modules` | Add package workflow fixture. |
@@ -47,5 +47,5 @@ Current coverage:
 - [ ] Add C declaration tests for every admitted canonical hostcall signature.
 - [x] Add C call-emission tests for `bus.exec`, `memory.region_base`, `memory.region_len`, and `ui.emit`.
 - [x] Add generated module runtime execution tests for C-emitted hostcall modules.
-- [x] Add a package fixture that builds `app/app.c` into `app/.build/app.wasm` using the canonical package layout.
+- [x] Add package workflow coverage for UI app and bus-driver manifests using the canonical package layout.
 - [ ] Update this checklist whenever `ER_WASM_CONTRACT_IMPORTS` changes.

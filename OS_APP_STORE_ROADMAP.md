@@ -35,7 +35,7 @@ identity-routed encrypted storage.
 
 ## Milestone 4: Wasm Drivers
 
-- [ ] Separate driver package admission from user app admission.
+- [x] Separate driver package admission from user app admission.
 - [ ] Define the first driver ABI for PCI discovery, MMIO, and bus packets.
 - [ ] Add event/interrupt delivery model for Wasm drivers.
 - [ ] Move one simple device path from native C fixture to a Wasm driver package.

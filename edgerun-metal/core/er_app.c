@@ -166,7 +166,18 @@ static UINT8 er_app_scene_budget_nonzero(er_ui_scene_budget_t budget) {
                  budget.text_quads != 0u);
 }
 
+static UINT8 er_app_kind_valid(UINT16 app_kind) {
+  switch (app_kind) {
+    case ER_APP_KIND_UI_APP:
+    case ER_APP_KIND_BUS_DRIVER:
+      return 1u;
+    default:
+      return 0u;
+  }
+}
+
 static UINT8 er_app_package_hash(const ErCryptoProvider* crypto,
+                                 UINT16 app_kind,
                                  const ErHash* app_object_id,
                                  UINT64 app_object_len,
                                  const ErHash* manifest_object_id,
@@ -179,10 +190,11 @@ static UINT8 er_app_package_hash(const ErCryptoProvider* crypto,
   ErByteSpan spans[ER_APP_PACKAGE_SPAN_COUNT];
 
   if (crypto == 0 || app_object_id == 0 || manifest_object_id == 0 ||
-      ui_assets_object_id == 0 || out_package_id == 0) {
+      ui_assets_object_id == 0 || out_package_id == 0 ||
+      er_app_kind_valid(app_kind) == 0u) {
     return 0;
   }
-  er_app_put_be16(cursor, ER_APP_KIND_USER);
+  er_app_put_be16(cursor, app_kind);
   cursor += ER_APP_U16_FIELD_BYTES;
   er_app_put_budget_field(&cursor, app_object_len);
   er_app_put_budget_field(&cursor, manifest_object_len);
@@ -206,7 +218,7 @@ static UINT8 er_app_package_manifest_valid(const ErCryptoProvider* crypto,
   ErHash expected_package_id;
 
   if (package == 0 || package->abi_version != ER_APP_ABI_VERSION ||
-      package->app_kind != ER_APP_KIND_USER ||
+      er_app_kind_valid(package->app_kind) == 0u ||
       er_hash_nonzero(&package->package_id) == 0u ||
       er_hash_nonzero(&package->app_object_id) == 0u ||
       er_hash_nonzero(&package->manifest_object_id) == 0u ||
@@ -221,7 +233,8 @@ static UINT8 er_app_package_manifest_valid(const ErCryptoProvider* crypto,
   } else if (er_hash_nonzero(&package->ui_assets_object_id) == 0u) {
     return 0;
   }
-  if (er_app_package_hash(crypto, &package->app_object_id,
+  if (er_app_package_hash(crypto, package->app_kind,
+                          &package->app_object_id,
                           package->app_object_len,
                           &package->manifest_object_id,
                           package->manifest_object_len,
@@ -322,9 +335,9 @@ static UINT8 er_app_package_storage_source_valid(const ErCryptoProvider* crypto,
                                                  const ErAppPackageStorageSource* source) {
   ErHash expected_source_id;
 
-  if (source == 0 ||
+  if (source == 0 || package == 0 ||
       source->abi_version != ER_APP_ABI_VERSION ||
-      source->app_kind != ER_APP_KIND_USER ||
+      source->app_kind != package->app_kind ||
       er_app_package_manifest_valid(crypto, package) == 0u ||
       er_hash_equal(&source->package_id, &package->package_id) == 0u ||
       er_hash_nonzero(&source->app_retrieve_route_id) == 0u ||
@@ -352,8 +365,9 @@ UINT8 er_app_package_index_entry_valid(const ErCryptoProvider* crypto,
                                        const ErAppPackageIndexEntry* entry) {
   if (entry == 0 ||
       entry->abi_version != ER_APP_ABI_VERSION ||
-      entry->app_kind != ER_APP_KIND_USER ||
+      er_app_kind_valid(entry->app_kind) == 0u ||
       er_app_package_manifest_valid(crypto, &entry->package) == 0u ||
+      entry->app_kind != entry->package.app_kind ||
       er_app_object_ref_matches(&entry->app_ref,
                                 &entry->package.app_object_id,
                                 entry->package.app_object_len) == 0u ||
@@ -385,7 +399,9 @@ UINT8 er_app_prepare_package_index_entry(const ErCryptoProvider* crypto,
   }
   er_mem_zero((UINT8*)out_entry, (UINTN)sizeof(*out_entry));
   out_entry->abi_version = ER_APP_ABI_VERSION;
-  out_entry->app_kind = ER_APP_KIND_USER;
+  if (package != 0) {
+    out_entry->app_kind = package->app_kind;
+  }
   out_entry->installed_slot = installed_slot;
   if (package != 0) {
     out_entry->package = *package;
@@ -409,8 +425,9 @@ UINT8 er_app_signed_package_index_entry_valid(const ErCryptoProvider* crypto,
                                               const ErAppSignedPackageIndexEntry* entry) {
   if (entry == 0 ||
       entry->abi_version != ER_APP_ABI_VERSION ||
-      entry->app_kind != ER_APP_KIND_USER ||
+      er_app_kind_valid(entry->app_kind) == 0u ||
       er_app_package_index_entry_valid(crypto, &entry->index_entry) == 0u ||
+      entry->app_kind != entry->index_entry.app_kind ||
       er_app_verify_package_signature(crypto, &entry->index_entry.package,
                                       &entry->package_signature) == 0u) {
     return 0u;
@@ -427,8 +444,8 @@ UINT8 er_app_prepare_signed_package_index_entry(const ErCryptoProvider* crypto,
   }
   er_mem_zero((UINT8*)out_entry, (UINTN)sizeof(*out_entry));
   out_entry->abi_version = ER_APP_ABI_VERSION;
-  out_entry->app_kind = ER_APP_KIND_USER;
   if (entry != 0) {
+    out_entry->app_kind = entry->app_kind;
     out_entry->index_entry = *entry;
   }
   if (signature != 0) {
@@ -459,9 +476,10 @@ UINT8 er_app_package_install_record_valid(const ErCryptoProvider* crypto,
 
   if (record == 0 ||
       record->abi_version != ER_APP_ABI_VERSION ||
-      record->app_kind != ER_APP_KIND_USER ||
+      er_app_kind_valid(record->app_kind) == 0u ||
       record->generation == 0u ||
       er_app_signed_package_index_entry_valid(crypto, &record->current_entry) == 0u ||
+      record->app_kind != record->current_entry.app_kind ||
       record->current_entry.index_entry.installed_slot != record->installed_slot) {
     return 0u;
   }
@@ -472,6 +490,7 @@ UINT8 er_app_package_install_record_valid(const ErCryptoProvider* crypto,
     case ER_APP_PACKAGE_INSTALL_STATE_REMOVED:
       if (previous_empty == 0u &&
           (er_app_signed_package_index_entry_valid(crypto, &record->previous_entry) == 0u ||
+           record->previous_entry.app_kind != record->app_kind ||
            record->previous_entry.index_entry.installed_slot != record->installed_slot)) {
         return 0u;
       }
@@ -479,6 +498,7 @@ UINT8 er_app_package_install_record_valid(const ErCryptoProvider* crypto,
     case ER_APP_PACKAGE_INSTALL_STATE_ROLLED_BACK:
       if (previous_empty != 0u ||
           er_app_signed_package_index_entry_valid(crypto, &record->previous_entry) == 0u ||
+          record->previous_entry.app_kind != record->app_kind ||
           record->previous_entry.index_entry.installed_slot != record->installed_slot ||
           er_hash_equal(&record->current_entry.index_entry.package.package_id,
                         &record->previous_entry.index_entry.package.package_id) != 0u) {
@@ -501,10 +521,10 @@ UINT8 er_app_prepare_package_install_record(const ErCryptoProvider* crypto,
   }
   er_mem_zero((UINT8*)out_record, (UINTN)sizeof(*out_record));
   out_record->abi_version = ER_APP_ABI_VERSION;
-  out_record->app_kind = ER_APP_KIND_USER;
   out_record->install_state = install_state;
   out_record->generation = generation;
   out_record->current_entry = *current_entry;
+  out_record->app_kind = current_entry->app_kind;
   out_record->installed_slot = current_entry->index_entry.installed_slot;
   if (previous_entry != 0) {
     out_record->previous_entry = *previous_entry;
@@ -531,12 +551,26 @@ UINT8 er_app_prepare_package_manifest(const ErCryptoProvider* crypto,
                                       const ErVfsObjectLabelRef* manifest_object,
                                       const ErVfsObjectLabelRef* ui_assets_object,
                                       ErAppPackageManifest* out_package) {
+  return er_app_prepare_package_manifest_for_kind(crypto, ER_APP_KIND_UI_APP,
+                                                  app_object,
+                                                  manifest_object,
+                                                  ui_assets_object,
+                                                  out_package);
+}
+
+UINT8 er_app_prepare_package_manifest_for_kind(const ErCryptoProvider* crypto,
+                                               UINT16 app_kind,
+                                               const ErVfsObjectLabelRef* app_object,
+                                               const ErVfsObjectLabelRef* manifest_object,
+                                               const ErVfsObjectLabelRef* ui_assets_object,
+                                               ErAppPackageManifest* out_package) {
   ErVfsObjectRef app_ref;
   ErVfsObjectRef manifest_ref;
   ErVfsObjectRef ui_assets_ref;
   const ErVfsObjectRef* ui_assets_ref_ptr = 0;
 
-  if (er_app_label_ref_valid(app_object) == 0u ||
+  if (er_app_kind_valid(app_kind) == 0u ||
+      er_app_label_ref_valid(app_object) == 0u ||
       er_app_label_ref_valid(manifest_object) == 0u) {
     return 0;
   }
@@ -557,10 +591,12 @@ UINT8 er_app_prepare_package_manifest(const ErCryptoProvider* crypto,
     }
     ui_assets_ref_ptr = &ui_assets_ref;
   }
-  return er_app_prepare_package_manifest_from_objects(crypto, &app_ref,
-                                                      &manifest_ref,
-                                                      ui_assets_ref_ptr,
-                                                      out_package);
+  return er_app_prepare_package_manifest_from_objects_for_kind(crypto,
+                                                              app_kind,
+                                                              &app_ref,
+                                                              &manifest_ref,
+                                                              ui_assets_ref_ptr,
+                                                              out_package);
 }
 
 UINT8 er_app_prepare_package_manifest_from_objects(const ErCryptoProvider* crypto,
@@ -568,11 +604,26 @@ UINT8 er_app_prepare_package_manifest_from_objects(const ErCryptoProvider* crypt
                                                    const ErVfsObjectRef* manifest_object,
                                                    const ErVfsObjectRef* ui_assets_object,
                                                    ErAppPackageManifest* out_package) {
+  return er_app_prepare_package_manifest_from_objects_for_kind(crypto,
+                                                              ER_APP_KIND_UI_APP,
+                                                              app_object,
+                                                              manifest_object,
+                                                              ui_assets_object,
+                                                              out_package);
+}
+
+UINT8 er_app_prepare_package_manifest_from_objects_for_kind(const ErCryptoProvider* crypto,
+                                                            UINT16 app_kind,
+                                                            const ErVfsObjectRef* app_object,
+                                                            const ErVfsObjectRef* manifest_object,
+                                                            const ErVfsObjectRef* ui_assets_object,
+                                                            ErAppPackageManifest* out_package) {
   ErHash zero_hash;
   const ErHash* ui_assets_object_id = &zero_hash;
   UINT64 ui_assets_object_len = 0u;
 
   if (crypto == 0 || out_package == 0 ||
+      er_app_kind_valid(app_kind) == 0u ||
       er_app_object_ref_valid(app_object) == 0u ||
       er_app_object_ref_valid(manifest_object) == 0u) {
     return 0;
@@ -588,7 +639,7 @@ UINT8 er_app_prepare_package_manifest_from_objects(const ErCryptoProvider* crypt
   er_mem_zero((UINT8*)&zero_hash, (UINTN)sizeof(zero_hash));
   er_mem_zero((UINT8*)out_package, (UINTN)sizeof(*out_package));
   out_package->abi_version = ER_APP_ABI_VERSION;
-  out_package->app_kind = ER_APP_KIND_USER;
+  out_package->app_kind = app_kind;
   out_package->app_object_id = app_object->object_id;
   out_package->app_object_len = app_object->object_len;
   out_package->manifest_object_id = manifest_object->object_id;
@@ -596,7 +647,8 @@ UINT8 er_app_prepare_package_manifest_from_objects(const ErCryptoProvider* crypt
   out_package->ui_assets_object_id = *ui_assets_object_id;
   out_package->ui_assets_object_len = ui_assets_object_len;
 
-  return er_app_package_hash(crypto, &out_package->app_object_id,
+  return er_app_package_hash(crypto, out_package->app_kind,
+                             &out_package->app_object_id,
                              out_package->app_object_len,
                              &out_package->manifest_object_id,
                              out_package->manifest_object_len,
@@ -623,7 +675,7 @@ UINT8 er_app_sign_package(const ErCryptoProvider* crypto,
   }
   er_mem_zero((UINT8*)out_signature, (UINTN)sizeof(*out_signature));
   out_signature->abi_version = ER_APP_ABI_VERSION;
-  out_signature->app_kind = ER_APP_KIND_USER;
+  out_signature->app_kind = package->app_kind;
   out_signature->package_id = package->package_id;
   out_signature->signer = *signer;
   out_signature->signature = work_signature;
@@ -636,9 +688,9 @@ UINT8 er_app_verify_package_signature(const ErCryptoProvider* crypto,
   UINT8 preimage[ER_APP_PACKAGE_SIGNATURE_PREIMAGE_BYTES];
   ErByteSpan preimage_span;
 
-  if (signature == 0 ||
+  if (signature == 0 || package == 0 ||
       signature->abi_version != ER_APP_ABI_VERSION ||
-      signature->app_kind != ER_APP_KIND_USER ||
+      signature->app_kind != package->app_kind ||
       er_identity_valid(&signature->signer) == 0u ||
       er_hash_equal(&signature->package_id, &package->package_id) == 0u ||
       er_identity_equal(&signature->signer,
@@ -687,7 +739,7 @@ UINT8 er_app_load_package_objects(const ErCryptoProvider* crypto,
 
   er_mem_zero((UINT8*)out_loaded, (UINTN)sizeof(*out_loaded));
   out_loaded->abi_version = ER_APP_ABI_VERSION;
-  out_loaded->app_kind = ER_APP_KIND_USER;
+  out_loaded->app_kind = package->app_kind;
   out_loaded->package_id = package->package_id;
   out_loaded->app_bytes = app_object->bytes;
   out_loaded->app_len = app_len;
@@ -727,7 +779,7 @@ UINT8 er_app_prepare_package_storage_source(const ErCryptoProvider* crypto,
 
   er_mem_zero((UINT8*)out_source, (UINTN)sizeof(*out_source));
   out_source->abi_version = ER_APP_ABI_VERSION;
-  out_source->app_kind = ER_APP_KIND_USER;
+  out_source->app_kind = package->app_kind;
   out_source->package_id = package->package_id;
   out_source->app_retrieve_route_id = app_route->route_id;
   out_source->manifest_retrieve_route_id = manifest_route->route_id;
