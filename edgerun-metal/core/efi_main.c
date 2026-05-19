@@ -269,6 +269,13 @@ EFI_STATUS EFIAPI efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE* SystemTable
     er_print_u64_dec((UINT64)boot_report.tpm_nv_limits.nv_buffer_max);
     er_println("");
   }
+#if defined(ER_BOARD_PI_ZERO_2W)
+  if (er_pi_zero2w_apply_boot_report(&boot_report) == 0u) {
+    er_println("pi-zero-2w: board peripheral map failed");
+  } else {
+    er_println("pi-zero-2w: board peripheral map ready");
+  }
+#endif
   er_boot_services_apply_admission(SystemTable, &boot_report);
   er_boot_services_print_report(&boot_report);
 

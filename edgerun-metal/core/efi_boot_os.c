@@ -61,6 +61,17 @@ static const char* er_boot_update_blocked_label(UINT8 reason) {
   }
 }
 
+static const char* er_boot_bluetooth_kind_label(UINT8 bluetooth_kind) {
+  switch (bluetooth_kind) {
+    case ER_BOOT_BLUETOOTH_KIND_NONE:
+      return "none";
+    case ER_BOOT_BLUETOOTH_KIND_CYW43439_HCI_UART:
+      return "cyw43439-hci-uart";
+    default:
+      return "invalid";
+  }
+}
+
 static void er_boot_log_runtime_capabilities(const ErBootServicesReport* boot_report) {
   const ErBootRuntimeCapabilities* capabilities;
 
@@ -77,6 +88,11 @@ static void er_boot_log_runtime_capabilities(const ErBootServicesReport* boot_re
   er_print_u64_dec((UINT64)capabilities->wifi_ready);
   er_print(" channel=");
   er_print_u64_dec((UINT64)capabilities->wifi_channel);
+  er_println("");
+  er_print("runtime bluetooth: kind=");
+  er_print(er_boot_bluetooth_kind_label(capabilities->bluetooth_kind));
+  er_print(" ready=");
+  er_print_u64_dec((UINT64)capabilities->bluetooth_ready);
   er_println("");
   er_print("runtime storage: kind=");
   er_print(er_boot_local_storage_kind_label(capabilities->local_storage_kind));
