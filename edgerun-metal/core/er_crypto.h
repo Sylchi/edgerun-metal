@@ -40,6 +40,12 @@ typedef struct {
 
 UINT8 er_crypto_hash(const ErCryptoProvider* provider, const UINT8* domain, UINTN domain_len,
                      const ErByteSpan* spans, UINTN span_count, ErHash* out_hash);
+UINT8 er_crypto_seal(const ErCryptoProvider* provider, const ErIdentity* recipient,
+                     const ErByteSpan* aad, const ErByteSpan* plaintext,
+                     ErMutableBytes* sealed_out);
+UINT8 er_crypto_open(const ErCryptoProvider* provider, const ErIdentity* recipient,
+                     const ErByteSpan* aad, const ErByteSpan* sealed,
+                     ErMutableBytes* plaintext_out);
 UINT8 er_crypto_sign(const ErCryptoProvider* provider, const ErByteSpan* preimage,
                      ErWorkSignature* out_signature);
 UINT8 er_crypto_verify(const ErCryptoProvider* provider, const ErIdentity* identity,

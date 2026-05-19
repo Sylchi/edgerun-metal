@@ -43,7 +43,7 @@ identity-routed encrypted storage.
 
 ## Milestone 5: Encrypted Identity Relay
 
-- [ ] Define encrypted content object format.
+- [x] Define encrypted content object format.
 - [ ] Wrap content keys to recipient identities.
 - [ ] Chunk, verify, cache, and garbage-collect content-addressed objects.
 - [ ] Relay sealed objects without exposing plaintext to storage nodes.
