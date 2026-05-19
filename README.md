@@ -502,11 +502,14 @@ Build the metal UEFI image for a specific boot architecture:
 ```bash
 make -C edgerun-metal ER_METAL_ARCH=x86_64
 make -C edgerun-metal ER_METAL_ARCH=aarch64
+make -C edgerun-metal pi-zero-2w-uefi
 ```
 
 The x86_64 removable-media path is `.build/edgerun-metal/esp/EFI/BOOT/BOOTX64.EFI`.
 The AArch64 removable-media path for Raspberry Pi 4B UEFI is
 `.build/edgerun-metal/aarch64/esp/EFI/BOOT/BOOTAA64.EFI`.
+The Pi Zero 2 W U-Boot EFI payload path is
+`.build/edgerun-metal/pi-zero-2w/esp/EFI/BOOT/BOOTAA64.EFI`.
 
 Prepare an interface manually when needed:
 

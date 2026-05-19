@@ -1,9 +1,10 @@
-.PHONY: all run run-aarch64 qemu-aarch64-smoke qemu-ephemeral-authority qemu-ephemeral-authority-smoke qemu-swtpm-persistence clean print-path print-config netboot os rebuild-image check test-core bench-ui-dirty wifi-hardware-probe wasm-modules qemu-config-check qemu-aarch64-config-check qemu-swtpm-persistence-config-check
+.PHONY: all run run-aarch64 qemu-aarch64-smoke qemu-ephemeral-authority qemu-ephemeral-authority-smoke qemu-swtpm-persistence clean print-path print-config netboot os rebuild-image check test-core bench-ui-dirty wifi-hardware-probe wasm-modules qemu-config-check qemu-aarch64-config-check qemu-swtpm-persistence-config-check pi-zero-2w-uefi
 
 CC := clang
 HOST_CC := clang
 
 ER_METAL_ARCH := x86_64
+ER_METAL_BOARD := uefi-generic
 BUILD_DIR := ../.build/edgerun-metal
 ESP_DIR := $(BUILD_DIR)/esp
 EFI_OUT := $(BUILD_DIR)/edgerun-metal.efi
@@ -31,6 +32,17 @@ ER_METAL_CRYPTO_DEFS :=
 CRYPTO_ASM_SRCS :=
 else
 $(error unsupported ER_METAL_ARCH '$(ER_METAL_ARCH)')
+endif
+
+ifeq ($(ER_METAL_BOARD),uefi-generic)
+ER_METAL_BOARD_BOOT_CHAIN := firmware -> BOOT$(if $(filter x86_64,$(ER_METAL_ARCH)),X64,AA64).EFI
+else ifeq ($(ER_METAL_BOARD),pi-zero-2w)
+ifneq ($(ER_METAL_ARCH),aarch64)
+$(error ER_METAL_BOARD=pi-zero-2w requires ER_METAL_ARCH=aarch64)
+endif
+ER_METAL_BOARD_BOOT_CHAIN := raspberry-pi-firmware -> u-boot-efi -> BOOTAA64.EFI
+else
+$(error unsupported ER_METAL_BOARD '$(ER_METAL_BOARD)')
 endif
 
 EFI_BOOT := $(ESP_DIR)/EFI/BOOT/$(ER_METAL_BOOT_EFI)
@@ -93,6 +105,7 @@ QEMU_AARCH64_BUILD_DIR := $(BUILD_DIR)/aarch64
 QEMU_AARCH64_SMOKE_LOG := $(QEMU_AARCH64_BUILD_DIR)/qemu-aarch64-smoke.log
 QEMU_AARCH64_SMOKE_TIMEOUT := 30
 QEMU_AARCH64_SMOKE_READY := boot services: fatal action=halt
+PI_ZERO_2W_BUILD_DIR := ../.build/edgerun-metal/pi-zero-2w
 QEMU_SMOKE_SRC := ../tools/qemu-smoke.sh
 QEMU_SWTPM_PERSIST_CONFIG := qemu-swtpm-persistence.conf
 QEMU_SWTPM_PERSIST_SCRIPT := ../tools/qemu-swtpm-persistence.sh
@@ -300,6 +313,9 @@ qemu-aarch64-smoke: $(QEMU_AARCH64_SMOKE_CONFIG) $(QEMU_SMOKE_SRC)
 	$(MAKE) $(QEMU_AARCH64_BUILD_DIR)/edgerun-qemu-run BUILD_DIR=$(QEMU_AARCH64_BUILD_DIR)
 	$(QEMU_SMOKE_SRC) ./$(QEMU_AARCH64_BUILD_DIR)/edgerun-qemu-run $(QEMU_AARCH64_SMOKE_CONFIG) $(abspath $(QEMU_AARCH64_BUILD_DIR)/esp) $(QEMU_AARCH64_SMOKE_LOG) $(QEMU_AARCH64_SMOKE_TIMEOUT) "$(QEMU_AARCH64_SMOKE_READY)"
 
+pi-zero-2w-uefi:
+	$(MAKE) all ER_METAL_ARCH=aarch64 ER_METAL_BOARD=pi-zero-2w BUILD_DIR=$(PI_ZERO_2W_BUILD_DIR)
+
 clean:
 	rm -rf $(BUILD_DIR)
 
@@ -308,8 +324,10 @@ print-path:
 
 print-config:
 	@printf 'ER_METAL_ARCH=%s\n' "$(ER_METAL_ARCH)"
+	@printf 'ER_METAL_BOARD=%s\n' "$(ER_METAL_BOARD)"
 	@printf 'ER_METAL_TARGET=%s\n' "$(ER_METAL_TARGET)"
 	@printf 'ER_METAL_BOOT_EFI=%s\n' "$(ER_METAL_BOOT_EFI)"
+	@printf 'ER_METAL_BOARD_BOOT_CHAIN=%s\n' "$(ER_METAL_BOARD_BOOT_CHAIN)"
 	@printf 'ER_BOOT_EPHEMERAL_AUTHORITY_ENABLED=%s\n' "$(ER_BOOT_EPHEMERAL_AUTHORITY_ENABLED)"
 	@printf 'EFI_BOOT=%s\n' "$(abspath $(EFI_BOOT))"
 	@printf 'CRYPTO_ASM_SRCS=%s\n' "$(CRYPTO_ASM_SRCS)"
