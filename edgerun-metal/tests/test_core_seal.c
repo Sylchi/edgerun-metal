@@ -3,7 +3,8 @@
 enum {
   TEST_SEAL_ROOT_KEY_SEED = 0x5au,
   TEST_SEAL_RECIPIENT_SEED = 0x20u,
-  TEST_SEAL_OTHER_RECIPIENT_SEED = 0x40u
+  TEST_SEAL_OTHER_RECIPIENT_SEED = 0x40u,
+  TEST_SEAL_CONTENT_KEY_SEED = 0x70u
 };
 
 static void check_bytes_equal(const char* name,
@@ -136,5 +137,89 @@ static void test_sealed_content_object_format(void) {
   check_int64("seal content reject aad mismatch",
               er_seal_content_object_valid(&crypto, &header, &aad,
                                            sealed_bytes, sealed_out.len),
+              0);
+}
+
+static void test_sealed_content_key_wrap(void) {
+  static const UINT8 wrap_aad_bytes[] = {'o', 'b', 'j', 'e', 'c', 't'};
+  ErCryptoProvider crypto;
+  ErCryptoBlake3Sealer sealer;
+  ErIdentity recipient;
+  ErByteSpan wrap_aad;
+  ErMutableBytes wrapped_key_out;
+  ErSealedContentKeyWrap wrap;
+  ErSealedContentKeyWrap tampered_wrap;
+  ErSealContentKey content_key;
+  ErSealContentKey opened_key;
+  UINT8 root_key[ER_CRYPTO_BLAKE3_SEAL_ROOT_KEY_LEN];
+  UINT8 recipient_key[ER_PUBLIC_KEY_LEN];
+  UINT8 content_key_bytes[ER_SEAL_CONTENT_KEY_LEN];
+  UINT8 wrapped_key[128];
+
+  test_fill_bytes(root_key, (UINTN)sizeof(root_key), TEST_SEAL_ROOT_KEY_SEED);
+  test_fill_bytes(recipient_key, (UINTN)sizeof(recipient_key),
+                  TEST_SEAL_RECIPIENT_SEED);
+  test_fill_bytes(content_key_bytes, (UINTN)sizeof(content_key_bytes),
+                  TEST_SEAL_CONTENT_KEY_SEED);
+  check_int64("seal wrap sealer init",
+              er_crypto_blake3_sealer_init(&sealer, root_key), 1);
+  er_crypto_blake3_sealing_provider(&sealer, &crypto);
+  check_int64("seal wrap recipient identity",
+              er_identity_prepare(ER_IDENTITY_TYPE_PUBLIC_KEY,
+                                  ER_IDENTITY_BACKING_ED25519,
+                                  recipient_key,
+                                  (UINT16)sizeof(recipient_key),
+                                  &recipient),
+              1);
+  check_int64("seal prepare content key",
+              er_seal_prepare_content_key(content_key_bytes, &content_key), 1);
+
+  wrap_aad.bytes = wrap_aad_bytes;
+  wrap_aad.len = (UINTN)sizeof(wrap_aad_bytes);
+  wrapped_key_out.bytes = wrapped_key;
+  wrapped_key_out.len = 0u;
+  wrapped_key_out.capacity = (UINTN)sizeof(wrapped_key);
+  check_int64("seal wrap content key",
+              er_seal_wrap_content_key(&crypto, &recipient, &wrap_aad,
+                                       &content_key, &wrapped_key_out,
+                                       &wrap),
+              1);
+  check_int64("seal wrap abi", wrap.abi_version, ER_SEAL_ABI_VERSION);
+  check_int64("seal wrap algorithm", wrap.algorithm,
+              ER_SEAL_ALGORITHM_BLAKE3_STREAM_AUTH);
+  check_uint64("seal wrap len", wrap.wrapped_key_len,
+               wrapped_key_out.len);
+  check_int64("seal wrap valid",
+              er_seal_content_key_wrap_valid(&crypto, &wrap, &wrap_aad,
+                                             wrapped_key,
+                                             wrapped_key_out.len),
+              1);
+  check_int64("seal open content key",
+              er_seal_open_content_key(&crypto, &wrap, &wrap_aad,
+                                       wrapped_key, wrapped_key_out.len,
+                                       &opened_key),
+              1);
+  check_bytes_equal("seal opened content key", opened_key.bytes,
+                    content_key.bytes, ER_SEAL_CONTENT_KEY_LEN);
+
+  wrapped_key[ER_CRYPTO_BLAKE3_SEAL_HEADER_LEN] ^= 1u;
+  check_int64("seal wrap reject payload tamper",
+              er_seal_content_key_wrap_valid(&crypto, &wrap, &wrap_aad,
+                                             wrapped_key,
+                                             wrapped_key_out.len),
+              0);
+  wrapped_key[ER_CRYPTO_BLAKE3_SEAL_HEADER_LEN] ^= 1u;
+  tampered_wrap = wrap;
+  tampered_wrap.reserved = 1u;
+  check_int64("seal wrap reject reserved",
+              er_seal_content_key_wrap_valid(&crypto, &tampered_wrap,
+                                             &wrap_aad, wrapped_key,
+                                             wrapped_key_out.len),
+              0);
+  wrap_aad.len = 0u;
+  check_int64("seal wrap reject aad mismatch",
+              er_seal_open_content_key(&crypto, &wrap, &wrap_aad,
+                                       wrapped_key, wrapped_key_out.len,
+                                       &opened_key),
               0);
 }

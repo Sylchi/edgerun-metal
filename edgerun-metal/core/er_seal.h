@@ -14,12 +14,17 @@
 #define ER_SEAL_CONTENT_KEY_THRESHOLD_BYTES 4096u
 #define ER_SEAL_CONTENT_KEY_REUSE_MIN 2u
 #define ER_SEAL_RECIPIENT_COUNT_DIRECT 1u
+#define ER_SEAL_CONTENT_KEY_LEN 32u
 
 typedef enum {
   ER_SEAL_STRATEGY_INVALID = 0,
   ER_SEAL_STRATEGY_DIRECT_RECIPIENT = 1,
   ER_SEAL_STRATEGY_CONTENT_KEY_WRAP = 2
 } ErSealStrategy;
+
+typedef struct {
+  UINT8 bytes[ER_SEAL_CONTENT_KEY_LEN];
+} ErSealContentKey;
 
 typedef struct {
   UINT16 abi_version;
@@ -35,10 +40,24 @@ typedef struct {
   ErHash sealed_object_id;
 } ErSealedContentObjectHeader;
 
+typedef struct {
+  UINT16 abi_version;
+  UINT16 algorithm;
+  UINT16 reserved;
+  UINT16 wrapped_key_len;
+  ErIdentity recipient;
+  ErHash content_key_hash;
+  ErHash wrap_aad_hash;
+  ErHash wrapped_key_hash;
+  ErHash wrap_id;
+} ErSealedContentKeyWrap;
+
 ErSealStrategy er_seal_select_strategy(UINT32 recipient_count,
                                        UINT64 plaintext_len,
                                        UINT32 expected_reuse_count);
 const char* er_seal_strategy_label(ErSealStrategy strategy);
+UINT8 er_seal_prepare_content_key(const UINT8 key_bytes[ER_SEAL_CONTENT_KEY_LEN],
+                                  ErSealContentKey* out_key);
 UINT8 er_seal_prepare_content_object(const ErCryptoProvider* crypto,
                                      const ErIdentity* recipient,
                                      const ErByteSpan* aad,
@@ -51,5 +70,22 @@ UINT8 er_seal_content_object_valid(const ErCryptoProvider* crypto,
                                    const ErByteSpan* aad,
                                    const UINT8* sealed_payload,
                                    UINTN sealed_payload_len);
+UINT8 er_seal_wrap_content_key(const ErCryptoProvider* crypto,
+                               const ErIdentity* recipient,
+                               const ErByteSpan* wrap_aad,
+                               const ErSealContentKey* content_key,
+                               ErMutableBytes* wrapped_key_out,
+                               ErSealedContentKeyWrap* out_wrap);
+UINT8 er_seal_content_key_wrap_valid(const ErCryptoProvider* crypto,
+                                     const ErSealedContentKeyWrap* wrap,
+                                     const ErByteSpan* wrap_aad,
+                                     const UINT8* wrapped_key,
+                                     UINTN wrapped_key_len);
+UINT8 er_seal_open_content_key(const ErCryptoProvider* crypto,
+                               const ErSealedContentKeyWrap* wrap,
+                               const ErByteSpan* wrap_aad,
+                               const UINT8* wrapped_key,
+                               UINTN wrapped_key_len,
+                               ErSealContentKey* out_key);
 
 #endif

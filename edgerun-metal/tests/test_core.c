@@ -67,6 +67,7 @@ int main(void) {
   test_app_identity_routes();
   test_device_relay_identity();
   test_sealed_content_object_format();
+  test_sealed_content_key_wrap();
   test_boot_admission_record();
   test_boot_efi_vars();
   test_boot_config_and_seal_strategy();
