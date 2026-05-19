@@ -56,6 +56,25 @@ memory(1);
 export i64 main(void) { return ui_emit(0, 0); }
 CAPP
 
+cat > "${TMP_DIR}/ui-local-return.c" <<'CAPP'
+extern i64 ui_emit(i64, i64) __import("edgerun.ui", "emit");
+memory(1);
+export i64 main(void) {
+  i64 value = 7;
+  return value;
+}
+CAPP
+
+cat > "${TMP_DIR}/ui-local-call.c" <<'CAPP'
+extern i64 ui_emit(i64, i64) __import("edgerun.ui", "emit");
+memory(1);
+export i64 main(void) {
+  i64 ptr = 1024;
+  i64 len = 172;
+  return ui_emit(ptr, len);
+}
+CAPP
+
 cat > "${TMP_DIR}/ui-region-base-call.c" <<'CAPP'
 extern i64 ui_emit(i64, i64) __import("edgerun.ui", "emit");
 extern i64 region_base(i64) __import("edgerun.memory", "region_base");
@@ -85,6 +104,14 @@ compile_twice \
   "${TMP_DIR}/ui-emit-call-a.wasm" \
   "${TMP_DIR}/ui-emit-call-b.wasm"
 compile_twice \
+  "${TMP_DIR}/ui-local-return.c" \
+  "${TMP_DIR}/ui-local-return-a.wasm" \
+  "${TMP_DIR}/ui-local-return-b.wasm"
+compile_twice \
+  "${TMP_DIR}/ui-local-call.c" \
+  "${TMP_DIR}/ui-local-call-a.wasm" \
+  "${TMP_DIR}/ui-local-call-b.wasm"
+compile_twice \
   "${TMP_DIR}/ui-region-base-call.c" \
   "${TMP_DIR}/ui-region-base-call-a.wasm" \
   "${TMP_DIR}/ui-region-base-call-b.wasm"
@@ -101,6 +128,8 @@ check_magic "${TMP_DIR}/driver-a.wasm"
 check_magic "${TMP_DIR}/ui-a.wasm"
 check_magic "${TMP_DIR}/ui-c-a.wasm"
 check_magic "${TMP_DIR}/ui-emit-call-a.wasm"
+check_magic "${TMP_DIR}/ui-local-return-a.wasm"
+check_magic "${TMP_DIR}/ui-local-call-a.wasm"
 check_magic "${TMP_DIR}/ui-region-base-call-a.wasm"
 check_magic "${TMP_DIR}/ui-region-len-call-a.wasm"
 check_magic "${TMP_DIR}/bus-exec-call-a.wasm"
@@ -181,5 +210,29 @@ CAPP
 expect_reject "unsupported c expression" \
   "${TMP_DIR}/bad-c-subset.c" \
   "${TMP_DIR}/bad-c-subset.wasm"
+
+cat > "${TMP_DIR}/bad-c-unknown-local.c" <<'CAPP'
+extern i64 ui_emit(i64, i64) __import("edgerun.ui", "emit");
+memory(1);
+export i64 main(void) { return missing; }
+CAPP
+
+expect_reject "unknown c local" \
+  "${TMP_DIR}/bad-c-unknown-local.c" \
+  "${TMP_DIR}/bad-c-unknown-local.wasm"
+
+cat > "${TMP_DIR}/bad-c-duplicate-local.c" <<'CAPP'
+extern i64 ui_emit(i64, i64) __import("edgerun.ui", "emit");
+memory(1);
+export i64 main(void) {
+  i64 value = 1;
+  i64 value = 2;
+  return value;
+}
+CAPP
+
+expect_reject "duplicate c local" \
+  "${TMP_DIR}/bad-c-duplicate-local.c" \
+  "${TMP_DIR}/bad-c-duplicate-local.wasm"
 
 printf 'wasm-compile tests passed\n'
