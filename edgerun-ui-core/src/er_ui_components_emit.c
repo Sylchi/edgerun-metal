@@ -82,6 +82,32 @@ static er_ui_status_t er_ui_component_labeled_control_frame(
   return ER_UI_OK;
 }
 
+static er_ui_status_t er_ui_component_select_impl(
+  er_ui_scene_t* scene,
+  vr_font_face_t* font,
+  er_ui_bounds_t bounds,
+  er_ui_resolved_theme_t theme,
+  const char* label,
+  const char* value,
+  uint32_t id,
+  bool open,
+  bool interactive) {
+  if (!scene || !font || !label || !value || !er_ui_bounds_valid(bounds)) return ER_UI_ERR_INVALID_ARGUMENT;
+  er_ui_color4_t fill =
+    open ? er_ui_color_with_alpha(theme.shadcn.colors.muted, 0.72f) : er_ui_color_with_alpha(theme.shadcn.colors.input, 0.30f);
+  er_ui_bounds_t control;
+  er_ui_status_t status = er_ui_component_labeled_control_frame(
+    scene, font, bounds, theme, label, ER_UI_HIT_SELECT, id, interactive,
+    er_ui_float_min(bounds.h - 18.0f, theme.shadcn.metrics.control_h), fill, 0.40f, &control);
+  if (status != ER_UI_OK) return status;
+  status = er_ui_component_push_ascii_text_clipped(scene, font, value, control.x + theme.shadcn.metrics.control_pad_x, control.y + 23.0f,
+                                                   control.w - theme.shadcn.metrics.control_pad_x - ER_UI_COMPONENT_CONTROL_ICON_RESERVED_W,
+                                                   theme.shadcn.colors.foreground);
+  if (status != ER_UI_OK) return status;
+  return er_ui_component_push_icon(scene, er_ui_bounds(control.x + control.w - 24.0f, control.y + (control.h - 16.0f) * 0.5f, 16.0f, 16.0f),
+                                open ? ER_UI_ICON_X : ER_UI_ICON_CHEVRON_RIGHT, theme.shadcn.colors.muted_foreground);
+}
+
 er_ui_status_t er_ui_component_select_emit(
   er_ui_scene_t* scene,
   vr_font_face_t* font,
@@ -91,19 +117,7 @@ er_ui_status_t er_ui_component_select_emit(
   const char* value,
   uint32_t id,
   bool open) {
-  if (!scene || !font || !label || !value || !er_ui_bounds_valid(bounds)) return ER_UI_ERR_INVALID_ARGUMENT;
-  er_ui_color4_t fill =
-    open ? er_ui_color_with_alpha(theme.shadcn.colors.muted, 0.72f) : er_ui_color_with_alpha(theme.shadcn.colors.input, 0.30f);
-  er_ui_bounds_t control;
-  er_ui_status_t status = er_ui_component_labeled_control_frame(
-    scene, font, bounds, theme, label, ER_UI_HIT_SELECT, id, true, er_ui_float_min(bounds.h - 18.0f, theme.shadcn.metrics.control_h), fill, 0.40f, &control);
-  if (status != ER_UI_OK) return status;
-  status = er_ui_component_push_ascii_text_clipped(scene, font, value, control.x + theme.shadcn.metrics.control_pad_x, control.y + 23.0f,
-                                                   control.w - theme.shadcn.metrics.control_pad_x - ER_UI_COMPONENT_CONTROL_ICON_RESERVED_W,
-                                                   theme.shadcn.colors.foreground);
-  if (status != ER_UI_OK) return status;
-  return er_ui_component_push_icon(scene, er_ui_bounds(control.x + control.w - 24.0f, control.y + (control.h - 16.0f) * 0.5f, 16.0f, 16.0f),
-                                open ? ER_UI_ICON_X : ER_UI_ICON_CHEVRON_RIGHT, theme.shadcn.colors.muted_foreground);
+  return er_ui_component_select_impl(scene, font, bounds, theme, label, value, id, open, true);
 }
 
 er_ui_status_t er_ui_component_select_static_emit(
@@ -114,19 +128,7 @@ er_ui_status_t er_ui_component_select_static_emit(
   const char* label,
   const char* value,
   bool open) {
-  if (!scene || !font || !label || !value || !er_ui_bounds_valid(bounds)) return ER_UI_ERR_INVALID_ARGUMENT;
-  er_ui_color4_t fill =
-    open ? er_ui_color_with_alpha(theme.shadcn.colors.muted, 0.72f) : er_ui_color_with_alpha(theme.shadcn.colors.input, 0.30f);
-  er_ui_bounds_t control;
-  er_ui_status_t status = er_ui_component_labeled_control_frame(
-    scene, font, bounds, theme, label, ER_UI_HIT_SELECT, 0u, false, er_ui_float_min(bounds.h - 18.0f, theme.shadcn.metrics.control_h), fill, 0.40f, &control);
-  if (status != ER_UI_OK) return status;
-  status = er_ui_component_push_ascii_text_clipped(scene, font, value, control.x + theme.shadcn.metrics.control_pad_x, control.y + 23.0f,
-                                                   control.w - theme.shadcn.metrics.control_pad_x - ER_UI_COMPONENT_CONTROL_ICON_RESERVED_W,
-                                                   theme.shadcn.colors.foreground);
-  if (status != ER_UI_OK) return status;
-  return er_ui_component_push_icon(scene, er_ui_bounds(control.x + control.w - 24.0f, control.y + (control.h - 16.0f) * 0.5f, 16.0f, 16.0f),
-                                  open ? ER_UI_ICON_X : ER_UI_ICON_CHEVRON_RIGHT, theme.shadcn.colors.muted_foreground);
+  return er_ui_component_select_impl(scene, font, bounds, theme, label, value, 0u, open, false);
 }
 
 er_ui_status_t er_ui_component_slider_emit(
@@ -174,7 +176,7 @@ er_ui_status_t er_ui_component_badge_emit(
                                                  bounds.w - ER_UI_COMPONENT_TEXT_PAD_X * 2.0f, er_ui_component_badge_text(theme, variant));
 }
 
-er_ui_status_t er_ui_component_field_emit(
+static er_ui_status_t er_ui_component_field_impl(
   er_ui_scene_t* scene,
   vr_font_face_t* font,
   er_ui_bounds_t bounds,
@@ -182,7 +184,8 @@ er_ui_status_t er_ui_component_field_emit(
   const char* label,
   const char* value,
   uint32_t id,
-  bool text_area) {
+  bool text_area,
+  bool interactive) {
   if (!scene || !font || !label || !value || !er_ui_bounds_valid(bounds)) return ER_UI_ERR_INVALID_ARGUMENT;
   er_ui_hit_kind_t hit_kind = text_area ? ER_UI_HIT_TEXT_AREA : ER_UI_HIT_INPUT;
   er_ui_bounds_t control;
@@ -194,7 +197,7 @@ er_ui_status_t er_ui_component_field_emit(
     label,
     hit_kind,
     id,
-    true,
+    interactive,
     er_ui_float_max(bounds.h - 18.0f, 24.0f),
     er_ui_color_with_alpha(theme.shadcn.colors.input, 0.30f),
     0.44f,
@@ -205,6 +208,18 @@ er_ui_status_t er_ui_component_field_emit(
                                                  theme.shadcn.colors.foreground);
 }
 
+er_ui_status_t er_ui_component_field_emit(
+  er_ui_scene_t* scene,
+  vr_font_face_t* font,
+  er_ui_bounds_t bounds,
+  er_ui_resolved_theme_t theme,
+  const char* label,
+  const char* value,
+  uint32_t id,
+  bool text_area) {
+  return er_ui_component_field_impl(scene, font, bounds, theme, label, value, id, text_area, true);
+}
+
 er_ui_status_t er_ui_component_field_static_emit(
   er_ui_scene_t* scene,
   vr_font_face_t* font,
@@ -213,26 +228,7 @@ er_ui_status_t er_ui_component_field_static_emit(
   const char* label,
   const char* value,
   bool text_area) {
-  if (!scene || !font || !label || !value || !er_ui_bounds_valid(bounds)) return ER_UI_ERR_INVALID_ARGUMENT;
-  er_ui_hit_kind_t hit_kind = text_area ? ER_UI_HIT_TEXT_AREA : ER_UI_HIT_INPUT;
-  er_ui_bounds_t control;
-  er_ui_status_t status = er_ui_component_labeled_control_frame(
-    scene,
-    font,
-    bounds,
-    theme,
-    label,
-    hit_kind,
-    0u,
-    false,
-    er_ui_float_max(bounds.h - 18.0f, 24.0f),
-    er_ui_color_with_alpha(theme.shadcn.colors.input, 0.30f),
-    0.44f,
-    &control);
-  if (status != ER_UI_OK) return status;
-  return er_ui_component_push_ascii_text_clipped(scene, font, value, control.x + theme.shadcn.metrics.control_pad_x, control.y + 23.0f,
-                                                 control.w - theme.shadcn.metrics.control_pad_x * 2.0f,
-                                                 theme.shadcn.colors.foreground);
+  return er_ui_component_field_impl(scene, font, bounds, theme, label, value, 0u, text_area, false);
 }
 
 er_ui_status_t er_ui_component_checkbox_emit(

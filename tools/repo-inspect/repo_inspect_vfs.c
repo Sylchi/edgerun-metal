@@ -130,6 +130,7 @@ static uint8_t eri_is_nonprod_path(const char* path) {
 
 static uint8_t eri_is_hosted_tool_path(const char* path) {
   return (uint8_t)(eri_contains_part(path, "tools") != 0u ||
+                   eri_contains_part(path, "codex") != 0u ||
                    eri_contains_part(path, "scripts") != 0u ||
                    eri_contains_part(path, "bench") != 0u);
 }
