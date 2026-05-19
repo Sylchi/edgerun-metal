@@ -59,6 +59,8 @@
 #define ER_WASM_DRIVER_MEMORY_BYTES (64u * 1024u)
 #define ER_UI_BOOT_APP_SLOT_CAPACITY 2u
 #define ER_UI_BOOT_INSTALLED_APP_COUNT 1u
+#define ER_UI_BOOT_USER_APP_SURFACE_ID_BASE 0xED030000u
+#define ER_UI_BOOT_USER_APP_LAUNCH_ID_BASE 0xED040000u
 #define ER_UI_BOOT_APP_MEMORY_BYTES (64u * 1024u)
 #define ER_UI_BOOT_APP_MODULE_BYTES 1024u
 #define ER_UI_BOOT_APP_MANIFEST_BYTES 256u
@@ -91,6 +93,9 @@
                                          ER_WASM_UI_RECT_RECORD_LEN + \
                                          ER_WASM_UI_HIT_RECORD_LEN + \
                                          ER_WASM_UI_QUAD_RECORD_LEN)
+#define ER_UI_BOOT_HASH_HEX_BYTES (ER_HASH_LEN * 2u)
+#define ER_UI_BOOT_PACKAGE_HASH_LABEL_BYTES (4u + ER_UI_BOOT_HASH_HEX_BYTES + 1u)
+#define ER_UI_BOOT_PROVENANCE_LABEL_BYTES (7u + ER_UI_BOOT_HASH_HEX_BYTES + 1u)
 #define ER_ACPI_SIGNATURE_BYTES 4u
 #define ER_BYTE_MASK 0xffu
 #define ER_GPU_PROFILE_POLL_LIMIT 1000000u
@@ -245,6 +250,9 @@ UINT8 er_ui_boot_execute_wasm_app(ErUiWasmAppRuntime* runtime);
 const ErUiBootInstalledApp* er_ui_boot_installed_app_for_slot(UINT32 app_index);
 const ErAppSignedPackageIndexEntry* er_ui_boot_installed_signed_package_index_entry_for_slot(UINT32 app_index);
 const ErAppPackageInstallRecord* er_ui_boot_installed_package_record_for_slot(UINT32 app_index);
+UINT8 er_ui_boot_user_app_surface_id(UINT32 app_index, UINT32* out_surface_id);
+UINT8 er_ui_boot_user_app_launch_id(UINT32 app_index, UINT32* out_launch_id);
+UINT8 er_ui_boot_install_shell_launcher_apps(er_ui_ledger_app_state_t* ledger_state);
 UINT8 er_ui_boot_prepare_signed_indexed_package_source(
     const ErAppSignedPackageIndexEntry* index_entry,
     ErUiBootInstalledPackageSource* out_source);

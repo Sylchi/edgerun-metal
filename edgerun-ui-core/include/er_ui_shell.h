@@ -21,7 +21,8 @@ extern "C" {
 typedef enum {
   ER_UI_LAUNCHER_APP_INSTALLED = 0,
   ER_UI_LAUNCHER_APP_UPDATE_AVAILABLE,
-  ER_UI_LAUNCHER_APP_REMOVED
+  ER_UI_LAUNCHER_APP_REMOVED,
+  ER_UI_LAUNCHER_APP_ROLLED_BACK
 } er_ui_launcher_app_status_t;
 
 typedef enum {

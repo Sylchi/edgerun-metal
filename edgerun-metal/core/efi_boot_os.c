@@ -169,6 +169,12 @@ void er_run_os_path(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE* SystemTable,
     vr_font_face_destroy(font);
     return;
   }
+  if (er_ui_boot_install_shell_launcher_apps(&ledger_state) == 0u) {
+    er_println("ui renderer: installed app launcher failed");
+    er_ui_ledger_app_state_destroy(&ledger_state);
+    vr_font_face_destroy(font);
+    return;
+  }
   if (er_ui_runtime_state_init_with_allocator(&runtime, er_ui_boot_allocator()) != ER_UI_OK) {
     er_println("ui renderer: runtime state failed");
     er_ui_ledger_app_state_destroy(&ledger_state);
