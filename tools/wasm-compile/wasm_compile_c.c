@@ -323,6 +323,10 @@ static int erwc_c_add_local(ErWcFunc* func, const char* name, uint32_t* out_inde
 static int erwc_c_parse_expression(ErWcCParser* parser,
                                    const ErWcModule* module,
                                    ErWcFunc* func);
+static int erwc_c_parse_main_statement(ErWcCParser* parser,
+                                       const ErWcModule* module,
+                                       ErWcFunc* func,
+                                       uint8_t* out_parsed);
 
 static int erwc_c_emit_call(ErWcCParser* parser,
                             const ErWcModule* module,
@@ -410,6 +414,45 @@ static int erwc_c_parse_assignment(ErWcCParser* parser,
   return 0;
 }
 
+static int erwc_c_parse_statement_block(ErWcCParser* parser,
+                                        const ErWcModule* module,
+                                        ErWcFunc* func) {
+  while (1) {
+    uint8_t parsed_statement = 0u;
+    erwc_c_skip_ws(parser);
+    if (parser->cur < parser->end && *parser->cur == '}') {
+      return 0;
+    }
+    if (erwc_c_parse_main_statement(parser, module, func, &parsed_statement) != 0 ||
+        parsed_statement == 0u) {
+      return -1;
+    }
+  }
+}
+
+static int erwc_c_parse_if_statement(ErWcCParser* parser,
+                                     const ErWcModule* module,
+                                     ErWcFunc* func) {
+  if (erwc_c_take_literal(parser, "if") != 0 ||
+      erwc_c_take_literal(parser, "(") != 0 ||
+      erwc_c_parse_expression(parser, module, func) != 0 ||
+      erwc_c_take_literal(parser, ")") != 0 ||
+      erwc_buffer_push(&func->code, ERWC_OP_IF) != 0 ||
+      erwc_buffer_push(&func->code, ERWC_BLOCKTYPE_EMPTY) != 0 ||
+      erwc_c_take_literal(parser, "{") != 0 ||
+      erwc_c_parse_statement_block(parser, module, func) != 0 ||
+      erwc_c_take_literal(parser, "}") != 0 ||
+      erwc_c_take_literal(parser, "else") != 0 ||
+      erwc_buffer_push(&func->code, ERWC_OP_ELSE) != 0 ||
+      erwc_c_take_literal(parser, "{") != 0 ||
+      erwc_c_parse_statement_block(parser, module, func) != 0 ||
+      erwc_c_take_literal(parser, "}") != 0 ||
+      erwc_buffer_push(&func->code, ERWC_OP_END) != 0) {
+    return -1;
+  }
+  return 0;
+}
+
 static int erwc_c_parse_main_statement(ErWcCParser* parser,
                                        const ErWcModule* module,
                                        ErWcFunc* func,
@@ -423,6 +466,11 @@ static int erwc_c_parse_main_statement(ErWcCParser* parser,
   }
   *parser = before_statement;
   if (erwc_c_parse_assignment(parser, module, func) == 0) {
+    *out_parsed = 1u;
+    return 0;
+  }
+  *parser = before_statement;
+  if (erwc_c_parse_if_statement(parser, module, func) == 0) {
     *out_parsed = 1u;
     return 0;
   }
