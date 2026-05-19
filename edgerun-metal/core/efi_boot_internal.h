@@ -17,6 +17,7 @@
 #include "er_gfx_console.h"
 #include "er_ps2_keyboard.h"
 #include "er_native_boot.h"
+#include "er_pi_zero2w.h"
 #include "er_render_endpoint.h"
 #include "er_storage_endpoint.h"
 #include "er_ui_surface_renderer.h"

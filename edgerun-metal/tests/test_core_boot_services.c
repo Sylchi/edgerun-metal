@@ -56,6 +56,19 @@ static void test_boot_services_boundary(void) {
   check_uint64("boot services update blocked without storage",
                report.runtime_capabilities.update_blocked_reason,
                ER_BOOT_UPDATE_BLOCKED_NO_WRITABLE_STORAGE);
+  check_int64("boot services reject impossible bluetooth",
+              er_boot_services_set_bluetooth_runtime(&report,
+                                                     ER_BOOT_BLUETOOTH_KIND_NONE,
+                                                     1u),
+              0);
+  check_int64("boot services set bluetooth",
+              er_boot_services_set_bluetooth_runtime(
+                  &report,
+                  ER_BOOT_BLUETOOTH_KIND_CYW43439_HCI_UART,
+                  1u),
+              1);
+  check_uint64("boot services bluetooth ready",
+               report.runtime_capabilities.bluetooth_ready, 1u);
   check_int64("boot services reject empty storage",
               er_boot_services_set_local_storage(&report,
                                                  ER_BOOT_LOCAL_STORAGE_KIND_SD_CARD,

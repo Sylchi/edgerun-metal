@@ -27,6 +27,9 @@
 #define ER_BOOT_WIFI_KIND_OPEN_L2 1u
 #define ER_BOOT_WIFI_KIND_CYW43439_SDIO 2u
 
+#define ER_BOOT_BLUETOOTH_KIND_NONE 0u
+#define ER_BOOT_BLUETOOTH_KIND_CYW43439_HCI_UART 1u
+
 #define ER_BOOT_UPDATE_READY 0u
 #define ER_BOOT_UPDATE_BLOCKED_NO_WIFI 1u
 #define ER_BOOT_UPDATE_BLOCKED_NO_WRITABLE_STORAGE 2u
@@ -88,7 +91,9 @@ typedef struct {
   UINT8 update_ready;
   UINT8 update_blocked_reason;
   UINT8 wifi_channel;
-  UINT16 reserved;
+  UINT8 bluetooth_kind;
+  UINT8 bluetooth_ready;
+  UINT8 reserved;
   UINT64 local_storage_block_bytes;
   UINT64 local_storage_block_count;
   UINT64 update_artifact_capacity_bytes;
@@ -133,6 +138,9 @@ UINT8 er_boot_services_set_wifi_runtime(ErBootServicesReport* report,
                                         UINT8 wifi_kind,
                                         UINT8 wifi_ready,
                                         UINT8 wifi_channel);
+UINT8 er_boot_services_set_bluetooth_runtime(ErBootServicesReport* report,
+                                             UINT8 bluetooth_kind,
+                                             UINT8 bluetooth_ready);
 UINT8 er_boot_services_set_local_storage(ErBootServicesReport* report,
                                          UINT8 storage_kind,
                                          UINT8 writable,

@@ -61,6 +61,16 @@ static UINT8 er_boot_services_storage_kind_valid(UINT8 storage_kind) {
   }
 }
 
+static UINT8 er_boot_services_bluetooth_kind_valid(UINT8 bluetooth_kind) {
+  switch (bluetooth_kind) {
+    case ER_BOOT_BLUETOOTH_KIND_NONE:
+    case ER_BOOT_BLUETOOTH_KIND_CYW43439_HCI_UART:
+      return 1u;
+    default:
+      return 0u;
+  }
+}
+
 static void er_boot_services_runtime_capabilities_init(
     ErBootRuntimeCapabilities* capabilities) {
   if (capabilities == 0) {
@@ -232,6 +242,23 @@ UINT8 er_boot_services_set_wifi_runtime(ErBootServicesReport* report,
   return er_boot_services_update_runtime_capabilities(report);
 }
 
+UINT8 er_boot_services_set_bluetooth_runtime(ErBootServicesReport* report,
+                                             UINT8 bluetooth_kind,
+                                             UINT8 bluetooth_ready) {
+  if (report == 0 ||
+      er_boot_services_bluetooth_kind_valid(bluetooth_kind) == 0u ||
+      (bluetooth_kind == ER_BOOT_BLUETOOTH_KIND_NONE &&
+       bluetooth_ready != 0u)) {
+    return 0u;
+  }
+  report->runtime_capabilities.abi_version =
+      ER_BOOT_RUNTIME_CAPABILITY_ABI_VERSION;
+  report->runtime_capabilities.bluetooth_kind = bluetooth_kind;
+  report->runtime_capabilities.bluetooth_ready =
+      (UINT8)(bluetooth_ready != 0u);
+  return er_boot_services_update_runtime_capabilities(report);
+}
+
 UINT8 er_boot_services_set_local_storage(ErBootServicesReport* report,
                                          UINT8 storage_kind,
                                          UINT8 writable,
@@ -274,6 +301,8 @@ UINT8 er_boot_services_update_runtime_capabilities(ErBootServicesReport* report)
       report->runtime_capabilities.abi_version !=
           ER_BOOT_RUNTIME_CAPABILITY_ABI_VERSION ||
       er_boot_services_wifi_kind_valid(report->runtime_capabilities.wifi_kind) == 0u ||
+      er_boot_services_bluetooth_kind_valid(
+          report->runtime_capabilities.bluetooth_kind) == 0u ||
       er_boot_services_storage_kind_valid(
           report->runtime_capabilities.local_storage_kind) == 0u) {
     return 0u;
