@@ -189,7 +189,7 @@ UINT8 er_seal_prepare_content_object(const ErCryptoProvider* crypto,
   header.strategy = (UINT16)er_seal_select_strategy(ER_SEAL_RECIPIENT_COUNT_DIRECT,
                                                     (UINT64)plaintext->len,
                                                     expected_reuse_count);
-  header.algorithm = ER_SEAL_ALGORITHM_AES256_GCM;
+  header.algorithm = ER_SEAL_ALGORITHM_BLAKE3_STREAM_AUTH;
   header.recipient = *recipient;
   header.plaintext_len = (UINT64)plaintext->len;
   if (er_seal_valid_strategy(header.strategy) == 0u ||
@@ -233,7 +233,7 @@ UINT8 er_seal_content_object_valid(const ErCryptoProvider* crypto,
       sealed_payload_len == 0u ||
       header->abi_version != ER_SEAL_ABI_VERSION ||
       er_seal_valid_strategy(header->strategy) == 0u ||
-      header->algorithm != ER_SEAL_ALGORITHM_AES256_GCM ||
+      header->algorithm != ER_SEAL_ALGORITHM_BLAKE3_STREAM_AUTH ||
       header->reserved != 0u ||
       header->plaintext_len == 0u ||
       header->sealed_payload_len != (UINT64)sealed_payload_len ||

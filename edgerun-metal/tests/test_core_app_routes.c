@@ -155,11 +155,13 @@ static void test_vfs_object_packets(void) {
               0);
   check_int64("vfs transform sealed",
               er_vfs_prepare_transform_ref(&crypto, &ref.object_id, ref.object_len, &packet.header.payload_hash,
-                                           packet.header.bytes_len, ER_VFS_COMPRESSION_NONE, ER_VFS_SEAL_AES256_GCM,
+                                           packet.header.bytes_len, ER_VFS_COMPRESSION_NONE,
+                                           ER_VFS_SEAL_BLAKE3_STREAM_AUTH,
                                            &transform),
               1);
   check_int64("vfs transform abi", transform.abi_version, ER_VFS_ABI_VERSION);
-  check_int64("vfs transform seal", transform.seal_kind, ER_VFS_SEAL_AES256_GCM);
+  check_int64("vfs transform seal", transform.seal_kind,
+              ER_VFS_SEAL_BLAKE3_STREAM_AUTH);
 }
 
 static void test_prepare_storage_endpoint_route(ErAdmittedRoute* route,

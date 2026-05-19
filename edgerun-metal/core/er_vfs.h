@@ -16,7 +16,7 @@
 #define ER_VFS_COMPRESSION_NONE 0u
 #define ER_VFS_COMPRESSION_DEFLATE_RAW 1u
 #define ER_VFS_SEAL_NONE 0u
-#define ER_VFS_SEAL_AES256_GCM 1u
+#define ER_VFS_SEAL_BLAKE3_STREAM_AUTH 1u
 
 typedef struct {
   UINT16 abi_version;
