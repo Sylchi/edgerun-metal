@@ -37,6 +37,15 @@ if "${ER_BUILD}" app-build "${TMP_DIR}/bad-package" >/dev/null 2>&1; then
   exit 1
 fi
 
+mkdir "${TMP_DIR}/bad-manifest"
+cp "${PACKAGE_DIR}/app.c" "${TMP_DIR}/bad-manifest/app.c"
+sed 's/output=.build\/app.wasm/output=app.wasm/' \
+  "${PACKAGE_DIR}/app.manifest" > "${TMP_DIR}/bad-manifest/app.manifest"
+if "${ER_BUILD}" app-build "${TMP_DIR}/bad-manifest" >/dev/null 2>&1; then
+  printf 'app-build accepted invalid manifest\n' >&2
+  exit 1
+fi
+
 plan=$("${ER_BUILD}" --print-plan app-build "${PACKAGE_DIR}")
 case "${plan}" in
   *"+ .build/wasm-compile ${PACKAGE_DIR}/app.c ${PACKAGE_DIR}/.build/app.wasm"* ) ;;

@@ -22,7 +22,8 @@ enum {
   ERB_MAX_ARGC = 96,
   ERB_EXEC_FAILURE_STATUS = 127,
   ERB_OUTPUT_DIR_MODE = 0777,
-  ERB_PATH_CAP = 4096
+  ERB_PATH_CAP = 4096,
+  ERB_MANIFEST_CAP = 512
 };
 
 static const char ERB_DEFAULT_CC[] = "clang";
@@ -40,6 +41,12 @@ static const char ERB_APP_SOURCE_NAME[] = "app.c";
 static const char ERB_APP_MANIFEST_NAME[] = "app.manifest";
 static const char ERB_APP_BUILD_DIR_NAME[] = ".build";
 static const char ERB_APP_WASM_NAME[] = "app.wasm";
+static const char ERB_APP_MANIFEST_EXPECTED[] =
+    "contract=ui-app\n"
+    "memory_pages=1\n"
+    "imports=edgerun.ui/emit\n"
+    "source=app.c\n"
+    "output=.build/app.wasm\n";
 
 typedef struct {
   const char* items[ERB_MAX_ARGC];
@@ -141,6 +148,49 @@ static int erb_require_regular_file(const char* path) {
   }
   if (!S_ISREG(st.st_mode) || st.st_size <= 0) {
     fprintf(stderr, "er-build: invalid required file %s\n", path);
+    return 1;
+  }
+  return 0;
+}
+
+static int erb_read_text_file(const char* path, char* out, size_t out_len) {
+  FILE* file;
+  size_t len;
+
+  if (path == NULL || out == NULL || out_len == 0u) {
+    return erb_fail("invalid file read");
+  }
+  file = fopen(path, "rb");
+  if (file == NULL) {
+    fprintf(stderr, "er-build: open failed for %s: %s\n", path, strerror(errno));
+    return 1;
+  }
+  len = fread(out, 1u, out_len - 1u, file);
+  if (ferror(file) != 0) {
+    fclose(file);
+    fprintf(stderr, "er-build: read failed for %s\n", path);
+    return 1;
+  }
+  if (fclose(file) != 0) {
+    fprintf(stderr, "er-build: close failed for %s: %s\n", path, strerror(errno));
+    return 1;
+  }
+  out[len] = '\0';
+  if (len == out_len - 1u) {
+    fprintf(stderr, "er-build: file too large %s\n", path);
+    return 1;
+  }
+  return 0;
+}
+
+static int erb_validate_app_manifest(const char* path) {
+  char text[ERB_MANIFEST_CAP];
+
+  if (erb_read_text_file(path, text, sizeof(text)) != 0) {
+    return 1;
+  }
+  if (strcmp(text, ERB_APP_MANIFEST_EXPECTED) != 0) {
+    fprintf(stderr, "er-build: invalid app manifest %s\n", path);
     return 1;
   }
   return 0;
@@ -254,6 +304,7 @@ static int erb_target_app_build(const char* package_dir, int print_plan) {
   }
   if (erb_require_regular_file(app_source) != 0 ||
       erb_require_regular_file(manifest_source) != 0 ||
+      erb_validate_app_manifest(manifest_source) != 0 ||
       erb_build_wasm_compile(print_plan) != 0) {
     return 1;
   }
