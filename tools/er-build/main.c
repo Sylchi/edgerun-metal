@@ -333,6 +333,39 @@ static int erb_target_app_build(const char* package_dir, int print_plan) {
                                         output_wasm);
 }
 
+static int erb_target_app_verify(const char* package_dir) {
+  char app_source[ERB_PATH_CAP];
+  char manifest_source[ERB_PATH_CAP];
+  char package_build_dir[ERB_PATH_CAP];
+  char output_wasm[ERB_PATH_CAP];
+  char output_identity[ERB_PATH_CAP];
+
+  if (package_dir == NULL || package_dir[0] == '\0') {
+    return erb_fail("app-verify requires a package directory");
+  }
+  if (erb_path_join(app_source, sizeof(app_source), package_dir,
+                    ERB_APP_SOURCE_NAME) != 0 ||
+      erb_path_join(manifest_source, sizeof(manifest_source), package_dir,
+                    ERB_APP_MANIFEST_NAME) != 0 ||
+      erb_path_join(package_build_dir, sizeof(package_build_dir), package_dir,
+                    ERB_APP_BUILD_DIR_NAME) != 0 ||
+      erb_path_join(output_wasm, sizeof(output_wasm), package_build_dir,
+                    ERB_APP_WASM_NAME) != 0 ||
+      erb_path_join(output_identity, sizeof(output_identity), package_build_dir,
+                    ERB_APP_PACKAGE_IDENTITY_NAME) != 0) {
+    return 1;
+  }
+  if (erb_require_regular_file(app_source) != 0 ||
+      erb_require_regular_file(manifest_source) != 0 ||
+      erb_require_regular_file(output_wasm) != 0 ||
+      erb_require_regular_file(output_identity) != 0 ||
+      erb_validate_app_manifest(manifest_source) != 0) {
+    return 1;
+  }
+  return erb_verify_app_package_identity(output_identity, app_source, manifest_source,
+                                         output_wasm);
+}
+
 static int erb_run_program(const char* program, int print_plan) {
   ErbArgs args;
 
@@ -581,7 +614,7 @@ static int erb_target_varfont_test(int print_plan) {
 static int erb_usage(void) {
   fprintf(stderr,
           "usage: er-build [--print-plan] <target> [args]\n"
-          "targets: app-build <package-dir>\n"
+          "targets: app-build <package-dir> app-verify <package-dir>\n"
           "         repo-check-bin repo-inspect erwire-decode erwire-test wasm-compile\n"
           "         repo-check repo-test repo-progress <scope> [test-target]\n"
           "         crypto-test varfont-test\n");
@@ -619,6 +652,12 @@ int main(int argc, char** argv) {
       return erb_usage();
     }
     return erb_target_app_build(argv[target_index + 1], print_plan);
+  }
+  if (strcmp(target, "app-verify") == 0) {
+    if (print_plan != 0 || target_index + 2 != argc) {
+      return erb_usage();
+    }
+    return erb_target_app_verify(argv[target_index + 1]);
   }
   if (target_index + 1 != argc) {
     return erb_usage();

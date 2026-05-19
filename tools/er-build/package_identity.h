@@ -13,5 +13,9 @@ int erb_write_app_package_identity(const char* identity_path,
                                    const char* app_source,
                                    const char* manifest_source,
                                    const char* output_wasm);
+int erb_verify_app_package_identity(const char* identity_path,
+                                    const char* app_source,
+                                    const char* manifest_source,
+                                    const char* output_wasm);
 
 #endif
