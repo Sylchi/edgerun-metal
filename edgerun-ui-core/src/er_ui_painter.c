@@ -28,9 +28,9 @@ er_ui_status_t er_ui_painter_panel(er_ui_painter_t* painter, er_ui_bounds_t boun
 
 er_ui_status_t er_ui_painter_card(er_ui_painter_t* painter, er_ui_bounds_t bounds, er_ui_resolved_theme_t theme) {
   er_ui_status_t status =
-    er_ui_painter_shadow_rect(painter, bounds, theme.shadcn.radius.xl, er_ui_color_rgba(0.0f, 0.0f, 0.0f, 0.08f), 8.0f);
+    er_ui_painter_shadow_rect(painter, bounds, theme.design.radius.xl, er_ui_color_rgba(0.0f, 0.0f, 0.0f, 0.08f), 8.0f);
   if (status != ER_UI_OK) return status;
-  return er_ui_painter_panel(painter, bounds, theme.shadcn.radius.xl, theme.shadcn.colors.card, theme.shadcn.colors.border);
+  return er_ui_painter_panel(painter, bounds, theme.design.radius.xl, theme.design.colors.card, theme.design.colors.border);
 }
 
 er_ui_status_t er_ui_painter_soft_card(er_ui_painter_t* painter, er_ui_bounds_t bounds, float radius, er_ui_color4_t fill) {

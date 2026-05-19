@@ -185,9 +185,9 @@ static er_ui_status_t er_ui_metal_emit_rail_item(
   uint32_t id) {
   er_ui_status_t status = er_ui_scene_push_hit(scene, er_ui_hit(ER_UI_HIT_BUTTON, id, bounds.x, bounds.y, bounds.w, bounds.h));
   if (status != ER_UI_OK) return status;
-  status = er_ui_scene_push_rect(scene, er_ui_rect_fill(bounds.x, bounds.y, bounds.w, bounds.h, theme.radius.control, er_ui_color_with_alpha(theme.shadcn.colors.card, 0.96f)));
+  status = er_ui_scene_push_rect(scene, er_ui_rect_fill(bounds.x, bounds.y, bounds.w, bounds.h, theme.radius.control, er_ui_color_with_alpha(theme.design.colors.card, 0.96f)));
   if (status != ER_UI_OK) return status;
-  status = er_ui_scene_push_rect(scene, er_ui_rect_border(bounds.x, bounds.y, bounds.w, bounds.h, theme.radius.control, er_ui_color_with_alpha(theme.shadcn.colors.border, 1.65f)));
+  status = er_ui_scene_push_rect(scene, er_ui_rect_border(bounds.x, bounds.y, bounds.w, bounds.h, theme.radius.control, er_ui_color_with_alpha(theme.design.colors.border, 1.65f)));
   if (status != ER_UI_OK) return status;
   status = er_ui_scene_push_ascii_text(scene, font, label, ER_UI_METAL_TEXT_BUDGET, bounds.x + 12.0f, bounds.y + 18.0f, theme.colors.muted);
   if (status != ER_UI_OK) return status;
@@ -217,10 +217,10 @@ static er_ui_status_t er_ui_metal_emit_style_rail(
     ER_UI_ICON_MENU
   };
   er_ui_status_t status = er_ui_scene_push_rect(scene, er_ui_rect_fill(bounds.x, bounds.y, bounds.w, bounds.h, 0.0f,
-                                                                       er_ui_color_with_alpha(theme.shadcn.colors.background, 0.98f)));
+                                                                       er_ui_color_with_alpha(theme.design.colors.background, 0.98f)));
   if (status != ER_UI_OK) return status;
   status = er_ui_scene_push_rect(scene, er_ui_rect_border(bounds.x, bounds.y, bounds.w, bounds.h, 0.0f,
-                                                         er_ui_color_with_alpha(theme.shadcn.colors.border, 1.7f)));
+                                                         er_ui_color_with_alpha(theme.design.colors.border, 1.7f)));
   if (status != ER_UI_OK) return status;
   status = er_ui_scene_push_ascii_text(scene, font, "Menu", ER_UI_METAL_MENU_TEXT_BUDGET, bounds.x + 20.0f, bounds.y + 34.0f, theme.colors.text);
   if (status != ER_UI_OK) return status;
@@ -243,10 +243,10 @@ static er_ui_status_t er_ui_metal_emit_showcase_topbar(
   er_ui_resolved_theme_t theme) {
   er_ui_painter_t painter = er_ui_painter(scene);
   er_ui_status_t status = er_ui_scene_push_rect(scene, er_ui_rect_fill(bounds.x, bounds.y, bounds.w, bounds.h, 0.0f,
-                                                                       er_ui_color_with_alpha(theme.shadcn.colors.background, 0.98f)));
+                                                                       er_ui_color_with_alpha(theme.design.colors.background, 0.98f)));
   if (status != ER_UI_OK) return status;
   status = er_ui_scene_push_rect(scene, er_ui_rect_border(bounds.x, bounds.y, bounds.w, bounds.h, 0.0f,
-                                                         er_ui_color_with_alpha(theme.shadcn.colors.border, 1.65f)));
+                                                         er_ui_color_with_alpha(theme.design.colors.border, 1.65f)));
   if (status != ER_UI_OK) return status;
   status = er_ui_painter_icon(&painter, er_ui_bounds(bounds.x + 18.0f, bounds.y + 21.0f, 20.0f, 20.0f), ER_UI_ICON_SPARKLES, theme.colors.accent);
   if (status != ER_UI_OK) return status;

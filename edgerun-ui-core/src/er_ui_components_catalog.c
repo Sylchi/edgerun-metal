@@ -1,6 +1,6 @@
 #include "er_ui_components_internal.h"
 
-static const char* const er_ui_component_shadcn_reference_slugs[ER_UI_COMPONENT_SHADCN_REFERENCE_COUNT] = {
+static const char* const er_ui_component_canonical_slugs[ER_UI_COMPONENT_CANONICAL_BASE_COUNT] = {
   "accordion",
   "alert",
   "alert-dialog",
@@ -97,20 +97,20 @@ const er_ui_component_spec_t* er_ui_component_at(size_t index) {
 
 size_t er_ui_component_count(void) { return ER_UI_COMPONENT_COUNT; }
 
-const char* er_ui_component_shadcn_reference_source(void) {
+const char* er_ui_component_canonical_source(void) {
   return "ui/shadcn-ui/apps/v4/registry/bases/base/ui";
 }
 
-size_t er_ui_component_shadcn_reference_count(void) {
-  return ER_UI_COMPONENT_SHADCN_REFERENCE_COUNT;
+size_t er_ui_component_canonical_count(void) {
+  return ER_UI_COMPONENT_CANONICAL_BASE_COUNT;
 }
 
-const char* er_ui_component_shadcn_reference_at(size_t index) {
-  if (index >= ER_UI_COMPONENT_SHADCN_REFERENCE_COUNT) return 0;
-  return er_ui_component_shadcn_reference_slugs[index];
+const char* er_ui_component_canonical_at(size_t index) {
+  if (index >= ER_UI_COMPONENT_CANONICAL_BASE_COUNT) return 0;
+  return er_ui_component_canonical_slugs[index];
 }
 
-bool er_ui_component_shadcn_reference_covered(const char* slug) {
+bool er_ui_component_canonical_covered(const char* slug) {
   return er_ui_component_find_by_slug(slug) != 0;
 }
 

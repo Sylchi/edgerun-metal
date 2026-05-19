@@ -78,7 +78,7 @@ er_ui_status_t er_ui_component_icon_tile(
   er_ui_color4_t color) {
   if (!scene || !er_ui_bounds_valid(bounds)) return ER_UI_ERR_INVALID_ARGUMENT;
   er_ui_rect_t tile_fill =
-    er_ui_rect_fill(bounds.x, bounds.y, bounds.w, bounds.h, theme.shadcn.radius.md, er_ui_color_with_alpha(theme.shadcn.colors.muted, 0.72f));
+    er_ui_rect_fill(bounds.x, bounds.y, bounds.w, bounds.h, theme.design.radius.md, er_ui_color_with_alpha(theme.design.colors.muted, 0.72f));
   er_ui_status_t status = er_ui_scene_push_rect(scene, tile_fill);
   if (status != ER_UI_OK) return status;
   float icon_size = er_ui_float_min(bounds.w, bounds.h) - 10.0f;
@@ -277,52 +277,52 @@ er_ui_status_t er_ui_component_badged_icon_card_emit(
 
 er_ui_color4_t er_ui_component_button_fill(er_ui_resolved_theme_t theme, er_ui_component_button_variant_t variant) {
   switch (variant) {
-    case ER_UI_COMPONENT_BUTTON_DESTRUCTIVE: return er_ui_color_with_alpha(theme.shadcn.colors.destructive, 0.20f);
-    case ER_UI_COMPONENT_BUTTON_OUTLINE: return er_ui_color_with_alpha(theme.shadcn.colors.input, 0.30f);
-    case ER_UI_COMPONENT_BUTTON_SECONDARY: return theme.shadcn.colors.secondary;
+    case ER_UI_COMPONENT_BUTTON_DESTRUCTIVE: return er_ui_color_with_alpha(theme.design.colors.destructive, 0.20f);
+    case ER_UI_COMPONENT_BUTTON_OUTLINE: return er_ui_color_with_alpha(theme.design.colors.input, 0.30f);
+    case ER_UI_COMPONENT_BUTTON_SECONDARY: return theme.design.colors.secondary;
     case ER_UI_COMPONENT_BUTTON_GHOST:
-    case ER_UI_COMPONENT_BUTTON_LINK: return er_ui_color_with_alpha(theme.shadcn.colors.card, 0.0f);
+    case ER_UI_COMPONENT_BUTTON_LINK: return er_ui_color_with_alpha(theme.design.colors.card, 0.0f);
     case ER_UI_COMPONENT_BUTTON_DEFAULT:
-    default: return theme.shadcn.colors.primary;
+    default: return theme.design.colors.primary;
   }
 }
 
 er_ui_color4_t er_ui_component_button_border(er_ui_resolved_theme_t theme, er_ui_component_button_variant_t variant) {
   switch (variant) {
-    case ER_UI_COMPONENT_BUTTON_DESTRUCTIVE: return er_ui_color_with_alpha(theme.shadcn.colors.destructive, 0.40f);
-    case ER_UI_COMPONENT_BUTTON_DEFAULT: return er_ui_color_with_alpha(theme.shadcn.colors.primary, 0.0f);
-    case ER_UI_COMPONENT_BUTTON_OUTLINE: return theme.shadcn.colors.input;
-    default: return er_ui_color_with_alpha(theme.shadcn.colors.border, 0.0f);
+    case ER_UI_COMPONENT_BUTTON_DESTRUCTIVE: return er_ui_color_with_alpha(theme.design.colors.destructive, 0.40f);
+    case ER_UI_COMPONENT_BUTTON_DEFAULT: return er_ui_color_with_alpha(theme.design.colors.primary, 0.0f);
+    case ER_UI_COMPONENT_BUTTON_OUTLINE: return theme.design.colors.input;
+    default: return er_ui_color_with_alpha(theme.design.colors.border, 0.0f);
   }
 }
 
 er_ui_color4_t er_ui_component_button_text(er_ui_resolved_theme_t theme, er_ui_component_button_variant_t variant) {
   switch (variant) {
-    case ER_UI_COMPONENT_BUTTON_DEFAULT: return theme.shadcn.colors.primary_foreground;
-    case ER_UI_COMPONENT_BUTTON_DESTRUCTIVE: return theme.shadcn.colors.destructive;
-    case ER_UI_COMPONENT_BUTTON_SECONDARY: return theme.shadcn.colors.secondary_foreground;
-    case ER_UI_COMPONENT_BUTTON_GHOST: return theme.shadcn.colors.foreground;
-    case ER_UI_COMPONENT_BUTTON_LINK: return theme.shadcn.colors.primary;
-    default: return theme.shadcn.colors.foreground;
+    case ER_UI_COMPONENT_BUTTON_DEFAULT: return theme.design.colors.primary_foreground;
+    case ER_UI_COMPONENT_BUTTON_DESTRUCTIVE: return theme.design.colors.destructive;
+    case ER_UI_COMPONENT_BUTTON_SECONDARY: return theme.design.colors.secondary_foreground;
+    case ER_UI_COMPONENT_BUTTON_GHOST: return theme.design.colors.foreground;
+    case ER_UI_COMPONENT_BUTTON_LINK: return theme.design.colors.primary;
+    default: return theme.design.colors.foreground;
   }
 }
 
 er_ui_color4_t er_ui_component_badge_fill(er_ui_resolved_theme_t theme, er_ui_component_badge_variant_t variant) {
   switch (variant) {
-    case ER_UI_COMPONENT_BADGE_SECONDARY: return theme.shadcn.colors.secondary;
-    case ER_UI_COMPONENT_BADGE_DESTRUCTIVE: return er_ui_color_with_alpha(theme.shadcn.colors.destructive, 0.20f);
-    case ER_UI_COMPONENT_BADGE_OUTLINE: return er_ui_color_with_alpha(theme.shadcn.colors.card, 0.0f);
+    case ER_UI_COMPONENT_BADGE_SECONDARY: return theme.design.colors.secondary;
+    case ER_UI_COMPONENT_BADGE_DESTRUCTIVE: return er_ui_color_with_alpha(theme.design.colors.destructive, 0.20f);
+    case ER_UI_COMPONENT_BADGE_OUTLINE: return er_ui_color_with_alpha(theme.design.colors.card, 0.0f);
     case ER_UI_COMPONENT_BADGE_DEFAULT:
-    default: return theme.shadcn.colors.primary;
+    default: return theme.design.colors.primary;
   }
 }
 
 er_ui_color4_t er_ui_component_badge_text(er_ui_resolved_theme_t theme, er_ui_component_badge_variant_t variant) {
   switch (variant) {
-    case ER_UI_COMPONENT_BADGE_DEFAULT: return theme.shadcn.colors.primary_foreground;
-    case ER_UI_COMPONENT_BADGE_DESTRUCTIVE: return theme.shadcn.colors.destructive;
-    case ER_UI_COMPONENT_BADGE_SECONDARY: return theme.shadcn.colors.secondary_foreground;
-    default: return theme.shadcn.colors.foreground;
+    case ER_UI_COMPONENT_BADGE_DEFAULT: return theme.design.colors.primary_foreground;
+    case ER_UI_COMPONENT_BADGE_DESTRUCTIVE: return theme.design.colors.destructive;
+    case ER_UI_COMPONENT_BADGE_SECONDARY: return theme.design.colors.secondary_foreground;
+    default: return theme.design.colors.foreground;
   }
 }
 

@@ -172,7 +172,7 @@ typedef struct {
 } er_ui_component_accessibility_metadata_t;
 
 #define ER_UI_COMPONENT_COUNT 59u
-#define ER_UI_COMPONENT_SHADCN_REFERENCE_COUNT 55u
+#define ER_UI_COMPONENT_CANONICAL_BASE_COUNT 55u
 #define ER_UI_COMPONENT_TEST_ID_COUNT 16u
 #define ER_UI_COMPONENT_STATE_COUNT 7u
 #define ER_UI_COMPONENT_PREVIEW_BASE_ID 18000u
@@ -221,10 +221,10 @@ const char* er_ui_component_status_label(er_ui_component_status_t status);
 const char* er_ui_component_resolve_kind_label(er_ui_component_resolve_kind_t kind);
 const er_ui_component_spec_t* er_ui_component_at(size_t index);
 size_t er_ui_component_count(void);
-const char* er_ui_component_shadcn_reference_source(void);
-size_t er_ui_component_shadcn_reference_count(void);
-const char* er_ui_component_shadcn_reference_at(size_t index);
-bool er_ui_component_shadcn_reference_covered(const char* slug);
+const char* er_ui_component_canonical_source(void);
+size_t er_ui_component_canonical_count(void);
+const char* er_ui_component_canonical_at(size_t index);
+bool er_ui_component_canonical_covered(const char* slug);
 bool er_ui_component_has_native_renderer(const er_ui_component_spec_t* spec);
 bool er_ui_component_is_exact_port(const er_ui_component_spec_t* spec);
 bool er_ui_component_uses_slot(const er_ui_component_spec_t* spec, const char* slot);
