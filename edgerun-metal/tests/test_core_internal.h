@@ -383,6 +383,38 @@ static void test_acpi_set_checksum(UINT8* bytes, UINTN len, UINTN checksum_offse
   bytes[checksum_offset] = (UINT8)(0u - sum);
 }
 
+static UINT32 g_test_wasm_log_u64_calls = 0u;
+static UINT32 g_test_wasm_log_hex_calls = 0u;
+static UINT32 g_test_wasm_pci_write32_calls = 0u;
+
+static void test_vm_log_u64(INT64 value) {
+  ++g_test_wasm_log_u64_calls;
+  check_int64("wasm log.u64 value", value, 42);
+}
+
+static void test_vm_log_hex(UINT64 value) {
+  ++g_test_wasm_log_hex_calls;
+  check_uint64("wasm log.hex value", value, 15u);
+}
+
+static INT64 test_vm_pci_read32(INT64 bus, INT64 device, INT64 func, INT64 offset) {
+  check_int64("wasm pci.read32 bus", bus, 1);
+  check_int64("wasm pci.read32 device", device, 2);
+  check_int64("wasm pci.read32 func", func, 3);
+  check_int64("wasm pci.read32 offset", offset, 4);
+  return 0x12345678;
+}
+
+static void test_vm_pci_write32(INT64 bus, INT64 device, INT64 func,
+                                INT64 offset, INT64 value) {
+  ++g_test_wasm_pci_write32_calls;
+  check_int64("wasm pci.write32 bus", bus, 5);
+  check_int64("wasm pci.write32 device", device, 6);
+  check_int64("wasm pci.write32 func", func, 7);
+  check_int64("wasm pci.write32 offset", offset, 8);
+  check_int64("wasm pci.write32 value", value, 9);
+}
+
 static INT64 test_vm_mmio_map(INT64 phys, INT64 len) {
   check_int64("wasm mmio.map phys", phys, 4096);
   check_int64("wasm mmio.map len", len, 8);
