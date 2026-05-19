@@ -125,6 +125,30 @@ export i64 main(void) {
 }
 CAPP
 
+cat > "${TMP_DIR}/ui-load32-return.c" <<'CAPP'
+extern i64 ui_emit(i64, i64) __import("edgerun.ui", "emit");
+const i64 OUTBOX = 1024;
+const i64 VALUE_OFFSET = 16;
+memory(1);
+export i64 main(void) {
+  i64 ptr = OUTBOX;
+  store32(ptr, VALUE_OFFSET, 77);
+  return load32(ptr, VALUE_OFFSET);
+}
+CAPP
+
+cat > "${TMP_DIR}/ui-load64-local.c" <<'CAPP'
+extern i64 ui_emit(i64, i64) __import("edgerun.ui", "emit");
+const i64 OUTBOX = 1024;
+memory(1);
+export i64 main(void) {
+  i64 ptr = OUTBOX;
+  store32(ptr, 24, 123);
+  i64 loaded = load64(ptr, 24);
+  return loaded;
+}
+CAPP
+
 cat > "${TMP_DIR}/ui-region-base-call.c" <<'CAPP'
 extern i64 ui_emit(i64, i64) __import("edgerun.ui", "emit");
 extern i64 region_base(i64) __import("edgerun.memory", "region_base");
@@ -174,6 +198,14 @@ compile_twice \
   "${TMP_DIR}/ui-if-assign-a.wasm" \
   "${TMP_DIR}/ui-if-assign-b.wasm"
 compile_twice \
+  "${TMP_DIR}/ui-load32-return.c" \
+  "${TMP_DIR}/ui-load32-return-a.wasm" \
+  "${TMP_DIR}/ui-load32-return-b.wasm"
+compile_twice \
+  "${TMP_DIR}/ui-load64-local.c" \
+  "${TMP_DIR}/ui-load64-local-a.wasm" \
+  "${TMP_DIR}/ui-load64-local-b.wasm"
+compile_twice \
   "${TMP_DIR}/ui-region-base-call.c" \
   "${TMP_DIR}/ui-region-base-call-a.wasm" \
   "${TMP_DIR}/ui-region-base-call-b.wasm"
@@ -195,6 +227,8 @@ check_magic "${TMP_DIR}/ui-local-call-a.wasm"
 check_magic "${TMP_DIR}/ui-store-call-a.wasm"
 check_magic "${TMP_DIR}/ui-local-assign-a.wasm"
 check_magic "${TMP_DIR}/ui-if-assign-a.wasm"
+check_magic "${TMP_DIR}/ui-load32-return-a.wasm"
+check_magic "${TMP_DIR}/ui-load64-local-a.wasm"
 check_magic "${TMP_DIR}/ui-region-base-call-a.wasm"
 check_magic "${TMP_DIR}/ui-region-len-call-a.wasm"
 check_magic "${TMP_DIR}/bus-exec-call-a.wasm"
@@ -368,5 +402,29 @@ CAPP
 expect_reject "unknown c store offset constant" \
   "${TMP_DIR}/bad-c-unknown-store-offset.c" \
   "${TMP_DIR}/bad-c-unknown-store-offset.wasm"
+
+cat > "${TMP_DIR}/bad-c-load-negative-offset.c" <<'CAPP'
+extern i64 ui_emit(i64, i64) __import("edgerun.ui", "emit");
+memory(1);
+export i64 main(void) {
+  return load32(1024, -1);
+}
+CAPP
+
+expect_reject "negative c load offset" \
+  "${TMP_DIR}/bad-c-load-negative-offset.c" \
+  "${TMP_DIR}/bad-c-load-negative-offset.wasm"
+
+cat > "${TMP_DIR}/bad-c-unknown-load-offset.c" <<'CAPP'
+extern i64 ui_emit(i64, i64) __import("edgerun.ui", "emit");
+memory(1);
+export i64 main(void) {
+  return load64(1024, MISSING_OFFSET);
+}
+CAPP
+
+expect_reject "unknown c load offset constant" \
+  "${TMP_DIR}/bad-c-unknown-load-offset.c" \
+  "${TMP_DIR}/bad-c-unknown-load-offset.wasm"
 
 printf 'wasm-compile tests passed\n'

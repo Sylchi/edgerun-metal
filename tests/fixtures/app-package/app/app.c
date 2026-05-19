@@ -1,6 +1,7 @@
 extern i64 ui_emit(i64, i64) __import("edgerun.ui", "emit");
 const i64 APP_OUTBOX = 1024;
 const i64 APP_PACKET_BYTES = 172;
+const i64 APP_PACKET_BYTES_SLOT = 172;
 const i64 UI_ABI_VERSION = 1;
 const i64 UI_COMMAND_COUNT = 3;
 const i64 UI_RECT_COUNT = 1;
@@ -69,7 +70,9 @@ const i64 UI_RECT_MODE_FILL = 0;
 memory(1);
 export i64 main(void) {
   i64 ptr = APP_OUTBOX;
-  i64 len = APP_PACKET_BYTES;
+  i64 len = 0;
+  store32(ptr, APP_PACKET_BYTES_SLOT, APP_PACKET_BYTES);
+  len = load32(ptr, APP_PACKET_BYTES_SLOT);
   store16(ptr, UI_HEADER_ABI, UI_ABI_VERSION);
   store32(ptr, UI_HEADER_COMMANDS, UI_COMMAND_COUNT);
   store32(ptr, UI_HEADER_RECTS, UI_RECT_COUNT);
