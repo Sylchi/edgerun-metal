@@ -17,7 +17,6 @@ static const char g_er_boot_config_firmware_path_prefix[] = {
 #define ER_BOOT_CONFIG_FIRMWARE_SEPARATOR1_OFFSET 23u
 #define ER_BOOT_CONFIG_FIRMWARE_INSTANCE_OFFSET 24u
 #define ER_BOOT_CONFIG_FIRMWARE_INSTANCE_ZERO 0u
-#define ER_BOOT_CONFIG_FIRMWARE_INSTANCE_ZERO_CHAR '0'
 #define ER_BOOT_CONFIG_HEX_NIBBLE_MASK 0x0fu
 #define ER_BOOT_CONFIG_HEX_NIBBLE_BITS 4u
 
@@ -96,7 +95,7 @@ static void er_boot_config_write_firmware_path(ErBootFirmwareSourceConfig* sourc
   er_boot_config_write_hex16(&source->path[ER_BOOT_CONFIG_FIRMWARE_DEVICE_OFFSET],
                              source->pci_device_id);
   source->path[ER_BOOT_CONFIG_FIRMWARE_SEPARATOR1_OFFSET] = '.';
-  source->path[ER_BOOT_CONFIG_FIRMWARE_INSTANCE_OFFSET] = ER_BOOT_CONFIG_FIRMWARE_INSTANCE_ZERO_CHAR;
+  source->path[ER_BOOT_CONFIG_FIRMWARE_INSTANCE_OFFSET] = (char)('0' + source->instance);
   source->path_len = ER_BOOT_CONFIG_FIRMWARE_PATH_LEN;
 }
 
@@ -110,6 +109,7 @@ static UINT8 er_boot_config_firmware_path_canonical(const ErBootFirmwareSourceCo
   er_mem_zero((UINT8*)&expected, (UINTN)sizeof(expected));
   expected.pci_vendor_id = source->pci_vendor_id;
   expected.pci_device_id = source->pci_device_id;
+  expected.instance = source->instance;
   er_boot_config_write_firmware_path(&expected);
   return er_mem_equal((const UINT8*)source->path,
                       (const UINT8*)expected.path,
@@ -120,7 +120,7 @@ static UINT8 er_boot_config_firmware_source_valid(const ErBootFirmwareSourceConf
   if (source == 0 ||
       source->enabled != ER_BOOT_CONFIG_CHANNEL_ENABLED ||
       source->source_kind != ER_BOOT_CONFIG_FIRMWARE_SOURCE_EFI_PARTITION ||
-      source->instance != ER_BOOT_CONFIG_FIRMWARE_INSTANCE_ZERO ||
+      source->instance > ER_BOOT_CONFIG_FIRMWARE_INSTANCE_MAX ||
       source->reserved != 0u ||
       source->pci_vendor_id == 0u ||
       source->pci_device_id == 0u ||
@@ -207,12 +207,23 @@ UINT8 er_boot_config_add_open_wifi_channel(ErBootConfig* config,
 UINT8 er_boot_config_add_efi_firmware_source(ErBootConfig* config,
                                              UINT16 pci_vendor_id,
                                              UINT16 pci_device_id) {
+  return er_boot_config_add_efi_firmware_source_instance(config,
+                                                         pci_vendor_id,
+                                                         pci_device_id,
+                                                         ER_BOOT_CONFIG_FIRMWARE_INSTANCE_ZERO);
+}
+
+UINT8 er_boot_config_add_efi_firmware_source_instance(ErBootConfig* config,
+                                                      UINT16 pci_vendor_id,
+                                                      UINT16 pci_device_id,
+                                                      UINT8 instance) {
   ErBootFirmwareSourceConfig* source;
 
   if (config == 0 ||
       config->firmware_source_count >= ER_BOOT_CONFIG_FIRMWARE_SOURCE_CAPACITY ||
       pci_vendor_id == 0u ||
-      pci_device_id == 0u) {
+      pci_device_id == 0u ||
+      instance > ER_BOOT_CONFIG_FIRMWARE_INSTANCE_MAX) {
     return 0u;
   }
 
@@ -220,7 +231,7 @@ UINT8 er_boot_config_add_efi_firmware_source(ErBootConfig* config,
   er_mem_zero((UINT8*)source, (UINTN)sizeof(*source));
   source->enabled = ER_BOOT_CONFIG_CHANNEL_ENABLED;
   source->source_kind = ER_BOOT_CONFIG_FIRMWARE_SOURCE_EFI_PARTITION;
-  source->instance = ER_BOOT_CONFIG_FIRMWARE_INSTANCE_ZERO;
+  source->instance = instance;
   source->pci_vendor_id = pci_vendor_id;
   source->pci_device_id = pci_device_id;
   er_boot_config_write_firmware_path(source);
@@ -231,12 +242,23 @@ UINT8 er_boot_config_add_efi_firmware_source(ErBootConfig* config,
 const ErBootFirmwareSourceConfig* er_boot_config_find_efi_firmware_source(const ErBootConfig* config,
                                                                           UINT16 pci_vendor_id,
                                                                           UINT16 pci_device_id) {
+  return er_boot_config_find_efi_firmware_source_instance(config,
+                                                          pci_vendor_id,
+                                                          pci_device_id,
+                                                          ER_BOOT_CONFIG_FIRMWARE_INSTANCE_ZERO);
+}
+
+const ErBootFirmwareSourceConfig* er_boot_config_find_efi_firmware_source_instance(const ErBootConfig* config,
+                                                                                   UINT16 pci_vendor_id,
+                                                                                   UINT16 pci_device_id,
+                                                                                   UINT8 instance) {
   UINT16 i;
   const ErBootFirmwareSourceConfig* source;
 
   if (config == 0 ||
       pci_vendor_id == 0u ||
       pci_device_id == 0u ||
+      instance > ER_BOOT_CONFIG_FIRMWARE_INSTANCE_MAX ||
       config->firmware_source_count > ER_BOOT_CONFIG_FIRMWARE_SOURCE_CAPACITY) {
     return 0;
   }
@@ -245,7 +267,8 @@ const ErBootFirmwareSourceConfig* er_boot_config_find_efi_firmware_source(const 
     source = &config->firmware_sources[i];
     if (er_boot_config_firmware_source_valid(source) != 0u &&
         source->pci_vendor_id == pci_vendor_id &&
-        source->pci_device_id == pci_device_id) {
+        source->pci_device_id == pci_device_id &&
+        source->instance == instance) {
       return source;
     }
   }

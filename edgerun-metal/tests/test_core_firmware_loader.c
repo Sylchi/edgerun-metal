@@ -63,6 +63,8 @@ static void test_firmware_loader(void) {
               er_boot_config_add_channel(&config, ER_CHANNEL_KIND_NATIVE_ETH, "edgerun0", 8u), 1);
   check_int64("firmware loader add source",
               er_boot_config_add_efi_firmware_source(&config, 0x10ecu, 0x8922u), 1);
+  check_int64("firmware loader add source instance",
+              er_boot_config_add_efi_firmware_source_instance(&config, 0x10ecu, 0x8922u, 1u), 1);
   config.generation = 1u;
   check_int64("firmware loader config valid", er_boot_config_valid(&config), 1);
 
@@ -92,6 +94,24 @@ static void test_firmware_loader(void) {
   check_int64("firmware loader copied bytes",
               er_mem_equal(firmware_out, firmware_bytes, (UINTN)sizeof(firmware_bytes)), 1);
   check_int64("firmware loader hash nonzero", er_hash_nonzero(&image.firmware_hash), 1);
+
+  reader.expected_path = "/EFI/firmware/10ec.8922.1";
+  reader.called = 0u;
+  check_int64("firmware loader for pci instance",
+              er_firmware_loader_load_for_pci_instance(&crypto,
+                                                       &config,
+                                                       0x10ecu,
+                                                       0x8922u,
+                                                       1u,
+                                                       test_firmware_read,
+                                                       &reader,
+                                                       firmware_out,
+                                                       (UINTN)sizeof(firmware_out),
+                                                       &image),
+              1);
+  check_int64("firmware loader instance reader called", reader.called, 1);
+  check_uint64("firmware loader image instance", image.instance, 1u);
+  check_cstr("firmware loader image instance path", image.path, "/EFI/firmware/10ec.8922.1");
 
   reader.called = 0u;
   check_int64("firmware loader rejects missing source",
