@@ -27,7 +27,7 @@ check: repo-check repo-test crypto-test edgerun-check varfont-test ui-core-test
 
 er-build:
 	mkdir -p .build
-	$(HOST_CC) -std=c11 -Wall -Wextra -Werror -O2 $(HOST_LDFLAGS) -o .build/er-build tools/er-build/main.c
+	tmp=".build/er-build.$$$$.tmp"; trap 'rm -f "$$tmp"' EXIT; $(HOST_CC) -std=c11 -Wall -Wextra -Werror -O2 $(HOST_LDFLAGS) -o "$$tmp" tools/er-build/main.c; mv "$$tmp" .build/er-build
 
 repo-check: er-build
 	./.build/er-build repo-check
