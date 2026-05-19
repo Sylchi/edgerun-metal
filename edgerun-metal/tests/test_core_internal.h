@@ -23,6 +23,7 @@
 #include "er_identity.h"
 #include "er_iwlwifi.h"
 #include "er_hw_relay.h"
+#include "er_jurisdiction.h"
 #include "er_mt7922.h"
 #include "er_native_eth.h"
 #include "er_native_boot.h"
