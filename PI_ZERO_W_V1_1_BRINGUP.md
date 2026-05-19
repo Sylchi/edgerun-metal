@@ -28,9 +28,10 @@ Raspberry Pi firmware -> kernel.img
 ```
 
 The current `kernel.img` is the first repo-owned ARMv6 payload boundary. The
-current payload initializes the BCM2835 mini UART on GPIO14/GPIO15 and prints a
-deterministic boot banner at 115200 baud. The staged `config.txt` pins
-`core_freq=250` so the mini UART divisor is explicit.
+current payload initializes the BCM2835 mini UART on GPIO14/GPIO15, prints a
+deterministic boot banner and board constants at 115200 baud, then emits an
+`alive=0x........` heartbeat line. The staged `config.txt` pins `core_freq=250`
+so the mini UART divisor is explicit.
 
 ## Board Facts Captured In Code
 
