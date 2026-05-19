@@ -17,6 +17,20 @@
 #define ER_BOOT_AUTHORITY_HANDLE_INVALID 0u
 #define ER_BOOT_CONFIG_GENERATION_INVALID 0u
 #define ER_BOOT_ONBOARDING_SELECTED_INVALID ER_BOOT_AUTHORITY_PROFILE_CAPACITY
+#define ER_BOOT_RUNTIME_CAPABILITY_ABI_VERSION 1u
+
+#define ER_BOOT_LOCAL_STORAGE_KIND_NONE 0u
+#define ER_BOOT_LOCAL_STORAGE_KIND_EFI_SYSTEM_PARTITION 1u
+#define ER_BOOT_LOCAL_STORAGE_KIND_SD_CARD 2u
+
+#define ER_BOOT_WIFI_KIND_NONE 0u
+#define ER_BOOT_WIFI_KIND_OPEN_L2 1u
+#define ER_BOOT_WIFI_KIND_CYW43439_SDIO 2u
+
+#define ER_BOOT_UPDATE_READY 0u
+#define ER_BOOT_UPDATE_BLOCKED_NO_WIFI 1u
+#define ER_BOOT_UPDATE_BLOCKED_NO_WRITABLE_STORAGE 2u
+#define ER_BOOT_UPDATE_BLOCKED_NO_ARTIFACT_STORE 3u
 
 typedef enum {
   ER_BOOT_SECURE_BOOT_UNKNOWN = 0,
@@ -65,6 +79,22 @@ typedef struct {
 } ErBootAuthorityProfile;
 
 typedef struct {
+  UINT16 abi_version;
+  UINT8 wifi_kind;
+  UINT8 wifi_ready;
+  UINT8 local_storage_kind;
+  UINT8 local_storage_writable;
+  UINT8 update_artifact_store_ready;
+  UINT8 update_ready;
+  UINT8 update_blocked_reason;
+  UINT8 wifi_channel;
+  UINT16 reserved;
+  UINT64 local_storage_block_bytes;
+  UINT64 local_storage_block_count;
+  UINT64 update_artifact_capacity_bytes;
+} ErBootRuntimeCapabilities;
+
+typedef struct {
   UINT8 state;
   UINT8 selected_authority;
   UINT16 choice_count;
@@ -82,6 +112,7 @@ typedef struct {
   UINT8 boot_admission_present;
   UINT8 reserved[3];
   ErBootAdmissionRecord boot_admission;
+  ErBootRuntimeCapabilities runtime_capabilities;
   ErBootAuthorityProfile authorities[ER_BOOT_AUTHORITY_PROFILE_CAPACITY];
   ErBootDetectedDevice devices[ER_BOOT_DETECTED_DEVICE_CAPACITY];
 } ErBootServicesReport;
@@ -98,6 +129,19 @@ UINT8 er_boot_services_set_tpm_limits(ErBootServicesReport* report,
 UINT8 er_boot_services_set_boot_admission(ErBootServicesReport* report,
                                           const ErCryptoProvider* crypto,
                                           const ErBootAdmissionRecord* record);
+UINT8 er_boot_services_set_wifi_runtime(ErBootServicesReport* report,
+                                        UINT8 wifi_kind,
+                                        UINT8 wifi_ready,
+                                        UINT8 wifi_channel);
+UINT8 er_boot_services_set_local_storage(ErBootServicesReport* report,
+                                         UINT8 storage_kind,
+                                         UINT8 writable,
+                                         UINT64 block_bytes,
+                                         UINT64 block_count);
+UINT8 er_boot_services_set_update_artifact_store(ErBootServicesReport* report,
+                                                 UINT8 ready,
+                                                 UINT64 capacity_bytes);
+UINT8 er_boot_services_update_runtime_capabilities(ErBootServicesReport* report);
 UINT8 er_boot_services_add_pci_device(ErBootServicesReport* report,
                                       const ErPciDeviceSnapshot* snapshot);
 UINT8 er_boot_services_add_authority(ErBootServicesReport* report,

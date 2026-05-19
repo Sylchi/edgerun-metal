@@ -35,6 +35,57 @@ static void test_boot_services_boundary(void) {
                report.secure_boot_state, ER_BOOT_SECURE_BOOT_UNKNOWN);
   check_uint64("boot services selected invalid",
                report.selected_authority, ER_BOOT_AUTHORITY_PROFILE_CAPACITY);
+  check_uint64("boot services runtime cap abi",
+               report.runtime_capabilities.abi_version,
+               ER_BOOT_RUNTIME_CAPABILITY_ABI_VERSION);
+  check_uint64("boot services update blocked without wifi",
+               report.runtime_capabilities.update_blocked_reason,
+               ER_BOOT_UPDATE_BLOCKED_NO_WIFI);
+  check_int64("boot services reject impossible wifi",
+              er_boot_services_set_wifi_runtime(&report,
+                                                ER_BOOT_WIFI_KIND_NONE,
+                                                1u,
+                                                0u),
+              0);
+  check_int64("boot services set wifi",
+              er_boot_services_set_wifi_runtime(&report,
+                                                ER_BOOT_WIFI_KIND_CYW43439_SDIO,
+                                                1u,
+                                                6u),
+              1);
+  check_uint64("boot services update blocked without storage",
+               report.runtime_capabilities.update_blocked_reason,
+               ER_BOOT_UPDATE_BLOCKED_NO_WRITABLE_STORAGE);
+  check_int64("boot services reject empty storage",
+              er_boot_services_set_local_storage(&report,
+                                                 ER_BOOT_LOCAL_STORAGE_KIND_SD_CARD,
+                                                 1u,
+                                                 0u,
+                                                 1024u),
+              0);
+  check_int64("boot services set storage",
+              er_boot_services_set_local_storage(&report,
+                                                 ER_BOOT_LOCAL_STORAGE_KIND_SD_CARD,
+                                                 1u,
+                                                 512u,
+                                                 1024u),
+              1);
+  check_uint64("boot services update blocked without artifact store",
+               report.runtime_capabilities.update_blocked_reason,
+               ER_BOOT_UPDATE_BLOCKED_NO_ARTIFACT_STORE);
+  check_int64("boot services reject zero artifact capacity",
+              er_boot_services_set_update_artifact_store(&report, 1u, 0u),
+              0);
+  check_int64("boot services set artifact store",
+              er_boot_services_set_update_artifact_store(&report,
+                                                         1u,
+                                                         512u * 1024u),
+              1);
+  check_uint64("boot services update ready",
+               report.runtime_capabilities.update_ready, 1u);
+  check_uint64("boot services update ready reason",
+               report.runtime_capabilities.update_blocked_reason,
+               ER_BOOT_UPDATE_READY);
   check_int64("boot services unknown blocked",
               er_boot_services_decide_action(&report), ER_BOOT_SERVICES_ACTION_BLOCKED);
   check_cstr("boot services blocked label",
