@@ -58,16 +58,17 @@ Source the zsh helper once from your shell startup file:
 source /path/to/repo/codex/edgerun-c.zsh
 ```
 
-After that, call prompt mode without spelling out `.build/codex --prompt`:
+After that, call prompt mode with the short canonical `c` command instead of
+spelling out `.build/codex --prompt`:
 
 ```zsh
-codex inspect edgerun-c and explain what it can do
-codex --root /path/to/repo find the Codex client entry point
+c inspect edgerun-c and explain what it can do
+c --root /path/to/repo find the Codex client entry point
 ```
 
 The helper builds `.build/codex` when the binary is missing or older than the C
-sources. Use `codex repl` for the interactive workspace REPL, or `codex raw ...`
-to pass exact arguments to the compiled binary.
+sources. Use `c repl` for the interactive workspace REPL, or `c raw ...` to pass
+exact arguments to the compiled binary.
 
 ## Run
 
@@ -137,10 +138,3 @@ loop. The highest-impact next improvements are:
 - `commit`
 - `commit-verified`
 - `quit`
-
-`commit` is deliberately simple: it writes the full staged file contents to disk.
-It does not run tests, formatters, hooks, or `git commit`.
-
-`commit-verified` writes pending proposals, runs `tools/repo-progress.sh` for
-the scopes touched by those proposals, stages only the proposed paths, and runs
-`git commit` only after every verification step passes.

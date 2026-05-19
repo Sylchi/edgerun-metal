@@ -1,16 +1,16 @@
-# Source this file from zsh to add the interactive edgerun-c convenience command.
+# Source this file from zsh to add the interactive Codex C convenience command.
 #
 # Example ~/.zshrc line:
 #   source /path/to/repo/codex/edgerun-c.zsh
 #
 # Then prompt the agent from any directory with:
-#   codex fix the failing ui-core render test
-#   codex --root /path/to/repo inspect the metal boot path
+#   c fix the failing ui-core render test
+#   c --root /path/to/repo inspect the metal boot path
 #
-# Use `codex repl` for the underlying REPL, or `codex raw ...` to pass exact
-# arguments through to the compiled binary.
+# Use `c repl` for the underlying REPL, or `c raw ...` to pass exact arguments
+# through to the compiled binary.
 
-codex() {
+c() {
   emulate -L zsh
   setopt no_unset
 
@@ -49,9 +49,9 @@ codex() {
       return $?
       ;;
     --help|-h)
-      print 'usage: codex [--root PATH] [--] PROMPT WORDS...'
-      print '       codex repl [PATH]'
-      print '       codex raw [edgerun-c arguments...]'
+      print 'usage: c [--root PATH] [--] PROMPT WORDS...'
+      print '       c repl [PATH]'
+      print '       c raw [codex binary arguments...]'
       print ''
       print 'Prompts default to the current directory as the repository root.'
       print 'The wrapper builds .build/codex when the binary is missing or stale.'
@@ -59,7 +59,7 @@ codex() {
       ;;
     --root)
       if (( $# < 3 )); then
-        print -u2 'codex: --root requires PATH and prompt text'
+        print -u2 'c: --root requires PATH and prompt text'
         return 2
       fi
       root=$2
@@ -72,7 +72,7 @@ codex() {
   fi
 
   if (( $# == 0 )); then
-    print -u2 'codex: prompt text is required'
+    print -u2 'c: prompt text is required'
     return 2
   fi
 
