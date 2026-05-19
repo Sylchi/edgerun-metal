@@ -18,7 +18,9 @@ static void test_pi_zero2w_bringup_boundary(void) {
     PI_TEST_EMMC_CMD5_VALUE = 0x05020000u,
     PI_TEST_EMMC_CMD3_VALUE = 0x031a0000u,
     PI_TEST_EMMC_CMD52_VALUE = 0x341a0000u,
-    PI_TEST_ZERO_W_UART_ALT5_FSEL1 = 0x00012000u
+    PI_TEST_ZERO_W_UART_ALT5_FSEL1 = 0x00012000u,
+    PI_TEST_SERIAL_HEX_DIGIT_A = 10u,
+    PI_TEST_SERIAL_HEX_DIGIT_F = 15u
   };
 
   ErPiZero2wMmio mmio;
@@ -64,6 +66,9 @@ static void test_pi_zero2w_bringup_boundary(void) {
   check_uint64("pi zero w profile wifi",
                zero_w_profile->wifi_kind,
                ER_BOOT_WIFI_KIND_CYW43438_SDIO);
+  check_uint64("pi zero w uart peripheral base",
+               ER_PI_ZERO_W_V1_1_UART_PERIPHERAL_BASE,
+               ER_PI_ZERO_W_V1_1_PERIPHERAL_BASE);
 
   check_int64("pi mailbox reject end tag",
               er_pi_mailbox_two_value_request(ER_PI_MAILBOX_TAG_LAST,
@@ -279,4 +284,16 @@ static void test_pi_zero2w_bringup_boundary(void) {
                    ER_PI_GPIO_PIN_UART_RX,
                    ER_PI_GPIO_ALT5),
                PI_TEST_ZERO_W_UART_ALT5_FSEL1);
+  check_uint64("pi zero w serial hex digit zero",
+               (UINT8)er_pi_serial_hex_digit(0u),
+               (UINT8)'0');
+  check_uint64("pi zero w serial hex digit nine",
+               (UINT8)er_pi_serial_hex_digit(9u),
+               (UINT8)'9');
+  check_uint64("pi zero w serial hex digit a",
+               (UINT8)er_pi_serial_hex_digit(PI_TEST_SERIAL_HEX_DIGIT_A),
+               (UINT8)'a');
+  check_uint64("pi zero w serial hex digit f",
+               (UINT8)er_pi_serial_hex_digit(PI_TEST_SERIAL_HEX_DIGIT_F),
+               (UINT8)'f');
 }

@@ -9,6 +9,7 @@
 
 #include "er_types.h"
 
+#define ER_PI_ZERO_W_V1_1_UART_PERIPHERAL_BASE 0x20000000u
 #define ER_PI_ZERO_W_V1_1_GPIO_BASE 0x20200000u
 #define ER_PI_ZERO_W_V1_1_AUX_BASE 0x20215000u
 
@@ -48,6 +49,12 @@
 #define ER_PI_AUX_MU_BAUD_115200_CORE_250MHZ 270u
 
 #define ER_PI_ZERO_W_V1_1_UART_GPIO_DELAY_TICKS 150u
+#define ER_PI_ZERO_W_V1_1_UART_HEARTBEAT_DELAY_TICKS 4000000u
+
+#define ER_PI_SERIAL_HEX_DIGITS_U32 8u
+#define ER_PI_SERIAL_HEX_NIBBLE_MASK 0x0fu
+#define ER_PI_SERIAL_HEX_NIBBLE_BITS 4u
+#define ER_PI_SERIAL_HEX_DECIMAL_DIGITS 10u
 
 static inline UINT32 er_pi_gpio_fsel_shift(UINT32 pin) {
   return (pin % ER_PI_GPIO_FSEL_PIN_MOD) * ER_PI_GPIO_FSEL_BITS_PER_PIN;
@@ -61,6 +68,15 @@ static inline UINT32 er_pi_gpio_fsel_alt(UINT32 current,
 
   return (current & ~mask) |
          ((alt_function & ER_PI_GPIO_FSEL_MASK) << shift);
+}
+
+static inline char er_pi_serial_hex_digit(UINT32 value) {
+  UINT32 digit = value & ER_PI_SERIAL_HEX_NIBBLE_MASK;
+
+  if (digit < ER_PI_SERIAL_HEX_DECIMAL_DIGITS) {
+    return (char)('0' + digit);
+  }
+  return (char)('a' + (digit - ER_PI_SERIAL_HEX_DECIMAL_DIGITS));
 }
 
 #endif

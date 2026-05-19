@@ -115,13 +115,49 @@ static void er_pi_zero_w_v1_1_uart_puts(const char* text) {
   }
 }
 
+static void er_pi_zero_w_v1_1_uart_put_hex32(UINT32 value) {
+  UINT32 i;
+  UINT32 shift;
+
+  er_pi_zero_w_v1_1_uart_puts("0x");
+  for (i = 0u; i < ER_PI_SERIAL_HEX_DIGITS_U32; ++i) {
+    shift = (ER_PI_SERIAL_HEX_DIGITS_U32 - 1u - i) *
+            ER_PI_SERIAL_HEX_NIBBLE_BITS;
+    er_pi_zero_w_v1_1_uart_putc(
+        er_pi_serial_hex_digit(value >> shift));
+  }
+}
+
+static void er_pi_zero_w_v1_1_uart_put_key_hex32(const char* key,
+                                                 UINT32 value) {
+  er_pi_zero_w_v1_1_uart_puts(key);
+  er_pi_zero_w_v1_1_uart_put_hex32(value);
+  er_pi_zero_w_v1_1_uart_puts("\n");
+}
+
 void er_pi_zero_w_v1_1_main(void) {
+  UINT32 heartbeat = 0u;
+
   er_pi_zero_w_v1_1_uart_init();
   er_pi_zero_w_v1_1_uart_puts("EdgeRun Pi Zero W v1.1 ARMv6 boot\n");
   er_pi_zero_w_v1_1_uart_puts("board=pi-zero-w-v1_1 radio=cyw43438\n");
+  er_pi_zero_w_v1_1_uart_put_key_hex32(
+      "peripheral_base=", ER_PI_ZERO_W_V1_1_UART_PERIPHERAL_BASE);
+  er_pi_zero_w_v1_1_uart_put_key_hex32(
+      "gpio_base=", ER_PI_ZERO_W_V1_1_GPIO_BASE);
+  er_pi_zero_w_v1_1_uart_put_key_hex32(
+      "aux_base=", ER_PI_ZERO_W_V1_1_AUX_BASE);
+  er_pi_zero_w_v1_1_uart_put_key_hex32(
+      "boot_magic=", ER_PI_ZERO_W_V1_1_BOOT_MAGIC);
 
   for (;;) {
     g_er_pi_zero_w_v1_1_boot_magic = ER_PI_ZERO_W_V1_1_BOOT_MAGIC;
+    er_pi_zero_w_v1_1_uart_puts("alive=");
+    er_pi_zero_w_v1_1_uart_put_hex32(heartbeat);
+    er_pi_zero_w_v1_1_uart_puts("\n");
+    heartbeat += 1u;
+    er_pi_zero_w_v1_1_delay(
+        ER_PI_ZERO_W_V1_1_UART_HEARTBEAT_DELAY_TICKS);
   }
 }
 
