@@ -6,6 +6,21 @@
 
 #define CODEX_CONTEXT_TREE_PATH_LIMIT 200u
 #define CODEX_CONTEXT_PROCESS_LINE_LIMIT 40u
+#define CODEX_FENCE_MARKER_LEN 3u
+#define CODEX_MARKDOWN_HEADING_MAX_DEPTH 6u
+
+typedef enum {
+    CODEX_RESPONSE_LANG_TEXT = 0,
+    CODEX_RESPONSE_LANG_C,
+    CODEX_RESPONSE_LANG_MARKDOWN,
+    CODEX_RESPONSE_LANG_OTHER
+} CodexResponseLanguage;
+
+typedef struct {
+    Buffer line;
+    bool in_fence;
+    CodexResponseLanguage fence_language;
+} CodexResponseRenderState;
 
 static int context_path_compare(const void *a, const void *b) {
     const char *const *pa = (const char *const *)a;
@@ -110,6 +125,345 @@ static char *enhanced_initial_context_text_new(Workspace *ws) {
     return b.data;
 }
 
+static void codex_response_render_state_init(CodexResponseRenderState *state) {
+    buffer_init(&state->line);
+    state->in_fence = false;
+    state->fence_language = CODEX_RESPONSE_LANG_TEXT;
+}
+
+static void codex_response_render_state_free(CodexResponseRenderState *state) {
+    free(state->line.data);
+    state->line.data = NULL;
+    state->line.len = 0;
+    state->line.cap = 0;
+}
+
+static size_t codex_skip_spaces(const char *line, size_t len, size_t i) {
+    while (i < len && (line[i] == ' ' || line[i] == '\t')) i++;
+    return i;
+}
+
+static bool codex_language_token_matches(const char *token, size_t token_len, const char *name) {
+    size_t name_len = strlen(name);
+    if (token_len != name_len) return false;
+    for (size_t i = 0; i < token_len; i++) {
+        if (lower_char(token[i]) != lower_char(name[i])) return false;
+    }
+    return true;
+}
+
+static CodexResponseLanguage codex_response_language_for_token(const char *token, size_t token_len) {
+    if (token_len == 0) return CODEX_RESPONSE_LANG_OTHER;
+    if (codex_language_token_matches(token, token_len, "c") ||
+        codex_language_token_matches(token, token_len, "h")) {
+        return CODEX_RESPONSE_LANG_C;
+    }
+    if (codex_language_token_matches(token, token_len, "md") ||
+        codex_language_token_matches(token, token_len, "markdown")) {
+        return CODEX_RESPONSE_LANG_MARKDOWN;
+    }
+    return CODEX_RESPONSE_LANG_OTHER;
+}
+
+static bool codex_markdown_fence_line(const char *line, size_t len, CodexResponseLanguage *out_language) {
+    size_t i = codex_skip_spaces(line, len, 0);
+    if (i + CODEX_FENCE_MARKER_LEN > len) return false;
+    if (memcmp(line + i, "```", CODEX_FENCE_MARKER_LEN) != 0) return false;
+    i += CODEX_FENCE_MARKER_LEN;
+    i = codex_skip_spaces(line, len, i);
+    size_t token_start = i;
+    while (i < len && line[i] != ' ' && line[i] != '\t' && line[i] != '`' && line[i] != '{') i++;
+    *out_language = codex_response_language_for_token(line + token_start, i - token_start);
+    return true;
+}
+
+static size_t codex_markdown_heading_depth(const char *line, size_t len) {
+    size_t depth = 0;
+    while (depth < len && line[depth] == '#') depth++;
+    if (depth == 0 || depth > CODEX_MARKDOWN_HEADING_MAX_DEPTH) return 0;
+    if (depth < len && line[depth] != ' ' && line[depth] != '\t') return 0;
+    return depth;
+}
+
+static bool codex_markdown_list_marker(const char *line, size_t len, size_t *marker_len) {
+    size_t i = codex_skip_spaces(line, len, 0);
+    if (i + 1u >= len) return false;
+    switch (line[i]) {
+        case '-':
+        case '*':
+            if (line[i + 1u] == ' ' || line[i + 1u] == '\t') {
+                *marker_len = i + 1u;
+                return true;
+            }
+            return false;
+        default:
+            break;
+    }
+    if (!isdigit((unsigned char)line[i])) return false;
+    while (i < len && isdigit((unsigned char)line[i])) i++;
+    if (i + 1u < len && line[i] == '.' && (line[i + 1u] == ' ' || line[i + 1u] == '\t')) {
+        *marker_len = i + 1u;
+        return true;
+    }
+    return false;
+}
+
+static void print_highlighted_markdown_inline(const char *line, size_t len) {
+    for (size_t i = 0; i < len;) {
+        switch (line[i]) {
+            case '`': {
+                size_t start = i++;
+                while (i < len && line[i] != '`') i++;
+                if (i < len) i++;
+                printf("%s%.*s%s", color_code(stdout, ANSI_GREEN), (int)(i - start), line + start, color_code(stdout, ANSI_RESET));
+                break;
+            }
+            case '*': {
+                if (i + 1u < len && line[i + 1u] == '*') {
+                    size_t start = i;
+                    i += 2u;
+                    while (i + 1u < len && !(line[i] == '*' && line[i + 1u] == '*')) i++;
+                    if (i + 1u < len) i += 2u;
+                    printf("%s%.*s%s", color_code(stdout, ANSI_MAGENTA), (int)(i - start), line + start, color_code(stdout, ANSI_RESET));
+                } else {
+                    putchar(line[i++]);
+                }
+                break;
+            }
+            case '[': {
+                size_t start = i++;
+                while (i < len && line[i] != ']') i++;
+                if (i < len && i + 1u < len && line[i + 1u] == '(') {
+                    i += 2u;
+                    while (i < len && line[i] != ')') i++;
+                    if (i < len) i++;
+                    printf("%s%.*s%s", color_code(stdout, ANSI_CYAN), (int)(i - start), line + start, color_code(stdout, ANSI_RESET));
+                } else {
+                    printf("%.*s", (int)(i - start), line + start);
+                }
+                break;
+            }
+            default:
+                putchar(line[i++]);
+                break;
+        }
+    }
+}
+
+static void print_highlighted_markdown_line(const char *line, size_t len) {
+    size_t heading_depth = codex_markdown_heading_depth(line, len);
+    if (heading_depth != 0) {
+        printf("%s%s%.*s%s", color_code(stdout, ANSI_BOLD), color_code(stdout, ANSI_CYAN), (int)len, line, color_code(stdout, ANSI_RESET));
+        return;
+    }
+    size_t marker_len = 0;
+    if (codex_markdown_list_marker(line, len, &marker_len)) {
+        printf("%s%.*s%s", color_code(stdout, ANSI_YELLOW), (int)marker_len, line, color_code(stdout, ANSI_RESET));
+        print_highlighted_markdown_inline(line + marker_len, len - marker_len);
+        return;
+    }
+    if (len > 0 && line[0] == '>') {
+        printf("%s%.*s%s", color_code(stdout, ANSI_GRAY), (int)len, line, color_code(stdout, ANSI_RESET));
+        return;
+    }
+    print_highlighted_markdown_inline(line, len);
+}
+
+static void codex_render_plain_code_line(const char *line, size_t len) {
+    printf("%s%.*s%s", color_code(stdout, ANSI_DIM), (int)len, line, color_code(stdout, ANSI_RESET));
+}
+
+static void codex_render_response_line(CodexResponseRenderState *state, const char *line, size_t len) {
+    CodexResponseLanguage fence_language = CODEX_RESPONSE_LANG_TEXT;
+    if (codex_markdown_fence_line(line, len, &fence_language)) {
+        printf("%s%.*s%s", color_code(stdout, ANSI_GRAY), (int)len, line, color_code(stdout, ANSI_RESET));
+        if (state->in_fence) {
+            state->in_fence = false;
+            state->fence_language = CODEX_RESPONSE_LANG_TEXT;
+        } else {
+            state->in_fence = true;
+            state->fence_language = fence_language;
+        }
+        return;
+    }
+
+    if (!state->in_fence) {
+        print_highlighted_markdown_line(line, len);
+        return;
+    }
+
+    switch (state->fence_language) {
+        case CODEX_RESPONSE_LANG_C:
+            print_highlighted_c_line(line, len);
+            break;
+        case CODEX_RESPONSE_LANG_MARKDOWN:
+            print_highlighted_markdown_line(line, len);
+            break;
+        case CODEX_RESPONSE_LANG_TEXT:
+        case CODEX_RESPONSE_LANG_OTHER:
+            codex_render_plain_code_line(line, len);
+            break;
+    }
+}
+
+static void codex_render_response_delta(CodexResponseRenderState *state, const char *delta) {
+    for (const char *p = delta; *p; p++) {
+        if (*p == '\n') {
+            if (state->line.data) codex_render_response_line(state, state->line.data, state->line.len);
+            putchar('\n');
+            state->line.len = 0;
+            if (state->line.data) state->line.data[0] = 0;
+        } else {
+            buffer_append_c(&state->line, *p);
+        }
+    }
+    fflush(stdout);
+}
+
+static void codex_render_response_flush(CodexResponseRenderState *state) {
+    if (state->line.len == 0) return;
+    codex_render_response_line(state, state->line.data, state->line.len);
+    state->line.len = 0;
+    if (state->line.data) state->line.data[0] = 0;
+    fflush(stdout);
+}
+
+static void highlighted_process_sse_json_event(AgentTurn *turn, CodexResponseRenderState *render, const char *event_json) {
+    char *type = json_get_string_dup(event_json, "type");
+    if (!type) return;
+    if (strcmp(type, "response.output_text.delta") == 0) {
+        char *delta = json_get_string_dup(event_json, "delta");
+        if (delta) {
+            codex_render_response_delta(render, delta);
+            agent_turn_append_text(turn, delta);
+            free(delta);
+        }
+    } else if (strcmp(type, "response.output_item.done") == 0) {
+        char *item = json_dup_balanced_value(json_find_key_value_start(event_json, "item"));
+        if (item) process_output_item_json(turn, item);
+    } else if (strcmp(type, "response.failed") == 0) {
+        char *message = json_get_string_dup(event_json, "message");
+        if (message) {
+            fprintf(stderr, "\nresponse failed: %s\n", message);
+            free(message);
+        } else {
+            fprintf(stderr, "\nresponse failed\n");
+        }
+    }
+    free(type);
+}
+
+static AgentTurn highlighted_codex_stream_turn(const char *model, const CodexAuth *auth, const CodexSession *session, JsonItems *history) {
+    AgentTurn turn;
+    agent_turn_init(&turn);
+    CodexResponseRenderState render;
+    codex_response_render_state_init(&render);
+    char *body = build_responses_body_new(model, session, history);
+    debug_write_body(body);
+    char *body_path = write_temp_body_new(body);
+    free(body);
+
+    char *body_q = shell_quote_new(body_path);
+    char *url_q = shell_quote_new(CODEX_BACKEND_URL);
+    Buffer auth_header;
+    buffer_init(&auth_header);
+    buffer_appendf(&auth_header, "authorization: Bearer %s", auth->access_token);
+    char *auth_header_q = shell_quote_new(auth_header.data);
+    Buffer request_id_header;
+    buffer_init(&request_id_header);
+    buffer_appendf(&request_id_header, "x-client-request-id: %s", session->thread_id);
+    char *request_id_header_q = shell_quote_new(request_id_header.data);
+    Buffer session_id_header;
+    buffer_init(&session_id_header);
+    buffer_appendf(&session_id_header, "session_id: %s", session->session_id);
+    char *session_id_header_q = shell_quote_new(session_id_header.data);
+    Buffer thread_id_header;
+    buffer_init(&thread_id_header);
+    buffer_appendf(&thread_id_header, "thread_id: %s", session->thread_id);
+    char *thread_id_header_q = shell_quote_new(thread_id_header.data);
+    Buffer installation_header;
+    buffer_init(&installation_header);
+    buffer_appendf(&installation_header, "x-codex-installation-id: %s", session->installation_id);
+    char *installation_header_q = shell_quote_new(installation_header.data);
+    Buffer window_header;
+    buffer_init(&window_header);
+    buffer_appendf(&window_header, "x-codex-window-id: %s", session->window_id);
+    char *window_header_q = shell_quote_new(window_header.data);
+    char *account_header_q = NULL;
+    if (auth->account_id) {
+        Buffer account_header;
+        buffer_init(&account_header);
+        buffer_appendf(&account_header, "ChatGPT-Account-ID: %s", auth->account_id);
+        account_header_q = shell_quote_new(account_header.data);
+        free(account_header.data);
+    }
+
+    Buffer cmd;
+    buffer_init(&cmd);
+    buffer_appendf(&cmd,
+        "curl -sS -N --fail-with-body -X POST %s "
+        "-H 'accept: text/event-stream' "
+        "-H 'content-type: application/json' "
+        "-H 'version: " CODEX_BACKEND_VERSION "' "
+        "-H %s -H %s -H %s -H %s -H %s -H %s ",
+        url_q, auth_header_q, request_id_header_q, session_id_header_q,
+        thread_id_header_q, installation_header_q, window_header_q);
+    if (account_header_q) {
+        buffer_appendf(&cmd, "-H %s ", account_header_q);
+    }
+    buffer_appendf(&cmd, "--data-binary @%s", body_q);
+
+    FILE *pipe = popen(cmd.data, "r");
+    if (!pipe) die("failed to start curl; install curl or provide a local HTTPS transport");
+
+    char *line = NULL;
+    size_t cap = 0;
+    Buffer event;
+    buffer_init(&event);
+    while (getline(&line, &cap, pipe) != -1) {
+        trim_newline(line);
+        if (line[0] == 0) {
+            if (event.len > 0) {
+                highlighted_process_sse_json_event(&turn, &render, event.data);
+                bool done = response_completed(event.data);
+                event.len = 0;
+                if (event.data) event.data[0] = 0;
+                if (done) break;
+            }
+        } else if (starts_with(line, "data: ")) {
+            if (event.len) buffer_append_c(&event, '\n');
+            buffer_append(&event, line + 6, strlen(line + 6));
+        } else if (getenv("EDGERUN_C_DEBUG")) {
+            fprintf(stderr, "[debug] non-sse: %s\n", line);
+        }
+    }
+    codex_render_response_flush(&render);
+    codex_response_render_state_free(&render);
+    free(line);
+    int rc = pclose(pipe);
+    if (rc != 0) fprintf(stderr, "\ncurl exited with status %d\n", rc);
+    unlink(body_path);
+    free(body_path);
+    free(body_q);
+    free(url_q);
+    free(auth_header.data);
+    free(auth_header_q);
+    free(request_id_header.data);
+    free(request_id_header_q);
+    free(session_id_header.data);
+    free(session_id_header_q);
+    free(thread_id_header.data);
+    free(thread_id_header_q);
+    free(installation_header.data);
+    free(installation_header_q);
+    free(window_header.data);
+    free(window_header_q);
+    free(account_header_q);
+    free(cmd.data);
+    free(event.data);
+    return turn;
+}
+
 static int run_agent_prompt(Workspace *ws, const char *prompt) {
     const char *model = getenv("CODEX_TUI_MODEL");
     if (!model || !*model) model = DEFAULT_MODEL;
@@ -130,7 +484,7 @@ static int run_agent_prompt(Workspace *ws, const char *prompt) {
     json_items_push(&history, user_item_json_new(prompt));
 
     for (;;) {
-        AgentTurn turn = codex_stream_turn(model, &auth, &session, &history);
+        AgentTurn turn = highlighted_codex_stream_turn(model, &auth, &session, &history);
         summary.turns++;
         for (size_t i = 0; i < turn.output_items.count; i++) {
             json_items_push(&history, xstrdup(turn.output_items.items[i]));
@@ -165,8 +519,23 @@ static int run_agent_prompt(Workspace *ws, const char *prompt) {
     }
 }
 
+static int enhanced_self_test(void) {
+    int base = self_test();
+    if (base != 0) return base;
+    CodexResponseLanguage language = CODEX_RESPONSE_LANG_TEXT;
+    if (!codex_markdown_fence_line("```c", 4, &language)) return 20;
+    if (language != CODEX_RESPONSE_LANG_C) return 21;
+    if (!codex_markdown_fence_line("```md", 5, &language)) return 22;
+    if (language != CODEX_RESPONSE_LANG_MARKDOWN) return 23;
+    if (!codex_markdown_fence_line("```", 3, &language)) return 24;
+    if (language != CODEX_RESPONSE_LANG_OTHER) return 25;
+    if (codex_markdown_fence_line("  text", 6, &language)) return 26;
+    puts("enhanced self-test ok");
+    return 0;
+}
+
 int main(int argc, char **argv) {
-    if (argc > 1 && strcmp(argv[1], "--self-test") == 0) return self_test();
+    if (argc > 1 && strcmp(argv[1], "--self-test") == 0) return enhanced_self_test();
     const char *root = ".";
     const char *prompt = NULL;
     for (int i = 1; i < argc; i++) {
