@@ -1,5 +1,50 @@
 #include "test_core_internal.h"
 
+enum {
+  TEST_APP_ROUTE_SIGNATURE_ALGORITHM = 1u
+};
+
+static ErIdentity g_test_app_route_package_signer;
+
+static UINT8 test_package_sign(void* ctx, const ErByteSpan* preimage,
+                               ErWorkSignature* out_signature) {
+  UINTN i;
+
+  (void)ctx;
+  if (er_identity_valid(&g_test_app_route_package_signer) == 0u || preimage == 0 ||
+      preimage->bytes == 0 || preimage->len == 0u || out_signature == 0) {
+    return 0u;
+  }
+  er_mem_zero((UINT8*)out_signature, (UINTN)sizeof(*out_signature));
+  out_signature->algorithm = TEST_APP_ROUTE_SIGNATURE_ALGORITHM;
+  out_signature->signature_len = ER_SIGNATURE_LEN;
+  out_signature->identity = g_test_app_route_package_signer;
+  for (i = 0u; i < ER_SIGNATURE_LEN; ++i) {
+    out_signature->signature[i] =
+        (UINT8)(preimage->bytes[i % preimage->len] + (UINT8)i + 1u);
+  }
+  return 1u;
+}
+
+static UINT8 test_package_verify(void* ctx, const ErIdentity* identity,
+                                 const ErByteSpan* preimage,
+                                 const ErWorkSignature* signature) {
+  ErWorkSignature expected;
+
+  (void)ctx;
+  if (er_identity_valid(identity) == 0u || signature == 0 ||
+      test_package_sign((void*)identity, preimage, &expected) == 0u ||
+      er_identity_equal(identity, &expected.identity) == 0u ||
+      signature->algorithm != expected.algorithm ||
+      signature->signature_len != expected.signature_len ||
+      er_identity_equal(&signature->identity, &expected.identity) == 0u ||
+      er_mem_equal(signature->signature, expected.signature,
+                   ER_SIGNATURE_LEN) == 0u) {
+    return 0u;
+  }
+  return 1u;
+}
+
 static void test_vfs_object_packets(void) {
   static const UINT8 object_bytes[] = {'a', 'b', 'c', 'd', 'e', 'f'};
   ErCryptoProvider crypto;
@@ -329,6 +374,8 @@ static void test_app_identity_routes(void) {
   ErAppPackageManifest package_from_objects;
   ErAppPackageManifest package_without_assets;
   ErAppPackageManifest package_bad_id;
+  ErAppPackageSignature package_signature;
+  ErAppPackageSignature bad_package_signature;
   ErAppLoadedPackage loaded_package;
   ErAppPackageStorageSource storage_source;
   ErAppPackageStorageSource storage_source_again;
@@ -353,6 +400,7 @@ static void test_app_identity_routes(void) {
   ErHash admission_id;
   ErHash capability_id;
   ErHash route_hash;
+  UINT8 package_signer_key[ER_PUBLIC_KEY_LEN];
   ErNodeId target_node_id;
   ErNodeId parent_relay_node_id;
   ErNodeId ui_relay_node_id;
@@ -448,6 +496,51 @@ static void test_app_identity_routes(void) {
               1);
   check_hash_equal("app package labels ignored", &package_alias.package_id,
                    &package.package_id);
+  test_fill_bytes(package_signer_key, (UINTN)sizeof(package_signer_key), 0x61u);
+  check_int64("app package signer identity",
+              er_identity_prepare(ER_IDENTITY_TYPE_PUBLIC_KEY,
+                                  ER_IDENTITY_BACKING_ED25519,
+                                  package_signer_key,
+                                  (UINT16)sizeof(package_signer_key),
+                                  &g_test_app_route_package_signer),
+              1);
+  check_int64("app package sign rejects missing provider",
+              er_app_sign_package(&crypto, &package,
+                                  &g_test_app_route_package_signer,
+                                  &package_signature),
+              0);
+  crypto.sign = test_package_sign;
+  crypto.verify = test_package_verify;
+  check_int64("app package sign",
+              er_app_sign_package(&crypto, &package,
+                                  &g_test_app_route_package_signer,
+                                  &package_signature),
+              1);
+  check_hash_equal("app package signature package",
+                   &package_signature.package_id, &package.package_id);
+  check_int64("app package verify signature",
+              er_app_verify_package_signature(&crypto, &package,
+                                              &package_signature),
+              1);
+  bad_package_signature = package_signature;
+  bad_package_signature.package_id.bytes[0] ^= 1u;
+  check_int64("app package verify rejects package id",
+              er_app_verify_package_signature(&crypto, &package,
+                                              &bad_package_signature),
+              0);
+  bad_package_signature = package_signature;
+  bad_package_signature.signature.signature[0] ^= 1u;
+  check_int64("app package verify rejects signature bytes",
+              er_app_verify_package_signature(&crypto, &package,
+                                              &bad_package_signature),
+              0);
+  package_bad_id = package;
+  package_bad_id.package_id.bytes[0] ^= 1u;
+  check_int64("app package sign rejects invalid package",
+              er_app_sign_package(&crypto, &package_bad_id,
+                                  &g_test_app_route_package_signer,
+                                  &bad_package_signature),
+              0);
   bad_object_ref = app_object_ref;
   bad_object_ref.reserved = 1u;
   check_int64("app package object ref rejects reserved",

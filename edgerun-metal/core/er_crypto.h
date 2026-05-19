@@ -40,5 +40,9 @@ typedef struct {
 
 UINT8 er_crypto_hash(const ErCryptoProvider* provider, const UINT8* domain, UINTN domain_len,
                      const ErByteSpan* spans, UINTN span_count, ErHash* out_hash);
+UINT8 er_crypto_sign(const ErCryptoProvider* provider, const ErByteSpan* preimage,
+                     ErWorkSignature* out_signature);
+UINT8 er_crypto_verify(const ErCryptoProvider* provider, const ErIdentity* identity,
+                       const ErByteSpan* preimage, const ErWorkSignature* signature);
 
 #endif
