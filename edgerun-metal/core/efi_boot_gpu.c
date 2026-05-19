@@ -30,14 +30,56 @@ UINT8 er_virtio_gpu_wait_display_info(ErVirtioGpu* gpu,
 }
 
 UINT8 er_ui_boot_gpu_present(const ErUiBootRenderContext* render) {
+  ErUiSurfacePixelRect rect;
+  UINT32 i;
+  UINT32 width;
+  UINT32 height;
+
   if (render == 0 || render->gpu == 0 || render->framebuffer == 0) {
     return 0u;
   }
-  if (er_virtio_gpu_submit_framebuffer_transfer(render->gpu, render->framebuffer) == 0u ||
-      er_virtio_gpu_wait_ok(render->gpu) == 0u ||
-      er_virtio_gpu_submit_framebuffer_flush(render->gpu, render->framebuffer) == 0u ||
-      er_virtio_gpu_wait_ok(render->gpu) == 0u) {
+  if (render->last_dirty_tiles.count == 0u) {
+    return 1u;
+  }
+  if (render->tile_plan == 0 ||
+      render->last_dirty_tiles.tile_ids == 0 ||
+      render->last_dirty_tiles.overflowed != 0u) {
     return 0u;
+  }
+  if (render->last_dirty_tiles.count == render->tile_plan->tile_count) {
+    if (er_virtio_gpu_submit_framebuffer_transfer(render->gpu, render->framebuffer) == 0u ||
+        er_virtio_gpu_wait_ok(render->gpu) == 0u ||
+        er_virtio_gpu_submit_framebuffer_flush(render->gpu, render->framebuffer) == 0u ||
+        er_virtio_gpu_wait_ok(render->gpu) == 0u) {
+      return 0u;
+    }
+    return 1u;
+  }
+  for (i = 0u; i < render->last_dirty_tiles.count; ++i) {
+    if (er_ui_surface_tile_rect(render->tile_plan,
+                                render->last_dirty_tiles.tile_ids[i],
+                                &rect) == 0u ||
+        rect.x1 <= rect.x0 || rect.y1 <= rect.y0) {
+      return 0u;
+    }
+    width = rect.x1 - rect.x0;
+    height = rect.y1 - rect.y0;
+    if (er_virtio_gpu_submit_framebuffer_transfer_rect(render->gpu,
+                                                       render->framebuffer,
+                                                       rect.x0,
+                                                       rect.y0,
+                                                       width,
+                                                       height) == 0u ||
+        er_virtio_gpu_wait_ok(render->gpu) == 0u ||
+        er_virtio_gpu_submit_framebuffer_flush_rect(render->gpu,
+                                                   render->framebuffer,
+                                                   rect.x0,
+                                                   rect.y0,
+                                                   width,
+                                                   height) == 0u ||
+        er_virtio_gpu_wait_ok(render->gpu) == 0u) {
+      return 0u;
+    }
   }
   return 1u;
 }

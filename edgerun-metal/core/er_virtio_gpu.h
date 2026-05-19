@@ -105,8 +105,15 @@ UINT8 er_virtio_gpu_submit_set_scanout(ErVirtioGpu* gpu, UINT32 scanout_id, UINT
                                        UINT32 width, UINT32 height);
 UINT8 er_virtio_gpu_submit_transfer_to_host_2d(ErVirtioGpu* gpu, UINT32 resource_id,
                                               UINT32 width, UINT32 height);
+UINT8 er_virtio_gpu_submit_transfer_to_host_2d_rect(ErVirtioGpu* gpu, UINT32 resource_id,
+                                                    UINT32 x, UINT32 y,
+                                                    UINT32 width, UINT32 height,
+                                                    UINT64 offset);
 UINT8 er_virtio_gpu_submit_resource_flush(ErVirtioGpu* gpu, UINT32 resource_id,
                                           UINT32 width, UINT32 height);
+UINT8 er_virtio_gpu_submit_resource_flush_rect(ErVirtioGpu* gpu, UINT32 resource_id,
+                                               UINT32 x, UINT32 y,
+                                               UINT32 width, UINT32 height);
 ErVirtioGpuStats er_virtio_gpu_stats(ErVirtioGpu* gpu);
 UINT8 er_virtio_gpu_framebuffer_init(ErVirtioGpuFramebuffer* framebuffer, UINT32 resource_id,
                                      UINT32 scanout_id, UINT32 format, UINT32 width,
@@ -125,6 +132,14 @@ UINT8 er_virtio_gpu_submit_framebuffer_transfer(ErVirtioGpu* gpu,
                                                const ErVirtioGpuFramebuffer* framebuffer);
 UINT8 er_virtio_gpu_submit_framebuffer_flush(ErVirtioGpu* gpu,
                                             const ErVirtioGpuFramebuffer* framebuffer);
+UINT8 er_virtio_gpu_submit_framebuffer_transfer_rect(ErVirtioGpu* gpu,
+                                                     const ErVirtioGpuFramebuffer* framebuffer,
+                                                     UINT32 x, UINT32 y,
+                                                     UINT32 width, UINT32 height);
+UINT8 er_virtio_gpu_submit_framebuffer_flush_rect(ErVirtioGpu* gpu,
+                                                  const ErVirtioGpuFramebuffer* framebuffer,
+                                                  UINT32 x, UINT32 y,
+                                                  UINT32 width, UINT32 height);
 
 #if defined(ER_ENABLE_TEST_HOOKS)
 ErVirtioQueueDesc* er_virtio_gpu_test_control_desc(void);
