@@ -51,10 +51,17 @@ static void test_print_routes_firmware_before_serial(void) {
   check_uint64("print firmware route skips serial",
                er_print_test_serial_byte_count(), 0u);
 
+  er_print_set_serial_mirror_enabled(1u);
+  er_print("mirror");
+  check_uint64("print serial mirror keeps firmware route",
+               g_print_test_firmware_byte_count, 14u);
+  check_uint64("print serial mirror bytes",
+               er_print_test_serial_byte_count(), 6u);
+
   er_print_set_firmware_console_enabled(0u);
   er_print("serial");
   check_uint64("print serial route after firmware disabled",
-               er_print_test_serial_byte_count(), 6u);
+               er_print_test_serial_byte_count(), 12u);
 }
 
 static void test_ui_surface_renderer_surface(void) {

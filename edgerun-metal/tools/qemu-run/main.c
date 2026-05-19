@@ -28,9 +28,10 @@ enum {
   ER_QEMU_PARSE_BASE = 10,
   ER_QEMU_EXEC_FAILED_STATUS = 127,
   ER_QEMU_SIGNAL_STATUS_BASE = 128,
-  ER_QEMU_SWTPM_TPMSTATE_ARG = 3,
-  ER_QEMU_SWTPM_CTRL_ARG = 4,
-  ER_QEMU_SWTPM_PID_ARG = 5,
+  ER_QEMU_PRIVATE_DIR_MODE = 0700,
+  ER_QEMU_SWTPM_TPMSTATE_VALUE_ARG = 4,
+  ER_QEMU_SWTPM_CTRL_VALUE_ARG = 6,
+  ER_QEMU_SWTPM_PID_VALUE_ARG = 8,
   ER_QEMU_SOCKET_WAIT_ATTEMPTS = 50,
   ER_QEMU_SOCKET_WAIT_NS = 100000000
 };
@@ -45,6 +46,7 @@ typedef struct {
   char* esp_drive_if;
   char* ovmf_code;
   char* ovmf_vars;
+  char* ovmf_vars_runtime;
   char* capture;
   char* net_id;
   char* net_mac;
@@ -57,6 +59,7 @@ typedef struct {
   uint32_t refresh;
   int virtio_gpu;
   int virtio_net;
+  int ovmf_vars_persist;
   int tpm;
   int tpm_persist_state;
 } ErQemuConfig;
@@ -65,6 +68,23 @@ typedef struct {
   char* values[ER_QEMU_MAX_ARGS];
   size_t count;
 } ErQemuArgs;
+
+static volatile sig_atomic_t g_qemu_child_pid;
+static volatile sig_atomic_t g_tpm_child_pid;
+
+static void er_qemu_signal_child(volatile sig_atomic_t* child_pid) {
+  pid_t pid = (pid_t)*child_pid;
+
+  if (pid > 0) {
+    kill(pid, SIGTERM);
+  }
+}
+
+static void er_qemu_handle_signal(int signal_number) {
+  (void)signal_number;
+  er_qemu_signal_child(&g_qemu_child_pid);
+  er_qemu_signal_child(&g_tpm_child_pid);
+}
 
 static void er_qemu_free_string(char** value) {
   if (value != NULL && *value != NULL) {
@@ -150,6 +170,7 @@ static void er_qemu_config_destroy(ErQemuConfig* config) {
   er_qemu_free_string(&config->esp_drive_if);
   er_qemu_free_string(&config->ovmf_code);
   er_qemu_free_string(&config->ovmf_vars);
+  er_qemu_free_string(&config->ovmf_vars_runtime);
   er_qemu_free_string(&config->capture);
   er_qemu_free_string(&config->net_id);
   er_qemu_free_string(&config->net_mac);
@@ -168,6 +189,7 @@ static int er_qemu_apply_config(ErQemuConfig* config, const char* key, const cha
   if (strcmp(key, "esp_drive_if") == 0) return er_qemu_set_string(&config->esp_drive_if, value);
   if (strcmp(key, "ovmf_code") == 0) return er_qemu_set_string(&config->ovmf_code, value);
   if (strcmp(key, "ovmf_vars") == 0) return er_qemu_set_string(&config->ovmf_vars, value);
+  if (strcmp(key, "ovmf_vars_runtime") == 0) return er_qemu_set_string(&config->ovmf_vars_runtime, value);
   if (strcmp(key, "capture") == 0) return er_qemu_set_string(&config->capture, value);
   if (strcmp(key, "net_id") == 0) return er_qemu_set_string(&config->net_id, value);
   if (strcmp(key, "net_mac") == 0) return er_qemu_set_string(&config->net_mac, value);
@@ -180,6 +202,7 @@ static int er_qemu_apply_config(ErQemuConfig* config, const char* key, const cha
   if (strcmp(key, "refresh") == 0) return er_qemu_parse_u32(value, &config->refresh);
   if (strcmp(key, "virtio_gpu") == 0) return er_qemu_parse_bool(value, &config->virtio_gpu);
   if (strcmp(key, "virtio_net") == 0) return er_qemu_parse_bool(value, &config->virtio_net);
+  if (strcmp(key, "ovmf_vars_persist") == 0) return er_qemu_parse_bool(value, &config->ovmf_vars_persist);
   if (strcmp(key, "tpm") == 0) return er_qemu_parse_bool(value, &config->tpm);
   if (strcmp(key, "tpm_persist_state") == 0) return er_qemu_parse_bool(value, &config->tpm_persist_state);
   fprintf(stderr, "%s:%u: unknown key: %s\n", path, line, key);
@@ -245,6 +268,19 @@ static int er_qemu_file_exists(const char* path) {
   return path != NULL && stat(path, &st) == 0 && S_ISREG(st.st_mode);
 }
 
+static int er_qemu_dir_exists(const char* path) {
+  struct stat st;
+  return path != NULL && stat(path, &st) == 0 && S_ISDIR(st.st_mode);
+}
+
+static int er_qemu_ensure_dir(const char* path) {
+  if (er_qemu_dir_exists(path) != 0) return 1;
+  if (mkdir(path, ER_QEMU_PRIVATE_DIR_MODE) == 0) return 1;
+  if (errno == EEXIST && er_qemu_dir_exists(path) != 0) return 1;
+  fprintf(stderr, "%s: mkdir failed: %s\n", path, strerror(errno));
+  return 0;
+}
+
 static int er_qemu_validate_config(const ErQemuConfig* config, const char* esp_dir) {
   char boot_path[ER_QEMU_PATH_MAX];
   const char* boot_file;
@@ -294,6 +330,28 @@ static int er_qemu_validate_config(const ErQemuConfig* config, const char* esp_d
     return 0;
   }
   return 1;
+}
+
+static int er_qemu_copy_file(const char* src, const char* dst);
+
+static int er_qemu_prepare_ovmf_vars(const ErQemuConfig* config,
+                                     const char* esp_dir,
+                                     char* vars_path,
+                                     size_t vars_path_size,
+                                     int* remove_after_run) {
+  if (er_qemu_string_empty(config->ovmf_vars_runtime) == 0) {
+    if (snprintf(vars_path, vars_path_size, "%s", config->ovmf_vars_runtime) >= (int)vars_path_size) {
+      fprintf(stderr, "runtime OVMF vars path is too long\n");
+      return 0;
+    }
+  } else if (snprintf(vars_path, vars_path_size, "%s/ovmf-vars-runtime.fd", esp_dir) >= (int)vars_path_size) {
+    fprintf(stderr, "runtime OVMF vars path is too long\n");
+    return 0;
+  }
+
+  *remove_after_run = config->ovmf_vars_persist == 0;
+  if (config->ovmf_vars_persist != 0 && er_qemu_file_exists(vars_path) != 0) return 1;
+  return er_qemu_copy_file(config->ovmf_vars, vars_path);
 }
 
 static int er_qemu_copy_file(const char* src, const char* dst) {
@@ -465,18 +523,6 @@ static int er_qemu_wait_for_socket(const char* path) {
   return 0;
 }
 
-static pid_t er_qemu_read_pidfile(const char* path) {
-  FILE* file;
-  long parsed;
-
-  file = fopen(path, "rb");
-  if (file == NULL) return 0;
-  parsed = 0;
-  if (fscanf(file, "%ld", &parsed) != 1) parsed = 0;
-  fclose(file);
-  return parsed > 0 ? (pid_t)parsed : 0;
-}
-
 static int er_qemu_run_child(char* const* argv) {
   pid_t pid;
   int status;
@@ -491,13 +537,45 @@ static int er_qemu_run_child(char* const* argv) {
     fprintf(stderr, "%s: exec failed: %s\n", argv[0], strerror(errno));
     _exit(ER_QEMU_EXEC_FAILED_STATUS);
   }
-  if (waitpid(pid, &status, 0) < 0) {
+  g_qemu_child_pid = (sig_atomic_t)pid;
+  while (waitpid(pid, &status, 0) < 0) {
+    if (errno == EINTR) continue;
     fprintf(stderr, "waitpid failed: %s\n", strerror(errno));
+    g_qemu_child_pid = 0;
     return 1;
   }
+  g_qemu_child_pid = 0;
   if (WIFEXITED(status)) return WEXITSTATUS(status);
   if (WIFSIGNALED(status)) return ER_QEMU_SIGNAL_STATUS_BASE + WTERMSIG(status);
   return 1;
+}
+
+static int er_qemu_spawn_child(char* const* argv, pid_t* out_pid) {
+  pid_t pid;
+
+  pid = fork();
+  if (pid < 0) {
+    fprintf(stderr, "fork failed: %s\n", strerror(errno));
+    return 0;
+  }
+  if (pid == 0) {
+    execvp(argv[0], argv);
+    fprintf(stderr, "%s: exec failed: %s\n", argv[0], strerror(errno));
+    _exit(ER_QEMU_EXEC_FAILED_STATUS);
+  }
+  *out_pid = pid;
+  return 1;
+}
+
+static void er_qemu_stop_child(pid_t pid) {
+  int status;
+
+  if (pid <= 0) return;
+  kill(pid, SIGTERM);
+  while (waitpid(pid, &status, 0) < 0) {
+    if (errno == EINTR) continue;
+    break;
+  }
 }
 
 static int er_qemu_start_tpm(const ErQemuConfig* config, pid_t* out_pid) {
@@ -505,39 +583,42 @@ static int er_qemu_start_tpm(const ErQemuConfig* config, pid_t* out_pid) {
     "swtpm",
     "socket",
     "--tpm2",
+    "--tpmstate",
     NULL,
+    "--ctrl",
     NULL,
+    "--pid",
     NULL,
-    NULL,
-    "--daemon",
+    "--flags",
+    "not-need-init,startup-clear",
     NULL
   };
   char tpmstate[ER_QEMU_PATH_MAX];
   char ctrl[ER_QEMU_PATH_MAX];
   char pidfile[ER_QEMU_PATH_MAX];
-  int rc;
+  pid_t pid;
 
-  if (snprintf(tpmstate, sizeof(tpmstate), "--tpmstate=dir=%s", config->tpm_state_dir) >= (int)sizeof(tpmstate) ||
-      snprintf(ctrl, sizeof(ctrl), "--ctrl=type=unixio,path=%s", config->tpm_socket) >= (int)sizeof(ctrl) ||
-      snprintf(pidfile, sizeof(pidfile), "--pid=file=%s", config->tpm_pidfile) >= (int)sizeof(pidfile)) {
+  if (snprintf(tpmstate, sizeof(tpmstate), "dir=%s", config->tpm_state_dir) >= (int)sizeof(tpmstate) ||
+      snprintf(ctrl, sizeof(ctrl), "type=unixio,path=%s", config->tpm_socket) >= (int)sizeof(ctrl) ||
+      snprintf(pidfile, sizeof(pidfile), "file=%s", config->tpm_pidfile) >= (int)sizeof(pidfile)) {
     fprintf(stderr, "TPM paths are too long\n");
     return 0;
   }
-  swtpm_args[ER_QEMU_SWTPM_TPMSTATE_ARG] = tpmstate;
-  swtpm_args[ER_QEMU_SWTPM_CTRL_ARG] = ctrl;
-  swtpm_args[ER_QEMU_SWTPM_PID_ARG] = pidfile;
+  swtpm_args[ER_QEMU_SWTPM_TPMSTATE_VALUE_ARG] = tpmstate;
+  swtpm_args[ER_QEMU_SWTPM_CTRL_VALUE_ARG] = ctrl;
+  swtpm_args[ER_QEMU_SWTPM_PID_VALUE_ARG] = pidfile;
+  if (er_qemu_ensure_dir(config->tpm_state_dir) == 0) return 0;
   unlink(config->tpm_socket);
   unlink(config->tpm_pidfile);
-  rc = er_qemu_run_child(swtpm_args);
-  if (rc != 0) {
-    fprintf(stderr, "swtpm failed with status %d\n", rc);
-    return 0;
-  }
+  if (er_qemu_spawn_child(swtpm_args, &pid) == 0) return 0;
+  g_tpm_child_pid = (sig_atomic_t)pid;
   if (er_qemu_wait_for_socket(config->tpm_socket) == 0) {
     fprintf(stderr, "swtpm socket did not become ready: %s\n", config->tpm_socket);
+    er_qemu_stop_child(pid);
+    g_tpm_child_pid = 0;
     return 0;
   }
-  *out_pid = er_qemu_read_pidfile(config->tpm_pidfile);
+  *out_pid = pid;
   return 1;
 }
 
@@ -565,6 +646,7 @@ int main(int argc, char** argv) {
   const char* config_path;
   const char* esp_dir;
   int rc;
+  int remove_vars_after_run = 1;
   pid_t tpm_pid = 0;
 
   if (argc == ER_QEMU_ARGC) {
@@ -578,6 +660,8 @@ int main(int argc, char** argv) {
   }
   memset(&config, 0, sizeof(config));
   memset(&args, 0, sizeof(args));
+  signal(SIGTERM, er_qemu_handle_signal);
+  signal(SIGINT, er_qemu_handle_signal);
   if (er_qemu_load_config(config_path, &config) == 0 ||
       er_qemu_validate_config(&config, esp_dir) == 0) {
     er_qemu_config_destroy(&config);
@@ -587,31 +671,27 @@ int main(int argc, char** argv) {
     er_qemu_config_destroy(&config);
     return 0;
   }
-  if (snprintf(vars_copy, sizeof(vars_copy), "%s/ovmf-vars-runtime.fd", esp_dir) >= (int)sizeof(vars_copy)) {
-    fprintf(stderr, "runtime OVMF vars path is too long\n");
-    er_qemu_config_destroy(&config);
-    return 1;
-  }
-  if (er_qemu_copy_file(config.ovmf_vars, vars_copy) == 0) {
+  if (er_qemu_prepare_ovmf_vars(&config, esp_dir, vars_copy, sizeof(vars_copy), &remove_vars_after_run) == 0) {
     er_qemu_config_destroy(&config);
     return 1;
   }
   if (config.tpm != 0 && er_qemu_start_tpm(&config, &tpm_pid) == 0) {
-    unlink(vars_copy);
+    if (remove_vars_after_run != 0) unlink(vars_copy);
     er_qemu_config_destroy(&config);
     return 1;
   }
   if (er_qemu_build_args(&config, esp_dir, vars_copy, &args) == 0 ||
       (config.tpm != 0 && er_qemu_append_tpm_args(&config, &args) == 0)) {
     er_qemu_args_destroy(&args);
-    unlink(vars_copy);
+    if (remove_vars_after_run != 0) unlink(vars_copy);
     er_qemu_config_destroy(&config);
     return 1;
   }
   rc = er_qemu_run_child(args.values);
-  if (tpm_pid > 0) kill(tpm_pid, SIGTERM);
+  er_qemu_stop_child(tpm_pid);
+  g_tpm_child_pid = 0;
   er_qemu_args_destroy(&args);
-  unlink(vars_copy);
+  if (remove_vars_after_run != 0) unlink(vars_copy);
   if (config.tpm != 0 && config.tpm_persist_state == 0) {
     unlink(config.tpm_socket);
     unlink(config.tpm_pidfile);

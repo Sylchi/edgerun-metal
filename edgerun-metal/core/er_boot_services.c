@@ -20,7 +20,7 @@ static const char g_er_boot_authority_default_label[] = {
 
 #define ER_BOOT_SERVICES_TPM_COMMAND_BYTES 128u
 #define ER_BOOT_SERVICES_TPM_RESPONSE_BYTES 512u
-#define ER_BOOT_SERVICES_TPM_PROPERTY_COUNT 2u
+#define ER_BOOT_SERVICES_TPM_PROPERTY_COUNT ((ER_TPM_PT_NV_BUFFER_MAX - ER_TPM_PT_NV_INDEX_MAX) + 1u)
 
 static UINT8 er_boot_services_authority_profile_ready(const ErBootAuthorityProfile* authority) {
   if (authority == 0 ||
@@ -113,16 +113,28 @@ UINT8 er_boot_services_probe_tpm(EFI_SYSTEM_TABLE* system_table,
       er_acpi_enumerate_tables(&rsdp, &tables) == 0u ||
       er_tpm_find_tpm2_table(&tables, &tpm2) == 0u ||
       er_tpm_crb_from_tpm2_info(&tpm2, &transport) == 0u ||
+      er_tpm_build_startup_command(ER_TPM_SU_CLEAR,
+                                   command,
+                                   (UINT32)sizeof(command),
+                                   &command_len) == 0u) {
+    return 0u;
+  }
+
+  if (er_tpm_crb_transact(&transport,
+                          command,
+                          command_len,
+                          response,
+                          (UINT32)sizeof(response),
+                          &response_len) == 0u ||
+      (er_tpm_response_code(response, response_len) != ER_TPM_RC_SUCCESS &&
+       er_tpm_response_code(response, response_len) != ER_TPM_RC_INITIALIZE) ||
       er_tpm_build_get_capability_command(ER_TPM_CAP_TPM_PROPERTIES,
                                           ER_TPM_PT_NV_INDEX_MAX,
                                           ER_BOOT_SERVICES_TPM_PROPERTY_COUNT,
                                           command,
                                           (UINT32)sizeof(command),
-                                          &command_len) == 0u) {
-    return 0u;
-  }
-
-  if (er_tpm_crb_transact(&transport,
+                                          &command_len) == 0u ||
+      er_tpm_crb_transact(&transport,
                           command,
                           command_len,
                           response,

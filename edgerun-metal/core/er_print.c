@@ -136,6 +136,10 @@ void er_print_set_firmware_console_enabled(UINT8 enabled) {
   g_serial_direct_enabled = (UINT8)(enabled == 0u);
 }
 
+void er_print_set_serial_mirror_enabled(UINT8 enabled) {
+  g_serial_direct_enabled = (UINT8)(enabled != 0u);
+}
+
 #ifdef ER_ENABLE_TEST_HOOKS
 void er_print_test_reset(EFI_SYSTEM_TABLE* st) {
   g_st = st;
