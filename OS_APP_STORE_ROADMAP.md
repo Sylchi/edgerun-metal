@@ -47,5 +47,5 @@ identity-routed encrypted storage.
 - [x] Wrap content keys to recipient identities.
 - [x] Chunk, verify, cache, and garbage-collect content-addressed objects.
 - [x] Relay sealed objects without exposing plaintext to storage nodes.
-- [ ] Add route receipts and accounting records.
+- [x] Add route receipts and accounting records.
 - [ ] Install packages fetched from another identity or device.

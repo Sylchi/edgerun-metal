@@ -508,7 +508,9 @@ static void test_storage_endpoint_sealed_relay_capture(void) {
     STORAGE_SEALED_RELAY_TOKEN_SEED = 0x91u,
     STORAGE_SEALED_RELAY_SEQUENCE = 7u,
     STORAGE_SEALED_RELAY_COST_PER_BYTE = 1u,
-    STORAGE_SEALED_RELAY_MAX_COST = 512u
+    STORAGE_SEALED_RELAY_MAX_COST = 512u,
+    STORAGE_SEALED_RELAY_RECEIPT_BASE = 2u,
+    STORAGE_SEALED_RELAY_UNIT_PRICE = 3u
   };
   static const UINT8 aad_bytes[] = {'s', 't', 'o', 'r', 'e'};
   static const UINT8 plaintext_bytes[] = {'s', 'e', 'a', 'l', 'e', 'd'};
@@ -521,6 +523,9 @@ static void test_storage_endpoint_sealed_relay_capture(void) {
   ErMutableBytes sealed_out;
   ErSealedContentObjectHeader sealed_header;
   ErStorageEndpointSealedRelayCapture capture;
+  ErStorageEndpointRouteReceipt receipt;
+  ErStorageEndpointRouteReceipt receipt_again;
+  ErRelayAccountingClaim claim;
   ErHash relay_payload_hash;
   ErHash token_id;
   UINT8 root_key[ER_CRYPTO_BLAKE3_SEAL_ROOT_KEY_LEN];
@@ -594,6 +599,68 @@ static void test_storage_endpoint_sealed_relay_capture(void) {
                capture.sequence, STORAGE_SEALED_RELAY_SEQUENCE);
   check_uint64("storage sealed relay payload len",
                capture.sealed_payload_len, sealed_out.len);
+  er_mem_zero((UINT8*)&claim, (UINTN)sizeof(claim));
+  claim.abi_version = ER_WORK_ABI_VERSION;
+  claim.relay_node_id = route.relay_node_id;
+  claim.request_hash = route.request_hash;
+  claim.admission_hash = route.admission_hash;
+  claim.transit_hash = relay_payload_hash;
+  claim.packet_bytes = (UINT64)relay_packet_len;
+  claim.units_used = (claim.packet_bytes + (ER_WORK_COST_UNIT_BYTES - 1u)) /
+                     ER_WORK_COST_UNIT_BYTES;
+  claim.unit_price = STORAGE_SEALED_RELAY_UNIT_PRICE;
+  claim.receipt_base = STORAGE_SEALED_RELAY_RECEIPT_BASE;
+  claim.total_claim = (claim.units_used * claim.unit_price) + claim.receipt_base;
+  claim.sequence = STORAGE_SEALED_RELAY_SEQUENCE;
+  check_int64("storage sealed relay receipt",
+              er_storage_endpoint_prepare_sealed_relay_receipt(&crypto, &route,
+                                                               &capture,
+                                                               &claim,
+                                                               &receipt),
+              1);
+  check_hash_equal("storage sealed relay receipt route", &receipt.route_id,
+                   &route.route_id);
+  check_hash_equal("storage sealed relay receipt object",
+                   &receipt.sealed_object_id,
+                   &sealed_header.sealed_object_id);
+  check_hash_equal("storage sealed relay receipt transit",
+                   &receipt.transit_hash, &claim.transit_hash);
+  check_uint64("storage sealed relay receipt total",
+               receipt.total_claim, claim.total_claim);
+  check_int64("storage sealed relay receipt hash",
+              er_hash_nonzero(&receipt.receipt_hash), 1);
+  check_int64("storage sealed relay receipt deterministic",
+              er_storage_endpoint_prepare_sealed_relay_receipt(&crypto, &route,
+                                                               &capture,
+                                                               &claim,
+                                                               &receipt_again),
+              1);
+  check_hash_equal("storage sealed relay receipt deterministic hash",
+                   &receipt_again.receipt_hash, &receipt.receipt_hash);
+  ++claim.packet_bytes;
+  check_int64("storage sealed relay reject receipt bytes",
+              er_storage_endpoint_prepare_sealed_relay_receipt(&crypto, &route,
+                                                               &capture,
+                                                               &claim,
+                                                               &receipt_again),
+              0);
+  --claim.packet_bytes;
+  claim.total_claim = route.admitted_budget + 1u;
+  check_int64("storage sealed relay reject receipt budget",
+              er_storage_endpoint_prepare_sealed_relay_receipt(&crypto, &route,
+                                                               &capture,
+                                                               &claim,
+                                                               &receipt_again),
+              0);
+  claim.total_claim = (claim.units_used * claim.unit_price) + claim.receipt_base;
+  ++claim.sequence;
+  check_int64("storage sealed relay reject receipt sequence",
+              er_storage_endpoint_prepare_sealed_relay_receipt(&crypto, &route,
+                                                               &capture,
+                                                               &claim,
+                                                               &receipt_again),
+              0);
+  --claim.sequence;
 
   relay_packet[ER_RELAY_PACKET_HEADER_LEN] ^= 1u;
   check_int64("storage sealed relay reject payload tamper",

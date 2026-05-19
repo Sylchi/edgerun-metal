@@ -68,6 +68,25 @@ typedef struct {
 typedef struct {
   UINT16 abi_version;
   UINT16 reserved;
+  ErHash route_id;
+  ErHash request_hash;
+  ErHash admission_id;
+  ErHash relay_payload_hash;
+  ErHash sealed_object_id;
+  ErHash transit_hash;
+  ErNodeId relay_node_id;
+  UINT64 sequence;
+  UINT64 packet_bytes;
+  UINT64 units_used;
+  UINT64 unit_price;
+  UINT64 receipt_base;
+  UINT64 total_claim;
+  ErHash receipt_hash;
+} ErStorageEndpointRouteReceipt;
+
+typedef struct {
+  UINT16 abi_version;
+  UINT16 reserved;
   ErStorageEndpointCacheEntry* entries;
   UINT32 entry_capacity;
   ErVfsObjectPacket* packets;
@@ -115,6 +134,11 @@ UINT8 er_storage_endpoint_capture_sealed_relay_packet(const ErCryptoProvider* cr
                                                       const ErByteSpan* aad,
                                                       const ErSealedContentObjectHeader* sealed_header,
                                                       ErStorageEndpointSealedRelayCapture* out_capture);
+UINT8 er_storage_endpoint_prepare_sealed_relay_receipt(const ErCryptoProvider* crypto,
+                                                       const ErAdmittedRoute* route,
+                                                       const ErStorageEndpointSealedRelayCapture* capture,
+                                                       const ErRelayAccountingClaim* claim,
+                                                       ErStorageEndpointRouteReceipt* out_receipt);
 UINT8 er_storage_endpoint_capture_object_packet(const ErCryptoProvider* crypto,
                                                 const ErAdmittedRoute* route,
                                                 const ErChannelEnvelopeHeader* envelope,
