@@ -18,6 +18,7 @@ Known scopes choose a deterministic test target when one is not provided:
   varfont         -> varfont-test
   edgerun-crypto  -> crypto-test
   edgerun-metal   -> edgerun-check
+  codex           -> codex-test
 USAGE
 }
 
@@ -44,6 +45,7 @@ if [ "$test_target" = "" ]; then
     varfont) test_target="varfont-test" ;;
     edgerun-crypto) test_target="crypto-test" ;;
     edgerun-metal) test_target="edgerun-check" ;;
+    codex) test_target="codex-test" ;;
     *)
       printf 'repo-progress: no default test target for scope %s\n' "$scope" >&2
       printf 'repo-progress: pass an explicit test target\n' >&2

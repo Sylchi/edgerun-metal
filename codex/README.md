@@ -1,0 +1,82 @@
+# edgerun-c
+
+`edgerun-c` is a dependency-free C workspace client for prompting Codex against
+an in-memory repo snapshot, staging repo edits in memory, and committing only
+verified useful work.
+
+It does not mutate the repository while you search, read, or propose changes.
+Agent prompts receive host-generated repository status and workflow context
+automatically. When an agent finishes with pending proposals, the host writes
+only those proposed paths, runs the matching `repo-progress` scope checks, and
+creates a git commit only if verification passes.
+
+Agent mode reads local Codex auth from `CODEX_HOME/auth.json` or
+`~/.codex/auth.json`, uses `CODEX_TUI_MODEL` when set, and otherwise defaults to
+`gpt-5.5`.
+
+The C program has no linked third-party dependencies. HTTPS streaming is handled
+by the system `curl` command because the C standard library has no TLS client.
+
+## Build
+
+```sh
+make -C codex
+```
+
+The binary is written to `.build/codex/edgerun-c`.
+
+## Run
+
+```sh
+.build/codex/edgerun-c /path/to/repo
+```
+
+If no path is supplied, the current directory is used.
+
+## Prompt Codex
+
+```sh
+.build/codex/edgerun-c --prompt "inspect edgerun-c and explain what it can do"
+```
+
+or choose a root explicitly:
+
+```sh
+.build/codex/edgerun-c --root /path/to/repo --prompt "find the Codex client entry point"
+```
+
+The built-in agent tools are:
+
+- `project_status`
+- `repo_rules`
+- `search_code`
+- `read_code`
+- `propose_change`
+- `verify_scope`
+- `commit_verified`
+
+The model can stage complete-file replacements with `propose_change`. It should
+not ask for routine `git status`, build, or test commands: the host supplies
+status context and performs scoped verification automatically.
+
+## Commands
+
+- `help`
+- `stats`
+- `search <text> [limit]`
+- `read <path> [start_line] [max_lines]`
+- `propose <path>` then enter full file content, ending with a line containing only `.end`
+- `show <path>`
+- `diff [path]`
+- `discard <path>`
+- `discard --all`
+- `commit`
+- `commit-verified`
+- `quit`
+
+`commit` is deliberately simple: it writes the full staged file contents to disk.
+It does not run tests, formatters, hooks, or `git commit`.
+
+`commit-verified` writes pending proposals, runs `tools/repo-progress.sh` for
+the scopes touched by those proposals, stages only the proposed paths, and runs
+`git commit` only after every verification step passes.

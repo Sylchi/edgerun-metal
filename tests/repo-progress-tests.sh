@@ -37,6 +37,12 @@ case "$explicit_output" in
   *) printf 'explicit test target was not honored\n' >&2; exit 1 ;;
 esac
 
+codex_output=$("$REPO_PROGRESS" --print-plan codex)
+case "$codex_output" in
+  *"+ make codex-test"*) ;;
+  *) printf 'codex scope did not choose codex-test\n' >&2; exit 1 ;;
+esac
+
 if "$REPO_PROGRESS" --print-plan docs >/tmp/repo-progress-unknown.out 2>/tmp/repo-progress-unknown.err; then
   printf 'unknown scope without explicit test target unexpectedly succeeded\n' >&2
   exit 1
