@@ -12,6 +12,12 @@
 #define ER_WIFI_L2_ABI_VERSION 1u
 #define ER_WIFI_L2_NODE_SSID_LEN 19u
 #define ER_WIFI_L2_NODE_SSID_CAP 32u
+#define ER_WIFI_L2_ENDPOINT_ADDR_FIXED_LEN 10u
+#define ER_WIFI_L2_ENDPOINT_ADDR_MAC_OFFSET 0u
+#define ER_WIFI_L2_ENDPOINT_ADDR_ETH_TYPE_OFFSET 6u
+#define ER_WIFI_L2_ENDPOINT_ADDR_CHANNEL_OFFSET 8u
+#define ER_WIFI_L2_ENDPOINT_ADDR_SSID_LEN_OFFSET 9u
+#define ER_WIFI_L2_ENDPOINT_ADDR_SSID_OFFSET 10u
 
 typedef struct {
   UINT16 abi_version;
@@ -33,5 +39,11 @@ UINT8 er_wifi_l2_ap_plan_prepare(const ErNodeId* node_id,
                                  UINT8 channel,
                                  ErWifiL2ApPlan* out_plan);
 UINT8 er_wifi_l2_ap_plan_valid(const ErWifiL2ApPlan* plan);
+UINT8 er_wifi_l2_prepare_channel_endpoint(const ErHash* channel_id,
+                                          const ErWifiL2ApPlan* plan,
+                                          const char* label,
+                                          UINTN label_len,
+                                          ErChannelEndpoint* out_endpoint);
+UINT8 er_wifi_l2_channel_endpoint_valid(const ErChannelEndpoint* endpoint);
 
 #endif
