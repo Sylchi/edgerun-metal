@@ -25,8 +25,26 @@ enum {
   ER_BLE_ADV_PAYLOAD_OFFSET = 13u,
   ER_BLE_ADV_BYTE_MASK = 0xffu,
   ER_BLE_ADV_BYTE_BITS = 8u,
+  ER_BLE_ADV_U32_MASK = 0xffffffffu,
   ER_BLE_ADV_U16_LO_OFFSET = 0u,
   ER_BLE_ADV_U16_HI_OFFSET = 1u,
+  ER_BLE_ADV_U32_BYTE0_OFFSET = 0u,
+  ER_BLE_ADV_U32_BYTE1_OFFSET = 1u,
+  ER_BLE_ADV_U32_BYTE2_OFFSET = 2u,
+  ER_BLE_ADV_U32_BYTE3_OFFSET = 3u,
+  ER_BLE_ADV_U64_LO_U32_OFFSET = 0u,
+  ER_BLE_ADV_U64_HI_U32_OFFSET = 4u,
+  ER_BLE_WIFI_ROLE_PAYLOAD_KIND_OFFSET = 0u,
+  ER_BLE_WIFI_ROLE_PAYLOAD_VERSION_OFFSET = 1u,
+  ER_BLE_WIFI_ROLE_PAYLOAD_CAPABILITIES_OFFSET = 2u,
+  ER_BLE_WIFI_ROLE_PAYLOAD_PREFERRED_ROLE_OFFSET = 3u,
+  ER_BLE_WIFI_ROLE_PAYLOAD_ELECTION_PRIORITY_OFFSET = 4u,
+  ER_BLE_WIFI_ROLE_PAYLOAD_CHANNEL_OFFSET = 5u,
+  ER_BLE_WIFI_ROLE_PAYLOAD_GROUP_ID_OFFSET = 6u,
+  ER_BLE_WIFI_ROLE_PAYLOAD_NODE_NONCE_OFFSET = 10u,
+  ER_BLE_WIFI_ROLE_PAYLOAD_VERSION = 1u,
+  ER_BLE_WIFI_CAPABILITY_KNOWN_MASK = ER_BLE_WIFI_CAPABILITY_AP | ER_BLE_WIFI_CAPABILITY_STA,
+  ER_BLE_WIFI_CHANNEL_INVALID = 0u,
   ER_BLE_HCI_COMMAND_OPCODE_LO_OFFSET = 0u,
   ER_BLE_HCI_COMMAND_OPCODE_HI_OFFSET = 1u,
   ER_BLE_HCI_COMMAND_PARAM_LEN_OFFSET = 2u,
@@ -104,6 +122,87 @@ static EFI_GUID g_er_bluetooth_hc_protocol_guid = {
 static void er_ble_adv_write_u16(UINT8* dst, UINT16 value) {
   dst[ER_BLE_ADV_U16_LO_OFFSET] = (UINT8)(value & ER_BLE_ADV_BYTE_MASK);
   dst[ER_BLE_ADV_U16_HI_OFFSET] = (UINT8)((value >> ER_BLE_ADV_BYTE_BITS) & ER_BLE_ADV_BYTE_MASK);
+}
+
+static UINT32 er_ble_adv_read_u32(const UINT8* src) {
+  return (UINT32)src[ER_BLE_ADV_U32_BYTE0_OFFSET] |
+         ((UINT32)src[ER_BLE_ADV_U32_BYTE1_OFFSET] << ER_BLE_ADV_BYTE_BITS) |
+         ((UINT32)src[ER_BLE_ADV_U32_BYTE2_OFFSET] <<
+          (ER_BLE_ADV_BYTE_BITS * ER_BLE_ADV_U32_BYTE2_OFFSET)) |
+         ((UINT32)src[ER_BLE_ADV_U32_BYTE3_OFFSET] <<
+          (ER_BLE_ADV_BYTE_BITS * ER_BLE_ADV_U32_BYTE3_OFFSET));
+}
+
+static UINT64 er_ble_adv_read_u64(const UINT8* src) {
+  return (UINT64)er_ble_adv_read_u32(src + ER_BLE_ADV_U64_LO_U32_OFFSET) |
+         ((UINT64)er_ble_adv_read_u32(src + ER_BLE_ADV_U64_HI_U32_OFFSET) <<
+          (ER_BLE_ADV_BYTE_BITS * ER_BLE_ADV_U64_HI_U32_OFFSET));
+}
+
+static void er_ble_adv_write_u32(UINT8* dst, UINT32 value) {
+  dst[ER_BLE_ADV_U32_BYTE0_OFFSET] = (UINT8)(value & ER_BLE_ADV_BYTE_MASK);
+  dst[ER_BLE_ADV_U32_BYTE1_OFFSET] = (UINT8)((value >> ER_BLE_ADV_BYTE_BITS) & ER_BLE_ADV_BYTE_MASK);
+  dst[ER_BLE_ADV_U32_BYTE2_OFFSET] =
+      (UINT8)((value >> (ER_BLE_ADV_BYTE_BITS * ER_BLE_ADV_U32_BYTE2_OFFSET)) & ER_BLE_ADV_BYTE_MASK);
+  dst[ER_BLE_ADV_U32_BYTE3_OFFSET] =
+      (UINT8)((value >> (ER_BLE_ADV_BYTE_BITS * ER_BLE_ADV_U32_BYTE3_OFFSET)) & ER_BLE_ADV_BYTE_MASK);
+}
+
+static void er_ble_adv_write_u64(UINT8* dst, UINT64 value) {
+  er_ble_adv_write_u32(dst + ER_BLE_ADV_U64_LO_U32_OFFSET,
+                       (UINT32)(value & ER_BLE_ADV_U32_MASK));
+  er_ble_adv_write_u32(dst + ER_BLE_ADV_U64_HI_U32_OFFSET,
+                       (UINT32)(value >> (ER_BLE_ADV_BYTE_BITS * ER_BLE_ADV_U64_HI_U32_OFFSET)));
+}
+
+static UINT8 er_ble_wifi_role_valid(UINT8 role) {
+  switch (role) {
+    case ER_BLE_WIFI_ROLE_NONE:
+    case ER_BLE_WIFI_ROLE_AP:
+    case ER_BLE_WIFI_ROLE_STA:
+      return 1u;
+    default:
+      return 0u;
+  }
+}
+
+static UINT8 er_ble_wifi_role_capability_valid(UINT8 capabilities) {
+  if (capabilities == 0u ||
+      (capabilities & (UINT8)~ER_BLE_WIFI_CAPABILITY_KNOWN_MASK) != 0u) {
+    return 0u;
+  }
+  return 1u;
+}
+
+static UINT8 er_ble_wifi_role_can_ap(const ErBleWifiRoleAdvert* advert) {
+  return (UINT8)(advert != 0 &&
+                 (advert->capabilities & ER_BLE_WIFI_CAPABILITY_AP) != 0u);
+}
+
+static UINT8 er_ble_wifi_role_can_sta(const ErBleWifiRoleAdvert* advert) {
+  return (UINT8)(advert != 0 &&
+                 (advert->capabilities & ER_BLE_WIFI_CAPABILITY_STA) != 0u);
+}
+
+static UINT8 er_ble_wifi_role_advert_valid(const ErBleWifiRoleAdvert* advert) {
+  if (advert == 0 ||
+      er_ble_wifi_role_capability_valid(advert->capabilities) == 0u ||
+      er_ble_wifi_role_valid(advert->preferred_role) == 0u ||
+      advert->wifi_channel == ER_BLE_WIFI_CHANNEL_INVALID ||
+      advert->group_id == ER_BLE_WIFI_GROUP_ID_INVALID ||
+      advert->node_nonce == 0u) {
+    return 0u;
+  }
+  switch (advert->preferred_role) {
+    case ER_BLE_WIFI_ROLE_AP:
+      return er_ble_wifi_role_can_ap(advert);
+    case ER_BLE_WIFI_ROLE_STA:
+      return er_ble_wifi_role_can_sta(advert);
+    case ER_BLE_WIFI_ROLE_NONE:
+      return 1u;
+    default:
+      return 0u;
+  }
 }
 
 UINT8 er_ble_adv_prepare_packet(UINT8 channel_id,
@@ -216,6 +315,125 @@ UINT8 er_ble_adv_decode_data(const UINT8* data,
     offset = (UINT8)(offset + ER_BLE_HCI_ADV_DATA_BYTES_OFFSET + field_len);
   }
   return 0u;
+}
+
+UINT8 er_ble_wifi_role_advert_prepare(UINT8 capabilities,
+                                      UINT8 preferred_role,
+                                      UINT8 election_priority,
+                                      UINT8 wifi_channel,
+                                      UINT32 group_id,
+                                      UINT64 node_nonce,
+                                      ErBleWifiRoleAdvert* out_advert) {
+  ErBleWifiRoleAdvert advert;
+
+  if (out_advert == 0) {
+    return 0u;
+  }
+  er_mem_zero((UINT8*)&advert, (UINTN)sizeof(advert));
+  advert.capabilities = capabilities;
+  advert.preferred_role = preferred_role;
+  advert.election_priority = election_priority;
+  advert.wifi_channel = wifi_channel;
+  advert.group_id = group_id;
+  advert.node_nonce = node_nonce;
+  if (er_ble_wifi_role_advert_valid(&advert) == 0u) {
+    return 0u;
+  }
+  *out_advert = advert;
+  return 1u;
+}
+
+UINT8 er_ble_wifi_role_encode_payload(const ErBleWifiRoleAdvert* advert,
+                                      UINT8 out_payload[ER_BLE_ADV_PAYLOAD_BYTES]) {
+  if (out_payload == 0 || er_ble_wifi_role_advert_valid(advert) == 0u) {
+    return 0u;
+  }
+  er_mem_zero(out_payload, ER_BLE_ADV_PAYLOAD_BYTES);
+  out_payload[ER_BLE_WIFI_ROLE_PAYLOAD_KIND_OFFSET] = ER_BLE_PAYLOAD_KIND_WIFI_ROLE;
+  out_payload[ER_BLE_WIFI_ROLE_PAYLOAD_VERSION_OFFSET] = ER_BLE_WIFI_ROLE_PAYLOAD_VERSION;
+  out_payload[ER_BLE_WIFI_ROLE_PAYLOAD_CAPABILITIES_OFFSET] = advert->capabilities;
+  out_payload[ER_BLE_WIFI_ROLE_PAYLOAD_PREFERRED_ROLE_OFFSET] = advert->preferred_role;
+  out_payload[ER_BLE_WIFI_ROLE_PAYLOAD_ELECTION_PRIORITY_OFFSET] = advert->election_priority;
+  out_payload[ER_BLE_WIFI_ROLE_PAYLOAD_CHANNEL_OFFSET] = advert->wifi_channel;
+  er_ble_adv_write_u32(out_payload + ER_BLE_WIFI_ROLE_PAYLOAD_GROUP_ID_OFFSET,
+                       advert->group_id);
+  er_ble_adv_write_u64(out_payload + ER_BLE_WIFI_ROLE_PAYLOAD_NODE_NONCE_OFFSET,
+                       advert->node_nonce);
+  return 1u;
+}
+
+UINT8 er_ble_wifi_role_decode_payload(const UINT8 payload[ER_BLE_ADV_PAYLOAD_BYTES],
+                                      ErBleWifiRoleAdvert* out_advert) {
+  if (payload == 0 || out_advert == 0 ||
+      payload[ER_BLE_WIFI_ROLE_PAYLOAD_KIND_OFFSET] != ER_BLE_PAYLOAD_KIND_WIFI_ROLE ||
+      payload[ER_BLE_WIFI_ROLE_PAYLOAD_VERSION_OFFSET] != ER_BLE_WIFI_ROLE_PAYLOAD_VERSION) {
+    return 0u;
+  }
+  return er_ble_wifi_role_advert_prepare(payload[ER_BLE_WIFI_ROLE_PAYLOAD_CAPABILITIES_OFFSET],
+                                         payload[ER_BLE_WIFI_ROLE_PAYLOAD_PREFERRED_ROLE_OFFSET],
+                                         payload[ER_BLE_WIFI_ROLE_PAYLOAD_ELECTION_PRIORITY_OFFSET],
+                                         payload[ER_BLE_WIFI_ROLE_PAYLOAD_CHANNEL_OFFSET],
+                                         er_ble_adv_read_u32(payload + ER_BLE_WIFI_ROLE_PAYLOAD_GROUP_ID_OFFSET),
+                                         er_ble_adv_read_u64(payload + ER_BLE_WIFI_ROLE_PAYLOAD_NODE_NONCE_OFFSET),
+                                         out_advert);
+}
+
+ErBleWifiRoleDecision er_ble_wifi_role_decide(const ErBleWifiRoleAdvert* local,
+                                              const ErBleWifiRoleAdvert* remote) {
+  UINT8 local_can_ap;
+  UINT8 local_can_sta;
+  UINT8 remote_can_ap;
+  UINT8 remote_can_sta;
+
+  if (er_ble_wifi_role_advert_valid(local) == 0u ||
+      er_ble_wifi_role_advert_valid(remote) == 0u ||
+      local->group_id != remote->group_id ||
+      local->wifi_channel != remote->wifi_channel) {
+    return ER_BLE_WIFI_ROLE_DECISION_NONE;
+  }
+
+  local_can_ap = er_ble_wifi_role_can_ap(local);
+  local_can_sta = er_ble_wifi_role_can_sta(local);
+  remote_can_ap = er_ble_wifi_role_can_ap(remote);
+  remote_can_sta = er_ble_wifi_role_can_sta(remote);
+
+  if (local_can_ap != 0u && remote_can_sta != 0u &&
+      local->preferred_role == ER_BLE_WIFI_ROLE_AP &&
+      remote->preferred_role == ER_BLE_WIFI_ROLE_STA) {
+    return ER_BLE_WIFI_ROLE_DECISION_LOCAL_AP;
+  }
+  if (local_can_sta != 0u && remote_can_ap != 0u &&
+      local->preferred_role == ER_BLE_WIFI_ROLE_STA &&
+      remote->preferred_role == ER_BLE_WIFI_ROLE_AP) {
+    return ER_BLE_WIFI_ROLE_DECISION_LOCAL_STA;
+  }
+  if (local_can_ap == 0u && remote_can_ap == 0u) {
+    return ER_BLE_WIFI_ROLE_DECISION_CONFLICT;
+  }
+  if (local_can_sta == 0u && remote_can_sta == 0u) {
+    return ER_BLE_WIFI_ROLE_DECISION_CONFLICT;
+  }
+  if (local_can_ap != 0u && remote_can_sta != 0u &&
+      (local_can_sta == 0u || remote_can_ap == 0u)) {
+    return ER_BLE_WIFI_ROLE_DECISION_LOCAL_AP;
+  }
+  if (local_can_sta != 0u && remote_can_ap != 0u &&
+      (local_can_ap == 0u || remote_can_sta == 0u)) {
+    return ER_BLE_WIFI_ROLE_DECISION_LOCAL_STA;
+  }
+  if (local->election_priority > remote->election_priority) {
+    return ER_BLE_WIFI_ROLE_DECISION_LOCAL_AP;
+  }
+  if (local->election_priority < remote->election_priority) {
+    return ER_BLE_WIFI_ROLE_DECISION_LOCAL_STA;
+  }
+  if (local->node_nonce > remote->node_nonce) {
+    return ER_BLE_WIFI_ROLE_DECISION_LOCAL_AP;
+  }
+  if (local->node_nonce < remote->node_nonce) {
+    return ER_BLE_WIFI_ROLE_DECISION_LOCAL_STA;
+  }
+  return ER_BLE_WIFI_ROLE_DECISION_CONFLICT;
 }
 
 static UINT8 er_ble_adv_efi_send_command(EFI_BLUETOOTH_HC_PROTOCOL* hc,
