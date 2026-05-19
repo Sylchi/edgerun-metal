@@ -21,6 +21,13 @@ enum {
   ER_PI_SDIO_CMD53_COUNT_MASK = 0x000001ffu,
   ER_PI_MMC_RCA_MASK = 0x0000ffffu,
   ER_PI_MMC_RCA_ARGUMENT_BITS = 16u,
+  ER_PI_EMMC_CMDTM_RESPONSE_BITS = 16u,
+  ER_PI_EMMC_CMDTM_RESPONSE_NONE = 0u,
+  ER_PI_EMMC_CMDTM_RESPONSE_48 = 2u,
+  ER_PI_EMMC_CMDTM_CRC_CHECK = 1u << 19u,
+  ER_PI_EMMC_CMDTM_INDEX_CHECK = 1u << 20u,
+  ER_PI_EMMC_CMDTM_INDEX_BITS = 24u,
+  ER_PI_EMMC_INTERRUPT_ALL = 0xffffffffu,
   ER_PI_ZERO2W_SDIO_OCR_3V3 = 0x00300000u,
   ER_PI_ZERO2W_SDIO_NO_ARGUMENT = 0u
 };
@@ -141,6 +148,67 @@ UINT32 er_pi_mmc_relative_card_argument(UINT32 relative_card_address) {
          ER_PI_MMC_RCA_ARGUMENT_BITS;
 }
 
+UINT32 er_pi_mmc_relative_card_from_r6(UINT32 response) {
+  return (response >> ER_PI_MMC_RCA_ARGUMENT_BITS) & ER_PI_MMC_RCA_MASK;
+}
+
+static UINT8 er_pi_mmc_response_requires_crc(UINT32 response_kind) {
+  switch (response_kind) {
+    case ER_PI_MMC_RESPONSE_R1:
+    case ER_PI_MMC_RESPONSE_R5:
+    case ER_PI_MMC_RESPONSE_R6:
+      return 1u;
+    case ER_PI_MMC_RESPONSE_NONE:
+    case ER_PI_MMC_RESPONSE_R4:
+      return 0u;
+    default:
+      return 0u;
+  }
+}
+
+static UINT8 er_pi_mmc_response_requires_index(UINT32 response_kind) {
+  switch (response_kind) {
+    case ER_PI_MMC_RESPONSE_R1:
+    case ER_PI_MMC_RESPONSE_R5:
+    case ER_PI_MMC_RESPONSE_R6:
+      return 1u;
+    case ER_PI_MMC_RESPONSE_NONE:
+    case ER_PI_MMC_RESPONSE_R4:
+      return 0u;
+    default:
+      return 0u;
+  }
+}
+
+static UINT32 er_pi_emmc_response_bits(UINT32 response_kind) {
+  switch (response_kind) {
+    case ER_PI_MMC_RESPONSE_NONE:
+      return ER_PI_EMMC_CMDTM_RESPONSE_NONE;
+    case ER_PI_MMC_RESPONSE_R1:
+    case ER_PI_MMC_RESPONSE_R4:
+    case ER_PI_MMC_RESPONSE_R5:
+    case ER_PI_MMC_RESPONSE_R6:
+      return ER_PI_EMMC_CMDTM_RESPONSE_48;
+    default:
+      return ER_PI_EMMC_CMDTM_RESPONSE_NONE;
+  }
+}
+
+static UINT32 er_pi_emmc_command_value(const ErPiMmcCommand* command) {
+  UINT32 value;
+
+  value = command->command_index << ER_PI_EMMC_CMDTM_INDEX_BITS;
+  value |= er_pi_emmc_response_bits(command->response_kind) <<
+           ER_PI_EMMC_CMDTM_RESPONSE_BITS;
+  if (er_pi_mmc_response_requires_crc(command->response_kind) != 0u) {
+    value |= ER_PI_EMMC_CMDTM_CRC_CHECK;
+  }
+  if (er_pi_mmc_response_requires_index(command->response_kind) != 0u) {
+    value |= ER_PI_EMMC_CMDTM_INDEX_CHECK;
+  }
+  return value;
+}
+
 UINT8 er_pi_mmc_command_prepare(UINT32 command_index,
                                 UINT32 argument,
                                 UINT32 response_kind,
@@ -183,6 +251,53 @@ UINT8 er_pi_mmc_command_prepare(UINT32 command_index,
   out_command->command_index = command_index;
   out_command->argument = argument;
   out_command->response_kind = response_kind;
+  return 1u;
+}
+
+UINT8 er_pi_emmc_command_io_prepare(const ErPiMmcCommand* command,
+                                    ErPiEmmcCommandIo* out_io) {
+  ErPiMmcCommand prepared;
+
+  if (command == 0 ||
+      out_io == 0 ||
+      er_pi_mmc_command_prepare(command->command_index,
+                                command->argument,
+                                command->response_kind,
+                                &prepared) == 0u) {
+    return 0u;
+  }
+
+  out_io->interrupt_offset = ER_PI_EMMC_REG_INTERRUPT;
+  out_io->interrupt_clear_value = ER_PI_EMMC_INTERRUPT_ALL;
+  out_io->argument_offset = ER_PI_EMMC_REG_ARG1;
+  out_io->argument_value = prepared.argument;
+  out_io->command_offset = ER_PI_EMMC_REG_CMDTM;
+  out_io->command_value = er_pi_emmc_command_value(&prepared);
+  out_io->response_offset = ER_PI_EMMC_REG_RESP0;
+  out_io->response_kind = prepared.response_kind;
+  return 1u;
+}
+
+UINT8 er_pi_emmc_command_begin(INT64 emmc_handle,
+                               const ErPiMmcCommand* command,
+                               ErPiEmmcCommandIo* out_io) {
+  ErPiEmmcCommandIo io;
+
+  if (out_io == 0 ||
+      er_pi_emmc_command_io_prepare(command, &io) == 0u ||
+      er_mmio_write32(emmc_handle,
+                      (INT64)io.interrupt_offset,
+                      io.interrupt_clear_value) == 0u ||
+      er_mmio_write32(emmc_handle,
+                      (INT64)io.argument_offset,
+                      io.argument_value) == 0u ||
+      er_mmio_write32(emmc_handle,
+                      (INT64)io.command_offset,
+                      io.command_value) == 0u) {
+    return 0u;
+  }
+
+  *out_io = io;
   return 1u;
 }
 
