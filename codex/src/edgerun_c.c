@@ -38,6 +38,7 @@
 #define ANSI_CYAN "\033[36m"
 #define ANSI_GRAY "\033[90m"
 #define C_KEYWORD_COUNT 33u
+#define SESSION_EXCERPT_BYTES 400u
 
 static const char *AGENT_INSTRUCTIONS =
     "You are Codex running inside EdgeRun C. "
@@ -1166,6 +1167,68 @@ static char *host_continue_message_new(Workspace *ws, bool checkpoint_committed)
     buffer_append(&b, status, strlen(status));
     free(status);
     return b.data;
+}
+
+static void buffer_append_excerpt(Buffer *b, const char *text, size_t max_bytes) {
+    size_t len = strlen(text);
+    size_t n = len < max_bytes ? len : max_bytes;
+    buffer_append(b, text, n);
+    if (len > n) buffer_append(b, "\n[truncated]\n", 12);
+}
+
+static char *session_memory_message_new(
+    Workspace *ws,
+    const AgentRunSummary *summary,
+    const char *user_prompt,
+    const char *exchange) {
+    Buffer b;
+    buffer_init(&b);
+    buffer_append(&b,
+        "Fixed end-of-turn carry-forward summary for the next user prompt. "
+        "Keep this context, but prefer fresh repository tools when facts may have changed.\n\n",
+        strlen("Fixed end-of-turn carry-forward summary for the next user prompt. "
+               "Keep this context, but prefer fresh repository tools when facts may have changed.\n\n"));
+    buffer_appendf(&b, "last user prompt:\n%s\n\n", user_prompt);
+    buffer_appendf(&b,
+                   "turn counters: turns=%zu tool_calls=%zu checkpoints=%zu review_only_turns=%zu last_commit_status=%d\n",
+                   summary->turns,
+                   summary->tool_calls,
+                   summary->checkpoints,
+                   summary->review_only_turns,
+                   summary->commit_status);
+    char *status = repo_status_text_new(ws);
+    const char *status_title = "\nrepository status after turn:\n";
+    buffer_append(&b, status_title, strlen(status_title));
+    buffer_append(&b, status, strlen(status));
+    free(status);
+    const char *exchange_title = "\ncompact exchange record:\n";
+    buffer_append(&b, exchange_title, strlen(exchange_title));
+    buffer_append_excerpt(&b, exchange, SESSION_EXCERPT_BYTES * 8u);
+    return b.data;
+}
+
+static char *read_session_prompt_new(void) {
+    char *line = NULL;
+    size_t cap = 0;
+    for (;;) {
+        printf("%scodex user>%s ", color_code(stdout, ANSI_BLUE), color_code(stdout, ANSI_RESET));
+        fflush(stdout);
+        if (getline(&line, &cap, stdin) == -1) {
+            free(line);
+            return NULL;
+        }
+        trim_newline(line);
+        char *p = line;
+        while (*p && isspace((unsigned char)*p)) p++;
+        if (*p == 0) continue;
+        if (strcmp(p, "quit") == 0 || strcmp(p, "exit") == 0) {
+            free(line);
+            return NULL;
+        }
+        char *out = xstrdup(p);
+        free(line);
+        return out;
+    }
 }
 
 static void trim_newline(char *s) {

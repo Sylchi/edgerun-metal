@@ -483,11 +483,18 @@ static int run_agent_prompt(Workspace *ws, const char *prompt) {
     char *context = enhanced_initial_context_text_new(ws);
     json_items_push(&history, user_item_json_new(context));
     free(context);
-    json_items_push(&history, user_item_json_new(prompt));
+    char *current_prompt = xstrdup(prompt);
+    Buffer exchange;
+    buffer_init(&exchange);
+    json_items_push(&history, user_item_json_new(current_prompt));
 
     for (;;) {
         AgentTurn turn = highlighted_codex_stream_turn(model, &auth, &session, &history);
         summary.turns++;
+        if (turn.text && *turn.text) {
+            buffer_append(&exchange, "\nassistant:\n", 12);
+            buffer_append_excerpt(&exchange, turn.text, SESSION_EXCERPT_BYTES * 2u);
+        }
         for (size_t i = 0; i < turn.output_items.count; i++) {
             json_items_push(&history, xstrdup(turn.output_items.items[i]));
         }
@@ -510,12 +517,39 @@ static int run_agent_prompt(Workspace *ws, const char *prompt) {
                 json_items_free(&history);
                 free(auth.access_token);
                 free(auth.account_id);
+                free(current_prompt);
+                free(exchange.data);
                 return summary.commit_status;
             }
             summary.checkpoints++;
-            char *continue_message = host_continue_message_new(ws, true);
-            json_items_push(&history, user_item_json_new(continue_message));
-            free(continue_message);
+            char *memory = session_memory_message_new(
+                ws,
+                &summary,
+                current_prompt,
+                exchange.data ? exchange.data : "");
+            print_icon_line(stdout, "🧠", ANSI_CYAN, "session context compacted; enter the next prompt or 'quit'");
+            char *next_prompt = read_session_prompt_new();
+            if (!next_prompt) {
+                free(memory);
+                json_items_free(&history);
+                free(auth.access_token);
+                free(auth.account_id);
+                free(current_prompt);
+                free(exchange.data);
+                return 0;
+            }
+            json_items_free(&history);
+            memset(&history, 0, sizeof(history));
+            context = enhanced_initial_context_text_new(ws);
+            json_items_push(&history, user_item_json_new(context));
+            free(context);
+            json_items_push(&history, user_item_json_new(memory));
+            free(memory);
+            free(current_prompt);
+            current_prompt = next_prompt;
+            json_items_push(&history, user_item_json_new(current_prompt));
+            exchange.len = 0;
+            if (exchange.data) exchange.data[0] = 0;
             continue;
         }
         for (size_t i = 0; i < turn.tool_count; i++) {
@@ -524,6 +558,8 @@ static int run_agent_prompt(Workspace *ws, const char *prompt) {
             fprintf(stderr, "\n%s🔧 tool%s %s\n",
                     color_code(stderr, ANSI_BLUE), color_code(stderr, ANSI_RESET), turn.tools[i].name);
             char *tool_out = execute_agent_tool_new(ws, &turn.tools[i], &ok);
+            buffer_appendf(&exchange, "\ntool %s (%s):\n", turn.tools[i].name, ok ? "ok" : "failed");
+            buffer_append_excerpt(&exchange, tool_out, SESSION_EXCERPT_BYTES);
             fprintf(stderr, "%s%s tool result%s %.160s%s\n",
                     color_code(stderr, ok ? ANSI_GREEN : ANSI_RED),
                     ok ? "✅" : "❌",
