@@ -23,6 +23,7 @@ static void test_boot_services_boundary(void) {
   EFI_SYSTEM_TABLE system_table;
   ErTpmNvLimits limits;
   ErPciDeviceSnapshot snapshot;
+  ErBootOnboardingModel onboarding;
 
   er_boot_services_report_init(&report);
   check_uint64("boot services secure boot unknown",
@@ -35,6 +36,15 @@ static void test_boot_services_boundary(void) {
              er_boot_services_action_label(ER_BOOT_SERVICES_ACTION_HALT), "halt");
   check_int64("boot services runtime denied",
               er_boot_services_runtime_entry_allowed(&report), 0);
+  er_boot_services_onboarding_model(&report, &onboarding);
+  check_uint64("boot services unknown onboarding fatal",
+               onboarding.state, ER_BOOT_ONBOARDING_STATE_FATAL);
+  check_cstr("boot services onboarding fatal label",
+             er_boot_services_onboarding_state_label(onboarding.state), "fatal");
+  check_int64("boot services reject empty label",
+              er_boot_services_authority_label_valid("", 0u), 0);
+  check_int64("boot services accept profile label",
+              er_boot_services_authority_label_valid("personal", 8u), 1);
 
   er_mem_zero((UINT8*)&runtime_services, (UINTN)sizeof(runtime_services));
   er_mem_zero((UINT8*)&system_table, (UINTN)sizeof(system_table));
@@ -68,10 +78,23 @@ static void test_boot_services_boundary(void) {
   check_cstr("boot services configure label",
              er_boot_services_action_label(ER_BOOT_SERVICES_ACTION_CONFIGURE_AUTHORITY),
              "configure-authority");
+  er_boot_services_onboarding_model(&report, &onboarding);
+  check_uint64("boot services onboarding create first",
+               onboarding.state, ER_BOOT_ONBOARDING_STATE_CREATE_FIRST_PROFILE);
+  check_uint64("boot services onboarding no choices", onboarding.choice_count, 0u);
+  check_cstr("boot services onboarding create label",
+             er_boot_services_onboarding_state_label(onboarding.state),
+             "create-first-profile");
 
-  check_int64("boot services add authority",
-              er_boot_services_add_authority(&report, 0x81000010u, 1u,
-                                             ER_BOOT_CONFIG_PRESENT),
+  check_int64("boot services reject unnamed authority",
+              er_boot_services_add_authority_profile(&report, 0x81000010u, 1u,
+                                                     ER_BOOT_CONFIG_PRESENT,
+                                                     "", 0u),
+              0);
+  check_int64("boot services add personal authority",
+              er_boot_services_add_authority_profile(&report, 0x81000010u, 1u,
+                                                     ER_BOOT_CONFIG_PRESENT,
+                                                     "personal", 8u),
               1);
   check_int64("boot services one authority enters runtime",
               er_boot_services_decide_action(&report),
@@ -79,10 +102,17 @@ static void test_boot_services_boundary(void) {
   check_cstr("boot services runtime label",
              er_boot_services_action_label(ER_BOOT_SERVICES_ACTION_ENTER_RUNTIME),
              "enter-runtime");
+  er_boot_services_onboarding_model(&report, &onboarding);
+  check_uint64("boot services onboarding ready",
+               onboarding.state, ER_BOOT_ONBOARDING_STATE_READY);
+  check_uint64("boot services onboarding one choice", onboarding.choice_count, 1u);
+  check_cstr("boot services onboarding personal label",
+             onboarding.choices[0].label, "personal");
 
   check_int64("boot services add second authority",
-              er_boot_services_add_authority(&report, 0x81000011u, 2u,
-                                             ER_BOOT_CONFIG_PRESENT),
+              er_boot_services_add_authority_profile(&report, 0x81000011u, 2u,
+                                                     ER_BOOT_CONFIG_PRESENT,
+                                                     "lab", 3u),
               1);
   check_int64("boot services multiple authority selects",
               er_boot_services_decide_action(&report),
@@ -90,6 +120,12 @@ static void test_boot_services_boundary(void) {
   check_cstr("boot services select label",
              er_boot_services_action_label(ER_BOOT_SERVICES_ACTION_SELECT_AUTHORITY),
              "select-authority");
+  er_boot_services_onboarding_model(&report, &onboarding);
+  check_uint64("boot services onboarding select",
+               onboarding.state, ER_BOOT_ONBOARDING_STATE_SELECT_PROFILE);
+  check_uint64("boot services onboarding two choices", onboarding.choice_count, 2u);
+  check_cstr("boot services onboarding lab label",
+             onboarding.choices[1].label, "lab");
   check_int64("boot services select second",
               er_boot_services_select_authority(&report, 1u), 1);
   check_int64("boot services selected enters runtime",
@@ -97,6 +133,8 @@ static void test_boot_services_boundary(void) {
               ER_BOOT_SERVICES_ACTION_ENTER_RUNTIME);
   check_int64("boot services runtime allowed",
               er_boot_services_runtime_entry_allowed(&report), 1);
+  er_boot_services_onboarding_model(&report, &onboarding);
+  check_uint64("boot services onboarding selected", onboarding.selected_authority, 1u);
 
   er_mem_zero((UINT8*)&snapshot, (UINTN)sizeof(snapshot));
   snapshot.present = 1u;
