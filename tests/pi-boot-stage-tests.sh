@@ -95,6 +95,11 @@ if ! grep -q "kernel=kernel.img" "$ZERO_W_BOOT_DIR/config.txt"; then
   exit 1
 fi
 
+if ! grep -q "core_freq=250" "$ZERO_W_BOOT_DIR/config.txt"; then
+  printf 'zero w config.txt does not pin mini UART core clock\n' >&2
+  exit 1
+fi
+
 if ! grep -q "board=pi-zero-w-v1_1" \
   "$ZERO_W_BOOT_DIR/EDGERUN-PI-ZERO-W-V1_1-BOOT.txt"; then
   printf 'zero w manifest does not name actual board\n' >&2

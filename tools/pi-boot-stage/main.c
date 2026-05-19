@@ -52,6 +52,7 @@ static const char ERPBS_ZERO_W_CONFIG_TEXT[] =
     "arm_64bit=0\n"
     "enable_uart=1\n"
     "uart_2ndstage=1\n"
+    "core_freq=250\n"
     "kernel=kernel.img\n";
 static const char ERPBS_ZERO2W_STARTUP_TEXT[] =
     "fs0:\\EFI\\BOOT\\BOOTAA64.EFI\n";
