@@ -500,6 +500,132 @@ static void test_storage_endpoint_object_cache(void) {
               0);
 }
 
+static void test_storage_endpoint_sealed_relay_capture(void) {
+  enum {
+    STORAGE_SEALED_RELAY_ROUTE_SEED = 0x61u,
+    STORAGE_SEALED_RELAY_ROOT_KEY_SEED = 0x25u,
+    STORAGE_SEALED_RELAY_RECIPIENT_SEED = 0x47u,
+    STORAGE_SEALED_RELAY_TOKEN_SEED = 0x91u,
+    STORAGE_SEALED_RELAY_SEQUENCE = 7u,
+    STORAGE_SEALED_RELAY_COST_PER_BYTE = 1u,
+    STORAGE_SEALED_RELAY_MAX_COST = 512u
+  };
+  static const UINT8 aad_bytes[] = {'s', 't', 'o', 'r', 'e'};
+  static const UINT8 plaintext_bytes[] = {'s', 'e', 'a', 'l', 'e', 'd'};
+  ErCryptoProvider crypto;
+  ErCryptoBlake3Sealer sealer;
+  ErAdmittedRoute route;
+  ErIdentity recipient;
+  ErByteSpan aad;
+  ErByteSpan plaintext;
+  ErMutableBytes sealed_out;
+  ErSealedContentObjectHeader sealed_header;
+  ErStorageEndpointSealedRelayCapture capture;
+  ErHash relay_payload_hash;
+  ErHash token_id;
+  UINT8 root_key[ER_CRYPTO_BLAKE3_SEAL_ROOT_KEY_LEN];
+  UINT8 recipient_key[ER_PUBLIC_KEY_LEN];
+  UINT8 sealed_payload[128];
+  UINT8 relay_packet[512];
+  UINT32 relay_packet_len = 0u;
+
+  test_fill_bytes(root_key, (UINTN)sizeof(root_key),
+                  STORAGE_SEALED_RELAY_ROOT_KEY_SEED);
+  test_fill_bytes(recipient_key, (UINTN)sizeof(recipient_key),
+                  STORAGE_SEALED_RELAY_RECIPIENT_SEED);
+  test_fill_bytes(token_id.bytes, ER_HASH_LEN, STORAGE_SEALED_RELAY_TOKEN_SEED);
+  check_int64("storage sealed relay sealer init",
+              er_crypto_blake3_sealer_init(&sealer, root_key), 1);
+  er_crypto_blake3_sealing_provider(&sealer, &crypto);
+  check_int64("storage sealed relay recipient",
+              er_identity_prepare(ER_IDENTITY_TYPE_PUBLIC_KEY,
+                                  ER_IDENTITY_BACKING_ED25519,
+                                  recipient_key,
+                                  (UINT16)sizeof(recipient_key),
+                                  &recipient),
+              1);
+  aad.bytes = aad_bytes;
+  aad.len = (UINTN)sizeof(aad_bytes);
+  plaintext.bytes = plaintext_bytes;
+  plaintext.len = (UINTN)sizeof(plaintext_bytes);
+  sealed_out.bytes = sealed_payload;
+  sealed_out.len = 0u;
+  sealed_out.capacity = (UINTN)sizeof(sealed_payload);
+  check_int64("storage sealed relay seal object",
+              er_seal_prepare_content_object(&crypto, &recipient, &aad,
+                                             &plaintext, 1u, &sealed_out,
+                                             &sealed_header),
+              1);
+  check_int64("storage sealed relay payload hash",
+              er_storage_endpoint_sealed_relay_payload_hash(&crypto,
+                                                            sealed_payload,
+                                                            sealed_out.len,
+                                                            &relay_payload_hash),
+              1);
+  test_prepare_storage_endpoint_route(&route, STORAGE_SEALED_RELAY_ROUTE_SEED);
+  check_int64("storage sealed relay packet prepare",
+              er_relay_packet_prepare(relay_packet,
+                                      (UINT32)sizeof(relay_packet),
+                                      &route.source_node_id,
+                                      &route.target_node_id,
+                                      &route.admission_hash,
+                                      &token_id,
+                                      &route.target_route_commitment,
+                                      STORAGE_SEALED_RELAY_SEQUENCE,
+                                      STORAGE_SEALED_RELAY_COST_PER_BYTE,
+                                      STORAGE_SEALED_RELAY_MAX_COST,
+                                      &relay_payload_hash,
+                                      sealed_payload,
+                                      (UINT32)sealed_out.len,
+                                      &relay_packet_len),
+              1);
+  check_int64("storage sealed relay capture",
+              er_storage_endpoint_capture_sealed_relay_packet(&crypto, &route,
+                                                              relay_packet,
+                                                              relay_packet_len,
+                                                              &aad,
+                                                              &sealed_header,
+                                                              &capture),
+              1);
+  check_hash_equal("storage sealed relay capture object",
+                   &capture.sealed_object_id,
+                   &sealed_header.sealed_object_id);
+  check_uint64("storage sealed relay capture sequence",
+               capture.sequence, STORAGE_SEALED_RELAY_SEQUENCE);
+  check_uint64("storage sealed relay payload len",
+               capture.sealed_payload_len, sealed_out.len);
+
+  relay_packet[ER_RELAY_PACKET_HEADER_LEN] ^= 1u;
+  check_int64("storage sealed relay reject payload tamper",
+              er_storage_endpoint_capture_sealed_relay_packet(&crypto, &route,
+                                                              relay_packet,
+                                                              relay_packet_len,
+                                                              &aad,
+                                                              &sealed_header,
+                                                              &capture),
+              0);
+  relay_packet[ER_RELAY_PACKET_HEADER_LEN] ^= 1u;
+  aad.len = 0u;
+  check_int64("storage sealed relay reject aad mismatch",
+              er_storage_endpoint_capture_sealed_relay_packet(&crypto, &route,
+                                                              relay_packet,
+                                                              relay_packet_len,
+                                                              &aad,
+                                                              &sealed_header,
+                                                              &capture),
+              0);
+  aad.len = (UINTN)sizeof(aad_bytes);
+  route.target_node_id.bytes[0] ^= 1u;
+  check_int64("storage sealed relay reject route mismatch",
+              er_storage_endpoint_capture_sealed_relay_packet(&crypto, &route,
+                                                              relay_packet,
+                                                              relay_packet_len,
+                                                              &aad,
+                                                              &sealed_header,
+                                                              &capture),
+              0);
+}
+
 static void test_app_identity_routes(void) {
   enum {
     APP_PACKAGE_TEST_INSTALLED_SLOT = 3u

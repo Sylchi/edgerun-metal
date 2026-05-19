@@ -65,6 +65,7 @@ int main(void) {
   test_vfs_object_packets();
   test_storage_endpoint_object_store();
   test_storage_endpoint_object_cache();
+  test_storage_endpoint_sealed_relay_capture();
   test_app_identity_routes();
   test_device_relay_identity();
   test_sealed_content_object_format();

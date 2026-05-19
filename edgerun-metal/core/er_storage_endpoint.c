@@ -7,6 +7,8 @@
  */
 
 static const UINT8 g_storage_capture_domain[] = "edgerun:c:v1:storage:endpoint-capture";
+static const UINT8 g_storage_sealed_relay_payload_domain[] =
+    "edgerun:c:v1:storage:sealed-relay-payload";
 
 enum {
   ER_STORAGE_CAPTURE_SPAN_COUNT = 4u,
@@ -14,6 +16,8 @@ enum {
   ER_STORAGE_CAPTURE_OBJECT_SPAN = 1u,
   ER_STORAGE_CAPTURE_PACKET_SPAN = 2u,
   ER_STORAGE_CAPTURE_PAYLOAD_SPAN = 3u,
+  ER_STORAGE_SEALED_RELAY_PAYLOAD_SPAN_COUNT = 1u,
+  ER_STORAGE_SEALED_RELAY_PAYLOAD_SPAN = 0u,
   ER_STORAGE_CACHE_ENTRY_EMPTY = 0u,
   ER_STORAGE_CACHE_ENTRY_FIRST = 0u
 };
@@ -28,6 +32,21 @@ static UINT8 er_storage_endpoint_route_valid(const ErAdmittedRoute* route) {
                  er_hash_nonzero(&route->target_route_commitment) != 0u &&
                  er_node_id_nonzero(&route->source_node_id) != 0u &&
                  er_node_id_nonzero(&route->target_node_id) != 0u);
+}
+
+static UINT8 er_storage_endpoint_relay_header_matches_route(
+    const ErRelayPacketHeader* header,
+    const ErAdmittedRoute* route) {
+  return (UINT8)(header != 0 &&
+                 route != 0 &&
+                 er_node_id_equal(&header->source_node_id,
+                                  &route->source_node_id) != 0u &&
+                 er_node_id_equal(&header->target_node_id,
+                                  &route->target_node_id) != 0u &&
+                 er_hash_equal(&header->admission_id,
+                               &route->admission_hash) != 0u &&
+                 er_hash_equal(&header->route_hash,
+                               &route->target_route_commitment) != 0u);
 }
 
 static UINT8 er_storage_endpoint_packet_matches_store(const ErStorageEndpointObjectStore* store,
@@ -364,6 +383,68 @@ UINT8 er_storage_endpoint_cache_collect(ErStorageEndpointObjectCache* cache,
     ++collected;
   }
   *out_collected = collected;
+  return 1u;
+}
+
+UINT8 er_storage_endpoint_sealed_relay_payload_hash(const ErCryptoProvider* crypto,
+                                                    const UINT8* sealed_payload,
+                                                    UINTN sealed_payload_len,
+                                                    ErHash* out_hash) {
+  ErByteSpan span;
+
+  if (crypto == 0 || sealed_payload == 0 || sealed_payload_len == 0u ||
+      out_hash == 0) {
+    return 0u;
+  }
+  span.bytes = sealed_payload;
+  span.len = sealed_payload_len;
+  return er_crypto_hash(crypto, g_storage_sealed_relay_payload_domain,
+                        (UINTN)(sizeof(g_storage_sealed_relay_payload_domain) - 1u),
+                        &span, ER_STORAGE_SEALED_RELAY_PAYLOAD_SPAN_COUNT,
+                        out_hash);
+}
+
+UINT8 er_storage_endpoint_capture_sealed_relay_packet(const ErCryptoProvider* crypto,
+                                                      const ErAdmittedRoute* route,
+                                                      const UINT8* relay_packet,
+                                                      UINT32 relay_packet_len,
+                                                      const ErByteSpan* aad,
+                                                      const ErSealedContentObjectHeader* sealed_header,
+                                                      ErStorageEndpointSealedRelayCapture* out_capture) {
+  ErRelayPacketHeader relay_header;
+  const UINT8* sealed_payload;
+  UINT32 sealed_payload_len;
+  ErHash relay_payload_hash;
+
+  if (crypto == 0 || relay_packet == 0 || aad == 0 ||
+      sealed_header == 0 || out_capture == 0 ||
+      er_storage_endpoint_route_valid(route) == 0u ||
+      er_relay_packet_decode_header(relay_packet, relay_packet_len,
+                                    &relay_header) == 0u ||
+      er_storage_endpoint_relay_header_matches_route(&relay_header,
+                                                     route) == 0u ||
+      er_relay_packet_payload(relay_packet, relay_packet_len, &sealed_payload,
+                              &sealed_payload_len) == 0u ||
+      er_storage_endpoint_sealed_relay_payload_hash(crypto, sealed_payload,
+                                                    sealed_payload_len,
+                                                    &relay_payload_hash) == 0u ||
+      er_hash_equal(&relay_payload_hash, &relay_header.payload_hash) == 0u ||
+      er_seal_content_object_valid(crypto, sealed_header, aad, sealed_payload,
+                                   sealed_payload_len) == 0u) {
+    return 0u;
+  }
+
+  er_mem_zero((UINT8*)out_capture, (UINTN)sizeof(*out_capture));
+  out_capture->abi_version = ER_WORK_ABI_VERSION;
+  out_capture->route_id = route->route_id;
+  out_capture->admission_id = route->admission_hash;
+  out_capture->relay_payload_hash = relay_payload_hash;
+  out_capture->sealed_object_id = sealed_header->sealed_object_id;
+  out_capture->plaintext_object_id = sealed_header->plaintext_object_id;
+  out_capture->sealed_payload_hash = sealed_header->sealed_payload_hash;
+  out_capture->sequence = relay_header.sequence;
+  out_capture->plaintext_len = sealed_header->plaintext_len;
+  out_capture->sealed_payload_len = sealed_header->sealed_payload_len;
   return 1u;
 }
 

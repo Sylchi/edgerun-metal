@@ -7,6 +7,8 @@
  */
 
 #include "er_app.h"
+#include "er_relay_packet.h"
+#include "er_seal.h"
 #include "er_vfs.h"
 #include "er_work_route.h"
 
@@ -52,6 +54,20 @@ typedef struct {
 typedef struct {
   UINT16 abi_version;
   UINT16 reserved;
+  ErHash route_id;
+  ErHash admission_id;
+  ErHash relay_payload_hash;
+  ErHash sealed_object_id;
+  ErHash plaintext_object_id;
+  ErHash sealed_payload_hash;
+  UINT64 sequence;
+  UINT64 plaintext_len;
+  UINT64 sealed_payload_len;
+} ErStorageEndpointSealedRelayCapture;
+
+typedef struct {
+  UINT16 abi_version;
+  UINT16 reserved;
   ErStorageEndpointCacheEntry* entries;
   UINT32 entry_capacity;
   ErVfsObjectPacket* packets;
@@ -88,6 +104,17 @@ UINT8 er_storage_endpoint_cache_set_pinned(ErStorageEndpointObjectCache* cache,
 UINT8 er_storage_endpoint_cache_collect(ErStorageEndpointObjectCache* cache,
                                         UINT32 max_entries_to_collect,
                                         UINT32* out_collected);
+UINT8 er_storage_endpoint_sealed_relay_payload_hash(const ErCryptoProvider* crypto,
+                                                    const UINT8* sealed_payload,
+                                                    UINTN sealed_payload_len,
+                                                    ErHash* out_hash);
+UINT8 er_storage_endpoint_capture_sealed_relay_packet(const ErCryptoProvider* crypto,
+                                                      const ErAdmittedRoute* route,
+                                                      const UINT8* relay_packet,
+                                                      UINT32 relay_packet_len,
+                                                      const ErByteSpan* aad,
+                                                      const ErSealedContentObjectHeader* sealed_header,
+                                                      ErStorageEndpointSealedRelayCapture* out_capture);
 UINT8 er_storage_endpoint_capture_object_packet(const ErCryptoProvider* crypto,
                                                 const ErAdmittedRoute* route,
                                                 const ErChannelEnvelopeHeader* envelope,
