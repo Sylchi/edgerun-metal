@@ -25,6 +25,10 @@
 #define ER_APP_BUDGET_IPC_SEND 0x00000010u
 #define ER_APP_BUDGET_IPC_RECV 0x00000020u
 
+#define ER_APP_PACKAGE_INSTALL_STATE_INSTALLED 1u
+#define ER_APP_PACKAGE_INSTALL_STATE_REMOVED 2u
+#define ER_APP_PACKAGE_INSTALL_STATE_ROLLED_BACK 3u
+
 typedef struct {
   UINT16 abi_version;
   UINT16 app_kind;
@@ -91,6 +95,16 @@ typedef struct {
   ErAppPackageIndexEntry index_entry;
   ErAppPackageSignature package_signature;
 } ErAppSignedPackageIndexEntry;
+
+typedef struct {
+  UINT16 abi_version;
+  UINT16 app_kind;
+  UINT32 install_state;
+  UINT32 installed_slot;
+  UINT64 generation;
+  ErAppSignedPackageIndexEntry current_entry;
+  ErAppSignedPackageIndexEntry previous_entry;
+} ErAppPackageInstallRecord;
 
 typedef struct {
   ErHash retrieve_route_id;
@@ -271,6 +285,16 @@ UINT8 er_app_prepare_signed_package_index_entry(const ErCryptoProvider* crypto,
                                                 ErAppSignedPackageIndexEntry* out_entry);
 UINT8 er_app_signed_package_index_entry_valid(const ErCryptoProvider* crypto,
                                               const ErAppSignedPackageIndexEntry* entry);
+UINT8 er_app_package_install_record_valid(const ErCryptoProvider* crypto,
+                                          const ErAppPackageInstallRecord* record);
+UINT8 er_app_prepare_package_install_record(const ErCryptoProvider* crypto,
+                                            UINT32 install_state,
+                                            UINT64 generation,
+                                            const ErAppSignedPackageIndexEntry* current_entry,
+                                            const ErAppSignedPackageIndexEntry* previous_entry,
+                                            ErAppPackageInstallRecord* out_record);
+UINT8 er_app_package_install_record_loadable(const ErCryptoProvider* crypto,
+                                             const ErAppPackageInstallRecord* record);
 UINT8 er_app_prepare_package_storage_object(const ErAppPackageStorageResponse* response,
                                             const ErHash* expected_route_id,
                                             const ErHash* expected_object_id,

@@ -244,8 +244,12 @@ UINT8 er_ui_boot_prepare_route_envelope(const ErAdmittedRoute* route,
 UINT8 er_ui_boot_execute_wasm_app(ErUiWasmAppRuntime* runtime);
 const ErUiBootInstalledApp* er_ui_boot_installed_app_for_slot(UINT32 app_index);
 const ErAppSignedPackageIndexEntry* er_ui_boot_installed_signed_package_index_entry_for_slot(UINT32 app_index);
+const ErAppPackageInstallRecord* er_ui_boot_installed_package_record_for_slot(UINT32 app_index);
 UINT8 er_ui_boot_prepare_signed_indexed_package_source(
     const ErAppSignedPackageIndexEntry* index_entry,
+    ErUiBootInstalledPackageSource* out_source);
+UINT8 er_ui_boot_prepare_package_record_source(
+    const ErAppPackageInstallRecord* record,
     ErUiBootInstalledPackageSource* out_source);
 UINT8 er_ui_boot_prepare_installed_package_source(const ErUiBootInstalledApp* installed_app,
                                                   UINT32 app_index,

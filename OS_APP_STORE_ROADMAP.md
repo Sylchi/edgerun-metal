@@ -30,7 +30,7 @@ identity-routed encrypted storage.
 - [x] Store packages by content identity, not labels.
 - [x] Sign packages and verify signatures before install.
 - [x] Build a local package index.
-- [ ] Add package rollback and removal.
+- [x] Add package rollback and removal.
 - [ ] Show package identity, permissions, and provenance in the shell.
 
 ## Milestone 4: Wasm Drivers
