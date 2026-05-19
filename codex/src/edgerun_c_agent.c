@@ -103,7 +103,11 @@ static char *enhanced_initial_context_text_new(Workspace *ws) {
     buffer_append(&b, status, strlen(status));
     free(status);
 
-    buffer_appendf(&b, "\nworkspace files loaded: %zu\npending in-memory proposals: %zu\n", ws->file_count, ws->proposal_count);
+    buffer_appendf(&b,
+                   "\nworkspace files loaded: %zu\ncached file summaries: %zu\npending in-memory proposals: %zu\n",
+                   ws->file_count,
+                   ws->summary_count,
+                   ws->proposal_count);
 
     char *rules = repo_rules_text_new(ws);
     buffer_append(&b, "\n", 1);
