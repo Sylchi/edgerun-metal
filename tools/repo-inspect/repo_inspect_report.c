@@ -289,7 +289,8 @@ static void eri_print_finding_kind_samples(const EriFindings* findings, const ch
     if (strcmp(findings->items[i].kind, kind) != 0) {
       continue;
     }
-    printf("    %s:%u %s\n", findings->items[i].path, findings->items[i].line, findings->items[i].text);
+    printf("    %s:%u [%s] %s\n", findings->items[i].path, findings->items[i].line,
+           findings->items[i].kind, findings->items[i].text);
     ++shown;
   }
   if (shown == 0u) {
@@ -329,6 +330,19 @@ static uint64_t eri_count_worldview_findings(const EriFindings* findings) {
   return count;
 }
 
+static uint64_t eri_count_smell_findings(const EriFindings* findings) {
+  size_t i;
+  uint64_t count = 0u;
+
+  for (i = 0; i < findings->len; ++i) {
+    if (eri_finding_is_cpu_cost(&findings->items[i]) == 0u &&
+        eri_finding_is_worldview_risk(&findings->items[i]) == 0u) {
+      ++count;
+    }
+  }
+  return count;
+}
+
 static void eri_print_cpu_finding_samples(const EriFindings* findings, size_t limit) {
   size_t i;
   size_t shown = 0u;
@@ -352,6 +366,24 @@ static void eri_print_worldview_finding_samples(const EriFindings* findings, siz
 
   for (i = 0u; i < findings->len && shown < limit; ++i) {
     if (eri_finding_is_worldview_risk(&findings->items[i]) == 0u) {
+      continue;
+    }
+    printf("    %s:%u [%s] %s\n", findings->items[i].path, findings->items[i].line,
+           findings->items[i].kind, findings->items[i].text);
+    ++shown;
+  }
+  if (shown == 0u) {
+    printf("    none\n");
+  }
+}
+
+static void eri_print_smell_finding_samples(const EriFindings* findings, size_t limit) {
+  size_t i;
+  size_t shown = 0u;
+
+  for (i = 0u; i < findings->len && shown < limit; ++i) {
+    if (eri_finding_is_cpu_cost(&findings->items[i]) != 0u ||
+        eri_finding_is_worldview_risk(&findings->items[i]) != 0u) {
       continue;
     }
     printf("    %s:%u [%s] %s\n", findings->items[i].path, findings->items[i].line,
