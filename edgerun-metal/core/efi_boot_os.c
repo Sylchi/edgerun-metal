@@ -49,6 +49,7 @@ void er_run_os_path(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE* SystemTable,
   UINT8 ble_payload[ER_BLE_ADV_PAYLOAD_BYTES];
   UINT8 tile_marks[ER_UI_BOOT_MAX_TILE_MARKS];
   UINT32 dirty_tile_ids[ER_UI_BOOT_MAX_DIRTY_TILES];
+  ErUiSurfacePixelRect present_rects[ER_UI_BOOT_MAX_DIRTY_TILES];
   UINT64 ble_node_nonce;
   vr_font_face_t* font = 0;
 
@@ -171,6 +172,8 @@ void er_run_os_path(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE* SystemTable,
   render_context.tile_mark_count = ER_UI_BOOT_MAX_TILE_MARKS;
   render_context.dirty_tile_ids = dirty_tile_ids;
   render_context.dirty_tile_capacity = ER_UI_BOOT_MAX_DIRTY_TILES;
+  render_context.present_rects = present_rects;
+  render_context.present_rect_capacity = ER_UI_BOOT_MAX_DIRTY_TILES;
 
   if (er_ui_ledger_app_state_init(&ledger_state, er_ui_boot_allocator()) != ER_UI_OK) {
     er_println("ui renderer: ledger app state failed");

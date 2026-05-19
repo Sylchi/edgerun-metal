@@ -719,6 +719,88 @@ static void test_ui_boot_dirty_render_state(void) {
   er_ui_scene_destroy(&first_scene);
 }
 
+static void test_ui_boot_dirty_present_rect_coalescing(void) {
+  enum {
+    BOOT_PRESENT_WIDTH = 8u,
+    BOOT_PRESENT_HEIGHT = 4u,
+    BOOT_PRESENT_STRIDE = 8u,
+    BOOT_PRESENT_TILE_WIDTH = 2u,
+    BOOT_PRESENT_TILE_HEIGHT = 2u,
+    BOOT_PRESENT_TILE_COUNT = 8u,
+    BOOT_PRESENT_RECT_CAPACITY = 8u
+  };
+  UINT32 pixels[BOOT_PRESENT_WIDTH * BOOT_PRESENT_HEIGHT] = {0};
+  UINT8 tile_marks[BOOT_PRESENT_TILE_COUNT] = {0};
+  UINT32 dirty_tile_ids[BOOT_PRESENT_TILE_COUNT] = {0};
+  ErUiSurfacePixelRect present_rects[BOOT_PRESENT_RECT_CAPACITY];
+  ErUiSurface surface;
+  ErUiSurfaceTilePlan tile_plan;
+  ErUiBootRenderContext render;
+
+  er_mem_zero((UINT8*)&render, (UINTN)sizeof(render));
+  er_mem_zero((UINT8*)present_rects, (UINTN)sizeof(present_rects));
+  surface.pixels = pixels;
+  surface.width = BOOT_PRESENT_WIDTH;
+  surface.height = BOOT_PRESENT_HEIGHT;
+  surface.stride = BOOT_PRESENT_STRIDE;
+  surface.pixel_format = ER_UI_SURFACE_PIXEL_RGBX;
+  check_int64("ui boot present tile plan",
+              er_ui_surface_tile_plan(&surface,
+                                      BOOT_PRESENT_TILE_WIDTH,
+                                      BOOT_PRESENT_TILE_HEIGHT,
+                                      BOOT_PRESENT_TILE_COUNT,
+                                      &tile_plan),
+              1);
+
+  render.tile_plan = &tile_plan;
+  render.tile_marks = tile_marks;
+  render.tile_mark_count = BOOT_PRESENT_TILE_COUNT;
+  render.present_rects = present_rects;
+  render.present_rect_capacity = BOOT_PRESENT_RECT_CAPACITY;
+  render.last_dirty_tiles.tile_ids = dirty_tile_ids;
+  render.last_dirty_tiles.capacity = BOOT_PRESENT_TILE_COUNT;
+
+  dirty_tile_ids[0] = 0u;
+  dirty_tile_ids[1] = 1u;
+  dirty_tile_ids[2] = 4u;
+  dirty_tile_ids[3] = 5u;
+  render.last_dirty_tiles.count = 4u;
+  check_int64("ui boot present coalesce block",
+              er_ui_boot_dirty_present_rects(&render), 1);
+  check_uint64("ui boot present block count", render.last_present_rect_count, 1u);
+  check_uint64("ui boot present block x0", present_rects[0].x0, 0u);
+  check_uint64("ui boot present block y0", present_rects[0].y0, 0u);
+  check_uint64("ui boot present block x1", present_rects[0].x1, 4u);
+  check_uint64("ui boot present block y1", present_rects[0].y1, 4u);
+
+  dirty_tile_ids[0] = 0u;
+  dirty_tile_ids[1] = 1u;
+  dirty_tile_ids[2] = 4u;
+  render.last_dirty_tiles.count = 3u;
+  check_int64("ui boot present coalesce l shape",
+              er_ui_boot_dirty_present_rects(&render), 1);
+  check_uint64("ui boot present l count", render.last_present_rect_count, 2u);
+  check_uint64("ui boot present l first x1", present_rects[0].x1, 4u);
+  check_uint64("ui boot present l first y1", present_rects[0].y1, 2u);
+  check_uint64("ui boot present l second x1", present_rects[1].x1, 2u);
+  check_uint64("ui boot present l second y1", present_rects[1].y1, 4u);
+
+  dirty_tile_ids[0] = 0u;
+  dirty_tile_ids[1] = 1u;
+  dirty_tile_ids[2] = 2u;
+  dirty_tile_ids[3] = 3u;
+  dirty_tile_ids[4] = 4u;
+  dirty_tile_ids[5] = 5u;
+  dirty_tile_ids[6] = 6u;
+  dirty_tile_ids[7] = 7u;
+  render.last_dirty_tiles.count = 8u;
+  check_int64("ui boot present coalesce full",
+              er_ui_boot_dirty_present_rects(&render), 1);
+  check_uint64("ui boot present full count", render.last_present_rect_count, 1u);
+  check_uint64("ui boot present full x1", present_rects[0].x1, BOOT_PRESENT_WIDTH);
+  check_uint64("ui boot present full y1", present_rects[0].y1, BOOT_PRESENT_HEIGHT);
+}
+
 static void test_ui_surface_renderer_varfont_text(void) {
   vr_font_config_t cfg;
   vr_font_face_t* font = 0;
