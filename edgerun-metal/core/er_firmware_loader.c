@@ -28,11 +28,17 @@ static UINT8 er_firmware_loader_source_valid(const ErBootFirmwareSourceConfig* s
   }
 
   er_boot_config_init(&config);
-  if (er_boot_config_add_efi_firmware_source(&config, source->pci_vendor_id, source->pci_device_id) == 0u) {
+  if (er_boot_config_add_efi_firmware_source_instance(&config,
+                                                      source->pci_vendor_id,
+                                                      source->pci_device_id,
+                                                      source->instance) == 0u) {
     return 0u;
   }
 
-  found = er_boot_config_find_efi_firmware_source(&config, source->pci_vendor_id, source->pci_device_id);
+  found = er_boot_config_find_efi_firmware_source_instance(&config,
+                                                           source->pci_vendor_id,
+                                                           source->pci_device_id,
+                                                           source->instance);
   if (found == 0 ||
       source->enabled != found->enabled ||
       source->source_kind != found->source_kind ||
@@ -150,14 +156,42 @@ UINT8 er_firmware_loader_load_for_pci(const ErCryptoProvider* crypto,
                                       UINT8* firmware_bytes,
                                       UINTN firmware_capacity,
                                       ErFirmwareImage* out_image) {
+  return er_firmware_loader_load_for_pci_instance(crypto,
+                                                  config,
+                                                  pci_vendor_id,
+                                                  pci_device_id,
+                                                  0u,
+                                                  read_fn,
+                                                  read_ctx,
+                                                  firmware_bytes,
+                                                  firmware_capacity,
+                                                  out_image);
+}
+
+UINT8 er_firmware_loader_load_for_pci_instance(const ErCryptoProvider* crypto,
+                                               const ErBootConfig* config,
+                                               UINT16 pci_vendor_id,
+                                               UINT16 pci_device_id,
+                                               UINT8 instance,
+                                               ErFirmwareReadFn read_fn,
+                                               void* read_ctx,
+                                               UINT8* firmware_bytes,
+                                               UINTN firmware_capacity,
+                                               ErFirmwareImage* out_image) {
   const ErBootFirmwareSourceConfig* source;
 
   er_firmware_loader_clear_image(out_image);
-  if (config == 0 || pci_vendor_id == 0u || pci_device_id == 0u) {
+  if (config == 0 ||
+      pci_vendor_id == 0u ||
+      pci_device_id == 0u ||
+      instance > ER_BOOT_CONFIG_FIRMWARE_INSTANCE_MAX) {
     return 0u;
   }
 
-  source = er_boot_config_find_efi_firmware_source(config, pci_vendor_id, pci_device_id);
+  source = er_boot_config_find_efi_firmware_source_instance(config,
+                                                            pci_vendor_id,
+                                                            pci_device_id,
+                                                            instance);
   if (source == 0) {
     return 0u;
   }

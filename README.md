@@ -170,11 +170,13 @@ Mutable configuration lives on the EFI partition: which relay channels are
 available, which local interface speaks native EdgeRun frames, which interface
 may run regular TCP/IP compatibility traffic, and which admission public key this
 device will do work for, and whether any device firmware may be loaded from the
-canonical EFI-partition name `/EFI/firmware/vendorid.deviceid.0`. The vendor and
-device fields are four lowercase hex digits derived from PCI IDs, for example
-`/EFI/firmware/10ec.8922.0`; users choose whether that device target is enabled,
-not an arbitrary path. Firmware loading is disabled unless the selected authority
-profile names an explicit device target; there is no compiled-in fallback path.
+canonical EFI-partition name `/EFI/firmware/vendorid.deviceid.instance`. The
+vendor and device fields are four lowercase hex digits derived from PCI IDs, and
+the instance is a decimal firmware part number, for example
+`/EFI/firmware/10ec.8922.0` or `/EFI/firmware/8086.2725.1`; users choose whether
+that exact device target and instance are enabled, not an arbitrary path.
+Firmware loading is disabled unless the selected authority profile names an
+explicit device target; there is no compiled-in fallback path.
 TPM storage is for keys and hardware-rooted identity material, not relay policy,
 drivers, or firmware blobs. If multiple authority profiles exist, the user
 selects one before the runtime starts. If Secure Boot or TPM state cannot be

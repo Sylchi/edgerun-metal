@@ -6,6 +6,7 @@ ErWasmHostCalls g_host_calls = {0};
 #include "test_core_pci_mmio.c"
 #include "test_core_rtw89.c"
 #include "test_core_mt7922.c"
+#include "test_core_iwlwifi.c"
 #include "test_core_firmware_loader.c"
 #include "test_core_virtio.c"
 #include "test_core_platform.c"
@@ -35,6 +36,7 @@ int main(void) {
   test_pci_device_classification();
   test_rtw89_pci_prepare();
   test_mt7922_pci_prepare();
+  test_iwlwifi_pci_prepare();
   test_firmware_loader();
   test_mmio_handles();
   test_bus_addresses();

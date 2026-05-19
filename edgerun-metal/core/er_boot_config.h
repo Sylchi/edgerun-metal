@@ -18,6 +18,7 @@
 #define ER_BOOT_CONFIG_WIFI_FIXED_SSID_LEN 7u
 #define ER_BOOT_CONFIG_FIRMWARE_PATH_MAX 32u
 #define ER_BOOT_CONFIG_FIRMWARE_PATH_LEN 25u
+#define ER_BOOT_CONFIG_FIRMWARE_INSTANCE_MAX 9u
 
 #define ER_BOOT_CONFIG_CHANNEL_DISABLED 0u
 #define ER_BOOT_CONFIG_CHANNEL_ENABLED 1u
@@ -77,9 +78,17 @@ UINT8 er_boot_config_add_open_wifi_channel(ErBootConfig* config,
 UINT8 er_boot_config_add_efi_firmware_source(ErBootConfig* config,
                                              UINT16 pci_vendor_id,
                                              UINT16 pci_device_id);
+UINT8 er_boot_config_add_efi_firmware_source_instance(ErBootConfig* config,
+                                                      UINT16 pci_vendor_id,
+                                                      UINT16 pci_device_id,
+                                                      UINT8 instance);
 const ErBootFirmwareSourceConfig* er_boot_config_find_efi_firmware_source(const ErBootConfig* config,
                                                                           UINT16 pci_vendor_id,
                                                                           UINT16 pci_device_id);
+const ErBootFirmwareSourceConfig* er_boot_config_find_efi_firmware_source_instance(const ErBootConfig* config,
+                                                                                   UINT16 pci_vendor_id,
+                                                                                   UINT16 pci_device_id,
+                                                                                   UINT8 instance);
 UINT8 er_boot_config_valid(const ErBootConfig* config);
 const char* er_boot_config_wifi_fixed_ssid(void);
 

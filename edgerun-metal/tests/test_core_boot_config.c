@@ -32,13 +32,22 @@ static void test_boot_config_and_seal_strategy(void) {
   check_int64("boot config add efi firmware source",
               er_boot_config_add_efi_firmware_source(&config, 0x10ecu, 0x8922u),
               1);
+  check_int64("boot config add efi firmware source instance",
+              er_boot_config_add_efi_firmware_source_instance(&config, 0x8086u, 0x2725u, 1u),
+              1);
+  check_int64("boot config reject efi firmware source instance overflow",
+              er_boot_config_add_efi_firmware_source_instance(&config,
+                                                              0x8086u,
+                                                              0x2725u,
+                                                              ER_BOOT_CONFIG_FIRMWARE_INSTANCE_MAX + 1u),
+              0);
   check_int64("boot config invalid generation rejected",
               er_boot_config_valid(&config), 0);
   config.generation = 1u;
   check_int64("boot config valid",
               er_boot_config_valid(&config), 1);
   check_uint64("boot config channel count", config.channel_count, 3u);
-  check_uint64("boot config firmware source count", config.firmware_source_count, 1u);
+  check_uint64("boot config firmware source count", config.firmware_source_count, 2u);
   check_uint64("boot config tcp channel kind",
                config.channels[1].channel_kind, ER_CHANNEL_KIND_TCP_IP);
   check_uint64("boot config wifi channel kind",
@@ -66,6 +75,13 @@ static void test_boot_config_and_seal_strategy(void) {
   check_cstr("boot config firmware path",
              config.firmware_sources[0].path,
              "/EFI/firmware/10ec.8922.0");
+  check_uint64("boot config firmware instance path len",
+               config.firmware_sources[1].path_len, ER_BOOT_CONFIG_FIRMWARE_PATH_LEN);
+  check_uint64("boot config firmware instance",
+               config.firmware_sources[1].instance, 1u);
+  check_cstr("boot config firmware instance path",
+             config.firmware_sources[1].path,
+             "/EFI/firmware/8086.2725.1");
   check_int64("boot config reject firmware path drift",
               (config.firmware_sources[0].path[3] = ' ', er_boot_config_valid(&config)), 0);
   config.firmware_sources[0].path[3] = 'I';
@@ -82,8 +98,17 @@ static void test_boot_config_and_seal_strategy(void) {
     check_uint64("boot config find firmware path len",
                  firmware_source->path_len, ER_BOOT_CONFIG_FIRMWARE_PATH_LEN);
   }
+  firmware_source = er_boot_config_find_efi_firmware_source_instance(&config, 0x8086u, 0x2725u, 1u);
+  check_int64("boot config find firmware source instance", firmware_source != 0, 1);
+  if (firmware_source != 0) {
+    check_cstr("boot config find firmware source instance path",
+               firmware_source->path,
+               "/EFI/firmware/8086.2725.1");
+  }
   check_int64("boot config find rejects wrong device",
               er_boot_config_find_efi_firmware_source(&config, 0x10ecu, 0x892bu) == 0, 1);
+  check_int64("boot config find rejects wrong instance",
+              er_boot_config_find_efi_firmware_source_instance(&config, 0x8086u, 0x2725u, 2u) == 0, 1);
 
   check_int64("seal zero recipient invalid",
               er_seal_select_strategy(0u, 1u, 1u), ER_SEAL_STRATEGY_INVALID);

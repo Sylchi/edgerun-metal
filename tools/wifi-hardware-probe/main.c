@@ -15,6 +15,7 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
+#include "er_iwlwifi.h"
 #include "er_mt7922.h"
 #include "er_rtw89.h"
 
@@ -25,10 +26,17 @@ enum {
   ER_WIFI_HW_HEX_BASE = 16,
   ER_WIFI_HW_VENDOR_MEDIATEK = ER_MT7922_PCI_VENDOR_MEDIATEK,
   ER_WIFI_HW_VENDOR_REALTEK = ER_RTW89_PCI_VENDOR_REALTEK,
-  ER_WIFI_HW_VENDOR_INTEL = 0x8086u,
-  ER_WIFI_HW_DEVICE_INTEL_AX210 = 0x2725u,
+  ER_WIFI_HW_VENDOR_INTEL = ER_IWLWIFI_PCI_VENDOR_INTEL,
+  ER_WIFI_HW_VENDOR_QUALCOMM_ATHEROS = 0x168cu,
+  ER_WIFI_HW_DEVICE_INTEL_AX210 = ER_IWLWIFI_PCI_DEVICE_AX210,
+  ER_WIFI_HW_DEVICE_QCA6174 = 0x003eu,
+  ER_WIFI_HW_DEVICE_MEDIATEK_MT7603 = 0x7603u,
+  ER_WIFI_HW_DEVICE_MEDIATEK_MT7663 = 0x7663u,
   ER_WIFI_HW_UNSUPPORTED_MEDIATEK_DEVICE = 0x7961u,
+  ER_WIFI_HW_QCA6174_PCI_ID = 0x003e168cu,
   ER_WIFI_HW_MT7922_PCI_ID = 0x061614c3u,
+  ER_WIFI_HW_MT7603_PCI_ID = 0x760314c3u,
+  ER_WIFI_HW_MT7663_PCI_ID = 0x766314c3u,
   ER_WIFI_HW_AX210_PCI_ID = 0x27258086u,
   ER_WIFI_HW_CLASS_NETWORK = 0x02u,
   ER_WIFI_HW_SUBCLASS_OTHER_NETWORK = 0x80u,
@@ -49,7 +57,10 @@ typedef enum {
   ER_WIFI_HW_KIND_UNSUPPORTED = 0,
   ER_WIFI_HW_KIND_MT7922_RZ616 = 1,
   ER_WIFI_HW_KIND_RTW89 = 2,
-  ER_WIFI_HW_KIND_INTEL_AX210 = 3
+  ER_WIFI_HW_KIND_INTEL_AX210 = 3,
+  ER_WIFI_HW_KIND_MT7603 = 4,
+  ER_WIFI_HW_KIND_MT7663 = 5,
+  ER_WIFI_HW_KIND_QCA6174 = 6
 } ErWifiHardwareKind;
 
 typedef struct {
@@ -159,6 +170,14 @@ static ErWifiHardwareKind er_wifi_hw_kind(uint16_t vendor_id, uint16_t device_id
       device_id == ER_MT7922_PCI_DEVICE_MT7922_RZ616) {
     return ER_WIFI_HW_KIND_MT7922_RZ616;
   }
+  if (vendor_id == ER_MT7922_PCI_VENDOR_MEDIATEK &&
+      device_id == ER_WIFI_HW_DEVICE_MEDIATEK_MT7603) {
+    return ER_WIFI_HW_KIND_MT7603;
+  }
+  if (vendor_id == ER_MT7922_PCI_VENDOR_MEDIATEK &&
+      device_id == ER_WIFI_HW_DEVICE_MEDIATEK_MT7663) {
+    return ER_WIFI_HW_KIND_MT7663;
+  }
   if (vendor_id == ER_RTW89_PCI_VENDOR_REALTEK) {
     switch (device_id) {
       case ER_RTW89_PCI_DEVICE_RTL8922AE:
@@ -171,6 +190,10 @@ static ErWifiHardwareKind er_wifi_hw_kind(uint16_t vendor_id, uint16_t device_id
   if (vendor_id == ER_WIFI_HW_VENDOR_INTEL && device_id == ER_WIFI_HW_DEVICE_INTEL_AX210) {
     return ER_WIFI_HW_KIND_INTEL_AX210;
   }
+  if (vendor_id == ER_WIFI_HW_VENDOR_QUALCOMM_ATHEROS &&
+      device_id == ER_WIFI_HW_DEVICE_QCA6174) {
+    return ER_WIFI_HW_KIND_QCA6174;
+  }
   return ER_WIFI_HW_KIND_UNSUPPORTED;
 }
 
@@ -178,10 +201,16 @@ static const char* er_wifi_hw_kind_label(ErWifiHardwareKind kind) {
   switch (kind) {
     case ER_WIFI_HW_KIND_MT7922_RZ616:
       return "mt7922-rz616";
+    case ER_WIFI_HW_KIND_MT7603:
+      return "mt7603";
+    case ER_WIFI_HW_KIND_MT7663:
+      return "mt7663";
     case ER_WIFI_HW_KIND_RTW89:
       return "rtw89";
     case ER_WIFI_HW_KIND_INTEL_AX210:
       return "intel-ax210";
+    case ER_WIFI_HW_KIND_QCA6174:
+      return "qca6174";
     case ER_WIFI_HW_KIND_UNSUPPORTED:
     default:
       return "unsupported";
@@ -360,12 +389,32 @@ static int er_wifi_hw_self_test(void) {
                              ER_MT7922_PCI_DEVICE_MT7922_RZ616) != ER_WIFI_HW_MT7922_PCI_ID) {
     return 1;
   }
+  if (er_wifi_hw_make_pci_id(ER_WIFI_HW_VENDOR_MEDIATEK,
+                             ER_WIFI_HW_DEVICE_MEDIATEK_MT7603) != ER_WIFI_HW_MT7603_PCI_ID) {
+    return 1;
+  }
+  if (er_wifi_hw_make_pci_id(ER_WIFI_HW_VENDOR_MEDIATEK,
+                             ER_WIFI_HW_DEVICE_MEDIATEK_MT7663) != ER_WIFI_HW_MT7663_PCI_ID) {
+    return 1;
+  }
   if (er_wifi_hw_make_pci_id(ER_WIFI_HW_VENDOR_INTEL,
                              ER_WIFI_HW_DEVICE_INTEL_AX210) != ER_WIFI_HW_AX210_PCI_ID) {
     return 1;
   }
+  if (er_wifi_hw_make_pci_id(ER_WIFI_HW_VENDOR_QUALCOMM_ATHEROS,
+                             ER_WIFI_HW_DEVICE_QCA6174) != ER_WIFI_HW_QCA6174_PCI_ID) {
+    return 1;
+  }
   if (er_wifi_hw_kind(ER_WIFI_HW_VENDOR_MEDIATEK, ER_MT7922_PCI_DEVICE_MT7922_RZ616) !=
       ER_WIFI_HW_KIND_MT7922_RZ616) {
+    return 1;
+  }
+  if (er_wifi_hw_kind(ER_WIFI_HW_VENDOR_MEDIATEK, ER_WIFI_HW_DEVICE_MEDIATEK_MT7603) !=
+      ER_WIFI_HW_KIND_MT7603) {
+    return 1;
+  }
+  if (er_wifi_hw_kind(ER_WIFI_HW_VENDOR_MEDIATEK, ER_WIFI_HW_DEVICE_MEDIATEK_MT7663) !=
+      ER_WIFI_HW_KIND_MT7663) {
     return 1;
   }
   if (er_wifi_hw_kind(ER_WIFI_HW_VENDOR_REALTEK, ER_RTW89_PCI_DEVICE_RTL8922AE) !=
@@ -378,6 +427,10 @@ static int er_wifi_hw_self_test(void) {
   }
   if (er_wifi_hw_kind(ER_WIFI_HW_VENDOR_INTEL, ER_WIFI_HW_DEVICE_INTEL_AX210) !=
       ER_WIFI_HW_KIND_INTEL_AX210) {
+    return 1;
+  }
+  if (er_wifi_hw_kind(ER_WIFI_HW_VENDOR_QUALCOMM_ATHEROS, ER_WIFI_HW_DEVICE_QCA6174) !=
+      ER_WIFI_HW_KIND_QCA6174) {
     return 1;
   }
   if (er_wifi_hw_kind(ER_WIFI_HW_VENDOR_MEDIATEK, ER_WIFI_HW_UNSUPPORTED_MEDIATEK_DEVICE) !=
