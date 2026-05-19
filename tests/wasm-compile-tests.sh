@@ -47,6 +47,17 @@ compile_twice \
 check_magic "${TMP_DIR}/driver-a.wasm"
 check_magic "${TMP_DIR}/ui-a.wasm"
 
+expect_reject() {
+  local label="$1"
+  local source="$2"
+  local output="$3"
+
+  if "${WASM_COMPILE}" "${source}" "${output}" >/dev/null 2>&1; then
+    printf '%s accepted\n' "${label}" >&2
+    exit 1
+  fi
+}
+
 cat > "${TMP_DIR}/invalid.wat" <<'WAT'
 (module
   (type $main_t (func (result i64)))
@@ -56,9 +67,51 @@ cat > "${TMP_DIR}/invalid.wat" <<'WAT'
 )
 WAT
 
-if "${WASM_COMPILE}" "${TMP_DIR}/invalid.wat" "${TMP_DIR}/invalid.wasm" >/dev/null 2>&1; then
-  printf 'unsupported instruction accepted\n' >&2
-  exit 1
-fi
+expect_reject "unsupported instruction" "${TMP_DIR}/invalid.wat" "${TMP_DIR}/invalid.wasm"
+
+cat > "${TMP_DIR}/bad-contract-none.wat" <<'WAT'
+(module
+  (type $main_t (func (result i64)))
+  (memory 1)
+  (func (export "main") (type $main_t) (result i64)
+    (i64.const 1))
+)
+WAT
+
+expect_reject "missing contract import" \
+  "${TMP_DIR}/bad-contract-none.wat" \
+  "${TMP_DIR}/bad-contract-none.wasm"
+
+cat > "${TMP_DIR}/bad-contract-mixed.wat" <<'WAT'
+(module
+  (type $ui_emit_t (func (param i64 i64) (result i64)))
+  (type $bus_exec_t (func (param i64 i64) (result i64)))
+  (type $main_t (func (result i64)))
+  (import "edgerun.ui" "emit" (func $ui_emit (type $ui_emit_t)))
+  (import "edgerun.bus" "exec" (func $bus_exec (type $bus_exec_t)))
+  (memory 1)
+  (func (export "main") (type $main_t) (result i64)
+    (i64.const 1))
+)
+WAT
+
+expect_reject "mixed contracts" \
+  "${TMP_DIR}/bad-contract-mixed.wat" \
+  "${TMP_DIR}/bad-contract-mixed.wasm"
+
+cat > "${TMP_DIR}/bad-contract-signature.wat" <<'WAT'
+(module
+  (type $ui_emit_t (func (param i32 i64) (result i64)))
+  (type $main_t (func (result i64)))
+  (import "edgerun.ui" "emit" (func $ui_emit (type $ui_emit_t)))
+  (memory 1)
+  (func (export "main") (type $main_t) (result i64)
+    (i64.const 1))
+)
+WAT
+
+expect_reject "bad hostcall signature" \
+  "${TMP_DIR}/bad-contract-signature.wat" \
+  "${TMP_DIR}/bad-contract-signature.wasm"
 
 printf 'wasm-compile tests passed\n'
