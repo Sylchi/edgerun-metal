@@ -68,12 +68,12 @@ case "$varfont_plan" in
 esac
 
 case "$varfont_plan" in
-  *"+ clang -std=c11 -Wall -Wextra -Werror -O2 -o .build/er-build-out/varfont/vrfont_tests -ffreestanding -fno-builtin -fno-stack-protector -Ivarfont/include -Iinclude -Ivarfont/src -DVRFONT_PROJECT_ROOT=\"varfont\""* ) ;;
+  *"+ clang -std=c11 -Wall -Wextra -Werror -O2 -o .build/er-build-out/varfont/vrfont_tests -ffreestanding -fno-builtin -fno-stack-protector -Iedgerun-ui-core/varfont/include -Iinclude -Iedgerun-ui-core/varfont/src -DVRFONT_PROJECT_ROOT=\"edgerun-ui-core/varfont\""* ) ;;
   * ) printf 'missing direct varfont test compile step\n' >&2; exit 1 ;;
 esac
 
 case "$varfont_plan" in
-  *"varfont/tests/test_runner.c"*"varfont/src/vr_font_atlas.c"*" -lm"* ) ;;
+  *"edgerun-ui-core/varfont/tests/test_runner.c"*"edgerun-ui-core/varfont/src/vr_font_atlas.c"*" -lm"* ) ;;
   * ) printf 'missing varfont test source set\n' >&2; exit 1 ;;
 esac
 

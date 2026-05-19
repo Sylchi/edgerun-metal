@@ -17,7 +17,7 @@ Runs the standard local progress loop for a repository scope:
 
 Known scopes choose a deterministic test target when one is not provided:
   edgerun-ui-core -> ui-core-test
-  varfont         -> varfont-test
+  edgerun-ui-core/varfont -> varfont-test
   edgerun-crypto  -> crypto-test
   edgerun-metal   -> edgerun-check
   codex           -> codex-test
@@ -44,7 +44,7 @@ fi
 if [ "$test_target" = "" ]; then
   case "$scope" in
     edgerun-ui-core) test_target="ui-core-test" ;;
-    varfont) test_target="varfont-test" ;;
+    edgerun-ui-core/varfont) test_target="varfont-test" ;;
     edgerun-crypto) test_target="crypto-test" ;;
     edgerun-metal) test_target="edgerun-check" ;;
     codex) test_target="codex-test" ;;

@@ -1,4 +1,4 @@
-# edgerun-c
+# Codex Client
 
 `edgerun-c` is a dependency-free C workspace client for prompting Codex against
 an in-memory repo snapshot, staging repo edits in memory, and committing only

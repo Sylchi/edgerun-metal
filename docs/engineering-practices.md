@@ -28,7 +28,7 @@ make check
 - repository structure through `tools/repo-check.c`
 - repository-policy tests through `tests/repo-check-tests.sh`
 - the `edgerun-metal` OS image builds with warnings as errors
-- `varfont` tests through the repository-owned `tools/er-build` runner
+- `edgerun-ui-core/varfont` tests through the repository-owned `tools/er-build` runner
 - `edgerun-ui-core` builds with CMake and Ninja
 - `edgerun-ui-core` tests pass through CTest
 - `edgerun-crypto` tests through the repository-owned `tools/er-build` runner
@@ -60,7 +60,7 @@ Tests must be added with behavior changes and with new repository tooling. If co
 Keep documentation close to the decision:
 
 - all first-party workflow, commands, and runtime-area summaries belong in root `README.md`
-- repository-wide rules belong in `agents.md`
+- repository-wide rules belong in `AGENTS.md`
 - structure and engineering intent belong in `docs/`
 - detailed architecture belongs in named `docs/` files, not nested READMEs
 

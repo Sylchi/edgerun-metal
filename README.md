@@ -5,8 +5,8 @@ top-level directories are cooperating runtime areas, not separate products:
 
 - `edgerun-metal`: the freestanding x86_64 UEFI OS runtime that boots as `BOOTX64.EFI`, hosts Wasm apps, and owns runtime device paths.
 - `edgerun-crypto`: freestanding cryptographic primitives used by the runtime, tools, and tests, currently centered on BLAKE3 hashing.
-- `varfont`: the freestanding variable-font renderer used by the UI runtime for text shaping, rasterization, atlas output, and test coverage.
 - `edgerun-ui-core`: the platform-neutral UI scene, component, input, and rendering contract consumed by the metal runtime.
+  Its `varfont` subtree owns the freestanding variable-font renderer used by UI text paths.
 
 ## Why This Work Exists
 
@@ -263,14 +263,18 @@ Primary data references:
 
 ```text
 .
-├── agents.md              repository engineering rules
+├── AGENTS.md              repository engineering rules
+├── Makefile               root build, test, and check entrypoints
+├── codex/                 hosted Codex support library and tests
 ├── docs/                  repository structure and engineering intent
-├── tools/                 repository maintenance tools
-├── tests/                 repository maintenance tests
-├── edgerun-metal/         freestanding UEFI OS runtime and device adapters
 ├── edgerun-crypto/        freestanding crypto used by the runtime
+├── edgerun-metal/         freestanding UEFI OS runtime and device adapters
 ├── edgerun-ui-core/       portable UI scene/component/input runtime
-├── varfont/               variable-font renderer used by UI text paths
+├── firmware/              firmware-facing runtime source areas
+├── include/               repository-wide freestanding C headers
+├── tests/                 repository maintenance tests
+├── third_party/           vendored source
+├── tools/                 repository maintenance tools
 └── .build/                local generated builds, ignored
 ```
 
@@ -278,10 +282,9 @@ Generated build output must stay out of source directories. Use `.build/` for lo
 
 This is one Git repository. Do not add nested `.git` directories, `.gitmodules`, or submodule gitlinks.
 
-`README.md` is the only first-party README. Runtime-area details that affect
-commands, behavior, status, or workflow belong here so the repository does not
-grow conflicting area READMEs. Deeper architecture and design intent belong in
-`docs/`.
+`README.md` owns the project overview and command entrypoints.
+`docs/repository-structure.md` owns path responsibility. Detailed area notes
+belong in named `docs/` files, not nested READMEs.
 
 ## Runtime Area Notes
 
@@ -329,7 +332,7 @@ layout nodes such as `er_ui_node_row`, `er_ui_node_column`, `er_ui_node_grid`,
 Direct `er_ui_scene_push_*` calls are for renderer primitives, component
 internals, workspace placement, and reusable component implementation.
 
-`varfont` provides the freestanding variable-font parser, shaper, rasterizer,
+`edgerun-ui-core/varfont` provides the freestanding variable-font parser, shaper, rasterizer,
 atlas, and UI vertex generation path used by UI text. Production font creation
 uses `vr_font_face_create_from_memory`; hosted file loading belongs in tests or
 tools before calling the library. CMap support is currently formats 4 and 12;
@@ -447,7 +450,7 @@ The benchmark target is hosted-only. It fetches official upstream BLAKE3 into
 `.build/blake3-upstream`, prints the upstream commit, and runs matching
 freestanding and upstream benchmark paths.
 
-Build and test `varfont`:
+Build and test `edgerun-ui-core/varfont`:
 
 ```bash
 make varfont-test
@@ -474,17 +477,17 @@ The root Makefile wraps the same flow:
 make ui-core-test
 ```
 
-Run the hosted `varfont` demo when SDL2 and the Geist font are available:
+Run the hosted `edgerun-ui-core/varfont` demo when SDL2 and the Geist font are available:
 
 ```bash
-./.build/varfont/vrfont_demo varfont/fonts/Geist[wght].ttf
+./.build/edgerun-ui-core/varfont/vrfont_demo edgerun-ui-core/varfont/fonts/Geist[wght].ttf
 ```
 
 Download the Geist variable font for hosted demos:
 
 ```bash
-mkdir -p varfont/fonts
-curl -L -o varfont/fonts/Geist[wght].ttf https://raw.githubusercontent.com/vercel/geist-font/main/fonts/Geist/variable/Geist%5Bwght%5D.ttf
+mkdir -p edgerun-ui-core/varfont/fonts
+curl -L -o edgerun-ui-core/varfont/fonts/Geist[wght].ttf https://raw.githubusercontent.com/vercel/geist-font/main/fonts/Geist/variable/Geist%5Bwght%5D.ttf
 ```
 
 Build the host-side PXE helper:
@@ -539,7 +542,7 @@ make clean
 
 ## Rules
 
-`agents.md` is authoritative for engineering behavior. In short:
+`AGENTS.md` is authoritative for engineering behavior. In short:
 
 - warnings are errors
 - unsupported states fail immediately

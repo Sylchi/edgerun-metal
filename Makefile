@@ -113,7 +113,7 @@ edgerun-check:
 	$(MAKE) -C edgerun-metal check
 
 varfont-configure:
-	cmake -S varfont -B $(VARFONT_BUILD_DIR) -G "$(VARFONT_CMAKE_GENERATOR)" $(CMAKE_TOOLCHAIN_ARGS)
+	cmake -S edgerun-ui-core/varfont -B $(VARFONT_BUILD_DIR) -G "$(VARFONT_CMAKE_GENERATOR)" $(CMAKE_TOOLCHAIN_ARGS)
 
 varfont-build: varfont-configure
 	cmake --build $(VARFONT_BUILD_DIR)

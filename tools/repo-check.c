@@ -29,7 +29,7 @@ enum {
 };
 
 static const char ERC_BUILD_ARTIFACT_DIR[] = ".build/";
-static const char ERC_VARFONT_BUILD_ARTIFACT_DIR[] = "varfont/build/";
+static const char ERC_VARFONT_BUILD_ARTIFACT_DIR[] = "edgerun-ui-core/varfont/build/";
 static const char ERC_METAL_BUILD_ARTIFACT_DIR[] = "edgerun-metal/build/";
 static const char ERC_ROOT_README[] = "README.md";
 static const char ERC_THIRD_PARTY_DIR[] = "third_party/";

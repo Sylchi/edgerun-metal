@@ -1,7 +1,7 @@
 # Network Firmware
 
-This directory holds explicitly selected device firmware blobs using the EdgeRun
-EFI firmware naming convention:
+`firmware/network/` holds explicitly selected device firmware blobs using the
+EdgeRun EFI firmware naming convention:
 
 ```text
 /EFI/firmware/vendorid.deviceid.0

@@ -43,7 +43,7 @@ endif()
 
 target_include_directories(vrfont PUBLIC
   ${CMAKE_CURRENT_SOURCE_DIR}/include
-  ${CMAKE_CURRENT_SOURCE_DIR}/../include
+  ${CMAKE_CURRENT_SOURCE_DIR}/../../include
 )
 
 if(VRFONT_BUILD_HOSTED_TOOLS)

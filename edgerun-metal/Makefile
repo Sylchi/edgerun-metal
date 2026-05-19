@@ -11,7 +11,7 @@ BUILD_DIR := build
 ESP_DIR := $(BUILD_DIR)/esp
 EFI_OUT := $(BUILD_DIR)/edgerun-metal.efi
 UI_CORE_DIR := ../edgerun-ui-core
-VARFONT_DIR := ../varfont
+VARFONT_DIR := ../edgerun-ui-core/varfont
 CRYPTO_DIR := ../edgerun-crypto
 GENERATED_DIR := $(BUILD_DIR)/generated
 
@@ -49,7 +49,7 @@ VARFONT_SRCS := $(VARFONT_DIR)/src/vr_font.c $(VARFONT_DIR)/src/vr_font_utils.c 
 CRYPTO_SRCS := $(CRYPTO_DIR)/src/er_blake3.c
 OBJS := $(patsubst %.c,$(BUILD_DIR)/%.o,$(SRCS))
 UI_OBJS := $(patsubst $(UI_CORE_DIR)/src/%.c,$(BUILD_DIR)/ui-core/%.o,$(UI_SRCS))
-VARFONT_OBJS := $(patsubst $(VARFONT_DIR)/src/%.c,$(BUILD_DIR)/varfont/%.o,$(VARFONT_SRCS))
+VARFONT_OBJS := $(patsubst $(VARFONT_DIR)/src/%.c,$(BUILD_DIR)/edgerun-ui-core/varfont/%.o,$(VARFONT_SRCS))
 CRYPTO_OBJS := $(patsubst $(CRYPTO_DIR)/src/%.c,$(BUILD_DIR)/crypto/%.o,$(CRYPTO_SRCS))
 CRYPTO_ASM_OBJS := $(patsubst $(CRYPTO_DIR)/../third_party/blake3/c/%.S,$(BUILD_DIR)/crypto/%.o,$(CRYPTO_ASM_SRCS))
 HDRS := $(wildcard core/*.h)
@@ -140,7 +140,7 @@ $(BUILD_DIR)/ui-core/%.o: $(UI_CORE_DIR)/src/%.c $(UI_HDRS) $(VARFONT_HDRS)
 	mkdir -p $(dir $@)
 	$(CCACHE_PREFIX) $(CC) $(CFLAGS) -c $< -o $@
 
-$(BUILD_DIR)/varfont/%.o: $(VARFONT_DIR)/src/%.c $(VARFONT_HDRS)
+$(BUILD_DIR)/edgerun-ui-core/varfont/%.o: $(VARFONT_DIR)/src/%.c $(VARFONT_HDRS)
 	mkdir -p $(dir $@)
 	$(CCACHE_PREFIX) $(CC) $(CFLAGS) -c $< -o $@
 

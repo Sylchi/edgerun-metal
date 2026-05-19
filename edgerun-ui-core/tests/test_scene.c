@@ -165,7 +165,7 @@ unsigned char* er_ui_test_read_file(const char* path, size_t* out_size) {
 
 vr_font_face_t* er_ui_test_open_font(float px_size, const char* load_message, const char* open_message) {
   size_t font_size = 0u;
-  unsigned char* font_data = er_ui_test_read_file(ER_UI_REPO_ROOT "/varfont/fonts/Geist[wght].ttf", &font_size);
+  unsigned char* font_data = er_ui_test_read_file(ER_UI_REPO_ROOT "/edgerun-ui-core/varfont/fonts/Geist[wght].ttf", &font_size);
   expect_true(font_data != NULL && font_size > 0u, load_message);
   if (!font_data) return NULL;
 
@@ -601,7 +601,7 @@ static void test_varfont_memory_face_emits_ui_text(void) {
   expect_status(er_ui_scene_init_with_allocator(&scene, ER_TEST_BG, er_ui_test_allocator()), ER_UI_OK, "varfont text: scene init succeeds");
 
   size_t font_size = 0u;
-  unsigned char* font_data = er_ui_test_read_file(ER_UI_REPO_ROOT "/varfont/fonts/Geist[wght].ttf", &font_size);
+  unsigned char* font_data = er_ui_test_read_file(ER_UI_REPO_ROOT "/edgerun-ui-core/varfont/fonts/Geist[wght].ttf", &font_size);
   expect_true(font_data != NULL && font_size > 0u, "varfont text: bundled font bytes load");
   if (!font_data) {
     er_ui_scene_destroy(&scene);
