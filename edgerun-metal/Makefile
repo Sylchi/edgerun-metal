@@ -1,4 +1,4 @@
-.PHONY: all run run-aarch64 qemu-aarch64-smoke qemu-swtpm-persistence clean print-path print-config netboot os rebuild-image check test-core wasm-modules qemu-config-check qemu-aarch64-config-check qemu-swtpm-persistence-config-check
+.PHONY: all run run-aarch64 qemu-aarch64-smoke qemu-swtpm-persistence clean print-path print-config netboot os rebuild-image check test-core wifi-hardware-probe wasm-modules qemu-config-check qemu-aarch64-config-check qemu-swtpm-persistence-config-check
 
 CC = clang
 HOST_CC ?= clang
@@ -70,6 +70,8 @@ PXE4011_SRC := tools/edgerun-pxe4011/main.c
 PXE4011_BIN := $(BUILD_DIR)/edgerun-pxe4011
 QEMU_RUN_SRC := tools/qemu-run/main.c
 QEMU_RUN_BIN := $(BUILD_DIR)/edgerun-qemu-run
+WIFI_HW_PROBE_SRC := tools/wifi-hardware-probe/main.c
+WIFI_HW_PROBE_BIN := $(BUILD_DIR)/wifi-hardware-probe
 QEMU_CONFIG := qemu.conf
 QEMU_AARCH64_CONFIG := qemu-aarch64.conf
 QEMU_AARCH64_SMOKE_CONFIG := qemu-aarch64-smoke.conf
@@ -100,6 +102,9 @@ check: os test-core qemu-config-check
 
 test-core: $(CORE_TEST_BIN)
 	./$(CORE_TEST_BIN)
+
+wifi-hardware-probe: $(WIFI_HW_PROBE_BIN)
+	./$(WIFI_HW_PROBE_BIN)
 
 wasm-modules: $(WASM_MODULE_HEADERS)
 
@@ -166,6 +171,10 @@ $(PXE4011_BIN): $(PXE4011_SRC)
 $(QEMU_RUN_BIN): $(QEMU_RUN_SRC)
 	mkdir -p $(dir $@)
 	$(CCACHE_PREFIX) $(HOST_CC) $(HOST_CFLAGS) $(HOST_LDFLAGS) -o $@ $<
+
+$(WIFI_HW_PROBE_BIN): $(WIFI_HW_PROBE_SRC) core/er_mt7922.h core/er_rtw89.h
+	mkdir -p $(dir $@)
+	$(CCACHE_PREFIX) $(HOST_CC) $(HOST_CFLAGS) $(HOST_LDFLAGS) -o $@ $(WIFI_HW_PROBE_SRC)
 
 $(CORE_TEST_BIN): $(CORE_TEST_SRC) $(HDRS) $(UI_HDRS) $(VARFONT_HDRS) $(CRYPTO_HDRS) $(WASM_MODULE_HEADERS) $(FONT_HEADER)
 	mkdir -p $(dir $@)
