@@ -259,6 +259,21 @@ UINT8 er_ui_boot_prepare_signed_indexed_package_source(
 UINT8 er_ui_boot_prepare_package_record_source(
     const ErAppPackageInstallRecord* record,
     ErUiBootInstalledPackageSource* out_source);
+UINT8 er_ui_boot_prepare_remote_package_fetch_source(
+    const ErAppSignedPackageIndexEntry* index_entry,
+    const ErIdentity* remote_identity,
+    const ErHash* app_route_receipt_hash,
+    const ErHash* manifest_route_receipt_hash,
+    const ErHash* ui_assets_route_receipt_hash,
+    ErAppPackageRemoteFetchSource* out_source);
+UINT8 er_ui_boot_prepare_remote_package_install_record(
+    const ErAppSignedPackageIndexEntry* index_entry,
+    const ErAppPackageRemoteFetchSource* remote_source,
+    const ErAppSignedPackageIndexEntry* previous_entry,
+    UINT64 generation,
+    ErAppPackageInstallRecord* out_record);
+UINT8 er_ui_boot_package_install_record_loadable(
+    const ErAppPackageInstallRecord* record);
 UINT8 er_ui_boot_prepare_installed_package_source(const ErUiBootInstalledApp* installed_app,
                                                   UINT32 app_index,
                                                   ErUiBootInstalledPackageSource* out_source);

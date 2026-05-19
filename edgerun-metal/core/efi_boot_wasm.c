@@ -521,6 +521,52 @@ UINT8 er_ui_boot_prepare_package_record_source(
                                                          out_source);
 }
 
+UINT8 er_ui_boot_prepare_remote_package_fetch_source(
+    const ErAppSignedPackageIndexEntry* index_entry,
+    const ErIdentity* remote_identity,
+    const ErHash* app_route_receipt_hash,
+    const ErHash* manifest_route_receipt_hash,
+    const ErHash* ui_assets_route_receipt_hash,
+    ErAppPackageRemoteFetchSource* out_source) {
+  ErCryptoProvider crypto;
+
+  er_ui_boot_package_crypto_provider(&crypto);
+  if (er_ui_boot_prepare_installed_app_registry() == 0u ||
+      er_ui_boot_installed_signed_package_index_entry_valid(index_entry) == 0u) {
+    return 0u;
+  }
+  return er_app_prepare_remote_package_fetch_source(
+      &crypto, &index_entry->index_entry.package, remote_identity,
+      app_route_receipt_hash, manifest_route_receipt_hash,
+      ui_assets_route_receipt_hash, out_source);
+}
+
+UINT8 er_ui_boot_prepare_remote_package_install_record(
+    const ErAppSignedPackageIndexEntry* index_entry,
+    const ErAppPackageRemoteFetchSource* remote_source,
+    const ErAppSignedPackageIndexEntry* previous_entry,
+    UINT64 generation,
+    ErAppPackageInstallRecord* out_record) {
+  ErCryptoProvider crypto;
+
+  er_ui_boot_package_crypto_provider(&crypto);
+  if (er_ui_boot_prepare_installed_app_registry() == 0u ||
+      er_ui_boot_installed_signed_package_index_entry_valid(index_entry) == 0u) {
+    return 0u;
+  }
+  return er_app_prepare_remote_package_install_record(
+      &crypto, generation, index_entry, remote_source, previous_entry,
+      out_record);
+}
+
+UINT8 er_ui_boot_package_install_record_loadable(
+    const ErAppPackageInstallRecord* record) {
+  ErCryptoProvider crypto;
+
+  er_ui_boot_package_crypto_provider(&crypto);
+  return er_app_package_install_record_loadable(&crypto, record);
+}
+
 UINT8 er_ui_boot_prepare_installed_package_source(const ErUiBootInstalledApp* installed_app,
                                                   UINT32 app_index,
                                                   ErUiBootInstalledPackageSource* out_source) {

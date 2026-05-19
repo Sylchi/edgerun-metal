@@ -18,6 +18,8 @@ static const UINT8 g_app_ui_presentation_domain[] = "edgerun:c:v1:app:ui-present
 static const UINT8 g_app_package_domain[] = "edgerun:c:v1:app:package";
 static const UINT8 g_app_package_signature_domain[] = "edgerun:c:v1:app:package-signature";
 static const UINT8 g_app_package_storage_source_domain[] = "edgerun:c:v1:app:package-storage-source";
+static const UINT8 g_app_package_remote_fetch_source_domain[] =
+    "edgerun:c:v1:app:package-remote-fetch-source";
 
 enum {
   ER_APP_BYTE_BITS = 8u,
@@ -39,6 +41,12 @@ enum {
   ER_APP_PACKAGE_STORAGE_APP_ROUTE_SPAN = 1u,
   ER_APP_PACKAGE_STORAGE_MANIFEST_ROUTE_SPAN = 2u,
   ER_APP_PACKAGE_STORAGE_UI_ASSETS_ROUTE_SPAN = 3u,
+  ER_APP_PACKAGE_REMOTE_FETCH_SPAN_COUNT = 5u,
+  ER_APP_PACKAGE_REMOTE_FETCH_PACKAGE_SPAN = 0u,
+  ER_APP_PACKAGE_REMOTE_FETCH_IDENTITY_SPAN = 1u,
+  ER_APP_PACKAGE_REMOTE_FETCH_APP_RECEIPT_SPAN = 2u,
+  ER_APP_PACKAGE_REMOTE_FETCH_MANIFEST_RECEIPT_SPAN = 3u,
+  ER_APP_PACKAGE_REMOTE_FETCH_UI_ASSETS_RECEIPT_SPAN = 4u,
   ER_APP_IDENTITY_HASH_SPAN_COUNT = 4u,
   ER_APP_IDENTITY_APP_OBJECT_SPAN = 0u,
   ER_APP_IDENTITY_MANIFEST_SPAN = 1u,
@@ -361,6 +369,93 @@ static UINT8 er_app_package_storage_source_valid(const ErCryptoProvider* crypto,
   return er_hash_equal(&source->source_id, &expected_source_id);
 }
 
+static UINT8 er_app_package_remote_fetch_source_id(
+    const ErCryptoProvider* crypto,
+    const ErHash* package_id,
+    const ErIdentity* remote_identity,
+    const ErHash* app_route_receipt_hash,
+    const ErHash* manifest_route_receipt_hash,
+    const ErHash* ui_assets_route_receipt_hash,
+    ErHash* out_source_id) {
+  ErByteSpan spans[ER_APP_PACKAGE_REMOTE_FETCH_SPAN_COUNT];
+
+  if (crypto == 0 || package_id == 0 || remote_identity == 0 ||
+      app_route_receipt_hash == 0 || manifest_route_receipt_hash == 0 ||
+      ui_assets_route_receipt_hash == 0 || out_source_id == 0) {
+    return 0u;
+  }
+  spans[ER_APP_PACKAGE_REMOTE_FETCH_PACKAGE_SPAN].bytes = package_id->bytes;
+  spans[ER_APP_PACKAGE_REMOTE_FETCH_PACKAGE_SPAN].len = ER_HASH_LEN;
+  spans[ER_APP_PACKAGE_REMOTE_FETCH_IDENTITY_SPAN].bytes =
+      (const UINT8*)remote_identity;
+  spans[ER_APP_PACKAGE_REMOTE_FETCH_IDENTITY_SPAN].len =
+      (UINTN)sizeof(*remote_identity);
+  spans[ER_APP_PACKAGE_REMOTE_FETCH_APP_RECEIPT_SPAN].bytes =
+      app_route_receipt_hash->bytes;
+  spans[ER_APP_PACKAGE_REMOTE_FETCH_APP_RECEIPT_SPAN].len = ER_HASH_LEN;
+  spans[ER_APP_PACKAGE_REMOTE_FETCH_MANIFEST_RECEIPT_SPAN].bytes =
+      manifest_route_receipt_hash->bytes;
+  spans[ER_APP_PACKAGE_REMOTE_FETCH_MANIFEST_RECEIPT_SPAN].len = ER_HASH_LEN;
+  spans[ER_APP_PACKAGE_REMOTE_FETCH_UI_ASSETS_RECEIPT_SPAN].bytes =
+      ui_assets_route_receipt_hash->bytes;
+  spans[ER_APP_PACKAGE_REMOTE_FETCH_UI_ASSETS_RECEIPT_SPAN].len = ER_HASH_LEN;
+  return er_crypto_hash(crypto, g_app_package_remote_fetch_source_domain,
+                        (UINTN)(sizeof(g_app_package_remote_fetch_source_domain) - 1u),
+                        spans, ER_APP_PACKAGE_REMOTE_FETCH_SPAN_COUNT,
+                        out_source_id);
+}
+
+static UINT8 er_app_package_remote_fetch_source_valid(
+    const ErCryptoProvider* crypto,
+    const ErAppPackageManifest* package,
+    const ErAppPackageRemoteFetchSource* source) {
+  ErHash expected_source_id;
+
+  if (source == 0 || package == 0 ||
+      source->abi_version != ER_APP_ABI_VERSION ||
+      source->app_kind != package->app_kind ||
+      er_identity_valid(&source->remote_identity) == 0u ||
+      er_app_package_manifest_valid(crypto, package) == 0u ||
+      er_hash_equal(&source->package_id, &package->package_id) == 0u ||
+      er_hash_nonzero(&source->source_id) == 0u ||
+      er_hash_nonzero(&source->app_route_receipt_hash) == 0u ||
+      er_hash_nonzero(&source->manifest_route_receipt_hash) == 0u) {
+    return 0u;
+  }
+  if (package->ui_assets_object_len == 0u) {
+    if (er_hash_nonzero(&source->ui_assets_route_receipt_hash) != 0u) {
+      return 0u;
+    }
+  } else if (er_hash_nonzero(&source->ui_assets_route_receipt_hash) == 0u) {
+    return 0u;
+  }
+  if (er_app_package_remote_fetch_source_id(
+          crypto, &source->package_id, &source->remote_identity,
+          &source->app_route_receipt_hash,
+          &source->manifest_route_receipt_hash,
+          &source->ui_assets_route_receipt_hash,
+          &expected_source_id) == 0u) {
+    return 0u;
+  }
+  return er_hash_equal(&source->source_id, &expected_source_id);
+}
+
+static UINT8 er_app_package_remote_fetch_source_empty(
+    const ErAppPackageRemoteFetchSource* source) {
+  const UINT8* bytes = (const UINT8*)source;
+  UINTN i;
+
+  if (source == 0) {
+    return 0u;
+  }
+  for (i = 0u; i < (UINTN)sizeof(*source); ++i) {
+    if (bytes[i] != 0u) {
+      return 0u;
+    }
+  }
+  return 1u;
+}
+
 UINT8 er_app_package_index_entry_valid(const ErCryptoProvider* crypto,
                                        const ErAppPackageIndexEntry* entry) {
   if (entry == 0 ||
@@ -473,6 +568,7 @@ static UINT8 er_app_signed_package_index_entry_empty(
 UINT8 er_app_package_install_record_valid(const ErCryptoProvider* crypto,
                                           const ErAppPackageInstallRecord* record) {
   UINT8 previous_empty;
+  UINT8 remote_empty;
 
   if (record == 0 ||
       record->abi_version != ER_APP_ABI_VERSION ||
@@ -485,6 +581,14 @@ UINT8 er_app_package_install_record_valid(const ErCryptoProvider* crypto,
   }
   previous_empty =
       er_app_signed_package_index_entry_empty(&record->previous_entry);
+  remote_empty =
+      er_app_package_remote_fetch_source_empty(&record->remote_source);
+  if (remote_empty == 0u &&
+      er_app_package_remote_fetch_source_valid(
+          crypto, &record->current_entry.index_entry.package,
+          &record->remote_source) == 0u) {
+    return 0u;
+  }
   switch (record->install_state) {
     case ER_APP_PACKAGE_INSTALL_STATE_INSTALLED:
     case ER_APP_PACKAGE_INSTALL_STATE_REMOVED:
@@ -526,6 +630,83 @@ UINT8 er_app_prepare_package_install_record(const ErCryptoProvider* crypto,
   out_record->current_entry = *current_entry;
   out_record->app_kind = current_entry->app_kind;
   out_record->installed_slot = current_entry->index_entry.installed_slot;
+  if (previous_entry != 0) {
+    out_record->previous_entry = *previous_entry;
+  }
+  return er_app_package_install_record_valid(crypto, out_record);
+}
+
+UINT8 er_app_prepare_remote_package_fetch_source(
+    const ErCryptoProvider* crypto,
+    const ErAppPackageManifest* package,
+    const ErIdentity* remote_identity,
+    const ErHash* app_route_receipt_hash,
+    const ErHash* manifest_route_receipt_hash,
+    const ErHash* ui_assets_route_receipt_hash,
+    ErAppPackageRemoteFetchSource* out_source) {
+  ErHash zero_ui_assets_receipt_hash;
+  const ErHash* ui_assets_receipt_hash = &zero_ui_assets_receipt_hash;
+
+  if (out_source == 0 ||
+      er_identity_valid(remote_identity) == 0u ||
+      er_app_package_manifest_valid(crypto, package) == 0u ||
+      app_route_receipt_hash == 0 ||
+      manifest_route_receipt_hash == 0 ||
+      er_hash_nonzero(app_route_receipt_hash) == 0u ||
+      er_hash_nonzero(manifest_route_receipt_hash) == 0u) {
+    return 0u;
+  }
+  er_mem_zero((UINT8*)&zero_ui_assets_receipt_hash,
+              (UINTN)sizeof(zero_ui_assets_receipt_hash));
+  if (package->ui_assets_object_len != 0u) {
+    if (ui_assets_route_receipt_hash == 0 ||
+        er_hash_nonzero(ui_assets_route_receipt_hash) == 0u) {
+      return 0u;
+    }
+    ui_assets_receipt_hash = ui_assets_route_receipt_hash;
+  } else if (ui_assets_route_receipt_hash != 0 &&
+             er_hash_nonzero(ui_assets_route_receipt_hash) != 0u) {
+    return 0u;
+  }
+
+  er_mem_zero((UINT8*)out_source, (UINTN)sizeof(*out_source));
+  out_source->abi_version = ER_APP_ABI_VERSION;
+  out_source->app_kind = package->app_kind;
+  out_source->remote_identity = *remote_identity;
+  out_source->package_id = package->package_id;
+  out_source->app_route_receipt_hash = *app_route_receipt_hash;
+  out_source->manifest_route_receipt_hash = *manifest_route_receipt_hash;
+  out_source->ui_assets_route_receipt_hash = *ui_assets_receipt_hash;
+  return er_app_package_remote_fetch_source_id(
+      crypto, &out_source->package_id, &out_source->remote_identity,
+      &out_source->app_route_receipt_hash,
+      &out_source->manifest_route_receipt_hash,
+      &out_source->ui_assets_route_receipt_hash,
+      &out_source->source_id);
+}
+
+UINT8 er_app_prepare_remote_package_install_record(
+    const ErCryptoProvider* crypto,
+    UINT64 generation,
+    const ErAppSignedPackageIndexEntry* current_entry,
+    const ErAppPackageRemoteFetchSource* remote_source,
+    const ErAppSignedPackageIndexEntry* previous_entry,
+    ErAppPackageInstallRecord* out_record) {
+  if (current_entry == 0 || remote_source == 0 || out_record == 0 ||
+      er_app_signed_package_index_entry_valid(crypto, current_entry) == 0u ||
+      er_app_package_remote_fetch_source_valid(
+          crypto, &current_entry->index_entry.package,
+          remote_source) == 0u) {
+    return 0u;
+  }
+  er_mem_zero((UINT8*)out_record, (UINTN)sizeof(*out_record));
+  out_record->abi_version = ER_APP_ABI_VERSION;
+  out_record->install_state = ER_APP_PACKAGE_INSTALL_STATE_INSTALLED;
+  out_record->generation = generation;
+  out_record->current_entry = *current_entry;
+  out_record->app_kind = current_entry->app_kind;
+  out_record->installed_slot = current_entry->index_entry.installed_slot;
+  out_record->remote_source = *remote_source;
   if (previous_entry != 0) {
     out_record->previous_entry = *previous_entry;
   }
