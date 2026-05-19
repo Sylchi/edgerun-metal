@@ -205,6 +205,11 @@ UINT8 er_app_prepare_package_manifest(const ErCryptoProvider* crypto,
                                       const ErVfsObjectLabelRef* manifest_object,
                                       const ErVfsObjectLabelRef* ui_assets_object,
                                       ErAppPackageManifest* out_package);
+UINT8 er_app_prepare_package_manifest_from_objects(const ErCryptoProvider* crypto,
+                                                   const ErVfsObjectRef* app_object,
+                                                   const ErVfsObjectRef* manifest_object,
+                                                   const ErVfsObjectRef* ui_assets_object,
+                                                   ErAppPackageManifest* out_package);
 UINT8 er_app_load_package_objects(const ErCryptoProvider* crypto,
                                   const ErAppPackageManifest* package,
                                   const ErAppPackageObjectLoad* app_object,

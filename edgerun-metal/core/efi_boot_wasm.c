@@ -154,8 +154,8 @@ UINT8 er_ui_boot_load_installed_app_package(const ErUiBootInstalledApp* installe
                                             UINT32 app_index,
                                             ErAppLoadedPackage* out_loaded) {
   ErCryptoProvider crypto;
-  ErVfsObjectLabelRef app_ref;
-  ErVfsObjectLabelRef manifest_ref;
+  ErVfsObjectRef app_ref;
+  ErVfsObjectRef manifest_ref;
   ErAppPackageManifest package;
   ErVfsObjectPacket app_packet;
   ErVfsObjectPacket manifest_packet;
@@ -169,10 +169,10 @@ UINT8 er_ui_boot_load_installed_app_package(const ErUiBootInstalledApp* installe
 
   if (installed_app == 0 || module_memory == 0 || manifest_memory == 0 || storage == 0 ||
       out_loaded == 0 ||
-      installed_app->app_label == 0 || installed_app->app_bytes == 0 ||
-      installed_app->manifest_label == 0 || installed_app->manifest_bytes == 0 ||
-      installed_app->app_label_len == 0u || installed_app->app_len == 0u ||
-      installed_app->manifest_label_len == 0u || installed_app->manifest_len == 0u ||
+      installed_app->app_bytes == 0 ||
+      installed_app->manifest_bytes == 0 ||
+      installed_app->app_len == 0u ||
+      installed_app->manifest_len == 0u ||
       module_memory_size == 0u || manifest_memory_size == 0u) {
     return 0u;
   }
@@ -185,21 +185,18 @@ UINT8 er_ui_boot_load_installed_app_package(const ErUiBootInstalledApp* installe
                                             ER_UI_BOOT_PACKAGE_OBJECT_PACKET_CAPACITY) == 0u) {
     return 0u;
   }
-  if (er_vfs_prepare_object_label_ref(&crypto, installed_app->app_label,
-                                      installed_app->app_label_len,
-                                      installed_app->app_bytes,
-                                      installed_app->app_len, &app_ref) == 0u) {
+  if (er_vfs_prepare_object_ref(&crypto, installed_app->app_bytes,
+                                installed_app->app_len, &app_ref) == 0u) {
     return 0u;
   }
-  if (er_vfs_prepare_object_label_ref(&crypto, installed_app->manifest_label,
-                                      installed_app->manifest_label_len,
-                                      installed_app->manifest_bytes,
-                                      installed_app->manifest_len,
-                                      &manifest_ref) == 0u) {
+  if (er_vfs_prepare_object_ref(&crypto, installed_app->manifest_bytes,
+                                installed_app->manifest_len,
+                                &manifest_ref) == 0u) {
     return 0u;
   }
-  if (er_app_prepare_package_manifest(&crypto, &app_ref, &manifest_ref, 0,
-                                      &package) == 0u) {
+  if (er_app_prepare_package_manifest_from_objects(&crypto, &app_ref,
+                                                   &manifest_ref, 0,
+                                                   &package) == 0u) {
     return 0u;
   }
   if (er_vfs_prepare_object_packet(&crypto, installed_app->app_bytes,

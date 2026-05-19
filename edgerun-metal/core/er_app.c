@@ -128,6 +128,14 @@ static UINT8 er_app_label_ref_valid(const ErVfsObjectLabelRef* object_ref) {
                  er_hash_nonzero(&object_ref->object_id) != 0u);
 }
 
+static UINT8 er_app_object_ref_valid(const ErVfsObjectRef* object_ref) {
+  return (UINT8)(object_ref != 0 &&
+                 object_ref->abi_version == ER_VFS_ABI_VERSION &&
+                 object_ref->reserved == 0u &&
+                 object_ref->object_len != 0u &&
+                 er_hash_nonzero(&object_ref->object_id) != 0u);
+}
+
 static UINT8 er_app_scene_budget_nonzero(er_ui_scene_budget_t budget) {
   return (UINT8)(budget.rects != 0u ||
                  budget.hits != 0u ||
@@ -306,17 +314,54 @@ UINT8 er_app_prepare_package_manifest(const ErCryptoProvider* crypto,
                                       const ErVfsObjectLabelRef* manifest_object,
                                       const ErVfsObjectLabelRef* ui_assets_object,
                                       ErAppPackageManifest* out_package) {
+  ErVfsObjectRef app_ref;
+  ErVfsObjectRef manifest_ref;
+  ErVfsObjectRef ui_assets_ref;
+  const ErVfsObjectRef* ui_assets_ref_ptr = 0;
+
+  if (er_app_label_ref_valid(app_object) == 0u ||
+      er_app_label_ref_valid(manifest_object) == 0u) {
+    return 0;
+  }
+  if (er_vfs_prepare_object_ref_from_object(&app_object->object_id,
+                                            app_object->object_len,
+                                            &app_ref) == 0u ||
+      er_vfs_prepare_object_ref_from_object(&manifest_object->object_id,
+                                            manifest_object->object_len,
+                                            &manifest_ref) == 0u) {
+    return 0;
+  }
+  if (ui_assets_object != 0) {
+    if (er_app_label_ref_valid(ui_assets_object) == 0u ||
+        er_vfs_prepare_object_ref_from_object(&ui_assets_object->object_id,
+                                              ui_assets_object->object_len,
+                                              &ui_assets_ref) == 0u) {
+      return 0;
+    }
+    ui_assets_ref_ptr = &ui_assets_ref;
+  }
+  return er_app_prepare_package_manifest_from_objects(crypto, &app_ref,
+                                                      &manifest_ref,
+                                                      ui_assets_ref_ptr,
+                                                      out_package);
+}
+
+UINT8 er_app_prepare_package_manifest_from_objects(const ErCryptoProvider* crypto,
+                                                   const ErVfsObjectRef* app_object,
+                                                   const ErVfsObjectRef* manifest_object,
+                                                   const ErVfsObjectRef* ui_assets_object,
+                                                   ErAppPackageManifest* out_package) {
   ErHash zero_hash;
   const ErHash* ui_assets_object_id = &zero_hash;
   UINT64 ui_assets_object_len = 0u;
 
   if (crypto == 0 || out_package == 0 ||
-      er_app_label_ref_valid(app_object) == 0u ||
-      er_app_label_ref_valid(manifest_object) == 0u) {
+      er_app_object_ref_valid(app_object) == 0u ||
+      er_app_object_ref_valid(manifest_object) == 0u) {
     return 0;
   }
   if (ui_assets_object != 0) {
-    if (er_app_label_ref_valid(ui_assets_object) == 0u) {
+    if (er_app_object_ref_valid(ui_assets_object) == 0u) {
       return 0;
     }
     ui_assets_object_id = &ui_assets_object->object_id;

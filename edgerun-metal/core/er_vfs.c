@@ -361,6 +361,33 @@ UINT8 er_vfs_assemble_object_packets(const ErCryptoProvider* crypto,
   return 1;
 }
 
+UINT8 er_vfs_prepare_object_ref_from_object(const ErHash* object_id,
+                                            UINT64 object_len,
+                                            ErVfsObjectRef* out_ref) {
+  if (object_id == 0 || out_ref == 0 || object_len == 0u ||
+      er_hash_nonzero(object_id) == 0u) {
+    return 0;
+  }
+  er_mem_zero((UINT8*)out_ref, (UINTN)sizeof(*out_ref));
+  out_ref->abi_version = ER_VFS_ABI_VERSION;
+  out_ref->object_id = *object_id;
+  out_ref->object_len = object_len;
+  return 1;
+}
+
+UINT8 er_vfs_prepare_object_ref(const ErCryptoProvider* crypto,
+                                const UINT8* object_bytes,
+                                UINTN object_len,
+                                ErVfsObjectRef* out_ref) {
+  ErHash object_id;
+
+  if (er_vfs_hash_object(crypto, object_bytes, object_len, &object_id) == 0u) {
+    return 0;
+  }
+  return er_vfs_prepare_object_ref_from_object(&object_id, (UINT64)object_len,
+                                               out_ref);
+}
+
 UINT8 er_vfs_prepare_object_label_ref(const ErCryptoProvider* crypto, const char* label, UINTN label_len,
                                       const UINT8* object_bytes, UINTN object_len,
                                       ErVfsObjectLabelRef* out_ref) {

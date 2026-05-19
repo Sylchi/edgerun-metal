@@ -37,6 +37,13 @@ typedef struct {
 
 typedef struct {
   UINT16 abi_version;
+  UINT16 reserved;
+  ErHash object_id;
+  UINT64 object_len;
+} ErVfsObjectRef;
+
+typedef struct {
+  UINT16 abi_version;
   UINT16 label_len;
   char label[ER_VFS_LABEL_MAX];
   ErHash object_id;
@@ -93,6 +100,13 @@ UINT8 er_vfs_assemble_object_packets(const ErCryptoProvider* crypto,
                                      UINTN out_object_capacity,
                                      UINTN* out_object_len,
                                      ErHash* out_object_id);
+UINT8 er_vfs_prepare_object_ref(const ErCryptoProvider* crypto,
+                                const UINT8* object_bytes,
+                                UINTN object_len,
+                                ErVfsObjectRef* out_ref);
+UINT8 er_vfs_prepare_object_ref_from_object(const ErHash* object_id,
+                                            UINT64 object_len,
+                                            ErVfsObjectRef* out_ref);
 UINT8 er_vfs_prepare_object_label_ref(const ErCryptoProvider* crypto, const char* label, UINTN label_len,
                                       const UINT8* object_bytes, UINTN object_len,
                                       ErVfsObjectLabelRef* out_ref);

@@ -260,6 +260,7 @@ static void test_ui_boot_package_loads_from_endpoint_storage(void) {
   ErUiBootPackageStorage storage;
   ErAppLoadedPackage loaded;
   const ErUiBootInstalledApp* installed_app;
+  ErUiBootInstalledApp content_only_app;
 
   er_mem_zero(module_memory, (UINTN)sizeof(module_memory));
   er_mem_zero(manifest_memory, (UINTN)sizeof(manifest_memory));
@@ -288,6 +289,23 @@ static void test_ui_boot_package_loads_from_endpoint_storage(void) {
                                                     UI_BOOT_PACKAGE_TEST_APP_INDEX,
                                                     &loaded),
               0);
+  content_only_app = *installed_app;
+  content_only_app.app_label = 0;
+  content_only_app.app_label_len = 0u;
+  content_only_app.manifest_label = 0;
+  content_only_app.manifest_label_len = 0u;
+  er_mem_zero((UINT8*)&storage, (UINTN)sizeof(storage));
+  er_mem_zero((UINT8*)&loaded, (UINTN)sizeof(loaded));
+  check_int64("ui boot package loads content refs without labels",
+              er_ui_boot_load_installed_app_package(&content_only_app,
+                                                    module_memory,
+                                                    (UINT32)sizeof(module_memory),
+                                                    manifest_memory,
+                                                    (UINT32)sizeof(manifest_memory),
+                                                    &storage,
+                                                    UI_BOOT_PACKAGE_TEST_APP_INDEX,
+                                                    &loaded),
+              1);
   er_mem_zero((UINT8*)&storage, (UINTN)sizeof(storage));
   er_mem_zero((UINT8*)&loaded, (UINTN)sizeof(loaded));
 
