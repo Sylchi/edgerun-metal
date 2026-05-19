@@ -119,6 +119,35 @@ if "${ER_BUILD}" app-build "${TMP_DIR}/bad-manifest" >/dev/null 2>&1; then
   exit 1
 fi
 
+mkdir "${TMP_DIR}/driver-package"
+cat > "${TMP_DIR}/driver-package/app.c" <<'CAPP'
+extern i64 bus_exec(i64, i64) __import("edgerun.bus", "exec");
+const i64 OUTBOX = 1024;
+memory(1);
+export i64 main(void) {
+  i64 ptr = OUTBOX;
+  store32(ptr, 0, 1);
+  store32(ptr, 4, 0);
+  store32(ptr, 8, 0);
+  store32(ptr, 12, 4);
+  return bus_exec(ptr, 16);
+}
+CAPP
+cat > "${TMP_DIR}/driver-package/app.manifest" <<'MANIFEST'
+contract=bus-driver
+memory_pages=1
+imports=edgerun.bus/exec
+source=app.c
+output=.build/app.wasm
+MANIFEST
+"${ER_BUILD}" app-build "${TMP_DIR}/driver-package"
+"${ER_BUILD}" app-verify "${TMP_DIR}/driver-package"
+grep '^manifest=app.manifest$' "${TMP_DIR}/driver-package/.build/package.identity" >/dev/null
+if "${ER_BUILD}" app-run "${TMP_DIR}/driver-package" >/dev/null 2>&1; then
+  printf 'app-run accepted bus-driver package\n' >&2
+  exit 1
+fi
+
 plan=$("${ER_BUILD}" --print-plan app-build "${PACKAGE_DIR}")
 case "${plan}" in
   *"+ .build/wasm-compile ${PACKAGE_DIR}/app.c ${PACKAGE_DIR}/.build/app.wasm"* ) ;;

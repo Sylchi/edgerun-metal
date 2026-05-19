@@ -15,7 +15,9 @@
 #define ER_APP_INSTANCE_NONCE_LEN 32u
 
 #define ER_APP_SEAL_POLICY_REQUIRED 1u
-#define ER_APP_KIND_USER 1u
+#define ER_APP_KIND_UI_APP 1u
+#define ER_APP_KIND_BUS_DRIVER 2u
+#define ER_APP_KIND_USER ER_APP_KIND_UI_APP
 #define ER_APP_ADDRESS_BASE 0u
 
 #define ER_APP_BUDGET_CPU_STEP 0x00000001u
@@ -245,11 +247,23 @@ UINT8 er_app_prepare_package_manifest(const ErCryptoProvider* crypto,
                                       const ErVfsObjectLabelRef* manifest_object,
                                       const ErVfsObjectLabelRef* ui_assets_object,
                                       ErAppPackageManifest* out_package);
+UINT8 er_app_prepare_package_manifest_for_kind(const ErCryptoProvider* crypto,
+                                               UINT16 app_kind,
+                                               const ErVfsObjectLabelRef* app_object,
+                                               const ErVfsObjectLabelRef* manifest_object,
+                                               const ErVfsObjectLabelRef* ui_assets_object,
+                                               ErAppPackageManifest* out_package);
 UINT8 er_app_prepare_package_manifest_from_objects(const ErCryptoProvider* crypto,
                                                    const ErVfsObjectRef* app_object,
                                                    const ErVfsObjectRef* manifest_object,
                                                    const ErVfsObjectRef* ui_assets_object,
                                                    ErAppPackageManifest* out_package);
+UINT8 er_app_prepare_package_manifest_from_objects_for_kind(const ErCryptoProvider* crypto,
+                                                            UINT16 app_kind,
+                                                            const ErVfsObjectRef* app_object,
+                                                            const ErVfsObjectRef* manifest_object,
+                                                            const ErVfsObjectRef* ui_assets_object,
+                                                            ErAppPackageManifest* out_package);
 UINT8 er_app_sign_package(const ErCryptoProvider* crypto,
                           const ErAppPackageManifest* package,
                           const ErIdentity* signer,

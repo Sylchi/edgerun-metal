@@ -57,12 +57,24 @@ and rejects any mismatch between `package.identity` and the current source,
 manifest, or generated Wasm bytes. The execution check runs admitted Wasm
 through the metal VM with deterministic local hostcalls.
 
-The first admitted manifest is intentionally exact:
+The first admitted UI app manifest is intentionally exact:
 
 ```text
 contract=ui-app
 memory_pages=1
 imports=edgerun.ui/emit
+source=app.c
+output=.build/app.wasm
+```
+
+Driver packages use the same source and generated-artifact layout, but their
+manifest is a distinct admission contract and they are not runnable through the
+UI app launcher:
+
+```text
+contract=bus-driver
+memory_pages=1
+imports=edgerun.bus/exec
 source=app.c
 output=.build/app.wasm
 ```

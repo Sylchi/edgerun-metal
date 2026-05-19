@@ -372,9 +372,11 @@ static void test_app_identity_routes(void) {
   ErAppPackageManifest package;
   ErAppPackageManifest package_alias;
   ErAppPackageManifest package_from_objects;
+  ErAppPackageManifest driver_package;
   ErAppPackageManifest package_without_assets;
   ErAppPackageManifest package_bad_id;
   ErAppPackageSignature package_signature;
+  ErAppPackageSignature driver_package_signature;
   ErAppPackageSignature package_without_assets_signature;
   ErAppPackageSignature bad_package_signature;
   ErAppLoadedPackage loaded_package;
@@ -489,6 +491,8 @@ static void test_app_identity_routes(void) {
                    &package_from_objects.package_id, &package.package_id);
   check_int64("app package abi", package.abi_version, ER_APP_ABI_VERSION);
   check_int64("app package kind", package.app_kind, ER_APP_KIND_USER);
+  check_int64("app package ui kind alias", package.app_kind,
+              ER_APP_KIND_UI_APP);
   check_hash_equal("app package app object", &package.app_object_id,
                    &app_ref.object_id);
   check_hash_equal("app package manifest object", &package.manifest_object_id,
@@ -505,6 +509,25 @@ static void test_app_identity_routes(void) {
               1);
   check_hash_equal("app package labels ignored", &package_alias.package_id,
                    &package.package_id);
+  check_int64("driver package prepare",
+              er_app_prepare_package_manifest_for_kind(&crypto,
+                                                       ER_APP_KIND_BUS_DRIVER,
+                                                       &app_ref,
+                                                       &manifest_ref,
+                                                       0,
+                                                       &driver_package),
+              1);
+  check_int64("driver package kind", driver_package.app_kind,
+              ER_APP_KIND_BUS_DRIVER);
+  check_hash_not_equal("driver package id differs from ui package",
+                       &driver_package.package_id, &package.package_id);
+  check_int64("driver package rejects invalid kind",
+              er_app_prepare_package_manifest_for_kind(&crypto, 0u,
+                                                       &app_ref,
+                                                       &manifest_ref,
+                                                       0,
+                                                       &package_alias),
+              0);
   test_fill_bytes(package_signer_key, (UINTN)sizeof(package_signer_key), 0x61u);
   check_int64("app package signer identity",
               er_identity_prepare(ER_IDENTITY_TYPE_PUBLIC_KEY,
@@ -531,6 +554,21 @@ static void test_app_identity_routes(void) {
               er_app_verify_package_signature(&crypto, &package,
                                               &package_signature),
               1);
+  check_int64("driver package sign",
+              er_app_sign_package(&crypto, &driver_package,
+                                  &g_test_app_route_package_signer,
+                                  &driver_package_signature),
+              1);
+  check_int64("driver package signature kind",
+              driver_package_signature.app_kind, ER_APP_KIND_BUS_DRIVER);
+  check_int64("driver package rejects ui signature",
+              er_app_verify_package_signature(&crypto, &driver_package,
+                                              &package_signature),
+              0);
+  check_int64("ui package rejects driver signature",
+              er_app_verify_package_signature(&crypto, &package,
+                                              &driver_package_signature),
+              0);
   bad_package_signature = package_signature;
   bad_package_signature.package_id.bytes[0] ^= 1u;
   check_int64("app package verify rejects package id",
@@ -563,6 +601,9 @@ static void test_app_identity_routes(void) {
               er_app_prepare_package_manifest(&crypto, &app_ref, &manifest_ref,
                                               0, &package_without_assets),
               1);
+  check_hash_not_equal("driver package kind affects id",
+                       &driver_package.package_id,
+                       &package_without_assets.package_id);
   check_hash_not_equal("app package assets affect id",
                        &package_without_assets.package_id, &package.package_id);
   check_int64("app package reject missing manifest",
