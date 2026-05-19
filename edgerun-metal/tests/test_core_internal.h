@@ -28,6 +28,7 @@
 #include "er_mt7922.h"
 #include "er_native_eth.h"
 #include "er_native_boot.h"
+#include "er_node_control.h"
 #include "er_pi_zero2w.h"
 #include "er_pi_zero_w_v1_1_uart.h"
 #include "er_net_frame.h"
