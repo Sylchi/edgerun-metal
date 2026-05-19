@@ -15,6 +15,31 @@ static void test_bus_addresses(void) {
   UINT8 value8 = 0;
   UINT16 value16 = 0;
 
+  check_uint64("driver abi bus address bytes",
+               (UINT64)sizeof(ErBusAddress),
+               ER_DRIVER_ABI_BUS_ADDRESS_BYTES);
+  check_uint64("driver abi bus io packet bytes",
+               (UINT64)sizeof(ErBusIoPacket),
+               ER_DRIVER_ABI_BUS_PACKET_IO_BYTES);
+  check_uint64("driver abi bus op32 packet bytes",
+               (UINT64)sizeof(ErBusPacket32),
+               ER_DRIVER_ABI_BUS_PACKET_OP32_BYTES);
+  check_uint64("driver abi bus address kind offset",
+               (UINT64)__builtin_offsetof(ErBusAddress, bus_kind),
+               ER_DRIVER_ABI_BUS_ADDRESS_KIND_OFFSET);
+  check_uint64("driver abi bus address mmio base offset",
+               (UINT64)__builtin_offsetof(ErBusAddress, base),
+               ER_DRIVER_ABI_BUS_ADDRESS_MMIO_BASE_OFFSET);
+  check_uint64("driver abi bus packet op offset",
+               (UINT64)__builtin_offsetof(ErBusIoPacket, op),
+               ER_DRIVER_ABI_BUS_PACKET_OP_OFFSET);
+  check_uint64("driver abi bus io op address offset",
+               (UINT64)__builtin_offsetof(ErBusIoOp, address),
+               ER_DRIVER_ABI_BUS_IO_OP_ADDRESS_OFFSET);
+  check_uint64("driver abi bus io packet result offset",
+               (UINT64)__builtin_offsetof(ErBusIoPacket, result),
+               ER_DRIVER_ABI_BUS_PACKET_IO_RESULT_OFFSET);
+
   er_mmio_reset();
 
   check_int64("bus pci address",

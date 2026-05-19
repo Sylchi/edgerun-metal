@@ -12,6 +12,8 @@
 #include <signal.h>
 #include <unistd.h>
 
+#include "er_driver_abi.h"
+
 #define ERWIRE_MAGIC 0x31575245u
 #define ERWIRE_VERSION 1u
 #define ERWIRE_HEADER_SIZE 32u
@@ -37,20 +39,6 @@
 #define ERWIRE_U32_SIZE 4u
 #define ERWIRE_ASCII_PRINTABLE_MIN 0x20u
 #define ERWIRE_ASCII_PRINTABLE_MAX 0x7fu
-#define ERWIRE_BUS_KIND_PCI_CONFIG 1u
-#define ERWIRE_BUS_KIND_MMIO 2u
-#define ERWIRE_BUS_KIND_IO_PORT 3u
-#define ERWIRE_BUS_STATUS_OK 0u
-#define ERWIRE_BUS_STATUS_DENIED 1u
-#define ERWIRE_BUS_STATUS_INVALID_ADDRESS 2u
-#define ERWIRE_BUS_STATUS_INVALID_OPERATION 3u
-#define ERWIRE_BUS_STATUS_IO_FAILED 4u
-#define ERWIRE_BUS_ACCESS_READ32 0x00000001u
-#define ERWIRE_BUS_ACCESS_WRITE32 0x00000002u
-#define ERWIRE_BUS_ACCESS_READ8 0x00000004u
-#define ERWIRE_BUS_ACCESS_WRITE8 0x00000008u
-#define ERWIRE_BUS_ACCESS_READ16 0x00000010u
-#define ERWIRE_BUS_ACCESS_WRITE16 0x00000020u
 #define ERWIRE_HEADER_MAGIC_OFFSET 0u
 #define ERWIRE_HEADER_VERSION_OFFSET 4u
 #define ERWIRE_HEADER_SIZE_OFFSET 6u
@@ -60,42 +48,9 @@
 #define ERWIRE_HEADER_FLAGS_OFFSET 18u
 #define ERWIRE_HEADER_PAYLOAD_LEN_OFFSET 20u
 #define ERWIRE_HEADER_PAYLOAD_CRC_OFFSET 24u
-#define ERWIRE_PCI_PAYLOAD_SIZE 56u
-#define ERWIRE_PCI_BUS_OFFSET 0u
-#define ERWIRE_PCI_DEV_OFFSET 4u
-#define ERWIRE_PCI_FUNC_OFFSET 8u
-#define ERWIRE_PCI_TARGET_OFFSET 12u
-#define ERWIRE_PCI_ID_OFFSET 16u
-#define ERWIRE_PCI_COMMAND_OFFSET 20u
-#define ERWIRE_PCI_CLASS_OFFSET 24u
-#define ERWIRE_PCI_BAR_COUNT 6u
-#define ERWIRE_PCI_BAR_BASE_OFFSET 32u
 #define ERWIRE_BLOB_META_SIZE 12u
 #define ERWIRE_BLOB_TOTAL_OFFSET 4u
 #define ERWIRE_BLOB_CHUNK_OFFSET 8u
-#define ERWIRE_BUS_ADDRESS_KIND_OFFSET 2u
-#define ERWIRE_BUS_ADDRESS_PCI_BUS_OFFSET 8u
-#define ERWIRE_BUS_ADDRESS_PCI_DEV_OFFSET 12u
-#define ERWIRE_BUS_ADDRESS_PCI_FUNC_OFFSET 16u
-#define ERWIRE_BUS_ADDRESS_MMIO_BAR_OFFSET 20u
-#define ERWIRE_BUS_ADDRESS_IO_PORT_OFFSET 24u
-#define ERWIRE_BUS_ADDRESS_MMIO_BASE_OFFSET 32u
-#define ERWIRE_BUS_ADDRESS_MMIO_LEN_OFFSET 40u
-#define ERWIRE_BUS_OP_OFFSET 16u
-#define ERWIRE_BUS_STATUS_OFFSET 4u
-#define ERWIRE_BUS_PACKET_ID_OFFSET 8u
-#define ERWIRE_BUS_OP_ACCESS_OFFSET 4u
-#define ERWIRE_BUS_OP_ADDRESS_OFFSET 8u
-#define ERWIRE_BUS_OP32_PAYLOAD_SIZE 96u
-#define ERWIRE_BUS_OP32_OFFSET_OFFSET 56u
-#define ERWIRE_BUS_OP32_VALUE_OFFSET 64u
-#define ERWIRE_BUS_OP32_RESULT_OFFSET 88u
-#define ERWIRE_BUS_IO_PAYLOAD_SIZE 104u
-#define ERWIRE_BUS_IO_WIDTH_OFFSET 8u
-#define ERWIRE_BUS_IO_ADDRESS_OFFSET 16u
-#define ERWIRE_BUS_IO_OFFSET_OFFSET 64u
-#define ERWIRE_BUS_IO_VALUE_OFFSET 72u
-#define ERWIRE_BUS_IO_RESULT_OFFSET 96u
 #define ERWIRE_PORT_PARSE_BASE 10
 #define ERWIRE_PORT_MAX 65535ul
 #define ERWIRE_DEFAULT_UDP_PORT 9000u
@@ -178,11 +133,11 @@ static const char* er_kind_name(uint16_t kind) {
 
 static const char* er_bus_kind_name(uint16_t kind) {
   switch (kind) {
-    case ERWIRE_BUS_KIND_PCI_CONFIG:
+    case ER_DRIVER_ABI_BUS_KIND_PCI_CONFIG:
       return "pci_config";
-    case ERWIRE_BUS_KIND_MMIO:
+    case ER_DRIVER_ABI_BUS_KIND_MMIO32:
       return "mmio";
-    case ERWIRE_BUS_KIND_IO_PORT:
+    case ER_DRIVER_ABI_BUS_KIND_IO_PORT:
       return "io_port";
     default:
       return "unknown";
@@ -191,15 +146,15 @@ static const char* er_bus_kind_name(uint16_t kind) {
 
 static const char* er_bus_status_name(uint32_t status) {
   switch (status) {
-    case ERWIRE_BUS_STATUS_OK:
+    case ER_DRIVER_ABI_BUS_STATUS_OK:
       return "ok";
-    case ERWIRE_BUS_STATUS_DENIED:
+    case ER_DRIVER_ABI_BUS_STATUS_DENIED:
       return "denied";
-    case ERWIRE_BUS_STATUS_INVALID_ADDRESS:
+    case ER_DRIVER_ABI_BUS_STATUS_INVALID_ADDRESS:
       return "invalid_address";
-    case ERWIRE_BUS_STATUS_INVALID_OPERATION:
+    case ER_DRIVER_ABI_BUS_STATUS_INVALID_OPERATION:
       return "invalid_operation";
-    case ERWIRE_BUS_STATUS_IO_FAILED:
+    case ER_DRIVER_ABI_BUS_STATUS_IO_FAILED:
       return "io_failed";
     default:
       return "unknown";
@@ -208,17 +163,17 @@ static const char* er_bus_status_name(uint32_t status) {
 
 static const char* er_bus_access_name(uint32_t access) {
   switch (access) {
-    case ERWIRE_BUS_ACCESS_READ32:
+    case ER_DRIVER_ABI_BUS_ACCESS_READ32:
       return "read32";
-    case ERWIRE_BUS_ACCESS_WRITE32:
+    case ER_DRIVER_ABI_BUS_ACCESS_WRITE32:
       return "write32";
-    case ERWIRE_BUS_ACCESS_READ8:
+    case ER_DRIVER_ABI_BUS_ACCESS_READ8:
       return "read8";
-    case ERWIRE_BUS_ACCESS_WRITE8:
+    case ER_DRIVER_ABI_BUS_ACCESS_WRITE8:
       return "write8";
-    case ERWIRE_BUS_ACCESS_READ16:
+    case ER_DRIVER_ABI_BUS_ACCESS_READ16:
       return "read16";
-    case ERWIRE_BUS_ACCESS_WRITE16:
+    case ER_DRIVER_ABI_BUS_ACCESS_WRITE16:
       return "write16";
     default:
       return "unknown";
@@ -281,20 +236,20 @@ static void er_print_text_payload(const uint8_t* payload, uint32_t len) {
 static void er_print_pci_payload(const uint8_t* payload, uint32_t len) {
   uint32_t i;
 
-  if (len < ERWIRE_PCI_PAYLOAD_SIZE) {
+  if (len < ER_DRIVER_ABI_PCI_DISCOVERY_BYTES) {
     printf(" pci=truncated");
     return;
   }
   printf(" bus=%u dev=%u func=%u target=%u id=0x%08x cmd=0x%08x class=0x%08x",
-         er_get_u32(payload + ERWIRE_PCI_BUS_OFFSET),
-         er_get_u32(payload + ERWIRE_PCI_DEV_OFFSET),
-         er_get_u32(payload + ERWIRE_PCI_FUNC_OFFSET),
-         er_get_u32(payload + ERWIRE_PCI_TARGET_OFFSET),
-         er_get_u32(payload + ERWIRE_PCI_ID_OFFSET),
-         er_get_u32(payload + ERWIRE_PCI_COMMAND_OFFSET),
-         er_get_u32(payload + ERWIRE_PCI_CLASS_OFFSET));
-  for (i = 0; i < ERWIRE_PCI_BAR_COUNT; ++i) {
-    printf(" bar%u=0x%08x", i, er_get_u32(payload + ERWIRE_PCI_BAR_BASE_OFFSET + (i * ERWIRE_U32_SIZE)));
+         er_get_u32(payload + ER_DRIVER_ABI_PCI_DISCOVERY_BUS_OFFSET),
+         er_get_u32(payload + ER_DRIVER_ABI_PCI_DISCOVERY_DEV_OFFSET),
+         er_get_u32(payload + ER_DRIVER_ABI_PCI_DISCOVERY_FUNC_OFFSET),
+         er_get_u32(payload + ER_DRIVER_ABI_PCI_DISCOVERY_TARGET_OFFSET),
+         er_get_u32(payload + ER_DRIVER_ABI_PCI_DISCOVERY_ID_OFFSET),
+         er_get_u32(payload + ER_DRIVER_ABI_PCI_DISCOVERY_COMMAND_OFFSET),
+         er_get_u32(payload + ER_DRIVER_ABI_PCI_DISCOVERY_CLASS_OFFSET));
+  for (i = 0; i < ER_DRIVER_ABI_PCI_DISCOVERY_BAR_COUNT; ++i) {
+    printf(" bar%u=0x%08x", i, er_get_u32(payload + ER_DRIVER_ABI_PCI_DISCOVERY_BAR_BASE_OFFSET + (i * ERWIRE_U32_SIZE)));
   }
 }
 
@@ -316,21 +271,21 @@ static void er_print_blob_payload(const uint8_t* payload, uint32_t len) {
 }
 
 static void er_print_bus_address(const uint8_t* address) {
-  uint16_t bus_kind = er_get_u16(address + ERWIRE_BUS_ADDRESS_KIND_OFFSET);
+  uint16_t bus_kind = er_get_u16(address + ER_DRIVER_ABI_BUS_ADDRESS_KIND_OFFSET);
 
   printf(" bus_kind=%s(%u)", er_bus_kind_name(bus_kind), bus_kind);
-  if (bus_kind == ERWIRE_BUS_KIND_PCI_CONFIG) {
+  if (bus_kind == ER_DRIVER_ABI_BUS_KIND_PCI_CONFIG) {
     printf(" bus=%u dev=%u func=%u",
-           er_get_u32(address + ERWIRE_BUS_ADDRESS_PCI_BUS_OFFSET),
-           er_get_u32(address + ERWIRE_BUS_ADDRESS_PCI_DEV_OFFSET),
-           er_get_u32(address + ERWIRE_BUS_ADDRESS_PCI_FUNC_OFFSET));
-  } else if (bus_kind == ERWIRE_BUS_KIND_MMIO) {
+           er_get_u32(address + ER_DRIVER_ABI_BUS_ADDRESS_PCI_BUS_OFFSET),
+           er_get_u32(address + ER_DRIVER_ABI_BUS_ADDRESS_PCI_DEV_OFFSET),
+           er_get_u32(address + ER_DRIVER_ABI_BUS_ADDRESS_PCI_FUNC_OFFSET));
+  } else if (bus_kind == ER_DRIVER_ABI_BUS_KIND_MMIO32) {
     printf(" bar=%u base=0x%016llx len=%llu",
-           er_get_u32(address + ERWIRE_BUS_ADDRESS_MMIO_BAR_OFFSET),
-           (unsigned long long)er_get_u64(address + ERWIRE_BUS_ADDRESS_MMIO_BASE_OFFSET),
-           (unsigned long long)er_get_u64(address + ERWIRE_BUS_ADDRESS_MMIO_LEN_OFFSET));
-  } else if (bus_kind == ERWIRE_BUS_KIND_IO_PORT) {
-    printf(" port=0x%04x", er_get_u32(address + ERWIRE_BUS_ADDRESS_IO_PORT_OFFSET));
+           er_get_u32(address + ER_DRIVER_ABI_BUS_ADDRESS_MMIO_BAR_OFFSET),
+           (unsigned long long)er_get_u64(address + ER_DRIVER_ABI_BUS_ADDRESS_MMIO_BASE_OFFSET),
+           (unsigned long long)er_get_u64(address + ER_DRIVER_ABI_BUS_ADDRESS_MMIO_LEN_OFFSET));
+  } else if (bus_kind == ER_DRIVER_ABI_BUS_KIND_IO_PORT) {
+    printf(" port=0x%04x", er_get_u32(address + ER_DRIVER_ABI_BUS_ADDRESS_IO_PORT_OFFSET));
   }
 }
 
@@ -339,20 +294,20 @@ static void er_print_bus_op32_payload(const uint8_t* payload, uint32_t len) {
   uint32_t status;
   uint32_t access;
 
-  if (len < ERWIRE_BUS_OP32_PAYLOAD_SIZE) {
+  if (len < ER_DRIVER_ABI_BUS_PACKET_OP32_BYTES) {
     printf(" bus_op32=truncated");
     return;
   }
-  status = er_get_u32(payload + ERWIRE_BUS_STATUS_OFFSET);
-  op = payload + ERWIRE_BUS_OP_OFFSET;
-  access = er_get_u32(op + ERWIRE_BUS_OP_ACCESS_OFFSET);
+  status = er_get_u32(payload + ER_DRIVER_ABI_BUS_PACKET_STATUS_OFFSET);
+  op = payload + ER_DRIVER_ABI_BUS_PACKET_OP_OFFSET;
+  access = er_get_u32(op + ER_DRIVER_ABI_BUS_OP_ACCESS_OFFSET);
   printf(" packet_id=%llu status=%s(%u) access=%s offset=%llu value=0x%08x result=0x%08x",
-         (unsigned long long)er_get_u64(payload + ERWIRE_BUS_PACKET_ID_OFFSET),
+         (unsigned long long)er_get_u64(payload + ER_DRIVER_ABI_BUS_PACKET_ID_OFFSET),
          er_bus_status_name(status), status,
-         er_bus_access_name(access), (unsigned long long)er_get_u64(op + ERWIRE_BUS_OP32_OFFSET_OFFSET),
-         er_get_u32(op + ERWIRE_BUS_OP32_VALUE_OFFSET),
-         er_get_u32(payload + ERWIRE_BUS_OP32_RESULT_OFFSET));
-  er_print_bus_address(op + ERWIRE_BUS_OP_ADDRESS_OFFSET);
+         er_bus_access_name(access), (unsigned long long)er_get_u64(op + ER_DRIVER_ABI_BUS_OP32_OFFSET_OFFSET),
+         er_get_u32(op + ER_DRIVER_ABI_BUS_OP32_VALUE_OFFSET),
+         er_get_u32(payload + ER_DRIVER_ABI_BUS_PACKET_OP32_RESULT_OFFSET));
+  er_print_bus_address(op + ER_DRIVER_ABI_BUS_OP32_ADDRESS_OFFSET);
 }
 
 static void er_print_bus_io_payload(const uint8_t* payload, uint32_t len) {
@@ -360,21 +315,21 @@ static void er_print_bus_io_payload(const uint8_t* payload, uint32_t len) {
   uint32_t status;
   uint32_t access;
 
-  if (len < ERWIRE_BUS_IO_PAYLOAD_SIZE) {
+  if (len < ER_DRIVER_ABI_BUS_PACKET_IO_BYTES) {
     printf(" bus_io=truncated");
     return;
   }
-  status = er_get_u32(payload + ERWIRE_BUS_STATUS_OFFSET);
-  op = payload + ERWIRE_BUS_OP_OFFSET;
-  access = er_get_u32(op + ERWIRE_BUS_OP_ACCESS_OFFSET);
+  status = er_get_u32(payload + ER_DRIVER_ABI_BUS_PACKET_STATUS_OFFSET);
+  op = payload + ER_DRIVER_ABI_BUS_PACKET_OP_OFFSET;
+  access = er_get_u32(op + ER_DRIVER_ABI_BUS_OP_ACCESS_OFFSET);
   printf(" packet_id=%llu status=%s(%u) access=%s width=%u offset=%llu value=0x%08x result=0x%08x",
-         (unsigned long long)er_get_u64(payload + ERWIRE_BUS_PACKET_ID_OFFSET),
+         (unsigned long long)er_get_u64(payload + ER_DRIVER_ABI_BUS_PACKET_ID_OFFSET),
          er_bus_status_name(status), status,
-         er_bus_access_name(access), er_get_u32(op + ERWIRE_BUS_IO_WIDTH_OFFSET),
-         (unsigned long long)er_get_u64(op + ERWIRE_BUS_IO_OFFSET_OFFSET),
-         er_get_u32(op + ERWIRE_BUS_IO_VALUE_OFFSET),
-         er_get_u32(payload + ERWIRE_BUS_IO_RESULT_OFFSET));
-  er_print_bus_address(op + ERWIRE_BUS_IO_ADDRESS_OFFSET);
+         er_bus_access_name(access), er_get_u32(op + ER_DRIVER_ABI_BUS_IO_OP_WIDTH_OFFSET),
+         (unsigned long long)er_get_u64(op + ER_DRIVER_ABI_BUS_IO_OP_OFFSET_OFFSET),
+         er_get_u32(op + ER_DRIVER_ABI_BUS_IO_OP_VALUE_OFFSET),
+         er_get_u32(payload + ER_DRIVER_ABI_BUS_PACKET_IO_RESULT_OFFSET));
+  er_print_bus_address(op + ER_DRIVER_ABI_BUS_IO_OP_ADDRESS_OFFSET);
 }
 
 static int er_decode_packet(const uint8_t* packet, uint32_t len) {

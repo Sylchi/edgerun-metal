@@ -278,7 +278,8 @@ static int erb_build_erwire_decode(int print_plan) {
   if (erb_prepare_dirs() != 0 || erb_compile_common(&args, ERB_ERWIRE_DECODE_BIN) != 0) {
     return 1;
   }
-  if (erb_args_push(&args, "tools/erwire-decode.c") != 0) {
+  if (erb_args_push(&args, "-Iinclude") != 0 ||
+      erb_args_push(&args, "tools/erwire-decode.c") != 0) {
     return 1;
   }
   return erb_run_args(&args, print_plan);

@@ -37,6 +37,11 @@ case "$repo_plan" in
   * ) printf 'missing erwire test step\n' >&2; exit 1 ;;
 esac
 
+case "$repo_plan" in
+  *"+ clang -std=c11 -Wall -Wextra -Werror -O2 -o .build/erwire-decode -Iinclude tools/erwire-decode.c"* ) ;;
+  * ) printf 'missing erwire decoder include path\n' >&2; exit 1 ;;
+esac
+
 app_package_plan=$("$ER_BUILD" --print-plan app-build "${ROOT_DIR}/tests/fixtures/app-package/app")
 
 case "$app_package_plan" in
