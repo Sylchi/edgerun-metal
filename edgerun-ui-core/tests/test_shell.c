@@ -2,9 +2,15 @@
 
 static const uint32_t ER_TEST_SHELL_FIRST_SURFACE_ID = 10u;
 static const uint32_t ER_TEST_SHELL_SECOND_SURFACE_ID = 20u;
+static const uint32_t ER_TEST_SHELL_UPDATE_SURFACE_ID = 30u;
+static const uint32_t ER_TEST_SHELL_REMOVED_SURFACE_ID = 40u;
+static const uint32_t ER_TEST_SHELL_LAUNCHER_APP_ID = 100u;
+static const uint32_t ER_TEST_SHELL_LAUNCHER_UPDATE_ID = 101u;
+static const uint32_t ER_TEST_SHELL_LAUNCHER_REMOVED_ID = 102u;
 static const size_t ER_TEST_SHELL_SURFACE_COUNT = 2u;
+static const size_t ER_TEST_SHELL_LAUNCHER_APP_COUNT = 3u;
 static const size_t ER_TEST_SHELL_MIN_CHROME_RECTS = 6u;
-static const size_t ER_TEST_SHELL_MIN_CHROME_HITS = 5u;
+static const size_t ER_TEST_SHELL_MIN_CHROME_HITS = 6u;
 static const size_t ER_TEST_SHELL_MIN_ICON_QUADS = 5u;
 static const size_t ER_TEST_SHELL_MIN_FONT_ICON_QUADS = 3u;
 static const float ER_TEST_SHELL_PANEL_PAD = 8.0f;
@@ -42,6 +48,40 @@ void run_shell_tests(void) {
 
   expect_status(er_ui_workspace_add_surface(&shell, ER_TEST_SHELL_FIRST_SURFACE_ID), ER_UI_OK, "workspace: first surface opens");
   expect_status(er_ui_workspace_add_surface(&shell, ER_TEST_SHELL_SECOND_SURFACE_ID), ER_UI_OK, "workspace: second surface opens");
+  expect_status(er_ui_shell_add_launcher_app(&shell,
+                                             (er_ui_launcher_app_t){
+                                                 ER_TEST_SHELL_LAUNCHER_APP_ID,
+                                                 ER_TEST_SHELL_FIRST_SURFACE_ID,
+                                                 "Ledger",
+                                                 ER_UI_LAUNCHER_APP_INSTALLED,
+                                                 "pkg:0123456789abcdef",
+                                                 "signed:authority-root",
+                                                 "ui,storage"}),
+                ER_UI_OK,
+                "launcher: installed package record is accepted");
+  expect_status(er_ui_shell_add_launcher_app(&shell,
+                                             (er_ui_launcher_app_t){
+                                                 ER_TEST_SHELL_LAUNCHER_UPDATE_ID,
+                                                 ER_TEST_SHELL_UPDATE_SURFACE_ID,
+                                                 "Charts",
+                                                 ER_UI_LAUNCHER_APP_UPDATE_AVAILABLE,
+                                                 "pkg:1123456789abcdef",
+                                                 "signed:store-cache",
+                                                 "ui,network"}),
+                ER_UI_OK,
+                "launcher: update-available package record is accepted");
+  expect_status(er_ui_shell_add_launcher_app(&shell,
+                                             (er_ui_launcher_app_t){
+                                                 ER_TEST_SHELL_LAUNCHER_REMOVED_ID,
+                                                 ER_TEST_SHELL_REMOVED_SURFACE_ID,
+                                                 "Archive",
+                                                 ER_UI_LAUNCHER_APP_REMOVED,
+                                                 "pkg:2123456789abcdef",
+                                                 "removed:local-index",
+                                                 "none"}),
+                ER_UI_OK,
+                "launcher: removed package record is accepted");
+  expect_size(er_ui_shell_launcher_app_count(&shell), ER_TEST_SHELL_LAUNCHER_APP_COUNT, "launcher: app inventory count tracks records");
   expect_size(er_ui_workspace_surface_count(&shell), ER_TEST_SHELL_SURFACE_COUNT, "workspace: surface count tracks opened surfaces");
   expect_u32(er_ui_workspace_focused_surface_id(&shell), ER_TEST_SHELL_SECOND_SURFACE_ID, "workspace: newest surface is focused");
   expect_status(er_ui_workspace_focus_surface(&shell, ER_TEST_SHELL_FIRST_SURFACE_ID), ER_UI_OK, "workspace: focus existing surface succeeds");
@@ -63,6 +103,9 @@ void run_shell_tests(void) {
                 "shell scene: emit succeeds");
   expect_true(scene.rect_count >= ER_TEST_SHELL_MIN_CHROME_RECTS, "shell scene: chrome and surfaces emit rects");
   expect_true(scene.hit_count >= ER_TEST_SHELL_MIN_CHROME_HITS, "shell scene: launcher tabs and closes emit hits");
+  expect_true(shell_scene_has_hit_id(&scene, ER_TEST_SHELL_LAUNCHER_APP_ID), "shell scene: launcher app hit emits");
+  expect_true(shell_scene_has_hit_id(&scene, ER_TEST_SHELL_LAUNCHER_UPDATE_ID), "shell scene: update-available app hit emits");
+  expect_true(!shell_scene_has_hit_id(&scene, ER_TEST_SHELL_LAUNCHER_REMOVED_ID), "shell scene: removed app is displayed without launch hit");
   expect_size(scene.drop_target_count, ER_TEST_SHELL_SURFACE_COUNT, "shell scene: surface tiles emit drop targets");
   expect_true(scene.icon_quad_count >= ER_TEST_SHELL_MIN_ICON_QUADS, "shell scene: launcher tabs and closes emit Tabler icon quads");
   const er_ui_drop_target_t* first_drop = shell_scene_drop_target(&scene, ER_TEST_SHELL_FIRST_SURFACE_ID);
@@ -122,6 +165,24 @@ void run_shell_tests(void) {
   action.kind = ER_UI_ACTION_HOVERED;
   expect_status(er_ui_shell_apply_action(&shell, action, &changed), ER_UI_OK, "shell action: ignored action applies");
   expect_true(!changed, "shell action: ignored action reports unchanged");
+
+  er_ui_shell_set_launcher_open(&shell, true);
+  action = (er_ui_action_t){0};
+  action.kind = ER_UI_ACTION_ACTIVATED;
+  action.has_hit = true;
+  action.hit = er_ui_hit(ER_UI_HIT_APP_LAUNCHER_ITEM, ER_TEST_SHELL_LAUNCHER_APP_ID, 0.0f, 0.0f, 1.0f, 1.0f);
+  expect_status(er_ui_shell_apply_action(&shell, action, &changed), ER_UI_OK, "launcher action: installed app activates");
+  expect_true(changed, "launcher action: installed app reports changed");
+  expect_true(!er_ui_shell_launcher_open(&shell), "launcher action: installed app closes launcher");
+  expect_u32(er_ui_workspace_focused_surface_id(&shell), ER_TEST_SHELL_FIRST_SURFACE_ID, "launcher action: installed app focuses target surface");
+
+  action = (er_ui_action_t){0};
+  action.kind = ER_UI_ACTION_ACTIVATED;
+  action.has_hit = true;
+  action.hit = er_ui_hit(ER_UI_HIT_APP_LAUNCHER_ITEM, ER_TEST_SHELL_LAUNCHER_REMOVED_ID, 0.0f, 0.0f, 1.0f, 1.0f);
+  expect_status(er_ui_shell_apply_action(&shell, action, &changed), ER_UI_OK, "launcher action: removed app action applies");
+  expect_true(!changed, "launcher action: removed app reports unchanged");
+  expect_u32(er_ui_workspace_focused_surface_id(&shell), ER_TEST_SHELL_FIRST_SURFACE_ID, "launcher action: removed app does not change focus");
 
   {
     vr_font_face_t* face =

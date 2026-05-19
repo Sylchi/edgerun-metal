@@ -19,6 +19,12 @@ extern "C" {
 #define ER_UI_NETWORK_APP_PROMPT_CANCEL_ID 0xED010003u
 
 typedef enum {
+  ER_UI_LAUNCHER_APP_INSTALLED = 0,
+  ER_UI_LAUNCHER_APP_UPDATE_AVAILABLE,
+  ER_UI_LAUNCHER_APP_REMOVED
+} er_ui_launcher_app_status_t;
+
+typedef enum {
   ER_UI_NETWORK_APP_PROMPT_CHOICE_NONE = 0,
   ER_UI_NETWORK_APP_PROMPT_CHOICE_RUN_ONCE,
   ER_UI_NETWORK_APP_PROMPT_CHOICE_VERIFY_CACHE,
@@ -31,6 +37,16 @@ typedef struct {
 } er_ui_workspace_surface_t;
 
 typedef struct {
+  uint32_t launch_id;
+  uint32_t surface_id;
+  const char* name;
+  er_ui_launcher_app_status_t status;
+  const char* package_hash;
+  const char* provenance;
+  const char* permissions;
+} er_ui_launcher_app_t;
+
+typedef struct {
   er_ui_allocator_t allocator;
   bool launcher_open;
   bool network_app_prompt_open;
@@ -39,6 +55,9 @@ typedef struct {
   er_ui_workspace_surface_t* surfaces;
   size_t surface_count;
   size_t surface_capacity;
+  er_ui_launcher_app_t* launcher_apps;
+  size_t launcher_app_count;
+  size_t launcher_app_capacity;
 } er_ui_shell_state_t;
 
 er_ui_status_t er_ui_shell_state_init(er_ui_shell_state_t* state);
@@ -57,6 +76,9 @@ bool er_ui_shell_network_app_prompt_open(const er_ui_shell_state_t* state);
 void er_ui_shell_show_network_app_prompt(er_ui_shell_state_t* state);
 void er_ui_shell_clear_network_app_prompt_choice(er_ui_shell_state_t* state);
 er_ui_network_app_prompt_choice_t er_ui_shell_network_app_prompt_choice(const er_ui_shell_state_t* state);
+
+er_ui_status_t er_ui_shell_add_launcher_app(er_ui_shell_state_t* state, er_ui_launcher_app_t app);
+size_t er_ui_shell_launcher_app_count(const er_ui_shell_state_t* state);
 
 er_ui_status_t er_ui_workspace_add_surface(er_ui_shell_state_t* state, uint32_t surface_id);
 er_ui_status_t er_ui_workspace_add_named_surface(er_ui_shell_state_t* state, uint32_t surface_id, const char* title);

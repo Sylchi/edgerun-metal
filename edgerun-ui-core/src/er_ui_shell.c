@@ -4,9 +4,13 @@
 #include "er_ui_painter.h"
 
 static const size_t ER_UI_SHELL_INITIAL_SURFACE_CAP = 4u;
+static const size_t ER_UI_SHELL_INITIAL_LAUNCHER_APP_CAP = 4u;
 static const float ER_UI_SHELL_PAD = 8.0f;
 static const float ER_UI_SHELL_LAUNCHER_WIDTH = 280.0f;
 static const float ER_UI_SHELL_LAUNCHER_BUTTON = 32.0f;
+static const float ER_UI_SHELL_LAUNCHER_ROW_HEIGHT = 92.0f;
+static const float ER_UI_SHELL_LAUNCHER_ROW_GAP = 8.0f;
+static const float ER_UI_SHELL_LAUNCHER_ICON = 28.0f;
 static const float ER_UI_WORKSPACE_TAB_WIDTH = 132.0f;
 static const float ER_UI_WORKSPACE_CLOSE_SIZE = 20.0f;
 static const float ER_UI_WORKSPACE_PANEL_PAD = 8.0f;
@@ -15,11 +19,14 @@ static const float ER_UI_NETWORK_APP_PROMPT_HEIGHT = 328.0f;
 static const size_t ER_UI_SHELL_TEXT_MAX_CODEPOINTS = 192u;
 enum {
   ER_UI_SHELL_SURFACE_GROWTH_FACTOR = 4u,
+  ER_UI_SHELL_LAUNCHER_APP_GROWTH_FACTOR = 4u,
   ER_UI_SHELL_U32_DECIMAL_MAX_DIGITS = 10u,
   ER_UI_SHELL_DECIMAL_RADIX = 10u,
   ER_UI_SHELL_SURFACE_LABEL_CAP = 24u,
   ER_UI_SHELL_SURFACE_LABEL_PREFIX_LEN = 8u
 };
+
+static er_ui_status_t er_ui_shell_push_ascii_text(er_ui_scene_t* scene, vr_font_face_t* font, const char* text, float x, float y, er_ui_color4_t color);
 
 static bool er_ui_shell_reserve_surfaces(er_ui_shell_state_t* state, size_t count) {
   if (!state || count < state->surface_capacity) return true;
@@ -27,10 +34,25 @@ static bool er_ui_shell_reserve_surfaces(er_ui_shell_state_t* state, size_t coun
                                  ER_UI_SHELL_INITIAL_SURFACE_CAP, ER_UI_SHELL_SURFACE_GROWTH_FACTOR);
 }
 
+static bool er_ui_shell_reserve_launcher_apps(er_ui_shell_state_t* state, size_t count) {
+  if (!state || count < state->launcher_app_capacity) return true;
+  return er_ui_allocator_reserve(state->allocator, (void**)&state->launcher_apps, &state->launcher_app_capacity, count,
+                                 sizeof(*state->launcher_apps), ER_UI_SHELL_INITIAL_LAUNCHER_APP_CAP,
+                                 ER_UI_SHELL_LAUNCHER_APP_GROWTH_FACTOR);
+}
+
 static size_t er_ui_workspace_find_surface(const er_ui_shell_state_t* state, uint32_t surface_id) {
   if (!state) return (size_t)-1;
   for (size_t i = 0u; i < state->surface_count; ++i) {
     if (state->surfaces[i].id == surface_id) return i;
+  }
+  return (size_t)-1;
+}
+
+static size_t er_ui_shell_find_launcher_app(const er_ui_shell_state_t* state, uint32_t launch_id) {
+  if (!state) return (size_t)-1;
+  for (size_t i = 0u; i < state->launcher_app_count; ++i) {
+    if (state->launcher_apps[i].launch_id == launch_id) return i;
   }
   return (size_t)-1;
 }
@@ -58,6 +80,8 @@ void er_ui_shell_state_destroy(er_ui_shell_state_t* state) {
   if (!state) return;
   er_ui_allocator_t allocator = state->allocator;
   er_ui_allocator_free(allocator, state->surfaces, state->surface_capacity * sizeof(*state->surfaces), ER_UI_SHELL_SURFACE_GROWTH_FACTOR);
+  er_ui_allocator_free(allocator, state->launcher_apps, state->launcher_app_capacity * sizeof(*state->launcher_apps),
+                       ER_UI_SHELL_LAUNCHER_APP_GROWTH_FACTOR);
   er_ui_mem_zero(state, sizeof(*state));
 }
 
@@ -92,6 +116,37 @@ static bool er_ui_shell_prompt_choice_for_id(uint32_t id, er_ui_network_app_prom
   return true;
 }
 
+static const char* er_ui_shell_launcher_status_label(er_ui_launcher_app_status_t status) {
+  switch (status) {
+    case ER_UI_LAUNCHER_APP_INSTALLED:
+      return "installed";
+    case ER_UI_LAUNCHER_APP_UPDATE_AVAILABLE:
+      return "update available";
+    case ER_UI_LAUNCHER_APP_REMOVED:
+      return "removed";
+    default:
+      return NULL;
+  }
+}
+
+static bool er_ui_shell_launcher_app_launchable(const er_ui_launcher_app_t* app) {
+  if (!app) return false;
+  switch (app->status) {
+    case ER_UI_LAUNCHER_APP_INSTALLED:
+    case ER_UI_LAUNCHER_APP_UPDATE_AVAILABLE:
+      return true;
+    case ER_UI_LAUNCHER_APP_REMOVED:
+      return false;
+    default:
+      return false;
+  }
+}
+
+static bool er_ui_shell_launcher_app_valid(er_ui_launcher_app_t app) {
+  return app.launch_id != 0u && app.surface_id != 0u && app.name && app.package_hash && app.provenance && app.permissions &&
+         er_ui_shell_launcher_status_label(app.status) != NULL;
+}
+
 er_ui_status_t er_ui_shell_apply_action(er_ui_shell_state_t* state, er_ui_action_t action, bool* out_changed) {
   if (out_changed) *out_changed = false;
   if (!state) return ER_UI_ERR_INVALID_ARGUMENT;
@@ -119,6 +174,21 @@ er_ui_status_t er_ui_shell_apply_action(er_ui_shell_state_t* state, er_ui_action
       if (out_changed) *out_changed = true;
       return ER_UI_OK;
     }
+  }
+
+  if (action.has_hit && action.hit.kind == ER_UI_HIT_APP_LAUNCHER_ITEM && action.kind == ER_UI_ACTION_ACTIVATED) {
+    size_t index = er_ui_shell_find_launcher_app(state, action.hit.id);
+    if (index == (size_t)-1) return ER_UI_ERR_INVALID_ARGUMENT;
+    er_ui_launcher_app_t* app = &state->launcher_apps[index];
+    if (!er_ui_shell_launcher_app_launchable(app)) return ER_UI_OK;
+    uint32_t previous = state->focused_surface_id;
+    size_t previous_count = state->surface_count;
+    bool previous_launcher_open = state->launcher_open;
+    er_ui_status_t status = er_ui_workspace_add_named_surface(state, app->surface_id, app->name);
+    if (status != ER_UI_OK) return status;
+    state->launcher_open = false;
+    if (out_changed) *out_changed = previous_launcher_open || previous != state->focused_surface_id || previous_count != state->surface_count;
+    return ER_UI_OK;
   }
 
   if (action.has_hit && action.hit.kind == ER_UI_HIT_SHELL_LAUNCHER && action.kind == ER_UI_ACTION_ACTIVATED) {
@@ -164,6 +234,23 @@ void er_ui_shell_clear_network_app_prompt_choice(er_ui_shell_state_t* state) {
 
 er_ui_network_app_prompt_choice_t er_ui_shell_network_app_prompt_choice(const er_ui_shell_state_t* state) {
   return state ? state->network_app_prompt_choice : ER_UI_NETWORK_APP_PROMPT_CHOICE_NONE;
+}
+
+er_ui_status_t er_ui_shell_add_launcher_app(er_ui_shell_state_t* state, er_ui_launcher_app_t app) {
+  if (!state || !er_ui_shell_launcher_app_valid(app)) return ER_UI_ERR_INVALID_ARGUMENT;
+  size_t index = er_ui_shell_find_launcher_app(state, app.launch_id);
+  if (index != (size_t)-1) {
+    state->launcher_apps[index] = app;
+    return ER_UI_OK;
+  }
+  if (!er_ui_shell_reserve_launcher_apps(state, state->launcher_app_count)) return ER_UI_ERR_OOM;
+  state->launcher_apps[state->launcher_app_count] = app;
+  state->launcher_app_count++;
+  return ER_UI_OK;
+}
+
+size_t er_ui_shell_launcher_app_count(const er_ui_shell_state_t* state) {
+  return state ? state->launcher_app_count : 0u;
 }
 
 er_ui_status_t er_ui_workspace_add_surface(er_ui_shell_state_t* state, uint32_t surface_id) {
@@ -241,13 +328,56 @@ static er_ui_status_t er_ui_shell_emit_topbar(er_ui_scene_t* scene, er_ui_bounds
   return er_ui_scene_push_hit(scene, er_ui_hit(ER_UI_HIT_SHELL_LAUNCHER, ER_UI_SHELL_LAUNCHER_ID, launcher.x, launcher.y, launcher.w, launcher.h));
 }
 
-static er_ui_status_t er_ui_shell_emit_launcher(const er_ui_shell_state_t* state, er_ui_scene_t* scene, er_ui_bounds_t bounds, er_ui_resolved_theme_t theme) {
+static er_ui_status_t er_ui_shell_emit_launcher(
+  const er_ui_shell_state_t* state,
+  er_ui_scene_t* scene,
+  er_ui_bounds_t bounds,
+  er_ui_resolved_theme_t theme,
+  vr_font_face_t* font) {
   if (!state->launcher_open) return ER_UI_OK;
   float w = bounds.w < ER_UI_SHELL_LAUNCHER_WIDTH ? bounds.w : ER_UI_SHELL_LAUNCHER_WIDTH;
   er_ui_bounds_t panel = er_ui_bounds(bounds.x, bounds.y + ER_UI_SHELL_TOPBAR_HEIGHT, w, bounds.h - ER_UI_SHELL_TOPBAR_HEIGHT);
   er_ui_status_t status = er_ui_scene_push_rect(scene, er_ui_rect_fill(panel.x, panel.y, panel.w, panel.h, theme.radius.panel, theme.colors.sidebar));
   if (status != ER_UI_OK) return status;
-  return er_ui_scene_push_hit(scene, er_ui_hit(ER_UI_HIT_SHELL_LAUNCHER, ER_UI_SHELL_LAUNCHER_ID, panel.x, panel.y, panel.w, panel.h));
+  status = er_ui_scene_push_hit(scene, er_ui_hit(ER_UI_HIT_SHELL_LAUNCHER, ER_UI_SHELL_LAUNCHER_ID, panel.x, panel.y, panel.w, panel.h));
+  if (status != ER_UI_OK) return status;
+
+  er_ui_painter_t painter = er_ui_painter(scene);
+  float row_x = panel.x + ER_UI_SHELL_PAD;
+  float row_y = panel.y + ER_UI_SHELL_PAD;
+  float row_w = panel.w - (ER_UI_SHELL_PAD * 2.0f);
+  for (size_t i = 0u; i < state->launcher_app_count; ++i) {
+    const er_ui_launcher_app_t* app = &state->launcher_apps[i];
+    er_ui_bounds_t row = er_ui_bounds(row_x, row_y, row_w, ER_UI_SHELL_LAUNCHER_ROW_HEIGHT);
+    if (!er_ui_bounds_valid(row) || row.y + row.h > panel.y + panel.h) break;
+    bool launchable = er_ui_shell_launcher_app_launchable(app);
+    er_ui_color4_t fill = launchable ? theme.colors.row : theme.colors.panel;
+    er_ui_color4_t icon = launchable ? theme.colors.accent : theme.colors.muted;
+    status = er_ui_scene_push_rect(scene, er_ui_rect_fill(row.x, row.y, row.w, row.h, theme.radius.control, fill));
+    if (status != ER_UI_OK) return status;
+    status = er_ui_painter_icon(&painter, er_ui_bounds(row.x + 10.0f, row.y + 12.0f, ER_UI_SHELL_LAUNCHER_ICON, ER_UI_SHELL_LAUNCHER_ICON),
+                                ER_UI_ICON_APP, icon);
+    if (status != ER_UI_OK) return status;
+    if (launchable) {
+      status = er_ui_scene_push_hit(scene, er_ui_hit(ER_UI_HIT_APP_LAUNCHER_ITEM, app->launch_id, row.x, row.y, row.w, row.h));
+      if (status != ER_UI_OK) return status;
+    }
+    if (font) {
+      status = er_ui_shell_push_ascii_text(scene, font, app->name, row.x + 46.0f, row.y + 23.0f, theme.colors.text);
+      if (status != ER_UI_OK) return status;
+      status = er_ui_shell_push_ascii_text(scene, font, er_ui_shell_launcher_status_label(app->status), row.x + 46.0f, row.y + 41.0f,
+                                           launchable ? theme.colors.success : theme.colors.muted);
+      if (status != ER_UI_OK) return status;
+      status = er_ui_shell_push_ascii_text(scene, font, app->package_hash, row.x + 12.0f, row.y + 59.0f, theme.colors.muted);
+      if (status != ER_UI_OK) return status;
+      status = er_ui_shell_push_ascii_text(scene, font, app->provenance, row.x + 12.0f, row.y + 75.0f, theme.colors.muted);
+      if (status != ER_UI_OK) return status;
+      status = er_ui_shell_push_ascii_text(scene, font, app->permissions, row.x + 150.0f, row.y + 75.0f, theme.colors.muted);
+      if (status != ER_UI_OK) return status;
+    }
+    row_y += ER_UI_SHELL_LAUNCHER_ROW_HEIGHT + ER_UI_SHELL_LAUNCHER_ROW_GAP;
+  }
+  return ER_UI_OK;
 }
 
 static er_ui_status_t er_ui_shell_emit_workspace(
@@ -419,7 +549,7 @@ static er_ui_status_t er_ui_shell_emit_scene_base(
   if (status != ER_UI_OK) return status;
   status = er_ui_shell_emit_workspace(state, scene, bounds, theme, font, emit_surface, user);
   if (status != ER_UI_OK) return status;
-  return er_ui_shell_emit_launcher(state, scene, bounds, theme);
+  return er_ui_shell_emit_launcher(state, scene, bounds, theme, font);
 }
 
 er_ui_status_t er_ui_shell_emit_scene(
