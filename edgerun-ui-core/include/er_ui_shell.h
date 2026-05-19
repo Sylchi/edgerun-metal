@@ -53,6 +53,7 @@ typedef struct {
   bool network_app_prompt_open;
   er_ui_network_app_prompt_choice_t network_app_prompt_choice;
   uint32_t focused_surface_id;
+  uint32_t previous_surface_id;
   er_ui_workspace_surface_t* surfaces;
   size_t surface_count;
   size_t surface_capacity;
@@ -85,8 +86,11 @@ er_ui_status_t er_ui_workspace_add_surface(er_ui_shell_state_t* state, uint32_t 
 er_ui_status_t er_ui_workspace_add_named_surface(er_ui_shell_state_t* state, uint32_t surface_id, const char* title);
 er_ui_status_t er_ui_workspace_remove_surface(er_ui_shell_state_t* state, uint32_t surface_id);
 er_ui_status_t er_ui_workspace_focus_surface(er_ui_shell_state_t* state, uint32_t surface_id);
+er_ui_status_t er_ui_workspace_focus_next_surface(er_ui_shell_state_t* state);
+er_ui_status_t er_ui_workspace_focus_previous_surface(er_ui_shell_state_t* state);
 size_t er_ui_workspace_surface_count(const er_ui_shell_state_t* state);
 uint32_t er_ui_workspace_focused_surface_id(const er_ui_shell_state_t* state);
+uint32_t er_ui_workspace_previous_surface_id(const er_ui_shell_state_t* state);
 bool er_ui_workspace_surface_bounds(
   const er_ui_shell_state_t* state,
   er_ui_bounds_t workspace_bounds,

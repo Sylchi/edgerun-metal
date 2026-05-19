@@ -49,6 +49,31 @@ static size_t er_ui_workspace_find_surface(const er_ui_shell_state_t* state, uin
   return (size_t)-1;
 }
 
+static bool er_ui_workspace_has_surface(const er_ui_shell_state_t* state, uint32_t surface_id) {
+  return er_ui_workspace_find_surface(state, surface_id) != (size_t)-1;
+}
+
+static void er_ui_workspace_set_focus(er_ui_shell_state_t* state, uint32_t surface_id) {
+  if (!state || state->focused_surface_id == surface_id) return;
+  state->previous_surface_id = state->focused_surface_id;
+  state->focused_surface_id = surface_id;
+}
+
+static uint32_t er_ui_workspace_replacement_focus_after_remove(const er_ui_shell_state_t* state, size_t removed_index) {
+  if (!state || state->surface_count == 0u) return 0u;
+  if (removed_index > 0u) return state->surfaces[removed_index - 1u].id;
+  return state->surfaces[0u].id;
+}
+
+static uint32_t er_ui_workspace_alternate_previous_surface(const er_ui_shell_state_t* state, uint32_t focused_surface_id) {
+  if (!state || state->surface_count == 0u) return 0u;
+  for (size_t i = 0u; i < state->surface_count; ++i) {
+    uint32_t surface_id = state->surfaces[i].id;
+    if (surface_id != focused_surface_id) return surface_id;
+  }
+  return 0u;
+}
+
 static size_t er_ui_shell_find_launcher_app(const er_ui_shell_state_t* state, uint32_t launch_id) {
   if (!state) return (size_t)-1;
   for (size_t i = 0u; i < state->launcher_app_count; ++i) {
@@ -263,14 +288,14 @@ er_ui_status_t er_ui_workspace_add_surface(er_ui_shell_state_t* state, uint32_t 
 er_ui_status_t er_ui_workspace_add_named_surface(er_ui_shell_state_t* state, uint32_t surface_id, const char* title) {
   if (!state || surface_id == 0u) return ER_UI_ERR_INVALID_ARGUMENT;
   if (er_ui_workspace_find_surface(state, surface_id) != (size_t)-1) {
-    state->focused_surface_id = surface_id;
+    er_ui_workspace_set_focus(state, surface_id);
     return ER_UI_OK;
   }
   if (!er_ui_shell_reserve_surfaces(state, state->surface_count)) return ER_UI_ERR_OOM;
   state->surfaces[state->surface_count].id = surface_id;
   state->surfaces[state->surface_count].title = title;
   state->surface_count++;
-  state->focused_surface_id = surface_id;
+  er_ui_workspace_set_focus(state, surface_id);
   return ER_UI_OK;
 }
 
@@ -278,12 +303,20 @@ er_ui_status_t er_ui_workspace_remove_surface(er_ui_shell_state_t* state, uint32
   if (!state || surface_id == 0u) return ER_UI_ERR_INVALID_ARGUMENT;
   size_t index = er_ui_workspace_find_surface(state, surface_id);
   if (index == (size_t)-1) return ER_UI_ERR_INVALID_ARGUMENT;
+  bool removed_focus = state->focused_surface_id == surface_id;
+  uint32_t previous_surface_id = state->previous_surface_id;
   for (size_t i = index + 1u; i < state->surface_count; ++i) {
     state->surfaces[i - 1u] = state->surfaces[i];
   }
   state->surface_count--;
-  if (state->focused_surface_id == surface_id) {
-    state->focused_surface_id = state->surface_count > 0u ? state->surfaces[state->surface_count - 1u].id : 0u;
+  if (removed_focus) {
+    uint32_t replacement = er_ui_workspace_replacement_focus_after_remove(state, index);
+    state->focused_surface_id = er_ui_workspace_has_surface(state, previous_surface_id) ? previous_surface_id : replacement;
+    state->previous_surface_id = er_ui_workspace_alternate_previous_surface(state, state->focused_surface_id);
+    return ER_UI_OK;
+  }
+  if (state->previous_surface_id == surface_id) {
+    state->previous_surface_id = er_ui_workspace_alternate_previous_surface(state, state->focused_surface_id);
   }
   return ER_UI_OK;
 }
@@ -291,7 +324,26 @@ er_ui_status_t er_ui_workspace_remove_surface(er_ui_shell_state_t* state, uint32
 er_ui_status_t er_ui_workspace_focus_surface(er_ui_shell_state_t* state, uint32_t surface_id) {
   if (!state || surface_id == 0u) return ER_UI_ERR_INVALID_ARGUMENT;
   if (er_ui_workspace_find_surface(state, surface_id) == (size_t)-1) return ER_UI_ERR_INVALID_ARGUMENT;
-  state->focused_surface_id = surface_id;
+  er_ui_workspace_set_focus(state, surface_id);
+  return ER_UI_OK;
+}
+
+er_ui_status_t er_ui_workspace_focus_next_surface(er_ui_shell_state_t* state) {
+  if (!state || state->surface_count == 0u || state->focused_surface_id == 0u) return ER_UI_ERR_INVALID_ARGUMENT;
+  size_t index = er_ui_workspace_find_surface(state, state->focused_surface_id);
+  if (index == (size_t)-1) return ER_UI_ERR_INVALID_ARGUMENT;
+  size_t next = index + 1u;
+  if (next == state->surface_count) next = 0u;
+  er_ui_workspace_set_focus(state, state->surfaces[next].id);
+  return ER_UI_OK;
+}
+
+er_ui_status_t er_ui_workspace_focus_previous_surface(er_ui_shell_state_t* state) {
+  if (!state || state->surface_count == 0u || state->focused_surface_id == 0u) return ER_UI_ERR_INVALID_ARGUMENT;
+  size_t index = er_ui_workspace_find_surface(state, state->focused_surface_id);
+  if (index == (size_t)-1) return ER_UI_ERR_INVALID_ARGUMENT;
+  size_t previous = index == 0u ? state->surface_count - 1u : index - 1u;
+  er_ui_workspace_set_focus(state, state->surfaces[previous].id);
   return ER_UI_OK;
 }
 
@@ -301,6 +353,10 @@ size_t er_ui_workspace_surface_count(const er_ui_shell_state_t* state) {
 
 uint32_t er_ui_workspace_focused_surface_id(const er_ui_shell_state_t* state) {
   return state ? state->focused_surface_id : 0u;
+}
+
+uint32_t er_ui_workspace_previous_surface_id(const er_ui_shell_state_t* state) {
+  return state ? state->previous_surface_id : 0u;
 }
 
 bool er_ui_workspace_surface_bounds(const er_ui_shell_state_t* state, er_ui_bounds_t workspace_bounds, uint32_t surface_id, er_ui_bounds_t* out_bounds) {

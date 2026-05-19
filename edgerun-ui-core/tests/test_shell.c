@@ -4,6 +4,7 @@ static const uint32_t ER_TEST_SHELL_FIRST_SURFACE_ID = 10u;
 static const uint32_t ER_TEST_SHELL_SECOND_SURFACE_ID = 20u;
 static const uint32_t ER_TEST_SHELL_UPDATE_SURFACE_ID = 30u;
 static const uint32_t ER_TEST_SHELL_REMOVED_SURFACE_ID = 40u;
+static const uint32_t ER_TEST_SHELL_THIRD_SURFACE_ID = 50u;
 static const uint32_t ER_TEST_SHELL_LAUNCHER_APP_ID = 100u;
 static const uint32_t ER_TEST_SHELL_LAUNCHER_UPDATE_ID = 101u;
 static const uint32_t ER_TEST_SHELL_LAUNCHER_REMOVED_ID = 102u;
@@ -84,8 +85,10 @@ void run_shell_tests(void) {
   expect_size(er_ui_shell_launcher_app_count(&shell), ER_TEST_SHELL_LAUNCHER_APP_COUNT, "launcher: app inventory count tracks records");
   expect_size(er_ui_workspace_surface_count(&shell), ER_TEST_SHELL_SURFACE_COUNT, "workspace: surface count tracks opened surfaces");
   expect_u32(er_ui_workspace_focused_surface_id(&shell), ER_TEST_SHELL_SECOND_SURFACE_ID, "workspace: newest surface is focused");
+  expect_u32(er_ui_workspace_previous_surface_id(&shell), ER_TEST_SHELL_FIRST_SURFACE_ID, "workspace: previous surface tracks displaced focus");
   expect_status(er_ui_workspace_focus_surface(&shell, ER_TEST_SHELL_FIRST_SURFACE_ID), ER_UI_OK, "workspace: focus existing surface succeeds");
   expect_u32(er_ui_workspace_focused_surface_id(&shell), ER_TEST_SHELL_FIRST_SURFACE_ID, "workspace: focus switches to requested surface");
+  expect_u32(er_ui_workspace_previous_surface_id(&shell), ER_TEST_SHELL_SECOND_SURFACE_ID, "workspace: previous surface tracks explicit focus");
 
   er_ui_bounds_t workspace = er_ui_bounds(0.0f, 76.0f, 400.0f, 224.0f);
   expect_true(er_ui_workspace_surface_bounds(&shell, workspace, ER_TEST_SHELL_SECOND_SURFACE_ID, &surface_bounds), "workspace: surface bounds resolve");
@@ -151,6 +154,7 @@ void run_shell_tests(void) {
   expect_status(er_ui_shell_apply_action(&shell, action, &changed), ER_UI_OK, "shell action: tab selected applies");
   expect_true(changed, "shell action: tab selected reports focus change");
   expect_u32(er_ui_workspace_focused_surface_id(&shell), ER_TEST_SHELL_SECOND_SURFACE_ID, "shell action: tab selected focuses surface");
+  expect_u32(er_ui_workspace_previous_surface_id(&shell), ER_TEST_SHELL_FIRST_SURFACE_ID, "shell action: tab selection retains prior focus");
 
   action = (er_ui_action_t){0};
   action.kind = ER_UI_ACTION_ACTIVATED;
@@ -160,6 +164,7 @@ void run_shell_tests(void) {
   expect_true(changed, "shell action: close reports changed");
   expect_size(er_ui_workspace_surface_count(&shell), 1u, "shell action: close removes one surface");
   expect_u32(er_ui_workspace_focused_surface_id(&shell), ER_TEST_SHELL_FIRST_SURFACE_ID, "shell action: close falls focus back");
+  expect_u32(er_ui_workspace_previous_surface_id(&shell), 0u, "shell action: close clears missing previous focus");
 
   action = (er_ui_action_t){0};
   action.kind = ER_UI_ACTION_HOVERED;
@@ -175,6 +180,24 @@ void run_shell_tests(void) {
   expect_true(changed, "launcher action: installed app reports changed");
   expect_true(!er_ui_shell_launcher_open(&shell), "launcher action: installed app closes launcher");
   expect_u32(er_ui_workspace_focused_surface_id(&shell), ER_TEST_SHELL_FIRST_SURFACE_ID, "launcher action: installed app focuses target surface");
+
+  expect_status(er_ui_workspace_add_surface(&shell, ER_TEST_SHELL_SECOND_SURFACE_ID), ER_UI_OK, "workspace nav: second surface reopens");
+  expect_status(er_ui_workspace_add_surface(&shell, ER_TEST_SHELL_THIRD_SURFACE_ID), ER_UI_OK, "workspace nav: third surface opens");
+  expect_status(er_ui_workspace_focus_surface(&shell, ER_TEST_SHELL_FIRST_SURFACE_ID), ER_UI_OK, "workspace nav: first surface refocuses");
+  expect_status(er_ui_workspace_focus_surface(&shell, ER_TEST_SHELL_THIRD_SURFACE_ID), ER_UI_OK, "workspace nav: third surface refocuses");
+  expect_u32(er_ui_workspace_previous_surface_id(&shell), ER_TEST_SHELL_FIRST_SURFACE_ID, "workspace nav: previous focus is retained out of order");
+  expect_status(er_ui_workspace_remove_surface(&shell, ER_TEST_SHELL_THIRD_SURFACE_ID), ER_UI_OK, "workspace nav: closing focused third succeeds");
+  expect_u32(er_ui_workspace_focused_surface_id(&shell), ER_TEST_SHELL_FIRST_SURFACE_ID, "workspace nav: close restores retained previous focus");
+  expect_u32(er_ui_workspace_previous_surface_id(&shell), ER_TEST_SHELL_SECOND_SURFACE_ID, "workspace nav: close keeps alternate switch target");
+  expect_status(er_ui_workspace_focus_next_surface(&shell), ER_UI_OK, "workspace nav: next focus succeeds");
+  expect_u32(er_ui_workspace_focused_surface_id(&shell), ER_TEST_SHELL_SECOND_SURFACE_ID, "workspace nav: next focus advances");
+  expect_u32(er_ui_workspace_previous_surface_id(&shell), ER_TEST_SHELL_FIRST_SURFACE_ID, "workspace nav: next focus updates previous");
+  expect_status(er_ui_workspace_focus_next_surface(&shell), ER_UI_OK, "workspace nav: next focus wraps");
+  expect_u32(er_ui_workspace_focused_surface_id(&shell), ER_TEST_SHELL_FIRST_SURFACE_ID, "workspace nav: next focus wraps to first");
+  expect_status(er_ui_workspace_focus_previous_surface(&shell), ER_UI_OK, "workspace nav: previous focus wraps");
+  expect_u32(er_ui_workspace_focused_surface_id(&shell), ER_TEST_SHELL_SECOND_SURFACE_ID, "workspace nav: previous focus wraps to last");
+  expect_status(er_ui_workspace_remove_surface(&shell, ER_TEST_SHELL_SECOND_SURFACE_ID), ER_UI_OK, "workspace nav: second surface closes");
+  expect_u32(er_ui_workspace_focused_surface_id(&shell), ER_TEST_SHELL_FIRST_SURFACE_ID, "workspace nav: first surface remains focused");
 
   action = (er_ui_action_t){0};
   action.kind = ER_UI_ACTION_ACTIVATED;
