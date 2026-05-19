@@ -9,6 +9,7 @@
 #include "er_app.h"
 #include "er_crypto_blake3.h"
 #include "er_acpi.h"
+#include "er_boot_efi_vars.h"
 #include "er_boot_profile.h"
 #include "er_boot_services.h"
 #include "er_gfx_console.h"

@@ -93,11 +93,35 @@ static void er_boot_services_print_onboarding(const ErBootServicesReport* report
   }
 }
 
-static void er_boot_services_apply_default_admission(ErBootServicesReport* report) {
+static void er_boot_services_apply_admission(EFI_SYSTEM_TABLE* SystemTable,
+                                             ErBootServicesReport* report) {
   ErCryptoProvider crypto;
   ErBootAdmissionRecord record;
+  UINT8 read_state;
 
   er_crypto_blake3_provider(&crypto);
+
+  read_state = er_boot_efi_vars_read_admission(SystemTable, &crypto, &record);
+  er_print("boot admission var: ");
+  er_print(er_boot_efi_vars_admission_read_label(read_state));
+  er_println("");
+  if (read_state == ER_BOOT_EFI_VAR_ADMISSION_FOUND) {
+    if (er_boot_services_set_boot_admission(report, &crypto, &record) == 0u) {
+      er_println("boot admission: stored record rejected");
+      return;
+    }
+    er_print("boot admission: stored ");
+    er_print(er_boot_admission_mode_label(record.admission_mode));
+    er_print(" channel=");
+    er_print(er_boot_bootstrap_channel_label(record.bootstrap_channel_kind));
+    er_println("");
+    return;
+  }
+  if (read_state == ER_BOOT_EFI_VAR_ADMISSION_INVALID) {
+    er_println("boot admission: invalid stored record");
+    return;
+  }
+
   if (er_boot_admission_record_prepare_local(&crypto,
                                              ER_BOOT_DEFAULT_ADMISSION_GENERATION,
                                              ER_BOOT_BOOTSTRAP_CHANNEL_NATIVE_ETH,
@@ -114,6 +138,12 @@ static void er_boot_services_apply_default_admission(ErBootServicesReport* repor
   er_print(" channel=");
   er_print(er_boot_bootstrap_channel_label(record.bootstrap_channel_kind));
   er_println("");
+
+  if (er_boot_efi_vars_write_admission(SystemTable, &crypto, &record) == 0u) {
+    er_println("boot admission var: default write failed");
+  } else {
+    er_println("boot admission var: default written");
+  }
 }
 
 void er_run_boot_path(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE* SystemTable,
@@ -171,7 +201,7 @@ EFI_STATUS EFIAPI efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE* SystemTable
     er_print_u64_dec((UINT64)boot_report.tpm_nv_limits.nv_buffer_max);
     er_println("");
   }
-  er_boot_services_apply_default_admission(&boot_report);
+  er_boot_services_apply_admission(SystemTable, &boot_report);
   er_boot_services_print_report(&boot_report);
 
   er_run_boot_path(ImageHandle, SystemTable, &boot_report);
