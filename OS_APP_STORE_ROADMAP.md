@@ -14,7 +14,7 @@ identity-routed encrypted storage.
 - [x] Generate package identity from app source, manifest, assets, and Wasm bytes.
 - [ ] Expand the C subset with local variables, loads, stores, branches, and calls.
 - [ ] Load a user-authored package from local storage into the shell.
-- [ ] Route keyboard/input events to the active Wasm UI app.
+- [x] Route keyboard/input events to the active Wasm UI app.
 
 ## Milestone 2: Polished Shell UI
 

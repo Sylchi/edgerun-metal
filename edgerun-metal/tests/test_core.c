@@ -57,6 +57,7 @@ int main(void) {
   test_epoch_clock_rollover();
   test_ui_wasm_app_runner();
   test_ui_wasm_app_multiple_runtimes();
+  test_ui_boot_apply_input_routes_to_active_wasm_app();
   test_ui_boot_package_loads_from_endpoint_storage();
   test_vfs_object_packets();
   test_storage_endpoint_object_store();

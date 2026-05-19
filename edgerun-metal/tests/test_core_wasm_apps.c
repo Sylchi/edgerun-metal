@@ -251,6 +251,138 @@ static void test_ui_wasm_app_multiple_runtimes(void) {
   er_ui_scene_destroy(&scene_a);
 }
 
+static void test_ui_boot_apply_input_routes_to_active_wasm_app(void) {
+  enum {
+    UI_BOOT_INPUT_APP_COUNT = 2u,
+    UI_BOOT_INPUT_ACTIVE_APP = 1u,
+    UI_BOOT_INPUT_INBOX_BYTES = 1024u,
+    UI_BOOT_INPUT_OUTBOX_BASE = 1024u,
+    UI_BOOT_INPUT_OUTBOX_BYTES = 2048u,
+    UI_BOOT_INPUT_MEMORY_BYTES = 65536u,
+    UI_BOOT_INPUT_CHAR = 'R'
+  };
+  static UINT8 memory_a[UI_BOOT_INPUT_MEMORY_BYTES];
+  static UINT8 memory_b[UI_BOOT_INPUT_MEMORY_BYTES];
+  ErWasmHostCalls host = {0};
+  ErUiBootAppContext apps[UI_BOOT_INPUT_APP_COUNT];
+  ErUiBootRenderContext render;
+  ErAppUiPresentation presentation_a;
+  ErAppUiPresentation presentation_b;
+  er_ui_ledger_app_state_t ledger_state;
+  er_ui_runtime_state_t runtime;
+  er_ui_scene_t scene;
+  ErPs2KeyboardAction input;
+  UINT8 redraw = 0u;
+
+  test_prepare_wasm_ui_presentation(&presentation_a);
+  test_prepare_wasm_ui_presentation(&presentation_b);
+  er_mem_zero(memory_a, (UINTN)sizeof(memory_a));
+  er_mem_zero(memory_b, (UINTN)sizeof(memory_b));
+  er_mem_zero((UINT8*)apps, (UINTN)sizeof(apps));
+  er_mem_zero((UINT8*)&render, (UINTN)sizeof(render));
+  er_mem_zero((UINT8*)&input, (UINTN)sizeof(input));
+
+  check_int64("ui boot input ledger init",
+              er_ui_ledger_app_state_init(&ledger_state, test_ui_allocator()),
+              ER_UI_OK);
+  check_int64("ui boot input runtime init",
+              er_ui_runtime_state_init_with_allocator(&runtime, test_ui_allocator()),
+              ER_UI_OK);
+  check_int64("ui boot input scene init",
+              er_ui_scene_init_with_allocator(&scene, er_ui_color_rgb_u8(0u, 0u, 0u),
+                                              test_ui_allocator()),
+              ER_UI_OK);
+
+  apps[0].ready = 1u;
+  apps[0].runtime.memory = memory_a;
+  apps[0].runtime.memory_size = (UINT32)sizeof(memory_a);
+  apps[0].runtime.relay_inbox_base = 0u;
+  apps[0].runtime.relay_inbox_len = UI_BOOT_INPUT_INBOX_BYTES;
+  apps[0].runtime.relay_outbox_base = UI_BOOT_INPUT_OUTBOX_BASE;
+  apps[0].runtime.relay_outbox_len = UI_BOOT_INPUT_OUTBOX_BYTES;
+  apps[0].runtime.presentation = &presentation_a;
+  apps[0].runtime.scene = &apps[0].scene;
+  check_int64("ui boot input app a scene init",
+              er_ui_scene_init_with_allocator(&apps[0].scene,
+                                              er_ui_color_rgb_u8(0u, 0u, 0u),
+                                              test_ui_allocator()),
+              ER_UI_OK);
+  check_int64("ui boot input app a prepare",
+              er_ui_wasm_app_prepare(g_edgerun_ui_counter_wasm,
+                                     ER_UI_COUNTER_WASM_SIZE,
+                                     &host,
+                                     &apps[0].runtime),
+              0);
+
+  apps[1].ready = 1u;
+  apps[1].runtime.memory = memory_b;
+  apps[1].runtime.memory_size = (UINT32)sizeof(memory_b);
+  apps[1].runtime.relay_inbox_base = 0u;
+  apps[1].runtime.relay_inbox_len = UI_BOOT_INPUT_INBOX_BYTES;
+  apps[1].runtime.relay_outbox_base = UI_BOOT_INPUT_OUTBOX_BASE;
+  apps[1].runtime.relay_outbox_len = UI_BOOT_INPUT_OUTBOX_BYTES;
+  apps[1].runtime.presentation = &presentation_b;
+  apps[1].runtime.scene = &apps[1].scene;
+  check_int64("ui boot input app b scene init",
+              er_ui_scene_init_with_allocator(&apps[1].scene,
+                                              er_ui_color_rgb_u8(0u, 0u, 0u),
+                                              test_ui_allocator()),
+              ER_UI_OK);
+  check_int64("ui boot input app b prepare",
+              er_ui_wasm_app_prepare(g_edgerun_ui_counter_wasm,
+                                     ER_UI_COUNTER_WASM_SIZE,
+                                     &host,
+                                     &apps[1].runtime),
+              0);
+
+  render.apps = apps;
+  render.app_count = UI_BOOT_INPUT_APP_COUNT;
+  render.active_app = UI_BOOT_INPUT_ACTIVE_APP;
+  render.scene = &scene;
+
+  input.kind = ER_PS2_KEYBOARD_ACTION_UI_KEY;
+  input.key.kind = ER_UI_KEY_OTHER;
+  input.key.codepoint = UI_BOOT_INPUT_CHAR;
+  input.modifiers = er_ui_key_modifiers(false, true, false, false);
+
+  check_int64("ui boot input apply",
+              er_ui_boot_apply_input(&ledger_state, &runtime, &scene, &render,
+                                     input, &redraw),
+              1);
+  check_uint64("ui boot input redraw", redraw, 1u);
+  check_uint64("ui boot input inactive sequence",
+               apps[0].runtime.input_sequence, 0u);
+  check_uint64("ui boot input active sequence",
+               apps[1].runtime.input_sequence, 1u);
+  check_uint64("ui boot input inactive emitted",
+               apps[0].runtime.emitted, 0u);
+  check_uint64("ui boot input active emitted",
+               apps[1].runtime.emitted, 1u);
+  check_uint64("ui boot input inactive memory kind",
+               memory_a[ER_UI_WASM_INPUT_KIND_OFFSET], 0u);
+  check_uint64("ui boot input active abi",
+               memory_b[ER_UI_WASM_INPUT_ABI_OFFSET],
+               ER_UI_WASM_INPUT_ABI_VERSION);
+  check_uint64("ui boot input active kind",
+               memory_b[ER_UI_WASM_INPUT_KIND_OFFSET],
+               ER_UI_WASM_INPUT_KIND_KEY);
+  check_uint64("ui boot input active key",
+               memory_b[ER_UI_WASM_INPUT_KEY_KIND_OFFSET],
+               ER_UI_KEY_OTHER);
+  check_uint64("ui boot input active codepoint",
+               memory_b[ER_UI_WASM_INPUT_KEY_CODEPOINT_OFFSET],
+               UI_BOOT_INPUT_CHAR);
+  check_uint64("ui boot input active modifiers",
+               memory_b[ER_UI_WASM_INPUT_MODIFIERS_OFFSET],
+               ER_UI_WASM_INPUT_MODIFIER_CTRL);
+
+  er_ui_scene_destroy(&apps[1].scene);
+  er_ui_scene_destroy(&apps[0].scene);
+  er_ui_scene_destroy(&scene);
+  er_ui_runtime_state_destroy(&runtime);
+  er_ui_ledger_app_state_destroy(&ledger_state);
+}
+
 static void test_ui_boot_package_loads_from_endpoint_storage(void) {
   enum {
     UI_BOOT_PACKAGE_TEST_APP_INDEX = 0u
