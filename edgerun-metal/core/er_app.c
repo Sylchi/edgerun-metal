@@ -136,6 +136,22 @@ static UINT8 er_app_object_ref_valid(const ErVfsObjectRef* object_ref) {
                  er_hash_nonzero(&object_ref->object_id) != 0u);
 }
 
+static UINT8 er_app_empty_object_ref_valid(const ErVfsObjectRef* object_ref) {
+  return (UINT8)(object_ref != 0 &&
+                 object_ref->abi_version == 0u &&
+                 object_ref->reserved == 0u &&
+                 object_ref->object_len == 0u &&
+                 er_hash_nonzero(&object_ref->object_id) == 0u);
+}
+
+static UINT8 er_app_object_ref_matches(const ErVfsObjectRef* object_ref,
+                                       const ErHash* object_id,
+                                       UINT64 object_len) {
+  return (UINT8)(er_app_object_ref_valid(object_ref) != 0u &&
+                 er_hash_equal(&object_ref->object_id, object_id) != 0u &&
+                 object_ref->object_len == object_len);
+}
+
 static UINT8 er_app_scene_budget_nonzero(er_ui_scene_budget_t budget) {
   return (UINT8)(budget.rects != 0u ||
                  budget.hits != 0u ||
@@ -307,6 +323,63 @@ static UINT8 er_app_package_storage_source_valid(const ErCryptoProvider* crypto,
     return 0;
   }
   return er_hash_equal(&source->source_id, &expected_source_id);
+}
+
+UINT8 er_app_package_index_entry_valid(const ErCryptoProvider* crypto,
+                                       const ErAppPackageIndexEntry* entry) {
+  if (entry == 0 ||
+      entry->abi_version != ER_APP_ABI_VERSION ||
+      entry->app_kind != ER_APP_KIND_USER ||
+      er_app_package_manifest_valid(crypto, &entry->package) == 0u ||
+      er_app_object_ref_matches(&entry->app_ref,
+                                &entry->package.app_object_id,
+                                entry->package.app_object_len) == 0u ||
+      er_app_object_ref_matches(&entry->manifest_ref,
+                                &entry->package.manifest_object_id,
+                                entry->package.manifest_object_len) == 0u ||
+      er_app_package_storage_source_valid(crypto, &entry->package,
+                                          &entry->storage_source) == 0u) {
+    return 0u;
+  }
+  if (entry->package.ui_assets_object_len == 0u) {
+    return er_app_empty_object_ref_valid(&entry->ui_assets_ref);
+  }
+  return er_app_object_ref_matches(&entry->ui_assets_ref,
+                                   &entry->package.ui_assets_object_id,
+                                   entry->package.ui_assets_object_len);
+}
+
+UINT8 er_app_prepare_package_index_entry(const ErCryptoProvider* crypto,
+                                         const ErAppPackageManifest* package,
+                                         const ErVfsObjectRef* app_ref,
+                                         const ErVfsObjectRef* manifest_ref,
+                                         const ErVfsObjectRef* ui_assets_ref,
+                                         const ErAppPackageStorageSource* storage_source,
+                                         UINT32 installed_slot,
+                                         ErAppPackageIndexEntry* out_entry) {
+  if (out_entry == 0) {
+    return 0u;
+  }
+  er_mem_zero((UINT8*)out_entry, (UINTN)sizeof(*out_entry));
+  out_entry->abi_version = ER_APP_ABI_VERSION;
+  out_entry->app_kind = ER_APP_KIND_USER;
+  out_entry->installed_slot = installed_slot;
+  if (package != 0) {
+    out_entry->package = *package;
+  }
+  if (app_ref != 0) {
+    out_entry->app_ref = *app_ref;
+  }
+  if (manifest_ref != 0) {
+    out_entry->manifest_ref = *manifest_ref;
+  }
+  if (ui_assets_ref != 0) {
+    out_entry->ui_assets_ref = *ui_assets_ref;
+  }
+  if (storage_source != 0) {
+    out_entry->storage_source = *storage_source;
+  }
+  return er_app_package_index_entry_valid(crypto, out_entry);
 }
 
 UINT8 er_app_prepare_package_manifest(const ErCryptoProvider* crypto,

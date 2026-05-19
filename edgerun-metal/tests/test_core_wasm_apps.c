@@ -264,8 +264,8 @@ static void test_ui_boot_package_loads_from_endpoint_storage(void) {
   ErUiBootInstalledApp tampered_app;
   ErUiBootInstalledPackageSource source;
   ErUiBootInstalledPackageSource tampered_source;
-  const ErUiBootInstalledPackageIndexEntry* index_entry;
-  ErUiBootInstalledPackageIndexEntry tampered_index_entry;
+  const ErAppPackageIndexEntry* index_entry;
+  ErAppPackageIndexEntry tampered_index_entry;
 
   er_mem_zero(module_memory, (UINTN)sizeof(module_memory));
   er_mem_zero(manifest_memory, (UINTN)sizeof(manifest_memory));
@@ -298,9 +298,9 @@ static void test_ui_boot_package_loads_from_endpoint_storage(void) {
   check_int64("ui boot installed index abi",
               index_entry->abi_version, ER_APP_ABI_VERSION);
   check_uint64("ui boot installed index slot",
-               index_entry->installed_app_slot, UI_BOOT_PACKAGE_TEST_APP_INDEX);
+               index_entry->installed_slot, UI_BOOT_PACKAGE_TEST_APP_INDEX);
   check_hash_equal("ui boot installed index package",
-                   &index_entry->package_id,
+                   &index_entry->package.package_id,
                    &installed_app->package.package_id);
   check_hash_equal("ui boot installed index app",
                    &index_entry->app_ref.object_id,
@@ -339,7 +339,7 @@ static void test_ui_boot_package_loads_from_endpoint_storage(void) {
               er_ui_boot_prepare_indexed_package_source(index_entry, &source),
               1);
   tampered_index_entry = *index_entry;
-  tampered_index_entry.package_id.bytes[0] ^= 1u;
+  tampered_index_entry.package.package_id.bytes[0] ^= 1u;
   check_int64("ui boot indexed source rejects package mismatch",
               er_ui_boot_prepare_indexed_package_source(&tampered_index_entry,
                                                         &source),

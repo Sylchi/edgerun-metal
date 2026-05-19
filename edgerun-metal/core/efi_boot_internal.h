@@ -160,15 +160,6 @@ typedef struct {
 } ErUiBootInstalledPackageSource;
 
 typedef struct {
-  UINT16 abi_version;
-  UINT16 reserved;
-  UINT32 installed_app_slot;
-  ErHash package_id;
-  ErVfsObjectRef app_ref;
-  ErVfsObjectRef manifest_ref;
-} ErUiBootInstalledPackageIndexEntry;
-
-typedef struct {
   ErAppUiPresentation presentation;
   ErUiWasmAppRuntime runtime;
   ErUiBootPackageStorage storage;
@@ -255,8 +246,8 @@ UINT8 er_ui_boot_prepare_route_envelope(const ErAdmittedRoute* route,
                                         ErChannelEnvelopeHeader* out_envelope);
 UINT8 er_ui_boot_execute_wasm_app(ErUiWasmAppRuntime* runtime);
 const ErUiBootInstalledApp* er_ui_boot_installed_app_for_slot(UINT32 app_index);
-const ErUiBootInstalledPackageIndexEntry* er_ui_boot_installed_package_index_entry_for_slot(UINT32 app_index);
-UINT8 er_ui_boot_prepare_indexed_package_source(const ErUiBootInstalledPackageIndexEntry* index_entry,
+const ErAppPackageIndexEntry* er_ui_boot_installed_package_index_entry_for_slot(UINT32 app_index);
+UINT8 er_ui_boot_prepare_indexed_package_source(const ErAppPackageIndexEntry* index_entry,
                                                 ErUiBootInstalledPackageSource* out_source);
 UINT8 er_ui_boot_prepare_installed_package_source(const ErUiBootInstalledApp* installed_app,
                                                   UINT32 app_index,

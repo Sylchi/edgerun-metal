@@ -20,7 +20,7 @@ static ErUiBootInstalledApp g_ui_boot_installed_apps[ER_UI_BOOT_INSTALLED_APP_CO
   }
 };
 
-static ErUiBootInstalledPackageIndexEntry g_ui_boot_installed_package_index[ER_UI_BOOT_INSTALLED_APP_COUNT];
+static ErAppPackageIndexEntry g_ui_boot_installed_package_index[ER_UI_BOOT_INSTALLED_APP_COUNT];
 static UINT8 g_ui_boot_installed_apps_prepared;
 
 enum {
@@ -71,45 +71,46 @@ static UINT8 er_ui_boot_prepare_installed_app_descriptor(ErUiBootInstalledApp* i
 }
 
 static UINT8 er_ui_boot_prepare_installed_app_registry(void) {
+  ErCryptoProvider crypto;
+  ErUiBootInstalledPackageSource source;
   UINT32 i;
 
   if (g_ui_boot_installed_apps_prepared != 0u) {
     return 1u;
   }
+  er_crypto_blake3_provider(&crypto);
   for (i = 0u; i < ER_UI_BOOT_INSTALLED_APP_COUNT; ++i) {
-    if (er_ui_boot_prepare_installed_app_descriptor(&g_ui_boot_installed_apps[i]) == 0u) {
+    if (er_ui_boot_prepare_installed_app_descriptor(&g_ui_boot_installed_apps[i]) == 0u ||
+        er_ui_boot_prepare_installed_package_source(&g_ui_boot_installed_apps[i],
+                                                    i, &source) == 0u ||
+        er_app_prepare_package_index_entry(&crypto,
+                                           &g_ui_boot_installed_apps[i].package,
+                                           &g_ui_boot_installed_apps[i].app_ref,
+                                           &g_ui_boot_installed_apps[i].manifest_ref,
+                                           0,
+                                           &source.storage_source,
+                                           i,
+                                           &g_ui_boot_installed_package_index[i]) == 0u) {
       return 0u;
     }
-    er_mem_zero((UINT8*)&g_ui_boot_installed_package_index[i],
-                (UINTN)sizeof(g_ui_boot_installed_package_index[i]));
-    g_ui_boot_installed_package_index[i].abi_version = ER_APP_ABI_VERSION;
-    g_ui_boot_installed_package_index[i].installed_app_slot = i;
-    g_ui_boot_installed_package_index[i].package_id =
-        g_ui_boot_installed_apps[i].package.package_id;
-    g_ui_boot_installed_package_index[i].app_ref =
-        g_ui_boot_installed_apps[i].app_ref;
-    g_ui_boot_installed_package_index[i].manifest_ref =
-        g_ui_boot_installed_apps[i].manifest_ref;
   }
   g_ui_boot_installed_apps_prepared = 1u;
   return 1u;
 }
 
 static UINT8 er_ui_boot_installed_package_index_entry_valid(
-    const ErUiBootInstalledPackageIndexEntry* index_entry) {
+    const ErAppPackageIndexEntry* index_entry) {
+  ErCryptoProvider crypto;
   const ErUiBootInstalledApp* installed_app;
 
+  er_crypto_blake3_provider(&crypto);
   if (index_entry == 0 ||
-      index_entry->abi_version != ER_APP_ABI_VERSION ||
-      index_entry->reserved != 0u ||
-      index_entry->installed_app_slot >= ER_UI_BOOT_INSTALLED_APP_COUNT ||
-      index_entry->app_ref.abi_version != ER_VFS_ABI_VERSION ||
-      index_entry->manifest_ref.abi_version != ER_VFS_ABI_VERSION ||
-      er_hash_nonzero(&index_entry->package_id) == 0u) {
+      index_entry->installed_slot >= ER_UI_BOOT_INSTALLED_APP_COUNT ||
+      er_app_package_index_entry_valid(&crypto, index_entry) == 0u) {
     return 0u;
   }
-  installed_app = &g_ui_boot_installed_apps[index_entry->installed_app_slot];
-  if (er_hash_equal(&index_entry->package_id,
+  installed_app = &g_ui_boot_installed_apps[index_entry->installed_slot];
+  if (er_hash_equal(&index_entry->package.package_id,
                     &installed_app->package.package_id) == 0u ||
       er_hash_equal(&index_entry->app_ref.object_id,
                     &installed_app->app_ref.object_id) == 0u ||
@@ -228,7 +229,7 @@ const ErUiBootInstalledApp* er_ui_boot_installed_app_for_slot(UINT32 app_index) 
   return &g_ui_boot_installed_apps[app_index];
 }
 
-const ErUiBootInstalledPackageIndexEntry* er_ui_boot_installed_package_index_entry_for_slot(UINT32 app_index) {
+const ErAppPackageIndexEntry* er_ui_boot_installed_package_index_entry_for_slot(UINT32 app_index) {
   if (app_index >= ER_UI_BOOT_INSTALLED_APP_COUNT ||
       er_ui_boot_prepare_installed_app_registry() == 0u) {
     return 0;
@@ -236,15 +237,15 @@ const ErUiBootInstalledPackageIndexEntry* er_ui_boot_installed_package_index_ent
   return &g_ui_boot_installed_package_index[app_index];
 }
 
-UINT8 er_ui_boot_prepare_indexed_package_source(const ErUiBootInstalledPackageIndexEntry* index_entry,
+UINT8 er_ui_boot_prepare_indexed_package_source(const ErAppPackageIndexEntry* index_entry,
                                                 ErUiBootInstalledPackageSource* out_source) {
   if (er_ui_boot_prepare_installed_app_registry() == 0u ||
       er_ui_boot_installed_package_index_entry_valid(index_entry) == 0u) {
     return 0u;
   }
   return er_ui_boot_prepare_installed_package_source(
-      &g_ui_boot_installed_apps[index_entry->installed_app_slot],
-      index_entry->installed_app_slot, out_source);
+      &g_ui_boot_installed_apps[index_entry->installed_slot],
+      index_entry->installed_slot, out_source);
 }
 
 UINT8 er_ui_boot_prepare_installed_package_source(const ErUiBootInstalledApp* installed_app,

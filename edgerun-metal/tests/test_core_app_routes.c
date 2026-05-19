@@ -300,6 +300,9 @@ static void test_storage_endpoint_object_store(void) {
 }
 
 static void test_app_identity_routes(void) {
+  enum {
+    APP_PACKAGE_TEST_INSTALLED_SLOT = 3u
+  };
   ErCryptoProvider crypto;
   static const UINT8 app_bytes[] = {'w', 'a', 's', 'm', '-', 'u', 'i'};
   static const UINT8 manifest_bytes[] = {'m', 'a', 'n', 'i', 'f', 'e', 's', 't'};
@@ -331,6 +334,8 @@ static void test_app_identity_routes(void) {
   ErAppPackageStorageSource storage_source_again;
   ErAppPackageStorageSource package_without_assets_source;
   ErAppPackageStorageSource bad_storage_source;
+  ErAppPackageIndexEntry package_index_entry;
+  ErAppPackageIndexEntry bad_package_index_entry;
   ErAppPackageStorageResponse app_storage_response;
   ErAppPackageStorageResponse manifest_storage_response;
   ErAppPackageStorageResponse ui_assets_storage_response;
@@ -592,6 +597,39 @@ static void test_app_identity_routes(void) {
               1);
   check_hash_equal("app package storage source id deterministic",
                    &storage_source_again.source_id, &storage_source.source_id);
+  check_int64("app package index entry",
+              er_app_prepare_package_index_entry(&crypto, &package,
+                                                 &app_object_ref,
+                                                 &manifest_object_ref,
+                                                 &ui_assets_object_ref,
+                                                 &storage_source,
+                                                 APP_PACKAGE_TEST_INSTALLED_SLOT,
+                                                 &package_index_entry),
+              1);
+  check_uint64("app package index slot",
+               package_index_entry.installed_slot,
+               APP_PACKAGE_TEST_INSTALLED_SLOT);
+  check_hash_equal("app package index package",
+                   &package_index_entry.package.package_id,
+                   &package.package_id);
+  check_hash_equal("app package index source",
+                   &package_index_entry.storage_source.source_id,
+                   &storage_source.source_id);
+  check_int64("app package index valid",
+              er_app_package_index_entry_valid(&crypto, &package_index_entry),
+              1);
+  bad_package_index_entry = package_index_entry;
+  bad_package_index_entry.app_ref.object_len -= 1u;
+  check_int64("app package index reject app ref len",
+              er_app_package_index_entry_valid(&crypto,
+                                               &bad_package_index_entry),
+              0);
+  bad_package_index_entry = package_index_entry;
+  bad_package_index_entry.storage_source.source_id.bytes[0] ^= 1u;
+  check_int64("app package index reject source id",
+              er_app_package_index_entry_valid(&crypto,
+                                               &bad_package_index_entry),
+              0);
   er_mem_zero((UINT8*)&app_storage_response,
               (UINTN)sizeof(app_storage_response));
   app_storage_response.abi_version = ER_APP_ABI_VERSION;
