@@ -1,3 +1,5 @@
+#define _POSIX_C_SOURCE 200809L
+
 #include "er_ui_painter.h"
 #include "er_ui_scene.h"
 #include "er_ui_shell.h"
@@ -32,6 +34,7 @@
 #define ER_UI_SDL_TEXT_BUDGET 96u
 #define ER_UI_SDL_QUAD_VERTICES 6u
 #define ER_UI_SDL_TERMINAL_LINE_COUNT 7u
+#define ER_UI_SDL_TERMINAL_LINE_BYTES 160u
 #define ER_UI_SDL_STATUS_COUNT 3u
 #define ER_UI_SDL_ICON_ATLAS_WIDTH 1
 #define ER_UI_SDL_ICON_ATLAS_HEIGHT 1
@@ -64,7 +67,15 @@
 #define ER_UI_SDL_TEXTURE_INITIAL_CAPACITY 8u
 #define ER_UI_SDL_WINDOW_EVENT_IGNORED 0u
 #define ER_UI_SDL_SELF_TEST_ARG "--self-test"
+#define ER_UI_SDL_PROMPT_ARG "--prompt"
+#define ER_UI_SDL_ROOT_ARG "--root"
 #define ER_UI_SDL_SELF_TEST_FRAMES 2u
+#define ER_UI_SDL_CODEX_OUTPUT_BYTES 8192u
+#define ER_UI_SDL_SHELL_QUOTE_OVERHEAD 3u
+#define ER_UI_SDL_SHELL_QUOTE_ESCAPE_BYTES 4u
+#define ER_UI_SDL_PRINTABLE_ASCII_MIN 32u
+#define ER_UI_SDL_PRINTABLE_ASCII_MAX 126u
+#define ER_UI_SDL_CODEX_BIN ER_UI_REPO_ROOT "/.build/codex"
 
 typedef struct {
   SDL_Texture** textures;
@@ -85,6 +96,7 @@ typedef struct {
   bool running;
   bool self_test;
   uint32_t rendered_frames;
+  char transcript[ER_UI_SDL_TERMINAL_LINE_COUNT][ER_UI_SDL_TERMINAL_LINE_BYTES];
 } ErUiSdlApp;
 
 static void* er_ui_sdl_alloc(void* user, size_t size, size_t align) {
@@ -105,6 +117,119 @@ static void er_ui_sdl_free(void* user, void* ptr, size_t size, size_t align) {
   (void)size;
   (void)align;
   free(ptr);
+}
+
+static void er_ui_sdl_copy_text(char* dst, size_t dst_size, const char* src) {
+  if (!dst || dst_size == 0u) {
+    fprintf(stderr, "fatal: invalid text copy destination\n");
+    exit(1);
+  }
+  if (!src) src = "";
+  size_t i = 0u;
+  while (i + 1u < dst_size && src[i] != 0) {
+    dst[i] = src[i];
+    i++;
+  }
+  dst[i] = 0;
+}
+
+static void er_ui_sdl_set_transcript_line(ErUiSdlApp* app, size_t index, const char* text) {
+  if (!app || index >= ER_UI_SDL_TERMINAL_LINE_COUNT) {
+    fprintf(stderr, "fatal: invalid transcript line\n");
+    exit(1);
+  }
+  er_ui_sdl_copy_text(app->transcript[index], sizeof(app->transcript[index]), text);
+}
+
+static char* er_ui_sdl_shell_quote_new(const char* text) {
+  if (!text) text = "";
+  size_t cap = ER_UI_SDL_SHELL_QUOTE_OVERHEAD;
+  const char* scan = text;
+  while (*scan) {
+    cap += *scan == '\'' ? ER_UI_SDL_SHELL_QUOTE_ESCAPE_BYTES : 1u;
+    scan++;
+  }
+  char* out = (char*)malloc(cap);
+  if (!out) {
+    fprintf(stderr, "fatal: out of memory while quoting command argument\n");
+    exit(1);
+  }
+  char* write = out;
+  *write++ = '\'';
+  scan = text;
+  while (*scan) {
+    if (*scan == '\'') {
+      *write++ = '\'';
+      *write++ = '\\';
+      *write++ = '\'';
+      *write++ = '\'';
+    } else {
+      *write++ = *scan;
+    }
+    scan++;
+  }
+  *write++ = '\'';
+  *write = 0;
+  return out;
+}
+
+static char* er_ui_sdl_command_new(const char* root, const char* prompt) {
+  char* root_q = er_ui_sdl_shell_quote_new(root);
+  char* prompt_q = er_ui_sdl_shell_quote_new(prompt);
+  const char* prefix = ER_UI_SDL_CODEX_BIN " --root ";
+  const char* middle = " --prompt ";
+  const char* suffix = " < /dev/null 2>&1";
+  size_t len = strlen(prefix) + strlen(root_q) + strlen(middle) + strlen(prompt_q) + strlen(suffix) + 1u;
+  char* command = (char*)malloc(len);
+  if (!command) {
+    fprintf(stderr, "fatal: out of memory while building Codex command\n");
+    exit(1);
+  }
+  snprintf(command, len, "%s%s%s%s%s", prefix, root_q, middle, prompt_q, suffix);
+  free(root_q);
+  free(prompt_q);
+  return command;
+}
+
+static void er_ui_sdl_push_output_line(ErUiSdlApp* app, const char* line, size_t len) {
+  if (!app || !line) return;
+  for (size_t i = 1u; i < ER_UI_SDL_TERMINAL_LINE_COUNT; ++i) {
+    er_ui_sdl_copy_text(app->transcript[i - 1u], sizeof(app->transcript[i - 1u]), app->transcript[i]);
+  }
+  char text[ER_UI_SDL_TERMINAL_LINE_BYTES];
+  size_t count = len;
+  if (count >= sizeof(text)) count = sizeof(text) - 1u;
+  char* write = text;
+  const char* read = line;
+  for (size_t i = 0u; i < count; ++i) {
+    unsigned char ch = (unsigned char)*read++;
+    *write++ = ch >= ER_UI_SDL_PRINTABLE_ASCII_MIN && ch <= ER_UI_SDL_PRINTABLE_ASCII_MAX ? (char)ch : ' ';
+  }
+  *write = 0;
+  er_ui_sdl_set_transcript_line(app, ER_UI_SDL_TERMINAL_LINE_COUNT - 1u, text);
+}
+
+static void er_ui_sdl_load_codex_output(ErUiSdlApp* app, const char* root, const char* prompt) {
+  char* command = er_ui_sdl_command_new(root, prompt);
+  FILE* pipe = popen(command, "r");
+  free(command);
+  if (!pipe) {
+    er_ui_sdl_set_transcript_line(app, 0u, "fatal failed to launch Codex client");
+    return;
+  }
+  char buffer[ER_UI_SDL_CODEX_OUTPUT_BYTES];
+  size_t used = fread(buffer, 1u, sizeof(buffer), pipe);
+  int status = pclose(pipe);
+  size_t start = 0u;
+  for (size_t i = 0u; i < used; ++i) {
+    if (buffer[i] == '\n') {
+      if (i > start) er_ui_sdl_push_output_line(app, buffer + start, i - start);
+      start = i + 1u;
+    }
+  }
+  if (start < used) er_ui_sdl_push_output_line(app, buffer + start, used - start);
+  if (used == 0u) er_ui_sdl_set_transcript_line(app, 0u, "Codex produced no output");
+  if (status != 0) er_ui_sdl_push_output_line(app, "Codex exited with a non-zero status", strlen("Codex exited with a non-zero status"));
 }
 
 static uint8_t er_ui_sdl_channel(float value) {
@@ -330,31 +455,9 @@ static er_ui_status_t er_ui_sdl_emit_card(er_ui_scene_t* scene, vr_font_face_t* 
   return er_ui_sdl_text(scene, font, body, bounds.x + ER_UI_SDL_PAD, bounds.y + ER_UI_SDL_CARD_BODY_Y, theme.colors.muted);
 }
 
-static const char* er_ui_sdl_terminal_line(size_t index) {
-  switch (index) {
-    case 0u:
-      return "user  lets use edgerun-ui-core to create actual sdl ui";
-    case 1u:
-      return "agent inspecting shell, scene, text, and renderer primitives";
-    case 2u:
-      return "tool  proposed opt-in ER_UI_CORE_BUILD_SDL_HOST target";
-    case 3u:
-      return "agent rendering this surface from er_ui_shell_emit_scene";
-    case 4u:
-      return "plan  wire prompt entry, streaming events, and proposal review panes";
-    case 5u:
-      return "guard no terminal-only fallback in the graphical path";
-    case 6u:
-      return "next  replace placeholder transport with Codex client adapter";
-    default:
-      fprintf(stderr, "fatal: invalid terminal line index %zu\n", index);
-      exit(1);
-  }
-}
-
 static er_ui_status_t er_ui_sdl_emit_codex_surface(uint32_t surface_id, er_ui_scene_t* scene, vr_font_face_t* font, er_ui_bounds_t bounds, er_ui_resolved_theme_t theme, void* user) {
   (void)surface_id;
-  (void)user;
+  ErUiSdlApp* app = (ErUiSdlApp*)user;
   er_ui_status_t status = er_ui_scene_push_rect(scene, er_ui_rect_fill(bounds.x, bounds.y, bounds.w, bounds.h, ER_UI_SDL_RADIUS, er_ui_color_with_alpha(theme.colors.panel, 0.72f)));
   if (status != ER_UI_OK) return status;
   status = er_ui_sdl_text(scene, font, "Codex workspace", bounds.x + ER_UI_SDL_PAD, bounds.y + ER_UI_SDL_SURFACE_TITLE_Y, theme.colors.text);
@@ -376,7 +479,7 @@ static er_ui_status_t er_ui_sdl_emit_codex_surface(uint32_t surface_id, er_ui_sc
   status = er_ui_scene_push_rect(scene, er_ui_rect_fill(transcript.x, transcript.y, transcript.w, transcript.h, ER_UI_SDL_SMALL_RADIUS, theme.colors.bg));
   if (status != ER_UI_OK) return status;
   for (size_t i = 0u; i < ER_UI_SDL_TERMINAL_LINE_COUNT; ++i) {
-    status = er_ui_sdl_text(scene, font, er_ui_sdl_terminal_line(i), transcript.x + ER_UI_SDL_PAD, transcript.y + ER_UI_SDL_TRANSCRIPT_FIRST_LINE_Y + (float)i * ER_UI_SDL_LINE_H, theme.colors.text);
+    status = er_ui_sdl_text(scene, font, app->transcript[i], transcript.x + ER_UI_SDL_PAD, transcript.y + ER_UI_SDL_TRANSCRIPT_FIRST_LINE_Y + (float)i * ER_UI_SDL_LINE_H, theme.colors.text);
     if (status != ER_UI_OK) return status;
   }
 
@@ -408,7 +511,7 @@ static void er_ui_sdl_render(ErUiSdlApp* app) {
   er_ui_scene_clear_commands(&app->scene);
   er_ui_resolved_theme_t theme = er_ui_resolved_theme_user_default();
   er_ui_bounds_t bounds = er_ui_bounds(0.0f, 0.0f, (float)app->width, (float)app->height);
-  er_ui_status_t status = er_ui_shell_emit_scene_with_font_and_surfaces(&app->shell, &app->scene, bounds, theme, app->font, er_ui_sdl_emit_codex_surface, NULL);
+  er_ui_status_t status = er_ui_shell_emit_scene_with_font_and_surfaces(&app->shell, &app->scene, bounds, theme, app->font, er_ui_sdl_emit_codex_surface, app);
   if (status != ER_UI_OK) {
     fprintf(stderr, "fatal: failed to emit UI scene: %d\n", (int)status);
     exit(1);
@@ -558,9 +661,26 @@ static void er_ui_sdl_destroy(ErUiSdlApp* app) {
   SDL_Quit();
 }
 
+static const char* er_ui_sdl_arg_value(int argc, char** argv, const char* name) {
+  char** arg = argv + 1;
+  char** end = argv + argc - 1;
+  while (arg < end) {
+    if (strcmp(*arg, name) == 0) return *(arg + 1);
+    arg++;
+  }
+  return NULL;
+}
+
 int main(int argc, char** argv) {
   ErUiSdlApp app = {0};
-  if (argc > 1 && strcmp(argv[1], ER_UI_SDL_SELF_TEST_ARG) == 0) app.self_test = true;
+  if (argc > 1 && strcmp(*(argv + 1), ER_UI_SDL_SELF_TEST_ARG) == 0) app.self_test = true;
+  const char* root = er_ui_sdl_arg_value(argc, argv, ER_UI_SDL_ROOT_ARG);
+  const char* prompt = er_ui_sdl_arg_value(argc, argv, ER_UI_SDL_PROMPT_ARG);
+  if (!root) root = ER_UI_REPO_ROOT;
+  if (!prompt) prompt = "Inspect the current workspace status and continue the highest-impact useful task.";
+  er_ui_sdl_set_transcript_line(&app, 0u, "starting Codex workspace session");
+  er_ui_sdl_set_transcript_line(&app, 1u, prompt);
+  if (!app.self_test) er_ui_sdl_load_codex_output(&app, root, prompt);
   er_ui_sdl_init(&app);
   while (app.running) {
     SDL_Event event;

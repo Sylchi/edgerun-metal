@@ -1,4 +1,4 @@
-.PHONY: all check clean er-build repo-check repo-test repo-check-bin repo-inspect repo-progress erwire-decode erwire-test codex-test crypto-configure crypto-build crypto-test crypto-bench crypto-bench-avx2 crypto-bench-avx512 crypto-bench-avx512-threads crypto-bench-native-threads crypto-bench-sota edgerun-metal edgerun-os edgerun-check varfont-configure varfont-build varfont-test ui-core-configure ui-core-build ui-core-sdl-configure ui-core-sdl-build ui-core-sdl-test ui-core-test
+.PHONY: all check clean er-build repo-check repo-test repo-check-bin repo-inspect repo-progress erwire-decode erwire-test codex-build codex-test crypto-configure crypto-build crypto-test crypto-bench crypto-bench-avx2 crypto-bench-avx512 crypto-bench-avx512-threads crypto-bench-native-threads crypto-bench-sota edgerun-metal edgerun-os edgerun-check varfont-configure varfont-build varfont-test ui-core-configure ui-core-build ui-core-sdl-configure ui-core-sdl-build ui-core-sdl-run ui-core-sdl-test ui-core-test
 
 ifeq ($(origin CC),default)
 CC := clang
@@ -35,6 +35,7 @@ UI_CORE_CMAKE_GENERATOR ?= Ninja
 CRYPTO_CMAKE_GENERATOR ?= Ninja
 REPO_PROGRESS_SCOPE ?= edgerun-ui-core
 REPO_PROGRESS_TEST ?=
+PROMPT ?= Inspect the current workspace status and continue the highest-impact useful task.
 
 all: edgerun-metal
 
@@ -64,6 +65,9 @@ erwire-decode: er-build
 
 erwire-test: er-build
 	./.build/er-build erwire-test
+
+codex-build:
+	$(MAKE) -C codex CC="$(HOST_CC)"
 
 codex-test:
 	$(MAKE) -C codex CC="$(HOST_CC)" test
@@ -128,6 +132,9 @@ ui-core-sdl-configure:
 
 ui-core-sdl-build: ui-core-sdl-configure
 	cmake --build $(UI_CORE_SDL_BUILD_DIR) --target er_ui_sdl_shell
+
+ui-core-sdl-run: codex-build ui-core-sdl-build
+	$(UI_CORE_SDL_BUILD_DIR)/er_ui_sdl_shell --root "$(CURDIR)" --prompt "$(PROMPT)"
 
 ui-core-sdl-test: ui-core-sdl-configure
 	cmake --build $(UI_CORE_SDL_BUILD_DIR)
