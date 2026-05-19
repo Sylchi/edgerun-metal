@@ -24,6 +24,7 @@ enum {
   ERWC_MAX_FUNCS = 32,
   ERWC_MAX_IMPORTS = 16,
   ERWC_MAX_LOCALS = 32,
+  ERWC_MAX_CONSTANTS = 128,
   ERWC_MAX_INSTR = 4096,
   ERWC_MAX_BYTES = 65536,
   ERWC_MAX_STRING = 64,
@@ -117,6 +118,11 @@ typedef struct {
 
 typedef struct {
   char name[ERWC_MAX_STRING];
+  int64_t value;
+} ErWcConstant;
+
+typedef struct {
+  char name[ERWC_MAX_STRING];
   char module[ERWC_MAX_STRING];
   char field[ERWC_MAX_STRING];
   char type_name[ERWC_MAX_STRING];
@@ -143,6 +149,8 @@ typedef struct {
   uint32_t import_count;
   ErWcFunc funcs[ERWC_MAX_FUNCS];
   uint32_t func_count;
+  ErWcConstant constants[ERWC_MAX_CONSTANTS];
+  uint32_t constant_count;
   uint32_t memory_pages;
 } ErWcModule;
 

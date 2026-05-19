@@ -191,6 +191,40 @@ static const ErWcType* erwc_c_import_type(const ErWcModule* module,
   return NULL;
 }
 
+static const ErWcConstant* erwc_c_find_constant(const ErWcModule* module,
+                                                const char* name) {
+  for (uint32_t i = 0u; i < module->constant_count; ++i) {
+    //@optimizer-ignore authored C constants require indexed name lookup
+    if (strcmp(module->constants[i].name, name) == 0) {
+      return &module->constants[i];
+    }
+  }
+  return NULL;
+}
+
+static int erwc_c_parse_constant(ErWcCParser* parser, ErWcModule* module) {
+  ErWcConstant* constant;
+  char name[ERWC_MAX_STRING];
+  int64_t value = 0;
+
+  if (module->constant_count >= ERWC_MAX_CONSTANTS ||
+      erwc_c_take_literal(parser, "const") != 0 ||
+      erwc_c_take_literal(parser, "i64") != 0 ||
+      erwc_c_take_ident(parser, name, sizeof(name)) != 0 ||
+      erwc_c_find_constant(module, name) != NULL ||
+      erwc_c_take_literal(parser, "=") != 0 ||
+      erwc_c_take_i64_literal(parser, &value) != 0 ||
+      erwc_c_take_literal(parser, ";") != 0) {
+    return -1;
+  }
+  constant = &module->constants[module->constant_count];
+  memset(constant, 0, sizeof(*constant));
+  strcpy(constant->name, name);
+  constant->value = value;
+  ++module->constant_count;
+  return 0;
+}
+
 static int erwc_c_parse_import(ErWcCParser* parser, ErWcModule* module) {
   char result_ident[ERWC_MAX_STRING];
   char import_name[ERWC_MAX_STRING];
@@ -370,8 +404,10 @@ static int erwc_c_parse_expression(ErWcCParser* parser,
                                    const ErWcModule* module,
                                    ErWcFunc* func) {
   ErWcCParser before_literal = *parser;
+  const ErWcConstant* constant;
   char ident[ERWC_MAX_STRING];
   int64_t return_value = 0;
+  uint32_t local_index = 0u;
 
   if (erwc_c_take_i64_literal(parser, &return_value) == 0) {
     return erwc_c_emit_i64_const(func, return_value);
@@ -384,7 +420,14 @@ static int erwc_c_parse_expression(ErWcCParser* parser,
   if (parser->cur < parser->end && *parser->cur == '(') {
     return erwc_c_emit_call(parser, module, func, ident);
   }
-  return erwc_c_emit_local_get(func, ident);
+  if (erwc_find_local(func, ident, &local_index) == 0) {
+    return erwc_c_emit_local_get(func, ident);
+  }
+  constant = erwc_c_find_constant(module, ident);
+  if (constant == NULL) {
+    return -1;
+  }
+  return erwc_c_emit_i64_const(func, constant->value);
 }
 
 static int erwc_c_parse_local_decl(ErWcCParser* parser,
@@ -428,15 +471,31 @@ static int erwc_c_parse_store_statement(ErWcCParser* parser,
                                         const char* name,
                                         uint8_t opcode,
                                         uint32_t align) {
+  const ErWcConstant* constant;
+  char offset_name[ERWC_MAX_STRING];
+  ErWcCParser before_offset;
   int64_t offset = 0;
 
   if (erwc_c_take_literal(parser, name) != 0 ||
       erwc_c_take_literal(parser, "(") != 0 ||
       erwc_c_parse_expression(parser, module, func) != 0 ||
       erwc_c_emit_i32_wrap_i64(func) != 0 ||
-      erwc_c_take_literal(parser, ",") != 0 ||
-      erwc_c_take_i64_literal(parser, &offset) != 0 ||
-      offset < 0 || offset > (int64_t)ERWC_U32_MAX_VALUE ||
+      erwc_c_take_literal(parser, ",") != 0) {
+    return -1;
+  }
+  before_offset = *parser;
+  if (erwc_c_take_i64_literal(parser, &offset) != 0) {
+    *parser = before_offset;
+    if (erwc_c_take_ident(parser, offset_name, sizeof(offset_name)) != 0) {
+      return -1;
+    }
+    constant = erwc_c_find_constant(module, offset_name);
+    if (constant == NULL) {
+      return -1;
+    }
+    offset = constant->value;
+  }
+  if (offset < 0 || offset > (int64_t)ERWC_U32_MAX_VALUE ||
       erwc_c_take_literal(parser, ",") != 0 ||
       erwc_c_parse_expression(parser, module, func) != 0 ||
       erwc_c_emit_i32_wrap_i64(func) != 0 ||
@@ -584,6 +643,17 @@ int erwc_build_c_source(const ErWcSource* source, ErWcModule* module) {
     if ((size_t)(parser.end - parser.cur) >= strlen("extern") &&
         memcmp(parser.cur, "extern", strlen("extern")) == 0) {
       if (erwc_c_parse_import(&parser, module) != 0) {
+        return -1;
+      }
+    } else {
+      break;
+    }
+  }
+  while (1) {
+    erwc_c_skip_ws(&parser);
+    if ((size_t)(parser.end - parser.cur) >= strlen("const") &&
+        memcmp(parser.cur, "const", strlen("const")) == 0) {
+      if (erwc_c_parse_constant(&parser, module) != 0) {
         return -1;
       }
     } else {
