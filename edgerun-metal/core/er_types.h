@@ -37,6 +37,10 @@ typedef struct EFI_BOOT_SERVICES EFI_BOOT_SERVICES;
 typedef struct EFI_SERVICE_BINDING_PROTOCOL EFI_SERVICE_BINDING_PROTOCOL;
 typedef struct EFI_UDP4_PROTOCOL EFI_UDP4_PROTOCOL;
 typedef struct EFI_GRAPHICS_OUTPUT_PROTOCOL EFI_GRAPHICS_OUTPUT_PROTOCOL;
+typedef struct EFI_SYSTEM_TABLE EFI_SYSTEM_TABLE;
+typedef struct EFI_LOADED_IMAGE_PROTOCOL EFI_LOADED_IMAGE_PROTOCOL;
+typedef struct EFI_SIMPLE_FILE_SYSTEM_PROTOCOL EFI_SIMPLE_FILE_SYSTEM_PROTOCOL;
+typedef struct EFI_FILE_PROTOCOL EFI_FILE_PROTOCOL;
 
 typedef struct {
   UINT32 Data1;
@@ -118,6 +122,12 @@ typedef EFI_STATUS (*EFIAPI_GET_MEMORY_MAP_FN)(UINTN* MemoryMapSize, void* Memor
 typedef EFI_STATUS (*EFIAPI_EXIT_BOOT_SERVICES_FN)(EFI_HANDLE ImageHandle, UINTN MapKey);
 typedef EFI_STATUS (EFIAPI *EFIAPI_GET_VARIABLE_FN)(CHAR16* VariableName, EFI_GUID* VendorGuid, UINT32* Attributes,
                                                     UINTN* DataSize, void* Data);
+typedef EFI_STATUS (EFIAPI *EFIAPI_FILE_OPEN_FN)(EFI_FILE_PROTOCOL* This, EFI_FILE_PROTOCOL** NewHandle,
+                                                 CHAR16* FileName, UINT64 OpenMode, UINT64 Attributes);
+typedef EFI_STATUS (EFIAPI *EFIAPI_FILE_CLOSE_FN)(EFI_FILE_PROTOCOL* This);
+typedef EFI_STATUS (EFIAPI *EFIAPI_FILE_READ_FN)(EFI_FILE_PROTOCOL* This, UINTN* BufferSize, void* Buffer);
+typedef EFI_STATUS (EFIAPI *EFIAPI_OPEN_VOLUME_FN)(EFI_SIMPLE_FILE_SYSTEM_PROTOCOL* This,
+                                                   EFI_FILE_PROTOCOL** Root);
 
 struct EFI_BOOT_SERVICES {
   EFI_TABLE_HEADER Hdr;
@@ -298,7 +308,42 @@ struct EFI_UDP4_PROTOCOL {
   EFIAPI_UDP4_POLL_FN Poll;
 };
 
-typedef struct {
+struct EFI_FILE_PROTOCOL {
+  UINT64 Revision;
+  EFIAPI_FILE_OPEN_FN Open;
+  EFIAPI_FILE_CLOSE_FN Close;
+  void* Delete;
+  EFIAPI_FILE_READ_FN Read;
+  void* Write;
+  void* GetPosition;
+  void* SetPosition;
+  void* GetInfo;
+  void* SetInfo;
+  void* Flush;
+};
+
+struct EFI_SIMPLE_FILE_SYSTEM_PROTOCOL {
+  UINT64 Revision;
+  EFIAPI_OPEN_VOLUME_FN OpenVolume;
+};
+
+struct EFI_LOADED_IMAGE_PROTOCOL {
+  UINT32 Revision;
+  EFI_HANDLE ParentHandle;
+  EFI_SYSTEM_TABLE* SystemTable;
+  EFI_HANDLE DeviceHandle;
+  void* FilePath;
+  void* Reserved;
+  UINT32 LoadOptionsSize;
+  void* LoadOptions;
+  void* ImageBase;
+  UINT64 ImageSize;
+  UINT32 ImageCodeType;
+  UINT32 ImageDataType;
+  void* Unload;
+};
+
+typedef struct EFI_SYSTEM_TABLE {
   EFI_TABLE_HEADER Hdr;
   CHAR16* FirmwareVendor;
   UINT32 FirmwareRevision;
@@ -321,6 +366,7 @@ typedef struct {
 #define EFI_NOT_READY ((EFI_STATUS)(EFI_ERROR_MASK | 6u))
 #define EFI_INVALID_PARAMETER ((EFI_STATUS)(EFI_ERROR_MASK | 2u))
 #define EFI_NOT_FOUND ((EFI_STATUS)(EFI_ERROR_MASK | 14u))
+#define EFI_FILE_MODE_READ 0x0000000000000001ull
 #define EVT_NOTIFY_SIGNAL 0x00000200u
 #define TPL_CALLBACK 8u
 
