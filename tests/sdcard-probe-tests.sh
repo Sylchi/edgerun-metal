@@ -43,6 +43,7 @@ for expected in \
   "write-bytes: 1048576" \
   "verify-bytes: 1048576" \
   "actual-bytes: 1048576" \
+  "class-bounds-mb-sec: C2>=2 C4>=4 C6>=6 C10/U1/V10>=10 U3/V30>=30 V60>=60 V90>=90" \
   "observed-sd-speed-class:" \
   "observed-uhs-speed-class:" \
   "observed-video-speed-class:" \
