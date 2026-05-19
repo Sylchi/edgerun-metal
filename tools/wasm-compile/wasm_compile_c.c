@@ -103,14 +103,18 @@ static int erwc_c_take_i64_literal(ErWcCParser* parser, int64_t* out) {
   if (parser->cur >= parser->end || *parser->cur < '0' || *parser->cur > '9') {
     return -1;
   }
-  while (parser->cur < parser->end && *parser->cur >= '0' && *parser->cur <= '9') {
+  while (parser->cur < parser->end &&
+         ((*parser->cur >= '0' && *parser->cur <= '9') ||
+          (*parser->cur >= 'a' && *parser->cur <= 'f') ||
+          (*parser->cur >= 'A' && *parser->cur <= 'F') ||
+          *parser->cur == 'x' || *parser->cur == 'X')) {
     if (len + 1u >= sizeof(text)) {
       return -1;
     }
     text[len++] = *parser->cur++;
   }
   errno = 0;
-  value = strtoll(text, &end, ERWC_DECIMAL_BASE);
+  value = strtoll(text, &end, 0);
   if (end == text || *end != 0 || errno == ERANGE) {
     return -1;
   }
@@ -283,6 +287,10 @@ static int erwc_c_emit_i64_const(ErWcFunc* func, int64_t value) {
   return 0;
 }
 
+static int erwc_c_emit_i32_wrap_i64(ErWcFunc* func) {
+  return erwc_buffer_push(&func->code, ERWC_OP_I32_WRAP_I64);
+}
+
 static int erwc_c_emit_local_get(ErWcFunc* func, const char* name) {
   uint32_t local_index = 0u;
 
@@ -414,6 +422,34 @@ static int erwc_c_parse_assignment(ErWcCParser* parser,
   return 0;
 }
 
+static int erwc_c_parse_store_statement(ErWcCParser* parser,
+                                        const ErWcModule* module,
+                                        ErWcFunc* func,
+                                        const char* name,
+                                        uint8_t opcode,
+                                        uint32_t align) {
+  int64_t offset = 0;
+
+  if (erwc_c_take_literal(parser, name) != 0 ||
+      erwc_c_take_literal(parser, "(") != 0 ||
+      erwc_c_parse_expression(parser, module, func) != 0 ||
+      erwc_c_emit_i32_wrap_i64(func) != 0 ||
+      erwc_c_take_literal(parser, ",") != 0 ||
+      erwc_c_take_i64_literal(parser, &offset) != 0 ||
+      offset < 0 || offset > (int64_t)ERWC_U32_MAX_VALUE ||
+      erwc_c_take_literal(parser, ",") != 0 ||
+      erwc_c_parse_expression(parser, module, func) != 0 ||
+      erwc_c_emit_i32_wrap_i64(func) != 0 ||
+      erwc_c_take_literal(parser, ")") != 0 ||
+      erwc_c_take_literal(parser, ";") != 0 ||
+      erwc_buffer_push(&func->code, opcode) != 0 ||
+      erwc_emit_u32_leb(&func->code, align) != 0 ||
+      erwc_emit_u32_leb(&func->code, (uint32_t)offset) != 0) {
+    return -1;
+  }
+  return 0;
+}
+
 static int erwc_c_parse_statement_block(ErWcCParser* parser,
                                         const ErWcModule* module,
                                         ErWcFunc* func) {
@@ -466,6 +502,18 @@ static int erwc_c_parse_main_statement(ErWcCParser* parser,
   }
   *parser = before_statement;
   if (erwc_c_parse_assignment(parser, module, func) == 0) {
+    *out_parsed = 1u;
+    return 0;
+  }
+  *parser = before_statement;
+  if (erwc_c_parse_store_statement(parser, module, func, "store16",
+                                   ERWC_OP_I32_STORE16, 1u) == 0) {
+    *out_parsed = 1u;
+    return 0;
+  }
+  *parser = before_statement;
+  if (erwc_c_parse_store_statement(parser, module, func, "store32",
+                                   ERWC_OP_I32_STORE, 2u) == 0) {
     *out_parsed = 1u;
     return 0;
   }
