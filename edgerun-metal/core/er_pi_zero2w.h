@@ -69,6 +69,11 @@
 
 #define ER_PI_ZERO2W_SDIO_BRINGUP_COMMAND_CAPACITY 8u
 
+#define ER_PI_EMMC_REG_ARG1 0x00000008u
+#define ER_PI_EMMC_REG_CMDTM 0x0000000cu
+#define ER_PI_EMMC_REG_RESP0 0x00000010u
+#define ER_PI_EMMC_REG_INTERRUPT 0x00000030u
+
 typedef struct {
   UINT8 mapped;
   INT64 peripheral_handle;
@@ -101,6 +106,17 @@ typedef struct {
   ErPiMmcCommand commands[ER_PI_ZERO2W_SDIO_BRINGUP_COMMAND_CAPACITY];
 } ErPiZero2wSdioBringupPlan;
 
+typedef struct {
+  UINT32 interrupt_offset;
+  UINT32 interrupt_clear_value;
+  UINT32 argument_offset;
+  UINT32 argument_value;
+  UINT32 command_offset;
+  UINT32 command_value;
+  UINT32 response_offset;
+  UINT32 response_kind;
+} ErPiEmmcCommandIo;
+
 UINT8 er_pi_zero2w_mmio_map(ErPiZero2wMmio* out_mmio);
 UINT64 er_pi_zero2w_peripheral_phys(UINT64 offset);
 UINT8 er_pi_mailbox_two_value_request(UINT32 tag_id,
@@ -119,10 +135,16 @@ UINT32 er_pi_sdio_cmd53_argument(UINT8 write,
                                  UINT32 address,
                                  UINT32 count);
 UINT32 er_pi_mmc_relative_card_argument(UINT32 relative_card_address);
+UINT32 er_pi_mmc_relative_card_from_r6(UINT32 response);
 UINT8 er_pi_mmc_command_prepare(UINT32 command_index,
                                 UINT32 argument,
                                 UINT32 response_kind,
                                 ErPiMmcCommand* out_command);
+UINT8 er_pi_emmc_command_io_prepare(const ErPiMmcCommand* command,
+                                    ErPiEmmcCommandIo* out_io);
+UINT8 er_pi_emmc_command_begin(INT64 emmc_handle,
+                               const ErPiMmcCommand* command,
+                               ErPiEmmcCommandIo* out_io);
 UINT8 er_pi_zero2w_sdio_identity_plan(ErPiZero2wSdioBringupPlan* out_plan);
 UINT8 er_pi_zero2w_sdio_claim_plan(UINT32 relative_card_address,
                                    ErPiZero2wSdioBringupPlan* out_plan);

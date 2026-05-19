@@ -8,17 +8,23 @@ static void test_pi_zero2w_bringup_boundary(void) {
     PI_TEST_SDIO_BLOCK_COUNT = 0x00000020u,
     PI_TEST_SDIO_RCA = 0x00001234u,
     PI_TEST_SDIO_RCA_ARGUMENT = 0x12340000u,
+    PI_TEST_SDIO_OCR_3V3 = 0x00300000u,
     PI_TEST_SDIO_IDENTITY_PLAN_COUNT = 3u,
     PI_TEST_SDIO_CLAIM_PLAN_COUNT = 2u,
     PI_TEST_SDIO_CLAIM_CMD52_INDEX = 1u,
     PI_TEST_SDIO_IDENTITY_CMD5_INDEX = 1u,
-    PI_TEST_SDIO_IDENTITY_CMD3_INDEX = 2u
+    PI_TEST_SDIO_IDENTITY_CMD3_INDEX = 2u,
+    PI_TEST_EMMC_CMD0_VALUE = 0x00000000u,
+    PI_TEST_EMMC_CMD5_VALUE = 0x05020000u,
+    PI_TEST_EMMC_CMD3_VALUE = 0x031a0000u,
+    PI_TEST_EMMC_CMD52_VALUE = 0x341a0000u
   };
 
   ErPiZero2wMmio mmio;
   ErMmioInfo info;
   ErPiMailboxTwoValueMessage message;
   ErPiMmcCommand command;
+  ErPiEmmcCommandIo command_io;
   ErPiZero2wSdioBringupPlan sdio_plan;
   ErBootServicesReport report;
 
@@ -99,6 +105,9 @@ static void test_pi_zero2w_bringup_boundary(void) {
   check_uint64("pi mmc rca argument",
                er_pi_mmc_relative_card_argument(PI_TEST_SDIO_RCA),
                PI_TEST_SDIO_RCA_ARGUMENT);
+  check_uint64("pi mmc rca from r6",
+               er_pi_mmc_relative_card_from_r6(PI_TEST_SDIO_RCA_ARGUMENT),
+               PI_TEST_SDIO_RCA);
   check_int64("pi sdio identity plan",
               er_pi_zero2w_sdio_identity_plan(&sdio_plan),
               1);
@@ -111,18 +120,56 @@ static void test_pi_zero2w_bringup_boundary(void) {
   check_uint64("pi sdio identity cmd0 response",
                sdio_plan.commands[0].response_kind,
                ER_PI_MMC_RESPONSE_NONE);
+  check_int64("pi emmc cmd0 io",
+              er_pi_emmc_command_io_prepare(&sdio_plan.commands[0],
+                                            &command_io),
+              1);
+  check_uint64("pi emmc cmd0 interrupt register",
+               command_io.interrupt_offset,
+               ER_PI_EMMC_REG_INTERRUPT);
+  check_uint64("pi emmc cmd0 argument register",
+               command_io.argument_offset,
+               ER_PI_EMMC_REG_ARG1);
+  check_uint64("pi emmc cmd0 command register",
+               command_io.command_offset,
+               ER_PI_EMMC_REG_CMDTM);
+  check_uint64("pi emmc cmd0 response register",
+               command_io.response_offset,
+               ER_PI_EMMC_REG_RESP0);
+  check_uint64("pi emmc cmd0 command value",
+               command_io.command_value,
+               PI_TEST_EMMC_CMD0_VALUE);
   check_uint64("pi sdio identity cmd5",
                sdio_plan.commands[PI_TEST_SDIO_IDENTITY_CMD5_INDEX].command_index,
                ER_PI_MMC_CMD_IO_SEND_OP_COND);
   check_uint64("pi sdio identity cmd5 response",
                sdio_plan.commands[PI_TEST_SDIO_IDENTITY_CMD5_INDEX].response_kind,
                ER_PI_MMC_RESPONSE_R4);
+  check_int64("pi emmc cmd5 io",
+              er_pi_emmc_command_io_prepare(
+                  &sdio_plan.commands[PI_TEST_SDIO_IDENTITY_CMD5_INDEX],
+                  &command_io),
+              1);
+  check_uint64("pi emmc cmd5 argument",
+               command_io.argument_value,
+               PI_TEST_SDIO_OCR_3V3);
+  check_uint64("pi emmc cmd5 command value",
+               command_io.command_value,
+               PI_TEST_EMMC_CMD5_VALUE);
   check_uint64("pi sdio identity cmd3",
                sdio_plan.commands[PI_TEST_SDIO_IDENTITY_CMD3_INDEX].command_index,
                ER_PI_MMC_CMD_SEND_RELATIVE_ADDR);
   check_uint64("pi sdio identity cmd3 response",
                sdio_plan.commands[PI_TEST_SDIO_IDENTITY_CMD3_INDEX].response_kind,
                ER_PI_MMC_RESPONSE_R6);
+  check_int64("pi emmc cmd3 io",
+              er_pi_emmc_command_io_prepare(
+                  &sdio_plan.commands[PI_TEST_SDIO_IDENTITY_CMD3_INDEX],
+                  &command_io),
+              1);
+  check_uint64("pi emmc cmd3 command value",
+               command_io.command_value,
+               PI_TEST_EMMC_CMD3_VALUE);
   check_int64("pi sdio claim rejects missing rca",
               er_pi_zero2w_sdio_claim_plan(0u, &sdio_plan),
               0);
@@ -147,6 +194,19 @@ static void test_pi_zero2w_bringup_boundary(void) {
   check_uint64("pi sdio claim cmd52 response",
                sdio_plan.commands[PI_TEST_SDIO_CLAIM_CMD52_INDEX].response_kind,
                ER_PI_MMC_RESPONSE_R5);
+  check_int64("pi emmc cmd52 io",
+              er_pi_emmc_command_io_prepare(
+                  &sdio_plan.commands[PI_TEST_SDIO_CLAIM_CMD52_INDEX],
+                  &command_io),
+              1);
+  check_uint64("pi emmc cmd52 command value",
+               command_io.command_value,
+               PI_TEST_EMMC_CMD52_VALUE);
+  check_int64("pi emmc command begin rejects invalid handle",
+              er_pi_emmc_command_begin(ER_MMIO_INVALID_HANDLE,
+                                       &sdio_plan.commands[0],
+                                       &command_io),
+              0);
 
   er_boot_services_report_init(&report);
   er_mmio_reset();
