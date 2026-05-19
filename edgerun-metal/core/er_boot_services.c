@@ -22,6 +22,10 @@ static const char g_er_boot_authority_default_label[] = {
 #define ER_BOOT_SERVICES_TPM_RESPONSE_BYTES 512u
 #define ER_BOOT_SERVICES_TPM_PROPERTY_COUNT ((ER_TPM_PT_NV_BUFFER_MAX - ER_TPM_PT_NV_INDEX_MAX) + 1u)
 
+#ifndef ER_BOOT_EPHEMERAL_AUTHORITY_ENABLED
+#define ER_BOOT_EPHEMERAL_AUTHORITY_ENABLED 0
+#endif
+
 static UINT8 er_boot_services_authority_profile_ready(const ErBootAuthorityProfile* authority) {
   if (authority == 0 ||
       authority->present == 0u ||
@@ -257,11 +261,35 @@ UINT8 er_boot_services_select_authority(ErBootServicesReport* report,
   return 1u;
 }
 
+UINT8 er_boot_services_report_has_ephemeral_admission(const ErBootServicesReport* report) {
+  const ErBootAdmissionRecord* record;
+
+  if (report == 0 || report->boot_admission_present == 0u) {
+    return 0u;
+  }
+
+  record = &report->boot_admission;
+  return (UINT8)(record->admission_mode == ER_BOOT_ADMISSION_MODE_EXTERNAL &&
+                 record->admission_identity.identity_type == ER_IDENTITY_TYPE_HASH &&
+                 record->admission_identity.backing_type == ER_IDENTITY_BACKING_EPHEMERAL_HASH &&
+                 record->admission_identity.material_len == ER_HASH_LEN &&
+                 er_mem_any_nonzero(record->admission_identity.material, ER_HASH_LEN) != 0u);
+}
+
 ErBootServicesAction er_boot_services_decide_action(const ErBootServicesReport* report) {
   if (report == 0 ||
-      report->secure_boot_state != ER_BOOT_SECURE_BOOT_VERIFIED ||
-      report->tpm_present == 0u ||
       report->config_state == ER_BOOT_CONFIG_INVALID) {
+    return ER_BOOT_SERVICES_ACTION_BLOCKED;
+  }
+
+#if ER_BOOT_EPHEMERAL_AUTHORITY_ENABLED
+  if (er_boot_services_report_has_ephemeral_admission(report) != 0u) {
+    return ER_BOOT_SERVICES_ACTION_ENTER_RUNTIME;
+  }
+#endif
+
+  if (report->secure_boot_state != ER_BOOT_SECURE_BOOT_VERIFIED ||
+      report->tpm_present == 0u) {
     return ER_BOOT_SERVICES_ACTION_BLOCKED;
   }
 

@@ -176,9 +176,28 @@ static void test_boot_services_boundary(void) {
               1);
   check_int64("boot services set boot admission",
               er_boot_services_set_boot_admission(&report, &crypto, &admission_record), 1);
+  check_int64("boot services local admission not ephemeral",
+              er_boot_services_report_has_ephemeral_admission(&report), 0);
   check_int64("boot services admission enters runtime",
               er_boot_services_decide_action(&report),
               ER_BOOT_SERVICES_ACTION_ENTER_RUNTIME);
   check_int64("boot services admission runtime allowed",
               er_boot_services_runtime_entry_allowed(&report), 1);
+
+  er_boot_services_report_init(&report);
+  check_int64("boot services prepare ephemeral admission",
+              er_boot_admission_record_prepare_ephemeral_authority(&crypto,
+                                                                   BOOT_SERVICES_TEST_ADMISSION_GENERATION,
+                                                                   ER_BOOT_BOOTSTRAP_CHANNEL_NATIVE_ETH,
+                                                                   0u,
+                                                                   0u,
+                                                                   4u,
+                                                                   &admission_record),
+              1);
+  check_int64("boot services set ephemeral admission",
+              er_boot_services_set_boot_admission(&report, &crypto, &admission_record), 1);
+  check_int64("boot services detects ephemeral admission",
+              er_boot_services_report_has_ephemeral_admission(&report), 1);
+  check_int64("boot services default build still blocks ephemeral without secure boot",
+              er_boot_services_decide_action(&report), ER_BOOT_SERVICES_ACTION_BLOCKED);
 }
