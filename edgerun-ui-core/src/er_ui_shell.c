@@ -124,6 +124,8 @@ static const char* er_ui_shell_launcher_status_label(er_ui_launcher_app_status_t
       return "update available";
     case ER_UI_LAUNCHER_APP_REMOVED:
       return "removed";
+    case ER_UI_LAUNCHER_APP_ROLLED_BACK:
+      return "rolled back";
     default:
       return NULL;
   }
@@ -134,6 +136,7 @@ static bool er_ui_shell_launcher_app_launchable(const er_ui_launcher_app_t* app)
   switch (app->status) {
     case ER_UI_LAUNCHER_APP_INSTALLED:
     case ER_UI_LAUNCHER_APP_UPDATE_AVAILABLE:
+    case ER_UI_LAUNCHER_APP_ROLLED_BACK:
       return true;
     case ER_UI_LAUNCHER_APP_REMOVED:
       return false;

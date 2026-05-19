@@ -20,9 +20,22 @@ const ErUiBootAppContext* er_ui_boot_active_app_const(const ErUiBootRenderContex
 
 UINT8 er_ui_boot_switch_app_for_surface(ErUiBootRenderContext* render, UINT32 surface_id) {
   UINT32 app_index;
+  UINT32 user_app_surface_id;
+  UINT32 i;
 
   if (render == 0 || render->apps == 0 || render->app_count == 0u) {
     return 0u;
+  }
+  for (i = 0u; i < render->app_count && i < ER_UI_BOOT_INSTALLED_APP_COUNT; ++i) {
+    if (er_ui_boot_user_app_surface_id(i, &user_app_surface_id) != 0u &&
+        surface_id == user_app_surface_id) {
+      app_index = i;
+      if (app_index >= render->app_count || render->apps[app_index].ready == 0u) {
+        return 0u;
+      }
+      render->active_app = app_index;
+      return 1u;
+    }
   }
   switch (surface_id) {
     case ER_UI_LEDGER_APP_LEDGER_ID:

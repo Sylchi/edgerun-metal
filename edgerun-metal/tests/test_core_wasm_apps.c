@@ -375,6 +375,12 @@ static void test_ui_boot_apply_input_routes_to_active_wasm_app(void) {
   check_uint64("ui boot input active modifiers",
                memory_b[ER_UI_WASM_INPUT_MODIFIERS_OFFSET],
                ER_UI_WASM_INPUT_MODIFIER_CTRL);
+  check_int64("ui boot switch user app surface",
+              er_ui_boot_switch_app_for_surface(&render,
+                                                ER_UI_BOOT_USER_APP_SURFACE_ID_BASE),
+              1);
+  check_uint64("ui boot switched active app", render.active_app,
+               0u);
 
   er_ui_scene_destroy(&apps[1].scene);
   er_ui_scene_destroy(&apps[0].scene);
@@ -399,11 +405,17 @@ static void test_ui_boot_package_loads_from_endpoint_storage(void) {
   const ErAppPackageInstallRecord* install_record;
   ErAppPackageInstallRecord removed_record;
   ErAppSignedPackageIndexEntry tampered_signed_index_entry;
+  er_ui_ledger_app_state_t ledger_state;
+  er_ui_action_t action;
+  UINT32 launch_id = 0u;
+  UINT32 surface_id = 0u;
+  bool changed = false;
 
   er_mem_zero(module_memory, (UINTN)sizeof(module_memory));
   er_mem_zero(manifest_memory, (UINTN)sizeof(manifest_memory));
   er_mem_zero((UINT8*)&storage, (UINTN)sizeof(storage));
   er_mem_zero((UINT8*)&loaded, (UINTN)sizeof(loaded));
+  er_mem_zero((UINT8*)&ledger_state, (UINTN)sizeof(ledger_state));
 
   installed_app = er_ui_boot_installed_app_for_slot(UI_BOOT_PACKAGE_TEST_APP_INDEX);
   signed_index_entry = er_ui_boot_installed_signed_package_index_entry_for_slot(UI_BOOT_PACKAGE_TEST_APP_INDEX);
@@ -497,6 +509,40 @@ static void test_ui_boot_package_loads_from_endpoint_storage(void) {
   check_int64("ui boot package record source prepare",
               er_ui_boot_prepare_package_record_source(install_record, &source),
               1);
+  check_int64("ui boot user app surface id",
+              er_ui_boot_user_app_surface_id(UI_BOOT_PACKAGE_TEST_APP_INDEX,
+                                             &surface_id),
+              1);
+  check_int64("ui boot user app launch id",
+              er_ui_boot_user_app_launch_id(UI_BOOT_PACKAGE_TEST_APP_INDEX,
+                                            &launch_id),
+              1);
+  check_uint64("ui boot user app surface id value", surface_id,
+               ER_UI_BOOT_USER_APP_SURFACE_ID_BASE + UI_BOOT_PACKAGE_TEST_APP_INDEX);
+  check_uint64("ui boot user app launch id value", launch_id,
+               ER_UI_BOOT_USER_APP_LAUNCH_ID_BASE + UI_BOOT_PACKAGE_TEST_APP_INDEX);
+  check_int64("ui boot launcher ledger init",
+              er_ui_ledger_app_state_init(&ledger_state, test_ui_allocator()),
+              ER_UI_OK);
+  check_int64("ui boot install launcher apps",
+              er_ui_boot_install_shell_launcher_apps(&ledger_state), 1);
+  check_uint64("ui boot launcher app count",
+               er_ui_shell_launcher_app_count(&ledger_state.shell),
+               ER_UI_BOOT_INSTALLED_APP_COUNT);
+  action = (er_ui_action_t){0};
+  action.kind = ER_UI_ACTION_ACTIVATED;
+  action.has_hit = true;
+  action.hit = er_ui_hit(ER_UI_HIT_APP_LAUNCHER_ITEM, launch_id,
+                         0.0f, 0.0f, 1.0f, 1.0f);
+  er_ui_shell_set_launcher_open(&ledger_state.shell, true);
+  check_int64("ui boot launcher app action",
+              er_ui_ledger_app_apply_action(&ledger_state, action, &changed),
+              ER_UI_OK);
+  check_int64("ui boot launcher app changed", changed, 1);
+  check_uint64("ui boot launcher app focused surface",
+               er_ui_workspace_focused_surface_id(&ledger_state.shell),
+               surface_id);
+  er_ui_ledger_app_state_destroy(&ledger_state);
   removed_record = *install_record;
   removed_record.install_state = ER_APP_PACKAGE_INSTALL_STATE_REMOVED;
   removed_record.generation += 1u;

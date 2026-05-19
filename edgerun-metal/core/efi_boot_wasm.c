@@ -25,6 +25,8 @@ static ErUiBootInstalledApp g_ui_boot_installed_apps[ER_UI_BOOT_INSTALLED_APP_CO
 
 static ErAppSignedPackageIndexEntry g_ui_boot_installed_package_index[ER_UI_BOOT_INSTALLED_APP_COUNT];
 static ErAppPackageInstallRecord g_ui_boot_installed_package_records[ER_UI_BOOT_INSTALLED_APP_COUNT];
+static char g_ui_boot_package_hash_labels[ER_UI_BOOT_INSTALLED_APP_COUNT][ER_UI_BOOT_PACKAGE_HASH_LABEL_BYTES];
+static char g_ui_boot_package_provenance_labels[ER_UI_BOOT_INSTALLED_APP_COUNT][ER_UI_BOOT_PROVENANCE_LABEL_BYTES];
 static UINT8 g_ui_boot_installed_apps_prepared;
 
 enum {
@@ -32,6 +34,84 @@ enum {
   ER_UI_BOOT_PACKAGE_MANIFEST_SEQUENCE = 2u,
   ER_UI_BOOT_PACKAGE_SIGNATURE_ALGORITHM = 1u
 };
+
+static char er_ui_boot_hex_char(UINT8 value) {
+  static const char digits[] = "0123456789abcdef";
+  return digits[value & 0x0fu];
+}
+
+static UINT8 er_ui_boot_bytes_hex(const UINT8* bytes, UINTN byte_len, char* out, UINTN out_len) {
+  UINTN i;
+
+  if (bytes == 0 || out == 0 || byte_len != ER_HASH_LEN ||
+      out_len != ER_UI_BOOT_HASH_HEX_BYTES + 1u) {
+    return 0u;
+  }
+  for (i = 0u; i < byte_len; ++i) {
+    out[i * 2u] = er_ui_boot_hex_char((UINT8)(bytes[i] >> 4u));
+    out[i * 2u + 1u] = er_ui_boot_hex_char(bytes[i]);
+  }
+  out[ER_UI_BOOT_HASH_HEX_BYTES] = '\0';
+  return 1u;
+}
+
+static UINT8 er_ui_boot_prefixed_hash_label(const char* prefix,
+                                            UINTN prefix_len,
+                                            const ErHash* hash,
+                                            char* out,
+                                            UINTN out_len) {
+  UINTN i;
+
+  if (prefix == 0 || hash == 0 || out == 0 ||
+      out_len != prefix_len + ER_UI_BOOT_HASH_HEX_BYTES + 1u) {
+    return 0u;
+  }
+  for (i = 0u; i < prefix_len; ++i) {
+    out[i] = prefix[i];
+  }
+  return er_ui_boot_bytes_hex(hash->bytes, ER_HASH_LEN, out + prefix_len,
+                              out_len - prefix_len);
+}
+
+static UINT8 er_ui_boot_prefixed_bytes_label(const char* prefix,
+                                             UINTN prefix_len,
+                                             const UINT8* bytes,
+                                             UINTN byte_len,
+                                             char* out,
+                                             UINTN out_len) {
+  UINTN i;
+
+  if (prefix == 0 || bytes == 0 || out == 0 ||
+      out_len != prefix_len + ER_UI_BOOT_HASH_HEX_BYTES + 1u) {
+    return 0u;
+  }
+  for (i = 0u; i < prefix_len; ++i) {
+    out[i] = prefix[i];
+  }
+  return er_ui_boot_bytes_hex(bytes, byte_len, out + prefix_len,
+                              out_len - prefix_len);
+}
+
+static UINT8 er_ui_boot_launcher_status_from_install_state(
+    UINT32 install_state,
+    er_ui_launcher_app_status_t* out_status) {
+  if (out_status == 0) {
+    return 0u;
+  }
+  switch (install_state) {
+    case ER_APP_PACKAGE_INSTALL_STATE_INSTALLED:
+      *out_status = ER_UI_LAUNCHER_APP_INSTALLED;
+      return 1u;
+    case ER_APP_PACKAGE_INSTALL_STATE_REMOVED:
+      *out_status = ER_UI_LAUNCHER_APP_REMOVED;
+      return 1u;
+    case ER_APP_PACKAGE_INSTALL_STATE_ROLLED_BACK:
+      *out_status = ER_UI_LAUNCHER_APP_ROLLED_BACK;
+      return 1u;
+    default:
+      return 0u;
+  }
+}
 
 static UINT8 er_ui_boot_package_signer_identity(ErIdentity* out_identity) {
   return er_identity_prepare(ER_IDENTITY_TYPE_PUBLIC_KEY,
@@ -348,6 +428,67 @@ const ErAppPackageInstallRecord* er_ui_boot_installed_package_record_for_slot(UI
     return 0;
   }
   return &g_ui_boot_installed_package_records[app_index];
+}
+
+UINT8 er_ui_boot_user_app_surface_id(UINT32 app_index, UINT32* out_surface_id) {
+  if (out_surface_id == 0 || app_index >= ER_UI_BOOT_INSTALLED_APP_COUNT) {
+    return 0u;
+  }
+  *out_surface_id = ER_UI_BOOT_USER_APP_SURFACE_ID_BASE + app_index;
+  return 1u;
+}
+
+UINT8 er_ui_boot_user_app_launch_id(UINT32 app_index, UINT32* out_launch_id) {
+  if (out_launch_id == 0 || app_index >= ER_UI_BOOT_INSTALLED_APP_COUNT) {
+    return 0u;
+  }
+  *out_launch_id = ER_UI_BOOT_USER_APP_LAUNCH_ID_BASE + app_index;
+  return 1u;
+}
+
+UINT8 er_ui_boot_install_shell_launcher_apps(er_ui_ledger_app_state_t* ledger_state) {
+  UINT32 i;
+
+  if (ledger_state == 0 || er_ui_boot_prepare_installed_app_registry() == 0u) {
+    return 0u;
+  }
+  for (i = 0u; i < ER_UI_BOOT_INSTALLED_APP_COUNT; ++i) {
+    const ErAppPackageInstallRecord* record = er_ui_boot_installed_package_record_for_slot(i);
+    er_ui_launcher_app_status_t status;
+    UINT32 surface_id;
+    UINT32 launch_id;
+    er_ui_launcher_app_t app;
+
+    if (record == 0 ||
+        er_ui_boot_launcher_status_from_install_state(record->install_state,
+                                                      &status) == 0u ||
+        er_ui_boot_user_app_surface_id(i, &surface_id) == 0u ||
+        er_ui_boot_user_app_launch_id(i, &launch_id) == 0u ||
+        er_ui_boot_prefixed_hash_label("pkg:",
+                                       4u,
+                                       &record->current_entry.index_entry.package.package_id,
+                                       g_ui_boot_package_hash_labels[i],
+                                       ER_UI_BOOT_PACKAGE_HASH_LABEL_BYTES) == 0u ||
+        er_ui_boot_prefixed_bytes_label("signer:",
+                                        7u,
+                                        record->current_entry.package_signature.signature.identity.material,
+                                        ER_HASH_LEN,
+                                        g_ui_boot_package_provenance_labels[i],
+                                        ER_UI_BOOT_PROVENANCE_LABEL_BYTES) == 0u) {
+      return 0u;
+    }
+    app.launch_id = launch_id;
+    app.surface_id = surface_id;
+    app.name = "User App";
+    app.status = status;
+    app.package_hash = g_ui_boot_package_hash_labels[i];
+    app.provenance = g_ui_boot_package_provenance_labels[i];
+    app.permissions = "ui,storage";
+    if (er_ui_shell_add_launcher_app(&ledger_state->shell, app) != ER_UI_OK) {
+      return 0u;
+    }
+  }
+  return 1u;
 }
 
 UINT8 er_ui_boot_prepare_signed_indexed_package_source(
