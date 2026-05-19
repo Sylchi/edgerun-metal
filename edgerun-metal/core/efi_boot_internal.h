@@ -220,6 +220,9 @@ typedef struct {
   UINT32* dirty_tile_ids;
   UINT32 dirty_tile_capacity;
   ErUiSurfaceDirtyTileList last_dirty_tiles;
+  ErUiSurfacePixelRect* present_rects;
+  UINT32 present_rect_capacity;
+  UINT32 last_present_rect_count;
 } ErUiBootRenderContext;
 
 extern ErWasmHostCalls g_host_calls;
@@ -248,7 +251,8 @@ void er_install_hostcalls(void);
 
 UINT8 er_virtio_gpu_wait_ok(ErVirtioGpu* gpu);
 UINT8 er_virtio_gpu_wait_display_info(ErVirtioGpu* gpu, ErVirtioGpuDisplayInfo* out_info);
-UINT8 er_ui_boot_gpu_present(const ErUiBootRenderContext* render);
+UINT8 er_ui_boot_dirty_present_rects(ErUiBootRenderContext* render);
+UINT8 er_ui_boot_gpu_present(ErUiBootRenderContext* render);
 UINT8 er_ui_boot_gpu_prepare_scanout(ErVirtioGpu* gpu,
                                      ErVirtioGpuFramebuffer* framebuffer,
                                      ErUiSurface* surface,
