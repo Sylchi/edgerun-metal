@@ -16,6 +16,7 @@ ErWasmHostCalls g_host_calls = {0};
 #include "test_core_boot_efi_vars.c"
 #include "test_core_boot_config.c"
 #include "test_core_boot_services.c"
+#include "test_core_ble_adv.c"
 #include "test_core_boot_erwire.c"
 #include "test_core_ui_surface.c"
 #include "test_core_input.c"
@@ -59,6 +60,7 @@ int main(void) {
   test_boot_efi_vars();
   test_boot_config_and_seal_strategy();
   test_boot_services_boundary();
+  test_ble_adv();
   test_work_admitted_relay_route();
   test_boot_profiles();
   test_hw_relay_endpoints();

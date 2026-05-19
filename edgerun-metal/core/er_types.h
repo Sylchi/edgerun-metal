@@ -36,6 +36,7 @@ typedef struct EFI_SIMPLE_TEXT_INPUT_PROTOCOL EFI_SIMPLE_TEXT_INPUT_PROTOCOL;
 typedef struct EFI_BOOT_SERVICES EFI_BOOT_SERVICES;
 typedef struct EFI_SERVICE_BINDING_PROTOCOL EFI_SERVICE_BINDING_PROTOCOL;
 typedef struct EFI_UDP4_PROTOCOL EFI_UDP4_PROTOCOL;
+typedef struct EFI_BLUETOOTH_HC_PROTOCOL EFI_BLUETOOTH_HC_PROTOCOL;
 typedef struct EFI_GRAPHICS_OUTPUT_PROTOCOL EFI_GRAPHICS_OUTPUT_PROTOCOL;
 typedef struct EFI_SYSTEM_TABLE EFI_SYSTEM_TABLE;
 typedef struct EFI_LOADED_IMAGE_PROTOCOL EFI_LOADED_IMAGE_PROTOCOL;
@@ -308,6 +309,29 @@ struct EFI_UDP4_PROTOCOL {
   void* Receive;
   void* Cancel;
   EFIAPI_UDP4_POLL_FN Poll;
+};
+
+typedef EFI_STATUS (EFIAPI *EFIAPI_BLUETOOTH_HC_TRANSFER_FN)(EFI_BLUETOOTH_HC_PROTOCOL* This,
+                                                             UINTN* BufferSize,
+                                                             void* Buffer,
+                                                             UINTN Timeout);
+typedef EFI_STATUS (EFIAPI *EFIAPI_BLUETOOTH_HC_ASYNC_RECEIVE_FN)(EFI_BLUETOOTH_HC_PROTOCOL* This,
+                                                                  BOOLEAN IsNewTransfer,
+                                                                  UINTN PollingInterval,
+                                                                  UINTN DataLength,
+                                                                  void* Callback,
+                                                                  void* Context);
+
+struct EFI_BLUETOOTH_HC_PROTOCOL {
+  EFIAPI_BLUETOOTH_HC_TRANSFER_FN SendCommand;
+  EFIAPI_BLUETOOTH_HC_TRANSFER_FN ReceiveEvent;
+  EFIAPI_BLUETOOTH_HC_ASYNC_RECEIVE_FN AsyncReceiveEvent;
+  EFIAPI_BLUETOOTH_HC_TRANSFER_FN SendACLData;
+  EFIAPI_BLUETOOTH_HC_TRANSFER_FN ReceiveACLData;
+  EFIAPI_BLUETOOTH_HC_ASYNC_RECEIVE_FN AsyncReceiveACLData;
+  EFIAPI_BLUETOOTH_HC_TRANSFER_FN SendSCOData;
+  EFIAPI_BLUETOOTH_HC_TRANSFER_FN ReceiveSCOData;
+  EFIAPI_BLUETOOTH_HC_ASYNC_RECEIVE_FN AsyncReceiveSCOData;
 };
 
 struct EFI_FILE_PROTOCOL {

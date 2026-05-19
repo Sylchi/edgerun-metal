@@ -12,6 +12,7 @@
 #include "er_boot_efi_vars.h"
 #include "er_boot_profile.h"
 #include "er_boot_services.h"
+#include "er_ble_adv.h"
 #include "er_bus.h"
 #include "er_crypto_blake3.h"
 #include "er_device_identity.h"
