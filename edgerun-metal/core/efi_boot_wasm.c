@@ -7,6 +7,17 @@ static UINT8 g_ui_boot_app_manifest_memory[ER_UI_BOOT_APP_COUNT][ER_UI_BOOT_APP_
 static const char g_ui_boot_user_app_wasm_label[] = "apps/user-app.wasm";
 static const char g_ui_boot_user_app_manifest_label[] = "apps/user-app.manifest";
 
+static const ErUiBootInstalledApp g_ui_boot_installed_user_app = {
+  g_ui_boot_user_app_wasm_label,
+  (UINTN)sizeof(g_ui_boot_user_app_wasm_label) - 1u,
+  g_edgerun_user_app_wasm,
+  ER_USER_APP_WASM_SIZE,
+  g_ui_boot_user_app_manifest_label,
+  (UINTN)sizeof(g_ui_boot_user_app_manifest_label) - 1u,
+  g_edgerun_user_app_manifest,
+  ER_USER_APP_MANIFEST_SIZE
+};
+
 enum {
   ER_UI_BOOT_PACKAGE_APP_SEQUENCE = 1u,
   ER_UI_BOOT_PACKAGE_MANIFEST_SEQUENCE = 2u
@@ -125,13 +136,21 @@ UINT8 er_ui_boot_execute_wasm_app(ErUiWasmAppRuntime* runtime) {
   return 1u;
 }
 
-UINT8 er_ui_boot_load_user_app_package(UINT8* module_memory,
-                                       UINT32 module_memory_size,
-                                       UINT8* manifest_memory,
-                                       UINT32 manifest_memory_size,
-                                       ErUiBootPackageStorage* storage,
-                                       UINT32 app_index,
-                                       ErAppLoadedPackage* out_loaded) {
+const ErUiBootInstalledApp* er_ui_boot_installed_app_for_slot(UINT32 app_index) {
+  if (app_index >= ER_UI_BOOT_APP_COUNT) {
+    return 0;
+  }
+  return &g_ui_boot_installed_user_app;
+}
+
+UINT8 er_ui_boot_load_installed_app_package(const ErUiBootInstalledApp* installed_app,
+                                            UINT8* module_memory,
+                                            UINT32 module_memory_size,
+                                            UINT8* manifest_memory,
+                                            UINT32 manifest_memory_size,
+                                            ErUiBootPackageStorage* storage,
+                                            UINT32 app_index,
+                                            ErAppLoadedPackage* out_loaded) {
   ErCryptoProvider crypto;
   ErVfsObjectLabelRef app_ref;
   ErVfsObjectLabelRef manifest_ref;
@@ -146,8 +165,12 @@ UINT8 er_ui_boot_load_user_app_package(UINT8* module_memory,
   ErAppPackageStorageObject app_object;
   ErAppPackageStorageObject manifest_object;
 
-  if (module_memory == 0 || manifest_memory == 0 || storage == 0 ||
+  if (installed_app == 0 || module_memory == 0 || manifest_memory == 0 || storage == 0 ||
       out_loaded == 0 ||
+      installed_app->app_label == 0 || installed_app->app_bytes == 0 ||
+      installed_app->manifest_label == 0 || installed_app->manifest_bytes == 0 ||
+      installed_app->app_label_len == 0u || installed_app->app_len == 0u ||
+      installed_app->manifest_label_len == 0u || installed_app->manifest_len == 0u ||
       module_memory_size == 0u || manifest_memory_size == 0u) {
     return 0u;
   }
@@ -160,16 +183,16 @@ UINT8 er_ui_boot_load_user_app_package(UINT8* module_memory,
                                             ER_UI_BOOT_PACKAGE_OBJECT_PACKET_CAPACITY) == 0u) {
     return 0u;
   }
-  if (er_vfs_prepare_object_label_ref(&crypto, g_ui_boot_user_app_wasm_label,
-                                      (UINTN)sizeof(g_ui_boot_user_app_wasm_label) - 1u,
-                                      g_edgerun_user_app_wasm,
-                                      ER_USER_APP_WASM_SIZE, &app_ref) == 0u) {
+  if (er_vfs_prepare_object_label_ref(&crypto, installed_app->app_label,
+                                      installed_app->app_label_len,
+                                      installed_app->app_bytes,
+                                      installed_app->app_len, &app_ref) == 0u) {
     return 0u;
   }
-  if (er_vfs_prepare_object_label_ref(&crypto, g_ui_boot_user_app_manifest_label,
-                                      (UINTN)sizeof(g_ui_boot_user_app_manifest_label) - 1u,
-                                      g_edgerun_user_app_manifest,
-                                      ER_USER_APP_MANIFEST_SIZE,
+  if (er_vfs_prepare_object_label_ref(&crypto, installed_app->manifest_label,
+                                      installed_app->manifest_label_len,
+                                      installed_app->manifest_bytes,
+                                      installed_app->manifest_len,
                                       &manifest_ref) == 0u) {
     return 0u;
   }
@@ -177,13 +200,13 @@ UINT8 er_ui_boot_load_user_app_package(UINT8* module_memory,
                                       &package) == 0u) {
     return 0u;
   }
-  if (er_vfs_prepare_object_packet(&crypto, g_edgerun_user_app_wasm,
-                                   ER_USER_APP_WASM_SIZE, 0u, 0u, 1u,
+  if (er_vfs_prepare_object_packet(&crypto, installed_app->app_bytes,
+                                   installed_app->app_len, 0u, 0u, 1u,
                                    &app_packet) == 0u) {
     return 0u;
   }
-  if (er_vfs_prepare_object_packet(&crypto, g_edgerun_user_app_manifest,
-                                   ER_USER_APP_MANIFEST_SIZE,
+  if (er_vfs_prepare_object_packet(&crypto, installed_app->manifest_bytes,
+                                   installed_app->manifest_len,
                                    0u, 0u, 1u, &manifest_packet) == 0u) {
     return 0u;
   }
@@ -235,6 +258,19 @@ UINT8 er_ui_boot_load_user_app_package(UINT8* module_memory,
                                                  &storage_source, &app_object,
                                                  &manifest_object, 0,
                                                  out_loaded);
+}
+
+UINT8 er_ui_boot_load_user_app_package(UINT8* module_memory,
+                                       UINT32 module_memory_size,
+                                       UINT8* manifest_memory,
+                                       UINT32 manifest_memory_size,
+                                       ErUiBootPackageStorage* storage,
+                                       UINT32 app_index,
+                                       ErAppLoadedPackage* out_loaded) {
+  return er_ui_boot_load_installed_app_package(er_ui_boot_installed_app_for_slot(app_index),
+                                               module_memory, module_memory_size,
+                                               manifest_memory, manifest_memory_size,
+                                               storage, app_index, out_loaded);
 }
 
 UINT8 er_ui_boot_prepare_user_app(ErUiWasmAppRuntime* runtime,
