@@ -67,6 +67,17 @@ typedef struct {
 } ErAppPackageStorageSource;
 
 typedef struct {
+  UINT16 abi_version;
+  UINT16 app_kind;
+  UINT32 installed_slot;
+  ErAppPackageManifest package;
+  ErVfsObjectRef app_ref;
+  ErVfsObjectRef manifest_ref;
+  ErVfsObjectRef ui_assets_ref;
+  ErAppPackageStorageSource storage_source;
+} ErAppPackageIndexEntry;
+
+typedef struct {
   ErHash retrieve_route_id;
   ErAppPackageObjectLoad object;
 } ErAppPackageStorageObject;
@@ -222,6 +233,16 @@ UINT8 er_app_prepare_package_storage_source(const ErCryptoProvider* crypto,
                                             const ErAdmittedRoute* manifest_route,
                                             const ErAdmittedRoute* ui_assets_route,
                                             ErAppPackageStorageSource* out_source);
+UINT8 er_app_prepare_package_index_entry(const ErCryptoProvider* crypto,
+                                         const ErAppPackageManifest* package,
+                                         const ErVfsObjectRef* app_ref,
+                                         const ErVfsObjectRef* manifest_ref,
+                                         const ErVfsObjectRef* ui_assets_ref,
+                                         const ErAppPackageStorageSource* storage_source,
+                                         UINT32 installed_slot,
+                                         ErAppPackageIndexEntry* out_entry);
+UINT8 er_app_package_index_entry_valid(const ErCryptoProvider* crypto,
+                                       const ErAppPackageIndexEntry* entry);
 UINT8 er_app_prepare_package_storage_object(const ErAppPackageStorageResponse* response,
                                             const ErHash* expected_route_id,
                                             const ErHash* expected_object_id,

@@ -29,7 +29,7 @@ identity-routed encrypted storage.
 
 - [ ] Store packages by content identity, not labels.
 - [ ] Sign packages and verify signatures before install.
-- [ ] Build a local package index.
+- [x] Build a local package index.
 - [ ] Add package rollback and removal.
 - [ ] Show package identity, permissions, and provenance in the shell.
 
