@@ -630,6 +630,12 @@ static void test_ui_ledger_app_switching(void) {
   check_int64("ui ledger apply payments nav", er_ui_ledger_app_apply_action(&apps, up, &changed), ER_UI_OK);
   check_int64("ui ledger tab changed", changed, 1);
   check_uint64("ui ledger payments focus", er_ui_workspace_focused_surface_id(&apps.shell), ER_UI_LEDGER_APP_PAYMENTS_ID);
+  check_uint64("ui ledger previous focus", er_ui_workspace_previous_surface_id(&apps.shell), ER_UI_LEDGER_APP_LEDGER_ID);
+  check_int64("ui ledger next focus", er_ui_workspace_focus_next_surface(&apps.shell), ER_UI_OK);
+  check_uint64("ui ledger access focus", er_ui_workspace_focused_surface_id(&apps.shell), ER_UI_LEDGER_APP_ACCESS_ID);
+  check_uint64("ui ledger previous payments focus", er_ui_workspace_previous_surface_id(&apps.shell), ER_UI_LEDGER_APP_PAYMENTS_ID);
+  check_int64("ui ledger previous switch", er_ui_workspace_focus_previous_surface(&apps.shell), ER_UI_OK);
+  check_uint64("ui ledger payments refocus", er_ui_workspace_focused_surface_id(&apps.shell), ER_UI_LEDGER_APP_PAYMENTS_ID);
 
   er_ui_scene_destroy(&scene);
   er_ui_runtime_state_destroy(&runtime);

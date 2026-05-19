@@ -20,7 +20,7 @@ identity-routed encrypted storage.
 
 - [x] Build the app launcher as the first real shell surface.
 - [x] Add app install/remove/update states.
-- [ ] Add retained UI state for shell navigation and app switching.
+- [x] Add retained UI state for shell navigation and app switching.
 - [ ] Add frame timing instrumentation for 4K targets.
 - [ ] Optimize redraws around dirty regions and stable GPU command batches.
 - [ ] Verify 4K layout correctness before claiming 120 Hz smoothness.
