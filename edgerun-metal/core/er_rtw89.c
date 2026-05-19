@@ -28,6 +28,15 @@ void er_rtw89_clear_pci_device(ErRtw89PciDevice* device) {
   device->mmio_base = 0;
 }
 
+void er_rtw89_clear_boot_device(ErRtw89BootDevice* device) {
+  if (device == 0) {
+    return;
+  }
+
+  er_rtw89_clear_pci_device(&device->pci);
+  er_firmware_loader_clear_image(&device->firmware);
+}
+
 UINT8 er_rtw89_prepare_pci_device(const ErPciDeviceSnapshot* snapshot, ErRtw89PciDevice* out_device) {
   ErPciBarInfo mmio;
 
@@ -50,4 +59,34 @@ UINT8 er_rtw89_prepare_pci_device(const ErPciDeviceSnapshot* snapshot, ErRtw89Pc
   out_device->device_id = er_pci_device_id(snapshot->id);
   out_device->mmio_base = mmio.base;
   return 1;
+}
+
+UINT8 er_rtw89_prepare_boot_device(const ErCryptoProvider* crypto,
+                                   const ErBootConfig* config,
+                                   const ErPciDeviceSnapshot* snapshot,
+                                   ErFirmwareReadFn read_fn,
+                                   void* read_ctx,
+                                   UINT8* firmware_bytes,
+                                   UINTN firmware_capacity,
+                                   ErRtw89BootDevice* out_device) {
+  ErRtw89PciDevice pci;
+
+  er_rtw89_clear_boot_device(out_device);
+  if (out_device == 0 ||
+      er_rtw89_prepare_pci_device(snapshot, &pci) == 0u ||
+      er_firmware_loader_load_for_pci(crypto,
+                                      config,
+                                      ER_RTW89_PCI_VENDOR_REALTEK,
+                                      pci.device_id,
+                                      read_fn,
+                                      read_ctx,
+                                      firmware_bytes,
+                                      firmware_capacity,
+                                      &out_device->firmware) == 0u) {
+    er_rtw89_clear_boot_device(out_device);
+    return 0u;
+  }
+
+  out_device->pci = pci;
+  return 1u;
 }
