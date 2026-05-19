@@ -14,8 +14,10 @@ host feeds that back and asks the model to make a concrete change instead of
 returning a review. When an agent finishes with pending proposals, the host
 writes only those proposed paths, runs the matching `repo-progress` scope checks,
 creates a git checkpoint commit only if verification passes, and then asks the
-model to continue from that checkpoint. Stop the loop with the terminal
-interrupt when you have enough progress.
+user for the next prompt. At each checkpoint boundary, the host compacts the
+assistant exchange and tool results into a carry-forward context item for the
+next user prompt. Enter `quit` or `exit` at the `codex user>` prompt when you
+have enough progress.
 
 Terminal output uses ANSI color when stdout or stderr is a terminal. Set
 `NO_COLOR=1` or `EDGERUN_C_COLOR=0` to disable color. Interactive reads apply
@@ -23,7 +25,8 @@ lightweight C syntax highlighting for `.c` and `.h` files. Agent responses rende
 Markdown structure, inline code, links, and fenced `c`, `h`, `md`, and `markdown`
 blocks with lightweight ANSI highlighting, and agent turns end with a host-side
 summary of turns, tool calls, checkpoints, review-only turns, proposals, and
-verified commit status.
+verified commit status. Checkpoint summaries are retained for the next prompt
+without replaying the full transcript.
 
 Agent mode reads local Codex auth from `CODEX_HOME/auth.json` or
 `~/.codex/auth.json`, uses `CODEX_TUI_MODEL` when set, and otherwise defaults to
