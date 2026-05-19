@@ -27,6 +27,18 @@
 #define DEFAULT_MODEL "gpt-5.5"
 #define CODEX_BACKEND_URL "https://chatgpt.com/backend-api/codex/responses"
 
+#define ANSI_RESET "\033[0m"
+#define ANSI_BOLD "\033[1m"
+#define ANSI_DIM "\033[2m"
+#define ANSI_RED "\033[31m"
+#define ANSI_GREEN "\033[32m"
+#define ANSI_YELLOW "\033[33m"
+#define ANSI_BLUE "\033[34m"
+#define ANSI_MAGENTA "\033[35m"
+#define ANSI_CYAN "\033[36m"
+#define ANSI_GRAY "\033[90m"
+#define C_KEYWORD_COUNT 33u
+
 static const char *AGENT_INSTRUCTIONS =
     "You are Codex running inside EdgeRun C. "
     "You do not have direct shell or process access. "
@@ -98,6 +110,14 @@ typedef struct {
     JsonItems output_items;
 } AgentTurn;
 
+typedef struct {
+    const char *model;
+    size_t turns;
+    size_t tool_calls;
+    size_t proposals_before_commit;
+    int commit_status;
+} AgentRunSummary;
+
 static void trim_newline(char *s);
 static const char *json_find_key_value_start(const char *json, const char *key);
 
@@ -131,6 +151,98 @@ static char *xstrdup(const char *s) {
 
 static bool starts_with(const char *s, const char *prefix) {
     return strncmp(s, prefix, strlen(prefix)) == 0;
+}
+
+static bool terminal_color_enabled(FILE *stream) {
+    if (getenv("EDGERUN_C_COLOR")) {
+        return strcmp(getenv("EDGERUN_C_COLOR"), "0") != 0;
+    }
+    if (getenv("NO_COLOR")) return false;
+    return isatty(fileno(stream)) != 0;
+}
+
+static const char *color_code(FILE *stream, const char *code) {
+    return terminal_color_enabled(stream) ? code : "";
+}
+
+static void print_icon_line(FILE *stream, const char *icon, const char *color, const char *fmt, ...) {
+    fprintf(stream, "%s%s%s ", color_code(stream, color), icon, color_code(stream, ANSI_RESET));
+    va_list ap;
+    va_start(ap, fmt);
+    vfprintf(stream, fmt, ap);
+    va_end(ap);
+    fputc('\n', stream);
+}
+
+static bool is_identifier_start_char(char c) {
+    return isalpha((unsigned char)c) || c == '_';
+}
+
+static bool is_identifier_char(char c) {
+    return isalnum((unsigned char)c) || c == '_';
+}
+
+static bool is_c_keyword(const char *s, size_t len) {
+    static const char *keywords[C_KEYWORD_COUNT] = {
+        "auto", "break", "case", "char", "const", "continue", "default",
+        "do", "double", "else", "enum", "extern", "float", "for", "goto",
+        "if", "inline", "int", "long", "register", "restrict", "return",
+        "short", "signed", "sizeof", "static", "struct", "switch", "typedef",
+        "union", "unsigned", "void", "while"
+    };
+    for (size_t i = 0; i < C_KEYWORD_COUNT; i++) {
+        if (strlen(keywords[i]) == len && memcmp(s, keywords[i], len) == 0) return true;
+    }
+    return false;
+}
+
+static bool path_is_c_like(const char *path) {
+    const char *dot = strrchr(path, '.');
+    if (!dot) return false;
+    return strcmp(dot, ".c") == 0 || strcmp(dot, ".h") == 0;
+}
+
+static void print_highlighted_c_line(const char *line, size_t len) {
+    bool at_line_start = true;
+    for (size_t i = 0; i < len;) {
+        char c = line[i];
+        if (at_line_start && c == '#') {
+            printf("%s%.*s%s", color_code(stdout, ANSI_YELLOW), (int)(len - i), line + i, color_code(stdout, ANSI_RESET));
+            return;
+        }
+        if (c != ' ' && c != '\t') at_line_start = false;
+        if (c == '/' && i + 1u < len && line[i + 1u] == '/') {
+            printf("%s%.*s%s", color_code(stdout, ANSI_GRAY), (int)(len - i), line + i, color_code(stdout, ANSI_RESET));
+            return;
+        }
+        if (c == '"' || c == '\'') {
+            char quote = c;
+            size_t start = i++;
+            while (i < len) {
+                if (line[i] == '\\' && i + 1u < len) {
+                    i += 2u;
+                } else if (line[i++] == quote) {
+                    break;
+                }
+            }
+            printf("%s%.*s%s", color_code(stdout, ANSI_GREEN), (int)(i - start), line + start, color_code(stdout, ANSI_RESET));
+        } else if (is_identifier_start_char(c)) {
+            size_t start = i++;
+            while (i < len && is_identifier_char(line[i])) i++;
+            if (is_c_keyword(line + start, i - start)) {
+                printf("%s%.*s%s", color_code(stdout, ANSI_MAGENTA), (int)(i - start), line + start, color_code(stdout, ANSI_RESET));
+            } else {
+                printf("%.*s", (int)(i - start), line + start);
+            }
+        } else if (isdigit((unsigned char)c)) {
+            size_t start = i++;
+            while (i < len && (isalnum((unsigned char)line[i]) || line[i] == '.')) i++;
+            printf("%s%.*s%s", color_code(stdout, ANSI_CYAN), (int)(i - start), line + start, color_code(stdout, ANSI_RESET));
+        } else {
+            putchar(c);
+            i++;
+        }
+    }
 }
 
 static bool contains_path_part(const char *path, const char *part) {
@@ -358,8 +470,11 @@ static void cmd_stats(Workspace *ws) {
         if (ws->files[i].text) text++;
         bytes += ws->files[i].len;
     }
-    printf("root: %s\nfiles loaded: %zu\ntext files: %zu\nbytes loaded: %zu\nproposals: %zu\n",
-           ws->root, ws->file_count, text, bytes, ws->proposal_count);
+    printf("%sroot:%s %s\n", color_code(stdout, ANSI_BOLD), color_code(stdout, ANSI_RESET), ws->root);
+    printf("%sfiles loaded:%s %zu\n", color_code(stdout, ANSI_CYAN), color_code(stdout, ANSI_RESET), ws->file_count);
+    printf("%stext files:%s %zu\n", color_code(stdout, ANSI_CYAN), color_code(stdout, ANSI_RESET), text);
+    printf("%sbytes loaded:%s %zu\n", color_code(stdout, ANSI_CYAN), color_code(stdout, ANSI_RESET), bytes);
+    printf("%sproposals:%s %zu\n", color_code(stdout, ANSI_CYAN), color_code(stdout, ANSI_RESET), ws->proposal_count);
 }
 
 static void cmd_search(Workspace *ws, const char *query, size_t limit) {
@@ -378,7 +493,10 @@ static void cmd_search(Workspace *ws, const char *query, size_t limit) {
             if (pos == f->len || text[pos] == '\n') {
                 size_t line_len = pos - start;
                 if (contains_case_insensitive(text + start, line_len, query)) {
-                    printf("%s:%zu: %.*s\n", f->path, line_no, (int)line_len, text + start);
+                    printf("%s%s%s:%s%zu%s: %.*s\n",
+                           color_code(stdout, ANSI_CYAN), f->path, color_code(stdout, ANSI_RESET),
+                           color_code(stdout, ANSI_YELLOW), line_no, color_code(stdout, ANSI_RESET),
+                           (int)line_len, text + start);
                     hits++;
                 }
                 start = pos + 1;
@@ -386,7 +504,7 @@ static void cmd_search(Workspace *ws, const char *query, size_t limit) {
             }
         }
     }
-    if (hits == 0) printf("no matches\n");
+    if (hits == 0) print_icon_line(stdout, "🔎", ANSI_YELLOW, "no matches");
 }
 
 static void cmd_read(Workspace *ws, const char *path, size_t start_line, size_t max_lines) {
@@ -406,6 +524,7 @@ static void cmd_read(Workspace *ws, const char *path, size_t start_line, size_t 
         return;
     }
     if (start_line == 0) start_line = 1;
+    bool highlight = path_is_c_like(path);
     const char *s = (const char *)data;
     size_t line_no = 1;
     size_t emitted = 0;
@@ -413,7 +532,12 @@ static void cmd_read(Workspace *ws, const char *path, size_t start_line, size_t 
     for (size_t pos = 0; pos <= len && (max_lines == 0 || emitted < max_lines); pos++) {
         if (pos == len || s[pos] == '\n') {
             if (line_no >= start_line) {
-                printf("%5zu | %.*s\n", line_no, (int)(pos - start), s + start);
+                printf("%s%5zu%s %s|%s ",
+                       color_code(stdout, ANSI_DIM), line_no, color_code(stdout, ANSI_RESET),
+                       color_code(stdout, ANSI_GRAY), color_code(stdout, ANSI_RESET));
+                if (highlight) print_highlighted_c_line(s + start, pos - start);
+                else printf("%.*s", (int)(pos - start), s + start);
+                putchar('\n');
                 emitted++;
             }
             start = pos + 1;
@@ -995,6 +1119,21 @@ static int cmd_commit_verified(Workspace *ws) {
     return status;
 }
 
+static void print_agent_summary(const AgentRunSummary *summary) {
+    printf("\n%s%s Turn summary %s\n",
+           color_code(stdout, ANSI_BOLD), "📋", color_code(stdout, ANSI_RESET));
+    printf("  %smodel:%s %s\n", color_code(stdout, ANSI_CYAN), color_code(stdout, ANSI_RESET), summary->model);
+    printf("  %sturns:%s %zu\n", color_code(stdout, ANSI_CYAN), color_code(stdout, ANSI_RESET), summary->turns);
+    printf("  %stool calls:%s %zu\n", color_code(stdout, ANSI_CYAN), color_code(stdout, ANSI_RESET), summary->tool_calls);
+    printf("  %sproposals before commit:%s %zu\n",
+           color_code(stdout, ANSI_CYAN), color_code(stdout, ANSI_RESET), summary->proposals_before_commit);
+    if (summary->commit_status == 0) {
+        print_icon_line(stdout, "✅", ANSI_GREEN, "verified commit flow completed");
+    } else {
+        print_icon_line(stdout, "❌", ANSI_RED, "verified commit flow failed with status %d", summary->commit_status);
+    }
+}
+
 static void trim_newline(char *s) {
     size_t n = strlen(s);
     while (n && (s[n - 1] == '\n' || s[n - 1] == '\r')) s[--n] = 0;
@@ -1015,19 +1154,19 @@ static char *next_token(char **cursor) {
 }
 
 static void print_help(void) {
-    puts("commands:");
-    puts("  help");
-    puts("  stats");
-    puts("  search <text> [limit]");
-    puts("  read <path> [start_line] [max_lines]");
-    puts("  propose <path>   # full content until .end");
-    puts("  show <path>");
-    puts("  diff [path]");
-    puts("  discard <path>");
-    puts("  discard --all");
-    puts("  commit           # writes staged in-memory replacements to disk");
-    puts("  commit-verified  # verifies scoped repo-progress, then git commits");
-    puts("  quit");
+    printf("%scommands:%s\n", color_code(stdout, ANSI_BOLD), color_code(stdout, ANSI_RESET));
+    puts("  ❔ help");
+    puts("  📊 stats");
+    puts("  🔎 search <text> [limit]");
+    puts("  📖 read <path> [start_line] [max_lines]");
+    puts("  ✍️  propose <path>   # full content until .end");
+    puts("  📖 show <path>");
+    puts("  🧾 diff [path]");
+    puts("  🗑️  discard <path>");
+    puts("  🗑️  discard --all");
+    puts("  💾 commit           # writes staged in-memory replacements to disk");
+    puts("  ✅ commit-verified  # verifies scoped repo-progress, then git commits");
+    puts("  🚪 quit");
 }
 
 static char *workspace_search_text_new(Workspace *ws, const char *query, size_t limit) {
@@ -1511,6 +1650,13 @@ static AgentTurn codex_stream_turn(const char *model, const CodexAuth *auth, con
 static int run_agent_prompt(Workspace *ws, const char *prompt) {
     const char *model = getenv("CODEX_TUI_MODEL");
     if (!model || !*model) model = DEFAULT_MODEL;
+    AgentRunSummary summary = {
+        .model = model,
+        .turns = 0,
+        .tool_calls = 0,
+        .proposals_before_commit = 0,
+        .commit_status = 0,
+    };
     CodexAuth auth = read_codex_auth();
     CodexSession session;
     codex_session_init(&session);
@@ -1522,23 +1668,33 @@ static int run_agent_prompt(Workspace *ws, const char *prompt) {
 
     for (;;) {
         AgentTurn turn = codex_stream_turn(model, &auth, &session, &history);
+        summary.turns++;
         for (size_t i = 0; i < turn.output_items.count; i++) {
             json_items_push(&history, xstrdup(turn.output_items.items[i]));
         }
         if (turn.tool_count == 0) {
             putchar('\n');
             agent_turn_free(&turn);
-            int commit_status = cmd_commit_verified(ws);
+            summary.proposals_before_commit = ws->proposal_count;
+            summary.commit_status = cmd_commit_verified(ws);
+            print_agent_summary(&summary);
             json_items_free(&history);
             free(auth.access_token);
             free(auth.account_id);
-            return commit_status;
+            return summary.commit_status;
         }
         for (size_t i = 0; i < turn.tool_count; i++) {
             bool ok = false;
-            fprintf(stderr, "\n[tool] %s\n", turn.tools[i].name);
+            summary.tool_calls++;
+            fprintf(stderr, "\n%s🔧 tool%s %s\n",
+                    color_code(stderr, ANSI_BLUE), color_code(stderr, ANSI_RESET), turn.tools[i].name);
             char *tool_out = execute_agent_tool_new(ws, &turn.tools[i], &ok);
-            fprintf(stderr, "[tool result] %.160s%s\n", tool_out, strlen(tool_out) > 160 ? "..." : "");
+            fprintf(stderr, "%s%s tool result%s %.160s%s\n",
+                    color_code(stderr, ok ? ANSI_GREEN : ANSI_RED),
+                    ok ? "✅" : "❌",
+                    color_code(stderr, ANSI_RESET),
+                    tool_out,
+                    strlen(tool_out) > 160 ? "..." : "");
             json_items_push(&history, tool_output_item_json_new(turn.tools[i].call_id, tool_out, ok));
             free(tool_out);
         }
@@ -1551,7 +1707,7 @@ static void repl(Workspace *ws) {
     char *line = NULL;
     size_t cap = 0;
     for (;;) {
-        printf("edgerun-c> ");
+        printf("%sedgerun-c>%s ", color_code(stdout, ANSI_BLUE), color_code(stdout, ANSI_RESET));
         fflush(stdout);
         if (getline(&line, &cap, stdin) == -1) break;
         trim_newline(line);
@@ -1624,6 +1780,9 @@ static int self_test(void) {
     if (strcmp(scope_for_path("codex/src/edgerun_c.c"), "codex") != 0) return 6;
     if (strcmp(test_target_for_scope("codex"), "codex-test") != 0) return 7;
     if (strcmp(test_target_for_scope("docs"), "repo-test") != 0) return 8;
+    if (!is_c_keyword("static", 6)) return 9;
+    if (is_c_keyword("status", 6)) return 10;
+    if (!path_is_c_like("codex/src/edgerun_c.c")) return 11;
     puts("self-test ok");
     return 0;
 }
@@ -1647,7 +1806,7 @@ int main(int argc, char **argv) {
     }
     Workspace ws;
     workspace_init(&ws, root);
-    printf("loaded %zu files from %s\n", ws.file_count, ws.root);
+    print_icon_line(stdout, "📦", ANSI_GREEN, "loaded %zu files from %s", ws.file_count, ws.root);
     fflush(stdout);
     int rc = 0;
     if (prompt) rc = run_agent_prompt(&ws, prompt);
