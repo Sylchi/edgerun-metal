@@ -51,67 +51,45 @@ static uint8_t eri_host_thread_count(size_t* out_count) {
   return 1u;
 }
 
-static uint8_t eri_append_findings_move(EriFindings* dst, EriFindings* src) {
-  EriFinding* grown;
+static uint8_t eri_append_array_move(void** dst_items, size_t* dst_len, size_t* dst_cap,
+                                     void** src_items, size_t* src_len, size_t* src_cap,
+                                     size_t item_size) {
+  void* grown;
 
-  if (src->len == 0u) {
+  if (*src_len == 0u) {
     return 1u;
   }
-  if (dst->len + src->len > dst->cap) {
-    grown = (EriFinding*)eri_grow(dst->items, sizeof(dst->items[0]), &dst->cap, dst->len + src->len);
+  if (*dst_len + *src_len > *dst_cap) {
+    grown = eri_grow(*dst_items, item_size, dst_cap, *dst_len + *src_len);
     if (grown == NULL) {
       return 0u;
     }
-    dst->items = grown;
+    *dst_items = grown;
   }
-  memcpy(dst->items + dst->len, src->items, sizeof(src->items[0]) * src->len);
-  dst->len += src->len;
-  src->items = NULL;
-  src->len = 0u;
-  src->cap = 0u;
+  memcpy((uint8_t*)*dst_items + item_size * *dst_len, *src_items, item_size * *src_len);
+  *dst_len += *src_len;
+  *src_items = NULL;
+  *src_len = 0u;
+  *src_cap = 0u;
   return 1u;
+}
+
+static uint8_t eri_append_findings_move(EriFindings* dst, EriFindings* src) {
+  return eri_append_array_move((void**)&dst->items, &dst->len, &dst->cap,
+                               (void**)&src->items, &src->len, &src->cap,
+                               sizeof(src->items[0]));
 }
 
 static uint8_t eri_append_functions_move(EriFunctions* dst, EriFunctions* src) {
-  EriFunction* grown;
-
-  if (src->len == 0u) {
-    return 1u;
-  }
-  if (dst->len + src->len > dst->cap) {
-    grown = (EriFunction*)eri_grow(dst->items, sizeof(dst->items[0]), &dst->cap, dst->len + src->len);
-    if (grown == NULL) {
-      return 0u;
-    }
-    dst->items = grown;
-  }
-  memcpy(dst->items + dst->len, src->items, sizeof(src->items[0]) * src->len);
-  dst->len += src->len;
-  src->items = NULL;
-  src->len = 0u;
-  src->cap = 0u;
-  return 1u;
+  return eri_append_array_move((void**)&dst->items, &dst->len, &dst->cap,
+                               (void**)&src->items, &src->len, &src->cap,
+                               sizeof(src->items[0]));
 }
 
 static uint8_t eri_append_sources_move(EriSourceFiles* dst, EriSourceFiles* src) {
-  EriSourceFile* grown;
-
-  if (src->len == 0u) {
-    return 1u;
-  }
-  if (dst->len + src->len > dst->cap) {
-    grown = (EriSourceFile*)eri_grow(dst->items, sizeof(dst->items[0]), &dst->cap, dst->len + src->len);
-    if (grown == NULL) {
-      return 0u;
-    }
-    dst->items = grown;
-  }
-  memcpy(dst->items + dst->len, src->items, sizeof(src->items[0]) * src->len);
-  dst->len += src->len;
-  src->items = NULL;
-  src->len = 0u;
-  src->cap = 0u;
-  return 1u;
+  return eri_append_array_move((void**)&dst->items, &dst->len, &dst->cap,
+                               (void**)&src->items, &src->len, &src->cap,
+                               sizeof(src->items[0]));
 }
 
 static void eri_file_analysis_free(EriFileAnalysis* analysis) {
@@ -563,11 +541,11 @@ static uint8_t eri_analyze(const EriVfs* vfs) {
     printf("    samples:\n");
     eri_print_smell_finding_samples(&findings, ERI_SAMPLE_LIMIT);
     printf("    focused magic-number candidates:\n");
-    eri_print_finding_kind_samples(&findings, "magic-number", ERI_SAMPLE_LIMIT);
+    eri_print_magic_number_finding_samples(&findings, ERI_SAMPLE_LIMIT);
     printf("    focused string-indexing candidates:\n");
-    eri_print_finding_kind_samples(&findings, "string-indexing", ERI_SAMPLE_LIMIT);
+    eri_print_string_indexing_finding_samples(&findings, ERI_SAMPLE_LIMIT);
     printf("    focused math primitive candidates:\n");
-    eri_print_finding_kind_samples(&findings, "math-primitive", ERI_SAMPLE_LIMIT);
+    eri_print_math_primitive_finding_samples(&findings, ERI_SAMPLE_LIMIT);
   }
 
   eri_analyze_cleanup(&packages, &funcs, &findings, &bins, &sources, &coverage_packages,

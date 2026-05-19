@@ -22,103 +22,68 @@ static uint8_t eri_file_contains_word(const EriVfsFile* file, const char* word) 
   return 0;
 }
 
-static EriCoveragePackage* eri_coverage_package_get(EriCoveragePackages* packages, const char* name) {
-  size_t i;
-  EriCoveragePackage* grown;
+_Static_assert(offsetof(EriCoveragePackage, package) == 0u, "package key must be first");
+_Static_assert(offsetof(EriSmellPackage, package) == 0u, "package key must be first");
+_Static_assert(offsetof(EriCpuPackage, package) == 0u, "package key must be first");
+_Static_assert(offsetof(EriWorldviewPackage, package) == 0u, "package key must be first");
 
-  for (i = 0; i < packages->len; ++i) {
-    if (strcmp(packages->items[i].package, name) == 0) {
-      return &packages->items[i];
+static void* eri_package_slot_get(void** items, size_t* len, size_t* cap, size_t item_size,
+                                  const char* name) {
+  size_t i;
+  void* grown;
+
+  for (i = 0; i < *len; ++i) {
+    void* item = (uint8_t*)*items + item_size * i;
+    const char* package = (const char*)item;
+
+    if (strcmp(package, name) == 0) {
+      return item;
     }
   }
-  if (packages->len + 1u > packages->cap) {
-    grown = (EriCoveragePackage*)eri_grow(packages->items, sizeof(packages->items[0]),
-                                          &packages->cap, packages->len + 1u);
+  if (*len + 1u > *cap) {
+    grown = eri_grow(*items, item_size, cap, *len + 1u);
     if (grown == NULL) {
       return NULL;
     }
-    packages->items = grown;
+    *items = grown;
   }
-  memset(&packages->items[packages->len], 0, sizeof(packages->items[packages->len]));
-  snprintf(packages->items[packages->len].package, sizeof(packages->items[packages->len].package), "%s", name);
-  ++packages->len;
-  return &packages->items[packages->len - 1u];
+  memset((uint8_t*)*items + item_size * *len, 0, item_size);
+  snprintf((char*)*items + item_size * *len, ERI_PACKAGE_MAX, "%s", name);
+  ++(*len);
+  return (uint8_t*)*items + item_size * (*len - 1u);
+}
+
+static EriCoveragePackage* eri_coverage_package_get(EriCoveragePackages* packages, const char* name) {
+  return (EriCoveragePackage*)eri_package_slot_get((void**)&packages->items, &packages->len,
+                                                   &packages->cap, sizeof(packages->items[0]),
+                                                   name);
 }
 
 static EriSmellPackage* eri_smell_package_get(EriSmellPackages* packages, const char* path) {
   char name[ERI_PACKAGE_MAX];
-  size_t i;
-  EriSmellPackage* grown;
 
   eri_package_name(path, name, sizeof(name));
-  for (i = 0; i < packages->len; ++i) {
-    if (strcmp(packages->items[i].package, name) == 0) {
-      return &packages->items[i];
-    }
-  }
-  if (packages->len + 1u > packages->cap) {
-    grown = (EriSmellPackage*)eri_grow(packages->items, sizeof(packages->items[0]),
-                                       &packages->cap, packages->len + 1u);
-    if (grown == NULL) {
-      return NULL;
-    }
-    packages->items = grown;
-  }
-  memset(&packages->items[packages->len], 0, sizeof(packages->items[packages->len]));
-  snprintf(packages->items[packages->len].package, sizeof(packages->items[packages->len].package), "%s", name);
-  ++packages->len;
-  return &packages->items[packages->len - 1u];
+  return (EriSmellPackage*)eri_package_slot_get((void**)&packages->items, &packages->len,
+                                                &packages->cap, sizeof(packages->items[0]),
+                                                name);
 }
 
 static EriCpuPackage* eri_cpu_package_get(EriCpuPackages* packages, const char* path) {
   char name[ERI_PACKAGE_MAX];
-  size_t i;
-  EriCpuPackage* grown;
 
   eri_package_name(path, name, sizeof(name));
-  for (i = 0; i < packages->len; ++i) {
-    if (strcmp(packages->items[i].package, name) == 0) {
-      return &packages->items[i];
-    }
-  }
-  if (packages->len + 1u > packages->cap) {
-    grown = (EriCpuPackage*)eri_grow(packages->items, sizeof(packages->items[0]),
-                                     &packages->cap, packages->len + 1u);
-    if (grown == NULL) {
-      return NULL;
-    }
-    packages->items = grown;
-  }
-  memset(&packages->items[packages->len], 0, sizeof(packages->items[packages->len]));
-  snprintf(packages->items[packages->len].package, sizeof(packages->items[packages->len].package), "%s", name);
-  ++packages->len;
-  return &packages->items[packages->len - 1u];
+  return (EriCpuPackage*)eri_package_slot_get((void**)&packages->items, &packages->len,
+                                              &packages->cap, sizeof(packages->items[0]),
+                                              name);
 }
 
 static EriWorldviewPackage* eri_worldview_package_get(EriWorldviewPackages* packages, const char* path) {
   char name[ERI_PACKAGE_MAX];
-  size_t i;
-  EriWorldviewPackage* grown;
 
   eri_package_name(path, name, sizeof(name));
-
-  for (i = 0; i < packages->len; ++i) {
-    if (strcmp(packages->items[i].package, name) == 0) {
-      return &packages->items[i];
-    }
-  }
-  if (packages->len + 1u > packages->cap) {
-    grown = (EriWorldviewPackage*)eri_grow(packages->items, sizeof(packages->items[0]),
-                                           &packages->cap, packages->len + 1u);
-    if (grown == NULL) {
-      return NULL;
-    }
-    packages->items = grown;
-  }
-  memset(&packages->items[packages->len], 0, sizeof(packages->items[packages->len]));
-  snprintf(packages->items[packages->len].package, sizeof(packages->items[packages->len].package), "%s", name);
-  ++packages->len;
-  return &packages->items[packages->len - 1u];
+  return (EriWorldviewPackage*)eri_package_slot_get((void**)&packages->items, &packages->len,
+                                                    &packages->cap, sizeof(packages->items[0]),
+                                                    name);
 }
 
 static uint8_t eri_source_uses_included_tool_tests(const EriVfs* vfs, const char* path) {

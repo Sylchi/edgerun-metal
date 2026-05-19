@@ -142,6 +142,8 @@ C
 printf '\177ELFtest' > "${TMP_DIR}/release.efi"
 
 report="$(REPO_INSPECT_THREADS=2 "${REPO_INSPECT}" "${TMP_DIR}")"
+scoped_tools_report="$(cd "${ROOT_DIR}" && REPO_INSPECT_THREADS=2 "${REPO_INSPECT}" tools)"
+scoped_codex_report="$(cd "${ROOT_DIR}" && REPO_INSPECT_THREADS=2 "${REPO_INSPECT}" codex)"
 if REPO_INSPECT_THREADS=0 "${REPO_INSPECT}" "${TMP_DIR}" >/dev/null 2>"${TMP_DIR}/invalid_threads.err"; then
   printf 'invalid thread count accepted\n' >&2
   exit 1
@@ -240,6 +242,21 @@ esac
 case "${report}" in
   *"ignore_misuse.c:"*"[ignore-misuse]"* ) ;;
   * ) printf 'missing optimizer ignore misuse report\n%s\n' "${report}" >&2; exit 1 ;;
+esac
+
+case "${scoped_tools_report}" in
+  *"top packages:"*"tools"*"loc"* ) ;;
+  * ) printf 'relative scope prefix was not preserved\n%s\n' "${scoped_tools_report}" >&2; exit 1 ;;
+esac
+
+case "${scoped_tools_report}" in
+  *"worldview: 0 findings"* ) ;;
+  * ) printf 'hosted tools were classified as runtime worldview findings\n%s\n' "${scoped_tools_report}" >&2; exit 1 ;;
+esac
+
+case "${scoped_codex_report}" in
+  *"worldview: 0 findings"* ) ;;
+  * ) printf 'hosted codex support was classified as runtime worldview findings\n%s\n' "${scoped_codex_report}" >&2; exit 1 ;;
 esac
 
 printf 'repo-inspect tests passed\n'

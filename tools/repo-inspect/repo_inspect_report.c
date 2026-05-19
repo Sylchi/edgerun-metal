@@ -166,6 +166,8 @@ static int eri_cmp_duplicate(const void* a, const void* b) {
   return 0;
 }
 
+typedef uint8_t (*EriFindingPredicate)(const EriFinding* finding);
+
 static uint8_t eri_lines_near(uint32_t a, uint32_t b) {
   return (uint8_t)(a <= b ? b - a <= ERI_DUP_BLOCK_LINES : a - b <= ERI_DUP_BLOCK_LINES);
 }
@@ -281,29 +283,29 @@ static uint64_t eri_count_findings_kind(const EriFindings* findings, const char*
   return count;
 }
 
-static void eri_print_finding_kind_samples(const EriFindings* findings, const char* kind, size_t limit) {
-  size_t i;
-  size_t shown = 0u;
-
-  for (i = 0u; i < findings->len && shown < limit; ++i) {
-    if (strcmp(findings->items[i].kind, kind) != 0) {
-      continue;
-    }
-    printf("    %s:%u [%s] %s\n", findings->items[i].path, findings->items[i].line,
-           findings->items[i].kind, findings->items[i].text);
-    ++shown;
-  }
-  if (shown == 0u) {
-    printf("    none\n");
-  }
-}
-
 static uint8_t eri_finding_is_cpu_cost(const EriFinding* finding) {
   return (uint8_t)(strncmp(finding->kind, "cpu-", 4u) == 0);
 }
 
 static uint8_t eri_finding_is_worldview_risk(const EriFinding* finding) {
   return (uint8_t)(strncmp(finding->kind, "world-", 6u) == 0);
+}
+
+static uint8_t eri_finding_is_smell(const EriFinding* finding) {
+  return (uint8_t)(eri_finding_is_cpu_cost(finding) == 0u &&
+                   eri_finding_is_worldview_risk(finding) == 0u);
+}
+
+static uint8_t eri_finding_is_magic_number(const EriFinding* finding) {
+  return (uint8_t)(strcmp(finding->kind, "magic-number") == 0);
+}
+
+static uint8_t eri_finding_is_string_indexing(const EriFinding* finding) {
+  return (uint8_t)(strcmp(finding->kind, "string-indexing") == 0);
+}
+
+static uint8_t eri_finding_is_math_primitive(const EriFinding* finding) {
+  return (uint8_t)(strcmp(finding->kind, "math-primitive") == 0);
 }
 
 static uint64_t eri_count_cpu_findings(const EriFindings* findings) {
@@ -343,12 +345,13 @@ static uint64_t eri_count_smell_findings(const EriFindings* findings) {
   return count;
 }
 
-static void eri_print_cpu_finding_samples(const EriFindings* findings, size_t limit) {
+static void eri_print_filtered_finding_samples(const EriFindings* findings, size_t limit,
+                                               EriFindingPredicate predicate) {
   size_t i;
   size_t shown = 0u;
 
   for (i = 0u; i < findings->len && shown < limit; ++i) {
-    if (eri_finding_is_cpu_cost(&findings->items[i]) == 0u) {
+    if (predicate(&findings->items[i]) == 0u) {
       continue;
     }
     printf("    %s:%u [%s] %s\n", findings->items[i].path, findings->items[i].line,
@@ -358,41 +361,30 @@ static void eri_print_cpu_finding_samples(const EriFindings* findings, size_t li
   if (shown == 0u) {
     printf("    none\n");
   }
+}
+
+static void eri_print_cpu_finding_samples(const EriFindings* findings, size_t limit) {
+  eri_print_filtered_finding_samples(findings, limit, eri_finding_is_cpu_cost);
 }
 
 static void eri_print_worldview_finding_samples(const EriFindings* findings, size_t limit) {
-  size_t i;
-  size_t shown = 0u;
-
-  for (i = 0u; i < findings->len && shown < limit; ++i) {
-    if (eri_finding_is_worldview_risk(&findings->items[i]) == 0u) {
-      continue;
-    }
-    printf("    %s:%u [%s] %s\n", findings->items[i].path, findings->items[i].line,
-           findings->items[i].kind, findings->items[i].text);
-    ++shown;
-  }
-  if (shown == 0u) {
-    printf("    none\n");
-  }
+  eri_print_filtered_finding_samples(findings, limit, eri_finding_is_worldview_risk);
 }
 
 static void eri_print_smell_finding_samples(const EriFindings* findings, size_t limit) {
-  size_t i;
-  size_t shown = 0u;
+  eri_print_filtered_finding_samples(findings, limit, eri_finding_is_smell);
+}
 
-  for (i = 0u; i < findings->len && shown < limit; ++i) {
-    if (eri_finding_is_cpu_cost(&findings->items[i]) != 0u ||
-        eri_finding_is_worldview_risk(&findings->items[i]) != 0u) {
-      continue;
-    }
-    printf("    %s:%u [%s] %s\n", findings->items[i].path, findings->items[i].line,
-           findings->items[i].kind, findings->items[i].text);
-    ++shown;
-  }
-  if (shown == 0u) {
-    printf("    none\n");
-  }
+static void eri_print_magic_number_finding_samples(const EriFindings* findings, size_t limit) {
+  eri_print_filtered_finding_samples(findings, limit, eri_finding_is_magic_number);
+}
+
+static void eri_print_string_indexing_finding_samples(const EriFindings* findings, size_t limit) {
+  eri_print_filtered_finding_samples(findings, limit, eri_finding_is_string_indexing);
+}
+
+static void eri_print_math_primitive_finding_samples(const EriFindings* findings, size_t limit) {
+  eri_print_filtered_finding_samples(findings, limit, eri_finding_is_math_primitive);
 }
 
 static uint8_t eri_collect_smell_packages(const EriFindings* findings, EriSmellPackages* packages) {
