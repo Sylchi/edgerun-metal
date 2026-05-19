@@ -54,11 +54,26 @@ static EFI_STATUS EFIAPI test_ble_receive_event(EFI_BLUETOOTH_HC_PROTOCOL* This,
 }
 
 static void test_ble_adv(void) {
+  enum {
+    TEST_BLE_WIFI_CAP_AP = 1u,
+    TEST_BLE_WIFI_CAP_STA = 2u,
+    TEST_BLE_WIFI_CAP_BOTH = TEST_BLE_WIFI_CAP_AP | TEST_BLE_WIFI_CAP_STA,
+    TEST_BLE_WIFI_GROUP_ID = 0x44556677u,
+    TEST_BLE_WIFI_OTHER_GROUP_ID = 0x44556678u,
+    TEST_BLE_WIFI_CHANNEL = 6u,
+    TEST_BLE_WIFI_NODE_A = 0x0102030405060708ull,
+    TEST_BLE_WIFI_NODE_B = 0x0102030405060709ull,
+    TEST_BLE_WIFI_NODE_C = 0x0102030405060710ull
+  };
   static const UINT8 payload[ER_BLE_ADV_PAYLOAD_BYTES] = {
     'e', 'd', 'g', 'e', 'r', 'u', 'n', ':', 'b', 'l', 'e', ':', '0', '0', '1', '2', '3', '4'
   };
   ErBleAdvPacket packet;
   ErBleAdvPacket decoded;
+  ErBleWifiRoleAdvert wifi_a;
+  ErBleWifiRoleAdvert wifi_b;
+  ErBleWifiRoleAdvert wifi_c;
+  UINT8 wifi_payload[ER_BLE_ADV_PAYLOAD_BYTES];
   ErBleAdvEfi ble;
   EFI_BOOT_SERVICES boot_services;
   EFI_SYSTEM_TABLE system_table;
@@ -94,6 +109,100 @@ static void test_ble_adv(void) {
               er_ble_adv_decode_data(data, data_len, &decoded), 0);
   check_int64("ble adv re-encode after malformed case",
               er_ble_adv_encode_data(&packet, data, &data_len), 1);
+
+  check_int64("ble wifi reject no capability",
+              er_ble_wifi_role_advert_prepare(0u,
+                                              ER_BLE_WIFI_ROLE_NONE,
+                                              0u,
+                                              TEST_BLE_WIFI_CHANNEL,
+                                              TEST_BLE_WIFI_GROUP_ID,
+                                              TEST_BLE_WIFI_NODE_A,
+                                              &wifi_a),
+              0);
+  check_int64("ble wifi reject incompatible preferred ap",
+              er_ble_wifi_role_advert_prepare(TEST_BLE_WIFI_CAP_STA,
+                                              ER_BLE_WIFI_ROLE_AP,
+                                              0u,
+                                              TEST_BLE_WIFI_CHANNEL,
+                                              TEST_BLE_WIFI_GROUP_ID,
+                                              TEST_BLE_WIFI_NODE_A,
+                                              &wifi_a),
+              0);
+  check_int64("ble wifi prepare ap-only advert",
+              er_ble_wifi_role_advert_prepare(TEST_BLE_WIFI_CAP_AP,
+                                              ER_BLE_WIFI_ROLE_AP,
+                                              1u,
+                                              TEST_BLE_WIFI_CHANNEL,
+                                              TEST_BLE_WIFI_GROUP_ID,
+                                              TEST_BLE_WIFI_NODE_A,
+                                              &wifi_a),
+              1);
+  check_int64("ble wifi prepare sta-only advert",
+              er_ble_wifi_role_advert_prepare(TEST_BLE_WIFI_CAP_STA,
+                                              ER_BLE_WIFI_ROLE_STA,
+                                              1u,
+                                              TEST_BLE_WIFI_CHANNEL,
+                                              TEST_BLE_WIFI_GROUP_ID,
+                                              TEST_BLE_WIFI_NODE_B,
+                                              &wifi_b),
+              1);
+  check_int64("ble wifi encode payload",
+              er_ble_wifi_role_encode_payload(&wifi_a, wifi_payload), 1);
+  check_int64("ble wifi decode payload",
+              er_ble_wifi_role_decode_payload(wifi_payload, &wifi_c), 1);
+  check_uint64("ble wifi decoded group", wifi_c.group_id, TEST_BLE_WIFI_GROUP_ID);
+  check_uint64("ble wifi decoded nonce", wifi_c.node_nonce, TEST_BLE_WIFI_NODE_A);
+  check_int64("ble wifi local ap remote sta",
+              er_ble_wifi_role_decide(&wifi_a, &wifi_b),
+              ER_BLE_WIFI_ROLE_DECISION_LOCAL_AP);
+  check_int64("ble wifi local sta remote ap",
+              er_ble_wifi_role_decide(&wifi_b, &wifi_a),
+              ER_BLE_WIFI_ROLE_DECISION_LOCAL_STA);
+
+  check_int64("ble wifi prepare both lower nonce",
+              er_ble_wifi_role_advert_prepare(TEST_BLE_WIFI_CAP_BOTH,
+                                              ER_BLE_WIFI_ROLE_NONE,
+                                              3u,
+                                              TEST_BLE_WIFI_CHANNEL,
+                                              TEST_BLE_WIFI_GROUP_ID,
+                                              TEST_BLE_WIFI_NODE_A,
+                                              &wifi_a),
+              1);
+  check_int64("ble wifi prepare both higher nonce",
+              er_ble_wifi_role_advert_prepare(TEST_BLE_WIFI_CAP_BOTH,
+                                              ER_BLE_WIFI_ROLE_NONE,
+                                              3u,
+                                              TEST_BLE_WIFI_CHANNEL,
+                                              TEST_BLE_WIFI_GROUP_ID,
+                                              TEST_BLE_WIFI_NODE_B,
+                                              &wifi_b),
+              1);
+  check_int64("ble wifi higher nonce becomes ap",
+              er_ble_wifi_role_decide(&wifi_b, &wifi_a),
+              ER_BLE_WIFI_ROLE_DECISION_LOCAL_AP);
+  check_int64("ble wifi lower nonce becomes sta",
+              er_ble_wifi_role_decide(&wifi_a, &wifi_b),
+              ER_BLE_WIFI_ROLE_DECISION_LOCAL_STA);
+  check_int64("ble wifi prepare higher priority",
+              er_ble_wifi_role_advert_prepare(TEST_BLE_WIFI_CAP_BOTH,
+                                              ER_BLE_WIFI_ROLE_NONE,
+                                              4u,
+                                              TEST_BLE_WIFI_CHANNEL,
+                                              TEST_BLE_WIFI_GROUP_ID,
+                                              TEST_BLE_WIFI_NODE_C,
+                                              &wifi_c),
+              1);
+  check_int64("ble wifi priority beats nonce",
+              er_ble_wifi_role_decide(&wifi_c, &wifi_b),
+              ER_BLE_WIFI_ROLE_DECISION_LOCAL_AP);
+  wifi_c.group_id = TEST_BLE_WIFI_OTHER_GROUP_ID;
+  check_int64("ble wifi ignores other group",
+              er_ble_wifi_role_decide(&wifi_c, &wifi_b),
+              ER_BLE_WIFI_ROLE_DECISION_NONE);
+  wifi_c = wifi_b;
+  check_int64("ble wifi identical nonce conflicts",
+              er_ble_wifi_role_decide(&wifi_b, &wifi_c),
+              ER_BLE_WIFI_ROLE_DECISION_CONFLICT);
 
   er_mem_zero((UINT8*)&g_test_ble_hc, (UINTN)sizeof(g_test_ble_hc));
   er_mem_zero((UINT8*)&boot_services, (UINTN)sizeof(boot_services));

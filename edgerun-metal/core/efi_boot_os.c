@@ -1,5 +1,25 @@
 #include "efi_boot_internal.h"
 
+static UINT64 er_boot_ble_wifi_node_nonce(const ErBootServicesReport* boot_report) {
+  UINT64 nonce = ER_BOOT_BLE_WIFI_NODE_NONCE;
+  UINT32 i;
+
+  if (boot_report == 0 ||
+      boot_report->boot_admission_present == 0u ||
+      er_mem_any_nonzero(boot_report->boot_admission.record_hash.bytes, ER_HASH_LEN) == 0u) {
+    return nonce;
+  }
+
+  nonce = 0u;
+  for (i = 0u; i < sizeof(nonce); ++i) {
+    nonce |= ((UINT64)boot_report->boot_admission.record_hash.bytes[i]) << (i * ER_BOOT_BYTE_BITS);
+  }
+  if (nonce == 0u) {
+    return ER_BOOT_BLE_WIFI_NODE_NONCE;
+  }
+  return nonce;
+}
+
 void er_run_os_path(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE* SystemTable,
                     const ErBootServicesReport* boot_report) {
   er_ui_scene_budget_t scene_budget;
@@ -24,10 +44,10 @@ void er_run_os_path(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE* SystemTable,
   ErNativeBootState native_relay;
   ErBleAdvEfi ble_adv;
   ErBleAdvPacket ble_packet;
+  ErBleWifiRoleAdvert ble_wifi_role;
+  UINT8 ble_payload[ER_BLE_ADV_PAYLOAD_BYTES];
+  UINT64 ble_node_nonce;
   vr_font_face_t* font = 0;
-  static const UINT8 ble_payload[] = {
-    'e', 'd', 'g', 'e', 'r', 'u', 'n', '-', 'e', 'f', 'i', '-', 'b', 'l', 'e'
-  };
 
   er_mem_zero((UINT8*)apps, (UINTN)sizeof(apps));
   er_mem_zero((UINT8*)&native_relay, (UINTN)sizeof(native_relay));
@@ -40,12 +60,21 @@ void er_run_os_path(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE* SystemTable,
     er_println("");
     return;
   }
-  if (er_ble_adv_prepare_packet(ER_BLE_ADV_CHANNEL_ID,
+  ble_node_nonce = er_boot_ble_wifi_node_nonce(boot_report);
+  if (er_ble_wifi_role_advert_prepare(ER_BLE_WIFI_CAPABILITY_AP | ER_BLE_WIFI_CAPABILITY_STA,
+                                      ER_BLE_WIFI_ROLE_NONE,
+                                      ER_BOOT_BLE_WIFI_PRIORITY,
+                                      ER_BOOT_BLE_WIFI_CHANNEL,
+                                      ER_BOOT_BLE_WIFI_GROUP_ID,
+                                      ble_node_nonce,
+                                      &ble_wifi_role) == 0u ||
+      er_ble_wifi_role_encode_payload(&ble_wifi_role, ble_payload) == 0u ||
+      er_ble_adv_prepare_packet(ER_BLE_ADV_CHANNEL_ID,
                                 ER_BOOT_BLE_ADV_SEQUENCE,
                                 0u,
                                 1u,
                                 ble_payload,
-                                (UINT8)sizeof(ble_payload),
+                                ER_BLE_ADV_PAYLOAD_BYTES,
                                 &ble_packet) == 0u ||
       er_ble_adv_efi_init(SystemTable, &ble_adv) == 0u ||
       er_ble_adv_efi_start_advertising(&ble_adv, &ble_packet) == 0u) {
