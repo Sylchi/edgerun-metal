@@ -1,93 +1,66 @@
 #include "test_core_internal.h"
 
 enum {
-  TEST_SEAL_TAG_BYTES = 16u
+  TEST_SEAL_ROOT_KEY_SEED = 0x5au,
+  TEST_SEAL_RECIPIENT_SEED = 0x20u,
+  TEST_SEAL_OTHER_RECIPIENT_SEED = 0x40u
 };
 
-static UINT8 test_seal_bytes(void* ctx, const ErIdentity* recipient,
-                             const ErByteSpan* aad,
-                             const ErByteSpan* plaintext,
-                             ErMutableBytes* sealed_out) {
+static void check_bytes_equal(const char* name,
+                              const UINT8* actual,
+                              const UINT8* expected,
+                              UINTN len) {
   UINTN i;
-  UINT8 key = (UINT8)(UINTN)ctx;
 
-  if (er_identity_valid(recipient) == 0u || aad == 0 ||
-      plaintext == 0 || plaintext->bytes == 0 || plaintext->len == 0u ||
-      sealed_out == 0 || sealed_out->bytes == 0 ||
-      sealed_out->capacity < plaintext->len + TEST_SEAL_TAG_BYTES) {
-    return 0u;
+  ++g_total;
+  for (i = 0u; i < len; ++i) {
+    if (actual[i] != expected[i]) {
+      fprintf(stderr, "FAIL %s: byte %llu got 0x%02x expected 0x%02x\n",
+              name, (unsigned long long)i, actual[i], expected[i]);
+      ++g_failed;
+      return;
+    }
   }
-  if (aad->len > 0u && aad->bytes == 0) {
-    return 0u;
-  }
-  for (i = 0u; i < plaintext->len; ++i) {
-    sealed_out->bytes[i] = (UINT8)(plaintext->bytes[i] ^ key ^
-                                   recipient->material[i % recipient->material_len]);
-  }
-  for (i = 0u; i < TEST_SEAL_TAG_BYTES; ++i) {
-    sealed_out->bytes[plaintext->len + i] =
-        (UINT8)(key + recipient->material[i % recipient->material_len] +
-                (aad->len == 0u ? 0u : aad->bytes[i % aad->len]) + (UINT8)i);
-  }
-  sealed_out->len = plaintext->len + TEST_SEAL_TAG_BYTES;
-  return 1u;
-}
-
-static UINT8 test_open_bytes(void* ctx, const ErIdentity* recipient,
-                             const ErByteSpan* aad,
-                             const ErByteSpan* sealed,
-                             ErMutableBytes* plaintext_out) {
-  UINTN i;
-  UINTN plaintext_len;
-  UINT8 key = (UINT8)(UINTN)ctx;
-
-  if (er_identity_valid(recipient) == 0u || aad == 0 ||
-      sealed == 0 || sealed->bytes == 0 || sealed->len <= TEST_SEAL_TAG_BYTES ||
-      plaintext_out == 0 || plaintext_out->bytes == 0) {
-    return 0u;
-  }
-  if (aad->len > 0u && aad->bytes == 0) {
-    return 0u;
-  }
-  plaintext_len = sealed->len - TEST_SEAL_TAG_BYTES;
-  if (plaintext_out->capacity < plaintext_len) {
-    return 0u;
-  }
-  for (i = 0u; i < plaintext_len; ++i) {
-    plaintext_out->bytes[i] = (UINT8)(sealed->bytes[i] ^ key ^
-                                      recipient->material[i % recipient->material_len]);
-  }
-  plaintext_out->len = plaintext_len;
-  return 1u;
 }
 
 static void test_sealed_content_object_format(void) {
   static const UINT8 aad_bytes[] = {'r', 'o', 'u', 't', 'e'};
   static const UINT8 plaintext_bytes[] = {'p', 'a', 'c', 'k', 'a', 'g', 'e'};
   ErCryptoProvider crypto;
+  ErCryptoBlake3Sealer sealer;
   ErIdentity recipient;
+  ErIdentity other_recipient;
   ErByteSpan aad;
   ErByteSpan plaintext;
   ErMutableBytes sealed_out;
   ErSealedContentObjectHeader header;
+  UINT8 root_key[ER_CRYPTO_BLAKE3_SEAL_ROOT_KEY_LEN];
   UINT8 recipient_key[ER_PUBLIC_KEY_LEN];
-  UINT8 sealed_bytes[64];
+  UINT8 other_recipient_key[ER_PUBLIC_KEY_LEN];
+  UINT8 sealed_bytes[128];
   UINT8 opened_bytes[64];
 
-  crypto.ctx = (void*)(UINTN)0x5au;
-  crypto.hash = test_hash;
-  crypto.seal = test_seal_bytes;
-  crypto.open = test_open_bytes;
-  crypto.sign = 0;
-  crypto.verify = 0;
-
-  test_fill_bytes(recipient_key, (UINTN)sizeof(recipient_key), 0x20u);
+  test_fill_bytes(root_key, (UINTN)sizeof(root_key), TEST_SEAL_ROOT_KEY_SEED);
+  check_int64("seal blake3 sealer init",
+              er_crypto_blake3_sealer_init(&sealer, root_key), 1);
+  er_crypto_blake3_sealing_provider(&sealer, &crypto);
+  test_fill_bytes(recipient_key, (UINTN)sizeof(recipient_key),
+                  TEST_SEAL_RECIPIENT_SEED);
+  test_fill_bytes(other_recipient_key, (UINTN)sizeof(other_recipient_key),
+                  TEST_SEAL_OTHER_RECIPIENT_SEED);
   check_int64("seal recipient identity",
               er_identity_prepare(ER_IDENTITY_TYPE_PUBLIC_KEY,
                                   ER_IDENTITY_BACKING_ED25519,
                                   recipient_key,
                                   (UINT16)sizeof(recipient_key),
                                   &recipient),
+              1);
+  check_int64("seal other recipient identity",
+              er_identity_prepare(ER_IDENTITY_TYPE_PUBLIC_KEY,
+                                  ER_IDENTITY_BACKING_ED25519,
+                                  other_recipient_key,
+                                  (UINT16)sizeof(other_recipient_key),
+                                  &other_recipient),
               1);
 
   aad.bytes = aad_bytes;
@@ -107,11 +80,13 @@ static void test_sealed_content_object_format(void) {
   check_int64("seal content strategy", header.strategy,
               ER_SEAL_STRATEGY_DIRECT_RECIPIENT);
   check_int64("seal content algorithm", header.algorithm,
-              ER_SEAL_ALGORITHM_AES256_GCM);
+              ER_SEAL_ALGORITHM_BLAKE3_STREAM_AUTH);
   check_uint64("seal content plaintext len", header.plaintext_len,
                (UINT64)sizeof(plaintext_bytes));
   check_uint64("seal content payload len", header.sealed_payload_len,
-               (UINT64)(sizeof(plaintext_bytes) + TEST_SEAL_TAG_BYTES));
+               (UINT64)(ER_CRYPTO_BLAKE3_SEAL_HEADER_LEN +
+                        sizeof(plaintext_bytes) +
+                        ER_CRYPTO_BLAKE3_SEAL_TAG_LEN));
   check_int64("seal content valid",
               er_seal_content_object_valid(&crypto, &header, &aad,
                                            sealed_bytes, sealed_out.len),
@@ -131,7 +106,18 @@ static void test_sealed_content_object_format(void) {
                 1);
     check_uint64("seal content open len", plaintext_out.len,
                  (UINT64)sizeof(plaintext_bytes));
-    check_int64("seal content opened byte", opened_bytes[0], plaintext_bytes[0]);
+    check_bytes_equal("seal content opened bytes", opened_bytes,
+                      plaintext_bytes, (UINTN)sizeof(plaintext_bytes));
+    check_int64("seal content reject wrong recipient",
+                er_crypto_open(&crypto, &other_recipient, &aad, &sealed_span,
+                               &plaintext_out),
+                0);
+    aad.len = 0u;
+    check_int64("seal content reject open aad mismatch",
+                er_crypto_open(&crypto, &recipient, &aad, &sealed_span,
+                               &plaintext_out),
+                0);
+    aad.len = (UINTN)sizeof(aad_bytes);
   }
 
   sealed_bytes[0] ^= 1u;
