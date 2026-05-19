@@ -1,4 +1,4 @@
-.PHONY: all check clean er-build repo-check repo-test repo-check-bin repo-inspect repo-progress erwire-decode erwire-test codex-test crypto-configure crypto-build crypto-test crypto-bench crypto-bench-avx2 crypto-bench-avx512 crypto-bench-avx512-threads crypto-bench-native-threads crypto-bench-sota edgerun-metal edgerun-os edgerun-check varfont-configure varfont-build varfont-test ui-core-configure ui-core-build ui-core-test
+.PHONY: all check clean er-build repo-check repo-test repo-check-bin repo-inspect repo-progress erwire-decode erwire-test codex-test crypto-configure crypto-build crypto-test crypto-bench crypto-bench-avx2 crypto-bench-avx512 crypto-bench-avx512-threads crypto-bench-native-threads crypto-bench-sota edgerun-metal edgerun-os edgerun-check varfont-configure varfont-build varfont-test ui-core-configure ui-core-build ui-core-sdl-configure ui-core-sdl-build ui-core-sdl-test ui-core-test
 
 ifeq ($(origin CC),default)
 CC := clang
@@ -24,6 +24,7 @@ endif
 
 VARFONT_BUILD_DIR ?= .build/varfont
 UI_CORE_BUILD_DIR ?= .build/edgerun-ui-core
+UI_CORE_SDL_BUILD_DIR ?= .build/edgerun-ui-core-sdl
 CRYPTO_BUILD_DIR ?= .build/edgerun-crypto
 CRYPTO_AVX2_BUILD_DIR ?= .build/edgerun-crypto-avx2
 CRYPTO_AVX512_BUILD_DIR ?= .build/edgerun-crypto-avx512
@@ -121,6 +122,16 @@ ui-core-configure:
 
 ui-core-build: ui-core-configure
 	cmake --build $(UI_CORE_BUILD_DIR)
+
+ui-core-sdl-configure:
+	cmake -S edgerun-ui-core -B $(UI_CORE_SDL_BUILD_DIR) -G "$(UI_CORE_CMAKE_GENERATOR)" $(CMAKE_TOOLCHAIN_ARGS) -DER_UI_CORE_BUILD_SDL_HOST=ON
+
+ui-core-sdl-build: ui-core-sdl-configure
+	cmake --build $(UI_CORE_SDL_BUILD_DIR) --target er_ui_sdl_shell
+
+ui-core-sdl-test: ui-core-sdl-configure
+	cmake --build $(UI_CORE_SDL_BUILD_DIR)
+	ctest --test-dir $(UI_CORE_SDL_BUILD_DIR) --output-on-failure
 
 ui-core-test: ui-core-build
 	ctest --test-dir $(UI_CORE_BUILD_DIR) --output-on-failure
