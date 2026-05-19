@@ -15,7 +15,13 @@ static void test_network_coordinator(void) {
     NET_TEST_WIFI_CHANNEL = 6u,
     NET_TEST_PAYLOAD_LEN = 2u,
     NET_TEST_PAYLOAD_OFFSET = NET_TEST_VIRTIO_HDR_LEN + ER_NET_ETH_HEADER_LEN,
-    NET_TEST_PACKET_LEN = ERWIRE_HEADER_SIZE + NET_TEST_PAYLOAD_LEN
+    NET_TEST_PACKET_LEN = ERWIRE_HEADER_SIZE + NET_TEST_PAYLOAD_LEN,
+    NET_TEST_NODE_SSID_INDEX0 = 0u,
+    NET_TEST_NODE_SSID_INDEX1 = 1u,
+    NET_TEST_NODE_SSID_INDEX2 = 2u,
+    NET_TEST_NODE_SSID_INDEX3 = 3u,
+    NET_TEST_NODE_SSID_INDEX4 = 4u,
+    NET_TEST_NODE_SSID_INDEX18 = 18u
   };
   UINT32 regs[NET_TEST_MMIO_DWORDS] = {0};
   ErVirtioNet net;
@@ -46,6 +52,8 @@ static void test_network_coordinator(void) {
   ErNodeId target_node;
   ErNodeId other_node;
   ErWifiBurstPlan burst;
+  ErWifiL2ApPlan wifi_l2_plan;
+  ErWifiL2ApPlan rejected_wifi_l2_plan;
   ErAdmittedRoute admitted_route;
   ErChannelEndpoint firmware_endpoint;
   UINT32 frame_len = 0u;
@@ -53,6 +61,49 @@ static void test_network_coordinator(void) {
 
   test_fill_bytes(target_node.bytes, ER_NODE_ID_LEN, 0x31u);
   test_fill_bytes(other_node.bytes, ER_NODE_ID_LEN, 0x41u);
+  check_int64("network wifi l2 ap plan",
+              er_wifi_l2_ap_plan_prepare(&target_node,
+                                         NET_TEST_WIFI_CHANNEL,
+                                         &wifi_l2_plan),
+              1);
+  check_int64("network wifi l2 ap plan valid",
+              er_wifi_l2_ap_plan_valid(&wifi_l2_plan),
+              1);
+  check_uint64("network wifi l2 eth type",
+               wifi_l2_plan.eth_type,
+               ER_NET_ETH_TYPE_EDGERUN);
+  check_uint64("network wifi l2 ssid len",
+               wifi_l2_plan.ssid_len,
+               ER_WIFI_L2_NODE_SSID_LEN);
+  check_uint64("network wifi l2 ssid e",
+               wifi_l2_plan.ssid[NET_TEST_NODE_SSID_INDEX0],
+               'e');
+  check_uint64("network wifi l2 ssid r",
+               wifi_l2_plan.ssid[NET_TEST_NODE_SSID_INDEX1],
+               'r');
+  check_uint64("network wifi l2 ssid dash",
+               wifi_l2_plan.ssid[NET_TEST_NODE_SSID_INDEX2],
+               '-');
+  check_uint64("network wifi l2 ssid first high",
+               wifi_l2_plan.ssid[NET_TEST_NODE_SSID_INDEX3],
+               '3');
+  check_uint64("network wifi l2 ssid first low",
+               wifi_l2_plan.ssid[NET_TEST_NODE_SSID_INDEX4],
+               '1');
+  check_uint64("network wifi l2 ssid last",
+               wifi_l2_plan.ssid[NET_TEST_NODE_SSID_INDEX18],
+               '8');
+  check_uint64("network wifi l2 mac local",
+               wifi_l2_plan.mac[0] & 0x02u,
+               0x02u);
+  check_uint64("network wifi l2 mac unicast",
+               wifi_l2_plan.mac[0] & 0x01u,
+               0u);
+  check_int64("network wifi l2 reject missing node",
+              er_wifi_l2_ap_plan_prepare(0,
+                                         NET_TEST_WIFI_CHANNEL,
+                                         &rejected_wifi_l2_plan),
+              0);
   check_int64("network native locator",
               er_network_locator_prepare_native_eth(peer_mac, NET_TEST_PRIORITY_HIGH,
                                                     NET_TEST_VALID_MS, &native_locator),
@@ -72,13 +123,15 @@ static void test_network_coordinator(void) {
   check_int64("network wifi locator",
               er_network_locator_prepare_wifi_open(NET_TEST_GROUP_ID,
                                                    NET_TEST_WIFI_CHANNEL,
-                                                   ssid, 6u,
+                                                   wifi_l2_plan.ssid,
+                                                   wifi_l2_plan.ssid_len,
                                                    NET_TEST_PRIORITY_LOW,
                                                    NET_TEST_VALID_MS,
                                                    &wifi_locator),
               1);
   check_uint64("network wifi len", wifi_locator.address_len,
-               ER_NETWORK_LOCATOR_WIFI_OPEN_HEADER_LEN + 6u);
+               ER_NETWORK_LOCATOR_WIFI_OPEN_HEADER_LEN +
+                   ER_WIFI_L2_NODE_SSID_LEN);
   check_uint64("network wifi group byte0", wifi_locator.address[0], 0x44u);
   check_uint64("network wifi channel", wifi_locator.address[4], NET_TEST_WIFI_CHANNEL);
   check_int64("network wifi reject bad group",
