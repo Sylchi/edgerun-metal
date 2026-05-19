@@ -29,12 +29,12 @@ by the system `curl` command because the C standard library has no TLS client.
 make -C codex
 ```
 
-The binary is written to `.build/codex/edgerun-c`.
+The binary is written to `.build/codex`.
 
 ## Run
 
 ```sh
-.build/codex/edgerun-c /path/to/repo
+.build/codex /path/to/repo
 ```
 
 If no path is supplied, the current directory is used.
@@ -42,13 +42,13 @@ If no path is supplied, the current directory is used.
 ## Prompt Codex
 
 ```sh
-.build/codex/edgerun-c --prompt "inspect edgerun-c and explain what it can do"
+.build/codex --prompt "inspect edgerun-c and explain what it can do"
 ```
 
 or choose a root explicitly:
 
 ```sh
-.build/codex/edgerun-c --root /path/to/repo --prompt "find the Codex client entry point"
+.build/codex --root /path/to/repo --prompt "find the Codex client entry point"
 ```
 
 The built-in agent tools are:
