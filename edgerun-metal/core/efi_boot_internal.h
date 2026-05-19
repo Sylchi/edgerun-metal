@@ -37,6 +37,7 @@
 #define ER_CONSOLE_MIN_COLUMNS 80u
 #define ER_CONSOLE_MIN_ROWS 25u
 #define ER_UI_BOOT_ARENA_SIZE (4u * 1024u * 1024u)
+#define ER_UI_BOOT_ARENA_FREE_BLOCKS 256u
 #define ER_UI_BOOT_TILE_WIDTH 128u
 #define ER_UI_BOOT_TILE_HEIGHT 64u
 #define ER_UI_BOOT_MAX_DIRTY_TILES 4096u
@@ -183,6 +184,7 @@ extern ErWasmHostCalls g_host_calls;
 void* er_ui_boot_alloc(void* user, size_t size, size_t align);
 void er_ui_boot_free(void* user, void* ptr, size_t size, size_t align);
 void* er_ui_boot_realloc(void* user, void* ptr, size_t old_size, size_t new_size, size_t align);
+void er_ui_boot_allocator_reset(void);
 er_ui_allocator_t er_ui_boot_allocator(void);
 void er_fill_nonzero_bytes(UINT8* bytes, UINTN len, UINT8 seed);
 vr_font_allocator_t er_ui_boot_font_allocator(void);

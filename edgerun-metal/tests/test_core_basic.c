@@ -1,5 +1,36 @@
 #include "test_core_internal.h"
 
+static void test_ui_boot_allocator_reuses_freed_blocks(void) {
+  static const UINTN first_size = 128u;
+  static const UINTN second_size = 256u;
+  static const UINTN third_size = 64u;
+  static const UINTN align = 16u;
+  UINT8* first;
+  UINT8* second;
+  UINT8* reused;
+  UINT8* third;
+
+  er_ui_boot_allocator_reset();
+  first = (UINT8*)er_ui_boot_alloc(er_ui_boot_allocator().user, first_size, align);
+  second = (UINT8*)er_ui_boot_alloc(er_ui_boot_allocator().user, second_size, align);
+  check_int64("ui boot allocator first allocation succeeds", first != 0, 1);
+  check_int64("ui boot allocator second allocation succeeds", second != 0, 1);
+  check_int64("ui boot allocator keeps allocations distinct", first != second, 1);
+
+  er_ui_boot_free(er_ui_boot_allocator().user, first, first_size, align);
+  reused = (UINT8*)er_ui_boot_alloc(er_ui_boot_allocator().user, first_size, align);
+  check_int64("ui boot allocator reuses exact freed block", reused == first, 1);
+
+  er_ui_boot_free(er_ui_boot_allocator().user, reused, first_size, align);
+  er_ui_boot_free(er_ui_boot_allocator().user, second, second_size, align);
+  third = (UINT8*)er_ui_boot_alloc(er_ui_boot_allocator().user, first_size + second_size, align);
+  check_int64("ui boot allocator coalesces adjacent freed blocks", third == first, 1);
+
+  er_ui_boot_free(er_ui_boot_allocator().user, third, first_size + second_size, align);
+  third = (UINT8*)er_ui_boot_alloc(er_ui_boot_allocator().user, third_size, align);
+  check_int64("ui boot allocator splits freed block", third == first, 1);
+}
+
 static void test_wasm_ui_command_stats_records(void) {
   UINT8 bytes[ER_WASM_UI_COMMAND_LIST_HEADER_LEN +
               ER_WASM_UI_RECT_RECORD_LEN +
