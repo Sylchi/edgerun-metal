@@ -11,7 +11,9 @@ ROOT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 BUILD_DIR="${ROOT_DIR}/.build/pi-boot-stage-tests"
 TOOL_BIN="${BUILD_DIR}/pi-boot-stage"
 PAYLOAD="${BUILD_DIR}/BOOTAA64.EFI"
+ZERO_W_PAYLOAD="${BUILD_DIR}/kernel.img"
 BOOT_DIR="${BUILD_DIR}/boot"
+ZERO_W_BOOT_DIR="${BUILD_DIR}/boot-zero-w"
 
 rm -rf "$BUILD_DIR"
 mkdir -p "$BUILD_DIR"
@@ -24,21 +26,21 @@ if "$TOOL_BIN" >/tmp/pi-boot-stage-usage.out 2>/tmp/pi-boot-stage-usage.err; the
   exit 1
 fi
 
-if ! grep -q "usage: pi-boot-stage <BOOTAA64.EFI> <output-dir>" \
+if ! grep -q "usage: pi-boot-stage <board> <payload> <output-dir>" \
   /tmp/pi-boot-stage-usage.err; then
   printf 'pi-boot-stage usage text is not explicit\n' >&2
   exit 1
 fi
 
 printf 'not-a-directory\n' >"${BUILD_DIR}/not-a-directory"
-if "$TOOL_BIN" "$PAYLOAD" "${BUILD_DIR}/not-a-directory" \
+if "$TOOL_BIN" pi-zero-2w "$PAYLOAD" "${BUILD_DIR}/not-a-directory" \
   >/tmp/pi-boot-stage-file.out 2>/tmp/pi-boot-stage-file.err; then
   printf 'pi-boot-stage accepted a file as output directory\n' >&2
   exit 1
 fi
 
 printf 'edgerun-test-payload\n' >"$PAYLOAD"
-"$TOOL_BIN" "$PAYLOAD" "$BOOT_DIR" >/tmp/pi-boot-stage-run.out
+"$TOOL_BIN" pi-zero-2w "$PAYLOAD" "$BOOT_DIR" >/tmp/pi-boot-stage-run.out
 
 if ! cmp -s "$PAYLOAD" "$BOOT_DIR/EFI/BOOT/BOOTAA64.EFI"; then
   printf 'staged BOOTAA64.EFI does not match input payload\n' >&2
@@ -71,6 +73,48 @@ fi
 if ! grep -q "node=erz2w-5:mobile-observer-route-churn-late-admission" \
   "$BOOT_DIR/EDGERUN-PI-ZERO-2W-BOOT.txt"; then
   printf 'boot manifest does not include the sixth Pi node role\n' >&2
+  exit 1
+fi
+
+printf 'edgerun-armv6-test-payload\n' >"$ZERO_W_PAYLOAD"
+"$TOOL_BIN" pi-zero-w-v1_1 "$ZERO_W_PAYLOAD" "$ZERO_W_BOOT_DIR" \
+  >/tmp/pi-boot-stage-zero-w-run.out
+
+if ! cmp -s "$ZERO_W_PAYLOAD" "$ZERO_W_BOOT_DIR/kernel.img"; then
+  printf 'staged kernel.img does not match input payload\n' >&2
+  exit 1
+fi
+
+if ! grep -q "arm_64bit=0" "$ZERO_W_BOOT_DIR/config.txt"; then
+  printf 'zero w config.txt does not force 32-bit boot\n' >&2
+  exit 1
+fi
+
+if ! grep -q "kernel=kernel.img" "$ZERO_W_BOOT_DIR/config.txt"; then
+  printf 'zero w config.txt does not name owned kernel payload\n' >&2
+  exit 1
+fi
+
+if ! grep -q "board=pi-zero-w-v1_1" \
+  "$ZERO_W_BOOT_DIR/EDGERUN-PI-ZERO-W-V1_1-BOOT.txt"; then
+  printf 'zero w manifest does not name actual board\n' >&2
+  exit 1
+fi
+
+if ! grep -q "owned_payload=kernel.img" \
+  "$ZERO_W_BOOT_DIR/EDGERUN-PI-ZERO-W-V1_1-BOOT.txt"; then
+  printf 'zero w manifest does not name owned kernel payload\n' >&2
+  exit 1
+fi
+
+if "$TOOL_BIN" pi-zero-vague "$PAYLOAD" "$BOOT_DIR" \
+  >/tmp/pi-boot-stage-bad-board.out 2>/tmp/pi-boot-stage-bad-board.err; then
+  printf 'pi-boot-stage accepted unsupported board\n' >&2
+  exit 1
+fi
+
+if ! grep -q "unsupported board" /tmp/pi-boot-stage-bad-board.err; then
+  printf 'pi-boot-stage unsupported board error missing\n' >&2
   exit 1
 fi
 

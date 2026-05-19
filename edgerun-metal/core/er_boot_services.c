@@ -44,6 +44,7 @@ static UINT8 er_boot_services_wifi_kind_valid(UINT8 wifi_kind) {
     case ER_BOOT_WIFI_KIND_NONE:
     case ER_BOOT_WIFI_KIND_OPEN_L2:
     case ER_BOOT_WIFI_KIND_CYW43439_SDIO:
+    case ER_BOOT_WIFI_KIND_CYW43438_SDIO:
       return 1u;
     default:
       return 0u;
@@ -65,6 +66,7 @@ static UINT8 er_boot_services_bluetooth_kind_valid(UINT8 bluetooth_kind) {
   switch (bluetooth_kind) {
     case ER_BOOT_BLUETOOTH_KIND_NONE:
     case ER_BOOT_BLUETOOTH_KIND_CYW43439_HCI_UART:
+    case ER_BOOT_BLUETOOTH_KIND_CYW43438_HCI_UART:
       return 1u;
     default:
       return 0u;

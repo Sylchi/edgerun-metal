@@ -11,6 +11,8 @@
 
 #define ER_PI_ZERO2W_PERIPHERAL_BASE 0x3f000000ull
 #define ER_PI_ZERO2W_PERIPHERAL_BYTES 0x01000000ull
+#define ER_PI_ZERO_W_V1_1_PERIPHERAL_BASE 0x20000000ull
+#define ER_PI_ZERO_W_V1_1_PERIPHERAL_BYTES 0x01000000ull
 #define ER_PI_ZERO2W_MAILBOX_OFFSET 0x0000b880ull
 #define ER_PI_ZERO2W_MAILBOX_BYTES 0x00000024ull
 #define ER_PI_ZERO2W_GPIO_OFFSET 0x00200000ull
@@ -27,6 +29,7 @@
 #define ER_PI_ZERO2W_BLUETOOTH_UART_TX_GPIO 32u
 #define ER_PI_ZERO2W_BLUETOOTH_UART_RX_GPIO 33u
 #define ER_PI_ZERO2W_WIFI_DEFAULT_CHANNEL 6u
+#define ER_PI_ZERO_W_V1_1_WIFI_DEFAULT_CHANNEL 6u
 
 #define ER_PI_MAILBOX_CHANNEL_PROPERTY 8u
 #define ER_PI_MAILBOX_REQUEST_CODE 0u
@@ -75,6 +78,24 @@
 #define ER_PI_EMMC_REG_INTERRUPT 0x00000030u
 
 typedef struct {
+  UINT64 peripheral_base;
+  UINT64 peripheral_bytes;
+  UINT64 mailbox_offset;
+  UINT64 mailbox_bytes;
+  UINT64 gpio_offset;
+  UINT64 gpio_bytes;
+  UINT64 sdhost_offset;
+  UINT64 sdhost_bytes;
+  UINT64 emmc_offset;
+  UINT64 emmc_bytes;
+  UINT64 aux_offset;
+  UINT64 aux_bytes;
+  UINT8 wifi_kind;
+  UINT8 bluetooth_kind;
+  UINT8 wifi_default_channel;
+} ErPiBoardProfile;
+
+typedef struct {
   UINT8 mapped;
   INT64 peripheral_handle;
   INT64 mailbox_handle;
@@ -119,6 +140,12 @@ typedef struct {
 
 UINT8 er_pi_zero2w_mmio_map(ErPiZero2wMmio* out_mmio);
 UINT64 er_pi_zero2w_peripheral_phys(UINT64 offset);
+const ErPiBoardProfile* er_pi_zero2w_profile(void);
+const ErPiBoardProfile* er_pi_zero_w_v1_1_profile(void);
+UINT64 er_pi_board_peripheral_phys(const ErPiBoardProfile* profile,
+                                   UINT64 offset);
+UINT8 er_pi_board_mmio_map(const ErPiBoardProfile* profile,
+                           ErPiZero2wMmio* out_mmio);
 UINT8 er_pi_mailbox_two_value_request(UINT32 tag_id,
                                       UINT32 value0,
                                       UINT32 value1,
@@ -148,6 +175,9 @@ UINT8 er_pi_emmc_command_begin(INT64 emmc_handle,
 UINT8 er_pi_zero2w_sdio_identity_plan(ErPiZero2wSdioBringupPlan* out_plan);
 UINT8 er_pi_zero2w_sdio_claim_plan(UINT32 relative_card_address,
                                    ErPiZero2wSdioBringupPlan* out_plan);
+UINT8 er_pi_board_apply_boot_report(const ErPiBoardProfile* profile,
+                                    ErBootServicesReport* report);
 UINT8 er_pi_zero2w_apply_boot_report(ErBootServicesReport* report);
+UINT8 er_pi_zero_w_v1_1_apply_boot_report(ErBootServicesReport* report);
 
 #endif
