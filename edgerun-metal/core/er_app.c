@@ -1,4 +1,5 @@
 #include "er_app.h"
+#include "er_identity.h"
 #include "er_mem.h"
 
 /*
@@ -15,6 +16,7 @@ static const UINT8 g_app_launch_allocation_domain[] = "edgerun:c:v1:app:launch-a
 static const UINT8 g_app_execution_jurisdiction_domain[] = "edgerun:c:v1:app:execution-jurisdiction";
 static const UINT8 g_app_ui_presentation_domain[] = "edgerun:c:v1:app:ui-presentation";
 static const UINT8 g_app_package_domain[] = "edgerun:c:v1:app:package";
+static const UINT8 g_app_package_signature_domain[] = "edgerun:c:v1:app:package-signature";
 static const UINT8 g_app_package_storage_source_domain[] = "edgerun:c:v1:app:package-storage-source";
 
 enum {
@@ -91,7 +93,9 @@ enum {
   ER_APP_UI_PRESENTATION_FIELDS_SPAN = 4u,
   ER_APP_UI_PRESENTATION_U64_FIELD_COUNT = 8u,
   ER_APP_UI_PRESENTATION_U64_FIELDS_BYTES =
-      ER_APP_U64_FIELD_BYTES * ER_APP_UI_PRESENTATION_U64_FIELD_COUNT
+      ER_APP_U64_FIELD_BYTES * ER_APP_UI_PRESENTATION_U64_FIELD_COUNT,
+  ER_APP_PACKAGE_SIGNATURE_PREIMAGE_BYTES =
+      (UINTN)(sizeof(g_app_package_signature_domain) - 1u) + ER_HASH_LEN
 };
 
 static void er_app_put_be(UINT8* dst, UINT64 value, UINTN byte_count) {
@@ -227,6 +231,25 @@ static UINT8 er_app_package_manifest_valid(const ErCryptoProvider* crypto,
     return 0;
   }
   return er_hash_equal(&expected_package_id, &package->package_id);
+}
+
+static UINT8 er_app_prepare_package_signature_preimage(
+    const ErCryptoProvider* crypto,
+    const ErAppPackageManifest* package,
+    UINT8 out_preimage[ER_APP_PACKAGE_SIGNATURE_PREIMAGE_BYTES],
+    ErByteSpan* out_span) {
+  UINTN domain_len = (UINTN)(sizeof(g_app_package_signature_domain) - 1u);
+
+  if (out_preimage == 0 || out_span == 0 ||
+      er_app_package_manifest_valid(crypto, package) == 0u) {
+    return 0u;
+  }
+  er_mem_copy(out_preimage, g_app_package_signature_domain, domain_len);
+  er_mem_copy(out_preimage + domain_len, package->package_id.bytes,
+              ER_HASH_LEN);
+  out_span->bytes = out_preimage;
+  out_span->len = ER_APP_PACKAGE_SIGNATURE_PREIMAGE_BYTES;
+  return 1u;
 }
 
 static UINT8 er_app_load_package_object(const ErCryptoProvider* crypto,
@@ -459,6 +482,53 @@ UINT8 er_app_prepare_package_manifest_from_objects(const ErCryptoProvider* crypt
                              &out_package->ui_assets_object_id,
                              out_package->ui_assets_object_len,
                              &out_package->package_id);
+}
+
+UINT8 er_app_sign_package(const ErCryptoProvider* crypto,
+                          const ErAppPackageManifest* package,
+                          const ErIdentity* signer,
+                          ErAppPackageSignature* out_signature) {
+  UINT8 preimage[ER_APP_PACKAGE_SIGNATURE_PREIMAGE_BYTES];
+  ErByteSpan preimage_span;
+  ErWorkSignature work_signature;
+
+  if (out_signature == 0 || er_identity_valid(signer) == 0u ||
+      er_app_prepare_package_signature_preimage(crypto, package, preimage,
+                                               &preimage_span) == 0u ||
+      er_crypto_sign(crypto, &preimage_span, &work_signature) == 0u ||
+      er_identity_equal(&work_signature.identity, signer) == 0u ||
+      work_signature.signature_len != ER_SIGNATURE_LEN) {
+    return 0u;
+  }
+  er_mem_zero((UINT8*)out_signature, (UINTN)sizeof(*out_signature));
+  out_signature->abi_version = ER_APP_ABI_VERSION;
+  out_signature->app_kind = ER_APP_KIND_USER;
+  out_signature->package_id = package->package_id;
+  out_signature->signer = *signer;
+  out_signature->signature = work_signature;
+  return 1u;
+}
+
+UINT8 er_app_verify_package_signature(const ErCryptoProvider* crypto,
+                                      const ErAppPackageManifest* package,
+                                      const ErAppPackageSignature* signature) {
+  UINT8 preimage[ER_APP_PACKAGE_SIGNATURE_PREIMAGE_BYTES];
+  ErByteSpan preimage_span;
+
+  if (signature == 0 ||
+      signature->abi_version != ER_APP_ABI_VERSION ||
+      signature->app_kind != ER_APP_KIND_USER ||
+      er_identity_valid(&signature->signer) == 0u ||
+      er_hash_equal(&signature->package_id, &package->package_id) == 0u ||
+      er_identity_equal(&signature->signer,
+                        &signature->signature.identity) == 0u ||
+      signature->signature.signature_len != ER_SIGNATURE_LEN ||
+      er_app_prepare_package_signature_preimage(crypto, package, preimage,
+                                               &preimage_span) == 0u) {
+    return 0u;
+  }
+  return er_crypto_verify(crypto, &signature->signer, &preimage_span,
+                          &signature->signature);
 }
 
 UINT8 er_app_load_package_objects(const ErCryptoProvider* crypto,

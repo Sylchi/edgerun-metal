@@ -38,6 +38,14 @@ typedef struct {
 } ErAppPackageManifest;
 
 typedef struct {
+  UINT16 abi_version;
+  UINT16 app_kind;
+  ErHash package_id;
+  ErIdentity signer;
+  ErWorkSignature signature;
+} ErAppPackageSignature;
+
+typedef struct {
   const ErVfsObjectPacket* packets;
   UINT32 packet_count;
   UINT8* bytes;
@@ -221,6 +229,13 @@ UINT8 er_app_prepare_package_manifest_from_objects(const ErCryptoProvider* crypt
                                                    const ErVfsObjectRef* manifest_object,
                                                    const ErVfsObjectRef* ui_assets_object,
                                                    ErAppPackageManifest* out_package);
+UINT8 er_app_sign_package(const ErCryptoProvider* crypto,
+                          const ErAppPackageManifest* package,
+                          const ErIdentity* signer,
+                          ErAppPackageSignature* out_signature);
+UINT8 er_app_verify_package_signature(const ErCryptoProvider* crypto,
+                                      const ErAppPackageManifest* package,
+                                      const ErAppPackageSignature* signature);
 UINT8 er_app_load_package_objects(const ErCryptoProvider* crypto,
                                   const ErAppPackageManifest* package,
                                   const ErAppPackageObjectLoad* app_object,
