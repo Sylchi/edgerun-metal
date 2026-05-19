@@ -15,6 +15,7 @@
 #define ER_BLE_WIFI_GROUP_ID_INVALID 0u
 #define ER_BLE_WIFI_CAPABILITY_AP 1u
 #define ER_BLE_WIFI_CAPABILITY_STA 2u
+#define ER_BLE_WIFI_CAPABILITY_BURST_TX_PENDING 4u
 
 typedef enum {
   ER_BLE_PAYLOAD_KIND_NONE = 0,
@@ -81,6 +82,7 @@ UINT8 er_ble_wifi_role_encode_payload(const ErBleWifiRoleAdvert* advert,
                                       UINT8 out_payload[ER_BLE_ADV_PAYLOAD_BYTES]);
 UINT8 er_ble_wifi_role_decode_payload(const UINT8 payload[ER_BLE_ADV_PAYLOAD_BYTES],
                                       ErBleWifiRoleAdvert* out_advert);
+UINT8 er_ble_wifi_role_advert_is_valid(const ErBleWifiRoleAdvert* advert);
 ErBleWifiRoleDecision er_ble_wifi_role_decide(const ErBleWifiRoleAdvert* local,
                                               const ErBleWifiRoleAdvert* remote);
 UINT8 er_ble_adv_efi_init(EFI_SYSTEM_TABLE* system_table, ErBleAdvEfi* out_ble);
