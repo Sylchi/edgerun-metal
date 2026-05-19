@@ -75,8 +75,18 @@ case "$repo_plan" in
 esac
 
 case "$repo_plan" in
+  *"+ clang -std=c11 -Wall -Wextra -Werror -O2 -o .build/sdcard-probe tools/sdcard-probe/main.c"* ) ;;
+  * ) printf 'missing sd card probe compile step\n' >&2; exit 1 ;;
+esac
+
+case "$repo_plan" in
   *"+ ./tests/pi-serial-verify-tests.sh"* ) ;;
   * ) printf 'missing pi serial verifier test step\n' >&2; exit 1 ;;
+esac
+
+case "$repo_plan" in
+  *"+ ./tests/sdcard-probe-tests.sh"* ) ;;
+  * ) printf 'missing sd card probe test step\n' >&2; exit 1 ;;
 esac
 
 crypto_plan=$("$ER_BUILD" --print-plan crypto-test)

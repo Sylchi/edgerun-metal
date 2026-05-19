@@ -41,6 +41,7 @@ static const char ERB_ERWIRE_DECODE_BIN[] = ".build/erwire-decode";
 static const char ERB_WASM_COMPILE_BIN[] = ".build/wasm-compile";
 static const char ERB_APP_RUN_BIN[] = ".build/app-run";
 static const char ERB_PI_SERIAL_VERIFY_BIN[] = ".build/pi-serial-verify";
+static const char ERB_SDCARD_PROBE_BIN[] = ".build/sdcard-probe";
 static const char ERB_CRYPTO_TEST_BIN[] = ".build/er-build-out/crypto/test_blake3";
 static const char ERB_VARFONT_TEST_BIN[] = ".build/er-build-out/varfont/vrfont_tests";
 static const char ERB_APP_SOURCE_NAME[] = "app.c";
@@ -315,6 +316,19 @@ static int erb_build_pi_serial_verify(int print_plan) {
     return 1;
   }
   if (erb_args_push(&args, "tools/pi-serial-verify/main.c") != 0) {
+    return 1;
+  }
+  return erb_run_args(&args, print_plan);
+}
+
+static int erb_build_sdcard_probe(int print_plan) {
+  ErbArgs args;
+
+  if (erb_prepare_dirs() != 0 ||
+      erb_compile_common(&args, ERB_SDCARD_PROBE_BIN) != 0) {
+    return 1;
+  }
+  if (erb_args_push(&args, "tools/sdcard-probe/main.c") != 0) {
     return 1;
   }
   return erb_run_args(&args, print_plan);
@@ -634,7 +648,8 @@ static int erb_target_repo_test(int print_plan) {
       erb_build_repo_inspect(print_plan) != 0 ||
       erb_build_erwire_decode(print_plan) != 0 ||
       erb_build_wasm_compile(print_plan) != 0 ||
-      erb_build_pi_serial_verify(print_plan) != 0) {
+      erb_build_pi_serial_verify(print_plan) != 0 ||
+      erb_build_sdcard_probe(print_plan) != 0) {
     return 1;
   }
   if (erb_run_program("./tests/repo-check-tests.sh", print_plan) != 0 ||
@@ -646,6 +661,7 @@ static int erb_target_repo_test(int print_plan) {
       erb_run_program("./tests/metal-arch-build-tests.sh", print_plan) != 0 ||
       erb_run_program("./tests/pi-boot-stage-tests.sh", print_plan) != 0 ||
       erb_run_program("./tests/pi-serial-verify-tests.sh", print_plan) != 0 ||
+      erb_run_program("./tests/sdcard-probe-tests.sh", print_plan) != 0 ||
       erb_run_program("./tests/er-math-tests.sh", print_plan) != 0 ||
       erb_run_program("./tests/erwire-decode-tests.sh", print_plan) != 0) {
     return 1;
@@ -724,7 +740,7 @@ static int erb_usage(void) {
           "usage: er-build [--print-plan] <target> [args]\n"
           "targets: app-build <package-dir> app-verify <package-dir> app-run <package-dir>\n"
           "         repo-check-bin repo-inspect erwire-decode erwire-test wasm-compile\n"
-          "         pi-serial-verify\n"
+          "         pi-serial-verify sdcard-probe\n"
           "         repo-check repo-test repo-progress <scope> [test-target]\n"
           "         crypto-test varfont-test\n");
   return 2;
@@ -791,6 +807,9 @@ int main(int argc, char** argv) {
   }
   if (strcmp(target, "pi-serial-verify") == 0) {
     return erb_build_pi_serial_verify(print_plan);
+  }
+  if (strcmp(target, "sdcard-probe") == 0) {
+    return erb_build_sdcard_probe(print_plan);
   }
   if (strcmp(target, "erwire-test") == 0) {
     return erb_target_erwire_test(print_plan);
