@@ -1,5 +1,41 @@
 #include "wasm_vm_internal.h"
 
+typedef struct {
+  UINT8 kind;
+  UINT8 param_count;
+  UINT8 result_count;
+  UINT8 contract_mask;
+} ErWasmContractImport;
+
+static const ErWasmContractImport ER_WASM_CONTRACT_IMPORTS[] = {
+#define ER_WASM_CONTRACT_IMPORT_ROW(kind, module, field, params, results, contracts) \
+  {kind, params, results, contracts},
+  ER_WASM_CONTRACT_IMPORTS(ER_WASM_CONTRACT_IMPORT_ROW)
+#undef ER_WASM_CONTRACT_IMPORT_ROW
+};
+static const UINT32 ER_WASM_CONTRACT_IMPORT_COUNT =
+  (UINT32)(sizeof(ER_WASM_CONTRACT_IMPORTS) / sizeof(ER_WASM_CONTRACT_IMPORTS[0]));
+
+static UINT8 er_wasm_contract_mask(ErWasmModuleContract contract) {
+  switch (contract) {
+    case ER_WASM_MODULE_CONTRACT_UI_APP:
+      return ER_WASM_CONTRACT_MASK_UI_APP;
+    case ER_WASM_MODULE_CONTRACT_BUS_DRIVER:
+      return ER_WASM_CONTRACT_MASK_BUS_DRIVER;
+    default:
+      return ER_WASM_CONTRACT_MASK_NONE;
+  }
+}
+
+static const ErWasmContractImport* er_wasm_contract_import(UINT8 import_kind) {
+  for (UINT32 i = 0u; i < ER_WASM_CONTRACT_IMPORT_COUNT; ++i) {
+    if (ER_WASM_CONTRACT_IMPORTS[i].kind == import_kind) {
+      return &ER_WASM_CONTRACT_IMPORTS[i];
+    }
+  }
+  return 0;
+}
+
 static int er_wasm_contract_type_has_i64_params(const ErWasmModule* module,
                                                 UINT32 type_index,
                                                 UINT8 param_count) {
@@ -23,7 +59,8 @@ static int er_wasm_contract_type_result(const ErWasmModule* module,
       module->type_result_count[type_index] != result_count) {
     return -1;
   }
-  if (result_count != 0u && module->type_result_type[type_index] != result_type) {
+  if (result_count != ER_WASM_HOSTCALL_NO_RESULTS &&
+      module->type_result_type[type_index] != result_type) {
     return -1;
   }
   return 0;
@@ -32,43 +69,11 @@ static int er_wasm_contract_type_result(const ErWasmModule* module,
 static int er_wasm_contract_import_signature(const ErWasmModule* module,
                                              UINT8 import_kind,
                                              UINT32 type_index) {
-  UINT8 param_count = 0u;
-  UINT8 result_count = 0u;
+  const ErWasmContractImport* import = er_wasm_contract_import(import_kind);
 
-  switch (import_kind) {
-    case ER_IMPORT_KIND_LOG_U64:
-    case ER_IMPORT_KIND_LOG_HEX:
-      param_count = ER_WASM_HOSTCALL_UNARY_PARAMS;
-      result_count = ER_WASM_HOSTCALL_NO_RESULTS;
-      break;
-    case ER_IMPORT_KIND_PCI_READ32:
-      param_count = ER_WASM_PCI_READ32_PARAM_COUNT;
-      result_count = ER_WASM_HOSTCALL_I64_RESULTS;
-      break;
-    case ER_IMPORT_KIND_PCI_WRITE32:
-      param_count = ER_WASM_PCI_WRITE32_PARAM_COUNT;
-      result_count = ER_WASM_HOSTCALL_NO_RESULTS;
-      break;
-    case ER_IMPORT_KIND_MMIO_MAP:
-    case ER_IMPORT_KIND_MMIO_READ32:
-    case ER_IMPORT_KIND_BUS_EXEC:
-    case ER_IMPORT_KIND_RELAY_SEND:
-    case ER_IMPORT_KIND_RELAY_RECV:
-    case ER_IMPORT_KIND_UI_EMIT:
-      param_count = ER_WASM_HOSTCALL_BINARY_PARAMS;
-      result_count = ER_WASM_HOSTCALL_I64_RESULTS;
-      break;
-    case ER_IMPORT_KIND_MEMORY_REGION_BASE:
-    case ER_IMPORT_KIND_MEMORY_REGION_LEN:
-      param_count = ER_WASM_HOSTCALL_UNARY_PARAMS;
-      result_count = ER_WASM_HOSTCALL_I64_RESULTS;
-      break;
-    default:
-      return -1;
-  }
-
-  if (er_wasm_contract_type_has_i64_params(module, type_index, param_count) != 0 ||
-      er_wasm_contract_type_result(module, type_index, result_count,
+  if (import == 0 ||
+      er_wasm_contract_type_has_i64_params(module, type_index, import->param_count) != 0 ||
+      er_wasm_contract_type_result(module, type_index, import->result_count,
                                    ER_WASM_VALTYPE_I64) != 0) {
     return -1;
   }
@@ -96,26 +101,12 @@ static int er_wasm_contract_main_valid(const ErWasmModule* module) {
 
 static UINT8 er_wasm_contract_import_allowed(ErWasmModuleContract contract,
                                              UINT8 import_kind) {
-  switch (contract) {
-    case ER_WASM_MODULE_CONTRACT_UI_APP:
-      switch (import_kind) {
-        case ER_IMPORT_KIND_MEMORY_REGION_BASE:
-        case ER_IMPORT_KIND_MEMORY_REGION_LEN:
-        case ER_IMPORT_KIND_UI_EMIT:
-          return 1u;
-        default:
-          return 0u;
-      }
-    case ER_WASM_MODULE_CONTRACT_BUS_DRIVER:
-      switch (import_kind) {
-        case ER_IMPORT_KIND_BUS_EXEC:
-          return 1u;
-        default:
-          return 0u;
-      }
-    default:
-      return 0u;
-  }
+  const ErWasmContractImport* import = er_wasm_contract_import(import_kind);
+  UINT8 contract_mask = er_wasm_contract_mask(contract);
+
+  return (UINT8)(import != 0 &&
+                 contract_mask != ER_WASM_CONTRACT_MASK_NONE &&
+                 (import->contract_mask & contract_mask) != 0u);
 }
 
 static int er_wasm_contract_required_imports(const ErWasmModule* module,
@@ -125,10 +116,10 @@ static int er_wasm_contract_required_imports(const ErWasmModule* module,
 
   for (UINT32 i = 0u; i < module->num_imports; ++i) {
     switch (module->function_import_kind[i]) {
-      case ER_IMPORT_KIND_UI_EMIT:
+      case ER_WASM_IMPORT_KIND_UI_EMIT:
         ++ui_emit_count;
         break;
-      case ER_IMPORT_KIND_BUS_EXEC:
+      case ER_WASM_IMPORT_KIND_BUS_EXEC:
         ++bus_exec_count;
         break;
       default:
@@ -158,7 +149,7 @@ int er_wasm_validate_contract(const ErWasmModule* module,
     UINT8 import_kind = module->function_import_kind[i];
     UINT32 type_index = module->function_type_indices[i];
 
-    if (import_kind == ER_IMPORT_KIND_NONE ||
+    if (import_kind == ER_WASM_IMPORT_KIND_NONE ||
         er_wasm_contract_import_allowed(contract, import_kind) == 0u ||
         er_wasm_contract_import_signature(module, import_kind, type_index) != 0) {
       return -1;

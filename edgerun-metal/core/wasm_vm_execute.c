@@ -293,7 +293,7 @@ int er_wasm_execute_i64(ErWasmModule* module, UINT32 function_index, INT64* resu
           UINT8 result_count = module->type_result_count[type_index_local];
           UINT8 result_type = module->type_result_type[type_index_local];
 
-          if (import_kind == ER_IMPORT_KIND_LOG_U64) {
+          if (import_kind == ER_WASM_IMPORT_KIND_LOG_U64) {
             INT64 value = 0;
             if (param_count_call != 1 || result_count != 0) {
               return -1;
@@ -306,7 +306,7 @@ int er_wasm_execute_i64(ErWasmModule* module, UINT32 function_index, INT64* resu
             }
             value = stack[--stack_size];
             module->host.log_u64(value);
-          } else if (import_kind == ER_IMPORT_KIND_LOG_HEX) {
+          } else if (import_kind == ER_WASM_IMPORT_KIND_LOG_HEX) {
             INT64 value = 0;
             if (param_count_call != 1 || result_count != 0) {
               return -1;
@@ -319,7 +319,7 @@ int er_wasm_execute_i64(ErWasmModule* module, UINT32 function_index, INT64* resu
             }
             value = stack[--stack_size];
             module->host.log_hex((UINT64)value);
-          } else if (import_kind == ER_IMPORT_KIND_PCI_READ32) {
+          } else if (import_kind == ER_WASM_IMPORT_KIND_PCI_READ32) {
             INT64 value = 0;
             INT64 bus = 0;
             INT64 dev = 0;
@@ -347,7 +347,7 @@ int er_wasm_execute_i64(ErWasmModule* module, UINT32 function_index, INT64* resu
               return -1;
             }
             stack[stack_size++] = value;
-          } else if (import_kind == ER_IMPORT_KIND_PCI_WRITE32) {
+          } else if (import_kind == ER_WASM_IMPORT_KIND_PCI_WRITE32) {
             INT64 bus = 0;
             INT64 dev = 0;
             INT64 func = 0;
@@ -368,7 +368,7 @@ int er_wasm_execute_i64(ErWasmModule* module, UINT32 function_index, INT64* resu
             dev = stack[--stack_size];
             bus = stack[--stack_size];
             module->host.pci_write32(bus, dev, func, offset, value);
-          } else if (import_kind == ER_IMPORT_KIND_MMIO_MAP) {
+          } else if (import_kind == ER_WASM_IMPORT_KIND_MMIO_MAP) {
             INT64 value = 0;
             INT64 phys = 0;
             INT64 len = 0;
@@ -392,7 +392,7 @@ int er_wasm_execute_i64(ErWasmModule* module, UINT32 function_index, INT64* resu
               return -1;
             }
             stack[stack_size++] = value;
-          } else if (import_kind == ER_IMPORT_KIND_MMIO_READ32) {
+          } else if (import_kind == ER_WASM_IMPORT_KIND_MMIO_READ32) {
             INT64 value = 0;
             INT64 handle = 0;
             INT64 offset = 0;
@@ -416,7 +416,7 @@ int er_wasm_execute_i64(ErWasmModule* module, UINT32 function_index, INT64* resu
               return -1;
             }
             stack[stack_size++] = value;
-          } else if (import_kind == ER_IMPORT_KIND_BUS_EXEC) {
+          } else if (import_kind == ER_WASM_IMPORT_KIND_BUS_EXEC) {
             INT64 value = 0;
             INT64 request_ptr = 0;
             INT64 response_ptr = 0;
@@ -453,7 +453,7 @@ int er_wasm_execute_i64(ErWasmModule* module, UINT32 function_index, INT64* resu
               return -1;
             }
             stack[stack_size++] = value;
-          } else if (import_kind == ER_IMPORT_KIND_RELAY_SEND) {
+          } else if (import_kind == ER_WASM_IMPORT_KIND_RELAY_SEND) {
             INT64 value = 0;
             INT64 ptr = 0;
             INT64 len = 0;
@@ -495,7 +495,7 @@ int er_wasm_execute_i64(ErWasmModule* module, UINT32 function_index, INT64* resu
               return -1;
             }
             stack[stack_size++] = value;
-          } else if (import_kind == ER_IMPORT_KIND_RELAY_RECV) {
+          } else if (import_kind == ER_WASM_IMPORT_KIND_RELAY_RECV) {
             INT64 value = 0;
             INT64 ptr = 0;
             INT64 capacity = 0;
@@ -531,8 +531,8 @@ int er_wasm_execute_i64(ErWasmModule* module, UINT32 function_index, INT64* resu
               return -1;
             }
             stack[stack_size++] = value;
-          } else if (import_kind == ER_IMPORT_KIND_MEMORY_REGION_BASE ||
-                     import_kind == ER_IMPORT_KIND_MEMORY_REGION_LEN) {
+          } else if (import_kind == ER_WASM_IMPORT_KIND_MEMORY_REGION_BASE ||
+                     import_kind == ER_WASM_IMPORT_KIND_MEMORY_REGION_LEN) {
             INT64 region_id = 0;
             UINT32 region_base = 0u;
             UINT32 region_len = 0u;
@@ -557,12 +557,12 @@ int er_wasm_execute_i64(ErWasmModule* module, UINT32 function_index, INT64* resu
             if (stack_size >= ER_WASM_STACK_MAX) {
               return -1;
             }
-            if (import_kind == ER_IMPORT_KIND_MEMORY_REGION_BASE) {
+            if (import_kind == ER_WASM_IMPORT_KIND_MEMORY_REGION_BASE) {
               stack[stack_size++] = (INT64)(UINT64)region_base;
             } else {
               stack[stack_size++] = (INT64)(UINT64)region_len;
             }
-          } else if (import_kind == ER_IMPORT_KIND_UI_EMIT) {
+          } else if (import_kind == ER_WASM_IMPORT_KIND_UI_EMIT) {
             INT64 value = 0;
             INT64 ptr = 0;
             INT64 len = 0;
