@@ -14,6 +14,23 @@ static CHAR16 g_er_efi_secure_boot_name[] = {
   (CHAR16)'e', (CHAR16)'B', (CHAR16)'o', (CHAR16)'o', (CHAR16)'t', 0u
 };
 
+static const char g_er_boot_authority_default_label[] = {
+  'a', 'u', 't', 'h', 'o', 'r', 'i', 't', 'y'
+};
+
+static UINT8 er_boot_services_authority_profile_ready(const ErBootAuthorityProfile* authority) {
+  if (authority == 0 ||
+      authority->present == 0u ||
+      authority->config_state != ER_BOOT_CONFIG_PRESENT ||
+      authority->tpm_persistent_handle == ER_BOOT_AUTHORITY_HANDLE_INVALID ||
+      authority->boot_config_generation == ER_BOOT_CONFIG_GENERATION_INVALID ||
+      er_boot_services_authority_label_valid(authority->label, authority->label_len) == 0u) {
+    return 0u;
+  }
+
+  return 1u;
+}
+
 void er_boot_services_report_init(ErBootServicesReport* report) {
   if (report == 0) {
     return;
@@ -22,6 +39,23 @@ void er_boot_services_report_init(ErBootServicesReport* report) {
   report->secure_boot_state = ER_BOOT_SECURE_BOOT_UNKNOWN;
   report->config_state = ER_BOOT_CONFIG_UNKNOWN;
   report->selected_authority = ER_BOOT_AUTHORITY_PROFILE_CAPACITY;
+}
+
+UINT8 er_boot_services_authority_label_valid(const char* label,
+                                             UINT16 label_len) {
+  UINT16 i;
+
+  if (label == 0 || label_len == 0u || label_len > ER_BOOT_AUTHORITY_LABEL_MAX) {
+    return 0u;
+  }
+
+  for (i = 0u; i < label_len; ++i) {
+    if (label[i] < ' ' || label[i] > '~') {
+      return 0u;
+    }
+  }
+
+  return 1u;
 }
 
 UINT8 er_boot_services_probe_secure_boot(EFI_SYSTEM_TABLE* system_table,
@@ -97,12 +131,27 @@ UINT8 er_boot_services_add_authority(ErBootServicesReport* report,
                                      UINT32 tpm_persistent_handle,
                                      UINT32 boot_config_generation,
                                      UINT8 config_state) {
+  return er_boot_services_add_authority_profile(report,
+                                                tpm_persistent_handle,
+                                                boot_config_generation,
+                                                config_state,
+                                                g_er_boot_authority_default_label,
+                                                (UINT16)sizeof(g_er_boot_authority_default_label));
+}
+
+UINT8 er_boot_services_add_authority_profile(ErBootServicesReport* report,
+                                             UINT32 tpm_persistent_handle,
+                                             UINT32 boot_config_generation,
+                                             UINT8 config_state,
+                                             const char* label,
+                                             UINT16 label_len) {
   ErBootAuthorityProfile* authority;
 
   if (report == 0 ||
       tpm_persistent_handle == ER_BOOT_AUTHORITY_HANDLE_INVALID ||
       boot_config_generation == ER_BOOT_CONFIG_GENERATION_INVALID ||
       config_state != ER_BOOT_CONFIG_PRESENT ||
+      er_boot_services_authority_label_valid(label, label_len) == 0u ||
       report->authority_count >= ER_BOOT_AUTHORITY_PROFILE_CAPACITY) {
     return 0u;
   }
@@ -111,8 +160,10 @@ UINT8 er_boot_services_add_authority(ErBootServicesReport* report,
   er_mem_zero((UINT8*)authority, (UINTN)sizeof(*authority));
   authority->present = 1u;
   authority->config_state = config_state;
+  authority->label_len = label_len;
   authority->tpm_persistent_handle = tpm_persistent_handle;
   authority->boot_config_generation = boot_config_generation;
+  er_mem_copy((UINT8*)authority->label, (const UINT8*)label, label_len);
   report->authority_count += 1u;
   if (report->config_state == ER_BOOT_CONFIG_UNKNOWN ||
       report->config_state == ER_BOOT_CONFIG_MISSING) {
@@ -126,7 +177,7 @@ UINT8 er_boot_services_select_authority(ErBootServicesReport* report,
   if (report == 0 ||
       authority_index >= report->authority_count ||
       authority_index >= ER_BOOT_AUTHORITY_PROFILE_CAPACITY ||
-      report->authorities[authority_index].present == 0u) {
+      er_boot_services_authority_profile_ready(&report->authorities[authority_index]) == 0u) {
     return 0u;
   }
   report->selected_authority = (UINT8)authority_index;
@@ -145,8 +196,7 @@ ErBootServicesAction er_boot_services_decide_action(const ErBootServicesReport* 
     case 0u:
       return ER_BOOT_SERVICES_ACTION_CONFIGURE_AUTHORITY;
     case 1u:
-      if (report->authorities[0].present == 0u ||
-          report->authorities[0].config_state != ER_BOOT_CONFIG_PRESENT) {
+      if (er_boot_services_authority_profile_ready(&report->authorities[0]) == 0u) {
         return ER_BOOT_SERVICES_ACTION_HALT;
       }
       return ER_BOOT_SERVICES_ACTION_ENTER_RUNTIME;
@@ -158,8 +208,7 @@ ErBootServicesAction er_boot_services_decide_action(const ErBootServicesReport* 
       report->selected_authority >= ER_BOOT_AUTHORITY_PROFILE_CAPACITY) {
     return ER_BOOT_SERVICES_ACTION_SELECT_AUTHORITY;
   }
-  if (report->authorities[report->selected_authority].present == 0u ||
-      report->authorities[report->selected_authority].config_state != ER_BOOT_CONFIG_PRESENT) {
+  if (er_boot_services_authority_profile_ready(&report->authorities[report->selected_authority]) == 0u) {
     return ER_BOOT_SERVICES_ACTION_HALT;
   }
   return ER_BOOT_SERVICES_ACTION_ENTER_RUNTIME;
@@ -175,6 +224,72 @@ const char* er_boot_services_action_label(ErBootServicesAction action) {
       return "select-authority";
     case ER_BOOT_SERVICES_ACTION_ENTER_RUNTIME:
       return "enter-runtime";
+    default:
+      return "invalid";
+  }
+}
+
+void er_boot_services_onboarding_model(const ErBootServicesReport* report,
+                                       ErBootOnboardingModel* out_model) {
+  UINT32 i;
+  ErBootServicesAction action;
+
+  if (out_model == 0) {
+    return;
+  }
+
+  er_mem_zero((UINT8*)out_model, (UINTN)sizeof(*out_model));
+  out_model->state = ER_BOOT_ONBOARDING_STATE_FATAL;
+  out_model->selected_authority = ER_BOOT_ONBOARDING_SELECTED_INVALID;
+
+  if (report == 0) {
+    return;
+  }
+
+  action = er_boot_services_decide_action(report);
+  switch (action) {
+    case ER_BOOT_SERVICES_ACTION_CONFIGURE_AUTHORITY:
+      out_model->state = ER_BOOT_ONBOARDING_STATE_CREATE_FIRST_PROFILE;
+      break;
+    case ER_BOOT_SERVICES_ACTION_SELECT_AUTHORITY:
+      out_model->state = ER_BOOT_ONBOARDING_STATE_SELECT_PROFILE;
+      break;
+    case ER_BOOT_SERVICES_ACTION_ENTER_RUNTIME:
+      out_model->state = ER_BOOT_ONBOARDING_STATE_READY;
+      break;
+    case ER_BOOT_SERVICES_ACTION_HALT:
+    default:
+      out_model->state = ER_BOOT_ONBOARDING_STATE_FATAL;
+      break;
+  }
+
+  if (report->selected_authority < report->authority_count &&
+      report->selected_authority < ER_BOOT_AUTHORITY_PROFILE_CAPACITY) {
+    out_model->selected_authority = report->selected_authority;
+  }
+
+  for (i = 0u; i < report->authority_count && i < ER_BOOT_AUTHORITY_PROFILE_CAPACITY; ++i) {
+    if (er_boot_services_authority_profile_ready(&report->authorities[i]) == 0u) {
+      out_model->state = ER_BOOT_ONBOARDING_STATE_FATAL;
+      out_model->choice_count = 0u;
+      out_model->selected_authority = ER_BOOT_ONBOARDING_SELECTED_INVALID;
+      return;
+    }
+    out_model->choices[out_model->choice_count] = report->authorities[i];
+    out_model->choice_count += 1u;
+  }
+}
+
+const char* er_boot_services_onboarding_state_label(UINT8 state) {
+  switch (state) {
+    case ER_BOOT_ONBOARDING_STATE_FATAL:
+      return "fatal";
+    case ER_BOOT_ONBOARDING_STATE_CREATE_FIRST_PROFILE:
+      return "create-first-profile";
+    case ER_BOOT_ONBOARDING_STATE_SELECT_PROFILE:
+      return "select-profile";
+    case ER_BOOT_ONBOARDING_STATE_READY:
+      return "ready";
     default:
       return "invalid";
   }
