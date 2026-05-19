@@ -115,3 +115,6 @@ manifest is `EDGERUN-PI-ZERO-W-V1_1-BOOT.txt`, and the owned payload is the
 freestanding ARMv6 `kernel.img`. The manifest also records the mini UART baud,
 GPIO pins, expected boot banner, board constants, and first heartbeat line so a
 bring-up harness can validate the board without guessing what success means.
+Build the repo-owned verifier with `make pi-serial-verify`, then run
+`.build/pi-serial-verify` with the staged manifest path and the captured UART
+log path.

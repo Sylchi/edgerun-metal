@@ -69,6 +69,16 @@ case "$repo_plan" in
   * ) printf 'missing pi boot stage test step\n' >&2; exit 1 ;;
 esac
 
+case "$repo_plan" in
+  *"+ clang -std=c11 -Wall -Wextra -Werror -O2 -o .build/pi-serial-verify tools/pi-serial-verify/main.c"* ) ;;
+  * ) printf 'missing pi serial verifier compile step\n' >&2; exit 1 ;;
+esac
+
+case "$repo_plan" in
+  *"+ ./tests/pi-serial-verify-tests.sh"* ) ;;
+  * ) printf 'missing pi serial verifier test step\n' >&2; exit 1 ;;
+esac
+
 crypto_plan=$("$ER_BUILD" --print-plan crypto-test)
 
 case "$crypto_plan" in
