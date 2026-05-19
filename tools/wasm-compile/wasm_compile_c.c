@@ -369,6 +369,15 @@ static int erwc_c_parse_main_statement(ErWcCParser* parser,
                                        const ErWcModule* module,
                                        ErWcFunc* func,
                                        uint8_t* out_parsed);
+static int erwc_c_parse_memory_offset(ErWcCParser* parser,
+                                      const ErWcModule* module,
+                                      int64_t* out_offset);
+static int erwc_c_emit_load(ErWcCParser* parser,
+                            const ErWcModule* module,
+                            ErWcFunc* func,
+                            const char* name,
+                            uint8_t opcode,
+                            uint32_t align);
 
 static int erwc_c_emit_call(ErWcCParser* parser,
                             const ErWcModule* module,
@@ -418,6 +427,16 @@ static int erwc_c_parse_expression(ErWcCParser* parser,
   }
   erwc_c_skip_ws(parser);
   if (parser->cur < parser->end && *parser->cur == '(') {
+    if (strcmp(ident, "load32") == 0) {
+      *parser = before_literal;
+      return erwc_c_emit_load(parser, module, func, "load32",
+                              ERWC_OP_I32_LOAD, 2u);
+    }
+    if (strcmp(ident, "load64") == 0) {
+      *parser = before_literal;
+      return erwc_c_emit_load(parser, module, func, "load64",
+                              ERWC_OP_I64_LOAD, 3u);
+    }
     return erwc_c_emit_call(parser, module, func, ident);
   }
   if (erwc_find_local(func, ident, &local_index) == 0) {
@@ -471,16 +490,36 @@ static int erwc_c_parse_store_statement(ErWcCParser* parser,
                                         const char* name,
                                         uint8_t opcode,
                                         uint32_t align) {
-  const ErWcConstant* constant;
-  char offset_name[ERWC_MAX_STRING];
-  ErWcCParser before_offset;
   int64_t offset = 0;
 
   if (erwc_c_take_literal(parser, name) != 0 ||
       erwc_c_take_literal(parser, "(") != 0 ||
       erwc_c_parse_expression(parser, module, func) != 0 ||
       erwc_c_emit_i32_wrap_i64(func) != 0 ||
-      erwc_c_take_literal(parser, ",") != 0) {
+      erwc_c_take_literal(parser, ",") != 0 ||
+      erwc_c_parse_memory_offset(parser, module, &offset) != 0 ||
+      erwc_c_take_literal(parser, ",") != 0 ||
+      erwc_c_parse_expression(parser, module, func) != 0 ||
+      erwc_c_emit_i32_wrap_i64(func) != 0 ||
+      erwc_c_take_literal(parser, ")") != 0 ||
+      erwc_c_take_literal(parser, ";") != 0 ||
+      erwc_buffer_push(&func->code, opcode) != 0 ||
+      erwc_emit_u32_leb(&func->code, align) != 0 ||
+      erwc_emit_u32_leb(&func->code, (uint32_t)offset) != 0) {
+    return -1;
+  }
+  return 0;
+}
+
+static int erwc_c_parse_memory_offset(ErWcCParser* parser,
+                                      const ErWcModule* module,
+                                      int64_t* out_offset) {
+  const ErWcConstant* constant;
+  char offset_name[ERWC_MAX_STRING];
+  ErWcCParser before_offset;
+  int64_t offset = 0;
+
+  if (out_offset == NULL) {
     return -1;
   }
   before_offset = *parser;
@@ -495,12 +534,28 @@ static int erwc_c_parse_store_statement(ErWcCParser* parser,
     }
     offset = constant->value;
   }
-  if (offset < 0 || offset > (int64_t)ERWC_U32_MAX_VALUE ||
-      erwc_c_take_literal(parser, ",") != 0 ||
+  if (offset < 0 || offset > (int64_t)ERWC_U32_MAX_VALUE) {
+    return -1;
+  }
+  *out_offset = offset;
+  return 0;
+}
+
+static int erwc_c_emit_load(ErWcCParser* parser,
+                            const ErWcModule* module,
+                            ErWcFunc* func,
+                            const char* name,
+                            uint8_t opcode,
+                            uint32_t align) {
+  int64_t offset = 0;
+
+  if (erwc_c_take_literal(parser, name) != 0 ||
+      erwc_c_take_literal(parser, "(") != 0 ||
       erwc_c_parse_expression(parser, module, func) != 0 ||
       erwc_c_emit_i32_wrap_i64(func) != 0 ||
+      erwc_c_take_literal(parser, ",") != 0 ||
+      erwc_c_parse_memory_offset(parser, module, &offset) != 0 ||
       erwc_c_take_literal(parser, ")") != 0 ||
-      erwc_c_take_literal(parser, ";") != 0 ||
       erwc_buffer_push(&func->code, opcode) != 0 ||
       erwc_emit_u32_leb(&func->code, align) != 0 ||
       erwc_emit_u32_leb(&func->code, (uint32_t)offset) != 0) {
