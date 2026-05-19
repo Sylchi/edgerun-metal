@@ -147,6 +147,150 @@ static void test_bus_addresses(void) {
               0);
 }
 
+static void test_driver_event_queue(void) {
+  enum {
+    DRIVER_EVENT_TEST_CAPACITY = 2u,
+    DRIVER_EVENT_TEST_IRQ_SOURCE = 7u,
+    DRIVER_EVENT_TEST_QUEUE_SOURCE = 9u,
+    DRIVER_EVENT_TEST_DEVICE_SOURCE = 11u,
+    DRIVER_EVENT_TEST_IRQ_ARG0 = 0x20u,
+    DRIVER_EVENT_TEST_IRQ_ARG1 = 0x03u,
+    DRIVER_EVENT_TEST_QUEUE_ARG0 = 1u,
+    DRIVER_EVENT_TEST_QUEUE_ARG1 = 2u,
+    DRIVER_EVENT_TEST_DEVICE_ARG0 = 0x44u,
+    DRIVER_EVENT_TEST_DEVICE_ARG1 = 0x55u,
+    DRIVER_EVENT_TEST_SECOND_SEQUENCE = 2u,
+    DRIVER_EVENT_TEST_THIRD_SEQUENCE = 3u
+  };
+  ErDriverEvent events[DRIVER_EVENT_TEST_CAPACITY];
+  ErDriverEventQueue queue;
+  ErDriverEvent pushed;
+  ErDriverEvent popped;
+  ErDriverEvent rejected_event;
+
+  check_uint64("driver abi event bytes",
+               (UINT64)sizeof(ErDriverEvent),
+               ER_DRIVER_ABI_EVENT_BYTES);
+  check_uint64("driver abi event version offset",
+               (UINT64)__builtin_offsetof(ErDriverEvent, abi_version),
+               ER_DRIVER_ABI_EVENT_ABI_VERSION_OFFSET);
+  check_uint64("driver abi event kind offset",
+               (UINT64)__builtin_offsetof(ErDriverEvent, event_kind),
+               ER_DRIVER_ABI_EVENT_KIND_OFFSET);
+  check_uint64("driver abi event source offset",
+               (UINT64)__builtin_offsetof(ErDriverEvent, source_id),
+               ER_DRIVER_ABI_EVENT_SOURCE_ID_OFFSET);
+  check_uint64("driver abi event sequence offset",
+               (UINT64)__builtin_offsetof(ErDriverEvent, sequence),
+               ER_DRIVER_ABI_EVENT_SEQUENCE_OFFSET);
+  check_uint64("driver abi event arg0 offset",
+               (UINT64)__builtin_offsetof(ErDriverEvent, arg0),
+               ER_DRIVER_ABI_EVENT_ARG0_OFFSET);
+  check_uint64("driver abi event arg1 offset",
+               (UINT64)__builtin_offsetof(ErDriverEvent, arg1),
+               ER_DRIVER_ABI_EVENT_ARG1_OFFSET);
+
+  er_mem_zero((UINT8*)&queue, (UINTN)sizeof(queue));
+  er_mem_zero((UINT8*)&pushed, (UINTN)sizeof(pushed));
+  er_mem_zero((UINT8*)&popped, (UINTN)sizeof(popped));
+  er_mem_zero((UINT8*)&rejected_event, (UINTN)sizeof(rejected_event));
+
+  check_int64("driver event rejects none",
+              er_driver_event_kind_valid(ER_DRIVER_EVENT_KIND_NONE),
+              0);
+  check_int64("driver event accepts irq",
+              er_driver_event_kind_valid(ER_DRIVER_EVENT_KIND_IRQ),
+              1);
+  check_int64("driver event rejects null init",
+              er_driver_event_queue_init(0, events, DRIVER_EVENT_TEST_CAPACITY),
+              0);
+  check_int64("driver event rejects zero capacity",
+              er_driver_event_queue_init(&queue, events, 0u),
+              0);
+  check_int64("driver event init",
+              er_driver_event_queue_init(&queue, events, DRIVER_EVENT_TEST_CAPACITY),
+              1);
+  check_int64("driver event empty after init",
+              er_driver_event_queue_empty(&queue),
+              1);
+  check_int64("driver event not full after init",
+              er_driver_event_queue_full(&queue),
+              0);
+
+  check_int64("driver event push irq",
+              er_driver_event_push(&queue, ER_DRIVER_EVENT_KIND_IRQ,
+                                   DRIVER_EVENT_TEST_IRQ_SOURCE,
+                                   DRIVER_EVENT_TEST_IRQ_ARG0,
+                                   DRIVER_EVENT_TEST_IRQ_ARG1, &pushed),
+              1);
+  check_uint64("driver event pushed version", pushed.abi_version, ER_DRIVER_EVENT_ABI_VERSION);
+  check_uint64("driver event pushed kind", pushed.event_kind, ER_DRIVER_EVENT_KIND_IRQ);
+  check_uint64("driver event pushed source", pushed.source_id, DRIVER_EVENT_TEST_IRQ_SOURCE);
+  check_uint64("driver event first sequence", pushed.sequence, ER_DRIVER_EVENT_FIRST_SEQUENCE);
+  check_uint64("driver event pushed arg0", pushed.arg0, DRIVER_EVENT_TEST_IRQ_ARG0);
+  check_uint64("driver event pushed arg1", pushed.arg1, DRIVER_EVENT_TEST_IRQ_ARG1);
+
+  check_int64("driver event push queue used",
+              er_driver_event_push(&queue, ER_DRIVER_EVENT_KIND_QUEUE_USED,
+                                   DRIVER_EVENT_TEST_QUEUE_SOURCE,
+                                   DRIVER_EVENT_TEST_QUEUE_ARG0,
+                                   DRIVER_EVENT_TEST_QUEUE_ARG1, 0),
+              1);
+  check_int64("driver event full",
+              er_driver_event_queue_full(&queue),
+              1);
+  check_int64("driver event rejects overflow",
+              er_driver_event_push(&queue, ER_DRIVER_EVENT_KIND_DEVICE,
+                                   DRIVER_EVENT_TEST_DEVICE_SOURCE,
+                                   DRIVER_EVENT_TEST_DEVICE_ARG0,
+                                   DRIVER_EVENT_TEST_DEVICE_ARG1, &rejected_event),
+              0);
+  check_uint64("driver event overflow preserves out", rejected_event.sequence, 0u);
+  check_uint64("driver event overflow preserves next sequence",
+               queue.next_sequence,
+               DRIVER_EVENT_TEST_THIRD_SEQUENCE);
+
+  check_int64("driver event pop irq",
+              er_driver_event_pop(&queue, &popped),
+              1);
+  check_uint64("driver event pop irq kind", popped.event_kind, ER_DRIVER_EVENT_KIND_IRQ);
+  check_uint64("driver event pop irq sequence", popped.sequence, ER_DRIVER_EVENT_FIRST_SEQUENCE);
+  check_uint64("driver event pop irq source", popped.source_id, DRIVER_EVENT_TEST_IRQ_SOURCE);
+
+  check_int64("driver event push wraps",
+              er_driver_event_push(&queue, ER_DRIVER_EVENT_KIND_DEVICE,
+                                   DRIVER_EVENT_TEST_DEVICE_SOURCE,
+                                   DRIVER_EVENT_TEST_DEVICE_ARG0,
+                                   DRIVER_EVENT_TEST_DEVICE_ARG1, 0),
+              1);
+  check_int64("driver event pop queue used",
+              er_driver_event_pop(&queue, &popped),
+              1);
+  check_uint64("driver event pop queue kind", popped.event_kind, ER_DRIVER_EVENT_KIND_QUEUE_USED);
+  check_uint64("driver event pop queue sequence", popped.sequence, DRIVER_EVENT_TEST_SECOND_SEQUENCE);
+  check_uint64("driver event pop queue source", popped.source_id, DRIVER_EVENT_TEST_QUEUE_SOURCE);
+  check_int64("driver event pop device",
+              er_driver_event_pop(&queue, &popped),
+              1);
+  check_uint64("driver event pop device kind", popped.event_kind, ER_DRIVER_EVENT_KIND_DEVICE);
+  check_uint64("driver event pop device sequence", popped.sequence, DRIVER_EVENT_TEST_THIRD_SEQUENCE);
+  check_uint64("driver event pop device source", popped.source_id, DRIVER_EVENT_TEST_DEVICE_SOURCE);
+  check_int64("driver event empty after pops",
+              er_driver_event_queue_empty(&queue),
+              1);
+  check_int64("driver event rejects empty pop",
+              er_driver_event_pop(&queue, &popped),
+              0);
+
+  queue.next_sequence = ER_DRIVER_EVENT_SEQUENCE_MAX;
+  check_int64("driver event rejects sequence exhaustion",
+              er_driver_event_push(&queue, ER_DRIVER_EVENT_KIND_IRQ,
+                                   DRIVER_EVENT_TEST_IRQ_SOURCE,
+                                   DRIVER_EVENT_TEST_IRQ_ARG0,
+                                   DRIVER_EVENT_TEST_IRQ_ARG1, &rejected_event),
+              0);
+}
+
 static void test_virtio_mmio_transport(void) {
   enum {
     VIRTIO_TEST_MMIO_DWORDS = 128u,
