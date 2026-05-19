@@ -10,6 +10,7 @@
 enum {
   ERB_PACKAGE_HASH_CHUNK_CAP = 4096,
   ERB_PACKAGE_HASH_HEX_CAP = (ER_BLAKE3_OUT_LEN * 2u) + 1u,
+  ERB_PACKAGE_IDENTITY_TEXT_CAP = 512,
   ERB_PACKAGE_HASH_NIBBLE_SHIFT = 4u,
   ERB_PACKAGE_HASH_NIBBLE_MASK = 0x0f
 };
@@ -93,10 +94,10 @@ static int erb_package_hash_identity(const uint8_t source_hash[ER_BLAKE3_OUT_LEN
   return 0;
 }
 
-int erb_write_app_package_identity(const char* identity_path,
-                                   const char* app_source,
-                                   const char* manifest_source,
-                                   const char* output_wasm) {
+static int erb_format_app_package_identity(const char* app_source,
+                                           const char* manifest_source,
+                                           const char* output_wasm,
+                                           char out[ERB_PACKAGE_IDENTITY_TEXT_CAP]) {
   uint8_t source_hash[ER_BLAKE3_OUT_LEN];
   uint8_t manifest_hash[ER_BLAKE3_OUT_LEN];
   uint8_t wasm_hash[ER_BLAKE3_OUT_LEN];
@@ -105,7 +106,7 @@ int erb_write_app_package_identity(const char* identity_path,
   char manifest_hex[ERB_PACKAGE_HASH_HEX_CAP];
   char wasm_hex[ERB_PACKAGE_HASH_HEX_CAP];
   char package_hex[ERB_PACKAGE_HASH_HEX_CAP];
-  FILE* file;
+  int written;
 
   if (erb_package_hash_file(app_source, source_hash) != 0 ||
       erb_package_hash_file(manifest_source, manifest_hash) != 0 ||
@@ -118,29 +119,82 @@ int erb_write_app_package_identity(const char* identity_path,
   erb_package_hash_to_hex(wasm_hash, wasm_hex);
   erb_package_hash_to_hex(package_hash, package_hex);
 
+  written = snprintf(out, ERB_PACKAGE_IDENTITY_TEXT_CAP,
+                     "package_identity_v1\n"
+                     "source=app.c\n"
+                     "source_blake3=%s\n"
+                     "manifest=app.manifest\n"
+                     "manifest_blake3=%s\n"
+                     "wasm=.build/app.wasm\n"
+                     "wasm_blake3=%s\n"
+                     "%s"
+                     "package_blake3=%s\n",
+                     source_hex, manifest_hex, wasm_hex, ERB_PACKAGE_IDENTITY_ASSETS,
+                     package_hex);
+  if (written < 0 || (size_t)written >= ERB_PACKAGE_IDENTITY_TEXT_CAP) {
+    return erb_package_identity_fail("package identity text too large");
+  }
+  return 0;
+}
+
+int erb_write_app_package_identity(const char* identity_path,
+                                   const char* app_source,
+                                   const char* manifest_source,
+                                   const char* output_wasm) {
+  char text[ERB_PACKAGE_IDENTITY_TEXT_CAP];
+  FILE* file;
+
+  if (erb_format_app_package_identity(app_source, manifest_source, output_wasm, text) != 0) {
+    return 1;
+  }
   file = fopen(identity_path, "wb");
   if (file == NULL) {
     fprintf(stderr, "er-build: open failed for %s: %s\n", identity_path, strerror(errno));
     return 1;
   }
-  if (fprintf(file,
-              "package_identity_v1\n"
-              "source=app.c\n"
-              "source_blake3=%s\n"
-              "manifest=app.manifest\n"
-              "manifest_blake3=%s\n"
-              "wasm=.build/app.wasm\n"
-              "wasm_blake3=%s\n"
-              "%s"
-              "package_blake3=%s\n",
-              source_hex, manifest_hex, wasm_hex, ERB_PACKAGE_IDENTITY_ASSETS,
-              package_hex) < 0) {
+  if (fputs(text, file) < 0) {
     fclose(file);
     fprintf(stderr, "er-build: write failed for %s\n", identity_path);
     return 1;
   }
   if (fclose(file) != 0) {
     fprintf(stderr, "er-build: close failed for %s: %s\n", identity_path, strerror(errno));
+    return 1;
+  }
+  return 0;
+}
+
+int erb_verify_app_package_identity(const char* identity_path,
+                                    const char* app_source,
+                                    const char* manifest_source,
+                                    const char* output_wasm) {
+  char expected[ERB_PACKAGE_IDENTITY_TEXT_CAP];
+  char actual[ERB_PACKAGE_IDENTITY_TEXT_CAP];
+  FILE* file;
+  size_t len;
+
+  if (erb_format_app_package_identity(app_source, manifest_source, output_wasm,
+                                      expected) != 0) {
+    return 1;
+  }
+  file = fopen(identity_path, "rb");
+  if (file == NULL) {
+    fprintf(stderr, "er-build: open failed for %s: %s\n", identity_path, strerror(errno));
+    return 1;
+  }
+  len = fread(actual, 1u, sizeof(actual) - 1u, file);
+  if (ferror(file) != 0) {
+    fclose(file);
+    fprintf(stderr, "er-build: read failed for %s\n", identity_path);
+    return 1;
+  }
+  if (fclose(file) != 0) {
+    fprintf(stderr, "er-build: close failed for %s: %s\n", identity_path, strerror(errno));
+    return 1;
+  }
+  actual[len] = '\0';
+  if (len == sizeof(actual) - 1u || strcmp(actual, expected) != 0) {
+    fprintf(stderr, "er-build: invalid package identity %s\n", identity_path);
     return 1;
   }
   return 0;

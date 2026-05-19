@@ -49,6 +49,11 @@ case "$app_package_plan" in
   * ) printf 'missing app-build package compile step\n' >&2; exit 1 ;;
 esac
 
+if "$ER_BUILD" --print-plan app-verify "${ROOT_DIR}/tests/fixtures/app-package/app" >/dev/null 2>&1; then
+  printf 'app-verify accepted print-plan\n' >&2
+  exit 1
+fi
+
 case "$repo_plan" in
   *"+ ./tests/metal-arch-build-tests.sh"* ) ;;
   * ) printf 'missing metal architecture build test step\n' >&2; exit 1 ;;

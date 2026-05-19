@@ -40,6 +40,7 @@ rm -f "${OUTPUT_WASM}" "${OUTPUT_IDENTITY}"
 "${ER_BUILD}" app-build "${PACKAGE_DIR}"
 test -f "${OUTPUT_WASM}"
 test -f "${OUTPUT_IDENTITY}"
+"${ER_BUILD}" app-verify "${PACKAGE_DIR}"
 case "$(od -An -tx1 -N8 "${OUTPUT_WASM}")" in
   *"00 61 73 6d 01 00 00 00"* ) ;;
   * ) printf 'bad package wasm header\n' >&2; exit 1 ;;
@@ -59,6 +60,43 @@ cp "${OUTPUT_IDENTITY}" "${TMP_DIR}/first.identity"
 "${ER_BUILD}" app-build "${PACKAGE_DIR}"
 cmp "${OUTPUT_WASM}" "${TMP_DIR}/first.wasm"
 cmp "${OUTPUT_IDENTITY}" "${TMP_DIR}/first.identity"
+"${ER_BUILD}" app-verify "${PACKAGE_DIR}"
+
+mkdir "${TMP_DIR}/tampered-source"
+cp "${PACKAGE_DIR}/app.c" "${TMP_DIR}/tampered-source/app.c"
+cp "${PACKAGE_DIR}/app.manifest" "${TMP_DIR}/tampered-source/app.manifest"
+mkdir "${TMP_DIR}/tampered-source/.build"
+cp "${OUTPUT_WASM}" "${TMP_DIR}/tampered-source/.build/app.wasm"
+cp "${OUTPUT_IDENTITY}" "${TMP_DIR}/tampered-source/.build/package.identity"
+printf '\n' >> "${TMP_DIR}/tampered-source/app.c"
+if "${ER_BUILD}" app-verify "${TMP_DIR}/tampered-source" >/dev/null 2>&1; then
+  printf 'app-verify accepted tampered source\n' >&2
+  exit 1
+fi
+
+mkdir "${TMP_DIR}/tampered-wasm"
+cp "${PACKAGE_DIR}/app.c" "${TMP_DIR}/tampered-wasm/app.c"
+cp "${PACKAGE_DIR}/app.manifest" "${TMP_DIR}/tampered-wasm/app.manifest"
+mkdir "${TMP_DIR}/tampered-wasm/.build"
+cp "${OUTPUT_WASM}" "${TMP_DIR}/tampered-wasm/.build/app.wasm"
+cp "${OUTPUT_IDENTITY}" "${TMP_DIR}/tampered-wasm/.build/package.identity"
+printf '\000' >> "${TMP_DIR}/tampered-wasm/.build/app.wasm"
+if "${ER_BUILD}" app-verify "${TMP_DIR}/tampered-wasm" >/dev/null 2>&1; then
+  printf 'app-verify accepted tampered wasm\n' >&2
+  exit 1
+fi
+
+mkdir "${TMP_DIR}/tampered-identity"
+cp "${PACKAGE_DIR}/app.c" "${TMP_DIR}/tampered-identity/app.c"
+cp "${PACKAGE_DIR}/app.manifest" "${TMP_DIR}/tampered-identity/app.manifest"
+mkdir "${TMP_DIR}/tampered-identity/.build"
+cp "${OUTPUT_WASM}" "${TMP_DIR}/tampered-identity/.build/app.wasm"
+cp "${OUTPUT_IDENTITY}" "${TMP_DIR}/tampered-identity/.build/package.identity"
+printf '\n' >> "${TMP_DIR}/tampered-identity/.build/package.identity"
+if "${ER_BUILD}" app-verify "${TMP_DIR}/tampered-identity" >/dev/null 2>&1; then
+  printf 'app-verify accepted tampered identity\n' >&2
+  exit 1
+fi
 
 mkdir "${TMP_DIR}/bad-package"
 cp "${PACKAGE_DIR}/app.c" "${TMP_DIR}/bad-package/app.c"

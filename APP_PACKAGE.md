@@ -38,9 +38,17 @@ Canonical local build command:
 ./.build/er-build app-build app
 ```
 
+Canonical local admission check:
+
+```sh
+./.build/er-build app-verify app
+```
+
 The package directory must contain `app.c` and `app.manifest`. The build runner
 creates `app/.build/` and writes `app/.build/app.wasm` plus
-`app/.build/package.identity`.
+`app/.build/package.identity`. The admission check verifies the exact manifest
+and rejects any mismatch between `package.identity` and the current source,
+manifest, or generated Wasm bytes.
 
 The first admitted manifest is intentionally exact:
 
