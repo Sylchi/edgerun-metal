@@ -261,6 +261,7 @@ static void test_ui_boot_package_loads_from_endpoint_storage(void) {
   ErAppLoadedPackage loaded;
   const ErUiBootInstalledApp* installed_app;
   ErUiBootInstalledApp content_only_app;
+  ErUiBootInstalledApp tampered_app;
 
   er_mem_zero(module_memory, (UINTN)sizeof(module_memory));
   er_mem_zero(manifest_memory, (UINTN)sizeof(manifest_memory));
@@ -274,6 +275,17 @@ static void test_ui_boot_package_loads_from_endpoint_storage(void) {
   check_uint64("ui boot installed app len", installed_app->app_len,
                ER_USER_APP_WASM_SIZE);
   check_uint64("ui boot installed manifest len", installed_app->manifest_len,
+               ER_USER_APP_MANIFEST_SIZE);
+  check_int64("ui boot installed app ref abi",
+              installed_app->app_ref.abi_version, ER_VFS_ABI_VERSION);
+  check_int64("ui boot installed manifest ref abi",
+              installed_app->manifest_ref.abi_version, ER_VFS_ABI_VERSION);
+  check_int64("ui boot installed package abi",
+              installed_app->package.abi_version, ER_APP_ABI_VERSION);
+  check_uint64("ui boot installed package app len",
+               installed_app->package.app_object_len, ER_USER_APP_WASM_SIZE);
+  check_uint64("ui boot installed package manifest len",
+               installed_app->package.manifest_object_len,
                ER_USER_APP_MANIFEST_SIZE);
   check_uint64("ui boot installed app byte", installed_app->app_bytes[0],
                g_edgerun_user_app_wasm[0]);
@@ -306,6 +318,34 @@ static void test_ui_boot_package_loads_from_endpoint_storage(void) {
                                                     UI_BOOT_PACKAGE_TEST_APP_INDEX,
                                                     &loaded),
               1);
+  tampered_app = *installed_app;
+  tampered_app.app_ref.object_id.bytes[0] ^= 1u;
+  er_mem_zero((UINT8*)&storage, (UINTN)sizeof(storage));
+  er_mem_zero((UINT8*)&loaded, (UINTN)sizeof(loaded));
+  check_int64("ui boot package rejects app ref mismatch",
+              er_ui_boot_load_installed_app_package(&tampered_app,
+                                                    module_memory,
+                                                    (UINT32)sizeof(module_memory),
+                                                    manifest_memory,
+                                                    (UINT32)sizeof(manifest_memory),
+                                                    &storage,
+                                                    UI_BOOT_PACKAGE_TEST_APP_INDEX,
+                                                    &loaded),
+              0);
+  tampered_app = *installed_app;
+  tampered_app.package.package_id.bytes[0] ^= 1u;
+  er_mem_zero((UINT8*)&storage, (UINTN)sizeof(storage));
+  er_mem_zero((UINT8*)&loaded, (UINTN)sizeof(loaded));
+  check_int64("ui boot package rejects package mismatch",
+              er_ui_boot_load_installed_app_package(&tampered_app,
+                                                    module_memory,
+                                                    (UINT32)sizeof(module_memory),
+                                                    manifest_memory,
+                                                    (UINT32)sizeof(manifest_memory),
+                                                    &storage,
+                                                    UI_BOOT_PACKAGE_TEST_APP_INDEX,
+                                                    &loaded),
+              0);
   er_mem_zero((UINT8*)&storage, (UINTN)sizeof(storage));
   er_mem_zero((UINT8*)&loaded, (UINTN)sizeof(loaded));
 
