@@ -52,6 +52,21 @@ int erwc_write_file(const char* path, const ErWcBuffer* out) {
   return 0;
 }
 
+static int erwc_path_has_suffix(const char* path, const char* suffix) {
+  size_t path_len;
+  size_t suffix_len;
+
+  if (path == NULL || suffix == NULL) {
+    return 0;
+  }
+  path_len = strlen(path);
+  suffix_len = strlen(suffix);
+  if (path_len < suffix_len) {
+    return 0;
+  }
+  return memcmp(path + path_len - suffix_len, suffix, suffix_len) == 0;
+}
+
 int erwc_compile_path(const char* input_path, const char* output_path) {
   ErWcSource source;
   ErWcParse parse;
@@ -63,16 +78,24 @@ int erwc_compile_path(const char* input_path, const char* output_path) {
   if (erwc_read_file(input_path, &source) != 0) {
     return 1;
   }
-  if (erwc_tokenize(&source, &parse) != 0) {
-    fprintf(stderr, "wasm-compile: %s: tokenization failed\n", input_path);
-    free(source.bytes);
-    return 1;
-  }
-  root = erwc_parse_tree(&parse);
-  if (root < 0 || erwc_build_module(&parse, root, &module) != 0) {
-    fprintf(stderr, "wasm-compile: %s: unsupported WAT subset\n", input_path);
-    free(source.bytes);
-    return 1;
+  if (erwc_path_has_suffix(input_path, ".c") != 0) {
+    if (erwc_build_c_source(&source, &module) != 0) {
+      fprintf(stderr, "wasm-compile: %s: unsupported C subset\n", input_path);
+      free(source.bytes);
+      return 1;
+    }
+  } else {
+    if (erwc_tokenize(&source, &parse) != 0) {
+      fprintf(stderr, "wasm-compile: %s: tokenization failed\n", input_path);
+      free(source.bytes);
+      return 1;
+    }
+    root = erwc_parse_tree(&parse);
+    if (root < 0 || erwc_build_module(&parse, root, &module) != 0) {
+      fprintf(stderr, "wasm-compile: %s: unsupported WAT subset\n", input_path);
+      free(source.bytes);
+      return 1;
+    }
   }
   if (erwc_validate_contract(&module) != 0) {
     fprintf(stderr, "wasm-compile: %s: module contract rejected\n", input_path);

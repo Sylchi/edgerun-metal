@@ -31,6 +31,8 @@ enum {
   ERWC_INPUT_ARG = 1,
   ERWC_OUTPUT_ARG = 2,
   ERWC_DECIMAL_BASE = 10,
+  ERWC_C_IMPORT_PARAM_CAP = 8,
+  ERWC_C_INVALID_TYPE = 0xffu,
   ERWC_U32_MAX_VALUE = 0xffffffffu,
   ERWC_LEB_PAYLOAD_MASK = 0x7fu,
   ERWC_LEB_CONTINUATION_BIT = 0x80u,
@@ -170,6 +172,7 @@ int erwc_emit_u32_leb(ErWcBuffer* buffer, uint32_t value);
 int erwc_emit_i64_leb(ErWcBuffer* buffer, int64_t value);
 int erwc_emit_name(ErWcBuffer* buffer, const char* name);
 int erwc_build_module(const ErWcParse* parse, int root, ErWcModule* module);
+int erwc_build_c_source(const ErWcSource* source, ErWcModule* module);
 int erwc_emit_wasm(const ErWcModule* module, ErWcBuffer* out);
 int erwc_write_file(const char* path, const ErWcBuffer* out);
 int erwc_compile_path(const char* input_path, const char* output_path);
