@@ -383,6 +383,8 @@ static void test_app_identity_routes(void) {
   ErAppPackageStorageSource bad_storage_source;
   ErAppPackageIndexEntry package_index_entry;
   ErAppPackageIndexEntry bad_package_index_entry;
+  ErAppSignedPackageIndexEntry signed_index_entry;
+  ErAppSignedPackageIndexEntry bad_signed_index_entry;
   ErAppPackageStorageResponse app_storage_response;
   ErAppPackageStorageResponse manifest_storage_response;
   ErAppPackageStorageResponse ui_assets_storage_response;
@@ -722,6 +724,28 @@ static void test_app_identity_routes(void) {
   check_int64("app package index reject source id",
               er_app_package_index_entry_valid(&crypto,
                                                &bad_package_index_entry),
+              0);
+  check_int64("app signed package index entry",
+              er_app_prepare_signed_package_index_entry(&crypto,
+                                                        &package_index_entry,
+                                                        &package_signature,
+                                                        &signed_index_entry),
+              1);
+  check_int64("app signed package index valid",
+              er_app_signed_package_index_entry_valid(&crypto,
+                                                      &signed_index_entry),
+              1);
+  bad_signed_index_entry = signed_index_entry;
+  bad_signed_index_entry.index_entry.package.package_id.bytes[0] ^= 1u;
+  check_int64("app signed package index rejects package id",
+              er_app_signed_package_index_entry_valid(&crypto,
+                                                      &bad_signed_index_entry),
+              0);
+  bad_signed_index_entry = signed_index_entry;
+  bad_signed_index_entry.package_signature.signature.signature[0] ^= 1u;
+  check_int64("app signed package index rejects signature",
+              er_app_signed_package_index_entry_valid(&crypto,
+                                                      &bad_signed_index_entry),
               0);
   er_mem_zero((UINT8*)&app_storage_response,
               (UINTN)sizeof(app_storage_response));

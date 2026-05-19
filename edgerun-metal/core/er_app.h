@@ -86,6 +86,13 @@ typedef struct {
 } ErAppPackageIndexEntry;
 
 typedef struct {
+  UINT16 abi_version;
+  UINT16 app_kind;
+  ErAppPackageIndexEntry index_entry;
+  ErAppPackageSignature package_signature;
+} ErAppSignedPackageIndexEntry;
+
+typedef struct {
   ErHash retrieve_route_id;
   ErAppPackageObjectLoad object;
 } ErAppPackageStorageObject;
@@ -258,6 +265,12 @@ UINT8 er_app_prepare_package_index_entry(const ErCryptoProvider* crypto,
                                          ErAppPackageIndexEntry* out_entry);
 UINT8 er_app_package_index_entry_valid(const ErCryptoProvider* crypto,
                                        const ErAppPackageIndexEntry* entry);
+UINT8 er_app_prepare_signed_package_index_entry(const ErCryptoProvider* crypto,
+                                                const ErAppPackageIndexEntry* entry,
+                                                const ErAppPackageSignature* signature,
+                                                ErAppSignedPackageIndexEntry* out_entry);
+UINT8 er_app_signed_package_index_entry_valid(const ErCryptoProvider* crypto,
+                                              const ErAppSignedPackageIndexEntry* entry);
 UINT8 er_app_prepare_package_storage_object(const ErAppPackageStorageResponse* response,
                                             const ErHash* expected_route_id,
                                             const ErHash* expected_object_id,
