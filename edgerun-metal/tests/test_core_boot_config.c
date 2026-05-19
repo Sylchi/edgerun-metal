@@ -26,17 +26,11 @@ static void test_boot_config_and_seal_strategy(void) {
                                                   ER_BOOT_CONFIG_WIFI_ROLE_AUTO,
                                                   "wifi0", 5u),
               1);
-  check_int64("boot config reject absolute firmware path",
-              er_boot_config_add_efi_firmware_source(&config, 0x10ecu, 0x8922u,
-                                                     "/EFI/edgerun/rtw8922.bin", 24u),
-              0);
   check_int64("boot config reject missing firmware target",
-              er_boot_config_add_efi_firmware_source(&config, 0u, 0x8922u,
-                                                     "EFI/edgerun/rtw8922.bin", 23u),
+              er_boot_config_add_efi_firmware_source(&config, 0u, 0x8922u),
               0);
   check_int64("boot config add efi firmware source",
-              er_boot_config_add_efi_firmware_source(&config, 0x10ecu, 0x8922u,
-                                                     "EFI/edgerun/rtw8922.bin", 23u),
+              er_boot_config_add_efi_firmware_source(&config, 0x10ecu, 0x8922u),
               1);
   check_int64("boot config invalid generation rejected",
               er_boot_config_valid(&config), 0);
@@ -68,16 +62,25 @@ static void test_boot_config_and_seal_strategy(void) {
   check_uint64("boot config firmware device",
                config.firmware_sources[0].pci_device_id, 0x8922u);
   check_uint64("boot config firmware path len",
-               config.firmware_sources[0].path_len, 23u);
+               config.firmware_sources[0].path_len, ER_BOOT_CONFIG_FIRMWARE_PATH_LEN);
+  check_cstr("boot config firmware path",
+             config.firmware_sources[0].path,
+             "/EFI/firmware/10ec.8922.0");
   check_int64("boot config reject firmware path drift",
               (config.firmware_sources[0].path[3] = ' ', er_boot_config_valid(&config)), 0);
-  config.firmware_sources[0].path[3] = '/';
+  config.firmware_sources[0].path[3] = 'I';
   check_int64("boot config restored firmware path",
+              er_boot_config_valid(&config), 1);
+  check_int64("boot config reject firmware instance drift",
+              (config.firmware_sources[0].instance = 1u, er_boot_config_valid(&config)), 0);
+  config.firmware_sources[0].instance = 0u;
+  check_int64("boot config restored firmware instance",
               er_boot_config_valid(&config), 1);
   firmware_source = er_boot_config_find_efi_firmware_source(&config, 0x10ecu, 0x8922u);
   check_int64("boot config find firmware source", firmware_source != 0, 1);
   if (firmware_source != 0) {
-    check_uint64("boot config find firmware path len", firmware_source->path_len, 23u);
+    check_uint64("boot config find firmware path len",
+                 firmware_source->path_len, ER_BOOT_CONFIG_FIRMWARE_PATH_LEN);
   }
   check_int64("boot config find rejects wrong device",
               er_boot_config_find_efi_firmware_source(&config, 0x10ecu, 0x892bu) == 0, 1);

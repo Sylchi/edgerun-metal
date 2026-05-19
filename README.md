@@ -169,14 +169,16 @@ authority exists, setup creates one as a TPM-held persistent authority key.
 Mutable configuration lives on the EFI partition: which relay channels are
 available, which local interface speaks native EdgeRun frames, which interface
 may run regular TCP/IP compatibility traffic, and which admission public key this
-device will do work for, and whether any device firmware may be loaded from a
-chosen EFI-partition path. Firmware loading is disabled unless the selected
-authority profile names an explicit source and device target; there is no
-compiled-in fallback path. TPM storage is for keys and hardware-rooted identity
-material, not relay policy, drivers, or firmware blobs. If multiple authority
-profiles exist, the user selects one before the runtime starts. If Secure Boot
-or TPM state cannot be verified, boot fails instead of silently continuing under
-an ambiguous authority.
+device will do work for, and whether any device firmware may be loaded from the
+canonical EFI-partition name `/EFI/firmware/vendorid.deviceid.0`. The vendor and
+device fields are four lowercase hex digits derived from PCI IDs, for example
+`/EFI/firmware/10ec.8922.0`; users choose whether that device target is enabled,
+not an arbitrary path. Firmware loading is disabled unless the selected authority
+profile names an explicit device target; there is no compiled-in fallback path.
+TPM storage is for keys and hardware-rooted identity material, not relay policy,
+drivers, or firmware blobs. If multiple authority profiles exist, the user
+selects one before the runtime starts. If Secure Boot or TPM state cannot be
+verified, boot fails instead of silently continuing under an ambiguous authority.
 
 The interoperable Wi-Fi baseline is intentionally simple: an open fixed SSID
 named `edgerun`, no WPA enrollment, and no IP requirement for native EdgeRun

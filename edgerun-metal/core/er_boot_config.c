@@ -5,6 +5,22 @@ static const char g_er_boot_config_wifi_fixed_ssid[ER_BOOT_CONFIG_WIFI_FIXED_SSI
   'e', 'd', 'g', 'e', 'r', 'u', 'n'
 };
 
+static const char g_er_boot_config_firmware_path_prefix[] = {
+  '/', 'E', 'F', 'I', '/', 'f', 'i', 'r', 'm', 'w', 'a', 'r', 'e', '/'
+};
+
+#define ER_BOOT_CONFIG_FIRMWARE_PATH_PREFIX_LEN 14u
+#define ER_BOOT_CONFIG_FIRMWARE_HEX_DIGITS 4u
+#define ER_BOOT_CONFIG_FIRMWARE_VENDOR_OFFSET ER_BOOT_CONFIG_FIRMWARE_PATH_PREFIX_LEN
+#define ER_BOOT_CONFIG_FIRMWARE_SEPARATOR0_OFFSET 18u
+#define ER_BOOT_CONFIG_FIRMWARE_DEVICE_OFFSET 19u
+#define ER_BOOT_CONFIG_FIRMWARE_SEPARATOR1_OFFSET 23u
+#define ER_BOOT_CONFIG_FIRMWARE_INSTANCE_OFFSET 24u
+#define ER_BOOT_CONFIG_FIRMWARE_INSTANCE_ZERO 0u
+#define ER_BOOT_CONFIG_FIRMWARE_INSTANCE_ZERO_CHAR '0'
+#define ER_BOOT_CONFIG_HEX_NIBBLE_MASK 0x0fu
+#define ER_BOOT_CONFIG_HEX_NIBBLE_BITS 4u
+
 static UINT8 er_boot_config_channel_kind_valid(UINT8 channel_kind) {
   switch (channel_kind) {
     case ER_CHANNEL_KIND_NATIVE_ETH:
@@ -41,52 +57,74 @@ static UINT8 er_boot_config_label_valid(const char* label, UINT16 label_len) {
   return 1u;
 }
 
-static UINT8 er_boot_config_firmware_path_char_valid(char c) {
-  if (c >= 'a' && c <= 'z') {
-    return 1u;
-  }
-  if (c >= 'A' && c <= 'Z') {
-    return 1u;
-  }
-  if (c >= '0' && c <= '9') {
-    return 1u;
+static char er_boot_config_hex_char(UINT8 value) {
+  static const char hex_chars[16] = {
+    '0', '1', '2', '3', '4', '5', '6', '7',
+    '8', '9', 'a', 'b', 'c', 'd', 'e', 'f'
+  };
+
+  return hex_chars[value & ER_BOOT_CONFIG_HEX_NIBBLE_MASK];
+}
+
+static void er_boot_config_write_hex16(char* out, UINT16 value) {
+  UINT16 i;
+  UINT8 shift;
+
+  if (out == 0) {
+    return;
   }
 
-  switch (c) {
-    case '/':
-    case '-':
-    case '_':
-    case '.':
-      return 1u;
-    default:
-      return 0u;
+  for (i = 0u; i < ER_BOOT_CONFIG_FIRMWARE_HEX_DIGITS; ++i) {
+    shift = (UINT8)((ER_BOOT_CONFIG_FIRMWARE_HEX_DIGITS - 1u - i) *
+                    ER_BOOT_CONFIG_HEX_NIBBLE_BITS);
+    out[i] = er_boot_config_hex_char((UINT8)(value >> shift));
   }
 }
 
-static UINT8 er_boot_config_firmware_path_valid(const char* path, UINT16 path_len) {
-  UINT16 i;
+static void er_boot_config_write_firmware_path(ErBootFirmwareSourceConfig* source) {
+  if (source == 0) {
+    return;
+  }
 
-  if (path == 0 || path_len == 0u || path_len > ER_BOOT_CONFIG_FIRMWARE_PATH_MAX) {
+  er_mem_zero((UINT8*)source->path, (UINTN)sizeof(source->path));
+  er_mem_copy((UINT8*)source->path,
+              (const UINT8*)g_er_boot_config_firmware_path_prefix,
+              ER_BOOT_CONFIG_FIRMWARE_PATH_PREFIX_LEN);
+  er_boot_config_write_hex16(&source->path[ER_BOOT_CONFIG_FIRMWARE_VENDOR_OFFSET],
+                             source->pci_vendor_id);
+  source->path[ER_BOOT_CONFIG_FIRMWARE_SEPARATOR0_OFFSET] = '.';
+  er_boot_config_write_hex16(&source->path[ER_BOOT_CONFIG_FIRMWARE_DEVICE_OFFSET],
+                             source->pci_device_id);
+  source->path[ER_BOOT_CONFIG_FIRMWARE_SEPARATOR1_OFFSET] = '.';
+  source->path[ER_BOOT_CONFIG_FIRMWARE_INSTANCE_OFFSET] = ER_BOOT_CONFIG_FIRMWARE_INSTANCE_ZERO_CHAR;
+  source->path_len = ER_BOOT_CONFIG_FIRMWARE_PATH_LEN;
+}
+
+static UINT8 er_boot_config_firmware_path_canonical(const ErBootFirmwareSourceConfig* source) {
+  ErBootFirmwareSourceConfig expected;
+
+  if (source == 0 || source->path_len != ER_BOOT_CONFIG_FIRMWARE_PATH_LEN) {
     return 0u;
   }
-  if (path[0] == '/' || path[path_len - 1u] == '/') {
-    return 0u;
-  }
-  for (i = 0u; i < path_len; ++i) {
-    if (path[i] == 0 || er_boot_config_firmware_path_char_valid(path[i]) == 0u) {
-      return 0u;
-    }
-  }
-  return 1u;
+
+  er_mem_zero((UINT8*)&expected, (UINTN)sizeof(expected));
+  expected.pci_vendor_id = source->pci_vendor_id;
+  expected.pci_device_id = source->pci_device_id;
+  er_boot_config_write_firmware_path(&expected);
+  return er_mem_equal((const UINT8*)source->path,
+                      (const UINT8*)expected.path,
+                      ER_BOOT_CONFIG_FIRMWARE_PATH_LEN);
 }
 
 static UINT8 er_boot_config_firmware_source_valid(const ErBootFirmwareSourceConfig* source) {
   if (source == 0 ||
       source->enabled != ER_BOOT_CONFIG_CHANNEL_ENABLED ||
       source->source_kind != ER_BOOT_CONFIG_FIRMWARE_SOURCE_EFI_PARTITION ||
+      source->instance != ER_BOOT_CONFIG_FIRMWARE_INSTANCE_ZERO ||
+      source->reserved != 0u ||
       source->pci_vendor_id == 0u ||
       source->pci_device_id == 0u ||
-      er_boot_config_firmware_path_valid(source->path, source->path_len) == 0u) {
+      er_boot_config_firmware_path_canonical(source) == 0u) {
     return 0u;
   }
 
@@ -168,16 +206,13 @@ UINT8 er_boot_config_add_open_wifi_channel(ErBootConfig* config,
 
 UINT8 er_boot_config_add_efi_firmware_source(ErBootConfig* config,
                                              UINT16 pci_vendor_id,
-                                             UINT16 pci_device_id,
-                                             const char* path,
-                                             UINT16 path_len) {
+                                             UINT16 pci_device_id) {
   ErBootFirmwareSourceConfig* source;
 
   if (config == 0 ||
       config->firmware_source_count >= ER_BOOT_CONFIG_FIRMWARE_SOURCE_CAPACITY ||
       pci_vendor_id == 0u ||
-      pci_device_id == 0u ||
-      er_boot_config_firmware_path_valid(path, path_len) == 0u) {
+      pci_device_id == 0u) {
     return 0u;
   }
 
@@ -185,10 +220,10 @@ UINT8 er_boot_config_add_efi_firmware_source(ErBootConfig* config,
   er_mem_zero((UINT8*)source, (UINTN)sizeof(*source));
   source->enabled = ER_BOOT_CONFIG_CHANNEL_ENABLED;
   source->source_kind = ER_BOOT_CONFIG_FIRMWARE_SOURCE_EFI_PARTITION;
+  source->instance = ER_BOOT_CONFIG_FIRMWARE_INSTANCE_ZERO;
   source->pci_vendor_id = pci_vendor_id;
   source->pci_device_id = pci_device_id;
-  source->path_len = path_len;
-  er_mem_copy((UINT8*)source->path, (const UINT8*)path, path_len);
+  er_boot_config_write_firmware_path(source);
   config->firmware_source_count += 1u;
   return 1u;
 }
