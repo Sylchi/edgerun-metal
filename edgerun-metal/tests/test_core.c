@@ -50,6 +50,7 @@ int main(void) {
   test_wasm_relay_imports();
   test_wasm_ui_command_stats_records();
   test_wasm_ui_emit_import();
+  test_wasm_c_generated_hostcall_modules();
   test_epoch_clock_rollover();
   test_ui_wasm_app_runner();
   test_ui_wasm_app_multiple_runtimes();

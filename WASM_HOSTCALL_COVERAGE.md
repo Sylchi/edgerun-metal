@@ -19,6 +19,7 @@ Current coverage:
 | Contract-admitted user app hostcalls | 4 / 12 | 33.3% |
 | C frontend declaration tests | 4 / 12 | 33.3% |
 | C frontend call emission tests | 4 / 12 | 33.3% |
+| C-generated runtime execution tests | 4 / 12 | 33.3% |
 
 ## Hostcall Checklist
 
@@ -30,12 +31,12 @@ Current coverage:
 | [ ] | `edgerun.pci/write32` | `(i64, i64, i64, i64, i64) -> void` | not admitted | missing | expressible, untested | missing | Add direct execution test and decide driver contract ownership. |
 | [x] | `edgerun.mmio/map` | `(i64, i64) -> i64` | not admitted | `test_wasm_mmio_imports` | expressible, untested | missing | Decide whether this stays internal or becomes a driver contract call. |
 | [x] | `edgerun.mmio/read32` | `(i64, i64) -> i64` | not admitted | `test_wasm_mmio_imports` | expressible, untested | missing | Decide whether this stays internal or becomes a driver contract call. |
-| [x] | `edgerun.bus/exec` | `(i64, i64) -> i64` | `BUS_DRIVER` marker | `test_wasm_bus_exec_import` | `tests/wasm-compile-tests.sh` | `tests/wasm-compile-tests.sh` | Add generated module runtime execution test. |
+| [x] | `edgerun.bus/exec` | `(i64, i64) -> i64` | `BUS_DRIVER` marker | `test_wasm_bus_exec_import` | `tests/wasm-compile-tests.sh` | `tests/wasm-compile-tests.sh` and `test_wasm_c_generated_hostcall_modules` | Add package workflow fixture. |
 | [x] | `edgerun.relay/send` | `(i64, i64) -> i64` | not admitted | `test_wasm_relay_imports` | expressible, untested | missing | Decide whether relay access is a user app contract or runtime-owned path. |
 | [x] | `edgerun.relay/recv` | `(i64, i64) -> i64` | not admitted | `test_wasm_relay_imports` | expressible, untested | missing | Decide whether relay access is a user app contract or runtime-owned path. |
-| [x] | `edgerun.memory/region_base` | `(i64) -> i64` | `UI_APP` support | `test_wasm_public_region_imports` | `tests/wasm-compile-tests.sh` | `tests/wasm-compile-tests.sh` | Add generated module runtime execution test. |
-| [x] | `edgerun.memory/region_len` | `(i64) -> i64` | `UI_APP` support | `test_wasm_public_region_imports` | `tests/wasm-compile-tests.sh` | `tests/wasm-compile-tests.sh` | Add generated module runtime execution test. |
-| [x] | `edgerun.ui/emit` | `(i64, i64) -> i64` | `UI_APP` marker | `test_wasm_ui_emit_import` | `tests/wasm-compile-tests.sh` | `tests/wasm-compile-tests.sh` | Add generated module runtime execution test. |
+| [x] | `edgerun.memory/region_base` | `(i64) -> i64` | `UI_APP` support | `test_wasm_public_region_imports` | `tests/wasm-compile-tests.sh` | `tests/wasm-compile-tests.sh` and `test_wasm_c_generated_hostcall_modules` | Add package workflow fixture. |
+| [x] | `edgerun.memory/region_len` | `(i64) -> i64` | `UI_APP` support | `test_wasm_public_region_imports` | `tests/wasm-compile-tests.sh` | `tests/wasm-compile-tests.sh` and `test_wasm_c_generated_hostcall_modules` | Add package workflow fixture. |
+| [x] | `edgerun.ui/emit` | `(i64, i64) -> i64` | `UI_APP` marker | `test_wasm_ui_emit_import` | `tests/wasm-compile-tests.sh` | `tests/wasm-compile-tests.sh` and `test_wasm_c_generated_hostcall_modules` | Add package workflow fixture. |
 
 ## Work To Cross Off Next
 
@@ -45,6 +46,6 @@ Current coverage:
 - [x] Extend the C frontend expression subset from integer returns to admitted i64 hostcall return expressions.
 - [ ] Add C declaration tests for every admitted canonical hostcall signature.
 - [x] Add C call-emission tests for `bus.exec`, `memory.region_base`, `memory.region_len`, and `ui.emit`.
-- [ ] Add generated module runtime execution tests for C-emitted hostcall modules.
+- [x] Add generated module runtime execution tests for C-emitted hostcall modules.
 - [ ] Add a package fixture that builds `app/app.c` into `app/.build/app.wasm` using the canonical package layout.
 - [ ] Update this checklist whenever `ER_WASM_CONTRACT_IMPORTS` changes.

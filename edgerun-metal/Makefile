@@ -58,7 +58,11 @@ EMBED_HEADER_BIN := $(BUILD_DIR)/embed-header
 WASM_COMPILE_SRCS := ../tools/wasm-compile/main.c ../tools/wasm-compile/wasm_compile_c.c ../tools/wasm-compile/wasm_compile_common.c ../tools/wasm-compile/wasm_compile_contract.c ../tools/wasm-compile/wasm_compile_emit.c ../tools/wasm-compile/wasm_compile_io.c ../tools/wasm-compile/wasm_compile_module.c ../tools/wasm-compile/wasm_compile_parse.c
 WASM_COMPILE_HDRS := ../tools/wasm-compile/wasm_compile.h
 WASM_COMPILE_BIN := $(BUILD_DIR)/wasm-compile
-WASM_MODULE_HEADERS := $(GENERATED_DIR)/wasm_driver_bus_probe_module.h $(GENERATED_DIR)/wasm_ui_counter_module.h
+WASM_MODULE_HEADERS := $(GENERATED_DIR)/wasm_driver_bus_probe_module.h $(GENERATED_DIR)/wasm_ui_counter_module.h \
+                       $(GENERATED_DIR)/wasm_c_hostcall_bus_exec_module.h \
+                       $(GENERATED_DIR)/wasm_c_hostcall_region_base_module.h \
+                       $(GENERATED_DIR)/wasm_c_hostcall_region_len_module.h \
+                       $(GENERATED_DIR)/wasm_c_hostcall_ui_emit_module.h
 FONT_HEADER := $(GENERATED_DIR)/font_geist.h
 FONT_BAKED_HEADER := $(GENERATED_DIR)/font_geist_baked.h
 FONT_SOURCE := $(VARFONT_DIR)/fonts/Geist[wght].ttf
@@ -85,6 +89,7 @@ QEMU_SWTPM_PERSIST_SCRIPT := ../tools/qemu-swtpm-persistence.sh
 QEMU_SWTPM_PERSIST_DIR := $(BUILD_DIR)/qemu-swtpm-persistence
 QEMU_SWTPM_PERSIST_TIMEOUT := 30
 CORE_TEST_SRC := tests/test_core.c core/efi_boot_memory.c core/efi_boot_relay.c core/efi_boot_routes.c core/efi_boot_wasm.c core/er_boot_admission_record.c core/er_boot_efi_vars.c core/er_boot_config.c core/er_boot_profile.c core/er_boot_services.c core/er_pci.c core/er_rtw89.c core/er_mt7922.c core/er_firmware_loader.c core/er_mmio.c core/er_crypto.c core/er_crypto_blake3.c $(CRYPTO_SRCS) core/er_mem.c core/er_vfs.c core/er_app.c core/er_identity.c core/er_device_identity.c core/er_work_route.c core/er_render_endpoint.c core/er_storage_endpoint.c core/er_seal.c core/er_tpm.c core/er_hw_relay.c core/er_relay_packet.c core/er_ble_adv.c core/er_wifi_burst.c core/er_bus.c core/er_ps2_keyboard.c core/er_acpi.c core/er_print.c core/er_netlog.c core/er_gfx_console.c core/er_ui_gop_renderer.c core/er_ui_wasm_app.c core/er_epoch_clock.c core/erwire.c core/er_native_boot.c core/wasm_vm.c core/wasm_vm_reader.c core/wasm_vm_memory_ui.c core/wasm_vm_contract.c core/wasm_vm_hostcall.c core/wasm_vm_execute.c core/er_virtio.c core/er_virtio_blk.c core/er_virtio_net.c core/er_virtio_gpu.c core/er_net_frame.c core/er_native_eth.c $(UI_SRCS) $(VARFONT_SRCS)
+CORE_TEST_FRAGMENT_SRCS := $(wildcard tests/test_core_*.c)
 CORE_TEST_BIN := $(BUILD_DIR)/test-core
 IFACE :=
 
@@ -125,11 +130,39 @@ $(GENERATED_DIR)/ui_counter.wasm: modules/ui_counter/ui_counter.wat $(WASM_COMPI
 	mkdir -p $(dir $@)
 	$(WASM_COMPILE_BIN) $< $@
 
+$(GENERATED_DIR)/c_hostcall_bus_exec.wasm: modules/c_hostcall_bus_exec/c_hostcall_bus_exec.c $(WASM_COMPILE_BIN)
+	mkdir -p $(dir $@)
+	$(WASM_COMPILE_BIN) $< $@
+
+$(GENERATED_DIR)/c_hostcall_region_base.wasm: modules/c_hostcall_region_base/c_hostcall_region_base.c $(WASM_COMPILE_BIN)
+	mkdir -p $(dir $@)
+	$(WASM_COMPILE_BIN) $< $@
+
+$(GENERATED_DIR)/c_hostcall_region_len.wasm: modules/c_hostcall_region_len/c_hostcall_region_len.c $(WASM_COMPILE_BIN)
+	mkdir -p $(dir $@)
+	$(WASM_COMPILE_BIN) $< $@
+
+$(GENERATED_DIR)/c_hostcall_ui_emit.wasm: modules/c_hostcall_ui_emit/c_hostcall_ui_emit.c $(WASM_COMPILE_BIN)
+	mkdir -p $(dir $@)
+	$(WASM_COMPILE_BIN) $< $@
+
 $(GENERATED_DIR)/wasm_driver_bus_probe_module.h: $(GENERATED_DIR)/driver_bus_probe.wasm $(EMBED_HEADER_BIN)
 	$(EMBED_HEADER_BIN) wasm $< $@ WASM_DRIVER_BUS_PROBE_MODULE_H g_edgerun_driver_bus_probe_wasm ER_DRIVER_BUS_PROBE_WASM_SIZE modules/driver_bus_probe/driver_bus_probe.wat
 
 $(GENERATED_DIR)/wasm_ui_counter_module.h: $(GENERATED_DIR)/ui_counter.wasm $(EMBED_HEADER_BIN)
 	$(EMBED_HEADER_BIN) wasm $< $@ WASM_UI_COUNTER_MODULE_H g_edgerun_ui_counter_wasm ER_UI_COUNTER_WASM_SIZE modules/ui_counter/ui_counter.wat
+
+$(GENERATED_DIR)/wasm_c_hostcall_bus_exec_module.h: $(GENERATED_DIR)/c_hostcall_bus_exec.wasm $(EMBED_HEADER_BIN)
+	$(EMBED_HEADER_BIN) wasm $< $@ WASM_C_HOSTCALL_BUS_EXEC_MODULE_H g_edgerun_c_hostcall_bus_exec_wasm ER_C_HOSTCALL_BUS_EXEC_WASM_SIZE modules/c_hostcall_bus_exec/c_hostcall_bus_exec.c
+
+$(GENERATED_DIR)/wasm_c_hostcall_region_base_module.h: $(GENERATED_DIR)/c_hostcall_region_base.wasm $(EMBED_HEADER_BIN)
+	$(EMBED_HEADER_BIN) wasm $< $@ WASM_C_HOSTCALL_REGION_BASE_MODULE_H g_edgerun_c_hostcall_region_base_wasm ER_C_HOSTCALL_REGION_BASE_WASM_SIZE modules/c_hostcall_region_base/c_hostcall_region_base.c
+
+$(GENERATED_DIR)/wasm_c_hostcall_region_len_module.h: $(GENERATED_DIR)/c_hostcall_region_len.wasm $(EMBED_HEADER_BIN)
+	$(EMBED_HEADER_BIN) wasm $< $@ WASM_C_HOSTCALL_REGION_LEN_MODULE_H g_edgerun_c_hostcall_region_len_wasm ER_C_HOSTCALL_REGION_LEN_WASM_SIZE modules/c_hostcall_region_len/c_hostcall_region_len.c
+
+$(GENERATED_DIR)/wasm_c_hostcall_ui_emit_module.h: $(GENERATED_DIR)/c_hostcall_ui_emit.wasm $(EMBED_HEADER_BIN)
+	$(EMBED_HEADER_BIN) wasm $< $@ WASM_C_HOSTCALL_UI_EMIT_MODULE_H g_edgerun_c_hostcall_ui_emit_wasm ER_C_HOSTCALL_UI_EMIT_WASM_SIZE modules/c_hostcall_ui_emit/c_hostcall_ui_emit.c
 
 $(FONT_HEADER): $(FONT_SOURCE) $(EMBED_HEADER_BIN)
 	mkdir -p $(dir $@)
@@ -181,7 +214,7 @@ $(WIFI_HW_PROBE_BIN): $(WIFI_HW_PROBE_SRC) core/er_mt7922.h core/er_rtw89.h
 	mkdir -p $(dir $@)
 	$(HOST_CC) $(HOST_CFLAGS) $(HOST_LDFLAGS) -o $@ $(WIFI_HW_PROBE_SRC)
 
-$(CORE_TEST_BIN): $(CORE_TEST_SRC) $(HDRS) $(UI_HDRS) $(VARFONT_HDRS) $(CRYPTO_HDRS) $(WASM_MODULE_HEADERS) $(FONT_HEADER)
+$(CORE_TEST_BIN): $(CORE_TEST_SRC) $(CORE_TEST_FRAGMENT_SRCS) $(HDRS) $(UI_HDRS) $(VARFONT_HDRS) $(CRYPTO_HDRS) $(WASM_MODULE_HEADERS) $(FONT_HEADER)
 	mkdir -p $(dir $@)
 	$(HOST_CC) $(HOST_CFLAGS) $(HOST_LDFLAGS) -o $@ $(CORE_TEST_SRC)
 
