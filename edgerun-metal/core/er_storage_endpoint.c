@@ -9,8 +9,13 @@
 static const UINT8 g_storage_capture_domain[] = "edgerun:c:v1:storage:endpoint-capture";
 static const UINT8 g_storage_sealed_relay_payload_domain[] =
     "edgerun:c:v1:storage:sealed-relay-payload";
+static const UINT8 g_storage_route_receipt_domain[] =
+    "edgerun:c:v1:storage:route-receipt";
 
 enum {
+  ER_STORAGE_U64_BYTES = 8u,
+  ER_STORAGE_BYTE_BITS = 8u,
+  ER_STORAGE_BYTE_MASK = 0xffu,
   ER_STORAGE_CAPTURE_SPAN_COUNT = 4u,
   ER_STORAGE_CAPTURE_ROUTE_SPAN = 0u,
   ER_STORAGE_CAPTURE_OBJECT_SPAN = 1u,
@@ -18,9 +23,33 @@ enum {
   ER_STORAGE_CAPTURE_PAYLOAD_SPAN = 3u,
   ER_STORAGE_SEALED_RELAY_PAYLOAD_SPAN_COUNT = 1u,
   ER_STORAGE_SEALED_RELAY_PAYLOAD_SPAN = 0u,
+  ER_STORAGE_RECEIPT_FIELD_BYTES = ER_STORAGE_U64_BYTES * 6u,
+  ER_STORAGE_RECEIPT_SPAN_COUNT = 9u,
+  ER_STORAGE_RECEIPT_ROUTE_SPAN = 0u,
+  ER_STORAGE_RECEIPT_REQUEST_SPAN = 1u,
+  ER_STORAGE_RECEIPT_ADMISSION_SPAN = 2u,
+  ER_STORAGE_RECEIPT_RELAY_PAYLOAD_SPAN = 3u,
+  ER_STORAGE_RECEIPT_SEALED_OBJECT_SPAN = 4u,
+  ER_STORAGE_RECEIPT_TRANSIT_SPAN = 5u,
+  ER_STORAGE_RECEIPT_RELAY_NODE_SPAN = 6u,
+  ER_STORAGE_RECEIPT_CAPTURE_SEALED_PAYLOAD_SPAN = 7u,
+  ER_STORAGE_RECEIPT_FIELDS_SPAN = 8u,
   ER_STORAGE_CACHE_ENTRY_EMPTY = 0u,
   ER_STORAGE_CACHE_ENTRY_FIRST = 0u
 };
+
+static void er_storage_endpoint_put_be(UINT8* dst, UINT64 value, UINTN byte_count) {
+  UINTN i;
+
+  for (i = 0u; i < byte_count; ++i) {
+    UINTN shift = (byte_count - 1u - i) * ER_STORAGE_BYTE_BITS;
+    dst[i] = (UINT8)((value >> shift) & ER_STORAGE_BYTE_MASK);
+  }
+}
+
+static void er_storage_endpoint_put_be64(UINT8* dst, UINT64 value) {
+  er_storage_endpoint_put_be(dst, value, ER_STORAGE_U64_BYTES);
+}
 
 static UINT8 er_storage_endpoint_route_valid(const ErAdmittedRoute* route) {
   return (UINT8)(route != 0 &&
@@ -83,6 +112,57 @@ static UINT8 er_storage_endpoint_capture_hash(const ErCryptoProvider* crypto,
   return er_crypto_hash(crypto, g_storage_capture_domain,
                         (UINTN)(sizeof(g_storage_capture_domain) - 1u),
                         spans, ER_STORAGE_CAPTURE_SPAN_COUNT, out_hash);
+}
+
+static UINT8 er_storage_endpoint_route_receipt_hash(
+    const ErCryptoProvider* crypto,
+    const ErStorageEndpointRouteReceipt* receipt,
+    const ErStorageEndpointSealedRelayCapture* capture,
+    ErHash* out_hash) {
+  UINT8 fields[ER_STORAGE_RECEIPT_FIELD_BYTES];
+  UINT8* cursor = fields;
+  ErByteSpan spans[ER_STORAGE_RECEIPT_SPAN_COUNT];
+
+  if (crypto == 0 || receipt == 0 || capture == 0 || out_hash == 0) {
+    return 0u;
+  }
+
+  er_storage_endpoint_put_be64(cursor, receipt->sequence);
+  cursor += ER_STORAGE_U64_BYTES;
+  er_storage_endpoint_put_be64(cursor, receipt->packet_bytes);
+  cursor += ER_STORAGE_U64_BYTES;
+  er_storage_endpoint_put_be64(cursor, receipt->units_used);
+  cursor += ER_STORAGE_U64_BYTES;
+  er_storage_endpoint_put_be64(cursor, receipt->unit_price);
+  cursor += ER_STORAGE_U64_BYTES;
+  er_storage_endpoint_put_be64(cursor, receipt->receipt_base);
+  cursor += ER_STORAGE_U64_BYTES;
+  er_storage_endpoint_put_be64(cursor, receipt->total_claim);
+
+  spans[ER_STORAGE_RECEIPT_ROUTE_SPAN].bytes = receipt->route_id.bytes;
+  spans[ER_STORAGE_RECEIPT_ROUTE_SPAN].len = ER_HASH_LEN;
+  spans[ER_STORAGE_RECEIPT_REQUEST_SPAN].bytes = receipt->request_hash.bytes;
+  spans[ER_STORAGE_RECEIPT_REQUEST_SPAN].len = ER_HASH_LEN;
+  spans[ER_STORAGE_RECEIPT_ADMISSION_SPAN].bytes = receipt->admission_id.bytes;
+  spans[ER_STORAGE_RECEIPT_ADMISSION_SPAN].len = ER_HASH_LEN;
+  spans[ER_STORAGE_RECEIPT_RELAY_PAYLOAD_SPAN].bytes =
+      receipt->relay_payload_hash.bytes;
+  spans[ER_STORAGE_RECEIPT_RELAY_PAYLOAD_SPAN].len = ER_HASH_LEN;
+  spans[ER_STORAGE_RECEIPT_SEALED_OBJECT_SPAN].bytes =
+      receipt->sealed_object_id.bytes;
+  spans[ER_STORAGE_RECEIPT_SEALED_OBJECT_SPAN].len = ER_HASH_LEN;
+  spans[ER_STORAGE_RECEIPT_TRANSIT_SPAN].bytes = receipt->transit_hash.bytes;
+  spans[ER_STORAGE_RECEIPT_TRANSIT_SPAN].len = ER_HASH_LEN;
+  spans[ER_STORAGE_RECEIPT_RELAY_NODE_SPAN].bytes = receipt->relay_node_id.bytes;
+  spans[ER_STORAGE_RECEIPT_RELAY_NODE_SPAN].len = ER_NODE_ID_LEN;
+  spans[ER_STORAGE_RECEIPT_CAPTURE_SEALED_PAYLOAD_SPAN].bytes =
+      capture->sealed_payload_hash.bytes;
+  spans[ER_STORAGE_RECEIPT_CAPTURE_SEALED_PAYLOAD_SPAN].len = ER_HASH_LEN;
+  spans[ER_STORAGE_RECEIPT_FIELDS_SPAN].bytes = fields;
+  spans[ER_STORAGE_RECEIPT_FIELDS_SPAN].len = (UINTN)sizeof(fields);
+  return er_crypto_hash(crypto, g_storage_route_receipt_domain,
+                        (UINTN)(sizeof(g_storage_route_receipt_domain) - 1u),
+                        spans, ER_STORAGE_RECEIPT_SPAN_COUNT, out_hash);
 }
 
 UINT8 er_storage_endpoint_object_store_init(ErStorageEndpointObjectStore* store,
@@ -446,6 +526,75 @@ UINT8 er_storage_endpoint_capture_sealed_relay_packet(const ErCryptoProvider* cr
   out_capture->plaintext_len = sealed_header->plaintext_len;
   out_capture->sealed_payload_len = sealed_header->sealed_payload_len;
   return 1u;
+}
+
+UINT8 er_storage_endpoint_prepare_sealed_relay_receipt(
+    const ErCryptoProvider* crypto,
+    const ErAdmittedRoute* route,
+    const ErStorageEndpointSealedRelayCapture* capture,
+    const ErRelayAccountingClaim* claim,
+    ErStorageEndpointRouteReceipt* out_receipt) {
+  UINT64 packet_bytes;
+  UINT64 expected_units;
+  UINT64 claim_amount;
+
+  if (crypto == 0 || capture == 0 || claim == 0 || out_receipt == 0 ||
+      er_storage_endpoint_route_valid(route) == 0u ||
+      capture->abi_version != ER_WORK_ABI_VERSION ||
+      claim->abi_version != ER_WORK_ABI_VERSION ||
+      er_hash_equal(&capture->route_id, &route->route_id) == 0u ||
+      er_hash_equal(&capture->admission_id, &route->admission_hash) == 0u ||
+      er_hash_equal(&claim->request_hash, &route->request_hash) == 0u ||
+      er_hash_equal(&claim->admission_hash, &route->admission_hash) == 0u ||
+      er_node_id_equal(&claim->relay_node_id, &route->relay_node_id) == 0u ||
+      er_hash_nonzero(&capture->relay_payload_hash) == 0u ||
+      er_hash_nonzero(&capture->sealed_object_id) == 0u ||
+      er_hash_nonzero(&capture->sealed_payload_hash) == 0u ||
+      er_hash_nonzero(&claim->transit_hash) == 0u ||
+      capture->sequence == 0u ||
+      claim->sequence != capture->sequence ||
+      claim->units_used == 0u ||
+      claim->unit_price == 0u ||
+      claim->total_claim == 0u) {
+    return 0u;
+  }
+
+  packet_bytes = (UINT64)ER_RELAY_PACKET_HEADER_LEN + capture->sealed_payload_len;
+  if (packet_bytes < (UINT64)ER_RELAY_PACKET_HEADER_LEN ||
+      claim->packet_bytes != packet_bytes) {
+    return 0u;
+  }
+  expected_units = (packet_bytes + (ER_WORK_COST_UNIT_BYTES - 1u)) /
+                   ER_WORK_COST_UNIT_BYTES;
+  if (expected_units == 0u ||
+      claim->units_used != expected_units ||
+      claim->units_used > (~0ull / claim->unit_price)) {
+    return 0u;
+  }
+  claim_amount = claim->units_used * claim->unit_price;
+  if (claim_amount > (~0ull - claim->receipt_base) ||
+      claim->total_claim != claim_amount + claim->receipt_base ||
+      claim->total_claim > route->admitted_budget) {
+    return 0u;
+  }
+
+  er_mem_zero((UINT8*)out_receipt, (UINTN)sizeof(*out_receipt));
+  out_receipt->abi_version = ER_WORK_ABI_VERSION;
+  out_receipt->route_id = route->route_id;
+  out_receipt->request_hash = route->request_hash;
+  out_receipt->admission_id = route->admission_hash;
+  out_receipt->relay_payload_hash = capture->relay_payload_hash;
+  out_receipt->sealed_object_id = capture->sealed_object_id;
+  out_receipt->transit_hash = claim->transit_hash;
+  out_receipt->relay_node_id = route->relay_node_id;
+  out_receipt->sequence = capture->sequence;
+  out_receipt->packet_bytes = claim->packet_bytes;
+  out_receipt->units_used = claim->units_used;
+  out_receipt->unit_price = claim->unit_price;
+  out_receipt->receipt_base = claim->receipt_base;
+  out_receipt->total_claim = claim->total_claim;
+  return er_storage_endpoint_route_receipt_hash(crypto, out_receipt, capture,
+                                                &out_receipt->receipt_hash);
 }
 
 UINT8 er_storage_endpoint_capture_object_packet(const ErCryptoProvider* crypto,
