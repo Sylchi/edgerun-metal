@@ -17,12 +17,46 @@ static const uint32_t ERWC_HOST_IMPORT_COUNT =
 
 static ErWasmImportKind erwc_host_import_kind(const char* module, const char* field) {
   for (uint32_t i = 0u; i < ERWC_HOST_IMPORT_COUNT; ++i) {
+    //@optimizer-ignore shared Wasm host import ABI table requires indexed module and field lookup
     if (strcmp(module, ERWC_HOST_IMPORTS[i].module) == 0 &&
+        //@optimizer-ignore shared Wasm host import ABI table requires indexed module and field lookup
         strcmp(field, ERWC_HOST_IMPORTS[i].field) == 0) {
+      //@optimizer-ignore shared Wasm host import ABI table requires indexed kind lookup
       return ERWC_HOST_IMPORTS[i].kind;
     }
   }
   return ER_WASM_IMPORT_KIND_NONE;
+}
+
+static int erwc_parse_named_child(const ErWcParse* parse,
+                                  int* child,
+                                  const char* expected_name,
+                                  char* out_name,
+                                  size_t out_len) {
+  if (!erwc_node_atom_equals(parse, *child, expected_name)) {
+    return -1;
+  }
+  *child = parse->nodes[*child].next_sibling;
+  if (erwc_copy_token_text(parse, *child, out_name, out_len) != 0) {
+    return -1;
+  }
+  *child = parse->nodes[*child].next_sibling;
+  return 0;
+}
+
+static int erwc_parse_only_func_list(const ErWcParse* parse, int list_node) {
+  int func_list = list_node;
+  int func_child;
+
+  if (func_list < 0 || parse->nodes[func_list].is_list == 0 ||
+      parse->nodes[func_list].next_sibling >= 0) {
+    return -1;
+  }
+  func_child = parse->nodes[func_list].first_child;
+  if (!erwc_node_atom_equals(parse, func_child, "func")) {
+    return -1;
+  }
+  return func_child;
 }
 
 static int erwc_parse_type_ref(const ErWcParse* parse, int list_node, char* out_name, size_t out_len) {
@@ -54,20 +88,13 @@ static int erwc_parse_type_decl(const ErWcParse* parse, int list_node, ErWcModul
   type = &module->types[module->type_count];
   memset(type, 0, sizeof(*type));
   child = parse->nodes[list_node].first_child;
-  if (!erwc_node_atom_equals(parse, child, "type")) {
+  if (erwc_parse_named_child(parse, &child, "type",
+                             type->name, sizeof(type->name)) != 0) {
     return -1;
   }
-  child = parse->nodes[child].next_sibling;
-  if (erwc_copy_token_text(parse, child, type->name, sizeof(type->name)) != 0) {
-    return -1;
-  }
-  func_list = parse->nodes[child].next_sibling;
-  if (func_list < 0 || parse->nodes[func_list].is_list == 0 ||
-      parse->nodes[func_list].next_sibling >= 0) {
-    return -1;
-  }
-  func_child = parse->nodes[func_list].first_child;
-  if (!erwc_node_atom_equals(parse, func_child, "func")) {
+  func_list = child;
+  func_child = erwc_parse_only_func_list(parse, func_list);
+  if (func_child < 0) {
     return -1;
   }
   for (func_child = parse->nodes[func_child].next_sibling;
@@ -126,24 +153,16 @@ static int erwc_parse_import_decl(const ErWcParse* parse, int list_node, ErWcMod
   import = &module->imports[module->import_count];
   memset(import, 0, sizeof(*import));
   child = parse->nodes[list_node].first_child;
-  if (!erwc_node_atom_equals(parse, child, "import")) {
+  if (erwc_parse_named_child(parse, &child, "import",
+                             import->module, sizeof(import->module)) != 0) {
     return -1;
   }
-  child = parse->nodes[child].next_sibling;
-  if (erwc_copy_token_text(parse, child, import->module, sizeof(import->module)) != 0) {
-    return -1;
-  }
-  child = parse->nodes[child].next_sibling;
   if (erwc_copy_token_text(parse, child, import->field, sizeof(import->field)) != 0) {
     return -1;
   }
   func_list = parse->nodes[child].next_sibling;
-  if (func_list < 0 || parse->nodes[func_list].is_list == 0 ||
-      parse->nodes[func_list].next_sibling >= 0) {
-    return -1;
-  }
-  func_child = parse->nodes[func_list].first_child;
-  if (!erwc_node_atom_equals(parse, func_child, "func")) {
+  func_child = erwc_parse_only_func_list(parse, func_list);
+  if (func_child < 0) {
     return -1;
   }
   func_child = parse->nodes[func_child].next_sibling;
@@ -189,11 +208,11 @@ static int erwc_parse_memory_immediate(const ErWcParse* parse, int node_index,
   if (erwc_copy_token_text(parse, node_index, text, sizeof(text)) != 0) {
     return -1;
   }
-  if (strncmp(text, "offset=", 7u) == 0) {
-    return erwc_parse_u32_text(text + 7u, offset);
+  if (strncmp(text, "offset=", ERWC_MEMORY_IMMEDIATE_OFFSET_PREFIX_LEN) == 0) {
+    return erwc_parse_u32_text(text + ERWC_MEMORY_IMMEDIATE_OFFSET_PREFIX_LEN, offset);
   }
-  if (strncmp(text, "align=", 6u) == 0) {
-    return erwc_parse_u32_text(text + 6u, align);
+  if (strncmp(text, "align=", ERWC_MEMORY_IMMEDIATE_ALIGN_PREFIX_LEN) == 0) {
+    return erwc_parse_u32_text(text + ERWC_MEMORY_IMMEDIATE_ALIGN_PREFIX_LEN, align);
   }
   return -1;
 }

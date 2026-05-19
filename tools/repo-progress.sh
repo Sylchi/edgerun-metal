@@ -20,6 +20,7 @@ Known scopes choose a deterministic test target when one is not provided:
   edgerun-ui-core/varfont -> varfont-test
   edgerun-crypto  -> crypto-test
   edgerun-metal   -> edgerun-check
+  tools/wasm-compile -> repo-test
   codex           -> codex-test
 USAGE
 }
@@ -47,6 +48,7 @@ if [ "$test_target" = "" ]; then
     edgerun-ui-core/varfont) test_target="varfont-test" ;;
     edgerun-crypto) test_target="crypto-test" ;;
     edgerun-metal) test_target="edgerun-check" ;;
+    tools/wasm-compile) test_target="repo-test" ;;
     codex) test_target="codex-test" ;;
     *)
       printf 'repo-progress: no default test target for scope %s\n' "$scope" >&2

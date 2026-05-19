@@ -36,6 +36,7 @@ static uint8_t erwc_contract_mask(ErWasmModuleContract contract) {
 
 static const ErWcContractImport* erwc_contract_import(ErWasmImportKind import_kind) {
   for (uint32_t i = 0u; i < ERWC_CONTRACT_IMPORT_COUNT; ++i) {
+    //@optimizer-ignore shared Wasm contract ABI table requires indexed row lookup by import kind
     if (ERWC_CONTRACT_IMPORTS[i].kind == import_kind) {
       return &ERWC_CONTRACT_IMPORTS[i];
     }

@@ -241,6 +241,13 @@ int er_wasm_memory_range(ErWasmModule* module, UINT64 offset, UINT32 len, UINT8*
 int er_wasm_memory_window_range(ErWasmModule* module, UINT64 offset, UINT32 len,
                                 UINT32 window_base, UINT32 window_len,
                                 UINT8** out_bytes);
+int er_wasm_execute_import_call(ErWasmModule* module,
+                                UINT8 import_kind,
+                                UINT8 param_count_call,
+                                UINT8 result_count,
+                                UINT8 result_type,
+                                INT64* stack,
+                                UINT32* stack_size);
 UINT32 er_wasm_load_u32(const UINT8* src);
 float er_wasm_load_f32(const UINT8* src);
 UINT64 er_wasm_load_u64(const UINT8* src);

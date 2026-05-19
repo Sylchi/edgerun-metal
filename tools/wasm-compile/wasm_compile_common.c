@@ -75,8 +75,8 @@ int erwc_parse_u32_text(const char* text, uint32_t* out_value) {
     return -1;
   }
   errno = 0;
-  value = strtoul(text, &end, 10);
-  if (end == text || *end != 0 || errno == ERANGE || value > 0xfffffffful) {
+  value = strtoul(text, &end, ERWC_DECIMAL_BASE);
+  if (end == text || *end != 0 || errno == ERANGE || value > ERWC_U32_MAX_VALUE) {
     return -1;
   }
   *out_value = (uint32_t)value;
@@ -102,7 +102,7 @@ int erwc_node_i64(const ErWcParse* parse, int node_index, int64_t* out_value) {
     return -1;
   }
   errno = 0;
-  value = strtoll(text, &end, 10);
+  value = strtoll(text, &end, ERWC_DECIMAL_BASE);
   if (end == text || *end != 0 || errno == ERANGE) {
     return -1;
   }
@@ -181,10 +181,10 @@ int erwc_buffer_append(ErWcBuffer* buffer, const uint8_t* bytes, size_t len) {
 
 int erwc_emit_u32_leb(ErWcBuffer* buffer, uint32_t value) {
   do {
-    uint8_t byte = (uint8_t)(value & 0x7fu);
-    value >>= 7u;
+    uint8_t byte = (uint8_t)(value & ERWC_LEB_PAYLOAD_MASK);
+    value >>= ERWC_LEB_SHIFT;
     if (value != 0u) {
-      byte |= 0x80u;
+      byte |= ERWC_LEB_CONTINUATION_BIT;
     }
     if (erwc_buffer_push(buffer, byte) != 0) {
       return -1;
@@ -197,14 +197,14 @@ int erwc_emit_i64_leb(ErWcBuffer* buffer, int64_t value) {
   int more = 1;
 
   while (more != 0) {
-    uint8_t byte = (uint8_t)((uint64_t)value & 0x7fu);
-    int64_t shifted = value >> 7;
-    int sign = (byte & 0x40u) != 0u;
+    uint8_t byte = (uint8_t)((uint64_t)value & ERWC_LEB_PAYLOAD_MASK);
+    int64_t shifted = value >> ERWC_LEB_SHIFT;
+    int sign = (byte & ERWC_LEB_SIGN_BIT) != 0u;
 
     if ((shifted == 0 && sign == 0) || (shifted == -1 && sign != 0)) {
       more = 0;
     } else {
-      byte |= 0x80u;
+      byte |= ERWC_LEB_CONTINUATION_BIT;
     }
     if (erwc_buffer_push(buffer, byte) != 0) {
       return -1;
@@ -217,11 +217,10 @@ int erwc_emit_i64_leb(ErWcBuffer* buffer, int64_t value) {
 int erwc_emit_name(ErWcBuffer* buffer, const char* name) {
   size_t len = strlen(name);
 
-  if (len > 0xffffffffu ||
+  if (len > ERWC_U32_MAX_VALUE ||
       erwc_emit_u32_leb(buffer, (uint32_t)len) != 0 ||
       erwc_buffer_append(buffer, (const uint8_t*)name, len) != 0) {
     return -1;
   }
   return 0;
 }
-
