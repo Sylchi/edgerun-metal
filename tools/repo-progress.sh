@@ -8,7 +8,9 @@ usage: tools/repo-progress.sh [--print-plan] <scope> [test-target]
 Runs the standard local progress loop for a repository scope:
   git status --short --branch
   git diff --stat -- <scope>
+  git diff --cached --stat -- <scope>
   git diff --check -- <scope>
+  git diff --cached --check -- <scope>
   make repo-inspect
   ./.build/repo-inspect <scope>
   make <test-target>
@@ -75,6 +77,7 @@ run_step() {
 
 run_step "git status" git status --short --branch
 run_step "git diff stat: $scope" git diff --stat -- "$scope"
+run_step "git cached diff stat: $scope" git diff --cached --stat -- "$scope"
 run_step "git diff check: $scope" git diff --check -- "$scope"
 run_step "git cached diff check: $scope" git diff --cached --check -- "$scope"
 run_step "build repo-inspect" make repo-inspect

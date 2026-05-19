@@ -19,6 +19,11 @@ case "$plan_output" in
 esac
 
 case "$plan_output" in
+  *"+ git diff --cached --stat -- edgerun-ui-core"*) ;;
+  *) printf 'missing cached git diff stat step\n' >&2; exit 1 ;;
+esac
+
+case "$plan_output" in
   *"+ git diff --check -- edgerun-ui-core"*) ;;
   *) printf 'missing git diff check step\n' >&2; exit 1 ;;
 esac
