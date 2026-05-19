@@ -18,8 +18,8 @@ identity-routed encrypted storage.
 
 ## Milestone 2: Polished Shell UI
 
-- [ ] Build the app launcher as the first real shell surface.
-- [ ] Add app install/remove/update states.
+- [x] Build the app launcher as the first real shell surface.
+- [x] Add app install/remove/update states.
 - [ ] Add retained UI state for shell navigation and app switching.
 - [ ] Add frame timing instrumentation for 4K targets.
 - [ ] Optimize redraws around dirty regions and stable GPU command batches.
@@ -31,7 +31,7 @@ identity-routed encrypted storage.
 - [x] Sign packages and verify signatures before install.
 - [x] Build a local package index.
 - [x] Add package rollback and removal.
-- [ ] Show package identity, permissions, and provenance in the shell.
+- [x] Show package identity, permissions, and provenance in the shell.
 
 ## Milestone 4: Wasm Drivers
 
