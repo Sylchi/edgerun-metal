@@ -783,6 +783,19 @@ static void test_virtio_net_mmio(void) {
 }
 
 static void test_virtio_gpu_mmio(void) {
+  typedef struct {
+    ErVirtioGpuControlHeader header;
+    ErVirtioGpuRect rect;
+    UINT64 offset;
+    UINT32 resource_id;
+    UINT32 padding;
+  } TestVirtioGpuTransferToHost2d;
+  typedef struct {
+    ErVirtioGpuControlHeader header;
+    ErVirtioGpuRect rect;
+    UINT32 resource_id;
+    UINT32 padding;
+  } TestVirtioGpuResourceFlush;
   enum {
     VIRTIO_GPU_TEST_MMIO_DWORDS = 128u,
     VIRTIO_GPU_TEST_QUEUE_MAX = ER_VIRTIO_QUEUE_SIZE,
@@ -795,6 +808,14 @@ static void test_virtio_gpu_mmio(void) {
     VIRTIO_GPU_TEST_FB_WIDTH = 3u,
     VIRTIO_GPU_TEST_FB_HEIGHT = 2u,
     VIRTIO_GPU_TEST_FB_STRIDE = 4u,
+    VIRTIO_GPU_TEST_FB_RECT_X = 1u,
+    VIRTIO_GPU_TEST_FB_RECT_Y = 1u,
+    VIRTIO_GPU_TEST_FB_RECT_WIDTH = 2u,
+    VIRTIO_GPU_TEST_FB_RECT_HEIGHT = 1u,
+    VIRTIO_GPU_TEST_FB_RECT_OFFSET =
+        ((VIRTIO_GPU_TEST_FB_RECT_Y * VIRTIO_GPU_TEST_FB_STRIDE) +
+         VIRTIO_GPU_TEST_FB_RECT_X) *
+        ER_VIRTIO_GPU_FRAMEBUFFER_BYTES_PER_PIXEL,
     VIRTIO_GPU_TEST_FB_PIXELS = VIRTIO_GPU_TEST_FB_STRIDE * VIRTIO_GPU_TEST_FB_HEIGHT,
     VIRTIO_GPU_TEST_FB_BYTES =
         VIRTIO_GPU_TEST_FB_PIXELS * ER_VIRTIO_GPU_FRAMEBUFFER_BYTES_PER_PIXEL,
@@ -820,6 +841,8 @@ static void test_virtio_gpu_mmio(void) {
   UINT8* control_response;
   ErVirtioGpuDisplayInfo display_info;
   ErVirtioGpuControlHeader control_header;
+  TestVirtioGpuTransferToHost2d transfer_request;
+  TestVirtioGpuResourceFlush flush_request;
   ErVirtioGpuStats gpu_stats;
   ErVirtioGpuFramebuffer framebuffer;
   UINT32 framebuffer_pixels[VIRTIO_GPU_TEST_FB_PIXELS] = {0};
@@ -1103,4 +1126,68 @@ static void test_virtio_gpu_mmio(void) {
   er_mem_copy((UINT8*)&control_header, control_request, (UINTN)sizeof(control_header));
   check_uint64("virtio gpu framebuffer flush type", control_header.type,
                ER_VIRTIO_GPU_CMD_RESOURCE_FLUSH);
+  control_header.type = ER_VIRTIO_GPU_RESP_OK_NODATA;
+  er_mem_copy(control_response, (const UINT8*)&control_header, (UINTN)sizeof(control_header));
+  control_used->ring[10].id = 0u;
+  control_used->ring[10].len = (UINT32)sizeof(control_header);
+  control_used->idx = 11u;
+  check_int64("virtio gpu framebuffer flush ok", er_virtio_gpu_poll_ok_nodata(&gpu), 1);
+
+  check_int64("virtio gpu framebuffer transfer rect",
+              er_virtio_gpu_submit_framebuffer_transfer_rect(&gpu,
+                                                             &framebuffer,
+                                                             VIRTIO_GPU_TEST_FB_RECT_X,
+                                                             VIRTIO_GPU_TEST_FB_RECT_Y,
+                                                             VIRTIO_GPU_TEST_FB_RECT_WIDTH,
+                                                             VIRTIO_GPU_TEST_FB_RECT_HEIGHT),
+              1);
+  er_mem_zero((UINT8*)&transfer_request, (UINTN)sizeof(transfer_request));
+  er_mem_copy((UINT8*)&transfer_request, control_request, (UINTN)sizeof(transfer_request));
+  check_uint64("virtio gpu framebuffer transfer rect type",
+               transfer_request.header.type, ER_VIRTIO_GPU_CMD_TRANSFER_TO_HOST_2D);
+  check_uint64("virtio gpu framebuffer transfer rect x",
+               transfer_request.rect.x, VIRTIO_GPU_TEST_FB_RECT_X);
+  check_uint64("virtio gpu framebuffer transfer rect y",
+               transfer_request.rect.y, VIRTIO_GPU_TEST_FB_RECT_Y);
+  check_uint64("virtio gpu framebuffer transfer rect width",
+               transfer_request.rect.width, VIRTIO_GPU_TEST_FB_RECT_WIDTH);
+  check_uint64("virtio gpu framebuffer transfer rect height",
+               transfer_request.rect.height, VIRTIO_GPU_TEST_FB_RECT_HEIGHT);
+  check_uint64("virtio gpu framebuffer transfer rect offset",
+               transfer_request.offset, VIRTIO_GPU_TEST_FB_RECT_OFFSET);
+  control_header.type = ER_VIRTIO_GPU_RESP_OK_NODATA;
+  er_mem_copy(control_response, (const UINT8*)&control_header, (UINTN)sizeof(control_header));
+  control_used->ring[11].id = 0u;
+  control_used->ring[11].len = (UINT32)sizeof(control_header);
+  control_used->idx = 12u;
+  check_int64("virtio gpu framebuffer transfer rect ok", er_virtio_gpu_poll_ok_nodata(&gpu), 1);
+
+  check_int64("virtio gpu framebuffer flush rect",
+              er_virtio_gpu_submit_framebuffer_flush_rect(&gpu,
+                                                          &framebuffer,
+                                                          VIRTIO_GPU_TEST_FB_RECT_X,
+                                                          VIRTIO_GPU_TEST_FB_RECT_Y,
+                                                          VIRTIO_GPU_TEST_FB_RECT_WIDTH,
+                                                          VIRTIO_GPU_TEST_FB_RECT_HEIGHT),
+              1);
+  er_mem_zero((UINT8*)&flush_request, (UINTN)sizeof(flush_request));
+  er_mem_copy((UINT8*)&flush_request, control_request, (UINTN)sizeof(flush_request));
+  check_uint64("virtio gpu framebuffer flush rect type",
+               flush_request.header.type, ER_VIRTIO_GPU_CMD_RESOURCE_FLUSH);
+  check_uint64("virtio gpu framebuffer flush rect x",
+               flush_request.rect.x, VIRTIO_GPU_TEST_FB_RECT_X);
+  check_uint64("virtio gpu framebuffer flush rect y",
+               flush_request.rect.y, VIRTIO_GPU_TEST_FB_RECT_Y);
+  check_uint64("virtio gpu framebuffer flush rect width",
+               flush_request.rect.width, VIRTIO_GPU_TEST_FB_RECT_WIDTH);
+  check_uint64("virtio gpu framebuffer flush rect height",
+               flush_request.rect.height, VIRTIO_GPU_TEST_FB_RECT_HEIGHT);
+  check_int64("virtio gpu framebuffer reject transfer rect overflow",
+              er_virtio_gpu_submit_framebuffer_transfer_rect(&gpu,
+                                                             &framebuffer,
+                                                             VIRTIO_GPU_TEST_FB_WIDTH,
+                                                             VIRTIO_GPU_TEST_FB_RECT_Y,
+                                                             VIRTIO_GPU_TEST_FB_RECT_WIDTH,
+                                                             VIRTIO_GPU_TEST_FB_RECT_HEIGHT),
+              0);
 }

@@ -117,6 +117,18 @@ static ErVirtioGpuRect er_virtio_gpu_rect(UINT32 width, UINT32 height) {
   return rect;
 }
 
+static ErVirtioGpuRect er_virtio_gpu_rect_xy(UINT32 x, UINT32 y,
+                                             UINT32 width, UINT32 height) {
+  ErVirtioGpuRect rect;
+
+  er_mem_zero((UINT8*)&rect, (UINTN)sizeof(rect));
+  rect.x = x;
+  rect.y = y;
+  rect.width = width;
+  rect.height = height;
+  return rect;
+}
+
 static UINT8 er_virtio_gpu_submit_request(ErVirtioGpu* gpu, const UINT8* request, UINT32 request_len) {
   er_mem_zero(g_control_request, (UINTN)sizeof(g_control_request));
   er_mem_zero(g_control_response, (UINTN)sizeof(g_control_response));
@@ -347,6 +359,14 @@ UINT8 er_virtio_gpu_submit_set_scanout(ErVirtioGpu* gpu, UINT32 scanout_id, UINT
 
 UINT8 er_virtio_gpu_submit_transfer_to_host_2d(ErVirtioGpu* gpu, UINT32 resource_id,
                                               UINT32 width, UINT32 height) {
+  return er_virtio_gpu_submit_transfer_to_host_2d_rect(gpu, resource_id,
+                                                       0u, 0u, width, height, 0u);
+}
+
+UINT8 er_virtio_gpu_submit_transfer_to_host_2d_rect(ErVirtioGpu* gpu, UINT32 resource_id,
+                                                    UINT32 x, UINT32 y,
+                                                    UINT32 width, UINT32 height,
+                                                    UINT64 offset) {
   ErVirtioGpuTransferToHost2d request;
 
   if (resource_id == 0u || width == 0u || height == 0u) {
@@ -354,14 +374,21 @@ UINT8 er_virtio_gpu_submit_transfer_to_host_2d(ErVirtioGpu* gpu, UINT32 resource
   }
   er_mem_zero((UINT8*)&request, (UINTN)sizeof(request));
   request.header = er_virtio_gpu_control_header(ER_VIRTIO_GPU_CMD_TRANSFER_TO_HOST_2D);
-  request.rect = er_virtio_gpu_rect(width, height);
-  request.offset = 0u;
+  request.rect = er_virtio_gpu_rect_xy(x, y, width, height);
+  request.offset = offset;
   request.resource_id = resource_id;
   return er_virtio_gpu_submit_request(gpu, (const UINT8*)&request, (UINT32)sizeof(request));
 }
 
 UINT8 er_virtio_gpu_submit_resource_flush(ErVirtioGpu* gpu, UINT32 resource_id,
                                           UINT32 width, UINT32 height) {
+  return er_virtio_gpu_submit_resource_flush_rect(gpu, resource_id,
+                                                  0u, 0u, width, height);
+}
+
+UINT8 er_virtio_gpu_submit_resource_flush_rect(ErVirtioGpu* gpu, UINT32 resource_id,
+                                               UINT32 x, UINT32 y,
+                                               UINT32 width, UINT32 height) {
   ErVirtioGpuResourceFlush request;
 
   if (resource_id == 0u || width == 0u || height == 0u) {
@@ -369,7 +396,7 @@ UINT8 er_virtio_gpu_submit_resource_flush(ErVirtioGpu* gpu, UINT32 resource_id,
   }
   er_mem_zero((UINT8*)&request, (UINTN)sizeof(request));
   request.header = er_virtio_gpu_control_header(ER_VIRTIO_GPU_CMD_RESOURCE_FLUSH);
-  request.rect = er_virtio_gpu_rect(width, height);
+  request.rect = er_virtio_gpu_rect_xy(x, y, width, height);
   request.resource_id = resource_id;
   return er_virtio_gpu_submit_request(gpu, (const UINT8*)&request, (UINT32)sizeof(request));
 }
@@ -504,6 +531,54 @@ UINT8 er_virtio_gpu_submit_framebuffer_flush(ErVirtioGpu* gpu,
   }
   return er_virtio_gpu_submit_resource_flush(gpu, framebuffer->resource_id,
                                             framebuffer->width, framebuffer->height);
+}
+
+static UINT8 er_virtio_gpu_framebuffer_rect_ready(const ErVirtioGpuFramebuffer* framebuffer,
+                                                  UINT32 x, UINT32 y,
+                                                  UINT32 width, UINT32 height) {
+  if (er_virtio_gpu_framebuffer_ready(framebuffer) == 0u ||
+      width == 0u || height == 0u ||
+      x >= framebuffer->width || y >= framebuffer->height ||
+      width > framebuffer->width - x ||
+      height > framebuffer->height - y) {
+    return 0u;
+  }
+  return 1u;
+}
+
+UINT8 er_virtio_gpu_submit_framebuffer_transfer_rect(ErVirtioGpu* gpu,
+                                                     const ErVirtioGpuFramebuffer* framebuffer,
+                                                     UINT32 x, UINT32 y,
+                                                     UINT32 width, UINT32 height) {
+  UINT64 offset;
+
+  if (er_virtio_gpu_framebuffer_rect_ready(framebuffer, x, y, width, height) == 0u) {
+    return 0u;
+  }
+  offset = ((UINT64)y * (UINT64)framebuffer->stride_pixels + (UINT64)x) *
+           (UINT64)ER_VIRTIO_GPU_FRAMEBUFFER_BYTES_PER_PIXEL;
+  return er_virtio_gpu_submit_transfer_to_host_2d_rect(gpu,
+                                                       framebuffer->resource_id,
+                                                       x,
+                                                       y,
+                                                       width,
+                                                       height,
+                                                       offset);
+}
+
+UINT8 er_virtio_gpu_submit_framebuffer_flush_rect(ErVirtioGpu* gpu,
+                                                  const ErVirtioGpuFramebuffer* framebuffer,
+                                                  UINT32 x, UINT32 y,
+                                                  UINT32 width, UINT32 height) {
+  if (er_virtio_gpu_framebuffer_rect_ready(framebuffer, x, y, width, height) == 0u) {
+    return 0u;
+  }
+  return er_virtio_gpu_submit_resource_flush_rect(gpu,
+                                                  framebuffer->resource_id,
+                                                  x,
+                                                  y,
+                                                  width,
+                                                  height);
 }
 
 #if defined(ER_ENABLE_TEST_HOOKS)
