@@ -38,6 +38,16 @@ Canonical local build command:
 The package directory must contain `app.c` and `app.manifest`. The build runner
 creates `app/.build/` and writes `app/.build/app.wasm`.
 
+The first admitted manifest is intentionally exact:
+
+```text
+contract=ui-app
+memory_pages=1
+imports=edgerun.ui/emit
+source=app.c
+output=.build/app.wasm
+```
+
 Initial C subset:
 
 ```c
