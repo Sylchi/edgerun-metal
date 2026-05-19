@@ -33,6 +33,7 @@ void er_run_os_path(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE* SystemTable,
     ER_UI_STYLE_AUTHORITY_USER,
     (er_ui_style_preset_t){ER_UI_COLOR_SCHEME_DARK, ER_UI_ACCENT_NEUTRAL, ER_UI_RADIUS_DEFAULT});
   er_ui_scene_t scene = {0};
+  er_ui_scene_t previous_scene = {0};
   er_ui_runtime_state_t runtime = {0};
   er_ui_ledger_app_state_t ledger_state = {0};
   ErUiBootAppContext apps[ER_UI_BOOT_APP_SLOT_CAPACITY];
@@ -46,6 +47,8 @@ void er_run_os_path(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE* SystemTable,
   ErBleAdvPacket ble_packet;
   ErBleWifiRoleAdvert ble_wifi_role;
   UINT8 ble_payload[ER_BLE_ADV_PAYLOAD_BYTES];
+  UINT8 tile_marks[ER_UI_BOOT_MAX_TILE_MARKS];
+  UINT32 dirty_tile_ids[ER_UI_BOOT_MAX_DIRTY_TILES];
   UINT64 ble_node_nonce;
   vr_font_face_t* font = 0;
 
@@ -163,6 +166,11 @@ void er_run_os_path(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE* SystemTable,
   render_context.app_count = ER_UI_BOOT_INSTALLED_APP_COUNT;
   render_context.active_app = 0u;
   render_context.scene = &scene;
+  render_context.previous_scene = &previous_scene;
+  render_context.tile_marks = tile_marks;
+  render_context.tile_mark_count = ER_UI_BOOT_MAX_TILE_MARKS;
+  render_context.dirty_tile_ids = dirty_tile_ids;
+  render_context.dirty_tile_capacity = ER_UI_BOOT_MAX_DIRTY_TILES;
 
   if (er_ui_ledger_app_state_init(&ledger_state, er_ui_boot_allocator()) != ER_UI_OK) {
     er_println("ui renderer: ledger app state failed");
@@ -188,9 +196,18 @@ void er_run_os_path(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE* SystemTable,
     vr_font_face_destroy(font);
     return;
   }
+  if (er_ui_scene_init_with_allocator(&previous_scene, theme.colors.bg, er_ui_boot_allocator()) != ER_UI_OK) {
+    er_println("ui renderer: previous scene state failed");
+    er_ui_scene_destroy(&scene);
+    er_ui_runtime_state_destroy(&runtime);
+    er_ui_ledger_app_state_destroy(&ledger_state);
+    vr_font_face_destroy(font);
+    return;
+  }
   if (er_ui_boot_prepare_app_contexts(apps, ER_UI_BOOT_INSTALLED_APP_COUNT, &scene_budget,
                                       theme.colors.bg) == 0u) {
     er_println("ui renderer: app contexts failed");
+    er_ui_scene_destroy(&previous_scene);
     er_ui_scene_destroy(&scene);
     er_ui_runtime_state_destroy(&runtime);
     er_ui_ledger_app_state_destroy(&ledger_state);
@@ -210,6 +227,7 @@ void er_run_os_path(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE* SystemTable,
   er_print_set_firmware_console_enabled(0u);
   if (er_exit_boot_services(ImageHandle, SystemTable) == 0u) {
     er_ui_boot_destroy_app_contexts(apps, ER_UI_BOOT_INSTALLED_APP_COUNT);
+    er_ui_scene_destroy(&previous_scene);
     er_ui_scene_destroy(&scene);
     er_ui_runtime_state_destroy(&runtime);
     er_ui_ledger_app_state_destroy(&ledger_state);

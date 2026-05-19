@@ -213,6 +213,13 @@ typedef struct {
   ErStorageEndpointObjectCapture native_relay_last_storage_capture;
   ErUiBootFrameClock frame_clock;
   ErUiFrameTiming last_frame_timing;
+  ErUiSurfaceFrameState frame_state;
+  er_ui_scene_t* previous_scene;
+  UINT8* tile_marks;
+  UINT64 tile_mark_count;
+  UINT32* dirty_tile_ids;
+  UINT32 dirty_tile_capacity;
+  ErUiSurfaceDirtyTileList last_dirty_tiles;
 } ErUiBootRenderContext;
 
 extern ErWasmHostCalls g_host_calls;
@@ -331,6 +338,11 @@ UINT8 er_ui_boot_prepare_app_contexts(ErUiBootAppContext* apps,
 ErUiBootAppContext* er_ui_boot_active_app(ErUiBootRenderContext* render);
 const ErUiBootAppContext* er_ui_boot_active_app_const(const ErUiBootRenderContext* render);
 UINT8 er_ui_boot_switch_app_for_surface(ErUiBootRenderContext* render, UINT32 surface_id);
+UINT8 er_ui_boot_prepare_dirty_tiles(ErUiBootRenderContext* render,
+                                     const er_ui_scene_t* scene,
+                                     ErUiSurfaceDirtyTileList* out_dirty_tiles);
+UINT8 er_ui_boot_commit_rendered_scene(ErUiBootRenderContext* render,
+                                       const er_ui_scene_t* scene);
 UINT8 er_ui_boot_render_scene(er_ui_scene_t* scene,
                               er_ui_ledger_app_state_t* ledger_state,
                               ErUiBootRenderContext* render);
