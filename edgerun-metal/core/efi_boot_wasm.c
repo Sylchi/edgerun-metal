@@ -7,18 +7,20 @@ static UINT8 g_ui_boot_app_manifest_memory[ER_UI_BOOT_APP_SLOT_CAPACITY][ER_UI_B
 static const char g_ui_boot_user_app_wasm_label[] = "apps/user-app.wasm";
 static const char g_ui_boot_user_app_manifest_label[] = "apps/user-app.manifest";
 
-static const ErUiBootInstalledApp g_ui_boot_installed_apps[ER_UI_BOOT_INSTALLED_APP_COUNT] = {
+static ErUiBootInstalledApp g_ui_boot_installed_apps[ER_UI_BOOT_INSTALLED_APP_COUNT] = {
   {
-    g_ui_boot_user_app_wasm_label,
-    (UINTN)sizeof(g_ui_boot_user_app_wasm_label) - 1u,
-    g_edgerun_user_app_wasm,
-    ER_USER_APP_WASM_SIZE,
-    g_ui_boot_user_app_manifest_label,
-    (UINTN)sizeof(g_ui_boot_user_app_manifest_label) - 1u,
-    g_edgerun_user_app_manifest,
-    ER_USER_APP_MANIFEST_SIZE
+    .app_label = g_ui_boot_user_app_wasm_label,
+    .app_label_len = (UINTN)sizeof(g_ui_boot_user_app_wasm_label) - 1u,
+    .app_bytes = g_edgerun_user_app_wasm,
+    .app_len = ER_USER_APP_WASM_SIZE,
+    .manifest_label = g_ui_boot_user_app_manifest_label,
+    .manifest_label_len = (UINTN)sizeof(g_ui_boot_user_app_manifest_label) - 1u,
+    .manifest_bytes = g_edgerun_user_app_manifest,
+    .manifest_len = ER_USER_APP_MANIFEST_SIZE
   }
 };
+
+static UINT8 g_ui_boot_installed_apps_prepared;
 
 enum {
   ER_UI_BOOT_PACKAGE_APP_SEQUENCE = 1u,
@@ -38,6 +40,48 @@ static UINT8 er_ui_boot_seed_package_object_store(const ErCryptoProvider* crypto
   }
   return er_storage_endpoint_store_object_packet(crypto, route, &envelope,
                                                  packet, store, 0);
+}
+
+static UINT8 er_ui_boot_prepare_installed_app_descriptor(ErUiBootInstalledApp* installed_app) {
+  ErCryptoProvider crypto;
+
+  if (installed_app == 0 ||
+      installed_app->app_bytes == 0 ||
+      installed_app->manifest_bytes == 0 ||
+      installed_app->app_len == 0u ||
+      installed_app->manifest_len == 0u) {
+    return 0u;
+  }
+  er_crypto_blake3_provider(&crypto);
+  if (er_vfs_prepare_object_ref(&crypto, installed_app->app_bytes,
+                                installed_app->app_len,
+                                &installed_app->app_ref) == 0u ||
+      er_vfs_prepare_object_ref(&crypto, installed_app->manifest_bytes,
+                                installed_app->manifest_len,
+                                &installed_app->manifest_ref) == 0u ||
+      er_app_prepare_package_manifest_from_objects(&crypto,
+                                                   &installed_app->app_ref,
+                                                   &installed_app->manifest_ref,
+                                                   0,
+                                                   &installed_app->package) == 0u) {
+    return 0u;
+  }
+  return 1u;
+}
+
+static UINT8 er_ui_boot_prepare_installed_app_registry(void) {
+  UINT32 i;
+
+  if (g_ui_boot_installed_apps_prepared != 0u) {
+    return 1u;
+  }
+  for (i = 0u; i < ER_UI_BOOT_INSTALLED_APP_COUNT; ++i) {
+    if (er_ui_boot_prepare_installed_app_descriptor(&g_ui_boot_installed_apps[i]) == 0u) {
+      return 0u;
+    }
+  }
+  g_ui_boot_installed_apps_prepared = 1u;
+  return 1u;
 }
 
 UINT8 er_ui_boot_append_wasm_scene(er_ui_scene_t* scene, const er_ui_scene_t* wasm_scene) {
@@ -139,7 +183,8 @@ UINT8 er_ui_boot_execute_wasm_app(ErUiWasmAppRuntime* runtime) {
 }
 
 const ErUiBootInstalledApp* er_ui_boot_installed_app_for_slot(UINT32 app_index) {
-  if (app_index >= ER_UI_BOOT_INSTALLED_APP_COUNT) {
+  if (app_index >= ER_UI_BOOT_INSTALLED_APP_COUNT ||
+      er_ui_boot_prepare_installed_app_registry() == 0u) {
     return 0;
   }
   return &g_ui_boot_installed_apps[app_index];
@@ -154,9 +199,9 @@ UINT8 er_ui_boot_load_installed_app_package(const ErUiBootInstalledApp* installe
                                             UINT32 app_index,
                                             ErAppLoadedPackage* out_loaded) {
   ErCryptoProvider crypto;
-  ErVfsObjectRef app_ref;
-  ErVfsObjectRef manifest_ref;
-  ErAppPackageManifest package;
+  ErVfsObjectRef actual_app_ref;
+  ErVfsObjectRef actual_manifest_ref;
+  ErAppPackageManifest expected_package;
   ErVfsObjectPacket app_packet;
   ErVfsObjectPacket manifest_packet;
   ErAdmittedRoute app_route;
@@ -173,6 +218,9 @@ UINT8 er_ui_boot_load_installed_app_package(const ErUiBootInstalledApp* installe
       installed_app->manifest_bytes == 0 ||
       installed_app->app_len == 0u ||
       installed_app->manifest_len == 0u ||
+      installed_app->app_ref.abi_version != ER_VFS_ABI_VERSION ||
+      installed_app->manifest_ref.abi_version != ER_VFS_ABI_VERSION ||
+      installed_app->package.abi_version != ER_APP_ABI_VERSION ||
       module_memory_size == 0u || manifest_memory_size == 0u) {
     return 0u;
   }
@@ -186,17 +234,27 @@ UINT8 er_ui_boot_load_installed_app_package(const ErUiBootInstalledApp* installe
     return 0u;
   }
   if (er_vfs_prepare_object_ref(&crypto, installed_app->app_bytes,
-                                installed_app->app_len, &app_ref) == 0u) {
+                                installed_app->app_len, &actual_app_ref) == 0u) {
     return 0u;
   }
   if (er_vfs_prepare_object_ref(&crypto, installed_app->manifest_bytes,
                                 installed_app->manifest_len,
-                                &manifest_ref) == 0u) {
+                                &actual_manifest_ref) == 0u) {
     return 0u;
   }
-  if (er_app_prepare_package_manifest_from_objects(&crypto, &app_ref,
-                                                   &manifest_ref, 0,
-                                                   &package) == 0u) {
+  if (actual_app_ref.object_len != installed_app->app_ref.object_len ||
+      actual_manifest_ref.object_len != installed_app->manifest_ref.object_len ||
+      er_hash_equal(&actual_app_ref.object_id,
+                    &installed_app->app_ref.object_id) == 0u ||
+      er_hash_equal(&actual_manifest_ref.object_id,
+                    &installed_app->manifest_ref.object_id) == 0u ||
+      er_app_prepare_package_manifest_from_objects(&crypto,
+                                                   &installed_app->app_ref,
+                                                   &installed_app->manifest_ref,
+                                                   0,
+                                                   &expected_package) == 0u ||
+      er_hash_equal(&expected_package.package_id,
+                    &installed_app->package.package_id) == 0u) {
     return 0u;
   }
   if (er_vfs_prepare_object_packet(&crypto, installed_app->app_bytes,
@@ -213,7 +271,7 @@ UINT8 er_ui_boot_load_installed_app_package(const ErUiBootInstalledApp* installe
                                                 app_index, &app_route) == 0u ||
       er_ui_boot_prepare_storage_retrieve_route(ER_UI_WASM_STORAGE_MANIFEST_ROUTE_ID_SEED,
                                                 app_index, &manifest_route) == 0u ||
-      er_app_prepare_package_storage_source(&crypto, &package, &app_route,
+      er_app_prepare_package_storage_source(&crypto, &installed_app->package, &app_route,
                                             &manifest_route, 0,
                                             &storage_source) == 0u) {
     return 0u;
@@ -228,32 +286,32 @@ UINT8 er_ui_boot_load_installed_app_package(const ErUiBootInstalledApp* installe
       er_storage_endpoint_prepare_package_storage_response(&crypto,
                                                            &storage->app_store,
                                                            &storage_source.app_retrieve_route_id,
-                                                           &package.app_object_id,
-                                                           package.app_object_len,
+                                                           &installed_app->package.app_object_id,
+                                                           installed_app->package.app_object_len,
                                                            module_memory,
                                                            module_memory_size,
                                                            &app_response) == 0u ||
       er_storage_endpoint_prepare_package_storage_response(&crypto,
                                                            &storage->manifest_store,
                                                            &storage_source.manifest_retrieve_route_id,
-                                                           &package.manifest_object_id,
-                                                           package.manifest_object_len,
+                                                           &installed_app->package.manifest_object_id,
+                                                           installed_app->package.manifest_object_len,
                                                            manifest_memory,
                                                            manifest_memory_size,
                                                            &manifest_response) == 0u ||
       er_app_prepare_package_storage_object(&app_response,
                                             &storage_source.app_retrieve_route_id,
-                                            &package.app_object_id,
-                                            package.app_object_len,
+                                            &installed_app->package.app_object_id,
+                                            installed_app->package.app_object_len,
                                             &app_object) == 0u ||
       er_app_prepare_package_storage_object(&manifest_response,
                                             &storage_source.manifest_retrieve_route_id,
-                                            &package.manifest_object_id,
-                                            package.manifest_object_len,
+                                            &installed_app->package.manifest_object_id,
+                                            installed_app->package.manifest_object_len,
                                             &manifest_object) == 0u) {
     return 0u;
   }
-  return er_app_load_package_from_storage_source(&crypto, &package,
+  return er_app_load_package_from_storage_source(&crypto, &installed_app->package,
                                                  &storage_source, &app_object,
                                                  &manifest_object, 0,
                                                  out_loaded);

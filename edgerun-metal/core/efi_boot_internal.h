@@ -141,12 +141,15 @@ typedef struct {
 typedef struct {
   const char* app_label;
   UINTN app_label_len;
+  ErVfsObjectRef app_ref;
   const UINT8* app_bytes;
   UINTN app_len;
   const char* manifest_label;
   UINTN manifest_label_len;
+  ErVfsObjectRef manifest_ref;
   const UINT8* manifest_bytes;
   UINTN manifest_len;
+  ErAppPackageManifest package;
 } ErUiBootInstalledApp;
 
 typedef struct {
