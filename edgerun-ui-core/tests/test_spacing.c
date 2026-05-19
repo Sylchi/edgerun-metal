@@ -39,7 +39,7 @@ static void test_spacing_default_matches_tokens(void) {
   er_ui_spacing_t spacing = er_ui_spacing_default();
   expect_float(spacing.card_radius_max, ER_UI_CARD_RADIUS_MAX, "spacing: card radius token");
   expect_float(spacing.card_pad_x, ER_UI_CARD_PAD_X, "spacing: card pad x token");
-  expect_float(spacing.control_h, 36.0f, "spacing: control height follows shadcn Vega");
+  expect_float(spacing.control_h, 36.0f, "spacing: control height follows design Vega");
   expect_float(spacing.component_pad.x, ER_UI_COMPONENT_PAD_X, "spacing: component pad x token");
   expect_float(spacing.row_text_inset, ER_UI_ROW_TEXT_INSET, "spacing: row text inset token");
   expect_float(spacing.list_row_h, ER_UI_LIST_ROW_H, "spacing: list row height token");

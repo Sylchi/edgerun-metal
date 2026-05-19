@@ -448,7 +448,7 @@ er_ui_status_t er_ui_component_scene_preview_emit(
   if (er_ui_component_streq(slug, "spinner")) {
     er_ui_status_t status = er_ui_component_spinner_emit(scene, er_ui_bounds(bounds.x, bounds.y, 28.0f, 28.0f), theme);
     if (status != ER_UI_OK) return status;
-    return er_ui_component_push_ascii_text(scene, font, "Loading", bounds.x + 40.0f, bounds.y + 21.0f, theme.shadcn.colors.muted_foreground);
+    return er_ui_component_push_ascii_text(scene, font, "Loading", bounds.x + 40.0f, bounds.y + 21.0f, theme.design.colors.muted_foreground);
   }
   if (er_ui_component_streq(slug, "sonner")) {
     er_ui_status_t status = er_ui_component_toast_emit(scene, font, er_ui_bounds(bounds.x, bounds.y, er_ui_float_min(bounds.w, 260.0f), 48.0f), theme, "Event has been created",
@@ -504,15 +504,15 @@ static er_ui_status_t er_ui_component_showcase_card_emit(
   if (!scene || !font || !spec || !selected || !er_ui_bounds_valid(bounds)) return ER_UI_ERR_INVALID_ARGUMENT;
   er_ui_status_t status = er_ui_scene_push_hit(scene, er_ui_hit(ER_UI_HIT_LIST_ROW, id, bounds.x, bounds.y, bounds.w, bounds.h));
   if (status != ER_UI_OK) return status;
-  status = er_ui_scene_push_rect(scene, er_ui_rect_fill(bounds.x, bounds.y, bounds.w, bounds.h, theme.shadcn.radius.xl,
-                                                       er_ui_color_with_alpha(theme.shadcn.colors.card, 1.0f)));
+  status = er_ui_scene_push_rect(scene, er_ui_rect_fill(bounds.x, bounds.y, bounds.w, bounds.h, theme.design.radius.xl,
+                                                       er_ui_color_with_alpha(theme.design.colors.card, 1.0f)));
   if (status != ER_UI_OK) return status;
-  status = er_ui_scene_push_rect(scene, er_ui_rect_border(bounds.x, bounds.y, bounds.w, bounds.h, theme.shadcn.radius.xl,
-                                                         er_ui_color_with_alpha(theme.shadcn.colors.border, 1.8f)));
+  status = er_ui_scene_push_rect(scene, er_ui_rect_border(bounds.x, bounds.y, bounds.w, bounds.h, theme.design.radius.xl,
+                                                         er_ui_color_with_alpha(theme.design.colors.border, 1.8f)));
   if (status != ER_UI_OK) return status;
   if (er_ui_component_streq(spec->slug, selected->slug)) {
-    status = er_ui_scene_push_rect(scene, er_ui_rect_border(bounds.x, bounds.y, bounds.w, bounds.h, theme.shadcn.radius.xl,
-                                                           er_ui_color_with_alpha(theme.shadcn.colors.ring, 0.72f)));
+    status = er_ui_scene_push_rect(scene, er_ui_rect_border(bounds.x, bounds.y, bounds.w, bounds.h, theme.design.radius.xl,
+                                                           er_ui_color_with_alpha(theme.design.colors.ring, 0.72f)));
     if (status != ER_UI_OK) return status;
   }
   er_ui_bounds_t content = er_ui_bounds_inset(bounds, ER_UI_COMPONENT_SHOWCASE_CARD_PAD, ER_UI_COMPONENT_SHOWCASE_CARD_PAD);
@@ -532,15 +532,15 @@ static er_ui_status_t er_ui_component_showcase_card_emit(
                                                          preview.y + er_ui_float_max(preview.h * 0.20f, 0.0f),
                                                          er_ui_float_min(preview.w, 72.0f),
                                                          er_ui_float_max(preview.h * 0.16f, 3.0f),
-                                                         theme.shadcn.radius.sm,
-                                                         theme.shadcn.colors.muted));
+                                                         theme.design.radius.sm,
+                                                         theme.design.colors.muted));
     if (status != ER_UI_OK) return status;
     status = er_ui_scene_push_rect(scene, er_ui_rect_fill(preview.x,
                                                          preview.y + er_ui_float_max(preview.h * 0.48f, 0.0f),
                                                          er_ui_float_min(preview.w * 0.74f, 96.0f),
                                                          er_ui_float_max(preview.h * 0.16f, 3.0f),
-                                                         theme.shadcn.radius.sm,
-                                                         er_ui_color_with_alpha(theme.shadcn.colors.muted, 0.72f)));
+                                                         theme.design.radius.sm,
+                                                         er_ui_color_with_alpha(theme.design.colors.muted, 0.72f)));
     if (status != ER_UI_OK) return status;
     return er_ui_component_badge_emit(scene, font,
                                       er_ui_bounds(content.x, bounds.y + bounds.h - 30.0f, er_ui_float_min(content.w, 88.0f), 22.0f),
@@ -693,10 +693,10 @@ er_ui_status_t er_ui_component_showcase_emit(
                                                    viewport.hit.x, viewport.hit.y, viewport.hit.w, viewport.hit.h));
     if (status != ER_UI_OK) return status;
     status = er_ui_scene_push_rect(scene, er_ui_rect_fill(viewport.track.x, viewport.track.y, viewport.track.w, viewport.track.h,
-                                                         viewport.track.w * 0.5f, er_ui_color_with_alpha(theme.shadcn.colors.border, 0.64f)));
+                                                         viewport.track.w * 0.5f, er_ui_color_with_alpha(theme.design.colors.border, 0.64f)));
     if (status != ER_UI_OK) return status;
     return er_ui_scene_push_rect(scene, er_ui_rect_fill(viewport.thumb.x, viewport.thumb.y, viewport.thumb.w, viewport.thumb.h,
-                                                       viewport.thumb.w * 0.5f, theme.shadcn.colors.muted_foreground));
+                                                       viewport.thumb.w * 0.5f, theme.design.colors.muted_foreground));
   }
   return status;
 }

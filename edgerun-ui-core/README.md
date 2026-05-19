@@ -9,13 +9,13 @@ Intention: keep UI composition backend-neutral, deterministic, freestanding, and
 `edgerun-ui-core` is the platform-neutral UI layer for the C runtime. It owns:
 
 - scene records, hit regions, clips, text quads, icon quads, and render-budget checks
-- shadcn-aligned theme tokens and spacing primitives
+- design-aligned theme tokens and spacing primitives
 - component catalog, parity contracts, projected-field contracts, accessibility metadata, and state matrices
 - native emitters for controls, feedback, data-display surfaces, shell surfaces, setup surfaces, and the metal boot UI composition
 - layout nodes including rows, columns, cards, grids, masonry, bento grids, scroll areas, dialogs, tooltips, progress rings, and conversation/package/runtime rows
 - hosted deterministic tests plus an optional SDL preview shell
 
-The component catalog currently records 59 native components. The shadcn reference set records 55 base components from `ui/shadcn-ui/apps/v4/registry/bases/base/ui`, and tests assert that every catalog entry has a parity contract and a scene preview.
+The component catalog currently records 59 native components. The canonical component set records 55 base components from `ui/shadcn-ui/apps/v4/registry/bases/base/ui`, and tests assert that every catalog entry has a parity contract and a scene preview.
 
 ## Implemented Paths
 

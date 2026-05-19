@@ -529,13 +529,13 @@ static void test_theme_presets_and_semantic_colors(void) {
   er_ui_radius_scale_t none = er_ui_radius_scale_from_preset(ER_UI_RADIUS_NONE);
   er_ui_radius_scale_t soft = er_ui_radius_scale_from_preset(ER_UI_RADIUS_SOFT);
   expect_float(none.card, 0.0f, "theme: none radius has zero card radius");
-  expect_float(soft.card, 14.0f, "theme: soft radius respects shadcn card radius");
+  expect_float(soft.card, 14.0f, "theme: soft radius respects design card radius");
   expect_float(soft.pill, 999.0f, "theme: soft radius keeps pill radius");
 
   er_ui_semantic_colors_t dark = er_ui_semantic_colors_for_scheme(ER_UI_COLOR_SCHEME_DARK);
-  expect_float(dark.bg.r, 10.0f / 255.0f, "theme: dark bg red matches shadcn neutral");
-  expect_float(dark.sidebar.r, 23.0f / 255.0f, "theme: dark sidebar red matches shadcn card");
-  expect_float(dark.border.a, 0.10f, "theme: dark border alpha matches shadcn neutral");
+  expect_float(dark.bg.r, 10.0f / 255.0f, "theme: dark bg red matches design neutral");
+  expect_float(dark.sidebar.r, 23.0f / 255.0f, "theme: dark sidebar red matches design card");
+  expect_float(dark.border.a, 0.10f, "theme: dark border alpha matches design neutral");
 
   er_ui_semantic_colors_t terminal = er_ui_semantic_colors_for_scheme(ER_UI_COLOR_SCHEME_TERMINAL);
   expect_float(terminal.bg.r, 0.0f, "theme: terminal bg is black");
@@ -548,12 +548,12 @@ static void test_theme_presets_and_semantic_colors(void) {
   expect_true(theme.authority == ER_UI_STYLE_AUTHORITY_USER, "theme: authority stored");
   expect_float(theme.colors.accent.g, 185.0f / 255.0f, "theme: green accent applied");
   expect_float(theme.colors.active.a, 0.42f, "theme: active row alpha follows accent override");
-  expect_float(theme.radius.card, 14.0f, "theme: default card radius follows shadcn xl");
+  expect_float(theme.radius.card, 14.0f, "theme: default card radius follows design xl");
   expect_true(theme.density == ER_UI_DENSITY_COMFORTABLE, "theme: resolved density defaults comfortable");
-  expect_float(theme.shadcn.colors.card.r, 23.0f / 255.0f, "theme: shadcn card token stored");
-  expect_float(theme.shadcn.colors.primary.r, 229.0f / 255.0f, "theme: shadcn primary token stored");
-  expect_float(theme.shadcn.metrics.control_h, 36.0f, "theme: shadcn Vega control height stored");
-  expect_float(er_ui_shadcn_theme_color(theme, ER_UI_SHADCN_COLOR_INPUT).a, 0.15f, "theme: shadcn input token resolves");
+  expect_float(theme.design.colors.card.r, 23.0f / 255.0f, "theme: design card token stored");
+  expect_float(theme.design.colors.primary.r, 229.0f / 255.0f, "theme: design primary token stored");
+  expect_float(theme.design.metrics.control_h, 36.0f, "theme: design Vega control height stored");
+  expect_float(er_ui_design_theme_color(theme, ER_UI_DESIGN_COLOR_INPUT).a, 0.15f, "theme: design input token resolves");
 
   er_ui_color4_t token_color = er_ui_theme_color(theme, ER_UI_COLOR_TOKEN_ACCENT);
   expect_float(token_color.g, theme.colors.accent.g, "theme: accent token resolves");

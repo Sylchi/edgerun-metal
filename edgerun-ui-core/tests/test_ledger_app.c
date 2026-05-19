@@ -85,7 +85,7 @@ static void test_ledger_app_state_and_surface_switching(void) {
   er_ui_resolved_theme_t theme = er_ui_resolved_theme(
     ER_UI_STYLE_AUTHORITY_USER,
     (er_ui_style_preset_t){ER_UI_COLOR_SCHEME_DARK, ER_UI_ACCENT_NEUTRAL, ER_UI_RADIUS_DEFAULT});
-  theme.shadcn.colors.background = er_ui_color_rgba(0.02f, 0.024f, 0.03f, 1.0f);
+  theme.design.colors.background = er_ui_color_rgba(0.02f, 0.024f, 0.03f, 1.0f);
   bool changed = false;
 
   vr_font_face_t* font = er_ui_test_open_font(24.0f, "ledger app: bundled font bytes load", "ledger app: font opens");
@@ -102,7 +102,7 @@ static void test_ledger_app_state_and_surface_switching(void) {
   expect_status(er_ui_scene_init_with_allocator(&scene, ER_TEST_LEDGER_BG, er_ui_test_allocator()), ER_UI_OK, "ledger app: scene init succeeds");
   expect_status(er_ui_ledger_app_emit_scene(&apps, &scene, font, er_ui_bounds(0.0f, 0.0f, 1600.0f, 900.0f), theme), ER_UI_OK,
                 "ledger app: scene emits");
-  expect_float(scene.clear.r, theme.shadcn.colors.background.r, "ledger app: scene clear uses resolved theme background");
+  expect_float(scene.clear.r, theme.design.colors.background.r, "ledger app: scene clear uses resolved theme background");
 
   er_ui_scene_stats_t stats = er_ui_scene_stats(&scene);
   expect_true(stats.rects > 0u, "ledger app: scene emits rects");
