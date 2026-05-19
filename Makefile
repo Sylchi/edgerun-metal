@@ -1,4 +1,4 @@
-.PHONY: all check clean er-build repo-check repo-test repo-check-bin repo-inspect repo-progress erwire-decode erwire-test codex-build codex-test crypto-configure crypto-build crypto-test crypto-bench crypto-bench-avx2 crypto-bench-avx512 crypto-bench-avx512-threads crypto-bench-native-threads edgerun-metal edgerun-os edgerun-check varfont-configure varfont-build varfont-test ui-core-configure ui-core-build ui-core-sdl-configure ui-core-sdl-build ui-core-sdl-run ui-core-sdl-test ui-core-test
+.PHONY: all check clean er-build repo-check repo-test repo-check-bin repo-inspect repo-progress erwire-decode erwire-test codex-build codex-test crypto-configure crypto-build crypto-test crypto-bench crypto-bench-avx2 crypto-bench-avx512 crypto-bench-avx512-threads crypto-bench-native-threads metal-ui-bench edgerun-metal edgerun-os edgerun-check varfont-configure varfont-build varfont-test ui-core-configure ui-core-build ui-core-sdl-configure ui-core-sdl-build ui-core-sdl-run ui-core-sdl-test ui-core-test
 
 CC := clang
 HOST_CC := clang
@@ -83,6 +83,9 @@ crypto-bench-avx512-threads:
 crypto-bench-native-threads:
 	cmake -S edgerun-crypto -B $(CRYPTO_NATIVE_THREADS_BUILD_DIR) -G "$(CRYPTO_CMAKE_GENERATOR)" $(CMAKE_TOOLCHAIN_ARGS) -DER_CRYPTO_ENABLE_AVX512=ON -DER_CRYPTO_ENABLE_THREADS=ON -DER_CRYPTO_ENABLE_NATIVE=ON
 	cmake --build $(CRYPTO_NATIVE_THREADS_BUILD_DIR) --target bench
+
+metal-ui-bench:
+	$(MAKE) -C edgerun-metal bench-ui-dirty
 
 edgerun-metal:
 	$(MAKE) -C edgerun-metal
