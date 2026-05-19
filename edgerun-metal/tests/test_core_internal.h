@@ -16,6 +16,7 @@
 #include "er_bus.h"
 #include "er_crypto_blake3.h"
 #include "er_device_identity.h"
+#include "er_driver_event.h"
 #include "er_epoch_clock.h"
 #include "er_firmware_loader.h"
 #include "er_identity.h"
