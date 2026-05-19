@@ -65,6 +65,8 @@ WASM_MODULE_HEADERS := $(GENERATED_DIR)/wasm_driver_bus_probe_module.h $(GENERAT
                        $(GENERATED_DIR)/wasm_c_hostcall_region_base_module.h \
                        $(GENERATED_DIR)/wasm_c_hostcall_region_len_module.h \
                        $(GENERATED_DIR)/wasm_c_hostcall_ui_emit_module.h
+DRIVER_BUS_PROBE_SOURCE := modules/driver_bus_probe/app/app.c
+DRIVER_BUS_PROBE_MANIFEST := modules/driver_bus_probe/app/app.manifest
 USER_APP_SOURCE := ../tests/fixtures/app-package/app/app.c
 USER_APP_MANIFEST := ../tests/fixtures/app-package/app/app.manifest
 FONT_HEADER := $(GENERATED_DIR)/font_geist.h
@@ -130,7 +132,7 @@ $(WASM_COMPILE_BIN): $(WASM_COMPILE_SRCS) $(WASM_COMPILE_HDRS)
 	mkdir -p $(dir $@)
 	$(HOST_CC) $(HOST_CFLAGS) $(HOST_LDFLAGS) -o $@ $(WASM_COMPILE_SRCS)
 
-$(GENERATED_DIR)/driver_bus_probe.wasm: modules/driver_bus_probe/driver_bus_probe.wat $(WASM_COMPILE_BIN)
+$(GENERATED_DIR)/driver_bus_probe.wasm: $(DRIVER_BUS_PROBE_SOURCE) $(DRIVER_BUS_PROBE_MANIFEST) $(WASM_COMPILE_BIN)
 	mkdir -p $(dir $@)
 	$(WASM_COMPILE_BIN) $< $@
 
@@ -159,7 +161,7 @@ $(GENERATED_DIR)/c_hostcall_ui_emit.wasm: modules/c_hostcall_ui_emit/c_hostcall_
 	$(WASM_COMPILE_BIN) $< $@
 
 $(GENERATED_DIR)/wasm_driver_bus_probe_module.h: $(GENERATED_DIR)/driver_bus_probe.wasm $(EMBED_HEADER_BIN)
-	$(EMBED_HEADER_BIN) wasm $< $@ WASM_DRIVER_BUS_PROBE_MODULE_H g_edgerun_driver_bus_probe_wasm ER_DRIVER_BUS_PROBE_WASM_SIZE modules/driver_bus_probe/driver_bus_probe.wat
+	$(EMBED_HEADER_BIN) wasm $< $@ WASM_DRIVER_BUS_PROBE_MODULE_H g_edgerun_driver_bus_probe_wasm ER_DRIVER_BUS_PROBE_WASM_SIZE $(DRIVER_BUS_PROBE_SOURCE)
 
 $(GENERATED_DIR)/wasm_ui_counter_module.h: $(GENERATED_DIR)/ui_counter.wasm $(EMBED_HEADER_BIN)
 	$(EMBED_HEADER_BIN) wasm $< $@ WASM_UI_COUNTER_MODULE_H g_edgerun_ui_counter_wasm ER_UI_COUNTER_WASM_SIZE modules/ui_counter/ui_counter.wat

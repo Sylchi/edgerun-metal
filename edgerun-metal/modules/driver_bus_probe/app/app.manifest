@@ -1,0 +1,5 @@
+contract=bus-driver
+memory_pages=1
+imports=edgerun.bus/exec
+source=app.c
+output=.build/app.wasm

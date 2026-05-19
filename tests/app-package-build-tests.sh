@@ -9,6 +9,7 @@ set -eu
 ROOT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 ER_BUILD="${ROOT_DIR}/.build/er-build"
 PACKAGE_DIR="${ROOT_DIR}/tests/fixtures/app-package/app"
+DRIVER_PACKAGE_DIR="${ROOT_DIR}/edgerun-metal/modules/driver_bus_probe/app"
 OUTPUT_WASM="${PACKAGE_DIR}/.build/app.wasm"
 OUTPUT_IDENTITY="${PACKAGE_DIR}/.build/package.identity"
 HASH_HEX_LEN=64
@@ -145,6 +146,14 @@ MANIFEST
 grep '^manifest=app.manifest$' "${TMP_DIR}/driver-package/.build/package.identity" >/dev/null
 if "${ER_BUILD}" app-run "${TMP_DIR}/driver-package" >/dev/null 2>&1; then
   printf 'app-run accepted bus-driver package\n' >&2
+  exit 1
+fi
+
+"${ER_BUILD}" app-build "${DRIVER_PACKAGE_DIR}"
+"${ER_BUILD}" app-verify "${DRIVER_PACKAGE_DIR}"
+grep '^manifest=app.manifest$' "${DRIVER_PACKAGE_DIR}/.build/package.identity" >/dev/null
+if "${ER_BUILD}" app-run "${DRIVER_PACKAGE_DIR}" >/dev/null 2>&1; then
+  printf 'app-run accepted built-in bus-driver package\n' >&2
   exit 1
 fi
 

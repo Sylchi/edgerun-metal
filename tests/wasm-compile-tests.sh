@@ -36,7 +36,7 @@ check_magic() {
 }
 
 compile_twice \
-  "${ROOT_DIR}/edgerun-metal/modules/driver_bus_probe/driver_bus_probe.wat" \
+  "${ROOT_DIR}/edgerun-metal/modules/driver_bus_probe/app/app.c" \
   "${TMP_DIR}/driver-a.wasm" \
   "${TMP_DIR}/driver-b.wasm"
 compile_twice \
@@ -149,6 +149,19 @@ export i64 main(void) {
 }
 CAPP
 
+cat > "${TMP_DIR}/ui-store64-load64.c" <<'CAPP'
+extern i64 ui_emit(i64, i64) __import("edgerun.ui", "emit");
+const i64 OUTBOX = 1024;
+const i64 VALUE_OFFSET = 32;
+const i64 VALUE = 0x1122334455667788;
+memory(1);
+export i64 main(void) {
+  i64 ptr = OUTBOX;
+  store64(ptr, VALUE_OFFSET, VALUE);
+  return load64(ptr, VALUE_OFFSET);
+}
+CAPP
+
 cat > "${TMP_DIR}/ui-region-base-call.c" <<'CAPP'
 extern i64 ui_emit(i64, i64) __import("edgerun.ui", "emit");
 extern i64 region_base(i64) __import("edgerun.memory", "region_base");
@@ -206,6 +219,10 @@ compile_twice \
   "${TMP_DIR}/ui-load64-local-a.wasm" \
   "${TMP_DIR}/ui-load64-local-b.wasm"
 compile_twice \
+  "${TMP_DIR}/ui-store64-load64.c" \
+  "${TMP_DIR}/ui-store64-load64-a.wasm" \
+  "${TMP_DIR}/ui-store64-load64-b.wasm"
+compile_twice \
   "${TMP_DIR}/ui-region-base-call.c" \
   "${TMP_DIR}/ui-region-base-call-a.wasm" \
   "${TMP_DIR}/ui-region-base-call-b.wasm"
@@ -229,6 +246,7 @@ check_magic "${TMP_DIR}/ui-local-assign-a.wasm"
 check_magic "${TMP_DIR}/ui-if-assign-a.wasm"
 check_magic "${TMP_DIR}/ui-load32-return-a.wasm"
 check_magic "${TMP_DIR}/ui-load64-local-a.wasm"
+check_magic "${TMP_DIR}/ui-store64-load64-a.wasm"
 check_magic "${TMP_DIR}/ui-region-base-call-a.wasm"
 check_magic "${TMP_DIR}/ui-region-len-call-a.wasm"
 check_magic "${TMP_DIR}/bus-exec-call-a.wasm"

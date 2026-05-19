@@ -90,7 +90,8 @@ export i64 main(void) { return ui_emit(0, 0); }
 
 The current expression subset supports integer returns, direct returns from
 admitted i64 hostcalls, local `i64` declarations initialized from admitted
-expressions, assignment to prior local names, and explicit `if` / `else`
+expressions, assignment to prior local names, fixed-offset `store16`,
+`store32`, `store64`, `load32`, and `load64`, and explicit `if` / `else`
 statement blocks. Hostcall arguments may be integer literals or prior local
 names. Unsupported C syntax is fatal. The subset grows only when compiler
 output, runtime validation, and tests are updated together.
