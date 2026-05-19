@@ -405,6 +405,38 @@ UINT8 er_app_prepare_package_index_entry(const ErCryptoProvider* crypto,
   return er_app_package_index_entry_valid(crypto, out_entry);
 }
 
+UINT8 er_app_signed_package_index_entry_valid(const ErCryptoProvider* crypto,
+                                              const ErAppSignedPackageIndexEntry* entry) {
+  if (entry == 0 ||
+      entry->abi_version != ER_APP_ABI_VERSION ||
+      entry->app_kind != ER_APP_KIND_USER ||
+      er_app_package_index_entry_valid(crypto, &entry->index_entry) == 0u ||
+      er_app_verify_package_signature(crypto, &entry->index_entry.package,
+                                      &entry->package_signature) == 0u) {
+    return 0u;
+  }
+  return 1u;
+}
+
+UINT8 er_app_prepare_signed_package_index_entry(const ErCryptoProvider* crypto,
+                                                const ErAppPackageIndexEntry* entry,
+                                                const ErAppPackageSignature* signature,
+                                                ErAppSignedPackageIndexEntry* out_entry) {
+  if (out_entry == 0) {
+    return 0u;
+  }
+  er_mem_zero((UINT8*)out_entry, (UINTN)sizeof(*out_entry));
+  out_entry->abi_version = ER_APP_ABI_VERSION;
+  out_entry->app_kind = ER_APP_KIND_USER;
+  if (entry != 0) {
+    out_entry->index_entry = *entry;
+  }
+  if (signature != 0) {
+    out_entry->package_signature = *signature;
+  }
+  return er_app_signed_package_index_entry_valid(crypto, out_entry);
+}
+
 UINT8 er_app_prepare_package_manifest(const ErCryptoProvider* crypto,
                                       const ErVfsObjectLabelRef* app_object,
                                       const ErVfsObjectLabelRef* manifest_object,
