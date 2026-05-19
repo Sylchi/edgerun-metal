@@ -50,6 +50,10 @@
 #include "font_geist.h"
 #include "wasm_vm.h"
 #include "wasm_driver_bus_probe_module.h"
+#include "wasm_c_hostcall_bus_exec_module.h"
+#include "wasm_c_hostcall_region_base_module.h"
+#include "wasm_c_hostcall_region_len_module.h"
+#include "wasm_c_hostcall_ui_emit_module.h"
 #include "wasm_ui_counter_module.h"
 
 /*

@@ -551,6 +551,99 @@ static void test_wasm_ui_emit_import(void) {
   check_uint64("wasm ui shifted outbox command count", memory[2052], 3u);
 }
 
+static void test_wasm_c_generated_hostcall_modules(void) {
+  static UINT8 memory[65536];
+  ErWasmHostCalls host = {0};
+  ErWasmLinearMemory linear_memory;
+  ErWasmModule module;
+  ErBusIoPacket* request;
+  ErBusIoPacket* response;
+  ErAppUiPresentation presentation;
+  UINT32 main_index = 0;
+  UINT32 ui_packet_len = ER_WASM_UI_COMMAND_LIST_HEADER_LEN +
+                         ER_WASM_UI_RECT_RECORD_LEN +
+                         ER_WASM_UI_HIT_RECORD_LEN +
+                         ER_WASM_UI_QUAD_RECORD_LEN;
+  INT64 result = 0;
+
+  er_mem_zero(memory, (UINTN)sizeof(memory));
+  check_int64("wasm c hostcall memory prepare",
+              er_wasm_prepare_linear_memory(memory, (UINT32)sizeof(memory),
+                                            0u, 1024u, 1024u, 2048u,
+                                            &linear_memory),
+              0);
+
+  host.linear_memory = linear_memory;
+  host.bus_exec = test_vm_bus_exec;
+  check_int64("wasm c bus init",
+              er_wasm_init(&module, g_edgerun_c_hostcall_bus_exec_wasm,
+                           ER_C_HOSTCALL_BUS_EXEC_WASM_SIZE, &host),
+              0);
+  check_int64("wasm c bus driver contract",
+              er_wasm_validate_contract(&module, ER_WASM_MODULE_CONTRACT_BUS_DRIVER),
+              0);
+  request = (ErBusIoPacket*)memory;
+  response = (ErBusIoPacket*)(memory + 128u);
+  request->abi_version = ER_BUS_ABI_VERSION;
+  request->packet_kind = ER_BUS_PACKET_IO_REQUEST;
+  request->packet_id = 1u;
+  request->op.width = 1u;
+  request->op.address.base = 4096u;
+  request->op.address.len = 4u;
+  check_int64("wasm c bus find main", er_wasm_find_main(&module, &main_index), 0);
+  check_int64("wasm c bus main index", main_index, 1);
+  check_int64("wasm c bus execute", er_wasm_execute_i64(&module, main_index, &result), 0);
+  check_uint64("wasm c bus result", (UINT64)result, 1u);
+  check_uint64("wasm c bus response result", response->result, 0x5au);
+
+  host.bus_exec = 0;
+  check_int64("wasm c region base init",
+              er_wasm_init(&module, g_edgerun_c_hostcall_region_base_wasm,
+                           ER_C_HOSTCALL_REGION_BASE_WASM_SIZE, &host),
+              0);
+  check_int64("wasm c region base contract",
+              er_wasm_validate_contract(&module, ER_WASM_MODULE_CONTRACT_UI_APP),
+              0);
+  check_int64("wasm c region base find main",
+              er_wasm_find_main(&module, &main_index), 0);
+  check_int64("wasm c region base main index", main_index, 2);
+  check_int64("wasm c region base execute",
+              er_wasm_execute_i64(&module, main_index, &result), 0);
+  check_uint64("wasm c region base result", (UINT64)result, 1024u);
+
+  check_int64("wasm c region len init",
+              er_wasm_init(&module, g_edgerun_c_hostcall_region_len_wasm,
+                           ER_C_HOSTCALL_REGION_LEN_WASM_SIZE, &host),
+              0);
+  check_int64("wasm c region len contract",
+              er_wasm_validate_contract(&module, ER_WASM_MODULE_CONTRACT_UI_APP),
+              0);
+  check_int64("wasm c region len find main",
+              er_wasm_find_main(&module, &main_index), 0);
+  check_int64("wasm c region len main index", main_index, 2);
+  check_int64("wasm c region len execute",
+              er_wasm_execute_i64(&module, main_index, &result), 0);
+  check_uint64("wasm c region len result", (UINT64)result, 2048u);
+
+  host.ui_emit = test_vm_ui_emit;
+  host.ui_presentation = &presentation;
+  test_prepare_wasm_ui_presentation(&presentation);
+  check_int64("wasm c ui emit init",
+              er_wasm_init(&module, g_edgerun_c_hostcall_ui_emit_wasm,
+                           ER_C_HOSTCALL_UI_EMIT_WASM_SIZE, &host),
+              0);
+  check_int64("wasm c ui emit contract",
+              er_wasm_validate_contract(&module, ER_WASM_MODULE_CONTRACT_UI_APP),
+              0);
+  test_write_wasm_ui_scene_packet(memory + 1024u, ui_packet_len);
+  check_int64("wasm c ui emit find main",
+              er_wasm_find_main(&module, &main_index), 0);
+  check_int64("wasm c ui emit main index", main_index, 1);
+  check_int64("wasm c ui emit execute",
+              er_wasm_execute_i64(&module, main_index, &result), 0);
+  check_uint64("wasm c ui emit result", (UINT64)result, ui_packet_len);
+}
+
 static void test_epoch_clock_rollover(void) {
   ErEpochClockLimits limits;
   ErEpochClock clock;
