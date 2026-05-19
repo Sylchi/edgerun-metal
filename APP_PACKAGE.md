@@ -61,7 +61,8 @@ export i64 main(void) { return ui_emit(0, 0); }
 ```
 
 The current expression subset supports integer returns, direct returns from
-admitted i64 hostcalls, and local `i64` declarations initialized from admitted
-expressions. Hostcall arguments may be integer literals or prior local names.
-Unsupported C syntax is fatal. The subset grows only when compiler output,
-runtime validation, and tests are updated together.
+admitted i64 hostcalls, local `i64` declarations initialized from admitted
+expressions, and assignment to prior local names. Hostcall arguments may be
+integer literals or prior local names. Unsupported C syntax is fatal. The
+subset grows only when compiler output, runtime validation, and tests are
+updated together.
