@@ -129,6 +129,116 @@ static void test_device_relay_identity(void) {
               0);
 }
 
+static void test_ephemeral_node_identity(void) {
+  enum {
+    EPHEMERAL_TEST_WIFI_CHANNEL = 6u
+  };
+  ErCryptoProvider crypto;
+  ErHash admission_id;
+  ErHash other_admission_id;
+  UINT8 boot_nonce[ER_EPHEMERAL_NODE_BOOT_NONCE_LEN];
+  UINT8 other_boot_nonce[ER_EPHEMERAL_NODE_BOOT_NONCE_LEN];
+  ErEphemeralNode node;
+  ErEphemeralNode node_again;
+  ErEphemeralNode other_nonce_node;
+  ErEphemeralNode other_admission_node;
+  ErEphemeralNodeWifiL2 wifi_l2;
+
+  crypto.ctx = (void*)(UINTN)17u;
+  crypto.hash = test_hash;
+  crypto.seal = 0;
+  crypto.open = 0;
+  crypto.sign = 0;
+  crypto.verify = 0;
+
+  test_fill_bytes(admission_id.bytes, ER_HASH_LEN, 0x20u);
+  test_fill_bytes(other_admission_id.bytes, ER_HASH_LEN, 0x21u);
+  test_fill_bytes(boot_nonce, ER_EPHEMERAL_NODE_BOOT_NONCE_LEN, 0x30u);
+  test_fill_bytes(other_boot_nonce,
+                  ER_EPHEMERAL_NODE_BOOT_NONCE_LEN,
+                  0x31u);
+
+  check_int64("ephemeral node derive",
+              er_ephemeral_node_derive(&crypto,
+                                       &admission_id,
+                                       boot_nonce,
+                                       &node),
+              1);
+  check_uint64("ephemeral node abi",
+               node.abi_version,
+               ER_EPHEMERAL_NODE_ABI_VERSION);
+  check_hash_equal("ephemeral node admission",
+                   &node.admission_id,
+                   &admission_id);
+  check_uint64("ephemeral node nonce byte",
+               node.boot_nonce[0],
+               boot_nonce[0]);
+  check_int64("ephemeral node id nonzero",
+              er_node_id_nonzero(&node.node_id),
+              1);
+  check_int64("ephemeral node derive repeat",
+              er_ephemeral_node_derive(&crypto,
+                                       &admission_id,
+                                       boot_nonce,
+                                       &node_again),
+              1);
+  check_node_id_equal("ephemeral node deterministic",
+                      &node_again.node_id,
+                      &node.node_id);
+  check_int64("ephemeral node derive other nonce",
+              er_ephemeral_node_derive(&crypto,
+                                       &admission_id,
+                                       other_boot_nonce,
+                                       &other_nonce_node),
+              1);
+  check_node_id_not_equal("ephemeral node nonce changes id",
+                          &other_nonce_node.node_id,
+                          &node.node_id);
+  check_int64("ephemeral node derive other admission",
+              er_ephemeral_node_derive(&crypto,
+                                       &other_admission_id,
+                                       boot_nonce,
+                                       &other_admission_node),
+              1);
+  check_node_id_not_equal("ephemeral node admission changes id",
+                          &other_admission_node.node_id,
+                          &node.node_id);
+
+  er_mem_zero(admission_id.bytes, ER_HASH_LEN);
+  check_int64("ephemeral node reject zero admission",
+              er_ephemeral_node_derive(&crypto,
+                                       &admission_id,
+                                       boot_nonce,
+                                       &node),
+              0);
+  test_fill_bytes(admission_id.bytes, ER_HASH_LEN, 0x20u);
+  er_mem_zero(boot_nonce, ER_EPHEMERAL_NODE_BOOT_NONCE_LEN);
+  check_int64("ephemeral node reject zero nonce",
+              er_ephemeral_node_derive(&crypto,
+                                       &admission_id,
+                                       boot_nonce,
+                                       &node),
+              0);
+  test_fill_bytes(boot_nonce, ER_EPHEMERAL_NODE_BOOT_NONCE_LEN, 0x30u);
+
+  check_int64("ephemeral node wifi l2 prepare",
+              er_ephemeral_node_wifi_l2_prepare(&crypto,
+                                                &admission_id,
+                                                boot_nonce,
+                                                EPHEMERAL_TEST_WIFI_CHANNEL,
+                                                &wifi_l2),
+              1);
+  check_node_id_equal("ephemeral node wifi node id",
+                      &wifi_l2.node.node_id,
+                      &node_again.node_id);
+  check_int64("ephemeral node wifi ap valid",
+              er_wifi_l2_ap_plan_valid(&wifi_l2.ap_plan),
+              1);
+  check_uint64("ephemeral node wifi eth type",
+               wifi_l2.ap_plan.eth_type,
+               ER_NET_ETH_TYPE_EDGERUN);
+}
+
 static void test_work_admitted_relay_route(void) {
   ErCryptoProvider crypto;
   ErWorkRequest request;
