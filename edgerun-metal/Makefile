@@ -1,4 +1,4 @@
-.PHONY: all run run-aarch64 qemu-aarch64-smoke qemu-ephemeral-authority qemu-ephemeral-authority-smoke qemu-swtpm-persistence clean print-path print-config netboot os rebuild-image check test-core bench-ui-dirty wifi-hardware-probe wasm-modules qemu-config-check qemu-aarch64-config-check qemu-swtpm-persistence-config-check pi-zero-2w-uefi
+.PHONY: all run run-aarch64 qemu-aarch64-smoke qemu-ephemeral-authority qemu-ephemeral-authority-smoke qemu-swtpm-persistence clean print-path print-config netboot os rebuild-image check test-core bench-ui-dirty wifi-hardware-probe wasm-modules qemu-config-check qemu-aarch64-config-check qemu-swtpm-persistence-config-check pi-zero-2w-uefi pi-zero-2w-boot
 
 CC := clang
 HOST_CC := clang
@@ -106,6 +106,10 @@ QEMU_AARCH64_SMOKE_LOG := $(QEMU_AARCH64_BUILD_DIR)/qemu-aarch64-smoke.log
 QEMU_AARCH64_SMOKE_TIMEOUT := 30
 QEMU_AARCH64_SMOKE_READY := boot services: fatal action=halt
 PI_ZERO_2W_BUILD_DIR := ../.build/edgerun-metal/pi-zero-2w
+PI_ZERO_2W_EFI_BOOT := $(PI_ZERO_2W_BUILD_DIR)/esp/EFI/BOOT/BOOTAA64.EFI
+PI_ZERO_2W_BOOT_DIR := $(PI_ZERO_2W_BUILD_DIR)/boot
+PI_BOOT_STAGE_SRC := ../tools/pi-boot-stage/main.c
+PI_BOOT_STAGE_BIN := $(PI_ZERO_2W_BUILD_DIR)/pi-boot-stage
 QEMU_SMOKE_SRC := ../tools/qemu-smoke.sh
 QEMU_SWTPM_PERSIST_CONFIG := qemu-swtpm-persistence.conf
 QEMU_SWTPM_PERSIST_SCRIPT := ../tools/qemu-swtpm-persistence.sh
@@ -263,6 +267,10 @@ $(WIFI_HW_PROBE_BIN): $(WIFI_HW_PROBE_SRC) core/er_iwlwifi.h core/er_mt7922.h co
 	mkdir -p $(dir $@)
 	$(HOST_CC) $(HOST_CFLAGS) $(HOST_LDFLAGS) -o $@ $(WIFI_HW_PROBE_SRC)
 
+$(PI_BOOT_STAGE_BIN): $(PI_BOOT_STAGE_SRC)
+	mkdir -p $(dir $@)
+	$(HOST_CC) $(HOST_CFLAGS) $(HOST_LDFLAGS) -o $@ $<
+
 $(CORE_TEST_BIN): $(CORE_TEST_SRC) $(CORE_TEST_FRAGMENT_SRCS) $(HDRS) $(UI_HDRS) $(VARFONT_HDRS) $(CRYPTO_HDRS) $(WASM_MODULE_HEADERS) $(FONT_HEADER)
 	mkdir -p $(dir $@)
 	$(HOST_CC) $(HOST_CFLAGS) $(HOST_LDFLAGS) -o $@ $(CORE_TEST_SRC)
@@ -315,6 +323,9 @@ qemu-aarch64-smoke: $(QEMU_AARCH64_SMOKE_CONFIG) $(QEMU_SMOKE_SRC)
 
 pi-zero-2w-uefi:
 	$(MAKE) all ER_METAL_ARCH=aarch64 ER_METAL_BOARD=pi-zero-2w BUILD_DIR=$(PI_ZERO_2W_BUILD_DIR)
+
+pi-zero-2w-boot: pi-zero-2w-uefi $(PI_BOOT_STAGE_BIN)
+	$(PI_BOOT_STAGE_BIN) $(PI_ZERO_2W_EFI_BOOT) $(PI_ZERO_2W_BOOT_DIR)
 
 clean:
 	rm -rf $(BUILD_DIR)

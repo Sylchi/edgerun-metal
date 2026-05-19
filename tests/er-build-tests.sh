@@ -64,6 +64,11 @@ case "$repo_plan" in
   * ) printf 'missing metal architecture build test step\n' >&2; exit 1 ;;
 esac
 
+case "$repo_plan" in
+  *"+ ./tests/pi-boot-stage-tests.sh"* ) ;;
+  * ) printf 'missing pi boot stage test step\n' >&2; exit 1 ;;
+esac
+
 crypto_plan=$("$ER_BUILD" --print-plan crypto-test)
 
 case "$crypto_plan" in

@@ -1,6 +1,6 @@
 # Raspberry Pi Zero 2 W bring-up
 
-Purpose: use four constrained AArch64 boards to prove EdgeRun's deterministic,
+Purpose: use six constrained AArch64 boards to prove EdgeRun's deterministic,
 budget-based OS model on real, heterogeneous hardware.
 
 The Pi Zero 2 W target is not a performance excuse. It is the opposite: it is a
@@ -12,13 +12,15 @@ relay traffic.
 
 ## Board Role Plan
 
-Use four boards with fixed labels:
+Use six boards with fixed labels:
 
 ```text
 erz2w-0  bootstrap identity, package index publisher, serial console first boot
 erz2w-1  sealed object storage replica
 erz2w-2  relay-only node
 erz2w-3  offline/rejoin and failure-injection node
+erz2w-4  second sealed object storage replica, replica divergence check
+erz2w-5  mobile/observer node, route churn and late admission check
 ```
 
 Every board must get an explicit device identity before it is allowed to join a
@@ -26,16 +28,20 @@ swarm. Path names, hostnames, DHCP leases, and MAC addresses are not authority.
 
 ## Current Boot Target
 
-The first Pi Zero 2 W artifact is an AArch64 EFI payload:
+The first Pi Zero 2 W artifact path stages a deterministic boot directory:
 
 ```sh
-make -C edgerun-metal pi-zero-2w-uefi
+make -C edgerun-metal pi-zero-2w-boot
 ```
 
 Output:
 
 ```text
-.build/edgerun-metal/pi-zero-2w/esp/EFI/BOOT/BOOTAA64.EFI
+.build/edgerun-metal/pi-zero-2w/boot/
+.build/edgerun-metal/pi-zero-2w/boot/EFI/BOOT/BOOTAA64.EFI
+.build/edgerun-metal/pi-zero-2w/boot/config.txt
+.build/edgerun-metal/pi-zero-2w/boot/startup.nsh
+.build/edgerun-metal/pi-zero-2w/boot/EDGERUN-PI-ZERO-2W-BOOT.txt
 ```
 
 The intended first hardware chain is:
@@ -48,6 +54,13 @@ This is explicit. It is not a claim that the repository already owns the
 Raspberry Pi first-stage firmware or U-Boot. Until we own or vendor an audited
 first-stage path, those files are board bring-up prerequisites, not EdgeRun
 runtime dependencies.
+
+The EFI-only payload is still available when a board already has an EFI boot
+environment:
+
+```sh
+make -C edgerun-metal pi-zero-2w-uefi
+```
 
 ## First Boot Proof
 
@@ -84,11 +97,13 @@ create repeated work.
 
 After single-board boot, prove the distributed model:
 
-- four explicit device identities
+- six explicit device identities
 - signed package index published by `erz2w-0`
-- sealed content chunks replicated to `erz2w-1`
+- sealed content chunks replicated to `erz2w-1` and `erz2w-4`
 - relay traffic through `erz2w-2`
 - `erz2w-3` offline during publish, then rejoined by content identity
+- `erz2w-5` joins after the first route set is established and must not become
+  implicit authority
 - package install by hash and signature, not path or label
 - storage nodes never receive plaintext app content
 - route receipts account for each transfer
@@ -97,10 +112,11 @@ After single-board boot, prove the distributed model:
 
 - [x] Add explicit `pi-zero-2w` board profile.
 - [x] Add deterministic AArch64 EFI payload build target.
+- [x] Add repo-owned Pi boot artifact staging tool and generated boot manifest.
 - [ ] Confirm `BOOTAA64.EFI` loads through U-Boot EFI on one board.
 - [ ] Capture serial boot log from `erz2w-0`.
 - [ ] Add a repo-owned serial log checker for Pi boot evidence.
-- [ ] Add deterministic four-node identity material generation.
+- [ ] Add deterministic six-node identity material generation.
 - [ ] Add Pi swarm package index and sealed-object replication tests.
 - [ ] Add UI work-unit budget benchmark for no-change and small-change frames.
 - [ ] Add native Pi framebuffer/input/storage/network platform boundaries.
