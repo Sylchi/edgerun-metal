@@ -310,6 +310,10 @@ static void test_app_identity_routes(void) {
   ErVfsObjectLabelRef manifest_ref;
   ErVfsObjectLabelRef manifest_alias_ref;
   ErVfsObjectLabelRef ui_assets_ref;
+  ErVfsObjectRef app_object_ref;
+  ErVfsObjectRef manifest_object_ref;
+  ErVfsObjectRef ui_assets_object_ref;
+  ErVfsObjectRef bad_object_ref;
   ErVfsObjectPacket app_packet;
   ErVfsObjectPacket manifest_packet;
   ErVfsObjectPacket ui_assets_packet;
@@ -319,6 +323,7 @@ static void test_app_identity_routes(void) {
   ErAppPackageObjectLoad ui_assets_load;
   ErAppPackageManifest package;
   ErAppPackageManifest package_alias;
+  ErAppPackageManifest package_from_objects;
   ErAppPackageManifest package_without_assets;
   ErAppPackageManifest package_bad_id;
   ErAppLoadedPackage loaded_package;
@@ -391,10 +396,35 @@ static void test_app_identity_routes(void) {
                                               ui_assets_bytes, sizeof(ui_assets_bytes),
                                               &ui_assets_ref),
               1);
+  check_int64("app package app object ref",
+              er_vfs_prepare_object_ref(&crypto, app_bytes, sizeof(app_bytes),
+                                        &app_object_ref),
+              1);
+  check_int64("app package manifest object ref",
+              er_vfs_prepare_object_ref(&crypto, manifest_bytes,
+                                        sizeof(manifest_bytes),
+                                        &manifest_object_ref),
+              1);
+  check_int64("app package assets object ref",
+              er_vfs_prepare_object_ref(&crypto, ui_assets_bytes,
+                                        sizeof(ui_assets_bytes),
+                                        &ui_assets_object_ref),
+              1);
+  check_hash_equal("app package object ref app id",
+                   &app_object_ref.object_id, &app_ref.object_id);
   check_int64("app package prepare",
               er_app_prepare_package_manifest(&crypto, &app_ref, &manifest_ref,
                                               &ui_assets_ref, &package),
               1);
+  check_int64("app package prepare from objects",
+              er_app_prepare_package_manifest_from_objects(&crypto,
+                                                           &app_object_ref,
+                                                           &manifest_object_ref,
+                                                           &ui_assets_object_ref,
+                                                           &package_from_objects),
+              1);
+  check_hash_equal("app package object refs preserve package id",
+                   &package_from_objects.package_id, &package.package_id);
   check_int64("app package abi", package.abi_version, ER_APP_ABI_VERSION);
   check_int64("app package kind", package.app_kind, ER_APP_KIND_USER);
   check_hash_equal("app package app object", &package.app_object_id,
@@ -413,6 +443,15 @@ static void test_app_identity_routes(void) {
               1);
   check_hash_equal("app package labels ignored", &package_alias.package_id,
                    &package.package_id);
+  bad_object_ref = app_object_ref;
+  bad_object_ref.reserved = 1u;
+  check_int64("app package object ref rejects reserved",
+              er_app_prepare_package_manifest_from_objects(&crypto,
+                                                           &bad_object_ref,
+                                                           &manifest_object_ref,
+                                                           &ui_assets_object_ref,
+                                                           &package_from_objects),
+              0);
   check_int64("app package without assets",
               er_app_prepare_package_manifest(&crypto, &app_ref, &manifest_ref,
                                               0, &package_without_assets),
