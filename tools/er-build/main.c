@@ -629,6 +629,7 @@ static int erb_target_repo_test(int print_plan) {
       erb_run_program("./tests/app-package-build-tests.sh", print_plan) != 0 ||
       erb_run_program("./tests/wasm-compile-tests.sh", print_plan) != 0 ||
       erb_run_program("./tests/metal-arch-build-tests.sh", print_plan) != 0 ||
+      erb_run_program("./tests/pi-boot-stage-tests.sh", print_plan) != 0 ||
       erb_run_program("./tests/er-math-tests.sh", print_plan) != 0 ||
       erb_run_program("./tests/erwire-decode-tests.sh", print_plan) != 0) {
     return 1;

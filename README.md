@@ -3,7 +3,9 @@
 This repository contains one EdgeRun OS and runtime implementation in C. The
 top-level directories are cooperating runtime areas, not separate products:
 
-- `edgerun-metal`: the freestanding x86_64 UEFI OS runtime that boots as `BOOTX64.EFI`, hosts Wasm apps, and owns runtime device paths.
+- `edgerun-metal`: the freestanding UEFI OS runtime that boots as
+  `BOOTX64.EFI` on x86_64 and `BOOTAA64.EFI` on AArch64, hosts Wasm apps, and
+  owns runtime device paths.
 - `edgerun-crypto`: freestanding cryptographic primitives used by the runtime, tools, and tests, currently centered on BLAKE3 hashing.
 - `edgerun-ui-core`: the platform-neutral UI scene, component, input, and rendering contract consumed by the metal runtime.
   Its `varfont` subtree owns the freestanding variable-font renderer used by UI text paths.

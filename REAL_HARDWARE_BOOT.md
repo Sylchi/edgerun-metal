@@ -59,16 +59,16 @@ Known remaining Pi 4B work:
 ## Raspberry Pi Zero 2 W bring-up path
 
 The Pi Zero 2 W path is tracked in `PI_ZERO_2W_BRINGUP.md`. Build its first
-EFI payload with:
+staged boot tree with:
 
 ```bash
-make -C edgerun-metal pi-zero-2w-uefi
+make -C edgerun-metal pi-zero-2w-boot
 ```
 
-The generated payload is:
+The generated boot tree is:
 
 ```text
-.build/edgerun-metal/pi-zero-2w/esp/EFI/BOOT/BOOTAA64.EFI
+.build/edgerun-metal/pi-zero-2w/boot/
 ```
 
 The intended first boot chain is explicit:
@@ -76,6 +76,11 @@ The intended first boot chain is explicit:
 ```text
 Raspberry Pi firmware -> U-Boot EFI -> BOOTAA64.EFI -> EdgeRun Metal Core
 ```
+
+The boot tree contains the repo-owned `EFI/BOOT/BOOTAA64.EFI` payload plus
+`config.txt`, `startup.nsh`, and `EDGERUN-PI-ZERO-2W-BOOT.txt`. The manifest
+names Raspberry Pi firmware and `u-boot.bin` as first-stage board prerequisites
+so they are not confused with EdgeRun runtime dependencies.
 
 The Pi Zero 2 W boards are the constrained hardware swarm target for proving
 deterministic budgets, identity-routed storage, sealed package replication, and
