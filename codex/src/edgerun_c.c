@@ -1,0 +1,1657 @@
+#define _XOPEN_SOURCE 700
+#define _POSIX_C_SOURCE 200809L
+
+#include <ctype.h>
+#include <dirent.h>
+#include <errno.h>
+#include <limits.h>
+#include <stdarg.h>
+#include <stdbool.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/stat.h>
+#include <sys/types.h>
+#include <sys/wait.h>
+#include <time.h>
+#include <unistd.h>
+
+#ifndef PATH_MAX
+#define PATH_MAX 4096
+#endif
+
+#define READ_CHUNK 8192u
+#define GIT_COMMIT_SUBJECT_BYTES 72u
+#define CODEX_BACKEND_VERSION "0.130.0"
+#define DEFAULT_MODEL "gpt-5.5"
+#define CODEX_BACKEND_URL "https://chatgpt.com/backend-api/codex/responses"
+
+static const char *AGENT_INSTRUCTIONS =
+    "You are Codex running inside EdgeRun C. "
+    "You do not have direct shell or process access. "
+    "Use search_code and read_code to inspect the in-memory workspace snapshot. "
+    "Use propose_change to stage complete-file replacements in memory. "
+    "The host automatically provides repository status, rules, and verification context. "
+    "Do not ask the user to run git status, git diff, build, or test commands. "
+    "After you propose changes, the host writes only those proposals, runs scoped repo-progress verification, "
+    "and creates a git commit only after verification passes. "
+    "Do not claim tests were run unless the host reports test output.";
+
+typedef struct {
+    char *path;
+    unsigned char *data;
+    size_t len;
+    bool text;
+} MemoryFile;
+
+typedef struct {
+    char *path;
+    unsigned char *data;
+    size_t len;
+} Proposal;
+
+typedef struct {
+    char root[PATH_MAX];
+    MemoryFile *files;
+    size_t file_count;
+    size_t file_cap;
+    Proposal *proposals;
+    size_t proposal_count;
+    size_t proposal_cap;
+} Workspace;
+
+typedef struct {
+    char *data;
+    size_t len;
+    size_t cap;
+} Buffer;
+
+typedef struct {
+    char *access_token;
+    char *account_id;
+} CodexAuth;
+
+typedef struct {
+    char thread_id[64];
+    char session_id[64];
+    char installation_id[64];
+    char window_id[80];
+} CodexSession;
+
+typedef struct {
+    char *name;
+    char *arguments;
+    char *call_id;
+} ToolCall;
+
+typedef struct {
+    char **items;
+    size_t count;
+    size_t cap;
+} JsonItems;
+
+typedef struct {
+    char *text;
+    ToolCall *tools;
+    size_t tool_count;
+    JsonItems output_items;
+} AgentTurn;
+
+static void trim_newline(char *s);
+static const char *json_find_key_value_start(const char *json, const char *key);
+
+static void die(const char *fmt, ...) {
+    va_list ap;
+    va_start(ap, fmt);
+    vfprintf(stderr, fmt, ap);
+    va_end(ap);
+    fputc('\n', stderr);
+    exit(1);
+}
+
+static void *xmalloc(size_t n) {
+    void *p = malloc(n ? n : 1);
+    if (!p) die("out of memory");
+    return p;
+}
+
+static void *xrealloc(void *p, size_t n) {
+    void *q = realloc(p, n ? n : 1);
+    if (!q) die("out of memory");
+    return q;
+}
+
+static char *xstrdup(const char *s) {
+    size_t n = strlen(s) + 1;
+    char *p = xmalloc(n);
+    memcpy(p, s, n);
+    return p;
+}
+
+static bool starts_with(const char *s, const char *prefix) {
+    return strncmp(s, prefix, strlen(prefix)) == 0;
+}
+
+static bool contains_path_part(const char *path, const char *part) {
+    size_t part_len = strlen(part);
+    const char *p = path;
+    while (*p) {
+        const char *end = strchr(p, '/');
+        size_t len = end ? (size_t)(end - p) : strlen(p);
+        if (len == part_len && memcmp(p, part, len) == 0) return true;
+        if (!end) break;
+        p = end + 1;
+    }
+    return false;
+}
+
+static bool should_skip_dir(const char *rel) {
+    static const char *skip[] = {
+        ".git", "target", "node_modules", "dist", "build", "coverage",
+        ".next", ".turbo", "out", "vendor", NULL
+    };
+    for (size_t i = 0; skip[i]; i++) {
+        if (contains_path_part(rel, skip[i])) return true;
+    }
+    return false;
+}
+
+static bool path_is_safe(const char *path) {
+    if (!path || !*path) return false;
+    if (path[0] == '/' || path[0] == '\\') return false;
+    if (strstr(path, "\\") != NULL) return false;
+    if (strstr(path, "//") != NULL) return false;
+    if (strcmp(path, ".") == 0 || strcmp(path, "..") == 0) return false;
+    if (starts_with(path, "../") || strstr(path, "/../") || strstr(path, "/..") == path + strlen(path) - 3) return false;
+    if (starts_with(path, "./") || strstr(path, "/./")) return false;
+    return true;
+}
+
+static void join_path(char out[PATH_MAX], const char *root, const char *rel) {
+    int n = snprintf(out, PATH_MAX, "%s/%s", root, rel);
+    if (n < 0 || n >= PATH_MAX) die("path too long: %s/%s", root, rel);
+}
+
+static bool is_probably_text(const unsigned char *data, size_t len) {
+    for (size_t i = 0; i < len; i++) {
+        unsigned char c = data[i];
+        if (c == 0) return false;
+        if (c < 32 && c != '\n' && c != '\r' && c != '\t' && c != '\f') return false;
+    }
+    return true;
+}
+
+static unsigned char *read_file_bytes(const char *path, size_t *len_out, bool *text_out) {
+    FILE *f = fopen(path, "rb");
+    if (!f) return NULL;
+    if (fseek(f, 0, SEEK_END) != 0) {
+        fclose(f);
+        return NULL;
+    }
+    long end = ftell(f);
+    if (end < 0) {
+        fclose(f);
+        return NULL;
+    }
+    rewind(f);
+    size_t len = (size_t)end;
+    unsigned char *data = xmalloc(len + 1);
+    size_t got = fread(data, 1, len, f);
+    fclose(f);
+    if (got != len) {
+        free(data);
+        return NULL;
+    }
+    data[len] = 0;
+    *len_out = len;
+    *text_out = is_probably_text(data, len);
+    return data;
+}
+
+static void workspace_add_file(Workspace *ws, const char *rel, unsigned char *data, size_t len, bool text) {
+    if (ws->file_count == ws->file_cap) {
+        ws->file_cap = ws->file_cap ? ws->file_cap * 2 : 256;
+        ws->files = xrealloc(ws->files, ws->file_cap * sizeof(ws->files[0]));
+    }
+    ws->files[ws->file_count++] = (MemoryFile){
+        .path = xstrdup(rel),
+        .data = data,
+        .len = len,
+        .text = text,
+    };
+}
+
+static void workspace_clear_files(Workspace *ws) {
+    for (size_t i = 0; i < ws->file_count; i++) {
+        free(ws->files[i].path);
+        free(ws->files[i].data);
+    }
+    ws->file_count = 0;
+}
+
+static void scan_dir(Workspace *ws, const char *rel) {
+    char abs[PATH_MAX];
+    if (rel[0]) join_path(abs, ws->root, rel);
+    else snprintf(abs, sizeof(abs), "%s", ws->root);
+
+    DIR *dir = opendir(abs);
+    if (!dir) return;
+
+    struct dirent *ent;
+    while ((ent = readdir(dir)) != NULL) {
+        if (strcmp(ent->d_name, ".") == 0 || strcmp(ent->d_name, "..") == 0) continue;
+
+        char child_rel[PATH_MAX];
+        int n = rel[0]
+            ? snprintf(child_rel, sizeof(child_rel), "%s/%s", rel, ent->d_name)
+            : snprintf(child_rel, sizeof(child_rel), "%s", ent->d_name);
+        if (n < 0 || n >= PATH_MAX) continue;
+
+        char child_abs[PATH_MAX];
+        join_path(child_abs, ws->root, child_rel);
+
+        struct stat st;
+        if (lstat(child_abs, &st) != 0) continue;
+        if (S_ISDIR(st.st_mode)) {
+            if (!should_skip_dir(child_rel)) scan_dir(ws, child_rel);
+        } else if (S_ISREG(st.st_mode)) {
+            size_t len = 0;
+            bool text = false;
+            unsigned char *data = read_file_bytes(child_abs, &len, &text);
+            if (data) workspace_add_file(ws, child_rel, data, len, text);
+        }
+    }
+    closedir(dir);
+}
+
+static MemoryFile *find_file(Workspace *ws, const char *path) {
+    for (size_t i = 0; i < ws->file_count; i++) {
+        if (strcmp(ws->files[i].path, path) == 0) return &ws->files[i];
+    }
+    return NULL;
+}
+
+static Proposal *find_proposal(Workspace *ws, const char *path) {
+    for (size_t i = 0; i < ws->proposal_count; i++) {
+        if (strcmp(ws->proposals[i].path, path) == 0) return &ws->proposals[i];
+    }
+    return NULL;
+}
+
+static void upsert_proposal(Workspace *ws, const char *path, const unsigned char *data, size_t len) {
+    Proposal *p = find_proposal(ws, path);
+    if (!p) {
+        if (ws->proposal_count == ws->proposal_cap) {
+            ws->proposal_cap = ws->proposal_cap ? ws->proposal_cap * 2 : 32;
+            ws->proposals = xrealloc(ws->proposals, ws->proposal_cap * sizeof(ws->proposals[0]));
+        }
+        p = &ws->proposals[ws->proposal_count++];
+        p->path = xstrdup(path);
+        p->data = NULL;
+        p->len = 0;
+    }
+    free(p->data);
+    p->data = xmalloc(len + 1);
+    memcpy(p->data, data, len);
+    p->data[len] = 0;
+    p->len = len;
+}
+
+static void discard_proposal(Workspace *ws, const char *path) {
+    for (size_t i = 0; i < ws->proposal_count; i++) {
+        if (strcmp(ws->proposals[i].path, path) == 0) {
+            free(ws->proposals[i].path);
+            free(ws->proposals[i].data);
+            memmove(&ws->proposals[i], &ws->proposals[i + 1],
+                    (ws->proposal_count - i - 1) * sizeof(ws->proposals[0]));
+            ws->proposal_count--;
+            printf("discarded %s\n", path);
+            return;
+        }
+    }
+    printf("no proposal for %s\n", path);
+}
+
+static void discard_all(Workspace *ws) {
+    for (size_t i = 0; i < ws->proposal_count; i++) {
+        free(ws->proposals[i].path);
+        free(ws->proposals[i].data);
+    }
+    ws->proposal_count = 0;
+    printf("discarded all proposals\n");
+}
+
+static const unsigned char *effective_data(Workspace *ws, const char *path, size_t *len_out, bool *text_out) {
+    Proposal *p = find_proposal(ws, path);
+    if (p) {
+        *len_out = p->len;
+        *text_out = is_probably_text(p->data, p->len);
+        return p->data;
+    }
+    MemoryFile *f = find_file(ws, path);
+    if (!f) return NULL;
+    *len_out = f->len;
+    *text_out = f->text;
+    return f->data;
+}
+
+static char lower_char(char c) {
+    return (char)tolower((unsigned char)c);
+}
+
+static bool contains_case_insensitive(const char *hay, size_t hay_len, const char *needle) {
+    size_t needle_len = strlen(needle);
+    if (needle_len == 0 || needle_len > hay_len) return false;
+    for (size_t i = 0; i + needle_len <= hay_len; i++) {
+        size_t j = 0;
+        while (j < needle_len && lower_char(hay[i + j]) == lower_char(needle[j])) j++;
+        if (j == needle_len) return true;
+    }
+    return false;
+}
+
+static void cmd_stats(Workspace *ws) {
+    size_t text = 0;
+    size_t bytes = 0;
+    for (size_t i = 0; i < ws->file_count; i++) {
+        if (ws->files[i].text) text++;
+        bytes += ws->files[i].len;
+    }
+    printf("root: %s\nfiles loaded: %zu\ntext files: %zu\nbytes loaded: %zu\nproposals: %zu\n",
+           ws->root, ws->file_count, text, bytes, ws->proposal_count);
+}
+
+static void cmd_search(Workspace *ws, const char *query, size_t limit) {
+    if (!query || !*query) {
+        printf("usage: search <text> [limit]\n");
+        return;
+    }
+    size_t hits = 0;
+    for (size_t i = 0; i < ws->file_count && (limit == 0 || hits < limit); i++) {
+        MemoryFile *f = &ws->files[i];
+        if (!f->text) continue;
+        const char *text = (const char *)f->data;
+        size_t start = 0;
+        size_t line_no = 1;
+        for (size_t pos = 0; pos <= f->len && (limit == 0 || hits < limit); pos++) {
+            if (pos == f->len || text[pos] == '\n') {
+                size_t line_len = pos - start;
+                if (contains_case_insensitive(text + start, line_len, query)) {
+                    printf("%s:%zu: %.*s\n", f->path, line_no, (int)line_len, text + start);
+                    hits++;
+                }
+                start = pos + 1;
+                line_no++;
+            }
+        }
+    }
+    if (hits == 0) printf("no matches\n");
+}
+
+static void cmd_read(Workspace *ws, const char *path, size_t start_line, size_t max_lines) {
+    if (!path_is_safe(path)) {
+        printf("invalid workspace-relative path\n");
+        return;
+    }
+    size_t len = 0;
+    bool text = false;
+    const unsigned char *data = effective_data(ws, path, &len, &text);
+    if (!data) {
+        printf("file not loaded: %s\n", path);
+        return;
+    }
+    if (!text) {
+        printf("file is binary or unsupported text: %s (%zu bytes)\n", path, len);
+        return;
+    }
+    if (start_line == 0) start_line = 1;
+    const char *s = (const char *)data;
+    size_t line_no = 1;
+    size_t emitted = 0;
+    size_t start = 0;
+    for (size_t pos = 0; pos <= len && (max_lines == 0 || emitted < max_lines); pos++) {
+        if (pos == len || s[pos] == '\n') {
+            if (line_no >= start_line) {
+                printf("%5zu | %.*s\n", line_no, (int)(pos - start), s + start);
+                emitted++;
+            }
+            start = pos + 1;
+            line_no++;
+        }
+    }
+}
+
+static void buffer_init(Buffer *b) {
+    b->data = NULL;
+    b->len = 0;
+    b->cap = 0;
+}
+
+static void buffer_append(Buffer *b, const char *s, size_t n) {
+    if (b->len + n + 1 > b->cap) {
+        size_t next = b->cap ? b->cap * 2 : READ_CHUNK;
+        while (next < b->len + n + 1) next *= 2;
+        b->data = xrealloc(b->data, next);
+        b->cap = next;
+    }
+    memcpy(b->data + b->len, s, n);
+    b->len += n;
+    b->data[b->len] = 0;
+}
+
+static void buffer_append_c(Buffer *b, char c) {
+    buffer_append(b, &c, 1);
+}
+
+static void buffer_appendf(Buffer *b, const char *fmt, ...) {
+    va_list ap;
+    va_start(ap, fmt);
+    va_list copy;
+    va_copy(copy, ap);
+    int n = vsnprintf(NULL, 0, fmt, copy);
+    va_end(copy);
+    if (n < 0) die("format failed");
+    char *tmp = xmalloc((size_t)n + 1);
+    vsnprintf(tmp, (size_t)n + 1, fmt, ap);
+    va_end(ap);
+    buffer_append(b, tmp, (size_t)n);
+    free(tmp);
+}
+
+static char *json_escape_new(const char *s) {
+    Buffer b;
+    buffer_init(&b);
+    buffer_append_c(&b, '"');
+    for (const unsigned char *p = (const unsigned char *)s; *p; p++) {
+        switch (*p) {
+            case '\\': buffer_append(&b, "\\\\", 2); break;
+            case '"': buffer_append(&b, "\\\"", 2); break;
+            case '\n': buffer_append(&b, "\\n", 2); break;
+            case '\r': buffer_append(&b, "\\r", 2); break;
+            case '\t': buffer_append(&b, "\\t", 2); break;
+            default:
+                if (*p < 32) buffer_appendf(&b, "\\u%04x", *p);
+                else buffer_append_c(&b, (char)*p);
+        }
+    }
+    buffer_append_c(&b, '"');
+    return b.data ? b.data : xstrdup("\"\"");
+}
+
+static char *shell_quote_new(const char *s) {
+    Buffer b;
+    buffer_init(&b);
+    buffer_append_c(&b, '\'');
+    for (const char *p = s; *p; p++) {
+        if (*p == '\'') buffer_append(&b, "'\\''", 4);
+        else buffer_append_c(&b, *p);
+    }
+    buffer_append_c(&b, '\'');
+    return b.data ? b.data : xstrdup("''");
+}
+
+static int command_status_code(int raw_status) {
+    if (raw_status == -1) return 1;
+    if (WIFEXITED(raw_status)) return WEXITSTATUS(raw_status);
+    return 1;
+}
+
+static char *run_command_text_new(const char *cmd, int *status_out) {
+    FILE *pipe = popen(cmd, "r");
+    if (!pipe) die("failed to start command: %s", cmd);
+    Buffer out;
+    buffer_init(&out);
+    char chunk[READ_CHUNK];
+    while (fgets(chunk, sizeof(chunk), pipe) != NULL) {
+        buffer_append(&out, chunk, strlen(chunk));
+    }
+    int raw = pclose(pipe);
+    if (status_out) *status_out = command_status_code(raw);
+    if (!out.data) return xstrdup("");
+    return out.data;
+}
+
+static int run_command_checked(const char *cmd) {
+    int status = 0;
+    char *out = run_command_text_new(cmd, &status);
+    if (*out) fputs(out, stdout);
+    free(out);
+    return status;
+}
+
+static char *read_text_file_new(const char *path) {
+    size_t len = 0;
+    bool text = false;
+    unsigned char *data = read_file_bytes(path, &len, &text);
+    if (!data || !text) {
+        free(data);
+        return NULL;
+    }
+    return (char *)data;
+}
+
+static char *json_get_string_dup(const char *json, const char *key) {
+    char needle[128];
+    snprintf(needle, sizeof(needle), "\"%s\"", key);
+    const char *p = strstr(json, needle);
+    if (!p) return NULL;
+    p += strlen(needle);
+    while (*p && isspace((unsigned char)*p)) p++;
+    if (*p++ != ':') return NULL;
+    while (*p && isspace((unsigned char)*p)) p++;
+    if (*p++ != '"') return NULL;
+
+    Buffer b;
+    buffer_init(&b);
+    while (*p && *p != '"') {
+        if (*p == '\\') {
+            p++;
+            if (!*p) break;
+            switch (*p) {
+                case 'n': buffer_append_c(&b, '\n'); break;
+                case 'r': buffer_append_c(&b, '\r'); break;
+                case 't': buffer_append_c(&b, '\t'); break;
+                case '"': buffer_append_c(&b, '"'); break;
+                case '\\': buffer_append_c(&b, '\\'); break;
+                default: buffer_append_c(&b, *p); break;
+            }
+            p++;
+        } else {
+            buffer_append_c(&b, *p++);
+        }
+    }
+    return b.data ? b.data : xstrdup("");
+}
+
+static char *json_get_scalar_dup(const char *json, const char *key) {
+    char *s = json_get_string_dup(json, key);
+    if (s) return s;
+    const char *p = json_find_key_value_start(json, key);
+    if (!p) return NULL;
+    if (*p == '-' || isdigit((unsigned char)*p)) {
+        const char *start = p;
+        while (*p && (isdigit((unsigned char)*p) || *p == '-' || *p == '+'
+               || *p == '.' || *p == 'e' || *p == 'E')) {
+            p++;
+        }
+        size_t n = (size_t)(p - start);
+        char *out = xmalloc(n + 1);
+        memcpy(out, start, n);
+        out[n] = 0;
+        return out;
+    }
+    return NULL;
+}
+
+static char *codex_home_new(void) {
+    const char *home = getenv("CODEX_HOME");
+    if (home && *home) return xstrdup(home);
+    home = getenv("HOME");
+    if (!home || !*home) return NULL;
+    Buffer b;
+    buffer_init(&b);
+    buffer_appendf(&b, "%s/.codex", home);
+    return b.data;
+}
+
+static CodexAuth read_codex_auth(void) {
+    CodexAuth auth = {0};
+    char *home = codex_home_new();
+    if (!home) die("CODEX_HOME or HOME must be set");
+    char path[PATH_MAX];
+    int n = snprintf(path, sizeof(path), "%s/auth.json", home);
+    free(home);
+    if (n < 0 || n >= PATH_MAX) die("auth path too long");
+    char *json = read_text_file_new(path);
+    if (!json) die("failed to read Codex auth file: %s", path);
+    auth.access_token = json_get_string_dup(json, "access_token");
+    auth.account_id = json_get_string_dup(json, "account_id");
+    free(json);
+    if (!auth.access_token || !*auth.access_token) die("missing tokens.access_token in %s", path);
+    return auth;
+}
+
+static void json_items_push(JsonItems *items, char *json) {
+    if (items->count == items->cap) {
+        items->cap = items->cap ? items->cap * 2 : 16;
+        items->items = xrealloc(items->items, items->cap * sizeof(items->items[0]));
+    }
+    items->items[items->count++] = json;
+}
+
+static void json_items_free(JsonItems *items) {
+    for (size_t i = 0; i < items->count; i++) free(items->items[i]);
+    free(items->items);
+    items->items = NULL;
+    items->count = 0;
+    items->cap = 0;
+}
+
+static char *user_item_json_new(const char *text) {
+    char *escaped = json_escape_new(text);
+    Buffer b;
+    buffer_init(&b);
+    buffer_appendf(&b,
+        "{\"type\":\"message\",\"role\":\"user\",\"content\":[{\"type\":\"input_text\",\"text\":%s}]}",
+        escaped);
+    free(escaped);
+    return b.data;
+}
+
+static char *tool_output_item_json_new(const char *call_id, const char *text, bool success) {
+    (void)success;
+    char *id = json_escape_new(call_id);
+    char *out = json_escape_new(text);
+    Buffer b;
+    buffer_init(&b);
+    buffer_appendf(&b,
+        "{\"type\":\"function_call_output\",\"call_id\":%s,\"output\":%s}",
+        id, out);
+    free(id);
+    free(out);
+    return b.data;
+}
+
+static void codex_session_init(CodexSession *session) {
+    unsigned long now = (unsigned long)time(NULL);
+    unsigned long pid = (unsigned long)getpid();
+    snprintf(session->thread_id, sizeof(session->thread_id), "edgerun-c-thread-%lx-%lx", now, pid);
+    snprintf(session->session_id, sizeof(session->session_id), "%s", session->thread_id);
+    snprintf(session->installation_id, sizeof(session->installation_id), "edgerun-c-install-%lx-%lx", now, pid);
+    snprintf(session->window_id, sizeof(session->window_id), "%s:0", session->thread_id);
+}
+
+static void cmd_propose(Workspace *ws, const char *path) {
+    if (!path_is_safe(path)) {
+        printf("invalid workspace-relative path\n");
+        return;
+    }
+    printf("enter full file content for %s; finish with a line containing only .end\n", path);
+    Buffer b;
+    buffer_init(&b);
+    char *line = NULL;
+    size_t cap = 0;
+    while (getline(&line, &cap, stdin) != -1) {
+        if (strcmp(line, ".end\n") == 0 || strcmp(line, ".end\r\n") == 0 || strcmp(line, ".end") == 0) break;
+        buffer_append(&b, line, strlen(line));
+    }
+    free(line);
+    upsert_proposal(ws, path, (unsigned char *)b.data, b.len);
+    printf("staged in memory: %s (%zu bytes)\n", path, b.len);
+    free(b.data);
+}
+
+static void print_diff_for(Workspace *ws, Proposal *p) {
+    MemoryFile *old = find_file(ws, p->path);
+    printf("--- %s\n+++ %s (memory)\n", old ? p->path : "/dev/null", p->path);
+    if (!old) {
+        const char *s = (const char *)p->data;
+        size_t start = 0;
+        for (size_t pos = 0; pos <= p->len; pos++) {
+            if (pos == p->len || s[pos] == '\n') {
+                printf("+%.*s\n", (int)(pos - start), s + start);
+                start = pos + 1;
+            }
+        }
+        return;
+    }
+    if (old->len == p->len && memcmp(old->data, p->data, p->len) == 0) {
+        printf("(no byte changes)\n");
+        return;
+    }
+    printf("@@ full-file replacement @@\n");
+    printf("-old bytes: %zu\n+new bytes: %zu\n", old->len, p->len);
+}
+
+static void cmd_diff(Workspace *ws, const char *path) {
+    if (path && *path) {
+        Proposal *p = find_proposal(ws, path);
+        if (!p) {
+            printf("no proposal for %s\n", path);
+            return;
+        }
+        print_diff_for(ws, p);
+        return;
+    }
+    if (ws->proposal_count == 0) {
+        printf("no proposals\n");
+        return;
+    }
+    for (size_t i = 0; i < ws->proposal_count; i++) print_diff_for(ws, &ws->proposals[i]);
+}
+
+static void ensure_parent_dirs(const char *path) {
+    char tmp[PATH_MAX];
+    snprintf(tmp, sizeof(tmp), "%s", path);
+    for (char *p = tmp + 1; *p; p++) {
+        if (*p == '/') {
+            *p = 0;
+            if (mkdir(tmp, 0777) != 0 && errno != EEXIST) {
+                die("mkdir failed for %s: %s", tmp, strerror(errno));
+            }
+            *p = '/';
+        }
+    }
+}
+
+static void write_bytes_atomicish(const char *path, const unsigned char *data, size_t len) {
+    char tmp[PATH_MAX];
+    int n = snprintf(tmp, sizeof(tmp), "%s.tmp.%ld", path, (long)getpid());
+    if (n < 0 || n >= PATH_MAX) die("temp path too long");
+    ensure_parent_dirs(path);
+    FILE *f = fopen(tmp, "wb");
+    if (!f) die("open failed for %s: %s", tmp, strerror(errno));
+    if (fwrite(data, 1, len, f) != len) {
+        fclose(f);
+        unlink(tmp);
+        die("write failed for %s", tmp);
+    }
+    if (fclose(f) != 0) {
+        unlink(tmp);
+        die("close failed for %s", tmp);
+    }
+    if (rename(tmp, path) != 0) {
+        unlink(tmp);
+        die("rename failed for %s: %s", path, strerror(errno));
+    }
+}
+
+static void cmd_commit(Workspace *ws) {
+    if (ws->proposal_count == 0) {
+        printf("nothing to commit\n");
+        return;
+    }
+    for (size_t i = 0; i < ws->proposal_count; i++) {
+        char abs[PATH_MAX];
+        join_path(abs, ws->root, ws->proposals[i].path);
+        write_bytes_atomicish(abs, ws->proposals[i].data, ws->proposals[i].len);
+        printf("wrote %s (%zu bytes)\n", ws->proposals[i].path, ws->proposals[i].len);
+    }
+    discard_all(ws);
+    workspace_clear_files(ws);
+    scan_dir(ws, "");
+    printf("workspace reloaded from disk\n");
+}
+
+static const char *scope_for_path(const char *path) {
+    if (starts_with(path, "codex/")) return "codex";
+    if (starts_with(path, "edgerun-ui-core/")) return "edgerun-ui-core";
+    if (starts_with(path, "varfont/")) return "varfont";
+    if (starts_with(path, "edgerun-crypto/")) return "edgerun-crypto";
+    if (starts_with(path, "edgerun-metal/")) return "edgerun-metal";
+    if (starts_with(path, "docs/")) return "docs";
+    if (starts_with(path, "tools/")) return "tools";
+    if (starts_with(path, "tests/")) return "tests";
+    return ".";
+}
+
+static const char *test_target_for_scope(const char *scope) {
+    if (strcmp(scope, "codex") == 0) return "codex-test";
+    if (strcmp(scope, "edgerun-ui-core") == 0) return "ui-core-test";
+    if (strcmp(scope, "varfont") == 0) return "varfont-test";
+    if (strcmp(scope, "edgerun-crypto") == 0) return "crypto-test";
+    if (strcmp(scope, "edgerun-metal") == 0) return "edgerun-check";
+    return "repo-test";
+}
+
+static bool scope_list_contains(const char **scopes, size_t count, const char *scope) {
+    for (size_t i = 0; i < count; i++) {
+        if (strcmp(scopes[i], scope) == 0) return true;
+    }
+    return false;
+}
+
+static char *repo_command_new(Workspace *ws, const char *command) {
+    char *root_q = shell_quote_new(ws->root);
+    Buffer b;
+    buffer_init(&b);
+    buffer_appendf(&b, "cd %s && %s 2>&1", root_q, command);
+    free(root_q);
+    return b.data;
+}
+
+static char *repo_status_text_new(Workspace *ws) {
+    char *cmd = repo_command_new(ws, "git status --short --branch");
+    int status = 0;
+    char *out = run_command_text_new(cmd, &status);
+    Buffer b;
+    buffer_init(&b);
+    buffer_appendf(&b, "git status exit=%d\n%s", status, out);
+    free(cmd);
+    free(out);
+    return b.data;
+}
+
+static char *repo_rules_text_new(Workspace *ws) {
+    Buffer b;
+    buffer_init(&b);
+    size_t len = 0;
+    bool text = false;
+    const unsigned char *agents = effective_data(ws, "AGENTS.md", &len, &text);
+    if (agents && text) {
+        buffer_append(&b, "AGENTS.md:\n", 11);
+        buffer_append(&b, (const char *)agents, len);
+        if (len == 0 || agents[len - 1] != '\n') buffer_append_c(&b, '\n');
+    }
+    const char *scopes[] = {"codex", "edgerun-ui-core", "varfont", "edgerun-crypto", "edgerun-metal"};
+    for (size_t i = 0; i < sizeof(scopes) / sizeof(scopes[0]); i++) {
+        char command[256];
+        snprintf(command, sizeof(command), "./tools/repo-progress.sh --print-plan %s %s",
+                 scopes[i], test_target_for_scope(scopes[i]));
+        char *cmd = repo_command_new(ws, command);
+        int status = 0;
+        char *out = run_command_text_new(cmd, &status);
+        buffer_appendf(&b, "\nrepo-progress plan for %s exit=%d:\n%s", scopes[i], status, out);
+        free(cmd);
+        free(out);
+    }
+    return b.data ? b.data : xstrdup("");
+}
+
+static char *initial_context_text_new(Workspace *ws) {
+    Buffer b;
+    buffer_init(&b);
+    const char *intro = "Host-provided repository context. Use this instead of asking for routine git/build checks.\n\n";
+    buffer_append(&b, intro, strlen(intro));
+    char *status = repo_status_text_new(ws);
+    buffer_append(&b, status, strlen(status));
+    free(status);
+    buffer_appendf(&b, "\nworkspace files loaded: %zu\npending in-memory proposals: %zu\n", ws->file_count, ws->proposal_count);
+    const char *policy =
+        "\nVerification policy: after proposals, the host writes only proposed paths, runs scoped repo-progress, "
+        "and commits only if verification passes.\n";
+    buffer_append(&b, policy, strlen(policy));
+    return b.data;
+}
+
+static int verify_scope(Workspace *ws, const char *scope) {
+    const char *target = test_target_for_scope(scope);
+    char *scope_q = shell_quote_new(scope);
+    char *target_q = shell_quote_new(target);
+    Buffer command;
+    buffer_init(&command);
+    buffer_appendf(&command, "./tools/repo-progress.sh %s %s", scope_q, target_q);
+    char *cmd = repo_command_new(ws, command.data);
+    printf("status: verifying %s with %s\n", scope, target);
+    int status = run_command_checked(cmd);
+    free(scope_q);
+    free(target_q);
+    free(command.data);
+    free(cmd);
+    if (status == 0) printf("status: verification passed for %s\n", scope);
+    else printf("status: verification failed for %s\n", scope);
+    return status;
+}
+
+static int ensure_main_branch(Workspace *ws) {
+    char *cmd = repo_command_new(ws, "git rev-parse --abbrev-ref HEAD");
+    int status = 0;
+    char *branch = run_command_text_new(cmd, &status);
+    trim_newline(branch);
+    free(cmd);
+    if (status != 0 || strcmp(branch, "main") != 0) {
+        fprintf(stderr, "commit aborted: expected branch main, got %s\n", *branch ? branch : "(unknown)");
+        free(branch);
+        return 1;
+    }
+    free(branch);
+    return 0;
+}
+
+static int write_all_proposals(Workspace *ws) {
+    for (size_t i = 0; i < ws->proposal_count; i++) {
+        char abs[PATH_MAX];
+        join_path(abs, ws->root, ws->proposals[i].path);
+        write_bytes_atomicish(abs, ws->proposals[i].data, ws->proposals[i].len);
+        printf("status: wrote %s (%zu bytes)\n", ws->proposals[i].path, ws->proposals[i].len);
+    }
+    return 0;
+}
+
+static int stage_owned_paths(Workspace *ws) {
+    for (size_t i = 0; i < ws->proposal_count; i++) {
+        char *path_q = shell_quote_new(ws->proposals[i].path);
+        Buffer command;
+        buffer_init(&command);
+        buffer_appendf(&command, "git add -- %s", path_q);
+        char *cmd = repo_command_new(ws, command.data);
+        int status = run_command_checked(cmd);
+        free(path_q);
+        free(command.data);
+        free(cmd);
+        if (status != 0) return status;
+    }
+    return 0;
+}
+
+static char *commit_subject_new(Workspace *ws) {
+    const char *scope = ws->proposal_count ? scope_for_path(ws->proposals[0].path) : ".";
+    bool same_scope = true;
+    for (size_t i = 1; i < ws->proposal_count; i++) {
+        if (strcmp(scope, scope_for_path(ws->proposals[i].path)) != 0) same_scope = false;
+    }
+    Buffer b;
+    buffer_init(&b);
+    buffer_appendf(&b, "%s: apply verified Codex changes", same_scope ? scope : "repo");
+    if (b.len > GIT_COMMIT_SUBJECT_BYTES) b.data[GIT_COMMIT_SUBJECT_BYTES] = 0;
+    return b.data;
+}
+
+static int cmd_commit_verified(Workspace *ws) {
+    if (ws->proposal_count == 0) {
+        printf("status: nothing to verify or commit\n");
+        return 0;
+    }
+    if (ensure_main_branch(ws) != 0) return 1;
+
+    const char **scopes = xmalloc(ws->proposal_count * sizeof(scopes[0]));
+    size_t scope_count = 0;
+    for (size_t i = 0; i < ws->proposal_count; i++) {
+        const char *scope = scope_for_path(ws->proposals[i].path);
+        if (!scope_list_contains(scopes, scope_count, scope)) scopes[scope_count++] = scope;
+    }
+
+    if (write_all_proposals(ws) != 0) {
+        free(scopes);
+        return 1;
+    }
+    for (size_t i = 0; i < scope_count; i++) {
+        if (verify_scope(ws, scopes[i]) != 0) {
+            free(scopes);
+            return 1;
+        }
+    }
+    if (stage_owned_paths(ws) != 0) {
+        free(scopes);
+        return 1;
+    }
+    char *subject = commit_subject_new(ws);
+    char *subject_q = shell_quote_new(subject);
+    Buffer commit_cmd;
+    buffer_init(&commit_cmd);
+    buffer_appendf(&commit_cmd, "git commit -m %s", subject_q);
+    char *cmd = repo_command_new(ws, commit_cmd.data);
+    printf("status: committing verified changes\n");
+    int status = run_command_checked(cmd);
+    if (status == 0) {
+        char *show = repo_command_new(ws, "git rev-parse --short HEAD");
+        int show_status = 0;
+        char *sha = run_command_text_new(show, &show_status);
+        trim_newline(sha);
+        printf("status: committed %s\n", show_status == 0 ? sha : "(unknown)");
+        free(show);
+        free(sha);
+        discard_all(ws);
+        workspace_clear_files(ws);
+        scan_dir(ws, "");
+        printf("status: workspace reloaded from disk\n");
+    }
+    free(scopes);
+    free(subject);
+    free(subject_q);
+    free(commit_cmd.data);
+    free(cmd);
+    return status;
+}
+
+static void trim_newline(char *s) {
+    size_t n = strlen(s);
+    while (n && (s[n - 1] == '\n' || s[n - 1] == '\r')) s[--n] = 0;
+}
+
+static char *next_token(char **cursor) {
+    char *s = *cursor;
+    while (*s && isspace((unsigned char)*s)) s++;
+    if (!*s) {
+        *cursor = s;
+        return NULL;
+    }
+    char *start = s;
+    while (*s && !isspace((unsigned char)*s)) s++;
+    if (*s) *s++ = 0;
+    *cursor = s;
+    return start;
+}
+
+static void print_help(void) {
+    puts("commands:");
+    puts("  help");
+    puts("  stats");
+    puts("  search <text> [limit]");
+    puts("  read <path> [start_line] [max_lines]");
+    puts("  propose <path>   # full content until .end");
+    puts("  show <path>");
+    puts("  diff [path]");
+    puts("  discard <path>");
+    puts("  discard --all");
+    puts("  commit           # writes staged in-memory replacements to disk");
+    puts("  commit-verified  # verifies scoped repo-progress, then git commits");
+    puts("  quit");
+}
+
+static char *workspace_search_text_new(Workspace *ws, const char *query, size_t limit) {
+    if (!query || !*query) return xstrdup("tool error: query must not be empty");
+    Buffer out;
+    buffer_init(&out);
+    size_t hits = 0;
+    for (size_t i = 0; i < ws->file_count && (limit == 0 || hits < limit); i++) {
+        MemoryFile *f = &ws->files[i];
+        if (!f->text) continue;
+        const char *text = (const char *)f->data;
+        size_t start = 0;
+        size_t line_no = 1;
+        for (size_t pos = 0; pos <= f->len && (limit == 0 || hits < limit); pos++) {
+            if (pos == f->len || text[pos] == '\n') {
+                size_t line_len = pos - start;
+                if (contains_case_insensitive(text + start, line_len, query)) {
+                    buffer_appendf(&out, "%s:%zu: %.*s\n", f->path, line_no, (int)line_len, text + start);
+                    hits++;
+                }
+                start = pos + 1;
+                line_no++;
+            }
+        }
+    }
+    if (hits == 0) buffer_append(&out, "no matches\n", 11);
+    return out.data;
+}
+
+static char *workspace_read_text_new(Workspace *ws, const char *path, size_t start_line, size_t max_lines) {
+    if (!path_is_safe(path)) return xstrdup("tool error: invalid workspace-relative path");
+    size_t len = 0;
+    bool text = false;
+    const unsigned char *data = effective_data(ws, path, &len, &text);
+    if (!data) {
+        Buffer b;
+        buffer_init(&b);
+        buffer_appendf(&b, "tool error: file not loaded: %s", path);
+        return b.data;
+    }
+    if (!text) {
+        Buffer b;
+        buffer_init(&b);
+        buffer_appendf(&b, "tool error: file is binary or unsupported text: %s (%zu bytes)", path, len);
+        return b.data;
+    }
+    if (start_line == 0) start_line = 1;
+    Buffer out;
+    buffer_init(&out);
+    buffer_appendf(&out, "file: %s\n", path);
+    const char *s = (const char *)data;
+    size_t line_no = 1;
+    size_t emitted = 0;
+    size_t start = 0;
+    for (size_t pos = 0; pos <= len && (max_lines == 0 || emitted < max_lines); pos++) {
+        if (pos == len || s[pos] == '\n') {
+            if (line_no >= start_line) {
+                buffer_appendf(&out, "%5zu | %.*s\n", line_no, (int)(pos - start), s + start);
+                emitted++;
+            }
+            start = pos + 1;
+            line_no++;
+        }
+    }
+    return out.data;
+}
+
+static char *workspace_propose_text_new(Workspace *ws, const char *path, const char *content, const char *note) {
+    if (!path_is_safe(path)) return xstrdup("tool error: invalid workspace-relative path");
+    size_t len = strlen(content);
+    upsert_proposal(ws, path, (const unsigned char *)content, len);
+    Buffer out;
+    buffer_init(&out);
+    buffer_appendf(&out, "accepted in-memory proposal: %s (%zu bytes)\nnote: %s\nNo disk files were changed.",
+                   path, len, (note && *note) ? note : "no note");
+    return out.data;
+}
+
+static char *execute_agent_tool_new(Workspace *ws, const ToolCall *tool, bool *success_out) {
+    *success_out = false;
+    if (strcmp(tool->name, "project_status") == 0) {
+        *success_out = true;
+        return repo_status_text_new(ws);
+    }
+    if (strcmp(tool->name, "repo_rules") == 0) {
+        *success_out = true;
+        return repo_rules_text_new(ws);
+    }
+    if (strcmp(tool->name, "verify_scope") == 0) {
+        char *scope = json_get_string_dup(tool->arguments, "scope");
+        const char *selected = (scope && *scope) ? scope : ".";
+        Buffer out;
+        buffer_init(&out);
+        int status = verify_scope(ws, selected);
+        buffer_appendf(&out, "verify_scope %s exit=%d", selected, status);
+        *success_out = status == 0;
+        free(scope);
+        return out.data;
+    }
+    if (strcmp(tool->name, "commit_verified") == 0) {
+        int status = cmd_commit_verified(ws);
+        Buffer out;
+        buffer_init(&out);
+        buffer_appendf(&out, "commit_verified exit=%d", status);
+        *success_out = status == 0;
+        return out.data;
+    }
+    if (strcmp(tool->name, "search_code") == 0) {
+        char *query = json_get_string_dup(tool->arguments, "query");
+        char *limit_s = json_get_scalar_dup(tool->arguments, "limit");
+        size_t limit = limit_s ? (size_t)strtoull(limit_s, NULL, 10) : 0;
+        char *out = workspace_search_text_new(ws, query ? query : "", limit);
+        *success_out = query != NULL;
+        free(query);
+        free(limit_s);
+        return out;
+    }
+    if (strcmp(tool->name, "read_code") == 0) {
+        char *path = json_get_string_dup(tool->arguments, "path");
+        char *start_s = json_get_scalar_dup(tool->arguments, "start_line");
+        char *max_s = json_get_scalar_dup(tool->arguments, "max_lines");
+        char *out = workspace_read_text_new(ws, path ? path : "",
+            start_s ? (size_t)strtoull(start_s, NULL, 10) : 1,
+            max_s ? (size_t)strtoull(max_s, NULL, 10) : 0);
+        *success_out = path != NULL;
+        free(path);
+        free(start_s);
+        free(max_s);
+        return out;
+    }
+    if (strcmp(tool->name, "propose_change") == 0) {
+        char *path = json_get_string_dup(tool->arguments, "path");
+        char *content = json_get_string_dup(tool->arguments, "content");
+        char *note = json_get_string_dup(tool->arguments, "note");
+        char *out = (path && content)
+            ? workspace_propose_text_new(ws, path, content, note)
+            : xstrdup("tool error: path and content are required");
+        *success_out = path && content;
+        free(path);
+        free(content);
+        free(note);
+        return out;
+    }
+    Buffer out;
+    buffer_init(&out);
+    buffer_appendf(&out, "tool error: unsupported tool %s", tool->name);
+    return out.data;
+}
+
+static const char *tools_json(void) {
+    return "["
+        "{\"type\":\"function\",\"name\":\"project_status\",\"description\":\"Returns host-gathered git branch and workspace status. Use instead of asking for git status.\",\"strict\":false,\"parameters\":{\"type\":\"object\",\"properties\":{},\"additionalProperties\":false}},"
+        "{\"type\":\"function\",\"name\":\"repo_rules\",\"description\":\"Returns repository rules and the exact repo-progress verification plans for known scopes.\",\"strict\":false,\"parameters\":{\"type\":\"object\",\"properties\":{},\"additionalProperties\":false}},"
+        "{\"type\":\"function\",\"name\":\"verify_scope\",\"description\":\"Runs the repository-owned scoped progress check for a scope. Use only when explicit mid-turn verification is needed; the host also verifies automatically before commit.\",\"strict\":false,\"parameters\":{\"type\":\"object\",\"properties\":{\"scope\":{\"type\":\"string\",\"description\":\"Repository scope such as codex, edgerun-ui-core, varfont, edgerun-crypto, edgerun-metal, docs, tools, tests, or .\"}},\"required\":[\"scope\"],\"additionalProperties\":false}},"
+        "{\"type\":\"function\",\"name\":\"commit_verified\",\"description\":\"Writes pending proposals, runs scoped repo-progress verification, stages only proposed paths, and creates a git commit only if verification passes. The host also runs this automatically after final proposed changes.\",\"strict\":false,\"parameters\":{\"type\":\"object\",\"properties\":{},\"additionalProperties\":false}},"
+        "{\"type\":\"function\",\"name\":\"search_code\",\"description\":\"Searches the in-memory workspace snapshot. No disk or process access.\",\"strict\":false,\"parameters\":{\"type\":\"object\",\"properties\":{\"query\":{\"type\":\"string\",\"description\":\"Text to search for in UTF-8 workspace files\"},\"limit\":{\"type\":\"number\",\"description\":\"Maximum number of matching lines to return\"}},\"required\":[\"query\"],\"additionalProperties\":false}},"
+        "{\"type\":\"function\",\"name\":\"read_code\",\"description\":\"Reads a UTF-8 file from the in-memory workspace snapshot.\",\"strict\":false,\"parameters\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\",\"description\":\"Workspace-relative UTF-8 file path to read\"},\"start_line\":{\"type\":\"number\",\"description\":\"One-based first line to return\"},\"max_lines\":{\"type\":\"number\",\"description\":\"Maximum number of lines to return\"}},\"required\":[\"path\"],\"additionalProperties\":false}},"
+        "{\"type\":\"function\",\"name\":\"propose_change\",\"description\":\"Stages a complete-file replacement in the in-memory workspace. Does not write to disk.\",\"strict\":false,\"parameters\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\",\"description\":\"Workspace-relative file path to replace in memory\"},\"content\":{\"type\":\"string\",\"description\":\"Complete proposed file contents. This is stored only in memory.\"},\"note\":{\"type\":\"string\",\"description\":\"Short explanation of the proposed change\"}},\"required\":[\"path\",\"content\"],\"additionalProperties\":false}}"
+        "]";
+}
+
+static const char *json_find_key_value_start(const char *json, const char *key) {
+    char needle[128];
+    snprintf(needle, sizeof(needle), "\"%s\"", key);
+    const char *p = strstr(json, needle);
+    if (!p) return NULL;
+    p += strlen(needle);
+    while (*p && isspace((unsigned char)*p)) p++;
+    if (*p++ != ':') return NULL;
+    while (*p && isspace((unsigned char)*p)) p++;
+    return p;
+}
+
+static char *json_dup_balanced_value(const char *start) {
+    if (!start) return NULL;
+    if (*start == '"') {
+        const char *p = start + 1;
+        bool esc = false;
+        while (*p) {
+            if (esc) esc = false;
+            else if (*p == '\\') esc = true;
+            else if (*p == '"') {
+                size_t n = (size_t)(p - start + 1);
+                char *out = xmalloc(n + 1);
+                memcpy(out, start, n);
+                out[n] = 0;
+                return out;
+            }
+            p++;
+        }
+        return NULL;
+    }
+    if (*start == '{' || *start == '[') {
+        char open = *start;
+        char close = open == '{' ? '}' : ']';
+        int depth = 0;
+        bool in_string = false;
+        bool esc = false;
+        const char *p = start;
+        while (*p) {
+            if (in_string) {
+                if (esc) esc = false;
+                else if (*p == '\\') esc = true;
+                else if (*p == '"') in_string = false;
+            } else {
+                if (*p == '"') in_string = true;
+                else if (*p == open) depth++;
+                else if (*p == close && --depth == 0) {
+                    size_t n = (size_t)(p - start + 1);
+                    char *out = xmalloc(n + 1);
+                    memcpy(out, start, n);
+                    out[n] = 0;
+                    return out;
+                }
+            }
+            p++;
+        }
+    }
+    return NULL;
+}
+
+static void agent_turn_init(AgentTurn *turn) {
+    memset(turn, 0, sizeof(*turn));
+    turn->text = xstrdup("");
+}
+
+static void agent_turn_free(AgentTurn *turn) {
+    free(turn->text);
+    for (size_t i = 0; i < turn->tool_count; i++) {
+        free(turn->tools[i].name);
+        free(turn->tools[i].arguments);
+        free(turn->tools[i].call_id);
+    }
+    free(turn->tools);
+    json_items_free(&turn->output_items);
+}
+
+static void agent_turn_append_text(AgentTurn *turn, const char *delta) {
+    Buffer b;
+    buffer_init(&b);
+    if (turn->text) buffer_append(&b, turn->text, strlen(turn->text));
+    buffer_append(&b, delta, strlen(delta));
+    free(turn->text);
+    turn->text = b.data;
+}
+
+static void agent_turn_add_tool(AgentTurn *turn, char *name, char *arguments, char *call_id) {
+    turn->tools = xrealloc(turn->tools, (turn->tool_count + 1) * sizeof(turn->tools[0]));
+    turn->tools[turn->tool_count++] = (ToolCall){
+        .name = name,
+        .arguments = arguments,
+        .call_id = call_id,
+    };
+}
+
+static void process_output_item_json(AgentTurn *turn, char *item_json) {
+    char *type = json_get_string_dup(item_json, "type");
+    if (type && strcmp(type, "function_call") == 0) {
+        char *name = json_get_string_dup(item_json, "name");
+        char *arguments = json_get_string_dup(item_json, "arguments");
+        char *call_id = json_get_string_dup(item_json, "call_id");
+        if (name && arguments && call_id) {
+            agent_turn_add_tool(turn, xstrdup(name), xstrdup(arguments), xstrdup(call_id));
+            char *name_json = json_escape_new(name);
+            char *arguments_json = json_escape_new(arguments);
+            char *call_id_json = json_escape_new(call_id);
+            Buffer normalized;
+            buffer_init(&normalized);
+            buffer_appendf(&normalized,
+                "{\"type\":\"function_call\",\"name\":%s,\"arguments\":%s,\"call_id\":%s}",
+                name_json, arguments_json, call_id_json);
+            json_items_push(&turn->output_items, normalized.data);
+            free(name_json);
+            free(arguments_json);
+            free(call_id_json);
+            free(name);
+            free(arguments);
+            free(call_id);
+            free(type);
+            free(item_json);
+            return;
+        }
+        free(name);
+        free(arguments);
+        free(call_id);
+    }
+    free(type);
+    free(item_json);
+}
+
+static bool response_completed(const char *event_json) {
+    char *type = json_get_string_dup(event_json, "type");
+    bool done = type && strcmp(type, "response.completed") == 0;
+    free(type);
+    return done;
+}
+
+static void process_sse_json_event(AgentTurn *turn, const char *event_json) {
+    char *type = json_get_string_dup(event_json, "type");
+    if (!type) return;
+    if (strcmp(type, "response.output_text.delta") == 0) {
+        char *delta = json_get_string_dup(event_json, "delta");
+        if (delta) {
+            fputs(delta, stdout);
+            fflush(stdout);
+            agent_turn_append_text(turn, delta);
+            free(delta);
+        }
+    } else if (strcmp(type, "response.output_item.done") == 0) {
+        char *item = json_dup_balanced_value(json_find_key_value_start(event_json, "item"));
+        if (item) process_output_item_json(turn, item);
+    } else if (strcmp(type, "response.failed") == 0) {
+        char *message = json_get_string_dup(event_json, "message");
+        if (message) {
+            fprintf(stderr, "\nresponse failed: %s\n", message);
+            free(message);
+        } else {
+            fprintf(stderr, "\nresponse failed\n");
+        }
+    }
+    free(type);
+}
+
+static char *build_responses_body_new(const char *model, const CodexSession *session, JsonItems *history) {
+    char *model_json = json_escape_new(model);
+    char *instructions_json = json_escape_new(AGENT_INSTRUCTIONS);
+    char *installation_json = json_escape_new(session->installation_id);
+    char *window_json = json_escape_new(session->window_id);
+    Buffer b;
+    buffer_init(&b);
+    buffer_appendf(&b,
+        "{\"model\":%s,\"instructions\":%s,\"input\":[",
+        model_json, instructions_json);
+    for (size_t i = 0; i < history->count; i++) {
+        if (i) buffer_append_c(&b, ',');
+        buffer_append(&b, history->items[i], strlen(history->items[i]));
+    }
+    buffer_appendf(&b,
+        "],\"tools\":%s,\"tool_choice\":\"auto\",\"parallel_tool_calls\":true,\"store\":false,\"stream\":true,\"prompt_cache_key\":%s,"
+        "\"client_metadata\":{\"x-codex-installation-id\":%s,\"x-codex-window-id\":%s}}",
+        tools_json(), window_json, installation_json, window_json);
+    free(model_json);
+    free(instructions_json);
+    free(installation_json);
+    free(window_json);
+    return b.data;
+}
+
+static char *write_temp_body_new(const char *body) {
+    char tmpl[] = "/tmp/edgerun-c-body-XXXXXX";
+    int fd = mkstemp(tmpl);
+    if (fd < 0) die("mkstemp failed: %s", strerror(errno));
+    FILE *f = fdopen(fd, "wb");
+    if (!f) die("fdopen failed: %s", strerror(errno));
+    size_t len = strlen(body);
+    if (fwrite(body, 1, len, f) != len) die("temp body write failed");
+    if (fclose(f) != 0) die("temp body close failed");
+    return xstrdup(tmpl);
+}
+
+static void debug_write_body(const char *body) {
+    const char *debug = getenv("EDGERUN_C_DEBUG");
+    if (!debug || strcmp(debug, "1") != 0) return;
+    static unsigned long counter = 0;
+    char path[PATH_MAX];
+    snprintf(path, sizeof(path), "/tmp/edgerun-c-request-%lu.json", counter++);
+    FILE *f = fopen(path, "wb");
+    if (!f) return;
+    fwrite(body, 1, strlen(body), f);
+    fclose(f);
+    fprintf(stderr, "[debug] wrote request body %s\n", path);
+}
+
+static AgentTurn codex_stream_turn(const char *model, const CodexAuth *auth, const CodexSession *session, JsonItems *history) {
+    AgentTurn turn;
+    agent_turn_init(&turn);
+    char *body = build_responses_body_new(model, session, history);
+    debug_write_body(body);
+    char *body_path = write_temp_body_new(body);
+    free(body);
+
+    char *body_q = shell_quote_new(body_path);
+    char *url_q = shell_quote_new(CODEX_BACKEND_URL);
+    Buffer auth_header;
+    buffer_init(&auth_header);
+    buffer_appendf(&auth_header, "authorization: Bearer %s", auth->access_token);
+    char *auth_header_q = shell_quote_new(auth_header.data);
+    Buffer request_id_header;
+    buffer_init(&request_id_header);
+    buffer_appendf(&request_id_header, "x-client-request-id: %s", session->thread_id);
+    char *request_id_header_q = shell_quote_new(request_id_header.data);
+    Buffer session_id_header;
+    buffer_init(&session_id_header);
+    buffer_appendf(&session_id_header, "session_id: %s", session->session_id);
+    char *session_id_header_q = shell_quote_new(session_id_header.data);
+    Buffer thread_id_header;
+    buffer_init(&thread_id_header);
+    buffer_appendf(&thread_id_header, "thread_id: %s", session->thread_id);
+    char *thread_id_header_q = shell_quote_new(thread_id_header.data);
+    Buffer installation_header;
+    buffer_init(&installation_header);
+    buffer_appendf(&installation_header, "x-codex-installation-id: %s", session->installation_id);
+    char *installation_header_q = shell_quote_new(installation_header.data);
+    Buffer window_header;
+    buffer_init(&window_header);
+    buffer_appendf(&window_header, "x-codex-window-id: %s", session->window_id);
+    char *window_header_q = shell_quote_new(window_header.data);
+    char *account_header_q = NULL;
+    if (auth->account_id) {
+        Buffer account_header;
+        buffer_init(&account_header);
+        buffer_appendf(&account_header, "ChatGPT-Account-ID: %s", auth->account_id);
+        account_header_q = shell_quote_new(account_header.data);
+        free(account_header.data);
+    }
+
+    Buffer cmd;
+    buffer_init(&cmd);
+    buffer_appendf(&cmd,
+        "curl -sS -N --fail-with-body -X POST %s "
+        "-H 'accept: text/event-stream' "
+        "-H 'content-type: application/json' "
+        "-H 'version: " CODEX_BACKEND_VERSION "' "
+        "-H %s -H %s -H %s -H %s -H %s -H %s ",
+        url_q, auth_header_q, request_id_header_q, session_id_header_q,
+        thread_id_header_q, installation_header_q, window_header_q);
+    if (account_header_q) {
+        buffer_appendf(&cmd, "-H %s ", account_header_q);
+    }
+    buffer_appendf(&cmd, "--data-binary @%s", body_q);
+
+    FILE *pipe = popen(cmd.data, "r");
+    if (!pipe) die("failed to start curl; install curl or provide a local HTTPS transport");
+
+    char *line = NULL;
+    size_t cap = 0;
+    Buffer event;
+    buffer_init(&event);
+    while (getline(&line, &cap, pipe) != -1) {
+        trim_newline(line);
+        if (line[0] == 0) {
+            if (event.len > 0) {
+                process_sse_json_event(&turn, event.data);
+                bool done = response_completed(event.data);
+                event.len = 0;
+                if (event.data) event.data[0] = 0;
+                if (done) break;
+            }
+        } else if (starts_with(line, "data: ")) {
+            if (event.len) buffer_append_c(&event, '\n');
+            buffer_append(&event, line + 6, strlen(line + 6));
+        } else if (getenv("EDGERUN_C_DEBUG")) {
+            fprintf(stderr, "[debug] non-sse: %s\n", line);
+        }
+    }
+    free(line);
+    int rc = pclose(pipe);
+    if (rc != 0) fprintf(stderr, "\ncurl exited with status %d\n", rc);
+    unlink(body_path);
+    free(body_path);
+    free(body_q);
+    free(url_q);
+    free(auth_header.data);
+    free(auth_header_q);
+    free(request_id_header.data);
+    free(request_id_header_q);
+    free(session_id_header.data);
+    free(session_id_header_q);
+    free(thread_id_header.data);
+    free(thread_id_header_q);
+    free(installation_header.data);
+    free(installation_header_q);
+    free(window_header.data);
+    free(window_header_q);
+    free(account_header_q);
+    free(cmd.data);
+    free(event.data);
+    return turn;
+}
+
+static int run_agent_prompt(Workspace *ws, const char *prompt) {
+    const char *model = getenv("CODEX_TUI_MODEL");
+    if (!model || !*model) model = DEFAULT_MODEL;
+    CodexAuth auth = read_codex_auth();
+    CodexSession session;
+    codex_session_init(&session);
+    JsonItems history = {0};
+    char *context = initial_context_text_new(ws);
+    json_items_push(&history, user_item_json_new(context));
+    free(context);
+    json_items_push(&history, user_item_json_new(prompt));
+
+    for (;;) {
+        AgentTurn turn = codex_stream_turn(model, &auth, &session, &history);
+        for (size_t i = 0; i < turn.output_items.count; i++) {
+            json_items_push(&history, xstrdup(turn.output_items.items[i]));
+        }
+        if (turn.tool_count == 0) {
+            putchar('\n');
+            agent_turn_free(&turn);
+            int commit_status = cmd_commit_verified(ws);
+            json_items_free(&history);
+            free(auth.access_token);
+            free(auth.account_id);
+            return commit_status;
+        }
+        for (size_t i = 0; i < turn.tool_count; i++) {
+            bool ok = false;
+            fprintf(stderr, "\n[tool] %s\n", turn.tools[i].name);
+            char *tool_out = execute_agent_tool_new(ws, &turn.tools[i], &ok);
+            fprintf(stderr, "[tool result] %.160s%s\n", tool_out, strlen(tool_out) > 160 ? "..." : "");
+            json_items_push(&history, tool_output_item_json_new(turn.tools[i].call_id, tool_out, ok));
+            free(tool_out);
+        }
+        agent_turn_free(&turn);
+    }
+}
+
+static void repl(Workspace *ws) {
+    print_help();
+    char *line = NULL;
+    size_t cap = 0;
+    for (;;) {
+        printf("edgerun-c> ");
+        fflush(stdout);
+        if (getline(&line, &cap, stdin) == -1) break;
+        trim_newline(line);
+        char *cursor = line;
+        char *cmd = next_token(&cursor);
+        if (!cmd) continue;
+        if (strcmp(cmd, "help") == 0) {
+            print_help();
+        } else if (strcmp(cmd, "stats") == 0) {
+            cmd_stats(ws);
+        } else if (strcmp(cmd, "search") == 0) {
+            char *query = next_token(&cursor);
+            char *limit_s = next_token(&cursor);
+            cmd_search(ws, query, limit_s ? (size_t)strtoull(limit_s, NULL, 10) : 0);
+        } else if (strcmp(cmd, "read") == 0 || strcmp(cmd, "show") == 0) {
+            char *path = next_token(&cursor);
+            char *start_s = next_token(&cursor);
+            char *max_s = next_token(&cursor);
+            if (!path) printf("usage: %s <path> [start_line] [max_lines]\n", cmd);
+            else cmd_read(ws, path, start_s ? (size_t)strtoull(start_s, NULL, 10) : 1,
+                          max_s ? (size_t)strtoull(max_s, NULL, 10) : 0);
+        } else if (strcmp(cmd, "propose") == 0) {
+            char *path = next_token(&cursor);
+            if (!path) printf("usage: propose <path>\n");
+            else cmd_propose(ws, path);
+        } else if (strcmp(cmd, "diff") == 0) {
+            cmd_diff(ws, next_token(&cursor));
+        } else if (strcmp(cmd, "discard") == 0) {
+            char *path = next_token(&cursor);
+            if (!path) printf("usage: discard <path>|--all\n");
+            else if (strcmp(path, "--all") == 0) discard_all(ws);
+            else discard_proposal(ws, path);
+        } else if (strcmp(cmd, "commit") == 0) {
+            cmd_commit(ws);
+        } else if (strcmp(cmd, "commit-verified") == 0) {
+            (void)cmd_commit_verified(ws);
+        } else if (strcmp(cmd, "quit") == 0 || strcmp(cmd, "exit") == 0) {
+            break;
+        } else {
+            printf("unknown command: %s\n", cmd);
+        }
+    }
+    free(line);
+}
+
+static void workspace_init(Workspace *ws, const char *root) {
+    memset(ws, 0, sizeof(*ws));
+    char resolved[PATH_MAX];
+    if (!realpath(root, resolved)) die("cannot resolve %s: %s", root, strerror(errno));
+    snprintf(ws->root, sizeof(ws->root), "%s", resolved);
+    scan_dir(ws, "");
+}
+
+static void workspace_free(Workspace *ws) {
+    workspace_clear_files(ws);
+    for (size_t i = 0; i < ws->proposal_count; i++) {
+        free(ws->proposals[i].path);
+        free(ws->proposals[i].data);
+    }
+    free(ws->files);
+    free(ws->proposals);
+}
+
+static int self_test(void) {
+    if (!path_is_safe("src/main.c")) return 1;
+    if (path_is_safe("../x")) return 2;
+    if (path_is_safe("x/../y")) return 3;
+    if (!contains_case_insensitive("Hello EdgeRun", 13, "edge")) return 4;
+    if (contains_case_insensitive("Hello", 5, "world")) return 5;
+    if (strcmp(scope_for_path("codex/src/edgerun_c.c"), "codex") != 0) return 6;
+    if (strcmp(test_target_for_scope("codex"), "codex-test") != 0) return 7;
+    if (strcmp(test_target_for_scope("docs"), "repo-test") != 0) return 8;
+    puts("self-test ok");
+    return 0;
+}
+
+int main(int argc, char **argv) {
+    if (argc > 1 && strcmp(argv[1], "--self-test") == 0) return self_test();
+    const char *root = ".";
+    const char *prompt = NULL;
+    for (int i = 1; i < argc; i++) {
+        if ((strcmp(argv[i], "--prompt") == 0 || strcmp(argv[i], "-p") == 0) && i + 1 < argc) {
+            prompt = argv[++i];
+        } else if (strcmp(argv[i], "--root") == 0 && i + 1 < argc) {
+            root = argv[++i];
+        } else if (strcmp(argv[i], "--help") == 0 || strcmp(argv[i], "-h") == 0) {
+            puts("usage: edgerun-c [--root PATH] [--prompt TEXT]");
+            puts("       edgerun-c PATH");
+            return 0;
+        } else {
+            root = argv[i];
+        }
+    }
+    Workspace ws;
+    workspace_init(&ws, root);
+    printf("loaded %zu files from %s\n", ws.file_count, ws.root);
+    fflush(stdout);
+    int rc = 0;
+    if (prompt) rc = run_agent_prompt(&ws, prompt);
+    else repl(&ws);
+    workspace_free(&ws);
+    return rc;
+}

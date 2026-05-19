@@ -1,4 +1,4 @@
-.PHONY: all check clean er-build repo-check repo-test repo-check-bin repo-inspect repo-progress erwire-decode erwire-test crypto-configure crypto-build crypto-test crypto-bench crypto-bench-avx2 crypto-bench-avx512 crypto-bench-avx512-threads crypto-bench-native-threads crypto-bench-sota edgerun-metal edgerun-os edgerun-check varfont-configure varfont-build varfont-test ui-core-configure ui-core-build ui-core-test
+.PHONY: all check clean er-build repo-check repo-test repo-check-bin repo-inspect repo-progress erwire-decode erwire-test codex-test crypto-configure crypto-build crypto-test crypto-bench crypto-bench-avx2 crypto-bench-avx512 crypto-bench-avx512-threads crypto-bench-native-threads crypto-bench-sota edgerun-metal edgerun-os edgerun-check varfont-configure varfont-build varfont-test ui-core-configure ui-core-build ui-core-test
 
 ifeq ($(origin CC),default)
 CC := clang
@@ -63,6 +63,9 @@ erwire-decode: er-build
 
 erwire-test: er-build
 	./.build/er-build erwire-test
+
+codex-test:
+	$(MAKE) -C codex CC="$(HOST_CC)" test
 
 crypto-configure:
 	cmake -S edgerun-crypto -B $(CRYPTO_BUILD_DIR) -G "$(CRYPTO_CMAKE_GENERATOR)" $(CMAKE_TOOLCHAIN_ARGS)
