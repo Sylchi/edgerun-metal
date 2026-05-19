@@ -342,7 +342,6 @@ static void highlighted_process_sse_json_event(AgentTurn *turn, CodexResponseRen
         char *item = json_dup_balanced_value(json_find_key_value_start(event_json, "item"));
         if (item) {
             process_output_item_json(turn, item);
-            free(item);
         }
     } else if (strcmp(type, "response.failed") == 0) {
         char *message = json_get_string_dup(event_json, "message");
@@ -587,6 +586,23 @@ static int enhanced_self_test(void) {
     if (!codex_markdown_fence_line("```", 3, &language)) return 24;
     if (language != CODEX_RESPONSE_LANG_OTHER) return 25;
     if (codex_markdown_fence_line("  text", 6, &language)) return 26;
+
+    AgentTurn turn;
+    agent_turn_init(&turn);
+    CodexResponseRenderState render;
+    codex_response_render_state_init(&render);
+    highlighted_process_sse_json_event(
+        &turn,
+        &render,
+        "{\"type\":\"response.output_item.done\",\"item\":{\"type\":\"function_call\",\"name\":\"read_code\",\"arguments\":\"{}\",\"call_id\":\"call_1\"}}");
+    if (turn.tool_count != 1) return 27;
+    if (turn.output_items.count != 1) return 28;
+    if (strcmp(turn.tools[0].name, "read_code") != 0) return 29;
+    if (strcmp(turn.tools[0].arguments, "{}") != 0) return 30;
+    if (strcmp(turn.tools[0].call_id, "call_1") != 0) return 31;
+    codex_response_render_state_free(&render);
+    agent_turn_free(&turn);
+
     puts("enhanced self-test ok");
     return 0;
 }
