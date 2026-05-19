@@ -6,6 +6,7 @@
  * Intention: keep first-packet work staged behind explicit PCI ID and BAR2 proofs.
  */
 
+#include "er_firmware_loader.h"
 #include "er_pci.h"
 #include "er_types.h"
 
@@ -21,8 +22,22 @@ typedef struct {
   UINT64 mmio_base;
 } ErRtw89PciDevice;
 
+typedef struct {
+  ErRtw89PciDevice pci;
+  ErFirmwareImage firmware;
+} ErRtw89BootDevice;
+
 UINT8 er_rtw89_pci_id_supported(UINT32 id);
 void er_rtw89_clear_pci_device(ErRtw89PciDevice* device);
 UINT8 er_rtw89_prepare_pci_device(const ErPciDeviceSnapshot* snapshot, ErRtw89PciDevice* out_device);
+void er_rtw89_clear_boot_device(ErRtw89BootDevice* device);
+UINT8 er_rtw89_prepare_boot_device(const ErCryptoProvider* crypto,
+                                   const ErBootConfig* config,
+                                   const ErPciDeviceSnapshot* snapshot,
+                                   ErFirmwareReadFn read_fn,
+                                   void* read_ctx,
+                                   UINT8* firmware_bytes,
+                                   UINTN firmware_capacity,
+                                   ErRtw89BootDevice* out_device);
 
 #endif
