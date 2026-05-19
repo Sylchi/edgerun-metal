@@ -95,7 +95,7 @@ void er_run_os_path(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE* SystemTable,
     er_println("ui renderer: virtio gpu display poll failed");
     return;
   }
-  er_print("ui renderer: virtio gpu scanout0 width=");
+  er_print("ui renderer: virtio gpu initial scanout0 width=");
   er_print_u64_dec((UINT64)display_info.scanouts[0].rect.width);
   er_print(" height=");
   er_print_u64_dec((UINT64)display_info.scanouts[0].rect.height);
@@ -104,6 +104,11 @@ void er_run_os_path(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE* SystemTable,
     er_println("ui renderer: virtio gpu scanout failed");
     return;
   }
+  er_print("ui renderer: framebuffer width=");
+  er_print_u64_dec((UINT64)mode.width);
+  er_print(" height=");
+  er_print_u64_dec((UINT64)mode.height);
+  er_println("");
   if (er_ui_surface_tile_plan(&surface, ER_UI_BOOT_TILE_WIDTH, ER_UI_BOOT_TILE_HEIGHT,
                               ER_UI_BOOT_MAX_DIRTY_TILES, &tile_plan) == 0u ||
       tile_plan.tile_count > ER_UI_BOOT_MAX_TILE_MARKS) {

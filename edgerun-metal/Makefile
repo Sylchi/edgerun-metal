@@ -92,7 +92,7 @@ QEMU_SWTPM_PERSIST_TIMEOUT := 30
 QEMU_EPHEMERAL_AUTHORITY_BUILD_DIR := ../.build/edgerun-metal-ephemeral-authority
 QEMU_EPHEMERAL_AUTHORITY_LOG := $(QEMU_EPHEMERAL_AUTHORITY_BUILD_DIR)/qemu-ephemeral-authority.log
 QEMU_EPHEMERAL_AUTHORITY_TIMEOUT := 30
-QEMU_EPHEMERAL_AUTHORITY_READY := ui renderer: first frame deferred until boot services exit
+QEMU_EPHEMERAL_AUTHORITY_READY := ui renderer: framebuffer width=1920 height=1080
 CORE_TEST_SRC := tests/test_core.c core/efi_boot_memory.c core/efi_boot_relay.c core/efi_boot_routes.c core/efi_boot_wasm.c core/er_boot_admission_record.c core/er_boot_efi_vars.c core/er_boot_config.c core/er_boot_profile.c core/er_boot_services.c core/er_pci.c core/er_rtw89.c core/er_mt7922.c core/er_firmware_loader.c core/er_mmio.c core/er_crypto.c core/er_crypto_blake3.c $(CRYPTO_SRCS) core/er_mem.c core/er_vfs.c core/er_app.c core/er_identity.c core/er_device_identity.c core/er_work_route.c core/er_render_endpoint.c core/er_storage_endpoint.c core/er_seal.c core/er_tpm.c core/er_hw_relay.c core/er_relay_packet.c core/er_ble_adv.c core/er_wifi_burst.c core/er_bus.c core/er_ps2_keyboard.c core/er_acpi.c core/er_print.c core/er_netlog.c core/er_gfx_console.c core/er_ui_gop_renderer.c core/er_ui_wasm_app.c core/er_epoch_clock.c core/erwire.c core/er_native_boot.c core/wasm_vm.c core/wasm_vm_reader.c core/wasm_vm_memory_ui.c core/wasm_vm_contract.c core/wasm_vm_hostcall.c core/wasm_vm_execute.c core/er_virtio.c core/er_virtio_blk.c core/er_virtio_net.c core/er_virtio_gpu.c core/er_net_frame.c core/er_native_eth.c $(UI_SRCS) $(VARFONT_SRCS)
 CORE_TEST_FRAGMENT_SRCS := $(wildcard tests/test_core_*.c)
 CORE_TEST_BIN := $(BUILD_DIR)/test-core
