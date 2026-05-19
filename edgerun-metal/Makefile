@@ -60,10 +60,13 @@ WASM_COMPILE_SRCS := ../tools/wasm-compile/main.c ../tools/wasm-compile/wasm_com
 WASM_COMPILE_HDRS := ../tools/wasm-compile/wasm_compile.h
 WASM_COMPILE_BIN := $(BUILD_DIR)/wasm-compile
 WASM_MODULE_HEADERS := $(GENERATED_DIR)/wasm_driver_bus_probe_module.h $(GENERATED_DIR)/wasm_ui_counter_module.h \
+                       $(GENERATED_DIR)/wasm_user_app_module.h $(GENERATED_DIR)/app_user_manifest.h \
                        $(GENERATED_DIR)/wasm_c_hostcall_bus_exec_module.h \
                        $(GENERATED_DIR)/wasm_c_hostcall_region_base_module.h \
                        $(GENERATED_DIR)/wasm_c_hostcall_region_len_module.h \
                        $(GENERATED_DIR)/wasm_c_hostcall_ui_emit_module.h
+USER_APP_SOURCE := ../tests/fixtures/app-package/app/app.c
+USER_APP_MANIFEST := ../tests/fixtures/app-package/app/app.manifest
 FONT_HEADER := $(GENERATED_DIR)/font_geist.h
 FONT_BAKED_HEADER := $(GENERATED_DIR)/font_geist_baked.h
 FONT_SOURCE := $(VARFONT_DIR)/fonts/Geist[wght].ttf
@@ -92,7 +95,7 @@ QEMU_SWTPM_PERSIST_TIMEOUT := 30
 QEMU_EPHEMERAL_AUTHORITY_BUILD_DIR := ../.build/edgerun-metal-ephemeral-authority
 QEMU_EPHEMERAL_AUTHORITY_LOG := $(QEMU_EPHEMERAL_AUTHORITY_BUILD_DIR)/qemu-ephemeral-authority.log
 QEMU_EPHEMERAL_AUTHORITY_TIMEOUT := 30
-QEMU_EPHEMERAL_AUTHORITY_READY := ui renderer: framebuffer width=1920 height=1080
+QEMU_EPHEMERAL_AUTHORITY_READY := ui renderer: wasm app scene rects=1 hits=1 text=1
 CORE_TEST_SRC := tests/test_core.c core/efi_boot_memory.c core/efi_boot_relay.c core/efi_boot_routes.c core/efi_boot_wasm.c core/er_boot_admission_record.c core/er_boot_efi_vars.c core/er_boot_config.c core/er_boot_profile.c core/er_boot_services.c core/er_pci.c core/er_rtw89.c core/er_mt7922.c core/er_firmware_loader.c core/er_mmio.c core/er_crypto.c core/er_crypto_blake3.c $(CRYPTO_SRCS) core/er_mem.c core/er_vfs.c core/er_app.c core/er_identity.c core/er_device_identity.c core/er_work_route.c core/er_render_endpoint.c core/er_storage_endpoint.c core/er_seal.c core/er_tpm.c core/er_hw_relay.c core/er_relay_packet.c core/er_ble_adv.c core/er_wifi_burst.c core/er_bus.c core/er_ps2_keyboard.c core/er_acpi.c core/er_print.c core/er_netlog.c core/er_gfx_console.c core/er_ui_gop_renderer.c core/er_ui_wasm_app.c core/er_epoch_clock.c core/erwire.c core/er_native_boot.c core/wasm_vm.c core/wasm_vm_reader.c core/wasm_vm_memory_ui.c core/wasm_vm_contract.c core/wasm_vm_hostcall.c core/wasm_vm_execute.c core/er_virtio.c core/er_virtio_blk.c core/er_virtio_net.c core/er_virtio_gpu.c core/er_net_frame.c core/er_native_eth.c $(UI_SRCS) $(VARFONT_SRCS)
 CORE_TEST_FRAGMENT_SRCS := $(wildcard tests/test_core_*.c)
 CORE_TEST_BIN := $(BUILD_DIR)/test-core
@@ -135,6 +138,10 @@ $(GENERATED_DIR)/ui_counter.wasm: modules/ui_counter/ui_counter.wat $(WASM_COMPI
 	mkdir -p $(dir $@)
 	$(WASM_COMPILE_BIN) $< $@
 
+$(GENERATED_DIR)/user_app.wasm: $(USER_APP_SOURCE) $(USER_APP_MANIFEST) $(WASM_COMPILE_BIN)
+	mkdir -p $(dir $@)
+	$(WASM_COMPILE_BIN) $(USER_APP_SOURCE) $@
+
 $(GENERATED_DIR)/c_hostcall_bus_exec.wasm: modules/c_hostcall_bus_exec/c_hostcall_bus_exec.c $(WASM_COMPILE_BIN)
 	mkdir -p $(dir $@)
 	$(WASM_COMPILE_BIN) $< $@
@@ -156,6 +163,12 @@ $(GENERATED_DIR)/wasm_driver_bus_probe_module.h: $(GENERATED_DIR)/driver_bus_pro
 
 $(GENERATED_DIR)/wasm_ui_counter_module.h: $(GENERATED_DIR)/ui_counter.wasm $(EMBED_HEADER_BIN)
 	$(EMBED_HEADER_BIN) wasm $< $@ WASM_UI_COUNTER_MODULE_H g_edgerun_ui_counter_wasm ER_UI_COUNTER_WASM_SIZE modules/ui_counter/ui_counter.wat
+
+$(GENERATED_DIR)/wasm_user_app_module.h: $(GENERATED_DIR)/user_app.wasm $(EMBED_HEADER_BIN)
+	$(EMBED_HEADER_BIN) wasm $< $@ WASM_USER_APP_MODULE_H g_edgerun_user_app_wasm ER_USER_APP_WASM_SIZE $(USER_APP_SOURCE)
+
+$(GENERATED_DIR)/app_user_manifest.h: $(USER_APP_MANIFEST) $(EMBED_HEADER_BIN)
+	$(EMBED_HEADER_BIN) binary $< $@ APP_USER_MANIFEST_H g_edgerun_user_app_manifest ER_USER_APP_MANIFEST_SIZE
 
 $(GENERATED_DIR)/wasm_c_hostcall_bus_exec_module.h: $(GENERATED_DIR)/c_hostcall_bus_exec.wasm $(EMBED_HEADER_BIN)
 	$(EMBED_HEADER_BIN) wasm $< $@ WASM_C_HOSTCALL_BUS_EXEC_MODULE_H g_edgerun_c_hostcall_bus_exec_wasm ER_C_HOSTCALL_BUS_EXEC_WASM_SIZE modules/c_hostcall_bus_exec/c_hostcall_bus_exec.c

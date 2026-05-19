@@ -28,7 +28,8 @@
 #include "er_virtio_gpu.h"
 #include "font_geist.h"
 #include "wasm_vm.h"
-#include "wasm_ui_counter_module.h"
+#include "wasm_user_app_module.h"
+#include "app_user_manifest.h"
 
 #ifndef ER_BOOT_PROFILE
 #define ER_BOOT_PROFILE ER_BOOT_PROFILE_OS
@@ -221,26 +222,26 @@ UINT8 er_ui_boot_prepare_route_envelope(const ErAdmittedRoute* route,
                                         const ErHash* packet_hash,
                                         UINT64 sequence,
                                         ErChannelEnvelopeHeader* out_envelope);
-UINT8 er_ui_boot_execute_wasm_counter(ErUiWasmAppRuntime* runtime);
-UINT8 er_ui_boot_load_wasm_counter_package(UINT8* module_memory,
-                                           UINT32 module_memory_size,
-                                           UINT8* manifest_memory,
-                                           UINT32 manifest_memory_size,
-                                           ErUiBootPackageStorage* storage,
-                                           UINT32 app_index,
-                                           ErAppLoadedPackage* out_loaded);
-UINT8 er_ui_boot_prepare_wasm_counter(ErUiWasmAppRuntime* runtime,
-                                      ErUiBootPackageStorage* storage,
-                                      ErAppUiPresentation* presentation,
-                                      er_ui_scene_t* wasm_scene,
-                                      UINT8* memory,
-                                      UINT32 memory_size,
-                                      UINT8* module_memory,
-                                      UINT32 module_memory_size,
-                                      UINT8* manifest_memory,
-                                      UINT32 manifest_memory_size,
-                                      UINT32 app_index,
-                                      const er_ui_scene_budget_t* scene_budget);
+UINT8 er_ui_boot_execute_wasm_app(ErUiWasmAppRuntime* runtime);
+UINT8 er_ui_boot_load_user_app_package(UINT8* module_memory,
+                                       UINT32 module_memory_size,
+                                       UINT8* manifest_memory,
+                                       UINT32 manifest_memory_size,
+                                       ErUiBootPackageStorage* storage,
+                                       UINT32 app_index,
+                                       ErAppLoadedPackage* out_loaded);
+UINT8 er_ui_boot_prepare_user_app(ErUiWasmAppRuntime* runtime,
+                                  ErUiBootPackageStorage* storage,
+                                  ErAppUiPresentation* presentation,
+                                  er_ui_scene_t* wasm_scene,
+                                  UINT8* memory,
+                                  UINT32 memory_size,
+                                  UINT8* module_memory,
+                                  UINT32 module_memory_size,
+                                  UINT8* manifest_memory,
+                                  UINT32 manifest_memory_size,
+                                  UINT32 app_index,
+                                  const er_ui_scene_budget_t* scene_budget);
 void er_ui_boot_destroy_app_contexts(ErUiBootAppContext* apps, UINT32 app_count);
 UINT8 er_ui_boot_prepare_app_contexts(ErUiBootAppContext* apps,
                                       UINT32 app_count,

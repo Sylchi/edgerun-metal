@@ -253,8 +253,7 @@ static void test_ui_wasm_app_multiple_runtimes(void) {
 
 static void test_ui_boot_package_loads_from_endpoint_storage(void) {
   enum {
-    UI_BOOT_PACKAGE_TEST_APP_INDEX = 0u,
-    UI_BOOT_COUNTER_MANIFEST_BYTES = 18u
+    UI_BOOT_PACKAGE_TEST_APP_INDEX = 0u
   };
   UINT8 module_memory[ER_UI_BOOT_APP_MODULE_BYTES];
   UINT8 manifest_memory[ER_UI_BOOT_APP_MANIFEST_BYTES];
@@ -267,13 +266,13 @@ static void test_ui_boot_package_loads_from_endpoint_storage(void) {
   er_mem_zero((UINT8*)&loaded, (UINTN)sizeof(loaded));
 
   check_int64("ui boot package endpoint load",
-              er_ui_boot_load_wasm_counter_package(module_memory,
-                                                   (UINT32)sizeof(module_memory),
-                                                   manifest_memory,
-                                                   (UINT32)sizeof(manifest_memory),
-                                                   &storage,
-                                                   UI_BOOT_PACKAGE_TEST_APP_INDEX,
-                                                   &loaded),
+              er_ui_boot_load_user_app_package(module_memory,
+                                               (UINT32)sizeof(module_memory),
+                                               manifest_memory,
+                                               (UINT32)sizeof(manifest_memory),
+                                               &storage,
+                                               UI_BOOT_PACKAGE_TEST_APP_INDEX,
+                                               &loaded),
               1);
   check_uint64("ui boot package app store complete",
                storage.app_store.complete, 1u);
@@ -286,11 +285,11 @@ static void test_ui_boot_package_loads_from_endpoint_storage(void) {
                storage.manifest_store.accepted_packet_count,
                ER_UI_BOOT_PACKAGE_OBJECT_PACKET_CAPACITY);
   check_uint64("ui boot package loaded app len", loaded.app_len,
-               ER_UI_COUNTER_WASM_SIZE);
+               ER_USER_APP_WASM_SIZE);
   check_uint64("ui boot package loaded manifest len", loaded.manifest_len,
-               UI_BOOT_COUNTER_MANIFEST_BYTES);
+               ER_USER_APP_MANIFEST_SIZE);
   check_uint64("ui boot package app byte", loaded.app_bytes[0],
-               g_edgerun_ui_counter_wasm[0]);
+               g_edgerun_user_app_wasm[0]);
   check_uint64("ui boot package manifest byte", loaded.manifest_bytes[0],
-               (UINT8)'e');
+               g_edgerun_user_app_manifest[0]);
 }

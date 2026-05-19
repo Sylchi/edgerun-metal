@@ -164,7 +164,7 @@ UINT8 er_ui_boot_apply_input(er_ui_ledger_app_state_t* ledger_state,
   if (input.kind == ER_PS2_KEYBOARD_ACTION_UI_KEY && active_app != 0) {
     if (er_ui_wasm_app_deliver_key_input(&active_app->runtime,
                                          input.key, input.modifiers) != 0 ||
-        er_ui_boot_execute_wasm_counter(&active_app->runtime) == 0u) {
+        er_ui_boot_execute_wasm_app(&active_app->runtime) == 0u) {
       return 0u;
     }
     *out_redraw = 1u;
