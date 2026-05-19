@@ -30,10 +30,10 @@ static void test_boot_services_boundary(void) {
                report.secure_boot_state, ER_BOOT_SECURE_BOOT_UNKNOWN);
   check_uint64("boot services selected invalid",
                report.selected_authority, ER_BOOT_AUTHORITY_PROFILE_CAPACITY);
-  check_int64("boot services unknown halts",
-              er_boot_services_decide_action(&report), ER_BOOT_SERVICES_ACTION_HALT);
-  check_cstr("boot services halt label",
-             er_boot_services_action_label(ER_BOOT_SERVICES_ACTION_HALT), "halt");
+  check_int64("boot services unknown blocked",
+              er_boot_services_decide_action(&report), ER_BOOT_SERVICES_ACTION_BLOCKED);
+  check_cstr("boot services blocked label",
+             er_boot_services_action_label(ER_BOOT_SERVICES_ACTION_BLOCKED), "blocked");
   check_int64("boot services runtime denied",
               er_boot_services_runtime_entry_allowed(&report), 0);
   er_boot_services_onboarding_model(&report, &onboarding);
@@ -55,6 +55,8 @@ static void test_boot_services_boundary(void) {
               er_boot_services_probe_secure_boot(&system_table, &report), 1);
   check_uint64("boot services secure boot verified",
                report.secure_boot_state, ER_BOOT_SECURE_BOOT_VERIFIED);
+  check_int64("boot services probe missing tpm",
+              er_boot_services_probe_tpm(&system_table, &report), 0);
 
   g_test_secure_boot_value = 0u;
   check_int64("boot services probe secure boot disabled",
@@ -151,6 +153,6 @@ static void test_boot_services_boundary(void) {
                report.devices[0].kind, ER_PCI_TARGET_KIND_ETHERNET);
 
   report.config_state = ER_BOOT_CONFIG_INVALID;
-  check_int64("boot services invalid config halts",
-              er_boot_services_decide_action(&report), ER_BOOT_SERVICES_ACTION_HALT);
+  check_int64("boot services invalid config blocked",
+              er_boot_services_decide_action(&report), ER_BOOT_SERVICES_ACTION_BLOCKED);
 }

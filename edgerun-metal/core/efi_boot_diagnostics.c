@@ -306,7 +306,7 @@ void er_log_hex(UINT64 value) {
   }
 }
 
-void er_halt_once(void) {
+void er_cpu_idle_once(void) {
 #if defined(ER_TARGET_X86_64)
   __asm__ __volatile__("hlt");
 #elif defined(ER_TARGET_AARCH64)
@@ -326,9 +326,9 @@ void er_pause_once(void) {
 #endif
 }
 
-void er_halt_forever(void) {
+void er_idle_forever(void) {
   for (;;) {
-    er_halt_once();
+    er_cpu_idle_once();
   }
 }
 

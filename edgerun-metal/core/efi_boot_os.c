@@ -33,7 +33,7 @@ void er_run_os_path(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE* SystemTable,
     er_print("boot services: runtime entry blocked action=");
     er_print(er_boot_services_action_label(action));
     er_println("");
-    er_halt_forever();
+    return;
   }
   if (er_virtio_gpu_init_first_pci(&gpu) == 0u) {
     er_println("ui renderer: virtio gpu unavailable");
@@ -160,10 +160,10 @@ void er_run_os_path(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE* SystemTable,
     er_ui_runtime_state_destroy(&runtime);
     er_ui_ledger_app_state_destroy(&ledger_state);
     vr_font_face_destroy(font);
-    er_halt_forever();
+    return;
   }
   if (er_ui_boot_render_scene(&scene, &ledger_state, &render_context) == 0u) {
-    er_halt_forever();
+    er_idle_forever();
   }
   er_ui_boot_input_loop(&ledger_state, &runtime, &scene, &render_context);
 }
