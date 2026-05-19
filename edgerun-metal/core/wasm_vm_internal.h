@@ -50,24 +50,6 @@ typedef struct {
 
 typedef int (*ErWasmUiDecodeRecord)(const UINT8* bytes, er_ui_scene_t* scene);
 
-#define ER_WASM_IMPORT_MODULE_LOG "edgerun.log"
-#define ER_WASM_IMPORT_MODULE_PCI "edgerun.pci"
-#define ER_WASM_IMPORT_MODULE_MMIO "edgerun.mmio"
-#define ER_WASM_IMPORT_MODULE_BUS "edgerun.bus"
-#define ER_WASM_IMPORT_MODULE_RELAY "edgerun.relay"
-#define ER_WASM_IMPORT_MODULE_MEMORY "edgerun.memory"
-#define ER_WASM_IMPORT_MODULE_UI "edgerun.ui"
-#define ER_WASM_IMPORT_FIELD_U64 "u64"
-#define ER_WASM_IMPORT_FIELD_HEX "hex"
-#define ER_WASM_IMPORT_FIELD_READ32 "read32"
-#define ER_WASM_IMPORT_FIELD_WRITE32 "write32"
-#define ER_WASM_IMPORT_FIELD_MAP "map"
-#define ER_WASM_IMPORT_FIELD_EXEC "exec"
-#define ER_WASM_IMPORT_FIELD_SEND "send"
-#define ER_WASM_IMPORT_FIELD_RECV "recv"
-#define ER_WASM_IMPORT_FIELD_EMIT "emit"
-#define ER_WASM_IMPORT_FIELD_REGION_BASE "region_base"
-#define ER_WASM_IMPORT_FIELD_REGION_LEN "region_len"
 #define ER_WASM_STRING_LEN(value) ((UINT8)(sizeof(value) - 1u))
 #define ER_WASM_LEB32_MAX_BYTES 5u
 #define ER_WASM_LEB64_MAX_BYTES 10u
@@ -199,15 +181,6 @@ typedef int (*ErWasmUiDecodeRecord)(const UINT8* bytes, er_ui_scene_t* scene);
 #define ER_WASM_MAX_CONTROL_DEPTH 16u
 #define ER_WASM_STACK_MAX 32u
 #define ER_WASM_MEMORY_INDEX_ZERO 0u
-#define ER_WASM_CONTRACT_REQUIRED_MEMORY_PAGES 1u
-#define ER_WASM_CONTRACT_REQUIRED_IMPORT_COUNT 1u
-#define ER_WASM_HOSTCALL_NO_PARAMS 0u
-#define ER_WASM_HOSTCALL_UNARY_PARAMS 1u
-#define ER_WASM_HOSTCALL_BINARY_PARAMS 2u
-#define ER_WASM_HOSTCALL_NO_RESULTS 0u
-#define ER_WASM_HOSTCALL_I64_RESULTS 1u
-#define ER_WASM_PCI_READ32_PARAM_COUNT 4u
-#define ER_WASM_PCI_WRITE32_PARAM_COUNT 5u
 #define ER_WASM_MAIN_NAME_LEN 4u
 #define ER_WASM_MAIN_NAME_BYTE0 'm'
 #define ER_WASM_MAIN_NAME_BYTE1 'a'
@@ -245,22 +218,6 @@ typedef int (*ErWasmUiDecodeRecord)(const UINT8* bytes, er_ui_scene_t* scene);
 #define ER_WASM_OP_I64_ADD 0x7cu
 #define ER_WASM_OP_I64_AND 0x83u
 #define ER_WASM_OP_I32_WRAP_I64 0xa7u
-
-enum {
-  ER_IMPORT_KIND_NONE = 0,
-  ER_IMPORT_KIND_LOG_U64 = 1,
-  ER_IMPORT_KIND_LOG_HEX = 2,
-  ER_IMPORT_KIND_PCI_READ32 = 3,
-  ER_IMPORT_KIND_PCI_WRITE32 = 4,
-  ER_IMPORT_KIND_MMIO_MAP = 5,
-  ER_IMPORT_KIND_MMIO_READ32 = 6,
-  ER_IMPORT_KIND_BUS_EXEC = 7,
-  ER_IMPORT_KIND_RELAY_SEND = 8,
-  ER_IMPORT_KIND_RELAY_RECV = 9,
-  ER_IMPORT_KIND_MEMORY_REGION_BASE = 10,
-  ER_IMPORT_KIND_MEMORY_REGION_LEN = 11,
-  ER_IMPORT_KIND_UI_EMIT = 12
-};
 
 enum {
   ER_CONTROL_KIND_BLOCK = 1,

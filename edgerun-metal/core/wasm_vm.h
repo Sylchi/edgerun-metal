@@ -4,6 +4,7 @@
 #include "er_bus.h"
 #include "er_app.h"
 #include "er_types.h"
+#include "er_wasm_contract.h"
 
 #define ER_WASM_MAX_FUNCTIONS 16u
 #define ER_WASM_MAX_TYPE_PARAMS 5u
@@ -35,11 +36,6 @@ typedef INT64 (*er_wasm_relay_send)(const UINT8* bytes, UINT32 len);
 typedef INT64 (*er_wasm_relay_recv)(UINT8* bytes, UINT32 capacity);
 typedef INT64 (*er_wasm_ui_emit)(void* user, const UINT8* bytes, UINT32 len,
                                  const er_ui_scene_stats_t* stats);
-
-typedef enum {
-  ER_WASM_MODULE_CONTRACT_UI_APP = 1,
-  ER_WASM_MODULE_CONTRACT_BUS_DRIVER = 2
-} ErWasmModuleContract;
 
 typedef struct {
   UINT8* bytes;

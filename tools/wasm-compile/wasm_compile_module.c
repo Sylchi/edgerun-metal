@@ -1,5 +1,30 @@
 #include "wasm_compile.h"
 
+typedef struct {
+  ErWasmImportKind kind;
+  const char* module;
+  const char* field;
+} ErWcHostImport;
+
+static const ErWcHostImport ERWC_HOST_IMPORTS[] = {
+#define ERWC_HOST_IMPORT_ROW(kind, module, field, params, results, contracts) \
+  {kind, module, field},
+  ER_WASM_CONTRACT_IMPORTS(ERWC_HOST_IMPORT_ROW)
+#undef ERWC_HOST_IMPORT_ROW
+};
+static const uint32_t ERWC_HOST_IMPORT_COUNT =
+  (uint32_t)(sizeof(ERWC_HOST_IMPORTS) / sizeof(ERWC_HOST_IMPORTS[0]));
+
+static ErWasmImportKind erwc_host_import_kind(const char* module, const char* field) {
+  for (uint32_t i = 0u; i < ERWC_HOST_IMPORT_COUNT; ++i) {
+    if (strcmp(module, ERWC_HOST_IMPORTS[i].module) == 0 &&
+        strcmp(field, ERWC_HOST_IMPORTS[i].field) == 0) {
+      return ERWC_HOST_IMPORTS[i].kind;
+    }
+  }
+  return ER_WASM_IMPORT_KIND_NONE;
+}
+
 static int erwc_parse_type_ref(const ErWcParse* parse, int list_node, char* out_name, size_t out_len) {
   int child;
 
@@ -131,43 +156,8 @@ static int erwc_parse_import_decl(const ErWcParse* parse, int list_node, ErWcMod
       erwc_find_type(module, import->type_name, &import->type_index) != 0) {
     return -1;
   }
-  if (strcmp(import->module, "edgerun.log") == 0 &&
-      strcmp(import->field, "u64") == 0) {
-    import->import_kind = ERWC_IMPORT_LOG_U64;
-  } else if (strcmp(import->module, "edgerun.log") == 0 &&
-             strcmp(import->field, "hex") == 0) {
-    import->import_kind = ERWC_IMPORT_LOG_HEX;
-  } else if (strcmp(import->module, "edgerun.pci") == 0 &&
-             strcmp(import->field, "read32") == 0) {
-    import->import_kind = ERWC_IMPORT_PCI_READ32;
-  } else if (strcmp(import->module, "edgerun.pci") == 0 &&
-             strcmp(import->field, "write32") == 0) {
-    import->import_kind = ERWC_IMPORT_PCI_WRITE32;
-  } else if (strcmp(import->module, "edgerun.mmio") == 0 &&
-             strcmp(import->field, "map") == 0) {
-    import->import_kind = ERWC_IMPORT_MMIO_MAP;
-  } else if (strcmp(import->module, "edgerun.mmio") == 0 &&
-             strcmp(import->field, "read32") == 0) {
-    import->import_kind = ERWC_IMPORT_MMIO_READ32;
-  } else if (strcmp(import->module, "edgerun.bus") == 0 &&
-             strcmp(import->field, "exec") == 0) {
-    import->import_kind = ERWC_IMPORT_BUS_EXEC;
-  } else if (strcmp(import->module, "edgerun.relay") == 0 &&
-             strcmp(import->field, "send") == 0) {
-    import->import_kind = ERWC_IMPORT_RELAY_SEND;
-  } else if (strcmp(import->module, "edgerun.relay") == 0 &&
-             strcmp(import->field, "recv") == 0) {
-    import->import_kind = ERWC_IMPORT_RELAY_RECV;
-  } else if (strcmp(import->module, "edgerun.memory") == 0 &&
-             strcmp(import->field, "region_base") == 0) {
-    import->import_kind = ERWC_IMPORT_MEMORY_REGION_BASE;
-  } else if (strcmp(import->module, "edgerun.memory") == 0 &&
-             strcmp(import->field, "region_len") == 0) {
-    import->import_kind = ERWC_IMPORT_MEMORY_REGION_LEN;
-  } else if (strcmp(import->module, "edgerun.ui") == 0 &&
-             strcmp(import->field, "emit") == 0) {
-    import->import_kind = ERWC_IMPORT_UI_EMIT;
-  } else {
+  import->import_kind = erwc_host_import_kind(import->module, import->field);
+  if (import->import_kind == ER_WASM_IMPORT_KIND_NONE) {
     return -1;
   }
   import->function_index = module->import_count;
