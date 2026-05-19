@@ -6,6 +6,7 @@
 #include "er_pci.h"
 #include "er_mmio.h"
 #include "er_mem.h"
+#include "er_netlog.h"
 #include "er_app.h"
 #include "er_crypto_blake3.h"
 #include "er_acpi.h"

@@ -2,12 +2,10 @@
 
 static void test_netlog_disabled_path(void) {
   check_int64("netlog starts disabled", er_netlog_ready(), 0);
-  check_int64("netlog null init stays disabled", (er_netlog_init(0), er_netlog_ready()), 0);
+  check_int64("netlog null init fails", er_netlog_init(0), 0);
+  check_int64("netlog null init stays disabled", er_netlog_ready(), 0);
   check_int64("netlog disabled write fails", er_netlog_write_bytes_wait((const UINT8*)"x", 1u, 0u), 0);
   check_int64("netlog disabled empty write fails", er_netlog_write_bytes_wait((const UINT8*)"", 0u, 0u), 0);
-  er_netlog_write(0);
-  er_netlog_write_text("queued\n");
-  er_netlog_flush_text();
 }
 
 static void test_gfx_console_disabled_path(void) {

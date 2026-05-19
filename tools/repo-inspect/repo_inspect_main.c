@@ -11,14 +11,34 @@
 #include "repo_inspect_analyze.c"
 
 static void eri_usage(const char* argv0) {
-  printf("usage: %s [repo-root-or-scope]\n", argv0);
+  printf("usage: %s [--threads N] [--details] [repo-root-or-scope]\n", argv0);
   printf("\n");
   printf("Builds a virtual file snapshot, then reports C LOC, package size,\n");
   printf("binary artifacts, test signals, duplicate blocks, dead-code candidates,\n");
   printf("CPU cost signals, and simple code smells.\n");
-  printf("Set %s to an integer from %u to %u to choose worker count.\n",
-         ERI_THREAD_ENV, ERI_MIN_THREAD_COUNT, ERI_MAX_THREAD_COUNT);
-  printf("Set %s=1 to print every duplicate and finding after the summary.\n", ERI_DETAIL_ENV);
+  printf("--threads N must be an integer from %u to %u; the default is %u.\n",
+         ERI_MIN_THREAD_COUNT, ERI_MAX_THREAD_COUNT, ERI_DEFAULT_THREAD_COUNT);
+  printf("--details prints every duplicate and finding after the summary.\n");
+}
+
+static uint8_t eri_parse_thread_count(const char* text, size_t* out_count) {
+  char* end = NULL;
+  unsigned long requested;
+
+  if (text == NULL || out_count == NULL) {
+    return 0u;
+  }
+  errno = 0;
+  requested = strtoul(text, &end, 10);
+  if (end == text || *end != 0 || errno == ERANGE ||
+      requested < (unsigned long)ERI_MIN_THREAD_COUNT ||
+      requested > (unsigned long)ERI_MAX_THREAD_COUNT) {
+    fprintf(stderr, "repo-inspect: --threads must be an integer from %u to %u\n",
+            ERI_MIN_THREAD_COUNT, ERI_MAX_THREAD_COUNT);
+    return 0u;
+  }
+  *out_count = (size_t)requested;
+  return 1u;
 }
 
 static const char* eri_cli_relative_scope(const char* arg) {
@@ -33,28 +53,53 @@ static const char* eri_cli_relative_scope(const char* arg) {
 
 int main(int argc, char** argv) {
   EriVfs vfs;
+  EriInspectOptions options;
   const char* root = ".";
   const char* rel = "";
+  int argi = 1;
   int ok;
 
-  if (argc > 2 || (argc == 2 && (strcmp(argv[1], "-h") == 0 || strcmp(argv[1], "--help") == 0))) {
-    eri_usage(argv[0]);
-    return argc > 2 ? 1 : 0;
+  options.thread_count = ERI_DEFAULT_THREAD_COUNT;
+  options.details = 0u;
+
+  while (argi < argc) {
+    if (strcmp(argv[argi], "-h") == 0 || strcmp(argv[argi], "--help") == 0) {
+      eri_usage(argv[0]);
+      return 0;
+    }
+    if (strcmp(argv[argi], "--details") == 0) {
+      options.details = 1u;
+      ++argi;
+      continue;
+    }
+    if (strcmp(argv[argi], "--threads") == 0) {
+      if (argi + 1 >= argc || eri_parse_thread_count(argv[argi + 1], &options.thread_count) == 0u) {
+        return 1;
+      }
+      argi += 2;
+      continue;
+    }
+    break;
   }
-  if (argc == 2) {
-    root = argv[1];
-    rel = eri_cli_relative_scope(argv[1]);
+
+  if (argc - argi > 1) {
+    eri_usage(argv[0]);
+    return 1;
+  }
+  if (argc - argi == 1) {
+    root = argv[argi];
+    rel = eri_cli_relative_scope(argv[argi]);
     if (rel[0] != 0) {
       root = ".";
     }
   }
 
   memset(&vfs, 0, sizeof(vfs));
-  if (eri_load_dir(&vfs, root, rel) == 0u) {
+  if (eri_load_dir(&vfs, root, rel, options.thread_count) == 0u) {
     eri_vfs_free(&vfs);
     return 1;
   }
-  ok = eri_analyze(&vfs) != 0u ? 0 : 1;
+  ok = eri_analyze(&vfs, &options) != 0u ? 0 : 1;
   eri_vfs_free(&vfs);
   return ok;
 }

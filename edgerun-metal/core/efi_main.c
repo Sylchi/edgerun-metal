@@ -221,6 +221,7 @@ EFI_STATUS EFIAPI efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE* SystemTable
 
   er_boot_services_report_init(&boot_report);
   er_select_large_console(SystemTable);
+  (void)er_netlog_init(SystemTable);
   er_print_set_system_table(SystemTable);
   er_mmio_reset();
   er_install_hostcalls();
