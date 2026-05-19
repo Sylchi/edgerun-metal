@@ -16,7 +16,8 @@
 #define ER_BOOT_CONFIG_LABEL_MAX ER_CHANNEL_LABEL_MAX
 #define ER_BOOT_CONFIG_WIFI_SSID_MAX 32u
 #define ER_BOOT_CONFIG_WIFI_FIXED_SSID_LEN 7u
-#define ER_BOOT_CONFIG_FIRMWARE_PATH_MAX 96u
+#define ER_BOOT_CONFIG_FIRMWARE_PATH_MAX 32u
+#define ER_BOOT_CONFIG_FIRMWARE_PATH_LEN 25u
 
 #define ER_BOOT_CONFIG_CHANNEL_DISABLED 0u
 #define ER_BOOT_CONFIG_CHANNEL_ENABLED 1u
@@ -45,6 +46,8 @@ typedef struct {
 typedef struct {
   UINT8 enabled;
   UINT8 source_kind;
+  UINT8 instance;
+  UINT8 reserved;
   UINT16 pci_vendor_id;
   UINT16 pci_device_id;
   UINT16 path_len;
@@ -73,9 +76,7 @@ UINT8 er_boot_config_add_open_wifi_channel(ErBootConfig* config,
                                            UINT16 label_len);
 UINT8 er_boot_config_add_efi_firmware_source(ErBootConfig* config,
                                              UINT16 pci_vendor_id,
-                                             UINT16 pci_device_id,
-                                             const char* path,
-                                             UINT16 path_len);
+                                             UINT16 pci_device_id);
 const ErBootFirmwareSourceConfig* er_boot_config_find_efi_firmware_source(const ErBootConfig* config,
                                                                           UINT16 pci_vendor_id,
                                                                           UINT16 pci_device_id);
