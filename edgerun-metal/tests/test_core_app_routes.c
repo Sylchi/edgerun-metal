@@ -375,6 +375,7 @@ static void test_app_identity_routes(void) {
   ErAppPackageManifest package_without_assets;
   ErAppPackageManifest package_bad_id;
   ErAppPackageSignature package_signature;
+  ErAppPackageSignature package_without_assets_signature;
   ErAppPackageSignature bad_package_signature;
   ErAppLoadedPackage loaded_package;
   ErAppPackageStorageSource storage_source;
@@ -382,9 +383,15 @@ static void test_app_identity_routes(void) {
   ErAppPackageStorageSource package_without_assets_source;
   ErAppPackageStorageSource bad_storage_source;
   ErAppPackageIndexEntry package_index_entry;
+  ErAppPackageIndexEntry package_without_assets_index_entry;
   ErAppPackageIndexEntry bad_package_index_entry;
   ErAppSignedPackageIndexEntry signed_index_entry;
+  ErAppSignedPackageIndexEntry signed_package_without_assets_index_entry;
   ErAppSignedPackageIndexEntry bad_signed_index_entry;
+  ErAppPackageInstallRecord install_record;
+  ErAppPackageInstallRecord removed_record;
+  ErAppPackageInstallRecord rollback_record;
+  ErAppPackageInstallRecord bad_install_record;
   ErAppPackageStorageResponse app_storage_response;
   ErAppPackageStorageResponse manifest_storage_response;
   ErAppPackageStorageResponse ui_assets_storage_response;
@@ -692,6 +699,17 @@ static void test_app_identity_routes(void) {
               1);
   check_hash_equal("app package storage source id deterministic",
                    &storage_source_again.source_id, &storage_source.source_id);
+  check_int64("app package storage source without assets",
+              er_app_prepare_package_storage_source(&crypto,
+                                                    &package_without_assets,
+                                                    &app_retrieve_route,
+                                                    &manifest_retrieve_route,
+                                                    0,
+                                                    &package_without_assets_source),
+              1);
+  check_hash_not_equal("app package storage source assets affect id",
+                       &package_without_assets_source.source_id,
+                       &storage_source.source_id);
   check_int64("app package index entry",
               er_app_prepare_package_index_entry(&crypto, &package,
                                                  &app_object_ref,
@@ -746,6 +764,91 @@ static void test_app_identity_routes(void) {
   check_int64("app signed package index rejects signature",
               er_app_signed_package_index_entry_valid(&crypto,
                                                       &bad_signed_index_entry),
+              0);
+  check_int64("app package sign without assets",
+              er_app_sign_package(&crypto, &package_without_assets,
+                                  &g_test_app_route_package_signer,
+                                  &package_without_assets_signature),
+              1);
+  check_int64("app package index without assets",
+              er_app_prepare_package_index_entry(&crypto,
+                                                 &package_without_assets,
+                                                 &app_object_ref,
+                                                 &manifest_object_ref,
+                                                 0,
+                                                 &package_without_assets_source,
+                                                 APP_PACKAGE_TEST_INSTALLED_SLOT,
+                                                 &package_without_assets_index_entry),
+              1);
+  check_int64("app signed package index without assets",
+              er_app_prepare_signed_package_index_entry(
+                  &crypto,
+                  &package_without_assets_index_entry,
+                  &package_without_assets_signature,
+                  &signed_package_without_assets_index_entry),
+              1);
+  check_int64("app package install record",
+              er_app_prepare_package_install_record(
+                  &crypto,
+                  ER_APP_PACKAGE_INSTALL_STATE_INSTALLED,
+                  1u,
+                  &signed_index_entry,
+                  0,
+                  &install_record),
+              1);
+  check_int64("app package install record valid",
+              er_app_package_install_record_valid(&crypto, &install_record),
+              1);
+  check_int64("app package install record loadable",
+              er_app_package_install_record_loadable(&crypto, &install_record),
+              1);
+  check_int64("app package removed record",
+              er_app_prepare_package_install_record(
+                  &crypto,
+                  ER_APP_PACKAGE_INSTALL_STATE_REMOVED,
+                  2u,
+                  &signed_index_entry,
+                  0,
+                  &removed_record),
+              1);
+  check_int64("app package removed record not loadable",
+              er_app_package_install_record_loadable(&crypto, &removed_record),
+              0);
+  check_int64("app package rollback record",
+              er_app_prepare_package_install_record(
+                  &crypto,
+                  ER_APP_PACKAGE_INSTALL_STATE_ROLLED_BACK,
+                  3u,
+                  &signed_package_without_assets_index_entry,
+                  &signed_index_entry,
+                  &rollback_record),
+              1);
+  check_int64("app package rollback record loadable",
+              er_app_package_install_record_loadable(&crypto, &rollback_record),
+              1);
+  check_hash_equal("app package rollback current package",
+                   &rollback_record.current_entry.index_entry.package.package_id,
+                   &package_without_assets.package_id);
+  check_hash_equal("app package rollback previous package",
+                   &rollback_record.previous_entry.index_entry.package.package_id,
+                   &package.package_id);
+  check_int64("app package rollback rejects same package",
+              er_app_prepare_package_install_record(
+                  &crypto,
+                  ER_APP_PACKAGE_INSTALL_STATE_ROLLED_BACK,
+                  4u,
+                  &signed_index_entry,
+                  &signed_index_entry,
+                  &bad_install_record),
+              0);
+  check_int64("app package install rejects zero generation",
+              er_app_prepare_package_install_record(
+                  &crypto,
+                  ER_APP_PACKAGE_INSTALL_STATE_INSTALLED,
+                  0u,
+                  &signed_index_entry,
+                  0,
+                  &bad_install_record),
               0);
   er_mem_zero((UINT8*)&app_storage_response,
               (UINTN)sizeof(app_storage_response));
@@ -872,17 +975,6 @@ static void test_app_identity_routes(void) {
                                                       &ui_assets_storage_object,
                                                       &loaded_package),
               0);
-  check_int64("app package storage source without assets",
-              er_app_prepare_package_storage_source(&crypto,
-                                                    &package_without_assets,
-                                                    &app_retrieve_route,
-                                                    &manifest_retrieve_route,
-                                                    0,
-                                                    &package_without_assets_source),
-              1);
-  check_hash_not_equal("app package storage source assets affect id",
-                       &package_without_assets_source.source_id,
-                       &storage_source.source_id);
   app_storage_response.retrieve_route_id =
       package_without_assets_source.app_retrieve_route_id;
   manifest_storage_response.retrieve_route_id =

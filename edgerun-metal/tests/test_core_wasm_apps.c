@@ -396,6 +396,8 @@ static void test_ui_boot_package_loads_from_endpoint_storage(void) {
   ErUiBootInstalledPackageSource source;
   ErUiBootInstalledPackageSource tampered_source;
   const ErAppSignedPackageIndexEntry* signed_index_entry;
+  const ErAppPackageInstallRecord* install_record;
+  ErAppPackageInstallRecord removed_record;
   ErAppSignedPackageIndexEntry tampered_signed_index_entry;
 
   er_mem_zero(module_memory, (UINTN)sizeof(module_memory));
@@ -405,13 +407,18 @@ static void test_ui_boot_package_loads_from_endpoint_storage(void) {
 
   installed_app = er_ui_boot_installed_app_for_slot(UI_BOOT_PACKAGE_TEST_APP_INDEX);
   signed_index_entry = er_ui_boot_installed_signed_package_index_entry_for_slot(UI_BOOT_PACKAGE_TEST_APP_INDEX);
+  install_record = er_ui_boot_installed_package_record_for_slot(UI_BOOT_PACKAGE_TEST_APP_INDEX);
   check_int64("ui boot installed app present", installed_app != 0, 1);
   check_int64("ui boot installed signed package index present",
               signed_index_entry != 0, 1);
+  check_int64("ui boot installed package record present",
+              install_record != 0, 1);
   check_int64("ui boot installed app rejects invalid slot",
               er_ui_boot_installed_app_for_slot(ER_UI_BOOT_INSTALLED_APP_COUNT) == 0, 1);
   check_int64("ui boot installed signed package index rejects invalid slot",
               er_ui_boot_installed_signed_package_index_entry_for_slot(ER_UI_BOOT_INSTALLED_APP_COUNT) == 0, 1);
+  check_int64("ui boot installed package record rejects invalid slot",
+              er_ui_boot_installed_package_record_for_slot(ER_UI_BOOT_INSTALLED_APP_COUNT) == 0, 1);
   check_uint64("ui boot installed app len", installed_app->app_len,
                ER_USER_APP_WASM_SIZE);
   check_uint64("ui boot installed manifest len", installed_app->manifest_len,
@@ -433,6 +440,16 @@ static void test_ui_boot_package_loads_from_endpoint_storage(void) {
               signed_index_entry->app_kind, ER_APP_KIND_USER);
   check_hash_equal("ui boot installed signed index package signature",
                    &signed_index_entry->package_signature.package_id,
+                   &installed_app->package.package_id);
+  check_int64("ui boot installed record abi",
+              install_record->abi_version, ER_APP_ABI_VERSION);
+  check_uint64("ui boot installed record state",
+               install_record->install_state,
+               ER_APP_PACKAGE_INSTALL_STATE_INSTALLED);
+  check_uint64("ui boot installed record generation",
+               install_record->generation, 1u);
+  check_hash_equal("ui boot installed record package",
+                   &install_record->current_entry.index_entry.package.package_id,
                    &installed_app->package.package_id);
   check_uint64("ui boot installed index slot",
                signed_index_entry->index_entry.installed_slot,
@@ -477,6 +494,15 @@ static void test_ui_boot_package_loads_from_endpoint_storage(void) {
               er_ui_boot_prepare_signed_indexed_package_source(signed_index_entry,
                                                                &source),
               1);
+  check_int64("ui boot package record source prepare",
+              er_ui_boot_prepare_package_record_source(install_record, &source),
+              1);
+  removed_record = *install_record;
+  removed_record.install_state = ER_APP_PACKAGE_INSTALL_STATE_REMOVED;
+  removed_record.generation += 1u;
+  check_int64("ui boot removed package record rejects source",
+              er_ui_boot_prepare_package_record_source(&removed_record, &source),
+              0);
   tampered_signed_index_entry = *signed_index_entry;
   tampered_signed_index_entry.index_entry.package.package_id.bytes[0] ^= 1u;
   check_int64("ui boot signed indexed source rejects package mismatch",

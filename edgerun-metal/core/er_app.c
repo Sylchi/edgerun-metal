@@ -437,6 +437,95 @@ UINT8 er_app_prepare_signed_package_index_entry(const ErCryptoProvider* crypto,
   return er_app_signed_package_index_entry_valid(crypto, out_entry);
 }
 
+static UINT8 er_app_signed_package_index_entry_empty(
+    const ErAppSignedPackageIndexEntry* entry) {
+  const UINT8* bytes = (const UINT8*)entry;
+  UINTN i;
+
+  if (entry == 0) {
+    return 0u;
+  }
+  for (i = 0u; i < (UINTN)sizeof(*entry); ++i) {
+    if (bytes[i] != 0u) {
+      return 0u;
+    }
+  }
+  return 1u;
+}
+
+UINT8 er_app_package_install_record_valid(const ErCryptoProvider* crypto,
+                                          const ErAppPackageInstallRecord* record) {
+  UINT8 previous_empty;
+
+  if (record == 0 ||
+      record->abi_version != ER_APP_ABI_VERSION ||
+      record->app_kind != ER_APP_KIND_USER ||
+      record->generation == 0u ||
+      er_app_signed_package_index_entry_valid(crypto, &record->current_entry) == 0u ||
+      record->current_entry.index_entry.installed_slot != record->installed_slot) {
+    return 0u;
+  }
+  previous_empty =
+      er_app_signed_package_index_entry_empty(&record->previous_entry);
+  switch (record->install_state) {
+    case ER_APP_PACKAGE_INSTALL_STATE_INSTALLED:
+    case ER_APP_PACKAGE_INSTALL_STATE_REMOVED:
+      if (previous_empty == 0u &&
+          (er_app_signed_package_index_entry_valid(crypto, &record->previous_entry) == 0u ||
+           record->previous_entry.index_entry.installed_slot != record->installed_slot)) {
+        return 0u;
+      }
+      return 1u;
+    case ER_APP_PACKAGE_INSTALL_STATE_ROLLED_BACK:
+      if (previous_empty != 0u ||
+          er_app_signed_package_index_entry_valid(crypto, &record->previous_entry) == 0u ||
+          record->previous_entry.index_entry.installed_slot != record->installed_slot ||
+          er_hash_equal(&record->current_entry.index_entry.package.package_id,
+                        &record->previous_entry.index_entry.package.package_id) != 0u) {
+        return 0u;
+      }
+      return 1u;
+    default:
+      return 0u;
+  }
+}
+
+UINT8 er_app_prepare_package_install_record(const ErCryptoProvider* crypto,
+                                            UINT32 install_state,
+                                            UINT64 generation,
+                                            const ErAppSignedPackageIndexEntry* current_entry,
+                                            const ErAppSignedPackageIndexEntry* previous_entry,
+                                            ErAppPackageInstallRecord* out_record) {
+  if (out_record == 0 || current_entry == 0) {
+    return 0u;
+  }
+  er_mem_zero((UINT8*)out_record, (UINTN)sizeof(*out_record));
+  out_record->abi_version = ER_APP_ABI_VERSION;
+  out_record->app_kind = ER_APP_KIND_USER;
+  out_record->install_state = install_state;
+  out_record->generation = generation;
+  out_record->current_entry = *current_entry;
+  out_record->installed_slot = current_entry->index_entry.installed_slot;
+  if (previous_entry != 0) {
+    out_record->previous_entry = *previous_entry;
+  }
+  return er_app_package_install_record_valid(crypto, out_record);
+}
+
+UINT8 er_app_package_install_record_loadable(const ErCryptoProvider* crypto,
+                                             const ErAppPackageInstallRecord* record) {
+  if (er_app_package_install_record_valid(crypto, record) == 0u) {
+    return 0u;
+  }
+  switch (record->install_state) {
+    case ER_APP_PACKAGE_INSTALL_STATE_INSTALLED:
+    case ER_APP_PACKAGE_INSTALL_STATE_ROLLED_BACK:
+      return 1u;
+    default:
+      return 0u;
+  }
+}
+
 UINT8 er_app_prepare_package_manifest(const ErCryptoProvider* crypto,
                                       const ErVfsObjectLabelRef* app_object,
                                       const ErVfsObjectLabelRef* manifest_object,
