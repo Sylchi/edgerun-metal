@@ -26,6 +26,7 @@
 #include "er_native_eth.h"
 #include "er_native_boot.h"
 #include "er_net_frame.h"
+#include "er_network.h"
 #include "er_netlog.h"
 #include "er_ps2_keyboard.h"
 #include "er_relay_packet.h"

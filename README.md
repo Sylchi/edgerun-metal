@@ -308,6 +308,10 @@ Netboot is support infrastructure. Do not redesign it unless it blocks boot.
 The durable runtime work is relay-routed UI, input, storage, driver, and device
 traffic through `erwire`.
 
+The canonical networking specification, consumer API contract, carrier
+behavior, and acceptance milestones live in
+[`NETWORK_MODEL.md`](NETWORK_MODEL.md).
+
 Hardware bring-up order:
 
 ```text
