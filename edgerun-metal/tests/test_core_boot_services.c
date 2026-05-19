@@ -18,12 +18,17 @@ static EFI_STATUS EFIAPI test_boot_services_get_variable(CHAR16* VariableName,
 }
 
 static void test_boot_services_boundary(void) {
+  enum {
+    BOOT_SERVICES_TEST_ADMISSION_GENERATION = 1u
+  };
   ErBootServicesReport report;
   EFI_RUNTIME_SERVICES runtime_services;
   EFI_SYSTEM_TABLE system_table;
   ErTpmNvLimits limits;
   ErPciDeviceSnapshot snapshot;
   ErBootOnboardingModel onboarding;
+  ErCryptoProvider crypto;
+  ErBootAdmissionRecord admission_record;
 
   er_boot_services_report_init(&report);
   check_uint64("boot services secure boot unknown",
@@ -155,4 +160,25 @@ static void test_boot_services_boundary(void) {
   report.config_state = ER_BOOT_CONFIG_INVALID;
   check_int64("boot services invalid config blocked",
               er_boot_services_decide_action(&report), ER_BOOT_SERVICES_ACTION_BLOCKED);
+
+  er_crypto_blake3_provider(&crypto);
+  er_boot_services_report_init(&report);
+  report.secure_boot_state = ER_BOOT_SECURE_BOOT_VERIFIED;
+  check_int64("boot services set tpm limits for admission",
+              er_boot_services_set_tpm_limits(&report, &limits), 1);
+  check_int64("boot services prepare local admission",
+              er_boot_admission_record_prepare_local(&crypto,
+                                                     BOOT_SERVICES_TEST_ADMISSION_GENERATION,
+                                                     ER_BOOT_BOOTSTRAP_CHANNEL_NATIVE_ETH,
+                                                     0u,
+                                                     0u,
+                                                     &admission_record),
+              1);
+  check_int64("boot services set boot admission",
+              er_boot_services_set_boot_admission(&report, &crypto, &admission_record), 1);
+  check_int64("boot services admission enters runtime",
+              er_boot_services_decide_action(&report),
+              ER_BOOT_SERVICES_ACTION_ENTER_RUNTIME);
+  check_int64("boot services admission runtime allowed",
+              er_boot_services_runtime_entry_allowed(&report), 1);
 }

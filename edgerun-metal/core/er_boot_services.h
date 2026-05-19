@@ -8,6 +8,7 @@
 
 #include "er_pci.h"
 #include "er_tpm.h"
+#include "er_boot_admission_record.h"
 
 #define ER_BOOT_AUTHORITY_PROFILE_CAPACITY 8u
 #define ER_BOOT_DETECTED_DEVICE_CAPACITY 32u
@@ -78,6 +79,9 @@ typedef struct {
   UINT32 authority_count;
   UINT32 device_count;
   ErTpmNvLimits tpm_nv_limits;
+  UINT8 boot_admission_present;
+  UINT8 reserved[3];
+  ErBootAdmissionRecord boot_admission;
   ErBootAuthorityProfile authorities[ER_BOOT_AUTHORITY_PROFILE_CAPACITY];
   ErBootDetectedDevice devices[ER_BOOT_DETECTED_DEVICE_CAPACITY];
 } ErBootServicesReport;
@@ -91,6 +95,9 @@ UINT8 er_boot_services_probe_tpm(EFI_SYSTEM_TABLE* system_table,
                                  ErBootServicesReport* report);
 UINT8 er_boot_services_set_tpm_limits(ErBootServicesReport* report,
                                       const ErTpmNvLimits* limits);
+UINT8 er_boot_services_set_boot_admission(ErBootServicesReport* report,
+                                          const ErCryptoProvider* crypto,
+                                          const ErBootAdmissionRecord* record);
 UINT8 er_boot_services_add_pci_device(ErBootServicesReport* report,
                                       const ErPciDeviceSnapshot* snapshot);
 UINT8 er_boot_services_add_authority(ErBootServicesReport* report,

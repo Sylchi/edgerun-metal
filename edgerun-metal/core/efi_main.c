@@ -27,6 +27,12 @@ static void er_boot_services_print_report(const ErBootServicesReport* report) {
   }
   er_print(" action=");
   er_print(er_boot_services_action_label(er_boot_services_decide_action(report)));
+  if (report->boot_admission_present != 0u) {
+    er_print(" admission=");
+    er_print(er_boot_admission_mode_label(report->boot_admission.admission_mode));
+    er_print(" channel=");
+    er_print(er_boot_bootstrap_channel_label(report->boot_admission.bootstrap_channel_kind));
+  }
   er_println("");
 }
 
@@ -87,6 +93,29 @@ static void er_boot_services_print_onboarding(const ErBootServicesReport* report
   }
 }
 
+static void er_boot_services_apply_default_admission(ErBootServicesReport* report) {
+  ErCryptoProvider crypto;
+  ErBootAdmissionRecord record;
+
+  er_crypto_blake3_provider(&crypto);
+  if (er_boot_admission_record_prepare_local(&crypto,
+                                             ER_BOOT_DEFAULT_ADMISSION_GENERATION,
+                                             ER_BOOT_BOOTSTRAP_CHANNEL_NATIVE_ETH,
+                                             0u,
+                                             0u,
+                                             &record) == 0u ||
+      er_boot_services_set_boot_admission(report, &crypto, &record) == 0u) {
+    er_println("boot admission: default local record unavailable");
+    return;
+  }
+
+  er_print("boot admission: default ");
+  er_print(er_boot_admission_mode_label(record.admission_mode));
+  er_print(" channel=");
+  er_print(er_boot_bootstrap_channel_label(record.bootstrap_channel_kind));
+  er_println("");
+}
+
 void er_run_boot_path(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE* SystemTable,
                       const ErBootServicesReport* boot_report) {
   ErBootServicesAction action;
@@ -142,6 +171,7 @@ EFI_STATUS EFIAPI efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE* SystemTable
     er_print_u64_dec((UINT64)boot_report.tpm_nv_limits.nv_buffer_max);
     er_println("");
   }
+  er_boot_services_apply_default_admission(&boot_report);
   er_boot_services_print_report(&boot_report);
 
   er_run_boot_path(ImageHandle, SystemTable, &boot_report);
