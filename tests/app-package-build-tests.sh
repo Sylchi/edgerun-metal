@@ -41,6 +41,11 @@ rm -f "${OUTPUT_WASM}" "${OUTPUT_IDENTITY}"
 test -f "${OUTPUT_WASM}"
 test -f "${OUTPUT_IDENTITY}"
 "${ER_BUILD}" app-verify "${PACKAGE_DIR}"
+run_output=$("${ER_BUILD}" app-run "${PACKAGE_DIR}")
+case "${run_output}" in
+  "app-run result=172 ui_emit_count=1 ui_emit_bytes=172 rects=1 hits=1 text=1" ) ;;
+  * ) printf 'bad app-run output\n%s\n' "${run_output}" >&2; exit 1 ;;
+esac
 case "$(od -An -tx1 -N8 "${OUTPUT_WASM}")" in
   *"00 61 73 6d 01 00 00 00"* ) ;;
   * ) printf 'bad package wasm header\n' >&2; exit 1 ;;
