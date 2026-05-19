@@ -18,6 +18,10 @@ static const char g_er_boot_authority_default_label[] = {
   'a', 'u', 't', 'h', 'o', 'r', 'i', 't', 'y'
 };
 
+#define ER_BOOT_SERVICES_TPM_COMMAND_BYTES 128u
+#define ER_BOOT_SERVICES_TPM_RESPONSE_BYTES 512u
+#define ER_BOOT_SERVICES_TPM_PROPERTY_COUNT 2u
+
 static UINT8 er_boot_services_authority_profile_ready(const ErBootAuthorityProfile* authority) {
   if (authority == 0 ||
       authority->present == 0u ||
@@ -90,6 +94,46 @@ UINT8 er_boot_services_probe_secure_boot(EFI_SYSTEM_TABLE* system_table,
       report->secure_boot_state = ER_BOOT_SECURE_BOOT_UNKNOWN;
       return 0u;
   }
+}
+
+UINT8 er_boot_services_probe_tpm(EFI_SYSTEM_TABLE* system_table,
+                                 ErBootServicesReport* report) {
+  ErAcpiRsdpInfo rsdp;
+  ErAcpiTableList tables;
+  ErTpm2Info tpm2;
+  ErTpmCrbTransport transport;
+  ErTpmNvLimits limits;
+  UINT8 command[ER_BOOT_SERVICES_TPM_COMMAND_BYTES];
+  UINT8 response[ER_BOOT_SERVICES_TPM_RESPONSE_BYTES];
+  UINT32 command_len;
+  UINT32 response_len;
+
+  if (system_table == 0 || report == 0 ||
+      er_acpi_find_rsdp(system_table, &rsdp) == 0u ||
+      er_acpi_enumerate_tables(&rsdp, &tables) == 0u ||
+      er_tpm_find_tpm2_table(&tables, &tpm2) == 0u ||
+      er_tpm_crb_from_tpm2_info(&tpm2, &transport) == 0u ||
+      er_tpm_build_get_capability_command(ER_TPM_CAP_TPM_PROPERTIES,
+                                          ER_TPM_PT_NV_INDEX_MAX,
+                                          ER_BOOT_SERVICES_TPM_PROPERTY_COUNT,
+                                          command,
+                                          (UINT32)sizeof(command),
+                                          &command_len) == 0u) {
+    return 0u;
+  }
+
+  if (er_tpm_crb_transact(&transport,
+                          command,
+                          command_len,
+                          response,
+                          (UINT32)sizeof(response),
+                          &response_len) == 0u ||
+      er_tpm_parse_nv_storage_limits_response(response, response_len, &limits) == 0u ||
+      er_boot_services_set_tpm_limits(report, &limits) == 0u) {
+    return 0u;
+  }
+
+  return 1u;
 }
 
 UINT8 er_boot_services_set_tpm_limits(ErBootServicesReport* report,
@@ -189,7 +233,7 @@ ErBootServicesAction er_boot_services_decide_action(const ErBootServicesReport* 
       report->secure_boot_state != ER_BOOT_SECURE_BOOT_VERIFIED ||
       report->tpm_present == 0u ||
       report->config_state == ER_BOOT_CONFIG_INVALID) {
-    return ER_BOOT_SERVICES_ACTION_HALT;
+    return ER_BOOT_SERVICES_ACTION_BLOCKED;
   }
 
   switch (report->authority_count) {
@@ -197,7 +241,7 @@ ErBootServicesAction er_boot_services_decide_action(const ErBootServicesReport* 
       return ER_BOOT_SERVICES_ACTION_CONFIGURE_AUTHORITY;
     case 1u:
       if (er_boot_services_authority_profile_ready(&report->authorities[0]) == 0u) {
-        return ER_BOOT_SERVICES_ACTION_HALT;
+        return ER_BOOT_SERVICES_ACTION_BLOCKED;
       }
       return ER_BOOT_SERVICES_ACTION_ENTER_RUNTIME;
     default:
@@ -209,15 +253,15 @@ ErBootServicesAction er_boot_services_decide_action(const ErBootServicesReport* 
     return ER_BOOT_SERVICES_ACTION_SELECT_AUTHORITY;
   }
   if (er_boot_services_authority_profile_ready(&report->authorities[report->selected_authority]) == 0u) {
-    return ER_BOOT_SERVICES_ACTION_HALT;
+    return ER_BOOT_SERVICES_ACTION_BLOCKED;
   }
   return ER_BOOT_SERVICES_ACTION_ENTER_RUNTIME;
 }
 
 const char* er_boot_services_action_label(ErBootServicesAction action) {
   switch (action) {
-    case ER_BOOT_SERVICES_ACTION_HALT:
-      return "halt";
+    case ER_BOOT_SERVICES_ACTION_BLOCKED:
+      return "blocked";
     case ER_BOOT_SERVICES_ACTION_CONFIGURE_AUTHORITY:
       return "configure-authority";
     case ER_BOOT_SERVICES_ACTION_SELECT_AUTHORITY:
@@ -257,7 +301,7 @@ void er_boot_services_onboarding_model(const ErBootServicesReport* report,
     case ER_BOOT_SERVICES_ACTION_ENTER_RUNTIME:
       out_model->state = ER_BOOT_ONBOARDING_STATE_READY;
       break;
-    case ER_BOOT_SERVICES_ACTION_HALT:
+    case ER_BOOT_SERVICES_ACTION_BLOCKED:
     default:
       out_model->state = ER_BOOT_ONBOARDING_STATE_FATAL;
       break;

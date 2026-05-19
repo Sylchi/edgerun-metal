@@ -193,28 +193,28 @@ void er_ui_boot_input_loop(er_ui_ledger_app_state_t* ledger_state,
     UINT8 redraw = 0u;
 
     if (er_ui_boot_poll_native_relay(render, &relay_redraw) == 0u) {
-      er_halt_forever();
+      er_idle_forever();
     }
     if (relay_redraw != 0u &&
         er_ui_boot_render_scene(scene, ledger_state, render) == 0u) {
-      er_halt_forever();
+      er_idle_forever();
     }
     if (er_ps2_keyboard_poll(&keyboard, &input) == 0u) {
-      er_halt_forever();
+      er_idle_forever();
     }
     if (input.kind == ER_PS2_KEYBOARD_ACTION_QUIT) {
-      er_halt_forever();
+      er_idle_forever();
     }
     if (input.kind == ER_PS2_KEYBOARD_ACTION_NONE) {
       er_pause_once();
       continue;
     }
     if (er_ui_boot_apply_input(ledger_state, runtime, scene, render, input, &redraw) == 0u) {
-      er_halt_forever();
+      er_idle_forever();
     }
     if (redraw != 0u &&
         er_ui_boot_render_scene(scene, ledger_state, render) == 0u) {
-      er_halt_forever();
+      er_idle_forever();
     }
   }
 }

@@ -31,7 +31,7 @@ typedef enum {
 } ErBootConfigState;
 
 typedef enum {
-  ER_BOOT_SERVICES_ACTION_HALT = 0,
+  ER_BOOT_SERVICES_ACTION_BLOCKED = 0,
   ER_BOOT_SERVICES_ACTION_CONFIGURE_AUTHORITY = 1,
   ER_BOOT_SERVICES_ACTION_SELECT_AUTHORITY = 2,
   ER_BOOT_SERVICES_ACTION_ENTER_RUNTIME = 3
@@ -87,6 +87,8 @@ UINT8 er_boot_services_authority_label_valid(const char* label,
                                              UINT16 label_len);
 UINT8 er_boot_services_probe_secure_boot(EFI_SYSTEM_TABLE* system_table,
                                          ErBootServicesReport* report);
+UINT8 er_boot_services_probe_tpm(EFI_SYSTEM_TABLE* system_table,
+                                 ErBootServicesReport* report);
 UINT8 er_boot_services_set_tpm_limits(ErBootServicesReport* report,
                                       const ErTpmNvLimits* limits);
 UINT8 er_boot_services_add_pci_device(ErBootServicesReport* report,
