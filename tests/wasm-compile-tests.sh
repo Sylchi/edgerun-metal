@@ -77,13 +77,21 @@ CAPP
 
 cat > "${TMP_DIR}/ui-store-call.c" <<'CAPP'
 extern i64 ui_emit(i64, i64) __import("edgerun.ui", "emit");
+const i64 OUTBOX = 1024;
+const i64 ABI_OFFSET = 0;
+const i64 COMMAND_OFFSET = 4;
+const i64 RECT_OFFSET = 8;
+const i64 ABI_VERSION = 1;
+const i64 COMMAND_COUNT = 3;
+const i64 RECT_COUNT = 1;
+const i64 PACKET_LEN = 172;
 memory(1);
 export i64 main(void) {
-  i64 ptr = 1024;
-  i64 len = 172;
-  store16(ptr, 0, 1);
-  store32(ptr, 4, 0x3);
-  store32(ptr, 8, 1);
+  i64 ptr = OUTBOX;
+  i64 len = PACKET_LEN;
+  store16(ptr, ABI_OFFSET, ABI_VERSION);
+  store32(ptr, COMMAND_OFFSET, COMMAND_COUNT);
+  store32(ptr, RECT_OFFSET, RECT_COUNT);
   return ui_emit(ptr, len);
 }
 CAPP
@@ -334,5 +342,31 @@ CAPP
 expect_reject "negative c store offset" \
   "${TMP_DIR}/bad-c-store-negative-offset.c" \
   "${TMP_DIR}/bad-c-store-negative-offset.wasm"
+
+cat > "${TMP_DIR}/bad-c-duplicate-constant.c" <<'CAPP'
+extern i64 ui_emit(i64, i64) __import("edgerun.ui", "emit");
+const i64 VALUE = 1;
+const i64 VALUE = 2;
+memory(1);
+export i64 main(void) { return ui_emit(VALUE, 0); }
+CAPP
+
+expect_reject "duplicate c constant" \
+  "${TMP_DIR}/bad-c-duplicate-constant.c" \
+  "${TMP_DIR}/bad-c-duplicate-constant.wasm"
+
+cat > "${TMP_DIR}/bad-c-unknown-store-offset.c" <<'CAPP'
+extern i64 ui_emit(i64, i64) __import("edgerun.ui", "emit");
+memory(1);
+export i64 main(void) {
+  i64 ptr = 1024;
+  store32(ptr, MISSING_OFFSET, 0);
+  return ui_emit(ptr, 0);
+}
+CAPP
+
+expect_reject "unknown c store offset constant" \
+  "${TMP_DIR}/bad-c-unknown-store-offset.c" \
+  "${TMP_DIR}/bad-c-unknown-store-offset.wasm"
 
 printf 'wasm-compile tests passed\n'
