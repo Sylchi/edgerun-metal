@@ -1,21 +1,23 @@
 #include "efi_boot_internal.h"
 
-static UINT8 g_ui_boot_app_memory[ER_UI_BOOT_APP_COUNT][ER_UI_BOOT_APP_MEMORY_BYTES];
-static UINT8 g_ui_boot_app_module_memory[ER_UI_BOOT_APP_COUNT][ER_UI_BOOT_APP_MODULE_BYTES];
-static UINT8 g_ui_boot_app_manifest_memory[ER_UI_BOOT_APP_COUNT][ER_UI_BOOT_APP_MANIFEST_BYTES];
+static UINT8 g_ui_boot_app_memory[ER_UI_BOOT_APP_SLOT_CAPACITY][ER_UI_BOOT_APP_MEMORY_BYTES];
+static UINT8 g_ui_boot_app_module_memory[ER_UI_BOOT_APP_SLOT_CAPACITY][ER_UI_BOOT_APP_MODULE_BYTES];
+static UINT8 g_ui_boot_app_manifest_memory[ER_UI_BOOT_APP_SLOT_CAPACITY][ER_UI_BOOT_APP_MANIFEST_BYTES];
 
 static const char g_ui_boot_user_app_wasm_label[] = "apps/user-app.wasm";
 static const char g_ui_boot_user_app_manifest_label[] = "apps/user-app.manifest";
 
-static const ErUiBootInstalledApp g_ui_boot_installed_user_app = {
-  g_ui_boot_user_app_wasm_label,
-  (UINTN)sizeof(g_ui_boot_user_app_wasm_label) - 1u,
-  g_edgerun_user_app_wasm,
-  ER_USER_APP_WASM_SIZE,
-  g_ui_boot_user_app_manifest_label,
-  (UINTN)sizeof(g_ui_boot_user_app_manifest_label) - 1u,
-  g_edgerun_user_app_manifest,
-  ER_USER_APP_MANIFEST_SIZE
+static const ErUiBootInstalledApp g_ui_boot_installed_apps[ER_UI_BOOT_INSTALLED_APP_COUNT] = {
+  {
+    g_ui_boot_user_app_wasm_label,
+    (UINTN)sizeof(g_ui_boot_user_app_wasm_label) - 1u,
+    g_edgerun_user_app_wasm,
+    ER_USER_APP_WASM_SIZE,
+    g_ui_boot_user_app_manifest_label,
+    (UINTN)sizeof(g_ui_boot_user_app_manifest_label) - 1u,
+    g_edgerun_user_app_manifest,
+    ER_USER_APP_MANIFEST_SIZE
+  }
 };
 
 enum {
@@ -137,10 +139,10 @@ UINT8 er_ui_boot_execute_wasm_app(ErUiWasmAppRuntime* runtime) {
 }
 
 const ErUiBootInstalledApp* er_ui_boot_installed_app_for_slot(UINT32 app_index) {
-  if (app_index >= ER_UI_BOOT_APP_COUNT) {
+  if (app_index >= ER_UI_BOOT_INSTALLED_APP_COUNT) {
     return 0;
   }
-  return &g_ui_boot_installed_user_app;
+  return &g_ui_boot_installed_apps[app_index];
 }
 
 UINT8 er_ui_boot_load_installed_app_package(const ErUiBootInstalledApp* installed_app,
@@ -342,7 +344,7 @@ UINT8 er_ui_boot_prepare_app_contexts(ErUiBootAppContext* apps,
   UINT32 i;
 
   if (apps == 0 || app_count == 0u || scene_budget == 0 ||
-      app_count > ER_UI_BOOT_APP_COUNT) {
+      app_count > ER_UI_BOOT_APP_SLOT_CAPACITY) {
     return 0u;
   }
   for (i = 0u; i < app_count; ++i) {
