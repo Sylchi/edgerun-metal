@@ -187,6 +187,7 @@ static int erb_build_wasm_compile(int print_plan) {
     return 1;
   }
   if (erb_args_push(&args, "tools/wasm-compile/main.c") != 0 ||
+      erb_args_push(&args, "tools/wasm-compile/wasm_compile_c.c") != 0 ||
       erb_args_push(&args, "tools/wasm-compile/wasm_compile_common.c") != 0 ||
       erb_args_push(&args, "tools/wasm-compile/wasm_compile_contract.c") != 0 ||
       erb_args_push(&args, "tools/wasm-compile/wasm_compile_emit.c") != 0 ||

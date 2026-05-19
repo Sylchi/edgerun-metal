@@ -44,8 +44,20 @@ compile_twice \
   "${TMP_DIR}/ui-a.wasm" \
   "${TMP_DIR}/ui-b.wasm"
 
+cat > "${TMP_DIR}/ui-min.c" <<'CAPP'
+extern i64 ui_emit(i64, i64) __import("edgerun.ui", "emit");
+memory(1);
+export i64 main(void) { return 7; }
+CAPP
+
+compile_twice \
+  "${TMP_DIR}/ui-min.c" \
+  "${TMP_DIR}/ui-c-a.wasm" \
+  "${TMP_DIR}/ui-c-b.wasm"
+
 check_magic "${TMP_DIR}/driver-a.wasm"
 check_magic "${TMP_DIR}/ui-a.wasm"
+check_magic "${TMP_DIR}/ui-c-a.wasm"
 
 expect_reject() {
   local label="$1"
@@ -113,5 +125,15 @@ WAT
 expect_reject "bad hostcall signature" \
   "${TMP_DIR}/bad-contract-signature.wat" \
   "${TMP_DIR}/bad-contract-signature.wasm"
+
+cat > "${TMP_DIR}/bad-c-subset.c" <<'CAPP'
+extern i64 ui_emit(i64, i64) __import("edgerun.ui", "emit");
+memory(1);
+export i64 main(void) { return ui_emit(0, 0); }
+CAPP
+
+expect_reject "unsupported c expression" \
+  "${TMP_DIR}/bad-c-subset.c" \
+  "${TMP_DIR}/bad-c-subset.wasm"
 
 printf 'wasm-compile tests passed\n'
