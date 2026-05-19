@@ -209,6 +209,51 @@ static void er_ui_sdl_destroy_font_texture(void* user, uint32_t texture) {
   store->textures[texture] = NULL;
 }
 
+static uint8_t* er_ui_sdl_read_file(const char* path, size_t* out_size) {
+  if (!path || !out_size) {
+    fprintf(stderr, "fatal: invalid file read request\n");
+    exit(1);
+  }
+  *out_size = 0u;
+  FILE* file = fopen(path, "rb");
+  if (!file) {
+    fprintf(stderr, "fatal: failed to open %s\n", path);
+    exit(1);
+  }
+  if (fseek(file, 0, SEEK_END) != 0) {
+    fclose(file);
+    fprintf(stderr, "fatal: failed to seek %s\n", path);
+    exit(1);
+  }
+  long signed_size = ftell(file);
+  if (signed_size <= 0) {
+    fclose(file);
+    fprintf(stderr, "fatal: invalid size for %s\n", path);
+    exit(1);
+  }
+  if (fseek(file, 0, SEEK_SET) != 0) {
+    fclose(file);
+    fprintf(stderr, "fatal: failed to rewind %s\n", path);
+    exit(1);
+  }
+  size_t size = (size_t)signed_size;
+  uint8_t* data = (uint8_t*)malloc(size);
+  if (!data) {
+    fclose(file);
+    fprintf(stderr, "fatal: out of memory while reading %s\n", path);
+    exit(1);
+  }
+  size_t read = fread(data, 1u, size, file);
+  fclose(file);
+  if (read != size) {
+    free(data);
+    fprintf(stderr, "fatal: failed to read %s\n", path);
+    exit(1);
+  }
+  *out_size = size;
+  return data;
+}
+
 static void er_ui_sdl_draw_rect(SDL_Renderer* renderer, er_ui_rect_t rect) {
   SDL_FRect dst = {rect.x, rect.y, rect.w, rect.h};
   er_ui_sdl_set_color(renderer, rect.color);
@@ -420,8 +465,12 @@ static vr_font_face_t* er_ui_sdl_load_font(ErUiSdlApp* app) {
   config.allocator.free = er_ui_sdl_free;
   config.gl = gl;
   vr_font_face_t* font = NULL;
-  if (vr_font_face_create(&font, ER_UI_REPO_ROOT "/varfont/fonts/Geist[wght].ttf", &config) != VR_OK) {
-    fprintf(stderr, "fatal: failed to load Geist font\n");
+  size_t font_size = 0u;
+  uint8_t* font_data = er_ui_sdl_read_file(ER_UI_REPO_ROOT "/varfont/fonts/Geist[wght].ttf", &font_size);
+  vr_status_t status = vr_font_face_create_from_memory(&font, font_data, font_size, &config);
+  free(font_data);
+  if (status != VR_OK) {
+    fprintf(stderr, "fatal: failed to load Geist font: %u\n", (unsigned)status);
     exit(1);
   }
   return font;
