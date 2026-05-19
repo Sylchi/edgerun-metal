@@ -53,6 +53,7 @@
 #include "er_virtio_net.h"
 #include "er_vfs.h"
 #include "er_wifi_burst.h"
+#include "er_wifi_l2.h"
 #include "erwire.h"
 #include "efi_boot_internal.h"
 #include "font_geist.h"

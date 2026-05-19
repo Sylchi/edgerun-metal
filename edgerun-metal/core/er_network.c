@@ -88,7 +88,7 @@ static UINT8 er_network_locator_shape_valid(const ErNetworkLocator* locator) {
   }
   if (locator->kind == ER_NETWORK_LOCATOR_KIND_WIFI_OPEN) {
     UINT8 ssid_len = locator->address[ER_NETWORK_WIFI_SSID_LEN_OFFSET];
-    if (ssid_len > ER_WIFI_BURST_SSID_BYTES ||
+    if (ssid_len > ER_NETWORK_LOCATOR_WIFI_OPEN_SSID_MAX ||
         locator->address[ER_NETWORK_WIFI_CHANNEL_OFFSET] == 0u) {
       return 0u;
     }
@@ -218,7 +218,7 @@ UINT8 er_network_locator_prepare_wifi_open(UINT32 group_id,
   if (out_locator == 0 ||
       group_id == ER_BLE_WIFI_GROUP_ID_INVALID ||
       channel == 0u ||
-      ssid_len > ER_WIFI_BURST_SSID_BYTES ||
+      ssid_len > ER_NETWORK_LOCATOR_WIFI_OPEN_SSID_MAX ||
       (ssid_len > 0u && ssid == 0) ||
       valid_until_ms == 0u) {
     return 0u;
