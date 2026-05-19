@@ -122,6 +122,8 @@ typedef EFI_STATUS (*EFIAPI_GET_MEMORY_MAP_FN)(UINTN* MemoryMapSize, void* Memor
 typedef EFI_STATUS (*EFIAPI_EXIT_BOOT_SERVICES_FN)(EFI_HANDLE ImageHandle, UINTN MapKey);
 typedef EFI_STATUS (EFIAPI *EFIAPI_GET_VARIABLE_FN)(CHAR16* VariableName, EFI_GUID* VendorGuid, UINT32* Attributes,
                                                     UINTN* DataSize, void* Data);
+typedef EFI_STATUS (EFIAPI *EFIAPI_SET_VARIABLE_FN)(CHAR16* VariableName, EFI_GUID* VendorGuid, UINT32 Attributes,
+                                                    UINTN DataSize, void* Data);
 typedef EFI_STATUS (EFIAPI *EFIAPI_FILE_OPEN_FN)(EFI_FILE_PROTOCOL* This, EFI_FILE_PROTOCOL** NewHandle,
                                                  CHAR16* FileName, UINT64 OpenMode, UINT64 Attributes);
 typedef EFI_STATUS (EFIAPI *EFIAPI_FILE_CLOSE_FN)(EFI_FILE_PROTOCOL* This);
@@ -181,7 +183,7 @@ typedef struct {
   void* ConvertPointer;
   EFIAPI_GET_VARIABLE_FN GetVariable;
   void* GetNextVariableName;
-  void* SetVariable;
+  EFIAPI_SET_VARIABLE_FN SetVariable;
   void* GetNextHighMonotonicCount;
   void* ResetSystem;
   void* UpdateCapsule;
@@ -366,6 +368,9 @@ typedef struct EFI_SYSTEM_TABLE {
 #define EFI_NOT_READY ((EFI_STATUS)(EFI_ERROR_MASK | 6u))
 #define EFI_INVALID_PARAMETER ((EFI_STATUS)(EFI_ERROR_MASK | 2u))
 #define EFI_NOT_FOUND ((EFI_STATUS)(EFI_ERROR_MASK | 14u))
+#define EFI_VARIABLE_NON_VOLATILE 0x00000001u
+#define EFI_VARIABLE_BOOTSERVICE_ACCESS 0x00000002u
+#define EFI_VARIABLE_RUNTIME_ACCESS 0x00000004u
 #define EFI_FILE_MODE_READ 0x0000000000000001ull
 #define EVT_NOTIFY_SIGNAL 0x00000200u
 #define TPL_CALLBACK 8u
