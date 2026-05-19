@@ -60,6 +60,12 @@ case "$codex_output" in
   *) printf 'codex scope did not choose codex-test\n' >&2; exit 1 ;;
 esac
 
+font_output=$("$REPO_PROGRESS" --print-plan edgerun-ui-core/varfont)
+case "$font_output" in
+  *"+ make varfont-test"*) ;;
+  *) printf 'ui-owned varfont scope did not choose varfont-test\n' >&2; exit 1 ;;
+esac
+
 unknown_out="${TMP_DIR}/repo-progress-unknown.out"
 unknown_err="${TMP_DIR}/repo-progress-unknown.err"
 if "$REPO_PROGRESS" --print-plan docs >"$unknown_out" 2>"$unknown_err"; then

@@ -8,7 +8,7 @@ option(ER_UI_CORE_BUILD_SDL_HOST "Build the hosted SDL shell preview." OFF)
 
 if(NOT TARGET vrfont)
   set(VRFONT_BUILD_HOSTED_TOOLS OFF CACHE BOOL "" FORCE)
-  add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../varfont ${CMAKE_CURRENT_BINARY_DIR}/varfont)
+  add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/varfont ${CMAKE_CURRENT_BINARY_DIR}/varfont)
 endif()
 
 add_library(er_ui_core

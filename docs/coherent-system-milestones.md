@@ -9,7 +9,7 @@ routes, and typed endpoint adapters.
 
 ## System Invariants
 
-- One OS/runtime project: `edgerun-metal`, `edgerun-ui-core`, `varfont`, and `edgerun-crypto` are cooperating runtime areas, not independent products.
+- One OS/runtime project: `edgerun-metal`, `edgerun-ui-core`, `edgerun-ui-core/varfont`, and `edgerun-crypto` are cooperating runtime areas, not independent products.
 - One boundary protocol model: `edgerun-work` protocol records carried by erwire.
 - One authority model: identity-routed, recipient-sealed, admission-bound work.
 - One jurisdiction model: every admission controls only the resources, route scope, budget, and policy window it is authorized to govern.
@@ -50,7 +50,7 @@ without weakening the transport proof.
 - `er_hw_relay` encodes firmware UDP, native Ethernet, and VirtIO endpoints.
 - `er_native_boot` can poll native erwire ingress into deterministic accepted, malformed, or empty records, preserve accepted payload bytes, and classify admitted render capability relay packets as native endpoint intents.
 - `edgerun-ui-core` provides backend-neutral UI scene, component, input, theme, layout, and render-budget records.
-- `varfont` provides freestanding font parsing, shaping, rasterization, atlas, and UI text vertex generation.
+- `edgerun-ui-core/varfont` provides freestanding font parsing, shaping, rasterization, atlas, and UI text vertex generation.
 - `edgerun-crypto` provides freestanding BLAKE3 hashing used by runtime records and tests.
 - `wasm_vm` runs bounded Wasm modules with explicit hostcalls, including bounded `edgerun.relay/send` and `edgerun.relay/recv` imports.
 - Relay sends are validated against serialized packet shape, app identity, admission id, budget token, and packet-byte budget before host relay dispatch.

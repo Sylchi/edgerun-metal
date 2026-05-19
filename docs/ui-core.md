@@ -13,6 +13,7 @@ Intention: keep UI composition backend-neutral, deterministic, freestanding, and
 - component catalog, parity contracts, projected-field contracts, accessibility metadata, and state matrices
 - native emitters for controls, feedback, data-display surfaces, shell surfaces, setup surfaces, and the metal boot UI composition
 - layout nodes including rows, columns, cards, grids, masonry, bento grids, scroll areas, dialogs, tooltips, progress rings, and conversation/package/runtime rows
+- the `varfont` text renderer subtree used by UI text paths
 - hosted deterministic tests plus an optional SDL preview shell
 
 The component catalog currently records 59 native components. The canonical component set records 55 base components from `ui/shadcn-ui/apps/v4/registry/bases/base/ui`, and tests assert that every catalog entry has a parity contract and a scene preview.

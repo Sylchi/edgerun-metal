@@ -595,7 +595,7 @@ static vr_font_face_t* er_ui_sdl_load_font(ErUiSdlApp* app) {
   config.gl = gl;
   vr_font_face_t* font = NULL;
   size_t font_size = 0u;
-  uint8_t* font_data = er_ui_sdl_read_file(ER_UI_REPO_ROOT "/varfont/fonts/Geist[wght].ttf", &font_size);
+  uint8_t* font_data = er_ui_sdl_read_file(ER_UI_REPO_ROOT "/edgerun-ui-core/varfont/fonts/Geist[wght].ttf", &font_size);
   vr_status_t status = vr_font_face_create_from_memory(&font, font_data, font_size, &config);
   free(font_data);
   if (status != VR_OK) {
