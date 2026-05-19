@@ -39,11 +39,15 @@
 #define ANSI_GRAY "\033[90m"
 #define C_KEYWORD_COUNT 33u
 #define SESSION_EXCERPT_BYTES 400u
+#define SUMMARY_TEXT_BYTES 1200u
+#define SUMMARY_INCLUDE_LIMIT 5u
+#define SUMMARY_SYMBOL_LIMIT 8u
 
 static const char *AGENT_INSTRUCTIONS =
     "You are Codex running inside EdgeRun C. "
     "You do not have direct shell or process access. "
     "Use search_code and read_code to inspect the in-memory workspace snapshot. "
+    "Use summarize_code first when orienting on a topic so you do not reread files unnecessarily. "
     "Use propose_change to stage complete-file replacements in memory. "
     "The host automatically provides repository status, rules, and verification context. "
     "Do not ask the user to run git status, git diff, build, or test commands. "
@@ -68,6 +72,12 @@ typedef struct {
 } Proposal;
 
 typedef struct {
+    char *path;
+    char *text;
+    uint64_t hash;
+} FileSummary;
+
+typedef struct {
     char root[PATH_MAX];
     MemoryFile *files;
     size_t file_count;
@@ -75,6 +85,9 @@ typedef struct {
     Proposal *proposals;
     size_t proposal_count;
     size_t proposal_cap;
+    FileSummary *summaries;
+    size_t summary_count;
+    size_t summary_cap;
 } Workspace;
 
 typedef struct {
@@ -126,6 +139,7 @@ typedef struct {
 
 static void trim_newline(char *s);
 static const char *json_find_key_value_start(const char *json, const char *key);
+static void buffer_append_excerpt(Buffer *b, const char *text, size_t max_bytes);
 
 static void die(const char *fmt, ...) {
     va_list ap;
@@ -208,6 +222,26 @@ static bool path_is_c_like(const char *path) {
     return strcmp(dot, ".c") == 0 || strcmp(dot, ".h") == 0;
 }
 
+static bool path_is_summary_candidate(const char *path) {
+    const char *dot = strrchr(path, '.');
+    if (!dot) return false;
+    return strcmp(dot, ".c") == 0 ||
+           strcmp(dot, ".h") == 0 ||
+           strcmp(dot, ".md") == 0 ||
+           strcmp(dot, ".sh") == 0 ||
+           strcmp(dot, ".txt") == 0 ||
+           strcmp(dot, ".cmake") == 0;
+}
+
+static uint64_t stable_hash_bytes(const unsigned char *data, size_t len) {
+    uint64_t hash = 1469598103934665603ull;
+    for (size_t i = 0; i < len; i++) {
+        hash ^= (uint64_t)data[i];
+        hash *= 1099511628211ull;
+    }
+    return hash;
+}
+
 static void print_highlighted_c_line(const char *line, size_t len) {
     bool at_line_start = true;
     for (size_t i = 0; i < len;) {
@@ -266,8 +300,8 @@ static bool contains_path_part(const char *path, const char *part) {
 
 static bool should_skip_dir(const char *rel) {
     static const char *skip[] = {
-        ".git", "target", "node_modules", "dist", "build", "coverage",
-        ".next", ".turbo", "out", "vendor", NULL
+        ".git", ".build", "target", "node_modules", "dist", "build", "coverage",
+        ".next", ".turbo", "out", "vendor", "shadcn-ui", NULL
     };
     for (size_t i = 0; skip[i]; i++) {
         if (contains_path_part(rel, skip[i])) return true;
@@ -346,6 +380,14 @@ static void workspace_clear_files(Workspace *ws) {
         free(ws->files[i].data);
     }
     ws->file_count = 0;
+}
+
+static void workspace_clear_summaries(Workspace *ws) {
+    for (size_t i = 0; i < ws->summary_count; i++) {
+        free(ws->summaries[i].path);
+        free(ws->summaries[i].text);
+    }
+    ws->summary_count = 0;
 }
 
 static void scan_dir(Workspace *ws, const char *rel) {
@@ -480,6 +522,7 @@ static void cmd_stats(Workspace *ws) {
     printf("%sfiles loaded:%s %zu\n", color_code(stdout, ANSI_CYAN), color_code(stdout, ANSI_RESET), ws->file_count);
     printf("%stext files:%s %zu\n", color_code(stdout, ANSI_CYAN), color_code(stdout, ANSI_RESET), text);
     printf("%sbytes loaded:%s %zu\n", color_code(stdout, ANSI_CYAN), color_code(stdout, ANSI_RESET), bytes);
+    printf("%ssummaries:%s %zu\n", color_code(stdout, ANSI_CYAN), color_code(stdout, ANSI_RESET), ws->summary_count);
     printf("%sproposals:%s %zu\n", color_code(stdout, ANSI_CYAN), color_code(stdout, ANSI_RESET), ws->proposal_count);
 }
 
@@ -587,6 +630,188 @@ static void buffer_appendf(Buffer *b, const char *fmt, ...) {
     va_end(ap);
     buffer_append(b, tmp, (size_t)n);
     free(tmp);
+}
+
+static bool line_has_word(const char *line, size_t len, const char *word) {
+    size_t word_len = strlen(word);
+    if (word_len == 0 || word_len > len) return false;
+    for (size_t i = 0; i + word_len <= len; i++) {
+        bool left = i == 0 || !is_identifier_char(line[i - 1]);
+        bool right = i + word_len == len || !is_identifier_char(line[i + word_len]);
+        if (left && right && memcmp(line + i, word, word_len) == 0) return true;
+    }
+    return false;
+}
+
+static bool summary_symbol_line(const char *line, size_t len) {
+    if (line_has_word(line, len, "typedef")) return true;
+    if (memchr(line, '(', len) == NULL || memchr(line, ')', len) == NULL) return false;
+    if (line_has_word(line, len, "if") ||
+        line_has_word(line, len, "for") ||
+        line_has_word(line, len, "while") ||
+        line_has_word(line, len, "switch")) {
+        return false;
+    }
+    return line_has_word(line, len, "static") ||
+           line_has_word(line, len, "extern") ||
+           line_has_word(line, len, "int") ||
+           line_has_word(line, len, "void") ||
+           line_has_word(line, len, "char");
+}
+
+static void append_trimmed_line(Buffer *b, const char *line, size_t len) {
+    while (len > 0 && isspace((unsigned char)line[0])) {
+        line++;
+        len--;
+    }
+    while (len > 0 && isspace((unsigned char)line[len - 1])) len--;
+    buffer_append(b, line, len);
+}
+
+static char *file_summary_text_new(const MemoryFile *file) {
+    Buffer b;
+    buffer_init(&b);
+    uint64_t hash = stable_hash_bytes(file->data, file->len);
+    buffer_appendf(&b, "file %s\nbytes %zu\nhash %016llx\n", file->path, file->len, (unsigned long long)hash);
+    if (!file->text) {
+        buffer_append(&b, "kind binary\n", 12);
+        return b.data;
+    }
+
+    size_t lines = 0;
+    size_t includes = 0;
+    size_t symbols = 0;
+    bool purpose_done = false;
+    Buffer include_text;
+    Buffer symbol_text;
+    buffer_init(&include_text);
+    buffer_init(&symbol_text);
+    const char *s = (const char *)file->data;
+    size_t start = 0;
+    for (size_t pos = 0; pos <= file->len; pos++) {
+        if (pos == file->len || s[pos] == '\n') {
+            size_t len = pos - start;
+            lines++;
+            const char *line = s + start;
+            while (len > 0 && isspace((unsigned char)line[0])) {
+                line++;
+                len--;
+            }
+            if (!purpose_done && len > 0 && line[0] != '#') {
+                buffer_append(&b, "purpose ", 8);
+                append_trimmed_line(&b, line, len);
+                buffer_append_c(&b, '\n');
+                purpose_done = true;
+            }
+            if (starts_with(line, "#include") && includes < SUMMARY_INCLUDE_LIMIT) {
+                buffer_append(&include_text, "include ", 8);
+                append_trimmed_line(&include_text, line, len);
+                buffer_append_c(&include_text, '\n');
+                includes++;
+            }
+            if (path_is_c_like(file->path) && symbols < SUMMARY_SYMBOL_LIMIT && summary_symbol_line(line, len)) {
+                buffer_append(&symbol_text, "symbol ", 7);
+                append_trimmed_line(&symbol_text, line, len);
+                buffer_append_c(&symbol_text, '\n');
+                symbols++;
+            }
+            start = pos + 1;
+        }
+    }
+    buffer_appendf(&b, "kind %s\nlines %zu\n", path_is_c_like(file->path) ? "c" : "text", lines);
+    if (include_text.data) buffer_append(&b, include_text.data, include_text.len);
+    if (symbol_text.data) buffer_append(&b, symbol_text.data, symbol_text.len);
+    free(include_text.data);
+    free(symbol_text.data);
+    if (!purpose_done) {
+        const char *empty_purpose = "purpose empty or declaration-only file\n";
+        buffer_append(&b, empty_purpose, strlen(empty_purpose));
+    }
+    return b.data;
+}
+
+static void workspace_add_summary(Workspace *ws, const MemoryFile *file) {
+    if (!file->text || !path_is_summary_candidate(file->path)) return;
+    if (ws->summary_count == ws->summary_cap) {
+        ws->summary_cap = ws->summary_cap ? ws->summary_cap * 2 : 256;
+        ws->summaries = xrealloc(ws->summaries, ws->summary_cap * sizeof(ws->summaries[0]));
+    }
+    FileSummary *summary = &ws->summaries[ws->summary_count++];
+    summary->path = xstrdup(file->path);
+    summary->hash = stable_hash_bytes(file->data, file->len);
+    summary->text = file_summary_text_new(file);
+}
+
+static void workspace_rebuild_summaries(Workspace *ws) {
+    workspace_clear_summaries(ws);
+    for (size_t i = 0; i < ws->file_count; i++) {
+        workspace_add_summary(ws, &ws->files[i]);
+    }
+}
+
+static size_t path_stem_len(const char *path) {
+    const char *base = strrchr(path, '/');
+    base = base ? base + 1 : path;
+    const char *dot = strrchr(base, '.');
+    return dot ? (size_t)(dot - base) : strlen(base);
+}
+
+static const char *path_base_name(const char *path) {
+    const char *base = strrchr(path, '/');
+    return base ? base + 1 : path;
+}
+
+static bool summaries_are_related(const FileSummary *a, const FileSummary *b) {
+    if (strcmp(a->path, b->path) == 0) return false;
+    if (!path_is_c_like(a->path) && !path_is_c_like(b->path)) return false;
+    const char *a_base = path_base_name(a->path);
+    const char *b_base = path_base_name(b->path);
+    size_t a_stem = path_stem_len(a->path);
+    size_t b_stem = path_stem_len(b->path);
+    if (path_is_c_like(a->path) &&
+        path_is_c_like(b->path) &&
+        a_stem == b_stem &&
+        memcmp(a_base, b_base, a_stem) == 0) {
+        return true;
+    }
+    if (contains_case_insensitive(a->text, strlen(a->text), b_base)) return true;
+    if (contains_case_insensitive(b->text, strlen(b->text), a_base)) return true;
+    return false;
+}
+
+static void append_related_summaries(Buffer *out, Workspace *ws, const FileSummary *summary) {
+    size_t emitted = 0;
+    for (size_t i = 0; i < ws->summary_count && emitted < SUMMARY_INCLUDE_LIMIT; i++) {
+        if (summaries_are_related(summary, &ws->summaries[i])) {
+            if (emitted == 0) buffer_append(out, "related\n", 8);
+            buffer_appendf(out, "- %s\n", ws->summaries[i].path);
+            emitted++;
+        }
+    }
+}
+
+static char *workspace_summary_query_new(Workspace *ws, const char *query, size_t limit) {
+    Buffer out;
+    buffer_init(&out);
+    if (!query || !*query) {
+        buffer_appendf(&out, "summary index: %zu files\n", ws->summary_count);
+        query = "";
+    }
+    size_t emitted = 0;
+    for (size_t i = 0; i < ws->summary_count && (limit == 0 || emitted < limit); i++) {
+        FileSummary *summary = &ws->summaries[i];
+        if (*query &&
+            !contains_case_insensitive(summary->path, strlen(summary->path), query) &&
+            !contains_case_insensitive(summary->text, strlen(summary->text), query)) {
+            continue;
+        }
+        buffer_appendf(&out, "\n[%zu] %s\n", emitted + 1, summary->path);
+        buffer_append_excerpt(&out, summary->text, SUMMARY_TEXT_BYTES);
+        append_related_summaries(&out, ws, summary);
+        emitted++;
+    }
+    if (emitted == 0) buffer_append(&out, "no matching summaries\n", 22);
+    return out.data ? out.data : xstrdup("");
 }
 
 static char *json_escape_new(const char *s) {
@@ -901,6 +1126,7 @@ static void cmd_commit(Workspace *ws) {
     discard_all(ws);
     workspace_clear_files(ws);
     scan_dir(ws, "");
+    workspace_rebuild_summaries(ws);
     printf("workspace reloaded from disk\n");
 }
 
@@ -987,7 +1213,11 @@ static char *initial_context_text_new(Workspace *ws) {
     char *status = repo_status_text_new(ws);
     buffer_append(&b, status, strlen(status));
     free(status);
-    buffer_appendf(&b, "\nworkspace files loaded: %zu\npending in-memory proposals: %zu\n", ws->file_count, ws->proposal_count);
+    buffer_appendf(&b,
+                   "\nworkspace files loaded: %zu\ncached file summaries: %zu\npending in-memory proposals: %zu\n",
+                   ws->file_count,
+                   ws->summary_count,
+                   ws->proposal_count);
     const char *policy =
         "\nVerification policy: after proposals, the host writes only proposed paths, runs scoped repo-progress, "
         "and commits only if verification passes.\n";
@@ -1115,6 +1345,7 @@ static int cmd_commit_verified(Workspace *ws) {
         discard_all(ws);
         workspace_clear_files(ws);
         scan_dir(ws, "");
+        workspace_rebuild_summaries(ws);
         printf("status: workspace reloaded from disk\n");
     }
     free(scopes);
@@ -1254,6 +1485,7 @@ static void print_help(void) {
     printf("%scommands:%s\n", color_code(stdout, ANSI_BOLD), color_code(stdout, ANSI_RESET));
     puts("  ❔ help");
     puts("  📊 stats");
+    puts("  🧠 summarize [query] [limit]");
     puts("  🔎 search <text> [limit]");
     puts("  📖 read <path> [start_line] [max_lines]");
     puts("  ✍️  propose <path>   # full content until .end");
@@ -1352,6 +1584,16 @@ static char *execute_agent_tool_new(Workspace *ws, const ToolCall *tool, bool *s
         *success_out = true;
         return repo_rules_text_new(ws);
     }
+    if (strcmp(tool->name, "summarize_code") == 0) {
+        char *query = json_get_string_dup(tool->arguments, "query");
+        char *limit_s = json_get_scalar_dup(tool->arguments, "limit");
+        size_t limit = limit_s ? (size_t)strtoull(limit_s, NULL, 10) : 20;
+        char *out = workspace_summary_query_new(ws, query ? query : "", limit);
+        *success_out = true;
+        free(query);
+        free(limit_s);
+        return out;
+    }
     if (strcmp(tool->name, "verify_scope") == 0) {
         char *scope = json_get_string_dup(tool->arguments, "scope");
         const char *selected = (scope && *scope) ? scope : ".";
@@ -1417,6 +1659,7 @@ static const char *tools_json(void) {
     return "["
         "{\"type\":\"function\",\"name\":\"project_status\",\"description\":\"Returns host-gathered git branch and workspace status. Use instead of asking for git status.\",\"strict\":false,\"parameters\":{\"type\":\"object\",\"properties\":{},\"additionalProperties\":false}},"
         "{\"type\":\"function\",\"name\":\"repo_rules\",\"description\":\"Returns repository rules and the exact repo-progress verification plans for known scopes.\",\"strict\":false,\"parameters\":{\"type\":\"object\",\"properties\":{},\"additionalProperties\":false}},"
+        "{\"type\":\"function\",\"name\":\"summarize_code\",\"description\":\"Returns deterministic cached summaries for matching files and related code context. Use before raw reads when orienting on a topic.\",\"strict\":false,\"parameters\":{\"type\":\"object\",\"properties\":{\"query\":{\"type\":\"string\",\"description\":\"Path, symbol, include, or topic text to match against cached summaries\"},\"limit\":{\"type\":\"number\",\"description\":\"Maximum matching summaries to return\"}},\"required\":[\"query\"],\"additionalProperties\":false}},"
         "{\"type\":\"function\",\"name\":\"verify_scope\",\"description\":\"Runs the repository-owned scoped progress check for a scope. Use only when explicit mid-turn verification is needed; the host also verifies automatically before commit.\",\"strict\":false,\"parameters\":{\"type\":\"object\",\"properties\":{\"scope\":{\"type\":\"string\",\"description\":\"Repository scope such as codex, edgerun-ui-core, varfont, edgerun-crypto, edgerun-metal, docs, tools, tests, or .\"}},\"required\":[\"scope\"],\"additionalProperties\":false}},"
         "{\"type\":\"function\",\"name\":\"commit_verified\",\"description\":\"Writes pending proposals, runs scoped repo-progress verification, stages only proposed paths, and creates a git commit only if verification passes. The host also runs this automatically after final proposed changes.\",\"strict\":false,\"parameters\":{\"type\":\"object\",\"properties\":{},\"additionalProperties\":false}},"
         "{\"type\":\"function\",\"name\":\"search_code\",\"description\":\"Searches the in-memory workspace snapshot. No disk or process access.\",\"strict\":false,\"parameters\":{\"type\":\"object\",\"properties\":{\"query\":{\"type\":\"string\",\"description\":\"Text to search for in UTF-8 workspace files\"},\"limit\":{\"type\":\"number\",\"description\":\"Maximum number of matching lines to return\"}},\"required\":[\"query\"],\"additionalProperties\":false}},"
@@ -1833,6 +2076,12 @@ static void repl(Workspace *ws) {
             print_help();
         } else if (strcmp(cmd, "stats") == 0) {
             cmd_stats(ws);
+        } else if (strcmp(cmd, "summarize") == 0 || strcmp(cmd, "summary") == 0) {
+            char *query = next_token(&cursor);
+            char *limit_s = next_token(&cursor);
+            char *out = workspace_summary_query_new(ws, query ? query : "", limit_s ? (size_t)strtoull(limit_s, NULL, 10) : 20);
+            fputs(out, stdout);
+            free(out);
         } else if (strcmp(cmd, "search") == 0) {
             char *query = next_token(&cursor);
             char *limit_s = next_token(&cursor);
@@ -1874,16 +2123,19 @@ static void workspace_init(Workspace *ws, const char *root) {
     if (!realpath(root, resolved)) die("cannot resolve %s: %s", root, strerror(errno));
     snprintf(ws->root, sizeof(ws->root), "%s", resolved);
     scan_dir(ws, "");
+    workspace_rebuild_summaries(ws);
 }
 
 static void workspace_free(Workspace *ws) {
     workspace_clear_files(ws);
+    workspace_clear_summaries(ws);
     for (size_t i = 0; i < ws->proposal_count; i++) {
         free(ws->proposals[i].path);
         free(ws->proposals[i].data);
     }
     free(ws->files);
     free(ws->proposals);
+    free(ws->summaries);
 }
 
 static int self_test(void) {
@@ -1898,6 +2150,9 @@ static int self_test(void) {
     if (!is_c_keyword("static", 6)) return 9;
     if (is_c_keyword("status", 6)) return 10;
     if (!path_is_c_like("codex/src/edgerun_c.c")) return 11;
+    if (path_stem_len("codex/src/edgerun_c.c") != strlen("edgerun_c")) return 12;
+    if (stable_hash_bytes((const unsigned char *)"abc", 3) == stable_hash_bytes((const unsigned char *)"abd", 3)) return 13;
+    if (!should_skip_dir(".build/codex")) return 14;
     puts("self-test ok");
     return 0;
 }

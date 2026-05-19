@@ -28,6 +28,13 @@ summary of turns, tool calls, checkpoints, review-only turns, proposals, and
 verified commit status. Checkpoint summaries are retained for the next prompt
 without replaying the full transcript.
 
+The workspace snapshot also builds a deterministic in-memory summary index for
+text source files. The agent can call `summarize_code` to get file purpose,
+size/hash, includes, visible symbols, and related files by include/stem
+relationship for matching paths or topics before falling back to full
+`read_code` calls. The index is rebuilt when the workspace is reloaded after
+verified commits.
+
 Agent mode reads local Codex auth from `CODEX_HOME/auth.json` or
 `~/.codex/auth.json`, uses `CODEX_TUI_MODEL` when set, and otherwise defaults to
 `gpt-5.5`.
@@ -67,6 +74,7 @@ The built-in agent tools are:
 
 - `project_status`
 - `repo_rules`
+- `summarize_code`
 - `search_code`
 - `read_code`
 - `propose_change`
@@ -99,6 +107,7 @@ loop. The highest-impact next improvements are:
 
 - `help`
 - `stats`
+- `summarize [query] [limit]`
 - `search <text> [limit]`
 - `read <path> [start_line] [max_lines]`
 - `propose <path>` then enter full file content, ending with a line containing only `.end`
