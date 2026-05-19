@@ -269,7 +269,7 @@ static void test_ui_boot_package_loads_from_endpoint_storage(void) {
   installed_app = er_ui_boot_installed_app_for_slot(UI_BOOT_PACKAGE_TEST_APP_INDEX);
   check_int64("ui boot installed app present", installed_app != 0, 1);
   check_int64("ui boot installed app rejects invalid slot",
-              er_ui_boot_installed_app_for_slot(ER_UI_BOOT_APP_COUNT) == 0, 1);
+              er_ui_boot_installed_app_for_slot(ER_UI_BOOT_INSTALLED_APP_COUNT) == 0, 1);
   check_uint64("ui boot installed app len", installed_app->app_len,
                ER_USER_APP_WASM_SIZE);
   check_uint64("ui boot installed manifest len", installed_app->manifest_len,

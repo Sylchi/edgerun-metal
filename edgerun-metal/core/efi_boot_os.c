@@ -35,7 +35,7 @@ void er_run_os_path(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE* SystemTable,
   er_ui_scene_t scene = {0};
   er_ui_runtime_state_t runtime = {0};
   er_ui_ledger_app_state_t ledger_state = {0};
-  ErUiBootAppContext apps[ER_UI_BOOT_APP_COUNT];
+  ErUiBootAppContext apps[ER_UI_BOOT_APP_SLOT_CAPACITY];
   ErVirtioGpu gpu;
   ErVirtioGpuFramebuffer framebuffer;
   ErVirtioGpuDisplayInfo display_info;
@@ -160,7 +160,7 @@ void er_run_os_path(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE* SystemTable,
   render_context.frame_budget = frame_budget;
   render_context.theme = theme;
   render_context.apps = apps;
-  render_context.app_count = ER_UI_BOOT_APP_COUNT;
+  render_context.app_count = ER_UI_BOOT_INSTALLED_APP_COUNT;
   render_context.active_app = 0u;
   render_context.scene = &scene;
 
@@ -182,7 +182,7 @@ void er_run_os_path(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE* SystemTable,
     vr_font_face_destroy(font);
     return;
   }
-  if (er_ui_boot_prepare_app_contexts(apps, ER_UI_BOOT_APP_COUNT, &scene_budget,
+  if (er_ui_boot_prepare_app_contexts(apps, ER_UI_BOOT_INSTALLED_APP_COUNT, &scene_budget,
                                       theme.colors.bg) == 0u) {
     er_println("ui renderer: app contexts failed");
     er_ui_scene_destroy(&scene);
@@ -203,7 +203,7 @@ void er_run_os_path(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE* SystemTable,
   er_gfx_console_set_enabled(0u);
   er_print_set_firmware_console_enabled(0u);
   if (er_exit_boot_services(ImageHandle, SystemTable) == 0u) {
-    er_ui_boot_destroy_app_contexts(apps, ER_UI_BOOT_APP_COUNT);
+    er_ui_boot_destroy_app_contexts(apps, ER_UI_BOOT_INSTALLED_APP_COUNT);
     er_ui_scene_destroy(&scene);
     er_ui_runtime_state_destroy(&runtime);
     er_ui_ledger_app_state_destroy(&ledger_state);
