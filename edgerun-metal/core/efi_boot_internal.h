@@ -20,6 +20,7 @@
 #include "er_render_endpoint.h"
 #include "er_storage_endpoint.h"
 #include "er_ui_surface_renderer.h"
+#include "er_ui_frame_timing.h"
 #include "er_ui_components.h"
 #include "er_ui_ledger_app.h"
 #include "er_ui_metal.h"
@@ -181,6 +182,14 @@ typedef struct {
   UINT64 transit_emitted;
 } ErUiBootNativeRelayStats;
 
+typedef UINT8 (*ErUiBootFrameClockReadFn)(void* user, UINT64* out_ticks);
+
+typedef struct {
+  ErUiBootFrameClockReadFn read;
+  void* user;
+  UINT64 ticks_per_second;
+} ErUiBootFrameClock;
+
 typedef struct {
   vr_font_face_t* font;
   ErUiSurfaceMode mode;
@@ -202,6 +211,8 @@ typedef struct {
   ErRenderEndpointCapture native_relay_last_render_capture;
   ErRenderEndpointScene native_relay_last_render_scene;
   ErStorageEndpointObjectCapture native_relay_last_storage_capture;
+  ErUiBootFrameClock frame_clock;
+  ErUiFrameTiming last_frame_timing;
 } ErUiBootRenderContext;
 
 extern ErWasmHostCalls g_host_calls;
@@ -322,7 +333,7 @@ const ErUiBootAppContext* er_ui_boot_active_app_const(const ErUiBootRenderContex
 UINT8 er_ui_boot_switch_app_for_surface(ErUiBootRenderContext* render, UINT32 surface_id);
 UINT8 er_ui_boot_render_scene(er_ui_scene_t* scene,
                               er_ui_ledger_app_state_t* ledger_state,
-                              const ErUiBootRenderContext* render);
+                              ErUiBootRenderContext* render);
 er_ui_action_t er_ui_boot_action_from_ps2(er_ui_runtime_state_t* runtime,
                                           const er_ui_scene_t* scene,
                                           ErPs2KeyboardAction input);

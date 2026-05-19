@@ -512,6 +512,115 @@ static void test_ui_surface_renderer_4k_tile_plan(void) {
   check_int64("ui surface reject zero dirty budget", er_ui_surface_tile_plan(&surface, 128u, 64u, 0u, &plan), 0);
 }
 
+static void test_ui_frame_timing_4k120_budget(void) {
+  enum {
+    FRAME_TIMING_TEST_TICKS_PER_SECOND = 1000000u,
+    FRAME_TIMING_TEST_BEGIN_TICKS = 1000u,
+    FRAME_TIMING_TEST_SCENE_TICKS = 2000u,
+    FRAME_TIMING_TEST_RASTER_TICKS = 5000u,
+    FRAME_TIMING_TEST_PRESENT_TICKS = 9000u,
+    FRAME_TIMING_TEST_SLOW_PRESENT_TICKS = 10000u,
+    FRAME_TIMING_TEST_TARGET_NS = 8333333u,
+    FRAME_TIMING_TEST_SCENE_NS = 1000000u,
+    FRAME_TIMING_TEST_RASTER_NS = 3000000u,
+    FRAME_TIMING_TEST_PRESENT_NS = 4000000u,
+    FRAME_TIMING_TEST_TOTAL_NS = 8000000u,
+    FRAME_TIMING_TEST_SLOW_TOTAL_NS = 9000000u
+  };
+  ErUiSurfaceMode mode;
+  ErUiFrameTimingConfig config;
+  ErUiFrameTiming timing;
+  ErUiFrameTimingViolation violation;
+
+  mode.width = ER_UI_FRAME_TIMING_TARGET_4K_WIDTH;
+  mode.height = ER_UI_FRAME_TIMING_TARGET_4K_HEIGHT;
+  mode.stride = ER_UI_FRAME_TIMING_TARGET_4K_WIDTH;
+  mode.refresh_hz = ER_UI_FRAME_TIMING_TARGET_120HZ;
+  mode.pixel_format = ER_UI_SURFACE_PIXEL_BGRX;
+
+  check_int64("ui frame timing config",
+              er_ui_frame_timing_config_from_mode(&mode,
+                                                  FRAME_TIMING_TEST_TICKS_PER_SECOND,
+                                                  &config),
+              1);
+  check_uint64("ui frame timing width", config.width, ER_UI_FRAME_TIMING_TARGET_4K_WIDTH);
+  check_uint64("ui frame timing height", config.height, ER_UI_FRAME_TIMING_TARGET_4K_HEIGHT);
+  check_uint64("ui frame timing 4k120 target",
+               er_ui_frame_timing_is_4k120_target(config), 1u);
+  check_int64("ui frame timing begin",
+              er_ui_frame_timing_begin(config,
+                                       FRAME_TIMING_TEST_BEGIN_TICKS,
+                                       &timing),
+              1);
+  check_uint64("ui frame timing target ns", timing.target_frame_ns,
+               FRAME_TIMING_TEST_TARGET_NS);
+  check_int64("ui frame timing scene",
+              er_ui_frame_timing_finish_scene(&timing,
+                                              FRAME_TIMING_TEST_SCENE_TICKS),
+              1);
+  check_int64("ui frame timing raster",
+              er_ui_frame_timing_finish_raster(&timing,
+                                               FRAME_TIMING_TEST_RASTER_TICKS),
+              1);
+  check_int64("ui frame timing present",
+              er_ui_frame_timing_finish_present(&timing,
+                                                FRAME_TIMING_TEST_PRESENT_TICKS),
+              1);
+  check_uint64("ui frame timing scene ns",
+               timing.stage_ns[ER_UI_FRAME_TIMING_STAGE_SCENE],
+               FRAME_TIMING_TEST_SCENE_NS);
+  check_uint64("ui frame timing raster ns",
+               timing.stage_ns[ER_UI_FRAME_TIMING_STAGE_RASTER],
+               FRAME_TIMING_TEST_RASTER_NS);
+  check_uint64("ui frame timing present ns",
+               timing.stage_ns[ER_UI_FRAME_TIMING_STAGE_PRESENT],
+               FRAME_TIMING_TEST_PRESENT_NS);
+  check_uint64("ui frame timing total ns",
+               timing.stage_ns[ER_UI_FRAME_TIMING_STAGE_TOTAL],
+               FRAME_TIMING_TEST_TOTAL_NS);
+  check_uint64("ui frame timing fits", er_ui_frame_timing_fits_budget(&timing), 1u);
+  check_uint64("ui frame timing no violation",
+               er_ui_frame_timing_first_budget_violation(&timing, &violation), 0u);
+
+  check_int64("ui frame timing slow begin",
+              er_ui_frame_timing_begin(config,
+                                       FRAME_TIMING_TEST_BEGIN_TICKS,
+                                       &timing),
+              1);
+  check_int64("ui frame timing slow scene",
+              er_ui_frame_timing_finish_scene(&timing,
+                                              FRAME_TIMING_TEST_SCENE_TICKS),
+              1);
+  check_int64("ui frame timing slow raster",
+              er_ui_frame_timing_finish_raster(&timing,
+                                               FRAME_TIMING_TEST_RASTER_TICKS),
+              1);
+  check_int64("ui frame timing slow present",
+              er_ui_frame_timing_finish_present(&timing,
+                                                FRAME_TIMING_TEST_SLOW_PRESENT_TICKS),
+              1);
+  check_uint64("ui frame timing slow total ns",
+               timing.stage_ns[ER_UI_FRAME_TIMING_STAGE_TOTAL],
+               FRAME_TIMING_TEST_SLOW_TOTAL_NS);
+  check_uint64("ui frame timing over budget",
+               er_ui_frame_timing_first_budget_violation(&timing, &violation), 1u);
+  check_uint64("ui frame timing violation actual",
+               violation.actual_ns, FRAME_TIMING_TEST_SLOW_TOTAL_NS);
+  check_uint64("ui frame timing violation limit",
+               violation.limit_ns, FRAME_TIMING_TEST_TARGET_NS);
+  check_uint64("ui frame timing slow fits", er_ui_frame_timing_fits_budget(&timing), 0u);
+
+  check_int64("ui frame timing reject high clock",
+              er_ui_frame_timing_config_from_mode(&mode,
+                                                  ER_UI_FRAME_TIMING_NS_PER_SECOND + 1u,
+                                                  &config),
+              0);
+  check_int64("ui frame timing reject nonmonotonic scene",
+              er_ui_frame_timing_finish_scene(&timing,
+                                              FRAME_TIMING_TEST_BEGIN_TICKS - 1u),
+              0);
+}
+
 static void test_ui_surface_renderer_varfont_text(void) {
   vr_font_config_t cfg;
   vr_font_face_t* font = 0;
