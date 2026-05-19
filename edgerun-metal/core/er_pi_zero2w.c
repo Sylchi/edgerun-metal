@@ -9,7 +9,20 @@
 enum {
   ER_PI_MAILBOX_TWO_VALUE_BUFFER_BYTES = 8u,
   ER_PI_MAILBOX_MESSAGE_WORDS = 8u,
-  ER_PI_ZERO2W_STORAGE_BLOCK_BYTES = 512u
+  ER_PI_ZERO2W_STORAGE_BLOCK_BYTES = 512u,
+  ER_PI_SDIO_FUNCTION_BITS = 28u,
+  ER_PI_SDIO_RAW_FLAG_BIT = 27u,
+  ER_PI_SDIO_BLOCK_MODE_BIT = 27u,
+  ER_PI_SDIO_INCREMENTING_ADDRESS_BIT = 26u,
+  ER_PI_SDIO_ADDRESS_BITS = 9u,
+  ER_PI_SDIO_RW_FLAG_BIT = 31u,
+  ER_PI_SDIO_FUNCTION_MASK = 0x07u,
+  ER_PI_SDIO_ADDRESS_MASK = 0x0001ffffu,
+  ER_PI_SDIO_CMD53_COUNT_MASK = 0x000001ffu,
+  ER_PI_MMC_RCA_MASK = 0x0000ffffu,
+  ER_PI_MMC_RCA_ARGUMENT_BITS = 16u,
+  ER_PI_ZERO2W_SDIO_OCR_3V3 = 0x00300000u,
+  ER_PI_ZERO2W_SDIO_NO_ARGUMENT = 0u
 };
 
 UINT64 er_pi_zero2w_peripheral_phys(UINT64 offset) {
@@ -76,6 +89,170 @@ UINT8 er_pi_mailbox_two_value_request(UINT32 tag_id,
   out_message->value0 = value0;
   out_message->value1 = value1;
   out_message->end_tag = ER_PI_MAILBOX_TAG_LAST;
+  return 1u;
+}
+
+UINT32 er_pi_sdio_cmd52_argument(UINT8 write,
+                                 UINT8 function,
+                                 UINT8 raw,
+                                 UINT32 address,
+                                 UINT8 data) {
+  UINT32 argument = 0u;
+
+  if (write != 0u) {
+    argument |= 1u << ER_PI_SDIO_RW_FLAG_BIT;
+  }
+  argument |= ((UINT32)function & ER_PI_SDIO_FUNCTION_MASK) <<
+              ER_PI_SDIO_FUNCTION_BITS;
+  if (raw != 0u) {
+    argument |= 1u << ER_PI_SDIO_RAW_FLAG_BIT;
+  }
+  argument |= (address & ER_PI_SDIO_ADDRESS_MASK) << ER_PI_SDIO_ADDRESS_BITS;
+  argument |= (UINT32)data;
+  return argument;
+}
+
+UINT32 er_pi_sdio_cmd53_argument(UINT8 write,
+                                 UINT8 function,
+                                 UINT8 block_mode,
+                                 UINT8 incrementing_address,
+                                 UINT32 address,
+                                 UINT32 count) {
+  UINT32 argument = 0u;
+
+  if (write != 0u) {
+    argument |= 1u << ER_PI_SDIO_RW_FLAG_BIT;
+  }
+  argument |= ((UINT32)function & ER_PI_SDIO_FUNCTION_MASK) <<
+              ER_PI_SDIO_FUNCTION_BITS;
+  if (block_mode != 0u) {
+    argument |= 1u << ER_PI_SDIO_BLOCK_MODE_BIT;
+  }
+  if (incrementing_address != 0u) {
+    argument |= 1u << ER_PI_SDIO_INCREMENTING_ADDRESS_BIT;
+  }
+  argument |= (address & ER_PI_SDIO_ADDRESS_MASK) << ER_PI_SDIO_ADDRESS_BITS;
+  argument |= count & ER_PI_SDIO_CMD53_COUNT_MASK;
+  return argument;
+}
+
+UINT32 er_pi_mmc_relative_card_argument(UINT32 relative_card_address) {
+  return (relative_card_address & ER_PI_MMC_RCA_MASK) <<
+         ER_PI_MMC_RCA_ARGUMENT_BITS;
+}
+
+UINT8 er_pi_mmc_command_prepare(UINT32 command_index,
+                                UINT32 argument,
+                                UINT32 response_kind,
+                                ErPiMmcCommand* out_command) {
+  if (out_command == 0) {
+    return 0u;
+  }
+
+  switch (command_index) {
+    case ER_PI_MMC_CMD_GO_IDLE_STATE:
+      if (response_kind != ER_PI_MMC_RESPONSE_NONE) {
+        return 0u;
+      }
+      break;
+    case ER_PI_MMC_CMD_IO_SEND_OP_COND:
+      if (response_kind != ER_PI_MMC_RESPONSE_R4) {
+        return 0u;
+      }
+      break;
+    case ER_PI_MMC_CMD_SEND_RELATIVE_ADDR:
+      if (response_kind != ER_PI_MMC_RESPONSE_R6) {
+        return 0u;
+      }
+      break;
+    case ER_PI_MMC_CMD_SELECT_CARD:
+      if (response_kind != ER_PI_MMC_RESPONSE_R1) {
+        return 0u;
+      }
+      break;
+    case ER_PI_MMC_CMD_IO_RW_DIRECT:
+    case ER_PI_MMC_CMD_IO_RW_EXTENDED:
+      if (response_kind != ER_PI_MMC_RESPONSE_R5) {
+        return 0u;
+      }
+      break;
+    default:
+      return 0u;
+  }
+
+  out_command->command_index = command_index;
+  out_command->argument = argument;
+  out_command->response_kind = response_kind;
+  return 1u;
+}
+
+static UINT8 er_pi_zero2w_sdio_plan_add(ErPiZero2wSdioBringupPlan* plan,
+                                        UINT32 command_index,
+                                        UINT32 argument,
+                                        UINT32 response_kind) {
+  if (plan == 0 ||
+      plan->command_count >= ER_PI_ZERO2W_SDIO_BRINGUP_COMMAND_CAPACITY ||
+      er_pi_mmc_command_prepare(command_index,
+                                argument,
+                                response_kind,
+                                &plan->commands[plan->command_count]) == 0u) {
+    return 0u;
+  }
+
+  plan->command_count += 1u;
+  return 1u;
+}
+
+UINT8 er_pi_zero2w_sdio_identity_plan(ErPiZero2wSdioBringupPlan* out_plan) {
+  if (out_plan == 0) {
+    return 0u;
+  }
+
+  out_plan->command_count = 0u;
+  if (er_pi_zero2w_sdio_plan_add(out_plan,
+                                 ER_PI_MMC_CMD_GO_IDLE_STATE,
+                                 ER_PI_ZERO2W_SDIO_NO_ARGUMENT,
+                                 ER_PI_MMC_RESPONSE_NONE) == 0u ||
+      er_pi_zero2w_sdio_plan_add(out_plan,
+                                 ER_PI_MMC_CMD_IO_SEND_OP_COND,
+                                 ER_PI_ZERO2W_SDIO_OCR_3V3,
+                                 ER_PI_MMC_RESPONSE_R4) == 0u ||
+      er_pi_zero2w_sdio_plan_add(out_plan,
+                                 ER_PI_MMC_CMD_SEND_RELATIVE_ADDR,
+                                 ER_PI_ZERO2W_SDIO_NO_ARGUMENT,
+                                 ER_PI_MMC_RESPONSE_R6) == 0u) {
+    return 0u;
+  }
+
+  return 1u;
+}
+
+UINT8 er_pi_zero2w_sdio_claim_plan(UINT32 relative_card_address,
+                                   ErPiZero2wSdioBringupPlan* out_plan) {
+  if (out_plan == 0 ||
+      relative_card_address == 0u ||
+      relative_card_address > ER_PI_MMC_RCA_MASK) {
+    return 0u;
+  }
+
+  out_plan->command_count = 0u;
+  if (er_pi_zero2w_sdio_plan_add(
+          out_plan,
+          ER_PI_MMC_CMD_SELECT_CARD,
+          er_pi_mmc_relative_card_argument(relative_card_address),
+          ER_PI_MMC_RESPONSE_R1) == 0u ||
+      er_pi_zero2w_sdio_plan_add(
+          out_plan,
+          ER_PI_MMC_CMD_IO_RW_DIRECT,
+          er_pi_sdio_cmd52_argument(ER_PI_SDIO_CMD52_READ,
+                                    ER_PI_SDIO_FUNCTION_BACKPLANE,
+                                    ER_PI_SDIO_CMD52_NO_RAW,
+                                    0u,
+                                    0u),
+          ER_PI_MMC_RESPONSE_R5) == 0u) {
+    return 0u;
+  }
+
   return 1u;
 }
 
