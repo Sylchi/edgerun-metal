@@ -50,14 +50,60 @@ memory(1);
 export i64 main(void) { return 7; }
 CAPP
 
+cat > "${TMP_DIR}/ui-emit-call.c" <<'CAPP'
+extern i64 ui_emit(i64, i64) __import("edgerun.ui", "emit");
+memory(1);
+export i64 main(void) { return ui_emit(0, 0); }
+CAPP
+
+cat > "${TMP_DIR}/ui-region-base-call.c" <<'CAPP'
+extern i64 ui_emit(i64, i64) __import("edgerun.ui", "emit");
+extern i64 region_base(i64) __import("edgerun.memory", "region_base");
+memory(1);
+export i64 main(void) { return region_base(0); }
+CAPP
+
+cat > "${TMP_DIR}/ui-region-len-call.c" <<'CAPP'
+extern i64 ui_emit(i64, i64) __import("edgerun.ui", "emit");
+extern i64 region_len(i64) __import("edgerun.memory", "region_len");
+memory(1);
+export i64 main(void) { return region_len(0); }
+CAPP
+
+cat > "${TMP_DIR}/bus-exec-call.c" <<'CAPP'
+extern i64 bus_exec(i64, i64) __import("edgerun.bus", "exec");
+memory(1);
+export i64 main(void) { return bus_exec(0, 0); }
+CAPP
+
 compile_twice \
   "${TMP_DIR}/ui-min.c" \
   "${TMP_DIR}/ui-c-a.wasm" \
   "${TMP_DIR}/ui-c-b.wasm"
+compile_twice \
+  "${TMP_DIR}/ui-emit-call.c" \
+  "${TMP_DIR}/ui-emit-call-a.wasm" \
+  "${TMP_DIR}/ui-emit-call-b.wasm"
+compile_twice \
+  "${TMP_DIR}/ui-region-base-call.c" \
+  "${TMP_DIR}/ui-region-base-call-a.wasm" \
+  "${TMP_DIR}/ui-region-base-call-b.wasm"
+compile_twice \
+  "${TMP_DIR}/ui-region-len-call.c" \
+  "${TMP_DIR}/ui-region-len-call-a.wasm" \
+  "${TMP_DIR}/ui-region-len-call-b.wasm"
+compile_twice \
+  "${TMP_DIR}/bus-exec-call.c" \
+  "${TMP_DIR}/bus-exec-call-a.wasm" \
+  "${TMP_DIR}/bus-exec-call-b.wasm"
 
 check_magic "${TMP_DIR}/driver-a.wasm"
 check_magic "${TMP_DIR}/ui-a.wasm"
 check_magic "${TMP_DIR}/ui-c-a.wasm"
+check_magic "${TMP_DIR}/ui-emit-call-a.wasm"
+check_magic "${TMP_DIR}/ui-region-base-call-a.wasm"
+check_magic "${TMP_DIR}/ui-region-len-call-a.wasm"
+check_magic "${TMP_DIR}/bus-exec-call-a.wasm"
 
 expect_reject() {
   local label="$1"
@@ -129,7 +175,7 @@ expect_reject "bad hostcall signature" \
 cat > "${TMP_DIR}/bad-c-subset.c" <<'CAPP'
 extern i64 ui_emit(i64, i64) __import("edgerun.ui", "emit");
 memory(1);
-export i64 main(void) { return ui_emit(0, 0); }
+export i64 main(void) { return ui_emit(0); }
 CAPP
 
 expect_reject "unsupported c expression" \

@@ -34,8 +34,10 @@ Initial C subset:
 ```c
 extern i64 ui_emit(i64, i64) __import("edgerun.ui", "emit");
 memory(1);
-export i64 main(void) { return 7; }
+export i64 main(void) { return ui_emit(0, 0); }
 ```
 
-Unsupported C syntax is fatal. The subset grows only when compiler output,
-runtime validation, and tests are updated together.
+The current expression subset supports integer returns and direct returns from
+admitted i64 hostcalls with integer literal arguments. Unsupported C syntax is
+fatal. The subset grows only when compiler output, runtime validation, and
+tests are updated together.
