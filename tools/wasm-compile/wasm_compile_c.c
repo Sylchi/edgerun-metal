@@ -393,6 +393,43 @@ static int erwc_c_parse_local_decl(ErWcCParser* parser,
   return 0;
 }
 
+static int erwc_c_parse_assignment(ErWcCParser* parser,
+                                   const ErWcModule* module,
+                                   ErWcFunc* func) {
+  char local_name[ERWC_MAX_STRING];
+  uint32_t local_index = 0u;
+
+  if (erwc_c_take_ident(parser, local_name, sizeof(local_name)) != 0 ||
+      erwc_find_local(func, local_name, &local_index) != 0 ||
+      erwc_c_take_literal(parser, "=") != 0 ||
+      erwc_c_parse_expression(parser, module, func) != 0 ||
+      erwc_c_take_literal(parser, ";") != 0 ||
+      erwc_c_emit_local_set(func, local_index) != 0) {
+    return -1;
+  }
+  return 0;
+}
+
+static int erwc_c_parse_main_statement(ErWcCParser* parser,
+                                       const ErWcModule* module,
+                                       ErWcFunc* func,
+                                       uint8_t* out_parsed) {
+  ErWcCParser before_statement = *parser;
+
+  *out_parsed = 0u;
+  if (erwc_c_parse_local_decl(parser, module, func) == 0) {
+    *out_parsed = 1u;
+    return 0;
+  }
+  *parser = before_statement;
+  if (erwc_c_parse_assignment(parser, module, func) == 0) {
+    *out_parsed = 1u;
+    return 0;
+  }
+  *parser = before_statement;
+  return 0;
+}
+
 static int erwc_c_parse_main(ErWcCParser* parser, ErWcModule* module) {
   static const uint8_t no_params[1] = {0u};
   ErWcFunc* func;
@@ -418,9 +455,11 @@ static int erwc_c_parse_main(ErWcCParser* parser, ErWcModule* module) {
   func->function_index = module->import_count + module->func_count;
   func->exported_main = 1u;
   while (1) {
-    ErWcCParser before_decl = *parser;
-    if (erwc_c_parse_local_decl(parser, module, func) != 0) {
-      *parser = before_decl;
+    uint8_t parsed_statement = 0u;
+    if (erwc_c_parse_main_statement(parser, module, func, &parsed_statement) != 0) {
+      return -1;
+    }
+    if (parsed_statement == 0u) {
       break;
     }
   }
