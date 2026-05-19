@@ -153,6 +153,13 @@ typedef struct {
 } ErUiBootInstalledApp;
 
 typedef struct {
+  const ErUiBootInstalledApp* installed_app;
+  ErAdmittedRoute app_route;
+  ErAdmittedRoute manifest_route;
+  ErAppPackageStorageSource storage_source;
+} ErUiBootInstalledPackageSource;
+
+typedef struct {
   ErAppUiPresentation presentation;
   ErUiWasmAppRuntime runtime;
   ErUiBootPackageStorage storage;
@@ -239,6 +246,16 @@ UINT8 er_ui_boot_prepare_route_envelope(const ErAdmittedRoute* route,
                                         ErChannelEnvelopeHeader* out_envelope);
 UINT8 er_ui_boot_execute_wasm_app(ErUiWasmAppRuntime* runtime);
 const ErUiBootInstalledApp* er_ui_boot_installed_app_for_slot(UINT32 app_index);
+UINT8 er_ui_boot_prepare_installed_package_source(const ErUiBootInstalledApp* installed_app,
+                                                  UINT32 app_index,
+                                                  ErUiBootInstalledPackageSource* out_source);
+UINT8 er_ui_boot_load_installed_package_source(const ErUiBootInstalledPackageSource* source,
+                                               UINT8* module_memory,
+                                               UINT32 module_memory_size,
+                                               UINT8* manifest_memory,
+                                               UINT32 manifest_memory_size,
+                                               ErUiBootPackageStorage* storage,
+                                               ErAppLoadedPackage* out_loaded);
 UINT8 er_ui_boot_load_installed_app_package(const ErUiBootInstalledApp* installed_app,
                                             UINT8* module_memory,
                                             UINT32 module_memory_size,
