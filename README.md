@@ -527,6 +527,19 @@ to re-enumerate:
 sudo sh -c 'echo 0000:c3:00.4 > /sys/bus/pci/drivers/xhci_hcd/unbind; sleep 3; echo 0000:c3:00.4 > /sys/bus/pci/drivers/xhci_hcd/bind'
 ```
 
+The Pi Zero W v1.1 open OTA updater is intentionally unauthenticated during
+bring-up. The listener accepts raw L2 `ERUP` frames from boot:
+
+- `BEGIN` declares image length, CRC32, and target SD block.
+- `DATA` carries up to 96 image bytes per frame.
+- `COMMIT` verifies the CRC32, flushes the final block, and marks reboot
+  required.
+
+The default update slot begins at SD block `8192`. The receiver code is linked
+into `kernel.img`; the current hardware boot path still needs the Pi Zero W
+v1.1 SDHOST block writer bound to the receiver before OTA can persist a new
+kernel on the microSD card.
+
 Prepare an interface manually when needed:
 
 ```bash

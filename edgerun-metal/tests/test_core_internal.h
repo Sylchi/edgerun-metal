@@ -34,6 +34,7 @@
 #include "er_native_boot.h"
 #include "er_node_control.h"
 #include "er_pi_zero2w.h"
+#include "er_pi_zero_w_v1_1_ota.h"
 #include "er_pi_usb_control.h"
 #include "er_net_frame.h"
 #include "er_network.h"
