@@ -1,6 +1,7 @@
 CC ?= cc
 CFLAGS ?= -std=c11 -Wall -Wextra -Werror -O2
 LDFLAGS ?=
+LDLIBS ?= -lssl -lcrypto
 
 BUILD_DIR ?= ../.build
 BIN := $(BUILD_DIR)/codex
@@ -13,7 +14,7 @@ all: $(BIN)
 $(BIN): $(SRC) src/edgerun_c.c src/edgerun_c_game.c src/edgerun_c_tls.c src/edgerun_c_transport.c FORCE
 	mkdir -p $(BUILD_DIR)
 	rm -rf $(BIN)
-	$(CC) $(CFLAGS) -o $@ $(SRC) $(LDFLAGS)
+	$(CC) $(CFLAGS) -o $@ $(SRC) $(LDFLAGS) $(LDLIBS)
 
 test: $(BIN)
 	./$(BIN) --self-test
