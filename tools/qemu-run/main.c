@@ -33,7 +33,10 @@ enum {
   ER_QEMU_SWTPM_CTRL_VALUE_ARG = 6,
   ER_QEMU_SWTPM_PID_VALUE_ARG = 8,
   ER_QEMU_SOCKET_WAIT_ATTEMPTS = 50,
-  ER_QEMU_SOCKET_WAIT_NS = 100000000
+  ER_QEMU_SOCKET_WAIT_NS = 100000000,
+  ER_QEMU_TPM_BACKEND_NONE = 0,
+  ER_QEMU_TPM_BACKEND_EMULATOR = 1,
+  ER_QEMU_TPM_BACKEND_PASSTHROUGH = 2
 };
 
 typedef struct {
@@ -50,6 +53,9 @@ typedef struct {
   char* capture;
   char* net_id;
   char* net_mac;
+  char* tpm_backend;
+  char* tpm_device;
+  char* tpm_cancel_path;
   char* tpm_state_dir;
   char* tpm_socket;
   char* tpm_pidfile;
@@ -174,6 +180,9 @@ static void er_qemu_config_destroy(ErQemuConfig* config) {
   er_qemu_free_string(&config->capture);
   er_qemu_free_string(&config->net_id);
   er_qemu_free_string(&config->net_mac);
+  er_qemu_free_string(&config->tpm_backend);
+  er_qemu_free_string(&config->tpm_device);
+  er_qemu_free_string(&config->tpm_cancel_path);
   er_qemu_free_string(&config->tpm_state_dir);
   er_qemu_free_string(&config->tpm_socket);
   er_qemu_free_string(&config->tpm_pidfile);
@@ -193,6 +202,9 @@ static int er_qemu_apply_config(ErQemuConfig* config, const char* key, const cha
   if (strcmp(key, "capture") == 0) return er_qemu_set_string(&config->capture, value);
   if (strcmp(key, "net_id") == 0) return er_qemu_set_string(&config->net_id, value);
   if (strcmp(key, "net_mac") == 0) return er_qemu_set_string(&config->net_mac, value);
+  if (strcmp(key, "tpm_backend") == 0) return er_qemu_set_string(&config->tpm_backend, value);
+  if (strcmp(key, "tpm_device") == 0) return er_qemu_set_string(&config->tpm_device, value);
+  if (strcmp(key, "tpm_cancel_path") == 0) return er_qemu_set_string(&config->tpm_cancel_path, value);
   if (strcmp(key, "tpm_state_dir") == 0) return er_qemu_set_string(&config->tpm_state_dir, value);
   if (strcmp(key, "tpm_socket") == 0) return er_qemu_set_string(&config->tpm_socket, value);
   if (strcmp(key, "tpm_pidfile") == 0) return er_qemu_set_string(&config->tpm_pidfile, value);
@@ -268,6 +280,19 @@ static int er_qemu_file_exists(const char* path) {
   return path != NULL && stat(path, &st) == 0 && S_ISREG(st.st_mode);
 }
 
+static int er_qemu_char_device_accessible(const char* path) {
+  struct stat st;
+  return path != NULL && stat(path, &st) == 0 && S_ISCHR(st.st_mode) &&
+         access(path, R_OK | W_OK) == 0;
+}
+
+static int er_qemu_node_writable(const char* path) {
+  struct stat st;
+  return path != NULL && stat(path, &st) == 0 &&
+         (S_ISREG(st.st_mode) || S_ISCHR(st.st_mode)) &&
+         access(path, W_OK) == 0;
+}
+
 static int er_qemu_dir_exists(const char* path) {
   struct stat st;
   return path != NULL && stat(path, &st) == 0 && S_ISDIR(st.st_mode);
@@ -281,9 +306,12 @@ static int er_qemu_ensure_dir(const char* path) {
   return 0;
 }
 
+static int er_qemu_tpm_backend_mode(const ErQemuConfig* config);
+
 static int er_qemu_validate_config(const ErQemuConfig* config, const char* esp_dir) {
   char boot_path[ER_QEMU_PATH_MAX];
   const char* boot_file;
+  int tpm_backend;
 
   if (er_qemu_string_empty(config->qemu_binary) != 0) {
     fprintf(stderr, "qemu.conf: qemu_binary is required\n");
@@ -322,12 +350,33 @@ static int er_qemu_validate_config(const ErQemuConfig* config, const char* esp_d
     fprintf(stderr, "qemu.conf: net_id and net_mac are required when virtio_net = true\n");
     return 0;
   }
-  if (config->tpm != 0 &&
-      (er_qemu_string_empty(config->tpm_state_dir) != 0 ||
-       er_qemu_string_empty(config->tpm_socket) != 0 ||
-       er_qemu_string_empty(config->tpm_pidfile) != 0)) {
-    fprintf(stderr, "qemu.conf: TPM paths are required when tpm = true\n");
-    return 0;
+  tpm_backend = er_qemu_tpm_backend_mode(config);
+  if (config->tpm != 0) {
+    switch (tpm_backend) {
+      case ER_QEMU_TPM_BACKEND_EMULATOR:
+        if (er_qemu_string_empty(config->tpm_state_dir) != 0 ||
+            er_qemu_string_empty(config->tpm_socket) != 0 ||
+            er_qemu_string_empty(config->tpm_pidfile) != 0) {
+          fprintf(stderr, "qemu.conf: swtpm paths are required when tpm_backend = emulator\n");
+          return 0;
+        }
+        break;
+      case ER_QEMU_TPM_BACKEND_PASSTHROUGH:
+        if (er_qemu_string_empty(config->tpm_device) != 0 ||
+            er_qemu_char_device_accessible(config->tpm_device) == 0) {
+          fprintf(stderr, "qemu.conf: tpm_device must be a readable and writable character device when tpm_backend = passthrough\n");
+          return 0;
+        }
+        if (er_qemu_string_empty(config->tpm_cancel_path) != 0 ||
+            er_qemu_node_writable(config->tpm_cancel_path) == 0) {
+          fprintf(stderr, "qemu.conf: tpm_cancel_path must be a writable regular or character device path when tpm_backend = passthrough\n");
+          return 0;
+        }
+        break;
+      default:
+        fprintf(stderr, "qemu.conf: tpm_backend must be emulator or passthrough\n");
+        return 0;
+    }
   }
   return 1;
 }
@@ -352,6 +401,16 @@ static int er_qemu_prepare_ovmf_vars(const ErQemuConfig* config,
   *remove_after_run = config->ovmf_vars_persist == 0;
   if (config->ovmf_vars_persist != 0 && er_qemu_file_exists(vars_path) != 0) return 1;
   return er_qemu_copy_file(config->ovmf_vars, vars_path);
+}
+
+static int er_qemu_tpm_backend_mode(const ErQemuConfig* config) {
+  const char* backend;
+
+  if (config == NULL || config->tpm == 0) return ER_QEMU_TPM_BACKEND_NONE;
+  backend = er_qemu_string_empty(config->tpm_backend) != 0 ? "emulator" : config->tpm_backend;
+  if (strcmp(backend, "emulator") == 0) return ER_QEMU_TPM_BACKEND_EMULATOR;
+  if (strcmp(backend, "passthrough") == 0) return ER_QEMU_TPM_BACKEND_PASSTHROUGH;
+  return ER_QEMU_TPM_BACKEND_NONE;
 }
 
 static int er_qemu_copy_file(const char* src, const char* dst) {
@@ -623,15 +682,35 @@ static int er_qemu_start_tpm(const ErQemuConfig* config, pid_t* out_pid) {
 }
 
 static int er_qemu_append_tpm_args(const ErQemuConfig* config, ErQemuArgs* args) {
-  char* chardev = er_qemu_format_arg("socket,id=chrtpm,path=%s", config->tpm_socket);
-  if (chardev == NULL ||
-      !er_qemu_args_add(args, "-chardev") || !er_qemu_args_add_owned(args, chardev) ||
-      !er_qemu_args_add(args, "-tpmdev") || !er_qemu_args_add(args, "emulator,id=tpm0,chardev=chrtpm") ||
-      !er_qemu_args_add(args, "-device") || !er_qemu_args_add(args, "tpm-crb,tpmdev=tpm0")) {
-    free(chardev);
-    return 0;
+  char* chardev;
+  char* tpmdev;
+
+  switch (er_qemu_tpm_backend_mode(config)) {
+    case ER_QEMU_TPM_BACKEND_EMULATOR:
+      chardev = er_qemu_format_arg("socket,id=chrtpm,path=%s", config->tpm_socket);
+      if (chardev == NULL ||
+          !er_qemu_args_add(args, "-chardev") || !er_qemu_args_add_owned(args, chardev) ||
+          !er_qemu_args_add(args, "-tpmdev") || !er_qemu_args_add(args, "emulator,id=tpm0,chardev=chrtpm") ||
+          !er_qemu_args_add(args, "-device") || !er_qemu_args_add(args, "tpm-crb,tpmdev=tpm0")) {
+        free(chardev);
+        return 0;
+      }
+      return 1;
+    case ER_QEMU_TPM_BACKEND_PASSTHROUGH:
+      tpmdev = er_qemu_format_arg("passthrough,id=tpm0,path=%s,cancel-path=%s",
+                                  config->tpm_device,
+                                  config->tpm_cancel_path);
+      if (tpmdev == NULL ||
+          !er_qemu_args_add(args, "-tpmdev") || !er_qemu_args_add_owned(args, tpmdev) ||
+          !er_qemu_args_add(args, "-device") || !er_qemu_args_add(args, "tpm-crb,tpmdev=tpm0")) {
+        free(tpmdev);
+        return 0;
+      }
+      return 1;
+    default:
+      fprintf(stderr, "qemu.conf: invalid TPM backend\n");
+      return 0;
   }
-  return 1;
 }
 
 static int er_qemu_usage(const char* program) {
@@ -647,6 +726,7 @@ int main(int argc, char** argv) {
   const char* esp_dir;
   int rc;
   int remove_vars_after_run = 1;
+  int tpm_backend;
   pid_t tpm_pid = 0;
 
   if (argc == ER_QEMU_ARGC) {
@@ -675,7 +755,9 @@ int main(int argc, char** argv) {
     er_qemu_config_destroy(&config);
     return 1;
   }
-  if (config.tpm != 0 && er_qemu_start_tpm(&config, &tpm_pid) == 0) {
+  tpm_backend = er_qemu_tpm_backend_mode(&config);
+  if (config.tpm != 0 && tpm_backend == ER_QEMU_TPM_BACKEND_EMULATOR &&
+      er_qemu_start_tpm(&config, &tpm_pid) == 0) {
     if (remove_vars_after_run != 0) unlink(vars_copy);
     er_qemu_config_destroy(&config);
     return 1;
@@ -692,7 +774,8 @@ int main(int argc, char** argv) {
   g_tpm_child_pid = 0;
   er_qemu_args_destroy(&args);
   if (remove_vars_after_run != 0) unlink(vars_copy);
-  if (config.tpm != 0 && config.tpm_persist_state == 0) {
+  if (config.tpm != 0 && tpm_backend == ER_QEMU_TPM_BACKEND_EMULATOR &&
+      config.tpm_persist_state == 0) {
     unlink(config.tpm_socket);
     unlink(config.tpm_pidfile);
   }
