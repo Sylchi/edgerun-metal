@@ -22,15 +22,11 @@
 #define ER_PI_ZERO_W_V1_1_HEARTBEAT_SECS 10u
 #define ER_PI_ZERO_W_V1_1_NODE_BYTES 32u
 #define ER_PI_ZERO_W_V1_1_HASH_BYTES 32u
-#define ER_PI_ZERO_W_V1_1_SSID_BYTES 19u
-#define ER_PI_ZERO_W_V1_1_WIFI_ADDR_BYTES 29u
 #define ER_PI_ZERO_W_V1_1_NODE_AVAILABLE_BYTES 189u
 #define ER_PI_ZERO_W_V1_1_NODE_HEARTBEAT_BYTES 116u
 #define ER_PI_ZERO_W_V1_1_CRC32_INITIAL 0xffffffffu
 #define ER_PI_ZERO_W_V1_1_CRC32_POLY 0xedb88320u
 #define ER_PI_ZERO_W_V1_1_CRC32_BITS_PER_BYTE 8u
-#define ER_PI_ZERO_W_V1_1_ETH_TYPE_EDGERUN 0x88b5u
-#define ER_PI_ZERO_W_V1_1_WIFI_CHANNEL 6u
 #define ER_PI_ZERO_W_V1_1_BYTE_MASK 0xffu
 #define ER_PI_ZERO_W_V1_1_U16_HIGH_SHIFT 8u
 #define ER_PI_ZERO_W_V1_1_U32_BYTE2_SHIFT 16u
@@ -39,8 +35,6 @@
 #define ER_PI_ZERO_W_V1_1_U64_BYTE5_SHIFT 40u
 #define ER_PI_ZERO_W_V1_1_U64_BYTE6_SHIFT 48u
 #define ER_PI_ZERO_W_V1_1_U64_BYTE7_SHIFT 56u
-#define ER_PI_ZERO_W_V1_1_HEX_HIGH_NIBBLE_SHIFT 4u
-#define ER_PI_ZERO_W_V1_1_HEX_NIBBLE_MASK 0x0fu
 #define ER_PI_ZERO_W_V1_1_BOOT_MS 0u
 #define ER_PI_ZERO_W_V1_1_WIFI_GPIO_DELAY_TICKS 150u
 #define ER_PI_ZERO_W_V1_1_WIFI_POWER_DELAY_TICKS 400000u
@@ -52,6 +46,7 @@
 #define ER_PI_ZERO_W_V1_1_SDIO_PROBE_CMD7_DONE 4u
 #define ER_PI_ZERO_W_V1_1_SDIO_PROBE_CMD52_DONE 5u
 #define ER_PI_ZERO_W_V1_1_SDIO_PROBE_CMD53_DONE 6u
+#define ER_PI_ZERO_W_V1_1_L2_READY 7u
 #define ER_PI_ZERO_W_V1_1_SDIO_PROBE_ERROR 0xffffffffu
 #define ER_PI_ZERO_W_V1_1_LED_STEP_DELAY_TICKS 250000u
 #define ER_PI_ZERO_W_V1_1_EMMC_RESET_POLL_BUDGET 100000u
@@ -723,15 +718,6 @@ static void er_pi_zero_w_v1_1_put_bytes(UINT8** cursor,
   *cursor += len;
 }
 
-static UINT8 er_pi_zero_w_v1_1_hex(UINT8 value) {
-  UINT8 digit = (UINT8)(value & ER_PI_ZERO_W_V1_1_HEX_NIBBLE_MASK);
-
-  if (digit < 10u) {
-    return (UINT8)('0' + digit);
-  }
-  return (UINT8)('a' + (digit - 10u));
-}
-
 static void er_pi_zero_w_v1_1_fill_zero(UINT8* bytes, UINT32 len) {
   UINT32 i;
 
@@ -740,37 +726,11 @@ static void er_pi_zero_w_v1_1_fill_zero(UINT8* bytes, UINT32 len) {
   }
 }
 
-static void er_pi_zero_w_v1_1_wifi_address(UINT8 out_address[ER_PI_ZERO_W_V1_1_WIFI_ADDR_BYTES]) {
-  UINT32 i;
-
-  out_address[0] = 0x02u;
-  out_address[1] = (UINT8)(g_er_pi_zero_w_v1_1_node_id[0] ^
-                           g_er_pi_zero_w_v1_1_node_id[7]);
-  out_address[2] = (UINT8)(g_er_pi_zero_w_v1_1_node_id[1] ^
-                           g_er_pi_zero_w_v1_1_node_id[8]);
-  out_address[3] = (UINT8)(g_er_pi_zero_w_v1_1_node_id[2] ^
-                           g_er_pi_zero_w_v1_1_node_id[9]);
-  out_address[4] = (UINT8)(g_er_pi_zero_w_v1_1_node_id[3] ^
-                           g_er_pi_zero_w_v1_1_node_id[10]);
-  out_address[5] = (UINT8)(g_er_pi_zero_w_v1_1_node_id[4] ^
-                           g_er_pi_zero_w_v1_1_node_id[11]);
-  out_address[6] = (UINT8)((ER_PI_ZERO_W_V1_1_ETH_TYPE_EDGERUN >>
-                            ER_PI_ZERO_W_V1_1_U16_HIGH_SHIFT) &
-                           ER_PI_ZERO_W_V1_1_BYTE_MASK);
-  out_address[7] = (UINT8)(ER_PI_ZERO_W_V1_1_ETH_TYPE_EDGERUN &
-                           ER_PI_ZERO_W_V1_1_BYTE_MASK);
-  out_address[8] = ER_PI_ZERO_W_V1_1_WIFI_CHANNEL;
-  out_address[9] = ER_PI_ZERO_W_V1_1_SSID_BYTES;
-  out_address[10] = (UINT8)'e';
-  out_address[11] = (UINT8)'r';
-  out_address[12] = (UINT8)'-';
-  for (i = 0u; i < 8u; ++i) {
-    out_address[13u + (i * 2u)] =
-        er_pi_zero_w_v1_1_hex((UINT8)(g_er_pi_zero_w_v1_1_node_id[i] >>
-                                      ER_PI_ZERO_W_V1_1_HEX_HIGH_NIBBLE_SHIFT));
-    out_address[14u + (i * 2u)] =
-        er_pi_zero_w_v1_1_hex(g_er_pi_zero_w_v1_1_node_id[i]);
-  }
+static UINT32 er_pi_zero_w_v1_1_wifi_address(
+    UINT8 out_address[ER_PI_ZERO_W_V1_1_L2_ADDRESS_BYTES]) {
+  return er_pi_zero_w_v1_1_l2_address(g_er_pi_zero_w_v1_1_node_id,
+                                      ER_PI_ZERO_W_V1_1_L2_WIFI_CHANNEL,
+                                      out_address);
 }
 
 static UINT32 er_pi_zero_w_v1_1_crc32(const UINT8* bytes, UINT32 len) {
@@ -818,11 +778,12 @@ static void er_pi_zero_w_v1_1_send_erwire(UINT16 kind,
 
 static void er_pi_zero_w_v1_1_send_node_available(void) {
   UINT8 payload[ER_PI_ZERO_W_V1_1_NODE_AVAILABLE_BYTES];
-  UINT8 wifi_address[ER_PI_ZERO_W_V1_1_WIFI_ADDR_BYTES];
+  UINT8 wifi_address[ER_PI_ZERO_W_V1_1_L2_ADDRESS_BYTES];
   UINT8 log_head[ER_PI_ZERO_W_V1_1_HASH_BYTES];
   UINT8* cursor = payload;
+  UINT32 l2_ready;
 
-  er_pi_zero_w_v1_1_wifi_address(wifi_address);
+  l2_ready = er_pi_zero_w_v1_1_wifi_address(wifi_address);
   er_pi_zero_w_v1_1_fill_zero(log_head, ER_PI_ZERO_W_V1_1_HASH_BYTES);
   cursor = log_head;
   er_pi_zero_w_v1_1_put_u32(
@@ -837,6 +798,7 @@ static void er_pi_zero_w_v1_1_send_node_available(void) {
   er_pi_zero_w_v1_1_put_u32(
       &cursor,
       (UINT32)g_er_pi_zero_w_v1_1_sdio_relative_card_address);
+  er_pi_zero_w_v1_1_put_u32(&cursor, l2_ready);
   cursor = payload;
   er_pi_zero_w_v1_1_put_u16(&cursor, ER_PI_ZERO_W_V1_1_WORK_ABI_VERSION);
   er_pi_zero_w_v1_1_put_u16(&cursor, ER_PI_ZERO_W_V1_1_NODE_ROLE_RELAY);
@@ -851,10 +813,10 @@ static void er_pi_zero_w_v1_1_send_node_available(void) {
   er_pi_zero_w_v1_1_put_bytes(&cursor,
                               g_er_pi_zero_w_v1_1_channel_id,
                               ER_PI_ZERO_W_V1_1_HASH_BYTES);
-  er_pi_zero_w_v1_1_put_u16(&cursor, ER_PI_ZERO_W_V1_1_WIFI_ADDR_BYTES);
+  er_pi_zero_w_v1_1_put_u16(&cursor, ER_PI_ZERO_W_V1_1_L2_ADDRESS_BYTES);
   er_pi_zero_w_v1_1_put_bytes(&cursor,
                               wifi_address,
-                              ER_PI_ZERO_W_V1_1_WIFI_ADDR_BYTES);
+                              ER_PI_ZERO_W_V1_1_L2_ADDRESS_BYTES);
   er_pi_zero_w_v1_1_put_u64(&cursor, 1u);
   er_pi_zero_w_v1_1_put_u64(&cursor, ER_PI_ZERO_W_V1_1_BOOT_MS);
   er_pi_zero_w_v1_1_put_u64(&cursor, ER_PI_ZERO_W_V1_1_HEARTBEAT_SECS);
@@ -906,6 +868,7 @@ void er_pi_zero_w_v1_1_main(void) {
   er_pi_zero_w_v1_1_sdio_probe();
   if (g_er_pi_zero_w_v1_1_sdio_probe_state ==
       ER_PI_ZERO_W_V1_1_SDIO_PROBE_CMD53_DONE) {
+    g_er_pi_zero_w_v1_1_sdio_probe_state = ER_PI_ZERO_W_V1_1_L2_READY;
     er_pi_zero_w_v1_1_act_led_status(6u);
   } else {
     er_pi_zero_w_v1_1_act_led_status(10u);
