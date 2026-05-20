@@ -282,6 +282,24 @@ static er_ui_status_t er_ui_ledger_card(er_ui_scene_t* scene, er_ui_bounds_t bou
   return er_ui_component_card_emit(scene, bounds, colors.theme);
 }
 
+static er_ui_status_t er_ui_ledger_card_with_panel_header(
+  er_ui_scene_t* scene,
+  vr_font_face_t* font,
+  er_ui_bounds_t bounds,
+  er_ui_ledger_colors_t colors,
+  const char* title,
+  const char* subtitle,
+  const char* action,
+  uint32_t action_id,
+  er_ui_bounds_t* out_content) {
+  er_ui_status_t status = er_ui_ledger_card(scene, bounds, colors);
+  if (status != ER_UI_OK) return status;
+  er_ui_bounds_t content = er_ui_ledger_card_content_rect(bounds, colors);
+  if (out_content) *out_content = content;
+  er_ui_bounds_t header = er_ui_bounds(content.x, bounds.y + 14.0f, content.w, subtitle ? 54.0f : 38.0f);
+  return er_ui_component_panel_header_emit(scene, font, header, colors.theme, title, subtitle ? subtitle : "", action ? action : "", action_id);
+}
+
 static er_ui_status_t er_ui_ledger_card_with_header(
   er_ui_scene_t* scene,
   vr_font_face_t* font,
@@ -289,11 +307,7 @@ static er_ui_status_t er_ui_ledger_card_with_header(
   er_ui_ledger_colors_t colors,
   const char* title,
   const char* subtitle) {
-  er_ui_status_t status = er_ui_ledger_card(scene, bounds, colors);
-  if (status != ER_UI_OK) return status;
-  er_ui_bounds_t content = er_ui_ledger_card_content_rect(bounds, colors);
-  er_ui_bounds_t header = er_ui_bounds(content.x, bounds.y + 14.0f, content.w, subtitle ? 54.0f : 38.0f);
-  return er_ui_component_panel_header_emit(scene, font, header, colors.theme, title, subtitle ? subtitle : "", 0, 0u);
+  return er_ui_ledger_card_with_panel_header(scene, font, bounds, colors, title, subtitle, 0, 0u, 0);
 }
 
 static er_ui_status_t er_ui_ledger_subtile(
@@ -639,13 +653,14 @@ static er_ui_status_t er_ui_ledger_targets_card(
   vr_font_face_t* font,
   er_ui_bounds_t bounds,
   er_ui_ledger_colors_t colors) {
-  er_ui_status_t status = er_ui_ledger_card(scene, bounds, colors);
-  if (status != ER_UI_OK) return status;
-  er_ui_bounds_t content = er_ui_ledger_card_content_rect(bounds, colors);
+  er_ui_bounds_t content = {0};
   const char* action = bounds.h >= ER_UI_LEDGER_DENSE_CARD_H && bounds.w >= ER_UI_LEDGER_NARROW_CARD_W ? "New Goal" : 0;
-  status = er_ui_component_panel_header_emit(scene, font, er_ui_bounds(content.x, bounds.y + 14.0f, content.w, 54.0f),
-                                             colors.theme, "Savings Targets", "Active milestones for 2024", action,
-                                             ER_UI_LEDGER_GOAL_BUTTON_ID);
+  er_ui_status_t status = er_ui_ledger_card_with_panel_header(scene, font, bounds, colors,
+                                                              "Savings Targets",
+                                                              "Active milestones for 2024",
+                                                              action,
+                                                              ER_UI_LEDGER_GOAL_BUTTON_ID,
+                                                              &content);
   if (status != ER_UI_OK) return status;
   const er_ui_ledger_target_t* row = ER_UI_LEDGER_TARGETS;
   const er_ui_ledger_target_t* end = ER_UI_LEDGER_TARGETS + ER_UI_LEDGER_ARRAY_COUNT(ER_UI_LEDGER_TARGETS);
@@ -709,12 +724,13 @@ static er_ui_status_t er_ui_ledger_transactions_card(
   vr_font_face_t* font,
   er_ui_bounds_t bounds,
   er_ui_ledger_colors_t colors) {
-  er_ui_status_t status = er_ui_ledger_card(scene, bounds, colors);
-  if (status != ER_UI_OK) return status;
-  er_ui_bounds_t content = er_ui_ledger_card_content_rect(bounds, colors);
-  status = er_ui_component_panel_header_emit(scene, font, er_ui_bounds(content.x, bounds.y + 14.0f, content.w, 54.0f),
-                                             colors.theme, "Recent Transactions", "Your latest account activity.",
-                                             "View All", ER_UI_LEDGER_VIEW_TRANSACTIONS_BUTTON_ID);
+  er_ui_bounds_t content = {0};
+  er_ui_status_t status = er_ui_ledger_card_with_panel_header(scene, font, bounds, colors,
+                                                              "Recent Transactions",
+                                                              "Your latest account activity.",
+                                                              "View All",
+                                                              ER_UI_LEDGER_VIEW_TRANSACTIONS_BUTTON_ID,
+                                                              &content);
   if (status != ER_UI_OK) return status;
   float y = bounds.y + 76.0f;
   const er_ui_ledger_transaction_t* row = ER_UI_LEDGER_TRANSACTIONS;
