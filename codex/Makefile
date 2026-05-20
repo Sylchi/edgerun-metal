@@ -10,7 +10,7 @@ SRC := src/edgerun_c_agent.c
 
 all: $(BIN)
 
-$(BIN): $(SRC) src/edgerun_c.c src/edgerun_c_game.c FORCE
+$(BIN): $(SRC) src/edgerun_c.c src/edgerun_c_game.c src/edgerun_c_transport.c FORCE
 	mkdir -p $(BUILD_DIR)
 	rm -rf $(BIN)
 	$(CC) $(CFLAGS) -o $@ $(SRC) $(LDFLAGS)

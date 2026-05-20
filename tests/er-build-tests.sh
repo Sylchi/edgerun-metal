@@ -32,17 +32,17 @@ case "$swarm_plan" in
 esac
 
 case "$swarm_plan" in
-  *"+ repo-inspect analyze --details <in-memory VFS> | <in-memory file task queue>"* ) ;;
+  *"+ repo-inspect analyze --details <in-memory VFS> | <filtered actionable file task queue>"* ) ;;
   * ) printf 'missing swarm repo-inspect queue step\n' >&2; exit 1 ;;
 esac
 
 case "$swarm_plan" in
-  *"+ .build/codex --memory-only --quiet-agent --root . --prompt <one file per worker, streamed diffs, 50 concurrent>"* ) ;;
+  *"+ .build/codex --memory-only --quiet-agent --minimal-agent --only-file FILE --root . --prompt <one focused file, streamed diffs, 50 concurrent>"* ) ;;
   * ) printf 'missing swarm bounded worker step\n' >&2; exit 1 ;;
 esac
 
 case "$swarm_limit_plan" in
-  *"+ .build/codex --memory-only --quiet-agent --root . --prompt <one file per worker, streamed diffs, 10 concurrent, 10 limit>"* ) ;;
+  *"+ .build/codex --memory-only --quiet-agent --minimal-agent --only-file FILE --root . --prompt <one focused file, streamed diffs, 10 concurrent, 10 limit>"* ) ;;
   * ) printf 'missing swarm worker limit step\n' >&2; exit 1 ;;
 esac
 

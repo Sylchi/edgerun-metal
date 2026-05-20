@@ -424,17 +424,22 @@ static void test_tpm_crb_direct_transport(void) {
   ErTpm2Info info;
   ErTpmCrbTransport transport;
   ErTpmP256Primary primary;
+  ErTpmAlgorithmProfile algorithms;
+  ErTpmCommandProfile commands;
   ErTpmNvLimits limits;
   UINT8 command[128];
   UINT8 response[256];
   UINT8 random[32];
   UINT8 digest[32];
   UINT8 signature[64];
+  UINT32 cipher_len = 0u;
+  UINT32 iv_len = 0u;
   UINT32 command_len = 0u;
   UINT32 response_len = 0u;
   UINT32 random_len = 0u;
   UINT32 response_body_len;
   UINT32 offset;
+  UINT16 selected_mode = 0u;
 
   er_mem_zero(tpm2, (UINTN)sizeof(tpm2));
   er_mem_zero(crb, (UINTN)sizeof(crb));
@@ -529,6 +534,159 @@ static void test_tpm_crb_direct_transport(void) {
   check_uint64("tpm random byte0", random[0], 0xaau);
   check_uint64("tpm random byte3", random[3], 0xddu);
 
+  check_int64("tpm hash command",
+              er_tpm_build_hash_sha256_command(random, 4u, ER_TPM_RH_NULL,
+                                               command, (UINT32)sizeof(command),
+                                               &command_len),
+              1);
+  check_uint64("tpm hash command len", command_len, 22u);
+  check_uint64("tpm hash command code", command[9], 0x7du);
+  check_uint64("tpm hash data len", command[11], 4u);
+  check_uint64("tpm hash data byte0", command[12], random[0]);
+  check_uint64("tpm hash algorithm", command[17], ER_TPM_ALG_SHA256);
+  check_uint64("tpm hash hierarchy lo", command[21], 0x07u);
+  check_int64("tpm hash rejects oversized command",
+              er_tpm_build_hash_sha256_command(random, 0xffffu, ER_TPM_RH_NULL,
+                                               command, (UINT32)sizeof(command),
+                                               &command_len),
+              0);
+
+  er_mem_zero(response_buffer, (UINTN)sizeof(response_buffer));
+  response_buffer[0] = 0x80u;
+  response_buffer[1] = 0x01u;
+  test_put_be32(response_buffer + 2u, 44u);
+  test_put_be32(response_buffer + 6u, ER_TPM_RC_SUCCESS);
+  test_put_be16(response_buffer + 10u, ER_TPM_SHA256_DIGEST_LEN);
+  test_fill_bytes(response_buffer + 12u, ER_TPM_SHA256_DIGEST_LEN, 0x22u);
+  check_int64("tpm parse hash digest",
+              er_tpm_parse_sha256_digest_response(response_buffer, 44u, digest),
+              1);
+  check_uint64("tpm hash digest byte0", digest[0], 0x22u);
+  check_uint64("tpm hash digest byte31", digest[31], 0x41u);
+
+  check_int64("tpm get alg capability command",
+              er_tpm_build_get_capability_command(ER_TPM_CAP_ALGS,
+                                                  ER_TPM_ALG_SHA256, 11u,
+                                                  command, (UINT32)sizeof(command),
+                                                  &command_len),
+              1);
+  check_uint64("tpm get alg capability len", command_len, 22u);
+  check_uint64("tpm get alg capability code", command[9], 0x7au);
+  check_uint64("tpm get alg capability cap", command[13], ER_TPM_CAP_ALGS);
+
+  er_mem_zero(response_buffer, (UINTN)sizeof(response_buffer));
+  response_buffer[0] = 0x80u;
+  response_buffer[1] = 0x01u;
+  test_put_be32(response_buffer + 2u, 85u);
+  test_put_be32(response_buffer + 6u, ER_TPM_RC_SUCCESS);
+  response_buffer[10] = 0u;
+  test_put_be32(response_buffer + 11u, ER_TPM_CAP_ALGS);
+  test_put_be32(response_buffer + 15u, 11u);
+  offset = 19u;
+  test_put_be16(response_buffer + offset, ER_TPM_ALG_SHA256);
+  offset += 6u;
+  test_put_be16(response_buffer + offset, ER_TPM_ALG_HMAC);
+  offset += 6u;
+  test_put_be16(response_buffer + offset, ER_TPM_ALG_KEYEDHASH);
+  offset += 6u;
+  test_put_be16(response_buffer + offset, ER_TPM_ALG_ECC);
+  offset += 6u;
+  test_put_be16(response_buffer + offset, ER_TPM_ALG_ECDH);
+  offset += 6u;
+  test_put_be16(response_buffer + offset, ER_TPM_ALG_ECDSA);
+  offset += 6u;
+  test_put_be16(response_buffer + offset, ER_TPM_ALG_AES);
+  offset += 6u;
+  test_put_be16(response_buffer + offset, ER_TPM_ALG_SYMCIPHER);
+  offset += 6u;
+  test_put_be16(response_buffer + offset, ER_TPM_ALG_CTR);
+  offset += 6u;
+  test_put_be16(response_buffer + offset, ER_TPM_ALG_CBC);
+  offset += 6u;
+  test_put_be16(response_buffer + offset, ER_TPM_ALG_CFB);
+  check_int64("tpm parse algorithm profile",
+              er_tpm_parse_algorithm_profile_response(response_buffer, 85u,
+                                                      &algorithms),
+              1);
+  check_uint64("tpm profile sha256", algorithms.has_sha256, 1u);
+  check_uint64("tpm profile hmac", algorithms.has_hmac, 1u);
+  check_uint64("tpm profile keyedhash", algorithms.has_keyedhash, 1u);
+  check_uint64("tpm profile ecdh", algorithms.has_ecdh, 1u);
+  check_uint64("tpm profile symcipher", algorithms.has_symcipher, 1u);
+  check_uint64("tpm profile ctr", algorithms.has_ctr, 1u);
+  check_uint64("tpm profile cbc", algorithms.has_cbc, 1u);
+  check_uint64("tpm profile cfb", algorithms.has_cfb, 1u);
+  check_int64("tpm select record mode",
+              er_tpm_select_record_cipher_mode(&algorithms, &selected_mode), 1);
+  check_uint64("tpm selected record mode", selected_mode, ER_TPM_ALG_CTR);
+
+  check_int64("tpm get command capability command",
+              er_tpm_build_get_capability_command(ER_TPM_CAP_COMMANDS,
+                                                  ER_TPM_CC_CREATE_PRIMARY, 9u,
+                                                  command, (UINT32)sizeof(command),
+                                                  &command_len),
+              1);
+  check_uint64("tpm get command capability len", command_len, 22u);
+  check_uint64("tpm get command capability cap", command[13], ER_TPM_CAP_COMMANDS);
+
+  er_mem_zero(response_buffer, (UINTN)sizeof(response_buffer));
+  response_buffer[0] = 0x80u;
+  response_buffer[1] = 0x01u;
+  test_put_be32(response_buffer + 2u, 55u);
+  test_put_be32(response_buffer + 6u, ER_TPM_RC_SUCCESS);
+  response_buffer[10] = 0u;
+  test_put_be32(response_buffer + 11u, ER_TPM_CAP_COMMANDS);
+  test_put_be32(response_buffer + 15u, 9u);
+  offset = 19u;
+  test_put_be32(response_buffer + offset, ER_TPM_CC_CREATE_PRIMARY);
+  offset += 4u;
+  test_put_be32(response_buffer + offset, ER_TPM_CC_ECDH_ZGEN);
+  offset += 4u;
+  test_put_be32(response_buffer + offset, ER_TPM_CC_ENCRYPT_DECRYPT2);
+  offset += 4u;
+  test_put_be32(response_buffer + offset, ER_TPM_CC_GET_RANDOM);
+  offset += 4u;
+  test_put_be32(response_buffer + offset, ER_TPM_CC_HASH);
+  offset += 4u;
+  test_put_be32(response_buffer + offset, ER_TPM_CC_HMAC);
+  offset += 4u;
+  test_put_be32(response_buffer + offset, ER_TPM_CC_LOAD_EXTERNAL);
+  offset += 4u;
+  test_put_be32(response_buffer + offset, ER_TPM_CC_SIGN);
+  offset += 4u;
+  test_put_be32(response_buffer + offset, ER_TPM_CC_VERIFY_SIGNATURE);
+  check_int64("tpm parse command profile",
+              er_tpm_parse_command_profile_response(response_buffer, 55u,
+                                                    &commands),
+              1);
+  check_uint64("tpm command profile create primary", commands.has_create_primary, 1u);
+  check_uint64("tpm command profile encrypt decrypt2", commands.has_encrypt_decrypt2, 1u);
+  check_uint64("tpm command profile verify", commands.has_verify_signature, 1u);
+
+  check_int64("tpm tls profile supported",
+              er_tpm_tls_compat_profile_supported(&info, &algorithms, &commands), 1);
+  algorithms.has_ctr = 0u;
+  algorithms.has_cbc = 0u;
+  algorithms.has_cfb = 0u;
+  selected_mode = ER_TPM_ALG_CTR;
+  check_int64("tpm select record mode rejects none",
+              er_tpm_select_record_cipher_mode(&algorithms, &selected_mode), 0);
+  check_uint64("tpm rejected record mode cleared", selected_mode, ER_TPM_ALG_NULL);
+  check_int64("tpm tls profile rejects missing record mode",
+              er_tpm_tls_compat_profile_supported(&info, &algorithms, &commands), 0);
+  algorithms.has_ctr = 1u;
+  algorithms.has_symcipher = 0u;
+  check_int64("tpm tls profile rejects missing symcipher",
+              er_tpm_tls_compat_profile_supported(&info, &algorithms, &commands), 0);
+  algorithms.has_symcipher = 1u;
+  algorithms.has_keyedhash = 0u;
+  check_int64("tpm tls profile rejects missing keyedhash",
+              er_tpm_tls_compat_profile_supported(&info, &algorithms, &commands), 0);
+  algorithms.has_keyedhash = 1u;
+  commands.has_encrypt_decrypt2 = 0u;
+  check_int64("tpm tls profile rejects missing record command",
+              er_tpm_tls_compat_profile_supported(&info, &algorithms, &commands), 0);
+
   check_int64("tpm get capability command",
               er_tpm_build_get_capability_command(ER_TPM_CAP_TPM_PROPERTIES,
                                                   ER_TPM_PT_NV_INDEX_MAX, 2u,
@@ -570,6 +728,14 @@ static void test_tpm_crb_direct_transport(void) {
   check_uint64("tpm create primary auth bytes", command[17], 9u);
   check_uint64("tpm create primary ecc type", command[35], 0x00u);
   check_uint64("tpm create primary ecc type lo", command[36], 0x23u);
+
+  check_int64("tpm create primary ecdh command",
+              er_tpm_build_create_primary_p256_ecdh_command(
+                  command, (UINT32)sizeof(command), &command_len),
+              1);
+  check_uint64("tpm create primary ecdh len", command_len, 65u);
+  check_uint64("tpm create primary ecdh decrypt attr", command[40], 0x02u);
+  check_uint64("tpm create primary ecdh scheme", command[48], ER_TPM_ALG_ECDH);
 
   er_mem_zero(response_buffer, (UINTN)sizeof(response_buffer));
   response_buffer[0] = 0x80u;
@@ -614,6 +780,93 @@ static void test_tpm_crb_direct_transport(void) {
   check_uint64("tpm primary public x0", primary.public_key[0], 0x71u);
   check_uint64("tpm primary public y0", primary.public_key[32], 0x91u);
 
+  check_int64("tpm load external p256 verify command",
+              er_tpm_build_load_external_p256_verify_key_command(
+                  primary.public_key, command, (UINT32)sizeof(command), &command_len),
+              1);
+  check_uint64("tpm load external p256 len", command_len, 106u);
+  check_uint64("tpm load external command code", command[9], 0x67u);
+  check_uint64("tpm load external public size", command[13], 88u);
+  check_uint64("tpm load external ecc type", command[15], ER_TPM_ALG_ECC);
+  check_uint64("tpm load external scheme", command[27], ER_TPM_ALG_ECDSA);
+  check_uint64("tpm load external x size", command[35], 32u);
+  check_uint64("tpm load external x byte0", command[36], primary.public_key[0]);
+  check_uint64("tpm load external y byte0", command[70], primary.public_key[32]);
+  check_uint64("tpm load external hierarchy lo", command[105], 0x07u);
+
+  test_fill_bytes(digest, ER_TPM_SHA256_DIGEST_LEN, 0xc0u);
+  check_int64("tpm load external hmac key command",
+              er_tpm_build_load_external_hmac_sha256_key_command(
+                  digest, ER_TPM_SHA256_DIGEST_LEN,
+                  command, (UINT32)sizeof(command), &command_len),
+              1);
+  check_uint64("tpm load external hmac len", command_len, 74u);
+  check_uint64("tpm load external hmac command code", command[9], 0x67u);
+  check_uint64("tpm load external hmac sensitive size", command[11], 40u);
+  check_uint64("tpm load external hmac sensitive type", command[13],
+               ER_TPM_ALG_KEYEDHASH);
+  check_uint64("tpm load external hmac key size", command[19],
+               ER_TPM_SHA256_DIGEST_LEN);
+  check_uint64("tpm load external hmac key byte0", command[20], digest[0]);
+  check_uint64("tpm load external hmac public size", command[53], 16u);
+  check_uint64("tpm load external hmac public type", command[55],
+               ER_TPM_ALG_KEYEDHASH);
+  check_uint64("tpm load external hmac public attrs", command[61], 0x40u);
+  check_uint64("tpm load external hmac scheme", command[65], ER_TPM_ALG_HMAC);
+  check_uint64("tpm load external hmac hash", command[67], ER_TPM_ALG_SHA256);
+  check_uint64("tpm load external hmac hierarchy lo", command[73], 0x07u);
+  check_int64("tpm load external hmac rejects oversized key",
+              er_tpm_build_load_external_hmac_sha256_key_command(
+                  digest, 0xfff8u, command, (UINT32)sizeof(command), &command_len),
+              0);
+
+  test_fill_bytes(signature, ER_TPM_AES_128_KEY_LEN, 0xd0u);
+  check_int64("tpm load external aes key command",
+              er_tpm_build_load_external_aes_key_command(
+                  signature, ER_TPM_AES_128_KEY_LEN,
+                  ER_TPM_AES_128_KEY_BITS, ER_TPM_ALG_CTR,
+                  command, (UINT32)sizeof(command), &command_len),
+              1);
+  check_uint64("tpm load external aes len", command_len, 60u);
+  check_uint64("tpm load external aes sensitive size", command[11], 24u);
+  check_uint64("tpm load external aes sensitive type", command[13],
+               ER_TPM_ALG_SYMCIPHER);
+  check_uint64("tpm load external aes key size", command[19],
+               ER_TPM_AES_128_KEY_LEN);
+  check_uint64("tpm load external aes key byte0", command[20], signature[0]);
+  check_uint64("tpm load external aes public size", command[37], 18u);
+  check_uint64("tpm load external aes public type", command[39],
+               ER_TPM_ALG_SYMCIPHER);
+  check_uint64("tpm load external aes public attrs", command[45], 0x40u);
+  check_uint64("tpm load external aes algorithm", command[49], ER_TPM_ALG_AES);
+  check_uint64("tpm load external aes key bits", command[51],
+               ER_TPM_AES_128_KEY_BITS);
+  check_uint64("tpm load external aes mode", command[53], ER_TPM_ALG_CTR);
+  check_uint64("tpm load external aes hierarchy lo", command[59], 0x07u);
+  check_int64("tpm load external aes rejects mismatched key bits",
+              er_tpm_build_load_external_aes_key_command(
+                  signature, ER_TPM_AES_128_KEY_LEN,
+                  ER_TPM_AES_256_KEY_BITS, ER_TPM_ALG_CTR,
+                  command, (UINT32)sizeof(command), &command_len),
+              0);
+  check_int64("tpm load external aes rejects unknown mode",
+              er_tpm_build_load_external_aes_key_command(
+                  signature, ER_TPM_AES_128_KEY_LEN,
+                  ER_TPM_AES_128_KEY_BITS, ER_TPM_ALG_KEYEDHASH,
+                  command, (UINT32)sizeof(command), &command_len),
+              0);
+
+  er_mem_zero(response_buffer, (UINTN)sizeof(response_buffer));
+  response_buffer[0] = 0x80u;
+  response_buffer[1] = 0x01u;
+  test_put_be32(response_buffer + 2u, 14u);
+  test_put_be32(response_buffer + 6u, ER_TPM_RC_SUCCESS);
+  test_put_be32(response_buffer + 10u, 0x80000004u);
+  check_int64("tpm parse handle",
+              er_tpm_parse_handle_response(response_buffer, 14u, &primary.handle),
+              1);
+  check_uint64("tpm parsed handle", primary.handle, 0x80000004u);
+
   check_int64("tpm read public command",
               er_tpm_build_read_public_command(0x81000001u, command,
                                                (UINT32)sizeof(command),
@@ -630,6 +883,151 @@ static void test_tpm_crb_direct_transport(void) {
   check_uint64("tpm sign command len", command_len, 73u);
   check_uint64("tpm sign tag sessions", command[1], 0x02u);
   check_uint64("tpm sign digest byte0", command[29], digest[0]);
+
+  test_fill_bytes(signature, (UINTN)sizeof(signature), 0x24u);
+  check_int64("tpm verify p256 command",
+              er_tpm_build_verify_p256_sha256_command(0x80000004u, digest, signature,
+                                                      command, (UINT32)sizeof(command),
+                                                      &command_len),
+              1);
+  check_uint64("tpm verify p256 len", command_len, 120u);
+  check_uint64("tpm verify p256 command code", command[9], 0x77u);
+  check_uint64("tpm verify p256 digest len", command[15], 32u);
+  check_uint64("tpm verify p256 digest byte0", command[16], digest[0]);
+  check_uint64("tpm verify p256 scheme", command[49], ER_TPM_ALG_ECDSA);
+  check_uint64("tpm verify p256 r size", command[53], 32u);
+  check_uint64("tpm verify p256 r byte0", command[54], signature[0]);
+  check_uint64("tpm verify p256 s byte0", command[88], signature[32]);
+
+  er_mem_zero(response_buffer, (UINTN)sizeof(response_buffer));
+  response_buffer[0] = 0x80u;
+  response_buffer[1] = 0x01u;
+  test_put_be32(response_buffer + 2u, 18u);
+  test_put_be32(response_buffer + 6u, ER_TPM_RC_SUCCESS);
+  test_put_be16(response_buffer + 10u, ER_TPM_ST_HASHCHECK);
+  test_put_be32(response_buffer + 12u, ER_TPM_RH_NULL);
+  test_put_be16(response_buffer + 16u, 0u);
+  check_int64("tpm parse verify ticket",
+              er_tpm_parse_verify_ticket_response(response_buffer, 18u),
+              1);
+
+  test_fill_bytes(signature, ER_TPM_AES_BLOCK_LEN, 0x90u);
+  check_int64("tpm encrypt decrypt2 command",
+              er_tpm_build_encrypt_decrypt2_command(0x80000005u, 0u, ER_TPM_ALG_CTR,
+                                                    signature, ER_TPM_AES_BLOCK_LEN,
+                                                    random, ER_TPM_AES_BLOCK_LEN,
+                                                    command, (UINT32)sizeof(command),
+                                                    &command_len),
+              1);
+  check_uint64("tpm encrypt decrypt2 len", command_len, 66u);
+  check_uint64("tpm encrypt decrypt2 command code", command[9], 0x93u);
+  check_uint64("tpm encrypt decrypt2 auth size", command[17], 9u);
+  check_uint64("tpm encrypt decrypt2 decrypt flag", command[27], 0u);
+  check_uint64("tpm encrypt decrypt2 mode", command[29], ER_TPM_ALG_CTR);
+  check_uint64("tpm encrypt decrypt2 iv size", command[31], ER_TPM_AES_BLOCK_LEN);
+  check_uint64("tpm encrypt decrypt2 iv byte0", command[32], signature[0]);
+  check_uint64("tpm encrypt decrypt2 input size", command[49], ER_TPM_AES_BLOCK_LEN);
+  check_uint64("tpm encrypt decrypt2 input byte0", command[50], random[0]);
+  check_int64("tpm encrypt decrypt2 rejects oversized command",
+              er_tpm_build_encrypt_decrypt2_command(
+                  0x80000005u, 0u, ER_TPM_ALG_CTR,
+                  signature, 0xffffu,
+                  random, ER_TPM_AES_BLOCK_LEN,
+                  command, (UINT32)sizeof(command), &command_len),
+              0);
+  check_int64("tpm encrypt decrypt2 rejects unknown mode",
+              er_tpm_build_encrypt_decrypt2_command(
+                  0x80000005u, 0u, ER_TPM_ALG_KEYEDHASH,
+                  signature, ER_TPM_AES_BLOCK_LEN,
+                  random, ER_TPM_AES_BLOCK_LEN,
+                  command, (UINT32)sizeof(command), &command_len),
+              0);
+
+  er_mem_zero(response_buffer, (UINTN)sizeof(response_buffer));
+  response_buffer[0] = 0x80u;
+  response_buffer[1] = 0x02u;
+  test_put_be32(response_buffer + 2u, 50u);
+  test_put_be32(response_buffer + 6u, ER_TPM_RC_SUCCESS);
+  test_put_be32(response_buffer + 10u, 36u);
+  test_put_be16(response_buffer + 14u, ER_TPM_AES_BLOCK_LEN);
+  test_fill_bytes(response_buffer + 16u, ER_TPM_AES_BLOCK_LEN, 0xa0u);
+  test_put_be16(response_buffer + 32u, ER_TPM_AES_BLOCK_LEN);
+  test_fill_bytes(response_buffer + 34u, ER_TPM_AES_BLOCK_LEN, 0xb0u);
+  check_int64("tpm parse encrypt decrypt2",
+              er_tpm_parse_encrypt_decrypt2_response(response_buffer, 50u,
+                                                     random, (UINT32)sizeof(random),
+                                                     &cipher_len,
+                                                     signature, (UINT32)sizeof(signature),
+                                                     &iv_len),
+              1);
+  check_uint64("tpm encrypt decrypt2 data len", cipher_len, ER_TPM_AES_BLOCK_LEN);
+  check_uint64("tpm encrypt decrypt2 data byte0", random[0], 0xa0u);
+  check_uint64("tpm encrypt decrypt2 iv len", iv_len, ER_TPM_AES_BLOCK_LEN);
+  check_uint64("tpm encrypt decrypt2 iv byte0 parsed", signature[0], 0xb0u);
+
+  check_int64("tpm hmac command",
+              er_tpm_build_hmac_sha256_command(0x81000002u, random, 4u,
+                                               command, (UINT32)sizeof(command),
+                                               &command_len),
+              1);
+  check_uint64("tpm hmac command len", command_len, 35u);
+  check_uint64("tpm hmac command code", command[9], 0x55u);
+  check_uint64("tpm hmac auth size", command[17], 9u);
+  check_uint64("tpm hmac data len", command[28], 4u);
+  check_uint64("tpm hmac data byte0", command[29], random[0]);
+  check_uint64("tpm hmac algorithm", command[34], ER_TPM_ALG_SHA256);
+  check_int64("tpm hmac rejects oversized command",
+              er_tpm_build_hmac_sha256_command(0x81000002u, random, 0xffffu,
+                                               command, (UINT32)sizeof(command),
+                                               &command_len),
+              0);
+
+  er_mem_zero(response_buffer, (UINTN)sizeof(response_buffer));
+  response_buffer[0] = 0x80u;
+  response_buffer[1] = 0x02u;
+  test_put_be32(response_buffer + 2u, 57u);
+  test_put_be32(response_buffer + 6u, ER_TPM_RC_SUCCESS);
+  test_put_be32(response_buffer + 10u, 34u);
+  test_put_be16(response_buffer + 14u, ER_TPM_SHA256_DIGEST_LEN);
+  test_fill_bytes(response_buffer + 16u, ER_TPM_SHA256_DIGEST_LEN, 0x33u);
+  response_buffer[48] = 0x40u;
+  response_buffer[49] = 0x00u;
+  response_buffer[50] = 0x00u;
+  response_buffer[51] = 0x09u;
+  check_int64("tpm parse session digest",
+              er_tpm_parse_sha256_digest_response(response_buffer, 57u, digest),
+              1);
+  check_uint64("tpm session digest byte0", digest[0], 0x33u);
+  check_uint64("tpm session digest byte31", digest[31], 0x52u);
+
+  test_fill_bytes(primary.public_key, ER_TPM_P256_PUBLIC_KEY_LEN, 0x81u);
+  check_int64("tpm ecdh zgen command",
+              er_tpm_build_ecdh_zgen_p256_command(0x81000003u, primary.public_key,
+                                                  command, (UINT32)sizeof(command),
+                                                  &command_len),
+              1);
+  check_uint64("tpm ecdh zgen command len", command_len, 97u);
+  check_uint64("tpm ecdh zgen command code", command[9], 0x54u);
+  check_uint64("tpm ecdh zgen point size", command[28], 68u);
+  check_uint64("tpm ecdh zgen x size", command[30], 32u);
+  check_uint64("tpm ecdh zgen x byte0", command[31], primary.public_key[0]);
+
+  er_mem_zero(response_buffer, (UINTN)sizeof(response_buffer));
+  response_buffer[0] = 0x80u;
+  response_buffer[1] = 0x01u;
+  test_put_be32(response_buffer + 2u, 80u);
+  test_put_be32(response_buffer + 6u, ER_TPM_RC_SUCCESS);
+  test_put_be16(response_buffer + 10u, 68u);
+  test_put_be16(response_buffer + 12u, 32u);
+  test_fill_bytes(response_buffer + 14u, 32u, 0x44u);
+  test_put_be16(response_buffer + 46u, 32u);
+  test_fill_bytes(response_buffer + 48u, 32u, 0x64u);
+  check_int64("tpm parse p256 point",
+              er_tpm_parse_p256_point_response(response_buffer, 80u,
+                                               primary.public_key),
+              1);
+  check_uint64("tpm p256 point x0", primary.public_key[0], 0x44u);
+  check_uint64("tpm p256 point y0", primary.public_key[32], 0x64u);
 
   response_body_len = 4u + 2u + 31u + 2u + 32u;
   response_buffer[0] = 0x80u;
