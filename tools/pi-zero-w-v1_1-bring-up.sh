@@ -11,6 +11,10 @@ ROOT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 BOOT_DIR="${ROOT_DIR}/.build/edgerun-metal/pi-zero-w-v1_1/boot"
 MANIFEST="${BOOT_DIR}/EDGERUN-PI-ZERO-W-V1_1-BOOT.txt"
 DEFAULT_LOG="${ROOT_DIR}/.build/pi-zero-w-v1_1/serial.bin"
+USB_BOOT_TOOL="${PI_USB_BOOT_TOOL:-${ROOT_DIR}/.build/pi-usb-boot}"
+LSUSB_FILE="${PI_USB_BOOT_LSUSB_FILE:-}"
+USB_RESET_DEVICE="${PI_USB_RESET_DEVICE:-0000:c3:00.4}"
+USB_RESET_CMD="${PI_USB_RESET_CMD:-}"
 SERIAL_DEVICE="${PI_SERIAL_DEVICE:-}"
 USB_DEVICE="${PI_USB_DEVICE:-}"
 SERIAL_LOG="$DEFAULT_LOG"
@@ -18,6 +22,7 @@ CAPTURE_SECONDS="${PI_CAPTURE_SECONDS:-20}"
 SKIP_USB=0
 VERIFY_ONLY=0
 DRY_RUN=0
+USB_RESET_DONE=0
 
 usage() {
   cat >&2 <<EOF_USAGE
@@ -101,6 +106,64 @@ pick_serial_device() {
   fi
 }
 
+read_broadcom_boot_nodes() {
+  if [ "$LSUSB_FILE" != "" ]; then
+    cat "$LSUSB_FILE"
+  else
+    lsusb -d 0a5c:2763 || true
+  fi
+}
+
+pick_usb_device() {
+  count=0
+  chosen=''
+  while IFS= read -r line; do
+    set -- $line
+    if [ "${1:-}" != "Bus" ] || [ "${3:-}" != "Device" ]; then
+      continue
+    fi
+    bus="$2"
+    device="${4:-}"
+    device="${device%:}"
+    case "$bus:$device" in
+      *[!0-9:]*|:|*:|:*)
+        continue
+        ;;
+    esac
+    count=$((count + 1))
+    chosen="/dev/bus/usb/$bus/$device"
+  done <<EOF_USB_NODES
+$(read_broadcom_boot_nodes)
+EOF_USB_NODES
+  if [ "$count" -eq 1 ]; then
+    USB_DEVICE="$chosen"
+  elif [ "$count" -gt 1 ]; then
+    fail "more than one Pi boot device is attached; unplug the extra board and run make pi-ready again"
+  fi
+}
+
+repair_usb_device_owner() {
+  [ "$USB_DEVICE" != "" ] || return 0
+  [ -e "$USB_DEVICE" ] || return 0
+  if [ ! -r "$USB_DEVICE" ] || [ ! -w "$USB_DEVICE" ]; then
+    say "Preparing the Pi USB boot cable."
+    sudo chown "$(id -u):$(id -g)" "$USB_DEVICE"
+  fi
+}
+
+reset_pi_usb_station() {
+  say "Resetting the Pi USB station."
+  if [ "$USB_RESET_CMD" != "" ]; then
+    "$USB_RESET_CMD" "$USB_RESET_DEVICE"
+  else
+    sudo sh -c "echo $USB_RESET_DEVICE > /sys/bus/pci/drivers/xhci_hcd/unbind; sleep 3; echo $USB_RESET_DEVICE > /sys/bus/pci/drivers/xhci_hcd/bind"
+  fi
+  USB_RESET_DONE=1
+  USB_DEVICE=''
+  pick_usb_device
+  repair_usb_device_owner
+}
+
 build_needed_files() {
   say "Preparing the board image."
   make -C "$ROOT_DIR/edgerun-metal" pi-zero-w-v1_1-boot >/dev/null
@@ -131,8 +194,21 @@ run_usb_boot() {
     usb_args="$usb_args --dry-run"
   fi
   # shellcheck disable=SC2086
-  "$ROOT_DIR/.build/pi-usb-boot" $usb_args >/tmp/pi-zero-w-v1_1-usb.out 2>/tmp/pi-zero-w-v1_1-usb.err ||
-    fail "the board did not accept boot files; unplug it, hold BOOT, plug it back in, then run the same command"
+  "$USB_BOOT_TOOL" $usb_args >/tmp/pi-zero-w-v1_1-usb.out 2>/tmp/pi-zero-w-v1_1-usb.err
+}
+
+run_usb_boot_with_recovery() {
+  if run_usb_boot; then
+    return 0
+  fi
+  if [ "$DRY_RUN" -ne 0 ] || [ "$USB_RESET_DONE" -ne 0 ]; then
+    fail "the board did not accept boot files; unplug it, hold BOOT, plug it back in, then run make pi-ready again"
+  fi
+  reset_pi_usb_station
+  if run_usb_boot; then
+    return 0
+  fi
+  fail "the board still did not accept boot files after the USB station reset; unplug it, hold BOOT, plug it back in, then run make pi-ready again"
 }
 
 verify_capture() {
@@ -150,6 +226,14 @@ if [ "$SERIAL_DEVICE" = "" ]; then
   pick_serial_device
 fi
 
+if [ "$USB_DEVICE" = "" ] && [ "$SKIP_USB" -eq 0 ]; then
+  pick_usb_device
+fi
+
+if [ "$SKIP_USB" -eq 0 ]; then
+  repair_usb_device_owner
+fi
+
 if [ "$SERIAL_DEVICE" = "" ] && [ "$VERIFY_ONLY" -eq 0 ]; then
   say "No small serial cable was found. I can still send the boot files, but I cannot prove the board is ready."
 elif [ "$VERIFY_ONLY" -eq 0 ]; then
@@ -163,7 +247,7 @@ fi
 
 if [ "$SKIP_USB" -eq 0 ]; then
   say "Sending the board image."
-  run_usb_boot
+  run_usb_boot_with_recovery
 fi
 
 if [ "$VERIFY_ONLY" -ne 0 ]; then
@@ -178,5 +262,5 @@ elif [ "$SERIAL_DEVICE" != "" ]; then
   say "Board is ready."
   say "Log: $SERIAL_LOG"
 else
-  say "Boot files sent. Attach the small serial cable and run: PI_SERIAL_DEVICE=/dev/ttyUSB0 make pi-ready"
+  say "Boot files sent. Attach the small serial cable and run make pi-ready again."
 fi
