@@ -87,6 +87,14 @@
 #define ER_PI_ZERO_W_V1_1_U64_BYTE5_SHIFT 40u
 #define ER_PI_ZERO_W_V1_1_U64_BYTE6_SHIFT 48u
 #define ER_PI_ZERO_W_V1_1_U64_BYTE7_SHIFT 56u
+#define ER_PI_ZERO_W_V1_1_LE_BYTE0 0u
+#define ER_PI_ZERO_W_V1_1_LE_BYTE1 1u
+#define ER_PI_ZERO_W_V1_1_LE_BYTE2 2u
+#define ER_PI_ZERO_W_V1_1_LE_BYTE3 3u
+#define ER_PI_ZERO_W_V1_1_LE_BYTE4 4u
+#define ER_PI_ZERO_W_V1_1_LE_BYTE5 5u
+#define ER_PI_ZERO_W_V1_1_LE_BYTE6 6u
+#define ER_PI_ZERO_W_V1_1_LE_BYTE7 7u
 #define ER_PI_ZERO_W_V1_1_BOOT_MS 0u
 #define ER_PI_ZERO_W_V1_1_WIFI_GPIO_DELAY_TICKS 150u
 #define ER_PI_ZERO_W_V1_1_WIFI_POWER_DELAY_TICKS 400000u
@@ -944,31 +952,41 @@ static UINT32 er_pi_zero_w_v1_1_emmc_sdio_read_bytes(UINT32 function,
 }
 
 static UINT32 er_pi_zero_w_v1_1_cyw43438_read_le32(const UINT8* bytes) {
-  return ((UINT32)bytes[0]) |
-         ((UINT32)bytes[1] << ER_PI_ZERO_W_V1_1_U16_HIGH_SHIFT) |
-         ((UINT32)bytes[2] << ER_PI_ZERO_W_V1_1_U32_BYTE2_SHIFT) |
-         ((UINT32)bytes[3] << ER_PI_ZERO_W_V1_1_U32_BYTE3_SHIFT);
+  return ((UINT32)bytes[ER_PI_ZERO_W_V1_1_LE_BYTE0]) |
+         ((UINT32)bytes[ER_PI_ZERO_W_V1_1_LE_BYTE1] <<
+          ER_PI_ZERO_W_V1_1_U16_HIGH_SHIFT) |
+         ((UINT32)bytes[ER_PI_ZERO_W_V1_1_LE_BYTE2] <<
+          ER_PI_ZERO_W_V1_1_U32_BYTE2_SHIFT) |
+         ((UINT32)bytes[ER_PI_ZERO_W_V1_1_LE_BYTE3] <<
+          ER_PI_ZERO_W_V1_1_U32_BYTE3_SHIFT);
 }
 
 static void er_pi_zero_w_v1_1_cyw43438_put_le32(UINT8* bytes, UINT32 value) {
-  bytes[0] = (UINT8)(value & ER_PI_ZERO_W_V1_1_BYTE_MASK);
-  bytes[1] = (UINT8)((value >> ER_PI_ZERO_W_V1_1_U16_HIGH_SHIFT) &
-                     ER_PI_ZERO_W_V1_1_BYTE_MASK);
-  bytes[2] = (UINT8)((value >> ER_PI_ZERO_W_V1_1_U32_BYTE2_SHIFT) &
-                     ER_PI_ZERO_W_V1_1_BYTE_MASK);
-  bytes[3] = (UINT8)((value >> ER_PI_ZERO_W_V1_1_U32_BYTE3_SHIFT) &
-                     ER_PI_ZERO_W_V1_1_BYTE_MASK);
+  bytes[ER_PI_ZERO_W_V1_1_LE_BYTE0] =
+      (UINT8)(value & ER_PI_ZERO_W_V1_1_BYTE_MASK);
+  bytes[ER_PI_ZERO_W_V1_1_LE_BYTE1] =
+      (UINT8)((value >> ER_PI_ZERO_W_V1_1_U16_HIGH_SHIFT) &
+              ER_PI_ZERO_W_V1_1_BYTE_MASK);
+  bytes[ER_PI_ZERO_W_V1_1_LE_BYTE2] =
+      (UINT8)((value >> ER_PI_ZERO_W_V1_1_U32_BYTE2_SHIFT) &
+              ER_PI_ZERO_W_V1_1_BYTE_MASK);
+  bytes[ER_PI_ZERO_W_V1_1_LE_BYTE3] =
+      (UINT8)((value >> ER_PI_ZERO_W_V1_1_U32_BYTE3_SHIFT) &
+              ER_PI_ZERO_W_V1_1_BYTE_MASK);
 }
 
 static UINT16 er_pi_zero_w_v1_1_cyw43438_read_le16(const UINT8* bytes) {
-  return (UINT16)(((UINT16)bytes[0]) |
-                  ((UINT16)bytes[1] << ER_PI_ZERO_W_V1_1_U16_HIGH_SHIFT));
+  return (UINT16)(((UINT16)bytes[ER_PI_ZERO_W_V1_1_LE_BYTE0]) |
+                  ((UINT16)bytes[ER_PI_ZERO_W_V1_1_LE_BYTE1] <<
+                   ER_PI_ZERO_W_V1_1_U16_HIGH_SHIFT));
 }
 
 static void er_pi_zero_w_v1_1_cyw43438_put_le16(UINT8* bytes, UINT16 value) {
-  bytes[0] = (UINT8)(value & ER_PI_ZERO_W_V1_1_BYTE_MASK);
-  bytes[1] = (UINT8)(((UINT32)value >> ER_PI_ZERO_W_V1_1_U16_HIGH_SHIFT) &
-                     ER_PI_ZERO_W_V1_1_BYTE_MASK);
+  bytes[ER_PI_ZERO_W_V1_1_LE_BYTE0] =
+      (UINT8)(value & ER_PI_ZERO_W_V1_1_BYTE_MASK);
+  bytes[ER_PI_ZERO_W_V1_1_LE_BYTE1] =
+      (UINT8)(((UINT32)value >> ER_PI_ZERO_W_V1_1_U16_HIGH_SHIFT) &
+              ER_PI_ZERO_W_V1_1_BYTE_MASK);
 }
 
 static UINT32 er_pi_zero_w_v1_1_cyw43438_enable_function1(void) {
@@ -1091,7 +1109,7 @@ static UINT32 er_pi_zero_w_v1_1_cyw43438_backplane_write_bytes(
 
 static UINT32 er_pi_zero_w_v1_1_cyw43438_backplane_read32(UINT32 address,
                                                          UINT32* out_value) {
-  UINT8 bytes[4];
+  UINT8 bytes[sizeof(UINT32)];
 
   if (out_value == 0 ||
       er_pi_zero_w_v1_1_cyw43438_set_backplane_window(address) == 0u ||
@@ -1108,7 +1126,7 @@ static UINT32 er_pi_zero_w_v1_1_cyw43438_backplane_read32(UINT32 address,
 
 static UINT32 er_pi_zero_w_v1_1_cyw43438_backplane_write32(UINT32 address,
                                                           UINT32 value) {
-  UINT8 bytes[4];
+  UINT8 bytes[sizeof(UINT32)];
 
   er_pi_zero_w_v1_1_cyw43438_put_le32(bytes, value);
   return er_pi_zero_w_v1_1_cyw43438_backplane_write_bytes(
@@ -2007,33 +2025,45 @@ static void er_pi_zero_w_v1_1_put_u16(UINT8** cursor, UINT16 value) {
 }
 
 static void er_pi_zero_w_v1_1_put_u32(UINT8** cursor, UINT32 value) {
-  (*cursor)[0] = (UINT8)(value & ER_PI_ZERO_W_V1_1_BYTE_MASK);
-  (*cursor)[1] = (UINT8)((value >> ER_PI_ZERO_W_V1_1_U16_HIGH_SHIFT) &
-                         ER_PI_ZERO_W_V1_1_BYTE_MASK);
-  (*cursor)[2] = (UINT8)((value >> ER_PI_ZERO_W_V1_1_U32_BYTE2_SHIFT) &
-                         ER_PI_ZERO_W_V1_1_BYTE_MASK);
-  (*cursor)[3] = (UINT8)((value >> ER_PI_ZERO_W_V1_1_U32_BYTE3_SHIFT) &
-                         ER_PI_ZERO_W_V1_1_BYTE_MASK);
-  *cursor += 4u;
+  (*cursor)[ER_PI_ZERO_W_V1_1_LE_BYTE0] =
+      (UINT8)(value & ER_PI_ZERO_W_V1_1_BYTE_MASK);
+  (*cursor)[ER_PI_ZERO_W_V1_1_LE_BYTE1] =
+      (UINT8)((value >> ER_PI_ZERO_W_V1_1_U16_HIGH_SHIFT) &
+              ER_PI_ZERO_W_V1_1_BYTE_MASK);
+  (*cursor)[ER_PI_ZERO_W_V1_1_LE_BYTE2] =
+      (UINT8)((value >> ER_PI_ZERO_W_V1_1_U32_BYTE2_SHIFT) &
+              ER_PI_ZERO_W_V1_1_BYTE_MASK);
+  (*cursor)[ER_PI_ZERO_W_V1_1_LE_BYTE3] =
+      (UINT8)((value >> ER_PI_ZERO_W_V1_1_U32_BYTE3_SHIFT) &
+              ER_PI_ZERO_W_V1_1_BYTE_MASK);
+  *cursor += (UINT32)sizeof(UINT32);
 }
 
 static void er_pi_zero_w_v1_1_put_u64(UINT8** cursor, UINT64 value) {
-  (*cursor)[0] = (UINT8)(value & ER_PI_ZERO_W_V1_1_BYTE_MASK);
-  (*cursor)[1] = (UINT8)((value >> ER_PI_ZERO_W_V1_1_U16_HIGH_SHIFT) &
-                         ER_PI_ZERO_W_V1_1_BYTE_MASK);
-  (*cursor)[2] = (UINT8)((value >> ER_PI_ZERO_W_V1_1_U32_BYTE2_SHIFT) &
-                         ER_PI_ZERO_W_V1_1_BYTE_MASK);
-  (*cursor)[3] = (UINT8)((value >> ER_PI_ZERO_W_V1_1_U32_BYTE3_SHIFT) &
-                         ER_PI_ZERO_W_V1_1_BYTE_MASK);
-  (*cursor)[4] = (UINT8)((value >> ER_PI_ZERO_W_V1_1_U64_BYTE4_SHIFT) &
-                         ER_PI_ZERO_W_V1_1_BYTE_MASK);
-  (*cursor)[5] = (UINT8)((value >> ER_PI_ZERO_W_V1_1_U64_BYTE5_SHIFT) &
-                         ER_PI_ZERO_W_V1_1_BYTE_MASK);
-  (*cursor)[6] = (UINT8)((value >> ER_PI_ZERO_W_V1_1_U64_BYTE6_SHIFT) &
-                         ER_PI_ZERO_W_V1_1_BYTE_MASK);
-  (*cursor)[7] = (UINT8)((value >> ER_PI_ZERO_W_V1_1_U64_BYTE7_SHIFT) &
-                         ER_PI_ZERO_W_V1_1_BYTE_MASK);
-  *cursor += 8u;
+  (*cursor)[ER_PI_ZERO_W_V1_1_LE_BYTE0] =
+      (UINT8)(value & ER_PI_ZERO_W_V1_1_BYTE_MASK);
+  (*cursor)[ER_PI_ZERO_W_V1_1_LE_BYTE1] =
+      (UINT8)((value >> ER_PI_ZERO_W_V1_1_U16_HIGH_SHIFT) &
+              ER_PI_ZERO_W_V1_1_BYTE_MASK);
+  (*cursor)[ER_PI_ZERO_W_V1_1_LE_BYTE2] =
+      (UINT8)((value >> ER_PI_ZERO_W_V1_1_U32_BYTE2_SHIFT) &
+              ER_PI_ZERO_W_V1_1_BYTE_MASK);
+  (*cursor)[ER_PI_ZERO_W_V1_1_LE_BYTE3] =
+      (UINT8)((value >> ER_PI_ZERO_W_V1_1_U32_BYTE3_SHIFT) &
+              ER_PI_ZERO_W_V1_1_BYTE_MASK);
+  (*cursor)[ER_PI_ZERO_W_V1_1_LE_BYTE4] =
+      (UINT8)((value >> ER_PI_ZERO_W_V1_1_U64_BYTE4_SHIFT) &
+              ER_PI_ZERO_W_V1_1_BYTE_MASK);
+  (*cursor)[ER_PI_ZERO_W_V1_1_LE_BYTE5] =
+      (UINT8)((value >> ER_PI_ZERO_W_V1_1_U64_BYTE5_SHIFT) &
+              ER_PI_ZERO_W_V1_1_BYTE_MASK);
+  (*cursor)[ER_PI_ZERO_W_V1_1_LE_BYTE6] =
+      (UINT8)((value >> ER_PI_ZERO_W_V1_1_U64_BYTE6_SHIFT) &
+              ER_PI_ZERO_W_V1_1_BYTE_MASK);
+  (*cursor)[ER_PI_ZERO_W_V1_1_LE_BYTE7] =
+      (UINT8)((value >> ER_PI_ZERO_W_V1_1_U64_BYTE7_SHIFT) &
+              ER_PI_ZERO_W_V1_1_BYTE_MASK);
+  *cursor += (UINT32)sizeof(UINT64);
 }
 
 static void er_pi_zero_w_v1_1_put_bytes(UINT8** cursor,
@@ -2235,10 +2265,7 @@ static UINT32 er_pi_zero_w_v1_1_ota_wire_magic(const UINT8* bytes) {
   if (bytes == 0) {
     return 0u;
   }
-  return (UINT32)bytes[0] |
-         ((UINT32)bytes[1] << ER_PI_ZERO_W_V1_1_U16_HIGH_SHIFT) |
-         ((UINT32)bytes[2] << ER_PI_ZERO_W_V1_1_U32_BYTE2_SHIFT) |
-         ((UINT32)bytes[3] << ER_PI_ZERO_W_V1_1_U32_BYTE3_SHIFT);
+  return er_pi_zero_w_v1_1_cyw43438_read_le32(bytes);
 }
 
 static UINT8 er_pi_zero_w_v1_1_storage_read_block(
