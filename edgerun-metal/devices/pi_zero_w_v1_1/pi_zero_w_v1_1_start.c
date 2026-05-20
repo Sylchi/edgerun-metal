@@ -84,6 +84,14 @@
 #define ER_PI_ZERO_W_V1_1_SDIO_PROBE_CMD53_DONE 6u
 #define ER_PI_ZERO_W_V1_1_L2_READY 7u
 #define ER_PI_ZERO_W_V1_1_SDIO_PROBE_ERROR 0xffffffffu
+#define ER_PI_ZERO_W_V1_1_STORAGE_PROBE_NONE 0u
+#define ER_PI_ZERO_W_V1_1_STORAGE_PROBE_CMD8_DONE 1u
+#define ER_PI_ZERO_W_V1_1_STORAGE_PROBE_ACMD41_DONE 2u
+#define ER_PI_ZERO_W_V1_1_STORAGE_PROBE_CMD2_DONE 3u
+#define ER_PI_ZERO_W_V1_1_STORAGE_PROBE_CMD3_DONE 4u
+#define ER_PI_ZERO_W_V1_1_STORAGE_READY 5u
+#define ER_PI_ZERO_W_V1_1_STORAGE_WRITE_VERIFIED 6u
+#define ER_PI_ZERO_W_V1_1_STORAGE_PROBE_ERROR 0xffffffffu
 #define ER_PI_ZERO_W_V1_1_LED_BOOT_ENTRY 1u
 #define ER_PI_ZERO_W_V1_1_LED_UART_READY 2u
 #define ER_PI_ZERO_W_V1_1_LED_WIFI_POWERED 3u
@@ -93,6 +101,7 @@
 #define ER_PI_ZERO_W_V1_1_EMMC_RESET_POLL_BUDGET 100000u
 #define ER_PI_ZERO_W_V1_1_EMMC_STABLE_POLL_BUDGET 100000u
 #define ER_PI_ZERO_W_V1_1_EMMC_READY_POLL_BUDGET 100000u
+#define ER_PI_ZERO_W_V1_1_SD_MEMORY_OCR_POLL_BUDGET 1000u
 #define ER_PI_ZERO_W_V1_1_CYW43438_CCCR_IO_ENABLE_ADDR 0x00000002u
 #define ER_PI_ZERO_W_V1_1_CYW43438_CCCR_IO_READY_ADDR 0x00000003u
 #define ER_PI_ZERO_W_V1_1_CYW43438_CCCR_ENABLE_FUNCTION_1 0x02u
@@ -169,6 +178,11 @@ volatile UINT32 g_er_pi_zero_w_v1_1_sdio_probe_state =
 volatile UINT32 g_er_pi_zero_w_v1_1_sdio_probe_interrupt = 0u;
 volatile UINT32 g_er_pi_zero_w_v1_1_sdio_probe_response = 0u;
 volatile UINT32 g_er_pi_zero_w_v1_1_sdio_relative_card_address = 0u;
+volatile UINT32 g_er_pi_zero_w_v1_1_storage_probe_state =
+    ER_PI_ZERO_W_V1_1_STORAGE_PROBE_NONE;
+volatile UINT32 g_er_pi_zero_w_v1_1_storage_relative_card_address = 0u;
+volatile UINT32 g_er_pi_zero_w_v1_1_storage_last_block = 0u;
+volatile UINT32 g_er_pi_zero_w_v1_1_storage_last_response = 0u;
 volatile UINT32 g_er_pi_zero_w_v1_1_ota_status =
     ER_PI_ZERO_W_V1_1_OTA_STATUS_IDLE;
 volatile UINT32 g_er_pi_zero_w_v1_1_ota_offset = 0u;
@@ -391,10 +405,14 @@ static UINT32 er_pi_zero_w_v1_1_emmc_response_bits(UINT32 response_kind) {
   switch (response_kind) {
     case ER_PI_ZERO_W_V1_1_MMC_RESPONSE_NONE:
       return ER_PI_ZERO_W_V1_1_EMMC_CMDTM_RESPONSE_NONE;
+    case ER_PI_ZERO_W_V1_1_MMC_RESPONSE_R2:
+      return ER_PI_ZERO_W_V1_1_EMMC_CMDTM_RESPONSE_136;
     case ER_PI_ZERO_W_V1_1_MMC_RESPONSE_R1:
+    case ER_PI_ZERO_W_V1_1_MMC_RESPONSE_R3:
     case ER_PI_ZERO_W_V1_1_MMC_RESPONSE_R4:
     case ER_PI_ZERO_W_V1_1_MMC_RESPONSE_R5:
     case ER_PI_ZERO_W_V1_1_MMC_RESPONSE_R6:
+    case ER_PI_ZERO_W_V1_1_MMC_RESPONSE_R7:
       return ER_PI_ZERO_W_V1_1_EMMC_CMDTM_RESPONSE_48;
     default:
       return ER_PI_ZERO_W_V1_1_EMMC_CMDTM_RESPONSE_NONE;
@@ -410,12 +428,25 @@ static UINT32 er_pi_zero_w_v1_1_emmc_command_value(UINT32 command_index,
            ER_PI_ZERO_W_V1_1_EMMC_CMDTM_RESPONSE_BITS;
   switch (response_kind) {
     case ER_PI_ZERO_W_V1_1_MMC_RESPONSE_R1:
+    case ER_PI_ZERO_W_V1_1_MMC_RESPONSE_R2:
     case ER_PI_ZERO_W_V1_1_MMC_RESPONSE_R5:
     case ER_PI_ZERO_W_V1_1_MMC_RESPONSE_R6:
+    case ER_PI_ZERO_W_V1_1_MMC_RESPONSE_R7:
       value |= ER_PI_ZERO_W_V1_1_EMMC_CMDTM_CRC_CHECK;
+      break;
+    default:
+      break;
+  }
+  switch (response_kind) {
+    case ER_PI_ZERO_W_V1_1_MMC_RESPONSE_R1:
+    case ER_PI_ZERO_W_V1_1_MMC_RESPONSE_R5:
+    case ER_PI_ZERO_W_V1_1_MMC_RESPONSE_R6:
+    case ER_PI_ZERO_W_V1_1_MMC_RESPONSE_R7:
       value |= ER_PI_ZERO_W_V1_1_EMMC_CMDTM_INDEX_CHECK;
       break;
     case ER_PI_ZERO_W_V1_1_MMC_RESPONSE_NONE:
+    case ER_PI_ZERO_W_V1_1_MMC_RESPONSE_R2:
+    case ER_PI_ZERO_W_V1_1_MMC_RESPONSE_R3:
     case ER_PI_ZERO_W_V1_1_MMC_RESPONSE_R4:
     default:
       break;
@@ -586,6 +617,11 @@ static UINT32 er_pi_zero_w_v1_1_emmc_command(UINT32 command_index,
 static UINT32 er_pi_zero_w_v1_1_mmc_rca_argument(UINT32 relative_card_address) {
   return (relative_card_address & ER_PI_ZERO_W_V1_1_MMC_RCA_MASK) <<
          ER_PI_ZERO_W_V1_1_MMC_RCA_RESPONSE_SHIFT;
+}
+
+static UINT32 er_pi_zero_w_v1_1_mmc_rca_from_response(UINT32 response) {
+  return (response >> ER_PI_ZERO_W_V1_1_MMC_RCA_RESPONSE_SHIFT) &
+         ER_PI_ZERO_W_V1_1_MMC_RCA_MASK;
 }
 
 static UINT32 er_pi_zero_w_v1_1_sdio_cmd52_argument(UINT32 write,
@@ -1780,7 +1816,7 @@ static void er_pi_zero_w_v1_1_sdio_probe(void) {
     return;
   }
   g_er_pi_zero_w_v1_1_sdio_relative_card_address =
-      response >> ER_PI_ZERO_W_V1_1_MMC_RCA_RESPONSE_SHIFT;
+      er_pi_zero_w_v1_1_mmc_rca_from_response(response);
   if (g_er_pi_zero_w_v1_1_sdio_relative_card_address == 0u) {
     g_er_pi_zero_w_v1_1_sdio_probe_state = ER_PI_ZERO_W_V1_1_SDIO_PROBE_ERROR;
     return;
@@ -1824,6 +1860,129 @@ static void er_pi_zero_w_v1_1_sdio_probe(void) {
       (UINT32)cmd53_byte;
   g_er_pi_zero_w_v1_1_sdio_probe_state =
       ER_PI_ZERO_W_V1_1_SDIO_PROBE_CMD53_DONE;
+}
+
+static UINT32 er_pi_zero_w_v1_1_sd_memory_app_command(UINT32 rca,
+                                                      UINT32 command_index,
+                                                      UINT32 argument,
+                                                      UINT32 response_kind,
+                                                      UINT32* out_response) {
+  UINT32 app_response;
+
+  if (out_response == 0 ||
+      er_pi_zero_w_v1_1_emmc_command(ER_PI_ZERO_W_V1_1_MMC_CMD_APP_CMD,
+                                     er_pi_zero_w_v1_1_mmc_rca_argument(rca),
+                                     ER_PI_ZERO_W_V1_1_MMC_RESPONSE_R1,
+                                     &app_response) == 0u) {
+    return 0u;
+  }
+  return er_pi_zero_w_v1_1_emmc_command(command_index,
+                                        argument,
+                                        response_kind,
+                                        out_response);
+}
+
+static UINT32 er_pi_zero_w_v1_1_sd_memory_init(void) {
+  UINT32 response;
+  UINT32 poll;
+
+  g_er_pi_zero_w_v1_1_storage_probe_state =
+      ER_PI_ZERO_W_V1_1_STORAGE_PROBE_NONE;
+  g_er_pi_zero_w_v1_1_storage_relative_card_address = 0u;
+  g_er_pi_zero_w_v1_1_storage_last_response = 0u;
+  if (er_pi_zero_w_v1_1_emmc_init() == 0u ||
+      er_pi_zero_w_v1_1_emmc_command(ER_PI_ZERO_W_V1_1_MMC_CMD_GO_IDLE_STATE,
+                                     0u,
+                                     ER_PI_ZERO_W_V1_1_MMC_RESPONSE_NONE,
+                                     &response) == 0u ||
+      er_pi_zero_w_v1_1_emmc_command(ER_PI_ZERO_W_V1_1_MMC_CMD_SEND_IF_COND,
+                                     ER_PI_ZERO_W_V1_1_SD_MEMORY_IF_COND_3V3_CHECK,
+                                     ER_PI_ZERO_W_V1_1_MMC_RESPONSE_R7,
+                                     &response) == 0u) {
+    g_er_pi_zero_w_v1_1_storage_probe_state =
+        ER_PI_ZERO_W_V1_1_STORAGE_PROBE_ERROR;
+    return 0u;
+  }
+  g_er_pi_zero_w_v1_1_storage_last_response = response;
+  g_er_pi_zero_w_v1_1_storage_probe_state =
+      ER_PI_ZERO_W_V1_1_STORAGE_PROBE_CMD8_DONE;
+  for (poll = 0u;
+       poll < ER_PI_ZERO_W_V1_1_SD_MEMORY_OCR_POLL_BUDGET;
+       ++poll) {
+    if (er_pi_zero_w_v1_1_sd_memory_app_command(
+            0u,
+            ER_PI_ZERO_W_V1_1_MMC_ACMD_SD_SEND_OP_COND,
+            ER_PI_ZERO_W_V1_1_SD_MEMORY_OCR_3V3_HCS,
+            ER_PI_ZERO_W_V1_1_MMC_RESPONSE_R3,
+            &response) == 0u) {
+      g_er_pi_zero_w_v1_1_storage_probe_state =
+          ER_PI_ZERO_W_V1_1_STORAGE_PROBE_ERROR;
+      return 0u;
+    }
+    g_er_pi_zero_w_v1_1_storage_last_response = response;
+    if ((response & ER_PI_ZERO_W_V1_1_SD_MEMORY_OCR_READY) != 0u) {
+      break;
+    }
+  }
+  if ((response & ER_PI_ZERO_W_V1_1_SD_MEMORY_OCR_READY) == 0u) {
+    g_er_pi_zero_w_v1_1_storage_probe_state =
+        ER_PI_ZERO_W_V1_1_STORAGE_PROBE_ERROR;
+    return 0u;
+  }
+  g_er_pi_zero_w_v1_1_storage_probe_state =
+      ER_PI_ZERO_W_V1_1_STORAGE_PROBE_ACMD41_DONE;
+  if (er_pi_zero_w_v1_1_emmc_command(ER_PI_ZERO_W_V1_1_MMC_CMD_ALL_SEND_CID,
+                                     0u,
+                                     ER_PI_ZERO_W_V1_1_MMC_RESPONSE_R2,
+                                     &response) == 0u) {
+    g_er_pi_zero_w_v1_1_storage_probe_state =
+        ER_PI_ZERO_W_V1_1_STORAGE_PROBE_ERROR;
+    return 0u;
+  }
+  g_er_pi_zero_w_v1_1_storage_last_response = response;
+  g_er_pi_zero_w_v1_1_storage_probe_state =
+      ER_PI_ZERO_W_V1_1_STORAGE_PROBE_CMD2_DONE;
+  if (er_pi_zero_w_v1_1_emmc_command(ER_PI_ZERO_W_V1_1_MMC_CMD_SEND_RELATIVE_ADDR,
+                                     0u,
+                                     ER_PI_ZERO_W_V1_1_MMC_RESPONSE_R6,
+                                     &response) == 0u) {
+    g_er_pi_zero_w_v1_1_storage_probe_state =
+        ER_PI_ZERO_W_V1_1_STORAGE_PROBE_ERROR;
+    return 0u;
+  }
+  g_er_pi_zero_w_v1_1_storage_last_response = response;
+  g_er_pi_zero_w_v1_1_storage_relative_card_address =
+      er_pi_zero_w_v1_1_mmc_rca_from_response(response);
+  if (g_er_pi_zero_w_v1_1_storage_relative_card_address == 0u) {
+    g_er_pi_zero_w_v1_1_storage_probe_state =
+        ER_PI_ZERO_W_V1_1_STORAGE_PROBE_ERROR;
+    return 0u;
+  }
+  g_er_pi_zero_w_v1_1_storage_probe_state =
+      ER_PI_ZERO_W_V1_1_STORAGE_PROBE_CMD3_DONE;
+  if (er_pi_zero_w_v1_1_emmc_command(
+          ER_PI_ZERO_W_V1_1_MMC_CMD_SELECT_CARD,
+          er_pi_zero_w_v1_1_mmc_rca_argument(
+              g_er_pi_zero_w_v1_1_storage_relative_card_address),
+          ER_PI_ZERO_W_V1_1_MMC_RESPONSE_R1,
+          &response) == 0u) {
+    g_er_pi_zero_w_v1_1_storage_probe_state =
+        ER_PI_ZERO_W_V1_1_STORAGE_PROBE_ERROR;
+    return 0u;
+  }
+  g_er_pi_zero_w_v1_1_storage_last_response = response;
+  g_er_pi_zero_w_v1_1_storage_probe_state = ER_PI_ZERO_W_V1_1_STORAGE_READY;
+  return 1u;
+}
+
+static UINT32 er_pi_zero_w_v1_1_storage_ready(void) {
+  if (g_er_pi_zero_w_v1_1_storage_probe_state ==
+          ER_PI_ZERO_W_V1_1_STORAGE_READY ||
+      g_er_pi_zero_w_v1_1_storage_probe_state ==
+          ER_PI_ZERO_W_V1_1_STORAGE_WRITE_VERIFIED) {
+    return 1u;
+  }
+  return er_pi_zero_w_v1_1_sd_memory_init();
 }
 
 static void er_pi_zero_w_v1_1_uart_put_byte(UINT8 byte) {
@@ -2031,24 +2190,90 @@ static UINT32 er_pi_zero_w_v1_1_ota_wire_magic(const UINT8* bytes) {
          ((UINT32)bytes[3] << ER_PI_ZERO_W_V1_1_U32_BYTE3_SHIFT);
 }
 
+static UINT8 er_pi_zero_w_v1_1_storage_read_block(
+    UINT32 block_address,
+    UINT8 block[ER_PI_ZERO_W_V1_1_OTA_BLOCK_BYTES]) {
+  ErPiEmmcMmioOps ops;
+  ErPiEmmcBlockResult result;
+
+  if (block == 0 ||
+      er_pi_zero_w_v1_1_storage_ready() == 0u) {
+    return 0u;
+  }
+  ops.ctx = 0;
+  ops.read32 = er_pi_zero_w_v1_1_emmc_read32_op;
+  ops.write32 = er_pi_zero_w_v1_1_emmc_write32_op;
+  ops.read8 = 0;
+  ops.write8 = 0;
+  if (er_pi_emmc_read_block_with_ops(&ops,
+                                     block_address,
+                                     block,
+                                     ER_PI_ZERO_W_V1_1_SDIO_POLL_BUDGET,
+                                     &result) == 0u) {
+    g_er_pi_zero_w_v1_1_storage_probe_state =
+        ER_PI_ZERO_W_V1_1_STORAGE_PROBE_ERROR;
+    g_er_pi_zero_w_v1_1_storage_last_response = result.response0;
+    return 0u;
+  }
+  g_er_pi_zero_w_v1_1_storage_last_block = block_address;
+  g_er_pi_zero_w_v1_1_storage_last_response = result.response0;
+  return 1u;
+}
+
+static UINT8 er_pi_zero_w_v1_1_storage_blocks_equal(const UINT8* left,
+                                                    const UINT8* right) {
+  UINT32 i;
+
+  if (left == 0 || right == 0) {
+    return 0u;
+  }
+  for (i = 0u; i < ER_PI_ZERO_W_V1_1_OTA_BLOCK_BYTES; ++i) {
+    if (left[i] != right[i]) {
+      return 0u;
+    }
+  }
+  return 1u;
+}
+
 static UINT8 er_pi_zero_w_v1_1_ota_write_block_unbound(
     void* ctx,
     UINT32 block_address,
     const UINT8 block[ER_PI_ZERO_W_V1_1_OTA_BLOCK_BYTES]) {
   ErPiEmmcMmioOps ops;
   ErPiEmmcBlockResult result;
+  UINT8 readback[ER_PI_ZERO_W_V1_1_OTA_BLOCK_BYTES];
 
   (void)ctx;
+  if (block == 0 ||
+      er_pi_zero_w_v1_1_storage_ready() == 0u) {
+    return 0u;
+  }
   ops.ctx = 0;
   ops.read32 = er_pi_zero_w_v1_1_emmc_read32_op;
   ops.write32 = er_pi_zero_w_v1_1_emmc_write32_op;
   ops.read8 = 0;
   ops.write8 = 0;
-  return er_pi_emmc_write_block_with_ops(&ops,
-                                         block_address,
-                                         block,
-                                         ER_PI_ZERO_W_V1_1_SDIO_POLL_BUDGET,
-                                         &result);
+  if (er_pi_emmc_write_block_with_ops(&ops,
+                                      block_address,
+                                      block,
+                                      ER_PI_ZERO_W_V1_1_SDIO_POLL_BUDGET,
+                                      &result) == 0u) {
+    g_er_pi_zero_w_v1_1_storage_probe_state =
+        ER_PI_ZERO_W_V1_1_STORAGE_PROBE_ERROR;
+    g_er_pi_zero_w_v1_1_storage_last_response = result.response0;
+    return 0u;
+  }
+  g_er_pi_zero_w_v1_1_storage_last_block = block_address;
+  g_er_pi_zero_w_v1_1_storage_last_response = result.response0;
+  if (er_pi_zero_w_v1_1_storage_read_block(block_address, readback) == 0u ||
+      er_pi_zero_w_v1_1_storage_blocks_equal(block, readback) == 0u) {
+    g_er_pi_zero_w_v1_1_storage_probe_state =
+        ER_PI_ZERO_W_V1_1_STORAGE_PROBE_ERROR;
+    return 0u;
+  }
+  g_er_pi_zero_w_v1_1_storage_probe_state =
+      ER_PI_ZERO_W_V1_1_STORAGE_WRITE_VERIFIED;
+  return 1u;
 }
 
 static void er_pi_zero_w_v1_1_ota_status_refresh(void) {
