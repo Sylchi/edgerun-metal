@@ -1,4 +1,5 @@
 #include "er_pi_zero2w.h"
+#include "er_mem.h"
 
 /*
  * Purpose: build the first executable Pi Zero 2 W board bring-up boundary.
@@ -33,6 +34,7 @@ enum {
   ER_PI_EMMC_CMDTM_INDEX_BITS = 24u,
   ER_PI_EMMC_BLOCK_COUNT_BITS = 16u,
   ER_PI_EMMC_WORD_BYTES = 4u,
+  ER_PI_EMMC_SDIO_BYTE_TRANSFER_MAX = 512u,
   ER_PI_EMMC_INTERRUPT_ALL = 0xffffffffu,
   ER_PI_ZERO2W_SDIO_OCR_3V3 = 0x00300000u,
   ER_PI_ZERO2W_SD_MEMORY_IF_COND_3V3_CHECK = 0x000001aau,
@@ -297,6 +299,17 @@ static UINT8 er_pi_mmc_command_is_block_data(UINT32 command_index) {
   }
 }
 
+static UINT8 er_pi_mmc_command_requires_data_path(UINT32 command_index) {
+  switch (command_index) {
+    case ER_PI_MMC_CMD_READ_SINGLE_BLOCK:
+    case ER_PI_MMC_CMD_WRITE_BLOCK:
+    case ER_PI_MMC_CMD_IO_RW_EXTENDED:
+      return 1u;
+    default:
+      return 0u;
+  }
+}
+
 static UINT32 er_pi_emmc_block_command_value(const ErPiMmcCommand* command) {
   UINT32 value;
 
@@ -419,7 +432,7 @@ UINT8 er_pi_emmc_command_begin(INT64 emmc_handle,
 
   if (out_io == 0 ||
       command == 0 ||
-      er_pi_mmc_command_is_block_data(command->command_index) != 0u ||
+      er_pi_mmc_command_requires_data_path(command->command_index) != 0u ||
       er_pi_emmc_command_io_prepare(command, &io) == 0u ||
       er_mmio_write32(emmc_handle,
                       (INT64)io.interrupt_offset,
@@ -778,6 +791,215 @@ UINT8 er_pi_emmc_write_block(INT64 emmc_handle,
     }
   }
   return er_pi_emmc_wait_data_done(emmc_handle, poll_budget, out_result);
+}
+
+static void er_pi_emmc_sdio_transfer_result_clear(
+    ErPiEmmcSdioTransferResult* result) {
+  if (result == 0) {
+    return;
+  }
+  er_mem_zero((UINT8*)result, (UINTN)sizeof(*result));
+}
+
+static UINT8 er_pi_sdio_function_valid(UINT8 function) {
+  switch (function) {
+    case ER_PI_SDIO_FUNCTION_BACKPLANE:
+    case ER_PI_SDIO_FUNCTION_WLAN:
+      return 1u;
+    default:
+      return 0u;
+  }
+}
+
+static UINT32 er_pi_emmc_sdio_transfer_size_count(UINT32 data_len) {
+  return (1u << ER_PI_EMMC_BLOCK_COUNT_BITS) | data_len;
+}
+
+UINT8 er_pi_emmc_sdio_transfer_io_prepare(UINT8 write,
+                                           UINT8 function,
+                                           UINT8 incrementing_address,
+                                           UINT32 address,
+                                           UINT32 data_len,
+                                           ErPiEmmcSdioTransferIo* out_io) {
+  ErPiMmcCommand command;
+  UINT32 argument;
+
+  if (out_io == 0 ||
+      er_pi_sdio_function_valid(function) == 0u ||
+      data_len == 0u ||
+      data_len > ER_PI_EMMC_SDIO_BYTE_TRANSFER_MAX ||
+      address > ER_PI_SDIO_ADDRESS_MASK) {
+    return 0u;
+  }
+
+  argument = er_pi_sdio_cmd53_argument(write,
+                                       function,
+                                       ER_PI_SDIO_CMD53_BYTE_MODE,
+                                       incrementing_address,
+                                       address,
+                                       data_len);
+  if (er_pi_mmc_command_prepare(ER_PI_MMC_CMD_IO_RW_EXTENDED,
+                                argument,
+                                ER_PI_MMC_RESPONSE_R5,
+                                &command) == 0u ||
+      er_pi_emmc_command_io_prepare(&command, &out_io->command_io) == 0u) {
+    return 0u;
+  }
+
+  out_io->block_size_count_offset = ER_PI_EMMC_REG_BLKSIZECNT;
+  out_io->block_size_count_value =
+      er_pi_emmc_sdio_transfer_size_count(data_len);
+  out_io->data_offset = ER_PI_EMMC_REG_DATA;
+  out_io->data_len = data_len;
+  out_io->read = (UINT8)(write == ER_PI_SDIO_READ);
+  out_io->command_io.command_value |= ER_PI_EMMC_CMDTM_BLOCK_COUNT_ENABLE;
+  out_io->command_io.command_value |= ER_PI_EMMC_CMDTM_IS_DATA;
+  if (out_io->read != 0u) {
+    out_io->command_io.command_value |= ER_PI_EMMC_CMDTM_DATA_READ;
+  }
+  return 1u;
+}
+
+static UINT8 er_pi_emmc_sdio_transfer_begin(
+    INT64 emmc_handle,
+    const ErPiEmmcSdioTransferIo* io) {
+  if (io == 0 ||
+      er_mmio_write32(emmc_handle,
+                      (INT64)io->command_io.interrupt_offset,
+                      io->command_io.interrupt_clear_value) == 0u ||
+      er_mmio_write32(emmc_handle,
+                      (INT64)io->block_size_count_offset,
+                      io->block_size_count_value) == 0u ||
+      er_mmio_write32(emmc_handle,
+                      (INT64)io->command_io.argument_offset,
+                      io->command_io.argument_value) == 0u ||
+      er_mmio_write32(emmc_handle,
+                      (INT64)io->command_io.command_offset,
+                      io->command_io.command_value) == 0u) {
+    return 0u;
+  }
+  return 1u;
+}
+
+static UINT8 er_pi_emmc_sdio_transfer_done(
+    INT64 emmc_handle,
+    UINT32 poll_budget,
+    ErPiEmmcSdioTransferResult* out_result) {
+  UINT32 interrupt;
+  INT64 response;
+
+  if (out_result == 0 ||
+      er_pi_emmc_poll_interrupt(emmc_handle,
+                                ER_PI_EMMC_INTERRUPT_DATA_DONE,
+                                poll_budget,
+                                &interrupt) == 0u) {
+    if (out_result != 0) {
+      out_result->error = 1u;
+    }
+    return 0u;
+  }
+  out_result->interrupt_value = interrupt;
+  response = er_mmio_read32(emmc_handle,
+                            (INT64)out_result->io.command_io.response_offset);
+  if (response < 0 ||
+      er_mmio_write32(emmc_handle,
+                      (INT64)out_result->io.command_io.interrupt_offset,
+                      interrupt) == 0u) {
+    out_result->error = 1u;
+    return 0u;
+  }
+  out_result->response0 = (UINT32)response;
+  out_result->completed = 1u;
+  return 1u;
+}
+
+UINT8 er_pi_emmc_sdio_read_bytes(INT64 emmc_handle,
+                                 UINT8 function,
+                                 UINT8 incrementing_address,
+                                 UINT32 address,
+                                 UINT8* out_bytes,
+                                 UINT32 bytes_len,
+                                 UINT32 poll_budget,
+                                 ErPiEmmcSdioTransferResult* out_result) {
+  UINT32 byte_index;
+  UINT32 interrupt;
+  INT64 value;
+  ErPiEmmcSdioTransferIo io;
+
+  er_pi_emmc_sdio_transfer_result_clear(out_result);
+  if (out_bytes == 0 ||
+      out_result == 0 ||
+      er_pi_emmc_sdio_transfer_io_prepare(ER_PI_SDIO_READ,
+                                          function,
+                                          incrementing_address,
+                                          address,
+                                          bytes_len,
+                                          &io) == 0u ||
+      er_pi_emmc_sdio_transfer_begin(emmc_handle, &io) == 0u ||
+      er_pi_emmc_poll_interrupt(emmc_handle,
+                                ER_PI_EMMC_INTERRUPT_READ_RDY,
+                                poll_budget,
+                                &interrupt) == 0u) {
+    if (out_result != 0) {
+      out_result->error = 1u;
+    }
+    return 0u;
+  }
+  out_result->io = io;
+  out_result->interrupt_value = interrupt;
+  for (byte_index = 0u; byte_index < bytes_len; ++byte_index) {
+    value = er_mmio_read8(emmc_handle, (INT64)io.data_offset);
+    if (value < 0) {
+      out_result->error = 1u;
+      return 0u;
+    }
+    out_bytes[byte_index] = (UINT8)value;
+  }
+  return er_pi_emmc_sdio_transfer_done(emmc_handle, poll_budget, out_result);
+}
+
+UINT8 er_pi_emmc_sdio_write_bytes(INT64 emmc_handle,
+                                  UINT8 function,
+                                  UINT8 incrementing_address,
+                                  UINT32 address,
+                                  const UINT8* bytes,
+                                  UINT32 bytes_len,
+                                  UINT32 poll_budget,
+                                  ErPiEmmcSdioTransferResult* out_result) {
+  UINT32 byte_index;
+  UINT32 interrupt;
+  ErPiEmmcSdioTransferIo io;
+
+  er_pi_emmc_sdio_transfer_result_clear(out_result);
+  if (bytes == 0 ||
+      out_result == 0 ||
+      er_pi_emmc_sdio_transfer_io_prepare(ER_PI_SDIO_WRITE,
+                                          function,
+                                          incrementing_address,
+                                          address,
+                                          bytes_len,
+                                          &io) == 0u ||
+      er_pi_emmc_sdio_transfer_begin(emmc_handle, &io) == 0u ||
+      er_pi_emmc_poll_interrupt(emmc_handle,
+                                ER_PI_EMMC_INTERRUPT_WRITE_RDY,
+                                poll_budget,
+                                &interrupt) == 0u) {
+    if (out_result != 0) {
+      out_result->error = 1u;
+    }
+    return 0u;
+  }
+  out_result->io = io;
+  out_result->interrupt_value = interrupt;
+  for (byte_index = 0u; byte_index < bytes_len; ++byte_index) {
+    if (er_mmio_write8(emmc_handle,
+                       (INT64)io.data_offset,
+                       bytes[byte_index]) == 0u) {
+      out_result->error = 1u;
+      return 0u;
+    }
+  }
+  return er_pi_emmc_sdio_transfer_done(emmc_handle, poll_budget, out_result);
 }
 
 static UINT8 er_pi_zero2w_sdio_plan_add(ErPiZero2wSdioBringupPlan* plan,

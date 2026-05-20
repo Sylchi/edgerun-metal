@@ -6,6 +6,9 @@ static void test_pi_zero2w_bringup_boundary(void) {
     PI_TEST_SDIO_DATA = 0xabu,
     PI_TEST_SDIO_BLOCK_ADDRESS = 0x00000040u,
     PI_TEST_SDIO_BLOCK_COUNT = 0x00000020u,
+    PI_TEST_SDIO_BYTE_COUNT = 0x00000010u,
+    PI_TEST_SDIO_CMD53_READ_BYTES_PACKED = 0x24008010u,
+    PI_TEST_SDIO_CMD53_WRITE_BYTES_PACKED = 0xa4008010u,
     PI_TEST_SDIO_RCA = 0x00001234u,
     PI_TEST_SDIO_RCA_ARGUMENT = 0x12340000u,
     PI_TEST_SDIO_OCR_3V3 = 0x00300000u,
@@ -33,8 +36,11 @@ static void test_pi_zero2w_bringup_boundary(void) {
     PI_TEST_EMMC_CMD52_VALUE = 0x341a0000u,
     PI_TEST_EMMC_BLOCK_ADDRESS = 0x00000007u,
     PI_TEST_EMMC_BLOCK_SIZE_COUNT_VALUE = 0x00010200u,
+    PI_TEST_EMMC_SDIO_BYTE_SIZE_COUNT_VALUE = 0x00010010u,
     PI_TEST_EMMC_CMD17_VALUE = 0x113a0012u,
     PI_TEST_EMMC_CMD24_VALUE = 0x183a0002u,
+    PI_TEST_EMMC_CMD53_READ_BYTES_VALUE = 0x353a0012u,
+    PI_TEST_EMMC_CMD53_WRITE_BYTES_VALUE = 0x353a0002u,
     PI_TEST_ZERO_W_UART_ALT5_FSEL1 = 0x00012000u,
     PI_TEST_SERIAL_HEX_DIGIT_A = 10u,
     PI_TEST_SERIAL_HEX_DIGIT_F = 15u
@@ -46,8 +52,10 @@ static void test_pi_zero2w_bringup_boundary(void) {
   ErPiMmcCommand command;
   ErPiEmmcCommandIo command_io;
   ErPiEmmcBlockIo block_io;
+  ErPiEmmcSdioTransferIo sdio_transfer_io;
   ErPiEmmcCommandResult command_result;
   ErPiEmmcBlockResult block_result;
+  ErPiEmmcSdioTransferResult sdio_transfer_result;
   ErPiZero2wSdioBringupPlan sdio_plan;
   ErPiZero2wSdioBringupState sdio_state;
   ErPiZero2wSdMemoryBringupPlan sd_memory_plan;
@@ -132,6 +140,24 @@ static void test_pi_zero2w_bringup_boundary(void) {
                    PI_TEST_SDIO_BLOCK_ADDRESS,
                    PI_TEST_SDIO_BLOCK_COUNT),
                PI_TEST_SDIO_CMD53_PACKED);
+  check_uint64("pi sdio cmd53 read bytes argument",
+               er_pi_sdio_cmd53_argument(
+                   ER_PI_SDIO_READ,
+                   ER_PI_SDIO_FUNCTION_WLAN,
+                   ER_PI_SDIO_CMD53_BYTE_MODE,
+                   ER_PI_SDIO_CMD53_INCREMENTING_ADDRESS,
+                   PI_TEST_SDIO_BLOCK_ADDRESS,
+                   PI_TEST_SDIO_BYTE_COUNT),
+               PI_TEST_SDIO_CMD53_READ_BYTES_PACKED);
+  check_uint64("pi sdio cmd53 write bytes argument",
+               er_pi_sdio_cmd53_argument(
+                   ER_PI_SDIO_WRITE,
+                   ER_PI_SDIO_FUNCTION_WLAN,
+                   ER_PI_SDIO_CMD53_BYTE_MODE,
+                   ER_PI_SDIO_CMD53_INCREMENTING_ADDRESS,
+                   PI_TEST_SDIO_BLOCK_ADDRESS,
+                   PI_TEST_SDIO_BYTE_COUNT),
+               PI_TEST_SDIO_CMD53_WRITE_BYTES_PACKED);
   check_int64("pi mmc rejects wrong response",
               er_pi_mmc_command_prepare(ER_PI_MMC_CMD_IO_RW_DIRECT,
                                         PI_TEST_SDIO_CMD52_PACKED,
@@ -379,6 +405,54 @@ static void test_pi_zero2w_bringup_boundary(void) {
                                           PI_TEST_EMMC_BLOCK_ADDRESS,
                                           &block_io),
               0);
+  check_int64("pi emmc sdio read transfer io",
+              er_pi_emmc_sdio_transfer_io_prepare(
+                  ER_PI_SDIO_READ,
+                  ER_PI_SDIO_FUNCTION_WLAN,
+                  ER_PI_SDIO_CMD53_INCREMENTING_ADDRESS,
+                  PI_TEST_SDIO_BLOCK_ADDRESS,
+                  PI_TEST_SDIO_BYTE_COUNT,
+                  &sdio_transfer_io),
+              1);
+  check_uint64("pi emmc sdio read transfer size count",
+               sdio_transfer_io.block_size_count_value,
+               PI_TEST_EMMC_SDIO_BYTE_SIZE_COUNT_VALUE);
+  check_uint64("pi emmc sdio read transfer argument",
+               sdio_transfer_io.command_io.argument_value,
+               PI_TEST_SDIO_CMD53_READ_BYTES_PACKED);
+  check_uint64("pi emmc sdio read transfer command value",
+               sdio_transfer_io.command_io.command_value,
+               PI_TEST_EMMC_CMD53_READ_BYTES_VALUE);
+  check_uint64("pi emmc sdio read transfer marks read",
+               sdio_transfer_io.read,
+               1u);
+  check_int64("pi emmc sdio write transfer io",
+              er_pi_emmc_sdio_transfer_io_prepare(
+                  ER_PI_SDIO_WRITE,
+                  ER_PI_SDIO_FUNCTION_WLAN,
+                  ER_PI_SDIO_CMD53_INCREMENTING_ADDRESS,
+                  PI_TEST_SDIO_BLOCK_ADDRESS,
+                  PI_TEST_SDIO_BYTE_COUNT,
+                  &sdio_transfer_io),
+              1);
+  check_uint64("pi emmc sdio write transfer argument",
+               sdio_transfer_io.command_io.argument_value,
+               PI_TEST_SDIO_CMD53_WRITE_BYTES_PACKED);
+  check_uint64("pi emmc sdio write transfer command value",
+               sdio_transfer_io.command_io.command_value,
+               PI_TEST_EMMC_CMD53_WRITE_BYTES_VALUE);
+  check_uint64("pi emmc sdio write transfer marks write",
+               sdio_transfer_io.read,
+               0u);
+  check_int64("pi emmc sdio transfer rejects cccr function",
+              er_pi_emmc_sdio_transfer_io_prepare(
+                  ER_PI_SDIO_READ,
+                  ER_CYW43438_SDIO_FUNCTION_CCCR,
+                  ER_PI_SDIO_CMD53_INCREMENTING_ADDRESS,
+                  PI_TEST_SDIO_BLOCK_ADDRESS,
+                  PI_TEST_SDIO_BYTE_COUNT,
+                  &sdio_transfer_io),
+              0);
   check_int64("pi emmc command begin rejects block command",
               er_pi_emmc_command_begin(ER_MMIO_INVALID_HANDLE,
                                        &command,
@@ -414,6 +488,32 @@ static void test_pi_zero2w_bringup_boundary(void) {
               0);
   check_uint64("pi emmc write block marks error",
                block_result.error,
+               1u);
+  check_int64("pi emmc sdio read rejects invalid handle",
+              er_pi_emmc_sdio_read_bytes(ER_MMIO_INVALID_HANDLE,
+                                         ER_PI_SDIO_FUNCTION_WLAN,
+                                         ER_PI_SDIO_CMD53_INCREMENTING_ADDRESS,
+                                         PI_TEST_SDIO_BLOCK_ADDRESS,
+                                         block,
+                                         PI_TEST_SDIO_BYTE_COUNT,
+                                         1u,
+                                         &sdio_transfer_result),
+              0);
+  check_uint64("pi emmc sdio read marks error",
+               sdio_transfer_result.error,
+               1u);
+  check_int64("pi emmc sdio write rejects invalid handle",
+              er_pi_emmc_sdio_write_bytes(ER_MMIO_INVALID_HANDLE,
+                                          ER_PI_SDIO_FUNCTION_WLAN,
+                                          ER_PI_SDIO_CMD53_INCREMENTING_ADDRESS,
+                                          PI_TEST_SDIO_BLOCK_ADDRESS,
+                                          block,
+                                          PI_TEST_SDIO_BYTE_COUNT,
+                                          1u,
+                                          &sdio_transfer_result),
+              0);
+  check_uint64("pi emmc sdio write marks error",
+               sdio_transfer_result.error,
                1u);
   check_int64("pi emmc command poll rejects zero budget",
               er_pi_emmc_command_poll(ER_MMIO_INVALID_HANDLE,
