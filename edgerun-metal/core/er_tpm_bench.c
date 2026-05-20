@@ -22,6 +22,8 @@ enum {
   ER_TPM_BENCH_NS_PER_SECOND = 1000000000u,
   ER_TPM_BENCH_ALGORITHM_PROPERTY_START = 0u,
   ER_TPM_BENCH_CAPABILITY_COUNT = 128u,
+  ER_TPM_BENCH_KEY_HMAC_SHA256 = 1u,
+  ER_TPM_BENCH_KEY_AES_128 = 2u,
   ER_TPM_BENCH_COMMAND_BYTES = 512u,
   ER_TPM_BENCH_RESPONSE_BYTES = 4096u
 };
@@ -48,6 +50,9 @@ typedef struct {
   UINT8 record[ER_TPM_BENCH_RECORD_HEADER_BYTES + ER_TPM_BENCH_RECORD_BYTES +
                 ER_TLS_RECORD_TAG_BYTES];
   ErTlsRecordKeys record_keys;
+  UINT8 hmac_ready;
+  UINT8 aes_ready;
+  UINT8 record_ready;
   UINT64 sink;
 } ErTpmBenchState;
 
@@ -173,6 +178,58 @@ static UINT8 er_tpm_bench_startup(ErTpmBenchTransport* transport) {
                  response_code == ER_TPM_RC_INITIALIZE);
 }
 
+static UINT8 er_tpm_bench_load_key(ErTpmBenchState* state,
+                                   UINT8 key_type,
+                                   UINT32* out_handle,
+                                   UINT32* out_response_code) {
+  UINT8 command[ER_TPM_BENCH_COMMAND_BYTES];
+  UINT8 response[ER_TPM_BENCH_RESPONSE_BYTES];
+  UINT32 command_len;
+  UINT32 response_len;
+
+  if (state == 0 || out_handle == 0 || out_response_code == 0) {
+    return 0u;
+  }
+  *out_response_code = ER_TPM_RC_METAL_PROTOCOL;
+  switch (key_type) {
+    case ER_TPM_BENCH_KEY_HMAC_SHA256:
+      if (er_tpm_build_load_external_hmac_sha256_key_command(
+              state->data,
+              ER_TPM_SHA256_DIGEST_LEN,
+              command,
+              (UINT32)sizeof(command),
+              &command_len) == 0u) {
+        return 0u;
+      }
+      break;
+    case ER_TPM_BENCH_KEY_AES_128:
+      if (er_tpm_build_load_external_aes_key_command(
+              state->key,
+              ER_TPM_AES_128_KEY_LEN,
+              ER_TPM_AES_128_KEY_BITS,
+              er_tls_tpm_record_mode(&state->tls_tpm),
+              command,
+              (UINT32)sizeof(command),
+              &command_len) == 0u) {
+        return 0u;
+      }
+      break;
+    default:
+      return 0u;
+  }
+  if (er_tpm_bench_crb_transact(&state->transport,
+                                command,
+                                command_len,
+                                response,
+                                (UINT32)sizeof(response),
+                                &response_len) == 0u) {
+    *out_response_code = ER_TPM_RC_METAL_TIMEOUT;
+    return 0u;
+  }
+  *out_response_code = er_tpm_response_code(response, response_len);
+  return er_tpm_parse_handle_response(response, response_len, out_handle);
+}
+
 static UINT8 er_tpm_bench_init(EFI_SYSTEM_TABLE* system_table,
                                ErTpmBenchState* state) {
   ErAcpiRsdpInfo rsdp;
@@ -182,6 +239,7 @@ static UINT8 er_tpm_bench_init(EFI_SYSTEM_TABLE* system_table,
   ErTpmCommandProfile commands;
   UINT8 response[ER_TPM_BENCH_RESPONSE_BYTES];
   UINT32 response_len;
+  UINT32 response_code;
   UINT32 i;
 
   if (system_table == 0 || state == 0) {
@@ -254,22 +312,35 @@ static UINT8 er_tpm_bench_init(EFI_SYSTEM_TABLE* system_table,
     state->iv[i] = (UINT8)(0x80u + i);
   }
 
-  if (er_tls_tpm_load_hmac_sha256_key(&state->tls_tpm,
-                                      state->data,
-                                      ER_TPM_SHA256_DIGEST_LEN,
-                                      &state->hmac_handle) == 0u ||
-      er_tls_tpm_load_aes_key(&state->tls_tpm,
-                              state->key,
-                              ER_TPM_AES_128_KEY_LEN,
-                              ER_TPM_AES_128_KEY_BITS,
-                              &state->aes_handle) == 0u) {
-    er_println("TPM real bench failed: stage=load-record-keys");
-    return 0u;
+  if (er_tpm_bench_load_key(state,
+                            ER_TPM_BENCH_KEY_HMAC_SHA256,
+                            &state->hmac_handle,
+                            &response_code) != 0u) {
+    state->hmac_ready = 1u;
+    state->record_keys.client_hmac_handle = state->hmac_handle;
+  } else {
+    er_print("TPM real bench unsupported: case=hmac-sha256-32 stage=load-hmac-key rc=");
+    er_print_u64_hex((UINT64)response_code);
+    er_println("");
   }
-  state->record_keys.client_hmac_handle = state->hmac_handle;
-  state->record_keys.client_aes_handle = state->aes_handle;
-  er_mem_copy(state->record_keys.client_iv, state->iv, ER_TLS_RECORD_IV_BYTES);
-  state->record_keys.ready = 1u;
+  if (er_tpm_bench_load_key(state,
+                            ER_TPM_BENCH_KEY_AES_128,
+                            &state->aes_handle,
+                            &response_code) != 0u) {
+    state->aes_ready = 1u;
+    state->record_keys.client_aes_handle = state->aes_handle;
+  } else {
+    er_print("TPM real bench unsupported: case=aes-crypt-16 stage=load-aes-key rc=");
+    er_print_u64_hex((UINT64)response_code);
+    er_println("");
+  }
+  if (state->hmac_ready != 0u && state->aes_ready != 0u) {
+    er_mem_copy(state->record_keys.client_iv, state->iv, ER_TLS_RECORD_IV_BYTES);
+    state->record_keys.ready = 1u;
+    state->record_ready = 1u;
+  } else {
+    er_println("TPM real bench unsupported: case=tls-record-protect-16 stage=record-keys");
+  }
   return 1u;
 }
 
@@ -304,6 +375,7 @@ static UINT8 er_tpm_bench_hmac_case(void* user) {
   ErTpmBenchState* state = (ErTpmBenchState*)user;
 
   if (state == 0 ||
+      state->hmac_ready == 0u ||
       er_tls_tpm_hmac_sha256(&state->tls_tpm,
                              state->hmac_handle,
                              state->data,
@@ -321,6 +393,7 @@ static UINT8 er_tpm_bench_aes_case(void* user) {
   UINT32 iv_len;
 
   if (state == 0 ||
+      state->aes_ready == 0u ||
       er_tls_tpm_record_crypt(&state->tls_tpm,
                               state->aes_handle,
                               0u,
@@ -347,7 +420,7 @@ static UINT8 er_tpm_bench_record_case(void* user) {
   UINT16 record_len;
   UINT8 status;
 
-  if (state == 0) {
+  if (state == 0 || state->record_ready == 0u) {
     return 0u;
   }
   state->record_keys.client_sequence = 0u;
@@ -461,22 +534,28 @@ void er_tpm_real_benchmark(EFI_SYSTEM_TABLE* system_table) {
                                      "sha256-32",
                                      er_tpm_bench_sha256_case,
                                      ER_TPM_BENCH_SHA256_ITERATIONS,
-                                     cycles_per_us) != 0u &&
-               er_tpm_bench_run_case(&state,
-                                     "hmac-sha256-32",
-                                     er_tpm_bench_hmac_case,
-                                     ER_TPM_BENCH_HMAC_ITERATIONS,
-                                     cycles_per_us) != 0u &&
-               er_tpm_bench_run_case(&state,
-                                     "aes-crypt-16",
-                                     er_tpm_bench_aes_case,
-                                     ER_TPM_BENCH_AES_ITERATIONS,
-                                     cycles_per_us) != 0u &&
-               er_tpm_bench_run_case(&state,
-                                     "tls-record-protect-16",
-                                     er_tpm_bench_record_case,
-                                     ER_TPM_BENCH_RECORD_ITERATIONS,
                                      cycles_per_us) != 0u);
+  if (ok != 0u && state.hmac_ready != 0u) {
+    ok = er_tpm_bench_run_case(&state,
+                               "hmac-sha256-32",
+                               er_tpm_bench_hmac_case,
+                               ER_TPM_BENCH_HMAC_ITERATIONS,
+                               cycles_per_us);
+  }
+  if (ok != 0u && state.aes_ready != 0u) {
+    ok = er_tpm_bench_run_case(&state,
+                               "aes-crypt-16",
+                               er_tpm_bench_aes_case,
+                               ER_TPM_BENCH_AES_ITERATIONS,
+                               cycles_per_us);
+  }
+  if (ok != 0u && state.record_ready != 0u) {
+    ok = er_tpm_bench_run_case(&state,
+                               "tls-record-protect-16",
+                               er_tpm_bench_record_case,
+                               ER_TPM_BENCH_RECORD_ITERATIONS,
+                               cycles_per_us);
+  }
   if (ok == 0u) {
     (void)er_tls_record_keys_close(&state.tls_tpm, &state.record_keys);
     return;
