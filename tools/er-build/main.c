@@ -42,12 +42,22 @@ enum {
   ERB_SWARM_FILE_TASK_MAX = 512,
   ERB_SWARM_MAX_ISSUES_PER_FILE = 8,
   ERB_SWARM_AGENT_ARGC = 12,
+  ERB_DECIMAL_RADIX = 10,
+  ERB_ARGC_TARGET_ONLY = 1,
+  ERB_ARGC_ONE_VALUE = 2,
+  ERB_ARGC_TWO_VALUES = 3,
   ERB_TEXT_INITIAL_CAP = 8192,
   ERB_PIPE_READ_CHUNK = 4096,
   ERB_SWARM_STREAM_CHUNK = 4096,
   ERB_SELECT_TIMEOUT_USEC = 200000,
   ERB_PACKAGE_CONTRACT_UI_APP = 1,
-  ERB_PACKAGE_CONTRACT_BUS_DRIVER = 2
+  ERB_PACKAGE_CONTRACT_BUS_DRIVER = 2,
+  ERB_MANIFEST_UI_LINE_COUNT = 5,
+  ERB_MANIFEST_BUS_LINE_COUNT = 7,
+  ERB_ZERRORS_PREFIX_LEN = 8,
+  ERB_ZSYSCALL_PREFIX_LEN = 9,
+  ERB_ZSYSNUM_PREFIX_LEN = 8,
+  ERB_ZTYPES_PREFIX_LEN = 7
 };
 
 typedef enum {
@@ -518,8 +528,10 @@ static int erb_validate_app_manifest(const char* path,
     }
     ++line_index;
   }
-  if ((*out_contract == ERB_PACKAGE_CONTRACT_UI_APP && line_index == 5u) ||
-      (*out_contract == ERB_PACKAGE_CONTRACT_BUS_DRIVER && line_index == 7u)) {
+  if ((*out_contract == ERB_PACKAGE_CONTRACT_UI_APP &&
+       line_index == ERB_MANIFEST_UI_LINE_COUNT) ||
+      (*out_contract == ERB_PACKAGE_CONTRACT_BUS_DRIVER &&
+       line_index == ERB_MANIFEST_BUS_LINE_COUNT)) {
     return 0;
   }
   fprintf(stderr, "er-build: invalid app manifest %s\n", path);
@@ -573,6 +585,29 @@ static int erb_compile_common(ErbArgs* args, const char* output) {
       erb_args_push(args, "-O2") != 0 ||
       erb_args_push(args, "-o") != 0 ||
       erb_args_push(args, output) != 0) {
+    return 1;
+  }
+  return 0;
+}
+
+static int erb_args_push_varfont_sources(ErbArgs* args) {
+  if (erb_args_push(args, "edgerun-ui-core/varfont/src/vr_font_freestanding.c") != 0 ||
+      erb_args_push(args, "edgerun-ui-core/varfont/src/vr_font.c") != 0 ||
+      erb_args_push(args, "edgerun-ui-core/varfont/src/vr_font_utils.c") != 0 ||
+      erb_args_push(args, "edgerun-ui-core/varfont/src/vr_font_axes.c") != 0 ||
+      erb_args_push(args, "edgerun-ui-core/varfont/src/vr_font_cmap.c") != 0 ||
+      erb_args_push(args, "edgerun-ui-core/varfont/src/vr_font_gvar.c") != 0 ||
+      erb_args_push(args, "edgerun-ui-core/varfont/src/vr_font_gvar_apply.c") != 0 ||
+      erb_args_push(args, "edgerun-ui-core/varfont/src/vr_font_kern.c") != 0 ||
+      erb_args_push(args, "edgerun-ui-core/varfont/src/vr_font_tables.c") != 0 ||
+      erb_args_push(args, "edgerun-ui-core/varfont/src/vr_font_shape.c") != 0 ||
+      erb_args_push(args, "edgerun-ui-core/varfont/src/vr_font_raster.c") != 0 ||
+      erb_args_push(args, "edgerun-ui-core/varfont/src/vr_font_raster_geometry.c") != 0 ||
+      erb_args_push(args, "edgerun-ui-core/varfont/src/vr_font_raster_glyph.c") != 0 ||
+      erb_args_push(args, "edgerun-ui-core/varfont/src/vr_font_raster_msdf.c") != 0 ||
+      erb_args_push(args, "edgerun-ui-core/varfont/src/vr_font_raster_outline.c") != 0 ||
+      erb_args_push(args, "edgerun-ui-core/varfont/src/vr_font_raster_storage.c") != 0 ||
+      erb_args_push(args, "edgerun-ui-core/varfont/src/vr_font_atlas.c") != 0) {
     return 1;
   }
   return 0;
@@ -738,28 +773,39 @@ static int erb_build_app_run(int print_plan) {
   return erb_run_args(&args, print_plan);
 }
 
-static int erb_target_app_build(const char* package_dir, int print_plan) {
-  ErbArgs args;
-  ErbAppPackagePaths paths;
+static int erb_load_app_package(const char* package_dir,
+                                const char* target_name,
+                                ErbAppPackagePaths* paths) {
   int package_contract = 0;
   char source_name[ERB_PATH_CAP];
 
   if (package_dir == NULL || package_dir[0] == '\0') {
-    return erb_fail("app-build requires a package directory");
-  }
-  if (erb_init_app_package_paths(&paths, package_dir) != 0) {
+    fprintf(stderr, "er-build: %s requires a package directory\n", target_name);
     return 1;
   }
-  if (erb_require_regular_file(paths.manifest_source) != 0 ||
-      erb_validate_app_manifest(paths.manifest_source, &package_contract,
+  if (paths == NULL || erb_init_app_package_paths(paths, package_dir) != 0) {
+    return 1;
+  }
+  if (erb_require_regular_file(paths->manifest_source) != 0 ||
+      erb_validate_app_manifest(paths->manifest_source, &package_contract,
                                 source_name, sizeof(source_name)) != 0 ||
-      erb_path_join(paths.app_source, sizeof(paths.app_source), package_dir,
+      erb_path_join(paths->app_source, sizeof(paths->app_source), package_dir,
                     source_name) != 0 ||
-      erb_require_regular_file(paths.app_source) != 0 ||
-      erb_build_wasm_compile(print_plan) != 0) {
+      erb_require_regular_file(paths->app_source) != 0) {
     return 1;
   }
   (void)package_contract;
+  return 0;
+}
+
+static int erb_target_app_build(const char* package_dir, int print_plan) {
+  ErbArgs args;
+  ErbAppPackagePaths paths;
+
+  if (erb_load_app_package(package_dir, "app-build", &paths) != 0 ||
+      erb_build_wasm_compile(print_plan) != 0) {
+    return 1;
+  }
   if (print_plan == 0 && erb_mkdir_one(paths.package_build_dir) != 0) {
     return 1;
   }
@@ -781,26 +827,12 @@ static int erb_target_app_build(const char* package_dir, int print_plan) {
 
 static int erb_target_app_verify(const char* package_dir) {
   ErbAppPackagePaths paths;
-  int package_contract = 0;
-  char source_name[ERB_PATH_CAP];
 
-  if (package_dir == NULL || package_dir[0] == '\0') {
-    return erb_fail("app-verify requires a package directory");
-  }
-  if (erb_init_app_package_paths(&paths, package_dir) != 0) {
-    return 1;
-  }
-  if (erb_require_regular_file(paths.manifest_source) != 0 ||
-      erb_validate_app_manifest(paths.manifest_source, &package_contract,
-                                source_name, sizeof(source_name)) != 0 ||
-      erb_path_join(paths.app_source, sizeof(paths.app_source), package_dir,
-                    source_name) != 0 ||
-      erb_require_regular_file(paths.app_source) != 0 ||
+  if (erb_load_app_package(package_dir, "app-verify", &paths) != 0 ||
       erb_require_regular_file(paths.output_wasm) != 0 ||
       erb_require_regular_file(paths.output_identity) != 0) {
     return 1;
   }
-  (void)package_contract;
   return erb_verify_app_package_identity(paths.output_identity, paths.app_source,
                                          paths.manifest_source, paths.output_wasm);
 }
@@ -1073,7 +1105,7 @@ static int erb_swarm_issue_parse(const char* line, ErbSwarmIssue* issue) {
   }
   after_colon = colon + 1;
   errno = 0;
-  parsed_line = strtoul(after_colon, &end, 10);
+  parsed_line = strtoul(after_colon, &end, ERB_DECIMAL_RADIX);
   if (end == after_colon || errno == ERANGE || parsed_line == 0ul || *end != ' ') {
     return 0;
   }
@@ -1149,10 +1181,10 @@ static int erb_swarm_path_generated_or_catalog(const char* path) {
       strstr(path, "catalog_data") != NULL ||
       strstr(path, "_data.c") != NULL ||
       strstr(path, "_table.c") != NULL ||
-      strncmp(base, "zerrors_", 8u) == 0 ||
-      strncmp(base, "zsyscall_", 9u) == 0 ||
-      strncmp(base, "zsysnum_", 8u) == 0 ||
-      strncmp(base, "ztypes_", 7u) == 0) {
+      strncmp(base, "zerrors_", ERB_ZERRORS_PREFIX_LEN) == 0 ||
+      strncmp(base, "zsyscall_", ERB_ZSYSCALL_PREFIX_LEN) == 0 ||
+      strncmp(base, "zsysnum_", ERB_ZSYSNUM_PREFIX_LEN) == 0 ||
+      strncmp(base, "ztypes_", ERB_ZTYPES_PREFIX_LEN) == 0) {
     return 1;
   }
   return 0;
@@ -1523,7 +1555,10 @@ static int erb_swarm_spawn_file_task(const ErbSwarmFileTask* task,
   return 0;
 }
 
-static int erb_swarm_parse_concurrency(const char* text, int* out_value) {
+static int erb_swarm_parse_bounded(const char* text,
+                                   unsigned long max_value,
+                                   const char* value_name,
+                                   unsigned long* out_value) {
   char* end = NULL;
   unsigned long value;
 
@@ -1531,11 +1566,22 @@ static int erb_swarm_parse_concurrency(const char* text, int* out_value) {
     return 0;
   }
   errno = 0;
-  value = strtoul(text, &end, 10);
+  value = strtoul(text, &end, ERB_DECIMAL_RADIX);
   if (end == text || *end != '\0' || errno == ERANGE ||
-      value == 0ul || value > (unsigned long)ERB_SWARM_MAX_LIMIT) {
-    fprintf(stderr, "er-build: repo-agent-swarm concurrency must be 1..%d\n",
-            ERB_SWARM_MAX_LIMIT);
+      value == 0ul || value > max_value) {
+    fprintf(stderr, "er-build: repo-agent-swarm %s must be 1..%lu\n",
+            value_name, max_value);
+    return 0;
+  }
+  *out_value = value;
+  return 1;
+}
+
+static int erb_swarm_parse_concurrency(const char* text, int* out_value) {
+  unsigned long value;
+
+  if (erb_swarm_parse_bounded(text, (unsigned long)ERB_SWARM_MAX_LIMIT,
+                              "concurrency", &value) == 0) {
     return 0;
   }
   *out_value = (int)value;
@@ -1543,18 +1589,10 @@ static int erb_swarm_parse_concurrency(const char* text, int* out_value) {
 }
 
 static int erb_swarm_parse_limit(const char* text, size_t* out_value) {
-  char* end = NULL;
   unsigned long value;
 
-  if (text == NULL || out_value == NULL) {
-    return 0;
-  }
-  errno = 0;
-  value = strtoul(text, &end, 10);
-  if (end == text || *end != '\0' || errno == ERANGE ||
-      value == 0ul || value > (unsigned long)ERB_SWARM_FILE_TASK_MAX) {
-    fprintf(stderr, "er-build: repo-agent-swarm limit must be 1..%d\n",
-            ERB_SWARM_FILE_TASK_MAX);
+  if (erb_swarm_parse_bounded(text, (unsigned long)ERB_SWARM_FILE_TASK_MAX,
+                              "limit", &value) == 0) {
     return 0;
   }
   *out_value = (size_t)value;
@@ -1902,23 +1940,7 @@ static int erb_target_varfont_test(int print_plan) {
       erb_args_push(&args, "edgerun-ui-core/varfont/tests/test_cmap.c") != 0 ||
       erb_args_push(&args, "edgerun-ui-core/varfont/tests/test_raster.c") != 0 ||
       erb_args_push(&args, "edgerun-ui-core/varfont/tests/test_vr_font_freestanding.c") != 0 ||
-      erb_args_push(&args, "edgerun-ui-core/varfont/src/vr_font_freestanding.c") != 0 ||
-      erb_args_push(&args, "edgerun-ui-core/varfont/src/vr_font.c") != 0 ||
-      erb_args_push(&args, "edgerun-ui-core/varfont/src/vr_font_utils.c") != 0 ||
-      erb_args_push(&args, "edgerun-ui-core/varfont/src/vr_font_axes.c") != 0 ||
-      erb_args_push(&args, "edgerun-ui-core/varfont/src/vr_font_cmap.c") != 0 ||
-      erb_args_push(&args, "edgerun-ui-core/varfont/src/vr_font_gvar.c") != 0 ||
-      erb_args_push(&args, "edgerun-ui-core/varfont/src/vr_font_gvar_apply.c") != 0 ||
-      erb_args_push(&args, "edgerun-ui-core/varfont/src/vr_font_kern.c") != 0 ||
-      erb_args_push(&args, "edgerun-ui-core/varfont/src/vr_font_tables.c") != 0 ||
-      erb_args_push(&args, "edgerun-ui-core/varfont/src/vr_font_shape.c") != 0 ||
-      erb_args_push(&args, "edgerun-ui-core/varfont/src/vr_font_raster.c") != 0 ||
-      erb_args_push(&args, "edgerun-ui-core/varfont/src/vr_font_raster_geometry.c") != 0 ||
-      erb_args_push(&args, "edgerun-ui-core/varfont/src/vr_font_raster_glyph.c") != 0 ||
-      erb_args_push(&args, "edgerun-ui-core/varfont/src/vr_font_raster_msdf.c") != 0 ||
-      erb_args_push(&args, "edgerun-ui-core/varfont/src/vr_font_raster_outline.c") != 0 ||
-      erb_args_push(&args, "edgerun-ui-core/varfont/src/vr_font_raster_storage.c") != 0 ||
-      erb_args_push(&args, "edgerun-ui-core/varfont/src/vr_font_atlas.c") != 0 ||
+      erb_args_push_varfont_sources(&args) != 0 ||
       erb_args_push(&args, "-lm") != 0) {
     return 1;
   }
@@ -1988,23 +2010,7 @@ static int erb_target_ui_core_test(int print_plan) {
       erb_args_push(&args, "edgerun-ui-core/src/er_ui_surface_renderer.c") != 0 ||
       erb_args_push(&args, "edgerun-ui-core/src/er_ui_theme.c") != 0 ||
       erb_args_push(&args, "edgerun-ui-core/src/er_ui_text.c") != 0 ||
-      erb_args_push(&args, "edgerun-ui-core/varfont/src/vr_font_freestanding.c") != 0 ||
-      erb_args_push(&args, "edgerun-ui-core/varfont/src/vr_font.c") != 0 ||
-      erb_args_push(&args, "edgerun-ui-core/varfont/src/vr_font_utils.c") != 0 ||
-      erb_args_push(&args, "edgerun-ui-core/varfont/src/vr_font_axes.c") != 0 ||
-      erb_args_push(&args, "edgerun-ui-core/varfont/src/vr_font_cmap.c") != 0 ||
-      erb_args_push(&args, "edgerun-ui-core/varfont/src/vr_font_gvar.c") != 0 ||
-      erb_args_push(&args, "edgerun-ui-core/varfont/src/vr_font_gvar_apply.c") != 0 ||
-      erb_args_push(&args, "edgerun-ui-core/varfont/src/vr_font_kern.c") != 0 ||
-      erb_args_push(&args, "edgerun-ui-core/varfont/src/vr_font_tables.c") != 0 ||
-      erb_args_push(&args, "edgerun-ui-core/varfont/src/vr_font_shape.c") != 0 ||
-      erb_args_push(&args, "edgerun-ui-core/varfont/src/vr_font_raster.c") != 0 ||
-      erb_args_push(&args, "edgerun-ui-core/varfont/src/vr_font_raster_geometry.c") != 0 ||
-      erb_args_push(&args, "edgerun-ui-core/varfont/src/vr_font_raster_glyph.c") != 0 ||
-      erb_args_push(&args, "edgerun-ui-core/varfont/src/vr_font_raster_msdf.c") != 0 ||
-      erb_args_push(&args, "edgerun-ui-core/varfont/src/vr_font_raster_outline.c") != 0 ||
-      erb_args_push(&args, "edgerun-ui-core/varfont/src/vr_font_raster_storage.c") != 0 ||
-      erb_args_push(&args, "edgerun-ui-core/varfont/src/vr_font_atlas.c") != 0 ||
+      erb_args_push_varfont_sources(&args) != 0 ||
       erb_args_push(&args, "-lm") != 0) {
     return 1;
   }
@@ -2045,41 +2051,42 @@ int main(int argc, char** argv) {
     const char* scope;
     const char* test_target = NULL;
 
-    if (target_index + 2 > argc || target_index + 3 < argc) {
+    if (target_index + ERB_ARGC_ONE_VALUE > argc ||
+        target_index + ERB_ARGC_TWO_VALUES < argc) {
       return erb_usage();
     }
     scope = argv[target_index + 1];
-    if (target_index + 3 == argc) {
+    if (target_index + ERB_ARGC_TWO_VALUES == argc) {
       test_target = argv[target_index + 2];
     }
     return erb_target_repo_progress(scope, test_target, print_plan);
   }
   if (strcmp(target, "app-build") == 0) {
-    if (target_index + 2 != argc) {
+    if (target_index + ERB_ARGC_ONE_VALUE != argc) {
       return erb_usage();
     }
     return erb_target_app_build(argv[target_index + 1], print_plan);
   }
   if (strcmp(target, "app-new") == 0) {
-    if (print_plan != 0 || target_index + 3 != argc) {
+    if (print_plan != 0 || target_index + ERB_ARGC_TWO_VALUES != argc) {
       return erb_usage();
     }
     return erb_target_app_new(argv[target_index + 1], argv[target_index + 2]);
   }
   if (strcmp(target, "app-check") == 0) {
-    if (target_index + 2 != argc) {
+    if (target_index + ERB_ARGC_ONE_VALUE != argc) {
       return erb_usage();
     }
     return erb_target_app_check(argv[target_index + 1], print_plan);
   }
   if (strcmp(target, "app-verify") == 0) {
-    if (print_plan != 0 || target_index + 2 != argc) {
+    if (print_plan != 0 || target_index + ERB_ARGC_ONE_VALUE != argc) {
       return erb_usage();
     }
     return erb_target_app_verify(argv[target_index + 1]);
   }
   if (strcmp(target, "app-run") == 0) {
-    if (target_index + 2 != argc) {
+    if (target_index + ERB_ARGC_ONE_VALUE != argc) {
       return erb_usage();
     }
     return erb_target_app_run(argv[target_index + 1], print_plan);
@@ -2090,7 +2097,7 @@ int main(int argc, char** argv) {
   if (strcmp(target, "repo-agent-swarm") == 0) {
     return erb_target_repo_agent_swarm(argc - target_index - 1, argv + target_index + 1, print_plan);
   }
-  if (target_index + 1 != argc) {
+  if (target_index + ERB_ARGC_TARGET_ONLY != argc) {
     return erb_usage();
   }
   if (strcmp(target, "repo-check-bin") == 0) {
