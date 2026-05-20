@@ -286,9 +286,9 @@ all local build output, including EFI artifacts produced by the metal Makefile.
 
 This is one Git repository. Do not add nested `.git` directories, `.gitmodules`, or submodule gitlinks.
 
-`README.md` owns the project overview, repository layout, and command
-entrypoints. Detailed area notes belong in named top-level documents, not
-nested READMEs.
+`README.md` is the only first-party documentation surface. `AGENTS.md` is the
+agent policy file. Code, tests, generated boot manifests, and hardware output
+are the source of truth for subsystem details.
 
 ## Runtime Area Notes
 
@@ -312,9 +312,9 @@ Netboot is support infrastructure. Do not redesign it unless it blocks boot.
 The durable runtime work is relay-routed UI, input, storage, driver, and device
 traffic through `erwire`.
 
-The canonical networking specification, consumer API contract, carrier
-behavior, and acceptance milestones live in
-[`NETWORK_MODEL.md`](NETWORK_MODEL.md).
+Networking code lives in `edgerun-metal/core/er_network.c`,
+`edgerun-metal/core/er_work_route.c`, `edgerun-metal/core/erwire.c`, and the
+carrier implementations. Those files and their tests define current behavior.
 
 Hardware bring-up order:
 
@@ -382,9 +382,10 @@ to create the first `.build/er-build` without rebuilding it from a host compiler
 Compiler and linker calls that still produce new C artifacts remain explicit
 until they move behind the repository-owned compiler boundary.
 
-ERC, documented in `ERC_LANGUAGE.md`, is the current EdgeRun app language. It
-is EdgeRun C--: a small C-shaped source format for admitted packages, not
-hosted C and not a freestanding C profile.
+ERC is the current EdgeRun app language. It is EdgeRun C--: a small C-shaped
+source format for admitted packages, not hosted C and not a freestanding C
+profile. The compiler in `tools/wasm-compile` and contract headers in
+`include/` define the accepted surface.
 
 ## Common Commands
 
