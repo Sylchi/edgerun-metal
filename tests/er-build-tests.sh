@@ -67,6 +67,17 @@ case "$repo_plan" in
 esac
 
 case "$repo_plan" in
+  *"+ ./tests/repo-push-check-tests.sh"* ) ;;
+  * ) printf 'missing repo push check test step\n' >&2; exit 1 ;;
+esac
+
+push_check_plan=$("$ER_BUILD" --print-plan repo-push-check)
+case "$push_check_plan" in
+  *"+ ./tools/repo-push-check.sh"* ) ;;
+  * ) printf 'missing repo-push-check step\n' >&2; exit 1 ;;
+esac
+
+case "$repo_plan" in
   *"+ toolchain/bin/clang -std=c11 -Wall -Wextra -Werror -O2 -o .build/erwire-decode -Iinclude tools/erwire-decode.c"* ) ;;
   * ) printf 'missing erwire decoder include path\n' >&2; exit 1 ;;
 esac

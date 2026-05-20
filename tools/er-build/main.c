@@ -1794,6 +1794,7 @@ static int erb_target_repo_test(int print_plan) {
     return 1;
   }
   if (erb_run_program("./tests/repo-check-tests.sh", print_plan) != 0 ||
+      erb_run_program("./tests/repo-push-check-tests.sh", print_plan) != 0 ||
       erb_run_program("./tests/repo-inspect-tests.sh", print_plan) != 0 ||
       erb_run_program("./tests/repo-progress-tests.sh", print_plan) != 0 ||
       erb_run_program("./tests/er-build-tests.sh", print_plan) != 0 ||
@@ -1969,7 +1970,7 @@ static int erb_usage(void) {
           "targets: app-new <package-dir> ui-app|bus-driver\n"
           "         app-build <package-dir> app-verify <package-dir>\n"
           "         app-run <package-dir> app-check <package-dir>\n"
-          "         repo-check-bin repo-inspect erwire-decode erwire-test wasm-compile\n"
+          "         repo-check-bin repo-push-check repo-inspect erwire-decode erwire-test wasm-compile\n"
           "         repo-agent-swarm [--scope PATH] [--concurrency N] [--limit N]\n"
           "         pi-serial-verify sdcard-probe pi-usb-boot\n"
           "         repo-check repo-test repo-progress <scope> [test-target]\n"
@@ -2044,6 +2045,9 @@ int main(int argc, char** argv) {
   }
   if (strcmp(target, "repo-check-bin") == 0) {
     return erb_build_repo_check(print_plan);
+  }
+  if (strcmp(target, "repo-push-check") == 0) {
+    return erb_run_program("./tools/repo-push-check.sh", print_plan);
   }
   if (strcmp(target, "erwire-decode") == 0) {
     return erb_build_erwire_decode(print_plan);
