@@ -39,6 +39,7 @@ typedef struct {
   UINT32 ecdh_handle;
   UINT16 cipher_suite;
   UINT16 supported_version;
+  UINT8 server_authenticated;
   UINT8 ready;
 } ErTlsHandshake;
 
@@ -78,6 +79,13 @@ UINT8 er_tls_handshake_accept_server_hello(ErTlsTpm* tpm,
                                            ErTlsHandshake* handshake,
                                            const UINT8* bytes,
                                            UINT16 len);
+UINT8 er_tls_certificate_verify_accept(ErTlsTpm* tpm,
+                                       ErTlsHandshake* handshake,
+                                       const UINT8 server_verify_key[ER_TLS_P256_RAW_PUBLIC_BYTES],
+                                       const UINT8* transcript,
+                                       UINT16 transcript_len,
+                                       const UINT8* message,
+                                       UINT16 message_len);
 UINT8 er_tls_handshake_close(ErTlsTpm* tpm, ErTlsHandshake* handshake);
 UINT8 er_tls_record_keys_derive(ErTlsTpm* tpm,
                                 const ErTlsHandshake* handshake,

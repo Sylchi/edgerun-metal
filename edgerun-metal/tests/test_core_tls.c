@@ -2,10 +2,16 @@
 #define TEST_TLS_SERVER_KEY_SEED 0xd0u
 #define TEST_TLS_SERVER_HELLO_MAX 160u
 #define TEST_TLS_TRANSCRIPT_MAX 384u
+#define TEST_TLS_CERT_VERIFY_MAX 80u
+#define TEST_TLS_CERT_VERIFY_HANDSHAKE 15u
+#define TEST_TLS_CERT_VERIFY_SCHEME 0x0403u
+#define TEST_TLS_CERT_VERIFY_SIGNATURE_BYTES 64u
+#define TEST_TLS_CERT_VERIFY_SIGNATURE_SEED 0x20u
 #define TEST_TLS_RECORD_MAX 128u
 #define TEST_TLS_RECORD_HEADER_BYTES 5u
 #define TEST_TLS_PLAINTEXT_BYTES 16u
-#define TEST_TLS_DERIVE_CALLS 18u
+#define TEST_TLS_AUTH_CALLS 10u
+#define TEST_TLS_DERIVE_CALLS 25u
 
 typedef struct {
   UINT8* bytes;
@@ -88,6 +94,23 @@ static UINT16 test_tls_build_server_hello(UINT8* out, UINT16 out_capacity, UINT8
   return writer.len;
 }
 
+static UINT16 test_tls_build_certificate_verify(UINT8* out, UINT16 out_capacity) {
+  TestTlsWriter writer;
+
+  (void)out_capacity;
+  writer.bytes = out;
+  writer.len = 0u;
+  test_tls_write_u8(&writer, TEST_TLS_CERT_VERIFY_HANDSHAKE);
+  test_tls_write_u24(&writer, 2u + 2u + TEST_TLS_CERT_VERIFY_SIGNATURE_BYTES);
+  test_tls_write_u16(&writer, TEST_TLS_CERT_VERIFY_SCHEME);
+  test_tls_write_u16(&writer, TEST_TLS_CERT_VERIFY_SIGNATURE_BYTES);
+  test_fill_bytes(out + writer.len,
+                  TEST_TLS_CERT_VERIFY_SIGNATURE_BYTES,
+                  TEST_TLS_CERT_VERIFY_SIGNATURE_SEED);
+  writer.len = (UINT16)(writer.len + TEST_TLS_CERT_VERIFY_SIGNATURE_BYTES);
+  return writer.len;
+}
+
 static void test_tls_tpm_handshake_core(void) {
   TestTlsTpmScript script;
   ErTpm2Info info;
@@ -99,6 +122,7 @@ static void test_tls_tpm_handshake_core(void) {
   ErTlsServerHello parsed;
   UINT8 client_hello[ER_TLS_CLIENT_HELLO_MAX_BYTES];
   UINT8 server_hello[TEST_TLS_SERVER_HELLO_MAX];
+  UINT8 certificate_verify[TEST_TLS_CERT_VERIFY_MAX];
   UINT8 transcript[TEST_TLS_TRANSCRIPT_MAX];
   UINT8 plaintext[TEST_TLS_PLAINTEXT_BYTES];
   UINT8 record[TEST_TLS_RECORD_MAX];
@@ -106,6 +130,7 @@ static void test_tls_tpm_handshake_core(void) {
   UINT8 server_key[ER_TLS_P256_RAW_PUBLIC_BYTES];
   UINT16 client_hello_len = 0u;
   UINT16 server_hello_len;
+  UINT16 certificate_verify_len;
   UINT16 transcript_len;
   UINT16 record_len = 0u;
   UINT16 opened_len = 0u;
@@ -159,6 +184,22 @@ static void test_tls_tpm_handshake_core(void) {
     er_mem_copy(transcript + client_hello_len, server_hello, server_hello_len);
   }
   transcript_len = (UINT16)(client_hello_len + server_hello_len);
+  certificate_verify_len =
+      test_tls_build_certificate_verify(certificate_verify,
+                                        (UINT16)sizeof(certificate_verify));
+  check_uint64("tls core certificate verify",
+               er_tls_certificate_verify_accept(&tls_tpm,
+                                                &handshake,
+                                                server_key,
+                                                transcript,
+                                                transcript_len,
+                                                certificate_verify,
+                                                certificate_verify_len),
+               ER_TLS_STATUS_OK);
+  check_uint64("tls core authenticated", handshake.server_authenticated, 1u);
+  check_uint64("tls core auth calls", script.calls, TEST_TLS_AUTH_CALLS);
+  check_uint64("tls core auth flush", script.last_command_code, ER_TPM_CC_FLUSH_CONTEXT);
+
   check_uint64("tls core derive keys",
                er_tls_record_keys_derive(&tls_tpm,
                                          &handshake,
