@@ -54,7 +54,8 @@
   fixture, \
   slots, \
   states, \
-  state_count) \
+  state_count, \
+  component_status) \
   { \
     title, \
     slug, \
@@ -66,7 +67,7 @@
     ER_UI_COMPONENT_ARRAY_COUNT(slots), \
     states, \
     state_count, \
-    ER_UI_COMPONENT_STATUS_EXACT_PORT \
+    component_status \
   }
 #define ER_UI_COMPONENT_ENTRY(title, slug, category, source, fixture, slots, states) \
   ER_UI_COMPONENT_SPEC( \
@@ -77,7 +78,19 @@
     fixture, \
     slots, \
     states, \
-    ER_UI_COMPONENT_ARRAY_COUNT(states))
+    ER_UI_COMPONENT_ARRAY_COUNT(states), \
+    ER_UI_COMPONENT_STATUS_EXACT_PORT)
+#define ER_UI_COMPONENT_NATIVE(title, slug, category, source, fixture, slots, states) \
+  ER_UI_COMPONENT_SPEC( \
+    title, \
+    slug, \
+    category, \
+    source, \
+    fixture, \
+    slots, \
+    states, \
+    ER_UI_COMPONENT_ARRAY_COUNT(states), \
+    ER_UI_COMPONENT_STATUS_NATIVE_PRIMITIVE)
 #define ER_UI_COMPONENT_EMPTY(title, slug, category, source, fixture, slots, states) \
   ER_UI_COMPONENT_SPEC( \
     title, \
@@ -87,7 +100,8 @@
     fixture, \
     slots, \
     states, \
-    ER_UI_COMPONENT_EMPTY_COUNT)
+    ER_UI_COMPONENT_EMPTY_COUNT, \
+    ER_UI_COMPONENT_STATUS_EXACT_PORT)
 #define ER_UI_COMPONENT_FIELD_SET(fields) \
   do { \
     *out_fields = fields; \

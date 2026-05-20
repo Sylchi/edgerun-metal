@@ -34,6 +34,8 @@
 #define ER_UI_TEST_COMPONENT_NARROW_METAL_W 800.0f
 #define ER_UI_TEST_COMPONENT_NARROW_METAL_H 720.0f
 #define ER_UI_TEST_COMPONENT_COUNT 59u
+#define ER_UI_TEST_COMPONENT_EXACT_COUNT ER_UI_COMPONENT_CANONICAL_BASE_COUNT
+#define ER_UI_TEST_COMPONENT_NATIVE_PRIMITIVE_COUNT (ER_UI_TEST_COMPONENT_COUNT - ER_UI_TEST_COMPONENT_EXACT_COUNT)
 #define ER_UI_TEST_COMPONENT_KEYBOARD_COUNT 2u
 #define ER_UI_TEST_COMPONENT_ORDER_OPTION_INDEX 1u
 #define ER_UI_TEST_COMPONENT_STOCK_BUTTON_INDEX 2u
@@ -347,6 +349,10 @@ void run_component_tests(void) {
   expect_true(mapping.status == ER_UI_COMPONENT_STATUS_EXACT_PORT, "component mapping: status matches");
   expect_true(mapping.native_renderer, "component mapping: native renderer true");
   expect_true(mapping.exact_port, "component mapping: exact port true");
+  expect_true(er_ui_component_port_mapping_for_identifier("data-table", &mapping), "component mapping: composed data table maps");
+  expect_true(mapping.status == ER_UI_COMPONENT_STATUS_NATIVE_PRIMITIVE, "component mapping: composed surface is native");
+  expect_true(mapping.native_renderer, "component mapping: composed surface has a renderer");
+  expect_true(!mapping.exact_port, "component mapping: composed surface is not an exact shadcn base port");
   expect_true(!er_ui_component_port_mapping_for_identifier("UnknownThing", &mapping), "component mapping: unknown is rejected");
 
   expect_true(er_ui_component_preview_available_by_source_component("InputGroup"), "component preview: source component resolves");
@@ -410,9 +416,10 @@ void run_component_tests(void) {
   expect_true(!er_ui_component_gallery_apply_action(&state, action), "component preview state: unrelated action is rejected");
 
   expect_size(er_ui_component_native_count(), ER_UI_TEST_COMPONENT_COUNT, "component progress: native count matches Rust source");
-  expect_size(er_ui_component_exact_count(), ER_UI_TEST_COMPONENT_COUNT, "component progress: exact count matches Rust source");
-  expect_size(er_ui_component_exact_parity_count(), ER_UI_TEST_COMPONENT_COUNT, "component progress: parity count matches Rust source");
-  expect_size(er_ui_component_count_by_status(ER_UI_COMPONENT_STATUS_NATIVE_PRIMITIVE), 0u, "component progress: native primitive count matches Rust source");
+  expect_size(er_ui_component_exact_count(), ER_UI_TEST_COMPONENT_EXACT_COUNT, "component progress: exact count matches canonical base");
+  expect_size(er_ui_component_exact_parity_count(), ER_UI_TEST_COMPONENT_EXACT_COUNT, "component progress: exact parity count matches canonical base");
+  expect_size(er_ui_component_count_by_status(ER_UI_COMPONENT_STATUS_NATIVE_PRIMITIVE), ER_UI_TEST_COMPONENT_NATIVE_PRIMITIVE_COUNT,
+              "component progress: native primitive count covers composed surfaces");
   expect_true(er_ui_component_count_by_category(ER_UI_COMPONENT_CATEGORY_FOUNDATION) > 0u, "component progress: foundation category populated");
   expect_true(er_ui_component_count_by_category(ER_UI_COMPONENT_CATEGORY_OVERLAY) > 0u, "component progress: overlay category populated");
 

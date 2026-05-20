@@ -771,7 +771,7 @@ static const er_ui_component_spec_t component_catalog[] = {
     "context_menu_node",
     slots_context_menu,
     states_context_menu),
-  ER_UI_COMPONENT_ENTRY(
+  ER_UI_COMPONENT_NATIVE(
     "Data Table",
     "data-table",
     ER_UI_COMPONENT_CATEGORY_DATA_DISPLAY,
@@ -779,7 +779,7 @@ static const er_ui_component_spec_t component_catalog[] = {
     "data_table_node",
     slots_data_table,
     states_data_table),
-  ER_UI_COMPONENT_ENTRY(
+  ER_UI_COMPONENT_NATIVE(
     "Invoice Card",
     "invoice-card",
     ER_UI_COMPONENT_CATEGORY_DATA_DISPLAY,
@@ -787,7 +787,7 @@ static const er_ui_component_spec_t component_catalog[] = {
     "invoice_card",
     slots_invoice_card,
     states_invoice_card),
-  ER_UI_COMPONENT_ENTRY(
+  ER_UI_COMPONENT_NATIVE(
     "Date Picker",
     "date-picker",
     ER_UI_COMPONENT_CATEGORY_FORM,
@@ -1067,7 +1067,7 @@ static const er_ui_component_spec_t component_catalog[] = {
     "text_area_node",
     slots_textarea,
     states_textarea),
-  ER_UI_COMPONENT_ENTRY(
+  ER_UI_COMPONENT_NATIVE(
     "Toast",
     "toast",
     ER_UI_COMPONENT_CATEGORY_FEEDBACK,

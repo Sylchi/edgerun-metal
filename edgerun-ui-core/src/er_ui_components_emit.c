@@ -75,8 +75,8 @@ static er_ui_status_t er_ui_component_labeled_control_frame(
     status = er_ui_scene_push_hit(scene, er_ui_hit(hit_kind, id, control.x, control.y, control.w, control.h));
     if (status != ER_UI_OK) return status;
   }
-  (void)border_alpha;
-  status = er_ui_component_fill_border(scene, control, theme.design.radius.md, fill, theme.design.colors.input);
+  status = er_ui_component_fill_border(scene, control, theme.design.radius.md, fill,
+                                       er_ui_color_with_alpha(theme.design.colors.input, border_alpha));
   if (status != ER_UI_OK) return status;
   *out_control = control;
   return ER_UI_OK;
