@@ -14,6 +14,7 @@ PAYLOAD="${BUILD_DIR}/BOOTAA64.EFI"
 ZERO_W_PAYLOAD="${BUILD_DIR}/kernel.img"
 BOOT_DIR="${BUILD_DIR}/boot"
 ZERO_W_BOOT_DIR="${BUILD_DIR}/boot-zero-w"
+USB_BOOT_PACKET_BYTES=64
 
 rm -rf "$BUILD_DIR"
 mkdir -p "$BUILD_DIR"
@@ -100,8 +101,28 @@ if ! cmp -s "$ZERO_W_PAYLOAD" "$ZERO_W_BOOT_DIR/kernel.img"; then
   exit 1
 fi
 
-if [ -e "$ZERO_W_BOOT_DIR/config.txt" ]; then
-  printf 'zero w boot stage should not generate config.txt\n' >&2
+if ! grep -q "arm_64bit=0" "$ZERO_W_BOOT_DIR/config.txt"; then
+  printf 'zero w config.txt does not select ARMv6 boot\n' >&2
+  exit 1
+fi
+
+if ! grep -q "enable_uart=1" "$ZERO_W_BOOT_DIR/config.txt"; then
+  printf 'zero w config.txt does not enable UART\n' >&2
+  exit 1
+fi
+
+if ! grep -q "core_freq=250" "$ZERO_W_BOOT_DIR/config.txt"; then
+  printf 'zero w config.txt does not pin mini UART clock\n' >&2
+  exit 1
+fi
+
+if ! grep -q "kernel=kernel.img" "$ZERO_W_BOOT_DIR/config.txt"; then
+  printf 'zero w config.txt does not name explicit kernel payload\n' >&2
+  exit 1
+fi
+
+if [ "$(wc -c <"$ZERO_W_BOOT_DIR/config.txt")" -ne "$USB_BOOT_PACKET_BYTES" ]; then
+  printf 'zero w config.txt must fit one USB boot packet\n' >&2
   exit 1
 fi
 
