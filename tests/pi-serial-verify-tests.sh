@@ -37,6 +37,8 @@ cat >"$GEN_SRC" <<'EOF_C'
 #include <stdint.h>
 #include <stdio.h>
 
+#include "er_pi_zero_w_v1_1_status.h"
+
 enum {
   ERWIRE_MAGIC = 0x31575245u,
   ERWIRE_VERSION = 1u,
@@ -47,8 +49,6 @@ enum {
   ERWIRE_KIND_NODE_HEARTBEAT = 38u,
   NODE_AVAILABLE_BYTES = 189u,
   NODE_AVAILABLE_LOG_HEAD_OFFSET = 157u,
-  L2_READY = 7u,
-  L2_OVER_AIR_RX_UNSUPPORTED = 19u,
   ERWIRE_CRC32_INITIAL = 0xffffffffu,
   ERWIRE_CRC32_POLY = 0xedb88320u,
   ERWIRE_CRC32_BITS_PER_BYTE = 8u
@@ -108,7 +108,7 @@ static int packet(uint16_t kind, uint32_t seq, uint8_t payload_byte) {
     payload_len = NODE_AVAILABLE_BYTES;
     put_u32_at(payload,
                NODE_AVAILABLE_LOG_HEAD_OFFSET,
-               L2_OVER_AIR_RX_UNSUPPORTED);
+               ER_PI_ZERO_W_V1_1_L2_OVER_AIR_RX_UNSUPPORTED);
   }
 
   put_u32(&cursor, ERWIRE_MAGIC);
@@ -136,7 +136,9 @@ int main(int argc, char** argv) {
 }
 EOF_C
 
-"${CC:-${ROOT_DIR}/toolchain/bin/clang}" -std=c11 -Wall -Wextra -Werror -O2 -o "$GEN_BIN" "$GEN_SRC"
+"${CC:-${ROOT_DIR}/toolchain/bin/clang}" -std=c11 -Wall -Wextra -Werror -O2 \
+  -I"${ROOT_DIR}/edgerun-metal/devices/pi_zero_w_v1_1" \
+  -o "$GEN_BIN" "$GEN_SRC"
 
 cat >"$MANIFEST" <<'EOF_MANIFEST'
 board=pi-zero-w-v1_1

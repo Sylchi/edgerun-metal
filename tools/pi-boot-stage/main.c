@@ -6,6 +6,8 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 
+#include "../../edgerun-metal/devices/pi_zero_w_v1_1/er_pi_zero_w_v1_1_status.h"
+
 #ifndef ERPBS_PROJECT_ROOT
 #define ERPBS_PROJECT_ROOT "."
 #endif
@@ -99,7 +101,8 @@ static const char ERPBS_ZERO_W_MANIFEST_TEXT[] =
     "serial_gpio_rx=15\n"
     "serial_protocol=erwire\n"
     "erwire_expect=node_available\n"
-    "erwire_expect_sdio_probe=l2_over_air_rx_unsupported\n"
+    "erwire_expect_sdio_probe="
+    ER_PI_ZERO_W_V1_1_STATUS_NAME_L2_OVER_AIR_RX_UNSUPPORTED "\n"
     "erwire_expect=node_heartbeat\n"
     "firmware=EFI/firmware/02d0.a9a6.0\n"
     "firmware=EFI/firmware/02d0.a9a6.1\n"

@@ -7,7 +7,7 @@
  * pulling in firmware, libc, or host assumptions.
  */
 
-#include "er_types.h"
+#include "er_wifi_l2.h"
 
 #define ER_PI_ZERO_W_V1_1_UART_PERIPHERAL_BASE 0x20000000u
 #define ER_PI_ZERO_W_V1_1_GPIO_BASE 0x20200000u
@@ -172,134 +172,12 @@
 #define ER_PI_ZERO_W_V1_1_UART_GPIO_DELAY_TICKS 150u
 #define ER_PI_ZERO_W_V1_1_UART_HEARTBEAT_DELAY_TICKS 4000000u
 
-#define ER_PI_ZERO_W_V1_1_SERIAL_HEX_DIGITS_U32 8u
-#define ER_PI_ZERO_W_V1_1_SERIAL_HEX_NIBBLE_MASK 0x0fu
-#define ER_PI_ZERO_W_V1_1_SERIAL_HEX_NIBBLE_BITS 4u
-#define ER_PI_ZERO_W_V1_1_SERIAL_HEX_DECIMAL_DIGITS 10u
-#define ER_PI_ZERO_W_V1_1_L2_NODE_BYTES 32u
-#define ER_PI_ZERO_W_V1_1_L2_MAC_BYTES 6u
-#define ER_PI_ZERO_W_V1_1_L2_MAC_LOCAL_UNICAST 0x02u
-#define ER_PI_ZERO_W_V1_1_L2_MAC_NODE_BYTE_COUNT 5u
-#define ER_PI_ZERO_W_V1_1_L2_MAC_NODE_OFFSET 1u
-#define ER_PI_ZERO_W_V1_1_L2_SSID_PREFIX_E_OFFSET 0u
-#define ER_PI_ZERO_W_V1_1_L2_SSID_PREFIX_R_OFFSET 1u
-#define ER_PI_ZERO_W_V1_1_L2_SSID_PREFIX_DASH_OFFSET 2u
-#define ER_PI_ZERO_W_V1_1_L2_SSID_HEX_OFFSET 3u
-#define ER_PI_ZERO_W_V1_1_L2_SSID_NODE_BYTES 8u
-#define ER_PI_ZERO_W_V1_1_L2_HEX_DIGITS_PER_BYTE 2u
-#define ER_PI_ZERO_W_V1_1_L2_SSID_BYTES 19u
-#define ER_PI_ZERO_W_V1_1_L2_ADDRESS_FIXED_BYTES 10u
-#define ER_PI_ZERO_W_V1_1_L2_ADDRESS_BYTES 29u
-#define ER_PI_ZERO_W_V1_1_L2_ADDRESS_MAC_OFFSET 0u
-#define ER_PI_ZERO_W_V1_1_L2_ADDRESS_ETH_TYPE_OFFSET 6u
-#define ER_PI_ZERO_W_V1_1_L2_ADDRESS_CHANNEL_OFFSET 8u
-#define ER_PI_ZERO_W_V1_1_L2_ADDRESS_SSID_LEN_OFFSET 9u
-#define ER_PI_ZERO_W_V1_1_L2_ADDRESS_SSID_OFFSET 10u
-#define ER_PI_ZERO_W_V1_1_L2_ETH_TYPE_EDGERUN 0x88b5u
-#define ER_PI_ZERO_W_V1_1_L2_ETH_TYPE_HIGH_SHIFT 8u
-#define ER_PI_ZERO_W_V1_1_L2_BYTE_MASK 0xffu
-#define ER_PI_ZERO_W_V1_1_L2_HEX_HIGH_NIBBLE_SHIFT 4u
-#define ER_PI_ZERO_W_V1_1_L2_HEX_NIBBLE_MASK 0x0fu
+#define ER_PI_ZERO_W_V1_1_L2_NODE_BYTES ER_NODE_ID_LEN
+#define ER_PI_ZERO_W_V1_1_L2_MAC_BYTES ER_NET_MAC_LEN
+#define ER_PI_ZERO_W_V1_1_L2_SSID_BYTES ER_WIFI_L2_NODE_SSID_LEN
+#define ER_PI_ZERO_W_V1_1_L2_ADDRESS_BYTES \
+  (ER_WIFI_L2_ENDPOINT_ADDR_FIXED_LEN + ER_WIFI_L2_NODE_SSID_LEN)
 #define ER_PI_ZERO_W_V1_1_L2_WIFI_CHANNEL 6u
-
-static inline UINT8 er_pi_zero_w_v1_1_node_id_nonzero(
-    const UINT8 node_id[ER_PI_ZERO_W_V1_1_L2_NODE_BYTES]) {
-  UINT32 i;
-
-  if (node_id == 0) {
-    return 0u;
-  }
-  for (i = 0u; i < ER_PI_ZERO_W_V1_1_L2_NODE_BYTES; ++i) {
-    if (node_id[i] != 0u) {
-      return 1u;
-    }
-  }
-  return 0u;
-}
-
-static inline UINT8 er_pi_zero_w_v1_1_l2_hex_digit(UINT8 value) {
-  UINT8 digit = (UINT8)(value & ER_PI_ZERO_W_V1_1_L2_HEX_NIBBLE_MASK);
-
-  if (digit < ER_PI_ZERO_W_V1_1_SERIAL_HEX_DECIMAL_DIGITS) {
-    return (UINT8)('0' + digit);
-  }
-  return (UINT8)('a' + (digit - ER_PI_ZERO_W_V1_1_SERIAL_HEX_DECIMAL_DIGITS));
-}
-
-static inline UINT8 er_pi_zero_w_v1_1_l2_node_mac(
-    const UINT8 node_id[ER_PI_ZERO_W_V1_1_L2_NODE_BYTES],
-    UINT8 out_mac[ER_PI_ZERO_W_V1_1_L2_MAC_BYTES]) {
-  UINT32 i;
-
-  if (er_pi_zero_w_v1_1_node_id_nonzero(node_id) == 0u || out_mac == 0) {
-    return 0u;
-  }
-  out_mac[0] = ER_PI_ZERO_W_V1_1_L2_MAC_LOCAL_UNICAST;
-  for (i = 0u; i < ER_PI_ZERO_W_V1_1_L2_MAC_NODE_BYTE_COUNT; ++i) {
-    out_mac[ER_PI_ZERO_W_V1_1_L2_MAC_NODE_OFFSET + i] =
-        (UINT8)(node_id[i] ^
-                node_id[i + ER_PI_ZERO_W_V1_1_L2_MAC_NODE_BYTE_COUNT] ^
-                node_id[i + (ER_PI_ZERO_W_V1_1_L2_MAC_NODE_BYTE_COUNT * 2u)] ^
-                node_id[i + (ER_PI_ZERO_W_V1_1_L2_MAC_NODE_BYTE_COUNT * 3u)] ^
-                node_id[i + (ER_PI_ZERO_W_V1_1_L2_MAC_NODE_BYTE_COUNT * 4u)] ^
-                node_id[i + (ER_PI_ZERO_W_V1_1_L2_MAC_NODE_BYTE_COUNT * 5u)] ^
-                node_id[ER_PI_ZERO_W_V1_1_L2_NODE_BYTES - 1u - i]);
-  }
-  out_mac[0] &= (UINT8)~1u;
-  out_mac[0] |= ER_PI_ZERO_W_V1_1_L2_MAC_LOCAL_UNICAST;
-  return 1u;
-}
-
-static inline UINT8 er_pi_zero_w_v1_1_l2_node_ssid(
-    const UINT8 node_id[ER_PI_ZERO_W_V1_1_L2_NODE_BYTES],
-    UINT8 out_ssid[ER_PI_ZERO_W_V1_1_L2_SSID_BYTES]) {
-  UINT32 i;
-  UINT32 ssid_index;
-  UINT8 node_byte;
-
-  if (er_pi_zero_w_v1_1_node_id_nonzero(node_id) == 0u || out_ssid == 0) {
-    return 0u;
-  }
-  out_ssid[ER_PI_ZERO_W_V1_1_L2_SSID_PREFIX_E_OFFSET] = (UINT8)'e';
-  out_ssid[ER_PI_ZERO_W_V1_1_L2_SSID_PREFIX_R_OFFSET] = (UINT8)'r';
-  out_ssid[ER_PI_ZERO_W_V1_1_L2_SSID_PREFIX_DASH_OFFSET] = (UINT8)'-';
-  for (i = 0u; i < ER_PI_ZERO_W_V1_1_L2_SSID_NODE_BYTES; ++i) {
-    node_byte = node_id[i];
-    ssid_index = ER_PI_ZERO_W_V1_1_L2_SSID_HEX_OFFSET +
-                 (i * ER_PI_ZERO_W_V1_1_L2_HEX_DIGITS_PER_BYTE);
-    out_ssid[ssid_index] =
-        er_pi_zero_w_v1_1_l2_hex_digit(
-            (UINT8)(node_byte >> ER_PI_ZERO_W_V1_1_L2_HEX_HIGH_NIBBLE_SHIFT));
-    out_ssid[ssid_index + 1u] = er_pi_zero_w_v1_1_l2_hex_digit(node_byte);
-  }
-  return 1u;
-}
-
-static inline UINT8 er_pi_zero_w_v1_1_l2_address(
-    const UINT8 node_id[ER_PI_ZERO_W_V1_1_L2_NODE_BYTES],
-    UINT8 channel,
-    UINT8 out_address[ER_PI_ZERO_W_V1_1_L2_ADDRESS_BYTES]) {
-  if (out_address == 0 ||
-      er_pi_zero_w_v1_1_l2_node_mac(
-          node_id,
-          out_address + ER_PI_ZERO_W_V1_1_L2_ADDRESS_MAC_OFFSET) == 0u ||
-      er_pi_zero_w_v1_1_l2_node_ssid(
-          node_id,
-          out_address + ER_PI_ZERO_W_V1_1_L2_ADDRESS_SSID_OFFSET) == 0u) {
-    return 0u;
-  }
-  out_address[ER_PI_ZERO_W_V1_1_L2_ADDRESS_ETH_TYPE_OFFSET] =
-      (UINT8)((ER_PI_ZERO_W_V1_1_L2_ETH_TYPE_EDGERUN >>
-               ER_PI_ZERO_W_V1_1_L2_ETH_TYPE_HIGH_SHIFT) &
-              ER_PI_ZERO_W_V1_1_L2_BYTE_MASK);
-  out_address[ER_PI_ZERO_W_V1_1_L2_ADDRESS_ETH_TYPE_OFFSET + 1u] =
-      (UINT8)(ER_PI_ZERO_W_V1_1_L2_ETH_TYPE_EDGERUN &
-              ER_PI_ZERO_W_V1_1_L2_BYTE_MASK);
-  out_address[ER_PI_ZERO_W_V1_1_L2_ADDRESS_CHANNEL_OFFSET] = channel;
-  out_address[ER_PI_ZERO_W_V1_1_L2_ADDRESS_SSID_LEN_OFFSET] =
-      ER_PI_ZERO_W_V1_1_L2_SSID_BYTES;
-  return 1u;
-}
 
 static inline UINT32 er_pi_zero_w_v1_1_gpio_fsel_shift(UINT32 pin) {
   return (pin % ER_PI_ZERO_W_V1_1_GPIO_FSEL_PIN_MOD) * ER_PI_ZERO_W_V1_1_GPIO_FSEL_BITS_PER_PIN;
@@ -313,15 +191,6 @@ static inline UINT32 er_pi_zero_w_v1_1_gpio_fsel_alt(UINT32 current,
 
   return (current & ~mask) |
          ((alt_function & ER_PI_ZERO_W_V1_1_GPIO_FSEL_MASK) << shift);
-}
-
-static inline char er_pi_zero_w_v1_1_serial_hex_digit(UINT32 value) {
-  UINT32 digit = value & ER_PI_ZERO_W_V1_1_SERIAL_HEX_NIBBLE_MASK;
-
-  if (digit < ER_PI_ZERO_W_V1_1_SERIAL_HEX_DECIMAL_DIGITS) {
-    return (char)('0' + digit);
-  }
-  return (char)('a' + (digit - ER_PI_ZERO_W_V1_1_SERIAL_HEX_DECIMAL_DIGITS));
 }
 
 #endif
