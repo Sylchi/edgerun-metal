@@ -21,6 +21,7 @@ mkdir -p "${TREE}/src/a" "${TREE}/src/b" "${TREE}/proj/node_modules/pkg"
   -o "${TOOL_BIN}" \
   "${ROOT_DIR}/tools/disk-analyzer/main.c" \
   "${ROOT_DIR}/tools/disk-analyzer/disk_analyzer.c" \
+  "${ROOT_DIR}/tools/disk-analyzer/duplicates.c" \
   "${ROOT_DIR}/edgerun-metal/core/er_disk_analyzer.c" \
   "${ROOT_DIR}/edgerun-metal/core/er_mem.c"
 
@@ -39,6 +40,16 @@ if ! grep -q -- "--merge-hardlinks requires --yes" /tmp/disk-analyzer-merge-bad.
   exit 1
 fi
 
+if "${TOOL_BIN}" --root "${TREE}" --delete-caches \
+  >/tmp/disk-analyzer-cache-bad.out 2>/tmp/disk-analyzer-cache-bad.err; then
+  printf 'disk-analyzer accepted cache deletion without --yes\n' >&2
+  exit 1
+fi
+if ! grep -q -- "--delete-caches requires --yes" /tmp/disk-analyzer-cache-bad.err; then
+  printf 'disk-analyzer did not explain cache deletion confirmation requirement\n' >&2
+  exit 1
+fi
+
 "${TOOL_BIN}" --root "${TREE}" --top 8 --duplicates 8 --min-dup-size 1 \
   >/tmp/disk-analyzer-report.out
 
@@ -46,10 +57,48 @@ for expected in \
   "disk-analyzer root=${TREE}" \
   "top-folders count=" \
   "cache=node path=${TREE}/proj/node_modules" \
-  "duplicate bytes=23 canonical=${TREE}/src/a/original.bin duplicate=${TREE}/src/b/copy.bin" \
+  "duplicate-candidate bytes=23 canonical=${TREE}/src/a/original.bin duplicate=${TREE}/src/b/copy.bin" \
   "duplicate-summary candidate-size-groups=1 sampled-files=2"; do
   if ! grep -q "${expected}" /tmp/disk-analyzer-report.out; then
     printf 'disk-analyzer missing output: %s\n' "${expected}" >&2
+    exit 1
+  fi
+done
+
+mkdir -p "${TREE}/.build/out" "${TREE}/target/debug"
+printf 'object bytes\n' >"${TREE}/.build/out/app.o"
+printf 'rust bytes\n' >"${TREE}/target/debug/app"
+printf '[package]\nname = "cache-test"\n' >"${TREE}/Cargo.toml"
+
+"${TOOL_BIN}" --root "${TREE}" --top 8 --no-duplicates \
+  --delete-caches --yes >/tmp/disk-analyzer-cache-delete.out
+
+for expected in \
+  "cache-delete cache=node path=${TREE}/proj/node_modules" \
+  "cache-delete cache=c-build path=${TREE}/.build" \
+  "cache-delete cache=rust path=${TREE}/target" \
+  "cache-delete-summary roots="; do
+  if ! grep -q "${expected}" /tmp/disk-analyzer-cache-delete.out; then
+    printf 'disk-analyzer missing cache deletion output: %s\n' "${expected}" >&2
+    exit 1
+  fi
+done
+
+for removed in "${TREE}/proj/node_modules" "${TREE}/.build" "${TREE}/target"; do
+  if [ -e "${removed}" ]; then
+    printf 'disk-analyzer did not delete cache path: %s\n' "${removed}" >&2
+    exit 1
+  fi
+done
+
+"${TOOL_BIN}" --root "${TREE}" --top 8 --duplicates 8 --min-dup-size 1 \
+  --verify-duplicates >/tmp/disk-analyzer-verify.out
+
+for expected in \
+  "duplicates min-bytes=1 verify=1" \
+  "duplicate bytes=23 canonical=${TREE}/src/a/original.bin duplicate=${TREE}/src/b/copy.bin"; do
+  if ! grep -q "${expected}" /tmp/disk-analyzer-verify.out; then
+    printf 'disk-analyzer missing verified output: %s\n' "${expected}" >&2
     exit 1
   fi
 done

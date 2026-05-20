@@ -14,12 +14,17 @@ int main(int argc, char** argv) {
   if (da_scan_root(&scan, &options) != 0) {
     return 1;
   }
-  printf("disk-analyzer root=%s files=%llu dirs=%zu bytes=%llu duplicate-min-bytes=%llu\n",
+  printf("disk-analyzer root=%s files=%llu dirs=%llu bytes=%llu duplicate-min-bytes=%llu\n",
          options.root,
          (unsigned long long)scan.total_files,
-         scan.dirs.count,
+         (unsigned long long)scan.total_dirs,
          (unsigned long long)scan.total_bytes,
          (unsigned long long)options.min_dup_size);
+  printf("cache-delete-summary roots=%llu bytes=%llu files=%llu dirs=%llu\n",
+         (unsigned long long)scan.deleted_cache_roots,
+         (unsigned long long)scan.deleted_cache_bytes,
+         (unsigned long long)scan.deleted_cache_files,
+         (unsigned long long)scan.deleted_cache_dirs);
   da_print_top_folders(&scan, options.top_limit);
   if (options.duplicates_enabled != 0) {
     if (da_report_duplicates(&scan, &options, &duplicate_stats) != 0) {
