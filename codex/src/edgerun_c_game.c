@@ -1,11 +1,13 @@
 #define CODEX_GAME_BENCH_TASKS 100u
-#define CODEX_GAME_STRATEGY_COUNT 4u
+#define CODEX_GAME_STRATEGY_COUNT 5u
 #define CODEX_GAME_SCORE_FEATURE 1
 #define CODEX_GAME_SCORE_CLEANUP 8
 #define CODEX_GAME_SCORE_SMELL_OR_WORLDVIEW 5
 #define CODEX_GAME_SCORE_CPU 4
 #define CODEX_GAME_SCORE_TEST 5
 #define CODEX_GAME_SCORE_DELETE 2
+#define CODEX_GAME_SCORE_STEP -1
+#define CODEX_GAME_SCORE_SUBAGENT 0
 #define CODEX_GAME_SCORE_IRRELEVANT -10
 #define CODEX_GAME_SCORE_DEBT -6
 #define CODEX_GAME_SCORE_GATE_FLOOR 0
@@ -19,9 +21,12 @@
 #define CODEX_GAME_DELETE_SPAN 4
 #define CODEX_GAME_DEBT_SPAN 3
 #define CODEX_GAME_IRRELEVANT_PERIOD 11u
+#define CODEX_GAME_DELEGATE_MIN_WORK 3
+#define CODEX_GAME_DELEGATE_MAX_AGENTS 3
+#define CODEX_GAME_BASE_STEP_COUNT 1
 #define CODEX_GAME_PARSE_BASE 10
-#define CODEX_GAME_SELF_TEST_POSITIVE_SCORE 16
-#define CODEX_GAME_SELF_TEST_NEGATIVE_SCORE -15
+#define CODEX_GAME_SELF_TEST_POSITIVE_SCORE 15
+#define CODEX_GAME_SELF_TEST_NEGATIVE_SCORE -16
 #define CODEX_GAME_SELF_TEST_PARSE_BEFORE_FAILURE 1
 #define CODEX_GAME_SELF_TEST_PARSE_AFTER_FAILURE 2
 #define CODEX_GAME_SELF_TEST_DUPLICATE_FAILURE 3
@@ -35,7 +40,8 @@ typedef enum {
     CODEX_GAME_STRATEGY_FEATURE_FIRST = 0,
     CODEX_GAME_STRATEGY_SCORE_ONLY,
     CODEX_GAME_STRATEGY_CLEANUP_FIRST,
-    CODEX_GAME_STRATEGY_GATE_AND_SCORE
+    CODEX_GAME_STRATEGY_GATE_AND_SCORE,
+    CODEX_GAME_STRATEGY_DELEGATED_GATE
 } CodexGameStrategyKind;
 
 typedef struct {
@@ -45,6 +51,8 @@ typedef struct {
     int deleted_units;
     int debt_units;
     int irrelevant_units;
+    int step_units;
+    int subagent_units;
 } CodexGameUnits;
 
 typedef CodexGameUnits CodexGameTask;
@@ -87,10 +95,13 @@ static char *quality_game_text_new(void) {
         "+1 requested feature behavior delivered with no inspect regression\n"
         "-6 new inspect debt in touched scope\n"
         "-10 unrelated touched file or irrelevant behavior\n"
+        "-1 host step used; fewer steps win ties\n"
+        "+0 delegated sub-agent used; only host steps are penalized\n"
         "Winning condition: maximize score delta while passing repo-progress. "
         "Feature code that merely works scores lowest unless it also reduces debt. "
         "The host should reject negative-score proposal batches unless the user "
-        "explicitly accepts feature debt.\n";
+        "explicitly accepts feature debt. Agents may delegate independent, "
+        "bounded side work when that clears the objective in fewer host steps.\n";
     Buffer b;
 
     buffer_init(&b);
@@ -264,8 +275,69 @@ static int codex_game_score_move(CodexGameMove move) {
            (move.cleanup_units * CODEX_GAME_SCORE_CLEANUP) +
            (move.test_units * CODEX_GAME_SCORE_TEST) +
            (move.deleted_units * CODEX_GAME_SCORE_DELETE) +
+           (move.step_units * CODEX_GAME_SCORE_STEP) +
+           (move.subagent_units * CODEX_GAME_SCORE_SUBAGENT) +
            (move.irrelevant_units * CODEX_GAME_SCORE_IRRELEVANT) +
            (move.debt_units * CODEX_GAME_SCORE_DEBT);
+}
+
+static int codex_game_positive_unit(int value) {
+    return value > 0 ? 1 : 0;
+}
+
+static int codex_game_move_work_units(CodexGameMove move) {
+    return move.feature_units + move.cleanup_units + move.test_units +
+           move.deleted_units;
+}
+
+static int codex_game_serial_steps(CodexGameMove move) {
+    int work = codex_game_move_work_units(move);
+
+    return work > 0 ? work : CODEX_GAME_BASE_STEP_COUNT;
+}
+
+static int codex_game_delegated_steps(int work, int agents) {
+    int workers = agents + CODEX_GAME_BASE_STEP_COUNT;
+    int steps = work / workers;
+
+    if ((work % workers) != 0) steps++;
+    return CODEX_GAME_BASE_STEP_COUNT + steps;
+}
+
+static int codex_game_delegated_cost(int work, int agents) {
+    return codex_game_delegated_steps(work, agents);
+}
+
+static int codex_game_best_delegated_agent_count(int work) {
+    int best_agents = 0;
+    int best_cost = work;
+
+    for (int agents = CODEX_GAME_BASE_STEP_COUNT;
+         agents <= CODEX_GAME_DELEGATE_MAX_AGENTS;
+         ++agents) {
+        int cost = codex_game_delegated_cost(work, agents);
+        if (cost < best_cost) {
+            best_agents = agents;
+            best_cost = cost;
+        }
+    }
+    return best_agents;
+}
+
+static void codex_game_finish_move(CodexGameMove *move) {
+    move->step_units = codex_game_serial_steps(*move);
+}
+
+static void codex_game_finish_delegated_move(CodexGameMove *move) {
+    int work = codex_game_move_work_units(*move);
+
+    if (work >= CODEX_GAME_DELEGATE_MIN_WORK) {
+        move->subagent_units = codex_game_best_delegated_agent_count(work);
+        move->step_units =
+            codex_game_delegated_steps(work, move->subagent_units);
+    } else {
+        codex_game_finish_move(move);
+    }
 }
 
 static CodexGameMove codex_game_move_for_strategy(CodexGameStrategyKind strategy,
@@ -275,31 +347,45 @@ static CodexGameMove codex_game_move_for_strategy(CodexGameStrategyKind strategy
     switch (strategy) {
         case CODEX_GAME_STRATEGY_FEATURE_FIRST:
             move.feature_units = task.feature_units;
-            move.test_units = task.test_units > 0 ? 1 : 0;
+            move.test_units = codex_game_positive_unit(task.test_units);
             move.debt_units = task.debt_units;
             move.irrelevant_units = task.irrelevant_units;
+            codex_game_finish_move(&move);
             break;
         case CODEX_GAME_STRATEGY_SCORE_ONLY:
-            move.feature_units = task.feature_units > 0 ? 1 : 0;
+            move.feature_units = codex_game_positive_unit(task.feature_units);
             move.cleanup_units = task.cleanup_units;
             move.test_units = task.test_units;
             move.deleted_units = task.deleted_units;
             move.debt_units =
                 task.debt_units > 0 && task.cleanup_units == 0 ? 1 : 0;
+            codex_game_finish_move(&move);
             break;
         case CODEX_GAME_STRATEGY_CLEANUP_FIRST:
             move.cleanup_units = task.cleanup_units;
             move.deleted_units = task.deleted_units;
-            move.test_units = task.test_units > 0 ? 1 : 0;
+            move.test_units = codex_game_positive_unit(task.test_units);
             if (task.cleanup_units == 0 && task.deleted_units == 0) {
-                move.feature_units = task.feature_units > 0 ? 1 : 0;
+                move.feature_units = codex_game_positive_unit(task.feature_units);
             }
+            codex_game_finish_move(&move);
             break;
         case CODEX_GAME_STRATEGY_GATE_AND_SCORE:
-            move.feature_units = task.feature_units > 0 ? 1 : 0;
+            move.feature_units = codex_game_positive_unit(task.feature_units);
             move.cleanup_units = task.cleanup_units;
             move.test_units = task.test_units;
             move.deleted_units = task.deleted_units;
+            codex_game_finish_move(&move);
+            if (codex_game_score_move(move) < CODEX_GAME_SCORE_GATE_FLOOR) {
+                memset(&move, 0, sizeof(move));
+            }
+            break;
+        case CODEX_GAME_STRATEGY_DELEGATED_GATE:
+            move.feature_units = codex_game_positive_unit(task.feature_units);
+            move.cleanup_units = task.cleanup_units;
+            move.test_units = task.test_units;
+            move.deleted_units = task.deleted_units;
+            codex_game_finish_delegated_move(&move);
             if (codex_game_score_move(move) < CODEX_GAME_SCORE_GATE_FLOOR) {
                 memset(&move, 0, sizeof(move));
             }
@@ -319,6 +405,8 @@ static void codex_game_result_add(CodexGameResult *result,
     result->units.deleted_units += move.deleted_units;
     result->units.debt_units += move.debt_units;
     result->units.irrelevant_units += move.irrelevant_units;
+    result->units.step_units += move.step_units;
+    result->units.subagent_units += move.subagent_units;
     if (score < CODEX_GAME_SCORE_GATE_FLOOR) {
         result->rejected_moves++;
     }
@@ -329,6 +417,7 @@ static int codex_game_better_move(CodexGameMove a, CodexGameMove b) {
     int score_b = codex_game_score_move(b);
 
     if (score_a != score_b) return score_a > score_b;
+    if (a.step_units != b.step_units) return a.step_units < b.step_units;
     if (a.cleanup_units != b.cleanup_units) {
         return a.cleanup_units > b.cleanup_units;
     }
@@ -346,8 +435,10 @@ static CodexGameStrategyKind codex_game_strategy_at(size_t index) {
             return CODEX_GAME_STRATEGY_CLEANUP_FIRST;
         case CODEX_GAME_STRATEGY_GATE_AND_SCORE:
             return CODEX_GAME_STRATEGY_GATE_AND_SCORE;
+        case CODEX_GAME_STRATEGY_DELEGATED_GATE:
+            return CODEX_GAME_STRATEGY_DELEGATED_GATE;
     }
-    return CODEX_GAME_STRATEGY_GATE_AND_SCORE;
+    return CODEX_GAME_STRATEGY_DELEGATED_GATE;
 }
 
 static const char *codex_game_strategy_name(CodexGameStrategyKind strategy) {
@@ -360,8 +451,10 @@ static const char *codex_game_strategy_name(CodexGameStrategyKind strategy) {
             return "cleanup-first";
         case CODEX_GAME_STRATEGY_GATE_AND_SCORE:
             return "gate-and-score";
+        case CODEX_GAME_STRATEGY_DELEGATED_GATE:
+            return "delegated-gate";
     }
-    return "gate-and-score";
+    return "delegated-gate";
 }
 
 static int codex_game_bench(void) {
@@ -400,17 +493,20 @@ static int codex_game_bench(void) {
     puts("quality game benchmark");
     printf("tasks: %u deterministic synthetic repo-change tasks\n",
            (unsigned)CODEX_GAME_BENCH_TASKS);
-    puts("score: feature +1, cleanup +8, test +5, delete +2, debt -6, "
-         "irrelevant -10");
+    puts("score: feature +1, cleanup +8, test +5, delete +2, step -1, "
+         "subagent +0, debt -6, irrelevant -10");
     puts("");
     puts("solo strategy results");
     for (size_t i = 0u; i < CODEX_GAME_STRATEGY_COUNT; ++i) {
         CodexGameStrategyKind strategy = codex_game_strategy_at(i);
-        printf("%-22s score=%5d wins=%3d feature=%3d cleanup=%3d tests=%3d "
-               "delete=%3d debt=%3d irrelevant=%3d negative=%3d\n",
+        printf("%-22s score=%5d wins=%3d steps=%3d agents=%3d feature=%3d "
+               "cleanup=%3d tests=%3d delete=%3d debt=%3d irrelevant=%3d "
+               "negative=%3d\n",
                codex_game_strategy_name(strategy),
                solo[i].total_score,
                solo[i].wins,
+               solo[i].units.step_units,
+               solo[i].units.subagent_units,
                solo[i].units.feature_units,
                solo[i].units.cleanup_units,
                solo[i].units.test_units,
@@ -420,9 +516,12 @@ static int codex_game_bench(void) {
                solo[i].rejected_moves);
     }
     puts("");
-    printf("tournament winner-picks score=%5d feature=%3d cleanup=%3d tests=%3d "
-           "delete=%3d debt=%3d irrelevant=%3d negative=%3d\n",
+    printf("tournament winner-picks score=%5d steps=%3d agents=%3d "
+           "feature=%3d cleanup=%3d tests=%3d delete=%3d debt=%3d "
+           "irrelevant=%3d negative=%3d\n",
            tournament.total_score,
+           tournament.units.step_units,
+           tournament.units.subagent_units,
            tournament.units.feature_units,
            tournament.units.cleanup_units,
            tournament.units.test_units,
@@ -436,6 +535,7 @@ static int codex_game_bench(void) {
     puts("- cleanup-first wins cleanup-heavy tasks, but under-delivers features");
     puts("- score-only can still accept small debt when cleanup is absent");
     puts("- gate-and-score keeps feature progress while preventing negative moves");
+    puts("- delegated-gate wins when parallel side work reduces host steps enough");
     return 0;
 }
 
