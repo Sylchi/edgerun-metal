@@ -21,6 +21,8 @@ enum {
   DA_FILE_PTR_INITIAL_CAP = 64,
   DA_VEC_GROWTH_FACTOR = 2,
   DA_TMP_SUFFIX_CAP = 64,
+  DA_CACHE_DELETE_PRINT_LIMIT = 100,
+  DA_CMAKE_BUILD_PREFIX_LEN = 12,
   DA_BYTE_MASK = 255,
   DA_SAMPLE_SPAN_COUNT = 3,
   DA_FNV_OFFSET_BASIS = 1469598103934665603ull,
@@ -61,8 +63,19 @@ typedef struct {
   const char* root;
   dev_t root_dev;
   int cross_device;
+  int collect_files;
+  int delete_caches;
+  int cache_delete_only;
+  uint64_t min_dup_size;
+  size_t top_limit;
   uint64_t total_bytes;
   uint64_t total_files;
+  uint64_t total_dirs;
+  uint64_t deleted_cache_bytes;
+  uint64_t deleted_cache_files;
+  uint64_t deleted_cache_dirs;
+  uint64_t deleted_cache_roots;
+  uint64_t printed_cache_deletes;
 } DaScan;
 
 typedef struct {
@@ -72,6 +85,8 @@ typedef struct {
   size_t duplicate_limit;
   int cross_device;
   int duplicates_enabled;
+  int verify_duplicates;
+  int delete_caches;
   int merge_hardlinks;
   int yes;
 } DaOptions;
@@ -83,6 +98,7 @@ typedef struct {
   uint64_t duplicate_files;
   uint64_t duplicate_bytes;
   uint64_t merged_hardlinks;
+  uint64_t stopped_after_limit;
 } DaDuplicateStats;
 
 void da_options_init(DaOptions* options);

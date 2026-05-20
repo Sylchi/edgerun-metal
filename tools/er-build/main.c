@@ -685,6 +685,7 @@ static int erb_build_disk_analyzer(int print_plan) {
       erb_args_push(&args, "-Iedgerun-metal/core") != 0 ||
       erb_args_push(&args, "tools/disk-analyzer/main.c") != 0 ||
       erb_args_push(&args, "tools/disk-analyzer/disk_analyzer.c") != 0 ||
+      erb_args_push(&args, "tools/disk-analyzer/duplicates.c") != 0 ||
       erb_args_push(&args, "edgerun-metal/core/er_disk_analyzer.c") != 0 ||
       erb_args_push(&args, "edgerun-metal/core/er_mem.c") != 0) {
     return 1;
