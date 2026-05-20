@@ -57,12 +57,7 @@ static const char ERPBS_ZERO2W_CONFIG_TEXT[] =
     "enable_uart=1\n"
     "uart_2ndstage=1\n"
     "kernel=u-boot.bin\n";
-static const char ERPBS_ZERO_W_CONFIG_TEXT[] =
-    "arm_64bit=0\n"
-    "enable_uart=1\n"
-    "uart_2ndstage=1\n"
-    "core_freq=250\n"
-    "kernel=kernel.img\n";
+static const char ERPBS_ZERO_W_CONFIG_TEXT[] = "";
 static const char ERPBS_ZERO2W_STARTUP_TEXT[] =
     "fs0:\\EFI\\BOOT\\BOOTAA64.EFI\n";
 static const char ERPBS_ZERO_W_STARTUP_TEXT[] = "";
@@ -387,8 +382,6 @@ static int erpbs_stage(const ErpbsBoardProfile* profile,
   }
   if (erpbs_join(payload_path, sizeof(payload_path), output_dir,
                  profile->payload_path) != 0 ||
-      erpbs_join(config_path, sizeof(config_path), output_dir,
-                 ERPBS_CONFIG_NAME) != 0 ||
       erpbs_join(startup_path, sizeof(startup_path), output_dir,
                  ERPBS_STARTUP_NAME) != 0 ||
       erpbs_join(manifest_path, sizeof(manifest_path), output_dir,
@@ -396,10 +389,16 @@ static int erpbs_stage(const ErpbsBoardProfile* profile,
     return 1;
   }
   if (erpbs_copy_payload(payload, payload_path) != 0 ||
-      erpbs_write_text(config_path, profile->config_text) != 0 ||
       erpbs_write_text(startup_path, profile->startup_text) != 0 ||
       erpbs_write_text(manifest_path, profile->manifest_text) != 0) {
     return 1;
+  }
+  if (profile->config_text[0] != '\0') {
+    if (erpbs_join(config_path, sizeof(config_path), output_dir,
+                   ERPBS_CONFIG_NAME) != 0 ||
+        erpbs_write_text(config_path, profile->config_text) != 0) {
+      return 1;
+    }
   }
   printf("pi-boot-stage: staged %s\n", output_dir);
   return 0;

@@ -100,18 +100,8 @@ if ! cmp -s "$ZERO_W_PAYLOAD" "$ZERO_W_BOOT_DIR/kernel.img"; then
   exit 1
 fi
 
-if ! grep -q "arm_64bit=0" "$ZERO_W_BOOT_DIR/config.txt"; then
-  printf 'zero w config.txt does not force 32-bit boot\n' >&2
-  exit 1
-fi
-
-if ! grep -q "kernel=kernel.img" "$ZERO_W_BOOT_DIR/config.txt"; then
-  printf 'zero w config.txt does not name owned kernel payload\n' >&2
-  exit 1
-fi
-
-if ! grep -q "core_freq=250" "$ZERO_W_BOOT_DIR/config.txt"; then
-  printf 'zero w config.txt does not pin mini UART core clock\n' >&2
+if [ -e "$ZERO_W_BOOT_DIR/config.txt" ]; then
+  printf 'zero w boot stage should not generate config.txt\n' >&2
   exit 1
 fi
 
