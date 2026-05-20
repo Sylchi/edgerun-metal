@@ -36,7 +36,7 @@ enum {
   ERB_SWARM_LINE_CAP = 2048,
   ERB_SWARM_PROMPT_CAP = 32768,
   ERB_SWARM_PATH_CAP = 512,
-  ERB_SWARM_AGENT_ARGC = 6,
+  ERB_SWARM_AGENT_ARGC = 7,
   ERB_PACKAGE_CONTRACT_UI_APP = 1,
   ERB_PACKAGE_CONTRACT_BUS_DRIVER = 2
 };
@@ -764,6 +764,7 @@ static int erb_swarm_spawn_issue(const ErbSwarmIssue* issue, size_t index) {
     int log_fd = open(log_path, O_WRONLY | O_CREAT | O_TRUNC, 0666);
     char* const args[ERB_SWARM_AGENT_ARGC] = {
       (char*)ERB_CODEX_BIN,
+      "--memory-only",
       "--root",
       ".",
       "--prompt",
@@ -838,7 +839,7 @@ static int erb_target_repo_agent_swarm(int argc, char** argv, int print_plan) {
   if (print_plan != 0) {
     printf("+ make codex-build\n");
     printf("+ .build/er-build repo-inspect --details %s > %s\n", scope, ERB_SWARM_ISSUES_PATH);
-    printf("+ .build/codex --root . --prompt <one generated prompt per repo-inspect issue, %d concurrent>\n",
+    printf("+ .build/codex --memory-only --root . --prompt <one generated prompt per repo-inspect issue, %d concurrent>\n",
            concurrency);
     return 0;
   }
