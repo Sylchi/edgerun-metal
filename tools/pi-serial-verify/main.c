@@ -4,6 +4,8 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "../../edgerun-metal/devices/pi_zero_w_v1_1/er_pi_zero_w_v1_1_status.h"
+
 /*
  * Purpose:
  *   Validate captured Raspberry Pi bootstrap serial bytes as erwire packets.
@@ -37,17 +39,10 @@ enum {
   ERPSV_BYTE_SHIFT_1 = 8u,
   ERPSV_BYTE_SHIFT_2 = 16u,
   ERPSV_BYTE_SHIFT_3 = 24u,
+  ERPSV_U32_BYTE_3 = 3u,
   ERPSV_CRC32_INITIAL = 0xffffffffu,
   ERPSV_CRC32_POLY = 0xedb88320u,
-  ERPSV_CRC32_BITS_PER_BYTE = 8u,
-  ERPSV_SDIO_PROBE_CMD0_DONE = 1u,
-  ERPSV_SDIO_PROBE_CMD5_DONE = 2u,
-  ERPSV_SDIO_PROBE_CMD3_DONE = 3u,
-  ERPSV_SDIO_PROBE_CMD7_DONE = 4u,
-  ERPSV_SDIO_PROBE_CMD52_DONE = 5u,
-  ERPSV_SDIO_PROBE_CMD53_DONE = 6u,
-  ERPSV_L2_READY = 7u,
-  ERPSV_L2_OVER_AIR_RX_UNSUPPORTED = 19u
+  ERPSV_CRC32_BITS_PER_BYTE = 8u
 };
 
 static const char ERPSV_EXPECT_PREFIX[] = "erwire_expect=";
@@ -107,7 +102,7 @@ static uint32_t erpsv_get_u32(const unsigned char* bytes) {
   return (uint32_t)bytes[0] |
          ((uint32_t)bytes[1] << ERPSV_BYTE_SHIFT_1) |
          ((uint32_t)bytes[2] << ERPSV_BYTE_SHIFT_2) |
-         ((uint32_t)bytes[3] << ERPSV_BYTE_SHIFT_3);
+         ((uint32_t)bytes[ERPSV_U32_BYTE_3] << ERPSV_BYTE_SHIFT_3);
 }
 
 //@optimizer-ignore-function CRC32 verifier must fold every captured erwire payload byte
@@ -258,59 +253,61 @@ static int erpsv_find_kind(const unsigned char* log,
 
 static uint32_t erpsv_sdio_state_from_name(const unsigned char* name,
                                            size_t name_len) {
-  if (name_len == strlen("cmd0_done") &&
-      memcmp(name, "cmd0_done", name_len) == 0) {
-    return ERPSV_SDIO_PROBE_CMD0_DONE;
+  if (name_len == strlen(ER_PI_ZERO_W_V1_1_STATUS_NAME_CMD0_DONE) &&
+      memcmp(name, ER_PI_ZERO_W_V1_1_STATUS_NAME_CMD0_DONE, name_len) == 0) {
+    return ER_PI_ZERO_W_V1_1_SDIO_PROBE_CMD0_DONE;
   }
-  if (name_len == strlen("cmd5_done") &&
-      memcmp(name, "cmd5_done", name_len) == 0) {
-    return ERPSV_SDIO_PROBE_CMD5_DONE;
+  if (name_len == strlen(ER_PI_ZERO_W_V1_1_STATUS_NAME_CMD5_DONE) &&
+      memcmp(name, ER_PI_ZERO_W_V1_1_STATUS_NAME_CMD5_DONE, name_len) == 0) {
+    return ER_PI_ZERO_W_V1_1_SDIO_PROBE_CMD5_DONE;
   }
-  if (name_len == strlen("cmd3_done") &&
-      memcmp(name, "cmd3_done", name_len) == 0) {
-    return ERPSV_SDIO_PROBE_CMD3_DONE;
+  if (name_len == strlen(ER_PI_ZERO_W_V1_1_STATUS_NAME_CMD3_DONE) &&
+      memcmp(name, ER_PI_ZERO_W_V1_1_STATUS_NAME_CMD3_DONE, name_len) == 0) {
+    return ER_PI_ZERO_W_V1_1_SDIO_PROBE_CMD3_DONE;
   }
-  if (name_len == strlen("cmd7_done") &&
-      memcmp(name, "cmd7_done", name_len) == 0) {
-    return ERPSV_SDIO_PROBE_CMD7_DONE;
+  if (name_len == strlen(ER_PI_ZERO_W_V1_1_STATUS_NAME_CMD7_DONE) &&
+      memcmp(name, ER_PI_ZERO_W_V1_1_STATUS_NAME_CMD7_DONE, name_len) == 0) {
+    return ER_PI_ZERO_W_V1_1_SDIO_PROBE_CMD7_DONE;
   }
-  if (name_len == strlen("cmd52_done") &&
-      memcmp(name, "cmd52_done", name_len) == 0) {
-    return ERPSV_SDIO_PROBE_CMD52_DONE;
+  if (name_len == strlen(ER_PI_ZERO_W_V1_1_STATUS_NAME_CMD52_DONE) &&
+      memcmp(name, ER_PI_ZERO_W_V1_1_STATUS_NAME_CMD52_DONE, name_len) == 0) {
+    return ER_PI_ZERO_W_V1_1_SDIO_PROBE_CMD52_DONE;
   }
-  if (name_len == strlen("cmd53_done") &&
-      memcmp(name, "cmd53_done", name_len) == 0) {
-    return ERPSV_SDIO_PROBE_CMD53_DONE;
+  if (name_len == strlen(ER_PI_ZERO_W_V1_1_STATUS_NAME_CMD53_DONE) &&
+      memcmp(name, ER_PI_ZERO_W_V1_1_STATUS_NAME_CMD53_DONE, name_len) == 0) {
+    return ER_PI_ZERO_W_V1_1_SDIO_PROBE_CMD53_DONE;
   }
-  if (name_len == strlen("l2_ready") &&
-      memcmp(name, "l2_ready", name_len) == 0) {
-    return ERPSV_L2_READY;
+  if (name_len == strlen(ER_PI_ZERO_W_V1_1_STATUS_NAME_L2_READY) &&
+      memcmp(name, ER_PI_ZERO_W_V1_1_STATUS_NAME_L2_READY, name_len) == 0) {
+    return ER_PI_ZERO_W_V1_1_L2_READY;
   }
-  if (name_len == strlen("l2_over_air_rx_unsupported") &&
-      memcmp(name, "l2_over_air_rx_unsupported", name_len) == 0) {
-    return ERPSV_L2_OVER_AIR_RX_UNSUPPORTED;
+  if (name_len == strlen(ER_PI_ZERO_W_V1_1_STATUS_NAME_L2_OVER_AIR_RX_UNSUPPORTED) &&
+      memcmp(name,
+             ER_PI_ZERO_W_V1_1_STATUS_NAME_L2_OVER_AIR_RX_UNSUPPORTED,
+             name_len) == 0) {
+    return ER_PI_ZERO_W_V1_1_L2_OVER_AIR_RX_UNSUPPORTED;
   }
   return 0u;
 }
 
 static const char* erpsv_sdio_state_name(uint32_t state) {
   switch (state) {
-    case ERPSV_SDIO_PROBE_CMD0_DONE:
-      return "cmd0_done";
-    case ERPSV_SDIO_PROBE_CMD5_DONE:
-      return "cmd5_done";
-    case ERPSV_SDIO_PROBE_CMD3_DONE:
-      return "cmd3_done";
-    case ERPSV_SDIO_PROBE_CMD7_DONE:
-      return "cmd7_done";
-    case ERPSV_SDIO_PROBE_CMD52_DONE:
-      return "cmd52_done";
-    case ERPSV_SDIO_PROBE_CMD53_DONE:
-      return "cmd53_done";
-    case ERPSV_L2_READY:
-      return "l2_ready";
-    case ERPSV_L2_OVER_AIR_RX_UNSUPPORTED:
-      return "l2_over_air_rx_unsupported";
+    case ER_PI_ZERO_W_V1_1_SDIO_PROBE_CMD0_DONE:
+      return ER_PI_ZERO_W_V1_1_STATUS_NAME_CMD0_DONE;
+    case ER_PI_ZERO_W_V1_1_SDIO_PROBE_CMD5_DONE:
+      return ER_PI_ZERO_W_V1_1_STATUS_NAME_CMD5_DONE;
+    case ER_PI_ZERO_W_V1_1_SDIO_PROBE_CMD3_DONE:
+      return ER_PI_ZERO_W_V1_1_STATUS_NAME_CMD3_DONE;
+    case ER_PI_ZERO_W_V1_1_SDIO_PROBE_CMD7_DONE:
+      return ER_PI_ZERO_W_V1_1_STATUS_NAME_CMD7_DONE;
+    case ER_PI_ZERO_W_V1_1_SDIO_PROBE_CMD52_DONE:
+      return ER_PI_ZERO_W_V1_1_STATUS_NAME_CMD52_DONE;
+    case ER_PI_ZERO_W_V1_1_SDIO_PROBE_CMD53_DONE:
+      return ER_PI_ZERO_W_V1_1_STATUS_NAME_CMD53_DONE;
+    case ER_PI_ZERO_W_V1_1_L2_READY:
+      return ER_PI_ZERO_W_V1_1_STATUS_NAME_L2_READY;
+    case ER_PI_ZERO_W_V1_1_L2_OVER_AIR_RX_UNSUPPORTED:
+      return ER_PI_ZERO_W_V1_1_STATUS_NAME_L2_OVER_AIR_RX_UNSUPPORTED;
     default:
       return "unknown";
   }

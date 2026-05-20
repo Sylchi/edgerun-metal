@@ -1,5 +1,6 @@
 #include "er_pi_zero_w_v1_1_uart.h"
 #include "er_pi_zero_w_v1_1_ota.h"
+#include "er_pi_zero_w_v1_1_status.h"
 #include "er_crypto_blake3.h"
 #include "er_cyw43438_d11.h"
 #include "er_cyw43438_owned_firmware.h"
@@ -24,6 +25,8 @@
 #define ER_PI_ZERO_W_V1_1_WORK_ABI_VERSION 1u
 #define ER_PI_ZERO_W_V1_1_NODE_ROLE_RELAY 1u
 #define ER_PI_ZERO_W_V1_1_CHANNEL_KIND_WIFI_OPEN_L2 14u
+#define ER_PI_ZERO_W_V1_1_L2_LABEL "pi-zero-w-v1_1"
+#define ER_PI_ZERO_W_V1_1_L2_LABEL_BYTES 14u
 #define ER_PI_ZERO_W_V1_1_HEARTBEAT_SECS 10u
 #define ER_PI_ZERO_W_V1_1_NODE_BYTES 32u
 #define ER_PI_ZERO_W_V1_1_HASH_BYTES 32u
@@ -82,15 +85,6 @@
 #define ER_PI_ZERO_W_V1_1_WIFI_GPIO_DELAY_TICKS 150u
 #define ER_PI_ZERO_W_V1_1_WIFI_POWER_DELAY_TICKS 400000u
 #define ER_PI_ZERO_W_V1_1_SDIO_POLL_BUDGET 1000000u
-#define ER_PI_ZERO_W_V1_1_SDIO_PROBE_NONE 0u
-#define ER_PI_ZERO_W_V1_1_SDIO_PROBE_CMD0_DONE 1u
-#define ER_PI_ZERO_W_V1_1_SDIO_PROBE_CMD5_DONE 2u
-#define ER_PI_ZERO_W_V1_1_SDIO_PROBE_CMD3_DONE 3u
-#define ER_PI_ZERO_W_V1_1_SDIO_PROBE_CMD7_DONE 4u
-#define ER_PI_ZERO_W_V1_1_SDIO_PROBE_CMD52_DONE 5u
-#define ER_PI_ZERO_W_V1_1_SDIO_PROBE_CMD53_DONE 6u
-#define ER_PI_ZERO_W_V1_1_L2_READY 7u
-#define ER_PI_ZERO_W_V1_1_SDIO_PROBE_ERROR 0xffffffffu
 #define ER_PI_ZERO_W_V1_1_STORAGE_PROBE_NONE 0u
 #define ER_PI_ZERO_W_V1_1_STORAGE_PROBE_CMD8_DONE 1u
 #define ER_PI_ZERO_W_V1_1_STORAGE_PROBE_ACMD41_DONE 2u
@@ -171,15 +165,6 @@
 #define ER_PI_ZERO_W_V1_1_CYW43438_DMP_SLAVE_SIZE_4K 0u
 #define ER_PI_ZERO_W_V1_1_CYW43438_DMP_SLAVE_SIZE_8K 1u
 #define ER_PI_ZERO_W_V1_1_CYW43438_DMP_SLAVE_SIZE_DESC 3u
-#define ER_PI_ZERO_W_V1_1_L2_OWNED_FIRMWARE_LOADED 12u
-#define ER_PI_ZERO_W_V1_1_L2_CM3_ACTIVE 13u
-#define ER_PI_ZERO_W_V1_1_L2_D11_TX_FIFO_READY 14u
-#define ER_PI_ZERO_W_V1_1_L2_D11_TX_TEMPLATE_LOADED 15u
-#define ER_PI_ZERO_W_V1_1_L2_D11_TX_PIO_ATTEMPTED 16u
-#define ER_PI_ZERO_W_V1_1_L2_D11_MAC_TX_ATTEMPTED 17u
-#define ER_PI_ZERO_W_V1_1_L2_OTA_LISTENING 18u
-#define ER_PI_ZERO_W_V1_1_L2_OVER_AIR_RX_UNSUPPORTED 19u
-
 volatile UINT32 g_er_pi_zero_w_v1_1_boot_magic =
     ER_PI_ZERO_W_V1_1_BOOT_MAGIC;
 volatile UINT32 g_er_pi_zero_w_v1_1_sdio_probe_state =
@@ -2084,22 +2069,61 @@ static void er_pi_zero_w_v1_1_fill_byte(UINT8* bytes,
   }
 }
 
+static void er_pi_zero_w_v1_1_node_id(ErNodeId* out_node_id) {
+  UINT32 i;
+
+  for (i = 0u; i < ER_PI_ZERO_W_V1_1_NODE_BYTES; ++i) {
+    out_node_id->bytes[i] = g_er_pi_zero_w_v1_1_node_id[i];
+  }
+}
+
+static UINT32 er_pi_zero_w_v1_1_wifi_plan(ErWifiL2ApPlan* out_plan) {
+  ErNodeId node_id;
+
+  if (out_plan == 0) {
+    return 0u;
+  }
+  er_pi_zero_w_v1_1_node_id(&node_id);
+  return er_wifi_l2_ap_plan_prepare(&node_id,
+                                    ER_PI_ZERO_W_V1_1_L2_WIFI_CHANNEL,
+                                    out_plan);
+}
+
 static UINT32 er_pi_zero_w_v1_1_wifi_address(
     UINT8 out_address[ER_PI_ZERO_W_V1_1_L2_ADDRESS_BYTES]) {
-  return er_pi_zero_w_v1_1_l2_address(g_er_pi_zero_w_v1_1_node_id,
-                                      ER_PI_ZERO_W_V1_1_L2_WIFI_CHANNEL,
-                                      out_address);
+  ErWifiL2ApPlan plan;
+  ErHash channel_id;
+  ErChannelEndpoint endpoint;
+  UINT32 i;
+
+  if (out_address == 0 ||
+      er_pi_zero_w_v1_1_wifi_plan(&plan) == 0u) {
+    return 0u;
+  }
+  for (i = 0u; i < ER_PI_ZERO_W_V1_1_HASH_BYTES; ++i) {
+    channel_id.bytes[i] = g_er_pi_zero_w_v1_1_channel_id[i];
+  }
+  if (er_wifi_l2_prepare_channel_endpoint(&channel_id,
+                                          &plan,
+                                          ER_PI_ZERO_W_V1_1_L2_LABEL,
+                                          ER_PI_ZERO_W_V1_1_L2_LABEL_BYTES,
+                                          &endpoint) == 0u ||
+      endpoint.address_len != ER_PI_ZERO_W_V1_1_L2_ADDRESS_BYTES) {
+    return 0u;
+  }
+  for (i = 0u; i < ER_PI_ZERO_W_V1_1_L2_ADDRESS_BYTES; ++i) {
+    out_address[i] = endpoint.address[i];
+  }
+  return 1u;
 }
 
 static UINT32 er_pi_zero_w_v1_1_wifi_beacon(
     UINT8 out_frame[ER_PI_ZERO_W_V1_1_IEEE80211_BEACON_LEN]) {
-  UINT8 mac[ER_PI_ZERO_W_V1_1_L2_MAC_BYTES];
-  UINT8 ssid[ER_PI_ZERO_W_V1_1_L2_SSID_BYTES];
+  ErWifiL2ApPlan plan;
   UINT8* cursor;
 
   if (out_frame == 0 ||
-      er_pi_zero_w_v1_1_l2_node_mac(g_er_pi_zero_w_v1_1_node_id, mac) == 0u ||
-      er_pi_zero_w_v1_1_l2_node_ssid(g_er_pi_zero_w_v1_1_node_id, ssid) == 0u) {
+      er_pi_zero_w_v1_1_wifi_plan(&plan) == 0u) {
     return 0u;
   }
   er_pi_zero_w_v1_1_fill_zero(out_frame,
@@ -2110,9 +2134,13 @@ static UINT32 er_pi_zero_w_v1_1_wifi_beacon(
       ER_PI_ZERO_W_V1_1_L2_MAC_BYTES,
       ER_PI_ZERO_W_V1_1_IEEE80211_ADDR_BROADCAST);
   cursor = out_frame + ER_PI_ZERO_W_V1_1_IEEE80211_SA_OFFSET;
-  er_pi_zero_w_v1_1_put_bytes(&cursor, mac, ER_PI_ZERO_W_V1_1_L2_MAC_BYTES);
+  er_pi_zero_w_v1_1_put_bytes(&cursor,
+                              plan.mac,
+                              ER_PI_ZERO_W_V1_1_L2_MAC_BYTES);
   cursor = out_frame + ER_PI_ZERO_W_V1_1_IEEE80211_BSSID_OFFSET;
-  er_pi_zero_w_v1_1_put_bytes(&cursor, mac, ER_PI_ZERO_W_V1_1_L2_MAC_BYTES);
+  er_pi_zero_w_v1_1_put_bytes(&cursor,
+                              plan.mac,
+                              ER_PI_ZERO_W_V1_1_L2_MAC_BYTES);
   cursor = out_frame + ER_PI_ZERO_W_V1_1_IEEE80211_SEQUENCE_OFFSET;
   er_pi_zero_w_v1_1_put_u16(&cursor, 0u);
   cursor = out_frame + ER_PI_ZERO_W_V1_1_IEEE80211_BEACON_FIXED_OFFSET + 8u;
@@ -2126,7 +2154,9 @@ static UINT32 er_pi_zero_w_v1_1_wifi_beacon(
   cursor += 1u;
   *cursor = ER_PI_ZERO_W_V1_1_L2_SSID_BYTES;
   cursor += 1u;
-  er_pi_zero_w_v1_1_put_bytes(&cursor, ssid, ER_PI_ZERO_W_V1_1_L2_SSID_BYTES);
+  er_pi_zero_w_v1_1_put_bytes(&cursor,
+                              plan.ssid,
+                              ER_PI_ZERO_W_V1_1_L2_SSID_BYTES);
   *cursor = ER_PI_ZERO_W_V1_1_IEEE80211_IE_SUPPORTED_RATES;
   cursor += 1u;
   *cursor = ER_PI_ZERO_W_V1_1_IEEE80211_SUPPORTED_RATE_COUNT;
@@ -2149,13 +2179,11 @@ static UINT32 er_pi_zero_w_v1_1_wifi_beacon(
 
 static UINT32 er_pi_zero_w_v1_1_wifi_probe_request(
     UINT8 out_frame[ER_PI_ZERO_W_V1_1_IEEE80211_PROBE_REQUEST_LEN]) {
-  UINT8 mac[ER_PI_ZERO_W_V1_1_L2_MAC_BYTES];
-  UINT8 ssid[ER_PI_ZERO_W_V1_1_L2_SSID_BYTES];
+  ErWifiL2ApPlan plan;
   UINT8* cursor;
 
   if (out_frame == 0 ||
-      er_pi_zero_w_v1_1_l2_node_mac(g_er_pi_zero_w_v1_1_node_id, mac) == 0u ||
-      er_pi_zero_w_v1_1_l2_node_ssid(g_er_pi_zero_w_v1_1_node_id, ssid) == 0u) {
+      er_pi_zero_w_v1_1_wifi_plan(&plan) == 0u) {
     return 0u;
   }
   er_pi_zero_w_v1_1_fill_zero(out_frame,
@@ -2166,7 +2194,9 @@ static UINT32 er_pi_zero_w_v1_1_wifi_probe_request(
       ER_PI_ZERO_W_V1_1_L2_MAC_BYTES,
       ER_PI_ZERO_W_V1_1_IEEE80211_ADDR_BROADCAST);
   cursor = out_frame + ER_PI_ZERO_W_V1_1_IEEE80211_SA_OFFSET;
-  er_pi_zero_w_v1_1_put_bytes(&cursor, mac, ER_PI_ZERO_W_V1_1_L2_MAC_BYTES);
+  er_pi_zero_w_v1_1_put_bytes(&cursor,
+                              plan.mac,
+                              ER_PI_ZERO_W_V1_1_L2_MAC_BYTES);
   er_pi_zero_w_v1_1_fill_byte(
       out_frame + ER_PI_ZERO_W_V1_1_IEEE80211_BSSID_OFFSET,
       ER_PI_ZERO_W_V1_1_L2_MAC_BYTES,
@@ -2178,7 +2208,9 @@ static UINT32 er_pi_zero_w_v1_1_wifi_probe_request(
   cursor += 1u;
   *cursor = ER_PI_ZERO_W_V1_1_L2_SSID_BYTES;
   cursor += 1u;
-  er_pi_zero_w_v1_1_put_bytes(&cursor, ssid, ER_PI_ZERO_W_V1_1_L2_SSID_BYTES);
+  er_pi_zero_w_v1_1_put_bytes(&cursor,
+                              plan.ssid,
+                              ER_PI_ZERO_W_V1_1_L2_SSID_BYTES);
   *cursor = ER_PI_ZERO_W_V1_1_IEEE80211_IE_SUPPORTED_RATES;
   cursor += 1u;
   *cursor = ER_PI_ZERO_W_V1_1_IEEE80211_SUPPORTED_RATE_COUNT;
