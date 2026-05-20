@@ -1,6 +1,11 @@
 #define TEST_TLS_SERVER_RANDOM_SEED 0xa5u
 #define TEST_TLS_SERVER_KEY_SEED 0xd0u
 #define TEST_TLS_SERVER_HELLO_MAX 160u
+#define TEST_TLS_TRANSCRIPT_MAX 384u
+#define TEST_TLS_RECORD_MAX 128u
+#define TEST_TLS_RECORD_HEADER_BYTES 5u
+#define TEST_TLS_PLAINTEXT_BYTES 16u
+#define TEST_TLS_DERIVE_CALLS 18u
 
 typedef struct {
   UINT8* bytes;
@@ -90,12 +95,20 @@ static void test_tls_tpm_handshake_core(void) {
   ErTpmCommandProfile commands;
   ErTlsTpm tls_tpm;
   ErTlsHandshake handshake;
+  ErTlsRecordKeys keys;
   ErTlsServerHello parsed;
   UINT8 client_hello[ER_TLS_CLIENT_HELLO_MAX_BYTES];
   UINT8 server_hello[TEST_TLS_SERVER_HELLO_MAX];
+  UINT8 transcript[TEST_TLS_TRANSCRIPT_MAX];
+  UINT8 plaintext[TEST_TLS_PLAINTEXT_BYTES];
+  UINT8 record[TEST_TLS_RECORD_MAX];
+  UINT8 opened[TEST_TLS_PLAINTEXT_BYTES];
   UINT8 server_key[ER_TLS_P256_RAW_PUBLIC_BYTES];
   UINT16 client_hello_len = 0u;
   UINT16 server_hello_len;
+  UINT16 transcript_len;
+  UINT16 record_len = 0u;
+  UINT16 opened_len = 0u;
 
   er_mem_zero((UINT8*)&script, (UINTN)sizeof(script));
   test_tls_tpm_profiles(&info, &algorithms, &commands);
@@ -119,7 +132,9 @@ static void test_tls_tpm_handshake_core(void) {
   check_uint64("tls core ecdh handle", handshake.ecdh_handle, TEST_TLS_TPM_HANDLE_ECDH);
   check_uint64("tls core build calls", script.calls, 2u);
 
-  server_hello_len = test_tls_build_server_hello(server_hello, (UINT16)sizeof(server_hello), server_key);
+  server_hello_len = test_tls_build_server_hello(server_hello,
+                                                 (UINT16)sizeof(server_hello),
+                                                 server_key);
   check_uint64("tls core parse server hello",
                er_tls_server_hello_parse(server_hello, server_hello_len, &parsed),
                ER_TLS_STATUS_OK);
@@ -135,8 +150,72 @@ static void test_tls_tpm_handshake_core(void) {
   check_uint64("tls core ready", handshake.ready, 1u);
   check_uint64("tls core shared x", handshake.shared_point[0], TEST_TLS_TPM_POINT_X_SEED);
   check_uint64("tls core shared y", handshake.shared_point[32], TEST_TLS_TPM_POINT_Y_SEED);
-  check_uint64("tls core server key stored", handshake.server_public_key[0], TEST_TLS_SERVER_KEY_SEED);
+  check_uint64("tls core server key stored",
+               handshake.server_public_key[0],
+               TEST_TLS_SERVER_KEY_SEED);
   check_uint64("tls core ecdh command", script.last_command_code, ER_TPM_CC_ECDH_ZGEN);
+  if (client_hello_len + server_hello_len <= sizeof(transcript)) {
+    er_mem_copy(transcript, client_hello, client_hello_len);
+    er_mem_copy(transcript + client_hello_len, server_hello, server_hello_len);
+  }
+  transcript_len = (UINT16)(client_hello_len + server_hello_len);
+  check_uint64("tls core derive keys",
+               er_tls_record_keys_derive(&tls_tpm,
+                                         &handshake,
+                                         transcript,
+                                         transcript_len,
+                                         &keys),
+               ER_TLS_STATUS_OK);
+  check_uint64("tls core key derive ready", keys.ready, 1u);
+  check_uint64("tls core client aes handle", keys.client_aes_handle, TEST_TLS_TPM_HANDLE_AES);
+  check_uint64("tls core server aes handle", keys.server_aes_handle, TEST_TLS_TPM_HANDLE_AES);
+  check_uint64("tls core client hmac handle", keys.client_hmac_handle, TEST_TLS_TPM_HANDLE_HMAC);
+  check_uint64("tls core server hmac handle", keys.server_hmac_handle, TEST_TLS_TPM_HANDLE_HMAC);
+  check_uint64("tls core derive calls", script.calls, TEST_TLS_DERIVE_CALLS);
+
+  test_fill_bytes(plaintext, (UINTN)sizeof(plaintext), 0x11u);
+  check_uint64("tls core protect record",
+               er_tls_record_protect(&tls_tpm,
+                                     &keys,
+                                     1u,
+                                     plaintext,
+                                     (UINT16)sizeof(plaintext),
+                                     record,
+                                     (UINT16)sizeof(record),
+                                     &record_len),
+               ER_TLS_STATUS_OK);
+  check_uint64("tls core protected type", record[0], 23u);
+  check_uint64("tls core protected len",
+               record_len,
+               TEST_TLS_RECORD_HEADER_BYTES + TEST_TLS_PLAINTEXT_BYTES +
+                   ER_TLS_RECORD_TAG_BYTES);
+  check_uint64("tls core protected cipher",
+               record[TEST_TLS_RECORD_HEADER_BYTES],
+               TEST_TLS_TPM_CIPHER_SEED);
+  check_uint64("tls core protected tag",
+               record[TEST_TLS_RECORD_HEADER_BYTES + TEST_TLS_PLAINTEXT_BYTES],
+               TEST_TLS_TPM_DIGEST_SEED);
+  check_uint64("tls core client sequence", keys.client_sequence, 1u);
+
+  keys.client_sequence = 0u;
+  check_uint64("tls core unprotect record",
+               er_tls_record_unprotect(&tls_tpm,
+                                       &keys,
+                                       1u,
+                                       record,
+                                       record_len,
+                                       opened,
+                                       (UINT16)sizeof(opened),
+                                       &opened_len),
+               ER_TLS_STATUS_OK);
+  check_uint64("tls core opened len", opened_len, TEST_TLS_PLAINTEXT_BYTES);
+  check_uint64("tls core opened byte", opened[0], TEST_TLS_TPM_CIPHER_SEED);
+  check_uint64("tls core unprotect sequence", keys.client_sequence, 1u);
+
+  check_uint64("tls core close keys",
+               er_tls_record_keys_close(&tls_tpm, &keys),
+               ER_TLS_STATUS_OK);
+  check_uint64("tls core close keys clears", keys.ready, 0u);
   check_uint64("tls core close",
                er_tls_handshake_close(&tls_tpm, &handshake),
                ER_TLS_STATUS_OK);

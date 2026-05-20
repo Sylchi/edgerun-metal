@@ -33,7 +33,10 @@
 #define ER_TPM_CC_GET_CAPABILITY 0x0000017Au
 #define ER_TPM_CC_GET_RANDOM 0x0000017Bu
 #define ER_TPM_CC_HASH 0x0000017Du
+#define ER_TPM_CC_HASH_SEQUENCE_START 0x00000186u
 #define ER_TPM_CC_READ_PUBLIC 0x00000173u
+#define ER_TPM_CC_SEQUENCE_COMPLETE 0x0000013Eu
+#define ER_TPM_CC_SEQUENCE_UPDATE 0x0000015Cu
 #define ER_TPM_CC_SIGN 0x0000015Du
 #define ER_TPM_CC_VERIFY_SIGNATURE 0x00000177u
 #define ER_TPM_CC_FLUSH_CONTEXT 0x00000165u
@@ -128,8 +131,11 @@ typedef struct {
   UINT8 has_encrypt_decrypt2;
   UINT8 has_get_random;
   UINT8 has_hash;
+  UINT8 has_hash_sequence_start;
   UINT8 has_hmac;
   UINT8 has_load_external;
+  UINT8 has_sequence_complete;
+  UINT8 has_sequence_update;
   UINT8 has_sign;
   UINT8 has_verify_signature;
 } ErTpmCommandProfile;
@@ -162,6 +168,20 @@ UINT8 er_tpm_build_hash_sha256_command(const UINT8* data, UINT16 data_len,
                                        UINT8* out_command,
                                        UINT32 command_capacity,
                                        UINT32* out_command_len);
+UINT8 er_tpm_build_hash_sequence_start_sha256_command(UINT8* out_command,
+                                                      UINT32 command_capacity,
+                                                      UINT32* out_command_len);
+UINT8 er_tpm_build_sequence_update_command(UINT32 handle,
+                                           const UINT8* data, UINT16 data_len,
+                                           UINT8* out_command,
+                                           UINT32 command_capacity,
+                                           UINT32* out_command_len);
+UINT8 er_tpm_build_sequence_complete_command(UINT32 handle,
+                                             const UINT8* data, UINT16 data_len,
+                                             UINT32 hierarchy,
+                                             UINT8* out_command,
+                                             UINT32 command_capacity,
+                                             UINT32* out_command_len);
 UINT8 er_tpm_build_hmac_sha256_command(UINT32 handle,
                                        const UINT8* data, UINT16 data_len,
                                        UINT8* out_command,

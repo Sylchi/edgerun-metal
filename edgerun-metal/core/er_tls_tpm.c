@@ -2,6 +2,9 @@
 
 #include "er_mem.h"
 
+#define ER_TLS_TPM_SHA256_ONESHOT_MAX_BYTES 238u
+#define ER_TLS_TPM_SHA256_UPDATE_MAX_BYTES 227u
+
 static UINT8 er_tls_tpm_run(ErTlsTpm* tls_tpm, UINT32 command_len, UINT32* out_response_len) {
   if (tls_tpm == 0 || tls_tpm->transact == 0 || command_len == 0u || out_response_len == 0) {
     return 0u;
@@ -71,14 +74,56 @@ UINT8 er_tls_tpm_sha256(ErTlsTpm* tls_tpm,
                         UINT8 out_digest[ER_TPM_SHA256_DIGEST_LEN]) {
   UINT32 command_len;
   UINT32 response_len;
+  UINT32 cursor;
+  UINT32 chunk_len;
+  UINT32 sequence_handle;
 
   if (tls_tpm == 0 || data == 0 || out_digest == 0 ||
-      er_tpm_build_hash_sha256_command(data,
-                                       data_len,
-                                       ER_TPM_RH_NULL,
-                                       tls_tpm->command,
-                                       (UINT32)sizeof(tls_tpm->command),
-                                       &command_len) == 0u ||
+      data_len == 0u) {
+    return 0u;
+  }
+  if (data_len <= ER_TLS_TPM_SHA256_ONESHOT_MAX_BYTES) {
+    if (er_tpm_build_hash_sha256_command(data,
+                                         data_len,
+                                         ER_TPM_RH_NULL,
+                                         tls_tpm->command,
+                                         (UINT32)sizeof(tls_tpm->command),
+                                         &command_len) == 0u ||
+        er_tls_tpm_run(tls_tpm, command_len, &response_len) == 0u) {
+      return 0u;
+    }
+    return er_tpm_parse_sha256_digest_response(tls_tpm->response, response_len, out_digest);
+  }
+  if (er_tpm_build_hash_sequence_start_sha256_command(tls_tpm->command,
+                                                      (UINT32)sizeof(tls_tpm->command),
+                                                      &command_len) == 0u ||
+      er_tls_tpm_run(tls_tpm, command_len, &response_len) == 0u ||
+      er_tpm_parse_handle_response(tls_tpm->response, response_len, &sequence_handle) == 0u) {
+    return 0u;
+  }
+  cursor = 0u;
+  while ((UINT32)data_len - cursor > ER_TLS_TPM_SHA256_UPDATE_MAX_BYTES) {
+    chunk_len = ER_TLS_TPM_SHA256_UPDATE_MAX_BYTES;
+    if (er_tpm_build_sequence_update_command(sequence_handle,
+                                             data + cursor,
+                                             (UINT16)chunk_len,
+                                             tls_tpm->command,
+                                             (UINT32)sizeof(tls_tpm->command),
+                                             &command_len) == 0u ||
+        er_tls_tpm_run(tls_tpm, command_len, &response_len) == 0u ||
+        er_tpm_response_success(tls_tpm->response, response_len) == 0u) {
+      return 0u;
+    }
+    cursor += chunk_len;
+  }
+  chunk_len = (UINT32)data_len - cursor;
+  if (er_tpm_build_sequence_complete_command(sequence_handle,
+                                             data + cursor,
+                                             (UINT16)chunk_len,
+                                             ER_TPM_RH_NULL,
+                                             tls_tpm->command,
+                                             (UINT32)sizeof(tls_tpm->command),
+                                             &command_len) == 0u ||
       er_tls_tpm_run(tls_tpm, command_len, &response_len) == 0u) {
     return 0u;
   }

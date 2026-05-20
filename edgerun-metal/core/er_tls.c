@@ -20,6 +20,18 @@
 #define ER_TLS_NULL_COMPRESSION_BYTES 2u
 #define ER_TLS_U24_MAX 0x00ffffffu
 #define ER_TLS_SEC1_UNCOMPRESSED 0x04u
+#define ER_TLS_RECORD_APPLICATION_DATA 23u
+#define ER_TLS_RECORD_AUTH_PREFIX_BYTES 13u
+#define ER_TLS_RECORD_HEADER_BYTES 5u
+#define ER_TLS_RECORD_SEQUENCE_BYTES 8u
+#define ER_TLS_RECORD_CLIENT_TO_SERVER 1u
+#define ER_TLS_RECORD_SERVER_TO_CLIENT 0u
+#define ER_TLS_DERIVE_LABEL_CLIENT_KEY 1u
+#define ER_TLS_DERIVE_LABEL_SERVER_KEY 2u
+#define ER_TLS_DERIVE_LABEL_CLIENT_IV 3u
+#define ER_TLS_DERIVE_LABEL_SERVER_IV 4u
+#define ER_TLS_DERIVE_LABEL_CLIENT_MAC 5u
+#define ER_TLS_DERIVE_LABEL_SERVER_MAC 6u
 
 typedef struct {
   UINT8* bytes;
@@ -83,6 +95,30 @@ static UINT8 er_tls_patch_u24(ErTlsWriter* writer, UINT16 offset, UINT32 value) 
   writer->bytes[offset + 1u] = (UINT8)((value >> 8u) & 0xffu);
   writer->bytes[offset + 2u] = (UINT8)(value & 0xffu);
   return 1u;
+}
+
+static void er_tls_write_seq(UINT8 out[ER_TLS_RECORD_SEQUENCE_BYTES], UINT64 value) {
+  out[0] = (UINT8)((value >> 56u) & 0xffu);
+  out[1] = (UINT8)((value >> 48u) & 0xffu);
+  out[2] = (UINT8)((value >> 40u) & 0xffu);
+  out[3] = (UINT8)((value >> 32u) & 0xffu);
+  out[4] = (UINT8)((value >> 24u) & 0xffu);
+  out[5] = (UINT8)((value >> 16u) & 0xffu);
+  out[6] = (UINT8)((value >> 8u) & 0xffu);
+  out[7] = (UINT8)(value & 0xffu);
+}
+
+static UINT8 er_tls_slice_equal(const UINT8* a, const UINT8* b, UINT16 len) {
+  UINT16 i;
+  UINT8 diff = 0u;
+
+  if (a == 0 || b == 0) {
+    return 0u;
+  }
+  for (i = 0u; i < len; ++i) {
+    diff = (UINT8)(diff | (UINT8)(a[i] ^ b[i]));
+  }
+  return (UINT8)(diff == 0u);
 }
 
 static UINT8 er_tls_host_valid(const UINT8* host, UINT16 host_len) {
@@ -388,4 +424,308 @@ UINT8 er_tls_handshake_close(ErTlsTpm* tpm, ErTlsHandshake* handshake) {
     return ER_TLS_STATUS_OK;
   }
   return er_tls_tpm_flush(tpm, handle) == 0u ? ER_TLS_STATUS_TPM_FAILURE : ER_TLS_STATUS_OK;
+}
+
+static UINT8 er_tls_derive_material(ErTlsTpm* tpm,
+                                    UINT32 secret_handle,
+                                    UINT8 label,
+                                    const UINT8 transcript_hash[ER_TLS_SHA256_BYTES],
+                                    UINT8 out_material[ER_TLS_SHA256_BYTES]) {
+  UINT8 input[1u + ER_TLS_SHA256_BYTES];
+
+  input[0] = label;
+  er_mem_copy(input + 1u, transcript_hash, ER_TLS_SHA256_BYTES);
+  return er_tls_tpm_hmac_sha256(tpm,
+                                secret_handle,
+                                input,
+                                (UINT16)sizeof(input),
+                                out_material);
+}
+
+static UINT8 er_tls_load_key_material(ErTlsTpm* tpm,
+                                      ErTlsRecordKeys* keys,
+                                      const UINT8 client_key[ER_TLS_SHA256_BYTES],
+                                      const UINT8 server_key[ER_TLS_SHA256_BYTES],
+                                      const UINT8 client_mac[ER_TLS_SHA256_BYTES],
+                                      const UINT8 server_mac[ER_TLS_SHA256_BYTES]) {
+  if (er_tls_tpm_load_aes_key(tpm,
+                              client_key,
+                              ER_TLS_AES_128_KEY_BYTES,
+                              ER_TPM_AES_128_KEY_BITS,
+                              &keys->client_aes_handle) == 0u ||
+      er_tls_tpm_load_aes_key(tpm,
+                              server_key,
+                              ER_TLS_AES_128_KEY_BYTES,
+                              ER_TPM_AES_128_KEY_BITS,
+                              &keys->server_aes_handle) == 0u ||
+      er_tls_tpm_load_hmac_sha256_key(tpm,
+                                      client_mac,
+                                      ER_TLS_SHA256_BYTES,
+                                      &keys->client_hmac_handle) == 0u ||
+      er_tls_tpm_load_hmac_sha256_key(tpm,
+                                      server_mac,
+                                      ER_TLS_SHA256_BYTES,
+                                      &keys->server_hmac_handle) == 0u) {
+    return 0u;
+  }
+  return 1u;
+}
+
+UINT8 er_tls_record_keys_derive(ErTlsTpm* tpm,
+                                const ErTlsHandshake* handshake,
+                                const UINT8* transcript,
+                                UINT16 transcript_len,
+                                ErTlsRecordKeys* out_keys) {
+  UINT8 transcript_hash[ER_TLS_SHA256_BYTES];
+  UINT8 client_key[ER_TLS_SHA256_BYTES];
+  UINT8 server_key[ER_TLS_SHA256_BYTES];
+  UINT8 client_iv[ER_TLS_SHA256_BYTES];
+  UINT8 server_iv[ER_TLS_SHA256_BYTES];
+  UINT8 client_mac[ER_TLS_SHA256_BYTES];
+  UINT8 server_mac[ER_TLS_SHA256_BYTES];
+  UINT32 secret_handle;
+
+  if (tpm == 0 || handshake == 0 || handshake->ready == 0u ||
+      transcript == 0 || transcript_len == 0u || out_keys == 0) {
+    return ER_TLS_STATUS_INVALID_ARGUMENT;
+  }
+  er_mem_zero((UINT8*)out_keys, (UINTN)sizeof(*out_keys));
+  if (er_tls_tpm_sha256(tpm, transcript, transcript_len, transcript_hash) == 0u ||
+      er_tls_tpm_load_hmac_sha256_key(tpm,
+                                      handshake->shared_point,
+                                      ER_TLS_SHA256_BYTES,
+                                      &secret_handle) == 0u) {
+    return ER_TLS_STATUS_TPM_FAILURE;
+  }
+  if (er_tls_derive_material(tpm, secret_handle, ER_TLS_DERIVE_LABEL_CLIENT_KEY,
+                             transcript_hash, client_key) == 0u ||
+      er_tls_derive_material(tpm, secret_handle, ER_TLS_DERIVE_LABEL_SERVER_KEY,
+                             transcript_hash, server_key) == 0u ||
+      er_tls_derive_material(tpm, secret_handle, ER_TLS_DERIVE_LABEL_CLIENT_IV,
+                             transcript_hash, client_iv) == 0u ||
+      er_tls_derive_material(tpm, secret_handle, ER_TLS_DERIVE_LABEL_SERVER_IV,
+                             transcript_hash, server_iv) == 0u ||
+      er_tls_derive_material(tpm, secret_handle, ER_TLS_DERIVE_LABEL_CLIENT_MAC,
+                             transcript_hash, client_mac) == 0u ||
+      er_tls_derive_material(tpm, secret_handle, ER_TLS_DERIVE_LABEL_SERVER_MAC,
+                             transcript_hash, server_mac) == 0u ||
+      er_tls_tpm_flush(tpm, secret_handle) == 0u ||
+      er_tls_load_key_material(tpm,
+                               out_keys,
+                               client_key,
+                               server_key,
+                               client_mac,
+                               server_mac) == 0u) {
+    return ER_TLS_STATUS_TPM_FAILURE;
+  }
+  er_mem_copy(out_keys->client_iv, client_iv, ER_TLS_RECORD_IV_BYTES);
+  er_mem_copy(out_keys->server_iv, server_iv, ER_TLS_RECORD_IV_BYTES);
+  out_keys->ready = 1u;
+  return ER_TLS_STATUS_OK;
+}
+
+static UINT8 er_tls_record_mac(ErTlsTpm* tpm,
+                               UINT32 hmac_handle,
+                               UINT64 sequence,
+                               const UINT8* header,
+                               const UINT8* data,
+                               UINT16 data_len,
+                               UINT8 out_tag[ER_TLS_RECORD_TAG_BYTES]) {
+  UINT8 mac_input[ER_TLS_RECORD_AUTH_PREFIX_BYTES + ER_TLS_RECORD_PLAINTEXT_MAX_BYTES];
+  UINT8 seq[8];
+
+  if (data_len > ER_TLS_RECORD_PLAINTEXT_MAX_BYTES) {
+    return 0u;
+  }
+  er_tls_write_seq(seq, sequence);
+  er_mem_copy(mac_input, seq, (UINTN)sizeof(seq));
+  er_mem_copy(mac_input + sizeof(seq), header, ER_TLS_RECORD_HEADER_BYTES);
+  er_mem_copy(mac_input + ER_TLS_RECORD_AUTH_PREFIX_BYTES, data, data_len);
+  return er_tls_tpm_hmac_sha256(tpm,
+                                hmac_handle,
+                                mac_input,
+                                (UINT16)(ER_TLS_RECORD_AUTH_PREFIX_BYTES + data_len),
+                                out_tag);
+}
+
+UINT8 er_tls_record_protect(ErTlsTpm* tpm,
+                            ErTlsRecordKeys* keys,
+                            UINT8 from_client,
+                            const UINT8* plaintext,
+                            UINT16 plaintext_len,
+                            UINT8* out_record,
+                            UINT16 out_capacity,
+                            UINT16* out_record_len) {
+  UINT32 data_len = 0u;
+  UINT32 iv_len = 0u;
+  UINT32 aes_handle;
+  UINT32 hmac_handle;
+  UINT8* iv;
+  UINT64 sequence;
+  UINT8 tag[ER_TLS_RECORD_TAG_BYTES];
+
+  if (tpm == 0 || keys == 0 || keys->ready == 0u || plaintext == 0 ||
+      plaintext_len == 0u || plaintext_len > ER_TLS_RECORD_PLAINTEXT_MAX_BYTES ||
+      out_record == 0 || out_record_len == 0 ||
+      out_capacity < ER_TLS_RECORD_HEADER_BYTES + plaintext_len + ER_TLS_RECORD_TAG_BYTES) {
+    return ER_TLS_STATUS_INVALID_ARGUMENT;
+  }
+  if (from_client == ER_TLS_RECORD_CLIENT_TO_SERVER) {
+    aes_handle = keys->client_aes_handle;
+    hmac_handle = keys->client_hmac_handle;
+    iv = keys->client_iv;
+    sequence = keys->client_sequence;
+  } else {
+    aes_handle = keys->server_aes_handle;
+    hmac_handle = keys->server_hmac_handle;
+    iv = keys->server_iv;
+    sequence = keys->server_sequence;
+  }
+  out_record[0] = ER_TLS_RECORD_APPLICATION_DATA;
+  out_record[1] = (UINT8)((ER_TLS_RECORD_VERSION >> 8u) & 0xffu);
+  out_record[2] = (UINT8)(ER_TLS_RECORD_VERSION & 0xffu);
+  out_record[3] = (UINT8)(((plaintext_len + ER_TLS_RECORD_TAG_BYTES) >> 8u) & 0xffu);
+  out_record[4] = (UINT8)((plaintext_len + ER_TLS_RECORD_TAG_BYTES) & 0xffu);
+  if (er_tls_tpm_record_crypt(tpm,
+                              aes_handle,
+                              0u,
+                              iv,
+                              ER_TLS_RECORD_IV_BYTES,
+                              plaintext,
+                              plaintext_len,
+                              out_record + ER_TLS_RECORD_HEADER_BYTES,
+                              out_capacity - ER_TLS_RECORD_HEADER_BYTES,
+                              &data_len,
+                              iv,
+                              ER_TLS_RECORD_IV_BYTES,
+                              &iv_len) == 0u ||
+      data_len != plaintext_len ||
+      iv_len != ER_TLS_RECORD_IV_BYTES ||
+      er_tls_record_mac(tpm,
+                        hmac_handle,
+                        sequence,
+                        out_record,
+                        out_record + ER_TLS_RECORD_HEADER_BYTES,
+                        plaintext_len, tag) == 0u) {
+    return ER_TLS_STATUS_TPM_FAILURE;
+  }
+  er_mem_copy(out_record + ER_TLS_RECORD_HEADER_BYTES + plaintext_len,
+              tag,
+              ER_TLS_RECORD_TAG_BYTES);
+  *out_record_len = (UINT16)(ER_TLS_RECORD_HEADER_BYTES +
+                             plaintext_len +
+                             ER_TLS_RECORD_TAG_BYTES);
+  if (from_client == ER_TLS_RECORD_CLIENT_TO_SERVER) {
+    ++keys->client_sequence;
+  } else {
+    ++keys->server_sequence;
+  }
+  return ER_TLS_STATUS_OK;
+}
+
+UINT8 er_tls_record_unprotect(ErTlsTpm* tpm,
+                              ErTlsRecordKeys* keys,
+                              UINT8 from_client,
+                              const UINT8* record,
+                              UINT16 record_len,
+                              UINT8* out_plaintext,
+                              UINT16 out_capacity,
+                              UINT16* out_plaintext_len) {
+  UINT16 encrypted_len;
+  UINT16 plaintext_len;
+  UINT32 data_len = 0u;
+  UINT32 iv_len = 0u;
+  UINT32 aes_handle;
+  UINT32 hmac_handle;
+  UINT8* iv;
+  UINT64 sequence;
+  UINT8 expected_tag[ER_TLS_RECORD_TAG_BYTES];
+
+  if (tpm == 0 || keys == 0 || keys->ready == 0u || record == 0 ||
+      record_len < ER_TLS_RECORD_HEADER_BYTES + ER_TLS_RECORD_TAG_BYTES || out_plaintext == 0 ||
+      out_plaintext_len == 0 || record[0] != ER_TLS_RECORD_APPLICATION_DATA ||
+      er_tls_read_u16(record + 1u) != ER_TLS_RECORD_VERSION) {
+    return ER_TLS_STATUS_INVALID_ARGUMENT;
+  }
+  encrypted_len = er_tls_read_u16(record + 3u);
+  if (encrypted_len != record_len - ER_TLS_RECORD_HEADER_BYTES ||
+      encrypted_len < ER_TLS_RECORD_TAG_BYTES) {
+    return ER_TLS_STATUS_PARSE_FAILURE;
+  }
+  plaintext_len = (UINT16)(encrypted_len - ER_TLS_RECORD_TAG_BYTES);
+  if (plaintext_len > out_capacity || plaintext_len > ER_TLS_RECORD_PLAINTEXT_MAX_BYTES) {
+    return ER_TLS_STATUS_BUFFER_TOO_SMALL;
+  }
+  if (from_client == ER_TLS_RECORD_CLIENT_TO_SERVER) {
+    aes_handle = keys->client_aes_handle;
+    hmac_handle = keys->client_hmac_handle;
+    iv = keys->client_iv;
+    sequence = keys->client_sequence;
+  } else {
+    aes_handle = keys->server_aes_handle;
+    hmac_handle = keys->server_hmac_handle;
+    iv = keys->server_iv;
+    sequence = keys->server_sequence;
+  }
+  if (er_tls_record_mac(tpm,
+                        hmac_handle,
+                        sequence,
+                        record,
+                        record + ER_TLS_RECORD_HEADER_BYTES,
+                        plaintext_len, expected_tag) == 0u ||
+      er_tls_slice_equal(expected_tag,
+                         record + ER_TLS_RECORD_HEADER_BYTES + plaintext_len,
+                         ER_TLS_RECORD_TAG_BYTES) == 0u) {
+    return ER_TLS_STATUS_PARSE_FAILURE;
+  }
+  if (er_tls_tpm_record_crypt(tpm,
+                              aes_handle,
+                              1u,
+                              iv,
+                              ER_TLS_RECORD_IV_BYTES,
+                              record + ER_TLS_RECORD_HEADER_BYTES,
+                              plaintext_len,
+                              out_plaintext,
+                              out_capacity,
+                              &data_len,
+                              iv,
+                              ER_TLS_RECORD_IV_BYTES,
+                              &iv_len) == 0u ||
+      data_len != plaintext_len ||
+      iv_len != ER_TLS_RECORD_IV_BYTES) {
+    return ER_TLS_STATUS_TPM_FAILURE;
+  }
+  *out_plaintext_len = (UINT16)data_len;
+  if (from_client == ER_TLS_RECORD_CLIENT_TO_SERVER) {
+    ++keys->client_sequence;
+  } else {
+    ++keys->server_sequence;
+  }
+  return ER_TLS_STATUS_OK;
+}
+
+UINT8 er_tls_record_keys_close(ErTlsTpm* tpm, ErTlsRecordKeys* keys) {
+  UINT8 ok = 1u;
+
+  if (tpm == 0 || keys == 0) {
+    return ER_TLS_STATUS_INVALID_ARGUMENT;
+  }
+  if (keys->client_aes_handle != 0u &&
+      er_tls_tpm_flush(tpm, keys->client_aes_handle) == 0u) {
+    ok = 0u;
+  }
+  if (keys->server_aes_handle != 0u &&
+      er_tls_tpm_flush(tpm, keys->server_aes_handle) == 0u) {
+    ok = 0u;
+  }
+  if (keys->client_hmac_handle != 0u &&
+      er_tls_tpm_flush(tpm, keys->client_hmac_handle) == 0u) {
+    ok = 0u;
+  }
+  if (keys->server_hmac_handle != 0u &&
+      er_tls_tpm_flush(tpm, keys->server_hmac_handle) == 0u) {
+    ok = 0u;
+  }
+  er_mem_zero((UINT8*)keys, (UINTN)sizeof(*keys));
+  return ok == 0u ? ER_TLS_STATUS_TPM_FAILURE : ER_TLS_STATUS_OK;
 }
