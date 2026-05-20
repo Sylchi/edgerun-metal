@@ -8,7 +8,6 @@
  */
 
 #define ER_PI_ZERO_W_V1_1_BOOT_MAGIC 0x45525a57u
-#define ER_PI_ZERO_W_V1_1_STACK_TOP_ASM "0x8000"
 #define ER_PI_ZERO_W_V1_1_ERWIRE_MAGIC 0x31575245u
 #define ER_PI_ZERO_W_V1_1_ERWIRE_VERSION 1u
 #define ER_PI_ZERO_W_V1_1_ERWIRE_HEADER_SIZE 32u
@@ -52,6 +51,7 @@
 #define ER_PI_ZERO_W_V1_1_SDIO_PROBE_CMD3_DONE 3u
 #define ER_PI_ZERO_W_V1_1_SDIO_PROBE_CMD7_DONE 4u
 #define ER_PI_ZERO_W_V1_1_SDIO_PROBE_CMD52_DONE 5u
+#define ER_PI_ZERO_W_V1_1_SDIO_PROBE_CMD53_DONE 6u
 #define ER_PI_ZERO_W_V1_1_SDIO_PROBE_ERROR 0xffffffffu
 #define ER_PI_ZERO_W_V1_1_LED_STEP_DELAY_TICKS 250000u
 #define ER_PI_ZERO_W_V1_1_EMMC_RESET_POLL_BUDGET 100000u
@@ -288,6 +288,17 @@ static UINT32 er_pi_zero_w_v1_1_emmc_command_value(UINT32 command_index,
   return value;
 }
 
+static UINT32 er_pi_zero_w_v1_1_emmc_sdio_command_value(UINT32 command_index,
+                                                        UINT32 response_kind) {
+  UINT32 value;
+
+  value = er_pi_zero_w_v1_1_emmc_command_value(command_index, response_kind);
+  value |= ER_PI_EMMC_CMDTM_BLOCK_COUNT_ENABLE;
+  value |= ER_PI_EMMC_CMDTM_IS_DATA;
+  value |= ER_PI_EMMC_CMDTM_DATA_READ;
+  return value;
+}
+
 static UINT32 er_pi_zero_w_v1_1_emmc_control1_ident_clock(void) {
   UINT32 divisor = ER_PI_EMMC_IDENT_CLOCK_DIVISOR;
   UINT32 control;
@@ -403,7 +414,7 @@ static UINT32 er_pi_zero_w_v1_1_emmc_command(UINT32 command_index,
   }
   if (er_pi_zero_w_v1_1_emmc_wait_clear(
           ER_PI_EMMC_REG_STATUS,
-          ER_PI_EMMC_STATUS_CMD_INHIBIT,
+          ER_PI_EMMC_STATUS_CMD_INHIBIT | ER_PI_EMMC_STATUS_DATA_INHIBIT,
           ER_PI_ZERO_W_V1_1_EMMC_READY_POLL_BUDGET) == 0u) {
     return 0u;
   }
@@ -460,8 +471,119 @@ static UINT32 er_pi_zero_w_v1_1_sdio_cmd52_argument(UINT32 write,
   return argument;
 }
 
+static UINT32 er_pi_zero_w_v1_1_sdio_cmd53_argument(UINT32 write,
+                                                    UINT32 function,
+                                                    UINT32 block_mode,
+                                                    UINT32 incrementing,
+                                                    UINT32 address,
+                                                    UINT32 count) {
+  UINT32 argument = 0u;
+
+  if (write != ER_PI_SDIO_CMD53_READ) {
+    argument |= 1u << ER_PI_SDIO_RW_FLAG_BIT;
+  }
+  argument |= ((function & ER_PI_SDIO_FUNCTION_MASK) <<
+               ER_PI_SDIO_FUNCTION_BITS);
+  if (block_mode != ER_PI_SDIO_CMD53_BYTE_MODE) {
+    argument |= 1u << ER_PI_SDIO_BLOCK_MODE_BIT;
+  }
+  if (incrementing != ER_PI_SDIO_CMD53_FIXED_ADDRESS) {
+    argument |= 1u << ER_PI_SDIO_INCREMENTING_ADDRESS_BIT;
+  }
+  argument |= (address & ER_PI_SDIO_ADDRESS_MASK) <<
+              ER_PI_SDIO_ADDRESS_BITS;
+  argument |= count & ER_PI_SDIO_CMD53_COUNT_MASK;
+  return argument;
+}
+
+static UINT32 er_pi_zero_w_v1_1_emmc_wait_interrupt(UINT32 wanted_interrupt,
+                                                    UINT32* out_interrupt) {
+  UINT32 poll;
+  UINT32 interrupt;
+
+  if (out_interrupt == 0 || wanted_interrupt == 0u) {
+    return 0u;
+  }
+  *out_interrupt = 0u;
+  for (poll = 0u;
+       poll < ER_PI_ZERO_W_V1_1_SDIO_POLL_BUDGET;
+       ++poll) {
+    interrupt = er_pi_zero_w_v1_1_read(ER_PI_ZERO_W_V1_1_EMMC_BASE,
+                                       ER_PI_EMMC_REG_INTERRUPT);
+    if ((interrupt & ER_PI_EMMC_INTERRUPT_ERROR_MASK) != 0u) {
+      *out_interrupt = interrupt;
+      return 0u;
+    }
+    if ((interrupt & wanted_interrupt) != 0u) {
+      *out_interrupt = interrupt;
+      return 1u;
+    }
+  }
+  return 0u;
+}
+
+static UINT32 er_pi_zero_w_v1_1_emmc_sdio_read_byte(UINT32 function,
+                                                    UINT32 address,
+                                                    UINT8* out_byte) {
+  UINT32 interrupt;
+  UINT32 response;
+  UINT32 data;
+
+  if (out_byte == 0 ||
+      er_pi_zero_w_v1_1_emmc_wait_clear(
+          ER_PI_EMMC_REG_STATUS,
+          ER_PI_EMMC_STATUS_CMD_INHIBIT | ER_PI_EMMC_STATUS_DATA_INHIBIT,
+          ER_PI_ZERO_W_V1_1_EMMC_READY_POLL_BUDGET) == 0u) {
+    return 0u;
+  }
+  *out_byte = 0u;
+  er_pi_zero_w_v1_1_write(ER_PI_ZERO_W_V1_1_EMMC_BASE,
+                          ER_PI_EMMC_REG_INTERRUPT,
+                          ER_PI_EMMC_INTERRUPT_ALL);
+  er_pi_zero_w_v1_1_write(
+      ER_PI_ZERO_W_V1_1_EMMC_BASE,
+      ER_PI_EMMC_REG_BLKSIZECNT,
+      (1u << ER_PI_EMMC_BLOCK_COUNT_BITS) | 1u);
+  er_pi_zero_w_v1_1_write(
+      ER_PI_ZERO_W_V1_1_EMMC_BASE,
+      ER_PI_EMMC_REG_ARG1,
+      er_pi_zero_w_v1_1_sdio_cmd53_argument(ER_PI_SDIO_CMD53_READ,
+                                            function,
+                                            ER_PI_SDIO_CMD53_BYTE_MODE,
+                                            ER_PI_SDIO_CMD53_FIXED_ADDRESS,
+                                            address,
+                                            1u));
+  er_pi_zero_w_v1_1_write(
+      ER_PI_ZERO_W_V1_1_EMMC_BASE,
+      ER_PI_EMMC_REG_CMDTM,
+      er_pi_zero_w_v1_1_emmc_sdio_command_value(ER_PI_MMC_CMD_IO_RW_EXTENDED,
+                                                ER_PI_MMC_RESPONSE_R5));
+  if (er_pi_zero_w_v1_1_emmc_wait_interrupt(ER_PI_EMMC_INTERRUPT_READ_RDY,
+                                            &interrupt) == 0u) {
+    g_er_pi_zero_w_v1_1_sdio_probe_interrupt = interrupt;
+    return 0u;
+  }
+  data = er_pi_zero_w_v1_1_read(ER_PI_ZERO_W_V1_1_EMMC_BASE,
+                                ER_PI_EMMC_REG_DATA);
+  *out_byte = (UINT8)(data & ER_PI_ZERO_W_V1_1_BYTE_MASK);
+  if (er_pi_zero_w_v1_1_emmc_wait_interrupt(ER_PI_EMMC_INTERRUPT_DATA_DONE,
+                                            &interrupt) == 0u) {
+    g_er_pi_zero_w_v1_1_sdio_probe_interrupt = interrupt;
+    return 0u;
+  }
+  response = er_pi_zero_w_v1_1_read(ER_PI_ZERO_W_V1_1_EMMC_BASE,
+                                    ER_PI_EMMC_REG_RESP0);
+  g_er_pi_zero_w_v1_1_sdio_probe_interrupt = interrupt;
+  g_er_pi_zero_w_v1_1_sdio_probe_response = response;
+  er_pi_zero_w_v1_1_write(ER_PI_ZERO_W_V1_1_EMMC_BASE,
+                          ER_PI_EMMC_REG_INTERRUPT,
+                          interrupt);
+  return 1u;
+}
+
 static void er_pi_zero_w_v1_1_sdio_probe(void) {
   UINT32 response;
+  UINT8 cmd53_byte;
 
   g_er_pi_zero_w_v1_1_sdio_probe_state = ER_PI_ZERO_W_V1_1_SDIO_PROBE_NONE;
   g_er_pi_zero_w_v1_1_sdio_probe_interrupt = 0u;
@@ -529,6 +651,18 @@ static void er_pi_zero_w_v1_1_sdio_probe(void) {
   }
   g_er_pi_zero_w_v1_1_sdio_probe_state =
       ER_PI_ZERO_W_V1_1_SDIO_PROBE_CMD52_DONE;
+  if (er_pi_zero_w_v1_1_emmc_sdio_read_byte(ER_PI_SDIO_FUNCTION_BACKPLANE,
+                                            0u,
+                                            &cmd53_byte) == 0u) {
+    g_er_pi_zero_w_v1_1_sdio_probe_state = ER_PI_ZERO_W_V1_1_SDIO_PROBE_ERROR;
+    return;
+  }
+  g_er_pi_zero_w_v1_1_sdio_probe_response =
+      (g_er_pi_zero_w_v1_1_sdio_probe_response &
+       ~ER_PI_SDIO_CMD52_DATA_MASK) |
+      (UINT32)cmd53_byte;
+  g_er_pi_zero_w_v1_1_sdio_probe_state =
+      ER_PI_ZERO_W_V1_1_SDIO_PROBE_CMD53_DONE;
 }
 
 static void er_pi_zero_w_v1_1_uart_put_byte(UINT8 byte) {
@@ -771,8 +905,8 @@ void er_pi_zero_w_v1_1_main(void) {
   er_pi_zero_w_v1_1_act_led_status(3u);
   er_pi_zero_w_v1_1_sdio_probe();
   if (g_er_pi_zero_w_v1_1_sdio_probe_state ==
-      ER_PI_ZERO_W_V1_1_SDIO_PROBE_CMD52_DONE) {
-    er_pi_zero_w_v1_1_act_led_status(5u);
+      ER_PI_ZERO_W_V1_1_SDIO_PROBE_CMD53_DONE) {
+    er_pi_zero_w_v1_1_act_led_status(6u);
   } else {
     er_pi_zero_w_v1_1_act_led_status(10u);
   }
@@ -790,7 +924,7 @@ void er_pi_zero_w_v1_1_main(void) {
 void _start(void) __attribute__((naked));
 void _start(void) {
   __asm__ volatile(
-      "ldr sp, =" ER_PI_ZERO_W_V1_1_STACK_TOP_ASM "\n"
+      "mov sp, #0x8000\n"
       "bl er_pi_zero_w_v1_1_main\n"
       "1: b 1b\n"
       ::: "memory");

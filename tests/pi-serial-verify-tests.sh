@@ -47,7 +47,7 @@ enum {
   ERWIRE_KIND_NODE_HEARTBEAT = 38u,
   NODE_AVAILABLE_BYTES = 189u,
   NODE_AVAILABLE_LOG_HEAD_OFFSET = 157u,
-  SDIO_PROBE_CMD52_DONE = 5u,
+  SDIO_PROBE_CMD53_DONE = 6u,
   ERWIRE_CRC32_INITIAL = 0xffffffffu,
   ERWIRE_CRC32_POLY = 0xedb88320u,
   ERWIRE_CRC32_BITS_PER_BYTE = 8u
@@ -107,7 +107,7 @@ static int packet(uint16_t kind, uint32_t seq, uint8_t payload_byte) {
     payload_len = NODE_AVAILABLE_BYTES;
     put_u32_at(payload,
                NODE_AVAILABLE_LOG_HEAD_OFFSET,
-               SDIO_PROBE_CMD52_DONE);
+               SDIO_PROBE_CMD53_DONE);
   }
 
   put_u32(&cursor, ERWIRE_MAGIC);
@@ -141,7 +141,7 @@ cat >"$MANIFEST" <<'EOF_MANIFEST'
 board=pi-zero-w-v1_1
 serial_protocol=erwire
 erwire_expect=node_available
-erwire_expect_sdio_probe=cmd52_done
+erwire_expect_sdio_probe=cmd53_done
 erwire_expect=node_heartbeat
 EOF_MANIFEST
 
