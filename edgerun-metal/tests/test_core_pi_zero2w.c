@@ -9,6 +9,15 @@ static void test_pi_zero2w_bringup_boundary(void) {
     PI_TEST_SDIO_RCA = 0x00001234u,
     PI_TEST_SDIO_RCA_ARGUMENT = 0x12340000u,
     PI_TEST_SDIO_OCR_3V3 = 0x00300000u,
+    PI_TEST_SD_MEMORY_IF_COND = 0x000001aau,
+    PI_TEST_SD_MEMORY_OCR_HCS = 0x40300000u,
+    PI_TEST_SD_MEMORY_IDENTITY_PLAN_COUNT = 6u,
+    PI_TEST_SD_MEMORY_CLAIM_PLAN_COUNT = 1u,
+    PI_TEST_SD_MEMORY_CMD8_INDEX = 1u,
+    PI_TEST_SD_MEMORY_CMD55_INDEX = 2u,
+    PI_TEST_SD_MEMORY_ACMD41_INDEX = 3u,
+    PI_TEST_SD_MEMORY_CMD2_INDEX = 4u,
+    PI_TEST_SD_MEMORY_CMD3_INDEX = 5u,
     PI_TEST_SDIO_IDENTITY_PLAN_COUNT = 3u,
     PI_TEST_SDIO_CLAIM_PLAN_COUNT = 2u,
     PI_TEST_SDIO_CLAIM_CMD52_INDEX = 1u,
@@ -17,6 +26,10 @@ static void test_pi_zero2w_bringup_boundary(void) {
     PI_TEST_EMMC_CMD0_VALUE = 0x00000000u,
     PI_TEST_EMMC_CMD5_VALUE = 0x05020000u,
     PI_TEST_EMMC_CMD3_VALUE = 0x031a0000u,
+    PI_TEST_EMMC_CMD8_VALUE = 0x081a0000u,
+    PI_TEST_EMMC_CMD55_VALUE = 0x371a0000u,
+    PI_TEST_EMMC_ACMD41_VALUE = 0x29020000u,
+    PI_TEST_EMMC_CMD2_VALUE = 0x02090000u,
     PI_TEST_EMMC_CMD52_VALUE = 0x341a0000u,
     PI_TEST_EMMC_BLOCK_ADDRESS = 0x00000007u,
     PI_TEST_EMMC_BLOCK_SIZE_COUNT_VALUE = 0x00010200u,
@@ -37,6 +50,8 @@ static void test_pi_zero2w_bringup_boundary(void) {
   ErPiEmmcBlockResult block_result;
   ErPiZero2wSdioBringupPlan sdio_plan;
   ErPiZero2wSdioBringupState sdio_state;
+  ErPiZero2wSdMemoryBringupPlan sd_memory_plan;
+  ErPiZero2wSdMemoryBringupState sd_memory_state;
   const ErPiBoardProfile* zero_w_profile;
   ErBootServicesReport report;
   UINT8 block[ER_PI_EMMC_BLOCK_BYTES];
@@ -144,6 +159,81 @@ static void test_pi_zero2w_bringup_boundary(void) {
   check_uint64("pi mmc rca from r6",
                er_pi_mmc_relative_card_from_r6(PI_TEST_SDIO_RCA_ARGUMENT),
                PI_TEST_SDIO_RCA);
+  check_int64("pi sd memory identity plan",
+              er_pi_zero2w_sd_memory_identity_plan(&sd_memory_plan),
+              1);
+  check_uint64("pi sd memory identity plan count",
+               sd_memory_plan.command_count,
+               PI_TEST_SD_MEMORY_IDENTITY_PLAN_COUNT);
+  check_uint64("pi sd memory identity cmd0",
+               sd_memory_plan.commands[0].command_index,
+               ER_PI_MMC_CMD_GO_IDLE_STATE);
+  check_uint64("pi sd memory identity cmd8",
+               sd_memory_plan.commands[PI_TEST_SD_MEMORY_CMD8_INDEX].command_index,
+               ER_PI_MMC_CMD_SEND_IF_COND);
+  check_uint64("pi sd memory identity cmd8 argument",
+               sd_memory_plan.commands[PI_TEST_SD_MEMORY_CMD8_INDEX].argument,
+               PI_TEST_SD_MEMORY_IF_COND);
+  check_uint64("pi sd memory identity cmd55",
+               sd_memory_plan.commands[PI_TEST_SD_MEMORY_CMD55_INDEX].command_index,
+               ER_PI_MMC_CMD_APP_CMD);
+  check_uint64("pi sd memory identity acmd41",
+               sd_memory_plan.commands[PI_TEST_SD_MEMORY_ACMD41_INDEX].command_index,
+               ER_PI_MMC_ACMD_SD_SEND_OP_COND);
+  check_uint64("pi sd memory identity acmd41 argument",
+               sd_memory_plan.commands[PI_TEST_SD_MEMORY_ACMD41_INDEX].argument,
+               PI_TEST_SD_MEMORY_OCR_HCS);
+  check_uint64("pi sd memory identity cmd2",
+               sd_memory_plan.commands[PI_TEST_SD_MEMORY_CMD2_INDEX].command_index,
+               ER_PI_MMC_CMD_ALL_SEND_CID);
+  check_uint64("pi sd memory identity cmd3",
+               sd_memory_plan.commands[PI_TEST_SD_MEMORY_CMD3_INDEX].command_index,
+               ER_PI_MMC_CMD_SEND_RELATIVE_ADDR);
+  check_int64("pi emmc cmd8 io",
+              er_pi_emmc_command_io_prepare(
+                  &sd_memory_plan.commands[PI_TEST_SD_MEMORY_CMD8_INDEX],
+                  &command_io),
+              1);
+  check_uint64("pi emmc cmd8 command value",
+               command_io.command_value,
+               PI_TEST_EMMC_CMD8_VALUE);
+  check_int64("pi emmc cmd55 io",
+              er_pi_emmc_command_io_prepare(
+                  &sd_memory_plan.commands[PI_TEST_SD_MEMORY_CMD55_INDEX],
+                  &command_io),
+              1);
+  check_uint64("pi emmc cmd55 command value",
+               command_io.command_value,
+               PI_TEST_EMMC_CMD55_VALUE);
+  check_int64("pi emmc acmd41 io",
+              er_pi_emmc_command_io_prepare(
+                  &sd_memory_plan.commands[PI_TEST_SD_MEMORY_ACMD41_INDEX],
+                  &command_io),
+              1);
+  check_uint64("pi emmc acmd41 command value",
+               command_io.command_value,
+               PI_TEST_EMMC_ACMD41_VALUE);
+  check_int64("pi emmc cmd2 io",
+              er_pi_emmc_command_io_prepare(
+                  &sd_memory_plan.commands[PI_TEST_SD_MEMORY_CMD2_INDEX],
+                  &command_io),
+              1);
+  check_uint64("pi emmc cmd2 command value",
+               command_io.command_value,
+               PI_TEST_EMMC_CMD2_VALUE);
+  check_int64("pi sd memory claim rejects missing rca",
+              er_pi_zero2w_sd_memory_claim_plan(0u, &sd_memory_plan),
+              0);
+  check_int64("pi sd memory claim plan",
+              er_pi_zero2w_sd_memory_claim_plan(PI_TEST_SDIO_RCA,
+                                                &sd_memory_plan),
+              1);
+  check_uint64("pi sd memory claim plan count",
+               sd_memory_plan.command_count,
+               PI_TEST_SD_MEMORY_CLAIM_PLAN_COUNT);
+  check_uint64("pi sd memory claim cmd7",
+               sd_memory_plan.commands[0].command_index,
+               ER_PI_MMC_CMD_SELECT_CARD);
   check_int64("pi sdio identity plan",
               er_pi_zero2w_sdio_identity_plan(&sdio_plan),
               1);
@@ -340,6 +430,18 @@ static void test_pi_zero2w_bringup_boundary(void) {
                                              1u,
                                              &sdio_state),
               0);
+  check_int64("pi sd memory execute rejects invalid handle",
+              er_pi_zero2w_sd_memory_execute_plan(ER_MMIO_INVALID_HANDLE,
+                                                  &sd_memory_plan,
+                                                  1u,
+                                                  &sd_memory_state),
+              0);
+  check_uint64("pi sd memory execute keeps command count",
+               sd_memory_state.command_count,
+               PI_TEST_SD_MEMORY_CLAIM_PLAN_COUNT);
+  check_uint64("pi sd memory execute marks error",
+               sd_memory_state.error,
+               1u);
   check_uint64("pi sdio execute keeps command count",
                sdio_state.command_count,
                PI_TEST_SDIO_CLAIM_PLAN_COUNT);
