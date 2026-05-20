@@ -1,4 +1,4 @@
-.PHONY: all run run-aarch64 qemu-aarch64-smoke qemu-ephemeral-authority qemu-ephemeral-authority-smoke qemu-swtpm-persistence clean print-path print-config netboot os rebuild-image check test-core bench-ui-dirty tpm-real-bench-uefi wifi-hardware-probe wasm-modules qemu-config-check qemu-aarch64-config-check qemu-swtpm-persistence-config-check pi-zero-2w-uefi pi-zero-2w-boot pi-zero-w-v1_1-kernel pi-zero-w-v1_1-boot
+.PHONY: all run run-aarch64 qemu-aarch64-smoke qemu-ephemeral-authority qemu-ephemeral-authority-smoke qemu-swtpm-persistence qemu-host-tpm-bench clean print-path print-config netboot os rebuild-image check test-core bench-ui-dirty tpm-real-bench-uefi wifi-hardware-probe wasm-modules qemu-config-check qemu-aarch64-config-check qemu-swtpm-persistence-config-check qemu-host-tpm-bench-config-check pi-zero-2w-uefi pi-zero-2w-boot pi-zero-w-v1_1-kernel pi-zero-w-v1_1-boot
 
 CC := clang
 HOST_CC := clang
@@ -156,6 +156,8 @@ QEMU_SWTPM_PERSIST_CONFIG := qemu-swtpm-persistence.conf
 QEMU_SWTPM_PERSIST_SCRIPT := ../tools/qemu-swtpm-persistence.sh
 QEMU_SWTPM_PERSIST_DIR := $(BUILD_DIR)/qemu-swtpm-persistence
 QEMU_SWTPM_PERSIST_TIMEOUT := 30
+QEMU_HOST_TPM_BENCH_CONFIG := qemu-host-tpm-bench.conf
+QEMU_HOST_TPM_BENCH_DIR := $(BUILD_DIR)/qemu-host-tpm-bench
 QEMU_EPHEMERAL_AUTHORITY_BUILD_DIR := ../.build/edgerun-metal-ephemeral-authority
 QEMU_EPHEMERAL_AUTHORITY_LOG := $(QEMU_EPHEMERAL_AUTHORITY_BUILD_DIR)/qemu-ephemeral-authority.log
 QEMU_EPHEMERAL_AUTHORITY_TIMEOUT := 30
@@ -355,6 +357,14 @@ qemu-swtpm-persistence-config-check: $(EFI_BOOT) $(QEMU_RUN_BIN) $(QEMU_SWTPM_PE
 
 qemu-swtpm-persistence: $(EFI_BOOT) $(QEMU_RUN_BIN) $(QEMU_SMOKE_SRC) $(QEMU_SWTPM_PERSIST_SCRIPT) $(QEMU_SWTPM_PERSIST_CONFIG)
 	$(QEMU_SWTPM_PERSIST_SCRIPT) $(QEMU_SMOKE_SRC) ./$(QEMU_RUN_BIN) $(QEMU_SWTPM_PERSIST_CONFIG) $(abspath $(ESP_DIR)) $(QEMU_SWTPM_PERSIST_DIR) $(QEMU_SWTPM_PERSIST_TIMEOUT)
+
+qemu-host-tpm-bench-config-check: tpm-real-bench-uefi $(QEMU_RUN_BIN) $(QEMU_HOST_TPM_BENCH_CONFIG)
+	mkdir -p $(QEMU_HOST_TPM_BENCH_DIR)
+	./$(QEMU_RUN_BIN) --check $(QEMU_HOST_TPM_BENCH_CONFIG) $(abspath $(ESP_DIR))
+
+qemu-host-tpm-bench: tpm-real-bench-uefi $(QEMU_RUN_BIN) $(QEMU_HOST_TPM_BENCH_CONFIG)
+	mkdir -p $(QEMU_HOST_TPM_BENCH_DIR)
+	./$(QEMU_RUN_BIN) $(QEMU_HOST_TPM_BENCH_CONFIG) $(abspath $(ESP_DIR))
 
 run-aarch64: $(QEMU_AARCH64_CONFIG)
 	$(MAKE) all ER_METAL_ARCH=aarch64 BUILD_DIR=$(QEMU_AARCH64_BUILD_DIR)

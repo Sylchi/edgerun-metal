@@ -20,6 +20,7 @@ enum {
   ER_TPM_BENCH_RECORD_FROM_CLIENT = 1u,
   ER_TPM_BENCH_NS_PER_US = 1000u,
   ER_TPM_BENCH_NS_PER_SECOND = 1000000000u,
+  ER_TPM_BENCH_ALGORITHM_PROPERTY_START = 0u,
   ER_TPM_BENCH_CAPABILITY_COUNT = 128u,
   ER_TPM_BENCH_COMMAND_BYTES = 512u,
   ER_TPM_BENCH_RESPONSE_BYTES = 4096u
@@ -187,31 +188,59 @@ static UINT8 er_tpm_bench_init(EFI_SYSTEM_TABLE* system_table,
     return 0u;
   }
   er_mem_zero((UINT8*)state, (UINTN)sizeof(*state));
-  if (er_acpi_find_rsdp(system_table, &rsdp) == 0u ||
-      er_acpi_enumerate_tables(&rsdp, &tables) == 0u ||
-      er_tpm_find_tpm2_table(&tables, &tpm2) == 0u ||
-      er_tpm_crb_from_tpm2_info(&tpm2, &state->transport.transport) == 0u ||
-      er_tpm_bench_startup(&state->transport) == 0u ||
-      er_tpm_bench_get_capability(&state->transport,
+  if (er_acpi_find_rsdp(system_table, &rsdp) == 0u) {
+    er_println("TPM real bench failed: stage=acpi-rsdp");
+    return 0u;
+  }
+  if (er_acpi_enumerate_tables(&rsdp, &tables) == 0u) {
+    er_println("TPM real bench failed: stage=acpi-tables");
+    return 0u;
+  }
+  if (er_tpm_find_tpm2_table(&tables, &tpm2) == 0u) {
+    er_println("TPM real bench failed: stage=tpm2-table");
+    return 0u;
+  }
+  if (er_tpm_crb_from_tpm2_info(&tpm2, &state->transport.transport) == 0u) {
+    er_println("TPM real bench failed: stage=crb-transport");
+    return 0u;
+  }
+  if (er_tpm_bench_startup(&state->transport) == 0u) {
+    er_println("TPM real bench failed: stage=startup");
+    return 0u;
+  }
+  if (er_tpm_bench_get_capability(&state->transport,
                                   ER_TPM_CAP_ALGS,
-                                  ER_TPM_ALG_SHA256,
+                                  ER_TPM_BENCH_ALGORITHM_PROPERTY_START,
                                   response,
                                   (UINT32)sizeof(response),
-                                  &response_len) == 0u ||
-      er_tpm_parse_algorithm_profile_response(response, response_len, &algorithms) == 0u ||
-      er_tpm_bench_get_capability(&state->transport,
+                                  &response_len) == 0u) {
+    er_println("TPM real bench failed: stage=cap-algs");
+    return 0u;
+  }
+  if (er_tpm_parse_algorithm_profile_response(response, response_len, &algorithms) == 0u) {
+    er_println("TPM real bench failed: stage=parse-algs");
+    return 0u;
+  }
+  if (er_tpm_bench_get_capability(&state->transport,
                                   ER_TPM_CAP_COMMANDS,
                                   ER_TPM_CC_CREATE_PRIMARY,
                                   response,
                                   (UINT32)sizeof(response),
-                                  &response_len) == 0u ||
-      er_tpm_parse_command_profile_response(response, response_len, &commands) == 0u ||
-      er_tls_tpm_init(&state->tls_tpm,
+                                  &response_len) == 0u) {
+    er_println("TPM real bench failed: stage=cap-commands");
+    return 0u;
+  }
+  if (er_tpm_parse_command_profile_response(response, response_len, &commands) == 0u) {
+    er_println("TPM real bench failed: stage=parse-commands");
+    return 0u;
+  }
+  if (er_tls_tpm_init(&state->tls_tpm,
                       er_tpm_bench_crb_transact,
                       &state->transport,
                       &tpm2,
                       &algorithms,
                       &commands) == 0u) {
+    er_println("TPM real bench failed: stage=tls-profile");
     return 0u;
   }
 
@@ -234,6 +263,7 @@ static UINT8 er_tpm_bench_init(EFI_SYSTEM_TABLE* system_table,
                               ER_TPM_AES_128_KEY_LEN,
                               ER_TPM_AES_128_KEY_BITS,
                               &state->aes_handle) == 0u) {
+    er_println("TPM real bench failed: stage=load-record-keys");
     return 0u;
   }
   state->record_keys.client_hmac_handle = state->hmac_handle;
