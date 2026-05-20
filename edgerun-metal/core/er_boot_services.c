@@ -1,5 +1,6 @@
 #include "er_boot_services.h"
 #include "er_mem.h"
+#include "er_tpm_acpi.h"
 
 //@optimizer-ignore-constant UEFI global variable GUID bytes are fixed by the UEFI specification
 static EFI_GUID g_er_efi_global_variable_guid = {
