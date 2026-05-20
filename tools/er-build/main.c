@@ -26,6 +26,7 @@ enum {
   ERB_OUTPUT_DIR_MODE = 0777,
   ERB_PATH_CAP = 4096,
   ERB_MANIFEST_CAP = 512,
+  ERB_PROGRESS_TITLE_CAP = 256,
   ERB_PACKAGE_CONTRACT_UI_APP = 1,
   ERB_PACKAGE_CONTRACT_BUS_DRIVER = 2
 };
@@ -68,6 +69,14 @@ typedef struct {
   const char* items[ERB_MAX_ARGC];
   size_t count;
 } ErbArgs;
+
+typedef struct {
+  char app_source[ERB_PATH_CAP];
+  char manifest_source[ERB_PATH_CAP];
+  char package_build_dir[ERB_PATH_CAP];
+  char output_wasm[ERB_PATH_CAP];
+  char output_identity[ERB_PATH_CAP];
+} ErbAppPackagePaths;
 
 static int erb_fail(const char* message) {
   fprintf(stderr, "er-build: %s\n", message);
@@ -221,6 +230,26 @@ static int erb_validate_app_manifest(const char* path, int* out_contract) {
   return 1;
 }
 
+static int erb_init_app_package_paths(ErbAppPackagePaths* paths,
+                                      const char* package_dir) {
+  if (paths == NULL || package_dir == NULL || package_dir[0] == '\0') {
+    return erb_fail("invalid app package path input");
+  }
+  if (erb_path_join(paths->app_source, sizeof(paths->app_source), package_dir,
+                    ERB_APP_SOURCE_NAME) != 0 ||
+      erb_path_join(paths->manifest_source, sizeof(paths->manifest_source), package_dir,
+                    ERB_APP_MANIFEST_NAME) != 0 ||
+      erb_path_join(paths->package_build_dir, sizeof(paths->package_build_dir), package_dir,
+                    ERB_APP_BUILD_DIR_NAME) != 0 ||
+      erb_path_join(paths->output_wasm, sizeof(paths->output_wasm), paths->package_build_dir,
+                    ERB_APP_WASM_NAME) != 0 ||
+      erb_path_join(paths->output_identity, sizeof(paths->output_identity),
+                    paths->package_build_dir, ERB_APP_PACKAGE_IDENTITY_NAME) != 0) {
+    return 1;
+  }
+  return 0;
+}
+
 static int erb_prepare_dirs(void) {
   if (erb_mkdir_one(ERB_BUILD_DIR) != 0) {
     return 1;
@@ -369,42 +398,29 @@ static int erb_build_app_run(int print_plan) {
 
 static int erb_target_app_build(const char* package_dir, int print_plan) {
   ErbArgs args;
-  char app_source[ERB_PATH_CAP];
-  char manifest_source[ERB_PATH_CAP];
-  char package_build_dir[ERB_PATH_CAP];
-  char output_wasm[ERB_PATH_CAP];
-  char output_identity[ERB_PATH_CAP];
+  ErbAppPackagePaths paths;
   int package_contract = 0;
 
   if (package_dir == NULL || package_dir[0] == '\0') {
     return erb_fail("app-build requires a package directory");
   }
-  if (erb_path_join(app_source, sizeof(app_source), package_dir,
-                    ERB_APP_SOURCE_NAME) != 0 ||
-      erb_path_join(manifest_source, sizeof(manifest_source), package_dir,
-                    ERB_APP_MANIFEST_NAME) != 0 ||
-      erb_path_join(package_build_dir, sizeof(package_build_dir), package_dir,
-                    ERB_APP_BUILD_DIR_NAME) != 0 ||
-      erb_path_join(output_wasm, sizeof(output_wasm), package_build_dir,
-                    ERB_APP_WASM_NAME) != 0 ||
-      erb_path_join(output_identity, sizeof(output_identity), package_build_dir,
-                    ERB_APP_PACKAGE_IDENTITY_NAME) != 0) {
+  if (erb_init_app_package_paths(&paths, package_dir) != 0) {
     return 1;
   }
-  if (erb_require_regular_file(app_source) != 0 ||
-      erb_require_regular_file(manifest_source) != 0 ||
-      erb_validate_app_manifest(manifest_source, &package_contract) != 0 ||
+  if (erb_require_regular_file(paths.app_source) != 0 ||
+      erb_require_regular_file(paths.manifest_source) != 0 ||
+      erb_validate_app_manifest(paths.manifest_source, &package_contract) != 0 ||
       erb_build_wasm_compile(print_plan) != 0) {
     return 1;
   }
   (void)package_contract;
-  if (print_plan == 0 && erb_mkdir_one(package_build_dir) != 0) {
+  if (print_plan == 0 && erb_mkdir_one(paths.package_build_dir) != 0) {
     return 1;
   }
   erb_args_init(&args);
   if (erb_args_push(&args, ERB_WASM_COMPILE_BIN) != 0 ||
-      erb_args_push(&args, app_source) != 0 ||
-      erb_args_push(&args, output_wasm) != 0) {
+      erb_args_push(&args, paths.app_source) != 0 ||
+      erb_args_push(&args, paths.output_wasm) != 0) {
     return 1;
   }
   if (erb_run_args(&args, print_plan) != 0) {
@@ -413,43 +429,30 @@ static int erb_target_app_build(const char* package_dir, int print_plan) {
   if (print_plan != 0) {
     return 0;
   }
-  return erb_write_app_package_identity(output_identity, app_source, manifest_source,
-                                        output_wasm);
+  return erb_write_app_package_identity(paths.output_identity, paths.app_source,
+                                        paths.manifest_source, paths.output_wasm);
 }
 
 static int erb_target_app_verify(const char* package_dir) {
-  char app_source[ERB_PATH_CAP];
-  char manifest_source[ERB_PATH_CAP];
-  char package_build_dir[ERB_PATH_CAP];
-  char output_wasm[ERB_PATH_CAP];
-  char output_identity[ERB_PATH_CAP];
+  ErbAppPackagePaths paths;
   int package_contract = 0;
 
   if (package_dir == NULL || package_dir[0] == '\0') {
     return erb_fail("app-verify requires a package directory");
   }
-  if (erb_path_join(app_source, sizeof(app_source), package_dir,
-                    ERB_APP_SOURCE_NAME) != 0 ||
-      erb_path_join(manifest_source, sizeof(manifest_source), package_dir,
-                    ERB_APP_MANIFEST_NAME) != 0 ||
-      erb_path_join(package_build_dir, sizeof(package_build_dir), package_dir,
-                    ERB_APP_BUILD_DIR_NAME) != 0 ||
-      erb_path_join(output_wasm, sizeof(output_wasm), package_build_dir,
-                    ERB_APP_WASM_NAME) != 0 ||
-      erb_path_join(output_identity, sizeof(output_identity), package_build_dir,
-                    ERB_APP_PACKAGE_IDENTITY_NAME) != 0) {
+  if (erb_init_app_package_paths(&paths, package_dir) != 0) {
     return 1;
   }
-  if (erb_require_regular_file(app_source) != 0 ||
-      erb_require_regular_file(manifest_source) != 0 ||
-      erb_require_regular_file(output_wasm) != 0 ||
-      erb_require_regular_file(output_identity) != 0 ||
-      erb_validate_app_manifest(manifest_source, &package_contract) != 0) {
+  if (erb_require_regular_file(paths.app_source) != 0 ||
+      erb_require_regular_file(paths.manifest_source) != 0 ||
+      erb_require_regular_file(paths.output_wasm) != 0 ||
+      erb_require_regular_file(paths.output_identity) != 0 ||
+      erb_validate_app_manifest(paths.manifest_source, &package_contract) != 0) {
     return 1;
   }
   (void)package_contract;
-  return erb_verify_app_package_identity(output_identity, app_source, manifest_source,
-                                         output_wasm);
+  return erb_verify_app_package_identity(paths.output_identity, paths.app_source,
+                                         paths.manifest_source, paths.output_wasm);
 }
 
 static int erb_target_app_run(const char* package_dir, int print_plan) {
@@ -522,6 +525,9 @@ static const char* erb_default_progress_test(const char* scope) {
   if (strcmp(scope, "tools/wasm-compile") == 0) {
     return "repo-test";
   }
+  if (strcmp(scope, "tools") == 0) {
+    return "repo-test";
+  }
   if (strcmp(scope, "codex") == 0) {
     return "codex-test";
   }
@@ -535,7 +541,7 @@ static int erb_run_progress_step(const char* title, const ErbArgs* args, int pri
 
 static int erb_target_repo_progress(const char* scope, const char* test_target, int print_plan) {
   ErbArgs args;
-  char title[256];
+  char title[ERB_PROGRESS_TITLE_CAP];
 
   if (scope == NULL || scope[0] == '\0') {
     fprintf(stderr, "er-build: repo-progress requires a scope\n");
