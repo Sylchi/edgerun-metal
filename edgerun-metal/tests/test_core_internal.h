@@ -42,6 +42,7 @@
 #include "er_seal.h"
 #include "er_storage_endpoint.h"
 #include "er_tpm.h"
+#include "er_tls_tpm.h"
 #include "er_work_route.h"
 #include "er_gfx_console.h"
 #include "er_ui_surface_renderer.h"
