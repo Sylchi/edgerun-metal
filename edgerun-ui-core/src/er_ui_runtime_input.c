@@ -151,13 +151,7 @@ er_ui_action_t er_ui_runtime_pointer_down(er_ui_runtime_state_t* state, const er
       state->has_focused = true;
     }
     if (has_source) {
-      er_ui_mem_zero(&state->drag, sizeof(state->drag));
-      state->drag.source = source;
-      state->drag.start_x = x;
-      state->drag.start_y = y;
-      state->drag.current_x = x;
-      state->drag.current_y = y;
-      state->has_drag = true;
+      er_ui_runtime_begin_drag(state, source, x, y);
     }
 
     if (hit.kind == ER_UI_HIT_SLIDER) return er_ui_activate_hit(state, hit, x);
@@ -169,13 +163,7 @@ er_ui_action_t er_ui_runtime_pointer_down(er_ui_runtime_state_t* state, const er
   er_ui_runtime_clear_focus(state);
 
   if (has_source) {
-    er_ui_mem_zero(&state->drag, sizeof(state->drag));
-    state->drag.source = source;
-    state->drag.start_x = x;
-    state->drag.start_y = y;
-    state->drag.current_x = x;
-    state->drag.current_y = y;
-    state->has_drag = true;
+    er_ui_runtime_begin_drag(state, source, x, y);
     return er_ui_action_drag(ER_UI_ACTION_FOCUSED, source, false, (er_ui_drop_target_t){0});
   }
 

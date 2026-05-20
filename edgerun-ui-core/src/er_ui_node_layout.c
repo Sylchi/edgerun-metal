@@ -21,6 +21,13 @@ static er_ui_bounds_t er_ui_node_grid_cell_bounds(const er_ui_node_grid_layout_t
   return er_ui_uniform_grid_cell(layout->grid, child_index);
 }
 
+static er_ui_status_t er_ui_node_child_at(const er_ui_node_t* node, size_t child_index, const er_ui_node_t** out_child) {
+  if (!node || !out_child) return ER_UI_ERR_INVALID_ARGUMENT;
+  if (child_index >= node->child_count || !node->children[child_index]) return ER_UI_ERR_INVALID_ARGUMENT;
+  *out_child = node->children[child_index];
+  return ER_UI_OK;
+}
+
 static float er_ui_node_child_requested_height(const er_ui_node_t* child, float width, size_t child_index) {
   if (child && er_ui_bounds_valid(child->bounds)) return child->bounds.h;
   float step = (float)(child_index % ER_UI_NODE_MASONRY_STEP_COUNT);
@@ -33,8 +40,9 @@ static er_ui_status_t er_ui_node_masonry_child_bounds(
   size_t child_index,
   er_ui_bounds_t bounds,
   er_ui_bounds_t* out_bounds) {
-  if (!node || !out_bounds) return ER_UI_ERR_INVALID_ARGUMENT;
-  if (child_index >= node->child_count || !node->children[child_index]) return ER_UI_ERR_INVALID_ARGUMENT;
+  const er_ui_node_t* child = NULL;
+  er_ui_status_t status = er_ui_node_child_at(node, child_index, &child);
+  if (status != ER_UI_OK) return status;
   if (node->child_count == 0u) return ER_UI_ERR_INVALID_ARGUMENT;
   size_t columns = node->selected == 0u ? 1u : node->selected;
   if (columns > ER_UI_NODE_MAX_CHILDREN) columns = ER_UI_NODE_MAX_CHILDREN;
@@ -59,7 +67,8 @@ static er_ui_status_t er_ui_node_masonry_child_bounds(
     if (i == child_index) selected = placed;
     heights[column] += requested_h + node->gap;
   }
-  *out_bounds = er_ui_node_resolve_bounds(node->children[child_index], selected);
+  if (!out_bounds) return ER_UI_ERR_INVALID_ARGUMENT;
+  *out_bounds = er_ui_node_resolve_bounds(child, selected);
   return ER_UI_OK;
 }
 
@@ -128,8 +137,9 @@ static er_ui_status_t er_ui_node_bento_child_bounds(
   size_t child_index,
   er_ui_bounds_t bounds,
   er_ui_bounds_t* out_bounds) {
-  if (!node || !out_bounds) return ER_UI_ERR_INVALID_ARGUMENT;
-  if (child_index >= node->child_count || !node->children[child_index]) return ER_UI_ERR_INVALID_ARGUMENT;
+  const er_ui_node_t* child = NULL;
+  er_ui_status_t status = er_ui_node_child_at(node, child_index, &child);
+  if (status != ER_UI_OK) return status;
   size_t columns = node->selected == 0u ? 1u : node->selected;
   if (columns > ER_UI_NODE_MAX_CHILDREN) columns = ER_UI_NODE_MAX_CHILDREN;
   er_ui_bounds_t content = er_ui_bounds_inset(bounds, node->padding, node->padding);
@@ -153,7 +163,8 @@ static er_ui_status_t er_ui_node_bento_child_bounds(
     if (i == child_index) selected = placed;
     er_ui_node_bento_mark_cells(occupied, row, column, row_span, col_span);
   }
-  *out_bounds = er_ui_node_resolve_bounds(node->children[child_index], selected);
+  if (!out_bounds) return ER_UI_ERR_INVALID_ARGUMENT;
+  *out_bounds = er_ui_node_resolve_bounds(child, selected);
   return ER_UI_OK;
 }
 
@@ -163,8 +174,9 @@ static er_ui_status_t er_ui_node_linear_child_bounds(
   er_ui_bounds_t bounds,
   bool row,
   er_ui_bounds_t* out_bounds) {
-  if (!node || !out_bounds) return ER_UI_ERR_INVALID_ARGUMENT;
-  if (child_index >= node->child_count || !node->children[child_index]) return ER_UI_ERR_INVALID_ARGUMENT;
+  const er_ui_node_t* child = NULL;
+  er_ui_status_t status = er_ui_node_child_at(node, child_index, &child);
+  if (status != ER_UI_OK) return status;
   if (node->child_count == 0u) return ER_UI_ERR_INVALID_ARGUMENT;
   er_ui_bounds_t content = er_ui_bounds_inset(bounds, node->padding, node->padding);
   float total_gap = node->gap * (float)(node->child_count - 1u);
@@ -178,7 +190,8 @@ static er_ui_status_t er_ui_node_linear_child_bounds(
     child_bounds.y = content.y + (step + node->gap) * (float)child_index;
     child_bounds.h = step;
   }
-  *out_bounds = er_ui_node_resolve_bounds(node->children[child_index], child_bounds);
+  if (!out_bounds) return ER_UI_ERR_INVALID_ARGUMENT;
+  *out_bounds = er_ui_node_resolve_bounds(child, child_bounds);
   return ER_UI_OK;
 }
 
@@ -187,13 +200,15 @@ static er_ui_status_t er_ui_node_grid_child_bounds(
   size_t child_index,
   er_ui_bounds_t bounds,
   er_ui_bounds_t* out_bounds) {
-  if (!node || !out_bounds) return ER_UI_ERR_INVALID_ARGUMENT;
-  if (child_index >= node->child_count || !node->children[child_index]) return ER_UI_ERR_INVALID_ARGUMENT;
+  const er_ui_node_t* child = NULL;
+  er_ui_status_t child_status = er_ui_node_child_at(node, child_index, &child);
+  if (child_status != ER_UI_OK) return child_status;
   er_ui_node_grid_layout_t layout;
   er_ui_status_t status = er_ui_node_grid_layout(node, bounds, &layout);
   if (status != ER_UI_OK) return status;
   er_ui_bounds_t child_bounds = er_ui_node_grid_cell_bounds(&layout, child_index);
-  *out_bounds = er_ui_node_resolve_bounds(node->children[child_index], child_bounds);
+  if (!out_bounds) return ER_UI_ERR_INVALID_ARGUMENT;
+  *out_bounds = er_ui_node_resolve_bounds(child, child_bounds);
   return ER_UI_OK;
 }
 
