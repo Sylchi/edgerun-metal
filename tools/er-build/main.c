@@ -84,7 +84,8 @@ static const char ERB_PI_NODE_UPDATE_BIN[] = ".build/pi-node-update";
 static const char ERB_SDCARD_PROBE_BIN[] = ".build/sdcard-probe";
 static const char ERB_DISK_ANALYZER_BIN[] = ".build/disk-analyzer";
 static const char ERB_PI_USB_BOOT_BIN[] = ".build/pi-usb-boot";
-static const char ERB_CRYPTO_TEST_BIN[] = ".build/er-build-out/crypto/test_blake3";
+static const char ERB_CRYPTO_BLAKE3_TEST_BIN[] = ".build/er-build-out/crypto/test_blake3";
+static const char ERB_CRYPTO_STORE_TEST_BIN[] = ".build/er-build-out/crypto/test_store";
 static const char ERB_VARFONT_TEST_BIN[] = ".build/er-build-out/varfont/vrfont_tests";
 static const char ERB_UI_CORE_TEST_BIN[] = ".build/er-build-out/ui-core/er_ui_core_tests";
 static const char ERB_APP_C_SOURCE_NAME[] = "app.c";
@@ -1903,7 +1904,7 @@ static int erb_target_repo_test(int print_plan) {
 static int erb_target_crypto_test(int print_plan) {
   ErbArgs args;
 
-  if (erb_prepare_dirs() != 0 || erb_compile_common(&args, ERB_CRYPTO_TEST_BIN) != 0) {
+  if (erb_prepare_dirs() != 0 || erb_compile_common(&args, ERB_CRYPTO_BLAKE3_TEST_BIN) != 0) {
     return 1;
   }
   if (erb_args_push(&args, "-Iedgerun-crypto/include") != 0 ||
@@ -1914,7 +1915,22 @@ static int erb_target_crypto_test(int print_plan) {
   if (erb_run_args(&args, print_plan) != 0) {
     return 1;
   }
-  return erb_run_program(ERB_CRYPTO_TEST_BIN, print_plan);
+  if (erb_run_program(ERB_CRYPTO_BLAKE3_TEST_BIN, print_plan) != 0) {
+    return 1;
+  }
+  if (erb_compile_common(&args, ERB_CRYPTO_STORE_TEST_BIN) != 0) {
+    return 1;
+  }
+  if (erb_args_push(&args, "-Iedgerun-crypto/include") != 0 ||
+      erb_args_push(&args, "edgerun-crypto/tests/test_store.c") != 0 ||
+      erb_args_push(&args, "edgerun-crypto/src/er_store.c") != 0 ||
+      erb_args_push(&args, "edgerun-crypto/src/er_blake3.c") != 0) {
+    return 1;
+  }
+  if (erb_run_args(&args, print_plan) != 0) {
+    return 1;
+  }
+  return erb_run_program(ERB_CRYPTO_STORE_TEST_BIN, print_plan);
 }
 
 static int erb_target_varfont_test(int print_plan) {

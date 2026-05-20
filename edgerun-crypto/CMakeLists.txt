@@ -17,6 +17,7 @@ endif()
 
 add_library(edgerun_crypto STATIC
   src/er_blake3.c
+  src/er_store.c
 )
 target_include_directories(edgerun_crypto PUBLIC
   ${CMAKE_CURRENT_SOURCE_DIR}/include
@@ -77,6 +78,13 @@ if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
   target_link_libraries(test_blake3 PRIVATE edgerun_crypto)
 
   add_test(NAME blake3 COMMAND test_blake3)
+
+  add_executable(test_store
+    tests/test_store.c
+  )
+  target_link_libraries(test_store PRIVATE edgerun_crypto)
+
+  add_test(NAME store COMMAND test_store)
 
   add_executable(bench_blake3
     bench/bench_blake3.c
