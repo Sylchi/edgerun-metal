@@ -16,14 +16,8 @@ enum {
   ER_CRYPTO_BLAKE3_SEAL_ALGORITHM_OFFSET = 2u,
   ER_CRYPTO_BLAKE3_SEAL_CIPHERTEXT_LEN_OFFSET = 4u,
   ER_CRYPTO_BLAKE3_SEAL_NONCE_OFFSET = 12u,
+  ER_CRYPTO_BLAKE3_SEAL_U8_BITS = 8u,
   ER_CRYPTO_BLAKE3_SEAL_U16_SHIFT = 8u,
-  ER_CRYPTO_BLAKE3_SEAL_U64_SHIFT_56 = 56u,
-  ER_CRYPTO_BLAKE3_SEAL_U64_SHIFT_48 = 48u,
-  ER_CRYPTO_BLAKE3_SEAL_U64_SHIFT_40 = 40u,
-  ER_CRYPTO_BLAKE3_SEAL_U64_SHIFT_32 = 32u,
-  ER_CRYPTO_BLAKE3_SEAL_U64_SHIFT_24 = 24u,
-  ER_CRYPTO_BLAKE3_SEAL_U64_SHIFT_16 = 16u,
-  ER_CRYPTO_BLAKE3_SEAL_U64_SHIFT_8 = 8u,
   ER_CRYPTO_BLAKE3_SEAL_U8_MASK = 0xffu,
   ER_CRYPTO_BLAKE3_SEAL_NONCE_SPAN_COUNT = 4u,
   ER_CRYPTO_BLAKE3_SEAL_NONCE_ROOT_SPAN = 0u,
@@ -61,32 +55,27 @@ static UINT16 er_crypto_blake3_read_be16(const UINT8* src) {
 }
 
 static void er_crypto_blake3_put_be64(UINT8* dst, UINT64 value) {
-  dst[0] = (UINT8)((value >> ER_CRYPTO_BLAKE3_SEAL_U64_SHIFT_56) &
-                   ER_CRYPTO_BLAKE3_SEAL_U8_MASK);
-  dst[1] = (UINT8)((value >> ER_CRYPTO_BLAKE3_SEAL_U64_SHIFT_48) &
-                   ER_CRYPTO_BLAKE3_SEAL_U8_MASK);
-  dst[2] = (UINT8)((value >> ER_CRYPTO_BLAKE3_SEAL_U64_SHIFT_40) &
-                   ER_CRYPTO_BLAKE3_SEAL_U8_MASK);
-  dst[3] = (UINT8)((value >> ER_CRYPTO_BLAKE3_SEAL_U64_SHIFT_32) &
-                   ER_CRYPTO_BLAKE3_SEAL_U8_MASK);
-  dst[4] = (UINT8)((value >> ER_CRYPTO_BLAKE3_SEAL_U64_SHIFT_24) &
-                   ER_CRYPTO_BLAKE3_SEAL_U8_MASK);
-  dst[5] = (UINT8)((value >> ER_CRYPTO_BLAKE3_SEAL_U64_SHIFT_16) &
-                   ER_CRYPTO_BLAKE3_SEAL_U8_MASK);
-  dst[6] = (UINT8)((value >> ER_CRYPTO_BLAKE3_SEAL_U64_SHIFT_8) &
-                   ER_CRYPTO_BLAKE3_SEAL_U8_MASK);
-  dst[7] = (UINT8)(value & ER_CRYPTO_BLAKE3_SEAL_U8_MASK);
+  UINTN i;
+  UINT32 shift;
+
+  for (i = 0u; i < ER_CRYPTO_BLAKE3_SEAL_U64_BYTES; ++i) {
+    shift = (UINT32)((ER_CRYPTO_BLAKE3_SEAL_U64_BYTES - 1u - i) *
+                     ER_CRYPTO_BLAKE3_SEAL_U8_BITS);
+    dst[i] = (UINT8)((value >> shift) & ER_CRYPTO_BLAKE3_SEAL_U8_MASK);
+  }
 }
 
 static UINT64 er_crypto_blake3_read_be64(const UINT8* src) {
-  return ((UINT64)src[0] << ER_CRYPTO_BLAKE3_SEAL_U64_SHIFT_56) |
-         ((UINT64)src[1] << ER_CRYPTO_BLAKE3_SEAL_U64_SHIFT_48) |
-         ((UINT64)src[2] << ER_CRYPTO_BLAKE3_SEAL_U64_SHIFT_40) |
-         ((UINT64)src[3] << ER_CRYPTO_BLAKE3_SEAL_U64_SHIFT_32) |
-         ((UINT64)src[4] << ER_CRYPTO_BLAKE3_SEAL_U64_SHIFT_24) |
-         ((UINT64)src[5] << ER_CRYPTO_BLAKE3_SEAL_U64_SHIFT_16) |
-         ((UINT64)src[6] << ER_CRYPTO_BLAKE3_SEAL_U64_SHIFT_8) |
-         (UINT64)src[7];
+  UINTN i;
+  UINT32 shift;
+  UINT64 value = 0u;
+
+  for (i = 0u; i < ER_CRYPTO_BLAKE3_SEAL_U64_BYTES; ++i) {
+    shift = (UINT32)((ER_CRYPTO_BLAKE3_SEAL_U64_BYTES - 1u - i) *
+                     ER_CRYPTO_BLAKE3_SEAL_U8_BITS);
+    value |= ((UINT64)src[i] << shift);
+  }
+  return value;
 }
 
 static UINT8 er_crypto_blake3_equal_constant_time(const UINT8* left,
@@ -178,14 +167,16 @@ static UINT8 er_crypto_blake3_xor_stream(const ErCryptoBlake3Sealer* sealer,
   if (input == 0 || output == 0 || input_len == 0u) {
     return 0u;
   }
+  block_offset = 0u;
   for (i = 0u; i < input_len; ++i) {
-    block_offset = i % ER_HASH_LEN;
     if (block_offset == 0u &&
         er_crypto_blake3_stream_block(sealer, nonce, counter, stream) == 0u) {
       return 0u;
     }
     output[i] = (UINT8)(input[i] ^ stream[block_offset]);
-    if (block_offset + 1u == ER_HASH_LEN) {
+    ++block_offset;
+    if (block_offset == ER_HASH_LEN) {
+      block_offset = 0u;
       ++counter;
     }
   }
