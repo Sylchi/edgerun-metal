@@ -243,6 +243,31 @@ static int da_parent_has_marker(const char* path, const char* marker) {
   return access(parent_marker, F_OK) == 0;
 }
 
+static int da_parent_base_is(const char* path, const char* expected) {
+  char parent[DA_PATH_CAP];
+  const char* slash = strrchr(path, '/');
+  int written;
+
+  if (slash == NULL || slash == path) {
+    return 0;
+  }
+  written = snprintf(parent, sizeof(parent), "%.*s", (int)(slash - path), path);
+  if (written < 0 || (size_t)written >= sizeof(parent)) {
+    return 0;
+  }
+  return strcmp(da_path_base(parent), expected) == 0;
+}
+
+static int da_child_exists(const char* path, const char* child) {
+  char child_path[DA_PATH_CAP];
+  int written = snprintf(child_path, sizeof(child_path), "%s/%s", path, child);
+
+  if (written < 0 || (size_t)written >= sizeof(child_path)) {
+    return 0;
+  }
+  return access(child_path, F_OK) == 0;
+}
+
 static uint16_t da_cache_delete_kind_for_path(const char* path) {
   const char* base = da_path_base(path);
 
@@ -255,19 +280,35 @@ static uint16_t da_cache_delete_kind_for_path(const char* path) {
        da_parent_has_marker(path, "meson.build") != 0)) {
     return ER_DISK_ANALYZER_CACHE_C_BUILD;
   }
-  if (strcmp(base, "target") == 0 && da_parent_has_marker(path, "Cargo.toml") != 0) {
+  if ((strcmp(base, "target") == 0 && da_parent_has_marker(path, "Cargo.toml") != 0) ||
+      ((strcmp(base, "registry") == 0 || strcmp(base, "git") == 0) &&
+       da_parent_base_is(path, ".cargo") != 0)) {
     return ER_DISK_ANALYZER_CACHE_RUST;
   }
   if (strcmp(base, "node_modules") == 0 || strcmp(base, ".next") == 0 ||
-      strcmp(base, ".turbo") == 0) {
+      strcmp(base, ".turbo") == 0 ||
+      (strcmp(base, "_cacache") == 0 && da_parent_base_is(path, ".npm") != 0) ||
+      ((strcmp(base, "cache") == 0 || strcmp(base, "store") == 0) &&
+       (da_parent_base_is(path, ".yarn") != 0 || da_parent_base_is(path, ".pnpm") != 0))) {
     return ER_DISK_ANALYZER_CACHE_NODE;
   }
   if (strcmp(base, "__pycache__") == 0 || strcmp(base, ".pytest_cache") == 0 ||
-      strcmp(base, ".mypy_cache") == 0 || strcmp(base, ".ruff_cache") == 0) {
+      strcmp(base, ".mypy_cache") == 0 || strcmp(base, ".ruff_cache") == 0 ||
+      ((strcmp(base, "pip") == 0 || strcmp(base, "uv") == 0 ||
+        strcmp(base, "pypoetry") == 0) &&
+       da_parent_base_is(path, ".cache") != 0) ||
+      ((strcmp(base, ".venv") == 0 || strcmp(base, "venv") == 0) &&
+       da_child_exists(path, "pyvenv.cfg") != 0)) {
     return ER_DISK_ANALYZER_CACHE_PYTHON;
   }
   if (strcmp(base, "go-build") == 0 || strcmp(base, "gomodcache") == 0) {
     return ER_DISK_ANALYZER_CACHE_GO;
+  }
+  if (strcmp(base, "caches") == 0 && da_parent_base_is(path, ".gradle") != 0) {
+    return ER_DISK_ANALYZER_CACHE_C_BUILD;
+  }
+  if (strcmp(base, "repository") == 0 && da_parent_base_is(path, ".m2") != 0) {
+    return ER_DISK_ANALYZER_CACHE_C_BUILD;
   }
   return ER_DISK_ANALYZER_CACHE_NONE;
 }
