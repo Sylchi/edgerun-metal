@@ -1,4 +1,4 @@
-.PHONY: all check clean er-build repo-check repo-test repo-check-bin repo-push-check repo-inspect repo-progress repo-agent-swarm erwire-decode erwire-test pi-serial-verify pi-node-update sdcard-probe pi-usb-boot pi-ready pi-zero-w-v1_1-ready pi-zero-w-v1_1-usb-boot codex-build codex-test crypto-test metal-ui-bench tpm-real-bench-uefi qemu-host-tpm-bench os-user-app-smoke edgerun-metal edgerun-os edgerun-check varfont-test ui-core-test
+.PHONY: all check clean er-build repo-check repo-test repo-check-bin repo-push-check repo-inspect repo-progress repo-agent-swarm erwire-decode erwire-test pi-serial-verify pi-node-update sdcard-probe pi-usb-boot pi-ready pi-zero-w-v1_1-ready pi-zero-w-v1_1-usb-boot codex-build codex-test crypto-test metal-ui-bench tpm-real-bench-uefi qemu-host-tpm-bench os-user-app-smoke edgerun-metal edgerun-os edgerun-check varfont-test ui-core-test ui-core-snapshot
 
 CC := toolchain/bin/clang
 HOST_CC := toolchain/bin/clang
@@ -112,6 +112,12 @@ varfont-test: er-build
 
 ui-core-test: er-build
 	$(ER_BUILD_STAGED) ui-core-test
+
+ui-core-snapshot:
+	mkdir -p .build/edgerun-ui-core
+	cmake -S edgerun-ui-core -B .build/edgerun-ui-core -DER_UI_CORE_BUILD_SNAPSHOT_HOST=ON
+	cmake --build .build/edgerun-ui-core --target er_ui_snapshot
+	./.build/edgerun-ui-core/er_ui_snapshot --output .build/edgerun-ui-core/snapshot.bmp
 
 clean:
 	$(MAKE) -C edgerun-metal clean
