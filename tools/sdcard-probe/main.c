@@ -505,6 +505,22 @@ static const char* ersd_video_speed_class(double write_mb_sec) {
   return "below-V6";
 }
 
+static const char* ersd_write_interpretation(double write_mb_sec) {
+  if (write_mb_sec >= (double)ERSD_SPEED_MB_V30) {
+    return "fast: exceeds U3/V30 floor; stronger than a basic U1/Class10 card";
+  }
+  if (write_mb_sec >= (double)ERSD_SPEED_MB_C10) {
+    return "normal: meets C10/U1/V10 floor; plausible for entry-level SanDisk Ultra A1 media";
+  }
+  if (write_mb_sec >= (double)ERSD_SPEED_MB_C6) {
+    return "slow: below C10/U1 floor; suspicious for C10/U1-labeled media or this reader path";
+  }
+  if (write_mb_sec >= (double)ERSD_SPEED_MB_C2) {
+    return "very-slow: below C6/C10/U1; suspicious for modern branded media";
+  }
+  return "failing-speed: below C2; likely bad media, bad reader, or bad link";
+}
+
 static void ersd_format_eta(double seconds, char* out, size_t out_size) {
   unsigned long long whole_seconds;
   unsigned long long hours;
@@ -597,6 +613,8 @@ static void ersd_print_live_header(const ErsdConfig* cfg,
   ersd_print_live_text_field("csd", info->csd);
   fprintf(stderr,
           "sdcard-probe: class-bounds-mb-sec: C2>=2 C4>=4 C6>=6 C10/U1/V10>=10 U3/V30>=30 V60>=60 V90>=90\n");
+  fprintf(stderr,
+          "sdcard-probe: interpretation-note: advertised 98MB/s on SanDisk Ultra A1 16GB is a read ceiling; C10/U1 is a 10MB/s sustained-write floor\n");
 }
 
 static int ersd_probe_interleaved(int fd,
@@ -726,6 +744,7 @@ static void ersd_print_report(const ErsdConfig* cfg,
   printf("observed-uhs-speed-class: %s\n", ersd_uhs_speed_class(write_mb_sec));
   printf("observed-video-speed-class: %s\n",
          ersd_video_speed_class(write_mb_sec));
+  printf("write-interpretation: %s\n", ersd_write_interpretation(write_mb_sec));
   printf("verify-mib-sec: %.2f\n",
          ersd_mib_per_sec(result->verify_bytes, result->verify_seconds));
   printf("read-check-mib-sec: %.2f\n",
