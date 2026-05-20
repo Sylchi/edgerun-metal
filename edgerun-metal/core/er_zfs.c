@@ -17,11 +17,32 @@ enum {
   ER_ZFS_UBERBLOCK_TIMESTAMP_WORD = 4u,
   ER_ZFS_UBERBLOCK_ROOTBP_WORD = 5u,
   ER_ZFS_UBERBLOCK_ROOTBP_WORDS = 16u,
+  ER_ZFS_U32_BYTES = 4u,
   ER_ZFS_U64_BYTES = 8u,
+  ER_ZFS_U16_BYTES = 2u,
   ER_ZFS_UINT64_MAX = 0xffffffffffffffffULL,
   ER_ZFS_BYTE_BITS = 8u,
-  ER_ZFS_BYTE_MASK = 0xffu
+  ER_ZFS_BYTE_MASK = 0xffu,
+  ER_ZFS_GPT_HEADER_LBA = 1u,
+  ER_ZFS_GPT_SIGNATURE_OFFSET = 0u,
+  ER_ZFS_GPT_HEADER_SIZE_OFFSET = 12u,
+  ER_ZFS_GPT_FIRST_USABLE_LBA_OFFSET = 40u,
+  ER_ZFS_GPT_LAST_USABLE_LBA_OFFSET = 48u,
+  ER_ZFS_GPT_ENTRY_LBA_OFFSET = 72u,
+  ER_ZFS_GPT_ENTRY_COUNT_OFFSET = 80u,
+  ER_ZFS_GPT_ENTRY_SIZE_OFFSET = 84u,
+  ER_ZFS_GPT_HEADER_MIN_BYTES = 92u,
+  ER_ZFS_GPT_SIGNATURE_BYTES = 8u,
+  ER_ZFS_GPT_ENTRY_TYPE_GUID_OFFSET = 0u,
+  ER_ZFS_GPT_ENTRY_UNIQUE_GUID_OFFSET = 16u,
+  ER_ZFS_GPT_ENTRY_FIRST_LBA_OFFSET = 32u,
+  ER_ZFS_GPT_ENTRY_LAST_LBA_OFFSET = 40u,
+  ER_ZFS_GPT_ENTRY_NAME_OFFSET = 56u,
+  ER_ZFS_GPT_MAX_ENTRY_SIZE = 512u
 };
+
+static const UINT8 g_er_zfs_gpt_signature[ER_ZFS_GPT_SIGNATURE_BYTES] = {
+    'E', 'F', 'I', ' ', 'P', 'A', 'R', 'T'};
 
 static UINT64 er_zfs_get_le64(const UINT8* bytes) {
   UINT32 i;
@@ -41,6 +62,20 @@ static UINT64 er_zfs_get_be64(const UINT8* bytes) {
     value = (value << ER_ZFS_BYTE_BITS) | (UINT64)(bytes[i] & ER_ZFS_BYTE_MASK);
   }
   return value;
+}
+
+static UINT32 er_zfs_get_le32(const UINT8* bytes) {
+  UINT32 i;
+  UINT32 value = 0u;
+
+  for (i = 0u; i < ER_ZFS_U32_BYTES; ++i) {
+    value |= ((UINT32)bytes[i]) << (i * ER_ZFS_BYTE_BITS);
+  }
+  return value;
+}
+
+static UINT16 er_zfs_get_le16(const UINT8* bytes) {
+  return (UINT16)((UINT16)bytes[0] | ((UINT16)bytes[1] << ER_ZFS_BYTE_BITS));
 }
 
 static UINT8 er_zfs_uberblock_word(const UINT8* uberblock,
@@ -187,6 +222,19 @@ UINT8 er_zfs_probe_pool(const ErBlockDevice* device,
                         UINT8* label_buffer,
                         UINT32 label_buffer_len,
                         ErZfsPoolProbe* out_probe) {
+  if (device == 0 || device->abi_version != ER_BLOCK_DEVICE_ABI_VERSION) {
+    return 0u;
+  }
+  return er_zfs_probe_pool_at(device, 0u, device->block_count,
+                              label_buffer, label_buffer_len, out_probe);
+}
+
+UINT8 er_zfs_probe_pool_at(const ErBlockDevice* device,
+                           UINT64 base_lba,
+                           UINT64 block_count,
+                           UINT8* label_buffer,
+                           UINT32 label_buffer_len,
+                           ErZfsPoolProbe* out_probe) {
   UINT64 device_bytes;
   UINT16 slot;
 
@@ -194,18 +242,23 @@ UINT8 er_zfs_probe_pool(const ErBlockDevice* device,
       device->abi_version != ER_BLOCK_DEVICE_ABI_VERSION ||
       label_buffer == 0 ||
       label_buffer_len < ER_ZFS_LABEL_BYTES ||
-      out_probe == 0) {
+      out_probe == 0 ||
+      block_count == 0u ||
+      base_lba >= device->block_count ||
+      block_count > device->block_count - base_lba) {
     return 0u;
   }
   if (device->logical_block_bytes == 0u ||
-      device->block_count >
+      block_count >
           ER_ZFS_UINT64_MAX / (UINT64)device->logical_block_bytes) {
     return 0u;
   }
   er_mem_zero((UINT8*)out_probe, (UINTN)sizeof(*out_probe));
-  device_bytes = device->block_count * (UINT64)device->logical_block_bytes;
+  device_bytes = block_count * (UINT64)device->logical_block_bytes;
   out_probe->abi_version = ER_ZFS_ABI_VERSION;
   out_probe->pool_bytes = device_bytes;
+  out_probe->base_lba = base_lba;
+  out_probe->block_count = block_count;
   for (slot = 0u; slot < ER_ZFS_LABEL_COUNT; ++slot) {
     UINT64 label_offset = 0u;
     UINT64 lba = 0u;
@@ -215,7 +268,7 @@ UINT8 er_zfs_probe_pool(const ErBlockDevice* device,
         (ER_ZFS_LABEL_BYTES % device->logical_block_bytes) != 0u) {
       return 0u;
     }
-    lba = label_offset / device->logical_block_bytes;
+    lba = base_lba + (label_offset / device->logical_block_bytes);
     if (er_block_device_read(device, lba,
                              ER_ZFS_LABEL_BYTES / device->logical_block_bytes,
                              label_buffer, ER_ZFS_LABEL_BYTES) == 0u) {
@@ -234,4 +287,195 @@ UINT8 er_zfs_probe_pool(const ErBlockDevice* device,
     }
   }
   return (UINT8)(out_probe->label_count != 0u);
+}
+
+static UINT8 er_zfs_gpt_entry_used(const UINT8* entry) {
+  UINT32 i;
+  const UINT8* entry_byte;
+
+  if (entry == 0) {
+    return 0u;
+  }
+  for (i = 0u; i < ER_ZFS_GPT_PARTITION_GUID_BYTES; ++i) {
+    entry_byte = entry + i;
+    if (*entry_byte != 0u) {
+      return 1u;
+    }
+  }
+  return 0u;
+}
+
+static UINT8 er_zfs_gpt_read_partition(const UINT8* entry,
+                                       UINT32 entry_size,
+                                       UINT32 entry_index,
+                                       UINT64 first_usable_lba,
+                                       UINT64 last_usable_lba,
+                                       ErZfsGptPartition* out_partition) {
+  UINT32 i;
+  UINT64 first_lba;
+  UINT64 last_lba;
+
+  if (entry == 0 ||
+      out_partition == 0 ||
+      entry_size < ER_ZFS_GPT_PARTITION_ENTRY_MIN_BYTES ||
+      er_zfs_gpt_entry_used(entry) == 0u) {
+    return 0u;
+  }
+  first_lba = er_zfs_get_le64(entry + ER_ZFS_GPT_ENTRY_FIRST_LBA_OFFSET);
+  last_lba = er_zfs_get_le64(entry + ER_ZFS_GPT_ENTRY_LAST_LBA_OFFSET);
+  if (first_lba < first_usable_lba ||
+      last_lba > last_usable_lba ||
+      first_lba > last_lba) {
+    return 0u;
+  }
+  er_mem_zero((UINT8*)out_partition, (UINTN)sizeof(*out_partition));
+  out_partition->abi_version = ER_ZFS_ABI_VERSION;
+  out_partition->entry_index = (UINT16)entry_index;
+  out_partition->first_lba = first_lba;
+  out_partition->last_lba = last_lba;
+  er_mem_copy(out_partition->type_guid,
+              entry + ER_ZFS_GPT_ENTRY_TYPE_GUID_OFFSET,
+              ER_ZFS_GPT_PARTITION_GUID_BYTES);
+  er_mem_copy(out_partition->unique_guid,
+              entry + ER_ZFS_GPT_ENTRY_UNIQUE_GUID_OFFSET,
+              ER_ZFS_GPT_PARTITION_GUID_BYTES);
+  for (i = 0u; i < ER_ZFS_GPT_PARTITION_NAME_CODE_UNITS; ++i) {
+    UINT16* name_code_unit = out_partition->utf16le_units + i;
+
+    *name_code_unit =
+        er_zfs_get_le16(entry + ER_ZFS_GPT_ENTRY_NAME_OFFSET +
+                        (i * ER_ZFS_U16_BYTES));
+  }
+  return 1u;
+}
+
+UINT8 er_zfs_gpt_partition_name_matches_ascii(const ErZfsGptPartition* partition,
+                                              const char* name,
+                                              UINT32 name_len) {
+  UINT32 i;
+  const char* name_at;
+  const UINT16* partition_name_at;
+
+  if (partition == 0 ||
+      partition->abi_version != ER_ZFS_ABI_VERSION ||
+      name == 0 ||
+      name_len == 0u ||
+      name_len > ER_ZFS_GPT_PARTITION_NAME_CODE_UNITS) {
+    return 0u;
+  }
+  for (i = 0u; i < name_len; ++i) {
+    name_at = name + i;
+    partition_name_at = partition->utf16le_units + i;
+    if (*name_at == 0 ||
+        *partition_name_at != (UINT16)(UINT8)(*name_at)) {
+      return 0u;
+    }
+  }
+  if (name_len == ER_ZFS_GPT_PARTITION_NAME_CODE_UNITS) {
+    return 1u;
+  }
+  partition_name_at = partition->utf16le_units + name_len;
+  return (UINT8)(*partition_name_at == 0u);
+}
+
+UINT8 er_zfs_probe_gpt_for_pool(const ErBlockDevice* device,
+                                UINT8* gpt_buffer,
+                                UINT32 gpt_buffer_len,
+                                UINT8* label_buffer,
+                                UINT32 label_buffer_len,
+                                ErZfsGptPartition* out_partition,
+                                ErZfsPoolProbe* out_probe) {
+  UINT64 first_usable_lba;
+  UINT64 last_usable_lba;
+  UINT64 entry_lba;
+  UINT32 header_size;
+  UINT32 entry_count;
+  UINT32 entry_size;
+  UINT32 entries_per_read;
+  UINT32 entry_index;
+
+  if (device == 0 ||
+      device->abi_version != ER_BLOCK_DEVICE_ABI_VERSION ||
+      gpt_buffer == 0 ||
+      label_buffer == 0 ||
+      out_partition == 0 ||
+      out_probe == 0 ||
+      gpt_buffer_len < device->logical_block_bytes ||
+      label_buffer_len < ER_ZFS_LABEL_BYTES) {
+    return 0u;
+  }
+  er_mem_zero((UINT8*)out_partition, (UINTN)sizeof(*out_partition));
+  er_mem_zero((UINT8*)out_probe, (UINTN)sizeof(*out_probe));
+  if (er_block_device_read(device, ER_ZFS_GPT_HEADER_LBA, 1u,
+                           gpt_buffer, device->logical_block_bytes) == 0u ||
+      er_mem_equal(gpt_buffer + ER_ZFS_GPT_SIGNATURE_OFFSET,
+                   g_er_zfs_gpt_signature,
+                   ER_ZFS_GPT_SIGNATURE_BYTES) == 0u) {
+    return 0u;
+  }
+  header_size = er_zfs_get_le32(gpt_buffer + ER_ZFS_GPT_HEADER_SIZE_OFFSET);
+  entry_lba = er_zfs_get_le64(gpt_buffer + ER_ZFS_GPT_ENTRY_LBA_OFFSET);
+  entry_count = er_zfs_get_le32(gpt_buffer + ER_ZFS_GPT_ENTRY_COUNT_OFFSET);
+  entry_size = er_zfs_get_le32(gpt_buffer + ER_ZFS_GPT_ENTRY_SIZE_OFFSET);
+  first_usable_lba = er_zfs_get_le64(gpt_buffer + ER_ZFS_GPT_FIRST_USABLE_LBA_OFFSET);
+  last_usable_lba = er_zfs_get_le64(gpt_buffer + ER_ZFS_GPT_LAST_USABLE_LBA_OFFSET);
+  if (header_size < ER_ZFS_GPT_HEADER_MIN_BYTES ||
+      header_size > device->logical_block_bytes ||
+      entry_lba == 0u ||
+      entry_count == 0u ||
+      entry_size < ER_ZFS_GPT_PARTITION_ENTRY_MIN_BYTES ||
+      entry_size > ER_ZFS_GPT_MAX_ENTRY_SIZE ||
+      gpt_buffer_len < entry_size ||
+      first_usable_lba > last_usable_lba) {
+    return 0u;
+  }
+  entries_per_read = gpt_buffer_len / entry_size;
+  if (entries_per_read == 0u) {
+    return 0u;
+  }
+  for (entry_index = 0u; entry_index < entry_count;) {
+    UINT32 remaining = entry_count - entry_index;
+    UINT32 entries_to_read = remaining < entries_per_read ? remaining : entries_per_read;
+    UINT64 byte_offset = ((UINT64)entry_index * (UINT64)entry_size);
+    UINT64 read_lba = entry_lba + (byte_offset / device->logical_block_bytes);
+    UINT32 read_blocks;
+    UINT32 i;
+
+    if ((byte_offset % device->logical_block_bytes) != 0u) {
+      return 0u;
+    }
+    read_blocks = (entries_to_read * entry_size) / device->logical_block_bytes;
+    if ((entries_to_read * entry_size) % device->logical_block_bytes != 0u) {
+      read_blocks += 1u;
+    }
+    if (read_blocks == 0u ||
+        read_blocks * device->logical_block_bytes > gpt_buffer_len ||
+        er_block_device_read(device, read_lba, read_blocks, gpt_buffer,
+                             read_blocks * device->logical_block_bytes) == 0u) {
+      return 0u;
+    }
+    for (i = 0u; i < entries_to_read; ++i) {
+      const UINT8* entry = gpt_buffer + ((UINTN)i * entry_size);
+      ErZfsGptPartition partition;
+      UINT64 block_count;
+
+      if (er_zfs_gpt_read_partition(entry, entry_size,
+                                    entry_index + i,
+                                    first_usable_lba,
+                                    last_usable_lba,
+                                    &partition) == 0u) {
+        continue;
+      }
+      block_count = partition.last_lba - partition.first_lba + 1u;
+      if (er_zfs_probe_pool_at(device, partition.first_lba, block_count,
+                               label_buffer, label_buffer_len,
+                               out_probe) == 0u) {
+        continue;
+      }
+      *out_partition = partition;
+      return 1u;
+    }
+    entry_index += entries_to_read;
+  }
+  return 0u;
 }
