@@ -6,8 +6,11 @@
 enum {
   TEST_IO_CAP = 65536u,
   TEST_ARENA_SIZE = ER_STORE_ARENA_MIN_SIZE,
+  TEST_LARGE_ARENA_SIZE = ER_STORE_ARENA_MIN_SIZE + (4u * 1024u * 1024u),
   TEST_FIRST_PAYLOAD_OFF = 68u + 92u,
-  TEST_TRAILING_JUNK = 7u
+  TEST_TRAILING_JUNK = 7u,
+  TEST_TYPE_ROW = 17u,
+  TEST_INDEX_BY_NAME = 23u
 };
 
 typedef struct {
@@ -266,6 +269,70 @@ static void test_verify_detects_wrong_hash(void) {
   check_int("verify wrong hash", er_store_verify(&store), ER_ERR_CORRUPT);
 }
 
+static void test_configured_cache_and_capacities(void) {
+  static uint8_t arena[TEST_LARGE_ARENA_SIZE];
+  TestIo io;
+  er_store_t store;
+  er_store_config_t config;
+  er_store_stats_t stats;
+  uint8_t hash[ER_HASH_SIZE];
+  uint8_t out[16];
+  size_t out_len = 0u;
+  static const uint8_t data[] = {81u, 82u, 83u, 84u};
+
+  test_zero(&io, sizeof(io));
+  config.blob_slots = 8192u;
+  config.key_slots = 8192u;
+  config.type_slots = 1024u;
+  config.index_slots = 1024u;
+  config.cache_bytes = 65536u;
+  check_int("open configured", er_store_open_config(&store, test_make_io(&io), arena, sizeof(arena), &config),
+            ER_OK);
+  check_int("stats configured", er_store_stats(&store, &stats), ER_OK);
+  check_size("configured blob slots", stats.blob_slots, 8192u);
+  check_size("configured key slots", stats.key_slots, 8192u);
+  check_size("configured cache bytes", stats.cache_bytes, config.cache_bytes);
+  check_int("configured put", er_store_put_blob(&store, data, sizeof(data), hash), ER_OK);
+  check_int("configured get", er_store_get_blob(&store, hash, out, sizeof(out), &out_len), ER_OK);
+  check_int("configured stats after cache", er_store_stats(&store, &stats), ER_OK);
+  check_size("configured cache used", stats.cache_used, sizeof(data));
+}
+
+static void test_typed_blob_and_custom_index_rebuild(void) {
+  static uint8_t arena_a[TEST_ARENA_SIZE];
+  static uint8_t arena_b[TEST_ARENA_SIZE];
+  TestIo io;
+  er_store_t store_a;
+  er_store_t store_b;
+  er_blob_t info;
+  uint8_t hash[ER_HASH_SIZE];
+  uint8_t got[ER_HASH_SIZE];
+  er_index_entry_t entries[4];
+  size_t count = 0u;
+  static const uint8_t data[] = {91u, 92u, 93u};
+
+  test_zero(&io, sizeof(io));
+  check_int("open typed a", er_store_open(&store_a, test_make_io(&io), arena_a, sizeof(arena_a)), ER_OK);
+  check_int("define content type", er_store_define_content_type(&store_a, TEST_TYPE_ROW, "row"), ER_OK);
+  check_int("define index", er_store_define_index(&store_a, TEST_INDEX_BY_NAME, TEST_TYPE_ROW, "by-name"),
+            ER_OK);
+  check_int("put typed blob", er_store_put_typed_blob(&store_a, TEST_TYPE_ROW, data, sizeof(data), hash),
+            ER_OK);
+  check_int("typed info", er_store_get_blob_info(&store_a, hash, &info), ER_OK);
+  check_int("typed info type", (int)info.content_type, (int)TEST_TYPE_ROW);
+  check_int("custom index put", er_store_index_put_ex(&store_a, TEST_INDEX_BY_NAME, "row/alice", hash), ER_OK);
+  check_int("custom index get", er_store_index_get_ex(&store_a, TEST_INDEX_BY_NAME, "row/alice", got), ER_OK);
+  check_bytes("custom index hash", got, hash, ER_HASH_SIZE);
+  check_int("close typed a", er_store_close(&store_a), ER_OK);
+  check_int("open typed b", er_store_open(&store_b, test_make_io(&io), arena_b, sizeof(arena_b)), ER_OK);
+  check_int("rebuilt typed info", er_store_get_blob_info(&store_b, hash, &info), ER_OK);
+  check_int("rebuilt typed info type", (int)info.content_type, (int)TEST_TYPE_ROW);
+  check_int("custom prefix scan",
+            er_store_index_scan_prefix_ex(&store_b, TEST_INDEX_BY_NAME, "row/", entries, 4u, &count), ER_OK);
+  check_size("custom prefix count", count, 1u);
+  check_int("custom prefix index id", (int)entries[0].index_id, (int)TEST_INDEX_BY_NAME);
+}
+
 int main(void) {
   test_open_empty_store();
   test_put_get_and_duplicate();
@@ -273,6 +340,8 @@ int main(void) {
   test_reopen_rebuild_and_latest_wins();
   test_trailing_corruption_truncates();
   test_verify_detects_wrong_hash();
+  test_configured_cache_and_capacities();
+  test_typed_blob_and_custom_index_rebuild();
 
   if (g_failed != 0) {
     fprintf(stderr, "store tests failed: %d/%d\n", g_failed, g_total);
