@@ -85,6 +85,16 @@ typedef struct {
   UINT32 interrupt_value;
 } ErCyw43438SdioDirectResult;
 
+typedef struct {
+  UINT16 abi_version;
+  UINT8 function;
+  UINT8 incrementing_address;
+  UINT32 address;
+  UINT32 bytes_len;
+  UINT32 response0;
+  UINT32 interrupt_value;
+} ErCyw43438SdioTransferResult;
+
 void er_cyw43438_clear_firmware_set(ErCyw43438FirmwareSet* firmware);
 void er_cyw43438_clear_open_ap_boot_device(
     ErCyw43438OpenApBootDevice* device);
@@ -100,6 +110,24 @@ UINT8 er_cyw43438_sdio_write8(INT64 emmc_handle,
                               UINT8 value,
                               UINT32 poll_budget,
                               ErCyw43438SdioDirectResult* out_result);
+UINT8 er_cyw43438_sdio_read_bytes(
+    INT64 emmc_handle,
+    UINT8 function,
+    UINT8 incrementing_address,
+    UINT32 address,
+    UINT8* out_bytes,
+    UINT32 bytes_len,
+    UINT32 poll_budget,
+    ErCyw43438SdioTransferResult* out_result);
+UINT8 er_cyw43438_sdio_write_bytes(
+    INT64 emmc_handle,
+    UINT8 function,
+    UINT8 incrementing_address,
+    UINT32 address,
+    const UINT8* bytes,
+    UINT32 bytes_len,
+    UINT32 poll_budget,
+    ErCyw43438SdioTransferResult* out_result);
 UINT8 er_cyw43438_add_pi_zero_w_firmware_sources(ErBootConfig* config);
 UINT8 er_cyw43438_load_pi_zero_w_firmware(
     const ErCryptoProvider* crypto,
