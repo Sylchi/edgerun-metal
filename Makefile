@@ -3,6 +3,7 @@
 CC := clang
 HOST_CC := clang
 HOST_LDFLAGS :=
+ER_BUILD_BOOTSTRAP := toolchain/bin/er-build
 
 REPO_PROGRESS_SCOPE := edgerun-ui-core
 REPO_PROGRESS_TEST :=
@@ -12,9 +13,10 @@ all: edgerun-metal
 
 check: repo-check repo-test crypto-test edgerun-check varfont-test ui-core-test
 
-er-build:
+er-build: $(ER_BUILD_BOOTSTRAP)
 	mkdir -p .build
-	tmp=".build/er-build.$$$$.tmp"; trap 'rm -f "$$tmp"' EXIT; $(HOST_CC) -std=c11 -Wall -Wextra -Werror -O2 -pthread -DERI_NO_CLI_MAIN -Iedgerun-crypto/include $(HOST_LDFLAGS) -o "$$tmp" tools/er-build/main.c tools/er-build/package_identity.c tools/repo-inspect/repo_inspect_main.c edgerun-crypto/src/er_blake3.c; mv "$$tmp" .build/er-build
+	cp $(ER_BUILD_BOOTSTRAP) .build/er-build
+	chmod 755 .build/er-build
 
 repo-check: er-build
 	./.build/er-build repo-check
