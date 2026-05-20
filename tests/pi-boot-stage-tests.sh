@@ -130,21 +130,21 @@ if ! grep -q "serial_gpio_rx=15" \
   exit 1
 fi
 
-if ! grep -q "serial_expect=EdgeRun Pi Zero W v1.1 ARMv6 boot" \
+if ! grep -q "serial_protocol=erwire" \
   "$ZERO_W_BOOT_DIR/EDGERUN-PI-ZERO-W-V1_1-BOOT.txt"; then
-  printf 'zero w manifest does not name serial banner expectation\n' >&2
+  printf 'zero w manifest does not name erwire serial protocol\n' >&2
   exit 1
 fi
 
-if ! grep -q "serial_expect=peripheral_base=0x20000000" \
+if ! grep -q "erwire_expect=node_available" \
   "$ZERO_W_BOOT_DIR/EDGERUN-PI-ZERO-W-V1_1-BOOT.txt"; then
-  printf 'zero w manifest does not name peripheral base expectation\n' >&2
+  printf 'zero w manifest does not name node availability expectation\n' >&2
   exit 1
 fi
 
-if ! grep -q "serial_expect=alive=0x00000000" \
+if ! grep -q "erwire_expect=node_heartbeat" \
   "$ZERO_W_BOOT_DIR/EDGERUN-PI-ZERO-W-V1_1-BOOT.txt"; then
-  printf 'zero w manifest does not name heartbeat expectation\n' >&2
+  printf 'zero w manifest does not name node heartbeat expectation\n' >&2
   exit 1
 fi
 
