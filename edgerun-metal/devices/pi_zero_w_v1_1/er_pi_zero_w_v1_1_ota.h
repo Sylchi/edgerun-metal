@@ -28,6 +28,7 @@
 #define ER_PI_ZERO_W_V1_1_OTA_STATUS_COMMITTED 2u
 #define ER_PI_ZERO_W_V1_1_OTA_STATUS_REJECTED 3u
 #define ER_PI_ZERO_W_V1_1_OTA_STATUS_WRITE_FAILED 4u
+#define ER_PI_ZERO_W_V1_1_OTA_STATUS_STORED_UNBOOTABLE 5u
 
 typedef UINT8 (*ErPiZeroWV11OtaWriteBlockFn)(
     void* ctx,
@@ -52,6 +53,11 @@ typedef struct {
 
 void er_pi_zero_w_v1_1_ota_reset(ErPiZeroWV11OtaState* state);
 UINT32 er_pi_zero_w_v1_1_ota_crc32(const UINT8* bytes, UINT32 len);
+UINT8 er_pi_zero_w_v1_1_ota_encode_object_packet_payload(
+    const ErVfsObjectPacket* packet,
+    UINT8* out_payload,
+    UINT32 out_payload_capacity,
+    UINT32* out_payload_len);
 UINT8 er_pi_zero_w_v1_1_ota_decode_object_packet_payload(
     const UINT8* frame,
     UINT32 frame_len,

@@ -85,6 +85,35 @@ UINT32 er_pi_zero_w_v1_1_ota_crc32(const UINT8* bytes, UINT32 len) {
   return ~crc;
 }
 
+UINT8 er_pi_zero_w_v1_1_ota_encode_object_packet_payload(
+    const ErVfsObjectPacket* packet,
+    UINT8* out_payload,
+    UINT32 out_payload_capacity,
+    UINT32* out_payload_len) {
+  UINT32 payload_len;
+
+  if (packet == 0 ||
+      out_payload == 0 ||
+      out_payload_len == 0 ||
+      packet->header.bytes_len > ER_VFS_OBJECT_PACKET_BYTES) {
+    return 0u;
+  }
+  payload_len = (UINT32)sizeof(packet->header) + packet->header.bytes_len;
+  if (payload_len > out_payload_capacity) {
+    return 0u;
+  }
+  er_mem_copy(out_payload,
+              (const UINT8*)&packet->header,
+              (UINTN)sizeof(packet->header));
+  if (packet->header.bytes_len != 0u) {
+    er_mem_copy(out_payload + (UINT32)sizeof(packet->header),
+                packet->bytes,
+                packet->header.bytes_len);
+  }
+  *out_payload_len = payload_len;
+  return 1u;
+}
+
 static UINT8 er_pi_zero_w_v1_1_ota_erwire_decode(
     const UINT8* frame,
     UINT32 frame_len,
@@ -269,8 +298,8 @@ static UINT8 er_pi_zero_w_v1_1_ota_commit_object(
     state->status = ER_PI_ZERO_W_V1_1_OTA_STATUS_WRITE_FAILED;
     return 0u;
   }
-  state->status = ER_PI_ZERO_W_V1_1_OTA_STATUS_COMMITTED;
-  state->reboot_required = 1u;
+  state->status = ER_PI_ZERO_W_V1_1_OTA_STATUS_STORED_UNBOOTABLE;
+  state->reboot_required = 0u;
   return 1u;
 }
 

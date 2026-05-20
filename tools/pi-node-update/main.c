@@ -24,10 +24,10 @@
 
 #include "er_crypto_blake3.h"
 #include "er_mem.h"
+#include "er_pi_zero_w_v1_1_ota.h"
 #include "er_vfs.h"
 
 #define ER_PI_NODE_UPDATE_ETH_TYPE 0x88b5u
-#define ER_PI_ZERO_W_V1_1_OTA_PACKET_CAPACITY 64u
 #define ER_PI_NODE_UPDATE_MAX_OBJECT_BYTES \
   (ER_PI_ZERO_W_V1_1_OTA_PACKET_CAPACITY * ER_VFS_OBJECT_PACKET_BYTES)
 #define ER_PI_NODE_UPDATE_ERWIRE_MAGIC 0x31575245u
@@ -37,6 +37,7 @@
 #define ER_PI_NODE_UPDATE_ERWIRE_FLAG_FIRST 0x0001u
 #define ER_PI_NODE_UPDATE_ERWIRE_FLAG_LAST 0x0002u
 #define ER_PI_NODE_UPDATE_ERWIRE_STREAM_ID 0x45525a57u
+#define ER_PI_NODE_UPDATE_LIVE_SEND_SUPPORTED 0u
 #define ER_PI_NODE_UPDATE_ERWIRE_PAYLOAD_BYTES_MAX \
   (ER_VFS_OBJECT_PACKET_HEADER_BYTES + ER_VFS_OBJECT_PACKET_BYTES)
 #define ER_PI_NODE_UPDATE_ERWIRE_PACKET_BYTES_MAX \
@@ -229,25 +230,6 @@ static int er_pi_node_update_open_l2(const char* iface,
   return 1;
 }
 
-static int er_pi_node_update_packet_payload(const ErVfsObjectPacket* packet,
-                                            uint8_t* out_payload,
-                                            uint32_t* out_payload_len) {
-  uint32_t payload_len;
-
-  if (packet == 0 || out_payload == 0 || out_payload_len == 0) {
-    return 0;
-  }
-  payload_len = (uint32_t)sizeof(packet->header) + packet->header.bytes_len;
-  er_mem_copy(out_payload,
-              (const UINT8*)&packet->header,
-              (UINTN)sizeof(packet->header));
-  er_mem_copy(out_payload + (uint32_t)sizeof(packet->header),
-              packet->bytes,
-              packet->header.bytes_len);
-  *out_payload_len = payload_len;
-  return 1;
-}
-
 static uint32_t er_pi_node_update_crc32(const uint8_t* bytes, uint32_t len) {
   uint32_t crc = ER_PI_NODE_UPDATE_CRC32_INITIAL;
   uint32_t i;
@@ -367,6 +349,13 @@ static int er_pi_node_update_run(const ErPiNodeUpdateConfig* config) {
       er_pi_node_update_read_file(config->image_path, &image, &image_len) == 0) {
     return 1;
   }
+  if (config->dry_run == 0u &&
+      ER_PI_NODE_UPDATE_LIVE_SEND_SUPPORTED == 0u) {
+    fprintf(stderr,
+            "pi-node-update: live send unsupported: host Ethernet frames do not reach the Pi Zero W v1.1 CYW shared-RAM OTA receiver\n");
+    free(image);
+    return 1;
+  }
   packet_count = (uint32_t)((image_len + ER_VFS_OBJECT_PACKET_BYTES - 1u) /
                             ER_VFS_OBJECT_PACKET_BYTES);
   if (packet_count == 0u ||
@@ -399,9 +388,11 @@ static int er_pi_node_update_run(const ErPiNodeUpdateConfig* config) {
                                        packet_index,
                                        packet_count,
                                        &object_packet) == 0u ||
-          er_pi_node_update_packet_payload(&object_packet,
-                                           payload,
-                                           &payload_len) == 0 ||
+          er_pi_zero_w_v1_1_ota_encode_object_packet_payload(
+              &object_packet,
+              payload,
+              (uint32_t)sizeof(payload),
+              &payload_len) == 0 ||
           er_pi_node_update_build_erwire(seq,
                                          payload,
                                          payload_len,
