@@ -36,7 +36,7 @@ if "$TOOL_BIN" >/tmp/pi-node-update-usage.out \
   exit 1
 fi
 
-if ! grep -q "usage: .*--iface <iface> --image <kernel.img>" \
+if ! grep -q "usage: .*--serial <tty> | --iface <iface> | --dry-run.* --image <kernel.img>" \
   /tmp/pi-node-update-usage.err; then
   printf 'pi-node-update usage text is not explicit\n' >&2
   exit 1
@@ -60,14 +60,9 @@ if ! grep -q "bytes=38404 packets=38 repeat=2 mode=dry-run" \
   exit 1
 fi
 
-if "$TOOL_BIN" --iface lo --image "$IMAGE" \
-  >/tmp/pi-node-update-live.out 2>/tmp/pi-node-update-live.err; then
-  printf 'pi-node-update accepted unsupported live send\n' >&2
-  exit 1
-fi
-
-if ! grep -q "live send unsupported" /tmp/pi-node-update-live.err; then
-  printf 'pi-node-update did not explain unsupported live send\n' >&2
+if "$TOOL_BIN" --serial /dev/null --iface lo --image "$IMAGE" \
+  >/tmp/pi-node-update-ambiguous.out 2>/tmp/pi-node-update-ambiguous.err; then
+  printf 'pi-node-update accepted ambiguous live transports\n' >&2
   exit 1
 fi
 

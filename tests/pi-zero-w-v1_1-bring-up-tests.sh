@@ -129,4 +129,10 @@ if ! make -C "$ROOT_DIR" -n pi-ready | grep -q "pi-zero-w-v1_1-bring-up.sh"; the
   exit 1
 fi
 
+if ! make -C "$ROOT_DIR" -n pi-zero-w-v1_1-update PI_UPDATE_IFACE=wlan0 |
+  grep -q "pi-node-update --iface"; then
+  printf 'pi zero w v1.1 update target does not use the Wi-Fi OTA sender\n' >&2
+  exit 1
+fi
+
 printf 'pi zero w v1.1 bring-up tests passed\n'

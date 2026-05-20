@@ -5,8 +5,10 @@
 #include "er_crypto_blake3.h"
 #include "er_cyw43438_d11.h"
 #include "er_cyw43438_owned_firmware.h"
+#include "er_cyw43438_sdpcm.h"
 #include "er_pi_mmc.h"
 #include "er_types.h"
+#include "pi_zero_w_v1_1_cyw43438_firmware.h"
 
 /*
  * Purpose: provide the first owned ARMv6 payload for Raspberry Pi Zero W v1.1.
@@ -138,18 +140,46 @@
 #define ER_PI_ZERO_W_V1_1_CYW43438_CCCR_IO_READY_ADDR 0x00000003u
 #define ER_PI_ZERO_W_V1_1_CYW43438_CCCR_ENABLE_FUNCTION_1 0x02u
 #define ER_PI_ZERO_W_V1_1_CYW43438_CCCR_ENABLE_FUNCTION_2 0x04u
+#define ER_PI_ZERO_W_V1_1_CYW43438_CCCR_ENABLE_FUNCTIONS_1_2 \
+  (ER_PI_ZERO_W_V1_1_CYW43438_CCCR_ENABLE_FUNCTION_1 | \
+   ER_PI_ZERO_W_V1_1_CYW43438_CCCR_ENABLE_FUNCTION_2)
+#define ER_PI_ZERO_W_V1_1_CYW43438_CCCR_F2_BLOCK_SIZE_LOW 0x00000210u
+#define ER_PI_ZERO_W_V1_1_CYW43438_CCCR_F2_BLOCK_SIZE_HIGH 0x00000211u
 #define ER_PI_ZERO_W_V1_1_CYW43438_READY_POLL_BUDGET 10000u
 #define ER_PI_ZERO_W_V1_1_CYW43438_ALP_POLL_BUDGET 100000u
 #define ER_PI_ZERO_W_V1_1_CYW43438_RESET_POLL_BUDGET 1000u
+#define ER_PI_ZERO_W_V1_1_CYW43438_F2_POLL_BUDGET 64u
 #define ER_PI_ZERO_W_V1_1_CYW43438_FUNC1_SBADDRLOW 0x0001000au
 #define ER_PI_ZERO_W_V1_1_CYW43438_FUNC1_SBADDRMID 0x0001000bu
 #define ER_PI_ZERO_W_V1_1_CYW43438_FUNC1_SBADDRHIGH 0x0001000cu
+#define ER_PI_ZERO_W_V1_1_CYW43438_FUNC1_WATERMARK 0x00010008u
 #define ER_PI_ZERO_W_V1_1_CYW43438_FUNC1_CHIPCLKCSR 0x0001000eu
 #define ER_PI_ZERO_W_V1_1_CYW43438_FUNC1_SDIOPULLUP 0x0001000fu
 #define ER_PI_ZERO_W_V1_1_CYW43438_FORCE_HW_CLKREQ_OFF 0x20u
 #define ER_PI_ZERO_W_V1_1_CYW43438_ALP_AVAIL_REQ 0x08u
 #define ER_PI_ZERO_W_V1_1_CYW43438_ALP_AVAIL 0x40u
 #define ER_PI_ZERO_W_V1_1_CYW43438_FORCE_ALP 0x01u
+#define ER_PI_ZERO_W_V1_1_CYW43438_HT_AVAIL_REQ 0x10u
+#define ER_PI_ZERO_W_V1_1_CYW43438_HT_AVAIL 0x80u
+#define ER_PI_ZERO_W_V1_1_CYW43438_FORCE_HT 0x02u
+#define ER_PI_ZERO_W_V1_1_CYW43438_F2_WATERMARK 0x08u
+#define ER_PI_ZERO_W_V1_1_CYW43438_SDPCM_PROT_VERSION 4u
+#define ER_PI_ZERO_W_V1_1_CYW43438_SMB_DATA_VERSION_SHIFT 16u
+#define ER_PI_ZERO_W_V1_1_CYW43438_SDIO_CORE 0x0829u
+#define ER_PI_ZERO_W_V1_1_CYW43438_SDIO_INTSTATUS 0x00000020u
+#define ER_PI_ZERO_W_V1_1_CYW43438_SDIO_HOSTINTMASK 0x00000024u
+#define ER_PI_ZERO_W_V1_1_CYW43438_SDIO_TOSBMAILBOXDATA 0x00000048u
+#define ER_PI_ZERO_W_V1_1_CYW43438_INT_HMB_SW_MASK 0x000000f0u
+#define ER_PI_ZERO_W_V1_1_CYW43438_INT_CHIPACTIVE 0x20000000u
+#define ER_PI_ZERO_W_V1_1_CYW43438_INT_HMB_FRAME_IND 0x00000040u
+#define ER_PI_ZERO_W_V1_1_CYW43438_HOSTINTMASK \
+  (ER_PI_ZERO_W_V1_1_CYW43438_INT_HMB_SW_MASK | \
+   ER_PI_ZERO_W_V1_1_CYW43438_INT_CHIPACTIVE)
+#define ER_PI_ZERO_W_V1_1_CYW43438_F2_BLOCK_BYTES 512u
+#define ER_PI_ZERO_W_V1_1_CYW43438_F2_BLOCK_COUNT_MAX 3u
+#define ER_PI_ZERO_W_V1_1_CYW43438_F2_FRAME_BYTES \
+  (ER_PI_ZERO_W_V1_1_CYW43438_F2_BLOCK_BYTES * \
+   ER_PI_ZERO_W_V1_1_CYW43438_F2_BLOCK_COUNT_MAX)
 #define ER_PI_ZERO_W_V1_1_CYW43438_SBWINDOW_MASK 0xffff8000u
 #define ER_PI_ZERO_W_V1_1_CYW43438_SB_ADDR_MASK 0x00007fffu
 #define ER_PI_ZERO_W_V1_1_CYW43438_SB_ACCESS_2_4B_FLAG 0x00008000u
@@ -202,6 +232,7 @@ volatile UINT32 g_er_pi_zero_w_v1_1_sdio_probe_state =
 volatile UINT32 g_er_pi_zero_w_v1_1_sdio_probe_interrupt = 0u;
 volatile UINT32 g_er_pi_zero_w_v1_1_sdio_probe_response = 0u;
 volatile UINT32 g_er_pi_zero_w_v1_1_sdio_relative_card_address = 0u;
+static UINT32 g_er_pi_zero_w_v1_1_cyw43438_sdio_base = 0u;
 volatile UINT32 g_er_pi_zero_w_v1_1_storage_probe_state =
     ER_PI_ZERO_W_V1_1_STORAGE_PROBE_NONE;
 volatile UINT32 g_er_pi_zero_w_v1_1_storage_relative_card_address = 0u;
@@ -216,6 +247,8 @@ volatile UINT32 g_er_pi_zero_w_v1_1_ota_target_block =
 static ErPiZeroWV11OtaState g_er_pi_zero_w_v1_1_ota_state;
 static UINT8
     g_er_pi_zero_w_v1_1_uart_rx_frame[ER_PI_ZERO_W_V1_1_UART_RX_FRAME_BYTES];
+static UINT8
+    g_er_pi_zero_w_v1_1_l2_rx_frame[ER_PI_ZERO_W_V1_1_CYW43438_F2_FRAME_BYTES];
 static UINT32 g_er_pi_zero_w_v1_1_uart_rx_len =
     ER_PI_ZERO_W_V1_1_UART_RX_EXPECTING_HEADER;
 static UINT32 g_er_pi_zero_w_v1_1_uart_rx_expected_len =
@@ -230,11 +263,6 @@ static const UINT8
     g_er_pi_zero_w_v1_1_channel_id[ER_PI_ZERO_W_V1_1_HASH_BYTES +
                                    ER_PI_ZERO_W_V1_1_C_STRING_NUL_BYTES] =
     ER_PI_ZERO_W_V1_1_CHANNEL_ID_TEXT;
-
-static UINT32 er_pi_zero_w_v1_1_wifi_beacon(
-    UINT8 out_frame[ER_PI_ZERO_W_V1_1_IEEE80211_BEACON_LEN]);
-static UINT32 er_pi_zero_w_v1_1_wifi_probe_request(
-    UINT8 out_frame[ER_PI_ZERO_W_V1_1_IEEE80211_PROBE_REQUEST_LEN]);
 
 static volatile UINT32* er_pi_zero_w_v1_1_reg(UINT32 base, UINT32 offset) {
   return (volatile UINT32*)(UINTN)(base + offset);
@@ -736,15 +764,18 @@ static UINT32 er_pi_zero_w_v1_1_emmc_wait_interrupt(UINT32 wanted_interrupt,
   return 0u;
 }
 
-static UINT32 er_pi_zero_w_v1_1_emmc_sdio_start_cmd53(
+static UINT32 er_pi_zero_w_v1_1_emmc_sdio_start_cmd53_transfer(
     UINT32 function,
     UINT32 address,
-    UINT32 bytes_len,
+    UINT32 transfer_len,
+    UINT32 cmd53_count,
+    UINT32 block_mode,
     UINT32 write,
     UINT32 incrementing,
     UINT32 data_is_read) {
-  if (bytes_len == 0u ||
-      bytes_len > ER_PI_ZERO_W_V1_1_SDIO_CMD53_COUNT_MASK ||
+  if (transfer_len == 0u ||
+      cmd53_count == 0u ||
+      cmd53_count > ER_PI_ZERO_W_V1_1_SDIO_CMD53_COUNT_MASK ||
       er_pi_zero_w_v1_1_emmc_wait_clear(
           ER_PI_ZERO_W_V1_1_EMMC_REG_STATUS,
           ER_PI_ZERO_W_V1_1_EMMC_STATUS_CMD_INHIBIT |
@@ -758,16 +789,21 @@ static UINT32 er_pi_zero_w_v1_1_emmc_sdio_start_cmd53(
   er_pi_zero_w_v1_1_write(
       ER_PI_ZERO_W_V1_1_EMMC_BASE,
       ER_PI_ZERO_W_V1_1_EMMC_REG_BLKSIZECNT,
-      (1u << ER_PI_ZERO_W_V1_1_EMMC_BLOCK_COUNT_BITS) | bytes_len);
+      ((block_mode == ER_PI_ZERO_W_V1_1_SDIO_CMD53_BLOCK_MODE ?
+        cmd53_count :
+        1u) << ER_PI_ZERO_W_V1_1_EMMC_BLOCK_COUNT_BITS) |
+          (block_mode == ER_PI_ZERO_W_V1_1_SDIO_CMD53_BLOCK_MODE ?
+           ER_PI_ZERO_W_V1_1_CYW43438_F2_BLOCK_BYTES :
+           transfer_len));
   er_pi_zero_w_v1_1_write(
       ER_PI_ZERO_W_V1_1_EMMC_BASE,
       ER_PI_ZERO_W_V1_1_EMMC_REG_ARG1,
       er_pi_zero_w_v1_1_sdio_cmd53_argument(write,
                                             function,
-                                            ER_PI_ZERO_W_V1_1_SDIO_CMD53_BYTE_MODE,
+                                            block_mode,
                                             incrementing,
                                             address,
-                                            bytes_len));
+                                            cmd53_count));
   er_pi_zero_w_v1_1_write(
       ER_PI_ZERO_W_V1_1_EMMC_BASE,
       ER_PI_ZERO_W_V1_1_EMMC_REG_CMDTM,
@@ -776,6 +812,27 @@ static UINT32 er_pi_zero_w_v1_1_emmc_sdio_start_cmd53(
           ER_PI_ZERO_W_V1_1_MMC_RESPONSE_R5,
           data_is_read));
   return 1u;
+}
+
+static UINT32 er_pi_zero_w_v1_1_emmc_sdio_start_cmd53(
+    UINT32 function,
+    UINT32 address,
+    UINT32 bytes_len,
+    UINT32 write,
+    UINT32 incrementing,
+    UINT32 data_is_read) {
+  if (bytes_len > ER_PI_ZERO_W_V1_1_SDIO_CMD53_COUNT_MASK) {
+    return 0u;
+  }
+  return er_pi_zero_w_v1_1_emmc_sdio_start_cmd53_transfer(
+      function,
+      address,
+      bytes_len,
+      bytes_len,
+      ER_PI_ZERO_W_V1_1_SDIO_CMD53_BYTE_MODE,
+      write,
+      incrementing,
+      data_is_read);
 }
 
 static UINT32 er_pi_zero_w_v1_1_emmc_sdio_finish_data(UINT32* out_interrupt) {
@@ -973,6 +1030,47 @@ static UINT32 er_pi_zero_w_v1_1_emmc_sdio_read_bytes(UINT32 function,
   return er_pi_zero_w_v1_1_emmc_sdio_finish_data(&interrupt);
 }
 
+static UINT32 er_pi_zero_w_v1_1_emmc_sdio_read_blocks(UINT32 function,
+                                                      UINT32 address,
+                                                      UINT8* bytes,
+                                                      UINT32 block_count) {
+  UINT32 interrupt;
+  UINT32 offset;
+  UINT32 bytes_len;
+
+  bytes_len = block_count * ER_PI_ZERO_W_V1_1_CYW43438_F2_BLOCK_BYTES;
+  if (bytes == 0 ||
+      block_count == 0u ||
+      block_count > ER_PI_ZERO_W_V1_1_CYW43438_F2_BLOCK_COUNT_MAX ||
+      er_pi_zero_w_v1_1_emmc_sdio_start_cmd53_transfer(
+          function,
+          address,
+          bytes_len,
+          block_count,
+          ER_PI_ZERO_W_V1_1_SDIO_CMD53_BLOCK_MODE,
+          ER_PI_ZERO_W_V1_1_SDIO_CMD53_READ,
+          ER_PI_ZERO_W_V1_1_SDIO_CMD53_INCREMENTING_ADDRESS,
+          1u) == 0u) {
+    return 0u;
+  }
+  if (er_pi_zero_w_v1_1_emmc_wait_interrupt(
+          ER_PI_ZERO_W_V1_1_EMMC_INTERRUPT_READ_RDY,
+          &interrupt) == 0u) {
+    g_er_pi_zero_w_v1_1_sdio_probe_interrupt = interrupt;
+    return 0u;
+  }
+  for (offset = 0u; offset < bytes_len; offset += (UINT32)sizeof(UINT32)) {
+    UINT32 word;
+
+    word = er_pi_zero_w_v1_1_read(ER_PI_ZERO_W_V1_1_EMMC_BASE,
+                                  ER_PI_ZERO_W_V1_1_EMMC_REG_DATA);
+    er_pi_zero_w_v1_1_unpack_le32_partial(word,
+                                          bytes + offset,
+                                          (UINT32)sizeof(UINT32));
+  }
+  return er_pi_zero_w_v1_1_emmc_sdio_finish_data(&interrupt);
+}
+
 static UINT32 er_pi_zero_w_v1_1_cyw43438_read_le32(const UINT8* bytes) {
   return ((UINT32)bytes[ER_PI_ZERO_W_V1_1_LE_BYTE0]) |
          ((UINT32)bytes[ER_PI_ZERO_W_V1_1_LE_BYTE1] <<
@@ -1001,14 +1099,6 @@ static UINT16 er_pi_zero_w_v1_1_cyw43438_read_le16(const UINT8* bytes) {
   return (UINT16)(((UINT16)bytes[ER_PI_ZERO_W_V1_1_LE_BYTE0]) |
                   ((UINT16)bytes[ER_PI_ZERO_W_V1_1_LE_BYTE1] <<
                    ER_PI_ZERO_W_V1_1_U16_HIGH_SHIFT));
-}
-
-static void er_pi_zero_w_v1_1_cyw43438_put_le16(UINT8* bytes, UINT16 value) {
-  bytes[ER_PI_ZERO_W_V1_1_LE_BYTE0] =
-      (UINT8)(value & ER_PI_ZERO_W_V1_1_BYTE_MASK);
-  bytes[ER_PI_ZERO_W_V1_1_LE_BYTE1] =
-      (UINT8)(((UINT32)value >> ER_PI_ZERO_W_V1_1_U16_HIGH_SHIFT) &
-              ER_PI_ZERO_W_V1_1_BYTE_MASK);
 }
 
 static UINT32 er_pi_zero_w_v1_1_cyw43438_enable_function1(void) {
@@ -1151,34 +1241,6 @@ static UINT32 er_pi_zero_w_v1_1_cyw43438_backplane_write32(UINT32 address,
   UINT8 bytes[sizeof(UINT32)];
 
   er_pi_zero_w_v1_1_cyw43438_put_le32(bytes, value);
-  return er_pi_zero_w_v1_1_cyw43438_backplane_write_bytes(
-      address,
-      bytes,
-      (UINT32)sizeof(bytes));
-}
-
-static UINT32 er_pi_zero_w_v1_1_cyw43438_backplane_read16(UINT32 address,
-                                                         UINT16* out_value) {
-  UINT8 bytes[2];
-
-  if (out_value == 0 ||
-      er_pi_zero_w_v1_1_cyw43438_set_backplane_window(address) == 0u ||
-      er_pi_zero_w_v1_1_emmc_sdio_read_bytes(
-          ER_PI_ZERO_W_V1_1_SDIO_FUNCTION_BACKPLANE,
-          er_pi_zero_w_v1_1_cyw43438_backplane_address(address),
-          bytes,
-          (UINT32)sizeof(bytes)) == 0u) {
-    return 0u;
-  }
-  *out_value = er_pi_zero_w_v1_1_cyw43438_read_le16(bytes);
-  return 1u;
-}
-
-static UINT32 er_pi_zero_w_v1_1_cyw43438_backplane_write16(UINT32 address,
-                                                          UINT16 value) {
-  UINT8 bytes[2];
-
-  er_pi_zero_w_v1_1_cyw43438_put_le16(bytes, value);
   return er_pi_zero_w_v1_1_cyw43438_backplane_write_bytes(
       address,
       bytes,
@@ -1461,190 +1523,83 @@ static UINT32 er_pi_zero_w_v1_1_cyw43438_set_passive(UINT32 arm_wrap,
   return er_pi_zero_w_v1_1_cyw43438_core_up(mem_wrap);
 }
 
-static UINT32 er_pi_zero_w_v1_1_cyw43438_d11_tx_fifo_probe(UINT32 d11_base,
-                                                           UINT16* out_ready) {
-  UINT32 maccontrol;
-  UINT16 command;
+static UINT32 er_pi_zero_w_v1_1_cyw43438_enable_function2(void) {
+  UINT8 ready;
+  UINT32 poll;
 
-  if (out_ready == 0 ||
-      er_pi_zero_w_v1_1_cyw43438_backplane_write32(
-          d11_base + ER_CYW43438_D11_MACCONTROL,
-          ER_CYW43438_D11_MACCONTROL_PROBE) == 0u ||
-      er_pi_zero_w_v1_1_cyw43438_backplane_read32(
-          d11_base + ER_CYW43438_D11_MACCONTROL,
-          &maccontrol) == 0u ||
-      (maccontrol & ER_CYW43438_D11_MACCONTROL_PROBE) !=
-          ER_CYW43438_D11_MACCONTROL_PROBE ||
-      er_pi_zero_w_v1_1_cyw43438_backplane_write16(
-          d11_base + ER_CYW43438_D11_XMTFIFOCMD,
-          (UINT16)ER_CYW43438_D11_TX_BCMC_FIFO_RESET) == 0u) {
+  if (er_pi_zero_w_v1_1_emmc_sdio_write_byte(
+          ER_PI_ZERO_W_V1_1_SDIO_FUNCTION_CCCR,
+          ER_PI_ZERO_W_V1_1_CYW43438_CCCR_F2_BLOCK_SIZE_LOW,
+          (UINT8)(ER_PI_ZERO_W_V1_1_CYW43438_F2_BLOCK_BYTES &
+                  ER_PI_ZERO_W_V1_1_BYTE_MASK)) == 0u ||
+      er_pi_zero_w_v1_1_emmc_sdio_write_byte(
+          ER_PI_ZERO_W_V1_1_SDIO_FUNCTION_CCCR,
+          ER_PI_ZERO_W_V1_1_CYW43438_CCCR_F2_BLOCK_SIZE_HIGH,
+          (UINT8)((ER_PI_ZERO_W_V1_1_CYW43438_F2_BLOCK_BYTES >>
+                   ER_PI_ZERO_W_V1_1_U16_HIGH_SHIFT) &
+                  ER_PI_ZERO_W_V1_1_BYTE_MASK)) == 0u ||
+      er_pi_zero_w_v1_1_emmc_sdio_write_byte(
+          ER_PI_ZERO_W_V1_1_SDIO_FUNCTION_CCCR,
+          ER_PI_ZERO_W_V1_1_CYW43438_CCCR_IO_ENABLE_ADDR,
+          ER_PI_ZERO_W_V1_1_CYW43438_CCCR_ENABLE_FUNCTIONS_1_2) == 0u) {
     return 0u;
   }
-  er_pi_zero_w_v1_1_delay(ER_PI_ZERO_W_V1_1_WIFI_GPIO_DELAY_TICKS);
-  if (er_pi_zero_w_v1_1_cyw43438_backplane_write16(
-          d11_base + ER_CYW43438_D11_XMTFIFOCMD,
-          (UINT16)ER_CYW43438_D11_TX_BCMC_FIFO_SELECT) == 0u ||
-      er_pi_zero_w_v1_1_cyw43438_backplane_read16(
-          d11_base + ER_CYW43438_D11_XMTFIFOCMD,
-          &command) == 0u ||
-      (command & ER_CYW43438_D11_TXFIFOCMD_FIFOSEL_MASK) !=
-          ER_CYW43438_D11_TX_BCMC_FIFO_SELECT ||
-      (command & ER_CYW43438_D11_TXFIFOCMD_RESET) != 0u ||
-      er_pi_zero_w_v1_1_cyw43438_backplane_read16(
-          d11_base + ER_CYW43438_D11_XMTFIFORDY,
-          out_ready) == 0u) {
-    return 0u;
-  }
-  return 1u;
-}
-
-static UINT32 er_pi_zero_w_v1_1_cyw43438_d11_write_frame_words(
-    UINT32 address,
-    const UINT8* frame,
-    UINT32 frame_len) {
-  UINT32 offset;
-
-  if (frame == 0 || frame_len == 0u) {
-    return 0u;
-  }
-  for (offset = 0u; offset < frame_len; offset += (UINT32)sizeof(UINT32)) {
-    UINT8 word_bytes[4] = {0u, 0u, 0u, 0u};
-    UINT32 byte_index;
-
-    for (byte_index = 0u;
-         byte_index < (UINT32)sizeof(UINT32) && offset + byte_index < frame_len;
-         ++byte_index) {
-      word_bytes[byte_index] = frame[offset + byte_index];
-    }
-    if (er_pi_zero_w_v1_1_cyw43438_backplane_write32(
-            address,
-            er_pi_zero_w_v1_1_cyw43438_read_le32(word_bytes)) == 0u) {
-      return 0u;
+  for (poll = 0u; poll < ER_PI_ZERO_W_V1_1_CYW43438_READY_POLL_BUDGET; ++poll) {
+    if (er_pi_zero_w_v1_1_emmc_sdio_read_direct(
+            ER_PI_ZERO_W_V1_1_SDIO_FUNCTION_CCCR,
+            ER_PI_ZERO_W_V1_1_CYW43438_CCCR_IO_READY_ADDR,
+            &ready) != 0u &&
+        (((UINT32)ready & ER_PI_ZERO_W_V1_1_CYW43438_CCCR_ENABLE_FUNCTIONS_1_2) ==
+         ER_PI_ZERO_W_V1_1_CYW43438_CCCR_ENABLE_FUNCTIONS_1_2)) {
+      return 1u;
     }
   }
-  return 1u;
+  return 0u;
 }
 
-static UINT32 er_pi_zero_w_v1_1_cyw43438_d11_stage_tx_frame(
-    UINT32 d11_base,
-    const UINT8* frame,
-    UINT32 frame_len) {
-  UINT32 maccontrol;
-  UINT32 frmtxstatus;
-  UINT32 frmtxstatus2;
-  UINT16 txe_status;
-  UINT16 frame_count;
-  UINT16 byte_count;
-  UINT16 write_pointer;
+static UINT32 er_pi_zero_w_v1_1_cyw43438_force_ht_clock(void) {
+  UINT8 clock;
+  UINT32 poll;
 
-  if (er_pi_zero_w_v1_1_cyw43438_backplane_write32(
-          d11_base + ER_CYW43438_D11_TPLATEWRPTR,
-          0u) == 0u ||
-      er_pi_zero_w_v1_1_cyw43438_d11_write_frame_words(
-          d11_base + ER_CYW43438_D11_TPLATEWRDATA,
-          frame,
-          frame_len) == 0u) {
+  if (er_pi_zero_w_v1_1_emmc_sdio_write_byte(
+          ER_PI_ZERO_W_V1_1_SDIO_FUNCTION_BACKPLANE,
+          ER_PI_ZERO_W_V1_1_CYW43438_FUNC1_CHIPCLKCSR,
+          ER_PI_ZERO_W_V1_1_CYW43438_FORCE_HW_CLKREQ_OFF |
+          ER_PI_ZERO_W_V1_1_CYW43438_HT_AVAIL_REQ) == 0u) {
     return 0u;
   }
-  g_er_pi_zero_w_v1_1_sdio_probe_state =
-      ER_PI_ZERO_W_V1_1_L2_D11_TX_TEMPLATE_LOADED;
-  g_er_pi_zero_w_v1_1_sdio_probe_response = frame_len;
-  if (er_pi_zero_w_v1_1_cyw43438_d11_write_frame_words(
-          d11_base + ER_CYW43438_D11_TX_BCMC_PIO_TX_DATA,
-          frame,
-          frame_len) == 0u) {
-    return 0u;
+  for (poll = 0u; poll < ER_PI_ZERO_W_V1_1_CYW43438_ALP_POLL_BUDGET; ++poll) {
+    if (er_pi_zero_w_v1_1_emmc_sdio_read_direct(
+            ER_PI_ZERO_W_V1_1_SDIO_FUNCTION_BACKPLANE,
+            ER_PI_ZERO_W_V1_1_CYW43438_FUNC1_CHIPCLKCSR,
+            &clock) != 0u &&
+        (((UINT32)clock & ER_PI_ZERO_W_V1_1_CYW43438_HT_AVAIL) != 0u)) {
+      return er_pi_zero_w_v1_1_emmc_sdio_write_byte(
+          ER_PI_ZERO_W_V1_1_SDIO_FUNCTION_BACKPLANE,
+          ER_PI_ZERO_W_V1_1_CYW43438_FUNC1_CHIPCLKCSR,
+          ER_PI_ZERO_W_V1_1_CYW43438_FORCE_HW_CLKREQ_OFF |
+          ER_PI_ZERO_W_V1_1_CYW43438_FORCE_HT);
+    }
   }
-  g_er_pi_zero_w_v1_1_sdio_probe_state =
-      ER_PI_ZERO_W_V1_1_L2_D11_TX_PIO_ATTEMPTED;
-  g_er_pi_zero_w_v1_1_sdio_probe_response = frame_len;
-  if (er_pi_zero_w_v1_1_cyw43438_backplane_write32(
-          d11_base + ER_CYW43438_D11_MACCONTROL,
-          ER_CYW43438_D11_MACCONTROL_TX_ATTEMPT) == 0u ||
-      er_pi_zero_w_v1_1_cyw43438_backplane_read32(
-          d11_base + ER_CYW43438_D11_MACCONTROL,
-          &maccontrol) == 0u ||
-      (maccontrol & ER_CYW43438_D11_MACCONTROL_TX_ATTEMPT) !=
-          ER_CYW43438_D11_MACCONTROL_TX_ATTEMPT) {
-    return 0u;
-  }
-  er_pi_zero_w_v1_1_delay(ER_PI_ZERO_W_V1_1_WIFI_POWER_DELAY_TICKS);
-  if (er_pi_zero_w_v1_1_cyw43438_backplane_read16(
-          d11_base + ER_CYW43438_D11_TXE_STATUS,
-          &txe_status) == 0u ||
-      er_pi_zero_w_v1_1_cyw43438_backplane_read16(
-          d11_base + ER_CYW43438_D11_XMTFIFO_FRAME_CNT,
-          &frame_count) == 0u ||
-      er_pi_zero_w_v1_1_cyw43438_backplane_read16(
-          d11_base + ER_CYW43438_D11_XMTFIFO_BYTE_CNT,
-          &byte_count) == 0u ||
-      er_pi_zero_w_v1_1_cyw43438_backplane_read16(
-          d11_base + ER_CYW43438_D11_XMTFIFO_WR_PTR,
-          &write_pointer) == 0u ||
-      er_pi_zero_w_v1_1_cyw43438_backplane_read32(
-          d11_base + ER_CYW43438_D11_FRMTXSTATUS,
-          &frmtxstatus) == 0u ||
-      er_pi_zero_w_v1_1_cyw43438_backplane_read32(
-          d11_base + ER_CYW43438_D11_FRMTXSTATUS2,
-          &frmtxstatus2) == 0u) {
-    return 0u;
-  }
-  g_er_pi_zero_w_v1_1_sdio_probe_state =
-      ER_PI_ZERO_W_V1_1_L2_D11_MAC_TX_ATTEMPTED;
-  g_er_pi_zero_w_v1_1_sdio_probe_interrupt =
-      ((UINT32)txe_status << ER_PI_ZERO_W_V1_1_U16_HIGH_SHIFT) |
-      (UINT32)byte_count;
-  g_er_pi_zero_w_v1_1_sdio_probe_response =
-      ((UINT32)frame_count << ER_PI_ZERO_W_V1_1_U16_HIGH_SHIFT) |
-      (UINT32)write_pointer;
-  (void)frmtxstatus;
-  (void)frmtxstatus2;
-  return 1u;
+  return 0u;
 }
 
-static UINT32 er_pi_zero_w_v1_1_cyw43438_start_owned_firmware(void) {
+static UINT32 er_pi_zero_w_v1_1_cyw43438_start_wlan_firmware(void) {
   UINT32 arm_base;
   UINT32 arm_wrap;
   UINT32 mem_base;
   UINT32 mem_wrap;
   UINT32 d11_base;
   UINT32 d11_wrap;
-  UINT32 mailbox;
-  UINT32 heartbeat_first;
-  UINT32 heartbeat_second;
-  UINT32 command_response;
-  UINT32 tx_status;
-  UINT32 d11_tx_frame;
-  UINT32 d11_tx_len;
-  UINT32 d11_tx_status;
-  UINT32 rx_status;
-  UINT32 tx_beacon_len;
-  UINT32 rx_probe_len;
-  UINT16 d11_fifo_ready;
-  UINT8 tx_beacon[ER_PI_ZERO_W_V1_1_IEEE80211_BEACON_LEN];
-  UINT8 rx_probe[ER_PI_ZERO_W_V1_1_IEEE80211_PROBE_REQUEST_LEN];
+  UINT32 sdio_base;
+  UINT32 sdio_wrap;
+  UINT32 nvram_address;
+  UINT32 reset_vector;
 
-  if (sizeof(ER_CYW43438_OWNED_FIRMWARE) >=
+  if (ER_PI_ZERO_W_V1_1_CYW43438_RAM_FIRMWARE_SIZE >=
           ER_PI_ZERO_W_V1_1_CYW43438_RAM_SIZE ||
-      ER_PI_ZERO_W_V1_1_IEEE80211_BEACON_LEN >
-          ER_CYW43438_OWNED_FIRMWARE_TX_FRAME_CAPACITY ||
-      ER_PI_ZERO_W_V1_1_IEEE80211_PROBE_REQUEST_LEN >
-          ER_CYW43438_OWNED_FIRMWARE_RX_FRAME_CAPACITY ||
-      (ER_CYW43438_OWNED_FIRMWARE_TX_FRAME_ADDR +
-       ER_CYW43438_OWNED_FIRMWARE_TX_FRAME_CAPACITY) >=
+      ER_PI_ZERO_W_V1_1_CYW43438_NVRAM_FIRMWARE_SIZE >=
           ER_PI_ZERO_W_V1_1_CYW43438_RAM_SIZE ||
-      (ER_CYW43438_OWNED_FIRMWARE_RX_FRAME_ADDR +
-       ER_CYW43438_OWNED_FIRMWARE_RX_FRAME_CAPACITY) >=
-          ER_PI_ZERO_W_V1_1_CYW43438_RAM_SIZE ||
-      (ER_CYW43438_OWNED_FIRMWARE_TX_FRAME_ADDR <
-       ER_CYW43438_OWNED_FIRMWARE_SIZE) ||
-      (ER_CYW43438_OWNED_FIRMWARE_RX_FRAME_ADDR <
-       ER_CYW43438_OWNED_FIRMWARE_SIZE) ||
-      (ER_CYW43438_OWNED_FIRMWARE_RX_FRAME_ADDR <
-       (ER_CYW43438_OWNED_FIRMWARE_TX_FRAME_ADDR +
-        ER_CYW43438_OWNED_FIRMWARE_TX_FRAME_CAPACITY)) ||
-      (tx_beacon_len = er_pi_zero_w_v1_1_wifi_beacon(tx_beacon)) == 0u ||
-      (rx_probe_len = er_pi_zero_w_v1_1_wifi_probe_request(rx_probe)) == 0u ||
       er_pi_zero_w_v1_1_cyw43438_buscoreprep() == 0u ||
       er_pi_zero_w_v1_1_cyw43438_find_core(
           ER_PI_ZERO_W_V1_1_CYW43438_CORE_ARM_CM3,
@@ -1658,6 +1613,10 @@ static UINT32 er_pi_zero_w_v1_1_cyw43438_start_owned_firmware(void) {
           ER_PI_ZERO_W_V1_1_CYW43438_CORE_80211,
           &d11_base,
           &d11_wrap) == 0u ||
+      er_pi_zero_w_v1_1_cyw43438_find_core(
+          ER_PI_ZERO_W_V1_1_CYW43438_SDIO_CORE,
+          &sdio_base,
+          &sdio_wrap) == 0u ||
       er_pi_zero_w_v1_1_cyw43438_set_passive(arm_wrap,
                                              mem_base,
                                              mem_wrap,
@@ -1666,159 +1625,45 @@ static UINT32 er_pi_zero_w_v1_1_cyw43438_start_owned_firmware(void) {
   }
   (void)arm_base;
   (void)mem_base;
-  if (er_pi_zero_w_v1_1_cyw43438_d11_tx_fifo_probe(d11_base,
-                                                   &d11_fifo_ready) == 0u) {
-    return 0u;
-  }
-  g_er_pi_zero_w_v1_1_sdio_probe_state =
-      ER_PI_ZERO_W_V1_1_L2_D11_TX_FIFO_READY;
-  g_er_pi_zero_w_v1_1_sdio_probe_interrupt = (UINT32)d11_fifo_ready;
-  if (er_pi_zero_w_v1_1_cyw43438_d11_stage_tx_frame(d11_base,
-                                                    tx_beacon,
-                                                    tx_beacon_len) == 0u) {
-    return 0u;
-  }
+  (void)sdio_wrap;
+  nvram_address = ER_PI_ZERO_W_V1_1_CYW43438_RAM_SIZE -
+                  (UINT32)ER_PI_ZERO_W_V1_1_CYW43438_NVRAM_FIRMWARE_SIZE;
+  reset_vector = er_pi_zero_w_v1_1_cyw43438_read_le32(
+      g_er_pi_zero_w_v1_1_cyw43438_ram_firmware);
   if (er_pi_zero_w_v1_1_cyw43438_backplane_write_bytes(
           ER_PI_ZERO_W_V1_1_CYW43438_RAM_BASE,
-          ER_CYW43438_OWNED_FIRMWARE,
-          (UINT32)sizeof(ER_CYW43438_OWNED_FIRMWARE)) == 0u ||
-      er_pi_zero_w_v1_1_cyw43438_backplane_write32(
-          ER_CYW43438_OWNED_FIRMWARE_MAILBOX_ADDR,
-          0u) == 0u ||
-      er_pi_zero_w_v1_1_cyw43438_backplane_write32(
-          ER_CYW43438_OWNED_FIRMWARE_HEARTBEAT_ADDR,
-          0u) == 0u ||
-      er_pi_zero_w_v1_1_cyw43438_backplane_write32(
-          ER_CYW43438_OWNED_FIRMWARE_COMMAND_ADDR,
-          ER_CYW43438_OWNED_FIRMWARE_COMMAND_NONE) == 0u ||
-      er_pi_zero_w_v1_1_cyw43438_backplane_write32(
-          ER_CYW43438_OWNED_FIRMWARE_RESPONSE_ADDR,
-          0u) == 0u ||
-      er_pi_zero_w_v1_1_cyw43438_backplane_write32(
-          ER_CYW43438_OWNED_FIRMWARE_TX_LEN_ADDR,
-          0u) == 0u ||
-      er_pi_zero_w_v1_1_cyw43438_backplane_write32(
-          ER_CYW43438_OWNED_FIRMWARE_TX_STATUS_ADDR,
-          0u) == 0u ||
-      er_pi_zero_w_v1_1_cyw43438_backplane_write32(
-          ER_CYW43438_OWNED_FIRMWARE_RX_LEN_ADDR,
-          0u) == 0u ||
-      er_pi_zero_w_v1_1_cyw43438_backplane_write32(
-          ER_CYW43438_OWNED_FIRMWARE_RX_STATUS_ADDR,
-          0u) == 0u ||
-      er_pi_zero_w_v1_1_cyw43438_backplane_write32(
-          ER_CYW43438_OWNED_FIRMWARE_D11_TX_FRAME_ADDR,
-          0u) == 0u ||
-      er_pi_zero_w_v1_1_cyw43438_backplane_write32(
-          ER_CYW43438_OWNED_FIRMWARE_D11_TX_LEN_ADDR,
-          0u) == 0u ||
-      er_pi_zero_w_v1_1_cyw43438_backplane_write32(
-          ER_CYW43438_OWNED_FIRMWARE_D11_TX_STATUS_ADDR,
-          0u) == 0u ||
+          g_er_pi_zero_w_v1_1_cyw43438_ram_firmware,
+          (UINT32)ER_PI_ZERO_W_V1_1_CYW43438_RAM_FIRMWARE_SIZE) == 0u ||
       er_pi_zero_w_v1_1_cyw43438_backplane_write_bytes(
-          ER_CYW43438_OWNED_FIRMWARE_TX_FRAME_ADDR,
-          tx_beacon,
-          tx_beacon_len) == 0u ||
-      er_pi_zero_w_v1_1_cyw43438_backplane_write_bytes(
-          ER_CYW43438_OWNED_FIRMWARE_RX_FRAME_ADDR,
-          rx_probe,
-          rx_probe_len) == 0u ||
-      er_pi_zero_w_v1_1_cyw43438_backplane_write32(
-          ER_CYW43438_OWNED_FIRMWARE_TX_LEN_ADDR,
-          tx_beacon_len) == 0u ||
-      er_pi_zero_w_v1_1_cyw43438_backplane_write32(
-          ER_CYW43438_OWNED_FIRMWARE_RX_LEN_ADDR,
-          rx_probe_len) == 0u ||
+          nvram_address,
+          g_er_pi_zero_w_v1_1_cyw43438_nvram_firmware,
+          (UINT32)ER_PI_ZERO_W_V1_1_CYW43438_NVRAM_FIRMWARE_SIZE) == 0u ||
       er_pi_zero_w_v1_1_cyw43438_backplane_write32(
           ER_PI_ZERO_W_V1_1_CYW43438_RAM_BASE,
-          ER_CYW43438_OWNED_FIRMWARE_RESET_VECTOR) == 0u) {
-    return 0u;
-  }
-  g_er_pi_zero_w_v1_1_sdio_probe_state =
-      ER_PI_ZERO_W_V1_1_L2_OWNED_FIRMWARE_LOADED;
-  if (er_pi_zero_w_v1_1_cyw43438_reset_core(arm_wrap, 0u, 0u, 0u) == 0u) {
+          reset_vector) == 0u ||
+      er_pi_zero_w_v1_1_cyw43438_reset_core(arm_wrap, 0u, 0u, 0u) == 0u) {
     return 0u;
   }
   er_pi_zero_w_v1_1_delay(ER_PI_ZERO_W_V1_1_WIFI_POWER_DELAY_TICKS);
-  if (er_pi_zero_w_v1_1_cyw43438_backplane_read32(
-          ER_CYW43438_OWNED_FIRMWARE_MAILBOX_ADDR,
-          &mailbox) == 0u ||
-      mailbox != ER_CYW43438_OWNED_FIRMWARE_MAILBOX_MAGIC) {
+  if (er_pi_zero_w_v1_1_cyw43438_force_ht_clock() == 0u ||
+      er_pi_zero_w_v1_1_cyw43438_backplane_write32(
+          sdio_base + ER_PI_ZERO_W_V1_1_CYW43438_SDIO_TOSBMAILBOXDATA,
+          ER_PI_ZERO_W_V1_1_CYW43438_SDPCM_PROT_VERSION <<
+              ER_PI_ZERO_W_V1_1_CYW43438_SMB_DATA_VERSION_SHIFT) == 0u ||
+      er_pi_zero_w_v1_1_cyw43438_enable_function2() == 0u ||
+      er_pi_zero_w_v1_1_cyw43438_backplane_write32(
+          sdio_base + ER_PI_ZERO_W_V1_1_CYW43438_SDIO_HOSTINTMASK,
+          ER_PI_ZERO_W_V1_1_CYW43438_HOSTINTMASK) == 0u ||
+      er_pi_zero_w_v1_1_emmc_sdio_write_byte(
+          ER_PI_ZERO_W_V1_1_SDIO_FUNCTION_BACKPLANE,
+          ER_PI_ZERO_W_V1_1_CYW43438_FUNC1_WATERMARK,
+          ER_PI_ZERO_W_V1_1_CYW43438_F2_WATERMARK) == 0u) {
     return 0u;
   }
-  if (er_pi_zero_w_v1_1_cyw43438_backplane_read32(
-          ER_CYW43438_OWNED_FIRMWARE_HEARTBEAT_ADDR,
-          &heartbeat_first) == 0u ||
-      heartbeat_first == 0u) {
-    return 0u;
-  }
-  er_pi_zero_w_v1_1_delay(ER_PI_ZERO_W_V1_1_WIFI_POWER_DELAY_TICKS);
-  if (er_pi_zero_w_v1_1_cyw43438_backplane_read32(
-          ER_CYW43438_OWNED_FIRMWARE_HEARTBEAT_ADDR,
-          &heartbeat_second) == 0u ||
-      heartbeat_second == heartbeat_first) {
-    return 0u;
-  }
-  if (er_pi_zero_w_v1_1_cyw43438_backplane_write32(
-          ER_CYW43438_OWNED_FIRMWARE_COMMAND_ADDR,
-          ER_CYW43438_OWNED_FIRMWARE_COMMAND_PING) == 0u) {
-    return 0u;
-  }
-  er_pi_zero_w_v1_1_delay(ER_PI_ZERO_W_V1_1_WIFI_POWER_DELAY_TICKS);
-  if (er_pi_zero_w_v1_1_cyw43438_backplane_read32(
-          ER_CYW43438_OWNED_FIRMWARE_RESPONSE_ADDR,
-          &command_response) == 0u ||
-      command_response != ER_CYW43438_OWNED_FIRMWARE_RESPONSE_PING_ACK) {
-    return 0u;
-  }
-  if (er_pi_zero_w_v1_1_cyw43438_backplane_write32(
-          ER_CYW43438_OWNED_FIRMWARE_COMMAND_ADDR,
-          ER_CYW43438_OWNED_FIRMWARE_COMMAND_TX_BEACON) == 0u) {
-    return 0u;
-  }
-  er_pi_zero_w_v1_1_delay(ER_PI_ZERO_W_V1_1_WIFI_POWER_DELAY_TICKS);
-  if (er_pi_zero_w_v1_1_cyw43438_backplane_read32(
-          ER_CYW43438_OWNED_FIRMWARE_RESPONSE_ADDR,
-          &command_response) == 0u ||
-      command_response != ER_CYW43438_OWNED_FIRMWARE_RESPONSE_TX_BEACON_ACK ||
-      er_pi_zero_w_v1_1_cyw43438_backplane_read32(
-          ER_CYW43438_OWNED_FIRMWARE_TX_STATUS_ADDR,
-          &tx_status) == 0u ||
-      tx_status != ER_PI_ZERO_W_V1_1_CYW_TX_STATUS_EXPECTED ||
-      er_pi_zero_w_v1_1_cyw43438_backplane_read32(
-          ER_CYW43438_OWNED_FIRMWARE_D11_TX_FRAME_ADDR,
-          &d11_tx_frame) == 0u ||
-      d11_tx_frame != ER_CYW43438_OWNED_FIRMWARE_TX_FRAME_ADDR ||
-      er_pi_zero_w_v1_1_cyw43438_backplane_read32(
-          ER_CYW43438_OWNED_FIRMWARE_D11_TX_LEN_ADDR,
-          &d11_tx_len) == 0u ||
-      d11_tx_len != tx_beacon_len ||
-      er_pi_zero_w_v1_1_cyw43438_backplane_read32(
-          ER_CYW43438_OWNED_FIRMWARE_D11_TX_STATUS_ADDR,
-          &d11_tx_status) == 0u ||
-      d11_tx_status != ER_PI_ZERO_W_V1_1_CYW_TX_STATUS_EXPECTED) {
-    return 0u;
-  }
-  if (er_pi_zero_w_v1_1_cyw43438_backplane_write32(
-          ER_CYW43438_OWNED_FIRMWARE_COMMAND_ADDR,
-          ER_CYW43438_OWNED_FIRMWARE_COMMAND_RX_PROBE) == 0u) {
-    return 0u;
-  }
-  er_pi_zero_w_v1_1_delay(ER_PI_ZERO_W_V1_1_WIFI_POWER_DELAY_TICKS);
-  if (er_pi_zero_w_v1_1_cyw43438_backplane_read32(
-          ER_CYW43438_OWNED_FIRMWARE_RESPONSE_ADDR,
-          &command_response) == 0u ||
-      command_response != ER_CYW43438_OWNED_FIRMWARE_RESPONSE_RX_PROBE_ACK ||
-      er_pi_zero_w_v1_1_cyw43438_backplane_read32(
-          ER_CYW43438_OWNED_FIRMWARE_RX_STATUS_ADDR,
-          &rx_status) == 0u ||
-      rx_status != ER_PI_ZERO_W_V1_1_CYW_RX_STATUS_EXPECTED) {
-    return 0u;
-  }
-  g_er_pi_zero_w_v1_1_sdio_probe_response = mailbox;
-  g_er_pi_zero_w_v1_1_sdio_probe_interrupt = rx_status;
-  g_er_pi_zero_w_v1_1_sdio_probe_state =
-      ER_PI_ZERO_W_V1_1_L2_CM3_ACTIVE;
+  g_er_pi_zero_w_v1_1_sdio_probe_response = sdio_base;
+  g_er_pi_zero_w_v1_1_cyw43438_sdio_base = sdio_base;
+  g_er_pi_zero_w_v1_1_sdio_probe_interrupt =
+      (UINT32)ER_PI_ZERO_W_V1_1_CYW43438_CLM_FIRMWARE_SIZE;
   return 1u;
 }
 
@@ -2124,65 +1969,6 @@ static void er_pi_zero_w_v1_1_fill_zero(UINT8* bytes, UINT32 len) {
   }
 }
 
-static void er_pi_zero_w_v1_1_fill_byte(UINT8* bytes,
-                                        UINT32 len,
-                                        UINT8 value) {
-  UINT32 i;
-
-  for (i = 0u; i < len; ++i) {
-    bytes[i] = value;
-  }
-}
-
-static void er_pi_zero_w_v1_1_wifi_put_ssid_ie(UINT8** cursor,
-                                               const UINT8* ssid) {
-  **cursor = ER_PI_ZERO_W_V1_1_IEEE80211_IE_SSID;
-  *cursor += 1u;
-  **cursor = ER_PI_ZERO_W_V1_1_L2_SSID_BYTES;
-  *cursor += 1u;
-  er_pi_zero_w_v1_1_put_bytes(cursor,
-                              ssid,
-                              ER_PI_ZERO_W_V1_1_L2_SSID_BYTES);
-}
-
-static void er_pi_zero_w_v1_1_wifi_put_rates_ie(UINT8** cursor) {
-  **cursor = ER_PI_ZERO_W_V1_1_IEEE80211_IE_SUPPORTED_RATES;
-  *cursor += 1u;
-  **cursor = ER_PI_ZERO_W_V1_1_IEEE80211_SUPPORTED_RATE_COUNT;
-  *cursor += 1u;
-  **cursor = ER_PI_ZERO_W_V1_1_IEEE80211_RATE_1M;
-  *cursor += 1u;
-  **cursor = ER_PI_ZERO_W_V1_1_IEEE80211_RATE_2M;
-  *cursor += 1u;
-  **cursor = ER_PI_ZERO_W_V1_1_IEEE80211_RATE_5M5;
-  *cursor += 1u;
-  **cursor = ER_PI_ZERO_W_V1_1_IEEE80211_RATE_11M;
-  *cursor += 1u;
-}
-
-static void er_pi_zero_w_v1_1_wifi_put_ds_ie(UINT8** cursor) {
-  **cursor = ER_PI_ZERO_W_V1_1_IEEE80211_IE_DS;
-  *cursor += 1u;
-  **cursor = 1u;
-  *cursor += 1u;
-  **cursor = ER_PI_ZERO_W_V1_1_L2_WIFI_CHANNEL;
-}
-
-static void er_pi_zero_w_v1_1_wifi_fill_broadcast_mac(UINT8* out_mac) {
-  er_pi_zero_w_v1_1_fill_byte(out_mac,
-                              ER_PI_ZERO_W_V1_1_L2_MAC_BYTES,
-                              ER_PI_ZERO_W_V1_1_IEEE80211_ADDR_BROADCAST);
-}
-
-static void er_pi_zero_w_v1_1_wifi_put_source_mac(UINT8* out_frame,
-                                                  const UINT8* mac) {
-  UINT8* cursor = out_frame + ER_PI_ZERO_W_V1_1_IEEE80211_SA_OFFSET;
-
-  er_pi_zero_w_v1_1_put_bytes(&cursor,
-                              mac,
-                              ER_PI_ZERO_W_V1_1_L2_MAC_BYTES);
-}
-
 static void er_pi_zero_w_v1_1_node_id(ErNodeId* out_node_id) {
   UINT32 i;
 
@@ -2231,68 +2017,8 @@ static UINT32 er_pi_zero_w_v1_1_wifi_address(
   return 1u;
 }
 
-static UINT32 er_pi_zero_w_v1_1_wifi_beacon(
-    UINT8 out_frame[ER_PI_ZERO_W_V1_1_IEEE80211_BEACON_LEN]) {
-  ErWifiL2ApPlan plan;
-  UINT8* cursor;
-
-  if (out_frame == 0 ||
-      er_pi_zero_w_v1_1_wifi_plan(&plan) == 0u) {
-    return 0u;
-  }
-  er_pi_zero_w_v1_1_fill_zero(out_frame,
-                              ER_PI_ZERO_W_V1_1_IEEE80211_BEACON_LEN);
-  out_frame[0] = ER_PI_ZERO_W_V1_1_IEEE80211_FC_BEACON;
-  er_pi_zero_w_v1_1_wifi_fill_broadcast_mac(
-      out_frame + ER_PI_ZERO_W_V1_1_IEEE80211_DA_OFFSET);
-  er_pi_zero_w_v1_1_wifi_put_source_mac(out_frame, plan.mac);
-  cursor = out_frame + ER_PI_ZERO_W_V1_1_IEEE80211_BSSID_OFFSET;
-  er_pi_zero_w_v1_1_put_bytes(&cursor,
-                              plan.mac,
-                              ER_PI_ZERO_W_V1_1_L2_MAC_BYTES);
-  cursor = out_frame + ER_PI_ZERO_W_V1_1_IEEE80211_SEQUENCE_OFFSET;
-  er_pi_zero_w_v1_1_put_u16(&cursor, 0u);
-  cursor = out_frame + ER_PI_ZERO_W_V1_1_IEEE80211_BEACON_FIXED_OFFSET + 8u;
-  er_pi_zero_w_v1_1_put_u16(
-      &cursor,
-      ER_PI_ZERO_W_V1_1_IEEE80211_BEACON_INTERVAL_TU);
-  er_pi_zero_w_v1_1_put_u16(&cursor,
-                            ER_PI_ZERO_W_V1_1_IEEE80211_CAPABILITY_ESS);
-  cursor = out_frame + ER_PI_ZERO_W_V1_1_IEEE80211_SSID_IE_OFFSET;
-  er_pi_zero_w_v1_1_wifi_put_ssid_ie(&cursor, plan.ssid);
-  er_pi_zero_w_v1_1_wifi_put_rates_ie(&cursor);
-  er_pi_zero_w_v1_1_wifi_put_ds_ie(&cursor);
-  return ER_PI_ZERO_W_V1_1_IEEE80211_BEACON_LEN;
-}
-
-static UINT32 er_pi_zero_w_v1_1_wifi_probe_request(
-    UINT8 out_frame[ER_PI_ZERO_W_V1_1_IEEE80211_PROBE_REQUEST_LEN]) {
-  ErWifiL2ApPlan plan;
-  UINT8* cursor;
-
-  if (out_frame == 0 ||
-      er_pi_zero_w_v1_1_wifi_plan(&plan) == 0u) {
-    return 0u;
-  }
-  er_pi_zero_w_v1_1_fill_zero(out_frame,
-                              ER_PI_ZERO_W_V1_1_IEEE80211_PROBE_REQUEST_LEN);
-  out_frame[0] = ER_PI_ZERO_W_V1_1_IEEE80211_FC_PROBE_REQUEST;
-  er_pi_zero_w_v1_1_wifi_fill_broadcast_mac(
-      out_frame + ER_PI_ZERO_W_V1_1_IEEE80211_DA_OFFSET);
-  er_pi_zero_w_v1_1_wifi_put_source_mac(out_frame, plan.mac);
-  er_pi_zero_w_v1_1_wifi_fill_broadcast_mac(
-      out_frame + ER_PI_ZERO_W_V1_1_IEEE80211_BSSID_OFFSET);
-  cursor = out_frame + ER_PI_ZERO_W_V1_1_IEEE80211_SEQUENCE_OFFSET;
-  er_pi_zero_w_v1_1_put_u16(&cursor, 0u);
-  cursor = out_frame + ER_PI_ZERO_W_V1_1_IEEE80211_BEACON_FIXED_OFFSET;
-  er_pi_zero_w_v1_1_wifi_put_ssid_ie(&cursor, plan.ssid);
-  er_pi_zero_w_v1_1_wifi_put_rates_ie(&cursor);
-  er_pi_zero_w_v1_1_wifi_put_ds_ie(&cursor);
-  return ER_PI_ZERO_W_V1_1_IEEE80211_PROBE_REQUEST_LEN;
-}
-
 static UINT32 er_pi_zero_w_v1_1_cyw43438_start_owned_l2(void) {
-  return er_pi_zero_w_v1_1_cyw43438_start_owned_firmware();
+  return er_pi_zero_w_v1_1_cyw43438_start_wlan_firmware();
 }
 
 static UINT32 er_pi_zero_w_v1_1_ota_wire_magic(const UINT8* bytes) {
@@ -2505,35 +2231,97 @@ static void er_pi_zero_w_v1_1_ota_poll_uart_rx(void) {
 
 static void er_pi_zero_w_v1_1_ota_poll_owned_rx(void) {
   ErCryptoProvider crypto;
-  UINT32 rx_len;
-  UINT8 frame[ER_CYW43438_OWNED_FIRMWARE_RX_FRAME_CAPACITY];
+  UINT32 intstatus;
+  UINT32 frame_len;
+  UINT32 checksum;
+  UINT32 remaining;
+  UINT32 read_address;
+  UINT8 src_mac[ER_NET_MAC_LEN];
+  const UINT8* erwire;
+  UINT32 erwire_len;
 
   er_crypto_blake3_provider(&crypto);
   if (g_er_pi_zero_w_v1_1_sdio_probe_state != ER_PI_ZERO_W_V1_1_L2_READY ||
+      g_er_pi_zero_w_v1_1_cyw43438_sdio_base == 0u ||
       er_pi_zero_w_v1_1_cyw43438_backplane_read32(
-          ER_CYW43438_OWNED_FIRMWARE_RX_LEN_ADDR,
-          &rx_len) == 0u ||
-      rx_len < ER_PI_ZERO_W_V1_1_ERWIRE_HEADER_SIZE ||
-      rx_len > ER_CYW43438_OWNED_FIRMWARE_RX_FRAME_CAPACITY ||
+          g_er_pi_zero_w_v1_1_cyw43438_sdio_base +
+              ER_PI_ZERO_W_V1_1_CYW43438_SDIO_INTSTATUS,
+          &intstatus) == 0u ||
+      (intstatus & ER_PI_ZERO_W_V1_1_CYW43438_INT_HMB_FRAME_IND) == 0u ||
       er_pi_zero_w_v1_1_cyw43438_set_backplane_window(
-          ER_CYW43438_OWNED_FIRMWARE_RX_FRAME_ADDR) == 0u ||
+          ER_PI_ZERO_W_V1_1_CYW43438_CHIPCOMMON_BASE) == 0u) {
+    return;
+  }
+  read_address = er_pi_zero_w_v1_1_cyw43438_backplane_address(
+      ER_PI_ZERO_W_V1_1_CYW43438_CHIPCOMMON_BASE);
+  if (er_pi_zero_w_v1_1_emmc_sdio_read_bytes(
+          ER_PI_ZERO_W_V1_1_SDIO_FUNCTION_WLAN,
+          read_address,
+          g_er_pi_zero_w_v1_1_l2_rx_frame,
+          ER_CYW43438_SDPCM_HEADER_BYTES) == 0u) {
+    return;
+  }
+  frame_len = er_pi_zero_w_v1_1_cyw43438_read_le16(
+      g_er_pi_zero_w_v1_1_l2_rx_frame);
+  checksum = er_pi_zero_w_v1_1_cyw43438_read_le16(
+      g_er_pi_zero_w_v1_1_l2_rx_frame + (UINT32)sizeof(UINT16));
+  if (frame_len < ER_CYW43438_SDPCM_HEADER_BYTES ||
+      frame_len > ER_PI_ZERO_W_V1_1_CYW43438_F2_FRAME_BYTES ||
+      ((frame_len ^ checksum) & ER_CYW43438_SDPCM_HEADER_CHECK_VALUE) !=
+          ER_CYW43438_SDPCM_HEADER_CHECK_VALUE) {
+    return;
+  }
+  remaining = frame_len - ER_CYW43438_SDPCM_HEADER_BYTES;
+  if (remaining != 0u &&
+      remaining <= ER_PI_ZERO_W_V1_1_SDIO_CMD53_COUNT_MASK &&
       er_pi_zero_w_v1_1_emmc_sdio_read_bytes(
-          ER_PI_ZERO_W_V1_1_SDIO_FUNCTION_BACKPLANE,
-          er_pi_zero_w_v1_1_cyw43438_backplane_address(
-              ER_CYW43438_OWNED_FIRMWARE_RX_FRAME_ADDR),
-          frame,
-          rx_len) == 0u ||
-      er_pi_zero_w_v1_1_ota_wire_magic(frame) !=
+          ER_PI_ZERO_W_V1_1_SDIO_FUNCTION_WLAN,
+          read_address,
+          g_er_pi_zero_w_v1_1_l2_rx_frame + ER_CYW43438_SDPCM_HEADER_BYTES,
+          remaining) == 0u) {
+    return;
+  }
+  if (remaining > ER_PI_ZERO_W_V1_1_SDIO_CMD53_COUNT_MASK) {
+    UINT32 block_count;
+
+    if (remaining <= ER_PI_ZERO_W_V1_1_CYW43438_F2_BLOCK_BYTES) {
+      block_count = 1u;
+    } else if (remaining <=
+               (ER_PI_ZERO_W_V1_1_CYW43438_F2_BLOCK_BYTES * 2u)) {
+      block_count = 2u;
+    } else {
+      block_count = 3u;
+    }
+    if (er_pi_zero_w_v1_1_emmc_sdio_read_blocks(
+            ER_PI_ZERO_W_V1_1_SDIO_FUNCTION_WLAN,
+            read_address,
+            g_er_pi_zero_w_v1_1_l2_rx_frame +
+                ER_CYW43438_SDPCM_HEADER_BYTES,
+            block_count) == 0u) {
+      return;
+    }
+  }
+  if (er_cyw43438_sdpcm_parse_broadcast_erwire(
+          g_er_pi_zero_w_v1_1_l2_rx_frame,
+          frame_len,
+          src_mac,
+          &erwire,
+          &erwire_len) == 0u ||
+      er_pi_zero_w_v1_1_ota_wire_magic(erwire) !=
           ER_PI_ZERO_W_V1_1_ERWIRE_MAGIC) {
     return;
   }
   (void)er_pi_zero_w_v1_1_ota_receive_frame(
       &g_er_pi_zero_w_v1_1_ota_state,
       &crypto,
-      frame,
-      rx_len,
+      erwire,
+      erwire_len,
       er_pi_zero_w_v1_1_ota_write_block_unbound,
       0);
+  (void)er_pi_zero_w_v1_1_cyw43438_backplane_write32(
+      g_er_pi_zero_w_v1_1_cyw43438_sdio_base +
+          ER_PI_ZERO_W_V1_1_CYW43438_SDIO_INTSTATUS,
+      intstatus);
   er_pi_zero_w_v1_1_ota_status_refresh();
 }
 
