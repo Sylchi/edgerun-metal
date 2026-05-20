@@ -597,6 +597,32 @@ er_ui_status_t er_ui_component_tooltip_emit(
   return er_ui_component_push_ascii_text(scene, font, text, bounds.x + 10.0f, bounds.y + bounds.h * 0.62f, theme.colors.text);
 }
 
+static er_ui_status_t er_ui_component_notice_text_emit(
+  er_ui_scene_t* scene,
+  vr_font_face_t* font,
+  er_ui_bounds_t bounds,
+  er_ui_resolved_theme_t theme,
+  const char* title,
+  const char* body,
+  er_ui_color4_t accent,
+  er_ui_bounds_t icon_bounds,
+  float text_x,
+  float title_y,
+  float body_y,
+  bool icon_tile) {
+  er_ui_status_t status;
+
+  if (icon_tile) {
+    status = er_ui_component_icon_tile(scene, icon_bounds, theme, ER_UI_ICON_WARNING, accent);
+  } else {
+    status = er_ui_component_push_icon(scene, icon_bounds, ER_UI_ICON_WARNING, accent);
+  }
+  if (status != ER_UI_OK) return status;
+  status = er_ui_component_push_ascii_text(scene, font, title, text_x, bounds.y + title_y, theme.colors.text);
+  if (status != ER_UI_OK) return status;
+  return er_ui_component_push_ascii_text(scene, font, body, text_x, bounds.y + body_y, theme.colors.muted);
+}
+
 er_ui_status_t er_ui_component_dialog_emit(
   er_ui_scene_t* scene,
   vr_font_face_t* font,
@@ -608,11 +634,9 @@ er_ui_status_t er_ui_component_dialog_emit(
   if (!scene || !font || !title || !body || !er_ui_bounds_valid(bounds)) return ER_UI_ERR_INVALID_ARGUMENT;
   er_ui_status_t status = er_ui_component_card_emit(scene, bounds, theme);
   if (status != ER_UI_OK) return status;
-  status = er_ui_component_icon_tile(scene, er_ui_bounds(bounds.x + 18.0f, bounds.y + 18.0f, 34.0f, 34.0f), theme, ER_UI_ICON_WARNING, accent);
-  if (status != ER_UI_OK) return status;
-  status = er_ui_component_push_ascii_text(scene, font, title, bounds.x + 64.0f, bounds.y + 32.0f, theme.colors.text);
-  if (status != ER_UI_OK) return status;
-  status = er_ui_component_push_ascii_text(scene, font, body, bounds.x + 64.0f, bounds.y + 56.0f, theme.colors.muted);
+  status = er_ui_component_notice_text_emit(scene, font, bounds, theme, title, body, accent,
+                                            er_ui_bounds(bounds.x + 18.0f, bounds.y + 18.0f, 34.0f, 34.0f),
+                                            bounds.x + 64.0f, 32.0f, 56.0f, true);
   if (status != ER_UI_OK) return status;
   return er_ui_component_separator_emit(scene, er_ui_bounds(bounds.x + 18.0f, bounds.y + 74.0f, bounds.w - 36.0f, 1.0f), theme);
 }
@@ -652,11 +676,9 @@ er_ui_status_t er_ui_component_alert_emit(
   er_ui_status_t status = er_ui_component_fill_border(scene, bounds, theme.radius.card, er_ui_color_with_alpha(theme.colors.row, 0.28f),
                                                       er_ui_color_with_alpha(theme.colors.border, 0.46f));
   if (status != ER_UI_OK) return status;
-  status = er_ui_component_push_icon(scene, er_ui_bounds(bounds.x + 12.0f, bounds.y + 14.0f, 16.0f, 16.0f), ER_UI_ICON_WARNING, accent);
-  if (status != ER_UI_OK) return status;
-  status = er_ui_component_push_ascii_text(scene, font, title, bounds.x + 34.0f, bounds.y + 24.0f, theme.colors.text);
-  if (status != ER_UI_OK) return status;
-  return er_ui_component_push_ascii_text(scene, font, body, bounds.x + 34.0f, bounds.y + 46.0f, theme.colors.muted);
+  return er_ui_component_notice_text_emit(scene, font, bounds, theme, title, body, accent,
+                                          er_ui_bounds(bounds.x + 12.0f, bounds.y + 14.0f, 16.0f, 16.0f),
+                                          bounds.x + 34.0f, 24.0f, 46.0f, false);
 }
 
 er_ui_status_t er_ui_component_avatar_emit(
@@ -1029,6 +1051,37 @@ er_ui_status_t er_ui_component_transaction_row_emit(
   return er_ui_component_bottom_separator_emit(scene, bounds, theme);
 }
 
+static er_ui_status_t er_ui_component_trailing_badge_emit(
+  er_ui_scene_t* scene,
+  vr_font_face_t* font,
+  er_ui_bounds_t bounds,
+  er_ui_resolved_theme_t theme,
+  const char* badge) {
+  if (er_ui_ascii_len(badge) == 0u) return ER_UI_OK;
+  return er_ui_component_badge_emit(scene, font,
+                                    er_ui_bounds(bounds.x + bounds.w - 84.0f,
+                                                 bounds.y + 17.0f,
+                                                 72.0f,
+                                                 24.0f),
+                                    theme,
+                                    badge,
+                                    ER_UI_COMPONENT_BADGE_SECONDARY);
+}
+
+static er_ui_status_t er_ui_component_trailing_text_emit(
+  er_ui_scene_t* scene,
+  vr_font_face_t* font,
+  er_ui_bounds_t bounds,
+  er_ui_resolved_theme_t theme,
+  const char* text) {
+  if (er_ui_ascii_len(text) == 0u) return ER_UI_OK;
+  return er_ui_component_push_ascii_text_clipped(scene, font, text,
+                                                bounds.x + bounds.w - 116.0f,
+                                                bounds.y + 34.0f,
+                                                104.0f,
+                                                theme.colors.muted);
+}
+
 er_ui_status_t er_ui_component_menu_item_emit(
   er_ui_scene_t* scene,
   vr_font_face_t* font,
@@ -1045,11 +1098,7 @@ er_ui_status_t er_ui_component_menu_item_emit(
   er_ui_status_t status = er_ui_component_row_body_emit(scene, font, bounds, theme, ER_UI_HIT_MENU_ITEM, id, true, label, detail, theme.radius.control, fill,
                                                         22.0f, 44.0f);
   if (status != ER_UI_OK) return status;
-  if (badge[0]) {
-    return er_ui_component_badge_emit(scene, font, er_ui_bounds(bounds.x + bounds.w - 84.0f, bounds.y + 17.0f, 72.0f, 24.0f), theme, badge,
-                                   ER_UI_COMPONENT_BADGE_SECONDARY);
-  }
-  return ER_UI_OK;
+  return er_ui_component_trailing_badge_emit(scene, font, bounds, theme, badge);
 }
 
 er_ui_status_t er_ui_component_control_row_emit(
@@ -1065,11 +1114,8 @@ er_ui_status_t er_ui_component_control_row_emit(
   er_ui_status_t status = er_ui_component_row_body_emit(scene, font, bounds, theme, ER_UI_HIT_LIST_ROW, id, id != 0u, label, detail, 0.0f,
                                                      theme.colors.panel, 22.0f, 44.0f);
   if (status != ER_UI_OK) return status;
-  if (accessory[0]) {
-    status = er_ui_component_push_ascii_text_clipped(scene, font, accessory, bounds.x + bounds.w - 116.0f, bounds.y + 34.0f,
-                                                     104.0f, theme.colors.muted);
-    if (status != ER_UI_OK) return status;
-  }
+  status = er_ui_component_trailing_text_emit(scene, font, bounds, theme, accessory);
+  if (status != ER_UI_OK) return status;
   return er_ui_component_bottom_separator_emit(scene, bounds, theme);
 }
 
