@@ -30,6 +30,7 @@ ErWasmHostCalls g_host_calls = {0};
 #include "test_core_ui_surface.c"
 #include "test_core_input.c"
 #include "test_core_tls_tpm.c"
+#include "test_core_tls.c"
 
 int main(void) {
   test_mem_helpers();
@@ -39,6 +40,7 @@ int main(void) {
   test_pci_config_addressing();
   test_acpi_tables();
   test_tpm_crb_direct_transport();
+  test_tls_tpm_handshake_core();
   test_tls_tpm_adapter();
   test_pci_device_classification();
   test_rtw89_pci_prepare();
