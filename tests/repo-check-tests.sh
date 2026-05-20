@@ -91,6 +91,20 @@ add_nested_readme() {
   git -C "${repo_dir}" add docs/README.md
 }
 
+add_top_level_markdown() {
+  local repo_dir="$1"
+
+  printf 'stale status\n' > "${repo_dir}/ROADMAP.md"
+  git -C "${repo_dir}" add ROADMAP.md
+}
+
+add_agents_policy() {
+  local repo_dir="$1"
+
+  printf 'policy\n' > "${repo_dir}/AGENTS.md"
+  git -C "${repo_dir}" add AGENTS.md
+}
+
 add_allowed_blake3_readme() {
   local repo_dir="$1"
 
@@ -116,6 +130,7 @@ add_vendor_ui_reference() {
 }
 
 expect_pass clean_repo
+expect_pass agents_policy add_agents_policy
 expect_pass allowed_blake3_readme add_allowed_blake3_readme
 expect_pass vendor_ui_reference add_vendor_ui_reference
 expect_fail nested_git_dir add_nested_git_dir
@@ -123,6 +138,7 @@ expect_fail gitmodules_file add_gitmodules_file
 expect_fail gitlink_entry add_gitlink
 expect_fail tracked_build_artifact add_tracked_build_artifact
 expect_fail nested_readme add_nested_readme
+expect_fail top_level_markdown add_top_level_markdown
 expect_fail unapproved_third_party add_unapproved_third_party
 
 printf 'repo-check tests passed\n'

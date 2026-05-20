@@ -31,6 +31,8 @@ enum {
 static const char ERC_BUILD_ARTIFACT_DIR[] = ".build/";
 static const char ERC_VARFONT_BUILD_ARTIFACT_DIR[] = "edgerun-ui-core/varfont/build/";
 static const char ERC_ROOT_README[] = "README.md";
+static const char ERC_AGENT_POLICY[] = "AGENTS.md";
+static const char ERC_MARKDOWN_SUFFIX[] = ".md";
 static const char ERC_THIRD_PARTY_DIR[] = "third_party/";
 static const char ERC_ALLOWED_BLAKE3_DIR[] = "third_party/blake3/";
 static const char ERC_VENDOR_UI_DIR[] = "ui/shadcn-ui/";
@@ -80,6 +82,23 @@ static int erc_has_readme_name(const char* path) {
   const char* name = slash == NULL ? path : slash + 1;
 
   return strcmp(name, ERC_ROOT_README) == 0;
+}
+
+static int erc_is_top_level_extra_markdown(const char* path) {
+  size_t path_len;
+  size_t suffix_len;
+
+  if (strchr(path, '/') != NULL ||
+      strcmp(path, ERC_ROOT_README) == 0 ||
+      strcmp(path, ERC_AGENT_POLICY) == 0) {
+    return 0;
+  }
+  path_len = strlen(path);
+  suffix_len = sizeof(ERC_MARKDOWN_SUFFIX) - 1u;
+  if (path_len < suffix_len) {
+    return 0;
+  }
+  return strcmp(path + path_len - suffix_len, ERC_MARKDOWN_SUFFIX) == 0;
 }
 
 static int erc_is_first_party_readme(const char* path) {
@@ -276,6 +295,10 @@ static int erc_scan_index(const char* root) {
     if (erc_is_first_party_readme(name) != 0) {
       free(index_bytes);
       return erc_fail("first-party documentation must use the root README.md, not nested README.md files");
+    }
+    if (erc_is_top_level_extra_markdown(name) != 0) {
+      free(index_bytes);
+      return erc_fail("first-party documentation must stay in README.md; top-level markdown docs are not allowed");
     }
     if (erc_is_unapproved_external_dependency_path(name) != 0) {
       free(index_bytes);
