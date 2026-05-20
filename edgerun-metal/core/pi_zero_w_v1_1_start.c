@@ -53,6 +53,10 @@
 #define ER_PI_ZERO_W_V1_1_SDIO_PROBE_CMD7_DONE 4u
 #define ER_PI_ZERO_W_V1_1_SDIO_PROBE_CMD52_DONE 5u
 #define ER_PI_ZERO_W_V1_1_SDIO_PROBE_ERROR 0xffffffffu
+#define ER_PI_ZERO_W_V1_1_LED_STEP_DELAY_TICKS 250000u
+#define ER_PI_ZERO_W_V1_1_EMMC_RESET_POLL_BUDGET 100000u
+#define ER_PI_ZERO_W_V1_1_EMMC_STABLE_POLL_BUDGET 100000u
+#define ER_PI_ZERO_W_V1_1_EMMC_READY_POLL_BUDGET 100000u
 
 volatile UINT32 g_er_pi_zero_w_v1_1_boot_magic =
     ER_PI_ZERO_W_V1_1_BOOT_MAGIC;
@@ -97,6 +101,42 @@ static void er_pi_zero_w_v1_1_delay(UINT32 ticks) {
 
   for (i = 0u; i < ticks; ++i) {
     __asm__ volatile("nop" ::: "memory");
+  }
+}
+
+static void er_pi_zero_w_v1_1_act_led_init(void) {
+  UINT32 fsel4;
+
+  fsel4 = er_pi_zero_w_v1_1_read(ER_PI_ZERO_W_V1_1_GPIO_BASE,
+                                 ER_PI_GPIO_GPFSEL4);
+  fsel4 = er_pi_gpio_fsel_alt(fsel4,
+                              ER_PI_GPIO_PIN_ACT_LED,
+                              ER_PI_GPIO_OUTPUT);
+  er_pi_zero_w_v1_1_write(ER_PI_ZERO_W_V1_1_GPIO_BASE,
+                          ER_PI_GPIO_GPFSEL4,
+                          fsel4);
+}
+
+static void er_pi_zero_w_v1_1_act_led_on(void) {
+  er_pi_zero_w_v1_1_write(ER_PI_ZERO_W_V1_1_GPIO_BASE,
+                          ER_PI_GPIO_GPCLR1,
+                          ER_PI_GPIO_SET_ACT_LED);
+}
+
+static void er_pi_zero_w_v1_1_act_led_off(void) {
+  er_pi_zero_w_v1_1_write(ER_PI_ZERO_W_V1_1_GPIO_BASE,
+                          ER_PI_GPIO_GPSET1,
+                          ER_PI_GPIO_SET_ACT_LED);
+}
+
+static void er_pi_zero_w_v1_1_act_led_status(UINT32 count) {
+  UINT32 i;
+
+  for (i = 0u; i < count; ++i) {
+    er_pi_zero_w_v1_1_act_led_on();
+    er_pi_zero_w_v1_1_delay(ER_PI_ZERO_W_V1_1_LED_STEP_DELAY_TICKS);
+    er_pi_zero_w_v1_1_act_led_off();
+    er_pi_zero_w_v1_1_delay(ER_PI_ZERO_W_V1_1_LED_STEP_DELAY_TICKS);
   }
 }
 
@@ -248,6 +288,87 @@ static UINT32 er_pi_zero_w_v1_1_emmc_command_value(UINT32 command_index,
   return value;
 }
 
+static UINT32 er_pi_zero_w_v1_1_emmc_control1_ident_clock(void) {
+  UINT32 divisor = ER_PI_EMMC_IDENT_CLOCK_DIVISOR;
+  UINT32 control;
+
+  control = ER_PI_EMMC_CONTROL1_CLK_INTLEN |
+            ER_PI_EMMC_CONTROL1_CLK_GENSEL |
+            (ER_PI_EMMC_CONTROL1_DATA_TOUNIT_MAX <<
+             ER_PI_EMMC_CONTROL1_DATA_TOUNIT_SHIFT);
+  control |= (divisor & ER_PI_EMMC_CONTROL1_CLK_FREQ8_MASK) <<
+             ER_PI_EMMC_CONTROL1_CLK_FREQ8_SHIFT;
+  control |= (divisor & ER_PI_EMMC_CONTROL1_CLK_FREQ_MS2_MASK) >>
+             ER_PI_EMMC_CONTROL1_CLK_FREQ_MS2_SHIFT;
+  return control;
+}
+
+static UINT32 er_pi_zero_w_v1_1_emmc_wait_clear(UINT32 offset,
+                                                UINT32 mask,
+                                                UINT32 poll_budget) {
+  UINT32 poll;
+
+  for (poll = 0u; poll < poll_budget; ++poll) {
+    if ((er_pi_zero_w_v1_1_read(ER_PI_ZERO_W_V1_1_EMMC_BASE, offset) &
+         mask) == 0u) {
+      return 1u;
+    }
+  }
+  return 0u;
+}
+
+static UINT32 er_pi_zero_w_v1_1_emmc_wait_set(UINT32 offset,
+                                              UINT32 mask,
+                                              UINT32 poll_budget) {
+  UINT32 poll;
+
+  for (poll = 0u; poll < poll_budget; ++poll) {
+    if ((er_pi_zero_w_v1_1_read(ER_PI_ZERO_W_V1_1_EMMC_BASE, offset) &
+         mask) == mask) {
+      return 1u;
+    }
+  }
+  return 0u;
+}
+
+static UINT32 er_pi_zero_w_v1_1_emmc_init(void) {
+  UINT32 control1;
+
+  er_pi_zero_w_v1_1_write(ER_PI_ZERO_W_V1_1_EMMC_BASE,
+                          ER_PI_EMMC_REG_CONTROL1,
+                          ER_PI_EMMC_CONTROL1_SRST_HC);
+  if (er_pi_zero_w_v1_1_emmc_wait_clear(
+          ER_PI_EMMC_REG_CONTROL1,
+          ER_PI_EMMC_CONTROL1_SRST_HC,
+          ER_PI_ZERO_W_V1_1_EMMC_RESET_POLL_BUDGET) == 0u) {
+    return 0u;
+  }
+  er_pi_zero_w_v1_1_write(ER_PI_ZERO_W_V1_1_EMMC_BASE,
+                          ER_PI_EMMC_REG_IRPT_EN,
+                          0u);
+  er_pi_zero_w_v1_1_write(ER_PI_ZERO_W_V1_1_EMMC_BASE,
+                          ER_PI_EMMC_REG_IRPT_MASK,
+                          0u);
+  er_pi_zero_w_v1_1_write(ER_PI_ZERO_W_V1_1_EMMC_BASE,
+                          ER_PI_EMMC_REG_INTERRUPT,
+                          ER_PI_EMMC_INTERRUPT_ALL);
+  control1 =
+      er_pi_zero_w_v1_1_emmc_control1_ident_clock();
+  er_pi_zero_w_v1_1_write(ER_PI_ZERO_W_V1_1_EMMC_BASE,
+                          ER_PI_EMMC_REG_CONTROL1,
+                          control1);
+  if (er_pi_zero_w_v1_1_emmc_wait_set(
+          ER_PI_EMMC_REG_CONTROL1,
+          ER_PI_EMMC_CONTROL1_CLK_STABLE,
+          ER_PI_ZERO_W_V1_1_EMMC_STABLE_POLL_BUDGET) == 0u) {
+    return 0u;
+  }
+  er_pi_zero_w_v1_1_write(ER_PI_ZERO_W_V1_1_EMMC_BASE,
+                          ER_PI_EMMC_REG_CONTROL1,
+                          control1 | ER_PI_EMMC_CONTROL1_CLK_EN);
+  return 1u;
+}
+
 static UINT32 er_pi_zero_w_v1_1_emmc_wait_command(UINT32* out_interrupt) {
   UINT32 poll;
   UINT32 interrupt;
@@ -278,6 +399,12 @@ static UINT32 er_pi_zero_w_v1_1_emmc_command(UINT32 command_index,
   UINT32 ok;
 
   if (out_response == 0) {
+    return 0u;
+  }
+  if (er_pi_zero_w_v1_1_emmc_wait_clear(
+          ER_PI_EMMC_REG_STATUS,
+          ER_PI_EMMC_STATUS_CMD_INHIBIT,
+          ER_PI_ZERO_W_V1_1_EMMC_READY_POLL_BUDGET) == 0u) {
     return 0u;
   }
   *out_response = 0u;
@@ -340,6 +467,10 @@ static void er_pi_zero_w_v1_1_sdio_probe(void) {
   g_er_pi_zero_w_v1_1_sdio_probe_interrupt = 0u;
   g_er_pi_zero_w_v1_1_sdio_probe_response = 0u;
   g_er_pi_zero_w_v1_1_sdio_relative_card_address = 0u;
+  if (er_pi_zero_w_v1_1_emmc_init() == 0u) {
+    g_er_pi_zero_w_v1_1_sdio_probe_state = ER_PI_ZERO_W_V1_1_SDIO_PROBE_ERROR;
+    return;
+  }
   if (er_pi_zero_w_v1_1_emmc_command(ER_PI_MMC_CMD_GO_IDLE_STATE,
                                      0u,
                                      ER_PI_MMC_RESPONSE_NONE,
@@ -632,9 +763,19 @@ static void er_pi_zero_w_v1_1_send_node_heartbeat(UINT32 heartbeat) {
 void er_pi_zero_w_v1_1_main(void) {
   UINT32 heartbeat = 0u;
 
+  er_pi_zero_w_v1_1_act_led_init();
+  er_pi_zero_w_v1_1_act_led_status(1u);
   er_pi_zero_w_v1_1_uart_init();
+  er_pi_zero_w_v1_1_act_led_status(2u);
   er_pi_zero_w_v1_1_wifi_gpio_init();
+  er_pi_zero_w_v1_1_act_led_status(3u);
   er_pi_zero_w_v1_1_sdio_probe();
+  if (g_er_pi_zero_w_v1_1_sdio_probe_state ==
+      ER_PI_ZERO_W_V1_1_SDIO_PROBE_CMD52_DONE) {
+    er_pi_zero_w_v1_1_act_led_status(5u);
+  } else {
+    er_pi_zero_w_v1_1_act_led_status(10u);
+  }
   er_pi_zero_w_v1_1_send_node_available();
 
   for (;;) {
