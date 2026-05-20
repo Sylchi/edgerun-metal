@@ -1,5 +1,32 @@
 #include "vr_font_utils_internal.h"
 
+static const size_t VR_AVAR_HEADER_SIZE = 8u;
+static const size_t VR_AVAR_AXIS_COUNT_OFFSET = 6u;
+static const size_t VR_AVAR_AXIS_OFFSET_SIZE = 2u;
+static const size_t VR_AVAR_SEGMENT_COUNT_SIZE = 2u;
+static const size_t VR_AVAR_SEGMENT_MAP_VALUE_SIZE = 4u;
+static const size_t VR_FVAR_AXIS_ARRAY_OFFSET_OFFSET = 4u;
+static const size_t VR_FVAR_AXIS_COUNT_OFFSET = 8u;
+static const size_t VR_FVAR_AXIS_SIZE_OFFSET = 10u;
+static const size_t VR_FVAR_INSTANCE_COUNT_OFFSET = 12u;
+static const size_t VR_FVAR_INSTANCE_SIZE_OFFSET = 14u;
+static const uint16_t VR_FVAR_MIN_AXIS_ARRAY_OFFSET = 16u;
+static const uint16_t VR_FVAR_MIN_AXIS_SIZE = 20u;
+static const uint16_t VR_FVAR_MIN_INSTANCE_SIZE = 4u;
+static const size_t VR_FVAR_AXIS_TAG_OFFSET = 0u;
+static const size_t VR_FVAR_AXIS_MIN_VALUE_OFFSET = 4u;
+static const size_t VR_FVAR_AXIS_DEFAULT_VALUE_OFFSET = 8u;
+static const size_t VR_FVAR_AXIS_MAX_VALUE_OFFSET = 12u;
+static const size_t VR_FVAR_AXIS_STEP_OFFSET = 16u;
+static const uint32_t VR_FVAR_TAG_BYTE0_SHIFT = 24u;
+static const uint32_t VR_FVAR_TAG_BYTE1_SHIFT = 16u;
+static const uint32_t VR_FVAR_TAG_BYTE2_SHIFT = 8u;
+static const size_t VR_FVAR_TAG_BYTE0_INDEX = 0u;
+static const size_t VR_FVAR_TAG_BYTE1_INDEX = 1u;
+static const size_t VR_FVAR_TAG_BYTE2_INDEX = 2u;
+static const size_t VR_FVAR_TAG_BYTE3_INDEX = 3u;
+static const size_t VR_FVAR_TAG_TERMINATOR_INDEX = 4u;
+
 float vr_apply_avar_mapping(const vr_font_face_t* face, uint16_t axis_index, float value) {
   if (!face || face->avar.axis_count == 0 || axis_index >= face->avar.axis_count) return value;
   if (!face->avar.map_from || !face->avar.map_to || !face->avar.segment_count || !face->avar.segment_offset) {
@@ -44,15 +71,15 @@ vr_status_t vr_parse_avar(vr_font_face_t* face) {
     return VR_ERR_NOT_FOUND;
   }
   if (t->offset + t->length > face->file_size) return VR_ERR_INVALID_FONT;
-  if (t->length < 8) return VR_ERR_INVALID_FONT;
+  if (t->length < VR_AVAR_HEADER_SIZE) return VR_ERR_INVALID_FONT;
 
   const uint8_t* p = face->file_data + t->offset;
   uint32_t version = vr_u32(p);
-  uint16_t axis_count = vr_u16(p + 6);
+  uint16_t axis_count = vr_u16(p + VR_AVAR_AXIS_COUNT_OFFSET);
 
   if (version != VR_SFNT_VERSION_MAGIC || axis_count > VR_MAX_AXES) return VR_ERR_INVALID_FONT;
   if (face->fvar.axis_count != 0 && face->fvar.axis_count != axis_count) return VR_ERR_INVALID_FONT;
-  if (t->length < 8u + (size_t)axis_count * 2u) return VR_ERR_INVALID_FONT;
+  if (t->length < VR_AVAR_HEADER_SIZE + (size_t)axis_count * VR_AVAR_AXIS_OFFSET_SIZE) return VR_ERR_INVALID_FONT;
 
   face->avar.axis_count = axis_count;
   if (axis_count == 0) {
@@ -68,13 +95,13 @@ vr_status_t vr_parse_avar(vr_font_face_t* face) {
   }
 
   uint32_t total_segments = 0;
-  const uint8_t* map_offsets = p + 8;
+  const uint8_t* map_offsets = p + VR_AVAR_HEADER_SIZE;
   for (uint16_t a = 0; a < axis_count; ++a) {
-    uint16_t off = vr_u16(map_offsets + (size_t)a * 2u);
+    uint16_t off = vr_u16(map_offsets + (size_t)a * VR_AVAR_AXIS_OFFSET_SIZE);
     if (off == 0) {
       continue;
     }
-    if ((size_t)off + 2 > t->length) {
+    if ((size_t)off + VR_AVAR_SEGMENT_COUNT_SIZE > t->length) {
       vr_face_free_array(face, seg_counts, axis_count, sizeof(uint16_t), 2u);
       vr_face_free_array(face, seg_offsets, axis_count, sizeof(size_t), 8u);
       return VR_ERR_INVALID_FONT;
@@ -101,7 +128,7 @@ vr_status_t vr_parse_avar(vr_font_face_t* face) {
 
   uint32_t cursor = 0;
   for (uint16_t a = 0; a < axis_count; ++a) {
-    uint16_t off = vr_u16(map_offsets + (size_t)a * 2u);
+    uint16_t off = vr_u16(map_offsets + (size_t)a * VR_AVAR_AXIS_OFFSET_SIZE);
     uint16_t sc = seg_counts[a];
     seg_offsets[a] = (size_t)cursor;
 
@@ -110,7 +137,7 @@ vr_status_t vr_parse_avar(vr_font_face_t* face) {
     }
 
     const uint8_t* map = p + off;
-    size_t needed = 2u + (size_t)sc * 4u;
+    size_t needed = VR_AVAR_SEGMENT_COUNT_SIZE + (size_t)sc * VR_AVAR_SEGMENT_MAP_VALUE_SIZE;
     if (off + needed > t->length) {
       vr_face_free_array(face, map_from, (size_t)total_segments, sizeof(float), 8u);
       vr_face_free_array(face, map_to, (size_t)total_segments, sizeof(float), 8u);
@@ -119,11 +146,11 @@ vr_status_t vr_parse_avar(vr_font_face_t* face) {
       return VR_ERR_INVALID_FONT;
     }
 
-    const uint8_t* from = map + 2;
-    const uint8_t* to = from + (size_t)sc * 2u;
+    const uint8_t* from = map + VR_AVAR_SEGMENT_COUNT_SIZE;
+    const uint8_t* to = from + (size_t)sc * VR_AVAR_AXIS_OFFSET_SIZE;
     for (uint16_t i = 0; i < sc; ++i) {
-      map_from[cursor + i] = vr_utils_f2dot14_to_float(vr_u16(from + ((size_t)i * 2u)));
-      map_to[cursor + i] = vr_utils_f2dot14_to_float(vr_u16(to + ((size_t)i * 2u)));
+      map_from[cursor + i] = vr_utils_f2dot14_to_float(vr_u16(from + ((size_t)i * VR_AVAR_AXIS_OFFSET_SIZE)));
+      map_to[cursor + i] = vr_utils_f2dot14_to_float(vr_u16(to + ((size_t)i * VR_AVAR_AXIS_OFFSET_SIZE)));
     }
     cursor += sc;
   }
@@ -148,18 +175,18 @@ vr_status_t vr_read_fvar(vr_font_face_t* face) {
 
   const uint8_t* p = face->file_data + t->offset;
   uint32_t version = vr_u32(p);
-  uint16_t axis_offset = vr_u16(p + 4);
-  uint16_t axis_count = vr_u16(p + 8);
-  uint16_t axis_size = vr_u16(p + 10);
-  uint16_t instance_count = vr_u16(p + 12);
-  uint16_t instance_size = vr_u16(p + 14);
-  if (version != VR_SFNT_VERSION_MAGIC || axis_count > VR_MAX_AXES || axis_size < 20) {
+  uint16_t axis_offset = vr_u16(p + VR_FVAR_AXIS_ARRAY_OFFSET_OFFSET);
+  uint16_t axis_count = vr_u16(p + VR_FVAR_AXIS_COUNT_OFFSET);
+  uint16_t axis_size = vr_u16(p + VR_FVAR_AXIS_SIZE_OFFSET);
+  uint16_t instance_count = vr_u16(p + VR_FVAR_INSTANCE_COUNT_OFFSET);
+  uint16_t instance_size = vr_u16(p + VR_FVAR_INSTANCE_SIZE_OFFSET);
+  if (version != VR_SFNT_VERSION_MAGIC || axis_count > VR_MAX_AXES || axis_size < VR_FVAR_MIN_AXIS_SIZE) {
     return VR_ERR_INVALID_FONT;
   }
-  if (axis_offset > t->length || axis_offset < 16u) {
+  if (axis_offset > t->length || axis_offset < VR_FVAR_MIN_AXIS_ARRAY_OFFSET) {
     return VR_ERR_INVALID_FONT;
   }
-  if (instance_size < 4u && instance_count != 0u) {
+  if (instance_size < VR_FVAR_MIN_INSTANCE_SIZE && instance_count != 0u) {
     return VR_ERR_INVALID_FONT;
   }
   size_t instance_records_size = (size_t)instance_count * (size_t)instance_size;
@@ -173,21 +200,21 @@ vr_status_t vr_read_fvar(vr_font_face_t* face) {
 
   const uint8_t* a = p + axis_offset;
   for (uint16_t i = 0; i < axis_count; ++i) {
-    if ((size_t)(a - p) + 20 > t->length) {
+    if ((size_t)(a - p) + VR_FVAR_MIN_AXIS_SIZE > t->length) {
       return VR_ERR_INVALID_FONT;
     }
-    uint32_t tag = vr_u32(a);
-    float minValue = vr_fixed_to_float(vr_u32(a + 4));
-    float defaultValue = vr_fixed_to_float(vr_u32(a + 8));
-    float maxValue = vr_fixed_to_float(vr_u32(a + 12));
-    float step = vr_fixed_to_float(vr_u32(a + 16));
+    uint32_t tag = vr_u32(a + VR_FVAR_AXIS_TAG_OFFSET);
+    float minValue = vr_fixed_to_float(vr_u32(a + VR_FVAR_AXIS_MIN_VALUE_OFFSET));
+    float defaultValue = vr_fixed_to_float(vr_u32(a + VR_FVAR_AXIS_DEFAULT_VALUE_OFFSET));
+    float maxValue = vr_fixed_to_float(vr_u32(a + VR_FVAR_AXIS_MAX_VALUE_OFFSET));
+    float step = vr_fixed_to_float(vr_u32(a + VR_FVAR_AXIS_STEP_OFFSET));
     (void)step;
 
-    face->fvar.descriptors[i].tag[0] = (char)(tag >> 24);
-    face->fvar.descriptors[i].tag[1] = (char)(tag >> 16);
-    face->fvar.descriptors[i].tag[2] = (char)(tag >> 8);
-    face->fvar.descriptors[i].tag[3] = (char)tag;
-    face->fvar.descriptors[i].tag[4] = '\0';
+    face->fvar.descriptors[i].tag[VR_FVAR_TAG_BYTE0_INDEX] = (char)(tag >> VR_FVAR_TAG_BYTE0_SHIFT);
+    face->fvar.descriptors[i].tag[VR_FVAR_TAG_BYTE1_INDEX] = (char)(tag >> VR_FVAR_TAG_BYTE1_SHIFT);
+    face->fvar.descriptors[i].tag[VR_FVAR_TAG_BYTE2_INDEX] = (char)(tag >> VR_FVAR_TAG_BYTE2_SHIFT);
+    face->fvar.descriptors[i].tag[VR_FVAR_TAG_BYTE3_INDEX] = (char)tag;
+    face->fvar.descriptors[i].tag[VR_FVAR_TAG_TERMINATOR_INDEX] = '\0';
     face->fvar.descriptors[i].min = minValue;
     face->fvar.descriptors[i].default_value = defaultValue;
     face->fvar.descriptors[i].max = maxValue;

@@ -1,18 +1,39 @@
 #include "vr_font_utils_internal.h"
 
+static const size_t VR_CMAP_U16_SIZE = 2u;
+static const size_t VR_CMAP_U32_SIZE = 4u;
+static const size_t VR_CMAP_FORMAT4_LANGUAGE_OFFSET = 4u;
+static const size_t VR_CMAP_FORMAT4_SEG_COUNT_X2_OFFSET = 6u;
+static const size_t VR_CMAP_FORMAT4_ARRAYS_OFFSET = 14u;
+static const size_t VR_CMAP_FORMAT4_ARRAY_COUNT = 4u;
+static const size_t VR_CMAP_FORMAT12_LANGUAGE_OFFSET = 4u;
+static const size_t VR_CMAP_FORMAT12_HEADER_SIZE = 16u;
+static const size_t VR_CMAP_FORMAT12_GROUP_COUNT_OFFSET = 12u;
+static const size_t VR_CMAP_FORMAT12_GROUP_RECORD_SIZE = 12u;
+static const size_t VR_CMAP_FORMAT12_GROUP_START_CHAR_OFFSET = 0u;
+static const size_t VR_CMAP_FORMAT12_GROUP_END_CHAR_OFFSET = 4u;
+static const size_t VR_CMAP_FORMAT12_GROUP_START_GLYPH_OFFSET = 8u;
+static const size_t VR_CMAP_ENCODING_RECORD_SIZE = 8u;
+static const size_t VR_CMAP_ENCODING_RECORD_PLATFORM_OFFSET = 0u;
+static const size_t VR_CMAP_ENCODING_RECORD_SUBTABLE_OFFSET = 4u;
+static const size_t VR_CMAP_HEADER_TABLE_COUNT_OFFSET = 2u;
+static const size_t VR_CMAP_HEADER_ENCODING_RECORDS_OFFSET = 4u;
+static const size_t VR_CMAP_SUBTABLE_LENGTH_OFFSET = 2u;
+static const uint32_t VR_CMAP_GLYPH_ID_MASK = 0xFFFFu;
+
 vr_status_t vr_parse_cmap_format4(
   vr_font_face_t* face,
   const uint8_t* sub,
   uint16_t length) {
   face->cmap.format = VR_CMAP_FORMAT_4;
   face->cmap.length = length;
-  face->cmap.language = vr_u16(sub + 4);
-  uint16_t seg_count_x2 = vr_u16(sub + 6);
+  face->cmap.language = vr_u16(sub + VR_CMAP_FORMAT4_LANGUAGE_OFFSET);
+  uint16_t seg_count_x2 = vr_u16(sub + VR_CMAP_FORMAT4_SEG_COUNT_X2_OFFSET);
   face->cmap.u.format4.seg_count_x2 = seg_count_x2;
 
-  uint16_t seg_count = (uint16_t)(seg_count_x2 / 2u);
-  const uint8_t* q = sub + 14;
-  size_t headers = (size_t)4u * 2u * (size_t)seg_count;
+  uint16_t seg_count = (uint16_t)(seg_count_x2 / VR_CMAP_U16_SIZE);
+  const uint8_t* q = sub + VR_CMAP_FORMAT4_ARRAYS_OFFSET;
+  size_t headers = VR_CMAP_FORMAT4_ARRAY_COUNT * VR_CMAP_U16_SIZE * (size_t)seg_count;
   if ((size_t)length < (size_t)(q - sub) + headers) return VR_ERR_INVALID_FONT;
 
   uint16_t* end_code = (uint16_t*)vr_face_alloc_array(face, seg_count, sizeof(uint16_t), 2u);
@@ -28,24 +49,24 @@ vr_status_t vr_parse_cmap_format4(
   }
 
   for (uint16_t i = 0; i < seg_count; ++i) {
-    end_code[i] = vr_u16(q + i * 2u);
+    end_code[i] = vr_u16(q + i * VR_CMAP_U16_SIZE);
   }
-  q += (size_t)seg_count * 2u + 2u;
+  q += (size_t)seg_count * VR_CMAP_U16_SIZE + VR_CMAP_U16_SIZE;
   for (uint16_t i = 0; i < seg_count; ++i) {
-    start_code[i] = vr_u16(q + i * 2u);
+    start_code[i] = vr_u16(q + i * VR_CMAP_U16_SIZE);
   }
-  q += (size_t)seg_count * 2u;
+  q += (size_t)seg_count * VR_CMAP_U16_SIZE;
   for (uint16_t i = 0; i < seg_count; ++i) {
-    id_delta[i] = (int16_t)vr_u16(q + i * 2u);
+    id_delta[i] = (int16_t)vr_u16(q + i * VR_CMAP_U16_SIZE);
   }
-  q += (size_t)seg_count * 2u;
+  q += (size_t)seg_count * VR_CMAP_U16_SIZE;
   for (uint16_t i = 0; i < seg_count; ++i) {
-    id_range_offset[i] = vr_u16(q + i * 2u);
+    id_range_offset[i] = vr_u16(q + i * VR_CMAP_U16_SIZE);
   }
-  q += (size_t)seg_count * 2u;
+  q += (size_t)seg_count * VR_CMAP_U16_SIZE;
 
   size_t remaining = (size_t)length - (size_t)(q - sub);
-  size_t glyph_count = remaining / 2u;
+  size_t glyph_count = remaining / VR_CMAP_U16_SIZE;
   uint16_t* glyph_id_array = NULL;
   if (glyph_count > 0u) {
     glyph_id_array = (uint16_t*)vr_face_alloc_array(face, glyph_count, sizeof(uint16_t), 2u);
@@ -58,7 +79,7 @@ vr_status_t vr_parse_cmap_format4(
     return VR_ERR_OOM;
   }
   for (size_t i = 0; i < glyph_count; ++i) {
-    glyph_id_array[i] = vr_u16(q + i * 2u);
+    glyph_id_array[i] = vr_u16(q + i * VR_CMAP_U16_SIZE);
   }
 
   face->cmap.u.format4.end_code = end_code;
@@ -75,33 +96,34 @@ vr_status_t vr_parse_cmap_format12(
   const uint8_t* sub,
   uint16_t length) {
   face->cmap.format = VR_CMAP_FORMAT_12;
-  face->cmap.language = vr_u16(sub + 4);
+  face->cmap.language = vr_u16(sub + VR_CMAP_FORMAT12_LANGUAGE_OFFSET);
 
-  if (length < 16u) return VR_ERR_INVALID_FONT;
-  uint32_t n_groups = vr_u32(sub + 12);
-  const uint8_t* q = sub + 16;
-  size_t needed = 16u + (size_t)n_groups * 12u;
+  if (length < VR_CMAP_FORMAT12_HEADER_SIZE) return VR_ERR_INVALID_FONT;
+  uint32_t n_groups = vr_u32(sub + VR_CMAP_FORMAT12_GROUP_COUNT_OFFSET);
+  const uint8_t* q = sub + VR_CMAP_FORMAT12_HEADER_SIZE;
+  size_t needed = VR_CMAP_FORMAT12_HEADER_SIZE + (size_t)n_groups * VR_CMAP_FORMAT12_GROUP_RECORD_SIZE;
   if (needed > (size_t)length) return VR_ERR_INVALID_FONT;
 
   uint32_t* start_char = NULL;
   uint32_t* end_char = NULL;
   uint32_t* start_glyph = NULL;
   if (n_groups > 0u) {
-    start_char = (uint32_t*)vr_face_alloc_array(face, n_groups, sizeof(uint32_t), 4u);
-    end_char = (uint32_t*)vr_face_alloc_array(face, n_groups, sizeof(uint32_t), 4u);
-    start_glyph = (uint32_t*)vr_face_alloc_array(face, n_groups, sizeof(uint32_t), 4u);
+    start_char = (uint32_t*)vr_face_alloc_array(face, n_groups, sizeof(uint32_t), VR_CMAP_U32_SIZE);
+    end_char = (uint32_t*)vr_face_alloc_array(face, n_groups, sizeof(uint32_t), VR_CMAP_U32_SIZE);
+    start_glyph = (uint32_t*)vr_face_alloc_array(face, n_groups, sizeof(uint32_t), VR_CMAP_U32_SIZE);
   }
   if (n_groups > 0u && (!start_char || !end_char || !start_glyph)) {
-    vr_face_free_array(face, start_char, n_groups, sizeof(uint32_t), 4u);
-    vr_face_free_array(face, end_char, n_groups, sizeof(uint32_t), 4u);
-    vr_face_free_array(face, start_glyph, n_groups, sizeof(uint32_t), 4u);
+    vr_face_free_array(face, start_char, n_groups, sizeof(uint32_t), VR_CMAP_U32_SIZE);
+    vr_face_free_array(face, end_char, n_groups, sizeof(uint32_t), VR_CMAP_U32_SIZE);
+    vr_face_free_array(face, start_glyph, n_groups, sizeof(uint32_t), VR_CMAP_U32_SIZE);
     return VR_ERR_OOM;
   }
 
   for (uint32_t i = 0; i < n_groups; ++i) {
-    start_char[i] = vr_u32(q + i * 12u);
-    end_char[i] = vr_u32(q + i * 12u + 4u);
-    start_glyph[i] = vr_u32(q + i * 12u + 8u);
+    const uint8_t* group = q + i * VR_CMAP_FORMAT12_GROUP_RECORD_SIZE;
+    start_char[i] = vr_u32(group + VR_CMAP_FORMAT12_GROUP_START_CHAR_OFFSET);
+    end_char[i] = vr_u32(group + VR_CMAP_FORMAT12_GROUP_END_CHAR_OFFSET);
+    start_glyph[i] = vr_u32(group + VR_CMAP_FORMAT12_GROUP_START_GLYPH_OFFSET);
   }
 
   face->cmap.u.format12.n_groups = n_groups;
@@ -112,14 +134,15 @@ vr_status_t vr_parse_cmap_format12(
 }
 
 uint32_t vr_find_preferred_cmap_offset(const vr_font_face_t* face, const uint8_t* p) {
-  uint16_t count = vr_u16(p + 2);
-  const uint8_t* enc = p + 4;
+  uint16_t count = vr_u16(p + VR_CMAP_HEADER_TABLE_COUNT_OFFSET);
+  const uint8_t* enc = p + VR_CMAP_HEADER_ENCODING_RECORDS_OFFSET;
   uint32_t selected = 0u;
   bool preferred_found = false;
 
   for (uint16_t i = 0; i < count; ++i) {
-    uint16_t platform_id = vr_u16(enc + (size_t)i * 8u);
-    uint32_t offset = vr_u32(enc + (size_t)i * 8u + 4u);
+    const uint8_t* record = enc + (size_t)i * VR_CMAP_ENCODING_RECORD_SIZE;
+    uint16_t platform_id = vr_u16(record + VR_CMAP_ENCODING_RECORD_PLATFORM_OFFSET);
+    uint32_t offset = vr_u32(record + VR_CMAP_ENCODING_RECORD_SUBTABLE_OFFSET);
     face->cmap_offsets[i] = offset;
     if (!preferred_found && (platform_id == VR_CMAP_PLATFORM_ID_WINDOWS || platform_id == VR_CMAP_PLATFORM_ID_UNICODE)) {
       selected = offset;
@@ -146,12 +169,12 @@ vr_status_t vr_parse_cmap(vr_font_face_t* face) {
   if (version != VR_CMAP_TABLE_VERSION) {
     return VR_ERR_INVALID_FONT;
   }
-  uint16_t numTables = vr_u16(p + 2);
+  uint16_t numTables = vr_u16(p + VR_CMAP_HEADER_TABLE_COUNT_OFFSET);
 
   face->cmap_offset_count = numTables;
   face->cmap_offsets = NULL;
   if (numTables > 0u) {
-    face->cmap_offsets = (uint32_t*)vr_face_alloc_array(face, numTables, sizeof(uint32_t), 4u);
+    face->cmap_offsets = (uint32_t*)vr_face_alloc_array(face, numTables, sizeof(uint32_t), VR_CMAP_U32_SIZE);
   }
   if (numTables > 0u && !face->cmap_offsets) {
     return VR_ERR_OOM;
@@ -163,7 +186,7 @@ vr_status_t vr_parse_cmap(vr_font_face_t* face) {
   }
 
   const uint8_t* sub = p + sel;
-  uint16_t length = vr_u16(sub + 2);
+  uint16_t length = vr_u16(sub + VR_CMAP_SUBTABLE_LENGTH_OFFSET);
   vr_zero(&face->cmap, sizeof(vr_cmap_table_t));
   if (length == 0u || sub + length > p + cmap->length) {
     return VR_ERR_INVALID_FONT;
@@ -189,7 +212,7 @@ uint16_t vr_find_glyph_id(vr_font_face_t* face, uint32_t codepoint) {
   if (!face || !face->cmap.format) return 0;
   switch (face->cmap.format) {
     case VR_CMAP_FORMAT_4: {
-      uint16_t seg_count = face->cmap.u.format4.seg_count_x2 / 2u;
+      uint16_t seg_count = face->cmap.u.format4.seg_count_x2 / VR_CMAP_U16_SIZE;
       for (uint16_t i = 0; i < seg_count; ++i) {
         uint16_t end_code = face->cmap.u.format4.end_code[i];
         uint16_t start_code = face->cmap.u.format4.start_code[i];
@@ -200,7 +223,9 @@ uint16_t vr_find_glyph_id(vr_font_face_t* face, uint32_t codepoint) {
           return (uint16_t)(codepoint + delta);
         }
 
-        size_t idx = (size_t)(range_offset / 2u) + (size_t)(codepoint - start_code) - (size_t)(seg_count - i);
+        size_t idx = (size_t)(range_offset / VR_CMAP_U16_SIZE) +
+                     (size_t)(codepoint - start_code) -
+                     (size_t)(seg_count - i);
         if (idx < face->cmap.u.format4.glyph_id_array_count) {
           uint16_t g = face->cmap.u.format4.glyph_id_array[idx];
           if (g == 0u) return 0u;
@@ -216,7 +241,7 @@ uint16_t vr_find_glyph_id(vr_font_face_t* face, uint32_t codepoint) {
         uint32_t e = face->cmap.u.format12.end_char_code[i];
         if (codepoint < s || codepoint > e) continue;
         uint32_t g = face->cmap.u.format12.start_glyph_id[i] + (codepoint - s);
-        return (uint16_t)(g & 0xFFFFu);
+        return (uint16_t)(g & VR_CMAP_GLYPH_ID_MASK);
       }
       return 0u;
     default:
