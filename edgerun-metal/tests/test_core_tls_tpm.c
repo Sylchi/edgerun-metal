@@ -338,6 +338,8 @@ static void test_tls_tpm_adapter(void) {
   check_uint64("tls tpm hmac handle", handle, TEST_TLS_TPM_HANDLE_HMAC);
   check_uint64("tls tpm hmac load seed", script.last_command[18], TEST_TLS_TPM_RANDOM_SEED);
   check_uint64("tls tpm hmac load unique", script.last_command[100], TEST_TLS_TPM_DIGEST_SEED);
+  check_int64("tls tpm hmac load command scrubbed",
+              er_mem_any_nonzero(tls_tpm.command, (UINTN)sizeof(tls_tpm.command)), 0);
   check_int64("tls tpm hmac",
               er_tls_tpm_hmac_sha256(&tls_tpm, handle, random, ER_TPM_SHA256_DIGEST_LEN, digest), 1);
   check_uint64("tls tpm hmac command", script.last_command_code, ER_TPM_CC_HMAC);
@@ -348,6 +350,8 @@ static void test_tls_tpm_adapter(void) {
   check_uint64("tls tpm aes load seed", script.last_command[18], TEST_TLS_TPM_RANDOM_SEED);
   check_uint64("tls tpm aes load unique", script.last_command[88], TEST_TLS_TPM_DIGEST_SEED);
   check_uint64("tls tpm aes mode", script.last_command[85], ER_TPM_ALG_CTR);
+  check_int64("tls tpm aes load command scrubbed",
+              er_mem_any_nonzero(tls_tpm.command, (UINTN)sizeof(tls_tpm.command)), 0);
 
   test_fill_bytes(iv, (UINTN)sizeof(iv), 0x50u);
   check_int64("tls tpm record crypt",
