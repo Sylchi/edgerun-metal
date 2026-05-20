@@ -21,6 +21,7 @@ add_library(edgerun_crypto STATIC
 )
 target_include_directories(edgerun_crypto PUBLIC
   ${CMAKE_CURRENT_SOURCE_DIR}/include
+  ${CMAKE_CURRENT_SOURCE_DIR}/../include
 )
 target_compile_features(edgerun_crypto PUBLIC c_std_11)
 if(ER_CRYPTO_DISABLE_SIMD)

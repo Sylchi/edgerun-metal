@@ -1922,6 +1922,7 @@ static int erb_target_crypto_test(int print_plan) {
     return 1;
   }
   if (erb_args_push(&args, "-Iedgerun-crypto/include") != 0 ||
+      erb_args_push(&args, "-Iinclude") != 0 ||
       erb_args_push(&args, "edgerun-crypto/tests/test_store.c") != 0 ||
       erb_args_push(&args, "edgerun-crypto/src/er_store.c") != 0 ||
       erb_args_push(&args, "edgerun-crypto/src/er_blake3.c") != 0) {
