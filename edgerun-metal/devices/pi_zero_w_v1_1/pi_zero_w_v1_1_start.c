@@ -1,4 +1,5 @@
 #include "er_pi_zero_w_v1_1_uart.h"
+#include "er_pi_zero_w_v1_1_ota.h"
 #include "er_cyw43438_d11.h"
 #include "er_cyw43438_owned_firmware.h"
 #include "er_types.h"
@@ -157,6 +158,7 @@
 #define ER_PI_ZERO_W_V1_1_L2_D11_TX_TEMPLATE_LOADED 15u
 #define ER_PI_ZERO_W_V1_1_L2_D11_TX_PIO_ATTEMPTED 16u
 #define ER_PI_ZERO_W_V1_1_L2_D11_MAC_TX_ATTEMPTED 17u
+#define ER_PI_ZERO_W_V1_1_L2_OTA_LISTENING 18u
 
 volatile UINT32 g_er_pi_zero_w_v1_1_boot_magic =
     ER_PI_ZERO_W_V1_1_BOOT_MAGIC;
@@ -165,6 +167,13 @@ volatile UINT32 g_er_pi_zero_w_v1_1_sdio_probe_state =
 volatile UINT32 g_er_pi_zero_w_v1_1_sdio_probe_interrupt = 0u;
 volatile UINT32 g_er_pi_zero_w_v1_1_sdio_probe_response = 0u;
 volatile UINT32 g_er_pi_zero_w_v1_1_sdio_relative_card_address = 0u;
+volatile UINT32 g_er_pi_zero_w_v1_1_ota_status =
+    ER_PI_ZERO_W_V1_1_OTA_STATUS_IDLE;
+volatile UINT32 g_er_pi_zero_w_v1_1_ota_offset = 0u;
+volatile UINT32 g_er_pi_zero_w_v1_1_ota_target_block =
+    ER_PI_ZERO_W_V1_1_OTA_DEFAULT_SLOT_BLOCK;
+
+static ErPiZeroWV11OtaState g_er_pi_zero_w_v1_1_ota_state;
 
 static const UINT8 g_er_pi_zero_w_v1_1_node_id[ER_PI_ZERO_W_V1_1_NODE_BYTES] = {
   0x45u, 0x52u, 0x5au, 0x57u, 0x50u, 0x49u, 0x30u, 0x31u,
@@ -1991,6 +2000,69 @@ static UINT32 er_pi_zero_w_v1_1_cyw43438_start_owned_l2(void) {
   return er_pi_zero_w_v1_1_cyw43438_start_owned_firmware();
 }
 
+static UINT32 er_pi_zero_w_v1_1_ota_wire_magic(const UINT8* bytes) {
+  if (bytes == 0) {
+    return 0u;
+  }
+  return (UINT32)bytes[0] |
+         ((UINT32)bytes[1] << ER_PI_ZERO_W_V1_1_U16_HIGH_SHIFT) |
+         ((UINT32)bytes[2] << ER_PI_ZERO_W_V1_1_U32_BYTE2_SHIFT) |
+         ((UINT32)bytes[3] << ER_PI_ZERO_W_V1_1_U32_BYTE3_SHIFT);
+}
+
+static UINT8 er_pi_zero_w_v1_1_ota_write_block_unbound(
+    void* ctx,
+    UINT32 block_address,
+    const UINT8 block[ER_PI_ZERO_W_V1_1_OTA_BLOCK_BYTES]) {
+  (void)ctx;
+  (void)block_address;
+  (void)block;
+  return 0u;
+}
+
+static void er_pi_zero_w_v1_1_ota_status_refresh(void) {
+  g_er_pi_zero_w_v1_1_ota_status = g_er_pi_zero_w_v1_1_ota_state.status;
+  g_er_pi_zero_w_v1_1_ota_offset = g_er_pi_zero_w_v1_1_ota_state.next_offset;
+  g_er_pi_zero_w_v1_1_ota_target_block =
+      g_er_pi_zero_w_v1_1_ota_state.target_block;
+}
+
+static void er_pi_zero_w_v1_1_ota_listen_init(void) {
+  er_pi_zero_w_v1_1_ota_reset(&g_er_pi_zero_w_v1_1_ota_state);
+  er_pi_zero_w_v1_1_ota_status_refresh();
+}
+
+static void er_pi_zero_w_v1_1_ota_poll_owned_rx(void) {
+  UINT32 rx_len;
+  UINT8 frame[ER_CYW43438_OWNED_FIRMWARE_RX_FRAME_CAPACITY];
+
+  if (g_er_pi_zero_w_v1_1_sdio_probe_state != ER_PI_ZERO_W_V1_1_L2_READY ||
+      er_pi_zero_w_v1_1_cyw43438_backplane_read32(
+          ER_CYW43438_OWNED_FIRMWARE_RX_LEN_ADDR,
+          &rx_len) == 0u ||
+      rx_len < ER_PI_ZERO_W_V1_1_OTA_HEADER_BYTES ||
+      rx_len > ER_CYW43438_OWNED_FIRMWARE_RX_FRAME_CAPACITY ||
+      er_pi_zero_w_v1_1_cyw43438_set_backplane_window(
+          ER_CYW43438_OWNED_FIRMWARE_RX_FRAME_ADDR) == 0u ||
+      er_pi_zero_w_v1_1_emmc_sdio_read_bytes(
+          ER_PI_ZERO_W_V1_1_SDIO_FUNCTION_BACKPLANE,
+          er_pi_zero_w_v1_1_cyw43438_backplane_address(
+              ER_CYW43438_OWNED_FIRMWARE_RX_FRAME_ADDR),
+          frame,
+          rx_len) == 0u ||
+      er_pi_zero_w_v1_1_ota_wire_magic(frame) !=
+          ER_PI_ZERO_W_V1_1_OTA_MAGIC) {
+    return;
+  }
+  (void)er_pi_zero_w_v1_1_ota_receive_frame(
+      &g_er_pi_zero_w_v1_1_ota_state,
+      frame,
+      rx_len,
+      er_pi_zero_w_v1_1_ota_write_block_unbound,
+      0);
+  er_pi_zero_w_v1_1_ota_status_refresh();
+}
+
 static UINT32 er_pi_zero_w_v1_1_crc32(const UINT8* bytes, UINT32 len) {
   UINT32 crc = ER_PI_ZERO_W_V1_1_CRC32_INITIAL;
   UINT32 i;
@@ -2057,6 +2129,15 @@ static void er_pi_zero_w_v1_1_send_node_available(void) {
       &cursor,
       (UINT32)g_er_pi_zero_w_v1_1_sdio_relative_card_address);
   er_pi_zero_w_v1_1_put_u32(&cursor, l2_ready);
+  er_pi_zero_w_v1_1_put_u32(
+      &cursor,
+      (UINT32)g_er_pi_zero_w_v1_1_ota_status);
+  er_pi_zero_w_v1_1_put_u32(
+      &cursor,
+      (UINT32)g_er_pi_zero_w_v1_1_ota_offset);
+  er_pi_zero_w_v1_1_put_u32(
+      &cursor,
+      (UINT32)g_er_pi_zero_w_v1_1_ota_target_block);
   cursor = payload;
   er_pi_zero_w_v1_1_put_u16(&cursor, ER_PI_ZERO_W_V1_1_WORK_ABI_VERSION);
   er_pi_zero_w_v1_1_put_u16(&cursor, ER_PI_ZERO_W_V1_1_NODE_ROLE_RELAY);
@@ -2121,6 +2202,7 @@ void er_pi_zero_w_v1_1_main(void) {
   er_pi_zero_w_v1_1_act_led_status(ER_PI_ZERO_W_V1_1_LED_BOOT_ENTRY);
   er_pi_zero_w_v1_1_uart_init();
   er_pi_zero_w_v1_1_act_led_status(ER_PI_ZERO_W_V1_1_LED_UART_READY);
+  er_pi_zero_w_v1_1_ota_listen_init();
   er_pi_zero_w_v1_1_wifi_gpio_init();
   er_pi_zero_w_v1_1_act_led_status(ER_PI_ZERO_W_V1_1_LED_WIFI_POWERED);
   er_pi_zero_w_v1_1_sdio_probe();
@@ -2128,6 +2210,7 @@ void er_pi_zero_w_v1_1_main(void) {
           ER_PI_ZERO_W_V1_1_SDIO_PROBE_CMD53_DONE &&
       er_pi_zero_w_v1_1_cyw43438_start_owned_l2() != 0u) {
     g_er_pi_zero_w_v1_1_sdio_probe_state = ER_PI_ZERO_W_V1_1_L2_READY;
+    er_pi_zero_w_v1_1_ota_status_refresh();
     er_pi_zero_w_v1_1_act_led_status(ER_PI_ZERO_W_V1_1_LED_CYW_MAILBOX_OK);
   } else {
     er_pi_zero_w_v1_1_act_led_status(ER_PI_ZERO_W_V1_1_LED_CYW_MAILBOX_FAIL);
@@ -2136,6 +2219,7 @@ void er_pi_zero_w_v1_1_main(void) {
 
   for (;;) {
     g_er_pi_zero_w_v1_1_boot_magic = ER_PI_ZERO_W_V1_1_BOOT_MAGIC;
+    er_pi_zero_w_v1_1_ota_poll_owned_rx();
     er_pi_zero_w_v1_1_send_node_heartbeat(heartbeat);
     heartbeat += 1u;
     er_pi_zero_w_v1_1_delay(

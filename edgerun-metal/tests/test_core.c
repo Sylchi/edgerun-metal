@@ -22,6 +22,7 @@ ErWasmHostCalls g_host_calls = {0};
 #include "test_core_boot_services.c"
 #include "test_core_pi_zero2w.c"
 #include "test_core_pi_zero_w_v1_1.c"
+#include "test_core_pi_zero_w_v1_1_ota.c"
 #include "test_core_pi_usb_control.c"
 #include "test_core_ieee80211_ap.c"
 #include "test_core_cyw43438_d11.c"
@@ -93,6 +94,8 @@ int main(void) {
   test_boot_services_boundary();
   test_pi_zero2w_bringup_boundary();
   test_pi_zero_w_v1_1_bringup_boundary();
+  test_pi_zero_w_v1_1_ota_receiver();
+  test_pi_zero_w_v1_1_ota_rejects_bad_sequence();
   test_pi_usb_control_requests();
   test_ieee80211_open_ap_frames();
   test_cyw43438_d11_registers();
