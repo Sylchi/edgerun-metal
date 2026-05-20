@@ -52,6 +52,7 @@ static bool g_codex_minimal_agent = false;
 #define SELF_TEST_TRANSPORT_URL_FAILURE 16
 #define SELF_TEST_TRANSPORT_REQUEST_FAILURE 17
 #define SELF_TEST_CODEX_SSE_HEADERS_FAILURE 18
+#define SELF_TEST_TLS_FAILURE 19
 #define WORKSPACE_INITIAL_CAPACITY 256u
 #define FNV1A64_OFFSET_BASIS 1469598103934665603ull
 #define FNV1A64_PRIME 1099511628211ull
@@ -1332,6 +1333,7 @@ static char *repo_command_new(Workspace *ws, const char *command) {
 }
 
 #include "edgerun_c_game.c"
+#include "edgerun_c_tls.c"
 #include "edgerun_c_transport.c"
 
 static char *repo_status_text_new(Workspace *ws) {
@@ -2395,6 +2397,7 @@ static int self_test(void) {
     if (transport_status == 1) return SELF_TEST_TRANSPORT_URL_FAILURE;
     if (transport_status == 2) return SELF_TEST_TRANSPORT_REQUEST_FAILURE;
     if (!codex_sse_headers_self_test()) return SELF_TEST_CODEX_SSE_HEADERS_FAILURE;
+    if (er_tls_self_test() != 0) return SELF_TEST_TLS_FAILURE;
     if (codex_game_self_test() != 0) return SELF_TEST_CODEX_GAME_FAILURE;
     puts("self-test ok");
     return 0;
