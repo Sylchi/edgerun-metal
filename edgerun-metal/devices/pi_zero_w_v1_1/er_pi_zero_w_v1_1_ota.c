@@ -12,6 +12,7 @@ enum {
   ER_PI_ZERO_W_V1_1_OTA_ERWIRE_PAYLOAD_LEN_OFFSET = 20u,
   ER_PI_ZERO_W_V1_1_OTA_ERWIRE_PAYLOAD_CRC_OFFSET = 24u,
   ER_PI_ZERO_W_V1_1_OTA_ERWIRE_RESERVED_OFFSET = 28u,
+  ER_PI_ZERO_W_V1_1_OTA_U32_BYTE3_OFFSET = 3u,
   ER_PI_ZERO_W_V1_1_OTA_CRC32_INITIAL = 0xffffffffu,
   ER_PI_ZERO_W_V1_1_OTA_CRC32_POLY = 0xedb88320u,
   ER_PI_ZERO_W_V1_1_OTA_CRC32_BITS_PER_BYTE = 8u,
@@ -42,7 +43,8 @@ static UINT32 er_pi_zero_w_v1_1_ota_get_le32(const UINT8* bytes) {
   return (UINT32)bytes[0] |
          ((UINT32)bytes[1] << ER_PI_ZERO_W_V1_1_OTA_U16_HIGH_SHIFT) |
          ((UINT32)bytes[2] << ER_PI_ZERO_W_V1_1_OTA_U32_BYTE2_SHIFT) |
-         ((UINT32)bytes[3] << ER_PI_ZERO_W_V1_1_OTA_U32_BYTE3_SHIFT);
+         ((UINT32)bytes[ER_PI_ZERO_W_V1_1_OTA_U32_BYTE3_OFFSET] <<
+          ER_PI_ZERO_W_V1_1_OTA_U32_BYTE3_SHIFT);
 }
 
 static void er_pi_zero_w_v1_1_ota_zero(UINT8* bytes, UINT32 len) {
