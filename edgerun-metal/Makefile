@@ -144,6 +144,7 @@ PI_ZERO_W_V1_1_BUILD_DIR := ../.build/edgerun-metal/pi-zero-w-v1_1
 PI_ZERO_W_V1_1_ENTRY_SRC := $(PI_ZERO_W_V1_1_DEVICE_DIR)/pi_zero_w_v1_1_entry.c
 PI_ZERO_W_V1_1_START_SRC := $(PI_ZERO_W_V1_1_DEVICE_DIR)/pi_zero_w_v1_1_start.c
 PI_ZERO_W_V1_1_DEVICE_HDRS := $(wildcard $(PI_ZERO_W_V1_1_DEVICE_DIR)/*.h)
+PI_ZERO_W_V1_1_CYW43438_HDRS := devices/cyw43438/er_cyw43438_owned_firmware.h
 PI_ZERO_W_V1_1_KERNEL := $(PI_ZERO_W_V1_1_BUILD_DIR)/kernel.img
 PI_ZERO_W_V1_1_BOOT_DIR := $(PI_ZERO_W_V1_1_BUILD_DIR)/boot
 PI_BOOT_STAGE_SRC := ../tools/pi-boot-stage/main.c
@@ -371,9 +372,9 @@ pi-zero-2w-uefi:
 pi-zero-2w-boot: pi-zero-2w-uefi $(PI_BOOT_STAGE_BIN)
 	$(PI_BOOT_STAGE_BIN) pi-zero-2w $(PI_ZERO_2W_EFI_BOOT) $(PI_ZERO_2W_BOOT_DIR)
 
-pi-zero-w-v1_1-kernel: $(PI_ZERO_W_V1_1_ENTRY_SRC) $(PI_ZERO_W_V1_1_START_SRC) $(PI_ZERO_W_V1_1_DEVICE_HDRS)
+pi-zero-w-v1_1-kernel: $(PI_ZERO_W_V1_1_ENTRY_SRC) $(PI_ZERO_W_V1_1_START_SRC) $(PI_ZERO_W_V1_1_DEVICE_HDRS) $(PI_ZERO_W_V1_1_CYW43438_HDRS)
 	mkdir -p $(dir $(PI_ZERO_W_V1_1_KERNEL))
-	$(CC) -std=c11 -Wall -Wextra -Werror -ffreestanding -fno-builtin -fno-stack-protector -target armv6-none-eabi -fuse-ld=lld -nostdlib -I$(CURDIR)/core -I$(CURDIR)/$(PI_ZERO_W_V1_1_DEVICE_DIR) -I$(CURDIR)/../include -Wl,-Ttext=0x8000 -Wl,--image-base=0x0 -Wl,--oformat,binary -o $(PI_ZERO_W_V1_1_KERNEL) $(PI_ZERO_W_V1_1_ENTRY_SRC) $(PI_ZERO_W_V1_1_START_SRC)
+	$(CC) -std=c11 -Wall -Wextra -Werror -ffreestanding -fno-builtin -fno-stack-protector -target armv6-none-eabi -fuse-ld=lld -nostdlib -I$(CURDIR)/core -I$(CURDIR)/$(PI_ZERO_W_V1_1_DEVICE_DIR) -I$(CURDIR)/devices/cyw43438 -I$(CURDIR)/../include -Wl,-Ttext=0x8000 -Wl,--image-base=0x0 -Wl,--oformat,binary -o $(PI_ZERO_W_V1_1_KERNEL) $(PI_ZERO_W_V1_1_ENTRY_SRC) $(PI_ZERO_W_V1_1_START_SRC)
 
 pi-zero-w-v1_1-boot: pi-zero-w-v1_1-kernel $(PI_BOOT_STAGE_BIN)
 	$(PI_BOOT_STAGE_BIN) pi-zero-w-v1_1 $(PI_ZERO_W_V1_1_KERNEL) $(PI_ZERO_W_V1_1_BOOT_DIR)

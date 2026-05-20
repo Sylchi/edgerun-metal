@@ -1,0 +1,26 @@
+#ifndef ER_CYW43438_OWNED_FIRMWARE_H
+#define ER_CYW43438_OWNED_FIRMWARE_H
+
+/*
+ * Purpose: define the first owned CYW43438 Cortex-M3 payload.
+ * Intention: prove host-to-chip firmware control without binding the Pi Zero W
+ * boot path to vendor RAM firmware.
+ */
+
+#include "er_types.h"
+
+#define ER_CYW43438_OWNED_FIRMWARE_RESET_VECTOR 0x00000009u
+#define ER_CYW43438_OWNED_FIRMWARE_MAILBOX_ADDR 0x00000400u
+#define ER_CYW43438_OWNED_FIRMWARE_MAILBOX_MAGIC 0x45524359u
+
+static const UINT8 ER_CYW43438_OWNED_FIRMWARE[] = {
+  0x09u, 0x00u, 0x00u, 0x00u,
+  0x00u, 0x00u, 0x00u, 0x00u,
+  0x02u, 0x48u, 0x03u, 0x49u,
+  0x01u, 0x60u, 0xfeu, 0xe7u,
+  0x00u, 0x00u, 0x00u, 0x00u,
+  0x00u, 0x04u, 0x00u, 0x00u,
+  0x59u, 0x43u, 0x52u, 0x45u
+};
+
+#endif
