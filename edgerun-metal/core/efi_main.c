@@ -1,4 +1,5 @@
 #include "efi_boot_internal.h"
+#include "er_tpm_acpi.h"
 
 #ifndef ER_BOOT_EPHEMERAL_AUTHORITY_ENABLED
 #define ER_BOOT_EPHEMERAL_AUTHORITY_ENABLED 0

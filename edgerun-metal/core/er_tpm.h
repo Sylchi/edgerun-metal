@@ -6,7 +6,7 @@
  * Intention: make hardware identity available without Linux, TSS, or host services.
  */
 
-#include "er_acpi.h"
+#include "er_types.h"
 
 #define ER_TPM_HEADER_LEN 10u
 #define ER_TPM_CRB_MAX_BUFFER_SIZE 65536u
@@ -140,8 +140,6 @@ typedef struct {
   UINT8 has_verify_signature;
 } ErTpmCommandProfile;
 
-UINT8 er_tpm_parse_tpm2_table(UINT64 tpm2_address, ErTpm2Info* out_info);
-UINT8 er_tpm_find_tpm2_table(const ErAcpiTableList* tables, ErTpm2Info* out_info);
 UINT8 er_tpm2_info_is_crb(const ErTpm2Info* info);
 
 UINT8 er_tpm_crb_from_register_base(UINT64 register_base, ErTpmCrbTransport* out_transport);

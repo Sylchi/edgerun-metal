@@ -1,4 +1,4 @@
-.PHONY: all run run-aarch64 qemu-aarch64-smoke qemu-ephemeral-authority qemu-ephemeral-authority-smoke qemu-swtpm-persistence clean print-path print-config netboot os rebuild-image check test-core bench-ui-dirty wifi-hardware-probe wasm-modules qemu-config-check qemu-aarch64-config-check qemu-swtpm-persistence-config-check pi-zero-2w-uefi pi-zero-2w-boot pi-zero-w-v1_1-kernel pi-zero-w-v1_1-boot
+.PHONY: all run run-aarch64 qemu-aarch64-smoke qemu-ephemeral-authority qemu-ephemeral-authority-smoke qemu-swtpm-persistence clean print-path print-config netboot os rebuild-image check test-core bench-ui-dirty bench-tls-tpm wifi-hardware-probe wasm-modules qemu-config-check qemu-aarch64-config-check qemu-swtpm-persistence-config-check pi-zero-2w-uefi pi-zero-2w-boot pi-zero-w-v1_1-kernel pi-zero-w-v1_1-boot
 
 CC := clang
 HOST_CC := clang
@@ -80,7 +80,7 @@ HOST_CFLAGS := -std=c11 -Wall -Wextra -Werror -O2 -DER_ENABLE_TEST_HOOKS=1 -I$(C
 HOST_LDFLAGS :=
 
 ER_TPM_SRCS := core/er_tpm.c core/er_tls_tpm.c core/er_tls.c
-CORE_SRCS := core/efi_main.c core/efi_boot_memory.c core/efi_boot_diagnostics.c core/efi_boot_gpu.c core/efi_boot_routes.c core/efi_boot_wasm.c core/efi_boot_input.c core/efi_boot_render.c core/efi_boot_render_state.c core/efi_boot_relay.c core/efi_boot_os.c core/er_boot_admission_record.c core/er_boot_efi_vars.c core/er_boot_config.c core/er_boot_profile.c core/er_boot_services.c core/er_print.c core/er_gfx_console.c core/er_ui_gop_renderer.c core/er_ui_frame_timing.c core/er_ui_wasm_app.c core/er_epoch_clock.c core/er_ephemeral_node.c core/er_freestanding.c core/er_netlog.c core/er_crypto.c core/er_crypto_blake3.c core/er_mem.c core/er_vfs.c core/er_app.c core/er_identity.c core/er_node_control.c core/er_device_identity.c core/er_driver_event.c core/er_driver_policy.c core/er_jurisdiction.c core/er_work_route.c core/er_render_endpoint.c core/er_storage_endpoint.c core/er_seal.c core/er_hw_relay.c core/er_relay_packet.c core/er_ble_adv.c core/er_wifi_burst.c core/er_wifi_l2.c core/er_ieee80211_ap.c core/er_network.c core/er_bus.c core/er_acpi.c core/erwire.c core/er_native_boot.c core/wasm_vm.c core/wasm_vm_reader.c core/wasm_vm_memory_ui.c core/wasm_vm_contract.c core/wasm_vm_hostcall.c core/wasm_vm_execute.c core/er_pci.c core/er_firmware_loader.c core/er_mmio.c core/er_net_frame.c core/er_native_eth.c
+CORE_SRCS := core/efi_main.c core/efi_boot_memory.c core/efi_boot_diagnostics.c core/efi_boot_gpu.c core/efi_boot_routes.c core/efi_boot_wasm.c core/efi_boot_input.c core/efi_boot_render.c core/efi_boot_render_state.c core/efi_boot_relay.c core/efi_boot_os.c core/er_boot_admission_record.c core/er_boot_efi_vars.c core/er_boot_config.c core/er_boot_profile.c core/er_boot_services.c core/er_print.c core/er_gfx_console.c core/er_ui_gop_renderer.c core/er_ui_frame_timing.c core/er_ui_wasm_app.c core/er_epoch_clock.c core/er_ephemeral_node.c core/er_freestanding.c core/er_netlog.c core/er_crypto.c core/er_crypto_blake3.c core/er_mem.c core/er_vfs.c core/er_app.c core/er_identity.c core/er_node_control.c core/er_device_identity.c core/er_driver_event.c core/er_driver_policy.c core/er_jurisdiction.c core/er_work_route.c core/er_render_endpoint.c core/er_storage_endpoint.c core/er_seal.c core/er_hw_relay.c core/er_relay_packet.c core/er_ble_adv.c core/er_wifi_burst.c core/er_wifi_l2.c core/er_ieee80211_ap.c core/er_network.c core/er_bus.c core/er_acpi.c core/er_tpm_acpi.c core/erwire.c core/er_native_boot.c core/wasm_vm.c core/wasm_vm_reader.c core/wasm_vm_memory_ui.c core/wasm_vm_contract.c core/wasm_vm_hostcall.c core/wasm_vm_execute.c core/er_pci.c core/er_firmware_loader.c core/er_mmio.c core/er_net_frame.c core/er_native_eth.c
 DEVICE_SRCS := $(CYW43438_DEVICE_DIR)/er_cyw43438.c $(BCM2708_USB_BOOT_DEVICE_DIR)/er_bcm2708_usb_boot.c $(PS2_KEYBOARD_DEVICE_DIR)/er_ps2_keyboard.c $(PI_ZERO2W_DEVICE_DIR)/er_pi_zero2w.c $(RTW89_DEVICE_DIR)/er_rtw89.c $(MT7922_DEVICE_DIR)/er_mt7922.c $(IWLWIFI_DEVICE_DIR)/er_iwlwifi.c $(VIRTIO_DEVICE_DIR)/er_virtio.c $(VIRTIO_DEVICE_DIR)/er_virtio_blk.c $(VIRTIO_DEVICE_DIR)/er_virtio_net.c $(VIRTIO_DEVICE_DIR)/er_virtio_gpu.c
 SRCS := $(CORE_SRCS) $(DEVICE_SRCS)
 UI_SRCS := $(UI_CORE_DIR)/src/er_ui_assets.c $(UI_CORE_DIR)/src/er_ui_components_catalog.c $(UI_CORE_DIR)/src/er_ui_components_catalog_data.c $(UI_CORE_DIR)/src/er_ui_components_contracts.c $(UI_CORE_DIR)/src/er_ui_components_emit.c $(UI_CORE_DIR)/src/er_ui_components_internal.c $(UI_CORE_DIR)/src/er_ui_components_preview.c $(UI_CORE_DIR)/src/er_ui_components_state.c $(UI_CORE_DIR)/src/er_ui_icon.c $(UI_CORE_DIR)/src/er_ui_initial_setup.c $(UI_CORE_DIR)/src/er_ui_ledger_app.c $(UI_CORE_DIR)/src/er_ui_metal.c $(UI_CORE_DIR)/src/er_ui_node.c $(UI_CORE_DIR)/src/er_ui_node_accessibility.c $(UI_CORE_DIR)/src/er_ui_node_layout.c $(UI_CORE_DIR)/src/er_ui_node_render.c $(UI_CORE_DIR)/src/er_ui_node_render_controls.c $(UI_CORE_DIR)/src/er_ui_node_render_conversation.c $(UI_CORE_DIR)/src/er_ui_node_render_panels.c $(UI_CORE_DIR)/src/er_ui_painter.c $(UI_CORE_DIR)/src/er_ui_primitives.c $(UI_CORE_DIR)/src/er_ui_preset_code.c $(UI_CORE_DIR)/src/er_ui_record_codec.c $(UI_CORE_DIR)/src/er_ui_runtime_focus.c $(UI_CORE_DIR)/src/er_ui_runtime_input.c $(UI_CORE_DIR)/src/er_ui_runtime_internal.c $(UI_CORE_DIR)/src/er_ui_runtime_state.c $(UI_CORE_DIR)/src/er_ui_runtime_text.c $(UI_CORE_DIR)/src/er_ui_scene.c $(UI_CORE_DIR)/src/er_ui_shell.c $(UI_CORE_DIR)/src/er_ui_spacing.c $(UI_CORE_DIR)/src/er_ui_theme.c $(UI_CORE_DIR)/src/er_ui_text.c
@@ -159,11 +159,13 @@ QEMU_EPHEMERAL_AUTHORITY_LOG := $(QEMU_EPHEMERAL_AUTHORITY_BUILD_DIR)/qemu-ephem
 QEMU_EPHEMERAL_AUTHORITY_TIMEOUT := 30
 QEMU_EPHEMERAL_AUTHORITY_READY := ui renderer: wasm app scene rects=1 hits=1 text=1
 CORE_TEST_DEVICE_SRCS := $(RTW89_DEVICE_DIR)/er_rtw89.c $(MT7922_DEVICE_DIR)/er_mt7922.c $(IWLWIFI_DEVICE_DIR)/er_iwlwifi.c $(CYW43438_DEVICE_DIR)/er_cyw43438.c $(PS2_KEYBOARD_DEVICE_DIR)/er_ps2_keyboard.c $(PI_ZERO2W_DEVICE_DIR)/er_pi_zero2w.c $(VIRTIO_DEVICE_DIR)/er_virtio.c $(VIRTIO_DEVICE_DIR)/er_virtio_blk.c $(VIRTIO_DEVICE_DIR)/er_virtio_net.c $(VIRTIO_DEVICE_DIR)/er_virtio_gpu.c
-CORE_TEST_SRC := tests/test_core.c core/efi_boot_memory.c core/efi_boot_relay.c core/efi_boot_routes.c core/efi_boot_wasm.c core/efi_boot_input.c core/efi_boot_render_state.c core/er_boot_admission_record.c core/er_boot_efi_vars.c core/er_boot_config.c core/er_boot_profile.c core/er_boot_services.c core/er_pci.c core/er_firmware_loader.c core/er_mmio.c core/er_crypto.c core/er_crypto_blake3.c $(CRYPTO_SRCS) core/er_mem.c core/er_vfs.c core/er_app.c core/er_identity.c core/er_node_control.c core/er_device_identity.c core/er_driver_event.c core/er_driver_policy.c core/er_jurisdiction.c core/er_work_route.c core/er_render_endpoint.c core/er_storage_endpoint.c core/er_seal.c $(ER_TPM_SRCS) core/er_hw_relay.c core/er_relay_packet.c core/er_ble_adv.c core/er_wifi_burst.c core/er_wifi_l2.c core/er_ieee80211_ap.c core/er_ephemeral_node.c core/er_network.c core/er_bus.c core/er_acpi.c core/er_print.c core/er_netlog.c core/er_gfx_console.c core/er_ui_gop_renderer.c core/er_ui_frame_timing.c core/er_ui_wasm_app.c core/er_epoch_clock.c core/erwire.c core/er_native_boot.c core/wasm_vm.c core/wasm_vm_reader.c core/wasm_vm_memory_ui.c core/wasm_vm_contract.c core/wasm_vm_hostcall.c core/wasm_vm_execute.c core/er_net_frame.c core/er_native_eth.c $(CORE_TEST_DEVICE_SRCS) $(UI_SRCS) $(VARFONT_SRCS)
+CORE_TEST_SRC := tests/test_core.c core/efi_boot_memory.c core/efi_boot_relay.c core/efi_boot_routes.c core/efi_boot_wasm.c core/efi_boot_input.c core/efi_boot_render_state.c core/er_boot_admission_record.c core/er_boot_efi_vars.c core/er_boot_config.c core/er_boot_profile.c core/er_boot_services.c core/er_pci.c core/er_firmware_loader.c core/er_mmio.c core/er_crypto.c core/er_crypto_blake3.c $(CRYPTO_SRCS) core/er_mem.c core/er_vfs.c core/er_app.c core/er_identity.c core/er_node_control.c core/er_device_identity.c core/er_driver_event.c core/er_driver_policy.c core/er_jurisdiction.c core/er_work_route.c core/er_render_endpoint.c core/er_storage_endpoint.c core/er_seal.c $(ER_TPM_SRCS) core/er_hw_relay.c core/er_relay_packet.c core/er_ble_adv.c core/er_wifi_burst.c core/er_wifi_l2.c core/er_ieee80211_ap.c core/er_ephemeral_node.c core/er_network.c core/er_bus.c core/er_acpi.c core/er_tpm_acpi.c core/er_print.c core/er_netlog.c core/er_gfx_console.c core/er_ui_gop_renderer.c core/er_ui_frame_timing.c core/er_ui_wasm_app.c core/er_epoch_clock.c core/erwire.c core/er_native_boot.c core/wasm_vm.c core/wasm_vm_reader.c core/wasm_vm_memory_ui.c core/wasm_vm_contract.c core/wasm_vm_hostcall.c core/wasm_vm_execute.c core/er_net_frame.c core/er_native_eth.c $(CORE_TEST_DEVICE_SRCS) $(UI_SRCS) $(VARFONT_SRCS)
 CORE_TEST_FRAGMENT_SRCS := $(wildcard tests/test_core_*.c)
 CORE_TEST_BIN := $(BUILD_DIR)/test-core
 UI_DIRTY_BENCH_SRC := tools/bench_ui_dirty.c core/efi_boot_render_state.c core/er_mem.c core/er_ui_gop_renderer.c core/er_epoch_clock.c $(UI_CORE_DIR)/src/er_ui_icon.c $(UI_CORE_DIR)/src/er_ui_primitives.c $(UI_CORE_DIR)/src/er_ui_scene.c $(UI_CORE_DIR)/src/er_ui_text.c $(VARFONT_SRCS)
 UI_DIRTY_BENCH_BIN := $(BUILD_DIR)/bench-ui-dirty
+TLS_TPM_BENCH_SRC := tools/bench_tls_tpm.c $(ER_TPM_SRCS) core/er_mem.c
+TLS_TPM_BENCH_BIN := $(BUILD_DIR)/bench-tls-tpm
 IFACE :=
 
 all: wasm-modules $(FONT_HEADER) $(FONT_BAKED_HEADER) $(EFI_OUT) $(EFI_BOOT)
@@ -184,6 +186,9 @@ test-core: $(CORE_TEST_BIN)
 
 bench-ui-dirty: $(UI_DIRTY_BENCH_BIN)
 	./$(UI_DIRTY_BENCH_BIN)
+
+bench-tls-tpm: $(TLS_TPM_BENCH_BIN)
+	./$(TLS_TPM_BENCH_BIN)
 
 wifi-hardware-probe: $(WIFI_HW_PROBE_BIN)
 	./$(WIFI_HW_PROBE_BIN)
@@ -323,6 +328,10 @@ $(CORE_TEST_BIN): $(CORE_TEST_SRC) $(CORE_TEST_FRAGMENT_SRCS) $(HDRS) $(PI_ZERO_
 $(UI_DIRTY_BENCH_BIN): $(UI_DIRTY_BENCH_SRC) $(HDRS) $(UI_HDRS) $(VARFONT_HDRS) $(WASM_MODULE_HEADERS) $(FONT_HEADER)
 	mkdir -p $(dir $@)
 	$(HOST_CC) $(HOST_CFLAGS) $(HOST_LDFLAGS) -o $@ $(UI_DIRTY_BENCH_SRC)
+
+$(TLS_TPM_BENCH_BIN): $(TLS_TPM_BENCH_SRC) $(HDRS)
+	mkdir -p $(dir $@)
+	$(HOST_CC) $(HOST_CFLAGS) $(HOST_LDFLAGS) -o $@ $(TLS_TPM_BENCH_SRC)
 
 $(EFI_BOOT): $(EFI_OUT)
 	mkdir -p $(dir $@)

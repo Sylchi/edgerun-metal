@@ -44,6 +44,7 @@
 #include "er_storage_endpoint.h"
 #include "er_tls.h"
 #include "er_tpm.h"
+#include "er_tpm_acpi.h"
 #include "er_tls_tpm.h"
 #include "er_work_route.h"
 #include "er_gfx_console.h"
