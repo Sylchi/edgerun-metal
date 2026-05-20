@@ -25,7 +25,8 @@ enum {
   ERC_BE32_BYTE_INDEX_1 = 1,
   ERC_BE32_BYTE_INDEX_2 = 2,
   ERC_BE32_BYTE_INDEX_3 = 3,
-  ERC_GITLINK_MODE = 0160000
+  ERC_GITLINK_MODE = 0160000,
+  ERC_FETCH_PATTERN_COUNT = 7
 };
 
 static const char ERC_BUILD_ARTIFACT_DIR[] = ".build/";
@@ -36,6 +37,17 @@ static const char ERC_MARKDOWN_SUFFIX[] = ".md";
 static const char ERC_THIRD_PARTY_DIR[] = "third_party/";
 static const char ERC_ALLOWED_BLAKE3_DIR[] = "third_party/blake3/";
 static const char ERC_VENDOR_UI_DIR[] = "ui/shadcn-ui/";
+static const char ERC_FIRMWARE_DIR[] = "firmware/";
+
+static const char* const ERC_FETCH_PATTERNS[ERC_FETCH_PATTERN_COUNT] = {
+  "curl" " -",
+  "wget" " ",
+  "git" " clone ",
+  "npm" " install",
+  "pnpm" " install",
+  "cargo" " install",
+  "pip" " install"
+};
 
 static int erc_fail(const char* message) {
   fprintf(stderr, "repo-check: %s\n", message);
@@ -127,6 +139,63 @@ static int erc_is_unapproved_external_dependency_path(const char* path) {
       erc_is_allowed_third_party_path(path) == 0) {
     return 1;
   }
+  return 0;
+}
+
+static int erc_join(char* out, size_t out_len, const char* a, const char* b);
+static unsigned char* erc_read_file(const char* path, size_t* out_len);
+
+static int erc_is_external_dependency_audit_path(const char* path) {
+  if (strncmp(path, ERC_THIRD_PARTY_DIR, sizeof(ERC_THIRD_PARTY_DIR) - 1u) == 0) {
+    return 0;
+  }
+  if (strncmp(path, ERC_VENDOR_UI_DIR, sizeof(ERC_VENDOR_UI_DIR) - 1u) == 0) {
+    return 0;
+  }
+  if (strncmp(path, ERC_FIRMWARE_DIR, sizeof(ERC_FIRMWARE_DIR) - 1u) == 0) {
+    return 0;
+  }
+  return 1;
+}
+
+static int erc_bytes_contains(const unsigned char* bytes, size_t len, const char* pattern) {
+  size_t pattern_len = strlen(pattern);
+  size_t i;
+
+  if (pattern_len == 0u || len < pattern_len) {
+    return 0;
+  }
+  for (i = 0u; i <= len - pattern_len; ++i) {
+    if (memcmp(bytes + i, pattern, pattern_len) == 0) {
+      return 1;
+    }
+  }
+  return 0;
+}
+
+static int erc_scan_external_dependency_fetches(const char* root, const char* path) {
+  char full_path[4096];
+  unsigned char* bytes;
+  size_t len;
+  size_t i;
+
+  if (erc_is_external_dependency_audit_path(path) == 0) {
+    return 0;
+  }
+  if (!erc_join(full_path, sizeof(full_path), root, path)) {
+    return erc_fail("path too long");
+  }
+  bytes = erc_read_file(full_path, &len);
+  if (bytes == NULL) {
+    return erc_fail("unable to read tracked file for external dependency audit");
+  }
+  for (i = 0u; i < ERC_FETCH_PATTERN_COUNT; ++i) {
+    if (erc_bytes_contains(bytes, len, ERC_FETCH_PATTERNS[i]) != 0) {
+      free(bytes);
+      return erc_fail("first-party files must not introduce external dependency fetch commands");
+    }
+  }
+  free(bytes);
   return 0;
 }
 
@@ -303,6 +372,10 @@ static int erc_scan_index(const char* root) {
     if (erc_is_unapproved_external_dependency_path(name) != 0) {
       free(index_bytes);
       return erc_fail("unapproved external dependency path is not allowed");
+    }
+    if (erc_scan_external_dependency_fetches(root, name) != 0) {
+      free(index_bytes);
+      return 1;
     }
     entry_len = ERC_INDEX_ENTRY_BASE_BYTES + name_len + 1u;
     entry_len = (entry_len + (ERC_INDEX_ENTRY_ALIGNMENT - 1u)) & ~(ERC_INDEX_ENTRY_ALIGNMENT - 1u);

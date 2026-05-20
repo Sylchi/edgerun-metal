@@ -129,10 +129,26 @@ add_vendor_ui_reference() {
   git -C "${repo_dir}" add ui/shadcn-ui/pkg/README.md
 }
 
+add_first_party_fetch_command() {
+  local repo_dir="$1"
+
+  printf 'curl %sL https://example.invalid/pkg.tar.gz\n' '-' > "${repo_dir}/fetch.sh"
+  git -C "${repo_dir}" add fetch.sh
+}
+
+add_vendor_ui_fetch_command() {
+  local repo_dir="$1"
+
+  mkdir -p "${repo_dir}/ui/shadcn-ui"
+  printf 'pnpm %s\n' 'install' > "${repo_dir}/ui/shadcn-ui/package-notes.txt"
+  git -C "${repo_dir}" add ui/shadcn-ui/package-notes.txt
+}
+
 expect_pass clean_repo
 expect_pass agents_policy add_agents_policy
 expect_pass allowed_blake3_readme add_allowed_blake3_readme
 expect_pass vendor_ui_reference add_vendor_ui_reference
+expect_pass vendor_ui_fetch_command add_vendor_ui_fetch_command
 expect_fail nested_git_dir add_nested_git_dir
 expect_fail gitmodules_file add_gitmodules_file
 expect_fail gitlink_entry add_gitlink
@@ -140,5 +156,6 @@ expect_fail tracked_build_artifact add_tracked_build_artifact
 expect_fail nested_readme add_nested_readme
 expect_fail top_level_markdown add_top_level_markdown
 expect_fail unapproved_third_party add_unapproved_third_party
+expect_fail first_party_fetch_command add_first_party_fetch_command
 
 printf 'repo-check tests passed\n'
