@@ -37,6 +37,8 @@ enum {
   ERB_SWARM_PROMPT_CAP = 32768,
   ERB_SWARM_PATH_CAP = 512,
   ERB_SWARM_AGENT_ARGC = 7,
+  ERB_TEXT_INITIAL_CAP = 8192,
+  ERB_PIPE_READ_CHUNK = 4096,
   ERB_PACKAGE_CONTRACT_UI_APP = 1,
   ERB_PACKAGE_CONTRACT_BUS_DRIVER = 2
 };
@@ -48,7 +50,6 @@ static const char ERB_CRYPTO_BUILD_DIR[] = ".build/er-build-out/crypto";
 static const char ERB_VARFONT_BUILD_DIR[] = ".build/er-build-out/varfont";
 static const char ERB_CODEX_BIN[] = ".build/codex";
 static const char ERB_SWARM_DIR[] = ".build/repo-agent-swarm";
-static const char ERB_SWARM_ISSUES_PATH[] = ".build/repo-agent-swarm/issues.txt";
 static const char ERB_REPO_CHECK_BIN[] = ".build/repo-check";
 static const char ERB_ERWIRE_DECODE_BIN[] = ".build/erwire-decode";
 static const char ERB_WASM_COMPILE_BIN[] = ".build/wasm-compile";
@@ -96,6 +97,12 @@ typedef struct {
   int line;
   char text[ERB_SWARM_LINE_CAP];
 } ErbSwarmIssue;
+
+typedef struct {
+  char* data;
+  size_t len;
+  size_t cap;
+} ErbTextBuffer;
 
 static int erb_usage(void);
 
@@ -229,26 +236,50 @@ static int erb_read_text_file(const char* path, char* out, size_t out_len) {
   return 0;
 }
 
-static int erb_write_text_file(const char* path, const char* text) {
-  FILE* file;
+static void erb_text_buffer_free(ErbTextBuffer* buffer) {
+  if (buffer != NULL) {
+    free(buffer->data);
+    buffer->data = NULL;
+    buffer->len = 0u;
+    buffer->cap = 0u;
+  }
+}
 
-  if (path == NULL || text == NULL) {
-    return erb_fail("invalid file write");
+static int erb_text_buffer_reserve(ErbTextBuffer* buffer, size_t needed) {
+  size_t next;
+  char* grown;
+
+  if (buffer == NULL) {
+    return erb_fail("invalid text buffer");
   }
-  file = fopen(path, "wb");
-  if (file == NULL) {
-    fprintf(stderr, "er-build: open failed for %s: %s\n", path, strerror(errno));
+  if (needed <= buffer->cap) {
+    return 0;
+  }
+  next = buffer->cap == 0u ? ERB_TEXT_INITIAL_CAP : buffer->cap;
+  while (next < needed) {
+    next *= 2u;
+  }
+  grown = (char*)realloc(buffer->data, next);
+  if (grown == NULL) {
+    return erb_fail("text buffer allocation failed");
+  }
+  buffer->data = grown;
+  buffer->cap = next;
+  return 0;
+}
+
+static int erb_text_buffer_append(ErbTextBuffer* buffer, const char* text, size_t len) {
+  if (text == NULL) {
+    return erb_fail("invalid text append");
+  }
+  if (erb_text_buffer_reserve(buffer, buffer->len + len + 1u) != 0) {
     return 1;
   }
-  if (fputs(text, file) < 0) {
-    fclose(file);
-    fprintf(stderr, "er-build: write failed for %s\n", path);
-    return 1;
+  if (len > 0u) {
+    memcpy(buffer->data + buffer->len, text, len);
+    buffer->len += len;
   }
-  if (fclose(file) != 0) {
-    fprintf(stderr, "er-build: close failed for %s: %s\n", path, strerror(errno));
-    return 1;
-  }
+  buffer->data[buffer->len] = '\0';
   return 0;
 }
 
@@ -581,36 +612,84 @@ static int erb_target_repo_inspect(int argc, char** argv, int print_plan) {
   return eri_main(argc + 1, inspect_argv);
 }
 
-static int erb_repo_inspect_details_file(const char* scope) {
-  int out_fd;
-  int saved_stdout;
-  int rc;
-  char* inspect_argv[] = {"repo-inspect", "--details", (char*)scope};
+static void erb_repo_scope_root_rel(const char* scope, const char** root, const char** rel) {
+  const char* cursor = scope;
 
-  if (erb_mkdir_one(ERB_SWARM_DIR) != 0) {
+  while (cursor[0] == '.' && cursor[1] == '/') {
+    cursor += 2u;
+  }
+  if (cursor[0] == 0 || strcmp(cursor, ".") == 0 || cursor[0] == '/') {
+    *root = scope;
+    *rel = "";
+  } else {
+    *root = ".";
+    *rel = cursor;
+  }
+}
+
+static int erb_repo_inspect_details_memory(const EriVfs* vfs, ErbTextBuffer* out) {
+  int pipe_fds[2];
+  pid_t pid;
+  int status;
+  char chunk[ERB_PIPE_READ_CHUNK];
+  EriInspectOptions options;
+
+  if (vfs == NULL || out == NULL) {
+    return erb_fail("invalid repo-inspect capture");
+  }
+  options.thread_count = ERI_DEFAULT_THREAD_COUNT;
+  options.details = 1u;
+  fflush(stdout);
+  if (pipe(pipe_fds) != 0) {
+    return erb_fail("pipe failed");
+  }
+  pid = fork();
+  if (pid < 0) {
+    close(pipe_fds[0]);
+    close(pipe_fds[1]);
+    return erb_fail("fork failed");
+  }
+  if (pid == 0) {
+    int rc;
+
+    close(pipe_fds[0]);
+    if (dup2(pipe_fds[1], STDOUT_FILENO) < 0) {
+      _exit(ERB_EXEC_FAILURE_STATUS);
+    }
+    close(pipe_fds[1]);
+    rc = eri_analyze(vfs, &options) != 0u ? 0 : 1;
+    fflush(stdout);
+    _exit(rc == 0 ? 0 : 1);
+  }
+  close(pipe_fds[1]);
+  for (;;) {
+    ssize_t read_len = read(pipe_fds[0], chunk, sizeof(chunk));
+
+    if (read_len < 0) {
+      close(pipe_fds[0]);
+      return erb_fail("repo-inspect pipe read failed");
+    }
+    if (read_len == 0) {
+      break;
+    }
+    if (erb_text_buffer_append(out, chunk, (size_t)read_len) != 0) {
+      close(pipe_fds[0]);
+      return 1;
+    }
+  }
+  if (close(pipe_fds[0]) != 0) {
+    return erb_fail("repo-inspect pipe close failed");
+  }
+  if (waitpid(pid, &status, 0) < 0) {
+    return erb_fail("waitpid failed");
+  }
+  if (!WIFEXITED(status) || WEXITSTATUS(status) != 0) {
+    return erb_fail("repo-inspect failed");
+  }
+  if (out->data == NULL && erb_text_buffer_append(out, "", 0u) != 0) {
     return 1;
   }
-  fflush(stdout);
-  out_fd = open(ERB_SWARM_ISSUES_PATH, O_WRONLY | O_CREAT | O_TRUNC, 0666);
-  if (out_fd < 0) {
-    fprintf(stderr, "er-build: open failed for %s: %s\n", ERB_SWARM_ISSUES_PATH, strerror(errno));
-    return 1;
-  }
-  saved_stdout = dup(STDOUT_FILENO);
-  if (saved_stdout < 0 || dup2(out_fd, STDOUT_FILENO) < 0) {
-    close(out_fd);
-    if (saved_stdout >= 0) close(saved_stdout);
-    return erb_fail("stdout redirect failed");
-  }
-  close(out_fd);
-  rc = eri_main(3, inspect_argv);
-  fflush(stdout);
-  if (dup2(saved_stdout, STDOUT_FILENO) < 0) {
-    close(saved_stdout);
-    return erb_fail("stdout restore failed");
-  }
-  close(saved_stdout);
-  return rc;
+  return 0;
 }
 
 static int erb_swarm_issue_parse(const char* line, ErbSwarmIssue* issue) {
@@ -648,6 +727,31 @@ static int erb_swarm_issue_parse(const char* line, ErbSwarmIssue* issue) {
   return 1;
 }
 
+static int erb_swarm_next_issue_line(const char** cursor, char* line, size_t line_len, int* eof) {
+  const char* start;
+  const char* end;
+  size_t len;
+
+  if (cursor == NULL || *cursor == NULL || line == NULL || line_len == 0u || eof == NULL) {
+    return 1;
+  }
+  if (**cursor == '\0') {
+    *eof = 1;
+    line[0] = '\0';
+    return 0;
+  }
+  start = *cursor;
+  end = strchr(start, '\n');
+  len = end == NULL ? strlen(start) : (size_t)(end - start);
+  if (len >= line_len) {
+    len = line_len - 1u;
+  }
+  memcpy(line, start, len);
+  line[len] = '\0';
+  *cursor = end == NULL ? start + strlen(start) : end + 1;
+  return 0;
+}
+
 static int erb_swarm_prompt_append(char* prompt, size_t prompt_len, size_t* used,
                                    const char* text) {
   size_t text_len;
@@ -677,16 +781,18 @@ static int erb_swarm_prompt_appendf(char* prompt, size_t prompt_len, size_t* use
 }
 
 static int erb_swarm_prompt_for_issue(const ErbSwarmIssue* issue,
+                                      const EriVfs* vfs,
                                       char* prompt,
                                       size_t prompt_len) {
-  FILE* file;
+  const EriVfsFile* file;
   char line[ERB_SWARM_LINE_CAP];
   int current_line = 0;
   int start_line;
   int end_line;
   size_t used = 0u;
+  size_t offset = 0u;
 
-  if (issue == NULL || prompt == NULL || prompt_len == 0u) {
+  if (issue == NULL || vfs == NULL || prompt == NULL || prompt_len == 0u) {
     return 1;
   }
   prompt[0] = '\0';
@@ -711,11 +817,21 @@ static int erb_swarm_prompt_for_issue(const ErbSwarmIssue* issue,
     return 1;
   }
 
-  file = fopen(issue->path, "rb");
+  file = eri_vfs_find(vfs, issue->path);
   if (file == NULL) {
-    return erb_swarm_prompt_append(prompt, prompt_len, &used, "Context unavailable: file open failed.\n");
+    return erb_swarm_prompt_append(prompt, prompt_len, &used, "Context unavailable: file missing from VFS.\n");
   }
-  while (fgets(line, sizeof(line), file) != NULL) {
+  while (offset < file->len && current_line <= end_line) {
+    size_t line_start = offset;
+    size_t line_len;
+
+    while (offset < file->len && file->bytes[offset] != '\n') {
+      ++offset;
+    }
+    line_len = offset - line_start;
+    if (offset < file->len && file->bytes[offset] == '\n') {
+      ++offset;
+    }
     ++current_line;
     if (current_line < start_line) {
       continue;
@@ -725,37 +841,42 @@ static int erb_swarm_prompt_for_issue(const ErbSwarmIssue* issue,
     }
     {
       char numbered[ERB_SWARM_LINE_CAP];
-      int written = snprintf(numbered, sizeof(numbered), "%5d  %s", current_line, line);
-      if (written < 0 || (size_t)written >= sizeof(numbered) ||
-          erb_swarm_prompt_append(prompt, prompt_len, &used, numbered) != 0) {
-        fclose(file);
+      size_t copy_len = line_len;
+      int prefix_len = snprintf(numbered, sizeof(numbered), "%5d  ", current_line);
+      size_t available;
+
+      if (prefix_len < 0 || (size_t)prefix_len >= sizeof(numbered)) {
+        return 1;
+      }
+      available = sizeof(numbered) - (size_t)prefix_len - 2u;
+      if (copy_len > available) {
+        copy_len = available;
+      }
+      if (copy_len > 0u) {
+        memcpy(numbered + prefix_len, file->bytes + line_start, copy_len);
+      }
+      numbered[(size_t)prefix_len + copy_len] = '\n';
+      numbered[(size_t)prefix_len + copy_len + 1u] = '\0';
+      if (erb_swarm_prompt_append(prompt, prompt_len, &used, numbered) != 0) {
         return 1;
       }
     }
   }
-  if (fclose(file) != 0) {
-    return 1;
-  }
   return 0;
 }
 
-static int erb_swarm_spawn_issue(const ErbSwarmIssue* issue, size_t index) {
+static int erb_swarm_spawn_issue(const ErbSwarmIssue* issue, const EriVfs* vfs, size_t index) {
   char prompt[ERB_SWARM_PROMPT_CAP];
-  char prompt_path[ERB_PATH_CAP];
   char log_path[ERB_PATH_CAP];
   pid_t pid;
 
   if (issue == NULL) {
     return 1;
   }
-  if (erb_swarm_prompt_for_issue(issue, prompt, sizeof(prompt)) != 0) {
+  if (erb_swarm_prompt_for_issue(issue, vfs, prompt, sizeof(prompt)) != 0) {
     return erb_fail("failed to build swarm prompt");
   }
-  snprintf(prompt_path, sizeof(prompt_path), "%s/prompt-%04u.txt", ERB_SWARM_DIR, (unsigned)index);
   snprintf(log_path, sizeof(log_path), "%s/agent-%04u.log", ERB_SWARM_DIR, (unsigned)index);
-  if (erb_write_text_file(prompt_path, prompt) != 0) {
-    return 1;
-  }
   pid = fork();
   if (pid < 0) {
     return erb_fail("fork failed");
@@ -806,9 +927,13 @@ static int erb_swarm_parse_concurrency(const char* text, int* out_value) {
 
 static int erb_target_repo_agent_swarm(int argc, char** argv, int print_plan) {
   const char* scope = ".";
+  const char* root;
+  const char* rel;
   int concurrency = ERB_SWARM_DEFAULT_LIMIT;
   int argi = 0;
-  FILE* issues;
+  EriVfs vfs;
+  ErbTextBuffer issues;
+  const char* issue_cursor;
   char line[ERB_SWARM_LINE_CAP];
   int active = 0;
   int eof = 0;
@@ -836,9 +961,13 @@ static int erb_target_repo_agent_swarm(int argc, char** argv, int print_plan) {
     return erb_usage();
   }
 
+  erb_repo_scope_root_rel(scope, &root, &rel);
+  memset(&vfs, 0, sizeof(vfs));
+  memset(&issues, 0, sizeof(issues));
   if (print_plan != 0) {
     printf("+ make codex-build\n");
-    printf("+ .build/er-build repo-inspect --details %s > %s\n", scope, ERB_SWARM_ISSUES_PATH);
+    printf("+ repo-inspect VFS load %s %s\n", root, rel);
+    printf("+ repo-inspect analyze --details <in-memory VFS> | <in-memory issue queue>\n");
     printf("+ .build/codex --memory-only --root . --prompt <one generated prompt per repo-inspect issue, %d concurrent>\n",
            concurrency);
     return 0;
@@ -853,27 +982,36 @@ static int erb_target_repo_agent_swarm(int argc, char** argv, int print_plan) {
       return 1;
     }
   }
-  if (erb_repo_inspect_details_file(scope) != 0) {
+  if (erb_mkdir_one(ERB_SWARM_DIR) != 0) {
     return 1;
   }
-  issues = fopen(ERB_SWARM_ISSUES_PATH, "rb");
-  if (issues == NULL) {
-    fprintf(stderr, "er-build: open failed for %s: %s\n", ERB_SWARM_ISSUES_PATH, strerror(errno));
+  if (eri_load_dir(&vfs, root, rel, ERI_DEFAULT_THREAD_COUNT) == 0u) {
+    return erb_fail("repo-inspect VFS load failed");
+  }
+  if (erb_repo_inspect_details_memory(&vfs, &issues) != 0) {
+    eri_vfs_free(&vfs);
+    erb_text_buffer_free(&issues);
     return 1;
   }
+  issue_cursor = issues.data;
   while (eof == 0 || active > 0) {
     while (active < concurrency && eof == 0) {
       ErbSwarmIssue issue;
-      if (fgets(line, sizeof(line), issues) == NULL) {
-        eof = 1;
+      if (erb_swarm_next_issue_line(&issue_cursor, line, sizeof(line), &eof) != 0) {
+        eri_vfs_free(&vfs);
+        erb_text_buffer_free(&issues);
+        return 1;
+      }
+      if (eof != 0) {
         break;
       }
       if (erb_swarm_issue_parse(line, &issue) == 0) {
         continue;
       }
       ++dispatched;
-      if (erb_swarm_spawn_issue(&issue, dispatched) != 0) {
-        fclose(issues);
+      if (erb_swarm_spawn_issue(&issue, &vfs, dispatched) != 0) {
+        eri_vfs_free(&vfs);
+        erb_text_buffer_free(&issues);
         return 1;
       }
       ++active;
@@ -882,7 +1020,8 @@ static int erb_target_repo_agent_swarm(int argc, char** argv, int print_plan) {
       int status;
       pid_t done = waitpid(-1, &status, 0);
       if (done < 0) {
-        fclose(issues);
+        eri_vfs_free(&vfs);
+        erb_text_buffer_free(&issues);
         return erb_fail("waitpid failed");
       }
       --active;
@@ -893,9 +1032,8 @@ static int erb_target_repo_agent_swarm(int argc, char** argv, int print_plan) {
       }
     }
   }
-  if (fclose(issues) != 0) {
-    return 1;
-  }
+  eri_vfs_free(&vfs);
+  erb_text_buffer_free(&issues);
   printf("repo-agent-swarm: dispatched %u completed %u failed %u\n",
          (unsigned)dispatched, (unsigned)completed, (unsigned)failed);
   return failed == 0u ? 0 : 1;

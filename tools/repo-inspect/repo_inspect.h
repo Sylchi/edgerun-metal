@@ -253,6 +253,10 @@ typedef struct {
 } EriInspectOptions;
 
 int eri_main(int argc, char** argv);
+uint8_t eri_load_dir(EriVfs* vfs, const char* root, const char* rel, size_t thread_count);
+const EriVfsFile* eri_vfs_find(const EriVfs* vfs, const char* path);
+void eri_vfs_free(EriVfs* vfs);
+uint8_t eri_analyze(const EriVfs* vfs, const EriInspectOptions* options);
 
 typedef struct {
   uint32_t segment;
