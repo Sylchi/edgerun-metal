@@ -1,5 +1,6 @@
 #include "efi_boot_internal.h"
 #include "er_tpm_acpi.h"
+#include "er_tpm_bench.h"
 
 #ifndef ER_BOOT_EPHEMERAL_AUTHORITY_ENABLED
 #define ER_BOOT_EPHEMERAL_AUTHORITY_ENABLED 0
@@ -270,6 +271,9 @@ EFI_STATUS EFIAPI efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE* SystemTable
     er_print_u64_dec((UINT64)boot_report.tpm_nv_limits.nv_buffer_max);
     er_println("");
   }
+#if ER_TPM_REAL_BENCH_ENABLED
+  er_tpm_real_benchmark(SystemTable);
+#endif
 #if defined(ER_BOARD_PI_ZERO_2W)
   if (er_pi_zero2w_apply_boot_report(&boot_report) == 0u) {
     er_println("pi-zero-2w: board peripheral map failed");
