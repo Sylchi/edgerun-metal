@@ -182,52 +182,37 @@ static UINT8 er_tpm_bench_load_key(ErTpmBenchState* state,
                                    UINT8 key_type,
                                    UINT32* out_handle,
                                    UINT32* out_response_code) {
-  UINT8 command[ER_TPM_BENCH_COMMAND_BYTES];
-  UINT8 response[ER_TPM_BENCH_RESPONSE_BYTES];
-  UINT32 command_len;
-  UINT32 response_len;
-
   if (state == 0 || out_handle == 0 || out_response_code == 0) {
     return 0u;
   }
   *out_response_code = ER_TPM_RC_METAL_PROTOCOL;
   switch (key_type) {
     case ER_TPM_BENCH_KEY_HMAC_SHA256:
-      if (er_tpm_build_load_external_hmac_sha256_key_command(
-              state->data,
-              ER_TPM_SHA256_DIGEST_LEN,
-              command,
-              (UINT32)sizeof(command),
-              &command_len) == 0u) {
+      if (er_tls_tpm_load_hmac_sha256_key(&state->tls_tpm,
+                                          state->data,
+                                          ER_TPM_SHA256_DIGEST_LEN,
+                                          out_handle) == 0u) {
+        *out_response_code = er_tpm_response_code(state->tls_tpm.response,
+                                                  state->tls_tpm.last_response_len);
         return 0u;
       }
-      break;
+      *out_response_code = ER_TPM_RC_SUCCESS;
+      return 1u;
     case ER_TPM_BENCH_KEY_AES_128:
-      if (er_tpm_build_load_external_aes_key_command(
-              state->key,
-              ER_TPM_AES_128_KEY_LEN,
-              ER_TPM_AES_128_KEY_BITS,
-              er_tls_tpm_record_mode(&state->tls_tpm),
-              command,
-              (UINT32)sizeof(command),
-              &command_len) == 0u) {
+      if (er_tls_tpm_load_aes_key(&state->tls_tpm,
+                                  state->key,
+                                  ER_TPM_AES_128_KEY_LEN,
+                                  ER_TPM_AES_128_KEY_BITS,
+                                  out_handle) == 0u) {
+        *out_response_code = er_tpm_response_code(state->tls_tpm.response,
+                                                  state->tls_tpm.last_response_len);
         return 0u;
       }
-      break;
+      *out_response_code = ER_TPM_RC_SUCCESS;
+      return 1u;
     default:
       return 0u;
   }
-  if (er_tpm_bench_crb_transact(&state->transport,
-                                command,
-                                command_len,
-                                response,
-                                (UINT32)sizeof(response),
-                                &response_len) == 0u) {
-    *out_response_code = ER_TPM_RC_METAL_TIMEOUT;
-    return 0u;
-  }
-  *out_response_code = er_tpm_response_code(response, response_len);
-  return er_tpm_parse_handle_response(response, response_len, out_handle);
 }
 
 static UINT8 er_tpm_bench_init(EFI_SYSTEM_TABLE* system_table,

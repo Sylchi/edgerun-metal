@@ -22,6 +22,7 @@ typedef struct {
   ErTlsTpmTransactFn transact;
   void* user;
   UINT16 record_mode;
+  UINT32 last_response_len;
   UINT8 command[ER_TLS_TPM_COMMAND_BYTES];
   UINT8 response[ER_TLS_TPM_RESPONSE_BYTES];
 } ErTlsTpm;

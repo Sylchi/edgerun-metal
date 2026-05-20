@@ -66,10 +66,10 @@ enum {
   ER_TPM_VERIFY_P256_SHA256_COMMAND_LEN = 120u,
   ER_TPM_LOAD_EXTERNAL_P256_COMMAND_LEN = 106u,
   ER_TPM_LOAD_EXTERNAL_PUBLIC_AREA_LEN = 88u,
-  ER_TPM_LOAD_EXTERNAL_KEYEDHASH_PUBLIC_AREA_LEN = 14u,
-  ER_TPM_LOAD_EXTERNAL_SYMCIPHER_PUBLIC_AREA_LEN = 18u,
-  ER_TPM_LOAD_EXTERNAL_KEYEDHASH_FIXED_LEN = 40u,
-  ER_TPM_LOAD_EXTERNAL_SYMCIPHER_FIXED_LEN = 44u,
+  ER_TPM_LOAD_EXTERNAL_KEYEDHASH_PUBLIC_AREA_LEN = 46u,
+  ER_TPM_LOAD_EXTERNAL_SYMCIPHER_PUBLIC_AREA_LEN = 50u,
+  ER_TPM_LOAD_EXTERNAL_KEYEDHASH_FIXED_LEN = 104u,
+  ER_TPM_LOAD_EXTERNAL_SYMCIPHER_FIXED_LEN = 108u,
   ER_TPM_ENCRYPT_DECRYPT2_COMMAND_FIXED_LEN = 34u,
   ER_TPM_HASH_COMMAND_FIXED_LEN = 18u,
   ER_TPM_HASH_SEQUENCE_START_COMMAND_LEN = 14u,
@@ -93,7 +93,8 @@ enum {
   ER_TPM_TPMA_OBJECT_DECRYPT = 0x00020000u,
   ER_TPM_TPMA_OBJECT_SIGN_ENCRYPT = 0x00040000u,
   ER_TPM_LOAD_EXTERNAL_KEY_AUTH_LEN = 0u,
-  ER_TPM_LOAD_EXTERNAL_KEY_SEED_LEN = 0u,
+  ER_TPM_LOAD_EXTERNAL_KEY_SEED_LEN = ER_TPM_SHA256_DIGEST_LEN,
+  ER_TPM_LOAD_EXTERNAL_KEY_UNIQUE_LEN = ER_TPM_SHA256_DIGEST_LEN,
   ER_TPM_LOAD_EXTERNAL_HMAC_SENSITIVE_HEADER_LEN = 8u,
   ER_TPM_LOAD_EXTERNAL_AES_SENSITIVE_HEADER_LEN = 8u
 };
@@ -745,6 +746,8 @@ UINT8 er_tpm_build_load_external_p256_verify_key_command(
 
 UINT8 er_tpm_build_load_external_hmac_sha256_key_command(
     const UINT8* key, UINT16 key_len,
+    const UINT8 seed[ER_TPM_SHA256_DIGEST_LEN],
+    const UINT8 unique[ER_TPM_SHA256_DIGEST_LEN],
     UINT8* out_command,
     UINT32 command_capacity,
     UINT32* out_command_len) {
@@ -752,11 +755,13 @@ UINT8 er_tpm_build_load_external_hmac_sha256_key_command(
   UINT32 offset;
   UINT16 sensitive_area_len;
 
-  if (key == 0 || key_len == 0u || out_command_len == 0 ||
-      key_len > ER_TPM_TPM2B_MAX_LEN - ER_TPM_LOAD_EXTERNAL_HMAC_SENSITIVE_HEADER_LEN) {
+  if (key == 0 || seed == 0 || unique == 0 || key_len == 0u || out_command_len == 0 ||
+      key_len > ER_TPM_TPM2B_MAX_LEN - ER_TPM_LOAD_EXTERNAL_HMAC_SENSITIVE_HEADER_LEN -
+                  ER_TPM_LOAD_EXTERNAL_KEY_SEED_LEN) {
     return 0u;
   }
-  sensitive_area_len = (UINT16)(ER_TPM_LOAD_EXTERNAL_HMAC_SENSITIVE_HEADER_LEN + key_len);
+  sensitive_area_len = (UINT16)(ER_TPM_LOAD_EXTERNAL_HMAC_SENSITIVE_HEADER_LEN +
+                                ER_TPM_LOAD_EXTERNAL_KEY_SEED_LEN + key_len);
   command_len = ER_TPM_LOAD_EXTERNAL_KEYEDHASH_FIXED_LEN + (UINT32)key_len;
   if (er_tpm_build_header(ER_TPM_ST_NO_SESSIONS, command_len,
                           ER_TPM_CC_LOAD_EXTERNAL, out_command,
@@ -772,6 +777,8 @@ UINT8 er_tpm_build_load_external_hmac_sha256_key_command(
   offset += ER_TPM_U16_BYTES;
   er_tpm_put_be16(out_command + offset, ER_TPM_LOAD_EXTERNAL_KEY_SEED_LEN);
   offset += ER_TPM_U16_BYTES;
+  er_mem_copy(out_command + offset, seed, ER_TPM_LOAD_EXTERNAL_KEY_SEED_LEN);
+  offset += ER_TPM_LOAD_EXTERNAL_KEY_SEED_LEN;
   er_tpm_put_be16(out_command + offset, key_len);
   offset += ER_TPM_U16_BYTES;
   er_mem_copy(out_command + offset, key, key_len);
@@ -791,8 +798,10 @@ UINT8 er_tpm_build_load_external_hmac_sha256_key_command(
   offset += ER_TPM_U16_BYTES;
   er_tpm_put_be16(out_command + offset, ER_TPM_ALG_NULL);
   offset += ER_TPM_U16_BYTES;
-  er_tpm_put_be16(out_command + offset, 0u);
+  er_tpm_put_be16(out_command + offset, ER_TPM_LOAD_EXTERNAL_KEY_UNIQUE_LEN);
   offset += ER_TPM_U16_BYTES;
+  er_mem_copy(out_command + offset, unique, ER_TPM_LOAD_EXTERNAL_KEY_UNIQUE_LEN);
+  offset += ER_TPM_LOAD_EXTERNAL_KEY_UNIQUE_LEN;
   er_tpm_put_be32(out_command + offset, ER_TPM_RH_NULL);
   offset += ER_TPM_U32_BYTES;
   if (offset != command_len) {
@@ -806,6 +815,8 @@ UINT8 er_tpm_build_load_external_aes_key_command(
     const UINT8* key, UINT16 key_len,
     UINT16 key_bits,
     UINT16 mode,
+    const UINT8 seed[ER_TPM_SHA256_DIGEST_LEN],
+    const UINT8 unique[ER_TPM_SHA256_DIGEST_LEN],
     UINT8* out_command,
     UINT32 command_capacity,
     UINT32* out_command_len) {
@@ -813,7 +824,7 @@ UINT8 er_tpm_build_load_external_aes_key_command(
   UINT32 offset;
   UINT16 sensitive_area_len;
 
-  if (key == 0 || out_command_len == 0) {
+  if (key == 0 || seed == 0 || unique == 0 || out_command_len == 0) {
     return 0u;
   }
   switch (key_bits) {
@@ -833,7 +844,8 @@ UINT8 er_tpm_build_load_external_aes_key_command(
   if (er_tpm_symmetric_mode_supported(mode) == 0u) {
     return 0u;
   }
-  sensitive_area_len = (UINT16)(ER_TPM_LOAD_EXTERNAL_AES_SENSITIVE_HEADER_LEN + key_len);
+  sensitive_area_len = (UINT16)(ER_TPM_LOAD_EXTERNAL_AES_SENSITIVE_HEADER_LEN +
+                                ER_TPM_LOAD_EXTERNAL_KEY_SEED_LEN + key_len);
   command_len = ER_TPM_LOAD_EXTERNAL_SYMCIPHER_FIXED_LEN + (UINT32)key_len;
   if (er_tpm_build_header(ER_TPM_ST_NO_SESSIONS, command_len,
                           ER_TPM_CC_LOAD_EXTERNAL, out_command,
@@ -849,6 +861,8 @@ UINT8 er_tpm_build_load_external_aes_key_command(
   offset += ER_TPM_U16_BYTES;
   er_tpm_put_be16(out_command + offset, ER_TPM_LOAD_EXTERNAL_KEY_SEED_LEN);
   offset += ER_TPM_U16_BYTES;
+  er_mem_copy(out_command + offset, seed, ER_TPM_LOAD_EXTERNAL_KEY_SEED_LEN);
+  offset += ER_TPM_LOAD_EXTERNAL_KEY_SEED_LEN;
   er_tpm_put_be16(out_command + offset, key_len);
   offset += ER_TPM_U16_BYTES;
   er_mem_copy(out_command + offset, key, key_len);
@@ -870,10 +884,12 @@ UINT8 er_tpm_build_load_external_aes_key_command(
   offset += ER_TPM_U16_BYTES;
   er_tpm_put_be16(out_command + offset, key_bits);
   offset += ER_TPM_U16_BYTES;
-  er_tpm_put_be16(out_command + offset, ER_TPM_ALG_NULL);
+  er_tpm_put_be16(out_command + offset, mode);
   offset += ER_TPM_U16_BYTES;
-  er_tpm_put_be16(out_command + offset, 0u);
+  er_tpm_put_be16(out_command + offset, ER_TPM_LOAD_EXTERNAL_KEY_UNIQUE_LEN);
   offset += ER_TPM_U16_BYTES;
+  er_mem_copy(out_command + offset, unique, ER_TPM_LOAD_EXTERNAL_KEY_UNIQUE_LEN);
+  offset += ER_TPM_LOAD_EXTERNAL_KEY_UNIQUE_LEN;
   er_tpm_put_be32(out_command + offset, ER_TPM_RH_NULL);
   offset += ER_TPM_U32_BYTES;
   if (offset != command_len) {
@@ -995,6 +1011,10 @@ UINT8 er_tpm_build_encrypt_decrypt2_command(UINT32 handle,
   er_tpm_put_be32(out_command + offset, ER_TPM_PW_AUTH_AREA_LEN);
   offset += ER_TPM_U32_BYTES;
   er_tpm_write_empty_auth_area(out_command, &offset);
+  er_tpm_put_be16(out_command + offset, input_len);
+  offset += ER_TPM_U16_BYTES;
+  er_mem_copy(out_command + offset, input, input_len);
+  offset += input_len;
   out_command[offset] = decrypt;
   offset += 1u;
   er_tpm_put_be16(out_command + offset, mode);
@@ -1003,10 +1023,6 @@ UINT8 er_tpm_build_encrypt_decrypt2_command(UINT32 handle,
   offset += ER_TPM_U16_BYTES;
   er_mem_copy(out_command + offset, iv, iv_len);
   offset += iv_len;
-  er_tpm_put_be16(out_command + offset, input_len);
-  offset += ER_TPM_U16_BYTES;
-  er_mem_copy(out_command + offset, input, input_len);
-  offset += input_len;
   if (offset != command_len) {
     return 0u;
   }
