@@ -104,7 +104,7 @@ CRYPTO_HDRS := $(wildcard $(CRYPTO_DIR)/include/*.h)
 EMBED_HEADER_SRC := ../tools/embed-header/main.c
 EMBED_HEADER_BIN := $(BUILD_DIR)/embed-header
 ER_BUILD_BIN := ../.build/er-build
-WASM_COMPILE_SRCS := ../tools/wasm-compile/main.c ../tools/wasm-compile/wasm_compile_c.c ../tools/wasm-compile/wasm_compile_common.c ../tools/wasm-compile/wasm_compile_contract.c ../tools/wasm-compile/wasm_compile_emit.c ../tools/wasm-compile/wasm_compile_io.c ../tools/wasm-compile/wasm_compile_module.c ../tools/wasm-compile/wasm_compile_parse.c
+WASM_COMPILE_SRCS := ../tools/wasm-compile/main.c ../tools/wasm-compile/wasm_compile_c.c ../tools/wasm-compile/wasm_compile_common.c ../tools/wasm-compile/wasm_compile_contract.c ../tools/wasm-compile/wasm_compile_emit.c ../tools/wasm-compile/wasm_compile_io.c ../tools/wasm-compile/wasm_compile_module.c ../tools/wasm-compile/wasm_compile_parse.c ../tools/wasm-compile/wasm_compile_source.c
 WASM_COMPILE_HDRS := ../tools/wasm-compile/wasm_compile.h
 WASM_COMPILE_BIN := $(BUILD_DIR)/wasm-compile
 WASM_MODULE_HEADERS := $(GENERATED_DIR)/wasm_driver_bus_probe_module.h $(GENERATED_DIR)/wasm_ui_counter_module.h \
@@ -113,10 +113,10 @@ WASM_MODULE_HEADERS := $(GENERATED_DIR)/wasm_driver_bus_probe_module.h $(GENERAT
                        $(GENERATED_DIR)/wasm_c_hostcall_region_base_module.h \
                        $(GENERATED_DIR)/wasm_c_hostcall_region_len_module.h \
                        $(GENERATED_DIR)/wasm_c_hostcall_ui_emit_module.h
-DRIVER_BUS_PROBE_SOURCE := modules/driver_bus_probe/app/app.c
+DRIVER_BUS_PROBE_SOURCE := modules/driver_bus_probe/app/app.erc
 DRIVER_BUS_PROBE_MANIFEST := modules/driver_bus_probe/app/app.manifest
 USER_APP_PACKAGE_DIR := ../tests/fixtures/app-package/app
-USER_APP_SOURCE := $(USER_APP_PACKAGE_DIR)/app.c
+USER_APP_SOURCE := $(USER_APP_PACKAGE_DIR)/app.erc
 USER_APP_MANIFEST := $(USER_APP_PACKAGE_DIR)/app.manifest
 USER_APP_PACKAGE_WASM := $(USER_APP_PACKAGE_DIR)/.build/app.wasm
 USER_APP_PACKAGE_IDENTITY := $(USER_APP_PACKAGE_DIR)/.build/package.identity

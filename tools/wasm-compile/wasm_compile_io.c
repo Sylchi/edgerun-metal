@@ -67,46 +67,46 @@ static int erwc_path_has_suffix(const char* path, const char* suffix) {
   return memcmp(path + path_len - suffix_len, suffix, suffix_len) == 0;
 }
 
+static ErWcCompileStatus erwc_source_kind_for_path(const char* path,
+                                                   ErWcSourceKind* out_kind) {
+  if (out_kind == NULL) {
+    return ERWC_COMPILE_STATUS_BAD_ARGS;
+  }
+  if (erwc_path_has_suffix(path, ".c") != 0 ||
+      erwc_path_has_suffix(path, ".erc") != 0) {
+    *out_kind = ERWC_SOURCE_KIND_ERC;
+    return ERWC_COMPILE_STATUS_OK;
+  }
+  if (erwc_path_has_suffix(path, ".wat") != 0) {
+    *out_kind = ERWC_SOURCE_KIND_WAT;
+    return ERWC_COMPILE_STATUS_OK;
+  }
+  return ERWC_COMPILE_STATUS_UNSUPPORTED_SOURCE_KIND;
+}
+
 int erwc_compile_path(const char* input_path, const char* output_path) {
   ErWcSource source;
-  ErWcParse parse;
-  ErWcModule module;
   ErWcBuffer out;
-  int root;
+  ErWcCompileStatus status;
+  ErWcSourceKind source_kind;
 
-  memset(&parse, 0, sizeof(parse));
+  if (input_path == NULL || output_path == NULL) {
+    return 1;
+  }
   if (erwc_read_file(input_path, &source) != 0) {
     return 1;
   }
-  if (erwc_path_has_suffix(input_path, ".c") != 0) {
-    if (erwc_build_c_source(&source, &module) != 0) {
-      fprintf(stderr, "wasm-compile: %s: unsupported C subset\n", input_path);
-      free(source.bytes);
-      return 1;
-    }
-  } else {
-    if (erwc_tokenize(&source, &parse) != 0) {
-      fprintf(stderr, "wasm-compile: %s: tokenization failed\n", input_path);
-      free(source.bytes);
-      return 1;
-    }
-    root = erwc_parse_tree(&parse);
-    if (root < 0 || erwc_build_module(&parse, root, &module) != 0) {
-      fprintf(stderr, "wasm-compile: %s: unsupported WAT subset\n", input_path);
-      free(source.bytes);
-      return 1;
-    }
-  }
-  if (erwc_validate_contract(&module) != 0) {
-    fprintf(stderr, "wasm-compile: %s: module contract rejected\n", input_path);
-    free(source.bytes);
-    return 1;
-  }
-  if (erwc_emit_wasm(&module, &out) != 0) {
-    fprintf(stderr, "wasm-compile: %s: emit failed\n", input_path);
-    free(source.bytes);
-    return 1;
+  status = erwc_source_kind_for_path(input_path, &source_kind);
+  if (status == ERWC_COMPILE_STATUS_OK) {
+    status = erwc_compile_source(&source, source_kind, &out);
   }
   free(source.bytes);
+  if (status != ERWC_COMPILE_STATUS_OK) {
+    fprintf(stderr, "wasm-compile: %s: %s: %s\n",
+            input_path,
+            erwc_compile_status_code(status),
+            erwc_compile_status_message(status));
+    return 1;
+  }
   return erwc_write_file(output_path, &out);
 }

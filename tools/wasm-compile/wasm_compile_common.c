@@ -10,6 +10,62 @@ int erwc_usage(const char* program) {
   return 2;
 }
 
+static const char ERWC_DIAG_OK[] = "ERWC0000";
+static const char ERWC_DIAG_BAD_ARGS[] = "ERWC0001";
+static const char ERWC_DIAG_UNSUPPORTED_ERC[] = "ERWC0100";
+static const char ERWC_DIAG_TOKENIZATION_FAILED[] = "ERWC0200";
+static const char ERWC_DIAG_UNSUPPORTED_WAT[] = "ERWC0201";
+static const char ERWC_DIAG_CONTRACT_REJECTED[] = "ERWC0300";
+static const char ERWC_DIAG_EMIT_FAILED[] = "ERWC0400";
+static const char ERWC_DIAG_UNSUPPORTED_SOURCE_KIND[] = "ERWC0500";
+static const char ERWC_DIAG_UNKNOWN[] = "ERWC0999";
+
+const char* erwc_compile_status_code(ErWcCompileStatus status) {
+  switch (status) {
+    case ERWC_COMPILE_STATUS_OK:
+      return ERWC_DIAG_OK;
+    case ERWC_COMPILE_STATUS_BAD_ARGS:
+      return ERWC_DIAG_BAD_ARGS;
+    case ERWC_COMPILE_STATUS_UNSUPPORTED_ERC:
+      return ERWC_DIAG_UNSUPPORTED_ERC;
+    case ERWC_COMPILE_STATUS_TOKENIZATION_FAILED:
+      return ERWC_DIAG_TOKENIZATION_FAILED;
+    case ERWC_COMPILE_STATUS_UNSUPPORTED_WAT:
+      return ERWC_DIAG_UNSUPPORTED_WAT;
+    case ERWC_COMPILE_STATUS_CONTRACT_REJECTED:
+      return ERWC_DIAG_CONTRACT_REJECTED;
+    case ERWC_COMPILE_STATUS_EMIT_FAILED:
+      return ERWC_DIAG_EMIT_FAILED;
+    case ERWC_COMPILE_STATUS_UNSUPPORTED_SOURCE_KIND:
+      return ERWC_DIAG_UNSUPPORTED_SOURCE_KIND;
+    default:
+      return ERWC_DIAG_UNKNOWN;
+  }
+}
+
+const char* erwc_compile_status_message(ErWcCompileStatus status) {
+  switch (status) {
+    case ERWC_COMPILE_STATUS_OK:
+      return "ok";
+    case ERWC_COMPILE_STATUS_BAD_ARGS:
+      return "bad arguments";
+    case ERWC_COMPILE_STATUS_UNSUPPORTED_ERC:
+      return "unsupported ERC source";
+    case ERWC_COMPILE_STATUS_TOKENIZATION_FAILED:
+      return "tokenization failed";
+    case ERWC_COMPILE_STATUS_UNSUPPORTED_WAT:
+      return "unsupported WAT subset";
+    case ERWC_COMPILE_STATUS_CONTRACT_REJECTED:
+      return "module contract rejected";
+    case ERWC_COMPILE_STATUS_EMIT_FAILED:
+      return "emit failed";
+    case ERWC_COMPILE_STATUS_UNSUPPORTED_SOURCE_KIND:
+      return "unsupported source kind";
+    default:
+      return "unknown compile status";
+  }
+}
+
 int erwc_token_text_equals(const ErWcParse* parse, int token_index, const char* text) {
   const ErWcToken* token;
   size_t len;

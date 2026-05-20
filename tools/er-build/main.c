@@ -29,6 +29,7 @@ enum {
   ERB_OUTPUT_DIR_MODE = 0777,
   ERB_PATH_CAP = 4096,
   ERB_MANIFEST_CAP = 512,
+  ERB_MANIFEST_LINE_CAP = 128,
   ERB_PROGRESS_TITLE_CAP = 256,
   ERB_SWARM_DEFAULT_LIMIT = 50,
   ERB_SWARM_MAX_LIMIT = 50,
@@ -56,7 +57,7 @@ typedef enum {
   ERB_SWARM_FIX_LOCAL_REFACTOR
 } ErbSwarmFixKind;
 
-static const char ERB_DEFAULT_CC[] = "clang";
+static const char ERB_DEFAULT_CC[] = "toolchain/bin/clang";
 static const char ERB_BUILD_DIR[] = ".build";
 static const char ERB_INTERNAL_BUILD_DIR[] = ".build/er-build-out";
 static const char ERB_CRYPTO_BUILD_DIR[] = ".build/er-build-out/crypto";
@@ -73,25 +74,205 @@ static const char ERB_PI_USB_BOOT_BIN[] = ".build/pi-usb-boot";
 static const char ERB_CRYPTO_TEST_BIN[] = ".build/er-build-out/crypto/test_blake3";
 static const char ERB_VARFONT_TEST_BIN[] = ".build/er-build-out/varfont/vrfont_tests";
 static const char ERB_UI_CORE_TEST_BIN[] = ".build/er-build-out/ui-core/er_ui_core_tests";
-static const char ERB_APP_SOURCE_NAME[] = "app.c";
+static const char ERB_APP_C_SOURCE_NAME[] = "app.c";
+static const char ERB_APP_ERC_SOURCE_NAME[] = "app.erc";
 static const char ERB_APP_MANIFEST_NAME[] = "app.manifest";
 static const char ERB_APP_BUILD_DIR_NAME[] = ".build";
 static const char ERB_APP_WASM_NAME[] = "app.wasm";
 static const char ERB_APP_PACKAGE_IDENTITY_NAME[] = "package.identity";
-static const char ERB_UI_APP_MANIFEST_EXPECTED[] =
+static const char ERB_MANIFEST_CONTRACT_UI_APP[] = "contract=ui-app";
+static const char ERB_MANIFEST_CONTRACT_BUS_DRIVER[] = "contract=bus-driver";
+static const char ERB_MANIFEST_UI_MEMORY[] = "memory_pages=1";
+static const char ERB_MANIFEST_UI_IMPORTS[] = "imports=edgerun.ui/emit";
+static const char ERB_MANIFEST_BUS_IMPORTS[] = "imports=edgerun.bus/exec";
+static const char ERB_MANIFEST_DRIVER_MEMORY[] = "driver_memory_bytes=65536";
+static const char ERB_MANIFEST_DRIVER_BUS[] = "driver_bus=mmio32:4096:4:read8";
+static const char ERB_MANIFEST_OUTPUT_WASM[] = "output=.build/app.wasm";
+static const char ERB_MANIFEST_SOURCE_PREFIX[] = "source=";
+static const char ERB_UI_APP_SCAFFOLD_MANIFEST[] =
     "contract=ui-app\n"
     "memory_pages=1\n"
     "imports=edgerun.ui/emit\n"
-    "source=app.c\n"
+    "source=app.erc\n"
     "output=.build/app.wasm\n";
-static const char ERB_BUS_DRIVER_MANIFEST_EXPECTED[] =
+static const char ERB_BUS_DRIVER_SCAFFOLD_MANIFEST[] =
     "contract=bus-driver\n"
     "memory_pages=1\n"
     "imports=edgerun.bus/exec\n"
     "driver_memory_bytes=65536\n"
     "driver_bus=mmio32:4096:4:read8\n"
-    "source=app.c\n"
+    "source=app.erc\n"
     "output=.build/app.wasm\n";
+static const char ERB_UI_APP_SCAFFOLD_SOURCE[] =
+    "extern i64 ui_emit(i64, i64) __import(\"edgerun.ui\", \"emit\");\n"
+    "const i64 APP_OUTBOX = 1024;\n"
+    "const i64 APP_PACKET_BYTES = 172;\n"
+    "const i64 APP_PACKET_BYTES_SLOT = 172;\n"
+    "const i64 UI_ABI_VERSION = 1;\n"
+    "const i64 UI_COMMAND_COUNT = 3;\n"
+    "const i64 UI_RECT_COUNT = 1;\n"
+    "const i64 UI_HIT_COUNT = 1;\n"
+    "const i64 UI_EMPTY_COUNT = 0;\n"
+    "const i64 UI_TEXT_COUNT = 1;\n"
+    "const i64 UI_HIT_KIND_BUTTON = 3;\n"
+    "const i64 UI_HIT_ID = 7;\n"
+    "const i64 UI_TEXT_ATLAS_ID = 2;\n"
+    "const i64 UI_HEADER_ABI = 0;\n"
+    "const i64 UI_HEADER_COMMANDS = 4;\n"
+    "const i64 UI_HEADER_RECTS = 8;\n"
+    "const i64 UI_HEADER_HITS = 12;\n"
+    "const i64 UI_HEADER_DRAG_SOURCES = 16;\n"
+    "const i64 UI_HEADER_DROP_TARGETS = 20;\n"
+    "const i64 UI_HEADER_TRANSITIONS = 24;\n"
+    "const i64 UI_HEADER_ICON_QUADS = 28;\n"
+    "const i64 UI_HEADER_TEXT_QUADS = 32;\n"
+    "const i64 UI_RECT_X = 36;\n"
+    "const i64 UI_RECT_Y = 40;\n"
+    "const i64 UI_RECT_W = 44;\n"
+    "const i64 UI_RECT_H = 48;\n"
+    "const i64 UI_RECT_RADIUS = 52;\n"
+    "const i64 UI_RECT_COLOR_R = 56;\n"
+    "const i64 UI_RECT_COLOR_G = 60;\n"
+    "const i64 UI_RECT_COLOR_B = 64;\n"
+    "const i64 UI_RECT_COLOR_A = 68;\n"
+    "const i64 UI_RECT_COLOR2_R = 72;\n"
+    "const i64 UI_RECT_COLOR2_G = 76;\n"
+    "const i64 UI_RECT_COLOR2_B = 80;\n"
+    "const i64 UI_RECT_COLOR2_A = 84;\n"
+    "const i64 UI_RECT_MODE = 88;\n"
+    "const i64 UI_RECT_SHADOW = 92;\n"
+    "const i64 UI_HIT_KIND = 96;\n"
+    "const i64 UI_HIT_RECORD_ID = 100;\n"
+    "const i64 UI_HIT_X = 104;\n"
+    "const i64 UI_HIT_Y = 108;\n"
+    "const i64 UI_HIT_W = 112;\n"
+    "const i64 UI_HIT_H = 116;\n"
+    "const i64 UI_TEXT_X = 120;\n"
+    "const i64 UI_TEXT_Y = 124;\n"
+    "const i64 UI_TEXT_W = 128;\n"
+    "const i64 UI_TEXT_H = 132;\n"
+    "const i64 UI_TEXT_U0 = 136;\n"
+    "const i64 UI_TEXT_V0 = 140;\n"
+    "const i64 UI_TEXT_U1 = 144;\n"
+    "const i64 UI_TEXT_V1 = 148;\n"
+    "const i64 UI_TEXT_ATLAS = 152;\n"
+    "const i64 UI_TEXT_COLOR_R = 156;\n"
+    "const i64 UI_TEXT_COLOR_G = 160;\n"
+    "const i64 UI_TEXT_COLOR_B = 164;\n"
+    "const i64 UI_TEXT_COLOR_A = 168;\n"
+    "const i64 F32_RECT_X = 0x41200000;\n"
+    "const i64 F32_RECT_Y = 0x41a00000;\n"
+    "const i64 F32_RECT_W = 0x42f00000;\n"
+    "const i64 F32_RECT_H = 0x42480000;\n"
+    "const i64 F32_RECT_RADIUS = 0x41000000;\n"
+    "const i64 F32_PANEL_R = 0x3e800000;\n"
+    "const i64 F32_PANEL_G = 0x3f000000;\n"
+    "const i64 F32_PANEL_B = 0x3f400000;\n"
+    "const i64 F32_ONE = 0x3f800000;\n"
+    "const i64 F32_TEXT_X = 0x41300000;\n"
+    "const i64 F32_TEXT_Y = 0x41b00000;\n"
+    "const i64 F32_TEXT_SIZE = 0x41800000;\n"
+    "const i64 UI_RECT_MODE_FILL = 0;\n"
+    "memory(1);\n"
+    "export i64 main(void) {\n"
+    "  i64 ptr = APP_OUTBOX;\n"
+    "  i64 len = 0;\n"
+    "  store32(ptr, APP_PACKET_BYTES_SLOT, APP_PACKET_BYTES);\n"
+    "  len = load32(ptr, APP_PACKET_BYTES_SLOT);\n"
+    "  store16(ptr, UI_HEADER_ABI, UI_ABI_VERSION);\n"
+    "  store32(ptr, UI_HEADER_COMMANDS, UI_COMMAND_COUNT);\n"
+    "  store32(ptr, UI_HEADER_RECTS, UI_RECT_COUNT);\n"
+    "  store32(ptr, UI_HEADER_HITS, UI_HIT_COUNT);\n"
+    "  store32(ptr, UI_HEADER_DRAG_SOURCES, UI_EMPTY_COUNT);\n"
+    "  store32(ptr, UI_HEADER_DROP_TARGETS, UI_EMPTY_COUNT);\n"
+    "  store32(ptr, UI_HEADER_TRANSITIONS, UI_EMPTY_COUNT);\n"
+    "  store32(ptr, UI_HEADER_ICON_QUADS, UI_EMPTY_COUNT);\n"
+    "  store32(ptr, UI_HEADER_TEXT_QUADS, UI_TEXT_COUNT);\n"
+    "  store32(ptr, UI_RECT_X, F32_RECT_X);\n"
+    "  store32(ptr, UI_RECT_Y, F32_RECT_Y);\n"
+    "  store32(ptr, UI_RECT_W, F32_RECT_W);\n"
+    "  store32(ptr, UI_RECT_H, F32_RECT_H);\n"
+    "  store32(ptr, UI_RECT_RADIUS, F32_RECT_RADIUS);\n"
+    "  store32(ptr, UI_RECT_COLOR_R, F32_PANEL_R);\n"
+    "  store32(ptr, UI_RECT_COLOR_G, F32_PANEL_G);\n"
+    "  store32(ptr, UI_RECT_COLOR_B, F32_PANEL_B);\n"
+    "  store32(ptr, UI_RECT_COLOR_A, F32_ONE);\n"
+    "  store32(ptr, UI_RECT_COLOR2_R, F32_PANEL_R);\n"
+    "  store32(ptr, UI_RECT_COLOR2_G, F32_PANEL_G);\n"
+    "  store32(ptr, UI_RECT_COLOR2_B, F32_PANEL_B);\n"
+    "  store32(ptr, UI_RECT_COLOR2_A, F32_ONE);\n"
+    "  store32(ptr, UI_RECT_MODE, UI_RECT_MODE_FILL);\n"
+    "  store32(ptr, UI_RECT_SHADOW, UI_EMPTY_COUNT);\n"
+    "  store32(ptr, UI_HIT_KIND, UI_HIT_KIND_BUTTON);\n"
+    "  store32(ptr, UI_HIT_RECORD_ID, UI_HIT_ID);\n"
+    "  store32(ptr, UI_HIT_X, F32_RECT_X);\n"
+    "  store32(ptr, UI_HIT_Y, F32_RECT_Y);\n"
+    "  store32(ptr, UI_HIT_W, F32_RECT_W);\n"
+    "  store32(ptr, UI_HIT_H, F32_RECT_H);\n"
+    "  store32(ptr, UI_TEXT_X, F32_TEXT_X);\n"
+    "  store32(ptr, UI_TEXT_Y, F32_TEXT_Y);\n"
+    "  store32(ptr, UI_TEXT_W, F32_TEXT_SIZE);\n"
+    "  store32(ptr, UI_TEXT_H, F32_TEXT_SIZE);\n"
+    "  store32(ptr, UI_TEXT_U0, UI_EMPTY_COUNT);\n"
+    "  store32(ptr, UI_TEXT_V0, UI_EMPTY_COUNT);\n"
+    "  store32(ptr, UI_TEXT_U1, F32_ONE);\n"
+    "  store32(ptr, UI_TEXT_V1, F32_ONE);\n"
+    "  store32(ptr, UI_TEXT_ATLAS, UI_TEXT_ATLAS_ID);\n"
+    "  store32(ptr, UI_TEXT_COLOR_R, F32_ONE);\n"
+    "  store32(ptr, UI_TEXT_COLOR_G, F32_ONE);\n"
+    "  store32(ptr, UI_TEXT_COLOR_B, F32_ONE);\n"
+    "  store32(ptr, UI_TEXT_COLOR_A, F32_ONE);\n"
+    "  return ui_emit(ptr, len);\n"
+    "}\n";
+static const char ERB_BUS_DRIVER_SCAFFOLD_SOURCE[] =
+    "extern i64 bus_exec(i64, i64) __import(\"edgerun.bus\", \"exec\");\n"
+    "\n"
+    "const i64 DRIVER_REQUEST = 0;\n"
+    "const i64 DRIVER_RESPONSE = 128;\n"
+    "const i64 DRIVER_ABI_VERSION = 1;\n"
+    "const i64 DRIVER_PACKET_IO_REQUEST = 3;\n"
+    "const i64 DRIVER_BUS_KIND_MMIO32 = 2;\n"
+    "const i64 DRIVER_BUS_ACCESS_READ8 = 4;\n"
+    "const i64 DRIVER_WIDTH8 = 1;\n"
+    "const i64 DRIVER_PACKET_ID = 1;\n"
+    "const i64 DRIVER_MMIO_BASE = 4096;\n"
+    "const i64 DRIVER_MMIO_LEN = 4;\n"
+    "\n"
+    "const i64 BUS_PACKET_ABI = 0;\n"
+    "const i64 BUS_PACKET_KIND = 2;\n"
+    "const i64 BUS_PACKET_ID = 8;\n"
+    "const i64 BUS_PACKET_OP_ABI = 16;\n"
+    "const i64 BUS_PACKET_OP_KIND = 18;\n"
+    "const i64 BUS_PACKET_OP_ACCESS = 20;\n"
+    "const i64 BUS_PACKET_OP_WIDTH = 24;\n"
+    "const i64 BUS_PACKET_ADDRESS_ABI = 32;\n"
+    "const i64 BUS_PACKET_ADDRESS_KIND = 34;\n"
+    "const i64 BUS_PACKET_ADDRESS_ACCESS = 36;\n"
+    "const i64 BUS_PACKET_ADDRESS_BASE = 64;\n"
+    "const i64 BUS_PACKET_ADDRESS_LEN = 72;\n"
+    "const i64 BUS_PACKET_RESPONSE_RESULT = 96;\n"
+    "\n"
+    "memory(1);\n"
+    "\n"
+    "export i64 main(void) {\n"
+    "  i64 request = DRIVER_REQUEST;\n"
+    "  i64 response = DRIVER_RESPONSE;\n"
+    "  i64 ok = 0;\n"
+    "  store16(request, BUS_PACKET_ABI, DRIVER_ABI_VERSION);\n"
+    "  store16(request, BUS_PACKET_KIND, DRIVER_PACKET_IO_REQUEST);\n"
+    "  store64(request, BUS_PACKET_ID, DRIVER_PACKET_ID);\n"
+    "  store16(request, BUS_PACKET_OP_ABI, DRIVER_ABI_VERSION);\n"
+    "  store16(request, BUS_PACKET_OP_KIND, DRIVER_BUS_KIND_MMIO32);\n"
+    "  store32(request, BUS_PACKET_OP_ACCESS, DRIVER_BUS_ACCESS_READ8);\n"
+    "  store32(request, BUS_PACKET_OP_WIDTH, DRIVER_WIDTH8);\n"
+    "  store16(request, BUS_PACKET_ADDRESS_ABI, DRIVER_ABI_VERSION);\n"
+    "  store16(request, BUS_PACKET_ADDRESS_KIND, DRIVER_BUS_KIND_MMIO32);\n"
+    "  store32(request, BUS_PACKET_ADDRESS_ACCESS, DRIVER_BUS_ACCESS_READ8);\n"
+    "  store64(request, BUS_PACKET_ADDRESS_BASE, DRIVER_MMIO_BASE);\n"
+    "  store64(request, BUS_PACKET_ADDRESS_LEN, DRIVER_MMIO_LEN);\n"
+    "  ok = bus_exec(request, response);\n"
+    "  return load64(response, BUS_PACKET_RESPONSE_RESULT);\n"
+    "}\n";
 
 typedef struct {
   const char* items[ERB_MAX_ARGC];
@@ -267,6 +448,31 @@ static int erb_read_text_file(const char* path, char* out, size_t out_len) {
   return 0;
 }
 
+static int erb_write_text_new_file(const char* dest_path, const char* text) {
+  FILE* dest;
+  size_t len;
+
+  if (dest_path == NULL || text == NULL) {
+    return erb_fail("invalid file write");
+  }
+  dest = fopen(dest_path, "wbx");
+  if (dest == NULL) {
+    fprintf(stderr, "er-build: create failed for %s: %s\n", dest_path, strerror(errno));
+    return 1;
+  }
+  len = strlen(text);
+  if (fwrite(text, 1u, len, dest) != len) {
+    fprintf(stderr, "er-build: write failed for %s\n", dest_path);
+    fclose(dest);
+    return 1;
+  }
+  if (fclose(dest) != 0) {
+    fprintf(stderr, "er-build: close failed for %s: %s\n", dest_path, strerror(errno));
+    return 1;
+  }
+  return 0;
+}
+
 static void erb_text_buffer_free(ErbTextBuffer* buffer) {
   if (buffer != NULL) {
     free(buffer->data);
@@ -314,22 +520,187 @@ static int erb_text_buffer_append(ErbTextBuffer* buffer, const char* text, size_
   return 0;
 }
 
-static int erb_validate_app_manifest(const char* path, int* out_contract) {
-  char text[ERB_MANIFEST_CAP];
+static int erb_copy_source_name(char* out_source_name,
+                                size_t out_source_name_len,
+                                const char* source_name) {
+  size_t source_name_len;
 
-  if (out_contract == NULL) {
+  if (out_source_name == NULL || source_name == NULL || out_source_name_len == 0u) {
+    return erb_fail("invalid app source name output");
+  }
+  source_name_len = strlen(source_name);
+  if (source_name_len + 1u > out_source_name_len) {
+    return erb_fail("app source name too long");
+  }
+  memcpy(out_source_name, source_name, source_name_len + 1u);
+  return 0;
+}
+
+static int erb_manifest_next_line(const char** cursor,
+                                  char* out_line,
+                                  size_t out_line_len,
+                                  int* out_has_line) {
+  const char* start;
+  const char* end;
+  size_t len;
+
+  if (cursor == NULL || *cursor == NULL || out_line == NULL ||
+      out_line_len == 0u || out_has_line == NULL) {
+    return erb_fail("invalid manifest cursor");
+  }
+  *out_has_line = 0;
+  if ((*cursor)[0] == '\0') {
+    return 0;
+  }
+  start = *cursor;
+  end = start;
+  while (*end != '\0' && *end != '\n') {
+    if (*end == '\r') {
+      return erb_fail("manifest contains carriage return");
+    }
+    ++end;
+  }
+  len = (size_t)(end - start);
+  if (len == 0u) {
+    return erb_fail("manifest contains empty line");
+  }
+  if (len + 1u > out_line_len) {
+    return erb_fail("manifest line too long");
+  }
+  memcpy(out_line, start, len);
+  out_line[len] = '\0';
+  *cursor = *end == '\n' ? end + 1 : end;
+  *out_has_line = 1;
+  return 0;
+}
+
+static int erb_manifest_line_equals(const char* line, const char* expected) {
+  if (line == NULL || expected == NULL || strcmp(line, expected) != 0) {
+    return erb_fail("invalid app manifest field");
+  }
+  return 0;
+}
+
+static int erb_manifest_parse_source(const char* line,
+                                     char* out_source_name,
+                                     size_t out_source_name_len) {
+  const char* source_name;
+  size_t prefix_len;
+
+  if (line == NULL) {
+    return erb_fail("invalid manifest source field");
+  }
+  prefix_len = strlen(ERB_MANIFEST_SOURCE_PREFIX);
+  if (strncmp(line, ERB_MANIFEST_SOURCE_PREFIX, prefix_len) != 0) {
+    return erb_fail("invalid app manifest source field");
+  }
+  source_name = line + prefix_len;
+  if (strcmp(source_name, ERB_APP_ERC_SOURCE_NAME) == 0 ||
+      strcmp(source_name, ERB_APP_C_SOURCE_NAME) == 0) {
+    return erb_copy_source_name(out_source_name, out_source_name_len, source_name);
+  }
+  return erb_fail("unsupported app manifest source");
+}
+
+static int erb_validate_app_manifest(const char* path,
+                                     int* out_contract,
+                                     char* out_source_name,
+                                     size_t out_source_name_len) {
+  char text[ERB_MANIFEST_CAP];
+  char line[ERB_MANIFEST_LINE_CAP];
+  const char* cursor;
+  size_t line_index = 0u;
+  int has_line = 0;
+
+  if (out_contract == NULL || out_source_name == NULL || out_source_name_len == 0u) {
     return erb_fail("invalid manifest contract output");
   }
   *out_contract = 0;
+  out_source_name[0] = '\0';
   if (erb_read_text_file(path, text, sizeof(text)) != 0) {
     return 1;
   }
-  if (strcmp(text, ERB_UI_APP_MANIFEST_EXPECTED) == 0) {
-    *out_contract = ERB_PACKAGE_CONTRACT_UI_APP;
-    return 0;
+  cursor = text;
+  while (1) {
+    if (erb_manifest_next_line(&cursor, line, sizeof(line), &has_line) != 0) {
+      fprintf(stderr, "er-build: invalid app manifest %s\n", path);
+      return 1;
+    }
+    if (has_line == 0) {
+      break;
+    }
+    switch (line_index) {
+      case 0:
+        if (strcmp(line, ERB_MANIFEST_CONTRACT_UI_APP) == 0) {
+          *out_contract = ERB_PACKAGE_CONTRACT_UI_APP;
+        } else if (strcmp(line, ERB_MANIFEST_CONTRACT_BUS_DRIVER) == 0) {
+          *out_contract = ERB_PACKAGE_CONTRACT_BUS_DRIVER;
+        } else {
+          fprintf(stderr, "er-build: invalid app manifest %s\n", path);
+          return 1;
+        }
+        break;
+      case 1:
+        if (erb_manifest_line_equals(line, ERB_MANIFEST_UI_MEMORY) != 0) {
+          fprintf(stderr, "er-build: invalid app manifest %s\n", path);
+          return 1;
+        }
+        break;
+      case 2:
+        if ((*out_contract == ERB_PACKAGE_CONTRACT_UI_APP &&
+             erb_manifest_line_equals(line, ERB_MANIFEST_UI_IMPORTS) != 0) ||
+            (*out_contract == ERB_PACKAGE_CONTRACT_BUS_DRIVER &&
+             erb_manifest_line_equals(line, ERB_MANIFEST_BUS_IMPORTS) != 0)) {
+          fprintf(stderr, "er-build: invalid app manifest %s\n", path);
+          return 1;
+        }
+        break;
+      case 3:
+        if (*out_contract == ERB_PACKAGE_CONTRACT_UI_APP) {
+          if (erb_manifest_parse_source(line, out_source_name,
+                                        out_source_name_len) != 0) {
+            fprintf(stderr, "er-build: invalid app manifest %s\n", path);
+            return 1;
+          }
+        } else if (erb_manifest_line_equals(line, ERB_MANIFEST_DRIVER_MEMORY) != 0) {
+          fprintf(stderr, "er-build: invalid app manifest %s\n", path);
+          return 1;
+        }
+        break;
+      case 4:
+        if (*out_contract == ERB_PACKAGE_CONTRACT_UI_APP) {
+          if (erb_manifest_line_equals(line, ERB_MANIFEST_OUTPUT_WASM) != 0) {
+            fprintf(stderr, "er-build: invalid app manifest %s\n", path);
+            return 1;
+          }
+        } else if (erb_manifest_line_equals(line, ERB_MANIFEST_DRIVER_BUS) != 0) {
+          fprintf(stderr, "er-build: invalid app manifest %s\n", path);
+          return 1;
+        }
+        break;
+      case 5:
+        if (*out_contract != ERB_PACKAGE_CONTRACT_BUS_DRIVER ||
+            erb_manifest_parse_source(line, out_source_name,
+                                      out_source_name_len) != 0) {
+          fprintf(stderr, "er-build: invalid app manifest %s\n", path);
+          return 1;
+        }
+        break;
+      case 6:
+        if (*out_contract != ERB_PACKAGE_CONTRACT_BUS_DRIVER ||
+            erb_manifest_line_equals(line, ERB_MANIFEST_OUTPUT_WASM) != 0) {
+          fprintf(stderr, "er-build: invalid app manifest %s\n", path);
+          return 1;
+        }
+        break;
+      default:
+        fprintf(stderr, "er-build: invalid app manifest %s\n", path);
+        return 1;
+    }
+    ++line_index;
   }
-  if (strcmp(text, ERB_BUS_DRIVER_MANIFEST_EXPECTED) == 0) {
-    *out_contract = ERB_PACKAGE_CONTRACT_BUS_DRIVER;
+  if ((*out_contract == ERB_PACKAGE_CONTRACT_UI_APP && line_index == 5u) ||
+      (*out_contract == ERB_PACKAGE_CONTRACT_BUS_DRIVER && line_index == 7u)) {
     return 0;
   }
   fprintf(stderr, "er-build: invalid app manifest %s\n", path);
@@ -341,9 +712,8 @@ static int erb_init_app_package_paths(ErbAppPackagePaths* paths,
   if (paths == NULL || package_dir == NULL || package_dir[0] == '\0') {
     return erb_fail("invalid app package path input");
   }
-  if (erb_path_join(paths->app_source, sizeof(paths->app_source), package_dir,
-                    ERB_APP_SOURCE_NAME) != 0 ||
-      erb_path_join(paths->manifest_source, sizeof(paths->manifest_source), package_dir,
+  memset(paths, 0, sizeof(*paths));
+  if (erb_path_join(paths->manifest_source, sizeof(paths->manifest_source), package_dir,
                     ERB_APP_MANIFEST_NAME) != 0 ||
       erb_path_join(paths->package_build_dir, sizeof(paths->package_build_dir), package_dir,
                     ERB_APP_BUILD_DIR_NAME) != 0 ||
@@ -427,7 +797,8 @@ static int erb_build_wasm_compile(int print_plan) {
       erb_args_push(&args, "tools/wasm-compile/wasm_compile_emit.c") != 0 ||
       erb_args_push(&args, "tools/wasm-compile/wasm_compile_io.c") != 0 ||
       erb_args_push(&args, "tools/wasm-compile/wasm_compile_module.c") != 0 ||
-      erb_args_push(&args, "tools/wasm-compile/wasm_compile_parse.c") != 0) {
+      erb_args_push(&args, "tools/wasm-compile/wasm_compile_parse.c") != 0 ||
+      erb_args_push(&args, "tools/wasm-compile/wasm_compile_source.c") != 0) {
     return 1;
   }
   return erb_run_args(&args, print_plan);
@@ -509,6 +880,7 @@ static int erb_target_app_build(const char* package_dir, int print_plan) {
   ErbArgs args;
   ErbAppPackagePaths paths;
   int package_contract = 0;
+  char source_name[ERB_PATH_CAP];
 
   if (package_dir == NULL || package_dir[0] == '\0') {
     return erb_fail("app-build requires a package directory");
@@ -516,9 +888,12 @@ static int erb_target_app_build(const char* package_dir, int print_plan) {
   if (erb_init_app_package_paths(&paths, package_dir) != 0) {
     return 1;
   }
-  if (erb_require_regular_file(paths.app_source) != 0 ||
-      erb_require_regular_file(paths.manifest_source) != 0 ||
-      erb_validate_app_manifest(paths.manifest_source, &package_contract) != 0 ||
+  if (erb_require_regular_file(paths.manifest_source) != 0 ||
+      erb_validate_app_manifest(paths.manifest_source, &package_contract,
+                                source_name, sizeof(source_name)) != 0 ||
+      erb_path_join(paths.app_source, sizeof(paths.app_source), package_dir,
+                    source_name) != 0 ||
+      erb_require_regular_file(paths.app_source) != 0 ||
       erb_build_wasm_compile(print_plan) != 0) {
     return 1;
   }
@@ -545,6 +920,7 @@ static int erb_target_app_build(const char* package_dir, int print_plan) {
 static int erb_target_app_verify(const char* package_dir) {
   ErbAppPackagePaths paths;
   int package_contract = 0;
+  char source_name[ERB_PATH_CAP];
 
   if (package_dir == NULL || package_dir[0] == '\0') {
     return erb_fail("app-verify requires a package directory");
@@ -552,11 +928,14 @@ static int erb_target_app_verify(const char* package_dir) {
   if (erb_init_app_package_paths(&paths, package_dir) != 0) {
     return 1;
   }
-  if (erb_require_regular_file(paths.app_source) != 0 ||
-      erb_require_regular_file(paths.manifest_source) != 0 ||
+  if (erb_require_regular_file(paths.manifest_source) != 0 ||
+      erb_validate_app_manifest(paths.manifest_source, &package_contract,
+                                source_name, sizeof(source_name)) != 0 ||
+      erb_path_join(paths.app_source, sizeof(paths.app_source), package_dir,
+                    source_name) != 0 ||
+      erb_require_regular_file(paths.app_source) != 0 ||
       erb_require_regular_file(paths.output_wasm) != 0 ||
-      erb_require_regular_file(paths.output_identity) != 0 ||
-      erb_validate_app_manifest(paths.manifest_source, &package_contract) != 0) {
+      erb_require_regular_file(paths.output_identity) != 0) {
     return 1;
   }
   (void)package_contract;
@@ -570,6 +949,7 @@ static int erb_target_app_run(const char* package_dir, int print_plan) {
   char package_build_dir[ERB_PATH_CAP];
   char output_wasm[ERB_PATH_CAP];
   int package_contract = 0;
+  char source_name[ERB_PATH_CAP];
 
   if (package_dir == NULL || package_dir[0] == '\0') {
     return erb_fail("app-run requires a package directory");
@@ -582,7 +962,8 @@ static int erb_target_app_run(const char* package_dir, int print_plan) {
                     ERB_APP_WASM_NAME) != 0) {
     return 1;
   }
-  if (erb_validate_app_manifest(manifest_source, &package_contract) != 0 ||
+  if (erb_validate_app_manifest(manifest_source, &package_contract,
+                                source_name, sizeof(source_name)) != 0 ||
       package_contract != ERB_PACKAGE_CONTRACT_UI_APP) {
     return erb_fail("app-run requires a ui-app package");
   }
@@ -596,6 +977,80 @@ static int erb_target_app_run(const char* package_dir, int print_plan) {
     return 1;
   }
   return erb_run_args(&args, print_plan);
+}
+
+static int erb_read_app_contract(const char* package_dir, int* out_contract) {
+  char manifest_source[ERB_PATH_CAP];
+  char source_name[ERB_PATH_CAP];
+
+  if (package_dir == NULL || package_dir[0] == '\0' || out_contract == NULL) {
+    return erb_fail("invalid app contract read");
+  }
+  if (erb_path_join(manifest_source, sizeof(manifest_source), package_dir,
+                    ERB_APP_MANIFEST_NAME) != 0 ||
+      erb_validate_app_manifest(manifest_source, out_contract,
+                                source_name, sizeof(source_name)) != 0) {
+    return 1;
+  }
+  return 0;
+}
+
+static int erb_target_app_check(const char* package_dir) {
+  int package_contract = 0;
+
+  if (package_dir == NULL || package_dir[0] == '\0') {
+    return erb_fail("app-check requires a package directory");
+  }
+  if (erb_target_app_build(package_dir, 0) != 0 ||
+      erb_read_app_contract(package_dir, &package_contract) != 0) {
+    return 1;
+  }
+  switch (package_contract) {
+    case ERB_PACKAGE_CONTRACT_UI_APP:
+      return erb_target_app_run(package_dir, 0);
+    case ERB_PACKAGE_CONTRACT_BUS_DRIVER:
+      if (erb_target_app_verify(package_dir) != 0) {
+        return 1;
+      }
+      printf("app-check result=verified contract=bus-driver\n");
+      return 0;
+    default:
+      return erb_fail("unsupported app package contract");
+  }
+}
+
+static int erb_target_app_new(const char* package_dir, const char* contract) {
+  const char* scaffold_source;
+  const char* scaffold_manifest;
+  char output_source[ERB_PATH_CAP];
+  char output_manifest[ERB_PATH_CAP];
+
+  if (package_dir == NULL || package_dir[0] == '\0' ||
+      contract == NULL || contract[0] == '\0') {
+    return erb_fail("app-new requires a package directory and contract");
+  }
+  if (strcmp(contract, "ui-app") == 0) {
+    scaffold_source = ERB_UI_APP_SCAFFOLD_SOURCE;
+    scaffold_manifest = ERB_UI_APP_SCAFFOLD_MANIFEST;
+  } else if (strcmp(contract, "bus-driver") == 0) {
+    scaffold_source = ERB_BUS_DRIVER_SCAFFOLD_SOURCE;
+    scaffold_manifest = ERB_BUS_DRIVER_SCAFFOLD_MANIFEST;
+  } else {
+    return erb_fail("app-new contract must be ui-app or bus-driver");
+  }
+  if (mkdir(package_dir, ERB_OUTPUT_DIR_MODE) != 0) {
+    fprintf(stderr, "er-build: mkdir failed for %s: %s\n", package_dir, strerror(errno));
+    return 1;
+  }
+  if (erb_path_join(output_source, sizeof(output_source), package_dir,
+                    ERB_APP_ERC_SOURCE_NAME) != 0 ||
+      erb_path_join(output_manifest, sizeof(output_manifest), package_dir,
+                    ERB_APP_MANIFEST_NAME) != 0 ||
+      erb_write_text_new_file(output_source, scaffold_source) != 0 ||
+      erb_write_text_new_file(output_manifest, scaffold_manifest) != 0) {
+    return 1;
+  }
+  return 0;
 }
 
 static int erb_run_program(const char* program, int print_plan) {
@@ -1524,6 +1979,7 @@ static int erb_target_repo_test(int print_plan) {
       erb_run_program("./tests/er-build-tests.sh", print_plan) != 0 ||
       erb_run_program("./tests/app-package-build-tests.sh", print_plan) != 0 ||
       erb_run_program("./tests/wasm-compile-tests.sh", print_plan) != 0 ||
+      erb_run_program("./tests/wasm-compile-source-tests.sh", print_plan) != 0 ||
       erb_run_program("./tests/metal-arch-build-tests.sh", print_plan) != 0 ||
       erb_run_program("./tests/pi-boot-stage-tests.sh", print_plan) != 0 ||
       erb_run_program("./tests/pi-serial-verify-tests.sh", print_plan) != 0 ||
@@ -1690,7 +2146,9 @@ static int erb_target_ui_core_test(int print_plan) {
 static int erb_usage(void) {
   fprintf(stderr,
           "usage: er-build [--print-plan] <target> [args]\n"
-          "targets: app-build <package-dir> app-verify <package-dir> app-run <package-dir>\n"
+          "targets: app-new <package-dir> ui-app|bus-driver\n"
+          "         app-build <package-dir> app-verify <package-dir>\n"
+          "         app-run <package-dir> app-check <package-dir>\n"
           "         repo-check-bin repo-inspect erwire-decode erwire-test wasm-compile\n"
           "         repo-agent-swarm [--scope PATH] [--concurrency N] [--limit N]\n"
           "         pi-serial-verify sdcard-probe pi-usb-boot\n"
@@ -1730,6 +2188,18 @@ int main(int argc, char** argv) {
       return erb_usage();
     }
     return erb_target_app_build(argv[target_index + 1], print_plan);
+  }
+  if (strcmp(target, "app-new") == 0) {
+    if (print_plan != 0 || target_index + 3 != argc) {
+      return erb_usage();
+    }
+    return erb_target_app_new(argv[target_index + 1], argv[target_index + 2]);
+  }
+  if (strcmp(target, "app-check") == 0) {
+    if (print_plan != 0 || target_index + 2 != argc) {
+      return erb_usage();
+    }
+    return erb_target_app_check(argv[target_index + 1]);
   }
   if (strcmp(target, "app-verify") == 0) {
     if (print_plan != 0 || target_index + 2 != argc) {

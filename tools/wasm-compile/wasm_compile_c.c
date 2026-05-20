@@ -11,6 +11,29 @@ typedef struct {
   const char* field;
 } ErWcCHostImport;
 
+static const char* const ERWC_C_FORBIDDEN_HOST_TOKENS[] = {
+  "FILE",
+  "argc",
+  "argv",
+  "char",
+  "fopen",
+  "free",
+  "include",
+  "int",
+  "malloc",
+  "open",
+  "printf",
+  "read",
+  "size_t",
+  "stdio",
+  "stdlib",
+  "string",
+  "write"
+};
+static const uint32_t ERWC_C_FORBIDDEN_HOST_TOKEN_COUNT =
+  (uint32_t)(sizeof(ERWC_C_FORBIDDEN_HOST_TOKENS) /
+             sizeof(ERWC_C_FORBIDDEN_HOST_TOKENS[0]));
+
 static const ErWcCHostImport ERWC_C_HOST_IMPORTS[] = {
 #define ERWC_C_HOST_IMPORT_ROW(kind, module, field, params, results, contracts) \
   {kind, module, field},
@@ -38,6 +61,65 @@ static int erwc_c_take_literal(ErWcCParser* parser, const char* literal) {
     return -1;
   }
   parser->cur += len;
+  return 0;
+}
+
+static uint8_t erwc_c_is_ident_byte(char ch) {
+  return ((ch >= 'A' && ch <= 'Z') ||
+          (ch >= 'a' && ch <= 'z') ||
+          (ch >= '0' && ch <= '9') ||
+          ch == '_') ? 1u : 0u;
+}
+
+static uint8_t erwc_c_token_equals(const char* start, size_t len,
+                                   const char* token) {
+  size_t token_len;
+
+  if (start == NULL || token == NULL) {
+    return 0u;
+  }
+  token_len = strlen(token);
+  return len == token_len && memcmp(start, token, len) == 0 ? 1u : 0u;
+}
+
+static uint8_t erwc_c_is_forbidden_host_token(const char* start, size_t len) {
+  uint32_t index;
+
+  for (index = 0u; index < ERWC_C_FORBIDDEN_HOST_TOKEN_COUNT; ++index) {
+    //@optimizer-ignore host-boundary token list requires explicit indexed scan
+    if (erwc_c_token_equals(start, len, ERWC_C_FORBIDDEN_HOST_TOKENS[index]) != 0u) {
+      return 1u;
+    }
+  }
+  return 0u;
+}
+
+static int erwc_c_reject_host_surface(const ErWcSource* source) {
+  const char* data;
+  size_t pos = 0u;
+
+  if (source == NULL || source->bytes == NULL) {
+    return -1;
+  }
+  data = (const char*)source->bytes;
+  while (pos < source->len) {
+    char ch = data[pos];
+    if (ch == '#') {
+      return -1;
+    }
+    if ((ch >= 'A' && ch <= 'Z') || (ch >= 'a' && ch <= 'z') || ch == '_') {
+      size_t start = pos;
+      ++pos;
+      while (pos < source->len && erwc_c_is_ident_byte(data[pos]) != 0u) {
+        ++pos;
+      }
+      if (erwc_c_is_forbidden_host_token(data + start, pos - start) != 0u) {
+        return -1;
+      }
+      continue;
+    }
+    ++pos;
+  }
   return 0;
 }
 
@@ -836,6 +918,9 @@ int erwc_build_c_source(const ErWcSource* source, ErWcModule* module) {
   ErWcCParser parser;
 
   if (source == NULL || module == NULL || source->bytes == NULL) {
+    return -1;
+  }
+  if (erwc_c_reject_host_surface(source) != 0) {
     return -1;
   }
   memset(module, 0, sizeof(*module));

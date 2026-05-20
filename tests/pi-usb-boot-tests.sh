@@ -16,7 +16,7 @@ EMPTY_BOOT_DIR="${BUILD_DIR}/empty-boot"
 rm -rf "$BUILD_DIR"
 mkdir -p "$BOOT_DIR" "$EMPTY_BOOT_DIR"
 
-clang -std=c11 -Wall -Wextra -Werror -O2 -o "$TOOL_BIN" \
+"${CC:-${ROOT_DIR}/toolchain/bin/clang}" -std=c11 -Wall -Wextra -Werror -O2 -o "$TOOL_BIN" \
   "${ROOT_DIR}/tools/pi-usb-boot/main.c"
 
 if "$TOOL_BIN" >/tmp/pi-usb-boot-usage.out 2>/tmp/pi-usb-boot-usage.err; then

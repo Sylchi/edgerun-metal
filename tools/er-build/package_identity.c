@@ -15,7 +15,7 @@ enum {
   ERB_PACKAGE_HASH_NIBBLE_MASK = 0x0f
 };
 
-static const char ERB_PACKAGE_IDENTITY_DOMAIN[] = "edgerun:c:v1:app-package-identity\n";
+static const char ERB_PACKAGE_IDENTITY_DOMAIN[] = "edgerun:erc:v1:app-package-identity\n";
 static const char ERB_PACKAGE_IDENTITY_ASSETS[] = "assets=none\n";
 static const char ERB_PACKAGE_HEX[] = "0123456789abcdef";
 
@@ -94,6 +94,22 @@ static int erb_package_hash_identity(const uint8_t source_hash[ER_BLAKE3_OUT_LEN
   return 0;
 }
 
+static const char* erb_package_basename(const char* path) {
+  const char* slash;
+
+  if (path == NULL || path[0] == '\0') {
+    return NULL;
+  }
+  slash = strrchr(path, '/');
+  if (slash == NULL) {
+    return path;
+  }
+  if (slash[1] == '\0') {
+    return NULL;
+  }
+  return slash + 1;
+}
+
 static int erb_format_app_package_identity(const char* app_source,
                                            const char* manifest_source,
                                            const char* output_wasm,
@@ -106,8 +122,15 @@ static int erb_format_app_package_identity(const char* app_source,
   char manifest_hex[ERB_PACKAGE_HASH_HEX_CAP];
   char wasm_hex[ERB_PACKAGE_HASH_HEX_CAP];
   char package_hex[ERB_PACKAGE_HASH_HEX_CAP];
+  const char* source_name;
+  const char* manifest_name;
   int written;
 
+  source_name = erb_package_basename(app_source);
+  manifest_name = erb_package_basename(manifest_source);
+  if (source_name == NULL || manifest_name == NULL) {
+    return erb_package_identity_fail("invalid package identity path");
+  }
   if (erb_package_hash_file(app_source, source_hash) != 0 ||
       erb_package_hash_file(manifest_source, manifest_hash) != 0 ||
       erb_package_hash_file(output_wasm, wasm_hash) != 0 ||
@@ -121,15 +144,16 @@ static int erb_format_app_package_identity(const char* app_source,
 
   written = snprintf(out, ERB_PACKAGE_IDENTITY_TEXT_CAP,
                      "package_identity_v1\n"
-                     "source=app.c\n"
+                     "source=%s\n"
                      "source_blake3=%s\n"
-                     "manifest=app.manifest\n"
+                     "manifest=%s\n"
                      "manifest_blake3=%s\n"
                      "wasm=.build/app.wasm\n"
                      "wasm_blake3=%s\n"
                      "%s"
                      "package_blake3=%s\n",
-                     source_hex, manifest_hex, wasm_hex, ERB_PACKAGE_IDENTITY_ASSETS,
+                     source_name, source_hex, manifest_name, manifest_hex, wasm_hex,
+                     ERB_PACKAGE_IDENTITY_ASSETS,
                      package_hex);
   if (written < 0 || (size_t)written >= ERB_PACKAGE_IDENTITY_TEXT_CAP) {
     return erb_package_identity_fail("package identity text too large");

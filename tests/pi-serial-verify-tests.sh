@@ -18,7 +18,7 @@ BAD_LOG="${BUILD_DIR}/serial-erwire-bad.bin"
 rm -rf "$BUILD_DIR"
 mkdir -p "$BUILD_DIR"
 
-clang -std=c11 -Wall -Wextra -Werror -O2 -o "$TOOL_BIN" \
+"${CC:-${ROOT_DIR}/toolchain/bin/clang}" -std=c11 -Wall -Wextra -Werror -O2 -o "$TOOL_BIN" \
   "${ROOT_DIR}/tools/pi-serial-verify/main.c"
 
 if "$TOOL_BIN" >/tmp/pi-serial-verify-usage.out \
@@ -135,7 +135,7 @@ int main(int argc, char** argv) {
 }
 EOF_C
 
-clang -std=c11 -Wall -Wextra -Werror -O2 -o "$GEN_BIN" "$GEN_SRC"
+"${CC:-${ROOT_DIR}/toolchain/bin/clang}" -std=c11 -Wall -Wextra -Werror -O2 -o "$GEN_BIN" "$GEN_SRC"
 
 cat >"$MANIFEST" <<'EOF_MANIFEST'
 board=pi-zero-w-v1_1

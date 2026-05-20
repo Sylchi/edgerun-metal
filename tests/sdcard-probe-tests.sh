@@ -14,7 +14,7 @@ IMAGE="${BUILD_DIR}/card.img"
 
 mkdir -p "${BUILD_DIR}"
 
-clang -std=c11 -Wall -Wextra -Werror -O2 \
+"${CC:-${ROOT_DIR}/toolchain/bin/clang}" -std=c11 -Wall -Wextra -Werror -O2 \
   -I"${ROOT_DIR}/include" \
   -o "${TOOL_BIN}" \
   "${ROOT_DIR}/tools/sdcard-probe/main.c"
