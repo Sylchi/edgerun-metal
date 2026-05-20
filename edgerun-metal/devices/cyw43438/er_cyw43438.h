@@ -27,6 +27,13 @@
 #define ER_CYW43438_SDIO_FUNCTION_CCCR 0u
 #define ER_CYW43438_SDIO_FUNCTION_BACKPLANE 1u
 #define ER_CYW43438_SDIO_FUNCTION_WLAN 2u
+#define ER_CYW43438_REGISTER_OP_CAPACITY 5u
+
+typedef enum {
+  ER_CYW43438_REGISTER_OP_WRITE8 = 1,
+  ER_CYW43438_REGISTER_OP_READ8_EXPECT = 2,
+  ER_CYW43438_REGISTER_OP_WRITE_TEMPLATE = 3
+} ErCyw43438RegisterOpKind;
 
 typedef enum {
   ER_CYW43438_AP_STAGE_SDIO_IDENTITY = 1,
@@ -46,6 +53,34 @@ typedef struct {
   UINT32 frame_len;
   UINT8 frame[ER_IEEE80211_AP_FRAME_MAX];
 } ErCyw43438ApTemplate;
+
+typedef struct {
+  UINT16 abi_version;
+  UINT16 kind;
+  UINT8 function;
+  UINT8 template_kind;
+  UINT16 reserved;
+  UINT32 address;
+  UINT32 value;
+  UINT32 value_mask;
+  UINT32 bytes_len;
+} ErCyw43438RegisterOp;
+
+typedef struct {
+  UINT16 abi_version;
+  UINT16 op_count;
+  ErCyw43438RegisterOp ops[ER_CYW43438_REGISTER_OP_CAPACITY];
+} ErCyw43438RegisterExecutorPlan;
+
+typedef struct {
+  UINT16 abi_version;
+  UINT16 completed_ops;
+  UINT16 failed_op;
+  UINT16 reserved;
+  UINT32 last_response0;
+  UINT32 last_interrupt_value;
+  UINT8 completed;
+} ErCyw43438RegisterExecutorResult;
 
 typedef struct {
   UINT16 abi_version;
@@ -74,6 +109,7 @@ typedef struct {
   UINT16 reserved;
   ErCyw43438FirmwareSet firmware;
   ErCyw43438ApPath ap_path;
+  ErCyw43438RegisterExecutorPlan register_executor;
 } ErCyw43438OpenApBootDevice;
 
 typedef struct {
@@ -161,5 +197,14 @@ UINT8 er_cyw43438_prepare_open_l2_ap_path(
     UINT32 relative_card_address,
     const UINT8 probe_station_mac[ER_NET_MAC_LEN],
     ErCyw43438ApPath* out_path);
+UINT8 er_cyw43438_prepare_register_executor_plan(
+    const ErCyw43438ApPath* path,
+    ErCyw43438RegisterExecutorPlan* out_plan);
+UINT8 er_cyw43438_execute_register_executor_plan(
+    INT64 emmc_handle,
+    const ErCyw43438ApPath* path,
+    const ErCyw43438RegisterExecutorPlan* plan,
+    UINT32 poll_budget,
+    ErCyw43438RegisterExecutorResult* out_result);
 
 #endif

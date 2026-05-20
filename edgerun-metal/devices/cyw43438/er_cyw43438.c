@@ -8,7 +8,20 @@ enum {
   ER_CYW43438_STAGE_SDIO_CLAIM_INDEX = 1u,
   ER_CYW43438_STAGE_BEACON_INDEX = 2u,
   ER_CYW43438_STAGE_PROBE_RESPONSE_INDEX = 3u,
-  ER_CYW43438_R5_DATA_MASK = 0xffu
+  ER_CYW43438_R5_DATA_MASK = 0xffu,
+  ER_CYW43438_CCCR_IO_ENABLE_ADDR = 0x00000002u,
+  ER_CYW43438_CCCR_IO_READY_ADDR = 0x00000003u,
+  ER_CYW43438_CCCR_ENABLE_FUNCTION_1 = 0x02u,
+  ER_CYW43438_CCCR_ENABLE_FUNCTION_2 = 0x04u,
+  ER_CYW43438_WLAN_AP_CONTROL_ADDR = 0x00000001u,
+  ER_CYW43438_WLAN_AP_CONTROL_ENABLE = 0x01u,
+  ER_CYW43438_WLAN_BEACON_TEMPLATE_ADDR = 0x00001000u,
+  ER_CYW43438_WLAN_PROBE_TEMPLATE_ADDR = 0x00001100u,
+  ER_CYW43438_REGISTER_OP_ENABLE_INDEX = 0u,
+  ER_CYW43438_REGISTER_OP_READY_INDEX = 1u,
+  ER_CYW43438_REGISTER_OP_BEACON_INDEX = 2u,
+  ER_CYW43438_REGISTER_OP_PROBE_INDEX = 3u,
+  ER_CYW43438_REGISTER_OP_AP_ENABLE_INDEX = 4u
 };
 
 void er_cyw43438_clear_firmware_set(ErCyw43438FirmwareSet* firmware) {
@@ -38,6 +51,14 @@ static void er_cyw43438_sdio_direct_result_clear(
 
 static void er_cyw43438_sdio_transfer_result_clear(
     ErCyw43438SdioTransferResult* result) {
+  if (result == 0) {
+    return;
+  }
+  er_mem_zero((UINT8*)result, (UINTN)sizeof(*result));
+}
+
+static void er_cyw43438_register_executor_result_clear(
+    ErCyw43438RegisterExecutorResult* result) {
   if (result == 0) {
     return;
   }
@@ -218,6 +239,105 @@ static void er_cyw43438_stage_init(ErCyw43438ApStage* stage,
   stage->blocked_reason = blocked_reason;
 }
 
+static void er_cyw43438_register_op_init(ErCyw43438RegisterOp* op,
+                                         UINT16 kind,
+                                         UINT8 function,
+                                         UINT8 template_kind,
+                                         UINT32 address,
+                                         UINT32 value,
+                                         UINT32 value_mask,
+                                         UINT32 bytes_len) {
+  er_mem_zero((UINT8*)op, (UINTN)sizeof(*op));
+  op->abi_version = ER_CYW43438_ABI_VERSION;
+  op->kind = kind;
+  op->function = function;
+  op->template_kind = template_kind;
+  op->address = address;
+  op->value = value;
+  op->value_mask = value_mask;
+  op->bytes_len = bytes_len;
+}
+
+static const ErCyw43438ApTemplate* er_cyw43438_template_for_kind(
+    const ErCyw43438ApPath* path,
+    UINT8 template_kind) {
+  if (path == 0) {
+    return 0;
+  }
+  switch (template_kind) {
+    case ER_CYW43438_AP_TEMPLATE_BEACON:
+      return &path->stages[ER_CYW43438_STAGE_BEACON_INDEX].ap_template;
+    case ER_CYW43438_AP_TEMPLATE_PROBE_RESPONSE:
+      return &path->stages[ER_CYW43438_STAGE_PROBE_RESPONSE_INDEX].ap_template;
+    default:
+      return 0;
+  }
+}
+
+static UINT8 er_cyw43438_template_valid(
+    const ErCyw43438ApTemplate* template,
+    UINT8 expected_kind) {
+  return (UINT8)(template != 0 &&
+                 template->abi_version == ER_CYW43438_ABI_VERSION &&
+                 template->kind == expected_kind &&
+                 template->frame_len != 0u &&
+                 template->frame_len <= ER_IEEE80211_AP_FRAME_MAX);
+}
+
+static UINT8 er_cyw43438_register_op_valid(
+    const ErCyw43438ApPath* path,
+    const ErCyw43438RegisterOp* op) {
+  const ErCyw43438ApTemplate* template;
+
+  if (op == 0 ||
+      op->abi_version != ER_CYW43438_ABI_VERSION ||
+      er_cyw43438_sdio_function_valid(op->function) == 0u ||
+      op->reserved != 0u) {
+    return 0u;
+  }
+  switch (op->kind) {
+    case ER_CYW43438_REGISTER_OP_WRITE8:
+      return (UINT8)(op->template_kind == 0u &&
+                     op->value <= ER_CYW43438_R5_DATA_MASK &&
+                     op->value_mask == ER_CYW43438_R5_DATA_MASK &&
+                     op->bytes_len == 0u);
+    case ER_CYW43438_REGISTER_OP_READ8_EXPECT:
+      return (UINT8)(op->template_kind == 0u &&
+                     op->value <= ER_CYW43438_R5_DATA_MASK &&
+                     op->value_mask <= ER_CYW43438_R5_DATA_MASK &&
+                     op->value_mask != 0u &&
+                     op->bytes_len == 0u);
+    case ER_CYW43438_REGISTER_OP_WRITE_TEMPLATE:
+      template = er_cyw43438_template_for_kind(path, op->template_kind);
+      return (UINT8)(op->function == ER_CYW43438_SDIO_FUNCTION_WLAN &&
+                     op->value == 0u &&
+                     op->value_mask == 0u &&
+                     er_cyw43438_template_valid(template, op->template_kind) != 0u &&
+                     op->bytes_len == template->frame_len);
+    default:
+      return 0u;
+  }
+}
+
+static UINT8 er_cyw43438_register_executor_plan_valid(
+    const ErCyw43438ApPath* path,
+    const ErCyw43438RegisterExecutorPlan* plan) {
+  UINT16 i;
+
+  if (path == 0 ||
+      plan == 0 ||
+      plan->abi_version != ER_CYW43438_ABI_VERSION ||
+      plan->op_count != ER_CYW43438_REGISTER_OP_CAPACITY) {
+    return 0u;
+  }
+  for (i = 0u; i < plan->op_count; ++i) {
+    if (er_cyw43438_register_op_valid(path, &plan->ops[i]) == 0u) {
+      return 0u;
+    }
+  }
+  return 1u;
+}
+
 static UINT8 er_cyw43438_prepare_template(
     const ErIeee80211OpenApConfig* config,
     UINT16 template_kind,
@@ -366,7 +486,10 @@ UINT8 er_cyw43438_prepare_open_l2_ap_boot_device(
       er_cyw43438_prepare_open_l2_ap_path(ap_plan,
                                           relative_card_address,
                                           probe_station_mac,
-                                          &out_device->ap_path) == 0u) {
+                                          &out_device->ap_path) == 0u ||
+      er_cyw43438_prepare_register_executor_plan(
+          &out_device->ap_path,
+          &out_device->register_executor) == 0u) {
     er_cyw43438_clear_open_ap_boot_device(out_device);
     return 0u;
   }
@@ -386,7 +509,7 @@ UINT8 er_cyw43438_prepare_open_l2_ap_path(
       out_path == 0) {
     return 0u;
   }
-  blocked_reason = ER_CYW43438_AP_BLOCKED_NO_FIRMWARE_REGISTER_EXECUTOR;
+  blocked_reason = ER_CYW43438_AP_BLOCKED_NONE;
   if (relative_card_address == 0u) {
     blocked_reason |= ER_CYW43438_AP_BLOCKED_NO_RCA;
   }
@@ -427,7 +550,7 @@ UINT8 er_cyw43438_prepare_open_l2_ap_path(
   er_cyw43438_stage_init(
       &out_path->stages[ER_CYW43438_STAGE_BEACON_INDEX],
       ER_CYW43438_AP_STAGE_INSTALL_BEACON_TEMPLATE,
-      ER_CYW43438_AP_BLOCKED_NO_FIRMWARE_REGISTER_EXECUTOR);
+      ER_CYW43438_AP_BLOCKED_NONE);
   if (er_cyw43438_prepare_template(
           &out_path->ap_config,
           ER_CYW43438_AP_TEMPLATE_BEACON,
@@ -440,7 +563,7 @@ UINT8 er_cyw43438_prepare_open_l2_ap_path(
   er_cyw43438_stage_init(
       &out_path->stages[ER_CYW43438_STAGE_PROBE_RESPONSE_INDEX],
       ER_CYW43438_AP_STAGE_INSTALL_PROBE_RESPONSE_TEMPLATE,
-      ER_CYW43438_AP_BLOCKED_NO_FIRMWARE_REGISTER_EXECUTOR);
+      ER_CYW43438_AP_BLOCKED_NONE);
   if (er_cyw43438_prepare_template(
           &out_path->ap_config,
           ER_CYW43438_AP_TEMPLATE_PROBE_RESPONSE,
@@ -450,5 +573,155 @@ UINT8 er_cyw43438_prepare_open_l2_ap_path(
     return 0u;
   }
 
+  return 1u;
+}
+
+UINT8 er_cyw43438_prepare_register_executor_plan(
+    const ErCyw43438ApPath* path,
+    ErCyw43438RegisterExecutorPlan* out_plan) {
+  const ErCyw43438ApTemplate* beacon;
+  const ErCyw43438ApTemplate* probe;
+  UINT32 functions;
+
+  if (path == 0 ||
+      out_plan == 0 ||
+      path->abi_version != ER_CYW43438_ABI_VERSION ||
+      path->stage_count != ER_CYW43438_AP_STAGE_COUNT ||
+      path->blocked_reason != ER_CYW43438_AP_BLOCKED_NONE) {
+    return 0u;
+  }
+  beacon = er_cyw43438_template_for_kind(path, ER_CYW43438_AP_TEMPLATE_BEACON);
+  probe = er_cyw43438_template_for_kind(path,
+                                        ER_CYW43438_AP_TEMPLATE_PROBE_RESPONSE);
+  if (er_cyw43438_template_valid(beacon, ER_CYW43438_AP_TEMPLATE_BEACON) == 0u ||
+      er_cyw43438_template_valid(probe,
+                                 ER_CYW43438_AP_TEMPLATE_PROBE_RESPONSE) == 0u) {
+    return 0u;
+  }
+
+  functions = ER_CYW43438_CCCR_ENABLE_FUNCTION_1 |
+              ER_CYW43438_CCCR_ENABLE_FUNCTION_2;
+  er_mem_zero((UINT8*)out_plan, (UINTN)sizeof(*out_plan));
+  out_plan->abi_version = ER_CYW43438_ABI_VERSION;
+  out_plan->op_count = ER_CYW43438_REGISTER_OP_CAPACITY;
+  er_cyw43438_register_op_init(
+      &out_plan->ops[ER_CYW43438_REGISTER_OP_ENABLE_INDEX],
+      ER_CYW43438_REGISTER_OP_WRITE8,
+      ER_CYW43438_SDIO_FUNCTION_CCCR,
+      0u,
+      ER_CYW43438_CCCR_IO_ENABLE_ADDR,
+      functions,
+      ER_CYW43438_R5_DATA_MASK,
+      0u);
+  er_cyw43438_register_op_init(
+      &out_plan->ops[ER_CYW43438_REGISTER_OP_READY_INDEX],
+      ER_CYW43438_REGISTER_OP_READ8_EXPECT,
+      ER_CYW43438_SDIO_FUNCTION_CCCR,
+      0u,
+      ER_CYW43438_CCCR_IO_READY_ADDR,
+      functions,
+      functions,
+      0u);
+  er_cyw43438_register_op_init(
+      &out_plan->ops[ER_CYW43438_REGISTER_OP_BEACON_INDEX],
+      ER_CYW43438_REGISTER_OP_WRITE_TEMPLATE,
+      ER_CYW43438_SDIO_FUNCTION_WLAN,
+      ER_CYW43438_AP_TEMPLATE_BEACON,
+      ER_CYW43438_WLAN_BEACON_TEMPLATE_ADDR,
+      0u,
+      0u,
+      beacon->frame_len);
+  er_cyw43438_register_op_init(
+      &out_plan->ops[ER_CYW43438_REGISTER_OP_PROBE_INDEX],
+      ER_CYW43438_REGISTER_OP_WRITE_TEMPLATE,
+      ER_CYW43438_SDIO_FUNCTION_WLAN,
+      ER_CYW43438_AP_TEMPLATE_PROBE_RESPONSE,
+      ER_CYW43438_WLAN_PROBE_TEMPLATE_ADDR,
+      0u,
+      0u,
+      probe->frame_len);
+  er_cyw43438_register_op_init(
+      &out_plan->ops[ER_CYW43438_REGISTER_OP_AP_ENABLE_INDEX],
+      ER_CYW43438_REGISTER_OP_WRITE8,
+      ER_CYW43438_SDIO_FUNCTION_WLAN,
+      0u,
+      ER_CYW43438_WLAN_AP_CONTROL_ADDR,
+      ER_CYW43438_WLAN_AP_CONTROL_ENABLE,
+      ER_CYW43438_R5_DATA_MASK,
+      0u);
+  return er_cyw43438_register_executor_plan_valid(path, out_plan);
+}
+
+UINT8 er_cyw43438_execute_register_executor_plan(
+    INT64 emmc_handle,
+    const ErCyw43438ApPath* path,
+    const ErCyw43438RegisterExecutorPlan* plan,
+    UINT32 poll_budget,
+    ErCyw43438RegisterExecutorResult* out_result) {
+  UINT16 i;
+
+  er_cyw43438_register_executor_result_clear(out_result);
+  if (out_result == 0 ||
+      poll_budget == 0u ||
+      er_cyw43438_register_executor_plan_valid(path, plan) == 0u) {
+    return 0u;
+  }
+  out_result->abi_version = ER_CYW43438_ABI_VERSION;
+  for (i = 0u; i < plan->op_count; ++i) {
+    const ErCyw43438RegisterOp* op = &plan->ops[i];
+    ErCyw43438SdioDirectResult direct_result;
+    ErCyw43438SdioTransferResult transfer_result;
+    const ErCyw43438ApTemplate* template;
+
+    out_result->failed_op = i;
+    switch (op->kind) {
+      case ER_CYW43438_REGISTER_OP_WRITE8:
+        if (er_cyw43438_sdio_write8(emmc_handle,
+                                    op->function,
+                                    op->address,
+                                    (UINT8)op->value,
+                                    poll_budget,
+                                    &direct_result) == 0u) {
+          return 0u;
+        }
+        out_result->last_response0 = direct_result.response0;
+        out_result->last_interrupt_value = direct_result.interrupt_value;
+        break;
+      case ER_CYW43438_REGISTER_OP_READ8_EXPECT:
+        if (er_cyw43438_sdio_read8(emmc_handle,
+                                   op->function,
+                                   op->address,
+                                   poll_budget,
+                                   &direct_result) == 0u ||
+            (((UINT32)direct_result.value & op->value_mask) != op->value)) {
+          return 0u;
+        }
+        out_result->last_response0 = direct_result.response0;
+        out_result->last_interrupt_value = direct_result.interrupt_value;
+        break;
+      case ER_CYW43438_REGISTER_OP_WRITE_TEMPLATE:
+        template = er_cyw43438_template_for_kind(path, op->template_kind);
+        if (template == 0 ||
+            er_cyw43438_sdio_write_bytes(
+                emmc_handle,
+                op->function,
+                ER_PI_SDIO_CMD53_INCREMENTING_ADDRESS,
+                op->address,
+                template->frame,
+                op->bytes_len,
+                poll_budget,
+                &transfer_result) == 0u) {
+          return 0u;
+        }
+        out_result->last_response0 = transfer_result.response0;
+        out_result->last_interrupt_value = transfer_result.interrupt_value;
+        break;
+      default:
+        return 0u;
+    }
+    out_result->completed_ops = (UINT16)(i + 1u);
+  }
+  out_result->failed_op = 0u;
+  out_result->completed = 1u;
   return 1u;
 }

@@ -148,6 +148,11 @@ static void test_ieee80211_open_ap_frames(void) {
     IEEE80211_TEST_STAGE_CLAIM = 1u,
     IEEE80211_TEST_STAGE_BEACON = 2u,
     IEEE80211_TEST_STAGE_PROBE = 3u,
+    IEEE80211_TEST_REGISTER_OP_ENABLE = 0u,
+    IEEE80211_TEST_REGISTER_OP_READY = 1u,
+    IEEE80211_TEST_REGISTER_OP_BEACON = 2u,
+    IEEE80211_TEST_REGISTER_OP_PROBE = 3u,
+    IEEE80211_TEST_REGISTER_OP_AP_ENABLE = 4u,
     IEEE80211_TEST_FIRMWARE_RAM_SEED = 0x91u,
     IEEE80211_TEST_FIRMWARE_NVRAM_SEED = 0x92u,
     IEEE80211_TEST_FIRMWARE_CLM_SEED = 0x93u,
@@ -165,6 +170,8 @@ static void test_ieee80211_open_ap_frames(void) {
   ErBootConfig boot_config;
   ErCryptoProvider crypto;
   ErCyw43438ApPath path;
+  ErCyw43438RegisterExecutorPlan register_plan;
+  ErCyw43438RegisterExecutorResult register_result;
   ErCyw43438FirmwareSet firmware;
   ErCyw43438OpenApBootDevice boot_device;
   ErCyw43438SdioDirectResult direct_result;
@@ -350,9 +357,9 @@ static void test_ieee80211_open_ap_frames(void) {
   check_uint64("cyw43438 path stage count",
                path.stage_count,
                ER_CYW43438_AP_STAGE_COUNT);
-  check_uint64("cyw43438 path blocked executor",
+  check_uint64("cyw43438 path unblocked",
                path.blocked_reason,
-               ER_CYW43438_AP_BLOCKED_NO_FIRMWARE_REGISTER_EXECUTOR);
+               ER_CYW43438_AP_BLOCKED_NONE);
   check_uint64("cyw43438 identity stage",
                path.stages[IEEE80211_TEST_STAGE_IDENTITY].kind,
                ER_CYW43438_AP_STAGE_SDIO_IDENTITY);
@@ -381,6 +388,47 @@ static void test_ieee80211_open_ap_frames(void) {
   check_uint64("cyw43438 probe template kind",
                path.stages[IEEE80211_TEST_STAGE_PROBE].ap_template.kind,
                ER_CYW43438_AP_TEMPLATE_PROBE_RESPONSE);
+  check_int64("cyw43438 register executor plan",
+              er_cyw43438_prepare_register_executor_plan(&path,
+                                                         &register_plan),
+              1);
+  check_uint64("cyw43438 register executor count",
+               register_plan.op_count,
+               ER_CYW43438_REGISTER_OP_CAPACITY);
+  check_uint64("cyw43438 register enable op",
+               register_plan.ops[IEEE80211_TEST_REGISTER_OP_ENABLE].kind,
+               ER_CYW43438_REGISTER_OP_WRITE8);
+  check_uint64("cyw43438 register ready op",
+               register_plan.ops[IEEE80211_TEST_REGISTER_OP_READY].kind,
+               ER_CYW43438_REGISTER_OP_READ8_EXPECT);
+  check_uint64("cyw43438 register beacon op",
+               register_plan.ops[IEEE80211_TEST_REGISTER_OP_BEACON].template_kind,
+               ER_CYW43438_AP_TEMPLATE_BEACON);
+  check_uint64("cyw43438 register beacon len",
+               register_plan.ops[IEEE80211_TEST_REGISTER_OP_BEACON].bytes_len,
+               path.stages[IEEE80211_TEST_STAGE_BEACON].ap_template.frame_len);
+  check_uint64("cyw43438 register probe op",
+               register_plan.ops[IEEE80211_TEST_REGISTER_OP_PROBE].template_kind,
+               ER_CYW43438_AP_TEMPLATE_PROBE_RESPONSE);
+  check_uint64("cyw43438 register probe len",
+               register_plan.ops[IEEE80211_TEST_REGISTER_OP_PROBE].bytes_len,
+               path.stages[IEEE80211_TEST_STAGE_PROBE].ap_template.frame_len);
+  check_uint64("cyw43438 register ap enable op",
+               register_plan.ops[IEEE80211_TEST_REGISTER_OP_AP_ENABLE].kind,
+               ER_CYW43438_REGISTER_OP_WRITE8);
+  check_int64("cyw43438 executor rejects invalid handle",
+              er_cyw43438_execute_register_executor_plan(ER_MMIO_INVALID_HANDLE,
+                                                         &path,
+                                                         &register_plan,
+                                                         1u,
+                                                         &register_result),
+              0);
+  check_uint64("cyw43438 executor failed first op",
+               register_result.failed_op,
+               IEEE80211_TEST_REGISTER_OP_ENABLE);
+  check_uint64("cyw43438 executor completed no ops",
+               register_result.completed_ops,
+               0u);
   check_int64("cyw43438 path blocked without rca",
               er_cyw43438_prepare_open_l2_ap_path(&ap_plan,
                                                   0u,
@@ -538,4 +586,7 @@ static void test_ieee80211_open_ap_frames(void) {
   check_uint64("cyw43438 boot device firmware",
                boot_device.firmware.ram.loaded,
                1u);
+  check_uint64("cyw43438 boot device register ops",
+               boot_device.register_executor.op_count,
+               ER_CYW43438_REGISTER_OP_CAPACITY);
 }
