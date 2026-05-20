@@ -55,7 +55,7 @@ enum {
   ERPIUSB_REENUMERATE_DELAY_NS = 100000000,
   ERPIUSB_CONTROL_TIMEOUT_MS = 20000,
   ERPIUSB_BOOT_CONTROL_TIMEOUT_MS = 1000,
-  ERPIUSB_BULK_TIMEOUT_MS = 5000,
+  ERPIUSB_BULK_TIMEOUT_MS = 20000,
   ERPIUSB_CMD_GET_FILE_SIZE = 0,
   ERPIUSB_CMD_READ_FILE = 1,
   ERPIUSB_CMD_DONE = 2,
@@ -75,6 +75,7 @@ typedef struct {
   uint16_t product_id;
   uint8_t serial_index;
   uint8_t interface_number;
+  uint8_t out_endpoint_seen;
   uint8_t in_endpoint;
   uint8_t out_endpoint;
 } ErPiUsbDevice;
@@ -285,6 +286,12 @@ static int erpiusb_bulk(int fd,
   return ret;
 }
 
+static int erpiusb_clear_halt(int fd, uint8_t endpoint) {
+  unsigned int ep = endpoint;
+
+  return ioctl(fd, USBDEVFS_CLEAR_HALT, &ep) == 0;
+}
+
 static int erpiusb_parse_config(const unsigned char* config,
                                 uint16_t len,
                                 ErPiUsbDevice* device) {
@@ -313,8 +320,9 @@ static int erpiusb_parse_config(const unsigned char* config,
                erpiusb_get_le16(config + offset + 4u) == ERPIUSB_PACKET_BYTES) {
       if ((config[offset + 2u] & ERPIUSB_ENDPOINT_IN) != 0u) {
         device->in_endpoint = config[offset + 2u];
-      } else {
+      } else if (device->out_endpoint_seen == 0u) {
         device->out_endpoint = config[offset + 2u];
+        device->out_endpoint_seen = 1u;
       }
     }
     offset = (uint16_t)(offset + descriptor_len);
@@ -513,7 +521,9 @@ static int erpiusb_settle_before_open(void) {
   return nanosleep(&delay, NULL) == 0;
 }
 
-static int erpiusb_open_any(const ErPiUsbConfig* cfg, ErPiUsbDevice* device) {
+static int erpiusb_open_any(const ErPiUsbConfig* cfg,
+                            ErPiUsbDevice* device,
+                            int honor_device_path) {
   char path[ERPIUSB_PATH_BYTES];
   char sysfs_dir[ERPIUSB_PATH_BYTES];
   unsigned int bus;
@@ -523,7 +533,7 @@ static int erpiusb_open_any(const ErPiUsbConfig* cfg, ErPiUsbDevice* device) {
   struct dirent* entry;
   ErPiUsbDevice metadata;
 
-  if (cfg->device_path != NULL) {
+  if (honor_device_path != 0 && cfg->device_path != NULL) {
     if (erpiusb_path_bus_device(cfg->device_path, &bus, &dev) == 0 ||
         erpiusb_find_sysfs_by_bus_device(bus,
                                          dev,
@@ -614,6 +624,13 @@ static int erpiusb_ep_write(ErPiUsbDevice* device,
       chunk = ERPIUSB_MAX_BULK_BYTES;
     }
     ret = erpiusb_bulk(device->fd, device->out_endpoint, (void*)(bytes + offset), chunk);
+    if (ret == -ETIMEDOUT &&
+        erpiusb_clear_halt(device->fd, device->out_endpoint) != 0) {
+      ret = erpiusb_bulk(device->fd,
+                         device->out_endpoint,
+                         (void*)(bytes + offset),
+                         chunk);
+    }
     if (ret < 0 || (uint32_t)ret != chunk) {
       fprintf(stderr, "pi-usb-boot: bulk write failed: %d\n", ret);
       return 0;
@@ -635,6 +652,9 @@ static int erpiusb_ep_read(ErPiUsbDevice* device,
                             ERPIUSB_CONTROL_TIMEOUT_MS);
   if (ret < 0) {
     return ret;
+  }
+  if (ret != (int)len) {
+    return -EIO;
   }
   return (int)len;
 }
@@ -727,12 +747,17 @@ static int erpiusb_file_server(const ErPiUsbConfig* cfg,
       (void)erpiusb_ep_write(device, NULL, 0u);
       return 1;
     }
+    if (cfg->verbose != 0) {
+      fprintf(stderr, "pi-usb-boot: request command=%d file=%s\n",
+              req.command, req.name);
+    }
     switch (req.command) {
       case ERPIUSB_CMD_GET_FILE_SIZE:
         if (erpiusb_path_join(path, sizeof(path), cfg->boot_dir, req.name) == 0 ||
-            erpiusb_file_size(path, &size) == 0 ||
-            erpiusb_send_file_size(device, size) == 0) {
-          (void)erpiusb_ep_write(device, NULL, 0u);
+            erpiusb_file_size(path, &size) == 0) {
+          size = 0u;
+        }
+        if (erpiusb_send_file_size(device, size) == 0) {
           return 0;
         }
         break;
@@ -757,7 +782,7 @@ static int erpiusb_wait_for_second_stage(const ErPiUsbConfig* cfg,
     if (nanosleep(&delay, NULL) != 0) {
       return erpiusb_fail("second-stage reenumeration wait interrupted");
     }
-    if (erpiusb_open_any(cfg, device) != 0) {
+    if (erpiusb_open_any(cfg, device, 0) != 0) {
       if (device->serial_index != 0u && device->serial_index != 3u) {
         return 0;
       }
@@ -777,7 +802,7 @@ static int erpiusb_boot(const ErPiUsbConfig* cfg) {
     printf("pi-usb-boot: boot directory ready: %s\n", cfg->boot_dir);
     return 0;
   }
-  if (erpiusb_open_any(cfg, &device) == 0) {
+  if (erpiusb_open_any(cfg, &device, 1) == 0) {
     return erpiusb_fail("Broadcom USB boot device not found");
   }
   if (erpiusb_boot_dir_valid_for_product(cfg->boot_dir, device.product_id) != 0) {
