@@ -43,6 +43,27 @@
 #define SUMMARY_INCLUDE_LIMIT 5u
 #define SUMMARY_SYMBOL_LIMIT 8u
 #define SELF_TEST_CODEX_GAME_FAILURE 15
+#define WORKSPACE_INITIAL_CAPACITY 256u
+#define FNV1A64_OFFSET_BASIS 1469598103934665603ull
+#define FNV1A64_PRIME 1099511628211ull
+#define MODE_PERMISSIONS_MASK 0777
+
+typedef enum {
+    SELF_TEST_SAFE_RELATIVE_PATH_FAILURE = 1,
+    SELF_TEST_PARENT_PATH_FAILURE,
+    SELF_TEST_INTERIOR_PARENT_PATH_FAILURE,
+    SELF_TEST_CASE_INSENSITIVE_POSITIVE_FAILURE,
+    SELF_TEST_CASE_INSENSITIVE_NEGATIVE_FAILURE,
+    SELF_TEST_SCOPE_FAILURE,
+    SELF_TEST_SCOPE_TEST_TARGET_FAILURE,
+    SELF_TEST_DEFAULT_TEST_TARGET_FAILURE,
+    SELF_TEST_KEYWORD_POSITIVE_FAILURE,
+    SELF_TEST_KEYWORD_NEGATIVE_FAILURE,
+    SELF_TEST_C_PATH_FAILURE,
+    SELF_TEST_STEM_LENGTH_FAILURE,
+    SELF_TEST_HASH_DIFFERENCE_FAILURE,
+    SELF_TEST_SKIP_BUILD_DIR_FAILURE
+} SelfTestFailure;
 
 static const char *AGENT_INSTRUCTIONS =
     "You are Codex running inside EdgeRun C. "
@@ -245,10 +266,10 @@ static bool path_is_summary_candidate(const char *path) {
 }
 
 static uint64_t stable_hash_bytes(const unsigned char *data, size_t len) {
-    uint64_t hash = 1469598103934665603ull;
+    uint64_t hash = FNV1A64_OFFSET_BASIS;
     for (size_t i = 0; i < len; i++) {
         hash ^= (uint64_t)data[i];
-        hash *= 1099511628211ull;
+        hash *= FNV1A64_PRIME;
     }
     return hash;
 }
@@ -374,7 +395,7 @@ static unsigned char *read_file_bytes(const char *path, size_t *len_out, bool *t
 
 static void workspace_add_file(Workspace *ws, const char *rel, unsigned char *data, size_t len, bool text, mode_t mode) {
     if (ws->file_count == ws->file_cap) {
-        ws->file_cap = ws->file_cap ? ws->file_cap * 2 : 256;
+        ws->file_cap = ws->file_cap ? ws->file_cap * 2 : WORKSPACE_INITIAL_CAPACITY;
         ws->files = xrealloc(ws->files, ws->file_cap * sizeof(ws->files[0]));
     }
     ws->files[ws->file_count++] = (MemoryFile){
@@ -694,7 +715,7 @@ static char *file_summary_text_new(const MemoryFile *file) {
     uint64_t hash = stable_hash_bytes(file->data, file->len);
     buffer_appendf(&b, "file %s\nbytes %zu\nhash %016llx\n", file->path, file->len, (unsigned long long)hash);
     if (!file->text) {
-        buffer_append(&b, "kind binary\n", 12);
+        buffer_append(&b, "kind binary\n", strlen("kind binary\n"));
         return b.data;
     }
 
@@ -753,7 +774,7 @@ static char *file_summary_text_new(const MemoryFile *file) {
 static void workspace_add_summary(Workspace *ws, const MemoryFile *file) {
     if (!file->text || !path_is_summary_candidate(file->path)) return;
     if (ws->summary_count == ws->summary_cap) {
-        ws->summary_cap = ws->summary_cap ? ws->summary_cap * 2 : 256;
+        ws->summary_cap = ws->summary_cap ? ws->summary_cap * 2 : WORKSPACE_INITIAL_CAPACITY;
         ws->summaries = xrealloc(ws->summaries, ws->summary_cap * sizeof(ws->summaries[0]));
     }
     FileSummary *summary = &ws->summaries[ws->summary_count++];
@@ -881,7 +902,7 @@ static char *workspace_summary_query_new(Workspace *ws, const char *query, size_
         emitted_flags[i] = true;
         emitted++;
     }
-    if (emitted == 0) buffer_append(&out, "no matching summaries\n", 22);
+    if (emitted == 0) buffer_append(&out, "no matching summaries\n", strlen("no matching summaries\n"));
     free(emitted_flags);
     return out.data ? out.data : xstrdup("");
 }
@@ -1154,7 +1175,7 @@ static void ensure_parent_dirs(const char *path) {
     for (char *p = tmp + 1; *p; p++) {
         if (*p == '/') {
             *p = 0;
-            if (mkdir(tmp, 0777) != 0 && errno != EEXIST) {
+            if (mkdir(tmp, MODE_PERMISSIONS_MASK) != 0 && errno != EEXIST) {
                 die("mkdir failed for %s: %s", tmp, strerror(errno));
             }
             *p = '/';
@@ -1178,7 +1199,7 @@ static void write_bytes_atomicish(const char *path, const unsigned char *data, s
         unlink(tmp);
         die("close failed for %s", tmp);
     }
-    if (mode_known && chmod(tmp, mode & 0777) != 0) {
+    if (mode_known && chmod(tmp, mode & MODE_PERMISSIONS_MASK) != 0) {
         unlink(tmp);
         die("chmod failed for %s: %s", tmp, strerror(errno));
     }
@@ -1264,7 +1285,7 @@ static char *repo_rules_text_new(Workspace *ws) {
     bool text = false;
     const unsigned char *agents = effective_data(ws, "AGENTS.md", &len, &text);
     if (agents && text) {
-        buffer_append(&b, "AGENTS.md:\n", 11);
+        buffer_append(&b, "AGENTS.md:\n", strlen("AGENTS.md:\n"));
         buffer_append(&b, (const char *)agents, len);
         if (len == 0 || agents[len - 1] != '\n') buffer_append_c(&b, '\n');
     }
@@ -1507,7 +1528,7 @@ static void buffer_append_excerpt(Buffer *b, const char *text, size_t max_bytes)
     size_t len = strlen(text);
     size_t n = len < max_bytes ? len : max_bytes;
     buffer_append(b, text, n);
-    if (len > n) buffer_append(b, "\n[truncated]\n", 12);
+    if (len > n) buffer_append(b, "\n[truncated]\n", strlen("\n[truncated]\n"));
 }
 
 static char *session_memory_message_new(
@@ -1624,7 +1645,7 @@ static char *workspace_search_text_new(Workspace *ws, const char *query, size_t 
             }
         }
     }
-    if (hits == 0) buffer_append(&out, "no matches\n", 11);
+    if (hits == 0) buffer_append(&out, "no matches\n", strlen("no matches\n"));
     return out.data;
 }
 
@@ -2242,20 +2263,27 @@ static void workspace_free(Workspace *ws) {
 }
 
 static int self_test(void) {
-    if (!path_is_safe("src/main.c")) return 1;
-    if (path_is_safe("../x")) return 2;
-    if (path_is_safe("x/../y")) return 3;
-    if (!contains_case_insensitive("Hello EdgeRun", 13, "edge")) return 4;
-    if (contains_case_insensitive("Hello", 5, "world")) return 5;
-    if (strcmp(scope_for_path("codex/src/edgerun_c.c"), "codex") != 0) return 6;
-    if (strcmp(test_target_for_scope("codex"), "codex-test") != 0) return 7;
-    if (strcmp(test_target_for_scope("docs"), "repo-test") != 0) return 8;
-    if (!is_c_keyword("static", 6)) return 9;
-    if (is_c_keyword("status", 6)) return 10;
-    if (!path_is_c_like("codex/src/edgerun_c.c")) return 11;
-    if (path_stem_len("codex/src/edgerun_c.c") != strlen("edgerun_c")) return 12;
-    if (stable_hash_bytes((const unsigned char *)"abc", 3) == stable_hash_bytes((const unsigned char *)"abd", 3)) return 13;
-    if (!should_skip_dir(".build/codex")) return 14;
+    if (!path_is_safe("src/main.c")) return SELF_TEST_SAFE_RELATIVE_PATH_FAILURE;
+    if (path_is_safe("../x")) return SELF_TEST_PARENT_PATH_FAILURE;
+    if (path_is_safe("x/../y")) return SELF_TEST_INTERIOR_PARENT_PATH_FAILURE;
+    if (!contains_case_insensitive("Hello EdgeRun", strlen("Hello EdgeRun"), "edge")) {
+        return SELF_TEST_CASE_INSENSITIVE_POSITIVE_FAILURE;
+    }
+    if (contains_case_insensitive("Hello", strlen("Hello"), "world")) {
+        return SELF_TEST_CASE_INSENSITIVE_NEGATIVE_FAILURE;
+    }
+    if (strcmp(scope_for_path("codex/src/edgerun_c.c"), "codex") != 0) return SELF_TEST_SCOPE_FAILURE;
+    if (strcmp(test_target_for_scope("codex"), "codex-test") != 0) return SELF_TEST_SCOPE_TEST_TARGET_FAILURE;
+    if (strcmp(test_target_for_scope("docs"), "repo-test") != 0) return SELF_TEST_DEFAULT_TEST_TARGET_FAILURE;
+    if (!is_c_keyword("static", strlen("static"))) return SELF_TEST_KEYWORD_POSITIVE_FAILURE;
+    if (is_c_keyword("status", strlen("status"))) return SELF_TEST_KEYWORD_NEGATIVE_FAILURE;
+    if (!path_is_c_like("codex/src/edgerun_c.c")) return SELF_TEST_C_PATH_FAILURE;
+    if (path_stem_len("codex/src/edgerun_c.c") != strlen("edgerun_c")) return SELF_TEST_STEM_LENGTH_FAILURE;
+    if (stable_hash_bytes((const unsigned char *)"abc", strlen("abc")) ==
+        stable_hash_bytes((const unsigned char *)"abd", strlen("abd"))) {
+        return SELF_TEST_HASH_DIFFERENCE_FAILURE;
+    }
+    if (!should_skip_dir(".build/codex")) return SELF_TEST_SKIP_BUILD_DIR_FAILURE;
     if (codex_game_self_test() != 0) return SELF_TEST_CODEX_GAME_FAILURE;
     puts("self-test ok");
     return 0;
