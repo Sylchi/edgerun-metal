@@ -155,6 +155,7 @@ static void test_ieee80211_open_ap_frames(void) {
     IEEE80211_TEST_FIRMWARE_NVRAM_LEN = 5u,
     IEEE80211_TEST_FIRMWARE_CLM_LEN = 6u,
     IEEE80211_TEST_SDIO_ADDR = 0x00000002u,
+    IEEE80211_TEST_SDIO_BYTES_LEN = 4u,
     IEEE80211_TEST_SDIO_VALUE = 0x12u,
     IEEE80211_TEST_SDIO_INVALID_FUNCTION = 3u
   };
@@ -167,6 +168,7 @@ static void test_ieee80211_open_ap_frames(void) {
   ErCyw43438FirmwareSet firmware;
   ErCyw43438OpenApBootDevice boot_device;
   ErCyw43438SdioDirectResult direct_result;
+  ErCyw43438SdioTransferResult transfer_result;
   Cyw43438TestFirmwareReader reader;
   UINT8 ram_bytes[IEEE80211_TEST_FIRMWARE_RAM_LEN];
   UINT8 nvram_bytes[IEEE80211_TEST_FIRMWARE_NVRAM_LEN];
@@ -174,6 +176,7 @@ static void test_ieee80211_open_ap_frames(void) {
   UINT8 ram_out[IEEE80211_TEST_FIRMWARE_RAM_LEN];
   UINT8 nvram_out[IEEE80211_TEST_FIRMWARE_NVRAM_LEN];
   UINT8 clm_blob_out[IEEE80211_TEST_FIRMWARE_CLM_LEN];
+  UINT8 sdio_bytes[IEEE80211_TEST_SDIO_BYTES_LEN];
   UINT8 station_mac[ER_NET_MAC_LEN];
   UINT8 frame[ER_IEEE80211_AP_FRAME_MAX];
   UINT8 probe_request[ER_IEEE80211_AP_FRAME_MAX];
@@ -418,6 +421,31 @@ static void test_ieee80211_open_ap_frames(void) {
                                       IEEE80211_TEST_SDIO_VALUE,
                                       1u,
                                       &direct_result),
+              0);
+  check_int64("cyw43438 sdio read bytes rejects invalid handle",
+              er_cyw43438_sdio_read_bytes(
+                  ER_MMIO_INVALID_HANDLE,
+                  ER_CYW43438_SDIO_FUNCTION_WLAN,
+                  ER_PI_SDIO_CMD53_INCREMENTING_ADDRESS,
+                  IEEE80211_TEST_SDIO_ADDR,
+                  sdio_bytes,
+                  IEEE80211_TEST_SDIO_BYTES_LEN,
+                  1u,
+                  &transfer_result),
+              0);
+  check_uint64("cyw43438 failed read bytes clears abi",
+               transfer_result.abi_version,
+               0u);
+  check_int64("cyw43438 sdio write bytes rejects invalid function",
+              er_cyw43438_sdio_write_bytes(
+                  ER_MMIO_INVALID_HANDLE,
+                  IEEE80211_TEST_SDIO_INVALID_FUNCTION,
+                  ER_PI_SDIO_CMD53_INCREMENTING_ADDRESS,
+                  IEEE80211_TEST_SDIO_ADDR,
+                  sdio_bytes,
+                  IEEE80211_TEST_SDIO_BYTES_LEN,
+                  1u,
+                  &transfer_result),
               0);
 
   er_boot_config_init(&boot_config);

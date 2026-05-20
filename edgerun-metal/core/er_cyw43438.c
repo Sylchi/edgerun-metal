@@ -36,6 +36,14 @@ static void er_cyw43438_sdio_direct_result_clear(
   er_mem_zero((UINT8*)result, (UINTN)sizeof(*result));
 }
 
+static void er_cyw43438_sdio_transfer_result_clear(
+    ErCyw43438SdioTransferResult* result) {
+  if (result == 0) {
+    return;
+  }
+  er_mem_zero((UINT8*)result, (UINTN)sizeof(*result));
+}
+
 UINT8 er_cyw43438_sdio_function_valid(UINT8 function) {
   switch (function) {
     case ER_CYW43438_SDIO_FUNCTION_CCCR:
@@ -115,6 +123,90 @@ UINT8 er_cyw43438_sdio_write8(INT64 emmc_handle,
                                          value,
                                          poll_budget,
                                          out_result);
+}
+
+static UINT8 er_cyw43438_sdio_transfer_finish(
+    UINT8 function,
+    UINT8 incrementing_address,
+    UINT32 address,
+    UINT32 bytes_len,
+    const ErPiEmmcSdioTransferResult* transfer,
+    ErCyw43438SdioTransferResult* out_result) {
+  if (transfer == 0 || out_result == 0 || transfer->completed == 0u) {
+    return 0u;
+  }
+  out_result->abi_version = ER_CYW43438_ABI_VERSION;
+  out_result->function = function;
+  out_result->incrementing_address = incrementing_address;
+  out_result->address = address;
+  out_result->bytes_len = bytes_len;
+  out_result->response0 = transfer->response0;
+  out_result->interrupt_value = transfer->interrupt_value;
+  return 1u;
+}
+
+UINT8 er_cyw43438_sdio_read_bytes(
+    INT64 emmc_handle,
+    UINT8 function,
+    UINT8 incrementing_address,
+    UINT32 address,
+    UINT8* out_bytes,
+    UINT32 bytes_len,
+    UINT32 poll_budget,
+    ErCyw43438SdioTransferResult* out_result) {
+  ErPiEmmcSdioTransferResult transfer;
+
+  er_cyw43438_sdio_transfer_result_clear(out_result);
+  if (out_result == 0 ||
+      er_cyw43438_sdio_function_valid(function) == 0u ||
+      er_pi_emmc_sdio_read_bytes(emmc_handle,
+                                 function,
+                                 incrementing_address,
+                                 address,
+                                 out_bytes,
+                                 bytes_len,
+                                 poll_budget,
+                                 &transfer) == 0u) {
+    return 0u;
+  }
+  return er_cyw43438_sdio_transfer_finish(function,
+                                          incrementing_address,
+                                          address,
+                                          bytes_len,
+                                          &transfer,
+                                          out_result);
+}
+
+UINT8 er_cyw43438_sdio_write_bytes(
+    INT64 emmc_handle,
+    UINT8 function,
+    UINT8 incrementing_address,
+    UINT32 address,
+    const UINT8* bytes,
+    UINT32 bytes_len,
+    UINT32 poll_budget,
+    ErCyw43438SdioTransferResult* out_result) {
+  ErPiEmmcSdioTransferResult transfer;
+
+  er_cyw43438_sdio_transfer_result_clear(out_result);
+  if (out_result == 0 ||
+      er_cyw43438_sdio_function_valid(function) == 0u ||
+      er_pi_emmc_sdio_write_bytes(emmc_handle,
+                                  function,
+                                  incrementing_address,
+                                  address,
+                                  bytes,
+                                  bytes_len,
+                                  poll_budget,
+                                  &transfer) == 0u) {
+    return 0u;
+  }
+  return er_cyw43438_sdio_transfer_finish(function,
+                                          incrementing_address,
+                                          address,
+                                          bytes_len,
+                                          &transfer,
+                                          out_result);
 }
 
 static void er_cyw43438_stage_init(ErCyw43438ApStage* stage,
