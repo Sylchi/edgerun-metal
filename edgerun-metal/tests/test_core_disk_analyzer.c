@@ -2,13 +2,21 @@
 
 enum {
   DISK_ANALYZER_TEST_BLOCK_BYTES = 512u,
-  DISK_ANALYZER_TEST_BLOCK_COUNT = 2048u,
+  DISK_ANALYZER_TEST_BLOCK_COUNT = 4096u,
   DISK_ANALYZER_TEST_DEVICE_BYTES =
       DISK_ANALYZER_TEST_BLOCK_BYTES * DISK_ANALYZER_TEST_BLOCK_COUNT,
   DISK_ANALYZER_TEST_LABEL_BLOCKS =
       ER_ZFS_LABEL_BYTES / DISK_ANALYZER_TEST_BLOCK_BYTES,
   DISK_ANALYZER_TEST_UBERBLOCK_OFFSET = 128u * 1024u,
+  DISK_ANALYZER_TEST_GPT_HEADER_LBA = 1u,
+  DISK_ANALYZER_TEST_GPT_ENTRY_LBA = 2u,
+  DISK_ANALYZER_TEST_GPT_ENTRY_COUNT = 128u,
+  DISK_ANALYZER_TEST_GPT_ENTRY_BYTES = 128u,
+  DISK_ANALYZER_TEST_ZFS_PARTITION_INDEX = 2u,
+  DISK_ANALYZER_TEST_ZFS_PARTITION_FIRST_LBA = 1024u,
+  DISK_ANALYZER_TEST_ZFS_PARTITION_LAST_LBA = 3071u,
   DISK_ANALYZER_TEST_UBERBLOCK_TXG = 42u,
+  DISK_ANALYZER_TEST_GPT_UBERBLOCK_TXG = 43u,
   DISK_ANALYZER_TEST_UBERBLOCK_TIMESTAMP = 77u,
   DISK_ANALYZER_TEST_CAP_DSTRD_SHIFT = 32u,
   DISK_ANALYZER_TEST_CAP_MPSMIN_SHIFT = 48u
@@ -25,6 +33,19 @@ static void disk_analyzer_put_le64(UINT8* dst, UINT64 value) {
   for (i = 0u; i < 8u; ++i) {
     dst[i] = (UINT8)(value >> ((UINT64)i * 8u));
   }
+}
+
+static void disk_analyzer_put_le32(UINT8* dst, UINT32 value) {
+  UINT32 i;
+
+  for (i = 0u; i < 4u; ++i) {
+    dst[i] = (UINT8)(value >> (i * 8u));
+  }
+}
+
+static void disk_analyzer_put_le16(UINT8* dst, UINT16 value) {
+  dst[0] = (UINT8)value;
+  dst[1] = (UINT8)(value >> 8u);
 }
 
 static UINT8 disk_analyzer_fake_read(void* ctx,
@@ -231,6 +252,88 @@ static void test_zfs_label_probe(void) {
   check_uint64("zfs pool selected txg", probe.selected_txg, DISK_ANALYZER_TEST_UBERBLOCK_TXG);
 }
 
+static void test_zfs_gpt_partition_probe(void) {
+  DiskAnalyzerFakeDevice fake;
+  ErBlockDevice device;
+  ErZfsGptPartition partition;
+  ErZfsPoolProbe probe;
+  UINT8 id[ER_BLOCK_DEVICE_ID_BYTES];
+  UINT8 gpt[DISK_ANALYZER_TEST_BLOCK_BYTES * 32u];
+  UINT8 label[ER_ZFS_LABEL_BYTES];
+  UINT8* header;
+  UINT8* entry;
+  UINT8* uberblock;
+
+  er_mem_zero((UINT8*)&fake, (UINTN)sizeof(fake));
+  er_mem_zero(id, ER_BLOCK_DEVICE_ID_BYTES);
+  er_mem_zero(gpt, (UINTN)sizeof(gpt));
+  er_mem_zero(label, ER_ZFS_LABEL_BYTES);
+  id[0] = 3u;
+  header = fake.bytes + (DISK_ANALYZER_TEST_GPT_HEADER_LBA * DISK_ANALYZER_TEST_BLOCK_BYTES);
+  entry = fake.bytes + (DISK_ANALYZER_TEST_GPT_ENTRY_LBA * DISK_ANALYZER_TEST_BLOCK_BYTES) +
+          (DISK_ANALYZER_TEST_ZFS_PARTITION_INDEX * DISK_ANALYZER_TEST_GPT_ENTRY_BYTES);
+  uberblock = fake.bytes +
+              (DISK_ANALYZER_TEST_ZFS_PARTITION_FIRST_LBA * DISK_ANALYZER_TEST_BLOCK_BYTES) +
+              DISK_ANALYZER_TEST_UBERBLOCK_OFFSET;
+
+  er_mem_copy(header, (const UINT8*)"EFI PART", 8u);
+  disk_analyzer_put_le32(header + 12u, 92u);
+  disk_analyzer_put_le64(header + 40u, 34u);
+  disk_analyzer_put_le64(header + 48u, DISK_ANALYZER_TEST_BLOCK_COUNT - 34u);
+  disk_analyzer_put_le64(header + 72u, DISK_ANALYZER_TEST_GPT_ENTRY_LBA);
+  disk_analyzer_put_le32(header + 80u, DISK_ANALYZER_TEST_GPT_ENTRY_COUNT);
+  disk_analyzer_put_le32(header + 84u, DISK_ANALYZER_TEST_GPT_ENTRY_BYTES);
+  entry[0] = 1u;
+  entry[16u] = 2u;
+  disk_analyzer_put_le64(entry + 32u, DISK_ANALYZER_TEST_ZFS_PARTITION_FIRST_LBA);
+  disk_analyzer_put_le64(entry + 40u, DISK_ANALYZER_TEST_ZFS_PARTITION_LAST_LBA);
+  disk_analyzer_put_le16(entry + 56u, (UINT16)'z');
+  disk_analyzer_put_le16(entry + 58u, (UINT16)'b');
+
+  disk_analyzer_put_le64(uberblock, ER_ZFS_UBERBLOCK_MAGIC);
+  disk_analyzer_put_le64(uberblock + 8u, 1u);
+  disk_analyzer_put_le64(uberblock + 16u, DISK_ANALYZER_TEST_GPT_UBERBLOCK_TXG);
+  disk_analyzer_put_le64(uberblock + 24u, 10u);
+  disk_analyzer_put_le64(uberblock + 32u, DISK_ANALYZER_TEST_UBERBLOCK_TIMESTAMP);
+
+  check_int64("zfs gpt fake block prepare",
+              er_block_device_prepare(&device,
+                                      DISK_ANALYZER_TEST_BLOCK_BYTES,
+                                      DISK_ANALYZER_TEST_BLOCK_COUNT,
+                                      id,
+                                      "nvme0n1",
+                                      7u,
+                                      &fake,
+                                      disk_analyzer_fake_read,
+                                      disk_analyzer_fake_write,
+                                      disk_analyzer_fake_flush),
+              1);
+  check_int64("zfs gpt finds pool",
+              er_zfs_probe_gpt_for_pool(&device,
+                                        gpt,
+                                        (UINT32)sizeof(gpt),
+                                        label,
+                                        ER_ZFS_LABEL_BYTES,
+                                        &partition,
+                                        &probe),
+              1);
+  check_uint64("zfs gpt partition index",
+               partition.entry_index,
+               DISK_ANALYZER_TEST_ZFS_PARTITION_INDEX);
+  check_uint64("zfs gpt partition first lba",
+               partition.first_lba,
+               DISK_ANALYZER_TEST_ZFS_PARTITION_FIRST_LBA);
+  check_uint64("zfs gpt probe base lba",
+               probe.base_lba,
+               DISK_ANALYZER_TEST_ZFS_PARTITION_FIRST_LBA);
+  check_uint64("zfs gpt probe txg",
+               probe.selected_txg,
+               DISK_ANALYZER_TEST_GPT_UBERBLOCK_TXG);
+  check_int64("zfs gpt name matches",
+              er_zfs_gpt_partition_name_matches_ascii(&partition, "zb", 2u),
+              1);
+}
+
 static void test_nvme_register_helpers(void) {
   ErPciDeviceSnapshot snapshot;
   ErPciBarSelection bar;
@@ -289,5 +392,6 @@ static void test_disk_analyzer_storage_foundation(void) {
   test_block_device_contract();
   test_disk_analyzer_cache_policy();
   test_zfs_label_probe();
+  test_zfs_gpt_partition_probe();
   test_nvme_register_helpers();
 }
