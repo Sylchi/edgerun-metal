@@ -44,7 +44,8 @@ enum {
   ERPSV_SDIO_PROBE_CMD5_DONE = 2u,
   ERPSV_SDIO_PROBE_CMD3_DONE = 3u,
   ERPSV_SDIO_PROBE_CMD7_DONE = 4u,
-  ERPSV_SDIO_PROBE_CMD52_DONE = 5u
+  ERPSV_SDIO_PROBE_CMD52_DONE = 5u,
+  ERPSV_SDIO_PROBE_CMD53_DONE = 6u
 };
 
 static const char ERPSV_EXPECT_PREFIX[] = "erwire_expect=";
@@ -275,6 +276,10 @@ static uint32_t erpsv_sdio_state_from_name(const unsigned char* name,
       memcmp(name, "cmd52_done", name_len) == 0) {
     return ERPSV_SDIO_PROBE_CMD52_DONE;
   }
+  if (name_len == strlen("cmd53_done") &&
+      memcmp(name, "cmd53_done", name_len) == 0) {
+    return ERPSV_SDIO_PROBE_CMD53_DONE;
+  }
   return 0u;
 }
 
@@ -290,6 +295,8 @@ static const char* erpsv_sdio_state_name(uint32_t state) {
       return "cmd7_done";
     case ERPSV_SDIO_PROBE_CMD52_DONE:
       return "cmd52_done";
+    case ERPSV_SDIO_PROBE_CMD53_DONE:
+      return "cmd53_done";
     default:
       return "unknown";
   }
