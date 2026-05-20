@@ -577,7 +577,7 @@ static uint8_t eri_run_file_analysis_jobs(const EriVfs* vfs, EriFileAnalysis* fi
 }
 
 //@optimizer-ignore-function repo analysis orchestrates per-file metric, function, and CPU scans over the VFS snapshot
-static uint8_t eri_analyze(const EriVfs* vfs, const EriInspectOptions* options) {
+uint8_t eri_analyze(const EriVfs* vfs, const EriInspectOptions* options) {
   EriAnalyzeState state;
   EriFileAnalysis* file_results;
   size_t thread_count = ERI_DEFAULT_THREAD_COUNT;

@@ -52,7 +52,7 @@ static uint8_t eri_vfs_add(EriVfs* vfs, const char* path, uint8_t* bytes, size_t
 }
 
 //@optimizer-ignore-function VFS teardown must release each loaded path and byte buffer
-static void eri_vfs_free(EriVfs* vfs) {
+void eri_vfs_free(EriVfs* vfs) {
   size_t i;
 
   for (i = 0; i < vfs->len; ++i) {
@@ -60,6 +60,20 @@ static void eri_vfs_free(EriVfs* vfs) {
     free(vfs->files[i].bytes);
   }
   free(vfs->files);
+}
+
+const EriVfsFile* eri_vfs_find(const EriVfs* vfs, const char* path) {
+  size_t i;
+
+  if (vfs == NULL || path == NULL) {
+    return NULL;
+  }
+  for (i = 0u; i < vfs->len; ++i) {
+    if (strcmp(vfs->files[i].path, path) == 0) {
+      return &vfs->files[i];
+    }
+  }
+  return NULL;
 }
 
 static uint8_t eri_ends_with(const char* s, const char* suffix) {
@@ -423,7 +437,7 @@ static uint8_t eri_read_entries_parallel(EriLoadEntries* entries, const char* ro
 }
 
 //@optimizer-ignore-function repo inspection loads every enumerated regular file into the analysis VFS
-static uint8_t eri_load_dir(EriVfs* vfs, const char* root, const char* rel, size_t thread_count) {
+uint8_t eri_load_dir(EriVfs* vfs, const char* root, const char* rel, size_t thread_count) {
   EriLoadEntries entries;
   size_t i;
 

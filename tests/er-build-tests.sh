@@ -31,7 +31,7 @@ case "$swarm_plan" in
 esac
 
 case "$swarm_plan" in
-  *"+ .build/er-build repo-inspect --details codex > .build/repo-agent-swarm/issues.txt"* ) ;;
+  *"+ repo-inspect analyze --details <in-memory VFS> | <in-memory issue queue>"* ) ;;
   * ) printf 'missing swarm repo-inspect queue step\n' >&2; exit 1 ;;
 esac
 
