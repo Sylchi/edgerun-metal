@@ -5,12 +5,14 @@
 #include <dirent.h>
 #include <errno.h>
 #include <limits.h>
+#include <netdb.h>
 #include <stdarg.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <sys/wait.h>
@@ -26,8 +28,10 @@
 #define CODEX_BACKEND_VERSION "0.130.0"
 #define DEFAULT_MODEL "gpt-5.5"
 #define CODEX_BACKEND_URL "https://chatgpt.com/backend-api/codex/responses"
+#define CODEX_SSE_HEADER_CAP 10u
 static bool g_codex_memory_only = false;
 static bool g_codex_quiet_agent = false;
+static bool g_codex_minimal_agent = false;
 
 #define ANSI_RESET "\033[0m"
 #define ANSI_BOLD "\033[1m"
@@ -45,6 +49,9 @@ static bool g_codex_quiet_agent = false;
 #define SUMMARY_INCLUDE_LIMIT 5u
 #define SUMMARY_SYMBOL_LIMIT 8u
 #define SELF_TEST_CODEX_GAME_FAILURE 15
+#define SELF_TEST_TRANSPORT_URL_FAILURE 16
+#define SELF_TEST_TRANSPORT_REQUEST_FAILURE 17
+#define SELF_TEST_CODEX_SSE_HEADERS_FAILURE 18
 #define WORKSPACE_INITIAL_CAPACITY 256u
 #define FNV1A64_OFFSET_BASIS 1469598103934665603ull
 #define FNV1A64_PRIME 1099511628211ull
@@ -1325,6 +1332,7 @@ static char *repo_command_new(Workspace *ws, const char *command) {
 }
 
 #include "edgerun_c_game.c"
+#include "edgerun_c_transport.c"
 
 static char *repo_status_text_new(Workspace *ws) {
     char *cmd = repo_command_new(ws, "git status --short --branch");
@@ -1986,13 +1994,6 @@ static void process_output_item_json(AgentTurn *turn, char *item_json) {
     free(item_json);
 }
 
-static bool response_completed(const char *event_json) {
-    char *type = json_get_string_dup(event_json, "type");
-    bool done = type && strcmp(type, "response.completed") == 0;
-    free(type);
-    return done;
-}
-
 static void process_sse_json_event(AgentTurn *turn, const char *event_json) {
     char *type = json_get_string_dup(event_json, "type");
     if (!type) return;
@@ -2046,18 +2047,6 @@ static char *build_responses_body_new(const char *model, const CodexSession *ses
     return b.data;
 }
 
-static char *write_temp_body_new(const char *body) {
-    char tmpl[] = "/tmp/edgerun-c-body-XXXXXX";
-    int fd = mkstemp(tmpl);
-    if (fd < 0) die("mkstemp failed: %s", strerror(errno));
-    FILE *f = fdopen(fd, "wb");
-    if (!f) die("fdopen failed: %s", strerror(errno));
-    size_t len = strlen(body);
-    if (fwrite(body, 1, len, f) != len) die("temp body write failed");
-    if (fclose(f) != 0) die("temp body close failed");
-    return xstrdup(tmpl);
-}
-
 static void debug_write_body(const char *body) {
     const char *debug = getenv("EDGERUN_C_DEBUG");
     if (!debug || strcmp(debug, "1") != 0) return;
@@ -2071,110 +2060,117 @@ static void debug_write_body(const char *body) {
     fprintf(stderr, "[debug] wrote request body %s\n", path);
 }
 
+static void codex_transport_event(void *user, const char *event_json) {
+    AgentTurn *turn = (AgentTurn *)user;
+    process_sse_json_event(turn, event_json);
+}
+
+typedef struct {
+    ErHttpHeader headers[CODEX_SSE_HEADER_CAP];
+    size_t count;
+    Buffer auth;
+    Buffer request_id;
+    Buffer session_id;
+    Buffer thread_id;
+    Buffer installation_id;
+    Buffer window_id;
+    Buffer account_id;
+} CodexSseHeaders;
+
+static void codex_sse_headers_append(CodexSseHeaders *out, const char *name, const char *value) {
+    if (out->count >= CODEX_SSE_HEADER_CAP) die("too many Codex SSE headers");
+    out->headers[out->count++] = (ErHttpHeader){name, value};
+}
+
+static void codex_sse_headers_init(CodexSseHeaders *out, const CodexAuth *auth, const CodexSession *session) {
+    memset(out, 0, sizeof(*out));
+    buffer_init(&out->auth);
+    buffer_init(&out->request_id);
+    buffer_init(&out->session_id);
+    buffer_init(&out->thread_id);
+    buffer_init(&out->installation_id);
+    buffer_init(&out->window_id);
+    buffer_init(&out->account_id);
+    buffer_appendf(&out->auth, "Bearer %s", auth->access_token);
+    buffer_appendf(&out->request_id, "%s", session->thread_id);
+    buffer_appendf(&out->session_id, "%s", session->session_id);
+    buffer_appendf(&out->thread_id, "%s", session->thread_id);
+    buffer_appendf(&out->installation_id, "%s", session->installation_id);
+    buffer_appendf(&out->window_id, "%s", session->window_id);
+    codex_sse_headers_append(out, "accept", "text/event-stream");
+    codex_sse_headers_append(out, "content-type", "application/json");
+    codex_sse_headers_append(out, "version", CODEX_BACKEND_VERSION);
+    codex_sse_headers_append(out, "authorization", out->auth.data);
+    codex_sse_headers_append(out, "x-client-request-id", out->request_id.data);
+    codex_sse_headers_append(out, "session_id", out->session_id.data);
+    codex_sse_headers_append(out, "thread_id", out->thread_id.data);
+    codex_sse_headers_append(out, "x-codex-installation-id", out->installation_id.data);
+    codex_sse_headers_append(out, "x-codex-window-id", out->window_id.data);
+    if (auth->account_id) {
+        buffer_appendf(&out->account_id, "%s", auth->account_id);
+        codex_sse_headers_append(out, "ChatGPT-Account-ID", out->account_id.data);
+    }
+}
+
+static void codex_sse_headers_free(CodexSseHeaders *headers) {
+    free(headers->auth.data);
+    free(headers->request_id.data);
+    free(headers->session_id.data);
+    free(headers->thread_id.data);
+    free(headers->installation_id.data);
+    free(headers->window_id.data);
+    free(headers->account_id.data);
+}
+
+static const char *codex_sse_header_value(const CodexSseHeaders *headers, const char *name) {
+    for (size_t i = 0; i < headers->count; i++) {
+        if (strcmp(headers->headers[i].name, name) == 0) return headers->headers[i].value;
+    }
+    return NULL;
+}
+
+static bool codex_sse_header_matches(const CodexSseHeaders *headers, const char *name, const char *value) {
+    const char *actual = codex_sse_header_value(headers, name);
+    return actual && strcmp(actual, value) == 0;
+}
+
+static bool codex_sse_headers_self_test(void) {
+    CodexAuth auth = {
+        .access_token = "token",
+        .account_id = "account",
+    };
+    CodexSession session;
+    CodexSseHeaders headers;
+    bool ok;
+
+    memset(&session, 0, sizeof(session));
+    snprintf(session.thread_id, sizeof(session.thread_id), "thread");
+    snprintf(session.session_id, sizeof(session.session_id), "session");
+    snprintf(session.installation_id, sizeof(session.installation_id), "install");
+    snprintf(session.window_id, sizeof(session.window_id), "window");
+    codex_sse_headers_init(&headers, &auth, &session);
+    ok = headers.count == CODEX_SSE_HEADER_CAP &&
+         codex_sse_header_matches(&headers, "authorization", "Bearer token") &&
+         codex_sse_header_matches(&headers, "x-client-request-id", "thread") &&
+         codex_sse_header_matches(&headers, "session_id", "session") &&
+         codex_sse_header_matches(&headers, "thread_id", "thread") &&
+         codex_sse_header_matches(&headers, "x-codex-installation-id", "install") &&
+         codex_sse_header_matches(&headers, "x-codex-window-id", "window") &&
+         codex_sse_header_matches(&headers, "ChatGPT-Account-ID", "account");
+    codex_sse_headers_free(&headers);
+    return ok;
+}
+
 static AgentTurn codex_stream_turn(const char *model, const CodexAuth *auth, const CodexSession *session, JsonItems *history) {
     AgentTurn turn;
     agent_turn_init(&turn);
     char *body = build_responses_body_new(model, session, history);
     debug_write_body(body);
-    char *body_path = write_temp_body_new(body);
+    CodexSseHeaders headers;
+    codex_sse_headers_init(&headers, auth, session);
+    er_transport_post_sse(CODEX_BACKEND_URL, headers.headers, headers.count, body, codex_transport_event, &turn);
     free(body);
-
-    char *body_q = shell_quote_new(body_path);
-    char *url_q = shell_quote_new(CODEX_BACKEND_URL);
-    Buffer auth_header;
-    buffer_init(&auth_header);
-    buffer_appendf(&auth_header, "authorization: Bearer %s", auth->access_token);
-    char *auth_header_q = shell_quote_new(auth_header.data);
-    Buffer request_id_header;
-    buffer_init(&request_id_header);
-    buffer_appendf(&request_id_header, "x-client-request-id: %s", session->thread_id);
-    char *request_id_header_q = shell_quote_new(request_id_header.data);
-    Buffer session_id_header;
-    buffer_init(&session_id_header);
-    buffer_appendf(&session_id_header, "session_id: %s", session->session_id);
-    char *session_id_header_q = shell_quote_new(session_id_header.data);
-    Buffer thread_id_header;
-    buffer_init(&thread_id_header);
-    buffer_appendf(&thread_id_header, "thread_id: %s", session->thread_id);
-    char *thread_id_header_q = shell_quote_new(thread_id_header.data);
-    Buffer installation_header;
-    buffer_init(&installation_header);
-    buffer_appendf(&installation_header, "x-codex-installation-id: %s", session->installation_id);
-    char *installation_header_q = shell_quote_new(installation_header.data);
-    Buffer window_header;
-    buffer_init(&window_header);
-    buffer_appendf(&window_header, "x-codex-window-id: %s", session->window_id);
-    char *window_header_q = shell_quote_new(window_header.data);
-    char *account_header_q = NULL;
-    if (auth->account_id) {
-        Buffer account_header;
-        buffer_init(&account_header);
-        buffer_appendf(&account_header, "ChatGPT-Account-ID: %s", auth->account_id);
-        account_header_q = shell_quote_new(account_header.data);
-        free(account_header.data);
-    }
-
-    Buffer cmd;
-    buffer_init(&cmd);
-    buffer_appendf(&cmd,
-        "curl -sS -N --fail-with-body -X POST %s "
-        "-H 'accept: text/event-stream' "
-        "-H 'content-type: application/json' "
-        "-H 'version: " CODEX_BACKEND_VERSION "' "
-        "-H %s -H %s -H %s -H %s -H %s -H %s ",
-        url_q, auth_header_q, request_id_header_q, session_id_header_q,
-        thread_id_header_q, installation_header_q, window_header_q);
-    if (account_header_q) {
-        buffer_appendf(&cmd, "-H %s ", account_header_q);
-    }
-    buffer_appendf(&cmd, "--data-binary @%s", body_q);
-
-    FILE *pipe = popen(cmd.data, "r");
-    if (!pipe) die("failed to start curl; install curl or provide a local HTTPS transport");
-
-    char *line = NULL;
-    size_t cap = 0;
-    Buffer event;
-    buffer_init(&event);
-    while (getline(&line, &cap, pipe) != -1) {
-        trim_newline(line);
-        if (line[0] == 0) {
-            if (event.len > 0) {
-                process_sse_json_event(&turn, event.data);
-                bool done = response_completed(event.data);
-                event.len = 0;
-                if (event.data) event.data[0] = 0;
-                if (done) break;
-            }
-        } else if (starts_with(line, "data: ")) {
-            if (event.len) buffer_append_c(&event, '\n');
-            buffer_append(&event, line + 6, strlen(line + 6));
-        } else if (getenv("EDGERUN_C_DEBUG")) {
-            fprintf(stderr, "[debug] non-sse: %s\n", line);
-        }
-    }
-    free(line);
-    int rc = pclose(pipe);
-    if (rc != 0) fprintf(stderr, "\ncurl exited with status %d\n", rc);
-    unlink(body_path);
-    free(body_path);
-    free(body_q);
-    free(url_q);
-    free(auth_header.data);
-    free(auth_header_q);
-    free(request_id_header.data);
-    free(request_id_header_q);
-    free(session_id_header.data);
-    free(session_id_header_q);
-    free(thread_id_header.data);
-    free(thread_id_header_q);
-    free(installation_header.data);
-    free(installation_header_q);
-    free(window_header.data);
-    free(window_header_q);
-    free(account_header_q);
-    free(cmd.data);
-    free(event.data);
+    codex_sse_headers_free(&headers);
     return turn;
 }
 
@@ -2194,9 +2190,11 @@ static int run_agent_prompt(Workspace *ws, const char *prompt) {
     CodexSession session;
     codex_session_init(&session);
     JsonItems history = {0};
-    char *context = initial_context_text_new(ws);
-    json_items_push(&history, user_item_json_new(context));
-    free(context);
+    if (!g_codex_minimal_agent) {
+        char *context = initial_context_text_new(ws);
+        json_items_push(&history, user_item_json_new(context));
+        free(context);
+    }
     json_items_push(&history, user_item_json_new(prompt));
 
     for (;;) {
@@ -2337,6 +2335,28 @@ static void workspace_init(Workspace *ws, const char *root) {
     workspace_rebuild_summaries(ws);
 }
 
+static void workspace_init_one_file(Workspace *ws, const char *root, const char *path) {
+    memset(ws, 0, sizeof(*ws));
+    char resolved[PATH_MAX];
+    char abs[PATH_MAX];
+    struct stat st;
+    size_t len = 0;
+    bool text = false;
+    unsigned char *data;
+
+    if (!realpath(root, resolved)) die("cannot resolve %s: %s", root, strerror(errno));
+    if (!path_is_safe(path)) die("invalid focused file path: %s", path ? path : "(null)");
+    snprintf(ws->root, sizeof(ws->root), "%s", resolved);
+    join_path(abs, ws->root, path);
+    if (lstat(abs, &st) != 0 || !S_ISREG(st.st_mode)) {
+        die("focused file missing: %s", path);
+    }
+    data = read_file_bytes(abs, &len, &text);
+    if (data == NULL) die("cannot read focused file: %s", path);
+    workspace_add_file(ws, path, data, len, text, st.st_mode);
+    workspace_rebuild_summaries(ws);
+}
+
 static void workspace_free(Workspace *ws) {
     workspace_clear_files(ws);
     workspace_clear_summaries(ws);
@@ -2371,6 +2391,10 @@ static int self_test(void) {
         return SELF_TEST_HASH_DIFFERENCE_FAILURE;
     }
     if (!should_skip_dir(".build/codex")) return SELF_TEST_SKIP_BUILD_DIR_FAILURE;
+    int transport_status = er_transport_self_test();
+    if (transport_status == 1) return SELF_TEST_TRANSPORT_URL_FAILURE;
+    if (transport_status == 2) return SELF_TEST_TRANSPORT_REQUEST_FAILURE;
+    if (!codex_sse_headers_self_test()) return SELF_TEST_CODEX_SSE_HEADERS_FAILURE;
     if (codex_game_self_test() != 0) return SELF_TEST_CODEX_GAME_FAILURE;
     puts("self-test ok");
     return 0;
@@ -2381,17 +2405,22 @@ int main(int argc, char **argv) {
     if (argc > 1 && strcmp(argv[1], "--game-bench") == 0) return codex_game_bench();
     const char *root = ".";
     const char *prompt = NULL;
+    const char *only_file = NULL;
     for (int i = 1; i < argc; i++) {
         if ((strcmp(argv[i], "--prompt") == 0 || strcmp(argv[i], "-p") == 0) && i + 1 < argc) {
             prompt = argv[++i];
         } else if (strcmp(argv[i], "--root") == 0 && i + 1 < argc) {
             root = argv[++i];
+        } else if (strcmp(argv[i], "--only-file") == 0 && i + 1 < argc) {
+            only_file = argv[++i];
         } else if (strcmp(argv[i], "--memory-only") == 0) {
             g_codex_memory_only = true;
         } else if (strcmp(argv[i], "--quiet-agent") == 0) {
             g_codex_quiet_agent = true;
+        } else if (strcmp(argv[i], "--minimal-agent") == 0) {
+            g_codex_minimal_agent = true;
         } else if (strcmp(argv[i], "--help") == 0 || strcmp(argv[i], "-h") == 0) {
-            puts("usage: edgerun-c [--memory-only] [--quiet-agent] [--root PATH] [--prompt TEXT] [--game-bench]");
+            puts("usage: edgerun-c [--memory-only] [--quiet-agent] [--minimal-agent] [--only-file PATH] [--root PATH] [--prompt TEXT] [--game-bench]");
             puts("       edgerun-c PATH");
             return 0;
         } else {
@@ -2399,7 +2428,11 @@ int main(int argc, char **argv) {
         }
     }
     Workspace ws;
-    workspace_init(&ws, root);
+    if (only_file != NULL) {
+        workspace_init_one_file(&ws, root, only_file);
+    } else {
+        workspace_init(&ws, root);
+    }
     if (!g_codex_quiet_agent) {
         print_icon_line(stdout, "📦", ANSI_GREEN, "loaded %zu files from %s", ws.file_count, ws.root);
         fflush(stdout);

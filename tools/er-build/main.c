@@ -38,7 +38,8 @@ enum {
   ERB_SWARM_PROMPT_CAP = 32768,
   ERB_SWARM_PATH_CAP = 512,
   ERB_SWARM_FILE_TASK_MAX = 512,
-  ERB_SWARM_AGENT_ARGC = 8,
+  ERB_SWARM_MAX_ISSUES_PER_FILE = 8,
+  ERB_SWARM_AGENT_ARGC = 12,
   ERB_TEXT_INITIAL_CAP = 8192,
   ERB_PIPE_READ_CHUNK = 4096,
   ERB_SWARM_STREAM_CHUNK = 4096,
@@ -46,6 +47,14 @@ enum {
   ERB_PACKAGE_CONTRACT_UI_APP = 1,
   ERB_PACKAGE_CONTRACT_BUS_DRIVER = 2
 };
+
+typedef enum {
+  ERB_SWARM_FIX_SKIP = 0,
+  ERB_SWARM_FIX_CONSTANT,
+  ERB_SWARM_FIX_DUPLICATE,
+  ERB_SWARM_FIX_BOUNDS,
+  ERB_SWARM_FIX_LOCAL_REFACTOR
+} ErbSwarmFixKind;
 
 static const char ERB_DEFAULT_CC[] = "clang";
 static const char ERB_BUILD_DIR[] = ".build";
@@ -101,6 +110,8 @@ typedef struct {
   char path[ERB_SWARM_PATH_CAP];
   int line;
   char text[ERB_SWARM_LINE_CAP];
+  char kind[64];
+  ErbSwarmFixKind fix_kind;
 } ErbSwarmIssue;
 
 typedef struct {
@@ -112,6 +123,8 @@ typedef struct {
 typedef struct {
   char path[ERB_SWARM_PATH_CAP];
   ErbTextBuffer issues;
+  ErbSwarmFixKind fix_kind;
+  size_t issue_count;
 } ErbSwarmFileTask;
 
 typedef struct {
@@ -717,9 +730,12 @@ static int erb_swarm_issue_parse(const char* line, ErbSwarmIssue* issue) {
   const char* text = line;
   const char* colon;
   const char* after_colon;
+  const char* kind_open;
+  const char* kind_close;
   char* end = NULL;
   unsigned long parsed_line;
   size_t path_len;
+  size_t kind_len;
 
   if (line == NULL || issue == NULL) {
     return 0;
@@ -745,6 +761,18 @@ static int erb_swarm_issue_parse(const char* line, ErbSwarmIssue* issue) {
   issue->path[path_len] = '\0';
   issue->line = (int)parsed_line;
   snprintf(issue->text, sizeof(issue->text), "%s", text);
+  kind_open = strchr(text, '[');
+  kind_close = kind_open == NULL ? NULL : strchr(kind_open, ']');
+  if (kind_open == NULL || kind_close == NULL || kind_close <= kind_open + 1) {
+    return 0;
+  }
+  kind_len = (size_t)(kind_close - kind_open - 1);
+  if (kind_len >= sizeof(issue->kind)) {
+    kind_len = sizeof(issue->kind) - 1u;
+  }
+  memcpy(issue->kind, kind_open + 1, kind_len);
+  issue->kind[kind_len] = '\0';
+  issue->fix_kind = ERB_SWARM_FIX_SKIP;
   return 1;
 }
 
@@ -773,6 +801,63 @@ static int erb_swarm_next_issue_line(const char** cursor, char* line, size_t lin
   return 0;
 }
 
+static const char* erb_swarm_fix_kind_label(ErbSwarmFixKind kind) {
+  switch (kind) {
+    case ERB_SWARM_FIX_CONSTANT:
+      return "name constants";
+    case ERB_SWARM_FIX_DUPLICATE:
+      return "remove duplication";
+    case ERB_SWARM_FIX_BOUNDS:
+      return "add bounds guard";
+    case ERB_SWARM_FIX_LOCAL_REFACTOR:
+      return "small local refactor";
+    case ERB_SWARM_FIX_SKIP:
+    default:
+      return "skip";
+  }
+}
+
+static int erb_swarm_path_generated_or_catalog(const char* path) {
+  const char* base;
+
+  if (path == NULL) {
+    return 1;
+  }
+  base = strrchr(path, '/');
+  base = base == NULL ? path : base + 1;
+  if (strstr(path, "/generated/") != NULL ||
+      strstr(path, "catalog_data") != NULL ||
+      strstr(path, "_data.c") != NULL ||
+      strstr(path, "_table.c") != NULL ||
+      strncmp(base, "zerrors_", 8u) == 0 ||
+      strncmp(base, "zsyscall_", 9u) == 0 ||
+      strncmp(base, "zsysnum_", 8u) == 0 ||
+      strncmp(base, "ztypes_", 7u) == 0) {
+    return 1;
+  }
+  return 0;
+}
+
+static ErbSwarmFixKind erb_swarm_issue_fix_kind(const ErbSwarmIssue* issue) {
+  if (issue == NULL || erb_swarm_path_generated_or_catalog(issue->path) != 0) {
+    return ERB_SWARM_FIX_SKIP;
+  }
+  if (strcmp(issue->kind, "magic-number") == 0) {
+    return ERB_SWARM_FIX_CONSTANT;
+  }
+  if (strcmp(issue->kind, "duplicate-block") == 0) {
+    return ERB_SWARM_FIX_DUPLICATE;
+  }
+  if (strcmp(issue->kind, "string-indexing") == 0) {
+    return ERB_SWARM_FIX_BOUNDS;
+  }
+  if (strcmp(issue->kind, "cpu-memory-in-loop") == 0 ||
+      strcmp(issue->kind, "cpu-alloc-in-loop") == 0) {
+    return ERB_SWARM_FIX_LOCAL_REFACTOR;
+  }
+  return ERB_SWARM_FIX_SKIP;
+}
+
 static void erb_swarm_file_tasks_free(ErbSwarmFileTask* tasks, size_t task_count) {
   size_t i;
 
@@ -786,9 +871,14 @@ static int erb_swarm_file_task_add_issue(ErbSwarmFileTask* tasks,
                                          const ErbSwarmIssue* issue) {
   size_t i;
   ErbSwarmFileTask* task = NULL;
+  ErbSwarmFixKind fix_kind;
 
   if (tasks == NULL || task_count == NULL || issue == NULL) {
     return 1;
+  }
+  fix_kind = erb_swarm_issue_fix_kind(issue);
+  if (fix_kind == ERB_SWARM_FIX_SKIP) {
+    return 0;
   }
   for (i = 0u; i < *task_count; ++i) {
     if (strcmp(tasks[i].path, issue->path) == 0) {
@@ -803,12 +893,21 @@ static int erb_swarm_file_task_add_issue(ErbSwarmFileTask* tasks,
     task = &tasks[*task_count];
     memset(task, 0, sizeof(*task));
     snprintf(task->path, sizeof(task->path), "%s", issue->path);
+    task->fix_kind = fix_kind;
     ++*task_count;
+  }
+  if (task->issue_count >= ERB_SWARM_MAX_ISSUES_PER_FILE ||
+      strstr(task->issues.data == NULL ? "" : task->issues.data, issue->text) != NULL) {
+    return 0;
+  }
+  if (task->fix_kind == ERB_SWARM_FIX_SKIP) {
+    task->fix_kind = fix_kind;
   }
   if (erb_text_buffer_append(&task->issues, issue->text, strlen(issue->text)) != 0 ||
       erb_text_buffer_append(&task->issues, "\n", 1u) != 0) {
     return 1;
   }
+  ++task->issue_count;
   return 0;
 }
 
@@ -885,9 +984,12 @@ static int erb_swarm_prompt_for_file_task(const ErbSwarmFileTask* task,
       "Edit only the named file. You may inspect only that file. Do not inspect broad repo state.\n"
       "Do not run git, tests, commits, pushes, branch commands, or repo-inspect.\n"
       "If the file cannot be fixed safely, make no change.\n"
+      "Keep the patch local and small; do not add optimizer-ignore annotations unless the issue explicitly asks for one.\n"
       "Output only the file name and proposed unified diff. Do not add explanation outside the diff.\n"
       "Multiple agents share this checkout; do not revert or overwrite unrelated edits.\n\n") != 0 ||
       erb_swarm_prompt_appendf(prompt, prompt_len, &used, "FILE: %s\n\n", task->path) != 0 ||
+      erb_swarm_prompt_appendf(prompt, prompt_len, &used, "FIX TYPE: %s\n\n",
+                               erb_swarm_fix_kind_label(task->fix_kind)) != 0 ||
       erb_swarm_prompt_append(prompt, prompt_len, &used, "ISSUES:\n") != 0 ||
       erb_swarm_prompt_append(prompt, prompt_len, &used, task->issues.data) != 0 ||
       erb_swarm_prompt_append(prompt, prompt_len, &used, "\n") != 0) {
@@ -898,13 +1000,8 @@ static int erb_swarm_prompt_for_file_task(const ErbSwarmFileTask* task,
   if (file == NULL) {
     return erb_swarm_prompt_append(prompt, prompt_len, &used, "Context unavailable: file missing from VFS.\n");
   }
-  if (file->len + used + 32u >= prompt_len) {
-    return erb_swarm_prompt_append(prompt, prompt_len, &used,
-                                   "The named file is too large for inline context. Inspect only FILE.\n");
-  }
-  if (erb_swarm_prompt_append(prompt, prompt_len, &used, "CURRENT FILE:\n```c\n") != 0 ||
-      erb_swarm_prompt_append(prompt, prompt_len, &used, (const char*)file->bytes) != 0 ||
-      erb_swarm_prompt_append(prompt, prompt_len, &used, "\n```\n") != 0) {
+  if (erb_swarm_prompt_append(prompt, prompt_len, &used,
+                              "The in-memory workspace contains only FILE. Read that file if needed.\n") != 0) {
     return 1;
   }
   return 0;
@@ -1075,6 +1172,9 @@ static int erb_swarm_spawn_file_task(const ErbSwarmFileTask* task,
       (char*)ERB_CODEX_BIN,
       "--memory-only",
       "--quiet-agent",
+      "--minimal-agent",
+      "--only-file",
+      (char*)task->path,
       "--root",
       ".",
       "--prompt",
@@ -1194,12 +1294,12 @@ static int erb_target_repo_agent_swarm(int argc, char** argv, int print_plan) {
   if (print_plan != 0) {
     printf("+ make codex-build\n");
     printf("+ repo-inspect VFS load %s %s\n", root, rel);
-    printf("+ repo-inspect analyze --details <in-memory VFS> | <in-memory file task queue>\n");
+    printf("+ repo-inspect analyze --details <in-memory VFS> | <filtered actionable file task queue>\n");
     if (limit == 0u) {
-      printf("+ .build/codex --memory-only --quiet-agent --root . --prompt <one file per worker, streamed diffs, %d concurrent>\n",
+      printf("+ .build/codex --memory-only --quiet-agent --minimal-agent --only-file FILE --root . --prompt <one focused file, streamed diffs, %d concurrent>\n",
              concurrency);
     } else {
-      printf("+ .build/codex --memory-only --quiet-agent --root . --prompt <one file per worker, streamed diffs, %d concurrent, %u limit>\n",
+      printf("+ .build/codex --memory-only --quiet-agent --minimal-agent --only-file FILE --root . --prompt <one focused file, streamed diffs, %d concurrent, %u limit>\n",
              concurrency, (unsigned)limit);
     }
     return 0;
