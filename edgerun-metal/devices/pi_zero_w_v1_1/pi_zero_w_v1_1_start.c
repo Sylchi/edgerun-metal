@@ -1281,6 +1281,7 @@ static UINT32 er_pi_zero_w_v1_1_cyw43438_start_owned_firmware(void) {
   UINT32 mailbox;
   UINT32 heartbeat_first;
   UINT32 heartbeat_second;
+  UINT32 command_response;
 
   if (sizeof(ER_CYW43438_OWNED_FIRMWARE) >=
           ER_PI_ZERO_W_V1_1_CYW43438_RAM_SIZE ||
@@ -1317,6 +1318,12 @@ static UINT32 er_pi_zero_w_v1_1_cyw43438_start_owned_firmware(void) {
           ER_CYW43438_OWNED_FIRMWARE_HEARTBEAT_ADDR,
           0u) == 0u ||
       er_pi_zero_w_v1_1_cyw43438_backplane_write32(
+          ER_CYW43438_OWNED_FIRMWARE_COMMAND_ADDR,
+          0u) == 0u ||
+      er_pi_zero_w_v1_1_cyw43438_backplane_write32(
+          ER_CYW43438_OWNED_FIRMWARE_RESPONSE_ADDR,
+          0u) == 0u ||
+      er_pi_zero_w_v1_1_cyw43438_backplane_write32(
           ER_PI_ZERO_W_V1_1_CYW43438_RAM_BASE,
           ER_CYW43438_OWNED_FIRMWARE_RESET_VECTOR) == 0u) {
     return 0u;
@@ -1344,6 +1351,18 @@ static UINT32 er_pi_zero_w_v1_1_cyw43438_start_owned_firmware(void) {
           ER_CYW43438_OWNED_FIRMWARE_HEARTBEAT_ADDR,
           &heartbeat_second) == 0u ||
       heartbeat_second == heartbeat_first) {
+    return 0u;
+  }
+  if (er_pi_zero_w_v1_1_cyw43438_backplane_write32(
+          ER_CYW43438_OWNED_FIRMWARE_COMMAND_ADDR,
+          heartbeat_second) == 0u) {
+    return 0u;
+  }
+  er_pi_zero_w_v1_1_delay(ER_PI_ZERO_W_V1_1_WIFI_POWER_DELAY_TICKS);
+  if (er_pi_zero_w_v1_1_cyw43438_backplane_read32(
+          ER_CYW43438_OWNED_FIRMWARE_RESPONSE_ADDR,
+          &command_response) == 0u ||
+      command_response != heartbeat_second) {
     return 0u;
   }
   g_er_pi_zero_w_v1_1_sdio_probe_response = mailbox;
