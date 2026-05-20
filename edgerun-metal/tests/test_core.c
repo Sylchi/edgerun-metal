@@ -23,6 +23,7 @@ ErWasmHostCalls g_host_calls = {0};
 #include "test_core_pi_zero2w.c"
 #include "test_core_pi_zero_w_v1_1.c"
 #include "test_core_ieee80211_ap.c"
+#include "test_core_cyw43438_d11.c"
 #include "test_core_cyw43438_owned_firmware.c"
 #include "test_core_node_control.c"
 #include "test_core_ble_adv.c"
@@ -92,6 +93,7 @@ int main(void) {
   test_pi_zero2w_bringup_boundary();
   test_pi_zero_w_v1_1_bringup_boundary();
   test_ieee80211_open_ap_frames();
+  test_cyw43438_d11_registers();
   test_cyw43438_owned_firmware_payload();
   test_node_control_relay_assignment();
   test_ble_adv();
