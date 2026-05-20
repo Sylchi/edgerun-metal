@@ -47,16 +47,23 @@ static void er_boot_services_print_report(const ErBootServicesReport* report) {
 
 static void er_boot_services_print_bounded_ascii(const char* text, UINT16 text_len) {
   char out[ER_BOOT_AUTHORITY_LABEL_MAX + 1u];
-  UINT16 i;
 
   if (text == 0 || text_len > ER_BOOT_AUTHORITY_LABEL_MAX) {
     return;
   }
-  for (i = 0u; i < text_len; ++i) {
-    out[i] = text[i];
-  }
-  out[text_len] = 0;
+  er_mem_copy((UINT8*)out, (const UINT8*)text, text_len);
+  *(out + text_len) = 0;
   er_print(out);
+}
+
+static const ErBootAuthorityProfile* er_boot_services_onboarding_choice(
+    const ErBootOnboardingModel* onboarding,
+    UINT16 choice_index) {
+  if (onboarding == 0 || choice_index >= onboarding->choice_count ||
+      choice_index >= ER_BOOT_AUTHORITY_PROFILE_CAPACITY) {
+    return 0;
+  }
+  return &onboarding->choices[choice_index];
 }
 
 static void er_boot_services_print_onboarding(const ErBootServicesReport* report) {
@@ -80,15 +87,19 @@ static void er_boot_services_print_onboarding(const ErBootServicesReport* report
     case ER_BOOT_ONBOARDING_STATE_SELECT_PROFILE:
       er_println("onboarding: select authority profile");
       for (i = 0u; i < onboarding.choice_count; ++i) {
+        const ErBootAuthorityProfile* choice = er_boot_services_onboarding_choice(&onboarding, i);
+
+        if (choice == 0) {
+          return;
+        }
         er_print("  profile ");
         er_print_u64_dec((UINT64)i);
         er_print(": ");
-        er_boot_services_print_bounded_ascii(onboarding.choices[i].label,
-                                             onboarding.choices[i].label_len);
+        er_boot_services_print_bounded_ascii(choice->label, choice->label_len);
         er_print(" tpm=");
-        er_print_u64_hex((UINT64)onboarding.choices[i].tpm_persistent_handle);
+        er_print_u64_hex((UINT64)choice->tpm_persistent_handle);
         er_print(" config-generation=");
-        er_print_u64_dec((UINT64)onboarding.choices[i].boot_config_generation);
+        er_print_u64_dec((UINT64)choice->boot_config_generation);
         er_println("");
       }
       break;

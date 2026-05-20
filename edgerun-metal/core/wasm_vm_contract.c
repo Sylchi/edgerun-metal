@@ -28,10 +28,14 @@ static UINT8 er_wasm_contract_mask(ErWasmModuleContract contract) {
 }
 
 static const ErWasmContractImport* er_wasm_contract_import(UINT8 import_kind) {
-  for (UINT32 i = 0u; i < ER_WASM_CONTRACT_IMPORT_COUNT; ++i) {
-    if (ER_WASM_CONTRACT_IMPORTS[i].kind == import_kind) {
-      return &ER_WASM_CONTRACT_IMPORTS[i];
+  const ErWasmContractImport* import = ER_WASM_CONTRACT_IMPORTS;
+  const ErWasmContractImport* const end = import + ER_WASM_CONTRACT_IMPORT_COUNT;
+
+  while (import < end) {
+    if (import->kind == import_kind) {
+      return import;
     }
+    ++import;
   }
   return 0;
 }

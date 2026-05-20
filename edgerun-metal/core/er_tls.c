@@ -73,6 +73,7 @@
   (ER_TLS_CIPHER_SUITE_BYTES + ER_TLS_COMPRESSION_METHOD_BYTES + \
    ER_TLS_EXTENSION_VECTOR_LEN_BYTES)
 
+//@optimizer-ignore-constant TLS CertificateVerify context string is fixed by TLS 1.3
 static const UINT8 er_tls_server_certificate_verify_context[] =
     "TLS 1.3, server CertificateVerify";
 
@@ -586,7 +587,7 @@ static UINT8 er_tls_derive_material(ErTlsTpm* tpm,
                                     UINT8 out_material[ER_TLS_SHA256_BYTES]) {
   UINT8 input[1u + ER_TLS_SHA256_BYTES];
 
-  input[0] = label;
+  *input = label;
   er_mem_copy(input + 1u, transcript_hash, ER_TLS_SHA256_BYTES);
   return er_tls_tpm_hmac_sha256(tpm,
                                 secret_handle,

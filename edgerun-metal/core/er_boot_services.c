@@ -97,16 +97,20 @@ void er_boot_services_report_init(ErBootServicesReport* report) {
 
 UINT8 er_boot_services_authority_label_valid(const char* label,
                                              UINT16 label_len) {
-  UINT16 i;
+  const char* current;
+  const char* end;
 
   if (label == 0 || label_len == 0u || label_len > ER_BOOT_AUTHORITY_LABEL_MAX) {
     return 0u;
   }
 
-  for (i = 0u; i < label_len; ++i) {
-    if (label[i] < ' ' || label[i] > '~') {
+  current = label;
+  end = label + label_len;
+  while (current < end) {
+    if (*current < ' ' || *current > '~') {
       return 0u;
     }
+    ++current;
   }
 
   return 1u;

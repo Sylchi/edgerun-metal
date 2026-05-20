@@ -219,12 +219,15 @@ UINT8 er_boot_admission_record_prepare_ephemeral_authority(const ErCryptoProvide
   }
 
   er_mem_zero(fields, (UINTN)sizeof(fields));
-  er_boot_admission_put_be32(&fields[EPHEMERAL_AUTHORITY_GENERATION_OFFSET], generation);
-  er_boot_admission_put_be32(&fields[EPHEMERAL_AUTHORITY_BOOT_PROFILE_OFFSET], boot_profile);
-  er_boot_admission_put_be16(&fields[EPHEMERAL_AUTHORITY_CHANNEL_OFFSET], (UINT16)bootstrap_channel_kind);
-  er_boot_admission_put_be16(&fields[EPHEMERAL_AUTHORITY_VENDOR_OFFSET], bootstrap_pci_vendor_id);
-  er_boot_admission_put_be16(&fields[EPHEMERAL_AUTHORITY_DEVICE_OFFSET], bootstrap_pci_device_id);
-  er_boot_admission_put_be16(&fields[EPHEMERAL_AUTHORITY_RESERVED_OFFSET], 0u);
+  er_boot_admission_put_be32(fields + EPHEMERAL_AUTHORITY_GENERATION_OFFSET, generation);
+  er_boot_admission_put_be32(fields + EPHEMERAL_AUTHORITY_BOOT_PROFILE_OFFSET, boot_profile);
+  er_boot_admission_put_be16(fields + EPHEMERAL_AUTHORITY_CHANNEL_OFFSET,
+                             (UINT16)bootstrap_channel_kind);
+  er_boot_admission_put_be16(fields + EPHEMERAL_AUTHORITY_VENDOR_OFFSET,
+                             bootstrap_pci_vendor_id);
+  er_boot_admission_put_be16(fields + EPHEMERAL_AUTHORITY_DEVICE_OFFSET,
+                             bootstrap_pci_device_id);
+  er_boot_admission_put_be16(fields + EPHEMERAL_AUTHORITY_RESERVED_OFFSET, 0u);
 
   span.bytes = fields;
   span.len = (UINTN)sizeof(fields);

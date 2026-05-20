@@ -43,15 +43,19 @@ static UINT8 er_boot_config_wifi_role_valid(UINT8 wifi_role) {
 }
 
 static UINT8 er_boot_config_label_valid(const char* label, UINT16 label_len) {
-  UINT16 i;
+  const char* current;
+  const char* end;
 
   if (label == 0 || label_len == 0u || label_len > ER_BOOT_CONFIG_LABEL_MAX) {
     return 0u;
   }
-  for (i = 0u; i < label_len; ++i) {
-    if (label[i] == 0) {
+  current = label;
+  end = label + label_len;
+  while (current < end) {
+    if (*current == 0) {
       return 0u;
     }
+    ++current;
   }
   return 1u;
 }
