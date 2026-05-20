@@ -66,11 +66,10 @@ enum {
   ER_TPM_VERIFY_P256_SHA256_COMMAND_LEN = 120u,
   ER_TPM_LOAD_EXTERNAL_P256_COMMAND_LEN = 106u,
   ER_TPM_LOAD_EXTERNAL_PUBLIC_AREA_LEN = 88u,
-  ER_TPM_LOAD_EXTERNAL_KEYEDHASH_PUBLIC_AREA_LEN = 16u,
+  ER_TPM_LOAD_EXTERNAL_KEYEDHASH_PUBLIC_AREA_LEN = 14u,
   ER_TPM_LOAD_EXTERNAL_SYMCIPHER_PUBLIC_AREA_LEN = 18u,
-  ER_TPM_LOAD_EXTERNAL_KEYEDHASH_FIXED_LEN = 42u,
+  ER_TPM_LOAD_EXTERNAL_KEYEDHASH_FIXED_LEN = 40u,
   ER_TPM_LOAD_EXTERNAL_SYMCIPHER_FIXED_LEN = 44u,
-  ER_TPM_EMPTY_UNIQUE_LEN = 0u,
   ER_TPM_ENCRYPT_DECRYPT2_COMMAND_FIXED_LEN = 34u,
   ER_TPM_HASH_COMMAND_FIXED_LEN = 18u,
   ER_TPM_HASH_SEQUENCE_START_COMMAND_LEN = 14u,
@@ -785,15 +784,14 @@ UINT8 er_tpm_build_load_external_hmac_sha256_key_command(
   offset += ER_TPM_U16_BYTES;
   er_tpm_put_be32(out_command + offset,
                   ER_TPM_TPMA_OBJECT_USER_WITH_AUTH |
+                  ER_TPM_TPMA_OBJECT_DECRYPT |
                   ER_TPM_TPMA_OBJECT_SIGN_ENCRYPT);
   offset += ER_TPM_U32_BYTES;
   er_tpm_put_be16(out_command + offset, 0u);
   offset += ER_TPM_U16_BYTES;
-  er_tpm_put_be16(out_command + offset, ER_TPM_ALG_HMAC);
+  er_tpm_put_be16(out_command + offset, ER_TPM_ALG_NULL);
   offset += ER_TPM_U16_BYTES;
-  er_tpm_put_be16(out_command + offset, ER_TPM_ALG_SHA256);
-  offset += ER_TPM_U16_BYTES;
-  er_tpm_put_be16(out_command + offset, ER_TPM_EMPTY_UNIQUE_LEN);
+  er_tpm_put_be16(out_command + offset, 0u);
   offset += ER_TPM_U16_BYTES;
   er_tpm_put_be32(out_command + offset, ER_TPM_RH_NULL);
   offset += ER_TPM_U32_BYTES;
@@ -872,9 +870,9 @@ UINT8 er_tpm_build_load_external_aes_key_command(
   offset += ER_TPM_U16_BYTES;
   er_tpm_put_be16(out_command + offset, key_bits);
   offset += ER_TPM_U16_BYTES;
-  er_tpm_put_be16(out_command + offset, mode);
+  er_tpm_put_be16(out_command + offset, ER_TPM_ALG_NULL);
   offset += ER_TPM_U16_BYTES;
-  er_tpm_put_be16(out_command + offset, ER_TPM_EMPTY_UNIQUE_LEN);
+  er_tpm_put_be16(out_command + offset, 0u);
   offset += ER_TPM_U16_BYTES;
   er_tpm_put_be32(out_command + offset, ER_TPM_RH_NULL);
   offset += ER_TPM_U32_BYTES;

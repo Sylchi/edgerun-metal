@@ -809,7 +809,7 @@ static void test_tpm_crb_direct_transport(void) {
                   digest, ER_TPM_SHA256_DIGEST_LEN,
                   command, (UINT32)sizeof(command), &command_len),
               1);
-  check_uint64("tpm load external hmac len", command_len, 74u);
+  check_uint64("tpm load external hmac len", command_len, 72u);
   check_uint64("tpm load external hmac command code", command[9], 0x67u);
   check_uint64("tpm load external hmac sensitive size", command[11], 40u);
   check_uint64("tpm load external hmac sensitive type", command[13],
@@ -817,13 +817,14 @@ static void test_tpm_crb_direct_transport(void) {
   check_uint64("tpm load external hmac key size", command[19],
                ER_TPM_SHA256_DIGEST_LEN);
   check_uint64("tpm load external hmac key byte0", command[20], digest[0]);
-  check_uint64("tpm load external hmac public size", command[53], 16u);
+  check_uint64("tpm load external hmac public size", command[53], 14u);
   check_uint64("tpm load external hmac public type", command[55],
                ER_TPM_ALG_KEYEDHASH);
   check_uint64("tpm load external hmac public attrs", command[61], 0x40u);
-  check_uint64("tpm load external hmac scheme", command[65], ER_TPM_ALG_HMAC);
-  check_uint64("tpm load external hmac hash", command[67], ER_TPM_ALG_SHA256);
-  check_uint64("tpm load external hmac hierarchy lo", command[73], 0x07u);
+  check_uint64("tpm load external hmac public attrs high", command[59], 0x06u);
+  check_uint64("tpm load external hmac scheme", command[65], ER_TPM_ALG_NULL);
+  check_uint64("tpm load external hmac unique size", command[67], 0u);
+  check_uint64("tpm load external hmac hierarchy lo", command[71], 0x07u);
   check_int64("tpm load external hmac rejects oversized key",
               er_tpm_build_load_external_hmac_sha256_key_command(
                   digest, 0xfff8u, command, (UINT32)sizeof(command), &command_len),
@@ -850,7 +851,8 @@ static void test_tpm_crb_direct_transport(void) {
   check_uint64("tpm load external aes algorithm", command[49], ER_TPM_ALG_AES);
   check_uint64("tpm load external aes key bits", command[51],
                ER_TPM_AES_128_KEY_BITS);
-  check_uint64("tpm load external aes mode", command[53], ER_TPM_ALG_CTR);
+  check_uint64("tpm load external aes mode", command[53], ER_TPM_ALG_NULL);
+  check_uint64("tpm load external aes unique size", command[55], 0u);
   check_uint64("tpm load external aes hierarchy lo", command[59], 0x07u);
   check_int64("tpm load external aes rejects mismatched key bits",
               er_tpm_build_load_external_aes_key_command(

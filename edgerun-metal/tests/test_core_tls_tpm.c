@@ -229,7 +229,7 @@ static UINT8 test_tls_tpm_transact(void* user,
         return test_tls_tpm_handle_response(response, response_capacity, out_response_len,
                                             TEST_TLS_TPM_HANDLE_AES);
       }
-      if (command_len == 74u) {
+      if (command_len == 72u && command[55u] == ER_TPM_ALG_KEYEDHASH) {
         return test_tls_tpm_handle_response(response, response_capacity, out_response_len,
                                             TEST_TLS_TPM_HANDLE_HMAC);
       }
@@ -343,7 +343,7 @@ static void test_tls_tpm_adapter(void) {
   check_int64("tls tpm load aes",
               er_tls_tpm_load_aes_key(&tls_tpm, key, ER_TPM_AES_128_KEY_LEN, ER_TPM_AES_128_KEY_BITS, &handle), 1);
   check_uint64("tls tpm aes handle", handle, TEST_TLS_TPM_HANDLE_AES);
-  check_uint64("tls tpm aes mode", script.last_command[53], ER_TPM_ALG_CTR);
+  check_uint64("tls tpm aes mode", script.last_command[53], ER_TPM_ALG_NULL);
 
   test_fill_bytes(iv, (UINTN)sizeof(iv), 0x50u);
   check_int64("tls tpm record crypt",
