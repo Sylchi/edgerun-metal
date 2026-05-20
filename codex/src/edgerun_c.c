@@ -42,6 +42,7 @@
 #define SUMMARY_TEXT_BYTES 1200u
 #define SUMMARY_INCLUDE_LIMIT 5u
 #define SUMMARY_SYMBOL_LIMIT 8u
+#define SELF_TEST_CODEX_GAME_FAILURE 15
 
 static const char *AGENT_INSTRUCTIONS =
     "You are Codex running inside EdgeRun C. "
@@ -1242,6 +1243,8 @@ static char *repo_command_new(Workspace *ws, const char *command) {
     return b.data;
 }
 
+#include "edgerun_c_game.c"
+
 static char *repo_status_text_new(Workspace *ws) {
     char *cmd = repo_command_new(ws, "git status --short --branch");
     int status = 0;
@@ -1293,6 +1296,9 @@ static char *initial_context_text_new(Workspace *ws) {
                    ws->file_count,
                    ws->summary_count,
                    ws->proposal_count);
+    char *game = quality_game_text_new();
+    buffer_append(&b, game, strlen(game));
+    free(game);
     const char *policy =
         "\nVerification policy: after proposals, the host writes only proposed paths, runs scoped repo-progress, "
         "and commits only if verification passes.\n";
@@ -1387,28 +1393,48 @@ static int cmd_commit_verified(Workspace *ws) {
         if (!scope_list_contains(scopes, scope_count, scope)) scopes[scope_count++] = scope;
     }
 
-    if (write_all_proposals(ws) != 0) {
-        free(scopes);
-        return 1;
-    }
-    for (size_t i = 0; i < scope_count; i++) {
-        if (verify_scope(ws, scopes[i]) != 0) {
-            free(scopes);
-            return 1;
-        }
-    }
-    if (stage_owned_paths(ws) != 0) {
-        free(scopes);
-        return 1;
-    }
-    char *subject = commit_subject_new(ws);
-    char *subject_q = shell_quote_new(subject);
+    CodexGameInspectTotals *quality_before =
+        xmalloc(scope_count * sizeof(quality_before[0]));
+    CodexGameInspectTotals *quality_after =
+        xmalloc(scope_count * sizeof(quality_after[0]));
+    char *subject = NULL;
+    char *subject_q = NULL;
+    char *cmd = NULL;
     Buffer commit_cmd;
     buffer_init(&commit_cmd);
-    buffer_appendf(&commit_cmd, "git commit -m %s", subject_q);
-    char *cmd = repo_command_new(ws, commit_cmd.data);
-    printf("status: committing verified changes\n");
-    int status = run_command_checked(cmd);
+    int status = codex_game_inspect_scopes(ws, scopes, scope_count,
+                                           quality_before);
+    if (status == 0) {
+        status = write_all_proposals(ws);
+    }
+    for (size_t i = 0; i < scope_count && status == 0; i++) {
+        status = verify_scope(ws, scopes[i]);
+    }
+    if (status == 0) {
+        status = codex_game_inspect_scopes(ws, scopes, scope_count,
+                                           quality_after);
+    }
+    if (status == 0) {
+        CodexGameQualityScore quality =
+            codex_game_quality_score(quality_before, quality_after,
+                                     scope_count);
+        codex_game_quality_score_print(quality);
+        if (quality.score < CODEX_GAME_SCORE_GATE_FLOOR) {
+            fprintf(stderr, "commit aborted: quality game score is negative\n");
+            status = 1;
+        }
+    }
+    if (status == 0) {
+        status = stage_owned_paths(ws);
+    }
+    if (status == 0) {
+        subject = commit_subject_new(ws);
+        subject_q = shell_quote_new(subject);
+        buffer_appendf(&commit_cmd, "git commit -m %s", subject_q);
+        cmd = repo_command_new(ws, commit_cmd.data);
+        printf("status: committing verified changes\n");
+        status = run_command_checked(cmd);
+    }
     if (status == 0) {
         char *show = repo_command_new(ws, "git rev-parse --short HEAD");
         int show_status = 0;
@@ -1423,6 +1449,8 @@ static int cmd_commit_verified(Workspace *ws) {
         workspace_rebuild_summaries(ws);
         printf("status: workspace reloaded from disk\n");
     }
+    free(quality_before);
+    free(quality_after);
     free(scopes);
     free(subject);
     free(subject_q);
@@ -2228,12 +2256,14 @@ static int self_test(void) {
     if (path_stem_len("codex/src/edgerun_c.c") != strlen("edgerun_c")) return 12;
     if (stable_hash_bytes((const unsigned char *)"abc", 3) == stable_hash_bytes((const unsigned char *)"abd", 3)) return 13;
     if (!should_skip_dir(".build/codex")) return 14;
+    if (codex_game_self_test() != 0) return SELF_TEST_CODEX_GAME_FAILURE;
     puts("self-test ok");
     return 0;
 }
 
 int main(int argc, char **argv) {
     if (argc > 1 && strcmp(argv[1], "--self-test") == 0) return self_test();
+    if (argc > 1 && strcmp(argv[1], "--game-bench") == 0) return codex_game_bench();
     const char *root = ".";
     const char *prompt = NULL;
     for (int i = 1; i < argc; i++) {
@@ -2242,7 +2272,7 @@ int main(int argc, char **argv) {
         } else if (strcmp(argv[i], "--root") == 0 && i + 1 < argc) {
             root = argv[++i];
         } else if (strcmp(argv[i], "--help") == 0 || strcmp(argv[i], "-h") == 0) {
-            puts("usage: edgerun-c [--root PATH] [--prompt TEXT]");
+            puts("usage: edgerun-c [--root PATH] [--prompt TEXT] [--game-bench]");
             puts("       edgerun-c PATH");
             return 0;
         } else {
