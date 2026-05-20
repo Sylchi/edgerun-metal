@@ -6,6 +6,65 @@ enum {
 
 static ErIdentity g_test_app_route_package_signer;
 
+typedef struct {
+  UINT8* bytes;
+  UINT32 byte_len;
+} TestStorageBlockDevice;
+
+static UINT8 test_storage_block_range(TestStorageBlockDevice* device,
+                                      UINT64 sector,
+                                      UINT32 byte_len,
+                                      UINT32* out_offset) {
+  UINT64 offset;
+
+  if (device == 0 ||
+      device->bytes == 0 ||
+      out_offset == 0 ||
+      byte_len == 0u ||
+      (byte_len % ER_STORAGE_ENDPOINT_DURABLE_BLOCK_BYTES) != 0u) {
+    return 0u;
+  }
+  offset = sector * ER_STORAGE_ENDPOINT_DURABLE_BLOCK_BYTES;
+  if (offset > device->byte_len ||
+      byte_len > device->byte_len - (UINT32)offset) {
+    return 0u;
+  }
+  *out_offset = (UINT32)offset;
+  return 1u;
+}
+
+static UINT8 test_storage_block_read(void* ctx,
+                                     UINT64 sector,
+                                     UINT8* out_bytes,
+                                     UINT32 byte_len) {
+  TestStorageBlockDevice* device;
+  UINT32 offset;
+
+  device = (TestStorageBlockDevice*)ctx;
+  if (out_bytes == 0 ||
+      test_storage_block_range(device, sector, byte_len, &offset) == 0u) {
+    return 0u;
+  }
+  er_mem_copy(out_bytes, device->bytes + offset, byte_len);
+  return 1u;
+}
+
+static UINT8 test_storage_block_write(void* ctx,
+                                      UINT64 sector,
+                                      const UINT8* bytes,
+                                      UINT32 byte_len) {
+  TestStorageBlockDevice* device;
+  UINT32 offset;
+
+  device = (TestStorageBlockDevice*)ctx;
+  if (bytes == 0 ||
+      test_storage_block_range(device, sector, byte_len, &offset) == 0u) {
+    return 0u;
+  }
+  er_mem_copy(device->bytes + offset, bytes, byte_len);
+  return 1u;
+}
+
 static UINT8 test_package_sign(void* ctx, const ErByteSpan* preimage,
                                ErWorkSignature* out_signature) {
   UINTN i;
@@ -356,21 +415,34 @@ static void test_storage_endpoint_object_cache(void) {
     STORAGE_CACHE_OBJECT_B_BYTES = 19u,
     STORAGE_CACHE_TICK_A0 = 10u,
     STORAGE_CACHE_TICK_A1 = 11u,
-    STORAGE_CACHE_TICK_B0 = 12u
+    STORAGE_CACHE_TICK_B0 = 12u,
+    STORAGE_CACHE_DURABLE_SLOTS = 4u,
+    STORAGE_CACHE_DURABLE_BYTES =
+        STORAGE_CACHE_DURABLE_SLOTS *
+        ER_STORAGE_ENDPOINT_DURABLE_SLOT_BYTES,
+    STORAGE_CACHE_RESTORE_TICK = 21u
   };
   ErCryptoProvider crypto;
   ErStorageEndpointObjectCache cache;
+  ErStorageEndpointObjectCache restored_cache;
+  ErStorageEndpointDurableStore durable_store;
   ErStorageEndpointCacheEntry entries[STORAGE_CACHE_ENTRY_CAPACITY];
+  ErStorageEndpointCacheEntry restored_entries[STORAGE_CACHE_ENTRY_CAPACITY];
   ErStorageEndpointCacheEntry entry;
   ErVfsObjectPacket cache_packets[STORAGE_CACHE_PACKET_CAPACITY];
+  ErVfsObjectPacket restored_packets[STORAGE_CACHE_PACKET_CAPACITY];
   ErVfsObjectPacket object_a_packets[STORAGE_CACHE_PACKET_STRIDE];
   ErVfsObjectPacket object_b_packet;
   ErVfsObjectPacket tampered_packet;
+  TestStorageBlockDevice block_device;
+  UINT8 durable_blocks[STORAGE_CACHE_DURABLE_BYTES];
+  UINT8 durable_slot[ER_STORAGE_ENDPOINT_DURABLE_SLOT_BYTES];
   UINT8 object_a[STORAGE_CACHE_OBJECT_A_BYTES];
   UINT8 object_b[STORAGE_CACHE_OBJECT_B_BYTES];
   UINT8 assembled[STORAGE_CACHE_OBJECT_A_BYTES];
   UINTN assembled_len = 0u;
   UINT32 collected = 0u;
+  UINT32 restored = 0u;
   UINTN i;
 
   crypto.ctx = (void*)(UINTN)9u;
@@ -452,6 +524,59 @@ static void test_storage_endpoint_object_cache(void) {
   check_int64("storage cache assemble a last byte",
               assembled[sizeof(object_a) - 1u],
               object_a[sizeof(object_a) - 1u]);
+
+  er_mem_zero(durable_blocks, (UINTN)sizeof(durable_blocks));
+  block_device.bytes = durable_blocks;
+  block_device.byte_len = (UINT32)sizeof(durable_blocks);
+  check_int64("storage durable init",
+              er_storage_endpoint_durable_store_init(
+                  &durable_store,
+                  0u,
+                  STORAGE_CACHE_DURABLE_SLOTS,
+                  durable_slot,
+                  (UINT32)sizeof(durable_slot),
+                  &block_device,
+                  test_storage_block_read,
+                  test_storage_block_write),
+              1);
+  check_int64("storage durable write a0",
+              er_storage_endpoint_durable_write_packet(&crypto,
+                                                       &durable_store,
+                                                       &object_a_packets[0]),
+              1);
+  check_int64("storage durable write a1",
+              er_storage_endpoint_durable_write_packet(&crypto,
+                                                       &durable_store,
+                                                       &object_a_packets[1]),
+              1);
+  check_int64("storage restore cache init",
+              er_storage_endpoint_object_cache_init(&restored_cache,
+                                                    restored_entries,
+                                                    STORAGE_CACHE_ENTRY_CAPACITY,
+                                                    restored_packets,
+                                                    STORAGE_CACHE_PACKET_CAPACITY,
+                                                    STORAGE_CACHE_PACKET_STRIDE),
+              1);
+  check_int64("storage durable restore",
+              er_storage_endpoint_durable_restore_cache(&crypto,
+                                                        &durable_store,
+                                                        &restored_cache,
+                                                        STORAGE_CACHE_RESTORE_TICK,
+                                                        &restored),
+              1);
+  check_uint64("storage durable restored count", restored, 2u);
+  check_int64("storage durable restored assemble",
+              er_storage_endpoint_cache_assemble_object(
+                  &crypto,
+                  &restored_cache,
+                  &object_a_packets[0].header.object_id,
+                  assembled,
+                  (UINTN)sizeof(assembled),
+                  &assembled_len),
+              1);
+  check_uint64("storage durable restored len",
+               assembled_len,
+               (UINT64)sizeof(object_a));
 
   tampered_packet = object_b_packet;
   tampered_packet.bytes[0] ^= 1u;
