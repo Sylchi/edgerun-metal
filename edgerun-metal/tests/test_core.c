@@ -21,6 +21,7 @@ ErWasmHostCalls g_host_calls = {0};
 #include "test_core_boot_config.c"
 #include "test_core_boot_services.c"
 #include "test_core_pi_zero2w.c"
+#include "test_core_ieee80211_ap.c"
 #include "test_core_node_control.c"
 #include "test_core_ble_adv.c"
 #include "test_core_network.c"
@@ -83,6 +84,7 @@ int main(void) {
   test_boot_config_and_seal_strategy();
   test_boot_services_boundary();
   test_pi_zero2w_bringup_boundary();
+  test_ieee80211_open_ap_frames();
   test_node_control_relay_assignment();
   test_ble_adv();
   test_network_coordinator();
