@@ -15,6 +15,13 @@ enum {
   ER_USB_ENDPOINT_ATTRIBUTES_OFFSET = 3u,
   ER_USB_ENDPOINT_PACKET_LOW_OFFSET = 4u,
   ER_USB_ENDPOINT_PACKET_HIGH_OFFSET = 5u,
+  ER_BCM2708_USB_BOOT_CONTROL_LOW_MASK = 0xffffu,
+  ER_BCM2708_USB_BOOT_CONTROL_HIGH_SHIFT = 16u,
+  ER_BCM2708_USB_BOOT_LENGTH_OFFSET = 0u,
+  ER_BCM2708_USB_BOOT_SIGNATURE_OFFSET = 4u,
+  ER_BCM2708_USB_BOOT_BYTE_SHIFT = 8u,
+  ER_BCM2708_USB_BOOT_BYTE2_SHIFT = 16u,
+  ER_BCM2708_USB_BOOT_BYTE3_SHIFT = 24u,
   ER_USB_INTERFACE_DESCRIPTOR_BYTES = 9u,
   ER_USB_ENDPOINT_DESCRIPTOR_BYTES = 7u,
   ER_USB_ENDPOINT_DIRECTION_IN = 0x80u,
@@ -208,5 +215,103 @@ UINT8 er_bcm2708_usb_boot_payload_plan(UINT32 payload_bytes,
   out_plan->full_packet_count = full_packet_count;
   out_plan->final_packet_bytes = (UINT8)final_packet_bytes;
   out_plan->packet_bytes = ER_BCM2708_USB_BOOT_PACKET_BYTES;
+  return 1u;
+}
+
+static void er_bcm2708_usb_boot_put_le32(UINT8* out, UINT32 value) {
+  out[0] = (UINT8)(value & 0xffu);
+  out[1] = (UINT8)((value >> ER_BCM2708_USB_BOOT_BYTE_SHIFT) & 0xffu);
+  out[2] = (UINT8)((value >> ER_BCM2708_USB_BOOT_BYTE2_SHIFT) & 0xffu);
+  out[3] = (UINT8)((value >> ER_BCM2708_USB_BOOT_BYTE3_SHIFT) & 0xffu);
+}
+
+static UINT8 er_bcm2708_usb_boot_control_request(
+    UINT8 request_type,
+    UINT32 payload_bytes,
+    UINT16 transfer_length,
+    ErBcm2708UsbBootControlRequest* out_request) {
+  if (out_request != 0) {
+    er_mem_zero((UINT8*)out_request, (UINTN)sizeof(*out_request));
+  }
+  if (payload_bytes == 0u || out_request == 0) {
+    return 0u;
+  }
+  out_request->abi_version = ER_BCM2708_USB_BOOT_ABI_VERSION;
+  out_request->request_type = request_type;
+  out_request->request = ER_BCM2708_USB_BOOT_CONTROL_REQUEST;
+  out_request->value =
+      (UINT16)(payload_bytes & ER_BCM2708_USB_BOOT_CONTROL_LOW_MASK);
+  out_request->index =
+      (UINT16)(payload_bytes >> ER_BCM2708_USB_BOOT_CONTROL_HIGH_SHIFT);
+  out_request->length = transfer_length;
+  return 1u;
+}
+
+UINT8 er_bcm2708_usb_boot_prepare_write_control(
+    UINT32 payload_bytes,
+    ErBcm2708UsbBootControlRequest* out_request) {
+  return er_bcm2708_usb_boot_control_request(
+      ER_BCM2708_USB_BOOT_CONTROL_VENDOR_OUT,
+      payload_bytes,
+      0u,
+      out_request);
+}
+
+UINT8 er_bcm2708_usb_boot_prepare_read_control(
+    UINT32 payload_bytes,
+    ErBcm2708UsbBootControlRequest* out_request) {
+  return er_bcm2708_usb_boot_control_request(
+      ER_BCM2708_USB_BOOT_CONTROL_VENDOR_IN,
+      payload_bytes,
+      (UINT16)payload_bytes,
+      out_request);
+}
+
+UINT8 er_bcm2708_usb_boot_bulk_plan(UINT32 payload_bytes,
+                                    ErBcm2708UsbBootBulkPlan* out_plan) {
+  UINT32 full_transfer_count;
+  UINT32 final_transfer_bytes;
+  UINT32 transfer_count;
+
+  if (out_plan != 0) {
+    er_mem_zero((UINT8*)out_plan, (UINTN)sizeof(*out_plan));
+  }
+  if (payload_bytes == 0u || out_plan == 0) {
+    return 0u;
+  }
+  full_transfer_count =
+      payload_bytes / ER_BCM2708_USB_BOOT_MAX_BULK_TRANSFER_BYTES;
+  final_transfer_bytes =
+      payload_bytes -
+      (full_transfer_count * ER_BCM2708_USB_BOOT_MAX_BULK_TRANSFER_BYTES);
+  transfer_count = full_transfer_count;
+  if (final_transfer_bytes != 0u) {
+    transfer_count += 1u;
+  }
+
+  out_plan->abi_version = ER_BCM2708_USB_BOOT_ABI_VERSION;
+  out_plan->payload_bytes = payload_bytes;
+  out_plan->transfer_count = transfer_count;
+  out_plan->full_transfer_count = full_transfer_count;
+  out_plan->final_transfer_bytes = final_transfer_bytes;
+  out_plan->max_transfer_bytes = ER_BCM2708_USB_BOOT_MAX_BULK_TRANSFER_BYTES;
+  return 1u;
+}
+
+UINT8 er_bcm2708_usb_boot_second_stage_header(
+    UINT32 bootcode_bytes,
+    const UINT8 signature[ER_BCM2708_USB_BOOT_SIGNATURE_BYTES],
+    UINT8 out_header[ER_BCM2708_USB_BOOT_SECOND_STAGE_HEADER_BYTES]) {
+  if (bootcode_bytes == 0u || out_header == 0) {
+    return 0u;
+  }
+  er_mem_zero(out_header, ER_BCM2708_USB_BOOT_SECOND_STAGE_HEADER_BYTES);
+  er_bcm2708_usb_boot_put_le32(out_header + ER_BCM2708_USB_BOOT_LENGTH_OFFSET,
+                               bootcode_bytes);
+  if (signature != 0) {
+    er_mem_copy(out_header + ER_BCM2708_USB_BOOT_SIGNATURE_OFFSET,
+                signature,
+                ER_BCM2708_USB_BOOT_SIGNATURE_BYTES);
+  }
   return 1u;
 }

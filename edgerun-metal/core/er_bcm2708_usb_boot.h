@@ -19,6 +19,13 @@
 #define ER_BCM2708_USB_BOOT_IN_ENDPOINT 0x82u
 #define ER_BCM2708_USB_BOOT_BULK_ATTRIBUTES 0x02u
 #define ER_BCM2708_USB_BOOT_PACKET_BYTES 64u
+#define ER_BCM2708_USB_BOOT_MAX_BULK_TRANSFER_BYTES 16384u
+#define ER_BCM2708_USB_BOOT_SIGNATURE_BYTES 20u
+#define ER_BCM2708_USB_BOOT_SECOND_STAGE_HEADER_BYTES 24u
+#define ER_BCM2708_USB_BOOT_CONTROL_VENDOR_OUT 0x40u
+#define ER_BCM2708_USB_BOOT_CONTROL_VENDOR_IN 0xc0u
+#define ER_BCM2708_USB_BOOT_CONTROL_REQUEST 0u
+#define ER_BCM2708_USB_BOOT_RETURN_CODE_BYTES 4u
 
 typedef struct {
   UINT16 abi_version;
@@ -41,6 +48,26 @@ typedef struct {
   UINT8 reserved1[2];
 } ErBcm2708UsbBootPayloadPlan;
 
+typedef struct {
+  UINT16 abi_version;
+  UINT8 request_type;
+  UINT8 request;
+  UINT16 value;
+  UINT16 index;
+  UINT16 length;
+  UINT16 reserved;
+} ErBcm2708UsbBootControlRequest;
+
+typedef struct {
+  UINT16 abi_version;
+  UINT16 reserved;
+  UINT32 payload_bytes;
+  UINT32 transfer_count;
+  UINT32 full_transfer_count;
+  UINT32 final_transfer_bytes;
+  UINT32 max_transfer_bytes;
+} ErBcm2708UsbBootBulkPlan;
+
 UINT8 er_bcm2708_usb_boot_device_id_supported(UINT16 vendor_id,
                                               UINT16 product_id);
 UINT8 er_bcm2708_usb_boot_parse_configuration(
@@ -49,5 +76,17 @@ UINT8 er_bcm2708_usb_boot_parse_configuration(
     ErBcm2708UsbBootTransport* out_transport);
 UINT8 er_bcm2708_usb_boot_payload_plan(UINT32 payload_bytes,
                                        ErBcm2708UsbBootPayloadPlan* out_plan);
+UINT8 er_bcm2708_usb_boot_prepare_write_control(
+    UINT32 payload_bytes,
+    ErBcm2708UsbBootControlRequest* out_request);
+UINT8 er_bcm2708_usb_boot_prepare_read_control(
+    UINT32 payload_bytes,
+    ErBcm2708UsbBootControlRequest* out_request);
+UINT8 er_bcm2708_usb_boot_bulk_plan(UINT32 payload_bytes,
+                                    ErBcm2708UsbBootBulkPlan* out_plan);
+UINT8 er_bcm2708_usb_boot_second_stage_header(
+    UINT32 bootcode_bytes,
+    const UINT8 signature[ER_BCM2708_USB_BOOT_SIGNATURE_BYTES],
+    UINT8 out_header[ER_BCM2708_USB_BOOT_SECOND_STAGE_HEADER_BYTES]);
 
 #endif
