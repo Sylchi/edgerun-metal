@@ -37,6 +37,7 @@
 - If the task is documentation, verify the documentation against current code before editing and remove stale/conflicting claims instead of expanding them.
 - If the user corrects direction, treat the correction as higher priority than earlier plans and re-read the relevant code before continuing.
 - Do not keep retrying a failing build, test, or QEMU run without changing the hypothesis. Capture the specific failure, inspect the responsible code, then make a targeted fix.
+- This laptop's USB bus is flaky during hardware bring-up. If USB storage or serial devices appear wedged or report impossible state, reset the affected root hub before changing repo code or assuming the target board failed.
 
 ## UI And Visual Work
 
