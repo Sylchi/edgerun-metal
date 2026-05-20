@@ -32,6 +32,7 @@ static const char ERC_BUILD_ARTIFACT_DIR[] = ".build/";
 static const char ERC_VARFONT_BUILD_ARTIFACT_DIR[] = "edgerun-ui-core/varfont/build/";
 static const char ERC_ROOT_README[] = "README.md";
 static const char ERC_THIRD_PARTY_DIR[] = "third_party/";
+static const char ERC_ALLOWED_BLAKE3_DIR[] = "third_party/blake3/";
 static const char ERC_VENDOR_UI_DIR[] = "ui/shadcn-ui/";
 
 static int erc_fail(const char* message) {
@@ -95,6 +96,22 @@ static int erc_is_first_party_readme(const char* path) {
     return 0;
   }
   return 1;
+}
+
+static int erc_is_allowed_third_party_path(const char* path) {
+  return strncmp(path, ERC_ALLOWED_BLAKE3_DIR,
+                 sizeof(ERC_ALLOWED_BLAKE3_DIR) - 1u) == 0;
+}
+
+static int erc_is_unapproved_external_dependency_path(const char* path) {
+  if (strncmp(path, ERC_THIRD_PARTY_DIR, sizeof(ERC_THIRD_PARTY_DIR) - 1u) == 0 &&
+      erc_is_allowed_third_party_path(path) == 0) {
+    return 1;
+  }
+  if (strncmp(path, ERC_VENDOR_UI_DIR, sizeof(ERC_VENDOR_UI_DIR) - 1u) == 0) {
+    return 1;
+  }
+  return 0;
 }
 
 static int erc_join(char* out, size_t out_len, const char* a, const char* b) {
@@ -262,6 +279,10 @@ static int erc_scan_index(const char* root) {
     if (erc_is_first_party_readme(name) != 0) {
       free(index_bytes);
       return erc_fail("first-party documentation must use the root README.md, not nested README.md files");
+    }
+    if (erc_is_unapproved_external_dependency_path(name) != 0) {
+      free(index_bytes);
+      return erc_fail("unapproved external dependency path is not allowed");
     }
     entry_len = ERC_INDEX_ENTRY_BASE_BYTES + name_len + 1u;
     entry_len = (entry_len + (ERC_INDEX_ENTRY_ALIGNMENT - 1u)) & ~(ERC_INDEX_ENTRY_ALIGNMENT - 1u);
