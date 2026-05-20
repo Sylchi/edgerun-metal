@@ -108,25 +108,25 @@ static void er_pi_zero_w_v1_1_act_led_init(void) {
   UINT32 fsel4;
 
   fsel4 = er_pi_zero_w_v1_1_read(ER_PI_ZERO_W_V1_1_GPIO_BASE,
-                                 ER_PI_GPIO_GPFSEL4);
-  fsel4 = er_pi_gpio_fsel_alt(fsel4,
-                              ER_PI_GPIO_PIN_ACT_LED,
-                              ER_PI_GPIO_OUTPUT);
+                                 ER_PI_ZERO_W_V1_1_GPIO_GPFSEL4);
+  fsel4 = er_pi_zero_w_v1_1_gpio_fsel_alt(fsel4,
+                              ER_PI_ZERO_W_V1_1_GPIO_PIN_ACT_LED,
+                              ER_PI_ZERO_W_V1_1_GPIO_OUTPUT);
   er_pi_zero_w_v1_1_write(ER_PI_ZERO_W_V1_1_GPIO_BASE,
-                          ER_PI_GPIO_GPFSEL4,
+                          ER_PI_ZERO_W_V1_1_GPIO_GPFSEL4,
                           fsel4);
 }
 
 static void er_pi_zero_w_v1_1_act_led_on(void) {
   er_pi_zero_w_v1_1_write(ER_PI_ZERO_W_V1_1_GPIO_BASE,
-                          ER_PI_GPIO_GPCLR1,
-                          ER_PI_GPIO_SET_ACT_LED);
+                          ER_PI_ZERO_W_V1_1_GPIO_GPCLR1,
+                          ER_PI_ZERO_W_V1_1_GPIO_SET_ACT_LED);
 }
 
 static void er_pi_zero_w_v1_1_act_led_off(void) {
   er_pi_zero_w_v1_1_write(ER_PI_ZERO_W_V1_1_GPIO_BASE,
-                          ER_PI_GPIO_GPSET1,
-                          ER_PI_GPIO_SET_ACT_LED);
+                          ER_PI_ZERO_W_V1_1_GPIO_GPSET1,
+                          ER_PI_ZERO_W_V1_1_GPIO_SET_ACT_LED);
 }
 
 static void er_pi_zero_w_v1_1_act_led_status(UINT32 count) {
@@ -144,56 +144,56 @@ static void er_pi_zero_w_v1_1_uart_gpio_init(void) {
   UINT32 fsel1;
 
   fsel1 = er_pi_zero_w_v1_1_read(ER_PI_ZERO_W_V1_1_GPIO_BASE,
-                                 ER_PI_GPIO_GPFSEL1);
-  fsel1 = er_pi_gpio_fsel_alt(fsel1,
-                              ER_PI_GPIO_PIN_UART_TX,
-                              ER_PI_GPIO_ALT5);
-  fsel1 = er_pi_gpio_fsel_alt(fsel1,
-                              ER_PI_GPIO_PIN_UART_RX,
-                              ER_PI_GPIO_ALT5);
+                                 ER_PI_ZERO_W_V1_1_GPIO_GPFSEL1);
+  fsel1 = er_pi_zero_w_v1_1_gpio_fsel_alt(fsel1,
+                              ER_PI_ZERO_W_V1_1_GPIO_PIN_UART_TX,
+                              ER_PI_ZERO_W_V1_1_GPIO_ALT5);
+  fsel1 = er_pi_zero_w_v1_1_gpio_fsel_alt(fsel1,
+                              ER_PI_ZERO_W_V1_1_GPIO_PIN_UART_RX,
+                              ER_PI_ZERO_W_V1_1_GPIO_ALT5);
   er_pi_zero_w_v1_1_write(ER_PI_ZERO_W_V1_1_GPIO_BASE,
-                          ER_PI_GPIO_GPFSEL1,
+                          ER_PI_ZERO_W_V1_1_GPIO_GPFSEL1,
                           fsel1);
   er_pi_zero_w_v1_1_write(ER_PI_ZERO_W_V1_1_GPIO_BASE,
-                          ER_PI_GPIO_GPPUD,
-                          ER_PI_GPIO_PULL_DISABLE);
+                          ER_PI_ZERO_W_V1_1_GPIO_GPPUD,
+                          ER_PI_ZERO_W_V1_1_GPIO_PULL_DISABLE);
   er_pi_zero_w_v1_1_delay(ER_PI_ZERO_W_V1_1_UART_GPIO_DELAY_TICKS);
   er_pi_zero_w_v1_1_write(ER_PI_ZERO_W_V1_1_GPIO_BASE,
-                          ER_PI_GPIO_GPPUDCLK0,
-                          ER_PI_GPIO_PULL_CLOCK_UART);
+                          ER_PI_ZERO_W_V1_1_GPIO_GPPUDCLK0,
+                          ER_PI_ZERO_W_V1_1_GPIO_PULL_CLOCK_UART);
   er_pi_zero_w_v1_1_delay(ER_PI_ZERO_W_V1_1_UART_GPIO_DELAY_TICKS);
   er_pi_zero_w_v1_1_write(ER_PI_ZERO_W_V1_1_GPIO_BASE,
-                          ER_PI_GPIO_GPPUDCLK0,
-                          ER_PI_GPIO_PULL_DISABLE);
+                          ER_PI_ZERO_W_V1_1_GPIO_GPPUDCLK0,
+                          ER_PI_ZERO_W_V1_1_GPIO_PULL_DISABLE);
 }
 
 static void er_pi_zero_w_v1_1_uart_init(void) {
   er_pi_zero_w_v1_1_write(ER_PI_ZERO_W_V1_1_AUX_BASE,
-                          ER_PI_AUX_ENABLES,
-                          ER_PI_AUX_ENABLE_MINI_UART);
+                          ER_PI_ZERO_W_V1_1_AUX_ENABLES,
+                          ER_PI_ZERO_W_V1_1_AUX_ENABLE_MINI_UART);
   er_pi_zero_w_v1_1_write(ER_PI_ZERO_W_V1_1_AUX_BASE,
-                          ER_PI_AUX_MU_CNTL,
-                          ER_PI_AUX_MU_DISABLE);
+                          ER_PI_ZERO_W_V1_1_AUX_MU_CNTL,
+                          ER_PI_ZERO_W_V1_1_AUX_MU_DISABLE);
   er_pi_zero_w_v1_1_write(ER_PI_ZERO_W_V1_1_AUX_BASE,
-                          ER_PI_AUX_MU_IER,
-                          ER_PI_AUX_MU_DISABLE_INTERRUPTS);
+                          ER_PI_ZERO_W_V1_1_AUX_MU_IER,
+                          ER_PI_ZERO_W_V1_1_AUX_MU_DISABLE_INTERRUPTS);
   er_pi_zero_w_v1_1_write(ER_PI_ZERO_W_V1_1_AUX_BASE,
-                          ER_PI_AUX_MU_LCR,
-                          ER_PI_AUX_MU_EIGHT_BIT_MODE);
+                          ER_PI_ZERO_W_V1_1_AUX_MU_LCR,
+                          ER_PI_ZERO_W_V1_1_AUX_MU_EIGHT_BIT_MODE);
   er_pi_zero_w_v1_1_write(ER_PI_ZERO_W_V1_1_AUX_BASE,
-                          ER_PI_AUX_MU_MCR,
-                          ER_PI_AUX_MU_RTS_HIGH);
+                          ER_PI_ZERO_W_V1_1_AUX_MU_MCR,
+                          ER_PI_ZERO_W_V1_1_AUX_MU_RTS_HIGH);
   er_pi_zero_w_v1_1_write(ER_PI_ZERO_W_V1_1_AUX_BASE,
-                          ER_PI_AUX_MU_IIR,
-                          ER_PI_AUX_MU_CLEAR_FIFOS);
+                          ER_PI_ZERO_W_V1_1_AUX_MU_IIR,
+                          ER_PI_ZERO_W_V1_1_AUX_MU_CLEAR_FIFOS);
   er_pi_zero_w_v1_1_write(ER_PI_ZERO_W_V1_1_AUX_BASE,
-                          ER_PI_AUX_MU_BAUD,
-                          ER_PI_AUX_MU_BAUD_115200_CORE_250MHZ);
+                          ER_PI_ZERO_W_V1_1_AUX_MU_BAUD,
+                          ER_PI_ZERO_W_V1_1_AUX_MU_BAUD_115200_CORE_250MHZ);
   er_pi_zero_w_v1_1_uart_gpio_init();
   er_pi_zero_w_v1_1_barrier();
   er_pi_zero_w_v1_1_write(ER_PI_ZERO_W_V1_1_AUX_BASE,
-                          ER_PI_AUX_MU_CNTL,
-                          ER_PI_AUX_MU_ENABLE_TX_RX);
+                          ER_PI_ZERO_W_V1_1_AUX_MU_CNTL,
+                          ER_PI_ZERO_W_V1_1_AUX_MU_ENABLE_TX_RX);
 }
 
 static void er_pi_zero_w_v1_1_wifi_gpio_init(void) {
@@ -201,68 +201,68 @@ static void er_pi_zero_w_v1_1_wifi_gpio_init(void) {
   UINT32 fsel4;
 
   fsel3 = er_pi_zero_w_v1_1_read(ER_PI_ZERO_W_V1_1_GPIO_BASE,
-                                 ER_PI_GPIO_GPFSEL3);
-  fsel3 = er_pi_gpio_fsel_alt(fsel3,
-                              ER_PI_GPIO_PIN_WIFI_SDIO_CLK,
-                              ER_PI_GPIO_ALT3);
-  fsel3 = er_pi_gpio_fsel_alt(fsel3,
-                              ER_PI_GPIO_PIN_WIFI_SDIO_CMD,
-                              ER_PI_GPIO_ALT3);
-  fsel3 = er_pi_gpio_fsel_alt(fsel3,
-                              ER_PI_GPIO_PIN_WIFI_SDIO_DAT0,
-                              ER_PI_GPIO_ALT3);
-  fsel3 = er_pi_gpio_fsel_alt(fsel3,
-                              ER_PI_GPIO_PIN_WIFI_SDIO_DAT1,
-                              ER_PI_GPIO_ALT3);
-  fsel3 = er_pi_gpio_fsel_alt(fsel3,
-                              ER_PI_GPIO_PIN_WIFI_SDIO_DAT2,
-                              ER_PI_GPIO_ALT3);
-  fsel3 = er_pi_gpio_fsel_alt(fsel3,
-                              ER_PI_GPIO_PIN_WIFI_SDIO_DAT3,
-                              ER_PI_GPIO_ALT3);
+                                 ER_PI_ZERO_W_V1_1_GPIO_GPFSEL3);
+  fsel3 = er_pi_zero_w_v1_1_gpio_fsel_alt(fsel3,
+                              ER_PI_ZERO_W_V1_1_GPIO_PIN_WIFI_SDIO_CLK,
+                              ER_PI_ZERO_W_V1_1_GPIO_ALT3);
+  fsel3 = er_pi_zero_w_v1_1_gpio_fsel_alt(fsel3,
+                              ER_PI_ZERO_W_V1_1_GPIO_PIN_WIFI_SDIO_CMD,
+                              ER_PI_ZERO_W_V1_1_GPIO_ALT3);
+  fsel3 = er_pi_zero_w_v1_1_gpio_fsel_alt(fsel3,
+                              ER_PI_ZERO_W_V1_1_GPIO_PIN_WIFI_SDIO_DAT0,
+                              ER_PI_ZERO_W_V1_1_GPIO_ALT3);
+  fsel3 = er_pi_zero_w_v1_1_gpio_fsel_alt(fsel3,
+                              ER_PI_ZERO_W_V1_1_GPIO_PIN_WIFI_SDIO_DAT1,
+                              ER_PI_ZERO_W_V1_1_GPIO_ALT3);
+  fsel3 = er_pi_zero_w_v1_1_gpio_fsel_alt(fsel3,
+                              ER_PI_ZERO_W_V1_1_GPIO_PIN_WIFI_SDIO_DAT2,
+                              ER_PI_ZERO_W_V1_1_GPIO_ALT3);
+  fsel3 = er_pi_zero_w_v1_1_gpio_fsel_alt(fsel3,
+                              ER_PI_ZERO_W_V1_1_GPIO_PIN_WIFI_SDIO_DAT3,
+                              ER_PI_ZERO_W_V1_1_GPIO_ALT3);
   er_pi_zero_w_v1_1_write(ER_PI_ZERO_W_V1_1_GPIO_BASE,
-                          ER_PI_GPIO_GPFSEL3,
+                          ER_PI_ZERO_W_V1_1_GPIO_GPFSEL3,
                           fsel3);
 
   fsel4 = er_pi_zero_w_v1_1_read(ER_PI_ZERO_W_V1_1_GPIO_BASE,
-                                 ER_PI_GPIO_GPFSEL4);
-  fsel4 = er_pi_gpio_fsel_alt(fsel4,
-                              ER_PI_GPIO_PIN_WIFI_REG_ON,
-                              ER_PI_GPIO_OUTPUT);
+                                 ER_PI_ZERO_W_V1_1_GPIO_GPFSEL4);
+  fsel4 = er_pi_zero_w_v1_1_gpio_fsel_alt(fsel4,
+                              ER_PI_ZERO_W_V1_1_GPIO_PIN_WIFI_REG_ON,
+                              ER_PI_ZERO_W_V1_1_GPIO_OUTPUT);
   er_pi_zero_w_v1_1_write(ER_PI_ZERO_W_V1_1_GPIO_BASE,
-                          ER_PI_GPIO_GPFSEL4,
+                          ER_PI_ZERO_W_V1_1_GPIO_GPFSEL4,
                           fsel4);
 
   er_pi_zero_w_v1_1_write(ER_PI_ZERO_W_V1_1_GPIO_BASE,
-                          ER_PI_GPIO_GPPUD,
-                          ER_PI_GPIO_PULL_DISABLE);
+                          ER_PI_ZERO_W_V1_1_GPIO_GPPUD,
+                          ER_PI_ZERO_W_V1_1_GPIO_PULL_DISABLE);
   er_pi_zero_w_v1_1_delay(ER_PI_ZERO_W_V1_1_WIFI_GPIO_DELAY_TICKS);
   er_pi_zero_w_v1_1_write(ER_PI_ZERO_W_V1_1_GPIO_BASE,
-                          ER_PI_GPIO_GPPUDCLK1,
-                          ER_PI_GPIO_PULL_CLOCK_WIFI_SDIO);
+                          ER_PI_ZERO_W_V1_1_GPIO_GPPUDCLK1,
+                          ER_PI_ZERO_W_V1_1_GPIO_PULL_CLOCK_WIFI_SDIO);
   er_pi_zero_w_v1_1_delay(ER_PI_ZERO_W_V1_1_WIFI_GPIO_DELAY_TICKS);
   er_pi_zero_w_v1_1_write(ER_PI_ZERO_W_V1_1_GPIO_BASE,
-                          ER_PI_GPIO_GPPUDCLK1,
-                          ER_PI_GPIO_PULL_DISABLE);
+                          ER_PI_ZERO_W_V1_1_GPIO_GPPUDCLK1,
+                          ER_PI_ZERO_W_V1_1_GPIO_PULL_DISABLE);
 
   er_pi_zero_w_v1_1_write(ER_PI_ZERO_W_V1_1_GPIO_BASE,
-                          ER_PI_GPIO_GPSET1,
-                          ER_PI_GPIO_SET_WIFI_REG_ON);
+                          ER_PI_ZERO_W_V1_1_GPIO_GPSET1,
+                          ER_PI_ZERO_W_V1_1_GPIO_SET_WIFI_REG_ON);
   er_pi_zero_w_v1_1_delay(ER_PI_ZERO_W_V1_1_WIFI_POWER_DELAY_TICKS);
   er_pi_zero_w_v1_1_barrier();
 }
 
 static UINT32 er_pi_zero_w_v1_1_emmc_response_bits(UINT32 response_kind) {
   switch (response_kind) {
-    case ER_PI_MMC_RESPONSE_NONE:
-      return ER_PI_EMMC_CMDTM_RESPONSE_NONE;
-    case ER_PI_MMC_RESPONSE_R1:
-    case ER_PI_MMC_RESPONSE_R4:
-    case ER_PI_MMC_RESPONSE_R5:
-    case ER_PI_MMC_RESPONSE_R6:
-      return ER_PI_EMMC_CMDTM_RESPONSE_48;
+    case ER_PI_ZERO_W_V1_1_MMC_RESPONSE_NONE:
+      return ER_PI_ZERO_W_V1_1_EMMC_CMDTM_RESPONSE_NONE;
+    case ER_PI_ZERO_W_V1_1_MMC_RESPONSE_R1:
+    case ER_PI_ZERO_W_V1_1_MMC_RESPONSE_R4:
+    case ER_PI_ZERO_W_V1_1_MMC_RESPONSE_R5:
+    case ER_PI_ZERO_W_V1_1_MMC_RESPONSE_R6:
+      return ER_PI_ZERO_W_V1_1_EMMC_CMDTM_RESPONSE_48;
     default:
-      return ER_PI_EMMC_CMDTM_RESPONSE_NONE;
+      return ER_PI_ZERO_W_V1_1_EMMC_CMDTM_RESPONSE_NONE;
   }
 }
 
@@ -270,18 +270,18 @@ static UINT32 er_pi_zero_w_v1_1_emmc_command_value(UINT32 command_index,
                                                    UINT32 response_kind) {
   UINT32 value;
 
-  value = command_index << ER_PI_EMMC_CMDTM_INDEX_BITS;
+  value = command_index << ER_PI_ZERO_W_V1_1_EMMC_CMDTM_INDEX_BITS;
   value |= er_pi_zero_w_v1_1_emmc_response_bits(response_kind) <<
-           ER_PI_EMMC_CMDTM_RESPONSE_BITS;
+           ER_PI_ZERO_W_V1_1_EMMC_CMDTM_RESPONSE_BITS;
   switch (response_kind) {
-    case ER_PI_MMC_RESPONSE_R1:
-    case ER_PI_MMC_RESPONSE_R5:
-    case ER_PI_MMC_RESPONSE_R6:
-      value |= ER_PI_EMMC_CMDTM_CRC_CHECK;
-      value |= ER_PI_EMMC_CMDTM_INDEX_CHECK;
+    case ER_PI_ZERO_W_V1_1_MMC_RESPONSE_R1:
+    case ER_PI_ZERO_W_V1_1_MMC_RESPONSE_R5:
+    case ER_PI_ZERO_W_V1_1_MMC_RESPONSE_R6:
+      value |= ER_PI_ZERO_W_V1_1_EMMC_CMDTM_CRC_CHECK;
+      value |= ER_PI_ZERO_W_V1_1_EMMC_CMDTM_INDEX_CHECK;
       break;
-    case ER_PI_MMC_RESPONSE_NONE:
-    case ER_PI_MMC_RESPONSE_R4:
+    case ER_PI_ZERO_W_V1_1_MMC_RESPONSE_NONE:
+    case ER_PI_ZERO_W_V1_1_MMC_RESPONSE_R4:
     default:
       break;
   }
@@ -293,24 +293,24 @@ static UINT32 er_pi_zero_w_v1_1_emmc_sdio_command_value(UINT32 command_index,
   UINT32 value;
 
   value = er_pi_zero_w_v1_1_emmc_command_value(command_index, response_kind);
-  value |= ER_PI_EMMC_CMDTM_BLOCK_COUNT_ENABLE;
-  value |= ER_PI_EMMC_CMDTM_IS_DATA;
-  value |= ER_PI_EMMC_CMDTM_DATA_READ;
+  value |= ER_PI_ZERO_W_V1_1_EMMC_CMDTM_BLOCK_COUNT_ENABLE;
+  value |= ER_PI_ZERO_W_V1_1_EMMC_CMDTM_IS_DATA;
+  value |= ER_PI_ZERO_W_V1_1_EMMC_CMDTM_DATA_READ;
   return value;
 }
 
 static UINT32 er_pi_zero_w_v1_1_emmc_control1_ident_clock(void) {
-  UINT32 divisor = ER_PI_EMMC_IDENT_CLOCK_DIVISOR;
+  UINT32 divisor = ER_PI_ZERO_W_V1_1_EMMC_IDENT_CLOCK_DIVISOR;
   UINT32 control;
 
-  control = ER_PI_EMMC_CONTROL1_CLK_INTLEN |
-            ER_PI_EMMC_CONTROL1_CLK_GENSEL |
-            (ER_PI_EMMC_CONTROL1_DATA_TOUNIT_MAX <<
-             ER_PI_EMMC_CONTROL1_DATA_TOUNIT_SHIFT);
-  control |= (divisor & ER_PI_EMMC_CONTROL1_CLK_FREQ8_MASK) <<
-             ER_PI_EMMC_CONTROL1_CLK_FREQ8_SHIFT;
-  control |= (divisor & ER_PI_EMMC_CONTROL1_CLK_FREQ_MS2_MASK) >>
-             ER_PI_EMMC_CONTROL1_CLK_FREQ_MS2_SHIFT;
+  control = ER_PI_ZERO_W_V1_1_EMMC_CONTROL1_CLK_INTLEN |
+            ER_PI_ZERO_W_V1_1_EMMC_CONTROL1_CLK_GENSEL |
+            (ER_PI_ZERO_W_V1_1_EMMC_CONTROL1_DATA_TOUNIT_MAX <<
+             ER_PI_ZERO_W_V1_1_EMMC_CONTROL1_DATA_TOUNIT_SHIFT);
+  control |= (divisor & ER_PI_ZERO_W_V1_1_EMMC_CONTROL1_CLK_FREQ8_MASK) <<
+             ER_PI_ZERO_W_V1_1_EMMC_CONTROL1_CLK_FREQ8_SHIFT;
+  control |= (divisor & ER_PI_ZERO_W_V1_1_EMMC_CONTROL1_CLK_FREQ_MS2_MASK) >>
+             ER_PI_ZERO_W_V1_1_EMMC_CONTROL1_CLK_FREQ_MS2_SHIFT;
   return control;
 }
 
@@ -346,37 +346,37 @@ static UINT32 er_pi_zero_w_v1_1_emmc_init(void) {
   UINT32 control1;
 
   er_pi_zero_w_v1_1_write(ER_PI_ZERO_W_V1_1_EMMC_BASE,
-                          ER_PI_EMMC_REG_CONTROL1,
-                          ER_PI_EMMC_CONTROL1_SRST_HC);
+                          ER_PI_ZERO_W_V1_1_EMMC_REG_CONTROL1,
+                          ER_PI_ZERO_W_V1_1_EMMC_CONTROL1_SRST_HC);
   if (er_pi_zero_w_v1_1_emmc_wait_clear(
-          ER_PI_EMMC_REG_CONTROL1,
-          ER_PI_EMMC_CONTROL1_SRST_HC,
+          ER_PI_ZERO_W_V1_1_EMMC_REG_CONTROL1,
+          ER_PI_ZERO_W_V1_1_EMMC_CONTROL1_SRST_HC,
           ER_PI_ZERO_W_V1_1_EMMC_RESET_POLL_BUDGET) == 0u) {
     return 0u;
   }
   er_pi_zero_w_v1_1_write(ER_PI_ZERO_W_V1_1_EMMC_BASE,
-                          ER_PI_EMMC_REG_IRPT_EN,
+                          ER_PI_ZERO_W_V1_1_EMMC_REG_IRPT_EN,
                           0u);
   er_pi_zero_w_v1_1_write(ER_PI_ZERO_W_V1_1_EMMC_BASE,
-                          ER_PI_EMMC_REG_IRPT_MASK,
+                          ER_PI_ZERO_W_V1_1_EMMC_REG_IRPT_MASK,
                           0u);
   er_pi_zero_w_v1_1_write(ER_PI_ZERO_W_V1_1_EMMC_BASE,
-                          ER_PI_EMMC_REG_INTERRUPT,
-                          ER_PI_EMMC_INTERRUPT_ALL);
+                          ER_PI_ZERO_W_V1_1_EMMC_REG_INTERRUPT,
+                          ER_PI_ZERO_W_V1_1_EMMC_INTERRUPT_ALL);
   control1 =
       er_pi_zero_w_v1_1_emmc_control1_ident_clock();
   er_pi_zero_w_v1_1_write(ER_PI_ZERO_W_V1_1_EMMC_BASE,
-                          ER_PI_EMMC_REG_CONTROL1,
+                          ER_PI_ZERO_W_V1_1_EMMC_REG_CONTROL1,
                           control1);
   if (er_pi_zero_w_v1_1_emmc_wait_set(
-          ER_PI_EMMC_REG_CONTROL1,
-          ER_PI_EMMC_CONTROL1_CLK_STABLE,
+          ER_PI_ZERO_W_V1_1_EMMC_REG_CONTROL1,
+          ER_PI_ZERO_W_V1_1_EMMC_CONTROL1_CLK_STABLE,
           ER_PI_ZERO_W_V1_1_EMMC_STABLE_POLL_BUDGET) == 0u) {
     return 0u;
   }
   er_pi_zero_w_v1_1_write(ER_PI_ZERO_W_V1_1_EMMC_BASE,
-                          ER_PI_EMMC_REG_CONTROL1,
-                          control1 | ER_PI_EMMC_CONTROL1_CLK_EN);
+                          ER_PI_ZERO_W_V1_1_EMMC_REG_CONTROL1,
+                          control1 | ER_PI_ZERO_W_V1_1_EMMC_CONTROL1_CLK_EN);
   return 1u;
 }
 
@@ -392,11 +392,11 @@ static UINT32 er_pi_zero_w_v1_1_emmc_wait_command(UINT32* out_interrupt) {
        poll < ER_PI_ZERO_W_V1_1_SDIO_POLL_BUDGET;
        ++poll) {
     interrupt = er_pi_zero_w_v1_1_read(ER_PI_ZERO_W_V1_1_EMMC_BASE,
-                                       ER_PI_EMMC_REG_INTERRUPT);
-    if ((interrupt & ER_PI_EMMC_INTERRUPT_ERROR_MASK) != 0u ||
-        (interrupt & ER_PI_EMMC_INTERRUPT_CMD_DONE) != 0u) {
+                                       ER_PI_ZERO_W_V1_1_EMMC_REG_INTERRUPT);
+    if ((interrupt & ER_PI_ZERO_W_V1_1_EMMC_INTERRUPT_ERROR_MASK) != 0u ||
+        (interrupt & ER_PI_ZERO_W_V1_1_EMMC_INTERRUPT_CMD_DONE) != 0u) {
       *out_interrupt = interrupt;
-      return (UINT32)((interrupt & ER_PI_EMMC_INTERRUPT_ERROR_MASK) == 0u);
+      return (UINT32)((interrupt & ER_PI_ZERO_W_V1_1_EMMC_INTERRUPT_ERROR_MASK) == 0u);
     }
   }
   return 0u;
@@ -413,41 +413,41 @@ static UINT32 er_pi_zero_w_v1_1_emmc_command(UINT32 command_index,
     return 0u;
   }
   if (er_pi_zero_w_v1_1_emmc_wait_clear(
-          ER_PI_EMMC_REG_STATUS,
-          ER_PI_EMMC_STATUS_CMD_INHIBIT | ER_PI_EMMC_STATUS_DATA_INHIBIT,
+          ER_PI_ZERO_W_V1_1_EMMC_REG_STATUS,
+          ER_PI_ZERO_W_V1_1_EMMC_STATUS_CMD_INHIBIT | ER_PI_ZERO_W_V1_1_EMMC_STATUS_DATA_INHIBIT,
           ER_PI_ZERO_W_V1_1_EMMC_READY_POLL_BUDGET) == 0u) {
     return 0u;
   }
   *out_response = 0u;
   er_pi_zero_w_v1_1_write(ER_PI_ZERO_W_V1_1_EMMC_BASE,
-                          ER_PI_EMMC_REG_INTERRUPT,
-                          ER_PI_EMMC_INTERRUPT_ALL);
+                          ER_PI_ZERO_W_V1_1_EMMC_REG_INTERRUPT,
+                          ER_PI_ZERO_W_V1_1_EMMC_INTERRUPT_ALL);
   er_pi_zero_w_v1_1_write(ER_PI_ZERO_W_V1_1_EMMC_BASE,
-                          ER_PI_EMMC_REG_ARG1,
+                          ER_PI_ZERO_W_V1_1_EMMC_REG_ARG1,
                           argument);
   er_pi_zero_w_v1_1_write(
       ER_PI_ZERO_W_V1_1_EMMC_BASE,
-      ER_PI_EMMC_REG_CMDTM,
+      ER_PI_ZERO_W_V1_1_EMMC_REG_CMDTM,
       er_pi_zero_w_v1_1_emmc_command_value(command_index, response_kind));
   ok = er_pi_zero_w_v1_1_emmc_wait_command(&interrupt);
   g_er_pi_zero_w_v1_1_sdio_probe_interrupt = interrupt;
   if (ok == 0u) {
     return 0u;
   }
-  if (response_kind != ER_PI_MMC_RESPONSE_NONE) {
+  if (response_kind != ER_PI_ZERO_W_V1_1_MMC_RESPONSE_NONE) {
     *out_response = er_pi_zero_w_v1_1_read(ER_PI_ZERO_W_V1_1_EMMC_BASE,
-                                           ER_PI_EMMC_REG_RESP0);
+                                           ER_PI_ZERO_W_V1_1_EMMC_REG_RESP0);
     g_er_pi_zero_w_v1_1_sdio_probe_response = *out_response;
   }
   er_pi_zero_w_v1_1_write(ER_PI_ZERO_W_V1_1_EMMC_BASE,
-                          ER_PI_EMMC_REG_INTERRUPT,
+                          ER_PI_ZERO_W_V1_1_EMMC_REG_INTERRUPT,
                           interrupt);
   return 1u;
 }
 
 static UINT32 er_pi_zero_w_v1_1_mmc_rca_argument(UINT32 relative_card_address) {
-  return (relative_card_address & ER_PI_MMC_RCA_MASK) <<
-         ER_PI_MMC_RCA_RESPONSE_SHIFT;
+  return (relative_card_address & ER_PI_ZERO_W_V1_1_MMC_RCA_MASK) <<
+         ER_PI_ZERO_W_V1_1_MMC_RCA_RESPONSE_SHIFT;
 }
 
 static UINT32 er_pi_zero_w_v1_1_sdio_cmd52_argument(UINT32 write,
@@ -457,17 +457,17 @@ static UINT32 er_pi_zero_w_v1_1_sdio_cmd52_argument(UINT32 write,
                                                     UINT8 data) {
   UINT32 argument = 0u;
 
-  if (write != ER_PI_SDIO_CMD52_READ) {
-    argument |= 1u << ER_PI_SDIO_RW_FLAG_BIT;
+  if (write != ER_PI_ZERO_W_V1_1_SDIO_CMD52_READ) {
+    argument |= 1u << ER_PI_ZERO_W_V1_1_SDIO_RW_FLAG_BIT;
   }
-  argument |= ((function & ER_PI_SDIO_FUNCTION_MASK) <<
-               ER_PI_SDIO_FUNCTION_BITS);
-  if (raw != ER_PI_SDIO_CMD52_NO_RAW) {
-    argument |= 1u << ER_PI_SDIO_RAW_FLAG_BIT;
+  argument |= ((function & ER_PI_ZERO_W_V1_1_SDIO_FUNCTION_MASK) <<
+               ER_PI_ZERO_W_V1_1_SDIO_FUNCTION_BITS);
+  if (raw != ER_PI_ZERO_W_V1_1_SDIO_CMD52_NO_RAW) {
+    argument |= 1u << ER_PI_ZERO_W_V1_1_SDIO_RAW_FLAG_BIT;
   }
-  argument |= (address & ER_PI_SDIO_ADDRESS_MASK) <<
-              ER_PI_SDIO_ADDRESS_BITS;
-  argument |= (UINT32)data & ER_PI_SDIO_CMD52_DATA_MASK;
+  argument |= (address & ER_PI_ZERO_W_V1_1_SDIO_ADDRESS_MASK) <<
+              ER_PI_ZERO_W_V1_1_SDIO_ADDRESS_BITS;
+  argument |= (UINT32)data & ER_PI_ZERO_W_V1_1_SDIO_CMD52_DATA_MASK;
   return argument;
 }
 
@@ -479,20 +479,20 @@ static UINT32 er_pi_zero_w_v1_1_sdio_cmd53_argument(UINT32 write,
                                                     UINT32 count) {
   UINT32 argument = 0u;
 
-  if (write != ER_PI_SDIO_CMD53_READ) {
-    argument |= 1u << ER_PI_SDIO_RW_FLAG_BIT;
+  if (write != ER_PI_ZERO_W_V1_1_SDIO_CMD53_READ) {
+    argument |= 1u << ER_PI_ZERO_W_V1_1_SDIO_RW_FLAG_BIT;
   }
-  argument |= ((function & ER_PI_SDIO_FUNCTION_MASK) <<
-               ER_PI_SDIO_FUNCTION_BITS);
-  if (block_mode != ER_PI_SDIO_CMD53_BYTE_MODE) {
-    argument |= 1u << ER_PI_SDIO_BLOCK_MODE_BIT;
+  argument |= ((function & ER_PI_ZERO_W_V1_1_SDIO_FUNCTION_MASK) <<
+               ER_PI_ZERO_W_V1_1_SDIO_FUNCTION_BITS);
+  if (block_mode != ER_PI_ZERO_W_V1_1_SDIO_CMD53_BYTE_MODE) {
+    argument |= 1u << ER_PI_ZERO_W_V1_1_SDIO_BLOCK_MODE_BIT;
   }
-  if (incrementing != ER_PI_SDIO_CMD53_FIXED_ADDRESS) {
-    argument |= 1u << ER_PI_SDIO_INCREMENTING_ADDRESS_BIT;
+  if (incrementing != ER_PI_ZERO_W_V1_1_SDIO_CMD53_FIXED_ADDRESS) {
+    argument |= 1u << ER_PI_ZERO_W_V1_1_SDIO_INCREMENTING_ADDRESS_BIT;
   }
-  argument |= (address & ER_PI_SDIO_ADDRESS_MASK) <<
-              ER_PI_SDIO_ADDRESS_BITS;
-  argument |= count & ER_PI_SDIO_CMD53_COUNT_MASK;
+  argument |= (address & ER_PI_ZERO_W_V1_1_SDIO_ADDRESS_MASK) <<
+              ER_PI_ZERO_W_V1_1_SDIO_ADDRESS_BITS;
+  argument |= count & ER_PI_ZERO_W_V1_1_SDIO_CMD53_COUNT_MASK;
   return argument;
 }
 
@@ -509,8 +509,8 @@ static UINT32 er_pi_zero_w_v1_1_emmc_wait_interrupt(UINT32 wanted_interrupt,
        poll < ER_PI_ZERO_W_V1_1_SDIO_POLL_BUDGET;
        ++poll) {
     interrupt = er_pi_zero_w_v1_1_read(ER_PI_ZERO_W_V1_1_EMMC_BASE,
-                                       ER_PI_EMMC_REG_INTERRUPT);
-    if ((interrupt & ER_PI_EMMC_INTERRUPT_ERROR_MASK) != 0u) {
+                                       ER_PI_ZERO_W_V1_1_EMMC_REG_INTERRUPT);
+    if ((interrupt & ER_PI_ZERO_W_V1_1_EMMC_INTERRUPT_ERROR_MASK) != 0u) {
       *out_interrupt = interrupt;
       return 0u;
     }
@@ -531,52 +531,52 @@ static UINT32 er_pi_zero_w_v1_1_emmc_sdio_read_byte(UINT32 function,
 
   if (out_byte == 0 ||
       er_pi_zero_w_v1_1_emmc_wait_clear(
-          ER_PI_EMMC_REG_STATUS,
-          ER_PI_EMMC_STATUS_CMD_INHIBIT | ER_PI_EMMC_STATUS_DATA_INHIBIT,
+          ER_PI_ZERO_W_V1_1_EMMC_REG_STATUS,
+          ER_PI_ZERO_W_V1_1_EMMC_STATUS_CMD_INHIBIT | ER_PI_ZERO_W_V1_1_EMMC_STATUS_DATA_INHIBIT,
           ER_PI_ZERO_W_V1_1_EMMC_READY_POLL_BUDGET) == 0u) {
     return 0u;
   }
   *out_byte = 0u;
   er_pi_zero_w_v1_1_write(ER_PI_ZERO_W_V1_1_EMMC_BASE,
-                          ER_PI_EMMC_REG_INTERRUPT,
-                          ER_PI_EMMC_INTERRUPT_ALL);
+                          ER_PI_ZERO_W_V1_1_EMMC_REG_INTERRUPT,
+                          ER_PI_ZERO_W_V1_1_EMMC_INTERRUPT_ALL);
   er_pi_zero_w_v1_1_write(
       ER_PI_ZERO_W_V1_1_EMMC_BASE,
-      ER_PI_EMMC_REG_BLKSIZECNT,
-      (1u << ER_PI_EMMC_BLOCK_COUNT_BITS) | 1u);
+      ER_PI_ZERO_W_V1_1_EMMC_REG_BLKSIZECNT,
+      (1u << ER_PI_ZERO_W_V1_1_EMMC_BLOCK_COUNT_BITS) | 1u);
   er_pi_zero_w_v1_1_write(
       ER_PI_ZERO_W_V1_1_EMMC_BASE,
-      ER_PI_EMMC_REG_ARG1,
-      er_pi_zero_w_v1_1_sdio_cmd53_argument(ER_PI_SDIO_CMD53_READ,
+      ER_PI_ZERO_W_V1_1_EMMC_REG_ARG1,
+      er_pi_zero_w_v1_1_sdio_cmd53_argument(ER_PI_ZERO_W_V1_1_SDIO_CMD53_READ,
                                             function,
-                                            ER_PI_SDIO_CMD53_BYTE_MODE,
-                                            ER_PI_SDIO_CMD53_FIXED_ADDRESS,
+                                            ER_PI_ZERO_W_V1_1_SDIO_CMD53_BYTE_MODE,
+                                            ER_PI_ZERO_W_V1_1_SDIO_CMD53_FIXED_ADDRESS,
                                             address,
                                             1u));
   er_pi_zero_w_v1_1_write(
       ER_PI_ZERO_W_V1_1_EMMC_BASE,
-      ER_PI_EMMC_REG_CMDTM,
-      er_pi_zero_w_v1_1_emmc_sdio_command_value(ER_PI_MMC_CMD_IO_RW_EXTENDED,
-                                                ER_PI_MMC_RESPONSE_R5));
-  if (er_pi_zero_w_v1_1_emmc_wait_interrupt(ER_PI_EMMC_INTERRUPT_READ_RDY,
+      ER_PI_ZERO_W_V1_1_EMMC_REG_CMDTM,
+      er_pi_zero_w_v1_1_emmc_sdio_command_value(ER_PI_ZERO_W_V1_1_MMC_CMD_IO_RW_EXTENDED,
+                                                ER_PI_ZERO_W_V1_1_MMC_RESPONSE_R5));
+  if (er_pi_zero_w_v1_1_emmc_wait_interrupt(ER_PI_ZERO_W_V1_1_EMMC_INTERRUPT_READ_RDY,
                                             &interrupt) == 0u) {
     g_er_pi_zero_w_v1_1_sdio_probe_interrupt = interrupt;
     return 0u;
   }
   data = er_pi_zero_w_v1_1_read(ER_PI_ZERO_W_V1_1_EMMC_BASE,
-                                ER_PI_EMMC_REG_DATA);
+                                ER_PI_ZERO_W_V1_1_EMMC_REG_DATA);
   *out_byte = (UINT8)(data & ER_PI_ZERO_W_V1_1_BYTE_MASK);
-  if (er_pi_zero_w_v1_1_emmc_wait_interrupt(ER_PI_EMMC_INTERRUPT_DATA_DONE,
+  if (er_pi_zero_w_v1_1_emmc_wait_interrupt(ER_PI_ZERO_W_V1_1_EMMC_INTERRUPT_DATA_DONE,
                                             &interrupt) == 0u) {
     g_er_pi_zero_w_v1_1_sdio_probe_interrupt = interrupt;
     return 0u;
   }
   response = er_pi_zero_w_v1_1_read(ER_PI_ZERO_W_V1_1_EMMC_BASE,
-                                    ER_PI_EMMC_REG_RESP0);
+                                    ER_PI_ZERO_W_V1_1_EMMC_REG_RESP0);
   g_er_pi_zero_w_v1_1_sdio_probe_interrupt = interrupt;
   g_er_pi_zero_w_v1_1_sdio_probe_response = response;
   er_pi_zero_w_v1_1_write(ER_PI_ZERO_W_V1_1_EMMC_BASE,
-                          ER_PI_EMMC_REG_INTERRUPT,
+                          ER_PI_ZERO_W_V1_1_EMMC_REG_INTERRUPT,
                           interrupt);
   return 1u;
 }
@@ -593,33 +593,33 @@ static void er_pi_zero_w_v1_1_sdio_probe(void) {
     g_er_pi_zero_w_v1_1_sdio_probe_state = ER_PI_ZERO_W_V1_1_SDIO_PROBE_ERROR;
     return;
   }
-  if (er_pi_zero_w_v1_1_emmc_command(ER_PI_MMC_CMD_GO_IDLE_STATE,
+  if (er_pi_zero_w_v1_1_emmc_command(ER_PI_ZERO_W_V1_1_MMC_CMD_GO_IDLE_STATE,
                                      0u,
-                                     ER_PI_MMC_RESPONSE_NONE,
+                                     ER_PI_ZERO_W_V1_1_MMC_RESPONSE_NONE,
                                      &response) == 0u) {
     g_er_pi_zero_w_v1_1_sdio_probe_state = ER_PI_ZERO_W_V1_1_SDIO_PROBE_ERROR;
     return;
   }
   g_er_pi_zero_w_v1_1_sdio_probe_state =
       ER_PI_ZERO_W_V1_1_SDIO_PROBE_CMD0_DONE;
-  if (er_pi_zero_w_v1_1_emmc_command(ER_PI_MMC_CMD_IO_SEND_OP_COND,
-                                     ER_PI_SDIO_OCR_3V3,
-                                     ER_PI_MMC_RESPONSE_R4,
+  if (er_pi_zero_w_v1_1_emmc_command(ER_PI_ZERO_W_V1_1_MMC_CMD_IO_SEND_OP_COND,
+                                     ER_PI_ZERO_W_V1_1_SDIO_OCR_3V3,
+                                     ER_PI_ZERO_W_V1_1_MMC_RESPONSE_R4,
                                      &response) == 0u) {
     g_er_pi_zero_w_v1_1_sdio_probe_state = ER_PI_ZERO_W_V1_1_SDIO_PROBE_ERROR;
     return;
   }
   g_er_pi_zero_w_v1_1_sdio_probe_state =
       ER_PI_ZERO_W_V1_1_SDIO_PROBE_CMD5_DONE;
-  if (er_pi_zero_w_v1_1_emmc_command(ER_PI_MMC_CMD_SEND_RELATIVE_ADDR,
+  if (er_pi_zero_w_v1_1_emmc_command(ER_PI_ZERO_W_V1_1_MMC_CMD_SEND_RELATIVE_ADDR,
                                      0u,
-                                     ER_PI_MMC_RESPONSE_R6,
+                                     ER_PI_ZERO_W_V1_1_MMC_RESPONSE_R6,
                                      &response) == 0u) {
     g_er_pi_zero_w_v1_1_sdio_probe_state = ER_PI_ZERO_W_V1_1_SDIO_PROBE_ERROR;
     return;
   }
   g_er_pi_zero_w_v1_1_sdio_relative_card_address =
-      response >> ER_PI_MMC_RCA_RESPONSE_SHIFT;
+      response >> ER_PI_ZERO_W_V1_1_MMC_RCA_RESPONSE_SHIFT;
   if (g_er_pi_zero_w_v1_1_sdio_relative_card_address == 0u) {
     g_er_pi_zero_w_v1_1_sdio_probe_state = ER_PI_ZERO_W_V1_1_SDIO_PROBE_ERROR;
     return;
@@ -627,10 +627,10 @@ static void er_pi_zero_w_v1_1_sdio_probe(void) {
   g_er_pi_zero_w_v1_1_sdio_probe_state =
       ER_PI_ZERO_W_V1_1_SDIO_PROBE_CMD3_DONE;
   if (er_pi_zero_w_v1_1_emmc_command(
-          ER_PI_MMC_CMD_SELECT_CARD,
+          ER_PI_ZERO_W_V1_1_MMC_CMD_SELECT_CARD,
           er_pi_zero_w_v1_1_mmc_rca_argument(
               g_er_pi_zero_w_v1_1_sdio_relative_card_address),
-          ER_PI_MMC_RESPONSE_R1,
+          ER_PI_ZERO_W_V1_1_MMC_RESPONSE_R1,
           &response) == 0u) {
     g_er_pi_zero_w_v1_1_sdio_probe_state = ER_PI_ZERO_W_V1_1_SDIO_PROBE_ERROR;
     return;
@@ -638,20 +638,20 @@ static void er_pi_zero_w_v1_1_sdio_probe(void) {
   g_er_pi_zero_w_v1_1_sdio_probe_state =
       ER_PI_ZERO_W_V1_1_SDIO_PROBE_CMD7_DONE;
   if (er_pi_zero_w_v1_1_emmc_command(
-          ER_PI_MMC_CMD_IO_RW_DIRECT,
-          er_pi_zero_w_v1_1_sdio_cmd52_argument(ER_PI_SDIO_CMD52_READ,
-                                                ER_PI_SDIO_FUNCTION_BACKPLANE,
-                                                ER_PI_SDIO_CMD52_NO_RAW,
+          ER_PI_ZERO_W_V1_1_MMC_CMD_IO_RW_DIRECT,
+          er_pi_zero_w_v1_1_sdio_cmd52_argument(ER_PI_ZERO_W_V1_1_SDIO_CMD52_READ,
+                                                ER_PI_ZERO_W_V1_1_SDIO_FUNCTION_BACKPLANE,
+                                                ER_PI_ZERO_W_V1_1_SDIO_CMD52_NO_RAW,
                                                 0u,
                                                 0u),
-          ER_PI_MMC_RESPONSE_R5,
+          ER_PI_ZERO_W_V1_1_MMC_RESPONSE_R5,
           &response) == 0u) {
     g_er_pi_zero_w_v1_1_sdio_probe_state = ER_PI_ZERO_W_V1_1_SDIO_PROBE_ERROR;
     return;
   }
   g_er_pi_zero_w_v1_1_sdio_probe_state =
       ER_PI_ZERO_W_V1_1_SDIO_PROBE_CMD52_DONE;
-  if (er_pi_zero_w_v1_1_emmc_sdio_read_byte(ER_PI_SDIO_FUNCTION_BACKPLANE,
+  if (er_pi_zero_w_v1_1_emmc_sdio_read_byte(ER_PI_ZERO_W_V1_1_SDIO_FUNCTION_BACKPLANE,
                                             0u,
                                             &cmd53_byte) == 0u) {
     g_er_pi_zero_w_v1_1_sdio_probe_state = ER_PI_ZERO_W_V1_1_SDIO_PROBE_ERROR;
@@ -659,7 +659,7 @@ static void er_pi_zero_w_v1_1_sdio_probe(void) {
   }
   g_er_pi_zero_w_v1_1_sdio_probe_response =
       (g_er_pi_zero_w_v1_1_sdio_probe_response &
-       ~ER_PI_SDIO_CMD52_DATA_MASK) |
+       ~ER_PI_ZERO_W_V1_1_SDIO_CMD52_DATA_MASK) |
       (UINT32)cmd53_byte;
   g_er_pi_zero_w_v1_1_sdio_probe_state =
       ER_PI_ZERO_W_V1_1_SDIO_PROBE_CMD53_DONE;
@@ -667,11 +667,11 @@ static void er_pi_zero_w_v1_1_sdio_probe(void) {
 
 static void er_pi_zero_w_v1_1_uart_put_byte(UINT8 byte) {
   while ((er_pi_zero_w_v1_1_read(ER_PI_ZERO_W_V1_1_AUX_BASE,
-                                 ER_PI_AUX_MU_LSR) &
-          ER_PI_AUX_MU_LSR_TX_EMPTY) == 0u) {
+                                 ER_PI_ZERO_W_V1_1_AUX_MU_LSR) &
+          ER_PI_ZERO_W_V1_1_AUX_MU_LSR_TX_EMPTY) == 0u) {
   }
   er_pi_zero_w_v1_1_write(ER_PI_ZERO_W_V1_1_AUX_BASE,
-                          ER_PI_AUX_MU_IO,
+                          ER_PI_ZERO_W_V1_1_AUX_MU_IO,
                           (UINT32)byte);
 }
 
