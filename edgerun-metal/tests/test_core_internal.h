@@ -18,6 +18,7 @@
 #include "er_crypto_blake3.h"
 #include "er_cyw43438.h"
 #include "er_cyw43438_d11.h"
+#include "er_cyw43438_sdpcm.h"
 #include "er_disk_analyzer.h"
 #include "er_cyw43438_owned_firmware.h"
 #include "er_device_identity.h"
