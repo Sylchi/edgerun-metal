@@ -10,6 +10,7 @@
 #include <unistd.h>
 
 #include "package_identity.h"
+#include "../repo-inspect/repo_inspect.h"
 
 /*
  * Purpose:
@@ -37,7 +38,6 @@ static const char ERB_INTERNAL_BUILD_DIR[] = ".build/er-build-out";
 static const char ERB_CRYPTO_BUILD_DIR[] = ".build/er-build-out/crypto";
 static const char ERB_VARFONT_BUILD_DIR[] = ".build/er-build-out/varfont";
 static const char ERB_REPO_CHECK_BIN[] = ".build/repo-check";
-static const char ERB_REPO_INSPECT_BIN[] = ".build/repo-inspect";
 static const char ERB_ERWIRE_DECODE_BIN[] = ".build/erwire-decode";
 static const char ERB_WASM_COMPILE_BIN[] = ".build/wasm-compile";
 static const char ERB_APP_RUN_BIN[] = ".build/app-run";
@@ -292,19 +292,6 @@ static int erb_build_repo_check(int print_plan) {
   return erb_run_args(&args, print_plan);
 }
 
-static int erb_build_repo_inspect(int print_plan) {
-  ErbArgs args;
-
-  if (erb_prepare_dirs() != 0 || erb_compile_common(&args, ERB_REPO_INSPECT_BIN) != 0) {
-    return 1;
-  }
-  if (erb_args_push(&args, "-pthread") != 0 ||
-      erb_args_push(&args, "tools/repo-inspect/repo_inspect_main.c") != 0) {
-    return 1;
-  }
-  return erb_run_args(&args, print_plan);
-}
-
 static int erb_build_erwire_decode(int print_plan) {
   ErbArgs args;
 
@@ -509,6 +496,34 @@ static int erb_run_program_arg(const char* program, const char* arg, int print_p
   return erb_run_args(&args, print_plan);
 }
 
+static int erb_target_repo_inspect(int argc, char** argv, int print_plan) {
+  ErbArgs args;
+  char* inspect_argv[ERB_MAX_ARGC];
+
+  if (print_plan != 0) {
+    erb_args_init(&args);
+    if (erb_args_push(&args, ".build/er-build") != 0 ||
+        erb_args_push(&args, "repo-inspect") != 0) {
+      return 1;
+    }
+    for (int i = 0; i < argc; ++i) {
+      if (erb_args_push(&args, argv[i]) != 0) {
+        return 1;
+      }
+    }
+    return erb_run_args(&args, print_plan);
+  }
+  if ((size_t)argc + 2u > ERB_MAX_ARGC) {
+    return erb_fail("too many repo-inspect arguments");
+  }
+  inspect_argv[0] = "repo-inspect";
+  for (int i = 0; i < argc; ++i) {
+    inspect_argv[i + 1] = argv[i];
+  }
+  inspect_argv[argc + 1] = NULL;
+  return eri_main(argc + 1, inspect_argv);
+}
+
 static const char* erb_default_progress_test(const char* scope) {
   if (strcmp(scope, "edgerun-ui-core") == 0) {
     return "ui-core-test";
@@ -611,19 +626,13 @@ static int erb_target_repo_progress(const char* scope, const char* test_target, 
     return 1;
   }
 
-  erb_args_init(&args);
-  if (erb_args_push(&args, "make") != 0 ||
-      erb_args_push(&args, "repo-inspect") != 0 ||
-      erb_run_progress_step("build repo-inspect", &args, print_plan) != 0) {
-    return 1;
-  }
-
   snprintf(title, sizeof(title), "repo-inspect: %s", scope);
-  erb_args_init(&args);
-  if (erb_args_push(&args, ERB_REPO_INSPECT_BIN) != 0 ||
-      erb_args_push(&args, scope) != 0 ||
-      erb_run_progress_step(title, &args, print_plan) != 0) {
-    return 1;
+  printf("\n== %s ==\n", title);
+  {
+    char* inspect_argv[] = {(char*)scope};
+    if (erb_target_repo_inspect(1, inspect_argv, print_plan) != 0) {
+      return 1;
+    }
   }
 
   snprintf(title, sizeof(title), "test target: %s", test_target);
@@ -652,7 +661,6 @@ static int erb_target_erwire_test(int print_plan) {
 
 static int erb_target_repo_test(int print_plan) {
   if (erb_build_repo_check(print_plan) != 0 ||
-      erb_build_repo_inspect(print_plan) != 0 ||
       erb_build_erwire_decode(print_plan) != 0 ||
       erb_build_wasm_compile(print_plan) != 0 ||
       erb_build_pi_serial_verify(print_plan) != 0 ||
@@ -797,14 +805,14 @@ int main(int argc, char** argv) {
     }
     return erb_target_app_run(argv[target_index + 1], print_plan);
   }
+  if (strcmp(target, "repo-inspect") == 0) {
+    return erb_target_repo_inspect(argc - target_index - 1, argv + target_index + 1, print_plan);
+  }
   if (target_index + 1 != argc) {
     return erb_usage();
   }
   if (strcmp(target, "repo-check-bin") == 0) {
     return erb_build_repo_check(print_plan);
-  }
-  if (strcmp(target, "repo-inspect") == 0) {
-    return erb_build_repo_inspect(print_plan);
   }
   if (strcmp(target, "erwire-decode") == 0) {
     return erb_build_erwire_decode(print_plan);

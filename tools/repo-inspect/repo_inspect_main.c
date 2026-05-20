@@ -51,7 +51,7 @@ static const char* eri_cli_relative_scope(const char* arg) {
   return arg;
 }
 
-int main(int argc, char** argv) {
+int eri_main(int argc, char** argv) {
   EriVfs vfs;
   EriInspectOptions options;
   const char* root = ".";
@@ -103,3 +103,9 @@ int main(int argc, char** argv) {
   eri_vfs_free(&vfs);
   return ok;
 }
+
+#ifndef ERI_NO_CLI_MAIN
+int main(int argc, char** argv) {
+  return eri_main(argc, argv);
+}
+#endif

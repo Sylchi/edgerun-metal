@@ -252,6 +252,8 @@ typedef struct {
   uint8_t details;
 } EriInspectOptions;
 
+int eri_main(int argc, char** argv);
+
 typedef struct {
   uint32_t segment;
   int brace_depth;
