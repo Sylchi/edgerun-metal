@@ -3,6 +3,7 @@
 CC := toolchain/bin/clang
 HOST_CC := toolchain/bin/clang
 HOST_LDFLAGS :=
+HOST_CC_FOR_SUBMAKE := $(if $(findstring /,$(HOST_CC)),$(abspath $(HOST_CC)),$(HOST_CC))
 ER_BUILD_BOOTSTRAP := toolchain/bin/er-build
 
 REPO_PROGRESS_SCOPE := edgerun-ui-core
@@ -62,10 +63,10 @@ pi-zero-w-v1_1-usb-boot: er-build
 	./.build/pi-usb-boot --boot-dir $(PI_ZERO_W_V1_1_USB_BOOT_DIR) $(PI_USB_BOOT_DEVICE_ARG) --verbose
 
 codex-build:
-	$(MAKE) -C codex CC="$(HOST_CC)"
+	$(MAKE) -C codex CC="$(HOST_CC_FOR_SUBMAKE)"
 
 codex-test:
-	$(MAKE) -C codex CC="$(HOST_CC)" test
+	$(MAKE) -C codex CC="$(HOST_CC_FOR_SUBMAKE)" test
 
 crypto-test: er-build
 	./.build/er-build crypto-test

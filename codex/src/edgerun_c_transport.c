@@ -372,15 +372,19 @@ static void er_transport_post_sse(const char *url_text,
     char *sse_body;
 
     if (!er_transport_parse_url(url_text, &url)) die("codex transport invalid URL: %s", url_text);
-    if (url.tls) {
-        die("codex transport HTTPS requires the in-progress C TLS port; curl fallback is disabled");
-    }
     request = er_transport_request_text_new(&url, headers, header_count, body);
     if (!request) die("codex transport failed to build request");
     fd = er_transport_connect_plain(&url);
-    er_transport_write_all(fd, request, strlen(request));
-    response = er_transport_read_response_new(fd);
-    close(fd);
+    if (url.tls) {
+        ErTlsConnection tls = er_tls_connection_open(url.host, fd);
+        er_tls_write_all(&tls, request, strlen(request));
+        response = er_tls_read_response_new(&tls);
+        er_tls_connection_close(&tls);
+    } else {
+        er_transport_write_all(fd, request, strlen(request));
+        response = er_transport_read_response_new(fd);
+        close(fd);
+    }
     sse_body = er_transport_sse_body_new(response);
     er_transport_stream_sse_text(sse_body, on_event, user);
     free(sse_body);
