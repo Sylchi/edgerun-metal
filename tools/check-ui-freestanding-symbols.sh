@@ -16,7 +16,7 @@ cmake -S edgerun-ui-core -B "${BUILD_DIR}" -G Ninja \
   -DVRFONT_BUILD_HOSTED_TOOLS=OFF >/dev/null
 cmake --build "${BUILD_DIR}" >/dev/null
 
-ld.lld -r -o "${COMBINED_OBJ}" \
+"${ROOT_DIR}/toolchain/bin/ld.lld" -r -o "${COMBINED_OBJ}" \
   "${BUILD_DIR}"/CMakeFiles/er_ui_core.dir/src/*.o \
   "${BUILD_DIR}"/varfont/CMakeFiles/vrfont.dir/src/*.o
 

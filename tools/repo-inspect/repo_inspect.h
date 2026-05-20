@@ -42,7 +42,7 @@
 #define ERI_LOCAL_BUILD_PATH ".build"
 #define ERI_BUILD_PATH "build"
 #define ERI_CMAKE_DEBUG_PATH "cmake-build-debug"
-#define ERI_STRIP_COMMAND "llvm-strip"
+#define ERI_STRIP_COMMAND "toolchain/bin/llvm-strip"
 #define ERI_THIRD_PARTY_PATH "third_party"
 #define ERI_VENDOR_UI_PATH "ui/shadcn-ui"
 #define ERI_OPTIMIZER_IGNORE_TAG "@optimizer-ignore"

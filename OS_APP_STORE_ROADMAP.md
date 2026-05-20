@@ -9,10 +9,12 @@ identity-routed encrypted storage.
 - [x] Own the Wasm compiler and interpreter path for the current subset.
 - [x] Define canonical hostcalls in one contract table.
 - [x] Runtime-test every declared hostcall.
-- [x] Build `app/app.c` into `app/.build/app.wasm` through `er-build app-build`.
+- [x] Build manifest-declared ERC source into `app/.build/app.wasm` through
+      `er-build app-build`.
 - [x] Validate app manifests against the owned app contract.
 - [x] Generate package identity from app source, manifest, assets, and Wasm bytes.
-- [x] Expand the C subset with local variables, loads, stores, branches, and calls.
+- [x] Define ERC, the EdgeRun C-- app language, over the current local
+      variables, loads, stores, branches, and calls.
 - [x] Load a user-authored package from local storage into the shell.
 - [x] Route keyboard/input events to the active Wasm UI app.
 

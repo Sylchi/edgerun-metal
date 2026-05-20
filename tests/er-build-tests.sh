@@ -13,7 +13,7 @@ ER_BUILD="${ROOT_DIR}/.build/er-build"
 repo_plan=$("$ER_BUILD" --print-plan repo-test)
 
 case "$repo_plan" in
-  *"+ clang -std=c11 -Wall -Wextra -Werror -O2 -o .build/repo-check tools/repo-check.c"* ) ;;
+  *"+ toolchain/bin/clang -std=c11 -Wall -Wextra -Werror -O2 -o .build/repo-check tools/repo-check.c"* ) ;;
   * ) printf 'missing repo-check compile step\n' >&2; exit 1 ;;
 esac
 
@@ -57,24 +57,29 @@ case "$repo_plan" in
 esac
 
 case "$repo_plan" in
+  *"+ ./tests/wasm-compile-source-tests.sh"* ) ;;
+  * ) printf 'missing wasm compiler source test step\n' >&2; exit 1 ;;
+esac
+
+case "$repo_plan" in
   *"+ ./tests/erwire-decode-tests.sh"* ) ;;
   * ) printf 'missing erwire test step\n' >&2; exit 1 ;;
 esac
 
 case "$repo_plan" in
-  *"+ clang -std=c11 -Wall -Wextra -Werror -O2 -o .build/erwire-decode -Iinclude tools/erwire-decode.c"* ) ;;
+  *"+ toolchain/bin/clang -std=c11 -Wall -Wextra -Werror -O2 -o .build/erwire-decode -Iinclude tools/erwire-decode.c"* ) ;;
   * ) printf 'missing erwire decoder include path\n' >&2; exit 1 ;;
 esac
 
 app_package_plan=$("$ER_BUILD" --print-plan app-build "${ROOT_DIR}/tests/fixtures/app-package/app")
 
 case "$app_package_plan" in
-  *"+ clang -std=c11 -Wall -Wextra -Werror -O2 -o .build/wasm-compile"*"tools/wasm-compile/wasm_compile_parse.c"* ) ;;
+  *"+ toolchain/bin/clang -std=c11 -Wall -Wextra -Werror -O2 -o .build/wasm-compile"*"tools/wasm-compile/wasm_compile_parse.c"* ) ;;
   * ) printf 'missing app-build compiler build step\n' >&2; exit 1 ;;
 esac
 
 case "$app_package_plan" in
-  *"+ .build/wasm-compile ${ROOT_DIR}/tests/fixtures/app-package/app/app.c ${ROOT_DIR}/tests/fixtures/app-package/app/.build/app.wasm"* ) ;;
+  *"+ .build/wasm-compile ${ROOT_DIR}/tests/fixtures/app-package/app/app.erc ${ROOT_DIR}/tests/fixtures/app-package/app/.build/app.wasm"* ) ;;
   * ) printf 'missing app-build package compile step\n' >&2; exit 1 ;;
 esac
 
@@ -94,17 +99,17 @@ case "$repo_plan" in
 esac
 
 case "$repo_plan" in
-  *"+ clang -std=c11 -Wall -Wextra -Werror -O2 -o .build/pi-serial-verify tools/pi-serial-verify/main.c"* ) ;;
+  *"+ toolchain/bin/clang -std=c11 -Wall -Wextra -Werror -O2 -o .build/pi-serial-verify tools/pi-serial-verify/main.c"* ) ;;
   * ) printf 'missing pi serial verifier compile step\n' >&2; exit 1 ;;
 esac
 
 case "$repo_plan" in
-  *"+ clang -std=c11 -Wall -Wextra -Werror -O2 -o .build/sdcard-probe -Iinclude tools/sdcard-probe/main.c"* ) ;;
+  *"+ toolchain/bin/clang -std=c11 -Wall -Wextra -Werror -O2 -o .build/sdcard-probe -Iinclude tools/sdcard-probe/main.c"* ) ;;
   * ) printf 'missing sd card probe compile step\n' >&2; exit 1 ;;
 esac
 
 case "$repo_plan" in
-  *"+ clang -std=c11 -Wall -Wextra -Werror -O2 -o .build/pi-usb-boot tools/pi-usb-boot/main.c"* ) ;;
+  *"+ toolchain/bin/clang -std=c11 -Wall -Wextra -Werror -O2 -o .build/pi-usb-boot tools/pi-usb-boot/main.c"* ) ;;
   * ) printf 'missing pi usb boot compile step\n' >&2; exit 1 ;;
 esac
 
@@ -134,7 +139,7 @@ case "$crypto_plan" in
 esac
 
 case "$crypto_plan" in
-  *"+ clang -std=c11 -Wall -Wextra -Werror -O2 -o .build/er-build-out/crypto/test_blake3 -Iedgerun-crypto/include edgerun-crypto/tests/test_blake3.c edgerun-crypto/src/er_blake3.c"* ) ;;
+  *"+ toolchain/bin/clang -std=c11 -Wall -Wextra -Werror -O2 -o .build/er-build-out/crypto/test_blake3 -Iedgerun-crypto/include edgerun-crypto/tests/test_blake3.c edgerun-crypto/src/er_blake3.c"* ) ;;
   * ) printf 'missing direct crypto test compile step\n' >&2; exit 1 ;;
 esac
 
@@ -154,7 +159,7 @@ case "$varfont_plan" in
 esac
 
 case "$varfont_plan" in
-  *"+ clang -std=c11 -Wall -Wextra -Werror -O2 -o .build/er-build-out/varfont/vrfont_tests -ffreestanding -fno-builtin -fno-stack-protector -Iedgerun-ui-core/varfont/include -Iinclude -Iedgerun-ui-core/varfont/src -DVRFONT_PROJECT_ROOT=\"edgerun-ui-core/varfont\""* ) ;;
+  *"+ toolchain/bin/clang -std=c11 -Wall -Wextra -Werror -O2 -o .build/er-build-out/varfont/vrfont_tests -ffreestanding -fno-builtin -fno-stack-protector -Iedgerun-ui-core/varfont/include -Iinclude -Iedgerun-ui-core/varfont/src -DVRFONT_PROJECT_ROOT=\"edgerun-ui-core/varfont\""* ) ;;
   * ) printf 'missing direct varfont test compile step\n' >&2; exit 1 ;;
 esac
 
@@ -179,7 +184,7 @@ case "$ui_core_plan" in
 esac
 
 case "$ui_core_plan" in
-  *"+ clang -std=c11 -Wall -Wextra -Werror -O2 -o .build/er-build-out/ui-core/er_ui_core_tests -ffreestanding -fno-builtin -fno-stack-protector -Iedgerun-ui-core/include -Iedgerun-ui-core/varfont/include -Iedgerun-ui-core/varfont/src -Iinclude -DER_UI_REPO_ROOT=\".\""* ) ;;
+  *"+ toolchain/bin/clang -std=c11 -Wall -Wextra -Werror -O2 -o .build/er-build-out/ui-core/er_ui_core_tests -ffreestanding -fno-builtin -fno-stack-protector -Iedgerun-ui-core/include -Iedgerun-ui-core/varfont/include -Iedgerun-ui-core/varfont/src -Iinclude -DER_UI_REPO_ROOT=\".\""* ) ;;
   * ) printf 'missing direct ui-core test compile step\n' >&2; exit 1 ;;
 esac
 

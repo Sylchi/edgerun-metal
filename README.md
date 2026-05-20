@@ -366,7 +366,8 @@ The preferred local build tools are:
 
 - `clang` and `lld` for `edgerun-metal`
 - `llvm-strip` for repository release-binary size inspection
-- repository-owned `tools/wasm-compile` for source-first metal Wasm module fixtures
+- repository-owned `tools/wasm-compile` for ERC and low-level WAT metal Wasm
+  module fixtures
 - repository-owned `tools/er-build` for repository policy, package, crypto, varfont, and UI-core tests
 - `rg` for repository search
 
@@ -380,6 +381,10 @@ tool, crypto, varfont, and UI-core test targets to it.
 to create the first `.build/er-build` without rebuilding it from a host compiler.
 Compiler and linker calls that still produce new C artifacts remain explicit
 until they move behind the repository-owned compiler boundary.
+
+ERC, documented in `ERC_LANGUAGE.md`, is the current EdgeRun app language. It
+is EdgeRun C--: a small C-shaped source format for admitted packages, not
+hosted C and not a freestanding C profile.
 
 ## Common Commands
 

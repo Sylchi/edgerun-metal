@@ -8,7 +8,7 @@ Canonical layout:
 
 ```text
 app/
-  app.c
+  app.erc
   app.manifest
   assets/
   .build/
@@ -18,7 +18,8 @@ app/
 
 Rules:
 
-- `app.c` is the authored source for the admitted EdgeRun C subset.
+- `app.erc` is the authored ERC source. Existing `source=app.c` manifests are
+  accepted only as a transitional spelling for old fixtures.
 - `app.manifest` records the app contract, source object hash, asset object
   hashes, required memory pages, and allowed host imports.
 - `assets/` contains source assets only. Generated packed assets belong under
@@ -31,6 +32,12 @@ Rules:
   app authoring format.
 - Package admission must use content identity from the manifest and generated
   Wasm bytes. Labels and paths are not authority.
+
+Canonical local scaffold command:
+
+```sh
+./.build/er-build app-new app ui-app
+```
 
 Canonical local build command:
 
@@ -50,14 +57,39 @@ Canonical local execution check:
 ./.build/er-build app-run app
 ```
 
-The package directory must contain `app.c` and `app.manifest`. The build runner
+Canonical single-command check:
+
+```sh
+./.build/er-build app-check app
+```
+
+`app-new` creates a fresh `app.erc` package from the repository-owned canonical
+sample for either `ui-app` or `bus-driver`. It refuses to overwrite an existing
+package directory.
+
+`app-check` builds and verifies every package. For `ui-app` packages it also
+runs the app through the deterministic local VM hostcalls; for `bus-driver`
+packages it reports verified admission without using the UI app launcher.
+
+The package directory must contain the manifest-declared source file and
+`app.manifest`. The build runner
 creates `app/.build/` and writes `app/.build/app.wasm` plus
 `app/.build/package.identity`. The admission check verifies the exact manifest
 and rejects any mismatch between `package.identity` and the current source,
 manifest, or generated Wasm bytes. The execution check runs admitted Wasm
 through the metal VM with deterministic local hostcalls.
 
-The first admitted UI app manifest is intentionally exact:
+The admitted UI app manifest is intentionally exact:
+
+```text
+contract=ui-app
+memory_pages=1
+imports=edgerun.ui/emit
+source=app.erc
+output=.build/app.wasm
+```
+
+Legacy packages may use the transitional `source=app.c` spelling:
 
 ```text
 contract=ui-app
@@ -78,16 +110,19 @@ memory_pages=1
 imports=edgerun.bus/exec
 driver_memory_bytes=65536
 driver_bus=mmio32:4096:4:read8
-source=app.c
+source=app.erc
 output=.build/app.wasm
 ```
+
+Driver packages may also use the transitional `source=app.c` spelling with the
+same remaining manifest fields.
 
 Driver admission binds the package to one explicit memory budget and one
 explicit bus window. The runtime rejects a driver whose linear memory does not
 match `driver_memory_bytes`, and rejects `edgerun.bus/exec` packets outside the
 admitted `driver_bus` window before native bus execution.
 
-Initial C subset:
+Initial ERC source:
 
 ```c
 extern i64 ui_emit(i64, i64) __import("edgerun.ui", "emit");
@@ -95,10 +130,9 @@ memory(1);
 export i64 main(void) { return ui_emit(0, 0); }
 ```
 
-The current expression subset supports integer returns, direct returns from
-admitted i64 hostcalls, local `i64` declarations initialized from admitted
-expressions, assignment to prior local names, fixed-offset `store16`,
-`store32`, `store64`, `load32`, and `load64`, and explicit `if` / `else`
-statement blocks. Hostcall arguments may be integer literals or prior local
-names. Unsupported C syntax is fatal. The subset grows only when compiler
-output, runtime validation, and tests are updated together.
+ERC is not hosted C and not a freestanding C profile. It is a small C-shaped
+EdgeRun language whose only outside world is the explicit hostcall table in
+`include/er_wasm_contract.h`. The compiler rejects host libc and process
+surface such as includes, `stdio`, allocation APIs, `argc` / `argv`, and hosted
+`main` signatures. Unsupported ERC syntax is fatal. The language grows only
+when compiler output, runtime validation, and tests are updated together.

@@ -10,10 +10,10 @@
 
 /*
  * Purpose:
- *   Compile the admitted EdgeRun WAT subset into deterministic WebAssembly
- *   binary modules.
+ *   Compile the admitted ERC and low-level EdgeRun WAT subsets into
+ *   deterministic WebAssembly binary modules.
  * Intention:
- *   Remove the external WAT compiler dependency while keeping authored modules
+ *   Remove external app compiler dependencies while keeping authored modules
  *   inside the exact runtime subset supported by edgerun-metal/core/wasm_vm*.
  */
 
@@ -77,6 +77,22 @@ typedef enum {
   ERWC_TOKEN_ATOM,
   ERWC_TOKEN_STRING
 } ErWcTokenKind;
+
+typedef enum {
+  ERWC_SOURCE_KIND_ERC,
+  ERWC_SOURCE_KIND_WAT
+} ErWcSourceKind;
+
+typedef enum {
+  ERWC_COMPILE_STATUS_OK,
+  ERWC_COMPILE_STATUS_BAD_ARGS,
+  ERWC_COMPILE_STATUS_UNSUPPORTED_ERC,
+  ERWC_COMPILE_STATUS_TOKENIZATION_FAILED,
+  ERWC_COMPILE_STATUS_UNSUPPORTED_WAT,
+  ERWC_COMPILE_STATUS_CONTRACT_REJECTED,
+  ERWC_COMPILE_STATUS_EMIT_FAILED,
+  ERWC_COMPILE_STATUS_UNSUPPORTED_SOURCE_KIND
+} ErWcCompileStatus;
 
 typedef struct {
   ErWcTokenKind kind;
@@ -164,6 +180,8 @@ typedef struct {
 
 int erwc_fail_path(const char* path, const char* message);
 int erwc_usage(const char* program);
+const char* erwc_compile_status_code(ErWcCompileStatus status);
+const char* erwc_compile_status_message(ErWcCompileStatus status);
 int erwc_token_text_equals(const ErWcParse* parse, int token_index, const char* text);
 int erwc_node_atom_equals(const ErWcParse* parse, int node_index, const char* text);
 int erwc_copy_token_text(const ErWcParse* parse, int node_index, char* dst, size_t dst_len);
@@ -187,6 +205,9 @@ int erwc_build_module(const ErWcParse* parse, int root, ErWcModule* module);
 int erwc_build_c_source(const ErWcSource* source, ErWcModule* module);
 int erwc_emit_wasm(const ErWcModule* module, ErWcBuffer* out);
 int erwc_write_file(const char* path, const ErWcBuffer* out);
+ErWcCompileStatus erwc_compile_source(const ErWcSource* source,
+                                      ErWcSourceKind source_kind,
+                                      ErWcBuffer* out);
 int erwc_compile_path(const char* input_path, const char* output_path);
 
 #endif

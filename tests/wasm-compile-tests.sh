@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # Purpose:
-#   Smoke-test the repository-owned WAT subset compiler.
+#   Smoke-test the repository-owned ERC and low-level WAT subset compiler.
 # Intention:
 #   Keep metal Wasm module generation deterministic and repository-owned.
 
@@ -36,7 +36,7 @@ check_magic() {
 }
 
 compile_twice \
-  "${ROOT_DIR}/edgerun-metal/modules/driver_bus_probe/app/app.c" \
+  "${ROOT_DIR}/edgerun-metal/modules/driver_bus_probe/app/app.erc" \
   "${TMP_DIR}/driver-a.wasm" \
   "${TMP_DIR}/driver-b.wasm"
 compile_twice \
@@ -202,6 +202,11 @@ compile_twice \
   "${TMP_DIR}/ui-min.c" \
   "${TMP_DIR}/ui-c-a.wasm" \
   "${TMP_DIR}/ui-c-b.wasm"
+cp "${TMP_DIR}/ui-min.c" "${TMP_DIR}/ui-min.erc"
+compile_twice \
+  "${TMP_DIR}/ui-min.erc" \
+  "${TMP_DIR}/ui-erc-a.wasm" \
+  "${TMP_DIR}/ui-erc-b.wasm"
 compile_twice \
   "${TMP_DIR}/ui-emit-call.c" \
   "${TMP_DIR}/ui-emit-call-a.wasm" \
@@ -258,6 +263,7 @@ compile_twice \
 check_magic "${TMP_DIR}/driver-a.wasm"
 check_magic "${TMP_DIR}/ui-a.wasm"
 check_magic "${TMP_DIR}/ui-c-a.wasm"
+check_magic "${TMP_DIR}/ui-erc-a.wasm"
 check_magic "${TMP_DIR}/ui-emit-call-a.wasm"
 check_magic "${TMP_DIR}/ui-local-return-a.wasm"
 check_magic "${TMP_DIR}/ui-local-call-a.wasm"
@@ -276,9 +282,16 @@ expect_reject() {
   local label="$1"
   local source="$2"
   local output="$3"
+  local expected_code="${4:-}"
+  local stderr_path="${output}.stderr"
 
-  if "${WASM_COMPILE}" "${source}" "${output}" >/dev/null 2>&1; then
+  if "${WASM_COMPILE}" "${source}" "${output}" >"${output}.stdout" 2>"${stderr_path}"; then
     printf '%s accepted\n' "${label}" >&2
+    exit 1
+  fi
+  if [ -n "${expected_code}" ] && ! grep "${expected_code}" "${stderr_path}" >/dev/null; then
+    printf '%s missing diagnostic %s\n' "${label}" "${expected_code}" >&2
+    cat "${stderr_path}" >&2
     exit 1
   fi
 }
@@ -294,6 +307,12 @@ WAT
 
 expect_reject "unsupported instruction" "${TMP_DIR}/invalid.wat" "${TMP_DIR}/invalid.wasm"
 
+cp "${TMP_DIR}/invalid.wat" "${TMP_DIR}/invalid.txt"
+expect_reject "unsupported source kind" \
+  "${TMP_DIR}/invalid.txt" \
+  "${TMP_DIR}/invalid-kind.wasm" \
+  "ERWC0500"
+
 cat > "${TMP_DIR}/bad-contract-none.wat" <<'WAT'
 (module
   (type $main_t (func (result i64)))
@@ -305,7 +324,8 @@ WAT
 
 expect_reject "missing contract import" \
   "${TMP_DIR}/bad-contract-none.wat" \
-  "${TMP_DIR}/bad-contract-none.wasm"
+  "${TMP_DIR}/bad-contract-none.wasm" \
+  "ERWC0300"
 
 cat > "${TMP_DIR}/bad-contract-mixed.wat" <<'WAT'
 (module
@@ -347,7 +367,53 @@ CAPP
 
 expect_reject "unsupported c expression" \
   "${TMP_DIR}/bad-c-subset.c" \
-  "${TMP_DIR}/bad-c-subset.wasm"
+  "${TMP_DIR}/bad-c-subset.wasm" \
+  "ERWC0100"
+
+cat > "${TMP_DIR}/bad-c-include.c" <<'CAPP'
+#include <stdio.h>
+extern i64 ui_emit(i64, i64) __import("edgerun.ui", "emit");
+memory(1);
+export i64 main(void) { return ui_emit(0, 0); }
+CAPP
+
+expect_reject "host c include" \
+  "${TMP_DIR}/bad-c-include.c" \
+  "${TMP_DIR}/bad-c-include.wasm" \
+  "ERWC0100"
+
+cat > "${TMP_DIR}/bad-c-libc-call.c" <<'CAPP'
+extern i64 ui_emit(i64, i64) __import("edgerun.ui", "emit");
+memory(1);
+export i64 main(void) { return printf(0); }
+CAPP
+
+expect_reject "host libc call" \
+  "${TMP_DIR}/bad-c-libc-call.c" \
+  "${TMP_DIR}/bad-c-libc-call.wasm"
+
+cat > "${TMP_DIR}/bad-c-host-type.c" <<'CAPP'
+extern i64 ui_emit(i64, i64) __import("edgerun.ui", "emit");
+memory(1);
+export i64 main(void) {
+  size_t value = 0;
+  return value;
+}
+CAPP
+
+expect_reject "host c type" \
+  "${TMP_DIR}/bad-c-host-type.c" \
+  "${TMP_DIR}/bad-c-host-type.wasm"
+
+cat > "${TMP_DIR}/bad-c-host-entrypoint.c" <<'CAPP'
+extern i64 ui_emit(i64, i64) __import("edgerun.ui", "emit");
+memory(1);
+export i64 main(int argc, char** argv) { return argc; }
+CAPP
+
+expect_reject "host c entrypoint" \
+  "${TMP_DIR}/bad-c-host-entrypoint.c" \
+  "${TMP_DIR}/bad-c-host-entrypoint.wasm"
 
 cat > "${TMP_DIR}/bad-c-unknown-local.c" <<'CAPP'
 extern i64 ui_emit(i64, i64) __import("edgerun.ui", "emit");
