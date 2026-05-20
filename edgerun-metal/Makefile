@@ -62,10 +62,10 @@ endif
 
 EFI_BOOT := $(ESP_DIR)/EFI/BOOT/$(ER_METAL_BOOT_EFI)
 CFLAGS := -std=c11 -Wall -Werror -ffreestanding -fshort-wchar -fno-builtin -fno-stack-protector -fuse-ld=lld -target $(ER_METAL_TARGET) $(ER_METAL_ARCH_CFLAGS) \
-          $(ER_METAL_BOARD_CFLAGS) -I$(CURDIR)/core -I$(CURDIR)/$(PI_ZERO_W_V1_1_DEVICE_DIR) -I$(CURDIR) -I$(CURDIR)/../include -I$(CURDIR)/$(GENERATED_DIR) -I$(CURDIR)/$(CRYPTO_DIR)/include -I$(CURDIR)/$(UI_CORE_DIR)/include -I$(CURDIR)/$(VARFONT_DIR)/include -DER_BOOT_PROFILE=$(ER_BOOT_PROFILE) -DER_BOOT_EPHEMERAL_AUTHORITY_ENABLED=$(ER_BOOT_EPHEMERAL_AUTHORITY_ENABLED)
+          $(ER_METAL_BOARD_CFLAGS) -I$(CURDIR)/core -I$(CURDIR) -I$(CURDIR)/../include -I$(CURDIR)/$(GENERATED_DIR) -I$(CURDIR)/$(CRYPTO_DIR)/include -I$(CURDIR)/$(UI_CORE_DIR)/include -I$(CURDIR)/$(VARFONT_DIR)/include -DER_BOOT_PROFILE=$(ER_BOOT_PROFILE) -DER_BOOT_EPHEMERAL_AUTHORITY_ENABLED=$(ER_BOOT_EPHEMERAL_AUTHORITY_ENABLED)
 CRYPTO_CFLAGS := $(CFLAGS) -O3 $(ER_METAL_CRYPTO_DEFS)
 LDFLAGS := -nostdlib -Wl,/SUBSYSTEM:EFI_APPLICATION,/ENTRY:efi_main
-HOST_CFLAGS := -std=c11 -Wall -Wextra -Werror -O2 -DER_ENABLE_TEST_HOOKS=1 -I$(CURDIR)/core -I$(CURDIR)/$(PI_ZERO_W_V1_1_DEVICE_DIR) -I$(CURDIR)/../include -I$(CURDIR)/$(GENERATED_DIR) -I$(CURDIR)/$(CRYPTO_DIR)/include -I$(CURDIR)/$(UI_CORE_DIR)/include -I$(CURDIR)/$(VARFONT_DIR)/include
+HOST_CFLAGS := -std=c11 -Wall -Wextra -Werror -O2 -DER_ENABLE_TEST_HOOKS=1 -I$(CURDIR)/core -I$(CURDIR)/../include -I$(CURDIR)/$(GENERATED_DIR) -I$(CURDIR)/$(CRYPTO_DIR)/include -I$(CURDIR)/$(UI_CORE_DIR)/include -I$(CURDIR)/$(VARFONT_DIR)/include
 HOST_LDFLAGS :=
 
 SRCS := core/efi_main.c core/efi_boot_memory.c core/efi_boot_diagnostics.c core/efi_boot_gpu.c core/efi_boot_routes.c core/efi_boot_wasm.c core/efi_boot_input.c core/efi_boot_render.c core/efi_boot_render_state.c core/efi_boot_relay.c core/efi_boot_os.c core/er_boot_admission_record.c core/er_boot_efi_vars.c core/er_boot_config.c core/er_boot_profile.c core/er_boot_services.c core/er_print.c core/er_gfx_console.c core/er_ui_gop_renderer.c core/er_ui_frame_timing.c core/er_ui_wasm_app.c core/er_epoch_clock.c core/er_ephemeral_node.c core/er_freestanding.c core/er_netlog.c core/er_crypto.c core/er_crypto_blake3.c core/er_mem.c core/er_vfs.c core/er_app.c core/er_identity.c core/er_node_control.c core/er_device_identity.c core/er_driver_event.c core/er_driver_policy.c core/er_jurisdiction.c core/er_work_route.c core/er_render_endpoint.c core/er_storage_endpoint.c core/er_seal.c core/er_tpm.c core/er_hw_relay.c core/er_relay_packet.c core/er_ble_adv.c core/er_wifi_burst.c core/er_wifi_l2.c core/er_ieee80211_ap.c core/er_cyw43438.c core/er_bcm2708_usb_boot.c core/er_network.c core/er_bus.c core/er_ps2_keyboard.c core/er_acpi.c core/erwire.c core/er_native_boot.c core/er_pi_zero2w.c core/wasm_vm.c core/wasm_vm_reader.c core/wasm_vm_memory_ui.c core/wasm_vm_contract.c core/wasm_vm_hostcall.c core/wasm_vm_execute.c core/er_pci.c core/er_rtw89.c core/er_mt7922.c core/er_iwlwifi.c core/er_firmware_loader.c core/er_mmio.c core/er_virtio.c core/er_virtio_blk.c core/er_virtio_net.c core/er_virtio_gpu.c core/er_net_frame.c core/er_native_eth.c
@@ -77,7 +77,7 @@ UI_OBJS := $(patsubst $(UI_CORE_DIR)/src/%.c,$(BUILD_DIR)/ui-core/%.o,$(UI_SRCS)
 VARFONT_OBJS := $(patsubst $(VARFONT_DIR)/src/%.c,$(BUILD_DIR)/edgerun-ui-core/varfont/%.o,$(VARFONT_SRCS))
 CRYPTO_OBJS := $(patsubst $(CRYPTO_DIR)/src/%.c,$(BUILD_DIR)/crypto/%.o,$(CRYPTO_SRCS))
 CRYPTO_ASM_OBJS := $(patsubst $(CRYPTO_DIR)/../third_party/blake3/c/%.S,$(BUILD_DIR)/crypto/%.o,$(CRYPTO_ASM_SRCS))
-HDRS := $(wildcard core/*.h) $(wildcard $(PI_ZERO_W_V1_1_DEVICE_DIR)/*.h)
+HDRS := $(wildcard core/*.h)
 UI_HDRS := $(wildcard $(UI_CORE_DIR)/include/*.h)
 VARFONT_HDRS := $(wildcard $(VARFONT_DIR)/include/*.h) $(wildcard $(VARFONT_DIR)/src/*.h)
 CRYPTO_HDRS := $(wildcard $(CRYPTO_DIR)/include/*.h)
@@ -291,7 +291,7 @@ $(PI_BOOT_STAGE_BIN): $(PI_BOOT_STAGE_SRC)
 	mkdir -p $(dir $@)
 	$(HOST_CC) $(HOST_CFLAGS) -DERPBS_PROJECT_ROOT=\"..\" $(HOST_LDFLAGS) -o $@ $<
 
-$(CORE_TEST_BIN): $(CORE_TEST_SRC) $(CORE_TEST_FRAGMENT_SRCS) $(HDRS) $(UI_HDRS) $(VARFONT_HDRS) $(CRYPTO_HDRS) $(WASM_MODULE_HEADERS) $(FONT_HEADER)
+$(CORE_TEST_BIN): $(CORE_TEST_SRC) $(CORE_TEST_FRAGMENT_SRCS) $(HDRS) $(PI_ZERO_W_V1_1_DEVICE_HDRS) $(UI_HDRS) $(VARFONT_HDRS) $(CRYPTO_HDRS) $(WASM_MODULE_HEADERS) $(FONT_HEADER)
 	mkdir -p $(dir $@)
 	$(HOST_CC) $(HOST_CFLAGS) $(HOST_LDFLAGS) -o $@ $(CORE_TEST_SRC)
 
