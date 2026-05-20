@@ -360,9 +360,6 @@ Use the current system toolchain:
 ```bash
 clang --version
 llvm-strip --version
-cmake --version
-ninja --version
-ctest --version
 ```
 
 The preferred local build tools are:
@@ -370,16 +367,15 @@ The preferred local build tools are:
 - `clang` and `lld` for `edgerun-metal`
 - `llvm-strip` for repository release-binary size inspection
 - repository-owned `tools/wasm-compile` for source-first metal Wasm module fixtures
-- `CMake` with `Ninja` for `edgerun-ui-core`, hosted demos, and hosted benchmarks
-- `ctest --output-on-failure` for tests
+- repository-owned `tools/er-build` for repository policy, package, crypto, varfont, and UI-core tests
 - `rg` for repository search
 
 The root Makefile uses explicit LLVM defaults and does not auto-detect host
 accelerators. UEFI/EFI links stay on LLVM `lld`; hosted binaries must remain
 outside runtime dependencies.
-The repository-owned `tools/er-build` runner is the migration path away from
-external build orchestration. The Makefile builds `.build/er-build` and delegates
-repository policy/tool targets and `crypto-test` to it.
+The repository-owned `tools/er-build` runner is the normal build orchestration
+path. The Makefile builds `.build/er-build` and delegates repository policy,
+tool, crypto, varfont, and UI-core test targets to it.
 
 ## Common Commands
 
@@ -389,8 +385,8 @@ Build the default freestanding metal image:
 make
 ```
 
-Hosted CMake builds are for development, testing, and benchmarking only. Runtime
-code stays freestanding and is pulled into the OS image directly.
+Runtime code stays freestanding and is pulled into the OS image directly. Normal
+repository checks do not use CMake, Ninja, or CTest.
 
 Run all local checks:
 
@@ -438,17 +434,7 @@ make crypto-test
 ```
 
 `crypto-test` is built and run directly by `.build/er-build`; it does not use
-CMake, Ninja, or CTest. CMake remains available for hosted crypto benchmarking:
-
-```bash
-make crypto-build
-```
-
-Run hosted BLAKE3 benchmarks against the repository implementation:
-
-```bash
-make crypto-bench
-```
+CMake, Ninja, or CTest.
 
 External upstream comparison fetches are not repository targets. Any benchmark
 source used by a maintained target must be vendored or implemented in-tree.
@@ -460,25 +446,16 @@ make varfont-test
 ```
 
 `varfont-test` is built and run directly by `.build/er-build`; it does not use
-CMake, Ninja, or CTest. CMake remains available for the hosted SDL demo:
-
-```bash
-make varfont-build
-```
+CMake, Ninja, or CTest.
 
 Build and test `edgerun-ui-core`:
 
 ```bash
-cmake -S edgerun-ui-core -B .build/edgerun-ui-core -G Ninja
-cmake --build .build/edgerun-ui-core
-ctest --test-dir .build/edgerun-ui-core --output-on-failure
-```
-
-The root Makefile wraps the same flow:
-
-```bash
 make ui-core-test
 ```
+
+`ui-core-test` is built and run directly by `.build/er-build`; it does not use
+CMake, Ninja, or CTest.
 
 Run the hosted `edgerun-ui-core/varfont` demo when SDL2 and the Geist font are available:
 

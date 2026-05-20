@@ -168,4 +168,29 @@ case "$varfont_plan" in
   * ) printf 'missing direct varfont test execution step\n' >&2; exit 1 ;;
 esac
 
+ui_core_plan=$("$ER_BUILD" --print-plan ui-core-test)
+
+case "$ui_core_plan" in
+  *"cmake"* | *"ninja"* | *"ctest"* )
+    printf 'ui-core-test plan still depends on external build orchestration\n' >&2
+    exit 1
+    ;;
+  * ) ;;
+esac
+
+case "$ui_core_plan" in
+  *"+ clang -std=c11 -Wall -Wextra -Werror -O2 -o .build/er-build-out/ui-core/er_ui_core_tests -ffreestanding -fno-builtin -fno-stack-protector -Iedgerun-ui-core/include -Iedgerun-ui-core/varfont/include -Iedgerun-ui-core/varfont/src -Iinclude -DER_UI_REPO_ROOT=\".\""* ) ;;
+  * ) printf 'missing direct ui-core test compile step\n' >&2; exit 1 ;;
+esac
+
+case "$ui_core_plan" in
+  *"edgerun-ui-core/tests/test_components.c"*"edgerun-ui-core/src/er_ui_components_emit.c"*"edgerun-ui-core/varfont/src/vr_font_atlas.c"*" -lm"* ) ;;
+  * ) printf 'missing ui-core test source set\n' >&2; exit 1 ;;
+esac
+
+case "$ui_core_plan" in
+  *"+ .build/er-build-out/ui-core/er_ui_core_tests"* ) ;;
+  * ) printf 'missing direct ui-core test execution step\n' >&2; exit 1 ;;
+esac
+
 printf 'er-build tests passed\n'
