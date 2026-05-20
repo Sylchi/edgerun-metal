@@ -47,6 +47,7 @@ enum {
   ERWIRE_FLAG_LAST = 0x0002u,
   ERWIRE_KIND_NODE_AVAILABLE = 37u,
   ERWIRE_KIND_NODE_HEARTBEAT = 38u,
+  ERWIRE_KIND_BLE_ADVERTISEMENT = 42u,
   NODE_AVAILABLE_BYTES = 189u,
   NODE_AVAILABLE_LOG_HEAD_OFFSET = 157u,
   ERWIRE_CRC32_INITIAL = 0xffffffffu,
@@ -132,6 +133,9 @@ int main(int argc, char** argv) {
   if (packet(ERWIRE_KIND_NODE_AVAILABLE, 0u, 1u) != 0) {
     return 1;
   }
+  if (packet(ERWIRE_KIND_BLE_ADVERTISEMENT, 1u, 7u) != 0) {
+    return 1;
+  }
   return packet(ERWIRE_KIND_NODE_HEARTBEAT, 1u, 5u);
 }
 EOF_C
@@ -144,6 +148,7 @@ cat >"$MANIFEST" <<'EOF_MANIFEST'
 board=pi-zero-w-v1_1
 serial_protocol=erwire
 erwire_expect=node_available
+erwire_expect=ble_advertisement
 erwire_expect_sdio_probe=l2_over_air_rx_unsupported
 erwire_expect=node_heartbeat
 EOF_MANIFEST
@@ -151,7 +156,7 @@ EOF_MANIFEST
 "$GEN_BIN" >"$SERIAL_LOG"
 "$TOOL_BIN" "$MANIFEST" "$SERIAL_LOG" >/tmp/pi-serial-verify-ok.out
 
-if ! grep -q "pi-serial-verify: 3 erwire expectations matched" \
+if ! grep -q "pi-serial-verify: 4 erwire expectations matched" \
   /tmp/pi-serial-verify-ok.out; then
   printf 'pi-serial-verify did not report matched erwire expectations\n' >&2
   exit 1

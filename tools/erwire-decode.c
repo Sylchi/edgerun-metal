@@ -28,6 +28,7 @@
 #define ERWIRE_KIND_NODE_AVAILABLE 37u
 #define ERWIRE_KIND_NODE_HEARTBEAT 38u
 #define ERWIRE_KIND_RELAY_ASSIGNMENT 39u
+#define ERWIRE_KIND_BLE_ADVERTISEMENT 42u
 #define ERWIRE_MAX_PAYLOAD 1024u
 #define ERWIRE_HASH_LEN 32u
 #define ERWIRE_STREAM_STATE_COUNT 16u
@@ -135,6 +136,8 @@ static const char* er_kind_name(uint16_t kind) {
       return "node_heartbeat";
     case ERWIRE_KIND_RELAY_ASSIGNMENT:
       return "relay_assignment";
+    case ERWIRE_KIND_BLE_ADVERTISEMENT:
+      return "ble_advertisement";
     default:
       return "unknown";
   }

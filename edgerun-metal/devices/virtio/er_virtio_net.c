@@ -96,6 +96,22 @@ static void er_virtio_net_reset_storage(void) {
   er_mem_zero((UINT8*)&g_tx_buffers, (UINTN)sizeof(g_tx_buffers));
 }
 
+static void er_virtio_net_repost_rx_descriptor(ErVirtioNet* net, UINT16 desc_id) {
+  if (net == 0 || desc_id >= net->queue_size) {
+    return;
+  }
+  (void)er_virtio_queue_post_descriptor(&g_rx_avail, net->queue_size, desc_id);
+  (void)er_virtio_mmio_notify_queue(&net->transport, ER_VIRTIO_NET_RX_QUEUE);
+}
+
+static UINT8 er_virtio_net_reject_rx_descriptor(ErVirtioNet* net, UINT16 desc_id) {
+  if (net != 0) {
+    ++net->stats.rx_invalid;
+    er_virtio_net_repost_rx_descriptor(net, desc_id);
+  }
+  return 0;
+}
+
 static void er_virtio_net_init_rx_queue(ErVirtioNet* net) {
   UINT16 i;
 
@@ -293,7 +309,6 @@ UINT8 er_virtio_net_send(ErVirtioNet* net, const UINT8* frame, UINT32 frame_len)
 UINT8 er_virtio_net_recv(ErVirtioNet* net, UINT8* out_frame, UINT32 out_capacity, UINT32* out_frame_len) {
   ErVirtioQueueUsedElem elem;
   UINT32 payload_len = 0;
-  UINT32 copy_len = 0;
   UINT16 desc_id;
 
   if (net == 0 || net->initialized == 0u || out_frame_len == 0) {
@@ -307,31 +322,23 @@ UINT8 er_virtio_net_recv(ErVirtioNet* net, UINT8* out_frame, UINT32 out_capacity
   if (elem.id >= net->queue_size || er_virtio_net_payload_len(elem.len, &payload_len) == 0u) {
     ++net->stats.rx_invalid;
     if (elem.id < net->queue_size) {
-      (void)er_virtio_queue_post_descriptor(&g_rx_avail, net->queue_size, (UINT16)elem.id);
-      (void)er_virtio_mmio_notify_queue(&net->transport, ER_VIRTIO_NET_RX_QUEUE);
+      er_virtio_net_repost_rx_descriptor(net, (UINT16)elem.id);
     }
     return 0;
   }
   desc_id = (UINT16)elem.id;
-  copy_len = payload_len;
-  if (copy_len > out_capacity) {
-    copy_len = out_capacity;
-  }
-  if (copy_len == 0u) {
+  if (payload_len == 0u) {
     ++net->stats.rx_empty;
-  } else {
-    if (out_frame == 0) {
-      ++net->stats.rx_invalid;
-      (void)er_virtio_queue_post_descriptor(&g_rx_avail, net->queue_size, desc_id);
-      (void)er_virtio_mmio_notify_queue(&net->transport, ER_VIRTIO_NET_RX_QUEUE);
-      return 0;
-    }
-    er_mem_copy(out_frame, &g_rx_buffers.bytes[desc_id][ER_VIRTIO_NET_HDR_LEN], (UINTN)copy_len);
-    ++net->stats.rx_received;
+    er_virtio_net_repost_rx_descriptor(net, desc_id);
+    return 1;
   }
-  *out_frame_len = copy_len;
-  (void)er_virtio_queue_post_descriptor(&g_rx_avail, net->queue_size, desc_id);
-  (void)er_virtio_mmio_notify_queue(&net->transport, ER_VIRTIO_NET_RX_QUEUE);
+  if (out_frame == 0 || payload_len > out_capacity) {
+    return er_virtio_net_reject_rx_descriptor(net, desc_id);
+  }
+  er_mem_copy(out_frame, &g_rx_buffers.bytes[desc_id][ER_VIRTIO_NET_HDR_LEN], (UINTN)payload_len);
+  ++net->stats.rx_received;
+  *out_frame_len = payload_len;
+  er_virtio_net_repost_rx_descriptor(net, desc_id);
   return 1;
 }
 

@@ -27,6 +27,7 @@ enum {
   ERPSV_ERWIRE_KIND_NODE_AVAILABLE = 37u,
   ERPSV_ERWIRE_KIND_NODE_HEARTBEAT = 38u,
   ERPSV_ERWIRE_KIND_RELAY_ASSIGNMENT = 39u,
+  ERPSV_ERWIRE_KIND_BLE_ADVERTISEMENT = 42u,
   ERPSV_NODE_AVAILABLE_BYTES = 189u,
   ERPSV_NODE_AVAILABLE_LOG_HEAD_OFFSET = 157u,
   ERPSV_HEADER_MAGIC_OFFSET = 0u,
@@ -177,6 +178,10 @@ static uint16_t erpsv_kind_from_name(const unsigned char* name,
       memcmp(name, "relay_assignment", name_len) == 0) {
     return ERPSV_ERWIRE_KIND_RELAY_ASSIGNMENT;
   }
+  if (name_len == strlen("ble_advertisement") &&
+      memcmp(name, "ble_advertisement", name_len) == 0) {
+    return ERPSV_ERWIRE_KIND_BLE_ADVERTISEMENT;
+  }
   return 0u;
 }
 
@@ -188,6 +193,8 @@ static const char* erpsv_kind_name(uint16_t kind) {
       return "node_heartbeat";
     case ERPSV_ERWIRE_KIND_RELAY_ASSIGNMENT:
       return "relay_assignment";
+    case ERPSV_ERWIRE_KIND_BLE_ADVERTISEMENT:
+      return "ble_advertisement";
     default:
       return "unknown";
   }

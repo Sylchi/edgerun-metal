@@ -140,10 +140,12 @@ static void test_pi_zero_w_v1_1_ota_receiver(void) {
                   test_pi_zero_w_v1_1_ota_write_block,
                   &sink),
               1);
-  check_uint64("pi zero w ota stored raw slot",
+  check_uint64("pi zero w ota committed raw slot",
                state.status,
-               ER_PI_ZERO_W_V1_1_OTA_STATUS_STORED_UNBOOTABLE);
-  check_uint64("pi zero w ota raw slot no reboot", state.reboot_required, 0u);
+               ER_PI_ZERO_W_V1_1_OTA_STATUS_COMMITTED);
+  check_uint64("pi zero w ota raw slot requests reboot",
+               state.reboot_required,
+               1u);
   check_uint64("pi zero w ota object length",
                state.object_len,
                PI_TEST_OTA_IMAGE_LEN);
