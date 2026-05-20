@@ -65,18 +65,33 @@ for expected in \
   fi
 done
 
-mkdir -p "${TREE}/.build/out" "${TREE}/target/debug"
+mkdir -p "${TREE}/.build/out" "${TREE}/target/debug" \
+  "${TREE}/.npm/_cacache/content" "${TREE}/.cargo/registry/src" \
+  "${TREE}/.cache/pip/http" "${TREE}/.gradle/caches/modules" \
+  "${TREE}/.m2/repository/group/artifact" "${TREE}/.venv/lib"
 printf 'object bytes\n' >"${TREE}/.build/out/app.o"
 printf 'rust bytes\n' >"${TREE}/target/debug/app"
 printf '[package]\nname = "cache-test"\n' >"${TREE}/Cargo.toml"
+printf 'npm cache\n' >"${TREE}/.npm/_cacache/content/blob"
+printf 'cargo cache\n' >"${TREE}/.cargo/registry/src/lib.rs"
+printf 'pip cache\n' >"${TREE}/.cache/pip/http/blob"
+printf 'gradle cache\n' >"${TREE}/.gradle/caches/modules/module"
+printf 'maven cache\n' >"${TREE}/.m2/repository/group/artifact/lib.jar"
+printf 'home = /usr/bin/python\n' >"${TREE}/.venv/pyvenv.cfg"
 
 "${TOOL_BIN}" --root "${TREE}" --top 8 --no-duplicates \
   --delete-caches --yes >/tmp/disk-analyzer-cache-delete.out
 
 for expected in \
   "cache-delete cache=node path=${TREE}/proj/node_modules" \
+  "cache-delete cache=node path=${TREE}/.npm/_cacache" \
   "cache-delete cache=c-build path=${TREE}/.build" \
   "cache-delete cache=rust path=${TREE}/target" \
+  "cache-delete cache=rust path=${TREE}/.cargo/registry" \
+  "cache-delete cache=python path=${TREE}/.cache/pip" \
+  "cache-delete cache=python path=${TREE}/.venv" \
+  "cache-delete cache=c-build path=${TREE}/.gradle/caches" \
+  "cache-delete cache=c-build path=${TREE}/.m2/repository" \
   "cache-delete-summary roots="; do
   if ! grep -q "${expected}" /tmp/disk-analyzer-cache-delete.out; then
     printf 'disk-analyzer missing cache deletion output: %s\n' "${expected}" >&2
@@ -84,7 +99,16 @@ for expected in \
   fi
 done
 
-for removed in "${TREE}/proj/node_modules" "${TREE}/.build" "${TREE}/target"; do
+for removed in \
+  "${TREE}/proj/node_modules" \
+  "${TREE}/.npm/_cacache" \
+  "${TREE}/.build" \
+  "${TREE}/target" \
+  "${TREE}/.cargo/registry" \
+  "${TREE}/.cache/pip" \
+  "${TREE}/.venv" \
+  "${TREE}/.gradle/caches" \
+  "${TREE}/.m2/repository"; do
   if [ -e "${removed}" ]; then
     printf 'disk-analyzer did not delete cache path: %s\n' "${removed}" >&2
     exit 1
