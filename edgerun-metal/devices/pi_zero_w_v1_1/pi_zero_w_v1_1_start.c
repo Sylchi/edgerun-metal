@@ -154,6 +154,8 @@
 #define ER_PI_ZERO_W_V1_1_L2_OWNED_FIRMWARE_LOADED 12u
 #define ER_PI_ZERO_W_V1_1_L2_CM3_ACTIVE 13u
 #define ER_PI_ZERO_W_V1_1_L2_D11_TX_FIFO_READY 14u
+#define ER_PI_ZERO_W_V1_1_L2_D11_TX_TEMPLATE_LOADED 15u
+#define ER_PI_ZERO_W_V1_1_L2_D11_TX_PIO_ATTEMPTED 16u
 
 volatile UINT32 g_er_pi_zero_w_v1_1_boot_magic =
     ER_PI_ZERO_W_V1_1_BOOT_MAGIC;
@@ -1385,6 +1387,61 @@ static UINT32 er_pi_zero_w_v1_1_cyw43438_d11_tx_fifo_probe(UINT32 d11_base,
   return 1u;
 }
 
+static UINT32 er_pi_zero_w_v1_1_cyw43438_d11_write_frame_words(
+    UINT32 address,
+    const UINT8* frame,
+    UINT32 frame_len) {
+  UINT32 offset;
+
+  if (frame == 0 || frame_len == 0u) {
+    return 0u;
+  }
+  for (offset = 0u; offset < frame_len; offset += (UINT32)sizeof(UINT32)) {
+    UINT8 word_bytes[4] = {0u, 0u, 0u, 0u};
+    UINT32 byte_index;
+
+    for (byte_index = 0u;
+         byte_index < (UINT32)sizeof(UINT32) && offset + byte_index < frame_len;
+         ++byte_index) {
+      word_bytes[byte_index] = frame[offset + byte_index];
+    }
+    if (er_pi_zero_w_v1_1_cyw43438_backplane_write32(
+            address,
+            er_pi_zero_w_v1_1_cyw43438_read_le32(word_bytes)) == 0u) {
+      return 0u;
+    }
+  }
+  return 1u;
+}
+
+static UINT32 er_pi_zero_w_v1_1_cyw43438_d11_stage_tx_frame(
+    UINT32 d11_base,
+    const UINT8* frame,
+    UINT32 frame_len) {
+  if (er_pi_zero_w_v1_1_cyw43438_backplane_write32(
+          d11_base + ER_CYW43438_D11_TPLATEWRPTR,
+          0u) == 0u ||
+      er_pi_zero_w_v1_1_cyw43438_d11_write_frame_words(
+          d11_base + ER_CYW43438_D11_TPLATEWRDATA,
+          frame,
+          frame_len) == 0u) {
+    return 0u;
+  }
+  g_er_pi_zero_w_v1_1_sdio_probe_state =
+      ER_PI_ZERO_W_V1_1_L2_D11_TX_TEMPLATE_LOADED;
+  g_er_pi_zero_w_v1_1_sdio_probe_response = frame_len;
+  if (er_pi_zero_w_v1_1_cyw43438_d11_write_frame_words(
+          d11_base + ER_CYW43438_D11_TX_BCMC_PIO_TX_DATA,
+          frame,
+          frame_len) == 0u) {
+    return 0u;
+  }
+  g_er_pi_zero_w_v1_1_sdio_probe_state =
+      ER_PI_ZERO_W_V1_1_L2_D11_TX_PIO_ATTEMPTED;
+  g_er_pi_zero_w_v1_1_sdio_probe_response = frame_len;
+  return 1u;
+}
+
 static UINT32 er_pi_zero_w_v1_1_cyw43438_start_owned_firmware(void) {
   UINT32 arm_base;
   UINT32 arm_wrap;
@@ -1456,6 +1513,11 @@ static UINT32 er_pi_zero_w_v1_1_cyw43438_start_owned_firmware(void) {
   g_er_pi_zero_w_v1_1_sdio_probe_state =
       ER_PI_ZERO_W_V1_1_L2_D11_TX_FIFO_READY;
   g_er_pi_zero_w_v1_1_sdio_probe_interrupt = (UINT32)d11_fifo_ready;
+  if (er_pi_zero_w_v1_1_cyw43438_d11_stage_tx_frame(d11_base,
+                                                    tx_beacon,
+                                                    tx_beacon_len) == 0u) {
+    return 0u;
+  }
   if (er_pi_zero_w_v1_1_cyw43438_backplane_write_bytes(
           ER_PI_ZERO_W_V1_1_CYW43438_RAM_BASE,
           ER_CYW43438_OWNED_FIRMWARE,
