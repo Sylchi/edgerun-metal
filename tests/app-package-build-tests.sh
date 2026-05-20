@@ -278,4 +278,26 @@ case "${plan}" in
   * ) printf 'missing app-build wasm compile step\n%s\n' "${plan}" >&2; exit 1 ;;
 esac
 
+check_plan=$("${ER_BUILD}" --print-plan app-check "${PACKAGE_DIR}")
+case "${check_plan}" in
+  *"+ .build/wasm-compile ${PACKAGE_DIR}/app.erc ${PACKAGE_DIR}/.build/app.wasm"* ) ;;
+  * ) printf 'missing app-check wasm compile step\n%s\n' "${check_plan}" >&2; exit 1 ;;
+esac
+case "${check_plan}" in
+  *"+ .build/app-run ${PACKAGE_DIR}/.build/app.wasm"* ) ;;
+  * ) printf 'missing app-check app-run step\n%s\n' "${check_plan}" >&2; exit 1 ;;
+esac
+
+driver_check_plan=$("${ER_BUILD}" --print-plan app-check "${DRIVER_PACKAGE_DIR}")
+case "${driver_check_plan}" in
+  *"+ .build/wasm-compile ${DRIVER_PACKAGE_DIR}/app.erc ${DRIVER_PACKAGE_DIR}/.build/app.wasm"* ) ;;
+  * ) printf 'missing driver app-check wasm compile step\n%s\n' "${driver_check_plan}" >&2; exit 1 ;;
+esac
+case "${driver_check_plan}" in
+  *"+ .build/app-run "* )
+    printf 'driver app-check plan included ui runner\n%s\n' "${driver_check_plan}" >&2
+    exit 1
+    ;;
+esac
+
 printf 'app-package build tests passed\n'
