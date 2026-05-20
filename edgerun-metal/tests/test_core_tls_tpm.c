@@ -331,6 +331,8 @@ static void test_tls_tpm_adapter(void) {
               er_tls_tpm_sha256(&tls_tpm, random, ER_TPM_SHA256_DIGEST_LEN, digest), 1);
   check_uint64("tls tpm hash command", script.last_command_code, ER_TPM_CC_HASH);
   check_uint64("tls tpm hash byte", digest[0], TEST_TLS_TPM_DIGEST_SEED);
+  check_int64("tls tpm hash command scrubbed",
+              er_mem_any_nonzero(tls_tpm.command, (UINTN)sizeof(tls_tpm.command)), 0);
 
   test_fill_bytes(key, (UINTN)sizeof(key), 0xc0u);
   check_int64("tls tpm load hmac",
@@ -343,6 +345,8 @@ static void test_tls_tpm_adapter(void) {
   check_int64("tls tpm hmac",
               er_tls_tpm_hmac_sha256(&tls_tpm, handle, random, ER_TPM_SHA256_DIGEST_LEN, digest), 1);
   check_uint64("tls tpm hmac command", script.last_command_code, ER_TPM_CC_HMAC);
+  check_int64("tls tpm hmac command scrubbed",
+              er_mem_any_nonzero(tls_tpm.command, (UINTN)sizeof(tls_tpm.command)), 0);
 
   check_int64("tls tpm load aes",
               er_tls_tpm_load_aes_key(&tls_tpm, key, ER_TPM_AES_128_KEY_LEN, ER_TPM_AES_128_KEY_BITS, &handle), 1);
@@ -366,6 +370,8 @@ static void test_tls_tpm_adapter(void) {
   check_uint64("tls tpm crypt byte", cipher[0], TEST_TLS_TPM_CIPHER_SEED);
   check_uint64("tls tpm crypt iv len", out_iv_len, ER_TPM_AES_BLOCK_LEN);
   check_uint64("tls tpm crypt iv byte", out_iv[0], TEST_TLS_TPM_IV_SEED);
+  check_int64("tls tpm crypt command scrubbed",
+              er_mem_any_nonzero(tls_tpm.command, (UINTN)sizeof(tls_tpm.command)), 0);
 
   check_int64("tls tpm create ecdh",
               er_tls_tpm_create_p256_ecdh_key(&tls_tpm, &primary), 1);
