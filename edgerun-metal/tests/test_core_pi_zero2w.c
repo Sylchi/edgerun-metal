@@ -588,29 +588,34 @@ static void test_pi_zero2w_bringup_boundary(void) {
                report.runtime_capabilities.local_storage_kind,
                ER_BOOT_LOCAL_STORAGE_KIND_SD_CARD);
   check_uint64("pi zero w uart tx shift",
-               er_pi_gpio_fsel_shift(ER_PI_GPIO_PIN_UART_TX),
+               er_pi_zero_w_v1_1_gpio_fsel_shift(
+                   ER_PI_ZERO_W_V1_1_GPIO_PIN_UART_TX),
                12u);
   check_uint64("pi zero w uart rx shift",
-               er_pi_gpio_fsel_shift(ER_PI_GPIO_PIN_UART_RX),
+               er_pi_zero_w_v1_1_gpio_fsel_shift(
+                   ER_PI_ZERO_W_V1_1_GPIO_PIN_UART_RX),
                15u);
   check_uint64("pi zero w uart alt5 fsel",
-               er_pi_gpio_fsel_alt(
-                   er_pi_gpio_fsel_alt(0u,
-                                       ER_PI_GPIO_PIN_UART_TX,
-                                       ER_PI_GPIO_ALT5),
-                   ER_PI_GPIO_PIN_UART_RX,
-                   ER_PI_GPIO_ALT5),
+               er_pi_zero_w_v1_1_gpio_fsel_alt(
+                   er_pi_zero_w_v1_1_gpio_fsel_alt(
+                       0u,
+                       ER_PI_ZERO_W_V1_1_GPIO_PIN_UART_TX,
+                       ER_PI_ZERO_W_V1_1_GPIO_ALT5),
+                   ER_PI_ZERO_W_V1_1_GPIO_PIN_UART_RX,
+                   ER_PI_ZERO_W_V1_1_GPIO_ALT5),
                PI_TEST_ZERO_W_UART_ALT5_FSEL1);
   check_uint64("pi zero w serial hex digit zero",
-               (UINT8)er_pi_serial_hex_digit(0u),
+               (UINT8)er_pi_zero_w_v1_1_serial_hex_digit(0u),
                (UINT8)'0');
   check_uint64("pi zero w serial hex digit nine",
-               (UINT8)er_pi_serial_hex_digit(9u),
+               (UINT8)er_pi_zero_w_v1_1_serial_hex_digit(9u),
                (UINT8)'9');
   check_uint64("pi zero w serial hex digit a",
-               (UINT8)er_pi_serial_hex_digit(PI_TEST_SERIAL_HEX_DIGIT_A),
+               (UINT8)er_pi_zero_w_v1_1_serial_hex_digit(
+                   PI_TEST_SERIAL_HEX_DIGIT_A),
                (UINT8)'a');
   check_uint64("pi zero w serial hex digit f",
-               (UINT8)er_pi_serial_hex_digit(PI_TEST_SERIAL_HEX_DIGIT_F),
+               (UINT8)er_pi_zero_w_v1_1_serial_hex_digit(
+                   PI_TEST_SERIAL_HEX_DIGIT_F),
                (UINT8)'f');
 }
