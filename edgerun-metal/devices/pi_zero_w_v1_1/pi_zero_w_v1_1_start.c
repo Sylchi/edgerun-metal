@@ -1,4 +1,5 @@
 #include "er_pi_zero_w_v1_1_uart.h"
+#include "er_cyw43438_owned_firmware.h"
 #include "er_types.h"
 
 /*
@@ -49,8 +50,6 @@
 #define ER_PI_ZERO_W_V1_1_L2_READY 7u
 #define ER_PI_ZERO_W_V1_1_L2_AP_ENABLE_FUNCTIONS_DONE 8u
 #define ER_PI_ZERO_W_V1_1_L2_AP_READY_FUNCTIONS_DONE 9u
-#define ER_PI_ZERO_W_V1_1_L2_AP_BEACON_DONE 10u
-#define ER_PI_ZERO_W_V1_1_L2_AP_PROBE_DONE 11u
 #define ER_PI_ZERO_W_V1_1_SDIO_PROBE_ERROR 0xffffffffu
 #define ER_PI_ZERO_W_V1_1_LED_STEP_DELAY_TICKS 250000u
 #define ER_PI_ZERO_W_V1_1_EMMC_RESET_POLL_BUDGET 100000u
@@ -60,30 +59,6 @@
 #define ER_PI_ZERO_W_V1_1_CYW43438_CCCR_IO_READY_ADDR 0x00000003u
 #define ER_PI_ZERO_W_V1_1_CYW43438_CCCR_ENABLE_FUNCTION_1 0x02u
 #define ER_PI_ZERO_W_V1_1_CYW43438_CCCR_ENABLE_FUNCTION_2 0x04u
-#define ER_PI_ZERO_W_V1_1_CYW43438_WLAN_AP_CONTROL_ADDR 0x00000001u
-#define ER_PI_ZERO_W_V1_1_CYW43438_WLAN_AP_CONTROL_ENABLE 0x01u
-#define ER_PI_ZERO_W_V1_1_CYW43438_WLAN_BEACON_TEMPLATE_ADDR 0x00001000u
-#define ER_PI_ZERO_W_V1_1_CYW43438_WLAN_PROBE_TEMPLATE_ADDR 0x00001100u
-#define ER_PI_ZERO_W_V1_1_IEEE80211_FRAME_MAX 128u
-#define ER_PI_ZERO_W_V1_1_IEEE80211_MANAGEMENT_HEADER_LEN 24u
-#define ER_PI_ZERO_W_V1_1_IEEE80211_BEACON_FIXED_LEN 12u
-#define ER_PI_ZERO_W_V1_1_IEEE80211_BROADCAST_OCTET 0xffu
-#define ER_PI_ZERO_W_V1_1_IEEE80211_BEACON_FRAME_CONTROL 0x0080u
-#define ER_PI_ZERO_W_V1_1_IEEE80211_PROBE_FRAME_CONTROL 0x0050u
-#define ER_PI_ZERO_W_V1_1_IEEE80211_CAPABILITY_ESS 0x0001u
-#define ER_PI_ZERO_W_V1_1_IEEE80211_CAPABILITY_SHORT_PREAMBLE 0x0020u
-#define ER_PI_ZERO_W_V1_1_IEEE80211_CAPABILITY_SHORT_SLOT 0x0400u
-#define ER_PI_ZERO_W_V1_1_IEEE80211_IE_HEADER_LEN 2u
-#define ER_PI_ZERO_W_V1_1_IEEE80211_IE_ID_SSID 0u
-#define ER_PI_ZERO_W_V1_1_IEEE80211_IE_ID_SUPPORTED_RATES 1u
-#define ER_PI_ZERO_W_V1_1_IEEE80211_IE_ID_DS_PARAMETER_SET 3u
-#define ER_PI_ZERO_W_V1_1_IEEE80211_SUPPORTED_RATE_COUNT 4u
-#define ER_PI_ZERO_W_V1_1_IEEE80211_RATE_1M_BASIC 0x82u
-#define ER_PI_ZERO_W_V1_1_IEEE80211_RATE_2M_BASIC 0x84u
-#define ER_PI_ZERO_W_V1_1_IEEE80211_RATE_5M5_BASIC 0x8bu
-#define ER_PI_ZERO_W_V1_1_IEEE80211_RATE_11M_BASIC 0x96u
-#define ER_PI_ZERO_W_V1_1_IEEE80211_BEACON_INTERVAL_TU 100u
-#define ER_PI_ZERO_W_V1_1_IEEE80211_SEQ_SHIFT 4u
 #define ER_PI_ZERO_W_V1_1_CYW43438_READY_POLL_BUDGET 10000u
 #define ER_PI_ZERO_W_V1_1_CYW43438_ALP_POLL_BUDGET 100000u
 #define ER_PI_ZERO_W_V1_1_CYW43438_RESET_POLL_BUDGET 1000u
@@ -102,9 +77,6 @@
 #define ER_PI_ZERO_W_V1_1_CYW43438_RAM_BASE 0x00000000u
 #define ER_PI_ZERO_W_V1_1_CYW43438_RAM_SIZE 0x00080000u
 #define ER_PI_ZERO_W_V1_1_CYW43438_RAM_CHUNK_BYTES 256u
-#define ER_PI_ZERO_W_V1_1_CYW43438_NVRAM_WORK_BYTES 2048u
-#define ER_PI_ZERO_W_V1_1_CYW43438_NVRAM_ALIGNMENT 4u
-#define ER_PI_ZERO_W_V1_1_CYW43438_NVRAM_TOKEN_SHIFT 16u
 #define ER_PI_ZERO_W_V1_1_CYW43438_CHIPCOMMON_BASE 0x18000000u
 #define ER_PI_ZERO_W_V1_1_CYW43438_CHIPCOMMON_EROMPTR 0x000000fcu
 #define ER_PI_ZERO_W_V1_1_CYW43438_CORE_ARM_CM3 0x082au
@@ -144,18 +116,8 @@
 #define ER_PI_ZERO_W_V1_1_CYW43438_DMP_SLAVE_SIZE_4K 0u
 #define ER_PI_ZERO_W_V1_1_CYW43438_DMP_SLAVE_SIZE_8K 1u
 #define ER_PI_ZERO_W_V1_1_CYW43438_DMP_SLAVE_SIZE_DESC 3u
-#define ER_PI_ZERO_W_V1_1_CYW43438_NVRAM_COMMENT '#'
-#define ER_PI_ZERO_W_V1_1_CYW43438_NVRAM_LINE_FEED 0x0au
-#define ER_PI_ZERO_W_V1_1_CYW43438_NVRAM_CARRIAGE_RETURN 0x0du
-#define ER_PI_ZERO_W_V1_1_CYW43438_NVRAM_SPACE 0x20u
-#define ER_PI_ZERO_W_V1_1_CYW43438_NVRAM_EQUALS '='
-#define ER_PI_ZERO_W_V1_1_L2_FIRMWARE_LOADED 12u
+#define ER_PI_ZERO_W_V1_1_L2_OWNED_FIRMWARE_LOADED 12u
 #define ER_PI_ZERO_W_V1_1_L2_CM3_ACTIVE 13u
-
-extern const UINT8 g_er_pi_zero_w_v1_1_cyw43438_ram_firmware_start[];
-extern const UINT8 g_er_pi_zero_w_v1_1_cyw43438_ram_firmware_end[];
-extern const UINT8 g_er_pi_zero_w_v1_1_cyw43438_nvram_start[];
-extern const UINT8 g_er_pi_zero_w_v1_1_cyw43438_nvram_end[];
 
 volatile UINT32 g_er_pi_zero_w_v1_1_boot_magic =
     ER_PI_ZERO_W_V1_1_BOOT_MAGIC;
@@ -164,8 +126,6 @@ volatile UINT32 g_er_pi_zero_w_v1_1_sdio_probe_state =
 volatile UINT32 g_er_pi_zero_w_v1_1_sdio_probe_interrupt = 0u;
 volatile UINT32 g_er_pi_zero_w_v1_1_sdio_probe_response = 0u;
 volatile UINT32 g_er_pi_zero_w_v1_1_sdio_relative_card_address = 0u;
-static UINT8 g_er_pi_zero_w_v1_1_cyw43438_nvram_work[
-    ER_PI_ZERO_W_V1_1_CYW43438_NVRAM_WORK_BYTES];
 
 static const UINT8 g_er_pi_zero_w_v1_1_node_id[ER_PI_ZERO_W_V1_1_NODE_BYTES] = {
   0x45u, 0x52u, 0x5au, 0x57u, 0x50u, 0x49u, 0x30u, 0x31u,
@@ -869,12 +829,6 @@ static UINT32 er_pi_zero_w_v1_1_emmc_sdio_read_bytes(UINT32 function,
   return 1u;
 }
 
-static UINT32 er_pi_zero_w_v1_1_cyw43438_firmware_size(
-    const UINT8* start,
-    const UINT8* end) {
-  return (UINT32)((UINTN)end - (UINTN)start);
-}
-
 static UINT32 er_pi_zero_w_v1_1_cyw43438_read_le32(const UINT8* bytes) {
   return ((UINT32)bytes[0]) |
          ((UINT32)bytes[1] << ER_PI_ZERO_W_V1_1_U16_HIGH_SHIFT) |
@@ -1314,98 +1268,17 @@ static UINT32 er_pi_zero_w_v1_1_cyw43438_set_passive(UINT32 arm_wrap,
   return er_pi_zero_w_v1_1_cyw43438_core_up(mem_wrap);
 }
 
-static UINT32 er_pi_zero_w_v1_1_cyw43438_nvram_is_line_byte(UINT8 byte) {
-  return (UINT32)(byte != ER_PI_ZERO_W_V1_1_CYW43438_NVRAM_LINE_FEED &&
-                  byte != ER_PI_ZERO_W_V1_1_CYW43438_NVRAM_CARRIAGE_RETURN);
-}
-
-static UINT32 er_pi_zero_w_v1_1_cyw43438_nvram_prepare(UINT32* out_len) {
-  const UINT8* src;
-  const UINT8* end;
-  UINT32 out;
-
-  if (out_len == 0) {
-    return 0u;
-  }
-  src = g_er_pi_zero_w_v1_1_cyw43438_nvram_start;
-  end = g_er_pi_zero_w_v1_1_cyw43438_nvram_end;
-  out = 0u;
-  while (src < end) {
-    UINT32 line_has_equals;
-    UINT32 line_start;
-
-    while (src < end &&
-           (*src == ER_PI_ZERO_W_V1_1_CYW43438_NVRAM_LINE_FEED ||
-            *src == ER_PI_ZERO_W_V1_1_CYW43438_NVRAM_CARRIAGE_RETURN ||
-            *src == ER_PI_ZERO_W_V1_1_CYW43438_NVRAM_SPACE)) {
-      ++src;
-    }
-    if (src >= end) {
-      break;
-    }
-    if (*src == (UINT8)ER_PI_ZERO_W_V1_1_CYW43438_NVRAM_COMMENT) {
-      while (src < end &&
-             er_pi_zero_w_v1_1_cyw43438_nvram_is_line_byte(*src) != 0u) {
-        ++src;
-      }
-      continue;
-    }
-    line_has_equals = 0u;
-    line_start = out;
-    while (src < end &&
-           er_pi_zero_w_v1_1_cyw43438_nvram_is_line_byte(*src) != 0u) {
-      UINT8 byte;
-
-      byte = *src++;
-      if (byte == (UINT8)ER_PI_ZERO_W_V1_1_CYW43438_NVRAM_EQUALS) {
-        line_has_equals = 1u;
-      }
-      if (byte != ER_PI_ZERO_W_V1_1_CYW43438_NVRAM_SPACE) {
-        if (out + 1u >= ER_PI_ZERO_W_V1_1_CYW43438_NVRAM_WORK_BYTES) {
-          return 0u;
-        }
-        g_er_pi_zero_w_v1_1_cyw43438_nvram_work[out++] = byte;
-      }
-    }
-    if (line_has_equals == 0u || line_start == out) {
-      out = line_start;
-    } else {
-      g_er_pi_zero_w_v1_1_cyw43438_nvram_work[out++] = 0u;
-    }
-  }
-  if (out == 0u || out + sizeof(UINT32) >= ER_PI_ZERO_W_V1_1_CYW43438_NVRAM_WORK_BYTES) {
-    return 0u;
-  }
-  g_er_pi_zero_w_v1_1_cyw43438_nvram_work[out++] = 0u;
-  while ((out & (ER_PI_ZERO_W_V1_1_CYW43438_NVRAM_ALIGNMENT - 1u)) != 0u) {
-    g_er_pi_zero_w_v1_1_cyw43438_nvram_work[out++] = 0u;
-  }
-  er_pi_zero_w_v1_1_cyw43438_put_le32(
-      g_er_pi_zero_w_v1_1_cyw43438_nvram_work + out,
-      ((~(out / ER_PI_ZERO_W_V1_1_CYW43438_NVRAM_ALIGNMENT)) <<
-       ER_PI_ZERO_W_V1_1_CYW43438_NVRAM_TOKEN_SHIFT) |
-      ((out / ER_PI_ZERO_W_V1_1_CYW43438_NVRAM_ALIGNMENT) &
-       0x0000ffffu));
-  out += (UINT32)sizeof(UINT32);
-  *out_len = out;
-  return 1u;
-}
-
-static UINT32 er_pi_zero_w_v1_1_cyw43438_load_firmware(void) {
-  UINT32 ram_size;
-  UINT32 nvram_size;
+static UINT32 er_pi_zero_w_v1_1_cyw43438_start_owned_firmware(void) {
   UINT32 arm_base;
   UINT32 arm_wrap;
   UINT32 mem_base;
   UINT32 mem_wrap;
   UINT32 d11_base;
   UINT32 d11_wrap;
+  UINT32 mailbox;
 
-  ram_size = er_pi_zero_w_v1_1_cyw43438_firmware_size(
-      g_er_pi_zero_w_v1_1_cyw43438_ram_firmware_start,
-      g_er_pi_zero_w_v1_1_cyw43438_ram_firmware_end);
-  if (ram_size == 0u ||
-      ram_size >= ER_PI_ZERO_W_V1_1_CYW43438_RAM_SIZE ||
+  if (sizeof(ER_CYW43438_OWNED_FIRMWARE) >=
+          ER_PI_ZERO_W_V1_1_CYW43438_RAM_SIZE ||
       er_pi_zero_w_v1_1_cyw43438_buscoreprep() == 0u ||
       er_pi_zero_w_v1_1_cyw43438_find_core(
           ER_PI_ZERO_W_V1_1_CYW43438_CORE_ARM_CM3,
@@ -1422,9 +1295,7 @@ static UINT32 er_pi_zero_w_v1_1_cyw43438_load_firmware(void) {
       er_pi_zero_w_v1_1_cyw43438_set_passive(arm_wrap,
                                              mem_base,
                                              mem_wrap,
-                                             d11_wrap) == 0u ||
-      er_pi_zero_w_v1_1_cyw43438_nvram_prepare(&nvram_size) == 0u ||
-      nvram_size >= ER_PI_ZERO_W_V1_1_CYW43438_RAM_SIZE - ram_size) {
+                                             d11_wrap) == 0u) {
     return 0u;
   }
   (void)arm_base;
@@ -1432,24 +1303,29 @@ static UINT32 er_pi_zero_w_v1_1_cyw43438_load_firmware(void) {
   (void)mem_base;
   if (er_pi_zero_w_v1_1_cyw43438_backplane_write_bytes(
           ER_PI_ZERO_W_V1_1_CYW43438_RAM_BASE,
-          g_er_pi_zero_w_v1_1_cyw43438_ram_firmware_start,
-          ram_size) == 0u ||
-      er_pi_zero_w_v1_1_cyw43438_backplane_write_bytes(
-          ER_PI_ZERO_W_V1_1_CYW43438_RAM_BASE +
-          ER_PI_ZERO_W_V1_1_CYW43438_RAM_SIZE - nvram_size,
-          g_er_pi_zero_w_v1_1_cyw43438_nvram_work,
-          nvram_size) == 0u ||
+          ER_CYW43438_OWNED_FIRMWARE,
+          (UINT32)sizeof(ER_CYW43438_OWNED_FIRMWARE)) == 0u ||
+      er_pi_zero_w_v1_1_cyw43438_backplane_write32(
+          ER_CYW43438_OWNED_FIRMWARE_MAILBOX_ADDR,
+          0u) == 0u ||
       er_pi_zero_w_v1_1_cyw43438_backplane_write32(
           ER_PI_ZERO_W_V1_1_CYW43438_RAM_BASE,
-          er_pi_zero_w_v1_1_cyw43438_read_le32(
-              g_er_pi_zero_w_v1_1_cyw43438_ram_firmware_start)) == 0u) {
+          ER_CYW43438_OWNED_FIRMWARE_RESET_VECTOR) == 0u) {
     return 0u;
   }
   g_er_pi_zero_w_v1_1_sdio_probe_state =
-      ER_PI_ZERO_W_V1_1_L2_FIRMWARE_LOADED;
+      ER_PI_ZERO_W_V1_1_L2_OWNED_FIRMWARE_LOADED;
   if (er_pi_zero_w_v1_1_cyw43438_reset_core(arm_wrap, 0u, 0u, 0u) == 0u) {
     return 0u;
   }
+  er_pi_zero_w_v1_1_delay(ER_PI_ZERO_W_V1_1_WIFI_POWER_DELAY_TICKS);
+  if (er_pi_zero_w_v1_1_cyw43438_backplane_read32(
+          ER_CYW43438_OWNED_FIRMWARE_MAILBOX_ADDR,
+          &mailbox) == 0u ||
+      mailbox != ER_CYW43438_OWNED_FIRMWARE_MAILBOX_MAGIC) {
+    return 0u;
+  }
+  g_er_pi_zero_w_v1_1_sdio_probe_response = mailbox;
   g_er_pi_zero_w_v1_1_sdio_probe_state =
       ER_PI_ZERO_W_V1_1_L2_CM3_ACTIVE;
   return 1u;
@@ -1605,14 +1481,6 @@ static void er_pi_zero_w_v1_1_fill_zero(UINT8* bytes, UINT32 len) {
   }
 }
 
-static void er_pi_zero_w_v1_1_fill_broadcast(UINT8* bytes, UINT32 len) {
-  UINT32 i;
-
-  for (i = 0u; i < len; ++i) {
-    bytes[i] = ER_PI_ZERO_W_V1_1_IEEE80211_BROADCAST_OCTET;
-  }
-}
-
 static UINT32 er_pi_zero_w_v1_1_wifi_address(
     UINT8 out_address[ER_PI_ZERO_W_V1_1_L2_ADDRESS_BYTES]) {
   return er_pi_zero_w_v1_1_l2_address(g_er_pi_zero_w_v1_1_node_id,
@@ -1620,135 +1488,8 @@ static UINT32 er_pi_zero_w_v1_1_wifi_address(
                                       out_address);
 }
 
-static void er_pi_zero_w_v1_1_ap_rates(UINT8** cursor) {
-  (*cursor)[0] = ER_PI_ZERO_W_V1_1_IEEE80211_RATE_1M_BASIC;
-  (*cursor)[1] = ER_PI_ZERO_W_V1_1_IEEE80211_RATE_2M_BASIC;
-  (*cursor)[2] = ER_PI_ZERO_W_V1_1_IEEE80211_RATE_5M5_BASIC;
-  (*cursor)[3] = ER_PI_ZERO_W_V1_1_IEEE80211_RATE_11M_BASIC;
-  *cursor += ER_PI_ZERO_W_V1_1_IEEE80211_SUPPORTED_RATE_COUNT;
-}
-
-static UINT32 er_pi_zero_w_v1_1_build_ap_frame(
-    UINT16 frame_control,
-    const UINT8 receiver[ER_PI_ZERO_W_V1_1_L2_MAC_BYTES],
-    const UINT8 bssid[ER_PI_ZERO_W_V1_1_L2_MAC_BYTES],
-    const UINT8 ssid[ER_PI_ZERO_W_V1_1_L2_SSID_BYTES],
-    UINT8* out_frame,
-    UINT32 out_capacity) {
-  UINT8* cursor;
-  UINT16 capabilities;
-
-  if (receiver == 0 ||
-      bssid == 0 ||
-      ssid == 0 ||
-      out_frame == 0 ||
-      out_capacity < ER_PI_ZERO_W_V1_1_IEEE80211_FRAME_MAX) {
-    return 0u;
-  }
-  er_pi_zero_w_v1_1_fill_zero(out_frame, out_capacity);
-  cursor = out_frame;
-  er_pi_zero_w_v1_1_put_u16(&cursor, frame_control);
-  er_pi_zero_w_v1_1_put_u16(&cursor, 0u);
-  er_pi_zero_w_v1_1_put_bytes(&cursor, receiver, ER_PI_ZERO_W_V1_1_L2_MAC_BYTES);
-  er_pi_zero_w_v1_1_put_bytes(&cursor, bssid, ER_PI_ZERO_W_V1_1_L2_MAC_BYTES);
-  er_pi_zero_w_v1_1_put_bytes(&cursor, bssid, ER_PI_ZERO_W_V1_1_L2_MAC_BYTES);
-  er_pi_zero_w_v1_1_put_u16(&cursor,
-                            (UINT16)(frame_control <<
-                                     ER_PI_ZERO_W_V1_1_IEEE80211_SEQ_SHIFT));
-  er_pi_zero_w_v1_1_put_u64(&cursor, 0u);
-  er_pi_zero_w_v1_1_put_u16(&cursor,
-                            ER_PI_ZERO_W_V1_1_IEEE80211_BEACON_INTERVAL_TU);
-  capabilities = ER_PI_ZERO_W_V1_1_IEEE80211_CAPABILITY_ESS |
-                 ER_PI_ZERO_W_V1_1_IEEE80211_CAPABILITY_SHORT_PREAMBLE |
-                 ER_PI_ZERO_W_V1_1_IEEE80211_CAPABILITY_SHORT_SLOT;
-  er_pi_zero_w_v1_1_put_u16(&cursor, capabilities);
-  *cursor++ = ER_PI_ZERO_W_V1_1_IEEE80211_IE_ID_SSID;
-  *cursor++ = ER_PI_ZERO_W_V1_1_L2_SSID_BYTES;
-  er_pi_zero_w_v1_1_put_bytes(&cursor, ssid, ER_PI_ZERO_W_V1_1_L2_SSID_BYTES);
-  *cursor++ = ER_PI_ZERO_W_V1_1_IEEE80211_IE_ID_SUPPORTED_RATES;
-  *cursor++ = ER_PI_ZERO_W_V1_1_IEEE80211_SUPPORTED_RATE_COUNT;
-  er_pi_zero_w_v1_1_ap_rates(&cursor);
-  *cursor++ = ER_PI_ZERO_W_V1_1_IEEE80211_IE_ID_DS_PARAMETER_SET;
-  *cursor++ = 1u;
-  *cursor++ = ER_PI_ZERO_W_V1_1_L2_WIFI_CHANNEL;
-  return (UINT32)(cursor - out_frame);
-}
-
 static UINT32 er_pi_zero_w_v1_1_cyw43438_enable_open_l2_ap(void) {
-  UINT8 wifi_address[ER_PI_ZERO_W_V1_1_L2_ADDRESS_BYTES];
-  UINT8 beacon[ER_PI_ZERO_W_V1_1_IEEE80211_FRAME_MAX];
-  UINT8 probe[ER_PI_ZERO_W_V1_1_IEEE80211_FRAME_MAX];
-  UINT8 receiver[ER_PI_ZERO_W_V1_1_L2_MAC_BYTES];
-  UINT8 ready;
-  UINT32 poll;
-  UINT32 functions;
-  UINT32 beacon_len;
-  UINT32 probe_len;
-
-  if (er_pi_zero_w_v1_1_wifi_address(wifi_address) == 0u) {
-    return 0u;
-  }
-  er_pi_zero_w_v1_1_fill_broadcast(receiver, ER_PI_ZERO_W_V1_1_L2_MAC_BYTES);
-  beacon_len = er_pi_zero_w_v1_1_build_ap_frame(
-      ER_PI_ZERO_W_V1_1_IEEE80211_BEACON_FRAME_CONTROL,
-      receiver,
-      wifi_address + ER_PI_ZERO_W_V1_1_L2_ADDRESS_MAC_OFFSET,
-      wifi_address + ER_PI_ZERO_W_V1_1_L2_ADDRESS_SSID_OFFSET,
-      beacon,
-      ER_PI_ZERO_W_V1_1_IEEE80211_FRAME_MAX);
-  probe_len = er_pi_zero_w_v1_1_build_ap_frame(
-      ER_PI_ZERO_W_V1_1_IEEE80211_PROBE_FRAME_CONTROL,
-      receiver,
-      wifi_address + ER_PI_ZERO_W_V1_1_L2_ADDRESS_MAC_OFFSET,
-      wifi_address + ER_PI_ZERO_W_V1_1_L2_ADDRESS_SSID_OFFSET,
-      probe,
-      ER_PI_ZERO_W_V1_1_IEEE80211_FRAME_MAX);
-  functions = ER_PI_ZERO_W_V1_1_CYW43438_CCCR_ENABLE_FUNCTION_1 |
-              ER_PI_ZERO_W_V1_1_CYW43438_CCCR_ENABLE_FUNCTION_2;
-  if (beacon_len == 0u ||
-      probe_len == 0u ||
-      er_pi_zero_w_v1_1_cyw43438_load_firmware() == 0u ||
-      er_pi_zero_w_v1_1_emmc_sdio_write_byte(
-          ER_PI_ZERO_W_V1_1_SDIO_FUNCTION_CCCR,
-          ER_PI_ZERO_W_V1_1_CYW43438_CCCR_IO_ENABLE_ADDR,
-          (UINT8)functions) == 0u) {
-    return 0u;
-  }
-  g_er_pi_zero_w_v1_1_sdio_probe_state =
-      ER_PI_ZERO_W_V1_1_L2_AP_ENABLE_FUNCTIONS_DONE;
-  for (poll = 0u; poll < ER_PI_ZERO_W_V1_1_CYW43438_READY_POLL_BUDGET; ++poll) {
-    if (er_pi_zero_w_v1_1_emmc_sdio_read_direct(
-            ER_PI_ZERO_W_V1_1_SDIO_FUNCTION_CCCR,
-            ER_PI_ZERO_W_V1_1_CYW43438_CCCR_IO_READY_ADDR,
-            &ready) != 0u &&
-        (((UINT32)ready & functions) == functions)) {
-      g_er_pi_zero_w_v1_1_sdio_probe_state =
-          ER_PI_ZERO_W_V1_1_L2_AP_READY_FUNCTIONS_DONE;
-      if (er_pi_zero_w_v1_1_emmc_sdio_write_bytes(
-              ER_PI_ZERO_W_V1_1_SDIO_FUNCTION_WLAN,
-              ER_PI_ZERO_W_V1_1_CYW43438_WLAN_BEACON_TEMPLATE_ADDR,
-              beacon,
-              beacon_len) == 0u) {
-        return 0u;
-      }
-      g_er_pi_zero_w_v1_1_sdio_probe_state =
-          ER_PI_ZERO_W_V1_1_L2_AP_BEACON_DONE;
-      if (er_pi_zero_w_v1_1_emmc_sdio_write_bytes(
-              ER_PI_ZERO_W_V1_1_SDIO_FUNCTION_WLAN,
-              ER_PI_ZERO_W_V1_1_CYW43438_WLAN_PROBE_TEMPLATE_ADDR,
-              probe,
-              probe_len) == 0u) {
-        return 0u;
-      }
-      g_er_pi_zero_w_v1_1_sdio_probe_state =
-          ER_PI_ZERO_W_V1_1_L2_AP_PROBE_DONE;
-      return er_pi_zero_w_v1_1_emmc_sdio_write_byte(
-          ER_PI_ZERO_W_V1_1_SDIO_FUNCTION_WLAN,
-          ER_PI_ZERO_W_V1_1_CYW43438_WLAN_AP_CONTROL_ADDR,
-          ER_PI_ZERO_W_V1_1_CYW43438_WLAN_AP_CONTROL_ENABLE);
-    }
-  }
-  return 0u;
+  return er_pi_zero_w_v1_1_cyw43438_start_owned_firmware();
 }
 
 static UINT32 er_pi_zero_w_v1_1_crc32(const UINT8* bytes, UINT32 len) {
