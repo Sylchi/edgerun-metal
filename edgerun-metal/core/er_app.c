@@ -1032,6 +1032,33 @@ UINT8 er_app_load_package_from_storage_source(const ErCryptoProvider* crypto,
                                      out_loaded);
 }
 
+UINT8 er_app_load_package_from_install_record(
+    const ErCryptoProvider* crypto,
+    const ErAppPackageInstallRecord* record,
+    const ErAppPackageStorageObject* app_object,
+    const ErAppPackageStorageObject* manifest_object,
+    const ErAppPackageStorageObject* ui_assets_object,
+    ErAppLoadedPackage* out_loaded) {
+  const ErAppPackageIndexEntry* entry;
+
+  if (crypto == 0 ||
+      record == 0 ||
+      er_app_package_install_record_loadable(crypto, record) == 0u) {
+    return 0u;
+  }
+  entry = &record->current_entry.index_entry;
+  if (er_app_package_index_entry_valid(crypto, entry) == 0u) {
+    return 0u;
+  }
+  return er_app_load_package_from_storage_source(crypto,
+                                                 &entry->package,
+                                                 &entry->storage_source,
+                                                 app_object,
+                                                 manifest_object,
+                                                 ui_assets_object,
+                                                 out_loaded);
+}
+
 UINT8 er_app_derive_identity_from_package(const ErCryptoProvider* crypto,
                                           const ErAppPackageManifest* package,
                                           const ErHash* admission_id,

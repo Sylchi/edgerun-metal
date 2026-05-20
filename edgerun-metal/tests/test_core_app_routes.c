@@ -1470,6 +1470,25 @@ static void test_app_identity_routes(void) {
                    &loaded_package.package_id, &package.package_id);
   check_uint64("app package storage load app len", loaded_package.app_len,
                sizeof(app_bytes));
+  check_int64("app package install record storage load",
+              er_app_load_package_from_install_record(&crypto,
+                                                      &install_record,
+                                                      &app_storage_object,
+                                                      &manifest_storage_object,
+                                                      &ui_assets_storage_object,
+                                                      &loaded_package),
+              1);
+  check_hash_equal("app package install record load package",
+                   &loaded_package.package_id,
+                   &package.package_id);
+  check_int64("app removed install record refuses load",
+              er_app_load_package_from_install_record(&crypto,
+                                                      &removed_record,
+                                                      &app_storage_object,
+                                                      &manifest_storage_object,
+                                                      &ui_assets_storage_object,
+                                                      &loaded_package),
+              0);
   bad_storage_object = app_storage_object;
   bad_storage_object.retrieve_route_id = manifest_storage_object.retrieve_route_id;
   check_int64("app package storage load reject route mismatch",
