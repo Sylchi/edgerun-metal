@@ -1,4 +1,4 @@
-.PHONY: all run run-aarch64 qemu-aarch64-smoke qemu-ephemeral-authority qemu-ephemeral-authority-smoke qemu-swtpm-persistence clean print-path print-config netboot os rebuild-image check test-core bench-ui-dirty bench-tls-tpm wifi-hardware-probe wasm-modules qemu-config-check qemu-aarch64-config-check qemu-swtpm-persistence-config-check pi-zero-2w-uefi pi-zero-2w-boot pi-zero-w-v1_1-kernel pi-zero-w-v1_1-boot
+.PHONY: all run run-aarch64 qemu-aarch64-smoke qemu-ephemeral-authority qemu-ephemeral-authority-smoke qemu-swtpm-persistence clean print-path print-config netboot os rebuild-image check test-core bench-ui-dirty wifi-hardware-probe wasm-modules qemu-config-check qemu-aarch64-config-check qemu-swtpm-persistence-config-check pi-zero-2w-uefi pi-zero-2w-boot pi-zero-w-v1_1-kernel pi-zero-w-v1_1-boot
 
 CC := clang
 HOST_CC := clang
@@ -164,8 +164,6 @@ CORE_TEST_FRAGMENT_SRCS := $(wildcard tests/test_core_*.c)
 CORE_TEST_BIN := $(BUILD_DIR)/test-core
 UI_DIRTY_BENCH_SRC := tools/bench_ui_dirty.c core/efi_boot_render_state.c core/er_mem.c core/er_ui_gop_renderer.c core/er_epoch_clock.c $(UI_CORE_DIR)/src/er_ui_icon.c $(UI_CORE_DIR)/src/er_ui_primitives.c $(UI_CORE_DIR)/src/er_ui_scene.c $(UI_CORE_DIR)/src/er_ui_text.c $(VARFONT_SRCS)
 UI_DIRTY_BENCH_BIN := $(BUILD_DIR)/bench-ui-dirty
-TLS_TPM_BENCH_SRC := tools/bench_tls_tpm.c $(ER_TPM_SRCS) core/er_mem.c
-TLS_TPM_BENCH_BIN := $(BUILD_DIR)/bench-tls-tpm
 IFACE :=
 
 all: wasm-modules $(FONT_HEADER) $(FONT_BAKED_HEADER) $(EFI_OUT) $(EFI_BOOT)
@@ -186,9 +184,6 @@ test-core: $(CORE_TEST_BIN)
 
 bench-ui-dirty: $(UI_DIRTY_BENCH_BIN)
 	./$(UI_DIRTY_BENCH_BIN)
-
-bench-tls-tpm: $(TLS_TPM_BENCH_BIN)
-	./$(TLS_TPM_BENCH_BIN)
 
 wifi-hardware-probe: $(WIFI_HW_PROBE_BIN)
 	./$(WIFI_HW_PROBE_BIN)
@@ -328,10 +323,6 @@ $(CORE_TEST_BIN): $(CORE_TEST_SRC) $(CORE_TEST_FRAGMENT_SRCS) $(HDRS) $(PI_ZERO_
 $(UI_DIRTY_BENCH_BIN): $(UI_DIRTY_BENCH_SRC) $(HDRS) $(UI_HDRS) $(VARFONT_HDRS) $(WASM_MODULE_HEADERS) $(FONT_HEADER)
 	mkdir -p $(dir $@)
 	$(HOST_CC) $(HOST_CFLAGS) $(HOST_LDFLAGS) -o $@ $(UI_DIRTY_BENCH_SRC)
-
-$(TLS_TPM_BENCH_BIN): $(TLS_TPM_BENCH_SRC) $(HDRS)
-	mkdir -p $(dir $@)
-	$(HOST_CC) $(HOST_CFLAGS) $(HOST_LDFLAGS) -o $@ $(TLS_TPM_BENCH_SRC)
 
 $(EFI_BOOT): $(EFI_OUT)
 	mkdir -p $(dir $@)
