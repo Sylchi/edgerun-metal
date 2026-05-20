@@ -18,10 +18,26 @@ case "$repo_plan" in
 esac
 
 repo_inspect_plan=$("$ER_BUILD" --print-plan repo-inspect codex)
+swarm_plan=$("$ER_BUILD" --print-plan repo-agent-swarm --scope codex --concurrency 50)
 
 case "$repo_inspect_plan" in
   *"+ .build/er-build repo-inspect codex"* ) ;;
   * ) printf 'missing in-process repo-inspect plan\n' >&2; exit 1 ;;
+esac
+
+case "$swarm_plan" in
+  *"+ make codex-build"* ) ;;
+  * ) printf 'missing swarm codex build step\n' >&2; exit 1 ;;
+esac
+
+case "$swarm_plan" in
+  *"+ .build/er-build repo-inspect --details codex > .build/repo-agent-swarm/issues.txt"* ) ;;
+  * ) printf 'missing swarm repo-inspect queue step\n' >&2; exit 1 ;;
+esac
+
+case "$swarm_plan" in
+  *"+ .build/codex --root . --prompt <one generated prompt per repo-inspect issue, 50 concurrent>"* ) ;;
+  * ) printf 'missing swarm bounded worker step\n' >&2; exit 1 ;;
 esac
 
 case "$repo_plan" in
