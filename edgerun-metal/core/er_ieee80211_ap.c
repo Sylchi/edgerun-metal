@@ -30,6 +30,7 @@ enum {
   ER_IEEE80211_MIN_CHANNEL = 1u,
   ER_IEEE80211_MAX_CHANNEL = 14u,
   ER_IEEE80211_BYTE_SHIFT = 8u,
+  ER_IEEE80211_BYTE_MASK = 0xffu,
   ER_IEEE80211_BROADCAST_OCTET = 0xffu,
   ER_IEEE80211_RATE_1M_BASIC = 0x82u,
   ER_IEEE80211_RATE_2M_BASIC = 0x84u,
@@ -58,8 +59,9 @@ static UINT8 er_ieee80211_channel_valid(UINT8 channel) {
 }
 
 static void er_ieee80211_put_le16(UINT8* dst, UINT16 value) {
-  dst[0] = (UINT8)(value & 0xffu);
-  dst[1] = (UINT8)((value >> ER_IEEE80211_BYTE_SHIFT) & 0xffu);
+  dst[0] = (UINT8)(value & ER_IEEE80211_BYTE_MASK);
+  dst[1] = (UINT8)((value >> ER_IEEE80211_BYTE_SHIFT) &
+                   ER_IEEE80211_BYTE_MASK);
 }
 
 static UINT16 er_ieee80211_get_le16(const UINT8* src) {
@@ -204,6 +206,29 @@ UINT8 er_ieee80211_open_ap_config_from_l2_plan(
   return 1u;
 }
 
+static UINT8 er_ieee80211_open_ap_build_management_frame(
+    const ErIeee80211OpenApConfig* config,
+    UINT8 subtype,
+    const UINT8 receiver[ER_NET_MAC_LEN],
+    UINT16 sequence,
+    UINT8* out_frame,
+    UINT32 out_capacity,
+    UINT32* out_frame_len) {
+  if (er_ieee80211_write_management_header(subtype,
+                                           receiver,
+                                           config->bssid,
+                                           config->bssid,
+                                           sequence,
+                                           out_frame,
+                                           out_capacity) == 0u) {
+    return 0u;
+  }
+  return er_ieee80211_write_open_ap_body(config,
+                                         out_frame,
+                                         out_capacity,
+                                         out_frame_len);
+}
+
 UINT8 er_ieee80211_open_ap_build_beacon(
     const ErIeee80211OpenApConfig* config,
     UINT16 sequence,
@@ -216,20 +241,14 @@ UINT8 er_ieee80211_open_ap_build_beacon(
       out_capacity < er_ieee80211_open_ap_frame_len(config->ssid_len)) {
     return 0u;
   }
-  if (er_ieee80211_write_management_header(
-          ER_IEEE80211_SUBTYPE_BEACON,
-          er_ieee80211_broadcast_mac,
-          config->bssid,
-          config->bssid,
-          sequence,
-          out_frame,
-          out_capacity) == 0u) {
-    return 0u;
-  }
-  return er_ieee80211_write_open_ap_body(config,
-                                         out_frame,
-                                         out_capacity,
-                                         out_frame_len);
+  return er_ieee80211_open_ap_build_management_frame(
+      config,
+      ER_IEEE80211_SUBTYPE_BEACON,
+      er_ieee80211_broadcast_mac,
+      sequence,
+      out_frame,
+      out_capacity,
+      out_frame_len);
 }
 
 UINT8 er_ieee80211_open_ap_build_probe_response(
@@ -245,21 +264,17 @@ UINT8 er_ieee80211_open_ap_build_probe_response(
       (station_mac[0] & 1u) != 0u ||
       out_frame == 0 ||
       out_frame_len == 0 ||
-      out_capacity < er_ieee80211_open_ap_frame_len(config->ssid_len) ||
-      er_ieee80211_write_management_header(
-          ER_IEEE80211_SUBTYPE_PROBE_RESPONSE,
-          station_mac,
-          config->bssid,
-          config->bssid,
-          sequence,
-          out_frame,
-          out_capacity) == 0u) {
+      out_capacity < er_ieee80211_open_ap_frame_len(config->ssid_len)) {
     return 0u;
   }
-  return er_ieee80211_write_open_ap_body(config,
-                                         out_frame,
-                                         out_capacity,
-                                         out_frame_len);
+  return er_ieee80211_open_ap_build_management_frame(
+      config,
+      ER_IEEE80211_SUBTYPE_PROBE_RESPONSE,
+      station_mac,
+      sequence,
+      out_frame,
+      out_capacity,
+      out_frame_len);
 }
 
 UINT8 er_ieee80211_open_ap_probe_request_matches(
