@@ -125,6 +125,11 @@ case "$repo_plan" in
 esac
 
 case "$repo_plan" in
+  *"+ toolchain/bin/clang -std=c11 -Wall -Wextra -Werror -O2 -o .build/disk-analyzer -Iinclude -Iedgerun-metal/core tools/disk-analyzer/main.c tools/disk-analyzer/disk_analyzer.c edgerun-metal/core/er_disk_analyzer.c edgerun-metal/core/er_mem.c"* ) ;;
+  * ) printf 'missing disk analyzer compile step\n' >&2; exit 1 ;;
+esac
+
+case "$repo_plan" in
   *"+ toolchain/bin/clang -std=c11 -Wall -Wextra -Werror -O2 -o .build/pi-usb-boot tools/pi-usb-boot/main.c"* ) ;;
   * ) printf 'missing pi usb boot compile step\n' >&2; exit 1 ;;
 esac
@@ -142,6 +147,11 @@ esac
 case "$repo_plan" in
   *"+ ./tests/sdcard-probe-tests.sh"* ) ;;
   * ) printf 'missing sd card probe test step\n' >&2; exit 1 ;;
+esac
+
+case "$repo_plan" in
+  *"+ ./tests/disk-analyzer-tests.sh"* ) ;;
+  * ) printf 'missing disk analyzer test step\n' >&2; exit 1 ;;
 esac
 
 case "$repo_plan" in
