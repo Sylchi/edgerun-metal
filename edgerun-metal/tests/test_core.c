@@ -30,6 +30,7 @@ ErWasmHostCalls g_host_calls = {0};
 #include "test_core_node_control.c"
 #include "test_core_ble_adv.c"
 #include "test_core_network.c"
+#include "test_core_disk_analyzer.c"
 #include "test_core_boot_erwire.c"
 #include "test_core_ui_surface.c"
 #include "test_core_input.c"
@@ -103,6 +104,7 @@ int main(void) {
   test_node_control_relay_assignment();
   test_ble_adv();
   test_network_coordinator();
+  test_disk_analyzer_storage_foundation();
   test_work_admitted_relay_route();
   test_boot_profiles();
   test_hw_relay_endpoints();
