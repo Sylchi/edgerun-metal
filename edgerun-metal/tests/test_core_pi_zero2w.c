@@ -1,3 +1,73 @@
+enum {
+  TEST_PI_EMMC_OPS_WRITE_READY_READ = 1u,
+  TEST_PI_EMMC_OPS_DATA_DONE_READ = 2u,
+  TEST_PI_EMMC_OPS_RESPONSE0 = 0x1a2b3c4du
+};
+
+typedef struct {
+  UINT32 interrupt_read_count;
+  UINT32 data_write_count;
+  UINT32 first_data_word;
+  UINT32 last_data_word;
+} TestPiEmmcOpsCtx;
+
+static UINT8 test_pi_emmc_ops_read32(void* ctx,
+                                     UINT32 offset,
+                                     UINT32* out_value) {
+  TestPiEmmcOpsCtx* ops_ctx = (TestPiEmmcOpsCtx*)ctx;
+
+  if (ops_ctx == 0 || out_value == 0) {
+    return 0u;
+  }
+  switch (offset) {
+    case ER_PI_EMMC_REG_INTERRUPT:
+      ops_ctx->interrupt_read_count += 1u;
+      switch (ops_ctx->interrupt_read_count) {
+        case TEST_PI_EMMC_OPS_WRITE_READY_READ:
+          *out_value = ER_PI_EMMC_INTERRUPT_WRITE_RDY;
+          return 1u;
+        case TEST_PI_EMMC_OPS_DATA_DONE_READ:
+          *out_value = ER_PI_EMMC_INTERRUPT_DATA_DONE;
+          return 1u;
+        default:
+          *out_value = 0u;
+          return 1u;
+      }
+    case ER_PI_EMMC_REG_RESP0:
+      *out_value = TEST_PI_EMMC_OPS_RESPONSE0;
+      return 1u;
+    default:
+      *out_value = 0u;
+      return 1u;
+  }
+}
+
+static UINT8 test_pi_emmc_ops_write32(void* ctx,
+                                      UINT32 offset,
+                                      UINT32 value) {
+  TestPiEmmcOpsCtx* ops_ctx = (TestPiEmmcOpsCtx*)ctx;
+
+  if (ops_ctx == 0) {
+    return 0u;
+  }
+  switch (offset) {
+    case ER_PI_EMMC_REG_DATA:
+      if (ops_ctx->data_write_count == 0u) {
+        ops_ctx->first_data_word = value;
+      }
+      ops_ctx->last_data_word = value;
+      ops_ctx->data_write_count += 1u;
+      return 1u;
+    case ER_PI_EMMC_REG_INTERRUPT:
+    case ER_PI_EMMC_REG_BLKSIZECNT:
+    case ER_PI_EMMC_REG_ARG1:
+    case ER_PI_EMMC_REG_CMDTM:
+      return 1u;
+    default:
+      return 0u;
+  }
+}
+
 static void test_pi_zero2w_bringup_boundary(void) {
   enum {
     PI_TEST_SDIO_CMD52_PACKED = 0xa82468abu,
@@ -40,7 +110,10 @@ static void test_pi_zero2w_bringup_boundary(void) {
     PI_TEST_EMMC_CMD17_VALUE = 0x113a0012u,
     PI_TEST_EMMC_CMD24_VALUE = 0x183a0002u,
     PI_TEST_EMMC_CMD53_READ_BYTES_VALUE = 0x353a0012u,
-    PI_TEST_EMMC_CMD53_WRITE_BYTES_VALUE = 0x353a0002u
+    PI_TEST_EMMC_CMD53_WRITE_BYTES_VALUE = 0x353a0002u,
+    PI_TEST_EMMC_WORD_BYTES = 4u,
+    PI_TEST_EMMC_FIRST_WRITE_WORD = 0x03020100u,
+    PI_TEST_EMMC_LAST_WRITE_WORD = 0xfffefdfcu
   };
 
   ErPiZero2wMmio mmio;
@@ -53,12 +126,19 @@ static void test_pi_zero2w_bringup_boundary(void) {
   ErPiEmmcCommandResult command_result;
   ErPiEmmcBlockResult block_result;
   ErPiEmmcSdioTransferResult sdio_transfer_result;
+  ErPiEmmcMmioOps emmc_ops;
+  TestPiEmmcOpsCtx emmc_ops_ctx;
   ErPiZero2wSdioBringupPlan sdio_plan;
   ErPiZero2wSdioBringupState sdio_state;
   ErPiZero2wSdMemoryBringupPlan sd_memory_plan;
   ErPiZero2wSdMemoryBringupState sd_memory_state;
   ErBootServicesReport report;
   UINT8 block[ER_PI_EMMC_BLOCK_BYTES];
+  UINT32 i;
+
+  for (i = 0u; i < ER_PI_EMMC_BLOCK_BYTES; ++i) {
+    block[i] = (UINT8)i;
+  }
 
   er_mmio_reset();
   check_uint64("pi zero peripheral mailbox phys",
@@ -461,6 +541,41 @@ static void test_pi_zero2w_bringup_boundary(void) {
   check_uint64("pi emmc write block marks error",
                block_result.error,
                1u);
+  emmc_ops_ctx.interrupt_read_count = 0u;
+  emmc_ops_ctx.data_write_count = 0u;
+  emmc_ops_ctx.first_data_word = 0u;
+  emmc_ops_ctx.last_data_word = 0u;
+  emmc_ops.ctx = &emmc_ops_ctx;
+  emmc_ops.read32 = test_pi_emmc_ops_read32;
+  emmc_ops.write32 = test_pi_emmc_ops_write32;
+  emmc_ops.read8 = 0;
+  emmc_ops.write8 = 0;
+  check_int64("pi emmc write block ops",
+              er_pi_emmc_write_block_with_ops(&emmc_ops,
+                                              PI_TEST_EMMC_BLOCK_ADDRESS,
+                                              block,
+                                              2u,
+                                              &block_result),
+              1);
+  check_uint64("pi emmc write block ops completed",
+               block_result.completed,
+               1u);
+  check_uint64("pi emmc write block ops data words",
+               emmc_ops_ctx.data_write_count,
+               ER_PI_EMMC_BLOCK_BYTES / PI_TEST_EMMC_WORD_BYTES);
+  check_uint64("pi emmc write block ops first word",
+               emmc_ops_ctx.first_data_word,
+               PI_TEST_EMMC_FIRST_WRITE_WORD);
+  check_uint64("pi emmc write block ops last word",
+               emmc_ops_ctx.last_data_word,
+               PI_TEST_EMMC_LAST_WRITE_WORD);
+  check_int64("pi emmc write block rejects null ops",
+              er_pi_emmc_write_block_with_ops(0,
+                                              PI_TEST_EMMC_BLOCK_ADDRESS,
+                                              block,
+                                              1u,
+                                              &block_result),
+              0);
   check_int64("pi emmc sdio read rejects invalid handle",
               er_pi_emmc_sdio_read_bytes(ER_MMIO_INVALID_HANDLE,
                                          ER_PI_SDIO_FUNCTION_WLAN,
