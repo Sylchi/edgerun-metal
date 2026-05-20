@@ -22,6 +22,7 @@ mkdir -p "$BUILD_DIR"
   -I"${ROOT_DIR}/edgerun-crypto/include" \
   -o "$TOOL_BIN" \
   "${ROOT_DIR}/tools/pi-node-update/main.c" \
+  "${ROOT_DIR}/edgerun-metal/devices/pi_zero_w_v1_1/er_pi_zero_w_v1_1_ota.c" \
   "${ROOT_DIR}/edgerun-metal/core/er_vfs.c" \
   "${ROOT_DIR}/edgerun-metal/core/er_crypto.c" \
   "${ROOT_DIR}/edgerun-metal/core/er_crypto_blake3.c" \
@@ -56,6 +57,17 @@ fi
 if ! grep -q "bytes=38404 packets=38 repeat=2 mode=dry-run" \
   /tmp/pi-node-update-repeat.out; then
   printf 'pi-node-update dry-run did not report repeat count\n' >&2
+  exit 1
+fi
+
+if "$TOOL_BIN" --iface lo --image "$IMAGE" \
+  >/tmp/pi-node-update-live.out 2>/tmp/pi-node-update-live.err; then
+  printf 'pi-node-update accepted unsupported live send\n' >&2
+  exit 1
+fi
+
+if ! grep -q "live send unsupported" /tmp/pi-node-update-live.err; then
+  printf 'pi-node-update did not explain unsupported live send\n' >&2
   exit 1
 fi
 

@@ -35,14 +35,13 @@ static void test_pi_zero_w_v1_1_ota_erwire_object_frame(
   UINT8 payload[ERWIRE_MAX_PAYLOAD];
   UINT32 payload_len;
 
-  payload_len = (UINT32)sizeof(object_packet->header) +
-                object_packet->header.bytes_len;
-  er_mem_copy(payload,
-              (const UINT8*)&object_packet->header,
-              (UINTN)sizeof(object_packet->header));
-  er_mem_copy(payload + (UINT32)sizeof(object_packet->header),
-              object_packet->bytes,
-              object_packet->header.bytes_len);
+  check_int64("pi zero w ota encode object payload",
+              er_pi_zero_w_v1_1_ota_encode_object_packet_payload(
+                  object_packet,
+                  payload,
+                  (UINT32)sizeof(payload),
+                  &payload_len),
+              1);
   check_int64("pi zero w ota build erwire object packet",
               erwire_build_packet(ERWIRE_KIND_VFS_OBJECT_PACKET,
                                   ERWIRE_FLAG_FIRST | ERWIRE_FLAG_LAST,
@@ -141,10 +140,10 @@ static void test_pi_zero_w_v1_1_ota_receiver(void) {
                   test_pi_zero_w_v1_1_ota_write_block,
                   &sink),
               1);
-  check_uint64("pi zero w ota committed",
+  check_uint64("pi zero w ota stored raw slot",
                state.status,
-               ER_PI_ZERO_W_V1_1_OTA_STATUS_COMMITTED);
-  check_uint64("pi zero w ota reboot required", state.reboot_required, 1u);
+               ER_PI_ZERO_W_V1_1_OTA_STATUS_STORED_UNBOOTABLE);
+  check_uint64("pi zero w ota raw slot no reboot", state.reboot_required, 0u);
   check_uint64("pi zero w ota object length",
                state.object_len,
                PI_TEST_OTA_IMAGE_LEN);

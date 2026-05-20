@@ -104,6 +104,7 @@
 #define ER_PI_ZERO_W_V1_1_LED_WIFI_POWERED 3u
 #define ER_PI_ZERO_W_V1_1_LED_CYW_MAILBOX_OK 7u
 #define ER_PI_ZERO_W_V1_1_LED_CYW_MAILBOX_FAIL 11u
+#define ER_PI_ZERO_W_V1_1_LED_CYW_RX_UNSUPPORTED 13u
 #define ER_PI_ZERO_W_V1_1_LED_STEP_DELAY_TICKS 250000u
 #define ER_PI_ZERO_W_V1_1_EMMC_RESET_POLL_BUDGET 100000u
 #define ER_PI_ZERO_W_V1_1_EMMC_STABLE_POLL_BUDGET 100000u
@@ -177,6 +178,7 @@
 #define ER_PI_ZERO_W_V1_1_L2_D11_TX_PIO_ATTEMPTED 16u
 #define ER_PI_ZERO_W_V1_1_L2_D11_MAC_TX_ATTEMPTED 17u
 #define ER_PI_ZERO_W_V1_1_L2_OTA_LISTENING 18u
+#define ER_PI_ZERO_W_V1_1_L2_OVER_AIR_RX_UNSUPPORTED 19u
 
 volatile UINT32 g_er_pi_zero_w_v1_1_boot_magic =
     ER_PI_ZERO_W_V1_1_BOOT_MAGIC;
@@ -2517,10 +2519,18 @@ void er_pi_zero_w_v1_1_main(void) {
   er_pi_zero_w_v1_1_sdio_probe();
   if (g_er_pi_zero_w_v1_1_sdio_probe_state ==
           ER_PI_ZERO_W_V1_1_SDIO_PROBE_CMD53_DONE &&
-      er_pi_zero_w_v1_1_cyw43438_start_owned_l2() != 0u) {
+      er_pi_zero_w_v1_1_cyw43438_start_owned_l2() != 0u &&
+      ER_CYW43438_OWNED_FIRMWARE_OVER_AIR_RX_SUPPORTED != 0u) {
     g_er_pi_zero_w_v1_1_sdio_probe_state = ER_PI_ZERO_W_V1_1_L2_READY;
     er_pi_zero_w_v1_1_ota_status_refresh();
     er_pi_zero_w_v1_1_act_led_status(ER_PI_ZERO_W_V1_1_LED_CYW_MAILBOX_OK);
+  } else if (g_er_pi_zero_w_v1_1_sdio_probe_state ==
+                 ER_PI_ZERO_W_V1_1_L2_CM3_ACTIVE &&
+             ER_CYW43438_OWNED_FIRMWARE_OVER_AIR_RX_SUPPORTED == 0u) {
+    g_er_pi_zero_w_v1_1_sdio_probe_state =
+        ER_PI_ZERO_W_V1_1_L2_OVER_AIR_RX_UNSUPPORTED;
+    er_pi_zero_w_v1_1_act_led_status(
+        ER_PI_ZERO_W_V1_1_LED_CYW_RX_UNSUPPORTED);
   } else {
     er_pi_zero_w_v1_1_act_led_status(ER_PI_ZERO_W_V1_1_LED_CYW_MAILBOX_FAIL);
   }
