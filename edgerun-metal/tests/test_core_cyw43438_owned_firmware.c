@@ -66,7 +66,8 @@ static void test_cyw43438_owned_firmware_payload(void) {
                ER_IEEE80211_AP_FRAME_MAX);
   check_uint64("cyw43438 owned rx frame capacity",
                ER_CYW43438_OWNED_FIRMWARE_RX_FRAME_CAPACITY,
-               ER_IEEE80211_AP_FRAME_MAX);
+               ER_CYW43438_OWNED_FIRMWARE_RX_ERWIRE_HEADER_CAPACITY +
+                   ER_CYW43438_OWNED_FIRMWARE_RX_VFS_PACKET_CAPACITY);
   check_uint64("cyw43438 owned rx frame follows tx frame",
                ER_CYW43438_OWNED_FIRMWARE_RX_FRAME_ADDR,
                ER_CYW43438_OWNED_FIRMWARE_TX_FRAME_ADDR +
