@@ -361,6 +361,109 @@ UINT8 er_pi_emmc_command_begin(INT64 emmc_handle,
   return 1u;
 }
 
+static void er_pi_emmc_command_result_clear(ErPiEmmcCommandResult* result) {
+  if (result == 0) {
+    return;
+  }
+  result->io.interrupt_offset = 0u;
+  result->io.interrupt_clear_value = 0u;
+  result->io.argument_offset = 0u;
+  result->io.argument_value = 0u;
+  result->io.command_offset = 0u;
+  result->io.command_value = 0u;
+  result->io.response_offset = 0u;
+  result->io.response_kind = 0u;
+  result->interrupt_value = 0u;
+  result->response0 = 0u;
+  result->completed = 0u;
+  result->error = 0u;
+}
+
+static UINT8 er_pi_emmc_interrupt_is_error(UINT32 interrupt_value) {
+  return (UINT8)((interrupt_value & ER_PI_EMMC_INTERRUPT_ERROR_MASK) != 0u);
+}
+
+static UINT8 er_pi_emmc_interrupt_is_command_done(UINT32 interrupt_value) {
+  return (UINT8)((interrupt_value & ER_PI_EMMC_INTERRUPT_CMD_DONE) != 0u);
+}
+
+static UINT8 er_pi_emmc_command_finish(INT64 emmc_handle,
+                                       const ErPiEmmcCommandIo* io,
+                                       UINT32 interrupt_value,
+                                       ErPiEmmcCommandResult* out_result) {
+  INT64 response;
+
+  if (io == 0 || out_result == 0) {
+    return 0u;
+  }
+  out_result->io = *io;
+  out_result->interrupt_value = interrupt_value;
+  out_result->error = er_pi_emmc_interrupt_is_error(interrupt_value);
+  out_result->completed =
+      (UINT8)(out_result->error == 0u &&
+              er_pi_emmc_interrupt_is_command_done(interrupt_value) != 0u);
+  if (io->response_kind != ER_PI_MMC_RESPONSE_NONE) {
+    response = er_mmio_read32(emmc_handle, (INT64)io->response_offset);
+    if (response < 0) {
+      out_result->error = 1u;
+      out_result->completed = 0u;
+      return 0u;
+    }
+    out_result->response0 = (UINT32)response;
+  }
+  if (er_mmio_write32(emmc_handle,
+                      (INT64)io->interrupt_offset,
+                      interrupt_value) == 0u) {
+    out_result->error = 1u;
+    out_result->completed = 0u;
+    return 0u;
+  }
+  return out_result->completed;
+}
+
+UINT8 er_pi_emmc_command_poll(INT64 emmc_handle,
+                              const ErPiEmmcCommandIo* io,
+                              UINT32 poll_budget,
+                              ErPiEmmcCommandResult* out_result) {
+  UINT32 poll;
+  INT64 interrupt;
+
+  er_pi_emmc_command_result_clear(out_result);
+  if (io == 0 || out_result == 0 || poll_budget == 0u) {
+    return 0u;
+  }
+  for (poll = 0u; poll < poll_budget; ++poll) {
+    interrupt = er_mmio_read32(emmc_handle, (INT64)io->interrupt_offset);
+    if (interrupt < 0) {
+      out_result->error = 1u;
+      return 0u;
+    }
+    out_result->interrupt_value = (UINT32)interrupt;
+    if (er_pi_emmc_interrupt_is_error((UINT32)interrupt) != 0u ||
+        er_pi_emmc_interrupt_is_command_done((UINT32)interrupt) != 0u) {
+      return er_pi_emmc_command_finish(emmc_handle,
+                                       io,
+                                       (UINT32)interrupt,
+                                       out_result);
+    }
+  }
+  return 0u;
+}
+
+UINT8 er_pi_emmc_command_execute(INT64 emmc_handle,
+                                 const ErPiMmcCommand* command,
+                                 UINT32 poll_budget,
+                                 ErPiEmmcCommandResult* out_result) {
+  ErPiEmmcCommandIo io;
+
+  er_pi_emmc_command_result_clear(out_result);
+  if (out_result == 0 ||
+      er_pi_emmc_command_begin(emmc_handle, command, &io) == 0u) {
+    return 0u;
+  }
+  return er_pi_emmc_command_poll(emmc_handle, &io, poll_budget, out_result);
+}
+
 static UINT8 er_pi_zero2w_sdio_plan_add(ErPiZero2wSdioBringupPlan* plan,
                                         UINT32 command_index,
                                         UINT32 argument,
@@ -428,6 +531,67 @@ UINT8 er_pi_zero2w_sdio_claim_plan(UINT32 relative_card_address,
     return 0u;
   }
 
+  return 1u;
+}
+
+static void er_pi_zero2w_sdio_state_clear(ErPiZero2wSdioBringupState* state) {
+  UINT32 i;
+
+  if (state == 0) {
+    return;
+  }
+  state->command_count = 0u;
+  state->completed_count = 0u;
+  state->relative_card_address = 0u;
+  for (i = 0u; i < ER_PI_ZERO2W_SDIO_BRINGUP_COMMAND_CAPACITY; ++i) {
+    state->responses[i] = 0u;
+  }
+  state->last_interrupt_value = 0u;
+  state->completed = 0u;
+  state->error = 0u;
+}
+
+UINT8 er_pi_zero2w_sdio_execute_plan(
+    INT64 emmc_handle,
+    const ErPiZero2wSdioBringupPlan* plan,
+    UINT32 poll_budget_per_command,
+    ErPiZero2wSdioBringupState* out_state) {
+  UINT32 command_index;
+  ErPiEmmcCommandResult result;
+
+  er_pi_zero2w_sdio_state_clear(out_state);
+  if (plan == 0 ||
+      out_state == 0 ||
+      plan->command_count == 0u ||
+      plan->command_count > ER_PI_ZERO2W_SDIO_BRINGUP_COMMAND_CAPACITY ||
+      poll_budget_per_command == 0u) {
+    return 0u;
+  }
+  out_state->command_count = plan->command_count;
+  for (command_index = 0u;
+       command_index < plan->command_count;
+       ++command_index) {
+    if (er_pi_emmc_command_execute(emmc_handle,
+                                   &plan->commands[command_index],
+                                   poll_budget_per_command,
+                                   &result) == 0u) {
+      out_state->last_interrupt_value = result.interrupt_value;
+      out_state->error = 1u;
+      return 0u;
+    }
+    out_state->responses[command_index] = result.response0;
+    out_state->last_interrupt_value = result.interrupt_value;
+    out_state->completed_count += 1u;
+    if (plan->commands[command_index].response_kind == ER_PI_MMC_RESPONSE_R6) {
+      out_state->relative_card_address =
+          er_pi_mmc_relative_card_from_r6(result.response0);
+      if (out_state->relative_card_address == 0u) {
+        out_state->error = 1u;
+        return 0u;
+      }
+    }
+  }
+  out_state->completed = 1u;
   return 1u;
 }
 
