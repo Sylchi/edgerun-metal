@@ -328,7 +328,8 @@ static int erb_build_sdcard_probe(int print_plan) {
       erb_compile_common(&args, ERB_SDCARD_PROBE_BIN) != 0) {
     return 1;
   }
-  if (erb_args_push(&args, "tools/sdcard-probe/main.c") != 0) {
+  if (erb_args_push(&args, "-Iinclude") != 0 ||
+      erb_args_push(&args, "tools/sdcard-probe/main.c") != 0) {
     return 1;
   }
   return erb_run_args(&args, print_plan);
