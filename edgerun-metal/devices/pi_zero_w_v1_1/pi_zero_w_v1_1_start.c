@@ -3,6 +3,7 @@
 #include "er_crypto_blake3.h"
 #include "er_cyw43438_d11.h"
 #include "er_cyw43438_owned_firmware.h"
+#include "er_pi_mmc.h"
 #include "er_types.h"
 
 /*
@@ -205,6 +206,25 @@ static UINT32 er_pi_zero_w_v1_1_read(UINT32 base, UINT32 offset) {
 
 static void er_pi_zero_w_v1_1_write(UINT32 base, UINT32 offset, UINT32 value) {
   *er_pi_zero_w_v1_1_reg(base, offset) = value;
+}
+
+static UINT8 er_pi_zero_w_v1_1_emmc_read32_op(void* ctx,
+                                              UINT32 offset,
+                                              UINT32* out_value) {
+  (void)ctx;
+  if (out_value == 0) {
+    return 0u;
+  }
+  *out_value = er_pi_zero_w_v1_1_read(ER_PI_ZERO_W_V1_1_EMMC_BASE, offset);
+  return 1u;
+}
+
+static UINT8 er_pi_zero_w_v1_1_emmc_write32_op(void* ctx,
+                                               UINT32 offset,
+                                               UINT32 value) {
+  (void)ctx;
+  er_pi_zero_w_v1_1_write(ER_PI_ZERO_W_V1_1_EMMC_BASE, offset, value);
+  return 1u;
 }
 
 static void er_pi_zero_w_v1_1_barrier(void) {
@@ -2015,10 +2035,20 @@ static UINT8 er_pi_zero_w_v1_1_ota_write_block_unbound(
     void* ctx,
     UINT32 block_address,
     const UINT8 block[ER_PI_ZERO_W_V1_1_OTA_BLOCK_BYTES]) {
+  ErPiEmmcMmioOps ops;
+  ErPiEmmcBlockResult result;
+
   (void)ctx;
-  (void)block_address;
-  (void)block;
-  return 0u;
+  ops.ctx = 0;
+  ops.read32 = er_pi_zero_w_v1_1_emmc_read32_op;
+  ops.write32 = er_pi_zero_w_v1_1_emmc_write32_op;
+  ops.read8 = 0;
+  ops.write8 = 0;
+  return er_pi_emmc_write_block_with_ops(&ops,
+                                         block_address,
+                                         block,
+                                         ER_PI_ZERO_W_V1_1_SDIO_POLL_BUDGET,
+                                         &result);
 }
 
 static void er_pi_zero_w_v1_1_ota_status_refresh(void) {
