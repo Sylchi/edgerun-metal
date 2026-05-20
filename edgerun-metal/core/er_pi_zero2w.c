@@ -24,9 +24,14 @@ enum {
   ER_PI_EMMC_CMDTM_RESPONSE_BITS = 16u,
   ER_PI_EMMC_CMDTM_RESPONSE_NONE = 0u,
   ER_PI_EMMC_CMDTM_RESPONSE_48 = 2u,
+  ER_PI_EMMC_CMDTM_BLOCK_COUNT_ENABLE = 1u << 1u,
+  ER_PI_EMMC_CMDTM_DATA_READ = 1u << 4u,
   ER_PI_EMMC_CMDTM_CRC_CHECK = 1u << 19u,
   ER_PI_EMMC_CMDTM_INDEX_CHECK = 1u << 20u,
+  ER_PI_EMMC_CMDTM_IS_DATA = 1u << 21u,
   ER_PI_EMMC_CMDTM_INDEX_BITS = 24u,
+  ER_PI_EMMC_BLOCK_COUNT_BITS = 16u,
+  ER_PI_EMMC_WORD_BYTES = 4u,
   ER_PI_EMMC_INTERRUPT_ALL = 0xffffffffu,
   ER_PI_ZERO2W_SDIO_OCR_3V3 = 0x00300000u,
   ER_PI_ZERO2W_SDIO_NO_ARGUMENT = 0u
@@ -269,6 +274,32 @@ static UINT32 er_pi_emmc_command_value(const ErPiMmcCommand* command) {
   return value;
 }
 
+static UINT8 er_pi_mmc_command_is_block_data(UINT32 command_index) {
+  switch (command_index) {
+    case ER_PI_MMC_CMD_READ_SINGLE_BLOCK:
+    case ER_PI_MMC_CMD_WRITE_BLOCK:
+      return 1u;
+    default:
+      return 0u;
+  }
+}
+
+static UINT32 er_pi_emmc_block_command_value(const ErPiMmcCommand* command) {
+  UINT32 value;
+
+  value = er_pi_emmc_command_value(command);
+  value |= ER_PI_EMMC_CMDTM_BLOCK_COUNT_ENABLE;
+  value |= ER_PI_EMMC_CMDTM_IS_DATA;
+  if (command->command_index == ER_PI_MMC_CMD_READ_SINGLE_BLOCK) {
+    value |= ER_PI_EMMC_CMDTM_DATA_READ;
+  }
+  return value;
+}
+
+static UINT32 er_pi_emmc_block_size_count_value(void) {
+  return (1u << ER_PI_EMMC_BLOCK_COUNT_BITS) | ER_PI_EMMC_BLOCK_BYTES;
+}
+
 UINT8 er_pi_mmc_command_prepare(UINT32 command_index,
                                 UINT32 argument,
                                 UINT32 response_kind,
@@ -294,6 +325,12 @@ UINT8 er_pi_mmc_command_prepare(UINT32 command_index,
       }
       break;
     case ER_PI_MMC_CMD_SELECT_CARD:
+      if (response_kind != ER_PI_MMC_RESPONSE_R1) {
+        return 0u;
+      }
+      break;
+    case ER_PI_MMC_CMD_READ_SINGLE_BLOCK:
+    case ER_PI_MMC_CMD_WRITE_BLOCK:
       if (response_kind != ER_PI_MMC_RESPONSE_R1) {
         return 0u;
       }
@@ -332,7 +369,11 @@ UINT8 er_pi_emmc_command_io_prepare(const ErPiMmcCommand* command,
   out_io->argument_offset = ER_PI_EMMC_REG_ARG1;
   out_io->argument_value = prepared.argument;
   out_io->command_offset = ER_PI_EMMC_REG_CMDTM;
-  out_io->command_value = er_pi_emmc_command_value(&prepared);
+  if (er_pi_mmc_command_is_block_data(prepared.command_index) != 0u) {
+    out_io->command_value = er_pi_emmc_block_command_value(&prepared);
+  } else {
+    out_io->command_value = er_pi_emmc_command_value(&prepared);
+  }
   out_io->response_offset = ER_PI_EMMC_REG_RESP0;
   out_io->response_kind = prepared.response_kind;
   return 1u;
@@ -344,6 +385,8 @@ UINT8 er_pi_emmc_command_begin(INT64 emmc_handle,
   ErPiEmmcCommandIo io;
 
   if (out_io == 0 ||
+      command == 0 ||
+      er_pi_mmc_command_is_block_data(command->command_index) != 0u ||
       er_pi_emmc_command_io_prepare(command, &io) == 0u ||
       er_mmio_write32(emmc_handle,
                       (INT64)io.interrupt_offset,
@@ -462,6 +505,227 @@ UINT8 er_pi_emmc_command_execute(INT64 emmc_handle,
     return 0u;
   }
   return er_pi_emmc_command_poll(emmc_handle, &io, poll_budget, out_result);
+}
+
+static void er_pi_emmc_block_result_clear(ErPiEmmcBlockResult* result) {
+  if (result == 0) {
+    return;
+  }
+  result->io.block_size_count_offset = 0u;
+  result->io.block_size_count_value = 0u;
+  result->io.data_offset = 0u;
+  result->io.command_io.interrupt_offset = 0u;
+  result->io.command_io.interrupt_clear_value = 0u;
+  result->io.command_io.argument_offset = 0u;
+  result->io.command_io.argument_value = 0u;
+  result->io.command_io.command_offset = 0u;
+  result->io.command_io.command_value = 0u;
+  result->io.command_io.response_offset = 0u;
+  result->io.command_io.response_kind = 0u;
+  result->io.read = 0u;
+  result->interrupt_value = 0u;
+  result->response0 = 0u;
+  result->completed = 0u;
+  result->error = 0u;
+}
+
+UINT8 er_pi_emmc_block_io_prepare(UINT32 command_index,
+                                  UINT32 block_address,
+                                  ErPiEmmcBlockIo* out_io) {
+  ErPiMmcCommand command;
+
+  if (out_io == 0 ||
+      er_pi_mmc_command_is_block_data(command_index) == 0u ||
+      er_pi_mmc_command_prepare(command_index,
+                                block_address,
+                                ER_PI_MMC_RESPONSE_R1,
+                                &command) == 0u ||
+      er_pi_emmc_command_io_prepare(&command, &out_io->command_io) == 0u) {
+    return 0u;
+  }
+
+  out_io->block_size_count_offset = ER_PI_EMMC_REG_BLKSIZECNT;
+  out_io->block_size_count_value = er_pi_emmc_block_size_count_value();
+  out_io->data_offset = ER_PI_EMMC_REG_DATA;
+  out_io->read = (UINT8)(command_index == ER_PI_MMC_CMD_READ_SINGLE_BLOCK);
+  return 1u;
+}
+
+static UINT8 er_pi_emmc_poll_interrupt(INT64 emmc_handle,
+                                       UINT32 needed_interrupt,
+                                       UINT32 poll_budget,
+                                       UINT32* out_interrupt) {
+  UINT32 poll;
+  INT64 interrupt;
+
+  if (out_interrupt == 0 || needed_interrupt == 0u || poll_budget == 0u) {
+    return 0u;
+  }
+  *out_interrupt = 0u;
+  for (poll = 0u; poll < poll_budget; ++poll) {
+    interrupt = er_mmio_read32(emmc_handle, (INT64)ER_PI_EMMC_REG_INTERRUPT);
+    if (interrupt < 0) {
+      return 0u;
+    }
+    *out_interrupt = (UINT32)interrupt;
+    if (er_pi_emmc_interrupt_is_error((UINT32)interrupt) != 0u) {
+      return 0u;
+    }
+    if (((UINT32)interrupt & needed_interrupt) != 0u) {
+      return 1u;
+    }
+  }
+  return 0u;
+}
+
+static UINT8 er_pi_emmc_block_begin(INT64 emmc_handle,
+                                    const ErPiEmmcBlockIo* io) {
+  if (io == 0 ||
+      er_mmio_write32(emmc_handle,
+                      (INT64)io->command_io.interrupt_offset,
+                      io->command_io.interrupt_clear_value) == 0u ||
+      er_mmio_write32(emmc_handle,
+                      (INT64)io->block_size_count_offset,
+                      io->block_size_count_value) == 0u ||
+      er_mmio_write32(emmc_handle,
+                      (INT64)io->command_io.argument_offset,
+                      io->command_io.argument_value) == 0u ||
+      er_mmio_write32(emmc_handle,
+                      (INT64)io->command_io.command_offset,
+                      io->command_io.command_value) == 0u) {
+    return 0u;
+  }
+  return 1u;
+}
+
+static UINT8 er_pi_emmc_wait_data_done(INT64 emmc_handle,
+                                       UINT32 poll_budget,
+                                       ErPiEmmcBlockResult* out_result) {
+  UINT32 interrupt;
+  INT64 response;
+
+  if (out_result == 0 ||
+      er_pi_emmc_poll_interrupt(emmc_handle,
+                                ER_PI_EMMC_INTERRUPT_DATA_DONE,
+                                poll_budget,
+                                &interrupt) == 0u) {
+    if (out_result != 0) {
+      out_result->error = 1u;
+    }
+    return 0u;
+  }
+  out_result->interrupt_value = interrupt;
+  response = er_mmio_read32(emmc_handle,
+                            (INT64)out_result->io.command_io.response_offset);
+  if (response < 0 ||
+      er_mmio_write32(emmc_handle,
+                      (INT64)out_result->io.command_io.interrupt_offset,
+                      interrupt) == 0u) {
+    out_result->error = 1u;
+    return 0u;
+  }
+  out_result->response0 = (UINT32)response;
+  out_result->completed = 1u;
+  return 1u;
+}
+
+UINT8 er_pi_emmc_read_block(INT64 emmc_handle,
+                            UINT32 block_address,
+                            UINT8* out_block,
+                            UINT32 poll_budget,
+                            ErPiEmmcBlockResult* out_result) {
+  UINT32 word_index;
+  UINT32 interrupt;
+  INT64 data_word;
+  ErPiEmmcBlockIo io;
+
+  er_pi_emmc_block_result_clear(out_result);
+  if (out_block == 0 ||
+      out_result == 0 ||
+      er_pi_emmc_block_io_prepare(ER_PI_MMC_CMD_READ_SINGLE_BLOCK,
+                                  block_address,
+                                  &io) == 0u ||
+      er_pi_emmc_block_begin(emmc_handle, &io) == 0u ||
+      er_pi_emmc_poll_interrupt(emmc_handle,
+                                ER_PI_EMMC_INTERRUPT_READ_RDY,
+                                poll_budget,
+                                &interrupt) == 0u) {
+    if (out_result != 0) {
+      out_result->error = 1u;
+      out_result->interrupt_value = 0u;
+    }
+    return 0u;
+  }
+
+  out_result->io = io;
+  out_result->interrupt_value = interrupt;
+  for (word_index = 0u;
+       word_index < ER_PI_EMMC_BLOCK_BYTES / ER_PI_EMMC_WORD_BYTES;
+       ++word_index) {
+    data_word = er_mmio_read32(emmc_handle, (INT64)io.data_offset);
+    if (data_word < 0) {
+      out_result->error = 1u;
+      return 0u;
+    }
+    out_block[(word_index * ER_PI_EMMC_WORD_BYTES)] =
+        (UINT8)((UINT32)data_word);
+    out_block[(word_index * ER_PI_EMMC_WORD_BYTES) + 1u] =
+        (UINT8)((UINT32)data_word >> 8u);
+    out_block[(word_index * ER_PI_EMMC_WORD_BYTES) + 2u] =
+        (UINT8)((UINT32)data_word >> 16u);
+    out_block[(word_index * ER_PI_EMMC_WORD_BYTES) + 3u] =
+        (UINT8)((UINT32)data_word >> 24u);
+  }
+  return er_pi_emmc_wait_data_done(emmc_handle, poll_budget, out_result);
+}
+
+UINT8 er_pi_emmc_write_block(INT64 emmc_handle,
+                             UINT32 block_address,
+                             const UINT8* block,
+                             UINT32 poll_budget,
+                             ErPiEmmcBlockResult* out_result) {
+  UINT32 word_index;
+  UINT32 word_value;
+  UINT32 interrupt;
+  ErPiEmmcBlockIo io;
+
+  er_pi_emmc_block_result_clear(out_result);
+  if (block == 0 ||
+      out_result == 0 ||
+      er_pi_emmc_block_io_prepare(ER_PI_MMC_CMD_WRITE_BLOCK,
+                                  block_address,
+                                  &io) == 0u ||
+      er_pi_emmc_block_begin(emmc_handle, &io) == 0u ||
+      er_pi_emmc_poll_interrupt(emmc_handle,
+                                ER_PI_EMMC_INTERRUPT_WRITE_RDY,
+                                poll_budget,
+                                &interrupt) == 0u) {
+    if (out_result != 0) {
+      out_result->error = 1u;
+      out_result->interrupt_value = 0u;
+    }
+    return 0u;
+  }
+
+  out_result->io = io;
+  out_result->interrupt_value = interrupt;
+  for (word_index = 0u;
+       word_index < ER_PI_EMMC_BLOCK_BYTES / ER_PI_EMMC_WORD_BYTES;
+       ++word_index) {
+    word_value = (UINT32)block[word_index * ER_PI_EMMC_WORD_BYTES];
+    word_value |=
+        (UINT32)block[(word_index * ER_PI_EMMC_WORD_BYTES) + 1u] << 8u;
+    word_value |=
+        (UINT32)block[(word_index * ER_PI_EMMC_WORD_BYTES) + 2u] << 16u;
+    word_value |=
+        (UINT32)block[(word_index * ER_PI_EMMC_WORD_BYTES) + 3u] << 24u;
+    if (er_mmio_write32(emmc_handle, (INT64)io.data_offset, word_value) ==
+        0u) {
+      out_result->error = 1u;
+      return 0u;
+    }
+  }
+  return er_pi_emmc_wait_data_done(emmc_handle, poll_budget, out_result);
 }
 
 static UINT8 er_pi_zero2w_sdio_plan_add(ErPiZero2wSdioBringupPlan* plan,
