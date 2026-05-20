@@ -25,6 +25,8 @@ enum {
   ERPSV_ERWIRE_KIND_NODE_AVAILABLE = 37u,
   ERPSV_ERWIRE_KIND_NODE_HEARTBEAT = 38u,
   ERPSV_ERWIRE_KIND_RELAY_ASSIGNMENT = 39u,
+  ERPSV_NODE_AVAILABLE_BYTES = 189u,
+  ERPSV_NODE_AVAILABLE_LOG_HEAD_OFFSET = 157u,
   ERPSV_HEADER_MAGIC_OFFSET = 0u,
   ERPSV_HEADER_VERSION_OFFSET = 4u,
   ERPSV_HEADER_SIZE_OFFSET = 6u,
@@ -37,10 +39,16 @@ enum {
   ERPSV_BYTE_SHIFT_3 = 24u,
   ERPSV_CRC32_INITIAL = 0xffffffffu,
   ERPSV_CRC32_POLY = 0xedb88320u,
-  ERPSV_CRC32_BITS_PER_BYTE = 8u
+  ERPSV_CRC32_BITS_PER_BYTE = 8u,
+  ERPSV_SDIO_PROBE_CMD0_DONE = 1u,
+  ERPSV_SDIO_PROBE_CMD5_DONE = 2u,
+  ERPSV_SDIO_PROBE_CMD3_DONE = 3u,
+  ERPSV_SDIO_PROBE_CMD7_DONE = 4u,
+  ERPSV_SDIO_PROBE_CMD52_DONE = 5u
 };
 
 static const char ERPSV_EXPECT_PREFIX[] = "erwire_expect=";
+static const char ERPSV_SDIO_EXPECT_PREFIX[] = "erwire_expect_sdio_probe=";
 
 static unsigned char g_erpsv_manifest[ERPSV_FILE_CAP];
 static unsigned char g_erpsv_serial_log[ERPSV_FILE_CAP];
@@ -191,10 +199,12 @@ static int erpsv_packet_at(const unsigned char* log,
                            size_t log_len,
                            size_t offset,
                            uint16_t* out_kind,
+                           uint32_t* out_payload_len,
                            size_t* out_next) {
   uint32_t payload_len;
 
-  if (log == NULL || out_kind == NULL || out_next == NULL ||
+  if (log == NULL || out_kind == NULL || out_payload_len == NULL ||
+      out_next == NULL ||
       offset > log_len ||
       log_len - offset < ERPSV_ERWIRE_HEADER_SIZE ||
       erpsv_get_u32(log + offset + ERPSV_HEADER_MAGIC_OFFSET) != ERPSV_ERWIRE_MAGIC ||
@@ -211,6 +221,7 @@ static int erpsv_packet_at(const unsigned char* log,
     return 0;
   }
   *out_kind = erpsv_get_u16(log + offset + ERPSV_HEADER_KIND_OFFSET);
+  *out_payload_len = payload_len;
   *out_next = offset + ERPSV_ERWIRE_HEADER_SIZE + (size_t)payload_len;
   return 1;
 }
@@ -227,11 +238,90 @@ static int erpsv_find_kind(const unsigned char* log,
   scan = *cursor;
   while (scan < log_len) {
     uint16_t kind = 0u;
+    uint32_t payload_len = 0u;
     size_t next = 0u;
-    if (erpsv_packet_at(log, log_len, scan, &kind, &next) != 0) {
+    if (erpsv_packet_at(log, log_len, scan, &kind, &payload_len, &next) != 0) {
       if (kind == expected_kind) {
         *cursor = next;
         return 1;
+      }
+      scan = next;
+    } else {
+      ++scan;
+    }
+  }
+  return 0;
+}
+
+static uint32_t erpsv_sdio_state_from_name(const unsigned char* name,
+                                           size_t name_len) {
+  if (name_len == strlen("cmd0_done") &&
+      memcmp(name, "cmd0_done", name_len) == 0) {
+    return ERPSV_SDIO_PROBE_CMD0_DONE;
+  }
+  if (name_len == strlen("cmd5_done") &&
+      memcmp(name, "cmd5_done", name_len) == 0) {
+    return ERPSV_SDIO_PROBE_CMD5_DONE;
+  }
+  if (name_len == strlen("cmd3_done") &&
+      memcmp(name, "cmd3_done", name_len) == 0) {
+    return ERPSV_SDIO_PROBE_CMD3_DONE;
+  }
+  if (name_len == strlen("cmd7_done") &&
+      memcmp(name, "cmd7_done", name_len) == 0) {
+    return ERPSV_SDIO_PROBE_CMD7_DONE;
+  }
+  if (name_len == strlen("cmd52_done") &&
+      memcmp(name, "cmd52_done", name_len) == 0) {
+    return ERPSV_SDIO_PROBE_CMD52_DONE;
+  }
+  return 0u;
+}
+
+static const char* erpsv_sdio_state_name(uint32_t state) {
+  switch (state) {
+    case ERPSV_SDIO_PROBE_CMD0_DONE:
+      return "cmd0_done";
+    case ERPSV_SDIO_PROBE_CMD5_DONE:
+      return "cmd5_done";
+    case ERPSV_SDIO_PROBE_CMD3_DONE:
+      return "cmd3_done";
+    case ERPSV_SDIO_PROBE_CMD7_DONE:
+      return "cmd7_done";
+    case ERPSV_SDIO_PROBE_CMD52_DONE:
+      return "cmd52_done";
+    default:
+      return "unknown";
+  }
+}
+
+static int erpsv_find_sdio_probe_state(const unsigned char* log,
+                                       size_t log_len,
+                                       uint32_t expected_state) {
+  size_t scan = 0u;
+
+  if (log == NULL || expected_state == 0u) {
+    return 0;
+  }
+  while (scan < log_len) {
+    uint16_t kind = 0u;
+    uint32_t payload_len = 0u;
+    size_t next = 0u;
+    if (erpsv_packet_at(log, log_len, scan, &kind, &payload_len, &next) != 0) {
+      if (kind == ERPSV_ERWIRE_KIND_NODE_AVAILABLE &&
+          payload_len == ERPSV_NODE_AVAILABLE_BYTES) {
+        const unsigned char* payload = log + scan + ERPSV_ERWIRE_HEADER_SIZE;
+        uint32_t actual_state =
+            erpsv_get_u32(payload + ERPSV_NODE_AVAILABLE_LOG_HEAD_OFFSET);
+        if (actual_state == expected_state) {
+          return 1;
+        }
+        fprintf(stderr,
+                "pi-serial-verify: sdio probe state is %s (0x%08x), expected %s\n",
+                erpsv_sdio_state_name(actual_state),
+                actual_state,
+                erpsv_sdio_state_name(expected_state));
+        return 0;
       }
       scan = next;
     } else {
@@ -252,11 +342,29 @@ static int erpsv_verify(const unsigned char* manifest,
   size_t log_cursor = 0u;
   size_t expected_len;
   size_t prefix_len = strlen(ERPSV_EXPECT_PREFIX);
+  size_t sdio_prefix_len = strlen(ERPSV_SDIO_EXPECT_PREFIX);
   size_t expectation_count = 0u;
 
   while (erpsv_next_line(manifest, manifest_len, &manifest_cursor, &line,
                          &line_len) != 0) {
     uint16_t expected_kind;
+    if (erpsv_line_has_prefix(line, line_len, ERPSV_SDIO_EXPECT_PREFIX) != 0) {
+      uint32_t expected_state;
+      expected = line + sdio_prefix_len;
+      expected_len = line_len - sdio_prefix_len;
+      expected_state = erpsv_sdio_state_from_name(expected, expected_len);
+      if (expected_state == 0u) {
+        return erpsv_fail("unknown sdio probe expectation");
+      }
+      if (erpsv_find_sdio_probe_state(log, log_len, expected_state) == 0) {
+        fprintf(stderr,
+                "pi-serial-verify: missing sdio probe expectation: %s\n",
+                erpsv_sdio_state_name(expected_state));
+        return 1;
+      }
+      ++expectation_count;
+      continue;
+    }
     if (erpsv_line_has_prefix(line, line_len, ERPSV_EXPECT_PREFIX) == 0) {
       continue;
     }
