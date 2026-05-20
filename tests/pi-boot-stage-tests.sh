@@ -76,6 +76,21 @@ if ! grep -q "node=erz2w-5:mobile-observer-route-churn-late-admission" \
   exit 1
 fi
 
+for firmware_name in bootcode.bin start.elf fixup.dat; do
+  if ! cmp -s "${ROOT_DIR}/firmware/raspberry-pi/${firmware_name}" \
+    "${BOOT_DIR}/${firmware_name}"; then
+    printf 'zero 2w staged firmware %s does not match repo firmware\n' \
+      "$firmware_name" >&2
+    exit 1
+  fi
+  if ! grep -q "firmware=${firmware_name}" \
+    "$BOOT_DIR/EDGERUN-PI-ZERO-2W-BOOT.txt"; then
+    printf 'zero 2w manifest does not name firmware %s\n' \
+      "$firmware_name" >&2
+    exit 1
+  fi
+done
+
 printf 'edgerun-armv6-test-payload\n' >"$ZERO_W_PAYLOAD"
 "$TOOL_BIN" pi-zero-w-v1_1 "$ZERO_W_PAYLOAD" "$ZERO_W_BOOT_DIR" \
   >/tmp/pi-boot-stage-zero-w-run.out
@@ -147,6 +162,34 @@ if ! grep -q "erwire_expect=node_heartbeat" \
   printf 'zero w manifest does not name node heartbeat expectation\n' >&2
   exit 1
 fi
+
+for firmware_name in bootcode.bin start.elf fixup.dat; do
+  if ! cmp -s "${ROOT_DIR}/firmware/raspberry-pi/${firmware_name}" \
+    "${ZERO_W_BOOT_DIR}/${firmware_name}"; then
+    printf 'zero w staged firmware %s does not match repo firmware\n' \
+      "$firmware_name" >&2
+    exit 1
+  fi
+  if ! grep -q "firmware=${firmware_name}" \
+    "$ZERO_W_BOOT_DIR/EDGERUN-PI-ZERO-W-V1_1-BOOT.txt"; then
+    printf 'zero w manifest does not name firmware %s\n' "$firmware_name" >&2
+    exit 1
+  fi
+done
+
+for firmware_name in 02d0.a9a6.0 02d0.a9a6.1 02d0.a9a6.2; do
+  if ! cmp -s "${ROOT_DIR}/firmware/network/${firmware_name}" \
+    "${ZERO_W_BOOT_DIR}/EFI/firmware/${firmware_name}"; then
+    printf 'zero w staged firmware %s does not match repo firmware\n' \
+      "$firmware_name" >&2
+    exit 1
+  fi
+  if ! grep -q "firmware=EFI/firmware/${firmware_name}" \
+    "$ZERO_W_BOOT_DIR/EDGERUN-PI-ZERO-W-V1_1-BOOT.txt"; then
+    printf 'zero w manifest does not name firmware %s\n' "$firmware_name" >&2
+    exit 1
+  fi
+done
 
 if "$TOOL_BIN" pi-zero-vague "$PAYLOAD" "$BOOT_DIR" \
   >/tmp/pi-boot-stage-bad-board.out 2>/tmp/pi-boot-stage-bad-board.err; then
