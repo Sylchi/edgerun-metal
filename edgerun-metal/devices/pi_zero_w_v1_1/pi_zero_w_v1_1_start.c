@@ -48,9 +48,12 @@
 #define ER_PI_ZERO_W_V1_1_SDIO_PROBE_CMD52_DONE 5u
 #define ER_PI_ZERO_W_V1_1_SDIO_PROBE_CMD53_DONE 6u
 #define ER_PI_ZERO_W_V1_1_L2_READY 7u
-#define ER_PI_ZERO_W_V1_1_L2_AP_ENABLE_FUNCTIONS_DONE 8u
-#define ER_PI_ZERO_W_V1_1_L2_AP_READY_FUNCTIONS_DONE 9u
 #define ER_PI_ZERO_W_V1_1_SDIO_PROBE_ERROR 0xffffffffu
+#define ER_PI_ZERO_W_V1_1_LED_BOOT_ENTRY 1u
+#define ER_PI_ZERO_W_V1_1_LED_UART_READY 2u
+#define ER_PI_ZERO_W_V1_1_LED_WIFI_POWERED 3u
+#define ER_PI_ZERO_W_V1_1_LED_CYW_MAILBOX_OK 7u
+#define ER_PI_ZERO_W_V1_1_LED_CYW_MAILBOX_FAIL 11u
 #define ER_PI_ZERO_W_V1_1_LED_STEP_DELAY_TICKS 250000u
 #define ER_PI_ZERO_W_V1_1_EMMC_RESET_POLL_BUDGET 100000u
 #define ER_PI_ZERO_W_V1_1_EMMC_STABLE_POLL_BUDGET 100000u
@@ -1488,7 +1491,7 @@ static UINT32 er_pi_zero_w_v1_1_wifi_address(
                                       out_address);
 }
 
-static UINT32 er_pi_zero_w_v1_1_cyw43438_enable_open_l2_ap(void) {
+static UINT32 er_pi_zero_w_v1_1_cyw43438_start_owned_l2(void) {
   return er_pi_zero_w_v1_1_cyw43438_start_owned_firmware();
 }
 
@@ -1619,19 +1622,19 @@ void er_pi_zero_w_v1_1_main(void) {
   UINT32 heartbeat = 0u;
 
   er_pi_zero_w_v1_1_act_led_init();
-  er_pi_zero_w_v1_1_act_led_status(1u);
+  er_pi_zero_w_v1_1_act_led_status(ER_PI_ZERO_W_V1_1_LED_BOOT_ENTRY);
   er_pi_zero_w_v1_1_uart_init();
-  er_pi_zero_w_v1_1_act_led_status(2u);
+  er_pi_zero_w_v1_1_act_led_status(ER_PI_ZERO_W_V1_1_LED_UART_READY);
   er_pi_zero_w_v1_1_wifi_gpio_init();
-  er_pi_zero_w_v1_1_act_led_status(3u);
+  er_pi_zero_w_v1_1_act_led_status(ER_PI_ZERO_W_V1_1_LED_WIFI_POWERED);
   er_pi_zero_w_v1_1_sdio_probe();
   if (g_er_pi_zero_w_v1_1_sdio_probe_state ==
           ER_PI_ZERO_W_V1_1_SDIO_PROBE_CMD53_DONE &&
-      er_pi_zero_w_v1_1_cyw43438_enable_open_l2_ap() != 0u) {
+      er_pi_zero_w_v1_1_cyw43438_start_owned_l2() != 0u) {
     g_er_pi_zero_w_v1_1_sdio_probe_state = ER_PI_ZERO_W_V1_1_L2_READY;
-    er_pi_zero_w_v1_1_act_led_status(6u);
+    er_pi_zero_w_v1_1_act_led_status(ER_PI_ZERO_W_V1_1_LED_CYW_MAILBOX_OK);
   } else {
-    er_pi_zero_w_v1_1_act_led_status(10u);
+    er_pi_zero_w_v1_1_act_led_status(ER_PI_ZERO_W_V1_1_LED_CYW_MAILBOX_FAIL);
   }
   er_pi_zero_w_v1_1_send_node_available();
 
