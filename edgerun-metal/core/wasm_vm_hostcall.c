@@ -31,6 +31,105 @@ static int er_wasm_import_signature_matches(UINT8 actual_params,
   return 0;
 }
 
+typedef struct {
+  INT64 bus;
+  INT64 dev;
+  INT64 func;
+  INT64 offset;
+  INT64 value;
+} ErWasmPciCallArgs;
+
+static int er_wasm_hostcall_pci_args(UINT8 param_count_call,
+                                     UINT8 result_count,
+                                     UINT8 result_type,
+                                     INT64* stack,
+                                     UINT32* stack_size,
+                                     UINT8 include_value,
+                                     ErWasmPciCallArgs* out_args) {
+  UINT8 expected_results;
+  UINT8 expected_params;
+
+  if (out_args == 0) {
+    return -1;
+  }
+  expected_results = include_value != 0u ?
+      ER_WASM_HOSTCALL_NO_RESULTS : ER_WASM_HOSTCALL_I64_RESULTS;
+  expected_params = include_value != 0u ?
+      ER_WASM_PCI_WRITE32_PARAM_COUNT : ER_WASM_PCI_READ32_PARAM_COUNT;
+  if (er_wasm_import_signature_matches(param_count_call, result_count, result_type,
+                                       expected_params,
+                                       expected_results) != 0 ||
+      *stack_size < expected_params) {
+    return -1;
+  }
+  if (include_value != 0u) {
+    out_args->value = stack[--(*stack_size)];
+  } else {
+    out_args->value = 0;
+  }
+  out_args->offset = stack[--(*stack_size)];
+  out_args->func = stack[--(*stack_size)];
+  out_args->dev = stack[--(*stack_size)];
+  out_args->bus = stack[--(*stack_size)];
+  return 0;
+}
+
+static int er_wasm_hostcall_binary_window(ErWasmModule* module,
+                                          UINT8 param_count_call,
+                                          UINT8 result_count,
+                                          UINT8 result_type,
+                                          INT64* stack,
+                                          UINT32* stack_size,
+                                          UINT32 window_base,
+                                          UINT32 window_len,
+                                          UINT8** out_bytes,
+                                          UINT32* out_len) {
+  INT64 ptr = 0;
+  INT64 len = 0;
+
+  if (er_wasm_import_signature_matches(param_count_call, result_count, result_type,
+                                       ER_WASM_HOSTCALL_BINARY_PARAMS,
+                                       ER_WASM_HOSTCALL_I64_RESULTS) != 0 ||
+      *stack_size < ER_WASM_HOSTCALL_BINARY_PARAMS ||
+      out_bytes == 0 ||
+      out_len == 0) {
+    return -1;
+  }
+  len = stack[--(*stack_size)];
+  ptr = stack[--(*stack_size)];
+  if (ptr < 0 ||
+      len < 0 ||
+      (UINT64)len > (UINT64)ER_WASM_U32_MASK ||
+      er_wasm_memory_window_range(module, (UINT64)ptr, (UINT32)len,
+                                  window_base,
+                                  window_len,
+                                  out_bytes) != 0) {
+    return -1;
+  }
+  *out_len = (UINT32)len;
+  return 0;
+}
+
+static int er_wasm_hostcall_outbox_window(ErWasmModule* module,
+                                          UINT8 param_count_call,
+                                          UINT8 result_count,
+                                          UINT8 result_type,
+                                          INT64* stack,
+                                          UINT32* stack_size,
+                                          UINT8** out_bytes,
+                                          UINT32* out_len) {
+  return er_wasm_hostcall_binary_window(module,
+                                        param_count_call,
+                                        result_count,
+                                        result_type,
+                                        stack,
+                                        stack_size,
+                                        module->linear_memory.relay_outbox_base,
+                                        module->linear_memory.relay_outbox_len,
+                                        out_bytes,
+                                        out_len);
+}
+
 int er_wasm_execute_import_call(ErWasmModule* module,
                                 UINT8 import_kind,
                                 UINT8 param_count_call,
@@ -64,44 +163,26 @@ int er_wasm_execute_import_call(ErWasmModule* module,
       return 0;
     }
     case ER_WASM_IMPORT_KIND_PCI_READ32: {
-      INT64 bus = 0;
-      INT64 dev = 0;
-      INT64 func = 0;
-      INT64 offset = 0;
+      ErWasmPciCallArgs args;
       INT64 value = 0;
-      if (er_wasm_import_signature_matches(param_count_call, result_count, result_type,
-                                           ER_WASM_PCI_READ32_PARAM_COUNT,
-                                           ER_WASM_HOSTCALL_I64_RESULTS) != 0 ||
-          *stack_size < ER_WASM_PCI_READ32_PARAM_COUNT ||
-          module->host.pci_read32 == 0) {
+      if (module->host.pci_read32 == 0 ||
+          er_wasm_hostcall_pci_args(param_count_call, result_count, result_type,
+                                    stack, stack_size, 0u,
+                                    &args) != 0) {
         return -1;
       }
-      offset = stack[--(*stack_size)];
-      func = stack[--(*stack_size)];
-      dev = stack[--(*stack_size)];
-      bus = stack[--(*stack_size)];
-      value = module->host.pci_read32(bus, dev, func, offset);
+      value = module->host.pci_read32(args.bus, args.dev, args.func, args.offset);
       return er_wasm_stack_push(stack, stack_size, value);
     }
     case ER_WASM_IMPORT_KIND_PCI_WRITE32: {
-      INT64 bus = 0;
-      INT64 dev = 0;
-      INT64 func = 0;
-      INT64 offset = 0;
-      INT64 value = 0;
-      if (er_wasm_import_signature_matches(param_count_call, result_count, result_type,
-                                           ER_WASM_PCI_WRITE32_PARAM_COUNT,
-                                           ER_WASM_HOSTCALL_NO_RESULTS) != 0 ||
-          *stack_size < ER_WASM_PCI_WRITE32_PARAM_COUNT ||
-          module->host.pci_write32 == 0) {
+      ErWasmPciCallArgs args;
+      if (module->host.pci_write32 == 0 ||
+          er_wasm_hostcall_pci_args(param_count_call, result_count, result_type,
+                                    stack, stack_size, 1u,
+                                    &args) != 0) {
         return -1;
       }
-      value = stack[--(*stack_size)];
-      offset = stack[--(*stack_size)];
-      func = stack[--(*stack_size)];
-      dev = stack[--(*stack_size)];
-      bus = stack[--(*stack_size)];
-      module->host.pci_write32(bus, dev, func, offset, value);
+      module->host.pci_write32(args.bus, args.dev, args.func, args.offset, args.value);
       return 0;
     }
     case ER_WASM_IMPORT_KIND_MMIO_MAP: {
@@ -168,56 +249,45 @@ int er_wasm_execute_import_call(ErWasmModule* module,
       return er_wasm_stack_push(stack, stack_size, value);
     }
     case ER_WASM_IMPORT_KIND_RELAY_SEND: {
-      INT64 ptr = 0;
-      INT64 len = 0;
       INT64 value = 0;
       UINT8* bytes = 0;
-      if (er_wasm_import_signature_matches(param_count_call, result_count, result_type,
-                                           ER_WASM_HOSTCALL_BINARY_PARAMS,
-                                           ER_WASM_HOSTCALL_I64_RESULTS) != 0 ||
-          *stack_size < ER_WASM_HOSTCALL_BINARY_PARAMS ||
-          module->host.relay_send == 0) {
+      UINT32 len = 0u;
+      if (module->host.relay_send == 0 ||
+          er_wasm_hostcall_outbox_window(module, param_count_call,
+                                         result_count, result_type,
+                                         stack, stack_size,
+                                         &bytes,
+                                         &len) != 0) {
         return -1;
       }
-      len = stack[--(*stack_size)];
-      ptr = stack[--(*stack_size)];
-      if (ptr < 0 || len < 0 || (UINT64)len > (UINT64)ER_WASM_U32_MASK ||
-          er_wasm_memory_window_range(module, (UINT64)ptr, (UINT32)len,
-                                      module->linear_memory.relay_outbox_base,
-                                      module->linear_memory.relay_outbox_len,
-                                      &bytes) != 0 ||
-          er_relay_packet_authorized_for_app((const UINT8*)bytes, (UINT32)len,
+      if (er_relay_packet_authorized_for_app((const UINT8*)bytes, len,
                                              module->host.app_usage,
                                              module->host.app_budget) == 0u ||
           er_app_usage_charge(module->host.app_usage, module->host.app_budget,
                               ER_APP_BUDGET_PACKET_BYTE, (UINT64)len) == 0u) {
         return -1;
       }
-      value = module->host.relay_send((const UINT8*)bytes, (UINT32)len);
+      value = module->host.relay_send((const UINT8*)bytes, len);
       return er_wasm_stack_push(stack, stack_size, value);
     }
     case ER_WASM_IMPORT_KIND_RELAY_RECV: {
-      INT64 ptr = 0;
-      INT64 capacity = 0;
       INT64 value = 0;
       UINT8* bytes = 0;
-      if (er_wasm_import_signature_matches(param_count_call, result_count, result_type,
-                                           ER_WASM_HOSTCALL_BINARY_PARAMS,
-                                           ER_WASM_HOSTCALL_I64_RESULTS) != 0 ||
-          *stack_size < ER_WASM_HOSTCALL_BINARY_PARAMS ||
-          module->host.relay_recv == 0) {
+      UINT32 capacity = 0u;
+      if (module->host.relay_recv == 0 ||
+          er_wasm_hostcall_binary_window(module,
+                                         param_count_call,
+                                         result_count,
+                                         result_type,
+                                         stack,
+                                         stack_size,
+                                         module->linear_memory.relay_inbox_base,
+                                         module->linear_memory.relay_inbox_len,
+                                         &bytes,
+                                         &capacity) != 0) {
         return -1;
       }
-      capacity = stack[--(*stack_size)];
-      ptr = stack[--(*stack_size)];
-      if (ptr < 0 || capacity < 0 || (UINT64)capacity > (UINT64)ER_WASM_U32_MASK ||
-          er_wasm_memory_window_range(module, (UINT64)ptr, (UINT32)capacity,
-                                      module->linear_memory.relay_inbox_base,
-                                      module->linear_memory.relay_inbox_len,
-                                      &bytes) != 0) {
-        return -1;
-      }
-      value = module->host.relay_recv(bytes, (UINT32)capacity);
+      value = module->host.relay_recv(bytes, capacity);
       return er_wasm_stack_push(stack, stack_size, value);
     }
     case ER_WASM_IMPORT_KIND_MEMORY_REGION_BASE:
@@ -240,33 +310,26 @@ int er_wasm_execute_import_call(ErWasmModule* module,
       return er_wasm_stack_push(stack, stack_size, (INT64)(UINT64)region_len);
     }
     case ER_WASM_IMPORT_KIND_UI_EMIT: {
-      INT64 ptr = 0;
-      INT64 len = 0;
       INT64 value = 0;
       UINT8* bytes = 0;
+      UINT32 len = 0u;
       er_ui_scene_stats_t stats;
-      if (er_wasm_import_signature_matches(param_count_call, result_count, result_type,
-                                           ER_WASM_HOSTCALL_BINARY_PARAMS,
-                                           ER_WASM_HOSTCALL_I64_RESULTS) != 0 ||
-          *stack_size < ER_WASM_HOSTCALL_BINARY_PARAMS ||
-          module->host.ui_emit == 0 ||
-          module->host.ui_presentation == 0) {
+      if (module->host.ui_emit == 0 ||
+          module->host.ui_presentation == 0 ||
+          er_wasm_hostcall_outbox_window(module, param_count_call,
+                                         result_count, result_type,
+                                         stack, stack_size,
+                                         &bytes,
+                                         &len) != 0) {
         return -1;
       }
-      len = stack[--(*stack_size)];
-      ptr = stack[--(*stack_size)];
-      if (ptr < 0 || len < 0 || (UINT64)len > (UINT64)ER_WASM_U32_MASK ||
-          er_wasm_memory_window_range(module, (UINT64)ptr, (UINT32)len,
-                                      module->linear_memory.relay_outbox_base,
-                                      module->linear_memory.relay_outbox_len,
-                                      &bytes) != 0 ||
-          er_wasm_ui_command_stats(bytes, (UINT32)len, &stats) != 0 ||
+      if (er_wasm_ui_command_stats(bytes, len, &stats) != 0 ||
           er_app_ui_scene_fits_presentation(stats,
                                             module->host.ui_presentation) == 0u) {
         return -1;
       }
       value = module->host.ui_emit(module->host.ui_emit_user,
-                                   (const UINT8*)bytes, (UINT32)len,
+                                   (const UINT8*)bytes, len,
                                    &stats);
       return er_wasm_stack_push(stack, stack_size, value);
     }
