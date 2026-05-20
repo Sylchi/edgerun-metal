@@ -58,8 +58,15 @@
   ((ER_PI_ZERO_W_V1_1_IEEE80211_PROBE_REQUEST_LEN << \
     ER_CYW43438_OWNED_FIRMWARE_RX_STATUS_LEN_SHIFT) | \
    ER_PI_ZERO_W_V1_1_IEEE80211_FC_PROBE_REQUEST)
-#define ER_PI_ZERO_W_V1_1_NODE_AVAILABLE_BYTES 189u
-#define ER_PI_ZERO_W_V1_1_NODE_HEARTBEAT_BYTES 116u
+#define ER_PI_ZERO_W_V1_1_UPDATE_STATE_BYTES 20u
+#define ER_PI_ZERO_W_V1_1_NODE_AVAILABLE_BASE_BYTES 189u
+#define ER_PI_ZERO_W_V1_1_NODE_AVAILABLE_BYTES \
+  (ER_PI_ZERO_W_V1_1_NODE_AVAILABLE_BASE_BYTES + \
+   ER_PI_ZERO_W_V1_1_UPDATE_STATE_BYTES)
+#define ER_PI_ZERO_W_V1_1_NODE_HEARTBEAT_BASE_BYTES 116u
+#define ER_PI_ZERO_W_V1_1_NODE_HEARTBEAT_BYTES \
+  (ER_PI_ZERO_W_V1_1_NODE_HEARTBEAT_BASE_BYTES + \
+   ER_PI_ZERO_W_V1_1_UPDATE_STATE_BYTES)
 #define ER_PI_ZERO_W_V1_1_CRC32_INITIAL 0xffffffffu
 #define ER_PI_ZERO_W_V1_1_CRC32_POLY 0xedb88320u
 #define ER_PI_ZERO_W_V1_1_CRC32_BITS_PER_BYTE 8u
@@ -243,6 +250,20 @@ static UINT8 er_pi_zero_w_v1_1_emmc_write32_op(void* ctx,
 
 static void er_pi_zero_w_v1_1_barrier(void) {
   __asm__ volatile("" ::: "memory");
+}
+
+static void er_pi_zero_w_v1_1_reboot(void) {
+  er_pi_zero_w_v1_1_write(ER_PI_ZERO_W_V1_1_PM_BASE,
+                          ER_PI_ZERO_W_V1_1_PM_WDOG,
+                          ER_PI_ZERO_W_V1_1_PM_PASSWORD |
+                              ER_PI_ZERO_W_V1_1_PM_WDOG_RESET_TICKS);
+  er_pi_zero_w_v1_1_write(ER_PI_ZERO_W_V1_1_PM_BASE,
+                          ER_PI_ZERO_W_V1_1_PM_RSTC,
+                          ER_PI_ZERO_W_V1_1_PM_PASSWORD |
+                              ER_PI_ZERO_W_V1_1_PM_RSTC_WRCFG_FULL_RESET);
+  for (;;) {
+    er_pi_zero_w_v1_1_barrier();
+  }
 }
 
 static void er_pi_zero_w_v1_1_delay(UINT32 ticks) {
@@ -2337,6 +2358,24 @@ static UINT32 er_pi_zero_w_v1_1_crc32(const UINT8* bytes, UINT32 len) {
   return ~crc;
 }
 
+static void er_pi_zero_w_v1_1_put_update_state(UINT8** cursor) {
+  er_pi_zero_w_v1_1_put_u32(
+      cursor,
+      (UINT32)g_er_pi_zero_w_v1_1_storage_probe_state);
+  er_pi_zero_w_v1_1_put_u32(
+      cursor,
+      (UINT32)g_er_pi_zero_w_v1_1_storage_relative_card_address);
+  er_pi_zero_w_v1_1_put_u32(
+      cursor,
+      (UINT32)g_er_pi_zero_w_v1_1_storage_last_block);
+  er_pi_zero_w_v1_1_put_u32(
+      cursor,
+      (UINT32)g_er_pi_zero_w_v1_1_storage_last_response);
+  er_pi_zero_w_v1_1_put_u32(
+      cursor,
+      (UINT32)g_er_pi_zero_w_v1_1_ota_state.reboot_required);
+}
+
 static void er_pi_zero_w_v1_1_send_erwire(UINT16 kind,
                                           UINT32 seq,
                                           const UINT8* payload,
@@ -2419,6 +2458,7 @@ static void er_pi_zero_w_v1_1_send_node_available(void) {
   er_pi_zero_w_v1_1_put_u64(&cursor, ER_PI_ZERO_W_V1_1_BOOT_MS);
   er_pi_zero_w_v1_1_put_u64(&cursor, ER_PI_ZERO_W_V1_1_HEARTBEAT_SECS);
   er_pi_zero_w_v1_1_put_bytes(&cursor, log_head, ER_PI_ZERO_W_V1_1_HASH_BYTES);
+  er_pi_zero_w_v1_1_put_update_state(&cursor);
   er_pi_zero_w_v1_1_send_erwire(ER_PI_ZERO_W_V1_1_ERWIRE_KIND_NODE_AVAILABLE,
                                 0u,
                                 payload,
@@ -2448,10 +2488,20 @@ static void er_pi_zero_w_v1_1_send_node_heartbeat(UINT32 heartbeat) {
                               connection_hash,
                               ER_PI_ZERO_W_V1_1_HASH_BYTES);
   er_pi_zero_w_v1_1_put_bytes(&cursor, log_head, ER_PI_ZERO_W_V1_1_HASH_BYTES);
+  er_pi_zero_w_v1_1_put_update_state(&cursor);
   er_pi_zero_w_v1_1_send_erwire(ER_PI_ZERO_W_V1_1_ERWIRE_KIND_NODE_HEARTBEAT,
                                 heartbeat + 1u,
                                 payload,
                                 ER_PI_ZERO_W_V1_1_NODE_HEARTBEAT_BYTES);
+}
+
+static UINT8 er_pi_zero_w_v1_1_update_reboot_ready(void) {
+  if (g_er_pi_zero_w_v1_1_ota_state.reboot_required != 0u &&
+      g_er_pi_zero_w_v1_1_storage_probe_state ==
+          ER_PI_ZERO_W_V1_1_STORAGE_WRITE_VERIFIED) {
+    return 1u;
+  }
+  return 0u;
 }
 
 void er_pi_zero_w_v1_1_main(void) {
@@ -2480,6 +2530,9 @@ void er_pi_zero_w_v1_1_main(void) {
     g_er_pi_zero_w_v1_1_boot_magic = ER_PI_ZERO_W_V1_1_BOOT_MAGIC;
     er_pi_zero_w_v1_1_ota_poll_owned_rx();
     er_pi_zero_w_v1_1_send_node_heartbeat(heartbeat);
+    if (er_pi_zero_w_v1_1_update_reboot_ready() != 0u) {
+      er_pi_zero_w_v1_1_reboot();
+    }
     heartbeat += 1u;
     er_pi_zero_w_v1_1_delay(
         ER_PI_ZERO_W_V1_1_UART_HEARTBEAT_DELAY_TICKS);
