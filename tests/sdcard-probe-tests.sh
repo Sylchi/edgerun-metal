@@ -33,8 +33,8 @@ fi
 rm -f "${IMAGE}"
 dd if=/dev/zero of="${IMAGE}" bs=1048576 count=2 >/dev/null 2>&1
 
-"${TOOL_BIN}" --destroy "${IMAGE}" --bytes 1048576 \
-  >/tmp/sdcard-probe-ok.out
+"${TOOL_BIN}" --destroy "${IMAGE}" --bytes 1048576 --block-bytes 1048576 \
+  >/tmp/sdcard-probe-ok.out 2>&1
 
 for expected in \
   "kind: regular-file" \
@@ -54,6 +54,12 @@ for expected in \
     exit 1
   fi
 done
+
+if ! grep -q "checked 1048576 / 1048576 bytes write" \
+  /tmp/sdcard-probe-ok.out; then
+  printf 'sdcard-probe did not report first span progress\n' >&2
+  exit 1
+fi
 
 if "${TOOL_BIN}" --destroy "${IMAGE}" --bytes 3 \
   >/tmp/sdcard-probe-bad.out 2>/tmp/sdcard-probe-bad.err; then

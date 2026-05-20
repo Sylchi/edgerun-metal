@@ -566,8 +566,9 @@ static void ersd_print_progress(uint64_t done,
   double combined_seconds;
   double eta_seconds;
   char eta[ERSD_ETA_TEXT_BYTES];
+  int is_first_span = done == (uint64_t)ERSD_BUFFER_BYTES;
 
-  if (done == total || (done % ERSD_PROGRESS_BYTES) == 0u) {
+  if (is_first_span || done == total || (done % ERSD_PROGRESS_BYTES) == 0u) {
     write_mb_sec = ersd_mb_per_sec(result->write_bytes, result->write_seconds);
     combined_seconds = result->write_seconds + result->verify_seconds;
     eta_seconds = 0.0;
