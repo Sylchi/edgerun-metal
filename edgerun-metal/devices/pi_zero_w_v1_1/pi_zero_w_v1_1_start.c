@@ -30,6 +30,12 @@
 #define ER_PI_ZERO_W_V1_1_HEARTBEAT_SECS 10u
 #define ER_PI_ZERO_W_V1_1_NODE_BYTES 32u
 #define ER_PI_ZERO_W_V1_1_HASH_BYTES 32u
+#define ER_PI_ZERO_W_V1_1_NODE_ID_TEXT "ERZWPI01RELAY001CYW43438ARMV6L2"
+#define ER_PI_ZERO_W_V1_1_NODE_ID_REVISION_TEXT "\001"
+#define ER_PI_ZERO_W_V1_1_NODE_ID_BYTES \
+  ER_PI_ZERO_W_V1_1_NODE_ID_TEXT ER_PI_ZERO_W_V1_1_NODE_ID_REVISION_TEXT
+#define ER_PI_ZERO_W_V1_1_CHANNEL_ID_TEXT "ERWIFIL2PIZEROW1CHANNEL00000001"
+#define ER_PI_ZERO_W_V1_1_C_STRING_NUL_BYTES 1u
 #define ER_PI_ZERO_W_V1_1_IEEE80211_BEACON_LEN 64u
 #define ER_PI_ZERO_W_V1_1_IEEE80211_PROBE_REQUEST_LEN 54u
 #define ER_PI_ZERO_W_V1_1_IEEE80211_DA_OFFSET 4u
@@ -185,19 +191,15 @@ volatile UINT32 g_er_pi_zero_w_v1_1_ota_target_block =
 
 static ErPiZeroWV11OtaState g_er_pi_zero_w_v1_1_ota_state;
 
-static const UINT8 g_er_pi_zero_w_v1_1_node_id[ER_PI_ZERO_W_V1_1_NODE_BYTES] = {
-  0x45u, 0x52u, 0x5au, 0x57u, 0x50u, 0x49u, 0x30u, 0x31u,
-  0x52u, 0x45u, 0x4cu, 0x41u, 0x59u, 0x30u, 0x30u, 0x31u,
-  0x43u, 0x59u, 0x57u, 0x34u, 0x33u, 0x34u, 0x33u, 0x38u,
-  0x41u, 0x52u, 0x4du, 0x56u, 0x36u, 0x4cu, 0x32u, 0x01u
-};
+static const UINT8
+    g_er_pi_zero_w_v1_1_node_id[ER_PI_ZERO_W_V1_1_NODE_BYTES +
+                                ER_PI_ZERO_W_V1_1_C_STRING_NUL_BYTES] =
+    ER_PI_ZERO_W_V1_1_NODE_ID_BYTES;
 
-static const UINT8 g_er_pi_zero_w_v1_1_channel_id[ER_PI_ZERO_W_V1_1_HASH_BYTES] = {
-  0x45u, 0x52u, 0x57u, 0x49u, 0x46u, 0x49u, 0x4cu, 0x32u,
-  0x50u, 0x49u, 0x5au, 0x45u, 0x52u, 0x4fu, 0x57u, 0x31u,
-  0x43u, 0x48u, 0x41u, 0x4eu, 0x4eu, 0x45u, 0x4cu, 0x30u,
-  0x30u, 0x30u, 0x30u, 0x30u, 0x30u, 0x30u, 0x30u, 0x31u
-};
+static const UINT8
+    g_er_pi_zero_w_v1_1_channel_id[ER_PI_ZERO_W_V1_1_HASH_BYTES +
+                                   ER_PI_ZERO_W_V1_1_C_STRING_NUL_BYTES] =
+    ER_PI_ZERO_W_V1_1_CHANNEL_ID_TEXT;
 
 static UINT32 er_pi_zero_w_v1_1_wifi_beacon(
     UINT8 out_frame[ER_PI_ZERO_W_V1_1_IEEE80211_BEACON_LEN]);
