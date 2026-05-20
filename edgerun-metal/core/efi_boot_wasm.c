@@ -7,12 +7,8 @@ static const UINT8 g_ui_boot_package_signature_part_a[] =
     "edgerun:c:v1:boot:package-signature:a";
 static const UINT8 g_ui_boot_package_signature_part_b[] =
     "edgerun:c:v1:boot:package-signature:b";
-static const UINT8 g_ui_boot_package_signer_key[ER_PUBLIC_KEY_LEN] = {
-  0x45u, 0x52u, 0x57u, 0x43u, 0x2du, 0x42u, 0x4fu, 0x4fu,
-  0x54u, 0x2du, 0x50u, 0x4bu, 0x47u, 0x2du, 0x53u, 0x49u,
-  0x47u, 0x4eu, 0x45u, 0x52u, 0x2du, 0x56u, 0x30u, 0x30u,
-  0x30u, 0x30u, 0x30u, 0x30u, 0x30u, 0x30u, 0x30u, 0x31u
-};
+static const char g_ui_boot_package_signer_key[] =
+    "ERWC-BOOT-PKG-SIGNER-V0000000001";
 
 static ErUiBootInstalledApp g_ui_boot_installed_apps[ER_UI_BOOT_INSTALLED_APP_COUNT] = {
   {
@@ -32,12 +28,18 @@ static UINT8 g_ui_boot_installed_apps_prepared;
 enum {
   ER_UI_BOOT_PACKAGE_APP_SEQUENCE = 1u,
   ER_UI_BOOT_PACKAGE_MANIFEST_SEQUENCE = 2u,
-  ER_UI_BOOT_PACKAGE_SIGNATURE_ALGORITHM = 1u
+  ER_UI_BOOT_PACKAGE_SIGNATURE_ALGORITHM = 1u,
+  ER_UI_BOOT_HEX_CHARS_PER_BYTE = 2u,
+  ER_UI_BOOT_HEX_LOW_NYBBLE_OFFSET = 1u,
+  ER_UI_BOOT_HEX_HIGH_NYBBLE_SHIFT = 4u,
+  ER_UI_BOOT_HEX_NYBBLE_MASK = 0x0fu,
+  ER_UI_BOOT_PACKAGE_HASH_PREFIX_BYTES = 4u,
+  ER_UI_BOOT_PACKAGE_PROVENANCE_PREFIX_BYTES = 7u
 };
 
 static char er_ui_boot_hex_char(UINT8 value) {
   static const char digits[] = "0123456789abcdef";
-  return digits[value & 0x0fu];
+  return digits[value & ER_UI_BOOT_HEX_NYBBLE_MASK];
 }
 
 static UINT8 er_ui_boot_bytes_hex(const UINT8* bytes, UINTN byte_len, char* out, UINTN out_len) {
@@ -48,8 +50,10 @@ static UINT8 er_ui_boot_bytes_hex(const UINT8* bytes, UINTN byte_len, char* out,
     return 0u;
   }
   for (i = 0u; i < byte_len; ++i) {
-    out[i * 2u] = er_ui_boot_hex_char((UINT8)(bytes[i] >> 4u));
-    out[i * 2u + 1u] = er_ui_boot_hex_char(bytes[i]);
+    out[i * ER_UI_BOOT_HEX_CHARS_PER_BYTE] =
+        er_ui_boot_hex_char((UINT8)(bytes[i] >> ER_UI_BOOT_HEX_HIGH_NYBBLE_SHIFT));
+    out[i * ER_UI_BOOT_HEX_CHARS_PER_BYTE + ER_UI_BOOT_HEX_LOW_NYBBLE_OFFSET] =
+        er_ui_boot_hex_char(bytes[i]);
   }
   out[ER_UI_BOOT_HASH_HEX_BYTES] = '\0';
   return 1u;
@@ -116,8 +120,8 @@ static UINT8 er_ui_boot_launcher_status_from_install_state(
 static UINT8 er_ui_boot_package_signer_identity(ErIdentity* out_identity) {
   return er_identity_prepare(ER_IDENTITY_TYPE_PUBLIC_KEY,
                              ER_IDENTITY_BACKING_ED25519,
-                             g_ui_boot_package_signer_key,
-                             (UINT16)sizeof(g_ui_boot_package_signer_key),
+                             (const UINT8*)g_ui_boot_package_signer_key,
+                             ER_PUBLIC_KEY_LEN,
                              out_identity);
 }
 
@@ -458,6 +462,8 @@ UINT8 er_ui_boot_install_shell_launcher_apps(er_ui_ledger_app_state_t* ledger_st
     UINT32 surface_id;
     UINT32 launch_id;
     er_ui_launcher_app_t app;
+    char *package_hash_label = g_ui_boot_package_hash_labels[i];
+    char *provenance_label = g_ui_boot_package_provenance_labels[i];
 
     if (record == 0 ||
         er_ui_boot_launcher_status_from_install_state(record->install_state,
@@ -465,15 +471,15 @@ UINT8 er_ui_boot_install_shell_launcher_apps(er_ui_ledger_app_state_t* ledger_st
         er_ui_boot_user_app_surface_id(i, &surface_id) == 0u ||
         er_ui_boot_user_app_launch_id(i, &launch_id) == 0u ||
         er_ui_boot_prefixed_hash_label("pkg:",
-                                       4u,
+                                       ER_UI_BOOT_PACKAGE_HASH_PREFIX_BYTES,
                                        &record->current_entry.index_entry.package.package_id,
-                                       g_ui_boot_package_hash_labels[i],
+                                       package_hash_label,
                                        ER_UI_BOOT_PACKAGE_HASH_LABEL_BYTES) == 0u ||
         er_ui_boot_prefixed_bytes_label("signer:",
-                                        7u,
+                                        ER_UI_BOOT_PACKAGE_PROVENANCE_PREFIX_BYTES,
                                         record->current_entry.package_signature.signature.identity.material,
                                         ER_HASH_LEN,
-                                        g_ui_boot_package_provenance_labels[i],
+                                        provenance_label,
                                         ER_UI_BOOT_PROVENANCE_LABEL_BYTES) == 0u) {
       return 0u;
     }
@@ -481,8 +487,8 @@ UINT8 er_ui_boot_install_shell_launcher_apps(er_ui_ledger_app_state_t* ledger_st
     app.surface_id = surface_id;
     app.name = "User App";
     app.status = status;
-    app.package_hash = g_ui_boot_package_hash_labels[i];
-    app.provenance = g_ui_boot_package_provenance_labels[i];
+    app.package_hash = package_hash_label;
+    app.provenance = provenance_label;
     app.permissions = "ui,storage";
     if (er_ui_shell_add_launcher_app(&ledger_state->shell, app) != ER_UI_OK) {
       return 0u;
