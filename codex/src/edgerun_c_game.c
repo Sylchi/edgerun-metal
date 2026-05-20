@@ -1,5 +1,5 @@
 #define CODEX_GAME_BENCH_TASKS 100u
-#define CODEX_GAME_STRATEGY_COUNT 5u
+#define CODEX_GAME_STRATEGY_COUNT 10u
 #define CODEX_GAME_SCORE_FEATURE 1
 #define CODEX_GAME_SCORE_CLEANUP 8
 #define CODEX_GAME_SCORE_SMELL_OR_WORLDVIEW 5
@@ -41,7 +41,12 @@ typedef enum {
     CODEX_GAME_STRATEGY_SCORE_ONLY,
     CODEX_GAME_STRATEGY_CLEANUP_FIRST,
     CODEX_GAME_STRATEGY_GATE_AND_SCORE,
-    CODEX_GAME_STRATEGY_DELEGATED_GATE
+    CODEX_GAME_STRATEGY_DELEGATED_GATE,
+    CODEX_GAME_STRATEGY_MINIMAL_GATE,
+    CODEX_GAME_STRATEGY_TEST_LOCK_DELEGATE,
+    CODEX_GAME_STRATEGY_CLEANUP_SWARM,
+    CODEX_GAME_STRATEGY_VALUE_DENSITY,
+    CODEX_GAME_STRATEGY_DEBT_AVOID_SERIAL
 } CodexGameStrategyKind;
 
 typedef struct {
@@ -340,6 +345,38 @@ static void codex_game_finish_delegated_move(CodexGameMove *move) {
     }
 }
 
+static int codex_game_better_move(CodexGameMove a, CodexGameMove b);
+
+static void codex_game_fill_quality_units(CodexGameMove *move,
+                                          CodexGameTask task,
+                                          int include_feature) {
+    move->feature_units = include_feature ?
+                          codex_game_positive_unit(task.feature_units) : 0;
+    move->cleanup_units = task.cleanup_units;
+    move->test_units = task.test_units;
+    move->deleted_units = task.deleted_units;
+}
+
+static void codex_game_finish_gate(CodexGameMove *move, int delegated) {
+    if (delegated) {
+        codex_game_finish_delegated_move(move);
+    } else {
+        codex_game_finish_move(move);
+    }
+    if (codex_game_score_move(*move) < CODEX_GAME_SCORE_GATE_FLOOR) {
+        memset(move, 0, sizeof(*move));
+    }
+}
+
+static CodexGameMove codex_game_delegated_gate_candidate(CodexGameTask task,
+                                                         int include_feature) {
+    CodexGameMove move = {0};
+
+    codex_game_fill_quality_units(&move, task, include_feature);
+    codex_game_finish_gate(&move, 1);
+    return move;
+}
+
 static CodexGameMove codex_game_move_for_strategy(CodexGameStrategyKind strategy,
                                                   CodexGameTask task) {
     CodexGameMove move = {0};
@@ -371,24 +408,50 @@ static CodexGameMove codex_game_move_for_strategy(CodexGameStrategyKind strategy
             codex_game_finish_move(&move);
             break;
         case CODEX_GAME_STRATEGY_GATE_AND_SCORE:
+            codex_game_fill_quality_units(&move, task, 1);
+            codex_game_finish_gate(&move, 0);
+            break;
+        case CODEX_GAME_STRATEGY_DELEGATED_GATE:
+            codex_game_fill_quality_units(&move, task, 1);
+            codex_game_finish_gate(&move, 1);
+            break;
+        case CODEX_GAME_STRATEGY_MINIMAL_GATE:
             move.feature_units = codex_game_positive_unit(task.feature_units);
-            move.cleanup_units = task.cleanup_units;
-            move.test_units = task.test_units;
-            move.deleted_units = task.deleted_units;
+            move.cleanup_units = codex_game_positive_unit(task.cleanup_units);
+            move.test_units = codex_game_positive_unit(task.test_units);
+            move.deleted_units = codex_game_positive_unit(task.deleted_units);
             codex_game_finish_move(&move);
             if (codex_game_score_move(move) < CODEX_GAME_SCORE_GATE_FLOOR) {
                 memset(&move, 0, sizeof(move));
             }
             break;
-        case CODEX_GAME_STRATEGY_DELEGATED_GATE:
-            move.feature_units = codex_game_positive_unit(task.feature_units);
-            move.cleanup_units = task.cleanup_units;
+        case CODEX_GAME_STRATEGY_TEST_LOCK_DELEGATE:
             move.test_units = task.test_units;
+            move.cleanup_units = task.cleanup_units;
+            move.deleted_units = task.deleted_units;
+            if (task.test_units > 0) {
+                move.feature_units = codex_game_positive_unit(task.feature_units);
+            }
+            codex_game_finish_gate(&move, 1);
+            break;
+        case CODEX_GAME_STRATEGY_CLEANUP_SWARM:
+            move.cleanup_units = task.cleanup_units;
             move.deleted_units = task.deleted_units;
             codex_game_finish_delegated_move(&move);
-            if (codex_game_score_move(move) < CODEX_GAME_SCORE_GATE_FLOOR) {
-                memset(&move, 0, sizeof(move));
+            break;
+        case CODEX_GAME_STRATEGY_VALUE_DENSITY:
+            {
+                CodexGameMove with_feature =
+                    codex_game_delegated_gate_candidate(task, 1);
+                CodexGameMove without_feature =
+                    codex_game_delegated_gate_candidate(task, 0);
+                move = codex_game_better_move(with_feature, without_feature) ?
+                       with_feature : without_feature;
             }
+            break;
+        case CODEX_GAME_STRATEGY_DEBT_AVOID_SERIAL:
+            codex_game_fill_quality_units(&move, task, 1);
+            codex_game_finish_gate(&move, 0);
             break;
     }
     return move;
@@ -437,8 +500,18 @@ static CodexGameStrategyKind codex_game_strategy_at(size_t index) {
             return CODEX_GAME_STRATEGY_GATE_AND_SCORE;
         case CODEX_GAME_STRATEGY_DELEGATED_GATE:
             return CODEX_GAME_STRATEGY_DELEGATED_GATE;
+        case CODEX_GAME_STRATEGY_MINIMAL_GATE:
+            return CODEX_GAME_STRATEGY_MINIMAL_GATE;
+        case CODEX_GAME_STRATEGY_TEST_LOCK_DELEGATE:
+            return CODEX_GAME_STRATEGY_TEST_LOCK_DELEGATE;
+        case CODEX_GAME_STRATEGY_CLEANUP_SWARM:
+            return CODEX_GAME_STRATEGY_CLEANUP_SWARM;
+        case CODEX_GAME_STRATEGY_VALUE_DENSITY:
+            return CODEX_GAME_STRATEGY_VALUE_DENSITY;
+        case CODEX_GAME_STRATEGY_DEBT_AVOID_SERIAL:
+            return CODEX_GAME_STRATEGY_DEBT_AVOID_SERIAL;
     }
-    return CODEX_GAME_STRATEGY_DELEGATED_GATE;
+    return CODEX_GAME_STRATEGY_DEBT_AVOID_SERIAL;
 }
 
 static const char *codex_game_strategy_name(CodexGameStrategyKind strategy) {
@@ -453,8 +526,18 @@ static const char *codex_game_strategy_name(CodexGameStrategyKind strategy) {
             return "gate-and-score";
         case CODEX_GAME_STRATEGY_DELEGATED_GATE:
             return "delegated-gate";
+        case CODEX_GAME_STRATEGY_MINIMAL_GATE:
+            return "minimal-gate";
+        case CODEX_GAME_STRATEGY_TEST_LOCK_DELEGATE:
+            return "test-lock-delegate";
+        case CODEX_GAME_STRATEGY_CLEANUP_SWARM:
+            return "cleanup-swarm";
+        case CODEX_GAME_STRATEGY_VALUE_DENSITY:
+            return "value-density";
+        case CODEX_GAME_STRATEGY_DEBT_AVOID_SERIAL:
+            return "debt-avoid-serial";
     }
-    return "delegated-gate";
+    return "debt-avoid-serial";
 }
 
 static int codex_game_bench(void) {
@@ -536,6 +619,11 @@ static int codex_game_bench(void) {
     puts("- score-only can still accept small debt when cleanup is absent");
     puts("- gate-and-score keeps feature progress while preventing negative moves");
     puts("- delegated-gate wins when parallel side work reduces host steps enough");
+    puts("- minimal-gate trades score for short serial turns");
+    puts("- test-lock-delegate skips untested feature work");
+    puts("- cleanup-swarm ignores features and tests to harvest low-risk cleanup");
+    puts("- value-density prioritizes high-value work before delegated execution");
+    puts("- debt-avoid-serial is gate-and-score without parallelism");
     return 0;
 }
 
