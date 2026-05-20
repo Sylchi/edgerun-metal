@@ -50,6 +50,8 @@
 #define ER_PI_ZERO_W_V1_1_SDIO_PROBE_CMD0_DONE 1u
 #define ER_PI_ZERO_W_V1_1_SDIO_PROBE_CMD5_DONE 2u
 #define ER_PI_ZERO_W_V1_1_SDIO_PROBE_CMD3_DONE 3u
+#define ER_PI_ZERO_W_V1_1_SDIO_PROBE_CMD7_DONE 4u
+#define ER_PI_ZERO_W_V1_1_SDIO_PROBE_CMD52_DONE 5u
 #define ER_PI_ZERO_W_V1_1_SDIO_PROBE_ERROR 0xffffffffu
 
 volatile UINT32 g_er_pi_zero_w_v1_1_boot_magic =
@@ -214,7 +216,9 @@ static UINT32 er_pi_zero_w_v1_1_emmc_response_bits(UINT32 response_kind) {
   switch (response_kind) {
     case ER_PI_MMC_RESPONSE_NONE:
       return ER_PI_EMMC_CMDTM_RESPONSE_NONE;
+    case ER_PI_MMC_RESPONSE_R1:
     case ER_PI_MMC_RESPONSE_R4:
+    case ER_PI_MMC_RESPONSE_R5:
     case ER_PI_MMC_RESPONSE_R6:
       return ER_PI_EMMC_CMDTM_RESPONSE_48;
     default:
@@ -230,6 +234,8 @@ static UINT32 er_pi_zero_w_v1_1_emmc_command_value(UINT32 command_index,
   value |= er_pi_zero_w_v1_1_emmc_response_bits(response_kind) <<
            ER_PI_EMMC_CMDTM_RESPONSE_BITS;
   switch (response_kind) {
+    case ER_PI_MMC_RESPONSE_R1:
+    case ER_PI_MMC_RESPONSE_R5:
     case ER_PI_MMC_RESPONSE_R6:
       value |= ER_PI_EMMC_CMDTM_CRC_CHECK;
       value |= ER_PI_EMMC_CMDTM_INDEX_CHECK;
@@ -301,6 +307,32 @@ static UINT32 er_pi_zero_w_v1_1_emmc_command(UINT32 command_index,
   return 1u;
 }
 
+static UINT32 er_pi_zero_w_v1_1_mmc_rca_argument(UINT32 relative_card_address) {
+  return (relative_card_address & ER_PI_MMC_RCA_MASK) <<
+         ER_PI_MMC_RCA_RESPONSE_SHIFT;
+}
+
+static UINT32 er_pi_zero_w_v1_1_sdio_cmd52_argument(UINT32 write,
+                                                    UINT32 function,
+                                                    UINT32 raw,
+                                                    UINT32 address,
+                                                    UINT8 data) {
+  UINT32 argument = 0u;
+
+  if (write != ER_PI_SDIO_CMD52_READ) {
+    argument |= 1u << ER_PI_SDIO_RW_FLAG_BIT;
+  }
+  argument |= ((function & ER_PI_SDIO_FUNCTION_MASK) <<
+               ER_PI_SDIO_FUNCTION_BITS);
+  if (raw != ER_PI_SDIO_CMD52_NO_RAW) {
+    argument |= 1u << ER_PI_SDIO_RAW_FLAG_BIT;
+  }
+  argument |= (address & ER_PI_SDIO_ADDRESS_MASK) <<
+              ER_PI_SDIO_ADDRESS_BITS;
+  argument |= (UINT32)data & ER_PI_SDIO_CMD52_DATA_MASK;
+  return argument;
+}
+
 static void er_pi_zero_w_v1_1_sdio_probe(void) {
   UINT32 response;
 
@@ -335,8 +367,37 @@ static void er_pi_zero_w_v1_1_sdio_probe(void) {
   }
   g_er_pi_zero_w_v1_1_sdio_relative_card_address =
       response >> ER_PI_MMC_RCA_RESPONSE_SHIFT;
+  if (g_er_pi_zero_w_v1_1_sdio_relative_card_address == 0u) {
+    g_er_pi_zero_w_v1_1_sdio_probe_state = ER_PI_ZERO_W_V1_1_SDIO_PROBE_ERROR;
+    return;
+  }
   g_er_pi_zero_w_v1_1_sdio_probe_state =
       ER_PI_ZERO_W_V1_1_SDIO_PROBE_CMD3_DONE;
+  if (er_pi_zero_w_v1_1_emmc_command(
+          ER_PI_MMC_CMD_SELECT_CARD,
+          er_pi_zero_w_v1_1_mmc_rca_argument(
+              g_er_pi_zero_w_v1_1_sdio_relative_card_address),
+          ER_PI_MMC_RESPONSE_R1,
+          &response) == 0u) {
+    g_er_pi_zero_w_v1_1_sdio_probe_state = ER_PI_ZERO_W_V1_1_SDIO_PROBE_ERROR;
+    return;
+  }
+  g_er_pi_zero_w_v1_1_sdio_probe_state =
+      ER_PI_ZERO_W_V1_1_SDIO_PROBE_CMD7_DONE;
+  if (er_pi_zero_w_v1_1_emmc_command(
+          ER_PI_MMC_CMD_IO_RW_DIRECT,
+          er_pi_zero_w_v1_1_sdio_cmd52_argument(ER_PI_SDIO_CMD52_READ,
+                                                ER_PI_SDIO_FUNCTION_BACKPLANE,
+                                                ER_PI_SDIO_CMD52_NO_RAW,
+                                                0u,
+                                                0u),
+          ER_PI_MMC_RESPONSE_R5,
+          &response) == 0u) {
+    g_er_pi_zero_w_v1_1_sdio_probe_state = ER_PI_ZERO_W_V1_1_SDIO_PROBE_ERROR;
+    return;
+  }
+  g_er_pi_zero_w_v1_1_sdio_probe_state =
+      ER_PI_ZERO_W_V1_1_SDIO_PROBE_CMD52_DONE;
 }
 
 static void er_pi_zero_w_v1_1_uart_put_byte(UINT8 byte) {

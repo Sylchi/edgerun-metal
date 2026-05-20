@@ -147,6 +147,12 @@ if ! grep -q "erwire_expect=node_available" \
   exit 1
 fi
 
+if ! grep -q "erwire_expect_sdio_probe=cmd52_done" \
+  "$ZERO_W_BOOT_DIR/EDGERUN-PI-ZERO-W-V1_1-BOOT.txt"; then
+  printf 'zero w manifest does not name SDIO CMD52 proof expectation\n' >&2
+  exit 1
+fi
+
 if ! grep -q "erwire_expect=node_heartbeat" \
   "$ZERO_W_BOOT_DIR/EDGERUN-PI-ZERO-W-V1_1-BOOT.txt"; then
   printf 'zero w manifest does not name node heartbeat expectation\n' >&2

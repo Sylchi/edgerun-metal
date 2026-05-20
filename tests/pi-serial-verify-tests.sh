@@ -45,6 +45,9 @@ enum {
   ERWIRE_FLAG_LAST = 0x0002u,
   ERWIRE_KIND_NODE_AVAILABLE = 37u,
   ERWIRE_KIND_NODE_HEARTBEAT = 38u,
+  NODE_AVAILABLE_BYTES = 189u,
+  NODE_AVAILABLE_LOG_HEAD_OFFSET = 157u,
+  SDIO_PROBE_CMD52_DONE = 5u,
   ERWIRE_CRC32_INITIAL = 0xffffffffu,
   ERWIRE_CRC32_POLY = 0xedb88320u,
   ERWIRE_CRC32_BITS_PER_BYTE = 8u
@@ -79,10 +82,33 @@ static void put_u32(uint8_t** cursor, uint32_t value) {
   *cursor += 4u;
 }
 
+static void put_u32_at(uint8_t* bytes, uint32_t offset, uint32_t value) {
+  bytes[offset] = (uint8_t)(value & 0xffu);
+  bytes[offset + 1u] = (uint8_t)((value >> 8u) & 0xffu);
+  bytes[offset + 2u] = (uint8_t)((value >> 16u) & 0xffu);
+  bytes[offset + 3u] = (uint8_t)((value >> 24u) & 0xffu);
+}
+
 static int packet(uint16_t kind, uint32_t seq, uint8_t payload_byte) {
   uint8_t header[ERWIRE_HEADER_SIZE];
-  uint8_t payload[4] = {payload_byte, 2u, 3u, 4u};
+  uint8_t payload[NODE_AVAILABLE_BYTES];
   uint8_t* cursor = header;
+  uint32_t payload_len = 4u;
+  uint32_t i;
+
+  for (i = 0u; i < NODE_AVAILABLE_BYTES; ++i) {
+    payload[i] = 0u;
+  }
+  payload[0] = payload_byte;
+  payload[1] = 2u;
+  payload[2] = 3u;
+  payload[3] = 4u;
+  if (kind == ERWIRE_KIND_NODE_AVAILABLE) {
+    payload_len = NODE_AVAILABLE_BYTES;
+    put_u32_at(payload,
+               NODE_AVAILABLE_LOG_HEAD_OFFSET,
+               SDIO_PROBE_CMD52_DONE);
+  }
 
   put_u32(&cursor, ERWIRE_MAGIC);
   put_u16(&cursor, ERWIRE_VERSION);
@@ -91,11 +117,11 @@ static int packet(uint16_t kind, uint32_t seq, uint8_t payload_byte) {
   put_u32(&cursor, seq);
   put_u16(&cursor, kind);
   put_u16(&cursor, ERWIRE_FLAG_FIRST | ERWIRE_FLAG_LAST);
-  put_u32(&cursor, sizeof(payload));
-  put_u32(&cursor, crc32(payload, sizeof(payload)));
+  put_u32(&cursor, payload_len);
+  put_u32(&cursor, crc32(payload, payload_len));
   put_u32(&cursor, 0u);
   return fwrite(header, 1u, sizeof(header), stdout) == sizeof(header) &&
-         fwrite(payload, 1u, sizeof(payload), stdout) == sizeof(payload) ? 0 : 1;
+         fwrite(payload, 1u, payload_len, stdout) == payload_len ? 0 : 1;
 }
 
 int main(int argc, char** argv) {
@@ -115,13 +141,14 @@ cat >"$MANIFEST" <<'EOF_MANIFEST'
 board=pi-zero-w-v1_1
 serial_protocol=erwire
 erwire_expect=node_available
+erwire_expect_sdio_probe=cmd52_done
 erwire_expect=node_heartbeat
 EOF_MANIFEST
 
 "$GEN_BIN" >"$SERIAL_LOG"
 "$TOOL_BIN" "$MANIFEST" "$SERIAL_LOG" >/tmp/pi-serial-verify-ok.out
 
-if ! grep -q "pi-serial-verify: 2 erwire expectations matched" \
+if ! grep -q "pi-serial-verify: 3 erwire expectations matched" \
   /tmp/pi-serial-verify-ok.out; then
   printf 'pi-serial-verify did not report matched erwire expectations\n' >&2
   exit 1
