@@ -44,6 +44,10 @@
 #define ER_PI_ZERO_W_V1_1_IEEE80211_RATE_2M 0x84u
 #define ER_PI_ZERO_W_V1_1_IEEE80211_RATE_5M5 0x8bu
 #define ER_PI_ZERO_W_V1_1_IEEE80211_RATE_11M 0x96u
+#define ER_PI_ZERO_W_V1_1_CYW_TX_STATUS_EXPECTED \
+  ((ER_PI_ZERO_W_V1_1_IEEE80211_BEACON_LEN << \
+    ER_CYW43438_OWNED_FIRMWARE_TX_STATUS_LEN_SHIFT) | \
+   ER_PI_ZERO_W_V1_1_IEEE80211_FC_BEACON)
 #define ER_PI_ZERO_W_V1_1_NODE_AVAILABLE_BYTES 189u
 #define ER_PI_ZERO_W_V1_1_NODE_HEARTBEAT_BYTES 116u
 #define ER_PI_ZERO_W_V1_1_CRC32_INITIAL 0xffffffffu
@@ -1426,7 +1430,7 @@ static UINT32 er_pi_zero_w_v1_1_cyw43438_start_owned_firmware(void) {
       er_pi_zero_w_v1_1_cyw43438_backplane_read32(
           ER_CYW43438_OWNED_FIRMWARE_TX_STATUS_ADDR,
           &tx_status) == 0u ||
-      tx_status != tx_beacon_len) {
+      tx_status != ER_PI_ZERO_W_V1_1_CYW_TX_STATUS_EXPECTED) {
     return 0u;
   }
   g_er_pi_zero_w_v1_1_sdio_probe_response = mailbox;
