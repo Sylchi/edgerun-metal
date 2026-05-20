@@ -1,4 +1,5 @@
 #include "er_pi_zero_w_v1_1_uart.h"
+#include "er_cyw43438_d11.h"
 #include "er_cyw43438_owned_firmware.h"
 #include "er_types.h"
 
@@ -152,6 +153,7 @@
 #define ER_PI_ZERO_W_V1_1_CYW43438_DMP_SLAVE_SIZE_DESC 3u
 #define ER_PI_ZERO_W_V1_1_L2_OWNED_FIRMWARE_LOADED 12u
 #define ER_PI_ZERO_W_V1_1_L2_CM3_ACTIVE 13u
+#define ER_PI_ZERO_W_V1_1_L2_D11_TX_FIFO_READY 14u
 
 volatile UINT32 g_er_pi_zero_w_v1_1_boot_magic =
     ER_PI_ZERO_W_V1_1_BOOT_MAGIC;
@@ -885,6 +887,17 @@ static void er_pi_zero_w_v1_1_cyw43438_put_le32(UINT8* bytes, UINT32 value) {
                      ER_PI_ZERO_W_V1_1_BYTE_MASK);
 }
 
+static UINT16 er_pi_zero_w_v1_1_cyw43438_read_le16(const UINT8* bytes) {
+  return (UINT16)(((UINT16)bytes[0]) |
+                  ((UINT16)bytes[1] << ER_PI_ZERO_W_V1_1_U16_HIGH_SHIFT));
+}
+
+static void er_pi_zero_w_v1_1_cyw43438_put_le16(UINT8* bytes, UINT16 value) {
+  bytes[0] = (UINT8)(value & ER_PI_ZERO_W_V1_1_BYTE_MASK);
+  bytes[1] = (UINT8)(((UINT32)value >> ER_PI_ZERO_W_V1_1_U16_HIGH_SHIFT) &
+                     ER_PI_ZERO_W_V1_1_BYTE_MASK);
+}
+
 static UINT32 er_pi_zero_w_v1_1_cyw43438_enable_function1(void) {
   UINT8 ready;
   UINT32 poll;
@@ -1025,6 +1038,34 @@ static UINT32 er_pi_zero_w_v1_1_cyw43438_backplane_write32(UINT32 address,
   UINT8 bytes[4];
 
   er_pi_zero_w_v1_1_cyw43438_put_le32(bytes, value);
+  return er_pi_zero_w_v1_1_cyw43438_backplane_write_bytes(
+      address,
+      bytes,
+      (UINT32)sizeof(bytes));
+}
+
+static UINT32 er_pi_zero_w_v1_1_cyw43438_backplane_read16(UINT32 address,
+                                                         UINT16* out_value) {
+  UINT8 bytes[2];
+
+  if (out_value == 0 ||
+      er_pi_zero_w_v1_1_cyw43438_set_backplane_window(address) == 0u ||
+      er_pi_zero_w_v1_1_emmc_sdio_read_bytes(
+          ER_PI_ZERO_W_V1_1_SDIO_FUNCTION_BACKPLANE,
+          er_pi_zero_w_v1_1_cyw43438_backplane_address(address),
+          bytes,
+          (UINT32)sizeof(bytes)) == 0u) {
+    return 0u;
+  }
+  *out_value = er_pi_zero_w_v1_1_cyw43438_read_le16(bytes);
+  return 1u;
+}
+
+static UINT32 er_pi_zero_w_v1_1_cyw43438_backplane_write16(UINT32 address,
+                                                          UINT16 value) {
+  UINT8 bytes[2];
+
+  er_pi_zero_w_v1_1_cyw43438_put_le16(bytes, value);
   return er_pi_zero_w_v1_1_cyw43438_backplane_write_bytes(
       address,
       bytes,
@@ -1307,6 +1348,43 @@ static UINT32 er_pi_zero_w_v1_1_cyw43438_set_passive(UINT32 arm_wrap,
   return er_pi_zero_w_v1_1_cyw43438_core_up(mem_wrap);
 }
 
+static UINT32 er_pi_zero_w_v1_1_cyw43438_d11_tx_fifo_probe(UINT32 d11_base,
+                                                           UINT16* out_ready) {
+  UINT32 maccontrol;
+  UINT16 command;
+
+  if (out_ready == 0 ||
+      er_pi_zero_w_v1_1_cyw43438_backplane_write32(
+          d11_base + ER_CYW43438_D11_MACCONTROL,
+          ER_CYW43438_D11_MACCONTROL_PROBE) == 0u ||
+      er_pi_zero_w_v1_1_cyw43438_backplane_read32(
+          d11_base + ER_CYW43438_D11_MACCONTROL,
+          &maccontrol) == 0u ||
+      (maccontrol & ER_CYW43438_D11_MACCONTROL_PROBE) !=
+          ER_CYW43438_D11_MACCONTROL_PROBE ||
+      er_pi_zero_w_v1_1_cyw43438_backplane_write16(
+          d11_base + ER_CYW43438_D11_XMTFIFOCMD,
+          (UINT16)ER_CYW43438_D11_TX_BCMC_FIFO_RESET) == 0u) {
+    return 0u;
+  }
+  er_pi_zero_w_v1_1_delay(ER_PI_ZERO_W_V1_1_WIFI_GPIO_DELAY_TICKS);
+  if (er_pi_zero_w_v1_1_cyw43438_backplane_write16(
+          d11_base + ER_CYW43438_D11_XMTFIFOCMD,
+          (UINT16)ER_CYW43438_D11_TX_BCMC_FIFO_SELECT) == 0u ||
+      er_pi_zero_w_v1_1_cyw43438_backplane_read16(
+          d11_base + ER_CYW43438_D11_XMTFIFOCMD,
+          &command) == 0u ||
+      (command & ER_CYW43438_D11_TXFIFOCMD_FIFOSEL_MASK) !=
+          ER_CYW43438_D11_TX_BCMC_FIFO_SELECT ||
+      (command & ER_CYW43438_D11_TXFIFOCMD_RESET) != 0u ||
+      er_pi_zero_w_v1_1_cyw43438_backplane_read16(
+          d11_base + ER_CYW43438_D11_XMTFIFORDY,
+          out_ready) == 0u) {
+    return 0u;
+  }
+  return 1u;
+}
+
 static UINT32 er_pi_zero_w_v1_1_cyw43438_start_owned_firmware(void) {
   UINT32 arm_base;
   UINT32 arm_wrap;
@@ -1325,6 +1403,7 @@ static UINT32 er_pi_zero_w_v1_1_cyw43438_start_owned_firmware(void) {
   UINT32 rx_status;
   UINT32 tx_beacon_len;
   UINT32 rx_probe_len;
+  UINT16 d11_fifo_ready;
   UINT8 tx_beacon[ER_PI_ZERO_W_V1_1_IEEE80211_BEACON_LEN];
   UINT8 rx_probe[ER_PI_ZERO_W_V1_1_IEEE80211_PROBE_REQUEST_LEN];
 
@@ -1369,8 +1448,14 @@ static UINT32 er_pi_zero_w_v1_1_cyw43438_start_owned_firmware(void) {
     return 0u;
   }
   (void)arm_base;
-  (void)d11_base;
   (void)mem_base;
+  if (er_pi_zero_w_v1_1_cyw43438_d11_tx_fifo_probe(d11_base,
+                                                   &d11_fifo_ready) == 0u) {
+    return 0u;
+  }
+  g_er_pi_zero_w_v1_1_sdio_probe_state =
+      ER_PI_ZERO_W_V1_1_L2_D11_TX_FIFO_READY;
+  g_er_pi_zero_w_v1_1_sdio_probe_interrupt = (UINT32)d11_fifo_ready;
   if (er_pi_zero_w_v1_1_cyw43438_backplane_write_bytes(
           ER_PI_ZERO_W_V1_1_CYW43438_RAM_BASE,
           ER_CYW43438_OWNED_FIRMWARE,
