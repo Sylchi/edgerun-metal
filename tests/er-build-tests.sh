@@ -36,7 +36,7 @@ case "$swarm_plan" in
 esac
 
 case "$swarm_plan" in
-  *"+ .build/codex --root . --prompt <one generated prompt per repo-inspect issue, 50 concurrent>"* ) ;;
+  *"+ .build/codex --memory-only --root . --prompt <one generated prompt per repo-inspect issue, 50 concurrent>"* ) ;;
   * ) printf 'missing swarm bounded worker step\n' >&2; exit 1 ;;
 esac
 

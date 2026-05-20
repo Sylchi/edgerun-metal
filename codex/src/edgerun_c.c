@@ -26,6 +26,7 @@
 #define CODEX_BACKEND_VERSION "0.130.0"
 #define DEFAULT_MODEL "gpt-5.5"
 #define CODEX_BACKEND_URL "https://chatgpt.com/backend-api/codex/responses"
+static bool g_codex_memory_only = false;
 
 #define ANSI_RESET "\033[0m"
 #define ANSI_BOLD "\033[1m"
@@ -1737,6 +1738,10 @@ static char *execute_agent_tool_new(Workspace *ws, const ToolCall *tool, bool *s
         return out.data;
     }
     if (strcmp(tool->name, "commit_verified") == 0) {
+        if (g_codex_memory_only) {
+            *success_out = false;
+            return xstrdup("commit_verified disabled: memory-only mode keeps proposals in memory");
+        }
         int status = cmd_commit_verified(ws);
         Buffer out;
         buffer_init(&out);
@@ -2153,12 +2158,23 @@ static int run_agent_prompt(Workspace *ws, const char *prompt) {
                 summary.review_only_turns++;
                 summary.commit_status = 0;
                 print_agent_summary(&summary);
+                if (g_codex_memory_only) {
+                    json_items_free(&history);
+                    free(auth.access_token);
+                    free(auth.account_id);
+                    return 0;
+                }
                 char *continue_message = host_continue_message_new(ws, false);
                 json_items_push(&history, user_item_json_new(continue_message));
                 free(continue_message);
                 continue;
             }
-            summary.commit_status = cmd_commit_verified(ws);
+            if (g_codex_memory_only) {
+                cmd_diff(ws, NULL);
+                summary.commit_status = 0;
+            } else {
+                summary.commit_status = cmd_commit_verified(ws);
+            }
             print_agent_summary(&summary);
             if (summary.commit_status != 0) {
                 json_items_free(&history);
@@ -2306,8 +2322,10 @@ int main(int argc, char **argv) {
             prompt = argv[++i];
         } else if (strcmp(argv[i], "--root") == 0 && i + 1 < argc) {
             root = argv[++i];
+        } else if (strcmp(argv[i], "--memory-only") == 0) {
+            g_codex_memory_only = true;
         } else if (strcmp(argv[i], "--help") == 0 || strcmp(argv[i], "-h") == 0) {
-            puts("usage: edgerun-c [--root PATH] [--prompt TEXT] [--game-bench]");
+            puts("usage: edgerun-c [--memory-only] [--root PATH] [--prompt TEXT] [--game-bench]");
             puts("       edgerun-c PATH");
             return 0;
         } else {
