@@ -622,6 +622,8 @@ static int enhanced_self_test(void) {
         .deleted_units = 1,
         .debt_units = 0,
         .irrelevant_units = 0,
+        .step_units = 1,
+        .subagent_units = 0,
     };
     if (codex_game_score_move(positive) != CODEX_GAME_SELF_TEST_POSITIVE_SCORE) {
         return CODEX_SELF_TEST_GAME_POSITIVE_FAILURE;
@@ -633,6 +635,8 @@ static int enhanced_self_test(void) {
         .deleted_units = 0,
         .debt_units = 1,
         .irrelevant_units = 1,
+        .step_units = 1,
+        .subagent_units = 0,
     };
     if (codex_game_score_move(negative) != CODEX_GAME_SELF_TEST_NEGATIVE_SCORE) {
         return CODEX_SELF_TEST_GAME_NEGATIVE_FAILURE;
