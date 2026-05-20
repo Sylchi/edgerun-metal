@@ -75,7 +75,15 @@
 #define ER_PI_EMMC_REG_ARG1 0x00000008u
 #define ER_PI_EMMC_REG_CMDTM 0x0000000cu
 #define ER_PI_EMMC_REG_RESP0 0x00000010u
+#define ER_PI_EMMC_REG_STATUS 0x00000024u
 #define ER_PI_EMMC_REG_INTERRUPT 0x00000030u
+#define ER_PI_EMMC_REG_IRPT_MASK 0x00000034u
+#define ER_PI_EMMC_REG_IRPT_EN 0x00000038u
+#define ER_PI_EMMC_REG_CONTROL2 0x0000003cu
+
+#define ER_PI_EMMC_INTERRUPT_CMD_DONE 0x00000001u
+#define ER_PI_EMMC_INTERRUPT_DATA_DONE 0x00000002u
+#define ER_PI_EMMC_INTERRUPT_ERROR_MASK 0xffff0000u
 
 typedef struct {
   UINT64 peripheral_base;
@@ -138,6 +146,24 @@ typedef struct {
   UINT32 response_kind;
 } ErPiEmmcCommandIo;
 
+typedef struct {
+  ErPiEmmcCommandIo io;
+  UINT32 interrupt_value;
+  UINT32 response0;
+  UINT8 completed;
+  UINT8 error;
+} ErPiEmmcCommandResult;
+
+typedef struct {
+  UINT32 command_count;
+  UINT32 completed_count;
+  UINT32 relative_card_address;
+  UINT32 responses[ER_PI_ZERO2W_SDIO_BRINGUP_COMMAND_CAPACITY];
+  UINT32 last_interrupt_value;
+  UINT8 completed;
+  UINT8 error;
+} ErPiZero2wSdioBringupState;
+
 UINT8 er_pi_zero2w_mmio_map(ErPiZero2wMmio* out_mmio);
 UINT64 er_pi_zero2w_peripheral_phys(UINT64 offset);
 const ErPiBoardProfile* er_pi_zero2w_profile(void);
@@ -172,9 +198,22 @@ UINT8 er_pi_emmc_command_io_prepare(const ErPiMmcCommand* command,
 UINT8 er_pi_emmc_command_begin(INT64 emmc_handle,
                                const ErPiMmcCommand* command,
                                ErPiEmmcCommandIo* out_io);
+UINT8 er_pi_emmc_command_poll(INT64 emmc_handle,
+                              const ErPiEmmcCommandIo* io,
+                              UINT32 poll_budget,
+                              ErPiEmmcCommandResult* out_result);
+UINT8 er_pi_emmc_command_execute(INT64 emmc_handle,
+                                 const ErPiMmcCommand* command,
+                                 UINT32 poll_budget,
+                                 ErPiEmmcCommandResult* out_result);
 UINT8 er_pi_zero2w_sdio_identity_plan(ErPiZero2wSdioBringupPlan* out_plan);
 UINT8 er_pi_zero2w_sdio_claim_plan(UINT32 relative_card_address,
                                    ErPiZero2wSdioBringupPlan* out_plan);
+UINT8 er_pi_zero2w_sdio_execute_plan(
+    INT64 emmc_handle,
+    const ErPiZero2wSdioBringupPlan* plan,
+    UINT32 poll_budget_per_command,
+    ErPiZero2wSdioBringupState* out_state);
 UINT8 er_pi_board_apply_boot_report(const ErPiBoardProfile* profile,
                                     ErBootServicesReport* report);
 UINT8 er_pi_zero2w_apply_boot_report(ErBootServicesReport* report);

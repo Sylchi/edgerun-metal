@@ -28,7 +28,9 @@ static void test_pi_zero2w_bringup_boundary(void) {
   ErPiMailboxTwoValueMessage message;
   ErPiMmcCommand command;
   ErPiEmmcCommandIo command_io;
+  ErPiEmmcCommandResult command_result;
   ErPiZero2wSdioBringupPlan sdio_plan;
+  ErPiZero2wSdioBringupState sdio_state;
   const ErPiBoardProfile* zero_w_profile;
   ErBootServicesReport report;
 
@@ -234,6 +236,36 @@ static void test_pi_zero2w_bringup_boundary(void) {
                                        &sdio_plan.commands[0],
                                        &command_io),
               0);
+  check_int64("pi emmc command execute rejects invalid handle",
+              er_pi_emmc_command_execute(ER_MMIO_INVALID_HANDLE,
+                                         &sdio_plan.commands[0],
+                                         1u,
+                                         &command_result),
+              0);
+  check_int64("pi emmc command poll rejects zero budget",
+              er_pi_emmc_command_poll(ER_MMIO_INVALID_HANDLE,
+                                      &command_io,
+                                      0u,
+                                      &command_result),
+              0);
+  check_uint64("pi emmc command poll zero budget not completed",
+               command_result.completed,
+               0u);
+  check_int64("pi sdio execute rejects invalid handle",
+              er_pi_zero2w_sdio_execute_plan(ER_MMIO_INVALID_HANDLE,
+                                             &sdio_plan,
+                                             1u,
+                                             &sdio_state),
+              0);
+  check_uint64("pi sdio execute keeps command count",
+               sdio_state.command_count,
+               PI_TEST_SDIO_CLAIM_PLAN_COUNT);
+  check_uint64("pi sdio execute reports no completed commands",
+               sdio_state.completed_count,
+               0u);
+  check_uint64("pi sdio execute marks error",
+               sdio_state.error,
+               1u);
 
   er_boot_services_report_init(&report);
   er_mmio_reset();
