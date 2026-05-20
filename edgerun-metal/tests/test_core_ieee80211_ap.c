@@ -47,6 +47,75 @@ static void test_ieee80211_fill_probe_request(
   *out_frame_len = offset;
 }
 
+typedef struct {
+  const UINT8* ram_bytes;
+  const UINT8* nvram_bytes;
+  const UINT8* clm_blob_bytes;
+  UINTN ram_len;
+  UINTN nvram_len;
+  UINTN clm_blob_len;
+  UINT8 ram_called;
+  UINT8 nvram_called;
+  UINT8 clm_blob_called;
+} Cyw43438TestFirmwareReader;
+
+static UINT8 cyw43438_test_firmware_read(void* ctx,
+                                         const char* path,
+                                         UINT16 path_len,
+                                         UINT8* out_bytes,
+                                         UINTN out_capacity,
+                                         UINTN* out_len) {
+  Cyw43438TestFirmwareReader* reader;
+  static const char ram_path[] = "/EFI/firmware/02d0.a9a6.0";
+  static const char nvram_path[] = "/EFI/firmware/02d0.a9a6.1";
+  static const char clm_blob_path[] = "/EFI/firmware/02d0.a9a6.2";
+
+  reader = (Cyw43438TestFirmwareReader*)ctx;
+  if (reader == 0 ||
+      path == 0 ||
+      out_bytes == 0 ||
+      out_len == 0) {
+    return 0u;
+  }
+  if (path_len == (UINT16)(sizeof(ram_path) - 1u) &&
+      er_mem_equal((const UINT8*)path,
+                   (const UINT8*)ram_path,
+                   (UINTN)(sizeof(ram_path) - 1u)) != 0u) {
+    if (reader->ram_len > out_capacity) {
+      return 0u;
+    }
+    er_mem_copy(out_bytes, reader->ram_bytes, reader->ram_len);
+    *out_len = reader->ram_len;
+    reader->ram_called = 1u;
+    return 1u;
+  }
+  if (path_len == (UINT16)(sizeof(nvram_path) - 1u) &&
+      er_mem_equal((const UINT8*)path,
+                   (const UINT8*)nvram_path,
+                   (UINTN)(sizeof(nvram_path) - 1u)) != 0u) {
+    if (reader->nvram_len > out_capacity) {
+      return 0u;
+    }
+    er_mem_copy(out_bytes, reader->nvram_bytes, reader->nvram_len);
+    *out_len = reader->nvram_len;
+    reader->nvram_called = 1u;
+    return 1u;
+  }
+  if (path_len == (UINT16)(sizeof(clm_blob_path) - 1u) &&
+      er_mem_equal((const UINT8*)path,
+                   (const UINT8*)clm_blob_path,
+                   (UINTN)(sizeof(clm_blob_path) - 1u)) != 0u) {
+    if (reader->clm_blob_len > out_capacity) {
+      return 0u;
+    }
+    er_mem_copy(out_bytes, reader->clm_blob_bytes, reader->clm_blob_len);
+    *out_len = reader->clm_blob_len;
+    reader->clm_blob_called = 1u;
+    return 1u;
+  }
+  return 0u;
+}
+
 static void test_ieee80211_open_ap_frames(void) {
   enum {
     IEEE80211_TEST_NODE_SEED = 0x31u,
@@ -78,12 +147,29 @@ static void test_ieee80211_open_ap_frames(void) {
     IEEE80211_TEST_STAGE_IDENTITY = 0u,
     IEEE80211_TEST_STAGE_CLAIM = 1u,
     IEEE80211_TEST_STAGE_BEACON = 2u,
-    IEEE80211_TEST_STAGE_PROBE = 3u
+    IEEE80211_TEST_STAGE_PROBE = 3u,
+    IEEE80211_TEST_FIRMWARE_RAM_SEED = 0x91u,
+    IEEE80211_TEST_FIRMWARE_NVRAM_SEED = 0x92u,
+    IEEE80211_TEST_FIRMWARE_CLM_SEED = 0x93u,
+    IEEE80211_TEST_FIRMWARE_RAM_LEN = 8u,
+    IEEE80211_TEST_FIRMWARE_NVRAM_LEN = 5u,
+    IEEE80211_TEST_FIRMWARE_CLM_LEN = 6u
   };
   ErNodeId node_id;
   ErWifiL2ApPlan ap_plan;
   ErIeee80211OpenApConfig config;
+  ErBootConfig boot_config;
+  ErCryptoProvider crypto;
   ErCyw43438ApPath path;
+  ErCyw43438FirmwareSet firmware;
+  ErCyw43438OpenApBootDevice boot_device;
+  Cyw43438TestFirmwareReader reader;
+  UINT8 ram_bytes[IEEE80211_TEST_FIRMWARE_RAM_LEN];
+  UINT8 nvram_bytes[IEEE80211_TEST_FIRMWARE_NVRAM_LEN];
+  UINT8 clm_blob_bytes[IEEE80211_TEST_FIRMWARE_CLM_LEN];
+  UINT8 ram_out[IEEE80211_TEST_FIRMWARE_RAM_LEN];
+  UINT8 nvram_out[IEEE80211_TEST_FIRMWARE_NVRAM_LEN];
+  UINT8 clm_blob_out[IEEE80211_TEST_FIRMWARE_CLM_LEN];
   UINT8 station_mac[ER_NET_MAC_LEN];
   UINT8 frame[ER_IEEE80211_AP_FRAME_MAX];
   UINT8 probe_request[ER_IEEE80211_AP_FRAME_MAX];
@@ -91,10 +177,25 @@ static void test_ieee80211_open_ap_frames(void) {
   UINT32 probe_request_len;
 
   test_fill_bytes(node_id.bytes, ER_NODE_ID_LEN, IEEE80211_TEST_NODE_SEED);
+  test_fill_bytes(ram_bytes,
+                  (UINTN)sizeof(ram_bytes),
+                  IEEE80211_TEST_FIRMWARE_RAM_SEED);
+  test_fill_bytes(nvram_bytes,
+                  (UINTN)sizeof(nvram_bytes),
+                  IEEE80211_TEST_FIRMWARE_NVRAM_SEED);
+  test_fill_bytes(clm_blob_bytes,
+                  (UINTN)sizeof(clm_blob_bytes),
+                  IEEE80211_TEST_FIRMWARE_CLM_SEED);
   test_fill_bytes(station_mac,
                   (UINTN)sizeof(station_mac),
                   IEEE80211_TEST_STATION_SEED);
   station_mac[0] &= (UINT8)~1u;
+  crypto.ctx = (void*)0x21u;
+  crypto.hash = test_hash;
+  crypto.seal = 0;
+  crypto.open = 0;
+  crypto.sign = 0;
+  crypto.verify = 0;
 
   check_int64("ieee80211 ap plan",
               er_wifi_l2_ap_plan_prepare(&node_id,
@@ -282,4 +383,95 @@ static void test_ieee80211_open_ap_frames(void) {
   check_uint64("cyw43438 claim blocked reason",
                path.stages[IEEE80211_TEST_STAGE_CLAIM].blocked_reason,
                ER_CYW43438_AP_BLOCKED_NO_RCA);
+
+  er_boot_config_init(&boot_config);
+  check_int64("cyw43438 add firmware sources",
+              er_cyw43438_add_pi_zero_w_firmware_sources(&boot_config),
+              1);
+  check_uint64("cyw43438 firmware source count",
+               boot_config.firmware_source_count,
+               ER_CYW43438_FIRMWARE_SOURCE_COUNT);
+  check_cstr("cyw43438 firmware ram path",
+             boot_config.firmware_sources[0].path,
+             "/EFI/firmware/02d0.a9a6.0");
+  check_cstr("cyw43438 firmware nvram path",
+             boot_config.firmware_sources[1].path,
+             "/EFI/firmware/02d0.a9a6.1");
+  check_cstr("cyw43438 firmware clm path",
+             boot_config.firmware_sources[2].path,
+             "/EFI/firmware/02d0.a9a6.2");
+
+  reader.ram_bytes = ram_bytes;
+  reader.nvram_bytes = nvram_bytes;
+  reader.clm_blob_bytes = clm_blob_bytes;
+  reader.ram_len = (UINTN)sizeof(ram_bytes);
+  reader.nvram_len = (UINTN)sizeof(nvram_bytes);
+  reader.clm_blob_len = (UINTN)sizeof(clm_blob_bytes);
+  reader.ram_called = 0u;
+  reader.nvram_called = 0u;
+  reader.clm_blob_called = 0u;
+  check_int64("cyw43438 load firmware",
+              er_cyw43438_load_pi_zero_w_firmware(&crypto,
+                                                  &boot_config,
+                                                  cyw43438_test_firmware_read,
+                                                  &reader,
+                                                  ram_out,
+                                                  (UINTN)sizeof(ram_out),
+                                                  nvram_out,
+                                                  (UINTN)sizeof(nvram_out),
+                                                  clm_blob_out,
+                                                  (UINTN)sizeof(clm_blob_out),
+                                                  &firmware),
+              1);
+  check_int64("cyw43438 ram called", reader.ram_called, 1);
+  check_int64("cyw43438 nvram called", reader.nvram_called, 1);
+  check_int64("cyw43438 clm called", reader.clm_blob_called, 1);
+  check_uint64("cyw43438 ram instance",
+               firmware.ram.instance,
+               ER_CYW43438_FIRMWARE_INSTANCE_RAM);
+  check_uint64("cyw43438 nvram instance",
+               firmware.nvram.instance,
+               ER_CYW43438_FIRMWARE_INSTANCE_NVRAM);
+  check_uint64("cyw43438 clm instance",
+               firmware.clm_blob.instance,
+               ER_CYW43438_FIRMWARE_INSTANCE_CLM_BLOB);
+  check_uint64("cyw43438 ram bytes",
+               firmware.ram.bytes_len,
+               (UINT64)sizeof(ram_bytes));
+  check_uint64("cyw43438 nvram bytes",
+               firmware.nvram.bytes_len,
+               (UINT64)sizeof(nvram_bytes));
+  check_uint64("cyw43438 clm bytes",
+               firmware.clm_blob.bytes_len,
+               (UINT64)sizeof(clm_blob_bytes));
+
+  reader.ram_called = 0u;
+  reader.nvram_called = 0u;
+  reader.clm_blob_called = 0u;
+  check_int64("cyw43438 boot device",
+              er_cyw43438_prepare_open_l2_ap_boot_device(
+                  &crypto,
+                  &boot_config,
+                  cyw43438_test_firmware_read,
+                  &reader,
+                  ram_out,
+                  (UINTN)sizeof(ram_out),
+                  nvram_out,
+                  (UINTN)sizeof(nvram_out),
+                  clm_blob_out,
+                  (UINTN)sizeof(clm_blob_out),
+                  &ap_plan,
+                  IEEE80211_TEST_RCA,
+                  station_mac,
+                  &boot_device),
+              1);
+  check_uint64("cyw43438 boot device abi",
+               boot_device.abi_version,
+               ER_CYW43438_ABI_VERSION);
+  check_uint64("cyw43438 boot device stage count",
+               boot_device.ap_path.stage_count,
+               ER_CYW43438_AP_STAGE_COUNT);
+  check_uint64("cyw43438 boot device firmware",
+               boot_device.firmware.ram.loaded,
+               1u);
 }

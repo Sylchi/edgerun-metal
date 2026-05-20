@@ -10,6 +10,23 @@ enum {
   ER_CYW43438_STAGE_PROBE_RESPONSE_INDEX = 3u
 };
 
+void er_cyw43438_clear_firmware_set(ErCyw43438FirmwareSet* firmware) {
+  if (firmware == 0) {
+    return;
+  }
+  er_firmware_loader_clear_image(&firmware->ram);
+  er_firmware_loader_clear_image(&firmware->nvram);
+  er_firmware_loader_clear_image(&firmware->clm_blob);
+}
+
+void er_cyw43438_clear_open_ap_boot_device(
+    ErCyw43438OpenApBootDevice* device) {
+  if (device == 0) {
+    return;
+  }
+  er_mem_zero((UINT8*)device, (UINTN)sizeof(*device));
+}
+
 static void er_cyw43438_stage_init(ErCyw43438ApStage* stage,
                                    UINT16 kind,
                                    UINT32 blocked_reason) {
@@ -55,6 +72,123 @@ static UINT8 er_cyw43438_prepare_template(
     return 0u;
   }
   out_template->frame_len = frame_len;
+  return 1u;
+}
+
+UINT8 er_cyw43438_add_pi_zero_w_firmware_sources(ErBootConfig* config) {
+  if (config == 0 ||
+      config->firmware_source_count >
+          (ER_BOOT_CONFIG_FIRMWARE_SOURCE_CAPACITY -
+           ER_CYW43438_FIRMWARE_SOURCE_COUNT) ||
+      er_boot_config_add_efi_firmware_source_instance(
+          config,
+          ER_CYW43438_SDIO_VENDOR_BROADCOM,
+          ER_CYW43438_SDIO_DEVICE_BCM43430,
+          ER_CYW43438_FIRMWARE_INSTANCE_RAM) == 0u ||
+      er_boot_config_add_efi_firmware_source_instance(
+          config,
+          ER_CYW43438_SDIO_VENDOR_BROADCOM,
+          ER_CYW43438_SDIO_DEVICE_BCM43430,
+          ER_CYW43438_FIRMWARE_INSTANCE_NVRAM) == 0u ||
+      er_boot_config_add_efi_firmware_source_instance(
+          config,
+          ER_CYW43438_SDIO_VENDOR_BROADCOM,
+          ER_CYW43438_SDIO_DEVICE_BCM43430,
+          ER_CYW43438_FIRMWARE_INSTANCE_CLM_BLOB) == 0u) {
+    return 0u;
+  }
+  return 1u;
+}
+
+UINT8 er_cyw43438_load_pi_zero_w_firmware(
+    const ErCryptoProvider* crypto,
+    const ErBootConfig* config,
+    ErFirmwareReadFn read_fn,
+    void* read_ctx,
+    UINT8* ram_bytes,
+    UINTN ram_capacity,
+    UINT8* nvram_bytes,
+    UINTN nvram_capacity,
+    UINT8* clm_blob_bytes,
+    UINTN clm_blob_capacity,
+    ErCyw43438FirmwareSet* out_firmware) {
+  er_cyw43438_clear_firmware_set(out_firmware);
+  if (out_firmware == 0 ||
+      er_firmware_loader_load_for_device_instance(
+          crypto,
+          config,
+          ER_CYW43438_SDIO_VENDOR_BROADCOM,
+          ER_CYW43438_SDIO_DEVICE_BCM43430,
+          ER_CYW43438_FIRMWARE_INSTANCE_RAM,
+          read_fn,
+          read_ctx,
+          ram_bytes,
+          ram_capacity,
+          &out_firmware->ram) == 0u ||
+      er_firmware_loader_load_for_device_instance(
+          crypto,
+          config,
+          ER_CYW43438_SDIO_VENDOR_BROADCOM,
+          ER_CYW43438_SDIO_DEVICE_BCM43430,
+          ER_CYW43438_FIRMWARE_INSTANCE_NVRAM,
+          read_fn,
+          read_ctx,
+          nvram_bytes,
+          nvram_capacity,
+          &out_firmware->nvram) == 0u ||
+      er_firmware_loader_load_for_device_instance(
+          crypto,
+          config,
+          ER_CYW43438_SDIO_VENDOR_BROADCOM,
+          ER_CYW43438_SDIO_DEVICE_BCM43430,
+          ER_CYW43438_FIRMWARE_INSTANCE_CLM_BLOB,
+          read_fn,
+          read_ctx,
+          clm_blob_bytes,
+          clm_blob_capacity,
+          &out_firmware->clm_blob) == 0u) {
+    er_cyw43438_clear_firmware_set(out_firmware);
+    return 0u;
+  }
+  return 1u;
+}
+
+UINT8 er_cyw43438_prepare_open_l2_ap_boot_device(
+    const ErCryptoProvider* crypto,
+    const ErBootConfig* config,
+    ErFirmwareReadFn read_fn,
+    void* read_ctx,
+    UINT8* ram_bytes,
+    UINTN ram_capacity,
+    UINT8* nvram_bytes,
+    UINTN nvram_capacity,
+    UINT8* clm_blob_bytes,
+    UINTN clm_blob_capacity,
+    const ErWifiL2ApPlan* ap_plan,
+    UINT32 relative_card_address,
+    const UINT8 probe_station_mac[ER_NET_MAC_LEN],
+    ErCyw43438OpenApBootDevice* out_device) {
+  er_cyw43438_clear_open_ap_boot_device(out_device);
+  if (out_device == 0 ||
+      er_cyw43438_load_pi_zero_w_firmware(crypto,
+                                          config,
+                                          read_fn,
+                                          read_ctx,
+                                          ram_bytes,
+                                          ram_capacity,
+                                          nvram_bytes,
+                                          nvram_capacity,
+                                          clm_blob_bytes,
+                                          clm_blob_capacity,
+                                          &out_device->firmware) == 0u ||
+      er_cyw43438_prepare_open_l2_ap_path(ap_plan,
+                                          relative_card_address,
+                                          probe_station_mac,
+                                          &out_device->ap_path) == 0u) {
+    er_cyw43438_clear_open_ap_boot_device(out_device);
+    return 0u;
+  }
+  out_device->abi_version = ER_CYW43438_ABI_VERSION;
   return 1u;
 }
 

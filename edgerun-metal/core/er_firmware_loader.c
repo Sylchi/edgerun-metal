@@ -178,19 +178,41 @@ UINT8 er_firmware_loader_load_for_pci_instance(const ErCryptoProvider* crypto,
                                                UINT8* firmware_bytes,
                                                UINTN firmware_capacity,
                                                ErFirmwareImage* out_image) {
+  return er_firmware_loader_load_for_device_instance(crypto,
+                                                     config,
+                                                     pci_vendor_id,
+                                                     pci_device_id,
+                                                     instance,
+                                                     read_fn,
+                                                     read_ctx,
+                                                     firmware_bytes,
+                                                     firmware_capacity,
+                                                     out_image);
+}
+
+UINT8 er_firmware_loader_load_for_device_instance(const ErCryptoProvider* crypto,
+                                                  const ErBootConfig* config,
+                                                  UINT16 vendor_id,
+                                                  UINT16 device_id,
+                                                  UINT8 instance,
+                                                  ErFirmwareReadFn read_fn,
+                                                  void* read_ctx,
+                                                  UINT8* firmware_bytes,
+                                                  UINTN firmware_capacity,
+                                                  ErFirmwareImage* out_image) {
   const ErBootFirmwareSourceConfig* source;
 
   er_firmware_loader_clear_image(out_image);
   if (config == 0 ||
-      pci_vendor_id == 0u ||
-      pci_device_id == 0u ||
+      vendor_id == 0u ||
+      device_id == 0u ||
       instance > ER_BOOT_CONFIG_FIRMWARE_INSTANCE_MAX) {
     return 0u;
   }
 
   source = er_boot_config_find_efi_firmware_source_instance(config,
-                                                            pci_vendor_id,
-                                                            pci_device_id,
+                                                            vendor_id,
+                                                            device_id,
                                                             instance);
   if (source == 0) {
     return 0u;
