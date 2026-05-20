@@ -16,6 +16,7 @@
 #include "er_bus.h"
 #include "er_crypto_blake3.h"
 #include "er_cyw43438.h"
+#include "er_cyw43438_owned_firmware.h"
 #include "er_device_identity.h"
 #include "er_driver_event.h"
 #include "er_driver_policy.h"
