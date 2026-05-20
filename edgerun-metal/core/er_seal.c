@@ -12,14 +12,8 @@ static const UINT8 g_seal_key_wrap_domain[] = "edgerun:c:v1:seal:key-wrap";
 enum {
   ER_SEAL_U16_FIELD_BYTES = 2u,
   ER_SEAL_U64_FIELD_BYTES = 8u,
+  ER_SEAL_U8_BITS = 8u,
   ER_SEAL_U16_HIGH_SHIFT = 8u,
-  ER_SEAL_U64_SHIFT_56 = 56u,
-  ER_SEAL_U64_SHIFT_48 = 48u,
-  ER_SEAL_U64_SHIFT_40 = 40u,
-  ER_SEAL_U64_SHIFT_32 = 32u,
-  ER_SEAL_U64_SHIFT_24 = 24u,
-  ER_SEAL_U64_SHIFT_16 = 16u,
-  ER_SEAL_U64_SHIFT_8 = 8u,
   ER_SEAL_U8_MASK = 0xffu,
   ER_SEAL_U16_MAX = 0xffffu,
   ER_SEAL_OBJECT_SPAN_COUNT = 7u,
@@ -53,14 +47,13 @@ static void er_seal_put_be16(UINT8* dst, UINT16 value) {
 }
 
 static void er_seal_put_be64(UINT8* dst, UINT64 value) {
-  dst[0] = (UINT8)((value >> ER_SEAL_U64_SHIFT_56) & ER_SEAL_U8_MASK);
-  dst[1] = (UINT8)((value >> ER_SEAL_U64_SHIFT_48) & ER_SEAL_U8_MASK);
-  dst[2] = (UINT8)((value >> ER_SEAL_U64_SHIFT_40) & ER_SEAL_U8_MASK);
-  dst[3] = (UINT8)((value >> ER_SEAL_U64_SHIFT_32) & ER_SEAL_U8_MASK);
-  dst[4] = (UINT8)((value >> ER_SEAL_U64_SHIFT_24) & ER_SEAL_U8_MASK);
-  dst[5] = (UINT8)((value >> ER_SEAL_U64_SHIFT_16) & ER_SEAL_U8_MASK);
-  dst[6] = (UINT8)((value >> ER_SEAL_U64_SHIFT_8) & ER_SEAL_U8_MASK);
-  dst[7] = (UINT8)(value & ER_SEAL_U8_MASK);
+  UINTN i;
+  UINT32 shift;
+
+  for (i = 0u; i < ER_SEAL_U64_FIELD_BYTES; ++i) {
+    shift = (UINT32)((ER_SEAL_U64_FIELD_BYTES - 1u - i) * ER_SEAL_U8_BITS);
+    dst[i] = (UINT8)((value >> shift) & ER_SEAL_U8_MASK);
+  }
 }
 
 static void er_seal_write_u16(UINT8** cursor, UINT16 value) {

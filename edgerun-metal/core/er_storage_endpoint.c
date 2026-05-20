@@ -82,10 +82,13 @@ static UINT16 er_storage_endpoint_get_be16(const UINT8* src) {
 }
 
 static UINT32 er_storage_endpoint_get_be32(const UINT8* src) {
-  return ((UINT32)src[0] << 24u) |
-         ((UINT32)src[1] << 16u) |
-         ((UINT32)src[2] << ER_STORAGE_BYTE_BITS) |
-         (UINT32)src[3];
+  UINTN i;
+  UINT32 value = 0u;
+
+  for (i = 0u; i < ER_STORAGE_DURABLE_U32_BYTES; ++i) {
+    value = (value << ER_STORAGE_BYTE_BITS) | (UINT32)src[i];
+  }
+  return value;
 }
 
 static UINT64 er_storage_endpoint_get_be64(const UINT8* src) {
@@ -530,13 +533,7 @@ static UINT64 er_storage_endpoint_durable_slot_sector(
 static UINT32 er_storage_endpoint_durable_home_slot(
     const ErStorageEndpointDurableStore* store,
     const ErHash* packet_id) {
-  UINT32 value;
-
-  value = ((UINT32)packet_id->bytes[0] << 24u) |
-          ((UINT32)packet_id->bytes[1] << 16u) |
-          ((UINT32)packet_id->bytes[2] << ER_STORAGE_BYTE_BITS) |
-          (UINT32)packet_id->bytes[3];
-  return value % store->slot_count;
+  return er_storage_endpoint_get_be32(packet_id->bytes) % store->slot_count;
 }
 
 static void er_storage_endpoint_durable_packet_to_slot(
@@ -667,8 +664,8 @@ UINT8 er_storage_endpoint_durable_write_packet(
   }
   home_slot = er_storage_endpoint_durable_home_slot(store,
                                                    &packet->header.packet_id);
+  slot_index = home_slot;
   for (probe = 0u; probe < store->slot_count; ++probe) {
-    slot_index = (home_slot + probe) % store->slot_count;
     if (store->read(store->block_ctx,
                     er_storage_endpoint_durable_slot_sector(store, slot_index),
                     store->slot_buffer,
@@ -685,6 +682,10 @@ UINT8 er_storage_endpoint_durable_write_packet(
           er_storage_endpoint_durable_slot_sector(store, slot_index),
           store->slot_buffer,
           ER_STORAGE_ENDPOINT_DURABLE_SLOT_BYTES);
+    }
+    ++slot_index;
+    if (slot_index == store->slot_count) {
+      slot_index = 0u;
     }
   }
   return 0u;
