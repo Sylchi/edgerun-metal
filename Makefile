@@ -1,4 +1,4 @@
-.PHONY: all check clean er-build repo-check repo-test repo-check-bin repo-inspect repo-progress repo-agent-swarm erwire-decode erwire-test pi-serial-verify sdcard-probe pi-usb-boot codex-build codex-test crypto-test metal-ui-bench os-user-app-smoke edgerun-metal edgerun-os edgerun-check varfont-test ui-core-test
+.PHONY: all check clean er-build repo-check repo-test repo-check-bin repo-inspect repo-progress repo-agent-swarm erwire-decode erwire-test pi-serial-verify sdcard-probe pi-usb-boot codex-build codex-test crypto-test metal-ui-bench tpm-real-bench-uefi os-user-app-smoke edgerun-metal edgerun-os edgerun-check varfont-test ui-core-test
 
 CC := clang
 HOST_CC := clang
@@ -62,6 +62,9 @@ crypto-test: er-build
 
 metal-ui-bench:
 	$(MAKE) -C edgerun-metal bench-ui-dirty
+
+tpm-real-bench-uefi:
+	$(MAKE) -C edgerun-metal tpm-real-bench-uefi
 
 os-user-app-smoke: er-build
 	./.build/er-build app-build $(USER_APP_PACKAGE_DIR)

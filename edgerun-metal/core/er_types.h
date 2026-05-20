@@ -119,6 +119,7 @@ typedef EFI_STATUS (*EFIAPI_HANDLE_PROTOCOL_FN)(EFI_HANDLE Handle, EFI_GUID* Pro
 typedef EFI_STATUS (*EFIAPI_LOCATE_HANDLE_BUFFER_FN)(EFI_LOCATE_SEARCH_TYPE SearchType, EFI_GUID* Protocol, void* SearchKey, UINTN* NoHandles, EFI_HANDLE** Buffer);
 typedef EFI_STATUS (*EFIAPI_LOCATE_PROTOCOL_FN)(EFI_GUID* Protocol, void* Registration, void** Interface);
 typedef EFI_STATUS (*EFIAPI_FREE_POOL_FN)(void* Buffer);
+typedef EFI_STATUS (EFIAPI *EFIAPI_STALL_FN)(UINTN Microseconds);
 typedef EFI_STATUS (*EFIAPI_GET_MEMORY_MAP_FN)(UINTN* MemoryMapSize, void* MemoryMap, UINTN* MapKey, UINTN* DescriptorSize, UINT32* DescriptorVersion);
 typedef EFI_STATUS (*EFIAPI_EXIT_BOOT_SERVICES_FN)(EFI_HANDLE ImageHandle, UINTN MapKey);
 typedef EFI_STATUS (EFIAPI *EFIAPI_GET_VARIABLE_FN)(CHAR16* VariableName, EFI_GUID* VendorGuid, UINT32* Attributes,
@@ -162,7 +163,7 @@ struct EFI_BOOT_SERVICES {
   void* UnloadImage;
   EFIAPI_EXIT_BOOT_SERVICES_FN ExitBootServices;
   void* GetNextMonotonicCount;
-  void* Stall;
+  EFIAPI_STALL_FN Stall;
   void* SetWatchdogTimer;
   void* ConnectController;
   void* DisconnectController;
