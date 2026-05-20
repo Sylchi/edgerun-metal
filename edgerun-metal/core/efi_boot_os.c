@@ -128,7 +128,7 @@ void er_run_os_path(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE* SystemTable,
   er_ui_scene_t previous_scene = {0};
   er_ui_runtime_state_t runtime = {0};
   er_ui_ledger_app_state_t ledger_state = {0};
-  ErUiBootAppContext apps[ER_UI_BOOT_APP_SLOT_CAPACITY];
+  ErUiBootAppContext apps[ER_UI_BOOT_APP_SLOT_CAPACITY]; //@optimizer-ignore boot app slots are bounded by ER_UI_BOOT_APP_SLOT_CAPACITY
   ErVirtioGpu gpu;
   ErVirtioGpuFramebuffer framebuffer;
   ErVirtioGpuDisplayInfo display_info;

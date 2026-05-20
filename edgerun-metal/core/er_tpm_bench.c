@@ -51,7 +51,7 @@ typedef struct {
   UINT8 key[ER_TPM_AES_128_KEY_LEN];
   UINT8 iv[ER_TPM_AES_BLOCK_LEN];
   UINT8 out_iv[ER_TPM_AES_BLOCK_LEN];
-  UINT8 ciphertext[ER_TPM_BENCH_RECORD_BYTES];
+  UINT8 ciphertext[ER_TPM_BENCH_RECORD_BYTES]; //@optimizer-ignore TPM bench ciphertext buffer is fixed by ER_TPM_BENCH_RECORD_BYTES
   UINT8 record[ER_TPM_BENCH_RECORD_HEADER_BYTES + ER_TPM_BENCH_RECORD_BYTES +
                 ER_TLS_RECORD_TAG_BYTES];
   ErTlsRecordKeys record_keys;

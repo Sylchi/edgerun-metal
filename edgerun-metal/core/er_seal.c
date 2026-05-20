@@ -2,6 +2,7 @@
 #include "er_identity.h"
 #include "er_mem.h"
 
+//@optimizer-ignore-constant seal domain labels are fixed hash and key-derivation separators
 static const UINT8 g_seal_plaintext_domain[] = "edgerun:c:v1:seal:plaintext";
 static const UINT8 g_seal_aad_domain[] = "edgerun:c:v1:seal:aad";
 static const UINT8 g_seal_payload_domain[] = "edgerun:c:v1:seal:payload";
