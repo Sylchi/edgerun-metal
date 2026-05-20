@@ -24,8 +24,6 @@ typedef struct {
     CodexResponseLanguage fence_language;
 } CodexResponseRenderState;
 
-#include "edgerun_c_game.c"
-
 static int context_path_compare(const void *a, const void *b) {
     const char *const *pa = (const char *const *)a;
     const char *const *pb = (const char *const *)b;

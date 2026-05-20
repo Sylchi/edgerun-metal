@@ -2,6 +2,8 @@
 #define CODEX_GAME_STRATEGY_COUNT 4u
 #define CODEX_GAME_SCORE_FEATURE 1
 #define CODEX_GAME_SCORE_CLEANUP 8
+#define CODEX_GAME_SCORE_SMELL_OR_WORLDVIEW 5
+#define CODEX_GAME_SCORE_CPU 4
 #define CODEX_GAME_SCORE_TEST 5
 #define CODEX_GAME_SCORE_DELETE 2
 #define CODEX_GAME_SCORE_IRRELEVANT -10
@@ -17,8 +19,17 @@
 #define CODEX_GAME_DELETE_SPAN 4
 #define CODEX_GAME_DEBT_SPAN 3
 #define CODEX_GAME_IRRELEVANT_PERIOD 11u
+#define CODEX_GAME_PARSE_BASE 10
 #define CODEX_GAME_SELF_TEST_POSITIVE_SCORE 16
 #define CODEX_GAME_SELF_TEST_NEGATIVE_SCORE -15
+#define CODEX_GAME_SELF_TEST_PARSE_BEFORE_FAILURE 1
+#define CODEX_GAME_SELF_TEST_PARSE_AFTER_FAILURE 2
+#define CODEX_GAME_SELF_TEST_DUPLICATE_FAILURE 3
+#define CODEX_GAME_SELF_TEST_CPU_FAILURE 4
+#define CODEX_GAME_SELF_TEST_LOC_FAILURE 5
+#define CODEX_GAME_SELF_TEST_DEBT_FAILURE 6
+#define CODEX_GAME_SELF_TEST_SCORE_FAILURE 7
+#define CODEX_GAME_SELF_TEST_EXPECTED_SCORE 10
 
 typedef enum {
     CODEX_GAME_STRATEGY_FEATURE_FIRST = 0,
@@ -46,6 +57,25 @@ typedef struct {
     int wins;
 } CodexGameResult;
 
+typedef struct {
+    unsigned long long code_loc;
+    unsigned long long duplicates;
+    unsigned long long worldview;
+    unsigned long long cpu;
+    unsigned long long smells;
+} CodexGameInspectTotals;
+
+typedef struct {
+    int score;
+    unsigned long long duplicates_removed;
+    unsigned long long worldview_removed;
+    unsigned long long cpu_removed;
+    unsigned long long smells_removed;
+    unsigned long long loc_removed;
+    unsigned long long debt_added;
+    int feature_progress;
+} CodexGameQualityScore;
+
 static char *quality_game_text_new(void) {
     static const char text[] =
         "\nQuality game score shown to every agent turn:\n"
@@ -66,6 +96,144 @@ static char *quality_game_text_new(void) {
     buffer_init(&b);
     buffer_append(&b, text, strlen(text));
     return b.data ? b.data : xstrdup("");
+}
+
+static int codex_game_parse_unsigned_after(const char *text,
+                                           const char *marker,
+                                           unsigned long long *out) {
+    const char *p = strstr(text, marker);
+
+    if (!p) return 0;
+    p += strlen(marker);
+    while (*p && !isdigit((unsigned char)*p)) p++;
+    if (!*p) return 0;
+    *out = strtoull(p, NULL, CODEX_GAME_PARSE_BASE);
+    return 1;
+}
+
+static int codex_game_inspect_totals_parse(const char *text,
+                                           CodexGameInspectTotals *out) {
+    memset(out, 0, sizeof(*out));
+    return codex_game_parse_unsigned_after(text, "code:", &out->code_loc) &&
+           codex_game_parse_unsigned_after(text, "duplication:",
+                                           &out->duplicates) &&
+           codex_game_parse_unsigned_after(text, "worldview:",
+                                           &out->worldview) &&
+           codex_game_parse_unsigned_after(text, "CPU cost:", &out->cpu) &&
+           codex_game_parse_unsigned_after(text, "smells:", &out->smells);
+}
+
+static unsigned long long codex_game_positive_delta(unsigned long long before,
+                                                    unsigned long long after) {
+    return before > after ? before - after : 0u;
+}
+
+static unsigned long long codex_game_negative_delta(unsigned long long before,
+                                                    unsigned long long after) {
+    return after > before ? after - before : 0u;
+}
+
+static void codex_game_quality_score_add(CodexGameQualityScore *score,
+                                         CodexGameInspectTotals before,
+                                         CodexGameInspectTotals after) {
+    unsigned long long duplicate_debt =
+        codex_game_negative_delta(before.duplicates, after.duplicates);
+    unsigned long long worldview_debt =
+        codex_game_negative_delta(before.worldview, after.worldview);
+    unsigned long long cpu_debt =
+        codex_game_negative_delta(before.cpu, after.cpu);
+    unsigned long long smell_debt =
+        codex_game_negative_delta(before.smells, after.smells);
+
+    score->duplicates_removed +=
+        codex_game_positive_delta(before.duplicates, after.duplicates);
+    score->worldview_removed +=
+        codex_game_positive_delta(before.worldview, after.worldview);
+    score->cpu_removed += codex_game_positive_delta(before.cpu, after.cpu);
+    score->smells_removed +=
+        codex_game_positive_delta(before.smells, after.smells);
+    score->loc_removed += codex_game_positive_delta(before.code_loc,
+                                                    after.code_loc);
+    score->debt_added += duplicate_debt + worldview_debt + cpu_debt +
+                         smell_debt;
+}
+
+static CodexGameQualityScore codex_game_quality_score(
+    const CodexGameInspectTotals *before,
+    const CodexGameInspectTotals *after,
+    size_t count) {
+    CodexGameQualityScore score = {0};
+
+    for (size_t i = 0u; i < count; ++i) {
+        codex_game_quality_score_add(&score, before[i], after[i]);
+    }
+    score.feature_progress = score.debt_added == 0u ? 1 : 0;
+    score.score =
+        (int)(score.duplicates_removed * CODEX_GAME_SCORE_CLEANUP) +
+        (int)(score.worldview_removed * CODEX_GAME_SCORE_SMELL_OR_WORLDVIEW) +
+        (int)(score.cpu_removed * CODEX_GAME_SCORE_CPU) +
+        (int)(score.smells_removed * CODEX_GAME_SCORE_SMELL_OR_WORLDVIEW) +
+        (int)(score.loc_removed * CODEX_GAME_SCORE_DELETE) +
+        (score.feature_progress * CODEX_GAME_SCORE_FEATURE) +
+        (int)(score.debt_added * CODEX_GAME_SCORE_DEBT);
+    return score;
+}
+
+static int codex_game_build_repo_inspect(Workspace *ws) {
+    char *cmd = repo_command_new(ws, "make repo-inspect");
+    int status = run_command_checked(cmd);
+
+    free(cmd);
+    return status;
+}
+
+static int codex_game_inspect_scope(Workspace *ws,
+                                    const char *scope,
+                                    CodexGameInspectTotals *out) {
+    char *scope_q = shell_quote_new(scope);
+    Buffer command;
+    buffer_init(&command);
+    buffer_appendf(&command, "./.build/repo-inspect %s", scope_q);
+    char *cmd = repo_command_new(ws, command.data);
+    int status = 0;
+    char *text = run_command_text_new(cmd, &status);
+
+    if (status == 0 && !codex_game_inspect_totals_parse(text, out)) {
+        status = 1;
+    }
+    if (status != 0) {
+        fprintf(stderr, "quality game: repo-inspect failed for %s\n", scope);
+    }
+    free(scope_q);
+    free(command.data);
+    free(cmd);
+    free(text);
+    return status;
+}
+
+static int codex_game_inspect_scopes(Workspace *ws,
+                                     const char **scopes,
+                                     size_t scope_count,
+                                     CodexGameInspectTotals *out) {
+    if (codex_game_build_repo_inspect(ws) != 0) return 1;
+    for (size_t i = 0u; i < scope_count; ++i) {
+        if (codex_game_inspect_scope(ws, scopes[i], &out[i]) != 0) return 1;
+    }
+    return 0;
+}
+
+static void codex_game_quality_score_print(CodexGameQualityScore score) {
+    printf("quality game: score=%d feature=%d duplicate-removal=%llu "
+           "worldview-removal=%llu cpu-removal=%llu smell-removal=%llu "
+           "loc-removal=%llu new-debt=%llu\n",
+           score.score,
+           score.feature_progress,
+           score.duplicates_removed,
+           score.worldview_removed,
+           score.cpu_removed,
+           score.smells_removed,
+           score.loc_removed,
+           score.debt_added);
 }
 
 static uint64_t codex_game_next(uint64_t *state) {
@@ -268,5 +436,44 @@ static int codex_game_bench(void) {
     puts("- cleanup-first wins cleanup-heavy tasks, but under-delivers features");
     puts("- score-only can still accept small debt when cleanup is absent");
     puts("- gate-and-score keeps feature progress while preventing negative moves");
+    return 0;
+}
+
+static int codex_game_self_test(void) {
+    static const char fixture_before[] =
+        "Inventory\n"
+        "  C files: 1  code: 10 loc\n"
+        "Issues by group\n"
+        "  duplication: 2 production, 0 mixed test/source\n"
+        "  worldview: 1 findings\n"
+        "  CPU cost: 3 findings\n"
+        "  smells: 4 findings\n";
+    static const char fixture_after[] =
+        "Inventory\n"
+        "  C files: 1  code: 8 loc\n"
+        "Issues by group\n"
+        "  duplication: 1 production, 0 mixed test/source\n"
+        "  worldview: 1 findings\n"
+        "  CPU cost: 2 findings\n"
+        "  smells: 5 findings\n";
+    CodexGameInspectTotals before;
+    CodexGameInspectTotals after;
+
+    if (!codex_game_inspect_totals_parse(fixture_before, &before)) {
+        return CODEX_GAME_SELF_TEST_PARSE_BEFORE_FAILURE;
+    }
+    if (!codex_game_inspect_totals_parse(fixture_after, &after)) {
+        return CODEX_GAME_SELF_TEST_PARSE_AFTER_FAILURE;
+    }
+    CodexGameQualityScore score = codex_game_quality_score(&before, &after, 1u);
+    if (score.duplicates_removed != 1u) {
+        return CODEX_GAME_SELF_TEST_DUPLICATE_FAILURE;
+    }
+    if (score.cpu_removed != 1u) return CODEX_GAME_SELF_TEST_CPU_FAILURE;
+    if (score.loc_removed != 2u) return CODEX_GAME_SELF_TEST_LOC_FAILURE;
+    if (score.debt_added != 1u) return CODEX_GAME_SELF_TEST_DEBT_FAILURE;
+    if (score.score != CODEX_GAME_SELF_TEST_EXPECTED_SCORE) {
+        return CODEX_GAME_SELF_TEST_SCORE_FAILURE;
+    }
     return 0;
 }
