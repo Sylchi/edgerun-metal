@@ -24,6 +24,9 @@
 #define ER_CYW43438_AP_BLOCKED_NO_RCA 1u
 #define ER_CYW43438_AP_BLOCKED_NO_FIRMWARE 2u
 #define ER_CYW43438_AP_BLOCKED_NO_FIRMWARE_REGISTER_EXECUTOR 4u
+#define ER_CYW43438_SDIO_FUNCTION_CCCR 0u
+#define ER_CYW43438_SDIO_FUNCTION_BACKPLANE 1u
+#define ER_CYW43438_SDIO_FUNCTION_WLAN 2u
 
 typedef enum {
   ER_CYW43438_AP_STAGE_SDIO_IDENTITY = 1,
@@ -73,9 +76,30 @@ typedef struct {
   ErCyw43438ApPath ap_path;
 } ErCyw43438OpenApBootDevice;
 
+typedef struct {
+  UINT16 abi_version;
+  UINT8 function;
+  UINT8 value;
+  UINT32 address;
+  UINT32 response0;
+  UINT32 interrupt_value;
+} ErCyw43438SdioDirectResult;
+
 void er_cyw43438_clear_firmware_set(ErCyw43438FirmwareSet* firmware);
 void er_cyw43438_clear_open_ap_boot_device(
     ErCyw43438OpenApBootDevice* device);
+UINT8 er_cyw43438_sdio_function_valid(UINT8 function);
+UINT8 er_cyw43438_sdio_read8(INT64 emmc_handle,
+                             UINT8 function,
+                             UINT32 address,
+                             UINT32 poll_budget,
+                             ErCyw43438SdioDirectResult* out_result);
+UINT8 er_cyw43438_sdio_write8(INT64 emmc_handle,
+                              UINT8 function,
+                              UINT32 address,
+                              UINT8 value,
+                              UINT32 poll_budget,
+                              ErCyw43438SdioDirectResult* out_result);
 UINT8 er_cyw43438_add_pi_zero_w_firmware_sources(ErBootConfig* config);
 UINT8 er_cyw43438_load_pi_zero_w_firmware(
     const ErCryptoProvider* crypto,

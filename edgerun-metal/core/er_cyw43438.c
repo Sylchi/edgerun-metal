@@ -7,7 +7,8 @@ enum {
   ER_CYW43438_STAGE_SDIO_IDENTITY_INDEX = 0u,
   ER_CYW43438_STAGE_SDIO_CLAIM_INDEX = 1u,
   ER_CYW43438_STAGE_BEACON_INDEX = 2u,
-  ER_CYW43438_STAGE_PROBE_RESPONSE_INDEX = 3u
+  ER_CYW43438_STAGE_PROBE_RESPONSE_INDEX = 3u,
+  ER_CYW43438_R5_DATA_MASK = 0xffu
 };
 
 void er_cyw43438_clear_firmware_set(ErCyw43438FirmwareSet* firmware) {
@@ -25,6 +26,95 @@ void er_cyw43438_clear_open_ap_boot_device(
     return;
   }
   er_mem_zero((UINT8*)device, (UINTN)sizeof(*device));
+}
+
+static void er_cyw43438_sdio_direct_result_clear(
+    ErCyw43438SdioDirectResult* result) {
+  if (result == 0) {
+    return;
+  }
+  er_mem_zero((UINT8*)result, (UINTN)sizeof(*result));
+}
+
+UINT8 er_cyw43438_sdio_function_valid(UINT8 function) {
+  switch (function) {
+    case ER_CYW43438_SDIO_FUNCTION_CCCR:
+    case ER_CYW43438_SDIO_FUNCTION_BACKPLANE:
+    case ER_CYW43438_SDIO_FUNCTION_WLAN:
+      return 1u;
+    default:
+      return 0u;
+  }
+}
+
+static UINT8 er_cyw43438_sdio_direct_execute(
+    INT64 emmc_handle,
+    UINT8 write,
+    UINT8 function,
+    UINT32 address,
+    UINT8 value,
+    UINT32 poll_budget,
+    ErCyw43438SdioDirectResult* out_result) {
+  ErPiMmcCommand command;
+  ErPiEmmcCommandResult result;
+
+  er_cyw43438_sdio_direct_result_clear(out_result);
+  if (out_result == 0 ||
+      er_cyw43438_sdio_function_valid(function) == 0u ||
+      poll_budget == 0u ||
+      er_pi_mmc_command_prepare(
+          ER_PI_MMC_CMD_IO_RW_DIRECT,
+          er_pi_sdio_cmd52_argument(write,
+                                    function,
+                                    ER_PI_SDIO_CMD52_NO_RAW,
+                                    address,
+                                    value),
+          ER_PI_MMC_RESPONSE_R5,
+          &command) == 0u ||
+      er_pi_emmc_command_execute(emmc_handle,
+                                 &command,
+                                 poll_budget,
+                                 &result) == 0u) {
+    return 0u;
+  }
+  out_result->abi_version = ER_CYW43438_ABI_VERSION;
+  out_result->function = function;
+  out_result->address = address;
+  out_result->response0 = result.response0;
+  out_result->interrupt_value = result.interrupt_value;
+  out_result->value = write == ER_PI_SDIO_WRITE ?
+                      value :
+                      (UINT8)(result.response0 & ER_CYW43438_R5_DATA_MASK);
+  return 1u;
+}
+
+UINT8 er_cyw43438_sdio_read8(INT64 emmc_handle,
+                             UINT8 function,
+                             UINT32 address,
+                             UINT32 poll_budget,
+                             ErCyw43438SdioDirectResult* out_result) {
+  return er_cyw43438_sdio_direct_execute(emmc_handle,
+                                         ER_PI_SDIO_READ,
+                                         function,
+                                         address,
+                                         0u,
+                                         poll_budget,
+                                         out_result);
+}
+
+UINT8 er_cyw43438_sdio_write8(INT64 emmc_handle,
+                              UINT8 function,
+                              UINT32 address,
+                              UINT8 value,
+                              UINT32 poll_budget,
+                              ErCyw43438SdioDirectResult* out_result) {
+  return er_cyw43438_sdio_direct_execute(emmc_handle,
+                                         ER_PI_SDIO_WRITE,
+                                         function,
+                                         address,
+                                         value,
+                                         poll_budget,
+                                         out_result);
 }
 
 static void er_cyw43438_stage_init(ErCyw43438ApStage* stage,

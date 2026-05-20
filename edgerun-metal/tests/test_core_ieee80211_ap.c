@@ -153,7 +153,10 @@ static void test_ieee80211_open_ap_frames(void) {
     IEEE80211_TEST_FIRMWARE_CLM_SEED = 0x93u,
     IEEE80211_TEST_FIRMWARE_RAM_LEN = 8u,
     IEEE80211_TEST_FIRMWARE_NVRAM_LEN = 5u,
-    IEEE80211_TEST_FIRMWARE_CLM_LEN = 6u
+    IEEE80211_TEST_FIRMWARE_CLM_LEN = 6u,
+    IEEE80211_TEST_SDIO_ADDR = 0x00000002u,
+    IEEE80211_TEST_SDIO_VALUE = 0x12u,
+    IEEE80211_TEST_SDIO_INVALID_FUNCTION = 3u
   };
   ErNodeId node_id;
   ErWifiL2ApPlan ap_plan;
@@ -163,6 +166,7 @@ static void test_ieee80211_open_ap_frames(void) {
   ErCyw43438ApPath path;
   ErCyw43438FirmwareSet firmware;
   ErCyw43438OpenApBootDevice boot_device;
+  ErCyw43438SdioDirectResult direct_result;
   Cyw43438TestFirmwareReader reader;
   UINT8 ram_bytes[IEEE80211_TEST_FIRMWARE_RAM_LEN];
   UINT8 nvram_bytes[IEEE80211_TEST_FIRMWARE_NVRAM_LEN];
@@ -383,6 +387,38 @@ static void test_ieee80211_open_ap_frames(void) {
   check_uint64("cyw43438 claim blocked reason",
                path.stages[IEEE80211_TEST_STAGE_CLAIM].blocked_reason,
                ER_CYW43438_AP_BLOCKED_NO_RCA);
+  check_int64("cyw43438 cccr function valid",
+              er_cyw43438_sdio_function_valid(ER_CYW43438_SDIO_FUNCTION_CCCR),
+              1);
+  check_int64("cyw43438 backplane function valid",
+              er_cyw43438_sdio_function_valid(
+                  ER_CYW43438_SDIO_FUNCTION_BACKPLANE),
+              1);
+  check_int64("cyw43438 wlan function valid",
+              er_cyw43438_sdio_function_valid(ER_CYW43438_SDIO_FUNCTION_WLAN),
+              1);
+  check_int64("cyw43438 invalid function rejected",
+              er_cyw43438_sdio_function_valid(
+                  IEEE80211_TEST_SDIO_INVALID_FUNCTION),
+              0);
+  check_int64("cyw43438 sdio read rejects invalid handle",
+              er_cyw43438_sdio_read8(ER_MMIO_INVALID_HANDLE,
+                                     ER_CYW43438_SDIO_FUNCTION_CCCR,
+                                     IEEE80211_TEST_SDIO_ADDR,
+                                     1u,
+                                     &direct_result),
+              0);
+  check_uint64("cyw43438 failed read clears abi",
+               direct_result.abi_version,
+               0u);
+  check_int64("cyw43438 sdio write rejects invalid function",
+              er_cyw43438_sdio_write8(ER_MMIO_INVALID_HANDLE,
+                                      IEEE80211_TEST_SDIO_INVALID_FUNCTION,
+                                      IEEE80211_TEST_SDIO_ADDR,
+                                      IEEE80211_TEST_SDIO_VALUE,
+                                      1u,
+                                      &direct_result),
+              0);
 
   er_boot_config_init(&boot_config);
   check_int64("cyw43438 add firmware sources",
