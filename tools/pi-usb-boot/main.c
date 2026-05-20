@@ -50,6 +50,7 @@ enum {
   ERPIUSB_FILE_REQUEST_BYTES = 260,
   ERPIUSB_PATH_BYTES = 4096,
   ERPIUSB_MAX_BULK_BYTES = 16384,
+  ERPIUSB_SMALL_BULK_THRESHOLD_BYTES = 4096,
   ERPIUSB_SCAN_MAX = 255,
   ERPIUSB_REENUMERATE_TRIES = 100,
   ERPIUSB_REENUMERATE_DELAY_NS = 100000000,
@@ -620,8 +621,11 @@ static int erpiusb_ep_write(ErPiUsbDevice* device,
   }
   while (offset < len) {
     uint32_t chunk = len - offset;
-    if (chunk > ERPIUSB_MAX_BULK_BYTES) {
-      chunk = ERPIUSB_MAX_BULK_BYTES;
+    uint32_t max_chunk = len <= ERPIUSB_SMALL_BULK_THRESHOLD_BYTES ?
+                         ERPIUSB_PACKET_BYTES :
+                         ERPIUSB_MAX_BULK_BYTES;
+    if (chunk > max_chunk) {
+      chunk = max_chunk;
     }
     ret = erpiusb_bulk(device->fd, device->out_endpoint, (void*)(bytes + offset), chunk);
     if (ret == -ETIMEDOUT &&
@@ -632,7 +636,9 @@ static int erpiusb_ep_write(ErPiUsbDevice* device,
                          chunk);
     }
     if (ret < 0 || (uint32_t)ret != chunk) {
-      fprintf(stderr, "pi-usb-boot: bulk write failed: %d\n", ret);
+      fprintf(stderr,
+              "pi-usb-boot: bulk write failed: ret=%d offset=%u chunk=%u total=%u endpoint=%u\n",
+              ret, offset, chunk, len, device->out_endpoint);
       return 0;
     }
     offset += chunk;
@@ -755,7 +761,10 @@ static int erpiusb_file_server(const ErPiUsbConfig* cfg,
       case ERPIUSB_CMD_GET_FILE_SIZE:
         if (erpiusb_path_join(path, sizeof(path), cfg->boot_dir, req.name) == 0 ||
             erpiusb_file_size(path, &size) == 0) {
-          size = 0u;
+          if (erpiusb_ep_write(device, NULL, 0u) == 0) {
+            return 0;
+          }
+          break;
         }
         if (erpiusb_send_file_size(device, size) == 0) {
           return 0;
