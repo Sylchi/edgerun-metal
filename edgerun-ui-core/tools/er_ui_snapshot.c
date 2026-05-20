@@ -1,4 +1,4 @@
-#include "er_ui_gop_renderer.h"
+#include "er_ui_surface_renderer.h"
 #include "er_ui_metal.h"
 #include "er_ui_scene.h"
 #include "er_ui_theme.h"
@@ -356,8 +356,8 @@ int main(int argc, char** argv) {
   er_ui_resolved_theme_t theme;
   vr_font_face_t* font;
   uint32_t* pixels;
-  ErUiGopSurface surface;
-  ErUiGopRenderStats stats;
+  ErUiSurface surface;
+  ErUiSurfaceRenderStats stats;
   size_t pixel_count;
   uint8_t ok;
 
@@ -412,14 +412,14 @@ int main(int argc, char** argv) {
     return 1;
   }
 
-  surface = (ErUiGopSurface){
+  surface = (ErUiSurface){
     pixels,
     config.width,
     config.height,
     config.width + ER_UI_SNAPSHOT_STRIDE_EXTRA,
-    ER_UI_GOP_PIXEL_RGBX
+    ER_UI_SURFACE_PIXEL_RGBX
   };
-  if (er_ui_gop_surface_render_scene_with_font_stats(
+  if (er_ui_surface_render_scene_with_font_stats(
           &surface, &scene, font, &stats) == 0u) {
     er_ui_scene_destroy(&scene);
     vr_font_face_destroy(font);

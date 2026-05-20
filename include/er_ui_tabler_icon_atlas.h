@@ -6,7 +6,7 @@
  * Intention: render real Tabler icons from an atlas instead of hand-drawn placeholder strokes.
  */
 
-#include "er_types.h"
+#include <stdint.h>
 #include "er_ui_icon.h"
 
 #define ER_UI_TABLER_ICON_ATLAS_WIDTH 672u
@@ -15,14 +15,14 @@
 #define ER_UI_TABLER_ICON_ATLAS_BYTES_PER_PIXEL 1u
 
 typedef struct {
-  UINT32 x;
-  UINT32 y;
-  UINT32 w;
-  UINT32 h;
+  uint32_t x;
+  uint32_t y;
+  uint32_t w;
+  uint32_t h;
 } ErUiTablerIconRect;
 
 //@optimizer-ignore-constant generated alpha atlas bytes are a fixed Tabler SVG asset
-static const UINT8 g_er_ui_tabler_icon_atlas_alpha[] = {
+static const uint8_t g_er_ui_tabler_icon_atlas_alpha[] = {
   0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
   0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
   0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
@@ -15705,7 +15705,7 @@ static const UINT8 g_er_ui_tabler_icon_atlas_alpha[] = {
   0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
 };
 
-static inline UINT8 er_ui_tabler_icon_rect(er_ui_icon_t icon, ErUiTablerIconRect* out_rect) {
+static inline uint8_t er_ui_tabler_icon_rect(er_ui_icon_t icon, ErUiTablerIconRect* out_rect) {
   if (out_rect == 0) return 0u;
   switch (icon) {
     case ER_UI_ICON_ACTIVITY: *out_rect = (ErUiTablerIconRect){8u, 8u, 96u, 96u}; return 1u;

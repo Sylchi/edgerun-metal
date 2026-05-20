@@ -47,6 +47,7 @@ add_library(er_ui_core
   src/er_ui_scene.c
   src/er_ui_shell.c
   src/er_ui_spacing.c
+  src/er_ui_surface_renderer.c
   src/er_ui_theme.c
   src/er_ui_text.c
 )
@@ -65,12 +66,8 @@ endif()
 if(ER_UI_CORE_BUILD_SNAPSHOT_HOST)
   add_executable(er_ui_snapshot
     tools/er_ui_snapshot.c
-    ${CMAKE_CURRENT_SOURCE_DIR}/../edgerun-metal/core/er_ui_gop_renderer.c
   )
   target_link_libraries(er_ui_snapshot PRIVATE er_ui_core)
-  target_include_directories(er_ui_snapshot PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}/../edgerun-metal/core
-  )
   target_compile_definitions(er_ui_snapshot PRIVATE ER_UI_REPO_ROOT="${CMAKE_CURRENT_SOURCE_DIR}/..")
   if(UNIX)
     target_link_libraries(er_ui_snapshot PRIVATE m)

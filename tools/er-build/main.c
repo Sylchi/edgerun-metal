@@ -1963,6 +1963,7 @@ static int erb_target_ui_core_test(int print_plan) {
       erb_args_push(&args, "edgerun-ui-core/src/er_ui_scene.c") != 0 ||
       erb_args_push(&args, "edgerun-ui-core/src/er_ui_shell.c") != 0 ||
       erb_args_push(&args, "edgerun-ui-core/src/er_ui_spacing.c") != 0 ||
+      erb_args_push(&args, "edgerun-ui-core/src/er_ui_surface_renderer.c") != 0 ||
       erb_args_push(&args, "edgerun-ui-core/src/er_ui_theme.c") != 0 ||
       erb_args_push(&args, "edgerun-ui-core/src/er_ui_text.c") != 0 ||
       erb_args_push(&args, "edgerun-ui-core/varfont/src/vr_font_freestanding.c") != 0 ||
