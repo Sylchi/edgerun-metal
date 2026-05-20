@@ -3,7 +3,7 @@
 
 /*
  * Purpose: account UI frame build, raster, and present time against explicit display targets.
- * Intention: make 4K/120 Hz claims depend on measured frame budgets, not renderer shape alone.
+ * Intention: make high-refresh display claims depend on measured frame budgets.
  */
 
 #include "er_types.h"

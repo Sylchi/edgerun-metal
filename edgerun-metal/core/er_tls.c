@@ -43,6 +43,35 @@
 #define ER_TLS_U8_MASK 0xffu
 #define ER_TLS_U16_BYTES 2u
 #define ER_TLS_U24_BYTES 3u
+#define ER_TLS_RECORD_VERSION_OFFSET 1u
+#define ER_TLS_RECORD_LENGTH_OFFSET 3u
+#define ER_TLS_SERVER_KEY_SHARE_GROUP_OFFSET 0u
+#define ER_TLS_SERVER_KEY_SHARE_KEY_LEN_OFFSET 2u
+#define ER_TLS_SERVER_KEY_SHARE_FORMAT_OFFSET 4u
+#define ER_TLS_SERVER_KEY_SHARE_PUBLIC_OFFSET 5u
+#define ER_TLS_EXTENSION_HEADER_BYTES 4u
+#define ER_TLS_LEGACY_VERSION_BYTES 2u
+#define ER_TLS_SESSION_ID_LENGTH_BYTES 1u
+#define ER_TLS_CIPHER_SUITE_BYTES 2u
+#define ER_TLS_COMPRESSION_METHOD_BYTES 1u
+#define ER_TLS_EXTENSION_VECTOR_LEN_BYTES 2u
+#define ER_TLS_SUPPORTED_VERSIONS_LIST_BYTES 2u
+#define ER_TLS_SUPPORTED_VERSIONS_EXTENSION_BYTES \
+  (ER_TLS_SESSION_ID_LENGTH_BYTES + ER_TLS_SUPPORTED_VERSIONS_LIST_BYTES)
+#define ER_TLS_NAMED_GROUP_LIST_BYTES 2u
+#define ER_TLS_SUPPORTED_GROUPS_EXTENSION_BYTES \
+  (ER_TLS_EXTENSION_VECTOR_LEN_BYTES + ER_TLS_NAMED_GROUP_LIST_BYTES)
+#define ER_TLS_SIGNATURE_ALGORITHM_LIST_BYTES 2u
+#define ER_TLS_SIGNATURE_ALGORITHMS_EXTENSION_BYTES \
+  (ER_TLS_EXTENSION_VECTOR_LEN_BYTES + ER_TLS_SIGNATURE_ALGORITHM_LIST_BYTES)
+#define ER_TLS_KEY_SHARE_ENTRY_HEADER_BYTES \
+  (ER_TLS_NAMED_GROUP_LIST_BYTES + ER_TLS_EXTENSION_VECTOR_LEN_BYTES)
+#define ER_TLS_KEY_SHARE_EXTENSION_BYTES \
+  (ER_TLS_EXTENSION_VECTOR_LEN_BYTES + ER_TLS_KEY_SHARE_ENTRY_HEADER_BYTES + \
+   ER_TLS_P256_SEC1_PUBLIC_BYTES)
+#define ER_TLS_SERVER_HELLO_MIN_TAIL_BYTES \
+  (ER_TLS_CIPHER_SUITE_BYTES + ER_TLS_COMPRESSION_METHOD_BYTES + \
+   ER_TLS_EXTENSION_VECTOR_LEN_BYTES)
 
 static const UINT8 er_tls_server_certificate_verify_context[] =
     "TLS 1.3, server CertificateVerify";
@@ -193,28 +222,36 @@ static UINT8 er_tls_write_sni_extension(ErTlsWriter* writer,
 }
 
 static UINT8 er_tls_write_supported_versions_extension(ErTlsWriter* writer) {
-  return (UINT8)(er_tls_write_extension_header(writer, ER_TLS_EXTENSION_SUPPORTED_VERSIONS, 3u) != 0u &&
-                 er_tls_write_u8(writer, 2u) != 0u &&
+  return (UINT8)(er_tls_write_extension_header(writer,
+                                               ER_TLS_EXTENSION_SUPPORTED_VERSIONS,
+                                               ER_TLS_SUPPORTED_VERSIONS_EXTENSION_BYTES) != 0u &&
+                 er_tls_write_u8(writer, ER_TLS_SUPPORTED_VERSIONS_LIST_BYTES) != 0u &&
                  er_tls_write_u16(writer, ER_TLS_VERSION_1_3) != 0u);
 }
 
 static UINT8 er_tls_write_supported_groups_extension(ErTlsWriter* writer) {
-  return (UINT8)(er_tls_write_extension_header(writer, ER_TLS_EXTENSION_SUPPORTED_GROUPS, 4u) != 0u &&
-                 er_tls_write_u16(writer, 2u) != 0u &&
+  return (UINT8)(er_tls_write_extension_header(writer,
+                                               ER_TLS_EXTENSION_SUPPORTED_GROUPS,
+                                               ER_TLS_SUPPORTED_GROUPS_EXTENSION_BYTES) != 0u &&
+                 er_tls_write_u16(writer, ER_TLS_NAMED_GROUP_LIST_BYTES) != 0u &&
                  er_tls_write_u16(writer, ER_TLS_NAMED_GROUP_SECP256R1) != 0u);
 }
 
 static UINT8 er_tls_write_signature_algorithms_extension(ErTlsWriter* writer) {
-  return (UINT8)(er_tls_write_extension_header(writer, ER_TLS_EXTENSION_SIGNATURE_ALGORITHMS, 4u) != 0u &&
-                 er_tls_write_u16(writer, 2u) != 0u &&
+  return (UINT8)(er_tls_write_extension_header(writer,
+                                               ER_TLS_EXTENSION_SIGNATURE_ALGORITHMS,
+                                               ER_TLS_SIGNATURE_ALGORITHMS_EXTENSION_BYTES) != 0u &&
+                 er_tls_write_u16(writer, ER_TLS_SIGNATURE_ALGORITHM_LIST_BYTES) != 0u &&
                  er_tls_write_u16(writer, ER_TLS_SIGNATURE_ECDSA_SECP256R1_SHA256) != 0u);
 }
 
 static UINT8 er_tls_write_key_share_extension(ErTlsWriter* writer,
                                               const UINT8 raw_public[ER_TLS_P256_RAW_PUBLIC_BYTES]) {
   return (UINT8)(er_tls_write_extension_header(writer, ER_TLS_EXTENSION_KEY_SHARE,
-                                               2u + 2u + 2u + ER_TLS_P256_SEC1_PUBLIC_BYTES) != 0u &&
-                 er_tls_write_u16(writer, 2u + 2u + ER_TLS_P256_SEC1_PUBLIC_BYTES) != 0u &&
+                                               ER_TLS_KEY_SHARE_EXTENSION_BYTES) != 0u &&
+                 er_tls_write_u16(writer,
+                                  ER_TLS_KEY_SHARE_ENTRY_HEADER_BYTES +
+                                  ER_TLS_P256_SEC1_PUBLIC_BYTES) != 0u &&
                  er_tls_write_u16(writer, ER_TLS_NAMED_GROUP_SECP256R1) != 0u &&
                  er_tls_write_u16(writer, ER_TLS_P256_SEC1_PUBLIC_BYTES) != 0u &&
                  er_tls_write_u8(writer, ER_TLS_SEC1_UNCOMPRESSED) != 0u &&
@@ -226,15 +263,19 @@ static UINT8 er_tls_server_key_share_parse(ErTlsServerHello* out_hello,
                                            UINT16 len) {
   UINT16 key_len;
 
-  if (out_hello == 0 || data == 0 || len != 4u + ER_TLS_P256_SEC1_PUBLIC_BYTES ||
-      er_tls_read_u16(data) != ER_TLS_NAMED_GROUP_SECP256R1) {
+  if (out_hello == 0 || data == 0 ||
+      len != ER_TLS_KEY_SHARE_ENTRY_HEADER_BYTES + ER_TLS_P256_SEC1_PUBLIC_BYTES ||
+      er_tls_read_u16(data + ER_TLS_SERVER_KEY_SHARE_GROUP_OFFSET) != ER_TLS_NAMED_GROUP_SECP256R1) {
     return 0u;
   }
-  key_len = er_tls_read_u16(data + 2u);
-  if (key_len != ER_TLS_P256_SEC1_PUBLIC_BYTES || data[4] != ER_TLS_SEC1_UNCOMPRESSED) {
+  key_len = er_tls_read_u16(data + ER_TLS_SERVER_KEY_SHARE_KEY_LEN_OFFSET);
+  if (key_len != ER_TLS_P256_SEC1_PUBLIC_BYTES ||
+      data[ER_TLS_SERVER_KEY_SHARE_FORMAT_OFFSET] != ER_TLS_SEC1_UNCOMPRESSED) {
     return 0u;
   }
-  er_mem_copy(out_hello->server_public_key, data + 5u, ER_TLS_P256_RAW_PUBLIC_BYTES);
+  er_mem_copy(out_hello->server_public_key,
+              data + ER_TLS_SERVER_KEY_SHARE_PUBLIC_OFFSET,
+              ER_TLS_P256_RAW_PUBLIC_BYTES);
   out_hello->has_server_public_key = 1u;
   return 1u;
 }
@@ -344,48 +385,51 @@ UINT8 er_tls_server_hello_parse(const UINT8* bytes,
   UINT16 extension_len;
   UINT16 extension_end;
 
-  if (bytes == 0 || out_hello == 0 || len < ER_TLS_RECORD_HEADER_BYTES + 4u ||
+  if (bytes == 0 || out_hello == 0 ||
+      len < ER_TLS_RECORD_HEADER_BYTES + ER_TLS_HANDSHAKE_HEADER_BYTES ||
       bytes[0] != ER_TLS_RECORD_HANDSHAKE ||
-      er_tls_read_u16(bytes + 1u) != ER_TLS_RECORD_VERSION) {
+      er_tls_read_u16(bytes + ER_TLS_RECORD_VERSION_OFFSET) != ER_TLS_RECORD_VERSION) {
     return ER_TLS_STATUS_PARSE_FAILURE;
   }
-  record_len = er_tls_read_u16(bytes + 3u);
+  record_len = er_tls_read_u16(bytes + ER_TLS_RECORD_LENGTH_OFFSET);
   if (record_len > len - ER_TLS_RECORD_HEADER_BYTES ||
       bytes[ER_TLS_RECORD_HEADER_BYTES] != ER_TLS_HANDSHAKE_SERVER_HELLO) {
     return ER_TLS_STATUS_PARSE_FAILURE;
   }
   body_len = er_tls_read_u24(bytes + ER_TLS_RECORD_HEADER_BYTES + 1u);
-  if (body_len > ER_TLS_U24_MAX || body_len > record_len - 4u) {
+  if (body_len > ER_TLS_U24_MAX || body_len > record_len - ER_TLS_HANDSHAKE_HEADER_BYTES) {
     return ER_TLS_STATUS_PARSE_FAILURE;
   }
-  body_start = ER_TLS_RECORD_HEADER_BYTES + 4u;
+  body_start = ER_TLS_RECORD_HEADER_BYTES + ER_TLS_HANDSHAKE_HEADER_BYTES;
   body_end = (UINT16)(body_start + body_len);
-  if (body_end > len || body_end - body_start < 2u + ER_TLS_RANDOM_BYTES + 1u) {
+  if (body_end > len ||
+      body_end - body_start <
+          ER_TLS_LEGACY_VERSION_BYTES + ER_TLS_RANDOM_BYTES + ER_TLS_SESSION_ID_LENGTH_BYTES) {
     return ER_TLS_STATUS_PARSE_FAILURE;
   }
   er_mem_zero((UINT8*)out_hello, (UINTN)sizeof(*out_hello));
   pos = body_start;
   out_hello->legacy_version = er_tls_read_u16(bytes + pos);
-  pos = (UINT16)(pos + 2u);
+  pos = (UINT16)(pos + ER_TLS_LEGACY_VERSION_BYTES);
   er_mem_copy(out_hello->random, bytes + pos, ER_TLS_RANDOM_BYTES);
   pos = (UINT16)(pos + ER_TLS_RANDOM_BYTES);
   session_len = bytes[pos];
-  pos = (UINT16)(pos + 1u);
+  pos = (UINT16)(pos + ER_TLS_SESSION_ID_LENGTH_BYTES);
   if (session_len > body_end - pos) {
     return ER_TLS_STATUS_PARSE_FAILURE;
   }
   pos = (UINT16)(pos + session_len);
-  if (body_end - pos < 5u) {
+  if (body_end - pos < ER_TLS_SERVER_HELLO_MIN_TAIL_BYTES) {
     return ER_TLS_STATUS_PARSE_FAILURE;
   }
   out_hello->cipher_suite = er_tls_read_u16(bytes + pos);
-  pos = (UINT16)(pos + 2u);
+  pos = (UINT16)(pos + ER_TLS_CIPHER_SUITE_BYTES);
   if (bytes[pos] != 0u) {
     return ER_TLS_STATUS_UNSUPPORTED;
   }
-  pos = (UINT16)(pos + 1u);
+  pos = (UINT16)(pos + ER_TLS_COMPRESSION_METHOD_BYTES);
   extension_len = er_tls_read_u16(bytes + pos);
-  pos = (UINT16)(pos + 2u);
+  pos = (UINT16)(pos + ER_TLS_EXTENSION_VECTOR_LEN_BYTES);
   if (extension_len > body_end - pos) {
     return ER_TLS_STATUS_PARSE_FAILURE;
   }
@@ -394,12 +438,12 @@ UINT8 er_tls_server_hello_parse(const UINT8* bytes,
     UINT16 extension_type;
     UINT16 current_len;
 
-    if (extension_end - pos < 4u) {
+    if (extension_end - pos < ER_TLS_EXTENSION_HEADER_BYTES) {
       return ER_TLS_STATUS_PARSE_FAILURE;
     }
     extension_type = er_tls_read_u16(bytes + pos);
-    current_len = er_tls_read_u16(bytes + pos + 2u);
-    pos = (UINT16)(pos + 4u);
+    current_len = er_tls_read_u16(bytes + pos + ER_TLS_EXTENSION_VECTOR_LEN_BYTES);
+    pos = (UINT16)(pos + ER_TLS_EXTENSION_HEADER_BYTES);
     if (current_len > extension_end - pos ||
         er_tls_server_hello_extension_parse(out_hello, extension_type, bytes + pos, current_len) == 0u) {
       return ER_TLS_STATUS_PARSE_FAILURE;
@@ -798,8 +842,10 @@ UINT8 er_tls_record_protect(ErTlsTpm* tpm,
     return ER_TLS_STATUS_INVALID_ARGUMENT;
   }
   out_record[0] = ER_TLS_RECORD_APPLICATION_DATA;
-  er_tls_put_be(out_record + 1u, ER_TLS_U16_BYTES, ER_TLS_RECORD_VERSION);
-  er_tls_put_be(out_record + 3u,
+  er_tls_put_be(out_record + ER_TLS_RECORD_VERSION_OFFSET,
+                ER_TLS_U16_BYTES,
+                ER_TLS_RECORD_VERSION);
+  er_tls_put_be(out_record + ER_TLS_RECORD_LENGTH_OFFSET,
                 ER_TLS_U16_BYTES,
                 (UINT16)(plaintext_len + ER_TLS_RECORD_TAG_BYTES));
   if (er_tls_tpm_record_crypt(tpm,
@@ -853,10 +899,10 @@ UINT8 er_tls_record_unprotect(ErTlsTpm* tpm,
   if (tpm == 0 || keys == 0 || keys->ready == 0u || record == 0 ||
       record_len < ER_TLS_RECORD_HEADER_BYTES + ER_TLS_RECORD_TAG_BYTES || out_plaintext == 0 ||
       out_plaintext_len == 0 || record[0] != ER_TLS_RECORD_APPLICATION_DATA ||
-      er_tls_read_u16(record + 1u) != ER_TLS_RECORD_VERSION) {
+      er_tls_read_u16(record + ER_TLS_RECORD_VERSION_OFFSET) != ER_TLS_RECORD_VERSION) {
     return ER_TLS_STATUS_INVALID_ARGUMENT;
   }
-  encrypted_len = er_tls_read_u16(record + 3u);
+  encrypted_len = er_tls_read_u16(record + ER_TLS_RECORD_LENGTH_OFFSET);
   if (encrypted_len != record_len - ER_TLS_RECORD_HEADER_BYTES ||
       encrypted_len < ER_TLS_RECORD_TAG_BYTES) {
     return ER_TLS_STATUS_PARSE_FAILURE;
