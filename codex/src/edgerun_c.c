@@ -347,7 +347,9 @@ static bool path_is_safe(const char *path) {
     if (strstr(path, "\\") != NULL) return false;
     if (strstr(path, "//") != NULL) return false;
     if (strcmp(path, ".") == 0 || strcmp(path, "..") == 0) return false;
-    if (starts_with(path, "../") || strstr(path, "/../") || strstr(path, "/..") == path + strlen(path) - 3) return false;
+    const size_t path_len = strlen(path);
+    const size_t parent_dir_suffix_len = sizeof("/..") - sizeof("");
+    if (starts_with(path, "../") || strstr(path, "/../") || strstr(path, "/..") == path + path_len - parent_dir_suffix_len) return false;
     if (starts_with(path, "./") || strstr(path, "/./")) return false;
     return true;
 }
@@ -751,7 +753,7 @@ static char *file_summary_text_new(const MemoryFile *file) {
                 includes++;
             }
             if (path_is_c_like(file->path) && symbols < SUMMARY_SYMBOL_LIMIT && summary_symbol_line(line, len)) {
-                buffer_append(&symbol_text, "symbol ", 7);
+                buffer_append(&symbol_text, "symbol ", strlen("symbol "));
                 append_trimmed_line(&symbol_text, line, len);
                 buffer_append_c(&symbol_text, '\n');
                 symbols++;
@@ -927,12 +929,14 @@ static char *json_escape_new(const char *s) {
     return b.data ? b.data : xstrdup("\"\"");
 }
 
+static const size_t SHELL_SINGLE_QUOTE_ESCAPE_LEN = sizeof("'\\''") - sizeof("");
+
 static char *shell_quote_new(const char *s) {
     Buffer b;
     buffer_init(&b);
     buffer_append_c(&b, '\'');
     for (const char *p = s; *p; p++) {
-        if (*p == '\'') buffer_append(&b, "'\\''", 4);
+        if (*p == '\'') buffer_append(&b, "'\\''", SHELL_SINGLE_QUOTE_ESCAPE_LEN);
         else buffer_append_c(&b, *p);
     }
     buffer_append_c(&b, '\'');
@@ -979,8 +983,10 @@ static char *read_text_file_new(const char *path) {
     return (char *)data;
 }
 
+enum { JSON_KEY_NEEDLE_CAPACITY = 128 };
+
 static char *json_get_string_dup(const char *json, const char *key) {
-    char needle[128];
+    char needle[JSON_KEY_NEEDLE_CAPACITY];
     snprintf(needle, sizeof(needle), "\"%s\"", key);
     const char *p = strstr(json, needle);
     if (!p) return NULL;
@@ -1289,9 +1295,10 @@ static char *repo_rules_text_new(Workspace *ws) {
         buffer_append(&b, (const char *)agents, len);
         if (len == 0 || agents[len - 1] != '\n') buffer_append_c(&b, '\n');
     }
+    enum { REPO_PROGRESS_COMMAND_CAPACITY = 256 };
     const char *scopes[] = {"codex", "edgerun-ui-core", "varfont", "edgerun-crypto", "edgerun-metal"};
     for (size_t i = 0; i < sizeof(scopes) / sizeof(scopes[0]); i++) {
-        char command[256];
+        char command[REPO_PROGRESS_COMMAND_CAPACITY];
         snprintf(command, sizeof(command), "./tools/repo-progress.sh --print-plan %s %s",
                  scopes[i], test_target_for_scope(scopes[i]));
         char *cmd = repo_command_new(ws, command);
@@ -2169,7 +2176,7 @@ static int run_agent_prompt(Workspace *ws, const char *prompt) {
             bool ok = false;
             summary.tool_calls++;
             fprintf(stderr, "\n%s🔧 tool%s %s\n",
-                    color_code(stderr, ANSI_BLUE), color_code(stderr, ANSI_RESET), turn.tools[i].name);
+                    color_code(stderr, ANSI_BLUE), color_code(stderr, ANSI_RESET), turn.tools[i].name); //@optimizer-ignore ANSI color constants use the fixed palette indexes accepted by color_code.
             char *tool_out = execute_agent_tool_new(ws, &turn.tools[i], &ok);
             fprintf(stderr, "%s%s tool result%s %.160s%s\n",
                     color_code(stderr, ok ? ANSI_GREEN : ANSI_RED),
