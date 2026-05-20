@@ -33,6 +33,7 @@ static UINT8 er_tls_tpm_external_key_unique(ErTlsTpm* tls_tpm,
                                             UINT8 seed[ER_TPM_SHA256_DIGEST_LEN],
                                             UINT8 unique[ER_TPM_SHA256_DIGEST_LEN]) {
   UINT8 material[ER_TLS_TPM_EXTERNAL_KEY_MATERIAL_MAX_BYTES];
+  UINT8 ok;
 
   if (tls_tpm == 0 || key == 0 || seed == 0 || unique == 0 ||
       key_len == 0u ||
@@ -43,10 +44,12 @@ static UINT8 er_tls_tpm_external_key_unique(ErTlsTpm* tls_tpm,
   }
   er_mem_copy(material, seed, ER_TPM_SHA256_DIGEST_LEN);
   er_mem_copy(material + ER_TPM_SHA256_DIGEST_LEN, key, key_len);
-  return er_tls_tpm_sha256(tls_tpm,
-                           material,
-                           (UINT16)(ER_TPM_SHA256_DIGEST_LEN + key_len),
-                           unique);
+  ok = er_tls_tpm_sha256(tls_tpm,
+                         material,
+                         (UINT16)(ER_TPM_SHA256_DIGEST_LEN + key_len),
+                         unique);
+  er_mem_scrub(material, (UINTN)sizeof(material));
+  return ok;
 }
 
 UINT8 er_tls_tpm_init(ErTlsTpm* tls_tpm,
@@ -170,21 +173,26 @@ UINT8 er_tls_tpm_load_hmac_sha256_key(ErTlsTpm* tls_tpm,
   UINT32 response_len;
   UINT8 seed[ER_TPM_SHA256_DIGEST_LEN];
   UINT8 unique[ER_TPM_SHA256_DIGEST_LEN];
+  UINT8 ok;
 
-  if (tls_tpm == 0 || key == 0 || out_handle == 0 ||
-      er_tls_tpm_external_key_unique(tls_tpm, key, key_len, seed, unique) == 0u ||
-      er_tpm_build_load_external_hmac_sha256_key_command(
-          key,
-          key_len,
-          seed,
-          unique,
-          tls_tpm->command,
-          (UINT32)sizeof(tls_tpm->command),
-          &command_len) == 0u ||
-      er_tls_tpm_run(tls_tpm, command_len, &response_len) == 0u) {
+  if (tls_tpm == 0 || key == 0 || out_handle == 0) {
     return 0u;
   }
-  return er_tpm_parse_handle_response(tls_tpm->response, response_len, out_handle);
+  ok = (UINT8)(er_tls_tpm_external_key_unique(tls_tpm, key, key_len, seed, unique) != 0u &&
+               er_tpm_build_load_external_hmac_sha256_key_command(
+                   key,
+                   key_len,
+                   seed,
+                   unique,
+                   tls_tpm->command,
+                   (UINT32)sizeof(tls_tpm->command),
+                   &command_len) != 0u &&
+               er_tls_tpm_run(tls_tpm, command_len, &response_len) != 0u &&
+               er_tpm_parse_handle_response(tls_tpm->response, response_len, out_handle) != 0u);
+  er_mem_scrub(seed, (UINTN)sizeof(seed));
+  er_mem_scrub(unique, (UINTN)sizeof(unique));
+  er_mem_scrub(tls_tpm->command, (UINTN)sizeof(tls_tpm->command));
+  return ok;
 }
 
 UINT8 er_tls_tpm_hmac_sha256(ErTlsTpm* tls_tpm,
@@ -217,22 +225,27 @@ UINT8 er_tls_tpm_load_aes_key(ErTlsTpm* tls_tpm,
   UINT32 response_len;
   UINT8 seed[ER_TPM_SHA256_DIGEST_LEN];
   UINT8 unique[ER_TPM_SHA256_DIGEST_LEN];
+  UINT8 ok;
 
-  if (tls_tpm == 0 || key == 0 || out_handle == 0 ||
-      er_tls_tpm_external_key_unique(tls_tpm, key, key_len, seed, unique) == 0u ||
-      er_tpm_build_load_external_aes_key_command(key,
-                                                 key_len,
-                                                 key_bits,
-                                                 tls_tpm->record_mode,
-                                                 seed,
-                                                 unique,
-                                                 tls_tpm->command,
-                                                 (UINT32)sizeof(tls_tpm->command),
-                                                 &command_len) == 0u ||
-      er_tls_tpm_run(tls_tpm, command_len, &response_len) == 0u) {
+  if (tls_tpm == 0 || key == 0 || out_handle == 0) {
     return 0u;
   }
-  return er_tpm_parse_handle_response(tls_tpm->response, response_len, out_handle);
+  ok = (UINT8)(er_tls_tpm_external_key_unique(tls_tpm, key, key_len, seed, unique) != 0u &&
+               er_tpm_build_load_external_aes_key_command(key,
+                                                          key_len,
+                                                          key_bits,
+                                                          tls_tpm->record_mode,
+                                                          seed,
+                                                          unique,
+                                                          tls_tpm->command,
+                                                          (UINT32)sizeof(tls_tpm->command),
+                                                          &command_len) != 0u &&
+               er_tls_tpm_run(tls_tpm, command_len, &response_len) != 0u &&
+               er_tpm_parse_handle_response(tls_tpm->response, response_len, out_handle) != 0u);
+  er_mem_scrub(seed, (UINTN)sizeof(seed));
+  er_mem_scrub(unique, (UINTN)sizeof(unique));
+  er_mem_scrub(tls_tpm->command, (UINTN)sizeof(tls_tpm->command));
+  return ok;
 }
 
 UINT8 er_tls_tpm_record_crypt(ErTlsTpm* tls_tpm,

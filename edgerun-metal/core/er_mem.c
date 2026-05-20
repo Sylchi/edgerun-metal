@@ -16,6 +16,19 @@ void er_mem_zero(UINT8* bytes, UINTN len) {
   }
 }
 
+void er_mem_scrub(UINT8* bytes, UINTN len) {
+  volatile UINT8* cursor;
+  UINTN i;
+
+  if (bytes == 0) {
+    return;
+  }
+  cursor = (volatile UINT8*)bytes;
+  for (i = 0; i < len; ++i) {
+    cursor[i] = 0;
+  }
+}
+
 void er_mem_copy(UINT8* dst, const UINT8* src, UINTN len) {
   UINTN i;
 
