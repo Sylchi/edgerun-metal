@@ -40,6 +40,17 @@ static void test_cyw43438_owned_firmware_payload(void) {
                ER_CYW43438_OWNED_FIRMWARE_RESPONSE_ADDR,
                ER_CYW43438_OWNED_FIRMWARE_COMMAND_ADDR +
                    (UINT32)sizeof(UINT32));
+  check_uint64("cyw43438 owned tx len address",
+               ER_CYW43438_OWNED_FIRMWARE_TX_LEN_ADDR,
+               ER_CYW43438_OWNED_FIRMWARE_RESPONSE_ADDR +
+                   (UINT32)sizeof(UINT32));
+  check_uint64("cyw43438 owned tx status address",
+               ER_CYW43438_OWNED_FIRMWARE_TX_STATUS_ADDR,
+               ER_CYW43438_OWNED_FIRMWARE_TX_LEN_ADDR +
+                   (UINT32)sizeof(UINT32));
+  check_uint64("cyw43438 owned tx frame capacity",
+               ER_CYW43438_OWNED_FIRMWARE_TX_FRAME_CAPACITY,
+               ER_IEEE80211_AP_FRAME_MAX);
   check_uint64("cyw43438 owned mailbox magic literal",
                test_owned_firmware_le32(
                    ER_CYW43438_OWNED_FIRMWARE_MAILBOX_MAGIC_OFFSET),
@@ -54,10 +65,17 @@ static void test_cyw43438_owned_firmware_payload(void) {
   check_uint64("cyw43438 owned ping command",
                ER_CYW43438_OWNED_FIRMWARE_COMMAND_PING,
                1u);
+  check_uint64("cyw43438 owned tx beacon command",
+               ER_CYW43438_OWNED_FIRMWARE_COMMAND_TX_BEACON,
+               2u);
   check_uint64("cyw43438 owned ping ack",
                ER_CYW43438_OWNED_FIRMWARE_RESPONSE_PING_ACK,
                ER_CYW43438_OWNED_FIRMWARE_RESPONSE_ACK_MASK |
                    ER_CYW43438_OWNED_FIRMWARE_COMMAND_PING);
+  check_uint64("cyw43438 owned tx beacon ack",
+               ER_CYW43438_OWNED_FIRMWARE_RESPONSE_TX_BEACON_ACK,
+               ER_CYW43438_OWNED_FIRMWARE_RESPONSE_ACK_MASK |
+                   ER_CYW43438_OWNED_FIRMWARE_COMMAND_TX_BEACON);
   test_owned_firmware_byte("cyw43438 owned ldr r0",
                            ER_CYW43438_OWNED_FIRMWARE_HANDLER_OFFSET,
                            0x07u);
@@ -118,22 +136,34 @@ static void test_cyw43438_owned_firmware_payload(void) {
   test_owned_firmware_byte("cyw43438 owned idle branch high",
                            ER_CYW43438_OWNED_FIRMWARE_HANDLER_OFFSET + 19u,
                            0xd0u);
-  test_owned_firmware_byte("cyw43438 owned ack orr",
+  test_owned_firmware_byte("cyw43438 owned tx len load",
                            ER_CYW43438_OWNED_FIRMWARE_HANDLER_OFFSET + 20u,
+                           0x05u);
+  test_owned_firmware_byte("cyw43438 owned tx len load high",
+                           ER_CYW43438_OWNED_FIRMWARE_HANDLER_OFFSET + 21u,
+                           0x69u);
+  test_owned_firmware_byte("cyw43438 owned tx status store",
+                           ER_CYW43438_OWNED_FIRMWARE_HANDLER_OFFSET + 22u,
+                           0x45u);
+  test_owned_firmware_byte("cyw43438 owned tx status store high",
+                           ER_CYW43438_OWNED_FIRMWARE_HANDLER_OFFSET + 23u,
+                           0x61u);
+  test_owned_firmware_byte("cyw43438 owned ack orr",
+                           ER_CYW43438_OWNED_FIRMWARE_HANDLER_OFFSET + 24u,
                            0x23u);
   test_owned_firmware_byte("cyw43438 owned ack orr high",
-                           ER_CYW43438_OWNED_FIRMWARE_HANDLER_OFFSET + 21u,
+                           ER_CYW43438_OWNED_FIRMWARE_HANDLER_OFFSET + 25u,
                            0x43u);
   test_owned_firmware_byte("cyw43438 owned response store",
-                           ER_CYW43438_OWNED_FIRMWARE_HANDLER_OFFSET + 22u,
+                           ER_CYW43438_OWNED_FIRMWARE_HANDLER_OFFSET + 26u,
                            0xc3u);
   test_owned_firmware_byte("cyw43438 owned response store high",
-                           ER_CYW43438_OWNED_FIRMWARE_HANDLER_OFFSET + 23u,
+                           ER_CYW43438_OWNED_FIRMWARE_HANDLER_OFFSET + 27u,
                            0x60u);
   test_owned_firmware_byte("cyw43438 owned loop",
-                           ER_CYW43438_OWNED_FIRMWARE_HANDLER_OFFSET + 24u,
-                           0xf7u);
+                           ER_CYW43438_OWNED_FIRMWARE_HANDLER_OFFSET + 28u,
+                           0xf5u);
   test_owned_firmware_byte("cyw43438 owned loop high",
-                           ER_CYW43438_OWNED_FIRMWARE_HANDLER_OFFSET + 25u,
+                           ER_CYW43438_OWNED_FIRMWARE_HANDLER_OFFSET + 29u,
                            0xe7u);
 }
