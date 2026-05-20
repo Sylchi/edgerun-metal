@@ -13,10 +13,15 @@ enum {
   ER_WIFI_L2_SSID_HEX_OFFSET = 3u,
   ER_WIFI_L2_SSID_NODE_BYTES = 8u,
   ER_WIFI_L2_HEX_DIGITS_PER_BYTE = 2u,
+  ER_WIFI_L2_HEX_DECIMAL_DIGITS = 10u,
   ER_WIFI_L2_HEX_HIGH_NIBBLE_SHIFT = 4u,
   ER_WIFI_L2_HEX_NIBBLE_MASK = 0x0fu,
   ER_WIFI_L2_MAC_LOCAL_UNICAST = 0x02u,
   ER_WIFI_L2_MAC_NODE_BYTE_COUNT = 5u,
+  ER_WIFI_L2_MAC_NODE_GROUP_2 = 2u,
+  ER_WIFI_L2_MAC_NODE_GROUP_3 = 3u,
+  ER_WIFI_L2_MAC_NODE_GROUP_4 = 4u,
+  ER_WIFI_L2_MAC_NODE_GROUP_5 = 5u,
   ER_WIFI_L2_MAC_NODE_OFFSET = 1u,
   ER_WIFI_L2_MAC_BYTE_MASK = 0xffu,
   ER_WIFI_L2_ETH_TYPE_HIGH_SHIFT = 8u,
@@ -27,10 +32,10 @@ enum {
 static UINT8 er_wifi_l2_hex_digit(UINT8 value) {
   UINT8 digit = (UINT8)(value & ER_WIFI_L2_HEX_NIBBLE_MASK);
 
-  if (digit < 10u) {
+  if (digit < ER_WIFI_L2_HEX_DECIMAL_DIGITS) {
     return (UINT8)('0' + digit);
   }
-  return (UINT8)('a' + (digit - 10u));
+  return (UINT8)('a' + (digit - ER_WIFI_L2_HEX_DECIMAL_DIGITS));
 }
 
 static UINT8 er_wifi_l2_channel_valid(UINT8 channel) {
@@ -50,10 +55,14 @@ UINT8 er_wifi_l2_node_mac(const ErNodeId* node_id,
     out_mac[ER_WIFI_L2_MAC_NODE_OFFSET + i] =
         (UINT8)(node_id->bytes[i] ^
                 node_id->bytes[i + ER_WIFI_L2_MAC_NODE_BYTE_COUNT] ^
-                node_id->bytes[i + (ER_WIFI_L2_MAC_NODE_BYTE_COUNT * 2u)] ^
-                node_id->bytes[i + (ER_WIFI_L2_MAC_NODE_BYTE_COUNT * 3u)] ^
-                node_id->bytes[i + (ER_WIFI_L2_MAC_NODE_BYTE_COUNT * 4u)] ^
-                node_id->bytes[i + (ER_WIFI_L2_MAC_NODE_BYTE_COUNT * 5u)] ^
+                node_id->bytes[i + (ER_WIFI_L2_MAC_NODE_BYTE_COUNT *
+                                    ER_WIFI_L2_MAC_NODE_GROUP_2)] ^
+                node_id->bytes[i + (ER_WIFI_L2_MAC_NODE_BYTE_COUNT *
+                                    ER_WIFI_L2_MAC_NODE_GROUP_3)] ^
+                node_id->bytes[i + (ER_WIFI_L2_MAC_NODE_BYTE_COUNT *
+                                    ER_WIFI_L2_MAC_NODE_GROUP_4)] ^
+                node_id->bytes[i + (ER_WIFI_L2_MAC_NODE_BYTE_COUNT *
+                                    ER_WIFI_L2_MAC_NODE_GROUP_5)] ^
                 node_id->bytes[ER_NODE_ID_LEN - 1u - i]);
   }
   out_mac[0] &= (UINT8)~1u;
