@@ -198,6 +198,23 @@ typedef struct {
 } ErPiEmmcBlockResult;
 
 typedef struct {
+  UINT32 block_size_count_offset;
+  UINT32 block_size_count_value;
+  UINT32 data_offset;
+  UINT32 data_len;
+  ErPiEmmcCommandIo command_io;
+  UINT8 read;
+} ErPiEmmcSdioTransferIo;
+
+typedef struct {
+  ErPiEmmcSdioTransferIo io;
+  UINT32 interrupt_value;
+  UINT32 response0;
+  UINT8 completed;
+  UINT8 error;
+} ErPiEmmcSdioTransferResult;
+
+typedef struct {
   UINT32 command_count;
   UINT32 completed_count;
   UINT32 relative_card_address;
@@ -273,6 +290,28 @@ UINT8 er_pi_emmc_write_block(INT64 emmc_handle,
                              const UINT8* block,
                              UINT32 poll_budget,
                              ErPiEmmcBlockResult* out_result);
+UINT8 er_pi_emmc_sdio_transfer_io_prepare(UINT8 write,
+                                           UINT8 function,
+                                           UINT8 incrementing_address,
+                                           UINT32 address,
+                                           UINT32 data_len,
+                                           ErPiEmmcSdioTransferIo* out_io);
+UINT8 er_pi_emmc_sdio_read_bytes(INT64 emmc_handle,
+                                 UINT8 function,
+                                 UINT8 incrementing_address,
+                                 UINT32 address,
+                                 UINT8* out_bytes,
+                                 UINT32 bytes_len,
+                                 UINT32 poll_budget,
+                                 ErPiEmmcSdioTransferResult* out_result);
+UINT8 er_pi_emmc_sdio_write_bytes(INT64 emmc_handle,
+                                  UINT8 function,
+                                  UINT8 incrementing_address,
+                                  UINT32 address,
+                                  const UINT8* bytes,
+                                  UINT32 bytes_len,
+                                  UINT32 poll_budget,
+                                  ErPiEmmcSdioTransferResult* out_result);
 UINT8 er_pi_zero2w_sd_memory_identity_plan(
     ErPiZero2wSdMemoryBringupPlan* out_plan);
 UINT8 er_pi_zero2w_sd_memory_claim_plan(
