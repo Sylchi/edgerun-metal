@@ -17,9 +17,11 @@ case "$repo_plan" in
   * ) printf 'missing repo-check compile step\n' >&2; exit 1 ;;
 esac
 
-case "$repo_plan" in
-  *"+ clang -std=c11 -Wall -Wextra -Werror -O2 -o .build/repo-inspect -pthread"* ) ;;
-  * ) printf 'missing repo-inspect compile step\n' >&2; exit 1 ;;
+repo_inspect_plan=$("$ER_BUILD" --print-plan repo-inspect codex)
+
+case "$repo_inspect_plan" in
+  *"+ .build/er-build repo-inspect codex"* ) ;;
+  * ) printf 'missing in-process repo-inspect plan\n' >&2; exit 1 ;;
 esac
 
 case "$repo_plan" in

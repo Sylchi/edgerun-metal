@@ -8,9 +8,12 @@ set -euo pipefail
 
 readonly SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 readonly ROOT_DIR="$(dirname "${SCRIPT_DIR}")"
-readonly REPO_INSPECT="${ROOT_DIR}/.build/repo-inspect"
 readonly TMP_DIR="$(mktemp -d)"
 readonly MARKER_TOKEN="TO""DO"
+
+repo_inspect() {
+  "${ROOT_DIR}/.build/er-build" repo-inspect "$@"
+}
 
 cleanup() {
   rm -rf "${TMP_DIR}"
@@ -145,11 +148,11 @@ int test_main_path(void) {
 C
 printf '\177ELFtest' > "${TMP_DIR}/release.efi"
 
-report="$("${REPO_INSPECT}" --threads 2 "${TMP_DIR}")"
-detail_report="$("${REPO_INSPECT}" --threads 2 --details "${TMP_DIR}")"
-scoped_tools_report="$(cd "${ROOT_DIR}" && "${REPO_INSPECT}" --threads 2 tools)"
-scoped_codex_report="$(cd "${ROOT_DIR}" && "${REPO_INSPECT}" --threads 2 codex)"
-if "${REPO_INSPECT}" --threads 0 "${TMP_DIR}" >/dev/null 2>"${TMP_DIR}/invalid_threads.err"; then
+report="$(repo_inspect --threads 2 "${TMP_DIR}")"
+detail_report="$(repo_inspect --threads 2 --details "${TMP_DIR}")"
+scoped_tools_report="$(cd "${ROOT_DIR}" && repo_inspect --threads 2 tools)"
+scoped_codex_report="$(cd "${ROOT_DIR}" && repo_inspect --threads 2 codex)"
+if repo_inspect --threads 0 "${TMP_DIR}" >/dev/null 2>"${TMP_DIR}/invalid_threads.err"; then
   printf 'invalid thread count accepted\n' >&2
   exit 1
 fi
