@@ -98,6 +98,11 @@ case "$repo_plan" in
 esac
 
 case "$repo_plan" in
+  *"+ clang -std=c11 -Wall -Wextra -Werror -O2 -o .build/pi-usb-boot tools/pi-usb-boot/main.c"* ) ;;
+  * ) printf 'missing pi usb boot compile step\n' >&2; exit 1 ;;
+esac
+
+case "$repo_plan" in
   *"+ ./tests/pi-serial-verify-tests.sh"* ) ;;
   * ) printf 'missing pi serial verifier test step\n' >&2; exit 1 ;;
 esac
@@ -105,6 +110,11 @@ esac
 case "$repo_plan" in
   *"+ ./tests/sdcard-probe-tests.sh"* ) ;;
   * ) printf 'missing sd card probe test step\n' >&2; exit 1 ;;
+esac
+
+case "$repo_plan" in
+  *"+ ./tests/pi-usb-boot-tests.sh"* ) ;;
+  * ) printf 'missing pi usb boot test step\n' >&2; exit 1 ;;
 esac
 
 crypto_plan=$("$ER_BUILD" --print-plan crypto-test)
