@@ -1,5 +1,57 @@
 #include "test_core_internal.h"
 
+typedef struct {
+  ErNetworkLocator locator;
+  UINT8 packet[ERWIRE_HEADER_SIZE + ERWIRE_MAX_PAYLOAD];
+  UINT32 packet_len;
+  UINT32 send_count;
+  UINT32 recv_count;
+} NetworkTestWifiOpenCarrier;
+
+static UINT8 network_test_wifi_open_send(void* ctx,
+                                         const ErNetworkLocator* locator,
+                                         const UINT8* packet,
+                                         UINT32 packet_len) {
+  NetworkTestWifiOpenCarrier* carrier;
+
+  carrier = (NetworkTestWifiOpenCarrier*)ctx;
+  if (carrier == 0 ||
+      locator == 0 ||
+      packet == 0 ||
+      packet_len == 0u ||
+      packet_len > (UINT32)sizeof(carrier->packet)) {
+    return 0u;
+  }
+  carrier->locator = *locator;
+  er_mem_copy(carrier->packet, packet, packet_len);
+  carrier->packet_len = packet_len;
+  carrier->send_count += 1u;
+  return 1u;
+}
+
+static UINT8 network_test_wifi_open_recv(void* ctx,
+                                         ErNetworkLocator* out_locator,
+                                         UINT8* out_packet,
+                                         UINT32 out_capacity,
+                                         UINT32* out_packet_len) {
+  NetworkTestWifiOpenCarrier* carrier;
+
+  carrier = (NetworkTestWifiOpenCarrier*)ctx;
+  if (carrier == 0 ||
+      out_locator == 0 ||
+      out_packet == 0 ||
+      out_packet_len == 0 ||
+      carrier->packet_len == 0u ||
+      out_capacity < carrier->packet_len) {
+    return 0u;
+  }
+  *out_locator = carrier->locator;
+  er_mem_copy(out_packet, carrier->packet, carrier->packet_len);
+  *out_packet_len = carrier->packet_len;
+  carrier->recv_count += 1u;
+  return 1u;
+}
+
 static void test_network_coordinator(void) {
   enum {
     NET_TEST_MMIO_DWORDS = 128u,
@@ -27,6 +79,8 @@ static void test_network_coordinator(void) {
   ErVirtioNet net;
   ErNativeEth native_eth;
   ErNetworkIo io;
+  ErNetworkWifiOpenCarrier wifi_open;
+  NetworkTestWifiOpenCarrier wifi_open_test;
   ErNetworkLocator native_locator;
   ErNetworkLocator weaker_native_locator;
   ErNetworkLocator wifi_locator;
@@ -234,10 +288,17 @@ static void test_network_coordinator(void) {
   net.mac[0] = 0x02u;
   net.mac[ER_NET_MAC_LEN - 1u] = 0x02u;
   check_int64("network native eth init", er_native_eth_init(&native_eth, &net, peer_mac), 1);
+  er_mem_zero((UINT8*)&wifi_open_test, (UINTN)sizeof(wifi_open_test));
+  wifi_open.abi_version = ER_NETWORK_ABI_VERSION;
+  wifi_open.reserved = 0u;
+  wifi_open.ctx = &wifi_open_test;
+  wifi_open.send = network_test_wifi_open_send;
+  wifi_open.recv = network_test_wifi_open_recv;
   io.abi_version = ER_NETWORK_ABI_VERSION;
   io.reserved = 0u;
   io.native_eth = &native_eth;
   io.firmware_udp = 0;
+  io.wifi_open = 0;
   peers[1] = peer;
   check_int64("network route select native for send",
               er_network_route_select(peers, 2u, &target_node, NET_TEST_NOW_MS, &route),
@@ -303,6 +364,30 @@ static void test_network_coordinator(void) {
                                      ERWIRE_FLAG_FIRST | ERWIRE_FLAG_LAST,
                                      payload, NET_TEST_PAYLOAD_LEN),
               0);
+  io.wifi_open = &wifi_open;
+  erwire_init(29u);
+  check_int64("network send wifi",
+              er_network_send_erwire(&io, &wifi_route, 0, ERWIRE_KIND_LOG_TEXT,
+                                     ERWIRE_FLAG_FIRST | ERWIRE_FLAG_LAST,
+                                     payload, NET_TEST_PAYLOAD_LEN),
+              1);
+  check_uint64("network wifi send count", wifi_open_test.send_count, 1u);
+  check_uint64("network wifi packet magic0",
+               wifi_open_test.packet[0],
+               'E');
+  check_int64("network poll wifi",
+              er_network_poll_erwire(&io, peers, 2u, NET_TEST_NOW_MS, &route,
+                                     &header, out_payload,
+                                     (UINT32)sizeof(out_payload),
+                                     &out_payload_len),
+              1);
+  check_uint64("network wifi recv count", wifi_open_test.recv_count, 1u);
+  check_uint64("network wifi poll kind", header.Kind, ERWIRE_KIND_LOG_TEXT);
+  check_uint64("network wifi poll route kind",
+               route.selected_locator.kind,
+               ER_NETWORK_LOCATOR_KIND_WIFI_OPEN);
+  check_uint64("network wifi poll payload0", out_payload[0], payload[0]);
+  io.wifi_open = 0;
 
   check_int64("network firmware endpoint",
               er_hw_relay_default_firmware_udp_endpoint(&firmware_endpoint), 1);

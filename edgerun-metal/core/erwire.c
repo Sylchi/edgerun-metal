@@ -206,14 +206,25 @@ UINT8 erwire_poll_native_eth(ErwirePacketHeader* out_header,
                              out_capacity, out_payload_len);
 }
 
-void erwire_send(UINT16 kind, UINT16 flags, const UINT8* payload, UINT32 payload_len) {
-  UINT8* packet_cursor = g_packet;
+UINT8 erwire_build_packet(UINT16 kind, UINT16 flags,
+                          const UINT8* payload, UINT32 payload_len,
+                          UINT8* out_packet, UINT32 out_capacity,
+                          UINT32* out_packet_len) {
+  UINT8* packet_cursor;
   UINT32 send_len;
-  ErRelayForwardIntent intent;
 
-  if (payload_len > ERWIRE_MAX_PAYLOAD || (payload_len > 0u && payload == 0)) {
-    return;
+  if (out_packet_len == 0) {
+    return 0u;
   }
+  *out_packet_len = 0u;
+  if (payload_len > ERWIRE_MAX_PAYLOAD ||
+      (payload_len > 0u && payload == 0) ||
+      out_packet == 0 ||
+      out_capacity < ERWIRE_HEADER_SIZE + payload_len) {
+    return 0u;
+  }
+  packet_cursor = out_packet;
+  send_len = ERWIRE_HEADER_SIZE + payload_len;
 
   erwire_write_u32(&packet_cursor, ERWIRE_MAGIC);
   erwire_write_u16(&packet_cursor, ERWIRE_VERSION);
@@ -227,9 +238,26 @@ void erwire_send(UINT16 kind, UINT16 flags, const UINT8* payload, UINT32 payload
   erwire_write_u32(&packet_cursor, 0u);
 
   if (payload_len > 0u) {
-    er_mem_copy(&g_packet[ERWIRE_HEADER_SIZE], payload, (UINTN)payload_len);
+    er_mem_copy(&out_packet[ERWIRE_HEADER_SIZE], payload, (UINTN)payload_len);
   }
-  send_len = ERWIRE_HEADER_SIZE + payload_len;
+  *out_packet_len = send_len;
+  ++g_seq;
+  return 1u;
+}
+
+void erwire_send(UINT16 kind, UINT16 flags, const UINT8* payload, UINT32 payload_len) {
+  UINT32 send_len;
+  ErRelayForwardIntent intent;
+
+  if (erwire_build_packet(kind,
+                          flags,
+                          payload,
+                          payload_len,
+                          g_packet,
+                          (UINT32)sizeof(g_packet),
+                          &send_len) == 0u) {
+    return;
+  }
   er_mem_zero((UINT8*)&intent, (UINTN)sizeof(intent));
   intent.abi_version = ER_WORK_ABI_VERSION;
   erwire_prepare_memory_endpoint(&intent.from);
@@ -239,7 +267,6 @@ void erwire_send(UINT16 kind, UINT16 flags, const UINT8* payload, UINT32 payload
   } else if (er_hw_relay_default_firmware_udp_endpoint(&intent.to) != 0u) {
     (void)er_hw_relay_forward_to_firmware_udp(&intent, g_packet, (UINTN)send_len);
   }
-  ++g_seq;
 }
 
 void erwire_send_text(const char* s) {
