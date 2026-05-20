@@ -467,18 +467,17 @@ make ui-core-test
 `ui-core-test` is built and run directly by `.build/er-build`; it does not use
 CMake, Ninja, or CTest.
 
-Run the hosted `edgerun-ui-core/varfont` demo when SDL2 and the Geist font are available:
+Render the current `edgerun-ui-core` metal surface with no external display
+library:
 
 ```bash
-./.build/edgerun-ui-core/varfont/vrfont_demo edgerun-ui-core/varfont/fonts/Geist[wght].ttf
+make ui-core-snapshot
 ```
 
-Download the Geist variable font for hosted demos:
-
-```bash
-mkdir -p edgerun-ui-core/varfont/fonts
-curl -L -o edgerun-ui-core/varfont/fonts/Geist[wght].ttf https://raw.githubusercontent.com/vercel/geist-font/main/fonts/Geist/variable/Geist%5Bwght%5D.ttf
-```
+The snapshot target writes `.build/edgerun-ui-core/snapshot.bmp` using the
+bundled Geist variable font at `edgerun-ui-core/varfont/fonts/Geist[wght].ttf`;
+maintained repository targets must not fetch external demo assets at runtime or
+during validation.
 
 Build the host-side PXE helper:
 

@@ -4,7 +4,7 @@ project(vrfont C)
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 option(VRFONT_ENABLE_COVERAGE "Enable coverage instrumentation for the test target." OFF)
-option(VRFONT_BUILD_HOSTED_TOOLS "Build hosted SDL demo and ctest targets." ON)
+option(VRFONT_BUILD_TESTS "Build hosted ctest target." ON)
 
 if(VRFONT_ENABLE_COVERAGE)
   if (CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
@@ -46,23 +46,7 @@ target_include_directories(vrfont PUBLIC
   ${CMAKE_CURRENT_SOURCE_DIR}/../../include
 )
 
-if(VRFONT_BUILD_HOSTED_TOOLS)
-find_package(SDL2 REQUIRED)
-
-if (NOT TARGET SDL2::SDL2)
-  message(FATAL_ERROR "SDL2::SDL2 target not found. Install SDL2 with CMake package metadata.")
-endif()
-
-add_executable(vrfont_demo examples/main.c)
-if (TARGET SDL2::SDL2main)
-  target_link_libraries(vrfont_demo PRIVATE vrfont SDL2::SDL2 SDL2::SDL2main)
-else()
-  target_link_libraries(vrfont_demo PRIVATE vrfont SDL2::SDL2)
-endif()
-if(UNIX)
-  target_link_libraries(vrfont_demo PRIVATE m)
-endif()
-
+if(VRFONT_BUILD_TESTS)
 enable_testing()
 
 add_executable(vrfont_tests

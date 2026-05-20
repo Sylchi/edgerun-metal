@@ -4,10 +4,14 @@ project(er_ui_core C)
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 option(ER_UI_CORE_BUILD_TESTS "Build hosted ctest targets." ON)
-option(ER_UI_CORE_BUILD_SDL_HOST "Build the hosted SDL shell preview." OFF)
+option(ER_UI_CORE_BUILD_SNAPSHOT_HOST "Build the hosted dependency-free BMP snapshot tool." ON)
+
+if(ER_UI_CORE_BUILD_TESTS)
+  enable_testing()
+endif()
 
 if(NOT TARGET vrfont)
-  set(VRFONT_BUILD_HOSTED_TOOLS OFF CACHE BOOL "" FORCE)
+  set(VRFONT_BUILD_TESTS OFF CACHE BOOL "" FORCE)
   add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/varfont ${CMAKE_CURRENT_BINARY_DIR}/varfont)
 endif()
 
@@ -58,33 +62,28 @@ if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
   target_compile_options(er_ui_core PRIVATE -Wall -Wextra -Wpedantic -Werror -ffreestanding -fno-builtin -fno-stack-protector)
 endif()
 
-if(ER_UI_CORE_BUILD_SDL_HOST)
-  find_package(SDL2 REQUIRED)
-  if(NOT TARGET SDL2::SDL2)
-    message(FATAL_ERROR "SDL2::SDL2 target not found. Install SDL2 with CMake package metadata.")
-  endif()
-
-  add_executable(er_ui_sdl_shell tools/er_ui_sdl_shell.c)
-  target_link_libraries(er_ui_sdl_shell PRIVATE er_ui_core SDL2::SDL2)
-  target_compile_definitions(er_ui_sdl_shell PRIVATE ER_UI_REPO_ROOT="${CMAKE_CURRENT_SOURCE_DIR}/..")
-  if(TARGET SDL2::SDL2main)
-    target_link_libraries(er_ui_sdl_shell PRIVATE SDL2::SDL2main)
-  endif()
+if(ER_UI_CORE_BUILD_SNAPSHOT_HOST)
+  add_executable(er_ui_snapshot
+    tools/er_ui_snapshot.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/../edgerun-metal/core/er_ui_gop_renderer.c
+  )
+  target_link_libraries(er_ui_snapshot PRIVATE er_ui_core)
+  target_include_directories(er_ui_snapshot PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/../edgerun-metal/core
+  )
+  target_compile_definitions(er_ui_snapshot PRIVATE ER_UI_REPO_ROOT="${CMAKE_CURRENT_SOURCE_DIR}/..")
   if(UNIX)
-    target_link_libraries(er_ui_sdl_shell PRIVATE m)
+    target_link_libraries(er_ui_snapshot PRIVATE m)
   endif()
   if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
-    target_compile_options(er_ui_sdl_shell PRIVATE -Wall -Wextra -Wpedantic -Werror)
+    target_compile_options(er_ui_snapshot PRIVATE -Wall -Wextra -Wpedantic -Werror)
   endif()
   if(ER_UI_CORE_BUILD_TESTS)
-    add_test(NAME er_ui_sdl_shell_smoke COMMAND er_ui_sdl_shell --self-test)
-    set_tests_properties(er_ui_sdl_shell_smoke PROPERTIES ENVIRONMENT "SDL_VIDEODRIVER=dummy")
+    add_test(NAME er_ui_snapshot_smoke COMMAND er_ui_snapshot --self-test)
   endif()
 endif()
 
 if(ER_UI_CORE_BUILD_TESTS)
-  enable_testing()
-
 add_executable(er_ui_core_tests
     tests/test_assets.c
     tests/test_components.c
