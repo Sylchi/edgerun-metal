@@ -59,6 +59,7 @@ enum {
   ERPIUSB_CMD_GET_FILE_SIZE = 0,
   ERPIUSB_CMD_READ_FILE = 1,
   ERPIUSB_CMD_DONE = 2,
+  ERPIUSB_TEXT_BYTES = 64,
   ERPIUSB_EXIT_USAGE = 2
 };
 
@@ -265,27 +266,6 @@ static int erpiusb_control(int fd,
   return ret;
 }
 
-static int erpiusb_descriptor(int fd,
-                              uint8_t descriptor_type,
-                              void* out,
-                              uint16_t out_len) {
-  struct usbdevfs_ctrltransfer transfer;
-  int ret;
-
-  memset(&transfer, 0, sizeof(transfer));
-  transfer.bRequestType = ERPIUSB_CONTROL_IN;
-  transfer.bRequest = ERPIUSB_REQUEST_GET_DESCRIPTOR;
-  transfer.wValue = (uint16_t)((uint16_t)descriptor_type << 8u);
-  transfer.wLength = out_len;
-  transfer.timeout = ERPIUSB_CONTROL_TIMEOUT_MS;
-  transfer.data = out;
-  ret = ioctl(fd, USBDEVFS_CONTROL, &transfer);
-  if (ret < 0) {
-    return -errno;
-  }
-  return ret;
-}
-
 static int erpiusb_bulk(int fd,
                         uint8_t endpoint,
                         void* data,
@@ -342,86 +322,270 @@ static int erpiusb_parse_config(const unsigned char* config,
   return 1;
 }
 
-static int erpiusb_open_path(const char* path, ErPiUsbDevice* device) {
-  unsigned char dev_desc[ERPIUSB_DEVICE_DESCRIPTOR_BYTES];
-  unsigned char cfg_head[ERPIUSB_CONFIG_HEAD_BYTES];
-  unsigned char* cfg;
-  uint16_t product;
-  uint16_t cfg_len;
-  int fd;
-  int ret;
+static int erpiusb_read_exact_file(const char* path,
+                                   unsigned char* out,
+                                   size_t out_cap,
+                                   size_t* out_len) {
+  FILE* file;
+  size_t len;
 
-  memset(device, 0, sizeof(*device));
-  device->fd = -1;
-  fd = open(path, O_RDWR);
-  if (fd < 0) {
+  if (path == NULL || out == NULL || out_len == NULL || out_cap == 0u) {
     return 0;
   }
-  ret = erpiusb_descriptor(fd, ERPIUSB_DESCRIPTOR_DEVICE, dev_desc, sizeof(dev_desc));
-  if (ret != ERPIUSB_DEVICE_DESCRIPTOR_BYTES ||
-      erpiusb_get_le16(dev_desc + 8u) != ERPIUSB_VENDOR_BROADCOM) {
-    close(fd);
+  file = fopen(path, "rb");
+  if (file == NULL) {
     return 0;
   }
-  product = erpiusb_get_le16(dev_desc + 10u);
-  if (erpiusb_second_stage_name(product) == NULL) {
-    close(fd);
+  len = fread(out, 1u, out_cap, file);
+  if (ferror(file) != 0 || fclose(file) != 0) {
     return 0;
   }
-  ret = erpiusb_descriptor(fd, ERPIUSB_DESCRIPTOR_CONFIG, cfg_head, sizeof(cfg_head));
-  if (ret != ERPIUSB_CONFIG_HEAD_BYTES) {
-    close(fd);
-    return 0;
-  }
-  cfg_len = erpiusb_get_le16(cfg_head + 2u);
-  cfg = (unsigned char*)malloc(cfg_len);
-  if (cfg == NULL) {
-    close(fd);
-    return 0;
-  }
-  ret = erpiusb_descriptor(fd, ERPIUSB_DESCRIPTOR_CONFIG, cfg, cfg_len);
-  if (ret != (int)cfg_len || erpiusb_parse_config(cfg, cfg_len, device) == 0) {
-    free(cfg);
-    close(fd);
-    return 0;
-  }
-  free(cfg);
-  if (ioctl(fd, USBDEVFS_CLAIMINTERFACE, &device->interface_number) < 0) {
-    close(fd);
-    return 0;
-  }
-  device->fd = fd;
-  device->product_id = product;
-  device->serial_index = dev_desc[16u];
+  *out_len = len;
   return 1;
 }
 
-static int erpiusb_open_any(const ErPiUsbConfig* cfg, ErPiUsbDevice* device) {
+static int erpiusb_read_text_uint(const char* path,
+                                  unsigned int radix,
+                                  unsigned int* out_value) {
+  char text[ERPIUSB_TEXT_BYTES];
+  FILE* file;
+  char* end;
+  unsigned long value;
+
+  if (path == NULL || out_value == NULL) {
+    return 0;
+  }
+  file = fopen(path, "rb");
+  if (file == NULL) {
+    return 0;
+  }
+  if (fgets(text, sizeof(text), file) == NULL || fclose(file) != 0) {
+    return 0;
+  }
+  errno = 0;
+  value = strtoul(text, &end, (int)radix);
+  if (errno != 0 || end == text || value > UINT32_MAX) {
+    return 0;
+  }
+  *out_value = (unsigned int)value;
+  return 1;
+}
+
+static int erpiusb_sysfs_join(char* out,
+                              size_t out_len,
+                              const char* dir,
+                              const char* name) {
+  int written;
+
+  if (out == NULL || dir == NULL || name == NULL ||
+      dir[0] == '\0' || name[0] == '\0') {
+    return 0;
+  }
+  written = snprintf(out, out_len, "%s/%s", dir, name);
+  return written >= 0 && (size_t)written < out_len;
+}
+
+static int erpiusb_load_sysfs_device(const char* sysfs_dir,
+                                     ErPiUsbDevice* device) {
+  unsigned char descriptors[ERPIUSB_PATH_BYTES];
+  char path[ERPIUSB_PATH_BYTES];
+  size_t descriptors_len;
+  uint16_t product;
+  uint16_t cfg_len;
+
+  if (sysfs_dir == NULL || device == NULL ||
+      erpiusb_sysfs_join(path, sizeof(path), sysfs_dir, "descriptors") == 0 ||
+      erpiusb_read_exact_file(path,
+                              descriptors,
+                              sizeof(descriptors),
+                              &descriptors_len) == 0 ||
+      descriptors_len < ERPIUSB_DEVICE_DESCRIPTOR_BYTES + ERPIUSB_CONFIG_HEAD_BYTES ||
+      descriptors[1u] != ERPIUSB_DESCRIPTOR_DEVICE ||
+      erpiusb_get_le16(descriptors + 8u) != ERPIUSB_VENDOR_BROADCOM) {
+    return 0;
+  }
+  product = erpiusb_get_le16(descriptors + 10u);
+  if (erpiusb_second_stage_name(product) == NULL ||
+      descriptors[ERPIUSB_DEVICE_DESCRIPTOR_BYTES + 1u] != ERPIUSB_DESCRIPTOR_CONFIG) {
+    return 0;
+  }
+  cfg_len = erpiusb_get_le16(descriptors + ERPIUSB_DEVICE_DESCRIPTOR_BYTES + 2u);
+  if ((size_t)cfg_len + ERPIUSB_DEVICE_DESCRIPTOR_BYTES > descriptors_len) {
+    return 0;
+  }
+  memset(device, 0, sizeof(*device));
+  device->fd = -1;
+  device->product_id = product;
+  device->serial_index = descriptors[16u];
+  return erpiusb_parse_config(descriptors + ERPIUSB_DEVICE_DESCRIPTOR_BYTES,
+                              cfg_len,
+                              device);
+}
+
+static int erpiusb_find_sysfs_by_bus_device(unsigned int wanted_bus,
+                                            unsigned int wanted_dev,
+                                            char* out_dir,
+                                            size_t out_dir_len,
+                                            ErPiUsbDevice* out_device) {
+  DIR* dir;
+  struct dirent* entry;
+  char candidate[ERPIUSB_PATH_BYTES];
   char path[ERPIUSB_PATH_BYTES];
   unsigned int bus;
   unsigned int dev;
   int written;
 
-  if (cfg->device_path != NULL) {
-    return erpiusb_open_path(cfg->device_path, device);
+  dir = opendir("/sys/bus/usb/devices");
+  if (dir == NULL) {
+    return 0;
   }
-  for (bus = 1u; bus <= ERPIUSB_SCAN_MAX; ++bus) {
-    for (dev = 1u; dev <= ERPIUSB_SCAN_MAX; ++dev) {
-      written = snprintf(path, sizeof(path), "/dev/bus/usb/%03u/%03u", bus, dev);
-      if (written < 0 || (size_t)written >= sizeof(path)) {
-        return 0;
-      }
-      if (erpiusb_open_path(path, device) != 0) {
-        return 1;
-      }
+  while ((entry = readdir(dir)) != NULL) {
+    if (entry->d_name[0] == '.') {
+      continue;
+    }
+    written = snprintf(candidate,
+                       sizeof(candidate),
+                       "/sys/bus/usb/devices/%s",
+                       entry->d_name);
+    if (written < 0 || (size_t)written >= sizeof(candidate)) {
+      closedir(dir);
+      return 0;
+    }
+    if (erpiusb_sysfs_join(path, sizeof(path), candidate, "busnum") == 0 ||
+        erpiusb_read_text_uint(path, 10u, &bus) == 0 ||
+        erpiusb_sysfs_join(path, sizeof(path), candidate, "devnum") == 0 ||
+        erpiusb_read_text_uint(path, 10u, &dev) == 0 ||
+        bus != wanted_bus ||
+        dev != wanted_dev ||
+        erpiusb_load_sysfs_device(candidate, out_device) == 0) {
+      continue;
+    }
+    written = snprintf(out_dir, out_dir_len, "%s", candidate);
+    closedir(dir);
+    return written >= 0 && (size_t)written < out_dir_len;
+  }
+  closedir(dir);
+  return 0;
+}
+
+static int erpiusb_path_bus_device(const char* path,
+                                   unsigned int* out_bus,
+                                   unsigned int* out_dev) {
+  unsigned int bus;
+  unsigned int dev;
+
+  if (path == NULL || out_bus == NULL || out_dev == NULL ||
+      sscanf(path, "/dev/bus/usb/%u/%u", &bus, &dev) != 2) {
+    return 0;
+  }
+  *out_bus = bus;
+  *out_dev = dev;
+  return 1;
+}
+
+static int erpiusb_open_path_with_metadata(const char* path,
+                                           const ErPiUsbDevice* metadata,
+                                           ErPiUsbDevice* device) {
+  unsigned int interface_number;
+  int fd;
+
+  if (path == NULL || metadata == NULL || device == NULL) {
+    return 0;
+  }
+  fd = open(path, O_RDWR);
+  if (fd < 0) {
+    return 0;
+  }
+  *device = *metadata;
+  interface_number = device->interface_number;
+  if (ioctl(fd, USBDEVFS_CLAIMINTERFACE, &interface_number) < 0) {
+    close(fd);
+    device->fd = -1;
+    return 0;
+  }
+  device->fd = fd;
+  return 1;
+}
+
+static int erpiusb_settle_before_open(void) {
+  const struct timespec delay = {1, 0};
+
+  return nanosleep(&delay, NULL) == 0;
+}
+
+static int erpiusb_open_any(const ErPiUsbConfig* cfg, ErPiUsbDevice* device) {
+  char path[ERPIUSB_PATH_BYTES];
+  char sysfs_dir[ERPIUSB_PATH_BYTES];
+  unsigned int bus;
+  unsigned int dev;
+  int written;
+  DIR* dir;
+  struct dirent* entry;
+  ErPiUsbDevice metadata;
+
+  if (cfg->device_path != NULL) {
+    if (erpiusb_path_bus_device(cfg->device_path, &bus, &dev) == 0 ||
+        erpiusb_find_sysfs_by_bus_device(bus,
+                                         dev,
+                                         sysfs_dir,
+                                         sizeof(sysfs_dir),
+                                         &metadata) == 0) {
+      return 0;
+    }
+    if (erpiusb_settle_before_open() == 0) {
+      return 0;
+    }
+    return erpiusb_open_path_with_metadata(cfg->device_path, &metadata, device);
+  }
+  dir = opendir("/sys/bus/usb/devices");
+  if (dir == NULL) {
+    return 0;
+  }
+  while ((entry = readdir(dir)) != NULL) {
+    if (entry->d_name[0] == '.') {
+      continue;
+    }
+    written = snprintf(sysfs_dir,
+                       sizeof(sysfs_dir),
+                       "/sys/bus/usb/devices/%s",
+                       entry->d_name);
+    if (written < 0 || (size_t)written >= sizeof(sysfs_dir)) {
+      closedir(dir);
+      return 0;
+    }
+    if (erpiusb_load_sysfs_device(sysfs_dir, &metadata) == 0) {
+      continue;
+    }
+    if (erpiusb_sysfs_join(path, sizeof(path), sysfs_dir, "busnum") == 0 ||
+        erpiusb_read_text_uint(path, 10u, &bus) == 0 ||
+        erpiusb_sysfs_join(path, sizeof(path), sysfs_dir, "devnum") == 0 ||
+        erpiusb_read_text_uint(path, 10u, &dev) == 0) {
+      continue;
+    }
+    written = snprintf(path, sizeof(path), "/dev/bus/usb/%03u/%03u", bus, dev);
+    if (written < 0 || (size_t)written >= sizeof(path)) {
+      closedir(dir);
+      return 0;
+    }
+    if (erpiusb_settle_before_open() == 0) {
+      closedir(dir);
+      return 0;
+    }
+    if (erpiusb_open_path_with_metadata(path, &metadata, device) != 0) {
+      closedir(dir);
+      return 1;
     }
   }
+  closedir(dir);
   return 0;
 }
 
 static void erpiusb_close(ErPiUsbDevice* device) {
+  unsigned int interface_number;
+
   if (device != NULL && device->fd >= 0) {
-    (void)ioctl(device->fd, USBDEVFS_RELEASEINTERFACE, &device->interface_number);
+    interface_number = device->interface_number;
+    (void)ioctl(device->fd, USBDEVFS_RELEASEINTERFACE, &interface_number);
     (void)close(device->fd);
     device->fd = -1;
   }
@@ -482,6 +646,7 @@ static int erpiusb_send_second_stage(const ErPiUsbConfig* cfg,
   unsigned char header[ERPIUSB_BOOT_HEADER_BYTES];
   unsigned char* bytes = NULL;
   uint32_t len = 0u;
+  uint32_t retcode = 1u;
   int ok;
 
   if (name == NULL ||
@@ -497,7 +662,18 @@ static int erpiusb_send_second_stage(const ErPiUsbConfig* cfg,
   ok = erpiusb_ep_write(device, header, sizeof(header)) != 0 &&
        erpiusb_ep_write(device, bytes, len) != 0;
   free(bytes);
-  return ok;
+  if (ok == 0) {
+    return 0;
+  }
+  if (erpiusb_ep_read(device,
+                      (unsigned char*)&retcode,
+                      (uint32_t)sizeof(retcode)) != (int)sizeof(retcode) ||
+      retcode != 0u) {
+    fprintf(stderr, "pi-usb-boot: boot ROM rejected second stage: 0x%08x\n",
+            retcode);
+    return 0;
+  }
+  return 1;
 }
 
 static int erpiusb_send_file_size(ErPiUsbDevice* device, uint32_t size) {
