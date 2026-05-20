@@ -80,7 +80,10 @@ enum {
   ER_TPM_EMPTY_UNIQUE_LEN = 0u,
   ER_TPM_ENCRYPT_DECRYPT2_COMMAND_FIXED_LEN = 34u,
   ER_TPM_HASH_COMMAND_FIXED_LEN = 18u,
+  ER_TPM_HASH_SEQUENCE_START_COMMAND_LEN = 14u,
   ER_TPM_HMAC_COMMAND_FIXED_LEN = 31u,
+  ER_TPM_SEQUENCE_COMPLETE_COMMAND_FIXED_LEN = 33u,
+  ER_TPM_SEQUENCE_UPDATE_COMMAND_FIXED_LEN = 29u,
   ER_TPM_ECDH_ZGEN_COMMAND_LEN = 97u,
   ER_TPM_P256_POINT_BODY_LEN = 68u,
   ER_TPM_FLUSH_CONTEXT_COMMAND_LEN = 14u,
@@ -595,6 +598,111 @@ UINT8 er_tpm_build_hmac_sha256_command(UINT32 handle,
   offset += data_len;
   er_tpm_put_be16(out_command + offset, ER_TPM_ALG_SHA256);
   offset += ER_TPM_U16_BYTES;
+  if (offset != command_len) {
+    return 0u;
+  }
+  *out_command_len = command_len;
+  return 1u;
+}
+
+UINT8 er_tpm_build_hash_sequence_start_sha256_command(UINT8* out_command,
+                                                      UINT32 command_capacity,
+                                                      UINT32* out_command_len) {
+  UINT32 offset;
+
+  if (out_command_len == 0 ||
+      er_tpm_build_header(ER_TPM_ST_NO_SESSIONS,
+                          ER_TPM_HASH_SEQUENCE_START_COMMAND_LEN,
+                          ER_TPM_CC_HASH_SEQUENCE_START,
+                          out_command,
+                          command_capacity) == 0u) {
+    return 0u;
+  }
+  offset = ER_TPM_HEADER_LEN;
+  er_tpm_put_be16(out_command + offset, 0u);
+  offset += ER_TPM_U16_BYTES;
+  er_tpm_put_be16(out_command + offset, ER_TPM_ALG_SHA256);
+  offset += ER_TPM_U16_BYTES;
+  if (offset != ER_TPM_HASH_SEQUENCE_START_COMMAND_LEN) {
+    return 0u;
+  }
+  *out_command_len = ER_TPM_HASH_SEQUENCE_START_COMMAND_LEN;
+  return 1u;
+}
+
+UINT8 er_tpm_build_sequence_update_command(UINT32 handle,
+                                           const UINT8* data, UINT16 data_len,
+                                           UINT8* out_command,
+                                           UINT32 command_capacity,
+                                           UINT32* out_command_len) {
+  UINT32 command_len;
+  UINT32 offset;
+
+  if (handle == 0u || data == 0 || data_len == 0u || out_command_len == 0) {
+    return 0u;
+  }
+  command_len = ER_TPM_SEQUENCE_UPDATE_COMMAND_FIXED_LEN + (UINT32)data_len;
+  if (er_tpm_build_header(ER_TPM_ST_SESSIONS, command_len,
+                          ER_TPM_CC_SEQUENCE_UPDATE, out_command,
+                          command_capacity) == 0u) {
+    return 0u;
+  }
+  offset = ER_TPM_HEADER_LEN;
+  er_tpm_put_be32(out_command + offset, handle);
+  offset += ER_TPM_U32_BYTES;
+  er_tpm_put_be32(out_command + offset, ER_TPM_PW_AUTH_AREA_LEN);
+  offset += ER_TPM_U32_BYTES;
+  er_tpm_write_empty_auth_area(out_command, &offset);
+  er_tpm_put_be16(out_command + offset, data_len);
+  offset += ER_TPM_U16_BYTES;
+  er_mem_copy(out_command + offset, data, data_len);
+  offset += data_len;
+  if (offset != command_len) {
+    return 0u;
+  }
+  *out_command_len = command_len;
+  return 1u;
+}
+
+UINT8 er_tpm_build_sequence_complete_command(UINT32 handle,
+                                             const UINT8* data, UINT16 data_len,
+                                             UINT32 hierarchy,
+                                             UINT8* out_command,
+                                             UINT32 command_capacity,
+                                             UINT32* out_command_len) {
+  UINT32 command_len;
+  UINT32 offset;
+
+  if (handle == 0u || data == 0 || data_len == 0u || out_command_len == 0) {
+    return 0u;
+  }
+  switch (hierarchy) {
+    case ER_TPM_RH_OWNER:
+    case ER_TPM_RH_ENDORSEMENT:
+    case ER_TPM_RH_PLATFORM:
+    case ER_TPM_RH_NULL:
+      break;
+    default:
+      return 0u;
+  }
+  command_len = ER_TPM_SEQUENCE_COMPLETE_COMMAND_FIXED_LEN + (UINT32)data_len;
+  if (er_tpm_build_header(ER_TPM_ST_SESSIONS, command_len,
+                          ER_TPM_CC_SEQUENCE_COMPLETE, out_command,
+                          command_capacity) == 0u) {
+    return 0u;
+  }
+  offset = ER_TPM_HEADER_LEN;
+  er_tpm_put_be32(out_command + offset, handle);
+  offset += ER_TPM_U32_BYTES;
+  er_tpm_put_be32(out_command + offset, ER_TPM_PW_AUTH_AREA_LEN);
+  offset += ER_TPM_U32_BYTES;
+  er_tpm_write_empty_auth_area(out_command, &offset);
+  er_tpm_put_be16(out_command + offset, data_len);
+  offset += ER_TPM_U16_BYTES;
+  er_mem_copy(out_command + offset, data, data_len);
+  offset += data_len;
+  er_tpm_put_be32(out_command + offset, hierarchy);
+  offset += ER_TPM_U32_BYTES;
   if (offset != command_len) {
     return 0u;
   }
@@ -1306,11 +1414,20 @@ UINT8 er_tpm_parse_command_profile_response(const UINT8* response,
       case ER_TPM_CC_HASH:
         out_profile->has_hash = 1u;
         break;
+      case ER_TPM_CC_HASH_SEQUENCE_START:
+        out_profile->has_hash_sequence_start = 1u;
+        break;
       case ER_TPM_CC_HMAC:
         out_profile->has_hmac = 1u;
         break;
       case ER_TPM_CC_LOAD_EXTERNAL:
         out_profile->has_load_external = 1u;
+        break;
+      case ER_TPM_CC_SEQUENCE_COMPLETE:
+        out_profile->has_sequence_complete = 1u;
+        break;
+      case ER_TPM_CC_SEQUENCE_UPDATE:
+        out_profile->has_sequence_update = 1u;
         break;
       case ER_TPM_CC_SIGN:
         out_profile->has_sign = 1u;
@@ -1348,8 +1465,11 @@ UINT8 er_tpm_tls_compat_profile_supported(const ErTpm2Info* info,
       commands->has_encrypt_decrypt2 == 0u ||
       commands->has_get_random == 0u ||
       commands->has_hash == 0u ||
+      commands->has_hash_sequence_start == 0u ||
       commands->has_hmac == 0u ||
       commands->has_load_external == 0u ||
+      commands->has_sequence_complete == 0u ||
+      commands->has_sequence_update == 0u ||
       commands->has_sign == 0u ||
       commands->has_verify_signature == 0u) {
     return 0u;

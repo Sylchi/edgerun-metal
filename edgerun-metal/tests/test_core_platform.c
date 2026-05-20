@@ -632,11 +632,11 @@ static void test_tpm_crb_direct_transport(void) {
   er_mem_zero(response_buffer, (UINTN)sizeof(response_buffer));
   response_buffer[0] = 0x80u;
   response_buffer[1] = 0x01u;
-  test_put_be32(response_buffer + 2u, 55u);
+  test_put_be32(response_buffer + 2u, 67u);
   test_put_be32(response_buffer + 6u, ER_TPM_RC_SUCCESS);
   response_buffer[10] = 0u;
   test_put_be32(response_buffer + 11u, ER_TPM_CAP_COMMANDS);
-  test_put_be32(response_buffer + 15u, 9u);
+  test_put_be32(response_buffer + 15u, 12u);
   offset = 19u;
   test_put_be32(response_buffer + offset, ER_TPM_CC_CREATE_PRIMARY);
   offset += 4u;
@@ -648,19 +648,28 @@ static void test_tpm_crb_direct_transport(void) {
   offset += 4u;
   test_put_be32(response_buffer + offset, ER_TPM_CC_HASH);
   offset += 4u;
+  test_put_be32(response_buffer + offset, ER_TPM_CC_HASH_SEQUENCE_START);
+  offset += 4u;
   test_put_be32(response_buffer + offset, ER_TPM_CC_HMAC);
   offset += 4u;
   test_put_be32(response_buffer + offset, ER_TPM_CC_LOAD_EXTERNAL);
+  offset += 4u;
+  test_put_be32(response_buffer + offset, ER_TPM_CC_SEQUENCE_COMPLETE);
+  offset += 4u;
+  test_put_be32(response_buffer + offset, ER_TPM_CC_SEQUENCE_UPDATE);
   offset += 4u;
   test_put_be32(response_buffer + offset, ER_TPM_CC_SIGN);
   offset += 4u;
   test_put_be32(response_buffer + offset, ER_TPM_CC_VERIFY_SIGNATURE);
   check_int64("tpm parse command profile",
-              er_tpm_parse_command_profile_response(response_buffer, 55u,
+              er_tpm_parse_command_profile_response(response_buffer, 67u,
                                                     &commands),
               1);
   check_uint64("tpm command profile create primary", commands.has_create_primary, 1u);
   check_uint64("tpm command profile encrypt decrypt2", commands.has_encrypt_decrypt2, 1u);
+  check_uint64("tpm command profile sequence start", commands.has_hash_sequence_start, 1u);
+  check_uint64("tpm command profile sequence complete", commands.has_sequence_complete, 1u);
+  check_uint64("tpm command profile sequence update", commands.has_sequence_update, 1u);
   check_uint64("tpm command profile verify", commands.has_verify_signature, 1u);
 
   check_int64("tpm tls profile supported",

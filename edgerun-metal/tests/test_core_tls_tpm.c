@@ -3,6 +3,7 @@
 #define TEST_TLS_TPM_HANDLE_AES 0x80000011u
 #define TEST_TLS_TPM_HANDLE_VERIFY 0x80000012u
 #define TEST_TLS_TPM_HANDLE_ECDH 0x80000013u
+#define TEST_TLS_TPM_HANDLE_SEQUENCE 0x80000014u
 #define TEST_TLS_TPM_DIGEST_SEED 0x33u
 #define TEST_TLS_TPM_RANDOM_SEED 0x90u
 #define TEST_TLS_TPM_CIPHER_SEED 0xa0u
@@ -218,11 +219,22 @@ static UINT8 test_tls_tpm_transact(void* user,
       return test_tls_tpm_random_response(command, response, response_capacity, out_response_len);
     case ER_TPM_CC_HASH:
     case ER_TPM_CC_HMAC:
+    case ER_TPM_CC_SEQUENCE_COMPLETE:
       return test_tls_tpm_digest_response(response, response_capacity, out_response_len);
+    case ER_TPM_CC_HASH_SEQUENCE_START:
+      return test_tls_tpm_handle_response(response, response_capacity, out_response_len,
+                                          TEST_TLS_TPM_HANDLE_SEQUENCE);
     case ER_TPM_CC_LOAD_EXTERNAL:
-      if (command_len == 60u) return test_tls_tpm_handle_response(response, response_capacity, out_response_len, TEST_TLS_TPM_HANDLE_AES);
-      if (command_len == 74u) return test_tls_tpm_handle_response(response, response_capacity, out_response_len, TEST_TLS_TPM_HANDLE_HMAC);
-      return test_tls_tpm_handle_response(response, response_capacity, out_response_len, TEST_TLS_TPM_HANDLE_VERIFY);
+      if (command_len == 60u) {
+        return test_tls_tpm_handle_response(response, response_capacity, out_response_len,
+                                            TEST_TLS_TPM_HANDLE_AES);
+      }
+      if (command_len == 74u) {
+        return test_tls_tpm_handle_response(response, response_capacity, out_response_len,
+                                            TEST_TLS_TPM_HANDLE_HMAC);
+      }
+      return test_tls_tpm_handle_response(response, response_capacity, out_response_len,
+                                          TEST_TLS_TPM_HANDLE_VERIFY);
     case ER_TPM_CC_ENCRYPT_DECRYPT2:
       return test_tls_tpm_crypt_response(response, response_capacity, out_response_len);
     case ER_TPM_CC_CREATE_PRIMARY:
@@ -233,6 +245,7 @@ static UINT8 test_tls_tpm_transact(void* user,
       return test_tls_tpm_verify_response(response, response_capacity, out_response_len);
     case ER_TPM_CC_SIGN:
       return test_tls_tpm_signature_response(response, response_capacity, out_response_len);
+    case ER_TPM_CC_SEQUENCE_UPDATE:
     case ER_TPM_CC_FLUSH_CONTEXT:
       test_tls_tpm_response_header(response, ER_TPM_HEADER_LEN);
       *out_response_len = ER_TPM_HEADER_LEN;
@@ -266,8 +279,11 @@ static void test_tls_tpm_profiles(ErTpm2Info* info,
   commands->has_encrypt_decrypt2 = 1u;
   commands->has_get_random = 1u;
   commands->has_hash = 1u;
+  commands->has_hash_sequence_start = 1u;
   commands->has_hmac = 1u;
   commands->has_load_external = 1u;
+  commands->has_sequence_complete = 1u;
+  commands->has_sequence_update = 1u;
   commands->has_sign = 1u;
   commands->has_verify_signature = 1u;
 }
