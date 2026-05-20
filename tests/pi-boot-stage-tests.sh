@@ -15,6 +15,7 @@ ZERO_W_PAYLOAD="${BUILD_DIR}/kernel.img"
 BOOT_DIR="${BUILD_DIR}/boot"
 ZERO_W_BOOT_DIR="${BUILD_DIR}/boot-zero-w"
 USB_BOOT_PACKET_BYTES=64
+ZERO_W_CMDLINE_BYTES=1
 
 rm -rf "$BUILD_DIR"
 mkdir -p "$BUILD_DIR"
@@ -106,8 +107,8 @@ if ! grep -q "arm_64bit=0" "$ZERO_W_BOOT_DIR/config.txt"; then
   exit 1
 fi
 
-if ! grep -q "enable_uart=1" "$ZERO_W_BOOT_DIR/config.txt"; then
-  printf 'zero w config.txt does not enable UART\n' >&2
+if ! grep -q "device_tree=" "$ZERO_W_BOOT_DIR/config.txt"; then
+  printf 'zero w config.txt does not select bare-metal ATAG handoff\n' >&2
   exit 1
 fi
 
@@ -123,6 +124,11 @@ fi
 
 if [ "$(wc -c <"$ZERO_W_BOOT_DIR/config.txt")" -ne "$USB_BOOT_PACKET_BYTES" ]; then
   printf 'zero w config.txt must fit one USB boot packet\n' >&2
+  exit 1
+fi
+
+if [ "$(wc -c <"$ZERO_W_BOOT_DIR/cmdline.txt")" -ne "$ZERO_W_CMDLINE_BYTES" ]; then
+  printf 'zero w cmdline.txt must be explicit and minimal\n' >&2
   exit 1
 fi
 
