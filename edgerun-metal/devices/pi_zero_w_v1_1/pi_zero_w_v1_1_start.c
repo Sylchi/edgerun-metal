@@ -156,6 +156,7 @@
 #define ER_PI_ZERO_W_V1_1_L2_D11_TX_FIFO_READY 14u
 #define ER_PI_ZERO_W_V1_1_L2_D11_TX_TEMPLATE_LOADED 15u
 #define ER_PI_ZERO_W_V1_1_L2_D11_TX_PIO_ATTEMPTED 16u
+#define ER_PI_ZERO_W_V1_1_L2_D11_MAC_TX_ATTEMPTED 17u
 
 volatile UINT32 g_er_pi_zero_w_v1_1_boot_magic =
     ER_PI_ZERO_W_V1_1_BOOT_MAGIC;
@@ -1418,6 +1419,14 @@ static UINT32 er_pi_zero_w_v1_1_cyw43438_d11_stage_tx_frame(
     UINT32 d11_base,
     const UINT8* frame,
     UINT32 frame_len) {
+  UINT32 maccontrol;
+  UINT32 frmtxstatus;
+  UINT32 frmtxstatus2;
+  UINT16 txe_status;
+  UINT16 frame_count;
+  UINT16 byte_count;
+  UINT16 write_pointer;
+
   if (er_pi_zero_w_v1_1_cyw43438_backplane_write32(
           d11_base + ER_CYW43438_D11_TPLATEWRPTR,
           0u) == 0u ||
@@ -1439,6 +1448,47 @@ static UINT32 er_pi_zero_w_v1_1_cyw43438_d11_stage_tx_frame(
   g_er_pi_zero_w_v1_1_sdio_probe_state =
       ER_PI_ZERO_W_V1_1_L2_D11_TX_PIO_ATTEMPTED;
   g_er_pi_zero_w_v1_1_sdio_probe_response = frame_len;
+  if (er_pi_zero_w_v1_1_cyw43438_backplane_write32(
+          d11_base + ER_CYW43438_D11_MACCONTROL,
+          ER_CYW43438_D11_MACCONTROL_TX_ATTEMPT) == 0u ||
+      er_pi_zero_w_v1_1_cyw43438_backplane_read32(
+          d11_base + ER_CYW43438_D11_MACCONTROL,
+          &maccontrol) == 0u ||
+      (maccontrol & ER_CYW43438_D11_MACCONTROL_TX_ATTEMPT) !=
+          ER_CYW43438_D11_MACCONTROL_TX_ATTEMPT) {
+    return 0u;
+  }
+  er_pi_zero_w_v1_1_delay(ER_PI_ZERO_W_V1_1_WIFI_POWER_DELAY_TICKS);
+  if (er_pi_zero_w_v1_1_cyw43438_backplane_read16(
+          d11_base + ER_CYW43438_D11_TXE_STATUS,
+          &txe_status) == 0u ||
+      er_pi_zero_w_v1_1_cyw43438_backplane_read16(
+          d11_base + ER_CYW43438_D11_XMTFIFO_FRAME_CNT,
+          &frame_count) == 0u ||
+      er_pi_zero_w_v1_1_cyw43438_backplane_read16(
+          d11_base + ER_CYW43438_D11_XMTFIFO_BYTE_CNT,
+          &byte_count) == 0u ||
+      er_pi_zero_w_v1_1_cyw43438_backplane_read16(
+          d11_base + ER_CYW43438_D11_XMTFIFO_WR_PTR,
+          &write_pointer) == 0u ||
+      er_pi_zero_w_v1_1_cyw43438_backplane_read32(
+          d11_base + ER_CYW43438_D11_FRMTXSTATUS,
+          &frmtxstatus) == 0u ||
+      er_pi_zero_w_v1_1_cyw43438_backplane_read32(
+          d11_base + ER_CYW43438_D11_FRMTXSTATUS2,
+          &frmtxstatus2) == 0u) {
+    return 0u;
+  }
+  g_er_pi_zero_w_v1_1_sdio_probe_state =
+      ER_PI_ZERO_W_V1_1_L2_D11_MAC_TX_ATTEMPTED;
+  g_er_pi_zero_w_v1_1_sdio_probe_interrupt =
+      ((UINT32)txe_status << ER_PI_ZERO_W_V1_1_U16_HIGH_SHIFT) |
+      (UINT32)byte_count;
+  g_er_pi_zero_w_v1_1_sdio_probe_response =
+      ((UINT32)frame_count << ER_PI_ZERO_W_V1_1_U16_HIGH_SHIFT) |
+      (UINT32)write_pointer;
+  (void)frmtxstatus;
+  (void)frmtxstatus2;
   return 1u;
 }
 
