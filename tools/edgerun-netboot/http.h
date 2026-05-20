@@ -67,28 +67,14 @@ static int open_http_listener(const char *bind_ip, uint16_t port) {
     return fd;
 }
 
-static int open_http_listener_with_fallback(uint16_t *port, bool port_explicit) {
-    const uint16_t fallback_port = HTTP_PORT_FALLBACK;
-    int fd;
-
+static int open_http_listener_configured(uint16_t *port) {
     if (port == NULL) {
         return -1;
     }
     if (*port == 0u) {
         *port = HTTP_PORT_DEFAULT;
     }
-    fd = open_http_listener(SERVER_IP, *port);
-    if (fd >= 0 || port_explicit) {
-        return fd;
-    }
-    if (*port == HTTP_PORT_DEFAULT && fallback_port != 0u) {
-        fd = open_http_listener(SERVER_IP, fallback_port);
-        if (fd >= 0) {
-            *port = fallback_port;
-            return fd;
-        }
-    }
-    return -1;
+    return open_http_listener(SERVER_IP, *port);
 }
 
 static bool serve_http_file(int sock, const char *efi_path) {

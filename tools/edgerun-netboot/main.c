@@ -548,7 +548,6 @@ int main(int argc, char **argv) {
     const char *mgmt_ip;
     const char *boot_url_host = SERVER_IP;
     uint16_t http_port;
-    bool explicit_http_port;
     uint8_t mode;
     bool setup_interface;
     const uint8_t *allow_mac;
@@ -590,7 +589,6 @@ int main(int argc, char **argv) {
     client_ip = config.client_ip;
     mgmt_ip = config.mgmt_ip;
     http_port = config.http_port;
-    explicit_http_port = config.explicit_http_port;
     mode = config.mode;
     setup_interface = config.setup_interface;
     allow_mac = config.allow_mac;
@@ -627,7 +625,7 @@ int main(int argc, char **argv) {
         }
     }
     if (mode == MODE_HTTP || mode == MODE_AUTO) {
-        http_sock = open_http_listener_with_fallback(&http_port, explicit_http_port);
+        http_sock = open_http_listener_configured(&http_port);
         if (http_sock < 0) {
             close(dhcp_sock);
             if (tftp_sock >= 0) {
