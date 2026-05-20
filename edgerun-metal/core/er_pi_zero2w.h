@@ -46,6 +46,8 @@
 #define ER_PI_MMC_CMD_SEND_RELATIVE_ADDR 3u
 #define ER_PI_MMC_CMD_IO_SEND_OP_COND 5u
 #define ER_PI_MMC_CMD_SELECT_CARD 7u
+#define ER_PI_MMC_CMD_READ_SINGLE_BLOCK 17u
+#define ER_PI_MMC_CMD_WRITE_BLOCK 24u
 #define ER_PI_MMC_CMD_IO_RW_DIRECT 52u
 #define ER_PI_MMC_CMD_IO_RW_EXTENDED 53u
 
@@ -72,9 +74,13 @@
 
 #define ER_PI_ZERO2W_SDIO_BRINGUP_COMMAND_CAPACITY 8u
 
+#define ER_PI_EMMC_BLOCK_BYTES 512u
+
+#define ER_PI_EMMC_REG_BLKSIZECNT 0x00000004u
 #define ER_PI_EMMC_REG_ARG1 0x00000008u
 #define ER_PI_EMMC_REG_CMDTM 0x0000000cu
 #define ER_PI_EMMC_REG_RESP0 0x00000010u
+#define ER_PI_EMMC_REG_DATA 0x00000020u
 #define ER_PI_EMMC_REG_STATUS 0x00000024u
 #define ER_PI_EMMC_REG_INTERRUPT 0x00000030u
 #define ER_PI_EMMC_REG_IRPT_MASK 0x00000034u
@@ -83,6 +89,8 @@
 
 #define ER_PI_EMMC_INTERRUPT_CMD_DONE 0x00000001u
 #define ER_PI_EMMC_INTERRUPT_DATA_DONE 0x00000002u
+#define ER_PI_EMMC_INTERRUPT_WRITE_RDY 0x00000010u
+#define ER_PI_EMMC_INTERRUPT_READ_RDY 0x00000020u
 #define ER_PI_EMMC_INTERRUPT_ERROR_MASK 0xffff0000u
 
 typedef struct {
@@ -155,6 +163,22 @@ typedef struct {
 } ErPiEmmcCommandResult;
 
 typedef struct {
+  UINT32 block_size_count_offset;
+  UINT32 block_size_count_value;
+  UINT32 data_offset;
+  ErPiEmmcCommandIo command_io;
+  UINT8 read;
+} ErPiEmmcBlockIo;
+
+typedef struct {
+  ErPiEmmcBlockIo io;
+  UINT32 interrupt_value;
+  UINT32 response0;
+  UINT8 completed;
+  UINT8 error;
+} ErPiEmmcBlockResult;
+
+typedef struct {
   UINT32 command_count;
   UINT32 completed_count;
   UINT32 relative_card_address;
@@ -206,6 +230,19 @@ UINT8 er_pi_emmc_command_execute(INT64 emmc_handle,
                                  const ErPiMmcCommand* command,
                                  UINT32 poll_budget,
                                  ErPiEmmcCommandResult* out_result);
+UINT8 er_pi_emmc_block_io_prepare(UINT32 command_index,
+                                  UINT32 block_address,
+                                  ErPiEmmcBlockIo* out_io);
+UINT8 er_pi_emmc_read_block(INT64 emmc_handle,
+                            UINT32 block_address,
+                            UINT8* out_block,
+                            UINT32 poll_budget,
+                            ErPiEmmcBlockResult* out_result);
+UINT8 er_pi_emmc_write_block(INT64 emmc_handle,
+                             UINT32 block_address,
+                             const UINT8* block,
+                             UINT32 poll_budget,
+                             ErPiEmmcBlockResult* out_result);
 UINT8 er_pi_zero2w_sdio_identity_plan(ErPiZero2wSdioBringupPlan* out_plan);
 UINT8 er_pi_zero2w_sdio_claim_plan(UINT32 relative_card_address,
                                    ErPiZero2wSdioBringupPlan* out_plan);
