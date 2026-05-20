@@ -32,6 +32,7 @@ typedef struct {
   const char* board;
   const char* payload_path;
   const char* config_text;
+  const char* cmdline_text;
   const char* startup_text;
   const char* manifest_name;
   const char* manifest_text;
@@ -48,6 +49,7 @@ static const char ERPBS_EFI_FIRMWARE_DIR[] = "EFI/firmware";
 static const char ERPBS_RASPBERRY_PI_FIRMWARE_DIR[] = "firmware/raspberry-pi";
 static const char ERPBS_NETWORK_FIRMWARE_DIR[] = "firmware/network";
 static const char ERPBS_CONFIG_NAME[] = "config.txt";
+static const char ERPBS_CMDLINE_NAME[] = "cmdline.txt";
 static const char ERPBS_STARTUP_NAME[] = "startup.nsh";
 static const char ERPBS_ZERO2W_MANIFEST_NAME[] = "EDGERUN-PI-ZERO-2W-BOOT.txt";
 static const char ERPBS_ZERO_W_MANIFEST_NAME[] =
@@ -59,10 +61,11 @@ static const char ERPBS_ZERO2W_CONFIG_TEXT[] =
     "kernel=u-boot.bin\n";
 static const char ERPBS_ZERO_W_CONFIG_TEXT[] =
     "arm_64bit=0\n"
-    "enable_uart=1\n"
+    "device_tree=\n"
     "core_freq=250\n"
     "kernel=kernel.img\n"
-    "#usb0\n";
+    "#pad00\n";
+static const char ERPBS_ZERO_W_CMDLINE_TEXT[] = "\n";
 static const char ERPBS_ZERO2W_STARTUP_TEXT[] =
     "fs0:\\EFI\\BOOT\\BOOTAA64.EFI\n";
 static const char ERPBS_ZERO_W_STARTUP_TEXT[] = "";
@@ -113,6 +116,7 @@ static const ErpbsBoardProfile ERPBS_BOARD_PROFILES[] = {
     "pi-zero-2w",
     ERPBS_BOOTAA64_PATH,
     ERPBS_ZERO2W_CONFIG_TEXT,
+    "",
     ERPBS_ZERO2W_STARTUP_TEXT,
     ERPBS_ZERO2W_MANIFEST_NAME,
     ERPBS_ZERO2W_MANIFEST_TEXT,
@@ -124,6 +128,7 @@ static const ErpbsBoardProfile ERPBS_BOARD_PROFILES[] = {
     "pi-zero-w-v1_1",
     ERPBS_KERNEL_IMG_PATH,
     ERPBS_ZERO_W_CONFIG_TEXT,
+    ERPBS_ZERO_W_CMDLINE_TEXT,
     ERPBS_ZERO_W_STARTUP_TEXT,
     ERPBS_ZERO_W_MANIFEST_NAME,
     ERPBS_ZERO_W_MANIFEST_TEXT,
@@ -362,6 +367,7 @@ static int erpbs_stage(const ErpbsBoardProfile* profile,
                        const char* output_dir) {
   char payload_path[ERPBS_PATH_CAP];
   char config_path[ERPBS_PATH_CAP];
+  char cmdline_path[ERPBS_PATH_CAP];
   char startup_path[ERPBS_PATH_CAP];
   char manifest_path[ERPBS_PATH_CAP];
 
@@ -403,6 +409,13 @@ static int erpbs_stage(const ErpbsBoardProfile* profile,
     if (erpbs_join(config_path, sizeof(config_path), output_dir,
                    ERPBS_CONFIG_NAME) != 0 ||
         erpbs_write_text(config_path, profile->config_text) != 0) {
+      return 1;
+    }
+  }
+  if (profile->cmdline_text[0] != '\0') {
+    if (erpbs_join(cmdline_path, sizeof(cmdline_path), output_dir,
+                   ERPBS_CMDLINE_NAME) != 0 ||
+        erpbs_write_text(cmdline_path, profile->cmdline_text) != 0) {
       return 1;
     }
   }

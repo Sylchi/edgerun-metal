@@ -47,11 +47,44 @@
 #define ER_PI_ZERO_W_V1_1_SDIO_PROBE_CMD52_DONE 5u
 #define ER_PI_ZERO_W_V1_1_SDIO_PROBE_CMD53_DONE 6u
 #define ER_PI_ZERO_W_V1_1_L2_READY 7u
+#define ER_PI_ZERO_W_V1_1_L2_AP_ENABLE_FUNCTIONS_DONE 8u
+#define ER_PI_ZERO_W_V1_1_L2_AP_READY_FUNCTIONS_DONE 9u
+#define ER_PI_ZERO_W_V1_1_L2_AP_BEACON_DONE 10u
+#define ER_PI_ZERO_W_V1_1_L2_AP_PROBE_DONE 11u
 #define ER_PI_ZERO_W_V1_1_SDIO_PROBE_ERROR 0xffffffffu
 #define ER_PI_ZERO_W_V1_1_LED_STEP_DELAY_TICKS 250000u
 #define ER_PI_ZERO_W_V1_1_EMMC_RESET_POLL_BUDGET 100000u
 #define ER_PI_ZERO_W_V1_1_EMMC_STABLE_POLL_BUDGET 100000u
 #define ER_PI_ZERO_W_V1_1_EMMC_READY_POLL_BUDGET 100000u
+#define ER_PI_ZERO_W_V1_1_CYW43438_CCCR_IO_ENABLE_ADDR 0x00000002u
+#define ER_PI_ZERO_W_V1_1_CYW43438_CCCR_IO_READY_ADDR 0x00000003u
+#define ER_PI_ZERO_W_V1_1_CYW43438_CCCR_ENABLE_FUNCTION_1 0x02u
+#define ER_PI_ZERO_W_V1_1_CYW43438_CCCR_ENABLE_FUNCTION_2 0x04u
+#define ER_PI_ZERO_W_V1_1_CYW43438_WLAN_AP_CONTROL_ADDR 0x00000001u
+#define ER_PI_ZERO_W_V1_1_CYW43438_WLAN_AP_CONTROL_ENABLE 0x01u
+#define ER_PI_ZERO_W_V1_1_CYW43438_WLAN_BEACON_TEMPLATE_ADDR 0x00001000u
+#define ER_PI_ZERO_W_V1_1_CYW43438_WLAN_PROBE_TEMPLATE_ADDR 0x00001100u
+#define ER_PI_ZERO_W_V1_1_IEEE80211_FRAME_MAX 128u
+#define ER_PI_ZERO_W_V1_1_IEEE80211_MANAGEMENT_HEADER_LEN 24u
+#define ER_PI_ZERO_W_V1_1_IEEE80211_BEACON_FIXED_LEN 12u
+#define ER_PI_ZERO_W_V1_1_IEEE80211_BROADCAST_OCTET 0xffu
+#define ER_PI_ZERO_W_V1_1_IEEE80211_BEACON_FRAME_CONTROL 0x0080u
+#define ER_PI_ZERO_W_V1_1_IEEE80211_PROBE_FRAME_CONTROL 0x0050u
+#define ER_PI_ZERO_W_V1_1_IEEE80211_CAPABILITY_ESS 0x0001u
+#define ER_PI_ZERO_W_V1_1_IEEE80211_CAPABILITY_SHORT_PREAMBLE 0x0020u
+#define ER_PI_ZERO_W_V1_1_IEEE80211_CAPABILITY_SHORT_SLOT 0x0400u
+#define ER_PI_ZERO_W_V1_1_IEEE80211_IE_HEADER_LEN 2u
+#define ER_PI_ZERO_W_V1_1_IEEE80211_IE_ID_SSID 0u
+#define ER_PI_ZERO_W_V1_1_IEEE80211_IE_ID_SUPPORTED_RATES 1u
+#define ER_PI_ZERO_W_V1_1_IEEE80211_IE_ID_DS_PARAMETER_SET 3u
+#define ER_PI_ZERO_W_V1_1_IEEE80211_SUPPORTED_RATE_COUNT 4u
+#define ER_PI_ZERO_W_V1_1_IEEE80211_RATE_1M_BASIC 0x82u
+#define ER_PI_ZERO_W_V1_1_IEEE80211_RATE_2M_BASIC 0x84u
+#define ER_PI_ZERO_W_V1_1_IEEE80211_RATE_5M5_BASIC 0x8bu
+#define ER_PI_ZERO_W_V1_1_IEEE80211_RATE_11M_BASIC 0x96u
+#define ER_PI_ZERO_W_V1_1_IEEE80211_BEACON_INTERVAL_TU 100u
+#define ER_PI_ZERO_W_V1_1_IEEE80211_SEQ_SHIFT 4u
+#define ER_PI_ZERO_W_V1_1_CYW43438_READY_POLL_BUDGET 10000u
 
 volatile UINT32 g_er_pi_zero_w_v1_1_boot_magic =
     ER_PI_ZERO_W_V1_1_BOOT_MAGIC;
@@ -284,13 +317,16 @@ static UINT32 er_pi_zero_w_v1_1_emmc_command_value(UINT32 command_index,
 }
 
 static UINT32 er_pi_zero_w_v1_1_emmc_sdio_command_value(UINT32 command_index,
-                                                        UINT32 response_kind) {
+                                                        UINT32 response_kind,
+                                                        UINT32 data_read) {
   UINT32 value;
 
   value = er_pi_zero_w_v1_1_emmc_command_value(command_index, response_kind);
   value |= ER_PI_ZERO_W_V1_1_EMMC_CMDTM_BLOCK_COUNT_ENABLE;
   value |= ER_PI_ZERO_W_V1_1_EMMC_CMDTM_IS_DATA;
-  value |= ER_PI_ZERO_W_V1_1_EMMC_CMDTM_DATA_READ;
+  if (data_read != 0u) {
+    value |= ER_PI_ZERO_W_V1_1_EMMC_CMDTM_DATA_READ;
+  }
   return value;
 }
 
@@ -552,7 +588,8 @@ static UINT32 er_pi_zero_w_v1_1_emmc_sdio_read_byte(UINT32 function,
       ER_PI_ZERO_W_V1_1_EMMC_BASE,
       ER_PI_ZERO_W_V1_1_EMMC_REG_CMDTM,
       er_pi_zero_w_v1_1_emmc_sdio_command_value(ER_PI_ZERO_W_V1_1_MMC_CMD_IO_RW_EXTENDED,
-                                                ER_PI_ZERO_W_V1_1_MMC_RESPONSE_R5));
+                                                ER_PI_ZERO_W_V1_1_MMC_RESPONSE_R5,
+                                                1u));
   if (er_pi_zero_w_v1_1_emmc_wait_interrupt(ER_PI_ZERO_W_V1_1_EMMC_INTERRUPT_READ_RDY,
                                             &interrupt) == 0u) {
     g_er_pi_zero_w_v1_1_sdio_probe_interrupt = interrupt;
@@ -570,6 +607,117 @@ static UINT32 er_pi_zero_w_v1_1_emmc_sdio_read_byte(UINT32 function,
                                     ER_PI_ZERO_W_V1_1_EMMC_REG_RESP0);
   g_er_pi_zero_w_v1_1_sdio_probe_interrupt = interrupt;
   g_er_pi_zero_w_v1_1_sdio_probe_response = response;
+  er_pi_zero_w_v1_1_write(ER_PI_ZERO_W_V1_1_EMMC_BASE,
+                          ER_PI_ZERO_W_V1_1_EMMC_REG_INTERRUPT,
+                          interrupt);
+  return 1u;
+}
+
+static UINT32 er_pi_zero_w_v1_1_emmc_sdio_write_byte(UINT32 function,
+                                                     UINT32 address,
+                                                     UINT8 byte) {
+  UINT32 response;
+
+  return er_pi_zero_w_v1_1_emmc_command(
+      ER_PI_ZERO_W_V1_1_MMC_CMD_IO_RW_DIRECT,
+      er_pi_zero_w_v1_1_sdio_cmd52_argument(
+          ER_PI_ZERO_W_V1_1_SDIO_CMD52_WRITE,
+          function,
+          ER_PI_ZERO_W_V1_1_SDIO_CMD52_NO_RAW,
+          address,
+          byte),
+      ER_PI_ZERO_W_V1_1_MMC_RESPONSE_R5,
+      &response);
+}
+
+static UINT32 er_pi_zero_w_v1_1_emmc_sdio_read_direct(UINT32 function,
+                                                      UINT32 address,
+                                                      UINT8* out_byte) {
+  UINT32 response;
+
+  if (out_byte == 0 ||
+      er_pi_zero_w_v1_1_emmc_command(
+          ER_PI_ZERO_W_V1_1_MMC_CMD_IO_RW_DIRECT,
+          er_pi_zero_w_v1_1_sdio_cmd52_argument(
+              ER_PI_ZERO_W_V1_1_SDIO_CMD52_READ,
+              function,
+              ER_PI_ZERO_W_V1_1_SDIO_CMD52_NO_RAW,
+              address,
+              0u),
+          ER_PI_ZERO_W_V1_1_MMC_RESPONSE_R5,
+          &response) == 0u) {
+    return 0u;
+  }
+  *out_byte = (UINT8)(response & ER_PI_ZERO_W_V1_1_SDIO_CMD52_DATA_MASK);
+  return 1u;
+}
+
+static UINT32 er_pi_zero_w_v1_1_emmc_sdio_write_bytes(UINT32 function,
+                                                      UINT32 address,
+                                                      const UINT8* bytes,
+                                                      UINT32 bytes_len) {
+  UINT32 interrupt;
+  UINT32 offset;
+
+  if (bytes == 0 ||
+      bytes_len == 0u ||
+      bytes_len > ER_PI_ZERO_W_V1_1_SDIO_CMD53_COUNT_MASK ||
+      er_pi_zero_w_v1_1_emmc_wait_clear(
+          ER_PI_ZERO_W_V1_1_EMMC_REG_STATUS,
+          ER_PI_ZERO_W_V1_1_EMMC_STATUS_CMD_INHIBIT | ER_PI_ZERO_W_V1_1_EMMC_STATUS_DATA_INHIBIT,
+          ER_PI_ZERO_W_V1_1_EMMC_READY_POLL_BUDGET) == 0u) {
+    return 0u;
+  }
+  er_pi_zero_w_v1_1_write(ER_PI_ZERO_W_V1_1_EMMC_BASE,
+                          ER_PI_ZERO_W_V1_1_EMMC_REG_INTERRUPT,
+                          ER_PI_ZERO_W_V1_1_EMMC_INTERRUPT_ALL);
+  er_pi_zero_w_v1_1_write(
+      ER_PI_ZERO_W_V1_1_EMMC_BASE,
+      ER_PI_ZERO_W_V1_1_EMMC_REG_BLKSIZECNT,
+      (1u << ER_PI_ZERO_W_V1_1_EMMC_BLOCK_COUNT_BITS) | bytes_len);
+  er_pi_zero_w_v1_1_write(
+      ER_PI_ZERO_W_V1_1_EMMC_BASE,
+      ER_PI_ZERO_W_V1_1_EMMC_REG_ARG1,
+      er_pi_zero_w_v1_1_sdio_cmd53_argument(ER_PI_ZERO_W_V1_1_SDIO_CMD53_WRITE,
+                                            function,
+                                            ER_PI_ZERO_W_V1_1_SDIO_CMD53_BYTE_MODE,
+                                            ER_PI_ZERO_W_V1_1_SDIO_CMD53_INCREMENTING_ADDRESS,
+                                            address,
+                                            bytes_len));
+  er_pi_zero_w_v1_1_write(
+      ER_PI_ZERO_W_V1_1_EMMC_BASE,
+      ER_PI_ZERO_W_V1_1_EMMC_REG_CMDTM,
+      er_pi_zero_w_v1_1_emmc_sdio_command_value(ER_PI_ZERO_W_V1_1_MMC_CMD_IO_RW_EXTENDED,
+                                                ER_PI_ZERO_W_V1_1_MMC_RESPONSE_R5,
+                                                0u));
+  if (er_pi_zero_w_v1_1_emmc_wait_interrupt(ER_PI_ZERO_W_V1_1_EMMC_INTERRUPT_WRITE_RDY,
+                                            &interrupt) == 0u) {
+    g_er_pi_zero_w_v1_1_sdio_probe_interrupt = interrupt;
+    return 0u;
+  }
+  for (offset = 0u; offset < bytes_len; offset += (UINT32)sizeof(UINT32)) {
+    UINT32 word = 0u;
+    UINT32 byte_index;
+
+    for (byte_index = 0u;
+         byte_index < (UINT32)sizeof(UINT32) && offset + byte_index < bytes_len;
+         ++byte_index) {
+      word |= (UINT32)bytes[offset + byte_index] <<
+              (byte_index * ER_PI_ZERO_W_V1_1_U16_HIGH_SHIFT);
+    }
+    er_pi_zero_w_v1_1_write(ER_PI_ZERO_W_V1_1_EMMC_BASE,
+                            ER_PI_ZERO_W_V1_1_EMMC_REG_DATA,
+                            word);
+  }
+  if (er_pi_zero_w_v1_1_emmc_wait_interrupt(ER_PI_ZERO_W_V1_1_EMMC_INTERRUPT_DATA_DONE,
+                                            &interrupt) == 0u) {
+    g_er_pi_zero_w_v1_1_sdio_probe_interrupt = interrupt;
+    return 0u;
+  }
+  g_er_pi_zero_w_v1_1_sdio_probe_interrupt = interrupt;
+  g_er_pi_zero_w_v1_1_sdio_probe_response =
+      er_pi_zero_w_v1_1_read(ER_PI_ZERO_W_V1_1_EMMC_BASE,
+                             ER_PI_ZERO_W_V1_1_EMMC_REG_RESP0);
   er_pi_zero_w_v1_1_write(ER_PI_ZERO_W_V1_1_EMMC_BASE,
                           ER_PI_ZERO_W_V1_1_EMMC_REG_INTERRUPT,
                           interrupt);
@@ -726,11 +874,149 @@ static void er_pi_zero_w_v1_1_fill_zero(UINT8* bytes, UINT32 len) {
   }
 }
 
+static void er_pi_zero_w_v1_1_fill_broadcast(UINT8* bytes, UINT32 len) {
+  UINT32 i;
+
+  for (i = 0u; i < len; ++i) {
+    bytes[i] = ER_PI_ZERO_W_V1_1_IEEE80211_BROADCAST_OCTET;
+  }
+}
+
 static UINT32 er_pi_zero_w_v1_1_wifi_address(
     UINT8 out_address[ER_PI_ZERO_W_V1_1_L2_ADDRESS_BYTES]) {
   return er_pi_zero_w_v1_1_l2_address(g_er_pi_zero_w_v1_1_node_id,
                                       ER_PI_ZERO_W_V1_1_L2_WIFI_CHANNEL,
                                       out_address);
+}
+
+static void er_pi_zero_w_v1_1_ap_rates(UINT8** cursor) {
+  (*cursor)[0] = ER_PI_ZERO_W_V1_1_IEEE80211_RATE_1M_BASIC;
+  (*cursor)[1] = ER_PI_ZERO_W_V1_1_IEEE80211_RATE_2M_BASIC;
+  (*cursor)[2] = ER_PI_ZERO_W_V1_1_IEEE80211_RATE_5M5_BASIC;
+  (*cursor)[3] = ER_PI_ZERO_W_V1_1_IEEE80211_RATE_11M_BASIC;
+  *cursor += ER_PI_ZERO_W_V1_1_IEEE80211_SUPPORTED_RATE_COUNT;
+}
+
+static UINT32 er_pi_zero_w_v1_1_build_ap_frame(
+    UINT16 frame_control,
+    const UINT8 receiver[ER_PI_ZERO_W_V1_1_L2_MAC_BYTES],
+    const UINT8 bssid[ER_PI_ZERO_W_V1_1_L2_MAC_BYTES],
+    const UINT8 ssid[ER_PI_ZERO_W_V1_1_L2_SSID_BYTES],
+    UINT8* out_frame,
+    UINT32 out_capacity) {
+  UINT8* cursor;
+  UINT16 capabilities;
+
+  if (receiver == 0 ||
+      bssid == 0 ||
+      ssid == 0 ||
+      out_frame == 0 ||
+      out_capacity < ER_PI_ZERO_W_V1_1_IEEE80211_FRAME_MAX) {
+    return 0u;
+  }
+  er_pi_zero_w_v1_1_fill_zero(out_frame, out_capacity);
+  cursor = out_frame;
+  er_pi_zero_w_v1_1_put_u16(&cursor, frame_control);
+  er_pi_zero_w_v1_1_put_u16(&cursor, 0u);
+  er_pi_zero_w_v1_1_put_bytes(&cursor, receiver, ER_PI_ZERO_W_V1_1_L2_MAC_BYTES);
+  er_pi_zero_w_v1_1_put_bytes(&cursor, bssid, ER_PI_ZERO_W_V1_1_L2_MAC_BYTES);
+  er_pi_zero_w_v1_1_put_bytes(&cursor, bssid, ER_PI_ZERO_W_V1_1_L2_MAC_BYTES);
+  er_pi_zero_w_v1_1_put_u16(&cursor,
+                            (UINT16)(frame_control <<
+                                     ER_PI_ZERO_W_V1_1_IEEE80211_SEQ_SHIFT));
+  er_pi_zero_w_v1_1_put_u64(&cursor, 0u);
+  er_pi_zero_w_v1_1_put_u16(&cursor,
+                            ER_PI_ZERO_W_V1_1_IEEE80211_BEACON_INTERVAL_TU);
+  capabilities = ER_PI_ZERO_W_V1_1_IEEE80211_CAPABILITY_ESS |
+                 ER_PI_ZERO_W_V1_1_IEEE80211_CAPABILITY_SHORT_PREAMBLE |
+                 ER_PI_ZERO_W_V1_1_IEEE80211_CAPABILITY_SHORT_SLOT;
+  er_pi_zero_w_v1_1_put_u16(&cursor, capabilities);
+  *cursor++ = ER_PI_ZERO_W_V1_1_IEEE80211_IE_ID_SSID;
+  *cursor++ = ER_PI_ZERO_W_V1_1_L2_SSID_BYTES;
+  er_pi_zero_w_v1_1_put_bytes(&cursor, ssid, ER_PI_ZERO_W_V1_1_L2_SSID_BYTES);
+  *cursor++ = ER_PI_ZERO_W_V1_1_IEEE80211_IE_ID_SUPPORTED_RATES;
+  *cursor++ = ER_PI_ZERO_W_V1_1_IEEE80211_SUPPORTED_RATE_COUNT;
+  er_pi_zero_w_v1_1_ap_rates(&cursor);
+  *cursor++ = ER_PI_ZERO_W_V1_1_IEEE80211_IE_ID_DS_PARAMETER_SET;
+  *cursor++ = 1u;
+  *cursor++ = ER_PI_ZERO_W_V1_1_L2_WIFI_CHANNEL;
+  return (UINT32)(cursor - out_frame);
+}
+
+static UINT32 er_pi_zero_w_v1_1_cyw43438_enable_open_l2_ap(void) {
+  UINT8 wifi_address[ER_PI_ZERO_W_V1_1_L2_ADDRESS_BYTES];
+  UINT8 beacon[ER_PI_ZERO_W_V1_1_IEEE80211_FRAME_MAX];
+  UINT8 probe[ER_PI_ZERO_W_V1_1_IEEE80211_FRAME_MAX];
+  UINT8 receiver[ER_PI_ZERO_W_V1_1_L2_MAC_BYTES];
+  UINT8 ready;
+  UINT32 poll;
+  UINT32 functions;
+  UINT32 beacon_len;
+  UINT32 probe_len;
+
+  if (er_pi_zero_w_v1_1_wifi_address(wifi_address) == 0u) {
+    return 0u;
+  }
+  er_pi_zero_w_v1_1_fill_broadcast(receiver, ER_PI_ZERO_W_V1_1_L2_MAC_BYTES);
+  beacon_len = er_pi_zero_w_v1_1_build_ap_frame(
+      ER_PI_ZERO_W_V1_1_IEEE80211_BEACON_FRAME_CONTROL,
+      receiver,
+      wifi_address + ER_PI_ZERO_W_V1_1_L2_ADDRESS_MAC_OFFSET,
+      wifi_address + ER_PI_ZERO_W_V1_1_L2_ADDRESS_SSID_OFFSET,
+      beacon,
+      ER_PI_ZERO_W_V1_1_IEEE80211_FRAME_MAX);
+  probe_len = er_pi_zero_w_v1_1_build_ap_frame(
+      ER_PI_ZERO_W_V1_1_IEEE80211_PROBE_FRAME_CONTROL,
+      receiver,
+      wifi_address + ER_PI_ZERO_W_V1_1_L2_ADDRESS_MAC_OFFSET,
+      wifi_address + ER_PI_ZERO_W_V1_1_L2_ADDRESS_SSID_OFFSET,
+      probe,
+      ER_PI_ZERO_W_V1_1_IEEE80211_FRAME_MAX);
+  functions = ER_PI_ZERO_W_V1_1_CYW43438_CCCR_ENABLE_FUNCTION_1 |
+              ER_PI_ZERO_W_V1_1_CYW43438_CCCR_ENABLE_FUNCTION_2;
+  if (beacon_len == 0u ||
+      probe_len == 0u ||
+      er_pi_zero_w_v1_1_emmc_sdio_write_byte(
+          ER_PI_ZERO_W_V1_1_SDIO_FUNCTION_CCCR,
+          ER_PI_ZERO_W_V1_1_CYW43438_CCCR_IO_ENABLE_ADDR,
+          (UINT8)functions) == 0u) {
+    return 0u;
+  }
+  g_er_pi_zero_w_v1_1_sdio_probe_state =
+      ER_PI_ZERO_W_V1_1_L2_AP_ENABLE_FUNCTIONS_DONE;
+  for (poll = 0u; poll < ER_PI_ZERO_W_V1_1_CYW43438_READY_POLL_BUDGET; ++poll) {
+    if (er_pi_zero_w_v1_1_emmc_sdio_read_direct(
+            ER_PI_ZERO_W_V1_1_SDIO_FUNCTION_CCCR,
+            ER_PI_ZERO_W_V1_1_CYW43438_CCCR_IO_READY_ADDR,
+            &ready) != 0u &&
+        (((UINT32)ready & functions) == functions)) {
+      g_er_pi_zero_w_v1_1_sdio_probe_state =
+          ER_PI_ZERO_W_V1_1_L2_AP_READY_FUNCTIONS_DONE;
+      if (er_pi_zero_w_v1_1_emmc_sdio_write_bytes(
+              ER_PI_ZERO_W_V1_1_SDIO_FUNCTION_WLAN,
+              ER_PI_ZERO_W_V1_1_CYW43438_WLAN_BEACON_TEMPLATE_ADDR,
+              beacon,
+              beacon_len) == 0u) {
+        return 0u;
+      }
+      g_er_pi_zero_w_v1_1_sdio_probe_state =
+          ER_PI_ZERO_W_V1_1_L2_AP_BEACON_DONE;
+      if (er_pi_zero_w_v1_1_emmc_sdio_write_bytes(
+              ER_PI_ZERO_W_V1_1_SDIO_FUNCTION_WLAN,
+              ER_PI_ZERO_W_V1_1_CYW43438_WLAN_PROBE_TEMPLATE_ADDR,
+              probe,
+              probe_len) == 0u) {
+        return 0u;
+      }
+      g_er_pi_zero_w_v1_1_sdio_probe_state =
+          ER_PI_ZERO_W_V1_1_L2_AP_PROBE_DONE;
+      return er_pi_zero_w_v1_1_emmc_sdio_write_byte(
+          ER_PI_ZERO_W_V1_1_SDIO_FUNCTION_WLAN,
+          ER_PI_ZERO_W_V1_1_CYW43438_WLAN_AP_CONTROL_ADDR,
+          ER_PI_ZERO_W_V1_1_CYW43438_WLAN_AP_CONTROL_ENABLE);
+    }
+  }
+  return 0u;
 }
 
 static UINT32 er_pi_zero_w_v1_1_crc32(const UINT8* bytes, UINT32 len) {
@@ -867,7 +1153,8 @@ void er_pi_zero_w_v1_1_main(void) {
   er_pi_zero_w_v1_1_act_led_status(3u);
   er_pi_zero_w_v1_1_sdio_probe();
   if (g_er_pi_zero_w_v1_1_sdio_probe_state ==
-      ER_PI_ZERO_W_V1_1_SDIO_PROBE_CMD53_DONE) {
+          ER_PI_ZERO_W_V1_1_SDIO_PROBE_CMD53_DONE &&
+      er_pi_zero_w_v1_1_cyw43438_enable_open_l2_ap() != 0u) {
     g_er_pi_zero_w_v1_1_sdio_probe_state = ER_PI_ZERO_W_V1_1_L2_READY;
     er_pi_zero_w_v1_1_act_led_status(6u);
   } else {
@@ -882,13 +1169,4 @@ void er_pi_zero_w_v1_1_main(void) {
     er_pi_zero_w_v1_1_delay(
         ER_PI_ZERO_W_V1_1_UART_HEARTBEAT_DELAY_TICKS);
   }
-}
-
-void _start(void) __attribute__((naked));
-void _start(void) {
-  __asm__ volatile(
-      "mov sp, #0x8000\n"
-      "bl er_pi_zero_w_v1_1_main\n"
-      "1: b 1b\n"
-      ::: "memory");
 }
