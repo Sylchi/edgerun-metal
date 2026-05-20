@@ -17,6 +17,7 @@
 #define ER_TLS_AES_128_KEY_BYTES ER_TPM_AES_128_KEY_LEN
 #define ER_TLS_RECORD_IV_BYTES ER_TPM_AES_BLOCK_LEN
 #define ER_TLS_RECORD_TAG_BYTES ER_TPM_SHA256_DIGEST_LEN
+#define ER_TLS_FINISHED_VERIFY_BYTES ER_TPM_SHA256_DIGEST_LEN
 #define ER_TLS_RECORD_PLAINTEXT_MAX_BYTES 1024u
 #define ER_TLS_RECORD_WIRE_MAX_BYTES \
   (5u + ER_TLS_RECORD_PLAINTEXT_MAX_BYTES + ER_TLS_RECORD_TAG_BYTES)
@@ -40,6 +41,8 @@ typedef struct {
   UINT16 cipher_suite;
   UINT16 supported_version;
   UINT8 server_authenticated;
+  UINT8 server_finished_verified;
+  UINT8 client_finished_built;
   UINT8 ready;
 } ErTlsHandshake;
 
@@ -92,6 +95,21 @@ UINT8 er_tls_record_keys_derive(ErTlsTpm* tpm,
                                 const UINT8* transcript,
                                 UINT16 transcript_len,
                                 ErTlsRecordKeys* out_keys);
+UINT8 er_tls_server_finished_accept(ErTlsTpm* tpm,
+                                    ErTlsHandshake* handshake,
+                                    const ErTlsRecordKeys* keys,
+                                    const UINT8* transcript,
+                                    UINT16 transcript_len,
+                                    const UINT8* message,
+                                    UINT16 message_len);
+UINT8 er_tls_client_finished_build(ErTlsTpm* tpm,
+                                   ErTlsHandshake* handshake,
+                                   const ErTlsRecordKeys* keys,
+                                   const UINT8* transcript,
+                                   UINT16 transcript_len,
+                                   UINT8* out_message,
+                                   UINT16 out_capacity,
+                                   UINT16* out_message_len);
 UINT8 er_tls_record_protect(ErTlsTpm* tpm,
                             ErTlsRecordKeys* keys,
                             UINT8 from_client,
