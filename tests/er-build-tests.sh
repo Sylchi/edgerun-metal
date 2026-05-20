@@ -115,6 +115,11 @@ case "$repo_plan" in
 esac
 
 case "$repo_plan" in
+  *"+ toolchain/bin/clang -std=c11 -Wall -Wextra -Werror -O2 -o .build/pi-node-update -Iinclude -Iedgerun-metal/core -Iedgerun-metal/devices/pi_zero_w_v1_1 -Iedgerun-crypto/include tools/pi-node-update/main.c edgerun-metal/devices/pi_zero_w_v1_1/er_pi_zero_w_v1_1_ota.c edgerun-metal/core/er_mem.c edgerun-metal/core/er_vfs.c edgerun-metal/core/er_crypto.c edgerun-metal/core/er_crypto_blake3.c edgerun-metal/core/er_identity.c edgerun-crypto/src/er_blake3.c"* ) ;;
+  * ) printf 'missing pi node update compile step\n' >&2; exit 1 ;;
+esac
+
+case "$repo_plan" in
   *"+ toolchain/bin/clang -std=c11 -Wall -Wextra -Werror -O2 -o .build/sdcard-probe -Iinclude tools/sdcard-probe/main.c"* ) ;;
   * ) printf 'missing sd card probe compile step\n' >&2; exit 1 ;;
 esac
@@ -127,6 +132,11 @@ esac
 case "$repo_plan" in
   *"+ ./tests/pi-serial-verify-tests.sh"* ) ;;
   * ) printf 'missing pi serial verifier test step\n' >&2; exit 1 ;;
+esac
+
+case "$repo_plan" in
+  *"+ ./tests/pi-zero-w-v1_1-bring-up-tests.sh"* ) ;;
+  * ) printf 'missing pi zero w v1.1 bring-up test step\n' >&2; exit 1 ;;
 esac
 
 case "$repo_plan" in

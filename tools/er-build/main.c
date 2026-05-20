@@ -70,6 +70,7 @@ static const char ERB_ERWIRE_DECODE_BIN[] = ".build/erwire-decode";
 static const char ERB_WASM_COMPILE_BIN[] = ".build/wasm-compile";
 static const char ERB_APP_RUN_BIN[] = ".build/app-run";
 static const char ERB_PI_SERIAL_VERIFY_BIN[] = ".build/pi-serial-verify";
+static const char ERB_PI_NODE_UPDATE_BIN[] = ".build/pi-node-update";
 static const char ERB_SDCARD_PROBE_BIN[] = ".build/sdcard-probe";
 static const char ERB_PI_USB_BOOT_BIN[] = ".build/pi-usb-boot";
 static const char ERB_CRYPTO_TEST_BIN[] = ".build/er-build-out/crypto/test_blake3";
@@ -629,6 +630,30 @@ static int erb_build_pi_serial_verify(int print_plan) {
     return 1;
   }
   if (erb_args_push(&args, "tools/pi-serial-verify/main.c") != 0) {
+    return 1;
+  }
+  return erb_run_args(&args, print_plan);
+}
+
+static int erb_build_pi_node_update(int print_plan) {
+  ErbArgs args;
+
+  if (erb_prepare_dirs() != 0 ||
+      erb_compile_common(&args, ERB_PI_NODE_UPDATE_BIN) != 0) {
+    return 1;
+  }
+  if (erb_args_push(&args, "-Iinclude") != 0 ||
+      erb_args_push(&args, "-Iedgerun-metal/core") != 0 ||
+      erb_args_push(&args, "-Iedgerun-metal/devices/pi_zero_w_v1_1") != 0 ||
+      erb_args_push(&args, "-Iedgerun-crypto/include") != 0 ||
+      erb_args_push(&args, "tools/pi-node-update/main.c") != 0 ||
+      erb_args_push(&args, "edgerun-metal/devices/pi_zero_w_v1_1/er_pi_zero_w_v1_1_ota.c") != 0 ||
+      erb_args_push(&args, "edgerun-metal/core/er_mem.c") != 0 ||
+      erb_args_push(&args, "edgerun-metal/core/er_vfs.c") != 0 ||
+      erb_args_push(&args, "edgerun-metal/core/er_crypto.c") != 0 ||
+      erb_args_push(&args, "edgerun-metal/core/er_crypto_blake3.c") != 0 ||
+      erb_args_push(&args, "edgerun-metal/core/er_identity.c") != 0 ||
+      erb_args_push(&args, "edgerun-crypto/src/er_blake3.c") != 0) {
     return 1;
   }
   return erb_run_args(&args, print_plan);
@@ -1789,6 +1814,7 @@ static int erb_target_repo_test(int print_plan) {
       erb_build_erwire_decode(print_plan) != 0 ||
       erb_build_wasm_compile(print_plan) != 0 ||
       erb_build_pi_serial_verify(print_plan) != 0 ||
+      erb_build_pi_node_update(print_plan) != 0 ||
       erb_build_sdcard_probe(print_plan) != 0 ||
       erb_build_pi_usb_boot(print_plan) != 0) {
     return 1;
@@ -1804,6 +1830,7 @@ static int erb_target_repo_test(int print_plan) {
       erb_run_program("./tests/metal-arch-build-tests.sh", print_plan) != 0 ||
       erb_run_program("./tests/pi-boot-stage-tests.sh", print_plan) != 0 ||
       erb_run_program("./tests/pi-serial-verify-tests.sh", print_plan) != 0 ||
+      erb_run_program("./tests/pi-zero-w-v1_1-bring-up-tests.sh", print_plan) != 0 ||
       erb_run_program("./tests/sdcard-probe-tests.sh", print_plan) != 0 ||
       erb_run_program("./tests/pi-usb-boot-tests.sh", print_plan) != 0 ||
       erb_run_program("./tests/er-math-tests.sh", print_plan) != 0 ||
@@ -1972,7 +1999,7 @@ static int erb_usage(void) {
           "         app-run <package-dir> app-check <package-dir>\n"
           "         repo-check-bin repo-push-check repo-inspect erwire-decode erwire-test wasm-compile\n"
           "         repo-agent-swarm [--scope PATH] [--concurrency N] [--limit N]\n"
-          "         pi-serial-verify sdcard-probe pi-usb-boot\n"
+          "         pi-serial-verify pi-node-update sdcard-probe pi-usb-boot\n"
           "         repo-check repo-test repo-progress <scope> [test-target]\n"
           "         crypto-test varfont-test ui-core-test\n");
   return 2;
@@ -2057,6 +2084,9 @@ int main(int argc, char** argv) {
   }
   if (strcmp(target, "pi-serial-verify") == 0) {
     return erb_build_pi_serial_verify(print_plan);
+  }
+  if (strcmp(target, "pi-node-update") == 0) {
+    return erb_build_pi_node_update(print_plan);
   }
   if (strcmp(target, "sdcard-probe") == 0) {
     return erb_build_sdcard_probe(print_plan);

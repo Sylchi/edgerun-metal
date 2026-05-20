@@ -148,6 +148,11 @@ make_packet_file "${TMP_DIR}/blob.bin" 2 0 "(b'\x07' + (b'\x00' * 31) + b'\x04\x
 require_contains "${TMP_DIR}/blob.out" 'kind=blob_chunk(2)'
 require_contains "${TMP_DIR}/blob.out" 'object=0700000000000000000000000000000000000000000000000000000000000000 offset=4 total=10 chunk=3'
 
+make_packet_file "${TMP_DIR}/ble-adv.bin" 42 1 "b'\x00\x01\x02\x03\x04\x05\x06\x07\x08\x09\x0a\x0b\x0c\x0d\x0e\x0f\x10\x11\x12\x13\x14\x15\x16\x17\x18\x19\x1a\x1b\x1c\x1d\x1e'"
+"${DECODER}" < "${TMP_DIR}/ble-adv.bin" > "${TMP_DIR}/ble-adv.out"
+require_contains "${TMP_DIR}/ble-adv.out" 'kind=ble_advertisement(42)'
+require_contains "${TMP_DIR}/ble-adv.out" 'crc=ok'
+
 python3 - "${TMP_DIR}/bus-io.bin" <<'PY'
 import binascii
 import struct

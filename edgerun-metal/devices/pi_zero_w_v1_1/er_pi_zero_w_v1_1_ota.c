@@ -300,8 +300,8 @@ static UINT8 er_pi_zero_w_v1_1_ota_commit_object(
     state->status = ER_PI_ZERO_W_V1_1_OTA_STATUS_WRITE_FAILED;
     return 0u;
   }
-  state->status = ER_PI_ZERO_W_V1_1_OTA_STATUS_STORED_UNBOOTABLE;
-  state->reboot_required = 0u;
+  state->status = ER_PI_ZERO_W_V1_1_OTA_STATUS_COMMITTED;
+  state->reboot_required = 1u;
   return 1u;
 }
 

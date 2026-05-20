@@ -9,6 +9,7 @@
 #include <errno.h>
 #include <inttypes.h>
 #include <arpa/inet.h>
+#include <fcntl.h>
 #include <net/ethernet.h>
 #include <net/if.h>
 #include <netpacket/packet.h>
@@ -19,6 +20,7 @@
 #include <sys/ioctl.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
+#include <termios.h>
 #include <sys/types.h>
 #include <unistd.h>
 
@@ -37,7 +39,7 @@
 #define ER_PI_NODE_UPDATE_ERWIRE_FLAG_FIRST 0x0001u
 #define ER_PI_NODE_UPDATE_ERWIRE_FLAG_LAST 0x0002u
 #define ER_PI_NODE_UPDATE_ERWIRE_STREAM_ID 0x45525a57u
-#define ER_PI_NODE_UPDATE_LIVE_SEND_SUPPORTED 0u
+#define ER_PI_NODE_UPDATE_L2_SEND_SUPPORTED 0u
 #define ER_PI_NODE_UPDATE_ERWIRE_PAYLOAD_BYTES_MAX \
   (ER_VFS_OBJECT_PACKET_HEADER_BYTES + ER_VFS_OBJECT_PACKET_BYTES)
 #define ER_PI_NODE_UPDATE_ERWIRE_PACKET_BYTES_MAX \
@@ -56,12 +58,21 @@
 #define ER_PI_NODE_UPDATE_ETH_TYPE_HIGH_SHIFT 8u
 #define ER_PI_NODE_UPDATE_BROADCAST_BYTE 0xffu
 #define ER_PI_NODE_UPDATE_EXIT_USAGE 2
+#define ER_PI_NODE_UPDATE_PARSE_BASE_10 10
+#define ER_PI_NODE_UPDATE_BYTE_MASK 0xffu
+#define ER_PI_NODE_UPDATE_LE_BYTE0 0u
+#define ER_PI_NODE_UPDATE_LE_BYTE1 1u
+#define ER_PI_NODE_UPDATE_LE_BYTE2 2u
+#define ER_PI_NODE_UPDATE_LE_BYTE3 3u
+#define ER_PI_NODE_UPDATE_U16_BYTES 2u
+#define ER_PI_NODE_UPDATE_U32_BYTES 4u
 #define ER_PI_NODE_UPDATE_U16_HIGH_SHIFT 8u
 #define ER_PI_NODE_UPDATE_U32_BYTE2_SHIFT 16u
 #define ER_PI_NODE_UPDATE_U32_BYTE3_SHIFT 24u
 
 typedef struct {
   const char* iface;
+  const char* serial_path;
   const char* image_path;
   uint32_t repeat;
   uint8_t dry_run;
@@ -69,7 +80,7 @@ typedef struct {
 
 static void er_pi_node_update_usage(const char* argv0) {
   fprintf(stderr,
-          "usage: %s --iface <iface> --image <kernel.img> [--repeat N] [--dry-run]\n",
+          "usage: %s (--serial <tty> | --iface <iface> | --dry-run) --image <kernel.img> [--repeat N]\n",
           argv0 == 0 ? "pi-node-update" : argv0);
 }
 
@@ -81,7 +92,7 @@ static int er_pi_node_update_parse_u32(const char* text, uint32_t* out_value) {
     return 0;
   }
   errno = 0;
-  value = strtoul(text, &end, 10);
+  value = strtoul(text, &end, ER_PI_NODE_UPDATE_PARSE_BASE_10);
   if (errno != 0 || end == text || end == 0 || *end != '\0' ||
       value == 0ul || value > ER_PI_NODE_UPDATE_MAX_REPEAT) {
     return 0;
@@ -99,6 +110,7 @@ static int er_pi_node_update_parse_args(int argc,
     return 0;
   }
   out_config->iface = 0;
+  out_config->serial_path = 0;
   out_config->image_path = 0;
   out_config->repeat = ER_PI_NODE_UPDATE_DEFAULT_REPEAT;
   out_config->dry_run = 0u;
@@ -109,6 +121,9 @@ static int er_pi_node_update_parse_args(int argc,
     if (strcmp(argv[i], "--iface") == 0 && i + 1 < argc) {
       ++i;
       out_config->iface = argv[i];
+    } else if (strcmp(argv[i], "--serial") == 0 && i + 1 < argc) {
+      ++i;
+      out_config->serial_path = argv[i];
     } else if (strcmp(argv[i], "--image") == 0 && i + 1 < argc) {
       ++i;
       out_config->image_path = argv[i];
@@ -123,8 +138,14 @@ static int er_pi_node_update_parse_args(int argc,
       return 0;
     }
   }
-  if (out_config->image_path == 0 ||
-      (out_config->dry_run == 0u && out_config->iface == 0)) {
+  if (out_config->image_path == 0) {
+    return 0;
+  }
+  if (out_config->dry_run != 0u) {
+    return (out_config->iface == 0 && out_config->serial_path == 0) ? 1 : 0;
+  }
+  if ((out_config->iface == 0 && out_config->serial_path == 0) ||
+      (out_config->iface != 0 && out_config->serial_path != 0)) {
     return 0;
   }
   return 1;
@@ -181,9 +202,10 @@ static int er_pi_node_update_read_file(const char* path,
 static void er_pi_node_update_put_eth_type(uint8_t* frame) {
   frame[ER_PI_NODE_UPDATE_ETH_TYPE_OFFSET] =
       (uint8_t)((ER_PI_NODE_UPDATE_ETH_TYPE >>
-                 ER_PI_NODE_UPDATE_ETH_TYPE_HIGH_SHIFT) & 0xffu);
+                 ER_PI_NODE_UPDATE_ETH_TYPE_HIGH_SHIFT) &
+                ER_PI_NODE_UPDATE_BYTE_MASK);
   frame[ER_PI_NODE_UPDATE_ETH_TYPE_OFFSET + 1u] =
-      (uint8_t)(ER_PI_NODE_UPDATE_ETH_TYPE & 0xffu);
+      (uint8_t)(ER_PI_NODE_UPDATE_ETH_TYPE & ER_PI_NODE_UPDATE_BYTE_MASK);
 }
 
 static int er_pi_node_update_open_l2(const char* iface,
@@ -230,6 +252,41 @@ static int er_pi_node_update_open_l2(const char* iface,
   return 1;
 }
 
+static int er_pi_node_update_open_serial(const char* path, int* out_fd) {
+  int fd;
+  struct termios tty;
+
+  if (path == 0 || out_fd == 0) {
+    return 0;
+  }
+  fd = open(path, O_WRONLY | O_NOCTTY);
+  if (fd < 0) {
+    perror("pi-node-update: serial open");
+    return 0;
+  }
+  if (tcgetattr(fd, &tty) != 0) {
+    perror("pi-node-update: serial tcgetattr");
+    close(fd);
+    return 0;
+  }
+  cfmakeraw(&tty);
+  if (cfsetispeed(&tty, B115200) != 0 ||
+      cfsetospeed(&tty, B115200) != 0) {
+    perror("pi-node-update: serial baud");
+    close(fd);
+    return 0;
+  }
+  tty.c_cflag |= (CLOCAL | CREAD);
+  tty.c_cflag &= (tcflag_t)~CRTSCTS;
+  if (tcsetattr(fd, TCSANOW, &tty) != 0) {
+    perror("pi-node-update: serial tcsetattr");
+    close(fd);
+    return 0;
+  }
+  *out_fd = fd;
+  return 1;
+}
+
 static uint32_t er_pi_node_update_crc32(const uint8_t* bytes, uint32_t len) {
   uint32_t crc = ER_PI_NODE_UPDATE_CRC32_INITIAL;
   uint32_t i;
@@ -251,21 +308,27 @@ static uint32_t er_pi_node_update_crc32(const uint8_t* bytes, uint32_t len) {
 }
 
 static void er_pi_node_update_put_u16(uint8_t** cursor, uint16_t value) {
-  (*cursor)[0] = (uint8_t)(value & 0xffu);
-  (*cursor)[1] = (uint8_t)((value >> ER_PI_NODE_UPDATE_U16_HIGH_SHIFT) &
-                           0xffu);
-  *cursor += 2u;
+  (*cursor)[ER_PI_NODE_UPDATE_LE_BYTE0] =
+      (uint8_t)(value & ER_PI_NODE_UPDATE_BYTE_MASK);
+  (*cursor)[ER_PI_NODE_UPDATE_LE_BYTE1] =
+      (uint8_t)((value >> ER_PI_NODE_UPDATE_U16_HIGH_SHIFT) &
+                ER_PI_NODE_UPDATE_BYTE_MASK);
+  *cursor += ER_PI_NODE_UPDATE_U16_BYTES;
 }
 
 static void er_pi_node_update_put_u32(uint8_t** cursor, uint32_t value) {
-  (*cursor)[0] = (uint8_t)(value & 0xffu);
-  (*cursor)[1] = (uint8_t)((value >> ER_PI_NODE_UPDATE_U16_HIGH_SHIFT) &
-                           0xffu);
-  (*cursor)[2] = (uint8_t)((value >> ER_PI_NODE_UPDATE_U32_BYTE2_SHIFT) &
-                           0xffu);
-  (*cursor)[3] = (uint8_t)((value >> ER_PI_NODE_UPDATE_U32_BYTE3_SHIFT) &
-                           0xffu);
-  *cursor += 4u;
+  (*cursor)[ER_PI_NODE_UPDATE_LE_BYTE0] =
+      (uint8_t)(value & ER_PI_NODE_UPDATE_BYTE_MASK);
+  (*cursor)[ER_PI_NODE_UPDATE_LE_BYTE1] =
+      (uint8_t)((value >> ER_PI_NODE_UPDATE_U16_HIGH_SHIFT) &
+                ER_PI_NODE_UPDATE_BYTE_MASK);
+  (*cursor)[ER_PI_NODE_UPDATE_LE_BYTE2] =
+      (uint8_t)((value >> ER_PI_NODE_UPDATE_U32_BYTE2_SHIFT) &
+                ER_PI_NODE_UPDATE_BYTE_MASK);
+  (*cursor)[ER_PI_NODE_UPDATE_LE_BYTE3] =
+      (uint8_t)((value >> ER_PI_NODE_UPDATE_U32_BYTE3_SHIFT) &
+                ER_PI_NODE_UPDATE_BYTE_MASK);
+  *cursor += ER_PI_NODE_UPDATE_U32_BYTES;
 }
 
 static int er_pi_node_update_build_erwire(uint32_t seq,
@@ -334,41 +397,40 @@ static int er_pi_node_update_send_packet(int fd,
   return 1;
 }
 
-static int er_pi_node_update_run(const ErPiNodeUpdateConfig* config) {
-  ErCryptoProvider crypto;
-  uint8_t* image = 0;
-  size_t image_len = 0u;
-  uint32_t packet_count;
-  uint32_t packet_index;
-  uint32_t repeat;
-  int fd = -1;
-  struct sockaddr_ll addr;
-  uint8_t src_mac[ETH_ALEN];
+static int er_pi_node_update_write_all(int fd,
+                                       const uint8_t* bytes,
+                                       uint32_t bytes_len) {
+  uint32_t offset = 0u;
 
-  if (config == 0 ||
-      er_pi_node_update_read_file(config->image_path, &image, &image_len) == 0) {
-    return 1;
+  if (fd < 0 || bytes == 0) {
+    return 0;
   }
-  if (config->dry_run == 0u &&
-      ER_PI_NODE_UPDATE_LIVE_SEND_SUPPORTED == 0u) {
-    fprintf(stderr,
-            "pi-node-update: live send unsupported: host Ethernet frames do not reach the Pi Zero W v1.1 CYW shared-RAM OTA receiver\n");
-    free(image);
-    return 1;
+  while (offset < bytes_len) {
+    ssize_t written = write(fd, bytes + offset, bytes_len - offset);
+
+    if (written <= 0) {
+      perror("pi-node-update: serial write");
+      return 0;
+    }
+    offset += (uint32_t)written;
   }
-  packet_count = (uint32_t)((image_len + ER_VFS_OBJECT_PACKET_BYTES - 1u) /
-                            ER_VFS_OBJECT_PACKET_BYTES);
-  if (packet_count == 0u ||
-      packet_count > ER_PI_ZERO_W_V1_1_OTA_PACKET_CAPACITY) {
-    fprintf(stderr, "pi-node-update: unsupported packet count: %u\n",
-            packet_count);
-    free(image);
-    return 1;
-  }
-  if (config->dry_run == 0u &&
-      er_pi_node_update_open_l2(config->iface, &fd, &addr, src_mac) == 0) {
-    free(image);
-    return 1;
+  return 1;
+}
+
+static int er_pi_node_update_send_objects(
+    const ErPiNodeUpdateConfig* config,
+    int fd,
+    const struct sockaddr_ll* addr,
+    const uint8_t src_mac[ETH_ALEN],
+    const uint8_t* image,
+    size_t image_len,
+    uint32_t packet_count) {
+  ErCryptoProvider crypto;
+  uint32_t repeat;
+  uint32_t packet_index;
+
+  if (config == 0 || image == 0) {
+    return 0;
   }
   er_crypto_blake3_provider(&crypto);
   for (repeat = 0u; repeat < config->repeat; ++repeat) {
@@ -400,23 +462,86 @@ static int er_pi_node_update_run(const ErPiNodeUpdateConfig* config) {
                                          &erwire_packet_len) == 0) {
         fprintf(stderr, "pi-node-update: packet build failed: %u\n",
                 packet_index);
-        if (fd >= 0) {
-          close(fd);
-        }
-        free(image);
-        return 1;
+        return 0;
       }
-      if (config->dry_run == 0u &&
-          er_pi_node_update_send_packet(fd,
-                                        &addr,
-                                        src_mac,
+      if (config->dry_run == 0u && config->serial_path != 0) {
+        if (er_pi_node_update_write_all(fd,
                                         erwire_packet,
                                         erwire_packet_len) == 0) {
-        close(fd);
-        free(image);
-        return 1;
+          return 0;
+        }
+      } else if (config->dry_run == 0u &&
+                 er_pi_node_update_send_packet(fd,
+                                               addr,
+                                               src_mac,
+                                               erwire_packet,
+                                               erwire_packet_len) == 0) {
+        return 0;
       }
     }
+  }
+  return 1;
+}
+
+static int er_pi_node_update_run(const ErPiNodeUpdateConfig* config) {
+  uint8_t* image = 0;
+  size_t image_len = 0u;
+  uint32_t packet_count;
+  int fd = -1;
+  struct sockaddr_ll addr;
+  uint8_t src_mac[ETH_ALEN];
+
+  if (config == 0 ||
+      er_pi_node_update_read_file(config->image_path, &image, &image_len) == 0) {
+    return 1;
+  }
+  memset(&addr, 0, sizeof(addr));
+  memset(src_mac, 0, sizeof(src_mac));
+  packet_count = (uint32_t)((image_len + ER_VFS_OBJECT_PACKET_BYTES - 1u) /
+                            ER_VFS_OBJECT_PACKET_BYTES);
+  if (packet_count == 0u ||
+      packet_count > ER_PI_ZERO_W_V1_1_OTA_PACKET_CAPACITY) {
+    fprintf(stderr, "pi-node-update: unsupported packet count: %u\n",
+            packet_count);
+    free(image);
+    return 1;
+  }
+  if (config->dry_run == 0u && config->serial_path != 0) {
+    if (er_pi_node_update_open_serial(config->serial_path, &fd) == 0) {
+      free(image);
+      return 1;
+    }
+  } else if (config->dry_run == 0u &&
+             config->iface != 0 &&
+             ER_PI_NODE_UPDATE_L2_SEND_SUPPORTED != 0u) {
+    if (er_pi_node_update_open_l2(config->iface, &fd, &addr, src_mac) == 0) {
+      free(image);
+      return 1;
+    }
+  } else if (config->dry_run == 0u) {
+    fprintf(stderr,
+            "pi-node-update: l2 send unsupported: use --serial for Pi Zero W v1.1 UART OTA\n");
+    free(image);
+    return 1;
+  }
+  if (er_pi_node_update_send_objects(config,
+                                     fd,
+                                     &addr,
+                                     src_mac,
+                                     image,
+                                     image_len,
+                                     packet_count) == 0) {
+    if (fd >= 0) {
+      close(fd);
+    }
+    free(image);
+    return 1;
+  }
+  if (fd >= 0 && config->serial_path != 0 && tcdrain(fd) != 0) {
+    perror("pi-node-update: serial drain");
+    close(fd);
+    free(image);
+    return 1;
   }
   if (fd >= 0) {
     close(fd);
@@ -426,7 +551,8 @@ static int er_pi_node_update_run(const ErPiNodeUpdateConfig* config) {
          image_len,
          packet_count,
          config->repeat,
-         config->dry_run == 0u ? "l2" : "dry-run");
+         config->dry_run != 0u ? "dry-run" :
+         config->serial_path != 0 ? "serial" : "l2");
   free(image);
   return 0;
 }

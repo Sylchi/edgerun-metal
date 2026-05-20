@@ -146,7 +146,6 @@ static void test_bus_addresses(void) {
               er_bus_prepare_io_packet(11u, &mmio, ER_BUS_ACCESS_READ16, 1u, 1u, 0u, &io_request),
               0);
 }
-
 static void test_driver_event_queue(void) {
   enum {
     DRIVER_EVENT_TEST_CAPACITY = 2u,
@@ -691,7 +690,9 @@ static void test_virtio_net_mmio(void) {
     VIRTIO_NET_TEST_MMIO_DWORDS = 128u,
     VIRTIO_NET_TEST_QUEUE_MAX = ER_VIRTIO_QUEUE_SIZE,
     VIRTIO_NET_TEST_FRAME_LEN = 4u,
-    VIRTIO_NET_TEST_RX_DESC = 2u
+    VIRTIO_NET_TEST_RX_DESC = 2u,
+    VIRTIO_NET_TEST_TRUNCATED_FRAME_LEN = 5u,
+    VIRTIO_NET_TEST_TRUNCATED_CAPACITY = 3u
   };
   UINT32 regs[VIRTIO_NET_TEST_MMIO_DWORDS] = {0};
   ErVirtioNet net;
@@ -780,6 +781,21 @@ static void test_virtio_net_mmio(void) {
   stats = er_virtio_net_stats(&net);
   check_uint64("virtio net rx received", stats.rx_received, 1u);
   check_uint64("virtio net rx invalid", stats.rx_invalid, 0u);
+
+  rx_used->ring[1].id = VIRTIO_NET_TEST_RX_DESC;
+  rx_used->ring[1].len = 12u + VIRTIO_NET_TEST_TRUNCATED_FRAME_LEN;
+  rx_used->idx = 2u;
+  recv_len = VIRTIO_NET_TEST_TRUNCATED_FRAME_LEN;
+  check_int64("virtio net reject truncated recv",
+              er_virtio_net_recv(&net, recv_frame,
+                                 VIRTIO_NET_TEST_TRUNCATED_CAPACITY,
+                                 &recv_len),
+              0);
+  check_uint64("virtio net truncated recv clears len", recv_len, 0u);
+  check_uint64("virtio net truncated rx repost", rx_avail->idx, ER_VIRTIO_QUEUE_SIZE + 2u);
+  stats = er_virtio_net_stats(&net);
+  check_uint64("virtio net rx received after truncated", stats.rx_received, 1u);
+  check_uint64("virtio net rx invalid after truncated", stats.rx_invalid, 1u);
 }
 
 static void test_virtio_gpu_mmio(void) {

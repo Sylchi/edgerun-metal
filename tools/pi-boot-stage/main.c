@@ -101,6 +101,7 @@ static const char ERPBS_ZERO_W_MANIFEST_TEXT[] =
     "serial_gpio_rx=15\n"
     "serial_protocol=erwire\n"
     "erwire_expect=node_available\n"
+    "erwire_expect=ble_advertisement\n"
     "erwire_expect_sdio_probe="
     ER_PI_ZERO_W_V1_1_STATUS_NAME_L2_OVER_AIR_RX_UNSUPPORTED "\n"
     "erwire_expect=node_heartbeat\n"
