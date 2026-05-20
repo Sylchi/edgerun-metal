@@ -63,6 +63,12 @@ Canonical single-command check:
 ./.build/er-build app-check app
 ```
 
+Canonical check plan:
+
+```sh
+./.build/er-build --print-plan app-check app
+```
+
 `app-new` creates a fresh `app.erc` package from the repository-owned canonical
 sample for either `ui-app` or `bus-driver`. It refuses to overwrite an existing
 package directory.
@@ -70,6 +76,8 @@ package directory.
 `app-check` builds and verifies every package. For `ui-app` packages it also
 runs the app through the deterministic local VM hostcalls; for `bus-driver`
 packages it reports verified admission without using the UI app launcher.
+`--print-plan app-check` prints the compile and run commands without requiring
+generated package outputs to already exist.
 
 The package directory must contain the manifest-declared source file and
 `app.manifest`. The build runner

@@ -206,7 +206,7 @@ $(WASM_COMPILE_BIN): $(WASM_COMPILE_SRCS) $(WASM_COMPILE_HDRS)
 	mkdir -p $(dir $@)
 	$(HOST_CC) $(HOST_CFLAGS) $(HOST_LDFLAGS) -o $@ $(WASM_COMPILE_SRCS)
 
-$(ER_BUILD_BIN): ../tools/er-build/main.c ../tools/er-build/package_identity.c ../tools/er-build/package_identity.h ../edgerun-crypto/src/er_blake3.c ../edgerun-crypto/include/er_blake3.h
+$(ER_BUILD_BIN): ../tools/er-build/main.c ../tools/er-build/app_scaffold.c ../tools/er-build/app_scaffold.h ../tools/er-build/package_identity.c ../tools/er-build/package_identity.h ../edgerun-crypto/src/er_blake3.c ../edgerun-crypto/include/er_blake3.h
 	$(MAKE) -C .. er-build
 
 $(USER_APP_PACKAGE_WASM) $(USER_APP_PACKAGE_IDENTITY): $(USER_APP_SOURCE) $(USER_APP_MANIFEST) $(ER_BUILD_BIN)
