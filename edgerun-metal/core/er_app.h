@@ -346,6 +346,13 @@ UINT8 er_app_load_package_from_storage_source(const ErCryptoProvider* crypto,
                                               const ErAppPackageStorageObject* manifest_object,
                                               const ErAppPackageStorageObject* ui_assets_object,
                                               ErAppLoadedPackage* out_loaded);
+UINT8 er_app_load_package_from_install_record(
+    const ErCryptoProvider* crypto,
+    const ErAppPackageInstallRecord* record,
+    const ErAppPackageStorageObject* app_object,
+    const ErAppPackageStorageObject* manifest_object,
+    const ErAppPackageStorageObject* ui_assets_object,
+    ErAppLoadedPackage* out_loaded);
 UINT8 er_app_derive_identity_from_package(const ErCryptoProvider* crypto,
                                           const ErAppPackageManifest* package,
                                           const ErHash* admission_id,
