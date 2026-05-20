@@ -1,4 +1,4 @@
-.PHONY: all check clean er-build repo-check repo-test repo-check-bin repo-inspect repo-progress repo-agent-swarm erwire-decode erwire-test pi-serial-verify sdcard-probe pi-usb-boot codex-build codex-test crypto-test metal-ui-bench tpm-real-bench-uefi qemu-host-tpm-bench os-user-app-smoke edgerun-metal edgerun-os edgerun-check varfont-test ui-core-test
+.PHONY: all check clean er-build repo-check repo-test repo-check-bin repo-inspect repo-progress repo-agent-swarm erwire-decode erwire-test pi-serial-verify sdcard-probe pi-usb-boot pi-zero-w-v1_1-usb-boot codex-build codex-test crypto-test metal-ui-bench tpm-real-bench-uefi qemu-host-tpm-bench os-user-app-smoke edgerun-metal edgerun-os edgerun-check varfont-test ui-core-test
 
 CC := clang
 HOST_CC := clang
@@ -8,6 +8,8 @@ ER_BUILD_BOOTSTRAP := toolchain/bin/er-build
 REPO_PROGRESS_SCOPE := edgerun-ui-core
 REPO_PROGRESS_TEST :=
 USER_APP_PACKAGE_DIR := tests/fixtures/app-package/app
+PI_ZERO_W_V1_1_USB_BOOT_DIR := .build/edgerun-metal/pi-zero-w-v1_1/boot
+PI_USB_BOOT_DEVICE_ARG := $(if $(PI_USB_DEVICE),--device $(PI_USB_DEVICE),)
 
 all: edgerun-metal
 
@@ -50,6 +52,11 @@ sdcard-probe: er-build
 
 pi-usb-boot: er-build
 	./.build/er-build pi-usb-boot
+
+pi-zero-w-v1_1-usb-boot: er-build
+	$(MAKE) -C edgerun-metal pi-zero-w-v1_1-boot
+	./.build/er-build pi-usb-boot
+	./.build/pi-usb-boot --boot-dir $(PI_ZERO_W_V1_1_USB_BOOT_DIR) $(PI_USB_BOOT_DEVICE_ARG) --verbose
 
 codex-build:
 	$(MAKE) -C codex CC="$(HOST_CC)"

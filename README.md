@@ -498,6 +498,35 @@ The Pi Zero W v1.1 ARMv6 boot tree is
 `.build/edgerun-metal/pi-zero-w-v1_1/boot/` and contains the repo-owned
 `kernel.img` payload.
 
+Build only the repository-owned Raspberry Pi USB boot helper:
+
+```bash
+make pi-usb-boot
+```
+
+Stage and serve the Pi Zero W v1.1 boot tree over USB:
+
+```bash
+make pi-zero-w-v1_1-usb-boot
+```
+
+When the Broadcom boot ROM is already visible, pass the exact device node to
+avoid racing USB re-enumeration:
+
+```bash
+sudo chown "$USER:$USER" /dev/bus/usb/007/005
+make pi-zero-w-v1_1-usb-boot PI_USB_DEVICE=/dev/bus/usb/007/005
+```
+
+On this bring-up laptop, bus 007/008 can wedge during Raspberry Pi USB boot.
+Reset the xHCI controller that owns that root hub before changing boot code
+when `lsusb` shows stale state, impossible device state, or child devices fail
+to re-enumerate:
+
+```bash
+sudo sh -c 'echo 0000:c3:00.4 > /sys/bus/pci/drivers/xhci_hcd/unbind; sleep 3; echo 0000:c3:00.4 > /sys/bus/pci/drivers/xhci_hcd/bind'
+```
+
 Prepare an interface manually when needed:
 
 ```bash
