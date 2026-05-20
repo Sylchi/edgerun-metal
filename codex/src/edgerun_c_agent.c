@@ -362,7 +362,9 @@ static void highlighted_process_sse_json_event(AgentTurn *turn, CodexResponseRen
     if (strcmp(type, "response.output_text.delta") == 0) {
         char *delta = json_get_string_dup(event_json, "delta");
         if (delta) {
-            codex_render_response_delta(render, delta);
+            if (!g_codex_quiet_agent) {
+                codex_render_response_delta(render, delta);
+            }
             agent_turn_append_text(turn, delta);
             free(delta);
         }
@@ -467,7 +469,9 @@ static AgentTurn highlighted_codex_stream_turn(const char *model, const CodexAut
             fprintf(stderr, "[debug] non-sse: %s\n", line);
         }
     }
-    codex_render_response_flush(&render);
+    if (!g_codex_quiet_agent) {
+        codex_render_response_flush(&render);
+    }
     codex_response_render_state_free(&render);
     free(line);
     int rc = pclose(pipe);
@@ -529,13 +533,13 @@ static int run_agent_prompt(Workspace *ws, const char *prompt) {
             json_items_push(&history, xstrdup(turn.output_items.items[i]));
         }
         if (turn.tool_count == 0) {
-            putchar('\n');
+            if (!g_codex_quiet_agent) putchar('\n');
             agent_turn_free(&turn);
             summary.proposals_before_commit = ws->proposal_count;
             if (ws->proposal_count == 0) {
                 summary.review_only_turns++;
                 summary.commit_status = 0;
-                print_agent_summary(&summary);
+                if (!g_codex_quiet_agent) print_agent_summary(&summary);
                 if (g_codex_memory_only) {
                     json_items_free(&history);
                     free(auth.access_token);
@@ -555,7 +559,7 @@ static int run_agent_prompt(Workspace *ws, const char *prompt) {
             } else {
                 summary.commit_status = cmd_commit_verified(ws);
             }
-            print_agent_summary(&summary);
+            if (!g_codex_quiet_agent) print_agent_summary(&summary);
             if (summary.commit_status != 0) {
                 json_items_free(&history);
                 free(auth.access_token);
@@ -570,7 +574,9 @@ static int run_agent_prompt(Workspace *ws, const char *prompt) {
                 &summary,
                 current_prompt,
                 exchange.data ? exchange.data : "");
-            print_icon_line(stdout, "🧠", ANSI_CYAN, "session context compacted; enter the next prompt or 'quit'");
+            if (!g_codex_quiet_agent) {
+                print_icon_line(stdout, "🧠", ANSI_CYAN, "session context compacted; enter the next prompt or 'quit'");
+            }
             char *next_prompt = read_session_prompt_new();
             if (!next_prompt) {
                 free(memory);
@@ -599,17 +605,21 @@ static int run_agent_prompt(Workspace *ws, const char *prompt) {
             bool ok = false;
             const ToolCall *tool = &turn.tools[i];
             summary.tool_calls++;
-            fprintf(stderr, "\n%s🔧 tool%s %s\n",
-                    color_code(stderr, ANSI_BLUE), color_code(stderr, ANSI_RESET), tool->name);
+            if (!g_codex_quiet_agent) {
+                fprintf(stderr, "\n%s🔧 tool%s %s\n",
+                        color_code(stderr, ANSI_BLUE), color_code(stderr, ANSI_RESET), tool->name);
+            }
             char *tool_out = execute_agent_tool_new(ws, tool, &ok);
             buffer_appendf(&exchange, "\ntool %s (%s):\n", tool->name, ok ? "ok" : "failed");
             buffer_append_excerpt(&exchange, tool_out, SESSION_EXCERPT_BYTES);
-            fprintf(stderr, "%s%s tool result%s %.160s%s\n",
-                    color_code(stderr, ok ? ANSI_GREEN : ANSI_RED),
-                    ok ? "✅" : "❌",
-                    color_code(stderr, ANSI_RESET),
-                    tool_out,
-                    strlen(tool_out) > 160 ? "..." : "");
+            if (!g_codex_quiet_agent) {
+                fprintf(stderr, "%s%s tool result%s %.160s%s\n",
+                        color_code(stderr, ok ? ANSI_GREEN : ANSI_RED),
+                        ok ? "✅" : "❌",
+                        color_code(stderr, ANSI_RESET),
+                        tool_out,
+                        strlen(tool_out) > 160 ? "..." : "");
+            }
             json_items_push(&history, tool_output_item_json_new(tool->call_id, tool_out, ok));
             free(tool_out);
         }
@@ -697,8 +707,10 @@ int main(int argc, char **argv) {
             root = argv[++i];
         } else if (strcmp(argv[i], "--memory-only") == 0) {
             g_codex_memory_only = true;
+        } else if (strcmp(argv[i], "--quiet-agent") == 0) {
+            g_codex_quiet_agent = true;
         } else if (strcmp(argv[i], "--help") == 0 || strcmp(argv[i], "-h") == 0) {
-            puts("usage: edgerun-c [--memory-only] [--root PATH] [--prompt TEXT] [--game-bench]");
+            puts("usage: edgerun-c [--memory-only] [--quiet-agent] [--root PATH] [--prompt TEXT] [--game-bench]");
             puts("       edgerun-c PATH");
             return 0;
         } else {
@@ -707,8 +719,10 @@ int main(int argc, char **argv) {
     }
     Workspace ws;
     workspace_init(&ws, root);
-    print_icon_line(stdout, "📦", ANSI_GREEN, "loaded %zu files from %s", ws.file_count, ws.root);
-    fflush(stdout);
+    if (!g_codex_quiet_agent) {
+        print_icon_line(stdout, "📦", ANSI_GREEN, "loaded %zu files from %s", ws.file_count, ws.root);
+        fflush(stdout);
+    }
     int rc = 0;
     if (prompt) rc = run_agent_prompt(&ws, prompt);
     else repl(&ws);
