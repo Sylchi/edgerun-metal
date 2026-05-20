@@ -1319,7 +1319,7 @@ static UINT32 er_pi_zero_w_v1_1_cyw43438_start_owned_firmware(void) {
           0u) == 0u ||
       er_pi_zero_w_v1_1_cyw43438_backplane_write32(
           ER_CYW43438_OWNED_FIRMWARE_COMMAND_ADDR,
-          0u) == 0u ||
+          ER_CYW43438_OWNED_FIRMWARE_COMMAND_NONE) == 0u ||
       er_pi_zero_w_v1_1_cyw43438_backplane_write32(
           ER_CYW43438_OWNED_FIRMWARE_RESPONSE_ADDR,
           0u) == 0u ||
@@ -1355,14 +1355,14 @@ static UINT32 er_pi_zero_w_v1_1_cyw43438_start_owned_firmware(void) {
   }
   if (er_pi_zero_w_v1_1_cyw43438_backplane_write32(
           ER_CYW43438_OWNED_FIRMWARE_COMMAND_ADDR,
-          heartbeat_second) == 0u) {
+          ER_CYW43438_OWNED_FIRMWARE_COMMAND_PING) == 0u) {
     return 0u;
   }
   er_pi_zero_w_v1_1_delay(ER_PI_ZERO_W_V1_1_WIFI_POWER_DELAY_TICKS);
   if (er_pi_zero_w_v1_1_cyw43438_backplane_read32(
           ER_CYW43438_OWNED_FIRMWARE_RESPONSE_ADDR,
           &command_response) == 0u ||
-      command_response != heartbeat_second) {
+      command_response != ER_CYW43438_OWNED_FIRMWARE_RESPONSE_PING_ACK) {
     return 0u;
   }
   g_er_pi_zero_w_v1_1_sdio_probe_response = mailbox;
