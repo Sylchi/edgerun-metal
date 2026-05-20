@@ -26,7 +26,7 @@ enum {
   ERC_BE32_BYTE_INDEX_2 = 2,
   ERC_BE32_BYTE_INDEX_3 = 3,
   ERC_GITLINK_MODE = 0160000,
-  ERC_FETCH_PATTERN_COUNT = 7
+  ERC_EXTERNAL_PATTERN_COUNT = 11
 };
 
 static const char ERC_BUILD_ARTIFACT_DIR[] = ".build/";
@@ -39,14 +39,18 @@ static const char ERC_ALLOWED_BLAKE3_DIR[] = "third_party/blake3/";
 static const char ERC_VENDOR_UI_DIR[] = "ui/shadcn-ui/";
 static const char ERC_FIRMWARE_DIR[] = "firmware/";
 
-static const char* const ERC_FETCH_PATTERNS[ERC_FETCH_PATTERN_COUNT] = {
+static const char* const ERC_EXTERNAL_PATTERNS[ERC_EXTERNAL_PATTERN_COUNT] = {
   "curl" " -",
   "wget" " ",
   "git" " clone ",
   "npm" " install",
   "pnpm" " install",
   "cargo" " install",
-  "pip" " install"
+  "pip" " install",
+  "#include <openssl" "/",
+  "-l" "ssl",
+  "-l" "crypto",
+  "Open" "SSL"
 };
 
 static int erc_fail(const char* message) {
@@ -173,7 +177,7 @@ static int erc_bytes_contains(const unsigned char* bytes, size_t len, const char
   return 0;
 }
 
-static int erc_scan_external_dependency_fetches(const char* root, const char* path) {
+static int erc_scan_external_dependencies(const char* root, const char* path) {
   char full_path[4096];
   unsigned char* bytes;
   size_t len;
@@ -189,10 +193,10 @@ static int erc_scan_external_dependency_fetches(const char* root, const char* pa
   if (bytes == NULL) {
     return erc_fail("unable to read tracked file for external dependency audit");
   }
-  for (i = 0u; i < ERC_FETCH_PATTERN_COUNT; ++i) {
-    if (erc_bytes_contains(bytes, len, ERC_FETCH_PATTERNS[i]) != 0) {
+  for (i = 0u; i < ERC_EXTERNAL_PATTERN_COUNT; ++i) {
+    if (erc_bytes_contains(bytes, len, ERC_EXTERNAL_PATTERNS[i]) != 0) {
       free(bytes);
-      return erc_fail("first-party files must not introduce external dependency fetch commands");
+      return erc_fail("first-party files must not introduce external dependency fetches or forbidden TLS libraries");
     }
   }
   free(bytes);
@@ -373,7 +377,7 @@ static int erc_scan_index(const char* root) {
       free(index_bytes);
       return erc_fail("unapproved external dependency path is not allowed");
     }
-    if (erc_scan_external_dependency_fetches(root, name) != 0) {
+    if (erc_scan_external_dependencies(root, name) != 0) {
       free(index_bytes);
       return 1;
     }

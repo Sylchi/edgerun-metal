@@ -32,17 +32,12 @@
 #define ER_TLS_SELF_TEST_HOST_OFFSET 61u
 #define ER_TLS_IO_CHUNK 4096u
 
-#include <openssl/err.h>
-#include <openssl/ssl.h>
-
 typedef struct {
     unsigned char *data;
     size_t len;
 } ErTlsBytes;
 
 typedef struct {
-    SSL_CTX *ctx;
-    SSL *ssl;
     int fd;
 } ErTlsConnection;
 
@@ -232,30 +227,6 @@ static void er_tls_buffer_free(Buffer *buffer) {
     buffer->cap = 0;
 }
 
-static void er_tls_die_openssl(const char *operation, const char *host) {
-    unsigned long code = ERR_get_error();
-    if (code != 0u) {
-        char text[256];
-        ERR_error_string_n(code, text, sizeof(text));
-        die("tls %s failed for %s: %s", operation, host, text);
-    }
-    die("tls %s failed for %s", operation, host);
-}
-
-static SSL_CTX *er_tls_context_new(const char *host) {
-    SSL_CTX *ctx;
-
-    ctx = SSL_CTX_new(TLS_client_method());
-    if (!ctx) er_tls_die_openssl("context", host);
-    SSL_CTX_set_min_proto_version(ctx, TLS1_2_VERSION);
-    SSL_CTX_set_verify(ctx, SSL_VERIFY_PEER, NULL);
-    if (SSL_CTX_set_default_verify_paths(ctx) != 1) {
-        SSL_CTX_free(ctx);
-        er_tls_die_openssl("default verify paths", host);
-    }
-    return ctx;
-}
-
 static ErTlsConnection er_tls_connection_open(const char *host, int fd) {
     ErTlsConnection conn;
     size_t host_len;
@@ -266,72 +237,30 @@ static ErTlsConnection er_tls_connection_open(const char *host, int fd) {
     (void)host_len;
     memset(&conn, 0, sizeof(conn));
     conn.fd = fd;
-    conn.ctx = er_tls_context_new(host);
-    conn.ssl = SSL_new(conn.ctx);
-    if (!conn.ssl) {
-        SSL_CTX_free(conn.ctx);
-        er_tls_die_openssl("session", host);
-    }
-    if (SSL_set_tlsext_host_name(conn.ssl, host) != 1 ||
-        SSL_set1_host(conn.ssl, host) != 1 ||
-        SSL_set_fd(conn.ssl, fd) != 1) {
-        SSL_free(conn.ssl);
-        SSL_CTX_free(conn.ctx);
-        er_tls_die_openssl("configure", host);
-    }
-    if (SSL_connect(conn.ssl) != 1) {
-        SSL_free(conn.ssl);
-        SSL_CTX_free(conn.ctx);
-        er_tls_die_openssl("connect", host);
-    }
+    close(fd);
+    conn.fd = -1;
+    die("codex HTTPS requires repo-owned TPM-backed TLS; host TLS libraries are not allowed");
     return conn;
 }
 
 static void er_tls_connection_close(ErTlsConnection *conn) {
     if (!conn) return;
-    if (conn->ssl) {
-        SSL_shutdown(conn->ssl);
-        SSL_free(conn->ssl);
-    }
-    if (conn->ctx) SSL_CTX_free(conn->ctx);
     if (conn->fd >= 0) close(conn->fd);
     memset(conn, 0, sizeof(*conn));
     conn->fd = -1;
 }
 
 static void er_tls_write_all(ErTlsConnection *conn, const char *data, size_t len) {
-    size_t off = 0;
-
-    if (!conn || !conn->ssl || !data) die("tls write invalid input");
-    while (off < len) {
-        size_t remaining = len - off;
-        int request_len = (int)(remaining > ER_TLS_IO_CHUNK ? ER_TLS_IO_CHUNK : remaining);
-        int written = SSL_write(conn->ssl, data + off, request_len);
-        if (written <= 0) er_tls_die_openssl("write", "remote");
-        off += (size_t)written;
-    }
+    (void)conn;
+    (void)data;
+    (void)len;
+    die("codex HTTPS write requires repo-owned TPM-backed TLS");
 }
 
 static char *er_tls_read_response_new(ErTlsConnection *conn) {
-    Buffer out;
-    char chunk[ER_TLS_IO_CHUNK];
-
-    if (!conn || !conn->ssl) die("tls read invalid input");
-    buffer_init(&out);
-    for (;;) {
-        int got = SSL_read(conn->ssl, chunk, sizeof(chunk));
-        if (got > 0) {
-            buffer_append(&out, chunk, (size_t)got);
-            continue;
-        }
-        switch (SSL_get_error(conn->ssl, got)) {
-            case SSL_ERROR_ZERO_RETURN:
-                return out.data ? out.data : xstrdup("");
-            default:
-                free(out.data);
-                er_tls_die_openssl("read", "remote");
-        }
-    }
+    (void)conn;
+    die("codex HTTPS read requires repo-owned TPM-backed TLS");
+    return NULL;
 }
 
 static bool er_tls_record_parse(const unsigned char *data, size_t len, ErTlsRecordView *out) {
