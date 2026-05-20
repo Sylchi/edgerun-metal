@@ -75,7 +75,7 @@ case "$repo_plan" in
 esac
 
 case "$repo_plan" in
-  *"+ clang -std=c11 -Wall -Wextra -Werror -O2 -o .build/sdcard-probe tools/sdcard-probe/main.c"* ) ;;
+  *"+ clang -std=c11 -Wall -Wextra -Werror -O2 -o .build/sdcard-probe -Iinclude tools/sdcard-probe/main.c"* ) ;;
   * ) printf 'missing sd card probe compile step\n' >&2; exit 1 ;;
 esac
 

@@ -22,6 +22,8 @@
 #include <time.h>
 #include <unistd.h>
 
+#include "er_math.h"
+
 #ifdef __linux__
 #include <linux/fs.h>
 #endif
@@ -96,6 +98,11 @@ typedef struct {
 static const uint64_t ERSD_PATTERN_BLOCK_FACTOR = UINT64_C(0xbf58476d1ce4e5b9);
 static const uint64_t ERSD_PATTERN_WORD_STEP = UINT64_C(0x94d049bb133111eb);
 static const uint64_t ERSD_PATTERN_BASE = UINT64_C(0x9e3779b97f4a7c15);
+static const char ERSD_CLASS_BOUNDS_TEXT[] =
+    "C2>=2 C4>=4 C6>=6 C10/U1/V10>=10 U3/V30>=30 V60>=60 V90>=90";
+static const char ERSD_INTERPRETATION_NOTE[] =
+    "advertised 98MB/s on SanDisk Ultra A1 16GB is a read ceiling; "
+    "C10/U1 is a 10MB/s sustained-write floor";
 
 _Alignas(ERSD_IO_ALIGN_BYTES) static unsigned char g_ersd_buffer[ERSD_BUFFER_BYTES];
 _Alignas(ERSD_IO_ALIGN_BYTES) static unsigned char g_ersd_verify[ERSD_BUFFER_BYTES];
@@ -452,10 +459,6 @@ static int ersd_open_info(const char* target, int* out_fd, ErsdDeviceInfo* info)
   return 0;
 }
 
-static uint64_t ersd_min_u64(uint64_t a, uint64_t b) {
-  return a < b ? a : b;
-}
-
 static double ersd_mib_per_sec(uint64_t bytes, double seconds) {
   if (seconds <= 0.0) {
     return 0.0;
@@ -587,7 +590,9 @@ static void ersd_print_progress(uint64_t done,
     }
     ersd_format_eta(eta_seconds, eta, sizeof(eta));
     fprintf(stderr,
-            "sdcard-probe: checked %llu / %llu bytes write %.2f MiB/s %.2f MB/s %s/%s/%s verify %.2f MiB/s eta-real-card %s\n",
+            "sdcard-probe: checked %llu / %llu bytes "
+            "write %.2f MiB/s %.2f MB/s %s/%s/%s "
+            "verify %.2f MiB/s eta-real-card %s\n",
             (unsigned long long)done,
             (unsigned long long)total,
             ersd_mib_per_sec(result->write_bytes, result->write_seconds),
@@ -624,10 +629,10 @@ static void ersd_print_live_header(const ErsdConfig* cfg,
   ersd_print_live_text_field("serial", info->serial);
   ersd_print_live_text_field("cid", info->cid);
   ersd_print_live_text_field("csd", info->csd);
-  fprintf(stderr,
-          "sdcard-probe: class-bounds-mb-sec: C2>=2 C4>=4 C6>=6 C10/U1/V10>=10 U3/V30>=30 V60>=60 V90>=90\n");
-  fprintf(stderr,
-          "sdcard-probe: interpretation-note: advertised 98MB/s on SanDisk Ultra A1 16GB is a read ceiling; C10/U1 is a 10MB/s sustained-write floor\n");
+  fprintf(stderr, "sdcard-probe: class-bounds-mb-sec: %s\n",
+          ERSD_CLASS_BOUNDS_TEXT);
+  fprintf(stderr, "sdcard-probe: interpretation-note: %s\n",
+          ERSD_INTERPRETATION_NOTE);
 }
 
 static int ersd_probe_interleaved(int fd,
@@ -656,8 +661,8 @@ static int ersd_probe_interleaved(int fd,
                     start_bytes / (uint64_t)block_bytes,
                     ERSD_PATTERN_SALT_A);
   while (logical_offset < bytes) {
-    size_t span = (size_t)ersd_min_u64((uint64_t)sizeof(g_ersd_buffer),
-                                       bytes - logical_offset);
+    size_t span = (size_t)er_math_min_u64((uint64_t)sizeof(g_ersd_buffer),
+                                          bytes - logical_offset);
     absolute_offset = start_bytes + logical_offset;
     ersd_fill_span(g_ersd_buffer, span, absolute_offset,
                    block_bytes, ERSD_PATTERN_SALT_A);
@@ -706,8 +711,8 @@ static int ersd_probe_interleaved(int fd,
     return ersd_fail("clock_gettime failed");
   }
   while (next_read_logical_offset < read_limit) {
-    size_t span = (size_t)ersd_min_u64((uint64_t)sizeof(g_ersd_buffer),
-                                       read_limit - next_read_logical_offset);
+    size_t span = (size_t)er_math_min_u64((uint64_t)sizeof(g_ersd_buffer),
+                                          read_limit - next_read_logical_offset);
     absolute_offset = start_bytes + next_read_logical_offset;
     if (ersd_same_span(fd, absolute_offset, span, block_bytes,
                        ERSD_PATTERN_SALT_A) == 0) {
@@ -760,7 +765,7 @@ static void ersd_print_report(const ErsdConfig* cfg,
   printf("write-mib-sec: %.2f\n",
          ersd_mib_per_sec(result->write_bytes, result->write_seconds));
   printf("write-mb-sec: %.2f\n", write_mb_sec);
-  printf("class-bounds-mb-sec: C2>=2 C4>=4 C6>=6 C10/U1/V10>=10 U3/V30>=30 V60>=60 V90>=90\n");
+  printf("class-bounds-mb-sec: %s\n", ERSD_CLASS_BOUNDS_TEXT);
   printf("observed-sd-speed-class: %s\n", ersd_sd_speed_class(write_mb_sec));
   printf("observed-uhs-speed-class: %s\n", ersd_uhs_speed_class(write_mb_sec));
   printf("observed-video-speed-class: %s\n",
@@ -794,7 +799,7 @@ int main(int argc, char** argv) {
   }
   tested_bytes = info.claimed_bytes - cfg.start_bytes;
   if (cfg.byte_limit != 0u) {
-    tested_bytes = ersd_min_u64(tested_bytes, cfg.byte_limit);
+    tested_bytes = er_math_min_u64(tested_bytes, cfg.byte_limit);
   }
   tested_bytes -= tested_bytes % (uint64_t)cfg.block_bytes;
   if (tested_bytes == 0u) {
