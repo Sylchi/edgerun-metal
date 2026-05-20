@@ -39,6 +39,7 @@ dd if=/dev/zero of="${IMAGE}" bs=1048576 count=2 >/dev/null 2>&1
 for expected in \
   "kind: regular-file" \
   "claimed-bytes: 2097152" \
+  "start-bytes: 0" \
   "tested-bytes: 1048576" \
   "write-bytes: 1048576" \
   "verify-bytes: 1048576" \
@@ -58,6 +59,34 @@ done
 if ! grep -q "checked 1048576 / 1048576 bytes write" \
   /tmp/sdcard-probe-ok.out; then
   printf 'sdcard-probe did not report first span progress\n' >&2
+  exit 1
+fi
+
+"${TOOL_BIN}" --destroy "${IMAGE}" --start-bytes 1048576 --bytes 1048576 \
+  --block-bytes 1048576 >/tmp/sdcard-probe-offset.out 2>&1
+
+for expected in \
+  "claimed-bytes: 2097152" \
+  "start-bytes: 1048576" \
+  "tested-bytes: 1048576" \
+  "first-bad-offset: 2097152" \
+  "actual-bytes: 1048576" \
+  "status: pass"; do
+  if ! grep -q "${expected}" /tmp/sdcard-probe-offset.out; then
+    printf 'sdcard-probe missing offset output: %s\n' "${expected}" >&2
+    exit 1
+  fi
+done
+
+if "${TOOL_BIN}" --destroy "${IMAGE}" --start-bytes 3 --bytes 1048576 \
+  >/tmp/sdcard-probe-start-bad.out 2>/tmp/sdcard-probe-start-bad.err; then
+  printf 'sdcard-probe accepted unaligned start offset\n' >&2
+  exit 1
+fi
+
+if ! grep -q "start offset must be a multiple of block size" \
+  /tmp/sdcard-probe-start-bad.err; then
+  printf 'sdcard-probe did not explain unaligned start offset\n' >&2
   exit 1
 fi
 

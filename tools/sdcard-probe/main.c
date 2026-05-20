@@ -64,6 +64,7 @@ typedef enum {
 typedef struct {
   const char* target;
   uint64_t byte_limit;
+  uint64_t start_bytes;
   size_t block_bytes;
   int destroy;
 } ErsdConfig;
@@ -108,7 +109,7 @@ static int ersd_fail(const char* message) {
 
 static int ersd_usage(const char* program) {
   fprintf(stderr,
-          "usage: %s --destroy <device-or-file> [--bytes N] [--block-bytes N]\n",
+          "usage: %s --destroy <device-or-file> [--start-bytes N] [--bytes N] [--block-bytes N]\n",
           program);
   fprintf(stderr,
           "sdcard-probe: destructive; target contents will be overwritten\n");
@@ -150,6 +151,7 @@ static int ersd_parse_args(int argc, char** argv, ErsdConfig* cfg) {
   }
   cfg->target = NULL;
   cfg->byte_limit = 0u;
+  cfg->start_bytes = 0u;
   cfg->block_bytes = ERSD_DEFAULT_BLOCK_BYTES;
   cfg->destroy = 0;
   if (argc < ERSD_MIN_ARGS) {
@@ -161,6 +163,11 @@ static int ersd_parse_args(int argc, char** argv, ErsdConfig* cfg) {
     } else if (strcmp(argv[i], "--bytes") == 0) {
       ++i;
       if (i >= argc || ersd_parse_u64(argv[i], &cfg->byte_limit) == 0) {
+        return ersd_usage(argv[ERSD_ARG_PROGRAM]);
+      }
+    } else if (strcmp(argv[i], "--start-bytes") == 0) {
+      ++i;
+      if (i >= argc || ersd_parse_u64(argv[i], &cfg->start_bytes) == 0) {
         return ersd_usage(argv[ERSD_ARG_PROGRAM]);
       }
     } else if (strcmp(argv[i], "--block-bytes") == 0) {
@@ -187,6 +194,9 @@ static int ersd_parse_args(int argc, char** argv, ErsdConfig* cfg) {
   }
   if (cfg->byte_limit != 0u && (cfg->byte_limit % cfg->block_bytes) != 0u) {
     return ersd_fail("byte limit must be a multiple of block size");
+  }
+  if ((cfg->start_bytes % cfg->block_bytes) != 0u) {
+    return ersd_fail("start offset must be a multiple of block size");
   }
   return 0;
 }
@@ -605,6 +615,8 @@ static void ersd_print_live_header(const ErsdConfig* cfg,
   fprintf(stderr, "sdcard-probe: kind: %s\n", ersd_kind_label(info->kind));
   fprintf(stderr, "sdcard-probe: claimed-bytes: %llu\n",
           (unsigned long long)info->claimed_bytes);
+  fprintf(stderr, "sdcard-probe: start-bytes: %llu\n",
+          (unsigned long long)cfg->start_bytes);
   fprintf(stderr, "sdcard-probe: tested-bytes: %llu\n",
           (unsigned long long)tested_bytes);
   ersd_print_live_text_field("vendor", info->vendor);
@@ -619,12 +631,14 @@ static void ersd_print_live_header(const ErsdConfig* cfg,
 }
 
 static int ersd_probe_interleaved(int fd,
+                                  uint64_t start_bytes,
                                   uint64_t bytes,
                                   size_t block_bytes,
                                   ErsdProbeResult* result) {
-  uint64_t offset = 0u;
-  uint64_t next_read_offset = 0u;
+  uint64_t logical_offset = 0u;
+  uint64_t next_read_logical_offset = 0u;
   uint64_t read_limit;
+  uint64_t absolute_offset;
   struct timespec start;
   struct timespec end;
   struct timespec write_start;
@@ -636,69 +650,74 @@ static int ersd_probe_interleaved(int fd,
     return 1;
   }
   memset(result, 0, sizeof(*result));
-  result->first_bad_offset = bytes;
+  result->first_bad_offset = start_bytes + bytes;
   result->actual_bytes = bytes;
-  ersd_fill_pattern(g_ersd_block_a, block_bytes, 0u, ERSD_PATTERN_SALT_A);
-  while (offset < bytes) {
+  ersd_fill_pattern(g_ersd_block_a, block_bytes,
+                    start_bytes / (uint64_t)block_bytes,
+                    ERSD_PATTERN_SALT_A);
+  while (logical_offset < bytes) {
     size_t span = (size_t)ersd_min_u64((uint64_t)sizeof(g_ersd_buffer),
-                                       bytes - offset);
-    ersd_fill_span(g_ersd_buffer, span, offset, block_bytes, ERSD_PATTERN_SALT_A);
+                                       bytes - logical_offset);
+    absolute_offset = start_bytes + logical_offset;
+    ersd_fill_span(g_ersd_buffer, span, absolute_offset,
+                   block_bytes, ERSD_PATTERN_SALT_A);
     if (clock_gettime(CLOCK_MONOTONIC, &write_start) != 0) {
       return ersd_fail("clock_gettime failed");
     }
-    if (ersd_write_all_at(fd, g_ersd_buffer, span, offset) == 0) {
+    if (ersd_write_all_at(fd, g_ersd_buffer, span, absolute_offset) == 0) {
       result->failed = 1;
-      result->first_bad_offset = offset;
+      result->first_bad_offset = absolute_offset;
       break;
     }
     if (clock_gettime(CLOCK_MONOTONIC, &write_end) != 0) {
       return ersd_fail("clock_gettime failed");
     }
-    offset += (uint64_t)span;
-    result->write_bytes = offset;
+    logical_offset += (uint64_t)span;
+    result->write_bytes = logical_offset;
     result->write_seconds += ersd_seconds_since(&write_start, &write_end);
     if (clock_gettime(CLOCK_MONOTONIC, &verify_start) != 0) {
       return ersd_fail("clock_gettime failed");
     }
-    if (ersd_same_span(fd, offset - (uint64_t)span, span,
+    if (ersd_same_span(fd, absolute_offset, span,
                        block_bytes, ERSD_PATTERN_SALT_A) == 0) {
       result->failed = 1;
-      result->first_bad_offset = offset - (uint64_t)span;
-      result->actual_bytes = result->first_bad_offset;
+      result->first_bad_offset = absolute_offset;
+      result->actual_bytes = logical_offset - (uint64_t)span;
       break;
     }
-    result->verify_bytes = offset;
-    if (offset > (uint64_t)span &&
-        (ersd_read_all_at(fd, g_ersd_block_read, block_bytes, 0u) == 0 ||
+    result->verify_bytes = logical_offset;
+    if (logical_offset > (uint64_t)span &&
+        (ersd_read_all_at(fd, g_ersd_block_read, block_bytes, start_bytes) == 0 ||
          memcmp(g_ersd_block_a, g_ersd_block_read, block_bytes) != 0)) {
       result->failed = 1;
       result->wrapped = 1;
-      result->first_bad_offset = offset - (uint64_t)span;
-      result->actual_bytes = result->first_bad_offset;
+      result->first_bad_offset = absolute_offset;
+      result->actual_bytes = logical_offset - (uint64_t)span;
       break;
     }
     if (clock_gettime(CLOCK_MONOTONIC, &verify_end) != 0) {
       return ersd_fail("clock_gettime failed");
     }
     result->verify_seconds += ersd_seconds_since(&verify_start, &verify_end);
-    ersd_print_progress(offset, bytes, result);
+    ersd_print_progress(logical_offset, bytes, result);
   }
   read_limit = result->actual_bytes;
   if (clock_gettime(CLOCK_MONOTONIC, &start) != 0) {
     return ersd_fail("clock_gettime failed");
   }
-  while (next_read_offset < read_limit) {
+  while (next_read_logical_offset < read_limit) {
     size_t span = (size_t)ersd_min_u64((uint64_t)sizeof(g_ersd_buffer),
-                                       read_limit - next_read_offset);
-    if (ersd_same_span(fd, next_read_offset, span, block_bytes,
+                                       read_limit - next_read_logical_offset);
+    absolute_offset = start_bytes + next_read_logical_offset;
+    if (ersd_same_span(fd, absolute_offset, span, block_bytes,
                        ERSD_PATTERN_SALT_A) == 0) {
       result->failed = 1;
-      result->first_bad_offset = next_read_offset;
-      result->actual_bytes = next_read_offset;
+      result->first_bad_offset = absolute_offset;
+      result->actual_bytes = next_read_logical_offset;
       break;
     }
-    next_read_offset += (uint64_t)span;
-    result->read_check_bytes = next_read_offset;
+    next_read_logical_offset += (uint64_t)span;
+    result->read_check_bytes = next_read_logical_offset;
   }
   if (clock_gettime(CLOCK_MONOTONIC, &end) != 0) {
     return ersd_fail("clock_gettime failed");
@@ -725,6 +744,7 @@ static void ersd_print_report(const ErsdConfig* cfg,
   printf("target: %s\n", cfg->target);
   printf("kind: %s\n", ersd_kind_label(info->kind));
   printf("claimed-bytes: %llu\n", (unsigned long long)info->claimed_bytes);
+  printf("start-bytes: %llu\n", (unsigned long long)cfg->start_bytes);
   printf("tested-bytes: %llu\n", (unsigned long long)tested_bytes);
   ersd_print_text_field("vendor", info->vendor);
   ersd_print_text_field("model", info->model);
@@ -768,7 +788,11 @@ int main(int argc, char** argv) {
   if (ersd_open_info(cfg.target, &fd, &info) != 0) {
     return 1;
   }
-  tested_bytes = info.claimed_bytes;
+  if (cfg.start_bytes >= info.claimed_bytes) {
+    close(fd);
+    return ersd_fail("start offset must be below claimed capacity");
+  }
+  tested_bytes = info.claimed_bytes - cfg.start_bytes;
   if (cfg.byte_limit != 0u) {
     tested_bytes = ersd_min_u64(tested_bytes, cfg.byte_limit);
   }
@@ -778,7 +802,8 @@ int main(int argc, char** argv) {
     return ersd_fail("tested byte count is zero after block alignment");
   }
   ersd_print_live_header(&cfg, &info, tested_bytes);
-  if (ersd_probe_interleaved(fd, tested_bytes, cfg.block_bytes, &result) != 0) {
+  if (ersd_probe_interleaved(fd, cfg.start_bytes, tested_bytes,
+                             cfg.block_bytes, &result) != 0) {
     close(fd);
     return 1;
   }
