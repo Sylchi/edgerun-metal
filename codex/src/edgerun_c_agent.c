@@ -556,6 +556,13 @@ static int run_agent_prompt(Workspace *ws, const char *prompt) {
             if (g_codex_memory_only) {
                 cmd_diff(ws, NULL);
                 summary.commit_status = 0;
+                if (!g_codex_quiet_agent) print_agent_summary(&summary);
+                json_items_free(&history);
+                free(auth.access_token);
+                free(auth.account_id);
+                free(current_prompt);
+                free(exchange.data);
+                return 0;
             } else {
                 summary.commit_status = cmd_commit_verified(ws);
             }

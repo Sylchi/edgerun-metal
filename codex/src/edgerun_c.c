@@ -1138,6 +1138,32 @@ static void cmd_propose(Workspace *ws, const char *path) {
     free(b.data);
 }
 
+static size_t line_number_for_offset(const unsigned char *data, size_t offset) {
+    size_t line = 1;
+    for (size_t i = 0; i < offset; i++) {
+        if (data[i] == '\n') line++;
+    }
+    return line;
+}
+
+static size_t line_count_for_range(const unsigned char *data, size_t start, size_t end) {
+    size_t lines = start < end ? 1 : 0;
+    for (size_t i = start; i < end; i++) {
+        if (data[i] == '\n' && i + 1u < end) lines++;
+    }
+    return lines;
+}
+
+static void print_prefixed_lines(char prefix, const unsigned char *data, size_t start, size_t end) {
+    size_t line_start = start;
+    for (size_t pos = start; pos <= end; pos++) {
+        if (pos == end || data[pos] == '\n') {
+            printf("%c%.*s\n", prefix, (int)(pos - line_start), (const char *)data + line_start);
+            line_start = pos + 1u;
+        }
+    }
+}
+
 static void print_diff_for(Workspace *ws, Proposal *p) {
     MemoryFile *old = find_file(ws, p->path);
     printf("--- %s\n+++ %s (memory)\n", old ? p->path : "/dev/null", p->path);
@@ -1156,8 +1182,34 @@ static void print_diff_for(Workspace *ws, Proposal *p) {
         printf("(no byte changes)\n");
         return;
     }
-    printf("@@ full-file replacement @@\n");
-    printf("-old bytes: %zu\n+new bytes: %zu\n", old->len, p->len);
+    size_t prefix = 0;
+    while (prefix < old->len && prefix < p->len && old->data[prefix] == p->data[prefix]) {
+        prefix++;
+    }
+    size_t old_start = prefix;
+    size_t new_start = prefix;
+    while (old_start > 0u && old->data[old_start - 1u] != '\n') old_start--;
+    while (new_start > 0u && p->data[new_start - 1u] != '\n') new_start--;
+
+    size_t old_end = old->len;
+    size_t new_end = p->len;
+    while (old_end > old_start && new_end > new_start &&
+           old->data[old_end - 1u] == p->data[new_end - 1u]) {
+        old_end--;
+        new_end--;
+    }
+    while (old_end < old->len && old->data[old_end] != '\n') old_end++;
+    if (old_end < old->len) old_end++;
+    while (new_end < p->len && p->data[new_end] != '\n') new_end++;
+    if (new_end < p->len) new_end++;
+
+    size_t old_line = line_number_for_offset(old->data, old_start);
+    size_t new_line = line_number_for_offset(p->data, new_start);
+    size_t old_lines = line_count_for_range(old->data, old_start, old_end);
+    size_t new_lines = line_count_for_range(p->data, new_start, new_end);
+    printf("@@ -%zu,%zu +%zu,%zu @@\n", old_line, old_lines, new_line, new_lines);
+    print_prefixed_lines('-', old->data, old_start, old_end);
+    print_prefixed_lines('+', p->data, new_start, new_end);
 }
 
 static void cmd_diff(Workspace *ws, const char *path) {
@@ -2175,6 +2227,11 @@ static int run_agent_prompt(Workspace *ws, const char *prompt) {
             if (g_codex_memory_only) {
                 cmd_diff(ws, NULL);
                 summary.commit_status = 0;
+                if (!g_codex_quiet_agent) print_agent_summary(&summary);
+                json_items_free(&history);
+                free(auth.access_token);
+                free(auth.account_id);
+                return 0;
             } else {
                 summary.commit_status = cmd_commit_verified(ws);
             }
