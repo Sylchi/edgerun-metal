@@ -376,6 +376,10 @@ outside runtime dependencies.
 The repository-owned `tools/er-build` runner is the normal build orchestration
 path. The Makefile builds `.build/er-build` and delegates repository policy,
 tool, crypto, varfont, and UI-core test targets to it.
+`toolchain/bin/` contains tracked, statically linked repository tool seeds used
+to create the first `.build/er-build` without rebuilding it from a host compiler.
+Compiler and linker calls that still produce new C artifacts remain explicit
+until they move behind the repository-owned compiler boundary.
 
 ## Common Commands
 
