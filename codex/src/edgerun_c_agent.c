@@ -175,7 +175,7 @@ static bool codex_language_token_matches(const char *token, size_t token_len, co
     size_t name_len = strlen(name);
     if (token_len != name_len) return false;
     for (size_t i = 0; i < token_len; i++) {
-        if (lower_char(token[i]) != lower_char(name[i])) return false;
+        if (lower_char(token[i]) != lower_char(name[i])) return false; //@optimizer-ignore token_len is checked against strlen(name) before indexing both strings
     }
     return true;
 }
@@ -584,11 +584,12 @@ static int run_agent_prompt(Workspace *ws, const char *prompt) {
         }
         for (size_t i = 0; i < turn.tool_count; i++) {
             bool ok = false;
+            const ToolCall *tool = &turn.tools[i];
             summary.tool_calls++;
             fprintf(stderr, "\n%s🔧 tool%s %s\n",
-                    color_code(stderr, ANSI_BLUE), color_code(stderr, ANSI_RESET), turn.tools[i].name);
-            char *tool_out = execute_agent_tool_new(ws, &turn.tools[i], &ok);
-            buffer_appendf(&exchange, "\ntool %s (%s):\n", turn.tools[i].name, ok ? "ok" : "failed");
+                    color_code(stderr, ANSI_BLUE), color_code(stderr, ANSI_RESET), tool->name);
+            char *tool_out = execute_agent_tool_new(ws, tool, &ok);
+            buffer_appendf(&exchange, "\ntool %s (%s):\n", tool->name, ok ? "ok" : "failed");
             buffer_append_excerpt(&exchange, tool_out, SESSION_EXCERPT_BYTES);
             fprintf(stderr, "%s%s tool result%s %.160s%s\n",
                     color_code(stderr, ok ? ANSI_GREEN : ANSI_RED),
@@ -596,7 +597,7 @@ static int run_agent_prompt(Workspace *ws, const char *prompt) {
                     color_code(stderr, ANSI_RESET),
                     tool_out,
                     strlen(tool_out) > 160 ? "..." : "");
-            json_items_push(&history, tool_output_item_json_new(turn.tools[i].call_id, tool_out, ok));
+            json_items_push(&history, tool_output_item_json_new(tool->call_id, tool_out, ok));
             free(tool_out);
         }
         agent_turn_free(&turn);
