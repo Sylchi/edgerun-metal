@@ -8,6 +8,8 @@
 #define CODEX_CONTEXT_PROCESS_LINE_LIMIT 40u
 #define CODEX_FENCE_MARKER_LEN 3u
 #define CODEX_MARKDOWN_HEADING_MAX_DEPTH 6u
+#define CODEX_SELF_TEST_GAME_POSITIVE_FAILURE 32
+#define CODEX_SELF_TEST_GAME_NEGATIVE_FAILURE 33
 
 typedef enum {
     CODEX_RESPONSE_LANG_TEXT = 0,
@@ -21,6 +23,8 @@ typedef struct {
     bool in_fence;
     CodexResponseLanguage fence_language;
 } CodexResponseRenderState;
+
+#include "edgerun_c_game.c"
 
 static int context_path_compare(const void *a, const void *b) {
     const char *const *pa = (const char *const *)a;
@@ -113,6 +117,10 @@ static char *enhanced_initial_context_text_new(Workspace *ws) {
     buffer_append(&b, "\n", 1);
     buffer_append(&b, rules, strlen(rules));
     free(rules);
+
+    char *game = quality_game_text_new();
+    buffer_append(&b, game, strlen(game));
+    free(game);
 
     char *tree = repo_tree_text_new(ws);
     buffer_append(&b, tree, strlen(tree));
@@ -598,7 +606,9 @@ static int enhanced_self_test(void) {
     highlighted_process_sse_json_event(
         &turn,
         &render,
-        "{\"type\":\"response.output_item.done\",\"item\":{\"type\":\"function_call\",\"name\":\"read_code\",\"arguments\":\"{}\",\"call_id\":\"call_1\"}}");
+        "{\"type\":\"response.output_item.done\",\"item\":{\"type\":"
+        "\"function_call\",\"name\":\"read_code\",\"arguments\":\"{}\","
+        "\"call_id\":\"call_1\"}}");
     if (turn.tool_count != 1) return 27;
     if (turn.output_items.count != 1) return 28;
     if (strcmp(turn.tools[0].name, "read_code") != 0) return 29;
@@ -607,12 +617,36 @@ static int enhanced_self_test(void) {
     codex_response_render_state_free(&render);
     agent_turn_free(&turn);
 
+    CodexGameMove positive = {
+        .feature_units = 1,
+        .cleanup_units = 1,
+        .test_units = 1,
+        .deleted_units = 1,
+        .debt_units = 0,
+        .irrelevant_units = 0,
+    };
+    if (codex_game_score_move(positive) != CODEX_GAME_SELF_TEST_POSITIVE_SCORE) {
+        return CODEX_SELF_TEST_GAME_POSITIVE_FAILURE;
+    }
+    CodexGameMove negative = {
+        .feature_units = 1,
+        .cleanup_units = 0,
+        .test_units = 0,
+        .deleted_units = 0,
+        .debt_units = 1,
+        .irrelevant_units = 1,
+    };
+    if (codex_game_score_move(negative) != CODEX_GAME_SELF_TEST_NEGATIVE_SCORE) {
+        return CODEX_SELF_TEST_GAME_NEGATIVE_FAILURE;
+    }
+
     puts("enhanced self-test ok");
     return 0;
 }
 
 int main(int argc, char **argv) {
     if (argc > 1 && strcmp(argv[1], "--self-test") == 0) return enhanced_self_test();
+    if (argc > 1 && strcmp(argv[1], "--game-bench") == 0) return codex_game_bench();
     const char *root = ".";
     const char *prompt = NULL;
     for (int i = 1; i < argc; i++) {
@@ -621,7 +655,7 @@ int main(int argc, char **argv) {
         } else if (strcmp(argv[i], "--root") == 0 && i + 1 < argc) {
             root = argv[++i];
         } else if (strcmp(argv[i], "--help") == 0 || strcmp(argv[i], "-h") == 0) {
-            puts("usage: edgerun-c [--root PATH] [--prompt TEXT]");
+            puts("usage: edgerun-c [--root PATH] [--prompt TEXT] [--game-bench]");
             puts("       edgerun-c PATH");
             return 0;
         } else {
