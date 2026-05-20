@@ -20,10 +20,15 @@ enum {
   ER_TPM_BENCH_RECORD_FROM_CLIENT = 1u,
   ER_TPM_BENCH_NS_PER_US = 1000u,
   ER_TPM_BENCH_NS_PER_SECOND = 1000000000u,
+  ER_TPM_BENCH_DATA_SEED = 0u,
+  ER_TPM_BENCH_KEY_SEED = 0x40u,
+  ER_TPM_BENCH_IV_SEED = 0x80u,
   ER_TPM_BENCH_ALGORITHM_PROPERTY_START = 0u,
   ER_TPM_BENCH_CAPABILITY_COUNT = 128u,
   ER_TPM_BENCH_KEY_HMAC_SHA256 = 1u,
   ER_TPM_BENCH_KEY_AES_128 = 2u,
+  ER_TPM_BENCH_DIGEST_SHA256 = 1u,
+  ER_TPM_BENCH_DIGEST_HMAC_SHA256 = 2u,
   ER_TPM_BENCH_COMMAND_BYTES = 512u,
   ER_TPM_BENCH_RESPONSE_BYTES = 4096u
 };
@@ -105,15 +110,13 @@ static UINT8 er_tpm_bench_calibrate_cycles(EFI_SYSTEM_TABLE* system_table,
   return (UINT8)(*out_cycles_per_us != 0u);
 }
 
-static UINT8 er_tpm_bench_crb_transact(void* user,
-                                       const UINT8* command,
-                                       UINT32 command_len,
-                                       UINT8* response,
-                                       UINT32 response_capacity,
-                                       UINT32* out_response_len) {
-  ErTpmBenchTransport* transport = (ErTpmBenchTransport*)user;
-
-  if (transport == 0) {
+static UINT8 er_tpm_bench_transport_transact(ErTpmBenchTransport* transport,
+                                             const UINT8* command,
+                                             UINT32 command_len,
+                                             UINT8* response,
+                                             UINT32 response_capacity,
+                                             UINT32* out_response_len) {
+  if (transport == 0 || command == 0 || response == 0 || out_response_len == 0) {
     return 0u;
   }
   ++transport->calls;
@@ -123,6 +126,20 @@ static UINT8 er_tpm_bench_crb_transact(void* user,
                              response,
                              response_capacity,
                              out_response_len);
+}
+
+static UINT8 er_tpm_bench_crb_transact(void* user,
+                                       const UINT8* command,
+                                       UINT32 command_len,
+                                       UINT8* response,
+                                       UINT32 response_capacity,
+                                       UINT32* out_response_len) {
+  return er_tpm_bench_transport_transact((ErTpmBenchTransport*)user,
+                                         command,
+                                         command_len,
+                                         response,
+                                         response_capacity,
+                                         out_response_len);
 }
 
 static UINT8 er_tpm_bench_get_capability(ErTpmBenchTransport* transport,
@@ -143,13 +160,12 @@ static UINT8 er_tpm_bench_get_capability(ErTpmBenchTransport* transport,
                                           &command_len) == 0u) {
     return 0u;
   }
-  ++transport->calls;
-  return er_tpm_crb_transact(&transport->transport,
-                             command,
-                             command_len,
-                             response,
-                             response_capacity,
-                             out_response_len);
+  return er_tpm_bench_transport_transact(transport,
+                                         command,
+                                         command_len,
+                                         response,
+                                         response_capacity,
+                                         out_response_len);
 }
 
 static UINT8 er_tpm_bench_startup(ErTpmBenchTransport* transport) {
@@ -178,6 +194,32 @@ static UINT8 er_tpm_bench_startup(ErTpmBenchTransport* transport) {
                  response_code == ER_TPM_RC_INITIALIZE);
 }
 
+static UINT8 er_tpm_bench_key_load_result(ErTpmBenchState* state,
+                                          UINT8 key_loaded,
+                                          UINT32* out_response_code) {
+  if (state == 0 || out_response_code == 0) {
+    return 0u;
+  }
+  if (key_loaded == 0u) {
+    *out_response_code = er_tpm_response_code(state->tls_tpm.response,
+                                              state->tls_tpm.last_response_len);
+    return 0u;
+  }
+  *out_response_code = ER_TPM_RC_SUCCESS;
+  return 1u;
+}
+
+static void er_tpm_bench_fill_sequence(UINT8* buffer, UINT32 buffer_len, UINT8 seed) {
+  UINT32 i;
+
+  if (buffer == 0) {
+    return;
+  }
+  for (i = 0u; i < buffer_len; ++i) {
+    buffer[i] = (UINT8)((UINT32)seed + i);
+  }
+}
+
 static UINT8 er_tpm_bench_load_key(ErTpmBenchState* state,
                                    UINT8 key_type,
                                    UINT32* out_handle,
@@ -188,28 +230,22 @@ static UINT8 er_tpm_bench_load_key(ErTpmBenchState* state,
   *out_response_code = ER_TPM_RC_METAL_PROTOCOL;
   switch (key_type) {
     case ER_TPM_BENCH_KEY_HMAC_SHA256:
-      if (er_tls_tpm_load_hmac_sha256_key(&state->tls_tpm,
+      return er_tpm_bench_key_load_result(
+          state,
+          er_tls_tpm_load_hmac_sha256_key(&state->tls_tpm,
                                           state->data,
                                           ER_TPM_SHA256_DIGEST_LEN,
-                                          out_handle) == 0u) {
-        *out_response_code = er_tpm_response_code(state->tls_tpm.response,
-                                                  state->tls_tpm.last_response_len);
-        return 0u;
-      }
-      *out_response_code = ER_TPM_RC_SUCCESS;
-      return 1u;
+                                          out_handle),
+          out_response_code);
     case ER_TPM_BENCH_KEY_AES_128:
-      if (er_tls_tpm_load_aes_key(&state->tls_tpm,
+      return er_tpm_bench_key_load_result(
+          state,
+          er_tls_tpm_load_aes_key(&state->tls_tpm,
                                   state->key,
                                   ER_TPM_AES_128_KEY_LEN,
                                   ER_TPM_AES_128_KEY_BITS,
-                                  out_handle) == 0u) {
-        *out_response_code = er_tpm_response_code(state->tls_tpm.response,
-                                                  state->tls_tpm.last_response_len);
-        return 0u;
-      }
-      *out_response_code = ER_TPM_RC_SUCCESS;
-      return 1u;
+                                  out_handle),
+          out_response_code);
     default:
       return 0u;
   }
@@ -225,7 +261,6 @@ static UINT8 er_tpm_bench_init(EFI_SYSTEM_TABLE* system_table,
   UINT8 response[ER_TPM_BENCH_RESPONSE_BYTES];
   UINT32 response_len;
   UINT32 response_code;
-  UINT32 i;
 
   if (system_table == 0 || state == 0) {
     return 0u;
@@ -287,15 +322,15 @@ static UINT8 er_tpm_bench_init(EFI_SYSTEM_TABLE* system_table,
     return 0u;
   }
 
-  for (i = 0u; i < ER_TPM_BENCH_DATA_BYTES; ++i) {
-    state->data[i] = (UINT8)i;
-  }
-  for (i = 0u; i < ER_TPM_AES_128_KEY_LEN; ++i) {
-    state->key[i] = (UINT8)(0x40u + i);
-  }
-  for (i = 0u; i < ER_TPM_AES_BLOCK_LEN; ++i) {
-    state->iv[i] = (UINT8)(0x80u + i);
-  }
+  er_tpm_bench_fill_sequence(state->data,
+                             ER_TPM_BENCH_DATA_BYTES,
+                             ER_TPM_BENCH_DATA_SEED);
+  er_tpm_bench_fill_sequence(state->key,
+                             ER_TPM_AES_128_KEY_LEN,
+                             ER_TPM_BENCH_KEY_SEED);
+  er_tpm_bench_fill_sequence(state->iv,
+                             ER_TPM_AES_BLOCK_LEN,
+                             ER_TPM_BENCH_IV_SEED);
 
   if (er_tpm_bench_load_key(state,
                             ER_TPM_BENCH_KEY_HMAC_SHA256,
@@ -342,34 +377,47 @@ static UINT8 er_tpm_bench_get_random_case(void* user) {
   return 1u;
 }
 
-static UINT8 er_tpm_bench_sha256_case(void* user) {
-  ErTpmBenchState* state = (ErTpmBenchState*)user;
+static UINT8 er_tpm_bench_digest_case(ErTpmBenchState* state, UINT8 digest_case) {
+  UINT8 ok;
 
-  if (state == 0 ||
-      er_tls_tpm_sha256(&state->tls_tpm,
-                        state->data,
-                        ER_TPM_BENCH_DATA_BYTES,
-                        state->digest) == 0u) {
+  if (state == 0) {
+    return 0u;
+  }
+  switch (digest_case) {
+    case ER_TPM_BENCH_DIGEST_SHA256:
+      ok = er_tls_tpm_sha256(&state->tls_tpm,
+                             state->data,
+                             ER_TPM_BENCH_DATA_BYTES,
+                             state->digest);
+      break;
+    case ER_TPM_BENCH_DIGEST_HMAC_SHA256:
+      if (state->hmac_ready == 0u) {
+        return 0u;
+      }
+      ok = er_tls_tpm_hmac_sha256(&state->tls_tpm,
+                                  state->hmac_handle,
+                                  state->data,
+                                  ER_TPM_BENCH_DATA_BYTES,
+                                  state->digest);
+      break;
+    default:
+      return 0u;
+  }
+  if (ok == 0u) {
     return 0u;
   }
   state->sink += state->digest[0];
   return 1u;
 }
 
-static UINT8 er_tpm_bench_hmac_case(void* user) {
-  ErTpmBenchState* state = (ErTpmBenchState*)user;
+static UINT8 er_tpm_bench_sha256_case(void* user) {
+  return er_tpm_bench_digest_case((ErTpmBenchState*)user,
+                                  ER_TPM_BENCH_DIGEST_SHA256);
+}
 
-  if (state == 0 ||
-      state->hmac_ready == 0u ||
-      er_tls_tpm_hmac_sha256(&state->tls_tpm,
-                             state->hmac_handle,
-                             state->data,
-                             ER_TPM_BENCH_DATA_BYTES,
-                             state->digest) == 0u) {
-    return 0u;
-  }
-  state->sink += state->digest[0];
-  return 1u;
+static UINT8 er_tpm_bench_hmac_case(void* user) {
+  return er_tpm_bench_digest_case((ErTpmBenchState*)user,
+                                  ER_TPM_BENCH_DIGEST_HMAC_SHA256);
 }
 
 static UINT8 er_tpm_bench_aes_case(void* user) {
