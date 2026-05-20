@@ -108,9 +108,6 @@ static int erc_is_unapproved_external_dependency_path(const char* path) {
       erc_is_allowed_third_party_path(path) == 0) {
     return 1;
   }
-  if (strncmp(path, ERC_VENDOR_UI_DIR, sizeof(ERC_VENDOR_UI_DIR) - 1u) == 0) {
-    return 1;
-  }
   return 0;
 }
 
