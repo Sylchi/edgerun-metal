@@ -8,8 +8,25 @@
 #define CODEX_CONTEXT_PROCESS_LINE_LIMIT 40u
 #define CODEX_FENCE_MARKER_LEN 3u
 #define CODEX_MARKDOWN_HEADING_MAX_DEPTH 6u
+#define CODEX_SELF_TEST_SINGLE_TOOL_COUNT 1u
+#define CODEX_SELF_TEST_SINGLE_OUTPUT_ITEM_COUNT 1u
 #define CODEX_SELF_TEST_GAME_POSITIVE_FAILURE 32
 #define CODEX_SELF_TEST_GAME_NEGATIVE_FAILURE 33
+
+typedef enum {
+    CODEX_SELF_TEST_C_FENCE_FAILURE = 20,
+    CODEX_SELF_TEST_C_FENCE_LANGUAGE_FAILURE,
+    CODEX_SELF_TEST_MARKDOWN_FENCE_FAILURE,
+    CODEX_SELF_TEST_MARKDOWN_FENCE_LANGUAGE_FAILURE,
+    CODEX_SELF_TEST_EMPTY_FENCE_FAILURE,
+    CODEX_SELF_TEST_EMPTY_FENCE_LANGUAGE_FAILURE,
+    CODEX_SELF_TEST_NON_FENCE_FAILURE,
+    CODEX_SELF_TEST_TOOL_COUNT_FAILURE,
+    CODEX_SELF_TEST_OUTPUT_ITEM_COUNT_FAILURE,
+    CODEX_SELF_TEST_TOOL_NAME_FAILURE,
+    CODEX_SELF_TEST_TOOL_ARGUMENTS_FAILURE,
+    CODEX_SELF_TEST_TOOL_CALL_ID_FAILURE
+} CodexSelfTestFailure;
 
 typedef enum {
     CODEX_RESPONSE_LANG_TEXT = 0,
@@ -35,11 +52,12 @@ static char *context_tree_entry_new(const char *path) {
     if (!first) return xstrdup(path);
     const char *second = strchr(first + 1, '/');
     if (!second) return xstrdup(path);
+    const char *collapsed_suffix = "/...";
 
     Buffer b;
     buffer_init(&b);
     buffer_append(&b, path, (size_t)(second - path));
-    buffer_append(&b, "/...", 4);
+    buffer_append(&b, collapsed_suffix, strlen(collapsed_suffix));
     return b.data;
 }
 
@@ -589,13 +607,17 @@ static int enhanced_self_test(void) {
     int base = self_test();
     if (base != 0) return base;
     CodexResponseLanguage language = CODEX_RESPONSE_LANG_TEXT;
-    if (!codex_markdown_fence_line("```c", 4, &language)) return 20;
-    if (language != CODEX_RESPONSE_LANG_C) return 21;
-    if (!codex_markdown_fence_line("```md", 5, &language)) return 22;
-    if (language != CODEX_RESPONSE_LANG_MARKDOWN) return 23;
-    if (!codex_markdown_fence_line("```", 3, &language)) return 24;
-    if (language != CODEX_RESPONSE_LANG_OTHER) return 25;
-    if (codex_markdown_fence_line("  text", 6, &language)) return 26;
+    if (!codex_markdown_fence_line("```c", strlen("```c"), &language)) {
+        return CODEX_SELF_TEST_C_FENCE_FAILURE;
+    }
+    if (language != CODEX_RESPONSE_LANG_C) return CODEX_SELF_TEST_C_FENCE_LANGUAGE_FAILURE;
+    if (!codex_markdown_fence_line("```md", strlen("```md"), &language)) {
+        return CODEX_SELF_TEST_MARKDOWN_FENCE_FAILURE;
+    }
+    if (language != CODEX_RESPONSE_LANG_MARKDOWN) return CODEX_SELF_TEST_MARKDOWN_FENCE_LANGUAGE_FAILURE;
+    if (!codex_markdown_fence_line("```", strlen("```"), &language)) return CODEX_SELF_TEST_EMPTY_FENCE_FAILURE;
+    if (language != CODEX_RESPONSE_LANG_OTHER) return CODEX_SELF_TEST_EMPTY_FENCE_LANGUAGE_FAILURE;
+    if (codex_markdown_fence_line("  text", strlen("  text"), &language)) return CODEX_SELF_TEST_NON_FENCE_FAILURE;
 
     AgentTurn turn;
     agent_turn_init(&turn);
@@ -607,11 +629,14 @@ static int enhanced_self_test(void) {
         "{\"type\":\"response.output_item.done\",\"item\":{\"type\":"
         "\"function_call\",\"name\":\"read_code\",\"arguments\":\"{}\","
         "\"call_id\":\"call_1\"}}");
-    if (turn.tool_count != 1) return 27;
-    if (turn.output_items.count != 1) return 28;
-    if (strcmp(turn.tools[0].name, "read_code") != 0) return 29;
-    if (strcmp(turn.tools[0].arguments, "{}") != 0) return 30;
-    if (strcmp(turn.tools[0].call_id, "call_1") != 0) return 31;
+    if (turn.tool_count != CODEX_SELF_TEST_SINGLE_TOOL_COUNT) return CODEX_SELF_TEST_TOOL_COUNT_FAILURE;
+    if (turn.output_items.count != CODEX_SELF_TEST_SINGLE_OUTPUT_ITEM_COUNT) {
+        return CODEX_SELF_TEST_OUTPUT_ITEM_COUNT_FAILURE;
+    }
+    const ToolCall *tool = turn.tools;
+    if (strcmp(tool->name, "read_code") != 0) return CODEX_SELF_TEST_TOOL_NAME_FAILURE;
+    if (strcmp(tool->arguments, "{}") != 0) return CODEX_SELF_TEST_TOOL_ARGUMENTS_FAILURE;
+    if (strcmp(tool->call_id, "call_1") != 0) return CODEX_SELF_TEST_TOOL_CALL_ID_FAILURE;
     codex_response_render_state_free(&render);
     agent_turn_free(&turn);
 
