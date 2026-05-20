@@ -8,14 +8,22 @@
  */
 
 #include "er_ieee80211_ap.h"
+#include "er_firmware_loader.h"
 #include "er_pi_zero2w.h"
 
 #define ER_CYW43438_ABI_VERSION 1u
+#define ER_CYW43438_SDIO_VENDOR_BROADCOM 0x02d0u
+#define ER_CYW43438_SDIO_DEVICE_BCM43430 0xa9a6u
+#define ER_CYW43438_FIRMWARE_INSTANCE_RAM 0u
+#define ER_CYW43438_FIRMWARE_INSTANCE_NVRAM 1u
+#define ER_CYW43438_FIRMWARE_INSTANCE_CLM_BLOB 2u
+#define ER_CYW43438_FIRMWARE_SOURCE_COUNT 3u
 #define ER_CYW43438_AP_TEMPLATE_COUNT 2u
 #define ER_CYW43438_AP_STAGE_COUNT 4u
 #define ER_CYW43438_AP_BLOCKED_NONE 0u
 #define ER_CYW43438_AP_BLOCKED_NO_RCA 1u
-#define ER_CYW43438_AP_BLOCKED_NO_FIRMWARE_REGISTER_EXECUTOR 2u
+#define ER_CYW43438_AP_BLOCKED_NO_FIRMWARE 2u
+#define ER_CYW43438_AP_BLOCKED_NO_FIRMWARE_REGISTER_EXECUTOR 4u
 
 typedef enum {
   ER_CYW43438_AP_STAGE_SDIO_IDENTITY = 1,
@@ -52,6 +60,50 @@ typedef struct {
   ErCyw43438ApStage stages[ER_CYW43438_AP_STAGE_COUNT];
 } ErCyw43438ApPath;
 
+typedef struct {
+  ErFirmwareImage ram;
+  ErFirmwareImage nvram;
+  ErFirmwareImage clm_blob;
+} ErCyw43438FirmwareSet;
+
+typedef struct {
+  UINT16 abi_version;
+  UINT16 reserved;
+  ErCyw43438FirmwareSet firmware;
+  ErCyw43438ApPath ap_path;
+} ErCyw43438OpenApBootDevice;
+
+void er_cyw43438_clear_firmware_set(ErCyw43438FirmwareSet* firmware);
+void er_cyw43438_clear_open_ap_boot_device(
+    ErCyw43438OpenApBootDevice* device);
+UINT8 er_cyw43438_add_pi_zero_w_firmware_sources(ErBootConfig* config);
+UINT8 er_cyw43438_load_pi_zero_w_firmware(
+    const ErCryptoProvider* crypto,
+    const ErBootConfig* config,
+    ErFirmwareReadFn read_fn,
+    void* read_ctx,
+    UINT8* ram_bytes,
+    UINTN ram_capacity,
+    UINT8* nvram_bytes,
+    UINTN nvram_capacity,
+    UINT8* clm_blob_bytes,
+    UINTN clm_blob_capacity,
+    ErCyw43438FirmwareSet* out_firmware);
+UINT8 er_cyw43438_prepare_open_l2_ap_boot_device(
+    const ErCryptoProvider* crypto,
+    const ErBootConfig* config,
+    ErFirmwareReadFn read_fn,
+    void* read_ctx,
+    UINT8* ram_bytes,
+    UINTN ram_capacity,
+    UINT8* nvram_bytes,
+    UINTN nvram_capacity,
+    UINT8* clm_blob_bytes,
+    UINTN clm_blob_capacity,
+    const ErWifiL2ApPlan* ap_plan,
+    UINT32 relative_card_address,
+    const UINT8 probe_station_mac[ER_NET_MAC_LEN],
+    ErCyw43438OpenApBootDevice* out_device);
 UINT8 er_cyw43438_prepare_open_l2_ap_path(
     const ErWifiL2ApPlan* ap_plan,
     UINT32 relative_card_address,

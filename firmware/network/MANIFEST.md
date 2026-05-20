@@ -6,6 +6,9 @@ Firmware files in this directory use the EFI boot-loader name
 
 | File | Source file | Device | Role | Bytes | SHA-256 |
 | --- | --- | --- | --- | ---: | --- |
+| `02d0.a9a6.0` | RPi-Distro `debian/config/brcm80211/cypress/cyfmac43430-sdio.bin` | SDIO `02d0:a9a6` | CYW43438/BCM43430 RAM firmware | 399344 | `0717f8e798f3962230e76e9d840385ba127a38d31d6a55acd5c97cf53e4acc9d` |
+| `02d0.a9a6.1` | RPi-Distro `debian/config/brcm80211/brcm/brcmfmac43430-sdio.txt` | SDIO `02d0:a9a6` | Pi Zero W CYW43438 NVRAM board parameters | 1121 | `fc3949a4c32f07c18308e7e145c7615be314158e7d714a80e04e4791f16495f9` |
+| `02d0.a9a6.2` | RPi-Distro `debian/config/brcm80211/cypress/cyfmac43430-sdio.clm_blob` | SDIO `02d0:a9a6` | CYW43438/BCM43430 CLM regulatory blob | 4733 | `3376b9c9b32d16bf762e21c7fafb665365070ae240d092498d0d1987c22022aa` |
 | `10ec.8922.0` | Realtek rtw89 firmware | `10ec:8922` | RTL8922AE firmware | 1849226 | `d11927f593c82879bd0437435475d7915a60932374747984b3dc906a23009dea` |
 | `168c.003e.0` | `/lib/firmware/ath10k/QCA6174/hw3.0/firmware-6.bin.zst` | `168c:003e` | QCA6174 hw3.0 firmware | 706360 | `04d3bad5efa3f9fbe3ba53fd3e25fa9b0585ed227eea8111303b4e08861f979d` |
 | `168c.003e.1` | `/lib/firmware/ath10k/QCA6174/hw3.0/board-2.bin.zst` | `168c:003e` | QCA6174 board database | 740076 | `66e83dde1c9af535df1fcd17c72971a96a263357300e921b358d35a353227d60` |
@@ -28,6 +31,7 @@ Observed hardware:
 | Surface Go 1 | Linux PCI | `168c:003e` Qualcomm Atheros QCA6174/QCA61x4A | Expected ath10k PCI device. Surface Go reports commonly use subsystem `168c:3370`; Surface Go LTE/Wi-Fi reports may use `168c:3371`. Board selection depends on subsystem data inside `board-2.bin`. |
 | Wavlink WS-WN572HP3 4G | OpenWrt `24.10.5`, target `ramips/mt7621`, arch `mipsel_24kc` | `14c3:7603` MediaTek MT7603 | 2.4 GHz radio, driver `mt7603e`, AP-capable |
 | Wavlink WS-WN572HP3 4G | OpenWrt `24.10.5`, target `ramips/mt7621`, arch `mipsel_24kc` | `14c3:7663` MediaTek MT7663 | 5 GHz radio, driver `mt7615e`, AP/STA-capable but disabled in the observed config |
+| Raspberry Pi Zero W v1.1 | SDIO | `02d0:a9a6` Broadcom/Cypress CYW43438/BCM43430 | Firmware paths map to `brcmfmac43430-sdio.raspberrypi,model-zero-w.*` symlinks in Raspberry Pi OS firmware packaging |
 
 Architecture constraints from the observed set:
 
