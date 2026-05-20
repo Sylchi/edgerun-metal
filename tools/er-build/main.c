@@ -52,6 +52,7 @@ static const char ERB_BUILD_DIR[] = ".build";
 static const char ERB_INTERNAL_BUILD_DIR[] = ".build/er-build-out";
 static const char ERB_CRYPTO_BUILD_DIR[] = ".build/er-build-out/crypto";
 static const char ERB_VARFONT_BUILD_DIR[] = ".build/er-build-out/varfont";
+static const char ERB_UI_CORE_BUILD_DIR[] = ".build/er-build-out/ui-core";
 static const char ERB_CODEX_BIN[] = ".build/codex";
 static const char ERB_REPO_CHECK_BIN[] = ".build/repo-check";
 static const char ERB_ERWIRE_DECODE_BIN[] = ".build/erwire-decode";
@@ -62,6 +63,7 @@ static const char ERB_SDCARD_PROBE_BIN[] = ".build/sdcard-probe";
 static const char ERB_PI_USB_BOOT_BIN[] = ".build/pi-usb-boot";
 static const char ERB_CRYPTO_TEST_BIN[] = ".build/er-build-out/crypto/test_blake3";
 static const char ERB_VARFONT_TEST_BIN[] = ".build/er-build-out/varfont/vrfont_tests";
+static const char ERB_UI_CORE_TEST_BIN[] = ".build/er-build-out/ui-core/er_ui_core_tests";
 static const char ERB_APP_SOURCE_NAME[] = "app.c";
 static const char ERB_APP_MANIFEST_NAME[] = "app.manifest";
 static const char ERB_APP_BUILD_DIR_NAME[] = ".build";
@@ -351,7 +353,10 @@ static int erb_prepare_dirs(void) {
   if (erb_mkdir_one(ERB_CRYPTO_BUILD_DIR) != 0) {
     return 1;
   }
-  return erb_mkdir_one(ERB_VARFONT_BUILD_DIR);
+  if (erb_mkdir_one(ERB_VARFONT_BUILD_DIR) != 0) {
+    return 1;
+  }
+  return erb_mkdir_one(ERB_UI_CORE_BUILD_DIR);
 }
 
 static int erb_compile_common(ErbArgs* args, const char* output) {
@@ -1497,6 +1502,91 @@ static int erb_target_varfont_test(int print_plan) {
   return erb_run_program(ERB_VARFONT_TEST_BIN, print_plan);
 }
 
+static int erb_target_ui_core_test(int print_plan) {
+  ErbArgs args;
+
+  if (erb_prepare_dirs() != 0 || erb_compile_common(&args, ERB_UI_CORE_TEST_BIN) != 0) {
+    return 1;
+  }
+  if (erb_args_push(&args, "-ffreestanding") != 0 ||
+      erb_args_push(&args, "-fno-builtin") != 0 ||
+      erb_args_push(&args, "-fno-stack-protector") != 0 ||
+      erb_args_push(&args, "-Iedgerun-ui-core/include") != 0 ||
+      erb_args_push(&args, "-Iedgerun-ui-core/varfont/include") != 0 ||
+      erb_args_push(&args, "-Iedgerun-ui-core/varfont/src") != 0 ||
+      erb_args_push(&args, "-Iinclude") != 0 ||
+      erb_args_push(&args, "-DER_UI_REPO_ROOT=\".\"") != 0 ||
+      erb_args_push(&args, "edgerun-ui-core/tests/test_assets.c") != 0 ||
+      erb_args_push(&args, "edgerun-ui-core/tests/test_components.c") != 0 ||
+      erb_args_push(&args, "edgerun-ui-core/tests/test_ledger_app.c") != 0 ||
+      erb_args_push(&args, "edgerun-ui-core/tests/test_initial_setup.c") != 0 ||
+      erb_args_push(&args, "edgerun-ui-core/tests/test_node.c") != 0 ||
+      erb_args_push(&args, "edgerun-ui-core/tests/test_preset_code.c") != 0 ||
+      erb_args_push(&args, "edgerun-ui-core/tests/test_record_codec.c") != 0 ||
+      erb_args_push(&args, "edgerun-ui-core/tests/test_shell.c") != 0 ||
+      erb_args_push(&args, "edgerun-ui-core/tests/test_runtime.c") != 0 ||
+      erb_args_push(&args, "edgerun-ui-core/tests/test_scene.c") != 0 ||
+      erb_args_push(&args, "edgerun-ui-core/tests/test_text.c") != 0 ||
+      erb_args_push(&args, "edgerun-ui-core/tests/test_spacing.c") != 0 ||
+      erb_args_push(&args, "edgerun-ui-core/src/er_ui_assets.c") != 0 ||
+      erb_args_push(&args, "edgerun-ui-core/src/er_ui_components_catalog.c") != 0 ||
+      erb_args_push(&args, "edgerun-ui-core/src/er_ui_components_catalog_data.c") != 0 ||
+      erb_args_push(&args, "edgerun-ui-core/src/er_ui_components_contracts.c") != 0 ||
+      erb_args_push(&args, "edgerun-ui-core/src/er_ui_components_emit.c") != 0 ||
+      erb_args_push(&args, "edgerun-ui-core/src/er_ui_components_internal.c") != 0 ||
+      erb_args_push(&args, "edgerun-ui-core/src/er_ui_components_preview.c") != 0 ||
+      erb_args_push(&args, "edgerun-ui-core/src/er_ui_components_state.c") != 0 ||
+      erb_args_push(&args, "edgerun-ui-core/src/er_ui_ledger_app.c") != 0 ||
+      erb_args_push(&args, "edgerun-ui-core/src/er_ui_icon.c") != 0 ||
+      erb_args_push(&args, "edgerun-ui-core/src/er_ui_initial_setup.c") != 0 ||
+      erb_args_push(&args, "edgerun-ui-core/src/er_ui_metal.c") != 0 ||
+      erb_args_push(&args, "edgerun-ui-core/src/er_ui_node.c") != 0 ||
+      erb_args_push(&args, "edgerun-ui-core/src/er_ui_node_accessibility.c") != 0 ||
+      erb_args_push(&args, "edgerun-ui-core/src/er_ui_node_layout.c") != 0 ||
+      erb_args_push(&args, "edgerun-ui-core/src/er_ui_node_render.c") != 0 ||
+      erb_args_push(&args, "edgerun-ui-core/src/er_ui_node_render_controls.c") != 0 ||
+      erb_args_push(&args, "edgerun-ui-core/src/er_ui_node_render_conversation.c") != 0 ||
+      erb_args_push(&args, "edgerun-ui-core/src/er_ui_node_render_panels.c") != 0 ||
+      erb_args_push(&args, "edgerun-ui-core/src/er_ui_painter.c") != 0 ||
+      erb_args_push(&args, "edgerun-ui-core/src/er_ui_primitives.c") != 0 ||
+      erb_args_push(&args, "edgerun-ui-core/src/er_ui_preset_code.c") != 0 ||
+      erb_args_push(&args, "edgerun-ui-core/src/er_ui_record_codec.c") != 0 ||
+      erb_args_push(&args, "edgerun-ui-core/src/er_ui_runtime_focus.c") != 0 ||
+      erb_args_push(&args, "edgerun-ui-core/src/er_ui_runtime_input.c") != 0 ||
+      erb_args_push(&args, "edgerun-ui-core/src/er_ui_runtime_internal.c") != 0 ||
+      erb_args_push(&args, "edgerun-ui-core/src/er_ui_runtime_state.c") != 0 ||
+      erb_args_push(&args, "edgerun-ui-core/src/er_ui_runtime_text.c") != 0 ||
+      erb_args_push(&args, "edgerun-ui-core/src/er_ui_scene.c") != 0 ||
+      erb_args_push(&args, "edgerun-ui-core/src/er_ui_shell.c") != 0 ||
+      erb_args_push(&args, "edgerun-ui-core/src/er_ui_spacing.c") != 0 ||
+      erb_args_push(&args, "edgerun-ui-core/src/er_ui_theme.c") != 0 ||
+      erb_args_push(&args, "edgerun-ui-core/src/er_ui_text.c") != 0 ||
+      erb_args_push(&args, "edgerun-ui-core/varfont/src/vr_font_freestanding.c") != 0 ||
+      erb_args_push(&args, "edgerun-ui-core/varfont/src/vr_font.c") != 0 ||
+      erb_args_push(&args, "edgerun-ui-core/varfont/src/vr_font_utils.c") != 0 ||
+      erb_args_push(&args, "edgerun-ui-core/varfont/src/vr_font_axes.c") != 0 ||
+      erb_args_push(&args, "edgerun-ui-core/varfont/src/vr_font_cmap.c") != 0 ||
+      erb_args_push(&args, "edgerun-ui-core/varfont/src/vr_font_gvar.c") != 0 ||
+      erb_args_push(&args, "edgerun-ui-core/varfont/src/vr_font_gvar_apply.c") != 0 ||
+      erb_args_push(&args, "edgerun-ui-core/varfont/src/vr_font_kern.c") != 0 ||
+      erb_args_push(&args, "edgerun-ui-core/varfont/src/vr_font_tables.c") != 0 ||
+      erb_args_push(&args, "edgerun-ui-core/varfont/src/vr_font_shape.c") != 0 ||
+      erb_args_push(&args, "edgerun-ui-core/varfont/src/vr_font_raster.c") != 0 ||
+      erb_args_push(&args, "edgerun-ui-core/varfont/src/vr_font_raster_geometry.c") != 0 ||
+      erb_args_push(&args, "edgerun-ui-core/varfont/src/vr_font_raster_glyph.c") != 0 ||
+      erb_args_push(&args, "edgerun-ui-core/varfont/src/vr_font_raster_msdf.c") != 0 ||
+      erb_args_push(&args, "edgerun-ui-core/varfont/src/vr_font_raster_outline.c") != 0 ||
+      erb_args_push(&args, "edgerun-ui-core/varfont/src/vr_font_raster_storage.c") != 0 ||
+      erb_args_push(&args, "edgerun-ui-core/varfont/src/vr_font_atlas.c") != 0 ||
+      erb_args_push(&args, "-lm") != 0) {
+    return 1;
+  }
+  if (erb_run_args(&args, print_plan) != 0) {
+    return 1;
+  }
+  return erb_run_program(ERB_UI_CORE_TEST_BIN, print_plan);
+}
+
 static int erb_usage(void) {
   fprintf(stderr,
           "usage: er-build [--print-plan] <target> [args]\n"
@@ -1505,7 +1595,7 @@ static int erb_usage(void) {
           "         repo-agent-swarm [--scope PATH] [--concurrency N] [--limit N]\n"
           "         pi-serial-verify sdcard-probe pi-usb-boot\n"
           "         repo-check repo-test repo-progress <scope> [test-target]\n"
-          "         crypto-test varfont-test\n");
+          "         crypto-test varfont-test ui-core-test\n");
   return 2;
 }
 
@@ -1594,6 +1684,9 @@ int main(int argc, char** argv) {
   }
   if (strcmp(target, "varfont-test") == 0) {
     return erb_target_varfont_test(print_plan);
+  }
+  if (strcmp(target, "ui-core-test") == 0) {
+    return erb_target_ui_core_test(print_plan);
   }
   return erb_usage();
 }
