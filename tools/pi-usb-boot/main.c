@@ -604,7 +604,8 @@ static void erpiusb_close(ErPiUsbDevice* device) {
 
 static int erpiusb_ep_write(ErPiUsbDevice* device,
                             const unsigned char* bytes,
-                            uint32_t len) {
+                            uint32_t len,
+                            int packetized) {
   uint32_t offset = 0u;
   int ret;
 
@@ -621,7 +622,8 @@ static int erpiusb_ep_write(ErPiUsbDevice* device,
   }
   while (offset < len) {
     uint32_t chunk = len - offset;
-    uint32_t max_chunk = len <= ERPIUSB_SMALL_BULK_THRESHOLD_BYTES ?
+    uint32_t max_chunk = (packetized != 0 ||
+                          len <= ERPIUSB_SMALL_BULK_THRESHOLD_BYTES) ?
                          ERPIUSB_PACKET_BYTES :
                          ERPIUSB_MAX_BULK_BYTES;
     if (chunk > max_chunk) {
@@ -685,8 +687,8 @@ static int erpiusb_send_second_stage(const ErPiUsbConfig* cfg,
   if (cfg->verbose != 0) {
     fprintf(stderr, "pi-usb-boot: sending %s (%u bytes)\n", name, len);
   }
-  ok = erpiusb_ep_write(device, header, sizeof(header)) != 0 &&
-       erpiusb_ep_write(device, bytes, len) != 0;
+  ok = erpiusb_ep_write(device, header, sizeof(header), 0) != 0 &&
+       erpiusb_ep_write(device, bytes, len, 0) != 0;
   free(bytes);
   if (ok == 0) {
     return 0;
@@ -722,14 +724,17 @@ static int erpiusb_serve_file(const ErPiUsbConfig* cfg,
 
   if (erpiusb_path_join(path, sizeof(path), cfg->boot_dir, name) == 0 ||
       erpiusb_read_file(path, &bytes, &size) == 0) {
-    (void)erpiusb_ep_write(device, NULL, 0u);
+    (void)erpiusb_ep_write(device, NULL, 0u, 0);
     fprintf(stderr, "pi-usb-boot: missing requested file %s\n", name);
     return 0;
   }
   if (cfg->verbose != 0) {
     fprintf(stderr, "pi-usb-boot: serving %s (%u bytes)\n", name, size);
   }
-  ok = erpiusb_ep_write(device, bytes, size);
+  ok = erpiusb_ep_write(device,
+                        bytes,
+                        size,
+                        strcmp(name, "kernel.img") == 0);
   free(bytes);
   return ok;
 }
@@ -750,7 +755,7 @@ static int erpiusb_file_server(const ErPiUsbConfig* cfg,
     }
     req.name[ERPIUSB_FILE_NAME_BYTES - 1u] = '\0';
     if (req.command == ERPIUSB_CMD_DONE || req.name[0] == '\0') {
-      (void)erpiusb_ep_write(device, NULL, 0u);
+      (void)erpiusb_ep_write(device, NULL, 0u, 0);
       return 1;
     }
     if (cfg->verbose != 0) {
@@ -761,7 +766,7 @@ static int erpiusb_file_server(const ErPiUsbConfig* cfg,
       case ERPIUSB_CMD_GET_FILE_SIZE:
         if (erpiusb_path_join(path, sizeof(path), cfg->boot_dir, req.name) == 0 ||
             erpiusb_file_size(path, &size) == 0) {
-          if (erpiusb_ep_write(device, NULL, 0u) == 0) {
+          if (erpiusb_ep_write(device, NULL, 0u, 0) == 0) {
             return 0;
           }
           break;
