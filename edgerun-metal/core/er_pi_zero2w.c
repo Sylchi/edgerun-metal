@@ -23,6 +23,7 @@ enum {
   ER_PI_MMC_RCA_ARGUMENT_BITS = 16u,
   ER_PI_EMMC_CMDTM_RESPONSE_BITS = 16u,
   ER_PI_EMMC_CMDTM_RESPONSE_NONE = 0u,
+  ER_PI_EMMC_CMDTM_RESPONSE_136 = 1u,
   ER_PI_EMMC_CMDTM_RESPONSE_48 = 2u,
   ER_PI_EMMC_CMDTM_BLOCK_COUNT_ENABLE = 1u << 1u,
   ER_PI_EMMC_CMDTM_DATA_READ = 1u << 4u,
@@ -34,6 +35,8 @@ enum {
   ER_PI_EMMC_WORD_BYTES = 4u,
   ER_PI_EMMC_INTERRUPT_ALL = 0xffffffffu,
   ER_PI_ZERO2W_SDIO_OCR_3V3 = 0x00300000u,
+  ER_PI_ZERO2W_SD_MEMORY_IF_COND_3V3_CHECK = 0x000001aau,
+  ER_PI_ZERO2W_SD_MEMORY_OCR_3V3_HCS = 0x40300000u,
   ER_PI_ZERO2W_SDIO_NO_ARGUMENT = 0u
 };
 
@@ -220,10 +223,13 @@ UINT32 er_pi_mmc_relative_card_from_r6(UINT32 response) {
 static UINT8 er_pi_mmc_response_requires_crc(UINT32 response_kind) {
   switch (response_kind) {
     case ER_PI_MMC_RESPONSE_R1:
+    case ER_PI_MMC_RESPONSE_R2:
     case ER_PI_MMC_RESPONSE_R5:
     case ER_PI_MMC_RESPONSE_R6:
+    case ER_PI_MMC_RESPONSE_R7:
       return 1u;
     case ER_PI_MMC_RESPONSE_NONE:
+    case ER_PI_MMC_RESPONSE_R3:
     case ER_PI_MMC_RESPONSE_R4:
       return 0u;
     default:
@@ -236,8 +242,11 @@ static UINT8 er_pi_mmc_response_requires_index(UINT32 response_kind) {
     case ER_PI_MMC_RESPONSE_R1:
     case ER_PI_MMC_RESPONSE_R5:
     case ER_PI_MMC_RESPONSE_R6:
+    case ER_PI_MMC_RESPONSE_R7:
       return 1u;
     case ER_PI_MMC_RESPONSE_NONE:
+    case ER_PI_MMC_RESPONSE_R2:
+    case ER_PI_MMC_RESPONSE_R3:
     case ER_PI_MMC_RESPONSE_R4:
       return 0u;
     default:
@@ -249,10 +258,14 @@ static UINT32 er_pi_emmc_response_bits(UINT32 response_kind) {
   switch (response_kind) {
     case ER_PI_MMC_RESPONSE_NONE:
       return ER_PI_EMMC_CMDTM_RESPONSE_NONE;
+    case ER_PI_MMC_RESPONSE_R2:
+      return ER_PI_EMMC_CMDTM_RESPONSE_136;
     case ER_PI_MMC_RESPONSE_R1:
+    case ER_PI_MMC_RESPONSE_R3:
     case ER_PI_MMC_RESPONSE_R4:
     case ER_PI_MMC_RESPONSE_R5:
     case ER_PI_MMC_RESPONSE_R6:
+    case ER_PI_MMC_RESPONSE_R7:
       return ER_PI_EMMC_CMDTM_RESPONSE_48;
     default:
       return ER_PI_EMMC_CMDTM_RESPONSE_NONE;
@@ -314,6 +327,11 @@ UINT8 er_pi_mmc_command_prepare(UINT32 command_index,
         return 0u;
       }
       break;
+    case ER_PI_MMC_CMD_ALL_SEND_CID:
+      if (response_kind != ER_PI_MMC_RESPONSE_R2) {
+        return 0u;
+      }
+      break;
     case ER_PI_MMC_CMD_IO_SEND_OP_COND:
       if (response_kind != ER_PI_MMC_RESPONSE_R4) {
         return 0u;
@@ -329,15 +347,30 @@ UINT8 er_pi_mmc_command_prepare(UINT32 command_index,
         return 0u;
       }
       break;
+    case ER_PI_MMC_CMD_SEND_IF_COND:
+      if (response_kind != ER_PI_MMC_RESPONSE_R7) {
+        return 0u;
+      }
+      break;
     case ER_PI_MMC_CMD_READ_SINGLE_BLOCK:
     case ER_PI_MMC_CMD_WRITE_BLOCK:
       if (response_kind != ER_PI_MMC_RESPONSE_R1) {
         return 0u;
       }
       break;
+    case ER_PI_MMC_ACMD_SD_SEND_OP_COND:
+      if (response_kind != ER_PI_MMC_RESPONSE_R3) {
+        return 0u;
+      }
+      break;
     case ER_PI_MMC_CMD_IO_RW_DIRECT:
     case ER_PI_MMC_CMD_IO_RW_EXTENDED:
       if (response_kind != ER_PI_MMC_RESPONSE_R5) {
+        return 0u;
+      }
+      break;
+    case ER_PI_MMC_CMD_APP_CMD:
+      if (response_kind != ER_PI_MMC_RESPONSE_R1) {
         return 0u;
       }
       break;
@@ -418,6 +451,9 @@ static void er_pi_emmc_command_result_clear(ErPiEmmcCommandResult* result) {
   result->io.response_kind = 0u;
   result->interrupt_value = 0u;
   result->response0 = 0u;
+  result->response1 = 0u;
+  result->response2 = 0u;
+  result->response3 = 0u;
   result->completed = 0u;
   result->error = 0u;
 }
@@ -435,6 +471,9 @@ static UINT8 er_pi_emmc_command_finish(INT64 emmc_handle,
                                        UINT32 interrupt_value,
                                        ErPiEmmcCommandResult* out_result) {
   INT64 response;
+  INT64 response1;
+  INT64 response2;
+  INT64 response3;
 
   if (io == 0 || out_result == 0) {
     return 0u;
@@ -453,6 +492,19 @@ static UINT8 er_pi_emmc_command_finish(INT64 emmc_handle,
       return 0u;
     }
     out_result->response0 = (UINT32)response;
+    if (io->response_kind == ER_PI_MMC_RESPONSE_R2) {
+      response1 = er_mmio_read32(emmc_handle, (INT64)ER_PI_EMMC_REG_RESP1);
+      response2 = er_mmio_read32(emmc_handle, (INT64)ER_PI_EMMC_REG_RESP2);
+      response3 = er_mmio_read32(emmc_handle, (INT64)ER_PI_EMMC_REG_RESP3);
+      if (response1 < 0 || response2 < 0 || response3 < 0) {
+        out_result->error = 1u;
+        out_result->completed = 0u;
+        return 0u;
+      }
+      out_result->response1 = (UINT32)response1;
+      out_result->response2 = (UINT32)response2;
+      out_result->response3 = (UINT32)response3;
+    }
   }
   if (er_mmio_write32(emmc_handle,
                       (INT64)io->interrupt_offset,
@@ -742,6 +794,145 @@ static UINT8 er_pi_zero2w_sdio_plan_add(ErPiZero2wSdioBringupPlan* plan,
   }
 
   plan->command_count += 1u;
+  return 1u;
+}
+
+static UINT8 er_pi_zero2w_sd_memory_plan_add(
+    ErPiZero2wSdMemoryBringupPlan* plan,
+    UINT32 command_index,
+    UINT32 argument,
+    UINT32 response_kind) {
+  if (plan == 0 ||
+      plan->command_count >= ER_PI_ZERO2W_SD_MEMORY_BRINGUP_COMMAND_CAPACITY ||
+      er_pi_mmc_command_prepare(command_index,
+                                argument,
+                                response_kind,
+                                &plan->commands[plan->command_count]) == 0u) {
+    return 0u;
+  }
+
+  plan->command_count += 1u;
+  return 1u;
+}
+
+UINT8 er_pi_zero2w_sd_memory_identity_plan(
+    ErPiZero2wSdMemoryBringupPlan* out_plan) {
+  if (out_plan == 0) {
+    return 0u;
+  }
+
+  out_plan->command_count = 0u;
+  if (er_pi_zero2w_sd_memory_plan_add(out_plan,
+                                      ER_PI_MMC_CMD_GO_IDLE_STATE,
+                                      ER_PI_ZERO2W_SDIO_NO_ARGUMENT,
+                                      ER_PI_MMC_RESPONSE_NONE) == 0u ||
+      er_pi_zero2w_sd_memory_plan_add(
+          out_plan,
+          ER_PI_MMC_CMD_SEND_IF_COND,
+          ER_PI_ZERO2W_SD_MEMORY_IF_COND_3V3_CHECK,
+          ER_PI_MMC_RESPONSE_R7) == 0u ||
+      er_pi_zero2w_sd_memory_plan_add(out_plan,
+                                      ER_PI_MMC_CMD_APP_CMD,
+                                      ER_PI_ZERO2W_SDIO_NO_ARGUMENT,
+                                      ER_PI_MMC_RESPONSE_R1) == 0u ||
+      er_pi_zero2w_sd_memory_plan_add(out_plan,
+                                      ER_PI_MMC_ACMD_SD_SEND_OP_COND,
+                                      ER_PI_ZERO2W_SD_MEMORY_OCR_3V3_HCS,
+                                      ER_PI_MMC_RESPONSE_R3) == 0u ||
+      er_pi_zero2w_sd_memory_plan_add(out_plan,
+                                      ER_PI_MMC_CMD_ALL_SEND_CID,
+                                      ER_PI_ZERO2W_SDIO_NO_ARGUMENT,
+                                      ER_PI_MMC_RESPONSE_R2) == 0u ||
+      er_pi_zero2w_sd_memory_plan_add(out_plan,
+                                      ER_PI_MMC_CMD_SEND_RELATIVE_ADDR,
+                                      ER_PI_ZERO2W_SDIO_NO_ARGUMENT,
+                                      ER_PI_MMC_RESPONSE_R6) == 0u) {
+    return 0u;
+  }
+
+  return 1u;
+}
+
+UINT8 er_pi_zero2w_sd_memory_claim_plan(
+    UINT32 relative_card_address,
+    ErPiZero2wSdMemoryBringupPlan* out_plan) {
+  if (out_plan == 0 ||
+      relative_card_address == 0u ||
+      relative_card_address > ER_PI_MMC_RCA_MASK) {
+    return 0u;
+  }
+
+  out_plan->command_count = 0u;
+  return er_pi_zero2w_sd_memory_plan_add(
+      out_plan,
+      ER_PI_MMC_CMD_SELECT_CARD,
+      er_pi_mmc_relative_card_argument(relative_card_address),
+      ER_PI_MMC_RESPONSE_R1);
+}
+
+static void er_pi_zero2w_sd_memory_state_clear(
+    ErPiZero2wSdMemoryBringupState* state) {
+  UINT32 i;
+
+  if (state == 0) {
+    return;
+  }
+  state->command_count = 0u;
+  state->completed_count = 0u;
+  state->relative_card_address = 0u;
+  state->operating_conditions = 0u;
+  for (i = 0u; i < ER_PI_ZERO2W_SD_MEMORY_BRINGUP_COMMAND_CAPACITY; ++i) {
+    state->responses[i] = 0u;
+  }
+  state->last_interrupt_value = 0u;
+  state->completed = 0u;
+  state->error = 0u;
+}
+
+UINT8 er_pi_zero2w_sd_memory_execute_plan(
+    INT64 emmc_handle,
+    const ErPiZero2wSdMemoryBringupPlan* plan,
+    UINT32 poll_budget_per_command,
+    ErPiZero2wSdMemoryBringupState* out_state) {
+  UINT32 command_index;
+  ErPiEmmcCommandResult result;
+
+  er_pi_zero2w_sd_memory_state_clear(out_state);
+  if (plan == 0 ||
+      out_state == 0 ||
+      plan->command_count == 0u ||
+      plan->command_count > ER_PI_ZERO2W_SD_MEMORY_BRINGUP_COMMAND_CAPACITY ||
+      poll_budget_per_command == 0u) {
+    return 0u;
+  }
+  out_state->command_count = plan->command_count;
+  for (command_index = 0u;
+       command_index < plan->command_count;
+       ++command_index) {
+    if (er_pi_emmc_command_execute(emmc_handle,
+                                   &plan->commands[command_index],
+                                   poll_budget_per_command,
+                                   &result) == 0u) {
+      out_state->last_interrupt_value = result.interrupt_value;
+      out_state->error = 1u;
+      return 0u;
+    }
+    out_state->responses[command_index] = result.response0;
+    out_state->last_interrupt_value = result.interrupt_value;
+    out_state->completed_count += 1u;
+    if (plan->commands[command_index].response_kind == ER_PI_MMC_RESPONSE_R3) {
+      out_state->operating_conditions = result.response0;
+    }
+    if (plan->commands[command_index].response_kind == ER_PI_MMC_RESPONSE_R6) {
+      out_state->relative_card_address =
+          er_pi_mmc_relative_card_from_r6(result.response0);
+      if (out_state->relative_card_address == 0u) {
+        out_state->error = 1u;
+        return 0u;
+      }
+    }
+  }
+  out_state->completed = 1u;
   return 1u;
 }
 

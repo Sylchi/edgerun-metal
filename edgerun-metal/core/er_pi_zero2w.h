@@ -43,19 +43,26 @@
 #define ER_PI_CLOCK_ID_UART 2u
 
 #define ER_PI_MMC_CMD_GO_IDLE_STATE 0u
+#define ER_PI_MMC_CMD_ALL_SEND_CID 2u
 #define ER_PI_MMC_CMD_SEND_RELATIVE_ADDR 3u
 #define ER_PI_MMC_CMD_IO_SEND_OP_COND 5u
 #define ER_PI_MMC_CMD_SELECT_CARD 7u
+#define ER_PI_MMC_CMD_SEND_IF_COND 8u
 #define ER_PI_MMC_CMD_READ_SINGLE_BLOCK 17u
 #define ER_PI_MMC_CMD_WRITE_BLOCK 24u
+#define ER_PI_MMC_ACMD_SD_SEND_OP_COND 41u
 #define ER_PI_MMC_CMD_IO_RW_DIRECT 52u
 #define ER_PI_MMC_CMD_IO_RW_EXTENDED 53u
+#define ER_PI_MMC_CMD_APP_CMD 55u
 
 #define ER_PI_MMC_RESPONSE_NONE 0u
 #define ER_PI_MMC_RESPONSE_R1 1u
+#define ER_PI_MMC_RESPONSE_R2 2u
+#define ER_PI_MMC_RESPONSE_R3 3u
 #define ER_PI_MMC_RESPONSE_R4 4u
 #define ER_PI_MMC_RESPONSE_R5 5u
 #define ER_PI_MMC_RESPONSE_R6 6u
+#define ER_PI_MMC_RESPONSE_R7 7u
 
 #define ER_PI_SDIO_FUNCTION_BACKPLANE 1u
 #define ER_PI_SDIO_FUNCTION_WLAN 2u
@@ -73,6 +80,7 @@
 #define ER_PI_SDIO_CMD53_BLOCK_MODE 1u
 
 #define ER_PI_ZERO2W_SDIO_BRINGUP_COMMAND_CAPACITY 8u
+#define ER_PI_ZERO2W_SD_MEMORY_BRINGUP_COMMAND_CAPACITY 8u
 
 #define ER_PI_EMMC_BLOCK_BYTES 512u
 
@@ -80,6 +88,9 @@
 #define ER_PI_EMMC_REG_ARG1 0x00000008u
 #define ER_PI_EMMC_REG_CMDTM 0x0000000cu
 #define ER_PI_EMMC_REG_RESP0 0x00000010u
+#define ER_PI_EMMC_REG_RESP1 0x00000014u
+#define ER_PI_EMMC_REG_RESP2 0x00000018u
+#define ER_PI_EMMC_REG_RESP3 0x0000001cu
 #define ER_PI_EMMC_REG_DATA 0x00000020u
 #define ER_PI_EMMC_REG_STATUS 0x00000024u
 #define ER_PI_EMMC_REG_INTERRUPT 0x00000030u
@@ -144,6 +155,11 @@ typedef struct {
 } ErPiZero2wSdioBringupPlan;
 
 typedef struct {
+  UINT32 command_count;
+  ErPiMmcCommand commands[ER_PI_ZERO2W_SD_MEMORY_BRINGUP_COMMAND_CAPACITY];
+} ErPiZero2wSdMemoryBringupPlan;
+
+typedef struct {
   UINT32 interrupt_offset;
   UINT32 interrupt_clear_value;
   UINT32 argument_offset;
@@ -158,6 +174,9 @@ typedef struct {
   ErPiEmmcCommandIo io;
   UINT32 interrupt_value;
   UINT32 response0;
+  UINT32 response1;
+  UINT32 response2;
+  UINT32 response3;
   UINT8 completed;
   UINT8 error;
 } ErPiEmmcCommandResult;
@@ -187,6 +206,17 @@ typedef struct {
   UINT8 completed;
   UINT8 error;
 } ErPiZero2wSdioBringupState;
+
+typedef struct {
+  UINT32 command_count;
+  UINT32 completed_count;
+  UINT32 relative_card_address;
+  UINT32 operating_conditions;
+  UINT32 responses[ER_PI_ZERO2W_SD_MEMORY_BRINGUP_COMMAND_CAPACITY];
+  UINT32 last_interrupt_value;
+  UINT8 completed;
+  UINT8 error;
+} ErPiZero2wSdMemoryBringupState;
 
 UINT8 er_pi_zero2w_mmio_map(ErPiZero2wMmio* out_mmio);
 UINT64 er_pi_zero2w_peripheral_phys(UINT64 offset);
@@ -243,6 +273,16 @@ UINT8 er_pi_emmc_write_block(INT64 emmc_handle,
                              const UINT8* block,
                              UINT32 poll_budget,
                              ErPiEmmcBlockResult* out_result);
+UINT8 er_pi_zero2w_sd_memory_identity_plan(
+    ErPiZero2wSdMemoryBringupPlan* out_plan);
+UINT8 er_pi_zero2w_sd_memory_claim_plan(
+    UINT32 relative_card_address,
+    ErPiZero2wSdMemoryBringupPlan* out_plan);
+UINT8 er_pi_zero2w_sd_memory_execute_plan(
+    INT64 emmc_handle,
+    const ErPiZero2wSdMemoryBringupPlan* plan,
+    UINT32 poll_budget_per_command,
+    ErPiZero2wSdMemoryBringupState* out_state);
 UINT8 er_pi_zero2w_sdio_identity_plan(ErPiZero2wSdioBringupPlan* out_plan);
 UINT8 er_pi_zero2w_sdio_claim_plan(UINT32 relative_card_address,
                                    ErPiZero2wSdioBringupPlan* out_plan);
