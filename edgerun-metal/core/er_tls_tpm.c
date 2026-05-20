@@ -4,17 +4,49 @@
 
 #define ER_TLS_TPM_SHA256_ONESHOT_MAX_BYTES 238u
 #define ER_TLS_TPM_SHA256_UPDATE_MAX_BYTES 227u
+#define ER_TLS_TPM_EXTERNAL_KEY_MATERIAL_MAX_BYTES \
+  (ER_TPM_SHA256_DIGEST_LEN + ER_TPM_AES_256_KEY_LEN)
 
 static UINT8 er_tls_tpm_run(ErTlsTpm* tls_tpm, UINT32 command_len, UINT32* out_response_len) {
+  UINT8 ok;
+
   if (tls_tpm == 0 || tls_tpm->transact == 0 || command_len == 0u || out_response_len == 0) {
     return 0u;
   }
-  return tls_tpm->transact(tls_tpm->user,
-                           tls_tpm->command,
-                           command_len,
-                           tls_tpm->response,
-                           (UINT32)sizeof(tls_tpm->response),
-                           out_response_len);
+  ok = tls_tpm->transact(tls_tpm->user,
+                         tls_tpm->command,
+                         command_len,
+                         tls_tpm->response,
+                         (UINT32)sizeof(tls_tpm->response),
+                         out_response_len);
+  if (ok == 0u) {
+    tls_tpm->last_response_len = 0u;
+    return 0u;
+  }
+  tls_tpm->last_response_len = *out_response_len;
+  return 1u;
+}
+
+static UINT8 er_tls_tpm_external_key_unique(ErTlsTpm* tls_tpm,
+                                            const UINT8* key,
+                                            UINT16 key_len,
+                                            UINT8 seed[ER_TPM_SHA256_DIGEST_LEN],
+                                            UINT8 unique[ER_TPM_SHA256_DIGEST_LEN]) {
+  UINT8 material[ER_TLS_TPM_EXTERNAL_KEY_MATERIAL_MAX_BYTES];
+
+  if (tls_tpm == 0 || key == 0 || seed == 0 || unique == 0 ||
+      key_len == 0u ||
+      (UINT32)key_len > ER_TLS_TPM_EXTERNAL_KEY_MATERIAL_MAX_BYTES -
+                            ER_TPM_SHA256_DIGEST_LEN ||
+      er_tls_tpm_get_random(tls_tpm, seed, ER_TPM_SHA256_DIGEST_LEN) == 0u) {
+    return 0u;
+  }
+  er_mem_copy(material, seed, ER_TPM_SHA256_DIGEST_LEN);
+  er_mem_copy(material + ER_TPM_SHA256_DIGEST_LEN, key, key_len);
+  return er_tls_tpm_sha256(tls_tpm,
+                           material,
+                           (UINT16)(ER_TPM_SHA256_DIGEST_LEN + key_len),
+                           unique);
 }
 
 UINT8 er_tls_tpm_init(ErTlsTpm* tls_tpm,
@@ -136,11 +168,16 @@ UINT8 er_tls_tpm_load_hmac_sha256_key(ErTlsTpm* tls_tpm,
                                       UINT32* out_handle) {
   UINT32 command_len;
   UINT32 response_len;
+  UINT8 seed[ER_TPM_SHA256_DIGEST_LEN];
+  UINT8 unique[ER_TPM_SHA256_DIGEST_LEN];
 
   if (tls_tpm == 0 || key == 0 || out_handle == 0 ||
+      er_tls_tpm_external_key_unique(tls_tpm, key, key_len, seed, unique) == 0u ||
       er_tpm_build_load_external_hmac_sha256_key_command(
           key,
           key_len,
+          seed,
+          unique,
           tls_tpm->command,
           (UINT32)sizeof(tls_tpm->command),
           &command_len) == 0u ||
@@ -178,12 +215,17 @@ UINT8 er_tls_tpm_load_aes_key(ErTlsTpm* tls_tpm,
                               UINT32* out_handle) {
   UINT32 command_len;
   UINT32 response_len;
+  UINT8 seed[ER_TPM_SHA256_DIGEST_LEN];
+  UINT8 unique[ER_TPM_SHA256_DIGEST_LEN];
 
   if (tls_tpm == 0 || key == 0 || out_handle == 0 ||
+      er_tls_tpm_external_key_unique(tls_tpm, key, key_len, seed, unique) == 0u ||
       er_tpm_build_load_external_aes_key_command(key,
                                                  key_len,
                                                  key_bits,
                                                  tls_tpm->record_mode,
+                                                 seed,
+                                                 unique,
                                                  tls_tpm->command,
                                                  (UINT32)sizeof(tls_tpm->command),
                                                  &command_len) == 0u ||

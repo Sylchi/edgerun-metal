@@ -200,6 +200,8 @@ UINT8 er_tpm_build_load_external_p256_verify_key_command(
     UINT32* out_command_len);
 UINT8 er_tpm_build_load_external_hmac_sha256_key_command(
     const UINT8* key, UINT16 key_len,
+    const UINT8 seed[ER_TPM_SHA256_DIGEST_LEN],
+    const UINT8 unique[ER_TPM_SHA256_DIGEST_LEN],
     UINT8* out_command,
     UINT32 command_capacity,
     UINT32* out_command_len);
@@ -207,6 +209,8 @@ UINT8 er_tpm_build_load_external_aes_key_command(
     const UINT8* key, UINT16 key_len,
     UINT16 key_bits,
     UINT16 mode,
+    const UINT8 seed[ER_TPM_SHA256_DIGEST_LEN],
+    const UINT8 unique[ER_TPM_SHA256_DIGEST_LEN],
     UINT8* out_command,
     UINT32 command_capacity,
     UINT32* out_command_len);

@@ -225,11 +225,11 @@ static UINT8 test_tls_tpm_transact(void* user,
       return test_tls_tpm_handle_response(response, response_capacity, out_response_len,
                                           TEST_TLS_TPM_HANDLE_SEQUENCE);
     case ER_TPM_CC_LOAD_EXTERNAL:
-      if (command_len == 60u) {
+      if (command_len == 124u) {
         return test_tls_tpm_handle_response(response, response_capacity, out_response_len,
                                             TEST_TLS_TPM_HANDLE_AES);
       }
-      if (command_len == 72u && command[55u] == ER_TPM_ALG_KEYEDHASH) {
+      if (command_len == 136u && command[87u] == ER_TPM_ALG_KEYEDHASH) {
         return test_tls_tpm_handle_response(response, response_capacity, out_response_len,
                                             TEST_TLS_TPM_HANDLE_HMAC);
       }
@@ -336,6 +336,8 @@ static void test_tls_tpm_adapter(void) {
   check_int64("tls tpm load hmac",
               er_tls_tpm_load_hmac_sha256_key(&tls_tpm, digest, ER_TPM_SHA256_DIGEST_LEN, &handle), 1);
   check_uint64("tls tpm hmac handle", handle, TEST_TLS_TPM_HANDLE_HMAC);
+  check_uint64("tls tpm hmac load seed", script.last_command[18], TEST_TLS_TPM_RANDOM_SEED);
+  check_uint64("tls tpm hmac load unique", script.last_command[100], TEST_TLS_TPM_DIGEST_SEED);
   check_int64("tls tpm hmac",
               er_tls_tpm_hmac_sha256(&tls_tpm, handle, random, ER_TPM_SHA256_DIGEST_LEN, digest), 1);
   check_uint64("tls tpm hmac command", script.last_command_code, ER_TPM_CC_HMAC);
@@ -343,7 +345,9 @@ static void test_tls_tpm_adapter(void) {
   check_int64("tls tpm load aes",
               er_tls_tpm_load_aes_key(&tls_tpm, key, ER_TPM_AES_128_KEY_LEN, ER_TPM_AES_128_KEY_BITS, &handle), 1);
   check_uint64("tls tpm aes handle", handle, TEST_TLS_TPM_HANDLE_AES);
-  check_uint64("tls tpm aes mode", script.last_command[53], ER_TPM_ALG_NULL);
+  check_uint64("tls tpm aes load seed", script.last_command[18], TEST_TLS_TPM_RANDOM_SEED);
+  check_uint64("tls tpm aes load unique", script.last_command[88], TEST_TLS_TPM_DIGEST_SEED);
+  check_uint64("tls tpm aes mode", script.last_command[85], ER_TPM_ALG_CTR);
 
   test_fill_bytes(iv, (UINTN)sizeof(iv), 0x50u);
   check_int64("tls tpm record crypt",
@@ -385,5 +389,5 @@ static void test_tls_tpm_adapter(void) {
 
   check_int64("tls tpm flush", er_tls_tpm_flush(&tls_tpm, primary.handle), 1);
   check_uint64("tls tpm flush command", script.last_command_code, ER_TPM_CC_FLUSH_CONTEXT);
-  check_uint64("tls tpm calls", script.calls, 12u);
+  check_uint64("tls tpm calls", script.calls, 16u);
 }
