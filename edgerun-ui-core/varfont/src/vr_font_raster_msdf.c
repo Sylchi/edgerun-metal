@@ -1,5 +1,15 @@
 #include "vr_font_raster_internal.h"
 
+vr_outline_point_t vr_msdf_edge_end_point(const vr_msdf_outline_edge_t* edge) {
+  switch (edge->kind) {
+    case VR_MSDF_EDGE_KIND_LINE:
+      return edge->p1;
+    case VR_MSDF_EDGE_KIND_QUAD:
+      return edge->p2;
+  }
+  return edge->p1;
+}
+
 uint8_t vr_msdf_edge_color(float dx, float dy, size_t fallback_index) {
   if ((vr_absf(dx) <= VR_RASTER_SEGMENT_TOLERANCE) && (vr_absf(dy) <= VR_RASTER_SEGMENT_TOLERANCE)) {
     return (uint8_t)(fallback_index % VR_RASTER_MSDF_CHANNEL_COUNT);
@@ -44,7 +54,7 @@ vr_status_t vr_msdf_color_edges_cycle(
   if (!edges || !out_colors) return VR_ERR_INVALID_FONT;
   if (edge_count == 1u) {
     vr_outline_point_t p0 = edges[0u].p0;
-    vr_outline_point_t p1 = (edges[0u].kind == VR_MSDF_EDGE_KIND_QUAD) ? edges[0u].p2 : edges[0u].p1;
+    vr_outline_point_t p1 = vr_msdf_edge_end_point(edges);
     out_colors[0u] = vr_msdf_preferred_edge_color(p1.x - p0.x, p1.y - p0.y, 0u);
     return VR_OK;
   }
@@ -57,7 +67,7 @@ vr_status_t vr_msdf_color_edges_cycle(
   if (!preferred_colors) return VR_ERR_OOM;
   for (size_t i = 0u; i < edge_count; ++i) {
     vr_outline_point_t p0 = edges[i].p0;
-    vr_outline_point_t p1 = (edges[i].kind == VR_MSDF_EDGE_KIND_QUAD) ? edges[i].p2 : edges[i].p1;
+    vr_outline_point_t p1 = vr_msdf_edge_end_point(edges + i);
     preferred_colors[i] = vr_msdf_preferred_edge_color(p1.x - p0.x, p1.y - p0.y, i);
   }
 

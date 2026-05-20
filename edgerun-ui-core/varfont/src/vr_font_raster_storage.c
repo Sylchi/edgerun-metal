@@ -115,10 +115,11 @@ vr_status_t vr_push_msdf_edge(
   if (vr_ensure_msdf_edges_capacity(face, edges, edge_cap, *edge_count + 1u) != VR_OK) {
     return VR_ERR_OOM;
   }
-  (*edges)[*edge_count].kind = kind;
-  (*edges)[*edge_count].p0 = p0;
-  (*edges)[*edge_count].p1 = p1;
-  (*edges)[*edge_count].p2 = p2;
+  vr_msdf_outline_edge_t* edge = *edges + *edge_count;
+  edge->kind = kind;
+  edge->p0 = p0;
+  edge->p1 = p1;
+  edge->p2 = p2;
   ++(*edge_count);
   return VR_OK;
 }
