@@ -25,6 +25,7 @@
 #define ER_NETWORK_U32_BYTE2_SHIFT 16u
 #define ER_NETWORK_U32_BYTE3_SHIFT 24u
 #define ER_NETWORK_COST_DEFAULT 1u
+#define ER_NETWORK_ERWIRE_PACKET_MAX (ERWIRE_HEADER_SIZE + ERWIRE_MAX_PAYLOAD)
 
 static void er_network_put_u32_le(UINT8* dst, UINT32 value) {
   dst[ER_NETWORK_BYTE0] = (UINT8)(value & ER_NETWORK_U8_MASK);
@@ -169,6 +170,25 @@ static UINT8 er_network_firmware_udp_route_matches_io(const ErNetworkIo* io,
   }
   return er_network_bytes_equal(default_endpoint.address, route->selected_locator.address,
                                 ER_NETWORK_LOCATOR_FIRMWARE_UDP_LEN);
+}
+
+static UINT8 er_network_wifi_open_carrier_valid(
+    const ErNetworkWifiOpenCarrier* carrier) {
+  return (UINT8)(carrier != 0 &&
+                 carrier->abi_version == ER_NETWORK_ABI_VERSION &&
+                 carrier->send != 0 &&
+                 carrier->recv != 0);
+}
+
+static UINT8 er_network_wifi_open_route_matches_io(const ErNetworkIo* io,
+                                                   const ErNetworkRoute* route) {
+  return (UINT8)(io != 0 &&
+                 io->abi_version == ER_NETWORK_ABI_VERSION &&
+                 er_network_wifi_open_carrier_valid(io->wifi_open) != 0u &&
+                 route != 0 &&
+                 route->selected_locator.kind ==
+                     ER_NETWORK_LOCATOR_KIND_WIFI_OPEN &&
+                 er_network_locator_shape_valid(&route->selected_locator) != 0u);
 }
 
 static UINT8 er_network_route_from_peer_locator(const ErNetworkPeer* peer,
@@ -436,6 +456,25 @@ UINT8 er_network_send_erwire(ErNetworkIo* io,
       erwire_send(kind, flags, payload, payload_len);
       return 1u;
     case ER_NETWORK_LOCATOR_KIND_WIFI_OPEN:
+    {
+      UINT8 packet[ER_NETWORK_ERWIRE_PACKET_MAX];
+      UINT32 packet_len = 0u;
+
+      if (er_network_wifi_open_route_matches_io(io, route) == 0u ||
+          erwire_build_packet(kind,
+                              flags,
+                              payload,
+                              payload_len,
+                              packet,
+                              (UINT32)sizeof(packet),
+                              &packet_len) == 0u) {
+        return 0u;
+      }
+      return io->wifi_open->send(io->wifi_open->ctx,
+                                 &route->selected_locator,
+                                 packet,
+                                 packet_len);
+    }
     case ER_NETWORK_LOCATOR_KIND_MEMORY:
     default:
       return 0u;
@@ -453,35 +492,82 @@ UINT8 er_network_poll_erwire(ErNetworkIo* io,
                              UINT32* out_payload_len) {
   UINT8 peer_index;
   UINT8 locator_index;
+  UINT8 packet[ER_NETWORK_ERWIRE_PACKET_MAX];
+  UINT32 packet_len = 0u;
+  ErNetworkLocator wifi_locator;
 
   if (io == 0 ||
       io->abi_version != ER_NETWORK_ABI_VERSION ||
-      io->native_eth == 0 ||
       peers == 0 ||
       out_route == 0 ||
-      out_payload_len == 0 ||
-      erwire_set_native_eth_sink(io->native_eth) == 0u) {
+      out_payload_len == 0) {
     return 0u;
   }
-  if (erwire_poll_native_eth(out_header, out_payload, out_capacity, out_payload_len) == 0u) {
+  if (io->native_eth != 0 &&
+      erwire_set_native_eth_sink(io->native_eth) != 0u &&
+      erwire_poll_native_eth(out_header, out_payload, out_capacity,
+                             out_payload_len) != 0u) {
     erwire_clear_native_eth_sink();
+    for (peer_index = 0u; peer_index < peer_count; ++peer_index) {
+      const ErNetworkPeer* peer = &peers[peer_index];
+      if (peer->abi_version != ER_NETWORK_ABI_VERSION ||
+          peer->locator_count > ER_NETWORK_MAX_LOCATORS) {
+        continue;
+      }
+      for (locator_index = 0u;
+           locator_index < peer->locator_count;
+           ++locator_index) {
+        const ErNetworkLocator* locator = &peer->locators[locator_index];
+        if (locator->kind == ER_NETWORK_LOCATOR_KIND_NATIVE_ETH &&
+            er_network_locator_valid(locator, now_ms) != 0u &&
+            er_network_bytes_equal(locator->address,
+                                   io->native_eth->peer_mac,
+                                   ER_NET_MAC_LEN) != 0u) {
+          return er_network_route_from_peer_locator(peer,
+                                                    peer_index,
+                                                    locator_index,
+                                                    out_route);
+        }
+      }
+    }
     return 0u;
   }
   erwire_clear_native_eth_sink();
+
+  if (er_network_wifi_open_carrier_valid(io->wifi_open) == 0u ||
+      io->wifi_open->recv(io->wifi_open->ctx,
+                          &wifi_locator,
+                          packet,
+                          (UINT32)sizeof(packet),
+                          &packet_len) == 0u ||
+      erwire_parse_packet(packet,
+                          packet_len,
+                          out_header,
+                          out_payload,
+                          out_capacity,
+                          out_payload_len) == 0u) {
+    return 0u;
+  }
   for (peer_index = 0u; peer_index < peer_count; ++peer_index) {
     const ErNetworkPeer* peer = &peers[peer_index];
     if (peer->abi_version != ER_NETWORK_ABI_VERSION ||
         peer->locator_count > ER_NETWORK_MAX_LOCATORS) {
       continue;
     }
-    for (locator_index = 0u; locator_index < peer->locator_count; ++locator_index) {
+    for (locator_index = 0u;
+         locator_index < peer->locator_count;
+         ++locator_index) {
       const ErNetworkLocator* locator = &peer->locators[locator_index];
-      if (locator->kind == ER_NETWORK_LOCATOR_KIND_NATIVE_ETH &&
+      if (locator->kind == ER_NETWORK_LOCATOR_KIND_WIFI_OPEN &&
           er_network_locator_valid(locator, now_ms) != 0u &&
-          er_network_bytes_equal(locator->address, io->native_eth->peer_mac,
-                                 ER_NET_MAC_LEN) != 0u) {
-        return er_network_route_from_peer_locator(peer, peer_index,
-                                                  locator_index, out_route);
+          locator->address_len == wifi_locator.address_len &&
+          er_network_bytes_equal(locator->address,
+                                 wifi_locator.address,
+                                 locator->address_len) != 0u) {
+        return er_network_route_from_peer_locator(peer,
+                                                  peer_index,
+                                                  locator_index,
+                                                  out_route);
       }
     }
   }

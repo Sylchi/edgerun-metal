@@ -62,11 +62,30 @@ typedef struct {
   ErNetworkLocator selected_locator;
 } ErNetworkRoute;
 
+typedef UINT8 (*ErNetworkWifiOpenSendFn)(void* ctx,
+                                         const ErNetworkLocator* locator,
+                                         const UINT8* packet,
+                                         UINT32 packet_len);
+typedef UINT8 (*ErNetworkWifiOpenRecvFn)(void* ctx,
+                                         ErNetworkLocator* out_locator,
+                                         UINT8* out_packet,
+                                         UINT32 out_capacity,
+                                         UINT32* out_packet_len);
+
+typedef struct {
+  UINT16 abi_version;
+  UINT16 reserved;
+  void* ctx;
+  ErNetworkWifiOpenSendFn send;
+  ErNetworkWifiOpenRecvFn recv;
+} ErNetworkWifiOpenCarrier;
+
 typedef struct {
   UINT16 abi_version;
   UINT16 reserved;
   ErNativeEth* native_eth;
   ErChannelEndpoint* firmware_udp;
+  ErNetworkWifiOpenCarrier* wifi_open;
 } ErNetworkIo;
 
 UINT8 er_network_locator_prepare_native_eth(const UINT8 mac[ER_NET_MAC_LEN],

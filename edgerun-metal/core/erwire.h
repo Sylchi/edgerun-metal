@@ -60,6 +60,10 @@ UINT8 erwire_parse_packet(const UINT8* packet, UINT32 packet_len,
                           ErwirePacketHeader* out_header,
                           UINT8* out_payload, UINT32 out_capacity,
                           UINT32* out_payload_len);
+UINT8 erwire_build_packet(UINT16 kind, UINT16 flags,
+                          const UINT8* payload, UINT32 payload_len,
+                          UINT8* out_packet, UINT32 out_capacity,
+                          UINT32* out_packet_len);
 UINT8 erwire_poll_native_eth(ErwirePacketHeader* out_header,
                              UINT8* out_payload, UINT32 out_capacity,
                              UINT32* out_payload_len);
