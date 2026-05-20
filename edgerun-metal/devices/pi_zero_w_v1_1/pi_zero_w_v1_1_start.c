@@ -1319,6 +1319,9 @@ static UINT32 er_pi_zero_w_v1_1_cyw43438_start_owned_firmware(void) {
   UINT32 heartbeat_second;
   UINT32 command_response;
   UINT32 tx_status;
+  UINT32 d11_tx_frame;
+  UINT32 d11_tx_len;
+  UINT32 d11_tx_status;
   UINT32 rx_status;
   UINT32 tx_beacon_len;
   UINT32 rx_probe_len;
@@ -1396,6 +1399,15 @@ static UINT32 er_pi_zero_w_v1_1_cyw43438_start_owned_firmware(void) {
       er_pi_zero_w_v1_1_cyw43438_backplane_write32(
           ER_CYW43438_OWNED_FIRMWARE_RX_STATUS_ADDR,
           0u) == 0u ||
+      er_pi_zero_w_v1_1_cyw43438_backplane_write32(
+          ER_CYW43438_OWNED_FIRMWARE_D11_TX_FRAME_ADDR,
+          0u) == 0u ||
+      er_pi_zero_w_v1_1_cyw43438_backplane_write32(
+          ER_CYW43438_OWNED_FIRMWARE_D11_TX_LEN_ADDR,
+          0u) == 0u ||
+      er_pi_zero_w_v1_1_cyw43438_backplane_write32(
+          ER_CYW43438_OWNED_FIRMWARE_D11_TX_STATUS_ADDR,
+          0u) == 0u ||
       er_pi_zero_w_v1_1_cyw43438_backplane_write_bytes(
           ER_CYW43438_OWNED_FIRMWARE_TX_FRAME_ADDR,
           tx_beacon,
@@ -1465,7 +1477,19 @@ static UINT32 er_pi_zero_w_v1_1_cyw43438_start_owned_firmware(void) {
       er_pi_zero_w_v1_1_cyw43438_backplane_read32(
           ER_CYW43438_OWNED_FIRMWARE_TX_STATUS_ADDR,
           &tx_status) == 0u ||
-      tx_status != ER_PI_ZERO_W_V1_1_CYW_TX_STATUS_EXPECTED) {
+      tx_status != ER_PI_ZERO_W_V1_1_CYW_TX_STATUS_EXPECTED ||
+      er_pi_zero_w_v1_1_cyw43438_backplane_read32(
+          ER_CYW43438_OWNED_FIRMWARE_D11_TX_FRAME_ADDR,
+          &d11_tx_frame) == 0u ||
+      d11_tx_frame != ER_CYW43438_OWNED_FIRMWARE_TX_FRAME_ADDR ||
+      er_pi_zero_w_v1_1_cyw43438_backplane_read32(
+          ER_CYW43438_OWNED_FIRMWARE_D11_TX_LEN_ADDR,
+          &d11_tx_len) == 0u ||
+      d11_tx_len != tx_beacon_len ||
+      er_pi_zero_w_v1_1_cyw43438_backplane_read32(
+          ER_CYW43438_OWNED_FIRMWARE_D11_TX_STATUS_ADDR,
+          &d11_tx_status) == 0u ||
+      d11_tx_status != ER_PI_ZERO_W_V1_1_CYW_TX_STATUS_EXPECTED) {
     return 0u;
   }
   if (er_pi_zero_w_v1_1_cyw43438_backplane_write32(
