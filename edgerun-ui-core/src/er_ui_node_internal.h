@@ -34,6 +34,16 @@ er_ui_status_t er_ui_node_render_children(
   er_ui_bounds_t bounds,
   er_ui_resolved_theme_t theme);
 er_ui_status_t er_ui_node_render_text(er_ui_scene_t* scene, vr_font_face_t* font, const char* text, er_ui_bounds_t bounds, er_ui_color4_t color);
+er_ui_status_t er_ui_node_render_title_detail(
+  er_ui_scene_t* scene,
+  vr_font_face_t* font,
+  const char* title,
+  const char* detail,
+  er_ui_bounds_t bounds,
+  er_ui_resolved_theme_t theme,
+  float title_h,
+  float detail_y,
+  float detail_h);
 er_ui_status_t er_ui_node_render_icon(er_ui_scene_t* scene, er_ui_bounds_t bounds, er_ui_icon_t icon, er_ui_color4_t color);
 er_ui_status_t er_ui_node_card_inner(
   er_ui_scene_t* scene,

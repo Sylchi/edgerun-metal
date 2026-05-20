@@ -192,10 +192,12 @@ bool er_ui_runtime_hit_allowed_by_focus_scope(const er_ui_runtime_state_t* state
   return er_ui_focus_scope_contains_hit(scope, hit);
 }
 
-bool er_ui_runtime_focus_first(er_ui_runtime_state_t* state, const er_ui_scene_t* scene, er_ui_hit_t* out_hit) {
-  if (!state || !scene || !out_hit) return false;
+static bool er_ui_runtime_focus_at(er_ui_runtime_state_t* state,
+                                   const er_ui_scene_t* scene,
+                                   size_t index,
+                                   er_ui_hit_t* out_hit) {
   er_ui_hit_t hit = {0};
-  if (!er_ui_runtime_focusable_at(state, scene, 0u, &hit)) {
+  if (!er_ui_runtime_focusable_at(state, scene, index, &hit)) {
     state->has_focused = false;
     return false;
   }
@@ -203,6 +205,11 @@ bool er_ui_runtime_focus_first(er_ui_runtime_state_t* state, const er_ui_scene_t
   state->has_focused = true;
   *out_hit = hit;
   return true;
+}
+
+bool er_ui_runtime_focus_first(er_ui_runtime_state_t* state, const er_ui_scene_t* scene, er_ui_hit_t* out_hit) {
+  if (!state || !scene || !out_hit) return false;
+  return er_ui_runtime_focus_at(state, scene, 0u, out_hit);
 }
 
 bool er_ui_runtime_focus_next(er_ui_runtime_state_t* state, const er_ui_scene_t* scene, bool reverse, er_ui_hit_t* out_hit) {
@@ -225,13 +232,5 @@ bool er_ui_runtime_focus_next(er_ui_runtime_state_t* state, const er_ui_scene_t*
     next_index = (index + 1u) % count;
   }
 
-  er_ui_hit_t hit = {0};
-  if (!er_ui_runtime_focusable_at(state, scene, next_index, &hit)) {
-    state->has_focused = false;
-    return false;
-  }
-  state->focused = hit;
-  state->has_focused = true;
-  *out_hit = hit;
-  return true;
+  return er_ui_runtime_focus_at(state, scene, next_index, out_hit);
 }

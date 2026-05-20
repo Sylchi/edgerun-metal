@@ -71,9 +71,16 @@ er_ui_status_t er_ui_node_render_sidebar(
   er_ui_bounds_t main = layout.main;
   er_ui_status_t status = er_ui_component_card_emit(scene, side, theme);
   if (status != ER_UI_OK) return status;
-  status = er_ui_node_render_text(scene, font, node->label, er_ui_bounds(side.x + 12.0f, side.y + 8.0f, side.w - 24.0f, 22.0f), theme.colors.text);
-  if (status != ER_UI_OK) return status;
-  status = er_ui_node_render_text(scene, font, node->detail, er_ui_bounds(side.x + 12.0f, side.y + 30.0f, side.w - 24.0f, 20.0f), theme.colors.muted);
+  status = er_ui_node_render_title_detail(
+    scene,
+    font,
+    node->label,
+    node->detail,
+    er_ui_bounds(side.x + 12.0f, side.y + 8.0f, side.w - 24.0f, 44.0f),
+    theme,
+    22.0f,
+    22.0f,
+    20.0f);
   if (status != ER_UI_OK) return status;
   float y = side.y + 54.0f;
   for (size_t i = 0u; i < node->label_count; ++i) {
@@ -84,9 +91,16 @@ er_ui_status_t er_ui_node_render_sidebar(
   }
   status = er_ui_component_card_emit(scene, main, theme);
   if (status != ER_UI_OK) return status;
-  status = er_ui_node_render_text(scene, font, node->value, er_ui_bounds(main.x + 16.0f, main.y + 14.0f, main.w - 32.0f, 24.0f), theme.colors.text);
-  if (status != ER_UI_OK) return status;
-  return er_ui_node_render_text(scene, font, node->aux, er_ui_bounds(main.x + 16.0f, main.y + 40.0f, main.w - 32.0f, 22.0f), theme.colors.muted);
+  return er_ui_node_render_title_detail(
+    scene,
+    font,
+    node->value,
+    node->aux,
+    er_ui_bounds(main.x + 16.0f, main.y + 14.0f, main.w - 32.0f, 48.0f),
+    theme,
+    24.0f,
+    26.0f,
+    22.0f);
 }
 
 //@optimizer-ignore-function sonner rendering must visit each queued toast and its icon
@@ -197,9 +211,8 @@ er_ui_status_t er_ui_node_render_drawer(
   er_ui_bounds_t inner;
   er_ui_status_t status = er_ui_node_card_inner(scene, bounds, theme, pad, &inner);
   if (status != ER_UI_OK) return status;
-  status = er_ui_node_render_text(scene, font, node->label, er_ui_bounds(inner.x, inner.y, inner.w, 24.0f), theme.colors.text);
-  if (status != ER_UI_OK) return status;
-  status = er_ui_node_render_text(scene, font, node->detail, er_ui_bounds(inner.x, inner.y + 26.0f, inner.w, 22.0f), theme.colors.muted);
+  status = er_ui_node_render_title_detail(scene, font, node->label, node->detail, inner, theme,
+                                          24.0f, 26.0f, 22.0f);
   if (status != ER_UI_OK) return status;
   status = er_ui_component_slider_emit(scene, font, er_ui_bounds(inner.x, inner.y + 62.0f, inner.w, 48.0f), theme, node->aux, node->number, node->id);
   if (status != ER_UI_OK) return status;
@@ -248,9 +261,8 @@ er_ui_status_t er_ui_node_render_context_menu(
   er_ui_bounds_t inner;
   er_ui_status_t status = er_ui_node_card_inner(scene, bounds, theme, pad, &inner);
   if (status != ER_UI_OK) return status;
-  status = er_ui_node_render_text(scene, font, node->label, er_ui_bounds(inner.x, inner.y, inner.w, 24.0f), theme.colors.text);
-  if (status != ER_UI_OK) return status;
-  status = er_ui_node_render_text(scene, font, node->detail, er_ui_bounds(inner.x, inner.y + 24.0f, inner.w, 22.0f), theme.colors.muted);
+  status = er_ui_node_render_title_detail(scene, font, node->label, node->detail, inner, theme,
+                                          24.0f, 24.0f, 22.0f);
   if (status != ER_UI_OK) return status;
 
   return er_ui_node_render_menu_items(node, scene, font, er_ui_bounds(inner.x, inner.y + 54.0f, inner.w, inner.h - 54.0f), theme, 44.0f);

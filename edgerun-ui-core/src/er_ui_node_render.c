@@ -106,6 +106,25 @@ er_ui_status_t er_ui_node_render_text(er_ui_scene_t* scene, vr_font_face_t* font
   return er_ui_scene_push_ascii_text(scene, font, text, ER_UI_NODE_TEXT_BUDGET, bounds.x, bounds.y + er_ui_float_min(bounds.h * 0.62f, 22.0f), color);
 }
 
+er_ui_status_t er_ui_node_render_title_detail(
+  er_ui_scene_t* scene,
+  vr_font_face_t* font,
+  const char* title,
+  const char* detail,
+  er_ui_bounds_t bounds,
+  er_ui_resolved_theme_t theme,
+  float title_h,
+  float detail_y,
+  float detail_h) {
+  if (!scene || !font || !title || !detail || !er_ui_bounds_valid(bounds)) {
+    return ER_UI_ERR_INVALID_ARGUMENT;
+  }
+  er_ui_status_t status =
+    er_ui_node_render_text(scene, font, title, er_ui_bounds(bounds.x, bounds.y, bounds.w, title_h), theme.colors.text);
+  if (status != ER_UI_OK) return status;
+  return er_ui_node_render_text(scene, font, detail, er_ui_bounds(bounds.x, bounds.y + detail_y, bounds.w, detail_h), theme.colors.muted);
+}
+
 er_ui_status_t er_ui_node_render_icon(er_ui_scene_t* scene, er_ui_bounds_t bounds, er_ui_icon_t icon, er_ui_color4_t color) {
   if (!scene || !er_ui_bounds_valid(bounds)) return ER_UI_ERR_INVALID_ARGUMENT;
   er_ui_painter_t painter = er_ui_painter(scene);

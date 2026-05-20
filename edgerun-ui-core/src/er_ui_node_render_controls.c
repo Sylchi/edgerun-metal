@@ -29,10 +29,8 @@ er_ui_status_t er_ui_node_render_card_summary(
   er_ui_bounds_t inner;
   er_ui_status_t status = er_ui_node_card_inner(scene, bounds, theme, pad, &inner);
   if (status != ER_UI_OK) return status;
-  status = er_ui_node_render_text(scene, font, node->label, er_ui_bounds(inner.x, inner.y, inner.w, 26.0f), theme.colors.text);
-  if (status != ER_UI_OK) return status;
-  return er_ui_node_render_text(scene, font, node->detail, er_ui_bounds(inner.x, inner.y + 28.0f, inner.w, 24.0f),
-                                theme.colors.muted);
+  return er_ui_node_render_title_detail(scene, font, node->label, node->detail, inner, theme,
+                                        26.0f, 28.0f, 24.0f);
 }
 
 er_ui_status_t er_ui_node_render_collapsible(
@@ -168,9 +166,8 @@ er_ui_status_t er_ui_node_render_sheet(
   er_ui_bounds_t inner;
   er_ui_status_t status = er_ui_node_card_inner(scene, bounds, theme, pad, &inner);
   if (status != ER_UI_OK) return status;
-  status = er_ui_node_render_text(scene, font, node->label, er_ui_bounds(inner.x, inner.y, inner.w, 24.0f), theme.colors.text);
-  if (status != ER_UI_OK) return status;
-  status = er_ui_node_render_text(scene, font, node->detail, er_ui_bounds(inner.x, inner.y + 26.0f, inner.w, 22.0f), theme.colors.muted);
+  status = er_ui_node_render_title_detail(scene, font, node->label, node->detail, inner, theme,
+                                          24.0f, 26.0f, 22.0f);
   if (status != ER_UI_OK) return status;
   status = er_ui_component_field_emit(scene, font, er_ui_bounds(inner.x, inner.y + 58.0f, inner.w, 54.0f), theme, node->aux, node->extra, node->id, false);
   if (status != ER_UI_OK) return status;

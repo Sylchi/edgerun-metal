@@ -51,6 +51,10 @@ typedef struct {
 size_t er_ui_cstr_len(const char* text);
 bool er_ui_runtime_reserve(er_ui_allocator_t allocator, void** data, size_t* capacity, size_t count, size_t item_size);
 float er_ui_runtime_clamp_float(float value, float min_value, float max_value);
+void er_ui_runtime_begin_drag(er_ui_runtime_state_t* state,
+                              er_ui_drag_source_t source,
+                              float x,
+                              float y);
 er_ui_status_t er_ui_set_pair_f32(
   er_ui_allocator_t allocator,
   er_ui_pair_f32_t** values,
