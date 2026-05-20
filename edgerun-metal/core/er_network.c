@@ -208,6 +208,45 @@ static UINT8 er_network_route_from_peer_locator(const ErNetworkPeer* peer,
   return 1u;
 }
 
+static UINT8 er_network_route_from_matching_locator(const ErNetworkPeer* peers,
+                                                    UINT8 peer_count,
+                                                    UINT8 locator_kind,
+                                                    const UINT8* address,
+                                                    UINT8 address_len,
+                                                    UINT64 now_ms,
+                                                    ErNetworkRoute* out_route) {
+  UINT8 peer_index;
+  UINT8 locator_index;
+
+  if (peers == 0 || address == 0 || out_route == 0) {
+    return 0u;
+  }
+  for (peer_index = 0u; peer_index < peer_count; ++peer_index) {
+    const ErNetworkPeer* peer = &peers[peer_index];
+    if (peer->abi_version != ER_NETWORK_ABI_VERSION ||
+        peer->locator_count > ER_NETWORK_MAX_LOCATORS) {
+      continue;
+    }
+    for (locator_index = 0u;
+         locator_index < peer->locator_count;
+         ++locator_index) {
+      const ErNetworkLocator* locator = &peer->locators[locator_index];
+      if (locator->kind == locator_kind &&
+          er_network_locator_valid(locator, now_ms) != 0u &&
+          locator->address_len == address_len &&
+          er_network_bytes_equal(locator->address,
+                                 address,
+                                 address_len) != 0u) {
+        return er_network_route_from_peer_locator(peer,
+                                                  peer_index,
+                                                  locator_index,
+                                                  out_route);
+      }
+    }
+  }
+  return 0u;
+}
+
 UINT8 er_network_locator_prepare_native_eth(const UINT8 mac[ER_NET_MAC_LEN],
                                             UINT16 priority,
                                             UINT64 valid_until_ms,
@@ -490,8 +529,6 @@ UINT8 er_network_poll_erwire(ErNetworkIo* io,
                              UINT8* out_payload,
                              UINT32 out_capacity,
                              UINT32* out_payload_len) {
-  UINT8 peer_index;
-  UINT8 locator_index;
   UINT8 packet[ER_NETWORK_ERWIRE_PACKET_MAX];
   UINT32 packet_len = 0u;
   ErNetworkLocator wifi_locator;
@@ -508,29 +545,13 @@ UINT8 er_network_poll_erwire(ErNetworkIo* io,
       erwire_poll_native_eth(out_header, out_payload, out_capacity,
                              out_payload_len) != 0u) {
     erwire_clear_native_eth_sink();
-    for (peer_index = 0u; peer_index < peer_count; ++peer_index) {
-      const ErNetworkPeer* peer = &peers[peer_index];
-      if (peer->abi_version != ER_NETWORK_ABI_VERSION ||
-          peer->locator_count > ER_NETWORK_MAX_LOCATORS) {
-        continue;
-      }
-      for (locator_index = 0u;
-           locator_index < peer->locator_count;
-           ++locator_index) {
-        const ErNetworkLocator* locator = &peer->locators[locator_index];
-        if (locator->kind == ER_NETWORK_LOCATOR_KIND_NATIVE_ETH &&
-            er_network_locator_valid(locator, now_ms) != 0u &&
-            er_network_bytes_equal(locator->address,
-                                   io->native_eth->peer_mac,
-                                   ER_NET_MAC_LEN) != 0u) {
-          return er_network_route_from_peer_locator(peer,
-                                                    peer_index,
-                                                    locator_index,
-                                                    out_route);
-        }
-      }
-    }
-    return 0u;
+    return er_network_route_from_matching_locator(peers,
+                                                  peer_count,
+                                                  ER_NETWORK_LOCATOR_KIND_NATIVE_ETH,
+                                                  io->native_eth->peer_mac,
+                                                  ER_NETWORK_LOCATOR_NATIVE_ETH_LEN,
+                                                  now_ms,
+                                                  out_route);
   }
   erwire_clear_native_eth_sink();
 
@@ -548,28 +569,11 @@ UINT8 er_network_poll_erwire(ErNetworkIo* io,
                           out_payload_len) == 0u) {
     return 0u;
   }
-  for (peer_index = 0u; peer_index < peer_count; ++peer_index) {
-    const ErNetworkPeer* peer = &peers[peer_index];
-    if (peer->abi_version != ER_NETWORK_ABI_VERSION ||
-        peer->locator_count > ER_NETWORK_MAX_LOCATORS) {
-      continue;
-    }
-    for (locator_index = 0u;
-         locator_index < peer->locator_count;
-         ++locator_index) {
-      const ErNetworkLocator* locator = &peer->locators[locator_index];
-      if (locator->kind == ER_NETWORK_LOCATOR_KIND_WIFI_OPEN &&
-          er_network_locator_valid(locator, now_ms) != 0u &&
-          locator->address_len == wifi_locator.address_len &&
-          er_network_bytes_equal(locator->address,
-                                 wifi_locator.address,
-                                 locator->address_len) != 0u) {
-        return er_network_route_from_peer_locator(peer,
-                                                  peer_index,
-                                                  locator_index,
-                                                  out_route);
-      }
-    }
-  }
-  return 0u;
+  return er_network_route_from_matching_locator(peers,
+                                                peer_count,
+                                                ER_NETWORK_LOCATOR_KIND_WIFI_OPEN,
+                                                wifi_locator.address,
+                                                wifi_locator.address_len,
+                                                now_ms,
+                                                out_route);
 }
