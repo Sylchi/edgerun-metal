@@ -7,5 +7,9 @@ machine-report*.txt
 edgerun-metal/build/
 varfont/build/
 
+# local toolchain binaries are host artifacts and exceed GitHub blob limits
+toolchain/bin/clang
+toolchain/bin/lld
+
 # local upstream UI reference tree; keep it out of this repo's history
 ui/shadcn-ui/
