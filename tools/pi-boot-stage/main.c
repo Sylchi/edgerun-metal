@@ -6,6 +6,10 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 
+#ifndef ERPBS_PROJECT_ROOT
+#define ERPBS_PROJECT_ROOT "."
+#endif
+
 /*
  * Purpose:
  *   Stage explicit Raspberry Pi boot trees around owned EdgeRun payloads.
@@ -32,12 +36,17 @@ typedef struct {
   const char* manifest_name;
   const char* manifest_text;
   int needs_efi_dirs;
+  int needs_raspberry_pi_firmware;
+  int needs_cyw43438_firmware;
 } ErpbsBoardProfile;
 
 static const char ERPBS_BOOTAA64_PATH[] = "EFI/BOOT/BOOTAA64.EFI";
 static const char ERPBS_KERNEL_IMG_PATH[] = "kernel.img";
 static const char ERPBS_EFI_DIR[] = "EFI";
 static const char ERPBS_EFI_BOOT_DIR[] = "EFI/BOOT";
+static const char ERPBS_EFI_FIRMWARE_DIR[] = "EFI/firmware";
+static const char ERPBS_RASPBERRY_PI_FIRMWARE_DIR[] = "firmware/raspberry-pi";
+static const char ERPBS_NETWORK_FIRMWARE_DIR[] = "firmware/network";
 static const char ERPBS_CONFIG_NAME[] = "config.txt";
 static const char ERPBS_STARTUP_NAME[] = "startup.nsh";
 static const char ERPBS_ZERO2W_MANIFEST_NAME[] = "EDGERUN-PI-ZERO-2W-BOOT.txt";
@@ -63,6 +72,9 @@ static const char ERPBS_ZERO2W_MANIFEST_TEXT[] =
     "owned_payload=EFI/BOOT/BOOTAA64.EFI\n"
     "boot_chain=raspberry-pi-firmware -> u-boot-efi -> BOOTAA64.EFI\n"
     "required_first_stage=raspberry-pi-firmware\n"
+    "firmware=bootcode.bin\n"
+    "firmware=start.elf\n"
+    "firmware=fixup.dat\n"
     "required_first_stage=u-boot.bin\n"
     "node=erz2w-0:bootstrap-identity-package-index-serial-first-boot\n"
     "node=erz2w-1:sealed-object-storage-replica\n"
@@ -76,12 +88,18 @@ static const char ERPBS_ZERO_W_MANIFEST_TEXT[] =
     "owned_payload=kernel.img\n"
     "boot_chain=raspberry-pi-firmware -> kernel.img\n"
     "required_first_stage=raspberry-pi-firmware\n"
+    "firmware=bootcode.bin\n"
+    "firmware=start.elf\n"
+    "firmware=fixup.dat\n"
     "serial_baud=115200\n"
     "serial_gpio_tx=14\n"
     "serial_gpio_rx=15\n"
     "serial_protocol=erwire\n"
     "erwire_expect=node_available\n"
     "erwire_expect=node_heartbeat\n"
+    "firmware=EFI/firmware/02d0.a9a6.0\n"
+    "firmware=EFI/firmware/02d0.a9a6.1\n"
+    "firmware=EFI/firmware/02d0.a9a6.2\n"
     "node=erzw-0:bootstrap-identity-package-index-serial-first-boot\n"
     "node=erzw-1:sealed-object-storage-replica\n"
     "node=erzw-2:relay-only\n"
@@ -97,7 +115,9 @@ static const ErpbsBoardProfile ERPBS_BOARD_PROFILES[] = {
     ERPBS_ZERO2W_STARTUP_TEXT,
     ERPBS_ZERO2W_MANIFEST_NAME,
     ERPBS_ZERO2W_MANIFEST_TEXT,
-    1
+    1,
+    1,
+    0
   },
   {
     "pi-zero-w-v1_1",
@@ -106,9 +126,31 @@ static const ErpbsBoardProfile ERPBS_BOARD_PROFILES[] = {
     ERPBS_ZERO_W_STARTUP_TEXT,
     ERPBS_ZERO_W_MANIFEST_NAME,
     ERPBS_ZERO_W_MANIFEST_TEXT,
-    0
+    0,
+    1,
+    1
   }
 };
+
+static const char* const ERPBS_RASPBERRY_PI_FIRMWARE_NAMES[] = {
+  "bootcode.bin",
+  "start.elf",
+  "fixup.dat"
+};
+
+static const size_t ERPBS_RASPBERRY_PI_FIRMWARE_COUNT =
+    sizeof(ERPBS_RASPBERRY_PI_FIRMWARE_NAMES) /
+    sizeof(ERPBS_RASPBERRY_PI_FIRMWARE_NAMES[0]);
+
+static const char* const ERPBS_CYW43438_FIRMWARE_NAMES[] = {
+  "02d0.a9a6.0",
+  "02d0.a9a6.1",
+  "02d0.a9a6.2"
+};
+
+static const size_t ERPBS_CYW43438_FIRMWARE_COUNT =
+    sizeof(ERPBS_CYW43438_FIRMWARE_NAMES) /
+    sizeof(ERPBS_CYW43438_FIRMWARE_NAMES[0]);
 
 static const size_t ERPBS_BOARD_PROFILE_COUNT =
     sizeof(ERPBS_BOARD_PROFILES) / sizeof(ERPBS_BOARD_PROFILES[0]);
@@ -251,6 +293,69 @@ static int erpbs_copy_payload(const char* src, const char* dst) {
   return 0;
 }
 
+static int erpbs_stage_cyw43438_firmware(const char* output_dir) {
+  char source_dir[ERPBS_PATH_CAP];
+  char source_path[ERPBS_PATH_CAP];
+  char target_dir[ERPBS_PATH_CAP];
+  char target_path[ERPBS_PATH_CAP];
+  size_t i;
+
+  if (erpbs_mkdir_child(output_dir, ERPBS_EFI_DIR) != 0 ||
+      erpbs_mkdir_child(output_dir, ERPBS_EFI_FIRMWARE_DIR) != 0 ||
+      erpbs_join(source_dir,
+                 sizeof(source_dir),
+                 ERPBS_PROJECT_ROOT,
+                 ERPBS_NETWORK_FIRMWARE_DIR) != 0) {
+    return 1;
+  }
+  for (i = 0u; i < ERPBS_CYW43438_FIRMWARE_COUNT; ++i) {
+    if (erpbs_join(source_path,
+                   sizeof(source_path),
+                   source_dir,
+                   ERPBS_CYW43438_FIRMWARE_NAMES[i]) != 0 ||
+        erpbs_join(target_dir,
+                   sizeof(target_dir),
+                   output_dir,
+                   ERPBS_EFI_FIRMWARE_DIR) != 0 ||
+        erpbs_join(target_path,
+                   sizeof(target_path),
+                   target_dir,
+                   ERPBS_CYW43438_FIRMWARE_NAMES[i]) != 0 ||
+        erpbs_copy_payload(source_path, target_path) != 0) {
+      return 1;
+    }
+  }
+  return 0;
+}
+
+static int erpbs_stage_raspberry_pi_firmware(const char* output_dir) {
+  char source_dir[ERPBS_PATH_CAP];
+  char source_path[ERPBS_PATH_CAP];
+  char target_path[ERPBS_PATH_CAP];
+  size_t i;
+
+  if (erpbs_join(source_dir,
+                 sizeof(source_dir),
+                 ERPBS_PROJECT_ROOT,
+                 ERPBS_RASPBERRY_PI_FIRMWARE_DIR) != 0) {
+    return 1;
+  }
+  for (i = 0u; i < ERPBS_RASPBERRY_PI_FIRMWARE_COUNT; ++i) {
+    if (erpbs_join(source_path,
+                   sizeof(source_path),
+                   source_dir,
+                   ERPBS_RASPBERRY_PI_FIRMWARE_NAMES[i]) != 0 ||
+        erpbs_join(target_path,
+                   sizeof(target_path),
+                   output_dir,
+                   ERPBS_RASPBERRY_PI_FIRMWARE_NAMES[i]) != 0 ||
+        erpbs_copy_payload(source_path, target_path) != 0) {
+      return 1;
+    }
+  }
+  return 0;
+}
+
 static int erpbs_stage(const ErpbsBoardProfile* profile,
                        const char* payload,
                        const char* output_dir) {
@@ -270,6 +375,14 @@ static int erpbs_stage(const ErpbsBoardProfile* profile,
   if (profile->needs_efi_dirs != 0 &&
       (erpbs_mkdir_child(output_dir, ERPBS_EFI_DIR) != 0 ||
        erpbs_mkdir_child(output_dir, ERPBS_EFI_BOOT_DIR) != 0)) {
+    return 1;
+  }
+  if (profile->needs_raspberry_pi_firmware != 0 &&
+      erpbs_stage_raspberry_pi_firmware(output_dir) != 0) {
+    return 1;
+  }
+  if (profile->needs_cyw43438_firmware != 0 &&
+      erpbs_stage_cyw43438_firmware(output_dir) != 0) {
     return 1;
   }
   if (erpbs_join(payload_path, sizeof(payload_path), output_dir,
