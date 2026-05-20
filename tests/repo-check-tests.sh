@@ -91,21 +91,38 @@ add_nested_readme() {
   git -C "${repo_dir}" add docs/README.md
 }
 
-add_vendor_readmes() {
+add_allowed_blake3_readme() {
   local repo_dir="$1"
 
-  mkdir -p "${repo_dir}/third_party/pkg" "${repo_dir}/ui/shadcn-ui/pkg"
+  mkdir -p "${repo_dir}/third_party/blake3"
+  printf 'allowed BLAKE3 exception\n' > "${repo_dir}/third_party/blake3/README.md"
+  git -C "${repo_dir}" add third_party/blake3/README.md
+}
+
+add_unapproved_third_party() {
+  local repo_dir="$1"
+
+  mkdir -p "${repo_dir}/third_party/pkg"
   printf 'vendor docs\n' > "${repo_dir}/third_party/pkg/README.md"
+  git -C "${repo_dir}" add third_party/pkg/README.md
+}
+
+add_vendor_ui() {
+  local repo_dir="$1"
+
+  mkdir -p "${repo_dir}/ui/shadcn-ui/pkg"
   printf 'vendor ui docs\n' > "${repo_dir}/ui/shadcn-ui/pkg/README.md"
-  git -C "${repo_dir}" add third_party/pkg/README.md ui/shadcn-ui/pkg/README.md
+  git -C "${repo_dir}" add ui/shadcn-ui/pkg/README.md
 }
 
 expect_pass clean_repo
-expect_pass vendor_readmes add_vendor_readmes
+expect_pass allowed_blake3_readme add_allowed_blake3_readme
 expect_fail nested_git_dir add_nested_git_dir
 expect_fail gitmodules_file add_gitmodules_file
 expect_fail gitlink_entry add_gitlink
 expect_fail tracked_build_artifact add_tracked_build_artifact
 expect_fail nested_readme add_nested_readme
+expect_fail unapproved_third_party add_unapproved_third_party
+expect_fail vendor_ui add_vendor_ui
 
 printf 'repo-check tests passed\n'
