@@ -1555,6 +1555,10 @@ static uint8_t er_blake3_consume_full_chunks(ErBlake3Hasher* hasher,
                                              size_t* len) {
 #if defined(ER_BLAKE3_USE_AVX512) || defined(ER_BLAKE3_USE_AVX2) || defined(ER_BLAKE3_USE_SSE2)
   uint8_t consumed;
+#else
+  (void)hasher;
+  (void)bytes;
+  (void)len;
 #endif
 
 #if defined(ER_BLAKE3_USE_AVX512)

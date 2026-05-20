@@ -1,8 +1,8 @@
 .PHONY: all run run-aarch64 qemu-aarch64-smoke qemu-ephemeral-authority qemu-ephemeral-authority-smoke qemu-swtpm-persistence qemu-host-tpm-bench clean print-path print-config netboot os rebuild-image check test-core bench-ui-dirty tpm-real-bench-uefi wifi-hardware-probe wasm-modules qemu-config-check qemu-aarch64-config-check qemu-swtpm-persistence-config-check qemu-host-tpm-bench-config-check pi-zero-2w-uefi pi-zero-2w-boot pi-zero-w-v1_1-kernel pi-zero-w-v1_1-boot
 
-CC := clang
-HOST_CC := clang
-AR := llvm-ar
+CC := ../toolchain/bin/clang
+HOST_CC := ../toolchain/bin/clang
+AR := ../toolchain/bin/llvm-ar
 
 ER_METAL_ARCH := x86_64
 ER_METAL_BOARD := uefi-generic
@@ -389,7 +389,7 @@ pi-zero-2w-boot: pi-zero-2w-uefi $(PI_BOOT_STAGE_BIN)
 
 pi-zero-w-v1_1-kernel: $(PI_ZERO_W_V1_1_ENTRY_SRC) $(PI_ZERO_W_V1_1_START_SRC) $(PI_ZERO_W_V1_1_DEVICE_HDRS) $(PI_ZERO_W_V1_1_CYW43438_HDRS)
 	mkdir -p $(dir $(PI_ZERO_W_V1_1_KERNEL))
-	$(CC) -std=c11 -Wall -Wextra -Werror -ffreestanding -fno-builtin -fno-stack-protector -target armv6-none-eabi -fuse-ld=lld -nostdlib -I$(CURDIR)/core -I$(CURDIR)/$(PI_ZERO_W_V1_1_DEVICE_DIR) -I$(CURDIR)/devices/cyw43438 -I$(CURDIR)/../include -Wl,-Ttext=0x8000 -Wl,--image-base=0x0 -Wl,--oformat,binary -o $(PI_ZERO_W_V1_1_KERNEL) $(PI_ZERO_W_V1_1_ENTRY_SRC) $(PI_ZERO_W_V1_1_START_SRC) $(PI_ZERO_W_V1_1_DEVICE_DIR)/er_pi_zero_w_v1_1_ota.c
+	$(CC) -std=c11 -Wall -Wextra -Werror -ffreestanding -fno-builtin -fno-stack-protector -ffunction-sections -fdata-sections -target armv6-none-eabi -fuse-ld=lld -nostdlib -I$(CURDIR)/core -I$(CURDIR)/$(PI_ZERO_W_V1_1_DEVICE_DIR) -I$(CURDIR)/devices/cyw43438 -I$(CURDIR)/../include -I$(CURDIR)/$(CRYPTO_DIR)/include -Wl,--gc-sections -Wl,-Ttext=0x8000 -Wl,--image-base=0x0 -Wl,--oformat,binary -o $(PI_ZERO_W_V1_1_KERNEL) $(PI_ZERO_W_V1_1_ENTRY_SRC) $(PI_ZERO_W_V1_1_START_SRC) $(PI_ZERO_W_V1_1_DEVICE_DIR)/er_pi_zero_w_v1_1_ota.c core/er_freestanding.c core/er_mem.c core/er_crypto.c core/er_crypto_blake3.c core/er_identity.c core/er_vfs.c $(CRYPTO_DIR)/src/er_blake3.c
 
 pi-zero-w-v1_1-boot: pi-zero-w-v1_1-kernel $(PI_BOOT_STAGE_BIN)
 	$(PI_BOOT_STAGE_BIN) pi-zero-w-v1_1 $(PI_ZERO_W_V1_1_KERNEL) $(PI_ZERO_W_V1_1_BOOT_DIR)

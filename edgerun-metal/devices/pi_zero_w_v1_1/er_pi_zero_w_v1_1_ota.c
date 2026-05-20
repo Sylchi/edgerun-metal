@@ -1,24 +1,37 @@
 #include "er_pi_zero_w_v1_1_ota.h"
+#include "er_mem.h"
 
 enum {
-  ER_PI_ZERO_W_V1_1_OTA_MAGIC_OFFSET = 0u,
-  ER_PI_ZERO_W_V1_1_OTA_VERSION_OFFSET = 4u,
-  ER_PI_ZERO_W_V1_1_OTA_COMMAND_OFFSET = 6u,
-  ER_PI_ZERO_W_V1_1_OTA_SEQUENCE_OFFSET = 8u,
-  ER_PI_ZERO_W_V1_1_OTA_IMAGE_LEN_OFFSET = 12u,
-  ER_PI_ZERO_W_V1_1_OTA_IMAGE_CRC32_OFFSET = 16u,
-  ER_PI_ZERO_W_V1_1_OTA_PAYLOAD_OFFSET_OFFSET = 20u,
-  ER_PI_ZERO_W_V1_1_OTA_PAYLOAD_LEN_OFFSET = 24u,
-  ER_PI_ZERO_W_V1_1_OTA_HEADER_LEN_OFFSET = 26u,
-  ER_PI_ZERO_W_V1_1_OTA_TARGET_BLOCK_OFFSET = 28u,
+  ER_PI_ZERO_W_V1_1_OTA_ERWIRE_MAGIC_OFFSET = 0u,
+  ER_PI_ZERO_W_V1_1_OTA_ERWIRE_VERSION_OFFSET = 4u,
+  ER_PI_ZERO_W_V1_1_OTA_ERWIRE_HEADER_SIZE_OFFSET = 6u,
+  ER_PI_ZERO_W_V1_1_OTA_ERWIRE_STREAM_ID_OFFSET = 8u,
+  ER_PI_ZERO_W_V1_1_OTA_ERWIRE_SEQ_OFFSET = 12u,
+  ER_PI_ZERO_W_V1_1_OTA_ERWIRE_KIND_OFFSET = 16u,
+  ER_PI_ZERO_W_V1_1_OTA_ERWIRE_FLAGS_OFFSET = 18u,
+  ER_PI_ZERO_W_V1_1_OTA_ERWIRE_PAYLOAD_LEN_OFFSET = 20u,
+  ER_PI_ZERO_W_V1_1_OTA_ERWIRE_PAYLOAD_CRC_OFFSET = 24u,
+  ER_PI_ZERO_W_V1_1_OTA_ERWIRE_RESERVED_OFFSET = 28u,
   ER_PI_ZERO_W_V1_1_OTA_CRC32_INITIAL = 0xffffffffu,
   ER_PI_ZERO_W_V1_1_OTA_CRC32_POLY = 0xedb88320u,
   ER_PI_ZERO_W_V1_1_OTA_CRC32_BITS_PER_BYTE = 8u,
-  ER_PI_ZERO_W_V1_1_OTA_BYTE_MASK = 0xffu,
   ER_PI_ZERO_W_V1_1_OTA_U16_HIGH_SHIFT = 8u,
   ER_PI_ZERO_W_V1_1_OTA_U32_BYTE2_SHIFT = 16u,
   ER_PI_ZERO_W_V1_1_OTA_U32_BYTE3_SHIFT = 24u
 };
+
+typedef struct {
+  UINT32 Magic;
+  UINT16 Version;
+  UINT16 HeaderSize;
+  UINT32 StreamId;
+  UINT32 Seq;
+  UINT16 Kind;
+  UINT16 Flags;
+  UINT32 PayloadLen;
+  UINT32 PayloadCrc;
+  UINT32 Reserved;
+} ErPiZeroWV11OtaErwirePacketHeader;
 
 static UINT16 er_pi_zero_w_v1_1_ota_get_le16(const UINT8* bytes) {
   return (UINT16)((UINT16)bytes[0] |
@@ -30,22 +43,6 @@ static UINT32 er_pi_zero_w_v1_1_ota_get_le32(const UINT8* bytes) {
          ((UINT32)bytes[1] << ER_PI_ZERO_W_V1_1_OTA_U16_HIGH_SHIFT) |
          ((UINT32)bytes[2] << ER_PI_ZERO_W_V1_1_OTA_U32_BYTE2_SHIFT) |
          ((UINT32)bytes[3] << ER_PI_ZERO_W_V1_1_OTA_U32_BYTE3_SHIFT);
-}
-
-static void er_pi_zero_w_v1_1_ota_put_le16(UINT8* bytes, UINT16 value) {
-  bytes[0] = (UINT8)(value & ER_PI_ZERO_W_V1_1_OTA_BYTE_MASK);
-  bytes[1] = (UINT8)(((UINT32)value >> ER_PI_ZERO_W_V1_1_OTA_U16_HIGH_SHIFT) &
-                     ER_PI_ZERO_W_V1_1_OTA_BYTE_MASK);
-}
-
-static void er_pi_zero_w_v1_1_ota_put_le32(UINT8* bytes, UINT32 value) {
-  bytes[0] = (UINT8)(value & ER_PI_ZERO_W_V1_1_OTA_BYTE_MASK);
-  bytes[1] = (UINT8)((value >> ER_PI_ZERO_W_V1_1_OTA_U16_HIGH_SHIFT) &
-                     ER_PI_ZERO_W_V1_1_OTA_BYTE_MASK);
-  bytes[2] = (UINT8)((value >> ER_PI_ZERO_W_V1_1_OTA_U32_BYTE2_SHIFT) &
-                     ER_PI_ZERO_W_V1_1_OTA_BYTE_MASK);
-  bytes[3] = (UINT8)((value >> ER_PI_ZERO_W_V1_1_OTA_U32_BYTE3_SHIFT) &
-                     ER_PI_ZERO_W_V1_1_OTA_BYTE_MASK);
 }
 
 static void er_pi_zero_w_v1_1_ota_zero(UINT8* bytes, UINT32 len) {
@@ -60,17 +57,10 @@ void er_pi_zero_w_v1_1_ota_reset(ErPiZeroWV11OtaState* state) {
   if (state == 0) {
     return;
   }
+  er_mem_zero((UINT8*)state, (UINTN)sizeof(*state));
   state->status = ER_PI_ZERO_W_V1_1_OTA_STATUS_IDLE;
-  state->image_len = 0u;
-  state->image_crc32 = 0u;
-  state->running_crc32 = ER_PI_ZERO_W_V1_1_OTA_CRC32_INITIAL;
-  state->next_offset = 0u;
   state->target_block = ER_PI_ZERO_W_V1_1_OTA_DEFAULT_SLOT_BLOCK;
   state->next_block = ER_PI_ZERO_W_V1_1_OTA_DEFAULT_SLOT_BLOCK;
-  state->buffered_bytes = 0u;
-  state->reboot_required = 0u;
-  er_pi_zero_w_v1_1_ota_zero(state->block,
-                             ER_PI_ZERO_W_V1_1_OTA_BLOCK_BYTES);
 }
 
 UINT32 er_pi_zero_w_v1_1_ota_crc32(const UINT8* bytes, UINT32 len) {
@@ -95,84 +85,93 @@ UINT32 er_pi_zero_w_v1_1_ota_crc32(const UINT8* bytes, UINT32 len) {
   return ~crc;
 }
 
-static UINT32 er_pi_zero_w_v1_1_ota_crc32_extend(UINT32 running_crc32,
-                                                 const UINT8* bytes,
-                                                 UINT32 len) {
-  UINT32 crc = running_crc32;
-  UINT32 i;
-
-  for (i = 0u; i < len; ++i) {
-    UINT32 bit;
-
-    crc ^= (UINT32)bytes[i];
-    for (bit = 0u;
-         bit < ER_PI_ZERO_W_V1_1_OTA_CRC32_BITS_PER_BYTE;
-         ++bit) {
-      UINT32 mask = 0u - (crc & 1u);
-
-      crc = (crc >> 1u) ^ (ER_PI_ZERO_W_V1_1_OTA_CRC32_POLY & mask);
-    }
-  }
-  return crc;
-}
-
-UINT8 er_pi_zero_w_v1_1_ota_header_decode(
+static UINT8 er_pi_zero_w_v1_1_ota_erwire_decode(
     const UINT8* frame,
     UINT32 frame_len,
-    ErPiZeroWV11OtaFrameHeader* out_header) {
+    ErPiZeroWV11OtaErwirePacketHeader* out_header,
+    const UINT8** out_payload) {
+  UINT32 payload_crc;
+
   if (frame == 0 ||
       out_header == 0 ||
-      frame_len < ER_PI_ZERO_W_V1_1_OTA_HEADER_BYTES) {
+      out_payload == 0 ||
+      frame_len < ER_PI_ZERO_W_V1_1_OTA_ERWIRE_HEADER_BYTES) {
     return 0u;
   }
-  out_header->magic =
-      er_pi_zero_w_v1_1_ota_get_le32(frame + ER_PI_ZERO_W_V1_1_OTA_MAGIC_OFFSET);
-  out_header->version =
-      er_pi_zero_w_v1_1_ota_get_le16(frame + ER_PI_ZERO_W_V1_1_OTA_VERSION_OFFSET);
-  out_header->command =
-      er_pi_zero_w_v1_1_ota_get_le16(frame + ER_PI_ZERO_W_V1_1_OTA_COMMAND_OFFSET);
-  out_header->sequence =
-      er_pi_zero_w_v1_1_ota_get_le32(frame + ER_PI_ZERO_W_V1_1_OTA_SEQUENCE_OFFSET);
-  out_header->image_len =
-      er_pi_zero_w_v1_1_ota_get_le32(frame + ER_PI_ZERO_W_V1_1_OTA_IMAGE_LEN_OFFSET);
-  out_header->image_crc32 =
-      er_pi_zero_w_v1_1_ota_get_le32(frame + ER_PI_ZERO_W_V1_1_OTA_IMAGE_CRC32_OFFSET);
-  out_header->offset =
-      er_pi_zero_w_v1_1_ota_get_le32(frame + ER_PI_ZERO_W_V1_1_OTA_PAYLOAD_OFFSET_OFFSET);
-  out_header->payload_len =
-      er_pi_zero_w_v1_1_ota_get_le16(frame + ER_PI_ZERO_W_V1_1_OTA_PAYLOAD_LEN_OFFSET);
-  out_header->header_len =
-      er_pi_zero_w_v1_1_ota_get_le16(frame + ER_PI_ZERO_W_V1_1_OTA_HEADER_LEN_OFFSET);
-  out_header->target_block =
-      er_pi_zero_w_v1_1_ota_get_le32(frame + ER_PI_ZERO_W_V1_1_OTA_TARGET_BLOCK_OFFSET);
-  return (UINT8)(out_header->magic == ER_PI_ZERO_W_V1_1_OTA_MAGIC &&
-                 out_header->version == ER_PI_ZERO_W_V1_1_OTA_ABI_VERSION &&
-                 out_header->header_len == ER_PI_ZERO_W_V1_1_OTA_HEADER_BYTES &&
-                 out_header->payload_len <= ER_PI_ZERO_W_V1_1_OTA_FRAME_PAYLOAD_MAX &&
-                 frame_len == (UINT32)out_header->header_len +
-                              (UINT32)out_header->payload_len);
+  out_header->Magic =
+      er_pi_zero_w_v1_1_ota_get_le32(
+          frame + ER_PI_ZERO_W_V1_1_OTA_ERWIRE_MAGIC_OFFSET);
+  out_header->Version =
+      er_pi_zero_w_v1_1_ota_get_le16(
+          frame + ER_PI_ZERO_W_V1_1_OTA_ERWIRE_VERSION_OFFSET);
+  out_header->HeaderSize =
+      er_pi_zero_w_v1_1_ota_get_le16(
+          frame + ER_PI_ZERO_W_V1_1_OTA_ERWIRE_HEADER_SIZE_OFFSET);
+  out_header->StreamId =
+      er_pi_zero_w_v1_1_ota_get_le32(
+          frame + ER_PI_ZERO_W_V1_1_OTA_ERWIRE_STREAM_ID_OFFSET);
+  out_header->Seq =
+      er_pi_zero_w_v1_1_ota_get_le32(
+          frame + ER_PI_ZERO_W_V1_1_OTA_ERWIRE_SEQ_OFFSET);
+  out_header->Kind =
+      er_pi_zero_w_v1_1_ota_get_le16(
+          frame + ER_PI_ZERO_W_V1_1_OTA_ERWIRE_KIND_OFFSET);
+  out_header->Flags =
+      er_pi_zero_w_v1_1_ota_get_le16(
+          frame + ER_PI_ZERO_W_V1_1_OTA_ERWIRE_FLAGS_OFFSET);
+  out_header->PayloadLen =
+      er_pi_zero_w_v1_1_ota_get_le32(
+          frame + ER_PI_ZERO_W_V1_1_OTA_ERWIRE_PAYLOAD_LEN_OFFSET);
+  out_header->PayloadCrc =
+      er_pi_zero_w_v1_1_ota_get_le32(
+          frame + ER_PI_ZERO_W_V1_1_OTA_ERWIRE_PAYLOAD_CRC_OFFSET);
+  out_header->Reserved =
+      er_pi_zero_w_v1_1_ota_get_le32(
+          frame + ER_PI_ZERO_W_V1_1_OTA_ERWIRE_RESERVED_OFFSET);
+  if (out_header->Magic != ER_PI_ZERO_W_V1_1_OTA_ERWIRE_MAGIC ||
+      out_header->Version != ER_PI_ZERO_W_V1_1_OTA_ERWIRE_VERSION ||
+      out_header->HeaderSize != ER_PI_ZERO_W_V1_1_OTA_ERWIRE_HEADER_BYTES ||
+      out_header->Kind != ER_PI_ZERO_W_V1_1_OTA_ERWIRE_KIND_VFS_OBJECT_PACKET ||
+      out_header->PayloadLen < (UINT32)sizeof(ErVfsObjectPacketHeader) ||
+      out_header->PayloadLen > ER_PI_ZERO_W_V1_1_OTA_ERWIRE_PAYLOAD_BYTES_MAX ||
+      out_header->Reserved != 0u ||
+      frame_len != ER_PI_ZERO_W_V1_1_OTA_ERWIRE_HEADER_BYTES +
+                   out_header->PayloadLen) {
+    return 0u;
+  }
+  *out_payload = frame + ER_PI_ZERO_W_V1_1_OTA_ERWIRE_HEADER_BYTES;
+  payload_crc = er_pi_zero_w_v1_1_ota_crc32(*out_payload,
+                                            out_header->PayloadLen);
+  return (UINT8)(payload_crc == out_header->PayloadCrc);
 }
 
-static UINT8 er_pi_zero_w_v1_1_ota_header_payload_valid(
-    const ErPiZeroWV11OtaFrameHeader* header) {
-  if (header == 0 ||
-      header->image_len == 0u ||
-      header->image_len > ER_PI_ZERO_W_V1_1_OTA_IMAGE_BYTES_MAX ||
-      header->target_block == 0u) {
+UINT8 er_pi_zero_w_v1_1_ota_decode_object_packet_payload(
+    const UINT8* frame,
+    UINT32 frame_len,
+    ErVfsObjectPacket* out_packet) {
+  ErPiZeroWV11OtaErwirePacketHeader header;
+  const UINT8* payload;
+  UINT32 bytes_len;
+
+  if (out_packet == 0 ||
+      er_pi_zero_w_v1_1_ota_erwire_decode(frame,
+                                          frame_len,
+                                          &header,
+                                          &payload) == 0u) {
     return 0u;
   }
-  switch (header->command) {
-    case ER_PI_ZERO_W_V1_1_OTA_COMMAND_BEGIN:
-    case ER_PI_ZERO_W_V1_1_OTA_COMMAND_COMMIT:
-      return (UINT8)(header->offset == 0u && header->payload_len == 0u);
-    case ER_PI_ZERO_W_V1_1_OTA_COMMAND_DATA:
-      return (UINT8)(header->payload_len != 0u &&
-                     header->offset < header->image_len &&
-                     (UINT32)header->payload_len <=
-                         header->image_len - header->offset);
-    default:
-      return 0u;
+  bytes_len = header.PayloadLen - (UINT32)sizeof(out_packet->header);
+  er_mem_zero((UINT8*)out_packet, (UINTN)sizeof(*out_packet));
+  er_mem_copy((UINT8*)&out_packet->header,
+              payload,
+              (UINTN)sizeof(out_packet->header));
+  if (bytes_len > 0u) {
+    er_mem_copy(out_packet->bytes,
+                payload + (UINT32)sizeof(out_packet->header),
+                (UINTN)bytes_len);
   }
+  return (UINT8)(out_packet->header.bytes_len == bytes_len &&
+                 bytes_len <= ER_VFS_OBJECT_PACKET_BYTES);
 }
 
 static UINT8 er_pi_zero_w_v1_1_ota_flush_block(
@@ -193,99 +192,81 @@ static UINT8 er_pi_zero_w_v1_1_ota_flush_block(
   return 1u;
 }
 
-static UINT8 er_pi_zero_w_v1_1_ota_begin(
+static UINT8 er_pi_zero_w_v1_1_ota_write_bytes(
     ErPiZeroWV11OtaState* state,
-    const ErPiZeroWV11OtaFrameHeader* header) {
-  if (state == 0 || header == 0 ||
-      er_pi_zero_w_v1_1_ota_header_payload_valid(header) == 0u) {
-    return 0u;
-  }
-  er_pi_zero_w_v1_1_ota_reset(state);
-  state->status = ER_PI_ZERO_W_V1_1_OTA_STATUS_RECEIVING;
-  state->image_len = header->image_len;
-  state->image_crc32 = header->image_crc32;
-  state->target_block = header->target_block;
-  state->next_block = header->target_block;
-  return 1u;
-}
-
-static UINT8 er_pi_zero_w_v1_1_ota_data(
-    ErPiZeroWV11OtaState* state,
-    const ErPiZeroWV11OtaFrameHeader* header,
-    const UINT8* payload,
+    const UINT8* bytes,
+    UINT32 bytes_len,
     ErPiZeroWV11OtaWriteBlockFn write_block,
     void* write_ctx) {
-  UINT32 copied;
+  UINT32 copied = 0u;
 
-  if (state == 0 ||
-      header == 0 ||
-      payload == 0 ||
-      state->status != ER_PI_ZERO_W_V1_1_OTA_STATUS_RECEIVING ||
-      header->image_len != state->image_len ||
-      header->image_crc32 != state->image_crc32 ||
-      header->target_block != state->target_block ||
-      header->offset != state->next_offset ||
-      er_pi_zero_w_v1_1_ota_header_payload_valid(header) == 0u) {
-    if (state != 0) {
-      state->status = ER_PI_ZERO_W_V1_1_OTA_STATUS_REJECTED;
-    }
+  if (state == 0 || bytes == 0 || write_block == 0) {
     return 0u;
   }
-
-  state->running_crc32 =
-      er_pi_zero_w_v1_1_ota_crc32_extend(state->running_crc32,
-                                         payload,
-                                         (UINT32)header->payload_len);
-  copied = 0u;
-  while (copied < (UINT32)header->payload_len) {
+  while (copied < bytes_len) {
     UINT32 room = ER_PI_ZERO_W_V1_1_OTA_BLOCK_BYTES - state->buffered_bytes;
-    UINT32 chunk = (UINT32)header->payload_len - copied;
-    UINT32 i;
+    UINT32 chunk = bytes_len - copied;
 
     if (chunk > room) {
       chunk = room;
     }
-    for (i = 0u; i < chunk; ++i) {
-      state->block[state->buffered_bytes + i] = payload[copied + i];
-    }
+    er_mem_copy(state->block + state->buffered_bytes,
+                bytes + copied,
+                (UINTN)chunk);
     state->buffered_bytes += chunk;
     copied += chunk;
+    state->next_offset += chunk;
     if (state->buffered_bytes == ER_PI_ZERO_W_V1_1_OTA_BLOCK_BYTES &&
         er_pi_zero_w_v1_1_ota_flush_block(state, write_block, write_ctx) == 0u) {
       return 0u;
     }
   }
-  state->next_offset += (UINT32)header->payload_len;
   return 1u;
 }
 
-static UINT8 er_pi_zero_w_v1_1_ota_commit(
+static UINT8 er_pi_zero_w_v1_1_ota_commit_object(
     ErPiZeroWV11OtaState* state,
-    const ErPiZeroWV11OtaFrameHeader* header,
     ErPiZeroWV11OtaWriteBlockFn write_block,
     void* write_ctx) {
-  UINT32 final_crc;
+  UINT32 packet_index;
 
   if (state == 0 ||
-      header == 0 ||
-      state->status != ER_PI_ZERO_W_V1_1_OTA_STATUS_RECEIVING ||
-      header->image_len != state->image_len ||
-      header->image_crc32 != state->image_crc32 ||
-      header->target_block != state->target_block ||
-      state->next_offset != state->image_len ||
-      er_pi_zero_w_v1_1_ota_header_payload_valid(header) == 0u) {
+      write_block == 0 ||
+      state->object_len == 0u ||
+      state->accepted_packet_count == 0u ||
+      state->packet_count == 0u ||
+      state->packet_count > ER_PI_ZERO_W_V1_1_OTA_PACKET_CAPACITY ||
+      state->accepted_packet_count != state->packet_count) {
     if (state != 0) {
-      state->status = ER_PI_ZERO_W_V1_1_OTA_STATUS_REJECTED;
+      state->status = ER_PI_ZERO_W_V1_1_OTA_STATUS_WRITE_FAILED;
     }
     return 0u;
   }
-  final_crc = ~state->running_crc32;
-  if (final_crc != state->image_crc32) {
-    state->status = ER_PI_ZERO_W_V1_1_OTA_STATUS_REJECTED;
-    return 0u;
+  state->next_offset = 0u;
+  state->next_block = state->target_block;
+  state->buffered_bytes = 0u;
+  er_pi_zero_w_v1_1_ota_zero(state->block,
+                             ER_PI_ZERO_W_V1_1_OTA_BLOCK_BYTES);
+  for (packet_index = 0u;
+       packet_index < state->packet_count;
+       ++packet_index) {
+    const ErVfsObjectPacket* packet = &state->packets[packet_index];
+
+    if (state->packet_present[packet_index] == 0u ||
+        packet->header.packet_index != packet_index ||
+        er_pi_zero_w_v1_1_ota_write_bytes(state,
+                                          packet->bytes,
+                                          packet->header.bytes_len,
+                                          write_block,
+                                          write_ctx) == 0u) {
+      state->status = ER_PI_ZERO_W_V1_1_OTA_STATUS_WRITE_FAILED;
+      return 0u;
+    }
   }
-  if (state->buffered_bytes != 0u &&
-      er_pi_zero_w_v1_1_ota_flush_block(state, write_block, write_ctx) == 0u) {
+  if (state->next_offset != state->object_len ||
+      (state->buffered_bytes != 0u &&
+       er_pi_zero_w_v1_1_ota_flush_block(state, write_block, write_ctx) == 0u)) {
+    state->status = ER_PI_ZERO_W_V1_1_OTA_STATUS_WRITE_FAILED;
     return 0u;
   }
   state->status = ER_PI_ZERO_W_V1_1_OTA_STATUS_COMMITTED;
@@ -295,69 +276,45 @@ static UINT8 er_pi_zero_w_v1_1_ota_commit(
 
 UINT8 er_pi_zero_w_v1_1_ota_receive_frame(
     ErPiZeroWV11OtaState* state,
+    const ErCryptoProvider* crypto,
     const UINT8* frame,
     UINT32 frame_len,
     ErPiZeroWV11OtaWriteBlockFn write_block,
     void* write_ctx) {
-  ErPiZeroWV11OtaFrameHeader header;
-  const UINT8* payload;
+  ErVfsObjectPacket packet;
+  UINT32 packet_index;
 
-  if (er_pi_zero_w_v1_1_ota_header_decode(frame, frame_len, &header) == 0u) {
+  if (state == 0 ||
+      crypto == 0 ||
+      er_pi_zero_w_v1_1_ota_decode_object_packet_payload(frame,
+                                                         frame_len,
+                                                         &packet) == 0u ||
+      er_vfs_object_packet_valid(crypto, &packet) == 0u ||
+      packet.header.packet_count > ER_PI_ZERO_W_V1_1_OTA_PACKET_CAPACITY) {
     if (state != 0) {
       state->status = ER_PI_ZERO_W_V1_1_OTA_STATUS_REJECTED;
     }
     return 0u;
   }
-  payload = frame + ER_PI_ZERO_W_V1_1_OTA_HEADER_BYTES;
-  switch (header.command) {
-    case ER_PI_ZERO_W_V1_1_OTA_COMMAND_BEGIN:
-      return er_pi_zero_w_v1_1_ota_begin(state, &header);
-    case ER_PI_ZERO_W_V1_1_OTA_COMMAND_DATA:
-      return er_pi_zero_w_v1_1_ota_data(state,
-                                        &header,
-                                        payload,
-                                        write_block,
-                                        write_ctx);
-    case ER_PI_ZERO_W_V1_1_OTA_COMMAND_COMMIT:
-      return er_pi_zero_w_v1_1_ota_commit(state,
-                                          &header,
-                                          write_block,
-                                          write_ctx);
-    default:
-      if (state != 0) {
-        state->status = ER_PI_ZERO_W_V1_1_OTA_STATUS_REJECTED;
-      }
-      return 0u;
-  }
-}
-
-UINT8 er_pi_zero_w_v1_1_ota_build_header(
-    const ErPiZeroWV11OtaFrameHeader* header,
-    UINT8 out_header[ER_PI_ZERO_W_V1_1_OTA_HEADER_BYTES]) {
-  if (header == 0 || out_header == 0) {
+  packet_index = packet.header.packet_index;
+  if (state->accepted_packet_count == 0u) {
+    state->object_id = packet.header.object_id;
+    state->object_len = packet.header.object_len;
+    state->packet_count = packet.header.packet_count;
+  } else if (state->object_len != packet.header.object_len ||
+             state->packet_count != packet.header.packet_count ||
+             er_hash_equal(&state->object_id, &packet.header.object_id) == 0u ||
+             state->packet_present[packet_index] != 0u) {
+    state->status = ER_PI_ZERO_W_V1_1_OTA_STATUS_REJECTED;
     return 0u;
   }
-  er_pi_zero_w_v1_1_ota_zero(out_header,
-                             ER_PI_ZERO_W_V1_1_OTA_HEADER_BYTES);
-  er_pi_zero_w_v1_1_ota_put_le32(out_header + ER_PI_ZERO_W_V1_1_OTA_MAGIC_OFFSET,
-                                 header->magic);
-  er_pi_zero_w_v1_1_ota_put_le16(out_header + ER_PI_ZERO_W_V1_1_OTA_VERSION_OFFSET,
-                                 header->version);
-  er_pi_zero_w_v1_1_ota_put_le16(out_header + ER_PI_ZERO_W_V1_1_OTA_COMMAND_OFFSET,
-                                 header->command);
-  er_pi_zero_w_v1_1_ota_put_le32(out_header + ER_PI_ZERO_W_V1_1_OTA_SEQUENCE_OFFSET,
-                                 header->sequence);
-  er_pi_zero_w_v1_1_ota_put_le32(out_header + ER_PI_ZERO_W_V1_1_OTA_IMAGE_LEN_OFFSET,
-                                 header->image_len);
-  er_pi_zero_w_v1_1_ota_put_le32(out_header + ER_PI_ZERO_W_V1_1_OTA_IMAGE_CRC32_OFFSET,
-                                 header->image_crc32);
-  er_pi_zero_w_v1_1_ota_put_le32(out_header + ER_PI_ZERO_W_V1_1_OTA_PAYLOAD_OFFSET_OFFSET,
-                                 header->offset);
-  er_pi_zero_w_v1_1_ota_put_le16(out_header + ER_PI_ZERO_W_V1_1_OTA_PAYLOAD_LEN_OFFSET,
-                                 header->payload_len);
-  er_pi_zero_w_v1_1_ota_put_le16(out_header + ER_PI_ZERO_W_V1_1_OTA_HEADER_LEN_OFFSET,
-                                 header->header_len);
-  er_pi_zero_w_v1_1_ota_put_le32(out_header + ER_PI_ZERO_W_V1_1_OTA_TARGET_BLOCK_OFFSET,
-                                 header->target_block);
-  return 1u;
+  state->packets[packet_index] = packet;
+  state->packet_present[packet_index] = 1u;
+  state->accepted_packet_count += 1u;
+  state->status = ER_PI_ZERO_W_V1_1_OTA_STATUS_RECEIVING;
+  state->next_offset = (UINT32)packet.header.offset + packet.header.bytes_len;
+  if (state->accepted_packet_count != state->packet_count) {
+    return 1u;
+  }
+  return er_pi_zero_w_v1_1_ota_commit_object(state, write_block, write_ctx);
 }
