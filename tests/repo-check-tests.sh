@@ -144,6 +144,22 @@ add_vendor_ui_fetch_command() {
   git -C "${repo_dir}" add ui/shadcn-ui/package-notes.txt
 }
 
+add_first_party_openssl_link() {
+  local repo_dir="$1"
+
+  mkdir -p "${repo_dir}/codex"
+  printf 'LDLIBS ?= -l%s -l%s\n' 'ssl' 'crypto' > "${repo_dir}/codex/Makefile"
+  git -C "${repo_dir}" add codex/Makefile
+}
+
+add_first_party_openssl_include() {
+  local repo_dir="$1"
+
+  mkdir -p "${repo_dir}/codex/src"
+  printf '#include <openssl%sssl.h>\n' '/' > "${repo_dir}/codex/src/tls.c"
+  git -C "${repo_dir}" add codex/src/tls.c
+}
+
 expect_pass clean_repo
 expect_pass agents_policy add_agents_policy
 expect_pass allowed_blake3_readme add_allowed_blake3_readme
@@ -157,5 +173,7 @@ expect_fail nested_readme add_nested_readme
 expect_fail top_level_markdown add_top_level_markdown
 expect_fail unapproved_third_party add_unapproved_third_party
 expect_fail first_party_fetch_command add_first_party_fetch_command
+expect_fail first_party_openssl_link add_first_party_openssl_link
+expect_fail first_party_openssl_include add_first_party_openssl_include
 
 printf 'repo-check tests passed\n'

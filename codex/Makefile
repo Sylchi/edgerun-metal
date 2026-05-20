@@ -1,7 +1,7 @@
 CC ?= cc
 CFLAGS ?= -std=c11 -Wall -Wextra -Werror -O2
 LDFLAGS ?=
-LDLIBS ?= -lssl -lcrypto
+LDLIBS ?=
 
 BUILD_DIR ?= ../.build
 BIN := $(BUILD_DIR)/codex
