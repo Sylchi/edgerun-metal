@@ -9,6 +9,9 @@
 
 #define ER_TEST_VARFONT_TEXT_LEN 3u
 #define ER_TEST_ASCII_LEDGER_LEN 6u
+#define ER_TEST_SURFACE_WIDTH 8u
+#define ER_TEST_SURFACE_HEIGHT 6u
+#define ER_TEST_SURFACE_STRIDE 8u
 
 int g_tests_total = 0;
 int g_tests_failed = 0;
@@ -53,6 +56,10 @@ static const uint32_t ER_TEST_VARFONT_ATLAS_ID = 7u;
 static const uint32_t ER_TEST_VARFONT_TEXT_ATLAS_SIZE = 256u;
 static const size_t ER_TEST_ASCII_SHORT_BUDGET = 3u;
 static const size_t ER_TEST_ASCII_OVERSIZED_BUDGET = 300u;
+static const uint32_t ER_TEST_SURFACE_RECT_X = 2u;
+static const uint32_t ER_TEST_SURFACE_RECT_Y = 1u;
+static const uint32_t ER_TEST_SURFACE_RECT_W = 3u;
+static const uint32_t ER_TEST_SURFACE_RECT_H = 2u;
 
 void expect_true(bool condition, const char* name) {
   g_tests_total++;
@@ -663,12 +670,67 @@ static void test_varfont_memory_face_emits_ui_text(void) {
   er_ui_scene_destroy(&scene);
 }
 
+static void test_surface_renderer_rasterizes_scene_memory(void) {
+  uint32_t pixels[ER_TEST_SURFACE_WIDTH * ER_TEST_SURFACE_HEIGHT] = {0};
+  er_ui_scene_t scene;
+  ErUiSurface surface;
+  ErUiSurfaceRenderStats stats;
+  uint32_t clear_pixel;
+  uint32_t rect_pixel;
+  uint32_t outside_pixel;
+  uint32_t inside_pixel;
+
+  expect_status(er_ui_scene_init_with_allocator(&scene, ER_TEST_BG, er_ui_test_allocator()), ER_UI_OK,
+                "surface renderer: scene initializes");
+  expect_status(er_ui_scene_push_rect(&scene,
+                                      er_ui_rect_fill((float)ER_TEST_SURFACE_RECT_X,
+                                                      (float)ER_TEST_SURFACE_RECT_Y,
+                                                      (float)ER_TEST_SURFACE_RECT_W,
+                                                      (float)ER_TEST_SURFACE_RECT_H,
+                                                      0.0f,
+                                                      ER_TEST_TEXT)),
+                ER_UI_OK,
+                "surface renderer: rect push succeeds");
+
+  surface = (ErUiSurface){
+    pixels,
+    ER_TEST_SURFACE_WIDTH,
+    ER_TEST_SURFACE_HEIGHT,
+    ER_TEST_SURFACE_STRIDE,
+    ER_UI_SURFACE_PIXEL_RGBX
+  };
+  expect_true(er_ui_surface_valid(&surface) != 0u, "surface renderer: surface validates");
+  expect_true(er_ui_surface_render_scene_with_font_stats(&surface, &scene, NULL, &stats) != 0u,
+              "surface renderer: scene renders");
+
+  clear_pixel = er_ui_surface_pack_rgb(ER_UI_SURFACE_PIXEL_RGBX,
+                                       er_math_u8_from_unitf(ER_TEST_BG.r),
+                                       er_math_u8_from_unitf(ER_TEST_BG.g),
+                                       er_math_u8_from_unitf(ER_TEST_BG.b));
+  rect_pixel = er_ui_surface_pack_rgb(ER_UI_SURFACE_PIXEL_RGBX,
+                                      er_math_u8_from_unitf(ER_TEST_TEXT.r),
+                                      er_math_u8_from_unitf(ER_TEST_TEXT.g),
+                                      er_math_u8_from_unitf(ER_TEST_TEXT.b));
+  outside_pixel = pixels[0u];
+  inside_pixel = pixels[(ER_TEST_SURFACE_RECT_Y * ER_TEST_SURFACE_STRIDE) + ER_TEST_SURFACE_RECT_X];
+  expect_u32(outside_pixel, clear_pixel, "surface renderer: clear color reaches untouched pixels");
+  expect_u32(inside_pixel, rect_pixel, "surface renderer: fill rect reaches covered pixels");
+  expect_u32((uint32_t)stats.clears, 1u, "surface renderer: clear stats count full frame clear");
+  expect_u32((uint32_t)stats.solid_rects, 1u, "surface renderer: solid rect stats count draw");
+  expect_true(stats.pixels_written >=
+                  (uint64_t)ER_TEST_SURFACE_WIDTH * (uint64_t)ER_TEST_SURFACE_HEIGHT,
+              "surface renderer: reports framebuffer writes");
+
+  er_ui_scene_destroy(&scene);
+}
+
 int main(void) {
   test_primitive_bounds_helpers();
   test_painter_facade_pushes_scene_commands();
   test_theme_presets_and_semantic_colors();
   test_varfont_vertices_emit_text_quads();
   test_varfont_memory_face_emits_ui_text();
+  test_surface_renderer_rasterizes_scene_memory();
   test_scene_stats_and_clear();
   test_scene_reserve_handles_large_public_count();
   test_scene_topmost_queries();

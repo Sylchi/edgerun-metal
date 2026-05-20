@@ -8,145 +8,30 @@
  */
 
 #include "er_types.h"
+#include "er_ui_surface_renderer.h"
 #include "er_ui_scene.h"
 #include "vr_font.h"
 
-typedef enum {
-  ER_UI_GOP_PIXEL_RGBX = 0,
-  ER_UI_GOP_PIXEL_BGRX = 1
-} ErUiGopPixelFormat;
-
-typedef struct {
-  UINT32* pixels;
-  UINT32 width;
-  UINT32 height;
-  UINT32 stride;
-  ErUiGopPixelFormat pixel_format;
-} ErUiGopSurface;
-
-typedef struct {
-  UINT32 width;
-  UINT32 height;
-  UINT32 stride;
-  UINT32 refresh_hz;
-  ErUiGopPixelFormat pixel_format;
-} ErUiGopMode;
-
-typedef struct {
-  const UINT8* pixels;
-  UINT32 width;
-  UINT32 height;
-  UINT32 bytes_per_pixel;
-} ErUiGopAlphaAtlas;
-
-typedef struct {
-  UINT64 pixels_written;
-  UINT64 bytes_written;
-  UINT64 blend_pixels;
-  UINT64 text_pixels;
-  UINT64 clears;
-  UINT64 rects;
-  UINT64 solid_rects;
-  UINT64 gradient_rects;
-  UINT64 border_rects;
-  UINT64 icon_quads;
-  UINT64 text_quads;
-  UINT64 tiles_rendered;
-  UINT64 dirty_tiles_requested;
-  UINT64 clipped_primitives;
-  UINT64 rejected_primitives;
-} ErUiGopRenderStats;
-
-typedef struct {
-  UINT64 pixels_written;
-  UINT64 bytes_written;
-  UINT64 blend_pixels;
-  UINT64 text_pixels;
-  UINT64 rects;
-  UINT64 icon_quads;
-  UINT64 text_quads;
-  UINT64 tiles_rendered;
-  UINT64 dirty_tiles_requested;
-  UINT64 clipped_primitives;
-  UINT64 rejected_primitives;
-} ErUiGopFrameBudget;
-
-typedef struct {
-  const char* name;
-  UINT64 actual;
-  UINT64 limit;
-} ErUiGopBudgetViolation;
-
-typedef ErUiGopBudgetViolation ErUiGopFrameBudgetViolation;
-
-typedef struct {
-  UINT32 width;
-  UINT32 height;
-  UINT32 stride;
-  UINT32 bytes_per_pixel;
-  UINT32 tile_width;
-  UINT32 tile_height;
-  UINT32 columns;
-  UINT32 rows;
-  UINT32 max_dirty_tiles;
-  UINT64 tile_count;
-  UINT64 scanout_bytes;
-  UINT64 full_frame_bytes;
-  UINT64 max_tile_bytes;
-  UINT64 tile_state_bytes;
-  UINT64 dirty_queue_bytes;
-} ErUiGopTilePlan;
-
-typedef struct {
-  UINT32 refresh_hz;
-  UINT32 overdraw_budget;
-  UINT64 scanout_bytes_per_second;
-  UINT64 full_frame_bytes_per_second;
-  UINT64 budget_bytes_per_second;
-} ErUiGopBandwidthPlan;
-
-typedef struct {
-  UINT32 backing_buffer_count;
-  UINT64 scanout_bytes;
-  UINT64 backing_bytes;
-  UINT64 tile_state_bytes;
-  UINT64 dirty_queue_bytes;
-  UINT64 command_bytes;
-  UINT64 glyph_cache_bytes;
-  UINT64 surface_bytes;
-  UINT64 total_bytes;
-} ErUiGopMemoryPlan;
-
-typedef struct {
-  UINT64 scanout_bytes;
-  UINT64 backing_bytes;
-  UINT64 tile_state_bytes;
-  UINT64 dirty_queue_bytes;
-  UINT64 command_bytes;
-  UINT64 glyph_cache_bytes;
-  UINT64 surface_bytes;
-  UINT64 total_bytes;
-} ErUiGopMemoryBudget;
-
-typedef ErUiGopBudgetViolation ErUiGopMemoryBudgetViolation;
-
-typedef struct {
-  UINT32* tile_ids;
-  UINT32 capacity;
-  UINT32 count;
-  UINT8 overflowed;
-} ErUiGopDirtyTileList;
-
-typedef struct {
-  UINT32 x0;
-  UINT32 y0;
-  UINT32 x1;
-  UINT32 y1;
-} ErUiGopPixelRect;
-
-typedef struct {
-  UINT8 has_previous_scene;
-} ErUiGopFrameState;
+typedef ErUiSurfacePixelFormat ErUiGopPixelFormat;
+enum {
+  ER_UI_GOP_PIXEL_RGBX = ER_UI_SURFACE_PIXEL_RGBX,
+  ER_UI_GOP_PIXEL_BGRX = ER_UI_SURFACE_PIXEL_BGRX
+};
+typedef ErUiSurface ErUiGopSurface;
+typedef ErUiSurfaceMode ErUiGopMode;
+typedef ErUiSurfaceAlphaAtlas ErUiGopAlphaAtlas;
+typedef ErUiSurfaceRenderStats ErUiGopRenderStats;
+typedef ErUiSurfaceFrameBudget ErUiGopFrameBudget;
+typedef ErUiSurfaceBudgetViolation ErUiGopBudgetViolation;
+typedef ErUiSurfaceFrameBudgetViolation ErUiGopFrameBudgetViolation;
+typedef ErUiSurfaceTilePlan ErUiGopTilePlan;
+typedef ErUiSurfaceBandwidthPlan ErUiGopBandwidthPlan;
+typedef ErUiSurfaceMemoryPlan ErUiGopMemoryPlan;
+typedef ErUiSurfaceMemoryBudget ErUiGopMemoryBudget;
+typedef ErUiSurfaceMemoryBudgetViolation ErUiGopMemoryBudgetViolation;
+typedef ErUiSurfaceDirtyTileList ErUiGopDirtyTileList;
+typedef ErUiSurfacePixelRect ErUiGopPixelRect;
+typedef ErUiSurfaceFrameState ErUiGopFrameState;
 
 UINT8 er_ui_gop_surface_valid(const ErUiGopSurface* surface);
 UINT8 er_ui_gop_mode_valid(const ErUiGopMode* mode);

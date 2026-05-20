@@ -13,6 +13,7 @@
 #include "er_ui_scene.h"
 #include "er_ui_shell.h"
 #include "er_ui_spacing.h"
+#include "er_ui_surface_renderer.h"
 #include "er_ui_theme.h"
 #include "er_ui_text.h"
 
