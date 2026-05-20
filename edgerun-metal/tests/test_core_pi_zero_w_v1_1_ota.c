@@ -5,6 +5,8 @@ typedef struct {
   UINT8 bytes[4][ER_PI_ZERO_W_V1_1_OTA_BLOCK_BYTES];
 } TestPiZeroWV11OtaSink;
 
+#define PI_ZERO_W_V1_1_TEST_ERWIRE_STREAM_ID 0x45525a57u
+
 static UINT8 test_pi_zero_w_v1_1_ota_write_block(
     void* ctx,
     UINT32 block_address,
@@ -26,208 +28,114 @@ static UINT8 test_pi_zero_w_v1_1_ota_write_block(
   return 1u;
 }
 
-static void test_pi_zero_w_v1_1_ota_frame(
-    UINT16 command,
-    UINT32 sequence,
-    UINT32 image_len,
-    UINT32 image_crc32,
-    UINT32 offset,
-    UINT32 target_block,
-    const UINT8* payload,
-    UINT16 payload_len,
+static void test_pi_zero_w_v1_1_ota_erwire_object_frame(
+    const ErVfsObjectPacket* object_packet,
     UINT8* out_frame,
     UINT32* out_frame_len) {
-  ErPiZeroWV11OtaFrameHeader header;
-  UINT32 i;
+  UINT8 payload[ERWIRE_MAX_PAYLOAD];
+  UINT32 payload_len;
 
-  header.magic = ER_PI_ZERO_W_V1_1_OTA_MAGIC;
-  header.version = ER_PI_ZERO_W_V1_1_OTA_ABI_VERSION;
-  header.command = command;
-  header.sequence = sequence;
-  header.image_len = image_len;
-  header.image_crc32 = image_crc32;
-  header.offset = offset;
-  header.payload_len = payload_len;
-  header.header_len = ER_PI_ZERO_W_V1_1_OTA_HEADER_BYTES;
-  header.target_block = target_block;
-  check_int64("pi zero w ota build header",
-              er_pi_zero_w_v1_1_ota_build_header(&header, out_frame),
+  payload_len = (UINT32)sizeof(object_packet->header) +
+                object_packet->header.bytes_len;
+  er_mem_copy(payload,
+              (const UINT8*)&object_packet->header,
+              (UINTN)sizeof(object_packet->header));
+  er_mem_copy(payload + (UINT32)sizeof(object_packet->header),
+              object_packet->bytes,
+              object_packet->header.bytes_len);
+  check_int64("pi zero w ota build erwire object packet",
+              erwire_build_packet(ERWIRE_KIND_VFS_OBJECT_PACKET,
+                                  ERWIRE_FLAG_FIRST | ERWIRE_FLAG_LAST,
+                                  payload,
+                                  payload_len,
+                                  out_frame,
+                                  ERWIRE_HEADER_SIZE + ERWIRE_MAX_PAYLOAD,
+                                  out_frame_len),
               1);
-  for (i = 0u; i < payload_len; ++i) {
-    out_frame[ER_PI_ZERO_W_V1_1_OTA_HEADER_BYTES + i] = payload[i];
-  }
-  *out_frame_len = ER_PI_ZERO_W_V1_1_OTA_HEADER_BYTES + payload_len;
 }
 
 static void test_pi_zero_w_v1_1_ota_receiver(void) {
   enum {
-    PI_TEST_OTA_IMAGE_LEN = 700u,
-    PI_TEST_OTA_CHUNK_LEN = 96u,
-    PI_TEST_OTA_FIRST_FLUSH_OFFSET = 480u,
-    PI_TEST_OTA_TAIL_OFFSET = 672u,
-    PI_TEST_OTA_TAIL_LEN = 28u,
-    PI_TEST_OTA_TARGET_BLOCK = 9000u
+    PI_TEST_OTA_IMAGE_LEN = 1500u,
+    PI_TEST_OTA_SECOND_PACKET_OFFSET = 1024u,
+    PI_TEST_OTA_TARGET_BLOCK = ER_PI_ZERO_W_V1_1_OTA_DEFAULT_SLOT_BLOCK
   };
 
   ErPiZeroWV11OtaState state;
   TestPiZeroWV11OtaSink sink;
-  ErPiZeroWV11OtaFrameHeader decoded;
+  ErCryptoProvider crypto;
+  ErVfsObjectPacket object_packets[2];
+  ErVfsObjectPacket decoded_packet;
   UINT8 image[PI_TEST_OTA_IMAGE_LEN];
-  UINT8 frame[ER_PI_ZERO_W_V1_1_OTA_HEADER_BYTES +
-              ER_PI_ZERO_W_V1_1_OTA_FRAME_PAYLOAD_MAX];
+  UINT8 frame[ERWIRE_HEADER_SIZE + ERWIRE_MAX_PAYLOAD];
   UINT32 frame_len;
-  UINT32 image_crc32;
   UINT32 i;
 
+  er_crypto_blake3_provider(&crypto);
   er_mem_zero((UINT8*)&sink, (UINTN)sizeof(sink));
+  erwire_init(PI_ZERO_W_V1_1_TEST_ERWIRE_STREAM_ID);
   for (i = 0u; i < PI_TEST_OTA_IMAGE_LEN; ++i) {
     image[i] = (UINT8)(i * 17u + 3u);
   }
-  image_crc32 = er_pi_zero_w_v1_1_ota_crc32(image, PI_TEST_OTA_IMAGE_LEN);
+  check_int64("pi zero w ota prepare vfs object packet",
+              er_vfs_prepare_object_packet(&crypto,
+                                           image,
+                                           PI_TEST_OTA_IMAGE_LEN,
+                                           0u,
+                                           0u,
+                                           2u,
+                                           &object_packets[0]),
+              1);
+  check_int64("pi zero w ota prepare second vfs object packet",
+              er_vfs_prepare_object_packet(&crypto,
+                                           image,
+                                           PI_TEST_OTA_IMAGE_LEN,
+                                           PI_TEST_OTA_SECOND_PACKET_OFFSET,
+                                           1u,
+                                           2u,
+                                           &object_packets[1]),
+              1);
   er_pi_zero_w_v1_1_ota_reset(&state);
   check_uint64("pi zero w ota reset status",
                state.status,
                ER_PI_ZERO_W_V1_1_OTA_STATUS_IDLE);
   check_uint64("pi zero w ota reset target",
                state.target_block,
-               ER_PI_ZERO_W_V1_1_OTA_DEFAULT_SLOT_BLOCK);
-
-  test_pi_zero_w_v1_1_ota_frame(ER_PI_ZERO_W_V1_1_OTA_COMMAND_BEGIN,
-                                1u,
-                                PI_TEST_OTA_IMAGE_LEN,
-                                image_crc32,
-                                0u,
-                                PI_TEST_OTA_TARGET_BLOCK,
-                                0,
-                                0u,
-                                frame,
-                                &frame_len);
-  check_int64("pi zero w ota decode begin",
-              er_pi_zero_w_v1_1_ota_header_decode(frame,
-                                                  frame_len,
-                                                  &decoded),
-              1);
-  check_uint64("pi zero w ota decoded target",
-               decoded.target_block,
                PI_TEST_OTA_TARGET_BLOCK);
-  check_int64("pi zero w ota begin",
+
+  test_pi_zero_w_v1_1_ota_erwire_object_frame(&object_packets[0],
+                                              frame,
+                                              &frame_len);
+  check_int64("pi zero w ota decode erwire vfs packet",
+              er_pi_zero_w_v1_1_ota_decode_object_packet_payload(
+                  frame,
+                  frame_len,
+                  &decoded_packet),
+              1);
+  check_hash_equal("pi zero w ota decoded object id",
+                   &decoded_packet.header.object_id,
+                   &object_packets[0].header.object_id);
+  check_int64("pi zero w ota receive first vfs object packet",
               er_pi_zero_w_v1_1_ota_receive_frame(
                   &state,
+                  &crypto,
                   frame,
                   frame_len,
                   test_pi_zero_w_v1_1_ota_write_block,
                   &sink),
               1);
-  check_uint64("pi zero w ota receiving",
+  check_uint64("pi zero w ota receiving first packet",
                state.status,
                ER_PI_ZERO_W_V1_1_OTA_STATUS_RECEIVING);
+  check_uint64("pi zero w ota first packet no write", sink.write_count, 0u);
 
-  for (i = 0u; i < PI_TEST_OTA_FIRST_FLUSH_OFFSET; i += PI_TEST_OTA_CHUNK_LEN) {
-    test_pi_zero_w_v1_1_ota_frame(ER_PI_ZERO_W_V1_1_OTA_COMMAND_DATA,
-                                  2u + (i / PI_TEST_OTA_CHUNK_LEN),
-                                  PI_TEST_OTA_IMAGE_LEN,
-                                  image_crc32,
-                                  i,
-                                  PI_TEST_OTA_TARGET_BLOCK,
-                                  image + i,
-                                  PI_TEST_OTA_CHUNK_LEN,
-                                  frame,
-                                  &frame_len);
-    check_int64("pi zero w ota data before flush",
-                er_pi_zero_w_v1_1_ota_receive_frame(
-                    &state,
-                    frame,
-                    frame_len,
-                    test_pi_zero_w_v1_1_ota_write_block,
-                    &sink),
-                1);
-  }
-  check_uint64("pi zero w ota no full block yet", sink.write_count, 0u);
-  check_uint64("pi zero w ota next offset before flush",
-               state.next_offset,
-               PI_TEST_OTA_FIRST_FLUSH_OFFSET);
-
-  test_pi_zero_w_v1_1_ota_frame(ER_PI_ZERO_W_V1_1_OTA_COMMAND_DATA,
-                                7u,
-                                PI_TEST_OTA_IMAGE_LEN,
-                                image_crc32,
-                                PI_TEST_OTA_FIRST_FLUSH_OFFSET,
-                                PI_TEST_OTA_TARGET_BLOCK,
-                                image + PI_TEST_OTA_FIRST_FLUSH_OFFSET,
-                                PI_TEST_OTA_CHUNK_LEN,
-                                frame,
-                                &frame_len);
-  check_int64("pi zero w ota data flush",
+  test_pi_zero_w_v1_1_ota_erwire_object_frame(&object_packets[1],
+                                              frame,
+                                              &frame_len);
+  check_int64("pi zero w ota receive second vfs object packet",
               er_pi_zero_w_v1_1_ota_receive_frame(
                   &state,
-                  frame,
-                  frame_len,
-                  test_pi_zero_w_v1_1_ota_write_block,
-                  &sink),
-              1);
-  check_uint64("pi zero w ota first block written", sink.write_count, 1u);
-  check_uint64("pi zero w ota first block address",
-               sink.blocks[0],
-               PI_TEST_OTA_TARGET_BLOCK);
-  check_uint64("pi zero w ota next offset second",
-               state.next_offset,
-               PI_TEST_OTA_FIRST_FLUSH_OFFSET + PI_TEST_OTA_CHUNK_LEN);
-  for (i = 0u; i < ER_PI_ZERO_W_V1_1_OTA_BLOCK_BYTES; ++i) {
-    check_uint64("pi zero w ota first block byte", sink.bytes[0][i], image[i]);
-  }
-
-  test_pi_zero_w_v1_1_ota_frame(ER_PI_ZERO_W_V1_1_OTA_COMMAND_DATA,
-                                8u,
-                                PI_TEST_OTA_IMAGE_LEN,
-                                image_crc32,
-                                PI_TEST_OTA_FIRST_FLUSH_OFFSET +
-                                    PI_TEST_OTA_CHUNK_LEN,
-                                PI_TEST_OTA_TARGET_BLOCK,
-                                image + PI_TEST_OTA_FIRST_FLUSH_OFFSET +
-                                    PI_TEST_OTA_CHUNK_LEN,
-                                PI_TEST_OTA_CHUNK_LEN,
-                                frame,
-                                &frame_len);
-  check_int64("pi zero w ota data tail full",
-              er_pi_zero_w_v1_1_ota_receive_frame(
-                  &state,
-                  frame,
-                  frame_len,
-                  test_pi_zero_w_v1_1_ota_write_block,
-                  &sink),
-              1);
-  test_pi_zero_w_v1_1_ota_frame(ER_PI_ZERO_W_V1_1_OTA_COMMAND_DATA,
-                                9u,
-                                PI_TEST_OTA_IMAGE_LEN,
-                                image_crc32,
-                                PI_TEST_OTA_TAIL_OFFSET,
-                                PI_TEST_OTA_TARGET_BLOCK,
-                                image + PI_TEST_OTA_TAIL_OFFSET,
-                                PI_TEST_OTA_TAIL_LEN,
-                                frame,
-                                &frame_len);
-  check_int64("pi zero w ota data tail partial",
-              er_pi_zero_w_v1_1_ota_receive_frame(
-                  &state,
-                  frame,
-                  frame_len,
-                  test_pi_zero_w_v1_1_ota_write_block,
-                  &sink),
-              1);
-
-  test_pi_zero_w_v1_1_ota_frame(ER_PI_ZERO_W_V1_1_OTA_COMMAND_COMMIT,
-                                4u,
-                                PI_TEST_OTA_IMAGE_LEN,
-                                image_crc32,
-                                0u,
-                                PI_TEST_OTA_TARGET_BLOCK,
-                                0,
-                                0u,
-                                frame,
-                                &frame_len);
-  check_int64("pi zero w ota commit",
-              er_pi_zero_w_v1_1_ota_receive_frame(
-                  &state,
+                  &crypto,
                   frame,
                   frame_len,
                   test_pi_zero_w_v1_1_ota_write_block,
@@ -237,71 +145,75 @@ static void test_pi_zero_w_v1_1_ota_receiver(void) {
                state.status,
                ER_PI_ZERO_W_V1_1_OTA_STATUS_COMMITTED);
   check_uint64("pi zero w ota reboot required", state.reboot_required, 1u);
-  check_uint64("pi zero w ota final block written", sink.write_count, 2u);
-  check_uint64("pi zero w ota final block address",
+  check_uint64("pi zero w ota object length",
+               state.object_len,
+               PI_TEST_OTA_IMAGE_LEN);
+  check_uint64("pi zero w ota blocks written", sink.write_count, 3u);
+  check_uint64("pi zero w ota first block address",
+               sink.blocks[0],
+               PI_TEST_OTA_TARGET_BLOCK);
+  check_uint64("pi zero w ota second block address",
                sink.blocks[1],
                PI_TEST_OTA_TARGET_BLOCK + 1u);
-  for (i = 0u; i < PI_TEST_OTA_IMAGE_LEN - ER_PI_ZERO_W_V1_1_OTA_BLOCK_BYTES;
-       ++i) {
-    check_uint64("pi zero w ota final block byte",
+  check_uint64("pi zero w ota final block address",
+               sink.blocks[2],
+               PI_TEST_OTA_TARGET_BLOCK + 2u);
+  for (i = 0u; i < ER_PI_ZERO_W_V1_1_OTA_BLOCK_BYTES; ++i) {
+    check_uint64("pi zero w ota first block byte", sink.bytes[0][i], image[i]);
+  }
+  for (i = 0u; i < ER_PI_ZERO_W_V1_1_OTA_BLOCK_BYTES; ++i) {
+    check_uint64("pi zero w ota second block byte",
                  sink.bytes[1][i],
                  image[ER_PI_ZERO_W_V1_1_OTA_BLOCK_BYTES + i]);
+  }
+  for (i = 0u;
+       i < PI_TEST_OTA_IMAGE_LEN -
+           (ER_PI_ZERO_W_V1_1_OTA_BLOCK_BYTES * 2u);
+       ++i) {
+    check_uint64("pi zero w ota final block byte",
+                 sink.bytes[2][i],
+                 image[(ER_PI_ZERO_W_V1_1_OTA_BLOCK_BYTES * 2u) + i]);
   }
 }
 
 static void test_pi_zero_w_v1_1_ota_rejects_bad_sequence(void) {
   enum {
-    PI_TEST_OTA_BAD_IMAGE_LEN = 16u,
-    PI_TEST_OTA_BAD_TARGET_BLOCK = 44u
+    PI_TEST_OTA_BAD_IMAGE_LEN = 16u
   };
 
   ErPiZeroWV11OtaState state;
   TestPiZeroWV11OtaSink sink;
+  ErCryptoProvider crypto;
+  ErVfsObjectPacket object_packet;
   UINT8 image[PI_TEST_OTA_BAD_IMAGE_LEN];
-  UINT8 frame[ER_PI_ZERO_W_V1_1_OTA_HEADER_BYTES +
-              ER_PI_ZERO_W_V1_1_OTA_FRAME_PAYLOAD_MAX];
+  UINT8 frame[ERWIRE_HEADER_SIZE + ERWIRE_MAX_PAYLOAD];
   UINT32 frame_len;
-  UINT32 image_crc32;
   UINT32 i;
 
+  er_crypto_blake3_provider(&crypto);
   er_mem_zero((UINT8*)&sink, (UINTN)sizeof(sink));
+  erwire_init(PI_ZERO_W_V1_1_TEST_ERWIRE_STREAM_ID);
   for (i = 0u; i < PI_TEST_OTA_BAD_IMAGE_LEN; ++i) {
     image[i] = (UINT8)(0xa0u + i);
   }
-  image_crc32 =
-      er_pi_zero_w_v1_1_ota_crc32(image, PI_TEST_OTA_BAD_IMAGE_LEN);
   er_pi_zero_w_v1_1_ota_reset(&state);
-  test_pi_zero_w_v1_1_ota_frame(ER_PI_ZERO_W_V1_1_OTA_COMMAND_BEGIN,
-                                1u,
-                                PI_TEST_OTA_BAD_IMAGE_LEN,
-                                image_crc32,
-                                0u,
-                                PI_TEST_OTA_BAD_TARGET_BLOCK,
-                                0,
-                                0u,
-                                frame,
-                                &frame_len);
-  check_int64("pi zero w ota bad begin",
-              er_pi_zero_w_v1_1_ota_receive_frame(
-                  &state,
-                  frame,
-                  frame_len,
-                  test_pi_zero_w_v1_1_ota_write_block,
-                  &sink),
+  check_int64("pi zero w ota bad vfs prepare",
+              er_vfs_prepare_object_packet(&crypto,
+                                           image,
+                                           PI_TEST_OTA_BAD_IMAGE_LEN,
+                                           0u,
+                                           0u,
+                                           1u,
+                                           &object_packet),
               1);
-  test_pi_zero_w_v1_1_ota_frame(ER_PI_ZERO_W_V1_1_OTA_COMMAND_DATA,
-                                2u,
-                                PI_TEST_OTA_BAD_IMAGE_LEN,
-                                image_crc32,
-                                4u,
-                                PI_TEST_OTA_BAD_TARGET_BLOCK,
-                                image,
-                                PI_TEST_OTA_BAD_IMAGE_LEN,
-                                frame,
-                                &frame_len);
-  check_int64("pi zero w ota rejects skipped offset",
+  object_packet.header.packet_id.bytes[0] ^= 1u;
+  test_pi_zero_w_v1_1_ota_erwire_object_frame(&object_packet,
+                                              frame,
+                                              &frame_len);
+  check_int64("pi zero w ota rejects malformed vfs packet",
               er_pi_zero_w_v1_1_ota_receive_frame(
                   &state,
+                  &crypto,
                   frame,
                   frame_len,
                   test_pi_zero_w_v1_1_ota_write_block,
@@ -310,4 +222,5 @@ static void test_pi_zero_w_v1_1_ota_rejects_bad_sequence(void) {
   check_uint64("pi zero w ota rejected status",
                state.status,
                ER_PI_ZERO_W_V1_1_OTA_STATUS_REJECTED);
+  check_uint64("pi zero w ota rejected no write", sink.write_count, 0u);
 }

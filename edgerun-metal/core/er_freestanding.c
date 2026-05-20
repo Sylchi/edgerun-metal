@@ -52,6 +52,30 @@ void* memmove(void* dst, const void* src, UINTN size) {
   return dst;
 }
 
+void __aeabi_memcpy(void* dst, const void* src, UINTN size) {
+  (void)memcpy(dst, src, size);
+}
+
+void __aeabi_memcpy4(void* dst, const void* src, UINTN size) {
+  (void)memcpy(dst, src, size);
+}
+
+void __aeabi_memcpy8(void* dst, const void* src, UINTN size) {
+  (void)memcpy(dst, src, size);
+}
+
+void __aeabi_memclr(void* dst, UINTN size) {
+  (void)memset(dst, 0, size);
+}
+
+void __aeabi_memclr4(void* dst, UINTN size) {
+  (void)memset(dst, 0, size);
+}
+
+void __aeabi_memclr8(void* dst, UINTN size) {
+  (void)memset(dst, 0, size);
+}
+
 int memcmp(const void* left, const void* right, UINTN size) {
   const UINT8* a = (const UINT8*)left;
   const UINT8* b = (const UINT8*)right;

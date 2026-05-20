@@ -1,5 +1,6 @@
 #include "er_pi_zero_w_v1_1_uart.h"
 #include "er_pi_zero_w_v1_1_ota.h"
+#include "er_crypto_blake3.h"
 #include "er_cyw43438_d11.h"
 #include "er_cyw43438_owned_firmware.h"
 #include "er_types.h"
@@ -2033,14 +2034,16 @@ static void er_pi_zero_w_v1_1_ota_listen_init(void) {
 }
 
 static void er_pi_zero_w_v1_1_ota_poll_owned_rx(void) {
+  ErCryptoProvider crypto;
   UINT32 rx_len;
   UINT8 frame[ER_CYW43438_OWNED_FIRMWARE_RX_FRAME_CAPACITY];
 
+  er_crypto_blake3_provider(&crypto);
   if (g_er_pi_zero_w_v1_1_sdio_probe_state != ER_PI_ZERO_W_V1_1_L2_READY ||
       er_pi_zero_w_v1_1_cyw43438_backplane_read32(
           ER_CYW43438_OWNED_FIRMWARE_RX_LEN_ADDR,
           &rx_len) == 0u ||
-      rx_len < ER_PI_ZERO_W_V1_1_OTA_HEADER_BYTES ||
+      rx_len < ER_PI_ZERO_W_V1_1_ERWIRE_HEADER_SIZE ||
       rx_len > ER_CYW43438_OWNED_FIRMWARE_RX_FRAME_CAPACITY ||
       er_pi_zero_w_v1_1_cyw43438_set_backplane_window(
           ER_CYW43438_OWNED_FIRMWARE_RX_FRAME_ADDR) == 0u ||
@@ -2051,11 +2054,12 @@ static void er_pi_zero_w_v1_1_ota_poll_owned_rx(void) {
           frame,
           rx_len) == 0u ||
       er_pi_zero_w_v1_1_ota_wire_magic(frame) !=
-          ER_PI_ZERO_W_V1_1_OTA_MAGIC) {
+          ER_PI_ZERO_W_V1_1_ERWIRE_MAGIC) {
     return;
   }
   (void)er_pi_zero_w_v1_1_ota_receive_frame(
       &g_er_pi_zero_w_v1_1_ota_state,
+      &crypto,
       frame,
       rx_len,
       er_pi_zero_w_v1_1_ota_write_block_unbound,

@@ -1,6 +1,10 @@
 #include "er_vfs.h"
 #include "er_mem.h"
 
+_Static_assert(sizeof(ErVfsObjectPacketHeader) ==
+               ER_VFS_OBJECT_PACKET_HEADER_BYTES,
+               "VFS object packet header wire size must stay stable");
+
 /*
  * Purpose: build content-addressed VFS object records from in-memory bytes.
  * Intention: labels remain app-facing manifest names; wire/durable identity is sealed object data.

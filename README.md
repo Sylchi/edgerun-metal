@@ -528,12 +528,12 @@ sudo sh -c 'echo 0000:c3:00.4 > /sys/bus/pci/drivers/xhci_hcd/unbind; sleep 3; e
 ```
 
 The Pi Zero W v1.1 open OTA updater is intentionally unauthenticated during
-bring-up. The listener accepts raw L2 `ERUP` frames from boot:
-
-- `BEGIN` declares image length, CRC32, and target SD block.
-- `DATA` carries up to 96 image bytes per frame.
-- `COMMIT` verifies the CRC32, flushes the final block, and marks reboot
-  required.
+bring-up. The listener accepts raw L2 erwire frames from boot. Update payloads
+use `ERWIRE_KIND_VFS_OBJECT_PACKET` and carry the existing serialized VFS object
+packet shape: `ErVfsObjectPacketHeader` followed by `header.bytes_len` object
+bytes. The receiver validates the VFS packet with the normal content-addressed
+hashes, caches packets in the board-local boot receiver, writes the completed
+object to the update slot, and marks reboot required.
 
 The default update slot begins at SD block `8192`. The receiver code is linked
 into `kernel.img`; the current hardware boot path still needs the Pi Zero W
