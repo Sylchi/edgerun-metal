@@ -112,6 +112,7 @@ UINT8 er_tls_tpm_sha256(ErTlsTpm* tls_tpm,
   UINT32 cursor;
   UINT32 chunk_len;
   UINT32 sequence_handle;
+  UINT8 ok;
 
   if (tls_tpm == 0 || data == 0 || out_digest == 0 ||
       data_len == 0u) {
@@ -125,15 +126,19 @@ UINT8 er_tls_tpm_sha256(ErTlsTpm* tls_tpm,
                                          (UINT32)sizeof(tls_tpm->command),
                                          &command_len) == 0u ||
         er_tls_tpm_run(tls_tpm, command_len, &response_len) == 0u) {
+      er_mem_scrub(tls_tpm->command, (UINTN)sizeof(tls_tpm->command));
       return 0u;
     }
-    return er_tpm_parse_sha256_digest_response(tls_tpm->response, response_len, out_digest);
+    ok = er_tpm_parse_sha256_digest_response(tls_tpm->response, response_len, out_digest);
+    er_mem_scrub(tls_tpm->command, (UINTN)sizeof(tls_tpm->command));
+    return ok;
   }
   if (er_tpm_build_hash_sequence_start_sha256_command(tls_tpm->command,
                                                       (UINT32)sizeof(tls_tpm->command),
                                                       &command_len) == 0u ||
       er_tls_tpm_run(tls_tpm, command_len, &response_len) == 0u ||
       er_tpm_parse_handle_response(tls_tpm->response, response_len, &sequence_handle) == 0u) {
+    er_mem_scrub(tls_tpm->command, (UINTN)sizeof(tls_tpm->command));
     return 0u;
   }
   cursor = 0u;
@@ -147,8 +152,10 @@ UINT8 er_tls_tpm_sha256(ErTlsTpm* tls_tpm,
                                              &command_len) == 0u ||
         er_tls_tpm_run(tls_tpm, command_len, &response_len) == 0u ||
         er_tpm_response_success(tls_tpm->response, response_len) == 0u) {
+      er_mem_scrub(tls_tpm->command, (UINTN)sizeof(tls_tpm->command));
       return 0u;
     }
+    er_mem_scrub(tls_tpm->command, (UINTN)sizeof(tls_tpm->command));
     cursor += chunk_len;
   }
   chunk_len = (UINT32)data_len - cursor;
@@ -160,9 +167,12 @@ UINT8 er_tls_tpm_sha256(ErTlsTpm* tls_tpm,
                                              (UINT32)sizeof(tls_tpm->command),
                                              &command_len) == 0u ||
       er_tls_tpm_run(tls_tpm, command_len, &response_len) == 0u) {
+    er_mem_scrub(tls_tpm->command, (UINTN)sizeof(tls_tpm->command));
     return 0u;
   }
-  return er_tpm_parse_sha256_digest_response(tls_tpm->response, response_len, out_digest);
+  ok = er_tpm_parse_sha256_digest_response(tls_tpm->response, response_len, out_digest);
+  er_mem_scrub(tls_tpm->command, (UINTN)sizeof(tls_tpm->command));
+  return ok;
 }
 
 UINT8 er_tls_tpm_load_hmac_sha256_key(ErTlsTpm* tls_tpm,
@@ -202,6 +212,7 @@ UINT8 er_tls_tpm_hmac_sha256(ErTlsTpm* tls_tpm,
                              UINT8 out_digest[ER_TPM_SHA256_DIGEST_LEN]) {
   UINT32 command_len;
   UINT32 response_len;
+  UINT8 ok;
 
   if (tls_tpm == 0 || data == 0 || out_digest == 0 ||
       er_tpm_build_hmac_sha256_command(handle,
@@ -211,9 +222,14 @@ UINT8 er_tls_tpm_hmac_sha256(ErTlsTpm* tls_tpm,
                                        (UINT32)sizeof(tls_tpm->command),
                                        &command_len) == 0u ||
       er_tls_tpm_run(tls_tpm, command_len, &response_len) == 0u) {
+    if (tls_tpm != 0) {
+      er_mem_scrub(tls_tpm->command, (UINTN)sizeof(tls_tpm->command));
+    }
     return 0u;
   }
-  return er_tpm_parse_sha256_digest_response(tls_tpm->response, response_len, out_digest);
+  ok = er_tpm_parse_sha256_digest_response(tls_tpm->response, response_len, out_digest);
+  er_mem_scrub(tls_tpm->command, (UINTN)sizeof(tls_tpm->command));
+  return ok;
 }
 
 UINT8 er_tls_tpm_load_aes_key(ErTlsTpm* tls_tpm,
@@ -263,6 +279,7 @@ UINT8 er_tls_tpm_record_crypt(ErTlsTpm* tls_tpm,
                               UINT32* out_iv_len) {
   UINT32 command_len;
   UINT32 response_len;
+  UINT8 ok;
 
   if (tls_tpm == 0 || iv == 0 || input == 0 || out_data == 0 || out_data_len == 0 ||
       out_iv == 0 || out_iv_len == 0 ||
@@ -277,16 +294,21 @@ UINT8 er_tls_tpm_record_crypt(ErTlsTpm* tls_tpm,
                                             (UINT32)sizeof(tls_tpm->command),
                                             &command_len) == 0u ||
       er_tls_tpm_run(tls_tpm, command_len, &response_len) == 0u) {
+    if (tls_tpm != 0) {
+      er_mem_scrub(tls_tpm->command, (UINTN)sizeof(tls_tpm->command));
+    }
     return 0u;
   }
-  return er_tpm_parse_encrypt_decrypt2_response(tls_tpm->response,
-                                                response_len,
-                                                out_data,
-                                                out_data_capacity,
-                                                out_data_len,
-                                                out_iv,
-                                                out_iv_capacity,
-                                                out_iv_len);
+  ok = er_tpm_parse_encrypt_decrypt2_response(tls_tpm->response,
+                                              response_len,
+                                              out_data,
+                                              out_data_capacity,
+                                              out_data_len,
+                                              out_iv,
+                                              out_iv_capacity,
+                                              out_iv_len);
+  er_mem_scrub(tls_tpm->command, (UINTN)sizeof(tls_tpm->command));
+  return ok;
 }
 
 UINT8 er_tls_tpm_create_p256_ecdh_key(ErTlsTpm* tls_tpm,
