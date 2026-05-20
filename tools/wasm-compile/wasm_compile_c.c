@@ -43,6 +43,11 @@ static const ErWcCHostImport ERWC_C_HOST_IMPORTS[] = {
 static const uint32_t ERWC_C_HOST_IMPORT_COUNT =
   (uint32_t)(sizeof(ERWC_C_HOST_IMPORTS) / sizeof(ERWC_C_HOST_IMPORTS[0]));
 
+static const uint32_t ERWC_C_TYPE_SUFFIX_LEN = 3u;
+static const uint32_t ERWC_C_MEMORY_ALIGN_16 = 1u;
+static const uint32_t ERWC_C_MEMORY_ALIGN_32 = 2u;
+static const uint32_t ERWC_C_MEMORY_ALIGN_64 = 3u;
+
 static void erwc_c_skip_ws(ErWcCParser* parser) {
   while (parser->cur < parser->end &&
          (*parser->cur == ' ' || *parser->cur == '\n' ||
@@ -501,12 +506,22 @@ static int erwc_c_parse_main_statement(ErWcCParser* parser,
 static int erwc_c_parse_memory_offset(ErWcCParser* parser,
                                       const ErWcModule* module,
                                       int64_t* out_offset);
+static int erwc_c_parse_memory_access_prefix(ErWcCParser* parser, const ErWcModule* module,
+                                             ErWcFunc* func, const char* name,
+                                             int64_t* out_offset);
+static int erwc_c_parse_memory_op(ErWcCParser* parser, const ErWcModule* module,
+                                  ErWcFunc* func, const char* name, uint8_t opcode,
+                                  uint32_t align, uint8_t has_value,
+                                  uint8_t has_semicolon);
 static int erwc_c_emit_load(ErWcCParser* parser,
                             const ErWcModule* module,
                             ErWcFunc* func,
                             const char* name,
                             uint8_t opcode,
                             uint32_t align);
+static int erwc_c_parse_function_tail(ErWcCParser* parser,
+                                      const ErWcModule* module,
+                                      ErWcFunc* func);
 
 static int erwc_c_emit_call(ErWcCParser* parser,
                             const ErWcModule* module,
@@ -559,15 +574,17 @@ static int erwc_c_parse_expression(ErWcCParser* parser,
   }
   erwc_c_skip_ws(parser);
   if (parser->cur < parser->end && *parser->cur == '(') {
-    if (strcmp(ident, "load32") == 0) {
-      *parser = before_literal;
-      return erwc_c_emit_load(parser, module, func, "load32",
-                              ERWC_OP_I32_LOAD, 2u);
-    }
-    if (strcmp(ident, "load64") == 0) {
-      *parser = before_literal;
-      return erwc_c_emit_load(parser, module, func, "load64",
-                              ERWC_OP_I64_LOAD, 3u);
+	    if (strcmp(ident, "load32") == 0) {
+	      *parser = before_literal;
+	      return erwc_c_emit_load(parser, module, func, "load32",
+	                              ERWC_OP_I32_LOAD,
+	                              ERWC_C_MEMORY_ALIGN_32);
+	    }
+	    if (strcmp(ident, "load64") == 0) {
+	      *parser = before_literal;
+	      return erwc_c_emit_load(parser, module, func, "load64",
+	                              ERWC_OP_I64_LOAD,
+	                              ERWC_C_MEMORY_ALIGN_64);
     }
     return erwc_c_emit_call(parser, module, func, ident);
   }
@@ -622,25 +639,7 @@ static int erwc_c_parse_store_statement(ErWcCParser* parser,
                                         const char* name,
                                         uint8_t opcode,
                                         uint32_t align) {
-  int64_t offset = 0;
-
-  if (erwc_c_take_literal(parser, name) != 0 ||
-      erwc_c_take_literal(parser, "(") != 0 ||
-      erwc_c_parse_expression(parser, module, func) != 0 ||
-      erwc_c_emit_i32_wrap_i64(func) != 0 ||
-      erwc_c_take_literal(parser, ",") != 0 ||
-      erwc_c_parse_memory_offset(parser, module, &offset) != 0 ||
-      erwc_c_take_literal(parser, ",") != 0 ||
-      erwc_c_parse_expression(parser, module, func) != 0 ||
-      erwc_c_emit_i32_wrap_i64(func) != 0 ||
-      erwc_c_take_literal(parser, ")") != 0 ||
-      erwc_c_take_literal(parser, ";") != 0 ||
-      erwc_buffer_push(&func->code, opcode) != 0 ||
-      erwc_emit_u32_leb(&func->code, align) != 0 ||
-      erwc_emit_u32_leb(&func->code, (uint32_t)offset) != 0) {
-    return -1;
-  }
-  return 0;
+  return erwc_c_parse_memory_op(parser, module, func, name, opcode, align, 1u, 1u);
 }
 
 static int erwc_c_parse_memory_offset(ErWcCParser* parser,
@@ -673,27 +672,58 @@ static int erwc_c_parse_memory_offset(ErWcCParser* parser,
   return 0;
 }
 
-static int erwc_c_emit_load(ErWcCParser* parser,
-                            const ErWcModule* module,
-                            ErWcFunc* func,
-                            const char* name,
-                            uint8_t opcode,
-                            uint32_t align) {
-  int64_t offset = 0;
-
+static int erwc_c_parse_memory_access_prefix(ErWcCParser* parser,
+                                             const ErWcModule* module,
+                                             ErWcFunc* func,
+                                             const char* name,
+                                             int64_t* out_offset) {
   if (erwc_c_take_literal(parser, name) != 0 ||
       erwc_c_take_literal(parser, "(") != 0 ||
       erwc_c_parse_expression(parser, module, func) != 0 ||
       erwc_c_emit_i32_wrap_i64(func) != 0 ||
       erwc_c_take_literal(parser, ",") != 0 ||
-      erwc_c_parse_memory_offset(parser, module, &offset) != 0 ||
-      erwc_c_take_literal(parser, ")") != 0 ||
+      erwc_c_parse_memory_offset(parser, module, out_offset) != 0) {
+    return -1;
+  }
+  return 0;
+}
+
+static int erwc_c_parse_memory_op(ErWcCParser* parser,
+                                  const ErWcModule* module,
+                                  ErWcFunc* func,
+                                  const char* name,
+                                  uint8_t opcode,
+                                  uint32_t align,
+                                  uint8_t has_value,
+                                  uint8_t has_semicolon) {
+  int64_t offset = 0;
+
+  if (erwc_c_parse_memory_access_prefix(parser, module, func, name, &offset) != 0) {
+    return -1;
+  }
+  if (has_value != 0u &&
+      (erwc_c_take_literal(parser, ",") != 0 ||
+       erwc_c_parse_expression(parser, module, func) != 0 ||
+       erwc_c_emit_i32_wrap_i64(func) != 0)) {
+    return -1;
+  }
+  if (erwc_c_take_literal(parser, ")") != 0 ||
+      (has_semicolon != 0u && erwc_c_take_literal(parser, ";") != 0) ||
       erwc_buffer_push(&func->code, opcode) != 0 ||
       erwc_emit_u32_leb(&func->code, align) != 0 ||
       erwc_emit_u32_leb(&func->code, (uint32_t)offset) != 0) {
     return -1;
   }
   return 0;
+}
+
+static int erwc_c_emit_load(ErWcCParser* parser,
+                            const ErWcModule* module,
+                            ErWcFunc* func,
+                            const char* name,
+                            uint8_t opcode,
+                            uint32_t align) {
+  return erwc_c_parse_memory_op(parser, module, func, name, opcode, align, 0u, 0u);
 }
 
 static int erwc_c_parse_statement_block(ErWcCParser* parser,
@@ -789,7 +819,7 @@ static int erwc_c_parse_user_function(ErWcCParser* parser,
       strcmp(function_name, "main") == 0 ||
       erwc_c_function_name_available(module, function_name) != 0 ||
       snprintf(type_name, sizeof(type_name), "%s_t", function_name) <= 0 ||
-      strlen(function_name) + 3u > sizeof(type_name) ||
+      strlen(function_name) + ERWC_C_TYPE_SUFFIX_LEN > sizeof(type_name) ||
       erwc_c_take_literal(parser, "(") != 0 ||
       erwc_c_parse_parameter_list(parser, param_names, params,
                                   &param_count) != 0 ||
@@ -810,19 +840,7 @@ static int erwc_c_parse_user_function(ErWcCParser* parser,
       return -1;
     }
   }
-  while (1) {
-    uint8_t parsed_statement = 0u;
-    if (erwc_c_parse_main_statement(parser, module, func,
-                                    &parsed_statement) != 0) {
-      return -1;
-    }
-    if (parsed_statement == 0u) {
-      break;
-    }
-  }
-  if (erwc_c_emit_return(parser, module, func) != 0 ||
-      erwc_c_take_literal(parser, "}") != 0 ||
-      erwc_buffer_push(&func->code, ERWC_OP_END) != 0) {
+  if (erwc_c_parse_function_tail(parser, module, func) != 0) {
     return -1;
   }
   ++module->func_count;
@@ -847,19 +865,22 @@ static int erwc_c_parse_main_statement(ErWcCParser* parser,
   }
   *parser = before_statement;
   if (erwc_c_parse_store_statement(parser, module, func, "store16",
-                                   ERWC_OP_I32_STORE16, 1u) == 0) {
+                                   ERWC_OP_I32_STORE16,
+                                   ERWC_C_MEMORY_ALIGN_16) == 0) {
     *out_parsed = 1u;
     return 0;
   }
   *parser = before_statement;
   if (erwc_c_parse_store_statement(parser, module, func, "store32",
-                                   ERWC_OP_I32_STORE, 2u) == 0) {
+                                   ERWC_OP_I32_STORE,
+                                   ERWC_C_MEMORY_ALIGN_32) == 0) {
     *out_parsed = 1u;
     return 0;
   }
   *parser = before_statement;
   if (erwc_c_parse_store_statement(parser, module, func, "store64",
-                                   ERWC_OP_I64_STORE, 3u) == 0) {
+                                   ERWC_OP_I64_STORE,
+                                   ERWC_C_MEMORY_ALIGN_64) == 0) {
     *out_parsed = 1u;
     return 0;
   }
@@ -869,6 +890,27 @@ static int erwc_c_parse_main_statement(ErWcCParser* parser,
     return 0;
   }
   *parser = before_statement;
+  return 0;
+}
+
+static int erwc_c_parse_function_tail(ErWcCParser* parser,
+                                      const ErWcModule* module,
+                                      ErWcFunc* func) {
+  while (1) {
+    uint8_t parsed_statement = 0u;
+    if (erwc_c_parse_main_statement(parser, module, func,
+                                    &parsed_statement) != 0) {
+      return -1;
+    }
+    if (parsed_statement == 0u) {
+      break;
+    }
+  }
+  if (erwc_c_emit_return(parser, module, func) != 0 ||
+      erwc_c_take_literal(parser, "}") != 0 ||
+      erwc_buffer_push(&func->code, ERWC_OP_END) != 0) {
+    return -1;
+  }
   return 0;
 }
 
@@ -896,18 +938,7 @@ static int erwc_c_parse_main(ErWcCParser* parser, ErWcModule* module) {
   func->type_index = type_index;
   func->function_index = module->import_count + module->func_count;
   func->exported_main = 1u;
-  while (1) {
-    uint8_t parsed_statement = 0u;
-    if (erwc_c_parse_main_statement(parser, module, func, &parsed_statement) != 0) {
-      return -1;
-    }
-    if (parsed_statement == 0u) {
-      break;
-    }
-  }
-  if (erwc_c_emit_return(parser, module, func) != 0 ||
-      erwc_c_take_literal(parser, "}") != 0 ||
-      erwc_buffer_push(&func->code, ERWC_OP_END) != 0) {
+  if (erwc_c_parse_function_tail(parser, module, func) != 0) {
     return -1;
   }
   ++module->func_count;
