@@ -7,6 +7,7 @@
 #define ER_TLS_RECORD_VERSION 0x0303u
 #define ER_TLS_HANDSHAKE_CLIENT_HELLO 1u
 #define ER_TLS_HANDSHAKE_SERVER_HELLO 2u
+#define ER_TLS_HANDSHAKE_CERTIFICATE_VERIFY 15u
 #define ER_TLS_VERSION_1_3 0x0304u
 #define ER_TLS_CIPHER_TLS_AES_128_GCM_SHA256 0x1301u
 #define ER_TLS_EXTENSION_SERVER_NAME 0x0000u
@@ -22,8 +23,11 @@
 #define ER_TLS_SEC1_UNCOMPRESSED 0x04u
 #define ER_TLS_RECORD_APPLICATION_DATA 23u
 #define ER_TLS_RECORD_AUTH_PREFIX_BYTES 13u
-#define ER_TLS_RECORD_HEADER_BYTES 5u
+#define ER_TLS_HANDSHAKE_HEADER_BYTES 4u
 #define ER_TLS_RECORD_SEQUENCE_BYTES 8u
+#define ER_TLS_CERT_VERIFY_BODY_MIN_BYTES 4u
+#define ER_TLS_CERT_VERIFY_PREFIX_SPACE_BYTES 64u
+#define ER_TLS_P256_SIGNATURE_BYTES 64u
 #define ER_TLS_RECORD_CLIENT_TO_SERVER 1u
 #define ER_TLS_RECORD_SERVER_TO_CLIENT 0u
 #define ER_TLS_DERIVE_LABEL_CLIENT_KEY 1u
@@ -32,6 +36,9 @@
 #define ER_TLS_DERIVE_LABEL_SERVER_IV 4u
 #define ER_TLS_DERIVE_LABEL_CLIENT_MAC 5u
 #define ER_TLS_DERIVE_LABEL_SERVER_MAC 6u
+
+static const UINT8 er_tls_server_certificate_verify_context[] =
+    "TLS 1.3, server CertificateVerify";
 
 typedef struct {
   UINT8* bytes;
@@ -410,6 +417,83 @@ UINT8 er_tls_handshake_accept_server_hello(ErTlsTpm* tpm,
   handshake->supported_version = server_hello.supported_version;
   handshake->ready = 1u;
   return ER_TLS_STATUS_OK;
+}
+
+UINT8 er_tls_certificate_verify_accept(ErTlsTpm* tpm,
+                                       ErTlsHandshake* handshake,
+                                       const UINT8 server_verify_key[ER_TLS_P256_RAW_PUBLIC_BYTES],
+                                       const UINT8* transcript,
+                                       UINT16 transcript_len,
+                                       const UINT8* message,
+                                       UINT16 message_len) {
+  UINT32 body_len;
+  UINT16 signature_scheme;
+  UINT16 signature_len;
+  UINT8 transcript_hash[ER_TLS_SHA256_BYTES];
+  UINT8 signed_content[ER_TLS_CERT_VERIFY_PREFIX_SPACE_BYTES +
+                       sizeof(er_tls_server_certificate_verify_context) +
+                       ER_TLS_SHA256_BYTES];
+  UINT8 signed_hash[ER_TLS_SHA256_BYTES];
+  UINT16 signed_content_len;
+  UINT32 verify_handle = 0u;
+  UINT16 i;
+  UINT8 status = ER_TLS_STATUS_TPM_FAILURE;
+
+  if (tpm == 0 || handshake == 0 || handshake->ready == 0u ||
+      server_verify_key == 0 || transcript == 0 || transcript_len == 0u ||
+      message == 0 ||
+      message_len < ER_TLS_HANDSHAKE_HEADER_BYTES + ER_TLS_CERT_VERIFY_BODY_MIN_BYTES) {
+    return ER_TLS_STATUS_INVALID_ARGUMENT;
+  }
+  if (message[0] != ER_TLS_HANDSHAKE_CERTIFICATE_VERIFY) {
+    return ER_TLS_STATUS_PARSE_FAILURE;
+  }
+  body_len = er_tls_read_u24(message + 1u);
+  if (body_len != message_len - ER_TLS_HANDSHAKE_HEADER_BYTES ||
+      body_len < ER_TLS_CERT_VERIFY_BODY_MIN_BYTES) {
+    return ER_TLS_STATUS_PARSE_FAILURE;
+  }
+  signature_scheme = er_tls_read_u16(message + ER_TLS_HANDSHAKE_HEADER_BYTES);
+  signature_len = er_tls_read_u16(message + ER_TLS_HANDSHAKE_HEADER_BYTES + 2u);
+  if (signature_scheme != ER_TLS_SIGNATURE_ECDSA_SECP256R1_SHA256 ||
+      signature_len != ER_TLS_P256_SIGNATURE_BYTES ||
+      body_len != ER_TLS_CERT_VERIFY_BODY_MIN_BYTES + ER_TLS_P256_SIGNATURE_BYTES) {
+    return ER_TLS_STATUS_UNSUPPORTED;
+  }
+  for (i = 0u; i < ER_TLS_CERT_VERIFY_PREFIX_SPACE_BYTES; ++i) {
+    signed_content[i] = 0x20u;
+  }
+  if (er_tls_tpm_sha256(tpm, transcript, transcript_len, transcript_hash) == 0u) {
+    return ER_TLS_STATUS_TPM_FAILURE;
+  }
+  er_mem_copy(signed_content + ER_TLS_CERT_VERIFY_PREFIX_SPACE_BYTES,
+              er_tls_server_certificate_verify_context,
+              (UINTN)(sizeof(er_tls_server_certificate_verify_context) - 1u));
+  signed_content[ER_TLS_CERT_VERIFY_PREFIX_SPACE_BYTES +
+                 sizeof(er_tls_server_certificate_verify_context) - 1u] = 0u;
+  er_mem_copy(signed_content + ER_TLS_CERT_VERIFY_PREFIX_SPACE_BYTES +
+                  sizeof(er_tls_server_certificate_verify_context),
+              transcript_hash,
+              ER_TLS_SHA256_BYTES);
+  signed_content_len = (UINT16)(ER_TLS_CERT_VERIFY_PREFIX_SPACE_BYTES +
+                                sizeof(er_tls_server_certificate_verify_context) +
+                                ER_TLS_SHA256_BYTES);
+  if (er_tls_tpm_sha256(tpm, signed_content, signed_content_len, signed_hash) == 0u ||
+      er_tls_tpm_load_p256_verify_key(tpm, server_verify_key, &verify_handle) == 0u) {
+    return ER_TLS_STATUS_TPM_FAILURE;
+  }
+  if (er_tls_tpm_verify_p256_sha256(tpm,
+                                    verify_handle,
+                                    signed_hash,
+                                    message + ER_TLS_HANDSHAKE_HEADER_BYTES +
+                                        ER_TLS_CERT_VERIFY_BODY_MIN_BYTES) != 0u) {
+    handshake->server_authenticated = 1u;
+    status = ER_TLS_STATUS_OK;
+  }
+  if (er_tls_tpm_flush(tpm, verify_handle) == 0u) {
+    return ER_TLS_STATUS_TPM_FAILURE;
+  }
+  return status;
 }
 
 UINT8 er_tls_handshake_close(ErTlsTpm* tpm, ErTlsHandshake* handshake) {
