@@ -8,6 +8,7 @@
 - No shortcuts.
 - No external dependencies.
 - Production code must be freestanding and must not depend on host libc.
+- The only permitted vendor binary exception is device radio firmware needed to operate a radio block, such as the CYW43438 RAM/NVRAM/CLM files under `firmware/network/` for Pi Zero W wireless bring-up. This exception does not permit vendor drivers, host tools, protocol stacks, closed control planes, compatibility layers, or any other vendor blob.
 - No ambiguity.
 - Tests must cover 100% of code.
 - Code must be deterministic.

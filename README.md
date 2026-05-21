@@ -184,6 +184,14 @@ drivers, or firmware blobs. If multiple authority profiles exist, the user
 selects one before the runtime starts. If Secure Boot or TPM state cannot be
 verified, boot fails instead of silently continuing under an ambiguous authority.
 
+The only vendor-binary exception is radio firmware needed to operate a radio
+block. For Pi Zero W v1.1, the CYW43438 RAM/NVRAM/CLM files under
+`firmware/network/02d0.a9a6.*` may be loaded to run the chip's radio engine.
+That exception is not precedent for vendor drivers, host tools, protocol
+stacks, closed control planes, compatibility layers, or other blobs; EdgeRun
+still owns admission, routing, update framing, and packet formats above the
+radio firmware boundary.
+
 The interoperable Wi-Fi baseline is raw EdgeRun L2, not WLAN association. There
 is no WPA enrollment, DHCP, IP requirement, AP role, or station role in the
 native path. The driver owns channel selection, adapter MAC, frame filters, and
@@ -549,8 +557,9 @@ receiver, writes the completed object to the update slot, verifies each written
 SD block by reading it back, and marks reboot required.
 
 The default update slot begins at SD block `8192`. The intended live update
-transport is CYW43438 SDIO function-2 SDPCM data carrying raw EdgeRun L2
-ethertype `0x88b5` erwire frames, with no Wi-Fi association.
+transport is CYW43438 vendor radio firmware plus SDIO function-2 SDPCM data
+carrying raw EdgeRun L2 ethertype `0x88b5` erwire frames, with no Wi-Fi
+association.
 
 Send a freshly built `kernel.img` over the Pi Zero W v1.1 raw L2 receiver:
 
