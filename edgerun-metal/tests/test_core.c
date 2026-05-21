@@ -99,6 +99,7 @@ int main(void) {
   test_pi_zero_w_v1_1_bringup_boundary();
   test_pi_zero_w_v1_1_ota_receiver();
   test_pi_zero_w_v1_1_ota_rejects_bad_sequence();
+  test_pi_zero_w_v1_1_ota_l2_receiver();
   test_pi_usb_control_requests();
   test_ieee80211_open_ap_frames();
   test_cyw43438_d11_registers();

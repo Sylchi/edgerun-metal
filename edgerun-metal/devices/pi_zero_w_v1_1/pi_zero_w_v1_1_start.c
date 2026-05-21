@@ -1231,6 +1231,49 @@ static UINT32 er_pi_zero_w_v1_1_cyw43438_backplane_write_bytes(
   return 1u;
 }
 
+static UINT32 er_pi_zero_w_v1_1_cyw43438_backplane_read_bytes(
+    UINT32 address,
+    UINT8* bytes,
+    UINT32 bytes_len) {
+  UINT32 offset;
+
+  if (bytes == 0 || bytes_len == 0u) {
+    return 0u;
+  }
+  offset = 0u;
+  while (offset < bytes_len) {
+    UINT32 chunk;
+    UINT32 current_address;
+    UINT32 window_remaining;
+
+    current_address = address + offset;
+    window_remaining = ER_PI_ZERO_W_V1_1_CYW43438_SB_ACCESS_2_4B_FLAG -
+                       (current_address &
+                        ER_PI_ZERO_W_V1_1_CYW43438_SB_ADDR_MASK);
+    chunk = bytes_len - offset;
+    if (chunk > ER_PI_ZERO_W_V1_1_CYW43438_RAM_CHUNK_BYTES) {
+      chunk = ER_PI_ZERO_W_V1_1_CYW43438_RAM_CHUNK_BYTES;
+    }
+    if (chunk > window_remaining) {
+      chunk = window_remaining;
+    }
+    if (er_pi_zero_w_v1_1_cyw43438_set_backplane_window(current_address) == 0u ||
+        er_pi_zero_w_v1_1_emmc_sdio_transfer(
+            ER_PI_ZERO_W_V1_1_SDIO_FUNCTION_BACKPLANE,
+            er_pi_zero_w_v1_1_cyw43438_backplane_address(current_address),
+            0,
+            bytes + offset,
+            chunk,
+            chunk,
+            ER_PI_ZERO_W_V1_1_SDIO_CMD53_BYTE_MODE,
+            ER_PI_ZERO_W_V1_1_SDIO_TRANSFER_READ) == 0u) {
+      return 0u;
+    }
+    offset += chunk;
+  }
+  return 1u;
+}
+
 static UINT32 er_pi_zero_w_v1_1_cyw43438_backplane_read32(UINT32 address,
                                                          UINT32* out_value) {
   UINT8 bytes[sizeof(UINT32)];
@@ -2217,6 +2260,49 @@ static void er_pi_zero_w_v1_1_ota_poll_uart_rx(void) {
   }
 }
 
+static UINT32 er_pi_zero_w_v1_1_ota_poll_owned_shared_rx(
+    const ErCryptoProvider* crypto,
+    const ErWifiL2ApPlan* plan) {
+  UINT32 frame_len;
+  UINT8 received;
+
+  if (crypto == 0 ||
+      plan == 0 ||
+      er_pi_zero_w_v1_1_cyw43438_backplane_read32(
+          ER_CYW43438_OWNED_FIRMWARE_RX_LEN_ADDR,
+          &frame_len) == 0u ||
+      frame_len == 0u) {
+    return 0u;
+  }
+  if (frame_len > ER_CYW43438_OWNED_FIRMWARE_RX_FRAME_CAPACITY ||
+      frame_len > ER_PI_ZERO_W_V1_1_CYW43438_F2_FRAME_BYTES ||
+      er_pi_zero_w_v1_1_cyw43438_backplane_read_bytes(
+          ER_CYW43438_OWNED_FIRMWARE_RX_FRAME_ADDR,
+          g_er_pi_zero_w_v1_1_l2_rx_frame,
+          frame_len) == 0u) {
+    (void)er_pi_zero_w_v1_1_cyw43438_backplane_write32(
+        ER_CYW43438_OWNED_FIRMWARE_RX_LEN_ADDR,
+        0u);
+    return 0u;
+  }
+  received = er_pi_zero_w_v1_1_ota_receive_l2_frame(
+      &g_er_pi_zero_w_v1_1_ota_state,
+      crypto,
+      plan->mac,
+      g_er_pi_zero_w_v1_1_l2_rx_frame,
+      frame_len,
+      er_pi_zero_w_v1_1_ota_write_block_unbound,
+      0);
+  (void)er_pi_zero_w_v1_1_cyw43438_backplane_write32(
+      ER_CYW43438_OWNED_FIRMWARE_RX_LEN_ADDR,
+      0u);
+  if (received == 0u) {
+    return 0u;
+  }
+  er_pi_zero_w_v1_1_ota_status_refresh();
+  return 1u;
+}
+
 static void er_pi_zero_w_v1_1_ota_poll_owned_rx(void) {
   ErCryptoProvider crypto;
   UINT32 intstatus;
@@ -2231,12 +2317,18 @@ static void er_pi_zero_w_v1_1_ota_poll_owned_rx(void) {
 
   er_crypto_blake3_provider(&crypto);
   if (g_er_pi_zero_w_v1_1_sdio_probe_state != ER_PI_ZERO_W_V1_1_L2_READY ||
-      g_er_pi_zero_w_v1_1_cyw43438_sdio_base == 0u ||
+      er_pi_zero_w_v1_1_wifi_plan(&plan) == 0u) {
+    return;
+  }
+  if (ER_CYW43438_OWNED_FIRMWARE_RAW_RX_SUPPORTED != 0u &&
+      er_pi_zero_w_v1_1_ota_poll_owned_shared_rx(&crypto, &plan) != 0u) {
+    return;
+  }
+  if (g_er_pi_zero_w_v1_1_cyw43438_sdio_base == 0u ||
       er_pi_zero_w_v1_1_cyw43438_backplane_read32(
           g_er_pi_zero_w_v1_1_cyw43438_sdio_base +
               ER_PI_ZERO_W_V1_1_CYW43438_SDIO_INTSTATUS,
           &intstatus) == 0u ||
-      er_pi_zero_w_v1_1_wifi_plan(&plan) == 0u ||
       (intstatus & ER_PI_ZERO_W_V1_1_CYW43438_INT_HMB_FRAME_IND) == 0u ||
       er_pi_zero_w_v1_1_cyw43438_set_backplane_window(
           ER_PI_ZERO_W_V1_1_CYW43438_CHIPCOMMON_BASE) == 0u) {
