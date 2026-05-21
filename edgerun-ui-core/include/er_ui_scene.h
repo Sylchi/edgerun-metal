@@ -313,9 +313,7 @@ bool er_ui_scene_drop_target_at(
   uint32_t scope_id,
   er_ui_drop_target_t* out_target);
 
-er_ui_scene_budget_t er_ui_scene_budget_native_interactive_frame(void);
-er_ui_scene_budget_t er_ui_scene_budget_browser_interactive_frame(void);
-er_ui_scene_budget_t er_ui_scene_budget_public_showcase_frame(void);
+er_ui_scene_budget_t er_ui_scene_frame_budget(void);
 bool er_ui_scene_stats_fits_budget(er_ui_scene_stats_t stats, er_ui_scene_budget_t budget);
 bool er_ui_scene_first_budget_violation(
   er_ui_scene_stats_t stats,

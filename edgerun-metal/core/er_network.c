@@ -151,7 +151,6 @@ static UINT8 er_network_native_route_matches_io(const ErNetworkIo* io,
 static UINT8 er_network_firmware_udp_route_matches_io(const ErNetworkIo* io,
                                                       const ErNetworkRoute* route) {
   const ErChannelEndpoint* endpoint;
-  ErChannelEndpoint default_endpoint;
 
   if (io == 0 ||
       io->abi_version != ER_NETWORK_ABI_VERSION ||
@@ -164,12 +163,10 @@ static UINT8 er_network_firmware_udp_route_matches_io(const ErNetworkIo* io,
   if (er_hw_relay_endpoint_is_firmware_udp(endpoint) == 0u ||
       endpoint->address_len != ER_NETWORK_LOCATOR_FIRMWARE_UDP_LEN ||
       er_network_bytes_equal(endpoint->address, route->selected_locator.address,
-                             ER_NETWORK_LOCATOR_FIRMWARE_UDP_LEN) == 0u ||
-      er_hw_relay_default_firmware_udp_endpoint(&default_endpoint) == 0u) {
+                             ER_NETWORK_LOCATOR_FIRMWARE_UDP_LEN) == 0u) {
     return 0u;
   }
-  return er_network_bytes_equal(default_endpoint.address, route->selected_locator.address,
-                                ER_NETWORK_LOCATOR_FIRMWARE_UDP_LEN);
+  return 1u;
 }
 
 static UINT8 er_network_wifi_open_carrier_valid(

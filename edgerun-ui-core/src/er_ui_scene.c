@@ -15,21 +15,7 @@ enum {
   ER_UI_SCENE_NATIVE_CLIPS = 160u,
   ER_UI_SCENE_NATIVE_HITS = 240u,
   ER_UI_SCENE_NATIVE_TRANSITIONS = 1200u,
-  ER_UI_SCENE_NATIVE_VERTICES = 8000u,
-  ER_UI_SCENE_BROWSER_RECTS = 1400u,
-  ER_UI_SCENE_BROWSER_TEXT_QUADS = 600u,
-  ER_UI_SCENE_BROWSER_ICON_QUADS = 96u,
-  ER_UI_SCENE_BROWSER_CLIPS = 96u,
-  ER_UI_SCENE_BROWSER_HITS = 160u,
-  ER_UI_SCENE_BROWSER_TRANSITIONS = 800u,
-  ER_UI_SCENE_BROWSER_VERTICES = 5000u,
-  ER_UI_SCENE_SHOWCASE_RECTS = 1000u,
-  ER_UI_SCENE_SHOWCASE_TEXT_QUADS = 420u,
-  ER_UI_SCENE_SHOWCASE_ICON_QUADS = 80u,
-  ER_UI_SCENE_SHOWCASE_CLIPS = 80u,
-  ER_UI_SCENE_SHOWCASE_HITS = 120u,
-  ER_UI_SCENE_SHOWCASE_TRANSITIONS = 640u,
-  ER_UI_SCENE_SHOWCASE_VERTICES = 3600u
+  ER_UI_SCENE_NATIVE_VERTICES = 8000u
 };
 
 static bool er_ui_valid_geometry(float x, float y, float w, float h) {
@@ -517,21 +503,9 @@ bool er_ui_scene_drop_target_at(const er_ui_scene_t* scene, float x, float y, ui
   return false;
 }
 
-er_ui_scene_budget_t er_ui_scene_budget_native_interactive_frame(void) {
+er_ui_scene_budget_t er_ui_scene_frame_budget(void) {
   er_ui_scene_budget_t budget = {ER_UI_SCENE_NATIVE_RECTS, ER_UI_SCENE_NATIVE_TEXT_QUADS, ER_UI_SCENE_NATIVE_ICON_QUADS, ER_UI_SCENE_NATIVE_CLIPS,
                                  ER_UI_SCENE_NATIVE_HITS, ER_UI_SCENE_NATIVE_TRANSITIONS, ER_UI_SCENE_NATIVE_VERTICES};
-  return budget;
-}
-
-er_ui_scene_budget_t er_ui_scene_budget_browser_interactive_frame(void) {
-  er_ui_scene_budget_t budget = {ER_UI_SCENE_BROWSER_RECTS, ER_UI_SCENE_BROWSER_TEXT_QUADS, ER_UI_SCENE_BROWSER_ICON_QUADS, ER_UI_SCENE_BROWSER_CLIPS,
-                                 ER_UI_SCENE_BROWSER_HITS, ER_UI_SCENE_BROWSER_TRANSITIONS, ER_UI_SCENE_BROWSER_VERTICES};
-  return budget;
-}
-
-er_ui_scene_budget_t er_ui_scene_budget_public_showcase_frame(void) {
-  er_ui_scene_budget_t budget = {ER_UI_SCENE_SHOWCASE_RECTS, ER_UI_SCENE_SHOWCASE_TEXT_QUADS, ER_UI_SCENE_SHOWCASE_ICON_QUADS, ER_UI_SCENE_SHOWCASE_CLIPS,
-                                 ER_UI_SCENE_SHOWCASE_HITS, ER_UI_SCENE_SHOWCASE_TRANSITIONS, ER_UI_SCENE_SHOWCASE_VERTICES};
   return budget;
 }
 

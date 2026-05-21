@@ -102,7 +102,7 @@ pick_serial_device() {
   if [ "$count" -eq 1 ]; then
     SERIAL_DEVICE="$chosen"
   elif [ "$count" -gt 1 ]; then
-    fail "more than one small board cable is attached; run PI_SERIAL_DEVICE=/dev/ttyUSB0 make pi-ready"
+    fail "more than one small board cable is attached; run PI_SERIAL_DEVICE=/dev/ttyUSB0 make pi-zero-w-v1_1-ready"
   fi
 }
 
@@ -138,7 +138,7 @@ EOF_USB_NODES
   if [ "$count" -eq 1 ]; then
     USB_DEVICE="$chosen"
   elif [ "$count" -gt 1 ]; then
-    fail "more than one Pi boot device is attached; unplug the extra board and run make pi-ready again"
+    fail "more than one Pi boot device is attached; unplug the extra board and run make pi-zero-w-v1_1-ready again"
   fi
 }
 
@@ -202,13 +202,13 @@ run_usb_boot_with_recovery() {
     return 0
   fi
   if [ "$DRY_RUN" -ne 0 ] || [ "$USB_RESET_DONE" -ne 0 ]; then
-    fail "the board did not accept boot files; unplug it, hold BOOT, plug it back in, then run make pi-ready again"
+    fail "the board did not accept boot files; unplug it, hold BOOT, plug it back in, then run make pi-zero-w-v1_1-ready again"
   fi
   reset_pi_usb_station
   if run_usb_boot; then
     return 0
   fi
-  fail "the board still did not accept boot files after the USB station reset; unplug it, hold BOOT, plug it back in, then run make pi-ready again"
+  fail "the board still did not accept boot files after the USB station reset; unplug it, hold BOOT, plug it back in, then run make pi-zero-w-v1_1-ready again"
 }
 
 verify_capture() {
@@ -262,5 +262,5 @@ elif [ "$SERIAL_DEVICE" != "" ]; then
   say "Board is ready."
   say "Log: $SERIAL_LOG"
 else
-  say "Boot files sent. Attach the small serial cable and run make pi-ready again."
+  say "Boot files sent. Attach the small serial cable and run make pi-zero-w-v1_1-ready again."
 fi

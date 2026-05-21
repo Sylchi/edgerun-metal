@@ -8,7 +8,6 @@
  * Intention: packet forwarding is concrete hardware movement, not policy or app execution.
  */
 
-static const char g_default_udp_label[] = "uefi-udp4";
 #define ER_HW_RELAY_UDP_WAIT_POLLS 100000u
 
 enum {
@@ -20,10 +19,6 @@ enum {
   ER_HW_RELAY_ADDR_PORT_LOW_INDEX = 5u,
   ER_HW_RELAY_PORT_HIGH_SHIFT = 8u,
   ER_HW_RELAY_PORT_BYTE_MASK = 0xffu,
-  ER_HW_RELAY_DEFAULT_IP_A = 10u,
-  ER_HW_RELAY_DEFAULT_IP_B = 42u,
-  ER_HW_RELAY_DEFAULT_IP_C = 0u,
-  ER_HW_RELAY_DEFAULT_IP_D = 1u,
   ER_HW_RELAY_VIRTIO_DEVICE_TYPE_OFFSET = 0u,
   ER_HW_RELAY_VIRTIO_QUEUE_OFFSET = 4u,
   ER_HW_RELAY_VIRTIO_TRANSPORT_KIND_OFFSET = 6u,
@@ -75,15 +70,6 @@ UINT8 er_hw_relay_prepare_firmware_udp_endpoint(UINT8 a, UINT8 b, UINT8 c, UINT8
   out_endpoint->address[ER_HW_RELAY_ADDR_PORT_LOW_INDEX] = (UINT8)(port & ER_HW_RELAY_PORT_BYTE_MASK);
   er_mem_copy((UINT8*)out_endpoint->label, (const UINT8*)label, label_len);
   return 1;
-}
-
-UINT8 er_hw_relay_default_firmware_udp_endpoint(ErChannelEndpoint* out_endpoint) {
-  return er_hw_relay_prepare_firmware_udp_endpoint(ER_HW_RELAY_DEFAULT_IP_A, ER_HW_RELAY_DEFAULT_IP_B,
-                                                  ER_HW_RELAY_DEFAULT_IP_C, ER_HW_RELAY_DEFAULT_IP_D,
-                                                  ER_HW_RELAY_FIRMWARE_UDP_PORT,
-                                                  g_default_udp_label,
-                                                  (UINTN)(sizeof(g_default_udp_label) - 1u),
-                                                  out_endpoint);
 }
 
 UINT8 er_hw_relay_endpoint_is_firmware_udp(const ErChannelEndpoint* endpoint) {
