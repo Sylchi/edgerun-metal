@@ -304,6 +304,6 @@ const char* er_ui_record_status_label(er_ui_record_status_t status) {
     case ER_UI_RECORD_ERR_INVALID_ARGUMENT:
       return "invalid-argument";
     default:
-      return "unknown";
+      return 0;
   }
 }

@@ -456,7 +456,7 @@ static void test_ui_boot_package_loads_from_endpoint_storage(void) {
   check_int64("ui boot installed signed index abi",
               signed_index_entry->abi_version, ER_APP_ABI_VERSION);
   check_int64("ui boot installed signed index kind",
-              signed_index_entry->app_kind, ER_APP_KIND_USER);
+              signed_index_entry->app_kind, ER_APP_KIND_UI_APP);
   check_hash_equal("ui boot installed signed index package signature",
                    &signed_index_entry->package_signature.package_id,
                    &installed_app->package.package_id);

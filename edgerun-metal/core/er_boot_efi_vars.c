@@ -93,6 +93,6 @@ const char* er_boot_efi_vars_admission_read_label(UINT8 state) {
     case ER_BOOT_EFI_VAR_ADMISSION_INVALID:
       return "invalid";
     default:
-      return "unknown";
+      return 0;
   }
 }

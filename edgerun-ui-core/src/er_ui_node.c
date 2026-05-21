@@ -919,7 +919,7 @@ const char* er_ui_node_kind_label(er_ui_node_kind_t kind) {
     case ER_UI_NODE_TOOLTIP: return "tooltip";
     case ER_UI_NODE_DIALOG: return "dialog";
     case ER_UI_NODE_PROGRESS_RING: return "progress-ring";
-    default: return "unknown";
+    default: return 0;
   }
 }
 
@@ -927,7 +927,7 @@ const char* er_ui_node_composition_issue_label(er_ui_node_composition_issue_kind
   switch (kind) {
     case ER_UI_NODE_COMPOSITION_OK: return "ok";
     case ER_UI_NODE_COMPOSITION_NESTED_CARD: return "nested-card";
-    default: return "unknown";
+    default: return 0;
   }
 }
 

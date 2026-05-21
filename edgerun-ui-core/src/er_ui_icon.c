@@ -54,7 +54,7 @@ static const ErUiIconMapping* er_ui_icon_mapping(er_ui_icon_t icon) {
 
 const char* er_ui_icon_label(er_ui_icon_t icon) {
   const ErUiIconMapping* mapping = er_ui_icon_mapping(icon);
-  if (!mapping) return "unknown";
+  if (!mapping) return 0;
   return mapping->label;
 }
 
@@ -63,9 +63,10 @@ uint32_t er_ui_icon_atlas_id(er_ui_icon_t icon) {
   return (uint32_t)icon + 1u;
 }
 
-er_ui_icon_t er_ui_icon_from_atlas_id(uint32_t atlas_id) {
-  if (atlas_id == 0u || atlas_id > (uint32_t)ER_UI_ICON_COUNT) return ER_UI_ICON_APP;
-  return (er_ui_icon_t)(atlas_id - 1u);
+bool er_ui_icon_from_atlas_id(uint32_t atlas_id, er_ui_icon_t* out_icon) {
+  if (!out_icon || atlas_id == 0u || atlas_id > (uint32_t)ER_UI_ICON_COUNT) return false;
+  *out_icon = (er_ui_icon_t)(atlas_id - 1u);
+  return true;
 }
 
 const char* er_ui_icon_provider_name(er_ui_icon_t icon, er_ui_icon_provider_t provider) {

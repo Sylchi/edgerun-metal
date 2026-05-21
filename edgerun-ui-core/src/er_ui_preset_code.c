@@ -179,7 +179,7 @@ static const er_ui_style_family_spec_t ER_UI_STYLE_FAMILY_SPECS[ER_UI_STYLE_FAMI
   {ER_UI_STYLE_FAMILY_SERA, "Sera", "b4xFeBLg4O", "taupe", "warm rose collaboration surface"}
 };
 
-static const char *const ER_UI_STYLE_TOKEN_CLASSES_BACKGROUND[] = {"bg-background", "bg-bg"};
+static const char *const ER_UI_STYLE_TOKEN_CLASSES_BACKGROUND[] = {"bg-background"};
 static const char *const ER_UI_STYLE_TOKEN_CLASSES_CARD[] = {"bg-card", "bg-panel"};
 static const char *const ER_UI_STYLE_TOKEN_CLASSES_CARD_FOREGROUND[] = {"text-card-foreground"};
 static const char *const ER_UI_STYLE_TOKEN_CLASSES_POPOVER[] = {"bg-popover"};
@@ -450,7 +450,8 @@ er_ui_status_t er_ui_preset_decode(const char* preset_code, er_ui_preset_recipe_
   for (size_t i = 0u; i < ER_UI_PRESET_FIELD_COUNT; ++i) {
     uint64_t mask = (((uint64_t)1u) << ER_UI_PRESET_FIELDS[i].bits) - 1u;
     size_t index = (size_t)((value >> shift) & mask);
-    const char* selected = index < ER_UI_PRESET_FIELDS[i].value_count ? ER_UI_PRESET_FIELDS[i].values[index] : ER_UI_PRESET_FIELDS[i].values[0];
+    if (index >= ER_UI_PRESET_FIELDS[i].value_count) return ER_UI_ERR_INVALID_ARGUMENT;
+    const char* selected = ER_UI_PRESET_FIELDS[i].values[index];
     switch (i) {
       case ER_UI_PRESET_FIELD_MENU_COLOR:
         decoded.menu_color = selected;

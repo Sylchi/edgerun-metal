@@ -125,7 +125,7 @@ static void test_extracted_style_tokens_preserve_classes_and_roles(void) {
   expect_string(background->css_var, "--background", "style tokens: background css var");
   expect_true(background->kind == ER_UI_EXTRACTED_STYLE_TOKEN_SURFACE, "style tokens: background kind");
   expect_true(er_ui_extracted_style_token_has_class(background, "bg-background"), "style tokens: background primary class");
-  expect_true(er_ui_extracted_style_token_has_class(background, "bg-bg"), "style tokens: background alias class");
+  expect_true(!er_ui_extracted_style_token_has_class(background, "bg-bg"), "style tokens: background rejects shorthand class");
   expect_true(!er_ui_extracted_style_token_has_class(background, "text-muted"), "style tokens: background rejects unrelated class");
 
   const er_ui_extracted_style_token_t* destructive = er_ui_extracted_style_token_at(ER_UI_TEST_DESTRUCTIVE_TOKEN_INDEX);

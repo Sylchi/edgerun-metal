@@ -215,7 +215,7 @@ UINT8 er_relay_packet_authorized_for_app(const UINT8* packet, UINT32 packet_len,
   if (usage == 0 || budget == 0 ||
       usage->abi_version != ER_APP_ABI_VERSION ||
       budget->abi_version != ER_APP_ABI_VERSION ||
-      budget->app_kind != ER_APP_KIND_USER ||
+      budget->app_kind != ER_APP_KIND_UI_APP ||
       er_relay_packet_valid(packet, packet_len) == 0u) {
     return 0;
   }

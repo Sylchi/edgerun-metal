@@ -572,26 +572,36 @@ bool er_ui_scene_first_budget_violation(er_ui_scene_stats_t stats, er_ui_scene_b
   return false;
 }
 
-er_ui_color_scheme_t er_ui_color_scheme_from_code(uint32_t code) {
+bool er_ui_color_scheme_from_code(uint32_t code, er_ui_color_scheme_t* out_scheme) {
+  if (!out_scheme) return false;
   switch (code) {
     case ER_UI_COLOR_SCHEME_LIGHT:
-      return ER_UI_COLOR_SCHEME_LIGHT;
+      *out_scheme = ER_UI_COLOR_SCHEME_LIGHT;
+      return true;
     case ER_UI_COLOR_SCHEME_TERMINAL:
-      return ER_UI_COLOR_SCHEME_TERMINAL;
+      *out_scheme = ER_UI_COLOR_SCHEME_TERMINAL;
+      return true;
     case ER_UI_COLOR_SCHEME_DARK:
+      *out_scheme = ER_UI_COLOR_SCHEME_DARK;
+      return true;
     default:
-      return ER_UI_COLOR_SCHEME_DARK;
+      return false;
   }
 }
 
-uint32_t er_ui_color_scheme_code(er_ui_color_scheme_t scheme) {
+bool er_ui_color_scheme_code(er_ui_color_scheme_t scheme, uint32_t* out_code) {
+  if (!out_code) return false;
   switch (scheme) {
     case ER_UI_COLOR_SCHEME_LIGHT:
-      return 1u;
+      *out_code = 1u;
+      return true;
     case ER_UI_COLOR_SCHEME_TERMINAL:
-      return 2u;
+      *out_code = 2u;
+      return true;
     case ER_UI_COLOR_SCHEME_DARK:
+      *out_code = 0u;
+      return true;
     default:
-      return 0u;
+      return false;
   }
 }

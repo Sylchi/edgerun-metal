@@ -322,8 +322,8 @@ bool er_ui_scene_first_budget_violation(
   er_ui_scene_budget_t budget,
   er_ui_scene_budget_violation_t* out_violation);
 
-er_ui_color_scheme_t er_ui_color_scheme_from_code(uint32_t code);
-uint32_t er_ui_color_scheme_code(er_ui_color_scheme_t scheme);
+bool er_ui_color_scheme_from_code(uint32_t code, er_ui_color_scheme_t* out_scheme);
+bool er_ui_color_scheme_code(er_ui_color_scheme_t scheme, uint32_t* out_code);
 
 #ifdef __cplusplus
 }

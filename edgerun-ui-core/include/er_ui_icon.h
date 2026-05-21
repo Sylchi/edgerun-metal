@@ -6,6 +6,7 @@
  * Intention: keep Lucide/Tabler/icon atlas semantics in UI-core, not in render backends.
  */
 
+#include <stdbool.h>
 #include <stdint.h>
 
 #ifdef __cplusplus
@@ -55,7 +56,7 @@ typedef enum {
 
 const char* er_ui_icon_label(er_ui_icon_t icon);
 uint32_t er_ui_icon_atlas_id(er_ui_icon_t icon);
-er_ui_icon_t er_ui_icon_from_atlas_id(uint32_t atlas_id);
+bool er_ui_icon_from_atlas_id(uint32_t atlas_id, er_ui_icon_t* out_icon);
 const char* er_ui_icon_provider_name(er_ui_icon_t icon, er_ui_icon_provider_t provider);
 
 #ifdef __cplusplus
