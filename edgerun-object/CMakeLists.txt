@@ -17,6 +17,11 @@ target_include_directories(edgerun_object PUBLIC
   ${CMAKE_CURRENT_SOURCE_DIR}/../include
 )
 target_compile_definitions(edgerun_object PRIVATE ER_BLAKE3_NO_SIMD=1)
+target_compile_options(edgerun_object PRIVATE
+  -ffreestanding
+  -fno-builtin
+  -fno-stack-protector
+)
 target_compile_features(edgerun_object PUBLIC c_std_11)
 
 if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
