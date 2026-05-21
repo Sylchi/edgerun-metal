@@ -179,15 +179,20 @@ static void test_node_objects_and_store_receipts(void) {
   uint8_t identity_object[TEST_OBJECT_CAP];
   uint8_t clock_object[TEST_OBJECT_CAP];
   uint8_t receipt_object[TEST_OBJECT_CAP];
+  uint8_t signature_object[TEST_OBJECT_CAP];
   uint8_t object_id[ER_OBJECT_ID_SIZE];
   uint8_t identity_object_id[ER_OBJECT_ID_SIZE];
   uint8_t clock_object_id[ER_OBJECT_ID_SIZE];
   uint8_t receipt_id[ER_OBJECT_ID_SIZE];
+  uint8_t signature_id[ER_OBJECT_ID_SIZE];
+  uint8_t signature_bytes[64u];
   size_t canonical_len = 0u;
   size_t fetched_len = 0u;
   size_t identity_object_len = 0u;
   size_t clock_object_len = 0u;
   size_t receipt_len = 0u;
+  size_t signature_len = 0u;
+  er_object_signature_info_t signature_info;
   er_object_requirements_t requirements;
   er_object_info_t info;
   er_identity_t identity;
@@ -198,8 +203,12 @@ static void test_node_objects_and_store_receipts(void) {
   er_node_receipt_t receipt;
   TestIo io;
   static const uint8_t body[] = {7u, 8u, 9u};
+  size_t i;
 
   test_zero(&io, sizeof(io));
+  for (i = 0u; i < sizeof(signature_bytes); ++i) {
+    signature_bytes[i] = (uint8_t)(0xc0u + i);
+  }
   test_prepare_identity(&identity, &clock);
   config = test_store_config(&identity, clock.now);
   check_int("store open", er_store_open(&store, test_make_io(&io),
@@ -250,6 +259,19 @@ static void test_node_objects_and_store_receipts(void) {
   check_int("verify request receipt",
             er_object_verify(receipt_object, receipt_len, &info),
             ER_OBJECT_OK);
+  check_int("node sign",
+            er_node_sign(&node, canonical, canonical_len, clock_object,
+                         clock_object_len, ER_OBJECT_ALGORITHM_ED25519,
+                         signature_bytes, sizeof(signature_bytes),
+                         signature_object, sizeof(signature_object),
+                         &signature_len, signature_id),
+            ER_NODE_OK);
+  check_int("node signature verify",
+            er_object_signature_verify(signature_object, signature_len,
+                                       &signature_info),
+            ER_OBJECT_OK);
+  check_int("node signature algorithm", (int)signature_info.algorithm,
+            (int)ER_OBJECT_ALGORITHM_ED25519);
 }
 
 int main(void) {

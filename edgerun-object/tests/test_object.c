@@ -318,11 +318,92 @@ static void test_rejects_invalid_requirements(void) {
             ER_OBJECT_ERR_BADARG);
 }
 
+static void test_signature_object(void) {
+  uint8_t subject[TEST_BUFFER_SIZE];
+  uint8_t challenge[TEST_BUFFER_SIZE];
+  uint8_t signature_object[TEST_BUFFER_SIZE];
+  uint8_t subject_id[ER_OBJECT_ID_SIZE];
+  uint8_t challenge_id[ER_OBJECT_ID_SIZE];
+  uint8_t signature_id[ER_OBJECT_ID_SIZE];
+  uint8_t signer_id[ER_OBJECT_ID_SIZE];
+  uint8_t signature[64u];
+  er_object_requirements_t requirements =
+      test_requirements(ER_OBJECT_CONFIDENTIALITY_INTEGRITY_ONLY);
+  er_object_signature_info_t signature_info;
+  size_t subject_len = 0u;
+  size_t challenge_len = 0u;
+  size_t signature_len = 0u;
+  size_t i;
+  static const uint8_t subject_body[] = {1u, 4u, 9u};
+  static const uint8_t challenge_body[] = {2u, 5u, 10u};
+
+  for (i = 0u; i < ER_OBJECT_ID_SIZE; ++i) {
+    signer_id[i] = (uint8_t)(0x55u + i);
+  }
+  for (i = 0u; i < sizeof(signature); ++i) {
+    signature[i] = (uint8_t)(0x80u + i);
+  }
+  check_int("signature subject build",
+            er_object_build_node(ER_OBJECT_KIND_BYTES, 0u, &requirements,
+                                 test_epoch(TEST_LEAF_EPOCH_TICK),
+                                 0, 0u, 0, 0u, 0, 0u,
+                                 subject_body, sizeof(subject_body),
+                                 subject, sizeof(subject), &subject_len,
+                                 subject_id),
+            ER_OBJECT_OK);
+  check_int("signature challenge build",
+            er_object_build_node(ER_OBJECT_KIND_BYTES, 0u, &requirements,
+                                 test_epoch(TEST_TREE_EPOCH_TICK),
+                                 0, 0u, 0, 0u, 0, 0u,
+                                 challenge_body, sizeof(challenge_body),
+                                 challenge, sizeof(challenge), &challenge_len,
+                                 challenge_id),
+            ER_OBJECT_OK);
+  check_int("signature build",
+            er_object_sign(subject, subject_len, challenge, challenge_len,
+                           signer_id, ER_OBJECT_ALGORITHM_ED25519,
+                           signature, sizeof(signature),
+                           test_epoch(TEST_MISMATCH_EPOCH_TICK),
+                           signature_object, sizeof(signature_object),
+                           &signature_len, signature_id),
+            ER_OBJECT_OK);
+  check_int("signature verify",
+            er_object_signature_verify(signature_object, signature_len,
+                                       &signature_info),
+            ER_OBJECT_OK);
+  check_bytes("signature signer", signature_info.signer_id, signer_id,
+              ER_OBJECT_ID_SIZE);
+  check_bytes("signature subject id", signature_info.subject_id, subject_id,
+              ER_OBJECT_ID_SIZE);
+  check_bytes("signature challenge id", signature_info.challenge_id,
+              challenge_id, ER_OBJECT_ID_SIZE);
+  check_int("signature algorithm", (int)signature_info.algorithm,
+            (int)ER_OBJECT_ALGORITHM_ED25519);
+  check_int("signature length", (int)signature_info.signature_len,
+            (int)sizeof(signature));
+  check_bytes("signature bytes", signature_info.signature, signature,
+              sizeof(signature));
+
+  signature_object[signature_len - 1u] ^= 1u;
+  check_int("signature still canonical after byte change",
+            er_object_verify(signature_object, signature_len, 0),
+            ER_OBJECT_OK);
+  check_int("signature verifier accepts changed signature bytes",
+            er_object_signature_verify(signature_object, signature_len, 0),
+            ER_OBJECT_OK);
+  test_zero(&signature_object[signature_len - sizeof(signature)],
+            sizeof(signature));
+  check_int("signature verifier rejects zero signature",
+            er_object_signature_verify(signature_object, signature_len, 0),
+            ER_OBJECT_ERR_CORRUPT);
+}
+
 int main(void) {
   test_leaf_node();
   test_tree_node();
   test_rejects_mismatched_envelope();
   test_rejects_invalid_requirements();
+  test_signature_object();
 
   if (g_failed != 0) {
     fprintf(stderr, "object tests failed: %d/%d\n", g_failed, g_total);

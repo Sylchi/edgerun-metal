@@ -64,6 +64,23 @@ enum {
   ER_OBJECT_ENVELOPE_FLAGS_OFF = 8u,
   ER_OBJECT_ENVELOPE_KEY_ID_OFF = 12u,
   ER_OBJECT_ENVELOPE_METADATA_HASH_OFF = 44u,
+  ER_OBJECT_SIGNATURE_MAGIC_SIZE = 8u,
+  ER_OBJECT_SIGNATURE_FIXED_BODY_SIZE = 112u,
+  ER_OBJECT_SIGNATURE_MAGIC0 = 'E',
+  ER_OBJECT_SIGNATURE_MAGIC1 = 'R',
+  ER_OBJECT_SIGNATURE_MAGIC2 = 'S',
+  ER_OBJECT_SIGNATURE_MAGIC3 = 'I',
+  ER_OBJECT_SIGNATURE_MAGIC4 = 'G',
+  ER_OBJECT_SIGNATURE_MAGIC5 = '0',
+  ER_OBJECT_SIGNATURE_MAGIC6 = '0',
+  ER_OBJECT_SIGNATURE_MAGIC7 = '1',
+  ER_OBJECT_SIGNATURE_SIGNER_OFF = 8u,
+  ER_OBJECT_SIGNATURE_CHALLENGE_OFF = 40u,
+  ER_OBJECT_SIGNATURE_SUBJECT_OFF = 72u,
+  ER_OBJECT_SIGNATURE_ALGORITHM_OFF = 104u,
+  ER_OBJECT_SIGNATURE_LEN_OFF = 106u,
+  ER_OBJECT_SIGNATURE_RESERVED_OFF = 108u,
+  ER_OBJECT_SIGNATURE_BYTES_OFF = 112u,
   ER_OBJECT_CHILD_OBJECT_ID_OFF = 0u,
   ER_OBJECT_CHILD_LOGICAL_OFFSET_OFF = 32u,
   ER_OBJECT_CHILD_LOGICAL_LEN_OFF = 40u,
@@ -567,6 +584,144 @@ int er_object_build_node(uint16_t node_kind, uint32_t flags,
   }
   *out_len = total;
   return er_object_id(out, total, out_id);
+}
+
+static er_object_requirements_t er_object_signature_requirements(void) {
+  er_object_requirements_t requirements;
+
+  requirements.durability = ER_OBJECT_DURABILITY_DURABLE;
+  requirements.confidentiality = ER_OBJECT_CONFIDENTIALITY_INTEGRITY_ONLY;
+  requirements.portability = ER_OBJECT_PORTABILITY_PUBLIC_PORTABLE;
+  requirements.integrity = ER_OBJECT_INTEGRITY_SIGNED;
+  requirements.lifetime = ER_OBJECT_LIFETIME_RETAINED;
+  requirements.visibility = ER_OBJECT_VISIBILITY_PUBLIC;
+  requirements.access_cost = ER_OBJECT_ACCESS_EXPLICIT_IO;
+  return requirements;
+}
+
+int er_object_sign(const void* subject_canonical, size_t subject_len,
+                   const void* challenge_canonical, size_t challenge_len,
+                   const uint8_t signer_id[ER_OBJECT_ID_SIZE],
+                   uint16_t algorithm, const void* signature,
+                   size_t signature_len, er_clock_epoch_stamp_t epoch,
+                   void* out, size_t out_cap, size_t* out_len,
+                   uint8_t out_id[ER_OBJECT_ID_SIZE]) {
+  er_object_info_t subject;
+  er_object_info_t challenge;
+  er_object_requirements_t requirements;
+  uint8_t body[ER_OBJECT_SIGNATURE_FIXED_BODY_SIZE + ER_OBJECT_SIGNATURE_MAX_SIZE];
+
+  if (subject_canonical == (const void*)0 ||
+      challenge_canonical == (const void*)0 ||
+      signer_id == (const uint8_t*)0 ||
+      signature == (const void*)0 ||
+      signature_len == 0u ||
+      signature_len > ER_OBJECT_SIGNATURE_MAX_SIZE ||
+      er_object_bytes_nonzero(signer_id, ER_OBJECT_ID_SIZE) == 0 ||
+      er_clock_stamp_valid(epoch) == 0 ||
+      er_object_algorithm_valid(algorithm) == 0 ||
+      algorithm == ER_OBJECT_ALGORITHM_NONE ||
+      out == (void*)0 || out_len == (size_t*)0 ||
+      out_id == (uint8_t*)0) {
+    return ER_OBJECT_ERR_BADARG;
+  }
+  if (er_object_verify(subject_canonical, subject_len, &subject) != ER_OBJECT_OK ||
+      er_object_verify(challenge_canonical, challenge_len, &challenge) != ER_OBJECT_OK) {
+    return ER_OBJECT_ERR_CORRUPT;
+  }
+  er_object_zero(body, sizeof(body));
+  body[0] = ER_OBJECT_SIGNATURE_MAGIC0;
+  body[1] = ER_OBJECT_SIGNATURE_MAGIC1;
+  body[2] = ER_OBJECT_SIGNATURE_MAGIC2;
+  body[3] = ER_OBJECT_SIGNATURE_MAGIC3;
+  body[4] = ER_OBJECT_SIGNATURE_MAGIC4;
+  body[5] = ER_OBJECT_SIGNATURE_MAGIC5;
+  body[6] = ER_OBJECT_SIGNATURE_MAGIC6;
+  body[7] = ER_OBJECT_SIGNATURE_MAGIC7;
+  er_object_copy(&body[ER_OBJECT_SIGNATURE_SIGNER_OFF], signer_id, ER_OBJECT_ID_SIZE);
+  er_object_copy(&body[ER_OBJECT_SIGNATURE_CHALLENGE_OFF],
+                 challenge.object_id, ER_OBJECT_ID_SIZE);
+  er_object_copy(&body[ER_OBJECT_SIGNATURE_SUBJECT_OFF],
+                 subject.object_id, ER_OBJECT_ID_SIZE);
+  er_object_store16(&body[ER_OBJECT_SIGNATURE_ALGORITHM_OFF], algorithm);
+  er_object_store16(&body[ER_OBJECT_SIGNATURE_LEN_OFF], (uint16_t)signature_len);
+  er_object_copy(&body[ER_OBJECT_SIGNATURE_BYTES_OFF], signature, signature_len);
+  requirements = er_object_signature_requirements();
+  return er_object_build_node(ER_OBJECT_KIND_RECEIPT, 0u, &requirements,
+                              epoch, (const er_object_owner_t*)0, 0u,
+                              (const er_object_envelope_t*)0, 0u,
+                              (const er_object_child_ref_t*)0, 0u,
+                              body,
+                              ER_OBJECT_SIGNATURE_FIXED_BODY_SIZE + signature_len,
+                              out, out_cap, out_len, out_id);
+}
+
+static int er_object_signature_magic_valid(const uint8_t* body) {
+  return body[0] == ER_OBJECT_SIGNATURE_MAGIC0 &&
+         body[1] == ER_OBJECT_SIGNATURE_MAGIC1 &&
+         body[2] == ER_OBJECT_SIGNATURE_MAGIC2 &&
+         body[3] == ER_OBJECT_SIGNATURE_MAGIC3 &&
+         body[4] == ER_OBJECT_SIGNATURE_MAGIC4 &&
+         body[5] == ER_OBJECT_SIGNATURE_MAGIC5 &&
+         body[6] == ER_OBJECT_SIGNATURE_MAGIC6 &&
+         body[7] == ER_OBJECT_SIGNATURE_MAGIC7;
+}
+
+int er_object_signature_verify(const void* canonical, size_t len,
+                               er_object_signature_info_t* out_info) {
+  er_object_info_t object;
+  uint16_t algorithm;
+  uint16_t signature_len;
+
+  if (canonical == (const void*)0) {
+    return ER_OBJECT_ERR_BADARG;
+  }
+  if (er_object_verify(canonical, len, &object) != ER_OBJECT_OK) {
+    return ER_OBJECT_ERR_CORRUPT;
+  }
+  if (object.node_kind != ER_OBJECT_KIND_RECEIPT ||
+      object.requirements.integrity != ER_OBJECT_INTEGRITY_SIGNED ||
+      object.body_len < ER_OBJECT_SIGNATURE_FIXED_BODY_SIZE ||
+      object.body_len > (ER_OBJECT_SIGNATURE_FIXED_BODY_SIZE + ER_OBJECT_SIGNATURE_MAX_SIZE) ||
+      er_object_signature_magic_valid(object.body) == 0) {
+    return ER_OBJECT_ERR_CORRUPT;
+  }
+  algorithm = er_object_load16(&object.body[ER_OBJECT_SIGNATURE_ALGORITHM_OFF]);
+  signature_len = er_object_load16(&object.body[ER_OBJECT_SIGNATURE_LEN_OFF]);
+  if (er_object_algorithm_valid(algorithm) == 0 ||
+      algorithm == ER_OBJECT_ALGORITHM_NONE ||
+      signature_len == 0u ||
+      signature_len > ER_OBJECT_SIGNATURE_MAX_SIZE ||
+      object.body_len != ER_OBJECT_SIGNATURE_FIXED_BODY_SIZE + (size_t)signature_len ||
+      er_object_load32(&object.body[ER_OBJECT_SIGNATURE_RESERVED_OFF]) != 0u ||
+      er_object_bytes_nonzero(&object.body[ER_OBJECT_SIGNATURE_SIGNER_OFF],
+                              ER_OBJECT_ID_SIZE) == 0 ||
+      er_object_bytes_nonzero(&object.body[ER_OBJECT_SIGNATURE_CHALLENGE_OFF],
+                              ER_OBJECT_ID_SIZE) == 0 ||
+      er_object_bytes_nonzero(&object.body[ER_OBJECT_SIGNATURE_SUBJECT_OFF],
+                              ER_OBJECT_ID_SIZE) == 0 ||
+      er_object_bytes_nonzero(&object.body[ER_OBJECT_SIGNATURE_BYTES_OFF],
+                              signature_len) == 0) {
+    return ER_OBJECT_ERR_CORRUPT;
+  }
+  if (out_info != (er_object_signature_info_t*)0) {
+    er_object_zero(out_info, sizeof(*out_info));
+    er_object_copy(out_info->signer_id,
+                   &object.body[ER_OBJECT_SIGNATURE_SIGNER_OFF],
+                   ER_OBJECT_ID_SIZE);
+    er_object_copy(out_info->challenge_id,
+                   &object.body[ER_OBJECT_SIGNATURE_CHALLENGE_OFF],
+                   ER_OBJECT_ID_SIZE);
+    er_object_copy(out_info->subject_id,
+                   &object.body[ER_OBJECT_SIGNATURE_SUBJECT_OFF],
+                   ER_OBJECT_ID_SIZE);
+    out_info->algorithm = algorithm;
+    out_info->signature_len = signature_len;
+    er_object_copy(out_info->signature,
+                   &object.body[ER_OBJECT_SIGNATURE_BYTES_OFF],
+                   signature_len);
+  }
+  return ER_OBJECT_OK;
 }
 
 static int er_object_magic_valid(const uint8_t* bytes) {

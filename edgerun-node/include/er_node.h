@@ -27,6 +27,7 @@
 #define ER_NODE_METHOD_STORE 1u
 #define ER_NODE_METHOD_FETCH 2u
 #define ER_NODE_METHOD_REQUEST 3u
+#define ER_NODE_METHOD_SIGN 4u
 
 typedef struct er_node {
   uint64_t opaque[ER_NODE_HANDLE_BYTES / sizeof(uint64_t)];
@@ -67,5 +68,11 @@ int er_node_request(er_node_t* node, const void* capability_object,
                     size_t capability_len, void* out_receipt_object,
                     size_t out_cap, size_t* out_len,
                     uint8_t out_id[ER_OBJECT_ID_SIZE]);
+int er_node_sign(er_node_t* node, const void* subject_canonical,
+                 size_t subject_len, const void* challenge_canonical,
+                 size_t challenge_len, uint16_t algorithm,
+                 const void* signature, size_t signature_len,
+                 void* out_signature_object, size_t out_cap,
+                 size_t* out_len, uint8_t out_id[ER_OBJECT_ID_SIZE]);
 
 #endif

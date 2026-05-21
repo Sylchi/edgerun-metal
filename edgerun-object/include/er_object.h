@@ -25,6 +25,7 @@
 #define ER_OBJECT_MAX_OWNERS 16u
 #define ER_OBJECT_MAX_ENVELOPES 16u
 #define ER_OBJECT_MAX_CHILDREN 65536u
+#define ER_OBJECT_SIGNATURE_MAX_SIZE 128u
 
 #define ER_OBJECT_KIND_BYTES 1u
 #define ER_OBJECT_KIND_TREE 2u
@@ -130,6 +131,15 @@ typedef struct er_object_info {
   const uint8_t* body;
 } er_object_info_t;
 
+typedef struct er_object_signature_info {
+  uint8_t signer_id[ER_OBJECT_ID_SIZE];
+  uint8_t challenge_id[ER_OBJECT_ID_SIZE];
+  uint8_t subject_id[ER_OBJECT_ID_SIZE];
+  uint16_t algorithm;
+  uint16_t signature_len;
+  uint8_t signature[ER_OBJECT_SIGNATURE_MAX_SIZE];
+} er_object_signature_info_t;
+
 int er_object_requirements_valid(const er_object_requirements_t* requirements);
 int er_object_requirements_hash(const er_object_requirements_t* requirements,
                                 uint8_t out_hash[ER_OBJECT_ID_SIZE]);
@@ -145,6 +155,15 @@ int er_object_build_node(uint16_t node_kind, uint32_t flags,
                          const void* body, size_t body_len,
                          void* out, size_t out_cap, size_t* out_len,
                          uint8_t out_id[ER_OBJECT_ID_SIZE]);
+int er_object_sign(const void* subject_canonical, size_t subject_len,
+                   const void* challenge_canonical, size_t challenge_len,
+                   const uint8_t signer_id[ER_OBJECT_ID_SIZE],
+                   uint16_t algorithm, const void* signature,
+                   size_t signature_len, er_clock_epoch_stamp_t epoch,
+                   void* out, size_t out_cap, size_t* out_len,
+                   uint8_t out_id[ER_OBJECT_ID_SIZE]);
+int er_object_signature_verify(const void* canonical, size_t len,
+                               er_object_signature_info_t* out_info);
 int er_object_id(const void* canonical, size_t len,
                  uint8_t out_id[ER_OBJECT_ID_SIZE]);
 int er_object_verify(const void* canonical, size_t len,
