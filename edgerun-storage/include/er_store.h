@@ -7,14 +7,18 @@
  * record log without libc, malloc, paths, threads, or operating-system calls.
  *
  * Boundary: storage is deliberately content-blind. It does not authenticate
- * callers, authorize keys, parse object bytes, validate schemas, interpret
- * package formats, or decide whether a blob is safe to execute or reveal.
- * Callers own admission, signatures, encryption, access policy, object
- * semantics, and lifecycle policy above this byte store.
+ * callers, authorize keys, validate schemas, interpret package formats, or
+ * decide whether bytes are safe to execute or reveal. Callers own admission,
+ * signatures, encryption, access policy, and lifecycle policy above this byte
+ * store. Stored objects are canonical edgerun-object bytes so storage, wire,
+ * and VFS do not drift into separate object formats.
  */
 
 #include <stddef.h>
 #include <stdint.h>
+
+#include "er_clock.h"
+#include "er_object.h"
 
 #define ER_OK 0
 #define ER_ERR_IO -1
@@ -34,7 +38,8 @@
 #define ER_STORE_INDEX_DEF_CAPACITY 1024u
 #define ER_STORE_ARENA_MIN_SIZE (2u * 1024u * 1024u)
 #define ER_STORE_TYPE_RAW 0u
-#define ER_STORE_TYPE_OBJECT_MANIFEST 1u
+#define ER_STORE_TYPE_OBJECT 1u
+#define ER_STORE_TYPE_OBJECT_MANIFEST ER_STORE_TYPE_OBJECT
 #define ER_STORE_INDEX_DEFAULT 0u
 #define ER_STORE_VALUE_UNKNOWN 0u
 #define ER_STORE_VALUE_BLOB 1u
@@ -45,8 +50,9 @@
 #define ER_STORE_BLOCK_BACKING_CUSTOM 3u
 #define ER_STORE_SDCARD_BLOCK_BYTES 512u
 #define ER_STORE_NVME_BLOCK_BYTES 512u
-#define ER_STORE_HANDLE_BYTES 512u
+#define ER_STORE_HANDLE_BYTES 1024u
 #define ER_STORE_INDEX_CURSOR_BYTES 320u
+#define ER_STORE_IDENTITY_ID_SIZE 32u
 
 typedef struct er_io {
   void* ctx;
@@ -84,6 +90,8 @@ typedef struct er_store_config {
   size_t key_slots;
   size_t type_slots;
   size_t index_slots;
+  uint8_t storage_identity_id[ER_STORE_IDENTITY_ID_SIZE];
+  er_clock_epoch_stamp_t epoch;
 } er_store_config_t;
 
 typedef struct er_store_stats {
@@ -95,6 +103,9 @@ typedef struct er_store_stats {
   size_t key_count;
   size_t type_count;
   size_t index_count;
+  uint8_t log_root[ER_HASH_SIZE];
+  er_clock_epoch_stamp_t epoch;
+  uint8_t storage_identity_id[ER_STORE_IDENTITY_ID_SIZE];
 } er_store_stats_t;
 
 typedef struct er_store {
@@ -115,13 +126,18 @@ int er_store_close(er_store_t* store);
  */
 int er_store_sync(er_store_t* store);
 int er_store_stats(er_store_t* store, er_store_stats_t* out_stats);
+int er_store_log_root(er_store_t* store, uint8_t out_root[ER_HASH_SIZE]);
 
 int er_store_put_blob(er_store_t* store, const void* data, size_t len, uint8_t out_hash[ER_HASH_SIZE]);
 int er_store_put_typed_blob(er_store_t* store, uint32_t content_type, const void* data, size_t len,
                             uint8_t out_hash[ER_HASH_SIZE]);
+int er_store_put_canonical_object(er_store_t* store, const void* canonical, size_t len,
+                                  uint8_t out_object_id[ER_OBJECT_ID_SIZE]);
 int er_store_put_object(er_store_t* store, const void* data, size_t len, size_t chunk_size,
-                        uint8_t out_object_hash[ER_HASH_SIZE]);
-int er_store_get_object(er_store_t* store, const uint8_t object_hash[ER_HASH_SIZE], void* out, size_t out_cap,
+                        uint8_t out_object_id[ER_OBJECT_ID_SIZE]);
+int er_store_get_canonical_object(er_store_t* store, const uint8_t object_id[ER_OBJECT_ID_SIZE],
+                                  void* out, size_t out_cap, size_t* out_len);
+int er_store_get_object(er_store_t* store, const uint8_t object_id[ER_OBJECT_ID_SIZE], void* out, size_t out_cap,
                         size_t* out_len);
 int er_store_get_blob(er_store_t* store, const uint8_t hash[ER_HASH_SIZE], void* out, size_t out_cap,
                       size_t* out_len);
@@ -132,7 +148,8 @@ int er_store_define_index(er_store_t* store, uint32_t index_id, uint32_t content
 /*
  * Index writes require an existing store value. Blob entries reference blobs
  * written with er_store_put_blob or er_store_put_typed_blob. Object entries
- * reference manifests created by er_store_put_object.
+ * reference canonical edgerun-object bytes created by er_store_put_object or
+ * er_store_put_canonical_object.
  */
 int er_store_blob_index_put(er_store_t* store, uint32_t index_id, const char* key,
                             const uint8_t blob_hash[ER_HASH_SIZE]);

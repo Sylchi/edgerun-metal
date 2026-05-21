@@ -1,6 +1,7 @@
 #define _POSIX_C_SOURCE 200809L
 
 #include "er_store.h"
+#include "er_identity.h"
 
 #include <stdint.h>
 #include <stdio.h>
@@ -143,6 +144,35 @@ static er_io_t bench_make_io(BenchIo* io) {
   return out;
 }
 
+static int bench_fill_storage_config(er_store_config_t* config) {
+  er_identity_source_t source;
+  er_identity_t identity;
+  er_clock_keeper_id_t keeper_id;
+  uint8_t material[ER_IDENTITY_HASH_SIZE];
+  size_t i;
+
+  for (i = 0u; i < ER_CLOCK_KEEPER_ID_SIZE; ++i) {
+    keeper_id.bytes[i] = (uint8_t)(i + 1u);
+  }
+  for (i = 0u; i < sizeof(material); ++i) {
+    material[i] = (uint8_t)(0xb0u + i);
+  }
+  config->epoch.keeper_id = keeper_id;
+  config->epoch.tick = 1u;
+  config->epoch.slot = 0u;
+  config->epoch.epoch = 0u;
+  config->epoch.era = 0u;
+  if (er_identity_source_prepare(ER_IDENTITY_SOURCE_HASH, material,
+                                 sizeof(material), &source) != ER_IDENTITY_OK ||
+      er_identity_prepare(ER_IDENTITY_KIND_STORAGE, &source, config->epoch,
+                          &identity) != ER_IDENTITY_OK) {
+    return -1;
+  }
+  bench_store_copy(config->storage_identity_id, identity.id.bytes,
+                   ER_STORE_IDENTITY_ID_SIZE);
+  return 0;
+}
+
 static int bench_store_open(er_store_t* store, BenchIo* io, uint8_t* arena) {
   er_store_config_t config;
 
@@ -151,6 +181,9 @@ static int bench_store_open(er_store_t* store, BenchIo* io, uint8_t* arena) {
   config.key_slots = BENCH_STORE_KEY_SLOTS;
   config.type_slots = BENCH_STORE_TYPE_SLOTS;
   config.index_slots = BENCH_STORE_INDEX_SLOTS;
+  if (bench_fill_storage_config(&config) != 0) {
+    return ER_ERR_BADARG;
+  }
   return er_store_open(store, bench_make_io(io), arena, BENCH_STORE_ARENA_BYTES, &config);
 }
 

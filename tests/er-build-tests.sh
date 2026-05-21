@@ -250,13 +250,25 @@ case "$storage_plan" in
 esac
 
 case "$storage_plan" in
-  *"+ toolchain/bin/clang -std=c11 -Wall -Wextra -Werror -O2 -o .build/er-build-out/storage/test_store -Istorage/include -Iedgerun-crypto/include -Iinclude storage/tests/test_store.c storage/src/er_store.c edgerun-crypto/src/er_blake3.c"* ) ;;
+  *"+ toolchain/bin/clang -std=c11 -Wall -Wextra -Werror -O2 -o .build/er-build-out/storage/test_store -Iedgerun-storage/include -Iedgerun-object/include -Iedgerun-identity/include -Iedgerun-clock/include -Iedgerun-crypto/include -Iinclude edgerun-storage/tests/test_store.c edgerun-storage/src/er_store.c edgerun-object/src/er_object.c edgerun-identity/src/er_identity.c edgerun-clock/src/er_clock.c edgerun-crypto/src/er_blake3.c"* ) ;;
   * ) printf 'missing direct storage test compile step\n' >&2; exit 1 ;;
 esac
 
 case "$storage_plan" in
   *"+ .build/er-build-out/storage/test_store"* ) ;;
   * ) printf 'missing direct storage test execution step\n' >&2; exit 1 ;;
+esac
+
+node_plan=$("$ER_BUILD" --print-plan node-test)
+
+case "$node_plan" in
+  *"+ toolchain/bin/clang -std=c11 -Wall -Wextra -Werror -O2 -o .build/er-build-out/node/test_node -Iedgerun-node/include -Iedgerun-storage/include -Iedgerun-object/include -Iedgerun-identity/include -Iedgerun-clock/include -Iedgerun-crypto/include -Iinclude edgerun-node/tests/test_node.c edgerun-node/src/er_node.c edgerun-storage/src/er_store.c edgerun-object/src/er_object.c edgerun-identity/src/er_identity.c edgerun-clock/src/er_clock.c edgerun-crypto/src/er_blake3.c -DER_BLAKE3_NO_SIMD=1"* ) ;;
+  * ) printf 'missing direct node test compile step\n' >&2; exit 1 ;;
+esac
+
+case "$node_plan" in
+  *"+ .build/er-build-out/node/test_node"* ) ;;
+  * ) printf 'missing direct node test execution step\n' >&2; exit 1 ;;
 esac
 
 varfont_plan=$("$ER_BUILD" --print-plan varfont-test)

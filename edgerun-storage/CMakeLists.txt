@@ -9,10 +9,16 @@ endif()
 
 add_library(edgerun_storage STATIC
   src/er_store.c
+  ../edgerun-object/src/er_object.c
+  ../edgerun-identity/src/er_identity.c
+  ../edgerun-clock/src/er_clock.c
   ../edgerun-crypto/src/er_blake3.c
 )
 target_include_directories(edgerun_storage PUBLIC
   ${CMAKE_CURRENT_SOURCE_DIR}/include
+  ${CMAKE_CURRENT_SOURCE_DIR}/../edgerun-object/include
+  ${CMAKE_CURRENT_SOURCE_DIR}/../edgerun-identity/include
+  ${CMAKE_CURRENT_SOURCE_DIR}/../edgerun-clock/include
   ${CMAKE_CURRENT_SOURCE_DIR}/../edgerun-crypto/include
   ${CMAKE_CURRENT_SOURCE_DIR}/../include
 )

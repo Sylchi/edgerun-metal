@@ -32,6 +32,7 @@ enum {
   ERC_API_MANIFEST_IDENTITY,
   ERC_API_MANIFEST_OBJECT,
   ERC_API_MANIFEST_STORAGE,
+  ERC_API_MANIFEST_NODE,
   ERC_API_MANIFEST_UI,
   ERC_API_MANIFEST_COUNT
 };
@@ -56,7 +57,8 @@ static const char ERC_API_MANIFEST_CLOCK_PATH[] = "edgerun-clock/api/public-head
 static const char ERC_API_MANIFEST_CRYPTO_PATH[] = "edgerun-crypto/api/public-headers.manifest";
 static const char ERC_API_MANIFEST_IDENTITY_PATH[] = "edgerun-identity/api/public-headers.manifest";
 static const char ERC_API_MANIFEST_OBJECT_PATH[] = "edgerun-object/api/public-headers.manifest";
-static const char ERC_API_MANIFEST_STORAGE_PATH[] = "storage/api/public-headers.manifest";
+static const char ERC_API_MANIFEST_STORAGE_PATH[] = "edgerun-storage/api/public-headers.manifest";
+static const char ERC_API_MANIFEST_NODE_PATH[] = "edgerun-node/api/public-headers.manifest";
 static const char ERC_API_MANIFEST_UI_PATH[] = "edgerun-ui-core/api/public-headers.manifest";
 
 static const char* const ERC_EXTERNAL_PATTERNS[ERC_EXTERNAL_PATTERN_COUNT] = {
@@ -203,8 +205,11 @@ static int erc_public_header_manifest_index(const char* path) {
   if (erc_has_prefix(path, "edgerun-object/include/") != 0) {
     return ERC_API_MANIFEST_OBJECT;
   }
-  if (erc_has_prefix(path, "storage/include/") != 0) {
+  if (erc_has_prefix(path, "edgerun-storage/include/") != 0) {
     return ERC_API_MANIFEST_STORAGE;
+  }
+  if (erc_has_prefix(path, "edgerun-node/include/") != 0) {
+    return ERC_API_MANIFEST_NODE;
   }
   if (erc_has_prefix(path, "edgerun-ui-core/include/") != 0 ||
       erc_has_prefix(path, "edgerun-ui-core/varfont/include/") != 0 ||
@@ -276,6 +281,11 @@ static void erc_api_manifest_init(ErcApiManifest manifests[ERC_API_MANIFEST_COUN
   manifests[ERC_API_MANIFEST_STORAGE].bytes = NULL;
   manifests[ERC_API_MANIFEST_STORAGE].len = 0u;
   manifests[ERC_API_MANIFEST_STORAGE].cursor = 0u;
+
+  manifests[ERC_API_MANIFEST_NODE].path = ERC_API_MANIFEST_NODE_PATH;
+  manifests[ERC_API_MANIFEST_NODE].bytes = NULL;
+  manifests[ERC_API_MANIFEST_NODE].len = 0u;
+  manifests[ERC_API_MANIFEST_NODE].cursor = 0u;
 
   manifests[ERC_API_MANIFEST_UI].path = ERC_API_MANIFEST_UI_PATH;
   manifests[ERC_API_MANIFEST_UI].bytes = NULL;
