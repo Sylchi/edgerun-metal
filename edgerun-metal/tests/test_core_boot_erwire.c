@@ -50,9 +50,6 @@ static void test_hw_relay_endpoints(void) {
   check_int64("relay udp port lo", endpoint.address[5], 0x28);
   check_int64("relay udp recognized", er_hw_relay_endpoint_is_firmware_udp(&endpoint), 1);
 
-  check_int64("relay default udp", er_hw_relay_default_firmware_udp_endpoint(&endpoint), 1);
-  check_int64("relay default label", endpoint.label_len, 9);
-
   intent.abi_version = ER_WORK_ABI_VERSION;
   intent.reserved = 0;
   intent.to = endpoint;

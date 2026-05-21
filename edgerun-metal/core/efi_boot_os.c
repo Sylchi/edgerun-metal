@@ -226,7 +226,7 @@ void er_run_os_path(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE* SystemTable,
     return;
   }
 
-  scene_budget = er_ui_scene_budget_native_interactive_frame();
+  scene_budget = er_ui_scene_frame_budget();
   if (er_ui_surface_memory_plan_from_tile_plan(&tile_plan, ER_UI_BOOT_BACKING_BUFFERS,
                                            ER_UI_BOOT_COMMAND_BYTES, ER_UI_BOOT_GLYPH_CACHE_BYTES,
                                            ER_UI_BOOT_SURFACE_BYTES, &memory_plan) == 0u) {

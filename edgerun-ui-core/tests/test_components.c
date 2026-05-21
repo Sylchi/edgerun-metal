@@ -253,20 +253,20 @@ static void test_component_render_primitives(void) {
                 "metal surface: ui-core owns boot scene composition");
   expect_true(scene.hit_count >= ER_UI_TEST_COMPONENT_MIN_METAL_HITS, "metal surface: showcase and controls emit hits");
   expect_true(scene.text_quad_count > ER_UI_TEST_COMPONENT_MIN_METAL_TEXT_QUADS, "metal surface: boot UI emits variable font text");
-  expect_true(er_ui_scene_stats_fits_budget(er_ui_scene_stats(&scene), er_ui_scene_budget_native_interactive_frame()),
+  expect_true(er_ui_scene_stats_fits_budget(er_ui_scene_stats(&scene), er_ui_scene_frame_budget()),
               "metal surface: boot scene fits native frame budget");
   er_ui_scene_clear_commands(&scene);
   expect_status(er_ui_edgerun_metal_surface_emit(&scene, face, er_ui_bounds(0.0f, 0.0f, 1920.0f, 1080.0f), theme, &state), ER_UI_OK,
                 "metal surface: qemu 1080p scene emits");
   expect_true(scene.hit_count >= ER_UI_TEST_COMPONENT_MIN_METAL_HITS, "metal surface: qemu 1080p controls emit hits");
-  expect_true(er_ui_scene_stats_fits_budget(er_ui_scene_stats(&scene), er_ui_scene_budget_native_interactive_frame()),
+  expect_true(er_ui_scene_stats_fits_budget(er_ui_scene_stats(&scene), er_ui_scene_frame_budget()),
               "metal surface: qemu 1080p scene fits native frame budget");
   er_ui_scene_clear_commands(&scene);
   expect_status(er_ui_edgerun_metal_surface_emit(&scene, face, er_ui_bounds(0.0f, 0.0f, 1280.0f, 720.0f), theme, &state), ER_UI_OK,
                 "metal surface: qemu 720p scene emits");
   expect_true(scene.hit_count >= ER_UI_TEST_COMPONENT_MIN_METAL_HITS, "metal surface: qemu 720p controls emit hits");
   expect_true(scene.icon_quad_count >= ER_UI_TEST_COMPONENT_MIN_METAL_ICON_QUADS, "metal surface: qemu 720p icon nodes emit quads");
-  expect_true(er_ui_scene_stats_fits_budget(er_ui_scene_stats(&scene), er_ui_scene_budget_native_interactive_frame()),
+  expect_true(er_ui_scene_stats_fits_budget(er_ui_scene_stats(&scene), er_ui_scene_frame_budget()),
               "metal surface: qemu 720p scene fits native frame budget");
   er_ui_scene_clear_commands(&scene);
   expect_status(er_ui_edgerun_metal_surface_emit(&scene, face, er_ui_bounds(0.0f, 0.0f, ER_UI_TEST_COMPONENT_NARROW_METAL_W,

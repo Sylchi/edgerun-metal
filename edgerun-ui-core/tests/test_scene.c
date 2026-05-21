@@ -384,7 +384,7 @@ static void test_transition_and_budget_contracts(void) {
   expect_size(violation.actual, ER_TEST_BUDGET_ACTUAL_RECTS, "budget: violation actual is reported");
   expect_size(violation.limit, ER_TEST_BUDGET_LIMIT_RECTS, "budget: violation limit is reported");
   expect_true(!er_ui_scene_stats_fits_budget(stats, budget), "budget: over-budget stats do not fit");
-  expect_true(er_ui_scene_stats_fits_budget(stats, er_ui_scene_budget_native_interactive_frame()), "budget: native frame budget accepts fixture");
+  expect_true(er_ui_scene_stats_fits_budget(stats, er_ui_scene_frame_budget()), "budget: frame budget accepts fixture");
 }
 
 static void test_color_helpers_and_scheme_codes(void) {

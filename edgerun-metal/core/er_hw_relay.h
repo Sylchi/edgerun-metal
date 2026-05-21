@@ -17,7 +17,6 @@
 UINT8 er_hw_relay_prepare_firmware_udp_endpoint(UINT8 a, UINT8 b, UINT8 c, UINT8 d, UINT16 port,
                                                 const char* label, UINTN label_len,
                                                 ErChannelEndpoint* out_endpoint);
-UINT8 er_hw_relay_default_firmware_udp_endpoint(ErChannelEndpoint* out_endpoint);
 UINT8 er_hw_relay_endpoint_is_firmware_udp(const ErChannelEndpoint* endpoint);
 UINT8 er_hw_relay_forward_to_firmware_udp(const ErRelayForwardIntent* intent, const UINT8* packet, UINTN packet_len);
 UINT8 er_hw_relay_prepare_native_eth_endpoint(const UINT8* mac,

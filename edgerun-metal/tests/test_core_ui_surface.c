@@ -160,7 +160,7 @@ static void test_ui_surface_renderer_surface(void) {
               er_ui_surface_memory_plan_from_tile_plan(&tile_plan, 1u, 0xffffffffffffffffull, 0u, 0u, &memory_plan),
               0);
   check_uint64("ui surface memory overflow zeroes output", memory_plan.total_bytes, 0u);
-  frame_budget = er_ui_surface_frame_budget_from_plan(&tile_plan, er_ui_scene_budget_native_interactive_frame(), 4u);
+  frame_budget = er_ui_surface_frame_budget_from_plan(&tile_plan, er_ui_scene_frame_budget(), 4u);
   check_uint64("ui surface derived budget pixels", frame_budget.pixels_written, 24u);
   check_uint64("ui surface derived budget bytes", frame_budget.bytes_written, 96u);
   check_uint64("ui surface derived budget rects", frame_budget.rects, 2000u);
@@ -169,7 +169,7 @@ static void test_ui_surface_renderer_surface(void) {
   check_uint64("ui surface derived budget tiles", frame_budget.tiles_rendered, 4u);
   check_uint64("ui surface derived budget dirty", frame_budget.dirty_tiles_requested, 4u);
   check_uint64("ui surface derived budget clipped", frame_budget.clipped_primitives, 44800u);
-  frame_budget = er_ui_surface_frame_budget_from_plan(&tile_plan, er_ui_scene_budget_native_interactive_frame(), 0u);
+  frame_budget = er_ui_surface_frame_budget_from_plan(&tile_plan, er_ui_scene_frame_budget(), 0u);
   check_uint64("ui surface reject zero overdraw budget", frame_budget.bytes_written, 0u);
   check_int64("ui surface tile rect", er_ui_surface_tile_rect(&tile_plan, 3u, &tile_rect), 1);
   check_uint64("ui surface tile rect x0", tile_rect.x0, 2u);
@@ -501,7 +501,7 @@ static void test_ui_surface_renderer_4k_tile_plan(void) {
   check_uint64("ui surface 4k memory tile state", memory.tile_state_bytes, 1020u);
   check_uint64("ui surface 4k memory dirty queue", memory.dirty_queue_bytes, 1024u);
   check_uint64("ui surface 4k memory total", memory.total_bytes, 67667964u);
-  budget = er_ui_surface_frame_budget_from_plan(&plan, er_ui_scene_budget_native_interactive_frame(), 4u);
+  budget = er_ui_surface_frame_budget_from_plan(&plan, er_ui_scene_frame_budget(), 4u);
   check_uint64("ui surface 4k budget pixels", budget.pixels_written, 33177600u);
   check_uint64("ui surface 4k budget bytes", budget.bytes_written, 132710400u);
   check_uint64("ui surface 4k budget text pixels", budget.text_pixels, 8294400u);

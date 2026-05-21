@@ -390,7 +390,10 @@ static void test_network_coordinator(void) {
   io.wifi_open = 0;
 
   check_int64("network firmware endpoint",
-              er_hw_relay_default_firmware_udp_endpoint(&firmware_endpoint), 1);
+              er_hw_relay_prepare_firmware_udp_endpoint(10u, 42u, 0u, 1u,
+                                                        ER_HW_RELAY_FIRMWARE_UDP_PORT,
+                                                        "uefi-udp4", 9u,
+                                                        &firmware_endpoint), 1);
   io.firmware_udp = &firmware_endpoint;
   check_int64("network firmware route select",
               er_network_peer_prepare(&target_node, &udp_locator, 1u, &peer), 1);

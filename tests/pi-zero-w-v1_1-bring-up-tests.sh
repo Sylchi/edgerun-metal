@@ -132,14 +132,14 @@ if ! grep -q "0000:c3:00.4" "$BUILD_DIR/usb-reset-log.txt"; then
   exit 1
 fi
 
-if ! grep -q "Boot files sent. Attach the small serial cable and run make pi-ready again." \
+if ! grep -q "Boot files sent. Attach the small serial cable and run make pi-zero-w-v1_1-ready again." \
   /tmp/pi-zero-w-v1_1-bring-up-recovered.out; then
   printf 'bring-up wrapper did not print a plain retry instruction after recovery\n' >&2
   exit 1
 fi
 
-if ! make -C "$ROOT_DIR" -n pi-ready | grep -q "pi-zero-w-v1_1-bring-up.sh"; then
-  printf 'top-level pi-ready alias does not run the bring-up wrapper\n' >&2
+if ! make -C "$ROOT_DIR" -n pi-zero-w-v1_1-ready | grep -q "pi-zero-w-v1_1-bring-up.sh"; then
+  printf 'pi-zero-w-v1_1-ready target does not run the bring-up wrapper\n' >&2
   exit 1
 fi
 
