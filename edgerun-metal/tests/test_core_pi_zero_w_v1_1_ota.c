@@ -24,6 +24,18 @@ typedef struct {
 #define PI_ZERO_W_V1_1_TEST_OTHER_MAC_4 0x00u
 #define PI_ZERO_W_V1_1_TEST_OTHER_MAC_5 0x03u
 #define PI_ZERO_W_V1_1_TEST_BROADCAST_BYTE 0xffu
+#define PI_ZERO_W_V1_1_TEST_80211_ACTION_FRAME_CONTROL 0x00d0u
+#define PI_ZERO_W_V1_1_TEST_80211_HEADER_BYTES 24u
+#define PI_ZERO_W_V1_1_TEST_80211_ADDR1_OFFSET 4u
+#define PI_ZERO_W_V1_1_TEST_80211_ADDR2_OFFSET 10u
+#define PI_ZERO_W_V1_1_TEST_80211_ADDR3_OFFSET 16u
+#define PI_ZERO_W_V1_1_TEST_80211_BODY_OFFSET 24u
+#define PI_ZERO_W_V1_1_TEST_80211_VENDOR_CATEGORY 127u
+#define PI_ZERO_W_V1_1_TEST_80211_VENDOR_OUI0 0x45u
+#define PI_ZERO_W_V1_1_TEST_80211_VENDOR_OUI1 0x52u
+#define PI_ZERO_W_V1_1_TEST_80211_VENDOR_OUI2 0x00u
+#define PI_ZERO_W_V1_1_TEST_80211_VENDOR_TYPE_UPDATE 1u
+#define PI_ZERO_W_V1_1_TEST_80211_VENDOR_HEADER_BYTES 5u
 
 static UINT8 test_pi_zero_w_v1_1_ota_write_block(
     void* ctx,
@@ -100,6 +112,63 @@ static void test_pi_zero_w_v1_1_ota_eth_frame(
                                      ER_NET_FRAME_MAX,
                                      out_frame_len),
               1);
+}
+
+static void test_pi_zero_w_v1_1_ota_put_le16(UINT8* bytes, UINT16 value) {
+  bytes[0] = (UINT8)(value & 0xffu);
+  bytes[1] = (UINT8)((value >> 8u) & 0xffu);
+}
+
+static void test_pi_zero_w_v1_1_ota_80211_action_frame(
+    const UINT8* eth_frame,
+    UINT32 eth_frame_len,
+    const UINT8 dst_mac[ER_NET_MAC_LEN],
+    UINT8* out_frame,
+    UINT32* out_frame_len) {
+  static const UINT8 src_mac[ER_NET_MAC_LEN] = {
+      PI_ZERO_W_V1_1_TEST_SRC_MAC_0,
+      PI_ZERO_W_V1_1_TEST_SRC_MAC_1,
+      PI_ZERO_W_V1_1_TEST_SRC_MAC_2,
+      PI_ZERO_W_V1_1_TEST_SRC_MAC_3,
+      PI_ZERO_W_V1_1_TEST_SRC_MAC_4,
+      PI_ZERO_W_V1_1_TEST_SRC_MAC_5};
+  UINT8* vendor;
+
+  check_int64("pi zero w ota 80211 action inputs",
+              eth_frame != 0 &&
+                  dst_mac != 0 &&
+                  out_frame != 0 &&
+                  out_frame_len != 0 &&
+                  eth_frame_len <= ER_PI_ZERO_W_V1_1_OTA_L2_FRAME_BYTES_MAX,
+              1);
+  er_mem_zero(out_frame,
+              PI_ZERO_W_V1_1_TEST_80211_HEADER_BYTES +
+                  PI_ZERO_W_V1_1_TEST_80211_VENDOR_HEADER_BYTES +
+                  eth_frame_len);
+  test_pi_zero_w_v1_1_ota_put_le16(
+      out_frame,
+      PI_ZERO_W_V1_1_TEST_80211_ACTION_FRAME_CONTROL);
+  er_mem_copy(out_frame + PI_ZERO_W_V1_1_TEST_80211_ADDR1_OFFSET,
+              dst_mac,
+              ER_NET_MAC_LEN);
+  er_mem_copy(out_frame + PI_ZERO_W_V1_1_TEST_80211_ADDR2_OFFSET,
+              src_mac,
+              ER_NET_MAC_LEN);
+  er_mem_copy(out_frame + PI_ZERO_W_V1_1_TEST_80211_ADDR3_OFFSET,
+              dst_mac,
+              ER_NET_MAC_LEN);
+  vendor = out_frame + PI_ZERO_W_V1_1_TEST_80211_BODY_OFFSET;
+  vendor[0] = PI_ZERO_W_V1_1_TEST_80211_VENDOR_CATEGORY;
+  vendor[1] = PI_ZERO_W_V1_1_TEST_80211_VENDOR_OUI0;
+  vendor[2] = PI_ZERO_W_V1_1_TEST_80211_VENDOR_OUI1;
+  vendor[3] = PI_ZERO_W_V1_1_TEST_80211_VENDOR_OUI2;
+  vendor[4] = PI_ZERO_W_V1_1_TEST_80211_VENDOR_TYPE_UPDATE;
+  er_mem_copy(vendor + PI_ZERO_W_V1_1_TEST_80211_VENDOR_HEADER_BYTES,
+              eth_frame,
+              eth_frame_len);
+  *out_frame_len = PI_ZERO_W_V1_1_TEST_80211_HEADER_BYTES +
+                   PI_ZERO_W_V1_1_TEST_80211_VENDOR_HEADER_BYTES +
+                   eth_frame_len;
 }
 
 static void test_pi_zero_w_v1_1_ota_receiver(void) {
@@ -307,7 +376,9 @@ static void test_pi_zero_w_v1_1_ota_l2_receiver(void) {
   ErVfsObjectPacket object_packet;
   UINT8 image[PI_TEST_OTA_L2_IMAGE_LEN];
   UINT8 frame[ER_NET_FRAME_MAX];
+  UINT8 action_frame[ER_NET_FRAME_MAX];
   UINT32 frame_len;
+  UINT32 action_frame_len;
   UINT32 i;
 
   er_crypto_blake3_provider(&crypto);
@@ -404,4 +475,30 @@ static void test_pi_zero_w_v1_1_ota_l2_receiver(void) {
   check_uint64("pi zero w ota l2 wrong eth type rejected",
                state.status,
                ER_PI_ZERO_W_V1_1_OTA_STATUS_REJECTED);
+
+  er_pi_zero_w_v1_1_ota_reset(&state);
+  er_mem_zero((UINT8*)&sink, (UINTN)sizeof(sink));
+  test_pi_zero_w_v1_1_ota_eth_frame(&object_packet,
+                                    broadcast_mac,
+                                    ER_NET_ETH_TYPE_EDGERUN,
+                                    frame,
+                                    &frame_len);
+  test_pi_zero_w_v1_1_ota_80211_action_frame(frame,
+                                             frame_len,
+                                             broadcast_mac,
+                                             action_frame,
+                                             &action_frame_len);
+  check_int64("pi zero w ota receive raw 80211 action erwire",
+              er_pi_zero_w_v1_1_ota_receive_l2_frame(
+                  &state,
+                  &crypto,
+                  local_mac,
+                  action_frame,
+                  action_frame_len,
+                  test_pi_zero_w_v1_1_ota_write_block,
+                  &sink),
+              1);
+  check_uint64("pi zero w ota raw 80211 action committed",
+               state.status,
+               ER_PI_ZERO_W_V1_1_OTA_STATUS_COMMITTED);
 }
