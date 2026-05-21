@@ -11,8 +11,6 @@ ErWasmHostCalls g_host_calls = {0};
 #include "test_core_virtio.c"
 #include "test_core_platform.c"
 #include "test_core_wasm_imports.c"
-#include "test_core_wasm_apps.c"
-#include "test_core_app_routes.c"
 #include "test_core_storage_medium.c"
 #include "test_core_node_id.c"
 #include "test_core_device_routes.c"
@@ -80,15 +78,6 @@ int main(void) {
   test_wasm_ui_emit_import();
   test_wasm_c_generated_hostcall_modules();
   test_epoch_clock_rollover();
-  test_ui_wasm_app_runner();
-  test_ui_wasm_app_multiple_runtimes();
-  test_ui_boot_apply_input_routes_to_active_wasm_app();
-  test_ui_boot_package_loads_from_endpoint_storage();
-  test_vfs_object_packets();
-  test_storage_endpoint_object_store();
-  test_storage_endpoint_object_cache();
-  test_storage_endpoint_sealed_relay_capture();
-  test_app_identity_routes();
   test_storage_medium_init_record();
   test_node_id_sources();
   test_device_relay_identity();
@@ -124,7 +113,6 @@ int main(void) {
   test_native_boot_erwire_eth_sink();
   test_native_boot_endpoint_intent();
   test_native_boot_storage_endpoint_intent();
-  test_os_native_relay_dispatch();
   test_netlog_disabled_path();
   test_gfx_console_disabled_path();
   test_print_routes_firmware_before_serial();

@@ -5,7 +5,6 @@
 #include "er_mem.h"
 #include "er_pci.h"
 #include "er_acpi.h"
-#include "er_app.h"
 #include "er_blake3.h"
 #include "er_boot_config.h"
 #include "er_boot_admission_record.h"
@@ -64,7 +63,6 @@
 #include "er_ui_frame_timing.h"
 #include "er_ui_tabler_icon_atlas.h"
 #include "er_ui_ledger_app.h"
-#include "er_ui_wasm_app.h"
 #include "er_ui_text.h"
 #include "er_virtio.h"
 #include "er_virtio_blk.h"
@@ -623,21 +621,6 @@ static void test_write_wasm_ui_scene_packet(UINT8* bytes, UINT32 len) {
   test_put_le32(bytes + quad_offset + 40u, 0x3f800000u);
   test_put_le32(bytes + quad_offset + 44u, 0x3f800000u);
   test_put_le32(bytes + quad_offset + 48u, 0x3f800000u);
-}
-
-static void test_prepare_wasm_ui_presentation(ErAppUiPresentation* presentation) {
-  er_mem_zero((UINT8*)presentation, (UINTN)sizeof(*presentation));
-  presentation->abi_version = ER_APP_ABI_VERSION;
-  test_fill_bytes(presentation->presentation_id.bytes, ER_HASH_LEN, 0x10u);
-  test_fill_bytes(presentation->jurisdiction_id.bytes, ER_HASH_LEN, 0x30u);
-  test_fill_bytes(presentation->admission_id.bytes, ER_HASH_LEN, 0x50u);
-  test_fill_bytes(presentation->app_node_id.bytes, ER_NODE_ID_LEN, 0x70u);
-  test_fill_bytes(presentation->ui_relay_node_id.bytes, ER_NODE_ID_LEN, 0x90u);
-  test_fill_bytes(presentation->route_hash.bytes, ER_HASH_LEN, 0xb0u);
-  presentation->sequence = 1u;
-  presentation->max_rects = 1u;
-  presentation->max_hits = 1u;
-  presentation->max_text_quads = 1u;
 }
 
 #endif

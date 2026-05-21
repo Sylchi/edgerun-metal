@@ -7,7 +7,6 @@
  * canonical edgerun-storage objects instead of endpoint-owned packet blobs.
  */
 
-#include "er_app.h"
 #include "er_relay_packet.h"
 #include "er_seal.h"
 #include "er_vfs.h"
@@ -151,13 +150,4 @@ UINT8 er_storage_endpoint_store_object_packet(const ErCryptoProvider* crypto,
                                               const ErVfsObjectPacket* packet,
                                               ErStorageEndpointObjectStore* store,
                                               ErStorageEndpointObjectCapture* out_capture);
-UINT8 er_storage_endpoint_prepare_package_storage_response(const ErCryptoProvider* crypto,
-                                                           const ErStorageEndpointObjectStore* store,
-                                                           const ErHash* expected_route_id,
-                                                           const ErHash* expected_object_id,
-                                                           UINT64 expected_object_len,
-                                                           UINT8* object_bytes,
-                                                           UINTN object_capacity,
-                                                           ErAppPackageStorageResponse* out_response);
-
 #endif

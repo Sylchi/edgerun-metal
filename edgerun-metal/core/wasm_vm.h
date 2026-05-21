@@ -3,8 +3,8 @@
 
 #include "er_bus.h"
 #include "er_driver_policy.h"
-#include "er_app.h"
 #include "er_types.h"
+#include "er_ui_scene.h"
 #include "er_wasm_contract.h"
 
 #define ER_WASM_MAX_FUNCTIONS 16u
@@ -63,9 +63,6 @@ typedef struct {
   UINT8* memory;
   UINT32 memory_size;
   ErWasmLinearMemory linear_memory;
-  ErAppUsage* app_usage;
-  const ErAppBudget* app_budget;
-  const ErAppUiPresentation* ui_presentation;
   const ErDriverAdmissionPolicy* driver_policy;
 } ErWasmHostCalls;
 

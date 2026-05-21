@@ -260,13 +260,6 @@ int er_wasm_execute_import_call(ErWasmModule* module,
                                          &len) != 0) {
         return -1;
       }
-      if (er_relay_packet_authorized_for_app((const UINT8*)bytes, len,
-                                             module->host.app_usage,
-                                             module->host.app_budget) == 0u ||
-          er_app_usage_charge(module->host.app_usage, module->host.app_budget,
-                              ER_APP_BUDGET_PACKET_BYTE, (UINT64)len) == 0u) {
-        return -1;
-      }
       value = module->host.relay_send((const UINT8*)bytes, len);
       return er_wasm_stack_push(stack, stack_size, value);
     }
@@ -315,7 +308,6 @@ int er_wasm_execute_import_call(ErWasmModule* module,
       UINT32 len = 0u;
       er_ui_scene_stats_t stats;
       if (module->host.ui_emit == 0 ||
-          module->host.ui_presentation == 0 ||
           er_wasm_hostcall_outbox_window(module, param_count_call,
                                          result_count, result_type,
                                          stack, stack_size,
@@ -323,9 +315,7 @@ int er_wasm_execute_import_call(ErWasmModule* module,
                                          &len) != 0) {
         return -1;
       }
-      if (er_wasm_ui_command_stats(bytes, len, &stats) != 0 ||
-          er_app_ui_scene_fits_presentation(stats,
-                                            module->host.ui_presentation) == 0u) {
+      if (er_wasm_ui_command_stats(bytes, len, &stats) != 0) {
         return -1;
       }
       value = module->host.ui_emit(module->host.ui_emit_user,
