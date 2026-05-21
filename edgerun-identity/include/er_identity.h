@@ -10,6 +10,8 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include "er_clock.h"
+
 #define ER_IDENTITY_OK 0
 #define ER_IDENTITY_ERR_BADARG -1
 #define ER_IDENTITY_ERR_TOOBIG -2
@@ -56,6 +58,7 @@ typedef struct er_identity_source {
 typedef struct er_identity {
   uint16_t abi_version;
   uint16_t identity_kind;
+  er_clock_epoch_stamp_t epoch;
   er_identity_id_t id;
   er_identity_source_t source;
 } er_identity_t;
@@ -76,12 +79,14 @@ int er_identity_id_from_source(const er_identity_source_t* source,
                                er_identity_id_t* out_id);
 int er_identity_prepare(uint16_t identity_kind,
                         const er_identity_source_t* source,
+                        er_clock_epoch_stamp_t epoch,
                         er_identity_t* out_identity);
 int er_identity_valid(const er_identity_t* identity);
 int er_identity_equal(const er_identity_t* left,
                       const er_identity_t* right);
 int er_identity_derive_child(const er_identity_t* parent,
                              uint16_t child_kind,
+                             er_clock_epoch_stamp_t epoch,
                              const void* label,
                              size_t label_len,
                              const void* material,

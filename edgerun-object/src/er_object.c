@@ -1,6 +1,7 @@
 #include "er_object.h"
 
 #include "er_blake3.h"
+#include "er_clock.h"
 
 enum {
   ER_OBJECT_U16_BYTES = 2u,
@@ -19,7 +20,7 @@ enum {
   ER_OBJECT_MAGIC_BYTE5 = 5u,
   ER_OBJECT_MAGIC_BYTE6 = 6u,
   ER_OBJECT_MAGIC_BYTE7 = 7u,
-  ER_OBJECT_HEADER_SIZE = 84u,
+  ER_OBJECT_HEADER_SIZE = 116u,
   ER_OBJECT_REQUIREMENTS_SIZE = 28u,
   ER_OBJECT_OWNER_SIZE = 36u,
   ER_OBJECT_ENVELOPE_SIZE = 76u,
@@ -40,9 +41,14 @@ enum {
   ER_OBJECT_HEADER_ENVELOPE_COUNT_OFF = 26u,
   ER_OBJECT_HEADER_CHILD_COUNT_OFF = 28u,
   ER_OBJECT_HEADER_BODY_LEN_OFF = 32u,
-  ER_OBJECT_HEADER_REQUIREMENTS_OFF = 40u,
-  ER_OBJECT_HEADER_RESERVED_OFF = 68u,
+  ER_OBJECT_HEADER_EPOCH_OFF = 40u,
+  ER_OBJECT_HEADER_REQUIREMENTS_OFF = 72u,
+  ER_OBJECT_HEADER_RESERVED_OFF = 100u,
   ER_OBJECT_HEADER_RESERVED_SIZE = 16u,
+  ER_OBJECT_EPOCH_TICK_OFF = 0u,
+  ER_OBJECT_EPOCH_SLOT_OFF = 8u,
+  ER_OBJECT_EPOCH_EPOCH_OFF = 16u,
+  ER_OBJECT_EPOCH_ERA_OFF = 24u,
   ER_OBJECT_REQUIREMENTS_DURABILITY_OFF = 0u,
   ER_OBJECT_REQUIREMENTS_CONFIDENTIALITY_OFF = 4u,
   ER_OBJECT_REQUIREMENTS_PORTABILITY_OFF = 8u,
@@ -140,6 +146,24 @@ static uint32_t er_object_load32(const uint8_t* in) {
 static uint64_t er_object_load64(const uint8_t* in) {
   return (uint64_t)er_object_load32(in) |
          ((uint64_t)er_object_load32(&in[ER_OBJECT_U32_BYTES]) << (ER_OBJECT_BYTE_SHIFT * ER_OBJECT_U32_BYTES));
+}
+
+static void er_object_epoch_write(er_clock_epoch_stamp_t epoch,
+                                  uint8_t out[32]) {
+  er_object_store64(&out[ER_OBJECT_EPOCH_TICK_OFF], epoch.tick);
+  er_object_store64(&out[ER_OBJECT_EPOCH_SLOT_OFF], epoch.slot);
+  er_object_store64(&out[ER_OBJECT_EPOCH_EPOCH_OFF], epoch.epoch);
+  er_object_store64(&out[ER_OBJECT_EPOCH_ERA_OFF], epoch.era);
+}
+
+static er_clock_epoch_stamp_t er_object_epoch_read(const uint8_t in[32]) {
+  er_clock_epoch_stamp_t epoch;
+
+  epoch.tick = er_object_load64(&in[ER_OBJECT_EPOCH_TICK_OFF]);
+  epoch.slot = er_object_load64(&in[ER_OBJECT_EPOCH_SLOT_OFF]);
+  epoch.epoch = er_object_load64(&in[ER_OBJECT_EPOCH_EPOCH_OFF]);
+  epoch.era = er_object_load64(&in[ER_OBJECT_EPOCH_ERA_OFF]);
+  return epoch;
 }
 
 static int er_object_add_size(size_t a, size_t b, size_t* out) {
@@ -412,6 +436,7 @@ int er_object_id(const void* canonical, size_t len,
 
 int er_object_build_node(uint16_t node_kind, uint32_t flags,
                          const er_object_requirements_t* requirements,
+                         er_clock_epoch_stamp_t epoch,
                          const er_object_owner_t* owners, uint16_t owner_count,
                          const er_object_envelope_t* envelopes, uint16_t envelope_count,
                          const er_object_child_ref_t* children, uint32_t child_count,
@@ -426,6 +451,7 @@ int er_object_build_node(uint16_t node_kind, uint32_t flags,
 
   if (out == (void*)0 || out_len == (size_t*)0 ||
       out_id == (uint8_t*)0 ||
+      er_clock_stamp_valid(epoch) == 0 ||
       (owner_count != 0u && owners == (const er_object_owner_t*)0) ||
       (envelope_count != 0u && envelopes == (const er_object_envelope_t*)0) ||
       (child_count != 0u && children == (const er_object_child_ref_t*)0) ||
@@ -465,6 +491,7 @@ int er_object_build_node(uint16_t node_kind, uint32_t flags,
   er_object_store16(&bytes[ER_OBJECT_HEADER_ENVELOPE_COUNT_OFF], envelope_count);
   er_object_store32(&bytes[ER_OBJECT_HEADER_CHILD_COUNT_OFF], child_count);
   er_object_store64(&bytes[ER_OBJECT_HEADER_BODY_LEN_OFF], (uint64_t)body_len);
+  er_object_epoch_write(epoch, &bytes[ER_OBJECT_HEADER_EPOCH_OFF]);
   if ((size_t)(uint64_t)body_len != body_len ||
       er_object_requirements_write(requirements, &bytes[ER_OBJECT_HEADER_REQUIREMENTS_OFF]) != ER_OBJECT_OK) {
     return ER_OBJECT_ERR_BADARG;
@@ -557,6 +584,7 @@ int er_object_verify(const void* canonical, size_t len,
   uint32_t child_count;
   uint64_t body_len; //@optimizer-ignore canonical object body lengths are 64-bit fields
   uint64_t logical_len; //@optimizer-ignore canonical object logical lengths are 64-bit fields
+  er_clock_epoch_stamp_t epoch;
   uint64_t child_end = 0u;
   size_t expected_len;
   uint32_t i;
@@ -574,11 +602,13 @@ int er_object_verify(const void* canonical, size_t len,
   child_count = er_object_load32(&bytes[ER_OBJECT_HEADER_CHILD_COUNT_OFF]);
   body_len = er_object_load64(&bytes[ER_OBJECT_HEADER_BODY_LEN_OFF]);
   logical_len = er_object_load64(&bytes[ER_OBJECT_HEADER_LOGICAL_LEN_OFF]);
+  epoch = er_object_epoch_read(&bytes[ER_OBJECT_HEADER_EPOCH_OFF]);
   if ((size_t)body_len != body_len) {
     return ER_OBJECT_ERR_TOOBIG;
   }
   er_object_requirements_read(&bytes[ER_OBJECT_HEADER_REQUIREMENTS_OFF], &requirements);
   if (er_object_requirements_valid(&requirements) == 0 ||
+      er_clock_stamp_valid(epoch) == 0 ||
       er_object_canonical_size(node_kind, (size_t)body_len, owner_count,
                                envelope_count, child_count, &expected_len) != ER_OBJECT_OK ||
       expected_len != len) {
@@ -635,6 +665,7 @@ int er_object_verify(const void* canonical, size_t len,
     out_info->child_count = child_count;
     out_info->logical_len = er_object_load64(&bytes[ER_OBJECT_HEADER_LOGICAL_LEN_OFF]);
     out_info->body_len = body_len;
+    out_info->epoch = epoch;
     out_info->requirements = requirements;
     out_info->body = &bytes[len - (size_t)body_len];
     if (er_object_id(canonical, len, out_info->object_id) != ER_OBJECT_OK) {

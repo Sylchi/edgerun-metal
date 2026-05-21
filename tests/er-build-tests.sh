@@ -179,6 +179,26 @@ case "$crypto_plan" in
   * ) printf 'missing direct crypto test execution step\n' >&2; exit 1 ;;
 esac
 
+clock_plan=$("$ER_BUILD" --print-plan clock-test)
+
+case "$clock_plan" in
+  *"cmake"* | *"ninja"* | *"ctest"* )
+    printf 'clock-test plan still depends on external build orchestration\n' >&2
+    exit 1
+    ;;
+  * ) ;;
+esac
+
+case "$clock_plan" in
+  *"+ toolchain/bin/clang -std=c11 -Wall -Wextra -Werror -O2 -o .build/er-build-out/clock/test_clock -ffreestanding -fno-builtin -fno-stack-protector -Iedgerun-clock/include edgerun-clock/tests/test_clock.c edgerun-clock/src/er_clock.c"* ) ;;
+  * ) printf 'missing direct clock test compile step\n' >&2; exit 1 ;;
+esac
+
+case "$clock_plan" in
+  *"+ .build/er-build-out/clock/test_clock"* ) ;;
+  * ) printf 'missing direct clock test execution step\n' >&2; exit 1 ;;
+esac
+
 identity_plan=$("$ER_BUILD" --print-plan identity-test)
 
 case "$identity_plan" in
@@ -190,7 +210,7 @@ case "$identity_plan" in
 esac
 
 case "$identity_plan" in
-  *"+ toolchain/bin/clang -std=c11 -Wall -Wextra -Werror -O2 -o .build/er-build-out/identity/test_identity -ffreestanding -fno-builtin -fno-stack-protector -Iedgerun-identity/include -Iedgerun-crypto/include edgerun-identity/tests/test_identity.c edgerun-identity/src/er_identity.c edgerun-crypto/src/er_blake3.c -DER_BLAKE3_NO_SIMD=1"* ) ;;
+  *"+ toolchain/bin/clang -std=c11 -Wall -Wextra -Werror -O2 -o .build/er-build-out/identity/test_identity -ffreestanding -fno-builtin -fno-stack-protector -Iedgerun-identity/include -Iedgerun-clock/include -Iedgerun-crypto/include edgerun-identity/tests/test_identity.c edgerun-identity/src/er_identity.c edgerun-clock/src/er_clock.c edgerun-crypto/src/er_blake3.c -DER_BLAKE3_NO_SIMD=1"* ) ;;
   * ) printf 'missing direct identity test compile step\n' >&2; exit 1 ;;
 esac
 
@@ -210,7 +230,7 @@ case "$object_plan" in
 esac
 
 case "$object_plan" in
-  *"+ toolchain/bin/clang -std=c11 -Wall -Wextra -Werror -O2 -o .build/er-build-out/object/test_object -ffreestanding -fno-builtin -fno-stack-protector -Iedgerun-object/include -Iedgerun-crypto/include -Iinclude edgerun-object/tests/test_object.c edgerun-object/src/er_object.c edgerun-crypto/src/er_blake3.c -DER_BLAKE3_NO_SIMD=1"* ) ;;
+  *"+ toolchain/bin/clang -std=c11 -Wall -Wextra -Werror -O2 -o .build/er-build-out/object/test_object -ffreestanding -fno-builtin -fno-stack-protector -Iedgerun-object/include -Iedgerun-clock/include -Iedgerun-crypto/include -Iinclude edgerun-object/tests/test_object.c edgerun-object/src/er_object.c edgerun-clock/src/er_clock.c edgerun-crypto/src/er_blake3.c -DER_BLAKE3_NO_SIMD=1"* ) ;;
   * ) printf 'missing direct object test compile step\n' >&2; exit 1 ;;
 esac
 

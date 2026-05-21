@@ -11,6 +11,8 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include "er_clock.h"
+
 #define ER_OBJECT_OK 0
 #define ER_OBJECT_ERR_BADARG -1
 #define ER_OBJECT_ERR_TOOBIG -2
@@ -122,6 +124,7 @@ typedef struct er_object_info {
   uint32_t child_count;
   uint64_t logical_len; //@optimizer-ignore object lengths are canonical 64-bit fields
   uint64_t body_len; //@optimizer-ignore object body lengths are canonical 64-bit fields
+  er_clock_epoch_stamp_t epoch;
   er_object_requirements_t requirements;
   uint8_t object_id[ER_OBJECT_ID_SIZE];
   const uint8_t* body;
@@ -135,6 +138,7 @@ int er_object_canonical_size(uint16_t node_kind, size_t body_len,
                              uint32_t child_count, size_t* out_len);
 int er_object_build_node(uint16_t node_kind, uint32_t flags,
                          const er_object_requirements_t* requirements,
+                         er_clock_epoch_stamp_t epoch,
                          const er_object_owner_t* owners, uint16_t owner_count,
                          const er_object_envelope_t* envelopes, uint16_t envelope_count,
                          const er_object_child_ref_t* children, uint32_t child_count,

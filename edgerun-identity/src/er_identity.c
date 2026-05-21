@@ -1,6 +1,7 @@
 #include "er_identity.h"
 
 #include "er_blake3.h"
+#include "er_clock.h"
 
 static const uint8_t g_er_identity_id_domain[] = "edgerun:c:v1:identity-id";
 static const uint8_t g_er_identity_child_domain[] = "edgerun:c:v1:identity-child";
@@ -227,15 +228,18 @@ int er_identity_id_from_source(const er_identity_source_t* source,
 
 int er_identity_prepare(uint16_t identity_kind,
                         const er_identity_source_t* source,
+                        er_clock_epoch_stamp_t epoch,
                         er_identity_t* out_identity) {
   if (out_identity == (er_identity_t*)0 ||
       er_identity_kind_valid(identity_kind) == 0 ||
+      er_clock_stamp_valid(epoch) == 0 ||
       er_identity_source_valid(source) == 0) {
     return ER_IDENTITY_ERR_BADARG;
   }
   er_identity_zero(out_identity, sizeof(*out_identity));
   out_identity->abi_version = ER_IDENTITY_ABI_VERSION;
   out_identity->identity_kind = identity_kind;
+  out_identity->epoch = epoch;
   out_identity->source = *source;
   return er_identity_id_from_source(source, &out_identity->id);
 }
@@ -246,6 +250,7 @@ int er_identity_valid(const er_identity_t* identity) {
   if (identity == (const er_identity_t*)0 ||
       identity->abi_version != ER_IDENTITY_ABI_VERSION ||
       er_identity_kind_valid(identity->identity_kind) == 0 ||
+      er_clock_stamp_valid(identity->epoch) == 0 ||
       er_identity_id_nonzero(&identity->id) == 0 ||
       er_identity_source_valid(&identity->source) == 0 ||
       er_identity_id_from_source(&identity->source, &derived_id) != ER_IDENTITY_OK ||
@@ -260,6 +265,7 @@ int er_identity_equal(const er_identity_t* left,
   if (er_identity_valid(left) == 0 ||
       er_identity_valid(right) == 0 ||
       left->identity_kind != right->identity_kind ||
+      er_clock_stamp_compare(left->epoch, right->epoch) != 0 ||
       left->source.source_kind != right->source.source_kind ||
       left->source.material_len != right->source.material_len ||
       er_identity_id_equal(&left->id, &right->id) == 0) {
@@ -272,6 +278,7 @@ int er_identity_equal(const er_identity_t* left,
 
 int er_identity_derive_child(const er_identity_t* parent,
                              uint16_t child_kind,
+                             er_clock_epoch_stamp_t epoch,
                              const void* label,
                              size_t label_len,
                              const void* material,
@@ -284,6 +291,7 @@ int er_identity_derive_child(const er_identity_t* parent,
 
   if (er_identity_valid(parent) == 0 ||
       er_identity_kind_valid(child_kind) == 0 ||
+      er_clock_stamp_valid(epoch) == 0 ||
       out_child == (er_identity_t*)0 ||
       label == (const void*)0 ||
       material == (const void*)0 ||
@@ -312,5 +320,5 @@ int er_identity_derive_child(const er_identity_t* parent,
                                  &source) != ER_IDENTITY_OK) {
     return ER_IDENTITY_ERR_CORRUPT;
   }
-  return er_identity_prepare(child_kind, &source, out_child);
+  return er_identity_prepare(child_kind, &source, epoch, out_child);
 }

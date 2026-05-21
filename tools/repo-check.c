@@ -164,7 +164,8 @@ static int erc_is_public_header_path(const char* path) {
   if (erc_has_suffix(path, ".h") == 0) {
     return 0;
   }
-  if (strncmp(path, "edgerun-ui-core/include/", strlen("edgerun-ui-core/include/")) == 0 ||
+  if (strncmp(path, "edgerun-clock/include/", strlen("edgerun-clock/include/")) == 0 ||
+      strncmp(path, "edgerun-ui-core/include/", strlen("edgerun-ui-core/include/")) == 0 ||
       strncmp(path, "edgerun-ui-core/varfont/include/", strlen("edgerun-ui-core/varfont/include/")) == 0 ||
       strcmp(path, "include/er_math.h") == 0 ||
       strcmp(path, "include/er_ui_tabler_icon_atlas.h") == 0) {

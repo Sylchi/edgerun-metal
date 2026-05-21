@@ -71,6 +71,7 @@ typedef enum {
 static const char ERB_DEFAULT_CC[] = "toolchain/bin/clang";
 static const char ERB_BUILD_DIR[] = ".build";
 static const char ERB_INTERNAL_BUILD_DIR[] = ".build/er-build-out";
+static const char ERB_CLOCK_BUILD_DIR[] = ".build/er-build-out/clock";
 static const char ERB_CRYPTO_BUILD_DIR[] = ".build/er-build-out/crypto";
 static const char ERB_IDENTITY_BUILD_DIR[] = ".build/er-build-out/identity";
 static const char ERB_OBJECT_BUILD_DIR[] = ".build/er-build-out/object";
@@ -87,6 +88,7 @@ static const char ERB_PI_NODE_UPDATE_BIN[] = ".build/pi-node-update";
 static const char ERB_SDCARD_PROBE_BIN[] = ".build/sdcard-probe";
 static const char ERB_DISK_ANALYZER_BIN[] = ".build/disk-analyzer";
 static const char ERB_PI_USB_BOOT_BIN[] = ".build/pi-usb-boot";
+static const char ERB_CLOCK_TEST_BIN[] = ".build/er-build-out/clock/test_clock";
 static const char ERB_CRYPTO_BLAKE3_TEST_BIN[] = ".build/er-build-out/crypto/test_blake3";
 static const char ERB_CRYPTO_BLAKE3_BENCH_BIN[] = ".build/er-build-out/crypto/bench_blake3";
 static const char ERB_IDENTITY_TEST_BIN[] = ".build/er-build-out/identity/test_identity";
@@ -568,6 +570,9 @@ static int erb_prepare_dirs(void) {
     return 1;
   }
   if (erb_mkdir_one(ERB_INTERNAL_BUILD_DIR) != 0) {
+    return 1;
+  }
+  if (erb_mkdir_one(ERB_CLOCK_BUILD_DIR) != 0) {
     return 1;
   }
   if (erb_mkdir_one(ERB_CRYPTO_BUILD_DIR) != 0) {
@@ -1755,6 +1760,9 @@ static const char* erb_default_progress_test(const char* scope) {
   if (strcmp(scope, "edgerun-crypto") == 0) {
     return "crypto-test";
   }
+  if (strcmp(scope, "edgerun-clock") == 0) {
+    return "clock-test";
+  }
   if (strcmp(scope, "edgerun-identity") == 0) {
     return "identity-test";
   }
@@ -1892,6 +1900,7 @@ static int erb_target_erwire_test(int print_plan) {
 static int erb_target_storage_test(int print_plan);
 static int erb_target_object_test(int print_plan);
 static int erb_target_identity_test(int print_plan);
+static int erb_target_clock_test(int print_plan);
 
 static int erb_target_repo_test(int print_plan) {
   if (erb_build_repo_check(print_plan) != 0 ||
@@ -1921,6 +1930,7 @@ static int erb_target_repo_test(int print_plan) {
       erb_run_program("./tests/pi-usb-boot-tests.sh", print_plan) != 0 ||
       erb_run_program("./tests/er-math-tests.sh", print_plan) != 0 ||
       erb_run_program("./tests/erwire-decode-tests.sh", print_plan) != 0 ||
+      erb_target_clock_test(print_plan) != 0 ||
       erb_target_identity_test(print_plan) != 0 ||
       erb_target_object_test(print_plan) != 0 ||
       erb_target_storage_test(print_plan) != 0) {
@@ -1966,6 +1976,27 @@ static int erb_target_crypto_bench(int print_plan) {
   return erb_run_program(ERB_CRYPTO_BLAKE3_BENCH_BIN, print_plan);
 }
 
+static int erb_target_clock_test(int print_plan) {
+  ErbArgs args;
+
+  if (erb_prepare_dirs() != 0 ||
+      erb_compile_common(&args, ERB_CLOCK_TEST_BIN) != 0) {
+    return 1;
+  }
+  if (erb_args_push(&args, "-ffreestanding") != 0 ||
+      erb_args_push(&args, "-fno-builtin") != 0 ||
+      erb_args_push(&args, "-fno-stack-protector") != 0 ||
+      erb_args_push(&args, "-Iedgerun-clock/include") != 0 ||
+      erb_args_push(&args, "edgerun-clock/tests/test_clock.c") != 0 ||
+      erb_args_push(&args, "edgerun-clock/src/er_clock.c") != 0) {
+    return 1;
+  }
+  if (erb_run_args(&args, print_plan) != 0) {
+    return 1;
+  }
+  return erb_run_program(ERB_CLOCK_TEST_BIN, print_plan);
+}
+
 static int erb_target_identity_test(int print_plan) {
   ErbArgs args;
 
@@ -1977,9 +2008,11 @@ static int erb_target_identity_test(int print_plan) {
       erb_args_push(&args, "-fno-builtin") != 0 ||
       erb_args_push(&args, "-fno-stack-protector") != 0 ||
       erb_args_push(&args, "-Iedgerun-identity/include") != 0 ||
+      erb_args_push(&args, "-Iedgerun-clock/include") != 0 ||
       erb_args_push(&args, "-Iedgerun-crypto/include") != 0 ||
       erb_args_push(&args, "edgerun-identity/tests/test_identity.c") != 0 ||
       erb_args_push(&args, "edgerun-identity/src/er_identity.c") != 0 ||
+      erb_args_push(&args, "edgerun-clock/src/er_clock.c") != 0 ||
       erb_args_push(&args, "edgerun-crypto/src/er_blake3.c") != 0 ||
       erb_args_push(&args, "-DER_BLAKE3_NO_SIMD=1") != 0) {
     return 1;
@@ -2002,10 +2035,12 @@ static int erb_target_object_test(int print_plan) {
       erb_args_push(&args, "-fno-builtin") != 0 ||
       erb_args_push(&args, "-fno-stack-protector") != 0 ||
       erb_args_push(&args, "-Iedgerun-object/include") != 0 ||
+      erb_args_push(&args, "-Iedgerun-clock/include") != 0 ||
       erb_args_push(&args, "-Iedgerun-crypto/include") != 0 ||
       erb_args_push(&args, "-Iinclude") != 0 ||
       erb_args_push(&args, "edgerun-object/tests/test_object.c") != 0 ||
       erb_args_push(&args, "edgerun-object/src/er_object.c") != 0 ||
+      erb_args_push(&args, "edgerun-clock/src/er_clock.c") != 0 ||
       erb_args_push(&args, "edgerun-crypto/src/er_blake3.c") != 0 ||
       erb_args_push(&args, "-DER_BLAKE3_NO_SIMD=1") != 0) {
     return 1;
@@ -2169,7 +2204,7 @@ static int erb_usage(void) {
           "         repo-agent-swarm [--scope PATH] [--concurrency N] [--limit N]\n"
           "         pi-serial-verify pi-node-update sdcard-probe disk-analyzer pi-usb-boot\n"
           "         repo-check repo-test repo-progress <scope> [test-target]\n"
-          "         crypto-test crypto-bench identity-test object-test storage-test storage-bench varfont-test ui-core-test\n");
+          "         crypto-test crypto-bench clock-test identity-test object-test storage-test storage-bench varfont-test ui-core-test\n");
   return 2;
 }
 
@@ -2280,6 +2315,9 @@ int main(int argc, char** argv) {
   }
   if (strcmp(target, "crypto-bench") == 0) {
     return erb_target_crypto_bench(print_plan);
+  }
+  if (strcmp(target, "clock-test") == 0) {
+    return erb_target_clock_test(print_plan);
   }
   if (strcmp(target, "identity-test") == 0) {
     return erb_target_identity_test(print_plan);
