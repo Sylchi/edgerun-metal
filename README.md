@@ -192,11 +192,11 @@ stacks, closed control planes, compatibility layers, or other blobs; EdgeRun
 still owns admission, routing, update framing, and packet formats above the
 radio firmware boundary.
 
-The interoperable Wi-Fi baseline is raw EdgeRun L2, not WLAN association. There
-is no WPA enrollment, DHCP, IP requirement, AP role, or station role in the
-native path. The driver owns channel selection, adapter MAC, frame filters, and
-EdgeRun EtherType payloads directly; sealed EdgeRun frames ride as raw 802.11 L2
-payloads. TCP/IP can remain a separate transport channel on another interface,
+The Pi Zero W v1.1 bring-up Wi-Fi baseline is fixed open 2.4 GHz control-plane
+association on SSID `EdgeNet`, channel `1`, with DHCP disabled. The AP is only
+a radio wire replacement for EdgeRun EtherType `0x88b5` frames; EdgeRun still
+does not use WPA enrollment, DHCP leases, IP addressing, TCP, or UDP for native
+traffic. TCP/IP can remain a separate transport channel on another interface,
 but it is not the foundation for native EdgeRun traffic.
 
 Recipient sealing should be hybrid. Small one-recipient payloads can be sealed
@@ -558,10 +558,12 @@ SD block by reading it back, and marks reboot required.
 
 The default update slot begins at SD block `8192`. The intended live update
 transport is CYW43438 vendor radio firmware plus SDIO function-2 SDPCM data
-carrying raw EdgeRun L2 ethertype `0x88b5` erwire frames, with no Wi-Fi
-association.
+carrying EdgeRun L2 ethertype `0x88b5` erwire frames over the fixed open
+`EdgeNet` control AP on channel `1`; DHCP remains disabled because native
+EdgeRun traffic is not IP.
 
-Send a freshly built `kernel.img` over the Pi Zero W v1.1 raw L2 receiver:
+Send a freshly built `kernel.img` over the Pi Zero W v1.1 EdgeNet L2 receiver
+from a Linux interface associated to `EdgeNet`:
 
 ```bash
 make pi-zero-w-v1_1-update PI_UPDATE_IFACE=wlan0

@@ -12,6 +12,8 @@
 #define ER_WIFI_L2_ABI_VERSION 1u
 #define ER_WIFI_L2_NODE_SSID_LEN 19u
 #define ER_WIFI_L2_NODE_SSID_CAP 32u
+#define ER_WIFI_L2_CONTROL_SSID_LEN 7u
+#define ER_WIFI_L2_CONTROL_CHANNEL 1u
 #define ER_WIFI_L2_ENDPOINT_ADDR_FIXED_LEN 10u
 #define ER_WIFI_L2_ENDPOINT_ADDR_MAC_OFFSET 0u
 #define ER_WIFI_L2_ENDPOINT_ADDR_ETH_TYPE_OFFSET 6u
@@ -38,7 +40,12 @@ UINT8 er_wifi_l2_node_ssid(const ErNodeId* node_id,
 UINT8 er_wifi_l2_ap_plan_prepare(const ErNodeId* node_id,
                                  UINT8 channel,
                                  ErWifiL2ApPlan* out_plan);
+UINT8 er_wifi_l2_control_plan_prepare(const ErNodeId* node_id,
+                                      ErWifiL2ApPlan* out_plan);
 UINT8 er_wifi_l2_ap_plan_valid(const ErWifiL2ApPlan* plan);
+UINT8 er_wifi_l2_control_ssid(UINT8* out_ssid,
+                              UINT8 out_capacity,
+                              UINT8* out_ssid_len);
 UINT8 er_wifi_l2_prepare_channel_endpoint(const ErHash* channel_id,
                                           const ErWifiL2ApPlan* plan,
                                           const char* label,

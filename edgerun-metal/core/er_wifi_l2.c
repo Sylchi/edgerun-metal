@@ -29,6 +29,11 @@ enum {
   ER_WIFI_L2_MAX_CHANNEL = 14u
 };
 
+static const UINT8 g_er_wifi_l2_control_ssid[ER_WIFI_L2_CONTROL_SSID_LEN] = {
+  (UINT8)'E', (UINT8)'d', (UINT8)'g', (UINT8)'e',
+  (UINT8)'N', (UINT8)'e', (UINT8)'t'
+};
+
 static UINT8 er_wifi_l2_hex_digit(UINT8 value) {
   UINT8 digit = (UINT8)(value & ER_WIFI_L2_HEX_NIBBLE_MASK);
 
@@ -41,6 +46,34 @@ static UINT8 er_wifi_l2_hex_digit(UINT8 value) {
 static UINT8 er_wifi_l2_channel_valid(UINT8 channel) {
   return (UINT8)(channel >= ER_WIFI_L2_MIN_CHANNEL &&
                  channel <= ER_WIFI_L2_MAX_CHANNEL);
+}
+
+static UINT8 er_wifi_l2_ssid_valid(const UINT8* ssid, UINT8 ssid_len) {
+  if (ssid == 0 || ssid_len == 0u || ssid_len > ER_WIFI_L2_NODE_SSID_CAP) {
+    return 0u;
+  }
+  return 1u;
+}
+
+static UINT8 er_wifi_l2_node_ssid_valid(const UINT8* ssid, UINT8 ssid_len) {
+  return (UINT8)(er_wifi_l2_ssid_valid(ssid, ssid_len) != 0u &&
+                 ssid_len == ER_WIFI_L2_NODE_SSID_LEN &&
+                 ssid[ER_WIFI_L2_SSID_PREFIX_E_OFFSET] == (UINT8)'e' &&
+                 ssid[ER_WIFI_L2_SSID_PREFIX_R_OFFSET] == (UINT8)'r' &&
+                 ssid[ER_WIFI_L2_SSID_PREFIX_DASH_OFFSET] == (UINT8)'-');
+}
+
+static UINT8 er_wifi_l2_control_ssid_valid(const UINT8* ssid, UINT8 ssid_len) {
+  return (UINT8)(er_wifi_l2_ssid_valid(ssid, ssid_len) != 0u &&
+                 ssid_len == ER_WIFI_L2_CONTROL_SSID_LEN &&
+                 er_mem_equal(ssid,
+                              g_er_wifi_l2_control_ssid,
+                              ER_WIFI_L2_CONTROL_SSID_LEN) != 0u);
+}
+
+static UINT8 er_wifi_l2_plan_ssid_valid(const UINT8* ssid, UINT8 ssid_len) {
+  return (UINT8)(er_wifi_l2_node_ssid_valid(ssid, ssid_len) != 0u ||
+                 er_wifi_l2_control_ssid_valid(ssid, ssid_len) != 0u);
 }
 
 UINT8 er_wifi_l2_node_mac(const ErNodeId* node_id,
@@ -99,6 +132,21 @@ UINT8 er_wifi_l2_node_ssid(const ErNodeId* node_id,
   return 1u;
 }
 
+UINT8 er_wifi_l2_control_ssid(UINT8* out_ssid,
+                              UINT8 out_capacity,
+                              UINT8* out_ssid_len) {
+  if (out_ssid == 0 ||
+      out_ssid_len == 0 ||
+      out_capacity < ER_WIFI_L2_CONTROL_SSID_LEN) {
+    return 0u;
+  }
+  er_mem_copy(out_ssid,
+              g_er_wifi_l2_control_ssid,
+              ER_WIFI_L2_CONTROL_SSID_LEN);
+  *out_ssid_len = ER_WIFI_L2_CONTROL_SSID_LEN;
+  return 1u;
+}
+
 UINT8 er_wifi_l2_ap_plan_prepare(const ErNodeId* node_id,
                                  UINT8 channel,
                                  ErWifiL2ApPlan* out_plan) {
@@ -124,11 +172,33 @@ UINT8 er_wifi_l2_ap_plan_prepare(const ErNodeId* node_id,
   return 1u;
 }
 
+UINT8 er_wifi_l2_control_plan_prepare(const ErNodeId* node_id,
+                                      ErWifiL2ApPlan* out_plan) {
+  UINT8 ssid_len;
+
+  if (out_plan == 0) {
+    return 0u;
+  }
+  er_mem_zero((UINT8*)out_plan, (UINTN)sizeof(*out_plan));
+  if (er_wifi_l2_node_mac(node_id, out_plan->mac) == 0u ||
+      er_wifi_l2_control_ssid(out_plan->ssid,
+                              ER_WIFI_L2_NODE_SSID_CAP,
+                              &ssid_len) == 0u) {
+    er_mem_zero((UINT8*)out_plan, (UINTN)sizeof(*out_plan));
+    return 0u;
+  }
+  out_plan->abi_version = ER_WIFI_L2_ABI_VERSION;
+  out_plan->channel = ER_WIFI_L2_CONTROL_CHANNEL;
+  out_plan->ssid_len = ssid_len;
+  out_plan->eth_type = ER_NET_ETH_TYPE_EDGERUN;
+  return 1u;
+}
+
 UINT8 er_wifi_l2_ap_plan_valid(const ErWifiL2ApPlan* plan) {
   if (plan == 0 ||
       plan->abi_version != ER_WIFI_L2_ABI_VERSION ||
       er_wifi_l2_channel_valid(plan->channel) == 0u ||
-      plan->ssid_len != ER_WIFI_L2_NODE_SSID_LEN ||
+      er_wifi_l2_plan_ssid_valid(plan->ssid, plan->ssid_len) == 0u ||
       plan->eth_type != ER_NET_ETH_TYPE_EDGERUN ||
       plan->reserved[0] != 0u ||
       plan->reserved[1] != 0u ||
@@ -136,9 +206,7 @@ UINT8 er_wifi_l2_ap_plan_valid(const ErWifiL2ApPlan* plan) {
       (plan->mac[0] & ER_WIFI_L2_MAC_LOCAL_UNICAST) == 0u) {
     return 0u;
   }
-  return (UINT8)(plan->ssid[ER_WIFI_L2_SSID_PREFIX_E_OFFSET] == (UINT8)'e' &&
-                 plan->ssid[ER_WIFI_L2_SSID_PREFIX_R_OFFSET] == (UINT8)'r' &&
-                 plan->ssid[ER_WIFI_L2_SSID_PREFIX_DASH_OFFSET] == (UINT8)'-');
+  return 1u;
 }
 
 UINT8 er_wifi_l2_prepare_channel_endpoint(const ErHash* channel_id,
@@ -203,7 +271,8 @@ UINT8 er_wifi_l2_channel_endpoint_valid(const ErChannelEndpoint* endpoint) {
                        ER_WIFI_L2_ETH_TYPE_HIGH_SHIFT) |
                       (UINT16)endpoint->address[ER_WIFI_L2_ENDPOINT_ADDR_ETH_TYPE_OFFSET + 1u]);
   if (endpoint->address_len != (UINT8)(ER_WIFI_L2_ENDPOINT_ADDR_FIXED_LEN + ssid_len) ||
-      ssid_len != ER_WIFI_L2_NODE_SSID_LEN ||
+      er_wifi_l2_plan_ssid_valid(endpoint->address + ER_WIFI_L2_ENDPOINT_ADDR_SSID_OFFSET,
+                                 ssid_len) == 0u ||
       eth_type != ER_NET_ETH_TYPE_EDGERUN ||
       er_wifi_l2_channel_valid(endpoint->address[ER_WIFI_L2_ENDPOINT_ADDR_CHANNEL_OFFSET]) == 0u ||
       (endpoint->address[ER_WIFI_L2_ENDPOINT_ADDR_MAC_OFFSET] & 1u) != 0u ||
@@ -211,7 +280,5 @@ UINT8 er_wifi_l2_channel_endpoint_valid(const ErChannelEndpoint* endpoint) {
        ER_WIFI_L2_MAC_LOCAL_UNICAST) == 0u) {
     return 0u;
   }
-  return (UINT8)(endpoint->address[ER_WIFI_L2_ENDPOINT_ADDR_SSID_OFFSET] == (UINT8)'e' &&
-                 endpoint->address[ER_WIFI_L2_ENDPOINT_ADDR_SSID_OFFSET + 1u] == (UINT8)'r' &&
-                 endpoint->address[ER_WIFI_L2_ENDPOINT_ADDR_SSID_OFFSET + 2u] == (UINT8)'-');
+  return 1u;
 }

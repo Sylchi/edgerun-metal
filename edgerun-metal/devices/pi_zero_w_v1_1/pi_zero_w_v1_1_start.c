@@ -2075,9 +2075,7 @@ static UINT32 er_pi_zero_w_v1_1_wifi_plan(ErWifiL2ApPlan* out_plan) {
     return 0u;
   }
   er_pi_zero_w_v1_1_node_id(&node_id);
-  return er_wifi_l2_ap_plan_prepare(&node_id,
-                                    ER_PI_ZERO_W_V1_1_L2_WIFI_CHANNEL,
-                                    out_plan);
+  return er_wifi_l2_control_plan_prepare(&node_id, out_plan);
 }
 
 static UINT32 er_pi_zero_w_v1_1_wifi_address(
