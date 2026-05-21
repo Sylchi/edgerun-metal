@@ -13,6 +13,7 @@ ErWasmHostCalls g_host_calls = {0};
 #include "test_core_wasm_imports.c"
 #include "test_core_wasm_apps.c"
 #include "test_core_app_routes.c"
+#include "test_core_storage_medium.c"
 #include "test_core_node_id.c"
 #include "test_core_device_routes.c"
 #include "test_core_jurisdiction.c"
@@ -87,6 +88,7 @@ int main(void) {
   test_storage_endpoint_object_cache();
   test_storage_endpoint_sealed_relay_capture();
   test_app_identity_routes();
+  test_storage_medium_init_record();
   test_node_id_sources();
   test_device_relay_identity();
   test_ephemeral_node_identity();

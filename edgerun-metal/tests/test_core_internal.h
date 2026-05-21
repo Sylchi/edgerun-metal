@@ -51,6 +51,7 @@
 #include "er_rtw89.h"
 #include "er_seal.h"
 #include "er_storage_endpoint.h"
+#include "er_storage_medium.h"
 #include "er_st7789.h"
 #include "er_tls.h"
 #include "er_tpm.h"

@@ -893,6 +893,7 @@ static void test_app_identity_routes(void) {
   ErHash manifest_hash;
   ErHash admission_id;
   ErHash capability_id;
+  ErHash medium_id;
   ErHash route_hash;
   UINT8 package_signer_key[ER_PUBLIC_KEY_LEN];
   ErNodeId target_node_id;
@@ -904,6 +905,7 @@ static void test_app_identity_routes(void) {
   ErAppUsage usage;
   ErAppScheduleSlot slot;
   ErAppLaunchAllocation allocation;
+  ErAppStorageAllocation storage_allocation;
   ErAppExecutionJurisdiction jurisdiction;
   ErAppUiPresentation presentation;
   er_ui_scene_budget_t scene_budget;
@@ -1554,6 +1556,7 @@ static void test_app_identity_routes(void) {
     manifest_hash.bytes[i] = (UINT8)(0x30u + i);
     admission_id.bytes[i] = (UINT8)(0x50u + i);
     capability_id.bytes[i] = (UINT8)(0x70u + i);
+    medium_id.bytes[i] = (UINT8)(0x80u + i);
     route_hash.bytes[i] = (UINT8)(0x90u + i);
     target_node_id.bytes[i] = (UINT8)(0xb0u + i);
     parent_relay_node_id.bytes[i] = (UINT8)(0xc0u + i);
@@ -1647,6 +1650,86 @@ static void test_app_identity_routes(void) {
   check_uint64("app launch executor len", allocation.executor_memory_len, 4096u);
   check_uint64("app launch address base", allocation.app_address_base, ER_APP_ADDRESS_BASE);
   check_uint64("app launch address len", allocation.app_address_len, 4096u);
+
+  check_int64("app storage reject short allocation",
+              er_app_prepare_storage_allocation(
+                  &crypto,
+                  &identity,
+                  &budget,
+                  &medium_id,
+                  16u,
+                  8u,
+                  3u,
+                  512u,
+                  ER_APP_STORAGE_PERSISTENCE_EXPLICIT_SYNC,
+                  ER_APP_STORAGE_LATENCY_BULK,
+                  &storage_allocation),
+              0);
+  check_int64("app storage reject implicit persistence",
+              er_app_prepare_storage_allocation(
+                  &crypto,
+                  &identity,
+                  &budget,
+                  &medium_id,
+                  16u,
+                  8u,
+                  4u,
+                  512u,
+                  0u,
+                  ER_APP_STORAGE_LATENCY_BULK,
+                  &storage_allocation),
+              0);
+  check_int64("app storage reject odd block bytes",
+              er_app_prepare_storage_allocation(
+                  &crypto,
+                  &identity,
+                  &budget,
+                  &medium_id,
+                  16u,
+                  8u,
+                  4u,
+                  500u,
+                  ER_APP_STORAGE_PERSISTENCE_EXPLICIT_SYNC,
+                  ER_APP_STORAGE_LATENCY_BULK,
+                  &storage_allocation),
+              0);
+  check_int64("app storage reject medium overrun",
+              er_app_prepare_storage_allocation(
+                  &crypto,
+                  &identity,
+                  &budget,
+                  &medium_id,
+                  10u,
+                  8u,
+                  4u,
+                  512u,
+                  ER_APP_STORAGE_PERSISTENCE_EXPLICIT_SYNC,
+                  ER_APP_STORAGE_LATENCY_BULK,
+                  &storage_allocation),
+              0);
+  check_int64("app storage allocation",
+              er_app_prepare_storage_allocation(
+                  &crypto,
+                  &identity,
+                  &budget,
+                  &medium_id,
+                  16u,
+                  8u,
+                  4u,
+                  512u,
+                  ER_APP_STORAGE_PERSISTENCE_EXPLICIT_SYNC,
+                  ER_APP_STORAGE_LATENCY_BULK,
+                  &storage_allocation),
+              1);
+  check_uint64("app storage block base", storage_allocation.block_base, 8u);
+  check_uint64("app storage block count", storage_allocation.block_count, 4u);
+  check_uint64("app storage block bytes", storage_allocation.block_bytes, 512u);
+  check_uint64("app storage persistence",
+               storage_allocation.persistence_requirement,
+               ER_APP_STORAGE_PERSISTENCE_EXPLICIT_SYNC);
+  check_uint64("app storage latency",
+               storage_allocation.latency_requirement,
+               ER_APP_STORAGE_LATENCY_BULK);
 
   check_int64("app execution jurisdiction",
               er_app_prepare_execution_jurisdiction(&crypto, &identity, &budget, &allocation,
