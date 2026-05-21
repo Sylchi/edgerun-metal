@@ -112,6 +112,7 @@ int main(void) {
   test_erwire_parse_and_native_poll();
   test_native_boot_erwire_eth_sink();
   test_native_boot_endpoint_intent();
+  test_vfs_requires_canonical_objects();
   test_native_boot_storage_endpoint_intent();
   test_netlog_disabled_path();
   test_gfx_console_disabled_path();

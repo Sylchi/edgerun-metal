@@ -174,17 +174,22 @@ static void test_pi_zero_w_v1_1_ota_80211_action_frame(
 static void test_pi_zero_w_v1_1_ota_receiver(void) {
   enum {
     PI_TEST_OTA_IMAGE_LEN = 1500u,
-    PI_TEST_OTA_SECOND_PACKET_OFFSET = 1024u,
+    PI_TEST_OTA_PACKET_TEST_CAPACITY = 4u,
     PI_TEST_OTA_TARGET_BLOCK = ER_PI_ZERO_W_V1_1_OTA_DEFAULT_SLOT_BLOCK
   };
 
   ErPiZeroWV11OtaState state;
   TestPiZeroWV11OtaSink sink;
   ErCryptoProvider crypto;
-  ErVfsObjectPacket object_packets[2];
+  ErVfsObjectPacket object_packets[PI_TEST_OTA_PACKET_TEST_CAPACITY];
   ErVfsObjectPacket decoded_packet;
+  ErHash canonical_image_id;
   UINT8 image[PI_TEST_OTA_IMAGE_LEN];
+  UINT8 canonical_image[TEST_CANONICAL_OBJECT_CAPACITY];
   UINT8 frame[ERWIRE_HEADER_SIZE + ERWIRE_MAX_PAYLOAD];
+  UINTN canonical_image_len;
+  UINT32 packet_count;
+  UINT32 expected_blocks;
   UINT32 frame_len;
   UINT32 i;
 
@@ -194,24 +199,29 @@ static void test_pi_zero_w_v1_1_ota_receiver(void) {
   for (i = 0u; i < PI_TEST_OTA_IMAGE_LEN; ++i) {
     image[i] = (UINT8)(i * 17u + 3u);
   }
-  check_int64("pi zero w ota prepare vfs object packet",
-              er_vfs_prepare_object_packet(&crypto,
-                                           image,
-                                           PI_TEST_OTA_IMAGE_LEN,
-                                           0u,
-                                           0u,
-                                           2u,
-                                           &object_packets[0]),
-              1);
-  check_int64("pi zero w ota prepare second vfs object packet",
-              er_vfs_prepare_object_packet(&crypto,
-                                           image,
-                                           PI_TEST_OTA_IMAGE_LEN,
-                                           PI_TEST_OTA_SECOND_PACKET_OFFSET,
-                                           1u,
-                                           2u,
-                                           &object_packets[1]),
-              1);
+  test_build_canonical_bytes_object("pi zero w ota canonical object",
+                                    image,
+                                    PI_TEST_OTA_IMAGE_LEN,
+                                    canonical_image,
+                                    (UINTN)sizeof(canonical_image),
+                                    &canonical_image_len,
+                                    &canonical_image_id);
+  packet_count = (UINT32)((canonical_image_len + ER_VFS_OBJECT_PACKET_BYTES - 1u) /
+                          ER_VFS_OBJECT_PACKET_BYTES);
+  check_int64("pi zero w ota packet count fits",
+              packet_count <= PI_TEST_OTA_PACKET_TEST_CAPACITY, 1);
+  for (i = 0u; i < packet_count; ++i) {
+    check_int64("pi zero w ota prepare vfs object packet",
+                er_vfs_prepare_object_packet(
+                    &crypto,
+                    canonical_image,
+                    canonical_image_len,
+                    (UINTN)i * ER_VFS_OBJECT_PACKET_BYTES,
+                    i,
+                    packet_count,
+                    &object_packets[i]),
+                1);
+  }
   er_pi_zero_w_v1_1_ota_reset(&state);
   check_uint64("pi zero w ota reset status",
                state.status,
@@ -232,6 +242,9 @@ static void test_pi_zero_w_v1_1_ota_receiver(void) {
   check_hash_equal("pi zero w ota decoded object id",
                    &decoded_packet.header.object_id,
                    &object_packets[0].header.object_id);
+  check_hash_equal("pi zero w ota canonical object id",
+                   &object_packets[0].header.object_id,
+                   &canonical_image_id);
   check_int64("pi zero w ota receive first vfs object packet",
               er_pi_zero_w_v1_1_ota_receive_frame(
                   &state,
@@ -246,18 +259,20 @@ static void test_pi_zero_w_v1_1_ota_receiver(void) {
                ER_PI_ZERO_W_V1_1_OTA_STATUS_RECEIVING);
   check_uint64("pi zero w ota first packet no write", sink.write_count, 0u);
 
-  test_pi_zero_w_v1_1_ota_erwire_object_frame(&object_packets[1],
-                                              frame,
-                                              &frame_len);
-  check_int64("pi zero w ota receive second vfs object packet",
-              er_pi_zero_w_v1_1_ota_receive_frame(
-                  &state,
-                  &crypto,
-                  frame,
-                  frame_len,
-                  test_pi_zero_w_v1_1_ota_write_block,
-                  &sink),
-              1);
+  for (i = 1u; i < packet_count; ++i) {
+    test_pi_zero_w_v1_1_ota_erwire_object_frame(&object_packets[i],
+                                                frame,
+                                                &frame_len);
+    check_int64("pi zero w ota receive next vfs object packet",
+                er_pi_zero_w_v1_1_ota_receive_frame(
+                    &state,
+                    &crypto,
+                    frame,
+                    frame_len,
+                    test_pi_zero_w_v1_1_ota_write_block,
+                    &sink),
+                1);
+  }
   check_uint64("pi zero w ota committed raw slot",
                state.status,
                ER_PI_ZERO_W_V1_1_OTA_STATUS_COMMITTED);
@@ -266,32 +281,21 @@ static void test_pi_zero_w_v1_1_ota_receiver(void) {
                1u);
   check_uint64("pi zero w ota object length",
                state.object_len,
-               PI_TEST_OTA_IMAGE_LEN);
-  check_uint64("pi zero w ota blocks written", sink.write_count, 3u);
-  check_uint64("pi zero w ota first block address",
-               sink.blocks[0],
-               PI_TEST_OTA_TARGET_BLOCK);
-  check_uint64("pi zero w ota second block address",
-               sink.blocks[1],
-               PI_TEST_OTA_TARGET_BLOCK + 1u);
-  check_uint64("pi zero w ota final block address",
-               sink.blocks[2],
-               PI_TEST_OTA_TARGET_BLOCK + 2u);
-  for (i = 0u; i < ER_PI_ZERO_W_V1_1_OTA_BLOCK_BYTES; ++i) {
-    check_uint64("pi zero w ota first block byte", sink.bytes[0][i], image[i]);
+               canonical_image_len);
+  expected_blocks = (UINT32)((canonical_image_len +
+                              ER_PI_ZERO_W_V1_1_OTA_BLOCK_BYTES - 1u) /
+                             ER_PI_ZERO_W_V1_1_OTA_BLOCK_BYTES);
+  check_uint64("pi zero w ota blocks written", sink.write_count, expected_blocks);
+  for (i = 0u; i < expected_blocks; ++i) {
+    check_uint64("pi zero w ota block address",
+                 sink.blocks[i],
+                 PI_TEST_OTA_TARGET_BLOCK + i);
   }
-  for (i = 0u; i < ER_PI_ZERO_W_V1_1_OTA_BLOCK_BYTES; ++i) {
-    check_uint64("pi zero w ota second block byte",
-                 sink.bytes[1][i],
-                 image[ER_PI_ZERO_W_V1_1_OTA_BLOCK_BYTES + i]);
-  }
-  for (i = 0u;
-       i < PI_TEST_OTA_IMAGE_LEN -
-           (ER_PI_ZERO_W_V1_1_OTA_BLOCK_BYTES * 2u);
-       ++i) {
-    check_uint64("pi zero w ota final block byte",
-                 sink.bytes[2][i],
-                 image[(ER_PI_ZERO_W_V1_1_OTA_BLOCK_BYTES * 2u) + i]);
+  for (i = 0u; i < canonical_image_len; ++i) {
+    check_uint64("pi zero w ota canonical slot byte",
+                 sink.bytes[i / ER_PI_ZERO_W_V1_1_OTA_BLOCK_BYTES]
+                           [i % ER_PI_ZERO_W_V1_1_OTA_BLOCK_BYTES],
+                 canonical_image[i]);
   }
 }
 
@@ -304,8 +308,11 @@ static void test_pi_zero_w_v1_1_ota_rejects_bad_sequence(void) {
   TestPiZeroWV11OtaSink sink;
   ErCryptoProvider crypto;
   ErVfsObjectPacket object_packet;
+  ErHash canonical_image_id;
   UINT8 image[PI_TEST_OTA_BAD_IMAGE_LEN];
+  UINT8 canonical_image[TEST_CANONICAL_OBJECT_CAPACITY];
   UINT8 frame[ERWIRE_HEADER_SIZE + ERWIRE_MAX_PAYLOAD];
+  UINTN canonical_image_len;
   UINT32 frame_len;
   UINT32 i;
 
@@ -316,15 +323,25 @@ static void test_pi_zero_w_v1_1_ota_rejects_bad_sequence(void) {
     image[i] = (UINT8)(0xa0u + i);
   }
   er_pi_zero_w_v1_1_ota_reset(&state);
+  test_build_canonical_bytes_object("pi zero w ota bad canonical object",
+                                    image,
+                                    PI_TEST_OTA_BAD_IMAGE_LEN,
+                                    canonical_image,
+                                    (UINTN)sizeof(canonical_image),
+                                    &canonical_image_len,
+                                    &canonical_image_id);
   check_int64("pi zero w ota bad vfs prepare",
               er_vfs_prepare_object_packet(&crypto,
-                                           image,
-                                           PI_TEST_OTA_BAD_IMAGE_LEN,
+                                           canonical_image,
+                                           canonical_image_len,
                                            0u,
                                            0u,
                                            1u,
                                            &object_packet),
               1);
+  check_hash_equal("pi zero w ota bad canonical object id",
+                   &object_packet.header.object_id,
+                   &canonical_image_id);
   object_packet.header.packet_id.bytes[0] ^= 1u;
   test_pi_zero_w_v1_1_ota_erwire_object_frame(&object_packet,
                                               frame,
@@ -374,9 +391,12 @@ static void test_pi_zero_w_v1_1_ota_l2_receiver(void) {
   TestPiZeroWV11OtaSink sink;
   ErCryptoProvider crypto;
   ErVfsObjectPacket object_packet;
+  ErHash canonical_image_id;
   UINT8 image[PI_TEST_OTA_L2_IMAGE_LEN];
+  UINT8 canonical_image[TEST_CANONICAL_OBJECT_CAPACITY];
   UINT8 frame[ER_NET_FRAME_MAX];
   UINT8 action_frame[ER_NET_FRAME_MAX];
+  UINTN canonical_image_len;
   UINT32 frame_len;
   UINT32 action_frame_len;
   UINT32 i;
@@ -386,15 +406,25 @@ static void test_pi_zero_w_v1_1_ota_l2_receiver(void) {
   for (i = 0u; i < PI_TEST_OTA_L2_IMAGE_LEN; ++i) {
     image[i] = (UINT8)(0x30u + i);
   }
+  test_build_canonical_bytes_object("pi zero w ota l2 canonical object",
+                                    image,
+                                    PI_TEST_OTA_L2_IMAGE_LEN,
+                                    canonical_image,
+                                    (UINTN)sizeof(canonical_image),
+                                    &canonical_image_len,
+                                    &canonical_image_id);
   check_int64("pi zero w ota prepare l2 object packet",
               er_vfs_prepare_object_packet(&crypto,
-                                           image,
-                                           PI_TEST_OTA_L2_IMAGE_LEN,
+                                           canonical_image,
+                                           canonical_image_len,
                                            0u,
                                            0u,
                                            1u,
                                            &object_packet),
               1);
+  check_hash_equal("pi zero w ota l2 canonical object id",
+                   &object_packet.header.object_id,
+                   &canonical_image_id);
 
   er_pi_zero_w_v1_1_ota_reset(&state);
   er_mem_zero((UINT8*)&sink, (UINTN)sizeof(sink));

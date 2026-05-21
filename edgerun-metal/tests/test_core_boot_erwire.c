@@ -621,12 +621,71 @@ static void test_native_boot_endpoint_intent(void) {
               er_native_boot_decode_endpoint_intent(&ingress, &route, 0), 0);
 }
 
+static void test_vfs_requires_canonical_objects(void) {
+  enum {
+    VFS_CANONICAL_BODY_LEN = 7u
+  };
+  ErCryptoProvider crypto;
+  ErVfsObjectPacket packet;
+  ErVfsObjectRef ref;
+  ErHash canonical_object_id;
+  ErHash assembled_object_id;
+  UINT8 body[VFS_CANONICAL_BODY_LEN] = {'v', 'f', 's', '-', 'o', 'b', 'j'};
+  UINT8 canonical_object[TEST_CANONICAL_OBJECT_CAPACITY];
+  UINT8 assembled_object[TEST_CANONICAL_OBJECT_CAPACITY];
+  UINTN canonical_object_len;
+  UINTN assembled_object_len;
+
+  er_crypto_blake3_provider(&crypto);
+  test_build_canonical_bytes_object("vfs canonical object",
+                                    body,
+                                    (UINTN)sizeof(body),
+                                    canonical_object,
+                                    (UINTN)sizeof(canonical_object),
+                                    &canonical_object_len,
+                                    &canonical_object_id);
+  check_int64("vfs rejects raw object packet",
+              er_vfs_prepare_object_packet(&crypto, body, (UINTN)sizeof(body),
+                                           0u, 0u, 1u, &packet),
+              0);
+  check_int64("vfs prepares canonical object packet",
+              er_vfs_prepare_object_packet(&crypto, canonical_object,
+                                           canonical_object_len,
+                                           0u, 0u, 1u, &packet),
+              1);
+  check_hash_equal("vfs packet canonical object id",
+                   &packet.header.object_id,
+                   &canonical_object_id);
+  check_int64("vfs rejects raw object ref",
+              er_vfs_prepare_object_ref(&crypto, body, (UINTN)sizeof(body), &ref),
+              0);
+  check_int64("vfs prepares canonical object ref",
+              er_vfs_prepare_object_ref(&crypto, canonical_object,
+                                        canonical_object_len, &ref),
+              1);
+  check_int64("vfs assembles canonical object",
+              er_vfs_assemble_object_packets(&crypto,
+                                             &packet,
+                                             1u,
+                                             assembled_object,
+                                             (UINTN)sizeof(assembled_object),
+                                             &assembled_object_len,
+                                             &assembled_object_id),
+              1);
+  check_uint64("vfs assembled canonical len",
+               assembled_object_len,
+               canonical_object_len);
+  check_hash_equal("vfs assembled canonical object id",
+                   &assembled_object_id,
+                   &canonical_object_id);
+}
+
 static void test_native_boot_storage_endpoint_intent(void) {
   enum {
     NATIVE_STORAGE_PACKET_SEQUENCE = 13u,
     NATIVE_STORAGE_COST_PER_BYTE = 1u,
-    NATIVE_STORAGE_PAYLOAD_BYTES = sizeof(ErVfsObjectPacketHeader) + 5u,
-    NATIVE_STORAGE_MAX_TOTAL_COST = NATIVE_STORAGE_PAYLOAD_BYTES,
+    NATIVE_STORAGE_PAYLOAD_CAPACITY =
+        sizeof(ErVfsObjectPacketHeader) + ER_VFS_OBJECT_PACKET_BYTES,
     NATIVE_STORAGE_APP_INDEX = 0u
   };
   ErAdmittedRoute route;
@@ -637,8 +696,12 @@ static void test_native_boot_storage_endpoint_intent(void) {
   ErVfsObjectPacket bad_object_packet;
   ErCryptoProvider crypto;
   ErHash token_id;
+  ErHash canonical_object_id;
   UINT8 object_bytes[5] = {'o', 'b', 'j', '0', '1'};
-  UINT8 storage_payload[NATIVE_STORAGE_PAYLOAD_BYTES];
+  UINT8 canonical_object[TEST_CANONICAL_OBJECT_CAPACITY];
+  UINTN canonical_object_len;
+  UINT8 storage_payload[NATIVE_STORAGE_PAYLOAD_CAPACITY];
+  UINT32 storage_payload_len;
   UINT32 packet_len = 0u;
 
   er_crypto_blake3_provider(&crypto);
@@ -649,15 +712,27 @@ static void test_native_boot_storage_endpoint_intent(void) {
                                                         &route),
               1);
   test_fill_bytes(token_id.bytes, ER_HASH_LEN, 0xb1u);
+  test_build_canonical_bytes_object("native storage canonical object",
+                                    object_bytes,
+                                    (UINTN)sizeof(object_bytes),
+                                    canonical_object,
+                                    (UINTN)sizeof(canonical_object),
+                                    &canonical_object_len,
+                                    &canonical_object_id);
   check_int64("native storage object packet prepare",
-              er_vfs_prepare_object_packet(&crypto, object_bytes,
-                                           (UINTN)sizeof(object_bytes),
+              er_vfs_prepare_object_packet(&crypto, canonical_object,
+                                           canonical_object_len,
                                            0u, 0u, 1u, &object_packet),
               1);
+  check_hash_equal("native storage canonical object id",
+                   &object_packet.header.object_id,
+                   &canonical_object_id);
   er_mem_copy(storage_payload, (const UINT8*)&object_packet.header,
               (UINTN)sizeof(object_packet.header));
   er_mem_copy(storage_payload + sizeof(object_packet.header),
-              object_packet.bytes, (UINTN)sizeof(object_bytes));
+              object_packet.bytes, object_packet.header.bytes_len);
+  storage_payload_len =
+      (UINT32)sizeof(object_packet.header) + object_packet.header.bytes_len;
   check_int64("native storage relay packet prepare",
               er_relay_packet_prepare(ingress.payload,
                                       (UINT32)sizeof(ingress.payload),
@@ -668,10 +743,10 @@ static void test_native_boot_storage_endpoint_intent(void) {
                                       &route.target_route_commitment,
                                       NATIVE_STORAGE_PACKET_SEQUENCE,
                                       NATIVE_STORAGE_COST_PER_BYTE,
-                                      NATIVE_STORAGE_MAX_TOTAL_COST,
+                                      storage_payload_len,
                                       &object_packet.header.packet_id,
                                       storage_payload,
-                                      (UINT32)sizeof(storage_payload),
+                                      storage_payload_len,
                                       &packet_len),
               1);
   ingress.status = ER_NATIVE_RELAY_INGRESS_ACCEPTED;
@@ -690,14 +765,14 @@ static void test_native_boot_storage_endpoint_intent(void) {
                    &object_packet.header.object_id);
   check_uint64("native storage intent bytes",
                intent.object_packet.header.bytes_len,
-               sizeof(object_bytes));
+               canonical_object_len);
 
   bad_object_packet = object_packet;
   bad_object_packet.header.packet_id.bytes[0] ^= 1u;
   er_mem_copy(storage_payload, (const UINT8*)&bad_object_packet.header,
               (UINTN)sizeof(bad_object_packet.header));
   er_mem_copy(storage_payload + sizeof(bad_object_packet.header),
-              bad_object_packet.bytes, (UINTN)sizeof(object_bytes));
+              bad_object_packet.bytes, bad_object_packet.header.bytes_len);
   check_int64("native storage bad packet relay prepare",
               er_relay_packet_prepare(ingress.payload,
                                       (UINT32)sizeof(ingress.payload),
@@ -708,10 +783,10 @@ static void test_native_boot_storage_endpoint_intent(void) {
                                       &route.target_route_commitment,
                                       NATIVE_STORAGE_PACKET_SEQUENCE,
                                       NATIVE_STORAGE_COST_PER_BYTE,
-                                      NATIVE_STORAGE_MAX_TOTAL_COST,
+                                      storage_payload_len,
                                       &object_packet.header.packet_id,
                                       storage_payload,
-                                      (UINT32)sizeof(storage_payload),
+                                      storage_payload_len,
                                       &packet_len),
               1);
   ingress.payload_len = packet_len;

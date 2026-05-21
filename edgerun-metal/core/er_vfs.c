@@ -6,7 +6,7 @@ _Static_assert(sizeof(ErVfsObjectPacketHeader) ==
                "VFS object packet header wire size must stay stable");
 
 /*
- * Purpose: build VFS packet records from in-memory object payload bytes.
+ * Purpose: build VFS packet records from canonical object bytes.
  * Intention: labels remain app-facing names while object identity comes from
  * edgerun-object, not a VFS-private hash domain.
  */
@@ -15,10 +15,6 @@ static const UINT8 g_payload_domain[] = "edgerun:c:v1:vfs:object-payload";
 static const UINT8 g_packet_domain[] = "edgerun:c:v1:vfs:object-packet";
 static const UINT8 g_manifest_ref_domain[] = "edgerun:c:v1:vfs:object-label";
 static const UINT8 g_transform_domain[] = "edgerun:c:v1:vfs:object-transform";
-static const UINT8 g_vfs_object_clock_keeper[] = "edgerun-vfs-byte-object-v1-00000";
-
-_Static_assert(sizeof(g_vfs_object_clock_keeper) - 1u == ER_CLOCK_KEEPER_ID_SIZE,
-               "VFS object clock keeper id must be one keeper id");
 
 enum {
   ER_VFS_U16_FIELD_BYTES = 2u,
@@ -134,28 +130,20 @@ UINT8 er_vfs_label_valid(const char* label, UINTN label_len) {
   return 1;
 }
 
-static UINT8 er_vfs_object_id(const ErCryptoProvider* crypto, const UINT8* object_bytes, UINTN object_len,
-                              ErHash* out_hash) {
-  er_object_requirements_t requirements;
-  er_clock_epoch_stamp_t epoch;
+static UINT8 er_vfs_canonical_object_id(const UINT8* object_bytes,
+                                        UINTN object_len,
+                                        ErHash* out_hash) {
+  er_object_info_t info;
 
-  (void)crypto;
   if (out_hash == 0 || (object_len > 0u && object_bytes == 0)) {
     return 0;
   }
-  requirements.durability = ER_OBJECT_DURABILITY_MEMORY;
-  requirements.confidentiality = ER_OBJECT_CONFIDENTIALITY_PUBLIC;
-  requirements.portability = ER_OBJECT_PORTABILITY_PUBLIC_PORTABLE;
-  requirements.integrity = ER_OBJECT_INTEGRITY_HASH_ONLY;
-  requirements.lifetime = ER_OBJECT_LIFETIME_TRANSIENT;
-  requirements.visibility = ER_OBJECT_VISIBILITY_PUBLIC;
-  requirements.access_cost = ER_OBJECT_ACCESS_EXPLICIT_IO;
-  er_mem_zero((UINT8*)&epoch, (UINTN)sizeof(epoch));
-  er_mem_copy(epoch.keeper_id.bytes, g_vfs_object_clock_keeper,
-              ER_CLOCK_KEEPER_ID_SIZE);
-  return (UINT8)(er_object_id_for_bytes(&requirements, epoch, object_bytes,
-                                        (size_t)object_len,
-                                        out_hash->bytes) == ER_OBJECT_OK);
+  if (er_object_verify(object_bytes, (size_t)object_len, &info) !=
+      ER_OBJECT_OK) {
+    return 0;
+  }
+  er_mem_copy(out_hash->bytes, info.object_id, ER_HASH_LEN);
+  return 1;
 }
 
 static UINT8 er_vfs_hash_payload(const ErCryptoProvider* crypto, const UINT8* payload_bytes,
@@ -269,7 +257,9 @@ static UINT8 er_vfs_object_packet_matches(const ErCryptoProvider* crypto,
   return 1u;
 }
 
-UINT8 er_vfs_prepare_object_packet(const ErCryptoProvider* crypto, const UINT8* object_bytes, UINTN object_len,
+UINT8 er_vfs_prepare_object_packet(const ErCryptoProvider* crypto,
+                                   const UINT8* canonical_object_bytes,
+                                   UINTN canonical_object_len,
                                    UINTN offset, UINT32 packet_index, UINT32 packet_count,
                                    ErVfsObjectPacket* out_packet) {
   UINTN remaining;
@@ -281,31 +271,32 @@ UINT8 er_vfs_prepare_object_packet(const ErCryptoProvider* crypto, const UINT8* 
       packet_index > ER_VFS_PACKET_INDEX_MAX) {
     return 0;
   }
-  if (object_len > 0u && object_bytes == 0) {
+  if (canonical_object_len > 0u && canonical_object_bytes == 0) {
     return 0;
   }
-  if (offset > object_len) {
+  if (offset > canonical_object_len) {
     return 0;
   }
 
   er_mem_zero((UINT8*)out_packet, (UINTN)sizeof(*out_packet));
-  remaining = object_len - offset;
+  remaining = canonical_object_len - offset;
   chunk_len = remaining;
   if (chunk_len > ER_VFS_OBJECT_PACKET_BYTES) {
     chunk_len = ER_VFS_OBJECT_PACKET_BYTES;
   }
   if (chunk_len > 0u) {
-    er_mem_copy(out_packet->bytes, object_bytes + offset, chunk_len);
+    er_mem_copy(out_packet->bytes, canonical_object_bytes + offset, chunk_len);
   }
 
   out_packet->header.abi_version = ER_VFS_ABI_VERSION;
   out_packet->header.packet_index = (UINT16)packet_index;
   out_packet->header.packet_count = packet_count;
-  out_packet->header.object_len = (UINT64)object_len;
+  out_packet->header.object_len = (UINT64)canonical_object_len;
   out_packet->header.offset = (UINT64)offset;
   out_packet->header.bytes_len = (UINT32)chunk_len;
 
-  if (er_vfs_object_id(crypto, object_bytes, object_len, &out_packet->header.object_id) == 0u) {
+  if (er_vfs_canonical_object_id(canonical_object_bytes, canonical_object_len,
+                                 &out_packet->header.object_id) == 0u) {
     return 0;
   }
 
@@ -372,8 +363,8 @@ UINT8 er_vfs_assemble_object_packets(const ErCryptoProvider* crypto,
                   packet->header.bytes_len);
     }
   }
-  if (er_vfs_object_id(crypto, out_object_bytes, (UINTN)object_len,
-                       out_object_id) == 0u ||
+  if (er_vfs_canonical_object_id(out_object_bytes, (UINTN)object_len,
+                                 out_object_id) == 0u ||
       er_hash_equal(out_object_id, &object_id) == 0u) {
     return 0;
   }
@@ -396,28 +387,35 @@ UINT8 er_vfs_prepare_object_ref_from_object(const ErHash* object_id,
 }
 
 UINT8 er_vfs_prepare_object_ref(const ErCryptoProvider* crypto,
-                                const UINT8* object_bytes,
-                                UINTN object_len,
+                                const UINT8* canonical_object_bytes,
+                                UINTN canonical_object_len,
                                 ErVfsObjectRef* out_ref) {
   ErHash object_id;
 
-  if (er_vfs_object_id(crypto, object_bytes, object_len, &object_id) == 0u) {
+  (void)crypto;
+  if (er_vfs_canonical_object_id(canonical_object_bytes,
+                                 canonical_object_len,
+                                 &object_id) == 0u) {
     return 0;
   }
-  return er_vfs_prepare_object_ref_from_object(&object_id, (UINT64)object_len,
+  return er_vfs_prepare_object_ref_from_object(&object_id,
+                                               (UINT64)canonical_object_len,
                                                out_ref);
 }
 
 UINT8 er_vfs_prepare_object_label_ref(const ErCryptoProvider* crypto, const char* label, UINTN label_len,
-                                      const UINT8* object_bytes, UINTN object_len,
+                                      const UINT8* canonical_object_bytes,
+                                      UINTN canonical_object_len,
                                       ErVfsObjectLabelRef* out_ref) {
   ErHash object_id;
 
-  if (er_vfs_object_id(crypto, object_bytes, object_len, &object_id) == 0u) {
+  if (er_vfs_canonical_object_id(canonical_object_bytes,
+                                 canonical_object_len,
+                                 &object_id) == 0u) {
     return 0;
   }
   return er_vfs_prepare_object_label_ref_from_object(crypto, label, label_len, &object_id,
-                                                    (UINT64)object_len, out_ref);
+                                                    (UINT64)canonical_object_len, out_ref);
 }
 
 UINT8 er_vfs_prepare_object_label_ref_from_object(const ErCryptoProvider* crypto, const char* label,
