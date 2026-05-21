@@ -254,12 +254,12 @@ static void eri_print_worldview_report(const EriFindings* findings,
   size_t i;
 
   printf("  worldview: %llu findings (%llu host FS/process, %llu path identity, "
-         "%llu legacy object ids, %llu raw object APIs, "
+         "%llu numeric object ids, %llu raw object APIs, "
          "%llu WASM32-sized offset reviews)\n",
          (unsigned long long)eri_count_worldview_findings(findings),
          (unsigned long long)eri_count_findings_kind(findings, "world-host-fs"),
          (unsigned long long)eri_count_findings_kind(findings, "world-path-identity"),
-         (unsigned long long)eri_count_findings_kind(findings, "world-legacy-object-id"),
+         (unsigned long long)eri_count_findings_kind(findings, "world-numeric-object-id"),
          (unsigned long long)eri_count_findings_kind(findings, "world-raw-object-api"),
          (unsigned long long)eri_count_findings_kind(findings, "world-wasm64-offset"));
   if (eri_count_worldview_findings(findings) == 0u) {
@@ -278,7 +278,7 @@ static void eri_print_worldview_report(const EriFindings* findings,
              (unsigned long long)eri_worldview_package_score(pkg),
              (unsigned long long)pkg->host_fs_runtime,
              (unsigned long long)pkg->path_identity,
-             (unsigned long long)pkg->legacy_object_ids,
+             (unsigned long long)pkg->numeric_object_ids,
              (unsigned long long)pkg->raw_object_apis,
              (unsigned long long)pkg->wasm64_offsets,
              (unsigned long long)pkg->nonprod_findings);

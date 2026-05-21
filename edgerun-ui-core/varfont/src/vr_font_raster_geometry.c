@@ -279,9 +279,9 @@ void vr_msdf_signed_distances_to_outline(
     channel_present,
     &nearest_sq_all);
 
-  float fallback = vr_sqrtf(nearest_sq_all);
-  if (!vr_float_is_finite(fallback)) {
-    fallback = VR_RASTER_SEGMENT_TOLERANCE;
+  float nearest_distance = vr_sqrtf(nearest_sq_all);
+  if (!vr_float_is_finite(nearest_distance)) {
+    nearest_distance = VR_RASTER_SEGMENT_TOLERANCE;
   }
 
   for (uint8_t color = 0u; color < VR_RASTER_MSDF_CHANNEL_COUNT; ++color) {
@@ -289,7 +289,7 @@ void vr_msdf_signed_distances_to_outline(
     if (nearest_sq < FLT_MAX) {
       distances[color] = vr_sqrtf(nearest_sq);
     } else {
-      distances[color] = fallback;
+      distances[color] = nearest_distance;
     }
   }
 
@@ -302,7 +302,7 @@ void vr_msdf_signed_distances_to_outline(
   }
   if (all_missing) {
     for (uint8_t color = 0u; color < VR_RASTER_MSDF_CHANNEL_COUNT; ++color) {
-      out_distances[color] = -fallback;
+      out_distances[color] = -nearest_distance;
     }
     return;
   }

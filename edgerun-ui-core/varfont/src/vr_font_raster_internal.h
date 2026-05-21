@@ -122,7 +122,7 @@ vr_status_t vr_ensure_u8_capacity(const vr_font_face_t* face, uint8_t** values, 
 vr_status_t vr_push_msdf_segment_color(const vr_font_face_t* face, uint8_t** seg_colors, size_t* seg_color_count, size_t* seg_color_cap, uint8_t color);
 vr_status_t vr_push_msdf_curve_color(const vr_font_face_t* face, uint8_t** curve_colors, size_t* curve_color_count, size_t* curve_color_cap, uint8_t color);
 vr_outline_point_t vr_msdf_edge_end_point(const vr_msdf_outline_edge_t* edge);
-uint8_t vr_msdf_edge_color(float dx, float dy, size_t fallback_index);
+uint8_t vr_msdf_edge_color(float dx, float dy, size_t edge_index);
 vr_status_t vr_msdf_color_edges_cycle(
   const vr_font_face_t* face,
   const vr_msdf_outline_edge_t* edges,

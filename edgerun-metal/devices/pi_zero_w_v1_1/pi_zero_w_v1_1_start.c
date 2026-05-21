@@ -2532,7 +2532,7 @@ static void er_pi_zero_w_v1_1_send_ble_advertisement(UINT32 heartbeat) {
   ErBleWifiRoleAdvert advert;
   ErBleAdvPacket packet;
   UINT8 ble_payload[ER_BLE_ADV_PAYLOAD_BYTES];
-  UINT8 adv_data[ER_BLE_ADV_LEGACY_DATA_BYTES];
+  UINT8 adv_data[ER_BLE_ADV_DATA_BYTES];
   UINT8 adv_len;
   UINT16 sequence = er_pi_zero_w_v1_1_ble_sequence(heartbeat);
 

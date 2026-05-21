@@ -201,7 +201,7 @@ typedef struct {
   char package[ERI_PACKAGE_MAX];
   uint64_t host_fs_runtime;
   uint64_t path_identity;
-  uint64_t legacy_object_ids;
+  uint64_t numeric_object_ids;
   uint64_t raw_object_apis;
   uint64_t wasm64_offsets;
   uint64_t nonprod_findings;

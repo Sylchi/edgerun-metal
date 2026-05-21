@@ -149,9 +149,6 @@ uint32_t vr_find_preferred_cmap_offset(const vr_font_face_t* face, const uint8_t
       preferred_found = true;
     }
   }
-  if (!preferred_found && face->cmap_offset_count > 0) {
-    selected = face->cmap_offsets[0];
-  }
   return selected;
 }
 

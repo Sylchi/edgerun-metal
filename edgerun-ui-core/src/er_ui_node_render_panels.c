@@ -1,7 +1,7 @@
 #include "er_ui_node_internal.h"
 
-static const char* er_ui_node_label_or_default(const er_ui_node_t* node, size_t index, const char* fallback) {
-  if (!node || !node->labels || index >= node->label_count || !node->labels[index]) return fallback;
+static const char* er_ui_node_label_at(const er_ui_node_t* node, size_t index, const char* default_label) {
+  if (!node || !node->labels || index >= node->label_count || !node->labels[index]) return default_label;
   return node->labels[index];
 }
 
@@ -28,7 +28,7 @@ er_ui_status_t er_ui_node_render_resizable(
   status = er_ui_node_render_text(
     scene,
     font,
-    er_ui_node_label_or_default(node, ER_UI_NODE_RESIZABLE_FIRST_INDEX, "One"),
+    er_ui_node_label_at(node, ER_UI_NODE_RESIZABLE_FIRST_INDEX, "One"),
     er_ui_bounds(first.x + 12.0f, first.y + 8.0f, first.w - 24.0f, 28.0f),
     theme.colors.text);
   if (status != ER_UI_OK) return status;
@@ -39,7 +39,7 @@ er_ui_status_t er_ui_node_render_resizable(
   status = er_ui_node_render_text(
     scene,
     font,
-    er_ui_node_label_or_default(node, ER_UI_NODE_RESIZABLE_SECOND_INDEX, "Two"),
+    er_ui_node_label_at(node, ER_UI_NODE_RESIZABLE_SECOND_INDEX, "Two"),
     er_ui_bounds(second.x + 12.0f, second.y + 8.0f, second.w - 24.0f, 24.0f),
     theme.colors.text);
   if (status != ER_UI_OK) return status;
@@ -48,7 +48,7 @@ er_ui_status_t er_ui_node_render_resizable(
   return er_ui_node_render_text(
     scene,
     font,
-    er_ui_node_label_or_default(node, ER_UI_NODE_RESIZABLE_THIRD_INDEX, "Three"),
+    er_ui_node_label_at(node, ER_UI_NODE_RESIZABLE_THIRD_INDEX, "Three"),
     er_ui_bounds(third.x + 12.0f, third.y + 8.0f, third.w - 24.0f, 24.0f),
     theme.colors.text);
 }

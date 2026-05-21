@@ -49,7 +49,7 @@ static void test_preset_code_decodes_sera_and_validates_shape(void) {
   expect_string(recipe.encoded_radius, "default", "preset code: Sera encoded radius");
   expect_string(recipe.effective_radius, "none", "preset code: Sera effective radius");
   expect_true(er_ui_preset_is_code("b4xFeBLg4O"), "preset code: valid b code is accepted");
-  expect_true(er_ui_preset_is_code("a123"), "preset code: legacy a code shape is accepted");
+  expect_true(!er_ui_preset_is_code("a123"), "preset code: noncanonical prefix rejected");
   expect_true(!er_ui_preset_is_code("b4xFeBLg4O!"), "preset code: punctuation rejected");
   expect_preset_status(er_ui_preset_decode("a123", &recipe), ER_UI_ERR_INVALID_ARGUMENT, "preset code: decode requires b prefix");
 }

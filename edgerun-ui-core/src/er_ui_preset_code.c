@@ -505,7 +505,7 @@ bool er_ui_preset_recipe_matches_code(er_ui_preset_recipe_t recipe, const char* 
 bool er_ui_preset_is_code(const char* preset_code) {
   size_t len = er_ui_preset_cstr_len(preset_code);
   if (len < ER_UI_PRESET_MIN_CODE_LEN || len > ER_UI_PRESET_MAX_CODE_LEN) return false;
-  if (preset_code[0] != 'a' && preset_code[0] != 'b') return false;
+  if (preset_code[0] != 'b') return false;
   for (size_t i = ER_UI_PRESET_PREFIX_LEN; i < len; ++i) {
     size_t index = 0u;
     if (!er_ui_preset_alphabet_index(preset_code[i], &index)) return false;

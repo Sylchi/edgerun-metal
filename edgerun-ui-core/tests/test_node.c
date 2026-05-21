@@ -337,7 +337,7 @@ void run_node_tests(void) {
   er_ui_node_t icon_a11y = er_ui_node_icon(ER_UI_ICON_TRUST, NULL, er_ui_color_rgba(0.0f, 0.0f, 0.0f, 1.0f));
   expect_status(er_ui_node_accessibility(&icon_a11y, &a11y), ER_UI_OK, "node: icon accessibility maps");
   expect_size(a11y.role, ER_UI_A11Y_IMAGE, "node: icon accessibility role");
-  expect_string(a11y.label, "trust", "node: icon accessibility uses canonical label fallback");
+  expect_string(a11y.label, "trust", "node: icon accessibility uses canonical icon label");
 
   er_ui_node_t icon_button_a11y = er_ui_node_icon_button(ER_UI_ICON_SEARCH, "Search", ER_UI_TEST_NODE_ICON_BUTTON_ID, ER_UI_COMPONENT_BUTTON_GHOST);
   expect_status(er_ui_node_accessibility(&icon_button_a11y, &a11y), ER_UI_OK, "node: icon button accessibility maps");

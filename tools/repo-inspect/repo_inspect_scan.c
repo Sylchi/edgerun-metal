@@ -389,8 +389,8 @@ static void eri_scan_line_metrics(const uint8_t* bytes, size_t len, EriTotals* f
         eri_add_finding(findings, path, line_no, "world-path-identity",
                         "path/name appears coupled to object identity or hashing");
       }
-      if (eri_line_has_legacy_object_id_smell(path, searchable) != 0u) {
-        eri_add_finding(findings, path, line_no, "world-legacy-object-id",
+      if (eri_line_has_numeric_object_id_smell(path, searchable) != 0u) {
+        eri_add_finding(findings, path, line_no, "world-numeric-object-id",
                         "small numeric object_id should be an ErHash for content-addressed objects");
       }
       if (eri_line_has_raw_object_api_smell(path, searchable) != 0u) {

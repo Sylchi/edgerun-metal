@@ -50,7 +50,7 @@
 #define ER_TLS_SERVER_KEY_SHARE_FORMAT_OFFSET 4u
 #define ER_TLS_SERVER_KEY_SHARE_PUBLIC_OFFSET 5u
 #define ER_TLS_EXTENSION_HEADER_BYTES 4u
-#define ER_TLS_LEGACY_VERSION_BYTES 2u
+#define ER_TLS_SERVER_HELLO_VERSION_BYTES 2u
 #define ER_TLS_SESSION_ID_LENGTH_BYTES 1u
 #define ER_TLS_CIPHER_SUITE_BYTES 2u
 #define ER_TLS_COMPRESSION_METHOD_BYTES 1u
@@ -405,13 +405,13 @@ UINT8 er_tls_server_hello_parse(const UINT8* bytes,
   body_end = (UINT16)(body_start + body_len);
   if (body_end > len ||
       body_end - body_start <
-          ER_TLS_LEGACY_VERSION_BYTES + ER_TLS_RANDOM_BYTES + ER_TLS_SESSION_ID_LENGTH_BYTES) {
+          ER_TLS_SERVER_HELLO_VERSION_BYTES + ER_TLS_RANDOM_BYTES + ER_TLS_SESSION_ID_LENGTH_BYTES) {
     return ER_TLS_STATUS_PARSE_FAILURE;
   }
   er_mem_zero((UINT8*)out_hello, (UINTN)sizeof(*out_hello));
   pos = body_start;
-  out_hello->legacy_version = er_tls_read_u16(bytes + pos);
-  pos = (UINT16)(pos + ER_TLS_LEGACY_VERSION_BYTES);
+  out_hello->record_version = er_tls_read_u16(bytes + pos);
+  pos = (UINT16)(pos + ER_TLS_SERVER_HELLO_VERSION_BYTES);
   er_mem_copy(out_hello->random, bytes + pos, ER_TLS_RANDOM_BYTES);
   pos = (UINT16)(pos + ER_TLS_RANDOM_BYTES);
   session_len = bytes[pos];
@@ -451,7 +451,7 @@ UINT8 er_tls_server_hello_parse(const UINT8* bytes,
     }
     pos = (UINT16)(pos + current_len);
   }
-  if (out_hello->legacy_version != ER_TLS_RECORD_VERSION ||
+  if (out_hello->record_version != ER_TLS_RECORD_VERSION ||
       out_hello->cipher_suite != ER_TLS_CIPHER_TLS_AES_128_GCM_SHA256 ||
       out_hello->has_supported_version == 0u ||
       out_hello->supported_version != ER_TLS_VERSION_1_3 ||

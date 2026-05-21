@@ -10,9 +10,9 @@ vr_outline_point_t vr_msdf_edge_end_point(const vr_msdf_outline_edge_t* edge) {
   return edge->p1;
 }
 
-uint8_t vr_msdf_edge_color(float dx, float dy, size_t fallback_index) {
+uint8_t vr_msdf_edge_color(float dx, float dy, size_t edge_index) {
   if ((vr_absf(dx) <= VR_RASTER_SEGMENT_TOLERANCE) && (vr_absf(dy) <= VR_RASTER_SEGMENT_TOLERANCE)) {
-    return (uint8_t)(fallback_index % VR_RASTER_MSDF_CHANNEL_COUNT);
+    return (uint8_t)(edge_index % VR_RASTER_MSDF_CHANNEL_COUNT);
   }
 
   float angle = vr_atan2f(dy, dx) + VR_RASTER_MSDF_PI;
@@ -36,8 +36,8 @@ uint8_t vr_msdf_edge_color(float dx, float dy, size_t fallback_index) {
 uint8_t vr_msdf_preferred_edge_color(
   float dx,
   float dy,
-  size_t fallback_index) {
-  uint8_t color = vr_msdf_edge_color(dx, dy, fallback_index);
+  size_t edge_index) {
+  uint8_t color = vr_msdf_edge_color(dx, dy, edge_index);
   return color;
 }
 

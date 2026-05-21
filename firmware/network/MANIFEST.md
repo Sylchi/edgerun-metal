@@ -12,7 +12,7 @@ Firmware files in this directory use the EFI boot-loader name
 | `10ec.8922.0` | Realtek rtw89 firmware | `10ec:8922` | RTL8922AE firmware | 1849226 | `d11927f593c82879bd0437435475d7915a60932374747984b3dc906a23009dea` |
 | `168c.003e.0` | `/lib/firmware/ath10k/QCA6174/hw3.0/firmware-6.bin.zst` | `168c:003e` | QCA6174 hw3.0 firmware | 706360 | `04d3bad5efa3f9fbe3ba53fd3e25fa9b0585ed227eea8111303b4e08861f979d` |
 | `168c.003e.1` | `/lib/firmware/ath10k/QCA6174/hw3.0/board-2.bin.zst` | `168c:003e` | QCA6174 board database | 740076 | `66e83dde1c9af535df1fcd17c72971a96a263357300e921b358d35a353227d60` |
-| `168c.003e.2` | `/lib/firmware/ath10k/QCA6174/hw3.0/board.bin.zst` | `168c:003e` | QCA6174 fallback board data | 8124 | `1a8d225818b46986fc4f615594fbe448fa820618590d6902c8f844bb37cda667` |
+| `168c.003e.2` | `/lib/firmware/ath10k/QCA6174/hw3.0/board.bin.zst` | `168c:003e` | QCA6174 board data | 8124 | `1a8d225818b46986fc4f615594fbe448fa820618590d6902c8f844bb37cda667` |
 | `14c3.0616.0` | `/lib/firmware/mediatek/WIFI_RAM_CODE_MT7922_1.bin.zst` | `14c3:0616` | MT7922 Wi-Fi RAM code | 1003092 | `1226f5b30531b2f027897a4a499fb77c31f4a39025c98e5a9896769aaa781fda` |
 | `14c3.0616.1` | `/lib/firmware/mediatek/WIFI_MT7922_patch_mcu_1_1_hdr.bin.zst` | `14c3:0616` | MT7922 Wi-Fi patch MCU | 137632 | `6d04988f5f44fc41e9404a492291a7a519b38e6aea6369b2f939cd0c70765f5a` |
 | `14c3.0616.2` | `/lib/firmware/mediatek/BT_RAM_CODE_MT7922_1_1_hdr.bin.zst` | `14c3:0616` | MT7922 Bluetooth RAM code | 515670 | `b5dbcf0d27439db36a797203cabeb46220a8557ac488ecf69a0cfcb473b2dfa1` |

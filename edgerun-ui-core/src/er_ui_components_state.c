@@ -33,6 +33,7 @@ void er_ui_component_gallery_state_init(er_ui_component_gallery_state_t* state) 
   state->contribution_bar = ER_UI_COMPONENT_CHART_CONTRIBUTION_DEFAULT_INDEX;
   state->stock_bar = ER_UI_COMPONENT_CHART_STOCK_DEFAULT_INDEX;
   state->power_bar = ER_UI_COMPONENT_CHART_POWER_DEFAULT_INDEX;
+  (void)er_ui_component_gallery_set_slider(state, ER_UI_COMPONENT_PREVIEW_SLIDER_ID, 0.42f);
 }
 
 size_t er_ui_component_option_index(uint32_t id, uint32_t base, size_t len, bool* out_has_index) {
@@ -129,12 +130,12 @@ bool er_ui_component_gallery_select_open(const er_ui_component_gallery_state_t* 
   return state && state->has_open_select && state->open_select == id;
 }
 
-float er_ui_component_gallery_slider(const er_ui_component_gallery_state_t* state, uint32_t id, float fallback) {
-  if (!state) return fallback;
+float er_ui_component_gallery_slider(const er_ui_component_gallery_state_t* state, uint32_t id) {
+  if (!state) return 0.0f;
   for (size_t i = 0u; i < state->slider_count; ++i) {
     if (state->sliders[i].id == id) return state->sliders[i].value;
   }
-  return fallback;
+  return 0.0f;
 }
 
 bool er_ui_component_preview_available(const char* slug) {

@@ -73,20 +73,6 @@ cmp "${OUTPUT_WASM}" "${TMP_DIR}/first.wasm"
 cmp "${OUTPUT_IDENTITY}" "${TMP_DIR}/first.identity"
 "${ER_BUILD}" app-verify "${PACKAGE_DIR}"
 
-mkdir "${TMP_DIR}/legacy-c-package"
-cp "${PACKAGE_DIR}/app.erc" "${TMP_DIR}/legacy-c-package/app.c"
-sed 's/source=app.erc/source=app.c/' \
-  "${PACKAGE_DIR}/app.manifest" > "${TMP_DIR}/legacy-c-package/app.manifest"
-"${ER_BUILD}" app-build "${TMP_DIR}/legacy-c-package"
-"${ER_BUILD}" app-verify "${TMP_DIR}/legacy-c-package"
-legacy_run_output=$("${ER_BUILD}" app-run "${TMP_DIR}/legacy-c-package")
-case "${legacy_run_output}" in
-  "app-run result=172 ui_emit_count=1 ui_emit_bytes=172 rects=1 hits=1 text=1" ) ;;
-  * ) printf 'bad legacy app-run output\n%s\n' "${legacy_run_output}" >&2; exit 1 ;;
-esac
-grep '^source=app.c$' "${TMP_DIR}/legacy-c-package/.build/package.identity" >/dev/null
-grep '^manifest=app.manifest$' "${TMP_DIR}/legacy-c-package/.build/package.identity" >/dev/null
-
 mkdir "${TMP_DIR}/no-final-newline"
 cp "${PACKAGE_DIR}/app.erc" "${TMP_DIR}/no-final-newline/app.erc"
 printf 'contract=ui-app\nmemory_pages=1\nimports=edgerun.ui/emit\nsource=app.erc\noutput=.build/app.wasm' \
@@ -197,7 +183,7 @@ if "${ER_BUILD}" app-build "${TMP_DIR}/bad-extra-field" >/dev/null 2>&1; then
 fi
 
 mkdir "${TMP_DIR}/driver-package"
-cat > "${TMP_DIR}/driver-package/app.c" <<'CAPP'
+cat > "${TMP_DIR}/driver-package/app.erc" <<'CAPP'
 extern i64 bus_exec(i64, i64) __import("edgerun.bus", "exec");
 const i64 OUTBOX = 1024;
 memory(1);
@@ -216,7 +202,7 @@ memory_pages=1
 imports=edgerun.bus/exec
 driver_memory_bytes=65536
 driver_bus=mmio32:4096:4:read8
-source=app.c
+source=app.erc
 output=.build/app.wasm
 MANIFEST
 "${ER_BUILD}" app-build "${TMP_DIR}/driver-package"
@@ -224,18 +210,6 @@ MANIFEST
 grep '^manifest=app.manifest$' "${TMP_DIR}/driver-package/.build/package.identity" >/dev/null
 if "${ER_BUILD}" app-run "${TMP_DIR}/driver-package" >/dev/null 2>&1; then
   printf 'app-run accepted bus-driver package\n' >&2
-  exit 1
-fi
-
-mkdir "${TMP_DIR}/driver-erc-package"
-cp "${TMP_DIR}/driver-package/app.c" "${TMP_DIR}/driver-erc-package/app.erc"
-sed 's/source=app.c/source=app.erc/' \
-  "${TMP_DIR}/driver-package/app.manifest" > "${TMP_DIR}/driver-erc-package/app.manifest"
-"${ER_BUILD}" app-build "${TMP_DIR}/driver-erc-package"
-"${ER_BUILD}" app-verify "${TMP_DIR}/driver-erc-package"
-grep '^source=app.erc$' "${TMP_DIR}/driver-erc-package/.build/package.identity" >/dev/null
-if "${ER_BUILD}" app-run "${TMP_DIR}/driver-erc-package" >/dev/null 2>&1; then
-  printf 'app-run accepted erc bus-driver package\n' >&2
   exit 1
 fi
 

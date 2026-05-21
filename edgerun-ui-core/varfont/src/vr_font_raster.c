@@ -24,24 +24,6 @@ vr_status_t vr_free_bitmap(const vr_font_face_t* face, uint8_t* bitmap, int widt
   return VR_OK;
 }
 
-vr_status_t vr_rasterize_outline(const vr_font_face_t* face,
-                                 const vr_glyph_outline_t* outline,
-                                 uint8_t** out_bitmap,
-                                 int* out_w,
-                                 int* out_h,
-                                 int* out_left,
-                                 int* out_top) {
-  return vr_rasterize_outline_with_mode(
-    face,
-    outline,
-    VR_FONT_ATLAS_FORMAT_ALPHA8,
-    out_bitmap,
-    out_w,
-    out_h,
-    out_left,
-    out_top);
-}
-
 //@optimizer-ignore-function glyph rasterization must visit each output pixel and each configured subpixel sample
 vr_status_t vr_rasterize_outline_with_mode(
   const vr_font_face_t* face,

@@ -437,7 +437,7 @@ er_ui_status_t er_ui_component_scene_preview_emit(
     return er_ui_component_skeleton_emit(scene, er_ui_bounds(bounds.x, bounds.y + 56.0f, bounds.w * 0.50f, 18.0f), theme);
   }
   if (er_ui_component_streq(slug, "slider")) {
-    float value = er_ui_component_gallery_slider(state, ER_UI_COMPONENT_PREVIEW_SLIDER_ID, 0.42f);
+    float value = er_ui_component_gallery_slider(state, ER_UI_COMPONENT_PREVIEW_SLIDER_ID);
     return er_ui_component_slider_emit(scene, font, er_ui_bounds(bounds.x, bounds.y, bounds.w, 48.0f), theme, "Volume", value, ER_UI_COMPONENT_PREVIEW_SLIDER_ID);
   }
   if (er_ui_component_streq(slug, "switch")) {

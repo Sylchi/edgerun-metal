@@ -79,7 +79,7 @@ static void test_ble_adv(void) {
   ErBleAdvEfi ble;
   EFI_BOOT_SERVICES boot_services;
   EFI_SYSTEM_TABLE system_table;
-  UINT8 data[ER_BLE_ADV_LEGACY_DATA_BYTES];
+  UINT8 data[ER_BLE_ADV_DATA_BYTES];
   UINT8 data_len;
   UINT8 i;
 
@@ -96,7 +96,7 @@ static void test_ble_adv(void) {
                                         payload, ER_BLE_ADV_PAYLOAD_BYTES, &packet), 1);
   check_int64("ble adv encode",
               er_ble_adv_encode_data(&packet, data, &data_len), 1);
-  check_uint64("ble adv encoded length", data_len, ER_BLE_ADV_LEGACY_DATA_BYTES);
+  check_uint64("ble adv encoded length", data_len, ER_BLE_ADV_DATA_BYTES);
   check_int64("ble adv decode",
               er_ble_adv_decode_data(data, data_len, &decoded), 1);
   check_uint64("ble adv decoded channel", decoded.channel_id, ER_BLE_ADV_CHANNEL_ID);
@@ -283,7 +283,7 @@ static void test_ble_adv(void) {
   check_uint64("ble adv params opcode", g_test_ble_opcodes[0], 0x2006u);
   check_uint64("ble adv data opcode", g_test_ble_opcodes[1], 0x2008u);
   check_uint64("ble adv enable opcode", g_test_ble_opcodes[2], 0x200au);
-  check_uint64("ble adv hci data len", g_test_ble_command_params[1][0], ER_BLE_ADV_LEGACY_DATA_BYTES);
+  check_uint64("ble adv hci data len", g_test_ble_command_params[1][0], ER_BLE_ADV_DATA_BYTES);
   check_uint64("ble adv hci enable", g_test_ble_command_params[2][0], 1u);
 
   er_mem_zero(g_test_ble_event, (UINTN)sizeof(g_test_ble_event));
