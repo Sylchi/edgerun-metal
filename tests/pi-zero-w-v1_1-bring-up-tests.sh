@@ -156,9 +156,16 @@ if ! grep -q "firmware/network/02d0.a9a6.0" "$ROOT_DIR/edgerun-metal/Makefile" |
   exit 1
 fi
 
-if ! grep -q "only permitted vendor binary exception is device radio firmware" \
+if ! grep -q "permitted vendor binary exceptions are explicit and narrow" \
   "$ROOT_DIR/AGENTS.md"; then
-  printf 'agent instructions do not scope the vendor radio firmware exception\n' >&2
+  printf 'agent instructions do not scope the vendor firmware exceptions\n' >&2
+  exit 1
+fi
+
+if ! grep -q "Raspberry Pi Zero-family boot firmware" "$ROOT_DIR/AGENTS.md" ||
+  ! grep -q "kernel.img.*repo-owned EdgeRun payload" \
+    "$ROOT_DIR/firmware/raspberry-pi/MANIFEST.md"; then
+  printf 'pi zero w v1.1 boot firmware exception is not explicit\n' >&2
   exit 1
 fi
 
