@@ -459,6 +459,54 @@ int er_object_id(const void* canonical, size_t len,
              : ER_OBJECT_ERR_CORRUPT;
 }
 
+int er_object_id_for_bytes(const er_object_requirements_t* requirements,
+                           er_clock_epoch_stamp_t epoch,
+                           const void* body, size_t body_len,
+                           uint8_t out_id[ER_OBJECT_ID_SIZE]) {
+  uint8_t header[ER_OBJECT_HEADER_SIZE];
+  ErBlake3Hasher hasher;
+  uint64_t logical_len;
+
+  if (requirements == (const er_object_requirements_t*)0 ||
+      out_id == (uint8_t*)0 ||
+      er_clock_stamp_valid(epoch) == 0 ||
+      (body_len != 0u && body == (const void*)0) ||
+      (size_t)(uint64_t)body_len != body_len) {
+    return ER_OBJECT_ERR_BADARG;
+  }
+  logical_len = (uint64_t)body_len;
+  er_object_zero(header, sizeof(header));
+  header[ER_OBJECT_MAGIC_BYTE0] = ER_OBJECT_MAGIC0;
+  header[ER_OBJECT_MAGIC_BYTE1] = ER_OBJECT_MAGIC1;
+  header[ER_OBJECT_MAGIC_BYTE2] = ER_OBJECT_MAGIC2;
+  header[ER_OBJECT_MAGIC_BYTE3] = ER_OBJECT_MAGIC3;
+  header[ER_OBJECT_MAGIC_BYTE4] = ER_OBJECT_MAGIC4;
+  header[ER_OBJECT_MAGIC_BYTE5] = ER_OBJECT_MAGIC5;
+  header[ER_OBJECT_MAGIC_BYTE6] = ER_OBJECT_MAGIC6;
+  header[ER_OBJECT_MAGIC_BYTE7] = ER_OBJECT_MAGIC7;
+  er_object_store16(&header[ER_OBJECT_HEADER_VERSION_OFF], ER_OBJECT_ABI_VERSION);
+  er_object_store16(&header[ER_OBJECT_HEADER_KIND_OFF], ER_OBJECT_KIND_BYTES);
+  er_object_store32(&header[ER_OBJECT_HEADER_FLAGS_OFF], 0u);
+  er_object_store64(&header[ER_OBJECT_HEADER_LOGICAL_LEN_OFF], logical_len);
+  er_object_store16(&header[ER_OBJECT_HEADER_OWNER_COUNT_OFF], 0u);
+  er_object_store16(&header[ER_OBJECT_HEADER_ENVELOPE_COUNT_OFF], 0u);
+  er_object_store32(&header[ER_OBJECT_HEADER_CHILD_COUNT_OFF], 0u);
+  er_object_store64(&header[ER_OBJECT_HEADER_BODY_LEN_OFF], (uint64_t)body_len);
+  er_object_epoch_write(epoch, &header[ER_OBJECT_HEADER_EPOCH_OFF]);
+  if (er_object_requirements_write(requirements,
+                                   &header[ER_OBJECT_HEADER_REQUIREMENTS_OFF]) != ER_OBJECT_OK) {
+    return ER_OBJECT_ERR_BADARG;
+  }
+  er_blake3_init(&hasher);
+  if (er_blake3_update(&hasher, header, sizeof(header)) == 0u ||
+      (body_len != 0u &&
+       er_blake3_update(&hasher, (const uint8_t*)body, body_len) == 0u) ||
+      er_blake3_final(&hasher, out_id) == 0u) {
+    return ER_OBJECT_ERR_CORRUPT;
+  }
+  return ER_OBJECT_OK;
+}
+
 int er_object_build_node(uint16_t node_kind, uint32_t flags,
                          const er_object_requirements_t* requirements,
                          er_clock_epoch_stamp_t epoch,

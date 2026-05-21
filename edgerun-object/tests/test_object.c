@@ -146,7 +146,10 @@ static er_object_envelope_t test_envelope(uint32_t kind, uint16_t owner_index) {
 
 static void test_leaf_node(void) {
   uint8_t object[TEST_BUFFER_SIZE];
+  uint8_t bare_object[TEST_BUFFER_SIZE];
   uint8_t object_id[ER_OBJECT_ID_SIZE];
+  uint8_t bare_object_id[ER_OBJECT_ID_SIZE];
+  uint8_t bare_streamed_id[ER_OBJECT_ID_SIZE];
   uint8_t verify_id[ER_OBJECT_ID_SIZE];
   er_object_requirements_t requirements =
       test_requirements(ER_OBJECT_CONFIDENTIALITY_USER_APP_PRIVATE);
@@ -156,6 +159,7 @@ static void test_leaf_node(void) {
   er_object_envelope_t read_envelope;
   er_object_info_t info;
   size_t object_len = 0u;
+  size_t bare_object_len = 0u;
   size_t canonical_len = 0u;
   static const uint8_t payload[TEST_LEAF_BYTES] = {1u, 2u, 3u, 4u, 5u, 6u};
 
@@ -188,6 +192,23 @@ static void test_leaf_node(void) {
   check_bytes("leaf body", info.body, payload, sizeof(payload));
   check_int("leaf id", er_object_id(object, object_len, verify_id), ER_OBJECT_OK);
   check_bytes("leaf id matches", verify_id, object_id, ER_OBJECT_ID_SIZE);
+  check_int("bare leaf build",
+            er_object_build_node(ER_OBJECT_KIND_BYTES, 0u, &requirements,
+                                 test_epoch(TEST_LEAF_EPOCH_TICK),
+                                 0, 0u, 0, 0u, 0, 0u,
+                                 payload, sizeof(payload),
+                                 bare_object, sizeof(bare_object),
+                                 &bare_object_len, bare_object_id),
+            ER_OBJECT_OK);
+  check_int("bare leaf streamed id",
+            er_object_id_for_bytes(&requirements,
+                                   test_epoch(TEST_LEAF_EPOCH_TICK),
+                                   payload,
+                                   sizeof(payload),
+                                   bare_streamed_id),
+            ER_OBJECT_OK);
+  check_bytes("bare leaf streamed id matches", bare_streamed_id,
+              bare_object_id, ER_OBJECT_ID_SIZE);
   check_int("leaf owner accessor",
             er_object_owner_at(object, object_len, TEST_SECOND_OWNER_INDEX, &read_owner),
             ER_OBJECT_OK);

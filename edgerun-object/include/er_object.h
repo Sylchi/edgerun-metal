@@ -166,6 +166,10 @@ int er_object_signature_verify(const void* canonical, size_t len,
                                er_object_signature_info_t* out_info);
 int er_object_id(const void* canonical, size_t len,
                  uint8_t out_id[ER_OBJECT_ID_SIZE]);
+int er_object_id_for_bytes(const er_object_requirements_t* requirements,
+                           er_clock_epoch_stamp_t epoch,
+                           const void* body, size_t body_len,
+                           uint8_t out_id[ER_OBJECT_ID_SIZE]);
 int er_object_verify(const void* canonical, size_t len,
                      er_object_info_t* out_info);
 int er_object_owner_at(const void* canonical, size_t len, uint16_t index,

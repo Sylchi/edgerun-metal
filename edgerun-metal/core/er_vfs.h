@@ -2,12 +2,14 @@
 #define ER_VFS_H
 
 /*
- * Purpose: define the memory-only object/VFS records for the C runtime.
- * Intention: keep file-like work content-addressed and sealed before transport or durability.
+ * Purpose: define memory-only packet and VFS reference records for the C runtime.
+ * Intention: move canonical object bytes between boundaries without giving VFS
+ * its own object identity scheme.
  */
 
 #include "er_work.h"
 #include "er_crypto.h"
+#include "er_object.h"
 
 #define ER_VFS_ABI_VERSION 1u
 #define ER_VFS_LABEL_MAX 160u

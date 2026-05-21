@@ -700,11 +700,15 @@ static int erb_build_pi_node_update(int print_plan) {
   if (erb_args_push(&args, "-Iinclude") != 0 ||
       erb_args_push(&args, "-Iedgerun-metal/core") != 0 ||
       erb_args_push(&args, "-Iedgerun-metal/devices/pi_zero_w_v1_1") != 0 ||
+      erb_args_push(&args, "-Iedgerun-object/include") != 0 ||
+      erb_args_push(&args, "-Iedgerun-clock/include") != 0 ||
       erb_args_push(&args, "-Iedgerun-crypto/include") != 0 ||
       erb_args_push(&args, "tools/pi-node-update/main.c") != 0 ||
       erb_args_push(&args, "edgerun-metal/devices/pi_zero_w_v1_1/er_pi_zero_w_v1_1_ota.c") != 0 ||
       erb_args_push(&args, "edgerun-metal/core/er_mem.c") != 0 ||
       erb_args_push(&args, "edgerun-metal/core/er_vfs.c") != 0 ||
+      erb_args_push(&args, "edgerun-object/src/er_object.c") != 0 ||
+      erb_args_push(&args, "edgerun-clock/src/er_clock.c") != 0 ||
       erb_args_push(&args, "edgerun-metal/core/er_crypto.c") != 0 ||
       erb_args_push(&args, "edgerun-metal/core/er_crypto_blake3.c") != 0 ||
       erb_args_push(&args, "edgerun-metal/core/er_identity.c") != 0 ||
