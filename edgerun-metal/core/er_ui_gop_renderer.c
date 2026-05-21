@@ -1,4 +1,4 @@
-#include "er_ui_gop_renderer.h"
+#include "internal/er_ui_gop_renderer.h"
 
 //@optimizer-ignore-constant UEFI GOP protocol GUID is ABI-defined by firmware
 static EFI_GUID g_gop_guid = {
@@ -8,4 +8,4 @@ static EFI_GUID g_gop_guid = {
 static ErUiSurface g_surface;
 static UINT8 g_ready;
 
-#include "er_ui_gop_backend.h"
+#include "internal/er_ui_gop_backend.h"

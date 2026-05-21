@@ -165,18 +165,18 @@ add_first_party_openssl_include() {
 add_public_header_without_manifest() {
   local repo_dir="$1"
 
-  mkdir -p "${repo_dir}/include"
-  printf '#ifndef TEST_API_H\n#define TEST_API_H\n#endif\n' > "${repo_dir}/include/test_api.h"
-  git -C "${repo_dir}" add include/test_api.h
+  mkdir -p "${repo_dir}/edgerun-ui-core/include"
+  printf '#ifndef TEST_API_H\n#define TEST_API_H\n#endif\n' > "${repo_dir}/edgerun-ui-core/include/test_api.h"
+  git -C "${repo_dir}" add edgerun-ui-core/include/test_api.h
 }
 
 add_public_header_with_manifest() {
   local repo_dir="$1"
 
-  mkdir -p "${repo_dir}/include"
-  printf '#ifndef TEST_API_H\n#define TEST_API_H\n#endif\n' > "${repo_dir}/include/test_api.h"
-  printf 'include/test_api.h\n' > "${repo_dir}/api/public-headers.manifest"
-  git -C "${repo_dir}" add include/test_api.h api/public-headers.manifest
+  mkdir -p "${repo_dir}/edgerun-ui-core/include"
+  printf '#ifndef TEST_API_H\n#define TEST_API_H\n#endif\n' > "${repo_dir}/edgerun-ui-core/include/test_api.h"
+  printf 'edgerun-ui-core/include/test_api.h\n' > "${repo_dir}/api/public-headers.manifest"
+  git -C "${repo_dir}" add edgerun-ui-core/include/test_api.h api/public-headers.manifest
 }
 
 expect_pass clean_repo
