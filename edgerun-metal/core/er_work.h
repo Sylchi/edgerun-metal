@@ -7,11 +7,11 @@
  */
 
 #include "er_types.h"
+#include "er_node_id.h"
 
 #define ER_WORK_ABI_VERSION 1u
 
 #define ER_HASH_LEN 32u
-#define ER_NODE_ID_LEN 32u
 #define ER_IDENTITY_MATERIAL_MAX 64u
 #define ER_PUBLIC_KEY_LEN 32u
 #define ER_P256_PUBLIC_KEY_LEN 64u
@@ -86,15 +86,9 @@
 #define ER_IDENTITY_BACKING_P256 2u
 #define ER_IDENTITY_BACKING_TPM_P256 3u
 #define ER_IDENTITY_BACKING_HASH 4u
-#define ER_IDENTITY_BACKING_EPHEMERAL_HASH 5u
-
 typedef struct {
   UINT8 bytes[ER_HASH_LEN];
 } ErHash;
-
-typedef struct {
-  UINT8 bytes[ER_NODE_ID_LEN];
-} ErNodeId;
 
 static inline UINT8 er_hash_equal(const ErHash* left, const ErHash* right) {
   UINTN i;
@@ -117,34 +111,6 @@ static inline UINT8 er_hash_nonzero(const ErHash* value) {
     return 0u;
   }
   for (i = 0u; i < ER_HASH_LEN; ++i) {
-    if (value->bytes[i] != 0u) {
-      return 1u;
-    }
-  }
-  return 0u;
-}
-
-static inline UINT8 er_node_id_equal(const ErNodeId* left, const ErNodeId* right) {
-  UINTN i;
-
-  if (left == 0 || right == 0) {
-    return 0u;
-  }
-  for (i = 0u; i < ER_NODE_ID_LEN; ++i) {
-    if (left->bytes[i] != right->bytes[i]) {
-      return 0u;
-    }
-  }
-  return 1u;
-}
-
-static inline UINT8 er_node_id_nonzero(const ErNodeId* value) {
-  UINTN i;
-
-  if (value == 0) {
-    return 0u;
-  }
-  for (i = 0u; i < ER_NODE_ID_LEN; ++i) {
     if (value->bytes[i] != 0u) {
       return 1u;
     }

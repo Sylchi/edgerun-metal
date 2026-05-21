@@ -126,9 +126,8 @@ typedef struct er_store {
   uint8_t last_record_hash[ER_HASH_SIZE];
 } er_store_t;
 
-int er_store_open(er_store_t* store, er_io_t io, void* arena, size_t arena_len);
-int er_store_open_config(er_store_t* store, er_io_t io, void* arena, size_t arena_len,
-                         const er_store_config_t* config);
+int er_store_open(er_store_t* store, er_io_t io, void* arena, size_t arena_len,
+                  const er_store_config_t* config);
 int er_store_close(er_store_t* store);
 int er_store_stats(er_store_t* store, er_store_stats_t* out_stats);
 
@@ -145,24 +144,19 @@ int er_store_get_blob_info(er_store_t* store, const uint8_t hash[ER_HASH_SIZE], 
 
 int er_store_define_content_type(er_store_t* store, uint32_t content_type, const char* name);
 int er_store_define_index(er_store_t* store, uint32_t index_id, uint32_t content_type, const char* name);
-int er_store_index_put(er_store_t* store, const char* key, const uint8_t hash[ER_HASH_SIZE]);
-int er_store_index_put_ex(er_store_t* store, uint32_t index_id, const char* key,
-                          const uint8_t hash[ER_HASH_SIZE]);
+int er_store_index_put(er_store_t* store, uint32_t index_id, const char* key,
+                       const uint8_t hash[ER_HASH_SIZE]);
 int er_store_blob_index_put(er_store_t* store, uint32_t index_id, const char* key,
                             const uint8_t blob_hash[ER_HASH_SIZE]);
 int er_store_object_index_put(er_store_t* store, uint32_t index_id, const char* key,
                               const uint8_t object_hash[ER_HASH_SIZE]);
-int er_store_index_get(er_store_t* store, const char* key, uint8_t out_hash[ER_HASH_SIZE]);
-int er_store_index_get_ex(er_store_t* store, uint32_t index_id, const char* key,
-                          uint8_t out_hash[ER_HASH_SIZE]);
-int er_store_index_get_entry(er_store_t* store, const char* key, er_index_entry_t* out_entry);
-int er_store_index_get_entry_ex(er_store_t* store, uint32_t index_id, const char* key,
-                                er_index_entry_t* out_entry);
+int er_store_index_get(er_store_t* store, uint32_t index_id, const char* key,
+                       uint8_t out_hash[ER_HASH_SIZE]);
+int er_store_index_get_entry(er_store_t* store, uint32_t index_id, const char* key,
+                             er_index_entry_t* out_entry);
 
-int er_store_index_scan_prefix(er_store_t* store, const char* prefix, er_index_entry_t* out_entries,
-                               size_t max_entries, size_t* out_count);
-int er_store_index_scan_prefix_ex(er_store_t* store, uint32_t index_id, const char* prefix,
-                                  er_index_entry_t* out_entries, size_t max_entries, size_t* out_count);
+int er_store_index_scan_prefix(er_store_t* store, uint32_t index_id, const char* prefix,
+                               er_index_entry_t* out_entries, size_t max_entries, size_t* out_count);
 int er_store_index_cursor_open(er_store_t* store, uint32_t index_id, const char* prefix,
                                er_store_index_cursor_t* out_cursor);
 int er_store_index_cursor_next(er_store_index_cursor_t* cursor, er_index_entry_t* out_entry);

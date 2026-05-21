@@ -29,14 +29,14 @@ typedef UINT8 (*ErCryptoSignFn)(void* ctx, const ErByteSpan* preimage, ErWorkSig
 typedef UINT8 (*ErCryptoVerifyFn)(void* ctx, const ErIdentity* identity, const ErByteSpan* preimage,
                                   const ErWorkSignature* signature);
 
-typedef struct {
+struct ErCryptoProvider {
   void* ctx;
   ErCryptoHashFn hash;
   ErCryptoSealFn seal;
   ErCryptoOpenFn open;
   ErCryptoSignFn sign;
   ErCryptoVerifyFn verify;
-} ErCryptoProvider;
+};
 
 UINT8 er_crypto_hash(const ErCryptoProvider* provider, const UINT8* domain, UINTN domain_len,
                      const ErByteSpan* spans, UINTN span_count, ErHash* out_hash);

@@ -1,22 +1,11 @@
 #include "er_device_identity.h"
 #include "er_mem.h"
+#include "er_node_id.h"
 
 /*
  * Purpose: bind relay node identity to the device/session key and measured booted program.
  * Intention: keep relay identity derivation deterministic while leaving trust decisions to admission.
  */
-
-static const UINT8 g_device_relay_node_domain[] = "edgerun:c:v1:device:relay-node";
-
-enum {
-  ER_DEVICE_TYPE_FIELD_BYTES = 2u,
-  ER_DEVICE_RELAY_SPAN_COUNT = 3u,
-  ER_DEVICE_RELAY_TYPE_SPAN = 0u,
-  ER_DEVICE_RELAY_PROGRAM_SPAN = 1u,
-  ER_DEVICE_RELAY_IDENTITY_SPAN = 2u,
-  ER_DEVICE_BYTE_BITS = 8u,
-  ER_DEVICE_U8_MASK = 0xffu
-};
 
 static UINT8 er_device_identity_kind_valid(UINT16 kind) {
   switch (kind) {
@@ -28,14 +17,23 @@ static UINT8 er_device_identity_kind_valid(UINT16 kind) {
   }
 }
 
-static void er_device_put_u16(UINT8* dst, UINT16 value) {
-  dst[0] = (UINT8)(value & ER_DEVICE_U8_MASK);
-  dst[1] = (UINT8)((value >> ER_DEVICE_BYTE_BITS) & ER_DEVICE_U8_MASK);
-}
-
-static void er_device_span_set(ErByteSpan* span, const UINT8* bytes, UINTN len) {
-  span->bytes = bytes;
-  span->len = len;
+static UINT16 er_device_node_id_source_kind(const ErIdentity* identity) {
+  switch (identity->identity_type) {
+    case ER_IDENTITY_TYPE_PUBLIC_KEY:
+      switch (identity->backing_type) {
+        case ER_IDENTITY_BACKING_TPM_P256:
+          return ER_NODE_ID_SOURCE_TPM_P256_PUBLIC_KEY;
+        case ER_IDENTITY_BACKING_ED25519:
+        case ER_IDENTITY_BACKING_P256:
+          return ER_NODE_ID_SOURCE_PUBLIC_KEY;
+        default:
+          return 0u;
+      }
+    case ER_IDENTITY_TYPE_HASH:
+      return ER_NODE_ID_SOURCE_HASH;
+    default:
+      return 0u;
+  }
 }
 
 UINT8 er_device_identity_prepare(UINT16 kind, const ErIdentity* identity,
@@ -57,9 +55,8 @@ UINT8 er_device_relay_identity_derive(const ErCryptoProvider* crypto,
                                       const ErDeviceIdentity* device_identity,
                                       const ErHash* measured_program_hash,
                                       ErDeviceRelayIdentity* out_relay_identity) {
-  UINT8 type_bytes[ER_DEVICE_TYPE_FIELD_BYTES];
-  ErHash node_hash;
-  ErByteSpan spans[ER_DEVICE_RELAY_SPAN_COUNT];
+  UINT16 source_kind;
+  ErNodeId node_id;
 
   if (crypto == 0 || device_identity == 0 || measured_program_hash == 0 ||
       out_relay_identity == 0 ||
@@ -70,16 +67,13 @@ UINT8 er_device_relay_identity_derive(const ErCryptoProvider* crypto,
     return 0;
   }
 
-  er_device_put_u16(type_bytes, device_identity->kind);
-  er_device_span_set(&spans[ER_DEVICE_RELAY_TYPE_SPAN], type_bytes, (UINTN)sizeof(type_bytes));
-  er_device_span_set(&spans[ER_DEVICE_RELAY_PROGRAM_SPAN], measured_program_hash->bytes, ER_HASH_LEN);
-  er_device_span_set(&spans[ER_DEVICE_RELAY_IDENTITY_SPAN],
-                     (const UINT8*)&device_identity->identity,
-                     (UINTN)sizeof(device_identity->identity));
-
-  if (er_crypto_hash(crypto, g_device_relay_node_domain,
-                     (UINTN)(sizeof(g_device_relay_node_domain) - 1u),
-                     spans, ER_DEVICE_RELAY_SPAN_COUNT, &node_hash) == 0u) {
+  source_kind = er_device_node_id_source_kind(&device_identity->identity);
+  if (source_kind == 0u ||
+      er_node_id_from_material(crypto,
+                               source_kind,
+                               device_identity->identity.material,
+                               device_identity->identity.material_len,
+                               &node_id) == 0u) {
     return 0;
   }
 
@@ -90,6 +84,6 @@ UINT8 er_device_relay_identity_derive(const ErCryptoProvider* crypto,
   out_relay_identity->relay_node.abi_version = ER_WORK_ABI_VERSION;
   out_relay_identity->relay_node.role = ER_NODE_ROLE_RELAY;
   out_relay_identity->relay_node.identity = device_identity->identity;
-  er_mem_copy(out_relay_identity->relay_node.node_id.bytes, node_hash.bytes, ER_NODE_ID_LEN);
+  out_relay_identity->relay_node.node_id = node_id;
   return 1;
 }

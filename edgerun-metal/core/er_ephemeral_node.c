@@ -1,5 +1,6 @@
 #include "er_ephemeral_node.h"
 #include "er_mem.h"
+#include "er_node_id.h"
 
 /*
  * Purpose: bind a fresh boot nonce to the admission id that this node serves.
@@ -7,21 +8,18 @@
  * secrets.
  */
 
-static const UINT8 g_ephemeral_node_domain[] =
-    "edgerun:c:v1:ephemeral-node";
-
 enum {
-  ER_EPHEMERAL_NODE_ADMISSION_SPAN = 0u,
-  ER_EPHEMERAL_NODE_NONCE_SPAN = 1u,
-  ER_EPHEMERAL_NODE_SPAN_COUNT = 2u
+  ER_EPHEMERAL_NODE_ID_MATERIAL_ADMISSION_OFFSET = 0u,
+  ER_EPHEMERAL_NODE_ID_MATERIAL_NONCE_OFFSET = ER_HASH_LEN,
+  ER_EPHEMERAL_NODE_ID_MATERIAL_LEN = ER_HASH_LEN + ER_EPHEMERAL_NODE_BOOT_NONCE_LEN
 };
 
 UINT8 er_ephemeral_node_derive(const ErCryptoProvider* crypto,
                                const ErHash* admission_id,
                                const UINT8 boot_nonce[ER_EPHEMERAL_NODE_BOOT_NONCE_LEN],
                                ErEphemeralNode* out_node) {
-  ErHash node_hash;
-  ErByteSpan spans[ER_EPHEMERAL_NODE_SPAN_COUNT];
+  UINT8 node_material[ER_EPHEMERAL_NODE_ID_MATERIAL_LEN];
+  ErNodeId node_id;
 
   if (crypto == 0 ||
       admission_id == 0 ||
@@ -32,16 +30,17 @@ UINT8 er_ephemeral_node_derive(const ErCryptoProvider* crypto,
     return 0u;
   }
 
-  spans[ER_EPHEMERAL_NODE_ADMISSION_SPAN].bytes = admission_id->bytes;
-  spans[ER_EPHEMERAL_NODE_ADMISSION_SPAN].len = ER_HASH_LEN;
-  spans[ER_EPHEMERAL_NODE_NONCE_SPAN].bytes = boot_nonce;
-  spans[ER_EPHEMERAL_NODE_NONCE_SPAN].len = ER_EPHEMERAL_NODE_BOOT_NONCE_LEN;
-  if (er_crypto_hash(crypto,
-                     g_ephemeral_node_domain,
-                     (UINTN)(sizeof(g_ephemeral_node_domain) - 1u),
-                     spans,
-                     ER_EPHEMERAL_NODE_SPAN_COUNT,
-                     &node_hash) == 0u) {
+  er_mem_copy(node_material + ER_EPHEMERAL_NODE_ID_MATERIAL_ADMISSION_OFFSET,
+              admission_id->bytes,
+              ER_HASH_LEN);
+  er_mem_copy(node_material + ER_EPHEMERAL_NODE_ID_MATERIAL_NONCE_OFFSET,
+              boot_nonce,
+              ER_EPHEMERAL_NODE_BOOT_NONCE_LEN);
+  if (er_node_id_from_material(crypto,
+                               ER_NODE_ID_SOURCE_ENDPOINT,
+                               node_material,
+                               (UINT16)sizeof(node_material),
+                               &node_id) == 0u) {
     return 0u;
   }
 
@@ -51,7 +50,7 @@ UINT8 er_ephemeral_node_derive(const ErCryptoProvider* crypto,
   er_mem_copy(out_node->boot_nonce,
               boot_nonce,
               ER_EPHEMERAL_NODE_BOOT_NONCE_LEN);
-  er_mem_copy(out_node->node_id.bytes, node_hash.bytes, ER_NODE_ID_LEN);
+  out_node->node_id = node_id;
   return 1u;
 }
 

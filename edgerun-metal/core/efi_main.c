@@ -2,10 +2,6 @@
 #include "er_tpm_acpi.h"
 #include "er_tpm_bench.h"
 
-#ifndef ER_BOOT_EPHEMERAL_AUTHORITY_ENABLED
-#define ER_BOOT_EPHEMERAL_AUTHORITY_ENABLED 0
-#endif
-
 void er_run_invalid_boot_path(void) {
   er_print("invalid boot path: ");
   er_print_u64_dec((UINT64)ER_BOOT_PROFILE);
@@ -38,9 +34,6 @@ static void er_boot_services_print_report(const ErBootServicesReport* report) {
     er_print(er_boot_admission_mode_label(report->boot_admission.admission_mode));
     er_print(" channel=");
     er_print(er_boot_bootstrap_channel_label(report->boot_admission.bootstrap_channel_kind));
-    if (er_boot_services_report_has_ephemeral_admission(report) != 0u) {
-      er_print(" authority=ephemeral");
-    }
   }
   er_println("");
 }
@@ -142,33 +135,12 @@ static void er_boot_services_apply_admission(EFI_SYSTEM_TABLE* SystemTable,
     return;
   }
 
-#if ER_BOOT_EPHEMERAL_AUTHORITY_ENABLED
-  if (er_boot_admission_record_prepare_ephemeral_authority(&crypto,
-                                                           ER_BOOT_DEFAULT_ADMISSION_GENERATION,
-                                                           ER_BOOT_BOOTSTRAP_CHANNEL_NATIVE_ETH,
-                                                           0u,
-                                                           0u,
-                                                           ER_BOOT_PROFILE,
-                                                           &record) == 0u ||
-      er_boot_services_set_boot_admission(report, &crypto, &record) == 0u) {
-    er_println("boot admission: ephemeral authority unavailable");
-    return;
-  }
-
-  er_print("boot admission: ephemeral ");
-  er_print(er_boot_admission_mode_label(record.admission_mode));
-  er_print(" channel=");
-  er_print(er_boot_bootstrap_channel_label(record.bootstrap_channel_kind));
-  er_println("");
-  return;
-#endif
-
-  if (er_boot_admission_record_prepare_local(&crypto,
-                                             ER_BOOT_DEFAULT_ADMISSION_GENERATION,
-                                             ER_BOOT_BOOTSTRAP_CHANNEL_NATIVE_ETH,
-                                             0u,
-                                             0u,
-                                             &record) == 0u ||
+  if (er_boot_admission_record_prepare(&crypto,
+                                       ER_BOOT_DEFAULT_ADMISSION_GENERATION,
+                                       ER_BOOT_BOOTSTRAP_CHANNEL_NATIVE_ETH,
+                                       0u,
+                                       0u,
+                                       &record) == 0u ||
       er_boot_services_set_boot_admission(report, &crypto, &record) == 0u) {
     er_println("boot admission: default local record unavailable");
     return;

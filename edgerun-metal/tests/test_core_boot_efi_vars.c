@@ -94,13 +94,13 @@ static void test_boot_efi_vars(void) {
               er_boot_efi_vars_read_admission(&system_table, &crypto, &read_record),
               ER_BOOT_EFI_VAR_ADMISSION_MISSING);
 
-  check_int64("boot efi var prepare local",
-              er_boot_admission_record_prepare_local(&crypto,
-                                                     BOOT_EFI_VARS_TEST_GENERATION,
-                                                     ER_BOOT_BOOTSTRAP_CHANNEL_NATIVE_ETH,
-                                                     0u,
-                                                     0u,
-                                                     &record),
+  check_int64("boot efi var prepare",
+              er_boot_admission_record_prepare(&crypto,
+                                               BOOT_EFI_VARS_TEST_GENERATION,
+                                               ER_BOOT_BOOTSTRAP_CHANNEL_NATIVE_ETH,
+                                               0u,
+                                               0u,
+                                               &record),
               1);
   check_int64("boot efi var write",
               er_boot_efi_vars_write_admission(&system_table, &crypto, &record), 1);

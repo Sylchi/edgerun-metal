@@ -314,7 +314,7 @@ static size_t er_store_cstr_len(const char* text, size_t cap, int* ok) {
   return cap;
 }
 
-static int er_store_key_equal_ex(const ErStoreKeySlot* slot, uint32_t index_id, const char* key, size_t key_len) {
+static int er_store_index_key_equal(const ErStoreKeySlot* slot, uint32_t index_id, const char* key, size_t key_len) {
   if (slot->index_id != index_id || slot->key_len != key_len) {
     return 0;
   }
@@ -343,7 +343,7 @@ static size_t er_store_hash_slot(const uint8_t hash[ER_HASH_SIZE], size_t cap) {
   return value & (cap - 1u);
 }
 
-static size_t er_store_key_slot_ex(uint32_t index_id, const char* key, size_t key_len, size_t cap) {
+static size_t er_store_index_key_slot(uint32_t index_id, const char* key, size_t key_len, size_t cap) {
   size_t i;
   size_t value = index_id;
 
@@ -472,14 +472,14 @@ static void er_store_cache_blob(er_store_t* store, size_t slot, const void* data
 }
 
 //@optimizer-ignore-function fixed-capacity key table indexes the caller-provided arena
-static int er_store_find_key_ex(er_store_t* store, uint32_t index_id, const char* key, size_t key_len,
-                                size_t* out_slot) {
+static int er_store_find_index_key(er_store_t* store, uint32_t index_id, const char* key, size_t key_len,
+                                   size_t* out_slot) {
   ErStoreKeySlot* slots = er_store_keys(store);
   size_t start;
   size_t i;
   size_t slot;
 
-  start = er_store_key_slot_ex(index_id, key, key_len, store->key_capacity);
+  start = er_store_index_key_slot(index_id, key, key_len, store->key_capacity);
   slot = start;
   for (i = 0u; i < store->key_capacity; ++i) {
     if (slots[slot].used == 0u) {
@@ -488,7 +488,7 @@ static int er_store_find_key_ex(er_store_t* store, uint32_t index_id, const char
       }
       return ER_ERR_NOTFOUND;
     }
-    if (er_store_key_equal_ex(&slots[slot], index_id, key, key_len)) {
+    if (er_store_index_key_equal(&slots[slot], index_id, key, key_len)) {
       if (out_slot != (size_t*)0) {
         *out_slot = slot;
       }
@@ -508,7 +508,7 @@ static int er_store_insert_key_meta(er_store_t* store, uint32_t index_id, const 
                                     uint32_t content_type, uint64_t value_size) {
   ErStoreKeySlot* slots = er_store_keys(store);
   size_t slot;
-  int found = er_store_find_key_ex(store, index_id, key, key_len, &slot);
+  int found = er_store_find_index_key(store, index_id, key, key_len, &slot);
 
   if (found != ER_OK && found != ER_ERR_NOTFOUND) {
     return found;
@@ -532,8 +532,8 @@ static int er_store_insert_key_meta(er_store_t* store, uint32_t index_id, const 
   return ER_OK;
 }
 
-static int er_store_insert_key_ex(er_store_t* store, uint32_t index_id, const char* key, size_t key_len,
-                                  const uint8_t hash[ER_HASH_SIZE]) {
+static int er_store_insert_index_key(er_store_t* store, uint32_t index_id, const char* key, size_t key_len,
+                                     const uint8_t hash[ER_HASH_SIZE]) {
   return er_store_insert_key_meta(store, index_id, key, key_len, hash, ER_STORE_VALUE_UNKNOWN, ER_STORE_TYPE_RAW, 0u);
 }
 
@@ -1015,8 +1015,8 @@ static int er_store_apply_index_payload(er_store_t* store, uint64_t payload_off,
       payload_len != ((uint64_t)key_off + (uint64_t)key_len + ER_HASH_SIZE)) {
     return ER_ERR_CORRUPT;
   }
-  return er_store_insert_key_ex(store, index_id, (const char*)&payload[key_off], key_len,
-                                &payload[key_off + key_len]);
+  return er_store_insert_index_key(store, index_id, (const char*)&payload[key_off], key_len,
+                                  &payload[key_off + key_len]);
 }
 
 //@optimizer-ignore-function blob type records use fixed 64-bit payload offsets from the log
@@ -1433,8 +1433,8 @@ static int er_store_append_record(er_store_t* store, uint16_t type, const void* 
 }
 
 //@optimizer-ignore-function open scans fixed 64-bit record log offsets from IO size
-int er_store_open_config(er_store_t* store, er_io_t io, void* arena, size_t arena_len,
-                         const er_store_config_t* config) {
+int er_store_open(er_store_t* store, er_io_t io, void* arena, size_t arena_len,
+                  const er_store_config_t* config) {
   uint64_t io_size;
   int rc;
 
@@ -1470,10 +1470,6 @@ int er_store_open_config(er_store_t* store, er_io_t io, void* arena, size_t aren
     return rc;
   }
   return er_store_write_superblock(store);
-}
-
-int er_store_open(er_store_t* store, er_io_t io, void* arena, size_t arena_len) {
-  return er_store_open_config(store, io, arena, arena_len, (const er_store_config_t*)0);
 }
 
 int er_store_close(er_store_t* store) {
@@ -1868,8 +1864,8 @@ int er_store_define_index(er_store_t* store, uint32_t index_id, uint32_t content
   return er_store_insert_index_def(store, index_id, content_type, name, name_len);
 }
 
-int er_store_index_put_ex(er_store_t* store, uint32_t index_id, const char* key,
-                          const uint8_t hash[ER_HASH_SIZE]) {
+int er_store_index_put(er_store_t* store, uint32_t index_id, const char* key,
+                       const uint8_t hash[ER_HASH_SIZE]) {
   uint8_t payload[ER_STORE_INDEX_PAYLOAD_OVERHEAD + ER_STORE_MAX_KEY];
   uint8_t payload_hash[ER_HASH_SIZE];
   size_t key_len;
@@ -1898,7 +1894,7 @@ int er_store_index_put_ex(er_store_t* store, uint32_t index_id, const char* key,
   if (rc != ER_OK) {
     return rc;
   }
-  return er_store_insert_key_ex(store, index_id, key, key_len, hash);
+  return er_store_insert_index_key(store, index_id, key, key_len, hash);
 }
 
 //@optimizer-ignore-function projection records use fixed hash bytes and fixed 64-bit value sizes
@@ -1975,18 +1971,14 @@ int er_store_object_index_put(er_store_t* store, uint32_t index_id, const char* 
                                     ER_STORE_TYPE_OBJECT_MANIFEST, object_size);
 }
 
-int er_store_index_put(er_store_t* store, const char* key, const uint8_t hash[ER_HASH_SIZE]) {
-  return er_store_index_put_ex(store, ER_STORE_INDEX_DEFAULT, key, hash);
-}
-
-int er_store_index_get_ex(er_store_t* store, uint32_t index_id, const char* key, uint8_t out_hash[ER_HASH_SIZE]) {
+int er_store_index_get(er_store_t* store, uint32_t index_id, const char* key, uint8_t out_hash[ER_HASH_SIZE]) {
   er_index_entry_t entry;
   int rc;
 
   if (out_hash == (uint8_t*)0) {
     return ER_ERR_BADARG;
   }
-  rc = er_store_index_get_entry_ex(store, index_id, key, &entry);
+  rc = er_store_index_get_entry(store, index_id, key, &entry);
   if (rc != ER_OK) {
     return rc;
   }
@@ -1994,12 +1986,8 @@ int er_store_index_get_ex(er_store_t* store, uint32_t index_id, const char* key,
   return ER_OK;
 }
 
-int er_store_index_get(er_store_t* store, const char* key, uint8_t out_hash[ER_HASH_SIZE]) {
-  return er_store_index_get_ex(store, ER_STORE_INDEX_DEFAULT, key, out_hash);
-}
-
-int er_store_index_get_entry_ex(er_store_t* store, uint32_t index_id, const char* key,
-                                er_index_entry_t* out_entry) {
+int er_store_index_get_entry(er_store_t* store, uint32_t index_id, const char* key,
+                             er_index_entry_t* out_entry) {
   ErStoreKeySlot* slots;
   size_t key_len;
   size_t slot_index;
@@ -2013,17 +2001,13 @@ int er_store_index_get_entry_ex(er_store_t* store, uint32_t index_id, const char
   if (key_ok == 0 || key_len == 0u || key_len > ER_STORE_MAX_KEY) {
     return ER_ERR_BADARG;
   }
-  rc = er_store_find_key_ex(store, index_id, key, key_len, &slot_index);
+  rc = er_store_find_index_key(store, index_id, key, key_len, &slot_index);
   if (rc != ER_OK) {
     return rc;
   }
   slots = er_store_keys(store);
   er_store_fill_index_entry(out_entry, &slots[slot_index]);
   return ER_OK;
-}
-
-int er_store_index_get_entry(er_store_t* store, const char* key, er_index_entry_t* out_entry) {
-  return er_store_index_get_entry_ex(store, ER_STORE_INDEX_DEFAULT, key, out_entry);
 }
 
 int er_store_index_cursor_open(er_store_t* store, uint32_t index_id, const char* prefix,
@@ -2080,8 +2064,8 @@ int er_store_index_cursor_next(er_store_index_cursor_t* cursor, er_index_entry_t
   return ER_ERR_NOTFOUND;
 }
 
-int er_store_index_scan_prefix_ex(er_store_t* store, uint32_t index_id, const char* prefix,
-                                  er_index_entry_t* out_entries, size_t max_entries, size_t* out_count) {
+int er_store_index_scan_prefix(er_store_t* store, uint32_t index_id, const char* prefix,
+                               er_index_entry_t* out_entries, size_t max_entries, size_t* out_count) {
   er_store_index_cursor_t cursor;
   er_index_entry_t scratch;
   size_t count = 0u;
@@ -2113,11 +2097,6 @@ int er_store_index_scan_prefix_ex(er_store_t* store, uint32_t index_id, const ch
     }
     ++count;
   }
-}
-
-int er_store_index_scan_prefix(er_store_t* store, const char* prefix, er_index_entry_t* out_entries,
-                               size_t max_entries, size_t* out_count) {
-  return er_store_index_scan_prefix_ex(store, ER_STORE_INDEX_DEFAULT, prefix, out_entries, max_entries, out_count);
 }
 
 //@optimizer-ignore-function verify scans fixed 64-bit record log offsets from IO size

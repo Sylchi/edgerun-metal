@@ -3,7 +3,7 @@
 
 /*
  * Purpose: describe the minimal durable boot authority choice.
- * Intention: keep first boot to local authority or one external admission identity plus a bootstrap channel.
+ * Intention: keep first boot bound to one local authority plus a bootstrap channel.
  */
 
 #include "er_crypto.h"
@@ -15,7 +15,6 @@
 #define ER_BOOT_ADMISSION_RECORD_HASHED_BYTES 112u
 
 #define ER_BOOT_ADMISSION_MODE_LOCAL 1u
-#define ER_BOOT_ADMISSION_MODE_EXTERNAL 2u
 
 #define ER_BOOT_BOOTSTRAP_CHANNEL_NONE 0u
 #define ER_BOOT_BOOTSTRAP_CHANNEL_NATIVE_ETH 1u
@@ -37,26 +36,12 @@ typedef struct {
 
 void er_boot_admission_record_clear(ErBootAdmissionRecord* record);
 UINT8 er_boot_admission_channel_valid(UINT8 channel_kind);
-UINT8 er_boot_admission_record_prepare_local(const ErCryptoProvider* crypto,
-                                             UINT32 generation,
-                                             UINT8 bootstrap_channel_kind,
-                                             UINT16 bootstrap_pci_vendor_id,
-                                             UINT16 bootstrap_pci_device_id,
-                                             ErBootAdmissionRecord* out_record);
-UINT8 er_boot_admission_record_prepare_external(const ErCryptoProvider* crypto,
-                                                UINT32 generation,
-                                                UINT8 bootstrap_channel_kind,
-                                                UINT16 bootstrap_pci_vendor_id,
-                                                UINT16 bootstrap_pci_device_id,
-                                                const ErIdentity* admission_identity,
-                                                ErBootAdmissionRecord* out_record);
-UINT8 er_boot_admission_record_prepare_ephemeral_authority(const ErCryptoProvider* crypto,
-                                                           UINT32 generation,
-                                                           UINT8 bootstrap_channel_kind,
-                                                           UINT16 bootstrap_pci_vendor_id,
-                                                           UINT16 bootstrap_pci_device_id,
-                                                           UINT32 boot_profile,
-                                                           ErBootAdmissionRecord* out_record);
+UINT8 er_boot_admission_record_prepare(const ErCryptoProvider* crypto,
+                                       UINT32 generation,
+                                       UINT8 bootstrap_channel_kind,
+                                       UINT16 bootstrap_pci_vendor_id,
+                                       UINT16 bootstrap_pci_device_id,
+                                       ErBootAdmissionRecord* out_record);
 UINT8 er_boot_admission_record_hash(const ErCryptoProvider* crypto,
                                     const ErBootAdmissionRecord* record,
                                     ErHash* out_hash);

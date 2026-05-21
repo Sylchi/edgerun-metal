@@ -261,12 +261,11 @@ void erwire_send(UINT16 kind, UINT16 flags, const UINT8* payload, UINT32 payload
   er_mem_zero((UINT8*)&intent, (UINTN)sizeof(intent));
   intent.abi_version = ER_WORK_ABI_VERSION;
   erwire_prepare_memory_endpoint(&intent.from);
-  if (g_use_native_eth != 0u && g_native_eth != 0) {
-    intent.to = g_native_eth_endpoint;
-    (void)er_hw_relay_forward_to_native_eth(g_native_eth, &intent, g_packet, (UINTN)send_len);
-  } else if (er_hw_relay_default_firmware_udp_endpoint(&intent.to) != 0u) {
-    (void)er_hw_relay_forward_to_firmware_udp(&intent, g_packet, (UINTN)send_len);
+  if (g_use_native_eth == 0u || g_native_eth == 0) {
+    return;
   }
+  intent.to = g_native_eth_endpoint;
+  (void)er_hw_relay_forward_to_native_eth(g_native_eth, &intent, g_packet, (UINTN)send_len);
 }
 
 void erwire_send_text(const char* s) {
