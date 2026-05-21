@@ -61,6 +61,12 @@ case "$font_output" in
   *) printf 'ui-owned varfont scope did not choose varfont-test\n' >&2; exit 1 ;;
 esac
 
+storage_output=$("$REPO_PROGRESS" --print-plan repo-progress storage)
+case "$storage_output" in
+  *"+ make storage-test"*) ;;
+  *) printf 'storage scope did not choose storage-test\n' >&2; exit 1 ;;
+esac
+
 wasm_output=$("$REPO_PROGRESS" --print-plan repo-progress tools/wasm-compile)
 case "$wasm_output" in
   *"+ make repo-test"*) ;;

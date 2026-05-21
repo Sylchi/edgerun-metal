@@ -1312,6 +1312,7 @@ static const char *test_target_for_scope(const char *scope) {
     if (strcmp(scope, "edgerun-ui-core") == 0) return "ui-core-test";
     if (strcmp(scope, "varfont") == 0) return "varfont-test";
     if (strcmp(scope, "edgerun-crypto") == 0) return "crypto-test";
+    if (strcmp(scope, "storage") == 0) return "storage-test";
     if (strcmp(scope, "edgerun-metal") == 0) return "edgerun-check";
     return "repo-test";
 }

@@ -179,6 +179,26 @@ case "$crypto_plan" in
   * ) printf 'missing direct crypto test execution step\n' >&2; exit 1 ;;
 esac
 
+storage_plan=$("$ER_BUILD" --print-plan storage-test)
+
+case "$storage_plan" in
+  *"cmake"* | *"ninja"* | *"ctest"* )
+    printf 'storage-test plan still depends on external build orchestration\n' >&2
+    exit 1
+    ;;
+  * ) ;;
+esac
+
+case "$storage_plan" in
+  *"+ toolchain/bin/clang -std=c11 -Wall -Wextra -Werror -O2 -o .build/er-build-out/storage/test_store -Istorage/include -Iedgerun-crypto/include -Iinclude storage/tests/test_store.c storage/src/er_store.c edgerun-crypto/src/er_blake3.c"* ) ;;
+  * ) printf 'missing direct storage test compile step\n' >&2; exit 1 ;;
+esac
+
+case "$storage_plan" in
+  *"+ .build/er-build-out/storage/test_store"* ) ;;
+  * ) printf 'missing direct storage test execution step\n' >&2; exit 1 ;;
+esac
+
 varfont_plan=$("$ER_BUILD" --print-plan varfont-test)
 
 case "$varfont_plan" in
