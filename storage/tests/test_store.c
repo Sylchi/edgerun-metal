@@ -25,6 +25,7 @@ typedef struct {
   uint64_t size;
   uint32_t block_bytes;
   unsigned int sync_count;
+  unsigned int read_count;
 } TestIo;
 
 static int g_failed = 0;
@@ -72,6 +73,7 @@ static int test_read_at(void* ctx, uint64_t off, void* buf, size_t len) {
     return -1;
   }
   test_copy(buf, &io->bytes[off], len);
+  ++io->read_count;
   return 0;
 }
 
@@ -369,7 +371,7 @@ static void test_verify_detects_wrong_hash(void) {
   check_int("verify wrong hash", er_store_verify(&store), ER_ERR_CORRUPT);
 }
 
-static void test_configured_cache_and_capacities(void) {
+static void test_configured_capacities_and_explicit_reads(void) {
   static uint8_t arena[TEST_LARGE_ARENA_SIZE];
   TestIo io;
   er_store_t store;
@@ -378,6 +380,7 @@ static void test_configured_cache_and_capacities(void) {
   uint8_t hash[ER_HASH_SIZE];
   uint8_t out[16];
   size_t out_len = 0u;
+  unsigned int reads_before_get;
   static const uint8_t data[] = {81u, 82u, 83u, 84u};
 
   test_zero(&io, sizeof(io));
@@ -386,20 +389,18 @@ static void test_configured_cache_and_capacities(void) {
   config.key_slots = 8192u;
   config.type_slots = 1024u;
   config.index_slots = 1024u;
-  config.cache_bytes = 65536u;
   check_int("open configured", er_store_open(&store, test_make_io(&io), arena, sizeof(arena), &config),
             ER_OK);
   check_int("stats configured", er_store_stats(&store, &stats), ER_OK);
   check_size("configured blob slots", stats.blob_slots, 8192u);
   check_size("configured key slots", stats.key_slots, 8192u);
-  check_size("configured cache bytes", stats.cache_bytes, config.cache_bytes);
   check_int("configured put", er_store_put_blob(&store, data, sizeof(data), hash), ER_OK);
+  reads_before_get = io.read_count;
   check_int("configured get", er_store_get_blob(&store, hash, out, sizeof(out), &out_len), ER_OK);
-  check_int("configured stats after cache", er_store_stats(&store, &stats), ER_OK);
-  check_size("configured cache used", stats.cache_used, sizeof(data));
-  check_size("configured cache admissions", stats.cache_admissions, 1u);
-  check_size("configured cache hits", stats.cache_hits, 1u);
-  check_size("configured cache misses", stats.cache_misses, 0u);
+  check_int("configured get reads backing io",
+            (int)(io.read_count > reads_before_get), 1);
+  check_size("configured get len", out_len, sizeof(data));
+  check_bytes("configured get bytes", out, data, sizeof(data));
 }
 
 static void test_arena_size_and_reserved_types(void) {
@@ -427,7 +428,6 @@ static void test_arena_size_and_reserved_types(void) {
   config.key_slots = 8192u;
   config.type_slots = 1024u;
   config.index_slots = 1024u;
-  config.cache_bytes = 65536u;
   check_int("arena min configured",
             er_store_arena_min_size(&config, &configured_min), ER_OK);
   check_int("arena configured grows",
@@ -572,7 +572,7 @@ int main(void) {
   test_sdcard_block_backing_roundtrip();
   test_sdcard_block_backing_truncates_aligned_tail();
   test_verify_detects_wrong_hash();
-  test_configured_cache_and_capacities();
+  test_configured_capacities_and_explicit_reads();
   test_arena_size_and_reserved_types();
   test_typed_blob_and_custom_index_rebuild();
   test_chunked_object_roundtrip_and_chunk_reuse();

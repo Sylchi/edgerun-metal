@@ -23,7 +23,6 @@ enum {
   BENCH_STORE_KEY_SLOTS = 131072u,
   BENCH_STORE_TYPE_SLOTS = 1024u,
   BENCH_STORE_INDEX_SLOTS = 1024u,
-  BENCH_STORE_CACHE_BYTES = 32u * 1024u * 1024u,
   BENCH_STORE_NS_PER_SECOND = 1000000000ull,
   BENCH_STORE_BYTES_PER_MIB = 1024u * 1024u,
   BENCH_STORE_PATTERN_MULT = 131u,
@@ -152,7 +151,6 @@ static int bench_store_open(er_store_t* store, BenchIo* io, uint8_t* arena) {
   config.key_slots = BENCH_STORE_KEY_SLOTS;
   config.type_slots = BENCH_STORE_TYPE_SLOTS;
   config.index_slots = BENCH_STORE_INDEX_SLOTS;
-  config.cache_bytes = BENCH_STORE_CACHE_BYTES;
   return er_store_open(store, bench_make_io(io), arena, BENCH_STORE_ARENA_BYTES, &config);
 }
 
@@ -291,7 +289,6 @@ static void bench_index_key(char* out, size_t out_len, size_t value) {
 
 static int bench_index(BenchIo* io, uint8_t* arena, uint8_t* data, const char* label, size_t count) {
   er_store_t store;
-  er_store_stats_t stats;
   uint8_t hash[ER_HASH_SIZE];
   uint8_t got[ER_HASH_SIZE];
   char key[ER_STORE_MAX_KEY];
@@ -355,11 +352,6 @@ static int bench_index(BenchIo* io, uint8_t* arena, uint8_t* data, const char* l
   elapsed = bench_store_now_ns() - start;
   printf("%s-prefix %5u hits %9.2f keys/s\n", label, (unsigned)cursor_count,
          ((double)cursor_count * (double)BENCH_STORE_NS_PER_SECOND) / (double)elapsed);
-  if (er_store_stats(&store, &stats) != ER_OK) {
-    return 0;
-  }
-  printf("%s-cache hits=%zu misses=%zu admissions=%zu rejects=%zu\n",
-         label, stats.cache_hits, stats.cache_misses, stats.cache_admissions, stats.cache_rejects);
   return cursor_count != 0u ? 1 : 0;
 }
 
