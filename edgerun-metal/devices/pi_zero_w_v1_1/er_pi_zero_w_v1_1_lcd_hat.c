@@ -19,6 +19,7 @@
 #define ER_PI_ZERO_W_V1_1_LCD_L2_Y 106u
 #define ER_PI_ZERO_W_V1_1_LCD_OTA_Y 128u
 #define ER_PI_ZERO_W_V1_1_LCD_HEARTBEAT_Y 150u
+#define ER_PI_ZERO_W_V1_1_LCD_KEYS_Y 172u
 #define ER_PI_ZERO_W_V1_1_LCD_HEX_DIGITS 8u
 #define ER_PI_ZERO_W_V1_1_LCD_HEX_PREFIX_BYTES 2u
 #define ER_PI_ZERO_W_V1_1_LCD_LABEL_STATUS "BOOT"
@@ -27,6 +28,7 @@
 #define ER_PI_ZERO_W_V1_1_LCD_LABEL_L2 "L2"
 #define ER_PI_ZERO_W_V1_1_LCD_LABEL_OTA "OTA"
 #define ER_PI_ZERO_W_V1_1_LCD_LABEL_HB "HB"
+#define ER_PI_ZERO_W_V1_1_LCD_LABEL_KEYS "KEYS"
 #define ER_PI_ZERO_W_V1_1_LCD_TEXT_ON "ON"
 #define ER_PI_ZERO_W_V1_1_LCD_TEXT_OFF "OFF"
 #define ER_PI_ZERO_W_V1_1_LCD_TEXT_EDGERUN "EDGERUN"
@@ -174,6 +176,14 @@ static void er_pi_zero_w_v1_1_lcd_gpio_init(void) {
                                      ER_PI_ZERO_W_V1_1_GPIO_GPFSEL0);
   fsel0 = er_pi_zero_w_v1_1_gpio_fsel_alt(
       fsel0,
+      ER_PI_ZERO_W_V1_1_GPIO_PIN_LCD_JOYSTICK_LEFT,
+      ER_PI_ZERO_W_V1_1_GPIO_INPUT);
+  fsel0 = er_pi_zero_w_v1_1_gpio_fsel_alt(
+      fsel0,
+      ER_PI_ZERO_W_V1_1_GPIO_PIN_LCD_JOYSTICK_UP,
+      ER_PI_ZERO_W_V1_1_GPIO_INPUT);
+  fsel0 = er_pi_zero_w_v1_1_gpio_fsel_alt(
+      fsel0,
       ER_PI_ZERO_W_V1_1_GPIO_PIN_LCD_CS,
       ER_PI_ZERO_W_V1_1_GPIO_ALT0);
   er_pi_zero_w_v1_1_lcd_write(ER_PI_ZERO_W_V1_1_GPIO_BASE,
@@ -182,6 +192,18 @@ static void er_pi_zero_w_v1_1_lcd_gpio_init(void) {
 
   fsel1 = er_pi_zero_w_v1_1_lcd_read(ER_PI_ZERO_W_V1_1_GPIO_BASE,
                                      ER_PI_ZERO_W_V1_1_GPIO_GPFSEL1);
+  fsel1 = er_pi_zero_w_v1_1_gpio_fsel_alt(
+      fsel1,
+      ER_PI_ZERO_W_V1_1_GPIO_PIN_LCD_JOYSTICK_PRESS,
+      ER_PI_ZERO_W_V1_1_GPIO_INPUT);
+  fsel1 = er_pi_zero_w_v1_1_gpio_fsel_alt(
+      fsel1,
+      ER_PI_ZERO_W_V1_1_GPIO_PIN_LCD_KEY3,
+      ER_PI_ZERO_W_V1_1_GPIO_INPUT);
+  fsel1 = er_pi_zero_w_v1_1_gpio_fsel_alt(
+      fsel1,
+      ER_PI_ZERO_W_V1_1_GPIO_PIN_LCD_JOYSTICK_DOWN,
+      ER_PI_ZERO_W_V1_1_GPIO_INPUT);
   fsel1 = er_pi_zero_w_v1_1_gpio_fsel_alt(
       fsel1,
       ER_PI_ZERO_W_V1_1_GPIO_PIN_LCD_MOSI,
@@ -198,12 +220,24 @@ static void er_pi_zero_w_v1_1_lcd_gpio_init(void) {
                                      ER_PI_ZERO_W_V1_1_GPIO_GPFSEL2);
   fsel2 = er_pi_zero_w_v1_1_gpio_fsel_alt(
       fsel2,
+      ER_PI_ZERO_W_V1_1_GPIO_PIN_LCD_KEY2,
+      ER_PI_ZERO_W_V1_1_GPIO_INPUT);
+  fsel2 = er_pi_zero_w_v1_1_gpio_fsel_alt(
+      fsel2,
+      ER_PI_ZERO_W_V1_1_GPIO_PIN_LCD_KEY1,
+      ER_PI_ZERO_W_V1_1_GPIO_INPUT);
+  fsel2 = er_pi_zero_w_v1_1_gpio_fsel_alt(
+      fsel2,
       ER_PI_ZERO_W_V1_1_GPIO_PIN_LCD_BL,
       ER_PI_ZERO_W_V1_1_GPIO_OUTPUT);
   fsel2 = er_pi_zero_w_v1_1_gpio_fsel_alt(
       fsel2,
       ER_PI_ZERO_W_V1_1_GPIO_PIN_LCD_DC,
       ER_PI_ZERO_W_V1_1_GPIO_OUTPUT);
+  fsel2 = er_pi_zero_w_v1_1_gpio_fsel_alt(
+      fsel2,
+      ER_PI_ZERO_W_V1_1_GPIO_PIN_LCD_JOYSTICK_RIGHT,
+      ER_PI_ZERO_W_V1_1_GPIO_INPUT);
   fsel2 = er_pi_zero_w_v1_1_gpio_fsel_alt(
       fsel2,
       ER_PI_ZERO_W_V1_1_GPIO_PIN_LCD_RST,
@@ -223,6 +257,66 @@ static void er_pi_zero_w_v1_1_lcd_gpio_init(void) {
   er_pi_zero_w_v1_1_lcd_write(ER_PI_ZERO_W_V1_1_GPIO_BASE,
                               ER_PI_ZERO_W_V1_1_GPIO_GPPUDCLK0,
                               ER_PI_ZERO_W_V1_1_GPIO_PULL_DISABLE);
+  er_pi_zero_w_v1_1_lcd_write(ER_PI_ZERO_W_V1_1_GPIO_BASE,
+                              ER_PI_ZERO_W_V1_1_GPIO_GPPUD,
+                              ER_PI_ZERO_W_V1_1_GPIO_PULL_UP);
+  er_pi_zero_w_v1_1_lcd_delay(ER_PI_ZERO_W_V1_1_LCD_GPIO_DELAY_TICKS);
+  er_pi_zero_w_v1_1_lcd_write(
+      ER_PI_ZERO_W_V1_1_GPIO_BASE,
+      ER_PI_ZERO_W_V1_1_GPIO_GPPUDCLK0,
+      ER_PI_ZERO_W_V1_1_GPIO_PULL_CLOCK_LCD_INPUTS);
+  er_pi_zero_w_v1_1_lcd_delay(ER_PI_ZERO_W_V1_1_LCD_GPIO_DELAY_TICKS);
+  er_pi_zero_w_v1_1_lcd_write(ER_PI_ZERO_W_V1_1_GPIO_BASE,
+                              ER_PI_ZERO_W_V1_1_GPIO_GPPUDCLK0,
+                              ER_PI_ZERO_W_V1_1_GPIO_PULL_DISABLE);
+  er_pi_zero_w_v1_1_lcd_write(ER_PI_ZERO_W_V1_1_GPIO_BASE,
+                              ER_PI_ZERO_W_V1_1_GPIO_GPPUD,
+                              ER_PI_ZERO_W_V1_1_GPIO_PULL_DISABLE);
+}
+
+static UINT32 er_pi_zero_w_v1_1_lcd_active_low(UINT32 levels,
+                                               UINT32 pin_mask,
+                                               UINT32 input_mask) {
+  return (levels & pin_mask) == 0u ? input_mask : 0u;
+}
+
+UINT32 er_pi_zero_w_v1_1_lcd_hat_input_state(void) {
+  UINT32 levels;
+
+  levels = er_pi_zero_w_v1_1_lcd_read(ER_PI_ZERO_W_V1_1_GPIO_BASE,
+                                      ER_PI_ZERO_W_V1_1_GPIO_GPLEV0);
+  return er_pi_zero_w_v1_1_lcd_active_low(
+             levels,
+             ER_PI_ZERO_W_V1_1_GPIO_SET_LCD_JOYSTICK_UP,
+             ER_PI_ZERO_W_V1_1_LCD_INPUT_UP) |
+         er_pi_zero_w_v1_1_lcd_active_low(
+             levels,
+             ER_PI_ZERO_W_V1_1_GPIO_SET_LCD_JOYSTICK_DOWN,
+             ER_PI_ZERO_W_V1_1_LCD_INPUT_DOWN) |
+         er_pi_zero_w_v1_1_lcd_active_low(
+             levels,
+             ER_PI_ZERO_W_V1_1_GPIO_SET_LCD_JOYSTICK_LEFT,
+             ER_PI_ZERO_W_V1_1_LCD_INPUT_LEFT) |
+         er_pi_zero_w_v1_1_lcd_active_low(
+             levels,
+             ER_PI_ZERO_W_V1_1_GPIO_SET_LCD_JOYSTICK_RIGHT,
+             ER_PI_ZERO_W_V1_1_LCD_INPUT_RIGHT) |
+         er_pi_zero_w_v1_1_lcd_active_low(
+             levels,
+             ER_PI_ZERO_W_V1_1_GPIO_SET_LCD_JOYSTICK_PRESS,
+             ER_PI_ZERO_W_V1_1_LCD_INPUT_PRESS) |
+         er_pi_zero_w_v1_1_lcd_active_low(
+             levels,
+             ER_PI_ZERO_W_V1_1_GPIO_SET_LCD_KEY1,
+             ER_PI_ZERO_W_V1_1_LCD_INPUT_KEY1) |
+         er_pi_zero_w_v1_1_lcd_active_low(
+             levels,
+             ER_PI_ZERO_W_V1_1_GPIO_SET_LCD_KEY2,
+             ER_PI_ZERO_W_V1_1_LCD_INPUT_KEY2) |
+         er_pi_zero_w_v1_1_lcd_active_low(
+             levels,
+             ER_PI_ZERO_W_V1_1_GPIO_SET_LCD_KEY3,
+             ER_PI_ZERO_W_V1_1_LCD_INPUT_KEY3);
 }
 
 static void er_pi_zero_w_v1_1_lcd_hex(char* out, UINT32 value) {
@@ -367,6 +461,11 @@ void er_pi_zero_w_v1_1_lcd_hat_status(const ErPiZeroWV11DebugStatus* status) {
                                       ER_PI_ZERO_W_V1_1_LCD_HEARTBEAT_Y,
                                       ER_PI_ZERO_W_V1_1_LCD_LABEL_HB,
                                       status->heartbeat,
+                                      ER_ST7789_COLOR_GREEN) == 0u ||
+      er_pi_zero_w_v1_1_lcd_draw_pair(&bus,
+                                      ER_PI_ZERO_W_V1_1_LCD_KEYS_Y,
+                                      ER_PI_ZERO_W_V1_1_LCD_LABEL_KEYS,
+                                      status->input_state,
                                       ER_ST7789_COLOR_GREEN) == 0u) {
     g_er_pi_zero_w_v1_1_lcd_ready = 0u;
   }

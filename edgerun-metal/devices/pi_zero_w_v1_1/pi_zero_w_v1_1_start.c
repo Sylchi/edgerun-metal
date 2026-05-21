@@ -2610,6 +2610,7 @@ static void er_pi_zero_w_v1_1_lcd_debug_status(UINT32 heartbeat) {
   status.ota_offset = (UINT32)g_er_pi_zero_w_v1_1_ota_offset;
   status.l2_ready = g_er_pi_zero_w_v1_1_sdio_probe_state ==
                    ER_PI_ZERO_W_V1_1_L2_READY;
+  status.input_state = er_pi_zero_w_v1_1_lcd_hat_input_state();
   er_pi_zero_w_v1_1_lcd_hat_status(&status);
 }
 
