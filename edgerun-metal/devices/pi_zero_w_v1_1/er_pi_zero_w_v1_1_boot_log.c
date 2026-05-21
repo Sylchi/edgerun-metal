@@ -29,8 +29,7 @@ static void er_pi_zero_w_v1_1_boot_log_put_le32(UINT8* out, UINT32 value) {
   out[3] = (UINT8)(value >> (ER_PI_ZERO_W_V1_1_BOOT_LOG_BYTE_BITS * 3u));
 }
 
-static UINT32 er_pi_zero_w_v1_1_boot_log_crc32(const UINT8* bytes,
-                                               UINT32 len) {
+UINT32 er_pi_zero_w_v1_1_boot_log_crc32(const UINT8* bytes, UINT32 len) {
   UINT32 crc = ER_PI_ZERO_W_V1_1_BOOT_LOG_CRC_INITIAL;
   UINT32 i;
 

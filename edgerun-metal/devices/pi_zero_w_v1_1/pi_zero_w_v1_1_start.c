@@ -94,9 +94,6 @@
 #define ER_PI_ZERO_W_V1_1_NODE_HEARTBEAT_BYTES \
   (ER_PI_ZERO_W_V1_1_NODE_HEARTBEAT_BASE_BYTES + \
    ER_PI_ZERO_W_V1_1_UPDATE_STATE_BYTES)
-#define ER_PI_ZERO_W_V1_1_CRC32_INITIAL 0xffffffffu
-#define ER_PI_ZERO_W_V1_1_CRC32_POLY 0xedb88320u
-#define ER_PI_ZERO_W_V1_1_CRC32_BITS_PER_BYTE 8u
 #define ER_PI_ZERO_W_V1_1_BYTE_MASK 0xffu
 #define ER_PI_ZERO_W_V1_1_U16_HIGH_SHIFT 8u
 #define ER_PI_ZERO_W_V1_1_U32_BYTE2_SHIFT 16u
@@ -2394,25 +2391,6 @@ static UINT32 er_pi_zero_w_v1_1_get_le32_at(const UINT8* block,
          ((UINT32)block[offset + 3u] << ER_PI_ZERO_W_V1_1_U32_BYTE3_SHIFT);
 }
 
-static UINT32 er_pi_zero_w_v1_1_boot_checkpoint_crc32(const UINT8* bytes,
-                                                      UINT32 len) {
-  UINT32 crc = ER_PI_ZERO_W_V1_1_CRC32_INITIAL;
-  UINT32 i;
-
-  if (bytes == 0) {
-    return 0u;
-  }
-  for (i = 0u; i < len; ++i) {
-    UINT32 bit;
-    crc ^= (UINT32)bytes[i];
-    for (bit = 0u; bit < ER_PI_ZERO_W_V1_1_CRC32_BITS_PER_BYTE; ++bit) {
-      UINT32 mask = 0u - (crc & 1u);
-      crc = (crc >> 1u) ^ (ER_PI_ZERO_W_V1_1_CRC32_POLY & mask);
-    }
-  }
-  return ~crc;
-}
-
 static UINT8 er_pi_zero_w_v1_1_boot_checkpoint_direct_read(
     UINT8 block[ER_PI_ZERO_W_V1_1_BOOT_LOG_BLOCK_BYTES]) {
   ErPiEmmcMmioOps ops;
@@ -2461,7 +2439,7 @@ static void er_pi_zero_w_v1_1_boot_checkpoint_init(void) {
   crc_stored = er_pi_zero_w_v1_1_get_le32_at(
       block,
       ER_PI_ZERO_W_V1_1_BOOT_CHECKPOINT_CRC_OFFSET);
-  crc_actual = er_pi_zero_w_v1_1_boot_checkpoint_crc32(
+  crc_actual = er_pi_zero_w_v1_1_boot_log_crc32(
       block,
       ER_PI_ZERO_W_V1_1_BOOT_CHECKPOINT_CRC_OFFSET);
   if (crc_stored != crc_actual ||
@@ -2561,7 +2539,7 @@ static void er_pi_zero_w_v1_1_boot_checkpoint_write(UINT32 event,
       block,
       ER_PI_ZERO_W_V1_1_BOOT_CHECKPOINT_OTA_STATUS_OFFSET,
       (UINT32)g_er_pi_zero_w_v1_1_ota_status);
-  crc = er_pi_zero_w_v1_1_boot_checkpoint_crc32(
+  crc = er_pi_zero_w_v1_1_boot_log_crc32(
       block,
       ER_PI_ZERO_W_V1_1_BOOT_CHECKPOINT_CRC_OFFSET);
   er_pi_zero_w_v1_1_put_le32_at(
@@ -2901,21 +2879,6 @@ static void er_pi_zero_w_v1_1_ota_poll_owned_rx(void) {
       (UINT32)g_er_pi_zero_w_v1_1_ota_state.reboot_required);
 }
 
-static UINT32 er_pi_zero_w_v1_1_crc32(const UINT8* bytes, UINT32 len) {
-  UINT32 crc = ER_PI_ZERO_W_V1_1_CRC32_INITIAL;
-  UINT32 i;
-
-  for (i = 0u; i < len; ++i) {
-    UINT32 bit;
-    crc ^= (UINT32)bytes[i];
-    for (bit = 0u; bit < ER_PI_ZERO_W_V1_1_CRC32_BITS_PER_BYTE; ++bit) {
-      UINT32 mask = 0u - (crc & 1u);
-      crc = (crc >> 1) ^ (ER_PI_ZERO_W_V1_1_CRC32_POLY & mask);
-    }
-  }
-  return ~crc;
-}
-
 static void er_pi_zero_w_v1_1_put_update_state(UINT8** cursor) {
   er_pi_zero_w_v1_1_put_u32(
       cursor,
@@ -2952,7 +2915,8 @@ static void er_pi_zero_w_v1_1_send_erwire(UINT16 kind,
                                      ER_PI_ZERO_W_V1_1_ERWIRE_FLAG_LAST);
   er_pi_zero_w_v1_1_put_u32(&cursor, payload_len);
   er_pi_zero_w_v1_1_put_u32(&cursor,
-                            er_pi_zero_w_v1_1_crc32(payload, payload_len));
+                            er_pi_zero_w_v1_1_boot_log_crc32(payload,
+                                                             payload_len));
   er_pi_zero_w_v1_1_put_u32(&cursor, 0u);
   for (i = 0u; i < ER_PI_ZERO_W_V1_1_ERWIRE_HEADER_SIZE; ++i) {
     er_pi_zero_w_v1_1_uart_put_byte(header[i]);
