@@ -22,6 +22,11 @@
  *   IO is truncated back to the last valid end offset and indexes are rebuilt
  *   from the valid prefix. The log is the source of truth; indexes only
  *   accelerate lookups after replay.
+ *
+ * Flush policy:
+ *   Appends sync the record bytes before returning. The superblock is a compact
+ *   checkpoint and is flushed on close or after recovery, not after every
+ *   record; recovery scans the log and does not trust superblock log_end.
  */
 
 enum {
@@ -879,6 +884,7 @@ static int er_store_write_superblock(er_store_t* store) {
   if (rc != 0) {
     return ER_ERR_IO;
   }
+  store->superblock_dirty = 0;
   return ER_OK;
 }
 
@@ -1383,10 +1389,11 @@ static int er_store_append_record(er_store_t* store, uint16_t type, const void* 
   er_store_copy(store->last_record_hash, record_hash, ER_HASH_SIZE);
   store->log_end = new_end;
   ++store->next_seq;
+  store->superblock_dirty = 1;
   if (out_payload_off != (uint64_t*)0) {
     *out_payload_off = payload_off;
   }
-  return er_store_write_superblock(store);
+  return ER_OK;
 }
 
 //@optimizer-ignore-function open scans fixed 64-bit record log offsets from IO size
@@ -1436,6 +1443,9 @@ int er_store_open(er_store_t* store, er_io_t io, void* arena, size_t arena_len) 
 int er_store_close(er_store_t* store) {
   if (store == (er_store_t*)0) {
     return ER_ERR_BADARG;
+  }
+  if (store->superblock_dirty == 0) {
+    return ER_OK;
   }
   return er_store_write_superblock(store);
 }
@@ -2072,6 +2082,7 @@ int er_store_verify(er_store_t* store) {
   uint64_t saved_log_end;
   uint64_t saved_next_seq;
   uint8_t saved_hash[ER_HASH_SIZE];
+  int saved_superblock_dirty;
   int rc;
 
   if (store == (er_store_t*)0) {
@@ -2082,6 +2093,7 @@ int er_store_verify(er_store_t* store) {
   }
   saved_log_end = store->log_end;
   saved_next_seq = store->next_seq;
+  saved_superblock_dirty = store->superblock_dirty;
   er_store_copy(saved_hash, store->last_record_hash, ER_HASH_SIZE);
   rc = er_store_replay(store, io_size, 0, 0);
   if (rc == ER_OK && store->log_end != io_size) {
@@ -2089,6 +2101,7 @@ int er_store_verify(er_store_t* store) {
   }
   store->log_end = saved_log_end;
   store->next_seq = saved_next_seq;
+  store->superblock_dirty = saved_superblock_dirty;
   er_store_copy(store->last_record_hash, saved_hash, ER_HASH_SIZE);
   return rc;
 }

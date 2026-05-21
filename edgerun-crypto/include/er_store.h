@@ -117,6 +117,7 @@ typedef struct er_store {
   size_t cache_misses;
   size_t cache_admissions;
   size_t cache_rejects;
+  int superblock_dirty;
   uint64_t log_start; //@optimizer-ignore log offsets mirror the fixed 64-bit record log ABI
   uint64_t log_end; //@optimizer-ignore log offsets mirror the fixed 64-bit record log ABI
   uint64_t next_seq; //@optimizer-ignore sequence values mirror the fixed 64-bit record header ABI

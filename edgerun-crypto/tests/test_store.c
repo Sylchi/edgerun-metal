@@ -13,7 +13,10 @@ enum {
   TEST_INDEX_BY_NAME = 23u,
   TEST_OBJECT_BYTES = 8192u,
   TEST_OBJECT_CHUNK = 512u,
-  TEST_OBJECT_PATTERN_MOD = 251u
+  TEST_OBJECT_PATTERN_MOD = 251u,
+  TEST_OPEN_SYNC_COUNT = 1u,
+  TEST_APPEND_SYNC_COUNT = 1u,
+  TEST_CLOSE_SYNC_COUNT = 1u
 };
 
 typedef struct {
@@ -166,9 +169,11 @@ static void test_open_empty_store(void) {
 }
 
 static void test_put_get_and_duplicate(void) {
-  static uint8_t arena[TEST_ARENA_SIZE];
+  static uint8_t arena_a[TEST_ARENA_SIZE];
+  static uint8_t arena_b[TEST_ARENA_SIZE];
   TestIo io;
   er_store_t store;
+  er_store_t reopened;
   uint8_t hash_a[ER_HASH_SIZE];
   uint8_t hash_b[ER_HASH_SIZE];
   uint8_t out[32];
@@ -177,15 +182,25 @@ static void test_put_get_and_duplicate(void) {
   static const uint8_t data[] = {1u, 2u, 3u, 4u, 5u};
 
   test_zero(&io, sizeof(io));
-  check_int("open put", er_store_open(&store, test_make_io(&io), arena, sizeof(arena)), ER_OK);
+  check_int("open put", er_store_open(&store, test_make_io(&io), arena_a, sizeof(arena_a)), ER_OK);
+  check_int("open put syncs", (int)io.sync_count, (int)TEST_OPEN_SYNC_COUNT);
   check_int("put blob", er_store_put_blob(&store, data, sizeof(data), hash_a), ER_OK);
+  check_int("put blob syncs", (int)io.sync_count, (int)(TEST_OPEN_SYNC_COUNT + TEST_APPEND_SYNC_COUNT));
   size_after_first = io.size;
+  check_int("reopen unclosed", er_store_open(&reopened, test_make_io(&io), arena_b, sizeof(arena_b)), ER_OK);
+  check_int("reopen unclosed get", er_store_get_blob(&reopened, hash_a, out, sizeof(out), &out_len), ER_OK);
+  check_size("reopen unclosed len", out_len, sizeof(data));
+  check_bytes("reopen unclosed bytes", out, data, sizeof(data));
   check_int("duplicate blob", er_store_put_blob(&store, data, sizeof(data), hash_b), ER_OK);
   check_u64("duplicate no write", io.size, size_after_first);
   check_bytes("duplicate same hash", hash_a, hash_b, ER_HASH_SIZE);
   check_int("get blob", er_store_get_blob(&store, hash_a, out, sizeof(out), &out_len), ER_OK);
   check_size("get blob len", out_len, sizeof(data));
   check_bytes("get blob bytes", out, data, sizeof(data));
+  check_int("close put", er_store_close(&store), ER_OK);
+  check_int("close put syncs",
+            (int)io.sync_count, (int)((TEST_OPEN_SYNC_COUNT * 2u) + TEST_APPEND_SYNC_COUNT +
+                                      TEST_CLOSE_SYNC_COUNT));
 }
 
 static void test_index_and_scan(void) {
