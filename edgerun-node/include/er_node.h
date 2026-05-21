@@ -29,6 +29,8 @@
 #define ER_NODE_METHOD_REQUEST 3u
 #define ER_NODE_METHOD_SIGN 4u
 #define ER_NODE_METHOD_SPAWN 5u
+#define ER_NODE_METHOD_IMPORT 6u
+#define ER_NODE_METHOD_EXPORT 7u
 
 typedef struct er_node {
   uint64_t opaque[ER_NODE_HANDLE_BYTES / sizeof(uint64_t)];
@@ -99,5 +101,15 @@ int er_node_sign(er_node_t* node, const void* subject_canonical,
                  const void* signature, size_t signature_len,
                  void* out_signature_object, size_t out_cap,
                  size_t* out_len, uint8_t out_id[ER_OBJECT_ID_SIZE]);
+int er_node_import_object(er_node_t* node, const void* external_bytes,
+                          size_t external_len, void* out_canonical,
+                          size_t out_cap, size_t* out_len,
+                          uint8_t out_id[ER_OBJECT_ID_SIZE],
+                          er_node_receipt_t* out_receipt);
+int er_node_export_object(er_node_t* node, const void* canonical,
+                          size_t canonical_len, void* out_external,
+                          size_t out_cap, size_t* out_len,
+                          uint8_t out_id[ER_OBJECT_ID_SIZE],
+                          er_node_receipt_t* out_receipt);
 
 #endif
