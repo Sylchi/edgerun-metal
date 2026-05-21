@@ -149,9 +149,16 @@ if ! make -C "$ROOT_DIR" -n pi-zero-w-v1_1-update PI_UPDATE_IFACE=wlan0 |
   exit 1
 fi
 
-if make -C "$ROOT_DIR/edgerun-metal" -n pi-zero-w-v1_1-kernel |
-  grep -q "firmware/network/02d0.a9a6"; then
-  printf 'pi zero w v1.1 kernel build still depends on vendor WLAN firmware\n' >&2
+if ! grep -q "firmware/network/02d0.a9a6.0" "$ROOT_DIR/edgerun-metal/Makefile" ||
+  ! grep -q "PI_ZERO_W_V1_1_CYW43438_FIRMWARE_HEADER" \
+    "$ROOT_DIR/edgerun-metal/Makefile"; then
+  printf 'pi zero w v1.1 build does not declare allowed CYW43438 radio firmware inputs\n' >&2
+  exit 1
+fi
+
+if ! grep -q "only permitted vendor binary exception is device radio firmware" \
+  "$ROOT_DIR/AGENTS.md"; then
+  printf 'agent instructions do not scope the vendor radio firmware exception\n' >&2
   exit 1
 fi
 

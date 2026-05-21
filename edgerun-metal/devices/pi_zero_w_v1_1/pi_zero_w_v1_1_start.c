@@ -10,6 +10,7 @@
 #include "er_ephemeral_node.h"
 #include "er_pi_mmc.h"
 #include "er_types.h"
+#include "pi_zero_w_v1_1_cyw43438_firmware.h"
 
 /*
  * Purpose: provide the first owned ARMv6 payload for Raspberry Pi Zero W v1.1.
@@ -141,6 +142,12 @@
 #define ER_PI_ZERO_W_V1_1_CYW43438_CCCR_IO_ENABLE_ADDR 0x00000002u
 #define ER_PI_ZERO_W_V1_1_CYW43438_CCCR_IO_READY_ADDR 0x00000003u
 #define ER_PI_ZERO_W_V1_1_CYW43438_CCCR_ENABLE_FUNCTION_1 0x02u
+#define ER_PI_ZERO_W_V1_1_CYW43438_CCCR_ENABLE_FUNCTION_2 0x04u
+#define ER_PI_ZERO_W_V1_1_CYW43438_CCCR_ENABLE_FUNCTIONS_1_2 \
+  (ER_PI_ZERO_W_V1_1_CYW43438_CCCR_ENABLE_FUNCTION_1 | \
+   ER_PI_ZERO_W_V1_1_CYW43438_CCCR_ENABLE_FUNCTION_2)
+#define ER_PI_ZERO_W_V1_1_CYW43438_CCCR_F2_BLOCK_SIZE_LOW 0x00000210u
+#define ER_PI_ZERO_W_V1_1_CYW43438_CCCR_F2_BLOCK_SIZE_HIGH 0x00000211u
 #define ER_PI_ZERO_W_V1_1_CYW43438_READY_POLL_BUDGET 10000u
 #define ER_PI_ZERO_W_V1_1_CYW43438_ALP_POLL_BUDGET 100000u
 #define ER_PI_ZERO_W_V1_1_CYW43438_RESET_POLL_BUDGET 1000u
@@ -148,15 +155,29 @@
 #define ER_PI_ZERO_W_V1_1_CYW43438_FUNC1_SBADDRLOW 0x0001000au
 #define ER_PI_ZERO_W_V1_1_CYW43438_FUNC1_SBADDRMID 0x0001000bu
 #define ER_PI_ZERO_W_V1_1_CYW43438_FUNC1_SBADDRHIGH 0x0001000cu
+#define ER_PI_ZERO_W_V1_1_CYW43438_FUNC1_WATERMARK 0x00010008u
 #define ER_PI_ZERO_W_V1_1_CYW43438_FUNC1_CHIPCLKCSR 0x0001000eu
 #define ER_PI_ZERO_W_V1_1_CYW43438_FUNC1_SDIOPULLUP 0x0001000fu
 #define ER_PI_ZERO_W_V1_1_CYW43438_FORCE_HW_CLKREQ_OFF 0x20u
 #define ER_PI_ZERO_W_V1_1_CYW43438_ALP_AVAIL_REQ 0x08u
 #define ER_PI_ZERO_W_V1_1_CYW43438_ALP_AVAIL 0x40u
 #define ER_PI_ZERO_W_V1_1_CYW43438_FORCE_ALP 0x01u
+#define ER_PI_ZERO_W_V1_1_CYW43438_HT_AVAIL_REQ 0x10u
+#define ER_PI_ZERO_W_V1_1_CYW43438_HT_AVAIL 0x80u
+#define ER_PI_ZERO_W_V1_1_CYW43438_FORCE_HT 0x02u
+#define ER_PI_ZERO_W_V1_1_CYW43438_F2_WATERMARK 0x08u
+#define ER_PI_ZERO_W_V1_1_CYW43438_SDPCM_PROT_VERSION 4u
+#define ER_PI_ZERO_W_V1_1_CYW43438_SMB_DATA_VERSION_SHIFT 16u
 #define ER_PI_ZERO_W_V1_1_CYW43438_SDIO_CORE 0x0829u
 #define ER_PI_ZERO_W_V1_1_CYW43438_SDIO_INTSTATUS 0x00000020u
+#define ER_PI_ZERO_W_V1_1_CYW43438_SDIO_HOSTINTMASK 0x00000024u
+#define ER_PI_ZERO_W_V1_1_CYW43438_SDIO_TOSBMAILBOXDATA 0x00000048u
+#define ER_PI_ZERO_W_V1_1_CYW43438_INT_HMB_SW_MASK 0x000000f0u
+#define ER_PI_ZERO_W_V1_1_CYW43438_INT_CHIPACTIVE 0x20000000u
 #define ER_PI_ZERO_W_V1_1_CYW43438_INT_HMB_FRAME_IND 0x00000040u
+#define ER_PI_ZERO_W_V1_1_CYW43438_HOSTINTMASK \
+  (ER_PI_ZERO_W_V1_1_CYW43438_INT_HMB_SW_MASK | \
+   ER_PI_ZERO_W_V1_1_CYW43438_INT_CHIPACTIVE)
 #define ER_PI_ZERO_W_V1_1_CYW43438_F2_BLOCK_BYTES 512u
 #define ER_PI_ZERO_W_V1_1_CYW43438_F2_BLOCK_COUNT_MAX 3u
 #define ER_PI_ZERO_W_V1_1_CYW43438_F2_FRAME_BYTES \
@@ -1582,18 +1603,46 @@ static UINT32 er_pi_zero_w_v1_1_cyw43438_set_passive(UINT32 arm_wrap,
   return er_pi_zero_w_v1_1_cyw43438_core_up(mem_wrap);
 }
 
-static UINT32 er_pi_zero_w_v1_1_cyw43438_start_owned_firmware(void) {
+static UINT32 er_pi_zero_w_v1_1_cyw43438_enable_function2(void) {
+  if (er_pi_zero_w_v1_1_emmc_sdio_write_byte(
+          ER_PI_ZERO_W_V1_1_SDIO_FUNCTION_CCCR,
+          ER_PI_ZERO_W_V1_1_CYW43438_CCCR_F2_BLOCK_SIZE_LOW,
+          (UINT8)(ER_PI_ZERO_W_V1_1_CYW43438_F2_BLOCK_BYTES &
+                  ER_PI_ZERO_W_V1_1_BYTE_MASK)) == 0u ||
+      er_pi_zero_w_v1_1_emmc_sdio_write_byte(
+          ER_PI_ZERO_W_V1_1_SDIO_FUNCTION_CCCR,
+          ER_PI_ZERO_W_V1_1_CYW43438_CCCR_F2_BLOCK_SIZE_HIGH,
+          (UINT8)((ER_PI_ZERO_W_V1_1_CYW43438_F2_BLOCK_BYTES >>
+                   ER_PI_ZERO_W_V1_1_U16_HIGH_SHIFT) &
+                  ER_PI_ZERO_W_V1_1_BYTE_MASK)) == 0u) {
+    return 0u;
+  }
+  return er_pi_zero_w_v1_1_cyw43438_set_io_enable(
+      ER_PI_ZERO_W_V1_1_CYW43438_CCCR_ENABLE_FUNCTIONS_1_2);
+}
+
+static UINT32 er_pi_zero_w_v1_1_cyw43438_force_ht_clock(void) {
+  return er_pi_zero_w_v1_1_cyw43438_request_clock(
+      ER_PI_ZERO_W_V1_1_CYW43438_HT_AVAIL_REQ,
+      ER_PI_ZERO_W_V1_1_CYW43438_HT_AVAIL,
+      ER_PI_ZERO_W_V1_1_CYW43438_FORCE_HT);
+}
+
+static UINT32 er_pi_zero_w_v1_1_cyw43438_start_wlan_firmware(void) {
   UINT32 arm_base;
   UINT32 arm_wrap;
   UINT32 mem_base;
   UINT32 mem_wrap;
   UINT32 d11_base;
   UINT32 d11_wrap;
+  UINT32 sdio_base;
+  UINT32 sdio_wrap;
+  UINT32 nvram_address;
   UINT32 reset_vector;
-  UINT32 mailbox;
-  UINT32 heartbeat;
 
-  if (ER_CYW43438_OWNED_FIRMWARE_SIZE >=
+  if (ER_PI_ZERO_W_V1_1_CYW43438_RAM_FIRMWARE_SIZE >=
+          ER_PI_ZERO_W_V1_1_CYW43438_RAM_SIZE ||
+      ER_PI_ZERO_W_V1_1_CYW43438_NVRAM_FIRMWARE_SIZE >=
           ER_PI_ZERO_W_V1_1_CYW43438_RAM_SIZE ||
       er_pi_zero_w_v1_1_cyw43438_buscoreprep() == 0u ||
       er_pi_zero_w_v1_1_cyw43438_find_core(
@@ -1608,6 +1657,10 @@ static UINT32 er_pi_zero_w_v1_1_cyw43438_start_owned_firmware(void) {
           ER_PI_ZERO_W_V1_1_CYW43438_CORE_80211,
           &d11_base,
           &d11_wrap) == 0u ||
+      er_pi_zero_w_v1_1_cyw43438_find_core(
+          ER_PI_ZERO_W_V1_1_CYW43438_SDIO_CORE,
+          &sdio_base,
+          &sdio_wrap) == 0u ||
       er_pi_zero_w_v1_1_cyw43438_set_passive(arm_wrap,
                                              mem_base,
                                              mem_wrap,
@@ -1617,12 +1670,19 @@ static UINT32 er_pi_zero_w_v1_1_cyw43438_start_owned_firmware(void) {
   (void)arm_base;
   (void)mem_base;
   (void)d11_base;
+  (void)sdio_wrap;
+  nvram_address = ER_PI_ZERO_W_V1_1_CYW43438_RAM_SIZE -
+                  (UINT32)ER_PI_ZERO_W_V1_1_CYW43438_NVRAM_FIRMWARE_SIZE;
   reset_vector = er_pi_zero_w_v1_1_cyw43438_read_le32(
-      ER_CYW43438_OWNED_FIRMWARE);
+      g_er_pi_zero_w_v1_1_cyw43438_ram_firmware);
   if (er_pi_zero_w_v1_1_cyw43438_backplane_write_bytes(
           ER_PI_ZERO_W_V1_1_CYW43438_RAM_BASE,
-          ER_CYW43438_OWNED_FIRMWARE,
-          (UINT32)ER_CYW43438_OWNED_FIRMWARE_SIZE) == 0u ||
+          g_er_pi_zero_w_v1_1_cyw43438_ram_firmware,
+          (UINT32)ER_PI_ZERO_W_V1_1_CYW43438_RAM_FIRMWARE_SIZE) == 0u ||
+      er_pi_zero_w_v1_1_cyw43438_backplane_write_bytes(
+          nvram_address,
+          g_er_pi_zero_w_v1_1_cyw43438_nvram_firmware,
+          (UINT32)ER_PI_ZERO_W_V1_1_CYW43438_NVRAM_FIRMWARE_SIZE) == 0u ||
       er_pi_zero_w_v1_1_cyw43438_backplane_write32(
           ER_PI_ZERO_W_V1_1_CYW43438_RAM_BASE,
           reset_vector) == 0u ||
@@ -1630,20 +1690,25 @@ static UINT32 er_pi_zero_w_v1_1_cyw43438_start_owned_firmware(void) {
     return 0u;
   }
   er_pi_zero_w_v1_1_delay(ER_PI_ZERO_W_V1_1_WIFI_POWER_DELAY_TICKS);
-  if (er_pi_zero_w_v1_1_cyw43438_backplane_read32(
-          ER_CYW43438_OWNED_FIRMWARE_MAILBOX_ADDR,
-          &mailbox) == 0u ||
-      er_pi_zero_w_v1_1_cyw43438_backplane_read32(
-          ER_CYW43438_OWNED_FIRMWARE_HEARTBEAT_ADDR,
-          &heartbeat) == 0u ||
-      mailbox != ER_CYW43438_OWNED_FIRMWARE_MAILBOX_MAGIC ||
-      heartbeat == 0u) {
+  if (er_pi_zero_w_v1_1_cyw43438_force_ht_clock() == 0u ||
+      er_pi_zero_w_v1_1_cyw43438_backplane_write32(
+          sdio_base + ER_PI_ZERO_W_V1_1_CYW43438_SDIO_TOSBMAILBOXDATA,
+          ER_PI_ZERO_W_V1_1_CYW43438_SDPCM_PROT_VERSION <<
+              ER_PI_ZERO_W_V1_1_CYW43438_SMB_DATA_VERSION_SHIFT) == 0u ||
+      er_pi_zero_w_v1_1_cyw43438_enable_function2() == 0u ||
+      er_pi_zero_w_v1_1_cyw43438_backplane_write32(
+          sdio_base + ER_PI_ZERO_W_V1_1_CYW43438_SDIO_HOSTINTMASK,
+          ER_PI_ZERO_W_V1_1_CYW43438_HOSTINTMASK) == 0u ||
+      er_pi_zero_w_v1_1_emmc_sdio_write_byte(
+          ER_PI_ZERO_W_V1_1_SDIO_FUNCTION_BACKPLANE,
+          ER_PI_ZERO_W_V1_1_CYW43438_FUNC1_WATERMARK,
+          ER_PI_ZERO_W_V1_1_CYW43438_F2_WATERMARK) == 0u) {
     return 0u;
   }
-  g_er_pi_zero_w_v1_1_sdio_probe_state =
-      ER_PI_ZERO_W_V1_1_L2_CM3_ACTIVE;
-  g_er_pi_zero_w_v1_1_sdio_probe_response = mailbox;
-  g_er_pi_zero_w_v1_1_sdio_probe_interrupt = heartbeat;
+  g_er_pi_zero_w_v1_1_sdio_probe_response = sdio_base;
+  g_er_pi_zero_w_v1_1_cyw43438_sdio_base = sdio_base;
+  g_er_pi_zero_w_v1_1_sdio_probe_interrupt =
+      (UINT32)ER_PI_ZERO_W_V1_1_CYW43438_CLM_FIRMWARE_SIZE;
   return 1u;
 }
 
@@ -2044,7 +2109,7 @@ static UINT32 er_pi_zero_w_v1_1_wifi_address(
 }
 
 static UINT32 er_pi_zero_w_v1_1_cyw43438_start_owned_l2(void) {
-  return er_pi_zero_w_v1_1_cyw43438_start_owned_firmware();
+  return er_pi_zero_w_v1_1_cyw43438_start_wlan_firmware();
 }
 
 static UINT32 er_pi_zero_w_v1_1_ota_wire_magic(const UINT8* bytes) {
@@ -2667,18 +2732,10 @@ void er_pi_zero_w_v1_1_main(void) {
   er_pi_zero_w_v1_1_sdio_probe();
   if (g_er_pi_zero_w_v1_1_sdio_probe_state ==
           ER_PI_ZERO_W_V1_1_SDIO_PROBE_CMD53_DONE &&
-      er_pi_zero_w_v1_1_cyw43438_start_owned_l2() != 0u &&
-      ER_CYW43438_OWNED_FIRMWARE_RAW_RX_SUPPORTED != 0u) {
+      er_pi_zero_w_v1_1_cyw43438_start_owned_l2() != 0u) {
     g_er_pi_zero_w_v1_1_sdio_probe_state = ER_PI_ZERO_W_V1_1_L2_READY;
     er_pi_zero_w_v1_1_ota_status_refresh();
     er_pi_zero_w_v1_1_act_led_status(ER_PI_ZERO_W_V1_1_LED_CYW_MAILBOX_OK);
-  } else if (g_er_pi_zero_w_v1_1_sdio_probe_state ==
-                 ER_PI_ZERO_W_V1_1_L2_CM3_ACTIVE &&
-             ER_CYW43438_OWNED_FIRMWARE_RAW_RX_SUPPORTED == 0u) {
-    g_er_pi_zero_w_v1_1_sdio_probe_state =
-        ER_PI_ZERO_W_V1_1_L2_RAW_RX_UNSUPPORTED;
-    er_pi_zero_w_v1_1_act_led_status(
-        ER_PI_ZERO_W_V1_1_LED_CYW_RX_UNSUPPORTED);
   } else {
     er_pi_zero_w_v1_1_act_led_status(ER_PI_ZERO_W_V1_1_LED_CYW_MAILBOX_FAIL);
   }
