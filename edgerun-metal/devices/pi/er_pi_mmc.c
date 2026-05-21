@@ -15,7 +15,6 @@ enum {
   ER_PI_SDIO_RW_FLAG_BIT = 31u,
   ER_PI_SDIO_FUNCTION_MASK = 0x07u,
   ER_PI_SDIO_ADDRESS_MASK = 0x0001ffffu,
-  ER_PI_SDIO_CMD53_COUNT_MASK = 0x000001ffu,
   ER_PI_MMC_RCA_ARGUMENT_BITS = 16u,
   ER_PI_EMMC_CMDTM_RESPONSE_BITS = 16u,
   ER_PI_EMMC_CMDTM_RESPONSE_NONE = 0u,
@@ -27,10 +26,8 @@ enum {
   ER_PI_EMMC_CMDTM_INDEX_CHECK = 1u << 20u,
   ER_PI_EMMC_CMDTM_IS_DATA = 1u << 21u,
   ER_PI_EMMC_CMDTM_INDEX_BITS = 24u,
-  ER_PI_EMMC_BLOCK_COUNT_BITS = 16u,
   ER_PI_EMMC_WORD_BYTES = 4u,
-  ER_PI_EMMC_SDIO_BYTE_TRANSFER_MAX = 512u,
-  ER_PI_EMMC_INTERRUPT_ALL = 0xffffffffu
+  ER_PI_EMMC_SDIO_BYTE_TRANSFER_MAX = 512u
 };
 
 typedef struct {
@@ -792,10 +789,37 @@ static UINT32 er_pi_emmc_sdio_transfer_size_count(UINT32 data_len) {
   return (1u << ER_PI_EMMC_BLOCK_COUNT_BITS) | data_len;
 }
 
+static UINT8 er_pi_sdio_block_mode_valid(UINT8 block_mode) {
+  switch (block_mode) {
+    case ER_PI_SDIO_CMD53_BYTE_MODE:
+    case ER_PI_SDIO_CMD53_BLOCK_MODE:
+      return 1u;
+    default:
+      return 0u;
+  }
+}
+
+static UINT32 er_pi_emmc_sdio_block_size_count(UINT8 block_mode,
+                                               UINT32 block_size,
+                                               UINT32 transfer_count,
+                                               UINT32 data_len) {
+  switch (block_mode) {
+    case ER_PI_SDIO_CMD53_BYTE_MODE:
+      return er_pi_emmc_sdio_transfer_size_count(data_len);
+    case ER_PI_SDIO_CMD53_BLOCK_MODE:
+      return (transfer_count << ER_PI_EMMC_BLOCK_COUNT_BITS) | block_size;
+    default:
+      return 0u;
+  }
+}
+
 UINT8 er_pi_emmc_sdio_transfer_io_prepare(UINT8 write,
                                            UINT8 function,
+                                           UINT8 block_mode,
                                            UINT8 incrementing_address,
                                            UINT32 address,
+                                           UINT32 block_size,
+                                           UINT32 transfer_count,
                                            UINT32 data_len,
                                            ErPiEmmcSdioTransferIo* out_io) {
   ErPiMmcCommand command;
@@ -803,18 +827,27 @@ UINT8 er_pi_emmc_sdio_transfer_io_prepare(UINT8 write,
 
   if (out_io == 0 ||
       er_pi_sdio_function_valid(function) == 0u ||
+      er_pi_sdio_block_mode_valid(block_mode) == 0u ||
       data_len == 0u ||
-      data_len > ER_PI_EMMC_SDIO_BYTE_TRANSFER_MAX ||
+      block_size == 0u ||
+      transfer_count == 0u ||
+      transfer_count > ER_PI_SDIO_CMD53_COUNT_MASK ||
       address > ER_PI_SDIO_ADDRESS_MASK) {
+    return 0u;
+  }
+  if (block_mode == ER_PI_SDIO_CMD53_BYTE_MODE &&
+      (data_len > ER_PI_EMMC_SDIO_BYTE_TRANSFER_MAX ||
+       block_size != data_len ||
+       transfer_count != data_len)) {
     return 0u;
   }
 
   argument = er_pi_sdio_cmd53_argument(write,
                                        function,
-                                       ER_PI_SDIO_CMD53_BYTE_MODE,
+                                       block_mode,
                                        incrementing_address,
                                        address,
-                                       data_len);
+                                       transfer_count);
   if (er_pi_mmc_command_prepare(ER_PI_MMC_CMD_IO_RW_EXTENDED,
                                 argument,
                                 ER_PI_MMC_RESPONSE_R5,
@@ -825,7 +858,10 @@ UINT8 er_pi_emmc_sdio_transfer_io_prepare(UINT8 write,
 
   out_io->block_size_count_offset = ER_PI_EMMC_REG_BLKSIZECNT;
   out_io->block_size_count_value =
-      er_pi_emmc_sdio_transfer_size_count(data_len);
+      er_pi_emmc_sdio_block_size_count(block_mode,
+                                       block_size,
+                                       transfer_count,
+                                       data_len);
   out_io->data_offset = ER_PI_EMMC_REG_DATA;
   out_io->data_len = data_len;
   out_io->read = (UINT8)(write == ER_PI_SDIO_READ);
@@ -890,31 +926,82 @@ static UINT8 er_pi_emmc_sdio_transfer_done(
   return 1u;
 }
 
-UINT8 er_pi_emmc_sdio_read_bytes(INT64 emmc_handle,
-                                 UINT8 function,
-                                 UINT8 incrementing_address,
-                                 UINT32 address,
-                                 UINT8* out_bytes,
-                                 UINT32 bytes_len,
-                                 UINT32 poll_budget,
-                                 ErPiEmmcSdioTransferResult* out_result) {
+static UINT32 er_pi_emmc_sdio_transfer_ready_interrupt(UINT8 write) {
+  switch (write) {
+    case ER_PI_SDIO_READ:
+      return ER_PI_EMMC_INTERRUPT_READ_RDY;
+    case ER_PI_SDIO_WRITE:
+      return ER_PI_EMMC_INTERRUPT_WRITE_RDY;
+    default:
+      return 0u;
+  }
+}
+
+static UINT8 er_pi_emmc_sdio_move_byte(INT64 emmc_handle,
+                                       UINT32 data_offset,
+                                       UINT8 write,
+                                       const UINT8* write_bytes,
+                                       UINT8* read_bytes,
+                                       UINT32 byte_index) {
+  INT64 value;
+
+  switch (write) {
+    case ER_PI_SDIO_READ:
+      if (read_bytes == 0) {
+        return 0u;
+      }
+      value = er_mmio_read8(emmc_handle, (INT64)data_offset);
+      if (value < 0) {
+        return 0u;
+      }
+      read_bytes[byte_index] = (UINT8)value;
+      return 1u;
+    case ER_PI_SDIO_WRITE:
+      if (write_bytes == 0) {
+        return 0u;
+      }
+      return er_mmio_write8(emmc_handle,
+                            (INT64)data_offset,
+                            write_bytes[byte_index]);
+    default:
+      return 0u;
+  }
+}
+
+static UINT8 er_pi_emmc_sdio_transfer_bytes(
+    INT64 emmc_handle,
+    UINT8 write,
+    UINT8 function,
+    UINT8 incrementing_address,
+    UINT32 address,
+    const UINT8* write_bytes,
+    UINT8* read_bytes,
+    UINT32 bytes_len,
+    UINT32 poll_budget,
+    ErPiEmmcSdioTransferResult* out_result) {
   UINT32 byte_index;
   UINT32 interrupt;
-  INT64 value;
+  UINT32 ready_interrupt;
   ErPiEmmcSdioTransferIo io;
 
   er_pi_emmc_sdio_transfer_result_clear(out_result);
-  if (out_bytes == 0 ||
+  ready_interrupt = er_pi_emmc_sdio_transfer_ready_interrupt(write);
+  if (ready_interrupt == 0u ||
+      (write == ER_PI_SDIO_READ && read_bytes == 0) ||
+      (write == ER_PI_SDIO_WRITE && write_bytes == 0) ||
       out_result == 0 ||
-      er_pi_emmc_sdio_transfer_io_prepare(ER_PI_SDIO_READ,
+      er_pi_emmc_sdio_transfer_io_prepare(write,
                                           function,
+                                          ER_PI_SDIO_CMD53_BYTE_MODE,
                                           incrementing_address,
                                           address,
+                                          bytes_len,
+                                          bytes_len,
                                           bytes_len,
                                           &io) == 0u ||
       er_pi_emmc_sdio_transfer_begin(emmc_handle, &io) == 0u ||
       er_pi_emmc_poll_interrupt(emmc_handle,
-                                ER_PI_EMMC_INTERRUPT_READ_RDY,
+                                ready_interrupt,
                                 poll_budget,
                                 &interrupt) == 0u) {
     if (out_result != 0) {
@@ -925,14 +1012,37 @@ UINT8 er_pi_emmc_sdio_read_bytes(INT64 emmc_handle,
   out_result->io = io;
   out_result->interrupt_value = interrupt;
   for (byte_index = 0u; byte_index < bytes_len; ++byte_index) {
-    value = er_mmio_read8(emmc_handle, (INT64)io.data_offset);
-    if (value < 0) {
+    if (er_pi_emmc_sdio_move_byte(emmc_handle,
+                                  io.data_offset,
+                                  write,
+                                  write_bytes,
+                                  read_bytes,
+                                  byte_index) == 0u) {
       out_result->error = 1u;
       return 0u;
     }
-    out_bytes[byte_index] = (UINT8)value;
   }
   return er_pi_emmc_sdio_transfer_done(emmc_handle, poll_budget, out_result);
+}
+
+UINT8 er_pi_emmc_sdio_read_bytes(INT64 emmc_handle,
+                                 UINT8 function,
+                                 UINT8 incrementing_address,
+                                 UINT32 address,
+                                 UINT8* out_bytes,
+                                 UINT32 bytes_len,
+                                 UINT32 poll_budget,
+                                 ErPiEmmcSdioTransferResult* out_result) {
+  return er_pi_emmc_sdio_transfer_bytes(emmc_handle,
+                                        ER_PI_SDIO_READ,
+                                        function,
+                                        incrementing_address,
+                                        address,
+                                        0,
+                                        out_bytes,
+                                        bytes_len,
+                                        poll_budget,
+                                        out_result);
 }
 
 UINT8 er_pi_emmc_sdio_write_bytes(INT64 emmc_handle,
@@ -943,38 +1053,14 @@ UINT8 er_pi_emmc_sdio_write_bytes(INT64 emmc_handle,
                                   UINT32 bytes_len,
                                   UINT32 poll_budget,
                                   ErPiEmmcSdioTransferResult* out_result) {
-  UINT32 byte_index;
-  UINT32 interrupt;
-  ErPiEmmcSdioTransferIo io;
-
-  er_pi_emmc_sdio_transfer_result_clear(out_result);
-  if (bytes == 0 ||
-      out_result == 0 ||
-      er_pi_emmc_sdio_transfer_io_prepare(ER_PI_SDIO_WRITE,
-                                          function,
-                                          incrementing_address,
-                                          address,
-                                          bytes_len,
-                                          &io) == 0u ||
-      er_pi_emmc_sdio_transfer_begin(emmc_handle, &io) == 0u ||
-      er_pi_emmc_poll_interrupt(emmc_handle,
-                                ER_PI_EMMC_INTERRUPT_WRITE_RDY,
-                                poll_budget,
-                                &interrupt) == 0u) {
-    if (out_result != 0) {
-      out_result->error = 1u;
-    }
-    return 0u;
-  }
-  out_result->io = io;
-  out_result->interrupt_value = interrupt;
-  for (byte_index = 0u; byte_index < bytes_len; ++byte_index) {
-    if (er_mmio_write8(emmc_handle,
-                       (INT64)io.data_offset,
-                       bytes[byte_index]) == 0u) {
-      out_result->error = 1u;
-      return 0u;
-    }
-  }
-  return er_pi_emmc_sdio_transfer_done(emmc_handle, poll_budget, out_result);
+  return er_pi_emmc_sdio_transfer_bytes(emmc_handle,
+                                        ER_PI_SDIO_WRITE,
+                                        function,
+                                        incrementing_address,
+                                        address,
+                                        bytes,
+                                        0,
+                                        bytes_len,
+                                        poll_budget,
+                                        out_result);
 }

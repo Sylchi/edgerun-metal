@@ -36,15 +36,20 @@
 
 #define ER_PI_MMC_RCA_MASK 0x0000ffffu
 
+#define ER_PI_SDIO_FUNCTION_CCCR 0u
 #define ER_PI_SDIO_FUNCTION_BACKPLANE 1u
 #define ER_PI_SDIO_FUNCTION_WLAN 2u
 
+#define ER_PI_SDIO_CMD52_DATA_MASK 0x000000ffu
+#define ER_PI_SDIO_CMD53_COUNT_MASK 0x000001ffu
 #define ER_PI_SDIO_READ 0u
 #define ER_PI_SDIO_WRITE 1u
 #define ER_PI_SDIO_CMD52_READ ER_PI_SDIO_READ
 #define ER_PI_SDIO_CMD52_WRITE ER_PI_SDIO_WRITE
 #define ER_PI_SDIO_CMD52_NO_RAW 0u
 #define ER_PI_SDIO_CMD52_RAW 1u
+#define ER_PI_SDIO_CMD53_READ ER_PI_SDIO_READ
+#define ER_PI_SDIO_CMD53_WRITE ER_PI_SDIO_WRITE
 
 #define ER_PI_SDIO_CMD53_FIXED_ADDRESS 0u
 #define ER_PI_SDIO_CMD53_INCREMENTING_ADDRESS 1u
@@ -52,6 +57,7 @@
 #define ER_PI_SDIO_CMD53_BLOCK_MODE 1u
 
 #define ER_PI_EMMC_BLOCK_BYTES 512u
+#define ER_PI_EMMC_BLOCK_COUNT_BITS 16u
 
 #define ER_PI_EMMC_REG_BLKSIZECNT 0x00000004u
 #define ER_PI_EMMC_REG_ARG1 0x00000008u
@@ -71,6 +77,7 @@
 #define ER_PI_EMMC_INTERRUPT_DATA_DONE 0x00000002u
 #define ER_PI_EMMC_INTERRUPT_WRITE_RDY 0x00000010u
 #define ER_PI_EMMC_INTERRUPT_READ_RDY 0x00000020u
+#define ER_PI_EMMC_INTERRUPT_ALL 0xffffffffu
 #define ER_PI_EMMC_INTERRUPT_ERROR_MASK 0xffff0000u
 
 typedef struct {
@@ -204,8 +211,11 @@ UINT8 er_pi_emmc_write_block(INT64 emmc_handle,
                              ErPiEmmcBlockResult* out_result);
 UINT8 er_pi_emmc_sdio_transfer_io_prepare(UINT8 write,
                                            UINT8 function,
+                                           UINT8 block_mode,
                                            UINT8 incrementing_address,
                                            UINT32 address,
+                                           UINT32 block_size,
+                                           UINT32 transfer_count,
                                            UINT32 data_len,
                                            ErPiEmmcSdioTransferIo* out_io);
 UINT8 er_pi_emmc_sdio_read_bytes(INT64 emmc_handle,
