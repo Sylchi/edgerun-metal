@@ -109,6 +109,11 @@ int er_store_arena_min_size(const er_store_config_t* config, size_t* out_arena_l
 int er_store_open(er_store_t* store, er_io_t io, void* arena, size_t arena_len,
                   const er_store_config_t* config);
 int er_store_close(er_store_t* store);
+/*
+ * Explicit durability boundary. Normal store writes update the configured IO
+ * bytes only; callers decide when those bytes must be forced durable.
+ */
+int er_store_sync(er_store_t* store);
 int er_store_stats(er_store_t* store, er_store_stats_t* out_stats);
 
 int er_store_put_blob(er_store_t* store, const void* data, size_t len, uint8_t out_hash[ER_HASH_SIZE]);

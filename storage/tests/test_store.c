@@ -15,9 +15,8 @@ enum {
   TEST_OBJECT_CHUNK = 512u,
   TEST_OBJECT_PATTERN_MOD = 251u,
   TEST_SDCARD_BLOCK_BYTES = ER_STORE_SDCARD_BLOCK_BYTES,
-  TEST_OPEN_SYNC_COUNT = 1u,
-  TEST_APPEND_SYNC_COUNT = 1u,
-  TEST_CLOSE_SYNC_COUNT = 1u
+  TEST_NO_SYNC_COUNT = 0u,
+  TEST_EXPLICIT_SYNC_COUNT = 1u
 };
 
 typedef struct {
@@ -181,8 +180,12 @@ static void test_open_empty_store(void) {
 
   test_zero(&io, sizeof(io));
   check_int("open empty", er_store_open(&store, test_make_io(&io), arena, sizeof(arena), 0), ER_OK);
+  check_int("open empty syncs", (int)io.sync_count, (int)TEST_NO_SYNC_COUNT);
   check_u64("empty superblock size", io.size, 68u);
+  check_int("sync empty", er_store_sync(&store), ER_OK);
+  check_int("sync empty count", (int)io.sync_count, (int)TEST_EXPLICIT_SYNC_COUNT);
   check_int("close empty", er_store_close(&store), ER_OK);
+  check_int("close empty syncs", (int)io.sync_count, (int)TEST_EXPLICIT_SYNC_COUNT);
 }
 
 static void test_put_get_and_duplicate(void) {
@@ -200,11 +203,12 @@ static void test_put_get_and_duplicate(void) {
 
   test_zero(&io, sizeof(io));
   check_int("open put", er_store_open(&store, test_make_io(&io), arena_a, sizeof(arena_a), 0), ER_OK);
-  check_int("open put syncs", (int)io.sync_count, (int)TEST_OPEN_SYNC_COUNT);
+  check_int("open put syncs", (int)io.sync_count, (int)TEST_NO_SYNC_COUNT);
   check_int("put blob", er_store_put_blob(&store, data, sizeof(data), hash_a), ER_OK);
-  check_int("put blob syncs", (int)io.sync_count, (int)(TEST_OPEN_SYNC_COUNT + TEST_APPEND_SYNC_COUNT));
+  check_int("put blob syncs", (int)io.sync_count, (int)TEST_NO_SYNC_COUNT);
   size_after_first = io.size;
   check_int("reopen unclosed", er_store_open(&reopened, test_make_io(&io), arena_b, sizeof(arena_b), 0), ER_OK);
+  check_int("reopen unclosed syncs", (int)io.sync_count, (int)TEST_NO_SYNC_COUNT);
   check_int("reopen unclosed get", er_store_get_blob(&reopened, hash_a, out, sizeof(out), &out_len), ER_OK);
   check_size("reopen unclosed len", out_len, sizeof(data));
   check_bytes("reopen unclosed bytes", out, data, sizeof(data));
@@ -214,10 +218,11 @@ static void test_put_get_and_duplicate(void) {
   check_int("get blob", er_store_get_blob(&store, hash_a, out, sizeof(out), &out_len), ER_OK);
   check_size("get blob len", out_len, sizeof(data));
   check_bytes("get blob bytes", out, data, sizeof(data));
+  check_int("sync put", er_store_sync(&store), ER_OK);
+  check_int("sync put count", (int)io.sync_count, (int)TEST_EXPLICIT_SYNC_COUNT);
   check_int("close put", er_store_close(&store), ER_OK);
-  check_int("close put syncs",
-            (int)io.sync_count, (int)((TEST_OPEN_SYNC_COUNT * 2u) + TEST_APPEND_SYNC_COUNT +
-                                      TEST_CLOSE_SYNC_COUNT));
+  check_int("close put syncs", (int)io.sync_count, (int)TEST_EXPLICIT_SYNC_COUNT);
+  check_int("sync badarg", er_store_sync(0), ER_ERR_BADARG);
 }
 
 static void test_index_and_scan(void) {
@@ -542,10 +547,10 @@ static void test_chunked_object_roundtrip_and_chunk_reuse(void) {
   }
   test_zero(&io, sizeof(io));
   check_int("open object", er_store_open(&store, test_make_io(&io), arena, sizeof(arena), 0), ER_OK);
-  check_int("open object syncs", (int)io.sync_count, (int)TEST_OPEN_SYNC_COUNT);
+  check_int("open object syncs", (int)io.sync_count, (int)TEST_NO_SYNC_COUNT);
   check_int("put object a",
             er_store_put_object(&store, data, sizeof(data), TEST_OBJECT_CHUNK, object_hash_a), ER_OK);
-  check_int("put object syncs", (int)io.sync_count, (int)(TEST_OPEN_SYNC_COUNT + TEST_APPEND_SYNC_COUNT));
+  check_int("put object syncs", (int)io.sync_count, (int)TEST_NO_SYNC_COUNT);
   check_int("object info", er_store_get_blob_info(&store, object_hash_a, &info), ER_OK);
   check_int("object manifest type", (int)info.content_type, (int)ER_STORE_TYPE_OBJECT_MANIFEST);
   check_int("get object", er_store_get_object(&store, object_hash_a, out, sizeof(out), &out_len), ER_OK);
@@ -556,11 +561,13 @@ static void test_chunked_object_roundtrip_and_chunk_reuse(void) {
   size_after_first = io.size;
   check_int("put object duplicate",
             er_store_put_object(&store, data, sizeof(data), TEST_OBJECT_CHUNK, object_hash_b), ER_OK);
-  check_int("put object duplicate syncs", (int)io.sync_count, (int)(TEST_OPEN_SYNC_COUNT + TEST_APPEND_SYNC_COUNT));
+  check_int("put object duplicate syncs", (int)io.sync_count, (int)TEST_NO_SYNC_COUNT);
   check_bytes("object duplicate hash", object_hash_a, object_hash_b, ER_HASH_SIZE);
   check_int("object stats b", er_store_stats(&store, &stats), ER_OK);
   check_size("object chunk reuse count", stats.blob_count, blob_count_after_first);
   check_u64("object chunk reuse size", io.size, size_after_first);
+  check_int("sync object", er_store_sync(&store), ER_OK);
+  check_int("sync object count", (int)io.sync_count, (int)TEST_EXPLICIT_SYNC_COUNT);
 }
 
 int main(void) {

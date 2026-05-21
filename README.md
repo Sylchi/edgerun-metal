@@ -364,32 +364,33 @@ records, index definitions, and sorted prefix scans are rebuilt from
 caller-provided arena memory. Storage intentionally does not hide durable read
 cost behind an internal blob cache; every blob read reaches the backing IO path
 and callers must keep hot working sets in their own explicit memory if they need
-that behavior. Storage is intentionally content-blind: it
-does not authenticate callers, authorize keys, parse object bytes, validate
-schemas, interpret package formats, or decide whether a blob is safe to execute
-or reveal. Callers own admission, signatures, encryption, access policy, object
-semantics, and lifecycle policy above this byte store.
+that behavior. Storage also does not own durability policy: normal writes update
+the configured IO bytes, and callers invoke `er_store_sync` only at explicit
+capability or boot-log durability boundaries. Storage is intentionally
+content-blind: it does not authenticate callers, authorize keys, parse object
+bytes, validate schemas, interpret package formats, or decide whether a blob is
+safe to execute or reveal. Callers own admission, signatures, encryption, access
+policy, object semantics, and lifecycle policy above this byte store.
 
 Current storage integration work makes `storage` the single durable object
 system. Device details are selected once at store initialization with a
 deterministic block backing profile such as byte log, SD card, NVMe, or custom
 block size. External runtime consumers do not receive SD, NVMe, or packet-slot
 APIs; they receive only the store API for blobs, content-addressed objects, and
-indexes. `erwire` remains the transport. VFS already owns object packetization
-between memory and wire packets; durable manifest/chunk admission is still
-exposed through the store object helpers and must move behind a VFS/storage
-adapter so there is one explicit memory-to-wire, wire-to-memory,
+indexes. Store-backed storage endpoint durability has replaced the old fixed
+packet-slot path. `erwire` remains the transport. VFS already owns object
+packetization between memory and wire packets; durable manifest/chunk admission
+is still exposed through the store object helpers and must move behind a
+VFS/storage adapter so there is one explicit memory-to-wire, wire-to-memory,
 memory-to-durable, and durable-to-memory boundary. Completed VFS payloads are
 admitted into `er_store` before package loading, OTA install, or debug-log
 retention consumes them. The next implementation steps are:
 
 1. Add the VFS/storage adapter that owns object-to-manifest and
    manifest-to-object transitions.
-2. Link `storage` into the metal runtime as the only durable object/index
-   boundary.
-3. Replace the fixed-slot `ErStorageEndpointDurableStore` with store-backed
-   endpoint operations and delete the parallel durable slot format.
-4. Load Wasm app, manifest, UI assets, OTA objects, and Pi debug logs from
+2. Add explicit boot-log append and sync calls on top of `er_store`; do not add
+   ambient runtime logging or hidden store flushes.
+3. Load Wasm app, manifest, UI assets, OTA objects, and Pi debug logs from
    store indexes after first-boot admission of compiled-in or received bytes.
 
 The netboot helper is a host tool that provides DHCP/TFTP for EFI PXE boot. It
