@@ -8,7 +8,9 @@ enum {
   TEST_STORAGE_MEDIUM_BENCH_BLOCKS = 64u,
   TEST_STORAGE_MEDIUM_WRITE_BPS = 2000u,
   TEST_STORAGE_MEDIUM_VERIFY_BPS = 1800u,
-  TEST_STORAGE_MEDIUM_READ_BPS = 3000u
+  TEST_STORAGE_MEDIUM_READ_BPS = 3000u,
+  TEST_STORAGE_MEDIUM_STORE_ID_SEED = 0x42u,
+  TEST_STORAGE_MEDIUM_CLOCK_SEED = 0x24u
 };
 
 typedef struct {
@@ -102,6 +104,22 @@ static er_io_t test_storage_medium_io(TestStorageMediumIo* io) {
   return out;
 }
 
+static er_store_config_t test_storage_medium_store_config(void) {
+  er_store_config_t config;
+  UINTN i;
+
+  er_mem_zero((UINT8*)&config, (UINTN)sizeof(config));
+  for (i = 0u; i < ER_STORE_IDENTITY_ID_SIZE; ++i) {
+    config.storage_identity_id[i] =
+        (UINT8)(TEST_STORAGE_MEDIUM_STORE_ID_SEED + (UINT8)i);
+  }
+  for (i = 0u; i < ER_CLOCK_KEEPER_ID_SIZE; ++i) {
+    config.epoch.keeper_id.bytes[i] =
+        (UINT8)(TEST_STORAGE_MEDIUM_CLOCK_SEED + (UINT8)i);
+  }
+  return config;
+}
+
 static UINT8 test_storage_medium_benchmark(void* ctx,
                                            ErStorageMediumBenchmark* out) {
   TestStorageMediumBenchCtx* bench = (TestStorageMediumBenchCtx*)ctx;
@@ -136,6 +154,7 @@ static void test_storage_medium_init_record(void) {
   static UINT8 arena[TEST_STORAGE_MEDIUM_ARENA_BYTES];
   TestStorageMediumIo io;
   TestStorageMediumBenchCtx bench;
+  er_store_config_t store_config;
   er_store_t store;
   ErStorageMediumInitResult init_result;
   ErStorageMediumBenchmark restored;
@@ -145,6 +164,7 @@ static void test_storage_medium_init_record(void) {
   er_mem_zero((UINT8*)&io, (UINTN)sizeof(io));
   er_mem_zero(arena, (UINTN)sizeof(arena));
   er_mem_zero((UINT8*)&bench, (UINTN)sizeof(bench));
+  store_config = test_storage_medium_store_config();
   bench.benchmark = test_storage_medium_good_benchmark();
 
   check_int64("storage medium rejects null",
@@ -172,7 +192,7 @@ static void test_storage_medium_init_record(void) {
                             test_storage_medium_io(&io),
                             arena,
                             (size_t)sizeof(arena),
-                            0),
+                            &store_config),
               ER_OK);
   check_int64("storage medium not initialized",
               er_storage_medium_initialized(&store, 0),
