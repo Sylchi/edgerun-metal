@@ -164,18 +164,10 @@ static int erc_is_public_header_path(const char* path) {
   if (erc_has_suffix(path, ".h") == 0) {
     return 0;
   }
-  if (strncmp(path, "include/", strlen("include/")) == 0 ||
-      strncmp(path, "edgerun-ui-core/include/", strlen("edgerun-ui-core/include/")) == 0 ||
+  if (strncmp(path, "edgerun-ui-core/include/", strlen("edgerun-ui-core/include/")) == 0 ||
       strncmp(path, "edgerun-ui-core/varfont/include/", strlen("edgerun-ui-core/varfont/include/")) == 0 ||
-      strncmp(path, "edgerun-crypto/include/", strlen("edgerun-crypto/include/")) == 0 ||
-      strncmp(path, "edgerun-identity/include/", strlen("edgerun-identity/include/")) == 0 ||
-      strncmp(path, "edgerun-object/include/", strlen("edgerun-object/include/")) == 0 ||
-      strncmp(path, "storage/include/", strlen("storage/include/")) == 0 ||
-      strncmp(path, "devices/", strlen("devices/")) == 0) {
-    return 1;
-  }
-  if (strncmp(path, "edgerun-metal/core/", strlen("edgerun-metal/core/")) == 0 &&
-      strchr(path + strlen("edgerun-metal/core/"), '/') == NULL) {
+      strcmp(path, "include/er_math.h") == 0 ||
+      strcmp(path, "include/er_ui_tabler_icon_atlas.h") == 0) {
     return 1;
   }
   return 0;
