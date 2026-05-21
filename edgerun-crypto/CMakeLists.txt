@@ -92,9 +92,15 @@ if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
   )
   target_link_libraries(bench_blake3 PRIVATE edgerun_crypto)
 
+  add_executable(bench_store
+    bench/bench_store.c
+  )
+  target_link_libraries(bench_store PRIVATE edgerun_crypto)
+
   add_custom_target(bench
     COMMAND bench_blake3
-    DEPENDS bench_blake3
+    COMMAND bench_store
+    DEPENDS bench_blake3 bench_store
     WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
   )
 endif()

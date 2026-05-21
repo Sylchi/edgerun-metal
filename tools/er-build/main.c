@@ -86,6 +86,7 @@ static const char ERB_DISK_ANALYZER_BIN[] = ".build/disk-analyzer";
 static const char ERB_PI_USB_BOOT_BIN[] = ".build/pi-usb-boot";
 static const char ERB_CRYPTO_BLAKE3_TEST_BIN[] = ".build/er-build-out/crypto/test_blake3";
 static const char ERB_CRYPTO_STORE_TEST_BIN[] = ".build/er-build-out/crypto/test_store";
+static const char ERB_CRYPTO_STORE_BENCH_BIN[] = ".build/er-build-out/crypto/bench_store";
 static const char ERB_VARFONT_TEST_BIN[] = ".build/er-build-out/varfont/vrfont_tests";
 static const char ERB_UI_CORE_TEST_BIN[] = ".build/er-build-out/ui-core/er_ui_core_tests";
 static const char ERB_APP_C_SOURCE_NAME[] = "app.c";
@@ -1934,6 +1935,25 @@ static int erb_target_crypto_test(int print_plan) {
   return erb_run_program(ERB_CRYPTO_STORE_TEST_BIN, print_plan);
 }
 
+static int erb_target_crypto_bench(int print_plan) {
+  ErbArgs args;
+
+  if (erb_prepare_dirs() != 0 || erb_compile_common(&args, ERB_CRYPTO_STORE_BENCH_BIN) != 0) {
+    return 1;
+  }
+  if (erb_args_push(&args, "-Iedgerun-crypto/include") != 0 ||
+      erb_args_push(&args, "-Iinclude") != 0 ||
+      erb_args_push(&args, "edgerun-crypto/bench/bench_store.c") != 0 ||
+      erb_args_push(&args, "edgerun-crypto/src/er_store.c") != 0 ||
+      erb_args_push(&args, "edgerun-crypto/src/er_blake3.c") != 0) {
+    return 1;
+  }
+  if (erb_run_args(&args, print_plan) != 0) {
+    return 1;
+  }
+  return erb_run_program(ERB_CRYPTO_STORE_BENCH_BIN, print_plan);
+}
+
 static int erb_target_varfont_test(int print_plan) {
   ErbArgs args;
 
@@ -2047,7 +2067,7 @@ static int erb_usage(void) {
           "         repo-agent-swarm [--scope PATH] [--concurrency N] [--limit N]\n"
           "         pi-serial-verify pi-node-update sdcard-probe disk-analyzer pi-usb-boot\n"
           "         repo-check repo-test repo-progress <scope> [test-target]\n"
-          "         crypto-test varfont-test ui-core-test\n");
+          "         crypto-test crypto-bench varfont-test ui-core-test\n");
   return 2;
 }
 
@@ -2155,6 +2175,9 @@ int main(int argc, char** argv) {
   }
   if (strcmp(target, "crypto-test") == 0) {
     return erb_target_crypto_test(print_plan);
+  }
+  if (strcmp(target, "crypto-bench") == 0) {
+    return erb_target_crypto_bench(print_plan);
   }
   if (strcmp(target, "varfont-test") == 0) {
     return erb_target_varfont_test(print_plan);
