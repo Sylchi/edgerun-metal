@@ -39,6 +39,7 @@
 #include "er_node_control.h"
 #include "er_pi_mmc.h"
 #include "er_pi_zero2w.h"
+#include "er_pi_zero_w_v1_1_lcd_hat.h"
 #include "er_pi_zero_w_v1_1_ota.h"
 #include "er_pi_usb_control.h"
 #include "er_net_frame.h"

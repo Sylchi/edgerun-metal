@@ -3,6 +3,9 @@
 static void test_pi_zero_w_v1_1_bringup_boundary(void) {
   enum {
     PI_TEST_ZERO_W_UART_ALT5_FSEL1 = 0x00012000u,
+    PI_TEST_ZERO_W_LCD_SPI0_FSEL0 = 0x04000000u,
+    PI_TEST_ZERO_W_LCD_SPI0_FSEL1 = 0x00000024u,
+    PI_TEST_ZERO_W_LCD_INPUT_PULL_MASK = 0x04392060u,
     PI_TEST_ZERO_W_NODE_SEED = 0x45u
   };
 
@@ -68,7 +71,35 @@ static void test_pi_zero_w_v1_1_bringup_boundary(void) {
                        ER_PI_ZERO_W_V1_1_GPIO_ALT5),
                    ER_PI_ZERO_W_V1_1_GPIO_PIN_UART_RX,
                    ER_PI_ZERO_W_V1_1_GPIO_ALT5),
-               PI_TEST_ZERO_W_UART_ALT5_FSEL1);
+	               PI_TEST_ZERO_W_UART_ALT5_FSEL1);
+  check_uint64("pi zero w lcd cs alt0 fsel",
+               er_pi_zero_w_v1_1_gpio_fsel_alt(
+                   0u,
+                   ER_PI_ZERO_W_V1_1_GPIO_PIN_LCD_CS,
+                   ER_PI_ZERO_W_V1_1_GPIO_ALT0),
+               PI_TEST_ZERO_W_LCD_SPI0_FSEL0);
+  check_uint64("pi zero w lcd mosi sclk alt0 fsel",
+               er_pi_zero_w_v1_1_gpio_fsel_alt(
+                   er_pi_zero_w_v1_1_gpio_fsel_alt(
+                       0u,
+                       ER_PI_ZERO_W_V1_1_GPIO_PIN_LCD_MOSI,
+                       ER_PI_ZERO_W_V1_1_GPIO_ALT0),
+                   ER_PI_ZERO_W_V1_1_GPIO_PIN_LCD_SCLK,
+                   ER_PI_ZERO_W_V1_1_GPIO_ALT0),
+               PI_TEST_ZERO_W_LCD_SPI0_FSEL1);
+  check_uint64("pi zero w lcd input pull mask",
+               ER_PI_ZERO_W_V1_1_GPIO_PULL_CLOCK_LCD_INPUTS,
+               PI_TEST_ZERO_W_LCD_INPUT_PULL_MASK);
+  check_uint64("pi zero w lcd input semantic mask",
+               ER_PI_ZERO_W_V1_1_LCD_INPUT_ALL,
+               ER_PI_ZERO_W_V1_1_LCD_INPUT_UP |
+                   ER_PI_ZERO_W_V1_1_LCD_INPUT_DOWN |
+                   ER_PI_ZERO_W_V1_1_LCD_INPUT_LEFT |
+                   ER_PI_ZERO_W_V1_1_LCD_INPUT_RIGHT |
+                   ER_PI_ZERO_W_V1_1_LCD_INPUT_PRESS |
+                   ER_PI_ZERO_W_V1_1_LCD_INPUT_KEY1 |
+                   ER_PI_ZERO_W_V1_1_LCD_INPUT_KEY2 |
+                   ER_PI_ZERO_W_V1_1_LCD_INPUT_KEY3);
   check_int64("pi zero w l2 core plan",
               er_wifi_l2_ap_plan_prepare(&node_id,
                                          ER_PI_ZERO_W_V1_1_L2_WIFI_CHANNEL,
