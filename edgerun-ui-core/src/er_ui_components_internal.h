@@ -6,6 +6,164 @@
 #include "er_ui_spacing.h"
 #include "er_math.h"
 
+typedef enum {
+  ER_UI_COMPONENT_CATEGORY_FOUNDATION = 0,
+  ER_UI_COMPONENT_CATEGORY_FORM,
+  ER_UI_COMPONENT_CATEGORY_OVERLAY,
+  ER_UI_COMPONENT_CATEGORY_NAVIGATION,
+  ER_UI_COMPONENT_CATEGORY_DATA_DISPLAY,
+  ER_UI_COMPONENT_CATEGORY_FEEDBACK,
+  ER_UI_COMPONENT_CATEGORY_LAYOUT,
+  ER_UI_COMPONENT_CATEGORY_MEDIA
+} er_ui_component_category_t;
+
+typedef enum {
+  ER_UI_COMPONENT_STATUS_CATALOGED = 0,
+  ER_UI_COMPONENT_STATUS_NATIVE_PRIMITIVE,
+  ER_UI_COMPONENT_STATUS_EXACT_PORT
+} er_ui_component_status_t;
+
+typedef enum {
+  ER_UI_COMPONENT_RESOLVE_SLUG = 0,
+  ER_UI_COMPONENT_RESOLVE_SOURCE_COMPONENT,
+  ER_UI_COMPONENT_RESOLVE_MODULE_PATH,
+  ER_UI_COMPONENT_RESOLVE_SLOT
+} er_ui_component_resolve_kind_t;
+
+typedef enum {
+  ER_UI_COMPONENT_NETWORK_APP_PROMPT = 0,
+  ER_UI_COMPONENT_APP_STORE_CARD,
+  ER_UI_COMPONENT_TRUST_MANAGER_ACTIONS,
+  ER_UI_COMPONENT_RUNTIME_EVENT_ROW,
+  ER_UI_COMPONENT_PACKAGE_PROOF_ROW,
+  ER_UI_COMPONENT_IMPORT_SYNC_SOURCE_ROW,
+  ER_UI_COMPONENT_PUBLISH_FROM_NODE_ROW,
+  ER_UI_COMPONENT_NODE_INSTANCE_ROW,
+  ER_UI_COMPONENT_ADMISSION_POLICY_ROW,
+  ER_UI_COMPONENT_ROUTE_BUDGET_ROW,
+  ER_UI_COMPONENT_DATA_TABLE_CONTROLS,
+  ER_UI_COMPONENT_ICON_ONLY_BUTTON,
+  ER_UI_COMPONENT_SEGMENTED_CONTROL,
+  ER_UI_COMPONENT_RECEIPT_PAYMENT_ROW,
+  ER_UI_COMPONENT_CAPABILITY_GRANT_DETAIL_ROW,
+  ER_UI_COMPONENT_SYSTEM_SURFACE_STATE_PANEL
+} er_ui_component_test_id_t;
+
+typedef struct {
+  const char* name;
+  const char* slug;
+  const char* route;
+  er_ui_component_category_t category;
+  const char* source_component;
+  const char* edge_builder;
+  const char* const* slots;
+  size_t slot_count;
+  const char* const* states;
+  size_t state_count;
+  er_ui_component_status_t status;
+} er_ui_component_spec_t;
+
+typedef struct {
+  const er_ui_component_spec_t* spec;
+  er_ui_component_resolve_kind_t kind;
+} er_ui_component_resolved_t;
+
+typedef struct {
+  const char* identifier;
+  er_ui_component_resolve_kind_t resolve_kind;
+  const char* slug;
+  const char* source_component;
+  const char* edge_builder;
+  er_ui_component_category_t category;
+  er_ui_component_status_t status;
+  bool native_renderer;
+  bool exact_port;
+} er_ui_component_port_mapping_t;
+
+typedef struct {
+  const char* slug;
+  const char* const* slots;
+  size_t slot_count;
+  const char* const* states;
+  size_t state_count;
+  const char* const* variants;
+  size_t variant_count;
+  const char* const* interactions;
+  size_t interaction_count;
+  const char* const* keyboard;
+  size_t keyboard_count;
+  const char* aria_pattern;
+  bool compound;
+} er_ui_component_parity_contract_t;
+
+typedef struct {
+  const char* name;
+  bool required;
+} er_ui_component_projected_field_t;
+
+typedef struct {
+  er_ui_component_test_id_t component;
+  const er_ui_component_projected_field_t* fields;
+  size_t field_count;
+} er_ui_component_projection_contract_t;
+
+typedef struct {
+  er_ui_component_test_id_t component;
+  const er_ui_component_state_t* states;
+  size_t state_count;
+} er_ui_component_state_matrix_t;
+
+typedef struct {
+  er_ui_component_test_id_t component;
+  er_ui_component_a11y_role_t role;
+  const char* const* label_fields;
+  size_t label_field_count;
+} er_ui_component_accessibility_metadata_t;
+
+#define ER_UI_COMPONENT_COUNT 59u
+#define ER_UI_COMPONENT_CANONICAL_BASE_COUNT 55u
+#define ER_UI_COMPONENT_TEST_ID_COUNT 16u
+#define ER_UI_COMPONENT_PREVIEW_BASE_ID 18000u
+#define ER_UI_COMPONENT_SELECT_CURRENCY_BASE_ID (ER_UI_COMPONENT_PREVIEW_BASE_ID + 1100u)
+#define ER_UI_COMPONENT_SELECT_ORDER_BASE_ID (ER_UI_COMPONENT_PREVIEW_BASE_ID + 1120u)
+#define ER_UI_COMPONENT_SELECT_TICKER_BASE_ID (ER_UI_COMPONENT_PREVIEW_BASE_ID + 1140u)
+#define ER_UI_COMPONENT_CHART_CONTRIBUTION_BASE_ID (ER_UI_COMPONENT_PREVIEW_BASE_ID + 1200u)
+#define ER_UI_COMPONENT_CHART_STOCK_BASE_ID (ER_UI_COMPONENT_PREVIEW_BASE_ID + 1220u)
+#define ER_UI_COMPONENT_CHART_POWER_BASE_ID (ER_UI_COMPONENT_PREVIEW_BASE_ID + 1240u)
+#define ER_UI_COMPONENT_SELECT_CURRENCY_COUNT 3u
+#define ER_UI_COMPONENT_SELECT_ORDER_COUNT 3u
+#define ER_UI_COMPONENT_SELECT_TICKER_COUNT 4u
+#define ER_UI_COMPONENT_CHART_CONTRIBUTION_COUNT 7u
+#define ER_UI_COMPONENT_CHART_STOCK_COUNT 8u
+#define ER_UI_COMPONENT_CHART_POWER_COUNT 8u
+#define ER_UI_COMPONENT_CHART_CONTRIBUTION_DEFAULT_INDEX 5u
+#define ER_UI_COMPONENT_CHART_STOCK_DEFAULT_INDEX 5u
+#define ER_UI_COMPONENT_CHART_POWER_DEFAULT_INDEX 6u
+#define ER_UI_COMPONENT_SELECT_PREFERRED_CURRENCY_ID (ER_UI_COMPONENT_PREVIEW_BASE_ID + 942u)
+#define ER_UI_COMPONENT_SELECT_ORDER_TYPE_ID (ER_UI_COMPONENT_PREVIEW_BASE_ID + 946u)
+#define ER_UI_COMPONENT_SELECT_DEFAULT_CURRENCY_ID (ER_UI_COMPONENT_PREVIEW_BASE_ID + 968u)
+#define ER_UI_COMPONENT_SELECT_TICKER_ID (ER_UI_COMPONENT_PREVIEW_BASE_ID + 1056u)
+#define ER_UI_COMPONENT_GALLERY_SLIDER_CAPACITY 32u
+#define ER_UI_COMPONENT_SHOWCASE_ROW_BASE_ID (ER_UI_COMPONENT_PREVIEW_BASE_ID + 3000u)
+
+typedef struct {
+  uint32_t id;
+  float value;
+} er_ui_component_slider_value_t;
+
+typedef struct {
+  bool has_open_select;
+  uint32_t open_select;
+  size_t currency_index;
+  size_t order_index;
+  size_t ticker_index;
+  size_t contribution_bar;
+  size_t stock_bar;
+  size_t power_bar;
+  er_ui_component_slider_value_t sliders[ER_UI_COMPONENT_GALLERY_SLIDER_CAPACITY];
+  size_t slider_count;
+} er_ui_component_gallery_state_t;
+
 #define ER_UI_COMPONENT_TEXT_CAPACITY 128u
 #define ER_UI_COMPONENT_SUFFIX_TSX_LEN 4u
 #define ER_UI_COMPONENT_SUFFIX_TS_LEN 3u
@@ -119,6 +277,64 @@
 const char* er_ui_component_selector(er_ui_component_test_id_t component);
 const er_ui_component_test_id_t* er_ui_component_test_ids(size_t* out_count);
 const char* er_ui_component_state_selector(er_ui_component_state_t state);
+const char* er_ui_component_category_label(er_ui_component_category_t category);
+const char* er_ui_component_status_label(er_ui_component_status_t status);
+const char* er_ui_component_resolve_kind_label(er_ui_component_resolve_kind_t kind);
+const er_ui_component_spec_t* er_ui_component_at(size_t index);
+size_t er_ui_component_count(void);
+const char* er_ui_component_canonical_source(void);
+size_t er_ui_component_canonical_count(void);
+const char* er_ui_component_canonical_at(size_t index);
+bool er_ui_component_canonical_covered(const char* slug);
+bool er_ui_component_has_native_renderer(const er_ui_component_spec_t* spec);
+bool er_ui_component_is_exact_port(const er_ui_component_spec_t* spec);
+bool er_ui_component_uses_slot(const er_ui_component_spec_t* spec, const char* slot);
+bool er_ui_component_uses_state(const er_ui_component_spec_t* spec, const char* state);
+const er_ui_component_spec_t* er_ui_component_find_by_slug(const char* slug);
+const er_ui_component_spec_t* er_ui_component_find_by_source_component(const char* source_component);
+bool er_ui_component_resolve_identifier(const char* identifier, er_ui_component_resolved_t* out_resolved);
+bool er_ui_component_port_mapping_for_identifier(const char* identifier, er_ui_component_port_mapping_t* out_mapping);
+size_t er_ui_component_native_count(void);
+size_t er_ui_component_exact_count(void);
+size_t er_ui_component_exact_parity_count(void);
+size_t er_ui_component_count_by_category(er_ui_component_category_t category);
+size_t er_ui_component_count_by_status(er_ui_component_status_t status);
+bool er_ui_component_parity_contract_for_slug(const char* slug, er_ui_component_parity_contract_t* out_contract);
+bool er_ui_component_contract_supports_slot(const er_ui_component_parity_contract_t* contract, const char* slot);
+bool er_ui_component_contract_supports_state(const er_ui_component_parity_contract_t* contract, const char* state);
+bool er_ui_component_contract_supports_variant(const er_ui_component_parity_contract_t* contract, const char* variant);
+bool er_ui_component_contract_supports_interaction(
+  const er_ui_component_parity_contract_t* contract,
+  const char* interaction);
+const char* er_ui_component_name(er_ui_component_test_id_t component);
+bool er_ui_component_state_matrix_for(
+  er_ui_component_test_id_t component,
+  er_ui_component_state_matrix_t* out_matrix);
+bool er_ui_component_state_matrix_has_state(
+  const er_ui_component_state_matrix_t* matrix,
+  er_ui_component_state_t state);
+bool er_ui_component_projection_contract_for(
+  er_ui_component_test_id_t component,
+  er_ui_component_projection_contract_t* out_contract);
+bool er_ui_component_projection_contract_has_field(
+  const er_ui_component_projection_contract_t* contract,
+  const char* name);
+bool er_ui_component_projection_contract_requires_field(
+  const er_ui_component_projection_contract_t* contract,
+  const char* name);
+size_t er_ui_component_projection_required_field_count(
+  const er_ui_component_projection_contract_t* contract);
+bool er_ui_component_accessibility_metadata_for(
+  er_ui_component_test_id_t component,
+  er_ui_component_accessibility_metadata_t* out_metadata);
+bool er_ui_component_accessibility_metadata_has_label_field(
+  const er_ui_component_accessibility_metadata_t* metadata,
+  const char* name);
+void er_ui_component_gallery_state_init(er_ui_component_gallery_state_t* state);
+bool er_ui_component_gallery_apply_action(er_ui_component_gallery_state_t* state, er_ui_action_t action);
+bool er_ui_component_gallery_select_open(const er_ui_component_gallery_state_t* state, uint32_t id);
+float er_ui_component_gallery_slider(const er_ui_component_gallery_state_t* state, uint32_t id);
+size_t er_ui_component_option_index(uint32_t id, uint32_t base, size_t len, bool* out_has_index);
 bool er_ui_component_preview_available(const char* slug);
 bool er_ui_component_catalog_preview_available(const char* slug);
 bool er_ui_component_preview_available_by_source_component(const char* source_component);

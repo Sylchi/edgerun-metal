@@ -1,7 +1,7 @@
 #ifndef ER_UI_LEDGER_APP_H
 #define ER_UI_LEDGER_APP_H
 
-#include "er_ui_components.h"
+#include "../src/er_ui_components_internal.h"
 #include "er_ui_shell.h"
 
 #ifdef __cplusplus
