@@ -109,7 +109,7 @@ static int packet(uint16_t kind, uint32_t seq, uint8_t payload_byte) {
     payload_len = NODE_AVAILABLE_BYTES;
     put_u32_at(payload,
                NODE_AVAILABLE_LOG_HEAD_OFFSET,
-               ER_PI_ZERO_W_V1_1_L2_OVER_AIR_RX_UNSUPPORTED);
+               ER_PI_ZERO_W_V1_1_L2_RAW_RX_UNSUPPORTED);
   }
 
   put_u32(&cursor, ERWIRE_MAGIC);
@@ -149,7 +149,7 @@ board=pi-zero-w-v1_1
 serial_protocol=erwire
 erwire_expect=node_available
 erwire_expect=ble_advertisement
-erwire_expect_sdio_probe=l2_over_air_rx_unsupported
+erwire_expect_sdio_probe=l2_raw_rx_unsupported
 erwire_expect=node_heartbeat
 EOF_MANIFEST
 

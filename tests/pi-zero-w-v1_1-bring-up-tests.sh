@@ -145,7 +145,7 @@ fi
 
 if ! make -C "$ROOT_DIR" -n pi-zero-w-v1_1-update PI_UPDATE_IFACE=wlan0 |
   grep -q "pi-node-update --iface"; then
-  printf 'pi zero w v1.1 update target does not use the Wi-Fi OTA sender\n' >&2
+  printf 'pi zero w v1.1 update target does not use the raw L2 sender\n' >&2
   exit 1
 fi
 

@@ -288,11 +288,11 @@ static uint32_t erpsv_sdio_state_from_name(const unsigned char* name,
       memcmp(name, ER_PI_ZERO_W_V1_1_STATUS_NAME_L2_READY, name_len) == 0) {
     return ER_PI_ZERO_W_V1_1_L2_READY;
   }
-  if (name_len == strlen(ER_PI_ZERO_W_V1_1_STATUS_NAME_L2_OVER_AIR_RX_UNSUPPORTED) &&
+  if (name_len == strlen(ER_PI_ZERO_W_V1_1_STATUS_NAME_L2_RAW_RX_UNSUPPORTED) &&
       memcmp(name,
-             ER_PI_ZERO_W_V1_1_STATUS_NAME_L2_OVER_AIR_RX_UNSUPPORTED,
+             ER_PI_ZERO_W_V1_1_STATUS_NAME_L2_RAW_RX_UNSUPPORTED,
              name_len) == 0) {
-    return ER_PI_ZERO_W_V1_1_L2_OVER_AIR_RX_UNSUPPORTED;
+    return ER_PI_ZERO_W_V1_1_L2_RAW_RX_UNSUPPORTED;
   }
   return 0u;
 }
@@ -313,8 +313,8 @@ static const char* erpsv_sdio_state_name(uint32_t state) {
       return ER_PI_ZERO_W_V1_1_STATUS_NAME_CMD53_DONE;
     case ER_PI_ZERO_W_V1_1_L2_READY:
       return ER_PI_ZERO_W_V1_1_STATUS_NAME_L2_READY;
-    case ER_PI_ZERO_W_V1_1_L2_OVER_AIR_RX_UNSUPPORTED:
-      return ER_PI_ZERO_W_V1_1_STATUS_NAME_L2_OVER_AIR_RX_UNSUPPORTED;
+    case ER_PI_ZERO_W_V1_1_L2_RAW_RX_UNSUPPORTED:
+      return ER_PI_ZERO_W_V1_1_STATUS_NAME_L2_RAW_RX_UNSUPPORTED;
     default:
       return "unknown";
   }
