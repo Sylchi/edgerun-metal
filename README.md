@@ -6,6 +6,7 @@ top-level directories are cooperating runtime areas, not separate products:
 - `edgerun-metal`: the freestanding UEFI OS runtime that boots as
   `BOOTX64.EFI` on x86_64 and `BOOTAA64.EFI` on AArch64, hosts Wasm apps, and
   owns runtime device paths.
+- `edgerun-clock`: freestanding deterministic epoch clock shared by identity, object, admission, storage, and wire records.
 - `edgerun-crypto`: freestanding cryptographic primitives used by the runtime, tools, and tests, currently centered on BLAKE3 hashing.
 - `edgerun-identity`: freestanding routable identity primitives for users, devices, apps, resources, objects, ephemeral actors, and delegated actors.
 - `edgerun-object`: canonical object node definitions and validation APIs shared by memory, wire, durable storage, and apps.
@@ -223,6 +224,11 @@ tokens created by the same user up to the limits the device owner assigned.
 
 ## Canonical Objects
 
+`edgerun-clock` is the deterministic epoch coordinate below identities,
+objects, admission, storage, and wire records. Epoch time advances on accepted
+state transitions rather than wall-clock trust, giving separate devices a
+shared way to compare creation, validity, route, and receipt records.
+
 `edgerun-identity` is the routable naming layer below objects and boundary
 crossings. It turns explicit source material into fixed 32-byte identity ids for
 users, devices, apps, storage, relays, resources, objects, ephemeral actors, and
@@ -233,9 +239,9 @@ it is not the parent's signing key and does not imply permission by itself.
 
 `edgerun-object` is the public object boundary. It defines the canonical bytes
 that can move through memory, over wire routes, and into durable storage without
-changing format. An object node contains its requirement fields, owner layer
-identifiers, envelope descriptors, and either inline bytes or child references.
-The object id is the BLAKE3 hash of those canonical bytes.
+changing format. An object node contains its epoch stamp, requirement fields,
+owner layer identifiers, envelope descriptors, and either inline bytes or child
+references. The object id is the BLAKE3 hash of those canonical bytes.
 
 The object layer does not know auth, user sessions, device policy, object
 contents, storage tiers, or route admission. Those decisions belong to the
@@ -303,8 +309,11 @@ Primary data references:
 ├── AGENTS.md              repository engineering rules
 ├── Makefile               root build, test, and check entrypoints
 ├── codex/                 hosted Codex support library and tests
+├── edgerun-clock/         deterministic epoch clock shared across records
 ├── edgerun-crypto/        freestanding crypto used by the runtime
+├── edgerun-identity/      routable identity primitives
 ├── edgerun-metal/         freestanding UEFI OS runtime and device adapters
+├── edgerun-object/        canonical object node format
 ├── edgerun-ui-core/       portable UI scene/component/input runtime
 ├── firmware/              admitted firmware payloads and provenance notes
 ├── include/               repository-wide freestanding C headers

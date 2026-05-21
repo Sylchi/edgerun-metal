@@ -59,6 +59,16 @@ static void check_bytes(const char* label, const uint8_t* got,
   }
 }
 
+static er_clock_epoch_stamp_t test_epoch(uint64_t tick) {
+  er_clock_epoch_stamp_t epoch;
+
+  epoch.tick = tick;
+  epoch.slot = 1u;
+  epoch.epoch = 1u;
+  epoch.era = 1u;
+  return epoch;
+}
+
 static void test_public_key_identity(void) {
   uint8_t key[ER_IDENTITY_ED25519_PUBLIC_SIZE];
   er_identity_source_t source;
@@ -72,7 +82,7 @@ static void test_public_key_identity(void) {
             ER_IDENTITY_OK);
   check_int("source valid", er_identity_source_valid(&source), 1);
   check_int("identity prepare user",
-            er_identity_prepare(ER_IDENTITY_KIND_USER, &source, &identity),
+            er_identity_prepare(ER_IDENTITY_KIND_USER, &source, test_epoch(1u), &identity),
             ER_IDENTITY_OK);
   check_int("identity valid", er_identity_valid(&identity), 1);
   check_int("identity id nonzero", er_identity_id_nonzero(&identity.id), 1);
@@ -117,16 +127,18 @@ static void test_child_identity(void) {
                                        key, sizeof(key), &source),
             ER_IDENTITY_OK);
   check_int("child parent prepare",
-            er_identity_prepare(ER_IDENTITY_KIND_USER, &source, &parent),
+            er_identity_prepare(ER_IDENTITY_KIND_USER, &source, test_epoch(1u), &parent),
             ER_IDENTITY_OK);
   check_int("derive app child",
             er_identity_derive_child(&parent, ER_IDENTITY_KIND_APP,
+                                     test_epoch(2u),
                                      label, sizeof(label),
                                      material, sizeof(material),
                                      &child),
             ER_IDENTITY_OK);
   check_int("derive app child again",
             er_identity_derive_child(&parent, ER_IDENTITY_KIND_APP,
+                                     test_epoch(2u),
                                      label, sizeof(label),
                                      material, sizeof(material),
                                      &child_again),
@@ -162,10 +174,10 @@ static void test_delegated_identity(void) {
                                        key_b, sizeof(key_b), &source_b),
             ER_IDENTITY_OK);
   check_int("delegation app identity",
-            er_identity_prepare(ER_IDENTITY_KIND_APP, &source_a, &app),
+            er_identity_prepare(ER_IDENTITY_KIND_APP, &source_a, test_epoch(1u), &app),
             ER_IDENTITY_OK);
   check_int("delegation device identity",
-            er_identity_prepare(ER_IDENTITY_KIND_DEVICE, &source_b, &device),
+            er_identity_prepare(ER_IDENTITY_KIND_DEVICE, &source_b, test_epoch(1u), &device),
             ER_IDENTITY_OK);
   check_int("delegation source",
             er_identity_source_prepare_delegation(&app.id, &device.id,
@@ -175,6 +187,7 @@ static void test_delegated_identity(void) {
   check_int("delegated identity",
             er_identity_prepare(ER_IDENTITY_KIND_DELEGATED,
                                 &delegation_source,
+                                test_epoch(2u),
                                 &delegated),
             ER_IDENTITY_OK);
   check_int("delegated valid", er_identity_valid(&delegated), 1);

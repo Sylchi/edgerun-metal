@@ -22,6 +22,10 @@ enum {
   TEST_ENVELOPE_METADATA_SEED = 77u,
   TEST_CHILD0_ID_SEED = 1u,
   TEST_CHILD1_ID_SEED = 2u,
+  TEST_LEAF_EPOCH_TICK = 1u,
+  TEST_TREE_EPOCH_TICK = 2u,
+  TEST_MISMATCH_EPOCH_TICK = 3u,
+  TEST_INVALID_EPOCH_TICK = 4u,
   TEST_CHILD0_LEN = 11u,
   TEST_CHILD1_LEN = 7u,
   TEST_TREE_TOTAL_LEN = TEST_CHILD0_LEN + TEST_CHILD1_LEN
@@ -99,6 +103,16 @@ static er_object_requirements_t test_requirements(uint32_t confidentiality) {
   return requirements;
 }
 
+static er_clock_epoch_stamp_t test_epoch(uint64_t tick) {
+  er_clock_epoch_stamp_t epoch;
+
+  epoch.tick = tick;
+  epoch.slot = 1u;
+  epoch.epoch = 1u;
+  epoch.era = 1u;
+  return epoch;
+}
+
 static er_object_owner_t test_owner(uint32_t kind, uint8_t seed) {
   er_object_owner_t owner;
   size_t i;
@@ -154,6 +168,7 @@ static void test_leaf_node(void) {
             ER_OBJECT_OK);
   check_int("leaf build",
             er_object_build_node(ER_OBJECT_KIND_BYTES, 0u, &requirements,
+                                 test_epoch(TEST_LEAF_EPOCH_TICK),
                                  owners, TEST_LEAF_OWNER_COUNT,
                                  envelopes, TEST_LEAF_ENVELOPE_COUNT, 0, 0u,
                                  payload, sizeof(payload),
@@ -164,6 +179,7 @@ static void test_leaf_node(void) {
   check_int("leaf kind", (int)info.node_kind, (int)ER_OBJECT_KIND_BYTES);
   check_u64("leaf logical len", info.logical_len, sizeof(payload));
   check_u64("leaf body len", info.body_len, sizeof(payload));
+  check_u64("leaf epoch tick", info.epoch.tick, TEST_LEAF_EPOCH_TICK);
   check_bytes("leaf body", info.body, payload, sizeof(payload));
   check_int("leaf id", er_object_id(object, object_len, verify_id), ER_OBJECT_OK);
   check_bytes("leaf id matches", verify_id, object_id, ER_OBJECT_ID_SIZE);
@@ -219,6 +235,7 @@ static void test_tree_node(void) {
   children[1].requirements_hash[1] ^= 1u;
   check_int("tree build",
             er_object_build_node(ER_OBJECT_KIND_TREE, 0u, &requirements,
+                                 test_epoch(TEST_TREE_EPOCH_TICK),
                                  &owner, TEST_SINGLE_OWNER_COUNT, 0, 0u, children,
                                  TEST_TREE_CHILDREN, 0, 0u,
                                  object, sizeof(object), &object_len, object_id),
@@ -238,6 +255,7 @@ static void test_tree_node(void) {
   children[1].logical_offset = TEST_CHILD0_LEN + TEST_CHILD0_ID_SEED;
   check_int("tree rejects gap",
             er_object_build_node(ER_OBJECT_KIND_TREE, 0u, &requirements,
+                                 test_epoch(TEST_TREE_EPOCH_TICK),
                                  &owner, TEST_SINGLE_OWNER_COUNT, 0, 0u, children,
                                  TEST_TREE_CHILDREN, 0, 0u,
                                  object, sizeof(object), &object_len, object_id),
@@ -247,6 +265,7 @@ static void test_tree_node(void) {
   test_zero(children[1].requirements_hash, ER_OBJECT_ID_SIZE);
   check_int("tree rejects empty child requirements",
             er_object_build_node(ER_OBJECT_KIND_TREE, 0u, &requirements,
+                                 test_epoch(TEST_TREE_EPOCH_TICK),
                                  &owner, TEST_SINGLE_OWNER_COUNT, 0, 0u, children,
                                  TEST_TREE_CHILDREN, 0, 0u,
                                  object, sizeof(object), &object_len, object_id),
@@ -266,6 +285,7 @@ static void test_rejects_mismatched_envelope(void) {
 
   check_int("mismatched envelope owner",
             er_object_build_node(ER_OBJECT_KIND_BYTES, 0u, &requirements,
+                                 test_epoch(TEST_MISMATCH_EPOCH_TICK),
                                  &owner, TEST_SINGLE_OWNER_COUNT,
                                  &envelope, TEST_SINGLE_ENVELOPE_COUNT, 0, 0u,
                                  payload, sizeof(payload), object,
@@ -286,6 +306,7 @@ static void test_rejects_invalid_requirements(void) {
             er_object_requirements_valid(&requirements), 0);
   check_int("invalid requirements build",
             er_object_build_node(ER_OBJECT_KIND_BYTES, 0u, &requirements,
+                                 test_epoch(TEST_INVALID_EPOCH_TICK),
                                  0, 0u, 0, 0u, 0, 0u,
                                  payload, sizeof(payload), object,
                                  sizeof(object), &object_len, object_id),

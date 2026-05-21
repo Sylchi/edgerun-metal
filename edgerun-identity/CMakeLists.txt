@@ -9,10 +9,12 @@ endif()
 
 add_library(edgerun_identity STATIC
   src/er_identity.c
+  ../edgerun-clock/src/er_clock.c
   ../edgerun-crypto/src/er_blake3.c
 )
 target_include_directories(edgerun_identity PUBLIC
   ${CMAKE_CURRENT_SOURCE_DIR}/include
+  ${CMAKE_CURRENT_SOURCE_DIR}/../edgerun-clock/include
   ${CMAKE_CURRENT_SOURCE_DIR}/../edgerun-crypto/include
 )
 target_compile_definitions(edgerun_identity PRIVATE ER_BLAKE3_NO_SIMD=1)
