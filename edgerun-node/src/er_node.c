@@ -356,3 +356,23 @@ int er_node_request(er_node_t* node, const void* capability_object,
                                     out_receipt_object, out_cap, out_len,
                                     out_id);
 }
+
+int er_node_sign(er_node_t* node, const void* subject_canonical,
+                 size_t subject_len, const void* challenge_canonical,
+                 size_t challenge_len, uint16_t algorithm,
+                 const void* signature, size_t signature_len,
+                 void* out_signature_object, size_t out_cap,
+                 size_t* out_len, uint8_t out_id[ER_OBJECT_ID_SIZE]) {
+  ErNodeState* state = er_node_state(node);
+
+  if (node == (er_node_t*)0) {
+    return ER_NODE_ERR_BADARG;
+  }
+  return er_object_sign(subject_canonical, subject_len, challenge_canonical,
+                        challenge_len, state->identity.id.bytes, algorithm,
+                        signature, signature_len, state->clock.now,
+                        out_signature_object, out_cap, out_len,
+                        out_id) == ER_OBJECT_OK
+             ? ER_NODE_OK
+             : ER_NODE_ERR_CORRUPT;
+}
