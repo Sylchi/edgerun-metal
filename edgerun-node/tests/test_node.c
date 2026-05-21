@@ -6,6 +6,10 @@
 enum {
   TEST_IO_CAP = 32768u,
   TEST_ARENA_SIZE = ER_STORE_ARENA_MIN_SIZE,
+  TEST_NODE_ARENA_SIZE = 4096u,
+  TEST_CHILD_MEMORY_SIZE = 1024u,
+  TEST_PARENT_STORAGE_LIMIT = 8192u,
+  TEST_CHILD_STORAGE_LIMIT = 2048u,
   TEST_OBJECT_CAP = 4096u
 };
 
@@ -148,6 +152,24 @@ static void test_prepare_identity(er_identity_t* out_identity,
             ER_IDENTITY_OK);
 }
 
+static void test_prepare_delegated_identity(const er_identity_t* parent,
+                                            er_clock_epoch_stamp_t epoch,
+                                            er_identity_t* out_identity) {
+  uint8_t material[ER_IDENTITY_HASH_SIZE];
+  static const char label[] = "child";
+  size_t i;
+
+  for (i = 0u; i < sizeof(material); ++i) {
+    material[i] = (uint8_t)(0x90u + i);
+  }
+  check_int("delegated identity",
+            er_identity_derive_child(parent, ER_IDENTITY_KIND_DELEGATED,
+                                     epoch, label, sizeof(label) - 1u,
+                                     material, sizeof(material),
+                                     out_identity),
+            ER_IDENTITY_OK);
+}
+
 static er_store_config_t test_store_config(const er_identity_t* identity,
                                            er_clock_epoch_stamp_t epoch) {
   er_store_config_t config;
@@ -174,6 +196,7 @@ static er_object_requirements_t test_requirements(void) {
 
 static void test_node_objects_and_store_receipts(void) {
   static uint8_t arena[TEST_ARENA_SIZE];
+  static uint8_t node_arena[TEST_NODE_ARENA_SIZE];
   uint8_t canonical[TEST_OBJECT_CAP];
   uint8_t fetched[TEST_OBJECT_CAP];
   uint8_t identity_object[TEST_OBJECT_CAP];
@@ -200,6 +223,7 @@ static void test_node_objects_and_store_receipts(void) {
   er_store_config_t config;
   er_store_t store;
   er_node_t node;
+  er_node_config_t node_config;
   er_node_receipt_t receipt;
   TestIo io;
   static const uint8_t body[] = {7u, 8u, 9u};
@@ -214,7 +238,14 @@ static void test_node_objects_and_store_receipts(void) {
   check_int("store open", er_store_open(&store, test_make_io(&io),
                                         arena, sizeof(arena), &config),
             ER_OK);
-  check_int("node open", er_node_open(&node, &identity, &clock, &store),
+  test_zero(&node_config, sizeof(node_config));
+  node_config.identity = &identity;
+  node_config.clock = &clock;
+  node_config.store = &store;
+  node_config.arena = node_arena;
+  node_config.arena_len = sizeof(node_arena);
+  node_config.storage_limit = TEST_PARENT_STORAGE_LIMIT;
+  check_int("node open", er_node_open_config(&node, &node_config),
             ER_NODE_OK);
   check_int("describe identity",
             er_node_describe_identity(&node, identity_object,
@@ -274,8 +305,76 @@ static void test_node_objects_and_store_receipts(void) {
             (int)ER_OBJECT_ALGORITHM_ED25519);
 }
 
+static void test_node_spawn_delegates_budget(void) {
+  static uint8_t parent_arena[TEST_NODE_ARENA_SIZE];
+  uint8_t receipt_object[TEST_OBJECT_CAP];
+  uint8_t receipt_id[ER_OBJECT_ID_SIZE];
+  size_t receipt_len = 0u;
+  er_identity_t parent_identity;
+  er_identity_t child_identity;
+  er_clock_t parent_clock;
+  er_clock_t child_clock;
+  er_node_t parent_node;
+  er_node_t child_node;
+  er_node_config_t parent_config;
+  er_node_budget_t parent_budget;
+  er_node_budget_t child_budget;
+  er_object_info_t receipt_info;
+
+  test_prepare_identity(&parent_identity, &parent_clock);
+  child_clock = parent_clock;
+  test_prepare_delegated_identity(&parent_identity, child_clock.now,
+                                  &child_identity);
+  test_zero(&parent_config, sizeof(parent_config));
+  parent_config.identity = &parent_identity;
+  parent_config.clock = &parent_clock;
+  parent_config.arena = parent_arena;
+  parent_config.arena_len = sizeof(parent_arena);
+  parent_config.storage_limit = TEST_PARENT_STORAGE_LIMIT;
+  check_int("spawn parent open",
+            er_node_open_config(&parent_node, &parent_config),
+            ER_NODE_OK);
+  check_int("spawn child",
+            er_node_spawn(&parent_node, &child_identity, &child_clock,
+                          TEST_CHILD_MEMORY_SIZE, TEST_CHILD_STORAGE_LIMIT,
+                          (er_store_t*)0, &child_node, receipt_object,
+                          sizeof(receipt_object), &receipt_len, receipt_id),
+            ER_NODE_OK);
+  check_int("spawn receipt verify",
+            er_object_verify(receipt_object, receipt_len, &receipt_info),
+            ER_OBJECT_OK);
+  check_nonzero("spawn receipt id", receipt_id, ER_OBJECT_ID_SIZE);
+  check_int("spawn parent budget",
+            er_node_budget(&parent_node, &parent_budget), ER_NODE_OK);
+  check_int("spawn parent memory used",
+            (int)parent_budget.memory_used, (int)TEST_CHILD_MEMORY_SIZE);
+  check_int("spawn parent storage used",
+            (int)parent_budget.storage_used,
+            (int)TEST_CHILD_STORAGE_LIMIT);
+  check_int("spawn child budget",
+            er_node_budget(&child_node, &child_budget), ER_NODE_OK);
+  check_int("spawn child memory len",
+            (int)child_budget.memory_len, (int)TEST_CHILD_MEMORY_SIZE);
+  check_int("spawn child storage limit",
+            (int)child_budget.storage_limit,
+            (int)TEST_CHILD_STORAGE_LIMIT);
+  check_int("spawn rejects over memory",
+            er_node_spawn(&parent_node, &child_identity, &child_clock,
+                          TEST_NODE_ARENA_SIZE, 0u, (er_store_t*)0,
+                          &child_node, receipt_object,
+                          sizeof(receipt_object), &receipt_len, receipt_id),
+            ER_NODE_ERR_BADARG);
+  check_int("spawn rejects nondelegated",
+            er_node_spawn(&parent_node, &parent_identity, &parent_clock,
+                          0u, 0u, (er_store_t*)0, &child_node,
+                          receipt_object, sizeof(receipt_object),
+                          &receipt_len, receipt_id),
+            ER_NODE_ERR_BADARG);
+}
+
 int main(void) {
   test_node_objects_and_store_receipts();
+  test_node_spawn_delegates_budget();
 
   if (g_failed != 0) {
     fprintf(stderr, "node tests failed: %d/%d\n", g_failed, g_total);

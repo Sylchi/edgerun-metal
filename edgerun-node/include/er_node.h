@@ -23,15 +23,32 @@
 #define ER_NODE_ERR_TOOBIG -3
 #define ER_NODE_ERR_NOSTORE -4
 
-#define ER_NODE_HANDLE_BYTES 512u
+#define ER_NODE_HANDLE_BYTES 1024u
 #define ER_NODE_METHOD_STORE 1u
 #define ER_NODE_METHOD_FETCH 2u
 #define ER_NODE_METHOD_REQUEST 3u
 #define ER_NODE_METHOD_SIGN 4u
+#define ER_NODE_METHOD_SPAWN 5u
 
 typedef struct er_node {
   uint64_t opaque[ER_NODE_HANDLE_BYTES / sizeof(uint64_t)];
 } er_node_t;
+
+typedef struct er_node_config {
+  const er_identity_t* identity;
+  const er_clock_t* clock;
+  er_store_t* store;
+  void* arena;
+  size_t arena_len;
+  uint64_t storage_limit;
+} er_node_config_t;
+
+typedef struct er_node_budget {
+  size_t memory_len;
+  size_t memory_used;
+  uint64_t storage_limit;
+  uint64_t storage_used;
+} er_node_budget_t;
 
 typedef struct er_node_receipt {
   uint32_t method;
@@ -42,10 +59,18 @@ typedef struct er_node_receipt {
   er_clock_epoch_stamp_t epoch;
 } er_node_receipt_t;
 
+int er_node_open_config(er_node_t* node, const er_node_config_t* config);
 int er_node_open(er_node_t* node, const er_identity_t* identity,
                  const er_clock_t* clock, er_store_t* store);
 int er_node_identity(const er_node_t* node, er_identity_t* out_identity);
 int er_node_epoch(const er_node_t* node, er_clock_epoch_stamp_t* out_epoch);
+int er_node_budget(const er_node_t* node, er_node_budget_t* out_budget);
+int er_node_spawn(er_node_t* parent, const er_identity_t* child_identity,
+                  const er_clock_t* child_clock, size_t memory_len,
+                  uint64_t storage_limit, er_store_t* child_store,
+                  er_node_t* out_child, void* out_receipt_object,
+                  size_t out_cap, size_t* out_len,
+                  uint8_t out_id[ER_OBJECT_ID_SIZE]);
 int er_node_describe_identity(const er_node_t* node, void* out, size_t out_cap,
                               size_t* out_len, uint8_t out_id[ER_OBJECT_ID_SIZE]);
 int er_node_describe_clock(const er_node_t* node, void* out, size_t out_cap,
