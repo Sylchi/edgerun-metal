@@ -181,8 +181,6 @@ typedef struct __attribute__((__may_alias__)) {
   int sorted_key_dirty;
   size_t type_capacity;
   size_t index_capacity;
-  size_t defer_sync_depth;
-  int sync_pending;
   int superblock_dirty;
   uint64_t log_start; //@optimizer-ignore log offsets mirror the fixed 64-bit record log ABI
   uint64_t log_end; //@optimizer-ignore log offsets mirror the fixed 64-bit record log ABI
@@ -1097,44 +1095,8 @@ static int er_store_write_superblock(ErStoreState* store) {
   if (rc != ER_OK) {
     return rc;
   }
-  rc = er_store_io_sync(store);
-  if (rc != ER_OK) {
-    return rc;
-  }
   store->superblock_dirty = 0;
   return ER_OK;
-}
-
-static int er_store_sync_pending_records(ErStoreState* store) {
-  if (store->sync_pending == 0) {
-    return ER_OK;
-  }
-  if (er_store_io_sync(store) != ER_OK) {
-    return ER_ERR_IO;
-  }
-  store->sync_pending = 0;
-  return ER_OK;
-}
-
-static void er_store_defer_sync_begin(ErStoreState* store) {
-  ++store->defer_sync_depth;
-}
-
-static int er_store_defer_sync_end(ErStoreState* store, int rc) {
-  int sync_rc;
-
-  if (store->defer_sync_depth == 0u) {
-    return ER_ERR_CORRUPT;
-  }
-  --store->defer_sync_depth;
-  if (store->defer_sync_depth != 0u) {
-    return rc;
-  }
-  sync_rc = er_store_sync_pending_records(store);
-  if (sync_rc != ER_OK) {
-    return sync_rc;
-  }
-  return rc;
 }
 
 //@optimizer-ignore-function superblock offsets and IO size mirror fixed 64-bit record log fields
@@ -1704,11 +1666,6 @@ static int er_store_append_record(ErStoreState* store, uint16_t type, const void
   if (payload_len != 0u && er_store_io_write(store, payload_off, payload, payload_len) != ER_OK) {
     return ER_ERR_IO;
   }
-  if (store->defer_sync_depth != 0u) {
-    store->sync_pending = 1;
-  } else if (er_store_io_sync(store) != ER_OK) {
-    return ER_ERR_IO;
-  }
   er_store_record_hash(header, record_hash);
   er_store_copy(store->last_record_hash, record_hash, ER_HASH_SIZE);
   store->log_end = new_end;
@@ -1768,19 +1725,30 @@ int er_store_open(er_store_t* public_store, er_io_t io, void* arena, size_t aren
 
 int er_store_close(er_store_t* public_store) {
   ErStoreState* store = er_store_state(public_store);
-  int rc;
 
   if (public_store == (er_store_t*)0) {
     return ER_ERR_BADARG;
-  }
-  rc = er_store_sync_pending_records(store);
-  if (rc != ER_OK) {
-    return rc;
   }
   if (store->superblock_dirty == 0) {
     return ER_OK;
   }
   return er_store_write_superblock(store);
+}
+
+int er_store_sync(er_store_t* public_store) {
+  ErStoreState* store = er_store_state(public_store);
+  int rc;
+
+  if (public_store == (er_store_t*)0) {
+    return ER_ERR_BADARG;
+  }
+  if (store->superblock_dirty != 0) {
+    rc = er_store_write_superblock(store);
+    if (rc != ER_OK) {
+      return rc;
+    }
+  }
+  return er_store_io_sync(store);
 }
 
 int er_store_stats(er_store_t* public_store, er_store_stats_t* out_stats) {
@@ -2040,13 +2008,12 @@ int er_store_put_object(er_store_t* public_store, const void* data, size_t len, 
   er_store_store64(&manifest[ER_STORE_OBJECT_CHUNK_SIZE_OFF], chunk_size_u64);
   er_store_store32(&manifest[ER_STORE_OBJECT_CHUNK_COUNT_OFF], (uint32_t)chunk_count);
   off = 0u;
-  er_store_defer_sync_begin(store);
   for (chunk_index = 0u; chunk_index < chunk_count; ++chunk_index) {
     take = (len - off) > chunk_size ? chunk_size : (len - off);
     rc = er_store_put_typed_blob_internal(store, ER_STORE_TYPE_RAW,
                                           &bytes[off], take, chunk_hash, 0u);
     if (rc != ER_OK) {
-      return er_store_defer_sync_end(store, rc);
+      return rc;
     }
     er_store_copy(&manifest[ER_STORE_OBJECT_FIRST_HASH_OFF + (chunk_index * ER_HASH_SIZE)], chunk_hash,
                   ER_HASH_SIZE);
@@ -2056,7 +2023,7 @@ int er_store_put_object(er_store_t* public_store, const void* data, size_t len, 
   rc = er_store_put_typed_blob_internal(store, ER_STORE_TYPE_OBJECT_MANIFEST,
                                         manifest, manifest_len,
                                         out_object_hash, 1u);
-  return er_store_defer_sync_end(store, rc);
+  return rc;
 }
 
 //@optimizer-ignore-function object manifests use fixed 64-bit size fields in their canonical encoding
