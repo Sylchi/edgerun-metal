@@ -40,6 +40,7 @@ enum {
 
 typedef struct __attribute__((__may_alias__)) {
   er_identity_t identity;
+  er_node_authority_t authority;
   er_clock_t clock;
   er_store_t* store;
   uint8_t* arena;
@@ -159,8 +160,8 @@ static void er_node_epoch_body(er_clock_epoch_stamp_t epoch, uint8_t* out) {
 }
 
 int er_node_open(er_node_t* node, const er_identity_t* identity,
-                 void* arena, size_t arena_len, uint64_t storage_limit,
-                 er_store_t* store) {
+                 const er_node_authority_t* authority, void* arena,
+                 size_t arena_len, uint64_t storage_limit, er_store_t* store) {
   ErNodeState* state = er_node_state(node);
   er_clock_limits_t limits;
 
@@ -171,6 +172,9 @@ int er_node_open(er_node_t* node, const er_identity_t* identity,
   }
   er_node_zero(state, sizeof(*state));
   state->identity = *identity;
+  if (authority != (const er_node_authority_t*)0) {
+    state->authority = *authority;
+  }
   limits = er_clock_default_limits();
   if (er_clock_init(&identity->epoch.keeper_id, &limits, &state->clock) != ER_CLOCK_OK) {
     er_node_zero(state, sizeof(*state));
@@ -261,6 +265,7 @@ int er_node_spawn(er_node_t* parent, const er_identity_t* child_identity,
 
   if (er_node_open(out_child,
                    child_identity,
+                   (const er_node_authority_t*)0,
                    memory_len == 0u ? (void*)0 : &parent_state->arena[parent_state->arena_used],
                    memory_len,
                    storage_limit,
@@ -478,20 +483,84 @@ int er_node_request(er_node_t* node, const void* capability_object,
 
 int er_node_sign(er_node_t* node, const void* subject_canonical,
                  size_t subject_len, const void* challenge_canonical,
-                 size_t challenge_len, uint16_t algorithm,
-                 const void* signature, size_t signature_len,
-                 void* out_signature_object, size_t out_cap,
+                 size_t challenge_len, void* out_signature_object, size_t out_cap,
                  size_t* out_len, uint8_t out_id[ER_OBJECT_ID_SIZE]) {
   ErNodeState* state = er_node_state(node);
+  uint8_t signature[ER_NODE_SIGNATURE_MAX_SIZE];
+  size_t signature_len = 0u;
 
-  if (node == (er_node_t*)0) {
+  if (node == (er_node_t*)0 ||
+      state->authority.sign == (er_node_authority_sign_fn)0 ||
+      state->authority.signature_algorithm == ER_OBJECT_ALGORITHM_NONE ||
+      state->authority.identity_source_kind != state->identity.source.source_kind) {
     return ER_NODE_ERR_BADARG;
   }
+  if (state->authority.sign(state->authority.context,
+                            &state->identity,
+                            subject_canonical,
+                            subject_len,
+                            challenge_canonical,
+                            challenge_len,
+                            state->authority.signature_algorithm,
+                            signature,
+                            &signature_len) != ER_NODE_OK ||
+      signature_len == 0u ||
+      signature_len > ER_NODE_SIGNATURE_MAX_SIZE) {
+    return ER_NODE_ERR_CORRUPT;
+  }
   return er_object_sign(subject_canonical, subject_len, challenge_canonical,
-                        challenge_len, state->identity.id.bytes, algorithm,
+                        challenge_len, state->identity.id.bytes,
+                        state->authority.signature_algorithm,
                         signature, signature_len, state->clock.now,
                         out_signature_object, out_cap, out_len,
                         out_id) == ER_OBJECT_OK
+             ? ER_NODE_OK
+             : ER_NODE_ERR_CORRUPT;
+}
+
+int er_node_verify_signature(er_node_t* node, const void* subject_canonical,
+                             size_t subject_len,
+                             const void* challenge_canonical,
+                             size_t challenge_len,
+                             const void* signature_object,
+                             size_t signature_len) {
+  ErNodeState* state = er_node_state(node);
+  er_object_signature_info_t signature;
+  uint8_t subject_id[ER_OBJECT_ID_SIZE];
+  uint8_t challenge_id[ER_OBJECT_ID_SIZE];
+
+  if (node == (er_node_t*)0 ||
+      state->authority.verify == (er_node_authority_verify_fn)0 ||
+      state->authority.signature_algorithm == ER_OBJECT_ALGORITHM_NONE ||
+      state->authority.identity_source_kind != state->identity.source.source_kind ||
+      er_object_signature_verify(signature_object,
+                                 signature_len,
+                                 &signature) != ER_OBJECT_OK ||
+      er_object_id(subject_canonical, subject_len, subject_id) != ER_OBJECT_OK ||
+      er_object_id(challenge_canonical, challenge_len, challenge_id) != ER_OBJECT_OK ||
+      signature.algorithm != state->authority.signature_algorithm ||
+      signature.signature_len == 0u ||
+      signature.signature_len > ER_NODE_SIGNATURE_MAX_SIZE ||
+      er_node_equal(signature.signer_id,
+                    state->identity.id.bytes,
+                    ER_OBJECT_ID_SIZE) == 0 ||
+      er_node_equal(signature.subject_id,
+                    subject_id,
+                    ER_OBJECT_ID_SIZE) == 0 ||
+      er_node_equal(signature.challenge_id,
+                    challenge_id,
+                    ER_OBJECT_ID_SIZE) == 0) {
+    return ER_NODE_ERR_BADARG;
+  }
+  return state->authority.verify(state->authority.context,
+                                 &state->identity,
+                                 subject_canonical,
+                                 subject_len,
+                                 challenge_canonical,
+                                 challenge_len,
+                                 state->authority.signature_algorithm,
+                                 signature.signature,
+                                 signature.signature_len) == ER_NODE_OK
              ? ER_NODE_OK
              : ER_NODE_ERR_CORRUPT;
 }

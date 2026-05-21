@@ -251,6 +251,7 @@ static int er_object_algorithm_valid(uint16_t algorithm) {
     case ER_OBJECT_ALGORITHM_AES_GCM_256:
     case ER_OBJECT_ALGORITHM_XCHACHA20_POLY1305:
     case ER_OBJECT_ALGORITHM_ED25519:
+    case ER_OBJECT_ALGORITHM_ECDSA_P256_SHA256:
       return 1;
     default:
       return 0;

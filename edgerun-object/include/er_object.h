@@ -83,6 +83,7 @@
 #define ER_OBJECT_ALGORITHM_AES_GCM_256 2u
 #define ER_OBJECT_ALGORITHM_XCHACHA20_POLY1305 3u
 #define ER_OBJECT_ALGORITHM_ED25519 4u
+#define ER_OBJECT_ALGORITHM_ECDSA_P256_SHA256 5u
 
 typedef struct er_object_requirements {
   uint32_t durability;

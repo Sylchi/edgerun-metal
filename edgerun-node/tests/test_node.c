@@ -10,7 +10,9 @@ enum {
   TEST_CHILD_MEMORY_SIZE = 1024u,
   TEST_PARENT_STORAGE_LIMIT = 8192u,
   TEST_CHILD_STORAGE_LIMIT = 2048u,
-  TEST_OBJECT_CAP = 4096u
+  TEST_OBJECT_CAP = 4096u,
+  TEST_TPM_SIGNATURE_SIZE = 64u,
+  TEST_TPM_SIGNATURE_HALF = 32u
 };
 
 typedef struct {
@@ -38,6 +40,19 @@ static void test_copy(void* dst, const void* src, size_t len) {
   for (i = 0u; i < len; ++i) {
     out[i] = in[i];
   }
+}
+
+static int test_equal(const void* left, const void* right, size_t len) {
+  size_t i;
+  const uint8_t* a = (const uint8_t*)left;
+  const uint8_t* b = (const uint8_t*)right;
+
+  for (i = 0u; i < len; ++i) {
+    if (a[i] != b[i]) {
+      return 0;
+    }
+  }
+  return 1;
 }
 
 static int test_read_at(void* ctx, uint64_t off, void* buf, size_t len) {
@@ -166,6 +181,95 @@ static void test_prepare_identity(er_identity_t* out_identity,
             ER_IDENTITY_OK);
 }
 
+static void test_prepare_tpm_identity(er_identity_t* out_identity,
+                                      er_clock_t* out_clock) {
+  er_identity_instantiation_t instantiation;
+  er_clock_keeper_id_t keeper_id;
+  er_clock_limits_t limits;
+  uint8_t public_key[ER_IDENTITY_P256_PUBLIC_SIZE];
+  size_t i;
+
+  for (i = 0u; i < ER_CLOCK_KEEPER_ID_SIZE; ++i) {
+    keeper_id.bytes[i] = (uint8_t)(0x21u + i);
+  }
+  for (i = 0u; i < sizeof(public_key); ++i) {
+    public_key[i] = (uint8_t)(0x61u + i);
+  }
+  limits = er_clock_default_limits();
+  check_int("tpm clock init", er_clock_init(&keeper_id, &limits, out_clock),
+            ER_CLOCK_OK);
+  instantiation.identity_kind = ER_IDENTITY_KIND_DEVICE;
+  instantiation.source_kind = ER_IDENTITY_SOURCE_TPM_P256_PUBLIC;
+  instantiation.material = public_key;
+  instantiation.material_len = sizeof(public_key);
+  instantiation.epoch = out_clock->now;
+  check_int("tpm identity instantiate",
+            er_identity_instantiate(&instantiation, out_identity),
+            ER_IDENTITY_OK);
+}
+
+static int test_tpm_authority_sign(void* context,
+                                   const er_identity_t* identity,
+                                   const void* subject_canonical,
+                                   size_t subject_len,
+                                   const void* challenge_canonical,
+                                   size_t challenge_len,
+                                   uint16_t algorithm,
+                                   uint8_t out_signature[ER_NODE_SIGNATURE_MAX_SIZE],
+                                   size_t* out_signature_len) {
+  uint8_t subject_id[ER_OBJECT_ID_SIZE];
+  uint8_t challenge_id[ER_OBJECT_ID_SIZE];
+  size_t i;
+
+  (void)context;
+  if (identity == (const er_identity_t*)0 ||
+      identity->source.source_kind != ER_IDENTITY_SOURCE_TPM_P256_PUBLIC ||
+      algorithm != ER_OBJECT_ALGORITHM_ECDSA_P256_SHA256 ||
+      out_signature == (uint8_t*)0 ||
+      out_signature_len == (size_t*)0 ||
+      er_object_id(subject_canonical, subject_len, subject_id) != ER_OBJECT_OK ||
+      er_object_id(challenge_canonical, challenge_len, challenge_id) != ER_OBJECT_OK) {
+    return ER_NODE_ERR_BADARG;
+  }
+  for (i = 0u; i < TEST_TPM_SIGNATURE_HALF; ++i) {
+    out_signature[i] = (uint8_t)(subject_id[i] ^ identity->id.bytes[i]);
+    out_signature[TEST_TPM_SIGNATURE_HALF + i] =
+        (uint8_t)(challenge_id[i] ^ identity->id.bytes[i]);
+  }
+  *out_signature_len = TEST_TPM_SIGNATURE_SIZE;
+  return ER_NODE_OK;
+}
+
+static int test_tpm_authority_verify(void* context,
+                                     const er_identity_t* identity,
+                                     const void* subject_canonical,
+                                     size_t subject_len,
+                                     const void* challenge_canonical,
+                                     size_t challenge_len,
+                                     uint16_t algorithm,
+                                     const void* signature,
+                                     size_t signature_len) {
+  uint8_t expected[ER_NODE_SIGNATURE_MAX_SIZE];
+  size_t expected_len = 0u;
+
+  if (signature == (const void*)0 ||
+      test_tpm_authority_sign(context,
+                              identity,
+                              subject_canonical,
+                              subject_len,
+                              challenge_canonical,
+                              challenge_len,
+                              algorithm,
+                              expected,
+                              &expected_len) != ER_NODE_OK ||
+      signature_len != expected_len) {
+    return ER_NODE_ERR_BADARG;
+  }
+  return test_equal(signature, expected, expected_len) != 0
+             ? ER_NODE_OK
+             : ER_NODE_ERR_CORRUPT;
+}
+
 static void test_prepare_delegated_identity(const er_identity_t* parent,
                                             er_clock_epoch_stamp_t epoch,
                                             er_identity_t* out_identity) {
@@ -222,7 +326,6 @@ static void test_node_objects_and_store_receipts(void) {
   uint8_t clock_object_id[ER_OBJECT_ID_SIZE];
   uint8_t receipt_id[ER_OBJECT_ID_SIZE];
   uint8_t signature_id[ER_OBJECT_ID_SIZE];
-  uint8_t signature_bytes[64u];
   size_t canonical_len = 0u;
   size_t fetched_len = 0u;
   size_t identity_object_len = 0u;
@@ -237,21 +340,24 @@ static void test_node_objects_and_store_receipts(void) {
   er_store_config_t config;
   er_store_t store;
   er_node_t node;
+  er_node_t unsigned_node;
+  er_node_authority_t authority;
   er_node_receipt_t receipt;
   TestIo io;
   static const uint8_t body[] = {7u, 8u, 9u};
-  size_t i;
 
   test_zero(&io, sizeof(io));
-  for (i = 0u; i < sizeof(signature_bytes); ++i) {
-    signature_bytes[i] = (uint8_t)(0xc0u + i);
-  }
-  test_prepare_identity(&identity, &clock);
+  test_prepare_tpm_identity(&identity, &clock);
   config = test_store_config(&identity, clock.now);
   check_int("store open", er_store_open(&store, test_make_io(&io),
                                         arena, sizeof(arena), &config),
             ER_OK);
-  check_int("node open", er_node_open(&node, &identity, node_arena,
+  authority.identity_source_kind = ER_IDENTITY_SOURCE_TPM_P256_PUBLIC;
+  authority.signature_algorithm = ER_OBJECT_ALGORITHM_ECDSA_P256_SHA256;
+  authority.context = (void*)0;
+  authority.sign = test_tpm_authority_sign;
+  authority.verify = test_tpm_authority_verify;
+  check_int("node open", er_node_open(&node, &identity, &authority, node_arena,
                                       sizeof(node_arena),
                                       TEST_PARENT_STORAGE_LIMIT, &store),
             ER_NODE_OK);
@@ -298,10 +404,20 @@ static void test_node_objects_and_store_receipts(void) {
   check_int("verify request receipt",
             er_object_verify(receipt_object, receipt_len, &info),
             ER_OBJECT_OK);
+  check_int("unsigned node open",
+            er_node_open(&unsigned_node, &identity,
+                         (const er_node_authority_t*)0,
+                         (void*)0, 0u, 0u, (er_store_t*)0),
+            ER_NODE_OK);
+  check_int("unsigned node rejects sign",
+            er_node_sign(&unsigned_node, canonical, canonical_len,
+                         clock_object, clock_object_len,
+                         signature_object, sizeof(signature_object),
+                         &signature_len, signature_id),
+            ER_NODE_ERR_BADARG);
   check_int("node sign",
             er_node_sign(&node, canonical, canonical_len, clock_object,
-                         clock_object_len, ER_OBJECT_ALGORITHM_ED25519,
-                         signature_bytes, sizeof(signature_bytes),
+                         clock_object_len,
                          signature_object, sizeof(signature_object),
                          &signature_len, signature_id),
             ER_NODE_OK);
@@ -310,7 +426,12 @@ static void test_node_objects_and_store_receipts(void) {
                                        &signature_info),
             ER_OBJECT_OK);
   check_int("node signature algorithm", (int)signature_info.algorithm,
-            (int)ER_OBJECT_ALGORITHM_ED25519);
+            (int)ER_OBJECT_ALGORITHM_ECDSA_P256_SHA256);
+  check_int("node authority verify",
+            er_node_verify_signature(&node, canonical, canonical_len,
+                                     clock_object, clock_object_len,
+                                     signature_object, signature_len),
+            ER_NODE_OK);
   check_int("canonical object verify",
             er_object_verify(canonical, canonical_len, &info),
             ER_OBJECT_OK);
@@ -338,7 +459,8 @@ static void test_node_spawn_delegates_budget(void) {
   test_prepare_delegated_identity(&parent_identity, child_clock.now,
                                   &child_identity);
   check_int("spawn parent open",
-            er_node_open(&parent_node, &parent_identity, parent_arena,
+            er_node_open(&parent_node, &parent_identity,
+                         (const er_node_authority_t*)0, parent_arena,
                          sizeof(parent_arena), TEST_PARENT_STORAGE_LIMIT,
                          (er_store_t*)0),
             ER_NODE_OK);
