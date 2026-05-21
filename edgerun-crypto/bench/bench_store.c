@@ -152,7 +152,7 @@ static int bench_store_open(er_store_t* store, BenchIo* io, uint8_t* arena) {
   config.type_slots = BENCH_STORE_TYPE_SLOTS;
   config.index_slots = BENCH_STORE_INDEX_SLOTS;
   config.cache_bytes = BENCH_STORE_CACHE_BYTES;
-  return er_store_open_config(store, bench_make_io(io), arena, BENCH_STORE_ARENA_BYTES, &config);
+  return er_store_open(store, bench_make_io(io), arena, BENCH_STORE_ARENA_BYTES, &config);
 }
 
 static double bench_store_mib_per_s(size_t bytes, size_t iters, uint64_t elapsed_ns) {
@@ -320,7 +320,7 @@ static int bench_index(BenchIo* io, uint8_t* arena, uint8_t* data, const char* l
   start = bench_store_now_ns();
   for (i = 0u; i < count; ++i) {
     bench_index_key(key, sizeof(key), i);
-    if (er_store_index_get(&store, key, got) != ER_OK) {
+    if (er_store_index_get(&store, ER_STORE_INDEX_DEFAULT, key, got) != ER_OK) {
       return 0;
     }
     g_bench_store_sink ^= got[i & (ER_HASH_SIZE - 1u)];
@@ -332,7 +332,7 @@ static int bench_index(BenchIo* io, uint8_t* arena, uint8_t* data, const char* l
   start = bench_store_now_ns();
   for (i = 0u; i < count; ++i) {
     bench_index_key(key, sizeof(key), i);
-    if (er_store_index_get_entry(&store, key, &entry) != ER_OK ||
+    if (er_store_index_get_entry(&store, ER_STORE_INDEX_DEFAULT, key, &entry) != ER_OK ||
         entry.value_kind != ER_STORE_VALUE_BLOB ||
         entry.value_size != BENCH_STORE_BLOB_BYTES) {
       return 0;

@@ -64,8 +64,7 @@ static UINT8 er_jurisdiction_owner_valid(const ErIdentity* owner_identity) {
     case ER_IDENTITY_TYPE_PUBLIC_KEY:
       return (UINT8)(owner_identity->backing_type == ER_IDENTITY_BACKING_ED25519);
     case ER_IDENTITY_TYPE_HASH:
-      return (UINT8)(owner_identity->backing_type == ER_IDENTITY_BACKING_HASH ||
-                     owner_identity->backing_type == ER_IDENTITY_BACKING_EPHEMERAL_HASH);
+      return (UINT8)(owner_identity->backing_type == ER_IDENTITY_BACKING_HASH);
     default:
       return 0u;
   }

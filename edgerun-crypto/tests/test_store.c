@@ -163,7 +163,7 @@ static void test_open_empty_store(void) {
   er_store_t store;
 
   test_zero(&io, sizeof(io));
-  check_int("open empty", er_store_open(&store, test_make_io(&io), arena, sizeof(arena)), ER_OK);
+  check_int("open empty", er_store_open(&store, test_make_io(&io), arena, sizeof(arena), 0), ER_OK);
   check_u64("empty superblock size", io.size, 68u);
   check_int("close empty", er_store_close(&store), ER_OK);
 }
@@ -182,12 +182,12 @@ static void test_put_get_and_duplicate(void) {
   static const uint8_t data[] = {1u, 2u, 3u, 4u, 5u};
 
   test_zero(&io, sizeof(io));
-  check_int("open put", er_store_open(&store, test_make_io(&io), arena_a, sizeof(arena_a)), ER_OK);
+  check_int("open put", er_store_open(&store, test_make_io(&io), arena_a, sizeof(arena_a), 0), ER_OK);
   check_int("open put syncs", (int)io.sync_count, (int)TEST_OPEN_SYNC_COUNT);
   check_int("put blob", er_store_put_blob(&store, data, sizeof(data), hash_a), ER_OK);
   check_int("put blob syncs", (int)io.sync_count, (int)(TEST_OPEN_SYNC_COUNT + TEST_APPEND_SYNC_COUNT));
   size_after_first = io.size;
-  check_int("reopen unclosed", er_store_open(&reopened, test_make_io(&io), arena_b, sizeof(arena_b)), ER_OK);
+  check_int("reopen unclosed", er_store_open(&reopened, test_make_io(&io), arena_b, sizeof(arena_b), 0), ER_OK);
   check_int("reopen unclosed get", er_store_get_blob(&reopened, hash_a, out, sizeof(out), &out_len), ER_OK);
   check_size("reopen unclosed len", out_len, sizeof(data));
   check_bytes("reopen unclosed bytes", out, data, sizeof(data));
@@ -219,15 +219,15 @@ static void test_index_and_scan(void) {
   static const uint8_t beta[] = {20u, 21u};
 
   test_zero(&io, sizeof(io));
-  check_int("open index", er_store_open(&store, test_make_io(&io), arena, sizeof(arena)), ER_OK);
+  check_int("open index", er_store_open(&store, test_make_io(&io), arena, sizeof(arena), 0), ER_OK);
   check_int("put alpha", er_store_put_blob(&store, alpha, sizeof(alpha), alpha_hash), ER_OK);
   check_int("put beta", er_store_put_blob(&store, beta, sizeof(beta), beta_hash), ER_OK);
-  check_int("index put alpha", er_store_index_put(&store, "app/alpha", alpha_hash), ER_OK);
-  check_int("index put beta", er_store_index_put(&store, "app/beta", beta_hash), ER_OK);
-  check_int("index get alpha", er_store_index_get(&store, "app/alpha", got), ER_OK);
+  check_int("index put alpha", er_store_index_put(&store, ER_STORE_INDEX_DEFAULT, "app/alpha", alpha_hash), ER_OK);
+  check_int("index put beta", er_store_index_put(&store, ER_STORE_INDEX_DEFAULT, "app/beta", beta_hash), ER_OK);
+  check_int("index get alpha", er_store_index_get(&store, ER_STORE_INDEX_DEFAULT, "app/alpha", got), ER_OK);
   check_bytes("index get alpha hash", got, alpha_hash, ER_HASH_SIZE);
-  check_int("missing key", er_store_index_get(&store, "app/missing", got), ER_ERR_NOTFOUND);
-  check_int("prefix scan", er_store_index_scan_prefix(&store, "app/", entries, 4u, &count), ER_OK);
+  check_int("missing key", er_store_index_get(&store, ER_STORE_INDEX_DEFAULT, "app/missing", got), ER_ERR_NOTFOUND);
+  check_int("prefix scan", er_store_index_scan_prefix(&store, ER_STORE_INDEX_DEFAULT, "app/", entries, 4u, &count), ER_OK);
   check_size("prefix scan count", count, 2u);
   check_int("cursor open", er_store_index_cursor_open(&store, ER_STORE_INDEX_DEFAULT, "app/", &cursor), ER_OK);
   while (er_store_index_cursor_next(&cursor, &cursor_entry) == ER_OK) {
@@ -249,14 +249,14 @@ static void test_reopen_rebuild_and_latest_wins(void) {
   static const uint8_t second[] = {41u, 42u, 43u};
 
   test_zero(&io, sizeof(io));
-  check_int("open rebuild a", er_store_open(&store_a, test_make_io(&io), arena_a, sizeof(arena_a)), ER_OK);
+  check_int("open rebuild a", er_store_open(&store_a, test_make_io(&io), arena_a, sizeof(arena_a), 0), ER_OK);
   check_int("put first", er_store_put_blob(&store_a, first, sizeof(first), first_hash), ER_OK);
   check_int("put second", er_store_put_blob(&store_a, second, sizeof(second), second_hash), ER_OK);
-  check_int("index first value", er_store_index_put(&store_a, "row/current", first_hash), ER_OK);
-  check_int("index second value", er_store_index_put(&store_a, "row/current", second_hash), ER_OK);
+  check_int("index first value", er_store_index_put(&store_a, ER_STORE_INDEX_DEFAULT, "row/current", first_hash), ER_OK);
+  check_int("index second value", er_store_index_put(&store_a, ER_STORE_INDEX_DEFAULT, "row/current", second_hash), ER_OK);
   check_int("close rebuild a", er_store_close(&store_a), ER_OK);
-  check_int("open rebuild b", er_store_open(&store_b, test_make_io(&io), arena_b, sizeof(arena_b)), ER_OK);
-  check_int("rebuilt get", er_store_index_get(&store_b, "row/current", got), ER_OK);
+  check_int("open rebuild b", er_store_open(&store_b, test_make_io(&io), arena_b, sizeof(arena_b), 0), ER_OK);
+  check_int("rebuilt get", er_store_index_get(&store_b, ER_STORE_INDEX_DEFAULT, "row/current", got), ER_OK);
   check_bytes("latest wins", got, second_hash, ER_HASH_SIZE);
 }
 
@@ -272,12 +272,12 @@ static void test_trailing_corruption_truncates(void) {
   static const uint8_t junk[TEST_TRAILING_JUNK] = {1u, 1u, 2u, 3u, 5u, 8u, 13u};
 
   test_zero(&io, sizeof(io));
-  check_int("open corrupt tail a", er_store_open(&store_a, test_make_io(&io), arena_a, sizeof(arena_a)), ER_OK);
+  check_int("open corrupt tail a", er_store_open(&store_a, test_make_io(&io), arena_a, sizeof(arena_a), 0), ER_OK);
   check_int("put corrupt tail blob", er_store_put_blob(&store_a, data, sizeof(data), hash), ER_OK);
   valid_size = io.size;
   check_int("append corrupt tail", test_write_at(&io, io.size, junk, sizeof(junk)), 0);
   check_u64("tail grew", io.size, valid_size + sizeof(junk));
-  check_int("open corrupt tail b", er_store_open(&store_b, test_make_io(&io), arena_b, sizeof(arena_b)), ER_OK);
+  check_int("open corrupt tail b", er_store_open(&store_b, test_make_io(&io), arena_b, sizeof(arena_b), 0), ER_OK);
   check_u64("tail truncated", io.size, valid_size);
 }
 
@@ -289,7 +289,7 @@ static void test_verify_detects_wrong_hash(void) {
   static const uint8_t data[] = {71u, 72u, 73u, 74u};
 
   test_zero(&io, sizeof(io));
-  check_int("open verify", er_store_open(&store, test_make_io(&io), arena, sizeof(arena)), ER_OK);
+  check_int("open verify", er_store_open(&store, test_make_io(&io), arena, sizeof(arena), 0), ER_OK);
   check_int("put verify blob", er_store_put_blob(&store, data, sizeof(data), hash), ER_OK);
   io.bytes[TEST_FIRST_PAYLOAD_OFF] ^= 0x01u;
   check_int("verify wrong hash", er_store_verify(&store), ER_ERR_CORRUPT);
@@ -312,7 +312,7 @@ static void test_configured_cache_and_capacities(void) {
   config.type_slots = 1024u;
   config.index_slots = 1024u;
   config.cache_bytes = 65536u;
-  check_int("open configured", er_store_open_config(&store, test_make_io(&io), arena, sizeof(arena), &config),
+  check_int("open configured", er_store_open(&store, test_make_io(&io), arena, sizeof(arena), &config),
             ER_OK);
   check_int("stats configured", er_store_stats(&store, &stats), ER_OK);
   check_size("configured blob slots", stats.blob_slots, 8192u);
@@ -345,7 +345,7 @@ static void test_typed_blob_and_custom_index_rebuild(void) {
   static const uint8_t data[] = {91u, 92u, 93u};
 
   test_zero(&io, sizeof(io));
-  check_int("open typed a", er_store_open(&store_a, test_make_io(&io), arena_a, sizeof(arena_a)), ER_OK);
+  check_int("open typed a", er_store_open(&store_a, test_make_io(&io), arena_a, sizeof(arena_a), 0), ER_OK);
   check_int("define content type", er_store_define_content_type(&store_a, TEST_TYPE_ROW, "row"), ER_OK);
   check_int("define index", er_store_define_index(&store_a, TEST_INDEX_BY_NAME, TEST_TYPE_ROW, "by-name"),
             ER_OK);
@@ -358,19 +358,19 @@ static void test_typed_blob_and_custom_index_rebuild(void) {
             ER_OK);
   check_int("custom object index put",
             er_store_object_index_put(&store_a, TEST_INDEX_BY_NAME, "row/object", object_hash), ER_OK);
-  check_int("custom index get", er_store_index_get_ex(&store_a, TEST_INDEX_BY_NAME, "row/alice", got), ER_OK);
+  check_int("custom index get", er_store_index_get(&store_a, TEST_INDEX_BY_NAME, "row/alice", got), ER_OK);
   check_bytes("custom index hash", got, hash, ER_HASH_SIZE);
-  check_int("missing entry", er_store_index_get_entry_ex(&store_a, TEST_INDEX_BY_NAME, "row/missing", &blob_entry),
+  check_int("missing entry", er_store_index_get_entry(&store_a, TEST_INDEX_BY_NAME, "row/missing", &blob_entry),
             ER_ERR_NOTFOUND);
   check_int("close typed a", er_store_close(&store_a), ER_OK);
-  check_int("open typed b", er_store_open(&store_b, test_make_io(&io), arena_b, sizeof(arena_b)), ER_OK);
+  check_int("open typed b", er_store_open(&store_b, test_make_io(&io), arena_b, sizeof(arena_b), 0), ER_OK);
   check_int("rebuilt typed info", er_store_get_blob_info(&store_b, hash, &info), ER_OK);
   check_int("rebuilt typed info type", (int)info.content_type, (int)TEST_TYPE_ROW);
   check_int("custom prefix scan",
-            er_store_index_scan_prefix_ex(&store_b, TEST_INDEX_BY_NAME, "row/", entries, 4u, &count), ER_OK);
+            er_store_index_scan_prefix(&store_b, TEST_INDEX_BY_NAME, "row/", entries, 4u, &count), ER_OK);
   check_size("custom prefix count", count, 2u);
   check_int("custom prefix index id", (int)entries[0].index_id, (int)TEST_INDEX_BY_NAME);
-  check_int("blob entry get", er_store_index_get_entry_ex(&store_b, TEST_INDEX_BY_NAME, "row/alice", &blob_entry),
+  check_int("blob entry get", er_store_index_get_entry(&store_b, TEST_INDEX_BY_NAME, "row/alice", &blob_entry),
             ER_OK);
   check_int("blob entry kind", (int)blob_entry.value_kind, (int)ER_STORE_VALUE_BLOB);
   check_int("blob entry type", (int)blob_entry.content_type, (int)TEST_TYPE_ROW);
@@ -408,7 +408,7 @@ static void test_chunked_object_roundtrip_and_chunk_reuse(void) {
     }
   }
   test_zero(&io, sizeof(io));
-  check_int("open object", er_store_open(&store, test_make_io(&io), arena, sizeof(arena)), ER_OK);
+  check_int("open object", er_store_open(&store, test_make_io(&io), arena, sizeof(arena), 0), ER_OK);
   check_int("open object syncs", (int)io.sync_count, (int)TEST_OPEN_SYNC_COUNT);
   check_int("put object a",
             er_store_put_object(&store, data, sizeof(data), TEST_OBJECT_CHUNK, object_hash_a), ER_OK);

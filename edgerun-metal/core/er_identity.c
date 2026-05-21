@@ -22,7 +22,6 @@ static UINT8 er_identity_material_len_valid(UINT16 identity_type, UINT16 backing
     case ER_IDENTITY_TYPE_HASH:
       switch (backing_type) {
         case ER_IDENTITY_BACKING_HASH:
-        case ER_IDENTITY_BACKING_EPHEMERAL_HASH:
           return (UINT8)(material_len == ER_HASH_LEN);
         default:
           return 0;

@@ -173,9 +173,12 @@ static void test_device_relay_identity(void) {
               er_device_relay_identity_derive(&crypto, &hardware_device,
                                               &other_program_hash, &other_program_relay),
               1);
-  check_node_id_not_equal("device relay program hash changes node",
-                          &hardware_relay.relay_node.node_id,
-                          &other_program_relay.relay_node.node_id);
+  check_node_id_equal("device relay program hash keeps node id",
+                      &hardware_relay.relay_node.node_id,
+                      &other_program_relay.relay_node.node_id);
+  check_hash_equal("device relay other program stored",
+                   &other_program_relay.program_hash,
+                   &other_program_hash);
 
   er_mem_zero(program_hash.bytes, ER_HASH_LEN);
   check_int64("device relay reject zero program hash",

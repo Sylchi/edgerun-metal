@@ -32,7 +32,6 @@
 #define ER_BOOT_ADMISSION_U32_BYTE3 3u
 
 static const UINT8 g_er_boot_admission_record_hash_domain[] = "edgerun:c:v1:boot-admission-record";
-static const UINT8 g_er_boot_ephemeral_authority_domain[] = "edgerun:c:v1:boot-ephemeral-authority";
 
 static void er_boot_admission_put_be16(UINT8* dst, UINT16 value) {
   dst[ER_BOOT_ADMISSION_U16_BYTE0] = (UINT8)(value >> ER_BOOT_ADMISSION_U16_HIGH_SHIFT);
@@ -100,21 +99,17 @@ static UINT8 er_boot_admission_record_base_valid(const ErBootAdmissionRecord* re
         return 0u;
       }
       return 1u;
-    case ER_BOOT_ADMISSION_MODE_EXTERNAL:
-      return er_identity_valid(&record->admission_identity);
     default:
       return 0u;
   }
 }
 
-static UINT8 er_boot_admission_record_prepare_common(const ErCryptoProvider* crypto,
-                                                     UINT32 generation,
-                                                     UINT8 admission_mode,
-                                                     UINT8 bootstrap_channel_kind,
-                                                     UINT16 bootstrap_pci_vendor_id,
-                                                     UINT16 bootstrap_pci_device_id,
-                                                     const ErIdentity* admission_identity,
-                                                     ErBootAdmissionRecord* out_record) {
+UINT8 er_boot_admission_record_prepare(const ErCryptoProvider* crypto,
+                                       UINT32 generation,
+                                       UINT8 bootstrap_channel_kind,
+                                       UINT16 bootstrap_pci_vendor_id,
+                                       UINT16 bootstrap_pci_device_id,
+                                       ErBootAdmissionRecord* out_record) {
   ErHash record_hash;
 
   if (out_record == 0 ||
@@ -128,25 +123,10 @@ static UINT8 er_boot_admission_record_prepare_common(const ErCryptoProvider* cry
   out_record->abi_version = ER_BOOT_ADMISSION_RECORD_ABI_VERSION;
   out_record->record_size = ER_BOOT_ADMISSION_RECORD_BYTES;
   out_record->generation = generation;
-  out_record->admission_mode = admission_mode;
+  out_record->admission_mode = ER_BOOT_ADMISSION_MODE_LOCAL;
   out_record->bootstrap_channel_kind = bootstrap_channel_kind;
   out_record->bootstrap_pci_vendor_id = bootstrap_pci_vendor_id;
   out_record->bootstrap_pci_device_id = bootstrap_pci_device_id;
-
-  switch (admission_mode) {
-    case ER_BOOT_ADMISSION_MODE_LOCAL:
-      break;
-    case ER_BOOT_ADMISSION_MODE_EXTERNAL:
-      if (er_identity_valid(admission_identity) == 0u) {
-        er_boot_admission_record_clear(out_record);
-        return 0u;
-      }
-      out_record->admission_identity = *admission_identity;
-      break;
-    default:
-      er_boot_admission_record_clear(out_record);
-      return 0u;
-  }
 
   if (er_boot_admission_record_hash(crypto, out_record, &record_hash) == 0u) {
     er_boot_admission_record_clear(out_record);
@@ -154,105 +134,6 @@ static UINT8 er_boot_admission_record_prepare_common(const ErCryptoProvider* cry
   }
   out_record->record_hash = record_hash;
   return 1u;
-}
-
-UINT8 er_boot_admission_record_prepare_local(const ErCryptoProvider* crypto,
-                                             UINT32 generation,
-                                             UINT8 bootstrap_channel_kind,
-                                             UINT16 bootstrap_pci_vendor_id,
-                                             UINT16 bootstrap_pci_device_id,
-                                             ErBootAdmissionRecord* out_record) {
-  return er_boot_admission_record_prepare_common(crypto,
-                                                 generation,
-                                                 ER_BOOT_ADMISSION_MODE_LOCAL,
-                                                 bootstrap_channel_kind,
-                                                 bootstrap_pci_vendor_id,
-                                                 bootstrap_pci_device_id,
-                                                 0,
-                                                 out_record);
-}
-
-UINT8 er_boot_admission_record_prepare_external(const ErCryptoProvider* crypto,
-                                                UINT32 generation,
-                                                UINT8 bootstrap_channel_kind,
-                                                UINT16 bootstrap_pci_vendor_id,
-                                                UINT16 bootstrap_pci_device_id,
-                                                const ErIdentity* admission_identity,
-                                                ErBootAdmissionRecord* out_record) {
-  return er_boot_admission_record_prepare_common(crypto,
-                                                 generation,
-                                                 ER_BOOT_ADMISSION_MODE_EXTERNAL,
-                                                 bootstrap_channel_kind,
-                                                 bootstrap_pci_vendor_id,
-                                                 bootstrap_pci_device_id,
-                                                 admission_identity,
-                                                 out_record);
-}
-
-UINT8 er_boot_admission_record_prepare_ephemeral_authority(const ErCryptoProvider* crypto,
-                                                           UINT32 generation,
-                                                           UINT8 bootstrap_channel_kind,
-                                                           UINT16 bootstrap_pci_vendor_id,
-                                                           UINT16 bootstrap_pci_device_id,
-                                                           UINT32 boot_profile,
-                                                           ErBootAdmissionRecord* out_record) {
-  enum {
-    EPHEMERAL_AUTHORITY_FIELD_BYTES = 16u,
-    EPHEMERAL_AUTHORITY_GENERATION_OFFSET = 0u,
-    EPHEMERAL_AUTHORITY_BOOT_PROFILE_OFFSET = 4u,
-    EPHEMERAL_AUTHORITY_CHANNEL_OFFSET = 8u,
-    EPHEMERAL_AUTHORITY_VENDOR_OFFSET = 10u,
-    EPHEMERAL_AUTHORITY_DEVICE_OFFSET = 12u,
-    EPHEMERAL_AUTHORITY_RESERVED_OFFSET = 14u
-  };
-  UINT8 fields[EPHEMERAL_AUTHORITY_FIELD_BYTES];
-  ErByteSpan span;
-  ErHash identity_hash;
-  ErIdentity identity;
-
-  if (crypto == 0 ||
-      out_record == 0 ||
-      generation == 0u ||
-      boot_profile == 0u ||
-      er_boot_admission_channel_valid(bootstrap_channel_kind) == 0u) {
-    return 0u;
-  }
-
-  er_mem_zero(fields, (UINTN)sizeof(fields));
-  er_boot_admission_put_be32(fields + EPHEMERAL_AUTHORITY_GENERATION_OFFSET, generation);
-  er_boot_admission_put_be32(fields + EPHEMERAL_AUTHORITY_BOOT_PROFILE_OFFSET, boot_profile);
-  er_boot_admission_put_be16(fields + EPHEMERAL_AUTHORITY_CHANNEL_OFFSET,
-                             (UINT16)bootstrap_channel_kind);
-  er_boot_admission_put_be16(fields + EPHEMERAL_AUTHORITY_VENDOR_OFFSET,
-                             bootstrap_pci_vendor_id);
-  er_boot_admission_put_be16(fields + EPHEMERAL_AUTHORITY_DEVICE_OFFSET,
-                             bootstrap_pci_device_id);
-  er_boot_admission_put_be16(fields + EPHEMERAL_AUTHORITY_RESERVED_OFFSET, 0u);
-
-  span.bytes = fields;
-  span.len = (UINTN)sizeof(fields);
-  if (er_crypto_hash(crypto,
-                     g_er_boot_ephemeral_authority_domain,
-                     (UINTN)(sizeof(g_er_boot_ephemeral_authority_domain) - 1u),
-                     &span,
-                     1u,
-                     &identity_hash) == 0u ||
-      er_identity_prepare(ER_IDENTITY_TYPE_HASH,
-                          ER_IDENTITY_BACKING_EPHEMERAL_HASH,
-                          identity_hash.bytes,
-                          ER_HASH_LEN,
-                          &identity) == 0u) {
-    er_boot_admission_record_clear(out_record);
-    return 0u;
-  }
-
-  return er_boot_admission_record_prepare_external(crypto,
-                                                   generation,
-                                                   bootstrap_channel_kind,
-                                                   bootstrap_pci_vendor_id,
-                                                   bootstrap_pci_device_id,
-                                                   &identity,
-                                                   out_record);
 }
 
 UINT8 er_boot_admission_record_encode(const ErBootAdmissionRecord* record,
@@ -362,10 +243,8 @@ const char* er_boot_admission_mode_label(UINT8 admission_mode) {
   switch (admission_mode) {
     case ER_BOOT_ADMISSION_MODE_LOCAL:
       return "local";
-    case ER_BOOT_ADMISSION_MODE_EXTERNAL:
-      return "external";
     default:
-      return "invalid";
+      return 0;
   }
 }
 
@@ -378,6 +257,6 @@ const char* er_boot_bootstrap_channel_label(UINT8 channel_kind) {
     case ER_BOOT_BOOTSTRAP_CHANNEL_WIFI_OPEN_EDGERUN:
       return "wifi-open-edgerun";
     default:
-      return "invalid";
+      return 0;
   }
 }
