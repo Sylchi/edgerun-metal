@@ -3,13 +3,13 @@
 
 /*
  * Purpose: validate storage endpoint packets after relay route admission.
- * Intention: keep object storage as endpoint-owned content-addressed packets, not host files.
+ * Intention: keep storage admission at the endpoint while durable bytes use
+ * canonical edgerun-storage objects instead of endpoint-owned packet blobs.
  */
 
 #include "er_app.h"
 #include "er_relay_packet.h"
 #include "er_seal.h"
-#include "er_store.h"
 #include "er_vfs.h"
 #include "er_work_route.h"
 
@@ -95,18 +95,6 @@ typedef struct {
   UINT32 packet_stride;
 } ErStorageEndpointObjectCache;
 
-#define ER_STORAGE_ENDPOINT_DURABLE_PACKET_HEADER_BYTES 130u
-#define ER_STORAGE_ENDPOINT_DURABLE_PACKET_BYTES \
-  (ER_STORAGE_ENDPOINT_DURABLE_PACKET_HEADER_BYTES + ER_VFS_OBJECT_PACKET_BYTES)
-
-typedef struct {
-  UINT16 abi_version;
-  UINT16 reserved;
-  er_store_t* store;
-  UINT8* packet_buffer;
-  UINT32 packet_buffer_len;
-} ErStorageEndpointDurableStore;
-
 UINT8 er_storage_endpoint_object_store_init(ErStorageEndpointObjectStore* store,
                                             ErVfsObjectPacket* packets,
                                             UINT32 packet_capacity);
@@ -136,26 +124,6 @@ UINT8 er_storage_endpoint_cache_set_pinned(ErStorageEndpointObjectCache* cache,
 UINT8 er_storage_endpoint_cache_collect(ErStorageEndpointObjectCache* cache,
                                         UINT32 max_entries_to_collect,
                                         UINT32* out_collected);
-UINT8 er_storage_endpoint_durable_store_init(
-    ErStorageEndpointDurableStore* store,
-    er_store_t* durable_store,
-    UINT8* packet_buffer,
-    UINT32 packet_buffer_len);
-UINT8 er_storage_endpoint_durable_write_packet(
-    const ErCryptoProvider* crypto,
-    ErStorageEndpointDurableStore* store,
-    const ErVfsObjectPacket* packet);
-UINT8 er_storage_endpoint_durable_read_packet(
-    const ErCryptoProvider* crypto,
-    ErStorageEndpointDurableStore* store,
-    UINT32 packet_ordinal,
-    ErVfsObjectPacket* out_packet);
-UINT8 er_storage_endpoint_durable_restore_cache(
-    const ErCryptoProvider* crypto,
-    ErStorageEndpointDurableStore* store,
-    ErStorageEndpointObjectCache* cache,
-    UINT64 use_tick,
-    UINT32* out_restored);
 UINT8 er_storage_endpoint_sealed_relay_payload_hash(const ErCryptoProvider* crypto,
                                                     const UINT8* sealed_payload,
                                                     UINTN sealed_payload_len,

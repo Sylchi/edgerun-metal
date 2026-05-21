@@ -3,7 +3,9 @@
 enum {
   TEST_APP_ROUTE_SIGNATURE_ALGORITHM = 1u,
   TEST_STORAGE_STORE_IO_BYTES = 65536u,
-  TEST_STORAGE_STORE_ARENA_BYTES = ER_STORE_ARENA_MIN_SIZE
+  TEST_STORAGE_STORE_ARENA_BYTES = ER_STORE_ARENA_MIN_SIZE,
+  TEST_STORAGE_STORE_ID_SEED = 0x5au,
+  TEST_STORAGE_STORE_CLOCK_SEED = 0xa5u
 };
 
 static ErIdentity g_test_app_route_package_signer;
@@ -78,6 +80,22 @@ static er_io_t test_storage_store_io(TestStorageStoreIo* io) {
   out.size = test_storage_store_size;
   out.truncate = test_storage_store_truncate;
   return out;
+}
+
+static er_store_config_t test_app_routes_store_config(void) {
+  er_store_config_t config;
+  UINTN i;
+
+  er_mem_zero((UINT8*)&config, (UINTN)sizeof(config));
+  for (i = 0u; i < ER_STORE_IDENTITY_ID_SIZE; ++i) {
+    config.storage_identity_id[i] =
+        (UINT8)(TEST_STORAGE_STORE_ID_SEED + (UINT8)i);
+  }
+  for (i = 0u; i < ER_CLOCK_KEEPER_ID_SIZE; ++i) {
+    config.epoch.keeper_id.bytes[i] =
+        (UINT8)(TEST_STORAGE_STORE_CLOCK_SEED + (UINT8)i);
+  }
+  return config;
 }
 
 static UINT8 test_package_sign(void* ctx, const ErByteSpan* preimage,
@@ -430,31 +448,28 @@ static void test_storage_endpoint_object_cache(void) {
     STORAGE_CACHE_OBJECT_B_BYTES = 19u,
     STORAGE_CACHE_TICK_A0 = 10u,
     STORAGE_CACHE_TICK_A1 = 11u,
-    STORAGE_CACHE_TICK_B0 = 12u,
-    STORAGE_CACHE_RESTORE_TICK = 21u
+    STORAGE_CACHE_TICK_B0 = 12u
   };
   ErCryptoProvider crypto;
   ErStorageEndpointObjectCache cache;
-  ErStorageEndpointObjectCache restored_cache;
-  ErStorageEndpointDurableStore durable_store;
   ErStorageEndpointCacheEntry entries[STORAGE_CACHE_ENTRY_CAPACITY];
-  ErStorageEndpointCacheEntry restored_entries[STORAGE_CACHE_ENTRY_CAPACITY];
   ErStorageEndpointCacheEntry entry;
   ErVfsObjectPacket cache_packets[STORAGE_CACHE_PACKET_CAPACITY];
-  ErVfsObjectPacket restored_packets[STORAGE_CACHE_PACKET_CAPACITY];
   ErVfsObjectPacket object_a_packets[STORAGE_CACHE_PACKET_STRIDE];
   ErVfsObjectPacket object_b_packet;
   ErVfsObjectPacket tampered_packet;
   TestStorageStoreIo store_io;
-  er_store_t packet_store;
+  er_store_config_t store_config;
+  er_store_t object_store;
   UINT8 store_arena[TEST_STORAGE_STORE_ARENA_BYTES];
-  UINT8 durable_packet_buffer[ER_STORAGE_ENDPOINT_DURABLE_PACKET_BYTES];
   UINT8 object_a[STORAGE_CACHE_OBJECT_A_BYTES];
   UINT8 object_b[STORAGE_CACHE_OBJECT_B_BYTES];
   UINT8 assembled[STORAGE_CACHE_OBJECT_A_BYTES];
+  UINT8 durable_object[STORAGE_CACHE_OBJECT_A_BYTES];
+  UINT8 durable_object_id[ER_OBJECT_ID_SIZE];
   UINTN assembled_len = 0u;
+  size_t durable_object_len = 0u;
   UINT32 collected = 0u;
-  UINT32 restored = 0u;
   UINTN i;
 
   crypto.ctx = (void*)(UINTN)9u;
@@ -538,58 +553,34 @@ static void test_storage_endpoint_object_cache(void) {
               object_a[sizeof(object_a) - 1u]);
 
   er_mem_zero((UINT8*)&store_io, (UINTN)sizeof(store_io));
-  check_int64("storage durable store open",
-              er_store_open(&packet_store,
+  store_config = test_app_routes_store_config();
+  check_int64("storage durable object store open",
+              er_store_open(&object_store,
                             test_storage_store_io(&store_io),
                             store_arena,
                             (size_t)sizeof(store_arena),
-                            0),
+                            &store_config),
               ER_OK);
-  check_int64("storage durable init",
-              er_storage_endpoint_durable_store_init(
-                  &durable_store,
-                  &packet_store,
-                  durable_packet_buffer,
-                  (UINT32)sizeof(durable_packet_buffer)),
-              1);
-  check_int64("storage durable write a0",
-              er_storage_endpoint_durable_write_packet(&crypto,
-                                                       &durable_store,
-                                                       &object_a_packets[0]),
-              1);
-  check_int64("storage durable write a1",
-              er_storage_endpoint_durable_write_packet(&crypto,
-                                                       &durable_store,
-                                                       &object_a_packets[1]),
-              1);
-  check_int64("storage restore cache init",
-              er_storage_endpoint_object_cache_init(&restored_cache,
-                                                    restored_entries,
-                                                    STORAGE_CACHE_ENTRY_CAPACITY,
-                                                    restored_packets,
-                                                    STORAGE_CACHE_PACKET_CAPACITY,
-                                                    STORAGE_CACHE_PACKET_STRIDE),
-              1);
-  check_int64("storage durable restore",
-              er_storage_endpoint_durable_restore_cache(&crypto,
-                                                        &durable_store,
-                                                        &restored_cache,
-                                                        STORAGE_CACHE_RESTORE_TICK,
-                                                        &restored),
-              1);
-  check_uint64("storage durable restored count", restored, 2u);
-  check_int64("storage durable restored assemble",
-              er_storage_endpoint_cache_assemble_object(
-                  &crypto,
-                  &restored_cache,
-                  &object_a_packets[0].header.object_id,
-                  assembled,
-                  (UINTN)sizeof(assembled),
-                  &assembled_len),
-              1);
-  check_uint64("storage durable restored len",
-               assembled_len,
+  check_int64("storage durable put object",
+              er_store_put_object(&object_store,
+                                  assembled,
+                                  (size_t)assembled_len,
+                                  ER_VFS_OBJECT_PACKET_BYTES,
+                                  durable_object_id),
+              ER_OK);
+  check_int64("storage durable get object",
+              er_store_get_object(&object_store,
+                                  durable_object_id,
+                                  durable_object,
+                                  (size_t)sizeof(durable_object),
+                                  &durable_object_len),
+              ER_OK);
+  check_uint64("storage durable object len",
+               durable_object_len,
                (UINT64)sizeof(object_a));
+  check_int64("storage durable object last byte",
+              durable_object[sizeof(object_a) - 1u],
+              object_a[sizeof(object_a) - 1u]);
 
   tampered_packet = object_b_packet;
   tampered_packet.bytes[0] ^= 1u;
