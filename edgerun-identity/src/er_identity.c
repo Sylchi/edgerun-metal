@@ -5,6 +5,7 @@
 
 static const uint8_t g_er_identity_id_domain[] = "edgerun:c:v1:identity-id";
 static const uint8_t g_er_identity_child_domain[] = "edgerun:c:v1:identity-child";
+static const uint8_t g_er_identity_app_scope_domain[] = "edgerun:c:v1:identity-app-scope";
 
 enum {
   ER_IDENTITY_U16_BYTES = 2u,
@@ -16,7 +17,14 @@ enum {
   ER_IDENTITY_DELEGATION_PARENT_OFF = 0u,
   ER_IDENTITY_DELEGATION_DELEGATE_OFF = 32u,
   ER_IDENTITY_DELEGATION_SCOPE_OFF = 64u,
-  ER_IDENTITY_DERIVED_MATERIAL_SIZE = 32u
+  ER_IDENTITY_DERIVED_MATERIAL_SIZE = 32u,
+  ER_IDENTITY_U32_BYTES = 4u,
+  ER_IDENTITY_U32_BYTE0 = 0u,
+  ER_IDENTITY_U32_BYTE1 = 1u,
+  ER_IDENTITY_U32_BYTE2 = 2u,
+  ER_IDENTITY_U32_BYTE3 = 3u,
+  ER_IDENTITY_U32_SHIFT2 = 16u,
+  ER_IDENTITY_U32_SHIFT3 = 24u
 };
 
 static void er_identity_zero(void* dst, size_t len) {
@@ -68,6 +76,13 @@ static void er_identity_store16(uint8_t* out, uint16_t value) {
   out[ER_IDENTITY_U16_BYTE1] = (uint8_t)(value >> ER_IDENTITY_BYTE_SHIFT);
 }
 
+static void er_identity_store32(uint8_t* out, uint32_t value) {
+  out[ER_IDENTITY_U32_BYTE0] = (uint8_t)value;
+  out[ER_IDENTITY_U32_BYTE1] = (uint8_t)(value >> ER_IDENTITY_BYTE_SHIFT);
+  out[ER_IDENTITY_U32_BYTE2] = (uint8_t)(value >> ER_IDENTITY_U32_SHIFT2);
+  out[ER_IDENTITY_U32_BYTE3] = (uint8_t)(value >> ER_IDENTITY_U32_SHIFT3);
+}
+
 static int er_identity_kind_valid(uint16_t identity_kind) {
   switch (identity_kind) {
     case ER_IDENTITY_KIND_USER:
@@ -95,6 +110,7 @@ static int er_identity_source_kind_valid(uint16_t source_kind) {
     case ER_IDENTITY_SOURCE_ENDPOINT:
     case ER_IDENTITY_SOURCE_DERIVED:
     case ER_IDENTITY_SOURCE_DELEGATION:
+    case ER_IDENTITY_SOURCE_ANDROID_KEYSTONE_P256_PUBLIC:
       return 1;
     default:
       return 0;
@@ -112,6 +128,7 @@ static int er_identity_source_material_len_valid(uint16_t source_kind,
       return material_len == ER_IDENTITY_ED25519_PUBLIC_SIZE;
     case ER_IDENTITY_SOURCE_P256_PUBLIC:
     case ER_IDENTITY_SOURCE_TPM_P256_PUBLIC:
+    case ER_IDENTITY_SOURCE_ANDROID_KEYSTONE_P256_PUBLIC:
       return material_len == ER_IDENTITY_P256_PUBLIC_SIZE;
     case ER_IDENTITY_SOURCE_ENDPOINT:
       return material_len >= ER_IDENTITY_ENDPOINT_MIN_SIZE &&
@@ -242,6 +259,95 @@ int er_identity_prepare(uint16_t identity_kind,
   out_identity->epoch = epoch;
   out_identity->source = *source;
   return er_identity_id_from_source(source, &out_identity->id);
+}
+
+static int er_identity_instantiation_operations_valid(uint32_t operations) {
+  switch (operations) {
+    case ER_IDENTITY_INSTANTIATION_OPERATION_VERIFY:
+    case ER_IDENTITY_INSTANTIATION_OPERATION_SIGN:
+    case ER_IDENTITY_INSTANTIATION_OPERATION_VERIFY_AND_SIGN:
+      return 1;
+    default:
+      return 0;
+  }
+}
+
+int er_identity_instantiate(const er_identity_instantiation_t* instantiation,
+                            er_identity_t* out_identity) {
+  er_identity_source_t source;
+
+  if (instantiation == (const er_identity_instantiation_t*)0 ||
+      out_identity == (er_identity_t*)0 ||
+      instantiation->source_kind == ER_IDENTITY_SOURCE_DELEGATION ||
+      instantiation->source_kind == ER_IDENTITY_SOURCE_DERIVED) {
+    return ER_IDENTITY_ERR_BADARG;
+  }
+  if (er_identity_source_prepare(instantiation->source_kind,
+                                 instantiation->material,
+                                 instantiation->material_len,
+                                 &source) != ER_IDENTITY_OK) {
+    return ER_IDENTITY_ERR_BADARG;
+  }
+  return er_identity_prepare(instantiation->identity_kind,
+                             &source,
+                             instantiation->epoch,
+                             out_identity);
+}
+
+int er_identity_instantiate_app(const er_identity_app_instantiation_t* instantiation,
+                                er_identity_t* out_identity) {
+  ErBlake3Hasher hasher;
+  er_identity_t app_anchor;
+  er_identity_source_t app_source;
+  er_identity_source_t delegation_source;
+  uint8_t operations_bytes[ER_IDENTITY_U32_BYTES];
+  uint8_t delegated_scope_hash[ER_IDENTITY_HASH_SIZE];
+
+  if (instantiation == (const er_identity_app_instantiation_t*)0 ||
+      out_identity == (er_identity_t*)0 ||
+      er_identity_valid(instantiation->parent) == 0 ||
+      instantiation->scope_hash == (const uint8_t*)0 ||
+      er_identity_bytes_nonzero(instantiation->scope_hash,
+                                ER_IDENTITY_HASH_SIZE) == 0 ||
+      er_clock_stamp_valid(instantiation->epoch) == 0 ||
+      er_identity_instantiation_operations_valid(instantiation->required_parent_operations) == 0) {
+    return ER_IDENTITY_ERR_BADARG;
+  }
+  if (er_identity_source_prepare(ER_IDENTITY_SOURCE_HASH,
+                                 instantiation->app_material,
+                                 instantiation->app_material_len,
+                                 &app_source) != ER_IDENTITY_OK ||
+      er_identity_prepare(ER_IDENTITY_KIND_APP,
+                          &app_source,
+                          instantiation->epoch,
+                          &app_anchor) != ER_IDENTITY_OK) {
+    return ER_IDENTITY_ERR_BADARG;
+  }
+  er_identity_store32(operations_bytes,
+                      instantiation->required_parent_operations);
+  er_blake3_init(&hasher);
+  if (er_blake3_update(&hasher,
+                       g_er_identity_app_scope_domain,
+                       sizeof(g_er_identity_app_scope_domain) - 1u) == 0u ||
+      er_blake3_update(&hasher,
+                       operations_bytes,
+                       sizeof(operations_bytes)) == 0u ||
+      er_blake3_update(&hasher,
+                       instantiation->scope_hash,
+                       ER_IDENTITY_HASH_SIZE) == 0u ||
+      er_blake3_final(&hasher, delegated_scope_hash) == 0u) {
+    return ER_IDENTITY_ERR_CORRUPT;
+  }
+  if (er_identity_source_prepare_delegation(&instantiation->parent->id,
+                                            &app_anchor.id,
+                                            delegated_scope_hash,
+                                            &delegation_source) != ER_IDENTITY_OK) {
+    return ER_IDENTITY_ERR_BADARG;
+  }
+  return er_identity_prepare(ER_IDENTITY_KIND_DELEGATED,
+                             &delegation_source,
+                             instantiation->epoch,
+                             out_identity);
 }
 
 int er_identity_valid(const er_identity_t* identity) {
