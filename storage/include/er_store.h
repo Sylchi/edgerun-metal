@@ -5,6 +5,12 @@
  * Purpose: provide a tiny append-only content-addressed store.
  * Intention: make blobs and key projections rebuildable from one deterministic
  * record log without libc, malloc, paths, threads, or operating-system calls.
+ *
+ * Boundary: storage is deliberately content-blind. It does not authenticate
+ * callers, authorize keys, parse object bytes, validate schemas, interpret
+ * package formats, or decide whether a blob is safe to execute or reveal.
+ * Callers own admission, signatures, encryption, access policy, object
+ * semantics, and lifecycle policy above this byte store.
  */
 
 #include <stddef.h>
@@ -33,6 +39,8 @@
 #define ER_STORE_VALUE_UNKNOWN 0u
 #define ER_STORE_VALUE_BLOB 1u
 #define ER_STORE_VALUE_OBJECT 2u
+#define ER_STORE_HANDLE_BYTES 384u
+#define ER_STORE_INDEX_CURSOR_BYTES 320u
 
 typedef struct er_io {
   void* ctx;
@@ -47,7 +55,6 @@ typedef struct er_io {
 typedef struct er_blob {
   uint8_t hash[ER_HASH_SIZE];
   uint32_t content_type;
-  uint64_t offset; //@optimizer-ignore blob offsets mirror the fixed 64-bit record log ABI
   uint64_t size; //@optimizer-ignore blob sizes mirror the fixed 64-bit record log ABI
 } er_blob_t;
 
@@ -61,11 +68,7 @@ typedef struct er_index_entry {
 } er_index_entry_t;
 
 typedef struct er_store_index_cursor {
-  struct er_store* store;
-  uint32_t index_id;
-  char prefix[ER_STORE_MAX_KEY];
-  size_t prefix_len;
-  size_t pos;
+  uint64_t opaque[ER_STORE_INDEX_CURSOR_BYTES / sizeof(uint64_t)];
 } er_store_index_cursor_t;
 
 typedef struct er_store_config {
@@ -94,38 +97,14 @@ typedef struct er_store_stats {
 } er_store_stats_t;
 
 typedef struct er_store {
-  er_io_t io;
-  void* blob_slots;
-  void* key_slots;
-  void* sorted_key_slots;
-  void* type_slots;
-  void* index_slots;
-  uint8_t* cache;
-  size_t blob_count;
-  size_t key_count;
-  size_t sorted_key_count;
-  size_t type_count;
-  size_t index_count;
-  size_t blob_capacity;
-  size_t key_capacity;
-  int sorted_key_dirty;
-  size_t type_capacity;
-  size_t index_capacity;
-  size_t cache_len;
-  size_t cache_used;
-  size_t cache_hits;
-  size_t cache_misses;
-  size_t cache_admissions;
-  size_t cache_rejects;
-  size_t defer_sync_depth;
-  int sync_pending;
-  int superblock_dirty;
-  uint64_t log_start; //@optimizer-ignore log offsets mirror the fixed 64-bit record log ABI
-  uint64_t log_end; //@optimizer-ignore log offsets mirror the fixed 64-bit record log ABI
-  uint64_t next_seq; //@optimizer-ignore sequence values mirror the fixed 64-bit record header ABI
-  uint8_t last_record_hash[ER_HASH_SIZE];
+  uint64_t opaque[ER_STORE_HANDLE_BYTES / sizeof(uint64_t)];
 } er_store_t;
 
+/*
+ * Reports the minimum caller-owned arena size for a config. A null config uses
+ * default table capacities. The returned size includes alignment slack.
+ */
+int er_store_arena_min_size(const er_store_config_t* config, size_t* out_arena_len);
 int er_store_open(er_store_t* store, er_io_t io, void* arena, size_t arena_len,
                   const er_store_config_t* config);
 int er_store_close(er_store_t* store);
@@ -144,8 +123,11 @@ int er_store_get_blob_info(er_store_t* store, const uint8_t hash[ER_HASH_SIZE], 
 
 int er_store_define_content_type(er_store_t* store, uint32_t content_type, const char* name);
 int er_store_define_index(er_store_t* store, uint32_t index_id, uint32_t content_type, const char* name);
-int er_store_index_put(er_store_t* store, uint32_t index_id, const char* key,
-                       const uint8_t hash[ER_HASH_SIZE]);
+/*
+ * Index writes require an existing store value. Blob entries reference blobs
+ * written with er_store_put_blob or er_store_put_typed_blob. Object entries
+ * reference manifests created by er_store_put_object.
+ */
 int er_store_blob_index_put(er_store_t* store, uint32_t index_id, const char* key,
                             const uint8_t blob_hash[ER_HASH_SIZE]);
 int er_store_object_index_put(er_store_t* store, uint32_t index_id, const char* key,
@@ -157,6 +139,10 @@ int er_store_index_get_entry(er_store_t* store, uint32_t index_id, const char* k
 
 int er_store_index_scan_prefix(er_store_t* store, uint32_t index_id, const char* prefix,
                                er_index_entry_t* out_entries, size_t max_entries, size_t* out_count);
+/*
+ * Cursors are invalid after any write to the same store. Open a fresh cursor
+ * after blob, object, type, or index mutation.
+ */
 int er_store_index_cursor_open(er_store_t* store, uint32_t index_id, const char* prefix,
                                er_store_index_cursor_t* out_cursor);
 int er_store_index_cursor_next(er_store_index_cursor_t* cursor, er_index_entry_t* out_entry);
