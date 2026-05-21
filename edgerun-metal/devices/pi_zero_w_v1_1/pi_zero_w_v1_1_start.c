@@ -2645,7 +2645,7 @@ void er_pi_zero_w_v1_1_main(void) {
                  ER_PI_ZERO_W_V1_1_L2_CM3_ACTIVE &&
              ER_CYW43438_OWNED_FIRMWARE_OVER_AIR_RX_SUPPORTED == 0u) {
     g_er_pi_zero_w_v1_1_sdio_probe_state =
-        ER_PI_ZERO_W_V1_1_L2_OVER_AIR_RX_UNSUPPORTED;
+        ER_PI_ZERO_W_V1_1_L2_RAW_RX_UNSUPPORTED;
     er_pi_zero_w_v1_1_act_led_status(
         ER_PI_ZERO_W_V1_1_LED_CYW_RX_UNSUPPORTED);
   } else {

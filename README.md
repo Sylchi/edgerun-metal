@@ -184,13 +184,12 @@ drivers, or firmware blobs. If multiple authority profiles exist, the user
 selects one before the runtime starts. If Secure Boot or TPM state cannot be
 verified, boot fails instead of silently continuing under an ambiguous authority.
 
-The interoperable Wi-Fi baseline is intentionally simple: an open fixed SSID
-named `edgerun`, no WPA enrollment, and no IP requirement for native EdgeRun
-traffic. A device may run as an AP or as a station and may switch roles when
-local policy asks it to. Once associated, the driver only needs adapter MAC,
-Ethernet-style RX/TX, and the EdgeRun EtherType; sealed EdgeRun frames ride as
-L2 payloads. TCP/IP can remain a separate transport channel on the same or a
-different interface.
+The interoperable Wi-Fi baseline is raw EdgeRun L2, not WLAN association. There
+is no WPA enrollment, DHCP, IP requirement, AP role, or station role in the
+native path. The driver owns channel selection, adapter MAC, frame filters, and
+EdgeRun EtherType payloads directly; sealed EdgeRun frames ride as raw 802.11 L2
+payloads. TCP/IP can remain a separate transport channel on another interface,
+but it is not the foundation for native EdgeRun traffic.
 
 Recipient sealing should be hybrid. Small one-recipient payloads can be sealed
 directly to the recipient. Durable objects, large payloads, or anything with
@@ -549,11 +548,11 @@ the normal content-addressed hashes, caches packets in the board-local boot
 receiver, writes the completed object to the update slot, verifies each written
 SD block by reading it back, and marks reboot required.
 
-The default update slot begins at SD block `8192`. The live update transport is
-CYW43438 SDIO function-2 SDPCM data carrying EdgeRun ethertype `0x88b5`
-erwire frames.
+The default update slot begins at SD block `8192`. The intended live update
+transport is CYW43438 SDIO function-2 SDPCM data carrying raw EdgeRun L2
+ethertype `0x88b5` erwire frames, with no Wi-Fi association.
 
-Send a freshly built `kernel.img` over the Pi Zero W v1.1 Wi-Fi OTA receiver:
+Send a freshly built `kernel.img` over the Pi Zero W v1.1 raw L2 receiver:
 
 ```bash
 make pi-zero-w-v1_1-update PI_UPDATE_IFACE=wlan0

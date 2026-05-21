@@ -103,7 +103,7 @@ static const char ERPBS_ZERO_W_MANIFEST_TEXT[] =
     "erwire_expect=node_available\n"
     "erwire_expect=ble_advertisement\n"
     "erwire_expect_sdio_probe="
-    ER_PI_ZERO_W_V1_1_STATUS_NAME_L2_OVER_AIR_RX_UNSUPPORTED "\n"
+    ER_PI_ZERO_W_V1_1_STATUS_NAME_L2_RAW_RX_UNSUPPORTED "\n"
     "erwire_expect=node_heartbeat\n"
     "admission_id=ERADMISSIONPIZEROW1PROOF000001XX\n"
     "node_identity=ephemeral\n"
