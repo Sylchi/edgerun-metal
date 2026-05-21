@@ -389,6 +389,8 @@ static void test_transition_and_budget_contracts(void) {
 
 static void test_color_helpers_and_scheme_codes(void) {
   er_ui_color4_t color = er_ui_color_rgb_u8(ER_TEST_COLOR_U8_MAX, ER_TEST_COLOR_U8_MID, 0u);
+  er_ui_color_scheme_t scheme = ER_UI_COLOR_SCHEME_DARK;
+  uint32_t scheme_code = ER_TEST_SCHEME_UNKNOWN_CODE;
   expect_float(color.r, 1.0f, "color: u8 red converts to float");
   expect_float(color.g, (float)ER_TEST_COLOR_U8_MID / (float)ER_TEST_COLOR_U8_MAX, "color: u8 green converts to float");
   expect_float(color.b, 0.0f, "color: u8 blue converts to float");
@@ -396,12 +398,19 @@ static void test_color_helpers_and_scheme_codes(void) {
   color = er_ui_color_with_alpha(color, 0.25f);
   expect_float(color.a, 0.25f, "color: alpha helper updates alpha");
 
-  expect_true(er_ui_color_scheme_from_code(1u) == ER_UI_COLOR_SCHEME_LIGHT, "scheme: light code decodes");
-  expect_true(er_ui_color_scheme_from_code(2u) == ER_UI_COLOR_SCHEME_TERMINAL, "scheme: terminal code decodes");
-  expect_true(er_ui_color_scheme_from_code(ER_TEST_SCHEME_UNKNOWN_CODE) == ER_UI_COLOR_SCHEME_DARK, "scheme: unknown code decodes dark");
-  expect_u32(er_ui_color_scheme_code(ER_UI_COLOR_SCHEME_LIGHT), 1u, "scheme: light code encodes");
-  expect_u32(er_ui_color_scheme_code(ER_UI_COLOR_SCHEME_TERMINAL), 2u, "scheme: terminal code encodes");
-  expect_u32(er_ui_color_scheme_code(ER_UI_COLOR_SCHEME_DARK), 0u, "scheme: dark code encodes");
+  expect_true(er_ui_color_scheme_from_code(1u, &scheme), "scheme: light code decodes");
+  expect_true(scheme == ER_UI_COLOR_SCHEME_LIGHT, "scheme: light code selects light");
+  expect_true(er_ui_color_scheme_from_code(2u, &scheme), "scheme: terminal code decodes");
+  expect_true(scheme == ER_UI_COLOR_SCHEME_TERMINAL, "scheme: terminal code selects terminal");
+  expect_true(!er_ui_color_scheme_from_code(ER_TEST_SCHEME_UNKNOWN_CODE, &scheme), "scheme: unknown code is rejected");
+  expect_true(er_ui_color_scheme_code(ER_UI_COLOR_SCHEME_LIGHT, &scheme_code), "scheme: light code encodes");
+  expect_u32(scheme_code, 1u, "scheme: light code value");
+  expect_true(er_ui_color_scheme_code(ER_UI_COLOR_SCHEME_TERMINAL, &scheme_code), "scheme: terminal code encodes");
+  expect_u32(scheme_code, 2u, "scheme: terminal code value");
+  expect_true(er_ui_color_scheme_code(ER_UI_COLOR_SCHEME_DARK, &scheme_code), "scheme: dark code encodes");
+  expect_u32(scheme_code, 0u, "scheme: dark code value");
+  expect_true(!er_ui_color_scheme_code((er_ui_color_scheme_t)ER_TEST_SCHEME_UNKNOWN_CODE, &scheme_code),
+              "scheme: invalid scheme is rejected");
 }
 
 static void test_primitive_bounds_helpers(void) {

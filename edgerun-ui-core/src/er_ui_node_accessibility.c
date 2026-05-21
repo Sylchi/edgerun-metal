@@ -131,9 +131,12 @@ er_ui_status_t er_ui_node_accessibility(const er_ui_node_t* node, er_ui_a11y_nod
     case ER_UI_NODE_BADGE:
       out = er_ui_a11y_base(ER_UI_A11Y_TEXT, node->label, false, 0u);
       break;
-    case ER_UI_NODE_ICON:
-      out = er_ui_a11y_base(ER_UI_A11Y_IMAGE, node->label ? node->label : er_ui_icon_label(node->icon), false, 0u);
+    case ER_UI_NODE_ICON: {
+      const char* icon_label = node->label ? node->label : er_ui_icon_label(node->icon);
+      if (!icon_label) return ER_UI_ERR_INVALID_ARGUMENT;
+      out = er_ui_a11y_base(ER_UI_A11Y_IMAGE, icon_label, false, 0u);
       break;
+    }
     case ER_UI_NODE_BUTTON:
     case ER_UI_NODE_ICON_BUTTON:
       out = er_ui_a11y_base(ER_UI_A11Y_BUTTON, node->label, true, node->id);

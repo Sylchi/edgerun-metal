@@ -142,9 +142,9 @@ const char* er_ui_component_kind_label(er_ui_component_kind_t kind) {
     case ER_UI_COMPONENT_KIND_EDGERUN_DOMAIN:
       return "EdgeRun Domain";
     case ER_UI_COMPONENT_KIND_COUNT:
-      return "Unknown";
+      return 0;
   }
-  return "Unknown";
+  return 0;
 }
 
 er_ui_asset_limits_t er_ui_asset_limits_default(void) {

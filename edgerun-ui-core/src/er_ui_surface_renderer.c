@@ -529,7 +529,10 @@ static void er_ui_surface_render_icon_quad(ErUiSurface* surface, const er_ui_qua
   }
   if (stats != 0) ++stats->icon_quads;
 
-  icon = er_ui_icon_from_atlas_id(quad->atlas_id);
+  if (!er_ui_icon_from_atlas_id(quad->atlas_id, &icon)) {
+    if (stats != 0) ++stats->rejected_primitives;
+    return;
+  }
   {
     ErUiTablerIconRect rect;
     if (er_ui_tabler_icon_rect(icon, &rect) != 0u) {

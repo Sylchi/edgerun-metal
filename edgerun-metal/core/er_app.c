@@ -132,14 +132,6 @@ static UINT8 er_app_add_overflows(UINT64 current, UINT64 amount) {
   return (UINT64)(current + amount) < current ? 1u : 0u;
 }
 
-static UINT8 er_app_label_ref_valid(const ErVfsObjectLabelRef* object_ref) {
-  return (UINT8)(object_ref != 0 &&
-                 object_ref->abi_version == ER_VFS_ABI_VERSION &&
-                 object_ref->object_len != 0u &&
-                 er_vfs_label_valid(object_ref->label, object_ref->label_len) != 0u &&
-                 er_hash_nonzero(&object_ref->object_id) != 0u);
-}
-
 static UINT8 er_app_object_ref_valid(const ErVfsObjectRef* object_ref) {
   return (UINT8)(object_ref != 0 &&
                  object_ref->abi_version == ER_VFS_ABI_VERSION &&
@@ -727,59 +719,6 @@ UINT8 er_app_package_install_record_loadable(const ErCryptoProvider* crypto,
   }
 }
 
-UINT8 er_app_prepare_package_manifest(const ErCryptoProvider* crypto,
-                                      const ErVfsObjectLabelRef* app_object,
-                                      const ErVfsObjectLabelRef* manifest_object,
-                                      const ErVfsObjectLabelRef* ui_assets_object,
-                                      ErAppPackageManifest* out_package) {
-  return er_app_prepare_package_manifest_for_kind(crypto, ER_APP_KIND_UI_APP,
-                                                  app_object,
-                                                  manifest_object,
-                                                  ui_assets_object,
-                                                  out_package);
-}
-
-UINT8 er_app_prepare_package_manifest_for_kind(const ErCryptoProvider* crypto,
-                                               UINT16 app_kind,
-                                               const ErVfsObjectLabelRef* app_object,
-                                               const ErVfsObjectLabelRef* manifest_object,
-                                               const ErVfsObjectLabelRef* ui_assets_object,
-                                               ErAppPackageManifest* out_package) {
-  ErVfsObjectRef app_ref;
-  ErVfsObjectRef manifest_ref;
-  ErVfsObjectRef ui_assets_ref;
-  const ErVfsObjectRef* ui_assets_ref_ptr = 0;
-
-  if (er_app_kind_valid(app_kind) == 0u ||
-      er_app_label_ref_valid(app_object) == 0u ||
-      er_app_label_ref_valid(manifest_object) == 0u) {
-    return 0;
-  }
-  if (er_vfs_prepare_object_ref_from_object(&app_object->object_id,
-                                            app_object->object_len,
-                                            &app_ref) == 0u ||
-      er_vfs_prepare_object_ref_from_object(&manifest_object->object_id,
-                                            manifest_object->object_len,
-                                            &manifest_ref) == 0u) {
-    return 0;
-  }
-  if (ui_assets_object != 0) {
-    if (er_app_label_ref_valid(ui_assets_object) == 0u ||
-        er_vfs_prepare_object_ref_from_object(&ui_assets_object->object_id,
-                                              ui_assets_object->object_len,
-                                              &ui_assets_ref) == 0u) {
-      return 0;
-    }
-    ui_assets_ref_ptr = &ui_assets_ref;
-  }
-  return er_app_prepare_package_manifest_from_objects_for_kind(crypto,
-                                                              app_kind,
-                                                              &app_ref,
-                                                              &manifest_ref,
-                                                              ui_assets_ref_ptr,
-                                                              out_package);
-}
-
 UINT8 er_app_prepare_package_manifest_from_objects(const ErCryptoProvider* crypto,
                                                    const ErVfsObjectRef* app_object,
                                                    const ErVfsObjectRef* manifest_object,
@@ -1195,7 +1134,7 @@ UINT8 er_app_prepare_budget(const ErCryptoProvider* crypto, const ErAppIdentity*
   if (crypto == 0 || identity == 0 || out_budget == 0 || identity->abi_version != ER_APP_ABI_VERSION) {
     return 0;
   }
-  if (app_kind != ER_APP_KIND_USER) {
+  if (app_kind != ER_APP_KIND_UI_APP) {
     return 0;
   }
   if (max_cpu_steps == 0u || max_memory_bytes == 0u) {
@@ -1240,7 +1179,7 @@ UINT8 er_app_usage_init(const ErAppIdentity* identity, const ErAppBudget* budget
       identity->abi_version != ER_APP_ABI_VERSION || budget->abi_version != ER_APP_ABI_VERSION) {
     return 0;
   }
-  if (budget->app_kind != ER_APP_KIND_USER) {
+  if (budget->app_kind != ER_APP_KIND_UI_APP) {
     return 0;
   }
 
@@ -1306,7 +1245,7 @@ UINT8 er_app_prepare_schedule_slot(const ErCryptoProvider* crypto, const ErAppId
       identity->abi_version != ER_APP_ABI_VERSION || budget->abi_version != ER_APP_ABI_VERSION) {
     return 0;
   }
-  if (budget->app_kind != ER_APP_KIND_USER || budget->max_cpu_steps == 0u || budget->max_memory_bytes == 0u) {
+  if (budget->app_kind != ER_APP_KIND_UI_APP || budget->max_cpu_steps == 0u || budget->max_memory_bytes == 0u) {
     return 0;
   }
 
@@ -1338,7 +1277,7 @@ UINT8 er_app_prepare_launch_allocation(const ErCryptoProvider* crypto, const ErA
       identity->abi_version != ER_APP_ABI_VERSION || budget->abi_version != ER_APP_ABI_VERSION) {
     return 0;
   }
-  if (budget->app_kind != ER_APP_KIND_USER || budget->max_memory_bytes == 0u ||
+  if (budget->app_kind != ER_APP_KIND_UI_APP || budget->max_memory_bytes == 0u ||
       executor_memory_base == 0u || executor_memory_len != budget->max_memory_bytes) {
     return 0;
   }
@@ -1384,7 +1323,7 @@ UINT8 er_app_prepare_execution_jurisdiction(const ErCryptoProvider* crypto,
       identity->abi_version != ER_APP_ABI_VERSION ||
       budget->abi_version != ER_APP_ABI_VERSION ||
       allocation->abi_version != ER_APP_ABI_VERSION ||
-      budget->app_kind != ER_APP_KIND_USER ||
+      budget->app_kind != ER_APP_KIND_UI_APP ||
       er_node_id_nonzero(parent_relay_node_id) == 0u) {
     return 0;
   }

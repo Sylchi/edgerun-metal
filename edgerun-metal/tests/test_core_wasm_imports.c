@@ -302,7 +302,7 @@ static void test_relay_packets(void) {
   er_mem_zero((UINT8*)&budget, (UINTN)sizeof(budget));
   er_mem_zero((UINT8*)&usage, (UINTN)sizeof(usage));
   budget.abi_version = ER_APP_ABI_VERSION;
-  budget.app_kind = ER_APP_KIND_USER;
+  budget.app_kind = ER_APP_KIND_UI_APP;
   budget.admission_id = admission;
   budget.budget_id = token;
   usage.abi_version = ER_APP_ABI_VERSION;
@@ -440,7 +440,7 @@ static void test_wasm_relay_imports(void) {
   er_mem_zero((UINT8*)&budget, (UINTN)sizeof(budget));
   er_mem_zero((UINT8*)&usage, (UINTN)sizeof(usage));
   budget.abi_version = ER_APP_ABI_VERSION;
-  budget.app_kind = ER_APP_KIND_USER;
+  budget.app_kind = ER_APP_KIND_UI_APP;
   budget.admission_id = admission;
   budget.budget_id = token;
   budget.max_packet_bytes = ER_RELAY_PACKET_HEADER_LEN + 4u;

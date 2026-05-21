@@ -200,7 +200,7 @@ static void test_vfs_object_packets(void) {
   check_int64("vfs label ref label len", ref.label_len, 12);
   check_uint64("vfs label ref object len", ref.object_len, sizeof(object_bytes));
   check_int64("vfs label ref from object",
-              er_vfs_prepare_object_label_ref_from_object(&crypto, "app/alias.bin", 13, &ref.object_id,
+              er_vfs_prepare_object_label_ref_from_object(&crypto, "app/by-object.bin", 17, &ref.object_id,
                                                           ref.object_len, &ref_from_object),
               1);
   check_int64("vfs label ref from object abi", ref_from_object.abi_version, ER_VFS_ABI_VERSION);
@@ -827,10 +827,7 @@ static void test_app_identity_routes(void) {
   static const UINT8 manifest_bytes[] = {'m', 'a', 'n', 'i', 'f', 'e', 's', 't'};
   static const UINT8 ui_assets_bytes[] = {'a', 's', 's', 'e', 't', 's'};
   ErVfsObjectLabelRef app_ref;
-  ErVfsObjectLabelRef app_alias_ref;
-  ErVfsObjectLabelRef app_bad_label_ref;
   ErVfsObjectLabelRef manifest_ref;
-  ErVfsObjectLabelRef manifest_alias_ref;
   ErVfsObjectLabelRef ui_assets_ref;
   ErVfsObjectRef app_object_ref;
   ErVfsObjectRef manifest_object_ref;
@@ -844,7 +841,6 @@ static void test_app_identity_routes(void) {
   ErAppPackageObjectLoad manifest_load;
   ErAppPackageObjectLoad ui_assets_load;
   ErAppPackageManifest package;
-  ErAppPackageManifest package_alias;
   ErAppPackageManifest package_from_objects;
   ErAppPackageManifest driver_package;
   ErAppPackageManifest package_without_assets;
@@ -916,18 +912,9 @@ static void test_app_identity_routes(void) {
               er_vfs_prepare_object_label_ref(&crypto, "apps/counter.wasm", 17,
                                               app_bytes, sizeof(app_bytes), &app_ref),
               1);
-  check_int64("app package app alias ref",
-              er_vfs_prepare_object_label_ref(&crypto, "drafts/main.wasm", 16,
-                                              app_bytes, sizeof(app_bytes), &app_alias_ref),
-              1);
   check_int64("app package manifest ref",
               er_vfs_prepare_object_label_ref(&crypto, "apps/counter.manifest", 21,
                                               manifest_bytes, sizeof(manifest_bytes), &manifest_ref),
-              1);
-  check_int64("app package manifest alias ref",
-              er_vfs_prepare_object_label_ref(&crypto, "drafts/app.manifest", 19,
-                                              manifest_bytes, sizeof(manifest_bytes),
-                                              &manifest_alias_ref),
               1);
   check_int64("app package assets ref",
               er_vfs_prepare_object_label_ref(&crypto, "apps/counter.assets", 19,
@@ -951,22 +938,14 @@ static void test_app_identity_routes(void) {
   check_hash_equal("app package object ref app id",
                    &app_object_ref.object_id, &app_ref.object_id);
   check_int64("app package prepare",
-              er_app_prepare_package_manifest(&crypto, &app_ref, &manifest_ref,
-                                              &ui_assets_ref, &package),
-              1);
-  check_int64("app package prepare from objects",
               er_app_prepare_package_manifest_from_objects(&crypto,
                                                            &app_object_ref,
                                                            &manifest_object_ref,
                                                            &ui_assets_object_ref,
-                                                           &package_from_objects),
+                                                           &package),
               1);
-  check_hash_equal("app package object refs preserve package id",
-                   &package_from_objects.package_id, &package.package_id);
   check_int64("app package abi", package.abi_version, ER_APP_ABI_VERSION);
-  check_int64("app package kind", package.app_kind, ER_APP_KIND_USER);
-  check_int64("app package ui kind alias", package.app_kind,
-              ER_APP_KIND_UI_APP);
+  check_int64("app package kind", package.app_kind, ER_APP_KIND_UI_APP);
   check_hash_equal("app package app object", &package.app_object_id,
                    &app_ref.object_id);
   check_hash_equal("app package manifest object", &package.manifest_object_id,
@@ -976,31 +955,19 @@ static void test_app_identity_routes(void) {
                sizeof(manifest_bytes));
   check_uint64("app package assets len", package.ui_assets_object_len,
                sizeof(ui_assets_bytes));
-  check_int64("app package alias prepare",
-              er_app_prepare_package_manifest(&crypto, &app_alias_ref,
-                                              &manifest_alias_ref,
-                                              &ui_assets_ref, &package_alias),
-              1);
-  check_hash_equal("app package labels ignored", &package_alias.package_id,
-                   &package.package_id);
   check_int64("driver package prepare",
-              er_app_prepare_package_manifest_for_kind(&crypto,
-                                                       ER_APP_KIND_BUS_DRIVER,
-                                                       &app_ref,
-                                                       &manifest_ref,
-                                                       0,
-                                                       &driver_package),
+              er_app_prepare_package_manifest_from_objects_for_kind(
+                &crypto, ER_APP_KIND_BUS_DRIVER, &app_object_ref,
+                &manifest_object_ref, 0, &driver_package),
               1);
   check_int64("driver package kind", driver_package.app_kind,
               ER_APP_KIND_BUS_DRIVER);
   check_hash_not_equal("driver package id differs from ui package",
                        &driver_package.package_id, &package.package_id);
   check_int64("driver package rejects invalid kind",
-              er_app_prepare_package_manifest_for_kind(&crypto, 0u,
-                                                       &app_ref,
-                                                       &manifest_ref,
-                                                       0,
-                                                       &package_alias),
+              er_app_prepare_package_manifest_from_objects_for_kind(
+                &crypto, 0u, &app_object_ref, &manifest_object_ref, 0,
+                &package_from_objects),
               0);
   test_fill_bytes(package_signer_key, (UINTN)sizeof(package_signer_key), 0x61u);
   check_int64("app package signer identity",
@@ -1072,8 +1039,9 @@ static void test_app_identity_routes(void) {
                                                            &package_from_objects),
               0);
   check_int64("app package without assets",
-              er_app_prepare_package_manifest(&crypto, &app_ref, &manifest_ref,
-                                              0, &package_without_assets),
+              er_app_prepare_package_manifest_from_objects(
+                &crypto, &app_object_ref, &manifest_object_ref, 0,
+                &package_without_assets),
               1);
   check_hash_not_equal("driver package kind affects id",
                        &driver_package.package_id,
@@ -1081,15 +1049,9 @@ static void test_app_identity_routes(void) {
   check_hash_not_equal("app package assets affect id",
                        &package_without_assets.package_id, &package.package_id);
   check_int64("app package reject missing manifest",
-              er_app_prepare_package_manifest(&crypto, &app_ref, 0,
-                                              &ui_assets_ref, &package_alias),
-              0);
-  app_bad_label_ref = app_ref;
-  app_bad_label_ref.label[0] = '/';
-  check_int64("app package reject invalid label ref",
-              er_app_prepare_package_manifest(&crypto, &app_bad_label_ref,
-                                              &manifest_ref, &ui_assets_ref,
-                                              &package_alias),
+              er_app_prepare_package_manifest_from_objects(
+                &crypto, &app_object_ref, 0, &ui_assets_object_ref,
+                &package_from_objects),
               0);
   check_int64("app package app packet",
               er_vfs_prepare_object_packet(&crypto, app_bytes, sizeof(app_bytes),
@@ -1631,12 +1593,12 @@ static void test_app_identity_routes(void) {
               er_app_prepare_budget(&crypto, &identity, 99u, 1000u, 4096u, 1024u, 2048u, 4u, 4u, &budget),
               0);
   check_int64("app budget reject zero memory",
-              er_app_prepare_budget(&crypto, &identity, ER_APP_KIND_USER, 1000u, 0u, 1024u, 2048u, 4u, 4u, &budget),
+              er_app_prepare_budget(&crypto, &identity, ER_APP_KIND_UI_APP, 1000u, 0u, 1024u, 2048u, 4u, 4u, &budget),
               0);
   check_int64("app budget prepare",
-              er_app_prepare_budget(&crypto, &identity, ER_APP_KIND_USER, 1000u, 4096u, 1024u, 2048u, 4u, 4u, &budget),
+              er_app_prepare_budget(&crypto, &identity, ER_APP_KIND_UI_APP, 1000u, 4096u, 1024u, 2048u, 4u, 4u, &budget),
               1);
-  check_int64("app budget kind", budget.app_kind, ER_APP_KIND_USER);
+  check_int64("app budget kind", budget.app_kind, ER_APP_KIND_UI_APP);
   check_uint64("app budget cpu", budget.max_cpu_steps, 1000u);
   check_uint64("app budget memory", budget.max_memory_bytes, 4096u);
 
