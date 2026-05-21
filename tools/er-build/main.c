@@ -76,6 +76,7 @@ static const char ERB_CRYPTO_BUILD_DIR[] = ".build/er-build-out/crypto";
 static const char ERB_IDENTITY_BUILD_DIR[] = ".build/er-build-out/identity";
 static const char ERB_OBJECT_BUILD_DIR[] = ".build/er-build-out/object";
 static const char ERB_STORAGE_BUILD_DIR[] = ".build/er-build-out/storage";
+static const char ERB_NODE_BUILD_DIR[] = ".build/er-build-out/node";
 static const char ERB_VARFONT_BUILD_DIR[] = ".build/er-build-out/varfont";
 static const char ERB_UI_CORE_BUILD_DIR[] = ".build/er-build-out/ui-core";
 static const char ERB_CODEX_BIN[] = ".build/codex";
@@ -95,6 +96,7 @@ static const char ERB_IDENTITY_TEST_BIN[] = ".build/er-build-out/identity/test_i
 static const char ERB_OBJECT_TEST_BIN[] = ".build/er-build-out/object/test_object";
 static const char ERB_STORAGE_STORE_TEST_BIN[] = ".build/er-build-out/storage/test_store";
 static const char ERB_STORAGE_STORE_BENCH_BIN[] = ".build/er-build-out/storage/bench_store";
+static const char ERB_NODE_TEST_BIN[] = ".build/er-build-out/node/test_node";
 static const char ERB_VARFONT_TEST_BIN[] = ".build/er-build-out/varfont/vrfont_tests";
 static const char ERB_UI_CORE_TEST_BIN[] = ".build/er-build-out/ui-core/er_ui_core_tests";
 static const char ERB_APP_ERC_SOURCE_NAME[] = "app.erc";
@@ -1898,6 +1900,7 @@ static int erb_target_erwire_test(int print_plan) {
 }
 
 static int erb_target_storage_test(int print_plan);
+static int erb_target_node_test(int print_plan);
 static int erb_target_object_test(int print_plan);
 static int erb_target_identity_test(int print_plan);
 static int erb_target_clock_test(int print_plan);
@@ -1933,7 +1936,8 @@ static int erb_target_repo_test(int print_plan) {
       erb_target_clock_test(print_plan) != 0 ||
       erb_target_identity_test(print_plan) != 0 ||
       erb_target_object_test(print_plan) != 0 ||
-      erb_target_storage_test(print_plan) != 0) {
+      erb_target_storage_test(print_plan) != 0 ||
+      erb_target_node_test(print_plan) != 0) {
     return 1;
   }
   return 0;
@@ -2057,11 +2061,17 @@ static int erb_target_storage_test(int print_plan) {
   if (erb_prepare_dirs() != 0 || erb_compile_common(&args, ERB_STORAGE_STORE_TEST_BIN) != 0) {
     return 1;
   }
-  if (erb_args_push(&args, "-Istorage/include") != 0 ||
+  if (erb_args_push(&args, "-Iedgerun-storage/include") != 0 ||
+      erb_args_push(&args, "-Iedgerun-object/include") != 0 ||
+      erb_args_push(&args, "-Iedgerun-identity/include") != 0 ||
+      erb_args_push(&args, "-Iedgerun-clock/include") != 0 ||
       erb_args_push(&args, "-Iedgerun-crypto/include") != 0 ||
       erb_args_push(&args, "-Iinclude") != 0 ||
-      erb_args_push(&args, "storage/tests/test_store.c") != 0 ||
-      erb_args_push(&args, "storage/src/er_store.c") != 0 ||
+      erb_args_push(&args, "edgerun-storage/tests/test_store.c") != 0 ||
+      erb_args_push(&args, "edgerun-storage/src/er_store.c") != 0 ||
+      erb_args_push(&args, "edgerun-object/src/er_object.c") != 0 ||
+      erb_args_push(&args, "edgerun-identity/src/er_identity.c") != 0 ||
+      erb_args_push(&args, "edgerun-clock/src/er_clock.c") != 0 ||
       erb_args_push(&args, "edgerun-crypto/src/er_blake3.c") != 0) {
     return 1;
   }
@@ -2077,11 +2087,17 @@ static int erb_target_storage_bench(int print_plan) {
   if (erb_prepare_dirs() != 0 || erb_compile_common(&args, ERB_STORAGE_STORE_BENCH_BIN) != 0) {
     return 1;
   }
-  if (erb_args_push(&args, "-Istorage/include") != 0 ||
+  if (erb_args_push(&args, "-Iedgerun-storage/include") != 0 ||
+      erb_args_push(&args, "-Iedgerun-object/include") != 0 ||
+      erb_args_push(&args, "-Iedgerun-identity/include") != 0 ||
+      erb_args_push(&args, "-Iedgerun-clock/include") != 0 ||
       erb_args_push(&args, "-Iedgerun-crypto/include") != 0 ||
       erb_args_push(&args, "-Iinclude") != 0 ||
-      erb_args_push(&args, "storage/bench/bench_store.c") != 0 ||
-      erb_args_push(&args, "storage/src/er_store.c") != 0 ||
+      erb_args_push(&args, "edgerun-storage/bench/bench_store.c") != 0 ||
+      erb_args_push(&args, "edgerun-storage/src/er_store.c") != 0 ||
+      erb_args_push(&args, "edgerun-object/src/er_object.c") != 0 ||
+      erb_args_push(&args, "edgerun-identity/src/er_identity.c") != 0 ||
+      erb_args_push(&args, "edgerun-clock/src/er_clock.c") != 0 ||
       erb_args_push(&args, "edgerun-crypto/src/er_blake3.c") != 0) {
     return 1;
   }
@@ -2089,6 +2105,37 @@ static int erb_target_storage_bench(int print_plan) {
     return 1;
   }
   return erb_run_program(ERB_STORAGE_STORE_BENCH_BIN, print_plan);
+}
+
+static int erb_target_node_test(int print_plan) {
+  ErbArgs args;
+
+  if (erb_prepare_dirs() != 0 ||
+      erb_mkdir_one(ERB_NODE_BUILD_DIR) != 0 ||
+      erb_compile_common(&args, ERB_NODE_TEST_BIN) != 0) {
+    return 1;
+  }
+  if (erb_args_push(&args, "-Iedgerun-node/include") != 0 ||
+      erb_args_push(&args, "-Iedgerun-storage/include") != 0 ||
+      erb_args_push(&args, "-Iedgerun-object/include") != 0 ||
+      erb_args_push(&args, "-Iedgerun-identity/include") != 0 ||
+      erb_args_push(&args, "-Iedgerun-clock/include") != 0 ||
+      erb_args_push(&args, "-Iedgerun-crypto/include") != 0 ||
+      erb_args_push(&args, "-Iinclude") != 0 ||
+      erb_args_push(&args, "edgerun-node/tests/test_node.c") != 0 ||
+      erb_args_push(&args, "edgerun-node/src/er_node.c") != 0 ||
+      erb_args_push(&args, "edgerun-storage/src/er_store.c") != 0 ||
+      erb_args_push(&args, "edgerun-object/src/er_object.c") != 0 ||
+      erb_args_push(&args, "edgerun-identity/src/er_identity.c") != 0 ||
+      erb_args_push(&args, "edgerun-clock/src/er_clock.c") != 0 ||
+      erb_args_push(&args, "edgerun-crypto/src/er_blake3.c") != 0 ||
+      erb_args_push(&args, "-DER_BLAKE3_NO_SIMD=1") != 0) {
+    return 1;
+  }
+  if (erb_run_args(&args, print_plan) != 0) {
+    return 1;
+  }
+  return erb_run_program(ERB_NODE_TEST_BIN, print_plan);
 }
 
 static int erb_target_varfont_test(int print_plan) {
@@ -2204,7 +2251,7 @@ static int erb_usage(void) {
           "         repo-agent-swarm [--scope PATH] [--concurrency N] [--limit N]\n"
           "         pi-serial-verify pi-node-update sdcard-probe disk-analyzer pi-usb-boot\n"
           "         repo-check repo-test repo-progress <scope> [test-target]\n"
-          "         crypto-test crypto-bench clock-test identity-test object-test storage-test storage-bench varfont-test ui-core-test\n");
+          "         crypto-test crypto-bench clock-test identity-test object-test storage-test storage-bench node-test varfont-test ui-core-test\n");
   return 2;
 }
 
@@ -2330,6 +2377,9 @@ int main(int argc, char** argv) {
   }
   if (strcmp(target, "storage-bench") == 0) {
     return erb_target_storage_bench(print_plan);
+  }
+  if (strcmp(target, "node-test") == 0) {
+    return erb_target_node_test(print_plan);
   }
   if (strcmp(target, "varfont-test") == 0) {
     return erb_target_varfont_test(print_plan);

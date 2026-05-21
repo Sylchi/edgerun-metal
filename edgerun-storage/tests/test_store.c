@@ -1,4 +1,5 @@
 #include "er_store.h"
+#include "er_identity.h"
 
 #include <stdint.h>
 #include <stdio.h>
@@ -7,7 +8,7 @@ enum {
   TEST_IO_CAP = 65536u,
   TEST_ARENA_SIZE = ER_STORE_ARENA_MIN_SIZE,
   TEST_LARGE_ARENA_SIZE = ER_STORE_ARENA_MIN_SIZE + (4u * 1024u * 1024u),
-  TEST_FIRST_PAYLOAD_OFF = 68u + 92u,
+  TEST_FIRST_PAYLOAD_OFF = 68u + 188u,
   TEST_TRAILING_JUNK = 7u,
   TEST_TYPE_ROW = 17u,
   TEST_INDEX_BY_NAME = 23u,
@@ -139,6 +140,49 @@ static er_io_t test_make_io(TestIo* io) {
   out.truncate = test_truncate;
   return out;
 }
+
+static void test_fill_storage_config(er_store_config_t* config) {
+  er_identity_source_t source;
+  er_identity_t identity;
+  er_clock_keeper_id_t keeper_id;
+  uint8_t material[ER_IDENTITY_HASH_SIZE];
+  size_t i;
+
+  for (i = 0u; i < ER_CLOCK_KEEPER_ID_SIZE; ++i) {
+    keeper_id.bytes[i] = (uint8_t)(i + 1u);
+  }
+  for (i = 0u; i < sizeof(material); ++i) {
+    material[i] = (uint8_t)(0xa0u + i);
+  }
+  config->epoch.keeper_id = keeper_id;
+  config->epoch.tick = 1u;
+  config->epoch.slot = 0u;
+  config->epoch.epoch = 0u;
+  config->epoch.era = 0u;
+  if (er_identity_source_prepare(ER_IDENTITY_SOURCE_HASH, material,
+                                 sizeof(material), &source) != ER_IDENTITY_OK ||
+      er_identity_prepare(ER_IDENTITY_KIND_STORAGE, &source, config->epoch,
+                          &identity) != ER_IDENTITY_OK) {
+    ++g_failed;
+    return;
+  }
+  test_copy(config->storage_identity_id, identity.id.bytes,
+            ER_STORE_IDENTITY_ID_SIZE);
+}
+
+static int test_store_open(er_store_t* store, er_io_t io, void* arena,
+                           size_t arena_len, const er_store_config_t* config) {
+  er_store_config_t prepared;
+
+  test_zero(&prepared, sizeof(prepared));
+  if (config != (const er_store_config_t*)0) {
+    prepared = *config;
+  }
+  test_fill_storage_config(&prepared);
+  return er_store_open(store, io, arena, arena_len, &prepared);
+}
+
+#define er_store_open test_store_open
 
 static void check_int(const char* name, int actual, int expected) {
   ++g_total;
@@ -530,8 +574,11 @@ static void test_chunked_object_roundtrip_and_chunk_reuse(void) {
   er_store_t store;
   er_store_stats_t stats;
   er_blob_t info;
+  er_object_info_t object_info;
   uint8_t object_hash_a[ER_HASH_SIZE];
   uint8_t object_hash_b[ER_HASH_SIZE];
+  uint8_t canonical[4096];
+  size_t canonical_len = 0u;
   size_t out_len = 0u;
   size_t i;
   uint8_t pattern = 0u;
@@ -552,7 +599,17 @@ static void test_chunked_object_roundtrip_and_chunk_reuse(void) {
             er_store_put_object(&store, data, sizeof(data), TEST_OBJECT_CHUNK, object_hash_a), ER_OK);
   check_int("put object syncs", (int)io.sync_count, (int)TEST_NO_SYNC_COUNT);
   check_int("object info", er_store_get_blob_info(&store, object_hash_a, &info), ER_OK);
-  check_int("object manifest type", (int)info.content_type, (int)ER_STORE_TYPE_OBJECT_MANIFEST);
+  check_int("object canonical type", (int)info.content_type, (int)ER_STORE_TYPE_OBJECT);
+  check_int("object canonical get",
+            er_store_get_canonical_object(&store, object_hash_a,
+                                          canonical, sizeof(canonical),
+                                          &canonical_len),
+            ER_OK);
+  check_int("object canonical verify",
+            er_object_verify(canonical, canonical_len, &object_info),
+            ER_OBJECT_OK);
+  check_int("object canonical kind", (int)object_info.node_kind,
+            (int)ER_OBJECT_KIND_TREE);
   check_int("get object", er_store_get_object(&store, object_hash_a, out, sizeof(out), &out_len), ER_OK);
   check_size("get object len", out_len, sizeof(data));
   check_bytes("get object bytes", out, data, sizeof(data));

@@ -2,7 +2,9 @@
 #include "er_store.h"
 
 #include "er_blake3.h"
+#include "er_clock.h"
 #include "er_math.h"
+#include "er_object.h"
 
 /*
  * Format:
@@ -14,6 +16,7 @@
  *   The header CRC covers ER_STORE_RECORD_CRC_SIZE bytes. payload_hash uses
  *   ER_HASH_SIZE BLAKE3 bytes over the raw payload. prev_record_hash chains to
  *   the previous valid header hash, where the first record uses all zero bytes.
+ *   Each record also carries the current storage epoch and storage identity id.
  *
  * Recovery:
  *   open never trusts superblock log_end. It scans from log_start, validates
@@ -32,10 +35,10 @@
 
 enum {
   ER_STORE_SUPERBLOCK_SIZE = 68u,
-  ER_STORE_RECORD_HEADER_SIZE = 92u,
-  ER_STORE_RECORD_CRC_SIZE = 88u,
+  ER_STORE_RECORD_HEADER_SIZE = 188u,
+  ER_STORE_RECORD_CRC_SIZE = 184u,
   ER_STORE_VERSION = 1u,
-  ER_STORE_RECORD_VERSION = 1u,
+  ER_STORE_RECORD_VERSION = 2u,
   ER_STORE_MAGIC_SIZE = 8u,
   ER_STORE_MAGIC_0 = 'E',
   ER_STORE_MAGIC_1 = 'R',
@@ -59,7 +62,15 @@ enum {
   ER_STORE_HEADER_PAYLOAD_LEN_OFF = 16u,
   ER_STORE_HEADER_PAYLOAD_HASH_OFF = 24u,
   ER_STORE_HEADER_PREV_HASH_OFF = 56u,
-  ER_STORE_HEADER_CRC_OFF = 88u,
+  ER_STORE_HEADER_EPOCH_OFF = 88u,
+  ER_STORE_HEADER_STORAGE_ID_OFF = 152u,
+  ER_STORE_HEADER_CRC_OFF = 184u,
+  ER_STORE_EPOCH_SIZE = 64u,
+  ER_STORE_EPOCH_KEEPER_ID_OFF = 0u,
+  ER_STORE_EPOCH_TICK_OFF = 32u,
+  ER_STORE_EPOCH_SLOT_OFF = 40u,
+  ER_STORE_EPOCH_EPOCH_OFF = 48u,
+  ER_STORE_EPOCH_ERA_OFF = 56u,
   ER_STORE_TYPE_PAYLOAD_SIZE = 4u + ER_HASH_SIZE,
   ER_STORE_TYPE_HASH_OFF = 4u,
   ER_STORE_DEFINE_FIXED_PAYLOAD_SIZE = 6u,
@@ -68,10 +79,7 @@ enum {
   ER_STORE_INDEX_DEFINE_CONTENT_TYPE_OFF = 4u,
   ER_STORE_INDEX_DEFINE_NAME_LEN_OFF = 8u,
   ER_STORE_INDEX_ID_SIZE = 4u,
-  ER_STORE_OBJECT_TOTAL_SIZE_OFF = 0u,
-  ER_STORE_OBJECT_CHUNK_SIZE_OFF = 8u,
-  ER_STORE_OBJECT_CHUNK_COUNT_OFF = 16u,
-  ER_STORE_OBJECT_FIRST_HASH_OFF = 20u,
+  ER_STORE_OBJECT_MAX_CANONICAL_SIZE = 148u + (ER_STORE_MAX_CHUNKS * 84u),
   ER_STORE_PROJECT_INDEX_ID_OFF = 0u,
   ER_STORE_PROJECT_VALUE_KIND_OFF = 4u,
   ER_STORE_PROJECT_CONTENT_TYPE_OFF = 8u,
@@ -158,6 +166,8 @@ typedef struct {
   uint64_t payload_len; //@optimizer-ignore payload lengths mirror the fixed 64-bit record header ABI
   uint8_t payload_hash[ER_HASH_SIZE];
   uint8_t prev_hash[ER_HASH_SIZE];
+  er_clock_epoch_stamp_t epoch;
+  uint8_t storage_identity_id[ER_STORE_IDENTITY_ID_SIZE];
 } ErStoreRecordInfo;
 
 typedef struct __attribute__((__may_alias__)) {
@@ -185,6 +195,8 @@ typedef struct __attribute__((__may_alias__)) {
   uint64_t log_end; //@optimizer-ignore log offsets mirror the fixed 64-bit record log ABI
   uint64_t next_seq; //@optimizer-ignore sequence values mirror the fixed 64-bit record header ABI
   uint8_t last_record_hash[ER_HASH_SIZE];
+  uint8_t storage_identity_id[ER_STORE_IDENTITY_ID_SIZE];
+  er_clock_epoch_stamp_t epoch;
 } ErStoreState;
 
 typedef struct __attribute__((__may_alias__)) {
@@ -244,6 +256,20 @@ static int er_store_equal(const void* a, const void* b, size_t len) {
   return 1;
 }
 
+static int er_store_any_nonzero(const uint8_t* bytes, size_t len) {
+  size_t i;
+
+  if (bytes == (const uint8_t*)0) {
+    return 0;
+  }
+  for (i = 0u; i < len; ++i) {
+    if (bytes[i] != 0u) {
+      return 1;
+    }
+  }
+  return 0;
+}
+
 //@optimizer-ignore-function fixed-width little-endian ABI decoding requires byte-slot indexing
 static uint16_t er_store_load16(const uint8_t* bytes) {
   return (uint16_t)((uint16_t)bytes[ER_BYTE0] | ((uint16_t)bytes[ER_BYTE1] << ER_U16_BYTE1_SHIFT));
@@ -291,6 +317,30 @@ static void er_store_store64(uint8_t* bytes, uint64_t value) {
   bytes[ER_BYTE5] = (uint8_t)(value >> ER_U64_BYTE5_SHIFT);
   bytes[ER_BYTE6] = (uint8_t)(value >> ER_U64_BYTE6_SHIFT);
   bytes[ER_BYTE7] = (uint8_t)(value >> ER_U64_BYTE7_SHIFT);
+}
+
+static void er_store_epoch_write(er_clock_epoch_stamp_t epoch,
+                                 uint8_t out[ER_STORE_EPOCH_SIZE]) {
+  er_store_copy(&out[ER_STORE_EPOCH_KEEPER_ID_OFF],
+                epoch.keeper_id.bytes,
+                ER_CLOCK_KEEPER_ID_SIZE);
+  er_store_store64(&out[ER_STORE_EPOCH_TICK_OFF], epoch.tick);
+  er_store_store64(&out[ER_STORE_EPOCH_SLOT_OFF], epoch.slot);
+  er_store_store64(&out[ER_STORE_EPOCH_EPOCH_OFF], epoch.epoch);
+  er_store_store64(&out[ER_STORE_EPOCH_ERA_OFF], epoch.era);
+}
+
+static er_clock_epoch_stamp_t er_store_epoch_read(const uint8_t in[ER_STORE_EPOCH_SIZE]) {
+  er_clock_epoch_stamp_t epoch;
+
+  er_store_copy(epoch.keeper_id.bytes,
+                &in[ER_STORE_EPOCH_KEEPER_ID_OFF],
+                ER_CLOCK_KEEPER_ID_SIZE);
+  epoch.tick = er_store_load64(&in[ER_STORE_EPOCH_TICK_OFF]);
+  epoch.slot = er_store_load64(&in[ER_STORE_EPOCH_SLOT_OFF]);
+  epoch.epoch = er_store_load64(&in[ER_STORE_EPOCH_EPOCH_OFF]);
+  epoch.era = er_store_load64(&in[ER_STORE_EPOCH_ERA_OFF]);
+  return epoch;
 }
 
 //@optimizer-ignore-function CRC32 is the fixed on-disk header checksum algorithm
@@ -397,6 +447,23 @@ static int er_store_config_block_bytes(const er_store_config_t* config, uint32_t
   }
   *out_backing = backing;
   *out_block_bytes = block_bytes;
+  return ER_OK;
+}
+
+static int er_store_config_identity_epoch(const er_store_config_t* config,
+                                          uint8_t out_identity[ER_STORE_IDENTITY_ID_SIZE],
+                                          er_clock_epoch_stamp_t* out_epoch) {
+  if (config == (const er_store_config_t*)0 ||
+      out_identity == (uint8_t*)0 ||
+      out_epoch == (er_clock_epoch_stamp_t*)0 ||
+      er_clock_stamp_valid(config->epoch) == 0) {
+    return ER_ERR_BADARG;
+  }
+  if (er_store_any_nonzero(config->storage_identity_id, ER_STORE_IDENTITY_ID_SIZE) == 0) {
+    return ER_ERR_BADARG;
+  }
+  er_store_copy(out_identity, config->storage_identity_id, ER_STORE_IDENTITY_ID_SIZE);
+  *out_epoch = config->epoch;
   return ER_OK;
 }
 
@@ -1020,7 +1087,9 @@ static void er_store_encode_header(uint8_t header[ER_STORE_RECORD_HEADER_SIZE], 
                                    uint64_t seq, //@optimizer-ignore fixed record sequence is part of storage ABI
                                    uint64_t payload_len, //@optimizer-ignore fixed payload length is part of storage ABI
                                    const uint8_t payload_hash[ER_HASH_SIZE],
-                                   const uint8_t prev_hash[ER_HASH_SIZE]) {
+                                   const uint8_t prev_hash[ER_HASH_SIZE],
+                                   er_clock_epoch_stamp_t epoch,
+                                   const uint8_t storage_identity_id[ER_STORE_IDENTITY_ID_SIZE]) {
   er_store_zero(header, ER_STORE_RECORD_HEADER_SIZE);
   er_store_store32(&header[ER_STORE_HEADER_MAGIC_OFF], ER_STORE_RECORD_MAGIC);
   er_store_store16(&header[ER_STORE_HEADER_VERSION_OFF], ER_STORE_RECORD_VERSION);
@@ -1029,6 +1098,9 @@ static void er_store_encode_header(uint8_t header[ER_STORE_RECORD_HEADER_SIZE], 
   er_store_store64(&header[ER_STORE_HEADER_PAYLOAD_LEN_OFF], payload_len);
   er_store_copy(&header[ER_STORE_HEADER_PAYLOAD_HASH_OFF], payload_hash, ER_HASH_SIZE);
   er_store_copy(&header[ER_STORE_HEADER_PREV_HASH_OFF], prev_hash, ER_HASH_SIZE);
+  er_store_epoch_write(epoch, &header[ER_STORE_HEADER_EPOCH_OFF]);
+  er_store_copy(&header[ER_STORE_HEADER_STORAGE_ID_OFF], storage_identity_id,
+                ER_STORE_IDENTITY_ID_SIZE);
   er_store_store32(&header[ER_STORE_HEADER_CRC_OFF], er_store_crc32(header, ER_STORE_RECORD_CRC_SIZE));
 }
 
@@ -1053,6 +1125,14 @@ static int er_store_decode_header(const uint8_t header[ER_STORE_RECORD_HEADER_SI
   info->payload_len = er_store_load64(&header[ER_STORE_HEADER_PAYLOAD_LEN_OFF]);
   er_store_copy(info->payload_hash, &header[ER_STORE_HEADER_PAYLOAD_HASH_OFF], ER_HASH_SIZE);
   er_store_copy(info->prev_hash, &header[ER_STORE_HEADER_PREV_HASH_OFF], ER_HASH_SIZE);
+  info->epoch = er_store_epoch_read(&header[ER_STORE_HEADER_EPOCH_OFF]);
+  er_store_copy(info->storage_identity_id,
+                &header[ER_STORE_HEADER_STORAGE_ID_OFF],
+                ER_STORE_IDENTITY_ID_SIZE);
+  if (er_clock_stamp_valid(info->epoch) == 0 ||
+      er_store_any_nonzero(info->storage_identity_id, ER_STORE_IDENTITY_ID_SIZE) == 0) {
+    return ER_ERR_CORRUPT;
+  }
   switch (info->type) {
     case ER_REC_BLOB:
     case ER_REC_INDEX_PUT:
@@ -1327,7 +1407,10 @@ static int er_store_replay(ErStoreState* store, uint64_t io_size, int rebuild, i
     if (rc != ER_OK) {
       break;
     }
-    if (info.seq != expected_seq || !er_store_equal(info.prev_hash, expected_prev, ER_HASH_SIZE)) {
+    if (info.seq != expected_seq ||
+        !er_store_equal(info.prev_hash, expected_prev, ER_HASH_SIZE) ||
+        !er_store_equal(info.storage_identity_id, store->storage_identity_id, ER_STORE_IDENTITY_ID_SIZE) ||
+        er_clock_stamp_same_keeper(info.epoch, store->epoch) == 0) {
       break;
     }
     payload_off = off + ER_STORE_RECORD_HEADER_SIZE;
@@ -1658,7 +1741,8 @@ static int er_store_append_record(ErStoreState* store, uint16_t type, const void
     return ER_ERR_TOOBIG;
   }
   new_end = er_store_align_up(record_end, store->block_bytes);
-  er_store_encode_header(header, type, store->next_seq, payload_len_u64, payload_hash, store->last_record_hash);
+  er_store_encode_header(header, type, store->next_seq, payload_len_u64, payload_hash,
+                         store->last_record_hash, store->epoch, store->storage_identity_id);
   if (er_store_io_write(store, store->log_end, header, sizeof(header)) != ER_OK) {
     return ER_ERR_IO;
   }
@@ -1689,6 +1773,10 @@ int er_store_open(er_store_t* public_store, er_io_t io, void* arena, size_t aren
   er_store_zero(store, sizeof(*store));
   store->io = io;
   rc = er_store_config_block_bytes(config, &store->block_backing, &store->block_bytes);
+  if (rc != ER_OK) {
+    return rc;
+  }
+  rc = er_store_config_identity_epoch(config, store->storage_identity_id, &store->epoch);
   if (rc != ER_OK) {
     return rc;
   }
@@ -1764,6 +1852,19 @@ int er_store_stats(er_store_t* public_store, er_store_stats_t* out_stats) {
   out_stats->key_count = store->key_count;
   out_stats->type_count = store->type_count;
   out_stats->index_count = store->index_count;
+  er_store_copy(out_stats->log_root, store->last_record_hash, ER_HASH_SIZE);
+  out_stats->epoch = store->epoch;
+  er_store_copy(out_stats->storage_identity_id, store->storage_identity_id, ER_STORE_IDENTITY_ID_SIZE);
+  return ER_OK;
+}
+
+int er_store_log_root(er_store_t* public_store, uint8_t out_root[ER_HASH_SIZE]) {
+  ErStoreState* store = er_store_state(public_store);
+
+  if (public_store == (er_store_t*)0 || out_root == (uint8_t*)0) {
+    return ER_ERR_BADARG;
+  }
+  er_store_copy(out_root, store->last_record_hash, ER_HASH_SIZE);
   return ER_OK;
 }
 
@@ -1933,62 +2034,121 @@ int er_store_get_blob_info(er_store_t* public_store, const uint8_t hash[ER_HASH_
                                       out_blob);
 }
 
-//@optimizer-ignore-function object manifests use fixed hash bytes and fixed 64-bit size fields in canonical encoding
-static int er_store_get_object_size(ErStoreState* store, const uint8_t object_hash[ER_HASH_SIZE],
-                                    uint64_t* out_size) {
-  uint8_t manifest[ER_STORE_OBJECT_FIRST_HASH_OFF + (ER_STORE_MAX_CHUNKS * ER_HASH_SIZE)];
+static er_object_requirements_t er_store_object_requirements(void) {
+  er_object_requirements_t requirements;
+
+  requirements.durability = ER_OBJECT_DURABILITY_DURABLE;
+  requirements.confidentiality = ER_OBJECT_CONFIDENTIALITY_PUBLIC;
+  requirements.portability = ER_OBJECT_PORTABILITY_PUBLIC_PORTABLE;
+  requirements.integrity = ER_OBJECT_INTEGRITY_HASH_ONLY;
+  requirements.lifetime = ER_OBJECT_LIFETIME_RETAINED;
+  requirements.visibility = ER_OBJECT_VISIBILITY_PUBLIC;
+  requirements.access_cost = ER_OBJECT_ACCESS_EXPLICIT_IO;
+  return requirements;
+}
+
+int er_store_put_canonical_object(er_store_t* public_store, const void* canonical, size_t len,
+                                  uint8_t out_object_id[ER_OBJECT_ID_SIZE]) {
+  er_object_info_t info;
+  uint8_t object_id[ER_OBJECT_ID_SIZE];
+  int rc;
+
+  if (public_store == (er_store_t*)0 || canonical == (const void*)0 ||
+      out_object_id == (uint8_t*)0) {
+    return ER_ERR_BADARG;
+  }
+  if (er_object_verify(canonical, len, &info) != ER_OBJECT_OK ||
+      er_object_id(canonical, len, object_id) != ER_OBJECT_OK ||
+      !er_store_equal(info.object_id, object_id, ER_OBJECT_ID_SIZE)) {
+    return ER_ERR_CORRUPT;
+  }
+  rc = er_store_put_typed_blob_internal(er_store_state(public_store), ER_STORE_TYPE_OBJECT,
+                                        canonical, len, out_object_id, 1u);
+  if (rc != ER_OK) {
+    return rc;
+  }
+  if (!er_store_equal(out_object_id, object_id, ER_OBJECT_ID_SIZE)) {
+    return ER_ERR_CORRUPT;
+  }
+  return ER_OK;
+}
+
+int er_store_get_canonical_object(er_store_t* public_store, const uint8_t object_id[ER_OBJECT_ID_SIZE],
+                                  void* out, size_t out_cap, size_t* out_len) {
   er_blob_t info;
-  size_t manifest_len = 0u;
-  uint64_t total_size;
-  uint64_t chunk_size;
-  uint32_t chunk_count;
+  er_object_info_t object_info;
+  int rc;
+
+  if (public_store == (er_store_t*)0 || object_id == (const uint8_t*)0 ||
+      out_len == (size_t*)0 || (out_cap != 0u && out == (void*)0)) {
+    return ER_ERR_BADARG;
+  }
+  rc = er_store_get_blob_info(public_store, object_id, &info);
+  if (rc != ER_OK) {
+    return rc;
+  }
+  if (info.content_type != ER_STORE_TYPE_OBJECT || info.size > (uint64_t)out_cap ||
+      info.size > (uint64_t)((size_t)-1)) {
+    return ER_ERR_TOOBIG;
+  }
+  rc = er_store_get_blob(public_store, object_id, out, out_cap, out_len);
+  if (rc != ER_OK) {
+    return rc;
+  }
+  if (er_object_verify(out, *out_len, &object_info) != ER_OBJECT_OK ||
+      !er_store_equal(object_info.object_id, object_id, ER_OBJECT_ID_SIZE)) {
+    return ER_ERR_CORRUPT;
+  }
+  return ER_OK;
+}
+
+static int er_store_get_object_size(ErStoreState* store, const uint8_t object_id[ER_OBJECT_ID_SIZE],
+                                    uint64_t* out_size) {
+  uint8_t object[ER_STORE_OBJECT_MAX_CANONICAL_SIZE];
+  er_blob_t info;
+  er_object_info_t object_info;
+  size_t object_len = 0u;
   int rc;
 
   if (out_size == (uint64_t*)0) {
     return ER_ERR_BADARG;
   }
-  rc = er_store_get_blob_info_state(store, object_hash, &info);
+  rc = er_store_get_blob_info_state(store, object_id, &info);
   if (rc != ER_OK) {
     return rc;
   }
-  if (info.content_type != ER_STORE_TYPE_OBJECT_MANIFEST || info.size > sizeof(manifest)) {
+  if (info.content_type != ER_STORE_TYPE_OBJECT || info.size > sizeof(object)) {
     return ER_ERR_CORRUPT;
   }
-  rc = er_store_get_blob_state(store, object_hash, manifest, sizeof(manifest), &manifest_len);
+  rc = er_store_get_blob_state(store, object_id, object, sizeof(object), &object_len);
   if (rc != ER_OK) {
     return rc;
   }
-  if (manifest_len < ER_STORE_OBJECT_FIRST_HASH_OFF) {
+  if (er_object_verify(object, object_len, &object_info) != ER_OBJECT_OK ||
+      object_info.node_kind != ER_OBJECT_KIND_TREE) {
     return ER_ERR_CORRUPT;
   }
-  total_size = er_store_load64(&manifest[ER_STORE_OBJECT_TOTAL_SIZE_OFF]);
-  chunk_size = er_store_load64(&manifest[ER_STORE_OBJECT_CHUNK_SIZE_OFF]);
-  chunk_count = er_store_load32(&manifest[ER_STORE_OBJECT_CHUNK_COUNT_OFF]);
-  if (chunk_size == 0u || chunk_count > ER_STORE_MAX_CHUNKS ||
-      manifest_len != (ER_STORE_OBJECT_FIRST_HASH_OFF + ((size_t)chunk_count * ER_HASH_SIZE))) {
-    return ER_ERR_CORRUPT;
-  }
-  *out_size = total_size;
+  *out_size = object_info.logical_len;
   return ER_OK;
 }
 
-//@optimizer-ignore-function object manifests use fixed 64-bit size fields in their canonical encoding
 int er_store_put_object(er_store_t* public_store, const void* data, size_t len, size_t chunk_size,
-                        uint8_t out_object_hash[ER_HASH_SIZE]) {
+                        uint8_t out_object_id[ER_OBJECT_ID_SIZE]) {
   ErStoreState* store = er_store_state(public_store);
-  uint8_t manifest[ER_STORE_OBJECT_FIRST_HASH_OFF + (ER_STORE_MAX_CHUNKS * ER_HASH_SIZE)];
+  uint8_t canonical[ER_STORE_OBJECT_MAX_CANONICAL_SIZE];
+  er_object_child_ref_t children[ER_STORE_MAX_CHUNKS];
+  er_object_requirements_t requirements;
   const uint8_t* bytes = (const uint8_t*)data;
   size_t chunk_count;
-  size_t manifest_len;
+  size_t canonical_len;
   size_t chunk_index;
   size_t off;
   size_t take;
-  uint64_t len_u64;
-  uint64_t chunk_size_u64;
-  uint8_t chunk_hash[ER_HASH_SIZE];
+  uint8_t requirements_hash[ER_OBJECT_ID_SIZE];
+  uint8_t chunk_id[ER_OBJECT_ID_SIZE];
   int rc;
 
-  if (public_store == (er_store_t*)0 || out_object_hash == (uint8_t*)0 || chunk_size == 0u ||
+  if (public_store == (er_store_t*)0 || out_object_id == (uint8_t*)0 || chunk_size == 0u ||
       (len != 0u && data == (const void*)0)) {
     return ER_ERR_BADARG;
   }
@@ -1999,91 +2159,96 @@ int er_store_put_object(er_store_t* public_store, const void* data, size_t len, 
   if (chunk_count > ER_STORE_MAX_CHUNKS) {
     return ER_ERR_TOOBIG;
   }
-  if (er_store_size_to_u64(len, &len_u64) != ER_OK || er_store_size_to_u64(chunk_size, &chunk_size_u64) != ER_OK) {
-    return ER_ERR_TOOBIG;
+  requirements = er_store_object_requirements();
+  if (er_object_requirements_hash(&requirements, requirements_hash) != ER_OBJECT_OK) {
+    return ER_ERR_CORRUPT;
   }
-  er_store_zero(manifest, sizeof(manifest));
-  er_store_store64(&manifest[ER_STORE_OBJECT_TOTAL_SIZE_OFF], len_u64);
-  er_store_store64(&manifest[ER_STORE_OBJECT_CHUNK_SIZE_OFF], chunk_size_u64);
-  er_store_store32(&manifest[ER_STORE_OBJECT_CHUNK_COUNT_OFF], (uint32_t)chunk_count);
+  er_store_zero(children, sizeof(children));
   off = 0u;
   for (chunk_index = 0u; chunk_index < chunk_count; ++chunk_index) {
     take = (len - off) > chunk_size ? chunk_size : (len - off);
-    rc = er_store_put_typed_blob_internal(store, ER_STORE_TYPE_RAW,
-                                          &bytes[off], take, chunk_hash, 0u);
+    if (er_object_build_node(ER_OBJECT_KIND_BYTES, 0u, &requirements, store->epoch,
+                             (const er_object_owner_t*)0, 0u,
+                             (const er_object_envelope_t*)0, 0u,
+                             (const er_object_child_ref_t*)0, 0u,
+                             &bytes[off], take, canonical, sizeof(canonical),
+                             &canonical_len, chunk_id) != ER_OBJECT_OK) {
+      return ER_ERR_CORRUPT;
+    }
+    rc = er_store_put_canonical_object(public_store, canonical, canonical_len, chunk_id);
     if (rc != ER_OK) {
       return rc;
     }
-    er_store_copy(&manifest[ER_STORE_OBJECT_FIRST_HASH_OFF + (chunk_index * ER_HASH_SIZE)], chunk_hash,
-                  ER_HASH_SIZE);
+    er_store_copy(children[chunk_index].object_id, chunk_id, ER_OBJECT_ID_SIZE);
+    children[chunk_index].logical_offset = (uint64_t)off;
+    children[chunk_index].logical_len = (uint64_t)take;
+    children[chunk_index].node_kind = ER_OBJECT_KIND_BYTES;
+    children[chunk_index].reserved = 0u;
+    er_store_copy(children[chunk_index].requirements_hash, requirements_hash, ER_OBJECT_ID_SIZE);
     off += take;
   }
-  manifest_len = ER_STORE_OBJECT_FIRST_HASH_OFF + (chunk_count * ER_HASH_SIZE);
-  rc = er_store_put_typed_blob_internal(store, ER_STORE_TYPE_OBJECT_MANIFEST,
-                                        manifest, manifest_len,
-                                        out_object_hash, 1u);
-  return rc;
+  if (er_object_build_node(ER_OBJECT_KIND_TREE, 0u, &requirements, store->epoch,
+                           (const er_object_owner_t*)0, 0u,
+                           (const er_object_envelope_t*)0, 0u,
+                           children, (uint32_t)chunk_count,
+                           (const void*)0, 0u, canonical, sizeof(canonical),
+                           &canonical_len, out_object_id) != ER_OBJECT_OK) {
+    return ER_ERR_CORRUPT;
+  }
+  return er_store_put_canonical_object(public_store, canonical, canonical_len, out_object_id);
 }
 
-//@optimizer-ignore-function object manifests use fixed 64-bit size fields in their canonical encoding
-int er_store_get_object(er_store_t* public_store, const uint8_t object_hash[ER_HASH_SIZE], void* out, size_t out_cap,
+int er_store_get_object(er_store_t* public_store, const uint8_t object_id[ER_OBJECT_ID_SIZE], void* out, size_t out_cap,
                         size_t* out_len) {
-  ErStoreState* store = er_store_state(public_store);
-  uint8_t manifest[ER_STORE_OBJECT_FIRST_HASH_OFF + (ER_STORE_MAX_CHUNKS * ER_HASH_SIZE)];
-  er_blob_t info;
-  uint64_t total_size;
-  uint64_t chunk_size;
-  uint32_t chunk_count;
-  size_t manifest_len = 0u;
+  uint8_t object[ER_STORE_OBJECT_MAX_CANONICAL_SIZE];
+  uint8_t chunk_object[ER_STORE_OBJECT_MAX_CANONICAL_SIZE];
+  er_object_info_t object_info;
+  er_object_info_t chunk_info;
+  er_object_child_ref_t child;
+  size_t object_len = 0u;
+  size_t chunk_len = 0u;
   size_t chunk_index;
   size_t out_off = 0u;
-  size_t got_len = 0u;
-  size_t expected_len;
   int rc;
 
-  if (public_store == (er_store_t*)0 || object_hash == (const uint8_t*)0 || out_len == (size_t*)0 ||
+  if (public_store == (er_store_t*)0 || object_id == (const uint8_t*)0 || out_len == (size_t*)0 ||
       (out_cap != 0u && out == (void*)0)) {
     return ER_ERR_BADARG;
   }
-  rc = er_store_get_blob_info_state(store, object_hash, &info);
+  rc = er_store_get_canonical_object(public_store, object_id, object, sizeof(object), &object_len);
   if (rc != ER_OK) {
     return rc;
   }
-  if (info.content_type != ER_STORE_TYPE_OBJECT_MANIFEST || info.size > sizeof(manifest)) {
+  if (er_object_verify(object, object_len, &object_info) != ER_OBJECT_OK ||
+      object_info.node_kind != ER_OBJECT_KIND_TREE ||
+      object_info.child_count > ER_STORE_MAX_CHUNKS ||
+      object_info.logical_len > (uint64_t)out_cap ||
+      object_info.logical_len > (uint64_t)((size_t)-1)) {
     return ER_ERR_CORRUPT;
   }
-  rc = er_store_get_blob_state(store, object_hash, manifest, sizeof(manifest), &manifest_len);
-  if (rc != ER_OK) {
-    return rc;
-  }
-  if (manifest_len < ER_STORE_OBJECT_FIRST_HASH_OFF) {
-    return ER_ERR_CORRUPT;
-  }
-  total_size = er_store_load64(&manifest[ER_STORE_OBJECT_TOTAL_SIZE_OFF]);
-  chunk_size = er_store_load64(&manifest[ER_STORE_OBJECT_CHUNK_SIZE_OFF]);
-  chunk_count = er_store_load32(&manifest[ER_STORE_OBJECT_CHUNK_COUNT_OFF]);
-  if (chunk_size == 0u || chunk_count > ER_STORE_MAX_CHUNKS ||
-      manifest_len != (ER_STORE_OBJECT_FIRST_HASH_OFF + ((size_t)chunk_count * ER_HASH_SIZE))) {
-    return ER_ERR_CORRUPT;
-  }
-  if (total_size > (uint64_t)out_cap || total_size > (uint64_t)((size_t)-1)) {
-    return ER_ERR_TOOBIG;
-  }
-  for (chunk_index = 0u; chunk_index < chunk_count; ++chunk_index) {
-    expected_len = ((size_t)total_size - out_off) > (size_t)chunk_size ? (size_t)chunk_size
-                                                                       : ((size_t)total_size - out_off);
-    rc = er_store_get_blob(public_store,
-                           &manifest[ER_STORE_OBJECT_FIRST_HASH_OFF + (chunk_index * ER_HASH_SIZE)],
-                           &((uint8_t*)out)[out_off], expected_len, &got_len);
+  for (chunk_index = 0u; chunk_index < object_info.child_count; ++chunk_index) {
+    if (er_object_child_at(object, object_len, (uint32_t)chunk_index, &child) != ER_OBJECT_OK ||
+        child.node_kind != ER_OBJECT_KIND_BYTES ||
+        child.logical_offset != (uint64_t)out_off ||
+        child.logical_len > (uint64_t)((size_t)-1)) {
+      return ER_ERR_CORRUPT;
+    }
+    rc = er_store_get_canonical_object(public_store, child.object_id,
+                                       chunk_object, sizeof(chunk_object), &chunk_len);
     if (rc != ER_OK) {
       return rc;
     }
-    if (got_len != expected_len) {
+    if (er_object_verify(chunk_object, chunk_len, &chunk_info) != ER_OBJECT_OK ||
+        chunk_info.node_kind != ER_OBJECT_KIND_BYTES ||
+        chunk_info.body_len != child.logical_len ||
+        out_off > out_cap ||
+        (size_t)child.logical_len > (out_cap - out_off)) {
       return ER_ERR_CORRUPT;
     }
-    out_off += got_len;
+    er_store_copy(&((uint8_t*)out)[out_off], chunk_info.body, (size_t)chunk_info.body_len);
+    out_off += (size_t)chunk_info.body_len;
   }
-  if (out_off != (size_t)total_size) {
+  if (out_off != (size_t)object_info.logical_len) {
     return ER_ERR_CORRUPT;
   }
   *out_len = out_off;
