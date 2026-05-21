@@ -1,4 +1,4 @@
-.PHONY: all check clean er-build repo-check repo-test repo-check-bin repo-push-check repo-inspect repo-progress repo-agent-swarm erwire-decode erwire-test pi-serial-verify pi-node-update sdcard-probe disk-analyzer pi-usb-boot pi-ready pi-zero-w-v1_1-ready pi-zero-w-v1_1-usb-boot pi-zero-w-v1_1-update codex-build codex-test crypto-test crypto-bench metal-ui-bench tpm-real-bench-uefi qemu-host-tpm-bench os-user-app-smoke edgerun-metal edgerun-os edgerun-check varfont-test ui-core-test ui-core-snapshot
+.PHONY: all check clean er-build repo-check repo-test repo-check-bin repo-push-check repo-inspect repo-progress repo-agent-swarm erwire-decode erwire-test pi-serial-verify pi-node-update sdcard-probe disk-analyzer pi-usb-boot pi-ready pi-zero-w-v1_1-ready pi-zero-w-v1_1-usb-boot pi-zero-w-v1_1-cluster-boot pi-zero-w-v1_1-update codex-build codex-test crypto-test crypto-bench metal-ui-bench tpm-real-bench-uefi qemu-host-tpm-bench os-user-app-smoke edgerun-metal edgerun-os edgerun-check varfont-test ui-core-test ui-core-snapshot
 
 CC := toolchain/bin/clang
 HOST_CC := toolchain/bin/clang
@@ -76,6 +76,9 @@ pi-zero-w-v1_1-usb-boot: er-build
 	$(MAKE) -C edgerun-metal pi-zero-w-v1_1-boot
 	$(ER_BUILD_STAGED) pi-usb-boot
 	./.build/pi-usb-boot --boot-dir $(PI_ZERO_W_V1_1_USB_BOOT_DIR) $(PI_USB_BOOT_DEVICE_ARG) --verbose
+
+pi-zero-w-v1_1-cluster-boot:
+	$(MAKE) -C edgerun-metal pi-zero-w-v1_1-cluster-boot
 
 pi-zero-w-v1_1-update: er-build
 	test -n "$(PI_UPDATE_IFACE)" || { printf '%s\n' 'PI_UPDATE_IFACE=wlan0 is required for Pi Zero W v1.1 Wi-Fi OTA'; exit 2; }

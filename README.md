@@ -503,6 +503,18 @@ The Pi Zero W v1.1 ARMv6 boot tree is
 `.build/edgerun-metal/pi-zero-w-v1_1/boot/` and contains the repo-owned
 `kernel.img` payload.
 
+Build six deterministic Pi Zero W v1.1 boot trees for the cluster proof:
+
+```bash
+make pi-zero-w-v1_1-cluster-boot
+```
+
+The six staged trees live under
+`.build/edgerun-metal/pi-zero-w-v1_1/erzw-0/boot/` through
+`.build/edgerun-metal/pi-zero-w-v1_1/erzw-5/boot/`. Each tree has a distinct
+compiled node identity and an `EDGERUN-PI-ZERO-W-V1_1-NODE.txt` provision file
+that records the node index, role, node id, and shared open-L2 channel id.
+
 Build only the repository-owned Raspberry Pi USB boot helper:
 
 ```bash
