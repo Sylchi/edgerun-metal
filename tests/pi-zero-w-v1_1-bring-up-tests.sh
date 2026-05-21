@@ -42,7 +42,10 @@ printf '%s\n' "$1" >"${PI_USB_RESET_FAKE_LOG:?}"
 EOF_USB_RESET_FAKE
 chmod 755 "$USB_RESET_FAKE"
 
-make -C "$ROOT_DIR/edgerun-metal" pi-zero-w-v1_1-boot >/tmp/pi-zero-w-v1_1-bring-up-build.out
+make -C "$ROOT_DIR/edgerun-metal" pi-zero-w-v1_1-boot \
+  PI_ZERO_W_V1_1_NODE_INDEX=0 \
+  PI_ZERO_W_V1_1_BUILD_DIR="../.build/edgerun-metal/pi-zero-w-v1_1/erzw-0" \
+  >/tmp/pi-zero-w-v1_1-bring-up-build.out
 make -C "$ROOT_DIR" pi-serial-verify >/tmp/pi-zero-w-v1_1-bring-up-tool.out
 "$ROOT_DIR/tests/pi-serial-verify-tests.sh" >/tmp/pi-zero-w-v1_1-bring-up-fixture.out
 cp "${ROOT_DIR}/.build/pi-serial-verify-tests/serial-erwire.bin" "$LOG_PATH"
@@ -74,6 +77,21 @@ if ! grep -q "Not ready:" /tmp/pi-zero-w-v1_1-bring-up-missing.err; then
   exit 1
 fi
 
+if PI_ZERO_W_V1_1_NODE_INDEX=6 \
+  "$ROOT_DIR/tools/pi-zero-w-v1_1-bring-up.sh" --verify-only \
+  --serial-log "$LOG_PATH" \
+  >/tmp/pi-zero-w-v1_1-bring-up-bad-node.out \
+  2>/tmp/pi-zero-w-v1_1-bring-up-bad-node.err; then
+  printf 'bring-up wrapper accepted invalid node index\n' >&2
+  exit 1
+fi
+
+if ! grep -q "node index must be 0, 1, 2, 3, 4, or 5" \
+  /tmp/pi-zero-w-v1_1-bring-up-bad-node.err; then
+  printf 'bring-up wrapper did not explain invalid node index\n' >&2
+  exit 1
+fi
+
 "$ROOT_DIR/tools/pi-zero-w-v1_1-bring-up.sh" \
   --dry-run \
   --serial-log "$BUILD_DIR/no-serial.bin" \
@@ -89,6 +107,29 @@ fi
 cat >"$LSUSB_PATH" <<'EOF_LSUSB'
 Bus 007 Device 005: ID 0a5c:2763 Broadcom Corp. BCM2708 Boot
 EOF_LSUSB
+
+printf '1\n' >"$BUILD_DIR/usb-boot-node4-count.txt"
+PI_ZERO_W_V1_1_NODE_INDEX=4 \
+PI_USB_BOOT_TOOL="$USB_BOOT_FAKE" \
+PI_USB_BOOT_LSUSB_FILE="$LSUSB_PATH" \
+PI_USB_BOOT_FAKE_COUNT="$BUILD_DIR/usb-boot-node4-count.txt" \
+PI_USB_BOOT_FAKE_ARGS="$BUILD_DIR/usb-boot-node4-args.txt" \
+  "$ROOT_DIR/tools/pi-zero-w-v1_1-bring-up.sh" \
+  --dry-run \
+  --serial-log "$BUILD_DIR/node4-no-serial.bin" \
+  --capture-seconds 0 \
+  >/tmp/pi-zero-w-v1_1-bring-up-node4.out
+
+if ! grep -q "erzw-4/boot" "$BUILD_DIR/usb-boot-node4-args.txt"; then
+  printf 'bring-up wrapper did not use the selected node boot tree\n' >&2
+  exit 1
+fi
+
+if ! grep -q "node_id=ERZWPI04RELAY001CYW43438ARMV6L2" \
+  "$ROOT_DIR/.build/edgerun-metal/pi-zero-w-v1_1/erzw-4/boot/EDGERUN-PI-ZERO-W-V1_1-NODE.txt"; then
+  printf 'bring-up wrapper did not stage the selected node identity\n' >&2
+  exit 1
+fi
 
 PI_USB_BOOT_TOOL="$USB_BOOT_FAKE" \
 PI_USB_BOOT_LSUSB_FILE="$LSUSB_PATH" \

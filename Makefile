@@ -11,6 +11,7 @@ ER_BUILD_STAGED_TMP := .build/er-build.tmp
 REPO_PROGRESS_SCOPE := edgerun-ui-core
 REPO_PROGRESS_TEST :=
 USER_APP_PACKAGE_DIR := tests/fixtures/app-package/app
+PI_ZERO_W_V1_1_NODE_INDEX ?= 0
 PI_ZERO_W_V1_1_USB_BOOT_DIR := .build/edgerun-metal/pi-zero-w-v1_1/boot
 PI_ZERO_W_V1_1_KERNEL := .build/edgerun-metal/pi-zero-w-v1_1/kernel.img
 PI_USB_BOOT_DEVICE_ARG := $(if $(PI_USB_DEVICE),--device $(PI_USB_DEVICE),)
@@ -70,7 +71,7 @@ pi-usb-boot: er-build
 pi-ready: pi-zero-w-v1_1-ready
 
 pi-zero-w-v1_1-ready:
-	./tools/pi-zero-w-v1_1-bring-up.sh $(PI_ZERO_W_V1_1_READY_ARGS)
+	PI_ZERO_W_V1_1_NODE_INDEX="$(PI_ZERO_W_V1_1_NODE_INDEX)" ./tools/pi-zero-w-v1_1-bring-up.sh $(PI_ZERO_W_V1_1_READY_ARGS)
 
 pi-zero-w-v1_1-usb-boot: er-build
 	$(MAKE) -C edgerun-metal pi-zero-w-v1_1-boot

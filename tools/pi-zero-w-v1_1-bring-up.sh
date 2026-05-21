@@ -8,9 +8,12 @@ set -eu
 #   boot, update, and advertisement packets from the board.
 
 ROOT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
-BOOT_DIR="${ROOT_DIR}/.build/edgerun-metal/pi-zero-w-v1_1/boot"
+NODE_INDEX="${PI_ZERO_W_V1_1_NODE_INDEX:-0}"
+NODE_BUILD_DIR="${ROOT_DIR}/.build/edgerun-metal/pi-zero-w-v1_1/erzw-${NODE_INDEX}"
+NODE_BUILD_DIR_FOR_MAKE="../.build/edgerun-metal/pi-zero-w-v1_1/erzw-${NODE_INDEX}"
+BOOT_DIR="${NODE_BUILD_DIR}/boot"
 MANIFEST="${BOOT_DIR}/EDGERUN-PI-ZERO-W-V1_1-BOOT.txt"
-DEFAULT_LOG="${ROOT_DIR}/.build/pi-zero-w-v1_1/serial.bin"
+DEFAULT_LOG="${ROOT_DIR}/.build/pi-zero-w-v1_1/erzw-${NODE_INDEX}/serial.bin"
 USB_BOOT_TOOL="${PI_USB_BOOT_TOOL:-${ROOT_DIR}/.build/pi-usb-boot}"
 LSUSB_FILE="${PI_USB_BOOT_LSUSB_FILE:-}"
 USB_RESET_DEVICE="${PI_USB_RESET_DEVICE:-0000:c3:00.4}"
@@ -91,6 +94,14 @@ case "$CAPTURE_SECONDS" in
     ;;
 esac
 
+case "$NODE_INDEX" in
+  0|1|2|3|4|5)
+    ;;
+  *)
+    fail "node index must be 0, 1, 2, 3, 4, or 5"
+    ;;
+esac
+
 pick_serial_device() {
   count=0
   chosen=''
@@ -166,7 +177,9 @@ reset_pi_usb_station() {
 
 build_needed_files() {
   say "Preparing the board image."
-  make -C "$ROOT_DIR/edgerun-metal" pi-zero-w-v1_1-boot >/dev/null
+  make -C "$ROOT_DIR/edgerun-metal" pi-zero-w-v1_1-boot \
+    PI_ZERO_W_V1_1_NODE_INDEX="$NODE_INDEX" \
+    PI_ZERO_W_V1_1_BUILD_DIR="$NODE_BUILD_DIR_FOR_MAKE" >/dev/null
   make -C "$ROOT_DIR" pi-usb-boot pi-serial-verify >/dev/null
 }
 
