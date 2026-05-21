@@ -22,9 +22,20 @@ init_repo() {
   mkdir -p "${repo_dir}"
   git -C "${repo_dir}" init --quiet
   printf 'ok\n' > "${repo_dir}/README.md"
-  mkdir -p "${repo_dir}/api"
-  : > "${repo_dir}/api/public-headers.manifest"
-  git -C "${repo_dir}" add README.md api/public-headers.manifest
+  mkdir -p \
+    "${repo_dir}/edgerun-clock/api" \
+    "${repo_dir}/edgerun-crypto/api" \
+    "${repo_dir}/edgerun-identity/api" \
+    "${repo_dir}/edgerun-object/api" \
+    "${repo_dir}/storage/api" \
+    "${repo_dir}/edgerun-ui-core/api"
+  : > "${repo_dir}/edgerun-clock/api/public-headers.manifest"
+  : > "${repo_dir}/edgerun-crypto/api/public-headers.manifest"
+  : > "${repo_dir}/edgerun-identity/api/public-headers.manifest"
+  : > "${repo_dir}/edgerun-object/api/public-headers.manifest"
+  : > "${repo_dir}/storage/api/public-headers.manifest"
+  : > "${repo_dir}/edgerun-ui-core/api/public-headers.manifest"
+  git -C "${repo_dir}" add README.md edgerun-clock/api edgerun-crypto/api edgerun-identity/api edgerun-object/api storage/api edgerun-ui-core/api
 }
 
 run_in_repo() {
@@ -175,8 +186,17 @@ add_public_header_with_manifest() {
 
   mkdir -p "${repo_dir}/edgerun-ui-core/include"
   printf '#ifndef TEST_API_H\n#define TEST_API_H\n#endif\n' > "${repo_dir}/edgerun-ui-core/include/test_api.h"
-  printf 'edgerun-ui-core/include/test_api.h\n' > "${repo_dir}/api/public-headers.manifest"
-  git -C "${repo_dir}" add edgerun-ui-core/include/test_api.h api/public-headers.manifest
+  printf 'edgerun-ui-core/include/test_api.h\n' > "${repo_dir}/edgerun-ui-core/api/public-headers.manifest"
+  git -C "${repo_dir}" add edgerun-ui-core/include/test_api.h edgerun-ui-core/api/public-headers.manifest
+}
+
+add_identity_header_with_manifest() {
+  local repo_dir="$1"
+
+  mkdir -p "${repo_dir}/edgerun-identity/include"
+  printf '#ifndef TEST_IDENTITY_API_H\n#define TEST_IDENTITY_API_H\n#endif\n' > "${repo_dir}/edgerun-identity/include/test_identity_api.h"
+  printf 'edgerun-identity/include/test_identity_api.h\n' > "${repo_dir}/edgerun-identity/api/public-headers.manifest"
+  git -C "${repo_dir}" add edgerun-identity/include/test_identity_api.h edgerun-identity/api/public-headers.manifest
 }
 
 expect_pass clean_repo
@@ -185,6 +205,7 @@ expect_pass allowed_blake3_readme add_allowed_blake3_readme
 expect_pass vendor_ui_reference add_vendor_ui_reference
 expect_pass vendor_ui_fetch_command add_vendor_ui_fetch_command
 expect_pass public_header_manifest add_public_header_with_manifest
+expect_pass identity_header_manifest add_identity_header_with_manifest
 expect_fail nested_git_dir add_nested_git_dir
 expect_fail gitmodules_file add_gitmodules_file
 expect_fail gitlink_entry add_gitlink

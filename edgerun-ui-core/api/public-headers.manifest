@@ -1,4 +1,3 @@
-edgerun-clock/include/er_clock.h
 edgerun-ui-core/include/er_ui_assets.h
 edgerun-ui-core/include/er_ui_components.h
 edgerun-ui-core/include/er_ui_icon.h

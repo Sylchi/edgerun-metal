@@ -26,7 +26,14 @@ enum {
   ERC_BE32_BYTE_INDEX_2 = 2,
   ERC_BE32_BYTE_INDEX_3 = 3,
   ERC_GITLINK_MODE = 0160000,
-  ERC_EXTERNAL_PATTERN_COUNT = 11
+  ERC_EXTERNAL_PATTERN_COUNT = 11,
+  ERC_API_MANIFEST_CLOCK = 0,
+  ERC_API_MANIFEST_CRYPTO,
+  ERC_API_MANIFEST_IDENTITY,
+  ERC_API_MANIFEST_OBJECT,
+  ERC_API_MANIFEST_STORAGE,
+  ERC_API_MANIFEST_UI,
+  ERC_API_MANIFEST_COUNT
 };
 
 static const char ERC_BUILD_ARTIFACT_DIR[] = ".build/";
@@ -38,7 +45,19 @@ static const char ERC_THIRD_PARTY_DIR[] = "third_party/";
 static const char ERC_ALLOWED_BLAKE3_DIR[] = "third_party/blake3/";
 static const char ERC_VENDOR_UI_DIR[] = "ui/shadcn-ui/";
 static const char ERC_FIRMWARE_DIR[] = "firmware/";
-static const char ERC_API_MANIFEST[] = "api/public-headers.manifest";
+typedef struct {
+  const char* path;
+  unsigned char* bytes;
+  size_t len;
+  size_t cursor;
+} ErcApiManifest;
+
+static const char ERC_API_MANIFEST_CLOCK_PATH[] = "edgerun-clock/api/public-headers.manifest";
+static const char ERC_API_MANIFEST_CRYPTO_PATH[] = "edgerun-crypto/api/public-headers.manifest";
+static const char ERC_API_MANIFEST_IDENTITY_PATH[] = "edgerun-identity/api/public-headers.manifest";
+static const char ERC_API_MANIFEST_OBJECT_PATH[] = "edgerun-object/api/public-headers.manifest";
+static const char ERC_API_MANIFEST_STORAGE_PATH[] = "storage/api/public-headers.manifest";
+static const char ERC_API_MANIFEST_UI_PATH[] = "edgerun-ui-core/api/public-headers.manifest";
 
 static const char* const ERC_EXTERNAL_PATTERNS[ERC_EXTERNAL_PATTERN_COUNT] = {
   "curl" " -",
@@ -160,22 +179,40 @@ static int erc_has_suffix(const char* path, const char* suffix) {
   return strcmp(path + path_len - suffix_len, suffix) == 0;
 }
 
-static int erc_is_public_header_path(const char* path) {
+static int erc_has_prefix(const char* path, const char* prefix) {
+  return strncmp(path, prefix, strlen(prefix)) == 0;
+}
+
+static int erc_public_header_manifest_index(const char* path) {
   if (erc_has_suffix(path, ".h") == 0) {
-    return 0;
+    return -1;
   }
   if (strcmp(path, "edgerun-ui-core/include/er_ui_ledger_app.h") == 0 ||
       strcmp(path, "edgerun-ui-core/include/er_ui_metal.h") == 0) {
-    return 0;
+    return -1;
   }
-  if (strncmp(path, "edgerun-clock/include/", strlen("edgerun-clock/include/")) == 0 ||
-      strncmp(path, "edgerun-ui-core/include/", strlen("edgerun-ui-core/include/")) == 0 ||
-      strncmp(path, "edgerun-ui-core/varfont/include/", strlen("edgerun-ui-core/varfont/include/")) == 0 ||
+  if (erc_has_prefix(path, "edgerun-clock/include/") != 0) {
+    return ERC_API_MANIFEST_CLOCK;
+  }
+  if (erc_has_prefix(path, "edgerun-crypto/include/") != 0) {
+    return ERC_API_MANIFEST_CRYPTO;
+  }
+  if (erc_has_prefix(path, "edgerun-identity/include/") != 0) {
+    return ERC_API_MANIFEST_IDENTITY;
+  }
+  if (erc_has_prefix(path, "edgerun-object/include/") != 0) {
+    return ERC_API_MANIFEST_OBJECT;
+  }
+  if (erc_has_prefix(path, "storage/include/") != 0) {
+    return ERC_API_MANIFEST_STORAGE;
+  }
+  if (erc_has_prefix(path, "edgerun-ui-core/include/") != 0 ||
+      erc_has_prefix(path, "edgerun-ui-core/varfont/include/") != 0 ||
       strcmp(path, "include/er_math.h") == 0 ||
       strcmp(path, "include/er_ui_tabler_icon_atlas.h") == 0) {
-    return 1;
+    return ERC_API_MANIFEST_UI;
   }
-  return 0;
+  return -1;
 }
 
 static int erc_api_manifest_next(const unsigned char* bytes,
@@ -211,6 +248,99 @@ static int erc_api_manifest_next(const unsigned char* bytes,
   memcpy(out, bytes + start, line_len);
   out[line_len] = '\0';
   *out_has_line = 1;
+  return 0;
+}
+
+static void erc_api_manifest_init(ErcApiManifest manifests[ERC_API_MANIFEST_COUNT]) {
+  manifests[ERC_API_MANIFEST_CLOCK].path = ERC_API_MANIFEST_CLOCK_PATH;
+  manifests[ERC_API_MANIFEST_CLOCK].bytes = NULL;
+  manifests[ERC_API_MANIFEST_CLOCK].len = 0u;
+  manifests[ERC_API_MANIFEST_CLOCK].cursor = 0u;
+
+  manifests[ERC_API_MANIFEST_CRYPTO].path = ERC_API_MANIFEST_CRYPTO_PATH;
+  manifests[ERC_API_MANIFEST_CRYPTO].bytes = NULL;
+  manifests[ERC_API_MANIFEST_CRYPTO].len = 0u;
+  manifests[ERC_API_MANIFEST_CRYPTO].cursor = 0u;
+
+  manifests[ERC_API_MANIFEST_IDENTITY].path = ERC_API_MANIFEST_IDENTITY_PATH;
+  manifests[ERC_API_MANIFEST_IDENTITY].bytes = NULL;
+  manifests[ERC_API_MANIFEST_IDENTITY].len = 0u;
+  manifests[ERC_API_MANIFEST_IDENTITY].cursor = 0u;
+
+  manifests[ERC_API_MANIFEST_OBJECT].path = ERC_API_MANIFEST_OBJECT_PATH;
+  manifests[ERC_API_MANIFEST_OBJECT].bytes = NULL;
+  manifests[ERC_API_MANIFEST_OBJECT].len = 0u;
+  manifests[ERC_API_MANIFEST_OBJECT].cursor = 0u;
+
+  manifests[ERC_API_MANIFEST_STORAGE].path = ERC_API_MANIFEST_STORAGE_PATH;
+  manifests[ERC_API_MANIFEST_STORAGE].bytes = NULL;
+  manifests[ERC_API_MANIFEST_STORAGE].len = 0u;
+  manifests[ERC_API_MANIFEST_STORAGE].cursor = 0u;
+
+  manifests[ERC_API_MANIFEST_UI].path = ERC_API_MANIFEST_UI_PATH;
+  manifests[ERC_API_MANIFEST_UI].bytes = NULL;
+  manifests[ERC_API_MANIFEST_UI].len = 0u;
+  manifests[ERC_API_MANIFEST_UI].cursor = 0u;
+}
+
+static void erc_api_manifest_free(ErcApiManifest manifests[ERC_API_MANIFEST_COUNT]) {
+  size_t i;
+
+  for (i = 0u; i < ERC_API_MANIFEST_COUNT; ++i) {
+    free(manifests[i].bytes);
+    manifests[i].bytes = NULL;
+  }
+}
+
+static int erc_api_manifest_load_all(const char* root,
+                                     ErcApiManifest manifests[ERC_API_MANIFEST_COUNT]) {
+  char path[4096];
+  size_t i;
+
+  for (i = 0u; i < ERC_API_MANIFEST_COUNT; ++i) {
+    if (!erc_join(path, sizeof(path), root, manifests[i].path)) {
+      return erc_fail("path too long");
+    }
+    manifests[i].bytes = erc_read_file(path, &manifests[i].len);
+    if (manifests[i].bytes == NULL) {
+      return erc_fail("module API manifest is missing");
+    }
+  }
+  return 0;
+}
+
+static int erc_api_manifest_match_header(ErcApiManifest* manifest,
+                                         const char* header_path) {
+  char manifest_entry[4096];
+  int has_manifest_entry = 0;
+
+  if (erc_api_manifest_next(manifest->bytes, manifest->len, &manifest->cursor,
+                            manifest_entry, sizeof(manifest_entry),
+                            &has_manifest_entry) != 0) {
+    return 1;
+  }
+  if (has_manifest_entry == 0 || strcmp(header_path, manifest_entry) != 0) {
+    return erc_fail("module public API header manifest is stale");
+  }
+  return 0;
+}
+
+static int erc_api_manifest_finish_all(ErcApiManifest manifests[ERC_API_MANIFEST_COUNT]) {
+  char manifest_entry[4096];
+  size_t i;
+  int has_manifest_entry = 0;
+
+  for (i = 0u; i < ERC_API_MANIFEST_COUNT; ++i) {
+    has_manifest_entry = 0;
+    if (erc_api_manifest_next(manifests[i].bytes, manifests[i].len,
+                              &manifests[i].cursor, manifest_entry,
+                              sizeof(manifest_entry), &has_manifest_entry) != 0) {
+      return 1;
+    }
+    if (has_manifest_entry != 0) {
+      return erc_fail("module public API header manifest contains untracked header");
+    }
+  }
   return 0;
 }
 
@@ -376,36 +506,29 @@ static unsigned char* erc_read_file(const char* path, size_t* out_len) {
 //@optimizer-ignore-function git index check must parse each tracked entry and fail immediately on violations
 static int erc_scan_index(const char* root) {
   char index_path[4096];
-  char manifest_path[4096];
-  char manifest_entry[4096];
+  ErcApiManifest manifests[ERC_API_MANIFEST_COUNT];
   unsigned char* index_bytes;
-  unsigned char* manifest_bytes;
   size_t index_len;
-  size_t manifest_len;
-  size_t manifest_cursor = 0u;
   uint32_t entries;
   uint32_t i;
   size_t offset = ERC_INDEX_HEADER_BYTES;
-  int has_manifest_entry = 0;
 
   if (!erc_join(index_path, sizeof(index_path), root, ".git/index")) {
-    return erc_fail("path too long");
-  }
-  if (!erc_join(manifest_path, sizeof(manifest_path), root, ERC_API_MANIFEST)) {
     return erc_fail("path too long");
   }
   index_bytes = erc_read_file(index_path, &index_len);
   if (index_bytes == NULL) {
     return 0;
   }
-  manifest_bytes = erc_read_file(manifest_path, &manifest_len);
-  if (manifest_bytes == NULL) {
+  erc_api_manifest_init(manifests);
+  if (erc_api_manifest_load_all(root, manifests) != 0) {
     free(index_bytes);
-    return erc_fail("API manifest is missing");
+    erc_api_manifest_free(manifests);
+    return 1;
   }
   if (index_len < ERC_INDEX_HEADER_BYTES || memcmp(index_bytes, "DIRC", ERC_GIT_DIRC_MAGIC_BYTES) != 0) {
     free(index_bytes);
-    free(manifest_bytes);
+    erc_api_manifest_free(manifests);
     return erc_fail("Git index is not readable");
   }
   entries = erc_be32(index_bytes + 8u);
@@ -418,7 +541,7 @@ static int erc_scan_index(const char* root) {
 
     if (offset + ERC_INDEX_ENTRY_BASE_BYTES > index_len) {
       free(index_bytes);
-      free(manifest_bytes);
+      erc_api_manifest_free(manifests);
       return erc_fail("Git index entry is truncated");
     }
     mode = erc_be32(index_bytes + offset + ERC_INDEX_MODE_OFFSET);
@@ -430,78 +553,66 @@ static int erc_scan_index(const char* root) {
       const unsigned char* end = memchr(name, '\0', index_len - offset - ERC_INDEX_ENTRY_BASE_BYTES);
       if (end == NULL) {
         free(index_bytes);
-        free(manifest_bytes);
+        erc_api_manifest_free(manifests);
         return erc_fail("Git index entry path is truncated");
       }
       name_len = (size_t)(end - (const unsigned char*)name);
     }
     if (offset + ERC_INDEX_ENTRY_BASE_BYTES + name_len >= index_len) {
       free(index_bytes);
-      free(manifest_bytes);
+      erc_api_manifest_free(manifests);
       return erc_fail("Git index entry path is truncated");
     }
     if (mode == ERC_GITLINK_MODE) {
       free(index_bytes);
-      free(manifest_bytes);
+      erc_api_manifest_free(manifests);
       return erc_fail("Git submodule entries are not allowed");
     }
     if (erc_is_tracked_build_artifact(name) != 0) {
       free(index_bytes);
-      free(manifest_bytes);
+      erc_api_manifest_free(manifests);
       return erc_fail("generated build artifacts must not be tracked");
     }
     if (erc_is_first_party_readme(name) != 0) {
       free(index_bytes);
-      free(manifest_bytes);
+      erc_api_manifest_free(manifests);
       return erc_fail("first-party documentation must use the root README.md, not nested README.md files");
     }
     if (erc_is_top_level_extra_markdown(name) != 0) {
       free(index_bytes);
-      free(manifest_bytes);
+      erc_api_manifest_free(manifests);
       return erc_fail("first-party documentation must stay in README.md; top-level markdown docs are not allowed");
     }
     if (erc_is_unapproved_external_dependency_path(name) != 0) {
       free(index_bytes);
-      free(manifest_bytes);
+      erc_api_manifest_free(manifests);
       return erc_fail("unapproved external dependency path is not allowed");
     }
-    if (erc_is_public_header_path(name) != 0) {
-      if (erc_api_manifest_next(manifest_bytes, manifest_len, &manifest_cursor,
-                                manifest_entry, sizeof(manifest_entry),
-                                &has_manifest_entry) != 0) {
+    {
+      int manifest_index = erc_public_header_manifest_index(name);
+      if (manifest_index >= 0 &&
+          erc_api_manifest_match_header(&manifests[manifest_index], name) != 0) {
         free(index_bytes);
-        free(manifest_bytes);
+        erc_api_manifest_free(manifests);
         return 1;
-      }
-      if (has_manifest_entry == 0 || strcmp(name, manifest_entry) != 0) {
-        free(index_bytes);
-        free(manifest_bytes);
-        return erc_fail("public API header manifest is stale");
       }
     }
     if (erc_scan_external_dependencies(root, name) != 0) {
       free(index_bytes);
-      free(manifest_bytes);
+      erc_api_manifest_free(manifests);
       return 1;
     }
     entry_len = ERC_INDEX_ENTRY_BASE_BYTES + name_len + 1u;
     entry_len = (entry_len + (ERC_INDEX_ENTRY_ALIGNMENT - 1u)) & ~(ERC_INDEX_ENTRY_ALIGNMENT - 1u);
     offset += entry_len;
   }
-  if (erc_api_manifest_next(manifest_bytes, manifest_len, &manifest_cursor,
-                            manifest_entry, sizeof(manifest_entry),
-                            &has_manifest_entry) != 0) {
+  if (erc_api_manifest_finish_all(manifests) != 0) {
     free(index_bytes);
-    free(manifest_bytes);
+    erc_api_manifest_free(manifests);
     return 1;
   }
-  if (has_manifest_entry != 0) {
-    free(index_bytes);
-    free(manifest_bytes);
-    return erc_fail("public API header manifest contains untracked header");
-  }
   free(index_bytes);
-  free(manifest_bytes);
+  erc_api_manifest_free(manifests);
   return 0;
 }
 
