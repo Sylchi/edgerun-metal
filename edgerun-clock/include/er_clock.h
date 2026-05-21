@@ -17,8 +17,14 @@
 #define ER_CLOCK_DEFAULT_SLOTS_PER_EPOCH 1024u
 #define ER_CLOCK_DEFAULT_EPOCHS_PER_ERA 1024u
 #define ER_CLOCK_DEFAULT_STRIDE 1u
+#define ER_CLOCK_KEEPER_ID_SIZE 32u
+
+typedef struct er_clock_keeper_id {
+  uint8_t bytes[ER_CLOCK_KEEPER_ID_SIZE];
+} er_clock_keeper_id_t;
 
 typedef struct er_clock_epoch_stamp {
+  er_clock_keeper_id_t keeper_id;
   uint64_t tick;
   uint64_t slot;
   uint64_t epoch;
@@ -54,10 +60,17 @@ typedef struct er_clock_modifier {
 
 er_clock_limits_t er_clock_default_limits(void);
 er_clock_modifier_t er_clock_default_modifier(void);
+int er_clock_keeper_id_valid(const er_clock_keeper_id_t* keeper_id);
+int er_clock_keeper_id_equal(const er_clock_keeper_id_t* left,
+                             const er_clock_keeper_id_t* right);
 int er_clock_stamp_valid(er_clock_epoch_stamp_t stamp);
+int er_clock_stamp_same_keeper(er_clock_epoch_stamp_t left,
+                               er_clock_epoch_stamp_t right);
 int er_clock_stamp_compare(er_clock_epoch_stamp_t left,
                            er_clock_epoch_stamp_t right);
-int er_clock_init(const er_clock_limits_t* limits, er_clock_t* out_clock);
+int er_clock_init(const er_clock_keeper_id_t* keeper_id,
+                  const er_clock_limits_t* limits,
+                  er_clock_t* out_clock);
 int er_clock_advance(er_clock_t* clock, er_clock_boundary_t* out_boundary);
 int er_clock_advance_with_modifier(er_clock_t* clock,
                                    const er_clock_modifier_t* modifier,

@@ -11,6 +11,34 @@ static void er_clock_zero(void* dst, uint64_t len) {
   }
 }
 
+//@optimizer-ignore-function keeper ids are fixed-size protocol byte arrays
+static int er_clock_bytes_nonzero(const uint8_t* bytes, uint64_t len) {
+  uint64_t i;
+
+  for (i = 0u; i < len; ++i) {
+    if (bytes[i] != 0u) {
+      return 1;
+    }
+  }
+  return 0;
+}
+
+//@optimizer-ignore-function keeper ids are fixed-size protocol byte arrays
+static int er_clock_bytes_compare(const uint8_t* left, const uint8_t* right,
+                                  uint64_t len) {
+  uint64_t i;
+
+  for (i = 0u; i < len; ++i) {
+    if (left[i] < right[i]) {
+      return -1;
+    }
+    if (left[i] > right[i]) {
+      return 1;
+    }
+  }
+  return 0;
+}
+
 static int er_clock_limits_valid(const er_clock_limits_t* limits) {
   return limits != (const er_clock_limits_t*)0 &&
          limits->ticks_per_slot != 0u &&
@@ -75,17 +103,41 @@ er_clock_modifier_t er_clock_default_modifier(void) {
   return modifier;
 }
 
+int er_clock_keeper_id_valid(const er_clock_keeper_id_t* keeper_id) {
+  if (keeper_id == (const er_clock_keeper_id_t*)0) {
+    return 0;
+  }
+  return er_clock_bytes_nonzero(keeper_id->bytes, ER_CLOCK_KEEPER_ID_SIZE);
+}
+
+int er_clock_keeper_id_equal(const er_clock_keeper_id_t* left,
+                             const er_clock_keeper_id_t* right) {
+  if (er_clock_keeper_id_valid(left) == 0 ||
+      er_clock_keeper_id_valid(right) == 0) {
+    return 0;
+  }
+  return er_clock_bytes_compare(left->bytes, right->bytes,
+                                ER_CLOCK_KEEPER_ID_SIZE) == 0;
+}
+
 int er_clock_stamp_valid(er_clock_epoch_stamp_t stamp) {
-  return stamp.tick != 0u ||
-         stamp.slot != 0u ||
-         stamp.epoch != 0u ||
-         stamp.era != 0u;
+  return er_clock_keeper_id_valid(&stamp.keeper_id);
+}
+
+int er_clock_stamp_same_keeper(er_clock_epoch_stamp_t left,
+                               er_clock_epoch_stamp_t right) {
+  return er_clock_keeper_id_equal(&left.keeper_id, &right.keeper_id);
 }
 
 int er_clock_stamp_compare(er_clock_epoch_stamp_t left,
                            er_clock_epoch_stamp_t right) {
   int result;
 
+  result = er_clock_bytes_compare(left.keeper_id.bytes, right.keeper_id.bytes,
+                                  ER_CLOCK_KEEPER_ID_SIZE);
+  if (result != 0) {
+    return result;
+  }
   result = er_clock_compare_u64(left.era, right.era);
   if (result != 0) {
     return result;
@@ -101,12 +153,15 @@ int er_clock_stamp_compare(er_clock_epoch_stamp_t left,
   return er_clock_compare_u64(left.tick, right.tick);
 }
 
-int er_clock_init(const er_clock_limits_t* limits, er_clock_t* out_clock) {
+int er_clock_init(const er_clock_keeper_id_t* keeper_id,
+                  const er_clock_limits_t* limits,
+                  er_clock_t* out_clock) {
   uint8_t tick_shift = 0u;
   uint8_t slot_shift = 0u;
   uint8_t epoch_shift = 0u;
 
   if (out_clock == (er_clock_t*)0 ||
+      er_clock_keeper_id_valid(keeper_id) == 0 ||
       er_clock_limits_power_of_two(limits) == 0 ||
       er_clock_limit_shift(limits->ticks_per_slot, &tick_shift) != ER_CLOCK_OK ||
       er_clock_limit_shift(limits->slots_per_epoch, &slot_shift) != ER_CLOCK_OK ||
@@ -114,6 +169,7 @@ int er_clock_init(const er_clock_limits_t* limits, er_clock_t* out_clock) {
     return ER_CLOCK_ERR_BADARG;
   }
   er_clock_zero(out_clock, (uint64_t)sizeof(*out_clock));
+  out_clock->now.keeper_id = *keeper_id;
   out_clock->limits = *limits;
   out_clock->tick_mask = limits->ticks_per_slot - 1u;
   out_clock->slot_mask = limits->slots_per_epoch - 1u;

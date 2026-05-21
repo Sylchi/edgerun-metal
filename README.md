@@ -225,7 +225,9 @@ tokens created by the same user up to the limits the device owner assigned.
 ## Canonical Objects
 
 `edgerun-clock` is the deterministic epoch coordinate below identities,
-objects, admission, storage, and wire records. Epoch time advances on accepted
+objects, admission, storage, and wire records. Every epoch stamp names the
+32-byte identity id of the clock keeper that advanced it, so verifiers know
+which clock authority to ask about a claim. Epoch time advances on accepted
 state transitions rather than wall-clock trust, giving separate devices a
 shared way to compare creation, validity, route, and receipt records.
 
