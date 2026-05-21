@@ -36,7 +36,7 @@ if "$TOOL_BIN" >/tmp/pi-node-update-usage.out \
   exit 1
 fi
 
-if ! grep -q "usage: .*--serial <tty> | --iface <monitor-iface> | --dry-run.* --image <kernel.img>" \
+if ! grep -q "usage: .*--serial <tty> | --iface <edgenet-iface> | --dry-run.* --image <kernel.img>" \
   /tmp/pi-node-update-usage.err; then
   printf 'pi-node-update usage text is not explicit\n' >&2
   exit 1

@@ -101,17 +101,18 @@ static void test_pi_zero_w_v1_1_bringup_boundary(void) {
                    ER_PI_ZERO_W_V1_1_LCD_INPUT_KEY2 |
                    ER_PI_ZERO_W_V1_1_LCD_INPUT_KEY3);
   check_int64("pi zero w l2 core plan",
-              er_wifi_l2_ap_plan_prepare(&node_id,
-                                         ER_PI_ZERO_W_V1_1_L2_WIFI_CHANNEL,
-                                         &plan),
+              er_wifi_l2_control_plan_prepare(&node_id, &plan),
               1);
+  check_uint64("pi zero w l2 channel",
+               plan.channel,
+               ER_WIFI_L2_CONTROL_CHANNEL);
   check_uint64("pi zero w l2 address len",
                ER_PI_ZERO_W_V1_1_L2_ADDRESS_BYTES,
-               ER_WIFI_L2_ENDPOINT_ADDR_FIXED_LEN + ER_WIFI_L2_NODE_SSID_LEN);
+               ER_WIFI_L2_ENDPOINT_ADDR_FIXED_LEN + ER_WIFI_L2_CONTROL_SSID_LEN);
   check_uint64("pi zero w l2 mac bytes",
                ER_PI_ZERO_W_V1_1_L2_MAC_BYTES,
                ER_NET_MAC_LEN);
   check_uint64("pi zero w l2 ssid bytes",
                ER_PI_ZERO_W_V1_1_L2_SSID_BYTES,
-               ER_WIFI_L2_NODE_SSID_LEN);
+               ER_WIFI_L2_CONTROL_SSID_LEN);
 }

@@ -2,7 +2,7 @@
 #include "er_mem.h"
 
 static const char g_er_boot_config_wifi_fixed_ssid[ER_BOOT_CONFIG_WIFI_FIXED_SSID_LEN] = {
-  'e', 'd', 'g', 'e', 'r', 'u', 'n'
+  'E', 'd', 'g', 'e', 'N', 'e', 't'
 };
 
 static const char g_er_boot_config_firmware_path_prefix[] = {

@@ -76,7 +76,7 @@ pi-zero-w-v1_1-usb-boot: er-build
 	./.build/pi-usb-boot --boot-dir $(PI_ZERO_W_V1_1_USB_BOOT_DIR) $(PI_USB_BOOT_DEVICE_ARG) --verbose
 
 pi-zero-w-v1_1-update: er-build
-	test -n "$(PI_UPDATE_IFACE)" || { printf '%s\n' 'PI_UPDATE_IFACE=wlan0 is required for Pi Zero W v1.1 raw L2 update'; exit 2; }
+	test -n "$(PI_UPDATE_IFACE)" || { printf '%s\n' 'PI_UPDATE_IFACE=wlan0 is required for Pi Zero W v1.1 EdgeNet L2 update'; exit 2; }
 	$(MAKE) -C edgerun-metal pi-zero-w-v1_1-kernel
 	$(ER_BUILD_STAGED) pi-node-update
 	./.build/pi-node-update --iface "$(PI_UPDATE_IFACE)" --image "$(PI_ZERO_W_V1_1_KERNEL)"

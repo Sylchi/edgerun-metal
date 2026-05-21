@@ -60,7 +60,7 @@ static void test_boot_config_and_seal_strategy(void) {
                config.channels[2].ssid_len, ER_BOOT_CONFIG_WIFI_FIXED_SSID_LEN);
   check_int64("boot config reject fixed ssid drift",
               (config.channels[2].ssid[0] = 'x', er_boot_config_valid(&config)), 0);
-  config.channels[2].ssid[0] = 'e';
+  config.channels[2].ssid[0] = 'E';
   check_int64("boot config restored fixed ssid",
               er_boot_config_valid(&config), 1);
   check_uint64("boot config firmware source kind",
