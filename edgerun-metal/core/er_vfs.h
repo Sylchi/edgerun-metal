@@ -91,7 +91,9 @@ typedef struct {
 } ErVfsObjectUnsealRequestHeader;
 
 UINT8 er_vfs_label_valid(const char* label, UINTN label_len);
-UINT8 er_vfs_prepare_object_packet(const ErCryptoProvider* crypto, const UINT8* object_bytes, UINTN object_len,
+UINT8 er_vfs_prepare_object_packet(const ErCryptoProvider* crypto,
+                                   const UINT8* canonical_object_bytes,
+                                   UINTN canonical_object_len,
                                    UINTN offset, UINT32 packet_index, UINT32 packet_count,
                                    ErVfsObjectPacket* out_packet);
 UINT8 er_vfs_object_packet_valid(const ErCryptoProvider* crypto,
@@ -104,14 +106,15 @@ UINT8 er_vfs_assemble_object_packets(const ErCryptoProvider* crypto,
                                      UINTN* out_object_len,
                                      ErHash* out_object_id);
 UINT8 er_vfs_prepare_object_ref(const ErCryptoProvider* crypto,
-                                const UINT8* object_bytes,
-                                UINTN object_len,
+                                const UINT8* canonical_object_bytes,
+                                UINTN canonical_object_len,
                                 ErVfsObjectRef* out_ref);
 UINT8 er_vfs_prepare_object_ref_from_object(const ErHash* object_id,
                                             UINT64 object_len,
                                             ErVfsObjectRef* out_ref);
 UINT8 er_vfs_prepare_object_label_ref(const ErCryptoProvider* crypto, const char* label, UINTN label_len,
-                                      const UINT8* object_bytes, UINTN object_len,
+                                      const UINT8* canonical_object_bytes,
+                                      UINTN canonical_object_len,
                                       ErVfsObjectLabelRef* out_ref);
 UINT8 er_vfs_prepare_object_label_ref_from_object(const ErCryptoProvider* crypto, const char* label,
                                                   UINTN label_len, const ErHash* object_id,

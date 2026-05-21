@@ -403,6 +403,55 @@ static void test_fill_bytes(UINT8* dst, UINTN len, UINT8 seed) {
   }
 }
 
+#define TEST_CANONICAL_OBJECT_CAPACITY 4096u
+
+static er_object_requirements_t test_canonical_object_requirements(void) {
+  er_object_requirements_t requirements;
+
+  requirements.durability = ER_OBJECT_DURABILITY_MEMORY;
+  requirements.confidentiality = ER_OBJECT_CONFIDENTIALITY_PUBLIC;
+  requirements.portability = ER_OBJECT_PORTABILITY_PUBLIC_PORTABLE;
+  requirements.integrity = ER_OBJECT_INTEGRITY_HASH_ONLY;
+  requirements.lifetime = ER_OBJECT_LIFETIME_TRANSIENT;
+  requirements.visibility = ER_OBJECT_VISIBILITY_PUBLIC;
+  requirements.access_cost = ER_OBJECT_ACCESS_EXPLICIT_IO;
+  return requirements;
+}
+
+static er_clock_epoch_stamp_t test_canonical_object_epoch(void) {
+  er_clock_epoch_stamp_t epoch;
+
+  er_mem_zero((UINT8*)&epoch, (UINTN)sizeof(epoch));
+  test_fill_bytes(epoch.keeper_id.bytes, ER_CLOCK_KEEPER_ID_SIZE, 0xc0u);
+  epoch.tick = 1u;
+  return epoch;
+}
+
+static void test_build_canonical_bytes_object(const char* name,
+                                              const UINT8* body,
+                                              UINTN body_len,
+                                              UINT8* out_object,
+                                              UINTN out_object_capacity,
+                                              UINTN* out_object_len,
+                                              ErHash* out_object_id) {
+  er_object_requirements_t requirements;
+  er_clock_epoch_stamp_t epoch;
+  size_t object_len;
+
+  requirements = test_canonical_object_requirements();
+  epoch = test_canonical_object_epoch();
+  check_int64(name,
+              er_object_build_node(ER_OBJECT_KIND_BYTES, 0u, &requirements,
+                                   epoch, (const er_object_owner_t*)0, 0u,
+                                   (const er_object_envelope_t*)0, 0u,
+                                   (const er_object_child_ref_t*)0, 0u,
+                                   body, (size_t)body_len, out_object,
+                                   (size_t)out_object_capacity, &object_len,
+                                   out_object_id->bytes),
+              ER_OBJECT_OK);
+  *out_object_len = (UINTN)object_len;
+}
+
 static void test_acpi_set_checksum(UINT8* bytes, UINTN len, UINTN checksum_offset) {
   UINTN i;
   UINT8 sum = 0;
