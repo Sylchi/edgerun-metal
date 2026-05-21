@@ -91,8 +91,8 @@ static void test_cyw43438_owned_firmware_payload(void) {
                ER_CYW43438_OWNED_FIRMWARE_RESPONSE_RX_PROBE_ACK,
                ER_CYW43438_OWNED_FIRMWARE_RESPONSE_ACK_MASK |
                    ER_CYW43438_OWNED_FIRMWARE_COMMAND_RX_PROBE);
-  check_uint64("cyw43438 owned over air rx unsupported",
-               ER_CYW43438_OWNED_FIRMWARE_OVER_AIR_RX_SUPPORTED,
+  check_uint64("cyw43438 owned raw rx unsupported",
+               ER_CYW43438_OWNED_FIRMWARE_RAW_RX_SUPPORTED,
                0u);
   check_uint64("cyw43438 owned rx source host scratch",
                ER_CYW43438_OWNED_FIRMWARE_RX_SOURCE_HOST_SCRATCH,
@@ -174,7 +174,7 @@ static void test_cyw43438_owned_firmware_payload(void) {
                            0xc3u);
   test_owned_firmware_byte("cyw43438 owned loop",
                            ER_CYW43438_OWNED_FIRMWARE_HANDLER_OFFSET + 54u,
-                           0xe9u);
+                           0xeau);
   test_owned_firmware_byte("cyw43438 owned loop high",
                            ER_CYW43438_OWNED_FIRMWARE_HANDLER_OFFSET + 55u,
                            0xe7u);

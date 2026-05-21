@@ -2288,6 +2288,7 @@ static void er_pi_zero_w_v1_1_ota_poll_owned_rx(void) {
   UINT32 checksum;
   UINT32 remaining;
   UINT32 read_address;
+  ErWifiL2ApPlan plan;
   UINT8 src_mac[ER_NET_MAC_LEN];
   const UINT8* erwire;
   UINT32 erwire_len;
@@ -2299,6 +2300,7 @@ static void er_pi_zero_w_v1_1_ota_poll_owned_rx(void) {
           g_er_pi_zero_w_v1_1_cyw43438_sdio_base +
               ER_PI_ZERO_W_V1_1_CYW43438_SDIO_INTSTATUS,
           &intstatus) == 0u ||
+      er_pi_zero_w_v1_1_wifi_plan(&plan) == 0u ||
       (intstatus & ER_PI_ZERO_W_V1_1_CYW43438_INT_HMB_FRAME_IND) == 0u ||
       er_pi_zero_w_v1_1_cyw43438_set_backplane_window(
           ER_PI_ZERO_W_V1_1_CYW43438_CHIPCOMMON_BASE) == 0u) {
@@ -2361,9 +2363,10 @@ static void er_pi_zero_w_v1_1_ota_poll_owned_rx(void) {
       return;
     }
   }
-  if (er_cyw43438_sdpcm_parse_broadcast_erwire(
+  if (er_cyw43438_sdpcm_parse_raw_l2_erwire(
           g_er_pi_zero_w_v1_1_l2_rx_frame,
           frame_len,
+          plan.mac,
           src_mac,
           &erwire,
           &erwire_len) == 0u ||
@@ -2637,13 +2640,13 @@ void er_pi_zero_w_v1_1_main(void) {
   if (g_er_pi_zero_w_v1_1_sdio_probe_state ==
           ER_PI_ZERO_W_V1_1_SDIO_PROBE_CMD53_DONE &&
       er_pi_zero_w_v1_1_cyw43438_start_owned_l2() != 0u &&
-      ER_CYW43438_OWNED_FIRMWARE_OVER_AIR_RX_SUPPORTED != 0u) {
+      ER_CYW43438_OWNED_FIRMWARE_RAW_RX_SUPPORTED != 0u) {
     g_er_pi_zero_w_v1_1_sdio_probe_state = ER_PI_ZERO_W_V1_1_L2_READY;
     er_pi_zero_w_v1_1_ota_status_refresh();
     er_pi_zero_w_v1_1_act_led_status(ER_PI_ZERO_W_V1_1_LED_CYW_MAILBOX_OK);
   } else if (g_er_pi_zero_w_v1_1_sdio_probe_state ==
                  ER_PI_ZERO_W_V1_1_L2_CM3_ACTIVE &&
-             ER_CYW43438_OWNED_FIRMWARE_OVER_AIR_RX_SUPPORTED == 0u) {
+             ER_CYW43438_OWNED_FIRMWARE_RAW_RX_SUPPORTED == 0u) {
     g_er_pi_zero_w_v1_1_sdio_probe_state =
         ER_PI_ZERO_W_V1_1_L2_RAW_RX_UNSUPPORTED;
     er_pi_zero_w_v1_1_act_led_status(
