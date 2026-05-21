@@ -526,6 +526,13 @@ The Pi Zero W v1.1 ARMv6 boot tree is
 `.build/edgerun-metal/pi-zero-w-v1_1/boot/` and contains the repo-owned
 `kernel.img` payload.
 
+Pi Zero W v1.1 SD boot currently requires the Raspberry Pi Zero-family GPU boot
+firmware staged from `firmware/raspberry-pi/`: `bootcode.bin`, `start.elf`, and
+`fixup.dat`. This is an explicit hardware bring-up exception to let the
+Broadcom mask-ROM/GPU boot chain load repo-owned `kernel.img`; it is separate
+from the CYW43438 radio firmware exception and does not permit general vendor
+drivers, host tools, protocol stacks, or compatibility layers.
+
 The same boot tree can be used on every Pi Zero W v1.1 board in the cluster
 proof. Each board derives a boot-local ephemeral node id from the hardcoded
 proof admission id and board-local boot nonce material, so no node secret is
