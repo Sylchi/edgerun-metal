@@ -634,11 +634,12 @@ the normal content-addressed hashes, caches packets in the board-local boot
 receiver, writes the completed object to the update slot, verifies each written
 SD block by reading it back, and marks reboot required.
 
-The default update slot begins at SD block `8192`. The intended live update
-transport is CYW43438 vendor radio firmware plus SDIO function-2 SDPCM data
-carrying EdgeRun L2 ethertype `0x88b5` erwire frames over the fixed open
-`EdgeNet` control AP on channel `1`; DHCP remains disabled because native
-EdgeRun traffic is not IP.
+The Pi Zero W v1.1 SD layout keeps the FAT boot partition below raw firmware
+state. Boot logs begin at SD block `131072` for `128` blocks. The default update
+slot begins at SD block `262144`. The intended live update transport is
+CYW43438 vendor radio firmware plus SDIO function-2 SDPCM data carrying EdgeRun
+L2 ethertype `0x88b5` erwire frames over the fixed open `EdgeNet` control AP on
+channel `1`; DHCP remains disabled because native EdgeRun traffic is not IP.
 
 Send a freshly built `kernel.img` over the Pi Zero W v1.1 EdgeNet L2 receiver
 from a Linux interface associated to `EdgeNet`:
