@@ -194,8 +194,10 @@ static void test_cyw43438_sdpcm_rejects_invalid_frames(void) {
                0u);
 }
 
-static void test_cyw43438_sdpcm_extracts_broadcast_erwire(void) {
+static void test_cyw43438_sdpcm_extracts_raw_l2_erwire(void) {
   UINT8 src_mac[ER_NET_MAC_LEN] = {0x02u, 0x45u, 0x52u, 0x5au, 0x57u, 0x01u};
+  UINT8 local_mac[ER_NET_MAC_LEN] = {0x02u, 0x45u, 0x52u, 0x5au, 0x57u, 0x02u};
+  UINT8 other_mac[ER_NET_MAC_LEN] = {0x02u, 0x45u, 0x52u, 0x5au, 0x57u, 0x03u};
   UINT8 dst_mac[ER_NET_MAC_LEN] = {
       ER_CYW43438_SDPCM_BROADCAST_BYTE,
       ER_CYW43438_SDPCM_BROADCAST_BYTE,
@@ -232,29 +234,67 @@ static void test_cyw43438_sdpcm_extracts_broadcast_erwire(void) {
                    (UINT32)sizeof(sdpcm_frame),
                    &sdpcm_frame_len),
                1u);
-  check_uint64("sdpcm broadcast erwire parse",
-               er_cyw43438_sdpcm_parse_broadcast_erwire(sdpcm_frame,
-                                                        sdpcm_frame_len,
-                                                        parsed_src_mac,
-                                                        &parsed_erwire,
-                                                        &parsed_erwire_len),
+  check_uint64("sdpcm raw l2 broadcast erwire parse",
+               er_cyw43438_sdpcm_parse_raw_l2_erwire(sdpcm_frame,
+                                                     sdpcm_frame_len,
+                                                     local_mac,
+                                                     parsed_src_mac,
+                                                     &parsed_erwire,
+                                                     &parsed_erwire_len),
                1u);
-  check_uint64("sdpcm broadcast erwire len",
+  check_uint64("sdpcm raw l2 erwire len",
                parsed_erwire_len,
                (UINT32)sizeof(erwire));
-  check_uint64("sdpcm broadcast erwire pointer",
+  check_uint64("sdpcm raw l2 erwire pointer",
                (UINT64)(UINTN)parsed_erwire,
                (UINT64)(UINTN)(sdpcm_frame +
                                ER_CYW43438_SDPCM_HEADER_BYTES +
                                ER_NET_ETH_HEADER_LEN));
-  check_uint64("sdpcm broadcast source byte0",
+  check_uint64("sdpcm raw l2 source byte0",
                parsed_src_mac[0],
                src_mac[0]);
-  check_uint64("sdpcm broadcast source byte5",
+  check_uint64("sdpcm raw l2 source byte5",
                parsed_src_mac[5],
                src_mac[5]);
-  check_uint64("sdpcm broadcast erwire byte0", parsed_erwire[0], erwire[0]);
-  check_uint64("sdpcm broadcast erwire byte2", parsed_erwire[2], erwire[2]);
+  check_uint64("sdpcm raw l2 erwire byte0", parsed_erwire[0], erwire[0]);
+  check_uint64("sdpcm raw l2 erwire byte2", parsed_erwire[2], erwire[2]);
+
+  check_uint64("sdpcm test unicast eth frame build",
+               er_net_build_eth_frame(src_mac,
+                                      local_mac,
+                                      ER_NET_ETH_TYPE_EDGERUN,
+                                      erwire,
+                                      (UINT32)sizeof(erwire),
+                                      eth_frame,
+                                      (UINT32)sizeof(eth_frame),
+                                      &eth_frame_len),
+               1u);
+  check_uint64("sdpcm test unicast frame build",
+               er_cyw43438_sdpcm_build_frame(
+                   10u,
+                   ER_CYW43438_SDPCM_CHANNEL_DATA,
+                   eth_frame,
+                   eth_frame_len,
+                   sdpcm_frame,
+                   (UINT32)sizeof(sdpcm_frame),
+                   &sdpcm_frame_len),
+               1u);
+  check_uint64("sdpcm raw l2 local erwire parse",
+               er_cyw43438_sdpcm_parse_raw_l2_erwire(sdpcm_frame,
+                                                     sdpcm_frame_len,
+                                                     local_mac,
+                                                     parsed_src_mac,
+                                                     &parsed_erwire,
+                                                     &parsed_erwire_len),
+               1u);
+  check_uint64("sdpcm raw l2 rejects other local mac",
+               er_cyw43438_sdpcm_parse_raw_l2_erwire(sdpcm_frame,
+                                                     sdpcm_frame_len,
+                                                     other_mac,
+                                                     parsed_src_mac,
+                                                     &parsed_erwire,
+                                                     &parsed_erwire_len),
+               0u);
 }
 
 static void test_cyw43438_sdpcm_frames(void) {
@@ -283,5 +323,5 @@ static void test_cyw43438_sdpcm_frames(void) {
                0u);
   test_cyw43438_sdpcm_build_and_parse_data_frame();
   test_cyw43438_sdpcm_rejects_invalid_frames();
-  test_cyw43438_sdpcm_extracts_broadcast_erwire();
+  test_cyw43438_sdpcm_extracts_raw_l2_erwire();
 }

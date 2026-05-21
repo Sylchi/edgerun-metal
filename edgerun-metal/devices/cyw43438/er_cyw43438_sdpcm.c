@@ -49,6 +49,17 @@ static UINT8 er_cyw43438_sdpcm_is_broadcast_mac(const UINT8* mac) {
   return 1u;
 }
 
+static UINT8 er_cyw43438_sdpcm_dst_mac_matches(const UINT8* mac,
+                                               const UINT8* expected_mac) {
+  if (expected_mac == 0) {
+    return 0u;
+  }
+  if (er_cyw43438_sdpcm_is_broadcast_mac(mac) != 0u) {
+    return 1u;
+  }
+  return er_mem_equal(mac, expected_mac, ER_NET_MAC_LEN);
+}
+
 UINT8 er_cyw43438_sdpcm_channel_valid(UINT8 channel) {
   switch (channel) {
   case ER_CYW43438_SDPCM_CHANNEL_CONTROL:
@@ -174,9 +185,10 @@ UINT8 er_cyw43438_sdpcm_parse_frame(const UINT8* frame,
   return 1u;
 }
 
-UINT8 er_cyw43438_sdpcm_parse_broadcast_erwire(
+UINT8 er_cyw43438_sdpcm_parse_raw_l2_erwire(
     const UINT8* frame,
     UINT32 frame_len,
+    const UINT8 expected_dst_mac[ER_NET_MAC_LEN],
     UINT8 out_src_mac[ER_NET_MAC_LEN],
     const UINT8** out_erwire,
     UINT32* out_erwire_len) {
@@ -184,7 +196,8 @@ UINT8 er_cyw43438_sdpcm_parse_broadcast_erwire(
   const UINT8* payload;
   UINT32 payload_len;
 
-  if (out_src_mac == 0 || out_erwire == 0 || out_erwire_len == 0 ||
+  if (expected_dst_mac == 0 || out_src_mac == 0 ||
+      out_erwire == 0 || out_erwire_len == 0 ||
       er_cyw43438_sdpcm_parse_frame(
           frame,
           frame_len,
@@ -193,8 +206,9 @@ UINT8 er_cyw43438_sdpcm_parse_broadcast_erwire(
           &payload_len) == 0u ||
       header.channel != ER_CYW43438_SDPCM_CHANNEL_DATA ||
       payload_len <= ER_NET_ETH_HEADER_LEN ||
-      er_cyw43438_sdpcm_is_broadcast_mac(
-          payload + ER_CYW43438_SDPCM_ETH_DST_OFFSET) == 0u ||
+      er_cyw43438_sdpcm_dst_mac_matches(
+          payload + ER_CYW43438_SDPCM_ETH_DST_OFFSET,
+          expected_dst_mac) == 0u ||
       er_cyw43438_sdpcm_get_be16(
           payload + ER_CYW43438_SDPCM_ETH_TYPE_OFFSET) !=
           ER_NET_ETH_TYPE_EDGERUN) {

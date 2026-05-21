@@ -59,9 +59,10 @@ UINT8 er_cyw43438_sdpcm_parse_frame(const UINT8* frame,
                                     ErCyw43438SdpcmHeader* out_header,
                                     const UINT8** out_payload,
                                     UINT32* out_payload_len);
-UINT8 er_cyw43438_sdpcm_parse_broadcast_erwire(
+UINT8 er_cyw43438_sdpcm_parse_raw_l2_erwire(
     const UINT8* frame,
     UINT32 frame_len,
+    const UINT8 expected_dst_mac[ER_NET_MAC_LEN],
     UINT8 out_src_mac[ER_NET_MAC_LEN],
     const UINT8** out_erwire,
     UINT32* out_erwire_len);
