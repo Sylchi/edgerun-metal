@@ -307,6 +307,9 @@ static void test_configured_cache_and_capacities(void) {
   check_int("configured get", er_store_get_blob(&store, hash, out, sizeof(out), &out_len), ER_OK);
   check_int("configured stats after cache", er_store_stats(&store, &stats), ER_OK);
   check_size("configured cache used", stats.cache_used, sizeof(data));
+  check_size("configured cache admissions", stats.cache_admissions, 1u);
+  check_size("configured cache hits", stats.cache_hits, 1u);
+  check_size("configured cache misses", stats.cache_misses, 0u);
 }
 
 static void test_typed_blob_and_custom_index_rebuild(void) {
@@ -317,8 +320,11 @@ static void test_typed_blob_and_custom_index_rebuild(void) {
   er_store_t store_b;
   er_blob_t info;
   uint8_t hash[ER_HASH_SIZE];
+  uint8_t object_hash[ER_HASH_SIZE];
   uint8_t got[ER_HASH_SIZE];
   er_index_entry_t entries[4];
+  er_store_index_cursor_t cursor;
+  er_index_entry_t object_entry;
   size_t count = 0u;
   static const uint8_t data[] = {91u, 92u, 93u};
 
@@ -331,7 +337,10 @@ static void test_typed_blob_and_custom_index_rebuild(void) {
             ER_OK);
   check_int("typed info", er_store_get_blob_info(&store_a, hash, &info), ER_OK);
   check_int("typed info type", (int)info.content_type, (int)TEST_TYPE_ROW);
+  check_int("put small object", er_store_put_object(&store_a, data, sizeof(data), sizeof(data), object_hash), ER_OK);
   check_int("custom index put", er_store_index_put_ex(&store_a, TEST_INDEX_BY_NAME, "row/alice", hash), ER_OK);
+  check_int("custom object index put",
+            er_store_object_index_put(&store_a, TEST_INDEX_BY_NAME, "row/object", object_hash), ER_OK);
   check_int("custom index get", er_store_index_get_ex(&store_a, TEST_INDEX_BY_NAME, "row/alice", got), ER_OK);
   check_bytes("custom index hash", got, hash, ER_HASH_SIZE);
   check_int("close typed a", er_store_close(&store_a), ER_OK);
@@ -340,8 +349,14 @@ static void test_typed_blob_and_custom_index_rebuild(void) {
   check_int("rebuilt typed info type", (int)info.content_type, (int)TEST_TYPE_ROW);
   check_int("custom prefix scan",
             er_store_index_scan_prefix_ex(&store_b, TEST_INDEX_BY_NAME, "row/", entries, 4u, &count), ER_OK);
-  check_size("custom prefix count", count, 1u);
+  check_size("custom prefix count", count, 2u);
   check_int("custom prefix index id", (int)entries[0].index_id, (int)TEST_INDEX_BY_NAME);
+  check_int("object cursor open", er_store_index_cursor_open(&store_b, TEST_INDEX_BY_NAME, "row/object", &cursor),
+            ER_OK);
+  check_int("object cursor next", er_store_index_cursor_next(&cursor, &object_entry), ER_OK);
+  check_int("object cursor kind", (int)object_entry.value_kind, (int)ER_STORE_VALUE_OBJECT);
+  check_int("object cursor type", (int)object_entry.content_type, (int)ER_STORE_TYPE_OBJECT_MANIFEST);
+  check_u64("object cursor size", object_entry.value_size, sizeof(data));
 }
 
 static void test_chunked_object_roundtrip_and_chunk_reuse(void) {

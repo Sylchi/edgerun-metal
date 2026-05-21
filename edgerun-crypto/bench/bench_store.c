@@ -8,8 +8,8 @@
 #include <time.h>
 
 enum {
-  BENCH_STORE_IO_CAP = 256u * 1024u * 1024u,
-  BENCH_STORE_ARENA_BYTES = 64u * 1024u * 1024u,
+  BENCH_STORE_IO_CAP = 512u * 1024u * 1024u,
+  BENCH_STORE_ARENA_BYTES = 128u * 1024u * 1024u,
   BENCH_STORE_BLOB_BYTES = 64u * 1024u,
   BENCH_STORE_OBJECT_BYTES = 8u * 1024u * 1024u,
   BENCH_STORE_OBJECT_CHUNK = 64u * 1024u,
@@ -17,10 +17,10 @@ enum {
   BENCH_STORE_DEDUP_ITERS = 8192u,
   BENCH_STORE_OBJECT_ITERS = 16u,
   BENCH_STORE_REPLAY_OBJECTS = 64u,
-  BENCH_STORE_INDEX_ITERS = 20000u,
-  BENCH_STORE_INDEX_GET_ITERS = 20000u,
+  BENCH_STORE_INDEX_QUICK_ITERS = 20000u,
+  BENCH_STORE_INDEX_MEDIUM_ITERS = 100000u,
   BENCH_STORE_BLOB_SLOTS = 32768u,
-  BENCH_STORE_KEY_SLOTS = 32768u,
+  BENCH_STORE_KEY_SLOTS = 131072u,
   BENCH_STORE_TYPE_SLOTS = 1024u,
   BENCH_STORE_INDEX_SLOTS = 1024u,
   BENCH_STORE_CACHE_BYTES = 32u * 1024u * 1024u,
@@ -288,8 +288,9 @@ static void bench_index_key(char* out, size_t out_len, size_t value) {
   (void)snprintf(out, out_len, "row/%05u", (unsigned)value);
 }
 
-static int bench_index(BenchIo* io, uint8_t* arena, uint8_t* data) {
+static int bench_index(BenchIo* io, uint8_t* arena, uint8_t* data, const char* label, size_t count) {
   er_store_t store;
+  er_store_stats_t stats;
   uint8_t hash[ER_HASH_SIZE];
   uint8_t got[ER_HASH_SIZE];
   char key[ER_STORE_MAX_KEY];
@@ -306,18 +307,18 @@ static int bench_index(BenchIo* io, uint8_t* arena, uint8_t* data) {
     return 0;
   }
   start = bench_store_now_ns();
-  for (i = 0u; i < BENCH_STORE_INDEX_ITERS; ++i) {
+  for (i = 0u; i < count; ++i) {
     bench_index_key(key, sizeof(key), i);
     if (er_store_index_put(&store, key, hash) != ER_OK) {
       return 0;
     }
   }
   elapsed = bench_store_now_ns() - start;
-  printf("index-put  %7u keys %9.2f keys/s\n", (unsigned)BENCH_STORE_INDEX_ITERS,
-         ((double)BENCH_STORE_INDEX_ITERS * (double)BENCH_STORE_NS_PER_SECOND) / (double)elapsed);
+  printf("%s-put %7u keys %9.2f keys/s\n", label, (unsigned)count,
+         ((double)count * (double)BENCH_STORE_NS_PER_SECOND) / (double)elapsed);
 
   start = bench_store_now_ns();
-  for (i = 0u; i < BENCH_STORE_INDEX_GET_ITERS; ++i) {
+  for (i = 0u; i < count; ++i) {
     bench_index_key(key, sizeof(key), i);
     if (er_store_index_get(&store, key, got) != ER_OK) {
       return 0;
@@ -325,8 +326,8 @@ static int bench_index(BenchIo* io, uint8_t* arena, uint8_t* data) {
     g_bench_store_sink ^= got[i & (ER_HASH_SIZE - 1u)];
   }
   elapsed = bench_store_now_ns() - start;
-  printf("index-get  %7u keys %9.2f keys/s\n", (unsigned)BENCH_STORE_INDEX_GET_ITERS,
-         ((double)BENCH_STORE_INDEX_GET_ITERS * (double)BENCH_STORE_NS_PER_SECOND) / (double)elapsed);
+  printf("%s-get %7u keys %9.2f keys/s\n", label, (unsigned)count,
+         ((double)count * (double)BENCH_STORE_NS_PER_SECOND) / (double)elapsed);
 
   start = bench_store_now_ns();
   if (er_store_index_cursor_open(&store, ER_STORE_INDEX_DEFAULT, "row/0", &cursor) != ER_OK) {
@@ -337,8 +338,13 @@ static int bench_index(BenchIo* io, uint8_t* arena, uint8_t* data) {
     ++cursor_count;
   }
   elapsed = bench_store_now_ns() - start;
-  printf("prefix     %7u hits %9.2f keys/s\n", (unsigned)cursor_count,
+  printf("%s-prefix %5u hits %9.2f keys/s\n", label, (unsigned)cursor_count,
          ((double)cursor_count * (double)BENCH_STORE_NS_PER_SECOND) / (double)elapsed);
+  if (er_store_stats(&store, &stats) != ER_OK) {
+    return 0;
+  }
+  printf("%s-cache hits=%zu misses=%zu admissions=%zu rejects=%zu\n",
+         label, stats.cache_hits, stats.cache_misses, stats.cache_admissions, stats.cache_rejects);
   return cursor_count != 0u ? 1 : 0;
 }
 
@@ -373,7 +379,8 @@ int main(void) {
        bench_blob_dedup(&io, arena, data) != 0 &&
        bench_object_put_get(&io, arena, data, out) != 0 &&
        bench_replay(&io, arena, data) != 0 &&
-       bench_index(&io, arena, data) != 0;
+       bench_index(&io, arena, data, "index20k", BENCH_STORE_INDEX_QUICK_ITERS) != 0 &&
+       bench_index(&io, arena, data, "index100k", BENCH_STORE_INDEX_MEDIUM_ITERS) != 0;
   printf("io reads=%llu writes=%llu syncs=%llu sink=%u\n",
          (unsigned long long)io.reads, (unsigned long long)io.writes,
          (unsigned long long)io.syncs, (unsigned)g_bench_store_sink);
