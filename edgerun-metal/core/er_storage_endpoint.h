@@ -9,6 +9,7 @@
 #include "er_app.h"
 #include "er_relay_packet.h"
 #include "er_seal.h"
+#include "er_store.h"
 #include "er_vfs.h"
 #include "er_work_route.h"
 
@@ -94,31 +95,16 @@ typedef struct {
   UINT32 packet_stride;
 } ErStorageEndpointObjectCache;
 
-typedef UINT8 (*ErStorageEndpointBlockReadFn)(void* ctx,
-                                              UINT64 sector,
-                                              UINT8* out_bytes,
-                                              UINT32 byte_len);
-typedef UINT8 (*ErStorageEndpointBlockWriteFn)(void* ctx,
-                                               UINT64 sector,
-                                               const UINT8* bytes,
-                                               UINT32 byte_len);
-
-#define ER_STORAGE_ENDPOINT_DURABLE_SLOT_BLOCKS 3u
-#define ER_STORAGE_ENDPOINT_DURABLE_BLOCK_BYTES 512u
-#define ER_STORAGE_ENDPOINT_DURABLE_SLOT_BYTES \
-  (ER_STORAGE_ENDPOINT_DURABLE_SLOT_BLOCKS * ER_STORAGE_ENDPOINT_DURABLE_BLOCK_BYTES)
+#define ER_STORAGE_ENDPOINT_DURABLE_PACKET_HEADER_BYTES 130u
+#define ER_STORAGE_ENDPOINT_DURABLE_PACKET_BYTES \
+  (ER_STORAGE_ENDPOINT_DURABLE_PACKET_HEADER_BYTES + ER_VFS_OBJECT_PACKET_BYTES)
 
 typedef struct {
   UINT16 abi_version;
   UINT16 reserved;
-  UINT32 block_bytes;
-  UINT32 slot_count;
-  UINT64 first_sector;
-  UINT8* slot_buffer;
-  UINT32 slot_buffer_len;
-  void* block_ctx;
-  ErStorageEndpointBlockReadFn read;
-  ErStorageEndpointBlockWriteFn write;
+  er_store_t* store;
+  UINT8* packet_buffer;
+  UINT32 packet_buffer_len;
 } ErStorageEndpointDurableStore;
 
 UINT8 er_storage_endpoint_object_store_init(ErStorageEndpointObjectStore* store,
@@ -152,13 +138,9 @@ UINT8 er_storage_endpoint_cache_collect(ErStorageEndpointObjectCache* cache,
                                         UINT32* out_collected);
 UINT8 er_storage_endpoint_durable_store_init(
     ErStorageEndpointDurableStore* store,
-    UINT64 first_sector,
-    UINT32 slot_count,
-    UINT8* slot_buffer,
-    UINT32 slot_buffer_len,
-    void* block_ctx,
-    ErStorageEndpointBlockReadFn read,
-    ErStorageEndpointBlockWriteFn write);
+    er_store_t* durable_store,
+    UINT8* packet_buffer,
+    UINT32 packet_buffer_len);
 UINT8 er_storage_endpoint_durable_write_packet(
     const ErCryptoProvider* crypto,
     ErStorageEndpointDurableStore* store,
@@ -166,7 +148,7 @@ UINT8 er_storage_endpoint_durable_write_packet(
 UINT8 er_storage_endpoint_durable_read_packet(
     const ErCryptoProvider* crypto,
     ErStorageEndpointDurableStore* store,
-    UINT32 slot_index,
+    UINT32 packet_ordinal,
     ErVfsObjectPacket* out_packet);
 UINT8 er_storage_endpoint_durable_restore_cache(
     const ErCryptoProvider* crypto,
