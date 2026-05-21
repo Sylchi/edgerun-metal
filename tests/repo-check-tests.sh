@@ -27,15 +27,17 @@ init_repo() {
     "${repo_dir}/edgerun-crypto/api" \
     "${repo_dir}/edgerun-identity/api" \
     "${repo_dir}/edgerun-object/api" \
-    "${repo_dir}/storage/api" \
+    "${repo_dir}/edgerun-storage/api" \
+    "${repo_dir}/edgerun-node/api" \
     "${repo_dir}/edgerun-ui-core/api"
   : > "${repo_dir}/edgerun-clock/api/public-headers.manifest"
   : > "${repo_dir}/edgerun-crypto/api/public-headers.manifest"
   : > "${repo_dir}/edgerun-identity/api/public-headers.manifest"
   : > "${repo_dir}/edgerun-object/api/public-headers.manifest"
-  : > "${repo_dir}/storage/api/public-headers.manifest"
+  : > "${repo_dir}/edgerun-storage/api/public-headers.manifest"
+  : > "${repo_dir}/edgerun-node/api/public-headers.manifest"
   : > "${repo_dir}/edgerun-ui-core/api/public-headers.manifest"
-  git -C "${repo_dir}" add README.md edgerun-clock/api edgerun-crypto/api edgerun-identity/api edgerun-object/api storage/api edgerun-ui-core/api
+  git -C "${repo_dir}" add README.md edgerun-clock/api edgerun-crypto/api edgerun-identity/api edgerun-object/api edgerun-storage/api edgerun-node/api edgerun-ui-core/api
 }
 
 run_in_repo() {

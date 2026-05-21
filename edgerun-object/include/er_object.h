@@ -164,12 +164,6 @@ int er_object_sign(const void* subject_canonical, size_t subject_len,
                    uint8_t out_id[ER_OBJECT_ID_SIZE]);
 int er_object_signature_verify(const void* canonical, size_t len,
                                er_object_signature_info_t* out_info);
-int er_object_serialize(const void* canonical, size_t canonical_len,
-                        void* out, size_t out_cap, size_t* out_len,
-                        uint8_t out_id[ER_OBJECT_ID_SIZE]);
-int er_object_deserialize(const void* bytes, size_t len,
-                          er_object_info_t* out_info,
-                          uint8_t out_id[ER_OBJECT_ID_SIZE]);
 int er_object_id(const void* canonical, size_t len,
                  uint8_t out_id[ER_OBJECT_ID_SIZE]);
 int er_object_verify(const void* canonical, size_t len,

@@ -724,45 +724,6 @@ int er_object_signature_verify(const void* canonical, size_t len,
   return ER_OBJECT_OK;
 }
 
-int er_object_serialize(const void* canonical, size_t canonical_len,
-                        void* out, size_t out_cap, size_t* out_len,
-                        uint8_t out_id[ER_OBJECT_ID_SIZE]) {
-  er_object_info_t info;
-
-  if (canonical == (const void*)0 || out == (void*)0 ||
-      out_len == (size_t*)0 || out_id == (uint8_t*)0) {
-    return ER_OBJECT_ERR_BADARG;
-  }
-  if (canonical_len > out_cap) {
-    return ER_OBJECT_ERR_TOOBIG;
-  }
-  if (er_object_verify(canonical, canonical_len, &info) != ER_OBJECT_OK) {
-    return ER_OBJECT_ERR_CORRUPT;
-  }
-  er_object_copy(out, canonical, canonical_len);
-  *out_len = canonical_len;
-  er_object_copy(out_id, info.object_id, ER_OBJECT_ID_SIZE);
-  return ER_OBJECT_OK;
-}
-
-int er_object_deserialize(const void* bytes, size_t len,
-                          er_object_info_t* out_info,
-                          uint8_t out_id[ER_OBJECT_ID_SIZE]) {
-  er_object_info_t info;
-
-  if (bytes == (const void*)0 || out_id == (uint8_t*)0) {
-    return ER_OBJECT_ERR_BADARG;
-  }
-  if (er_object_verify(bytes, len, &info) != ER_OBJECT_OK) {
-    return ER_OBJECT_ERR_CORRUPT;
-  }
-  if (out_info != (er_object_info_t*)0) {
-    *out_info = info;
-  }
-  er_object_copy(out_id, info.object_id, ER_OBJECT_ID_SIZE);
-  return ER_OBJECT_OK;
-}
-
 static int er_object_magic_valid(const uint8_t* bytes) {
   return bytes[ER_OBJECT_MAGIC_BYTE0] == ER_OBJECT_MAGIC0 &&
          bytes[ER_OBJECT_MAGIC_BYTE1] == ER_OBJECT_MAGIC1 &&
