@@ -26,6 +26,7 @@ enum {
   TEST_TREE_EPOCH_TICK = 2u,
   TEST_MISMATCH_EPOCH_TICK = 3u,
   TEST_INVALID_EPOCH_TICK = 4u,
+  TEST_CLOCK_KEEPER_SEED = 31u,
   TEST_CHILD0_LEN = 11u,
   TEST_CHILD1_LEN = 7u,
   TEST_TREE_TOTAL_LEN = TEST_CHILD0_LEN + TEST_CHILD1_LEN
@@ -105,7 +106,11 @@ static er_object_requirements_t test_requirements(uint32_t confidentiality) {
 
 static er_clock_epoch_stamp_t test_epoch(uint64_t tick) {
   er_clock_epoch_stamp_t epoch;
+  uint64_t i;
 
+  for (i = 0u; i < ER_CLOCK_KEEPER_ID_SIZE; ++i) {
+    epoch.keeper_id.bytes[i] = (uint8_t)(TEST_CLOCK_KEEPER_SEED + i);
+  }
   epoch.tick = tick;
   epoch.slot = 1u;
   epoch.epoch = 1u;

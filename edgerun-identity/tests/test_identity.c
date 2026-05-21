@@ -7,6 +7,7 @@ enum {
   TEST_KEY_A_SEED = 17u,
   TEST_KEY_B_SEED = 71u,
   TEST_HASH_SEED = 99u,
+  TEST_CLOCK_KEEPER_SEED = 31u,
   TEST_LABEL_SIZE = 8u,
   TEST_MATERIAL_SIZE = 9u
 };
@@ -61,7 +62,11 @@ static void check_bytes(const char* label, const uint8_t* got,
 
 static er_clock_epoch_stamp_t test_epoch(uint64_t tick) {
   er_clock_epoch_stamp_t epoch;
+  uint64_t i;
 
+  for (i = 0u; i < ER_CLOCK_KEEPER_ID_SIZE; ++i) {
+    epoch.keeper_id.bytes[i] = (uint8_t)(TEST_CLOCK_KEEPER_SEED + i);
+  }
   epoch.tick = tick;
   epoch.slot = 1u;
   epoch.epoch = 1u;

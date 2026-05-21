@@ -20,7 +20,7 @@ enum {
   ER_OBJECT_MAGIC_BYTE5 = 5u,
   ER_OBJECT_MAGIC_BYTE6 = 6u,
   ER_OBJECT_MAGIC_BYTE7 = 7u,
-  ER_OBJECT_HEADER_SIZE = 116u,
+  ER_OBJECT_HEADER_SIZE = 148u,
   ER_OBJECT_REQUIREMENTS_SIZE = 28u,
   ER_OBJECT_OWNER_SIZE = 36u,
   ER_OBJECT_ENVELOPE_SIZE = 76u,
@@ -42,13 +42,15 @@ enum {
   ER_OBJECT_HEADER_CHILD_COUNT_OFF = 28u,
   ER_OBJECT_HEADER_BODY_LEN_OFF = 32u,
   ER_OBJECT_HEADER_EPOCH_OFF = 40u,
-  ER_OBJECT_HEADER_REQUIREMENTS_OFF = 72u,
-  ER_OBJECT_HEADER_RESERVED_OFF = 100u,
+  ER_OBJECT_HEADER_REQUIREMENTS_OFF = 104u,
+  ER_OBJECT_HEADER_RESERVED_OFF = 132u,
   ER_OBJECT_HEADER_RESERVED_SIZE = 16u,
-  ER_OBJECT_EPOCH_TICK_OFF = 0u,
-  ER_OBJECT_EPOCH_SLOT_OFF = 8u,
-  ER_OBJECT_EPOCH_EPOCH_OFF = 16u,
-  ER_OBJECT_EPOCH_ERA_OFF = 24u,
+  ER_OBJECT_EPOCH_SIZE = 64u,
+  ER_OBJECT_EPOCH_KEEPER_ID_OFF = 0u,
+  ER_OBJECT_EPOCH_TICK_OFF = 32u,
+  ER_OBJECT_EPOCH_SLOT_OFF = 40u,
+  ER_OBJECT_EPOCH_EPOCH_OFF = 48u,
+  ER_OBJECT_EPOCH_ERA_OFF = 56u,
   ER_OBJECT_REQUIREMENTS_DURABILITY_OFF = 0u,
   ER_OBJECT_REQUIREMENTS_CONFIDENTIALITY_OFF = 4u,
   ER_OBJECT_REQUIREMENTS_PORTABILITY_OFF = 8u,
@@ -149,16 +151,22 @@ static uint64_t er_object_load64(const uint8_t* in) {
 }
 
 static void er_object_epoch_write(er_clock_epoch_stamp_t epoch,
-                                  uint8_t out[32]) {
+                                  uint8_t out[ER_OBJECT_EPOCH_SIZE]) {
+  er_object_copy(&out[ER_OBJECT_EPOCH_KEEPER_ID_OFF],
+                 epoch.keeper_id.bytes,
+                 ER_CLOCK_KEEPER_ID_SIZE);
   er_object_store64(&out[ER_OBJECT_EPOCH_TICK_OFF], epoch.tick);
   er_object_store64(&out[ER_OBJECT_EPOCH_SLOT_OFF], epoch.slot);
   er_object_store64(&out[ER_OBJECT_EPOCH_EPOCH_OFF], epoch.epoch);
   er_object_store64(&out[ER_OBJECT_EPOCH_ERA_OFF], epoch.era);
 }
 
-static er_clock_epoch_stamp_t er_object_epoch_read(const uint8_t in[32]) {
+static er_clock_epoch_stamp_t er_object_epoch_read(const uint8_t in[ER_OBJECT_EPOCH_SIZE]) {
   er_clock_epoch_stamp_t epoch;
 
+  er_object_copy(epoch.keeper_id.bytes,
+                 &in[ER_OBJECT_EPOCH_KEEPER_ID_OFF],
+                 ER_CLOCK_KEEPER_ID_SIZE);
   epoch.tick = er_object_load64(&in[ER_OBJECT_EPOCH_TICK_OFF]);
   epoch.slot = er_object_load64(&in[ER_OBJECT_EPOCH_SLOT_OFF]);
   epoch.epoch = er_object_load64(&in[ER_OBJECT_EPOCH_EPOCH_OFF]);
