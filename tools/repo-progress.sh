@@ -19,6 +19,7 @@ Known scopes choose a deterministic test target when one is not provided:
   edgerun-ui-core -> ui-core-test
   edgerun-ui-core/varfont -> varfont-test
   edgerun-crypto  -> crypto-test
+  storage          -> storage-test
   edgerun-metal   -> edgerun-check
   tools/wasm-compile -> repo-test
   codex           -> codex-test
@@ -47,6 +48,7 @@ if [ "$test_target" = "" ]; then
     edgerun-ui-core) test_target="ui-core-test" ;;
     edgerun-ui-core/varfont) test_target="varfont-test" ;;
     edgerun-crypto) test_target="crypto-test" ;;
+    storage) test_target="storage-test" ;;
     edgerun-metal) test_target="edgerun-check" ;;
     tools/wasm-compile) test_target="repo-test" ;;
     codex) test_target="codex-test" ;;

@@ -7,6 +7,7 @@ top-level directories are cooperating runtime areas, not separate products:
   `BOOTX64.EFI` on x86_64 and `BOOTAA64.EFI` on AArch64, hosts Wasm apps, and
   owns runtime device paths.
 - `edgerun-crypto`: freestanding cryptographic primitives used by the runtime, tools, and tests, currently centered on BLAKE3 hashing.
+- `storage`: freestanding append-only content-addressed store and key projection basis.
 - `edgerun-ui-core`: the platform-neutral UI scene, component, input, and rendering contract consumed by the metal runtime.
   Its `varfont` subtree owns the freestanding variable-font renderer used by UI text paths.
 
@@ -282,6 +283,7 @@ Primary data references:
 ├── edgerun-ui-core/       portable UI scene/component/input runtime
 ├── firmware/              admitted firmware payloads and provenance notes
 ├── include/               repository-wide freestanding C headers
+├── storage/               append-only content-addressed storage basis
 ├── tests/                 repository maintenance tests
 ├── third_party/           vendored source
 ├── tools/                 repository maintenance tools
@@ -356,6 +358,11 @@ complex shaping such as GSUB, GPOS, Bidi, and CFF2 is not yet implemented.
 `edgerun-crypto` provides freestanding BLAKE3 hashing for the runtime. It does
 not depend on the EFI runtime, `ErCryptoProvider`, or libc memory routines.
 
+`storage` provides the freestanding append-only content-addressed store. Its
+record log is the source of truth; blob tables, key projections, content-type
+records, index definitions, sorted prefix scans, and the read cache are rebuilt
+from caller-provided arena memory.
+
 The netboot helper is a host tool that provides DHCP/TFTP for EFI PXE boot. It
 listens on UDP 67 and UDP 69, serves `BOOTX64.EFI`, can prepare an interface
 with `--setup-iface`, and logs relevant PXE vendor options.
@@ -375,7 +382,7 @@ The preferred local build tools are:
 - `llvm-strip` for repository release-binary size inspection
 - repository-owned `tools/wasm-compile` for ERC and low-level WAT metal Wasm
   module fixtures
-- repository-owned `tools/er-build` for repository policy, package, crypto, varfont, and UI-core tests
+- repository-owned `tools/er-build` for repository policy, package, crypto, storage, varfont, and UI-core tests
 - `rg` for repository search
 
 The root Makefile uses explicit LLVM defaults and does not auto-detect host
@@ -383,7 +390,7 @@ accelerators. UEFI/EFI links stay on LLVM `lld`; hosted binaries must remain
 outside runtime dependencies.
 The repository-owned `tools/er-build` runner is the normal build orchestration
 path. The Makefile builds `.build/er-build` and delegates repository policy,
-tool, crypto, varfont, and UI-core test targets to it.
+tool, crypto, storage, varfont, and UI-core test targets to it.
 `toolchain/bin/` contains tracked, statically linked repository tool seeds used
 to create the first `.build/er-build` without rebuilding it from a host compiler.
 Compiler and linker calls that still produce new C artifacts remain explicit
@@ -451,6 +458,15 @@ make crypto-test
 ```
 
 `crypto-test` is built and run directly by `.build/er-build`; it does not use
+CMake, Ninja, or CTest.
+
+Build and test `storage`:
+
+```bash
+make storage-test
+```
+
+`storage-test` is built and run directly by `.build/er-build`; it does not use
 CMake, Ninja, or CTest.
 
 External upstream comparison fetches are not repository targets. Any benchmark

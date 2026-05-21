@@ -1,5 +1,4 @@
 edgerun-crypto/include/er_blake3.h
-edgerun-crypto/include/er_store.h
 edgerun-metal/core/er_acpi.h
 edgerun-metal/core/er_app.h
 edgerun-metal/core/er_ble_adv.h
@@ -80,3 +79,4 @@ include/er_driver_abi.h
 include/er_math.h
 include/er_ui_tabler_icon_atlas.h
 include/er_wasm_contract.h
+storage/include/er_store.h
