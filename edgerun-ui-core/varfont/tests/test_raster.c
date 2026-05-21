@@ -79,15 +79,6 @@ static bool test_msdf_has_distance_ramp(const uint8_t* bitmap, int w, int h) {
   return has_low && has_mid && has_high;
 }
 
-static bool test_bitmap_equal(const uint8_t* a, const uint8_t* b, size_t count) {
-  for (size_t i = 0u; i < count; ++i) {
-    if (a[i] != b[i]) {
-      return false;
-    }
-  }
-  return true;
-}
-
 static size_t test_bitmap_covered_count(const uint8_t* bitmap, int w, int h, uint8_t threshold) {
   size_t total = (size_t)w * (size_t)h;
   size_t covered = 0u;
@@ -128,7 +119,8 @@ static void test_rasterize_square_outline(void) {
   int out_left = VR_RASTER_TEST_ZERO_COUNT;
   int out_top = VR_RASTER_TEST_ZERO_COUNT;
 
-  vr_status_t st = vr_rasterize_outline(&face, &outline, &bitmap, &out_w, &out_h, &out_left, &out_top);
+  vr_status_t st = vr_rasterize_outline_with_mode(&face, &outline, VR_FONT_ATLAS_FORMAT_ALPHA8,
+                                                  &bitmap, &out_w, &out_h, &out_left, &out_top);
     test_expect_status(st, VR_OK, "raster: square-like outline returns OK");
   if (st == VR_OK) {
     test_expect(out_w > 0 && out_h > 0, "raster: square-like outline produces bitmap dimensions");
@@ -174,7 +166,8 @@ static void test_rasterize_off_curve_start_outline(void) {
   int out_left = VR_RASTER_TEST_ZERO_COUNT;
   int out_top = VR_RASTER_TEST_ZERO_COUNT;
 
-  vr_status_t st = vr_rasterize_outline(&face, &outline, &bitmap, &out_w, &out_h, &out_left, &out_top);
+  vr_status_t st = vr_rasterize_outline_with_mode(&face, &outline, VR_FONT_ATLAS_FORMAT_ALPHA8,
+                                                  &bitmap, &out_w, &out_h, &out_left, &out_top);
   test_expect_status(st, VR_OK, "raster: off-curve-start outline returns OK");
   if (st == VR_OK) {
     test_expect(out_w > 0 && out_h > 0, "raster: off-curve-start outline produces bitmap dimensions");
@@ -193,17 +186,22 @@ static void test_rasterize_validation(void) {
   int out_top = VR_RASTER_TEST_ZERO_COUNT;
   vr_glyph_outline_t invalid = {0};
 
-  vr_status_t st = vr_rasterize_outline(NULL, &invalid, &bitmap, &out_w, &out_h, &out_left, &out_top);
+  vr_status_t st = vr_rasterize_outline_with_mode(NULL, &invalid, VR_FONT_ATLAS_FORMAT_ALPHA8,
+                                                  &bitmap, &out_w, &out_h, &out_left, &out_top);
   test_expect_status(st, VR_ERR_INVALID_FONT, "raster: null face is rejected");
-  st = vr_rasterize_outline(&face, NULL, &bitmap, &out_w, &out_h, &out_left, &out_top);
+  st = vr_rasterize_outline_with_mode(&face, NULL, VR_FONT_ATLAS_FORMAT_ALPHA8,
+                                      &bitmap, &out_w, &out_h, &out_left, &out_top);
   test_expect_status(st, VR_ERR_INVALID_FONT, "raster: null outline is rejected");
-  st = vr_rasterize_outline(&face, &invalid, NULL, &out_w, &out_h, &out_left, &out_top);
+  st = vr_rasterize_outline_with_mode(&face, &invalid, VR_FONT_ATLAS_FORMAT_ALPHA8,
+                                      NULL, &out_w, &out_h, &out_left, &out_top);
   test_expect_status(st, VR_ERR_INVALID_FONT, "raster: null bitmap output is rejected");
-  st = vr_rasterize_outline(&face, &invalid, &bitmap, NULL, &out_h, &out_left, &out_top);
+  st = vr_rasterize_outline_with_mode(&face, &invalid, VR_FONT_ATLAS_FORMAT_ALPHA8,
+                                      &bitmap, NULL, &out_h, &out_left, &out_top);
   test_expect_status(st, VR_ERR_INVALID_FONT, "raster: null width output is rejected");
   invalid.point_count = 0u;
   invalid.number_of_contours = 0u;
-  st = vr_rasterize_outline(&face, &invalid, &bitmap, &out_w, &out_h, &out_left, &out_top);
+  st = vr_rasterize_outline_with_mode(&face, &invalid, VR_FONT_ATLAS_FORMAT_ALPHA8,
+                                      &bitmap, &out_w, &out_h, &out_left, &out_top);
   test_expect_status(st, VR_ERR_UNSUPPORTED, "raster: zero contour outline is rejected");
 }
 
@@ -229,7 +227,8 @@ static void test_rasterize_real_font_outline(void) {
   int out_h = VR_RASTER_TEST_ZERO_COUNT;
   int out_left = VR_RASTER_TEST_ZERO_COUNT;
   int out_top = VR_RASTER_TEST_ZERO_COUNT;
-  st = vr_rasterize_outline(face, &outline, &bitmap, &out_w, &out_h, &out_left, &out_top);
+  st = vr_rasterize_outline_with_mode(face, &outline, VR_FONT_ATLAS_FORMAT_ALPHA8,
+                                      &bitmap, &out_w, &out_h, &out_left, &out_top);
   test_expect_status(st, VR_OK, "raster: real font outline returns OK");
   if (st == VR_OK) {
     test_expect(test_bitmap_has_coverage(bitmap, out_w, out_h), "raster: real font outline writes coverage");
@@ -289,61 +288,6 @@ static void test_rasterize_msdf_mode_outputs_channels(void) {
   test_close_face(face);
 }
 
-static void test_rasterize_alpha_mode_matches_legacy_interface(void) {
-  vr_font_face_t* face = test_open_default_face();
-  test_expect(face != NULL, "raster: default face opens for alpha mode parity");
-  if (!face) {
-    return;
-  }
-
-  vr_glyph_outline_t outline = {0};
-  vr_status_t st = vr_load_glyph_outline(face, (uint16_t)vr_find_glyph_id(face, (uint32_t)'A'), &outline);
-  if (st != VR_OK) {
-    test_expect_status(st, VR_OK, "raster: A glyph outline loads for alpha parity");
-    vr_free_outline(face, &outline);
-    test_close_face(face);
-    return;
-  }
-
-  uint8_t* legacy_bitmap = NULL;
-  uint8_t* mode_bitmap = NULL;
-  int out_w_a = VR_RASTER_TEST_ZERO_COUNT;
-  int out_h_a = VR_RASTER_TEST_ZERO_COUNT;
-  int out_left_a = VR_RASTER_TEST_ZERO_COUNT;
-  int out_top_a = VR_RASTER_TEST_ZERO_COUNT;
-  int out_w_m = VR_RASTER_TEST_ZERO_COUNT;
-  int out_h_m = VR_RASTER_TEST_ZERO_COUNT;
-  int out_left_m = VR_RASTER_TEST_ZERO_COUNT;
-  int out_top_m = VR_RASTER_TEST_ZERO_COUNT;
-
-  vr_status_t legacy_status = vr_rasterize_outline(face, &outline, &legacy_bitmap, &out_w_a, &out_h_a, &out_left_a, &out_top_a);
-  test_expect_status(legacy_status, VR_OK, "raster: legacy alpha path rasterizes");
-  vr_status_t mode_status = vr_rasterize_outline_with_mode(
-    face,
-    &outline,
-    VR_FONT_ATLAS_FORMAT_ALPHA8,
-    &mode_bitmap,
-    &out_w_m,
-    &out_h_m,
-    &out_left_m,
-    &out_top_m);
-  test_expect_status(mode_status, VR_OK, "raster: explicit alpha mode rasterizes");
-
-  if (legacy_status == VR_OK && mode_status == VR_OK) {
-    test_expect(out_w_a == out_w_m && out_h_a == out_h_m, "raster: alpha mode sizes match legacy");
-    test_expect(out_left_a == out_left_m && out_top_a == out_top_m, "raster: alpha mode offsets match legacy");
-    if (out_w_a == out_w_m && out_h_a == out_h_m) {
-      size_t pixel_count = (size_t)out_w_a * (size_t)out_h_a;
-      test_expect(test_bitmap_equal(legacy_bitmap, mode_bitmap, pixel_count), "raster: legacy alpha matches mode alpha bytes");
-    }
-  }
-
-  (void)vr_free_bitmap(face, legacy_bitmap, out_w_a, out_h_a, VR_FONT_ATLAS_FORMAT_ALPHA8);
-  (void)vr_free_bitmap(face, mode_bitmap, out_w_m, out_h_m, VR_FONT_ATLAS_FORMAT_ALPHA8);
-  vr_free_outline(face, &outline);
-  test_close_face(face);
-}
-
 static void test_rasterize_heavy_z_stays_legible(void) {
   vr_font_face_t* face = test_open_default_face();
   test_expect(face != NULL, "raster: default face opens for heavy z");
@@ -378,7 +322,8 @@ static void test_rasterize_heavy_z_stays_legible(void) {
   int out_h = VR_RASTER_TEST_ZERO_COUNT;
   int out_left = VR_RASTER_TEST_ZERO_COUNT;
   int out_top = VR_RASTER_TEST_ZERO_COUNT;
-  st = vr_rasterize_outline(face, &outline, &bitmap, &out_w, &out_h, &out_left, &out_top);
+  st = vr_rasterize_outline_with_mode(face, &outline, VR_FONT_ATLAS_FORMAT_ALPHA8,
+                                      &bitmap, &out_w, &out_h, &out_left, &out_top);
   test_expect_status(st, VR_OK, "raster: heavy z rasterizes");
   if (st == VR_OK) {
     size_t covered = test_bitmap_covered_count(bitmap, out_w, out_h, VR_RASTER_TEST_ALPHA_HIGH);
@@ -439,7 +384,6 @@ void run_raster_tests(void) {
   test_rasterize_validation();
   test_rasterize_real_font_outline();
   test_rasterize_msdf_mode_outputs_channels();
-  test_rasterize_alpha_mode_matches_legacy_interface();
   test_rasterize_heavy_z_stays_legible();
   test_rasterize_mode_invalid_format_rejected();
 }

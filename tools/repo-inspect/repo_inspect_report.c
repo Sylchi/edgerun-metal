@@ -46,7 +46,7 @@ static uint64_t eri_cpu_package_score(const EriCpuPackage* pkg) {
 }
 
 static uint64_t eri_worldview_package_score(const EriWorldviewPackage* pkg) {
-  return pkg->host_fs_runtime * 120u + pkg->path_identity * 90u + pkg->legacy_object_ids * 90u +
+  return pkg->host_fs_runtime * 120u + pkg->path_identity * 90u + pkg->numeric_object_ids * 90u +
          pkg->raw_object_apis * 45u + pkg->wasm64_offsets * 20u;
 }
 
@@ -480,8 +480,8 @@ static uint8_t eri_collect_worldview_packages(const EriFindings* findings, EriWo
       ++pkg->host_fs_runtime;
     } else if (strcmp(findings->items[i].kind, "world-path-identity") == 0) {
       ++pkg->path_identity;
-    } else if (strcmp(findings->items[i].kind, "world-legacy-object-id") == 0) {
-      ++pkg->legacy_object_ids;
+    } else if (strcmp(findings->items[i].kind, "world-numeric-object-id") == 0) {
+      ++pkg->numeric_object_ids;
     } else if (strcmp(findings->items[i].kind, "world-raw-object-api") == 0) {
       ++pkg->raw_object_apis;
     } else if (strcmp(findings->items[i].kind, "world-wasm64-offset") == 0) {

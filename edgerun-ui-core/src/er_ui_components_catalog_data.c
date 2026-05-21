@@ -45,11 +45,11 @@ static const char* const states_aspect_ratio[] = {
 static const char* const slots_avatar[] = {
   "avatar",
   "avatar-image",
-  "avatar-fallback",
+  "avatar-initials",
 };
 static const char* const states_avatar[] = {
   "loaded",
-  "fallback",
+  "initials",
 };
 static const char* const slots_badge[] = {
   "badge",

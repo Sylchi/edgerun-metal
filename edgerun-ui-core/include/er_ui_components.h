@@ -278,7 +278,7 @@ bool er_ui_component_accessibility_metadata_has_label_field(
 void er_ui_component_gallery_state_init(er_ui_component_gallery_state_t* state);
 bool er_ui_component_gallery_apply_action(er_ui_component_gallery_state_t* state, er_ui_action_t action);
 bool er_ui_component_gallery_select_open(const er_ui_component_gallery_state_t* state, uint32_t id);
-float er_ui_component_gallery_slider(const er_ui_component_gallery_state_t* state, uint32_t id, float fallback);
+float er_ui_component_gallery_slider(const er_ui_component_gallery_state_t* state, uint32_t id);
 size_t er_ui_component_option_index(uint32_t id, uint32_t base, size_t len, bool* out_has_index);
 bool er_ui_component_preview_available(const char* slug);
 bool er_ui_component_catalog_preview_available(const char* slug);

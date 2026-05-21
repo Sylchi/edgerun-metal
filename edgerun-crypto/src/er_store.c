@@ -1248,12 +1248,12 @@ static int er_store_checked_bytes(size_t count, size_t size, uint64_t* out) {
 }
 
 //@optimizer-ignore-function arena capacity planning uses fixed 64-bit storage-layout sizes
-static int er_store_choose_capacity(size_t requested, size_t fallback, size_t min_value, size_t slot_size,
+static int er_store_choose_capacity(size_t requested, size_t default_capacity, size_t min_value, size_t slot_size,
                                     uint64_t available, size_t* out) {
   size_t cap;
   uint64_t bytes;
 
-  cap = requested != 0u ? requested : fallback;
+  cap = requested != 0u ? requested : default_capacity;
   cap = er_store_floor_power2(er_math_max_size(cap, min_value));
   while (cap >= min_value) {
     if (er_store_checked_bytes(cap, slot_size, &bytes) == ER_OK && bytes <= available) {

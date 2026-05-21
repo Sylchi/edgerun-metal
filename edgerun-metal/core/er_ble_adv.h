@@ -2,13 +2,13 @@
 #define ER_BLE_ADV_H
 
 /*
- * Purpose: carry EdgeRun bytes through BLE legacy advertising during EFI Boot Services.
+ * Purpose: carry EdgeRun bytes through 31-byte BLE advertising data during EFI Boot Services.
  * Intention: keep pre-runtime device discovery connectionless and independent of GATT.
  */
 
 #include "er_types.h"
 
-#define ER_BLE_ADV_LEGACY_DATA_BYTES 31u
+#define ER_BLE_ADV_DATA_BYTES 31u
 #define ER_BLE_ADV_PAYLOAD_BYTES 18u
 #define ER_BLE_ADV_CHANNEL_ID 1u
 #define ER_BLE_ADV_SEQUENCE_INVALID 0u
@@ -66,7 +66,7 @@ UINT8 er_ble_adv_prepare_packet(UINT8 channel_id,
                                 UINT8 payload_len,
                                 ErBleAdvPacket* out_packet);
 UINT8 er_ble_adv_encode_data(const ErBleAdvPacket* packet,
-                             UINT8 out_data[ER_BLE_ADV_LEGACY_DATA_BYTES],
+                             UINT8 out_data[ER_BLE_ADV_DATA_BYTES],
                              UINT8* out_len);
 UINT8 er_ble_adv_decode_data(const UINT8* data,
                              UINT8 data_len,

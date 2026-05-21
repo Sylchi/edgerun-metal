@@ -16,7 +16,7 @@ static const er_ui_focus_scope_t* er_ui_runtime_active_focus_scope(const er_ui_r
   if (!state) return NULL;
   for (size_t i = state->focus_scope_count; i > 0u; --i) {
     const er_ui_focus_scope_t* scope = &state->focus_scopes[i - 1u];
-    if (scope->hit_count > 0u && er_ui_runtime_open_value(state, scope->open_id, false)) return scope;
+    if (scope->hit_count > 0u && er_ui_runtime_open_value(state, scope->open_id)) return scope;
   }
   return NULL;
 }

@@ -288,8 +288,6 @@ vr_status_t vr_load_glyph_outline(const vr_font_face_t* face, uint16_t glyph_id,
 uint16_t vr_get_glyph_h_advance_units(const vr_font_face_t* face, uint16_t glyph_id);
 int16_t vr_get_glyph_h_lsb_units(const vr_font_face_t* face, uint16_t glyph_id);
 void vr_free_outline(const vr_font_face_t* face, vr_glyph_outline_t* outline);
-vr_status_t vr_rasterize_outline(const vr_font_face_t* face, const vr_glyph_outline_t* outline,
-                                 uint8_t** out_bitmap, int* out_w, int* out_h, int* out_left, int* out_top);
 vr_status_t vr_rasterize_outline_with_mode(const vr_font_face_t* face,
                                  const vr_glyph_outline_t* outline,
                                  vr_font_atlas_format_t atlas_format,

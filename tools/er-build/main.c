@@ -89,7 +89,6 @@ static const char ERB_CRYPTO_STORE_TEST_BIN[] = ".build/er-build-out/crypto/test
 static const char ERB_CRYPTO_STORE_BENCH_BIN[] = ".build/er-build-out/crypto/bench_store";
 static const char ERB_VARFONT_TEST_BIN[] = ".build/er-build-out/varfont/vrfont_tests";
 static const char ERB_UI_CORE_TEST_BIN[] = ".build/er-build-out/ui-core/er_ui_core_tests";
-static const char ERB_APP_C_SOURCE_NAME[] = "app.c";
 static const char ERB_APP_ERC_SOURCE_NAME[] = "app.erc";
 static const char ERB_APP_MANIFEST_NAME[] = "app.manifest";
 static const char ERB_APP_BUILD_DIR_NAME[] = ".build";
@@ -426,8 +425,7 @@ static int erb_manifest_parse_source(const char* line,
     return erb_fail("invalid app manifest source field");
   }
   source_name = line + prefix_len;
-  if (strcmp(source_name, ERB_APP_ERC_SOURCE_NAME) == 0 ||
-      strcmp(source_name, ERB_APP_C_SOURCE_NAME) == 0) {
+  if (strcmp(source_name, ERB_APP_ERC_SOURCE_NAME) == 0) {
     return erb_copy_source_name(out_source_name, out_source_name_len, source_name);
   }
   return erb_fail("unsupported app manifest source");

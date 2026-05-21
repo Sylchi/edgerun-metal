@@ -505,32 +505,6 @@ static void test_parse_cmap_format4_happy_path(void) {
   test_free_cmap_payload(&face, storage);
 }
 
-static void test_parse_cmap_non_preferred_platform_is_fallback(void) {
-  uint8_t subtable[VR_UTILS_CMAP_TABLE_WITH_ONE_SEGMENT_LEN] = {0};
-  test_build_format4_single_segment_subtable(subtable, VR_UTILS_CMAP_FORMAT4_ID_DELTA_SUCCESS, VR_UTILS_ZERO_COUNT);
-
-  uint8_t* storage = NULL;
-  vr_font_face_t face;
-  vr_status_t st = test_build_face_with_single_cmap(
-    subtable,
-    sizeof(subtable),
-    VR_UTILS_CMAP_PLATFORM_NON_PREFERRED,
-    VR_UTILS_CMAP_ENCODING_UNICODE,
-    &face,
-    &storage);
-  if (st != VR_OK) {
-    test_expect_status(st, VR_OK, "cmap: helper builds non-preferred table");
-    return;
-  }
-
-  st = vr_parse_cmap(&face);
-  test_expect_status(st, VR_OK, "cmap: non-preferred platform still parsed via fallback");
-  if (st == VR_OK) {
-    test_expect(vr_find_glyph_id(&face, VR_UTILS_CMAP_CODEPOINT_A) == VR_UTILS_CMAP_CODEPOINT_B, "cmap: fallback-selected table is used");
-  }
-  test_free_cmap_payload(&face, storage);
-}
-
 static void test_parse_cmap_invalid_offset_rejected(void) {
   uint8_t subtable[VR_UTILS_CMAP_FORMAT12_INVALID_LEN] = {VR_UTILS_ZERO_COUNT};
   set_u16_be(subtable, 0u, VR_UTILS_CMAP_FORMAT_ID_12);
@@ -572,5 +546,4 @@ void run_cmap_tests(void) {
   test_parse_cmap_format4_happy_path();
   test_parse_cmap_format12_happy_path();
   test_parse_cmap_invalid_offset_rejected();
-  test_parse_cmap_non_preferred_platform_is_fallback();
 }

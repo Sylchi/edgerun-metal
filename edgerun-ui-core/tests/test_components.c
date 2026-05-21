@@ -203,7 +203,7 @@ static void test_component_render_primitives(void) {
   expect_true(scene.rect_count >= ER_UI_TEST_COMPONENT_MIN_INITIAL_RECTS, "component render: primitives emit geometry");
   expect_true(scene.hit_count >= ER_UI_TEST_COMPONENT_MIN_INITIAL_HITS, "component render: interactive primitives emit hits");
   expect_true(scene.text_quad_count > 0u, "component render: primitives use variable font text");
-  expect_true(scene.icon_quad_count > 0u, "component render: primitives use canonical Tabler-compatible icons");
+  expect_true(scene.icon_quad_count > 0u, "component render: primitives use canonical Tabler icons");
   expect_status(er_ui_component_button_emit(&scene, NULL, er_ui_bounds(0.0f, 0.0f, 40.0f, 40.0f), theme, "Nope",
                                          ER_UI_TEST_COMPONENT_INVALID_BUTTON_ID,
                                          ER_UI_COMPONENT_BUTTON_DEFAULT, ER_UI_COMPONENT_BUTTON_SIZE_DEFAULT, true),
@@ -395,11 +395,11 @@ void run_component_tests(void) {
   action.id = ER_UI_TEST_COMPONENT_SLIDER_ACTION_ID;
   action.float_value = 0.72f;
   expect_true(er_ui_component_gallery_apply_action(&state, action), "component preview state: slider action applies");
-  expect_true(er_ui_component_gallery_slider(&state, ER_UI_TEST_COMPONENT_SLIDER_ACTION_ID, 0.0f) > 0.71f,
+  expect_true(er_ui_component_gallery_slider(&state, ER_UI_TEST_COMPONENT_SLIDER_ACTION_ID) > 0.71f,
               "component preview state: slider value is stored");
   action.float_value = 1.2f;
   expect_true(er_ui_component_gallery_apply_action(&state, action), "component preview state: slider clamp action applies");
-  expect_true(er_ui_component_gallery_slider(&state, ER_UI_TEST_COMPONENT_SLIDER_ACTION_ID, 0.0f) == 1.0f,
+  expect_true(er_ui_component_gallery_slider(&state, ER_UI_TEST_COMPONENT_SLIDER_ACTION_ID) == 1.0f,
               "component preview state: slider value clamps high");
 
   action = (er_ui_action_t){0};

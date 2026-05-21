@@ -100,7 +100,7 @@ static er_ui_action_t er_ui_activate_hit(er_ui_runtime_state_t* state, er_ui_hit
   switch (hit.kind) {
     case ER_UI_HIT_TOGGLE:
     case ER_UI_HIT_CHECKBOX: {
-      bool next = !er_ui_runtime_toggle_value(state, hit.id, false);
+      bool next = !er_ui_runtime_toggle_value(state, hit.id);
       if (er_ui_runtime_set_toggle(state, hit.id, next) != ER_UI_OK) return er_ui_action_none();
       return er_ui_action_bool(ER_UI_ACTION_TOGGLED, hit.id, next);
     }
@@ -117,7 +117,7 @@ static er_ui_action_t er_ui_activate_hit(er_ui_runtime_state_t* state, er_ui_hit
       return er_ui_action_float(ER_UI_ACTION_SLIDER_CHANGED, hit.id, value);
     }
     case ER_UI_HIT_SELECT: {
-      bool next = !er_ui_runtime_open_value(state, hit.id, false);
+      bool next = !er_ui_runtime_open_value(state, hit.id);
       if (er_ui_runtime_set_open(state, hit.id, next) != ER_UI_OK) return er_ui_action_none();
       return er_ui_action_bool(ER_UI_ACTION_OPEN_CHANGED, hit.id, next);
     }
@@ -264,7 +264,7 @@ er_ui_action_t er_ui_runtime_key_down(er_ui_runtime_state_t* state, const er_ui_
 
   if (state->focused.kind == ER_UI_HIT_SLIDER && (key.kind == ER_UI_KEY_ARROW_LEFT || key.kind == ER_UI_KEY_ARROW_RIGHT)) {
     float delta = key.kind == ER_UI_KEY_ARROW_LEFT ? -ER_UI_KEY_SLIDER_STEP : ER_UI_KEY_SLIDER_STEP;
-    float next = er_ui_runtime_slider_value(state, state->focused.id, 0.0f) + delta;
+    float next = er_ui_runtime_slider_value(state, state->focused.id) + delta;
     next = er_ui_runtime_clamp_float(next, 0.0f, 1.0f);
     if (er_ui_runtime_set_slider(state, state->focused.id, next) != ER_UI_OK) return er_ui_action_none();
     return er_ui_action_float(ER_UI_ACTION_SLIDER_CHANGED, state->focused.id, next);

@@ -238,7 +238,7 @@ UINT8 er_ble_adv_prepare_packet(UINT8 channel_id,
 }
 
 UINT8 er_ble_adv_encode_data(const ErBleAdvPacket* packet,
-                             UINT8 out_data[ER_BLE_ADV_LEGACY_DATA_BYTES],
+                             UINT8 out_data[ER_BLE_ADV_DATA_BYTES],
                              UINT8* out_len) {
   if (packet == 0 || out_data == 0 || out_len == 0 ||
       packet->channel_id == 0u ||
@@ -248,7 +248,7 @@ UINT8 er_ble_adv_encode_data(const ErBleAdvPacket* packet,
       packet->payload_len > ER_BLE_ADV_PAYLOAD_BYTES) {
     return 0u;
   }
-  er_mem_zero(out_data, ER_BLE_ADV_LEGACY_DATA_BYTES);
+  er_mem_zero(out_data, ER_BLE_ADV_DATA_BYTES);
   out_data[ER_BLE_ADV_FIELD_LEN_OFFSET] =
       (UINT8)(ER_BLE_ADV_MANUFACTURER_HEADER_LEN + packet->payload_len);
   out_data[ER_BLE_ADV_TYPE_OFFSET] = ER_BLE_ADV_AD_TYPE_MANUFACTURER;
@@ -491,7 +491,7 @@ UINT8 er_ble_adv_efi_init(EFI_SYSTEM_TABLE* system_table, ErBleAdvEfi* out_ble) 
 UINT8 er_ble_adv_efi_start_advertising(ErBleAdvEfi* ble,
                                        const ErBleAdvPacket* packet) {
   UINT8 params[ER_BLE_HCI_LE_SET_ADV_DATA_BYTES];
-  UINT8 adv_data[ER_BLE_ADV_LEGACY_DATA_BYTES];
+  UINT8 adv_data[ER_BLE_ADV_DATA_BYTES];
   UINT8 adv_len;
 
   if (ble == 0 || ble->initialized == 0u || ble->hc == 0 ||

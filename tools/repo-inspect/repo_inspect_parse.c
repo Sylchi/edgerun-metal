@@ -392,7 +392,7 @@ static uint8_t eri_line_has_path_identity_smell(const char* path, const char* st
   return 0u;
 }
 
-static uint8_t eri_line_has_legacy_object_id_smell(const char* path, const char* structural_line) {
+static uint8_t eri_line_has_numeric_object_id_smell(const char* path, const char* structural_line) {
   if (eri_is_runtime_path(path) == 0u) {
     return 0u;
   }

@@ -59,7 +59,7 @@ typedef struct {
 } ErTlsRecordKeys;
 
 typedef struct {
-  UINT16 legacy_version;
+  UINT16 record_version;
   UINT8 random[ER_TLS_RANDOM_BYTES];
   UINT16 cipher_suite;
   UINT16 supported_version;
