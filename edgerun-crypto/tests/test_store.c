@@ -325,6 +325,7 @@ static void test_typed_blob_and_custom_index_rebuild(void) {
   er_index_entry_t entries[4];
   er_store_index_cursor_t cursor;
   er_index_entry_t object_entry;
+  er_index_entry_t blob_entry;
   size_t count = 0u;
   static const uint8_t data[] = {91u, 92u, 93u};
 
@@ -338,11 +339,14 @@ static void test_typed_blob_and_custom_index_rebuild(void) {
   check_int("typed info", er_store_get_blob_info(&store_a, hash, &info), ER_OK);
   check_int("typed info type", (int)info.content_type, (int)TEST_TYPE_ROW);
   check_int("put small object", er_store_put_object(&store_a, data, sizeof(data), sizeof(data), object_hash), ER_OK);
-  check_int("custom index put", er_store_index_put_ex(&store_a, TEST_INDEX_BY_NAME, "row/alice", hash), ER_OK);
+  check_int("custom blob index put", er_store_blob_index_put(&store_a, TEST_INDEX_BY_NAME, "row/alice", hash),
+            ER_OK);
   check_int("custom object index put",
             er_store_object_index_put(&store_a, TEST_INDEX_BY_NAME, "row/object", object_hash), ER_OK);
   check_int("custom index get", er_store_index_get_ex(&store_a, TEST_INDEX_BY_NAME, "row/alice", got), ER_OK);
   check_bytes("custom index hash", got, hash, ER_HASH_SIZE);
+  check_int("missing entry", er_store_index_get_entry_ex(&store_a, TEST_INDEX_BY_NAME, "row/missing", &blob_entry),
+            ER_ERR_NOTFOUND);
   check_int("close typed a", er_store_close(&store_a), ER_OK);
   check_int("open typed b", er_store_open(&store_b, test_make_io(&io), arena_b, sizeof(arena_b)), ER_OK);
   check_int("rebuilt typed info", er_store_get_blob_info(&store_b, hash, &info), ER_OK);
@@ -351,6 +355,12 @@ static void test_typed_blob_and_custom_index_rebuild(void) {
             er_store_index_scan_prefix_ex(&store_b, TEST_INDEX_BY_NAME, "row/", entries, 4u, &count), ER_OK);
   check_size("custom prefix count", count, 2u);
   check_int("custom prefix index id", (int)entries[0].index_id, (int)TEST_INDEX_BY_NAME);
+  check_int("blob entry get", er_store_index_get_entry_ex(&store_b, TEST_INDEX_BY_NAME, "row/alice", &blob_entry),
+            ER_OK);
+  check_int("blob entry kind", (int)blob_entry.value_kind, (int)ER_STORE_VALUE_BLOB);
+  check_int("blob entry type", (int)blob_entry.content_type, (int)TEST_TYPE_ROW);
+  check_u64("blob entry size", blob_entry.value_size, sizeof(data));
+  check_bytes("blob entry hash", blob_entry.hash, hash, ER_HASH_SIZE);
   check_int("object cursor open", er_store_index_cursor_open(&store_b, TEST_INDEX_BY_NAME, "row/object", &cursor),
             ER_OK);
   check_int("object cursor next", er_store_index_cursor_next(&cursor, &object_entry), ER_OK);
