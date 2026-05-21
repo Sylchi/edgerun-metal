@@ -1,4 +1,5 @@
 #include "er_pi_zero_w_v1_1_uart.h"
+#include "er_pi_zero_w_v1_1_lcd_hat.h"
 #include "er_pi_zero_w_v1_1_ota.h"
 #include "er_pi_zero_w_v1_1_status.h"
 #include "er_ble_adv.h"
@@ -2599,6 +2600,19 @@ static UINT8 er_pi_zero_w_v1_1_update_reboot_ready(void) {
   return 0u;
 }
 
+static void er_pi_zero_w_v1_1_lcd_debug_status(UINT32 heartbeat) {
+  ErPiZeroWV11DebugStatus status;
+
+  status.heartbeat = heartbeat;
+  status.sdio_state = (UINT32)g_er_pi_zero_w_v1_1_sdio_probe_state;
+  status.storage_state = (UINT32)g_er_pi_zero_w_v1_1_storage_probe_state;
+  status.ota_status = (UINT32)g_er_pi_zero_w_v1_1_ota_status;
+  status.ota_offset = (UINT32)g_er_pi_zero_w_v1_1_ota_offset;
+  status.l2_ready = g_er_pi_zero_w_v1_1_sdio_probe_state ==
+                   ER_PI_ZERO_W_V1_1_L2_READY;
+  er_pi_zero_w_v1_1_lcd_hat_status(&status);
+}
+
 void er_pi_zero_w_v1_1_main(void) {
   UINT32 heartbeat = 0u;
 
@@ -2606,6 +2620,8 @@ void er_pi_zero_w_v1_1_main(void) {
   er_pi_zero_w_v1_1_act_led_status(ER_PI_ZERO_W_V1_1_LED_BOOT_ENTRY);
   er_pi_zero_w_v1_1_uart_init();
   er_pi_zero_w_v1_1_act_led_status(ER_PI_ZERO_W_V1_1_LED_UART_READY);
+  er_pi_zero_w_v1_1_lcd_hat_init();
+  er_pi_zero_w_v1_1_lcd_debug_status(heartbeat);
   if (er_pi_zero_w_v1_1_init_ephemeral_identity() == 0u) {
     er_pi_zero_w_v1_1_act_led_status(ER_PI_ZERO_W_V1_1_LED_CYW_MAILBOX_FAIL);
     for (;;) {
@@ -2613,6 +2629,7 @@ void er_pi_zero_w_v1_1_main(void) {
     }
   }
   er_pi_zero_w_v1_1_ota_listen_init();
+  er_pi_zero_w_v1_1_lcd_debug_status(heartbeat);
   er_pi_zero_w_v1_1_wifi_gpio_init();
   er_pi_zero_w_v1_1_act_led_status(ER_PI_ZERO_W_V1_1_LED_WIFI_POWERED);
   er_pi_zero_w_v1_1_sdio_probe();
@@ -2633,6 +2650,7 @@ void er_pi_zero_w_v1_1_main(void) {
   } else {
     er_pi_zero_w_v1_1_act_led_status(ER_PI_ZERO_W_V1_1_LED_CYW_MAILBOX_FAIL);
   }
+  er_pi_zero_w_v1_1_lcd_debug_status(heartbeat);
   er_pi_zero_w_v1_1_send_node_available();
   er_pi_zero_w_v1_1_send_ble_advertisement(1u);
 
@@ -2642,6 +2660,7 @@ void er_pi_zero_w_v1_1_main(void) {
     er_pi_zero_w_v1_1_ota_poll_owned_rx();
     er_pi_zero_w_v1_1_send_ble_advertisement(heartbeat + 1u);
     er_pi_zero_w_v1_1_send_node_heartbeat(heartbeat);
+    er_pi_zero_w_v1_1_lcd_debug_status(heartbeat);
     if (er_pi_zero_w_v1_1_update_reboot_ready() != 0u) {
       er_pi_zero_w_v1_1_reboot();
     }
