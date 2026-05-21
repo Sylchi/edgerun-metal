@@ -109,6 +109,20 @@ static void check_int(const char* name, int actual, int expected) {
   }
 }
 
+static void check_bytes(const char* name, const uint8_t* actual,
+                        const uint8_t* expected, size_t len) {
+  size_t i;
+
+  ++g_total;
+  for (i = 0u; i < len; ++i) {
+    if (actual[i] != expected[i]) {
+      fprintf(stderr, "FAIL %s: byte mismatch\n", name);
+      ++g_failed;
+      return;
+    }
+  }
+}
+
 static void check_nonzero(const char* name, const uint8_t* bytes, size_t len) {
   size_t i;
   int ok = 0;
@@ -203,11 +217,15 @@ static void test_node_objects_and_store_receipts(void) {
   uint8_t clock_object[TEST_OBJECT_CAP];
   uint8_t receipt_object[TEST_OBJECT_CAP];
   uint8_t signature_object[TEST_OBJECT_CAP];
+  uint8_t exported[TEST_OBJECT_CAP];
+  uint8_t imported[TEST_OBJECT_CAP];
   uint8_t object_id[ER_OBJECT_ID_SIZE];
   uint8_t identity_object_id[ER_OBJECT_ID_SIZE];
   uint8_t clock_object_id[ER_OBJECT_ID_SIZE];
   uint8_t receipt_id[ER_OBJECT_ID_SIZE];
   uint8_t signature_id[ER_OBJECT_ID_SIZE];
+  uint8_t exported_id[ER_OBJECT_ID_SIZE];
+  uint8_t imported_id[ER_OBJECT_ID_SIZE];
   uint8_t signature_bytes[64u];
   size_t canonical_len = 0u;
   size_t fetched_len = 0u;
@@ -215,6 +233,8 @@ static void test_node_objects_and_store_receipts(void) {
   size_t clock_object_len = 0u;
   size_t receipt_len = 0u;
   size_t signature_len = 0u;
+  size_t exported_len = 0u;
+  size_t imported_len = 0u;
   er_object_signature_info_t signature_info;
   er_object_requirements_t requirements;
   er_object_info_t info;
@@ -303,6 +323,28 @@ static void test_node_objects_and_store_receipts(void) {
             ER_OBJECT_OK);
   check_int("node signature algorithm", (int)signature_info.algorithm,
             (int)ER_OBJECT_ALGORITHM_ED25519);
+  check_int("node export",
+            er_node_export_object(&node, canonical, canonical_len, exported,
+                                  sizeof(exported), &exported_len,
+                                  exported_id, &receipt),
+            ER_NODE_OK);
+  check_int("node export len", (int)(exported_len == canonical_len), 1);
+  check_int("node import",
+            er_node_import_object(&node, exported, exported_len, imported,
+                                  sizeof(imported), &imported_len,
+                                  imported_id, &receipt),
+            ER_NODE_OK);
+  check_int("node import len", (int)(imported_len == canonical_len), 1);
+  check_bytes("node export id", exported_id, object_id, ER_OBJECT_ID_SIZE);
+  check_bytes("node import id", imported_id, object_id, ER_OBJECT_ID_SIZE);
+  check_int("node import verify",
+            er_object_verify(imported, imported_len, &info),
+            ER_OBJECT_OK);
+  check_int("node import rejects junk",
+            er_node_import_object(&node, body, sizeof(body), imported,
+                                  sizeof(imported), &imported_len,
+                                  imported_id, &receipt),
+            ER_NODE_ERR_CORRUPT);
 }
 
 static void test_node_spawn_delegates_budget(void) {

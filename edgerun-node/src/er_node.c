@@ -510,3 +510,56 @@ int er_node_sign(er_node_t* node, const void* subject_canonical,
              ? ER_NODE_OK
              : ER_NODE_ERR_CORRUPT;
 }
+
+int er_node_import_object(er_node_t* node, const void* external_bytes,
+                          size_t external_len, void* out_canonical,
+                          size_t out_cap, size_t* out_len,
+                          uint8_t out_id[ER_OBJECT_ID_SIZE],
+                          er_node_receipt_t* out_receipt) {
+  ErNodeState* state = er_node_state(node);
+  er_object_info_t info;
+  int rc;
+
+  if (node == (er_node_t*)0 || external_bytes == (const void*)0 ||
+      out_canonical == (void*)0 || out_len == (size_t*)0 ||
+      out_id == (uint8_t*)0 || out_receipt == (er_node_receipt_t*)0) {
+    return ER_NODE_ERR_BADARG;
+  }
+  rc = er_object_deserialize(external_bytes, external_len, &info, out_id);
+  if (rc != ER_OBJECT_OK) {
+    return ER_NODE_ERR_CORRUPT;
+  }
+  if (external_len > out_cap) {
+    return ER_NODE_ERR_TOOBIG;
+  }
+  er_node_copy(out_canonical, external_bytes, external_len);
+  *out_len = external_len;
+  er_node_receipt_fill(state, ER_NODE_METHOD_IMPORT, ER_NODE_OK,
+                       info.object_id, info.object_id, out_receipt);
+  return ER_NODE_OK;
+}
+
+int er_node_export_object(er_node_t* node, const void* canonical,
+                          size_t canonical_len, void* out_external,
+                          size_t out_cap, size_t* out_len,
+                          uint8_t out_id[ER_OBJECT_ID_SIZE],
+                          er_node_receipt_t* out_receipt) {
+  ErNodeState* state = er_node_state(node);
+  int rc;
+
+  if (node == (er_node_t*)0 || out_receipt == (er_node_receipt_t*)0) {
+    return ER_NODE_ERR_BADARG;
+  }
+  rc = er_object_serialize(canonical, canonical_len, out_external, out_cap,
+                           out_len, out_id);
+  if (rc == ER_OBJECT_ERR_TOOBIG) {
+    return ER_NODE_ERR_TOOBIG;
+  }
+  if (rc != ER_OBJECT_OK) {
+    return rc == ER_OBJECT_ERR_BADARG ? ER_NODE_ERR_BADARG
+                                      : ER_NODE_ERR_CORRUPT;
+  }
+  er_node_receipt_fill(state, ER_NODE_METHOD_EXPORT, ER_NODE_OK,
+                       out_id, out_id, out_receipt);
+  return ER_NODE_OK;
+}

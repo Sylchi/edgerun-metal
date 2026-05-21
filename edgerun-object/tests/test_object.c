@@ -398,12 +398,64 @@ static void test_signature_object(void) {
             ER_OBJECT_ERR_CORRUPT);
 }
 
+static void test_object_codec(void) {
+  uint8_t object[TEST_BUFFER_SIZE];
+  uint8_t serialized[TEST_BUFFER_SIZE];
+  uint8_t object_id[ER_OBJECT_ID_SIZE];
+  uint8_t serialized_id[ER_OBJECT_ID_SIZE];
+  uint8_t deserialized_id[ER_OBJECT_ID_SIZE];
+  er_object_info_t info;
+  er_object_requirements_t requirements =
+      test_requirements(ER_OBJECT_CONFIDENTIALITY_PUBLIC);
+  size_t object_len = 0u;
+  size_t serialized_len = 0u;
+  static const uint8_t payload[] = {3u, 1u, 4u};
+
+  check_int("codec build",
+            er_object_build_node(ER_OBJECT_KIND_BYTES, 0u, &requirements,
+                                 test_epoch(TEST_LEAF_EPOCH_TICK),
+                                 0, 0u, 0, 0u, 0, 0u,
+                                 payload, sizeof(payload), object,
+                                 sizeof(object), &object_len, object_id),
+            ER_OBJECT_OK);
+  check_int("codec serialize",
+            er_object_serialize(object, object_len, serialized,
+                                sizeof(serialized), &serialized_len,
+                                serialized_id),
+            ER_OBJECT_OK);
+  check_u64("codec serialized len", serialized_len, object_len);
+  check_bytes("codec serialized bytes", serialized, object, object_len);
+  check_bytes("codec serialized id", serialized_id, object_id,
+              ER_OBJECT_ID_SIZE);
+  check_int("codec deserialize",
+            er_object_deserialize(serialized, serialized_len, &info,
+                                  deserialized_id),
+            ER_OBJECT_OK);
+  check_bytes("codec deserialized id", deserialized_id, object_id,
+              ER_OBJECT_ID_SIZE);
+  check_int("codec deserialize null info",
+            er_object_deserialize(serialized, serialized_len, 0,
+                                  deserialized_id),
+            ER_OBJECT_OK);
+  check_int("codec serialize too small",
+            er_object_serialize(object, object_len, serialized,
+                                object_len - 1u, &serialized_len,
+                                serialized_id),
+            ER_OBJECT_ERR_TOOBIG);
+  serialized[0] ^= 1u;
+  check_int("codec rejects external junk",
+            er_object_deserialize(serialized, serialized_len, 0,
+                                  deserialized_id),
+            ER_OBJECT_ERR_CORRUPT);
+}
+
 int main(void) {
   test_leaf_node();
   test_tree_node();
   test_rejects_mismatched_envelope();
   test_rejects_invalid_requirements();
   test_signature_object();
+  test_object_codec();
 
   if (g_failed != 0) {
     fprintf(stderr, "object tests failed: %d/%d\n", g_failed, g_total);
