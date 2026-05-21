@@ -9,6 +9,7 @@
 #include "er_pi_mmc.h"
 #include "er_types.h"
 #include "pi_zero_w_v1_1_cyw43438_firmware.h"
+#include "pi_zero_w_v1_1_node_config.h"
 
 /*
  * Purpose: provide the first owned ARMv6 payload for Raspberry Pi Zero W v1.1.
@@ -48,11 +49,6 @@
 #define ER_PI_ZERO_W_V1_1_HEARTBEAT_SECS 10u
 #define ER_PI_ZERO_W_V1_1_NODE_BYTES 32u
 #define ER_PI_ZERO_W_V1_1_HASH_BYTES 32u
-#define ER_PI_ZERO_W_V1_1_NODE_ID_TEXT "ERZWPI01RELAY001CYW43438ARMV6L2"
-#define ER_PI_ZERO_W_V1_1_NODE_ID_REVISION_TEXT "\001"
-#define ER_PI_ZERO_W_V1_1_NODE_ID_BYTES \
-  ER_PI_ZERO_W_V1_1_NODE_ID_TEXT ER_PI_ZERO_W_V1_1_NODE_ID_REVISION_TEXT
-#define ER_PI_ZERO_W_V1_1_CHANNEL_ID_TEXT "ERWIFIL2PIZEROW1CHANNEL00000001"
 #define ER_PI_ZERO_W_V1_1_C_STRING_NUL_BYTES 1u
 #define ER_PI_ZERO_W_V1_1_IEEE80211_BEACON_LEN 64u
 #define ER_PI_ZERO_W_V1_1_IEEE80211_PROBE_REQUEST_LEN 54u
