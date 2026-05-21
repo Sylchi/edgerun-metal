@@ -286,6 +286,8 @@ static UINT32 g_er_pi_zero_w_v1_1_uart_rx_expected_len =
 
 static UINT8
     g_er_pi_zero_w_v1_1_node_id[ER_PI_ZERO_W_V1_1_NODE_BYTES] = {0u};
+static UINT32 g_er_pi_zero_w_v1_1_boot_checkpoint_count = 1u;
+static UINT32 g_er_pi_zero_w_v1_1_boot_checkpoint_step = 0u;
 
 static const UINT8
     g_er_pi_zero_w_v1_1_admission_id[ER_PI_ZERO_W_V1_1_HASH_BYTES +
@@ -2474,6 +2476,236 @@ static void er_pi_zero_w_v1_1_storage_emmc_ops(ErPiEmmcMmioOps* ops) {
   ops->write8 = 0;
 }
 
+enum {
+  ER_PI_ZERO_W_V1_1_BOOT_CHECKPOINT_MAGIC = 0x43524245u,
+  ER_PI_ZERO_W_V1_1_BOOT_CHECKPOINT_VERSION = 1u,
+  ER_PI_ZERO_W_V1_1_BOOT_CHECKPOINT_MAGIC_OFFSET = 0u,
+  ER_PI_ZERO_W_V1_1_BOOT_CHECKPOINT_VERSION_OFFSET = 4u,
+  ER_PI_ZERO_W_V1_1_BOOT_CHECKPOINT_IMAGE_ID_OFFSET = 8u,
+  ER_PI_ZERO_W_V1_1_BOOT_CHECKPOINT_IMAGE_REVISION_OFFSET = 12u,
+  ER_PI_ZERO_W_V1_1_BOOT_CHECKPOINT_BOOT_COUNT_OFFSET = 16u,
+  ER_PI_ZERO_W_V1_1_BOOT_CHECKPOINT_STEP_COUNT_OFFSET = 20u,
+  ER_PI_ZERO_W_V1_1_BOOT_CHECKPOINT_EVENT_OFFSET = 24u,
+  ER_PI_ZERO_W_V1_1_BOOT_CHECKPOINT_ARG0_OFFSET = 28u,
+  ER_PI_ZERO_W_V1_1_BOOT_CHECKPOINT_ARG1_OFFSET = 32u,
+  ER_PI_ZERO_W_V1_1_BOOT_CHECKPOINT_ARG2_OFFSET = 36u,
+  ER_PI_ZERO_W_V1_1_BOOT_CHECKPOINT_ARG3_OFFSET = 40u,
+  ER_PI_ZERO_W_V1_1_BOOT_CHECKPOINT_STORAGE_STATE_OFFSET = 44u,
+  ER_PI_ZERO_W_V1_1_BOOT_CHECKPOINT_SDIO_STATE_OFFSET = 48u,
+  ER_PI_ZERO_W_V1_1_BOOT_CHECKPOINT_WIFI_STATE_OFFSET = 52u,
+  ER_PI_ZERO_W_V1_1_BOOT_CHECKPOINT_OTA_STATUS_OFFSET = 56u,
+  ER_PI_ZERO_W_V1_1_BOOT_CHECKPOINT_CRC_OFFSET = 508u
+};
+
+static void er_pi_zero_w_v1_1_put_le32_at(UINT8* block,
+                                          UINT32 offset,
+                                          UINT32 value) {
+  block[offset] = (UINT8)value;
+  block[offset + 1u] = (UINT8)(value >> ER_PI_ZERO_W_V1_1_U16_HIGH_SHIFT);
+  block[offset + 2u] = (UINT8)(value >> ER_PI_ZERO_W_V1_1_U32_BYTE2_SHIFT);
+  block[offset + 3u] = (UINT8)(value >> ER_PI_ZERO_W_V1_1_U32_BYTE3_SHIFT);
+}
+
+static UINT32 er_pi_zero_w_v1_1_get_le32_at(const UINT8* block,
+                                            UINT32 offset) {
+  return (UINT32)block[offset] |
+         ((UINT32)block[offset + 1u] << ER_PI_ZERO_W_V1_1_U16_HIGH_SHIFT) |
+         ((UINT32)block[offset + 2u] << ER_PI_ZERO_W_V1_1_U32_BYTE2_SHIFT) |
+         ((UINT32)block[offset + 3u] << ER_PI_ZERO_W_V1_1_U32_BYTE3_SHIFT);
+}
+
+static UINT32 er_pi_zero_w_v1_1_boot_checkpoint_crc32(const UINT8* bytes,
+                                                      UINT32 len) {
+  UINT32 crc = ER_PI_ZERO_W_V1_1_CRC32_INITIAL;
+  UINT32 i;
+
+  if (bytes == 0) {
+    return 0u;
+  }
+  for (i = 0u; i < len; ++i) {
+    UINT32 bit;
+    crc ^= (UINT32)bytes[i];
+    for (bit = 0u; bit < ER_PI_ZERO_W_V1_1_CRC32_BITS_PER_BYTE; ++bit) {
+      UINT32 mask = 0u - (crc & 1u);
+      crc = (crc >> 1u) ^ (ER_PI_ZERO_W_V1_1_CRC32_POLY & mask);
+    }
+  }
+  return ~crc;
+}
+
+static UINT8 er_pi_zero_w_v1_1_boot_checkpoint_direct_read(
+    UINT8 block[ER_PI_ZERO_W_V1_1_BOOT_LOG_BLOCK_BYTES]) {
+  ErPiEmmcMmioOps ops;
+  ErPiEmmcBlockResult result;
+
+  if (block == 0) {
+    return 0u;
+  }
+  er_pi_zero_w_v1_1_storage_emmc_ops(&ops);
+  return er_pi_emmc_read_block_with_ops(
+      &ops,
+      ER_PI_ZERO_W_V1_1_BOOT_CHECKPOINT_BLOCK,
+      block,
+      ER_PI_ZERO_W_V1_1_SDIO_POLL_BUDGET,
+      &result);
+}
+
+static UINT8 er_pi_zero_w_v1_1_boot_checkpoint_direct_write(
+    const UINT8 block[ER_PI_ZERO_W_V1_1_BOOT_LOG_BLOCK_BYTES]) {
+  ErPiEmmcMmioOps ops;
+  ErPiEmmcBlockResult result;
+
+  if (block == 0) {
+    return 0u;
+  }
+  er_pi_zero_w_v1_1_storage_emmc_ops(&ops);
+  return er_pi_emmc_write_block_with_ops(
+      &ops,
+      ER_PI_ZERO_W_V1_1_BOOT_CHECKPOINT_BLOCK,
+      block,
+      ER_PI_ZERO_W_V1_1_SDIO_POLL_BUDGET,
+      &result);
+}
+
+static void er_pi_zero_w_v1_1_boot_checkpoint_init(void) {
+  UINT8 block[ER_PI_ZERO_W_V1_1_BOOT_LOG_BLOCK_BYTES];
+  UINT32 previous_count;
+  UINT32 crc_stored;
+  UINT32 crc_actual;
+
+  g_er_pi_zero_w_v1_1_boot_checkpoint_count = 1u;
+  g_er_pi_zero_w_v1_1_boot_checkpoint_step = 0u;
+  if (er_pi_zero_w_v1_1_boot_checkpoint_direct_read(block) == 0u) {
+    return;
+  }
+  crc_stored = er_pi_zero_w_v1_1_get_le32_at(
+      block,
+      ER_PI_ZERO_W_V1_1_BOOT_CHECKPOINT_CRC_OFFSET);
+  crc_actual = er_pi_zero_w_v1_1_boot_checkpoint_crc32(
+      block,
+      ER_PI_ZERO_W_V1_1_BOOT_CHECKPOINT_CRC_OFFSET);
+  if (crc_stored != crc_actual ||
+      er_pi_zero_w_v1_1_get_le32_at(
+          block,
+          ER_PI_ZERO_W_V1_1_BOOT_CHECKPOINT_MAGIC_OFFSET) !=
+          ER_PI_ZERO_W_V1_1_BOOT_CHECKPOINT_MAGIC ||
+      er_pi_zero_w_v1_1_get_le32_at(
+          block,
+          ER_PI_ZERO_W_V1_1_BOOT_CHECKPOINT_VERSION_OFFSET) !=
+          ER_PI_ZERO_W_V1_1_BOOT_CHECKPOINT_VERSION ||
+      er_pi_zero_w_v1_1_get_le32_at(
+          block,
+          ER_PI_ZERO_W_V1_1_BOOT_CHECKPOINT_IMAGE_ID_OFFSET) !=
+          ER_PI_ZERO_W_V1_1_BOOT_IMAGE_ID ||
+      er_pi_zero_w_v1_1_get_le32_at(
+          block,
+          ER_PI_ZERO_W_V1_1_BOOT_CHECKPOINT_IMAGE_REVISION_OFFSET) !=
+          ER_PI_ZERO_W_V1_1_BOOT_IMAGE_REVISION) {
+    return;
+  }
+  previous_count = er_pi_zero_w_v1_1_get_le32_at(
+      block,
+      ER_PI_ZERO_W_V1_1_BOOT_CHECKPOINT_BOOT_COUNT_OFFSET);
+  if (previous_count != 0xffffffffu) {
+    g_er_pi_zero_w_v1_1_boot_checkpoint_count = previous_count + 1u;
+  }
+}
+
+static void er_pi_zero_w_v1_1_boot_checkpoint_write(UINT32 event,
+                                                    UINT32 arg0,
+                                                    UINT32 arg1,
+                                                    UINT32 arg2,
+                                                    UINT32 arg3) {
+  UINT8 block[ER_PI_ZERO_W_V1_1_BOOT_LOG_BLOCK_BYTES];
+  UINT32 crc;
+
+  er_pi_zero_w_v1_1_fill_zero(block, ER_PI_ZERO_W_V1_1_BOOT_LOG_BLOCK_BYTES);
+  ++g_er_pi_zero_w_v1_1_boot_checkpoint_step;
+  er_pi_zero_w_v1_1_put_le32_at(
+      block,
+      ER_PI_ZERO_W_V1_1_BOOT_CHECKPOINT_MAGIC_OFFSET,
+      ER_PI_ZERO_W_V1_1_BOOT_CHECKPOINT_MAGIC);
+  er_pi_zero_w_v1_1_put_le32_at(
+      block,
+      ER_PI_ZERO_W_V1_1_BOOT_CHECKPOINT_VERSION_OFFSET,
+      ER_PI_ZERO_W_V1_1_BOOT_CHECKPOINT_VERSION);
+  er_pi_zero_w_v1_1_put_le32_at(
+      block,
+      ER_PI_ZERO_W_V1_1_BOOT_CHECKPOINT_IMAGE_ID_OFFSET,
+      ER_PI_ZERO_W_V1_1_BOOT_IMAGE_ID);
+  er_pi_zero_w_v1_1_put_le32_at(
+      block,
+      ER_PI_ZERO_W_V1_1_BOOT_CHECKPOINT_IMAGE_REVISION_OFFSET,
+      ER_PI_ZERO_W_V1_1_BOOT_IMAGE_REVISION);
+  er_pi_zero_w_v1_1_put_le32_at(
+      block,
+      ER_PI_ZERO_W_V1_1_BOOT_CHECKPOINT_BOOT_COUNT_OFFSET,
+      g_er_pi_zero_w_v1_1_boot_checkpoint_count);
+  er_pi_zero_w_v1_1_put_le32_at(
+      block,
+      ER_PI_ZERO_W_V1_1_BOOT_CHECKPOINT_STEP_COUNT_OFFSET,
+      g_er_pi_zero_w_v1_1_boot_checkpoint_step);
+  er_pi_zero_w_v1_1_put_le32_at(
+      block,
+      ER_PI_ZERO_W_V1_1_BOOT_CHECKPOINT_EVENT_OFFSET,
+      event);
+  er_pi_zero_w_v1_1_put_le32_at(
+      block,
+      ER_PI_ZERO_W_V1_1_BOOT_CHECKPOINT_ARG0_OFFSET,
+      arg0);
+  er_pi_zero_w_v1_1_put_le32_at(
+      block,
+      ER_PI_ZERO_W_V1_1_BOOT_CHECKPOINT_ARG1_OFFSET,
+      arg1);
+  er_pi_zero_w_v1_1_put_le32_at(
+      block,
+      ER_PI_ZERO_W_V1_1_BOOT_CHECKPOINT_ARG2_OFFSET,
+      arg2);
+  er_pi_zero_w_v1_1_put_le32_at(
+      block,
+      ER_PI_ZERO_W_V1_1_BOOT_CHECKPOINT_ARG3_OFFSET,
+      arg3);
+  er_pi_zero_w_v1_1_put_le32_at(
+      block,
+      ER_PI_ZERO_W_V1_1_BOOT_CHECKPOINT_STORAGE_STATE_OFFSET,
+      (UINT32)g_er_pi_zero_w_v1_1_storage_probe_state);
+  er_pi_zero_w_v1_1_put_le32_at(
+      block,
+      ER_PI_ZERO_W_V1_1_BOOT_CHECKPOINT_SDIO_STATE_OFFSET,
+      (UINT32)g_er_pi_zero_w_v1_1_sdio_probe_state);
+  er_pi_zero_w_v1_1_put_le32_at(
+      block,
+      ER_PI_ZERO_W_V1_1_BOOT_CHECKPOINT_WIFI_STATE_OFFSET,
+      (UINT32)g_er_pi_zero_w_v1_1_wifi_control_state);
+  er_pi_zero_w_v1_1_put_le32_at(
+      block,
+      ER_PI_ZERO_W_V1_1_BOOT_CHECKPOINT_OTA_STATUS_OFFSET,
+      (UINT32)g_er_pi_zero_w_v1_1_ota_status);
+  crc = er_pi_zero_w_v1_1_boot_checkpoint_crc32(
+      block,
+      ER_PI_ZERO_W_V1_1_BOOT_CHECKPOINT_CRC_OFFSET);
+  er_pi_zero_w_v1_1_put_le32_at(
+      block,
+      ER_PI_ZERO_W_V1_1_BOOT_CHECKPOINT_CRC_OFFSET,
+      crc);
+  (void)er_pi_zero_w_v1_1_boot_checkpoint_direct_write(block);
+}
+
+static UINT8 er_pi_zero_w_v1_1_boot_mark(UINT32 event,
+                                         UINT32 arg0,
+                                         UINT32 arg1,
+                                         UINT32 arg2,
+                                         UINT32 arg3) {
+  er_pi_zero_w_v1_1_boot_checkpoint_write(event, arg0, arg1, arg2, arg3);
+  return er_pi_zero_w_v1_1_boot_log_append(
+      &g_er_pi_zero_w_v1_1_boot_log,
+      event,
+      arg0,
+      arg1,
+      arg2,
+      arg3);
+}
+
 static UINT8 er_pi_zero_w_v1_1_storage_block_error(
     const ErPiEmmcBlockResult* result) {
   g_er_pi_zero_w_v1_1_storage_probe_state =
@@ -2572,9 +2804,7 @@ static UINT8 er_pi_zero_w_v1_1_ota_write_block_unbound(
   }
   g_er_pi_zero_w_v1_1_storage_probe_state =
       ER_PI_ZERO_W_V1_1_STORAGE_WRITE_VERIFIED;
-  (void)er_pi_zero_w_v1_1_boot_log_append(
-      &g_er_pi_zero_w_v1_1_boot_log,
-      ER_PI_ZERO_W_V1_1_BOOT_LOG_EVENT_OTA_BLOCK_WRITTEN,
+  (void)er_pi_zero_w_v1_1_boot_mark(ER_PI_ZERO_W_V1_1_BOOT_LOG_EVENT_OTA_BLOCK_WRITTEN,
       block_address,
       (UINT32)g_er_pi_zero_w_v1_1_ota_state.next_offset,
       (UINT32)g_er_pi_zero_w_v1_1_ota_state.status,
@@ -2655,9 +2885,7 @@ static void er_pi_zero_w_v1_1_ota_receive_complete_uart_frame(void) {
       0);
   er_pi_zero_w_v1_1_uart_rx_reset();
   er_pi_zero_w_v1_1_ota_status_refresh();
-  (void)er_pi_zero_w_v1_1_boot_log_append(
-      &g_er_pi_zero_w_v1_1_boot_log,
-      ER_PI_ZERO_W_V1_1_BOOT_LOG_EVENT_UART_OTA_FRAME,
+  (void)er_pi_zero_w_v1_1_boot_mark(ER_PI_ZERO_W_V1_1_BOOT_LOG_EVENT_UART_OTA_FRAME,
       (UINT32)g_er_pi_zero_w_v1_1_ota_status,
       (UINT32)g_er_pi_zero_w_v1_1_ota_offset,
       (UINT32)g_er_pi_zero_w_v1_1_ota_state.accepted_packet_count,
@@ -2736,9 +2964,7 @@ static UINT32 er_pi_zero_w_v1_1_ota_poll_owned_shared_rx(
     return 0u;
   }
   er_pi_zero_w_v1_1_ota_status_refresh();
-  (void)er_pi_zero_w_v1_1_boot_log_append(
-      &g_er_pi_zero_w_v1_1_boot_log,
-      ER_PI_ZERO_W_V1_1_BOOT_LOG_EVENT_L2_OTA_FRAME,
+  (void)er_pi_zero_w_v1_1_boot_mark(ER_PI_ZERO_W_V1_1_BOOT_LOG_EVENT_L2_OTA_FRAME,
       (UINT32)g_er_pi_zero_w_v1_1_ota_status,
       (UINT32)g_er_pi_zero_w_v1_1_ota_offset,
       frame_len,
@@ -2788,9 +3014,7 @@ static void er_pi_zero_w_v1_1_ota_poll_owned_rx(void) {
       er_pi_zero_w_v1_1_ota_write_block_unbound,
       0);
   er_pi_zero_w_v1_1_ota_status_refresh();
-  (void)er_pi_zero_w_v1_1_boot_log_append(
-      &g_er_pi_zero_w_v1_1_boot_log,
-      ER_PI_ZERO_W_V1_1_BOOT_LOG_EVENT_L2_OTA_FRAME,
+  (void)er_pi_zero_w_v1_1_boot_mark(ER_PI_ZERO_W_V1_1_BOOT_LOG_EVENT_L2_OTA_FRAME,
       (UINT32)g_er_pi_zero_w_v1_1_ota_status,
       (UINT32)g_er_pi_zero_w_v1_1_ota_offset,
       erwire_len,
@@ -3030,11 +3254,10 @@ static void er_pi_zero_w_v1_1_lcd_debug_status(UINT32 heartbeat) {
 void er_pi_zero_w_v1_1_main(void) {
   UINT32 heartbeat = 0u;
 
+  er_pi_zero_w_v1_1_boot_checkpoint_init();
   er_pi_zero_w_v1_1_boot_log_init(&g_er_pi_zero_w_v1_1_boot_log,
                                   ER_PI_ZERO_W_V1_1_BOOT_MAGIC);
-  (void)er_pi_zero_w_v1_1_boot_log_append(
-      &g_er_pi_zero_w_v1_1_boot_log,
-      ER_PI_ZERO_W_V1_1_BOOT_LOG_EVENT_BOOT_ENTRY,
+  (void)er_pi_zero_w_v1_1_boot_mark(ER_PI_ZERO_W_V1_1_BOOT_LOG_EVENT_BOOT_ENTRY,
       (UINT32)g_er_pi_zero_w_v1_1_boot_magic,
       (UINT32)g_er_pi_zero_w_v1_1_sdio_probe_state,
       (UINT32)g_er_pi_zero_w_v1_1_storage_probe_state,
@@ -3042,27 +3265,21 @@ void er_pi_zero_w_v1_1_main(void) {
   er_pi_zero_w_v1_1_act_led_init();
   er_pi_zero_w_v1_1_act_led_status(ER_PI_ZERO_W_V1_1_LED_BOOT_ENTRY);
   er_pi_zero_w_v1_1_uart_init();
-  (void)er_pi_zero_w_v1_1_boot_log_append(
-      &g_er_pi_zero_w_v1_1_boot_log,
-      ER_PI_ZERO_W_V1_1_BOOT_LOG_EVENT_UART_READY,
+  (void)er_pi_zero_w_v1_1_boot_mark(ER_PI_ZERO_W_V1_1_BOOT_LOG_EVENT_UART_READY,
       0u,
       0u,
       0u,
       0u);
   er_pi_zero_w_v1_1_act_led_status(ER_PI_ZERO_W_V1_1_LED_UART_READY);
   er_pi_zero_w_v1_1_lcd_hat_init();
-  (void)er_pi_zero_w_v1_1_boot_log_append(
-      &g_er_pi_zero_w_v1_1_boot_log,
-      ER_PI_ZERO_W_V1_1_BOOT_LOG_EVENT_LCD_INIT,
+  (void)er_pi_zero_w_v1_1_boot_mark(ER_PI_ZERO_W_V1_1_BOOT_LOG_EVENT_LCD_INIT,
       0u,
       0u,
       0u,
       0u);
   er_pi_zero_w_v1_1_lcd_debug_status(heartbeat);
   if (er_pi_zero_w_v1_1_init_ephemeral_identity() == 0u) {
-    (void)er_pi_zero_w_v1_1_boot_log_append(
-        &g_er_pi_zero_w_v1_1_boot_log,
-        ER_PI_ZERO_W_V1_1_BOOT_LOG_EVENT_IDENTITY_FAILED,
+    (void)er_pi_zero_w_v1_1_boot_mark(ER_PI_ZERO_W_V1_1_BOOT_LOG_EVENT_IDENTITY_FAILED,
         0u,
         0u,
         0u,
@@ -3072,17 +3289,13 @@ void er_pi_zero_w_v1_1_main(void) {
       g_er_pi_zero_w_v1_1_boot_magic = ER_PI_ZERO_W_V1_1_BOOT_MAGIC;
     }
   }
-  (void)er_pi_zero_w_v1_1_boot_log_append(
-      &g_er_pi_zero_w_v1_1_boot_log,
-      ER_PI_ZERO_W_V1_1_BOOT_LOG_EVENT_IDENTITY_READY,
+  (void)er_pi_zero_w_v1_1_boot_mark(ER_PI_ZERO_W_V1_1_BOOT_LOG_EVENT_IDENTITY_READY,
       (UINT32)g_er_pi_zero_w_v1_1_node_id[0],
       (UINT32)g_er_pi_zero_w_v1_1_node_id[1],
       (UINT32)g_er_pi_zero_w_v1_1_node_id[2],
       (UINT32)g_er_pi_zero_w_v1_1_node_id[3]);
   er_pi_zero_w_v1_1_ota_listen_init();
-  (void)er_pi_zero_w_v1_1_boot_log_append(
-      &g_er_pi_zero_w_v1_1_boot_log,
-      ER_PI_ZERO_W_V1_1_BOOT_LOG_EVENT_OTA_LISTEN,
+  (void)er_pi_zero_w_v1_1_boot_mark(ER_PI_ZERO_W_V1_1_BOOT_LOG_EVENT_OTA_LISTEN,
       (UINT32)g_er_pi_zero_w_v1_1_ota_status,
       (UINT32)g_er_pi_zero_w_v1_1_ota_target_block,
       ER_PI_ZERO_W_V1_1_OTA_BLOCK_BYTES,
@@ -3092,17 +3305,13 @@ void er_pi_zero_w_v1_1_main(void) {
           &g_er_pi_zero_w_v1_1_boot_log,
           er_pi_zero_w_v1_1_boot_log_write_block,
           0) != 0u) {
-    (void)er_pi_zero_w_v1_1_boot_log_append(
-        &g_er_pi_zero_w_v1_1_boot_log,
-        ER_PI_ZERO_W_V1_1_BOOT_LOG_EVENT_STORAGE_READY,
+    (void)er_pi_zero_w_v1_1_boot_mark(ER_PI_ZERO_W_V1_1_BOOT_LOG_EVENT_STORAGE_READY,
         (UINT32)g_er_pi_zero_w_v1_1_storage_probe_state,
         (UINT32)g_er_pi_zero_w_v1_1_storage_relative_card_address,
         ER_PI_ZERO_W_V1_1_BOOT_LOG_START_BLOCK,
         ER_PI_ZERO_W_V1_1_BOOT_LOG_BLOCK_COUNT);
   } else {
-    (void)er_pi_zero_w_v1_1_boot_log_append(
-        &g_er_pi_zero_w_v1_1_boot_log,
-        ER_PI_ZERO_W_V1_1_BOOT_LOG_EVENT_STORAGE_FAILED,
+    (void)er_pi_zero_w_v1_1_boot_mark(ER_PI_ZERO_W_V1_1_BOOT_LOG_EVENT_STORAGE_FAILED,
         (UINT32)g_er_pi_zero_w_v1_1_storage_probe_state,
         (UINT32)g_er_pi_zero_w_v1_1_storage_relative_card_address,
         (UINT32)g_er_pi_zero_w_v1_1_storage_last_block,
@@ -3110,18 +3319,14 @@ void er_pi_zero_w_v1_1_main(void) {
   }
   er_pi_zero_w_v1_1_lcd_debug_status(heartbeat);
   er_pi_zero_w_v1_1_wifi_gpio_init();
-  (void)er_pi_zero_w_v1_1_boot_log_append(
-      &g_er_pi_zero_w_v1_1_boot_log,
-      ER_PI_ZERO_W_V1_1_BOOT_LOG_EVENT_WIFI_POWERED,
+  (void)er_pi_zero_w_v1_1_boot_mark(ER_PI_ZERO_W_V1_1_BOOT_LOG_EVENT_WIFI_POWERED,
       (UINT32)g_er_pi_zero_w_v1_1_wifi_control_state,
       0u,
       0u,
       0u);
   er_pi_zero_w_v1_1_act_led_status(ER_PI_ZERO_W_V1_1_LED_WIFI_POWERED);
   er_pi_zero_w_v1_1_sdio_probe();
-  (void)er_pi_zero_w_v1_1_boot_log_append(
-      &g_er_pi_zero_w_v1_1_boot_log,
-      ER_PI_ZERO_W_V1_1_BOOT_LOG_EVENT_SDIO_PROBED,
+  (void)er_pi_zero_w_v1_1_boot_mark(ER_PI_ZERO_W_V1_1_BOOT_LOG_EVENT_SDIO_PROBED,
       (UINT32)g_er_pi_zero_w_v1_1_sdio_probe_state,
       (UINT32)g_er_pi_zero_w_v1_1_sdio_probe_interrupt,
       (UINT32)g_er_pi_zero_w_v1_1_sdio_probe_response,
@@ -3131,18 +3336,14 @@ void er_pi_zero_w_v1_1_main(void) {
       er_pi_zero_w_v1_1_cyw43438_start_owned_l2() != 0u) {
     g_er_pi_zero_w_v1_1_sdio_probe_state = ER_PI_ZERO_W_V1_1_L2_READY;
     er_pi_zero_w_v1_1_ota_status_refresh();
-    (void)er_pi_zero_w_v1_1_boot_log_append(
-        &g_er_pi_zero_w_v1_1_boot_log,
-        ER_PI_ZERO_W_V1_1_BOOT_LOG_EVENT_L2_READY,
+    (void)er_pi_zero_w_v1_1_boot_mark(ER_PI_ZERO_W_V1_1_BOOT_LOG_EVENT_L2_READY,
         (UINT32)g_er_pi_zero_w_v1_1_sdio_probe_state,
         (UINT32)g_er_pi_zero_w_v1_1_wifi_control_state,
         (UINT32)g_er_pi_zero_w_v1_1_ota_status,
         (UINT32)g_er_pi_zero_w_v1_1_ota_offset);
     er_pi_zero_w_v1_1_act_led_status(ER_PI_ZERO_W_V1_1_LED_CYW_MAILBOX_OK);
   } else {
-    (void)er_pi_zero_w_v1_1_boot_log_append(
-        &g_er_pi_zero_w_v1_1_boot_log,
-        ER_PI_ZERO_W_V1_1_BOOT_LOG_EVENT_L2_FAILED,
+    (void)er_pi_zero_w_v1_1_boot_mark(ER_PI_ZERO_W_V1_1_BOOT_LOG_EVENT_L2_FAILED,
         (UINT32)g_er_pi_zero_w_v1_1_sdio_probe_state,
         (UINT32)g_er_pi_zero_w_v1_1_wifi_control_state,
         (UINT32)g_er_pi_zero_w_v1_1_sdio_probe_interrupt,
@@ -3151,9 +3352,7 @@ void er_pi_zero_w_v1_1_main(void) {
   }
   er_pi_zero_w_v1_1_lcd_debug_status(heartbeat);
   er_pi_zero_w_v1_1_send_node_available();
-  (void)er_pi_zero_w_v1_1_boot_log_append(
-      &g_er_pi_zero_w_v1_1_boot_log,
-      ER_PI_ZERO_W_V1_1_BOOT_LOG_EVENT_NODE_AVAILABLE_SENT,
+  (void)er_pi_zero_w_v1_1_boot_mark(ER_PI_ZERO_W_V1_1_BOOT_LOG_EVENT_NODE_AVAILABLE_SENT,
       (UINT32)g_er_pi_zero_w_v1_1_sdio_probe_state,
       (UINT32)g_er_pi_zero_w_v1_1_storage_probe_state,
       (UINT32)g_er_pi_zero_w_v1_1_ota_status,
@@ -3168,9 +3367,7 @@ void er_pi_zero_w_v1_1_main(void) {
     er_pi_zero_w_v1_1_send_node_heartbeat(heartbeat);
     er_pi_zero_w_v1_1_lcd_debug_status(heartbeat);
     if (er_pi_zero_w_v1_1_update_reboot_ready() != 0u) {
-      (void)er_pi_zero_w_v1_1_boot_log_append(
-          &g_er_pi_zero_w_v1_1_boot_log,
-          ER_PI_ZERO_W_V1_1_BOOT_LOG_EVENT_REBOOT_READY,
+      (void)er_pi_zero_w_v1_1_boot_mark(ER_PI_ZERO_W_V1_1_BOOT_LOG_EVENT_REBOOT_READY,
           (UINT32)g_er_pi_zero_w_v1_1_ota_status,
           (UINT32)g_er_pi_zero_w_v1_1_ota_offset,
           (UINT32)g_er_pi_zero_w_v1_1_storage_probe_state,
