@@ -26,6 +26,11 @@
 #define ER_APP_BUDGET_IPC_SEND 0x00000010u
 #define ER_APP_BUDGET_IPC_RECV 0x00000020u
 
+#define ER_APP_STORAGE_PERSISTENCE_VOLATILE 1u
+#define ER_APP_STORAGE_PERSISTENCE_EXPLICIT_SYNC 2u
+#define ER_APP_STORAGE_LATENCY_BULK 1u
+#define ER_APP_STORAGE_LATENCY_INTERACTIVE 2u
+
 #define ER_APP_PACKAGE_INSTALL_STATE_INSTALLED 1u
 #define ER_APP_PACKAGE_INSTALL_STATE_REMOVED 2u
 #define ER_APP_PACKAGE_INSTALL_STATE_ROLLED_BACK 3u
@@ -216,6 +221,21 @@ typedef struct {
 typedef struct {
   UINT16 abi_version;
   UINT16 reserved;
+  ErHash allocation_id;
+  ErHash admission_id;
+  ErHash budget_id;
+  ErHash medium_id;
+  ErNodeId app_node_id;
+  UINT64 block_base;
+  UINT64 block_count;
+  UINT32 block_bytes;
+  UINT16 persistence_requirement;
+  UINT16 latency_requirement;
+} ErAppStorageAllocation;
+
+typedef struct {
+  UINT16 abi_version;
+  UINT16 reserved;
   ErHash jurisdiction_id;
   ErHash admission_id;
   ErHash budget_id;
@@ -364,6 +384,17 @@ UINT8 er_app_prepare_schedule_slot(const ErCryptoProvider* crypto, const ErAppId
 UINT8 er_app_prepare_launch_allocation(const ErCryptoProvider* crypto, const ErAppIdentity* identity,
                                        const ErAppBudget* budget, UINT64 executor_memory_base,
                                        UINT64 executor_memory_len, ErAppLaunchAllocation* out_allocation);
+UINT8 er_app_prepare_storage_allocation(const ErCryptoProvider* crypto,
+                                        const ErAppIdentity* identity,
+                                        const ErAppBudget* budget,
+                                        const ErHash* medium_id,
+                                        UINT64 medium_total_blocks,
+                                        UINT64 block_base,
+                                        UINT64 block_count,
+                                        UINT32 block_bytes,
+                                        UINT16 persistence_requirement,
+                                        UINT16 latency_requirement,
+                                        ErAppStorageAllocation* out_allocation);
 UINT8 er_app_prepare_execution_jurisdiction(const ErCryptoProvider* crypto,
                                             const ErAppIdentity* identity,
                                             const ErAppBudget* budget,

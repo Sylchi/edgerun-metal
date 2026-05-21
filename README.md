@@ -375,22 +375,31 @@ policy, object semantics, and lifecycle policy above this byte store.
 Current storage integration work makes `storage` the single durable object
 system. Device details are selected once at store initialization with a
 deterministic block backing profile such as byte log, SD card, NVMe, or custom
-block size. External runtime consumers do not receive SD, NVMe, or packet-slot
-APIs; they receive only the store API for blobs, content-addressed objects, and
-indexes. Store-backed storage endpoint durability has replaced the old fixed
-packet-slot path. `erwire` remains the transport. VFS already owns object
-packetization between memory and wire packets; durable manifest/chunk admission
-is still exposed through the store object helpers and must move behind a
-VFS/storage adapter so there is one explicit memory-to-wire, wire-to-memory,
+block size. Runtime storage-medium initialization first checks the store for the
+`medium/init` record; if it is missing, the caller-provided SD/NVMe benchmark
+callback must run and the benchmark record becomes the first durable medium fact
+projected into the store. External runtime consumers do not receive SD, NVMe, or
+packet-slot APIs; they receive only the store API for blobs, content-addressed
+objects, and indexes. Store-backed storage endpoint durability has replaced the
+old fixed packet-slot path. Apps receive explicit storage allocations as fixed
+block ranges on an initialized medium, and allocation preparation rejects byte or
+medium overrun before an app can run. End-user storage capabilities must declare
+persistence and latency requirements instead of relying on ambient runtime
+policy. `erwire` remains the transport. VFS already owns object packetization
+between memory and wire packets; durable manifest/chunk admission is still
+exposed through the store object helpers and must move behind a VFS/storage
+adapter so there is one explicit memory-to-wire, wire-to-memory,
 memory-to-durable, and durable-to-memory boundary. Completed VFS payloads are
 admitted into `er_store` before package loading, OTA install, or debug-log
 retention consumes them. The next implementation steps are:
 
 1. Add the VFS/storage adapter that owns object-to-manifest and
    manifest-to-object transitions.
-2. Add explicit boot-log append and sync calls on top of `er_store`; do not add
+2. Wire the Pi SD benchmark callback to `er_storage_medium_init_if_needed` before
+   opening app storage allocation routes.
+3. Add explicit boot-log append and sync calls on top of `er_store`; do not add
    ambient runtime logging or hidden store flushes.
-3. Load Wasm app, manifest, UI assets, OTA objects, and Pi debug logs from
+4. Load Wasm app, manifest, UI assets, OTA objects, and Pi debug logs from
    store indexes after first-boot admission of compiled-in or received bytes.
 
 The netboot helper is a host tool that provides DHCP/TFTP for EFI PXE boot. It

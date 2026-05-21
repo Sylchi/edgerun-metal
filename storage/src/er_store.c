@@ -24,11 +24,10 @@
  *   accelerate lookups after replay.
  *
  * Flush policy:
- *   Appends sync the record bytes before returning. The superblock is a compact
- *   checkpoint and is flushed on close or after recovery, not after every
- *   record; recovery scans the log and does not trust superblock log_end.
- *   Composite object writes batch their internal chunk-record syncs and flush
- *   once before the public put_object call returns.
+ *   Appends update the configured IO only. No store write implies durability.
+ *   er_store_sync is the explicit boundary for writing a dirty superblock and
+ *   calling the configured IO sync hook. Recovery scans the log and does not
+ *   trust superblock log_end.
  */
 
 enum {

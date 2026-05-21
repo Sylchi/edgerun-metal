@@ -13,6 +13,7 @@ static const UINT8 g_app_session_domain[] = "edgerun:c:v1:app:ipc-session";
 static const UINT8 g_app_budget_domain[] = "edgerun:c:v1:app:budget";
 static const UINT8 g_app_schedule_domain[] = "edgerun:c:v1:app:schedule-slot";
 static const UINT8 g_app_launch_allocation_domain[] = "edgerun:c:v1:app:launch-allocation";
+static const UINT8 g_app_storage_allocation_domain[] = "edgerun:c:v1:app:storage-allocation";
 static const UINT8 g_app_execution_jurisdiction_domain[] = "edgerun:c:v1:app:execution-jurisdiction";
 static const UINT8 g_app_ui_presentation_domain[] = "edgerun:c:v1:app:ui-presentation";
 static const UINT8 g_app_package_domain[] = "edgerun:c:v1:app:package";
@@ -20,6 +21,7 @@ static const UINT8 g_app_package_signature_domain[] = "edgerun:c:v1:app:package-
 static const UINT8 g_app_package_storage_source_domain[] = "edgerun:c:v1:app:package-storage-source";
 static const UINT8 g_app_package_remote_fetch_source_domain[] =
     "edgerun:c:v1:app:package-remote-fetch-source";
+static const UINT64 g_app_uint64_max = (UINT64)~0ULL;
 
 enum {
   ER_APP_BYTE_BITS = 8u,
@@ -78,6 +80,19 @@ enum {
   ER_APP_EXECUTION_ADMISSION_SPAN = 2u,
   ER_APP_EXECUTION_BUDGET_SPAN = 3u,
   ER_APP_EXECUTION_FIELDS_SPAN = 4u,
+  ER_APP_STORAGE_ALLOCATION_SPAN_COUNT = 5u,
+  ER_APP_STORAGE_ALLOCATION_APP_SPAN = 0u,
+  ER_APP_STORAGE_ALLOCATION_ADMISSION_SPAN = 1u,
+  ER_APP_STORAGE_ALLOCATION_BUDGET_SPAN = 2u,
+  ER_APP_STORAGE_ALLOCATION_MEDIUM_SPAN = 3u,
+  ER_APP_STORAGE_ALLOCATION_FIELDS_SPAN = 4u,
+  ER_APP_STORAGE_ALLOCATION_U64_FIELD_COUNT = 4u,
+  ER_APP_STORAGE_ALLOCATION_FIELD_BYTES =
+      ER_APP_U64_FIELD_BYTES * ER_APP_STORAGE_ALLOCATION_U64_FIELD_COUNT,
+  ER_APP_STORAGE_ALLOCATION_BLOCK_BASE_OFFSET = 0u,
+  ER_APP_STORAGE_ALLOCATION_BLOCK_COUNT_OFFSET = 8u,
+  ER_APP_STORAGE_ALLOCATION_BLOCK_BYTES_OFFSET = 16u,
+  ER_APP_STORAGE_ALLOCATION_REQUIREMENTS_OFFSET = 24u,
   ER_APP_PACKED_FIELD0_OFFSET = 0u,
   ER_APP_PACKED_FIELD1_OFFSET = 8u,
   ER_APP_PACKED_FIELD2_OFFSET = 16u,
@@ -170,6 +185,26 @@ static UINT8 er_app_kind_valid(UINT16 app_kind) {
   switch (app_kind) {
     case ER_APP_KIND_UI_APP:
     case ER_APP_KIND_BUS_DRIVER:
+      return 1u;
+    default:
+      return 0u;
+  }
+}
+
+static UINT8 er_app_storage_persistence_valid(UINT16 persistence_requirement) {
+  switch (persistence_requirement) {
+    case ER_APP_STORAGE_PERSISTENCE_VOLATILE:
+    case ER_APP_STORAGE_PERSISTENCE_EXPLICIT_SYNC:
+      return 1u;
+    default:
+      return 0u;
+  }
+}
+
+static UINT8 er_app_storage_latency_valid(UINT16 latency_requirement) {
+  switch (latency_requirement) {
+    case ER_APP_STORAGE_LATENCY_BULK:
+    case ER_APP_STORAGE_LATENCY_INTERACTIVE:
       return 1u;
     default:
       return 0u;
@@ -1300,6 +1335,91 @@ UINT8 er_app_prepare_launch_allocation(const ErCryptoProvider* crypto, const ErA
   return er_crypto_hash(crypto, g_app_launch_allocation_domain,
                         (UINTN)(sizeof(g_app_launch_allocation_domain) - 1u),
                         spans, ER_APP_IDENTITY_BUDGET_SPAN_COUNT, &out_allocation->allocation_id);
+}
+
+UINT8 er_app_prepare_storage_allocation(const ErCryptoProvider* crypto,
+                                        const ErAppIdentity* identity,
+                                        const ErAppBudget* budget,
+                                        const ErHash* medium_id,
+                                        UINT64 medium_total_blocks,
+                                        UINT64 block_base,
+                                        UINT64 block_count,
+                                        UINT32 block_bytes,
+                                        UINT16 persistence_requirement,
+                                        UINT16 latency_requirement,
+                                        ErAppStorageAllocation* out_allocation) {
+  UINT8 fields[ER_APP_STORAGE_ALLOCATION_FIELD_BYTES];
+  ErByteSpan spans[ER_APP_STORAGE_ALLOCATION_SPAN_COUNT];
+  UINT64 storage_bytes;
+  UINT32 requirements;
+
+  if (crypto == 0 || identity == 0 || budget == 0 || medium_id == 0 ||
+      out_allocation == 0 ||
+      identity->abi_version != ER_APP_ABI_VERSION ||
+      budget->abi_version != ER_APP_ABI_VERSION ||
+      budget->app_kind != ER_APP_KIND_UI_APP ||
+      budget->max_storage_bytes == 0u ||
+      medium_total_blocks == 0u ||
+      block_count == 0u ||
+      block_bytes == 0u ||
+      er_hash_nonzero(medium_id) == 0u ||
+      er_app_storage_persistence_valid(persistence_requirement) == 0u ||
+      er_app_storage_latency_valid(latency_requirement) == 0u) {
+    return 0u;
+  }
+  if (block_base > medium_total_blocks ||
+      block_count > (medium_total_blocks - block_base)) {
+    return 0u;
+  }
+  if ((block_bytes & (block_bytes - 1u)) != 0u ||
+      block_count > (g_app_uint64_max / (UINT64)block_bytes)) {
+    return 0u;
+  }
+  storage_bytes = block_count * (UINT64)block_bytes;
+  if (storage_bytes != budget->max_storage_bytes) {
+    return 0u;
+  }
+
+  er_mem_zero((UINT8*)out_allocation, (UINTN)sizeof(*out_allocation));
+  out_allocation->abi_version = ER_APP_ABI_VERSION;
+  out_allocation->admission_id = identity->admission_id;
+  out_allocation->budget_id = budget->budget_id;
+  out_allocation->medium_id = *medium_id;
+  out_allocation->app_node_id = identity->app_node_id;
+  out_allocation->block_base = block_base;
+  out_allocation->block_count = block_count;
+  out_allocation->block_bytes = block_bytes;
+  out_allocation->persistence_requirement = persistence_requirement;
+  out_allocation->latency_requirement = latency_requirement;
+
+  requirements =
+      ((UINT32)persistence_requirement << (ER_APP_U16_FIELD_BYTES * ER_APP_BYTE_BITS)) |
+      (UINT32)latency_requirement;
+  er_app_put_be64(&fields[ER_APP_STORAGE_ALLOCATION_BLOCK_BASE_OFFSET],
+                  block_base);
+  er_app_put_be64(&fields[ER_APP_STORAGE_ALLOCATION_BLOCK_COUNT_OFFSET],
+                  block_count);
+  er_app_put_be64(&fields[ER_APP_STORAGE_ALLOCATION_BLOCK_BYTES_OFFSET],
+                  (UINT64)block_bytes);
+  er_app_put_be64(&fields[ER_APP_STORAGE_ALLOCATION_REQUIREMENTS_OFFSET],
+                  (UINT64)requirements);
+  spans[ER_APP_STORAGE_ALLOCATION_APP_SPAN].bytes = identity->app_node_id.bytes;
+  spans[ER_APP_STORAGE_ALLOCATION_APP_SPAN].len = ER_NODE_ID_LEN;
+  spans[ER_APP_STORAGE_ALLOCATION_ADMISSION_SPAN].bytes =
+      identity->admission_id.bytes;
+  spans[ER_APP_STORAGE_ALLOCATION_ADMISSION_SPAN].len = ER_HASH_LEN;
+  spans[ER_APP_STORAGE_ALLOCATION_BUDGET_SPAN].bytes = budget->budget_id.bytes;
+  spans[ER_APP_STORAGE_ALLOCATION_BUDGET_SPAN].len = ER_HASH_LEN;
+  spans[ER_APP_STORAGE_ALLOCATION_MEDIUM_SPAN].bytes = medium_id->bytes;
+  spans[ER_APP_STORAGE_ALLOCATION_MEDIUM_SPAN].len = ER_HASH_LEN;
+  spans[ER_APP_STORAGE_ALLOCATION_FIELDS_SPAN].bytes = fields;
+  spans[ER_APP_STORAGE_ALLOCATION_FIELDS_SPAN].len = (UINTN)sizeof(fields);
+  return er_crypto_hash(crypto,
+                        g_app_storage_allocation_domain,
+                        (UINTN)(sizeof(g_app_storage_allocation_domain) - 1u),
+                        spans,
+                        ER_APP_STORAGE_ALLOCATION_SPAN_COUNT,
+                        &out_allocation->allocation_id);
 }
 
 UINT8 er_app_prepare_execution_jurisdiction(const ErCryptoProvider* crypto,
