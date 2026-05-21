@@ -2,7 +2,7 @@
 #define ER_TLS_H
 
 /*
- * Purpose: provide the minimal TLS compatibility handshake core.
+ * Purpose: provide the minimal TPM-backed TLS handshake core.
  * Intention: keep cryptographic operations behind TPM-backed er_tls_tpm calls.
  */
 

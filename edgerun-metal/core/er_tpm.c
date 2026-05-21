@@ -1355,9 +1355,9 @@ UINT8 er_tpm_parse_command_profile_response(const UINT8* response,
   return (UINT8)(cursor == response_len);
 }
 
-UINT8 er_tpm_tls_compat_profile_supported(const ErTpm2Info* info,
-                                          const ErTpmAlgorithmProfile* algorithms,
-                                          const ErTpmCommandProfile* commands) {
+UINT8 er_tpm_tls_profile_supported(const ErTpm2Info* info,
+                                   const ErTpmAlgorithmProfile* algorithms,
+                                   const ErTpmCommandProfile* commands) {
   UINT16 record_mode;
 
   if (info == 0 || algorithms == 0 || commands == 0 ||

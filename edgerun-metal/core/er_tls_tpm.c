@@ -233,7 +233,7 @@ UINT8 er_tls_tpm_init(ErTlsTpm* tls_tpm,
   UINT16 mode;
 
   if (tls_tpm == 0 || transact == 0 ||
-      er_tpm_tls_compat_profile_supported(info, algorithms, commands) == 0u ||
+      er_tpm_tls_profile_supported(info, algorithms, commands) == 0u ||
       er_tpm_select_record_cipher_mode(algorithms, &mode) == 0u) {
     return 0u;
   }

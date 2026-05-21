@@ -2,9 +2,8 @@
 #define ER_UI_GOP_RENDERER_H
 
 /*
- * Purpose: compatibility declarations for the GOP-backed display adapter and legacy surface names.
- * Intention: new software surface code should include er_ui_surface_renderer.h so GOP remains
- * only the firmware scanout provider, not the UI renderer model.
+ * Purpose: GOP-backed display adapter declarations.
+ * Intention: GOP remains only the firmware scanout provider; UI core owns surface rendering.
  */
 
 #include "er_types.h"
@@ -12,98 +11,23 @@
 #include "er_ui_scene.h"
 #include "vr_font.h"
 
-typedef ErUiSurfacePixelFormat ErUiGopPixelFormat;
-enum {
-  ER_UI_GOP_PIXEL_RGBX = ER_UI_SURFACE_PIXEL_RGBX,
-  ER_UI_GOP_PIXEL_BGRX = ER_UI_SURFACE_PIXEL_BGRX
-};
-typedef ErUiSurface ErUiGopSurface;
-typedef ErUiSurfaceMode ErUiGopMode;
-typedef ErUiSurfaceAlphaAtlas ErUiGopAlphaAtlas;
-typedef ErUiSurfaceRenderStats ErUiGopRenderStats;
-typedef ErUiSurfaceFrameBudget ErUiGopFrameBudget;
-typedef ErUiSurfaceBudgetViolation ErUiGopBudgetViolation;
-typedef ErUiSurfaceFrameBudgetViolation ErUiGopFrameBudgetViolation;
-typedef ErUiSurfaceTilePlan ErUiGopTilePlan;
-typedef ErUiSurfaceBandwidthPlan ErUiGopBandwidthPlan;
-typedef ErUiSurfaceMemoryPlan ErUiGopMemoryPlan;
-typedef ErUiSurfaceMemoryBudget ErUiGopMemoryBudget;
-typedef ErUiSurfaceMemoryBudgetViolation ErUiGopMemoryBudgetViolation;
-typedef ErUiSurfaceDirtyTileList ErUiGopDirtyTileList;
-typedef ErUiSurfacePixelRect ErUiGopPixelRect;
-typedef ErUiSurfaceFrameState ErUiGopFrameState;
-
-UINT8 er_ui_gop_surface_valid(const ErUiGopSurface* surface);
-UINT8 er_ui_gop_mode_valid(const ErUiGopMode* mode);
-UINT8 er_ui_gop_tile_plan_from_mode(const ErUiGopMode* mode, UINT32 tile_width, UINT32 tile_height,
-                                    UINT32 max_dirty_tiles, ErUiGopTilePlan* out_plan);
-UINT8 er_ui_gop_tile_plan(const ErUiGopSurface* surface, UINT32 tile_width, UINT32 tile_height,
-                          UINT32 max_dirty_tiles, ErUiGopTilePlan* out_plan);
-UINT8 er_ui_gop_bandwidth_plan_from_mode(const ErUiGopMode* mode, UINT32 overdraw_budget,
-                                         ErUiGopBandwidthPlan* out_plan);
-UINT8 er_ui_gop_memory_plan_from_tile_plan(const ErUiGopTilePlan* tile_plan, UINT32 backing_buffer_count,
-                                           UINT64 command_bytes, UINT64 glyph_cache_bytes,
-                                           UINT64 surface_bytes, ErUiGopMemoryPlan* out_plan);
-UINT8 er_ui_gop_memory_plan_fits_budget(ErUiGopMemoryPlan plan, ErUiGopMemoryBudget budget);
-UINT8 er_ui_gop_memory_plan_first_budget_violation(ErUiGopMemoryPlan plan, ErUiGopMemoryBudget budget,
-                                                   ErUiGopMemoryBudgetViolation* out_violation);
-UINT8 er_ui_gop_tile_rect(const ErUiGopTilePlan* plan, UINT32 tile_id, ErUiGopPixelRect* out_rect);
-UINT8 er_ui_gop_dirty_tiles_reset(const ErUiGopTilePlan* plan, UINT8* tile_marks,
-                                  UINT64 tile_mark_count, ErUiGopDirtyTileList* list);
-UINT8 er_ui_gop_dirty_tiles_mark_rect(const ErUiGopTilePlan* plan, float x, float y, float w, float h,
-                                      UINT8* tile_marks, UINT64 tile_mark_count,
-                                      ErUiGopDirtyTileList* list);
-UINT8 er_ui_gop_dirty_tiles_mark_scene(const ErUiGopTilePlan* plan, const er_ui_scene_t* scene,
-                                       UINT8* tile_marks, UINT64 tile_mark_count,
-                                       ErUiGopDirtyTileList* list);
-UINT8 er_ui_gop_dirty_tiles_mark_scene_diff(const ErUiGopTilePlan* plan, const er_ui_scene_t* prev,
-                                            const er_ui_scene_t* next, UINT8* tile_marks,
-                                            UINT64 tile_mark_count, ErUiGopDirtyTileList* list);
-void er_ui_gop_frame_state_reset(ErUiGopFrameState* state);
-UINT8 er_ui_gop_frame_dirty_tiles(const ErUiGopFrameState* state, const ErUiGopTilePlan* plan,
-                                  const er_ui_scene_t* prev, const er_ui_scene_t* next,
-                                  UINT8* tile_marks, UINT64 tile_mark_count,
-                                  ErUiGopDirtyTileList* list);
-void er_ui_gop_frame_state_commit(ErUiGopFrameState* state);
-ErUiGopFrameBudget er_ui_gop_frame_budget_from_plan(const ErUiGopTilePlan* tile_plan,
-                                                    er_ui_scene_budget_t scene_budget,
-                                                    UINT32 overdraw_budget);
-UINT8 er_ui_gop_render_stats_fits_budget(ErUiGopRenderStats stats, ErUiGopFrameBudget budget);
-UINT8 er_ui_gop_render_stats_first_budget_violation(ErUiGopRenderStats stats, ErUiGopFrameBudget budget,
-                                                    ErUiGopFrameBudgetViolation* out_violation);
-UINT32 er_ui_gop_pack_rgb(ErUiGopPixelFormat format, UINT8 r, UINT8 g, UINT8 b);
-UINT8 er_ui_gop_surface_clear(ErUiGopSurface* surface, er_ui_color4_t color);
-UINT8 er_ui_gop_surface_render_scene(ErUiGopSurface* surface, const er_ui_scene_t* scene);
-UINT8 er_ui_gop_surface_render_scene_with_atlas(ErUiGopSurface* surface, const er_ui_scene_t* scene, const ErUiGopAlphaAtlas* atlas);
-UINT8 er_ui_gop_surface_render_scene_with_font(ErUiGopSurface* surface, const er_ui_scene_t* scene, const vr_font_face_t* font);
-UINT8 er_ui_gop_surface_render_scene_with_font_stats(ErUiGopSurface* surface, const er_ui_scene_t* scene, const vr_font_face_t* font, ErUiGopRenderStats* out_stats);
-UINT8 er_ui_gop_surface_render_scene_tile_with_font_stats(ErUiGopSurface* surface, const er_ui_scene_t* scene,
-                                                          const vr_font_face_t* font,
-                                                          const ErUiGopTilePlan* plan, UINT32 tile_id,
-                                                          ErUiGopRenderStats* out_stats);
-UINT8 er_ui_gop_surface_render_scene_dirty_tiles_with_font_stats(ErUiGopSurface* surface,
-                                                                 const er_ui_scene_t* scene,
-                                                                 const vr_font_face_t* font,
-                                                                 const ErUiGopTilePlan* plan,
-                                                                 const ErUiGopDirtyTileList* dirty_tiles,
-                                                                 ErUiGopRenderStats* out_stats);
-
 UINT8 er_ui_gop_renderer_init(EFI_SYSTEM_TABLE* st);
 UINT8 er_ui_gop_renderer_ready(void);
-UINT8 er_ui_gop_renderer_mode(ErUiGopMode* out_mode);
+UINT8 er_ui_gop_renderer_mode(ErUiSurfaceMode* out_mode);
 UINT8 er_ui_gop_renderer_tile_plan(UINT32 tile_width, UINT32 tile_height,
-                                    UINT32 max_dirty_tiles, ErUiGopTilePlan* out_plan);
+                                    UINT32 max_dirty_tiles, ErUiSurfaceTilePlan* out_plan);
 UINT8 er_ui_gop_renderer_render_scene(const er_ui_scene_t* scene);
-UINT8 er_ui_gop_renderer_render_scene_with_atlas(const er_ui_scene_t* scene, const ErUiGopAlphaAtlas* atlas);
+UINT8 er_ui_gop_renderer_render_scene_with_atlas(const er_ui_scene_t* scene, const ErUiSurfaceAlphaAtlas* atlas);
 UINT8 er_ui_gop_renderer_render_scene_with_font(const er_ui_scene_t* scene, const vr_font_face_t* font);
-UINT8 er_ui_gop_renderer_render_scene_with_font_stats(const er_ui_scene_t* scene, const vr_font_face_t* font, ErUiGopRenderStats* out_stats);
+UINT8 er_ui_gop_renderer_render_scene_with_font_stats(const er_ui_scene_t* scene, const vr_font_face_t* font,
+                                                      ErUiSurfaceRenderStats* out_stats);
 UINT8 er_ui_gop_renderer_render_scene_tile_with_font_stats(const er_ui_scene_t* scene, const vr_font_face_t* font,
-                                                           const ErUiGopTilePlan* plan, UINT32 tile_id,
-                                                           ErUiGopRenderStats* out_stats);
+                                                           const ErUiSurfaceTilePlan* plan, UINT32 tile_id,
+                                                           ErUiSurfaceRenderStats* out_stats);
 UINT8 er_ui_gop_renderer_render_scene_dirty_tiles_with_font_stats(const er_ui_scene_t* scene,
                                                                   const vr_font_face_t* font,
-                                                                  const ErUiGopTilePlan* plan,
-                                                                  const ErUiGopDirtyTileList* dirty_tiles,
-                                                                  ErUiGopRenderStats* out_stats);
+                                                                  const ErUiSurfaceTilePlan* plan,
+                                                                  const ErUiSurfaceDirtyTileList* dirty_tiles,
+                                                                  ErUiSurfaceRenderStats* out_stats);
 
 #endif
