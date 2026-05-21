@@ -38,6 +38,7 @@ edgerun-metal/core/er_relay_packet.h
 edgerun-metal/core/er_render_endpoint.h
 edgerun-metal/core/er_seal.h
 edgerun-metal/core/er_storage_endpoint.h
+edgerun-metal/core/er_storage_medium.h
 edgerun-metal/core/er_tls.h
 edgerun-metal/core/er_tls_tpm.h
 edgerun-metal/core/er_tpm.h
@@ -56,6 +57,7 @@ edgerun-metal/core/er_work_route.h
 edgerun-metal/core/er_zfs.h
 edgerun-metal/core/erwire.h
 edgerun-metal/core/wasm_vm.h
+edgerun-object/include/er_object.h
 edgerun-ui-core/include/er_ui_assets.h
 edgerun-ui-core/include/er_ui_components.h
 edgerun-ui-core/include/er_ui_icon.h

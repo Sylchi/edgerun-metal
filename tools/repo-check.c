@@ -168,6 +168,7 @@ static int erc_is_public_header_path(const char* path) {
       strncmp(path, "edgerun-ui-core/include/", strlen("edgerun-ui-core/include/")) == 0 ||
       strncmp(path, "edgerun-ui-core/varfont/include/", strlen("edgerun-ui-core/varfont/include/")) == 0 ||
       strncmp(path, "edgerun-crypto/include/", strlen("edgerun-crypto/include/")) == 0 ||
+      strncmp(path, "edgerun-object/include/", strlen("edgerun-object/include/")) == 0 ||
       strncmp(path, "storage/include/", strlen("storage/include/")) == 0 ||
       strncmp(path, "devices/", strlen("devices/")) == 0) {
     return 1;
