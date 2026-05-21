@@ -8,6 +8,7 @@
  */
 
 #include "er_crypto.h"
+#include "er_net_frame.h"
 #include "er_types.h"
 #include "er_vfs.h"
 
@@ -15,8 +16,14 @@
 #define ER_PI_ZERO_W_V1_1_OTA_ERWIRE_VERSION 1u
 #define ER_PI_ZERO_W_V1_1_OTA_ERWIRE_HEADER_BYTES 32u
 #define ER_PI_ZERO_W_V1_1_OTA_ERWIRE_KIND_VFS_OBJECT_PACKET 48u
+#define ER_PI_ZERO_W_V1_1_OTA_ERWIRE_FLAG_FIRST 0x0001u
+#define ER_PI_ZERO_W_V1_1_OTA_ERWIRE_FLAG_LAST 0x0002u
+#define ER_PI_ZERO_W_V1_1_OTA_ERWIRE_STREAM_ID 0x45525a57u
 #define ER_PI_ZERO_W_V1_1_OTA_ERWIRE_PAYLOAD_BYTES_MAX \
   (ER_VFS_OBJECT_PACKET_HEADER_BYTES + ER_VFS_OBJECT_PACKET_BYTES)
+#define ER_PI_ZERO_W_V1_1_OTA_ERWIRE_PACKET_BYTES_MAX \
+  (ER_PI_ZERO_W_V1_1_OTA_ERWIRE_HEADER_BYTES + \
+   ER_PI_ZERO_W_V1_1_OTA_ERWIRE_PAYLOAD_BYTES_MAX)
 #define ER_PI_ZERO_W_V1_1_OTA_BLOCK_BYTES 512u
 #define ER_PI_ZERO_W_V1_1_OTA_PACKET_CAPACITY 64u
 #define ER_PI_ZERO_W_V1_1_OTA_OBJECT_BYTES_MAX \
@@ -65,6 +72,14 @@ UINT8 er_pi_zero_w_v1_1_ota_decode_object_packet_payload(
 UINT8 er_pi_zero_w_v1_1_ota_receive_frame(
     ErPiZeroWV11OtaState* state,
     const ErCryptoProvider* crypto,
+    const UINT8* frame,
+    UINT32 frame_len,
+    ErPiZeroWV11OtaWriteBlockFn write_block,
+    void* write_ctx);
+UINT8 er_pi_zero_w_v1_1_ota_receive_l2_frame(
+    ErPiZeroWV11OtaState* state,
+    const ErCryptoProvider* crypto,
+    const UINT8 expected_dst_mac[ER_NET_MAC_LEN],
     const UINT8* frame,
     UINT32 frame_len,
     ErPiZeroWV11OtaWriteBlockFn write_block,

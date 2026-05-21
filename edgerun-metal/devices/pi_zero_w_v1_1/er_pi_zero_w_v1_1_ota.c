@@ -12,6 +12,9 @@ enum {
   ER_PI_ZERO_W_V1_1_OTA_ERWIRE_PAYLOAD_LEN_OFFSET = 20u,
   ER_PI_ZERO_W_V1_1_OTA_ERWIRE_PAYLOAD_CRC_OFFSET = 24u,
   ER_PI_ZERO_W_V1_1_OTA_ERWIRE_RESERVED_OFFSET = 28u,
+  ER_PI_ZERO_W_V1_1_OTA_ETH_DST_OFFSET = 0u,
+  ER_PI_ZERO_W_V1_1_OTA_ETH_TYPE_OFFSET = 12u,
+  ER_PI_ZERO_W_V1_1_OTA_BROADCAST_BYTE = 0xffu,
   ER_PI_ZERO_W_V1_1_OTA_U32_BYTE3_OFFSET = 3u,
   ER_PI_ZERO_W_V1_1_OTA_CRC32_INITIAL = 0xffffffffu,
   ER_PI_ZERO_W_V1_1_OTA_CRC32_POLY = 0xedb88320u,
@@ -47,12 +50,43 @@ static UINT32 er_pi_zero_w_v1_1_ota_get_le32(const UINT8* bytes) {
           ER_PI_ZERO_W_V1_1_OTA_U32_BYTE3_SHIFT);
 }
 
+static UINT16 er_pi_zero_w_v1_1_ota_get_be16(const UINT8* bytes) {
+  return (UINT16)(((UINT16)bytes[0] << ER_PI_ZERO_W_V1_1_OTA_U16_HIGH_SHIFT) |
+                  (UINT16)bytes[1]);
+}
+
 static void er_pi_zero_w_v1_1_ota_zero(UINT8* bytes, UINT32 len) {
   UINT32 i;
 
   for (i = 0u; i < len; ++i) {
     bytes[i] = 0u;
   }
+}
+
+static UINT8 er_pi_zero_w_v1_1_ota_dst_is_broadcast(
+    const UINT8 dst_mac[ER_NET_MAC_LEN]) {
+  UINT32 i;
+
+  if (dst_mac == 0) {
+    return 0u;
+  }
+  for (i = 0u; i < ER_NET_MAC_LEN; ++i) {
+    if (dst_mac[i] != ER_PI_ZERO_W_V1_1_OTA_BROADCAST_BYTE) {
+      return 0u;
+    }
+  }
+  return 1u;
+}
+
+static UINT8 er_pi_zero_w_v1_1_ota_l2_dst_matches(
+    const UINT8 frame_dst_mac[ER_NET_MAC_LEN],
+    const UINT8 expected_dst_mac[ER_NET_MAC_LEN]) {
+  if (frame_dst_mac == 0 || expected_dst_mac == 0) {
+    return 0u;
+  }
+  return (UINT8)(
+      er_pi_zero_w_v1_1_ota_dst_is_broadcast(frame_dst_mac) != 0u ||
+      er_mem_equal(frame_dst_mac, expected_dst_mac, ER_NET_MAC_LEN) != 0u);
 }
 
 void er_pi_zero_w_v1_1_ota_reset(ErPiZeroWV11OtaState* state) {
@@ -348,4 +382,42 @@ UINT8 er_pi_zero_w_v1_1_ota_receive_frame(
     return 1u;
   }
   return er_pi_zero_w_v1_1_ota_commit_object(state, write_block, write_ctx);
+}
+
+UINT8 er_pi_zero_w_v1_1_ota_receive_l2_frame(
+    ErPiZeroWV11OtaState* state,
+    const ErCryptoProvider* crypto,
+    const UINT8 expected_dst_mac[ER_NET_MAC_LEN],
+    const UINT8* frame,
+    UINT32 frame_len,
+    ErPiZeroWV11OtaWriteBlockFn write_block,
+    void* write_ctx) {
+  const UINT8* erwire_frame;
+  UINT32 erwire_frame_len;
+
+  if (state == 0 ||
+      crypto == 0 ||
+      expected_dst_mac == 0 ||
+      frame == 0 ||
+      frame_len <= ER_NET_ETH_HEADER_LEN ||
+      frame_len > ER_NET_FRAME_MAX ||
+      er_pi_zero_w_v1_1_ota_l2_dst_matches(
+          frame + ER_PI_ZERO_W_V1_1_OTA_ETH_DST_OFFSET,
+          expected_dst_mac) == 0u ||
+      er_pi_zero_w_v1_1_ota_get_be16(
+          frame + ER_PI_ZERO_W_V1_1_OTA_ETH_TYPE_OFFSET) !=
+          ER_NET_ETH_TYPE_EDGERUN) {
+    if (state != 0) {
+      state->status = ER_PI_ZERO_W_V1_1_OTA_STATUS_REJECTED;
+    }
+    return 0u;
+  }
+  erwire_frame = frame + ER_NET_ETH_HEADER_LEN;
+  erwire_frame_len = frame_len - ER_NET_ETH_HEADER_LEN;
+  return er_pi_zero_w_v1_1_ota_receive_frame(state,
+                                             crypto,
+                                             erwire_frame,
+                                             erwire_frame_len,
+                                             write_block,
+                                             write_ctx);
 }

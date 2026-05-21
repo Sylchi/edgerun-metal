@@ -26,32 +26,19 @@
 
 #include "er_crypto_blake3.h"
 #include "er_mem.h"
+#include "er_net_frame.h"
 #include "er_pi_zero_w_v1_1_ota.h"
 #include "er_vfs.h"
 
-#define ER_PI_NODE_UPDATE_ETH_TYPE 0x88b5u
 #define ER_PI_NODE_UPDATE_MAX_OBJECT_BYTES \
   (ER_PI_ZERO_W_V1_1_OTA_PACKET_CAPACITY * ER_VFS_OBJECT_PACKET_BYTES)
-#define ER_PI_NODE_UPDATE_ERWIRE_MAGIC 0x31575245u
-#define ER_PI_NODE_UPDATE_ERWIRE_VERSION 1u
-#define ER_PI_NODE_UPDATE_ERWIRE_HEADER_BYTES 32u
-#define ER_PI_NODE_UPDATE_ERWIRE_KIND_VFS_OBJECT_PACKET 48u
-#define ER_PI_NODE_UPDATE_ERWIRE_FLAG_FIRST 0x0001u
-#define ER_PI_NODE_UPDATE_ERWIRE_FLAG_LAST 0x0002u
-#define ER_PI_NODE_UPDATE_ERWIRE_STREAM_ID 0x45525a57u
 #define ER_PI_NODE_UPDATE_L2_SEND_SUPPORTED 1u
-#define ER_PI_NODE_UPDATE_ERWIRE_PAYLOAD_BYTES_MAX \
-  (ER_VFS_OBJECT_PACKET_HEADER_BYTES + ER_VFS_OBJECT_PACKET_BYTES)
-#define ER_PI_NODE_UPDATE_ERWIRE_PACKET_BYTES_MAX \
-  (ER_PI_NODE_UPDATE_ERWIRE_HEADER_BYTES + \
-   ER_PI_NODE_UPDATE_ERWIRE_PAYLOAD_BYTES_MAX)
 #define ER_PI_NODE_UPDATE_CRC32_INITIAL 0xffffffffu
 #define ER_PI_NODE_UPDATE_CRC32_POLY 0xedb88320u
 #define ER_PI_NODE_UPDATE_CRC32_BITS_PER_BYTE 8u
 #define ER_PI_NODE_UPDATE_DEFAULT_REPEAT 1u
 #define ER_PI_NODE_UPDATE_MIN_ARGC 2
 #define ER_PI_NODE_UPDATE_MAX_REPEAT 32u
-#define ER_PI_NODE_UPDATE_ETH_HEADER_BYTES 14u
 #define ER_PI_NODE_UPDATE_ETH_DST_OFFSET 0u
 #define ER_PI_NODE_UPDATE_ETH_SRC_OFFSET 6u
 #define ER_PI_NODE_UPDATE_ETH_TYPE_OFFSET 12u
@@ -201,11 +188,11 @@ static int er_pi_node_update_read_file(const char* path,
 
 static void er_pi_node_update_put_eth_type(uint8_t* frame) {
   frame[ER_PI_NODE_UPDATE_ETH_TYPE_OFFSET] =
-      (uint8_t)((ER_PI_NODE_UPDATE_ETH_TYPE >>
+      (uint8_t)((ER_NET_ETH_TYPE_EDGERUN >>
                  ER_PI_NODE_UPDATE_ETH_TYPE_HIGH_SHIFT) &
                 ER_PI_NODE_UPDATE_BYTE_MASK);
   frame[ER_PI_NODE_UPDATE_ETH_TYPE_OFFSET + 1u] =
-      (uint8_t)(ER_PI_NODE_UPDATE_ETH_TYPE & ER_PI_NODE_UPDATE_BYTE_MASK);
+      (uint8_t)(ER_NET_ETH_TYPE_EDGERUN & ER_PI_NODE_UPDATE_BYTE_MASK);
 }
 
 static int er_pi_node_update_open_l2(const char* iface,
@@ -218,7 +205,7 @@ static int er_pi_node_update_open_l2(const char* iface,
   if (iface == 0 || out_fd == 0 || out_addr == 0 || src_mac == 0) {
     return 0;
   }
-  fd = socket(AF_PACKET, SOCK_RAW, htons(ER_PI_NODE_UPDATE_ETH_TYPE));
+  fd = socket(AF_PACKET, SOCK_RAW, htons(ER_NET_ETH_TYPE_EDGERUN));
   if (fd < 0) {
     perror("pi-node-update: socket");
     return 0;
@@ -339,25 +326,27 @@ static int er_pi_node_update_build_erwire(uint32_t seq,
   uint8_t* cursor = out_packet;
 
   if (payload == 0 || out_packet == 0 || out_packet_len == 0 ||
-      payload_len > ER_PI_NODE_UPDATE_ERWIRE_PAYLOAD_BYTES_MAX) {
+      payload_len > ER_PI_ZERO_W_V1_1_OTA_ERWIRE_PAYLOAD_BYTES_MAX) {
     return 0;
   }
-  er_pi_node_update_put_u32(&cursor, ER_PI_NODE_UPDATE_ERWIRE_MAGIC);
-  er_pi_node_update_put_u16(&cursor, ER_PI_NODE_UPDATE_ERWIRE_VERSION);
-  er_pi_node_update_put_u16(&cursor, ER_PI_NODE_UPDATE_ERWIRE_HEADER_BYTES);
-  er_pi_node_update_put_u32(&cursor, ER_PI_NODE_UPDATE_ERWIRE_STREAM_ID);
+  er_pi_node_update_put_u32(&cursor, ER_PI_ZERO_W_V1_1_OTA_ERWIRE_MAGIC);
+  er_pi_node_update_put_u16(&cursor, ER_PI_ZERO_W_V1_1_OTA_ERWIRE_VERSION);
+  er_pi_node_update_put_u16(&cursor,
+                            ER_PI_ZERO_W_V1_1_OTA_ERWIRE_HEADER_BYTES);
+  er_pi_node_update_put_u32(&cursor,
+                            ER_PI_ZERO_W_V1_1_OTA_ERWIRE_STREAM_ID);
   er_pi_node_update_put_u32(&cursor, seq);
   er_pi_node_update_put_u16(&cursor,
-                            ER_PI_NODE_UPDATE_ERWIRE_KIND_VFS_OBJECT_PACKET);
+                            ER_PI_ZERO_W_V1_1_OTA_ERWIRE_KIND_VFS_OBJECT_PACKET);
   er_pi_node_update_put_u16(&cursor,
-                            ER_PI_NODE_UPDATE_ERWIRE_FLAG_FIRST |
-                                ER_PI_NODE_UPDATE_ERWIRE_FLAG_LAST);
+                            ER_PI_ZERO_W_V1_1_OTA_ERWIRE_FLAG_FIRST |
+                                ER_PI_ZERO_W_V1_1_OTA_ERWIRE_FLAG_LAST);
   er_pi_node_update_put_u32(&cursor, payload_len);
   er_pi_node_update_put_u32(&cursor,
                             er_pi_node_update_crc32(payload, payload_len));
   er_pi_node_update_put_u32(&cursor, 0u);
   memcpy(cursor, payload, payload_len);
-  *out_packet_len = ER_PI_NODE_UPDATE_ERWIRE_HEADER_BYTES + payload_len;
+  *out_packet_len = ER_PI_ZERO_W_V1_1_OTA_ERWIRE_HEADER_BYTES + payload_len;
   return 1;
 }
 
@@ -366,13 +355,13 @@ static int er_pi_node_update_send_packet(int fd,
                                          const uint8_t src_mac[ETH_ALEN],
                                          const uint8_t* erwire_packet,
                                          uint32_t erwire_packet_len) {
-  uint8_t frame[ER_PI_NODE_UPDATE_ETH_HEADER_BYTES +
-                ER_PI_NODE_UPDATE_ERWIRE_PACKET_BYTES_MAX];
+  uint8_t frame[ER_NET_ETH_HEADER_LEN +
+                ER_PI_ZERO_W_V1_1_OTA_ERWIRE_PACKET_BYTES_MAX];
   uint32_t frame_len;
   ssize_t sent;
 
   if (addr == 0 || src_mac == 0 || erwire_packet == 0 ||
-      erwire_packet_len > ER_PI_NODE_UPDATE_ERWIRE_PACKET_BYTES_MAX) {
+      erwire_packet_len > ER_PI_ZERO_W_V1_1_OTA_ERWIRE_PACKET_BYTES_MAX) {
     return 0;
   }
   memset(frame + ER_PI_NODE_UPDATE_ETH_DST_OFFSET,
@@ -380,10 +369,10 @@ static int er_pi_node_update_send_packet(int fd,
          ETH_ALEN);
   memcpy(frame + ER_PI_NODE_UPDATE_ETH_SRC_OFFSET, src_mac, ETH_ALEN);
   er_pi_node_update_put_eth_type(frame);
-  memcpy(frame + ER_PI_NODE_UPDATE_ETH_HEADER_BYTES,
+  memcpy(frame + ER_NET_ETH_HEADER_LEN,
          erwire_packet,
          erwire_packet_len);
-  frame_len = ER_PI_NODE_UPDATE_ETH_HEADER_BYTES + erwire_packet_len;
+  frame_len = ER_NET_ETH_HEADER_LEN + erwire_packet_len;
   sent = sendto(fd,
                 frame,
                 frame_len,
@@ -436,8 +425,8 @@ static int er_pi_node_update_send_objects(
   for (repeat = 0u; repeat < config->repeat; ++repeat) {
     for (packet_index = 0u; packet_index < packet_count; ++packet_index) {
       ErVfsObjectPacket object_packet;
-      uint8_t payload[ER_PI_NODE_UPDATE_ERWIRE_PAYLOAD_BYTES_MAX];
-      uint8_t erwire_packet[ER_PI_NODE_UPDATE_ERWIRE_PACKET_BYTES_MAX];
+      uint8_t payload[ER_PI_ZERO_W_V1_1_OTA_ERWIRE_PAYLOAD_BYTES_MAX];
+      uint8_t erwire_packet[ER_PI_ZERO_W_V1_1_OTA_ERWIRE_PACKET_BYTES_MAX];
       uint32_t payload_len;
       uint32_t erwire_packet_len;
       uint32_t seq = (repeat * packet_count) + packet_index;

@@ -5,7 +5,25 @@ typedef struct {
   UINT8 bytes[4][ER_PI_ZERO_W_V1_1_OTA_BLOCK_BYTES];
 } TestPiZeroWV11OtaSink;
 
-#define PI_ZERO_W_V1_1_TEST_ERWIRE_STREAM_ID 0x45525a57u
+#define PI_ZERO_W_V1_1_TEST_SRC_MAC_0 0x02u
+#define PI_ZERO_W_V1_1_TEST_SRC_MAC_1 0x45u
+#define PI_ZERO_W_V1_1_TEST_SRC_MAC_2 0x52u
+#define PI_ZERO_W_V1_1_TEST_SRC_MAC_3 0x11u
+#define PI_ZERO_W_V1_1_TEST_SRC_MAC_4 0x00u
+#define PI_ZERO_W_V1_1_TEST_SRC_MAC_5 0x01u
+#define PI_ZERO_W_V1_1_TEST_DST_MAC_0 0x02u
+#define PI_ZERO_W_V1_1_TEST_DST_MAC_1 0x45u
+#define PI_ZERO_W_V1_1_TEST_DST_MAC_2 0x52u
+#define PI_ZERO_W_V1_1_TEST_DST_MAC_3 0x11u
+#define PI_ZERO_W_V1_1_TEST_DST_MAC_4 0x00u
+#define PI_ZERO_W_V1_1_TEST_DST_MAC_5 0x02u
+#define PI_ZERO_W_V1_1_TEST_OTHER_MAC_0 0x02u
+#define PI_ZERO_W_V1_1_TEST_OTHER_MAC_1 0x45u
+#define PI_ZERO_W_V1_1_TEST_OTHER_MAC_2 0x52u
+#define PI_ZERO_W_V1_1_TEST_OTHER_MAC_3 0x11u
+#define PI_ZERO_W_V1_1_TEST_OTHER_MAC_4 0x00u
+#define PI_ZERO_W_V1_1_TEST_OTHER_MAC_5 0x03u
+#define PI_ZERO_W_V1_1_TEST_BROADCAST_BYTE 0xffu
 
 static UINT8 test_pi_zero_w_v1_1_ota_write_block(
     void* ctx,
@@ -53,6 +71,37 @@ static void test_pi_zero_w_v1_1_ota_erwire_object_frame(
               1);
 }
 
+static void test_pi_zero_w_v1_1_ota_eth_frame(
+    const ErVfsObjectPacket* object_packet,
+    const UINT8 dst_mac[ER_NET_MAC_LEN],
+    UINT16 eth_type,
+    UINT8* out_frame,
+    UINT32* out_frame_len) {
+  static const UINT8 src_mac[ER_NET_MAC_LEN] = {
+      PI_ZERO_W_V1_1_TEST_SRC_MAC_0,
+      PI_ZERO_W_V1_1_TEST_SRC_MAC_1,
+      PI_ZERO_W_V1_1_TEST_SRC_MAC_2,
+      PI_ZERO_W_V1_1_TEST_SRC_MAC_3,
+      PI_ZERO_W_V1_1_TEST_SRC_MAC_4,
+      PI_ZERO_W_V1_1_TEST_SRC_MAC_5};
+  UINT8 erwire_frame[ERWIRE_HEADER_SIZE + ERWIRE_MAX_PAYLOAD];
+  UINT32 erwire_frame_len;
+
+  test_pi_zero_w_v1_1_ota_erwire_object_frame(object_packet,
+                                              erwire_frame,
+                                              &erwire_frame_len);
+  check_int64("pi zero w ota build l2 erwire frame",
+              er_net_build_eth_frame(src_mac,
+                                     dst_mac,
+                                     eth_type,
+                                     erwire_frame,
+                                     erwire_frame_len,
+                                     out_frame,
+                                     ER_NET_FRAME_MAX,
+                                     out_frame_len),
+              1);
+}
+
 static void test_pi_zero_w_v1_1_ota_receiver(void) {
   enum {
     PI_TEST_OTA_IMAGE_LEN = 1500u,
@@ -72,7 +121,7 @@ static void test_pi_zero_w_v1_1_ota_receiver(void) {
 
   er_crypto_blake3_provider(&crypto);
   er_mem_zero((UINT8*)&sink, (UINTN)sizeof(sink));
-  erwire_init(PI_ZERO_W_V1_1_TEST_ERWIRE_STREAM_ID);
+  erwire_init(ER_PI_ZERO_W_V1_1_OTA_ERWIRE_STREAM_ID);
   for (i = 0u; i < PI_TEST_OTA_IMAGE_LEN; ++i) {
     image[i] = (UINT8)(i * 17u + 3u);
   }
@@ -193,7 +242,7 @@ static void test_pi_zero_w_v1_1_ota_rejects_bad_sequence(void) {
 
   er_crypto_blake3_provider(&crypto);
   er_mem_zero((UINT8*)&sink, (UINTN)sizeof(sink));
-  erwire_init(PI_ZERO_W_V1_1_TEST_ERWIRE_STREAM_ID);
+  erwire_init(ER_PI_ZERO_W_V1_1_OTA_ERWIRE_STREAM_ID);
   for (i = 0u; i < PI_TEST_OTA_BAD_IMAGE_LEN; ++i) {
     image[i] = (UINT8)(0xa0u + i);
   }
@@ -224,4 +273,135 @@ static void test_pi_zero_w_v1_1_ota_rejects_bad_sequence(void) {
                state.status,
                ER_PI_ZERO_W_V1_1_OTA_STATUS_REJECTED);
   check_uint64("pi zero w ota rejected no write", sink.write_count, 0u);
+}
+
+static void test_pi_zero_w_v1_1_ota_l2_receiver(void) {
+  enum {
+    PI_TEST_OTA_L2_IMAGE_LEN = 64u
+  };
+
+  static const UINT8 local_mac[ER_NET_MAC_LEN] = {
+      PI_ZERO_W_V1_1_TEST_DST_MAC_0,
+      PI_ZERO_W_V1_1_TEST_DST_MAC_1,
+      PI_ZERO_W_V1_1_TEST_DST_MAC_2,
+      PI_ZERO_W_V1_1_TEST_DST_MAC_3,
+      PI_ZERO_W_V1_1_TEST_DST_MAC_4,
+      PI_ZERO_W_V1_1_TEST_DST_MAC_5};
+  static const UINT8 other_mac[ER_NET_MAC_LEN] = {
+      PI_ZERO_W_V1_1_TEST_OTHER_MAC_0,
+      PI_ZERO_W_V1_1_TEST_OTHER_MAC_1,
+      PI_ZERO_W_V1_1_TEST_OTHER_MAC_2,
+      PI_ZERO_W_V1_1_TEST_OTHER_MAC_3,
+      PI_ZERO_W_V1_1_TEST_OTHER_MAC_4,
+      PI_ZERO_W_V1_1_TEST_OTHER_MAC_5};
+  static const UINT8 broadcast_mac[ER_NET_MAC_LEN] = {
+      PI_ZERO_W_V1_1_TEST_BROADCAST_BYTE,
+      PI_ZERO_W_V1_1_TEST_BROADCAST_BYTE,
+      PI_ZERO_W_V1_1_TEST_BROADCAST_BYTE,
+      PI_ZERO_W_V1_1_TEST_BROADCAST_BYTE,
+      PI_ZERO_W_V1_1_TEST_BROADCAST_BYTE,
+      PI_ZERO_W_V1_1_TEST_BROADCAST_BYTE};
+  ErPiZeroWV11OtaState state;
+  TestPiZeroWV11OtaSink sink;
+  ErCryptoProvider crypto;
+  ErVfsObjectPacket object_packet;
+  UINT8 image[PI_TEST_OTA_L2_IMAGE_LEN];
+  UINT8 frame[ER_NET_FRAME_MAX];
+  UINT32 frame_len;
+  UINT32 i;
+
+  er_crypto_blake3_provider(&crypto);
+  erwire_init(ER_PI_ZERO_W_V1_1_OTA_ERWIRE_STREAM_ID);
+  for (i = 0u; i < PI_TEST_OTA_L2_IMAGE_LEN; ++i) {
+    image[i] = (UINT8)(0x30u + i);
+  }
+  check_int64("pi zero w ota prepare l2 object packet",
+              er_vfs_prepare_object_packet(&crypto,
+                                           image,
+                                           PI_TEST_OTA_L2_IMAGE_LEN,
+                                           0u,
+                                           0u,
+                                           1u,
+                                           &object_packet),
+              1);
+
+  er_pi_zero_w_v1_1_ota_reset(&state);
+  er_mem_zero((UINT8*)&sink, (UINTN)sizeof(sink));
+  test_pi_zero_w_v1_1_ota_eth_frame(&object_packet,
+                                    broadcast_mac,
+                                    ER_NET_ETH_TYPE_EDGERUN,
+                                    frame,
+                                    &frame_len);
+  check_int64("pi zero w ota receive broadcast l2 erwire",
+              er_pi_zero_w_v1_1_ota_receive_l2_frame(
+                  &state,
+                  &crypto,
+                  local_mac,
+                  frame,
+                  frame_len,
+                  test_pi_zero_w_v1_1_ota_write_block,
+                  &sink),
+              1);
+  check_uint64("pi zero w ota l2 broadcast committed",
+               state.status,
+               ER_PI_ZERO_W_V1_1_OTA_STATUS_COMMITTED);
+  check_uint64("pi zero w ota l2 broadcast writes", sink.write_count, 1u);
+
+  er_pi_zero_w_v1_1_ota_reset(&state);
+  er_mem_zero((UINT8*)&sink, (UINTN)sizeof(sink));
+  test_pi_zero_w_v1_1_ota_eth_frame(&object_packet,
+                                    local_mac,
+                                    ER_NET_ETH_TYPE_EDGERUN,
+                                    frame,
+                                    &frame_len);
+  check_int64("pi zero w ota receive local l2 erwire",
+              er_pi_zero_w_v1_1_ota_receive_l2_frame(
+                  &state,
+                  &crypto,
+                  local_mac,
+                  frame,
+                  frame_len,
+                  test_pi_zero_w_v1_1_ota_write_block,
+                  &sink),
+              1);
+
+  er_pi_zero_w_v1_1_ota_reset(&state);
+  test_pi_zero_w_v1_1_ota_eth_frame(&object_packet,
+                                    other_mac,
+                                    ER_NET_ETH_TYPE_EDGERUN,
+                                    frame,
+                                    &frame_len);
+  check_int64("pi zero w ota rejects l2 wrong destination",
+              er_pi_zero_w_v1_1_ota_receive_l2_frame(
+                  &state,
+                  &crypto,
+                  local_mac,
+                  frame,
+                  frame_len,
+                  test_pi_zero_w_v1_1_ota_write_block,
+                  &sink),
+              0);
+  check_uint64("pi zero w ota l2 wrong destination rejected",
+               state.status,
+               ER_PI_ZERO_W_V1_1_OTA_STATUS_REJECTED);
+
+  er_pi_zero_w_v1_1_ota_reset(&state);
+  test_pi_zero_w_v1_1_ota_eth_frame(&object_packet,
+                                    broadcast_mac,
+                                    ER_NET_ETH_TYPE_IPV4,
+                                    frame,
+                                    &frame_len);
+  check_int64("pi zero w ota rejects l2 wrong eth type",
+              er_pi_zero_w_v1_1_ota_receive_l2_frame(
+                  &state,
+                  &crypto,
+                  local_mac,
+                  frame,
+                  frame_len,
+                  test_pi_zero_w_v1_1_ota_write_block,
+                  &sink),
+              0);
+  check_uint64("pi zero w ota l2 wrong eth type rejected",
+               state.status,
+               ER_PI_ZERO_W_V1_1_OTA_STATUS_REJECTED);
 }
