@@ -171,6 +171,9 @@ typedef struct __attribute__((__may_alias__)) {
   void* type_slots;
   void* index_slots;
   uint8_t* cache;
+  uint8_t* block_scratch;
+  uint32_t block_backing;
+  uint32_t block_bytes;
   size_t blob_count;
   size_t key_count;
   size_t sorted_key_count;
@@ -349,6 +352,188 @@ static int er_store_add_u64(uint64_t a, uint64_t b, uint64_t* out) {
   }
   *out = a + b;
   return ER_OK;
+}
+
+static int er_store_power2_u32(uint32_t value) {
+  if (value == 0u) {
+    return 0;
+  }
+  return (value & (value - 1u)) == 0u;
+}
+
+static uint64_t er_store_initial_log_start(const ErStoreState* store) {
+  if (store->block_bytes <= 1u) {
+    return ER_STORE_SUPERBLOCK_SIZE;
+  }
+  return (uint64_t)store->block_bytes;
+}
+
+static int er_store_config_block_bytes(const er_store_config_t* config, uint32_t* out_backing,
+                                       uint32_t* out_block_bytes) {
+  uint32_t backing = ER_STORE_BLOCK_BACKING_BYTE_LOG;
+  uint32_t block_bytes = 1u;
+
+  if (out_backing == (uint32_t*)0 || out_block_bytes == (uint32_t*)0) {
+    return ER_ERR_BADARG;
+  }
+  if (config != (const er_store_config_t*)0) {
+    backing = config->block_backing;
+    block_bytes = config->block_bytes;
+  }
+  switch (backing) {
+    case ER_STORE_BLOCK_BACKING_BYTE_LOG:
+      if (block_bytes != 0u && block_bytes != 1u) {
+        return ER_ERR_BADARG;
+      }
+      block_bytes = 1u;
+      break;
+    case ER_STORE_BLOCK_BACKING_SDCARD:
+      if (block_bytes != 0u && block_bytes != ER_STORE_SDCARD_BLOCK_BYTES) {
+        return ER_ERR_BADARG;
+      }
+      block_bytes = ER_STORE_SDCARD_BLOCK_BYTES;
+      break;
+    case ER_STORE_BLOCK_BACKING_NVME:
+      if (block_bytes != 0u && block_bytes != ER_STORE_NVME_BLOCK_BYTES) {
+        return ER_ERR_BADARG;
+      }
+      block_bytes = ER_STORE_NVME_BLOCK_BYTES;
+      break;
+    case ER_STORE_BLOCK_BACKING_CUSTOM:
+      if (block_bytes < ER_STORE_ALIGN || er_store_power2_u32(block_bytes) == 0) {
+        return ER_ERR_BADARG;
+      }
+      break;
+    default:
+      return ER_ERR_BADARG;
+  }
+  *out_backing = backing;
+  *out_block_bytes = block_bytes;
+  return ER_OK;
+}
+
+//@optimizer-ignore-function block-backed IO maps byte log requests to fixed medium block operations
+static int er_store_io_size(ErStoreState* store, uint64_t* out_size) {
+  uint64_t size;
+
+  if (store->io.size(store->io.ctx, &size) != 0) {
+    return ER_ERR_IO;
+  }
+  if (store->block_bytes > 1u && (size & ((uint64_t)store->block_bytes - 1u)) != 0u) {
+    return ER_ERR_CORRUPT;
+  }
+  *out_size = size;
+  return ER_OK;
+}
+
+//@optimizer-ignore-function block-backed IO maps byte log requests to fixed medium block operations
+static int er_store_io_read(ErStoreState* store, uint64_t off, void* buf, size_t len) {
+  uint8_t* out = (uint8_t*)buf;
+  uint64_t io_size;
+  uint64_t end;
+  uint64_t block_off;
+  size_t in_block;
+  size_t take;
+
+  if (len == 0u) {
+    return ER_OK;
+  }
+  if (er_store_add_u64(off, (uint64_t)len, &end) != ER_OK) {
+    return ER_ERR_TOOBIG;
+  }
+  if (store->block_bytes <= 1u) {
+    return store->io.read_at(store->io.ctx, off, buf, len) == 0 ? ER_OK : ER_ERR_IO;
+  }
+  if (er_store_io_size(store, &io_size) != ER_OK || end > io_size) {
+    return ER_ERR_IO;
+  }
+  while (len != 0u) {
+    block_off = off & ~((uint64_t)store->block_bytes - 1u);
+    in_block = (size_t)(off - block_off);
+    take = (size_t)store->block_bytes - in_block;
+    if (take > len) {
+      take = len;
+    }
+    if (in_block == 0u && take == (size_t)store->block_bytes) {
+      if (store->io.read_at(store->io.ctx, block_off, out, take) != 0) {
+        return ER_ERR_IO;
+      }
+    } else {
+      if (store->io.read_at(store->io.ctx, block_off, store->block_scratch, store->block_bytes) != 0) {
+        return ER_ERR_IO;
+      }
+      er_store_copy(out, &store->block_scratch[in_block], take);
+    }
+    off += take;
+    out = &out[take];
+    len -= take;
+  }
+  return ER_OK;
+}
+
+//@optimizer-ignore-function block-backed IO maps byte log requests to fixed medium block operations
+static int er_store_io_write(ErStoreState* store, uint64_t off, const void* buf, size_t len) {
+  const uint8_t* in = (const uint8_t*)buf;
+  uint64_t io_size;
+  uint64_t end;
+  uint64_t block_off;
+  size_t in_block;
+  size_t take;
+
+  if (len == 0u) {
+    return ER_OK;
+  }
+  if (er_store_add_u64(off, (uint64_t)len, &end) != ER_OK) {
+    return ER_ERR_TOOBIG;
+  }
+  (void)end;
+  if (store->block_bytes <= 1u) {
+    return store->io.write_at(store->io.ctx, off, buf, len) == 0 ? ER_OK : ER_ERR_IO;
+  }
+  if (er_store_io_size(store, &io_size) != ER_OK) {
+    return ER_ERR_IO;
+  }
+  while (len != 0u) {
+    block_off = off & ~((uint64_t)store->block_bytes - 1u);
+    in_block = (size_t)(off - block_off);
+    take = (size_t)store->block_bytes - in_block;
+    if (take > len) {
+      take = len;
+    }
+    if (in_block == 0u && take == (size_t)store->block_bytes) {
+      if (store->io.write_at(store->io.ctx, block_off, in, take) != 0) {
+        return ER_ERR_IO;
+      }
+    } else {
+      if (block_off < io_size) {
+        if (store->io.read_at(store->io.ctx, block_off, store->block_scratch, store->block_bytes) != 0) {
+          return ER_ERR_IO;
+        }
+      } else {
+        er_store_zero(store->block_scratch, store->block_bytes);
+      }
+      er_store_copy(&store->block_scratch[in_block], in, take);
+      if (store->io.write_at(store->io.ctx, block_off, store->block_scratch, store->block_bytes) != 0) {
+        return ER_ERR_IO;
+      }
+    }
+    off += take;
+    in = &in[take];
+    len -= take;
+  }
+  return ER_OK;
+}
+
+static int er_store_io_sync(ErStoreState* store) {
+  return store->io.sync(store->io.ctx) == 0 ? ER_OK : ER_ERR_IO;
+}
+
+//@optimizer-ignore-function block-backed IO maps byte log truncation to fixed medium block operations
+static int er_store_io_truncate(ErStoreState* store, uint64_t size) {
+  if (store->block_bytes > 1u && (size & ((uint64_t)store->block_bytes - 1u)) != 0u) {
+    return ER_ERR_CORRUPT;
+  }
+  return store->io.truncate(store->io.ctx, size) == 0 ? ER_OK : ER_ERR_IO;
 }
 
 //@optimizer-ignore-function bounded key scanning intentionally indexes caller key bytes
@@ -936,13 +1121,13 @@ static int er_store_write_superblock(ErStoreState* store) {
   er_store_store64(&superblock[ER_STORE_SUPER_LOG_END_OFF], store->log_end);
   er_store_copy(&superblock[ER_STORE_SUPER_ROOT_HASH_OFF], store->last_record_hash, ER_HASH_SIZE);
   er_store_store32(&superblock[ER_STORE_SUPER_CRC_OFF], er_store_crc32(superblock, ER_STORE_SUPER_CRC_OFF));
-  rc = store->io.write_at(store->io.ctx, 0u, superblock, sizeof(superblock));
-  if (rc != 0) {
-    return ER_ERR_IO;
+  rc = er_store_io_write(store, 0u, superblock, sizeof(superblock));
+  if (rc != ER_OK) {
+    return rc;
   }
-  rc = store->io.sync(store->io.ctx);
-  if (rc != 0) {
-    return ER_ERR_IO;
+  rc = er_store_io_sync(store);
+  if (rc != ER_OK) {
+    return rc;
   }
   store->superblock_dirty = 0;
   return ER_OK;
@@ -952,7 +1137,7 @@ static int er_store_sync_pending_records(ErStoreState* store) {
   if (store->sync_pending == 0) {
     return ER_OK;
   }
-  if (store->io.sync(store->io.ctx) != 0) {
+  if (er_store_io_sync(store) != ER_OK) {
     return ER_ERR_IO;
   }
   store->sync_pending = 0;
@@ -989,7 +1174,7 @@ static int er_store_read_superblock(ErStoreState* store, uint64_t io_size) {
   if (io_size < ER_STORE_SUPERBLOCK_SIZE) {
     return ER_ERR_CORRUPT;
   }
-  if (store->io.read_at(store->io.ctx, 0u, superblock, sizeof(superblock)) != 0) {
+  if (er_store_io_read(store, 0u, superblock, sizeof(superblock)) != ER_OK) {
     return ER_ERR_IO;
   }
   if (superblock[ER_BYTE0] != ER_STORE_MAGIC_0 || superblock[ER_BYTE1] != ER_STORE_MAGIC_1 ||
@@ -1006,7 +1191,7 @@ static int er_store_read_superblock(ErStoreState* store, uint64_t io_size) {
     return ER_ERR_CORRUPT;
   }
   store->log_start = er_store_load64(&superblock[ER_STORE_SUPER_LOG_START_OFF]);
-  if (store->log_start != ER_STORE_SUPERBLOCK_SIZE || store->log_start > io_size) {
+  if (store->log_start != er_store_initial_log_start(store) || store->log_start > io_size) {
     return ER_ERR_CORRUPT;
   }
   return ER_OK;
@@ -1027,7 +1212,7 @@ static int er_store_hash_payload(ErStoreState* store,
   er_blake3_init(&hasher);
   while (remaining != 0u) {
     take = remaining > ER_STORE_VERIFY_CHUNK ? ER_STORE_VERIFY_CHUNK : (size_t)remaining;
-    if (store->io.read_at(store->io.ctx, off, chunk, take) != 0) {
+    if (er_store_io_read(store, off, chunk, take) != ER_OK) {
       return ER_ERR_IO;
     }
     if (er_blake3_update(&hasher, chunk, take) == 0u) {
@@ -1053,7 +1238,7 @@ static int er_store_apply_index_payload(ErStoreState* store, uint64_t payload_of
       payload_len > (ER_STORE_INDEX_PAYLOAD_OVERHEAD + ER_STORE_MAX_KEY)) {
     return ER_ERR_CORRUPT;
   }
-  if (store->io.read_at(store->io.ctx, payload_off, payload, (size_t)payload_len) != 0) {
+  if (er_store_io_read(store, payload_off, payload, (size_t)payload_len) != ER_OK) {
     return ER_ERR_IO;
   }
   if (payload_len <= (ER_STORE_INDEX_OLD_PAYLOAD_OVERHEAD + ER_STORE_MAX_KEY)) {
@@ -1084,7 +1269,7 @@ static int er_store_apply_blob_type_payload(ErStoreState* store, uint64_t payloa
   if (payload_len != ER_STORE_TYPE_PAYLOAD_SIZE) {
     return ER_ERR_CORRUPT;
   }
-  if (store->io.read_at(store->io.ctx, payload_off, payload, sizeof(payload)) != 0) {
+  if (er_store_io_read(store, payload_off, payload, sizeof(payload)) != ER_OK) {
     return ER_ERR_IO;
   }
   return er_store_set_blob_type(store, &payload[ER_STORE_TYPE_HASH_OFF], er_store_load32(payload));
@@ -1099,7 +1284,7 @@ static int er_store_apply_type_define_payload(ErStoreState* store, uint64_t payl
       payload_len > (ER_STORE_DEFINE_FIXED_PAYLOAD_SIZE + ER_STORE_MAX_NAME)) {
     return ER_ERR_CORRUPT;
   }
-  if (store->io.read_at(store->io.ctx, payload_off, payload, (size_t)payload_len) != 0) {
+  if (er_store_io_read(store, payload_off, payload, (size_t)payload_len) != ER_OK) {
     return ER_ERR_IO;
   }
   name_len = er_store_load16(&payload[ER_STORE_DEFINE_NAME_LEN_OFF]);
@@ -1120,7 +1305,7 @@ static int er_store_apply_index_define_payload(ErStoreState* store, uint64_t pay
       payload_len > (ER_STORE_INDEX_DEFINE_FIXED_PAYLOAD_SIZE + ER_STORE_MAX_NAME)) {
     return ER_ERR_CORRUPT;
   }
-  if (store->io.read_at(store->io.ctx, payload_off, payload, (size_t)payload_len) != 0) {
+  if (er_store_io_read(store, payload_off, payload, (size_t)payload_len) != ER_OK) {
     return ER_ERR_IO;
   }
   name_len = er_store_load16(&payload[ER_STORE_INDEX_DEFINE_NAME_LEN_OFF]);
@@ -1147,7 +1332,7 @@ static int er_store_apply_project_payload(ErStoreState* store, uint64_t payload_
       payload_len > (ER_STORE_PROJECT_FIXED_PAYLOAD_SIZE + ER_STORE_MAX_KEY)) {
     return ER_ERR_CORRUPT;
   }
-  if (store->io.read_at(store->io.ctx, payload_off, payload, (size_t)payload_len) != 0) {
+  if (er_store_io_read(store, payload_off, payload, (size_t)payload_len) != ER_OK) {
     return ER_ERR_IO;
   }
   index_id = er_store_load32(&payload[ER_STORE_PROJECT_INDEX_ID_OFF]);
@@ -1203,7 +1388,7 @@ static int er_store_replay(ErStoreState* store, uint64_t io_size, int rebuild, i
     if ((io_size - off) < ER_STORE_RECORD_HEADER_SIZE) {
       break;
     }
-    if (store->io.read_at(store->io.ctx, off, header, sizeof(header)) != 0) {
+    if (er_store_io_read(store, off, header, sizeof(header)) != ER_OK) {
       return ER_ERR_IO;
     }
     rc = er_store_decode_header(header, &info);
@@ -1257,14 +1442,15 @@ static int er_store_replay(ErStoreState* store, uint64_t io_size, int rebuild, i
     }
     er_store_record_hash(header, record_hash);
     er_store_copy(expected_prev, record_hash, ER_HASH_SIZE);
-    valid_end = next_off;
-    off = next_off;
+    valid_end = er_store_align_up(next_off, store->block_bytes);
+    off = valid_end;
     ++expected_seq;
   }
 
   if (truncate_bad != 0 && valid_end != io_size) {
-    if (store->io.truncate(store->io.ctx, valid_end) != 0) {
-      return ER_ERR_IO;
+    rc = er_store_io_truncate(store, valid_end);
+    if (rc != ER_OK) {
+      return rc;
     }
   }
   store->log_end = valid_end;
@@ -1333,6 +1519,7 @@ static int er_store_prepare_arena(ErStoreState* store, void* arena, size_t arena
   uint64_t sorted_key_bytes;
   uint64_t type_bytes;
   uint64_t index_bytes;
+  uint64_t block_scratch_bytes;
   uint64_t cache_bytes;
   uint64_t used_bytes;
   size_t requested_blob_slots = 0u;
@@ -1430,6 +1617,17 @@ static int er_store_prepare_arena(ErStoreState* store, void* arena, size_t arena
   if (used_bytes > end) {
     return ER_ERR_NOSPACE;
   }
+  block_scratch_bytes = store->block_bytes > 1u ? store->block_bytes : 0u;
+  if (block_scratch_bytes > (end - used_bytes)) {
+    return ER_ERR_NOSPACE;
+  }
+  store->block_scratch = (uint8_t*)(uintptr_t)cursor;
+  cursor += block_scratch_bytes;
+  cursor = er_store_align_up(cursor, ER_STORE_ALIGN);
+  used_bytes = cursor - base;
+  if (used_bytes > end) {
+    return ER_ERR_NOSPACE;
+  }
   cache_bytes = end - used_bytes;
   if (requested_cache_bytes != 0u) {
     if (er_store_size_to_u64(requested_cache_bytes, &cache_bytes) != ER_OK || cache_bytes > (end - used_bytes)) {
@@ -1444,6 +1642,11 @@ static int er_store_prepare_arena(ErStoreState* store, void* arena, size_t arena
   er_store_zero(store->sorted_key_slots, (size_t)sorted_key_bytes);
   er_store_zero(store->type_slots, (size_t)type_bytes);
   er_store_zero(store->index_slots, (size_t)index_bytes);
+  if (block_scratch_bytes != 0u) {
+    er_store_zero(store->block_scratch, (size_t)block_scratch_bytes);
+  } else {
+    store->block_scratch = (uint8_t*)0;
+  }
   if (store->cache_len != 0u) {
     er_store_zero(store->cache, store->cache_len);
   }
@@ -1462,10 +1665,16 @@ int er_store_arena_min_size(const er_store_config_t* config, size_t* out_arena_l
   size_t requested_type_slots = 0u;
   size_t requested_index_slots = 0u;
   size_t requested_cache_bytes = 0u;
+  uint32_t block_backing;
+  uint32_t block_bytes;
 
   if (out_arena_len == (size_t*)0) {
     return ER_ERR_BADARG;
   }
+  if (er_store_config_block_bytes(config, &block_backing, &block_bytes) != ER_OK) {
+    return ER_ERR_BADARG;
+  }
+  (void)block_backing;
   if (config != (const er_store_config_t*)0) {
     requested_blob_slots = config->blob_slots;
     requested_key_slots = config->key_slots;
@@ -1506,6 +1715,8 @@ int er_store_arena_min_size(const er_store_config_t* config, size_t* out_arena_l
       er_store_checked_bytes(index_capacity, sizeof(ErStoreIndexSlot), &slot_bytes) != ER_OK ||
       er_store_add_u64(bytes, slot_bytes, &bytes) != ER_OK ||
       er_store_add_u64(bytes, ER_STORE_ALIGN - 1u, &bytes) != ER_OK ||
+      er_store_add_u64(bytes, block_bytes > 1u ? block_bytes : 0u, &bytes) != ER_OK ||
+      er_store_add_u64(bytes, ER_STORE_ALIGN - 1u, &bytes) != ER_OK ||
       er_store_size_to_u64(requested_cache_bytes, &slot_bytes) != ER_OK ||
       er_store_add_u64(bytes, slot_bytes, &bytes) != ER_OK ||
       bytes > (uint64_t)((size_t)-1)) {
@@ -1523,25 +1734,27 @@ static int er_store_append_record(ErStoreState* store, uint16_t type, const void
   uint8_t record_hash[ER_HASH_SIZE];
   uint64_t payload_len_u64;
   uint64_t payload_off;
+  uint64_t record_end;
   uint64_t new_end;
 
   if (er_store_size_to_u64(payload_len, &payload_len_u64) != ER_OK) {
     return ER_ERR_TOOBIG;
   }
   if (er_store_add_u64(store->log_end, ER_STORE_RECORD_HEADER_SIZE, &payload_off) != ER_OK ||
-      er_store_add_u64(payload_off, payload_len_u64, &new_end) != ER_OK) {
+      er_store_add_u64(payload_off, payload_len_u64, &record_end) != ER_OK) {
     return ER_ERR_TOOBIG;
   }
+  new_end = er_store_align_up(record_end, store->block_bytes);
   er_store_encode_header(header, type, store->next_seq, payload_len_u64, payload_hash, store->last_record_hash);
-  if (store->io.write_at(store->io.ctx, store->log_end, header, sizeof(header)) != 0) {
+  if (er_store_io_write(store, store->log_end, header, sizeof(header)) != ER_OK) {
     return ER_ERR_IO;
   }
-  if (payload_len != 0u && store->io.write_at(store->io.ctx, payload_off, payload, payload_len) != 0) {
+  if (payload_len != 0u && er_store_io_write(store, payload_off, payload, payload_len) != ER_OK) {
     return ER_ERR_IO;
   }
   if (store->defer_sync_depth != 0u) {
     store->sync_pending = 1;
-  } else if (store->io.sync(store->io.ctx) != 0) {
+  } else if (er_store_io_sync(store) != ER_OK) {
     return ER_ERR_IO;
   }
   er_store_record_hash(header, record_hash);
@@ -1567,16 +1780,21 @@ int er_store_open(er_store_t* public_store, er_io_t io, void* arena, size_t aren
   }
   er_store_zero(store, sizeof(*store));
   store->io = io;
+  rc = er_store_config_block_bytes(config, &store->block_backing, &store->block_bytes);
+  if (rc != ER_OK) {
+    return rc;
+  }
   rc = er_store_prepare_arena(store, arena, arena_len, config);
   if (rc != ER_OK) {
     return rc;
   }
-  if (store->io.size(store->io.ctx, &io_size) != 0) {
-    return ER_ERR_IO;
+  rc = er_store_io_size(store, &io_size);
+  if (rc != ER_OK) {
+    return rc;
   }
   if (io_size == 0u) {
-    store->log_start = ER_STORE_SUPERBLOCK_SIZE;
-    store->log_end = ER_STORE_SUPERBLOCK_SIZE;
+    store->log_start = er_store_initial_log_start(store);
+    store->log_end = store->log_start;
     store->next_seq = 1u;
     er_store_zero(store->last_record_hash, ER_HASH_SIZE);
     return er_store_write_superblock(store);
@@ -1757,8 +1975,8 @@ static int er_store_get_blob_state(ErStoreState* store, const uint8_t hash[ER_HA
     er_store_copy(out, &store->cache[slots[slot].cache_off], slots[slot].cache_len);
   } else {
     ++store->cache_misses;
-    if (slots[slot].size != 0u && store->io.read_at(store->io.ctx, slots[slot].offset, out,
-                                                     (size_t)slots[slot].size) != 0) {
+    if (slots[slot].size != 0u &&
+        er_store_io_read(store, slots[slot].offset, out, (size_t)slots[slot].size) != ER_OK) {
       return ER_ERR_IO;
     }
     er_store_cache_blob(store, slot, out, (size_t)slots[slot].size);
@@ -2257,8 +2475,9 @@ int er_store_verify(er_store_t* public_store) {
   if (public_store == (er_store_t*)0) {
     return ER_ERR_BADARG;
   }
-  if (store->io.size(store->io.ctx, &io_size) != 0) {
-    return ER_ERR_IO;
+  rc = er_store_io_size(store, &io_size);
+  if (rc != ER_OK) {
+    return rc;
   }
   saved_log_end = store->log_end;
   saved_next_seq = store->next_seq;

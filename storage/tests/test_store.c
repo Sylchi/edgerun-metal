@@ -14,6 +14,7 @@ enum {
   TEST_OBJECT_BYTES = 8192u,
   TEST_OBJECT_CHUNK = 512u,
   TEST_OBJECT_PATTERN_MOD = 251u,
+  TEST_SDCARD_BLOCK_BYTES = ER_STORE_SDCARD_BLOCK_BYTES,
   TEST_OPEN_SYNC_COUNT = 1u,
   TEST_APPEND_SYNC_COUNT = 1u,
   TEST_CLOSE_SYNC_COUNT = 1u
@@ -22,6 +23,7 @@ enum {
 typedef struct {
   uint8_t bytes[TEST_IO_CAP];
   uint64_t size;
+  uint32_t block_bytes;
   unsigned int sync_count;
 } TestIo;
 
@@ -61,6 +63,11 @@ static int test_bytes_equal(const uint8_t* a, const uint8_t* b, size_t len) {
 static int test_read_at(void* ctx, uint64_t off, void* buf, size_t len) {
   TestIo* io = (TestIo*)ctx;
 
+  if (io->block_bytes != 0u &&
+      ((off & ((uint64_t)io->block_bytes - 1u)) != 0u ||
+       (((uint64_t)len) & ((uint64_t)io->block_bytes - 1u)) != 0u)) {
+    return -1;
+  }
   if (off > io->size || len > (size_t)(io->size - off)) {
     return -1;
   }
@@ -72,6 +79,11 @@ static int test_write_at(void* ctx, uint64_t off, const void* buf, size_t len) {
   TestIo* io = (TestIo*)ctx;
   uint64_t end = off + len;
 
+  if (io->block_bytes != 0u &&
+      ((off & ((uint64_t)io->block_bytes - 1u)) != 0u ||
+       (((uint64_t)len) & ((uint64_t)io->block_bytes - 1u)) != 0u)) {
+    return -1;
+  }
   if (end < off || end > TEST_IO_CAP) {
     return -1;
   }
@@ -102,6 +114,9 @@ static int test_size(void* ctx, uint64_t* out_size) {
 static int test_truncate(void* ctx, uint64_t size) {
   TestIo* io = (TestIo*)ctx;
 
+  if (io->block_bytes != 0u && (size & ((uint64_t)io->block_bytes - 1u)) != 0u) {
+    return -1;
+  }
   if (size > TEST_IO_CAP) {
     return -1;
   }
@@ -283,6 +298,63 @@ static void test_trailing_corruption_truncates(void) {
   check_u64("tail truncated", io.size, valid_size);
 }
 
+static void test_sdcard_block_backing_roundtrip(void) {
+  static uint8_t arena_a[TEST_ARENA_SIZE];
+  static uint8_t arena_b[TEST_ARENA_SIZE];
+  TestIo io;
+  er_store_t store_a;
+  er_store_t store_b;
+  er_store_config_t config;
+  uint8_t hash[ER_HASH_SIZE];
+  uint8_t out[16];
+  size_t out_len = 0u;
+  static const uint8_t data[] = {61u, 62u, 63u, 64u, 65u, 66u};
+
+  test_zero(&io, sizeof(io));
+  test_zero(&config, sizeof(config));
+  io.block_bytes = TEST_SDCARD_BLOCK_BYTES;
+  config.block_backing = ER_STORE_BLOCK_BACKING_SDCARD;
+  check_int("open sd block a", er_store_open(&store_a, test_make_io(&io), arena_a, sizeof(arena_a), &config),
+            ER_OK);
+  check_u64("sd superblock block", io.size, TEST_SDCARD_BLOCK_BYTES);
+  check_int("put sd block blob", er_store_put_blob(&store_a, data, sizeof(data), hash), ER_OK);
+  check_int("sd size aligned after put", (int)((io.size & (TEST_SDCARD_BLOCK_BYTES - 1u)) == 0u), 1);
+  check_int("open sd block b", er_store_open(&store_b, test_make_io(&io), arena_b, sizeof(arena_b), &config),
+            ER_OK);
+  check_int("get sd block blob", er_store_get_blob(&store_b, hash, out, sizeof(out), &out_len), ER_OK);
+  check_size("get sd block len", out_len, sizeof(data));
+  check_bytes("get sd block bytes", out, data, sizeof(data));
+}
+
+static void test_sdcard_block_backing_truncates_aligned_tail(void) {
+  static uint8_t arena_a[TEST_ARENA_SIZE];
+  static uint8_t arena_b[TEST_ARENA_SIZE];
+  TestIo io;
+  er_store_t store_a;
+  er_store_t store_b;
+  er_store_config_t config;
+  uint8_t hash[ER_HASH_SIZE];
+  uint8_t junk[TEST_SDCARD_BLOCK_BYTES];
+  uint64_t valid_size;
+  static const uint8_t data[] = {67u, 68u, 69u};
+
+  test_zero(&io, sizeof(io));
+  test_zero(&config, sizeof(config));
+  test_zero(junk, sizeof(junk));
+  io.block_bytes = TEST_SDCARD_BLOCK_BYTES;
+  config.block_backing = ER_STORE_BLOCK_BACKING_SDCARD;
+  check_int("open sd corrupt a", er_store_open(&store_a, test_make_io(&io), arena_a, sizeof(arena_a), &config),
+            ER_OK);
+  check_int("put sd corrupt blob", er_store_put_blob(&store_a, data, sizeof(data), hash), ER_OK);
+  valid_size = io.size;
+  junk[0] = 1u;
+  check_int("append sd corrupt block", test_write_at(&io, io.size, junk, sizeof(junk)), 0);
+  check_u64("sd tail grew", io.size, valid_size + sizeof(junk));
+  check_int("open sd corrupt b", er_store_open(&store_b, test_make_io(&io), arena_b, sizeof(arena_b), &config),
+            ER_OK);
+  check_u64("sd tail truncated", io.size, valid_size);
+}
+
 static void test_verify_detects_wrong_hash(void) {
   static uint8_t arena[TEST_ARENA_SIZE];
   TestIo io;
@@ -309,6 +381,7 @@ static void test_configured_cache_and_capacities(void) {
   static const uint8_t data[] = {81u, 82u, 83u, 84u};
 
   test_zero(&io, sizeof(io));
+  test_zero(&config, sizeof(config));
   config.blob_slots = 8192u;
   config.key_slots = 8192u;
   config.type_slots = 1024u;
@@ -349,6 +422,7 @@ static void test_arena_size_and_reserved_types(void) {
   check_int("arena default fits test arena",
             default_min <= sizeof(arena), 1);
 
+  test_zero(&config, sizeof(config));
   config.blob_slots = 8192u;
   config.key_slots = 8192u;
   config.type_slots = 1024u;
@@ -357,6 +431,12 @@ static void test_arena_size_and_reserved_types(void) {
   check_int("arena min configured",
             er_store_arena_min_size(&config, &configured_min), ER_OK);
   check_int("arena configured grows",
+            configured_min > default_min, 1);
+  test_zero(&config, sizeof(config));
+  config.block_backing = ER_STORE_BLOCK_BACKING_SDCARD;
+  check_int("arena min sd block",
+            er_store_arena_min_size(&config, &configured_min), ER_OK);
+  check_int("arena sd block grows",
             configured_min > default_min, 1);
 
   check_int("open reserved type", er_store_open(&store, test_make_io(&io),
@@ -489,6 +569,8 @@ int main(void) {
   test_index_and_scan();
   test_reopen_rebuild_and_latest_wins();
   test_trailing_corruption_truncates();
+  test_sdcard_block_backing_roundtrip();
+  test_sdcard_block_backing_truncates_aligned_tail();
   test_verify_detects_wrong_hash();
   test_configured_cache_and_capacities();
   test_arena_size_and_reserved_types();
