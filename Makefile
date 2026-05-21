@@ -1,4 +1,4 @@
-.PHONY: all check clean er-build repo-check repo-test repo-check-bin repo-push-check repo-inspect repo-progress repo-agent-swarm erwire-decode erwire-test pi-serial-verify pi-node-update sdcard-probe disk-analyzer pi-usb-boot pi-zero-w-v1_1-ready pi-zero-w-v1_1-usb-boot pi-zero-w-v1_1-update codex-build codex-test crypto-test crypto-bench object-test storage-test storage-bench metal-ui-bench tpm-real-bench-uefi qemu-host-tpm-bench os-user-app-smoke edgerun-metal edgerun-os edgerun-check varfont-test ui-core-test ui-core-snapshot
+.PHONY: all check clean er-build repo-check repo-test repo-check-bin repo-push-check repo-inspect repo-progress repo-agent-swarm erwire-decode erwire-test pi-serial-verify pi-node-update sdcard-probe disk-analyzer pi-usb-boot pi-zero-w-v1_1-ready pi-zero-w-v1_1-usb-boot pi-zero-w-v1_1-update codex-build codex-test crypto-test crypto-bench identity-test object-test storage-test storage-bench metal-ui-bench tpm-real-bench-uefi qemu-host-tpm-bench os-user-app-smoke edgerun-metal edgerun-os edgerun-check varfont-test ui-core-test ui-core-snapshot
 
 CC := toolchain/bin/clang
 HOST_CC := toolchain/bin/clang
@@ -17,7 +17,7 @@ PI_USB_BOOT_DEVICE_ARG := $(if $(PI_USB_DEVICE),--device $(PI_USB_DEVICE),)
 
 all: edgerun-metal
 
-check: repo-check repo-test crypto-test object-test storage-test edgerun-check varfont-test ui-core-test
+check: repo-check repo-test crypto-test identity-test object-test storage-test edgerun-check varfont-test ui-core-test
 
 er-build: $(ER_BUILD_BOOTSTRAP)
 	mkdir -p .build
@@ -92,6 +92,9 @@ crypto-test: er-build
 
 crypto-bench: er-build
 	$(ER_BUILD_STAGED) crypto-bench
+
+identity-test: er-build
+	$(ER_BUILD_STAGED) identity-test
 
 object-test: er-build
 	$(ER_BUILD_STAGED) object-test

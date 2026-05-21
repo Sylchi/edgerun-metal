@@ -179,6 +179,26 @@ case "$crypto_plan" in
   * ) printf 'missing direct crypto test execution step\n' >&2; exit 1 ;;
 esac
 
+identity_plan=$("$ER_BUILD" --print-plan identity-test)
+
+case "$identity_plan" in
+  *"cmake"* | *"ninja"* | *"ctest"* )
+    printf 'identity-test plan still depends on external build orchestration\n' >&2
+    exit 1
+    ;;
+  * ) ;;
+esac
+
+case "$identity_plan" in
+  *"+ toolchain/bin/clang -std=c11 -Wall -Wextra -Werror -O2 -o .build/er-build-out/identity/test_identity -ffreestanding -fno-builtin -fno-stack-protector -Iedgerun-identity/include -Iedgerun-crypto/include edgerun-identity/tests/test_identity.c edgerun-identity/src/er_identity.c edgerun-crypto/src/er_blake3.c -DER_BLAKE3_NO_SIMD=1"* ) ;;
+  * ) printf 'missing direct identity test compile step\n' >&2; exit 1 ;;
+esac
+
+case "$identity_plan" in
+  *"+ .build/er-build-out/identity/test_identity"* ) ;;
+  * ) printf 'missing direct identity test execution step\n' >&2; exit 1 ;;
+esac
+
 object_plan=$("$ER_BUILD" --print-plan object-test)
 
 case "$object_plan" in
