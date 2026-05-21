@@ -84,7 +84,6 @@ typedef struct er_store_config {
   size_t key_slots;
   size_t type_slots;
   size_t index_slots;
-  size_t cache_bytes;
 } er_store_config_t;
 
 typedef struct er_store_stats {
@@ -96,12 +95,6 @@ typedef struct er_store_stats {
   size_t key_count;
   size_t type_count;
   size_t index_count;
-  size_t cache_bytes;
-  size_t cache_used;
-  size_t cache_hits;
-  size_t cache_misses;
-  size_t cache_admissions;
-  size_t cache_rejects;
 } er_store_stats_t;
 
 typedef struct er_store {

@@ -125,8 +125,6 @@ typedef struct {
   uint32_t content_type;
   uint64_t offset; //@optimizer-ignore blob offsets mirror the fixed 64-bit record log ABI
   uint64_t size; //@optimizer-ignore blob sizes mirror the fixed 64-bit record log ABI
-  size_t cache_off;
-  size_t cache_len;
 } ErStoreBlobSlot;
 
 typedef struct {
@@ -170,7 +168,6 @@ typedef struct __attribute__((__may_alias__)) {
   void* sorted_key_slots;
   void* type_slots;
   void* index_slots;
-  uint8_t* cache;
   uint8_t* block_scratch;
   uint32_t block_backing;
   uint32_t block_bytes;
@@ -184,12 +181,6 @@ typedef struct __attribute__((__may_alias__)) {
   int sorted_key_dirty;
   size_t type_capacity;
   size_t index_capacity;
-  size_t cache_len;
-  size_t cache_used;
-  size_t cache_hits;
-  size_t cache_misses;
-  size_t cache_admissions;
-  size_t cache_rejects;
   size_t defer_sync_depth;
   int sync_pending;
   int superblock_dirty;
@@ -678,8 +669,6 @@ static int er_store_insert_blob(ErStoreState* store, const uint8_t hash[ER_HASH_
   slots[slot].content_type = ER_STORE_TYPE_RAW;
   slots[slot].offset = offset;
   slots[slot].size = size;
-  slots[slot].cache_off = 0u;
-  slots[slot].cache_len = 0u;
   ++store->blob_count;
   return ER_OK;
 }
@@ -695,23 +684,6 @@ static int er_store_set_blob_type(ErStoreState* store, const uint8_t hash[ER_HAS
   }
   slots[slot].content_type = content_type;
   return ER_OK;
-}
-
-//@optimizer-ignore-function cache writes are bounded by arena-owned cache slots
-static void er_store_cache_blob(ErStoreState* store, size_t slot, const void* data, size_t len) {
-  ErStoreBlobSlot* slots = er_store_blobs(store);
-
-  if (len == 0u || data == (const void*)0 || len > (store->cache_len - store->cache_used)) {
-    if (len != 0u) {
-      ++store->cache_rejects;
-    }
-    return;
-  }
-  er_store_copy(&store->cache[store->cache_used], data, len);
-  slots[slot].cache_off = store->cache_used;
-  slots[slot].cache_len = len;
-  store->cache_used += len;
-  ++store->cache_admissions;
 }
 
 //@optimizer-ignore-function fixed-capacity key table indexes the caller-provided arena
@@ -1381,7 +1353,6 @@ static int er_store_replay(ErStoreState* store, uint64_t io_size, int rebuild, i
     er_store_zero(store->sorted_key_slots, sizeof(size_t) * store->key_capacity);
     er_store_zero(store->type_slots, sizeof(ErStoreTypeSlot) * store->type_capacity);
     er_store_zero(store->index_slots, sizeof(ErStoreIndexSlot) * store->index_capacity);
-    store->cache_used = 0u;
   }
 
   while (off < io_size) {
@@ -1520,13 +1491,11 @@ static int er_store_prepare_arena(ErStoreState* store, void* arena, size_t arena
   uint64_t type_bytes;
   uint64_t index_bytes;
   uint64_t block_scratch_bytes;
-  uint64_t cache_bytes;
   uint64_t used_bytes;
   size_t requested_blob_slots = 0u;
   size_t requested_key_slots = 0u;
   size_t requested_type_slots = 0u;
   size_t requested_index_slots = 0u;
-  size_t requested_cache_bytes = 0u;
 
   if (arena == (void*)0) {
     return ER_ERR_BADARG;
@@ -1536,7 +1505,6 @@ static int er_store_prepare_arena(ErStoreState* store, void* arena, size_t arena
     requested_key_slots = config->key_slots;
     requested_type_slots = config->type_slots;
     requested_index_slots = config->index_slots;
-    requested_cache_bytes = config->cache_bytes;
   }
   if (er_store_size_to_u64(arena_len, &end) != ER_OK) {
     return ER_ERR_TOOBIG;
@@ -1628,15 +1596,6 @@ static int er_store_prepare_arena(ErStoreState* store, void* arena, size_t arena
   if (used_bytes > end) {
     return ER_ERR_NOSPACE;
   }
-  cache_bytes = end - used_bytes;
-  if (requested_cache_bytes != 0u) {
-    if (er_store_size_to_u64(requested_cache_bytes, &cache_bytes) != ER_OK || cache_bytes > (end - used_bytes)) {
-      return ER_ERR_NOSPACE;
-    }
-  }
-  store->cache = (uint8_t*)(uintptr_t)cursor;
-  store->cache_len = (size_t)cache_bytes;
-  store->cache_used = 0u;
   er_store_zero(store->blob_slots, (size_t)blob_bytes);
   er_store_zero(store->key_slots, (size_t)key_bytes);
   er_store_zero(store->sorted_key_slots, (size_t)sorted_key_bytes);
@@ -1646,9 +1605,6 @@ static int er_store_prepare_arena(ErStoreState* store, void* arena, size_t arena
     er_store_zero(store->block_scratch, (size_t)block_scratch_bytes);
   } else {
     store->block_scratch = (uint8_t*)0;
-  }
-  if (store->cache_len != 0u) {
-    er_store_zero(store->cache, store->cache_len);
   }
   return ER_OK;
 }
@@ -1664,7 +1620,6 @@ int er_store_arena_min_size(const er_store_config_t* config, size_t* out_arena_l
   size_t requested_key_slots = 0u;
   size_t requested_type_slots = 0u;
   size_t requested_index_slots = 0u;
-  size_t requested_cache_bytes = 0u;
   uint32_t block_backing;
   uint32_t block_bytes;
 
@@ -1680,7 +1635,6 @@ int er_store_arena_min_size(const er_store_config_t* config, size_t* out_arena_l
     requested_key_slots = config->key_slots;
     requested_type_slots = config->type_slots;
     requested_index_slots = config->index_slots;
-    requested_cache_bytes = config->cache_bytes;
   }
   if (er_store_choose_capacity(requested_blob_slots, ER_STORE_BLOB_CAPACITY,
                                ER_STORE_BLOB_CAPACITY,
@@ -1717,8 +1671,6 @@ int er_store_arena_min_size(const er_store_config_t* config, size_t* out_arena_l
       er_store_add_u64(bytes, ER_STORE_ALIGN - 1u, &bytes) != ER_OK ||
       er_store_add_u64(bytes, block_bytes > 1u ? block_bytes : 0u, &bytes) != ER_OK ||
       er_store_add_u64(bytes, ER_STORE_ALIGN - 1u, &bytes) != ER_OK ||
-      er_store_size_to_u64(requested_cache_bytes, &slot_bytes) != ER_OK ||
-      er_store_add_u64(bytes, slot_bytes, &bytes) != ER_OK ||
       bytes > (uint64_t)((size_t)-1)) {
     return ER_ERR_TOOBIG;
   }
@@ -1845,12 +1797,6 @@ int er_store_stats(er_store_t* public_store, er_store_stats_t* out_stats) {
   out_stats->key_count = store->key_count;
   out_stats->type_count = store->type_count;
   out_stats->index_count = store->index_count;
-  out_stats->cache_bytes = store->cache_len;
-  out_stats->cache_used = store->cache_used;
-  out_stats->cache_hits = store->cache_hits;
-  out_stats->cache_misses = store->cache_misses;
-  out_stats->cache_admissions = store->cache_admissions;
-  out_stats->cache_rejects = store->cache_rejects;
   return ER_OK;
 }
 
@@ -1922,10 +1868,6 @@ static int er_store_put_typed_blob_internal(ErStoreState* store, uint32_t conten
   if (rc != ER_OK) {
     return rc;
   }
-  rc = er_store_find_blob(store, hash, &slot);
-  if (rc == ER_OK) {
-    er_store_cache_blob(store, slot, data, len);
-  }
   if (content_type != ER_STORE_TYPE_RAW) {
     return er_store_append_blob_type(store, content_type, hash);
   }
@@ -1970,16 +1912,9 @@ static int er_store_get_blob_state(ErStoreState* store, const uint8_t hash[ER_HA
   if (slots[slot].size > (uint64_t)out_cap) {
     return ER_ERR_TOOBIG;
   }
-  if (slots[slot].cache_len == (size_t)slots[slot].size) {
-    ++store->cache_hits;
-    er_store_copy(out, &store->cache[slots[slot].cache_off], slots[slot].cache_len);
-  } else {
-    ++store->cache_misses;
-    if (slots[slot].size != 0u &&
-        er_store_io_read(store, slots[slot].offset, out, (size_t)slots[slot].size) != ER_OK) {
-      return ER_ERR_IO;
-    }
-    er_store_cache_blob(store, slot, out, (size_t)slots[slot].size);
+  if (slots[slot].size != 0u &&
+      er_store_io_read(store, slots[slot].offset, out, (size_t)slots[slot].size) != ER_OK) {
+    return ER_ERR_IO;
   }
   rc = er_store_hash_bytes(out, (size_t)slots[slot].size, check_hash);
   if (rc != ER_OK) {

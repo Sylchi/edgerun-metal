@@ -360,8 +360,11 @@ not depend on the EFI runtime, `ErCryptoProvider`, or libc memory routines.
 
 `storage` provides the freestanding append-only content-addressed store. Its
 record log is the source of truth; blob tables, key projections, content-type
-records, index definitions, sorted prefix scans, and the read cache are rebuilt
-from caller-provided arena memory. Storage is intentionally content-blind: it
+records, index definitions, and sorted prefix scans are rebuilt from
+caller-provided arena memory. Storage intentionally does not hide durable read
+cost behind an internal blob cache; every blob read reaches the backing IO path
+and callers must keep hot working sets in their own explicit memory if they need
+that behavior. Storage is intentionally content-blind: it
 does not authenticate callers, authorize keys, parse object bytes, validate
 schemas, interpret package formats, or decide whether a blob is safe to execute
 or reveal. Callers own admission, signatures, encryption, access policy, object
@@ -372,13 +375,16 @@ system. Device details are selected once at store initialization with a
 deterministic block backing profile such as byte log, SD card, NVMe, or custom
 block size. External runtime consumers do not receive SD, NVMe, or packet-slot
 APIs; they receive only the store API for blobs, content-addressed objects, and
-indexes. `erwire` remains the transport, VFS packets remain the packetization
-format for moving object fragments, and completed payloads are admitted into
-`er_store` before package loading, OTA install, or debug-log retention consumes
-them. The next implementation steps are:
+indexes. `erwire` remains the transport. VFS already owns object packetization
+between memory and wire packets; durable manifest/chunk admission is still
+exposed through the store object helpers and must move behind a VFS/storage
+adapter so there is one explicit memory-to-wire, wire-to-memory,
+memory-to-durable, and durable-to-memory boundary. Completed VFS payloads are
+admitted into `er_store` before package loading, OTA install, or debug-log
+retention consumes them. The next implementation steps are:
 
-1. Finish block-backed `er_store` IO so SD/NVMe adapters can reject unaligned
-   access while the store owns padding, replay, truncation, and verification.
+1. Add the VFS/storage adapter that owns object-to-manifest and
+   manifest-to-object transitions.
 2. Link `storage` into the metal runtime as the only durable object/index
    boundary.
 3. Replace the fixed-slot `ErStorageEndpointDurableStore` with store-backed
