@@ -1,4 +1,5 @@
 edgerun-crypto/include/er_blake3.h
+edgerun-identity/include/er_identity.h
 edgerun-metal/core/er_acpi.h
 edgerun-metal/core/er_app.h
 edgerun-metal/core/er_ble_adv.h

@@ -7,6 +7,7 @@ top-level directories are cooperating runtime areas, not separate products:
   `BOOTX64.EFI` on x86_64 and `BOOTAA64.EFI` on AArch64, hosts Wasm apps, and
   owns runtime device paths.
 - `edgerun-crypto`: freestanding cryptographic primitives used by the runtime, tools, and tests, currently centered on BLAKE3 hashing.
+- `edgerun-identity`: freestanding routable identity primitives for users, devices, apps, resources, objects, ephemeral actors, and delegated actors.
 - `edgerun-object`: canonical object node definitions and validation APIs shared by memory, wire, durable storage, and apps.
 - `storage`: freestanding append-only content-addressed store and key projection basis.
 - `edgerun-ui-core`: the platform-neutral UI scene, component, input, and rendering contract consumed by the metal runtime.
@@ -221,6 +222,14 @@ slot can therefore carry a cost before it is admitted. Local programs may spend
 tokens created by the same user up to the limits the device owner assigned.
 
 ## Canonical Objects
+
+`edgerun-identity` is the routable naming layer below objects and boundary
+crossings. It turns explicit source material into fixed 32-byte identity ids for
+users, devices, apps, storage, relays, resources, objects, ephemeral actors, and
+delegated actors. It does not decide login state, admission, authority,
+signature trust, key unsealing, or transport reachability. A delegated identity
+is a new routable identity derived from parent, delegate, and scope identities;
+it is not the parent's signing key and does not imply permission by itself.
 
 `edgerun-object` is the public object boundary. It defines the canonical bytes
 that can move through memory, over wire routes, and into durable storage without
