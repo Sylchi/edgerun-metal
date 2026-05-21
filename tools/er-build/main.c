@@ -774,10 +774,16 @@ static int erb_build_app_run(int print_plan) {
       erb_args_push(&args, "-fdata-sections") != 0 ||
       erb_args_push(&args, "-Iedgerun-metal/core") != 0 ||
       erb_args_push(&args, "-Iinclude") != 0 ||
+      erb_args_push(&args, "-Iedgerun-object/include") != 0 ||
+      erb_args_push(&args, "-Iedgerun-clock/include") != 0 ||
+      erb_args_push(&args, "-Iedgerun-crypto/include") != 0 ||
       erb_args_push(&args, "-Iedgerun-ui-core/include") != 0 ||
       erb_args_push(&args, "-Iedgerun-ui-core/varfont/include") != 0 ||
       erb_args_push(&args, "tools/app-run/main.c") != 0 ||
       erb_args_push(&args, "edgerun-metal/core/er_mem.c") != 0 ||
+      erb_args_push(&args, "edgerun-object/src/er_object.c") != 0 ||
+      erb_args_push(&args, "edgerun-clock/src/er_clock.c") != 0 ||
+      erb_args_push(&args, "edgerun-crypto/src/er_blake3.c") != 0 ||
       erb_args_push(&args, "edgerun-metal/core/er_pci.c") != 0 ||
       erb_args_push(&args, "edgerun-metal/core/er_mmio.c") != 0 ||
       erb_args_push(&args, "edgerun-metal/core/er_bus.c") != 0 ||

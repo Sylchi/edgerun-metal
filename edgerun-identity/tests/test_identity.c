@@ -201,11 +201,108 @@ static void test_delegated_identity(void) {
             er_identity_id_equal(&delegated.id, &device.id), 0);
 }
 
+static void test_instantiate_device_sources(void) {
+  uint8_t tpm_key[ER_IDENTITY_P256_PUBLIC_SIZE];
+  uint8_t keystone_key[ER_IDENTITY_P256_PUBLIC_SIZE];
+  er_identity_instantiation_t instantiation;
+  er_identity_t tpm_device;
+  er_identity_t keystone_device;
+
+  test_fill(tpm_key, sizeof(tpm_key), TEST_KEY_A_SEED);
+  test_fill(keystone_key, sizeof(keystone_key), TEST_KEY_B_SEED);
+  instantiation.identity_kind = ER_IDENTITY_KIND_DEVICE;
+  instantiation.source_kind = ER_IDENTITY_SOURCE_TPM_P256_PUBLIC;
+  instantiation.material = tpm_key;
+  instantiation.material_len = sizeof(tpm_key);
+  instantiation.epoch = test_epoch(1u);
+  check_int("instantiate tpm device",
+            er_identity_instantiate(&instantiation, &tpm_device),
+            ER_IDENTITY_OK);
+  check_int("tpm device valid", er_identity_valid(&tpm_device), 1);
+  check_int("tpm device source",
+            (int)tpm_device.source.source_kind,
+            (int)ER_IDENTITY_SOURCE_TPM_P256_PUBLIC);
+
+  instantiation.source_kind = ER_IDENTITY_SOURCE_ANDROID_KEYSTONE_P256_PUBLIC;
+  instantiation.material = keystone_key;
+  instantiation.material_len = sizeof(keystone_key);
+  check_int("instantiate keystone device",
+            er_identity_instantiate(&instantiation, &keystone_device),
+            ER_IDENTITY_OK);
+  check_int("keystone device valid", er_identity_valid(&keystone_device), 1);
+  check_int("keystone source",
+            (int)keystone_device.source.source_kind,
+            (int)ER_IDENTITY_SOURCE_ANDROID_KEYSTONE_P256_PUBLIC);
+  check_int("device sources differ",
+            er_identity_id_equal(&tpm_device.id, &keystone_device.id), 0);
+}
+
+static void test_instantiate_app_delegation(void) {
+  uint8_t parent_key[ER_IDENTITY_ED25519_PUBLIC_SIZE];
+  uint8_t app_hash[ER_IDENTITY_HASH_SIZE];
+  uint8_t scope_hash[ER_IDENTITY_HASH_SIZE];
+  er_identity_source_t parent_source;
+  er_identity_t parent;
+  er_identity_t app;
+  er_identity_t app_again;
+  er_identity_t sign_only_app;
+  er_identity_app_instantiation_t instantiation;
+
+  test_fill(parent_key, sizeof(parent_key), TEST_KEY_A_SEED);
+  test_fill(app_hash, sizeof(app_hash), TEST_HASH_SEED);
+  test_fill(scope_hash, sizeof(scope_hash), TEST_KEY_B_SEED);
+  check_int("app parent source",
+            er_identity_source_prepare(ER_IDENTITY_SOURCE_ED25519_PUBLIC,
+                                       parent_key, sizeof(parent_key),
+                                       &parent_source),
+            ER_IDENTITY_OK);
+  check_int("app parent identity",
+            er_identity_prepare(ER_IDENTITY_KIND_DEVICE, &parent_source,
+                                test_epoch(1u), &parent),
+            ER_IDENTITY_OK);
+
+  instantiation.parent = &parent;
+  instantiation.app_material = app_hash;
+  instantiation.app_material_len = sizeof(app_hash);
+  instantiation.scope_hash = scope_hash;
+  instantiation.epoch = test_epoch(2u);
+  instantiation.required_parent_operations =
+      ER_IDENTITY_INSTANTIATION_OPERATION_VERIFY_AND_SIGN;
+  check_int("instantiate app",
+            er_identity_instantiate_app(&instantiation, &app),
+            ER_IDENTITY_OK);
+  check_int("app valid", er_identity_valid(&app), 1);
+  check_int("app delegated kind",
+            (int)app.identity_kind,
+            (int)ER_IDENTITY_KIND_DELEGATED);
+  check_int("app source delegation",
+            (int)app.source.source_kind,
+            (int)ER_IDENTITY_SOURCE_DELEGATION);
+  check_int("instantiate app again",
+            er_identity_instantiate_app(&instantiation, &app_again),
+            ER_IDENTITY_OK);
+  check_int("app deterministic", er_identity_equal(&app, &app_again), 1);
+
+  instantiation.required_parent_operations =
+      ER_IDENTITY_INSTANTIATION_OPERATION_SIGN;
+  check_int("instantiate sign-only app",
+            er_identity_instantiate_app(&instantiation, &sign_only_app),
+            ER_IDENTITY_OK);
+  check_int("operation changes app identity",
+            er_identity_id_equal(&app.id, &sign_only_app.id), 0);
+  instantiation.required_parent_operations = 0u;
+  check_int("reject missing parent operations",
+            er_identity_instantiate_app(&instantiation, &sign_only_app),
+            ER_IDENTITY_ERR_BADARG);
+}
+
 int main(void) {
   test_public_key_identity();
   test_rejects_invalid_sources();
   test_child_identity();
   test_delegated_identity();
+  test_instantiate_device_sources();
+  test_instantiate_app_delegation();
 
   if (g_failed != 0) {
     fprintf(stderr, "identity tests failed: %d/%d\n", g_failed, g_total);

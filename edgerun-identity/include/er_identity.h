@@ -25,6 +25,9 @@
 #define ER_IDENTITY_P256_PUBLIC_SIZE 64u
 #define ER_IDENTITY_ENDPOINT_MIN_SIZE 1u
 #define ER_IDENTITY_DELEGATION_MATERIAL_SIZE 96u
+#define ER_IDENTITY_INSTANTIATION_OPERATION_VERIFY 1u
+#define ER_IDENTITY_INSTANTIATION_OPERATION_SIGN 2u
+#define ER_IDENTITY_INSTANTIATION_OPERATION_VERIFY_AND_SIGN 3u
 
 #define ER_IDENTITY_KIND_USER 1u
 #define ER_IDENTITY_KIND_DEVICE 2u
@@ -44,6 +47,7 @@
 #define ER_IDENTITY_SOURCE_ENDPOINT 6u
 #define ER_IDENTITY_SOURCE_DERIVED 7u
 #define ER_IDENTITY_SOURCE_DELEGATION 8u
+#define ER_IDENTITY_SOURCE_ANDROID_KEYSTONE_P256_PUBLIC 9u
 
 typedef struct er_identity_id {
   uint8_t bytes[ER_IDENTITY_ID_SIZE];
@@ -63,6 +67,23 @@ typedef struct er_identity {
   er_identity_source_t source;
 } er_identity_t;
 
+typedef struct er_identity_instantiation {
+  uint16_t identity_kind;
+  uint16_t source_kind;
+  const void* material;
+  size_t material_len;
+  er_clock_epoch_stamp_t epoch;
+} er_identity_instantiation_t;
+
+typedef struct er_identity_app_instantiation {
+  const er_identity_t* parent;
+  const void* app_material;
+  size_t app_material_len;
+  const uint8_t* scope_hash;
+  er_clock_epoch_stamp_t epoch;
+  uint32_t required_parent_operations;
+} er_identity_app_instantiation_t;
+
 int er_identity_id_nonzero(const er_identity_id_t* id);
 int er_identity_id_equal(const er_identity_id_t* left,
                          const er_identity_id_t* right);
@@ -81,6 +102,10 @@ int er_identity_prepare(uint16_t identity_kind,
                         const er_identity_source_t* source,
                         er_clock_epoch_stamp_t epoch,
                         er_identity_t* out_identity);
+int er_identity_instantiate(const er_identity_instantiation_t* instantiation,
+                            er_identity_t* out_identity);
+int er_identity_instantiate_app(const er_identity_app_instantiation_t* instantiation,
+                                er_identity_t* out_identity);
 int er_identity_valid(const er_identity_t* identity);
 int er_identity_equal(const er_identity_t* left,
                       const er_identity_t* right);
