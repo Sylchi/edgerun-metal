@@ -6,6 +6,17 @@ enum {
   ER_NODE_BODY_STORE_SIZE = ER_IDENTITY_ID_SIZE + ER_OBJECT_ID_SIZE,
   ER_NODE_BODY_RECEIPT_SIZE = 4u + 4u + ER_OBJECT_ID_SIZE + ER_OBJECT_ID_SIZE +
                               ER_OBJECT_ID_SIZE + ER_CLOCK_KEEPER_ID_SIZE + 32u,
+  ER_NODE_BODY_SPAWN_SIZE = 8u + ER_IDENTITY_ID_SIZE + ER_IDENTITY_ID_SIZE +
+                            8u + 8u + 8u + 8u +
+                            ER_CLOCK_KEEPER_ID_SIZE + 32u,
+  ER_NODE_SPAWN_MAGIC0 = 'E',
+  ER_NODE_SPAWN_MAGIC1 = 'R',
+  ER_NODE_SPAWN_MAGIC2 = 'S',
+  ER_NODE_SPAWN_MAGIC3 = 'P',
+  ER_NODE_SPAWN_MAGIC4 = 'W',
+  ER_NODE_SPAWN_MAGIC5 = 'N',
+  ER_NODE_SPAWN_MAGIC6 = '0',
+  ER_NODE_SPAWN_MAGIC7 = '1',
   ER_NODE_BYTE0 = 0u,
   ER_NODE_BYTE1 = 1u,
   ER_NODE_BYTE2 = 2u,
@@ -31,6 +42,11 @@ typedef struct __attribute__((__may_alias__)) {
   er_identity_t identity;
   er_clock_t clock;
   er_store_t* store;
+  uint8_t* arena;
+  size_t arena_len;
+  size_t arena_used;
+  uint64_t storage_limit;
+  uint64_t storage_used;
 } ErNodeState;
 
 _Static_assert(sizeof(ErNodeState) <= sizeof(er_node_t),
@@ -142,21 +158,37 @@ static void er_node_epoch_body(er_clock_epoch_stamp_t epoch, uint8_t* out) {
   er_node_store64(&out[ER_CLOCK_KEEPER_ID_SIZE + 24u], epoch.era);
 }
 
-int er_node_open(er_node_t* node, const er_identity_t* identity,
-                 const er_clock_t* clock, er_store_t* store) {
+int er_node_open_config(er_node_t* node, const er_node_config_t* config) {
   ErNodeState* state = er_node_state(node);
 
-  if (node == (er_node_t*)0 || er_identity_valid(identity) == 0 ||
-      clock == (const er_clock_t*)0 ||
-      er_clock_stamp_valid(clock->now) == 0 ||
-      er_clock_stamp_same_keeper(identity->epoch, clock->now) == 0) {
+  if (node == (er_node_t*)0 || config == (const er_node_config_t*)0 ||
+      er_identity_valid(config->identity) == 0 ||
+      config->clock == (const er_clock_t*)0 ||
+      er_clock_stamp_valid(config->clock->now) == 0 ||
+      er_clock_stamp_same_keeper(config->identity->epoch,
+                                 config->clock->now) == 0 ||
+      (config->arena_len != 0u && config->arena == (void*)0)) {
     return ER_NODE_ERR_BADARG;
   }
   er_node_zero(state, sizeof(*state));
-  state->identity = *identity;
-  state->clock = *clock;
-  state->store = store;
+  state->identity = *config->identity;
+  state->clock = *config->clock;
+  state->store = config->store;
+  state->arena = (uint8_t*)config->arena;
+  state->arena_len = config->arena_len;
+  state->storage_limit = config->storage_limit;
   return ER_NODE_OK;
+}
+
+int er_node_open(er_node_t* node, const er_identity_t* identity,
+                 const er_clock_t* clock, er_store_t* store) {
+  er_node_config_t config;
+
+  er_node_zero(&config, sizeof(config));
+  config.identity = identity;
+  config.clock = clock;
+  config.store = store;
+  return er_node_open_config(node, &config);
 }
 
 int er_node_identity(const er_node_t* node, er_identity_t* out_identity) {
@@ -177,6 +209,108 @@ int er_node_epoch(const er_node_t* node, er_clock_epoch_stamp_t* out_epoch) {
   }
   *out_epoch = state->clock.now;
   return ER_NODE_OK;
+}
+
+int er_node_budget(const er_node_t* node, er_node_budget_t* out_budget) {
+  const ErNodeState* state = er_node_const_state(node);
+
+  if (node == (const er_node_t*)0 || out_budget == (er_node_budget_t*)0) {
+    return ER_NODE_ERR_BADARG;
+  }
+  out_budget->memory_len = state->arena_len;
+  out_budget->memory_used = state->arena_used;
+  out_budget->storage_limit = state->storage_limit;
+  out_budget->storage_used = state->storage_used;
+  return ER_NODE_OK;
+}
+
+static int er_node_add_size(size_t a, size_t b, size_t* out) {
+  if (out == (size_t*)0 || a > ((size_t)-1) - b) {
+    return ER_NODE_ERR_TOOBIG;
+  }
+  *out = a + b;
+  return ER_NODE_OK;
+}
+
+static int er_node_add_u64(uint64_t a, uint64_t b, uint64_t* out) {
+  if (out == (uint64_t*)0 || a > (0xffffffffffffffffull - b)) {
+    return ER_NODE_ERR_TOOBIG;
+  }
+  *out = a + b;
+  return ER_NODE_OK;
+}
+
+int er_node_spawn(er_node_t* parent, const er_identity_t* child_identity,
+                  const er_clock_t* child_clock, size_t memory_len,
+                  uint64_t storage_limit, er_store_t* child_store,
+                  er_node_t* out_child, void* out_receipt_object,
+                  size_t out_cap, size_t* out_len,
+                  uint8_t out_id[ER_OBJECT_ID_SIZE]) {
+  ErNodeState* parent_state = er_node_state(parent);
+  er_node_config_t child_config;
+  uint8_t body[ER_NODE_BODY_SPAWN_SIZE];
+  size_t memory_end;
+  uint64_t storage_end;
+
+  if (parent == (er_node_t*)0 || out_child == (er_node_t*)0 ||
+      child_identity == (const er_identity_t*)0 ||
+      child_clock == (const er_clock_t*)0 ||
+      out_receipt_object == (void*)0 || out_len == (size_t*)0 ||
+      out_id == (uint8_t*)0 ||
+      child_identity->identity_kind != ER_IDENTITY_KIND_DELEGATED ||
+      er_identity_valid(child_identity) == 0 ||
+      er_clock_stamp_valid(child_clock->now) == 0 ||
+      er_clock_stamp_same_keeper(child_identity->epoch, child_clock->now) == 0 ||
+      er_node_add_size(parent_state->arena_used, memory_len,
+                       &memory_end) != ER_NODE_OK ||
+      memory_end > parent_state->arena_len ||
+      (memory_len != 0u && parent_state->arena == (uint8_t*)0) ||
+      er_node_add_u64(parent_state->storage_used, storage_limit,
+                      &storage_end) != ER_NODE_OK ||
+      storage_end > parent_state->storage_limit) {
+    return ER_NODE_ERR_BADARG;
+  }
+
+  er_node_zero(&child_config, sizeof(child_config));
+  child_config.identity = child_identity;
+  child_config.clock = child_clock;
+  child_config.store = child_store;
+  child_config.arena = memory_len == 0u ? (void*)0
+                                        : &parent_state->arena[parent_state->arena_used];
+  child_config.arena_len = memory_len;
+  child_config.storage_limit = storage_limit;
+  if (er_node_open_config(out_child, &child_config) != ER_NODE_OK) {
+    return ER_NODE_ERR_CORRUPT;
+  }
+
+  er_node_zero(body, sizeof(body));
+  body[0] = ER_NODE_SPAWN_MAGIC0;
+  body[1] = ER_NODE_SPAWN_MAGIC1;
+  body[2] = ER_NODE_SPAWN_MAGIC2;
+  body[3] = ER_NODE_SPAWN_MAGIC3;
+  body[4] = ER_NODE_SPAWN_MAGIC4;
+  body[5] = ER_NODE_SPAWN_MAGIC5;
+  body[6] = ER_NODE_SPAWN_MAGIC6;
+  body[7] = ER_NODE_SPAWN_MAGIC7;
+  er_node_copy(&body[8u], parent_state->identity.id.bytes,
+               ER_IDENTITY_ID_SIZE);
+  er_node_copy(&body[8u + ER_IDENTITY_ID_SIZE],
+               child_identity->id.bytes, ER_IDENTITY_ID_SIZE);
+  er_node_store64(&body[8u + (2u * ER_IDENTITY_ID_SIZE)],
+                  (uint64_t)parent_state->arena_used);
+  er_node_store64(&body[16u + (2u * ER_IDENTITY_ID_SIZE)],
+                  (uint64_t)memory_len);
+  er_node_store64(&body[24u + (2u * ER_IDENTITY_ID_SIZE)],
+                  parent_state->storage_used);
+  er_node_store64(&body[32u + (2u * ER_IDENTITY_ID_SIZE)],
+                  storage_limit);
+  er_node_epoch_body(parent_state->clock.now,
+                     &body[40u + (2u * ER_IDENTITY_ID_SIZE)]);
+  parent_state->arena_used = memory_end;
+  parent_state->storage_used = storage_end;
+  return er_node_build_bytes_object(parent_state, body, sizeof(body),
+                                    out_receipt_object, out_cap, out_len,
+                                    out_id);
 }
 
 int er_node_describe_identity(const er_node_t* node, void* out, size_t out_cap,
