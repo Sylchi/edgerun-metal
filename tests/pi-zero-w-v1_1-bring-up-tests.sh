@@ -47,6 +47,20 @@ make -C "$ROOT_DIR" pi-serial-verify >/tmp/pi-zero-w-v1_1-bring-up-tool.out
 "$ROOT_DIR/tests/pi-serial-verify-tests.sh" >/tmp/pi-zero-w-v1_1-bring-up-fixture.out
 cp "${ROOT_DIR}/.build/pi-serial-verify-tests/serial-erwire.bin" "$LOG_PATH"
 
+mkdir -p "${ROOT_DIR}/.build/edgerun-metal/pi-zero-w-v1_1/boot"
+mkdir -p "${ROOT_DIR}/.build/edgerun-metal/pi-zero-w-v1_1/generated"
+mkdir -p "${ROOT_DIR}/.build/edgerun-metal/pi-zero-w-v1_1/erzw-0/boot"
+touch "${ROOT_DIR}/.build/edgerun-metal/pi-zero-w-v1_1/boot/EDGERUN-PI-ZERO-W-V1_1-NODE.txt"
+touch "${ROOT_DIR}/.build/edgerun-metal/pi-zero-w-v1_1/generated/pi_zero_w_v1_1_node_config.h"
+touch "${ROOT_DIR}/.build/edgerun-metal/pi-zero-w-v1_1/erzw-0/boot/EDGERUN-PI-ZERO-W-V1_1-NODE.txt"
+make -C "$ROOT_DIR/edgerun-metal" pi-zero-w-v1_1-boot >/tmp/pi-zero-w-v1_1-bring-up-restage.out
+if [ -e "${ROOT_DIR}/.build/edgerun-metal/pi-zero-w-v1_1/boot/EDGERUN-PI-ZERO-W-V1_1-NODE.txt" ] ||
+   [ -e "${ROOT_DIR}/.build/edgerun-metal/pi-zero-w-v1_1/generated/pi_zero_w_v1_1_node_config.h" ] ||
+   [ -e "${ROOT_DIR}/.build/edgerun-metal/pi-zero-w-v1_1/erzw-0" ]; then
+  printf 'pi zero w v1.1 boot stage kept stale static-node artifacts\n' >&2
+  exit 1
+fi
+
 "$ROOT_DIR/tools/pi-zero-w-v1_1-bring-up.sh" \
   --verify-only \
   --serial /dev/null \

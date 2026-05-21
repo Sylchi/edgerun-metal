@@ -152,6 +152,8 @@ PI_ZERO_W_V1_1_CYW43438_FIRMWARE_HEADER := $(GENERATED_DIR)/pi_zero_w_v1_1_cyw43
 PI_ZERO_W_V1_1_CYW43438_HDRS := devices/cyw43438/er_cyw43438_owned_firmware.h devices/cyw43438/er_cyw43438_sdpcm.h $(PI_ZERO_W_V1_1_CYW43438_FIRMWARE_HEADER)
 PI_ZERO_W_V1_1_KERNEL := $(PI_ZERO_W_V1_1_BUILD_DIR)/kernel.img
 PI_ZERO_W_V1_1_BOOT_DIR := $(PI_ZERO_W_V1_1_BUILD_DIR)/boot
+PI_ZERO_W_V1_1_STALE_NODE_DIRS := $(PI_ZERO_W_V1_1_BUILD_DIR)/erzw-0 $(PI_ZERO_W_V1_1_BUILD_DIR)/erzw-1 $(PI_ZERO_W_V1_1_BUILD_DIR)/erzw-2 $(PI_ZERO_W_V1_1_BUILD_DIR)/erzw-3 $(PI_ZERO_W_V1_1_BUILD_DIR)/erzw-4 $(PI_ZERO_W_V1_1_BUILD_DIR)/erzw-5
+PI_ZERO_W_V1_1_STALE_NODE_GENERATED_DIR := $(PI_ZERO_W_V1_1_BUILD_DIR)/generated
 PI_BOOT_STAGE_SRC := ../tools/pi-boot-stage/main.c
 PI_BOOT_STAGE_BIN := ../.build/edgerun-metal/pi-boot-stage
 QEMU_SMOKE_SRC := ../tools/qemu-smoke.sh
@@ -402,6 +404,7 @@ pi-zero-w-v1_1-kernel: $(PI_ZERO_W_V1_1_ENTRY_SRC) $(PI_ZERO_W_V1_1_START_SRC) $
 	$(CC) -std=c11 -Wall -Wextra -Werror -ffreestanding -fno-builtin -fno-stack-protector -ffunction-sections -fdata-sections -target armv6-none-eabi -fuse-ld=lld -nostdlib -I$(CURDIR)/core -I$(CURDIR)/$(PI_DEVICE_DIR) -I$(CURDIR)/$(PI_ZERO_W_V1_1_DEVICE_DIR) -I$(CURDIR)/devices/cyw43438 -I$(CURDIR)/../include -I$(CURDIR)/$(GENERATED_DIR) -I$(CURDIR)/$(CRYPTO_DIR)/include -Wl,--gc-sections -Wl,-Ttext=0x8000 -Wl,--image-base=0x0 -Wl,--oformat,binary -o $(PI_ZERO_W_V1_1_KERNEL) $(PI_ZERO_W_V1_1_ENTRY_SRC) $(PI_ZERO_W_V1_1_START_SRC) $(PI_DEVICE_DIR)/er_pi_mmc.c $(PI_ZERO_W_V1_1_DEVICE_DIR)/er_pi_zero_w_v1_1_ota.c devices/cyw43438/er_cyw43438_sdpcm.c core/er_ephemeral_node.c core/er_freestanding.c core/er_mem.c core/er_crypto.c core/er_crypto_blake3.c core/er_identity.c core/er_vfs.c core/er_wifi_l2.c core/er_ble_adv.c core/er_net_frame.c $(CRYPTO_DIR)/src/er_blake3.c
 
 pi-zero-w-v1_1-boot: pi-zero-w-v1_1-kernel $(PI_BOOT_STAGE_BIN)
+	rm -rf $(PI_ZERO_W_V1_1_BOOT_DIR) $(PI_ZERO_W_V1_1_STALE_NODE_GENERATED_DIR) $(PI_ZERO_W_V1_1_STALE_NODE_DIRS)
 	$(PI_BOOT_STAGE_BIN) pi-zero-w-v1_1 $(PI_ZERO_W_V1_1_KERNEL) $(PI_ZERO_W_V1_1_BOOT_DIR)
 
 clean:
