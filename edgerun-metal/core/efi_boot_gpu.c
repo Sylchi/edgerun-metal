@@ -1,4 +1,4 @@
-#include "efi_boot_internal.h"
+#include "internal/efi_boot_internal.h"
 
 static UINT32 g_virtio_gpu_framebuffer[ER_GPU_PROFILE_FRAMEBUFFER_WIDTH_MAX *
                                        ER_GPU_PROFILE_FRAMEBUFFER_HEIGHT_MAX];

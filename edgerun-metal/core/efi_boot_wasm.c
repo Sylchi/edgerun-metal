@@ -1,4 +1,4 @@
-#include "efi_boot_internal.h"
+#include "internal/efi_boot_internal.h"
 
 static UINT8 g_ui_boot_app_memory[ER_UI_BOOT_APP_SLOT_CAPACITY][ER_UI_BOOT_APP_MEMORY_BYTES];
 static UINT8 g_ui_boot_app_module_memory[ER_UI_BOOT_APP_SLOT_CAPACITY][ER_UI_BOOT_APP_MODULE_BYTES];

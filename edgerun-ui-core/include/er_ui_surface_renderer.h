@@ -151,6 +151,23 @@ typedef struct {
   uint8_t has_previous_scene;
 } ErUiSurfaceFrameState;
 
+typedef enum {
+  ER_UI_SURFACE_RENDER_FULL = 0,
+  ER_UI_SURFACE_RENDER_TILE,
+  ER_UI_SURFACE_RENDER_DIRTY_TILES
+} ErUiSurfaceRenderMode;
+
+typedef struct {
+  const er_ui_scene_t* scene;
+  const ErUiSurfaceAlphaAtlas* atlas;
+  const vr_font_face_t* font;
+  const ErUiSurfaceTilePlan* tile_plan;
+  const ErUiSurfaceDirtyTileList* dirty_tiles;
+  ErUiSurfaceRenderStats* out_stats;
+  ErUiSurfaceRenderMode mode;
+  uint32_t tile_id;
+} ErUiSurfaceRenderDesc;
+
 uint8_t er_ui_surface_valid(const ErUiSurface* surface);
 uint8_t er_ui_surface_mode_valid(const ErUiSurfaceMode* mode);
 uint8_t er_ui_surface_tile_plan_from_mode(const ErUiSurfaceMode* mode, uint32_t tile_width, uint32_t tile_height,
@@ -191,19 +208,6 @@ uint8_t er_ui_surface_render_stats_first_budget_violation(ErUiSurfaceRenderStats
                                                     ErUiSurfaceFrameBudgetViolation* out_violation);
 uint32_t er_ui_surface_pack_rgb(ErUiSurfacePixelFormat format, uint8_t r, uint8_t g, uint8_t b);
 uint8_t er_ui_surface_clear(ErUiSurface* surface, er_ui_color4_t color);
-uint8_t er_ui_surface_render_scene(ErUiSurface* surface, const er_ui_scene_t* scene);
-uint8_t er_ui_surface_render_scene_with_atlas(ErUiSurface* surface, const er_ui_scene_t* scene, const ErUiSurfaceAlphaAtlas* atlas);
-uint8_t er_ui_surface_render_scene_with_font(ErUiSurface* surface, const er_ui_scene_t* scene, const vr_font_face_t* font);
-uint8_t er_ui_surface_render_scene_with_font_stats(ErUiSurface* surface, const er_ui_scene_t* scene, const vr_font_face_t* font, ErUiSurfaceRenderStats* out_stats);
-uint8_t er_ui_surface_render_scene_tile_with_font_stats(ErUiSurface* surface, const er_ui_scene_t* scene,
-                                                          const vr_font_face_t* font,
-                                                          const ErUiSurfaceTilePlan* plan, uint32_t tile_id,
-                                                          ErUiSurfaceRenderStats* out_stats);
-uint8_t er_ui_surface_render_scene_dirty_tiles_with_font_stats(ErUiSurface* surface,
-                                                                 const er_ui_scene_t* scene,
-                                                                 const vr_font_face_t* font,
-                                                                 const ErUiSurfaceTilePlan* plan,
-                                                                 const ErUiSurfaceDirtyTileList* dirty_tiles,
-                                                                 ErUiSurfaceRenderStats* out_stats);
+uint8_t er_ui_surface_render(ErUiSurface* surface, const ErUiSurfaceRenderDesc* desc);
 
 #endif

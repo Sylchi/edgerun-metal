@@ -80,6 +80,49 @@ static void er_boot_services_runtime_capabilities_init(
   capabilities->update_blocked_reason = ER_BOOT_UPDATE_BLOCKED_NO_WIFI;
 }
 
+static UINT8 er_boot_services_report_mutable(const ErBootServicesReport* report) {
+  return (UINT8)(report != 0 && report->finalized == 0u);
+}
+
+static UINT8 er_boot_services_refresh_runtime_capabilities(ErBootServicesReport* report) {
+  ErBootRuntimeCapabilities* capabilities;
+
+  if (report == 0 ||
+      report->runtime_capabilities.abi_version !=
+          ER_BOOT_RUNTIME_CAPABILITY_ABI_VERSION ||
+      er_boot_services_wifi_kind_valid(report->runtime_capabilities.wifi_kind) == 0u ||
+      er_boot_services_bluetooth_kind_valid(
+          report->runtime_capabilities.bluetooth_kind) == 0u ||
+      er_boot_services_storage_kind_valid(
+          report->runtime_capabilities.local_storage_kind) == 0u) {
+    return 0u;
+  }
+
+  capabilities = &report->runtime_capabilities;
+  capabilities->update_ready = 0u;
+  if (capabilities->wifi_ready == 0u ||
+      capabilities->wifi_kind == ER_BOOT_WIFI_KIND_NONE) {
+    capabilities->update_blocked_reason = ER_BOOT_UPDATE_BLOCKED_NO_WIFI;
+    return 1u;
+  }
+  if (capabilities->local_storage_writable == 0u ||
+      capabilities->local_storage_kind == ER_BOOT_LOCAL_STORAGE_KIND_NONE) {
+    capabilities->update_blocked_reason =
+        ER_BOOT_UPDATE_BLOCKED_NO_WRITABLE_STORAGE;
+    return 1u;
+  }
+  if (capabilities->update_artifact_store_ready == 0u ||
+      capabilities->update_artifact_capacity_bytes == 0u) {
+    capabilities->update_blocked_reason =
+        ER_BOOT_UPDATE_BLOCKED_NO_ARTIFACT_STORE;
+    return 1u;
+  }
+
+  capabilities->update_ready = 1u;
+  capabilities->update_blocked_reason = ER_BOOT_UPDATE_READY;
+  return 1u;
+}
+
 void er_boot_services_report_init(ErBootServicesReport* report) {
   if (report == 0) {
     return;
@@ -89,6 +132,15 @@ void er_boot_services_report_init(ErBootServicesReport* report) {
   report->config_state = ER_BOOT_CONFIG_UNKNOWN;
   report->selected_authority = ER_BOOT_AUTHORITY_PROFILE_CAPACITY;
   er_boot_services_runtime_capabilities_init(&report->runtime_capabilities);
+}
+
+UINT8 er_boot_services_finalize_report(ErBootServicesReport* report) {
+  if (er_boot_services_report_mutable(report) == 0u ||
+      er_boot_services_refresh_runtime_capabilities(report) == 0u) {
+    return 0u;
+  }
+  report->finalized = 1u;
+  return 1u;
 }
 
 UINT8 er_boot_services_authority_label_valid(const char* label,
@@ -119,7 +171,8 @@ UINT8 er_boot_services_probe_secure_boot(EFI_SYSTEM_TABLE* system_table,
   EFI_STATUS status;
 
   if (system_table == 0 || system_table->RuntimeServices == 0 ||
-      system_table->RuntimeServices->GetVariable == 0 || report == 0) {
+      system_table->RuntimeServices->GetVariable == 0 ||
+      er_boot_services_report_mutable(report) == 0u) {
     return 0u;
   }
 
@@ -158,7 +211,8 @@ UINT8 er_boot_services_probe_tpm(EFI_SYSTEM_TABLE* system_table,
   UINT32 command_len;
   UINT32 response_len;
 
-  if (system_table == 0 || report == 0 ||
+  if (system_table == 0 ||
+      er_boot_services_report_mutable(report) == 0u ||
       er_acpi_find_rsdp(system_table, &rsdp) == 0u ||
       er_acpi_enumerate_tables(&rsdp, &tables) == 0u ||
       er_tpm_find_tpm2_table(&tables, &tpm2) == 0u ||
@@ -200,7 +254,7 @@ UINT8 er_boot_services_probe_tpm(EFI_SYSTEM_TABLE* system_table,
 
 UINT8 er_boot_services_set_tpm_limits(ErBootServicesReport* report,
                                       const ErTpmNvLimits* limits) {
-  if (report == 0 || limits == 0 ||
+  if (er_boot_services_report_mutable(report) == 0u || limits == 0 ||
       limits->has_nv_index_max == 0u ||
       limits->has_nv_buffer_max == 0u) {
     return 0u;
@@ -213,7 +267,7 @@ UINT8 er_boot_services_set_tpm_limits(ErBootServicesReport* report,
 UINT8 er_boot_services_set_boot_admission(ErBootServicesReport* report,
                                           const ErCryptoProvider* crypto,
                                           const ErBootAdmissionRecord* record) {
-  if (report == 0 ||
+  if (er_boot_services_report_mutable(report) == 0u ||
       er_boot_admission_record_valid(crypto, record) == 0u) {
     return 0u;
   }
@@ -231,7 +285,7 @@ UINT8 er_boot_services_set_wifi_runtime(ErBootServicesReport* report,
                                         UINT8 wifi_kind,
                                         UINT8 wifi_ready,
                                         UINT8 wifi_channel) {
-  if (report == 0 ||
+  if (er_boot_services_report_mutable(report) == 0u ||
       er_boot_services_wifi_kind_valid(wifi_kind) == 0u ||
       (wifi_kind == ER_BOOT_WIFI_KIND_NONE && wifi_ready != 0u) ||
       (wifi_kind != ER_BOOT_WIFI_KIND_NONE && wifi_channel == 0u)) {
@@ -248,7 +302,7 @@ UINT8 er_boot_services_set_wifi_runtime(ErBootServicesReport* report,
 UINT8 er_boot_services_set_bluetooth_runtime(ErBootServicesReport* report,
                                              UINT8 bluetooth_kind,
                                              UINT8 bluetooth_ready) {
-  if (report == 0 ||
+  if (er_boot_services_report_mutable(report) == 0u ||
       er_boot_services_bluetooth_kind_valid(bluetooth_kind) == 0u ||
       (bluetooth_kind == ER_BOOT_BLUETOOTH_KIND_NONE &&
        bluetooth_ready != 0u)) {
@@ -267,7 +321,7 @@ UINT8 er_boot_services_set_local_storage(ErBootServicesReport* report,
                                          UINT8 writable,
                                          UINT64 block_bytes,
                                          UINT64 block_count) {
-  if (report == 0 ||
+  if (er_boot_services_report_mutable(report) == 0u ||
       er_boot_services_storage_kind_valid(storage_kind) == 0u ||
       (storage_kind == ER_BOOT_LOCAL_STORAGE_KIND_NONE && writable != 0u) ||
       (storage_kind != ER_BOOT_LOCAL_STORAGE_KIND_NONE &&
@@ -286,7 +340,7 @@ UINT8 er_boot_services_set_local_storage(ErBootServicesReport* report,
 UINT8 er_boot_services_set_update_artifact_store(ErBootServicesReport* report,
                                                  UINT8 ready,
                                                  UINT64 capacity_bytes) {
-  if (report == 0 || (ready != 0u && capacity_bytes == 0u)) {
+  if (er_boot_services_report_mutable(report) == 0u || (ready != 0u && capacity_bytes == 0u)) {
     return 0u;
   }
   report->runtime_capabilities.abi_version =
@@ -298,49 +352,17 @@ UINT8 er_boot_services_set_update_artifact_store(ErBootServicesReport* report,
 }
 
 UINT8 er_boot_services_update_runtime_capabilities(ErBootServicesReport* report) {
-  ErBootRuntimeCapabilities* capabilities;
-
-  if (report == 0 ||
-      report->runtime_capabilities.abi_version !=
-          ER_BOOT_RUNTIME_CAPABILITY_ABI_VERSION ||
-      er_boot_services_wifi_kind_valid(report->runtime_capabilities.wifi_kind) == 0u ||
-      er_boot_services_bluetooth_kind_valid(
-          report->runtime_capabilities.bluetooth_kind) == 0u ||
-      er_boot_services_storage_kind_valid(
-          report->runtime_capabilities.local_storage_kind) == 0u) {
+  if (er_boot_services_report_mutable(report) == 0u) {
     return 0u;
   }
-
-  capabilities = &report->runtime_capabilities;
-  capabilities->update_ready = 0u;
-  if (capabilities->wifi_ready == 0u ||
-      capabilities->wifi_kind == ER_BOOT_WIFI_KIND_NONE) {
-    capabilities->update_blocked_reason = ER_BOOT_UPDATE_BLOCKED_NO_WIFI;
-    return 1u;
-  }
-  if (capabilities->local_storage_writable == 0u ||
-      capabilities->local_storage_kind == ER_BOOT_LOCAL_STORAGE_KIND_NONE) {
-    capabilities->update_blocked_reason =
-        ER_BOOT_UPDATE_BLOCKED_NO_WRITABLE_STORAGE;
-    return 1u;
-  }
-  if (capabilities->update_artifact_store_ready == 0u ||
-      capabilities->update_artifact_capacity_bytes == 0u) {
-    capabilities->update_blocked_reason =
-        ER_BOOT_UPDATE_BLOCKED_NO_ARTIFACT_STORE;
-    return 1u;
-  }
-
-  capabilities->update_ready = 1u;
-  capabilities->update_blocked_reason = ER_BOOT_UPDATE_READY;
-  return 1u;
+  return er_boot_services_refresh_runtime_capabilities(report);
 }
 
 UINT8 er_boot_services_add_pci_device(ErBootServicesReport* report,
                                       const ErPciDeviceSnapshot* snapshot) {
   ErBootDetectedDevice* device;
 
-  if (report == 0 || snapshot == 0 ||
+  if (er_boot_services_report_mutable(report) == 0u || snapshot == 0 ||
       snapshot->present == 0u ||
       report->device_count >= ER_BOOT_DETECTED_DEVICE_CAPACITY) {
     return 0u;
@@ -379,7 +401,7 @@ UINT8 er_boot_services_add_authority_profile(ErBootServicesReport* report,
                                              UINT16 label_len) {
   ErBootAuthorityProfile* authority;
 
-  if (report == 0 ||
+  if (er_boot_services_report_mutable(report) == 0u ||
       tpm_persistent_handle == ER_BOOT_AUTHORITY_HANDLE_INVALID ||
       boot_config_generation == ER_BOOT_CONFIG_GENERATION_INVALID ||
       config_state != ER_BOOT_CONFIG_PRESENT ||
@@ -406,7 +428,7 @@ UINT8 er_boot_services_add_authority_profile(ErBootServicesReport* report,
 
 UINT8 er_boot_services_select_authority(ErBootServicesReport* report,
                                         UINT32 authority_index) {
-  if (report == 0 ||
+  if (er_boot_services_report_mutable(report) == 0u ||
       authority_index >= report->authority_count ||
       authority_index >= ER_BOOT_AUTHORITY_PROFILE_CAPACITY ||
       er_boot_services_authority_profile_ready(&report->authorities[authority_index]) == 0u) {

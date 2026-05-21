@@ -1,4 +1,4 @@
-#include "efi_boot_internal.h"
+#include "internal/efi_boot_internal.h"
 
 UINT8 er_ui_boot_render_scene(er_ui_scene_t* scene,
                                      er_ui_ledger_app_state_t* ledger_state,
@@ -70,12 +70,15 @@ UINT8 er_ui_boot_render_scene(er_ui_scene_t* scene,
     er_println("ui renderer: dirty tile planning failed");
     return 0u;
   }
-  if (er_ui_surface_render_scene_dirty_tiles_with_font_stats(render->surface,
-                                                             scene,
-                                                             render->font,
-                                                             render->tile_plan,
-                                                             &dirty_tiles,
-                                                             &render_stats) == 0u) {
+  ErUiSurfaceRenderDesc render_desc = {
+    .scene = scene,
+    .font = render->font,
+    .tile_plan = render->tile_plan,
+    .dirty_tiles = &dirty_tiles,
+    .out_stats = &render_stats,
+    .mode = ER_UI_SURFACE_RENDER_DIRTY_TILES
+  };
+  if (er_ui_surface_render(render->surface, &render_desc) == 0u) {
     er_println("ui renderer: render failed");
     return 0u;
   }

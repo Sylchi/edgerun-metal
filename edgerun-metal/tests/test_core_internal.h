@@ -73,7 +73,7 @@
 #include "er_wifi_l2.h"
 #include "er_zfs.h"
 #include "erwire.h"
-#include "efi_boot_internal.h"
+#include "internal/efi_boot_internal.h"
 #include "font_geist.h"
 #include "wasm_vm.h"
 #include "wasm_driver_bus_probe_module.h"

@@ -1,4 +1,4 @@
-#include "efi_boot_internal.h"
+#include "internal/efi_boot_internal.h"
 
 /*
  * Purpose: prepare deterministic boot-time admitted routes shared by runtime adapters.

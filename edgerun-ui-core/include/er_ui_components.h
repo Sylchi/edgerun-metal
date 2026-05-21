@@ -245,10 +245,7 @@ bool er_ui_component_contract_supports_variant(const er_ui_component_parity_cont
 bool er_ui_component_contract_supports_interaction(
   const er_ui_component_parity_contract_t* contract,
   const char* interaction);
-const char* er_ui_component_selector(er_ui_component_test_id_t component);
 const char* er_ui_component_name(er_ui_component_test_id_t component);
-const er_ui_component_test_id_t* er_ui_component_test_ids(size_t* out_count);
-const char* er_ui_component_state_selector(er_ui_component_state_t state);
 const char* er_ui_component_state_label(er_ui_component_state_t state);
 const er_ui_component_state_t* er_ui_component_states(size_t* out_count);
 const char* er_ui_component_a11y_role_label(er_ui_component_a11y_role_t role);
@@ -280,11 +277,6 @@ bool er_ui_component_gallery_apply_action(er_ui_component_gallery_state_t* state
 bool er_ui_component_gallery_select_open(const er_ui_component_gallery_state_t* state, uint32_t id);
 float er_ui_component_gallery_slider(const er_ui_component_gallery_state_t* state, uint32_t id);
 size_t er_ui_component_option_index(uint32_t id, uint32_t base, size_t len, bool* out_has_index);
-bool er_ui_component_preview_available(const char* slug);
-bool er_ui_component_catalog_preview_available(const char* slug);
-bool er_ui_component_preview_available_by_source_component(const char* source_component);
-bool er_ui_component_preview_available_by_identifier(const char* identifier);
-bool er_ui_component_catalog_preview_available_by_identifier(const char* identifier);
 er_ui_bounds_t er_ui_component_button_bounds(er_ui_bounds_t bounds, er_ui_component_button_size_t size);
 er_ui_status_t er_ui_component_card_emit(er_ui_scene_t* scene, er_ui_bounds_t bounds, er_ui_resolved_theme_t theme);
 er_ui_status_t er_ui_component_button_emit(
@@ -661,22 +653,6 @@ er_ui_status_t er_ui_network_app_prompt_emit(
   uint32_t run_once_id,
   uint32_t verify_cache_id,
   uint32_t cancel_id);
-bool er_ui_component_scene_preview_available(const char* slug);
-er_ui_status_t er_ui_component_scene_preview_emit(
-  er_ui_scene_t* scene,
-  vr_font_face_t* font,
-  er_ui_bounds_t bounds,
-  er_ui_resolved_theme_t theme,
-  const char* slug,
-  const er_ui_component_gallery_state_t* state);
-er_ui_status_t er_ui_component_showcase_emit(
-  er_ui_scene_t* scene,
-  vr_font_face_t* font,
-  er_ui_bounds_t bounds,
-  er_ui_resolved_theme_t theme,
-  const char* selected_slug,
-  const er_ui_component_gallery_state_t* state);
-
 #ifdef __cplusplus
 }
 #endif

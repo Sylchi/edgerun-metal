@@ -1,4 +1,4 @@
-#include "efi_boot_internal.h"
+#include "internal/efi_boot_internal.h"
 #include "er_tpm_acpi.h"
 #include "er_tpm_bench.h"
 
@@ -271,6 +271,10 @@ EFI_STATUS EFIAPI efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE* SystemTable
   }
 #endif
   er_boot_services_apply_admission(SystemTable, &boot_report);
+  if (er_boot_services_finalize_report(&boot_report) == 0u) {
+    er_println("boot services: report finalization failed");
+    return EFI_ABORTED;
+  }
   er_boot_services_print_report(&boot_report);
 
   er_run_boot_path(ImageHandle, SystemTable, &boot_report);

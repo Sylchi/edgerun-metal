@@ -38,6 +38,7 @@ static const char ERC_THIRD_PARTY_DIR[] = "third_party/";
 static const char ERC_ALLOWED_BLAKE3_DIR[] = "third_party/blake3/";
 static const char ERC_VENDOR_UI_DIR[] = "ui/shadcn-ui/";
 static const char ERC_FIRMWARE_DIR[] = "firmware/";
+static const char ERC_API_MANIFEST[] = "api/public-headers.manifest";
 
 static const char* const ERC_EXTERNAL_PATTERNS[ERC_EXTERNAL_PATTERN_COUNT] = {
   "curl" " -",
@@ -148,6 +149,70 @@ static int erc_is_unapproved_external_dependency_path(const char* path) {
 
 static int erc_join(char* out, size_t out_len, const char* a, const char* b);
 static unsigned char* erc_read_file(const char* path, size_t* out_len);
+
+static int erc_has_suffix(const char* path, const char* suffix) {
+  size_t path_len = strlen(path);
+  size_t suffix_len = strlen(suffix);
+
+  if (path_len < suffix_len) {
+    return 0;
+  }
+  return strcmp(path + path_len - suffix_len, suffix) == 0;
+}
+
+static int erc_is_public_header_path(const char* path) {
+  if (erc_has_suffix(path, ".h") == 0) {
+    return 0;
+  }
+  if (strncmp(path, "include/", strlen("include/")) == 0 ||
+      strncmp(path, "edgerun-ui-core/include/", strlen("edgerun-ui-core/include/")) == 0 ||
+      strncmp(path, "edgerun-ui-core/varfont/include/", strlen("edgerun-ui-core/varfont/include/")) == 0 ||
+      strncmp(path, "edgerun-crypto/include/", strlen("edgerun-crypto/include/")) == 0 ||
+      strncmp(path, "devices/", strlen("devices/")) == 0) {
+    return 1;
+  }
+  if (strncmp(path, "edgerun-metal/core/", strlen("edgerun-metal/core/")) == 0 &&
+      strchr(path + strlen("edgerun-metal/core/"), '/') == NULL) {
+    return 1;
+  }
+  return 0;
+}
+
+static int erc_api_manifest_next(const unsigned char* bytes,
+                                 size_t len,
+                                 size_t* cursor,
+                                 char* out,
+                                 size_t out_len,
+                                 int* out_has_line) {
+  size_t start;
+  size_t line_len;
+
+  if (bytes == NULL || cursor == NULL || out == NULL || out_len == 0u || out_has_line == NULL) {
+    return erc_fail("invalid API manifest state");
+  }
+  *out_has_line = 0;
+  if (*cursor >= len) {
+    return 0;
+  }
+  start = *cursor;
+  while (*cursor < len && bytes[*cursor] != '\n') {
+    if (bytes[*cursor] == '\r') {
+      return erc_fail("API manifest contains carriage return");
+    }
+    ++*cursor;
+  }
+  line_len = *cursor - start;
+  if (*cursor < len && bytes[*cursor] == '\n') {
+    ++*cursor;
+  }
+  if (line_len == 0u || line_len >= out_len) {
+    return erc_fail("API manifest contains invalid line");
+  }
+  memcpy(out, bytes + start, line_len);
+  out[line_len] = '\0';
+  *out_has_line = 1;
+  return 0;
+}
 
 static int erc_is_external_dependency_audit_path(const char* path) {
   if (strncmp(path, ERC_THIRD_PARTY_DIR, sizeof(ERC_THIRD_PARTY_DIR) - 1u) == 0) {
@@ -311,21 +376,36 @@ static unsigned char* erc_read_file(const char* path, size_t* out_len) {
 //@optimizer-ignore-function git index check must parse each tracked entry and fail immediately on violations
 static int erc_scan_index(const char* root) {
   char index_path[4096];
+  char manifest_path[4096];
+  char manifest_entry[4096];
   unsigned char* index_bytes;
+  unsigned char* manifest_bytes;
   size_t index_len;
+  size_t manifest_len;
+  size_t manifest_cursor = 0u;
   uint32_t entries;
   uint32_t i;
   size_t offset = ERC_INDEX_HEADER_BYTES;
+  int has_manifest_entry = 0;
 
   if (!erc_join(index_path, sizeof(index_path), root, ".git/index")) {
+    return erc_fail("path too long");
+  }
+  if (!erc_join(manifest_path, sizeof(manifest_path), root, ERC_API_MANIFEST)) {
     return erc_fail("path too long");
   }
   index_bytes = erc_read_file(index_path, &index_len);
   if (index_bytes == NULL) {
     return 0;
   }
+  manifest_bytes = erc_read_file(manifest_path, &manifest_len);
+  if (manifest_bytes == NULL) {
+    free(index_bytes);
+    return erc_fail("API manifest is missing");
+  }
   if (index_len < ERC_INDEX_HEADER_BYTES || memcmp(index_bytes, "DIRC", ERC_GIT_DIRC_MAGIC_BYTES) != 0) {
     free(index_bytes);
+    free(manifest_bytes);
     return erc_fail("Git index is not readable");
   }
   entries = erc_be32(index_bytes + 8u);
@@ -338,6 +418,7 @@ static int erc_scan_index(const char* root) {
 
     if (offset + ERC_INDEX_ENTRY_BASE_BYTES > index_len) {
       free(index_bytes);
+      free(manifest_bytes);
       return erc_fail("Git index entry is truncated");
     }
     mode = erc_be32(index_bytes + offset + ERC_INDEX_MODE_OFFSET);
@@ -349,43 +430,78 @@ static int erc_scan_index(const char* root) {
       const unsigned char* end = memchr(name, '\0', index_len - offset - ERC_INDEX_ENTRY_BASE_BYTES);
       if (end == NULL) {
         free(index_bytes);
+        free(manifest_bytes);
         return erc_fail("Git index entry path is truncated");
       }
       name_len = (size_t)(end - (const unsigned char*)name);
     }
     if (offset + ERC_INDEX_ENTRY_BASE_BYTES + name_len >= index_len) {
       free(index_bytes);
+      free(manifest_bytes);
       return erc_fail("Git index entry path is truncated");
     }
     if (mode == ERC_GITLINK_MODE) {
       free(index_bytes);
+      free(manifest_bytes);
       return erc_fail("Git submodule entries are not allowed");
     }
     if (erc_is_tracked_build_artifact(name) != 0) {
       free(index_bytes);
+      free(manifest_bytes);
       return erc_fail("generated build artifacts must not be tracked");
     }
     if (erc_is_first_party_readme(name) != 0) {
       free(index_bytes);
+      free(manifest_bytes);
       return erc_fail("first-party documentation must use the root README.md, not nested README.md files");
     }
     if (erc_is_top_level_extra_markdown(name) != 0) {
       free(index_bytes);
+      free(manifest_bytes);
       return erc_fail("first-party documentation must stay in README.md; top-level markdown docs are not allowed");
     }
     if (erc_is_unapproved_external_dependency_path(name) != 0) {
       free(index_bytes);
+      free(manifest_bytes);
       return erc_fail("unapproved external dependency path is not allowed");
+    }
+    if (erc_is_public_header_path(name) != 0) {
+      if (erc_api_manifest_next(manifest_bytes, manifest_len, &manifest_cursor,
+                                manifest_entry, sizeof(manifest_entry),
+                                &has_manifest_entry) != 0) {
+        free(index_bytes);
+        free(manifest_bytes);
+        return 1;
+      }
+      if (has_manifest_entry == 0 || strcmp(name, manifest_entry) != 0) {
+        free(index_bytes);
+        free(manifest_bytes);
+        return erc_fail("public API header manifest is stale");
+      }
     }
     if (erc_scan_external_dependencies(root, name) != 0) {
       free(index_bytes);
+      free(manifest_bytes);
       return 1;
     }
     entry_len = ERC_INDEX_ENTRY_BASE_BYTES + name_len + 1u;
     entry_len = (entry_len + (ERC_INDEX_ENTRY_ALIGNMENT - 1u)) & ~(ERC_INDEX_ENTRY_ALIGNMENT - 1u);
     offset += entry_len;
   }
+  if (erc_api_manifest_next(manifest_bytes, manifest_len, &manifest_cursor,
+                            manifest_entry, sizeof(manifest_entry),
+                            &has_manifest_entry) != 0) {
+    free(index_bytes);
+    free(manifest_bytes);
+    return 1;
+  }
+  if (has_manifest_entry != 0) {
+    free(index_bytes);
+    free(manifest_bytes);
+    return erc_fail("public API header manifest contains untracked header");
+  }
   free(index_bytes);
+  free(manifest_bytes);
   return 0;
 }
 

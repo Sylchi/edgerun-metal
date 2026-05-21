@@ -14,7 +14,8 @@ extern "C" {
 typedef enum {
   ER_UI_OK = 0,
   ER_UI_ERR_INVALID_ARGUMENT,
-  ER_UI_ERR_OOM
+  ER_UI_ERR_OOM,
+  ER_UI_ERR_NOT_FOUND
 } er_ui_status_t;
 
 typedef void* (*er_ui_alloc_fn)(void* user, size_t size, size_t align);

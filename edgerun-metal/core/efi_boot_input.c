@@ -1,4 +1,4 @@
-#include "efi_boot_internal.h"
+#include "internal/efi_boot_internal.h"
 
 ErUiBootAppContext* er_ui_boot_active_app(ErUiBootRenderContext* render) {
   if (render == 0 || render->apps == 0 || render->app_count == 0u ||

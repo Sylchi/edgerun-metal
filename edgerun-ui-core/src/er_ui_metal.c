@@ -1,4 +1,5 @@
 #include "er_ui_metal.h"
+#include "er_ui_components_internal.h"
 #include "er_ui_node.h"
 #include "er_ui_painter.h"
 #include "er_ui_spacing.h"

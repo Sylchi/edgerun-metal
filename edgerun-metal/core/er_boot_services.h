@@ -117,7 +117,8 @@ typedef struct {
   UINT32 device_count;
   ErTpmNvLimits tpm_nv_limits;
   UINT8 boot_admission_present;
-  UINT8 reserved[3];
+  UINT8 finalized;
+  UINT8 reserved[2];
   ErBootAdmissionRecord boot_admission;
   ErBootRuntimeCapabilities runtime_capabilities;
   ErBootAuthorityProfile authorities[ER_BOOT_AUTHORITY_PROFILE_CAPACITY];
@@ -125,6 +126,7 @@ typedef struct {
 } ErBootServicesReport;
 
 void er_boot_services_report_init(ErBootServicesReport* report);
+UINT8 er_boot_services_finalize_report(ErBootServicesReport* report);
 UINT8 er_boot_services_authority_label_valid(const char* label,
                                              UINT16 label_len);
 UINT8 er_boot_services_probe_secure_boot(EFI_SYSTEM_TABLE* system_table,

@@ -709,7 +709,7 @@ static void test_surface_renderer_rasterizes_scene_memory(void) {
     ER_UI_SURFACE_PIXEL_RGBX
   };
   expect_true(er_ui_surface_valid(&surface) != 0u, "surface renderer: surface validates");
-  expect_true(er_ui_surface_render_scene_with_font_stats(&surface, &scene, NULL, &stats) != 0u,
+  expect_true(er_ui_surface_render(&surface, &(ErUiSurfaceRenderDesc){.scene = &scene, .out_stats = &stats, .mode = ER_UI_SURFACE_RENDER_FULL}) != 0u,
               "surface renderer: scene renders");
 
   clear_pixel = er_ui_surface_pack_rgb(ER_UI_SURFACE_PIXEL_RGBX,

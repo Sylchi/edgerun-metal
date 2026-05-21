@@ -115,6 +115,31 @@
     *out_count = ER_UI_COMPONENT_ARRAY_COUNT(labels); \
     return true; \
   } while (0)
+
+const char* er_ui_component_selector(er_ui_component_test_id_t component);
+const er_ui_component_test_id_t* er_ui_component_test_ids(size_t* out_count);
+const char* er_ui_component_state_selector(er_ui_component_state_t state);
+bool er_ui_component_preview_available(const char* slug);
+bool er_ui_component_catalog_preview_available(const char* slug);
+bool er_ui_component_preview_available_by_source_component(const char* source_component);
+bool er_ui_component_preview_available_by_identifier(const char* identifier);
+bool er_ui_component_catalog_preview_available_by_identifier(const char* identifier);
+bool er_ui_component_scene_preview_available(const char* slug);
+er_ui_status_t er_ui_component_scene_preview_emit(
+  er_ui_scene_t* scene,
+  vr_font_face_t* font,
+  er_ui_bounds_t bounds,
+  er_ui_resolved_theme_t theme,
+  const char* slug,
+  const er_ui_component_gallery_state_t* state);
+er_ui_status_t er_ui_component_showcase_emit(
+  er_ui_scene_t* scene,
+  vr_font_face_t* font,
+  er_ui_bounds_t bounds,
+  er_ui_resolved_theme_t theme,
+  const char* selected_slug,
+  const er_ui_component_gallery_state_t* state);
+
 #define ER_UI_COMPONENT_IDENTIFIER_CAPACITY ER_UI_COMPONENT_TEXT_CAPACITY
 #define ER_UI_COMPONENT_PREVIEW_BREADCRUMB_ID (ER_UI_COMPONENT_PREVIEW_BASE_ID + 1u)
 #define ER_UI_COMPONENT_PREVIEW_BUTTON_DEFAULT_ID (ER_UI_COMPONENT_PREVIEW_BASE_ID + 2u)

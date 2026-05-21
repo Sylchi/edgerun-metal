@@ -1,4 +1,4 @@
-#include "efi_boot_internal.h"
+#include "internal/efi_boot_internal.h"
 
 static UINT64 er_boot_ble_wifi_node_nonce(const ErBootServicesReport* boot_report) {
   UINT64 nonce = ER_BOOT_BLE_WIFI_NODE_NONCE;

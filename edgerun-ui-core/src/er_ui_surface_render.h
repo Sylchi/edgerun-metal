@@ -61,17 +61,8 @@ uint8_t er_ui_surface_clear(ErUiSurface* surface, er_ui_color4_t color) {
   return er_ui_surface_clear_stats(surface, color, 0);
 }
 
-uint8_t er_ui_surface_render_scene(ErUiSurface* surface, const er_ui_scene_t* scene) {
-  return er_ui_surface_render_scene_with_atlas(surface, scene, 0);
-}
-
-uint8_t er_ui_surface_render_scene_with_atlas(ErUiSurface* surface, const er_ui_scene_t* scene,
-                                                const ErUiSurfaceAlphaAtlas* atlas) {
-  return er_ui_surface_render_scene_with_atlas_stats(surface, scene, atlas, 0);
-}
-
 //@optimizer-ignore-function scene rendering must visit each recorded primitive stream in deterministic order
-static uint8_t er_ui_surface_render_scene_with_atlas_clip_stats(ErUiSurface* surface,
+static uint8_t er_ui_surface_render_clipped(ErUiSurface* surface,
                                                                   const er_ui_scene_t* scene,
                                                                   const ErUiSurfaceAlphaAtlas* atlas,
                                                                   const ErUiSurfacePixelRect* clip,
@@ -103,99 +94,102 @@ static uint8_t er_ui_surface_render_scene_with_atlas_clip_stats(ErUiSurface* sur
   return 1u;
 }
 
-static uint8_t er_ui_surface_render_scene_with_atlas_stats(ErUiSurface* surface, const er_ui_scene_t* scene,
-                                                             const ErUiSurfaceAlphaAtlas* atlas,
-                                                             ErUiSurfaceRenderStats* stats) {
-  return er_ui_surface_render_scene_with_atlas_clip_stats(surface, scene, atlas, 0, stats);
-}
-
-uint8_t er_ui_surface_render_scene_with_font(ErUiSurface* surface, const er_ui_scene_t* scene,
-                                               const vr_font_face_t* font) {
-  return er_ui_surface_render_scene_with_font_stats(surface, scene, font, 0);
-}
-
-uint8_t er_ui_surface_render_scene_with_font_stats(ErUiSurface* surface, const er_ui_scene_t* scene,
-                                                     const vr_font_face_t* font,
-                                                     ErUiSurfaceRenderStats* out_stats) {
-  return er_ui_surface_render_scene_tile_with_font_stats(surface, scene, font, 0, 0u, out_stats);
-}
-
 //@optimizer-ignore-function font-backed scene rendering must visit each text quad after base primitive rendering
-uint8_t er_ui_surface_render_scene_tile_with_font_stats(ErUiSurface* surface, const er_ui_scene_t* scene,
-                                                          const vr_font_face_t* font,
-                                                          const ErUiSurfaceTilePlan* plan, uint32_t tile_id,
-                                                          ErUiSurfaceRenderStats* out_stats) {
+static uint8_t er_ui_surface_render_tile(ErUiSurface* surface, const ErUiSurfaceRenderDesc* desc) {
   size_t i;
   ErUiSurfacePixelRect clip;
   const ErUiSurfacePixelRect* clip_ptr = 0;
 
   if (er_ui_surface_valid(surface) == 0u) {
-    if (out_stats != 0) {
-      *out_stats = (ErUiSurfaceRenderStats){0};
+    if (desc->out_stats != 0) {
+      *desc->out_stats = (ErUiSurfaceRenderStats){0};
     }
     return 0u;
   }
-  if (plan != 0) {
-    if (er_ui_surface_tile_rect(plan, tile_id, &clip) == 0u ||
-        plan->width != surface->width || plan->height != surface->height || plan->stride != surface->stride) {
-      if (out_stats != 0) {
-        *out_stats = (ErUiSurfaceRenderStats){0};
+  if (desc->mode == ER_UI_SURFACE_RENDER_TILE) {
+    if (desc->tile_plan == 0 ||
+        er_ui_surface_tile_rect(desc->tile_plan, desc->tile_id, &clip) == 0u ||
+        desc->tile_plan->width != surface->width ||
+        desc->tile_plan->height != surface->height ||
+        desc->tile_plan->stride != surface->stride) {
+      if (desc->out_stats != 0) {
+        *desc->out_stats = (ErUiSurfaceRenderStats){0};
       }
       return 0u;
     }
     clip_ptr = &clip;
   }
 
-  if (er_ui_surface_render_scene_with_atlas_clip_stats(surface, scene, 0, clip_ptr, out_stats) == 0u) {
+  if (desc->font != 0 && desc->atlas != 0) {
+    if (desc->out_stats != 0) {
+      *desc->out_stats = (ErUiSurfaceRenderStats){0};
+    }
     return 0u;
   }
-  if (clip_ptr != 0 && out_stats != 0) {
-    out_stats->tiles_rendered = 1u;
+  if (er_ui_surface_render_clipped(surface, desc->scene, desc->atlas, clip_ptr, desc->out_stats) == 0u) {
+    return 0u;
   }
-  if (font != 0) {
-    for (i = 0u; i < scene->text_quad_count; ++i) {
-      er_ui_surface_render_text_quad(surface, &scene->text_quads[i], font, clip_ptr, out_stats);
+  if (clip_ptr != 0 && desc->out_stats != 0) {
+    desc->out_stats->tiles_rendered = 1u;
+  }
+  if (desc->font != 0) {
+    for (i = 0u; i < desc->scene->text_quad_count; ++i) {
+      er_ui_surface_render_text_quad(surface, &desc->scene->text_quads[i], desc->font, clip_ptr, desc->out_stats);
     }
   }
   return 1u;
 }
 
 //@optimizer-ignore-function dirty rendering must redraw each requested tile deterministically
-uint8_t er_ui_surface_render_scene_dirty_tiles_with_font_stats(ErUiSurface* surface,
-                                                                 const er_ui_scene_t* scene,
-                                                                 const vr_font_face_t* font,
-                                                                 const ErUiSurfaceTilePlan* plan,
-                                                                 const ErUiSurfaceDirtyTileList* dirty_tiles,
-                                                                 ErUiSurfaceRenderStats* out_stats) {
+static uint8_t er_ui_surface_render_dirty_tiles(ErUiSurface* surface, const ErUiSurfaceRenderDesc* desc) {
   uint32_t i;
   ErUiSurfaceRenderStats total;
 
-  if (out_stats != 0) {
-    *out_stats = (ErUiSurfaceRenderStats){0};
+  if (desc->out_stats != 0) {
+    *desc->out_stats = (ErUiSurfaceRenderStats){0};
   }
-  if (surface == 0 || scene == 0 || plan == 0 || dirty_tiles == 0 || dirty_tiles->tile_ids == 0 ||
-      dirty_tiles->overflowed != 0u || dirty_tiles->count > dirty_tiles->capacity) {
+  if (surface == 0 || desc->scene == 0 || desc->tile_plan == 0 ||
+      desc->dirty_tiles == 0 || desc->dirty_tiles->tile_ids == 0 ||
+      desc->dirty_tiles->overflowed != 0u || desc->dirty_tiles->count > desc->dirty_tiles->capacity) {
     return 0u;
   }
 
   total = (ErUiSurfaceRenderStats){0};
-  total.dirty_tiles_requested = dirty_tiles->count;
-  for (i = 0u; i < dirty_tiles->count; ++i) {
+  total.dirty_tiles_requested = desc->dirty_tiles->count;
+  for (i = 0u; i < desc->dirty_tiles->count; ++i) {
     ErUiSurfaceRenderStats tile_stats;
-    if (er_ui_surface_render_scene_tile_with_font_stats(surface, scene, font, plan,
-                                                            dirty_tiles->tile_ids[i], &tile_stats) == 0u) {
-      if (out_stats != 0) {
-        *out_stats = (ErUiSurfaceRenderStats){0};
+    ErUiSurfaceRenderDesc tile_desc = *desc;
+    tile_desc.mode = ER_UI_SURFACE_RENDER_TILE;
+    tile_desc.tile_id = desc->dirty_tiles->tile_ids[i];
+    tile_desc.out_stats = &tile_stats;
+    if (er_ui_surface_render_tile(surface, &tile_desc) == 0u) {
+      if (desc->out_stats != 0) {
+        *desc->out_stats = (ErUiSurfaceRenderStats){0};
       }
       return 0u;
     }
     er_ui_surface_stats_add(&total, &tile_stats);
   }
-  if (out_stats != 0) {
-    total.dirty_tiles_requested = dirty_tiles->count;
-    *out_stats = total;
+  if (desc->out_stats != 0) {
+    total.dirty_tiles_requested = desc->dirty_tiles->count;
+    *desc->out_stats = total;
   }
   return 1u;
+}
+
+uint8_t er_ui_surface_render(ErUiSurface* surface, const ErUiSurfaceRenderDesc* desc) {
+  if (desc == 0 || desc->scene == 0) {
+    return 0u;
+  }
+  switch (desc->mode) {
+    case ER_UI_SURFACE_RENDER_FULL:
+    case ER_UI_SURFACE_RENDER_TILE:
+      return er_ui_surface_render_tile(surface, desc);
+    case ER_UI_SURFACE_RENDER_DIRTY_TILES:
+      return er_ui_surface_render_dirty_tiles(surface, desc);
+    default:
+      return 0u;
+  }
 }
 
 #endif

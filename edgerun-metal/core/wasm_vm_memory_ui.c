@@ -1,4 +1,4 @@
-#include "wasm_vm_internal.h"
+#include "internal/wasm_vm_internal.h"
 
 static int er_wasm_linear_window_valid(UINT32 address_base, UINT32 address_len,
                                        UINT32 window_base, UINT32 window_len) {

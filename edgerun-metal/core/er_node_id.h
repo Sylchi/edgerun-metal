@@ -36,7 +36,20 @@ typedef struct {
 } ErNodeIdSource;
 
 UINT8 er_node_id_equal(const ErNodeId* left, const ErNodeId* right);
-UINT8 er_node_id_nonzero(const ErNodeId* value);
+static inline UINT8 er_node_id_nonzero(const ErNodeId* value) {
+  UINTN i;
+
+  if (value == 0) {
+    return 0u;
+  }
+  for (i = 0u; i < ER_NODE_ID_LEN; ++i) {
+    if (value->bytes[i] != 0u) {
+      return 1u;
+    }
+  }
+  return 0u;
+}
+
 UINT8 er_node_id_source_prepare(UINT16 kind,
                                 const UINT8* material,
                                 UINT16 material_len,

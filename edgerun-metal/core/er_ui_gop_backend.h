@@ -69,54 +69,14 @@ UINT8 er_ui_gop_renderer_tile_plan(UINT32 tile_width, UINT32 tile_height,
   return er_ui_surface_tile_plan(&g_surface, tile_width, tile_height, max_dirty_tiles, out_plan);
 }
 
-UINT8 er_ui_gop_renderer_render_scene(const er_ui_scene_t* scene) {
-  return er_ui_gop_renderer_render_scene_with_atlas(scene, 0);
-}
-
-UINT8 er_ui_gop_renderer_render_scene_with_atlas(const er_ui_scene_t* scene, const ErUiSurfaceAlphaAtlas* atlas) {
+UINT8 er_ui_gop_renderer_render(const ErUiSurfaceRenderDesc* desc) {
   if (g_ready == 0u) {
-    return 0u;
-  }
-  return er_ui_surface_render_scene_with_atlas(&g_surface, scene, atlas);
-}
-
-UINT8 er_ui_gop_renderer_render_scene_with_font(const er_ui_scene_t* scene, const vr_font_face_t* font) {
-  return er_ui_gop_renderer_render_scene_with_font_stats(scene, font, 0);
-}
-
-UINT8 er_ui_gop_renderer_render_scene_with_font_stats(const er_ui_scene_t* scene, const vr_font_face_t* font,
-                                                      ErUiSurfaceRenderStats* out_stats) {
-  if (g_ready == 0u) {
-    return 0u;
-  }
-  return er_ui_surface_render_scene_with_font_stats(&g_surface, scene, font, out_stats);
-}
-
-UINT8 er_ui_gop_renderer_render_scene_tile_with_font_stats(const er_ui_scene_t* scene, const vr_font_face_t* font,
-                                                           const ErUiSurfaceTilePlan* plan, UINT32 tile_id,
-                                                           ErUiSurfaceRenderStats* out_stats) {
-  if (g_ready == 0u) {
-    if (out_stats != 0) {
-      *out_stats = (ErUiSurfaceRenderStats){0};
+    if (desc != 0 && desc->out_stats != 0) {
+      *desc->out_stats = (ErUiSurfaceRenderStats){0};
     }
     return 0u;
   }
-  return er_ui_surface_render_scene_tile_with_font_stats(&g_surface, scene, font, plan, tile_id, out_stats);
-}
-
-UINT8 er_ui_gop_renderer_render_scene_dirty_tiles_with_font_stats(const er_ui_scene_t* scene,
-                                                                  const vr_font_face_t* font,
-                                                                  const ErUiSurfaceTilePlan* plan,
-                                                                  const ErUiSurfaceDirtyTileList* dirty_tiles,
-                                                                  ErUiSurfaceRenderStats* out_stats) {
-  if (g_ready == 0u) {
-    if (out_stats != 0) {
-      *out_stats = (ErUiSurfaceRenderStats){0};
-    }
-    return 0u;
-  }
-  return er_ui_surface_render_scene_dirty_tiles_with_font_stats(&g_surface, scene, font, plan,
-                                                               dirty_tiles, out_stats);
+  return er_ui_surface_render(&g_surface, desc);
 }
 
 #endif

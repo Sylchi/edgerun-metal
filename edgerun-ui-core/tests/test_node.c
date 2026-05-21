@@ -1,4 +1,5 @@
 #include "test_common.h"
+#include "../src/er_ui_node_domain.h"
 
 #define ER_UI_TEST_NODE_ARRAY_COUNT(values) (sizeof(values) / sizeof((values)[0]))
 #define ER_UI_TEST_NODE_DEPLOY_BUTTON_ID 8001u

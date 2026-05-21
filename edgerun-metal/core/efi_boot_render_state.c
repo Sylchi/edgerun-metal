@@ -1,4 +1,4 @@
-#include "efi_boot_internal.h"
+#include "internal/efi_boot_internal.h"
 
 enum {
   ER_UI_BOOT_PRESENT_TILE_CLEAN = 0u,

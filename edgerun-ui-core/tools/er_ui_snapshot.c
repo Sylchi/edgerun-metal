@@ -419,8 +419,10 @@ int main(int argc, char** argv) {
     config.width + ER_UI_SNAPSHOT_STRIDE_EXTRA,
     ER_UI_SURFACE_PIXEL_RGBX
   };
-  if (er_ui_surface_render_scene_with_font_stats(
-          &surface, &scene, font, &stats) == 0u) {
+  if (er_ui_surface_render(&surface, &(ErUiSurfaceRenderDesc){.scene = &scene,
+                                                               .font = font,
+                                                               .out_stats = &stats,
+                                                               .mode = ER_UI_SURFACE_RENDER_FULL}) == 0u) {
     er_ui_scene_destroy(&scene);
     vr_font_face_destroy(font);
     free(pixels);

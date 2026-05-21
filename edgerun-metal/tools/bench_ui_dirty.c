@@ -1,4 +1,4 @@
-#include "efi_boot_internal.h"
+#include "internal/efi_boot_internal.h"
 
 #include <stdio.h>
 
@@ -188,10 +188,12 @@ int main(void) {
     return 1;
   }
 
-  if (er_ui_surface_render_scene_with_font_stats(&surface,
-                                                 &next_scene,
-                                                 0,
-                                                 &full_stats) == 0u ||
+  ErUiSurfaceRenderDesc full_render = {
+    .scene = &next_scene,
+    .out_stats = &full_stats,
+    .mode = ER_UI_SURFACE_RENDER_FULL
+  };
+  if (er_ui_surface_render(&surface, &full_render) == 0u ||
       bench_ui_work_from_render(&full_clock,
                                 full_stats.bytes_written,
                                 tile_plan.full_frame_bytes,
@@ -211,13 +213,15 @@ int main(void) {
   render.present_rect_capacity = BENCH_UI_MAX_DIRTY_TILES;
   er_ui_surface_frame_state_commit(&render.frame_state);
 
+  ErUiSurfaceRenderDesc dirty_render = {
+    .scene = &next_scene,
+    .tile_plan = &tile_plan,
+    .dirty_tiles = &dirty_tiles,
+    .out_stats = &dirty_stats,
+    .mode = ER_UI_SURFACE_RENDER_DIRTY_TILES
+  };
   if (er_ui_boot_prepare_dirty_tiles(&render, &next_scene, &dirty_tiles) == 0u ||
-      er_ui_surface_render_scene_dirty_tiles_with_font_stats(&surface,
-                                                             &next_scene,
-                                                             0,
-                                                             &tile_plan,
-                                                             &dirty_tiles,
-                                                             &dirty_stats) == 0u ||
+      er_ui_surface_render(&surface, &dirty_render) == 0u ||
       er_ui_boot_dirty_present_rects(&render) == 0u ||
       bench_ui_work_from_render(&dirty_clock,
                                 dirty_stats.bytes_written,

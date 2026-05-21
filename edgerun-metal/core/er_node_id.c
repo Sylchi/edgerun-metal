@@ -87,13 +87,6 @@ UINT8 er_node_id_equal(const ErNodeId* left, const ErNodeId* right) {
   return er_mem_equal(left->bytes, right->bytes, ER_NODE_ID_LEN);
 }
 
-UINT8 er_node_id_nonzero(const ErNodeId* value) {
-  if (value == 0) {
-    return 0u;
-  }
-  return er_mem_any_nonzero(value->bytes, ER_NODE_ID_LEN);
-}
-
 UINT8 er_node_id_source_prepare(UINT16 kind,
                                 const UINT8* material,
                                 UINT16 material_len,

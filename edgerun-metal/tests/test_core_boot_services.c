@@ -259,4 +259,11 @@ static void test_boot_services_boundary(void) {
               ER_BOOT_SERVICES_ACTION_ENTER_RUNTIME);
   check_int64("boot services admission runtime allowed",
               er_boot_services_runtime_entry_allowed(&report), 1);
+  check_int64("boot services finalize admission report",
+              er_boot_services_finalize_report(&report), 1);
+  check_uint64("boot services report finalized", report.finalized, 1u);
+  check_int64("boot services finalized report rejects mutation",
+              er_boot_services_set_tpm_limits(&report, &limits), 0);
+  check_int64("boot services finalized report rejects second finalize",
+              er_boot_services_finalize_report(&report), 0);
 }

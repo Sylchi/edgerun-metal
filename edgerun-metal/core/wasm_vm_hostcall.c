@@ -1,4 +1,4 @@
-#include "wasm_vm_internal.h"
+#include "internal/wasm_vm_internal.h"
 
 static int er_wasm_stack_pop(INT64* stack, UINT32* stack_size, INT64* out) {
   if (*stack_size == 0u) {
