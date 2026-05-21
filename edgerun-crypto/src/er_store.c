@@ -66,6 +66,13 @@ enum {
   ER_STORE_OBJECT_CHUNK_SIZE_OFF = 8u,
   ER_STORE_OBJECT_CHUNK_COUNT_OFF = 16u,
   ER_STORE_OBJECT_FIRST_HASH_OFF = 20u,
+  ER_STORE_PROJECT_INDEX_ID_OFF = 0u,
+  ER_STORE_PROJECT_VALUE_KIND_OFF = 4u,
+  ER_STORE_PROJECT_CONTENT_TYPE_OFF = 8u,
+  ER_STORE_PROJECT_VALUE_SIZE_OFF = 12u,
+  ER_STORE_PROJECT_KEY_LEN_OFF = 20u,
+  ER_STORE_PROJECT_KEY_OFF = 22u,
+  ER_STORE_PROJECT_FIXED_PAYLOAD_SIZE = ER_STORE_PROJECT_KEY_OFF + ER_HASH_SIZE,
   ER_STORE_INDEX_KEY_LEN_SIZE = 2u,
   ER_STORE_INDEX_PAYLOAD_OVERHEAD = ER_STORE_INDEX_ID_SIZE + ER_STORE_INDEX_KEY_LEN_SIZE + ER_HASH_SIZE,
   ER_STORE_INDEX_OLD_PAYLOAD_OVERHEAD = ER_STORE_INDEX_KEY_LEN_SIZE + ER_HASH_SIZE,
@@ -76,6 +83,7 @@ enum {
   ER_REC_BLOB_TYPE = 4u,
   ER_REC_CONTENT_TYPE_DEFINE = 5u,
   ER_REC_INDEX_DEFINE = 6u,
+  ER_REC_OBJECT_INDEX_PUT = 7u,
   ER_CRC_INIT = 0xffffffffu,
   ER_CRC_XOR_OUT = 0xffffffffu,
   ER_CRC_POLY = 0xedb88320u,
@@ -117,9 +125,12 @@ typedef struct {
 typedef struct {
   uint8_t used;
   uint32_t index_id;
+  uint32_t value_kind;
+  uint32_t content_type;
   uint16_t key_len;
   char key[ER_STORE_MAX_KEY];
   uint8_t hash[ER_HASH_SIZE];
+  uint64_t value_size; //@optimizer-ignore index values mirror fixed 64-bit blob/object sizes
 } ErStoreKeySlot;
 
 typedef struct {
@@ -441,12 +452,16 @@ static void er_store_cache_blob(er_store_t* store, size_t slot, const void* data
   ErStoreBlobSlot* slots = er_store_blobs(store);
 
   if (len == 0u || data == (const void*)0 || len > (store->cache_len - store->cache_used)) {
+    if (len != 0u) {
+      ++store->cache_rejects;
+    }
     return;
   }
   er_store_copy(&store->cache[store->cache_used], data, len);
   slots[slot].cache_off = store->cache_used;
   slots[slot].cache_len = len;
   store->cache_used += len;
+  ++store->cache_admissions;
 }
 
 //@optimizer-ignore-function fixed-capacity key table indexes the caller-provided arena
@@ -480,9 +495,10 @@ static int er_store_find_key_ex(er_store_t* store, uint32_t index_id, const char
   return ER_ERR_NOSPACE;
 }
 
-//@optimizer-ignore-function fixed-capacity key table indexes the caller-provided arena
-static int er_store_insert_key_ex(er_store_t* store, uint32_t index_id, const char* key, size_t key_len,
-                                  const uint8_t hash[ER_HASH_SIZE]) {
+//@optimizer-ignore-function fixed-capacity key table indexes fixed hash bytes from the caller-provided arena
+static int er_store_insert_key_meta(er_store_t* store, uint32_t index_id, const char* key, size_t key_len,
+                                    const uint8_t* hash, uint32_t value_kind,
+                                    uint32_t content_type, uint64_t value_size) {
   ErStoreKeySlot* slots = er_store_keys(store);
   size_t slot;
   int found = er_store_find_key_ex(store, index_id, key, key_len, &slot);
@@ -502,8 +518,16 @@ static int er_store_insert_key_ex(er_store_t* store, uint32_t index_id, const ch
     ++store->key_count;
     store->sorted_key_dirty = 1;
   }
+  slots[slot].value_kind = value_kind;
+  slots[slot].content_type = content_type;
+  slots[slot].value_size = value_size;
   er_store_copy(slots[slot].hash, hash, ER_HASH_SIZE);
   return ER_OK;
+}
+
+static int er_store_insert_key_ex(er_store_t* store, uint32_t index_id, const char* key, size_t key_len,
+                                  const uint8_t hash[ER_HASH_SIZE]) {
+  return er_store_insert_key_meta(store, index_id, key, key_len, hash, ER_STORE_VALUE_UNKNOWN, ER_STORE_TYPE_RAW, 0u);
 }
 
 //@optimizer-ignore-function fixed-capacity content-type table indexes the caller-provided arena
@@ -806,6 +830,7 @@ static int er_store_decode_header(const uint8_t header[ER_STORE_RECORD_HEADER_SI
     case ER_REC_BLOB_TYPE:
     case ER_REC_CONTENT_TYPE_DEFINE:
     case ER_REC_INDEX_DEFINE:
+    case ER_REC_OBJECT_INDEX_PUT:
       return ER_OK;
     default:
       return ER_ERR_CORRUPT;
@@ -999,6 +1024,37 @@ static int er_store_apply_index_define_payload(er_store_t* store, uint64_t paylo
                                    (const char*)&payload[ER_STORE_INDEX_DEFINE_FIXED_PAYLOAD_SIZE], name_len);
 }
 
+//@optimizer-ignore-function projection records use fixed hash bytes and fixed 64-bit value sizes in canonical encoding
+static int er_store_apply_project_payload(er_store_t* store, uint64_t payload_off, uint64_t payload_len) {
+  uint8_t payload[ER_STORE_PROJECT_FIXED_PAYLOAD_SIZE + ER_STORE_MAX_KEY];
+  uint32_t index_id;
+  uint32_t value_kind;
+  uint32_t content_type;
+  uint64_t value_size;
+  uint16_t key_len;
+  size_t hash_off;
+
+  if (payload_len < ER_STORE_PROJECT_FIXED_PAYLOAD_SIZE ||
+      payload_len > (ER_STORE_PROJECT_FIXED_PAYLOAD_SIZE + ER_STORE_MAX_KEY)) {
+    return ER_ERR_CORRUPT;
+  }
+  if (store->io.read_at(store->io.ctx, payload_off, payload, (size_t)payload_len) != 0) {
+    return ER_ERR_IO;
+  }
+  index_id = er_store_load32(&payload[ER_STORE_PROJECT_INDEX_ID_OFF]);
+  value_kind = er_store_load32(&payload[ER_STORE_PROJECT_VALUE_KIND_OFF]);
+  content_type = er_store_load32(&payload[ER_STORE_PROJECT_CONTENT_TYPE_OFF]);
+  value_size = er_store_load64(&payload[ER_STORE_PROJECT_VALUE_SIZE_OFF]);
+  key_len = er_store_load16(&payload[ER_STORE_PROJECT_KEY_LEN_OFF]);
+  hash_off = ER_STORE_PROJECT_KEY_OFF + key_len;
+  if (key_len == 0u || key_len > ER_STORE_MAX_KEY || hash_off + ER_HASH_SIZE != payload_len ||
+      value_kind == ER_STORE_VALUE_UNKNOWN) {
+    return ER_ERR_CORRUPT;
+  }
+  return er_store_insert_key_meta(store, index_id, (const char*)&payload[ER_STORE_PROJECT_KEY_OFF], key_len,
+                                  &payload[hash_off], value_kind, content_type, value_size);
+}
+
 //@optimizer-ignore-function log replay validates fixed 64-bit record offsets and sequence fields
 static int er_store_replay(er_store_t* store, uint64_t io_size, int rebuild, int truncate_bad) {
   uint8_t header[ER_STORE_RECORD_HEADER_SIZE];
@@ -1075,6 +1131,9 @@ static int er_store_replay(er_store_t* store, uint64_t io_size, int rebuild, int
           break;
         case ER_REC_INDEX_DEFINE:
           rc = er_store_apply_index_define_payload(store, payload_off, info.payload_len);
+          break;
+        case ER_REC_OBJECT_INDEX_PUT:
+          rc = er_store_apply_project_payload(store, payload_off, info.payload_len);
           break;
         case ER_REC_TOMBSTONE:
           rc = ER_OK;
@@ -1384,6 +1443,10 @@ int er_store_stats(er_store_t* store, er_store_stats_t* out_stats) {
   out_stats->index_count = store->index_count;
   out_stats->cache_bytes = store->cache_len;
   out_stats->cache_used = store->cache_used;
+  out_stats->cache_hits = store->cache_hits;
+  out_stats->cache_misses = store->cache_misses;
+  out_stats->cache_admissions = store->cache_admissions;
+  out_stats->cache_rejects = store->cache_rejects;
   return ER_OK;
 }
 
@@ -1485,8 +1548,10 @@ int er_store_get_blob(er_store_t* store, const uint8_t hash[ER_HASH_SIZE], void*
     return ER_ERR_TOOBIG;
   }
   if (slots[slot].cache_len == (size_t)slots[slot].size) {
+    ++store->cache_hits;
     er_store_copy(out, &store->cache[slots[slot].cache_off], slots[slot].cache_len);
   } else {
+    ++store->cache_misses;
     if (slots[slot].size != 0u && store->io.read_at(store->io.ctx, slots[slot].offset, out,
                                                      (size_t)slots[slot].size) != 0) {
       return ER_ERR_IO;
@@ -1521,6 +1586,45 @@ int er_store_get_blob_info(er_store_t* store, const uint8_t hash[ER_HASH_SIZE], 
   out_blob->content_type = slots[slot].content_type;
   out_blob->offset = slots[slot].offset;
   out_blob->size = slots[slot].size;
+  return ER_OK;
+}
+
+//@optimizer-ignore-function object manifests use fixed hash bytes and fixed 64-bit size fields in canonical encoding
+static int er_store_get_object_size(er_store_t* store, const uint8_t object_hash[ER_HASH_SIZE],
+                                    uint64_t* out_size) {
+  uint8_t manifest[ER_STORE_OBJECT_FIRST_HASH_OFF + (ER_STORE_MAX_CHUNKS * ER_HASH_SIZE)];
+  er_blob_t info;
+  size_t manifest_len = 0u;
+  uint64_t total_size;
+  uint64_t chunk_size;
+  uint32_t chunk_count;
+  int rc;
+
+  if (out_size == (uint64_t*)0) {
+    return ER_ERR_BADARG;
+  }
+  rc = er_store_get_blob_info(store, object_hash, &info);
+  if (rc != ER_OK) {
+    return rc;
+  }
+  if (info.content_type != ER_STORE_TYPE_OBJECT_MANIFEST || info.size > sizeof(manifest)) {
+    return ER_ERR_CORRUPT;
+  }
+  rc = er_store_get_blob(store, object_hash, manifest, sizeof(manifest), &manifest_len);
+  if (rc != ER_OK) {
+    return rc;
+  }
+  if (manifest_len < ER_STORE_OBJECT_FIRST_HASH_OFF) {
+    return ER_ERR_CORRUPT;
+  }
+  total_size = er_store_load64(&manifest[ER_STORE_OBJECT_TOTAL_SIZE_OFF]);
+  chunk_size = er_store_load64(&manifest[ER_STORE_OBJECT_CHUNK_SIZE_OFF]);
+  chunk_count = er_store_load32(&manifest[ER_STORE_OBJECT_CHUNK_COUNT_OFF]);
+  if (chunk_size == 0u || chunk_count > ER_STORE_MAX_CHUNKS ||
+      manifest_len != (ER_STORE_OBJECT_FIRST_HASH_OFF + ((size_t)chunk_count * ER_HASH_SIZE))) {
+    return ER_ERR_CORRUPT;
+  }
+  *out_size = total_size;
   return ER_OK;
 }
 
@@ -1732,6 +1836,50 @@ int er_store_index_put_ex(er_store_t* store, uint32_t index_id, const char* key,
   return er_store_insert_key_ex(store, index_id, key, key_len, hash);
 }
 
+//@optimizer-ignore-function object index projection records use fixed hash bytes and fixed 64-bit object sizes
+int er_store_object_index_put(er_store_t* store, uint32_t index_id, const char* key,
+                              const uint8_t object_hash[ER_HASH_SIZE]) {
+  uint8_t payload[ER_STORE_PROJECT_FIXED_PAYLOAD_SIZE + ER_STORE_MAX_KEY];
+  uint8_t payload_hash[ER_HASH_SIZE];
+  size_t key_len;
+  size_t hash_off;
+  uint64_t object_size;
+  int key_ok;
+  int rc;
+
+  if (store == (er_store_t*)0 || key == (const char*)0 || object_hash == (const uint8_t*)0) {
+    return ER_ERR_BADARG;
+  }
+  key_len = er_store_cstr_len(key, ER_STORE_MAX_KEY + 1u, &key_ok);
+  if (key_ok == 0 || key_len == 0u || key_len > ER_STORE_MAX_KEY) {
+    return ER_ERR_BADARG;
+  }
+  rc = er_store_get_object_size(store, object_hash, &object_size);
+  if (rc != ER_OK) {
+    return rc;
+  }
+  hash_off = ER_STORE_PROJECT_KEY_OFF + key_len;
+  er_store_zero(payload, sizeof(payload));
+  er_store_store32(&payload[ER_STORE_PROJECT_INDEX_ID_OFF], index_id);
+  er_store_store32(&payload[ER_STORE_PROJECT_VALUE_KIND_OFF], ER_STORE_VALUE_OBJECT);
+  er_store_store32(&payload[ER_STORE_PROJECT_CONTENT_TYPE_OFF], ER_STORE_TYPE_OBJECT_MANIFEST);
+  er_store_store64(&payload[ER_STORE_PROJECT_VALUE_SIZE_OFF], object_size);
+  er_store_store16(&payload[ER_STORE_PROJECT_KEY_LEN_OFF], (uint16_t)key_len);
+  er_store_copy(&payload[ER_STORE_PROJECT_KEY_OFF], key, key_len);
+  er_store_copy(&payload[hash_off], object_hash, ER_HASH_SIZE);
+  rc = er_store_hash_bytes(payload, hash_off + ER_HASH_SIZE, payload_hash);
+  if (rc != ER_OK) {
+    return rc;
+  }
+  rc = er_store_append_record(store, ER_REC_OBJECT_INDEX_PUT, payload, hash_off + ER_HASH_SIZE, payload_hash,
+                              (uint64_t*)0);
+  if (rc != ER_OK) {
+    return rc;
+  }
+  return er_store_insert_key_meta(store, index_id, key, key_len, object_hash, ER_STORE_VALUE_OBJECT,
+                                  ER_STORE_TYPE_OBJECT_MANIFEST, object_size);
+}
+
 int er_store_index_put(er_store_t* store, const char* key, const uint8_t hash[ER_HASH_SIZE]) {
   return er_store_index_put_ex(store, ER_STORE_INDEX_DEFAULT, key, hash);
 }
@@ -1812,9 +1960,12 @@ int er_store_index_cursor_next(er_store_index_cursor_t* cursor, er_index_entry_t
     }
     ++cursor->pos;
     out_entry->index_id = slot->index_id;
+    out_entry->value_kind = slot->value_kind;
+    out_entry->content_type = slot->content_type;
     er_store_zero(out_entry->key, ER_STORE_MAX_KEY);
     er_store_copy(out_entry->key, slot->key, slot->key_len);
     er_store_copy(out_entry->hash, slot->hash, ER_HASH_SIZE);
+    out_entry->value_size = slot->value_size;
     return ER_OK;
   }
   return ER_ERR_NOTFOUND;

@@ -30,6 +30,9 @@
 #define ER_STORE_TYPE_RAW 0u
 #define ER_STORE_TYPE_OBJECT_MANIFEST 1u
 #define ER_STORE_INDEX_DEFAULT 0u
+#define ER_STORE_VALUE_UNKNOWN 0u
+#define ER_STORE_VALUE_BLOB 1u
+#define ER_STORE_VALUE_OBJECT 2u
 
 typedef struct er_io {
   void* ctx;
@@ -50,8 +53,11 @@ typedef struct er_blob {
 
 typedef struct er_index_entry {
   uint32_t index_id;
+  uint32_t value_kind;
+  uint32_t content_type;
   char key[ER_STORE_MAX_KEY];
   uint8_t hash[ER_HASH_SIZE];
+  uint64_t value_size; //@optimizer-ignore index values mirror fixed 64-bit blob/object sizes
 } er_index_entry_t;
 
 typedef struct er_store_index_cursor {
@@ -81,6 +87,10 @@ typedef struct er_store_stats {
   size_t index_count;
   size_t cache_bytes;
   size_t cache_used;
+  size_t cache_hits;
+  size_t cache_misses;
+  size_t cache_admissions;
+  size_t cache_rejects;
 } er_store_stats_t;
 
 typedef struct er_store {
@@ -103,6 +113,10 @@ typedef struct er_store {
   size_t index_capacity;
   size_t cache_len;
   size_t cache_used;
+  size_t cache_hits;
+  size_t cache_misses;
+  size_t cache_admissions;
+  size_t cache_rejects;
   uint64_t log_start; //@optimizer-ignore log offsets mirror the fixed 64-bit record log ABI
   uint64_t log_end; //@optimizer-ignore log offsets mirror the fixed 64-bit record log ABI
   uint64_t next_seq; //@optimizer-ignore sequence values mirror the fixed 64-bit record header ABI
@@ -131,6 +145,8 @@ int er_store_define_index(er_store_t* store, uint32_t index_id, uint32_t content
 int er_store_index_put(er_store_t* store, const char* key, const uint8_t hash[ER_HASH_SIZE]);
 int er_store_index_put_ex(er_store_t* store, uint32_t index_id, const char* key,
                           const uint8_t hash[ER_HASH_SIZE]);
+int er_store_object_index_put(er_store_t* store, uint32_t index_id, const char* key,
+                              const uint8_t object_hash[ER_HASH_SIZE]);
 int er_store_index_get(er_store_t* store, const char* key, uint8_t out_hash[ER_HASH_SIZE]);
 int er_store_index_get_ex(er_store_t* store, uint32_t index_id, const char* key,
                           uint8_t out_hash[ER_HASH_SIZE]);
