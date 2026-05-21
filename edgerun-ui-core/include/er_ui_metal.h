@@ -1,7 +1,7 @@
 #ifndef ER_UI_METAL_H
 #define ER_UI_METAL_H
 
-#include "er_ui_components.h"
+#include "../src/er_ui_components_internal.h"
 
 #ifdef __cplusplus
 extern "C" {

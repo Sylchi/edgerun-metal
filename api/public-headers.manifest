@@ -3,8 +3,6 @@ edgerun-ui-core/include/er_ui_assets.h
 edgerun-ui-core/include/er_ui_components.h
 edgerun-ui-core/include/er_ui_icon.h
 edgerun-ui-core/include/er_ui_initial_setup.h
-edgerun-ui-core/include/er_ui_ledger_app.h
-edgerun-ui-core/include/er_ui_metal.h
 edgerun-ui-core/include/er_ui_node.h
 edgerun-ui-core/include/er_ui_painter.h
 edgerun-ui-core/include/er_ui_preset_code.h
