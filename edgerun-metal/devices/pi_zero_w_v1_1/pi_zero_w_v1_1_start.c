@@ -1111,13 +1111,41 @@ static UINT32 er_pi_zero_w_v1_1_cyw43438_backplane_address(UINT32 address) {
          ER_PI_ZERO_W_V1_1_CYW43438_SB_ACCESS_2_4B_FLAG;
 }
 
-static UINT32 er_pi_zero_w_v1_1_cyw43438_backplane_write_bytes(
+static UINT32 er_pi_zero_w_v1_1_cyw43438_backplane_window_remaining(
+    UINT32 address) {
+  return ER_PI_ZERO_W_V1_1_CYW43438_SB_ACCESS_2_4B_FLAG -
+         (address & ER_PI_ZERO_W_V1_1_CYW43438_SB_ADDR_MASK);
+}
+
+static UINT32 er_pi_zero_w_v1_1_cyw43438_backplane_chunk_len(
+    UINT32 bytes_len,
+    UINT32 offset,
+    UINT32 window_remaining) {
+  UINT32 chunk;
+
+  chunk = bytes_len - offset;
+  if (chunk > ER_PI_ZERO_W_V1_1_CYW43438_RAM_CHUNK_BYTES) {
+    chunk = ER_PI_ZERO_W_V1_1_CYW43438_RAM_CHUNK_BYTES;
+  }
+  if (chunk > window_remaining) {
+    chunk = window_remaining;
+  }
+  return chunk;
+}
+
+static UINT32 er_pi_zero_w_v1_1_cyw43438_backplane_transfer_bytes(
     UINT32 address,
-    const UINT8* bytes,
-    UINT32 bytes_len) {
+    const UINT8* write_bytes,
+    UINT8* read_bytes,
+    UINT32 bytes_len,
+    UINT32 transfer_kind) {
   UINT32 offset;
 
-  if (bytes == 0 || bytes_len == 0u) {
+  if (bytes_len == 0u ||
+      (transfer_kind == ER_PI_ZERO_W_V1_1_SDIO_TRANSFER_READ &&
+       read_bytes == 0) ||
+      (transfer_kind == ER_PI_ZERO_W_V1_1_SDIO_TRANSFER_WRITE &&
+       write_bytes == 0)) {
     return 0u;
   }
   offset = 0u;
@@ -1127,25 +1155,21 @@ static UINT32 er_pi_zero_w_v1_1_cyw43438_backplane_write_bytes(
     UINT32 window_remaining;
 
     current_address = address + offset;
-    window_remaining = ER_PI_ZERO_W_V1_1_CYW43438_SB_ACCESS_2_4B_FLAG -
-                       (current_address & ER_PI_ZERO_W_V1_1_CYW43438_SB_ADDR_MASK);
-    chunk = bytes_len - offset;
-    if (chunk > ER_PI_ZERO_W_V1_1_CYW43438_RAM_CHUNK_BYTES) {
-      chunk = ER_PI_ZERO_W_V1_1_CYW43438_RAM_CHUNK_BYTES;
-    }
-    if (chunk > window_remaining) {
-      chunk = window_remaining;
-    }
+    window_remaining =
+        er_pi_zero_w_v1_1_cyw43438_backplane_window_remaining(current_address);
+    chunk = er_pi_zero_w_v1_1_cyw43438_backplane_chunk_len(bytes_len,
+                                                          offset,
+                                                          window_remaining);
     if (er_pi_zero_w_v1_1_cyw43438_set_backplane_window(current_address) == 0u ||
         er_pi_zero_w_v1_1_emmc_sdio_transfer(
             ER_PI_SDIO_FUNCTION_BACKPLANE,
             er_pi_zero_w_v1_1_cyw43438_backplane_address(current_address),
-            bytes + offset,
-            0,
+            write_bytes == 0 ? 0 : write_bytes + offset,
+            read_bytes == 0 ? 0 : read_bytes + offset,
             chunk,
             chunk,
             ER_PI_SDIO_CMD53_BYTE_MODE,
-            ER_PI_ZERO_W_V1_1_SDIO_TRANSFER_WRITE) == 0u) {
+            transfer_kind) == 0u) {
       return 0u;
     }
     offset += chunk;
@@ -1153,47 +1177,28 @@ static UINT32 er_pi_zero_w_v1_1_cyw43438_backplane_write_bytes(
   return 1u;
 }
 
+static UINT32 er_pi_zero_w_v1_1_cyw43438_backplane_write_bytes(
+    UINT32 address,
+    const UINT8* bytes,
+    UINT32 bytes_len) {
+  return er_pi_zero_w_v1_1_cyw43438_backplane_transfer_bytes(
+      address,
+      bytes,
+      0,
+      bytes_len,
+      ER_PI_ZERO_W_V1_1_SDIO_TRANSFER_WRITE);
+}
+
 static UINT32 er_pi_zero_w_v1_1_cyw43438_backplane_read_bytes(
     UINT32 address,
     UINT8* bytes,
     UINT32 bytes_len) {
-  UINT32 offset;
-
-  if (bytes == 0 || bytes_len == 0u) {
-    return 0u;
-  }
-  offset = 0u;
-  while (offset < bytes_len) {
-    UINT32 chunk;
-    UINT32 current_address;
-    UINT32 window_remaining;
-
-    current_address = address + offset;
-    window_remaining = ER_PI_ZERO_W_V1_1_CYW43438_SB_ACCESS_2_4B_FLAG -
-                       (current_address &
-                        ER_PI_ZERO_W_V1_1_CYW43438_SB_ADDR_MASK);
-    chunk = bytes_len - offset;
-    if (chunk > ER_PI_ZERO_W_V1_1_CYW43438_RAM_CHUNK_BYTES) {
-      chunk = ER_PI_ZERO_W_V1_1_CYW43438_RAM_CHUNK_BYTES;
-    }
-    if (chunk > window_remaining) {
-      chunk = window_remaining;
-    }
-    if (er_pi_zero_w_v1_1_cyw43438_set_backplane_window(current_address) == 0u ||
-        er_pi_zero_w_v1_1_emmc_sdio_transfer(
-            ER_PI_SDIO_FUNCTION_BACKPLANE,
-            er_pi_zero_w_v1_1_cyw43438_backplane_address(current_address),
-            0,
-            bytes + offset,
-            chunk,
-            chunk,
-            ER_PI_SDIO_CMD53_BYTE_MODE,
-            ER_PI_ZERO_W_V1_1_SDIO_TRANSFER_READ) == 0u) {
-      return 0u;
-    }
-    offset += chunk;
-  }
-  return 1u;
+  return er_pi_zero_w_v1_1_cyw43438_backplane_transfer_bytes(
+      address,
+      0,
+      bytes,
+      bytes_len,
+      ER_PI_ZERO_W_V1_1_SDIO_TRANSFER_READ);
 }
 
 static UINT32 er_pi_zero_w_v1_1_cyw43438_backplane_read32(UINT32 address,
