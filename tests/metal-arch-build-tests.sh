@@ -109,33 +109,6 @@ case "$pi_zero_w_config" in
   *) printf 'pi zero w v1.1 boot chain missing\n' >&2; exit 1 ;;
 esac
 
-case "$pi_zero_w_config" in
-  *"PI_ZERO_W_V1_1_NODE_INDEX=0"*) ;;
-  *) printf 'pi zero w v1.1 default node index missing\n' >&2; exit 1 ;;
-esac
-
-case "$pi_zero_w_config" in
-  *"PI_ZERO_W_V1_1_NODE_ID=ERZWPI00RELAY001CYW43438ARMV6L2"*) ;;
-  *) printf 'pi zero w v1.1 default node identity missing\n' >&2; exit 1 ;;
-esac
-
-case "$pi_zero_w_config" in
-  *"PI_ZERO_W_V1_1_NODE_ROLE=bootstrap-identity-package-index-serial-first-boot"*) ;;
-  *) printf 'pi zero w v1.1 default node role missing\n' >&2; exit 1 ;;
-esac
-
-pi_zero_w_node5_config=$(make -C "$ROOT_DIR/edgerun-metal" --no-print-directory print-config ER_METAL_ARCH=armv6 ER_METAL_BOARD=pi-zero-w-v1_1 PI_ZERO_W_V1_1_NODE_INDEX=5)
-
-case "$pi_zero_w_node5_config" in
-  *"PI_ZERO_W_V1_1_NODE_ID=ERZWPI05RELAY001CYW43438ARMV6L2"*) ;;
-  *) printf 'pi zero w v1.1 node 5 identity missing\n' >&2; exit 1 ;;
-esac
-
-case "$pi_zero_w_node5_config" in
-  *"PI_ZERO_W_V1_1_NODE_ROLE=mobile-observer-route-churn-late-admission"*) ;;
-  *) printf 'pi zero w v1.1 node 5 role missing\n' >&2; exit 1 ;;
-esac
-
 if make -C "$ROOT_DIR/edgerun-metal" --no-print-directory print-config ER_METAL_ARCH=aarch64 ER_METAL_BOARD=pi-zero-w-v1_1 >/tmp/metal-zero-w-board-invalid.out 2>/tmp/metal-zero-w-board-invalid.err; then
   printf 'pi zero w v1.1 accepted aarch64 unexpectedly\n' >&2
   exit 1
@@ -143,16 +116,6 @@ fi
 
 if ! grep -q "ER_METAL_BOARD=pi-zero-w-v1_1 requires ER_METAL_ARCH=armv6" /tmp/metal-zero-w-board-invalid.err; then
   printf 'pi zero w v1.1 architecture error was not explicit\n' >&2
-  exit 1
-fi
-
-if make -C "$ROOT_DIR/edgerun-metal" --no-print-directory print-config ER_METAL_ARCH=armv6 ER_METAL_BOARD=pi-zero-w-v1_1 PI_ZERO_W_V1_1_NODE_INDEX=6 >/tmp/metal-zero-w-node-invalid.out 2>/tmp/metal-zero-w-node-invalid.err; then
-  printf 'pi zero w v1.1 accepted invalid node index unexpectedly\n' >&2
-  exit 1
-fi
-
-if ! grep -q "unsupported PI_ZERO_W_V1_1_NODE_INDEX '6'" /tmp/metal-zero-w-node-invalid.err; then
-  printf 'pi zero w v1.1 node index error was not explicit\n' >&2
   exit 1
 fi
 
@@ -169,5 +132,4 @@ fi
 rm -f /tmp/metal-arch-invalid.out /tmp/metal-arch-invalid.err
 rm -f /tmp/metal-board-invalid.out /tmp/metal-board-invalid.err
 rm -f /tmp/metal-zero-w-board-invalid.out /tmp/metal-zero-w-board-invalid.err
-rm -f /tmp/metal-zero-w-node-invalid.out /tmp/metal-zero-w-node-invalid.err
 printf 'metal architecture build tests passed\n'

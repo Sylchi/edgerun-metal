@@ -192,6 +192,24 @@ if ! grep -q "erwire_expect=node_heartbeat" \
   exit 1
 fi
 
+if ! grep -q "admission_id=ERADMISSIONPIZEROW1PROOF000001XX" \
+  "$ZERO_W_BOOT_DIR/EDGERUN-PI-ZERO-W-V1_1-BOOT.txt"; then
+  printf 'zero w manifest does not name hardcoded admission id\n' >&2
+  exit 1
+fi
+
+if ! grep -q "node_identity=ephemeral" \
+  "$ZERO_W_BOOT_DIR/EDGERUN-PI-ZERO-W-V1_1-BOOT.txt"; then
+  printf 'zero w manifest does not name ephemeral node identity\n' >&2
+  exit 1
+fi
+
+if ! grep -q "channel_id=ERWIFIL2PIZEROW1CHANNEL00000001" \
+  "$ZERO_W_BOOT_DIR/EDGERUN-PI-ZERO-W-V1_1-BOOT.txt"; then
+  printf 'zero w manifest does not name hardcoded L2 channel\n' >&2
+  exit 1
+fi
+
 for firmware_name in bootcode.bin start.elf fixup.dat; do
   if ! cmp -s "${ROOT_DIR}/firmware/raspberry-pi/${firmware_name}" \
     "${ZERO_W_BOOT_DIR}/${firmware_name}"; then

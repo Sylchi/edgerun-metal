@@ -105,15 +105,12 @@ static const char ERPBS_ZERO_W_MANIFEST_TEXT[] =
     "erwire_expect_sdio_probe="
     ER_PI_ZERO_W_V1_1_STATUS_NAME_L2_OVER_AIR_RX_UNSUPPORTED "\n"
     "erwire_expect=node_heartbeat\n"
+    "admission_id=ERADMISSIONPIZEROW1PROOF000001XX\n"
+    "node_identity=ephemeral\n"
+    "channel_id=ERWIFIL2PIZEROW1CHANNEL00000001\n"
     "firmware=EFI/firmware/02d0.a9a6.0\n"
     "firmware=EFI/firmware/02d0.a9a6.1\n"
-    "firmware=EFI/firmware/02d0.a9a6.2\n"
-    "node=erzw-0:bootstrap-identity-package-index-serial-first-boot\n"
-    "node=erzw-1:sealed-object-storage-replica\n"
-    "node=erzw-2:relay-only\n"
-    "node=erzw-3:offline-rejoin-failure-injection\n"
-    "node=erzw-4:sealed-object-storage-replica-divergence-check\n"
-    "node=erzw-5:mobile-observer-route-churn-late-admission\n";
+    "firmware=EFI/firmware/02d0.a9a6.2\n";
 
 static const ErpbsBoardProfile ERPBS_BOARD_PROFILES[] = {
   {

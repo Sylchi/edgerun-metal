@@ -6,10 +6,10 @@
 #include "er_cyw43438_d11.h"
 #include "er_cyw43438_owned_firmware.h"
 #include "er_cyw43438_sdpcm.h"
+#include "er_ephemeral_node.h"
 #include "er_pi_mmc.h"
 #include "er_types.h"
 #include "pi_zero_w_v1_1_cyw43438_firmware.h"
-#include "pi_zero_w_v1_1_node_config.h"
 
 /*
  * Purpose: provide the first owned ARMv6 payload for Raspberry Pi Zero W v1.1.
@@ -49,6 +49,8 @@
 #define ER_PI_ZERO_W_V1_1_HEARTBEAT_SECS 10u
 #define ER_PI_ZERO_W_V1_1_NODE_BYTES 32u
 #define ER_PI_ZERO_W_V1_1_HASH_BYTES 32u
+#define ER_PI_ZERO_W_V1_1_ADMISSION_ID_TEXT "ERADMISSIONPIZEROW1PROOF000001XX"
+#define ER_PI_ZERO_W_V1_1_CHANNEL_ID_TEXT "ERWIFIL2PIZEROW1CHANNEL00000001"
 #define ER_PI_ZERO_W_V1_1_C_STRING_NUL_BYTES 1u
 #define ER_PI_ZERO_W_V1_1_IEEE80211_BEACON_LEN 64u
 #define ER_PI_ZERO_W_V1_1_IEEE80211_PROBE_REQUEST_LEN 54u
@@ -130,6 +132,8 @@
 #define ER_PI_ZERO_W_V1_1_LED_CYW_MAILBOX_FAIL 11u
 #define ER_PI_ZERO_W_V1_1_LED_CYW_RX_UNSUPPORTED 13u
 #define ER_PI_ZERO_W_V1_1_LED_STEP_DELAY_TICKS 250000u
+#define ER_PI_ZERO_W_V1_1_NODE_ENTROPY_ROUNDS 8u
+#define ER_PI_ZERO_W_V1_1_NODE_ENTROPY_DELAY_TICKS 97u
 #define ER_PI_ZERO_W_V1_1_EMMC_RESET_POLL_BUDGET 100000u
 #define ER_PI_ZERO_W_V1_1_EMMC_STABLE_POLL_BUDGET 100000u
 #define ER_PI_ZERO_W_V1_1_EMMC_READY_POLL_BUDGET 100000u
@@ -223,6 +227,12 @@
 #define ER_PI_ZERO_W_V1_1_CYW43438_DMP_SLAVE_SIZE_4K 0u
 #define ER_PI_ZERO_W_V1_1_CYW43438_DMP_SLAVE_SIZE_8K 1u
 #define ER_PI_ZERO_W_V1_1_CYW43438_DMP_SLAVE_SIZE_DESC 3u
+#define ER_PI_ZERO_W_V1_1_SYSTEM_TIMER_BASE 0x20003000u
+#define ER_PI_ZERO_W_V1_1_SYSTEM_TIMER_COUNTER_LOW 0x00000004u
+#define ER_PI_ZERO_W_V1_1_SYSTEM_TIMER_COUNTER_HIGH 0x00000008u
+#define ER_PI_ZERO_W_V1_1_MIX_CONSTANT 0x9e3779b9u
+#define ER_PI_ZERO_W_V1_1_MIX_LEFT_SHIFT 6u
+#define ER_PI_ZERO_W_V1_1_MIX_RIGHT_SHIFT 2u
 volatile UINT32 g_er_pi_zero_w_v1_1_boot_magic =
     ER_PI_ZERO_W_V1_1_BOOT_MAGIC;
 volatile UINT32 g_er_pi_zero_w_v1_1_sdio_probe_state =
@@ -252,10 +262,13 @@ static UINT32 g_er_pi_zero_w_v1_1_uart_rx_len =
 static UINT32 g_er_pi_zero_w_v1_1_uart_rx_expected_len =
     ER_PI_ZERO_W_V1_1_UART_RX_EXPECTING_HEADER;
 
+static UINT8
+    g_er_pi_zero_w_v1_1_node_id[ER_PI_ZERO_W_V1_1_NODE_BYTES] = {0u};
+
 static const UINT8
-    g_er_pi_zero_w_v1_1_node_id[ER_PI_ZERO_W_V1_1_NODE_BYTES +
-                                ER_PI_ZERO_W_V1_1_C_STRING_NUL_BYTES] =
-    ER_PI_ZERO_W_V1_1_NODE_ID_BYTES;
+    g_er_pi_zero_w_v1_1_admission_id[ER_PI_ZERO_W_V1_1_HASH_BYTES +
+                                     ER_PI_ZERO_W_V1_1_C_STRING_NUL_BYTES] =
+    ER_PI_ZERO_W_V1_1_ADMISSION_ID_TEXT;
 
 static const UINT8
     g_er_pi_zero_w_v1_1_channel_id[ER_PI_ZERO_W_V1_1_HASH_BYTES +
@@ -1931,6 +1944,77 @@ static void er_pi_zero_w_v1_1_fill_zero(UINT8* bytes, UINT32 len) {
   }
 }
 
+static void er_pi_zero_w_v1_1_put_nonce_word(UINT8* nonce,
+                                             UINT32 word_index,
+                                             UINT32 value) {
+  UINT8* cursor = nonce + (word_index * (UINT32)sizeof(UINT32));
+
+  er_pi_zero_w_v1_1_put_u32(&cursor, value);
+}
+
+static UINT32 er_pi_zero_w_v1_1_mix_entropy(UINT32 state, UINT32 sample) {
+  return state ^ (sample + ER_PI_ZERO_W_V1_1_MIX_CONSTANT +
+                  (state << ER_PI_ZERO_W_V1_1_MIX_LEFT_SHIFT) +
+                  (state >> ER_PI_ZERO_W_V1_1_MIX_RIGHT_SHIFT));
+}
+
+static void er_pi_zero_w_v1_1_boot_nonce(
+    UINT8 nonce[ER_EPHEMERAL_NODE_BOOT_NONCE_LEN]) {
+  UINT32 state;
+  UINT32 i;
+
+  state = er_pi_zero_w_v1_1_read(ER_PI_ZERO_W_V1_1_SYSTEM_TIMER_BASE,
+                                 ER_PI_ZERO_W_V1_1_SYSTEM_TIMER_COUNTER_LOW) ^
+          ER_PI_ZERO_W_V1_1_BOOT_MAGIC;
+  for (i = 0u; i < ER_PI_ZERO_W_V1_1_NODE_ENTROPY_ROUNDS; ++i) {
+    er_pi_zero_w_v1_1_delay(ER_PI_ZERO_W_V1_1_NODE_ENTROPY_DELAY_TICKS + i);
+    state = er_pi_zero_w_v1_1_mix_entropy(
+        state,
+        er_pi_zero_w_v1_1_read(
+            ER_PI_ZERO_W_V1_1_SYSTEM_TIMER_BASE,
+            ER_PI_ZERO_W_V1_1_SYSTEM_TIMER_COUNTER_LOW));
+    state = er_pi_zero_w_v1_1_mix_entropy(
+        state,
+        er_pi_zero_w_v1_1_read(
+            ER_PI_ZERO_W_V1_1_SYSTEM_TIMER_BASE,
+            ER_PI_ZERO_W_V1_1_SYSTEM_TIMER_COUNTER_HIGH));
+    state = er_pi_zero_w_v1_1_mix_entropy(
+        state,
+        er_pi_zero_w_v1_1_read(ER_PI_ZERO_W_V1_1_AUX_BASE,
+                               ER_PI_ZERO_W_V1_1_AUX_MU_LSR));
+    state = er_pi_zero_w_v1_1_mix_entropy(
+        state,
+        (UINT32)g_er_pi_zero_w_v1_1_sdio_probe_state ^
+            (UINT32)g_er_pi_zero_w_v1_1_storage_probe_state);
+    er_pi_zero_w_v1_1_put_nonce_word(nonce, i, state);
+  }
+  nonce[ER_EPHEMERAL_NODE_BOOT_NONCE_LEN - 1u] |= 1u;
+}
+
+static UINT8 er_pi_zero_w_v1_1_init_ephemeral_identity(void) {
+  ErCryptoProvider crypto;
+  ErHash admission_id;
+  ErEphemeralNode node;
+  UINT8 boot_nonce[ER_EPHEMERAL_NODE_BOOT_NONCE_LEN];
+  UINT32 i;
+
+  er_crypto_blake3_provider(&crypto);
+  for (i = 0u; i < ER_PI_ZERO_W_V1_1_HASH_BYTES; ++i) {
+    admission_id.bytes[i] = g_er_pi_zero_w_v1_1_admission_id[i];
+  }
+  er_pi_zero_w_v1_1_boot_nonce(boot_nonce);
+  if (er_ephemeral_node_derive(&crypto,
+                               &admission_id,
+                               boot_nonce,
+                               &node) == 0u) {
+    return 0u;
+  }
+  for (i = 0u; i < ER_PI_ZERO_W_V1_1_NODE_BYTES; ++i) {
+    g_er_pi_zero_w_v1_1_node_id[i] = node.node_id.bytes[i];
+  }
+  return 1u;
+}
+
 static void er_pi_zero_w_v1_1_node_id(ErNodeId* out_node_id) {
   UINT32 i;
 
@@ -2522,6 +2606,12 @@ void er_pi_zero_w_v1_1_main(void) {
   er_pi_zero_w_v1_1_act_led_status(ER_PI_ZERO_W_V1_1_LED_BOOT_ENTRY);
   er_pi_zero_w_v1_1_uart_init();
   er_pi_zero_w_v1_1_act_led_status(ER_PI_ZERO_W_V1_1_LED_UART_READY);
+  if (er_pi_zero_w_v1_1_init_ephemeral_identity() == 0u) {
+    er_pi_zero_w_v1_1_act_led_status(ER_PI_ZERO_W_V1_1_LED_CYW_MAILBOX_FAIL);
+    for (;;) {
+      g_er_pi_zero_w_v1_1_boot_magic = ER_PI_ZERO_W_V1_1_BOOT_MAGIC;
+    }
+  }
   er_pi_zero_w_v1_1_ota_listen_init();
   er_pi_zero_w_v1_1_wifi_gpio_init();
   er_pi_zero_w_v1_1_act_led_status(ER_PI_ZERO_W_V1_1_LED_WIFI_POWERED);
