@@ -62,6 +62,10 @@ enum {
   ER_STORE_INDEX_DEFINE_CONTENT_TYPE_OFF = 4u,
   ER_STORE_INDEX_DEFINE_NAME_LEN_OFF = 8u,
   ER_STORE_INDEX_ID_SIZE = 4u,
+  ER_STORE_OBJECT_TOTAL_SIZE_OFF = 0u,
+  ER_STORE_OBJECT_CHUNK_SIZE_OFF = 8u,
+  ER_STORE_OBJECT_CHUNK_COUNT_OFF = 16u,
+  ER_STORE_OBJECT_FIRST_HASH_OFF = 20u,
   ER_STORE_INDEX_KEY_LEN_SIZE = 2u,
   ER_STORE_INDEX_PAYLOAD_OVERHEAD = ER_STORE_INDEX_ID_SIZE + ER_STORE_INDEX_KEY_LEN_SIZE + ER_HASH_SIZE,
   ER_STORE_INDEX_OLD_PAYLOAD_OVERHEAD = ER_STORE_INDEX_KEY_LEN_SIZE + ER_HASH_SIZE,
@@ -1257,6 +1261,9 @@ int er_store_put_typed_blob(er_store_t* store, uint32_t content_type, const void
   rc = er_store_find_blob(store, hash, &slot);
   if (rc == ER_OK) {
     if (content_type != ER_STORE_TYPE_RAW) {
+      if (er_store_blobs(store)[slot].content_type == content_type) {
+        return ER_OK;
+      }
       return er_store_append_blob_type(store, content_type, hash);
     }
     return ER_OK;
@@ -1346,6 +1353,117 @@ int er_store_get_blob_info(er_store_t* store, const uint8_t hash[ER_HASH_SIZE], 
   out_blob->content_type = slots[slot].content_type;
   out_blob->offset = slots[slot].offset;
   out_blob->size = slots[slot].size;
+  return ER_OK;
+}
+
+//@optimizer-ignore-function object manifests use fixed 64-bit size fields in their canonical encoding
+int er_store_put_object(er_store_t* store, const void* data, size_t len, size_t chunk_size,
+                        uint8_t out_object_hash[ER_HASH_SIZE]) {
+  uint8_t manifest[ER_STORE_OBJECT_FIRST_HASH_OFF + (ER_STORE_MAX_CHUNKS * ER_HASH_SIZE)];
+  const uint8_t* bytes = (const uint8_t*)data;
+  size_t chunk_count;
+  size_t manifest_len;
+  size_t chunk_index;
+  size_t off;
+  size_t take;
+  uint64_t len_u64;
+  uint64_t chunk_size_u64;
+  uint8_t chunk_hash[ER_HASH_SIZE];
+  int rc;
+
+  if (store == (er_store_t*)0 || out_object_hash == (uint8_t*)0 || chunk_size == 0u ||
+      (len != 0u && data == (const void*)0)) {
+    return ER_ERR_BADARG;
+  }
+  if (len != 0u && chunk_size > (((size_t)-1) - len + 1u)) {
+    return ER_ERR_TOOBIG;
+  }
+  chunk_count = len == 0u ? 0u : ((len + chunk_size - 1u) / chunk_size);
+  if (chunk_count > ER_STORE_MAX_CHUNKS) {
+    return ER_ERR_TOOBIG;
+  }
+  if (er_store_size_to_u64(len, &len_u64) != ER_OK || er_store_size_to_u64(chunk_size, &chunk_size_u64) != ER_OK) {
+    return ER_ERR_TOOBIG;
+  }
+  er_store_zero(manifest, sizeof(manifest));
+  er_store_store64(&manifest[ER_STORE_OBJECT_TOTAL_SIZE_OFF], len_u64);
+  er_store_store64(&manifest[ER_STORE_OBJECT_CHUNK_SIZE_OFF], chunk_size_u64);
+  er_store_store32(&manifest[ER_STORE_OBJECT_CHUNK_COUNT_OFF], (uint32_t)chunk_count);
+  off = 0u;
+  for (chunk_index = 0u; chunk_index < chunk_count; ++chunk_index) {
+    take = (len - off) > chunk_size ? chunk_size : (len - off);
+    rc = er_store_put_blob(store, &bytes[off], take, chunk_hash);
+    if (rc != ER_OK) {
+      return rc;
+    }
+    er_store_copy(&manifest[ER_STORE_OBJECT_FIRST_HASH_OFF + (chunk_index * ER_HASH_SIZE)], chunk_hash,
+                  ER_HASH_SIZE);
+    off += take;
+  }
+  manifest_len = ER_STORE_OBJECT_FIRST_HASH_OFF + (chunk_count * ER_HASH_SIZE);
+  return er_store_put_typed_blob(store, ER_STORE_TYPE_OBJECT_MANIFEST, manifest, manifest_len, out_object_hash);
+}
+
+//@optimizer-ignore-function object manifests use fixed 64-bit size fields in their canonical encoding
+int er_store_get_object(er_store_t* store, const uint8_t object_hash[ER_HASH_SIZE], void* out, size_t out_cap,
+                        size_t* out_len) {
+  uint8_t manifest[ER_STORE_OBJECT_FIRST_HASH_OFF + (ER_STORE_MAX_CHUNKS * ER_HASH_SIZE)];
+  er_blob_t info;
+  uint64_t total_size;
+  uint64_t chunk_size;
+  uint32_t chunk_count;
+  size_t manifest_len = 0u;
+  size_t chunk_index;
+  size_t out_off = 0u;
+  size_t got_len = 0u;
+  size_t expected_len;
+  int rc;
+
+  if (store == (er_store_t*)0 || object_hash == (const uint8_t*)0 || out_len == (size_t*)0 ||
+      (out_cap != 0u && out == (void*)0)) {
+    return ER_ERR_BADARG;
+  }
+  rc = er_store_get_blob_info(store, object_hash, &info);
+  if (rc != ER_OK) {
+    return rc;
+  }
+  if (info.content_type != ER_STORE_TYPE_OBJECT_MANIFEST || info.size > sizeof(manifest)) {
+    return ER_ERR_CORRUPT;
+  }
+  rc = er_store_get_blob(store, object_hash, manifest, sizeof(manifest), &manifest_len);
+  if (rc != ER_OK) {
+    return rc;
+  }
+  if (manifest_len < ER_STORE_OBJECT_FIRST_HASH_OFF) {
+    return ER_ERR_CORRUPT;
+  }
+  total_size = er_store_load64(&manifest[ER_STORE_OBJECT_TOTAL_SIZE_OFF]);
+  chunk_size = er_store_load64(&manifest[ER_STORE_OBJECT_CHUNK_SIZE_OFF]);
+  chunk_count = er_store_load32(&manifest[ER_STORE_OBJECT_CHUNK_COUNT_OFF]);
+  if (chunk_size == 0u || chunk_count > ER_STORE_MAX_CHUNKS ||
+      manifest_len != (ER_STORE_OBJECT_FIRST_HASH_OFF + ((size_t)chunk_count * ER_HASH_SIZE))) {
+    return ER_ERR_CORRUPT;
+  }
+  if (total_size > (uint64_t)out_cap || total_size > (uint64_t)((size_t)-1)) {
+    return ER_ERR_TOOBIG;
+  }
+  for (chunk_index = 0u; chunk_index < chunk_count; ++chunk_index) {
+    expected_len = ((size_t)total_size - out_off) > (size_t)chunk_size ? (size_t)chunk_size
+                                                                       : ((size_t)total_size - out_off);
+    rc = er_store_get_blob(store, &manifest[ER_STORE_OBJECT_FIRST_HASH_OFF + (chunk_index * ER_HASH_SIZE)],
+                           &((uint8_t*)out)[out_off], expected_len, &got_len);
+    if (rc != ER_OK) {
+      return rc;
+    }
+    if (got_len != expected_len) {
+      return ER_ERR_CORRUPT;
+    }
+    out_off += got_len;
+  }
+  if (out_off != (size_t)total_size) {
+    return ER_ERR_CORRUPT;
+  }
+  *out_len = out_off;
   return ER_OK;
 }
 

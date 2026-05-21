@@ -10,7 +10,10 @@ enum {
   TEST_FIRST_PAYLOAD_OFF = 68u + 92u,
   TEST_TRAILING_JUNK = 7u,
   TEST_TYPE_ROW = 17u,
-  TEST_INDEX_BY_NAME = 23u
+  TEST_INDEX_BY_NAME = 23u,
+  TEST_OBJECT_BYTES = 8192u,
+  TEST_OBJECT_CHUNK = 512u,
+  TEST_OBJECT_PATTERN_MOD = 251u
 };
 
 typedef struct {
@@ -333,6 +336,49 @@ static void test_typed_blob_and_custom_index_rebuild(void) {
   check_int("custom prefix index id", (int)entries[0].index_id, (int)TEST_INDEX_BY_NAME);
 }
 
+static void test_chunked_object_roundtrip_and_chunk_reuse(void) {
+  static uint8_t arena[TEST_LARGE_ARENA_SIZE];
+  static uint8_t data[TEST_OBJECT_BYTES];
+  static uint8_t out[TEST_OBJECT_BYTES];
+  TestIo io;
+  er_store_t store;
+  er_store_stats_t stats;
+  er_blob_t info;
+  uint8_t object_hash_a[ER_HASH_SIZE];
+  uint8_t object_hash_b[ER_HASH_SIZE];
+  size_t out_len = 0u;
+  size_t i;
+  uint8_t pattern = 0u;
+  size_t blob_count_after_first;
+  uint64_t size_after_first;
+
+  for (i = 0u; i < sizeof(data); ++i) {
+    data[i] = pattern;
+    ++pattern;
+    if (pattern == TEST_OBJECT_PATTERN_MOD) {
+      pattern = 0u;
+    }
+  }
+  test_zero(&io, sizeof(io));
+  check_int("open object", er_store_open(&store, test_make_io(&io), arena, sizeof(arena)), ER_OK);
+  check_int("put object a",
+            er_store_put_object(&store, data, sizeof(data), TEST_OBJECT_CHUNK, object_hash_a), ER_OK);
+  check_int("object info", er_store_get_blob_info(&store, object_hash_a, &info), ER_OK);
+  check_int("object manifest type", (int)info.content_type, (int)ER_STORE_TYPE_OBJECT_MANIFEST);
+  check_int("get object", er_store_get_object(&store, object_hash_a, out, sizeof(out), &out_len), ER_OK);
+  check_size("get object len", out_len, sizeof(data));
+  check_bytes("get object bytes", out, data, sizeof(data));
+  check_int("object stats a", er_store_stats(&store, &stats), ER_OK);
+  blob_count_after_first = stats.blob_count;
+  size_after_first = io.size;
+  check_int("put object duplicate",
+            er_store_put_object(&store, data, sizeof(data), TEST_OBJECT_CHUNK, object_hash_b), ER_OK);
+  check_bytes("object duplicate hash", object_hash_a, object_hash_b, ER_HASH_SIZE);
+  check_int("object stats b", er_store_stats(&store, &stats), ER_OK);
+  check_size("object chunk reuse count", stats.blob_count, blob_count_after_first);
+  check_u64("object chunk reuse size", io.size, size_after_first);
+}
+
 int main(void) {
   test_open_empty_store();
   test_put_get_and_duplicate();
@@ -342,6 +388,7 @@ int main(void) {
   test_verify_detects_wrong_hash();
   test_configured_cache_and_capacities();
   test_typed_blob_and_custom_index_rebuild();
+  test_chunked_object_roundtrip_and_chunk_reuse();
 
   if (g_failed != 0) {
     fprintf(stderr, "store tests failed: %d/%d\n", g_failed, g_total);

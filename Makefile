@@ -1,4 +1,4 @@
-.PHONY: all check clean er-build repo-check repo-test repo-check-bin repo-push-check repo-inspect repo-progress repo-agent-swarm erwire-decode erwire-test pi-serial-verify pi-node-update sdcard-probe disk-analyzer pi-usb-boot pi-ready pi-zero-w-v1_1-ready pi-zero-w-v1_1-usb-boot pi-zero-w-v1_1-update codex-build codex-test crypto-test metal-ui-bench tpm-real-bench-uefi qemu-host-tpm-bench os-user-app-smoke edgerun-metal edgerun-os edgerun-check varfont-test ui-core-test ui-core-snapshot
+.PHONY: all check clean er-build repo-check repo-test repo-check-bin repo-push-check repo-inspect repo-progress repo-agent-swarm erwire-decode erwire-test pi-serial-verify pi-node-update sdcard-probe disk-analyzer pi-usb-boot pi-ready pi-zero-w-v1_1-ready pi-zero-w-v1_1-usb-boot pi-zero-w-v1_1-update codex-build codex-test crypto-test crypto-bench metal-ui-bench tpm-real-bench-uefi qemu-host-tpm-bench os-user-app-smoke edgerun-metal edgerun-os edgerun-check varfont-test ui-core-test ui-core-snapshot
 
 CC := toolchain/bin/clang
 HOST_CC := toolchain/bin/clang
@@ -91,6 +91,9 @@ codex-test:
 
 crypto-test: er-build
 	$(ER_BUILD_STAGED) crypto-test
+
+crypto-bench: er-build
+	$(ER_BUILD_STAGED) crypto-bench
 
 metal-ui-bench:
 	$(MAKE) -C edgerun-metal bench-ui-dirty

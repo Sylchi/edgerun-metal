@@ -28,6 +28,7 @@
 #define ER_STORE_INDEX_DEF_CAPACITY 1024u
 #define ER_STORE_ARENA_MIN_SIZE (2u * 1024u * 1024u)
 #define ER_STORE_TYPE_RAW 0u
+#define ER_STORE_TYPE_OBJECT_MANIFEST 1u
 #define ER_STORE_INDEX_DEFAULT 0u
 
 typedef struct er_io {
@@ -106,6 +107,10 @@ int er_store_stats(er_store_t* store, er_store_stats_t* out_stats);
 int er_store_put_blob(er_store_t* store, const void* data, size_t len, uint8_t out_hash[ER_HASH_SIZE]);
 int er_store_put_typed_blob(er_store_t* store, uint32_t content_type, const void* data, size_t len,
                             uint8_t out_hash[ER_HASH_SIZE]);
+int er_store_put_object(er_store_t* store, const void* data, size_t len, size_t chunk_size,
+                        uint8_t out_object_hash[ER_HASH_SIZE]);
+int er_store_get_object(er_store_t* store, const uint8_t object_hash[ER_HASH_SIZE], void* out, size_t out_cap,
+                        size_t* out_len);
 int er_store_get_blob(er_store_t* store, const uint8_t hash[ER_HASH_SIZE], void* out, size_t out_cap,
                       size_t* out_len);
 int er_store_get_blob_info(er_store_t* store, const uint8_t hash[ER_HASH_SIZE], er_blob_t* out_blob);
