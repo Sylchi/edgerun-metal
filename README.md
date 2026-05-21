@@ -514,6 +514,11 @@ The six staged trees live under
 `.build/edgerun-metal/pi-zero-w-v1_1/erzw-5/boot/`. Each tree has a distinct
 compiled node identity and an `EDGERUN-PI-ZERO-W-V1_1-NODE.txt` provision file
 that records the node index, role, node id, and shared open-L2 channel id.
+The one-board bring-up wrapper accepts the same index, for example:
+
+```bash
+make pi-ready PI_ZERO_W_V1_1_NODE_INDEX=3
+```
 
 Build only the repository-owned Raspberry Pi USB boot helper:
 
