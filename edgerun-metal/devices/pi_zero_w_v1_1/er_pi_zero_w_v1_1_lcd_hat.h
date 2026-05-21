@@ -12,6 +12,7 @@ typedef struct ErPiZeroWV11DebugStatus {
   UINT32 heartbeat;
   UINT32 sdio_state;
   UINT32 storage_state;
+  UINT32 wifi_state;
   UINT32 ota_status;
   UINT32 ota_offset;
   UINT32 l2_ready;

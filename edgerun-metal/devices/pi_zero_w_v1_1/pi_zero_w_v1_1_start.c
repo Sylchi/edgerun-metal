@@ -126,6 +126,18 @@
 #define ER_PI_ZERO_W_V1_1_STORAGE_READY 5u
 #define ER_PI_ZERO_W_V1_1_STORAGE_WRITE_VERIFIED 6u
 #define ER_PI_ZERO_W_V1_1_STORAGE_PROBE_ERROR 0xffffffffu
+#define ER_PI_ZERO_W_V1_1_WIFI_STAGE_NONE 0u
+#define ER_PI_ZERO_W_V1_1_WIFI_STAGE_PLAN 1u
+#define ER_PI_ZERO_W_V1_1_WIFI_STAGE_FIRMWARE 2u
+#define ER_PI_ZERO_W_V1_1_WIFI_STAGE_MPC 3u
+#define ER_PI_ZERO_W_V1_1_WIFI_STAGE_INFRA 4u
+#define ER_PI_ZERO_W_V1_1_WIFI_STAGE_AUTH 5u
+#define ER_PI_ZERO_W_V1_1_WIFI_STAGE_WSEC 6u
+#define ER_PI_ZERO_W_V1_1_WIFI_STAGE_CHANNEL 7u
+#define ER_PI_ZERO_W_V1_1_WIFI_STAGE_UP 8u
+#define ER_PI_ZERO_W_V1_1_WIFI_STAGE_SSID 9u
+#define ER_PI_ZERO_W_V1_1_WIFI_STAGE_READY 10u
+#define ER_PI_ZERO_W_V1_1_WIFI_STAGE_ERROR 0x80000000u
 #define ER_PI_ZERO_W_V1_1_LED_BOOT_ENTRY 1u
 #define ER_PI_ZERO_W_V1_1_LED_UART_READY 2u
 #define ER_PI_ZERO_W_V1_1_LED_WIFI_POWERED 3u
@@ -250,6 +262,8 @@ volatile UINT32 g_er_pi_zero_w_v1_1_storage_probe_state =
 volatile UINT32 g_er_pi_zero_w_v1_1_storage_relative_card_address = 0u;
 volatile UINT32 g_er_pi_zero_w_v1_1_storage_last_block = 0u;
 volatile UINT32 g_er_pi_zero_w_v1_1_storage_last_response = 0u;
+volatile UINT32 g_er_pi_zero_w_v1_1_wifi_control_state =
+    ER_PI_ZERO_W_V1_1_WIFI_STAGE_NONE;
 volatile UINT32 g_er_pi_zero_w_v1_1_ota_status =
     ER_PI_ZERO_W_V1_1_OTA_STATUS_IDLE;
 volatile UINT32 g_er_pi_zero_w_v1_1_ota_offset = 0u;
@@ -2330,32 +2344,71 @@ static UINT32 er_pi_zero_w_v1_1_cyw43438_iovar_int(const char* name,
   return er_pi_zero_w_v1_1_cyw43438_send_bcdc_frame(request_id, frame_len);
 }
 
+static UINT32 er_pi_zero_w_v1_1_wifi_stage_error(UINT32 stage) {
+  g_er_pi_zero_w_v1_1_wifi_control_state =
+      ER_PI_ZERO_W_V1_1_WIFI_STAGE_ERROR | stage;
+  return 0u;
+}
+
 static UINT32 er_pi_zero_w_v1_1_cyw43438_join_control_ap(
     const ErWifiL2ApPlan* plan) {
   UINT16 request_id;
   UINT32 frame_len;
 
-  if (plan == 0 ||
-      er_pi_zero_w_v1_1_cyw43438_iovar_int(
+  if (plan == 0) {
+    return er_pi_zero_w_v1_1_wifi_stage_error(
+        ER_PI_ZERO_W_V1_1_WIFI_STAGE_PLAN);
+  }
+  g_er_pi_zero_w_v1_1_wifi_control_state =
+      ER_PI_ZERO_W_V1_1_WIFI_STAGE_MPC;
+  if (er_pi_zero_w_v1_1_cyw43438_iovar_int(
           g_er_pi_zero_w_v1_1_cyw43438_iovar_mpc,
-          0u) == 0u ||
-      er_pi_zero_w_v1_1_cyw43438_dcmd_int(
+          0u) == 0u) {
+    return er_pi_zero_w_v1_1_wifi_stage_error(
+        ER_PI_ZERO_W_V1_1_WIFI_STAGE_MPC);
+  }
+  g_er_pi_zero_w_v1_1_wifi_control_state =
+      ER_PI_ZERO_W_V1_1_WIFI_STAGE_INFRA;
+  if (er_pi_zero_w_v1_1_cyw43438_dcmd_int(
           ER_CYW43438_BCDC_CMD_SET_INFRA,
-          ER_CYW43438_BCDC_INFRA_STA) == 0u ||
-      er_pi_zero_w_v1_1_cyw43438_dcmd_int(
+          ER_CYW43438_BCDC_INFRA_STA) == 0u) {
+    return er_pi_zero_w_v1_1_wifi_stage_error(
+        ER_PI_ZERO_W_V1_1_WIFI_STAGE_INFRA);
+  }
+  g_er_pi_zero_w_v1_1_wifi_control_state =
+      ER_PI_ZERO_W_V1_1_WIFI_STAGE_AUTH;
+  if (er_pi_zero_w_v1_1_cyw43438_dcmd_int(
           ER_CYW43438_BCDC_CMD_SET_AUTH,
-          ER_CYW43438_BCDC_OPEN_AUTH) == 0u ||
-      er_pi_zero_w_v1_1_cyw43438_dcmd_int(
+          ER_CYW43438_BCDC_OPEN_AUTH) == 0u) {
+    return er_pi_zero_w_v1_1_wifi_stage_error(
+        ER_PI_ZERO_W_V1_1_WIFI_STAGE_AUTH);
+  }
+  g_er_pi_zero_w_v1_1_wifi_control_state =
+      ER_PI_ZERO_W_V1_1_WIFI_STAGE_WSEC;
+  if (er_pi_zero_w_v1_1_cyw43438_dcmd_int(
           ER_CYW43438_BCDC_CMD_SET_WSEC,
-          ER_CYW43438_BCDC_WSEC_OPEN) == 0u ||
-      er_pi_zero_w_v1_1_cyw43438_dcmd_int(
+          ER_CYW43438_BCDC_WSEC_OPEN) == 0u) {
+    return er_pi_zero_w_v1_1_wifi_stage_error(
+        ER_PI_ZERO_W_V1_1_WIFI_STAGE_WSEC);
+  }
+  g_er_pi_zero_w_v1_1_wifi_control_state =
+      ER_PI_ZERO_W_V1_1_WIFI_STAGE_CHANNEL;
+  if (er_pi_zero_w_v1_1_cyw43438_dcmd_int(
           ER_CYW43438_BCDC_CMD_SET_CHANNEL,
-          plan->channel) == 0u ||
-      er_pi_zero_w_v1_1_cyw43438_dcmd_int(
+          plan->channel) == 0u) {
+    return er_pi_zero_w_v1_1_wifi_stage_error(
+        ER_PI_ZERO_W_V1_1_WIFI_STAGE_CHANNEL);
+  }
+  g_er_pi_zero_w_v1_1_wifi_control_state =
+      ER_PI_ZERO_W_V1_1_WIFI_STAGE_UP;
+  if (er_pi_zero_w_v1_1_cyw43438_dcmd_int(
           ER_CYW43438_BCDC_CMD_UP,
           0u) == 0u) {
-    return 0u;
+    return er_pi_zero_w_v1_1_wifi_stage_error(
+        ER_PI_ZERO_W_V1_1_WIFI_STAGE_UP);
   }
+  g_er_pi_zero_w_v1_1_wifi_control_state =
+      ER_PI_ZERO_W_V1_1_WIFI_STAGE_SSID;
   request_id = er_pi_zero_w_v1_1_cyw43438_next_bcdc_request_id();
   if (er_cyw43438_bcdc_build_set_ssid_dcmd(
           er_pi_zero_w_v1_1_cyw43438_next_sdpcm_sequence(),
@@ -2365,17 +2418,33 @@ static UINT32 er_pi_zero_w_v1_1_cyw43438_join_control_ap(
           g_er_pi_zero_w_v1_1_l2_tx_frame,
           (UINT32)sizeof(g_er_pi_zero_w_v1_1_l2_tx_frame),
           &frame_len) == 0u) {
-    return 0u;
+    return er_pi_zero_w_v1_1_wifi_stage_error(
+        ER_PI_ZERO_W_V1_1_WIFI_STAGE_SSID);
   }
-  return er_pi_zero_w_v1_1_cyw43438_send_bcdc_frame(request_id, frame_len);
+  if (er_pi_zero_w_v1_1_cyw43438_send_bcdc_frame(request_id, frame_len) ==
+      0u) {
+    return er_pi_zero_w_v1_1_wifi_stage_error(
+        ER_PI_ZERO_W_V1_1_WIFI_STAGE_SSID);
+  }
+  g_er_pi_zero_w_v1_1_wifi_control_state =
+      ER_PI_ZERO_W_V1_1_WIFI_STAGE_READY;
+  return 1u;
 }
 
 static UINT32 er_pi_zero_w_v1_1_cyw43438_start_owned_l2(void) {
   ErWifiL2ApPlan plan;
 
-  if (er_pi_zero_w_v1_1_wifi_plan(&plan) == 0u ||
-      er_pi_zero_w_v1_1_cyw43438_start_wlan_firmware() == 0u) {
-    return 0u;
+  g_er_pi_zero_w_v1_1_wifi_control_state =
+      ER_PI_ZERO_W_V1_1_WIFI_STAGE_PLAN;
+  if (er_pi_zero_w_v1_1_wifi_plan(&plan) == 0u) {
+    return er_pi_zero_w_v1_1_wifi_stage_error(
+        ER_PI_ZERO_W_V1_1_WIFI_STAGE_PLAN);
+  }
+  g_er_pi_zero_w_v1_1_wifi_control_state =
+      ER_PI_ZERO_W_V1_1_WIFI_STAGE_FIRMWARE;
+  if (er_pi_zero_w_v1_1_cyw43438_start_wlan_firmware() == 0u) {
+    return er_pi_zero_w_v1_1_wifi_stage_error(
+        ER_PI_ZERO_W_V1_1_WIFI_STAGE_FIRMWARE);
   }
   return er_pi_zero_w_v1_1_cyw43438_join_control_ap(&plan);
 }
@@ -2901,6 +2970,7 @@ static void er_pi_zero_w_v1_1_lcd_debug_status(UINT32 heartbeat) {
   status.heartbeat = heartbeat;
   status.sdio_state = (UINT32)g_er_pi_zero_w_v1_1_sdio_probe_state;
   status.storage_state = (UINT32)g_er_pi_zero_w_v1_1_storage_probe_state;
+  status.wifi_state = (UINT32)g_er_pi_zero_w_v1_1_wifi_control_state;
   status.ota_status = (UINT32)g_er_pi_zero_w_v1_1_ota_status;
   status.ota_offset = (UINT32)g_er_pi_zero_w_v1_1_ota_offset;
   status.l2_ready = g_er_pi_zero_w_v1_1_sdio_probe_state ==

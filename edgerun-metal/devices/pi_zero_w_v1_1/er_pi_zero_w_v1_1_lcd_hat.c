@@ -16,15 +16,17 @@
 #define ER_PI_ZERO_W_V1_1_LCD_STATUS_Y 40u
 #define ER_PI_ZERO_W_V1_1_LCD_SDIO_Y 62u
 #define ER_PI_ZERO_W_V1_1_LCD_STORE_Y 84u
-#define ER_PI_ZERO_W_V1_1_LCD_L2_Y 106u
-#define ER_PI_ZERO_W_V1_1_LCD_OTA_Y 128u
-#define ER_PI_ZERO_W_V1_1_LCD_HEARTBEAT_Y 150u
-#define ER_PI_ZERO_W_V1_1_LCD_KEYS_Y 172u
+#define ER_PI_ZERO_W_V1_1_LCD_WIFI_Y 106u
+#define ER_PI_ZERO_W_V1_1_LCD_L2_Y 128u
+#define ER_PI_ZERO_W_V1_1_LCD_OTA_Y 150u
+#define ER_PI_ZERO_W_V1_1_LCD_HEARTBEAT_Y 172u
+#define ER_PI_ZERO_W_V1_1_LCD_KEYS_Y 194u
 #define ER_PI_ZERO_W_V1_1_LCD_HEX_DIGITS 8u
 #define ER_PI_ZERO_W_V1_1_LCD_HEX_PREFIX_BYTES 2u
 #define ER_PI_ZERO_W_V1_1_LCD_LABEL_STATUS "BOOT"
 #define ER_PI_ZERO_W_V1_1_LCD_LABEL_SDIO "SDIO"
 #define ER_PI_ZERO_W_V1_1_LCD_LABEL_STORE "STORE"
+#define ER_PI_ZERO_W_V1_1_LCD_LABEL_WIFI "WIFI"
 #define ER_PI_ZERO_W_V1_1_LCD_LABEL_L2 "L2"
 #define ER_PI_ZERO_W_V1_1_LCD_LABEL_OTA "OTA"
 #define ER_PI_ZERO_W_V1_1_LCD_LABEL_HB "HB"
@@ -433,6 +435,11 @@ void er_pi_zero_w_v1_1_lcd_hat_status(const ErPiZeroWV11DebugStatus* status) {
                                       ER_PI_ZERO_W_V1_1_LCD_LABEL_STORE,
                                       status->storage_state,
                                       ER_ST7789_COLOR_WHITE) == 0u ||
+      er_pi_zero_w_v1_1_lcd_draw_pair(&bus,
+                                      ER_PI_ZERO_W_V1_1_LCD_WIFI_Y,
+                                      ER_PI_ZERO_W_V1_1_LCD_LABEL_WIFI,
+                                      status->wifi_state,
+                                      ER_ST7789_COLOR_CYAN) == 0u ||
       er_st7789_draw_text(&bus,
                           ER_PI_ZERO_W_V1_1_LCD_LEFT,
                           ER_PI_ZERO_W_V1_1_LCD_L2_Y,
