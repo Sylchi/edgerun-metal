@@ -147,6 +147,7 @@ static er_io_t bench_make_io(BenchIo* io) {
 static int bench_store_open(er_store_t* store, BenchIo* io, uint8_t* arena) {
   er_store_config_t config;
 
+  bench_store_zero(&config, sizeof(config));
   config.blob_slots = BENCH_STORE_BLOB_SLOTS;
   config.key_slots = BENCH_STORE_KEY_SLOTS;
   config.type_slots = BENCH_STORE_TYPE_SLOTS;

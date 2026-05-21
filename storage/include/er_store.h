@@ -39,7 +39,13 @@
 #define ER_STORE_VALUE_UNKNOWN 0u
 #define ER_STORE_VALUE_BLOB 1u
 #define ER_STORE_VALUE_OBJECT 2u
-#define ER_STORE_HANDLE_BYTES 384u
+#define ER_STORE_BLOCK_BACKING_BYTE_LOG 0u
+#define ER_STORE_BLOCK_BACKING_SDCARD 1u
+#define ER_STORE_BLOCK_BACKING_NVME 2u
+#define ER_STORE_BLOCK_BACKING_CUSTOM 3u
+#define ER_STORE_SDCARD_BLOCK_BYTES 512u
+#define ER_STORE_NVME_BLOCK_BYTES 512u
+#define ER_STORE_HANDLE_BYTES 512u
 #define ER_STORE_INDEX_CURSOR_BYTES 320u
 
 typedef struct er_io {
@@ -72,6 +78,8 @@ typedef struct er_store_index_cursor {
 } er_store_index_cursor_t;
 
 typedef struct er_store_config {
+  uint32_t block_backing;
+  uint32_t block_bytes;
   size_t blob_slots;
   size_t key_slots;
   size_t type_slots;

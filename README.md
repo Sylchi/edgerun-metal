@@ -367,6 +367,25 @@ schemas, interpret package formats, or decide whether a blob is safe to execute
 or reveal. Callers own admission, signatures, encryption, access policy, object
 semantics, and lifecycle policy above this byte store.
 
+Current storage integration work makes `storage` the single durable object
+system. Device details are selected once at store initialization with a
+deterministic block backing profile such as byte log, SD card, NVMe, or custom
+block size. External runtime consumers do not receive SD, NVMe, or packet-slot
+APIs; they receive only the store API for blobs, content-addressed objects, and
+indexes. `erwire` remains the transport, VFS packets remain the packetization
+format for moving object fragments, and completed payloads are admitted into
+`er_store` before package loading, OTA install, or debug-log retention consumes
+them. The next implementation steps are:
+
+1. Finish block-backed `er_store` IO so SD/NVMe adapters can reject unaligned
+   access while the store owns padding, replay, truncation, and verification.
+2. Link `storage` into the metal runtime as the only durable object/index
+   boundary.
+3. Replace the fixed-slot `ErStorageEndpointDurableStore` with store-backed
+   endpoint operations and delete the parallel durable slot format.
+4. Load Wasm app, manifest, UI assets, OTA objects, and Pi debug logs from
+   store indexes after first-boot admission of compiled-in or received bytes.
+
 The netboot helper is a host tool that provides DHCP/TFTP for EFI PXE boot. It
 listens on UDP 67 and UDP 69, serves `BOOTX64.EFI`, can prepare an interface
 with `--setup-iface`, and logs relevant PXE vendor options.
