@@ -21,9 +21,10 @@ check: repo-check repo-test crypto-test clock-test identity-test object-test sto
 
 er-build: $(ER_BUILD_BOOTSTRAP)
 	mkdir -p .build
-	cp $(ER_BUILD_BOOTSTRAP) $(ER_BUILD_STAGED_TMP)
-	chmod 755 $(ER_BUILD_STAGED_TMP)
-	mv $(ER_BUILD_STAGED_TMP) $(ER_BUILD_STAGED)
+	tmp="$(ER_BUILD_STAGED_TMP).$$$$"; \
+	cp $(ER_BUILD_BOOTSTRAP) "$$tmp"; \
+	chmod 755 "$$tmp"; \
+	mv "$$tmp" $(ER_BUILD_STAGED)
 
 repo-check: er-build
 	$(ER_BUILD_STAGED) repo-check

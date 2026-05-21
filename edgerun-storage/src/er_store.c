@@ -1904,7 +1904,7 @@ static int er_store_put_typed_blob_internal(ErStoreState* store, uint32_t conten
   if (store == (ErStoreState*)0 || out_hash == (uint8_t*)0 ||
       (len != 0u && data == (const void*)0) ||
       (allow_reserved_content_type == 0u &&
-       content_type == ER_STORE_TYPE_OBJECT_MANIFEST)) {
+       content_type == ER_STORE_TYPE_OBJECT)) {
     return ER_ERR_BADARG;
   }
   rc = er_store_hash_bytes(data, len, hash);
@@ -2265,7 +2265,7 @@ int er_store_define_content_type(er_store_t* public_store, uint32_t content_type
   int rc;
 
   if (public_store == (er_store_t*)0 || content_type == ER_STORE_TYPE_RAW ||
-      content_type == ER_STORE_TYPE_OBJECT_MANIFEST || name == (const char*)0) {
+      content_type == ER_STORE_TYPE_OBJECT || name == (const char*)0) {
     return ER_ERR_BADARG;
   }
   name_len = er_store_cstr_len(name, ER_STORE_MAX_NAME + 1u, &name_ok);
@@ -2395,7 +2395,7 @@ int er_store_object_index_put(er_store_t* public_store, uint32_t index_id, const
     return rc;
   }
   return er_store_project_index_put(store, index_id, key, object_hash, ER_STORE_VALUE_OBJECT,
-                                    ER_STORE_TYPE_OBJECT_MANIFEST, object_size);
+                                    ER_STORE_TYPE_OBJECT, object_size);
 }
 
 int er_store_index_get(er_store_t* public_store, uint32_t index_id, const char* key, uint8_t out_hash[ER_HASH_SIZE]) {

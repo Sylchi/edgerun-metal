@@ -490,13 +490,13 @@ static void test_arena_size_and_reserved_types(void) {
 
   check_int("open reserved type", er_store_open(&store, test_make_io(&io),
                                                 arena, sizeof(arena), 0), ER_OK);
-  check_int("reserved manifest type rejected",
-            er_store_put_typed_blob(&store, ER_STORE_TYPE_OBJECT_MANIFEST,
+  check_int("reserved object type rejected",
+            er_store_put_typed_blob(&store, ER_STORE_TYPE_OBJECT,
                                     data, sizeof(data), hash),
             ER_ERR_BADARG);
   check_int("reserved content type definition rejected",
-            er_store_define_content_type(&store, ER_STORE_TYPE_OBJECT_MANIFEST,
-                                         "object-manifest"),
+            er_store_define_content_type(&store, ER_STORE_TYPE_OBJECT,
+                                         "object"),
             ER_ERR_BADARG);
   check_int("blob index rejects missing blob",
             er_store_blob_index_put(&store, ER_STORE_INDEX_DEFAULT,
@@ -562,7 +562,7 @@ static void test_typed_blob_and_custom_index_rebuild(void) {
             ER_OK);
   check_int("object cursor next", er_store_index_cursor_next(&cursor, &object_entry), ER_OK);
   check_int("object cursor kind", (int)object_entry.value_kind, (int)ER_STORE_VALUE_OBJECT);
-  check_int("object cursor type", (int)object_entry.content_type, (int)ER_STORE_TYPE_OBJECT_MANIFEST);
+  check_int("object cursor type", (int)object_entry.content_type, (int)ER_STORE_TYPE_OBJECT);
   check_u64("object cursor size", object_entry.value_size, sizeof(data));
 }
 
