@@ -7,6 +7,7 @@ top-level directories are cooperating runtime areas, not separate products:
   `BOOTX64.EFI` on x86_64 and `BOOTAA64.EFI` on AArch64, hosts Wasm apps, and
   owns runtime device paths.
 - `edgerun-crypto`: freestanding cryptographic primitives used by the runtime, tools, and tests, currently centered on BLAKE3 hashing.
+- `edgerun-object`: canonical object node definitions and validation APIs shared by memory, wire, durable storage, and apps.
 - `storage`: freestanding append-only content-addressed store and key projection basis.
 - `edgerun-ui-core`: the platform-neutral UI scene, component, input, and rendering contract consumed by the metal runtime.
   Its `varfont` subtree owns the freestanding variable-font renderer used by UI text paths.
@@ -218,6 +219,21 @@ much capacity can be turned into spendable claims.
 Each packet, object, compute slice, storage interval, relay hop, or scheduling
 slot can therefore carry a cost before it is admitted. Local programs may spend
 tokens created by the same user up to the limits the device owner assigned.
+
+## Canonical Objects
+
+`edgerun-object` is the public object boundary. It defines the canonical bytes
+that can move through memory, over wire routes, and into durable storage without
+changing format. An object node contains its requirement fields, owner layer
+identifiers, envelope descriptors, and either inline bytes or child references.
+The object id is the BLAKE3 hash of those canonical bytes.
+
+The object layer does not know auth, user sessions, device policy, object
+contents, storage tiers, or route admission. Those decisions belong to the
+authorities that issue resource grants and to the components that consume the
+object. Storage persists canonical bytes; network routes canonical bytes; apps
+create and consume canonical bytes. The object API only builds, sizes, hashes,
+and verifies the canonical object form so boundary crossings are explicit.
 Friends, nearby devices, organizations, apps, or strangers crossing into another
 jurisdiction must pay in a token that the destination admission accepts, under
 that destination's current price and policy.

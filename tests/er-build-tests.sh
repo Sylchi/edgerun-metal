@@ -179,6 +179,26 @@ case "$crypto_plan" in
   * ) printf 'missing direct crypto test execution step\n' >&2; exit 1 ;;
 esac
 
+object_plan=$("$ER_BUILD" --print-plan object-test)
+
+case "$object_plan" in
+  *"cmake"* | *"ninja"* | *"ctest"* )
+    printf 'object-test plan still depends on external build orchestration\n' >&2
+    exit 1
+    ;;
+  * ) ;;
+esac
+
+case "$object_plan" in
+  *"+ toolchain/bin/clang -std=c11 -Wall -Wextra -Werror -O2 -o .build/er-build-out/object/test_object -Iedgerun-object/include -Iedgerun-crypto/include -Iinclude edgerun-object/tests/test_object.c edgerun-object/src/er_object.c edgerun-crypto/src/er_blake3.c -DER_BLAKE3_NO_SIMD=1"* ) ;;
+  * ) printf 'missing direct object test compile step\n' >&2; exit 1 ;;
+esac
+
+case "$object_plan" in
+  *"+ .build/er-build-out/object/test_object"* ) ;;
+  * ) printf 'missing direct object test execution step\n' >&2; exit 1 ;;
+esac
+
 storage_plan=$("$ER_BUILD" --print-plan storage-test)
 
 case "$storage_plan" in
