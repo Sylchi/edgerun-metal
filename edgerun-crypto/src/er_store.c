@@ -27,6 +27,8 @@
  *   Appends sync the record bytes before returning. The superblock is a compact
  *   checkpoint and is flushed on close or after recovery, not after every
  *   record; recovery scans the log and does not trust superblock log_end.
+ *   Composite object writes batch their internal chunk-record syncs and flush
+ *   once before the public put_object call returns.
  */
 
 enum {
@@ -888,6 +890,38 @@ static int er_store_write_superblock(er_store_t* store) {
   return ER_OK;
 }
 
+static int er_store_sync_pending_records(er_store_t* store) {
+  if (store->sync_pending == 0) {
+    return ER_OK;
+  }
+  if (store->io.sync(store->io.ctx) != 0) {
+    return ER_ERR_IO;
+  }
+  store->sync_pending = 0;
+  return ER_OK;
+}
+
+static void er_store_defer_sync_begin(er_store_t* store) {
+  ++store->defer_sync_depth;
+}
+
+static int er_store_defer_sync_end(er_store_t* store, int rc) {
+  int sync_rc;
+
+  if (store->defer_sync_depth == 0u) {
+    return ER_ERR_CORRUPT;
+  }
+  --store->defer_sync_depth;
+  if (store->defer_sync_depth != 0u) {
+    return rc;
+  }
+  sync_rc = er_store_sync_pending_records(store);
+  if (sync_rc != ER_OK) {
+    return sync_rc;
+  }
+  return rc;
+}
+
 //@optimizer-ignore-function superblock offsets and IO size mirror fixed 64-bit record log fields
 static int er_store_read_superblock(er_store_t* store, uint64_t io_size) {
   uint8_t superblock[ER_STORE_SUPERBLOCK_SIZE];
@@ -1382,7 +1416,9 @@ static int er_store_append_record(er_store_t* store, uint16_t type, const void* 
   if (payload_len != 0u && store->io.write_at(store->io.ctx, payload_off, payload, payload_len) != 0) {
     return ER_ERR_IO;
   }
-  if (store->io.sync(store->io.ctx) != 0) {
+  if (store->defer_sync_depth != 0u) {
+    store->sync_pending = 1;
+  } else if (store->io.sync(store->io.ctx) != 0) {
     return ER_ERR_IO;
   }
   er_store_record_hash(header, record_hash);
@@ -1441,8 +1477,14 @@ int er_store_open(er_store_t* store, er_io_t io, void* arena, size_t arena_len) 
 }
 
 int er_store_close(er_store_t* store) {
+  int rc;
+
   if (store == (er_store_t*)0) {
     return ER_ERR_BADARG;
+  }
+  rc = er_store_sync_pending_records(store);
+  if (rc != ER_OK) {
+    return rc;
   }
   if (store->superblock_dirty == 0) {
     return ER_OK;
@@ -1683,18 +1725,20 @@ int er_store_put_object(er_store_t* store, const void* data, size_t len, size_t 
   er_store_store64(&manifest[ER_STORE_OBJECT_CHUNK_SIZE_OFF], chunk_size_u64);
   er_store_store32(&manifest[ER_STORE_OBJECT_CHUNK_COUNT_OFF], (uint32_t)chunk_count);
   off = 0u;
+  er_store_defer_sync_begin(store);
   for (chunk_index = 0u; chunk_index < chunk_count; ++chunk_index) {
     take = (len - off) > chunk_size ? chunk_size : (len - off);
     rc = er_store_put_blob(store, &bytes[off], take, chunk_hash);
     if (rc != ER_OK) {
-      return rc;
+      return er_store_defer_sync_end(store, rc);
     }
     er_store_copy(&manifest[ER_STORE_OBJECT_FIRST_HASH_OFF + (chunk_index * ER_HASH_SIZE)], chunk_hash,
                   ER_HASH_SIZE);
     off += take;
   }
   manifest_len = ER_STORE_OBJECT_FIRST_HASH_OFF + (chunk_count * ER_HASH_SIZE);
-  return er_store_put_typed_blob(store, ER_STORE_TYPE_OBJECT_MANIFEST, manifest, manifest_len, out_object_hash);
+  rc = er_store_put_typed_blob(store, ER_STORE_TYPE_OBJECT_MANIFEST, manifest, manifest_len, out_object_hash);
+  return er_store_defer_sync_end(store, rc);
 }
 
 //@optimizer-ignore-function object manifests use fixed 64-bit size fields in their canonical encoding

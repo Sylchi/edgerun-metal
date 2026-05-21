@@ -409,8 +409,10 @@ static void test_chunked_object_roundtrip_and_chunk_reuse(void) {
   }
   test_zero(&io, sizeof(io));
   check_int("open object", er_store_open(&store, test_make_io(&io), arena, sizeof(arena)), ER_OK);
+  check_int("open object syncs", (int)io.sync_count, (int)TEST_OPEN_SYNC_COUNT);
   check_int("put object a",
             er_store_put_object(&store, data, sizeof(data), TEST_OBJECT_CHUNK, object_hash_a), ER_OK);
+  check_int("put object syncs", (int)io.sync_count, (int)(TEST_OPEN_SYNC_COUNT + TEST_APPEND_SYNC_COUNT));
   check_int("object info", er_store_get_blob_info(&store, object_hash_a, &info), ER_OK);
   check_int("object manifest type", (int)info.content_type, (int)ER_STORE_TYPE_OBJECT_MANIFEST);
   check_int("get object", er_store_get_object(&store, object_hash_a, out, sizeof(out), &out_len), ER_OK);
@@ -421,6 +423,7 @@ static void test_chunked_object_roundtrip_and_chunk_reuse(void) {
   size_after_first = io.size;
   check_int("put object duplicate",
             er_store_put_object(&store, data, sizeof(data), TEST_OBJECT_CHUNK, object_hash_b), ER_OK);
+  check_int("put object duplicate syncs", (int)io.sync_count, (int)(TEST_OPEN_SYNC_COUNT + TEST_APPEND_SYNC_COUNT));
   check_bytes("object duplicate hash", object_hash_a, object_hash_b, ER_HASH_SIZE);
   check_int("object stats b", er_store_stats(&store, &stats), ER_OK);
   check_size("object chunk reuse count", stats.blob_count, blob_count_after_first);
