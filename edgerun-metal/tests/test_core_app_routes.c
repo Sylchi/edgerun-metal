@@ -1,68 +1,83 @@
 #include "test_core_internal.h"
 
 enum {
-  TEST_APP_ROUTE_SIGNATURE_ALGORITHM = 1u
+  TEST_APP_ROUTE_SIGNATURE_ALGORITHM = 1u,
+  TEST_STORAGE_STORE_IO_BYTES = 65536u,
+  TEST_STORAGE_STORE_ARENA_BYTES = ER_STORE_ARENA_MIN_SIZE
 };
 
 static ErIdentity g_test_app_route_package_signer;
 
 typedef struct {
-  UINT8* bytes;
-  UINT32 byte_len;
-} TestStorageBlockDevice;
+  UINT8 bytes[TEST_STORAGE_STORE_IO_BYTES];
+  UINT64 size;
+} TestStorageStoreIo;
 
-static UINT8 test_storage_block_range(TestStorageBlockDevice* device,
-                                      UINT64 sector,
-                                      UINT32 byte_len,
-                                      UINT32* out_offset) {
-  UINT64 offset;
+static int test_storage_store_read_at(void* ctx, uint64_t off, void* buf, size_t len) {
+  TestStorageStoreIo* io = (TestStorageStoreIo*)ctx;
 
-  if (device == 0 ||
-      device->bytes == 0 ||
-      out_offset == 0 ||
-      byte_len == 0u ||
-      (byte_len % ER_STORAGE_ENDPOINT_DURABLE_BLOCK_BYTES) != 0u) {
-    return 0u;
+  if (io == 0 || buf == 0 || off > io->size || len > (size_t)(io->size - off)) {
+    return -1;
   }
-  offset = sector * ER_STORAGE_ENDPOINT_DURABLE_BLOCK_BYTES;
-  if (offset > device->byte_len ||
-      byte_len > device->byte_len - (UINT32)offset) {
-    return 0u;
-  }
-  *out_offset = (UINT32)offset;
-  return 1u;
+  er_mem_copy((UINT8*)buf, io->bytes + off, (UINTN)len);
+  return 0;
 }
 
-static UINT8 test_storage_block_read(void* ctx,
-                                     UINT64 sector,
-                                     UINT8* out_bytes,
-                                     UINT32 byte_len) {
-  TestStorageBlockDevice* device;
-  UINT32 offset;
+static int test_storage_store_write_at(void* ctx, uint64_t off, const void* buf, size_t len) {
+  TestStorageStoreIo* io = (TestStorageStoreIo*)ctx;
+  UINT64 end = off + (UINT64)len;
 
-  device = (TestStorageBlockDevice*)ctx;
-  if (out_bytes == 0 ||
-      test_storage_block_range(device, sector, byte_len, &offset) == 0u) {
-    return 0u;
+  if (io == 0 || (len != 0u && buf == 0) || end < off ||
+      end > TEST_STORAGE_STORE_IO_BYTES) {
+    return -1;
   }
-  er_mem_copy(out_bytes, device->bytes + offset, byte_len);
-  return 1u;
+  if (off > io->size) {
+    er_mem_zero(io->bytes + io->size, (UINTN)(off - io->size));
+  }
+  er_mem_copy(io->bytes + off, (const UINT8*)buf, (UINTN)len);
+  if (end > io->size) {
+    io->size = end;
+  }
+  return 0;
 }
 
-static UINT8 test_storage_block_write(void* ctx,
-                                      UINT64 sector,
-                                      const UINT8* bytes,
-                                      UINT32 byte_len) {
-  TestStorageBlockDevice* device;
-  UINT32 offset;
+static int test_storage_store_sync(void* ctx) {
+  return ctx != 0 ? 0 : -1;
+}
 
-  device = (TestStorageBlockDevice*)ctx;
-  if (bytes == 0 ||
-      test_storage_block_range(device, sector, byte_len, &offset) == 0u) {
-    return 0u;
+static int test_storage_store_size(void* ctx, uint64_t* out_size) {
+  TestStorageStoreIo* io = (TestStorageStoreIo*)ctx;
+
+  if (io == 0 || out_size == 0) {
+    return -1;
   }
-  er_mem_copy(device->bytes + offset, bytes, byte_len);
-  return 1u;
+  *out_size = io->size;
+  return 0;
+}
+
+static int test_storage_store_truncate(void* ctx, uint64_t size) {
+  TestStorageStoreIo* io = (TestStorageStoreIo*)ctx;
+
+  if (io == 0 || size > TEST_STORAGE_STORE_IO_BYTES) {
+    return -1;
+  }
+  if (size > io->size) {
+    er_mem_zero(io->bytes + io->size, (UINTN)(size - io->size));
+  }
+  io->size = size;
+  return 0;
+}
+
+static er_io_t test_storage_store_io(TestStorageStoreIo* io) {
+  er_io_t out;
+
+  out.ctx = io;
+  out.read_at = test_storage_store_read_at;
+  out.write_at = test_storage_store_write_at;
+  out.sync = test_storage_store_sync;
+  out.size = test_storage_store_size;
+  out.truncate = test_storage_store_truncate;
+  return out;
 }
 
 static UINT8 test_package_sign(void* ctx, const ErByteSpan* preimage,
@@ -416,10 +431,6 @@ static void test_storage_endpoint_object_cache(void) {
     STORAGE_CACHE_TICK_A0 = 10u,
     STORAGE_CACHE_TICK_A1 = 11u,
     STORAGE_CACHE_TICK_B0 = 12u,
-    STORAGE_CACHE_DURABLE_SLOTS = 4u,
-    STORAGE_CACHE_DURABLE_BYTES =
-        STORAGE_CACHE_DURABLE_SLOTS *
-        ER_STORAGE_ENDPOINT_DURABLE_SLOT_BYTES,
     STORAGE_CACHE_RESTORE_TICK = 21u
   };
   ErCryptoProvider crypto;
@@ -434,9 +445,10 @@ static void test_storage_endpoint_object_cache(void) {
   ErVfsObjectPacket object_a_packets[STORAGE_CACHE_PACKET_STRIDE];
   ErVfsObjectPacket object_b_packet;
   ErVfsObjectPacket tampered_packet;
-  TestStorageBlockDevice block_device;
-  UINT8 durable_blocks[STORAGE_CACHE_DURABLE_BYTES];
-  UINT8 durable_slot[ER_STORAGE_ENDPOINT_DURABLE_SLOT_BYTES];
+  TestStorageStoreIo store_io;
+  er_store_t packet_store;
+  UINT8 store_arena[TEST_STORAGE_STORE_ARENA_BYTES];
+  UINT8 durable_packet_buffer[ER_STORAGE_ENDPOINT_DURABLE_PACKET_BYTES];
   UINT8 object_a[STORAGE_CACHE_OBJECT_A_BYTES];
   UINT8 object_b[STORAGE_CACHE_OBJECT_B_BYTES];
   UINT8 assembled[STORAGE_CACHE_OBJECT_A_BYTES];
@@ -525,19 +537,20 @@ static void test_storage_endpoint_object_cache(void) {
               assembled[sizeof(object_a) - 1u],
               object_a[sizeof(object_a) - 1u]);
 
-  er_mem_zero(durable_blocks, (UINTN)sizeof(durable_blocks));
-  block_device.bytes = durable_blocks;
-  block_device.byte_len = (UINT32)sizeof(durable_blocks);
+  er_mem_zero((UINT8*)&store_io, (UINTN)sizeof(store_io));
+  check_int64("storage durable store open",
+              er_store_open(&packet_store,
+                            test_storage_store_io(&store_io),
+                            store_arena,
+                            (size_t)sizeof(store_arena),
+                            0),
+              ER_OK);
   check_int64("storage durable init",
               er_storage_endpoint_durable_store_init(
                   &durable_store,
-                  0u,
-                  STORAGE_CACHE_DURABLE_SLOTS,
-                  durable_slot,
-                  (UINT32)sizeof(durable_slot),
-                  &block_device,
-                  test_storage_block_read,
-                  test_storage_block_write),
+                  &packet_store,
+                  durable_packet_buffer,
+                  (UINT32)sizeof(durable_packet_buffer)),
               1);
   check_int64("storage durable write a0",
               er_storage_endpoint_durable_write_packet(&crypto,

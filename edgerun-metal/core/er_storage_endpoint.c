@@ -36,10 +36,15 @@ enum {
   ER_STORAGE_RECEIPT_FIELDS_SPAN = 8u,
   ER_STORAGE_CACHE_ENTRY_EMPTY = 0u,
   ER_STORAGE_CACHE_ENTRY_FIRST = 0u,
-  ER_STORAGE_DURABLE_MAGIC = 0x45525344u,
+  ER_STORAGE_DURABLE_PACKET_INDEX_ID = 0x45524450u,
+  ER_STORAGE_DURABLE_MAGIC = 0x45525350u,
   ER_STORAGE_DURABLE_U16_BYTES = 2u,
   ER_STORAGE_DURABLE_U32_BYTES = 4u,
   ER_STORAGE_DURABLE_U64_BYTES = 8u,
+  ER_STORAGE_DURABLE_KEY_PREFIX_LEN = 7u,
+  ER_STORAGE_DURABLE_PACKET_KEY_LEN =
+      ER_STORAGE_DURABLE_KEY_PREFIX_LEN + (ER_HASH_LEN * 2u) + 1u +
+      (ER_STORAGE_DURABLE_U32_BYTES * 2u),
   ER_STORAGE_DURABLE_MAGIC_OFFSET = 0u,
   ER_STORAGE_DURABLE_ABI_OFFSET =
       ER_STORAGE_DURABLE_MAGIC_OFFSET + ER_STORAGE_DURABLE_U32_BYTES,
@@ -62,6 +67,9 @@ enum {
   ER_STORAGE_DURABLE_PAYLOAD_OFFSET =
       ER_STORAGE_DURABLE_PACKET_ID_OFFSET + ER_HASH_LEN
 };
+
+static const char g_storage_durable_packet_key_prefix[] = "packet/";
+static const char g_storage_hex_digits[] = "0123456789abcdef";
 
 static void er_storage_endpoint_put_be(UINT8* dst, UINT64 value, UINTN byte_count) {
   UINTN i;
@@ -515,136 +523,142 @@ static UINT8 er_storage_endpoint_durable_store_valid(
     const ErStorageEndpointDurableStore* store) {
   return (UINT8)(store != 0 &&
                  store->abi_version == ER_WORK_ABI_VERSION &&
-                 store->block_bytes == ER_STORAGE_ENDPOINT_DURABLE_BLOCK_BYTES &&
-                 store->slot_count != 0u &&
-                 store->slot_buffer != 0 &&
-                 store->slot_buffer_len >= ER_STORAGE_ENDPOINT_DURABLE_SLOT_BYTES &&
-                 store->read != 0 &&
-                 store->write != 0);
+                 store->store != 0 &&
+                 store->packet_buffer != 0 &&
+                 store->packet_buffer_len >=
+                     ER_STORAGE_ENDPOINT_DURABLE_PACKET_BYTES);
 }
 
-static UINT64 er_storage_endpoint_durable_slot_sector(
-    const ErStorageEndpointDurableStore* store,
-    UINT32 slot_index) {
-  return store->first_sector +
-         ((UINT64)slot_index * ER_STORAGE_ENDPOINT_DURABLE_SLOT_BLOCKS);
+static void er_storage_endpoint_durable_packet_key(const ErVfsObjectPacket* packet,
+                                                   char* out_key) {
+  UINTN i;
+  UINTN off;
+  UINT32 packet_index;
+  UINT32 shift;
+
+  er_mem_copy((UINT8*)out_key,
+              (const UINT8*)g_storage_durable_packet_key_prefix,
+              ER_STORAGE_DURABLE_KEY_PREFIX_LEN);
+  off = ER_STORAGE_DURABLE_KEY_PREFIX_LEN;
+  for (i = 0u; i < ER_HASH_LEN; ++i) {
+    out_key[off] = g_storage_hex_digits[packet->header.object_id.bytes[i] >> 4u];
+    ++off;
+    out_key[off] = g_storage_hex_digits[packet->header.object_id.bytes[i] & 0x0fu];
+    ++off;
+  }
+  out_key[off] = '/';
+  ++off;
+  packet_index = packet->header.packet_index;
+  for (i = 0u; i < ER_STORAGE_DURABLE_U32_BYTES * 2u; ++i) {
+    shift = (UINT32)((ER_STORAGE_DURABLE_U32_BYTES * 2u - 1u - i) * 4u);
+    out_key[off] = g_storage_hex_digits[(packet_index >> shift) & 0x0fu];
+    ++off;
+  }
+  out_key[off] = 0;
 }
 
-static UINT32 er_storage_endpoint_durable_home_slot(
-    const ErStorageEndpointDurableStore* store,
-    const ErHash* packet_id) {
-  return er_storage_endpoint_get_be32(packet_id->bytes) % store->slot_count;
-}
-
-static void er_storage_endpoint_durable_packet_to_slot(
+static UINT32 er_storage_endpoint_durable_packet_to_bytes(
     const ErVfsObjectPacket* packet,
-    UINT8* slot) {
-  er_mem_zero(slot, ER_STORAGE_ENDPOINT_DURABLE_SLOT_BYTES);
-  er_storage_endpoint_put_be(slot + ER_STORAGE_DURABLE_MAGIC_OFFSET,
+    UINT8* bytes) {
+  er_mem_zero(bytes, ER_STORAGE_ENDPOINT_DURABLE_PACKET_BYTES);
+  er_storage_endpoint_put_be(bytes + ER_STORAGE_DURABLE_MAGIC_OFFSET,
                              ER_STORAGE_DURABLE_MAGIC,
                              ER_STORAGE_DURABLE_U32_BYTES);
-  er_storage_endpoint_put_be(slot + ER_STORAGE_DURABLE_ABI_OFFSET,
+  er_storage_endpoint_put_be(bytes + ER_STORAGE_DURABLE_ABI_OFFSET,
                              ER_VFS_ABI_VERSION,
                              ER_STORAGE_DURABLE_U16_BYTES);
-  er_storage_endpoint_put_be(slot + ER_STORAGE_DURABLE_PACKET_INDEX_OFFSET,
+  er_storage_endpoint_put_be(bytes + ER_STORAGE_DURABLE_PACKET_INDEX_OFFSET,
                              packet->header.packet_index,
                              ER_STORAGE_DURABLE_U32_BYTES);
-  er_storage_endpoint_put_be(slot + ER_STORAGE_DURABLE_PACKET_COUNT_OFFSET,
+  er_storage_endpoint_put_be(bytes + ER_STORAGE_DURABLE_PACKET_COUNT_OFFSET,
                              packet->header.packet_count,
                              ER_STORAGE_DURABLE_U32_BYTES);
-  er_storage_endpoint_put_be64(slot + ER_STORAGE_DURABLE_OBJECT_LEN_OFFSET,
+  er_storage_endpoint_put_be64(bytes + ER_STORAGE_DURABLE_OBJECT_LEN_OFFSET,
                                packet->header.object_len);
-  er_storage_endpoint_put_be64(slot + ER_STORAGE_DURABLE_OFFSET_OFFSET,
+  er_storage_endpoint_put_be64(bytes + ER_STORAGE_DURABLE_OFFSET_OFFSET,
                                packet->header.offset);
-  er_storage_endpoint_put_be(slot + ER_STORAGE_DURABLE_BYTES_LEN_OFFSET,
+  er_storage_endpoint_put_be(bytes + ER_STORAGE_DURABLE_BYTES_LEN_OFFSET,
                              packet->header.bytes_len,
                              ER_STORAGE_DURABLE_U32_BYTES);
-  er_mem_copy(slot + ER_STORAGE_DURABLE_OBJECT_ID_OFFSET,
+  er_mem_copy(bytes + ER_STORAGE_DURABLE_OBJECT_ID_OFFSET,
               packet->header.object_id.bytes,
               ER_HASH_LEN);
-  er_mem_copy(slot + ER_STORAGE_DURABLE_PAYLOAD_HASH_OFFSET,
+  er_mem_copy(bytes + ER_STORAGE_DURABLE_PAYLOAD_HASH_OFFSET,
               packet->header.payload_hash.bytes,
               ER_HASH_LEN);
-  er_mem_copy(slot + ER_STORAGE_DURABLE_PACKET_ID_OFFSET,
+  er_mem_copy(bytes + ER_STORAGE_DURABLE_PACKET_ID_OFFSET,
               packet->header.packet_id.bytes,
               ER_HASH_LEN);
-  er_mem_copy(slot + ER_STORAGE_DURABLE_PAYLOAD_OFFSET,
+  er_mem_copy(bytes + ER_STORAGE_DURABLE_PAYLOAD_OFFSET,
               packet->bytes,
               packet->header.bytes_len);
+  return ER_STORAGE_DURABLE_PAYLOAD_OFFSET + packet->header.bytes_len;
 }
 
-static UINT8 er_storage_endpoint_durable_slot_to_packet(
-    const UINT8* slot,
+static UINT8 er_storage_endpoint_durable_bytes_to_packet(
+    const UINT8* bytes,
+    UINTN bytes_len,
     ErVfsObjectPacket* packet) {
-  UINT32 bytes_len;
+  UINT32 payload_len;
 
-  if (slot == 0 || packet == 0 ||
-      er_storage_endpoint_get_be32(slot + ER_STORAGE_DURABLE_MAGIC_OFFSET) !=
+  if (bytes == 0 || packet == 0 ||
+      bytes_len < ER_STORAGE_DURABLE_PAYLOAD_OFFSET ||
+      er_storage_endpoint_get_be32(bytes + ER_STORAGE_DURABLE_MAGIC_OFFSET) !=
           ER_STORAGE_DURABLE_MAGIC ||
-      er_storage_endpoint_get_be16(slot + ER_STORAGE_DURABLE_ABI_OFFSET) !=
+      er_storage_endpoint_get_be16(bytes + ER_STORAGE_DURABLE_ABI_OFFSET) !=
           ER_VFS_ABI_VERSION) {
     return 0u;
   }
-  bytes_len =
-      er_storage_endpoint_get_be32(slot + ER_STORAGE_DURABLE_BYTES_LEN_OFFSET);
-  if (bytes_len > ER_VFS_OBJECT_PACKET_BYTES) {
+  payload_len =
+      er_storage_endpoint_get_be32(bytes + ER_STORAGE_DURABLE_BYTES_LEN_OFFSET);
+  if (payload_len > ER_VFS_OBJECT_PACKET_BYTES ||
+      bytes_len != ER_STORAGE_DURABLE_PAYLOAD_OFFSET + payload_len) {
     return 0u;
   }
   er_mem_zero((UINT8*)packet, (UINTN)sizeof(*packet));
   packet->header.abi_version = ER_VFS_ABI_VERSION;
   packet->header.packet_index =
       (UINT16)er_storage_endpoint_get_be32(
-          slot + ER_STORAGE_DURABLE_PACKET_INDEX_OFFSET);
+          bytes + ER_STORAGE_DURABLE_PACKET_INDEX_OFFSET);
   packet->header.packet_count =
-      er_storage_endpoint_get_be32(slot + ER_STORAGE_DURABLE_PACKET_COUNT_OFFSET);
+      er_storage_endpoint_get_be32(bytes + ER_STORAGE_DURABLE_PACKET_COUNT_OFFSET);
   packet->header.object_len =
-      er_storage_endpoint_get_be64(slot + ER_STORAGE_DURABLE_OBJECT_LEN_OFFSET);
+      er_storage_endpoint_get_be64(bytes + ER_STORAGE_DURABLE_OBJECT_LEN_OFFSET);
   packet->header.offset =
-      er_storage_endpoint_get_be64(slot + ER_STORAGE_DURABLE_OFFSET_OFFSET);
-  packet->header.bytes_len = bytes_len;
+      er_storage_endpoint_get_be64(bytes + ER_STORAGE_DURABLE_OFFSET_OFFSET);
+  packet->header.bytes_len = payload_len;
   er_mem_copy(packet->header.object_id.bytes,
-              slot + ER_STORAGE_DURABLE_OBJECT_ID_OFFSET,
+              bytes + ER_STORAGE_DURABLE_OBJECT_ID_OFFSET,
               ER_HASH_LEN);
   er_mem_copy(packet->header.payload_hash.bytes,
-              slot + ER_STORAGE_DURABLE_PAYLOAD_HASH_OFFSET,
+              bytes + ER_STORAGE_DURABLE_PAYLOAD_HASH_OFFSET,
               ER_HASH_LEN);
   er_mem_copy(packet->header.packet_id.bytes,
-              slot + ER_STORAGE_DURABLE_PACKET_ID_OFFSET,
+              bytes + ER_STORAGE_DURABLE_PACKET_ID_OFFSET,
               ER_HASH_LEN);
   er_mem_copy(packet->bytes,
-              slot + ER_STORAGE_DURABLE_PAYLOAD_OFFSET,
-              bytes_len);
+              bytes + ER_STORAGE_DURABLE_PAYLOAD_OFFSET,
+              payload_len);
   return 1u;
 }
 
 UINT8 er_storage_endpoint_durable_store_init(
     ErStorageEndpointDurableStore* store,
-    UINT64 first_sector,
-    UINT32 slot_count,
-    UINT8* slot_buffer,
-    UINT32 slot_buffer_len,
-    void* block_ctx,
-    ErStorageEndpointBlockReadFn read,
-    ErStorageEndpointBlockWriteFn write) {
+    er_store_t* durable_store,
+    UINT8* packet_buffer,
+    UINT32 packet_buffer_len) {
   if (store == 0 ||
-      slot_count == 0u ||
-      slot_buffer == 0 ||
-      slot_buffer_len < ER_STORAGE_ENDPOINT_DURABLE_SLOT_BYTES ||
-      read == 0 ||
-      write == 0) {
+      durable_store == 0 ||
+      packet_buffer == 0 ||
+      packet_buffer_len < ER_STORAGE_ENDPOINT_DURABLE_PACKET_BYTES) {
     return 0u;
   }
   er_mem_zero((UINT8*)store, (UINTN)sizeof(*store));
   store->abi_version = ER_WORK_ABI_VERSION;
-  store->block_bytes = ER_STORAGE_ENDPOINT_DURABLE_BLOCK_BYTES;
-  store->first_sector = first_sector;
-  store->slot_count = slot_count;
-  store->slot_buffer = slot_buffer;
-  store->slot_buffer_len = slot_buffer_len;
-  store->block_ctx = block_ctx;
-  store->read = read;
-  store->write = write;
-  er_mem_zero(slot_buffer, slot_buffer_len);
+  store->store = durable_store;
+  store->packet_buffer = packet_buffer;
+  store->packet_buffer_len = packet_buffer_len;
+  er_mem_zero(packet_buffer, packet_buffer_len);
   return 1u;
 }
 
@@ -652,60 +666,63 @@ UINT8 er_storage_endpoint_durable_write_packet(
     const ErCryptoProvider* crypto,
     ErStorageEndpointDurableStore* store,
     const ErVfsObjectPacket* packet) {
-  UINT32 home_slot;
-  UINT32 probe;
-  UINT32 slot_index;
-  ErVfsObjectPacket existing;
+  UINT8 blob_hash[ER_HASH_SIZE];
+  UINT32 packet_bytes;
+  char key[ER_STORAGE_DURABLE_PACKET_KEY_LEN + 1u];
 
   if (crypto == 0 ||
       er_storage_endpoint_durable_store_valid(store) == 0u ||
       er_vfs_object_packet_valid(crypto, packet) == 0u) {
     return 0u;
   }
-  home_slot = er_storage_endpoint_durable_home_slot(store,
-                                                   &packet->header.packet_id);
-  slot_index = home_slot;
-  for (probe = 0u; probe < store->slot_count; ++probe) {
-    if (store->read(store->block_ctx,
-                    er_storage_endpoint_durable_slot_sector(store, slot_index),
-                    store->slot_buffer,
-                    ER_STORAGE_ENDPOINT_DURABLE_SLOT_BYTES) == 0u) {
-      return 0u;
-    }
-    if (er_storage_endpoint_durable_slot_to_packet(store->slot_buffer,
-                                                   &existing) == 0u ||
-        er_hash_equal(&existing.header.packet_id,
-                      &packet->header.packet_id) != 0u) {
-      er_storage_endpoint_durable_packet_to_slot(packet, store->slot_buffer);
-      return store->write(
-          store->block_ctx,
-          er_storage_endpoint_durable_slot_sector(store, slot_index),
-          store->slot_buffer,
-          ER_STORAGE_ENDPOINT_DURABLE_SLOT_BYTES);
-    }
-    ++slot_index;
-    if (slot_index == store->slot_count) {
-      slot_index = 0u;
-    }
-  }
-  return 0u;
+  packet_bytes = er_storage_endpoint_durable_packet_to_bytes(
+      packet,
+      store->packet_buffer);
+  er_storage_endpoint_durable_packet_key(packet, key);
+  return (UINT8)(er_store_put_blob(store->store,
+                                   store->packet_buffer,
+                                   packet_bytes,
+                                   blob_hash) == ER_OK &&
+                 er_store_blob_index_put(store->store,
+                                         ER_STORAGE_DURABLE_PACKET_INDEX_ID,
+                                         key,
+                                         blob_hash) == ER_OK);
 }
 
 UINT8 er_storage_endpoint_durable_read_packet(
     const ErCryptoProvider* crypto,
     ErStorageEndpointDurableStore* store,
-    UINT32 slot_index,
+    UINT32 packet_ordinal,
     ErVfsObjectPacket* out_packet) {
+  er_store_index_cursor_t cursor;
+  er_index_entry_t entry;
+  UINT32 pos;
+  size_t blob_len = 0u;
+  int rc;
+
   if (crypto == 0 ||
       er_storage_endpoint_durable_store_valid(store) == 0u ||
       out_packet == 0 ||
-      slot_index >= store->slot_count ||
-      store->read(store->block_ctx,
-                  er_storage_endpoint_durable_slot_sector(store, slot_index),
-                  store->slot_buffer,
-                  ER_STORAGE_ENDPOINT_DURABLE_SLOT_BYTES) == 0u ||
-      er_storage_endpoint_durable_slot_to_packet(store->slot_buffer,
-                                                 out_packet) == 0u ||
+      er_store_index_cursor_open(store->store,
+                                 ER_STORAGE_DURABLE_PACKET_INDEX_ID,
+                                 g_storage_durable_packet_key_prefix,
+                                 &cursor) != ER_OK) {
+    return 0u;
+  }
+  for (pos = 0u; pos <= packet_ordinal; ++pos) {
+    rc = er_store_index_cursor_next(&cursor, &entry);
+    if (rc != ER_OK) {
+      return 0u;
+    }
+  }
+  if (er_store_get_blob(store->store,
+                        entry.hash,
+                        store->packet_buffer,
+                        store->packet_buffer_len,
+                        &blob_len) != ER_OK ||
+      er_storage_endpoint_durable_bytes_to_packet(store->packet_buffer,
+                                                  blob_len,
+                                                  out_packet) == 0u ||
       er_vfs_object_packet_valid(crypto, out_packet) == 0u) {
     return 0u;
   }
@@ -718,9 +735,12 @@ UINT8 er_storage_endpoint_durable_restore_cache(
     ErStorageEndpointObjectCache* cache,
     UINT64 use_tick,
     UINT32* out_restored) {
-  UINT32 slot_index;
   UINT32 restored = 0u;
+  er_store_index_cursor_t cursor;
+  er_index_entry_t entry;
   ErVfsObjectPacket packet;
+  size_t blob_len = 0u;
+  int cursor_rc;
 
   if (out_restored != 0) {
     *out_restored = 0u;
@@ -733,11 +753,22 @@ UINT8 er_storage_endpoint_durable_restore_cache(
       out_restored == 0) {
     return 0u;
   }
-  for (slot_index = 0u; slot_index < store->slot_count; ++slot_index) {
-    if (er_storage_endpoint_durable_read_packet(crypto,
-                                                store,
-                                                slot_index,
-                                                &packet) != 0u &&
+  if (er_store_index_cursor_open(store->store,
+                                 ER_STORAGE_DURABLE_PACKET_INDEX_ID,
+                                 g_storage_durable_packet_key_prefix,
+                                 &cursor) != ER_OK) {
+    return 0u;
+  }
+  while ((cursor_rc = er_store_index_cursor_next(&cursor, &entry)) == ER_OK) {
+    if (er_store_get_blob(store->store,
+                          entry.hash,
+                          store->packet_buffer,
+                          store->packet_buffer_len,
+                          &blob_len) == ER_OK &&
+        er_storage_endpoint_durable_bytes_to_packet(store->packet_buffer,
+                                                    blob_len,
+                                                    &packet) != 0u &&
+        er_vfs_object_packet_valid(crypto, &packet) != 0u &&
         er_storage_endpoint_cache_object_packet(crypto,
                                                 cache,
                                                 &packet,
@@ -745,6 +776,9 @@ UINT8 er_storage_endpoint_durable_restore_cache(
                                                 0) != 0u) {
       ++restored;
     }
+  }
+  if (cursor_rc != ER_ERR_NOTFOUND) {
+    return 0u;
   }
   *out_restored = restored;
   return 1u;
