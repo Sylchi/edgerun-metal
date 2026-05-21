@@ -158,37 +158,30 @@ static void er_node_epoch_body(er_clock_epoch_stamp_t epoch, uint8_t* out) {
   er_node_store64(&out[ER_CLOCK_KEEPER_ID_SIZE + 24u], epoch.era);
 }
 
-int er_node_open_config(er_node_t* node, const er_node_config_t* config) {
+int er_node_open(er_node_t* node, const er_identity_t* identity,
+                 void* arena, size_t arena_len, uint64_t storage_limit,
+                 er_store_t* store) {
   ErNodeState* state = er_node_state(node);
+  er_clock_limits_t limits;
 
-  if (node == (er_node_t*)0 || config == (const er_node_config_t*)0 ||
-      er_identity_valid(config->identity) == 0 ||
-      config->clock == (const er_clock_t*)0 ||
-      er_clock_stamp_valid(config->clock->now) == 0 ||
-      er_clock_stamp_same_keeper(config->identity->epoch,
-                                 config->clock->now) == 0 ||
-      (config->arena_len != 0u && config->arena == (void*)0)) {
+  if (node == (er_node_t*)0 ||
+      er_identity_valid(identity) == 0 ||
+      (arena_len != 0u && arena == (void*)0)) {
     return ER_NODE_ERR_BADARG;
   }
   er_node_zero(state, sizeof(*state));
-  state->identity = *config->identity;
-  state->clock = *config->clock;
-  state->store = config->store;
-  state->arena = (uint8_t*)config->arena;
-  state->arena_len = config->arena_len;
-  state->storage_limit = config->storage_limit;
+  state->identity = *identity;
+  limits = er_clock_default_limits();
+  if (er_clock_init(&identity->epoch.keeper_id, &limits, &state->clock) != ER_CLOCK_OK) {
+    er_node_zero(state, sizeof(*state));
+    return ER_NODE_ERR_CORRUPT;
+  }
+  state->clock.now = identity->epoch;
+  state->store = store;
+  state->arena = (uint8_t*)arena;
+  state->arena_len = arena_len;
+  state->storage_limit = storage_limit;
   return ER_NODE_OK;
-}
-
-int er_node_open(er_node_t* node, const er_identity_t* identity,
-                 const er_clock_t* clock, er_store_t* store) {
-  er_node_config_t config;
-
-  er_node_zero(&config, sizeof(config));
-  config.identity = identity;
-  config.clock = clock;
-  config.store = store;
-  return er_node_open_config(node, &config);
 }
 
 int er_node_identity(const er_node_t* node, er_identity_t* out_identity) {
@@ -241,26 +234,21 @@ static int er_node_add_u64(uint64_t a, uint64_t b, uint64_t* out) {
 }
 
 int er_node_spawn(er_node_t* parent, const er_identity_t* child_identity,
-                  const er_clock_t* child_clock, size_t memory_len,
-                  uint64_t storage_limit, er_store_t* child_store,
-                  er_node_t* out_child, void* out_receipt_object,
-                  size_t out_cap, size_t* out_len,
+                  size_t memory_len, uint64_t storage_limit,
+                  er_store_t* child_store, er_node_t* out_child,
+                  void* out_receipt_object, size_t out_cap, size_t* out_len,
                   uint8_t out_id[ER_OBJECT_ID_SIZE]) {
   ErNodeState* parent_state = er_node_state(parent);
-  er_node_config_t child_config;
   uint8_t body[ER_NODE_BODY_SPAWN_SIZE];
   size_t memory_end;
   uint64_t storage_end;
 
   if (parent == (er_node_t*)0 || out_child == (er_node_t*)0 ||
       child_identity == (const er_identity_t*)0 ||
-      child_clock == (const er_clock_t*)0 ||
       out_receipt_object == (void*)0 || out_len == (size_t*)0 ||
       out_id == (uint8_t*)0 ||
       child_identity->identity_kind != ER_IDENTITY_KIND_DELEGATED ||
       er_identity_valid(child_identity) == 0 ||
-      er_clock_stamp_valid(child_clock->now) == 0 ||
-      er_clock_stamp_same_keeper(child_identity->epoch, child_clock->now) == 0 ||
       er_node_add_size(parent_state->arena_used, memory_len,
                        &memory_end) != ER_NODE_OK ||
       memory_end > parent_state->arena_len ||
@@ -271,15 +259,12 @@ int er_node_spawn(er_node_t* parent, const er_identity_t* child_identity,
     return ER_NODE_ERR_BADARG;
   }
 
-  er_node_zero(&child_config, sizeof(child_config));
-  child_config.identity = child_identity;
-  child_config.clock = child_clock;
-  child_config.store = child_store;
-  child_config.arena = memory_len == 0u ? (void*)0
-                                        : &parent_state->arena[parent_state->arena_used];
-  child_config.arena_len = memory_len;
-  child_config.storage_limit = storage_limit;
-  if (er_node_open_config(out_child, &child_config) != ER_NODE_OK) {
+  if (er_node_open(out_child,
+                   child_identity,
+                   memory_len == 0u ? (void*)0 : &parent_state->arena[parent_state->arena_used],
+                   memory_len,
+                   storage_limit,
+                   child_store) != ER_NODE_OK) {
     return ER_NODE_ERR_CORRUPT;
   }
 
@@ -509,57 +494,4 @@ int er_node_sign(er_node_t* node, const void* subject_canonical,
                         out_id) == ER_OBJECT_OK
              ? ER_NODE_OK
              : ER_NODE_ERR_CORRUPT;
-}
-
-int er_node_import_object(er_node_t* node, const void* external_bytes,
-                          size_t external_len, void* out_canonical,
-                          size_t out_cap, size_t* out_len,
-                          uint8_t out_id[ER_OBJECT_ID_SIZE],
-                          er_node_receipt_t* out_receipt) {
-  ErNodeState* state = er_node_state(node);
-  er_object_info_t info;
-  int rc;
-
-  if (node == (er_node_t*)0 || external_bytes == (const void*)0 ||
-      out_canonical == (void*)0 || out_len == (size_t*)0 ||
-      out_id == (uint8_t*)0 || out_receipt == (er_node_receipt_t*)0) {
-    return ER_NODE_ERR_BADARG;
-  }
-  rc = er_object_deserialize(external_bytes, external_len, &info, out_id);
-  if (rc != ER_OBJECT_OK) {
-    return ER_NODE_ERR_CORRUPT;
-  }
-  if (external_len > out_cap) {
-    return ER_NODE_ERR_TOOBIG;
-  }
-  er_node_copy(out_canonical, external_bytes, external_len);
-  *out_len = external_len;
-  er_node_receipt_fill(state, ER_NODE_METHOD_IMPORT, ER_NODE_OK,
-                       info.object_id, info.object_id, out_receipt);
-  return ER_NODE_OK;
-}
-
-int er_node_export_object(er_node_t* node, const void* canonical,
-                          size_t canonical_len, void* out_external,
-                          size_t out_cap, size_t* out_len,
-                          uint8_t out_id[ER_OBJECT_ID_SIZE],
-                          er_node_receipt_t* out_receipt) {
-  ErNodeState* state = er_node_state(node);
-  int rc;
-
-  if (node == (er_node_t*)0 || out_receipt == (er_node_receipt_t*)0) {
-    return ER_NODE_ERR_BADARG;
-  }
-  rc = er_object_serialize(canonical, canonical_len, out_external, out_cap,
-                           out_len, out_id);
-  if (rc == ER_OBJECT_ERR_TOOBIG) {
-    return ER_NODE_ERR_TOOBIG;
-  }
-  if (rc != ER_OBJECT_OK) {
-    return rc == ER_OBJECT_ERR_BADARG ? ER_NODE_ERR_BADARG
-                                      : ER_NODE_ERR_CORRUPT;
-  }
-  er_node_receipt_fill(state, ER_NODE_METHOD_EXPORT, ER_NODE_OK,
-                       out_id, out_id, out_receipt);
-  return ER_NODE_OK;
 }

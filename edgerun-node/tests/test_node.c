@@ -217,15 +217,11 @@ static void test_node_objects_and_store_receipts(void) {
   uint8_t clock_object[TEST_OBJECT_CAP];
   uint8_t receipt_object[TEST_OBJECT_CAP];
   uint8_t signature_object[TEST_OBJECT_CAP];
-  uint8_t exported[TEST_OBJECT_CAP];
-  uint8_t imported[TEST_OBJECT_CAP];
   uint8_t object_id[ER_OBJECT_ID_SIZE];
   uint8_t identity_object_id[ER_OBJECT_ID_SIZE];
   uint8_t clock_object_id[ER_OBJECT_ID_SIZE];
   uint8_t receipt_id[ER_OBJECT_ID_SIZE];
   uint8_t signature_id[ER_OBJECT_ID_SIZE];
-  uint8_t exported_id[ER_OBJECT_ID_SIZE];
-  uint8_t imported_id[ER_OBJECT_ID_SIZE];
   uint8_t signature_bytes[64u];
   size_t canonical_len = 0u;
   size_t fetched_len = 0u;
@@ -233,8 +229,6 @@ static void test_node_objects_and_store_receipts(void) {
   size_t clock_object_len = 0u;
   size_t receipt_len = 0u;
   size_t signature_len = 0u;
-  size_t exported_len = 0u;
-  size_t imported_len = 0u;
   er_object_signature_info_t signature_info;
   er_object_requirements_t requirements;
   er_object_info_t info;
@@ -243,7 +237,6 @@ static void test_node_objects_and_store_receipts(void) {
   er_store_config_t config;
   er_store_t store;
   er_node_t node;
-  er_node_config_t node_config;
   er_node_receipt_t receipt;
   TestIo io;
   static const uint8_t body[] = {7u, 8u, 9u};
@@ -258,14 +251,9 @@ static void test_node_objects_and_store_receipts(void) {
   check_int("store open", er_store_open(&store, test_make_io(&io),
                                         arena, sizeof(arena), &config),
             ER_OK);
-  test_zero(&node_config, sizeof(node_config));
-  node_config.identity = &identity;
-  node_config.clock = &clock;
-  node_config.store = &store;
-  node_config.arena = node_arena;
-  node_config.arena_len = sizeof(node_arena);
-  node_config.storage_limit = TEST_PARENT_STORAGE_LIMIT;
-  check_int("node open", er_node_open_config(&node, &node_config),
+  check_int("node open", er_node_open(&node, &identity, node_arena,
+                                      sizeof(node_arena),
+                                      TEST_PARENT_STORAGE_LIMIT, &store),
             ER_NODE_OK);
   check_int("describe identity",
             er_node_describe_identity(&node, identity_object,
@@ -323,28 +311,11 @@ static void test_node_objects_and_store_receipts(void) {
             ER_OBJECT_OK);
   check_int("node signature algorithm", (int)signature_info.algorithm,
             (int)ER_OBJECT_ALGORITHM_ED25519);
-  check_int("node export",
-            er_node_export_object(&node, canonical, canonical_len, exported,
-                                  sizeof(exported), &exported_len,
-                                  exported_id, &receipt),
-            ER_NODE_OK);
-  check_int("node export len", (int)(exported_len == canonical_len), 1);
-  check_int("node import",
-            er_node_import_object(&node, exported, exported_len, imported,
-                                  sizeof(imported), &imported_len,
-                                  imported_id, &receipt),
-            ER_NODE_OK);
-  check_int("node import len", (int)(imported_len == canonical_len), 1);
-  check_bytes("node export id", exported_id, object_id, ER_OBJECT_ID_SIZE);
-  check_bytes("node import id", imported_id, object_id, ER_OBJECT_ID_SIZE);
-  check_int("node import verify",
-            er_object_verify(imported, imported_len, &info),
+  check_int("canonical object verify",
+            er_object_verify(canonical, canonical_len, &info),
             ER_OBJECT_OK);
-  check_int("node import rejects junk",
-            er_node_import_object(&node, body, sizeof(body), imported,
-                                  sizeof(imported), &imported_len,
-                                  imported_id, &receipt),
-            ER_NODE_ERR_CORRUPT);
+  check_bytes("canonical object id", info.object_id, object_id,
+              ER_OBJECT_ID_SIZE);
 }
 
 static void test_node_spawn_delegates_budget(void) {
@@ -358,7 +329,6 @@ static void test_node_spawn_delegates_budget(void) {
   er_clock_t child_clock;
   er_node_t parent_node;
   er_node_t child_node;
-  er_node_config_t parent_config;
   er_node_budget_t parent_budget;
   er_node_budget_t child_budget;
   er_object_info_t receipt_info;
@@ -367,20 +337,16 @@ static void test_node_spawn_delegates_budget(void) {
   child_clock = parent_clock;
   test_prepare_delegated_identity(&parent_identity, child_clock.now,
                                   &child_identity);
-  test_zero(&parent_config, sizeof(parent_config));
-  parent_config.identity = &parent_identity;
-  parent_config.clock = &parent_clock;
-  parent_config.arena = parent_arena;
-  parent_config.arena_len = sizeof(parent_arena);
-  parent_config.storage_limit = TEST_PARENT_STORAGE_LIMIT;
   check_int("spawn parent open",
-            er_node_open_config(&parent_node, &parent_config),
+            er_node_open(&parent_node, &parent_identity, parent_arena,
+                         sizeof(parent_arena), TEST_PARENT_STORAGE_LIMIT,
+                         (er_store_t*)0),
             ER_NODE_OK);
   check_int("spawn child",
-            er_node_spawn(&parent_node, &child_identity, &child_clock,
-                          TEST_CHILD_MEMORY_SIZE, TEST_CHILD_STORAGE_LIMIT,
-                          (er_store_t*)0, &child_node, receipt_object,
-                          sizeof(receipt_object), &receipt_len, receipt_id),
+            er_node_spawn(&parent_node, &child_identity, TEST_CHILD_MEMORY_SIZE,
+                          TEST_CHILD_STORAGE_LIMIT, (er_store_t*)0,
+                          &child_node, receipt_object, sizeof(receipt_object),
+                          &receipt_len, receipt_id),
             ER_NODE_OK);
   check_int("spawn receipt verify",
             er_object_verify(receipt_object, receipt_len, &receipt_info),
@@ -401,16 +367,14 @@ static void test_node_spawn_delegates_budget(void) {
             (int)child_budget.storage_limit,
             (int)TEST_CHILD_STORAGE_LIMIT);
   check_int("spawn rejects over memory",
-            er_node_spawn(&parent_node, &child_identity, &child_clock,
-                          TEST_NODE_ARENA_SIZE, 0u, (er_store_t*)0,
-                          &child_node, receipt_object,
+            er_node_spawn(&parent_node, &child_identity, TEST_NODE_ARENA_SIZE,
+                          0u, (er_store_t*)0, &child_node, receipt_object,
                           sizeof(receipt_object), &receipt_len, receipt_id),
             ER_NODE_ERR_BADARG);
   check_int("spawn rejects nondelegated",
-            er_node_spawn(&parent_node, &parent_identity, &parent_clock,
-                          0u, 0u, (er_store_t*)0, &child_node,
-                          receipt_object, sizeof(receipt_object),
-                          &receipt_len, receipt_id),
+            er_node_spawn(&parent_node, &parent_identity, 0u, 0u,
+                          (er_store_t*)0, &child_node, receipt_object,
+                          sizeof(receipt_object), &receipt_len, receipt_id),
             ER_NODE_ERR_BADARG);
 }
 
