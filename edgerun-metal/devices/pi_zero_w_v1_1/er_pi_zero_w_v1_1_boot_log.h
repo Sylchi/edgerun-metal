@@ -72,5 +72,6 @@ UINT8 er_pi_zero_w_v1_1_boot_log_append(ErPiZeroWV11BootLog* log,
                                         UINT32 arg1,
                                         UINT32 arg2,
                                         UINT32 arg3);
+UINT32 er_pi_zero_w_v1_1_boot_log_crc32(const UINT8* bytes, UINT32 len);
 
 #endif

@@ -8,7 +8,8 @@ enum {
   TEST_PI_BOOT_LOG_EVENT_OFFSET = 24u,
   TEST_PI_BOOT_LOG_ARG0_OFFSET = 28u,
   TEST_PI_BOOT_LOG_SEQUENCE_OFFSET = 16u,
-  TEST_PI_BOOT_LOG_DROPPED_OFFSET = 20u
+  TEST_PI_BOOT_LOG_DROPPED_OFFSET = 20u,
+  TEST_PI_BOOT_LOG_CRC32_KNOWN = 0xcbf43926u
 };
 
 typedef struct {
@@ -45,8 +46,26 @@ static UINT8 test_pi_boot_log_write(
 static void test_pi_zero_w_v1_1_boot_log(void) {
   ErPiZeroWV11BootLog log;
   TestPiBootLogIo io;
+  const UINT8 crc_bytes[9] = {
+      (UINT8)'1',
+      (UINT8)'2',
+      (UINT8)'3',
+      (UINT8)'4',
+      (UINT8)'5',
+      (UINT8)'6',
+      (UINT8)'7',
+      (UINT8)'8',
+      (UINT8)'9'};
 
   er_mem_zero((UINT8*)&io, (UINTN)sizeof(io));
+  check_uint64("pi boot log crc32 null",
+               er_pi_zero_w_v1_1_boot_log_crc32(0, 1u),
+               0u);
+  check_uint64("pi boot log crc32 known",
+               er_pi_zero_w_v1_1_boot_log_crc32(
+                   crc_bytes,
+                   (UINT32)sizeof(crc_bytes)),
+               TEST_PI_BOOT_LOG_CRC32_KNOWN);
   er_pi_zero_w_v1_1_boot_log_init(&log, TEST_PI_BOOT_LOG_BOOT_ID);
   check_int64("pi boot log queues before storage",
               er_pi_zero_w_v1_1_boot_log_append(
