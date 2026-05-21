@@ -1,4 +1,4 @@
-.PHONY: all run run-aarch64 qemu-aarch64-smoke qemu-ephemeral-authority qemu-ephemeral-authority-smoke qemu-swtpm-persistence qemu-host-tpm-bench clean print-path print-config netboot os rebuild-image check test-core bench-ui-dirty tpm-real-bench-uefi wifi-hardware-probe wasm-modules qemu-config-check qemu-aarch64-config-check qemu-swtpm-persistence-config-check qemu-host-tpm-bench-config-check pi-zero-2w-uefi pi-zero-2w-boot pi-zero-w-v1_1-kernel pi-zero-w-v1_1-boot pi-zero-w-v1_1-cluster-boot FORCE
+.PHONY: all run run-aarch64 qemu-aarch64-smoke qemu-ephemeral-authority qemu-ephemeral-authority-smoke qemu-swtpm-persistence qemu-host-tpm-bench clean print-path print-config netboot os rebuild-image check test-core bench-ui-dirty tpm-real-bench-uefi wifi-hardware-probe wasm-modules qemu-config-check qemu-aarch64-config-check qemu-swtpm-persistence-config-check qemu-host-tpm-bench-config-check pi-zero-2w-uefi pi-zero-2w-boot pi-zero-w-v1_1-kernel pi-zero-w-v1_1-boot
 
 CC := ../toolchain/bin/clang
 HOST_CC := ../toolchain/bin/clang
@@ -33,25 +33,6 @@ DEVICE_INCLUDE_FLAGS := $(foreach dir,$(DEVICE_INCLUDE_DIRS),-I$(CURDIR)/$(dir))
 ER_BOOT_PROFILE := 4
 ER_BOOT_EPHEMERAL_AUTHORITY_ENABLED := 0
 ER_TPM_REAL_BENCH_ENABLED := 0
-PI_ZERO_W_V1_1_NODE_INDEX ?= 0
-PI_ZERO_W_V1_1_NODE_0_ID_TEXT := ERZWPI00RELAY001CYW43438ARMV6L2
-PI_ZERO_W_V1_1_NODE_1_ID_TEXT := ERZWPI01RELAY001CYW43438ARMV6L2
-PI_ZERO_W_V1_1_NODE_2_ID_TEXT := ERZWPI02RELAY001CYW43438ARMV6L2
-PI_ZERO_W_V1_1_NODE_3_ID_TEXT := ERZWPI03RELAY001CYW43438ARMV6L2
-PI_ZERO_W_V1_1_NODE_4_ID_TEXT := ERZWPI04RELAY001CYW43438ARMV6L2
-PI_ZERO_W_V1_1_NODE_5_ID_TEXT := ERZWPI05RELAY001CYW43438ARMV6L2
-PI_ZERO_W_V1_1_NODE_0_ROLE_TEXT := bootstrap-identity-package-index-serial-first-boot
-PI_ZERO_W_V1_1_NODE_1_ROLE_TEXT := sealed-object-storage-replica
-PI_ZERO_W_V1_1_NODE_2_ROLE_TEXT := relay-only
-PI_ZERO_W_V1_1_NODE_3_ROLE_TEXT := offline-rejoin-failure-injection
-PI_ZERO_W_V1_1_NODE_4_ROLE_TEXT := sealed-object-storage-replica-divergence-check
-PI_ZERO_W_V1_1_NODE_5_ROLE_TEXT := mobile-observer-route-churn-late-admission
-PI_ZERO_W_V1_1_NODE_ID_TEXT := $(PI_ZERO_W_V1_1_NODE_$(PI_ZERO_W_V1_1_NODE_INDEX)_ID_TEXT)
-PI_ZERO_W_V1_1_NODE_ROLE_TEXT := $(PI_ZERO_W_V1_1_NODE_$(PI_ZERO_W_V1_1_NODE_INDEX)_ROLE_TEXT)
-
-ifeq ($(PI_ZERO_W_V1_1_NODE_ID_TEXT),)
-$(error unsupported PI_ZERO_W_V1_1_NODE_INDEX '$(PI_ZERO_W_V1_1_NODE_INDEX)')
-endif
 
 ifeq ($(ER_METAL_ARCH),x86_64)
 ER_METAL_TARGET := x86_64-pc-windows-msvc
@@ -164,16 +145,13 @@ PI_ZERO_2W_BUILD_DIR := ../.build/edgerun-metal/pi-zero-2w
 PI_ZERO_2W_EFI_BOOT := $(PI_ZERO_2W_BUILD_DIR)/esp/EFI/BOOT/BOOTAA64.EFI
 PI_ZERO_2W_BOOT_DIR := $(PI_ZERO_2W_BUILD_DIR)/boot
 PI_ZERO_W_V1_1_BUILD_DIR := ../.build/edgerun-metal/pi-zero-w-v1_1
-PI_ZERO_W_V1_1_GENERATED_DIR := $(PI_ZERO_W_V1_1_BUILD_DIR)/generated
 PI_ZERO_W_V1_1_ENTRY_SRC := $(PI_ZERO_W_V1_1_DEVICE_DIR)/pi_zero_w_v1_1_entry.c
 PI_ZERO_W_V1_1_START_SRC := $(PI_ZERO_W_V1_1_DEVICE_DIR)/pi_zero_w_v1_1_start.c
 PI_ZERO_W_V1_1_DEVICE_HDRS := $(wildcard $(PI_ZERO_W_V1_1_DEVICE_DIR)/*.h)
-PI_ZERO_W_V1_1_NODE_CONFIG_HEADER := $(PI_ZERO_W_V1_1_GENERATED_DIR)/pi_zero_w_v1_1_node_config.h
 PI_ZERO_W_V1_1_CYW43438_FIRMWARE_HEADER := $(GENERATED_DIR)/pi_zero_w_v1_1_cyw43438_firmware.h
 PI_ZERO_W_V1_1_CYW43438_HDRS := devices/cyw43438/er_cyw43438_owned_firmware.h devices/cyw43438/er_cyw43438_sdpcm.h $(PI_ZERO_W_V1_1_CYW43438_FIRMWARE_HEADER)
 PI_ZERO_W_V1_1_KERNEL := $(PI_ZERO_W_V1_1_BUILD_DIR)/kernel.img
 PI_ZERO_W_V1_1_BOOT_DIR := $(PI_ZERO_W_V1_1_BUILD_DIR)/boot
-PI_ZERO_W_V1_1_NODE_PROVISION := $(PI_ZERO_W_V1_1_BOOT_DIR)/EDGERUN-PI-ZERO-W-V1_1-NODE.txt
 PI_BOOT_STAGE_SRC := ../tools/pi-boot-stage/main.c
 PI_BOOT_STAGE_BIN := ../.build/edgerun-metal/pi-boot-stage
 QEMU_SMOKE_SRC := ../tools/qemu-smoke.sh
@@ -419,27 +397,12 @@ $(PI_ZERO_W_V1_1_CYW43438_FIRMWARE_HEADER): ../firmware/network/02d0.a9a6.0 ../f
 	$(EMBED_HEADER_BIN) binary ../firmware/network/02d0.a9a6.2 $@.clm ER_PI_ZERO_W_V1_1_CYW43438_CLM_FIRMWARE_H g_er_pi_zero_w_v1_1_cyw43438_clm_firmware ER_PI_ZERO_W_V1_1_CYW43438_CLM_FIRMWARE_SIZE
 	printf '%s\n' '#ifndef ER_PI_ZERO_W_V1_1_CYW43438_FIRMWARE_H' '#define ER_PI_ZERO_W_V1_1_CYW43438_FIRMWARE_H' '#include "pi_zero_w_v1_1_cyw43438_firmware.h.ram"' '#include "pi_zero_w_v1_1_cyw43438_firmware.h.nvram"' '#include "pi_zero_w_v1_1_cyw43438_firmware.h.clm"' '#endif' > $@
 
-$(PI_ZERO_W_V1_1_NODE_CONFIG_HEADER): FORCE
-	mkdir -p $(dir $@)
-	printf '%s\n' '#ifndef ER_PI_ZERO_W_V1_1_NODE_CONFIG_H' '#define ER_PI_ZERO_W_V1_1_NODE_CONFIG_H' '#define ER_PI_ZERO_W_V1_1_NODE_INDEX $(PI_ZERO_W_V1_1_NODE_INDEX)u' '#define ER_PI_ZERO_W_V1_1_NODE_ID_TEXT "$(PI_ZERO_W_V1_1_NODE_ID_TEXT)"' '#define ER_PI_ZERO_W_V1_1_NODE_ID_REVISION_TEXT "\001"' '#define ER_PI_ZERO_W_V1_1_NODE_ID_BYTES ER_PI_ZERO_W_V1_1_NODE_ID_TEXT ER_PI_ZERO_W_V1_1_NODE_ID_REVISION_TEXT' '#define ER_PI_ZERO_W_V1_1_CHANNEL_ID_TEXT "ERWIFIL2PIZEROW1CHANNEL00000001"' '#define ER_PI_ZERO_W_V1_1_NODE_ROLE_TEXT "$(PI_ZERO_W_V1_1_NODE_ROLE_TEXT)"' '#endif' > $@
-
-pi-zero-w-v1_1-kernel: $(PI_ZERO_W_V1_1_ENTRY_SRC) $(PI_ZERO_W_V1_1_START_SRC) $(PI_ZERO_W_V1_1_DEVICE_HDRS) $(PI_ZERO_W_V1_1_NODE_CONFIG_HEADER) $(PI_ZERO_W_V1_1_CYW43438_HDRS)
+pi-zero-w-v1_1-kernel: $(PI_ZERO_W_V1_1_ENTRY_SRC) $(PI_ZERO_W_V1_1_START_SRC) $(PI_ZERO_W_V1_1_DEVICE_HDRS) $(PI_ZERO_W_V1_1_CYW43438_HDRS)
 	mkdir -p $(dir $(PI_ZERO_W_V1_1_KERNEL))
-	$(CC) -std=c11 -Wall -Wextra -Werror -ffreestanding -fno-builtin -fno-stack-protector -ffunction-sections -fdata-sections -target armv6-none-eabi -fuse-ld=lld -nostdlib -I$(CURDIR)/core -I$(CURDIR)/$(PI_DEVICE_DIR) -I$(CURDIR)/$(PI_ZERO_W_V1_1_DEVICE_DIR) -I$(CURDIR)/devices/cyw43438 -I$(CURDIR)/../include -I$(CURDIR)/$(GENERATED_DIR) -I$(CURDIR)/$(PI_ZERO_W_V1_1_GENERATED_DIR) -I$(CURDIR)/$(CRYPTO_DIR)/include -Wl,--gc-sections -Wl,-Ttext=0x8000 -Wl,--image-base=0x0 -Wl,--oformat,binary -o $(PI_ZERO_W_V1_1_KERNEL) $(PI_ZERO_W_V1_1_ENTRY_SRC) $(PI_ZERO_W_V1_1_START_SRC) $(PI_DEVICE_DIR)/er_pi_mmc.c $(PI_ZERO_W_V1_1_DEVICE_DIR)/er_pi_zero_w_v1_1_ota.c devices/cyw43438/er_cyw43438_sdpcm.c core/er_freestanding.c core/er_mem.c core/er_crypto.c core/er_crypto_blake3.c core/er_identity.c core/er_vfs.c core/er_wifi_l2.c core/er_ble_adv.c core/er_net_frame.c $(CRYPTO_DIR)/src/er_blake3.c
+	$(CC) -std=c11 -Wall -Wextra -Werror -ffreestanding -fno-builtin -fno-stack-protector -ffunction-sections -fdata-sections -target armv6-none-eabi -fuse-ld=lld -nostdlib -I$(CURDIR)/core -I$(CURDIR)/$(PI_DEVICE_DIR) -I$(CURDIR)/$(PI_ZERO_W_V1_1_DEVICE_DIR) -I$(CURDIR)/devices/cyw43438 -I$(CURDIR)/../include -I$(CURDIR)/$(GENERATED_DIR) -I$(CURDIR)/$(CRYPTO_DIR)/include -Wl,--gc-sections -Wl,-Ttext=0x8000 -Wl,--image-base=0x0 -Wl,--oformat,binary -o $(PI_ZERO_W_V1_1_KERNEL) $(PI_ZERO_W_V1_1_ENTRY_SRC) $(PI_ZERO_W_V1_1_START_SRC) $(PI_DEVICE_DIR)/er_pi_mmc.c $(PI_ZERO_W_V1_1_DEVICE_DIR)/er_pi_zero_w_v1_1_ota.c devices/cyw43438/er_cyw43438_sdpcm.c core/er_ephemeral_node.c core/er_freestanding.c core/er_mem.c core/er_crypto.c core/er_crypto_blake3.c core/er_identity.c core/er_vfs.c core/er_wifi_l2.c core/er_ble_adv.c core/er_net_frame.c $(CRYPTO_DIR)/src/er_blake3.c
 
 pi-zero-w-v1_1-boot: pi-zero-w-v1_1-kernel $(PI_BOOT_STAGE_BIN)
 	$(PI_BOOT_STAGE_BIN) pi-zero-w-v1_1 $(PI_ZERO_W_V1_1_KERNEL) $(PI_ZERO_W_V1_1_BOOT_DIR)
-	printf '%s\n' 'board=pi-zero-w-v1_1' 'node_index=$(PI_ZERO_W_V1_1_NODE_INDEX)' 'node_id=$(PI_ZERO_W_V1_1_NODE_ID_TEXT)' 'node_role=$(PI_ZERO_W_V1_1_NODE_ROLE_TEXT)' 'channel_id=ERWIFIL2PIZEROW1CHANNEL00000001' > $(PI_ZERO_W_V1_1_NODE_PROVISION)
-
-pi-zero-w-v1_1-cluster-boot:
-	$(MAKE) pi-zero-w-v1_1-boot PI_ZERO_W_V1_1_NODE_INDEX=0 PI_ZERO_W_V1_1_BUILD_DIR=../.build/edgerun-metal/pi-zero-w-v1_1/erzw-0
-	$(MAKE) pi-zero-w-v1_1-boot PI_ZERO_W_V1_1_NODE_INDEX=1 PI_ZERO_W_V1_1_BUILD_DIR=../.build/edgerun-metal/pi-zero-w-v1_1/erzw-1
-	$(MAKE) pi-zero-w-v1_1-boot PI_ZERO_W_V1_1_NODE_INDEX=2 PI_ZERO_W_V1_1_BUILD_DIR=../.build/edgerun-metal/pi-zero-w-v1_1/erzw-2
-	$(MAKE) pi-zero-w-v1_1-boot PI_ZERO_W_V1_1_NODE_INDEX=3 PI_ZERO_W_V1_1_BUILD_DIR=../.build/edgerun-metal/pi-zero-w-v1_1/erzw-3
-	$(MAKE) pi-zero-w-v1_1-boot PI_ZERO_W_V1_1_NODE_INDEX=4 PI_ZERO_W_V1_1_BUILD_DIR=../.build/edgerun-metal/pi-zero-w-v1_1/erzw-4
-	$(MAKE) pi-zero-w-v1_1-boot PI_ZERO_W_V1_1_NODE_INDEX=5 PI_ZERO_W_V1_1_BUILD_DIR=../.build/edgerun-metal/pi-zero-w-v1_1/erzw-5
-
-FORCE:
 
 clean:
 	rm -rf $(BUILD_DIR)
@@ -454,8 +417,5 @@ print-config:
 	@printf 'ER_METAL_BOOT_EFI=%s\n' "$(ER_METAL_BOOT_EFI)"
 	@printf 'ER_METAL_BOARD_BOOT_CHAIN=%s\n' "$(ER_METAL_BOARD_BOOT_CHAIN)"
 	@printf 'ER_BOOT_EPHEMERAL_AUTHORITY_ENABLED=%s\n' "$(ER_BOOT_EPHEMERAL_AUTHORITY_ENABLED)"
-	@printf 'PI_ZERO_W_V1_1_NODE_INDEX=%s\n' "$(PI_ZERO_W_V1_1_NODE_INDEX)"
-	@printf 'PI_ZERO_W_V1_1_NODE_ID=%s\n' "$(PI_ZERO_W_V1_1_NODE_ID_TEXT)"
-	@printf 'PI_ZERO_W_V1_1_NODE_ROLE=%s\n' "$(PI_ZERO_W_V1_1_NODE_ROLE_TEXT)"
 	@printf 'EFI_BOOT=%s\n' "$(abspath $(EFI_BOOT))"
 	@printf 'CRYPTO_ASM_SRCS=%s\n' "$(CRYPTO_ASM_SRCS)"
