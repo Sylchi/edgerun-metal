@@ -14,6 +14,16 @@ enum {
   ER_PI_ZERO_W_V1_1_OTA_ERWIRE_RESERVED_OFFSET = 28u,
   ER_PI_ZERO_W_V1_1_OTA_ETH_DST_OFFSET = 0u,
   ER_PI_ZERO_W_V1_1_OTA_ETH_TYPE_OFFSET = 12u,
+  ER_PI_ZERO_W_V1_1_OTA_80211_FRAME_CONTROL_OFFSET = 0u,
+  ER_PI_ZERO_W_V1_1_OTA_80211_ADDR1_OFFSET = 4u,
+  ER_PI_ZERO_W_V1_1_OTA_80211_BODY_OFFSET = 24u,
+  ER_PI_ZERO_W_V1_1_OTA_80211_ACTION_FRAME_CONTROL = 0x00d0u,
+  ER_PI_ZERO_W_V1_1_OTA_80211_VENDOR_CATEGORY = 127u,
+  ER_PI_ZERO_W_V1_1_OTA_80211_VENDOR_OUI0 = 0x45u,
+  ER_PI_ZERO_W_V1_1_OTA_80211_VENDOR_OUI1 = 0x52u,
+  ER_PI_ZERO_W_V1_1_OTA_80211_VENDOR_OUI2 = 0x00u,
+  ER_PI_ZERO_W_V1_1_OTA_80211_VENDOR_TYPE_UPDATE = 1u,
+  ER_PI_ZERO_W_V1_1_OTA_80211_VENDOR_HEADER_BYTES = 5u,
   ER_PI_ZERO_W_V1_1_OTA_BROADCAST_BYTE = 0xffu,
   ER_PI_ZERO_W_V1_1_OTA_U32_BYTE3_OFFSET = 3u,
   ER_PI_ZERO_W_V1_1_OTA_CRC32_INITIAL = 0xffffffffu,
@@ -393,6 +403,8 @@ UINT8 er_pi_zero_w_v1_1_ota_receive_l2_frame(
     ErPiZeroWV11OtaWriteBlockFn write_block,
     void* write_ctx) {
   const UINT8* erwire_frame;
+  const UINT8* l2_frame;
+  UINT32 l2_frame_len;
   UINT32 erwire_frame_len;
 
   if (state == 0 ||
@@ -400,20 +412,52 @@ UINT8 er_pi_zero_w_v1_1_ota_receive_l2_frame(
       expected_dst_mac == 0 ||
       frame == 0 ||
       frame_len <= ER_NET_ETH_HEADER_LEN ||
-      frame_len > ER_NET_FRAME_MAX ||
-      er_pi_zero_w_v1_1_ota_l2_dst_matches(
-          frame + ER_PI_ZERO_W_V1_1_OTA_ETH_DST_OFFSET,
-          expected_dst_mac) == 0u ||
-      er_pi_zero_w_v1_1_ota_get_be16(
-          frame + ER_PI_ZERO_W_V1_1_OTA_ETH_TYPE_OFFSET) !=
-          ER_NET_ETH_TYPE_EDGERUN) {
+      frame_len > ER_NET_FRAME_MAX) {
     if (state != 0) {
       state->status = ER_PI_ZERO_W_V1_1_OTA_STATUS_REJECTED;
     }
     return 0u;
   }
-  erwire_frame = frame + ER_NET_ETH_HEADER_LEN;
-  erwire_frame_len = frame_len - ER_NET_ETH_HEADER_LEN;
+  l2_frame = frame;
+  l2_frame_len = frame_len;
+  if (er_pi_zero_w_v1_1_ota_get_le16(
+          frame + ER_PI_ZERO_W_V1_1_OTA_80211_FRAME_CONTROL_OFFSET) ==
+          ER_PI_ZERO_W_V1_1_OTA_80211_ACTION_FRAME_CONTROL) {
+    const UINT8* vendor;
+
+    if (frame_len <= ER_PI_ZERO_W_V1_1_OTA_80211_BODY_OFFSET +
+                     ER_PI_ZERO_W_V1_1_OTA_80211_VENDOR_HEADER_BYTES +
+                     ER_NET_ETH_HEADER_LEN ||
+        er_pi_zero_w_v1_1_ota_l2_dst_matches(
+            frame + ER_PI_ZERO_W_V1_1_OTA_80211_ADDR1_OFFSET,
+            expected_dst_mac) == 0u) {
+      state->status = ER_PI_ZERO_W_V1_1_OTA_STATUS_REJECTED;
+      return 0u;
+    }
+    vendor = frame + ER_PI_ZERO_W_V1_1_OTA_80211_BODY_OFFSET;
+    if (vendor[0] != ER_PI_ZERO_W_V1_1_OTA_80211_VENDOR_CATEGORY ||
+        vendor[1] != ER_PI_ZERO_W_V1_1_OTA_80211_VENDOR_OUI0 ||
+        vendor[2] != ER_PI_ZERO_W_V1_1_OTA_80211_VENDOR_OUI1 ||
+        vendor[3] != ER_PI_ZERO_W_V1_1_OTA_80211_VENDOR_OUI2 ||
+        vendor[4] != ER_PI_ZERO_W_V1_1_OTA_80211_VENDOR_TYPE_UPDATE) {
+      state->status = ER_PI_ZERO_W_V1_1_OTA_STATUS_REJECTED;
+      return 0u;
+    }
+    l2_frame = vendor + ER_PI_ZERO_W_V1_1_OTA_80211_VENDOR_HEADER_BYTES;
+    l2_frame_len = frame_len - ER_PI_ZERO_W_V1_1_OTA_80211_BODY_OFFSET -
+                   ER_PI_ZERO_W_V1_1_OTA_80211_VENDOR_HEADER_BYTES;
+  }
+  if (er_pi_zero_w_v1_1_ota_l2_dst_matches(
+          l2_frame + ER_PI_ZERO_W_V1_1_OTA_ETH_DST_OFFSET,
+          expected_dst_mac) == 0u ||
+      er_pi_zero_w_v1_1_ota_get_be16(
+          l2_frame + ER_PI_ZERO_W_V1_1_OTA_ETH_TYPE_OFFSET) !=
+          ER_NET_ETH_TYPE_EDGERUN) {
+    state->status = ER_PI_ZERO_W_V1_1_OTA_STATUS_REJECTED;
+    return 0u;
+  }
+  erwire_frame = l2_frame + ER_NET_ETH_HEADER_LEN;
+  erwire_frame_len = l2_frame_len - ER_NET_ETH_HEADER_LEN;
   return er_pi_zero_w_v1_1_ota_receive_frame(state,
                                              crypto,
                                              erwire_frame,

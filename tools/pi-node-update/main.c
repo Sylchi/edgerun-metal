@@ -43,6 +43,25 @@
 #define ER_PI_NODE_UPDATE_ETH_SRC_OFFSET 6u
 #define ER_PI_NODE_UPDATE_ETH_TYPE_OFFSET 12u
 #define ER_PI_NODE_UPDATE_ETH_TYPE_HIGH_SHIFT 8u
+#define ER_PI_NODE_UPDATE_RADIOTAP_BYTES 8u
+#define ER_PI_NODE_UPDATE_80211_HEADER_BYTES 24u
+#define ER_PI_NODE_UPDATE_80211_VENDOR_HEADER_BYTES 5u
+#define ER_PI_NODE_UPDATE_80211_FRAME_CONTROL_OFFSET 0u
+#define ER_PI_NODE_UPDATE_80211_ADDR1_OFFSET 4u
+#define ER_PI_NODE_UPDATE_80211_ADDR2_OFFSET 10u
+#define ER_PI_NODE_UPDATE_80211_ADDR3_OFFSET 16u
+#define ER_PI_NODE_UPDATE_80211_SEQUENCE_OFFSET 22u
+#define ER_PI_NODE_UPDATE_80211_BODY_OFFSET ER_PI_NODE_UPDATE_80211_HEADER_BYTES
+#define ER_PI_NODE_UPDATE_80211_ACTION_FRAME_CONTROL 0x00d0u
+#define ER_PI_NODE_UPDATE_80211_VENDOR_CATEGORY 127u
+#define ER_PI_NODE_UPDATE_80211_VENDOR_OUI0 0x45u
+#define ER_PI_NODE_UPDATE_80211_VENDOR_OUI1 0x52u
+#define ER_PI_NODE_UPDATE_80211_VENDOR_OUI2 0x00u
+#define ER_PI_NODE_UPDATE_80211_VENDOR_TYPE_UPDATE 1u
+#define ER_PI_NODE_UPDATE_RADIOTAP_VERSION_OFFSET 0u
+#define ER_PI_NODE_UPDATE_RADIOTAP_PAD_OFFSET 1u
+#define ER_PI_NODE_UPDATE_RADIOTAP_LEN_OFFSET 2u
+#define ER_PI_NODE_UPDATE_RADIOTAP_PRESENT_OFFSET 4u
 #define ER_PI_NODE_UPDATE_BROADCAST_BYTE 0xffu
 #define ER_PI_NODE_UPDATE_EXIT_USAGE 2
 #define ER_PI_NODE_UPDATE_PARSE_BASE_10 10
@@ -67,7 +86,7 @@ typedef struct {
 
 static void er_pi_node_update_usage(const char* argv0) {
   fprintf(stderr,
-          "usage: %s (--serial <tty> | --iface <iface> | --dry-run) --image <kernel.img> [--repeat N]\n",
+          "usage: %s (--serial <tty> | --iface <monitor-iface> | --dry-run) --image <kernel.img> [--repeat N]\n",
           argv0 == 0 ? "pi-node-update" : argv0);
 }
 
@@ -195,6 +214,13 @@ static void er_pi_node_update_put_eth_type(uint8_t* frame) {
       (uint8_t)(ER_NET_ETH_TYPE_EDGERUN & ER_PI_NODE_UPDATE_BYTE_MASK);
 }
 
+static void er_pi_node_update_put_u16_le_bytes(uint8_t* bytes,
+                                               uint16_t value) {
+  bytes[0] = (uint8_t)(value & ER_PI_NODE_UPDATE_BYTE_MASK);
+  bytes[1] = (uint8_t)((value >> ER_PI_NODE_UPDATE_U16_HIGH_SHIFT) &
+                       ER_PI_NODE_UPDATE_BYTE_MASK);
+}
+
 static int er_pi_node_update_open_l2(const char* iface,
                                      int* out_fd,
                                      struct sockaddr_ll* out_addr,
@@ -205,7 +231,7 @@ static int er_pi_node_update_open_l2(const char* iface,
   if (iface == 0 || out_fd == 0 || out_addr == 0 || src_mac == 0) {
     return 0;
   }
-  fd = socket(AF_PACKET, SOCK_RAW, htons(ER_NET_ETH_TYPE_EDGERUN));
+  fd = socket(AF_PACKET, SOCK_RAW, htons(ETH_P_ALL));
   if (fd < 0) {
     perror("pi-node-update: socket");
     return 0;
@@ -224,6 +250,7 @@ static int er_pi_node_update_open_l2(const char* iface,
   }
   memset(out_addr, 0, sizeof(*out_addr));
   out_addr->sll_family = AF_PACKET;
+  out_addr->sll_protocol = htons(ETH_P_ALL);
   out_addr->sll_ifindex = ifr.ifr_ifindex;
   out_addr->sll_halen = ETH_ALEN;
   memset(out_addr->sll_addr, ER_PI_NODE_UPDATE_BROADCAST_BYTE, ETH_ALEN);
@@ -237,6 +264,13 @@ static int er_pi_node_update_open_l2(const char* iface,
   memcpy(src_mac, ifr.ifr_hwaddr.sa_data, ETH_ALEN);
   *out_fd = fd;
   return 1;
+}
+
+static uint32_t er_pi_node_update_wifi_packet_capacity(void) {
+  return ER_PI_NODE_UPDATE_RADIOTAP_BYTES +
+         ER_PI_NODE_UPDATE_80211_HEADER_BYTES +
+         ER_PI_NODE_UPDATE_80211_VENDOR_HEADER_BYTES +
+         ER_PI_ZERO_W_V1_1_OTA_L2_FRAME_BYTES_MAX;
 }
 
 static int er_pi_node_update_open_serial(const char* path, int* out_fd) {
@@ -355,24 +389,63 @@ static int er_pi_node_update_send_packet(int fd,
                                          const uint8_t src_mac[ETH_ALEN],
                                          const uint8_t* erwire_packet,
                                          uint32_t erwire_packet_len) {
-  uint8_t frame[ER_NET_ETH_HEADER_LEN +
-                ER_PI_ZERO_W_V1_1_OTA_ERWIRE_PACKET_BYTES_MAX];
+  uint8_t frame[ER_PI_NODE_UPDATE_RADIOTAP_BYTES +
+                ER_PI_NODE_UPDATE_80211_HEADER_BYTES +
+                ER_PI_NODE_UPDATE_80211_VENDOR_HEADER_BYTES +
+                ER_PI_ZERO_W_V1_1_OTA_L2_FRAME_BYTES_MAX];
+  uint8_t* l2_frame;
+  uint8_t* wifi_frame;
+  uint8_t* vendor;
+  uint32_t l2_frame_len;
   uint32_t frame_len;
   ssize_t sent;
 
   if (addr == 0 || src_mac == 0 || erwire_packet == 0 ||
-      erwire_packet_len > ER_PI_ZERO_W_V1_1_OTA_ERWIRE_PACKET_BYTES_MAX) {
+      erwire_packet_len > ER_PI_ZERO_W_V1_1_OTA_ERWIRE_PACKET_BYTES_MAX ||
+      er_pi_node_update_wifi_packet_capacity() > (uint32_t)sizeof(frame)) {
     return 0;
   }
-  memset(frame + ER_PI_NODE_UPDATE_ETH_DST_OFFSET,
+  memset(frame, 0, sizeof(frame));
+  frame[ER_PI_NODE_UPDATE_RADIOTAP_VERSION_OFFSET] = 0u;
+  frame[ER_PI_NODE_UPDATE_RADIOTAP_PAD_OFFSET] = 0u;
+  er_pi_node_update_put_u16_le_bytes(
+      frame + ER_PI_NODE_UPDATE_RADIOTAP_LEN_OFFSET,
+      ER_PI_NODE_UPDATE_RADIOTAP_BYTES);
+  frame[ER_PI_NODE_UPDATE_RADIOTAP_PRESENT_OFFSET] = 0u;
+  wifi_frame = frame + ER_PI_NODE_UPDATE_RADIOTAP_BYTES;
+  er_pi_node_update_put_u16_le_bytes(
+      wifi_frame + ER_PI_NODE_UPDATE_80211_FRAME_CONTROL_OFFSET,
+      ER_PI_NODE_UPDATE_80211_ACTION_FRAME_CONTROL);
+  memset(wifi_frame + ER_PI_NODE_UPDATE_80211_ADDR1_OFFSET,
          ER_PI_NODE_UPDATE_BROADCAST_BYTE,
          ETH_ALEN);
-  memcpy(frame + ER_PI_NODE_UPDATE_ETH_SRC_OFFSET, src_mac, ETH_ALEN);
-  er_pi_node_update_put_eth_type(frame);
-  memcpy(frame + ER_NET_ETH_HEADER_LEN,
+  memcpy(wifi_frame + ER_PI_NODE_UPDATE_80211_ADDR2_OFFSET, src_mac, ETH_ALEN);
+  memset(wifi_frame + ER_PI_NODE_UPDATE_80211_ADDR3_OFFSET,
+         ER_PI_NODE_UPDATE_BROADCAST_BYTE,
+         ETH_ALEN);
+  er_pi_node_update_put_u16_le_bytes(
+      wifi_frame + ER_PI_NODE_UPDATE_80211_SEQUENCE_OFFSET,
+      0u);
+  vendor = wifi_frame + ER_PI_NODE_UPDATE_80211_BODY_OFFSET;
+  vendor[0] = ER_PI_NODE_UPDATE_80211_VENDOR_CATEGORY;
+  vendor[1] = ER_PI_NODE_UPDATE_80211_VENDOR_OUI0;
+  vendor[2] = ER_PI_NODE_UPDATE_80211_VENDOR_OUI1;
+  vendor[3] = ER_PI_NODE_UPDATE_80211_VENDOR_OUI2;
+  vendor[4] = ER_PI_NODE_UPDATE_80211_VENDOR_TYPE_UPDATE;
+  l2_frame = vendor + ER_PI_NODE_UPDATE_80211_VENDOR_HEADER_BYTES;
+  memset(l2_frame + ER_PI_NODE_UPDATE_ETH_DST_OFFSET,
+         ER_PI_NODE_UPDATE_BROADCAST_BYTE,
+         ETH_ALEN);
+  memcpy(l2_frame + ER_PI_NODE_UPDATE_ETH_SRC_OFFSET, src_mac, ETH_ALEN);
+  er_pi_node_update_put_eth_type(l2_frame);
+  memcpy(l2_frame + ER_NET_ETH_HEADER_LEN,
          erwire_packet,
          erwire_packet_len);
-  frame_len = ER_NET_ETH_HEADER_LEN + erwire_packet_len;
+  l2_frame_len = ER_NET_ETH_HEADER_LEN + erwire_packet_len;
+  frame_len = ER_PI_NODE_UPDATE_RADIOTAP_BYTES +
+              ER_PI_NODE_UPDATE_80211_HEADER_BYTES +
+              ER_PI_NODE_UPDATE_80211_VENDOR_HEADER_BYTES +
+              l2_frame_len;
   sent = sendto(fd,
                 frame,
                 frame_len,
