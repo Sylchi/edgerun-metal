@@ -309,7 +309,7 @@ static int bench_index(BenchIo* io, uint8_t* arena, uint8_t* data, const char* l
   start = bench_store_now_ns();
   for (i = 0u; i < count; ++i) {
     bench_index_key(key, sizeof(key), i);
-    if (er_store_index_put(&store, key, hash) != ER_OK) {
+    if (er_store_blob_index_put(&store, ER_STORE_INDEX_DEFAULT, key, hash) != ER_OK) {
       return 0;
     }
   }
@@ -327,6 +327,20 @@ static int bench_index(BenchIo* io, uint8_t* arena, uint8_t* data, const char* l
   }
   elapsed = bench_store_now_ns() - start;
   printf("%s-get %7u keys %9.2f keys/s\n", label, (unsigned)count,
+         ((double)count * (double)BENCH_STORE_NS_PER_SECOND) / (double)elapsed);
+
+  start = bench_store_now_ns();
+  for (i = 0u; i < count; ++i) {
+    bench_index_key(key, sizeof(key), i);
+    if (er_store_index_get_entry(&store, key, &entry) != ER_OK ||
+        entry.value_kind != ER_STORE_VALUE_BLOB ||
+        entry.value_size != BENCH_STORE_BLOB_BYTES) {
+      return 0;
+    }
+    g_bench_store_sink ^= entry.hash[i & (ER_HASH_SIZE - 1u)];
+  }
+  elapsed = bench_store_now_ns() - start;
+  printf("%s-entry %5u keys %9.2f keys/s\n", label, (unsigned)count,
          ((double)count * (double)BENCH_STORE_NS_PER_SECOND) / (double)elapsed);
 
   start = bench_store_now_ns();

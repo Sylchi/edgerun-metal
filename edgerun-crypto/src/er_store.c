@@ -530,6 +530,17 @@ static int er_store_insert_key_ex(er_store_t* store, uint32_t index_id, const ch
   return er_store_insert_key_meta(store, index_id, key, key_len, hash, ER_STORE_VALUE_UNKNOWN, ER_STORE_TYPE_RAW, 0u);
 }
 
+//@optimizer-ignore-function index entries copy fixed key and hash bytes from an arena-owned slot
+static void er_store_fill_index_entry(er_index_entry_t* out_entry, const ErStoreKeySlot* slot) {
+  out_entry->index_id = slot->index_id;
+  out_entry->value_kind = slot->value_kind;
+  out_entry->content_type = slot->content_type;
+  er_store_zero(out_entry->key, ER_STORE_MAX_KEY);
+  er_store_copy(out_entry->key, slot->key, slot->key_len);
+  er_store_copy(out_entry->hash, slot->hash, ER_HASH_SIZE);
+  out_entry->value_size = slot->value_size;
+}
+
 //@optimizer-ignore-function fixed-capacity content-type table indexes the caller-provided arena
 static int er_store_find_type(er_store_t* store, uint32_t content_type, size_t* out_slot) {
   ErStoreTypeSlot* slots = er_store_types(store);
@@ -1836,37 +1847,35 @@ int er_store_index_put_ex(er_store_t* store, uint32_t index_id, const char* key,
   return er_store_insert_key_ex(store, index_id, key, key_len, hash);
 }
 
-//@optimizer-ignore-function object index projection records use fixed hash bytes and fixed 64-bit object sizes
-int er_store_object_index_put(er_store_t* store, uint32_t index_id, const char* key,
-                              const uint8_t object_hash[ER_HASH_SIZE]) {
+//@optimizer-ignore-function projection records use fixed hash bytes and fixed 64-bit value sizes
+static int er_store_project_index_put(er_store_t* store, uint32_t index_id, const char* key,
+                                      const uint8_t* value_hash, uint32_t value_kind,
+                                      uint32_t content_type,
+                                      uint64_t value_size) { //@optimizer-ignore projection payload stores fixed 64-bit sizes
   uint8_t payload[ER_STORE_PROJECT_FIXED_PAYLOAD_SIZE + ER_STORE_MAX_KEY];
   uint8_t payload_hash[ER_HASH_SIZE];
   size_t key_len;
   size_t hash_off;
-  uint64_t object_size;
   int key_ok;
   int rc;
 
-  if (store == (er_store_t*)0 || key == (const char*)0 || object_hash == (const uint8_t*)0) {
+  if (store == (er_store_t*)0 || key == (const char*)0 || value_hash == (const uint8_t*)0 ||
+      value_kind == ER_STORE_VALUE_UNKNOWN) {
     return ER_ERR_BADARG;
   }
   key_len = er_store_cstr_len(key, ER_STORE_MAX_KEY + 1u, &key_ok);
   if (key_ok == 0 || key_len == 0u || key_len > ER_STORE_MAX_KEY) {
     return ER_ERR_BADARG;
   }
-  rc = er_store_get_object_size(store, object_hash, &object_size);
-  if (rc != ER_OK) {
-    return rc;
-  }
   hash_off = ER_STORE_PROJECT_KEY_OFF + key_len;
   er_store_zero(payload, sizeof(payload));
   er_store_store32(&payload[ER_STORE_PROJECT_INDEX_ID_OFF], index_id);
-  er_store_store32(&payload[ER_STORE_PROJECT_VALUE_KIND_OFF], ER_STORE_VALUE_OBJECT);
-  er_store_store32(&payload[ER_STORE_PROJECT_CONTENT_TYPE_OFF], ER_STORE_TYPE_OBJECT_MANIFEST);
-  er_store_store64(&payload[ER_STORE_PROJECT_VALUE_SIZE_OFF], object_size);
+  er_store_store32(&payload[ER_STORE_PROJECT_VALUE_KIND_OFF], value_kind);
+  er_store_store32(&payload[ER_STORE_PROJECT_CONTENT_TYPE_OFF], content_type);
+  er_store_store64(&payload[ER_STORE_PROJECT_VALUE_SIZE_OFF], value_size);
   er_store_store16(&payload[ER_STORE_PROJECT_KEY_LEN_OFF], (uint16_t)key_len);
   er_store_copy(&payload[ER_STORE_PROJECT_KEY_OFF], key, key_len);
-  er_store_copy(&payload[hash_off], object_hash, ER_HASH_SIZE);
+  er_store_copy(&payload[hash_off], value_hash, ER_HASH_SIZE);
   rc = er_store_hash_bytes(payload, hash_off + ER_HASH_SIZE, payload_hash);
   if (rc != ER_OK) {
     return rc;
@@ -1876,8 +1885,40 @@ int er_store_object_index_put(er_store_t* store, uint32_t index_id, const char* 
   if (rc != ER_OK) {
     return rc;
   }
-  return er_store_insert_key_meta(store, index_id, key, key_len, object_hash, ER_STORE_VALUE_OBJECT,
-                                  ER_STORE_TYPE_OBJECT_MANIFEST, object_size);
+  return er_store_insert_key_meta(store, index_id, key, key_len, value_hash, value_kind, content_type, value_size);
+}
+
+int er_store_blob_index_put(er_store_t* store, uint32_t index_id, const char* key,
+                            const uint8_t blob_hash[ER_HASH_SIZE]) {
+  er_blob_t info;
+  int rc;
+
+  if (store == (er_store_t*)0 || blob_hash == (const uint8_t*)0) {
+    return ER_ERR_BADARG;
+  }
+  rc = er_store_get_blob_info(store, blob_hash, &info);
+  if (rc != ER_OK) {
+    return rc;
+  }
+  return er_store_project_index_put(store, index_id, key, blob_hash, ER_STORE_VALUE_BLOB, info.content_type,
+                                    info.size);
+}
+
+//@optimizer-ignore-function object index projection records use fixed hash bytes and fixed 64-bit object sizes
+int er_store_object_index_put(er_store_t* store, uint32_t index_id, const char* key,
+                              const uint8_t object_hash[ER_HASH_SIZE]) {
+  uint64_t object_size;
+  int rc;
+
+  if (store == (er_store_t*)0 || object_hash == (const uint8_t*)0) {
+    return ER_ERR_BADARG;
+  }
+  rc = er_store_get_object_size(store, object_hash, &object_size);
+  if (rc != ER_OK) {
+    return rc;
+  }
+  return er_store_project_index_put(store, index_id, key, object_hash, ER_STORE_VALUE_OBJECT,
+                                    ER_STORE_TYPE_OBJECT_MANIFEST, object_size);
 }
 
 int er_store_index_put(er_store_t* store, const char* key, const uint8_t hash[ER_HASH_SIZE]) {
@@ -1885,30 +1926,50 @@ int er_store_index_put(er_store_t* store, const char* key, const uint8_t hash[ER
 }
 
 int er_store_index_get_ex(er_store_t* store, uint32_t index_id, const char* key, uint8_t out_hash[ER_HASH_SIZE]) {
+  er_index_entry_t entry;
+  int rc;
+
+  if (out_hash == (uint8_t*)0) {
+    return ER_ERR_BADARG;
+  }
+  rc = er_store_index_get_entry_ex(store, index_id, key, &entry);
+  if (rc != ER_OK) {
+    return rc;
+  }
+  er_store_copy(out_hash, entry.hash, ER_HASH_SIZE);
+  return ER_OK;
+}
+
+int er_store_index_get(er_store_t* store, const char* key, uint8_t out_hash[ER_HASH_SIZE]) {
+  return er_store_index_get_ex(store, ER_STORE_INDEX_DEFAULT, key, out_hash);
+}
+
+int er_store_index_get_entry_ex(er_store_t* store, uint32_t index_id, const char* key,
+                                er_index_entry_t* out_entry) {
   ErStoreKeySlot* slots;
   size_t key_len;
-  size_t slot;
+  size_t slot_index;
   int key_ok;
   int rc;
 
-  if (store == (er_store_t*)0 || key == (const char*)0 || out_hash == (uint8_t*)0) {
+  if (store == (er_store_t*)0 || key == (const char*)0 || out_entry == (er_index_entry_t*)0) {
     return ER_ERR_BADARG;
   }
   key_len = er_store_cstr_len(key, ER_STORE_MAX_KEY + 1u, &key_ok);
   if (key_ok == 0 || key_len == 0u || key_len > ER_STORE_MAX_KEY) {
     return ER_ERR_BADARG;
   }
-  rc = er_store_find_key_ex(store, index_id, key, key_len, &slot);
+  rc = er_store_find_key_ex(store, index_id, key, key_len, &slot_index);
   if (rc != ER_OK) {
     return rc;
   }
   slots = er_store_keys(store);
-  er_store_copy(out_hash, slots[slot].hash, ER_HASH_SIZE);
+  er_store_fill_index_entry(out_entry, &slots[slot_index]);
   return ER_OK;
 }
 
-int er_store_index_get(er_store_t* store, const char* key, uint8_t out_hash[ER_HASH_SIZE]) {
-  return er_store_index_get_ex(store, ER_STORE_INDEX_DEFAULT, key, out_hash);
+int er_store_index_get_entry(er_store_t* store, const char* key, er_index_entry_t* out_entry) {
+  return er_store_index_get_entry_ex(store, ER_STORE_INDEX_DEFAULT, key, out_entry);
 }
 
 int er_store_index_cursor_open(er_store_t* store, uint32_t index_id, const char* prefix,
@@ -1959,13 +2020,7 @@ int er_store_index_cursor_next(er_store_index_cursor_t* cursor, er_index_entry_t
       return ER_ERR_NOTFOUND;
     }
     ++cursor->pos;
-    out_entry->index_id = slot->index_id;
-    out_entry->value_kind = slot->value_kind;
-    out_entry->content_type = slot->content_type;
-    er_store_zero(out_entry->key, ER_STORE_MAX_KEY);
-    er_store_copy(out_entry->key, slot->key, slot->key_len);
-    er_store_copy(out_entry->hash, slot->hash, ER_HASH_SIZE);
-    out_entry->value_size = slot->value_size;
+    er_store_fill_index_entry(out_entry, slot);
     return ER_OK;
   }
   return ER_ERR_NOTFOUND;
