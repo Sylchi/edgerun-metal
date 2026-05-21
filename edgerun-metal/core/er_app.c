@@ -49,11 +49,12 @@ enum {
   ER_APP_PACKAGE_REMOTE_FETCH_APP_RECEIPT_SPAN = 2u,
   ER_APP_PACKAGE_REMOTE_FETCH_MANIFEST_RECEIPT_SPAN = 3u,
   ER_APP_PACKAGE_REMOTE_FETCH_UI_ASSETS_RECEIPT_SPAN = 4u,
-  ER_APP_IDENTITY_HASH_SPAN_COUNT = 4u,
+  ER_APP_IDENTITY_HASH_SPAN_COUNT = 5u,
   ER_APP_IDENTITY_APP_OBJECT_SPAN = 0u,
   ER_APP_IDENTITY_MANIFEST_SPAN = 1u,
   ER_APP_IDENTITY_ADMISSION_SPAN = 2u,
-  ER_APP_IDENTITY_NONCE_SPAN = 3u,
+  ER_APP_IDENTITY_KIND_SPAN = 3u,
+  ER_APP_IDENTITY_NONCE_SPAN = 4u,
   ER_APP_IDENTITY_BUDGET_SPAN_COUNT = 4u,
   ER_APP_IDENTITY_BUDGET_NODE_SPAN = 0u,
   ER_APP_IDENTITY_BUDGET_ADMISSION_SPAN = 1u,
@@ -784,7 +785,8 @@ UINT8 er_app_prepare_package_manifest_from_objects_for_kind(const ErCryptoProvid
     return 0;
   }
   if (ui_assets_object != 0) {
-    if (er_app_object_ref_valid(ui_assets_object) == 0u) {
+    if (app_kind != ER_APP_KIND_UI_APP ||
+        er_app_object_ref_valid(ui_assets_object) == 0u) {
       return 0;
     }
     ui_assets_object_id = &ui_assets_object->object_id;
@@ -1033,21 +1035,6 @@ UINT8 er_app_load_package_from_install_record(
                                                  out_loaded);
 }
 
-UINT8 er_app_derive_identity_from_package(const ErCryptoProvider* crypto,
-                                          const ErAppPackageManifest* package,
-                                          const ErHash* admission_id,
-                                          const UINT8* instance_nonce,
-                                          UINTN instance_nonce_len,
-                                          ErAppIdentity* out_identity) {
-  if (er_app_package_manifest_valid(crypto, package) == 0u) {
-    return 0;
-  }
-  return er_app_derive_identity(crypto, &package->app_object_id,
-                                &package->manifest_object_id,
-                                admission_id, instance_nonce,
-                                instance_nonce_len, out_identity);
-}
-
 static UINT8 er_app_scene_count_fits(UINT64 actual, UINT64 limit) {
   return (UINT8)(actual <= limit);
 }
@@ -1064,14 +1051,21 @@ static void er_app_prepare_identity_budget_spans(const ErAppIdentity* identity, 
   spans[ER_APP_IDENTITY_BUDGET_FIELDS_SPAN].len = fields_len;
 }
 
-UINT8 er_app_derive_identity(const ErCryptoProvider* crypto, const ErHash* app_object_id,
-                             const ErHash* manifest_hash, const ErHash* admission_id,
-                             const UINT8* instance_nonce, UINTN instance_nonce_len,
-                             ErAppIdentity* out_identity) {
+static UINT8 er_app_derive_identity_for_kind(const ErCryptoProvider* crypto,
+                                             UINT16 app_kind,
+                                             const ErHash* app_object_id,
+                                             const ErHash* manifest_hash,
+                                             const ErHash* admission_id,
+                                             const UINT8* instance_nonce,
+                                             UINTN instance_nonce_len,
+                                             ErAppIdentity* out_identity) {
   ErHash app_node_hash;
+  UINT8 app_kind_be[ER_APP_U16_FIELD_BYTES];
   ErByteSpan spans[ER_APP_IDENTITY_HASH_SPAN_COUNT];
 
-  if (crypto == 0 || app_object_id == 0 || manifest_hash == 0 || admission_id == 0 || out_identity == 0) {
+  if (crypto == 0 || app_object_id == 0 || manifest_hash == 0 ||
+      admission_id == 0 || out_identity == 0 ||
+      er_app_kind_valid(app_kind) == 0u) {
     return 0;
   }
   if (instance_nonce_len != ER_APP_INSTANCE_NONCE_LEN || instance_nonce == 0) {
@@ -1084,6 +1078,9 @@ UINT8 er_app_derive_identity(const ErCryptoProvider* crypto, const ErHash* app_o
   spans[ER_APP_IDENTITY_MANIFEST_SPAN].len = ER_HASH_LEN;
   spans[ER_APP_IDENTITY_ADMISSION_SPAN].bytes = admission_id->bytes;
   spans[ER_APP_IDENTITY_ADMISSION_SPAN].len = ER_HASH_LEN;
+  er_app_put_be16(app_kind_be, app_kind);
+  spans[ER_APP_IDENTITY_KIND_SPAN].bytes = app_kind_be;
+  spans[ER_APP_IDENTITY_KIND_SPAN].len = (UINTN)sizeof(app_kind_be);
   spans[ER_APP_IDENTITY_NONCE_SPAN].bytes = instance_nonce;
   spans[ER_APP_IDENTITY_NONCE_SPAN].len = instance_nonce_len;
   if (er_crypto_hash(crypto, g_app_node_domain, (UINTN)(sizeof(g_app_node_domain) - 1u),
@@ -1093,12 +1090,39 @@ UINT8 er_app_derive_identity(const ErCryptoProvider* crypto, const ErHash* app_o
 
   er_mem_zero((UINT8*)out_identity, (UINTN)sizeof(*out_identity));
   out_identity->abi_version = ER_APP_ABI_VERSION;
+  out_identity->app_kind = app_kind;
   out_identity->app_object_id = *app_object_id;
   out_identity->manifest_hash = *manifest_hash;
   out_identity->admission_id = *admission_id;
   er_mem_copy(out_identity->instance_nonce, instance_nonce, ER_APP_INSTANCE_NONCE_LEN);
   er_mem_copy(out_identity->app_node_id.bytes, app_node_hash.bytes, ER_NODE_ID_LEN);
   return 1;
+}
+
+UINT8 er_app_derive_identity_from_package(const ErCryptoProvider* crypto,
+                                          const ErAppPackageManifest* package,
+                                          const ErHash* admission_id,
+                                          const UINT8* instance_nonce,
+                                          UINTN instance_nonce_len,
+                                          ErAppIdentity* out_identity) {
+  if (er_app_package_manifest_valid(crypto, package) == 0u) {
+    return 0;
+  }
+  return er_app_derive_identity_for_kind(crypto, package->app_kind,
+                                         &package->app_object_id,
+                                         &package->manifest_object_id,
+                                         admission_id, instance_nonce,
+                                         instance_nonce_len, out_identity);
+}
+
+UINT8 er_app_derive_identity(const ErCryptoProvider* crypto, const ErHash* app_object_id,
+                             const ErHash* manifest_hash, const ErHash* admission_id,
+                             const UINT8* instance_nonce, UINTN instance_nonce_len,
+                             ErAppIdentity* out_identity) {
+  return er_app_derive_identity_for_kind(crypto, ER_APP_KIND_UI_APP,
+                                         app_object_id, manifest_hash,
+                                         admission_id, instance_nonce,
+                                         instance_nonce_len, out_identity);
 }
 
 UINT8 er_app_prepare_ipc_route_binding(const ErCryptoProvider* crypto, const ErAppIdentity* source_app,
@@ -1113,7 +1137,8 @@ UINT8 er_app_prepare_ipc_route_binding(const ErCryptoProvider* crypto, const ErA
       route_hash == 0 || out_binding == 0) {
     return 0;
   }
-  if (source_app->abi_version != ER_APP_ABI_VERSION) {
+  if (source_app->abi_version != ER_APP_ABI_VERSION ||
+      source_app->app_kind != ER_APP_KIND_UI_APP) {
     return 0;
   }
   if (capability_risk_flags != ER_CAPABILITY_RISK_NONE) {
@@ -1169,7 +1194,8 @@ UINT8 er_app_prepare_budget(const ErCryptoProvider* crypto, const ErAppIdentity*
   if (crypto == 0 || identity == 0 || out_budget == 0 || identity->abi_version != ER_APP_ABI_VERSION) {
     return 0;
   }
-  if (app_kind != ER_APP_KIND_UI_APP) {
+  if (identity->app_kind != ER_APP_KIND_UI_APP ||
+      app_kind != ER_APP_KIND_UI_APP) {
     return 0;
   }
   if (max_cpu_steps == 0u || max_memory_bytes == 0u) {
@@ -1214,7 +1240,8 @@ UINT8 er_app_usage_init(const ErAppIdentity* identity, const ErAppBudget* budget
       identity->abi_version != ER_APP_ABI_VERSION || budget->abi_version != ER_APP_ABI_VERSION) {
     return 0;
   }
-  if (budget->app_kind != ER_APP_KIND_UI_APP) {
+  if (identity->app_kind != ER_APP_KIND_UI_APP ||
+      budget->app_kind != ER_APP_KIND_UI_APP) {
     return 0;
   }
 
@@ -1280,7 +1307,9 @@ UINT8 er_app_prepare_schedule_slot(const ErCryptoProvider* crypto, const ErAppId
       identity->abi_version != ER_APP_ABI_VERSION || budget->abi_version != ER_APP_ABI_VERSION) {
     return 0;
   }
-  if (budget->app_kind != ER_APP_KIND_UI_APP || budget->max_cpu_steps == 0u || budget->max_memory_bytes == 0u) {
+  if (identity->app_kind != ER_APP_KIND_UI_APP ||
+      budget->app_kind != ER_APP_KIND_UI_APP ||
+      budget->max_cpu_steps == 0u || budget->max_memory_bytes == 0u) {
     return 0;
   }
 
@@ -1312,7 +1341,8 @@ UINT8 er_app_prepare_launch_allocation(const ErCryptoProvider* crypto, const ErA
       identity->abi_version != ER_APP_ABI_VERSION || budget->abi_version != ER_APP_ABI_VERSION) {
     return 0;
   }
-  if (budget->app_kind != ER_APP_KIND_UI_APP || budget->max_memory_bytes == 0u ||
+  if (identity->app_kind != ER_APP_KIND_UI_APP ||
+      budget->app_kind != ER_APP_KIND_UI_APP || budget->max_memory_bytes == 0u ||
       executor_memory_base == 0u || executor_memory_len != budget->max_memory_bytes) {
     return 0;
   }
@@ -1357,6 +1387,7 @@ UINT8 er_app_prepare_storage_allocation(const ErCryptoProvider* crypto,
       out_allocation == 0 ||
       identity->abi_version != ER_APP_ABI_VERSION ||
       budget->abi_version != ER_APP_ABI_VERSION ||
+      identity->app_kind != ER_APP_KIND_UI_APP ||
       budget->app_kind != ER_APP_KIND_UI_APP ||
       budget->max_storage_bytes == 0u ||
       medium_total_blocks == 0u ||
@@ -1443,6 +1474,7 @@ UINT8 er_app_prepare_execution_jurisdiction(const ErCryptoProvider* crypto,
       identity->abi_version != ER_APP_ABI_VERSION ||
       budget->abi_version != ER_APP_ABI_VERSION ||
       allocation->abi_version != ER_APP_ABI_VERSION ||
+      identity->app_kind != ER_APP_KIND_UI_APP ||
       budget->app_kind != ER_APP_KIND_UI_APP ||
       er_node_id_nonzero(parent_relay_node_id) == 0u) {
     return 0;

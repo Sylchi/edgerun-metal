@@ -143,7 +143,7 @@ typedef struct {
 
 typedef struct {
   UINT16 abi_version;
-  UINT16 reserved;
+  UINT16 app_kind;
   ErHash app_object_id;
   ErHash manifest_hash;
   ErHash admission_id;

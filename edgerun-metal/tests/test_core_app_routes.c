@@ -891,6 +891,7 @@ static void test_app_identity_routes(void) {
   ErNodeId parent_relay_node_id;
   ErNodeId ui_relay_node_id;
   ErAppIdentity identity;
+  ErAppIdentity driver_identity;
   ErAppIpcRouteBinding binding;
   ErAppBudget budget;
   ErAppUsage usage;
@@ -970,6 +971,12 @@ static void test_app_identity_routes(void) {
               ER_APP_KIND_BUS_DRIVER);
   check_hash_not_equal("driver package id differs from ui package",
                        &driver_package.package_id, &package.package_id);
+  check_int64("driver package rejects ui assets",
+              er_app_prepare_package_manifest_from_objects_for_kind(
+                &crypto, ER_APP_KIND_BUS_DRIVER, &app_object_ref,
+                &manifest_object_ref, &ui_assets_object_ref,
+                &package_from_objects),
+              0);
   check_int64("driver package rejects invalid kind",
               er_app_prepare_package_manifest_from_objects_for_kind(
                 &crypto, 0u, &app_object_ref, &manifest_object_ref, 0,
@@ -1564,6 +1571,7 @@ static void test_app_identity_routes(void) {
                                      nonce, ER_APP_INSTANCE_NONCE_LEN, &identity),
               1);
   check_int64("app identity abi", identity.abi_version, ER_APP_ABI_VERSION);
+  check_int64("app identity kind", identity.app_kind, ER_APP_KIND_UI_APP);
   check_int64("app identity nonce", identity.instance_nonce[0], 0xd0);
   check_int64("app identity from package",
               er_app_derive_identity_from_package(&crypto, &package, &admission_id,
@@ -1574,6 +1582,17 @@ static void test_app_identity_routes(void) {
                    &package.app_object_id);
   check_hash_equal("app identity package manifest", &identity.manifest_hash,
                    &package.manifest_object_id);
+  check_int64("app driver identity from package",
+              er_app_derive_identity_from_package(&crypto,
+                                                  &driver_package,
+                                                  &admission_id,
+                                                  nonce,
+                                                  ER_APP_INSTANCE_NONCE_LEN,
+                                                  &driver_identity),
+              1);
+  check_int64("app driver identity kind",
+              driver_identity.app_kind,
+              ER_APP_KIND_BUS_DRIVER);
 
   check_int64("app ipc route",
               er_app_prepare_ipc_route_binding(&crypto, &identity, &target_node_id, &capability_id,
@@ -1588,6 +1607,15 @@ static void test_app_identity_routes(void) {
               er_app_prepare_ipc_route_binding(&crypto, &identity, &target_node_id, &capability_id,
                                                &route_hash, 42u, ER_CAPABILITY_RISK_RAW_DEVICE, &binding),
               0);
+  check_int64("app ipc reject driver source",
+              er_app_prepare_ipc_route_binding(&crypto, &driver_identity,
+                                               &target_node_id,
+                                               &capability_id,
+                                               &route_hash,
+                                               42u,
+                                               ER_CAPABILITY_RISK_NONE,
+                                               &binding),
+              0);
 
   identity.abi_version = 0;
   check_int64("app ipc reject abi",
@@ -1598,6 +1626,17 @@ static void test_app_identity_routes(void) {
   identity.abi_version = ER_APP_ABI_VERSION;
   check_int64("app budget reject opaque system",
               er_app_prepare_budget(&crypto, &identity, 99u, 1000u, 4096u, 1024u, 2048u, 4u, 4u, &budget),
+              0);
+  check_int64("app budget reject driver identity",
+              er_app_prepare_budget(&crypto, &driver_identity,
+                                    ER_APP_KIND_UI_APP,
+                                    1000u,
+                                    4096u,
+                                    1024u,
+                                    2048u,
+                                    4u,
+                                    4u,
+                                    &budget),
               0);
   check_int64("app budget reject zero memory",
               er_app_prepare_budget(&crypto, &identity, ER_APP_KIND_UI_APP, 1000u, 0u, 1024u, 2048u, 4u, 4u, &budget),
@@ -1610,6 +1649,9 @@ static void test_app_identity_routes(void) {
   check_uint64("app budget memory", budget.max_memory_bytes, 4096u);
 
   check_int64("app usage init", er_app_usage_init(&identity, &budget, &usage), 1);
+  check_int64("app usage reject driver identity",
+              er_app_usage_init(&driver_identity, &budget, &usage),
+              0);
   check_int64("app usage cpu charge", er_app_usage_charge(&usage, &budget, ER_APP_BUDGET_CPU_STEP, 400u), 1);
   check_uint64("app usage cpu charged", usage.cpu_steps, 400u);
   check_int64("app usage cpu over budget", er_app_usage_charge(&usage, &budget, ER_APP_BUDGET_CPU_STEP, 601u), 0);
@@ -1621,6 +1663,10 @@ static void test_app_identity_routes(void) {
   check_int64("app schedule slot",
               er_app_prepare_schedule_slot(&crypto, &identity, &budget, 7u, 11u, &slot),
               1);
+  check_int64("app schedule reject driver identity",
+              er_app_prepare_schedule_slot(&crypto, &driver_identity, &budget,
+                                           7u, 11u, &slot),
+              0);
   check_int64("app schedule abi", slot.abi_version, ER_APP_ABI_VERSION);
   check_uint64("app schedule tick", slot.deterministic_tick, 7u);
   check_uint64("app schedule sequence", slot.sequence, 11u);
@@ -1636,6 +1682,11 @@ static void test_app_identity_routes(void) {
   check_int64("app launch allocation",
               er_app_prepare_launch_allocation(&crypto, &identity, &budget, 0x100000u, 4096u, &allocation),
               1);
+  check_int64("app launch reject driver identity",
+              er_app_prepare_launch_allocation(&crypto, &driver_identity,
+                                               &budget, 0x100000u, 4096u,
+                                               &allocation),
+              0);
   check_int64("app launch abi", allocation.abi_version, ER_APP_ABI_VERSION);
   check_uint64("app launch executor base", allocation.executor_memory_base, 0x100000u);
   check_uint64("app launch executor len", allocation.executor_memory_len, 4096u);
@@ -1712,6 +1763,20 @@ static void test_app_identity_routes(void) {
                   ER_APP_STORAGE_LATENCY_BULK,
                   &storage_allocation),
               1);
+  check_int64("app storage reject driver identity",
+              er_app_prepare_storage_allocation(
+                  &crypto,
+                  &driver_identity,
+                  &budget,
+                  &medium_id,
+                  16u,
+                  8u,
+                  4u,
+                  512u,
+                  ER_APP_STORAGE_PERSISTENCE_EXPLICIT_SYNC,
+                  ER_APP_STORAGE_LATENCY_BULK,
+                  &storage_allocation),
+              0);
   check_uint64("app storage block base", storage_allocation.block_base, 8u);
   check_uint64("app storage block count", storage_allocation.block_count, 4u);
   check_uint64("app storage block bytes", storage_allocation.block_bytes, 512u);
@@ -1727,6 +1792,13 @@ static void test_app_identity_routes(void) {
                                                     &parent_relay_node_id, 0u, 1024u,
                                                     1024u, 1024u, &jurisdiction),
               1);
+  check_int64("app execution reject driver identity",
+              er_app_prepare_execution_jurisdiction(&crypto, &driver_identity,
+                                                    &budget, &allocation,
+                                                    &parent_relay_node_id, 0u,
+                                                    1024u, 1024u, 1024u,
+                                                    &jurisdiction),
+              0);
   check_int64("app execution abi", jurisdiction.abi_version, ER_APP_ABI_VERSION);
   check_node_id_equal("app execution parent relay", &jurisdiction.parent_relay_node_id,
                       &parent_relay_node_id);
