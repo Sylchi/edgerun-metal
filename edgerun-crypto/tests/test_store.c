@@ -196,7 +196,10 @@ static void test_index_and_scan(void) {
   uint8_t beta_hash[ER_HASH_SIZE];
   uint8_t got[ER_HASH_SIZE];
   er_index_entry_t entries[4];
+  er_store_index_cursor_t cursor;
+  er_index_entry_t cursor_entry;
   size_t count = 0u;
+  size_t cursor_count = 0u;
   static const uint8_t alpha[] = {10u};
   static const uint8_t beta[] = {20u, 21u};
 
@@ -211,6 +214,11 @@ static void test_index_and_scan(void) {
   check_int("missing key", er_store_index_get(&store, "app/missing", got), ER_ERR_NOTFOUND);
   check_int("prefix scan", er_store_index_scan_prefix(&store, "app/", entries, 4u, &count), ER_OK);
   check_size("prefix scan count", count, 2u);
+  check_int("cursor open", er_store_index_cursor_open(&store, ER_STORE_INDEX_DEFAULT, "app/", &cursor), ER_OK);
+  while (er_store_index_cursor_next(&cursor, &cursor_entry) == ER_OK) {
+    ++cursor_count;
+  }
+  check_size("cursor count", cursor_count, 2u);
 }
 
 static void test_reopen_rebuild_and_latest_wins(void) {

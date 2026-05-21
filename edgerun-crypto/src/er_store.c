@@ -351,6 +351,10 @@ static ErStoreKeySlot* er_store_keys(er_store_t* store) {
   return (ErStoreKeySlot*)store->key_slots;
 }
 
+static size_t* er_store_sorted_keys(er_store_t* store) {
+  return (size_t*)store->sorted_key_slots;
+}
+
 static ErStoreTypeSlot* er_store_types(er_store_t* store) {
   return (ErStoreTypeSlot*)store->type_slots;
 }
@@ -496,6 +500,7 @@ static int er_store_insert_key_ex(er_store_t* store, uint32_t index_id, const ch
     er_store_zero(slots[slot].key, ER_STORE_MAX_KEY);
     er_store_copy(slots[slot].key, key, key_len);
     ++store->key_count;
+    store->sorted_key_dirty = 1;
   }
   er_store_copy(slots[slot].hash, hash, ER_HASH_SIZE);
   return ER_OK;
@@ -603,6 +608,150 @@ static int er_store_insert_index_def(er_store_t* store, uint32_t index_id, uint3
   er_store_zero(slots[slot].name, ER_STORE_MAX_NAME);
   er_store_copy(slots[slot].name, name, name_len);
   return ER_OK;
+}
+
+static int er_store_key_compare_bytes(const char* left, size_t left_len, const char* right, size_t right_len) {
+  size_t i;
+  size_t min_len = er_math_min_size(left_len, right_len);
+
+  for (i = 0u; i < min_len; ++i) {
+    if ((uint8_t)left[i] < (uint8_t)right[i]) {
+      return -1;
+    }
+    if ((uint8_t)left[i] > (uint8_t)right[i]) {
+      return 1;
+    }
+  }
+  if (left_len < right_len) {
+    return -1;
+  }
+  if (left_len > right_len) {
+    return 1;
+  }
+  return 0;
+}
+
+static int er_store_key_slot_compare(const ErStoreKeySlot* left, const ErStoreKeySlot* right) {
+  if (left->index_id < right->index_id) {
+    return -1;
+  }
+  if (left->index_id > right->index_id) {
+    return 1;
+  }
+  return er_store_key_compare_bytes(left->key, left->key_len, right->key, right->key_len);
+}
+
+//@optimizer-ignore-function sorted key references intentionally index arena-owned key slots
+static int er_store_sorted_ref_less(const ErStoreKeySlot* slots, size_t left_ref, size_t right_ref) {
+  return er_store_key_slot_compare(&slots[left_ref], &slots[right_ref]) < 0;
+}
+
+static void er_store_sorted_swap(size_t* refs, size_t a, size_t b) {
+  size_t tmp = refs[a];
+
+  refs[a] = refs[b];
+  refs[b] = tmp;
+}
+
+//@optimizer-ignore-function heapsort intentionally indexes sorted key references
+static void er_store_sorted_sift_down(const ErStoreKeySlot* slots, size_t* refs, size_t start, size_t end) {
+  size_t root = start;
+  size_t child;
+  size_t swap_index;
+
+  while ((root * 2u + 1u) <= end) {
+    child = root * 2u + 1u;
+    swap_index = root;
+    if (er_store_sorted_ref_less(slots, refs[swap_index], refs[child])) {
+      swap_index = child;
+    }
+    if (child + 1u <= end && er_store_sorted_ref_less(slots, refs[swap_index], refs[child + 1u])) {
+      swap_index = child + 1u;
+    }
+    if (swap_index == root) {
+      return;
+    }
+    er_store_sorted_swap(refs, root, swap_index);
+    root = swap_index;
+  }
+}
+
+static void er_store_sorted_heap_sort(const ErStoreKeySlot* slots, size_t* refs, size_t count) {
+  size_t start;
+  size_t end;
+
+  if (count < 2u) {
+    return;
+  }
+  start = (count - 2u) / 2u;
+  while (1) {
+    er_store_sorted_sift_down(slots, refs, start, count - 1u);
+    if (start == 0u) {
+      break;
+    }
+    --start;
+  }
+  end = count - 1u;
+  while (end > 0u) {
+    er_store_sorted_swap(refs, end, 0u);
+    --end;
+    er_store_sorted_sift_down(slots, refs, 0u, end);
+  }
+}
+
+static int er_store_key_compare_search(const ErStoreKeySlot* slot, uint32_t index_id, const char* key,
+                                       size_t key_len) {
+  if (slot->index_id < index_id) {
+    return -1;
+  }
+  if (slot->index_id > index_id) {
+    return 1;
+  }
+  return er_store_key_compare_bytes(slot->key, slot->key_len, key, key_len);
+}
+
+//@optimizer-ignore-function sorted key view intentionally indexes arena-owned key slots
+static int er_store_rebuild_sorted_keys(er_store_t* store) {
+  ErStoreKeySlot* slots = er_store_keys(store);
+  size_t* refs = er_store_sorted_keys(store);
+  size_t i;
+  size_t count = 0u;
+
+  if (store->sorted_key_dirty == 0) {
+    return ER_OK;
+  }
+  for (i = 0u; i < store->key_capacity; ++i) {
+    if (slots[i].used != 0u) {
+      if (count >= store->key_capacity) {
+        return ER_ERR_CORRUPT;
+      }
+      refs[count] = i;
+      ++count;
+    }
+  }
+  er_store_sorted_heap_sort(slots, refs, count);
+  store->sorted_key_count = count;
+  store->sorted_key_dirty = 0;
+  return ER_OK;
+}
+
+//@optimizer-ignore-function binary search intentionally indexes sorted key references
+static size_t er_store_sorted_lower_bound(er_store_t* store, uint32_t index_id, const char* key, size_t key_len) {
+  ErStoreKeySlot* slots = er_store_keys(store);
+  size_t* refs = er_store_sorted_keys(store);
+  size_t lo = 0u;
+  size_t hi = store->sorted_key_count;
+  size_t mid;
+
+  while (lo < hi) {
+    mid = lo + ((hi - lo) / 2u);
+    if (er_store_key_compare_search(&slots[refs[mid]], index_id, key, key_len) < 0) {
+      lo = mid + 1u;
+    } else {
+      hi = mid;
+    }
+  }
+  return lo;
 }
 
 static int er_store_hash_bytes(const void* data, size_t len, uint8_t out_hash[ER_HASH_SIZE]) {
@@ -873,10 +1022,13 @@ static int er_store_replay(er_store_t* store, uint64_t io_size, int rebuild, int
   if (rebuild != 0) {
     store->blob_count = 0u;
     store->key_count = 0u;
+    store->sorted_key_count = 0u;
+    store->sorted_key_dirty = 1;
     store->type_count = 0u;
     store->index_count = 0u;
     er_store_zero(store->blob_slots, sizeof(ErStoreBlobSlot) * store->blob_capacity);
     er_store_zero(store->key_slots, sizeof(ErStoreKeySlot) * store->key_capacity);
+    er_store_zero(store->sorted_key_slots, sizeof(size_t) * store->key_capacity);
     er_store_zero(store->type_slots, sizeof(ErStoreTypeSlot) * store->type_capacity);
     er_store_zero(store->index_slots, sizeof(ErStoreIndexSlot) * store->index_capacity);
     store->cache_used = 0u;
@@ -1010,6 +1162,7 @@ static int er_store_prepare_arena(er_store_t* store, void* arena, size_t arena_l
   uint64_t end;
   uint64_t blob_bytes;
   uint64_t key_bytes;
+  uint64_t sorted_key_bytes;
   uint64_t type_bytes;
   uint64_t index_bytes;
   uint64_t cache_bytes;
@@ -1066,6 +1219,16 @@ static int er_store_prepare_arena(er_store_t* store, void* arena, size_t arena_l
   cursor += key_bytes;
   cursor = er_store_align_up(cursor, ER_STORE_ALIGN);
   used_bytes = cursor - base;
+  if (used_bytes > end || er_store_checked_bytes(store->key_capacity, sizeof(size_t), &sorted_key_bytes) != ER_OK) {
+    return ER_ERR_NOSPACE;
+  }
+  if (sorted_key_bytes > (end - used_bytes)) {
+    return ER_ERR_NOSPACE;
+  }
+  store->sorted_key_slots = (void*)(uintptr_t)cursor;
+  cursor += sorted_key_bytes;
+  cursor = er_store_align_up(cursor, ER_STORE_ALIGN);
+  used_bytes = cursor - base;
   if (used_bytes > end) {
     return ER_ERR_NOSPACE;
   }
@@ -1110,6 +1273,7 @@ static int er_store_prepare_arena(er_store_t* store, void* arena, size_t arena_l
   store->cache_used = 0u;
   er_store_zero(store->blob_slots, (size_t)blob_bytes);
   er_store_zero(store->key_slots, (size_t)key_bytes);
+  er_store_zero(store->sorted_key_slots, (size_t)sorted_key_bytes);
   er_store_zero(store->type_slots, (size_t)type_bytes);
   er_store_zero(store->index_slots, (size_t)index_bytes);
   if (store->cache_len != 0u) {
@@ -1185,6 +1349,10 @@ int er_store_open_config(er_store_t* store, er_io_t io, void* arena, size_t aren
     return rc;
   }
   rc = er_store_replay(store, io_size, 1, 1);
+  if (rc != ER_OK) {
+    return rc;
+  }
+  rc = er_store_rebuild_sorted_keys(store);
   if (rc != ER_OK) {
     return rc;
   }
@@ -1595,38 +1763,96 @@ int er_store_index_get(er_store_t* store, const char* key, uint8_t out_hash[ER_H
   return er_store_index_get_ex(store, ER_STORE_INDEX_DEFAULT, key, out_hash);
 }
 
-//@optimizer-ignore-function prefix scan walks the fixed-capacity key table deterministically
-int er_store_index_scan_prefix_ex(er_store_t* store, uint32_t index_id, const char* prefix,
-                                  er_index_entry_t* out_entries, size_t max_entries, size_t* out_count) {
+int er_store_index_cursor_open(er_store_t* store, uint32_t index_id, const char* prefix,
+                               er_store_index_cursor_t* out_cursor) {
   ErStoreKeySlot* slots;
   size_t prefix_len;
-  size_t i;
-  size_t count = 0u;
   int prefix_ok;
+  int rc;
 
-  if (store == (er_store_t*)0 || prefix == (const char*)0 || out_count == (size_t*)0 ||
-      (max_entries != 0u && out_entries == (er_index_entry_t*)0)) {
+  if (store == (er_store_t*)0 || prefix == (const char*)0 || out_cursor == (er_store_index_cursor_t*)0) {
     return ER_ERR_BADARG;
   }
   prefix_len = er_store_cstr_len(prefix, ER_STORE_MAX_KEY + 1u, &prefix_ok);
   if (prefix_ok == 0 || prefix_len > ER_STORE_MAX_KEY) {
     return ER_ERR_BADARG;
   }
-  slots = er_store_keys(store);
-  for (i = 0u; i < store->key_capacity; ++i) {
-    if (slots[i].used != 0u && er_store_key_has_prefix(&slots[i], index_id, prefix, prefix_len)) {
-      if (count >= max_entries) {
-        return ER_ERR_NOSPACE;
-      }
-      out_entries[count].index_id = slots[i].index_id;
-      er_store_zero(out_entries[count].key, ER_STORE_MAX_KEY);
-      er_store_copy(out_entries[count].key, slots[i].key, slots[i].key_len);
-      er_store_copy(out_entries[count].hash, slots[i].hash, ER_HASH_SIZE);
-      ++count;
-    }
+  rc = er_store_rebuild_sorted_keys(store);
+  if (rc != ER_OK) {
+    return rc;
   }
-  *out_count = count;
+  out_cursor->store = store;
+  out_cursor->index_id = index_id;
+  out_cursor->prefix_len = prefix_len;
+  er_store_zero(out_cursor->prefix, ER_STORE_MAX_KEY);
+  er_store_copy(out_cursor->prefix, prefix, prefix_len);
+  slots = er_store_keys(store);
+  (void)slots;
+  out_cursor->pos = er_store_sorted_lower_bound(store, index_id, prefix, prefix_len);
   return ER_OK;
+}
+
+int er_store_index_cursor_next(er_store_index_cursor_t* cursor, er_index_entry_t* out_entry) {
+  er_store_t* store;
+  ErStoreKeySlot* slots;
+  size_t* refs;
+  ErStoreKeySlot* slot;
+
+  if (cursor == (er_store_index_cursor_t*)0 || out_entry == (er_index_entry_t*)0 ||
+      cursor->store == (er_store_t*)0) {
+    return ER_ERR_BADARG;
+  }
+  store = cursor->store;
+  slots = er_store_keys(store);
+  refs = er_store_sorted_keys(store);
+  while (cursor->pos < store->sorted_key_count) {
+    slot = &slots[refs[cursor->pos]];
+    if (!er_store_key_has_prefix(slot, cursor->index_id, cursor->prefix, cursor->prefix_len)) {
+      return ER_ERR_NOTFOUND;
+    }
+    ++cursor->pos;
+    out_entry->index_id = slot->index_id;
+    er_store_zero(out_entry->key, ER_STORE_MAX_KEY);
+    er_store_copy(out_entry->key, slot->key, slot->key_len);
+    er_store_copy(out_entry->hash, slot->hash, ER_HASH_SIZE);
+    return ER_OK;
+  }
+  return ER_ERR_NOTFOUND;
+}
+
+int er_store_index_scan_prefix_ex(er_store_t* store, uint32_t index_id, const char* prefix,
+                                  er_index_entry_t* out_entries, size_t max_entries, size_t* out_count) {
+  er_store_index_cursor_t cursor;
+  er_index_entry_t scratch;
+  size_t count = 0u;
+  int rc;
+
+  if (out_count == (size_t*)0 || (max_entries != 0u && out_entries == (er_index_entry_t*)0)) {
+    return ER_ERR_BADARG;
+  }
+  rc = er_store_index_cursor_open(store, index_id, prefix, &cursor);
+  if (rc != ER_OK) {
+    return rc;
+  }
+  while (1) {
+    if (count >= max_entries) {
+      rc = er_store_index_cursor_next(&cursor, &scratch);
+      if (rc == ER_ERR_NOTFOUND) {
+        *out_count = count;
+        return ER_OK;
+      }
+      return rc == ER_OK ? ER_ERR_NOSPACE : rc;
+    }
+    rc = er_store_index_cursor_next(&cursor, &out_entries[count]);
+    if (rc == ER_ERR_NOTFOUND) {
+      *out_count = count;
+      return ER_OK;
+    }
+    if (rc != ER_OK) {
+      return rc;
+    }
+    ++count;
+  }
 }
 
 int er_store_index_scan_prefix(er_store_t* store, const char* prefix, er_index_entry_t* out_entries,

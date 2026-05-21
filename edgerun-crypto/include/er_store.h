@@ -54,6 +54,14 @@ typedef struct er_index_entry {
   uint8_t hash[ER_HASH_SIZE];
 } er_index_entry_t;
 
+typedef struct er_store_index_cursor {
+  struct er_store* store;
+  uint32_t index_id;
+  char prefix[ER_STORE_MAX_KEY];
+  size_t prefix_len;
+  size_t pos;
+} er_store_index_cursor_t;
+
 typedef struct er_store_config {
   size_t blob_slots;
   size_t key_slots;
@@ -79,15 +87,18 @@ typedef struct er_store {
   er_io_t io;
   void* blob_slots;
   void* key_slots;
+  void* sorted_key_slots;
   void* type_slots;
   void* index_slots;
   uint8_t* cache;
   size_t blob_count;
   size_t key_count;
+  size_t sorted_key_count;
   size_t type_count;
   size_t index_count;
   size_t blob_capacity;
   size_t key_capacity;
+  int sorted_key_dirty;
   size_t type_capacity;
   size_t index_capacity;
   size_t cache_len;
@@ -128,6 +139,9 @@ int er_store_index_scan_prefix(er_store_t* store, const char* prefix, er_index_e
                                size_t max_entries, size_t* out_count);
 int er_store_index_scan_prefix_ex(er_store_t* store, uint32_t index_id, const char* prefix,
                                   er_index_entry_t* out_entries, size_t max_entries, size_t* out_count);
+int er_store_index_cursor_open(er_store_t* store, uint32_t index_id, const char* prefix,
+                               er_store_index_cursor_t* out_cursor);
+int er_store_index_cursor_next(er_store_index_cursor_t* cursor, er_index_entry_t* out_entry);
 
 int er_store_verify(er_store_t* store);
 
