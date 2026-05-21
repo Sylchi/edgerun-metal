@@ -152,8 +152,7 @@ PI_ZERO_W_V1_1_DEVICE_HDRS := $(wildcard $(PI_ZERO_W_V1_1_DEVICE_DIR)/*.h)
 CYW43438_OWNED_FIRMWARE_SRC := $(CYW43438_DEVICE_DIR)/er_cyw43438_owned_firmware.S
 CYW43438_OWNED_FIRMWARE_BIN := $(BUILD_DIR)/cyw43438/er_cyw43438_owned_firmware.bin
 CYW43438_OWNED_FIRMWARE_HEADER := $(GENERATED_DIR)/er_cyw43438_owned_firmware_image.h
-PI_ZERO_W_V1_1_CYW43438_FIRMWARE_HEADER := $(GENERATED_DIR)/pi_zero_w_v1_1_cyw43438_firmware.h
-PI_ZERO_W_V1_1_CYW43438_HDRS := devices/cyw43438/er_cyw43438_owned_firmware.h devices/cyw43438/er_cyw43438_sdpcm.h $(CYW43438_OWNED_FIRMWARE_HEADER) $(PI_ZERO_W_V1_1_CYW43438_FIRMWARE_HEADER)
+PI_ZERO_W_V1_1_CYW43438_HDRS := devices/cyw43438/er_cyw43438_owned_firmware.h devices/cyw43438/er_cyw43438_sdpcm.h $(CYW43438_OWNED_FIRMWARE_HEADER)
 PI_ZERO_W_V1_1_KERNEL := $(PI_ZERO_W_V1_1_BUILD_DIR)/kernel.img
 PI_ZERO_W_V1_1_BOOT_DIR := $(PI_ZERO_W_V1_1_BUILD_DIR)/boot
 PI_ZERO_W_V1_1_STALE_NODE_DIRS := $(PI_ZERO_W_V1_1_BUILD_DIR)/erzw-0 $(PI_ZERO_W_V1_1_BUILD_DIR)/erzw-1 $(PI_ZERO_W_V1_1_BUILD_DIR)/erzw-2 $(PI_ZERO_W_V1_1_BUILD_DIR)/erzw-3 $(PI_ZERO_W_V1_1_BUILD_DIR)/erzw-4 $(PI_ZERO_W_V1_1_BUILD_DIR)/erzw-5
@@ -395,13 +394,6 @@ pi-zero-2w-uefi:
 
 pi-zero-2w-boot: pi-zero-2w-uefi $(PI_BOOT_STAGE_BIN)
 	$(PI_BOOT_STAGE_BIN) pi-zero-2w $(PI_ZERO_2W_EFI_BOOT) $(PI_ZERO_2W_BOOT_DIR)
-
-$(PI_ZERO_W_V1_1_CYW43438_FIRMWARE_HEADER): ../firmware/network/02d0.a9a6.0 ../firmware/network/02d0.a9a6.1 ../firmware/network/02d0.a9a6.2 $(EMBED_HEADER_BIN)
-	mkdir -p $(dir $@)
-	$(EMBED_HEADER_BIN) binary ../firmware/network/02d0.a9a6.0 $@.ram ER_PI_ZERO_W_V1_1_CYW43438_RAM_FIRMWARE_H g_er_pi_zero_w_v1_1_cyw43438_ram_firmware ER_PI_ZERO_W_V1_1_CYW43438_RAM_FIRMWARE_SIZE
-	$(EMBED_HEADER_BIN) binary ../firmware/network/02d0.a9a6.1 $@.nvram ER_PI_ZERO_W_V1_1_CYW43438_NVRAM_FIRMWARE_H g_er_pi_zero_w_v1_1_cyw43438_nvram_firmware ER_PI_ZERO_W_V1_1_CYW43438_NVRAM_FIRMWARE_SIZE
-	$(EMBED_HEADER_BIN) binary ../firmware/network/02d0.a9a6.2 $@.clm ER_PI_ZERO_W_V1_1_CYW43438_CLM_FIRMWARE_H g_er_pi_zero_w_v1_1_cyw43438_clm_firmware ER_PI_ZERO_W_V1_1_CYW43438_CLM_FIRMWARE_SIZE
-	printf '%s\n' '#ifndef ER_PI_ZERO_W_V1_1_CYW43438_FIRMWARE_H' '#define ER_PI_ZERO_W_V1_1_CYW43438_FIRMWARE_H' '#include "pi_zero_w_v1_1_cyw43438_firmware.h.ram"' '#include "pi_zero_w_v1_1_cyw43438_firmware.h.nvram"' '#include "pi_zero_w_v1_1_cyw43438_firmware.h.clm"' '#endif' > $@
 
 $(CYW43438_OWNED_FIRMWARE_BIN): $(CYW43438_OWNED_FIRMWARE_SRC)
 	mkdir -p $(dir $@)

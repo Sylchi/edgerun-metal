@@ -149,4 +149,10 @@ if ! make -C "$ROOT_DIR" -n pi-zero-w-v1_1-update PI_UPDATE_IFACE=wlan0 |
   exit 1
 fi
 
+if make -C "$ROOT_DIR/edgerun-metal" -n pi-zero-w-v1_1-kernel |
+  grep -q "firmware/network/02d0.a9a6"; then
+  printf 'pi zero w v1.1 kernel build still depends on vendor WLAN firmware\n' >&2
+  exit 1
+fi
+
 printf 'pi zero w v1.1 bring-up tests passed\n'
