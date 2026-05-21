@@ -61,7 +61,7 @@ immediate infrastructure step:
 2. Bring up VirtIO queues in freestanding C.
 3. Move raw Ethernet frames through the native NIC path.
 4. Carry EdgeRun channel/work bytes directly over local L2 frames.
-5. Keep IP/UDP/TLS as compatibility bridges only, not as protocol foundations.
+5. Keep IP/UDP as optional transport carriers, not as protocol foundations; TLS uses the TPM-backed path.
 
 This is valuable because it removes duplicated infrastructure from the critical
 path. Existing systems often secure pipes: IP endpoints, TLS sessions, proxies,
@@ -170,7 +170,7 @@ capability facts, Secure Boot state, and available authority profiles. If no
 authority exists, setup creates one as a TPM-held persistent authority key.
 Mutable configuration lives on the EFI partition: which relay channels are
 available, which local interface speaks native EdgeRun frames, which interface
-may run regular TCP/IP compatibility traffic, and which admission public key this
+may run regular TCP/IP transport traffic, and which admission public key this
 device will do work for, and whether any device firmware may be loaded from the
 canonical EFI-partition name `/EFI/firmware/vendorid.deviceid.instance`. The
 vendor and device fields are four lowercase hex digits derived from PCI IDs, and
@@ -189,7 +189,7 @@ named `edgerun`, no WPA enrollment, and no IP requirement for native EdgeRun
 traffic. A device may run as an AP or as a station and may switch roles when
 local policy asks it to. Once associated, the driver only needs adapter MAC,
 Ethernet-style RX/TX, and the EdgeRun EtherType; sealed EdgeRun frames ride as
-L2 payloads. TCP/IP can remain a separate compatibility channel on the same or a
+L2 payloads. TCP/IP can remain a separate transport channel on the same or a
 different interface.
 
 Recipient sealing should be hybrid. Small one-recipient payloads can be sealed
@@ -198,7 +198,7 @@ more than one recipient should be encrypted once with a content key, then only
 that content key should be wrapped to each recipient and bound to the admission,
 route, payload hash, and channel metadata. That keeps relays and storage
 opaque, avoids re-encrypting the same object for every route, and lets the same
-sealed object move over native EdgeRun channels or TCP/IP compatibility channels
+sealed object move over native EdgeRun channels or TCP/IP transport channels
 without changing the object's durable identity.
 
 This makes hardware resources identity-routed and auditable without giving the
@@ -230,7 +230,7 @@ because every packet is accounted for by signed intent, scoped admission,
 ordered-channel state, payload hashes, transit evidence, delivery proofs, and
 receipts.
 
-Global compatibility comes from the shared `edgerun-work` contract. Abuse is
+Global interoperability comes from the shared `edgerun-work` contract. Abuse is
 limited by local admission policy and by proof-based accounting: resources are
 shared only inside the scope the owner admitted, and payment or credit is owed
 only for verified work.

@@ -263,9 +263,9 @@ UINT8 er_tpm_parse_algorithm_profile_response(const UINT8* response,
 UINT8 er_tpm_parse_command_profile_response(const UINT8* response,
                                             UINT32 response_len,
                                             ErTpmCommandProfile* out_profile);
-UINT8 er_tpm_tls_compat_profile_supported(const ErTpm2Info* info,
-                                          const ErTpmAlgorithmProfile* algorithms,
-                                          const ErTpmCommandProfile* commands);
+UINT8 er_tpm_tls_profile_supported(const ErTpm2Info* info,
+                                   const ErTpmAlgorithmProfile* algorithms,
+                                   const ErTpmCommandProfile* commands);
 UINT8 er_tpm_select_record_cipher_mode(const ErTpmAlgorithmProfile* algorithms,
                                        UINT16* out_mode);
 UINT8 er_tpm_parse_nv_storage_limits_response(const UINT8* response,

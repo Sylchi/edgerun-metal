@@ -675,7 +675,7 @@ static void test_tpm_crb_direct_transport(void) {
   check_uint64("tpm command profile verify", commands.has_verify_signature, 1u);
 
   check_int64("tpm tls profile supported",
-              er_tpm_tls_compat_profile_supported(&info, &algorithms, &commands), 1);
+              er_tpm_tls_profile_supported(&info, &algorithms, &commands), 1);
   algorithms.has_ctr = 0u;
   algorithms.has_cbc = 0u;
   algorithms.has_cfb = 0u;
@@ -684,19 +684,19 @@ static void test_tpm_crb_direct_transport(void) {
               er_tpm_select_record_cipher_mode(&algorithms, &selected_mode), 0);
   check_uint64("tpm rejected record mode cleared", selected_mode, ER_TPM_ALG_NULL);
   check_int64("tpm tls profile rejects missing record mode",
-              er_tpm_tls_compat_profile_supported(&info, &algorithms, &commands), 0);
+              er_tpm_tls_profile_supported(&info, &algorithms, &commands), 0);
   algorithms.has_ctr = 1u;
   algorithms.has_symcipher = 0u;
   check_int64("tpm tls profile rejects missing symcipher",
-              er_tpm_tls_compat_profile_supported(&info, &algorithms, &commands), 0);
+              er_tpm_tls_profile_supported(&info, &algorithms, &commands), 0);
   algorithms.has_symcipher = 1u;
   algorithms.has_keyedhash = 0u;
   check_int64("tpm tls profile rejects missing keyedhash",
-              er_tpm_tls_compat_profile_supported(&info, &algorithms, &commands), 0);
+              er_tpm_tls_profile_supported(&info, &algorithms, &commands), 0);
   algorithms.has_keyedhash = 1u;
   commands.has_encrypt_decrypt2 = 0u;
   check_int64("tpm tls profile rejects missing record command",
-              er_tpm_tls_compat_profile_supported(&info, &algorithms, &commands), 0);
+              er_tpm_tls_profile_supported(&info, &algorithms, &commands), 0);
 
   check_int64("tpm get capability command",
               er_tpm_build_get_capability_command(ER_TPM_CAP_TPM_PROPERTIES,

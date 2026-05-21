@@ -4,7 +4,7 @@
 /*
  * Purpose: keep bootstrap surface validation, tile planning, dirty tracking, and frame budget logic
  * out of the pixel rasterizer body.
- * Intention: leave the compatibility surface renderer focused on drawing primitives.
+ * Intention: leave the surface renderer focused on drawing primitives.
  */
 
 uint8_t er_ui_surface_valid(const ErUiSurface* surface) {

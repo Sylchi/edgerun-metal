@@ -2,7 +2,7 @@
 #define ER_TLS_TPM_H
 
 /*
- * Purpose: expose the TPM-backed operations that the TLS compatibility layer uses.
+ * Purpose: expose the TPM-backed operations used by the TLS handshake and record path.
  * Intention: keep TLS from depending on software crypto or raw TPM command layout.
  */
 
