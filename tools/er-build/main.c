@@ -1964,7 +1964,10 @@ static int erb_target_object_test(int print_plan) {
       erb_compile_common(&args, ERB_OBJECT_TEST_BIN) != 0) {
     return 1;
   }
-  if (erb_args_push(&args, "-Iedgerun-object/include") != 0 ||
+  if (erb_args_push(&args, "-ffreestanding") != 0 ||
+      erb_args_push(&args, "-fno-builtin") != 0 ||
+      erb_args_push(&args, "-fno-stack-protector") != 0 ||
+      erb_args_push(&args, "-Iedgerun-object/include") != 0 ||
       erb_args_push(&args, "-Iedgerun-crypto/include") != 0 ||
       erb_args_push(&args, "-Iinclude") != 0 ||
       erb_args_push(&args, "edgerun-object/tests/test_object.c") != 0 ||

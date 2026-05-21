@@ -190,7 +190,7 @@ case "$object_plan" in
 esac
 
 case "$object_plan" in
-  *"+ toolchain/bin/clang -std=c11 -Wall -Wextra -Werror -O2 -o .build/er-build-out/object/test_object -Iedgerun-object/include -Iedgerun-crypto/include -Iinclude edgerun-object/tests/test_object.c edgerun-object/src/er_object.c edgerun-crypto/src/er_blake3.c -DER_BLAKE3_NO_SIMD=1"* ) ;;
+  *"+ toolchain/bin/clang -std=c11 -Wall -Wextra -Werror -O2 -o .build/er-build-out/object/test_object -ffreestanding -fno-builtin -fno-stack-protector -Iedgerun-object/include -Iedgerun-crypto/include -Iinclude edgerun-object/tests/test_object.c edgerun-object/src/er_object.c edgerun-crypto/src/er_blake3.c -DER_BLAKE3_NO_SIMD=1"* ) ;;
   * ) printf 'missing direct object test compile step\n' >&2; exit 1 ;;
 esac
 
