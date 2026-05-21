@@ -35,6 +35,29 @@
 #define ER_CYW43438_SDPCM_CHANNEL_GLOM 3u
 #define ER_CYW43438_SDPCM_CHANNEL_TEST 15u
 #define ER_CYW43438_SDPCM_BROADCAST_BYTE 0xffu
+#define ER_CYW43438_BCDC_HEADER_BYTES 4u
+#define ER_CYW43438_BCDC_DCMD_HEADER_BYTES 16u
+#define ER_CYW43438_BCDC_DCMD_PAYLOAD_MAX 1024u
+#define ER_CYW43438_BCDC_DCMD_FRAME_MAX \
+  (ER_CYW43438_SDPCM_HEADER_BYTES + ER_CYW43438_BCDC_DCMD_HEADER_BYTES + \
+   ER_CYW43438_BCDC_DCMD_PAYLOAD_MAX)
+#define ER_CYW43438_BCDC_CMD_UP 2u
+#define ER_CYW43438_BCDC_CMD_SET_INFRA 20u
+#define ER_CYW43438_BCDC_CMD_SET_AUTH 22u
+#define ER_CYW43438_BCDC_CMD_SET_CHANNEL 30u
+#define ER_CYW43438_BCDC_CMD_SET_WSEC 134u
+#define ER_CYW43438_BCDC_CMD_SET_VAR 263u
+#define ER_CYW43438_BCDC_CMD_SET_SSID 26u
+#define ER_CYW43438_BCDC_STATUS_OK 0u
+#define ER_CYW43438_BCDC_IF_STA 0u
+#define ER_CYW43438_BCDC_OPEN_AUTH 0u
+#define ER_CYW43438_BCDC_INFRA_STA 1u
+#define ER_CYW43438_BCDC_WSEC_OPEN 0u
+#define ER_CYW43438_BCDC_SSID_CAP 32u
+#define ER_CYW43438_BCDC_BSSID_BYTES ER_NET_MAC_LEN
+#define ER_CYW43438_BCDC_JOIN_PARAMS_BYTES \
+  (sizeof(UINT32) + ER_CYW43438_BCDC_SSID_CAP)
+#define ER_CYW43438_BCDC_EXT_JOIN_PARAMS_BYTES 64u
 
 typedef struct {
   UINT32 frame_len;
@@ -45,6 +68,15 @@ typedef struct {
   UINT8 flow_control;
   UINT8 tx_window;
 } ErCyw43438SdpcmHeader;
+
+typedef struct {
+  UINT32 cmd;
+  UINT32 len;
+  UINT32 flags;
+  UINT32 status;
+  const UINT8* payload;
+  UINT32 payload_len;
+} ErCyw43438BcdcDcmd;
 
 UINT8 er_cyw43438_sdpcm_channel_valid(UINT8 channel);
 UINT8 er_cyw43438_sdpcm_build_frame(UINT8 sequence,
@@ -59,6 +91,31 @@ UINT8 er_cyw43438_sdpcm_parse_frame(const UINT8* frame,
                                     ErCyw43438SdpcmHeader* out_header,
                                     const UINT8** out_payload,
                                     UINT32* out_payload_len);
+UINT8 er_cyw43438_bcdc_build_int_dcmd(UINT8 sequence,
+                                      UINT16 request_id,
+                                      UINT32 command,
+                                      UINT32 value,
+                                      UINT8* out_frame,
+                                      UINT32 out_frame_capacity,
+                                      UINT32* out_frame_len);
+UINT8 er_cyw43438_bcdc_build_iovar_int_dcmd(UINT8 sequence,
+                                            UINT16 request_id,
+                                            const char* name,
+                                            UINT32 value,
+                                            UINT8* out_frame,
+                                            UINT32 out_frame_capacity,
+                                            UINT32* out_frame_len);
+UINT8 er_cyw43438_bcdc_build_set_ssid_dcmd(UINT8 sequence,
+                                           UINT16 request_id,
+                                           const UINT8* ssid,
+                                           UINT32 ssid_len,
+                                           UINT8* out_frame,
+                                           UINT32 out_frame_capacity,
+                                           UINT32* out_frame_len);
+UINT8 er_cyw43438_bcdc_parse_dcmd_response(const UINT8* frame,
+                                           UINT32 frame_len,
+                                           UINT16 expected_request_id,
+                                           ErCyw43438BcdcDcmd* out_dcmd);
 UINT8 er_cyw43438_sdpcm_parse_raw_l2_erwire(
     const UINT8* frame,
     UINT32 frame_len,
