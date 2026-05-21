@@ -28,6 +28,7 @@ ErWasmHostCalls g_host_calls = {0};
 #include "test_core_cyw43438_d11.c"
 #include "test_core_cyw43438_sdpcm.c"
 #include "test_core_cyw43438_owned_firmware.c"
+#include "test_core_st7789.c"
 #include "test_core_node_control.c"
 #include "test_core_ble_adv.c"
 #include "test_core_network.c"
@@ -103,6 +104,7 @@ int main(void) {
   test_cyw43438_d11_registers();
   test_cyw43438_sdpcm_frames();
   test_cyw43438_owned_firmware_payload();
+  test_st7789_driver();
   test_node_control_relay_assignment();
   test_ble_adv();
   test_network_coordinator();
