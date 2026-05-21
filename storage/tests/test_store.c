@@ -222,8 +222,8 @@ static void test_index_and_scan(void) {
   check_int("open index", er_store_open(&store, test_make_io(&io), arena, sizeof(arena), 0), ER_OK);
   check_int("put alpha", er_store_put_blob(&store, alpha, sizeof(alpha), alpha_hash), ER_OK);
   check_int("put beta", er_store_put_blob(&store, beta, sizeof(beta), beta_hash), ER_OK);
-  check_int("index put alpha", er_store_index_put(&store, ER_STORE_INDEX_DEFAULT, "app/alpha", alpha_hash), ER_OK);
-  check_int("index put beta", er_store_index_put(&store, ER_STORE_INDEX_DEFAULT, "app/beta", beta_hash), ER_OK);
+  check_int("index put alpha", er_store_blob_index_put(&store, ER_STORE_INDEX_DEFAULT, "app/alpha", alpha_hash), ER_OK);
+  check_int("index put beta", er_store_blob_index_put(&store, ER_STORE_INDEX_DEFAULT, "app/beta", beta_hash), ER_OK);
   check_int("index get alpha", er_store_index_get(&store, ER_STORE_INDEX_DEFAULT, "app/alpha", got), ER_OK);
   check_bytes("index get alpha hash", got, alpha_hash, ER_HASH_SIZE);
   check_int("missing key", er_store_index_get(&store, ER_STORE_INDEX_DEFAULT, "app/missing", got), ER_ERR_NOTFOUND);
@@ -252,8 +252,10 @@ static void test_reopen_rebuild_and_latest_wins(void) {
   check_int("open rebuild a", er_store_open(&store_a, test_make_io(&io), arena_a, sizeof(arena_a), 0), ER_OK);
   check_int("put first", er_store_put_blob(&store_a, first, sizeof(first), first_hash), ER_OK);
   check_int("put second", er_store_put_blob(&store_a, second, sizeof(second), second_hash), ER_OK);
-  check_int("index first value", er_store_index_put(&store_a, ER_STORE_INDEX_DEFAULT, "row/current", first_hash), ER_OK);
-  check_int("index second value", er_store_index_put(&store_a, ER_STORE_INDEX_DEFAULT, "row/current", second_hash), ER_OK);
+  check_int("index first value",
+            er_store_blob_index_put(&store_a, ER_STORE_INDEX_DEFAULT, "row/current", first_hash), ER_OK);
+  check_int("index second value",
+            er_store_blob_index_put(&store_a, ER_STORE_INDEX_DEFAULT, "row/current", second_hash), ER_OK);
   check_int("close rebuild a", er_store_close(&store_a), ER_OK);
   check_int("open rebuild b", er_store_open(&store_b, test_make_io(&io), arena_b, sizeof(arena_b), 0), ER_OK);
   check_int("rebuilt get", er_store_index_get(&store_b, ER_STORE_INDEX_DEFAULT, "row/current", got), ER_OK);
@@ -325,6 +327,57 @@ static void test_configured_cache_and_capacities(void) {
   check_size("configured cache admissions", stats.cache_admissions, 1u);
   check_size("configured cache hits", stats.cache_hits, 1u);
   check_size("configured cache misses", stats.cache_misses, 0u);
+}
+
+static void test_arena_size_and_reserved_types(void) {
+  static uint8_t arena[TEST_ARENA_SIZE];
+  TestIo io;
+  er_store_t store;
+  er_store_config_t config;
+  size_t default_min = 0u;
+  size_t configured_min = 0u;
+  uint8_t hash[ER_HASH_SIZE];
+  uint8_t missing_hash[ER_HASH_SIZE];
+  static const uint8_t data[] = {88u, 89u};
+
+  test_zero(&io, sizeof(io));
+  test_zero(missing_hash, sizeof(missing_hash));
+  check_int("arena min default",
+            er_store_arena_min_size(0, &default_min), ER_OK);
+  check_int("arena min rejects null",
+            er_store_arena_min_size(0, 0), ER_ERR_BADARG);
+  check_int("arena default fits test arena",
+            default_min <= sizeof(arena), 1);
+
+  config.blob_slots = 8192u;
+  config.key_slots = 8192u;
+  config.type_slots = 1024u;
+  config.index_slots = 1024u;
+  config.cache_bytes = 65536u;
+  check_int("arena min configured",
+            er_store_arena_min_size(&config, &configured_min), ER_OK);
+  check_int("arena configured grows",
+            configured_min > default_min, 1);
+
+  check_int("open reserved type", er_store_open(&store, test_make_io(&io),
+                                                arena, sizeof(arena), 0), ER_OK);
+  check_int("reserved manifest type rejected",
+            er_store_put_typed_blob(&store, ER_STORE_TYPE_OBJECT_MANIFEST,
+                                    data, sizeof(data), hash),
+            ER_ERR_BADARG);
+  check_int("reserved content type definition rejected",
+            er_store_define_content_type(&store, ER_STORE_TYPE_OBJECT_MANIFEST,
+                                         "object-manifest"),
+            ER_ERR_BADARG);
+  check_int("blob index rejects missing blob",
+            er_store_blob_index_put(&store, ER_STORE_INDEX_DEFAULT,
+                                    "missing/blob", missing_hash),
+            ER_ERR_NOTFOUND);
+  check_int("object index rejects missing object",
+            er_store_object_index_put(&store, ER_STORE_INDEX_DEFAULT,
+                                      "missing/object", missing_hash),
+            ER_ERR_NOTFOUND);
+  check_int("close reserved type", er_store_close(&store), ER_OK);
 }
 
 static void test_typed_blob_and_custom_index_rebuild(void) {
@@ -438,6 +491,7 @@ int main(void) {
   test_trailing_corruption_truncates();
   test_verify_detects_wrong_hash();
   test_configured_cache_and_capacities();
+  test_arena_size_and_reserved_types();
   test_typed_blob_and_custom_index_rebuild();
   test_chunked_object_roundtrip_and_chunk_reuse();
 

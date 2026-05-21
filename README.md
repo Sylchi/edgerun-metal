@@ -361,7 +361,11 @@ not depend on the EFI runtime, `ErCryptoProvider`, or libc memory routines.
 `storage` provides the freestanding append-only content-addressed store. Its
 record log is the source of truth; blob tables, key projections, content-type
 records, index definitions, sorted prefix scans, and the read cache are rebuilt
-from caller-provided arena memory.
+from caller-provided arena memory. Storage is intentionally content-blind: it
+does not authenticate callers, authorize keys, parse object bytes, validate
+schemas, interpret package formats, or decide whether a blob is safe to execute
+or reveal. Callers own admission, signatures, encryption, access policy, object
+semantics, and lifecycle policy above this byte store.
 
 The netboot helper is a host tool that provides DHCP/TFTP for EFI PXE boot. It
 listens on UDP 67 and UDP 69, serves `BOOTX64.EFI`, can prepare an interface
