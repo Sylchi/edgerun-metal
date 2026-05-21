@@ -87,9 +87,6 @@ static void er_clear_module(ErWasmModule* module) {
   module->host.memory = 0;
   module->host.memory_size = 0;
   er_mem_zero((UINT8*)&module->host.linear_memory, (UINTN)sizeof(module->host.linear_memory));
-  module->host.app_usage = 0;
-  module->host.app_budget = 0;
-  module->host.ui_presentation = 0;
   module->host.driver_policy = 0;
 }
 
@@ -109,9 +106,6 @@ static int er_wasm_init_host(ErWasmModule* module, const ErWasmHostCalls* host) 
     module->host.memory = host->memory;
     module->host.memory_size = host->memory_size;
     module->host.linear_memory = host->linear_memory;
-    module->host.app_usage = host->app_usage;
-    module->host.app_budget = host->app_budget;
-    module->host.ui_presentation = host->ui_presentation;
     module->host.driver_policy = host->driver_policy;
     if (host->linear_memory.bytes != 0) {
       if (er_wasm_linear_memory_valid(&host->linear_memory) == 0) {

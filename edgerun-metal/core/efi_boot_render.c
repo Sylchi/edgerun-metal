@@ -117,9 +117,7 @@ UINT8 er_ui_boot_render_scene(er_ui_scene_t* scene,
     return 0u;
   }
 
-  er_print("ui renderer: app=");
-  er_print_u64_dec((UINT64)render->active_app);
-  er_print(" surface=");
+  er_print("ui renderer: surface=");
   er_print_u64_dec((UINT64)er_ui_workspace_focused_surface_id(&ledger_state->shell));
   er_print(" bytes=");
   er_print_u64_dec(render_stats.bytes_written);
@@ -163,16 +161,8 @@ void er_ui_boot_input_loop(er_ui_ledger_app_state_t* ledger_state,
 
   for (;;) {
     ErPs2KeyboardAction input;
-    UINT8 relay_redraw = 0u;
     UINT8 redraw = 0u;
 
-    if (er_ui_boot_poll_native_relay(render, &relay_redraw) == 0u) {
-      er_idle_forever();
-    }
-    if (relay_redraw != 0u &&
-        er_ui_boot_render_scene(scene, ledger_state, render) == 0u) {
-      er_idle_forever();
-    }
     if (er_ps2_keyboard_poll(&keyboard, &input) == 0u) {
       er_idle_forever();
     }

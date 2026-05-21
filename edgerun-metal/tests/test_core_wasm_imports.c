@@ -286,8 +286,6 @@ static void test_relay_packets(void) {
   ErHash token;
   ErHash route;
   ErHash payload_hash;
-  ErAppBudget budget;
-  ErAppUsage usage;
   ErRelayPacketHeader decoded_header;
   const UINT8* parsed_payload = 0;
   UINT32 parsed_payload_len = 0u;
@@ -299,15 +297,6 @@ static void test_relay_packets(void) {
   test_fill_bytes(token.bytes, ER_HASH_LEN, 0x70u);
   test_fill_bytes(route.bytes, ER_HASH_LEN, 0x90u);
   test_fill_bytes(payload_hash.bytes, ER_HASH_LEN, 0xb0u);
-  er_mem_zero((UINT8*)&budget, (UINTN)sizeof(budget));
-  er_mem_zero((UINT8*)&usage, (UINTN)sizeof(usage));
-  budget.abi_version = ER_APP_ABI_VERSION;
-  budget.app_kind = ER_APP_KIND_UI_APP;
-  budget.admission_id = admission;
-  budget.budget_id = token;
-  usage.abi_version = ER_APP_ABI_VERSION;
-  usage.budget_id = token;
-  usage.app_node_id = source;
 
   check_int64("relay packet prepare",
               er_relay_packet_prepare(packet, (UINT32)sizeof(packet), &source, &target,
@@ -346,17 +335,6 @@ static void test_relay_packets(void) {
   check_uint64("relay packet payload len", parsed_payload_len, sizeof(payload));
   check_uint64("relay packet payload byte0", parsed_payload[0], payload[0]);
   check_uint64("relay packet payload byte3", parsed_payload[3], payload[3]);
-  check_int64("relay packet authorized",
-              er_relay_packet_authorized_for_app(packet, packet_len, &usage, &budget), 1);
-  usage.app_node_id.bytes[0] ^= 1u;
-  check_int64("relay packet reject source mismatch",
-              er_relay_packet_authorized_for_app(packet, packet_len, &usage, &budget), 0);
-  usage.app_node_id = source;
-  budget.budget_id.bytes[0] ^= 1u;
-  check_int64("relay packet reject token mismatch",
-              er_relay_packet_authorized_for_app(packet, packet_len, &usage, &budget), 0);
-  budget.budget_id = token;
-
   packet[0] = 0xffu;
   check_int64("relay packet reject abi", er_relay_packet_valid(packet, packet_len), 0);
   check_int64("relay packet reject decode bad abi",
@@ -409,9 +387,6 @@ static void test_wasm_relay_imports(void) {
   ErHash capability_id;
   ErHash scene_hash;
   ErCapabilityEnvelopeHeader render_header;
-  ErAppBudget budget;
-  ErAppUsage usage;
-  ErAppUsage charge_probe;
   UINT32 main_index = 0;
   UINT32 packet_len = 0u;
   INT64 result = 0;
@@ -437,18 +412,6 @@ static void test_wasm_relay_imports(void) {
   host.relay_send = test_vm_relay_send;
   host.relay_recv = test_vm_relay_recv;
   host.linear_memory = linear_memory;
-  er_mem_zero((UINT8*)&budget, (UINTN)sizeof(budget));
-  er_mem_zero((UINT8*)&usage, (UINTN)sizeof(usage));
-  budget.abi_version = ER_APP_ABI_VERSION;
-  budget.app_kind = ER_APP_KIND_UI_APP;
-  budget.admission_id = admission;
-  budget.budget_id = token;
-  budget.max_packet_bytes = ER_RELAY_PACKET_HEADER_LEN + 4u;
-  usage.abi_version = ER_APP_ABI_VERSION;
-  usage.budget_id = token;
-  usage.app_node_id = source;
-  host.app_budget = &budget;
-  host.app_usage = &usage;
 
   check_int64("wasm relay init",
               er_wasm_init(&module, wasm_relay_import_test,
@@ -471,19 +434,6 @@ static void test_wasm_relay_imports(void) {
   check_uint64("wasm relay inbox byte1", memory[1], (UINT8)'o');
   check_uint64("wasm relay inbox byte2", memory[2], (UINT8)'n');
   check_uint64("wasm relay inbox byte3", memory[3], (UINT8)'g');
-  check_uint64("wasm relay usage charged", usage.packet_bytes, ER_RELAY_PACKET_HEADER_LEN + 4u);
-
-  usage.packet_bytes = 0u;
-  budget.max_packet_bytes = ER_RELAY_PACKET_HEADER_LEN + 3u;
-  check_int64("wasm relay reject packet over budget",
-              er_wasm_execute_i64(&module, main_index, &result), -1);
-  check_uint64("wasm relay usage unchanged after over budget", usage.packet_bytes, 0u);
-  budget.max_packet_bytes = ER_RELAY_PACKET_HEADER_LEN + 4u;
-  usage.app_node_id.bytes[0] ^= 1u;
-  check_int64("wasm relay reject packet source mismatch",
-              er_wasm_execute_i64(&module, main_index, &result), -1);
-  check_uint64("wasm relay usage unchanged after source mismatch", usage.packet_bytes, 0u);
-  usage.app_node_id = source;
 
   check_uint64("wasm render capability payload size",
                sizeof(ErCapabilityEnvelopeHeader), 232u);
@@ -519,9 +469,6 @@ static void test_wasm_relay_imports(void) {
               1);
   er_mem_zero(memory, (UINTN)sizeof(memory));
   host.relay_send = test_vm_relay_send_render;
-  budget.max_packet_bytes =
-      ER_RELAY_PACKET_HEADER_LEN + sizeof(ErCapabilityEnvelopeHeader);
-  usage.packet_bytes = 0u;
   check_int64("wasm render relay init",
               er_wasm_init(&module, wasm_render_import_test,
                            (UINT32)sizeof(wasm_render_import_test), &host),
@@ -543,31 +490,17 @@ static void test_wasm_relay_imports(void) {
                ER_RELAY_PACKET_HEADER_LEN + sizeof(ErCapabilityEnvelopeHeader));
   check_int64("wasm render relay packet valid after init",
               er_relay_packet_valid(memory + 1024u, packet_len), 1);
-  check_int64("wasm render relay packet authorized",
-              er_relay_packet_authorized_for_app(memory + 1024u, packet_len,
-                                                 &usage, &budget),
-              1);
-  charge_probe = usage;
-  check_int64("wasm render relay charge probe",
-              er_app_usage_charge(&charge_probe, &budget,
-                                  ER_APP_BUDGET_PACKET_BYTE, packet_len),
-              1);
   check_int64("wasm render relay execute",
               er_wasm_execute_i64(&module, main_index, &result), 0);
   check_uint64("wasm render relay result", (UINT64)result,
                ER_RELAY_PACKET_HEADER_LEN +
                sizeof(ErCapabilityEnvelopeHeader) + 4u);
-  check_uint64("wasm render relay usage charged", usage.packet_bytes,
-               ER_RELAY_PACKET_HEADER_LEN + sizeof(ErCapabilityEnvelopeHeader));
-
   check_int64("wasm relay shifted outbox prepare",
               er_wasm_prepare_linear_memory(memory, (UINT32)sizeof(memory),
                                             0u, 1024u, 2048u, 2048u,
                                             &linear_memory),
               0);
   host.relay_send = test_vm_relay_send;
-  budget.max_packet_bytes = ER_RELAY_PACKET_HEADER_LEN + 4u;
-  usage.packet_bytes = 0u;
   host.linear_memory = linear_memory;
   check_int64("wasm relay shifted outbox init",
               er_wasm_init(&module, wasm_relay_import_test,
@@ -581,19 +514,17 @@ static void test_wasm_relay_imports(void) {
 
 static void test_wasm_ui_emit_import(void) {
   /*
-   * Purpose: prove authored WASM apps can emit UI command lists through admission.
-   * Intention: the VM validates public outbox bounds and presentation budget before host UI work.
+   * Purpose: prove authored WASM modules can emit UI command lists.
+   * Intention: the VM validates public outbox bounds before host UI work.
    */
   static UINT8 memory[65536];
   ErWasmHostCalls host = {0};
   ErWasmLinearMemory linear_memory;
   ErWasmModule module;
-  ErAppUiPresentation presentation;
   UINT32 main_index = 0;
   INT64 result = 0;
 
   er_mem_zero(memory, (UINTN)sizeof(memory));
-  test_prepare_wasm_ui_presentation(&presentation);
 
   check_int64("wasm ui linear memory prepare",
               er_wasm_prepare_linear_memory(memory, (UINT32)sizeof(memory),
@@ -602,7 +533,6 @@ static void test_wasm_ui_emit_import(void) {
               0);
   host.linear_memory = linear_memory;
   host.ui_emit = test_vm_ui_emit;
-  host.ui_presentation = &presentation;
   check_int64("wasm ui init",
               er_wasm_init(&module, g_edgerun_ui_counter_wasm,
                            ER_UI_COUNTER_WASM_SIZE, &host),
@@ -624,19 +554,6 @@ static void test_wasm_ui_emit_import(void) {
   check_uint64("wasm ui command count", memory[1028], 3u);
   check_uint64("wasm ui empty input hit id", memory[1124], 0u);
 
-  presentation.max_text_quads = 0u;
-  check_int64("wasm ui reject over presentation budget",
-              er_wasm_execute_i64(&module, main_index, &result), -1);
-  presentation.max_text_quads = 1u;
-  host.ui_presentation = 0;
-  check_int64("wasm ui reject missing presentation",
-              er_wasm_init(&module, g_edgerun_ui_counter_wasm,
-                           ER_UI_COUNTER_WASM_SIZE, &host),
-              0);
-  check_int64("wasm ui execute reject missing presentation",
-              er_wasm_execute_i64(&module, main_index, &result), -1);
-
-  host.ui_presentation = &presentation;
   check_int64("wasm ui shifted outbox prepare",
               er_wasm_prepare_linear_memory(memory, (UINT32)sizeof(memory),
                                             0u, 1024u, 2048u, 2048u,
@@ -662,7 +579,6 @@ static void test_wasm_c_generated_hostcall_modules(void) {
   ErDriverAdmissionPolicy driver_policy;
   ErBusIoPacket* request;
   ErBusIoPacket* response;
-  ErAppUiPresentation presentation;
   UINT32 main_index = 0;
   UINT32 ui_packet_len = ER_WASM_UI_COMMAND_LIST_HEADER_LEN +
                          ER_WASM_UI_RECT_RECORD_LEN +
@@ -742,8 +658,6 @@ static void test_wasm_c_generated_hostcall_modules(void) {
   check_uint64("wasm c region len result", (UINT64)result, 2048u);
 
   host.ui_emit = test_vm_ui_emit;
-  host.ui_presentation = &presentation;
-  test_prepare_wasm_ui_presentation(&presentation);
   check_int64("wasm c ui emit init",
               er_wasm_init(&module, g_edgerun_c_hostcall_ui_emit_wasm,
                            ER_C_HOSTCALL_UI_EMIT_WASM_SIZE, &host),

@@ -7,7 +7,6 @@
 #include "er_mmio.h"
 #include "er_mem.h"
 #include "er_netlog.h"
-#include "er_app.h"
 #include "er_crypto_blake3.h"
 #include "er_acpi.h"
 #include "er_boot_efi_vars.h"
@@ -26,12 +25,9 @@
 #include "er_ui_ledger_app.h"
 #include "er_ui_metal.h"
 #include "er_ui_theme.h"
-#include "er_ui_wasm_app.h"
 #include "er_virtio_gpu.h"
 #include "font_geist.h"
 #include "wasm_vm.h"
-#include "wasm_user_app_module.h"
-#include "app_user_manifest.h"
 
 #ifndef ER_BOOT_PROFILE
 #define ER_BOOT_PROFILE ER_BOOT_PROFILE_OS
@@ -59,13 +55,6 @@
 #define ER_EFI_MEMORY_MAP_BYTES (128u * 1024u)
 #define ER_EFI_EXIT_BOOT_SERVICES_ATTEMPTS 2u
 #define ER_WASM_DRIVER_MEMORY_BYTES (64u * 1024u)
-#define ER_UI_BOOT_APP_SLOT_CAPACITY 2u
-#define ER_UI_BOOT_INSTALLED_APP_COUNT 1u
-#define ER_UI_BOOT_USER_APP_SURFACE_ID_BASE 0xED030000u
-#define ER_UI_BOOT_USER_APP_LAUNCH_ID_BASE 0xED040000u
-#define ER_UI_BOOT_APP_MEMORY_BYTES (64u * 1024u)
-#define ER_UI_BOOT_APP_MODULE_BYTES 1024u
-#define ER_UI_BOOT_APP_MANIFEST_BYTES 256u
 #define ER_UI_BOOT_PACKAGE_OBJECT_PACKET_CAPACITY 1u
 #define ER_UI_WASM_RELAY_INBOX_BASE 0u
 #define ER_UI_WASM_RELAY_INBOX_BYTES 1024u
@@ -138,51 +127,6 @@ enum {
   ER_LOG_HEX_STAGE_BAR5 = 9u
 };
 
-typedef struct {
-  ErStorageEndpointObjectStore app_store;
-  ErStorageEndpointObjectStore manifest_store;
-  ErVfsObjectPacket app_packets[ER_UI_BOOT_PACKAGE_OBJECT_PACKET_CAPACITY];
-  ErVfsObjectPacket manifest_packets[ER_UI_BOOT_PACKAGE_OBJECT_PACKET_CAPACITY];
-} ErUiBootPackageStorage;
-
-typedef struct {
-  ErVfsObjectRef app_ref;
-  const UINT8* app_bytes;
-  UINTN app_len;
-  ErVfsObjectRef manifest_ref;
-  const UINT8* manifest_bytes;
-  UINTN manifest_len;
-  ErAppPackageManifest package;
-} ErUiBootInstalledApp;
-
-typedef struct {
-  const ErUiBootInstalledApp* installed_app;
-  ErAdmittedRoute app_route;
-  ErAdmittedRoute manifest_route;
-  ErAppPackageStorageSource storage_source;
-  ErAppPackageSignature package_signature;
-} ErUiBootInstalledPackageSource;
-
-typedef struct {
-  ErAppUiPresentation presentation;
-  ErUiWasmAppRuntime runtime;
-  ErUiBootPackageStorage storage;
-  er_ui_scene_t scene;
-  UINT8 ready;
-} ErUiBootAppContext;
-
-typedef struct {
-  UINT64 polls;
-  UINT64 none;
-  UINT64 malformed;
-  UINT64 unsupported;
-  UINT64 render_capability;
-  UINT64 render_scenes;
-  UINT64 storage_object_packets;
-  UINT64 transit_hops;
-  UINT64 transit_emitted;
-} ErUiBootNativeRelayStats;
-
 typedef UINT8 (*ErUiBootFrameClockReadFn)(void* user, UINT64* out_ticks);
 
 typedef struct {
@@ -202,16 +146,7 @@ typedef struct {
   er_ui_scene_budget_t scene_budget;
   ErUiSurfaceFrameBudget frame_budget;
   er_ui_resolved_theme_t theme;
-  ErUiBootAppContext* apps;
-  UINT32 app_count;
-  UINT32 active_app;
   er_ui_scene_t* scene;
-  ErNativeBootState* native_relay;
-  ErUiBootNativeRelayStats native_relay_stats;
-  ErRelayTransitHop native_relay_last_transit;
-  ErRenderEndpointCapture native_relay_last_render_capture;
-  ErRenderEndpointScene native_relay_last_render_scene;
-  ErStorageEndpointObjectCapture native_relay_last_storage_capture;
   ErUiBootFrameClock frame_clock;
   ErUiFrameTiming last_frame_timing;
   ErUiSurfaceFrameState frame_state;
@@ -259,90 +194,12 @@ UINT8 er_ui_boot_gpu_prepare_scanout(ErVirtioGpu* gpu,
                                      ErUiSurface* surface,
                                      ErUiSurfaceMode* out_mode);
 
-UINT8 er_ui_boot_append_wasm_scene(er_ui_scene_t* scene, const er_ui_scene_t* wasm_scene);
 UINT8 er_ui_boot_app_seed(UINT8 seed, UINT32 app_index);
-void er_ui_boot_prepare_wasm_presentation(const er_ui_scene_budget_t* scene_budget,
-                                          UINT32 app_index,
-                                          ErAppUiPresentation* out_presentation);
 UINT8 er_ui_boot_prepare_storage_retrieve_route(UINT8 route_seed, UINT32 app_index, ErAdmittedRoute* out_route);
 UINT8 er_ui_boot_prepare_route_envelope(const ErAdmittedRoute* route,
                                         const ErHash* packet_hash,
                                         UINT64 sequence,
                                         ErChannelEnvelopeHeader* out_envelope);
-UINT8 er_ui_boot_execute_wasm_app(ErUiWasmAppRuntime* runtime);
-const ErUiBootInstalledApp* er_ui_boot_installed_app_for_slot(UINT32 app_index);
-const ErAppSignedPackageIndexEntry* er_ui_boot_installed_signed_package_index_entry_for_slot(UINT32 app_index);
-const ErAppPackageInstallRecord* er_ui_boot_installed_package_record_for_slot(UINT32 app_index);
-UINT8 er_ui_boot_user_app_surface_id(UINT32 app_index, UINT32* out_surface_id);
-UINT8 er_ui_boot_user_app_launch_id(UINT32 app_index, UINT32* out_launch_id);
-UINT8 er_ui_boot_install_shell_launcher_apps(er_ui_ledger_app_state_t* ledger_state);
-UINT8 er_ui_boot_prepare_signed_indexed_package_source(
-    const ErAppSignedPackageIndexEntry* index_entry,
-    ErUiBootInstalledPackageSource* out_source);
-UINT8 er_ui_boot_prepare_package_record_source(
-    const ErAppPackageInstallRecord* record,
-    ErUiBootInstalledPackageSource* out_source);
-UINT8 er_ui_boot_prepare_remote_package_fetch_source(
-    const ErAppSignedPackageIndexEntry* index_entry,
-    const ErIdentity* remote_identity,
-    const ErHash* app_route_receipt_hash,
-    const ErHash* manifest_route_receipt_hash,
-    const ErHash* ui_assets_route_receipt_hash,
-    ErAppPackageRemoteFetchSource* out_source);
-UINT8 er_ui_boot_prepare_remote_package_install_record(
-    const ErAppSignedPackageIndexEntry* index_entry,
-    const ErAppPackageRemoteFetchSource* remote_source,
-    const ErAppSignedPackageIndexEntry* previous_entry,
-    UINT64 generation,
-    ErAppPackageInstallRecord* out_record);
-UINT8 er_ui_boot_package_install_record_loadable(
-    const ErAppPackageInstallRecord* record);
-UINT8 er_ui_boot_prepare_installed_package_source(const ErUiBootInstalledApp* installed_app,
-                                                  UINT32 app_index,
-                                                  ErUiBootInstalledPackageSource* out_source);
-UINT8 er_ui_boot_load_installed_package_source(const ErUiBootInstalledPackageSource* source,
-                                               UINT8* module_memory,
-                                               UINT32 module_memory_size,
-                                               UINT8* manifest_memory,
-                                               UINT32 manifest_memory_size,
-                                               ErUiBootPackageStorage* storage,
-                                               ErAppLoadedPackage* out_loaded);
-UINT8 er_ui_boot_load_installed_app_package(const ErUiBootInstalledApp* installed_app,
-                                            UINT8* module_memory,
-                                            UINT32 module_memory_size,
-                                            UINT8* manifest_memory,
-                                            UINT32 manifest_memory_size,
-                                            ErUiBootPackageStorage* storage,
-                                            UINT32 app_index,
-                                            ErAppLoadedPackage* out_loaded);
-UINT8 er_ui_boot_load_user_app_package(UINT8* module_memory,
-                                       UINT32 module_memory_size,
-                                       UINT8* manifest_memory,
-                                       UINT32 manifest_memory_size,
-                                       ErUiBootPackageStorage* storage,
-                                       UINT32 app_index,
-                                       ErAppLoadedPackage* out_loaded);
-UINT8 er_ui_boot_prepare_user_app(ErUiWasmAppRuntime* runtime,
-                                  ErUiBootPackageStorage* storage,
-                                  ErAppUiPresentation* presentation,
-                                  er_ui_scene_t* wasm_scene,
-                                  UINT8* memory,
-                                  UINT32 memory_size,
-                                  UINT8* module_memory,
-                                  UINT32 module_memory_size,
-                                  UINT8* manifest_memory,
-                                  UINT32 manifest_memory_size,
-                                  UINT32 app_index,
-                                  const er_ui_scene_budget_t* scene_budget);
-void er_ui_boot_destroy_app_contexts(ErUiBootAppContext* apps, UINT32 app_count);
-UINT8 er_ui_boot_prepare_app_contexts(ErUiBootAppContext* apps,
-                                      UINT32 app_count,
-                                      const er_ui_scene_budget_t* scene_budget,
-                                      er_ui_color4_t clear);
-
-ErUiBootAppContext* er_ui_boot_active_app(ErUiBootRenderContext* render);
-const ErUiBootAppContext* er_ui_boot_active_app_const(const ErUiBootRenderContext* render);
-UINT8 er_ui_boot_switch_app_for_surface(ErUiBootRenderContext* render, UINT32 surface_id);
 UINT8 er_ui_boot_prepare_dirty_tiles(ErUiBootRenderContext* render,
                                      const er_ui_scene_t* scene,
                                      ErUiSurfaceDirtyTileList* out_dirty_tiles);
@@ -360,11 +217,6 @@ UINT8 er_ui_boot_apply_input(er_ui_ledger_app_state_t* ledger_state,
                              ErUiBootRenderContext* render,
                              ErPs2KeyboardAction input,
                              UINT8* out_redraw);
-UINT8 er_ui_boot_dispatch_native_relay_ingress(ErUiBootRenderContext* render,
-                                               const ErNativeRelayIngress* ingress,
-                                               UINT8* out_redraw);
-UINT8 er_ui_boot_poll_native_relay(ErUiBootRenderContext* render,
-                                   UINT8* out_redraw);
 void er_ui_boot_input_loop(er_ui_ledger_app_state_t* ledger_state,
                            er_ui_runtime_state_t* runtime,
                            er_ui_scene_t* scene,

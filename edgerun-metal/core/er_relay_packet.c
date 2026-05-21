@@ -33,13 +33,6 @@ enum {
   ER_RELAY_PACKET_U32_MASK = 0xffffffffu
 };
 
-static UINT8 er_relay_packet_bytes_equal(const UINT8* left, const UINT8* right, UINT32 len) {
-  if (len == 0u) {
-    return 0;
-  }
-  return er_mem_equal(left, right, (UINTN)len);
-}
-
 static UINT16 er_relay_packet_read_u16(const UINT8* src) {
   return (UINT16)((UINT16)src[0] | ((UINT16)src[1] << ER_RELAY_PACKET_BYTE_BITS));
 }
@@ -207,32 +200,6 @@ UINT8 er_relay_packet_decode_header(const UINT8* packet, UINT32 packet_len,
   er_mem_copy(out_header->payload_hash.bytes,
               packet + ER_RELAY_PACKET_PAYLOAD_HASH_OFFSET, ER_HASH_LEN);
   return 1;
-}
-
-UINT8 er_relay_packet_authorized_for_app(const UINT8* packet, UINT32 packet_len,
-                                         const ErAppUsage* usage,
-                                         const ErAppBudget* budget) {
-  if (usage == 0 || budget == 0 ||
-      usage->abi_version != ER_APP_ABI_VERSION ||
-      budget->abi_version != ER_APP_ABI_VERSION ||
-      budget->app_kind != ER_APP_KIND_UI_APP ||
-      er_relay_packet_valid(packet, packet_len) == 0u) {
-    return 0;
-  }
-  if (er_relay_packet_bytes_equal(usage->budget_id.bytes, budget->budget_id.bytes,
-                                  ER_HASH_LEN) == 0u) {
-    return 0;
-  }
-  if (er_relay_packet_bytes_equal(packet + ER_RELAY_PACKET_SOURCE_OFFSET,
-                                  usage->app_node_id.bytes, ER_NODE_ID_LEN) == 0u) {
-    return 0;
-  }
-  if (er_relay_packet_bytes_equal(packet + ER_RELAY_PACKET_ADMISSION_OFFSET,
-                                  budget->admission_id.bytes, ER_HASH_LEN) == 0u) {
-    return 0;
-  }
-  return er_relay_packet_bytes_equal(packet + ER_RELAY_PACKET_TOKEN_OFFSET,
-                                     budget->budget_id.bytes, ER_HASH_LEN);
 }
 
 UINT8 er_relay_packet_payload(const UINT8* packet, UINT32 packet_len,

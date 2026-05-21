@@ -128,13 +128,11 @@ void er_run_os_path(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE* SystemTable,
   er_ui_scene_t previous_scene = {0};
   er_ui_runtime_state_t runtime = {0};
   er_ui_ledger_app_state_t ledger_state = {0};
-  ErUiBootAppContext apps[ER_UI_BOOT_APP_SLOT_CAPACITY]; //@optimizer-ignore boot app slots are bounded by ER_UI_BOOT_APP_SLOT_CAPACITY
   ErVirtioGpu gpu;
   ErVirtioGpuFramebuffer framebuffer;
   ErVirtioGpuDisplayInfo display_info;
   ErUiSurface surface;
   ErUiBootRenderContext render_context = {0};
-  ErNativeBootState native_relay;
   ErBleAdvEfi ble_adv;
   ErBleAdvPacket ble_packet;
   ErBleWifiRoleAdvert ble_wifi_role;
@@ -144,9 +142,6 @@ void er_run_os_path(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE* SystemTable,
   ErUiSurfacePixelRect present_rects[ER_UI_BOOT_MAX_DIRTY_TILES];
   UINT64 ble_node_nonce;
   vr_font_face_t* font = 0;
-
-  er_mem_zero((UINT8*)apps, (UINTN)sizeof(apps));
-  er_mem_zero((UINT8*)&native_relay, (UINTN)sizeof(native_relay));
 
   er_println("boot path: os");
   if (er_boot_services_runtime_entry_allowed(boot_report) == 0u) {
@@ -178,12 +173,6 @@ void er_run_os_path(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE* SystemTable,
     er_println("ble adv: unavailable");
   } else {
     er_println("ble adv: advertising");
-  }
-  if (er_native_boot_configure_pci_erwire_eth_sink(&native_relay) == 0u) {
-    er_println("relay ingress: virtio net unavailable");
-  } else {
-    render_context.native_relay = &native_relay;
-    er_println("relay ingress: virtio net ready");
   }
   if (er_virtio_gpu_init_first_pci(&gpu) == 0u) {
     er_println("ui renderer: virtio gpu unavailable");
@@ -264,9 +253,6 @@ void er_run_os_path(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE* SystemTable,
   render_context.scene_budget = scene_budget;
   render_context.frame_budget = frame_budget;
   render_context.theme = theme;
-  render_context.apps = apps;
-  render_context.app_count = ER_UI_BOOT_INSTALLED_APP_COUNT;
-  render_context.active_app = 0u;
   render_context.scene = &scene;
   render_context.previous_scene = &previous_scene;
   render_context.tile_marks = tile_marks;
@@ -278,12 +264,6 @@ void er_run_os_path(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE* SystemTable,
 
   if (er_ui_ledger_app_state_init(&ledger_state, er_ui_boot_allocator()) != ER_UI_OK) {
     er_println("ui renderer: ledger app state failed");
-    vr_font_face_destroy(font);
-    return;
-  }
-  if (er_ui_boot_install_shell_launcher_apps(&ledger_state) == 0u) {
-    er_println("ui renderer: installed app launcher failed");
-    er_ui_ledger_app_state_destroy(&ledger_state);
     vr_font_face_destroy(font);
     return;
   }
@@ -308,22 +288,11 @@ void er_run_os_path(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE* SystemTable,
     vr_font_face_destroy(font);
     return;
   }
-  if (er_ui_boot_prepare_app_contexts(apps, ER_UI_BOOT_INSTALLED_APP_COUNT, &scene_budget,
-                                      theme.colors.bg) == 0u) {
-    er_println("ui renderer: app contexts failed");
-    er_ui_scene_destroy(&previous_scene);
-    er_ui_scene_destroy(&scene);
-    er_ui_runtime_state_destroy(&runtime);
-    er_ui_ledger_app_state_destroy(&ledger_state);
-    vr_font_face_destroy(font);
-    return;
-  }
   er_println("ui renderer: first frame deferred until boot services exit");
   er_println("boot services: exiting");
   er_gfx_console_set_enabled(0u);
   er_print_set_firmware_console_enabled(0u);
   if (er_exit_boot_services(ImageHandle, SystemTable) == 0u) {
-    er_ui_boot_destroy_app_contexts(apps, ER_UI_BOOT_INSTALLED_APP_COUNT);
     er_ui_scene_destroy(&previous_scene);
     er_ui_scene_destroy(&scene);
     er_ui_runtime_state_destroy(&runtime);

@@ -9,7 +9,6 @@
 #include "er_types.h"
 #include "er_work.h"
 #include "er_vfs.h"
-#include "er_app.h"
 #include "er_native_eth.h"
 
 #define ERWIRE_MAGIC 0x31575245u
@@ -31,8 +30,6 @@
 #define ERWIRE_KIND_NODE_AVAILABLE 37u
 #define ERWIRE_KIND_NODE_HEARTBEAT 38u
 #define ERWIRE_KIND_RELAY_ASSIGNMENT 39u
-#define ERWIRE_KIND_APP_IDENTITY 40u
-#define ERWIRE_KIND_APP_IPC_ROUTE 41u
 #define ERWIRE_KIND_BLE_ADVERTISEMENT 42u
 #define ERWIRE_KIND_VFS_OBJECT_PACKET 48u
 #define ERWIRE_KIND_VFS_OBJECT_LABEL_REF 49u
