@@ -208,6 +208,9 @@ static void test_cyw43438_sdpcm_extracts_raw_l2_erwire(void) {
   UINT8 erwire[3] = {0x45u, 0x52u, 0x57u};
   UINT8 eth_frame[ER_NET_ETH_HEADER_LEN + sizeof(erwire)] = {0u};
   UINT8 sdpcm_frame[ER_CYW43438_SDPCM_HEADER_BYTES + sizeof(eth_frame)] = {0u};
+  UINT8 bcdc_payload[ER_CYW43438_BCDC_HEADER_BYTES + sizeof(eth_frame)] = {0u};
+  UINT8 bcdc_sdpcm_frame[ER_CYW43438_SDPCM_HEADER_BYTES +
+                         sizeof(bcdc_payload)] = {0u};
   UINT8 parsed_src_mac[ER_NET_MAC_LEN] = {0u};
   UINT32 eth_frame_len = 0u;
   UINT32 sdpcm_frame_len = 0u;
@@ -287,6 +290,34 @@ static void test_cyw43438_sdpcm_extracts_raw_l2_erwire(void) {
                                                      &parsed_erwire,
                                                      &parsed_erwire_len),
                1u);
+  bcdc_payload[0] = (UINT8)(2u << 4u);
+  bcdc_payload[1] = 0u;
+  bcdc_payload[2] = 0u;
+  bcdc_payload[3] = 0u;
+  er_mem_copy(bcdc_payload + ER_CYW43438_BCDC_HEADER_BYTES,
+              eth_frame,
+              eth_frame_len);
+  check_uint64("sdpcm bcdc test frame build",
+               er_cyw43438_sdpcm_build_frame(
+                   11u,
+                   ER_CYW43438_SDPCM_CHANNEL_DATA,
+                   bcdc_payload,
+                   ER_CYW43438_BCDC_HEADER_BYTES + eth_frame_len,
+                   bcdc_sdpcm_frame,
+                   (UINT32)sizeof(bcdc_sdpcm_frame),
+                   &sdpcm_frame_len),
+               1u);
+  check_uint64("sdpcm bcdc raw l2 local erwire parse",
+               er_cyw43438_sdpcm_parse_raw_l2_erwire(bcdc_sdpcm_frame,
+                                                     sdpcm_frame_len,
+                                                     local_mac,
+                                                     parsed_src_mac,
+                                                     &parsed_erwire,
+                                                     &parsed_erwire_len),
+               1u);
+  check_uint64("sdpcm bcdc raw l2 erwire byte0",
+               parsed_erwire[0],
+               erwire[0]);
   check_uint64("sdpcm raw l2 rejects other local mac",
                er_cyw43438_sdpcm_parse_raw_l2_erwire(sdpcm_frame,
                                                      sdpcm_frame_len,
@@ -294,6 +325,130 @@ static void test_cyw43438_sdpcm_extracts_raw_l2_erwire(void) {
                                                      parsed_src_mac,
                                                      &parsed_erwire,
                                                      &parsed_erwire_len),
+               0u);
+}
+
+static void test_cyw43438_bcdc_control_frames(void) {
+  UINT8 frame[ER_CYW43438_BCDC_DCMD_FRAME_MAX] = {0u};
+  UINT8 response[ER_CYW43438_BCDC_DCMD_HEADER_BYTES + 4u] = {0u};
+  UINT32 frame_len = 0u;
+  UINT32 response_len = 0u;
+  const UINT8* payload = 0;
+  UINT32 payload_len = 0u;
+  ErCyw43438SdpcmHeader header = {0u};
+  ErCyw43438BcdcDcmd dcmd = {0u};
+  UINT16 request_id = 3u;
+
+  check_uint64("bcdc int dcmd build",
+               er_cyw43438_bcdc_build_int_dcmd(
+                   12u,
+                   request_id,
+                   ER_CYW43438_BCDC_CMD_SET_INFRA,
+                   ER_CYW43438_BCDC_INFRA_STA,
+                   frame,
+                   (UINT32)sizeof(frame),
+                   &frame_len),
+               1u);
+  check_uint64("bcdc int dcmd parse sdpcm",
+               er_cyw43438_sdpcm_parse_frame(frame,
+                                             frame_len,
+                                             &header,
+                                             &payload,
+                                             &payload_len),
+               1u);
+  check_uint64("bcdc int dcmd channel",
+               header.channel,
+               ER_CYW43438_SDPCM_CHANNEL_CONTROL);
+  check_uint64("bcdc int dcmd command",
+               test_sdpcm_le32(payload),
+               ER_CYW43438_BCDC_CMD_SET_INFRA);
+  check_uint64("bcdc int dcmd request id",
+               test_sdpcm_le32(payload + 8u) >> 16u,
+               request_id);
+  check_uint64("bcdc int dcmd payload",
+               test_sdpcm_le32(payload + ER_CYW43438_BCDC_DCMD_HEADER_BYTES),
+               ER_CYW43438_BCDC_INFRA_STA);
+
+  check_uint64("bcdc iovar dcmd build",
+               er_cyw43438_bcdc_build_iovar_int_dcmd(
+                   13u,
+                   request_id,
+                   "mpc",
+                   0u,
+                   frame,
+                   (UINT32)sizeof(frame),
+                   &frame_len),
+               1u);
+  check_uint64("bcdc iovar parse sdpcm",
+               er_cyw43438_sdpcm_parse_frame(frame,
+                                             frame_len,
+                                             &header,
+                                             &payload,
+                                             &payload_len),
+               1u);
+  check_uint64("bcdc iovar dcmd command",
+               test_sdpcm_le32(payload),
+               ER_CYW43438_BCDC_CMD_SET_VAR);
+  check_uint64("bcdc iovar name m",
+               payload[ER_CYW43438_BCDC_DCMD_HEADER_BYTES],
+               'm');
+  check_uint64("bcdc iovar value",
+               test_sdpcm_le32(payload + ER_CYW43438_BCDC_DCMD_HEADER_BYTES +
+                               4u),
+               0u);
+
+  check_uint64("bcdc ssid dcmd build",
+               er_cyw43438_bcdc_build_set_ssid_dcmd(
+                   14u,
+                   request_id,
+                   (const UINT8*)"EdgeNet",
+                   ER_WIFI_L2_CONTROL_SSID_LEN,
+                   frame,
+                   (UINT32)sizeof(frame),
+                   &frame_len),
+               1u);
+  check_uint64("bcdc ssid dcmd parse sdpcm",
+               er_cyw43438_sdpcm_parse_frame(frame,
+                                             frame_len,
+                                             &header,
+                                             &payload,
+                                             &payload_len),
+               1u);
+  check_uint64("bcdc ssid len",
+               test_sdpcm_le32(payload + ER_CYW43438_BCDC_DCMD_HEADER_BYTES),
+               ER_WIFI_L2_CONTROL_SSID_LEN);
+  check_uint64("bcdc ssid byte0",
+               payload[ER_CYW43438_BCDC_DCMD_HEADER_BYTES + 4u],
+               'E');
+
+  response[0u] = (UINT8)(ER_CYW43438_BCDC_CMD_SET_INFRA & 0xffu);
+  response[4u] = 4u;
+  response[10u] = (UINT8)((UINT32)request_id & 0xffu);
+  response[11u] = (UINT8)(((UINT32)request_id >> 8u) & 0xffu);
+  response[11u] = 0u;
+  check_uint64("bcdc response frame build",
+               er_cyw43438_sdpcm_build_frame(
+                   15u,
+                   ER_CYW43438_SDPCM_CHANNEL_CONTROL,
+                   response,
+                   (UINT32)sizeof(response),
+                   frame,
+                   (UINT32)sizeof(frame),
+                   &response_len),
+               1u);
+  check_uint64("bcdc response parse",
+               er_cyw43438_bcdc_parse_dcmd_response(frame,
+                                                    response_len,
+                                                    request_id,
+                                                    &dcmd),
+               1u);
+  check_uint64("bcdc response cmd", dcmd.cmd, ER_CYW43438_BCDC_CMD_SET_INFRA);
+  check_uint64("bcdc response payload len", dcmd.payload_len, 4u);
+  check_uint64("bcdc response reject wrong id",
+               er_cyw43438_bcdc_parse_dcmd_response(frame,
+                                                    response_len,
+                                                    (UINT16)(request_id + 1u),
+                                                    &dcmd),
                0u);
 }
 
@@ -324,4 +479,5 @@ static void test_cyw43438_sdpcm_frames(void) {
   test_cyw43438_sdpcm_build_and_parse_data_frame();
   test_cyw43438_sdpcm_rejects_invalid_frames();
   test_cyw43438_sdpcm_extracts_raw_l2_erwire();
+  test_cyw43438_bcdc_control_frames();
 }
