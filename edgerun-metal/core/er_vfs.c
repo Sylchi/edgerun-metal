@@ -6,15 +6,19 @@ _Static_assert(sizeof(ErVfsObjectPacketHeader) ==
                "VFS object packet header wire size must stay stable");
 
 /*
- * Purpose: build content-addressed VFS object records from in-memory bytes.
- * Intention: labels remain app-facing manifest names; wire/durable identity is sealed object data.
+ * Purpose: build VFS packet records from in-memory object payload bytes.
+ * Intention: labels remain app-facing names while object identity comes from
+ * edgerun-object, not a VFS-private hash domain.
  */
 
-static const UINT8 g_object_domain[] = "edgerun:c:v1:vfs:object";
 static const UINT8 g_payload_domain[] = "edgerun:c:v1:vfs:object-payload";
 static const UINT8 g_packet_domain[] = "edgerun:c:v1:vfs:object-packet";
 static const UINT8 g_manifest_ref_domain[] = "edgerun:c:v1:vfs:object-label";
 static const UINT8 g_transform_domain[] = "edgerun:c:v1:vfs:object-transform";
+static const UINT8 g_vfs_object_clock_keeper[] = "edgerun-vfs-byte-object-v1-00000";
+
+_Static_assert(sizeof(g_vfs_object_clock_keeper) - 1u == ER_CLOCK_KEEPER_ID_SIZE,
+               "VFS object clock keeper id must be one keeper id");
 
 enum {
   ER_VFS_U16_FIELD_BYTES = 2u,
@@ -130,16 +134,28 @@ UINT8 er_vfs_label_valid(const char* label, UINTN label_len) {
   return 1;
 }
 
-static UINT8 er_vfs_hash_object(const ErCryptoProvider* crypto, const UINT8* object_bytes, UINTN object_len,
-                                ErHash* out_hash) {
-  ErByteSpan span;
+static UINT8 er_vfs_object_id(const ErCryptoProvider* crypto, const UINT8* object_bytes, UINTN object_len,
+                              ErHash* out_hash) {
+  er_object_requirements_t requirements;
+  er_clock_epoch_stamp_t epoch;
 
-  span.bytes = object_bytes;
-  span.len = object_len;
-  if (object_len > 0u && object_bytes == 0) {
+  (void)crypto;
+  if (out_hash == 0 || (object_len > 0u && object_bytes == 0)) {
     return 0;
   }
-  return er_crypto_hash(crypto, g_object_domain, (UINTN)(sizeof(g_object_domain) - 1u), &span, 1u, out_hash);
+  requirements.durability = ER_OBJECT_DURABILITY_MEMORY;
+  requirements.confidentiality = ER_OBJECT_CONFIDENTIALITY_PUBLIC;
+  requirements.portability = ER_OBJECT_PORTABILITY_PUBLIC_PORTABLE;
+  requirements.integrity = ER_OBJECT_INTEGRITY_HASH_ONLY;
+  requirements.lifetime = ER_OBJECT_LIFETIME_TRANSIENT;
+  requirements.visibility = ER_OBJECT_VISIBILITY_PUBLIC;
+  requirements.access_cost = ER_OBJECT_ACCESS_EXPLICIT_IO;
+  er_mem_zero((UINT8*)&epoch, (UINTN)sizeof(epoch));
+  er_mem_copy(epoch.keeper_id.bytes, g_vfs_object_clock_keeper,
+              ER_CLOCK_KEEPER_ID_SIZE);
+  return (UINT8)(er_object_id_for_bytes(&requirements, epoch, object_bytes,
+                                        (size_t)object_len,
+                                        out_hash->bytes) == ER_OBJECT_OK);
 }
 
 static UINT8 er_vfs_hash_payload(const ErCryptoProvider* crypto, const UINT8* payload_bytes,
@@ -289,7 +305,7 @@ UINT8 er_vfs_prepare_object_packet(const ErCryptoProvider* crypto, const UINT8* 
   out_packet->header.offset = (UINT64)offset;
   out_packet->header.bytes_len = (UINT32)chunk_len;
 
-  if (er_vfs_hash_object(crypto, object_bytes, object_len, &out_packet->header.object_id) == 0u) {
+  if (er_vfs_object_id(crypto, object_bytes, object_len, &out_packet->header.object_id) == 0u) {
     return 0;
   }
 
@@ -356,8 +372,8 @@ UINT8 er_vfs_assemble_object_packets(const ErCryptoProvider* crypto,
                   packet->header.bytes_len);
     }
   }
-  if (er_vfs_hash_object(crypto, out_object_bytes, (UINTN)object_len,
-                         out_object_id) == 0u ||
+  if (er_vfs_object_id(crypto, out_object_bytes, (UINTN)object_len,
+                       out_object_id) == 0u ||
       er_hash_equal(out_object_id, &object_id) == 0u) {
     return 0;
   }
@@ -385,7 +401,7 @@ UINT8 er_vfs_prepare_object_ref(const ErCryptoProvider* crypto,
                                 ErVfsObjectRef* out_ref) {
   ErHash object_id;
 
-  if (er_vfs_hash_object(crypto, object_bytes, object_len, &object_id) == 0u) {
+  if (er_vfs_object_id(crypto, object_bytes, object_len, &object_id) == 0u) {
     return 0;
   }
   return er_vfs_prepare_object_ref_from_object(&object_id, (UINT64)object_len,
@@ -397,7 +413,7 @@ UINT8 er_vfs_prepare_object_label_ref(const ErCryptoProvider* crypto, const char
                                       ErVfsObjectLabelRef* out_ref) {
   ErHash object_id;
 
-  if (er_vfs_hash_object(crypto, object_bytes, object_len, &object_id) == 0u) {
+  if (er_vfs_object_id(crypto, object_bytes, object_len, &object_id) == 0u) {
     return 0;
   }
   return er_vfs_prepare_object_label_ref_from_object(crypto, label, label_len, &object_id,
