@@ -1,4 +1,4 @@
-#include "wasm_vm_internal.h"
+#include "internal/wasm_vm_internal.h"
 
 typedef struct {
   ErWasmModule* module;

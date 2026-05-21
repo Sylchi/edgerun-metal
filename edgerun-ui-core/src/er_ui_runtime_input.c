@@ -100,7 +100,10 @@ static er_ui_action_t er_ui_activate_hit(er_ui_runtime_state_t* state, er_ui_hit
   switch (hit.kind) {
     case ER_UI_HIT_TOGGLE:
     case ER_UI_HIT_CHECKBOX: {
-      bool next = !er_ui_runtime_toggle_value(state, hit.id);
+      bool value = false;
+      er_ui_status_t read_status = er_ui_runtime_read_toggle(state, hit.id, &value);
+      if (read_status != ER_UI_OK && read_status != ER_UI_ERR_NOT_FOUND) return er_ui_action_none();
+      bool next = !value;
       if (er_ui_runtime_set_toggle(state, hit.id, next) != ER_UI_OK) return er_ui_action_none();
       return er_ui_action_bool(ER_UI_ACTION_TOGGLED, hit.id, next);
     }
@@ -117,7 +120,10 @@ static er_ui_action_t er_ui_activate_hit(er_ui_runtime_state_t* state, er_ui_hit
       return er_ui_action_float(ER_UI_ACTION_SLIDER_CHANGED, hit.id, value);
     }
     case ER_UI_HIT_SELECT: {
-      bool next = !er_ui_runtime_open_value(state, hit.id);
+      bool open = false;
+      er_ui_status_t read_status = er_ui_runtime_read_open(state, hit.id, &open);
+      if (read_status != ER_UI_OK && read_status != ER_UI_ERR_NOT_FOUND) return er_ui_action_none();
+      bool next = !open;
       if (er_ui_runtime_set_open(state, hit.id, next) != ER_UI_OK) return er_ui_action_none();
       return er_ui_action_bool(ER_UI_ACTION_OPEN_CHANGED, hit.id, next);
     }
@@ -232,7 +238,10 @@ er_ui_action_t er_ui_runtime_wheel(er_ui_runtime_state_t* state, const er_ui_sce
   er_ui_hit_t hit = {0};
   if (!er_ui_scene_scroll_hit_at(scene, x, y, &hit)) return er_ui_action_none();
 
-  float next = er_ui_runtime_scroll_offset(state, hit.id) + delta_y / ER_UI_WHEEL_SCROLL_SCALE;
+  float offset = 0.0f;
+  er_ui_status_t read_status = er_ui_runtime_read_scroll_offset(state, hit.id, &offset);
+  if (read_status != ER_UI_OK && read_status != ER_UI_ERR_NOT_FOUND) return er_ui_action_none();
+  float next = offset + delta_y / ER_UI_WHEEL_SCROLL_SCALE;
   next = er_ui_runtime_clamp_float(next, 0.0f, 1.0f);
   if (er_ui_runtime_set_scroll_offset(state, hit.id, next) != ER_UI_OK) return er_ui_action_none();
   return er_ui_action_float(ER_UI_ACTION_SCROLL_CHANGED, hit.id, next);
@@ -264,7 +273,10 @@ er_ui_action_t er_ui_runtime_key_down(er_ui_runtime_state_t* state, const er_ui_
 
   if (state->focused.kind == ER_UI_HIT_SLIDER && (key.kind == ER_UI_KEY_ARROW_LEFT || key.kind == ER_UI_KEY_ARROW_RIGHT)) {
     float delta = key.kind == ER_UI_KEY_ARROW_LEFT ? -ER_UI_KEY_SLIDER_STEP : ER_UI_KEY_SLIDER_STEP;
-    float next = er_ui_runtime_slider_value(state, state->focused.id) + delta;
+    float value = 0.0f;
+    er_ui_status_t read_status = er_ui_runtime_read_slider(state, state->focused.id, &value);
+    if (read_status != ER_UI_OK && read_status != ER_UI_ERR_NOT_FOUND) return er_ui_action_none();
+    float next = value + delta;
     next = er_ui_runtime_clamp_float(next, 0.0f, 1.0f);
     if (er_ui_runtime_set_slider(state, state->focused.id, next) != ER_UI_OK) return er_ui_action_none();
     return er_ui_action_float(ER_UI_ACTION_SLIDER_CHANGED, state->focused.id, next);

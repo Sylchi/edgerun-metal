@@ -46,6 +46,36 @@ static void expect_action(er_ui_text_buffer_action_t got, er_ui_text_buffer_acti
   expect_true(got == expected, name);
 }
 
+static void expect_runtime_scroll(const er_ui_runtime_state_t* state, uint32_t id, float expected, const char* name) {
+  float value = 0.0f;
+  expect_status(er_ui_runtime_read_scroll_offset(state, id, &value), ER_UI_OK, name);
+  expect_float(value, expected, name);
+}
+
+static void expect_runtime_toggle(const er_ui_runtime_state_t* state, uint32_t id, bool expected, const char* name) {
+  bool value = false;
+  expect_status(er_ui_runtime_read_toggle(state, id, &value), ER_UI_OK, name);
+  expect_true(value == expected, name);
+}
+
+static void expect_runtime_slider(const er_ui_runtime_state_t* state, uint32_t id, float expected, const char* name) {
+  float value = 0.0f;
+  expect_status(er_ui_runtime_read_slider(state, id, &value), ER_UI_OK, name);
+  expect_float(value, expected, name);
+}
+
+static void expect_runtime_open(const er_ui_runtime_state_t* state, uint32_t id, bool expected, const char* name) {
+  bool open = false;
+  expect_status(er_ui_runtime_read_open(state, id, &open), ER_UI_OK, name);
+  expect_true(open == expected, name);
+}
+
+static void expect_runtime_text(const er_ui_runtime_state_t* state, uint32_t id, const char* expected, const char* name) {
+  const char* value = NULL;
+  expect_status(er_ui_runtime_read_text(state, id, &value), ER_UI_OK, name);
+  expect_string(value, expected, name);
+}
+
 static void test_text_buffer_insert_and_cursor(void) {
   er_ui_text_buffer_t buffer = {0};
   expect_status(er_ui_text_buffer_init_with_allocator(&buffer, er_ui_test_allocator()), ER_UI_OK, "text: init succeeds");
@@ -215,27 +245,35 @@ static void test_runtime_value_stores(void) {
   er_ui_runtime_state_t state = {0};
   expect_status(er_ui_runtime_state_init_with_allocator(&state, er_ui_test_allocator()), ER_UI_OK, "runtime values: state init succeeds");
 
-  expect_float(er_ui_runtime_scroll_offset(&state, ER_UI_TEST_RUNTIME_SCROLL_ID), 0.0f, "runtime values: missing scroll defaults zero");
+  float scroll = 0.0f;
+  expect_status(er_ui_runtime_read_scroll_offset(&state, ER_UI_TEST_RUNTIME_SCROLL_ID, &scroll), ER_UI_ERR_NOT_FOUND,
+                "runtime values: missing scroll reports not found");
   expect_status(er_ui_runtime_set_scroll_offset(&state, ER_UI_TEST_RUNTIME_SCROLL_ID, 1.5f), ER_UI_OK, "runtime values: set scroll succeeds");
-  expect_float(er_ui_runtime_scroll_offset(&state, ER_UI_TEST_RUNTIME_SCROLL_ID), 1.0f, "runtime values: scroll clamps high");
+  expect_runtime_scroll(&state, ER_UI_TEST_RUNTIME_SCROLL_ID, 1.0f, "runtime values: scroll clamps high");
   expect_status(er_ui_runtime_set_scroll_offset(&state, ER_UI_TEST_RUNTIME_SCROLL_ID, -0.5f), ER_UI_OK, "runtime values: update scroll succeeds");
-  expect_float(er_ui_runtime_scroll_offset(&state, ER_UI_TEST_RUNTIME_SCROLL_ID), 0.0f, "runtime values: scroll clamps low");
+  expect_runtime_scroll(&state, ER_UI_TEST_RUNTIME_SCROLL_ID, 0.0f, "runtime values: scroll clamps low");
 
-  expect_true(!er_ui_runtime_toggle_value(&state, ER_UI_TEST_RUNTIME_TOGGLE_ID), "runtime values: missing toggle is false");
+  bool toggle = false;
+  expect_status(er_ui_runtime_read_toggle(&state, ER_UI_TEST_RUNTIME_TOGGLE_ID, &toggle), ER_UI_ERR_NOT_FOUND,
+                "runtime values: missing toggle reports not found");
   expect_status(er_ui_runtime_set_toggle(&state, ER_UI_TEST_RUNTIME_TOGGLE_ID, false), ER_UI_OK, "runtime values: set toggle succeeds");
-  expect_true(!er_ui_runtime_toggle_value(&state, ER_UI_TEST_RUNTIME_TOGGLE_ID), "runtime values: toggle returns stored value");
+  expect_runtime_toggle(&state, ER_UI_TEST_RUNTIME_TOGGLE_ID, false, "runtime values: toggle returns stored value");
 
-  expect_float(er_ui_runtime_slider_value(&state, ER_UI_TEST_RUNTIME_SLIDER_ID), 0.0f, "runtime values: missing slider is zero");
+  float slider = 0.0f;
+  expect_status(er_ui_runtime_read_slider(&state, ER_UI_TEST_RUNTIME_SLIDER_ID, &slider), ER_UI_ERR_NOT_FOUND,
+                "runtime values: missing slider reports not found");
   expect_status(er_ui_runtime_set_slider(&state, ER_UI_TEST_RUNTIME_SLIDER_ID, 0.25f), ER_UI_OK, "runtime values: set slider succeeds");
-  expect_float(er_ui_runtime_slider_value(&state, ER_UI_TEST_RUNTIME_SLIDER_ID), 0.25f, "runtime values: slider returns stored value");
+  expect_runtime_slider(&state, ER_UI_TEST_RUNTIME_SLIDER_ID, 0.25f, "runtime values: slider returns stored value");
 
-  expect_true(!er_ui_runtime_open_value(&state, ER_UI_TEST_RUNTIME_OPEN_ONE_ID), "runtime values: missing open is false");
+  bool open = false;
+  expect_status(er_ui_runtime_read_open(&state, ER_UI_TEST_RUNTIME_OPEN_ONE_ID, &open), ER_UI_ERR_NOT_FOUND,
+                "runtime values: missing open reports not found");
   expect_status(er_ui_runtime_set_open(&state, ER_UI_TEST_RUNTIME_OPEN_ONE_ID, true), ER_UI_OK, "runtime values: set open one succeeds");
   expect_status(er_ui_runtime_set_open(&state, ER_UI_TEST_RUNTIME_OPEN_TWO_ID, true), ER_UI_OK, "runtime values: set open two succeeds");
   expect_status(er_ui_runtime_set_open(&state, ER_UI_TEST_RUNTIME_OPEN_ONE_ID, true), ER_UI_OK, "runtime values: reopening existing scope succeeds");
   expect_u32(state.open_values[state.open_value_count - 1u].id, ER_UI_TEST_RUNTIME_OPEN_ONE_ID, "runtime values: reopened scope moves to top");
   expect_status(er_ui_runtime_set_open(&state, ER_UI_TEST_RUNTIME_OPEN_ONE_ID, false), ER_UI_OK, "runtime values: close open succeeds");
-  expect_true(!er_ui_runtime_open_value(&state, ER_UI_TEST_RUNTIME_OPEN_ONE_ID), "runtime values: open returns stored closed value");
+  expect_runtime_open(&state, ER_UI_TEST_RUNTIME_OPEN_ONE_ID, false, "runtime values: open returns stored closed value");
 
   er_ui_runtime_state_destroy(&state);
 }
@@ -255,11 +293,13 @@ static void test_runtime_tabs_and_text_values(void) {
   expect_size(er_ui_runtime_selected_tab_index(&state, ER_UI_TEST_RUNTIME_EMPTY_TAB_GROUP_ID, ER_UI_TEST_RUNTIME_EMPTY_TAB_COUNT),
               0u, "runtime tabs: empty tab set returns zero");
 
-  expect_string(er_ui_runtime_text_value(&state, ER_UI_TEST_RUNTIME_TEXT_ID), "", "runtime text: missing text is empty");
+  const char* text = NULL;
+  expect_status(er_ui_runtime_read_text(&state, ER_UI_TEST_RUNTIME_TEXT_ID, &text), ER_UI_ERR_NOT_FOUND,
+                "runtime text: missing text reports not found");
   expect_status(er_ui_runtime_set_text(&state, ER_UI_TEST_RUNTIME_TEXT_ID, "Trust Container"), ER_UI_OK, "runtime text: set text succeeds");
-  expect_string(er_ui_runtime_text_value(&state, ER_UI_TEST_RUNTIME_TEXT_ID), "Trust Container", "runtime text: stored text is returned");
+  expect_runtime_text(&state, ER_UI_TEST_RUNTIME_TEXT_ID, "Trust Container", "runtime text: stored text is returned");
   expect_status(er_ui_runtime_set_text(&state, ER_UI_TEST_RUNTIME_TEXT_ID, "Proof dashboard"), ER_UI_OK, "runtime text: update text succeeds");
-  expect_string(er_ui_runtime_text_value(&state, ER_UI_TEST_RUNTIME_TEXT_ID), "Proof dashboard", "runtime text: updated text is returned");
+  expect_runtime_text(&state, ER_UI_TEST_RUNTIME_TEXT_ID, "Proof dashboard", "runtime text: updated text is returned");
   const char invalid_utf8[] = {(char)0xE0, (char)0x80, (char)0x80, '\0'};
   expect_status(er_ui_runtime_set_text(&state, ER_UI_TEST_RUNTIME_INVALID_TEXT_ID, invalid_utf8), ER_UI_ERR_INVALID_ARGUMENT,
                 "runtime text: invalid utf8 is rejected");
@@ -350,7 +390,7 @@ static void test_runtime_pointer_activation_dispatch(void) {
   action = er_ui_runtime_pointer_up(&state, &scene, 10.0f, 10.0f);
   expect_true(action.kind == ER_UI_ACTION_TOGGLED, "dispatch pointer: toggle reports toggled");
   expect_true(action.bool_value, "dispatch pointer: toggle action carries value");
-  expect_true(er_ui_runtime_toggle_value(&state, ER_UI_TEST_POINTER_TOGGLE_ID), "dispatch pointer: toggle store updated");
+  expect_runtime_toggle(&state, ER_UI_TEST_POINTER_TOGGLE_ID, true, "dispatch pointer: toggle store updated");
 
   er_ui_scene_clear_commands(&scene);
   expect_status(er_ui_scene_push_hit(&scene, er_ui_hit(ER_UI_HIT_SELECT, ER_UI_TEST_POINTER_SELECT_ID, 0.0f, 0.0f, 80.0f, 30.0f)), ER_UI_OK,
@@ -358,7 +398,7 @@ static void test_runtime_pointer_activation_dispatch(void) {
   (void)er_ui_runtime_pointer_down(&state, &scene, 10.0f, 10.0f);
   action = er_ui_runtime_pointer_up(&state, &scene, 10.0f, 10.0f);
   expect_true(action.kind == ER_UI_ACTION_OPEN_CHANGED, "dispatch pointer: select opens");
-  expect_true(er_ui_runtime_open_value(&state, ER_UI_TEST_POINTER_SELECT_ID), "dispatch pointer: open store updated");
+  expect_runtime_open(&state, ER_UI_TEST_POINTER_SELECT_ID, true, "dispatch pointer: open store updated");
 
   er_ui_scene_clear_commands(&scene);
   expect_status(er_ui_scene_push_hit(&scene, er_ui_hit(ER_UI_HIT_SLIDER, ER_UI_TEST_POINTER_SLIDER_ID, 0.0f, 0.0f, ER_UI_TEST_POINTER_SLIDER_W, 30.0f)),
@@ -367,7 +407,7 @@ static void test_runtime_pointer_activation_dispatch(void) {
   action = er_ui_runtime_pointer_down(&state, &scene, ER_UI_TEST_POINTER_SLIDER_X, 10.0f);
   expect_true(action.kind == ER_UI_ACTION_SLIDER_CHANGED, "dispatch pointer: slider changes on pointer down");
   expect_float(action.float_value, 0.75f, "dispatch pointer: slider action carries pointer value");
-  expect_float(er_ui_runtime_slider_value(&state, ER_UI_TEST_POINTER_SLIDER_ID), 0.75f, "dispatch pointer: slider store updated");
+  expect_runtime_slider(&state, ER_UI_TEST_POINTER_SLIDER_ID, 0.75f, "dispatch pointer: slider store updated");
 
   er_ui_scene_destroy(&scene);
   er_ui_runtime_state_destroy(&state);
@@ -404,7 +444,7 @@ static void test_runtime_wheel_key_drag_and_blur_dispatch(void) {
 
   action = er_ui_runtime_wheel(&state, &scene, 10.0f, 50.0f, 450.0f);
   expect_true(action.kind == ER_UI_ACTION_SCROLL_CHANGED, "dispatch input: wheel changes scroll");
-  expect_float(er_ui_runtime_scroll_offset(&state, ER_UI_TEST_INPUT_SCROLL_ID), 0.5f, "dispatch input: wheel updates scroll store");
+  expect_runtime_scroll(&state, ER_UI_TEST_INPUT_SCROLL_ID, 0.5f, "dispatch input: wheel updates scroll store");
 
   action = er_ui_runtime_pointer_down(&state, &scene, 10.0f, 140.0f);
   expect_true(action.kind == ER_UI_ACTION_FOCUSED, "dispatch input: drag pointer down records source");
@@ -421,7 +461,7 @@ static void test_runtime_wheel_key_drag_and_blur_dispatch(void) {
   expect_status(er_ui_runtime_set_open(&state, ER_UI_TEST_INPUT_OPEN_ID, true), ER_UI_OK, "dispatch input: open value set succeeds");
   action = er_ui_runtime_key_down(&state, &scene, er_ui_key(ER_UI_KEY_ESCAPE), er_ui_key_modifiers_shift(false));
   expect_true(action.kind == ER_UI_ACTION_OPEN_CHANGED, "dispatch input: escape closes top open scope");
-  expect_true(!er_ui_runtime_open_value(&state, ER_UI_TEST_INPUT_OPEN_ID), "dispatch input: escape updates open store");
+  expect_runtime_open(&state, ER_UI_TEST_INPUT_OPEN_ID, false, "dispatch input: escape updates open store");
 
   (void)er_ui_runtime_pointer_down(&state, &scene, 10.0f, 10.0f);
   action = er_ui_runtime_blur(&state);

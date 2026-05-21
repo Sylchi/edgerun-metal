@@ -1,4 +1,4 @@
-#include "wasm_vm_internal.h"
+#include "internal/wasm_vm_internal.h"
 
 static const ErHostImport ER_HOST_IMPORTS[] = {
 #define ER_HOST_IMPORT_ROW(kind, module, field, params, results, contracts) \

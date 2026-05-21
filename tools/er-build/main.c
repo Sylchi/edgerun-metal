@@ -759,6 +759,7 @@ static int erb_build_app_run(int print_plan) {
       erb_args_push(&args, "edgerun-metal/core/er_mmio.c") != 0 ||
       erb_args_push(&args, "edgerun-metal/core/er_bus.c") != 0 ||
       erb_args_push(&args, "edgerun-metal/core/er_driver_policy.c") != 0 ||
+      erb_args_push(&args, "edgerun-metal/core/er_node_id.c") != 0 ||
       erb_args_push(&args, "edgerun-metal/core/er_app.c") != 0 ||
       erb_args_push(&args, "edgerun-metal/core/er_relay_packet.c") != 0 ||
       erb_args_push(&args, "edgerun-metal/core/wasm_vm.c") != 0 ||

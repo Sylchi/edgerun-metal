@@ -1,4 +1,4 @@
-#include "wasm_vm_internal.h"
+#include "internal/wasm_vm_internal.h"
 
 int er_reader_init(ErReader* r, const UINT8* data, UINT32 size) {
   if (r == 0) {

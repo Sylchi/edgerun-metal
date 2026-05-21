@@ -1,4 +1,4 @@
-#include "efi_boot_internal.h"
+#include "internal/efi_boot_internal.h"
 
 static UINT8 g_ui_boot_arena[ER_UI_BOOT_ARENA_SIZE];
 static UINTN g_ui_boot_arena_used;

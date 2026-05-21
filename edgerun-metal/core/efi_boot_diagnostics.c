@@ -1,4 +1,4 @@
-#include "efi_boot_internal.h"
+#include "internal/efi_boot_internal.h"
 
 ErWasmHostCalls g_host_calls = {0};
 static UINT8 g_wasm_driver_memory[ER_WASM_DRIVER_MEMORY_BYTES];

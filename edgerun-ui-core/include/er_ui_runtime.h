@@ -235,16 +235,16 @@ er_ui_status_t er_ui_runtime_sync_transitions(
 bool er_ui_runtime_advance_transitions(er_ui_runtime_state_t* state, uint32_t delta_ms);
 bool er_ui_runtime_transitions_active(const er_ui_runtime_state_t* state);
 
-float er_ui_runtime_scroll_offset(const er_ui_runtime_state_t* state, uint32_t id);
-bool er_ui_runtime_toggle_value(const er_ui_runtime_state_t* state, uint32_t id);
-float er_ui_runtime_slider_value(const er_ui_runtime_state_t* state, uint32_t id);
-bool er_ui_runtime_open_value(const er_ui_runtime_state_t* state, uint32_t id);
+er_ui_status_t er_ui_runtime_read_scroll_offset(const er_ui_runtime_state_t* state, uint32_t id, float* out_offset);
+er_ui_status_t er_ui_runtime_read_toggle(const er_ui_runtime_state_t* state, uint32_t id, bool* out_value);
+er_ui_status_t er_ui_runtime_read_slider(const er_ui_runtime_state_t* state, uint32_t id, float* out_value);
+er_ui_status_t er_ui_runtime_read_open(const er_ui_runtime_state_t* state, uint32_t id, bool* out_open);
 size_t er_ui_runtime_selected_tab_index(
   const er_ui_runtime_state_t* state,
   uint32_t base_id,
   size_t len
 );
-const char* er_ui_runtime_text_value(const er_ui_runtime_state_t* state, uint32_t id);
+er_ui_status_t er_ui_runtime_read_text(const er_ui_runtime_state_t* state, uint32_t id, const char** out_value);
 
 er_ui_status_t er_ui_runtime_set_scroll_offset(er_ui_runtime_state_t* state, uint32_t id, float offset);
 er_ui_status_t er_ui_runtime_set_toggle(er_ui_runtime_state_t* state, uint32_t id, bool value);

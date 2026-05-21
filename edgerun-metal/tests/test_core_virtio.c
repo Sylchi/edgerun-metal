@@ -1082,7 +1082,7 @@ static void test_virtio_gpu_mmio(void) {
   ui_surface.stride = framebuffer.stride_pixels;
   ui_surface.pixel_format = ER_UI_SURFACE_PIXEL_BGRX;
   check_int64("virtio gpu framebuffer surface scene",
-              er_ui_surface_render_scene_with_font_stats(&ui_surface, &ui_scene, 0, &ui_render_stats),
+              er_ui_surface_render(&ui_surface, &(ErUiSurfaceRenderDesc){.scene = &ui_scene, .out_stats = &ui_render_stats, .mode = ER_UI_SURFACE_RENDER_FULL}),
               1);
   check_uint64("virtio gpu framebuffer surface bytes", ui_render_stats.bytes_written, 32u);
   check_uint64("virtio gpu framebuffer surface rects", ui_render_stats.rects, 1u);

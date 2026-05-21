@@ -19,7 +19,6 @@
 #define ER_UI_SURFACE_MSDF_ALPHA_RANGE (ER_UI_SURFACE_MSDF_ALPHA_HIGH - ER_UI_SURFACE_MSDF_ALPHA_LOW)
 #define ER_UI_SURFACE_DIRTY_TILE_ID_BYTES 4u
 
-static uint8_t er_ui_surface_render_scene_with_atlas_stats(ErUiSurface* surface, const er_ui_scene_t* scene, const ErUiSurfaceAlphaAtlas* atlas, ErUiSurfaceRenderStats* stats);
 static uint8_t er_ui_surface_clip_rect_to(const ErUiSurface* surface, const ErUiSurfacePixelRect* clip,
                                     float x, float y, float w, float h,
                                     uint32_t* out_x0, uint32_t* out_y0, uint32_t* out_x1, uint32_t* out_y1);

@@ -1,4 +1,4 @@
-#include "efi_boot_internal.h"
+#include "internal/efi_boot_internal.h"
 
 /*
  * Purpose: connect post-boot native erwire ingress to OS endpoint dispatch.

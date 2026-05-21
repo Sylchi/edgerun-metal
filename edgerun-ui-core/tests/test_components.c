@@ -1,4 +1,5 @@
 #include "test_common.h"
+#include "../src/er_ui_components_internal.h"
 
 #define ER_UI_TEST_ARRAY_COUNT(values) (sizeof(values) / sizeof((values)[0]))
 #define ER_UI_TEST_COMPONENT_BUTTON_ID 3001u

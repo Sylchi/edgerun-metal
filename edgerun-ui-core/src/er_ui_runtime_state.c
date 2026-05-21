@@ -125,39 +125,52 @@ bool er_ui_runtime_transitions_active(const er_ui_runtime_state_t* state) {
   return false;
 }
 
-float er_ui_runtime_scroll_offset(const er_ui_runtime_state_t* state, uint32_t id) {
-  if (!state) return 0.0f;
+er_ui_status_t er_ui_runtime_read_scroll_offset(const er_ui_runtime_state_t* state, uint32_t id, float* out_offset) {
+  if (!state || !out_offset) return ER_UI_ERR_INVALID_ARGUMENT;
+  *out_offset = 0.0f;
   for (size_t i = 0u; i < state->scroll_offset_count; ++i) {
-    if (state->scroll_offsets[i].id == id) return state->scroll_offsets[i].value;
-  }
-  return 0.0f;
-}
-
-bool er_ui_runtime_toggle_value(const er_ui_runtime_state_t* state, uint32_t id) {
-  if (!state) return false;
-  for (size_t i = 0u; i < state->toggle_value_count; ++i) {
-    if (state->toggle_values[i].id == id) return state->toggle_values[i].value;
-  }
-  return false;
-}
-
-float er_ui_runtime_slider_value(const er_ui_runtime_state_t* state, uint32_t id) {
-  if (state) {
-    for (size_t i = 0u; i < state->slider_value_count; ++i) {
-      if (state->slider_values[i].id == id) {
-        return er_ui_runtime_clamp_float(state->slider_values[i].value, 0.0f, 1.0f);
-      }
+    if (state->scroll_offsets[i].id == id) {
+      *out_offset = state->scroll_offsets[i].value;
+      return ER_UI_OK;
     }
   }
-  return 0.0f;
+  return ER_UI_ERR_NOT_FOUND;
 }
 
-bool er_ui_runtime_open_value(const er_ui_runtime_state_t* state, uint32_t id) {
-  if (!state) return false;
-  for (size_t i = 0u; i < state->open_value_count; ++i) {
-    if (state->open_values[i].id == id) return state->open_values[i].value;
+er_ui_status_t er_ui_runtime_read_toggle(const er_ui_runtime_state_t* state, uint32_t id, bool* out_value) {
+  if (!state || !out_value) return ER_UI_ERR_INVALID_ARGUMENT;
+  *out_value = false;
+  for (size_t i = 0u; i < state->toggle_value_count; ++i) {
+    if (state->toggle_values[i].id == id) {
+      *out_value = state->toggle_values[i].value;
+      return ER_UI_OK;
+    }
   }
-  return false;
+  return ER_UI_ERR_NOT_FOUND;
+}
+
+er_ui_status_t er_ui_runtime_read_slider(const er_ui_runtime_state_t* state, uint32_t id, float* out_value) {
+  if (!state || !out_value) return ER_UI_ERR_INVALID_ARGUMENT;
+  *out_value = 0.0f;
+  for (size_t i = 0u; i < state->slider_value_count; ++i) {
+    if (state->slider_values[i].id == id) {
+      *out_value = er_ui_runtime_clamp_float(state->slider_values[i].value, 0.0f, 1.0f);
+      return ER_UI_OK;
+    }
+  }
+  return ER_UI_ERR_NOT_FOUND;
+}
+
+er_ui_status_t er_ui_runtime_read_open(const er_ui_runtime_state_t* state, uint32_t id, bool* out_open) {
+  if (!state || !out_open) return ER_UI_ERR_INVALID_ARGUMENT;
+  *out_open = false;
+  for (size_t i = 0u; i < state->open_value_count; ++i) {
+    if (state->open_values[i].id == id) {
+      *out_open = state->open_values[i].value;
+      return ER_UI_OK;
+    }
+  }
+  return ER_UI_ERR_NOT_FOUND;
 }
 
 size_t er_ui_runtime_selected_tab_index(const er_ui_runtime_state_t* state, uint32_t base_id, size_t len) {
@@ -170,12 +183,16 @@ size_t er_ui_runtime_selected_tab_index(const er_ui_runtime_state_t* state, uint
   return 0u;
 }
 
-const char* er_ui_runtime_text_value(const er_ui_runtime_state_t* state, uint32_t id) {
-  if (!state) return "";
+er_ui_status_t er_ui_runtime_read_text(const er_ui_runtime_state_t* state, uint32_t id, const char** out_value) {
+  if (!state || !out_value) return ER_UI_ERR_INVALID_ARGUMENT;
+  *out_value = "";
   for (size_t i = 0u; i < state->text_value_count; ++i) {
-    if (state->text_values[i].id == id) return state->text_values[i].value ? state->text_values[i].value : "";
+    if (state->text_values[i].id == id) {
+      *out_value = state->text_values[i].value ? state->text_values[i].value : "";
+      return ER_UI_OK;
+    }
   }
-  return "";
+  return ER_UI_ERR_NOT_FOUND;
 }
 
 er_ui_status_t er_ui_runtime_set_scroll_offset(er_ui_runtime_state_t* state, uint32_t id, float offset) {

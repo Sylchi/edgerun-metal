@@ -22,7 +22,9 @@ init_repo() {
   mkdir -p "${repo_dir}"
   git -C "${repo_dir}" init --quiet
   printf 'ok\n' > "${repo_dir}/README.md"
-  git -C "${repo_dir}" add README.md
+  mkdir -p "${repo_dir}/api"
+  : > "${repo_dir}/api/public-headers.manifest"
+  git -C "${repo_dir}" add README.md api/public-headers.manifest
 }
 
 run_in_repo() {
@@ -160,11 +162,29 @@ add_first_party_openssl_include() {
   git -C "${repo_dir}" add codex/src/tls.c
 }
 
+add_public_header_without_manifest() {
+  local repo_dir="$1"
+
+  mkdir -p "${repo_dir}/include"
+  printf '#ifndef TEST_API_H\n#define TEST_API_H\n#endif\n' > "${repo_dir}/include/test_api.h"
+  git -C "${repo_dir}" add include/test_api.h
+}
+
+add_public_header_with_manifest() {
+  local repo_dir="$1"
+
+  mkdir -p "${repo_dir}/include"
+  printf '#ifndef TEST_API_H\n#define TEST_API_H\n#endif\n' > "${repo_dir}/include/test_api.h"
+  printf 'include/test_api.h\n' > "${repo_dir}/api/public-headers.manifest"
+  git -C "${repo_dir}" add include/test_api.h api/public-headers.manifest
+}
+
 expect_pass clean_repo
 expect_pass agents_policy add_agents_policy
 expect_pass allowed_blake3_readme add_allowed_blake3_readme
 expect_pass vendor_ui_reference add_vendor_ui_reference
 expect_pass vendor_ui_fetch_command add_vendor_ui_fetch_command
+expect_pass public_header_manifest add_public_header_with_manifest
 expect_fail nested_git_dir add_nested_git_dir
 expect_fail gitmodules_file add_gitmodules_file
 expect_fail gitlink_entry add_gitlink
@@ -175,5 +195,6 @@ expect_fail unapproved_third_party add_unapproved_third_party
 expect_fail first_party_fetch_command add_first_party_fetch_command
 expect_fail first_party_openssl_link add_first_party_openssl_link
 expect_fail first_party_openssl_include add_first_party_openssl_include
+expect_fail public_header_without_manifest add_public_header_without_manifest
 
 printf 'repo-check tests passed\n'

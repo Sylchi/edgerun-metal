@@ -221,11 +221,11 @@ static void test_ui_surface_renderer_surface(void) {
   scene.text_quads = 0;
   scene.text_quad_count = 0u;
   scene.text_quad_capacity = 0u;
-  check_int64("ui surface render clipped fill", er_ui_surface_render_scene(&surface, &scene), 1);
+  check_int64("ui surface render clipped fill", er_ui_surface_render(&surface, &(ErUiSurfaceRenderDesc){.scene = &scene, .mode = ER_UI_SURFACE_RENDER_FULL}), 1);
   check_pixel("ui surface clipped fill x0", pixels[0], 0x000a141eu);
   check_pixel("ui surface clipped fill x1", pixels[1], 0x000a141eu);
   check_pixel("ui surface clipped fill x2 clear", pixels[2], 0u);
-  check_int64("ui surface render stats", er_ui_surface_render_scene_with_font_stats(&surface, &scene, 0, &stats), 1);
+  check_int64("ui surface render stats", er_ui_surface_render(&surface, &(ErUiSurfaceRenderDesc){.scene = &scene, .out_stats = &stats, .mode = ER_UI_SURFACE_RENDER_FULL}), 1);
   check_uint64("ui surface stats clear count", stats.clears, 1u);
   check_uint64("ui surface stats rect count", stats.rects, 1u);
   check_uint64("ui surface stats solid count", stats.solid_rects, 1u);
@@ -255,7 +255,7 @@ static void test_ui_surface_renderer_surface(void) {
   scene.icon_quads = icon_quads;
   scene.icon_quad_count = 1u;
   scene.icon_quad_capacity = 1u;
-  check_int64("ui surface render icon stats", er_ui_surface_render_scene_with_font_stats(&surface, &scene, 0, &stats), 1);
+  check_int64("ui surface render icon stats", er_ui_surface_render(&surface, &(ErUiSurfaceRenderDesc){.scene = &scene, .out_stats = &stats, .mode = ER_UI_SURFACE_RENDER_FULL}), 1);
   check_uint64("ui surface stats icon count", stats.icon_quads, 1u);
   scene.icon_quads = 0;
   scene.icon_quad_count = 0u;
@@ -282,7 +282,7 @@ static void test_ui_surface_renderer_surface(void) {
     icon_scene.icon_quad_capacity = 1u;
     check_int64("ui surface tabler search rect", er_ui_tabler_icon_rect(ER_UI_ICON_SEARCH, &search_rect), 1);
     check_uint64("ui surface tabler search atlas x", search_rect.x, 120u);
-    check_int64("ui surface render tabler icon", er_ui_surface_render_scene_with_font_stats(&icon_surface, &icon_scene, 0, &stats), 1);
+    check_int64("ui surface render tabler icon", er_ui_surface_render(&icon_surface, &(ErUiSurfaceRenderDesc){.scene = &icon_scene, .out_stats = &stats, .mode = ER_UI_SURFACE_RENDER_FULL}), 1);
     check_uint64("ui surface tabler icon stats", stats.icon_quads, 1u);
     for (i = 0u; i < 576u; ++i) {
       if (icon_pixels[i] != 0u) ++visible_icon_pixels;
@@ -327,8 +327,9 @@ static void test_ui_surface_renderer_surface(void) {
               1);
   check_uint64("ui surface frame same count", dirty_tiles.count, 0u);
   check_int64("ui surface render empty dirty tile list",
-              er_ui_surface_render_scene_dirty_tiles_with_font_stats(&surface, &scene, 0,
-                                                                         &tile_plan, &dirty_tiles, &stats),
+              er_ui_surface_render(&surface, &(ErUiSurfaceRenderDesc){.scene = &scene, .tile_plan = &tile_plan,
+                                                                        .dirty_tiles = &dirty_tiles, .out_stats = &stats,
+                                                                        .mode = ER_UI_SURFACE_RENDER_DIRTY_TILES}),
               1);
   check_uint64("ui surface empty dirty requested", stats.dirty_tiles_requested, 0u);
   check_uint64("ui surface empty dirty rendered", stats.tiles_rendered, 0u);
@@ -342,14 +343,14 @@ static void test_ui_surface_renderer_surface(void) {
   check_uint64("ui surface dirty clear diff count", dirty_tiles.count, 4u);
 
   rects[0] = er_ui_rect_fill(0.0f, 0.0f, 1.0f, 1.0f, 0.0f, er_ui_color_rgba_u8(255u, 0u, 0u, 128u));
-  check_int64("ui surface render alpha fill", er_ui_surface_render_scene(&surface, &scene), 1);
+  check_int64("ui surface render alpha fill", er_ui_surface_render(&surface, &(ErUiSurfaceRenderDesc){.scene = &scene, .mode = ER_UI_SURFACE_RENDER_FULL}), 1);
   check_pixel("ui surface alpha over clear", pixels[0], 0x00800000u);
 
   surface.width = 4u;
   surface.height = 4u;
   surface.stride = 4u;
   rects[0] = er_ui_rect_border(0.0f, 0.0f, 4.0f, 4.0f, 0.0f, er_ui_color_rgb_u8(0u, 255u, 0u));
-  check_int64("ui surface render border", er_ui_surface_render_scene(&surface, &scene), 1);
+  check_int64("ui surface render border", er_ui_surface_render(&surface, &(ErUiSurfaceRenderDesc){.scene = &scene, .mode = ER_UI_SURFACE_RENDER_FULL}), 1);
   check_pixel("ui surface border top", pixels[1], 0x0000ff00u);
   check_pixel("ui surface border left", pixels[4], 0x0000ff00u);
   check_pixel("ui surface border center clear", pixels[5], 0u);
@@ -361,7 +362,9 @@ static void test_ui_surface_renderer_surface(void) {
   check_int64("ui surface tile plan 4x4", er_ui_surface_tile_plan(&surface, 2u, 2u, 4u, &tile_plan), 1);
   rects[0] = er_ui_rect_fill(0.0f, 0.0f, 4.0f, 4.0f, 0.0f, er_ui_color_rgb_u8(255u, 0u, 0u));
   check_int64("ui surface render one tile",
-              er_ui_surface_render_scene_tile_with_font_stats(&surface, &scene, 0, &tile_plan, 3u, &stats),
+              er_ui_surface_render(&surface, &(ErUiSurfaceRenderDesc){.scene = &scene, .tile_plan = &tile_plan,
+                                                                        .out_stats = &stats, .mode = ER_UI_SURFACE_RENDER_TILE,
+                                                                        .tile_id = 3u}),
               1);
   check_pixel("ui surface tile outside top left", pixels[0], 0x00abcdefu);
   check_pixel("ui surface tile outside top right", pixels[3], 0x00abcdefu);
@@ -382,8 +385,9 @@ static void test_ui_surface_renderer_surface(void) {
     pixels[i] = 0x00abcdefu;
   }
   check_int64("ui surface render dirty tile list",
-              er_ui_surface_render_scene_dirty_tiles_with_font_stats(&surface, &scene, 0,
-                                                                         &tile_plan, &dirty_tiles, &stats),
+              er_ui_surface_render(&surface, &(ErUiSurfaceRenderDesc){.scene = &scene, .tile_plan = &tile_plan,
+                                                                        .dirty_tiles = &dirty_tiles, .out_stats = &stats,
+                                                                        .mode = ER_UI_SURFACE_RENDER_DIRTY_TILES}),
               1);
   check_pixel("ui surface dirty list top left", pixels[0], 0x00ff0000u);
   check_pixel("ui surface dirty list top right untouched", pixels[3], 0x00abcdefu);
@@ -396,14 +400,17 @@ static void test_ui_surface_renderer_surface(void) {
   check_uint64("ui surface dirty list clipped", stats.clipped_primitives, 2u);
   dirty_tiles.overflowed = 1u;
   check_int64("ui surface reject overflowed dirty list",
-              er_ui_surface_render_scene_dirty_tiles_with_font_stats(&surface, &scene, 0,
-                                                                         &tile_plan, &dirty_tiles, &stats),
+              er_ui_surface_render(&surface, &(ErUiSurfaceRenderDesc){.scene = &scene, .tile_plan = &tile_plan,
+                                                                        .dirty_tiles = &dirty_tiles, .out_stats = &stats,
+                                                                        .mode = ER_UI_SURFACE_RENDER_DIRTY_TILES}),
               0);
   check_uint64("ui surface reject overflowed dirty stats", stats.pixels_written, 0u);
   dirty_tiles.overflowed = 0u;
   tile_plan.width = 3u;
   check_int64("ui surface reject mismatched tile plan",
-              er_ui_surface_render_scene_tile_with_font_stats(&surface, &scene, 0, &tile_plan, 3u, &stats),
+              er_ui_surface_render(&surface, &(ErUiSurfaceRenderDesc){.scene = &scene, .tile_plan = &tile_plan,
+                                                                        .out_stats = &stats, .mode = ER_UI_SURFACE_RENDER_TILE,
+                                                                        .tile_id = 3u}),
               0);
   check_uint64("ui surface reject tile stats zero", stats.pixels_written, 0u);
 
@@ -413,7 +420,7 @@ static void test_ui_surface_renderer_surface(void) {
   rects[0] = er_ui_rect_linear_gradient(0.0f, 0.0f, 3.0f, 1.0f, 0.0f,
                                         er_ui_color_rgb_u8(255u, 0u, 0u),
                                         er_ui_color_rgb_u8(0u, 0u, 255u));
-  check_int64("ui surface render gradient", er_ui_surface_render_scene(&surface, &scene), 1);
+  check_int64("ui surface render gradient", er_ui_surface_render(&surface, &(ErUiSurfaceRenderDesc){.scene = &scene, .mode = ER_UI_SURFACE_RENDER_FULL}), 1);
   check_pixel("ui surface gradient left", pixels[0], 0x00ff0000u);
   check_pixel("ui surface gradient middle", pixels[1], 0x00800080u);
   check_pixel("ui surface gradient right", pixels[2], 0x000000ffu);
@@ -422,7 +429,9 @@ static void test_ui_surface_renderer_surface(void) {
   }
   check_int64("ui surface tile plan 3x1", er_ui_surface_tile_plan(&surface, 1u, 1u, 3u, &tile_plan), 1);
   check_int64("ui surface render gradient tile",
-              er_ui_surface_render_scene_tile_with_font_stats(&surface, &scene, 0, &tile_plan, 1u, &stats),
+              er_ui_surface_render(&surface, &(ErUiSurfaceRenderDesc){.scene = &scene, .tile_plan = &tile_plan,
+                                                                        .out_stats = &stats, .mode = ER_UI_SURFACE_RENDER_TILE,
+                                                                        .tile_id = 1u}),
               1);
   check_pixel("ui surface gradient tile outside left", pixels[0], 0x00abcdefu);
   check_pixel("ui surface gradient tile middle", pixels[1], 0x00800080u);
@@ -444,7 +453,7 @@ static void test_ui_surface_renderer_surface(void) {
     scene.text_quads = text_quads;
     scene.text_quad_count = 1u;
     scene.text_quad_capacity = 1u;
-    check_int64("ui surface render alpha atlas", er_ui_surface_render_scene_with_atlas(&surface, &scene, &atlas), 1);
+    check_int64("ui surface render alpha atlas", er_ui_surface_render(&surface, &(ErUiSurfaceRenderDesc){.scene = &scene, .atlas = &atlas, .mode = ER_UI_SURFACE_RENDER_FULL}), 1);
     check_pixel("ui surface alpha low", pixels[0], 0x00505050u);
     check_pixel("ui surface alpha middle", pixels[1], 0x00808080u);
     check_pixel("ui surface alpha high", pixels[2], 0x00b4b4b4u);
@@ -455,7 +464,7 @@ static void test_ui_surface_renderer_surface(void) {
 
   surface.pixels = 0;
   check_int64("ui surface invalid surface", er_ui_surface_valid(&surface), 0);
-  check_int64("ui surface reject invalid surface", er_ui_surface_render_scene(&surface, &scene), 0);
+  check_int64("ui surface reject invalid surface", er_ui_surface_render(&surface, &(ErUiSurfaceRenderDesc){.scene = &scene, .mode = ER_UI_SURFACE_RENDER_FULL}), 0);
   check_int64("ui surface reject invalid tile plan", er_ui_surface_tile_plan(&surface, 128u, 64u, 256u, &tile_plan), 0);
 }
 
@@ -847,7 +856,7 @@ static void test_ui_surface_renderer_varfont_text(void) {
   surface.height = 160u;
   surface.stride = 512u;
   surface.pixel_format = ER_UI_SURFACE_PIXEL_RGBX;
-  check_int64("ui text render", er_ui_surface_render_scene_with_font(&surface, &scene, font), 1);
+  check_int64("ui text render", er_ui_surface_render(&surface, &(ErUiSurfaceRenderDesc){.scene = &scene, .font = font, .mode = ER_UI_SURFACE_RENDER_FULL}), 1);
   for (i = 0u; i < (UINTN)(sizeof(pixels) / sizeof(pixels[0])); ++i) {
     if (pixels[i] != 0u) {
       ++lit_pixels;
