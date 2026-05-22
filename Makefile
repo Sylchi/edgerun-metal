@@ -1,8 +1,8 @@
 .PHONY: all check clean \
 	crypto-test crypto-bench \
-	clock-test identity-test object-test storage-test \
+	clock-test identity-test object-test storage-test sdk-test \
 	ui-core-test \
-	zig-check zig-fmt-check zig-fmt zig-test zig-real-tpm \
+	zig-check zig-fmt-check zig-fmt zig-test zig-real-tpm sdk-cli sdk-bench \
 	pi-zero-w-v1_1-kernel pi-zero-w-v1_1-usb-probe pi-usb-host pi-usb-state \
 	pi-boot-firmware-check pi-usb-reset-controller pi-usb-dry-run pi-usb-boot-dir \
 	pi-usb-load pi-usb-load-probe pi-usb-load-usbflag pi-usb-load-probe-usbflag \
@@ -18,7 +18,7 @@ PI_USB_XHCI_DEVICE := 0000:c3:00.4
 
 all: check
 
-check: crypto-test clock-test identity-test object-test storage-test ui-core-test zig-check
+check: crypto-test clock-test identity-test object-test storage-test sdk-test ui-core-test zig-check
 
 crypto-test:
 	$(CMAKE) -S edgerun-crypto -B $(BUILD_DIR)/edgerun-crypto
@@ -40,6 +40,15 @@ object-test:
 
 storage-test:
 	zig build --build-file edgerun-zig/build.zig --cache-dir $(BUILD_DIR)/edgerun-zig storage-test
+
+sdk-test:
+	zig build --build-file edgerun-zig/build.zig --cache-dir $(BUILD_DIR)/edgerun-zig sdk-test
+
+sdk-cli:
+	zig build --build-file edgerun-zig/build.zig --cache-dir $(BUILD_DIR)/edgerun-zig sdk-cli -- simulate standard
+
+sdk-bench:
+	zig build --build-file edgerun-zig/build.zig --cache-dir $(BUILD_DIR)/edgerun-zig sdk-bench
 
 ui-core-test:
 	zig build --build-file edgerun-zig/build.zig --cache-dir $(BUILD_DIR)/edgerun-zig ui-core-test

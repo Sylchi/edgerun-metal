@@ -46,6 +46,8 @@ pub const compositor = @import("compositor.zig");
 pub const renderer_gpu = @import("renderer_gpu.zig");
 pub const renderer_surface = @import("renderer_surface.zig");
 pub const renderer_software = @import("renderer_software.zig");
+pub const sdk = @import("sdk.zig");
+pub const shadcn_demo = @import("shadcn_demo.zig");
 pub const ui = @import("ui.zig");
 pub const ui_components = @import("ui_components.zig");
 pub const ui_resolver = @import("ui_resolver.zig");
@@ -100,6 +102,8 @@ test {
     _ = renderer_gpu;
     _ = renderer_surface;
     _ = renderer_software;
+    _ = sdk;
+    _ = shadcn_demo;
     _ = ui;
     _ = ui_components;
     _ = ui_resolver;
