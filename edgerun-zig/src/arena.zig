@@ -57,7 +57,7 @@ pub const BoundedArena = struct {
 
     fn rawAlloc(ctx: *anyopaque, len: usize, alignment: std.mem.Alignment, _: usize) ?[*]u8 {
         const self: *BoundedArena = @ptrCast(@alignCast(ctx));
-        const align_bytes = alignment.toByteUnits();
+        const align_bytes = @max(alignment.toByteUnits(), 1);
         const base_addr = @intFromPtr(self.region.base.ptr);
         const aligned_addr = std.mem.alignForward(usize, base_addr, align_bytes);
         const prefix = aligned_addr - base_addr;

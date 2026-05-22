@@ -13,3 +13,4 @@ toolchain/bin/lld
 
 # local upstream UI reference tree; keep it out of this repo's history
 ui/shadcn-ui/
+*/.zig-cache

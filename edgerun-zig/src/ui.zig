@@ -288,9 +288,9 @@ pub const Scene = struct {
     pub fn applyOpacitySince(self: *Scene, mark: Cursor, opacity: f32) void {
         const alpha = geometry.clamp(opacity, 0.0, 1.0);
         for (self.commands.mutableSlice()[mark.commands..]) |*command| switch (command.*) {
-            .rect => |*rect| rect.color.a = scaleAlpha(rect.color.a, alpha),
+            .rect => |*rect_cmd| rect_cmd.color.a = scaleAlpha(rect_cmd.color.a, alpha),
             .border => |*border| border.color.a = scaleAlpha(border.color.a, alpha),
-            .text => |*text| text.color.a = scaleAlpha(text.color.a, alpha),
+            .text => |*text_cmd| text_cmd.color.a = scaleAlpha(text_cmd.color.a, alpha),
             .icon_quad => |*quad| quad.color.a = scaleAlpha(quad.color.a, alpha),
             .text_quad => |*quad| quad.color.a = scaleAlpha(quad.color.a, alpha),
             else => {},
@@ -300,9 +300,9 @@ pub const Scene = struct {
     pub fn translateSince(self: *Scene, mark: Cursor, dx: f32, dy: f32) void {
         if (!geometry.finite(dx) or !geometry.finite(dy)) return;
         for (self.commands.mutableSlice()[mark.commands..]) |*command| switch (command.*) {
-            .rect => |*rect| translateRect(&rect.bounds, dx, dy),
+            .rect => |*rect_cmd| translateRect(&rect_cmd.bounds, dx, dy),
             .border => |*border| translateRect(&border.bounds, dx, dy),
-            .text => |*text| translateRect(&text.origin, dx, dy),
+            .text => |*text_cmd| translateRect(&text_cmd.origin, dx, dy),
             .hit => |*hit| translateRect(&hit.bounds, dx, dy),
             .drag_source => |*source| translateRect(&source.bounds, dx, dy),
             .drop_target => |*target| translateRect(&target.bounds, dx, dy),
@@ -426,11 +426,47 @@ pub const Node = union(enum) {
             .button => .{ .w = 112, .h = 36 },
             .input => .{ .w = 220, .h = 40 },
             .row_item => .{ .w = 260, .h = 48 },
-            .slot => |slot| slot.child.preferredSize(),
+            .slot => |slot_node| slot_node.child.preferredSize(),
             .stack => |layout| stackPreferredSize(layout),
         };
     }
 };
+
+pub fn rectNode(color: Color) Node {
+    return .{ .rect = .{ .color = color } };
+}
+
+pub fn textNode(value: []const u8, color: ?Color) Node {
+    return .{ .text = .{ .value = value, .color = color } };
+}
+
+pub fn buttonNode(id: u32, label: []const u8) Node {
+    return .{ .button = .{ .id = id, .label = label } };
+}
+
+pub fn inputNode(id: u32, placeholder: []const u8) Node {
+    return .{ .input = .{ .id = id, .placeholder = placeholder } };
+}
+
+pub fn rowItemNode(id: u32, title: []const u8, detail: []const u8) Node {
+    return .{ .row_item = .{ .id = id, .title = title, .detail = detail } };
+}
+
+pub fn slotNode(id: u32, child: *const Node) Node {
+    return .{ .slot = .{ .id = id, .child = child } };
+}
+
+pub fn stackNode(axis: Axis, gap: f32, padding: f32, children: []const Node) Node {
+    return .{ .stack = .{ .axis = axis, .gap = gap, .padding = padding, .children = children } };
+}
+
+pub fn columnStack(gap: f32, padding: f32, children: []const Node) Node {
+    return stackNode(.column, gap, padding, children);
+}
+
+pub fn rowStack(gap: f32, padding: f32, children: []const Node) Node {
+    return stackNode(.row, gap, padding, children);
+}
 
 pub const Patch = union(enum) {
     text_value: []const u8,
@@ -444,7 +480,7 @@ pub const Patch = union(enum) {
 pub fn applyPatch(node: *Node, patch: Patch) PatchError!void {
     switch (patch) {
         .text_value => |value| switch (node.*) {
-            .text => |*text| text.value = value,
+            .text => |*text_node| text_node.value = value,
             else => return error.WrongNodeKind,
         },
         .button_label => |label| switch (node.*) {
@@ -463,11 +499,11 @@ pub fn applyPatch(node: *Node, patch: Patch) PatchError!void {
             else => return error.WrongNodeKind,
         },
         .rect_color => |color| switch (node.*) {
-            .rect => |*rect| rect.color = color,
+            .rect => |*rect_node| rect_node.color = color,
             else => return error.WrongNodeKind,
         },
         .style_color => |color| switch (node.*) {
-            .text => |*text| text.color = color,
+            .text => |*text_node| text_node.color = color,
             else => return error.WrongNodeKind,
         },
     }
@@ -480,51 +516,143 @@ pub fn render(scene: *Scene, node: Node, bounds: Rect, style: Style) RenderError
 fn renderInSlot(scene: *Scene, node: Node, bounds: Rect, style: Style, slot_id: u32) RenderError!void {
     if (!bounds.valid()) return error.InvalidBounds;
     switch (node) {
-        .rect => |rect| try scene.push(.{ .rect = .{ .bounds = bounds, .color = rect.color } }),
-        .text => |text| try scene.push(.{ .text = .{ .origin = bounds, .value = text.value, .color = text.color orelse style.text } }),
+        .rect => |rect_node| try scene.push(.{ .rect = .{ .bounds = bounds, .color = rect_node.color } }),
+        .text => |text_node| try scene.push(.{ .text = .{ .origin = bounds, .value = text_node.value, .color = text_node.color orelse style.text } }),
         .button => |button| {
             try scene.push(.{ .rect = .{ .bounds = bounds, .color = style.accent } });
             try scene.push(.{ .border = .{ .bounds = bounds, .color = style.border } });
-            try scene.push(.{ .text = .{ .origin = bounds.insetUniform(10), .value = button.label, .color = style.bg } });
+            if (contentInset(bounds, button_text_padding)) |label_bounds| {
+                try scene.push(.{ .text = .{ .origin = label_bounds, .value = button.label, .color = style.bg } });
+            }
             try scene.push(.{ .hit = .{ .slot = slot_id, .kind = .button, .id = button.id, .bounds = bounds } });
         },
         .input => |input| {
             try scene.push(.{ .rect = .{ .bounds = bounds, .color = style.panel } });
             try scene.push(.{ .border = .{ .bounds = bounds, .color = style.border } });
-            try scene.push(.{ .text = .{ .origin = bounds.insetUniform(12), .value = input.placeholder, .color = style.muted } });
+            if (contentInset(bounds, input_text_padding)) |placeholder_bounds| {
+                try scene.push(.{ .text = .{ .origin = placeholder_bounds, .value = input.placeholder, .color = style.muted } });
+            }
             try scene.push(.{ .hit = .{ .slot = slot_id, .kind = .input, .id = input.id, .bounds = bounds } });
         },
         .row_item => |row| {
             try scene.push(.{ .rect = .{ .bounds = bounds, .color = style.row } });
-            try scene.push(.{ .text = .{ .origin = .{ .x = bounds.x + 12, .y = bounds.y + 8, .w = bounds.w - 24, .h = 18 }, .value = row.title, .color = style.text } });
-            try scene.push(.{ .text = .{ .origin = .{ .x = bounds.x + 12, .y = bounds.y + 26, .w = bounds.w - 24, .h = 16 }, .value = row.detail, .color = style.muted } });
+            if (rowTitleBounds(bounds, row.detail.len == 0)) |title_bounds| {
+                try scene.push(.{ .text = .{ .origin = title_bounds, .value = row.title, .color = style.text } });
+            }
+            if (row.detail.len != 0) {
+                if (rowDetailBounds(bounds)) |detail_bounds| {
+                    try scene.push(.{ .text = .{ .origin = detail_bounds, .value = row.detail, .color = style.muted } });
+                }
+            }
             try scene.push(.{ .hit = .{ .slot = slot_id, .kind = .row_item, .id = row.id, .bounds = bounds } });
         },
-        .slot => |slot| try renderInSlot(scene, slot.child.*, bounds, style, slot.id),
+        .slot => |slot_node| try renderInSlot(scene, slot_node.child.*, bounds, style, slot_node.id),
         .stack => |layout| try renderStack(scene, layout, bounds, style, slot_id),
     }
 }
 
+const button_text_padding: f32 = 10.0;
+const input_text_padding: f32 = 12.0;
+const row_text_padding_x: f32 = 12.0;
+const row_title_offset_y: f32 = 8.0;
+const row_detail_offset_y: f32 = 26.0;
+const row_title_height: f32 = 18.0;
+const row_detail_height: f32 = 16.0;
+
+fn contentInset(bounds: Rect, padding: f32) ?Rect {
+    const clamped = geometry.clamp(padding, 0.0, @min(bounds.w, bounds.h) * 0.5);
+    const out = bounds.insetUniform(clamped);
+    return if (out.valid()) out else null;
+}
+
+fn rowTitleBounds(bounds: Rect, centered: bool) ?Rect {
+    const row_bounds = if (centered) bounds.withHeightCentered(row_title_height) else Rect.init(bounds.x, bounds.y + row_title_offset_y, bounds.w, row_title_height);
+    return rowTextBounds(row_bounds);
+}
+
+fn rowDetailBounds(bounds: Rect) ?Rect {
+    return rowTextBounds(Rect.init(bounds.x, bounds.y + row_detail_offset_y, bounds.w, row_detail_height));
+}
+
+fn rowTextBounds(bounds: Rect) ?Rect {
+    const out = bounds.insetLtrb(row_text_padding_x, 0.0, row_text_padding_x, 0.0);
+    return if (out.valid()) out else null;
+}
+
 fn renderStack(scene: *Scene, layout: Layout, bounds: Rect, style: Style, slot_id: u32) RenderError!void {
-    const inner = bounds.insetUniform(layout.padding);
+    if (layout.children.len == 0) return;
+    const inner = insetResponsive(bounds, layout.padding);
+    if (!inner.valid()) return;
+    const available_main = mainSize(layout.axis, inner);
+    const total_preferred_main = stackPreferredMain(layout);
+    const requested_gap = responsiveGap(layout.gap, layout.children.len, available_main);
+    const gap_slots = if (layout.children.len > 1) layout.children.len - 1 else 0;
+    const total_requested_gap = requested_gap * @as(f32, @floatFromInt(gap_slots));
+    const overflow = total_preferred_main + total_requested_gap > available_main;
+    const gap: f32 = if (overflow) 0.0 else requested_gap;
+    const child_scale: f32 = if (overflow and total_preferred_main > 0.0) available_main / total_preferred_main else 1.0;
     var cursor: f32 = switch (layout.axis) {
         .row => inner.x,
         .column => inner.y,
     };
+    var used: f32 = 0.0;
 
-    for (layout.children) |child| {
+    for (layout.children, 0..) |child, index| {
         const preferred = child.preferredSize();
-        const child_bounds = switch (layout.axis) {
-            .row => Rect{ .x = cursor, .y = inner.y, .w = preferred.w, .h = inner.h },
-            .column => Rect{ .x = inner.x, .y = cursor, .w = inner.w, .h = preferred.h },
-        };
+        const remaining_children = layout.children.len - index - 1;
+        const remaining_gap = gap * @as(f32, @floatFromInt(remaining_children));
+        const remaining_main = @max(0.0, mainSize(layout.axis, inner) - used - remaining_gap);
+        const preferred_main = preferredMain(layout.axis, preferred);
+        const child_main = @min(preferred_main * child_scale, remaining_main);
+        if (child_main <= 0.0) break;
+        const child_bounds = childBounds(layout.axis, inner, cursor, child_main);
         try renderInSlot(scene, child, child_bounds, style, slot_id);
-        cursor += switch (layout.axis) {
-            .row => preferred.w + layout.gap,
-            .column => preferred.h + layout.gap,
-        };
+        cursor += child_main + gap;
+        used += child_main + if (remaining_children > 0) gap else 0.0;
     }
 }
+
+fn insetResponsive(bounds: Rect, requested_padding: f32) Rect {
+    const max_padding = geometry.max(0.0, (@min(bounds.w, bounds.h) - min_layout_extent) * 0.5);
+    const padding = geometry.clamp(requested_padding, 0.0, max_padding);
+    return bounds.insetUniform(padding);
+}
+
+fn responsiveGap(requested_gap: f32, child_count: usize, available_main: f32) f32 {
+    if (child_count < 2) return 0.0;
+    const gap = geometry.max(requested_gap, 0.0);
+    const slots = @as(f32, @floatFromInt(child_count - 1));
+    return @min(gap, available_main / slots);
+}
+
+fn stackPreferredMain(layout: Layout) f32 {
+    var total: f32 = 0.0;
+    for (layout.children) |child| total += preferredMain(layout.axis, child.preferredSize());
+    return total;
+}
+
+fn mainSize(axis: Axis, bounds: Rect) f32 {
+    return switch (axis) {
+        .row => bounds.w,
+        .column => bounds.h,
+    };
+}
+
+fn preferredMain(axis: Axis, size: Size) f32 {
+    return switch (axis) {
+        .row => size.w,
+        .column => size.h,
+    };
+}
+
+fn childBounds(axis: Axis, inner: Rect, cursor: f32, child_main: f32) Rect {
+    return switch (axis) {
+        .row => .{ .x = cursor, .y = inner.y, .w = child_main, .h = inner.h },
+        .column => .{ .x = inner.x, .y = cursor, .w = inner.w, .h = child_main },
+    };
+}
+
+const min_layout_extent: f32 = 1.0;
 
 fn stackPreferredSize(layout: Layout) Size {
     var main: f32 = 0;
@@ -576,12 +704,67 @@ test "ui renderer emits commands and structural hits without allocation" {
     try std.testing.expectEqual(@as(usize, 3), hits);
 }
 
-test "patches mutate only the matching node variant" {
-    var button = Node{ .button = .{ .id = 9, .label = "Before" } };
-    try applyPatch(&button, .{ .button_label = "After" });
-    try std.testing.expectEqualStrings("After", button.button.label);
+test "stack layout stays inside small responsive bounds" {
+    var nodes = [_]Node{
+        textNode("status", .accent),
+        inputNode(10, "search canonical objects"),
+        rowItemNode(20, "object graph renderer", ""),
+        buttonNode(30, "Render"),
+    };
+    const root = columnStack(18.0, 48.0, &nodes);
+    const viewport = Rect.init(0.0, 0.0, 160.0, 96.0);
 
-    try std.testing.expectError(error.WrongNodeKind, applyPatch(&button, .{ .input_placeholder = "Nope" }));
+    var commands: [32]Command = undefined;
+    var scene = Scene.init(&commands);
+    try render(&scene, root, viewport, .{});
+
+    var hits: usize = 0;
+    for (scene.written()) |command| switch (command) {
+        .rect => |rect_cmd| try expectRectInside(rect_cmd.bounds, viewport),
+        .border => |border_cmd| try expectRectInside(border_cmd.bounds, viewport),
+        .text => |text_cmd| try expectRectInside(text_cmd.origin, viewport),
+        .hit => |hit| {
+            hits += 1;
+            try expectRectInside(hit.bounds, viewport);
+        },
+        else => {},
+    };
+    try std.testing.expectEqual(@as(usize, 3), hits);
+}
+
+test "row layout proportionally shrinks overflowing children" {
+    var nodes = [_]Node{
+        buttonNode(1, "One"),
+        inputNode(2, "Two"),
+        buttonNode(3, "Three"),
+    };
+    const root = rowStack(24.0, 16.0, &nodes);
+    const viewport = Rect.init(0.0, 0.0, 180.0, 48.0);
+
+    var commands: [32]Command = undefined;
+    var scene = Scene.init(&commands);
+    try render(&scene, root, viewport, .{});
+
+    var hits: usize = 0;
+    var previous_end: f32 = 0.0;
+    for (scene.written()) |command| switch (command) {
+        .hit => |hit| {
+            hits += 1;
+            try expectRectInside(hit.bounds, viewport);
+            try std.testing.expect(hit.bounds.x >= previous_end);
+            previous_end = hit.bounds.x + hit.bounds.w;
+        },
+        else => {},
+    };
+    try std.testing.expectEqual(@as(usize, 3), hits);
+}
+
+test "patches mutate only the matching node variant" {
+    var button_node = Node{ .button = .{ .id = 9, .label = "Before" } };
+    try applyPatch(&button_node, .{ .button_label = "After" });
+    try std.testing.expectEqualStrings("After", button_node.button.label);
+
+    try std.testing.expectError(error.WrongNodeKind, applyPatch(&button_node, .{ .input_placeholder = "Nope" }));
 }
 
 test "patches change rendered output without changing structural hit ids" {
@@ -598,8 +781,8 @@ test "patches change rendered output without changing structural hit ids" {
 
     var saw_after_text = false;
     for (scene.written()) |command| switch (command) {
-        .text => |text| {
-            if (std.mem.eql(u8, text.value, "After")) saw_after_text = true;
+        .text => |text_cmd| {
+            if (std.mem.eql(u8, text_cmd.value, "After")) saw_after_text = true;
         },
         else => {},
     };
@@ -650,6 +833,14 @@ fn firstHitId(commands: []const Command) ?u32 {
         else => {},
     };
     return null;
+}
+
+fn expectRectInside(inner: Rect, outer: Rect) !void {
+    try std.testing.expect(inner.valid());
+    try std.testing.expect(inner.x >= outer.x);
+    try std.testing.expect(inner.y >= outer.y);
+    try std.testing.expect(inner.x + inner.w <= outer.x + outer.w);
+    try std.testing.expect(inner.y + inner.h <= outer.y + outer.h);
 }
 
 test "scene cursor mutation transition easing and budget contracts" {

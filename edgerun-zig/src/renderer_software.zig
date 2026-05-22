@@ -1,13 +1,16 @@
 const std = @import("std");
 const ui = @import("ui.zig");
-const varfont = @import("varfont.zig");
+
+pub const Error = error{
+    PixelBudgetExceeded,
+};
 
 pub const Surface = struct {
     width: usize,
     height: usize,
     pixels: []ui.Color,
 
-    pub fn init(width: usize, height: usize, pixels: []ui.Color) !Surface {
+    pub fn init(width: usize, height: usize, pixels: []ui.Color) Error!Surface {
         if (pixels.len < width * height) return error.PixelBudgetExceeded;
         return .{ .width = width, .height = height, .pixels = pixels[0 .. width * height] };
     }
@@ -16,11 +19,11 @@ pub const Surface = struct {
         @memset(self.pixels, color);
     }
 
-    pub fn rasterize(self: Surface, commands: []const ui.Command, font: *varfont.Cache) varfont.Error!void {
-        try self.rasterizeScaled(commands, font, default_raster_scale);
+    pub fn rasterize(self: Surface, commands: []const ui.Command) void {
+        self.rasterizeScaled(commands, default_raster_scale);
     }
 
-    pub fn rasterizeScaled(self: Surface, commands: []const ui.Command, font: *varfont.Cache, scale: f32) varfont.Error!void {
+    pub fn rasterizeScaled(self: Surface, commands: []const ui.Command, scale: f32) void {
         for (commands) |command| switch (command) {
             .rect => |rect| self.fill(scaleRect(rect.bounds, scale), rect.color),
             .border => |border| {
@@ -31,7 +34,7 @@ pub const Surface = struct {
                 self.fill(.{ .x = bounds.x, .y = bounds.y, .w = border_width, .h = bounds.h }, border.color);
                 self.fill(.{ .x = bounds.x + bounds.w - border_width, .y = bounds.y, .w = border_width, .h = bounds.h }, border.color);
             },
-            .text => |text| try font.drawText(self, scaleRect(text.origin, scale), text.value, text.color, varfont.default_px_size * scale),
+            .text => |text| self.textPlaceholder(scaleRect(text.origin, scale), text.value, text.color),
             .hit, .drag_source, .drop_target, .icon_quad, .text_quad, .transition => {},
         };
     }
@@ -62,10 +65,23 @@ pub const Surface = struct {
             while (x < x1) : (x += 1) self.pixels[y * self.width + x] = color;
         }
     }
+
+    fn textPlaceholder(self: Surface, bounds: ui.Rect, value: []const u8, color: ui.Color) void {
+        if (value.len == 0) return;
+        const bar_height = @max(min_text_placeholder_height, bounds.h * text_placeholder_height_ratio);
+        const max_width = bounds.w;
+        const width = @min(max_width, @max(min_text_placeholder_width, @as(f32, @floatFromInt(value.len)) * text_placeholder_glyph_width));
+        const y = bounds.y + @max(0.0, (bounds.h - bar_height) * 0.5);
+        self.fill(.{ .x = bounds.x, .y = y, .w = width, .h = bar_height }, color);
+    }
 };
 
 const default_raster_scale: f32 = 1.0;
 const min_border_width: f32 = 1.0;
+const min_text_placeholder_width: f32 = 4.0;
+const min_text_placeholder_height: f32 = 2.0;
+const text_placeholder_height_ratio: f32 = 0.18;
+const text_placeholder_glyph_width: f32 = 7.0;
 
 fn scaleRect(bounds: ui.Rect, scale: f32) ui.Rect {
     return .{
@@ -92,11 +108,8 @@ test "software renderer rasterizes ui commands to nonblank pixels" {
 
     var pixels: [320 * 240]ui.Color = undefined;
     const surface = try Surface.init(320, 240, &pixels);
-    const font = try varfont.Face.geist();
-    var glyph_bitmap: [128 * 1024]u8 = undefined;
-    var font_cache = varfont.Cache.init(font, &glyph_bitmap);
     surface.clear(.clear);
-    try surface.rasterize(scene.written(), &font_cache);
+    surface.rasterize(scene.written());
 
     var painted: usize = 0;
     for (surface.pixels) |pixel| {
