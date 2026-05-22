@@ -261,11 +261,11 @@ fn hashBytes(domain: []const u8, value: []const u8) preimage.Hash {
 test "tpm app seals only for authorized caller-bound policy" {
     const keeper = clock.KeeperId{ .bytes = [_]u8{1} ++ [_]u8{0} ** 31 };
     const epoch = clock.Stamp{ .keeper = keeper };
-    const user = identity.Identity.init(.user, identity.Source.init(.hash, "user").?, epoch).?;
-    const device = identity.Identity.init(.device, identity.Source.init(.hash, "device").?, epoch).?;
-    const tpm_id = identity.Identity.init(.app, identity.Source.init(.hash, "tpm app").?, epoch).?;
-    const chat = identity.Identity.init(.app, identity.Source.init(.hash, "chat").?, epoch).?;
-    const other = identity.Identity.init(.app, identity.Source.init(.hash, "other").?, epoch).?;
+    const user = identity.Identity.init(.user, identity.Source.prepare(.hash, &preimage.rawHash("user")).?, epoch).?;
+    const device = identity.Identity.init(.device, identity.Source.prepare(.hash, &preimage.rawHash("device")).?, epoch).?;
+    const tpm_id = identity.Identity.init(.app, identity.Source.prepare(.hash, &preimage.rawHash("tpm app")).?, epoch).?;
+    const chat = identity.Identity.init(.app, identity.Source.prepare(.hash, &preimage.rawHash("chat")).?, epoch).?;
+    const other = identity.Identity.init(.app, identity.Source.prepare(.hash, &preimage.rawHash("other")).?, epoch).?;
     var events: [4]Event = undefined;
     var tpm = App.init(tpm_id, device, clock.Clock.init(keeper, .{}).?, &events).?;
     const authorization = intent.admit(user, device, chat, tpm_id, .seal_data, .writes_private_state, tpm.clock.now, intent.requestId("seal chat data").?).?;
@@ -285,11 +285,11 @@ test "tpm app seals only for authorized caller-bound policy" {
 test "tpm app refuses signatures without caller intent" {
     const keeper = clock.KeeperId{ .bytes = [_]u8{1} ++ [_]u8{0} ** 31 };
     const epoch = clock.Stamp{ .keeper = keeper };
-    const user = identity.Identity.init(.user, identity.Source.init(.hash, "user").?, epoch).?;
-    const device = identity.Identity.init(.device, identity.Source.init(.hash, "device").?, epoch).?;
-    const tpm_id = identity.Identity.init(.app, identity.Source.init(.hash, "tpm app").?, epoch).?;
-    const chat = identity.Identity.init(.app, identity.Source.init(.hash, "chat").?, epoch).?;
-    const other = identity.Identity.init(.app, identity.Source.init(.hash, "other").?, epoch).?;
+    const user = identity.Identity.init(.user, identity.Source.prepare(.hash, &preimage.rawHash("user")).?, epoch).?;
+    const device = identity.Identity.init(.device, identity.Source.prepare(.hash, &preimage.rawHash("device")).?, epoch).?;
+    const tpm_id = identity.Identity.init(.app, identity.Source.prepare(.hash, &preimage.rawHash("tpm app")).?, epoch).?;
+    const chat = identity.Identity.init(.app, identity.Source.prepare(.hash, &preimage.rawHash("chat")).?, epoch).?;
+    const other = identity.Identity.init(.app, identity.Source.prepare(.hash, &preimage.rawHash("other")).?, epoch).?;
     var events: [2]Event = undefined;
     var tpm = App.init(tpm_id, device, clock.Clock.init(keeper, .{}).?, &events).?;
     const wrong_authorization = intent.admit(user, device, other, tpm_id, .sign_data, .attests_state, tpm.clock.now, intent.requestId("wrong signer").?).?;
@@ -304,11 +304,11 @@ test "tpm app refuses signatures without caller intent" {
 test "tpm app exposes authorized rng to apps" {
     const keeper = clock.KeeperId{ .bytes = [_]u8{1} ++ [_]u8{0} ** 31 };
     const epoch = clock.Stamp{ .keeper = keeper };
-    const user = identity.Identity.init(.user, identity.Source.init(.hash, "user").?, epoch).?;
-    const device = identity.Identity.init(.device, identity.Source.init(.hash, "device").?, epoch).?;
-    const tpm_id = identity.Identity.init(.app, identity.Source.init(.hash, "tpm app").?, epoch).?;
-    const chat = identity.Identity.init(.app, identity.Source.init(.hash, "chat").?, epoch).?;
-    const other = identity.Identity.init(.app, identity.Source.init(.hash, "other").?, epoch).?;
+    const user = identity.Identity.init(.user, identity.Source.prepare(.hash, &preimage.rawHash("user")).?, epoch).?;
+    const device = identity.Identity.init(.device, identity.Source.prepare(.hash, &preimage.rawHash("device")).?, epoch).?;
+    const tpm_id = identity.Identity.init(.app, identity.Source.prepare(.hash, &preimage.rawHash("tpm app")).?, epoch).?;
+    const chat = identity.Identity.init(.app, identity.Source.prepare(.hash, &preimage.rawHash("chat")).?, epoch).?;
+    const other = identity.Identity.init(.app, identity.Source.prepare(.hash, &preimage.rawHash("other")).?, epoch).?;
     var events: [3]Event = undefined;
     var tpm = App.init(tpm_id, device, clock.Clock.init(keeper, .{}).?, &events).?;
     const authorization = intent.admit(user, device, chat, tpm_id, .random_bytes, .creates_secret_material, tpm.clock.now, intent.requestId("message key material").?).?;

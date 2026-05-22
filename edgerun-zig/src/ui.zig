@@ -1,4 +1,5 @@
 const std = @import("std");
+const bounded = @import("bounded.zig");
 const geometry = @import("geometry.zig");
 
 pub const Color = packed struct {
@@ -40,29 +41,9 @@ pub const Style = struct {
 };
 
 pub const HitKind = enum(u8) {
-    contact,
-    composer,
-    send,
     button,
-    tab,
-    toggle,
-    list_row,
     input,
-    text_area,
-    slider,
-    checkbox,
-    radio,
-    select,
-    breadcrumb,
-    tree_item,
-    menu_item,
-    scroll_area,
-    scrollbar,
-    workspace_tab,
-    workspace_close,
-    workspace_split,
-    shell_launcher,
-    row,
+    row_item,
 };
 
 pub const RectMode = enum(u8) {
@@ -208,29 +189,28 @@ pub const PatchError = error{
     WrongNodeKind,
 };
 
+pub const CommandList = bounded.SliceList(Command);
+pub const ClipList = bounded.SliceList(Rect);
+
 pub const Scene = struct {
-    commands: []Command,
-    clips: []Rect = &.{},
-    count: usize = 0,
-    clip_count: usize = 0,
+    commands: CommandList,
+    clips: ClipList,
 
     pub fn init(commands: []Command) Scene {
-        return .{ .commands = commands };
+        return .{ .commands = CommandList.from(commands), .clips = ClipList.from(&.{}) };
     }
 
     pub fn initWithClips(commands: []Command, clips: []Rect) Scene {
-        return .{ .commands = commands, .clips = clips };
+        return .{ .commands = CommandList.from(commands), .clips = ClipList.from(clips) };
     }
 
     pub fn clear(self: *Scene) void {
-        self.count = 0;
-        self.clip_count = 0;
+        self.commands.clear();
+        self.clips.clear();
     }
 
     pub fn push(self: *Scene, command: Command) RenderError!void {
-        if (self.count == self.commands.len) return error.CommandBudgetExceeded;
-        self.commands[self.count] = command;
-        self.count += 1;
+        if (!self.commands.append(command)) return error.CommandBudgetExceeded;
     }
 
     pub fn pushRect(self: *Scene, bounds: Rect, color: Color, mode: RectMode, radius: f32, shadow: f32) RenderError!void {
@@ -245,9 +225,9 @@ pub const Scene = struct {
         try self.push(.{ .rect = .{ .bounds = normalized_bounds, .color = color, .mode = mode, .radius = normalized_radius, .shadow = normalized_shadow } });
     }
 
-    pub fn pushHit(self: *Scene, kind: HitKind, id: u32, bounds: Rect) RenderError!void {
-        if (self.clipRect(bounds)) |clipped| {
-            try self.push(.{ .hit = .{ .slot = 0, .kind = kind, .id = id, .bounds = clipped } });
+    pub fn pushHit(self: *Scene, hit: Hit) RenderError!void {
+        if (self.clipRect(hit.bounds)) |clipped| {
+            try self.push(.{ .hit = .{ .slot = hit.slot, .kind = hit.kind, .id = hit.id, .bounds = clipped } });
         }
     }
 
@@ -279,22 +259,20 @@ pub const Scene = struct {
     pub fn pushClip(self: *Scene, clip: Rect) RenderError!bool {
         if (!clip.valid()) return false;
         const next = if (self.currentClip()) |current| current.intersect(clip) orelse return false else clip;
-        if (self.clip_count == self.clips.len) return error.ClipBudgetExceeded;
-        self.clips[self.clip_count] = next;
-        self.clip_count += 1;
+        if (!self.clips.append(next)) return error.ClipBudgetExceeded;
         return true;
     }
 
     pub fn popClip(self: *Scene) void {
-        if (self.clip_count > 0) self.clip_count -= 1;
+        _ = self.clips.pop();
     }
 
     pub fn cursor(self: Scene) Cursor {
-        return .{ .commands = self.count };
+        return .{ .commands = self.commands.len };
     }
 
     pub fn stats(self: Scene) Stats {
-        var out = Stats{ .clips = self.clip_count };
+        var out = Stats{ .clips = self.clips.len };
         for (self.written()) |command| switch (command) {
             .rect, .border => out.rects += 1,
             .hit => out.hits += 1,
@@ -309,7 +287,7 @@ pub const Scene = struct {
 
     pub fn applyOpacitySince(self: *Scene, mark: Cursor, opacity: f32) void {
         const alpha = geometry.clamp(opacity, 0.0, 1.0);
-        for (self.commands[mark.commands..self.count]) |*command| switch (command.*) {
+        for (self.commands.mutableSlice()[mark.commands..]) |*command| switch (command.*) {
             .rect => |*rect| rect.color.a = scaleAlpha(rect.color.a, alpha),
             .border => |*border| border.color.a = scaleAlpha(border.color.a, alpha),
             .text => |*text| text.color.a = scaleAlpha(text.color.a, alpha),
@@ -321,7 +299,7 @@ pub const Scene = struct {
 
     pub fn translateSince(self: *Scene, mark: Cursor, dx: f32, dy: f32) void {
         if (!geometry.finite(dx) or !geometry.finite(dy)) return;
-        for (self.commands[mark.commands..self.count]) |*command| switch (command.*) {
+        for (self.commands.mutableSlice()[mark.commands..]) |*command| switch (command.*) {
             .rect => |*rect| translateRect(&rect.bounds, dx, dy),
             .border => |*border| translateRect(&border.bounds, dx, dy),
             .text => |*text| translateRect(&text.origin, dx, dy),
@@ -334,33 +312,9 @@ pub const Scene = struct {
         };
     }
 
-    pub fn dragSourceAt(self: Scene, x: f32, y: f32) ?DragSource {
-        var index = self.count;
-        while (index > 0) {
-            index -= 1;
-            switch (self.commands[index]) {
-                .drag_source => |source| if (source.bounds.containsInclusive(x, y)) return source,
-                else => {},
-            }
-        }
-        return null;
-    }
-
-    pub fn dropTargetAt(self: Scene, x: f32, y: f32, scope_id: u32) ?DropTarget {
-        var index = self.count;
-        while (index > 0) {
-            index -= 1;
-            switch (self.commands[index]) {
-                .drop_target => |target| if (target.scope_id == scope_id and target.bounds.containsInclusive(x, y)) return target,
-                else => {},
-            }
-        }
-        return null;
-    }
-
     fn currentClip(self: Scene) ?Rect {
-        if (self.clip_count == 0) return null;
-        return self.clips[self.clip_count - 1];
+        if (self.clips.len == 0) return null;
+        return self.clips.items[self.clips.len - 1];
     }
 
     fn clipRect(self: Scene, bounds: Rect) ?Rect {
@@ -392,7 +346,15 @@ pub const Scene = struct {
     }
 
     pub fn written(self: Scene) []const Command {
-        return self.commands[0..self.count];
+        return self.commands.slice();
+    }
+
+    pub fn commandCount(self: Scene) usize {
+        return self.commands.len;
+    }
+
+    pub fn commandAt(self: Scene, index: usize) ?Command {
+        return self.commands.at(index);
     }
 };
 
@@ -536,7 +498,7 @@ fn renderInSlot(scene: *Scene, node: Node, bounds: Rect, style: Style, slot_id: 
             try scene.push(.{ .rect = .{ .bounds = bounds, .color = style.row } });
             try scene.push(.{ .text = .{ .origin = .{ .x = bounds.x + 12, .y = bounds.y + 8, .w = bounds.w - 24, .h = 18 }, .value = row.title, .color = style.text } });
             try scene.push(.{ .text = .{ .origin = .{ .x = bounds.x + 12, .y = bounds.y + 26, .w = bounds.w - 24, .h = 16 }, .value = row.detail, .color = style.muted } });
-            try scene.push(.{ .hit = .{ .slot = slot_id, .kind = .row, .id = row.id, .bounds = bounds } });
+            try scene.push(.{ .hit = .{ .slot = slot_id, .kind = .row_item, .id = row.id, .bounds = bounds } });
         },
         .slot => |slot| try renderInSlot(scene, slot.child.*, bounds, style, slot.id),
         .stack => |layout| try renderStack(scene, layout, bounds, style, slot_id),
@@ -587,79 +549,7 @@ fn stackPreferredSize(layout: Layout) Size {
     };
 }
 
-pub fn hitTest(commands: []const Command, x: f32, y: f32) ?Hit {
-    var index = commands.len;
-    while (index > 0) {
-        index -= 1;
-        switch (commands[index]) {
-            .hit => |hit| if (hit.bounds.containsExclusive(x, y)) return hit,
-            else => {},
-        }
-    }
-    return null;
-}
-
-pub const Surface = struct {
-    width: usize,
-    height: usize,
-    pixels: []Color,
-
-    pub fn init(width: usize, height: usize, pixels: []Color) !Surface {
-        if (pixels.len < width * height) return error.PixelBudgetExceeded;
-        return .{ .width = width, .height = height, .pixels = pixels[0 .. width * height] };
-    }
-
-    pub fn clear(self: Surface, color: Color) void {
-        @memset(self.pixels, color);
-    }
-
-    pub fn rasterize(self: Surface, commands: []const Command) void {
-        for (commands) |command| switch (command) {
-            .rect => |rect| self.fill(rect.bounds, rect.color),
-            .border => |border| {
-                self.fill(.{ .x = border.bounds.x, .y = border.bounds.y, .w = border.bounds.w, .h = 1 }, border.color);
-                self.fill(.{ .x = border.bounds.x, .y = border.bounds.y + border.bounds.h - 1, .w = border.bounds.w, .h = 1 }, border.color);
-                self.fill(.{ .x = border.bounds.x, .y = border.bounds.y, .w = 1, .h = border.bounds.h }, border.color);
-                self.fill(.{ .x = border.bounds.x + border.bounds.w - 1, .y = border.bounds.y, .w = 1, .h = border.bounds.h }, border.color);
-            },
-            .text => |text| self.fakeText(text.origin, text.value, text.color),
-            .hit, .drag_source, .drop_target, .icon_quad, .text_quad, .transition => {},
-        };
-    }
-
-    fn fill(self: Surface, bounds: Rect, color: Color) void {
-        const x0 = clampCoord(@intFromFloat(@floor(bounds.x)), self.width);
-        const y0 = clampCoord(@intFromFloat(@floor(bounds.y)), self.height);
-        const x1 = clampCoord(@intFromFloat(@ceil(bounds.x + bounds.w)), self.width);
-        const y1 = clampCoord(@intFromFloat(@ceil(bounds.y + bounds.h)), self.height);
-        if (x1 <= x0 or y1 <= y0) return;
-
-        var y = y0;
-        while (y < y1) : (y += 1) {
-            var x = x0;
-            while (x < x1) : (x += 1) self.pixels[y * self.width + x] = color;
-        }
-    }
-
-    fn fakeText(self: Surface, bounds: Rect, value: []const u8, color: Color) void {
-        const glyph_w: f32 = 5;
-        const glyph_h: f32 = 7;
-        for (value, 0..) |byte, index| {
-            if (byte == ' ') continue;
-            const x = bounds.x + @as(f32, @floatFromInt(index)) * 7;
-            if (x + glyph_w > bounds.x + bounds.w) break;
-            self.fill(.{ .x = x, .y = bounds.y + 4, .w = glyph_w, .h = glyph_h }, color);
-        }
-    }
-};
-
-fn clampCoord(value: isize, limit: usize) usize {
-    if (value <= 0) return 0;
-    const as_usize: usize = @intCast(value);
-    return @min(as_usize, limit);
-}
-
-pub fn example(children: []Node) Node {
+fn sampleRoot(children: []Node) Node {
     std.debug.assert(children.len >= 5);
     children[0] = .{ .text = .{ .value = "edgerun ui", .color = .accent } };
     children[1] = .{ .input = .{ .id = 10, .placeholder = "search objects" } };
@@ -671,38 +561,19 @@ pub fn example(children: []Node) Node {
 
 test "ui renderer emits commands and structural hits without allocation" {
     var nodes: [5]Node = undefined;
-    const root = example(&nodes);
+    const root = sampleRoot(&nodes);
 
     var commands: [32]Command = undefined;
     var scene = Scene.init(&commands);
     try render(&scene, root, .{ .x = 0, .y = 0, .w = 320, .h = 240 }, .{});
 
-    try std.testing.expect(scene.count > 0);
+    try std.testing.expect(scene.commandCount() > 0);
 
     var hits: usize = 0;
     for (scene.written()) |command| {
         if (command == .hit) hits += 1;
     }
     try std.testing.expectEqual(@as(usize, 3), hits);
-}
-
-test "hit testing reports layout slot and local control id" {
-    var nodes: [5]Node = undefined;
-    const root = example(&nodes);
-
-    var commands: [32]Command = undefined;
-    var scene = Scene.init(&commands);
-    try render(&scene, root, .{ .x = 0, .y = 0, .w = 320, .h = 240 }, .{});
-
-    const input_hit = hitTest(scene.written(), 20, 52).?;
-    try std.testing.expectEqual(@as(u32, 0), input_hit.slot);
-    try std.testing.expectEqual(HitKind.input, input_hit.kind);
-    try std.testing.expectEqual(@as(u32, 10), input_hit.id);
-
-    const button_hit = hitTest(scene.written(), 20, 160).?;
-    try std.testing.expectEqual(@as(u32, 7), button_hit.slot);
-    try std.testing.expectEqual(HitKind.button, button_hit.kind);
-    try std.testing.expectEqual(@as(u32, 30), button_hit.id);
 }
 
 test "patches mutate only the matching node variant" {
@@ -719,8 +590,7 @@ test "patches change rendered output without changing structural hit ids" {
     var scene = Scene.init(&commands);
 
     try render(&scene, node, .{ .x = 0, .y = 0, .w = 120, .h = 40 }, .{});
-    const before_hit = hitTest(scene.written(), 4, 4).?;
-    try std.testing.expectEqual(@as(u32, 42), before_hit.id);
+    try std.testing.expectEqual(@as(u32, 42), firstHitId(scene.written()).?);
 
     try applyPatch(&node, .{ .button_label = "After" });
     scene.clear();
@@ -734,29 +604,7 @@ test "patches change rendered output without changing structural hit ids" {
         else => {},
     };
     try std.testing.expect(saw_after_text);
-
-    const after_hit = hitTest(scene.written(), 4, 4).?;
-    try std.testing.expectEqual(@as(u32, 42), after_hit.id);
-}
-
-test "ui commands rasterize to nonblank pixels" {
-    var nodes: [5]Node = undefined;
-    const root = example(&nodes);
-
-    var commands: [32]Command = undefined;
-    var scene = Scene.init(&commands);
-    try render(&scene, root, .{ .x = 0, .y = 0, .w = 320, .h = 240 }, .{});
-
-    var pixels: [320 * 240]Color = undefined;
-    const surface = try Surface.init(320, 240, &pixels);
-    surface.clear(.clear);
-    surface.rasterize(scene.written());
-
-    var painted: usize = 0;
-    for (surface.pixels) |pixel| {
-        if (pixel.a != 0) painted += 1;
-    }
-    try std.testing.expect(painted > 0);
+    try std.testing.expectEqual(@as(u32, 42), firstHitId(scene.written()).?);
 }
 
 test "scene typed pushes validate clip and query topmost commands" {
@@ -766,35 +614,42 @@ test "scene typed pushes validate clip and query topmost commands" {
 
     try scene.pushRect(Rect.init(0.0, 0.0, 0.0, 10.0), .text, .fill, 0.0, 0.0);
     try scene.pushRect(Rect.init(0.0, 0.0, 20.0, 10.0), .text, .fill, 999.0, -8.0);
-    try std.testing.expectEqual(@as(usize, 1), scene.count);
-    try std.testing.expectEqual(@as(f32, 5.0), scene.commands[0].rect.radius);
-    try std.testing.expectEqual(@as(f32, 0.0), scene.commands[0].rect.shadow);
+    try std.testing.expectEqual(@as(usize, 1), scene.commandCount());
+    try std.testing.expectEqual(@as(f32, 5.0), scene.commandAt(0).?.rect.radius);
+    try std.testing.expectEqual(@as(f32, 0.0), scene.commandAt(0).?.rect.shadow);
 
     scene.clear();
     try std.testing.expect(try scene.pushClip(Rect.init(5.0, 0.0, 10.0, 10.0)));
     try scene.pushRect(Rect.init(0.0, 0.0, 20.0, 20.0), .text, .shadow, 12.0, 6.0);
-    try scene.pushHit(.button, 7, Rect.init(0.0, 0.0, 20.0, 20.0));
+    try scene.pushHit(.{ .slot = 0, .kind = .button, .id = 7, .bounds = Rect.init(0.0, 0.0, 20.0, 20.0) });
     try scene.pushTextQuad(.{ .bounds = Rect.init(0.0, 0.0, 20.0, 10.0), .color = .text });
-    try std.testing.expectEqual(@as(f32, 5.0), scene.commands[0].rect.bounds.x);
-    try std.testing.expectEqual(@as(f32, 10.0), scene.commands[0].rect.bounds.w);
-    try std.testing.expectEqual(@as(f32, 5.0), scene.commands[0].rect.radius);
-    try std.testing.expectEqual(@as(f32, 5.0), scene.commands[1].hit.bounds.x);
-    try std.testing.expectEqual(@as(f32, 10.0), scene.commands[1].hit.bounds.w);
-    try std.testing.expectEqual(@as(f32, 0.25), scene.commands[2].text_quad.u0);
-    try std.testing.expectEqual(@as(f32, 0.75), scene.commands[2].text_quad.u1);
+    try std.testing.expectEqual(@as(f32, 5.0), scene.commandAt(0).?.rect.bounds.x);
+    try std.testing.expectEqual(@as(f32, 10.0), scene.commandAt(0).?.rect.bounds.w);
+    try std.testing.expectEqual(@as(f32, 5.0), scene.commandAt(0).?.rect.radius);
+    try std.testing.expectEqual(@as(f32, 5.0), scene.commandAt(1).?.hit.bounds.x);
+    try std.testing.expectEqual(@as(f32, 10.0), scene.commandAt(1).?.hit.bounds.w);
+    try std.testing.expectEqual(@as(f32, 0.25), scene.commandAt(2).?.text_quad.u0);
+    try std.testing.expectEqual(@as(f32, 0.75), scene.commandAt(2).?.text_quad.u1);
     scene.popClip();
 
     scene.clear();
-    try scene.pushHit(.button, 1, Rect.init(0.0, 0.0, 10.0, 10.0));
-    try scene.pushHit(.button, 2, Rect.init(0.0, 0.0, 10.0, 10.0));
+    try scene.pushHit(.{ .slot = 0, .kind = .button, .id = 1, .bounds = Rect.init(0.0, 0.0, 10.0, 10.0) });
+    try scene.pushHit(.{ .slot = 0, .kind = .button, .id = 2, .bounds = Rect.init(0.0, 0.0, 10.0, 10.0) });
     try scene.pushDragSource(.{ .scope_id = 9, .item_id = 1, .index = 0, .bounds = Rect.init(0.0, 0.0, 10.0, 10.0) });
     try scene.pushDragSource(.{ .scope_id = 9, .item_id = 2, .index = 1, .bounds = Rect.init(0.0, 0.0, 10.0, 10.0) });
     try scene.pushDropTarget(.{ .scope_id = 9, .index = 0, .bounds = Rect.init(0.0, 0.0, 10.0, 10.0) });
     try scene.pushDropTarget(.{ .scope_id = 9, .index = 1, .bounds = Rect.init(0.0, 0.0, 10.0, 10.0) });
-    try std.testing.expectEqual(@as(u32, 2), hitTest(scene.written(), 4.0, 4.0).?.id);
-    try std.testing.expectEqual(@as(u32, 2), scene.dragSourceAt(4.0, 4.0).?.item_id);
-    try std.testing.expectEqual(@as(usize, 1), scene.dropTargetAt(4.0, 4.0, 9).?.index);
-    try std.testing.expect(scene.dropTargetAt(4.0, 4.0, 10) == null);
+    try std.testing.expectEqual(@as(u32, 2), scene.commandAt(1).?.hit.id);
+    try std.testing.expectEqual(@as(u32, 2), scene.commandAt(3).?.drag_source.item_id);
+    try std.testing.expectEqual(@as(usize, 1), scene.commandAt(5).?.drop_target.index);
+}
+
+fn firstHitId(commands: []const Command) ?u32 {
+    for (commands) |command| switch (command) {
+        .hit => |hit| return hit.id,
+        else => {},
+    };
+    return null;
 }
 
 test "scene cursor mutation transition easing and budget contracts" {
@@ -804,19 +659,19 @@ test "scene cursor mutation transition easing and budget contracts" {
     try scene.pushRect(Rect.init(0.0, 0.0, 4.0, 4.0), .text, .fill, 0.0, 0.0);
     const mark = scene.cursor();
     try scene.pushRect(Rect.init(1.0, 2.0, 4.0, 4.0), .text, .fill, 0.0, 0.0);
-    try scene.pushHit(.button, 8, Rect.init(1.0, 2.0, 4.0, 4.0));
+    try scene.pushHit(.{ .slot = 0, .kind = .button, .id = 8, .bounds = Rect.init(1.0, 2.0, 4.0, 4.0) });
     try scene.pushIconQuad(.{ .bounds = Rect.init(1.0, 2.0, 4.0, 4.0), .color = .text });
 
     scene.applyOpacitySince(mark, 0.5);
     scene.translateSince(mark, 3.0, 4.0);
 
-    try std.testing.expectEqual(@as(f32, 0.0), scene.commands[0].rect.bounds.x);
-    try std.testing.expectEqual(@as(u8, 255), scene.commands[0].rect.color.a);
-    try std.testing.expectEqual(@as(f32, 4.0), scene.commands[1].rect.bounds.x);
-    try std.testing.expectEqual(@as(f32, 6.0), scene.commands[1].rect.bounds.y);
-    try std.testing.expectEqual(@as(u8, 128), scene.commands[1].rect.color.a);
-    try std.testing.expectEqual(@as(f32, 4.0), scene.commands[2].hit.bounds.x);
-    try std.testing.expectEqual(@as(u8, 128), scene.commands[3].icon_quad.color.a);
+    try std.testing.expectEqual(@as(f32, 0.0), scene.commandAt(0).?.rect.bounds.x);
+    try std.testing.expectEqual(@as(u8, 255), scene.commandAt(0).?.rect.color.a);
+    try std.testing.expectEqual(@as(f32, 4.0), scene.commandAt(1).?.rect.bounds.x);
+    try std.testing.expectEqual(@as(f32, 6.0), scene.commandAt(1).?.rect.bounds.y);
+    try std.testing.expectEqual(@as(u8, 128), scene.commandAt(1).?.rect.color.a);
+    try std.testing.expectEqual(@as(f32, 4.0), scene.commandAt(2).?.hit.bounds.x);
+    try std.testing.expectEqual(@as(u8, 128), scene.commandAt(3).?.icon_quad.color.a);
 
     try std.testing.expectEqual(@as(f32, 0.25), easingSample(.linear, 0.25));
     try std.testing.expectEqual(@as(f32, 0.25), easingSample(.ease_in, 0.5));

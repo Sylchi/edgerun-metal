@@ -300,11 +300,11 @@ fn hashMaterial(material: []const u8) preimage.Hash {
 test "relay forwards identity routed envelope without payload authority" {
     const keeper = clock.KeeperId{ .bytes = [_]u8{1} ++ [_]u8{0} ** 31 };
     const now = clock.Stamp{ .keeper = keeper, .tick = 7 };
-    const user = identity.Identity.init(.user, identity.Source.init(.hash, "user").?, now).?;
-    const device = identity.Identity.init(.device, identity.Source.init(.hash, "device").?, now).?;
-    const source = identity.Identity.init(.app, identity.Source.init(.hash, "chat app source").?, now).?;
-    const target = identity.Identity.init(.app, identity.Source.init(.hash, "chat app target").?, now).?;
-    const relay_id = identity.Identity.init(.relay, identity.Source.init(.hash, "public relay").?, now).?;
+    const user = identity.Identity.init(.user, identity.Source.prepare(.hash, &preimage.rawHash("user")).?, now).?;
+    const device = identity.Identity.init(.device, identity.Source.prepare(.hash, &preimage.rawHash("device")).?, now).?;
+    const source = identity.Identity.init(.app, identity.Source.prepare(.hash, &preimage.rawHash("chat app source")).?, now).?;
+    const target = identity.Identity.init(.app, identity.Source.prepare(.hash, &preimage.rawHash("chat app target")).?, now).?;
+    const relay_id = identity.Identity.init(.relay, identity.Source.prepare(.hash, &preimage.rawHash("public relay")).?, now).?;
 
     const admission = intent.admitWindow(
         user,
@@ -338,11 +338,11 @@ test "relay rejects messages outside route admission window" {
     const keeper = clock.KeeperId{ .bytes = [_]u8{2} ++ [_]u8{0} ** 31 };
     const start = clock.Stamp{ .keeper = keeper, .tick = 10 };
     const end = clock.Stamp{ .keeper = keeper, .tick = 20 };
-    const user = identity.Identity.init(.user, identity.Source.init(.hash, "user replay").?, start).?;
-    const device = identity.Identity.init(.device, identity.Source.init(.hash, "device replay").?, start).?;
-    const source = identity.Identity.init(.app, identity.Source.init(.hash, "source replay").?, start).?;
-    const target = identity.Identity.init(.app, identity.Source.init(.hash, "target replay").?, start).?;
-    const relay_id = identity.Identity.init(.relay, identity.Source.init(.hash, "relay replay").?, start).?;
+    const user = identity.Identity.init(.user, identity.Source.prepare(.hash, &preimage.rawHash("user replay")).?, start).?;
+    const device = identity.Identity.init(.device, identity.Source.prepare(.hash, &preimage.rawHash("device replay")).?, start).?;
+    const source = identity.Identity.init(.app, identity.Source.prepare(.hash, &preimage.rawHash("source replay")).?, start).?;
+    const target = identity.Identity.init(.app, identity.Source.prepare(.hash, &preimage.rawHash("target replay")).?, start).?;
+    const relay_id = identity.Identity.init(.relay, identity.Source.prepare(.hash, &preimage.rawHash("relay replay")).?, start).?;
 
     const admission = intent.admitWindow(user, device, source, target, .sync_data, .exports_data, start, start, end, intent.requestId("route replay").?).?;
     var route = Route.init(admission, source, target, .sync_data, .exports_data, hashMaterial("replay route policy")).?;

@@ -12,6 +12,7 @@ add_library(edgerun_clock STATIC
 )
 target_include_directories(edgerun_clock PUBLIC
   ${CMAKE_CURRENT_SOURCE_DIR}/include
+  ${CMAKE_CURRENT_SOURCE_DIR}/../include
 )
 target_compile_options(edgerun_clock PRIVATE
   -ffreestanding

@@ -122,8 +122,8 @@ pub fn spawnReceipt(parent: identity.Identity, child: identity.Identity, epoch: 
 test "spawn receipt deterministically records delegated resources" {
     const keeper = clock.KeeperId{ .bytes = [_]u8{1} ++ [_]u8{0} ** 31 };
     const epoch = clock.Stamp{ .keeper = keeper };
-    const parent = identity.Identity.init(.app, identity.Source.init(.hash, "parent").?, epoch).?;
-    const child = identity.Identity.init(.app, identity.Source.init(.hash, "child").?, epoch).?;
+    const parent = identity.Identity.init(.app, identity.Source.prepare(.hash, &preimage.rawHash("parent")).?, epoch).?;
+    const child = identity.Identity.init(.app, identity.Source.prepare(.hash, &preimage.rawHash("child")).?, epoch).?;
     const receipt = spawnReceipt(parent, child, epoch, 16, 32, 2).?;
 
     try std.testing.expect(receipt.valid());

@@ -3,6 +3,7 @@ const app = @import("app.zig");
 const clock = @import("clock.zig");
 const identity = @import("identity.zig");
 const intent = @import("intent.zig");
+const preimage = @import("preimage.zig");
 
 pub const Allocator = struct {
     id: identity.Identity,
@@ -27,11 +28,11 @@ test "allocator app is the authorized actor for spawn transitions" {
 
     const keeper = clock.KeeperId{ .bytes = [_]u8{1} ++ [_]u8{0} ** 31 };
     const epoch = clock.Stamp{ .keeper = keeper };
-    const user = identity.Identity.init(.user, identity.Source.init(.hash, "user").?, epoch).?;
-    const device = identity.Identity.init(.device, identity.Source.init(.hash, "device").?, epoch).?;
-    const allocator_id = identity.Identity.init(.app, identity.Source.init(.hash, "allocator").?, epoch).?;
-    const parent_id = identity.Identity.init(.app, identity.Source.init(.hash, "parent").?, epoch).?;
-    const child_id = identity.Identity.init(.app, identity.Source.init(.hash, "child").?, epoch).?;
+    const user = identity.Identity.init(.user, identity.Source.prepare(.hash, &preimage.rawHash("user")).?, epoch).?;
+    const device = identity.Identity.init(.device, identity.Source.prepare(.hash, &preimage.rawHash("device")).?, epoch).?;
+    const allocator_id = identity.Identity.init(.app, identity.Source.prepare(.hash, &preimage.rawHash("allocator")).?, epoch).?;
+    const parent_id = identity.Identity.init(.app, identity.Source.prepare(.hash, &preimage.rawHash("parent")).?, epoch).?;
+    const child_id = identity.Identity.init(.app, identity.Source.prepare(.hash, &preimage.rawHash("child")).?, epoch).?;
     const allocator = Allocator.init(allocator_id).?;
     var parent = app.App.init(
         parent_id,

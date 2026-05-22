@@ -10,12 +10,12 @@ static const size_t ER_UI_INITIAL_CAPACITY = 8u;
 static const size_t ER_UI_ALIGN_F32 = 4u;
 enum {
   ER_UI_SCENE_NATIVE_RECTS = 2000u,
-  ER_UI_SCENE_NATIVE_TEXT_QUADS = 900u,
-  ER_UI_SCENE_NATIVE_ICON_QUADS = 160u,
-  ER_UI_SCENE_NATIVE_CLIPS = 160u,
   ER_UI_SCENE_NATIVE_HITS = 240u,
+  ER_UI_SCENE_NATIVE_DRAG_SOURCES = 240u,
+  ER_UI_SCENE_NATIVE_DROP_TARGETS = 240u,
   ER_UI_SCENE_NATIVE_TRANSITIONS = 1200u,
-  ER_UI_SCENE_NATIVE_VERTICES = 8000u
+  ER_UI_SCENE_NATIVE_ICON_QUADS = 160u,
+  ER_UI_SCENE_NATIVE_TEXT_QUADS = 900u
 };
 
 static bool er_ui_valid_geometry(float x, float y, float w, float h) {
@@ -161,18 +161,6 @@ static bool er_ui_clip_quad(const er_ui_scene_t* scene, er_ui_quad_t* quad) {
 static bool er_ui_valid_transition(er_ui_transition_t transition) {
   return er_ui_float_is_finite_value(transition.from) && er_ui_float_is_finite_value(transition.to) && transition.duration_ms > 0u &&
          transition.duration_ms <= ER_UI_SCENE_TRANSITION_MAX_DURATION_MS;
-}
-
-static bool er_ui_hit_contains(er_ui_hit_t hit, float x, float y) {
-  return x >= hit.x && y >= hit.y && x <= hit.x + hit.w && y <= hit.y + hit.h;
-}
-
-static bool er_ui_drag_source_contains(er_ui_drag_source_t source, float x, float y) {
-  return x >= source.x && y >= source.y && x <= source.x + source.w && y <= source.y + source.h;
-}
-
-static bool er_ui_drop_target_contains(er_ui_drop_target_t target, float x, float y) {
-  return x >= target.x && y >= target.y && x <= target.x + target.w && y <= target.y + target.h;
 }
 
 er_ui_color4_t er_ui_color_rgba(float r, float g, float b, float a) {
@@ -467,45 +455,16 @@ void er_ui_scene_translate_since(er_ui_scene_t* scene, er_ui_scene_cursor_t curs
   }
 }
 
-bool er_ui_scene_hit_test(const er_ui_scene_t* scene, float x, float y, er_ui_hit_t* out_hit) {
-  if (!scene || !out_hit) return false;
-  for (size_t i = scene->hit_count; i > 0u; --i) {
-    er_ui_hit_t hit = scene->hits[i - 1u];
-    if (er_ui_hit_contains(hit, x, y)) {
-      *out_hit = hit;
-      return true;
-    }
-  }
-  return false;
-}
-
-bool er_ui_scene_drag_source_at(const er_ui_scene_t* scene, float x, float y, er_ui_drag_source_t* out_source) {
-  if (!scene || !out_source) return false;
-  for (size_t i = scene->drag_source_count; i > 0u; --i) {
-    er_ui_drag_source_t source = scene->drag_sources[i - 1u];
-    if (er_ui_drag_source_contains(source, x, y)) {
-      *out_source = source;
-      return true;
-    }
-  }
-  return false;
-}
-
-bool er_ui_scene_drop_target_at(const er_ui_scene_t* scene, float x, float y, uint32_t scope_id, er_ui_drop_target_t* out_target) {
-  if (!scene || !out_target) return false;
-  for (size_t i = scene->drop_target_count; i > 0u; --i) {
-    er_ui_drop_target_t target = scene->drop_targets[i - 1u];
-    if (target.scope_id == scope_id && er_ui_drop_target_contains(target, x, y)) {
-      *out_target = target;
-      return true;
-    }
-  }
-  return false;
-}
-
 er_ui_scene_budget_t er_ui_scene_frame_budget(void) {
-  er_ui_scene_budget_t budget = {ER_UI_SCENE_NATIVE_RECTS, ER_UI_SCENE_NATIVE_TEXT_QUADS, ER_UI_SCENE_NATIVE_ICON_QUADS, ER_UI_SCENE_NATIVE_CLIPS,
-                                 ER_UI_SCENE_NATIVE_HITS, ER_UI_SCENE_NATIVE_TRANSITIONS, ER_UI_SCENE_NATIVE_VERTICES};
+  er_ui_scene_budget_t budget = {
+    ER_UI_SCENE_NATIVE_RECTS,
+    ER_UI_SCENE_NATIVE_HITS,
+    ER_UI_SCENE_NATIVE_DRAG_SOURCES,
+    ER_UI_SCENE_NATIVE_DROP_TARGETS,
+    ER_UI_SCENE_NATIVE_TRANSITIONS,
+    ER_UI_SCENE_NATIVE_ICON_QUADS,
+    ER_UI_SCENE_NATIVE_TEXT_QUADS,
+  };
   return budget;
 }
 
@@ -544,38 +503,4 @@ bool er_ui_scene_first_budget_violation(er_ui_scene_stats_t stats, er_ui_scene_b
     entry++;
   }
   return false;
-}
-
-bool er_ui_color_scheme_from_code(uint32_t code, er_ui_color_scheme_t* out_scheme) {
-  if (!out_scheme) return false;
-  switch (code) {
-    case ER_UI_COLOR_SCHEME_LIGHT:
-      *out_scheme = ER_UI_COLOR_SCHEME_LIGHT;
-      return true;
-    case ER_UI_COLOR_SCHEME_TERMINAL:
-      *out_scheme = ER_UI_COLOR_SCHEME_TERMINAL;
-      return true;
-    case ER_UI_COLOR_SCHEME_DARK:
-      *out_scheme = ER_UI_COLOR_SCHEME_DARK;
-      return true;
-    default:
-      return false;
-  }
-}
-
-bool er_ui_color_scheme_code(er_ui_color_scheme_t scheme, uint32_t* out_code) {
-  if (!out_code) return false;
-  switch (scheme) {
-    case ER_UI_COLOR_SCHEME_LIGHT:
-      *out_code = 1u;
-      return true;
-    case ER_UI_COLOR_SCHEME_TERMINAL:
-      *out_code = 2u;
-      return true;
-    case ER_UI_COLOR_SCHEME_DARK:
-      *out_code = 0u;
-      return true;
-    default:
-      return false;
-  }
 }

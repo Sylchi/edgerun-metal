@@ -100,10 +100,10 @@ fn policyMatches(policy: seal.Policy, scope: seal.Scope, device: identity.Id, ap
 test "sync transfer reseals from source machine to target machine" {
     const keeper = clock.KeeperId{ .bytes = [_]u8{1} ++ [_]u8{0} ** 31 };
     const epoch = clock.Stamp{ .keeper = keeper };
-    const user = identity.Identity.init(.user, identity.Source.init(.hash, "user").?, epoch).?;
-    const source = identity.Identity.init(.device, identity.Source.init(.hash, "source device").?, epoch).?;
-    const target = identity.Identity.init(.device, identity.Source.init(.hash, "target device").?, epoch).?;
-    const app = identity.Identity.init(.app, identity.Source.init(.hash, "chat").?, epoch).?;
+    const user = identity.Identity.init(.user, identity.Source.prepare(.hash, &preimage.rawHash("user")).?, epoch).?;
+    const source = identity.Identity.init(.device, identity.Source.prepare(.hash, &preimage.rawHash("source device")).?, epoch).?;
+    const target = identity.Identity.init(.device, identity.Source.prepare(.hash, &preimage.rawHash("target device")).?, epoch).?;
+    const app = identity.Identity.init(.app, identity.Source.prepare(.hash, &preimage.rawHash("chat")).?, epoch).?;
     const object_id = [_]u8{9} ++ [_]u8{0} ** 31;
     const authorization = intent.admit(user, source, app, target, .sync_data, .exports_data, epoch, intent.requestId("sync messages").?).?;
     var chain = authority.Chain.init(user);

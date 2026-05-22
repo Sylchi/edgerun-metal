@@ -35,28 +35,9 @@ typedef enum {
 } er_ui_rect_mode_t;
 
 typedef enum {
-  ER_UI_HIT_CONTACT = 0,
-  ER_UI_HIT_COMPOSER,
-  ER_UI_HIT_SEND,
-  ER_UI_HIT_BUTTON,
-  ER_UI_HIT_TAB,
-  ER_UI_HIT_TOGGLE,
-  ER_UI_HIT_LIST_ROW,
+  ER_UI_HIT_BUTTON = 0,
   ER_UI_HIT_INPUT,
-  ER_UI_HIT_TEXT_AREA,
-  ER_UI_HIT_SLIDER,
-  ER_UI_HIT_CHECKBOX,
-  ER_UI_HIT_RADIO,
-  ER_UI_HIT_SELECT,
-  ER_UI_HIT_BREADCRUMB,
-  ER_UI_HIT_TREE_ITEM,
-  ER_UI_HIT_MENU_ITEM,
-  ER_UI_HIT_SCROLL_AREA,
-  ER_UI_HIT_SCROLLBAR,
-  ER_UI_HIT_WORKSPACE_TAB,
-  ER_UI_HIT_WORKSPACE_CLOSE,
-  ER_UI_HIT_WORKSPACE_SPLIT,
-  ER_UI_HIT_SHELL_LAUNCHER
+  ER_UI_HIT_ROW_ITEM
 } er_ui_hit_kind_t;
 
 typedef enum {
@@ -71,12 +52,6 @@ typedef enum {
   ER_UI_EASING_EASE_OUT,
   ER_UI_EASING_EASE_IN_OUT
 } er_ui_transition_easing_t;
-
-typedef enum {
-  ER_UI_COLOR_SCHEME_DARK = 0,
-  ER_UI_COLOR_SCHEME_LIGHT = 1,
-  ER_UI_COLOR_SCHEME_TERMINAL = 2
-} er_ui_color_scheme_t;
 
 typedef struct {
   float r;
@@ -303,24 +278,12 @@ er_ui_scene_stats_t er_ui_scene_stats(const er_ui_scene_t* scene);
 void er_ui_scene_apply_opacity_since(er_ui_scene_t* scene, er_ui_scene_cursor_t cursor, float opacity);
 void er_ui_scene_translate_since(er_ui_scene_t* scene, er_ui_scene_cursor_t cursor, float dx, float dy);
 
-bool er_ui_scene_hit_test(const er_ui_scene_t* scene, float x, float y, er_ui_hit_t* out_hit);
-bool er_ui_scene_drag_source_at(const er_ui_scene_t* scene, float x, float y, er_ui_drag_source_t* out_source);
-bool er_ui_scene_drop_target_at(
-  const er_ui_scene_t* scene,
-  float x,
-  float y,
-  uint32_t scope_id,
-  er_ui_drop_target_t* out_target);
-
 er_ui_scene_budget_t er_ui_scene_frame_budget(void);
 bool er_ui_scene_stats_fits_budget(er_ui_scene_stats_t stats, er_ui_scene_budget_t budget);
 bool er_ui_scene_first_budget_violation(
   er_ui_scene_stats_t stats,
   er_ui_scene_budget_t budget,
   er_ui_scene_budget_violation_t* out_violation);
-
-bool er_ui_color_scheme_from_code(uint32_t code, er_ui_color_scheme_t* out_scheme);
-bool er_ui_color_scheme_code(er_ui_color_scheme_t scheme, uint32_t* out_code);
 
 #ifdef __cplusplus
 }

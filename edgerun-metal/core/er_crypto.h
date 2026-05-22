@@ -1,0 +1,54 @@
+#ifndef ER_CRYPTO_H
+#define ER_CRYPTO_H
+
+/*
+ * Purpose: describe the cryptographic provider boundary used by runtime records.
+ * Intention: keep hashing, signing, and sealing explicit without baking in host or TLS assumptions.
+ */
+
+#include "er_work.h"
+
+typedef struct {
+  const UINT8* bytes;
+  UINTN len;
+} ErByteSpan;
+
+typedef struct {
+  UINT8* bytes;
+  UINTN len;
+  UINTN capacity;
+} ErMutableBytes;
+
+typedef UINT8 (*ErCryptoHashFn)(void* ctx, const UINT8* domain, UINTN domain_len,
+                                const ErByteSpan* spans, UINTN span_count, ErHash* out_hash);
+typedef UINT8 (*ErCryptoSealFn)(void* ctx, const ErCredential* recipient, const ErByteSpan* aad,
+                                const ErByteSpan* plaintext, ErMutableBytes* sealed_out);
+typedef UINT8 (*ErCryptoOpenFn)(void* ctx, const ErCredential* recipient, const ErByteSpan* aad,
+                                const ErByteSpan* sealed, ErMutableBytes* plaintext_out);
+typedef UINT8 (*ErCryptoSignFn)(void* ctx, const ErByteSpan* preimage, ErWorkSignature* out_signature);
+typedef UINT8 (*ErCryptoVerifyFn)(void* ctx, const ErCredential* identity, const ErByteSpan* preimage,
+                                  const ErWorkSignature* signature);
+
+struct ErCryptoProvider {
+  void* ctx;
+  ErCryptoHashFn hash;
+  ErCryptoSealFn seal;
+  ErCryptoOpenFn open;
+  ErCryptoSignFn sign;
+  ErCryptoVerifyFn verify;
+};
+
+UINT8 er_crypto_hash(const ErCryptoProvider* provider, const UINT8* domain, UINTN domain_len,
+                     const ErByteSpan* spans, UINTN span_count, ErHash* out_hash);
+UINT8 er_crypto_seal(const ErCryptoProvider* provider, const ErCredential* recipient,
+                     const ErByteSpan* aad, const ErByteSpan* plaintext,
+                     ErMutableBytes* sealed_out);
+UINT8 er_crypto_open(const ErCryptoProvider* provider, const ErCredential* recipient,
+                     const ErByteSpan* aad, const ErByteSpan* sealed,
+                     ErMutableBytes* plaintext_out);
+UINT8 er_crypto_sign(const ErCryptoProvider* provider, const ErByteSpan* preimage,
+                     ErWorkSignature* out_signature);
+UINT8 er_crypto_verify(const ErCryptoProvider* provider, const ErCredential* identity,
+                       const ErByteSpan* preimage, const ErWorkSignature* signature);
+
+#endif
