@@ -4,7 +4,7 @@
 	ui-core-test \
 	zig-check zig-fmt-check zig-fmt zig-test zig-real-tpm \
 	pi-zero-w-v1_1-kernel pi-zero-w-v1_1-usb-probe pi-usb-host pi-usb-state \
-	pi-usb-reset-port pi-usb-reset-controller pi-usb-dry-run pi-usb-boot-dir \
+	pi-boot-firmware-check pi-usb-reset-controller pi-usb-dry-run pi-usb-boot-dir \
 	pi-usb-load pi-usb-load-probe pi-usb-load-usbflag pi-usb-load-probe-usbflag \
 	pi-usb-recover-load pi-usb-recover-load-probe \
 	pi-usb-control-host pi-usb-control-dry-run pi-usb-control
@@ -14,18 +14,19 @@ CMAKE ?= cmake
 CTEST ?= ctest
 PI_BOOT_DIR := $(BUILD_DIR)/edgerun-metal/pi-zero-w-v1_1/boot
 PI_USB_BOOT_DIR := $(BUILD_DIR)/pi-zero-w-v1_1-usb-boot
+PI_USB_XHCI_DEVICE := 0000:c3:00.4
 
 all: check
 
 check: crypto-test clock-test identity-test object-test storage-test ui-core-test zig-check
 
 crypto-test:
-	$(CMAKE) -S edgerun-crypto -B $(BUILD_DIR)/edgerun-crypto -DER_CRYPTO_USE_UPSTREAM_BLAKE3_ASM=OFF
+	$(CMAKE) -S edgerun-crypto -B $(BUILD_DIR)/edgerun-crypto
 	$(CMAKE) --build $(BUILD_DIR)/edgerun-crypto --target test_blake3
 	$(CTEST) --test-dir $(BUILD_DIR)/edgerun-crypto --output-on-failure
 
 crypto-bench:
-	$(CMAKE) -S edgerun-crypto -B $(BUILD_DIR)/edgerun-crypto -DER_CRYPTO_USE_UPSTREAM_BLAKE3_ASM=OFF
+	$(CMAKE) -S edgerun-crypto -B $(BUILD_DIR)/edgerun-crypto
 	$(CMAKE) --build $(BUILD_DIR)/edgerun-crypto --target bench
 
 clock-test:
@@ -84,17 +85,18 @@ pi-usb-state:
 	lsusb | grep -E '0a5c:2763|0a5c:2764|4552:5049|Broadcom|BCM2708|BCM2710|Edgerun' || true
 	sudo dmesg --ctime | tail -n 40
 
-pi-usb-reset-port:
-	printf 1 | sudo tee /sys/devices/pci0000:00/0000:00:08.1/0000:c1:00.3/usb1/1-0:1.0/usb1-port1/disable >/dev/null
-	sleep 10
-	printf 0 | sudo tee /sys/devices/pci0000:00/0000:00:08.1/0000:c1:00.3/usb1/1-0:1.0/usb1-port1/disable >/dev/null
+pi-boot-firmware-check:
+	@test -f "$(PI_BOOT_DIR)/bootcode.bin" || { printf 'missing Pi Zero W boot firmware: %s\n' '$(PI_BOOT_DIR)/bootcode.bin'; exit 1; }
+	@test -f "$(PI_BOOT_DIR)/start.elf" || { printf 'missing Pi Zero W boot firmware: %s\n' '$(PI_BOOT_DIR)/start.elf'; exit 1; }
+	@test -f "$(PI_BOOT_DIR)/fixup.dat" || { printf 'missing Pi Zero W boot firmware: %s\n' '$(PI_BOOT_DIR)/fixup.dat'; exit 1; }
+	@test -f "$(PI_BOOT_DIR)/cmdline.txt" || { printf 'missing Pi Zero W boot firmware: %s\n' '$(PI_BOOT_DIR)/cmdline.txt'; exit 1; }
 
 pi-usb-reset-controller:
-	printf '0000:c1:00.3' | sudo tee /sys/bus/pci/drivers/xhci_hcd/unbind >/dev/null
-	sleep 2
-	printf '0000:c1:00.3' | sudo tee /sys/bus/pci/drivers/xhci_hcd/bind >/dev/null
+	sudo sh -c 'echo "$(PI_USB_XHCI_DEVICE)" > /sys/bus/pci/drivers/xhci_hcd/unbind'
+	sleep 3
+	sudo sh -c 'echo "$(PI_USB_XHCI_DEVICE)" > /sys/bus/pci/drivers/xhci_hcd/bind'
 
-$(PI_USB_BOOT_DIR)/config.txt: $(PI_BOOT_DIR)/config.txt
+$(PI_USB_BOOT_DIR)/config.txt: pi-boot-firmware-check
 	mkdir -p $(PI_USB_BOOT_DIR)
 	cp $(PI_BOOT_DIR)/bootcode.bin $(PI_USB_BOOT_DIR)/bootcode.bin
 	cp $(PI_BOOT_DIR)/start.elf $(PI_USB_BOOT_DIR)/start.elf
@@ -108,23 +110,23 @@ $(PI_USB_BOOT_DIR)/config.txt: $(PI_BOOT_DIR)/config.txt
 
 pi-usb-boot-dir: $(PI_USB_BOOT_DIR)/config.txt
 
-pi-usb-load: pi-zero-w-v1_1-kernel pi-usb-host
+pi-usb-load: pi-boot-firmware-check pi-zero-w-v1_1-kernel pi-usb-host
 	sudo $(BUILD_DIR)/pi-usb-host/edgerun-pi-usb-boot-host --wait --wait-ms 120000 --serve-dir $(PI_BOOT_DIR) --kernel-image $(BUILD_DIR)/pi-zero-w-v1_1-zig/kernel-padded.img $(PI_BOOT_DIR)/bootcode.bin
 
-pi-usb-load-probe: pi-zero-w-v1_1-usb-probe pi-usb-host
+pi-usb-load-probe: pi-boot-firmware-check pi-zero-w-v1_1-usb-probe pi-usb-host
 	sudo $(BUILD_DIR)/pi-usb-host/edgerun-pi-usb-boot-host --wait --wait-ms 120000 --serve-dir $(PI_BOOT_DIR) --kernel-image $(BUILD_DIR)/pi-zero-w-v1_1-usb-probe/kernel-padded.img $(PI_BOOT_DIR)/bootcode.bin
 
-pi-usb-load-usbflag: pi-zero-w-v1_1-kernel pi-usb-host pi-usb-boot-dir
+pi-usb-load-usbflag: pi-boot-firmware-check pi-zero-w-v1_1-kernel pi-usb-host pi-usb-boot-dir
 	sudo $(BUILD_DIR)/pi-usb-host/edgerun-pi-usb-boot-host --wait --wait-ms 120000 --serve-dir $(PI_USB_BOOT_DIR) --kernel-image $(BUILD_DIR)/pi-zero-w-v1_1-zig/kernel-padded.img $(PI_USB_BOOT_DIR)/bootcode.bin
 
-pi-usb-load-probe-usbflag: pi-zero-w-v1_1-usb-probe pi-usb-host pi-usb-boot-dir
+pi-usb-load-probe-usbflag: pi-boot-firmware-check pi-zero-w-v1_1-usb-probe pi-usb-host pi-usb-boot-dir
 	sudo $(BUILD_DIR)/pi-usb-host/edgerun-pi-usb-boot-host --wait --wait-ms 120000 --serve-dir $(PI_USB_BOOT_DIR) --kernel-image $(BUILD_DIR)/pi-zero-w-v1_1-usb-probe/kernel-padded.img $(PI_USB_BOOT_DIR)/bootcode.bin
 
-pi-usb-recover-load: pi-usb-reset-port pi-usb-load
+pi-usb-recover-load: pi-boot-firmware-check pi-usb-reset-controller pi-usb-load
 
-pi-usb-recover-load-probe: pi-usb-reset-port pi-usb-load-probe
+pi-usb-recover-load-probe: pi-boot-firmware-check pi-usb-reset-controller pi-usb-load-probe
 
-pi-usb-dry-run: pi-zero-w-v1_1-kernel
+pi-usb-dry-run: pi-boot-firmware-check pi-zero-w-v1_1-kernel
 	zig build --build-file edgerun-zig/build.zig --cache-dir $(BUILD_DIR)/edgerun-zig pi-usb-load -- --dry-run --serve-dir $(PI_BOOT_DIR) --kernel-image $(BUILD_DIR)/pi-zero-w-v1_1-zig/kernel.img $(PI_BOOT_DIR)/bootcode.bin
 
 pi-usb-control: pi-usb-control-host
