@@ -342,6 +342,8 @@ static void test_node_objects_and_store_receipts(void) {
   er_node_t node;
   er_node_t unsigned_node;
   er_node_authority_t authority;
+  er_node_budget_t budget_before_store;
+  er_node_budget_t budget_after_store;
   er_node_receipt_t receipt;
   TestIo io;
   static const uint8_t body[] = {7u, 8u, 9u};
@@ -388,9 +390,19 @@ static void test_node_objects_and_store_receipts(void) {
                                  sizeof(canonical), &canonical_len,
                                  object_id),
             ER_NODE_OK);
+  check_int("budget before store",
+            er_node_budget(&node, &budget_before_store), ER_NODE_OK);
   check_int("store object", er_node_store_object(&node, canonical,
                                                 canonical_len, &receipt),
             ER_NODE_OK);
+  check_int("budget after store",
+            er_node_budget(&node, &budget_after_store), ER_NODE_OK);
+  check_int("store keeps memory delegation",
+            (int)budget_after_store.memory_delegated,
+            (int)budget_before_store.memory_delegated);
+  check_int("store keeps storage delegation",
+            (int)budget_after_store.storage_delegated,
+            (int)budget_before_store.storage_delegated);
   check_nonzero("store receipt root", receipt.log_root, ER_OBJECT_ID_SIZE);
   check_int("fetch object", er_node_fetch_object(&node, object_id, fetched,
                                                 sizeof(fetched), &fetched_len,
@@ -476,10 +488,10 @@ static void test_node_spawn_delegates_budget(void) {
   check_nonzero("spawn receipt id", receipt_id, ER_OBJECT_ID_SIZE);
   check_int("spawn parent budget",
             er_node_budget(&parent_node, &parent_budget), ER_NODE_OK);
-  check_int("spawn parent memory used",
-            (int)parent_budget.memory_used, (int)TEST_CHILD_MEMORY_SIZE);
-  check_int("spawn parent storage used",
-            (int)parent_budget.storage_used,
+  check_int("spawn parent memory delegated",
+            (int)parent_budget.memory_delegated, (int)TEST_CHILD_MEMORY_SIZE);
+  check_int("spawn parent storage delegated",
+            (int)parent_budget.storage_delegated,
             (int)TEST_CHILD_STORAGE_LIMIT);
   check_int("spawn child budget",
             er_node_budget(&child_node, &child_budget), ER_NODE_OK);

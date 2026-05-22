@@ -45,9 +45,9 @@ typedef struct __attribute__((__may_alias__)) {
   er_store_t* store;
   uint8_t* arena;
   size_t arena_len;
-  size_t arena_used;
+  size_t arena_delegated;
   uint64_t storage_limit;
-  uint64_t storage_used;
+  uint64_t storage_delegated;
 } ErNodeState;
 
 _Static_assert(sizeof(ErNodeState) <= sizeof(er_node_t),
@@ -215,9 +215,9 @@ int er_node_budget(const er_node_t* node, er_node_budget_t* out_budget) {
     return ER_NODE_ERR_BADARG;
   }
   out_budget->memory_len = state->arena_len;
-  out_budget->memory_used = state->arena_used;
+  out_budget->memory_delegated = state->arena_delegated;
   out_budget->storage_limit = state->storage_limit;
-  out_budget->storage_used = state->storage_used;
+  out_budget->storage_delegated = state->storage_delegated;
   return ER_NODE_OK;
 }
 
@@ -253,11 +253,11 @@ int er_node_spawn(er_node_t* parent, const er_identity_t* child_identity,
       out_id == (uint8_t*)0 ||
       child_identity->identity_kind != ER_IDENTITY_KIND_DELEGATED ||
       er_identity_valid(child_identity) == 0 ||
-      er_node_add_size(parent_state->arena_used, memory_len,
+      er_node_add_size(parent_state->arena_delegated, memory_len,
                        &memory_end) != ER_NODE_OK ||
       memory_end > parent_state->arena_len ||
       (memory_len != 0u && parent_state->arena == (uint8_t*)0) ||
-      er_node_add_u64(parent_state->storage_used, storage_limit,
+      er_node_add_u64(parent_state->storage_delegated, storage_limit,
                       &storage_end) != ER_NODE_OK ||
       storage_end > parent_state->storage_limit) {
     return ER_NODE_ERR_BADARG;
@@ -266,7 +266,7 @@ int er_node_spawn(er_node_t* parent, const er_identity_t* child_identity,
   if (er_node_open(out_child,
                    child_identity,
                    (const er_node_authority_t*)0,
-                   memory_len == 0u ? (void*)0 : &parent_state->arena[parent_state->arena_used],
+                   memory_len == 0u ? (void*)0 : &parent_state->arena[parent_state->arena_delegated],
                    memory_len,
                    storage_limit,
                    child_store) != ER_NODE_OK) {
@@ -287,17 +287,17 @@ int er_node_spawn(er_node_t* parent, const er_identity_t* child_identity,
   er_node_copy(&body[8u + ER_IDENTITY_ID_SIZE],
                child_identity->id.bytes, ER_IDENTITY_ID_SIZE);
   er_node_store64(&body[8u + (2u * ER_IDENTITY_ID_SIZE)],
-                  (uint64_t)parent_state->arena_used);
+                  (uint64_t)parent_state->arena_delegated);
   er_node_store64(&body[16u + (2u * ER_IDENTITY_ID_SIZE)],
                   (uint64_t)memory_len);
   er_node_store64(&body[24u + (2u * ER_IDENTITY_ID_SIZE)],
-                  parent_state->storage_used);
+                  parent_state->storage_delegated);
   er_node_store64(&body[32u + (2u * ER_IDENTITY_ID_SIZE)],
                   storage_limit);
   er_node_epoch_body(parent_state->clock.now,
                      &body[40u + (2u * ER_IDENTITY_ID_SIZE)]);
-  parent_state->arena_used = memory_end;
-  parent_state->storage_used = storage_end;
+  parent_state->arena_delegated = memory_end;
+  parent_state->storage_delegated = storage_end;
   return er_node_build_bytes_object(parent_state, body, sizeof(body),
                                     out_receipt_object, out_cap, out_len,
                                     out_id);
@@ -411,6 +411,11 @@ int er_node_store_object(er_node_t* node, const void* canonical,
   if (er_object_verify(canonical, canonical_len, &info) != ER_OBJECT_OK) {
     return ER_NODE_ERR_CORRUPT;
   }
+  /*
+   * Store capacity is bound before launch by the store/slice supplied to
+   * er_node_open. This transition records canonical bytes in that fixed slice;
+   * node budget accounting tracks only explicit sub-slice delegation.
+   */
   status = er_store_put_canonical_object(state->store, canonical,
                                          canonical_len, id);
   if (status != ER_OK || !er_node_equal(id, info.object_id, ER_OBJECT_ID_SIZE)) {
