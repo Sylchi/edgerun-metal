@@ -321,11 +321,11 @@ static void test_work_admitted_relay_route(void) {
   ErWorkRouteChallenge changed_route_challenge;
   ErWorkRouteStartProof route_start_proof;
   ErWorkRouteStartProof tampered_route_start_proof;
-  ErEpochStamp route_challenge_issued_at;
-  ErEpochStamp route_challenge_valid_until;
-  ErEpochStamp route_challenge_now;
-  ErEpochStamp route_challenge_before;
-  ErEpochStamp route_challenge_expired;
+  er_clock_epoch_stamp_t route_challenge_issued_at;
+  er_clock_epoch_stamp_t route_challenge_valid_until;
+  er_clock_epoch_stamp_t route_challenge_now;
+  er_clock_epoch_stamp_t route_challenge_before;
+  er_clock_epoch_stamp_t route_challenge_expired;
   ErRelayForwardIntent intent;
   ErRelayTransitHop hop;
   ErRelayTransitHop hop_again;
@@ -478,6 +478,13 @@ static void test_work_admitted_relay_route(void) {
   route_challenge_before.slot = 3u;
   route_challenge_before.tick = 3u;
   route_challenge_expired = route_challenge_valid_until;
+  test_fill_bytes(route_challenge_issued_at.keeper_id.bytes,
+                  ER_CLOCK_KEEPER_ID_SIZE,
+                  0xc8u);
+  route_challenge_valid_until.keeper_id = route_challenge_issued_at.keeper_id;
+  route_challenge_now.keeper_id = route_challenge_issued_at.keeper_id;
+  route_challenge_before.keeper_id = route_challenge_issued_at.keeper_id;
+  route_challenge_expired.keeper_id = route_challenge_issued_at.keeper_id;
 
   check_int64("work route challenge prepare",
               er_work_route_challenge_prepare(&crypto,

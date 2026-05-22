@@ -78,17 +78,17 @@ static UINT8 er_storage_endpoint_relay_header_matches_route(
                                &route->target_route_commitment) != 0u);
 }
 
-static UINT8 er_storage_endpoint_packet_matches_store(const ErStorageEndpointObjectStore* store,
-                                                      const ErVfsObjectPacket* packet) {
-  if (store == 0 || packet == 0) {
+static UINT8 er_storage_endpoint_packet_matches_assembly(const ErStorageEndpointObjectAssembly* assembly,
+                                                         const ErVfsObjectPacket* packet) {
+  if (assembly == 0 || packet == 0) {
     return 0u;
   }
-  if (store->packet_count == 0u) {
+  if (assembly->packet_count == 0u) {
     return 1u;
   }
-  return (UINT8)(store->object_len == packet->header.object_len &&
-                 store->packet_count == packet->header.packet_count &&
-                 er_hash_equal(&store->object_id,
+  return (UINT8)(assembly->object_len == packet->header.object_len &&
+                 assembly->packet_count == packet->header.packet_count &&
+                 er_hash_equal(&assembly->object_id,
                                &packet->header.object_id) != 0u);
 }
 
@@ -165,18 +165,18 @@ static UINT8 er_storage_endpoint_route_receipt_hash(
                         spans, ER_STORAGE_RECEIPT_SPAN_COUNT, out_hash);
 }
 
-UINT8 er_storage_endpoint_object_store_init(ErStorageEndpointObjectStore* store,
-                                            ErVfsObjectPacket* packets,
-                                            UINT32 packet_capacity) {
-  if (store == 0 || packets == 0 || packet_capacity == 0u) {
+UINT8 er_storage_endpoint_object_assembly_init(ErStorageEndpointObjectAssembly* assembly,
+                                               ErVfsObjectPacket* packets,
+                                               UINT32 packet_capacity) {
+  if (assembly == 0 || packets == 0 || packet_capacity == 0u) {
     return 0u;
   }
-  er_mem_zero((UINT8*)store, (UINTN)sizeof(*store));
+  er_mem_zero((UINT8*)assembly, (UINTN)sizeof(*assembly));
   er_mem_zero((UINT8*)packets,
               (UINTN)packet_capacity * (UINTN)sizeof(packets[0]));
-  store->abi_version = ER_WORK_ABI_VERSION;
-  store->packets = packets;
-  store->packet_capacity = packet_capacity;
+  assembly->abi_version = ER_WORK_ABI_VERSION;
+  assembly->packets = packets;
+  assembly->packet_capacity = packet_capacity;
   return 1u;
 }
 
@@ -624,38 +624,38 @@ UINT8 er_storage_endpoint_capture_object_packet(const ErCryptoProvider* crypto,
                                           &out_capture->capture_hash);
 }
 
-UINT8 er_storage_endpoint_store_object_packet(const ErCryptoProvider* crypto,
-                                              const ErAdmittedRoute* route,
-                                              const ErChannelEnvelopeHeader* envelope,
-                                              const ErVfsObjectPacket* packet,
-                                              ErStorageEndpointObjectStore* store,
-                                              ErStorageEndpointObjectCapture* out_capture) {
+UINT8 er_storage_endpoint_accept_object_packet(const ErCryptoProvider* crypto,
+                                               const ErAdmittedRoute* route,
+                                               const ErChannelEnvelopeHeader* envelope,
+                                               const ErVfsObjectPacket* packet,
+                                               ErStorageEndpointObjectAssembly* assembly,
+                                               ErStorageEndpointObjectCapture* out_capture) {
   ErStorageEndpointObjectCapture capture;
   UINT32 packet_index;
 
-  if (store == 0 || store->abi_version != ER_WORK_ABI_VERSION ||
-      store->packets == 0 ||
+  if (assembly == 0 || assembly->abi_version != ER_WORK_ABI_VERSION ||
+      assembly->packets == 0 ||
       er_storage_endpoint_capture_object_packet(crypto, route, envelope,
                                                 packet, &capture) == 0u ||
-      er_storage_endpoint_packet_matches_store(store, packet) == 0u ||
-      packet->header.packet_count > store->packet_capacity ||
-      er_hash_nonzero(&store->packets[packet->header.packet_index].header.packet_id) != 0u) {
+      er_storage_endpoint_packet_matches_assembly(assembly, packet) == 0u ||
+      packet->header.packet_count > assembly->packet_capacity ||
+      er_hash_nonzero(&assembly->packets[packet->header.packet_index].header.packet_id) != 0u) {
     return 0u;
   }
 
-  if (store->packet_count == 0u) {
-    store->route_id = route->route_id;
-    store->object_id = packet->header.object_id;
-    store->object_len = packet->header.object_len;
-    store->packet_count = packet->header.packet_count;
-  } else if (er_hash_equal(&store->route_id, &route->route_id) == 0u) {
+  if (assembly->packet_count == 0u) {
+    assembly->route_id = route->route_id;
+    assembly->object_id = packet->header.object_id;
+    assembly->object_len = packet->header.object_len;
+    assembly->packet_count = packet->header.packet_count;
+  } else if (er_hash_equal(&assembly->route_id, &route->route_id) == 0u) {
     return 0u;
   }
 
   packet_index = packet->header.packet_index;
-  store->packets[packet_index] = *packet;
-  ++store->accepted_packet_count;
-  store->complete = (UINT16)(store->accepted_packet_count == store->packet_count);
+  assembly->packets[packet_index] = *packet;
+  ++assembly->accepted_packet_count;
+  assembly->complete = (UINT16)(assembly->accepted_packet_count == assembly->packet_count);
   if (out_capture != 0) {
     *out_capture = capture;
   }

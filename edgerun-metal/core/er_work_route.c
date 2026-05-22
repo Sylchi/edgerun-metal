@@ -106,7 +106,7 @@ static void er_work_put_be64(UINT8* dst, UINT64 value) {
   er_work_put_be(dst, value, ER_WORK_ROUTE_U64_BYTES);
 }
 
-static void er_work_put_epoch_stamp(UINT8* dst, ErEpochStamp stamp) {
+static void er_work_put_epoch_stamp(UINT8* dst, er_clock_epoch_stamp_t stamp) {
   er_work_put_be64(dst, stamp.era);
   dst += ER_WORK_ROUTE_U64_BYTES;
   er_work_put_be64(dst, stamp.epoch);
@@ -277,8 +277,8 @@ static UINT8 er_work_hash_admission(const ErCryptoProvider* crypto,
 
 static UINT8 er_work_route_challenge_hash(const ErCryptoProvider* crypto,
                                           const ErAdmittedRoute* route,
-                                          ErEpochStamp issued_at,
-                                          ErEpochStamp valid_until,
+                                          er_clock_epoch_stamp_t issued_at,
+                                          er_clock_epoch_stamp_t valid_until,
                                           ErHash* out_hash) {
   UINT8 fields[ER_WORK_ROUTE_CHALLENGE_FIELD_BYTES];
   UINT8* cursor = fields;
@@ -287,7 +287,7 @@ static UINT8 er_work_route_challenge_hash(const ErCryptoProvider* crypto,
   if (crypto == 0 ||
       er_work_admitted_route_valid(route) == 0u ||
       out_hash == 0 ||
-      er_epoch_stamp_compare(issued_at, valid_until) >= 0) {
+      er_clock_stamp_compare(issued_at, valid_until) >= 0) {
     return 0u;
   }
 
@@ -325,7 +325,7 @@ static UINT8 er_work_route_challenge_hash(const ErCryptoProvider* crypto,
 static UINT8 er_work_route_start_proof_hash(const ErCryptoProvider* crypto,
                                             const ErWorkRouteChallenge* challenge,
                                             const ErCredential* worker_identity,
-                                            ErEpochStamp started_at,
+                                            er_clock_epoch_stamp_t started_at,
                                             ErHash* out_hash) {
   UINT8 fields[ER_WORK_ROUTE_START_PROOF_FIELD_BYTES];
   ErByteSpan spans[ER_WORK_ROUTE_START_PROOF_SPAN_COUNT];
@@ -340,8 +340,8 @@ static UINT8 er_work_route_start_proof_hash(const ErCryptoProvider* crypto,
       er_node_id_nonzero(&challenge->worker_node_id) == 0u ||
       er_node_id_nonzero(&challenge->relay_node_id) == 0u ||
       er_credential_valid(worker_identity) == 0u ||
-      er_epoch_stamp_compare(started_at, challenge->issued_at) < 0 ||
-      er_epoch_stamp_compare(started_at, challenge->valid_until) >= 0) {
+      er_clock_stamp_compare(started_at, challenge->issued_at) < 0 ||
+      er_clock_stamp_compare(started_at, challenge->valid_until) >= 0) {
     return 0u;
   }
 
@@ -683,8 +683,8 @@ UINT8 er_work_prepare_relay_accounting_claim(const ErRelayTransitHop* hop,
 
 UINT8 er_work_route_challenge_prepare(const ErCryptoProvider* crypto,
                                       const ErAdmittedRoute* route,
-                                      ErEpochStamp issued_at,
-                                      ErEpochStamp valid_until,
+                                      er_clock_epoch_stamp_t issued_at,
+                                      er_clock_epoch_stamp_t valid_until,
                                       ErWorkRouteChallenge* out_challenge) {
   ErHash challenge_id;
 
@@ -711,7 +711,7 @@ UINT8 er_work_route_challenge_prepare(const ErCryptoProvider* crypto,
 }
 
 UINT8 er_work_route_challenge_valid_at(const ErWorkRouteChallenge* challenge,
-                                       ErEpochStamp now) {
+                                       er_clock_epoch_stamp_t now) {
   if (challenge == 0 ||
       challenge->abi_version != ER_WORK_ABI_VERSION ||
       er_hash_nonzero(&challenge->challenge_id) == 0u ||
@@ -720,9 +720,9 @@ UINT8 er_work_route_challenge_valid_at(const ErWorkRouteChallenge* challenge,
       er_hash_nonzero(&challenge->admission_hash) == 0u ||
       er_node_id_nonzero(&challenge->worker_node_id) == 0u ||
       er_node_id_nonzero(&challenge->relay_node_id) == 0u ||
-      er_epoch_stamp_compare(challenge->issued_at, challenge->valid_until) >= 0 ||
-      er_epoch_stamp_compare(now, challenge->issued_at) < 0 ||
-      er_epoch_stamp_compare(now, challenge->valid_until) >= 0) {
+      er_clock_stamp_compare(challenge->issued_at, challenge->valid_until) >= 0 ||
+      er_clock_stamp_compare(now, challenge->issued_at) < 0 ||
+      er_clock_stamp_compare(now, challenge->valid_until) >= 0) {
     return 0u;
   }
   return 1u;
@@ -731,7 +731,7 @@ UINT8 er_work_route_challenge_valid_at(const ErWorkRouteChallenge* challenge,
 UINT8 er_work_route_start_proof_sign(const ErCryptoProvider* crypto,
                                      const ErWorkRouteChallenge* challenge,
                                      const ErCredential* worker_identity,
-                                     ErEpochStamp started_at,
+                                     er_clock_epoch_stamp_t started_at,
                                      ErWorkRouteStartProof* out_proof) {
   ErHash proof_hash;
   ErByteSpan preimage;
@@ -766,7 +766,7 @@ UINT8 er_work_route_start_proof_sign(const ErCryptoProvider* crypto,
 UINT8 er_work_route_start_proof_verify(const ErCryptoProvider* crypto,
                                        const ErWorkRouteChallenge* challenge,
                                        const ErWorkRouteStartProof* proof,
-                                       ErEpochStamp now) {
+                                       er_clock_epoch_stamp_t now) {
   ErHash expected_hash;
   ErByteSpan preimage;
 

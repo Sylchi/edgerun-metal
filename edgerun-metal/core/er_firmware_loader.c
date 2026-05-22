@@ -2,6 +2,19 @@
 #include "er_mem.h"
 
 static const UINT8 g_er_firmware_loader_hash_domain[] = "edgerun:c:v1:firmware-image";
+static const char g_er_firmware_loader_path_prefix[] = {
+  '/', 'E', 'F', 'I', '/', 'f', 'i', 'r', 'm', 'w', 'a', 'r', 'e', '/'
+};
+
+#define ER_FIRMWARE_LOADER_PATH_PREFIX_LEN 14u
+#define ER_FIRMWARE_LOADER_HEX_DIGITS 4u
+#define ER_FIRMWARE_LOADER_VENDOR_OFFSET ER_FIRMWARE_LOADER_PATH_PREFIX_LEN
+#define ER_FIRMWARE_LOADER_SEPARATOR0_OFFSET 18u
+#define ER_FIRMWARE_LOADER_DEVICE_OFFSET 19u
+#define ER_FIRMWARE_LOADER_SEPARATOR1_OFFSET 23u
+#define ER_FIRMWARE_LOADER_INSTANCE_OFFSET 24u
+#define ER_FIRMWARE_LOADER_HEX_MASK 0x0fu
+#define ER_FIRMWARE_LOADER_HEX_BITS 4u
 
 //@optimizer-ignore-constant UEFI Loaded Image protocol GUID is ABI-defined by firmware
 static EFI_GUID g_er_loaded_image_protocol_guid = {
@@ -19,39 +32,79 @@ static EFI_GUID g_er_simple_file_system_protocol_guid = {
   {0x8eu, 0x39u, 0x00u, 0xa0u, 0xc9u, 0x69u, 0x72u, 0x3bu}
 };
 
-static UINT8 er_firmware_loader_source_valid(const ErBootFirmwareSourceConfig* source) {
-  const ErBootFirmwareSourceConfig* found;
-  ErBootConfig config;
+static char er_firmware_loader_hex_char(UINT8 value) {
+  static const char hex_chars[16] = {
+    '0', '1', '2', '3', '4', '5', '6', '7',
+    '8', '9', 'a', 'b', 'c', 'd', 'e', 'f'
+  };
 
-  if (source == 0) {
+  return hex_chars[value & ER_FIRMWARE_LOADER_HEX_MASK];
+}
+
+static void er_firmware_loader_write_hex16(char* out, UINT16 value) {
+  UINT16 i;
+  UINT8 shift;
+
+  if (out == 0) {
+    return;
+  }
+
+  for (i = 0u; i < ER_FIRMWARE_LOADER_HEX_DIGITS; ++i) {
+    shift = (UINT8)((ER_FIRMWARE_LOADER_HEX_DIGITS - 1u - i) *
+                    ER_FIRMWARE_LOADER_HEX_BITS);
+    out[i] = er_firmware_loader_hex_char((UINT8)(value >> shift));
+  }
+}
+
+static UINT8 er_firmware_loader_prepare_source(UINT16 vendor_id,
+                                               UINT16 device_id,
+                                               UINT8 instance,
+                                               ErBootFirmwareSourceConfig* out_source) {
+  if (vendor_id == 0u || device_id == 0u ||
+      instance > ER_BOOT_CONFIG_FIRMWARE_INSTANCE_MAX || out_source == 0) {
     return 0u;
   }
 
-  er_boot_config_init(&config);
-  if (er_boot_config_add_efi_firmware_source_instance(&config,
-                                                      source->pci_vendor_id,
-                                                      source->pci_device_id,
-                                                      source->instance) == 0u) {
-    return 0u;
-  }
-
-  found = er_boot_config_find_efi_firmware_source_instance(&config,
-                                                           source->pci_vendor_id,
-                                                           source->pci_device_id,
-                                                           source->instance);
-  if (found == 0 ||
-      source->enabled != found->enabled ||
-      source->source_kind != found->source_kind ||
-      source->instance != found->instance ||
-      source->reserved != found->reserved ||
-      source->pci_vendor_id != found->pci_vendor_id ||
-      source->pci_device_id != found->pci_device_id ||
-      source->path_len != found->path_len ||
-      er_mem_equal((const UINT8*)source->path, (const UINT8*)found->path, found->path_len) == 0u) {
-    return 0u;
-  }
-
+  er_mem_zero((UINT8*)out_source, (UINTN)sizeof(*out_source));
+  out_source->enabled = ER_BOOT_CONFIG_CHANNEL_ENABLED;
+  out_source->source_kind = ER_BOOT_CONFIG_FIRMWARE_SOURCE_EFI_PARTITION;
+  out_source->instance = instance;
+  out_source->pci_vendor_id = vendor_id;
+  out_source->pci_device_id = device_id;
+  out_source->path_len = ER_BOOT_CONFIG_FIRMWARE_PATH_LEN;
+  er_mem_copy((UINT8*)out_source->path,
+              (const UINT8*)g_er_firmware_loader_path_prefix,
+              ER_FIRMWARE_LOADER_PATH_PREFIX_LEN);
+  er_firmware_loader_write_hex16(&out_source->path[ER_FIRMWARE_LOADER_VENDOR_OFFSET],
+                                 vendor_id);
+  out_source->path[ER_FIRMWARE_LOADER_SEPARATOR0_OFFSET] = '.';
+  er_firmware_loader_write_hex16(&out_source->path[ER_FIRMWARE_LOADER_DEVICE_OFFSET],
+                                 device_id);
+  out_source->path[ER_FIRMWARE_LOADER_SEPARATOR1_OFFSET] = '.';
+  out_source->path[ER_FIRMWARE_LOADER_INSTANCE_OFFSET] = (char)('0' + instance);
   return 1u;
+}
+
+static UINT8 er_firmware_loader_source_valid(const ErBootFirmwareSourceConfig* source) {
+  ErBootFirmwareSourceConfig expected;
+
+  if (source == 0 ||
+      er_firmware_loader_prepare_source(source->pci_vendor_id,
+                                        source->pci_device_id,
+                                        source->instance,
+                                        &expected) == 0u) {
+    return 0u;
+  }
+  return (UINT8)(source->enabled == expected.enabled &&
+                 source->source_kind == expected.source_kind &&
+                 source->instance == expected.instance &&
+                 source->reserved == expected.reserved &&
+                 source->pci_vendor_id == expected.pci_vendor_id &&
+                 source->pci_device_id == expected.pci_device_id &&
+                 source->path_len == expected.path_len &&
+                 er_mem_equal((const UINT8*)source->path,
+                              (const UINT8*)expected.path,
+                              expected.path_len) != 0u);
 }
 
 static UINT8 er_firmware_loader_hash_image(const ErCryptoProvider* crypto,
@@ -200,26 +253,21 @@ UINT8 er_firmware_loader_load_for_device_instance(const ErCryptoProvider* crypto
                                                   UINT8* firmware_bytes,
                                                   UINTN firmware_capacity,
                                                   ErFirmwareImage* out_image) {
-  const ErBootFirmwareSourceConfig* source;
+  ErBootFirmwareSourceConfig source;
 
   er_firmware_loader_clear_image(out_image);
-  if (config == 0 ||
-      vendor_id == 0u ||
+  (void)config;
+  if (vendor_id == 0u ||
       device_id == 0u ||
-      instance > ER_BOOT_CONFIG_FIRMWARE_INSTANCE_MAX) {
-    return 0u;
-  }
-
-  source = er_boot_config_find_efi_firmware_source_instance(config,
-                                                            vendor_id,
-                                                            device_id,
-                                                            instance);
-  if (source == 0) {
+      er_firmware_loader_prepare_source(vendor_id,
+                                        device_id,
+                                        instance,
+                                        &source) == 0u) {
     return 0u;
   }
 
   return er_firmware_loader_load_source(crypto,
-                                        source,
+                                        &source,
                                         read_fn,
                                         read_ctx,
                                         firmware_bytes,

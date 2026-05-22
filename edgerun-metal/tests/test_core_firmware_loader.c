@@ -114,7 +114,8 @@ static void test_firmware_loader(void) {
   check_cstr("firmware loader image instance path", image.path, "/EFI/firmware/10ec.8922.1");
 
   reader.called = 0u;
-  check_int64("firmware loader rejects missing source",
+  reader.expected_path = "/EFI/firmware/10ec.892b.0";
+  check_int64("firmware loader derives source from pci id",
               er_firmware_loader_load_for_pci(&crypto,
                                               &config,
                                               0x10ecu,
@@ -124,8 +125,8 @@ static void test_firmware_loader(void) {
                                               firmware_out,
                                               (UINTN)sizeof(firmware_out),
                                               &image),
-              0);
-  check_int64("firmware loader missing source skips reader", reader.called, 0);
+              1);
+  check_int64("firmware loader derived source calls reader", reader.called, 1);
 
   source = config.firmware_sources[0];
   source.path[source.path_len - 1u] = '1';

@@ -39,7 +39,7 @@ typedef struct {
   UINT64 present_rects;
   UINT64 present_commands;
   UINT64 work_ticks;
-  ErEpochStamp stamp;
+  er_clock_epoch_stamp_t stamp;
 } BenchUiWork;
 
 static void bench_ui_rects(er_ui_rect_t* rects, UINT8 mutated) {
@@ -73,14 +73,14 @@ static void bench_ui_rects(er_ui_rect_t* rects, UINT8 mutated) {
   }
 }
 
-static UINT8 bench_ui_clock_advance(ErEpochClock* clock, UINT64 ticks) {
-  ErEpochClockModifier modifier;
+static UINT8 bench_ui_clock_advance(er_clock_t* clock, UINT64 ticks) {
+  er_clock_modifier_t modifier;
 
   if (ticks == 0u) {
     return 1u;
   }
   modifier.tick_stride = ticks;
-  return er_epoch_clock_advance_with_modifier(clock, &modifier, 0);
+  return er_clock_advance_with_modifier(clock, &modifier, 0);
 }
 
 static UINT64 bench_ui_present_bytes(const ErUiSurfacePixelRect* rects,
@@ -96,7 +96,7 @@ static UINT64 bench_ui_present_bytes(const ErUiSurfacePixelRect* rects,
   return bytes;
 }
 
-static UINT8 bench_ui_work_from_render(ErEpochClock* clock,
+static UINT8 bench_ui_work_from_render(er_clock_t* clock,
                                        UINT64 raster_bytes,
                                        UINT64 present_bytes,
                                        UINT64 present_rects,
@@ -142,9 +142,9 @@ int main(void) {
   ErUiSurfaceRenderStats dirty_stats;
   ErUiSurfaceDirtyTileList dirty_tiles;
   ErUiBootRenderContext render;
-  ErEpochClockLimits limits;
-  ErEpochClock full_clock;
-  ErEpochClock dirty_clock;
+  er_clock_limits_t limits;
+  er_clock_t full_clock;
+  er_clock_t dirty_clock;
   BenchUiWork full_work;
   BenchUiWork dirty_work;
   er_ui_scene_t prev_scene;

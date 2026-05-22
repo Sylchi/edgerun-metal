@@ -675,52 +675,58 @@ static void test_wasm_c_generated_hostcall_modules(void) {
 }
 
 static void test_epoch_clock_rollover(void) {
-  ErEpochClockLimits limits;
-  ErEpochClock clock;
-  ErEpochBoundary boundary;
-  ErEpochClockModifier modifier;
-  ErEpochStamp earlier;
-  ErEpochStamp later;
+  er_clock_keeper_id_t keeper_id;
+  er_clock_limits_t limits;
+  er_clock_t clock;
+  er_clock_boundary_t boundary;
+  er_clock_modifier_t modifier;
+  er_clock_epoch_stamp_t earlier;
+  er_clock_epoch_stamp_t later;
 
+  test_fill_bytes(keeper_id.bytes, ER_CLOCK_KEEPER_ID_SIZE, 0xabu);
   limits.ticks_per_slot = 2u;
   limits.slots_per_epoch = 2u;
   limits.epochs_per_era = 2u;
 
-  check_int64("epoch rejects null limits", er_epoch_clock_init(0, &clock), 0);
+  check_int64("epoch rejects null limits",
+              er_clock_init(&keeper_id, 0, &clock) == ER_CLOCK_OK, 0);
   limits.ticks_per_slot = 0u;
-  check_int64("epoch rejects zero tick limit", er_epoch_clock_init(&limits, &clock), 0);
+  check_int64("epoch rejects zero tick limit",
+              er_clock_init(&keeper_id, &limits, &clock) == ER_CLOCK_OK, 0);
   limits.ticks_per_slot = 2u;
   limits.slots_per_epoch = 3u;
-  check_int64("epoch rejects non-power slot limit", er_epoch_clock_init(&limits, &clock), 0);
+  check_int64("epoch rejects non-power slot limit",
+              er_clock_init(&keeper_id, &limits, &clock) == ER_CLOCK_OK, 0);
   limits.slots_per_epoch = 2u;
-  check_int64("epoch init", er_epoch_clock_init(&limits, &clock), 1);
+  check_int64("epoch init",
+              er_clock_init(&keeper_id, &limits, &clock) == ER_CLOCK_OK, 1);
   check_uint64("epoch initial tick", clock.now.tick, 0u);
   check_uint64("epoch tick mask", clock.tick_mask, 1u);
   check_uint64("epoch slot mask", clock.slot_mask, 1u);
   check_uint64("epoch epoch mask", clock.epoch_mask, 1u);
   check_uint64("epoch tick shift", clock.tick_shift, 1u);
 
-  check_int64("epoch advance 1", er_epoch_clock_advance(&clock, &boundary), 1);
+  check_int64("epoch advance 1", er_clock_advance(&clock, &boundary) == ER_CLOCK_OK, 1);
   check_uint64("epoch tick 1", clock.now.tick, 1u);
   check_uint64("epoch slot boundary clear", boundary.slot_boundary, 0u);
 
-  check_int64("epoch advance slot boundary", er_epoch_clock_advance(&clock, &boundary), 1);
+  check_int64("epoch advance slot boundary", er_clock_advance(&clock, &boundary) == ER_CLOCK_OK, 1);
   check_uint64("epoch tick reset", clock.now.tick, 0u);
   check_uint64("epoch slot 1", clock.now.slot, 1u);
   check_uint64("epoch slot boundary set", boundary.slot_boundary, 1u);
   check_uint64("epoch boundary no epoch", boundary.epoch_boundary, 0u);
 
-  check_int64("epoch advance 3", er_epoch_clock_advance(&clock, &boundary), 1);
-  check_int64("epoch advance epoch boundary", er_epoch_clock_advance(&clock, &boundary), 1);
+  check_int64("epoch advance 3", er_clock_advance(&clock, &boundary) == ER_CLOCK_OK, 1);
+  check_int64("epoch advance epoch boundary", er_clock_advance(&clock, &boundary) == ER_CLOCK_OK, 1);
   check_uint64("epoch slot reset", clock.now.slot, 0u);
   check_uint64("epoch epoch 1", clock.now.epoch, 1u);
   check_uint64("epoch boundary epoch set", boundary.epoch_boundary, 1u);
   check_uint64("epoch boundary no era", boundary.era_boundary, 0u);
 
-  check_int64("epoch advance 5", er_epoch_clock_advance(&clock, &boundary), 1);
-  check_int64("epoch advance 6", er_epoch_clock_advance(&clock, &boundary), 1);
-  check_int64("epoch advance 7", er_epoch_clock_advance(&clock, &boundary), 1);
-  check_int64("epoch advance era boundary", er_epoch_clock_advance(&clock, &boundary), 1);
+  check_int64("epoch advance 5", er_clock_advance(&clock, &boundary) == ER_CLOCK_OK, 1);
+  check_int64("epoch advance 6", er_clock_advance(&clock, &boundary) == ER_CLOCK_OK, 1);
+  check_int64("epoch advance 7", er_clock_advance(&clock, &boundary) == ER_CLOCK_OK, 1);
+  check_int64("epoch advance era boundary", er_clock_advance(&clock, &boundary) == ER_CLOCK_OK, 1);
   check_uint64("epoch era 1", clock.now.era, 1u);
   check_uint64("epoch epoch reset", clock.now.epoch, 0u);
   check_uint64("epoch era boundary set", boundary.era_boundary, 1u);
@@ -728,25 +734,26 @@ static void test_epoch_clock_rollover(void) {
   earlier = clock.now;
   later = clock.now;
   later.tick = 1u;
-  check_int64("epoch compare less", er_epoch_stamp_compare(earlier, later), -1);
-  check_int64("epoch compare equal", er_epoch_stamp_compare(earlier, earlier), 0);
-  check_int64("epoch compare greater", er_epoch_stamp_compare(later, earlier), 1);
-  check_int64("epoch reject invalid advance", er_epoch_clock_advance(0, &boundary), 0);
+  check_int64("epoch compare less", er_clock_stamp_compare(earlier, later), -1);
+  check_int64("epoch compare equal", er_clock_stamp_compare(earlier, earlier), 0);
+  check_int64("epoch compare greater", er_clock_stamp_compare(later, earlier), 1);
+  check_int64("epoch reject invalid advance", er_clock_advance(0, &boundary) != ER_CLOCK_OK, 1);
 
   limits.slots_per_epoch = 4u;
-  check_int64("epoch reinit for modifier", er_epoch_clock_init(&limits, &clock), 1);
-  modifier = er_epoch_clock_default_modifier();
+  check_int64("epoch reinit for modifier",
+              er_clock_init(&keeper_id, &limits, &clock) == ER_CLOCK_OK, 1);
+  modifier = er_clock_default_modifier();
   check_uint64("epoch default stride", modifier.tick_stride, 1u);
   modifier.tick_stride = 5u;
   check_int64("epoch modifier advance",
-              er_epoch_clock_advance_with_modifier(&clock, &modifier, &boundary), 1);
+              er_clock_advance_with_modifier(&clock, &modifier, &boundary) == ER_CLOCK_OK, 1);
   check_uint64("epoch modifier tick", clock.now.tick, 1u);
   check_uint64("epoch modifier slot", clock.now.slot, 2u);
   check_uint64("epoch modifier slot boundary", boundary.slot_boundary, 1u);
   check_uint64("epoch modifier epoch boundary", boundary.epoch_boundary, 0u);
   modifier.tick_stride = 11u;
   check_int64("epoch modifier crosses epoch and era",
-              er_epoch_clock_advance_with_modifier(&clock, &modifier, &boundary), 1);
+              er_clock_advance_with_modifier(&clock, &modifier, &boundary) == ER_CLOCK_OK, 1);
   check_uint64("epoch modifier final tick", clock.now.tick, 0u);
   check_uint64("epoch modifier final slot", clock.now.slot, 0u);
   check_uint64("epoch modifier final epoch", clock.now.epoch, 0u);
@@ -755,26 +762,26 @@ static void test_epoch_clock_rollover(void) {
   check_uint64("epoch modifier era boundary", boundary.era_boundary, 1u);
   modifier.tick_stride = 0u;
   check_int64("epoch reject zero stride",
-              er_epoch_clock_advance_with_modifier(&clock, &modifier, &boundary), 0);
+              er_clock_advance_with_modifier(&clock, &modifier, &boundary) != ER_CLOCK_OK, 1);
   clock.now.tick = 1u;
   modifier.tick_stride = UINT64_MAX;
   check_int64("epoch reject tick overflow",
-              er_epoch_clock_advance_with_modifier(&clock, &modifier, &boundary), 0);
+              er_clock_advance_with_modifier(&clock, &modifier, &boundary) != ER_CLOCK_OK, 1);
   check_uint64("epoch tick overflow unchanged", clock.now.tick, 1u);
   clock.now.tick = 0u;
   clock.now.slot = UINT64_MAX;
   modifier.tick_stride = 2u;
   check_int64("epoch reject slot overflow",
-              er_epoch_clock_advance_with_modifier(&clock, &modifier, &boundary), 0);
+              er_clock_advance_with_modifier(&clock, &modifier, &boundary) != ER_CLOCK_OK, 1);
   check_uint64("epoch slot overflow unchanged", clock.now.slot, UINT64_MAX);
   clock.now.slot = 3u;
   clock.now.epoch = UINT64_MAX;
   check_int64("epoch reject epoch overflow",
-              er_epoch_clock_advance_with_modifier(&clock, &modifier, &boundary), 0);
+              er_clock_advance_with_modifier(&clock, &modifier, &boundary) != ER_CLOCK_OK, 1);
   check_uint64("epoch epoch overflow unchanged", clock.now.epoch, UINT64_MAX);
   clock.now.epoch = 1u;
   clock.now.era = UINT64_MAX;
   check_int64("epoch reject era overflow",
-              er_epoch_clock_advance_with_modifier(&clock, &modifier, &boundary), 0);
+              er_clock_advance_with_modifier(&clock, &modifier, &boundary) != ER_CLOCK_OK, 1);
   check_uint64("epoch era overflow unchanged", clock.now.era, UINT64_MAX);
 }

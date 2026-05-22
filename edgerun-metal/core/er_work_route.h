@@ -7,7 +7,7 @@
  */
 
 #include "er_crypto.h"
-#include "er_epoch_clock.h"
+#include "er_clock.h"
 
 typedef struct {
   UINT16 abi_version;
@@ -18,8 +18,8 @@ typedef struct {
   ErHash admission_hash;
   ErNodeId worker_node_id;
   ErNodeId relay_node_id;
-  ErEpochStamp issued_at;
-  ErEpochStamp valid_until;
+  er_clock_epoch_stamp_t issued_at;
+  er_clock_epoch_stamp_t valid_until;
 } ErWorkRouteChallenge;
 
 typedef struct {
@@ -30,7 +30,7 @@ typedef struct {
   ErHash route_id;
   ErNodeId worker_node_id;
   ErNodeId relay_node_id;
-  ErEpochStamp started_at;
+  er_clock_epoch_stamp_t started_at;
   ErWorkSignature signature;
 } ErWorkRouteStartProof;
 
@@ -67,20 +67,20 @@ UINT8 er_work_prepare_relay_accounting_claim(const ErRelayTransitHop* hop,
                                              ErRelayAccountingClaim* out_claim);
 UINT8 er_work_route_challenge_prepare(const ErCryptoProvider* crypto,
                                       const ErAdmittedRoute* route,
-                                      ErEpochStamp issued_at,
-                                      ErEpochStamp valid_until,
+                                      er_clock_epoch_stamp_t issued_at,
+                                      er_clock_epoch_stamp_t valid_until,
                                       ErWorkRouteChallenge* out_challenge);
 UINT8 er_work_route_challenge_valid_at(const ErWorkRouteChallenge* challenge,
-                                       ErEpochStamp now);
+                                       er_clock_epoch_stamp_t now);
 UINT8 er_work_route_start_proof_sign(const ErCryptoProvider* crypto,
                                      const ErWorkRouteChallenge* challenge,
                                      const ErCredential* worker_identity,
-                                     ErEpochStamp started_at,
+                                     er_clock_epoch_stamp_t started_at,
                                      ErWorkRouteStartProof* out_proof);
 UINT8 er_work_route_start_proof_verify(const ErCryptoProvider* crypto,
                                        const ErWorkRouteChallenge* challenge,
                                        const ErWorkRouteStartProof* proof,
-                                       ErEpochStamp now);
+                                       er_clock_epoch_stamp_t now);
 UINT8 er_work_prepare_capability_envelope_header(UINT16 kind,
                                                  UINT16 operation,
                                                  UINT16 content_type,
