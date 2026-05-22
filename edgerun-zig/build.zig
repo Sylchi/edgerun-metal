@@ -86,6 +86,45 @@ pub fn build(b: *std.Build) void {
     const storage_test_step = b.step("storage-test", "Run Zig storage tests");
     storage_test_step.dependOn(&run_storage_tests.step);
 
+    const sdk_tests = b.addTest(.{
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/sdk.zig"),
+            .target = target,
+            .optimize = optimize,
+        }),
+    });
+
+    const run_sdk_tests = b.addRunArtifact(sdk_tests);
+    const sdk_test_step = b.step("sdk-test", "Run Zig SDK tests");
+    sdk_test_step.dependOn(&run_sdk_tests.step);
+
+    const sdk_cli = b.addExecutable(.{
+        .name = "edgerun-sdk",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/sdk_cli.zig"),
+            .target = target,
+            .optimize = optimize,
+        }),
+    });
+
+    const run_sdk_cli = b.addRunArtifact(sdk_cli);
+    if (b.args) |args| run_sdk_cli.addArgs(args);
+    const sdk_cli_step = b.step("sdk-cli", "Run the deterministic Edgerun SDK configuration CLI");
+    sdk_cli_step.dependOn(&run_sdk_cli.step);
+
+    const sdk_bench = b.addExecutable(.{
+        .name = "edgerun-sdk-bench",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/sdk_bench.zig"),
+            .target = target,
+            .optimize = optimize,
+        }),
+    });
+
+    const run_sdk_bench = b.addRunArtifact(sdk_bench);
+    const sdk_bench_step = b.step("sdk-bench", "Benchmark deterministic Edgerun SDK setup and simulation");
+    sdk_bench_step.dependOn(&run_sdk_bench.step);
+
     const ui_core_tests = b.addTest(.{
         .root_module = b.createModule(.{
             .root_source_file = b.path("src/ui.zig"),
@@ -97,6 +136,18 @@ pub fn build(b: *std.Build) void {
     const run_ui_core_tests = b.addRunArtifact(ui_core_tests);
     const ui_core_test_step = b.step("ui-core-test", "Run Zig UI core tests");
     ui_core_test_step.dependOn(&run_ui_core_tests.step);
+
+    const shadcn_demo_tests = b.addTest(.{
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/shadcn_demo.zig"),
+            .target = target,
+            .optimize = optimize,
+        }),
+    });
+
+    const run_shadcn_demo_tests = b.addRunArtifact(shadcn_demo_tests);
+    const shadcn_demo_test_step = b.step("shadcn-demo-test", "Run GitHub Pages shadcn demo port tests");
+    shadcn_demo_test_step.dependOn(&run_shadcn_demo_tests.step);
 
     const ui_snapshot = b.addExecutable(.{
         .name = "edgerun-ui-snapshot-zig",
@@ -123,6 +174,49 @@ pub fn build(b: *std.Build) void {
     const run_ui_bench = b.addRunArtifact(ui_bench);
     const ui_bench_step = b.step("ui-bench", "Benchmark the Zig UI software renderer");
     ui_bench_step.dependOn(&run_ui_bench.step);
+
+    const ui_browser_target = b.resolveTargetQuery(std.Target.Query.parse(.{
+        .arch_os_abi = "wasm32-freestanding",
+    }) catch unreachable);
+    const ui_browser = b.addExecutable(.{
+        .name = "edgerun-ui-browser",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/ui_browser.zig"),
+            .target = ui_browser_target,
+            .optimize = .ReleaseSmall,
+            .single_threaded = true,
+        }),
+    });
+    ui_browser.entry = .disabled;
+    ui_browser.export_memory = true;
+    ui_browser.root_module.export_symbol_names = &.{
+        "er_ui_max_width",
+        "er_ui_max_height",
+        "er_ui_pixels_ptr",
+        "er_ui_pixels_len",
+        "er_ui_gpu_rect_float_stride",
+        "er_ui_gpu_rect_buffer_ptr",
+        "er_ui_gpu_rect_buffer_len",
+        "er_ui_gpu_text_float_stride",
+        "er_ui_gpu_text_buffer_ptr",
+        "er_ui_gpu_text_buffer_len",
+        "er_ui_gpu_text_bytes_ptr",
+        "er_ui_gpu_text_bytes_len",
+        "er_ui_width",
+        "er_ui_height",
+        "er_ui_input_ptr",
+        "er_ui_input_capacity",
+        "er_ui_last_error",
+        "er_ui_clear",
+        "er_ui_render_demo",
+        "er_ui_render_shadcn_demo",
+        "er_ui_render_shadcn_demo_scroll",
+        "er_ui_build_shadcn_gpu_frame",
+        "er_ui_render_input_object",
+    };
+    const install_ui_browser = b.addInstallArtifact(ui_browser, .{});
+    const ui_browser_step = b.step("ui-browser", "Build browser-renderable Zig UI wasm");
+    ui_browser_step.dependOn(&install_ui_browser.step);
 
     const tpm_real_check = b.addExecutable(.{
         .name = "edgerun-tpm-real-check-zig",
