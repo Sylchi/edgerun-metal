@@ -127,7 +127,7 @@ pub fn build(b: *std.Build) void {
 
     const ui_core_tests = b.addTest(.{
         .root_module = b.createModule(.{
-            .root_source_file = b.path("src/ui.zig"),
+            .root_source_file = b.path("src/ui_core_test.zig"),
             .target = target,
             .optimize = optimize,
         }),
@@ -137,17 +137,17 @@ pub fn build(b: *std.Build) void {
     const ui_core_test_step = b.step("ui-core-test", "Run Zig UI core tests");
     ui_core_test_step.dependOn(&run_ui_core_tests.step);
 
-    const shadcn_demo_tests = b.addTest(.{
+    const component_gallery_tests = b.addTest(.{
         .root_module = b.createModule(.{
-            .root_source_file = b.path("src/shadcn_demo.zig"),
+            .root_source_file = b.path("src/component_gallery.zig"),
             .target = target,
             .optimize = optimize,
         }),
     });
 
-    const run_shadcn_demo_tests = b.addRunArtifact(shadcn_demo_tests);
-    const shadcn_demo_test_step = b.step("shadcn-demo-test", "Run GitHub Pages shadcn demo port tests");
-    shadcn_demo_test_step.dependOn(&run_shadcn_demo_tests.step);
+    const run_component_gallery_tests = b.addRunArtifact(component_gallery_tests);
+    const component_gallery_test_step = b.step("component-gallery-test", "Run canonical component gallery tests");
+    component_gallery_test_step.dependOn(&run_component_gallery_tests.step);
 
     const ui_snapshot = b.addExecutable(.{
         .name = "edgerun-ui-snapshot-zig",
@@ -192,26 +192,37 @@ pub fn build(b: *std.Build) void {
     ui_browser.root_module.export_symbol_names = &.{
         "er_ui_max_width",
         "er_ui_max_height",
-        "er_ui_pixels_ptr",
-        "er_ui_pixels_len",
         "er_ui_gpu_rect_float_stride",
         "er_ui_gpu_rect_buffer_ptr",
         "er_ui_gpu_rect_buffer_len",
-        "er_ui_gpu_text_float_stride",
-        "er_ui_gpu_text_buffer_ptr",
-        "er_ui_gpu_text_buffer_len",
-        "er_ui_gpu_text_bytes_ptr",
-        "er_ui_gpu_text_bytes_len",
+        "er_ui_gpu_text_vertex_float_stride",
+        "er_ui_gpu_text_vertex_buffer_ptr",
+        "er_ui_gpu_text_vertex_buffer_len",
+        "er_ui_gpu_icon_vertex_float_stride",
+        "er_ui_gpu_icon_vertex_buffer_ptr",
+        "er_ui_gpu_icon_vertex_buffer_len",
+        "er_ui_font_atlas_width",
+        "er_ui_font_atlas_height",
+        "er_ui_font_atlas_ptr",
+        "er_ui_icon_atlas_width",
+        "er_ui_icon_atlas_height",
+        "er_ui_icon_atlas_ptr",
         "er_ui_width",
         "er_ui_height",
         "er_ui_input_ptr",
         "er_ui_input_capacity",
         "er_ui_last_error",
+        "er_ui_set_device_scale",
+        "er_ui_hover_hit_kind",
+        "er_ui_hover_hit_id",
+        "er_ui_component_gallery_layout_masonry_id",
+        "er_ui_component_gallery_layout_grid_id",
+        "er_ui_component_gallery_gap_compact_id",
+        "er_ui_component_gallery_gap_default_id",
+        "er_ui_component_gallery_gap_wide_id",
         "er_ui_clear",
-        "er_ui_render_demo",
-        "er_ui_render_shadcn_demo",
-        "er_ui_render_shadcn_demo_scroll",
-        "er_ui_build_shadcn_gpu_frame",
+        "er_ui_build_component_gallery_gpu_frame",
+        "er_ui_build_component_gallery_gpu_frame_layout_gap_hover",
         "er_ui_render_input_object",
     };
     const install_ui_browser = b.addInstallArtifact(ui_browser, .{});

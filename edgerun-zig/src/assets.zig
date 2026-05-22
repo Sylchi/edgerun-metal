@@ -270,7 +270,7 @@ test "icon font and emoji validation reject incomplete packs" {
     pack = tablerInterPack();
     const mismatched = [_]IconPackEntry{
         .{ .value = .activity, .provider_name = "activity" },
-        .{ .value = .window, .provider_name = "apps" },
+        .{ .value = .app, .provider_name = "apps" },
     };
     pack.icons.provider = .lucide;
     pack.icons.entries = &mismatched;

@@ -37,6 +37,38 @@ pub const Align = enum {
     stretch,
 };
 
+pub const LinearCursor = struct {
+    bounds: Rect,
+    axis: Axis,
+    gap: f32,
+    offset: f32 = 0.0,
+
+    pub fn init(bounds: Rect, axis: Axis, gap: f32) LinearCursor {
+        return .{ .bounds = bounds, .axis = axis, .gap = @max(0.0, gap) };
+    }
+
+    pub fn take(self: *LinearCursor, main_size: f32) Rect {
+        const size = @max(0.0, main_size);
+        const out = switch (self.axis) {
+            .row => Rect.init(self.bounds.x + self.offset, self.bounds.y, size, self.bounds.h),
+            .column => Rect.init(self.bounds.x, self.bounds.y + self.offset, self.bounds.w, size),
+        };
+        self.offset += size + self.gap;
+        return out;
+    }
+
+    pub fn skip(self: *LinearCursor, main_size: f32) void {
+        self.offset += @max(0.0, main_size) + self.gap;
+    }
+
+    pub fn remaining(self: LinearCursor) Rect {
+        return switch (self.axis) {
+            .row => Rect.init(self.bounds.x + self.offset, self.bounds.y, @max(0.0, self.bounds.w - self.offset), self.bounds.h),
+            .column => Rect.init(self.bounds.x, self.bounds.y + self.offset, self.bounds.w, @max(0.0, self.bounds.h - self.offset)),
+        };
+    }
+};
+
 pub const Style = struct {
     bg: Color = .bg,
     panel: Color = .panel,
@@ -58,6 +90,12 @@ pub const RectMode = enum(u8) {
     shadow,
     border,
     linear_gradient,
+};
+
+pub const TextAlign = enum(u8) {
+    start,
+    center,
+    end,
 };
 
 pub const Hit = struct {
@@ -146,13 +184,19 @@ pub fn easingSample(easing: Easing, value: f32) f32 {
 pub const Command = union(enum) {
     rect: struct { bounds: Rect, color: Color, color2: Color = .clear, mode: RectMode = .fill, radius: f32 = 0.0, shadow: f32 = 0.0 },
     border: struct { bounds: Rect, color: Color },
-    text: struct { origin: Rect, value: []const u8, color: Color },
+    text: struct { origin: Rect, value: []const u8, color: Color, alignment: TextAlign = .start },
     hit: Hit,
     drag_source: DragSource,
     drop_target: DropTarget,
     icon_quad: Quad,
     text_quad: Quad,
     transition: Transition,
+};
+
+pub const TextWrap = struct {
+    line_height: f32 = 22.0,
+    average_char_width: f32 = 9.0,
+    max_lines: usize = 8,
 };
 
 pub const Cursor = struct {
@@ -269,6 +313,43 @@ pub const Scene = struct {
 
     pub fn pushTextQuad(self: *Scene, quad: Quad) RenderError!void {
         if (self.clipQuad(quad)) |clipped| try self.push(.{ .text_quad = clipped });
+    }
+
+    pub fn pushText(self: *Scene, origin: Rect, value: []const u8, color: Color) RenderError!void {
+        try self.pushAlignedText(origin, value, color, .start);
+    }
+
+    pub fn pushAlignedText(self: *Scene, origin: Rect, value: []const u8, color: Color, alignment: TextAlign) RenderError!void {
+        if (value.len == 0) return;
+        if (self.clipRect(origin)) |clipped| {
+            try self.push(.{ .text = .{ .origin = clipped, .value = value, .color = color, .alignment = alignment } });
+        }
+    }
+
+    pub fn pushWrappedText(self: *Scene, bounds: Rect, value: []const u8, color: Color, wrap: TextWrap) RenderError!void {
+        if (value.len == 0 or !bounds.valid() or wrap.max_lines == 0) return;
+        if (!geometry.finite(wrap.line_height) or !geometry.finite(wrap.average_char_width)) return;
+        if (wrap.line_height <= 0.0 or wrap.average_char_width <= 0.0) return;
+
+        const max_lines_by_height = @max(@as(usize, 1), @as(usize, @intFromFloat(@max(1.0, bounds.h / wrap.line_height))));
+        const max_lines = @min(wrap.max_lines, max_lines_by_height);
+        const char_capacity = @max(@as(usize, 1), @as(usize, @intFromFloat(@max(1.0, bounds.w / wrap.average_char_width))));
+        var byte_cursor: usize = 0;
+        var line_index: usize = 0;
+        while (line_index < max_lines) : (line_index += 1) {
+            byte_cursor = skipAsciiSpace(value, byte_cursor);
+            if (byte_cursor >= value.len) break;
+            const split = wrappedLine(value, byte_cursor, char_capacity);
+            if (split.end > split.start) {
+                try self.pushText(.{
+                    .x = bounds.x,
+                    .y = bounds.y + @as(f32, @floatFromInt(line_index)) * wrap.line_height,
+                    .w = bounds.w,
+                    .h = wrap.line_height,
+                }, value[split.start..split.end], color);
+            }
+            byte_cursor = split.next;
+        }
     }
 
     pub fn pushClip(self: *Scene, clip: Rect) RenderError!bool {
@@ -546,9 +627,7 @@ fn renderInSlot(scene: *Scene, node: Node, bounds: Rect, style: Style, slot_id: 
             try scene.pushRect(bounds, surface_shadow, .shadow, control_radius, control_shadow);
             try scene.pushGradientRect(bounds, style.accent, accent_bottom, control_radius);
             try scene.pushRect(bounds, style.border, .border, control_radius, 0.0);
-            if (contentInset(bounds, button_text_padding)) |label_bounds| {
-                try scene.push(.{ .text = .{ .origin = label_bounds, .value = button.label, .color = style.bg } });
-            }
+            try scene.push(.{ .text = .{ .origin = buttonLabelBounds(bounds), .value = button.label, .color = style.bg, .alignment = .center } });
             try scene.push(.{ .hit = .{ .slot = slot_id, .kind = .button, .id = button.id, .bounds = bounds } });
         },
         .input => |input| {
@@ -581,7 +660,8 @@ const control_shadow: f32 = 5.0;
 const row_radius: f32 = 4.0;
 const surface_shadow = Color{ .r = 0, .g = 0, .b = 0, .a = 96 };
 const accent_bottom = Color{ .r = 15, .g = 183, .b = 210 };
-const button_text_padding: f32 = 10.0;
+const button_label_height: f32 = 14.0;
+const button_label_horizontal_padding: f32 = 16.0;
 const input_text_padding: f32 = 12.0;
 const row_text_padding_x: f32 = 12.0;
 const row_title_offset_y: f32 = 8.0;
@@ -593,6 +673,17 @@ fn contentInset(bounds: Rect, padding: f32) ?Rect {
     const clamped = geometry.clamp(padding, 0.0, @min(bounds.w, bounds.h) * 0.5);
     const out = bounds.insetUniform(clamped);
     return if (out.valid()) out else null;
+}
+
+fn buttonLabelBounds(bounds: Rect) Rect {
+    const label_margin = geometry.clamp(button_label_horizontal_padding, 0.0, bounds.w * 0.5);
+    const label_height = geometry.clamp(button_label_height, 1.0, bounds.h);
+    return Rect.init(
+        bounds.x + label_margin,
+        bounds.y + (bounds.h - label_height) * 0.5,
+        @max(1.0, bounds.w - label_margin * 2.0),
+        label_height,
+    );
 }
 
 fn rowTitleBounds(bounds: Rect, centered: bool) ?Rect {
@@ -717,6 +808,42 @@ fn alignedCrossStart(origin: f32, available: f32, preferred: f32, cross_align: A
     };
 }
 
+pub const WrappedLine = struct {
+    start: usize,
+    end: usize,
+    next: usize,
+};
+
+pub fn skipAsciiSpace(value: []const u8, start: usize) usize {
+    var index = start;
+    while (index < value.len and isAsciiSpace(value[index])) : (index += 1) {}
+    return index;
+}
+
+pub fn wrappedLine(value: []const u8, start: usize, char_capacity: usize) WrappedLine {
+    const limit = @min(value.len, start + char_capacity);
+    var index = start;
+    var last_space: ?usize = null;
+    while (index < limit) : (index += 1) {
+        if (value[index] == '\n') return .{ .start = start, .end = index, .next = index + 1 };
+        if (isAsciiSpace(value[index])) last_space = index;
+    }
+    if (limit >= value.len) return .{ .start = start, .end = value.len, .next = value.len };
+    if (value[limit] == '\n') return .{ .start = start, .end = limit, .next = limit + 1 };
+    if (isAsciiSpace(value[limit])) return .{ .start = start, .end = limit, .next = limit + 1 };
+    if (last_space) |space| {
+        if (space > start) return .{ .start = start, .end = space, .next = space + 1 };
+    }
+    return .{ .start = start, .end = limit, .next = limit };
+}
+
+fn isAsciiSpace(value: u8) bool {
+    return switch (value) {
+        ' ', '\t', '\n', '\r' => true,
+        else => false,
+    };
+}
+
 fn stackPreferredSize(layout: Layout) Size {
     var main: f32 = 0;
     var cross: f32 = 0;
@@ -765,6 +892,23 @@ test "ui renderer emits commands and structural hits without allocation" {
         if (command == .hit) hits += 1;
     }
     try std.testing.expectEqual(@as(usize, 3), hits);
+}
+
+test "button node centers label in core renderer" {
+    const bounds = Rect.init(10.0, 20.0, 140.0, 36.0);
+    var commands: [8]Command = undefined;
+    var scene = Scene.init(&commands);
+    try render(&scene, buttonNode(7, "Launch"), bounds, .{});
+
+    const label = firstText(scene.written()).?.text;
+    const label_center_x = label.origin.x + label.origin.w * 0.5;
+    const button_center_x = bounds.x + bounds.w * 0.5;
+    const label_center_y = label.origin.y + label.origin.h * 0.5;
+    const button_center_y = bounds.y + bounds.h * 0.5;
+
+    try std.testing.expectEqual(TextAlign.center, label.alignment);
+    try std.testing.expect(@abs(label_center_x - button_center_x) < 0.01);
+    try std.testing.expect(@abs(label_center_y - button_center_y) < 0.01);
 }
 
 test "stack layout stays inside small responsive bounds" {
@@ -915,9 +1059,66 @@ test "scene typed pushes validate clip and query topmost commands" {
     try std.testing.expectEqual(@as(usize, 1), scene.commandAt(5).?.drop_target.index);
 }
 
+test "scene wrapped text emits bounded deterministic lines" {
+    var commands: [8]Command = undefined;
+    var scene = Scene.init(&commands);
+    try scene.pushWrappedText(Rect.init(0.0, 0.0, 72.0, 72.0), "identity routed apps render their own docs", .text, .{
+        .line_height = 18.0,
+        .average_char_width = 9.0,
+        .max_lines = 4,
+    });
+
+    try std.testing.expectEqual(@as(usize, 4), scene.commandCount());
+    try std.testing.expectEqualStrings("identity", scene.commandAt(0).?.text.value);
+    try std.testing.expectEqualStrings("routed", scene.commandAt(1).?.text.value);
+    try std.testing.expectEqualStrings("apps", scene.commandAt(2).?.text.value);
+    try std.testing.expectEqual(@as(f32, 54.0), scene.commandAt(3).?.text.origin.y);
+}
+
+test "scene wrapped text splits long words and clips line count to height" {
+    var commands: [8]Command = undefined;
+    var scene = Scene.init(&commands);
+    try scene.pushWrappedText(Rect.init(0.0, 0.0, 36.0, 36.0), "superlongword", .text, .{
+        .line_height = 18.0,
+        .average_char_width = 9.0,
+        .max_lines = 8,
+    });
+
+    try std.testing.expectEqual(@as(usize, 2), scene.commandCount());
+    try std.testing.expectEqualStrings("supe", scene.commandAt(0).?.text.value);
+    try std.testing.expectEqualStrings("rlon", scene.commandAt(1).?.text.value);
+}
+
+test "linear cursor lays out row and column slots" {
+    var row = LinearCursor.init(Rect.init(10.0, 20.0, 100.0, 30.0), .row, 4.0);
+    const first = row.take(20.0);
+    const second = row.take(30.0);
+    const remaining = row.remaining();
+
+    try std.testing.expectEqual(Rect.init(10.0, 20.0, 20.0, 30.0), first);
+    try std.testing.expectEqual(Rect.init(34.0, 20.0, 30.0, 30.0), second);
+    try std.testing.expectEqual(Rect.init(68.0, 20.0, 42.0, 30.0), remaining);
+
+    var column = LinearCursor.init(Rect.init(4.0, 8.0, 40.0, 80.0), .column, 6.0);
+    const top = column.take(18.0);
+    column.skip(10.0);
+    const bottom = column.take(12.0);
+
+    try std.testing.expectEqual(Rect.init(4.0, 8.0, 40.0, 18.0), top);
+    try std.testing.expectEqual(Rect.init(4.0, 48.0, 40.0, 12.0), bottom);
+}
+
 fn firstHitId(commands: []const Command) ?u32 {
     for (commands) |command| switch (command) {
         .hit => |hit| return hit.id,
+        else => {},
+    };
+    return null;
+}
+
+fn firstText(commands: []const Command) ?Command {
+    for (commands) |command| switch (command) {
+        .text => return command,
         else => {},
     };
     return null;

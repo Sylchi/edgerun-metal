@@ -22,11 +22,15 @@ pub const max_points = 768;
 pub const max_contour_points = max_points * 2 + 2;
 pub const max_edges = 2048;
 pub const max_curves = 1024;
-pub const max_cached_glyphs = 256;
+pub const max_cached_glyphs = 1024;
 pub const vertices_per_glyph = 6;
 pub const default_px_size: f32 = 18.0;
 const glyph_padding = 1;
-const supersample = 2;
+const raster_samples_small: usize = 8;
+const raster_samples_medium: usize = 6;
+const raster_samples_large: usize = 4;
+const raster_small_px_limit: f32 = 14.0;
+const raster_medium_px_limit: f32 = 28.0;
 const msdf_channels = 3;
 const msdf_supersample = 8;
 const msdf_spread: f32 = 2.0;
@@ -827,7 +831,7 @@ pub const Face = struct {
         bitmap_len.* += byte_count;
 
         switch (format) {
-            .alpha8 => bakeAlphaBitmap(bitmap[start .. start + byte_count], width, height, left, top, edges[0..raster.edge_count]),
+            .alpha8 => bakeAlphaBitmap(bitmap[start .. start + byte_count], width, height, left, top, edges[0..raster.edge_count], rasterSamples(px_size)),
             .sdf8 => bakeSdfBitmap(
                 bitmap[start .. start + byte_count],
                 width,
@@ -1285,36 +1289,41 @@ fn appendEdge(edges: *[max_edges]Edge, edge_count: usize, a: Point, b: Point) Er
     return edge_count + 1;
 }
 
-fn inside(x: f32, y: f32, edges: []const Edge) bool {
-    var hit = false;
+fn insideNonZero(x: f32, y: f32, edges: []const Edge) bool {
+    var winding: i32 = 0;
     for (edges) |edge| {
         const ay = edge.a.y;
         const by = edge.b.y;
-        if ((ay > y) == (by > y)) continue;
-        const ax = edge.a.x;
-        const bx = edge.b.x;
-        const cross = ax + (y - ay) * (bx - ax) / (by - ay);
-        if (x < cross) hit = !hit;
+        if (ay <= y) {
+            if (by > y and isLeft(edge, x, y) > 0.0) winding += 1;
+        } else if (by <= y and isLeft(edge, x, y) < 0.0) {
+            winding -= 1;
+        }
     }
-    return hit;
+    return winding != 0;
 }
 
-fn bakeAlphaBitmap(bitmap: []u8, width: u16, height: u16, left: i16, top: i16, edges: []const Edge) void {
+fn isLeft(edge: Edge, x: f32, y: f32) f32 {
+    return (edge.b.x - edge.a.x) * (y - edge.a.y) - (x - edge.a.x) * (edge.b.y - edge.a.y);
+}
+
+fn bakeAlphaBitmap(bitmap: []u8, width: u16, height: u16, left: i16, top: i16, edges: []const Edge, samples: usize) void {
+    const sample_count = samples * samples;
     var py: usize = 0;
     while (py < height) : (py += 1) {
         var px: usize = 0;
         while (px < width) : (px += 1) {
             var covered: u16 = 0;
             var sy: usize = 0;
-            while (sy < supersample) : (sy += 1) {
+            while (sy < samples) : (sy += 1) {
                 var sx: usize = 0;
-                while (sx < supersample) : (sx += 1) {
-                    const sample_x = @as(f32, @floatFromInt(left)) + @as(f32, @floatFromInt(px)) + sampleOffset(sx, supersample);
-                    const sample_y = @as(f32, @floatFromInt(top)) + @as(f32, @floatFromInt(py)) + sampleOffset(sy, supersample);
-                    if (inside(sample_x, sample_y, edges)) covered += 1;
+                while (sx < samples) : (sx += 1) {
+                    const sample_x = @as(f32, @floatFromInt(left)) + @as(f32, @floatFromInt(px)) + sampleOffset(sx, samples);
+                    const sample_y = @as(f32, @floatFromInt(top)) + @as(f32, @floatFromInt(py)) + sampleOffset(sy, samples);
+                    if (insideNonZero(sample_x, sample_y, edges)) covered += 1;
                 }
             }
-            bitmap[py * width + px] = @intCast((covered * 255) / (supersample * supersample));
+            bitmap[py * width + px] = @intCast((covered * 255) / sample_count);
         }
     }
 }
@@ -1652,6 +1661,12 @@ fn msdfCoverageAlpha(encoded: u8) u8 {
 
 fn sampleOffset(index: usize, samples: usize) f32 {
     return (@as(f32, @floatFromInt(index)) + 0.5) / @as(f32, @floatFromInt(samples));
+}
+
+fn rasterSamples(px_size: f32) usize {
+    if (px_size <= raster_small_px_limit) return raster_samples_small;
+    if (px_size <= raster_medium_px_limit) return raster_samples_medium;
+    return raster_samples_large;
 }
 
 fn colorMsdfEdges(edges: []const MsdfEdge, out_colors: []u8) void {
@@ -2030,6 +2045,12 @@ fn f2dot14(value: u16) f32 {
 
 fn pxKey(px_size: f32) u16 {
     return @intFromFloat(@round(px_size * 16.0));
+}
+
+test "alpha rasterizer uses size dependent coverage samples" {
+    try std.testing.expectEqual(@as(usize, raster_samples_small), rasterSamples(12.0));
+    try std.testing.expectEqual(@as(usize, raster_samples_medium), rasterSamples(20.0));
+    try std.testing.expectEqual(@as(usize, raster_samples_large), rasterSamples(32.0));
 }
 
 test "geist variable font parses metrics axes and glyph ids" {
