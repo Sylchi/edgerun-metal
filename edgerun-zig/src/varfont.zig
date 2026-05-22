@@ -43,6 +43,7 @@ const curve_newton_epsilon: f32 = 0.00001;
 const curve_crossing_epsilon: f32 = 0.0000001;
 const curve_distance_samples = 16;
 const curve_newton_steps = 8;
+const boundary_probe_offset: f32 = 0.25;
 const tessellation_soft_limit = 12;
 const tessellation_hard_limit = 16;
 const quadratic_tolerance_sq: f32 = 0.01;
@@ -149,11 +150,13 @@ const MsdfEdge = struct {
 
 pub const AtlasFormat = enum {
     alpha8,
+    sdf8,
     msdf_rgb,
 
     fn channels(self: AtlasFormat) usize {
         return switch (self) {
             .alpha8 => 1,
+            .sdf8 => 1,
             .msdf_rgb => msdf_channels,
         };
     }
@@ -395,6 +398,7 @@ pub const Cache = struct {
         const pixel_offset = glyph_value.bitmap_offset + (y * glyph_value.width + x) * glyph_value.format.channels();
         return switch (glyph_value.format) {
             .alpha8 => self.bitmap[pixel_offset],
+            .sdf8 => msdfCoverageAlpha(self.bitmap[pixel_offset]),
             .msdf_rgb => msdfCoverageAlpha(self.bitmap[pixel_offset + 2]),
         };
     }
@@ -803,6 +807,7 @@ pub const Face = struct {
                 .edge_count = try flattenContours(points[0..outline.points], contour_ends[0..outline.contours], &edges, 0.0, 0.0, scale),
                 .curve_count = 0,
             },
+            .sdf8 => try buildMsdfOutline(points[0..outline.points], contour_ends[0..outline.contours], scale, &edges, &edge_colors, &curves, &curve_colors),
             .msdf_rgb => try buildMsdfOutline(points[0..outline.points], contour_ends[0..outline.contours], scale, &edges, &edge_colors, &curves, &curve_colors),
         };
         if (raster.edge_count == 0 and raster.curve_count == 0) return emptyGlyph(glyph_id, px_size, advance_value, start, variation_key, format);
@@ -823,6 +828,16 @@ pub const Face = struct {
 
         switch (format) {
             .alpha8 => bakeAlphaBitmap(bitmap[start .. start + byte_count], width, height, left, top, edges[0..raster.edge_count]),
+            .sdf8 => bakeSdfBitmap(
+                bitmap[start .. start + byte_count],
+                width,
+                height,
+                left,
+                top,
+                edges[0..raster.edge_count],
+                edge_colors[0..raster.edge_count],
+                curves[0..raster.curve_count],
+            ),
             .msdf_rgb => bakeMsdfBitmap(
                 bitmap[start .. start + byte_count],
                 width,
@@ -1332,6 +1347,30 @@ fn bakeMsdfBitmap(bitmap: []u8, width: u16, height: u16, left: i16, top: i16, ed
     }
 }
 
+fn bakeSdfBitmap(bitmap: []u8, width: u16, height: u16, left: i16, top: i16, edges: []const Edge, edge_colors: []const u8, curves: []const Curve) void {
+    const inv_samples = 1.0 / @as(f32, @floatFromInt(msdf_supersample * msdf_supersample));
+    var boundary_edges: [max_edges]bool = undefined;
+    var boundary_curves: [max_curves]bool = undefined;
+    computeBoundaryFlags(edges, edge_colors, curves, &boundary_edges, &boundary_curves);
+    var py: usize = 0;
+    while (py < height) : (py += 1) {
+        var px: usize = 0;
+        while (px < width) : (px += 1) {
+            var total: f32 = 0.0;
+            var sy: usize = 0;
+            while (sy < msdf_supersample) : (sy += 1) {
+                var sx: usize = 0;
+                while (sx < msdf_supersample) : (sx += 1) {
+                    const sample_x = @as(f32, @floatFromInt(left)) + @as(f32, @floatFromInt(px)) + sampleOffset(sx, msdf_supersample);
+                    const sample_y = @as(f32, @floatFromInt(top)) + @as(f32, @floatFromInt(py)) + sampleOffset(sy, msdf_supersample);
+                    total += signedDistanceToBoundary(sample_x, sample_y, edges, edge_colors, curves, boundary_edges[0..edges.len], boundary_curves[0..curves.len]);
+                }
+            }
+            bitmap[py * width + px] = alphaFromSignedDistance(total * inv_samples);
+        }
+    }
+}
+
 fn msdfSignedDistances(px: f32, py: f32, edges: []const Edge, edge_colors: []const u8, curves: []const Curve, curve_colors: []const u8) [msdf_channels]f32 {
     var nearest_channel_sq = [_]f32{ std.math.floatMax(f32), std.math.floatMax(f32), std.math.floatMax(f32) };
     var present = [_]bool{ false, false, false };
@@ -1386,6 +1425,76 @@ fn signedDistanceToOutline(px: f32, py: f32, edges: []const Edge, edge_colors: [
     if (!std.math.isFinite(nearest)) nearest = segment_tolerance;
     const sign: f32 = if (insideWithCurves(px, py, edges, edge_colors, curves)) 1.0 else -1.0;
     return sign * nearest;
+}
+
+fn signedDistanceToBoundary(px: f32, py: f32, edges: []const Edge, edge_colors: []const u8, curves: []const Curve, boundary_edges: []const bool, boundary_curves: []const bool) f32 {
+    var nearest_sq = std.math.floatMax(f32);
+    for (edges, 0..) |edge, index| {
+        if (boundary_edges[index]) {
+            nearest_sq = @min(nearest_sq, segmentDistanceSq(px, py, edge));
+        }
+    }
+    for (curves, 0..) |curve, index| {
+        if (boundary_curves[index]) {
+            nearest_sq = @min(nearest_sq, quadraticDistanceSq(px, py, curve));
+        }
+    }
+    if (nearest_sq == std.math.floatMax(f32)) {
+        for (edges, 0..) |edge, index| {
+            if ((edge_colors[index] & flattened_curve_edge_flag) == 0) nearest_sq = @min(nearest_sq, segmentDistanceSq(px, py, edge));
+        }
+        for (curves) |curve| nearest_sq = @min(nearest_sq, quadraticDistanceSq(px, py, curve));
+    }
+    var nearest = @sqrt(nearest_sq);
+    if (!std.math.isFinite(nearest)) nearest = segment_tolerance;
+    const sign: f32 = if (insideWithCurves(px, py, edges, edge_colors, curves)) 1.0 else -1.0;
+    return sign * nearest;
+}
+
+fn computeBoundaryFlags(edges: []const Edge, edge_colors: []const u8, curves: []const Curve, boundary_edges: *[max_edges]bool, boundary_curves: *[max_curves]bool) void {
+    for (edges, 0..) |edge, index| {
+        boundary_edges[index] = (edge_colors[index] & flattened_curve_edge_flag) == 0 and segmentSeparatesFill(edge, edges, edge_colors, curves);
+    }
+    for (curves, 0..) |curve, index| {
+        boundary_curves[index] = curveSeparatesFill(curve, edges, edge_colors, curves);
+    }
+}
+
+fn segmentSeparatesFill(edge: Edge, edges: []const Edge, edge_colors: []const u8, curves: []const Curve) bool {
+    return normalSamplesDiffer(
+        (edge.a.x + edge.b.x) * 0.5,
+        (edge.a.y + edge.b.y) * 0.5,
+        edge.b.x - edge.a.x,
+        edge.b.y - edge.a.y,
+        edges,
+        edge_colors,
+        curves,
+    );
+}
+
+fn curveSeparatesFill(curve: Curve, edges: []const Edge, edge_colors: []const u8, curves: []const Curve) bool {
+    const mid_x = quadraticPointX(curve, 0.5);
+    const mid_y = quadraticPointY(curve, 0.5);
+    return normalSamplesDiffer(
+        mid_x,
+        mid_y,
+        curve.p2.x - curve.p0.x,
+        curve.p2.y - curve.p0.y,
+        edges,
+        edge_colors,
+        curves,
+    );
+}
+
+fn normalSamplesDiffer(x: f32, y: f32, dx: f32, dy: f32, edges: []const Edge, edge_colors: []const u8, curves: []const Curve) bool {
+    const length_sq = dx * dx + dy * dy;
+    if (length_sq <= segment_tolerance) return true;
+    const inv_len = 1.0 / @sqrt(length_sq);
+    const nx = -dy * inv_len * boundary_probe_offset;
+    const ny = dx * inv_len * boundary_probe_offset;
+    const inside_a = insideWithCurves(x + nx, y + ny, edges, edge_colors, curves);
+    const inside_b = insideWithCurves(x - nx, y - ny, edges, edge_colors, curves);
+    return inside_a != inside_b;
 }
 
 fn resolveMissingChannelDistance(present: [msdf_channels]bool, distances: [msdf_channels]f32, color: usize) f32 {
@@ -2026,7 +2135,41 @@ test "msdf rasterization emits rgb distance channels" {
     try std.testing.expect(msdfHasDistanceRamp(view.pixels));
 }
 
-test "msdf cache is distinct from alpha cache and drawable by median channel" {
+test "sdf rasterization emits single channel distance field" {
+    const face = try Face.geist();
+    var bitmap: [128 * 1024]u8 = undefined;
+    var cache = Cache.initFormat(face, &bitmap, .sdf8);
+    const glyph_id = face.glyphId('A');
+    try std.testing.expect(glyph_id != 0);
+    const glyph_value = try cache.bakeGlyph(glyph_id, 42.0);
+    try std.testing.expectEqual(AtlasFormat.sdf8, glyph_value.format);
+    try std.testing.expect(glyph_value.width > 0);
+    try std.testing.expect(glyph_value.height > 0);
+    try std.testing.expectEqual(@as(usize, glyph_value.width) * @as(usize, glyph_value.height), cache.bitmap_len);
+
+    const view = cache.bitmapView(glyph_value);
+    try std.testing.expectEqual(@as(usize, 1), view.bytes_per_pixel);
+    try std.testing.expectEqual(AtlasFormat.sdf8, view.format);
+    try std.testing.expect(sdfHasDistanceRamp(view.pixels));
+}
+
+test "sdf cache is distinct from alpha cache and drawable" {
+    const face = try Face.geist();
+    var pixels: [96 * 36]ui.Color = undefined;
+    var surface = TestSurface{ .width = 96, .height = 36, .pixels = &pixels };
+    var bitmap: [128 * 1024]u8 = undefined;
+    var cache = Cache.initFormat(face, &bitmap, .sdf8);
+    @memset(surface.pixels, ui.Color.clear);
+    try cache.drawText(&surface, ui.Rect.init(0, 0, 96, 36), "sdf", ui.Color.text, 24);
+    try std.testing.expect(pixelAlphaSum(&pixels) > 0);
+
+    const sdf_len = cache.bitmap_len;
+    cache.format = .alpha8;
+    try cache.drawText(&surface, ui.Rect.init(0, 0, 96, 36), "sdf", ui.Color.text, 24);
+    try std.testing.expect(cache.bitmap_len > sdf_len);
+}
+
+test "msdf cache is distinct from alpha cache and drawable" {
     const face = try Face.geist();
     var pixels: [96 * 36]ui.Color = undefined;
     var surface = TestSurface{ .width = 96, .height = 36, .pixels = &pixels };
@@ -2090,6 +2233,10 @@ fn msdfHasChannelVariation(bytes: []const u8) bool {
 }
 
 fn msdfHasDistanceRamp(bytes: []const u8) bool {
+    return sdfHasDistanceRamp(bytes);
+}
+
+fn sdfHasDistanceRamp(bytes: []const u8) bool {
     var low = false;
     var mid = false;
     var high = false;

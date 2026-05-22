@@ -1,14 +1,12 @@
 const std = @import("std");
 const renderer_software = @import("renderer_software.zig");
 const ui = @import("ui.zig");
-const varfont = @import("varfont.zig");
 
 pub fn main(init: std.process.Init) !void {
-    try renderSnapshot(init, ".build/edgerun-zig/ui.ppm", .alpha8);
-    try renderSnapshot(init, ".build/edgerun-zig/ui-msdf.ppm", .msdf_rgb);
+    try renderSnapshot(init, ".build/edgerun-zig/ui.ppm");
 }
 
-fn renderSnapshot(init: std.process.Init, out_path: []const u8, font_format: varfont.AtlasFormat) !void {
+fn renderSnapshot(init: std.process.Init, out_path: []const u8) !void {
     const allocator = std.heap.page_allocator;
     const width = 2560;
     const height = 1440;
@@ -28,13 +26,8 @@ fn renderSnapshot(init: std.process.Init, out_path: []const u8, font_format: var
     const pixels = try allocator.alloc(ui.Color, width * height);
     defer allocator.free(pixels);
     const surface = try renderer_software.Surface.init(render_width, render_height, render_pixels);
-    const font = try varfont.Face.geist();
-    const glyph_bitmap = try allocator.alloc(u8, 8 * 1024 * 1024);
-    defer allocator.free(glyph_bitmap);
-    var font_cache = varfont.Cache.initFormat(font, glyph_bitmap, font_format);
     surface.clear(.bg);
-    try surface.rasterizeScaled(scene.written(), &font_cache, @floatFromInt(supersample));
-    try drawTypographySpecimen(surface, &font_cache, supersample);
+    surface.rasterizeScaled(scene.written(), @floatFromInt(supersample));
     downsample2x(pixels, render_pixels, width, height);
 
     const io = init.io;
@@ -53,37 +46,12 @@ fn renderSnapshot(init: std.process.Init, out_path: []const u8, font_format: var
 
 fn sampleRoot(children: []ui.Node) ui.Node {
     std.debug.assert(children.len >= 5);
-    children[0] = .{ .text = .{ .value = "edgerun ui msdf snapshot", .color = .accent } };
+    children[0] = .{ .text = .{ .value = "edgerun ui snapshot", .color = .accent } };
     children[1] = .{ .input = .{ .id = 10, .placeholder = "search canonical objects, identities, storage records" } };
     children[2] = .{ .row_item = .{ .id = 20, .title = "object graph renderer", .detail = "" } };
     children[3] = .{ .slot = .{ .id = 7, .child = &children[4] } };
-    children[4] = .{ .button = .{ .id = 30, .label = "Render MSDF" } };
+    children[4] = .{ .button = .{ .id = 30, .label = "Render" } };
     return .{ .stack = .{ .axis = .column, .gap = 18, .padding = 48, .children = children[0..4] } };
-}
-
-fn drawTypographySpecimen(surface: renderer_software.Surface, cache: *varfont.Cache, comptime scale: comptime_int) varfont.Error!void {
-    const s: f32 = @floatFromInt(scale);
-    const x = 108.0 * s;
-    var y: f32 = 560.0 * s;
-    try cache.drawText(surface, ui.Rect.init(x, y, 2200.0 * s, 120.0 * s), "Geist variable font - MSDF sizes and weights", ui.Color.text, 72.0 * s);
-    y += 150.0 * s;
-
-    try drawSpecimenRow(surface, cache, x, y, 32.0 * s, 250.0, "small 250", "edgerun", s);
-    y += 84.0 * s;
-    try drawSpecimenRow(surface, cache, x, y, 40.0 * s, 400.0, "body 400", "edgerun", s);
-    y += 104.0 * s;
-    try drawSpecimenRow(surface, cache, x, y, 56.0 * s, 550.0, "title 550", "edgerun", s);
-    y += 136.0 * s;
-    try drawSpecimenRow(surface, cache, x, y, 80.0 * s, 700.0, "display 700", "edgerun", s);
-    y += 178.0 * s;
-    try drawSpecimenRow(surface, cache, x, y, 112.0 * s, 850.0, "poster 850", "MSDF", s);
-}
-
-fn drawSpecimenRow(surface: renderer_software.Surface, cache: *varfont.Cache, x: f32, y: f32, px_size: f32, weight: f32, label: []const u8, specimen: []const u8, scale: f32) varfont.Error!void {
-    _ = cache.setAxis("wght", 400.0);
-    try cache.drawText(surface, ui.Rect.init(x, y + 4.0 * scale, 360.0 * scale, 48.0 * scale), label, ui.Color.muted, 32.0 * scale);
-    _ = cache.setAxis("wght", weight);
-    try cache.drawText(surface, ui.Rect.init(x + 440.0 * scale, y, 1800.0 * scale, px_size + 36.0 * scale), specimen, ui.Color.text, px_size);
 }
 
 fn downsample2x(dst: []ui.Color, src: []const ui.Color, width: usize, height: usize) void {

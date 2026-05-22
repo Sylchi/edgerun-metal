@@ -42,6 +42,7 @@ pub const tpm = @import("tpm.zig");
 pub const tpm_acpi = @import("tpm_acpi.zig");
 pub const tpmapp = @import("tpmapp.zig");
 pub const theme = @import("theme.zig");
+pub const renderer_gpu = @import("renderer_gpu.zig");
 pub const renderer_surface = @import("renderer_surface.zig");
 pub const renderer_software = @import("renderer_software.zig");
 pub const ui = @import("ui.zig");
@@ -94,6 +95,7 @@ test {
     _ = tpm_acpi;
     _ = tpmapp;
     _ = theme;
+    _ = renderer_gpu;
     _ = renderer_surface;
     _ = renderer_software;
     _ = ui;

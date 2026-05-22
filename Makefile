@@ -11,6 +11,8 @@
 BUILD_DIR := .build
 CMAKE ?= cmake
 CTEST ?= ctest
+PI_BOOT_DIR := $(BUILD_DIR)/edgerun-metal/pi-zero-w-v1_1/boot
+PI_USB_BOOT_DIR := $(BUILD_DIR)/pi-zero-w-v1_1-usb-boot
 
 all: check
 
@@ -91,18 +93,32 @@ pi-usb-reset-controller:
 	sleep 2
 	printf '0000:c1:00.3' | sudo tee /sys/bus/pci/drivers/xhci_hcd/bind >/dev/null
 
-pi-usb-load: pi-zero-w-v1_1-kernel pi-usb-host
-	sudo $(BUILD_DIR)/pi-usb-host/edgerun-pi-usb-boot-host --wait --wait-ms 120000 --serve-dir $(BUILD_DIR)/edgerun-metal/pi-zero-w-v1_1/boot --kernel-image $(BUILD_DIR)/pi-zero-w-v1_1-zig/kernel-padded.img $(BUILD_DIR)/edgerun-metal/pi-zero-w-v1_1/boot/bootcode.bin
+$(PI_USB_BOOT_DIR)/config.txt: $(PI_BOOT_DIR)/config.txt
+	mkdir -p $(PI_USB_BOOT_DIR)
+	cp $(PI_BOOT_DIR)/bootcode.bin $(PI_USB_BOOT_DIR)/bootcode.bin
+	cp $(PI_BOOT_DIR)/start.elf $(PI_USB_BOOT_DIR)/start.elf
+	cp $(PI_BOOT_DIR)/fixup.dat $(PI_USB_BOOT_DIR)/fixup.dat
+	cp $(PI_BOOT_DIR)/cmdline.txt $(PI_USB_BOOT_DIR)/cmdline.txt
+	printf 'arm_64bit=0\n' > $(PI_USB_BOOT_DIR)/config.txt
+	printf 'device_tree=\n' >> $(PI_USB_BOOT_DIR)/config.txt
+	printf 'core_freq=250\n' >> $(PI_USB_BOOT_DIR)/config.txt
+	printf 'kernel=kernel.img\n' >> $(PI_USB_BOOT_DIR)/config.txt
+	printf 'boot_load_flags=1\n' >> $(PI_USB_BOOT_DIR)/config.txt
 
-pi-usb-load-probe: pi-zero-w-v1_1-usb-probe pi-usb-host
-	sudo $(BUILD_DIR)/pi-usb-host/edgerun-pi-usb-boot-host --wait --wait-ms 120000 --serve-dir $(BUILD_DIR)/edgerun-metal/pi-zero-w-v1_1/boot --kernel-image $(BUILD_DIR)/pi-zero-w-v1_1-usb-probe/kernel-padded.img $(BUILD_DIR)/edgerun-metal/pi-zero-w-v1_1/boot/bootcode.bin
+pi-usb-boot-dir: $(PI_USB_BOOT_DIR)/config.txt
+
+pi-usb-load: pi-zero-w-v1_1-kernel pi-usb-host pi-usb-boot-dir
+	sudo $(BUILD_DIR)/pi-usb-host/edgerun-pi-usb-boot-host --wait --wait-ms 120000 --serve-dir $(PI_USB_BOOT_DIR) --kernel-image $(BUILD_DIR)/pi-zero-w-v1_1-zig/kernel-padded.img $(PI_USB_BOOT_DIR)/bootcode.bin
+
+pi-usb-load-probe: pi-zero-w-v1_1-usb-probe pi-usb-host pi-usb-boot-dir
+	sudo $(BUILD_DIR)/pi-usb-host/edgerun-pi-usb-boot-host --wait --wait-ms 120000 --serve-dir $(PI_USB_BOOT_DIR) --kernel-image $(BUILD_DIR)/pi-zero-w-v1_1-usb-probe/kernel-padded.img $(PI_USB_BOOT_DIR)/bootcode.bin
 
 pi-usb-recover-load: pi-usb-reset-port pi-usb-load
 
 pi-usb-recover-load-probe: pi-usb-reset-port pi-usb-load-probe
 
 pi-usb-dry-run: pi-zero-w-v1_1-kernel
-	zig build --build-file edgerun-zig/build.zig --cache-dir $(BUILD_DIR)/edgerun-zig pi-usb-load -- --dry-run --serve-dir $(BUILD_DIR)/edgerun-metal/pi-zero-w-v1_1/boot --kernel-image $(BUILD_DIR)/pi-zero-w-v1_1-zig/kernel.img $(BUILD_DIR)/edgerun-metal/pi-zero-w-v1_1/boot/bootcode.bin
+	zig build --build-file edgerun-zig/build.zig --cache-dir $(BUILD_DIR)/edgerun-zig pi-usb-load -- --dry-run --serve-dir $(PI_USB_BOOT_DIR) --kernel-image $(BUILD_DIR)/pi-zero-w-v1_1-zig/kernel.img $(PI_USB_BOOT_DIR)/bootcode.bin
 
 pi-usb-control: pi-usb-control-host
 	sudo $(BUILD_DIR)/pi-usb-host/edgerun-pi-usb-control-host --wait-ms 10000 gpio-read 47
