@@ -245,6 +245,9 @@ that can move through memory, over wire routes, and into durable storage without
 changing format. An object node contains its epoch stamp, requirement fields,
 owner layer identifiers, envelope descriptors, and either inline bytes or child
 references. The object id is the BLAKE3 hash of those canonical bytes.
+No other subsystem defines an object byte format or object-id scheme; storage,
+VFS, relay, sealing, and app SDK code may only carry, validate, or reference
+canonical `edgerun-object` ids.
 
 The object layer does not know auth, user sessions, device policy, object
 contents, storage tiers, or route admission. Those decisions belong to the

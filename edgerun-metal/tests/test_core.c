@@ -83,7 +83,7 @@ int main(void) {
   test_device_relay_identity();
   test_ephemeral_node_identity();
   test_jurisdiction_policy_and_node_instances();
-  test_sealed_content_object_format();
+  test_sealed_content_record_format();
   test_sealed_content_key_wrap();
   test_boot_admission_record();
   test_boot_efi_vars();

@@ -24,7 +24,7 @@ static void check_bytes_equal(const char* name,
   }
 }
 
-static void test_sealed_content_object_format(void) {
+static void test_sealed_content_record_format(void) {
   static const UINT8 aad_bytes[] = {'r', 'o', 'u', 't', 'e'};
   static const UINT8 plaintext_bytes[] = {'p', 'a', 'c', 'k', 'a', 'g', 'e'};
   ErCryptoProvider crypto;
@@ -34,7 +34,7 @@ static void test_sealed_content_object_format(void) {
   ErByteSpan aad;
   ErByteSpan plaintext;
   ErMutableBytes sealed_out;
-  ErSealedContentObjectHeader header;
+  ErSealedContentRecordHeader header;
   UINT8 root_key[ER_CRYPTO_BLAKE3_SEAL_ROOT_KEY_LEN];
   UINT8 recipient_key[ER_PUBLIC_KEY_LEN];
   UINT8 other_recipient_key[ER_PUBLIC_KEY_LEN];
@@ -72,8 +72,8 @@ static void test_sealed_content_object_format(void) {
   sealed_out.len = 0u;
   sealed_out.capacity = (UINTN)sizeof(sealed_bytes);
 
-  check_int64("seal content object prepare",
-              er_seal_prepare_content_object(&crypto, &recipient, &aad,
+  check_int64("seal content record prepare",
+              er_seal_prepare_content_record(&crypto, &recipient, &aad,
                                              &plaintext, 1u, &sealed_out,
                                              &header),
               1);
@@ -89,7 +89,7 @@ static void test_sealed_content_object_format(void) {
                         sizeof(plaintext_bytes) +
                         ER_CRYPTO_BLAKE3_SEAL_TAG_LEN));
   check_int64("seal content valid",
-              er_seal_content_object_valid(&crypto, &header, &aad,
+              er_seal_content_record_valid(&crypto, &header, &aad,
                                            sealed_bytes, sealed_out.len),
               1);
   {
@@ -123,19 +123,19 @@ static void test_sealed_content_object_format(void) {
 
   sealed_bytes[0] ^= 1u;
   check_int64("seal content reject payload tamper",
-              er_seal_content_object_valid(&crypto, &header, &aad,
+              er_seal_content_record_valid(&crypto, &header, &aad,
                                            sealed_bytes, sealed_out.len),
               0);
   sealed_bytes[0] ^= 1u;
   header.reserved = 1u;
   check_int64("seal content reject reserved",
-              er_seal_content_object_valid(&crypto, &header, &aad,
+              er_seal_content_record_valid(&crypto, &header, &aad,
                                            sealed_bytes, sealed_out.len),
               0);
   header.reserved = 0u;
   aad.len = 0u;
   check_int64("seal content reject aad mismatch",
-              er_seal_content_object_valid(&crypto, &header, &aad,
+              er_seal_content_record_valid(&crypto, &header, &aad,
                                            sealed_bytes, sealed_out.len),
               0);
 }

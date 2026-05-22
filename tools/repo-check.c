@@ -367,6 +367,10 @@ static int erc_is_external_dependency_audit_path(const char* path) {
   return 1;
 }
 
+static int erc_is_canonical_object_owner_path(const char* path) {
+  return erc_has_prefix(path, "edgerun-object/") != 0;
+}
+
 static int erc_bytes_contains(const unsigned char* bytes, size_t len, const char* pattern) {
   size_t pattern_len = strlen(pattern);
   size_t i;
@@ -378,6 +382,24 @@ static int erc_bytes_contains(const unsigned char* bytes, size_t len, const char
     if (memcmp(bytes + i, pattern, pattern_len) == 0) {
       return 1;
     }
+  }
+  return 0;
+}
+
+static int erc_scan_canonical_object_boundary(const char* path,
+                                             const unsigned char* bytes,
+                                             size_t len) {
+  if (erc_is_canonical_object_owner_path(path) != 0) {
+    return 0;
+  }
+  if (erc_bytes_contains(bytes, len, "EROBJ" "001") != 0 ||
+      erc_bytes_contains(bytes, len, "ER_OBJECT" "_MAGIC") != 0) {
+    return erc_fail("edgerun-object is the only owner of the canonical object byte format");
+  }
+  if (erc_bytes_contains(bytes, len, "SealedContent" "Object") != 0 ||
+      erc_bytes_contains(bytes, len, "sealed_" "object_id") != 0 ||
+      erc_bytes_contains(bytes, len, "plaintext_" "object_id") != 0) {
+    return erc_fail("noncanonical records must not define object types or object ids");
   }
   return 0;
 }
@@ -403,6 +425,10 @@ static int erc_scan_external_dependencies(const char* root, const char* path) {
       free(bytes);
       return erc_fail("first-party files must not introduce external dependency fetches or forbidden TLS libraries");
     }
+  }
+  if (erc_scan_canonical_object_boundary(path, bytes, len) != 0) {
+    free(bytes);
+    return 1;
   }
   free(bytes);
   return 0;

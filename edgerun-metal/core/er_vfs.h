@@ -59,7 +59,7 @@ typedef struct {
   UINT16 compression_kind;
   UINT16 seal_kind;
   UINT16 reserved;
-  ErHash plaintext_object_id;
+  ErHash plaintext_canonical_object_id;
   UINT64 plaintext_len;
   ErHash transport_object_id;
   UINT64 transport_len;
@@ -71,7 +71,7 @@ typedef struct {
   UINT16 compression_kind;
   UINT16 seal_kind;
   UINT16 aad_len;
-  ErHash plaintext_object_id;
+  ErHash plaintext_canonical_object_id;
   UINT64 plaintext_len;
   ErHash aad_hash;
   ErHash payload_hash;
@@ -119,7 +119,7 @@ UINT8 er_vfs_prepare_object_label_ref(const ErCryptoProvider* crypto, const char
 UINT8 er_vfs_prepare_object_label_ref_from_object(const ErCryptoProvider* crypto, const char* label,
                                                   UINTN label_len, const ErHash* object_id,
                                                   UINT64 object_len, ErVfsObjectLabelRef* out_ref);
-UINT8 er_vfs_prepare_transform_ref(const ErCryptoProvider* crypto, const ErHash* plaintext_object_id,
+UINT8 er_vfs_prepare_transform_ref(const ErCryptoProvider* crypto, const ErHash* plaintext_canonical_object_id,
                                    UINT64 plaintext_len, const ErHash* transport_object_id,
                                    UINT64 transport_len, UINT16 compression_kind, UINT16 seal_kind,
                                    ErVfsObjectTransformRef* out_ref);
