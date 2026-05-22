@@ -7,6 +7,14 @@
  * object-in/object-out operations without learning storage, clock, identity,
  * or wire internals. No operation creates hidden authority or mutable shadow
  * state; outputs are canonical edgerun-object bytes or ids.
+ *
+ * Resource model:
+ *   Apps declare required memory and storage in their manifest. Launch binds
+ *   exactly that slice to the node: caller-owned arena bytes and a caller-bound
+ *   store/slice. There is no dynamic allocation, oversubscription, or runtime
+ *   quota negotiation in this API. Runtime calls are deterministic state
+ *   transitions inside the already-bound slice. A node may delegate part of its
+ *   launch-bound slice to child nodes, recursively.
  */
 
 #include <stddef.h>
@@ -65,9 +73,9 @@ typedef struct er_node_authority {
 
 typedef struct er_node_budget {
   size_t memory_len;
-  size_t memory_used;
+  size_t memory_delegated;
   uint64_t storage_limit;
-  uint64_t storage_used;
+  uint64_t storage_delegated;
 } er_node_budget_t;
 
 typedef struct er_node_receipt {
@@ -85,6 +93,11 @@ int er_node_open(er_node_t* node, const er_identity_t* identity,
 int er_node_identity(const er_node_t* node, er_identity_t* out_identity);
 int er_node_epoch(const er_node_t* node, er_clock_epoch_stamp_t* out_epoch);
 int er_node_budget(const er_node_t* node, er_node_budget_t* out_budget);
+/*
+ * Delegates fixed sub-slices from the parent node to a child node. The child
+ * identity may describe another app/developer; the parent is allocating part of
+ * its own already-bound slice, not granting global authority.
+ */
 int er_node_spawn(er_node_t* parent, const er_identity_t* child_identity,
                   size_t memory_len, uint64_t storage_limit,
                   er_store_t* child_store, er_node_t* out_child,
