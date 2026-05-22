@@ -239,6 +239,9 @@ delegated actors. It does not decide login state, admission, authority,
 signature trust, key unsealing, or transport reachability. A delegated identity
 is a new routable identity derived from parent, delegate, and scope identities;
 it is not the parent's signing key and does not imply permission by itself.
+Only `edgerun-identity` defines canonical identity bytes and identity ids;
+other packages may carry credentials or canonical `er_identity_t` values, but
+must not define a parallel identity format.
 
 `edgerun-object` is the public object boundary. It defines the canonical bytes
 that can move through memory, over wire routes, and into durable storage without

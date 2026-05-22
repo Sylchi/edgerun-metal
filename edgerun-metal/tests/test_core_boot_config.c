@@ -1,14 +1,14 @@
 static void test_boot_config_and_seal_strategy(void) {
   ErBootConfig config;
-  ErIdentity admission_identity;
+  ErCredential admission_identity;
   const ErBootFirmwareSourceConfig* firmware_source;
   UINT8 admission_key[ER_PUBLIC_KEY_LEN];
 
   er_boot_config_init(&config);
   test_fill_bytes(admission_key, (UINTN)sizeof(admission_key), 0x42u);
   check_int64("boot config prepare admission identity",
-              er_identity_prepare(ER_IDENTITY_TYPE_PUBLIC_KEY,
-                                  ER_IDENTITY_BACKING_ED25519,
+              er_credential_prepare(ER_CREDENTIAL_KIND_PUBLIC_KEY,
+                                  ER_CREDENTIAL_BACKING_ED25519,
                                   admission_key,
                                   ER_PUBLIC_KEY_LEN,
                                   &admission_identity),

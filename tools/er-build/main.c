@@ -711,7 +711,7 @@ static int erb_build_pi_node_update(int print_plan) {
       erb_args_push(&args, "edgerun-clock/src/er_clock.c") != 0 ||
       erb_args_push(&args, "edgerun-metal/core/er_crypto.c") != 0 ||
       erb_args_push(&args, "edgerun-metal/core/er_crypto_blake3.c") != 0 ||
-      erb_args_push(&args, "edgerun-metal/core/er_identity.c") != 0 ||
+      erb_args_push(&args, "edgerun-metal/core/er_credential.c") != 0 ||
       erb_args_push(&args, "edgerun-crypto/src/er_blake3.c") != 0) {
     return 1;
   }
@@ -789,7 +789,6 @@ static int erb_build_app_run(int print_plan) {
       erb_args_push(&args, "edgerun-metal/core/er_bus.c") != 0 ||
       erb_args_push(&args, "edgerun-metal/core/er_driver_policy.c") != 0 ||
       erb_args_push(&args, "edgerun-metal/core/er_node_id.c") != 0 ||
-      erb_args_push(&args, "edgerun-metal/core/er_app.c") != 0 ||
       erb_args_push(&args, "edgerun-metal/core/er_relay_packet.c") != 0 ||
       erb_args_push(&args, "edgerun-metal/core/wasm_vm.c") != 0 ||
       erb_args_push(&args, "edgerun-metal/core/wasm_vm_reader.c") != 0 ||

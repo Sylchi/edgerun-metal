@@ -1,5 +1,5 @@
 #include "er_node_control.h"
-#include "er_identity.h"
+#include "er_credential.h"
 #include "er_mem.h"
 #include "er_wifi_l2.h"
 
@@ -14,7 +14,7 @@ static UINT8 er_node_identity_shape_valid(const ErNodeIdentity* node) {
       node->abi_version != ER_WORK_ABI_VERSION ||
       node->role == 0u ||
       er_node_id_nonzero(&node->node_id) == 0u ||
-      er_identity_valid(&node->identity) == 0u) {
+      er_credential_valid(&node->identity) == 0u) {
     return 0u;
   }
   return 1u;

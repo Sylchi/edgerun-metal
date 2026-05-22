@@ -20,10 +20,7 @@ enum {
   ERA_RELAY_INBOX_BASE = 0,
   ERA_RELAY_INBOX_LEN = 1024,
   ERA_RELAY_OUTBOX_BASE = 1024,
-  ERA_RELAY_OUTBOX_LEN = 2048,
-  ERA_SEED_RECT_COUNT = 1,
-  ERA_SEED_HIT_COUNT = 1,
-  ERA_SEED_TEXT_QUAD_COUNT = 1
+  ERA_RELAY_OUTBOX_LEN = 2048
 };
 
 typedef struct {
@@ -35,14 +32,6 @@ typedef struct {
 static int era_usage(const char* program) {
   fprintf(stderr, "usage: %s <app.wasm>\n", program);
   return 2;
-}
-
-static void era_fill_nonzero(UINT8* bytes, size_t len, UINT8 seed) {
-  size_t i;
-
-  for (i = 0u; i < len; ++i) {
-    bytes[i] = (UINT8)(seed + (UINT8)i + 1u);
-  }
 }
 
 static int era_read_file(const char* path, UINT8** out_bytes, UINT32* out_len) {
@@ -96,21 +85,6 @@ static int era_read_file(const char* path, UINT8** out_bytes, UINT32* out_len) {
   return 0;
 }
 
-static void era_prepare_presentation(ErAppUiPresentation* presentation) {
-  er_mem_zero((UINT8*)presentation, (UINTN)sizeof(*presentation));
-  presentation->abi_version = ER_APP_ABI_VERSION;
-  era_fill_nonzero(presentation->presentation_id.bytes, ER_HASH_LEN, 0x10u);
-  era_fill_nonzero(presentation->jurisdiction_id.bytes, ER_HASH_LEN, 0x30u);
-  era_fill_nonzero(presentation->admission_id.bytes, ER_HASH_LEN, 0x50u);
-  era_fill_nonzero(presentation->app_node_id.bytes, ER_NODE_ID_LEN, 0x70u);
-  era_fill_nonzero(presentation->ui_relay_node_id.bytes, ER_NODE_ID_LEN, 0x90u);
-  era_fill_nonzero(presentation->route_hash.bytes, ER_HASH_LEN, 0xb0u);
-  presentation->sequence = 1u;
-  presentation->max_rects = ERA_SEED_RECT_COUNT;
-  presentation->max_hits = ERA_SEED_HIT_COUNT;
-  presentation->max_text_quads = ERA_SEED_TEXT_QUAD_COUNT;
-}
-
 static INT64 era_ui_emit(void* user, const UINT8* bytes, UINT32 len,
                          const er_ui_scene_stats_t* stats) {
   ErAppRunUiState* state = (ErAppRunUiState*)user;
@@ -131,7 +105,6 @@ int main(int argc, char** argv) {
   ErWasmLinearMemory linear_memory;
   ErWasmHostCalls host = {0};
   ErWasmModule module;
-  ErAppUiPresentation presentation;
   ErAppRunUiState ui_state = {0};
   UINT32 main_index = 0u;
   INT64 result = 0;
@@ -141,7 +114,6 @@ int main(int argc, char** argv) {
     return era_usage(argv[0]);
   }
   er_mem_zero(memory, (UINTN)sizeof(memory));
-  era_prepare_presentation(&presentation);
   if (era_read_file(argv[ERA_WASM_ARG], &wasm_bytes, &wasm_len) != 0 ||
       er_wasm_prepare_linear_memory(memory, (UINT32)sizeof(memory),
                                     ERA_RELAY_INBOX_BASE, ERA_RELAY_INBOX_LEN,
@@ -153,7 +125,6 @@ int main(int argc, char** argv) {
   host.linear_memory = linear_memory;
   host.ui_emit = era_ui_emit;
   host.ui_emit_user = &ui_state;
-  host.ui_presentation = &presentation;
   if (er_wasm_init(&module, wasm_bytes, wasm_len, &host) != 0) {
     fprintf(stderr, "app-run: wasm init failed\n");
   } else if (er_wasm_validate_contract(&module, ER_WASM_MODULE_CONTRACT_UI_APP) != 0) {

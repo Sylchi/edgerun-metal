@@ -16,7 +16,7 @@ UINT8 er_crypto_hash(const ErCryptoProvider* provider, const UINT8* domain, UINT
   return provider->hash(provider->ctx, domain, domain_len, spans, span_count, out_hash);
 }
 
-UINT8 er_crypto_seal(const ErCryptoProvider* provider, const ErIdentity* recipient,
+UINT8 er_crypto_seal(const ErCryptoProvider* provider, const ErCredential* recipient,
                      const ErByteSpan* aad, const ErByteSpan* plaintext,
                      ErMutableBytes* sealed_out) {
   if (provider == 0 || provider->seal == 0 || recipient == 0 ||
@@ -31,7 +31,7 @@ UINT8 er_crypto_seal(const ErCryptoProvider* provider, const ErIdentity* recipie
   return provider->seal(provider->ctx, recipient, aad, plaintext, sealed_out);
 }
 
-UINT8 er_crypto_open(const ErCryptoProvider* provider, const ErIdentity* recipient,
+UINT8 er_crypto_open(const ErCryptoProvider* provider, const ErCredential* recipient,
                      const ErByteSpan* aad, const ErByteSpan* sealed,
                      ErMutableBytes* plaintext_out) {
   if (provider == 0 || provider->open == 0 || recipient == 0 ||
@@ -55,7 +55,7 @@ UINT8 er_crypto_sign(const ErCryptoProvider* provider, const ErByteSpan* preimag
   return provider->sign(provider->ctx, preimage, out_signature);
 }
 
-UINT8 er_crypto_verify(const ErCryptoProvider* provider, const ErIdentity* identity,
+UINT8 er_crypto_verify(const ErCryptoProvider* provider, const ErCredential* identity,
                        const ErByteSpan* preimage, const ErWorkSignature* signature) {
   if (provider == 0 || provider->verify == 0 || identity == 0 ||
       preimage == 0 || preimage->bytes == 0 || preimage->len == 0u ||

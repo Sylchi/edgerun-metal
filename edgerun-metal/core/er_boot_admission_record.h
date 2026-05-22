@@ -7,7 +7,7 @@
  */
 
 #include "er_crypto.h"
-#include "er_identity.h"
+#include "er_credential.h"
 
 #define ER_BOOT_ADMISSION_RECORD_ABI_VERSION 1u
 #define ER_BOOT_ADMISSION_RECORD_MAGIC 0x45524252u
@@ -30,7 +30,7 @@ typedef struct {
   UINT16 bootstrap_pci_vendor_id;
   UINT16 bootstrap_pci_device_id;
   UINT16 reserved;
-  ErIdentity admission_identity;
+  ErCredential admission_identity;
   ErHash record_hash;
 } ErBootAdmissionRecord;
 

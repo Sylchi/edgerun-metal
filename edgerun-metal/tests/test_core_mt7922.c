@@ -63,7 +63,7 @@ static void test_mt7922_pci_prepare(void) {
   UINT8 firmware_bytes[MT7922_TEST_FIRMWARE_LEN];
   UINT8 firmware_out[MT7922_TEST_FIRMWARE_LEN];
   UINT8 admission_key[ER_PUBLIC_KEY_LEN];
-  ErIdentity admission_identity;
+  ErCredential admission_identity;
   UINT32 i;
 
   er_crypto_blake3_provider(&crypto);
@@ -125,8 +125,8 @@ static void test_mt7922_pci_prepare(void) {
   test_fill_bytes(admission_key, (UINTN)sizeof(admission_key), MT7922_TEST_ADMISSION_FILL);
   test_fill_bytes(firmware_bytes, (UINTN)sizeof(firmware_bytes), MT7922_TEST_FIRMWARE_FILL);
   check_int64("mt7922 boot prepare admission",
-              er_identity_prepare(ER_IDENTITY_TYPE_PUBLIC_KEY,
-                                  ER_IDENTITY_BACKING_ED25519,
+              er_credential_prepare(ER_CREDENTIAL_KIND_PUBLIC_KEY,
+                                  ER_CREDENTIAL_BACKING_ED25519,
                                   admission_key,
                                   ER_PUBLIC_KEY_LEN,
                                   &admission_identity),

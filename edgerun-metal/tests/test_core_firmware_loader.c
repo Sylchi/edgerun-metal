@@ -44,15 +44,15 @@ static void test_firmware_loader(void) {
   UINT8 firmware_bytes[8];
   UINT8 firmware_out[8];
   UINT8 admission_key[ER_PUBLIC_KEY_LEN];
-  ErIdentity admission_identity;
+  ErCredential admission_identity;
 
   er_crypto_blake3_provider(&crypto);
   er_boot_config_init(&config);
   test_fill_bytes(admission_key, (UINTN)sizeof(admission_key), 0x24u);
   test_fill_bytes(firmware_bytes, (UINTN)sizeof(firmware_bytes), 0xa0u);
   check_int64("firmware loader prepare admission",
-              er_identity_prepare(ER_IDENTITY_TYPE_PUBLIC_KEY,
-                                  ER_IDENTITY_BACKING_ED25519,
+              er_credential_prepare(ER_CREDENTIAL_KIND_PUBLIC_KEY,
+                                  ER_CREDENTIAL_BACKING_ED25519,
                                   admission_key,
                                   ER_PUBLIC_KEY_LEN,
                                   &admission_identity),

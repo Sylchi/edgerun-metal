@@ -44,7 +44,7 @@ static void test_rtw89_pci_prepare(void) {
   UINT8 firmware_bytes[8];
   UINT8 firmware_out[8];
   UINT8 admission_key[ER_PUBLIC_KEY_LEN];
-  ErIdentity admission_identity;
+  ErCredential admission_identity;
   UINT32 i;
 
   er_crypto_blake3_provider(&crypto);
@@ -102,8 +102,8 @@ static void test_rtw89_pci_prepare(void) {
   test_fill_bytes(admission_key, (UINTN)sizeof(admission_key), 0x36u);
   test_fill_bytes(firmware_bytes, (UINTN)sizeof(firmware_bytes), 0x72u);
   check_int64("rtw89 boot prepare admission",
-              er_identity_prepare(ER_IDENTITY_TYPE_PUBLIC_KEY,
-                                  ER_IDENTITY_BACKING_ED25519,
+              er_credential_prepare(ER_CREDENTIAL_KIND_PUBLIC_KEY,
+                                  ER_CREDENTIAL_BACKING_ED25519,
                                   admission_key,
                                   ER_PUBLIC_KEY_LEN,
                                   &admission_identity),

@@ -90,12 +90,12 @@ static UINT8 er_boot_admission_record_base_valid(const ErBootAdmissionRecord* re
 
   switch (record->admission_mode) {
     case ER_BOOT_ADMISSION_MODE_LOCAL:
-      if (record->admission_identity.identity_type != 0u ||
+      if (record->admission_identity.credential_kind != 0u ||
           record->admission_identity.backing_type != 0u ||
           record->admission_identity.material_len != 0u ||
           record->admission_identity.reserved != 0u ||
           er_mem_any_nonzero(record->admission_identity.material,
-                             ER_IDENTITY_MATERIAL_MAX) != 0u) {
+                             ER_CREDENTIAL_MATERIAL_MAX) != 0u) {
         return 0u;
       }
       return 1u;
@@ -155,7 +155,7 @@ UINT8 er_boot_admission_record_encode(const ErBootAdmissionRecord* record,
                              record->bootstrap_pci_device_id);
   er_boot_admission_put_be16(&out_bytes[ER_BOOT_ADMISSION_RECORD_RESERVED_OFFSET], record->reserved);
   er_boot_admission_put_be16(&out_bytes[ER_BOOT_ADMISSION_RECORD_IDENTITY_TYPE_OFFSET],
-                             record->admission_identity.identity_type);
+                             record->admission_identity.credential_kind);
   er_boot_admission_put_be16(&out_bytes[ER_BOOT_ADMISSION_RECORD_IDENTITY_BACKING_OFFSET],
                              record->admission_identity.backing_type);
   er_boot_admission_put_be16(&out_bytes[ER_BOOT_ADMISSION_RECORD_IDENTITY_LEN_OFFSET],
@@ -164,7 +164,7 @@ UINT8 er_boot_admission_record_encode(const ErBootAdmissionRecord* record,
                              record->admission_identity.reserved);
   er_mem_copy(&out_bytes[ER_BOOT_ADMISSION_RECORD_IDENTITY_MATERIAL_OFFSET],
               record->admission_identity.material,
-              ER_IDENTITY_MATERIAL_MAX);
+              ER_CREDENTIAL_MATERIAL_MAX);
   er_mem_copy(&out_bytes[ER_BOOT_ADMISSION_RECORD_HASH_OFFSET],
               record->record_hash.bytes,
               ER_HASH_LEN);
@@ -187,7 +187,7 @@ UINT8 er_boot_admission_record_decode(const UINT8 bytes[ER_BOOT_ADMISSION_RECORD
   out_record->bootstrap_pci_vendor_id = er_boot_admission_get_be16(&bytes[ER_BOOT_ADMISSION_RECORD_VENDOR_OFFSET]);
   out_record->bootstrap_pci_device_id = er_boot_admission_get_be16(&bytes[ER_BOOT_ADMISSION_RECORD_DEVICE_OFFSET]);
   out_record->reserved = er_boot_admission_get_be16(&bytes[ER_BOOT_ADMISSION_RECORD_RESERVED_OFFSET]);
-  out_record->admission_identity.identity_type =
+  out_record->admission_identity.credential_kind =
     er_boot_admission_get_be16(&bytes[ER_BOOT_ADMISSION_RECORD_IDENTITY_TYPE_OFFSET]);
   out_record->admission_identity.backing_type =
     er_boot_admission_get_be16(&bytes[ER_BOOT_ADMISSION_RECORD_IDENTITY_BACKING_OFFSET]);
@@ -197,7 +197,7 @@ UINT8 er_boot_admission_record_decode(const UINT8 bytes[ER_BOOT_ADMISSION_RECORD
     er_boot_admission_get_be16(&bytes[ER_BOOT_ADMISSION_RECORD_IDENTITY_RESERVED_OFFSET]);
   er_mem_copy(out_record->admission_identity.material,
               &bytes[ER_BOOT_ADMISSION_RECORD_IDENTITY_MATERIAL_OFFSET],
-              ER_IDENTITY_MATERIAL_MAX);
+              ER_CREDENTIAL_MATERIAL_MAX);
   er_mem_copy(out_record->record_hash.bytes,
               &bytes[ER_BOOT_ADMISSION_RECORD_HASH_OFFSET],
               ER_HASH_LEN);

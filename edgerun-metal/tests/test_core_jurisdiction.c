@@ -2,7 +2,7 @@ static void test_jurisdiction_policy_and_node_instances(void) {
   ErCryptoProvider crypto;
   UINT8 owner_key[ER_PUBLIC_KEY_LEN];
   UINT8 admission_key[ER_PUBLIC_KEY_LEN];
-  ErIdentity owner_identity;
+  ErCredential owner_identity;
   ErNodeIdentity admission_node;
   ErHash policy_hash;
   ErHash route_scope_hash;
@@ -26,8 +26,8 @@ static void test_jurisdiction_policy_and_node_instances(void) {
   test_fill_bytes(storage_node_id.bytes, ER_NODE_ID_LEN, 0xb0u);
 
   check_int64("jurisdiction owner identity",
-              er_identity_prepare(ER_IDENTITY_TYPE_PUBLIC_KEY,
-                                  ER_IDENTITY_BACKING_ED25519,
+              er_credential_prepare(ER_CREDENTIAL_KIND_PUBLIC_KEY,
+                                  ER_CREDENTIAL_BACKING_ED25519,
                                   owner_key,
                                   ER_PUBLIC_KEY_LEN,
                                   &owner_identity),
@@ -36,8 +36,8 @@ static void test_jurisdiction_policy_and_node_instances(void) {
   admission_node.abi_version = ER_WORK_ABI_VERSION;
   admission_node.role = ER_NODE_ROLE_ADMISSION;
   check_int64("jurisdiction admission identity",
-              er_identity_prepare(ER_IDENTITY_TYPE_PUBLIC_KEY,
-                                  ER_IDENTITY_BACKING_ED25519,
+              er_credential_prepare(ER_CREDENTIAL_KIND_PUBLIC_KEY,
+                                  ER_CREDENTIAL_BACKING_ED25519,
                                   admission_key,
                                   ER_PUBLIC_KEY_LEN,
                                   &admission_node.identity),

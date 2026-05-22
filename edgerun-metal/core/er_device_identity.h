@@ -7,7 +7,7 @@
  */
 
 #include "er_crypto.h"
-#include "er_identity.h"
+#include "er_credential.h"
 
 #define ER_DEVICE_IDENTITY_KIND_HARDWARE 1u
 #define ER_DEVICE_IDENTITY_KIND_EPHEMERAL 2u
@@ -15,7 +15,7 @@
 typedef struct {
   UINT16 abi_version;
   UINT16 kind;
-  ErIdentity identity;
+  ErCredential identity;
 } ErDeviceIdentity;
 
 typedef struct {
@@ -25,7 +25,7 @@ typedef struct {
   ErNodeIdentity relay_node;
 } ErDeviceRelayIdentity;
 
-UINT8 er_device_identity_prepare(UINT16 kind, const ErIdentity* identity,
+UINT8 er_device_identity_prepare(UINT16 kind, const ErCredential* identity,
                                  ErDeviceIdentity* out_identity);
 UINT8 er_device_relay_identity_derive(const ErCryptoProvider* crypto,
                                       const ErDeviceIdentity* device_identity,

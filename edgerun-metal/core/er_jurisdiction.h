@@ -25,7 +25,7 @@ typedef struct {
   UINT16 abi_version;
   UINT16 source;
   ErHash policy_id;
-  ErIdentity owner_identity;
+  ErCredential owner_identity;
   ErNodeIdentity admission_node;
   ErHash policy_hash;
   UINT64 max_budget;
@@ -37,7 +37,7 @@ typedef struct {
   UINT16 abi_version;
   UINT16 role;
   ErHash instance_id;
-  ErIdentity owner_identity;
+  ErCredential owner_identity;
   ErNodeId node_id;
   UINT16 runtime_target;
   UINT16 status;
@@ -54,7 +54,7 @@ UINT8 er_node_instance_status_valid(UINT16 status);
 UINT8 er_runtime_target_valid(UINT16 runtime_target);
 UINT8 er_admission_policy_prepare(const ErCryptoProvider* crypto,
                                   UINT16 source,
-                                  const ErIdentity* owner_identity,
+                                  const ErCredential* owner_identity,
                                   const ErNodeIdentity* admission_node,
                                   const ErHash* policy_hash,
                                   UINT64 max_budget,
@@ -64,7 +64,7 @@ UINT8 er_admission_policy_prepare(const ErCryptoProvider* crypto,
 UINT8 er_admission_policy_valid(const ErCryptoProvider* crypto,
                                 const ErAdmissionPolicyRecord* policy);
 UINT8 er_node_instance_prepare(const ErCryptoProvider* crypto,
-                               const ErIdentity* owner_identity,
+                               const ErCredential* owner_identity,
                                const ErNodeId* node_id,
                                UINT16 role,
                                UINT16 runtime_target,
