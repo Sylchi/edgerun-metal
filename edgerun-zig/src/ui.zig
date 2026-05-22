@@ -30,6 +30,13 @@ pub const Axis = enum {
     column,
 };
 
+pub const Align = enum {
+    start,
+    center,
+    end,
+    stretch,
+};
+
 pub const Style = struct {
     bg: Color = .bg,
     panel: Color = .panel,
@@ -214,6 +221,14 @@ pub const Scene = struct {
     }
 
     pub fn pushRect(self: *Scene, bounds: Rect, color: Color, mode: RectMode, radius: f32, shadow: f32) RenderError!void {
+        try self.pushRectPair(bounds, color, .clear, mode, radius, shadow);
+    }
+
+    pub fn pushGradientRect(self: *Scene, bounds: Rect, top_color: Color, bottom_color: Color, radius: f32) RenderError!void {
+        try self.pushRectPair(bounds, top_color, bottom_color, .linear_gradient, radius, 0.0);
+    }
+
+    fn pushRectPair(self: *Scene, bounds: Rect, color: Color, color2: Color, mode: RectMode, radius: f32, shadow: f32) RenderError!void {
         var normalized_bounds = bounds;
         var normalized_radius = radius;
         var normalized_shadow = shadow;
@@ -222,7 +237,7 @@ pub const Scene = struct {
             normalized_bounds = clipped;
             normalized_radius = @min(normalized_radius, @min(clipped.w * 0.5, clipped.h * 0.5));
         } else return;
-        try self.push(.{ .rect = .{ .bounds = normalized_bounds, .color = color, .mode = mode, .radius = normalized_radius, .shadow = normalized_shadow } });
+        try self.push(.{ .rect = .{ .bounds = normalized_bounds, .color = color, .color2 = color2, .mode = mode, .radius = normalized_radius, .shadow = normalized_shadow } });
     }
 
     pub fn pushHit(self: *Scene, hit: Hit) RenderError!void {
@@ -402,6 +417,7 @@ pub const Layout = struct {
     axis: Axis,
     gap: f32 = 8,
     padding: f32 = 0,
+    cross_align: Align = .stretch,
     children: []const Node,
 };
 
@@ -456,16 +472,24 @@ pub fn slotNode(id: u32, child: *const Node) Node {
     return .{ .slot = .{ .id = id, .child = child } };
 }
 
-pub fn stackNode(axis: Axis, gap: f32, padding: f32, children: []const Node) Node {
-    return .{ .stack = .{ .axis = axis, .gap = gap, .padding = padding, .children = children } };
+pub fn stackNode(axis: Axis, gap: f32, padding: f32, cross_align: Align, children: []const Node) Node {
+    return .{ .stack = .{ .axis = axis, .gap = gap, .padding = padding, .cross_align = cross_align, .children = children } };
 }
 
 pub fn columnStack(gap: f32, padding: f32, children: []const Node) Node {
-    return stackNode(.column, gap, padding, children);
+    return stackNode(.column, gap, padding, .stretch, children);
 }
 
 pub fn rowStack(gap: f32, padding: f32, children: []const Node) Node {
-    return stackNode(.row, gap, padding, children);
+    return stackNode(.row, gap, padding, .stretch, children);
+}
+
+pub fn alignedColumn(gap: f32, padding: f32, cross_align: Align, children: []const Node) Node {
+    return stackNode(.column, gap, padding, cross_align, children);
+}
+
+pub fn alignedRow(gap: f32, padding: f32, cross_align: Align, children: []const Node) Node {
+    return stackNode(.row, gap, padding, cross_align, children);
 }
 
 pub const Patch = union(enum) {
@@ -519,23 +543,24 @@ fn renderInSlot(scene: *Scene, node: Node, bounds: Rect, style: Style, slot_id: 
         .rect => |rect_node| try scene.push(.{ .rect = .{ .bounds = bounds, .color = rect_node.color } }),
         .text => |text_node| try scene.push(.{ .text = .{ .origin = bounds, .value = text_node.value, .color = text_node.color orelse style.text } }),
         .button => |button| {
-            try scene.push(.{ .rect = .{ .bounds = bounds, .color = style.accent } });
-            try scene.push(.{ .border = .{ .bounds = bounds, .color = style.border } });
+            try scene.pushRect(bounds, surface_shadow, .shadow, control_radius, control_shadow);
+            try scene.pushGradientRect(bounds, style.accent, accent_bottom, control_radius);
+            try scene.pushRect(bounds, style.border, .border, control_radius, 0.0);
             if (contentInset(bounds, button_text_padding)) |label_bounds| {
                 try scene.push(.{ .text = .{ .origin = label_bounds, .value = button.label, .color = style.bg } });
             }
             try scene.push(.{ .hit = .{ .slot = slot_id, .kind = .button, .id = button.id, .bounds = bounds } });
         },
         .input => |input| {
-            try scene.push(.{ .rect = .{ .bounds = bounds, .color = style.panel } });
-            try scene.push(.{ .border = .{ .bounds = bounds, .color = style.border } });
+            try scene.pushRect(bounds, style.panel, .fill, control_radius, 0.0);
+            try scene.pushRect(bounds, style.border, .border, control_radius, 0.0);
             if (contentInset(bounds, input_text_padding)) |placeholder_bounds| {
                 try scene.push(.{ .text = .{ .origin = placeholder_bounds, .value = input.placeholder, .color = style.muted } });
             }
             try scene.push(.{ .hit = .{ .slot = slot_id, .kind = .input, .id = input.id, .bounds = bounds } });
         },
         .row_item => |row| {
-            try scene.push(.{ .rect = .{ .bounds = bounds, .color = style.row } });
+            try scene.pushRect(bounds, style.row, .fill, row_radius, 0.0);
             if (rowTitleBounds(bounds, row.detail.len == 0)) |title_bounds| {
                 try scene.push(.{ .text = .{ .origin = title_bounds, .value = row.title, .color = style.text } });
             }
@@ -551,6 +576,11 @@ fn renderInSlot(scene: *Scene, node: Node, bounds: Rect, style: Style, slot_id: 
     }
 }
 
+const control_radius: f32 = 6.0;
+const control_shadow: f32 = 5.0;
+const row_radius: f32 = 4.0;
+const surface_shadow = Color{ .r = 0, .g = 0, .b = 0, .a = 96 };
+const accent_bottom = Color{ .r = 15, .g = 183, .b = 210 };
 const button_text_padding: f32 = 10.0;
 const input_text_padding: f32 = 12.0;
 const row_text_padding_x: f32 = 12.0;
@@ -605,7 +635,7 @@ fn renderStack(scene: *Scene, layout: Layout, bounds: Rect, style: Style, slot_i
         const preferred_main = preferredMain(layout.axis, preferred);
         const child_main = @min(preferred_main * child_scale, remaining_main);
         if (child_main <= 0.0) break;
-        const child_bounds = childBounds(layout.axis, inner, cursor, child_main);
+        const child_bounds = childBounds(layout.axis, inner, cursor, child_main, preferredCross(layout.axis, preferred), layout.cross_align);
         try renderInSlot(scene, child, child_bounds, style, slot_id);
         cursor += child_main + gap;
         used += child_main + if (remaining_children > 0) gap else 0.0;
@@ -645,14 +675,47 @@ fn preferredMain(axis: Axis, size: Size) f32 {
     };
 }
 
-fn childBounds(axis: Axis, inner: Rect, cursor: f32, child_main: f32) Rect {
+fn preferredCross(axis: Axis, size: Size) f32 {
     return switch (axis) {
-        .row => .{ .x = cursor, .y = inner.y, .w = child_main, .h = inner.h },
-        .column => .{ .x = inner.x, .y = cursor, .w = inner.w, .h = child_main },
+        .row => size.h,
+        .column => size.w,
+    };
+}
+
+fn childBounds(axis: Axis, inner: Rect, cursor: f32, child_main: f32, preferred_cross: f32, cross_align: Align) Rect {
+    return switch (axis) {
+        .row => .{
+            .x = cursor,
+            .y = alignedCrossStart(inner.y, inner.h, preferred_cross, cross_align),
+            .w = child_main,
+            .h = alignedCrossSize(inner.h, preferred_cross, cross_align),
+        },
+        .column => .{
+            .x = alignedCrossStart(inner.x, inner.w, preferred_cross, cross_align),
+            .y = cursor,
+            .w = alignedCrossSize(inner.w, preferred_cross, cross_align),
+            .h = child_main,
+        },
     };
 }
 
 const min_layout_extent: f32 = 1.0;
+
+fn alignedCrossSize(available: f32, preferred: f32, cross_align: Align) f32 {
+    return switch (cross_align) {
+        .stretch => available,
+        .start, .center, .end => @min(available, preferred),
+    };
+}
+
+fn alignedCrossStart(origin: f32, available: f32, preferred: f32, cross_align: Align) f32 {
+    const size = alignedCrossSize(available, preferred, cross_align);
+    return switch (cross_align) {
+        .start, .stretch => origin,
+        .center => origin + (available - size) * 0.5,
+        .end => origin + available - size,
+    };
+}
 
 fn stackPreferredSize(layout: Layout) Size {
     var main: f32 = 0;
@@ -757,6 +820,31 @@ test "row layout proportionally shrinks overflowing children" {
         else => {},
     };
     try std.testing.expectEqual(@as(usize, 3), hits);
+}
+
+test "stack cross-axis alignment keeps children at preferred size" {
+    var nodes = [_]Node{
+        buttonNode(1, "One"),
+        buttonNode(2, "Two"),
+    };
+    const root = alignedRow(8.0, 4.0, .center, &nodes);
+    const viewport = Rect.init(0.0, 0.0, 320.0, 96.0);
+
+    var commands: [32]Command = undefined;
+    var scene = Scene.init(&commands);
+    try render(&scene, root, viewport, .{});
+
+    var hits: usize = 0;
+    for (scene.written()) |command| switch (command) {
+        .hit => |hit| {
+            hits += 1;
+            try std.testing.expectEqual(@as(f32, 36.0), hit.bounds.h);
+            try std.testing.expect(hit.bounds.y > viewport.y);
+            try std.testing.expect(hit.bounds.y + hit.bounds.h < viewport.y + viewport.h);
+        },
+        else => {},
+    };
+    try std.testing.expectEqual(@as(usize, 2), hits);
 }
 
 test "patches mutate only the matching node variant" {

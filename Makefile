@@ -4,8 +4,9 @@
 	ui-core-test \
 	zig-check zig-fmt-check zig-fmt zig-test zig-real-tpm \
 	pi-zero-w-v1_1-kernel pi-zero-w-v1_1-usb-probe pi-usb-host pi-usb-state \
-	pi-usb-reset-port pi-usb-reset-controller pi-usb-dry-run pi-usb-load \
-	pi-usb-load-probe pi-usb-recover-load pi-usb-recover-load-probe \
+	pi-usb-reset-port pi-usb-reset-controller pi-usb-dry-run pi-usb-boot-dir \
+	pi-usb-load pi-usb-load-probe pi-usb-load-usbflag pi-usb-load-probe-usbflag \
+	pi-usb-recover-load pi-usb-recover-load-probe \
 	pi-usb-control-host pi-usb-control-dry-run pi-usb-control
 
 BUILD_DIR := .build
@@ -107,10 +108,16 @@ $(PI_USB_BOOT_DIR)/config.txt: $(PI_BOOT_DIR)/config.txt
 
 pi-usb-boot-dir: $(PI_USB_BOOT_DIR)/config.txt
 
-pi-usb-load: pi-zero-w-v1_1-kernel pi-usb-host pi-usb-boot-dir
+pi-usb-load: pi-zero-w-v1_1-kernel pi-usb-host
+	sudo $(BUILD_DIR)/pi-usb-host/edgerun-pi-usb-boot-host --wait --wait-ms 120000 --serve-dir $(PI_BOOT_DIR) --kernel-image $(BUILD_DIR)/pi-zero-w-v1_1-zig/kernel-padded.img $(PI_BOOT_DIR)/bootcode.bin
+
+pi-usb-load-probe: pi-zero-w-v1_1-usb-probe pi-usb-host
+	sudo $(BUILD_DIR)/pi-usb-host/edgerun-pi-usb-boot-host --wait --wait-ms 120000 --serve-dir $(PI_BOOT_DIR) --kernel-image $(BUILD_DIR)/pi-zero-w-v1_1-usb-probe/kernel-padded.img $(PI_BOOT_DIR)/bootcode.bin
+
+pi-usb-load-usbflag: pi-zero-w-v1_1-kernel pi-usb-host pi-usb-boot-dir
 	sudo $(BUILD_DIR)/pi-usb-host/edgerun-pi-usb-boot-host --wait --wait-ms 120000 --serve-dir $(PI_USB_BOOT_DIR) --kernel-image $(BUILD_DIR)/pi-zero-w-v1_1-zig/kernel-padded.img $(PI_USB_BOOT_DIR)/bootcode.bin
 
-pi-usb-load-probe: pi-zero-w-v1_1-usb-probe pi-usb-host pi-usb-boot-dir
+pi-usb-load-probe-usbflag: pi-zero-w-v1_1-usb-probe pi-usb-host pi-usb-boot-dir
 	sudo $(BUILD_DIR)/pi-usb-host/edgerun-pi-usb-boot-host --wait --wait-ms 120000 --serve-dir $(PI_USB_BOOT_DIR) --kernel-image $(BUILD_DIR)/pi-zero-w-v1_1-usb-probe/kernel-padded.img $(PI_USB_BOOT_DIR)/bootcode.bin
 
 pi-usb-recover-load: pi-usb-reset-port pi-usb-load
@@ -118,7 +125,7 @@ pi-usb-recover-load: pi-usb-reset-port pi-usb-load
 pi-usb-recover-load-probe: pi-usb-reset-port pi-usb-load-probe
 
 pi-usb-dry-run: pi-zero-w-v1_1-kernel
-	zig build --build-file edgerun-zig/build.zig --cache-dir $(BUILD_DIR)/edgerun-zig pi-usb-load -- --dry-run --serve-dir $(PI_USB_BOOT_DIR) --kernel-image $(BUILD_DIR)/pi-zero-w-v1_1-zig/kernel.img $(PI_USB_BOOT_DIR)/bootcode.bin
+	zig build --build-file edgerun-zig/build.zig --cache-dir $(BUILD_DIR)/edgerun-zig pi-usb-load -- --dry-run --serve-dir $(PI_BOOT_DIR) --kernel-image $(BUILD_DIR)/pi-zero-w-v1_1-zig/kernel.img $(PI_BOOT_DIR)/bootcode.bin
 
 pi-usb-control: pi-usb-control-host
 	sudo $(BUILD_DIR)/pi-usb-host/edgerun-pi-usb-control-host --wait-ms 10000 gpio-read 47
