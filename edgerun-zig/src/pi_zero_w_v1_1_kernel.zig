@@ -30,7 +30,9 @@ export fn kernelMain() callconv(.c) noreturn {
     } };
     board.initEarly();
     board.putString("\r\nER ZIG PI ZERO W V1.1 BOOT\r\n");
-    board.logToSd();
+    if (!board.logToSd()) {
+        board.putString("sd=unavailable continuing=usb-boot\r\n");
+    }
     board.heartbeat();
 }
 

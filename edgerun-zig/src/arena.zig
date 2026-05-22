@@ -3,9 +3,13 @@ const Region = @import("region.zig").Region;
 
 pub const BoundedArena = struct {
     region: Region,
+    owned: Region,
 
     pub fn init(region: Region) BoundedArena {
-        return .{ .region = region };
+        return .{
+            .region = region,
+            .owned = region,
+        };
     }
 
     pub fn remaining(self: BoundedArena) usize {
@@ -14,11 +18,28 @@ pub const BoundedArena = struct {
 
     pub fn split(self: *BoundedArena, size: usize) ?BoundedArena {
         const child = self.region.split(size) orelse return null;
-        return .{ .region = child };
+        const owned_start = @intFromPtr(self.owned.base.ptr);
+        const child_start = @intFromPtr(child.base.ptr);
+        if (child_start < owned_start) return null;
+        self.owned.base = self.owned.base[0 .. child_start - owned_start];
+        return .{
+            .region = child,
+            .owned = child,
+        };
     }
 
     pub fn takeRegion(self: *BoundedArena, size: usize) ?Region {
-        return self.region.takePrefix(size);
+        const child = self.region.takePrefix(size) orelse return null;
+        self.owned = self.region;
+        return child;
+    }
+
+    pub fn owns(self: BoundedArena, slice: []const u8) bool {
+        return self.owned.contains(slice);
+    }
+
+    pub fn offsetOf(self: BoundedArena, slice: []const u8) ?usize {
+        return self.owned.offsetOf(slice);
     }
 
     pub fn allocSlice(self: *BoundedArena, comptime T: type, count: usize) ?[]T {
@@ -87,6 +108,7 @@ test "parent can delegate child arena by splitting capability" {
     _ = try child_allocator.alloc(u8, 16);
     try std.testing.expectEqual(@as(usize, 40), parent.remaining());
     try std.testing.expect(child.remaining() <= 8);
+    try std.testing.expect(!parent.owns(child.region.base));
 }
 
 test "arena carves regions and typed slices from the same capability" {
@@ -98,4 +120,15 @@ test "arena carves regions and typed slices from the same capability" {
     try std.testing.expectEqual(@as(usize, 32), region.len());
     try std.testing.expectEqual(@as(usize, 4), slots.len);
     try std.testing.expect(arena.remaining() <= 64);
+    try std.testing.expect(arena.owns(std.mem.sliceAsBytes(slots)));
+    try std.testing.expectEqual(@as(usize, 0), arena.offsetOf(std.mem.sliceAsBytes(slots)).?);
+}
+
+test "region transfer seals earlier allocations out of shareable ownership" {
+    var memory: [64]u8 = undefined;
+    var arena = BoundedArena.init(.{ .base = &memory });
+    const consumed = arena.allocSlice(u8, 8).?;
+
+    _ = arena.takeRegion(8).?;
+    try std.testing.expect(!arena.owns(consumed));
 }

@@ -1,6 +1,7 @@
 const std = @import("std");
 const bytes = @import("bytes.zig");
 const identity = @import("identity.zig");
+const object = @import("object.zig");
 const preimage = @import("preimage.zig");
 
 pub const id_size = preimage.hash_size;
@@ -66,6 +67,15 @@ pub const Policy = struct {
         };
     }
 
+    pub fn fromRequirements(req: object.Requirements, device: identity.Identity, app: identity.Identity, user: identity.Identity) Policy {
+        return switch (req.confidentiality) {
+            .public => public(),
+            .integrity_only => integrityOnly(),
+            .app_private, .device_private => machineApp(device, app),
+            .user_private, .user_app_private, .layered => machineAppUser(device, app, user),
+        };
+    }
+
     pub fn valid(self: Policy) bool {
         return switch (self.scope) {
             .public => self.algorithm == .none and self.device == null and self.app == null and self.user == null,
@@ -112,4 +122,13 @@ test "seal policy captures machine app user binding" {
     try std.testing.expect(bytes.nonzero(&policy.id().?));
     try std.testing.expect(Policy.public().valid());
     try std.testing.expect(Policy.integrityOnly().valid());
+    try std.testing.expect(Policy.fromRequirements(.{
+        .durability = .durable,
+        .confidentiality = .user_private,
+        .portability = .machine_bound,
+        .integrity = .sealed,
+        .lifetime = .retained,
+        .visibility = .private,
+        .access = .explicit_io,
+    }, device, app, user).valid());
 }

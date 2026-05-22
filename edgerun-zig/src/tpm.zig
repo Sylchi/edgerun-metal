@@ -194,14 +194,14 @@ pub const Writer = struct {
 
     pub fn putU16(self: *Writer, value: u16) bool {
         if (self.out.len - self.offset < 2) return false;
-        putBe16(self.out[self.offset..][0..2], value);
+        _ = bytes.storeBe16(self.out[self.offset..][0..2], value);
         self.offset += 2;
         return true;
     }
 
     pub fn putU32(self: *Writer, value: u32) bool {
         if (self.out.len - self.offset < 4) return false;
-        putBe32(self.out[self.offset..][0..4], value);
+        _ = bytes.storeBe32(self.out[self.offset..][0..4], value);
         self.offset += 4;
         return true;
     }
@@ -238,7 +238,7 @@ pub const Writer = struct {
 
 pub fn buildStartup(startup_type: u16, out: []u8) ?[]u8 {
     const command = buildHeader(st_no_sessions, startup_command_len, cc_startup, out) orelse return null;
-    putBe16(command[header_len..][0..2], startup_type);
+    _ = bytes.storeBe16(command[header_len..][0..2], startup_type);
     return command;
 }
 
@@ -253,14 +253,14 @@ pub fn buildCreatePrimaryP256Ecdh(out: []u8) ?[]u8 {
 pub fn buildGetRandom(bytes_requested: u16, out: []u8) ?[]u8 {
     if (bytes_requested == 0) return null;
     const command = buildHeader(st_no_sessions, get_random_command_len, cc_get_random, out) orelse return null;
-    putBe16(command[header_len..][0..2], bytes_requested);
+    _ = bytes.storeBe16(command[header_len..][0..2], bytes_requested);
     return command;
 }
 
 pub fn buildReadPublic(handle: u32, out: []u8) ?[]u8 {
     if (handle == 0) return null;
     const command = buildHeader(st_no_sessions, read_public_command_len, 0x0000_0173, out) orelse return null;
-    putBe32(command[header_len..][0..4], handle);
+    _ = bytes.storeBe32(command[header_len..][0..4], handle);
     return command;
 }
 
@@ -336,9 +336,9 @@ pub fn buildSequenceComplete(handle: u32, data: []const u8, hierarchy: u32, out:
 pub fn buildGetCapability(capability: u32, property: u32, property_count: u32, out: []u8) ?[]u8 {
     if (property_count == 0) return null;
     const command = buildHeader(st_no_sessions, get_capability_command_len, cc_get_capability, out) orelse return null;
-    putBe32(command[10..14], capability);
-    putBe32(command[14..18], property);
-    putBe32(command[18..22], property_count);
+    _ = bytes.storeBe32(command[10..14], capability);
+    _ = bytes.storeBe32(command[14..18], property);
+    _ = bytes.storeBe32(command[18..22], property_count);
     return command;
 }
 
@@ -437,7 +437,7 @@ pub fn buildEcdhZgenP256(handle: u32, peer_public_key: [p256_public_key_len]u8, 
 pub fn buildFlushContext(handle: u32, out: []u8) ?[]u8 {
     if (handle == 0) return null;
     const command = buildHeader(st_no_sessions, flush_context_command_len, cc_flush_context, out) orelse return null;
-    putBe32(command[header_len..][0..4], handle);
+    _ = bytes.storeBe32(command[header_len..][0..4], handle);
     return command;
 }
 
@@ -680,9 +680,9 @@ pub fn tlsProfileSupported(info: Tpm2Info, algorithms: AlgorithmProfile, command
 fn buildHeader(tag: u16, size: usize, command_code: u32, out: []u8) ?[]u8 {
     if (size < header_len or size > crb_max_buffer_size or out.len < size) return null;
     const command = out[0..size];
-    putBe16(command[0..2], tag);
-    putBe32(command[command_size_offset..][0..4], @intCast(size));
-    putBe32(command[command_code_offset..][0..4], command_code);
+    _ = bytes.storeBe16(command[0..2], tag);
+    _ = bytes.storeBe32(command[command_size_offset..][0..4], @intCast(size));
+    _ = bytes.storeBe32(command[command_code_offset..][0..4], command_code);
     return command;
 }
 
@@ -802,25 +802,10 @@ fn symmetricModeSupported(mode: u16) bool {
     return mode == alg_ctr or mode == alg_ofb or mode == alg_cbc or mode == alg_cfb or mode == alg_ecb;
 }
 
-fn putBe16(out: []u8, value: u16) void {
-    out[0] = @intCast((value >> 8) & 0xff);
-    out[1] = @intCast(value & 0xff);
-}
-
-fn putBe32(out: []u8, value: u32) void {
-    out[0] = @intCast((value >> 24) & 0xff);
-    out[1] = @intCast((value >> 16) & 0xff);
-    out[2] = @intCast((value >> 8) & 0xff);
-    out[3] = @intCast(value & 0xff);
-}
-
 fn getBe16(in: []const u8) u16 {
-    return (@as(u16, in[0]) << 8) | @as(u16, in[1]);
+    return bytes.loadBe16(in) orelse 0;
 }
 
 fn getBe32(in: []const u8) u32 {
-    return (@as(u32, in[0]) << 24) |
-        (@as(u32, in[1]) << 16) |
-        (@as(u32, in[2]) << 8) |
-        @as(u32, in[3]);
+    return bytes.loadBe32(in) orelse 0;
 }

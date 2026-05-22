@@ -1,5 +1,6 @@
 const pi_mmc = @import("pi_mmc.zig");
 const pi_zero = @import("pi_zero_w_v1_1.zig");
+const bytes = @import("bytes.zig");
 
 pub const gpio_base: u32 = 0x2020_0000;
 pub const emmc_base: u32 = 0x2030_0000;
@@ -87,7 +88,7 @@ pub const Board = struct {
         }
     }
 
-    pub fn logToSd(self: *Board) void {
+    pub fn logToSd(self: *Board) bool {
         if (!self.sdMemoryInit()) {
             self.putString("sd=init-fail stage=");
             self.putHex32(self.raw_log.stage);
@@ -96,12 +97,30 @@ pub const Board = struct {
             self.putString(" resp=");
             self.putHex32(self.raw_log.response);
             self.putString("\r\n");
-            return;
+            return false;
         }
         var block = rawLogBlock(self.raw_log, 0x10);
-        _ = self.writeBlock(pi_zero.boot_checkpoint_block, &block);
+        if (!self.writeBlock(pi_zero.boot_checkpoint_block, &block)) {
+            self.putString("sd=write-fail checkpoint write=");
+            self.putHex32(self.raw_log.write_result);
+            self.putString(" intr=");
+            self.putHex32(self.raw_log.interrupt);
+            self.putString(" resp=");
+            self.putHex32(self.raw_log.response);
+            self.putString("\r\n");
+            return false;
+        }
         block = rawLogBlock(self.raw_log, 0x11);
-        _ = self.writeBlock(pi_zero.boot_log_start_block, &block);
+        if (!self.writeBlock(pi_zero.boot_log_start_block, &block)) {
+            self.putString("sd=write-fail event write=");
+            self.putHex32(self.raw_log.write_result);
+            self.putString(" intr=");
+            self.putHex32(self.raw_log.interrupt);
+            self.putString(" resp=");
+            self.putHex32(self.raw_log.response);
+            self.putString("\r\n");
+            return false;
+        }
         self.putString("sd=logged stage=");
         self.putHex32(self.raw_log.stage);
         self.putString(" rca=");
@@ -109,6 +128,32 @@ pub const Board = struct {
         self.putString(" write=");
         self.putHex32(self.raw_log.write_result);
         self.putString("\r\n");
+        return true;
+    }
+
+    pub fn failureCode(self: *Board) u32 {
+        if ((self.raw_log.write_result & 0x8000_0000) != 0) return self.raw_log.write_result & 0xff;
+        if ((self.raw_log.stage & 0x8000_0000) != 0) return self.raw_log.stage & 0xff;
+        return 31;
+    }
+
+    pub fn signalFailure(self: *Board, raw_code: u32) noreturn {
+        const code = if (raw_code == 0) 31 else if (raw_code > 31) 31 else raw_code;
+        self.putString("led=failure-code ");
+        self.putHex32(code);
+        self.putString("\r\n");
+        while (true) {
+            self.actLedOff();
+            self.mmio.delay(self.mmio.user, 2_500_000);
+            var i: u32 = 0;
+            while (i < code) : (i += 1) {
+                self.actLedOn();
+                self.mmio.delay(self.mmio.user, 180_000);
+                self.actLedOff();
+                self.mmio.delay(self.mmio.user, 180_000);
+            }
+            self.mmio.delay(self.mmio.user, 1_000_000);
+        }
     }
 
     pub fn heartbeat(self: *Board) noreturn {
@@ -317,15 +362,12 @@ pub fn gpioFselAlt(current: u32, pin: u32, alt_function: u32) u32 {
 }
 
 fn putLe32(out: []u8, value: u32) void {
-    out[0] = @intCast(value & 0xff);
-    out[1] = @intCast((value >> 8) & 0xff);
-    out[2] = @intCast((value >> 16) & 0xff);
-    out[3] = @intCast((value >> 24) & 0xff);
+    _ = bytes.store32(out, value);
 }
 
 test "builds raw Pi Zero W v1.1 SD log blocks" {
     const block = rawLogBlock(.{ .stage = 5, .interrupt = 1, .response = 2, .relative_card_address = 0x1234, .write_result = 1 }, 0x10);
     try @import("std").testing.expectEqual(@as(u32, 0x45), block[0]);
     try @import("std").testing.expectEqual(@as(u8, 'E'), block[64]);
-    try @import("std").testing.expectEqual(@as(u8, 'G'), block[70]);
+    try @import("std").testing.expectEqual(@as(u8, 'G'), block[69]);
 }

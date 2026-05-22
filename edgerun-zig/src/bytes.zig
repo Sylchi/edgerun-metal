@@ -15,9 +15,32 @@ pub fn nonzero(bytes: []const u8) bool {
     return false;
 }
 
+pub fn zeroed(value: []const u8) bool {
+    return !nonzero(value);
+}
+
 pub fn eql(a: []const u8, b: []const u8) bool {
     if (a.len != b.len) return false;
     return @import("std").mem.eql(u8, a, b);
+}
+
+pub fn eqlLen(a: []const u8, b: []const u8, len: usize) bool {
+    if (a.len < len or b.len < len) return false;
+    var index: usize = 0;
+    while (index < len) : (index += 1) {
+        if (a[index] != b[index]) return false;
+    }
+    return true;
+}
+
+pub fn compareLen(a: []const u8, b: []const u8, len: usize) i2 {
+    if (a.len < len or b.len < len) return 0;
+    var index: usize = 0;
+    while (index < len) : (index += 1) {
+        if (a[index] < b[index]) return -1;
+        if (a[index] > b[index]) return 1;
+    }
+    return 0;
 }
 
 pub fn order(a: []const u8, b: []const u8) i2 {
@@ -53,6 +76,22 @@ pub fn store64(out: []u8, value: u64) bool {
         store32(out[4..8], @truncate(value >> 32));
 }
 
+pub fn storeBe16(out: []u8, value: u16) bool {
+    if (out.len < 2) return false;
+    out[0] = @truncate(value >> 8);
+    out[1] = @truncate(value);
+    return true;
+}
+
+pub fn storeBe32(out: []u8, value: u32) bool {
+    if (out.len < 4) return false;
+    out[0] = @truncate(value >> 24);
+    out[1] = @truncate(value >> 16);
+    out[2] = @truncate(value >> 8);
+    out[3] = @truncate(value);
+    return true;
+}
+
 pub fn load16(in: []const u8) ?u16 {
     if (in.len < 2) return null;
     return @as(u16, in[0]) | (@as(u16, in[1]) << 8);
@@ -72,10 +111,51 @@ pub fn load64(in: []const u8) ?u64 {
         (@as(u64, load32(in[4..8]).?) << 32);
 }
 
+pub fn loadBe16(in: []const u8) ?u16 {
+    if (in.len < 2) return null;
+    return (@as(u16, in[0]) << 8) | @as(u16, in[1]);
+}
+
+pub fn loadBe32(in: []const u8) ?u32 {
+    if (in.len < 4) return null;
+    return (@as(u32, in[0]) << 24) |
+        (@as(u32, in[1]) << 16) |
+        (@as(u32, in[2]) << 8) |
+        @as(u32, in[3]);
+}
+
 test "little endian roundtrip" {
     const testing = @import("std").testing;
     var raw: [8]u8 = undefined;
 
     try testing.expect(store64(&raw, 0x1122334455667788));
     try testing.expectEqual(@as(u64, 0x1122334455667788), load64(&raw).?);
+}
+
+test "byte zero copy and fixed length compare match C helpers" {
+    const testing = @import("std").testing;
+    var dst = [_]u8{ 9, 9, 9, 9 };
+    const src = [_]u8{ 1, 2, 3, 4 };
+
+    try testing.expect(copy(&dst, &src));
+    try testing.expect(eql(&dst, &src));
+    try testing.expect(nonzero(&dst));
+    try testing.expect(!zeroed(&dst));
+    zero(&dst);
+    try testing.expect(zeroed(&dst));
+    try testing.expect(eqlLen(&src, &[_]u8{ 1, 2, 9, 9 }, 2));
+    try testing.expect(!eqlLen(&src, &[_]u8{ 1, 9, 3, 4 }, 2));
+    try testing.expectEqual(@as(i2, -1), compareLen(&[_]u8{ 1, 2, 3 }, &[_]u8{ 1, 3, 0 }, 3));
+    try testing.expectEqual(@as(i2, 1), compareLen(&[_]u8{ 1, 4, 3 }, &[_]u8{ 1, 3, 9 }, 3));
+    try testing.expectEqual(@as(i2, 0), compareLen(&[_]u8{ 1, 4, 3 }, &[_]u8{ 1, 3, 9 }, 1));
+}
+
+test "big endian roundtrip" {
+    const testing = @import("std").testing;
+    var raw: [4]u8 = undefined;
+
+    try testing.expect(storeBe32(&raw, 0x11223344));
+    try testing.expectEqual(@as(u32, 0x11223344), loadBe32(&raw).?);
+    try testing.expect(storeBe16(raw[0..2], 0xaabb));
+    try testing.expectEqual(@as(u16, 0xaabb), loadBe16(raw[0..2]).?);
 }

@@ -1,4 +1,5 @@
 const std = @import("std");
+const bytes_mod = @import("bytes.zig");
 
 pub const max_tables = 32;
 pub const max_madt_lapics = 32;
@@ -413,35 +414,27 @@ fn parseGenericAddress(value: []const u8) GenericAddress {
 }
 
 fn getLe16(value: []const u8) u16 {
-    return @as(u16, value[0]) | (@as(u16, value[1]) << 8);
+    return bytes_mod.load16(value) orelse 0;
 }
 
 fn getLe32(value: []const u8) u32 {
-    return @as(u32, value[0]) |
-        (@as(u32, value[1]) << 8) |
-        (@as(u32, value[2]) << 16) |
-        (@as(u32, value[3]) << 24);
+    return bytes_mod.load32(value) orelse 0;
 }
 
 fn getLe64(value: []const u8) u64 {
-    return @as(u64, getLe32(value[0..4])) | (@as(u64, getLe32(value[4..8])) << 32);
+    return bytes_mod.load64(value) orelse 0;
 }
 
 fn putLe16(out: []u8, value: u16) void {
-    out[0] = @intCast(value & 0xff);
-    out[1] = @intCast((value >> 8) & 0xff);
+    _ = bytes_mod.store16(out, value);
 }
 
 fn putLe32(out: []u8, value: u32) void {
-    out[0] = @intCast(value & 0xff);
-    out[1] = @intCast((value >> 8) & 0xff);
-    out[2] = @intCast((value >> 16) & 0xff);
-    out[3] = @intCast((value >> 24) & 0xff);
+    _ = bytes_mod.store32(out, value);
 }
 
 fn putLe64(out: []u8, value: u64) void {
-    putLe32(out[0..4], @intCast(value & 0xffff_ffff));
-    putLe32(out[4..8], @intCast(value >> 32));
+    _ = bytes_mod.store64(out, value);
 }
 
 fn finishChecksum(bytes: []u8) void {

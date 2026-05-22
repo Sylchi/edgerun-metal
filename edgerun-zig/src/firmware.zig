@@ -88,13 +88,7 @@ pub fn blockRequirements() object.Requirements {
 pub fn blockChild(canonical_block: []const u8, logical_offset: u64) ?object.Child {
     const view = object.View.decode(canonical_block) catch return null;
     if (view.header.kind != .bytes or !bytes.eql(&view.header.requirements.hash(), &blockRequirements().hash())) return null;
-    return .{
-        .object_id = view.id(),
-        .logical_offset = logical_offset,
-        .logical_len = view.body.len,
-        .kind = .bytes,
-        .requirements_hash = view.header.requirements.hash(),
-    };
+    return object.Child.fromView(view, logical_offset) catch null;
 }
 
 pub fn writeImageManifest(

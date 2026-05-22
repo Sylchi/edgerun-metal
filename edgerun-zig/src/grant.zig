@@ -10,6 +10,7 @@ pub const Resource = enum(u16) {
     memory = 1,
     storage_bytes = 2,
     storage_slots = 3,
+    read_only_memory = 4,
 };
 
 pub const Grant = struct {
@@ -87,6 +88,41 @@ pub const SpawnReceipt = struct {
     }
 };
 
+pub const MemoryViewReceipt = struct {
+    owner: identity.Id,
+    reader: identity.Id,
+    slice: preimage.Hash,
+    offset: u64,
+    memory: Grant,
+
+    pub fn valid(self: MemoryViewReceipt) bool {
+        return self.owner.valid() and
+            self.reader.valid() and
+            bytes.nonzero(&self.slice) and
+            self.memory.valid() and
+            self.memory.resource == .read_only_memory and
+            self.memory.issuer.eql(self.owner) and
+            self.memory.subject.eql(self.reader);
+    }
+
+    pub fn id(self: MemoryViewReceipt) ?[id_size]u8 {
+        if (!self.valid()) return null;
+
+        const grant_id = self.memory.id().?;
+        var raw: [144]u8 = undefined;
+        var writer = preimage.Writer.init(&raw);
+        if (!writer.id(self.owner) or
+            !writer.id(self.reader) or
+            !writer.hash(self.slice) or
+            !writer.writeU64(self.offset) or
+            !writer.hash(grant_id))
+        {
+            return null;
+        }
+        return preimage.hash("edgerun:zig:v1:memory-view-receipt", writer.written());
+    }
+};
+
 pub fn spawnReceipt(parent: identity.Identity, child: identity.Identity, epoch: clock.Stamp, memory_bytes: usize, storage_bytes: usize, storage_slots: usize) ?SpawnReceipt {
     const memory_amount = std.math.cast(u64, memory_bytes) orelse return null;
     const storage_amount = std.math.cast(u64, storage_bytes) orelse return null;
@@ -119,6 +155,25 @@ pub fn spawnReceipt(parent: identity.Identity, child: identity.Identity, epoch: 
     };
 }
 
+pub fn memoryViewReceipt(owner: identity.Identity, reader: identity.Id, slice: preimage.Hash, epoch: clock.Stamp, offset: usize, bytes_len: usize) ?MemoryViewReceipt {
+    const offset_amount = std.math.cast(u64, offset) orelse return null;
+    const byte_amount = std.math.cast(u64, bytes_len) orelse return null;
+
+    return .{
+        .owner = owner.id,
+        .reader = reader,
+        .slice = slice,
+        .offset = offset_amount,
+        .memory = .{
+            .issuer = owner.id,
+            .subject = reader,
+            .resource = .read_only_memory,
+            .amount = byte_amount,
+            .epoch = epoch,
+        },
+    };
+}
+
 test "spawn receipt deterministically records delegated resources" {
     const keeper = clock.KeeperId{ .bytes = [_]u8{1} ++ [_]u8{0} ** 31 };
     const epoch = clock.Stamp{ .keeper = keeper };
@@ -129,4 +184,19 @@ test "spawn receipt deterministically records delegated resources" {
     try std.testing.expect(receipt.valid());
     try std.testing.expect(bytes.nonzero(&receipt.id().?));
     try std.testing.expectEqual(@as(u64, 16), receipt.memory.amount);
+}
+
+test "memory view receipt binds owner reader slice and byte range" {
+    const keeper = clock.KeeperId{ .bytes = [_]u8{2} ++ [_]u8{0} ** 31 };
+    const epoch = clock.Stamp{ .keeper = keeper };
+    const owner = identity.Identity.init(.app, identity.Source.prepare(.hash, &preimage.rawHash("memory owner")).?, epoch).?;
+    const reader = identity.Identity.init(.app, identity.Source.prepare(.hash, &preimage.rawHash("memory reader")).?, epoch).?;
+    const slice = preimage.hash("edgerun:zig:v1:test-slice", "ui-state");
+    const receipt = memoryViewReceipt(owner, reader.id, slice, epoch, 8, 32).?;
+
+    try std.testing.expect(receipt.valid());
+    try std.testing.expect(bytes.nonzero(&receipt.id().?));
+    try std.testing.expectEqual(Resource.read_only_memory, receipt.memory.resource);
+    try std.testing.expectEqual(@as(u64, 32), receipt.memory.amount);
+    try std.testing.expectEqual(@as(u64, 8), receipt.offset);
 }

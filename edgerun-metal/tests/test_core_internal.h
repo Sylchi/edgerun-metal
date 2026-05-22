@@ -62,7 +62,6 @@
 #include "er_ui_surface_renderer.h"
 #include "er_ui_frame_timing.h"
 #include "er_ui_ledger_app.h"
-#include "vr_font.h"
 #include "er_virtio.h"
 #include "er_virtio_blk.h"
 #include "er_virtio_gpu.h"
@@ -330,15 +329,6 @@ static er_ui_allocator_t test_ui_allocator(void) {
   er_ui_allocator_t allocator;
   allocator.user = 0;
   allocator.alloc = test_alloc;
-  allocator.free = test_free;
-  return allocator;
-}
-
-static vr_font_allocator_t test_vr_allocator(void) {
-  vr_font_allocator_t allocator;
-  allocator.user = 0;
-  allocator.alloc = test_alloc;
-  allocator.realloc = test_realloc;
   allocator.free = test_free;
   return allocator;
 }

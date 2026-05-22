@@ -1,4 +1,5 @@
 const std = @import("std");
+const bytes = @import("bytes.zig");
 const clock = @import("clock.zig");
 const ui_input = @import("input.zig");
 const object = @import("object.zig");
@@ -33,12 +34,7 @@ pub const Component = union(enum) {
     }
 
     pub fn toObject(self: Component, ui_out: []u8, object_out: []u8, req: object.Requirements, epoch: clock.Stamp) ?[]u8 {
-        return switch (self) {
-            .text => |component| component.toObject(ui_out, object_out, req, epoch),
-            .button => |component| component.toObject(ui_out, object_out, req, epoch),
-            .input => |component| component.toObject(ui_out, object_out, req, epoch),
-            .row_item => |component| component.toObject(ui_out, object_out, req, epoch),
-        };
+        return writeSingleComponentObject(self, ui_out, object_out, req, epoch);
     }
 
     pub fn fromView(view: object.View) Error!Component {
@@ -95,18 +91,12 @@ pub const Text = struct {
     }
 
     pub fn toObject(self: Text, ui_out: []u8, object_out: []u8, req: object.Requirements, epoch: clock.Stamp) ?[]u8 {
-        var writer = codec.Writer.init(ui_out, 1, 1, .column, 0, 0) orelse return null;
-        const value = writer.string(self.value) orelse return null;
-        if (!writer.record(0, .text, 0, value, .{})) return null;
-        return writer.objectNode(object_out, req, epoch);
+        return writeSingleComponentObject(.{ .text = self }, ui_out, object_out, req, epoch);
     }
 
     pub fn fromView(view: object.View) Error!Text {
-        var nodes: [1]ui.Node = undefined;
-        const root = codec.decodeView(view, &nodes) catch return error.Corrupt;
-        if (root.stack.children.len != 1) return error.Corrupt;
-        return switch (root.stack.children[0]) {
-            .text => |text| .{ .value = text.value },
+        return switch (try Component.fromView(view)) {
+            .text => |text| text,
             else => error.UnsupportedComponent,
         };
     }
@@ -121,18 +111,12 @@ pub const Button = struct {
     }
 
     pub fn toObject(self: Button, ui_out: []u8, object_out: []u8, req: object.Requirements, epoch: clock.Stamp) ?[]u8 {
-        var writer = codec.Writer.init(ui_out, 1, 1, .column, 0, 0) orelse return null;
-        const label = writer.string(self.label) orelse return null;
-        if (!writer.record(0, .button, self.id, label, .{})) return null;
-        return writer.objectNode(object_out, req, epoch);
+        return writeSingleComponentObject(.{ .button = self }, ui_out, object_out, req, epoch);
     }
 
     pub fn fromView(view: object.View) Error!Button {
-        var nodes: [1]ui.Node = undefined;
-        const root = codec.decodeView(view, &nodes) catch return error.Corrupt;
-        if (root.stack.children.len != 1) return error.Corrupt;
-        return switch (root.stack.children[0]) {
-            .button => |button| .{ .id = button.id, .label = button.label },
+        return switch (try Component.fromView(view)) {
+            .button => |button| button,
             else => error.UnsupportedComponent,
         };
     }
@@ -147,18 +131,12 @@ pub const Input = struct {
     }
 
     pub fn toObject(self: Input, ui_out: []u8, object_out: []u8, req: object.Requirements, epoch: clock.Stamp) ?[]u8 {
-        var writer = codec.Writer.init(ui_out, 1, 1, .column, 0, 0) orelse return null;
-        const placeholder = writer.string(self.placeholder) orelse return null;
-        if (!writer.record(0, .input, self.id, placeholder, .{})) return null;
-        return writer.objectNode(object_out, req, epoch);
+        return writeSingleComponentObject(.{ .input = self }, ui_out, object_out, req, epoch);
     }
 
     pub fn fromView(view: object.View) Error!Input {
-        var nodes: [1]ui.Node = undefined;
-        const root = codec.decodeView(view, &nodes) catch return error.Corrupt;
-        if (root.stack.children.len != 1) return error.Corrupt;
-        return switch (root.stack.children[0]) {
-            .input => |input| .{ .id = input.id, .placeholder = input.placeholder },
+        return switch (try Component.fromView(view)) {
+            .input => |input| input,
             else => error.UnsupportedComponent,
         };
     }
@@ -174,19 +152,12 @@ pub const RowItem = struct {
     }
 
     pub fn toObject(self: RowItem, ui_out: []u8, object_out: []u8, req: object.Requirements, epoch: clock.Stamp) ?[]u8 {
-        var writer = codec.Writer.init(ui_out, 1, 1, .column, 0, 0) orelse return null;
-        const title = writer.string(self.title) orelse return null;
-        const detail = writer.string(self.detail) orelse return null;
-        if (!writer.record(0, .row_item, self.id, title, detail)) return null;
-        return writer.objectNode(object_out, req, epoch);
+        return writeSingleComponentObject(.{ .row_item = self }, ui_out, object_out, req, epoch);
     }
 
     pub fn fromView(view: object.View) Error!RowItem {
-        var nodes: [1]ui.Node = undefined;
-        const root = codec.decodeView(view, &nodes) catch return error.Corrupt;
-        if (root.stack.children.len != 1) return error.Corrupt;
-        return switch (root.stack.children[0]) {
-            .row_item => |row| .{ .id = row.id, .title = row.title, .detail = row.detail },
+        return switch (try Component.fromView(view)) {
+            .row_item => |row| row,
             else => error.UnsupportedComponent,
         };
     }
@@ -381,12 +352,9 @@ fn encodeTreeLayout(axis: ui.Axis, gap: u16, padding: u16, child_count: u16, out
         .row => 1,
     };
     out[9] = 0;
-    out[10] = @truncate(gap);
-    out[11] = @truncate(gap >> 8);
-    out[12] = @truncate(padding);
-    out[13] = @truncate(padding >> 8);
-    out[14] = @truncate(child_count);
-    out[15] = @truncate(child_count >> 8);
+    _ = bytes.store16(out[10..12], gap);
+    _ = bytes.store16(out[12..14], padding);
+    _ = bytes.store16(out[14..16], child_count);
 }
 
 fn decodeTreeLayout(view: object.View) Error!TreeLayout {
@@ -399,9 +367,9 @@ fn decodeTreeLayout(view: object.View) Error!TreeLayout {
             1 => .row,
             else => return error.Corrupt,
         },
-        .gap = @as(u16, view.body[10]) | (@as(u16, view.body[11]) << 8),
-        .padding = @as(u16, view.body[12]) | (@as(u16, view.body[13]) << 8),
-        .child_count = @as(u16, view.body[14]) | (@as(u16, view.body[15]) << 8),
+        .gap = bytes.load16(view.body[10..12]) orelse return error.Corrupt,
+        .padding = bytes.load16(view.body[12..14]) orelse return error.Corrupt,
+        .child_count = bytes.load16(view.body[14..16]) orelse return error.Corrupt,
     };
 }
 
@@ -415,19 +383,13 @@ fn encodeSlotLayout(id: u32, out: []u8) ?void {
     if (out.len < slot_layout_size) return null;
     @memset(out[0..slot_layout_size], 0);
     @memcpy(out[0..slot_layout_magic.len], slot_layout_magic);
-    out[8] = @truncate(id);
-    out[9] = @truncate(id >> 8);
-    out[10] = @truncate(id >> 16);
-    out[11] = @truncate(id >> 24);
+    _ = bytes.store32(out[8..12], id);
 }
 
 fn decodeSlotLayout(view: object.View) Error!u32 {
     if (view.header.kind != .bytes or view.body.len != slot_layout_size) return error.Corrupt;
     if (!std.mem.eql(u8, view.body[0..slot_layout_magic.len], slot_layout_magic)) return error.Corrupt;
-    return @as(u32, view.body[8]) |
-        (@as(u32, view.body[9]) << 8) |
-        (@as(u32, view.body[10]) << 16) |
-        (@as(u32, view.body[11]) << 24);
+    return bytes.load32(view.body[8..12]) orelse error.Corrupt;
 }
 
 fn isSlotLayout(view: object.View) bool {
@@ -438,18 +400,17 @@ fn isSlotLayout(view: object.View) bool {
 
 fn childRecord(canonical: []const u8, offset: u64) object.Child {
     const view = object.View.decode(canonical) catch unreachable;
-    const logical_len = if (view.header.logical_len == 0) 1 else view.header.logical_len;
-    return .{
-        .object_id = view.id(),
-        .logical_offset = offset,
-        .logical_len = logical_len,
-        .kind = view.header.kind,
-        .requirements_hash = view.header.requirements.hash(),
-    };
+    return object.Child.fromView(view, offset) catch unreachable;
 }
 
 fn sameId(left: [object.id_size]u8, right: [object.id_size]u8) bool {
     return std.mem.eql(u8, &left, &right);
+}
+
+fn writeSingleComponentObject(component: Component, ui_out: []u8, object_out: []u8, req: object.Requirements, epoch: clock.Stamp) ?[]u8 {
+    var writer = codec.Writer.init(ui_out, 1, 1, .column, 0, 0) orelse return null;
+    if (!writeComponentRecord(&writer, 0, component)) return null;
+    return writer.objectNode(object_out, req, epoch);
 }
 
 fn writeComponentRecord(writer: *codec.Writer, index: usize, component: Component) bool {

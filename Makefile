@@ -1,8 +1,12 @@
 .PHONY: all check clean \
 	crypto-test crypto-bench \
 	clock-test identity-test object-test storage-test \
-	varfont-test ui-core-test \
-	zig-check zig-fmt-check zig-fmt zig-test zig-real-tpm
+	ui-core-test \
+	zig-check zig-fmt-check zig-fmt zig-test zig-real-tpm \
+	pi-zero-w-v1_1-kernel pi-zero-w-v1_1-usb-probe pi-usb-host pi-usb-state \
+	pi-usb-reset-port pi-usb-reset-controller pi-usb-dry-run pi-usb-load \
+	pi-usb-load-probe pi-usb-recover-load pi-usb-recover-load-probe \
+	pi-usb-control-host pi-usb-control-dry-run pi-usb-control
 
 BUILD_DIR := .build
 CMAKE ?= cmake
@@ -10,7 +14,7 @@ CTEST ?= ctest
 
 all: check
 
-check: crypto-test clock-test identity-test object-test storage-test varfont-test ui-core-test zig-check
+check: crypto-test clock-test identity-test object-test storage-test ui-core-test zig-check
 
 crypto-test:
 	$(CMAKE) -S edgerun-crypto -B $(BUILD_DIR)/edgerun-crypto -DER_CRYPTO_USE_UPSTREAM_BLAKE3_ASM=OFF
@@ -22,9 +26,7 @@ crypto-bench:
 	$(CMAKE) --build $(BUILD_DIR)/edgerun-crypto --target bench
 
 clock-test:
-	$(CMAKE) -S edgerun-clock -B $(BUILD_DIR)/edgerun-clock
-	$(CMAKE) --build $(BUILD_DIR)/edgerun-clock --target test_clock
-	$(CTEST) --test-dir $(BUILD_DIR)/edgerun-clock --output-on-failure
+	zig build --build-file edgerun-zig/build.zig --cache-dir $(BUILD_DIR)/edgerun-zig clock-test
 
 identity-test:
 	zig build --build-file edgerun-zig/build.zig --cache-dir $(BUILD_DIR)/edgerun-zig identity-test
@@ -35,15 +37,8 @@ object-test:
 storage-test:
 	zig build --build-file edgerun-zig/build.zig --cache-dir $(BUILD_DIR)/edgerun-zig storage-test
 
-varfont-test:
-	$(CMAKE) -S edgerun-ui-core/varfont -B $(BUILD_DIR)/varfont
-	$(CMAKE) --build $(BUILD_DIR)/varfont
-	$(CTEST) --test-dir $(BUILD_DIR)/varfont --output-on-failure
-
 ui-core-test:
-	$(CMAKE) -S edgerun-ui-core -B $(BUILD_DIR)/edgerun-ui-core
-	$(CMAKE) --build $(BUILD_DIR)/edgerun-ui-core
-	$(CTEST) --test-dir $(BUILD_DIR)/edgerun-ui-core --output-on-failure
+	zig build --build-file edgerun-zig/build.zig --cache-dir $(BUILD_DIR)/edgerun-zig ui-core-test
 
 zig-check: zig-fmt-check zig-test
 
@@ -58,6 +53,62 @@ zig-test:
 
 zig-real-tpm:
 	zig build --build-file edgerun-zig/build.zig --cache-dir $(BUILD_DIR)/edgerun-zig real-tpm
+
+pi-zero-w-v1_1-kernel:
+	mkdir -p $(BUILD_DIR)/pi-zero-w-v1_1-zig
+	zig build-exe edgerun-zig/src/pi_zero_w_v1_1_kernel.zig -target arm-freestanding-eabi -mcpu=arm1176jzf_s -O ReleaseSmall -femit-bin=$(BUILD_DIR)/pi-zero-w-v1_1-zig/kernel.elf -fno-entry -T edgerun-zig/pi-zero-w-v1_1-kernel.ld
+	llvm-objcopy -O binary $(BUILD_DIR)/pi-zero-w-v1_1-zig/kernel.elf $(BUILD_DIR)/pi-zero-w-v1_1-zig/kernel.img
+	cp $(BUILD_DIR)/pi-zero-w-v1_1-zig/kernel.img $(BUILD_DIR)/pi-zero-w-v1_1-zig/kernel-padded.img
+	truncate -s 65536 $(BUILD_DIR)/pi-zero-w-v1_1-zig/kernel-padded.img
+
+pi-zero-w-v1_1-usb-probe:
+	mkdir -p $(BUILD_DIR)/pi-zero-w-v1_1-usb-probe
+	zig build-exe edgerun-zig/src/pi_zero_w_v1_1_usb_probe_kernel.zig -target arm-freestanding-eabi -mcpu=arm1176jzf_s -O ReleaseSmall -femit-bin=$(BUILD_DIR)/pi-zero-w-v1_1-usb-probe/kernel.elf -fno-entry -T edgerun-zig/pi-zero-w-v1_1-kernel.ld
+	llvm-objcopy -O binary $(BUILD_DIR)/pi-zero-w-v1_1-usb-probe/kernel.elf $(BUILD_DIR)/pi-zero-w-v1_1-usb-probe/kernel.img
+	cp $(BUILD_DIR)/pi-zero-w-v1_1-usb-probe/kernel.img $(BUILD_DIR)/pi-zero-w-v1_1-usb-probe/kernel-padded.img
+	truncate -s 65536 $(BUILD_DIR)/pi-zero-w-v1_1-usb-probe/kernel-padded.img
+
+pi-usb-host:
+	mkdir -p $(BUILD_DIR)/pi-usb-host
+	zig build-exe edgerun-zig/src/pi_usb_boot_host.zig --cache-dir $(BUILD_DIR)/edgerun-zig -femit-bin=$(BUILD_DIR)/pi-usb-host/edgerun-pi-usb-boot-host
+
+pi-usb-control-host:
+	mkdir -p $(BUILD_DIR)/pi-usb-host
+	zig build-exe edgerun-zig/src/pi_usb_control_host.zig --cache-dir $(BUILD_DIR)/edgerun-zig -femit-bin=$(BUILD_DIR)/pi-usb-host/edgerun-pi-usb-control-host
+
+pi-usb-state:
+	lsusb -t
+	lsusb | grep -E '0a5c:2763|0a5c:2764|4552:5049|Broadcom|BCM2708|BCM2710|Edgerun' || true
+	sudo dmesg --ctime | tail -n 40
+
+pi-usb-reset-port:
+	printf 1 | sudo tee /sys/devices/pci0000:00/0000:00:08.1/0000:c1:00.3/usb1/1-0:1.0/usb1-port1/disable >/dev/null
+	sleep 10
+	printf 0 | sudo tee /sys/devices/pci0000:00/0000:00:08.1/0000:c1:00.3/usb1/1-0:1.0/usb1-port1/disable >/dev/null
+
+pi-usb-reset-controller:
+	printf '0000:c1:00.3' | sudo tee /sys/bus/pci/drivers/xhci_hcd/unbind >/dev/null
+	sleep 2
+	printf '0000:c1:00.3' | sudo tee /sys/bus/pci/drivers/xhci_hcd/bind >/dev/null
+
+pi-usb-load: pi-zero-w-v1_1-kernel pi-usb-host
+	sudo $(BUILD_DIR)/pi-usb-host/edgerun-pi-usb-boot-host --wait --wait-ms 120000 --serve-dir $(BUILD_DIR)/edgerun-metal/pi-zero-w-v1_1/boot --kernel-image $(BUILD_DIR)/pi-zero-w-v1_1-zig/kernel-padded.img $(BUILD_DIR)/edgerun-metal/pi-zero-w-v1_1/boot/bootcode.bin
+
+pi-usb-load-probe: pi-zero-w-v1_1-usb-probe pi-usb-host
+	sudo $(BUILD_DIR)/pi-usb-host/edgerun-pi-usb-boot-host --wait --wait-ms 120000 --serve-dir $(BUILD_DIR)/edgerun-metal/pi-zero-w-v1_1/boot --kernel-image $(BUILD_DIR)/pi-zero-w-v1_1-usb-probe/kernel-padded.img $(BUILD_DIR)/edgerun-metal/pi-zero-w-v1_1/boot/bootcode.bin
+
+pi-usb-recover-load: pi-usb-reset-port pi-usb-load
+
+pi-usb-recover-load-probe: pi-usb-reset-port pi-usb-load-probe
+
+pi-usb-dry-run: pi-zero-w-v1_1-kernel
+	zig build --build-file edgerun-zig/build.zig --cache-dir $(BUILD_DIR)/edgerun-zig pi-usb-load -- --dry-run --serve-dir $(BUILD_DIR)/edgerun-metal/pi-zero-w-v1_1/boot --kernel-image $(BUILD_DIR)/pi-zero-w-v1_1-zig/kernel.img $(BUILD_DIR)/edgerun-metal/pi-zero-w-v1_1/boot/bootcode.bin
+
+pi-usb-control: pi-usb-control-host
+	sudo $(BUILD_DIR)/pi-usb-host/edgerun-pi-usb-control-host --wait-ms 10000 gpio-read 47
+
+pi-usb-control-dry-run:
+	zig build --build-file edgerun-zig/build.zig --cache-dir $(BUILD_DIR)/edgerun-zig pi-usb-control -- --dry-run gpio-read 47
 
 clean:
 	rm -rf $(BUILD_DIR)
