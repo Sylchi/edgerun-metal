@@ -1,5 +1,5 @@
 #include "er_ui_surface_renderer.h"
-#include "er_ui_metal.h"
+#include "er_ui_components.h"
 #include "er_ui_scene.h"
 #include "er_ui_theme.h"
 #include "vr_font.h"
@@ -352,7 +352,6 @@ static uint8_t er_ui_snapshot_write_bmp(const char* path,
 int main(int argc, char** argv) {
   ErUiSnapshotConfig config;
   er_ui_scene_t scene;
-  er_ui_component_gallery_state_t gallery;
   er_ui_resolved_theme_t theme;
   vr_font_face_t* font;
   uint32_t* pixels;
@@ -397,18 +396,16 @@ int main(int argc, char** argv) {
     return 1;
   }
 
-  er_ui_component_gallery_state_init(&gallery);
   theme = er_ui_resolved_theme_user_default();
-  if (er_ui_edgerun_metal_surface_emit(
-          &scene,
-          font,
-          er_ui_bounds(0.0f, 0.0f, (float)config.width, (float)config.height),
-          theme,
-          &gallery) != ER_UI_OK) {
+  if (er_ui_component_card_emit(&scene, er_ui_bounds(24.0f, 24.0f, (float)config.width - 48.0f, (float)config.height - 48.0f), theme) != ER_UI_OK ||
+      er_ui_component_button_emit(&scene, font, er_ui_bounds(48.0f, 48.0f, 144.0f, 40.0f), theme, "Primary", 1u,
+                                  ER_UI_COMPONENT_BUTTON_DEFAULT, ER_UI_COMPONENT_BUTTON_SIZE_DEFAULT, true) != ER_UI_OK ||
+      er_ui_component_field_emit(&scene, font, er_ui_bounds(48.0f, 112.0f, 280.0f, 58.0f), theme, "Field", "Rendered text", 2u, false) != ER_UI_OK ||
+      er_ui_component_progress_emit(&scene, er_ui_bounds(48.0f, 196.0f, 280.0f, 12.0f), theme, 0.62f) != ER_UI_OK) {
     er_ui_scene_destroy(&scene);
     vr_font_face_destroy(font);
     free(pixels);
-    fprintf(stderr, "fatal: failed to emit EdgeRun UI scene\n");
+    fprintf(stderr, "fatal: failed to emit UI scene\n");
     return 1;
   }
 
@@ -426,7 +423,7 @@ int main(int argc, char** argv) {
     er_ui_scene_destroy(&scene);
     vr_font_face_destroy(font);
     free(pixels);
-    fprintf(stderr, "fatal: failed to rasterize EdgeRun UI scene\n");
+    fprintf(stderr, "fatal: failed to rasterize UI scene\n");
     return 1;
   }
   ok = config.self_test != 0u ? 1u :

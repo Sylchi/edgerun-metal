@@ -14,7 +14,7 @@ typedef struct {
 //@optimizer-ignore-constant icon metadata is indexed only after er_ui_icon_t range guards and mirrors ER_UI_ICON_COUNT order
 static const ErUiIconMapping g_icon_mappings[ER_UI_ICON_COUNT] = {
   {"activity", "activity", "activity"},
-  {"app", "apps", "app-window"},
+  {"window", "apps", "app-window"},
   {"bell", "bell", "bell"},
   {"chat", "message-circle", "message-circle"},
   {"check", "check", "check"},
@@ -39,7 +39,7 @@ static const ErUiIconMapping g_icon_mappings[ER_UI_ICON_COUNT] = {
   {"sparkles", "sparkles", "sparkles"},
   {"storage", "database", "database"},
   {"terminal", "terminal-2", "square-terminal"},
-  {"trust", "shield-check", "shield-check"},
+  {"shield-check", "shield-check", "shield-check"},
   {"trash", "trash", "trash-2"},
   {"user", "user", "user"},
   {"wallet", "wallet", "wallet"},

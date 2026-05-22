@@ -192,14 +192,10 @@ vr_font_face_t* er_ui_test_open_font(float px_size, const char* load_message, co
 }
 
 void run_runtime_tests(void);
-void run_shell_tests(void);
 void run_component_tests(void);
-void run_ledger_app_tests(void);
-void run_initial_setup_tests(void);
 void run_asset_tests(void);
 void run_node_tests(void);
 void run_preset_code_tests(void);
-void run_record_codec_tests(void);
 void run_spacing_tests(void);
 void run_text_tests(void);
 
@@ -748,13 +744,9 @@ int main(void) {
   test_transition_and_budget_contracts();
   test_color_helpers_and_scheme_codes();
   run_text_tests();
-  run_ledger_app_tests();
-  run_initial_setup_tests();
   run_asset_tests();
   run_preset_code_tests();
-  run_record_codec_tests();
   run_spacing_tests();
-  run_shell_tests();
   run_runtime_tests();
   run_component_tests();
   run_node_tests();

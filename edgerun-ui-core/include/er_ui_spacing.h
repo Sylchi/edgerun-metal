@@ -69,17 +69,14 @@ extern "C" {
 #define ER_UI_OPERATION_ROW_H 78.0f
 #define ER_UI_OPERATION_ROW_CONTENT_H (ER_UI_OPERATION_ROW_H - ER_UI_SPACE_1 * 0.5f)
 #define ER_UI_OPERATION_ROW_PANEL_PAD ER_UI_SPACE_2
-#define ER_UI_PACKAGE_CARD_H 112.0f
-#define ER_UI_APP_STORE_CARD_H 138.0f
-#define ER_UI_APP_CARD_GRID_GAP ER_UI_SPACE_4
 #define ER_UI_NARROW_VIEWPORT_W 520.0f
 #define ER_UI_WIDE_VIEWPORT_W 1180.0f
-#define ER_UI_APP_SURFACE_INSET_X_NARROW ER_UI_SPACE_4
-#define ER_UI_APP_SURFACE_INSET_Y_NARROW ER_UI_SPACE_4
-#define ER_UI_APP_SURFACE_INSET_X ER_UI_SPACE_6
-#define ER_UI_APP_SURFACE_INSET_Y ER_UI_SPACE_6
-#define ER_UI_APP_SURFACE_INSET_X_WIDE ER_UI_SPACE_7
-#define ER_UI_APP_SURFACE_INSET_Y_WIDE ER_UI_SPACE_7
+#define ER_UI_SURFACE_INSET_X_NARROW ER_UI_SPACE_4
+#define ER_UI_SURFACE_INSET_Y_NARROW ER_UI_SPACE_4
+#define ER_UI_SURFACE_INSET_X ER_UI_SPACE_6
+#define ER_UI_SURFACE_INSET_Y ER_UI_SPACE_6
+#define ER_UI_SURFACE_INSET_X_WIDE ER_UI_SPACE_7
+#define ER_UI_SURFACE_INSET_Y_WIDE ER_UI_SPACE_7
 #define ER_UI_SHELL_VIEWPORT_INSET ER_UI_SPACE_4
 #define ER_UI_SHELL_PANEL_GAP ER_UI_SPACE_3
 #define ER_UI_SHELL_TOPBAR_H 42.0f
@@ -136,10 +133,8 @@ typedef struct {
   float command_row_h;
   float table_row_h;
   float operation_row_h;
-  float package_card_h;
-  float app_store_card_h;
-  float app_surface_inset_x;
-  float app_surface_inset_y;
+  float surface_inset_x;
+  float surface_inset_y;
   float shell_viewport_inset;
   float shell_panel_gap;
   float shell_topbar_h;
@@ -218,8 +213,8 @@ er_ui_bounds_t er_ui_vertical_flow_next(er_ui_vertical_flow_t* flow, float prefe
 er_ui_bounds_t er_ui_vertical_flow_remaining(const er_ui_vertical_flow_t* flow);
 er_ui_bounds_t er_ui_row_icon_slot(er_ui_bounds_t row);
 er_ui_bounds_t er_ui_row_text_rect(er_ui_bounds_t row, float trailing_reserved_w);
-er_ui_component_padding_t er_ui_app_surface_padding_for_width(float width);
-er_ui_bounds_t er_ui_app_surface_content_rect(er_ui_bounds_t bounds);
+er_ui_component_padding_t er_ui_surface_padding_for_width(float width);
+er_ui_bounds_t er_ui_surface_content_rect(er_ui_bounds_t bounds);
 er_ui_bounds_t er_ui_system_surface_safe_rect(er_ui_bounds_t bounds);
 er_ui_bounds_t er_ui_centered_system_panel(
   er_ui_bounds_t safe,

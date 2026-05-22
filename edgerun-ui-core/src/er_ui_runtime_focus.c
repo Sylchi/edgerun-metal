@@ -83,14 +83,12 @@ bool er_ui_runtime_is_focusable_hit(er_ui_hit_t hit) {
     case ER_UI_HIT_BREADCRUMB:
     case ER_UI_HIT_TREE_ITEM:
     case ER_UI_HIT_MENU_ITEM:
-    case ER_UI_HIT_TRANSACTION_ROW:
     case ER_UI_HIT_COMPOSER:
     case ER_UI_HIT_SEND:
     case ER_UI_HIT_WORKSPACE_TAB:
     case ER_UI_HIT_WORKSPACE_CLOSE:
     case ER_UI_HIT_WORKSPACE_SPLIT:
     case ER_UI_HIT_SHELL_LAUNCHER:
-    case ER_UI_HIT_APP_LAUNCHER_ITEM:
       return true;
     default:
       return false;

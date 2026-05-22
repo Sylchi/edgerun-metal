@@ -62,17 +62,17 @@ static void test_component_padding_density_tokens_are_monotonic(void) {
                 "spacing: component content rect follows density padding");
 }
 
-static void test_responsive_app_surface_spacing(void) {
-  er_ui_component_padding_t narrow = er_ui_app_surface_padding_for_width(390.0f);
-  er_ui_component_padding_t normal = er_ui_app_surface_padding_for_width(900.0f);
-  er_ui_component_padding_t wide = er_ui_app_surface_padding_for_width(1440.0f);
-  expect_float(narrow.x, ER_UI_APP_SURFACE_INSET_X_NARROW, "spacing: narrow app inset");
-  expect_float(normal.x, ER_UI_APP_SURFACE_INSET_X, "spacing: default app inset");
-  expect_float(wide.x, ER_UI_APP_SURFACE_INSET_X_WIDE, "spacing: wide app inset");
+static void test_responsive_surface_spacing(void) {
+  er_ui_component_padding_t narrow = er_ui_surface_padding_for_width(390.0f);
+  er_ui_component_padding_t normal = er_ui_surface_padding_for_width(900.0f);
+  er_ui_component_padding_t wide = er_ui_surface_padding_for_width(1440.0f);
+  expect_float(narrow.x, ER_UI_SURFACE_INSET_X_NARROW, "spacing: narrow surface inset");
+  expect_float(normal.x, ER_UI_SURFACE_INSET_X, "spacing: default surface inset");
+  expect_float(wide.x, ER_UI_SURFACE_INSET_X_WIDE, "spacing: wide surface inset");
   expect_true(narrow.x < normal.x, "spacing: narrow less than default");
   expect_true(normal.x < wide.x, "spacing: default less than wide");
-  expect_bounds(er_ui_app_surface_content_rect(er_ui_bounds(0.0f, 0.0f, 390.0f, 260.0f)), er_ui_bounds(10.0f, 10.0f, 370.0f, 240.0f),
-                "spacing: app surface content rect");
+  expect_bounds(er_ui_surface_content_rect(er_ui_bounds(0.0f, 0.0f, 390.0f, 260.0f)), er_ui_bounds(10.0f, 10.0f, 370.0f, 240.0f),
+                "spacing: surface content rect");
 }
 
 static void test_responsive_grid_derives_columns_from_available_width(void) {
@@ -215,7 +215,7 @@ static void test_scroll_geometry_uses_shared_padding_and_hit_contract(void) {
 void run_spacing_tests(void) {
   test_spacing_default_matches_tokens();
   test_component_padding_density_tokens_are_monotonic();
-  test_responsive_app_surface_spacing();
+  test_responsive_surface_spacing();
   test_responsive_grid_derives_columns_from_available_width();
   test_responsive_sidecar_adapts_without_fixed_content_math();
   test_uniform_grid_divides_exact_tracks_without_callsite_math();

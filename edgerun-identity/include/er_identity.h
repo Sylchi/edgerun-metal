@@ -3,8 +3,8 @@
 
 /*
  * Purpose: define routable EdgeRun identities independent of transport media.
- * Intention: let wire, storage, VFS, apps, and admission reference the same
- * fixed identity primitive without embedding auth, login, or policy decisions.
+ * Intention: let wire, storage, apps, and admission reference the same fixed
+ * identity primitive without embedding auth, login, or policy decisions.
  */
 
 #include <stddef.h>

@@ -196,10 +196,10 @@ static void test_text_buffer_display_value(void) {
   expect_string(display, "placeholder", "display: empty buffer returns placeholder");
   er_ui_text_buffer_free_text(&buffer, display);
 
-  expect_status(er_ui_text_buffer_set_text(&buffer, "identity"), ER_UI_OK, "display: set text succeeds");
+  expect_status(er_ui_text_buffer_set_text(&buffer, "profile"), ER_UI_OK, "display: set text succeeds");
   er_ui_text_buffer_move_cursor_to_start(&buffer);
   expect_status(er_ui_text_buffer_display_value(&buffer, "placeholder", "|", &display), ER_UI_OK, "display: cursor value succeeds");
-  expect_string(display, "|identity", "display: non-empty buffer returns value with cursor");
+  expect_string(display, "|profile", "display: non-empty buffer returns value with cursor");
   er_ui_text_buffer_free_text(&buffer, display);
 
   er_ui_text_buffer_destroy(&buffer);

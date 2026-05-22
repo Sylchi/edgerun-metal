@@ -11,12 +11,12 @@ static void test_bundled_asset_packs_validate(void) {
 
   expect_asset_status(er_ui_asset_pack_validate(tabler, limits), ER_UI_ASSET_PACK_OK, "assets: bundled Tabler/Inter pack validates");
   expect_asset_status(er_ui_asset_pack_validate(lucide, limits), ER_UI_ASSET_PACK_OK, "assets: bundled Lucide/Geist pack validates");
-  expect_string(lucide.name, "edgerun-lucide-geist", "assets: Lucide/Geist pack name");
+  expect_string(lucide.name, "ui-lucide-geist", "assets: Lucide/Geist pack name");
   const er_ui_font_face_spec_t* bundled_face = lucide.fonts.faces;
   expect_string(bundled_face->name, "Geist", "assets: bundled Geist face");
   expect_size(tabler.icons.entry_count, (size_t)ER_UI_ICON_COUNT, "assets: bundled icon coverage count");
   expect_size(tabler.components.component_count, (size_t)ER_UI_COMPONENT_KIND_COUNT, "assets: bundled component coverage count");
-  expect_string(er_ui_component_kind_label(ER_UI_COMPONENT_KIND_EDGERUN_DOMAIN), "EdgeRun Domain", "assets: component kind label");
+  expect_string(er_ui_component_kind_label(ER_UI_COMPONENT_KIND_FEEDBACK), "Feedback", "assets: component kind label");
 }
 
 static void test_icon_pack_rejects_missing_or_mismatched_icons(void) {
@@ -25,7 +25,7 @@ static void test_icon_pack_rejects_missing_or_mismatched_icons(void) {
   //@optimizer-ignore icon fixture array intentionally injects a provider-name mismatch into validated pack metadata
   er_ui_icon_pack_entry_t mismatched[2u] = {
     {ER_UI_ICON_ACTIVITY, "activity"},
-    {ER_UI_ICON_APP, "apps"},
+    {ER_UI_ICON_WINDOW, "apps"},
   };
 
   pack.icons.entry_count = (size_t)ER_UI_ICON_COUNT - 1u;
@@ -69,16 +69,16 @@ static void test_asset_pack_runtime_replaces_only_valid_packs(void) {
 
   expect_asset_status(er_ui_asset_pack_runtime_init(&runtime, tabler, er_ui_asset_limits_default()), ER_UI_ASSET_PACK_OK,
                       "assets: runtime accepts valid initial pack");
-  expect_string(runtime.active.name, "edgerun-tabler-inter", "assets: runtime active initial pack");
+  expect_string(runtime.active.name, "ui-tabler-inter", "assets: runtime active initial pack");
 
   expect_asset_status(er_ui_asset_pack_runtime_replace(&runtime, lucide), ER_UI_ASSET_PACK_OK,
                       "assets: runtime accepts valid replacement pack");
-  expect_string(runtime.active.name, "edgerun-lucide-geist", "assets: runtime active replacement pack");
+  expect_string(runtime.active.name, "ui-lucide-geist", "assets: runtime active replacement pack");
 
   invalid.icons.entry_count = invalid.icons.entry_count - 1u;
   expect_asset_status(er_ui_asset_pack_runtime_replace(&runtime, invalid), ER_UI_ASSET_PACK_MISSING_REQUIRED_ICON,
                       "assets: runtime rejects invalid replacement pack");
-  expect_string(runtime.active.name, "edgerun-lucide-geist", "assets: runtime preserves active pack after rejected replacement");
+  expect_string(runtime.active.name, "ui-lucide-geist", "assets: runtime preserves active pack after rejected replacement");
 }
 
 void run_asset_tests(void) {

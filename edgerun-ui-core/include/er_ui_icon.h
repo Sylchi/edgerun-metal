@@ -2,7 +2,7 @@
 #define ER_UI_ICON_H
 
 /*
- * Purpose: define canonical EdgeRun UI icon identities and provider mappings.
+ * Purpose: define canonical UI icon identities and provider mappings.
  * Intention: keep Lucide/Tabler/icon atlas semantics in UI-core, not in render backends.
  */
 
@@ -15,7 +15,7 @@ extern "C" {
 
 typedef enum {
   ER_UI_ICON_ACTIVITY = 0,
-  ER_UI_ICON_APP,
+  ER_UI_ICON_WINDOW,
   ER_UI_ICON_BELL,
   ER_UI_ICON_CHAT,
   ER_UI_ICON_CHECK,
@@ -40,7 +40,7 @@ typedef enum {
   ER_UI_ICON_SPARKLES,
   ER_UI_ICON_STORAGE,
   ER_UI_ICON_TERMINAL,
-  ER_UI_ICON_TRUST,
+  ER_UI_ICON_SHIELD_CHECK,
   ER_UI_ICON_TRASH,
   ER_UI_ICON_USER,
   ER_UI_ICON_WALLET,
