@@ -9,7 +9,6 @@ top-level directories are cooperating runtime areas, not separate products:
 - `edgerun-clock`: freestanding deterministic epoch clock shared by identity, object, admission, storage, and wire records.
 - `edgerun-crypto`: freestanding cryptographic primitives used by the runtime, tools, and tests, currently centered on BLAKE3 hashing.
 - `edgerun-identity`: freestanding routable identity primitives for users, devices, apps, resources, objects, ephemeral actors, and delegated actors.
-- `edgerun-node`: the app SDK facade that binds a manifest-declared memory/storage slice at launch and exposes deterministic object, store, load, request, signature, and recursive subapp delegation calls inside that slice.
 - `edgerun-object`: canonical object node definitions and validation APIs shared by memory, wire, durable storage, and apps.
 - `edgerun-storage`: freestanding append-only content-addressed store and key projection basis.
 - `edgerun-ui-core`: the platform-neutral UI scene, component, input, and rendering contract consumed by the metal runtime.
@@ -322,7 +321,6 @@ Primary data references:
 ├── edgerun-crypto/        freestanding crypto used by the runtime
 ├── edgerun-identity/      routable identity primitives
 ├── edgerun-metal/         freestanding UEFI OS runtime and device adapters
-├── edgerun-node/          launch-bound app SDK and recursive slice delegation
 ├── edgerun-object/        canonical object node format
 ├── edgerun-storage/       append-only content-addressed storage basis
 ├── edgerun-ui-core/       portable UI scene/component/input runtime
@@ -401,14 +399,6 @@ complex shaping such as GSUB, GPOS, Bidi, and CFF2 is not yet implemented.
 
 `edgerun-crypto` provides freestanding BLAKE3 hashing for the runtime. It does
 not depend on the EFI runtime, `ErCryptoProvider`, or libc memory routines.
-
-`edgerun-node` is the app-facing SDK boundary. Users select which apps can run;
-each app manifest declares its required memory and storage before launch. The
-runtime binds the whole requested slice to the node at launch, with no dynamic
-allocation, oversubscription, or runtime quota negotiation. Runtime operations
-are deterministic state transitions inside that pre-bound slice. A node can
-delegate part of its own slice to child nodes, including apps from other
-developers, and those children can repeat the same delegation pattern.
 
 `edgerun-storage` provides the freestanding append-only content-addressed store. Its
 record log is the source of truth; blob tables, key projections, content-type
