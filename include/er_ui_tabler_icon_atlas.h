@@ -15709,7 +15709,7 @@ static inline uint8_t er_ui_tabler_icon_rect(er_ui_icon_t icon, ErUiTablerIconRe
   if (out_rect == 0) return 0u;
   switch (icon) {
     case ER_UI_ICON_ACTIVITY: *out_rect = (ErUiTablerIconRect){8u, 8u, 96u, 96u}; return 1u;
-    case ER_UI_ICON_APP: *out_rect = (ErUiTablerIconRect){232u, 8u, 96u, 96u}; return 1u;
+    case ER_UI_ICON_WINDOW: *out_rect = (ErUiTablerIconRect){232u, 8u, 96u, 96u}; return 1u;
     case ER_UI_ICON_BELL: *out_rect = (ErUiTablerIconRect){456u, 8u, 96u, 96u}; return 1u;
     case ER_UI_ICON_CHAT: *out_rect = (ErUiTablerIconRect){344u, 232u, 96u, 96u}; return 1u;
     case ER_UI_ICON_CHECK: *out_rect = (ErUiTablerIconRect){568u, 8u, 96u, 96u}; return 1u;
@@ -15733,7 +15733,7 @@ static inline uint8_t er_ui_tabler_icon_rect(er_ui_icon_t icon, ErUiTablerIconRe
     case ER_UI_ICON_SPARKLES: *out_rect = (ErUiTablerIconRect){568u, 344u, 96u, 96u}; return 1u;
     case ER_UI_ICON_STORAGE: *out_rect = (ErUiTablerIconRect){344u, 120u, 96u, 96u}; return 1u;
     case ER_UI_ICON_TERMINAL: *out_rect = (ErUiTablerIconRect){8u, 456u, 96u, 96u}; return 1u;
-    case ER_UI_ICON_TRUST: *out_rect = (ErUiTablerIconRect){456u, 344u, 96u, 96u}; return 1u;
+    case ER_UI_ICON_SHIELD_CHECK: *out_rect = (ErUiTablerIconRect){456u, 344u, 96u, 96u}; return 1u;
     case ER_UI_ICON_TRASH: *out_rect = (ErUiTablerIconRect){120u, 456u, 96u, 96u}; return 1u;
     case ER_UI_ICON_USER: *out_rect = (ErUiTablerIconRect){232u, 456u, 96u, 96u}; return 1u;
     case ER_UI_ICON_WALLET: *out_rect = (ErUiTablerIconRect){344u, 456u, 96u, 96u}; return 1u;

@@ -285,15 +285,6 @@ er_ui_status_t er_ui_component_section_header_emit(
   er_ui_resolved_theme_t theme,
   const char* title,
   const char* detail);
-er_ui_status_t er_ui_component_identity_card_emit(
-  er_ui_scene_t* scene,
-  vr_font_face_t* font,
-  er_ui_bounds_t bounds,
-  er_ui_resolved_theme_t theme,
-  const char* name,
-  const char* node,
-  const char* policy,
-  uint32_t id);
 er_ui_status_t er_ui_component_contact_card_emit(
   er_ui_scene_t* scene,
   vr_font_face_t* font,
@@ -319,50 +310,6 @@ er_ui_status_t er_ui_component_attachment_preview_emit(
   const char* name,
   const char* kind,
   uint32_t id);
-er_ui_status_t er_ui_component_capability_grant_row_emit(
-  er_ui_scene_t* scene,
-  vr_font_face_t* font,
-  er_ui_bounds_t bounds,
-  er_ui_resolved_theme_t theme,
-  const char* app,
-  const char* capability,
-  const char* state,
-  uint32_t id);
-er_ui_status_t er_ui_component_proof_event_row_emit(
-  er_ui_scene_t* scene,
-  vr_font_face_t* font,
-  er_ui_bounds_t bounds,
-  er_ui_resolved_theme_t theme,
-  const char* title,
-  const char* hash,
-  const char* status_text,
-  uint32_t id);
-er_ui_status_t er_ui_component_route_path_emit(
-  er_ui_scene_t* scene,
-  vr_font_face_t* font,
-  er_ui_bounds_t bounds,
-  er_ui_resolved_theme_t theme,
-  const char* label,
-  const char* const* hops,
-  size_t hop_count);
-er_ui_status_t er_ui_component_package_card_emit(
-  er_ui_scene_t* scene,
-  vr_font_face_t* font,
-  er_ui_bounds_t bounds,
-  er_ui_resolved_theme_t theme,
-  const char* name,
-  const char* policy,
-  const char* hash,
-  uint32_t id);
-er_ui_status_t er_ui_component_receipt_row_emit(
-  er_ui_scene_t* scene,
-  vr_font_face_t* font,
-  er_ui_bounds_t bounds,
-  er_ui_resolved_theme_t theme,
-  const char* label,
-  const char* amount,
-  const char* status_text,
-  uint32_t id);
 er_ui_status_t er_ui_component_panel_header_emit(
   er_ui_scene_t* scene,
   vr_font_face_t* font,
@@ -383,17 +330,6 @@ er_ui_status_t er_ui_component_metric_card_emit(
   bool has_progress,
   float progress,
   er_ui_color4_t accent);
-er_ui_status_t er_ui_component_transaction_row_emit(
-  er_ui_scene_t* scene,
-  vr_font_face_t* font,
-  er_ui_bounds_t bounds,
-  er_ui_resolved_theme_t theme,
-  const char* title,
-  const char* subtitle,
-  const char* date,
-  const char* amount,
-  bool positive,
-  uint32_t id);
 er_ui_status_t er_ui_component_menu_item_emit(
   er_ui_scene_t* scene,
   vr_font_face_t* font,
@@ -425,18 +361,6 @@ er_ui_status_t er_ui_component_bar_chart_emit(
   size_t value_count,
   uint32_t base_id,
   size_t selected);
-er_ui_status_t er_ui_network_app_prompt_emit(
-  er_ui_scene_t* scene,
-  vr_font_face_t* font,
-  er_ui_bounds_t bounds,
-  er_ui_resolved_theme_t theme,
-  const char* app_name,
-  const char* package_size,
-  const char* retrieval_cost,
-  const char* policy_hash,
-  uint32_t run_once_id,
-  uint32_t verify_cache_id,
-  uint32_t cancel_id);
 #ifdef __cplusplus
 }
 #endif

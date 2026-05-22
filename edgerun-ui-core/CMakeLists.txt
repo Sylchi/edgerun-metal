@@ -17,17 +17,9 @@ endif()
 
 add_library(er_ui_core
   src/er_ui_assets.c
-  src/er_ui_components_catalog.c
-  src/er_ui_components_catalog_data.c
-  src/er_ui_components_contracts.c
   src/er_ui_components_emit.c
   src/er_ui_components_internal.c
-  src/er_ui_components_preview.c
-  src/er_ui_components_state.c
-  src/er_ui_ledger_app.c
   src/er_ui_icon.c
-  src/er_ui_initial_setup.c
-  src/er_ui_metal.c
   src/er_ui_node.c
   src/er_ui_node_accessibility.c
   src/er_ui_node_layout.c
@@ -38,14 +30,12 @@ add_library(er_ui_core
   src/er_ui_painter.c
   src/er_ui_primitives.c
   src/er_ui_preset_code.c
-  src/er_ui_record_codec.c
   src/er_ui_runtime_focus.c
   src/er_ui_runtime_input.c
   src/er_ui_runtime_internal.c
   src/er_ui_runtime_state.c
   src/er_ui_runtime_text.c
   src/er_ui_scene.c
-  src/er_ui_shell.c
   src/er_ui_spacing.c
   src/er_ui_surface_renderer.c
   src/er_ui_theme.c
@@ -84,12 +74,8 @@ if(ER_UI_CORE_BUILD_TESTS)
 add_executable(er_ui_core_tests
     tests/test_assets.c
     tests/test_components.c
-    tests/test_ledger_app.c
-    tests/test_initial_setup.c
     tests/test_node.c
     tests/test_preset_code.c
-    tests/test_record_codec.c
-    tests/test_shell.c
     tests/test_runtime.c
     tests/test_scene.c
     tests/test_text.c

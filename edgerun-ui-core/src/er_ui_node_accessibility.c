@@ -302,24 +302,17 @@ er_ui_status_t er_ui_node_accessibility(const er_ui_node_t* node, er_ui_a11y_nod
       out = er_ui_a11y_base(ER_UI_A11Y_LIST_ITEM, node->label, true, node->id);
       if (node->active) out.states |= ER_UI_A11Y_STATE_EXPANDED;
       break;
-    case ER_UI_NODE_IDENTITY_CARD:
     case ER_UI_NODE_CONTACT_CARD:
     case ER_UI_NODE_ATTACHMENT_PREVIEW:
-    case ER_UI_NODE_PACKAGE_CARD:
       out = er_ui_a11y_base(ER_UI_A11Y_GROUP, node->label, true, node->id);
       break;
     case ER_UI_NODE_THREAD_ROW:
       out = er_ui_a11y_base(ER_UI_A11Y_LIST_ITEM, node->label, true, node->id);
       if (node->active) out.states |= ER_UI_A11Y_STATE_CURRENT;
       break;
-    case ER_UI_NODE_CAPABILITY_GRANT_ROW:
-    case ER_UI_NODE_PROOF_EVENT_ROW:
-    case ER_UI_NODE_RECEIPT_ROW:
-    case ER_UI_NODE_TRANSACTION_ROW:
     case ER_UI_NODE_LIST_ROW:
       out = er_ui_a11y_base(ER_UI_A11Y_LIST_ITEM, node->label, true, node->id);
       break;
-    case ER_UI_NODE_ROUTE_PATH:
     case ER_UI_NODE_PANEL_HEADER:
     case ER_UI_NODE_METRIC_CARD:
       out = er_ui_a11y_base(ER_UI_A11Y_GROUP, node->label, false, 0u);

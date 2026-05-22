@@ -244,18 +244,12 @@ er_ui_status_t er_ui_node_render(
       return er_ui_component_tree_item_emit(scene, font, rect, theme, node->label, node->detail, (uint8_t)node->number, node->active, node->id);
     case ER_UI_NODE_SECTION:
       return er_ui_component_section_header_emit(scene, font, rect, theme, node->label, node->detail);
-    case ER_UI_NODE_IDENTITY_CARD:
-      return er_ui_component_identity_card_emit(scene, font, rect, theme, node->label, node->value, node->detail, node->id);
     case ER_UI_NODE_CONTACT_CARD:
       return er_ui_component_contact_card_emit(scene, font, rect, theme, node->label, node->detail, node->id);
     case ER_UI_NODE_THREAD_ROW:
       return er_ui_component_thread_row_emit(scene, font, rect, theme, node->label, node->detail, node->active, node->id);
     case ER_UI_NODE_ATTACHMENT_PREVIEW:
       return er_ui_component_attachment_preview_emit(scene, font, rect, theme, node->label, node->detail, node->id);
-    case ER_UI_NODE_CAPABILITY_GRANT_ROW:
-      return er_ui_component_capability_grant_row_emit(scene, font, rect, theme, node->label, node->value, node->detail, node->id);
-    case ER_UI_NODE_PROOF_EVENT_ROW:
-      return er_ui_component_proof_event_row_emit(scene, font, rect, theme, node->label, node->value, node->detail, node->id);
     case ER_UI_NODE_PAGINATION:
       return er_ui_node_render_pagination(node, scene, font, rect, theme);
     case ER_UI_NODE_COLLAPSIBLE:
@@ -312,18 +306,10 @@ er_ui_status_t er_ui_node_render(
       return er_ui_node_render_chat_message(node, scene, font, rect, theme);
     case ER_UI_NODE_CONVERSATION:
       return er_ui_node_render_scroll_area(node, scene, font, rect, theme);
-    case ER_UI_NODE_ROUTE_PATH:
-      return er_ui_component_route_path_emit(scene, font, rect, theme, node->label, node->labels, node->label_count);
-    case ER_UI_NODE_PACKAGE_CARD:
-      return er_ui_component_package_card_emit(scene, font, rect, theme, node->label, node->value, node->detail, node->id);
-    case ER_UI_NODE_RECEIPT_ROW:
-      return er_ui_component_receipt_row_emit(scene, font, rect, theme, node->label, node->value, node->detail, node->id);
     case ER_UI_NODE_PANEL_HEADER:
       return er_ui_component_panel_header_emit(scene, font, rect, theme, node->label, node->detail, node->value, node->id);
     case ER_UI_NODE_METRIC_CARD:
       return er_ui_component_metric_card_emit(scene, font, rect, theme, node->label, node->value, node->detail, node->active, node->number, node->color);
-    case ER_UI_NODE_TRANSACTION_ROW:
-      return er_ui_component_transaction_row_emit(scene, font, rect, theme, node->label, node->value, node->aux, node->detail, node->active, node->id);
     case ER_UI_NODE_MENU_ITEM:
       return er_ui_component_menu_item_emit(scene, font, rect, theme, node->label, node->detail, node->value, node->active, node->color, node->id);
     case ER_UI_NODE_CONTROL_ROW:

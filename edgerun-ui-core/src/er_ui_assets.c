@@ -20,7 +20,7 @@ static const char ER_UI_REQUIRED_FONT_CHARS[] =
 
 //@optimizer-ignore-constant provider manifest is indexed by the guarded er_ui_icon_t enum and mirrors the bundled Tabler asset contract
 static const er_ui_icon_pack_entry_t ER_UI_TABLER_ICON_ENTRIES[ER_UI_ICON_COUNT] = {
-  {ER_UI_ICON_ACTIVITY, "activity"},      {ER_UI_ICON_APP, "apps"},           {ER_UI_ICON_BELL, "bell"},
+  {ER_UI_ICON_ACTIVITY, "activity"},      {ER_UI_ICON_WINDOW, "apps"},        {ER_UI_ICON_BELL, "bell"},
   {ER_UI_ICON_CHAT, "message-circle"},    {ER_UI_ICON_CHECK, "check"},        {ER_UI_ICON_CHEVRON_LEFT, "chevron-left"},
   {ER_UI_ICON_CHEVRON_RIGHT, "chevron-right"},
   {ER_UI_ICON_CODE, "code"},              {ER_UI_ICON_CPU, "cpu"},            {ER_UI_ICON_DATABASE, "database"},
@@ -29,14 +29,14 @@ static const er_ui_icon_pack_entry_t ER_UI_TABLER_ICON_ENTRIES[ER_UI_ICON_COUNT]
   {ER_UI_ICON_NETWORK, "network"},        {ER_UI_ICON_ROUTE, "route"},        {ER_UI_ICON_SEARCH, "search"},
   {ER_UI_ICON_SEND, "arrow-up"},          {ER_UI_ICON_SERVER, "server"},      {ER_UI_ICON_SETTINGS, "settings"},
   {ER_UI_ICON_SHIELD, "shield-check"},    {ER_UI_ICON_SPARKLES, "sparkles"},  {ER_UI_ICON_STORAGE, "database"},
-  {ER_UI_ICON_TERMINAL, "terminal-2"},    {ER_UI_ICON_TRUST, "shield-check"}, {ER_UI_ICON_TRASH, "trash"},
+  {ER_UI_ICON_TERMINAL, "terminal-2"},    {ER_UI_ICON_SHIELD_CHECK, "shield-check"}, {ER_UI_ICON_TRASH, "trash"},
   {ER_UI_ICON_USER, "user"},              {ER_UI_ICON_WALLET, "wallet"},      {ER_UI_ICON_WARNING, "alert-triangle"},
   {ER_UI_ICON_X, "x"}
 };
 
 //@optimizer-ignore-constant provider manifest is indexed by the guarded er_ui_icon_t enum and mirrors the bundled Lucide asset contract
 static const er_ui_icon_pack_entry_t ER_UI_LUCIDE_ICON_ENTRIES[ER_UI_ICON_COUNT] = {
-  {ER_UI_ICON_ACTIVITY, "activity"},       {ER_UI_ICON_APP, "app-window"},        {ER_UI_ICON_BELL, "bell"},
+  {ER_UI_ICON_ACTIVITY, "activity"},       {ER_UI_ICON_WINDOW, "app-window"},     {ER_UI_ICON_BELL, "bell"},
   {ER_UI_ICON_CHAT, "message-circle"},     {ER_UI_ICON_CHECK, "check"},           {ER_UI_ICON_CHEVRON_LEFT, "chevron-left"},
   {ER_UI_ICON_CHEVRON_RIGHT, "chevron-right"},
   {ER_UI_ICON_CODE, "code"},               {ER_UI_ICON_CPU, "cpu"},               {ER_UI_ICON_DATABASE, "database"},
@@ -45,7 +45,7 @@ static const er_ui_icon_pack_entry_t ER_UI_LUCIDE_ICON_ENTRIES[ER_UI_ICON_COUNT]
   {ER_UI_ICON_NETWORK, "network"},         {ER_UI_ICON_ROUTE, "route"},           {ER_UI_ICON_SEARCH, "search"},
   {ER_UI_ICON_SEND, "arrow-up"},           {ER_UI_ICON_SERVER, "server"},         {ER_UI_ICON_SETTINGS, "settings"},
   {ER_UI_ICON_SHIELD, "shield-check"},     {ER_UI_ICON_SPARKLES, "sparkles"},     {ER_UI_ICON_STORAGE, "database"},
-  {ER_UI_ICON_TERMINAL, "square-terminal"}, {ER_UI_ICON_TRUST, "shield-check"},    {ER_UI_ICON_TRASH, "trash-2"},
+  {ER_UI_ICON_TERMINAL, "square-terminal"}, {ER_UI_ICON_SHIELD_CHECK, "shield-check"}, {ER_UI_ICON_TRASH, "trash-2"},
   {ER_UI_ICON_USER, "user"},               {ER_UI_ICON_WALLET, "wallet"},         {ER_UI_ICON_WARNING, "triangle-alert"},
   {ER_UI_ICON_X, "x"}
 };
@@ -60,8 +60,8 @@ static const er_ui_emoji_spec_t ER_UI_REQUIRED_EMOJI[] = {
   {"unlocked", "unlocked"},
   {"route", "route"},
   {"storage", "storage"},
-  {"payment", "payment"},
-  {"proof", "proof"}};
+  {"document", "document"},
+  {"surface", "surface"}};
 
 static const er_ui_component_pack_entry_t ER_UI_COMPONENT_ENTRIES[ER_UI_COMPONENT_KIND_COUNT] = {
   {"shell", ER_UI_COMPONENT_KIND_SHELL},
@@ -75,8 +75,7 @@ static const er_ui_component_pack_entry_t ER_UI_COMPONENT_ENTRIES[ER_UI_COMPONEN
   {"data-row", ER_UI_COMPONENT_KIND_DATA_ROW},
   {"control", ER_UI_COMPONENT_KIND_CONTROL},
   {"selection", ER_UI_COMPONENT_KIND_SELECTION},
-  {"feedback", ER_UI_COMPONENT_KIND_FEEDBACK},
-  {"domain", ER_UI_COMPONENT_KIND_EDGERUN_DOMAIN}
+  {"feedback", ER_UI_COMPONENT_KIND_FEEDBACK}
 };
 
 static bool er_ui_assets_cstr_eq(const char* a, const char* b) {
@@ -139,8 +138,6 @@ const char* er_ui_component_kind_label(er_ui_component_kind_t kind) {
       return "Selection";
     case ER_UI_COMPONENT_KIND_FEEDBACK:
       return "Feedback";
-    case ER_UI_COMPONENT_KIND_EDGERUN_DOMAIN:
-      return "EdgeRun Domain";
     case ER_UI_COMPONENT_KIND_COUNT:
       return 0;
   }
@@ -271,7 +268,7 @@ er_ui_asset_pack_status_t er_ui_asset_pack_validate(er_ui_asset_pack_spec_t pack
 
 er_ui_asset_pack_spec_t er_ui_tabler_inter_asset_pack(void) {
   return (er_ui_asset_pack_spec_t){
-    "edgerun-tabler-inter",
+    "ui-tabler-inter",
     {"tabler-svg",
      ER_UI_ICON_PROVIDER_TABLER,
      ER_UI_TABLER_ICON_ENTRIES,
@@ -285,13 +282,13 @@ er_ui_asset_pack_spec_t er_ui_tabler_inter_asset_pack(void) {
      ER_UI_BUNDLED_FONT_ATLAS_SIDE,
      ER_UI_BUNDLED_FONT_ATLAS_SIDE,
      ER_UI_BUNDLED_FONT_ATLAS_SIDE * ER_UI_BUNDLED_FONT_ATLAS_SIDE},
-    {"edgerun-semantic-emoji", ER_UI_REQUIRED_EMOJI, sizeof(ER_UI_REQUIRED_EMOJI) / sizeof(ER_UI_REQUIRED_EMOJI[0])},
-    {"edgerun-components", ER_UI_COMPONENT_ENTRIES, ER_UI_COMPONENT_KIND_COUNT}};
+    {"ui-semantic-emoji", ER_UI_REQUIRED_EMOJI, sizeof(ER_UI_REQUIRED_EMOJI) / sizeof(ER_UI_REQUIRED_EMOJI[0])},
+    {"ui-components", ER_UI_COMPONENT_ENTRIES, ER_UI_COMPONENT_KIND_COUNT}};
 }
 
 er_ui_asset_pack_spec_t er_ui_lucide_geist_asset_pack(void) {
   return (er_ui_asset_pack_spec_t){
-    "edgerun-lucide-geist",
+    "ui-lucide-geist",
     {"lucide-svg",
      ER_UI_ICON_PROVIDER_LUCIDE,
      ER_UI_LUCIDE_ICON_ENTRIES,
@@ -305,8 +302,8 @@ er_ui_asset_pack_spec_t er_ui_lucide_geist_asset_pack(void) {
      ER_UI_BUNDLED_FONT_ATLAS_SIDE,
      ER_UI_BUNDLED_FONT_ATLAS_SIDE,
      ER_UI_BUNDLED_FONT_ATLAS_SIDE * ER_UI_BUNDLED_FONT_ATLAS_SIDE},
-    {"edgerun-semantic-emoji", ER_UI_REQUIRED_EMOJI, sizeof(ER_UI_REQUIRED_EMOJI) / sizeof(ER_UI_REQUIRED_EMOJI[0])},
-    {"edgerun-components", ER_UI_COMPONENT_ENTRIES, ER_UI_COMPONENT_KIND_COUNT}};
+    {"ui-semantic-emoji", ER_UI_REQUIRED_EMOJI, sizeof(ER_UI_REQUIRED_EMOJI) / sizeof(ER_UI_REQUIRED_EMOJI[0])},
+    {"ui-components", ER_UI_COMPONENT_ENTRIES, ER_UI_COMPONENT_KIND_COUNT}};
 }
 
 er_ui_asset_pack_status_t er_ui_asset_pack_runtime_init(

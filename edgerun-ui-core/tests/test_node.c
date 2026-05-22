@@ -1,5 +1,4 @@
 #include "test_common.h"
-#include "../src/er_ui_node_domain.h"
 
 #define ER_UI_TEST_NODE_ARRAY_COUNT(values) (sizeof(values) / sizeof((values)[0]))
 #define ER_UI_TEST_NODE_DEPLOY_BUTTON_ID 8001u
@@ -108,16 +107,10 @@
 #define ER_UI_TEST_NODE_RENDER_CHART_ACTIVE_INDEX 1u
 #define ER_UI_TEST_NODE_RENDER_COMMAND_ID 8700u
 #define ER_UI_TEST_NODE_RENDER_TREE_ID 8800u
-#define ER_UI_TEST_NODE_RENDER_IDENTITY_ID 8801u
 #define ER_UI_TEST_NODE_RENDER_CONTACT_ID 8802u
 #define ER_UI_TEST_NODE_RENDER_THREAD_ID 8803u
 #define ER_UI_TEST_NODE_RENDER_ATTACHMENT_ID 8804u
-#define ER_UI_TEST_NODE_RENDER_GRANT_ID 8805u
-#define ER_UI_TEST_NODE_RENDER_PROOF_ID 8806u
-#define ER_UI_TEST_NODE_RENDER_ROUTE_PACKAGE_ID 8807u
-#define ER_UI_TEST_NODE_RENDER_RECEIPT_ID 8808u
 #define ER_UI_TEST_NODE_RENDER_PANEL_ID 8809u
-#define ER_UI_TEST_NODE_RENDER_TRANSACTION_ID 8810u
 #define ER_UI_TEST_NODE_RENDER_MENU_ID 8811u
 #define ER_UI_TEST_NODE_RENDER_CONTROL_ID 8812u
 #define ER_UI_TEST_NODE_RENDER_GRID_COLUMNS 2u
@@ -240,12 +233,12 @@ void run_node_tests(void) {
   expect_string(er_ui_node_kind_label(ER_UI_NODE_CONVERSATION), "conversation", "node: kind label maps conversation");
   expect_string(er_ui_icon_label(ER_UI_ICON_SEARCH), "search", "node: icon label maps canonical icon");
   expect_u32(er_ui_icon_atlas_id(ER_UI_ICON_SEARCH), (uint32_t)ER_UI_ICON_SEARCH + 1u, "node: icon atlas id is stable");
-  er_ui_icon_t icon = ER_UI_ICON_APP;
+  er_ui_icon_t icon = ER_UI_ICON_WINDOW;
   expect_true(er_ui_icon_from_atlas_id(er_ui_icon_atlas_id(ER_UI_ICON_SEARCH), &icon), "node: icon atlas id decodes");
   expect_size(icon, ER_UI_ICON_SEARCH, "node: icon atlas id round trips");
   expect_true(!er_ui_icon_from_atlas_id(0u, &icon), "node: zero atlas id is rejected");
-  expect_string(er_ui_icon_provider_name(ER_UI_ICON_APP, ER_UI_ICON_PROVIDER_LUCIDE), "app-window", "node: lucide provider name maps app icon");
-  expect_string(er_ui_icon_provider_name(ER_UI_ICON_APP, ER_UI_ICON_PROVIDER_TABLER), "apps", "node: tabler provider name maps app icon");
+  expect_string(er_ui_icon_provider_name(ER_UI_ICON_WINDOW, ER_UI_ICON_PROVIDER_LUCIDE), "app-window", "node: lucide provider name maps window icon");
+  expect_string(er_ui_icon_provider_name(ER_UI_ICON_WINDOW, ER_UI_ICON_PROVIDER_TABLER), "apps", "node: tabler provider name maps window icon");
   expect_string(er_ui_icon_provider_name(ER_UI_ICON_TRASH, ER_UI_ICON_PROVIDER_LUCIDE), "trash-2", "node: lucide provider name maps trash icon");
   expect_string(er_ui_icon_provider_name(ER_UI_ICON_TRASH, ER_UI_ICON_PROVIDER_TABLER), "trash", "node: tabler provider name maps trash icon");
   expect_true(er_ui_icon_provider_name(ER_UI_ICON_COUNT, ER_UI_ICON_PROVIDER_LUCIDE) == NULL, "node: invalid icon provider name is null");
@@ -338,10 +331,10 @@ void run_node_tests(void) {
   expect_true(a11y.has_id && a11y.id == ER_UI_TEST_NODE_DEPLOY_BUTTON_ID, "node: button accessibility id");
   expect_true(a11y.label == button.label, "node: button accessibility label is borrowed");
 
-  er_ui_node_t icon_a11y = er_ui_node_icon(ER_UI_ICON_TRUST, NULL, er_ui_color_rgba(0.0f, 0.0f, 0.0f, 1.0f));
+  er_ui_node_t icon_a11y = er_ui_node_icon(ER_UI_ICON_SHIELD_CHECK, NULL, er_ui_color_rgba(0.0f, 0.0f, 0.0f, 1.0f));
   expect_status(er_ui_node_accessibility(&icon_a11y, &a11y), ER_UI_OK, "node: icon accessibility maps");
   expect_size(a11y.role, ER_UI_A11Y_IMAGE, "node: icon accessibility role");
-  expect_string(a11y.label, "trust", "node: icon accessibility uses canonical icon label");
+  expect_string(a11y.label, "shield-check", "node: icon accessibility uses canonical icon label");
 
   er_ui_node_t icon_button_a11y = er_ui_node_icon_button(ER_UI_ICON_SEARCH, "Search", ER_UI_TEST_NODE_ICON_BUTTON_ID, ER_UI_COMPONENT_BUTTON_GHOST);
   expect_status(er_ui_node_accessibility(&icon_button_a11y, &a11y), ER_UI_OK, "node: icon button accessibility maps");
@@ -409,7 +402,7 @@ void run_node_tests(void) {
   expect_true(a11y.has_id && a11y.id == ER_UI_TEST_NODE_COLLAPSIBLE_ROW_ID, "node: collapsible row id");
 
   const char *const accordion_titles[] = {"Product", "Billing"};
-  const char *const accordion_bodies[] = {"Network app storage", "Proof-backed receipts"};
+  const char *const accordion_bodies[] = {"Reusable component states", "Accessible row patterns"};
   er_ui_node_t accordion_a11y =
       er_ui_node_accordion(accordion_titles, accordion_bodies, ER_UI_TEST_NODE_ARRAY_COUNT(accordion_titles), ER_UI_TEST_NODE_ACCORDION_ID);
   expect_status(er_ui_node_accessibility(&accordion_a11y, &a11y), ER_UI_OK, "node: accordion accessibility maps");
@@ -439,7 +432,7 @@ void run_node_tests(void) {
   expect_size(a11y.role, ER_UI_A11Y_TEXTBOX, "node: popover field accessibility role");
   expect_true(a11y.has_id && a11y.id == ER_UI_TEST_NODE_POPOVER_FIELD_ID, "node: popover field id");
 
-  er_ui_node_t sheet_a11y = er_ui_node_sheet("Profile", "Update local profile.", "Name", "EdgeRun", "Save changes", ER_UI_TEST_NODE_SHEET_ID);
+  er_ui_node_t sheet_a11y = er_ui_node_sheet("Profile", "Update local profile.", "Name", "Example", "Save changes", ER_UI_TEST_NODE_SHEET_ID);
   expect_status(er_ui_node_accessibility(&sheet_a11y, &a11y), ER_UI_OK, "node: sheet accessibility maps");
   expect_size(a11y.role, ER_UI_A11Y_DIALOG, "node: sheet accessibility role");
   expect_true(a11y.label == sheet_a11y.label, "node: sheet title is borrowed");
@@ -732,7 +725,7 @@ void run_node_tests(void) {
   expect_true((a11y.states & ER_UI_A11Y_STATE_SELECTED) != 0u, "node: selected tab accessibility state");
 
   const char *const a11y_headers[] = {"Name"};
-  const char *const a11y_cells[] = {"EdgeRun"};
+  const char *const a11y_cells[] = {"Example"};
   er_ui_node_t table_a11y =
       er_ui_node_table(a11y_headers, ER_UI_TEST_NODE_ARRAY_COUNT(a11y_headers), a11y_cells, ER_UI_TEST_NODE_ARRAY_COUNT(a11y_headers),
                        ER_UI_TEST_NODE_TABLE_ID);
@@ -789,22 +782,14 @@ void run_node_tests(void) {
                                               ER_UI_TEST_NODE_RENDER_CHART_ID, ER_UI_TEST_NODE_RENDER_CHART_ACTIVE_INDEX);
     er_ui_node_t command = er_ui_node_command_palette("Search components...", ER_UI_TEST_NODE_RENDER_COMMAND_ID);
     er_ui_node_t tree_item = er_ui_node_tree_item("src", "expanded", ER_UI_TEST_NODE_TREE_DEPTH, true, ER_UI_TEST_NODE_RENDER_TREE_ID);
-    er_ui_node_t section = er_ui_node_section("Proof", "Verified rows");
-    er_ui_node_t identity = er_ui_node_identity_card("Ken", "browser-node", "personal", ER_UI_TEST_NODE_RENDER_IDENTITY_ID);
+    er_ui_node_t section = er_ui_node_section("Components", "Composable rows");
     er_ui_node_t contact = er_ui_node_contact_card("Ada", "publisher", ER_UI_TEST_NODE_RENDER_CONTACT_ID);
     er_ui_node_t thread = er_ui_node_thread_row("Sync complete", "Drive import finished", true, ER_UI_TEST_NODE_RENDER_THREAD_ID);
-    er_ui_node_t attachment = er_ui_node_attachment_preview("manifest.rkyv", "package manifest", ER_UI_TEST_NODE_RENDER_ATTACHMENT_ID);
-    er_ui_node_t grant = er_ui_node_capability_grant_row("Mail", "contacts:read", "granted", ER_UI_TEST_NODE_RENDER_GRANT_ID);
-    er_ui_node_t proof = er_ui_node_proof_event_row("Package hash", "b3:abc123", "verified", ER_UI_TEST_NODE_RENDER_PROOF_ID);
-    const char *const route_hops[] = {"browser", "admission", "relay"};
-    er_ui_node_t route = er_ui_node_route_path("Admission route", route_hops, ER_UI_TEST_NODE_ARRAY_COUNT(route_hops));
-    er_ui_node_t package = er_ui_node_package_card("Docs", "cache-ok", "b3:def456", ER_UI_TEST_NODE_RENDER_ROUTE_PACKAGE_ID);
-    er_ui_node_t receipt = er_ui_node_receipt_row("Retrieval", "4 units", "settled", ER_UI_TEST_NODE_RENDER_RECEIPT_ID);
+    er_ui_node_t attachment = er_ui_node_attachment_preview("layout.json", "component schema", ER_UI_TEST_NODE_RENDER_ATTACHMENT_ID);
     er_ui_node_t panel = er_ui_node_panel_header("Dashboard", "Reusable UI primitives", "Run", ER_UI_TEST_NODE_RENDER_PANEL_ID);
     er_ui_node_t metric = er_ui_node_metric_card("Budget", "184", "units reserved", true, 0.64f, theme.colors.accent);
-    er_ui_node_t transaction = er_ui_node_transaction_row("Storage", "verified retrieval", "today", "8 units", false, ER_UI_TEST_NODE_RENDER_TRANSACTION_ID);
-    er_ui_node_t menu = er_ui_node_menu_item("Verify package", "content hash", "new", true, theme.colors.accent, ER_UI_TEST_NODE_RENDER_MENU_ID);
-    er_ui_node_t control = er_ui_node_control_row("Cache package", "avoid repeated retrieval", "enabled", ER_UI_TEST_NODE_RENDER_CONTROL_ID);
+    er_ui_node_t menu = er_ui_node_menu_item("Open panel", "secondary action", "new", true, theme.colors.accent, ER_UI_TEST_NODE_RENDER_MENU_ID);
+    er_ui_node_t control = er_ui_node_control_row("Compact density", "reduce row height", "enabled", ER_UI_TEST_NODE_RENDER_CONTROL_ID);
     er_ui_node_t grid = er_ui_node_grid(ER_UI_TEST_NODE_RENDER_GRID_COLUMNS);
     er_ui_node_set_gap(&grid, 4.0f);
     er_ui_node_t grid_badge_a = er_ui_node_badge("One", ER_UI_COMPONENT_BADGE_DEFAULT);
@@ -832,8 +817,8 @@ void run_node_tests(void) {
                   "node: scroll child bounds resolve offset");
     expect_float(resolved_child.y, 2540.0f, "node: scroll child bounds applies offset");
     er_ui_node_t spacer = er_ui_node_spacer();
-    er_ui_node_t tooltip = er_ui_node_tooltip("Verify package");
-    er_ui_node_t dialog = er_ui_node_dialog("Run network app", "Verify signed package bytes first.", theme.colors.accent);
+    er_ui_node_t tooltip = er_ui_node_tooltip("Open details");
+    er_ui_node_t dialog = er_ui_node_dialog("Confirm action", "Review the selected component changes first.", theme.colors.accent);
     er_ui_node_t ring = er_ui_node_progress_ring(0.58f, theme.colors.success);
     er_ui_node_t reorderable = er_ui_node_list_row("Drag me", "reorderable", ER_UI_TEST_NODE_RENDER_REORDERABLE_ID, false);
     er_ui_node_set_reorderable(&reorderable, ER_UI_TEST_NODE_RENDER_REORDER_GROUP_ID, ER_UI_TEST_NODE_RENDER_REORDERABLE_ID,
@@ -844,7 +829,7 @@ void run_node_tests(void) {
                                                                        ER_UI_TEST_NODE_RENDER_TRANSITION_MS));
     er_ui_node_t gradient_label = er_ui_node_text("Gradient card");
     expect_status(er_ui_node_add_child(&gradient_card, &gradient_label), ER_UI_OK, "node: gradient card accepts child");
-    er_ui_node_t icon = er_ui_node_icon(ER_UI_ICON_TRUST, "Trust", theme.colors.accent);
+    er_ui_node_t icon = er_ui_node_icon(ER_UI_ICON_SHIELD_CHECK, "Shield", theme.colors.accent);
     er_ui_node_t icon_button = er_ui_node_icon_button(ER_UI_ICON_SEARCH, "Search", ER_UI_TEST_NODE_RENDER_ICON_BUTTON_ID, ER_UI_COMPONENT_BUTTON_GHOST);
     const char *const render_button_group_labels[] = {"Copy", "Paste", "More"};
     er_ui_node_t button_group =
@@ -866,7 +851,7 @@ void run_node_tests(void) {
                                                   ER_UI_TEST_NODE_RENDER_ACCORDION_ID);
     er_ui_node_t hover_card = er_ui_node_hover_card("ER", "UI core", "Variable font rendering stays required.", theme.colors.accent);
     er_ui_node_t popover = er_ui_node_popover("Open popover", "Dimensions", "Set layout constraints.", "Width", "100%", ER_UI_TEST_NODE_RENDER_POPOVER_ID);
-    er_ui_node_t sheet = er_ui_node_sheet("Profile", "Update local profile.", "Name", "EdgeRun", "Save changes", ER_UI_TEST_NODE_RENDER_SHEET_ID);
+    er_ui_node_t sheet = er_ui_node_sheet("Profile", "Update local profile.", "Name", "Example", "Save changes", ER_UI_TEST_NODE_RENDER_SHEET_ID);
     const char *const render_kbd_keys[] = {"Ctrl", "K"};
     er_ui_node_t kbd = er_ui_node_kbd(render_kbd_keys, ER_UI_TEST_NODE_ARRAY_COUNT(render_kbd_keys), "Open command palette");
     const char *const render_menubar_items[] = {"File", "Edit", "View"};
@@ -964,35 +949,21 @@ void run_node_tests(void) {
                   "node: tree item renders");
     expect_status(er_ui_node_render(&section, &scene, face, er_ui_bounds(0.0f, 1226.0f, 320.0f, 34.0f), theme), ER_UI_OK,
                   "node: section renders");
-    expect_status(er_ui_node_render(&identity, &scene, face, er_ui_bounds(0.0f, 1272.0f, 320.0f, 110.0f), theme), ER_UI_OK,
-                  "node: identity card renders");
-    expect_status(er_ui_node_render(&contact, &scene, face, er_ui_bounds(0.0f, 1394.0f, 320.0f, 64.0f), theme), ER_UI_OK,
+    expect_status(er_ui_node_render(&contact, &scene, face, er_ui_bounds(0.0f, 1272.0f, 320.0f, 64.0f), theme), ER_UI_OK,
                   "node: contact card renders");
-    expect_status(er_ui_node_render(&thread, &scene, face, er_ui_bounds(0.0f, 1470.0f, 320.0f, 58.0f), theme), ER_UI_OK,
+    expect_status(er_ui_node_render(&thread, &scene, face, er_ui_bounds(0.0f, 1348.0f, 320.0f, 58.0f), theme), ER_UI_OK,
                   "node: thread row renders");
-    expect_status(er_ui_node_render(&attachment, &scene, face, er_ui_bounds(0.0f, 1540.0f, 320.0f, 64.0f), theme), ER_UI_OK,
+    expect_status(er_ui_node_render(&attachment, &scene, face, er_ui_bounds(0.0f, 1418.0f, 320.0f, 64.0f), theme), ER_UI_OK,
                   "node: attachment preview renders");
-    expect_status(er_ui_node_render(&grant, &scene, face, er_ui_bounds(0.0f, 1616.0f, 360.0f, 58.0f), theme), ER_UI_OK,
-                  "node: capability grant row renders");
-    expect_status(er_ui_node_render(&proof, &scene, face, er_ui_bounds(0.0f, 1686.0f, 360.0f, 58.0f), theme), ER_UI_OK,
-                  "node: proof event row renders");
-    expect_status(er_ui_node_render(&route, &scene, face, er_ui_bounds(0.0f, 1756.0f, 360.0f, 86.0f), theme), ER_UI_OK,
-                  "node: route path renders");
-    expect_status(er_ui_node_render(&package, &scene, face, er_ui_bounds(0.0f, 1854.0f, 320.0f, 110.0f), theme), ER_UI_OK,
-                  "node: package card renders");
-    expect_status(er_ui_node_render(&receipt, &scene, face, er_ui_bounds(0.0f, 1976.0f, 360.0f, 58.0f), theme), ER_UI_OK,
-                  "node: receipt row renders");
-    expect_status(er_ui_node_render(&panel, &scene, face, er_ui_bounds(0.0f, 2046.0f, 360.0f, 56.0f), theme), ER_UI_OK,
+    expect_status(er_ui_node_render(&panel, &scene, face, er_ui_bounds(0.0f, 1494.0f, 360.0f, 56.0f), theme), ER_UI_OK,
                   "node: panel header renders");
-    expect_status(er_ui_node_render(&metric, &scene, face, er_ui_bounds(0.0f, 2114.0f, 220.0f, 132.0f), theme), ER_UI_OK,
+    expect_status(er_ui_node_render(&metric, &scene, face, er_ui_bounds(0.0f, 1562.0f, 220.0f, 132.0f), theme), ER_UI_OK,
                   "node: metric card renders");
-    expect_status(er_ui_node_render(&transaction, &scene, face, er_ui_bounds(0.0f, 2258.0f, 360.0f, 58.0f), theme), ER_UI_OK,
-                  "node: transaction row renders");
-    expect_status(er_ui_node_render(&menu, &scene, face, er_ui_bounds(0.0f, 2328.0f, 260.0f, 58.0f), theme), ER_UI_OK,
+    expect_status(er_ui_node_render(&menu, &scene, face, er_ui_bounds(0.0f, 1706.0f, 260.0f, 58.0f), theme), ER_UI_OK,
                   "node: menu item renders");
-    expect_status(er_ui_node_render(&control, &scene, face, er_ui_bounds(0.0f, 2398.0f, 360.0f, 58.0f), theme), ER_UI_OK,
+    expect_status(er_ui_node_render(&control, &scene, face, er_ui_bounds(0.0f, 1776.0f, 360.0f, 58.0f), theme), ER_UI_OK,
                   "node: control row renders");
-    expect_status(er_ui_node_render(&grid, &scene, face, er_ui_bounds(0.0f, 2468.0f, 260.0f, 80.0f), theme), ER_UI_OK,
+    expect_status(er_ui_node_render(&grid, &scene, face, er_ui_bounds(0.0f, 1846.0f, 260.0f, 80.0f), theme), ER_UI_OK,
                   "node: grid renders children");
     expect_status(er_ui_node_render(&scroll, &scene, face, er_ui_bounds(0.0f, 2560.0f, 260.0f, 64.0f), theme), ER_UI_OK,
                   "node: scroll area renders clipped children");
@@ -1009,8 +980,8 @@ void run_node_tests(void) {
     expect_status(er_ui_node_render(&icon, &scene, face, er_ui_bounds(64.0f, 2870.0f, 32.0f, 32.0f), theme), ER_UI_OK,
                   "node: icon renders");
     expect_size(scene.icon_quad_count, icon_quads_before + 1u, "node: icon emits icon quad");
-    const er_ui_quad_t* trust_icon_quad = scene.icon_quads + icon_quads_before;
-    expect_u32(trust_icon_quad->atlas_id, er_ui_icon_atlas_id(ER_UI_ICON_TRUST), "node: icon quad carries atlas id");
+    const er_ui_quad_t* shield_icon_quad = scene.icon_quads + icon_quads_before;
+    expect_u32(shield_icon_quad->atlas_id, er_ui_icon_atlas_id(ER_UI_ICON_SHIELD_CHECK), "node: icon quad carries atlas id");
     expect_status(er_ui_node_render(&icon_button, &scene, face, er_ui_bounds(108.0f, 2870.0f, 40.0f, 40.0f), theme), ER_UI_OK,
                   "node: icon button renders");
     expect_size(scene.icon_quad_count, icon_quads_before + 2u, "node: icon button emits icon quad");

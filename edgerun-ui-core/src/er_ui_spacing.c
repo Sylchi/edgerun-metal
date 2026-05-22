@@ -50,10 +50,8 @@ er_ui_spacing_t er_ui_spacing_default(void) {
   spacing.command_row_h = ER_UI_COMMAND_ROW_H;
   spacing.table_row_h = ER_UI_TABLE_ROW_H;
   spacing.operation_row_h = ER_UI_OPERATION_ROW_H;
-  spacing.package_card_h = ER_UI_PACKAGE_CARD_H;
-  spacing.app_store_card_h = ER_UI_APP_STORE_CARD_H;
-  spacing.app_surface_inset_x = ER_UI_APP_SURFACE_INSET_X;
-  spacing.app_surface_inset_y = ER_UI_APP_SURFACE_INSET_Y;
+  spacing.surface_inset_x = ER_UI_SURFACE_INSET_X;
+  spacing.surface_inset_y = ER_UI_SURFACE_INSET_Y;
   spacing.shell_viewport_inset = ER_UI_SHELL_VIEWPORT_INSET;
   spacing.shell_panel_gap = ER_UI_SHELL_PANEL_GAP;
   spacing.shell_topbar_h = ER_UI_SHELL_TOPBAR_H;
@@ -233,18 +231,18 @@ er_ui_bounds_t er_ui_row_text_rect(er_ui_bounds_t row, float trailing_reserved_w
   return er_ui_bounds(row.x + ER_UI_ROW_TEXT_INSET, row.y, width, row.h);
 }
 
-er_ui_component_padding_t er_ui_app_surface_padding_for_width(float width) {
+er_ui_component_padding_t er_ui_surface_padding_for_width(float width) {
   if (width <= ER_UI_NARROW_VIEWPORT_W) {
-    return (er_ui_component_padding_t){ER_UI_APP_SURFACE_INSET_X_NARROW, ER_UI_APP_SURFACE_INSET_Y_NARROW};
+    return (er_ui_component_padding_t){ER_UI_SURFACE_INSET_X_NARROW, ER_UI_SURFACE_INSET_Y_NARROW};
   }
   if (width >= ER_UI_WIDE_VIEWPORT_W) {
-    return (er_ui_component_padding_t){ER_UI_APP_SURFACE_INSET_X_WIDE, ER_UI_APP_SURFACE_INSET_Y_WIDE};
+    return (er_ui_component_padding_t){ER_UI_SURFACE_INSET_X_WIDE, ER_UI_SURFACE_INSET_Y_WIDE};
   }
-  return (er_ui_component_padding_t){ER_UI_APP_SURFACE_INSET_X, ER_UI_APP_SURFACE_INSET_Y};
+  return (er_ui_component_padding_t){ER_UI_SURFACE_INSET_X, ER_UI_SURFACE_INSET_Y};
 }
 
-er_ui_bounds_t er_ui_app_surface_content_rect(er_ui_bounds_t bounds) {
-  er_ui_component_padding_t pad = er_ui_app_surface_padding_for_width(bounds.w);
+er_ui_bounds_t er_ui_surface_content_rect(er_ui_bounds_t bounds) {
+  er_ui_component_padding_t pad = er_ui_surface_padding_for_width(bounds.w);
   return er_ui_bounds_inset(bounds, pad.x, pad.y);
 }
 

@@ -17,43 +17,14 @@
 #define ER_UI_TEST_COMPONENT_CHART_ID 3024u
 #define ER_UI_TEST_COMPONENT_THREAD_ROW_ID 3030u
 #define ER_UI_TEST_COMPONENT_ATTACHMENT_ID 3031u
-#define ER_UI_TEST_COMPONENT_GRANT_ROW_ID 3032u
-#define ER_UI_TEST_COMPONENT_PROOF_ROW_ID 3033u
 #define ER_UI_TEST_COMPONENT_INVALID_BUTTON_ID 9u
 #define ER_UI_TEST_COMPONENT_TABS_ACTIVE_INDEX 1u
 #define ER_UI_TEST_COMPONENT_BREADCRUMB_CURRENT_INDEX 2u
 #define ER_UI_TEST_COMPONENT_CHART_ACTIVE_INDEX 1u
 #define ER_UI_TEST_COMPONENT_MIN_INITIAL_RECTS 8u
 #define ER_UI_TEST_COMPONENT_MIN_INITIAL_HITS 10u
-#define ER_UI_TEST_COMPONENT_MIN_SHOWCASE_HITS 20u
-#define ER_UI_TEST_COMPONENT_MIN_SHOWCASE_TEXT_QUADS 20u
-#define ER_UI_TEST_COMPONENT_COMPACT_SHOWCASE_W 420.0f
-#define ER_UI_TEST_COMPONENT_COMPACT_SHOWCASE_H 360.0f
-#define ER_UI_TEST_COMPONENT_MIN_METAL_HITS 20u
-#define ER_UI_TEST_COMPONENT_MIN_METAL_TEXT_QUADS 80u
-#define ER_UI_TEST_COMPONENT_MIN_METAL_ICON_QUADS 6u
-#define ER_UI_TEST_COMPONENT_NARROW_METAL_W 800.0f
-#define ER_UI_TEST_COMPONENT_NARROW_METAL_H 720.0f
-#define ER_UI_TEST_COMPONENT_COUNT 59u
-#define ER_UI_TEST_COMPONENT_EXACT_COUNT ER_UI_COMPONENT_CANONICAL_BASE_COUNT
-#define ER_UI_TEST_COMPONENT_NATIVE_PRIMITIVE_COUNT (ER_UI_TEST_COMPONENT_COUNT - ER_UI_TEST_COMPONENT_EXACT_COUNT)
-#define ER_UI_TEST_COMPONENT_KEYBOARD_COUNT 2u
-#define ER_UI_TEST_COMPONENT_ORDER_OPTION_INDEX 1u
-#define ER_UI_TEST_COMPONENT_STOCK_BUTTON_INDEX 2u
-#define ER_UI_TEST_COMPONENT_SLIDER_ACTION_ID (ER_UI_COMPONENT_PREVIEW_BASE_ID + 943u)
-#define ER_UI_TEST_COMPONENT_UNRELATED_BUTTON_ID 42u
 #define ER_UI_TEST_COMPONENT_NARROW_ID_OFFSET 80u
 #define ER_UI_TEST_COMPONENT_INVOICE_ID_OFFSET 240u
-#define ER_UI_TEST_APP_STORE_CARD_REQUIRED_FIELDS 3u
-#define ER_UI_TEST_METAL_BOARD_BASE_ID (ER_UI_COMPONENT_PREVIEW_BASE_ID + 4600u)
-
-static const er_ui_hit_t* test_component_find_hit(const er_ui_scene_t* scene, uint32_t id) {
-  if (!scene) return NULL;
-  for (size_t i = 0u; i < scene->hit_count; ++i) {
-    if (scene->hits[i].id == id) return &scene->hits[i];
-  }
-  return NULL;
-}
 
 static float test_component_text_max_x_since(const er_ui_scene_t* scene, size_t first_quad) {
   float max_x = 0.0f;
@@ -92,7 +63,7 @@ static void test_component_render_primitives(void) {
   expect_status(er_ui_component_badge_emit(&scene, face, er_ui_bounds(232.0f, 16.0f, 88.0f, 26.0f), theme, "Active",
                                         ER_UI_COMPONENT_BADGE_SECONDARY),
                 ER_UI_OK, "component render: badge emits");
-  expect_status(er_ui_component_field_emit(&scene, face, er_ui_bounds(232.0f, 48.0f, 160.0f, 58.0f), theme, "Name", "EdgeRun",
+  expect_status(er_ui_component_field_emit(&scene, face, er_ui_bounds(232.0f, 48.0f, 160.0f, 58.0f), theme, "Name", "Example",
                                         ER_UI_TEST_COMPONENT_FIELD_ID, false),
                 ER_UI_OK, "component render: field emits");
   expect_status(er_ui_component_field_emit(&scene, face, er_ui_bounds(232.0f, 110.0f, 160.0f, 86.0f), theme, "Notes", "Verified cache",
@@ -177,15 +148,9 @@ static void test_component_render_primitives(void) {
   expect_status(er_ui_component_thread_row_emit(&scene, face, er_ui_bounds(606.0f, 332.0f, 220.0f, 58.0f), theme, "Settlement", "Payout approved",
                                              true, ER_UI_TEST_COMPONENT_THREAD_ROW_ID),
                 ER_UI_OK, "component render: thread row emits through icon row primitive");
-  expect_status(er_ui_component_attachment_preview_emit(&scene, face, er_ui_bounds(606.0f, 396.0f, 220.0f, 58.0f), theme, "manifest.json", "Signed bundle",
+  expect_status(er_ui_component_attachment_preview_emit(&scene, face, er_ui_bounds(606.0f, 396.0f, 220.0f, 58.0f), theme, "schema.json", "Component schema",
                                                      ER_UI_TEST_COMPONENT_ATTACHMENT_ID),
                 ER_UI_OK, "component render: attachment preview emits through icon row primitive");
-  expect_status(er_ui_component_capability_grant_row_emit(&scene, face, er_ui_bounds(606.0f, 460.0f, 260.0f, 58.0f), theme, "Builder",
-                                                       "cache.read", "Active", ER_UI_TEST_COMPONENT_GRANT_ROW_ID),
-                ER_UI_OK, "component render: grant row emits through icon row primitive");
-  expect_status(er_ui_component_proof_event_row_emit(&scene, face, er_ui_bounds(606.0f, 524.0f, 260.0f, 58.0f), theme, "Receipt sealed",
-                                                  "0x91af", "OK", ER_UI_TEST_COMPONENT_PROOF_ROW_ID),
-                ER_UI_OK, "component render: proof row emits through icon row primitive");
   expect_status(er_ui_component_alert_emit(&scene, face, er_ui_bounds(606.0f, 16.0f, 220.0f, 72.0f), theme, "Heads up", "Reusable components", theme.colors.warning),
                 ER_UI_OK, "component render: alert emits");
   expect_status(er_ui_component_avatar_emit(&scene, face, er_ui_bounds(606.0f, 96.0f, 42.0f, 42.0f), theme, "ER", theme.colors.accent, true),
@@ -209,300 +174,16 @@ static void test_component_render_primitives(void) {
                                          ER_UI_TEST_COMPONENT_INVALID_BUTTON_ID,
                                          ER_UI_COMPONENT_BUTTON_DEFAULT, ER_UI_COMPONENT_BUTTON_SIZE_DEFAULT, true),
                 ER_UI_ERR_INVALID_ARGUMENT, "component render: missing variable font is rejected");
-  expect_true(er_ui_component_scene_preview_available("button"), "component scene preview: button is available");
-  expect_true(er_ui_component_scene_preview_available("accordion"), "component scene preview: accordion is available");
-  expect_true(er_ui_component_scene_preview_available("alert-dialog"), "component scene preview: alert dialog is available");
-  expect_true(er_ui_component_scene_preview_available("avatar"), "component scene preview: avatar is available");
-  expect_true(er_ui_component_scene_preview_available("chart"), "component scene preview: chart is available");
-  expect_true(er_ui_component_scene_preview_available("combobox"), "component scene preview: combobox is available");
-  expect_true(er_ui_component_scene_preview_available("label"), "component scene preview: label is available");
-  expect_true(er_ui_component_scene_preview_available("sheet"), "component scene preview: sheet is available");
-  expect_true(er_ui_component_scene_preview_available("spinner"), "component scene preview: spinner is available");
-  expect_true(er_ui_component_scene_preview_available("tabs"), "component scene preview: tabs are available");
-  expect_true(er_ui_component_scene_preview_available("data-table"), "component scene preview: data table is available");
-  expect_true(er_ui_component_scene_preview_available("invoice-card"), "component scene preview: invoice card is available");
-  expect_true(er_ui_component_scene_preview_available("radio-group"), "component scene preview: radio group is available");
-  expect_true(er_ui_component_scene_preview_available("toast"), "component scene preview: toast is available");
-  expect_true(!er_ui_component_scene_preview_available("unknown-component"), "component scene preview: unknown body is not claimed");
-  expect_status(er_ui_component_scene_preview_emit(&scene, face, er_ui_bounds(420.0f, 16.0f, 180.0f, 58.0f), theme, "button", NULL),
-                ER_UI_OK, "component scene preview: selected body emits");
-  expect_status(er_ui_component_scene_preview_emit(&scene, face, er_ui_bounds(420.0f, 530.0f, 220.0f, 112.0f), theme, "data-table", NULL),
-                ER_UI_OK, "component scene preview: table body emits");
-  expect_status(er_ui_component_scene_preview_emit(&scene, face, er_ui_bounds(420.0f, 646.0f, 240.0f, 132.0f), theme, "calendar", NULL),
-                ER_UI_OK, "component scene preview: calendar body emits");
-  expect_status(er_ui_component_scene_preview_emit(&scene, face, er_ui_bounds(8.0f, 1070.0f, 420.0f, 500.0f), theme, "invoice-card", NULL),
-                ER_UI_OK, "component scene preview: invoice card body emits");
-  expect_status(er_ui_component_scene_preview_emit(&scene, face, er_ui_bounds(420.0f, 82.0f, 180.0f, 58.0f), theme, "accordion", NULL),
-                ER_UI_OK, "component scene preview: accordion body emits");
-  expect_status(er_ui_component_scene_preview_emit(&scene, face, er_ui_bounds(420.0f, 782.0f, 180.0f, 58.0f), theme, "unknown-component", NULL),
-                ER_UI_ERR_INVALID_ARGUMENT, "component scene preview: unknown body is rejected");
-  er_ui_component_gallery_state_t state = {0};
-  er_ui_component_gallery_state_init(&state);
-  expect_status(er_ui_component_showcase_emit(&scene, face, er_ui_bounds(0.0f, 280.0f, 720.0f, 360.0f), theme, "button", &state), ER_UI_OK,
-                "component showcase: component reference emits");
-  expect_true(scene.hit_count >= ER_UI_TEST_COMPONENT_MIN_SHOWCASE_HITS, "component showcase: catalog rows and preview controls emit hits");
-  expect_true(scene.text_quad_count > ER_UI_TEST_COMPONENT_MIN_SHOWCASE_TEXT_QUADS, "component showcase: catalog and preview use variable font text");
-  er_ui_scene_clear_commands(&scene);
-  expect_status(er_ui_component_showcase_emit(&scene, face, er_ui_bounds(0.0f, 280.0f, ER_UI_TEST_COMPONENT_COMPACT_SHOWCASE_W,
-                                                                          ER_UI_TEST_COMPONENT_COMPACT_SHOWCASE_H),
-                                              theme, "button", &state),
-                ER_UI_OK, "component showcase: compact stacked reference emits");
-  expect_true(scene.hit_count > 0u, "component showcase: compact catalog and preview emit hits");
-
-  er_ui_scene_clear_commands(&scene);
-  expect_status(er_ui_edgerun_metal_surface_emit(&scene, face, er_ui_bounds(0.0f, 0.0f, 3840.0f, 2160.0f), theme, &state), ER_UI_OK,
-                "metal surface: ui-core owns boot scene composition");
-  expect_true(scene.hit_count >= ER_UI_TEST_COMPONENT_MIN_METAL_HITS, "metal surface: showcase and controls emit hits");
-  expect_true(scene.text_quad_count > ER_UI_TEST_COMPONENT_MIN_METAL_TEXT_QUADS, "metal surface: boot UI emits variable font text");
-  expect_true(er_ui_scene_stats_fits_budget(er_ui_scene_stats(&scene), er_ui_scene_frame_budget()),
-              "metal surface: boot scene fits native frame budget");
-  er_ui_scene_clear_commands(&scene);
-  expect_status(er_ui_edgerun_metal_surface_emit(&scene, face, er_ui_bounds(0.0f, 0.0f, 1920.0f, 1080.0f), theme, &state), ER_UI_OK,
-                "metal surface: qemu 1080p scene emits");
-  expect_true(scene.hit_count >= ER_UI_TEST_COMPONENT_MIN_METAL_HITS, "metal surface: qemu 1080p controls emit hits");
-  expect_true(er_ui_scene_stats_fits_budget(er_ui_scene_stats(&scene), er_ui_scene_frame_budget()),
-              "metal surface: qemu 1080p scene fits native frame budget");
-  er_ui_scene_clear_commands(&scene);
-  expect_status(er_ui_edgerun_metal_surface_emit(&scene, face, er_ui_bounds(0.0f, 0.0f, 1280.0f, 720.0f), theme, &state), ER_UI_OK,
-                "metal surface: qemu 720p scene emits");
-  expect_true(scene.hit_count >= ER_UI_TEST_COMPONENT_MIN_METAL_HITS, "metal surface: qemu 720p controls emit hits");
-  expect_true(scene.icon_quad_count >= ER_UI_TEST_COMPONENT_MIN_METAL_ICON_QUADS, "metal surface: qemu 720p icon nodes emit quads");
-  expect_true(er_ui_scene_stats_fits_budget(er_ui_scene_stats(&scene), er_ui_scene_frame_budget()),
-              "metal surface: qemu 720p scene fits native frame budget");
-  er_ui_scene_clear_commands(&scene);
-  expect_status(er_ui_edgerun_metal_surface_emit(&scene, face, er_ui_bounds(0.0f, 0.0f, ER_UI_TEST_COMPONENT_NARROW_METAL_W,
-                                                                            ER_UI_TEST_COMPONENT_NARROW_METAL_H),
-                                                 theme, &state),
-                ER_UI_OK, "metal surface: narrow compact scene emits");
-  expect_true(scene.hit_count > 0u, "metal surface: narrow compact layout emits controls");
-  er_ui_scene_clear_commands(&scene);
-  expect_status(er_ui_edgerun_metal_surface_emit(&scene, face, er_ui_bounds(0.0f, 0.0f, 1280.0f, 720.0f), theme, &state), ER_UI_OK,
-                "metal surface: qemu 720p scene re-emits for component gallery checks");
-  expect_true(test_component_find_hit(&scene, ER_UI_COMPONENT_SHOWCASE_ROW_BASE_ID) != NULL,
-              "metal surface: compact gallery exposes component cards");
-
-  for (size_t i = 0u; i < er_ui_component_count(); ++i) {
-    const er_ui_component_spec_t* spec = er_ui_component_at(i);
-    expect_true(spec != NULL, "component scene preview: indexed spec exists");
-    if (!spec) continue;
-    expect_true(er_ui_component_scene_preview_available(spec->slug), "component scene preview: every catalog component is claimed");
-    expect_status(er_ui_component_scene_preview_emit(&scene, face, er_ui_bounds(8.0f, 860.0f, 360.0f, 190.0f), theme, spec->slug, &state), ER_UI_OK,
-                  "component scene preview: every catalog component emits");
-  }
 
   vr_font_face_destroy(face);
   er_ui_scene_destroy(&scene);
 }
 
 void run_component_tests(void) {
-  expect_size(er_ui_component_count(), ER_UI_TEST_COMPONENT_COUNT, "component catalog: component count matches Rust source");
-  expect_string(er_ui_component_canonical_source(), "ui/shadcn-ui/apps/v4/registry/bases/base/ui",
-                "component catalog: canonical source is recorded");
-  expect_size(er_ui_component_canonical_count(), ER_UI_COMPONENT_CANONICAL_BASE_COUNT,
-              "component catalog: canonical base component count is recorded");
-  expect_string(er_ui_component_canonical_at(0u), "accordion", "component catalog: canonical list starts sorted");
-  expect_string(er_ui_component_canonical_at(ER_UI_COMPONENT_CANONICAL_BASE_COUNT - 1u), "tooltip",
-                "component catalog: canonical list ends sorted");
-  expect_true(er_ui_component_canonical_covered("button"), "component catalog: canonical button is covered");
-  expect_true(er_ui_component_canonical_covered("spinner"), "component catalog: canonical spinner is covered");
-  expect_true(er_ui_component_find_by_slug("accordion") != 0, "component catalog: accordion exists");
-  expect_true(er_ui_component_find_by_slug("tooltip") != 0, "component catalog: tooltip exists");
-  expect_true(er_ui_component_find_by_slug("data-table") != 0, "component catalog: data-table exists");
-  expect_true(er_ui_component_find_by_slug("input-otp") != 0, "component catalog: input-otp exists");
-
-  const er_ui_component_spec_t* input_group = er_ui_component_find_by_source_component("InputGroup");
-  expect_true(input_group != 0, "component catalog: InputGroup resolves by source component");
-  if (input_group) expect_string(input_group->slug, "input-group", "component catalog: InputGroup slug matches");
-  const er_ui_component_spec_t* button = er_ui_component_find_by_slug("button");
-  expect_true(er_ui_component_uses_state(button, "disabled"), "component catalog: button has disabled state");
-  expect_true(er_ui_component_uses_slot(er_ui_component_find_by_slug("dialog"), "dialog-content"), "component catalog: dialog content slot exists");
-
-  er_ui_component_parity_contract_t contract = {0};
-  expect_true(er_ui_component_parity_contract_for_slug("button", &contract), "component parity: button contract exists");
-  expect_string(contract.aria_pattern, "button", "component parity: button aria pattern matches");
-  expect_true(er_ui_component_contract_supports_variant(&contract, "destructive"), "component parity: button destructive variant exists");
-  expect_true(er_ui_component_contract_supports_variant(&contract, "ghost"), "component parity: button ghost variant exists");
-  expect_true(er_ui_component_contract_supports_interaction(&contract, "click"), "component parity: button click interaction exists");
-  expect_size(contract.keyboard_count, ER_UI_TEST_COMPONENT_KEYBOARD_COUNT, "component parity: button keyboard count matches");
-
-  er_ui_component_resolved_t resolved = {0};
-  expect_true(er_ui_component_resolve_identifier("button", &resolved), "component resolve: slug resolves");
-  expect_string(resolved.spec->slug, "button", "component resolve: slug result matches");
-  expect_true(resolved.kind == ER_UI_COMPONENT_RESOLVE_SLUG, "component resolve: slug kind matches");
-  expect_true(er_ui_component_resolve_identifier("Button", &resolved), "component resolve: source component resolves");
-  expect_true(resolved.kind == ER_UI_COMPONENT_RESOLVE_SOURCE_COMPONENT, "component resolve: source kind matches");
-  expect_true(er_ui_component_resolve_identifier("@/components/ui/input-otp", &resolved), "component resolve: module path resolves");
-  expect_true(resolved.kind == ER_UI_COMPONENT_RESOLVE_MODULE_PATH, "component resolve: module path kind matches");
-  expect_true(er_ui_component_resolve_identifier("components/ui/card.tsx", &resolved), "component resolve: tsx path resolves");
-  expect_string(resolved.spec->slug, "card", "component resolve: tsx path slug matches");
-  expect_true(er_ui_component_resolve_identifier("data-slot=\"card-header\"", &resolved), "component resolve: data-slot resolves");
-  expect_string(resolved.spec->slug, "card", "component resolve: data-slot slug matches");
-  expect_true(er_ui_component_resolve_identifier("CardHeader", &resolved), "component resolve: pascal slot resolves");
-  expect_true(resolved.kind == ER_UI_COMPONENT_RESOLVE_SLOT, "component resolve: slot kind matches");
-  expect_true(!er_ui_component_resolve_identifier("UnknownThing", &resolved), "component resolve: unknown is rejected");
-
-  er_ui_component_port_mapping_t mapping = {0};
-  expect_true(er_ui_component_port_mapping_for_identifier("@/components/ui/button", &mapping), "component mapping: module path maps");
-  expect_string(mapping.slug, "button", "component mapping: slug matches");
-  expect_string(mapping.source_component, "Button", "component mapping: source component matches");
-  expect_string(mapping.edge_builder, "button", "component mapping: edge builder matches");
-  expect_true(mapping.category == ER_UI_COMPONENT_CATEGORY_FOUNDATION, "component mapping: category matches");
-  expect_true(mapping.status == ER_UI_COMPONENT_STATUS_EXACT_PORT, "component mapping: status matches");
-  expect_true(mapping.native_renderer, "component mapping: native renderer true");
-  expect_true(mapping.exact_port, "component mapping: exact port true");
-  expect_true(er_ui_component_port_mapping_for_identifier("data-table", &mapping), "component mapping: composed data table maps");
-  expect_true(mapping.status == ER_UI_COMPONENT_STATUS_NATIVE_PRIMITIVE, "component mapping: composed surface is native");
-  expect_true(mapping.native_renderer, "component mapping: composed surface has a renderer");
-  expect_true(!mapping.exact_port, "component mapping: composed surface is not an exact shadcn base port");
-  expect_true(!er_ui_component_port_mapping_for_identifier("UnknownThing", &mapping), "component mapping: unknown is rejected");
-
-  expect_true(er_ui_component_preview_available_by_source_component("InputGroup"), "component preview: source component resolves");
-  expect_true(er_ui_component_preview_available_by_identifier("@/components/ui/button"), "component preview: module identifier resolves");
-  expect_true(er_ui_component_preview_available_by_identifier("CardHeader"), "component preview: slot component resolves");
-  expect_true(er_ui_component_preview_available_by_identifier("data-slot=\"dialog-content\""), "component preview: data-slot identifier resolves");
-  expect_true(!er_ui_component_preview_available_by_identifier("UnknownThing"), "component preview: unknown identifier is rejected");
-  expect_true(er_ui_component_catalog_preview_available("accordion"), "component preview: accordion component exists");
-  expect_true(er_ui_component_catalog_preview_available("button"), "component preview: button component exists");
-  expect_true(er_ui_component_catalog_preview_available("input-group"), "component preview: input-group component exists");
-  expect_true(!er_ui_component_catalog_preview_available("unknown-component"), "component preview: unknown component is rejected");
-
-  er_ui_component_gallery_state_t state = {0};
-  er_ui_component_gallery_state_init(&state);
-  expect_true(!state.has_open_select, "component preview state: select starts closed");
-  expect_size(state.currency_index, 0u, "component preview state: currency default matches Rust");
-  expect_size(state.order_index, 0u, "component preview state: order default matches Rust");
-  expect_size(state.ticker_index, 0u, "component preview state: ticker default matches Rust");
-  expect_size(state.contribution_bar, ER_UI_COMPONENT_CHART_CONTRIBUTION_DEFAULT_INDEX, "component preview state: contribution bar default matches Rust");
-  expect_size(state.stock_bar, ER_UI_COMPONENT_CHART_STOCK_DEFAULT_INDEX, "component preview state: stock bar default matches Rust");
-  expect_size(state.power_bar, ER_UI_COMPONENT_CHART_POWER_DEFAULT_INDEX, "component preview state: power bar default matches Rust");
-
-  er_ui_action_t action = {0};
-  action.kind = ER_UI_ACTION_OPEN_CHANGED;
-  action.id = ER_UI_COMPONENT_SELECT_ORDER_TYPE_ID;
-  action.bool_value = true;
-  expect_true(er_ui_component_gallery_apply_action(&state, action), "component preview state: open select action applies");
-  expect_true(er_ui_component_gallery_select_open(&state, ER_UI_COMPONENT_SELECT_ORDER_TYPE_ID), "component preview state: opened select is tracked");
-
-  action = (er_ui_action_t){0};
-  action.kind = ER_UI_ACTION_ACTIVATED;
-  action.has_hit = true;
-  action.hit = er_ui_hit(ER_UI_HIT_MENU_ITEM, ER_UI_COMPONENT_SELECT_ORDER_BASE_ID + ER_UI_TEST_COMPONENT_ORDER_OPTION_INDEX, 0.0f, 0.0f, 1.0f, 1.0f);
-  expect_true(er_ui_component_gallery_apply_action(&state, action), "component preview state: order option applies");
-  expect_size(state.order_index, ER_UI_TEST_COMPONENT_ORDER_OPTION_INDEX, "component preview state: order option index matches");
-  expect_true(!state.has_open_select, "component preview state: select closes after menu selection");
-
-  action = (er_ui_action_t){0};
-  action.kind = ER_UI_ACTION_SLIDER_CHANGED;
-  action.id = ER_UI_TEST_COMPONENT_SLIDER_ACTION_ID;
-  action.float_value = 0.72f;
-  expect_true(er_ui_component_gallery_apply_action(&state, action), "component preview state: slider action applies");
-  expect_true(er_ui_component_gallery_slider(&state, ER_UI_TEST_COMPONENT_SLIDER_ACTION_ID) > 0.71f,
-              "component preview state: slider value is stored");
-  action.float_value = 1.2f;
-  expect_true(er_ui_component_gallery_apply_action(&state, action), "component preview state: slider clamp action applies");
-  expect_true(er_ui_component_gallery_slider(&state, ER_UI_TEST_COMPONENT_SLIDER_ACTION_ID) == 1.0f,
-              "component preview state: slider value clamps high");
-
-  action = (er_ui_action_t){0};
-  action.kind = ER_UI_ACTION_ACTIVATED;
-  action.has_hit = true;
-  action.hit = er_ui_hit(ER_UI_HIT_BUTTON, ER_UI_COMPONENT_CHART_STOCK_BASE_ID + ER_UI_TEST_COMPONENT_STOCK_BUTTON_INDEX, 0.0f, 0.0f, 1.0f, 1.0f);
-  expect_true(er_ui_component_gallery_apply_action(&state, action), "component preview state: chart button applies");
-  expect_size(state.stock_bar, ER_UI_TEST_COMPONENT_STOCK_BUTTON_INDEX, "component preview state: stock chart index matches");
-
-  action = (er_ui_action_t){0};
-  action.kind = ER_UI_ACTION_ACTIVATED;
-  action.has_hit = true;
-  action.hit = er_ui_hit(ER_UI_HIT_BUTTON, ER_UI_TEST_COMPONENT_UNRELATED_BUTTON_ID, 0.0f, 0.0f, 1.0f, 1.0f);
-  expect_true(!er_ui_component_gallery_apply_action(&state, action), "component preview state: unrelated action is rejected");
-
-  expect_size(er_ui_component_native_count(), ER_UI_TEST_COMPONENT_COUNT, "component progress: native count matches Rust source");
-  expect_size(er_ui_component_exact_count(), ER_UI_TEST_COMPONENT_EXACT_COUNT, "component progress: exact count matches canonical base");
-  expect_size(er_ui_component_exact_parity_count(), ER_UI_TEST_COMPONENT_EXACT_COUNT, "component progress: exact parity count matches canonical base");
-  expect_size(er_ui_component_count_by_status(ER_UI_COMPONENT_STATUS_NATIVE_PRIMITIVE), ER_UI_TEST_COMPONENT_NATIVE_PRIMITIVE_COUNT,
-              "component progress: native primitive count covers composed surfaces");
-  expect_true(er_ui_component_count_by_category(ER_UI_COMPONENT_CATEGORY_FOUNDATION) > 0u, "component progress: foundation category populated");
-  expect_true(er_ui_component_count_by_category(ER_UI_COMPONENT_CATEGORY_OVERLAY) > 0u, "component progress: overlay category populated");
-
-  size_t component_count = 0u;
-  const er_ui_component_test_id_t* component_ids = er_ui_component_test_ids(&component_count);
-  expect_true(component_ids != 0, "component contracts: ids are exposed");
-  expect_size(component_count, ER_UI_COMPONENT_TEST_ID_COUNT, "component contracts: id count matches Rust source");
-  expect_string(er_ui_component_selector(ER_UI_COMPONENT_NETWORK_APP_PROMPT), "edgerun.network_app_prompt",
-                "component contracts: network prompt selector matches Rust source");
-  expect_string(er_ui_component_name(ER_UI_COMPONENT_SYSTEM_SURFACE_STATE_PANEL), "SystemSurfaceStatePanel",
-                "component contracts: state panel name matches Rust source");
-  expect_string(er_ui_component_state_selector(ER_UI_COMPONENT_STATE_LOADING), "state.loading",
-                "component contracts: state selector matches Rust source");
-  expect_string(er_ui_component_state_label(ER_UI_COMPONENT_STATE_ERROR), "Error",
-                "component contracts: state label matches Rust source");
-  expect_string(er_ui_component_a11y_role_label(ER_UI_COMPONENT_A11Y_TAB_LIST), "tab-list",
-                "component contracts: a11y role label matches Rust source");
-
   size_t state_count = 0u;
   const er_ui_component_state_t* states = er_ui_component_states(&state_count);
-  expect_true(states != 0, "component contracts: states are exposed");
-  expect_size(state_count, ER_UI_COMPONENT_STATE_COUNT, "component contracts: state count matches Rust source");
-
-  er_ui_component_state_matrix_t matrix = {0};
-  expect_true(er_ui_component_state_matrix_for(ER_UI_COMPONENT_SEGMENTED_CONTROL, &matrix),
-              "component contracts: segmented control state matrix exists");
-  expect_size(matrix.state_count, ER_UI_COMPONENT_STATE_COUNT, "component contracts: every component covers full state matrix");
-  expect_true(er_ui_component_state_matrix_has_state(&matrix, ER_UI_COMPONENT_STATE_DISABLED),
-              "component contracts: disabled state is covered");
-  expect_true(er_ui_component_state_matrix_has_state(&matrix, ER_UI_COMPONENT_STATE_ERROR),
-              "component contracts: error state is covered");
-
-  er_ui_component_projection_contract_t projection = {0};
-  expect_true(er_ui_component_projection_contract_for(ER_UI_COMPONENT_APP_STORE_CARD, &projection),
-              "component contracts: app store card projection exists");
-  expect_true(er_ui_component_projection_contract_requires_field(&projection, "name"),
-              "component contracts: app store card name is required");
-  expect_true(er_ui_component_projection_contract_requires_field(&projection, "run_id"),
-              "component contracts: app store card run id is required");
-  expect_true(er_ui_component_projection_contract_has_field(&projection, "app_policy_hash"),
-              "component contracts: app store card policy hash is projected");
-  expect_true(!er_ui_component_projection_contract_requires_field(&projection, "developer"),
-              "component contracts: app store card developer remains optional");
-  expect_size(er_ui_component_projection_required_field_count(&projection), ER_UI_TEST_APP_STORE_CARD_REQUIRED_FIELDS,
-              "component contracts: app store card required count matches Rust source");
-  expect_true(er_ui_component_projection_contract_for(ER_UI_COMPONENT_DATA_TABLE_CONTROLS, &projection),
-              "component contracts: data table controls projection exists");
-  expect_true(er_ui_component_projection_contract_requires_field(&projection, "filter_id"),
-              "component contracts: data table filter id is required");
-  expect_true(er_ui_component_projection_contract_requires_field(&projection, "columns"),
-              "component contracts: data table columns are required");
-
-  er_ui_component_accessibility_metadata_t metadata = {0};
-  expect_true(er_ui_component_accessibility_metadata_for(ER_UI_COMPONENT_NETWORK_APP_PROMPT, &metadata),
-              "component contracts: network prompt accessibility exists");
-  expect_true(metadata.role == ER_UI_COMPONENT_A11Y_DIALOG, "component contracts: network prompt is a dialog");
-  expect_true(er_ui_component_accessibility_metadata_has_label_field(&metadata, "app_name"),
-              "component contracts: network prompt labels by app name");
-  expect_true(er_ui_component_accessibility_metadata_for(ER_UI_COMPONENT_SYSTEM_SURFACE_STATE_PANEL, &metadata),
-              "component contracts: state panel accessibility exists");
-  expect_true(metadata.role == ER_UI_COMPONENT_A11Y_STATUS, "component contracts: state panel is a status");
-  expect_true(er_ui_component_accessibility_metadata_has_label_field(&metadata, "detail"),
-              "component contracts: state panel detail participates in label");
-  expect_true(er_ui_component_accessibility_metadata_for(ER_UI_COMPONENT_ICON_ONLY_BUTTON, &metadata),
-              "component contracts: icon-only button accessibility exists");
-  expect_true(metadata.role == ER_UI_COMPONENT_A11Y_BUTTON, "component contracts: icon-only button is a button");
-  expect_true(er_ui_component_accessibility_metadata_has_label_field(&metadata, "label"),
-              "component contracts: icon-only button requires a projected label");
-
-  for (size_t i = 0u; i < er_ui_component_count(); ++i) {
-    const er_ui_component_spec_t* spec = er_ui_component_at(i);
-    expect_true(spec != 0, "component catalog: indexed spec exists");
-    if (!spec) continue;
-    expect_true(spec->route && spec->route[0] == '/' && spec->route[1] == 'd', "component catalog: docs route is stable");
-    expect_true(spec->edge_builder && spec->edge_builder[0] != '\0', "component catalog: edge builder is present");
-    expect_true(spec->source_component && spec->source_component[0] != '\0', "component catalog: source component is present");
-    expect_true(er_ui_component_parity_contract_for_slug(spec->slug, &contract), "component parity: every exact component has a contract");
-    expect_true(contract.compound == (spec->slot_count > 1u), "component parity: compound flag matches slot count");
-    expect_true(er_ui_component_contract_supports_interaction(&contract, "render"), "component parity: every contract renders");
-    expect_true(er_ui_component_preview_available(spec->slug), "component preview: every native component has a preview");
-    expect_true(er_ui_component_catalog_preview_available(spec->slug), "component preview: every native component has a preview");
-  }
+  expect_true(states != 0, "component states: states are exposed");
+  expect_size(state_count, ER_UI_COMPONENT_STATE_COUNT, "component states: state count matches public contract");
 
   test_component_render_primitives();
 }

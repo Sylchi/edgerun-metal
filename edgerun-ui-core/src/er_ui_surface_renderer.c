@@ -577,7 +577,7 @@ static void er_ui_surface_render_icon_quad(ErUiSurface* surface, const er_ui_qua
       er_ui_surface_icon_line(surface, x0, y0, w, h, 14, 19, 16, 12, stroke, quad->color, clip, stats);
       er_ui_surface_icon_line(surface, x0, y0, w, h, 16, 12, 21, 12, stroke, quad->color, clip, stats);
       break;
-    case ER_UI_ICON_APP:
+    case ER_UI_ICON_WINDOW:
       er_ui_surface_icon_rect(surface, x0, y0, w, h, 4, 5, 20, 19, stroke, quad->color, clip, stats);
       er_ui_surface_icon_line(surface, x0, y0, w, h, 4, 9, 20, 9, stroke, quad->color, clip, stats);
       er_ui_surface_icon_line(surface, x0, y0, w, h, 8, 15, 11, 15, stroke, quad->color, clip, stats);
@@ -607,7 +607,7 @@ static void er_ui_surface_render_icon_quad(ErUiSurface* surface, const er_ui_qua
       er_ui_surface_icon_line(surface, x0, y0, w, h, 8, 18, 16, 18, stroke, quad->color, clip, stats);
       break;
     case ER_UI_ICON_SHIELD:
-    case ER_UI_ICON_TRUST:
+    case ER_UI_ICON_SHIELD_CHECK:
       er_ui_surface_icon_line(surface, x0, y0, w, h, 12, 3, 20, 7, stroke, quad->color, clip, stats);
       er_ui_surface_icon_line(surface, x0, y0, w, h, 20, 7, 18, 16, stroke, quad->color, clip, stats);
       er_ui_surface_icon_line(surface, x0, y0, w, h, 18, 16, 12, 21, stroke, quad->color, clip, stats);

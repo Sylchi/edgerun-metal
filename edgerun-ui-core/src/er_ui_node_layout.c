@@ -83,7 +83,7 @@ static size_t er_ui_node_child_row_span(const er_ui_node_t* child) {
 
 //@optimizer-ignore-function bento layout must test every cell covered by a candidate span
 static bool er_ui_node_bento_cells_available(
-  const bool occupied[ER_UI_NODE_BENTO_MAX_ROWS][ER_UI_NODE_MAX_CHILDREN],
+  bool occupied[ER_UI_NODE_BENTO_MAX_ROWS][ER_UI_NODE_MAX_CHILDREN],
   size_t row,
   size_t column,
   size_t row_span,
@@ -113,7 +113,7 @@ static void er_ui_node_bento_mark_cells(
 
 //@optimizer-ignore-function bento layout must scan bounded rows and columns to find the first fitting span
 static er_ui_status_t er_ui_node_bento_find_cell(
-  const bool occupied[ER_UI_NODE_BENTO_MAX_ROWS][ER_UI_NODE_MAX_CHILDREN],
+  bool occupied[ER_UI_NODE_BENTO_MAX_ROWS][ER_UI_NODE_MAX_CHILDREN],
   size_t row_span,
   size_t column_span,
   size_t columns,

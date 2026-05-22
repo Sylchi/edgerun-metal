@@ -67,7 +67,7 @@ static const char *const ER_UI_PRESET_STYLES[] = {"nova", "vega", "maia", "lyra"
 #define ER_UI_PRESET_RECIPE_MIRA {"mira", "neutral", "neutral", "neutral", "hugeicons", "inter", "inherit", "default", "default", "default", "subtle"}
 #define ER_UI_PRESET_RECIPE_LUMA {"luma", "neutral", "neutral", "neutral", "lucide", "inter", "inherit", "default", "default", "default", "subtle"}
 #define ER_UI_PRESET_RECIPE_SERA {"sera", "taupe", "taupe", "taupe", "lucide", "noto-sans", "playfair-display", "default", "none", "default", "subtle"}
-#define ER_UI_PRESET_COLOR(r, g, b, a) ((er_ui_color4_t){(r), (g), (b), (a)})
+#define ER_UI_PRESET_COLOR(r, g, b, a) {(r), (g), (b), (a)}
 #define ER_UI_PRESET_COLORS_MIRA                                                                                                                        \
   {                                                                                                                                                      \
     ER_UI_PRESET_COLOR(0.035f, 0.035f, 0.035f, 1.0f), ER_UI_PRESET_COLOR(0.055f, 0.055f, 0.055f, 0.98f),                                                 \
@@ -172,7 +172,7 @@ static const er_ui_semantic_colors_t ER_UI_STYLE_FAMILY_COLORS[ER_UI_STYLE_FAMIL
 static const er_ui_style_family_spec_t ER_UI_STYLE_FAMILY_SPECS[ER_UI_STYLE_FAMILY_COUNT] = {
   {ER_UI_STYLE_FAMILY_VEGA, "Vega", "bIkeymG", "neutral", "structured blue-black system surface"},
   {ER_UI_STYLE_FAMILY_NOVA, "Nova", "b2fA", "neutral", "neutral graphite system surface"},
-  {ER_UI_STYLE_FAMILY_MAIA, "Maia", "bbVKFP6", "neutral", "green policy and trust surface"},
+  {ER_UI_STYLE_FAMILY_MAIA, "Maia", "bbVKFP6", "neutral", "green status surface"},
   {ER_UI_STYLE_FAMILY_LYRA, "Lyra", "buFznsW", "neutral", "violet creative and agent surface"},
   {ER_UI_STYLE_FAMILY_MIRA, "Mira", "b1D0eCA4", "neutral", "neutral high-contrast default surface"},
   {ER_UI_STYLE_FAMILY_LUMA, "Luma", "b1VlIttI", "neutral", "warm finance and publishing surface"},
@@ -242,10 +242,10 @@ static const er_ui_extracted_style_token_t ER_UI_EXTRACTED_STYLE_TOKENS[] = {
   ER_UI_STYLE_TOKEN("destructive foreground", ER_UI_EXTRACTED_STYLE_TOKEN_TEXT, "--destructive-foreground", ER_UI_STYLE_TOKEN_CLASSES_DESTRUCTIVE_FOREGROUND,
                     "text on destructive action surfaces"),
   ER_UI_STYLE_TOKEN("success", ER_UI_EXTRACTED_STYLE_TOKEN_STATUS, "--success", ER_UI_STYLE_TOKEN_CLASSES_SUCCESS,
-                    "verified, paid, completed, and positive receipt states"),
+                    "verified, paid, completed, and positive states"),
   ER_UI_STYLE_TOKEN("warning", ER_UI_EXTRACTED_STYLE_TOKEN_STATUS, "--warning", ER_UI_STYLE_TOKEN_CLASSES_WARNING, "pending, budget, and caution states"),
   ER_UI_STYLE_TOKEN("info", ER_UI_EXTRACTED_STYLE_TOKEN_STATUS, "--info", ER_UI_STYLE_TOKEN_CLASSES_INFO,
-                    "neutral informational and policy reference states"),
+                    "neutral informational and reference states"),
   ER_UI_STYLE_TOKEN("input", ER_UI_EXTRACTED_STYLE_TOKEN_SURFACE, "--input", ER_UI_STYLE_TOKEN_CLASSES_INPUT, "input border and disabled input fill"),
   ER_UI_STYLE_TOKEN("ring", ER_UI_EXTRACTED_STYLE_TOKEN_BORDER, "--ring", ER_UI_STYLE_TOKEN_CLASSES_RING, "keyboard focus and validation ring"),
   ER_UI_STYLE_TOKEN("chart 1", ER_UI_EXTRACTED_STYLE_TOKEN_STATUS, "--chart-1", ER_UI_STYLE_TOKEN_CLASSES_CHART_1, "first chart series color"),
@@ -518,7 +518,7 @@ static const er_ui_extracted_source_capture_t ER_UI_SOURCE_CAPTURES[] = {
   {"ui.html", true, ER_UI_STYLE_FAMILY_MIRA, "b1D0eCA4", ER_UI_PRESET_RECIPE_MIRA, "radix-mira", "original screenshot source mapped to the neutral Mira style family"},
   {"vega.html", true, ER_UI_STYLE_FAMILY_VEGA, "bIkeymG", ER_UI_PRESET_RECIPE_VEGA, "radix-vega", "blue-black style-family capture"},
   {"nova.html", true, ER_UI_STYLE_FAMILY_NOVA, "b2fA", ER_UI_PRESET_RECIPE_NOVA, "radix-nova", "graphite style-family capture"},
-  {"maia.html", true, ER_UI_STYLE_FAMILY_MAIA, "bbVKFP6", ER_UI_PRESET_RECIPE_MAIA, "radix-maia", "green trust style-family capture"},
+  {"maia.html", true, ER_UI_STYLE_FAMILY_MAIA, "bbVKFP6", ER_UI_PRESET_RECIPE_MAIA, "radix-maia", "green status style-family capture"},
   {"lyra.html", true, ER_UI_STYLE_FAMILY_LYRA, "buFznsW", ER_UI_PRESET_RECIPE_LYRA, "radix-lyra", "violet agent style-family capture"},
   {"luma.html", true, ER_UI_STYLE_FAMILY_LUMA, "b1VlIttI", ER_UI_PRESET_RECIPE_LUMA, "radix-luma", "warm finance style-family capture"},
   {"sera.html", true, ER_UI_STYLE_FAMILY_SERA, "b4xFeBLg4O", ER_UI_PRESET_RECIPE_SERA, "radix-sera", "rose collaboration style-family capture"}

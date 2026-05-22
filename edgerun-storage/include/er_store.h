@@ -11,7 +11,7 @@
  * decide whether bytes are safe to execute or reveal. Callers own admission,
  * signatures, encryption, access policy, and lifecycle policy above this byte
  * store. Stored objects are canonical edgerun-object bytes so storage, wire,
- * and VFS do not drift into separate object formats.
+ * apps, and admission do not drift into separate object formats.
  */
 
 #include <stddef.h>

@@ -1,5 +1,46 @@
 #include "er_ui_components_internal.h"
 
+static const er_ui_component_state_t er_ui_component_all_states[ER_UI_COMPONENT_STATE_COUNT] = {
+  ER_UI_COMPONENT_STATE_DEFAULT,
+  ER_UI_COMPONENT_STATE_HOVER,
+  ER_UI_COMPONENT_STATE_FOCUS,
+  ER_UI_COMPONENT_STATE_ACTIVE,
+  ER_UI_COMPONENT_STATE_DISABLED,
+  ER_UI_COMPONENT_STATE_LOADING,
+  ER_UI_COMPONENT_STATE_ERROR
+};
+
+const char* er_ui_component_state_label(er_ui_component_state_t state) {
+  switch (state) {
+    case ER_UI_COMPONENT_STATE_DEFAULT: return "default";
+    case ER_UI_COMPONENT_STATE_HOVER: return "hover";
+    case ER_UI_COMPONENT_STATE_FOCUS: return "focus";
+    case ER_UI_COMPONENT_STATE_ACTIVE: return "active";
+    case ER_UI_COMPONENT_STATE_DISABLED: return "disabled";
+    case ER_UI_COMPONENT_STATE_LOADING: return "loading";
+    case ER_UI_COMPONENT_STATE_ERROR: return "error";
+    default: return "";
+  }
+}
+
+const er_ui_component_state_t* er_ui_component_states(size_t* out_count) {
+  if (out_count) *out_count = ER_UI_COMPONENT_STATE_COUNT;
+  return er_ui_component_all_states;
+}
+
+const char* er_ui_component_a11y_role_label(er_ui_component_a11y_role_t role) {
+  switch (role) {
+    case ER_UI_COMPONENT_A11Y_GENERIC: return "generic";
+    case ER_UI_COMPONENT_A11Y_GROUP: return "group";
+    case ER_UI_COMPONENT_A11Y_BUTTON: return "button";
+    case ER_UI_COMPONENT_A11Y_DIALOG: return "dialog";
+    case ER_UI_COMPONENT_A11Y_LIST_ITEM: return "list-item";
+    case ER_UI_COMPONENT_A11Y_STATUS: return "status";
+    case ER_UI_COMPONENT_A11Y_TAB_LIST: return "tab-list";
+    default: return "";
+  }
+}
+
 bool er_ui_component_streq(const char* a, const char* b) {
   if (!a || !b) return false;
   while (*a && *b) { if (*a != *b) return false; a++; b++; }
@@ -10,26 +51,6 @@ bool er_ui_component_list_contains(const char* const* values, size_t count, cons
   if (!values || !value) return false;
   for (size_t i = 0u; i < count; ++i) if (er_ui_component_streq(values[i], value)) return true;
   return false;
-}
-
-bool er_ui_component_range_starts_with(const char* start, const char* end, const char* prefix, size_t prefix_len) {
-  if (!start || !end || !prefix || end < start || (size_t)(end - start) < prefix_len) return false;
-  const char* cursor = start;
-  const char* prefix_cursor = prefix;
-  const char* prefix_end = prefix + prefix_len;
-  while (prefix_cursor < prefix_end) {
-    if (*cursor != *prefix_cursor) return false;
-    cursor++;
-    prefix_cursor++;
-  }
-  return true;
-}
-
-bool er_ui_component_ends_with_len(const char* start, const char* end, const char* suffix, size_t suffix_len) {
-  if (!start || !end || !suffix || end < start || (size_t)(end - start) <= suffix_len) return false;
-  const char* candidate = end - suffix_len;
-  for (size_t i = 0u; i < suffix_len; ++i) if (candidate[i] != suffix[i]) return false;
-  return true;
 }
 
 er_ui_status_t er_ui_component_push_ascii_text(

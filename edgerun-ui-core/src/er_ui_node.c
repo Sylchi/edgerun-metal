@@ -300,15 +300,6 @@ er_ui_node_t er_ui_node_section(const char* title, const char* detail) {
   return node;
 }
 
-er_ui_node_t er_ui_node_identity_card(const char* name, const char* node_name, const char* policy, uint32_t id) {
-  er_ui_node_t node = er_ui_node_base(ER_UI_NODE_IDENTITY_CARD);
-  node.label = name;
-  node.value = node_name;
-  node.detail = policy;
-  node.id = id;
-  return node;
-}
-
 er_ui_node_t er_ui_node_contact_card(const char* name, const char* detail, uint32_t id) {
   er_ui_node_t node = er_ui_node_base(ER_UI_NODE_CONTACT_CARD);
   node.label = name;
@@ -330,24 +321,6 @@ er_ui_node_t er_ui_node_attachment_preview(const char* name, const char* kind, u
   er_ui_node_t node = er_ui_node_base(ER_UI_NODE_ATTACHMENT_PREVIEW);
   node.label = name;
   node.detail = kind;
-  node.id = id;
-  return node;
-}
-
-er_ui_node_t er_ui_node_capability_grant_row(const char* app, const char* capability, const char* state, uint32_t id) {
-  er_ui_node_t node = er_ui_node_base(ER_UI_NODE_CAPABILITY_GRANT_ROW);
-  node.label = app;
-  node.value = capability;
-  node.detail = state;
-  node.id = id;
-  return node;
-}
-
-er_ui_node_t er_ui_node_proof_event_row(const char* title, const char* hash, const char* status_text, uint32_t id) {
-  er_ui_node_t node = er_ui_node_base(ER_UI_NODE_PROOF_EVENT_ROW);
-  node.label = title;
-  node.value = hash;
-  node.detail = status_text;
   node.id = id;
   return node;
 }
@@ -626,32 +599,6 @@ er_ui_node_t er_ui_node_conversation(float scroll_offset_px, uint32_t scroll_id)
   return node;
 }
 
-er_ui_node_t er_ui_node_route_path(const char* label, const char* const* hops, size_t hop_count) {
-  er_ui_node_t node = er_ui_node_base(ER_UI_NODE_ROUTE_PATH);
-  node.label = label;
-  node.labels = hops;
-  node.label_count = hop_count;
-  return node;
-}
-
-er_ui_node_t er_ui_node_package_card(const char* name, const char* policy, const char* hash, uint32_t id) {
-  er_ui_node_t node = er_ui_node_base(ER_UI_NODE_PACKAGE_CARD);
-  node.label = name;
-  node.value = policy;
-  node.detail = hash;
-  node.id = id;
-  return node;
-}
-
-er_ui_node_t er_ui_node_receipt_row(const char* label, const char* amount, const char* status_text, uint32_t id) {
-  er_ui_node_t node = er_ui_node_base(ER_UI_NODE_RECEIPT_ROW);
-  node.label = label;
-  node.value = amount;
-  node.detail = status_text;
-  node.id = id;
-  return node;
-}
-
 er_ui_node_t er_ui_node_panel_header(const char* title, const char* subtitle, const char* action_label, uint32_t action_id) {
   er_ui_node_t node = er_ui_node_base(ER_UI_NODE_PANEL_HEADER);
   node.label = title;
@@ -669,17 +616,6 @@ er_ui_node_t er_ui_node_metric_card(const char* title, const char* value, const 
   node.active = has_progress;
   node.number = progress;
   node.color = accent;
-  return node;
-}
-
-er_ui_node_t er_ui_node_transaction_row(const char* title, const char* subtitle, const char* date, const char* amount, bool positive, uint32_t id) {
-  er_ui_node_t node = er_ui_node_base(ER_UI_NODE_TRANSACTION_ROW);
-  node.label = title;
-  node.value = subtitle;
-  node.aux = date;
-  node.detail = amount;
-  node.active = positive;
-  node.id = id;
   return node;
 }
 
@@ -869,12 +805,9 @@ const char* er_ui_node_kind_label(er_ui_node_kind_t kind) {
     case ER_UI_NODE_COMMAND_PALETTE: return "command-palette";
     case ER_UI_NODE_TREE_ITEM: return "tree-item";
     case ER_UI_NODE_SECTION: return "section";
-    case ER_UI_NODE_IDENTITY_CARD: return "identity-card";
     case ER_UI_NODE_CONTACT_CARD: return "contact-card";
     case ER_UI_NODE_THREAD_ROW: return "thread-row";
     case ER_UI_NODE_ATTACHMENT_PREVIEW: return "attachment-preview";
-    case ER_UI_NODE_CAPABILITY_GRANT_ROW: return "capability-grant-row";
-    case ER_UI_NODE_PROOF_EVENT_ROW: return "proof-event-row";
     case ER_UI_NODE_PAGINATION: return "pagination";
     case ER_UI_NODE_COLLAPSIBLE: return "collapsible";
     case ER_UI_NODE_ACCORDION: return "accordion";
@@ -903,12 +836,8 @@ const char* er_ui_node_kind_label(er_ui_node_kind_t kind) {
     case ER_UI_NODE_DIFF_BODY: return "diff-body";
     case ER_UI_NODE_CHAT_MESSAGE: return "chat-message";
     case ER_UI_NODE_CONVERSATION: return "conversation";
-    case ER_UI_NODE_ROUTE_PATH: return "route-path";
-    case ER_UI_NODE_PACKAGE_CARD: return "package-card";
-    case ER_UI_NODE_RECEIPT_ROW: return "receipt-row";
     case ER_UI_NODE_PANEL_HEADER: return "panel-header";
     case ER_UI_NODE_METRIC_CARD: return "metric-card";
-    case ER_UI_NODE_TRANSACTION_ROW: return "transaction-row";
     case ER_UI_NODE_MENU_ITEM: return "menu-item";
     case ER_UI_NODE_CONTROL_ROW: return "control-row";
     case ER_UI_NODE_GRID: return "grid";
@@ -934,9 +863,7 @@ const char* er_ui_node_composition_issue_label(er_ui_node_composition_issue_kind
 static bool er_ui_node_is_card_like(er_ui_node_kind_t kind) {
   return kind == ER_UI_NODE_CARD ||
          kind == ER_UI_NODE_CARD_SUMMARY ||
-         kind == ER_UI_NODE_IDENTITY_CARD ||
          kind == ER_UI_NODE_CONTACT_CARD ||
-         kind == ER_UI_NODE_PACKAGE_CARD ||
          kind == ER_UI_NODE_METRIC_CARD;
 }
 
