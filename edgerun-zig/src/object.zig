@@ -3,7 +3,6 @@ const bytes = @import("bytes.zig");
 const clock = @import("clock.zig");
 const identity = @import("identity.zig");
 const preimage = @import("preimage.zig");
-const seal = @import("seal.zig");
 
 pub const id_size = preimage.hash_size;
 pub const header_size = 148;
@@ -119,15 +118,6 @@ pub const Requirements = struct {
         _ = self.encode(&raw);
 
         return preimage.rawHash(&raw);
-    }
-
-    pub fn sealPolicy(self: Requirements, device: identity.Identity, app: identity.Identity, user: identity.Identity) ?seal.Policy {
-        return switch (self.confidentiality) {
-            .public => seal.Policy.public(),
-            .integrity_only => seal.Policy.integrityOnly(),
-            .app_private, .device_private => seal.Policy.machineApp(device, app),
-            .user_private, .user_app_private, .layered => seal.Policy.machineAppUser(device, app, user),
-        };
     }
 };
 
@@ -328,6 +318,18 @@ pub const Child = struct {
             .requirements_hash = idFromBytes(in[52..84]),
         };
         if (!child.valid(expected_offset)) return error.Corrupt;
+        return child;
+    }
+
+    pub fn fromView(view: View, logical_offset: u64) Error!Child {
+        const child = Child{
+            .object_id = view.id(),
+            .logical_offset = logical_offset,
+            .logical_len = view.header.logical_len,
+            .kind = view.header.kind,
+            .requirements_hash = view.header.requirements.hash(),
+        };
+        if (!child.valid(logical_offset)) return error.Corrupt;
         return child;
     }
 };
@@ -692,19 +694,7 @@ fn encodeEpoch(epoch: clock.Stamp, out: []u8) void {
 }
 
 fn decodeEpoch(in: []const u8) Error!clock.Stamp {
-    if (in.len < 64) return error.Corrupt;
-    var keeper_bytes: [clock.keeper_id_size]u8 = undefined;
-    _ = bytes.copy(&keeper_bytes, in[0..32]);
-
-    const stamp = clock.Stamp{
-        .keeper = .{ .bytes = keeper_bytes },
-        .tick = bytes.load64(in[32..40]) orelse return error.Corrupt,
-        .slot = bytes.load64(in[40..48]) orelse return error.Corrupt,
-        .epoch = bytes.load64(in[48..56]) orelse return error.Corrupt,
-        .era = bytes.load64(in[56..64]) orelse return error.Corrupt,
-    };
-    if (!stamp.valid()) return error.Corrupt;
-    return stamp;
+    return preimage.decodeEpoch(in) orelse error.Corrupt;
 }
 
 fn enumFromInt(comptime E: type, value: anytype) ?E {
@@ -736,27 +726,6 @@ test "requirements are encoded and hashed deterministically" {
     };
 
     try std.testing.expect(bytes.nonzero(&req.hash()));
-}
-
-test "requirements derive explicit seal policy" {
-    const keeper = clock.KeeperId{ .bytes = [_]u8{1} ++ [_]u8{0} ** 31 };
-    const epoch = clock.Stamp{ .keeper = keeper };
-    const user = identity.Identity.init(.user, identity.Source.prepare(.hash, &preimage.rawHash("user")).?, epoch).?;
-    const device = identity.Identity.init(.device, identity.Source.prepare(.hash, &preimage.rawHash("device")).?, epoch).?;
-    const app = identity.Identity.init(.app, identity.Source.prepare(.hash, &preimage.rawHash("chat")).?, epoch).?;
-    const req = Requirements{
-        .durability = .durable,
-        .confidentiality = .user_app_private,
-        .portability = .machine_bound,
-        .integrity = .sealed,
-        .lifetime = .retained,
-        .visibility = .private,
-        .access = .explicit_io,
-    };
-    const policy = req.sealPolicy(device, app, user).?;
-
-    try std.testing.expect(policy.valid());
-    try std.testing.expectEqual(seal.Scope.machine_app_user, policy.scope);
 }
 
 test "header encode decode owns canonical layout" {

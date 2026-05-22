@@ -356,8 +356,8 @@ pub const version: u32 = 1;
 pub const record_version: u16 = 2;
 pub const max_key = 256;
 pub const max_name = 64;
-pub const type_raw: u32 = 0;
-pub const type_object: u32 = 1;
+pub const type_raw: u32 = content_type_raw;
+pub const type_object: u32 = content_type_object;
 pub const index_default: u32 = 0;
 pub const value_unknown: u32 = 0;
 pub const value_blob: u32 = 1;
@@ -397,6 +397,15 @@ const project_value_size_off = 12;
 const project_key_len_off = 20;
 const project_key_off = 22;
 const project_fixed_payload_size = project_key_off + hash_size;
+
+const ProjectPayload = struct {
+    index_id: u32,
+    value_kind: u32,
+    content_type: u32,
+    value_size: u64,
+    hash: [hash_size]u8,
+    key: []const u8,
+};
 
 pub const BlockBacking = enum(u32) {
     byte_log = 0,
@@ -554,10 +563,7 @@ pub const PersistentStore = struct {
         const payload_off = try self.appendRecord(rec_blob, payload);
         try self.insertBlob(hash, content_type, payload_off, payload.len);
         if (content_type != type_raw) {
-            var typed_payload: [type_payload_size]u8 = undefined;
-            _ = bytes.store32(typed_payload[0..4], content_type);
-            _ = bytes.copy(typed_payload[4..], &hash);
-            _ = try self.appendRecord(rec_blob_type, &typed_payload);
+            try self.appendBlobTypeRecord(content_type, hash);
         }
         return hash;
     }
@@ -568,10 +574,7 @@ pub const PersistentStore = struct {
         if (self.findBlob(hash)) |_| return hash;
         const payload_off = try self.appendRecord(rec_blob, canonical);
         try self.insertBlob(hash, type_object, payload_off, canonical.len);
-        var typed_payload: [type_payload_size]u8 = undefined;
-        _ = bytes.store32(typed_payload[0..4], type_object);
-        _ = bytes.copy(typed_payload[4..], &hash);
-        _ = try self.appendRecord(rec_blob_type, &typed_payload);
+        try self.appendBlobTypeRecord(type_object, hash);
         return hash;
     }
 
@@ -676,14 +679,15 @@ pub const PersistentStore = struct {
     fn indexPut(self: *PersistentStore, index_id: u32, key: []const u8, hash: [hash_size]u8, value_kind_in: u32, content_type: u32, value_size: u64, typ: u16) Error!void {
         if (key.len == 0 or key.len > max_key) return error.BadArgument;
         var payload: [project_fixed_payload_size + max_key]u8 = [_]u8{0} ** (project_fixed_payload_size + max_key);
-        _ = bytes.store32(payload[project_index_id_off..][0..4], index_id);
-        _ = bytes.store32(payload[project_value_kind_off..][0..4], value_kind_in);
-        _ = bytes.store32(payload[project_content_type_off..][0..4], content_type);
-        _ = bytes.store64(payload[project_value_size_off..][0..8], value_size);
-        _ = bytes.store16(payload[project_key_len_off..][0..2], @intCast(key.len));
-        _ = bytes.copy(payload[project_key_off..][0..hash_size], &hash);
-        _ = bytes.copy(payload[project_fixed_payload_size..], key);
-        _ = try self.appendRecord(typ, payload[0 .. project_fixed_payload_size + key.len]);
+        const encoded = try encodeProjectPayload(&payload, .{
+            .index_id = index_id,
+            .value_kind = value_kind_in,
+            .content_type = content_type,
+            .value_size = value_size,
+            .hash = hash,
+            .key = key,
+        });
+        _ = try self.appendRecord(typ, encoded);
         try self.insertKey(index_id, key, hash, value_kind_in, content_type, value_size);
     }
 
@@ -701,6 +705,14 @@ pub const PersistentStore = struct {
         self.next_seq += 1;
         self.superblock_dirty = true;
         return payload_off;
+    }
+
+    fn appendBlobTypeRecord(self: *PersistentStore, content_type: u32, hash: [hash_size]u8) Error!void {
+        if (content_type == type_raw or !bytes.nonzero(&hash)) return error.BadArgument;
+        var payload: [type_payload_size]u8 = undefined;
+        _ = bytes.store32(payload[0..4], content_type);
+        _ = bytes.copy(payload[4..], &hash);
+        _ = try self.appendRecord(rec_blob_type, &payload);
     }
 
     fn replay(self: *PersistentStore, io_size: u64) Error!void {
@@ -745,18 +757,11 @@ pub const PersistentStore = struct {
                 self.blobs[slot].content_type = content_type;
             },
             rec_index_put, rec_object_index_put => {
-                if (payload_len < project_fixed_payload_size or payload_len > project_fixed_payload_size + max_key) return error.Corrupt;
                 var payload: [project_fixed_payload_size + max_key]u8 = undefined;
                 const len: usize = @intCast(payload_len);
                 try self.ioRead(payload_off, payload[0..len]);
-                const index_id = bytes.load32(payload[project_index_id_off..][0..4]) orelse return error.Corrupt;
-                const value_kind_in = bytes.load32(payload[project_value_kind_off..][0..4]) orelse return error.Corrupt;
-                const content_type = bytes.load32(payload[project_content_type_off..][0..4]) orelse return error.Corrupt;
-                const value_size = bytes.load64(payload[project_value_size_off..][0..8]) orelse return error.Corrupt;
-                const key_len = bytes.load16(payload[project_key_len_off..][0..2]) orelse return error.Corrupt;
-                if (key_len == 0 or key_len > max_key or len != project_fixed_payload_size + key_len) return error.Corrupt;
-                const hash = fixedHash(payload[project_key_off..][0..hash_size]);
-                try self.insertKey(index_id, payload[project_fixed_payload_size..][0..key_len], hash, value_kind_in, content_type, value_size);
+                const project = try decodeProjectPayload(payload[0..len]);
+                try self.insertKey(project.index_id, project.key, project.hash, project.value_kind, project.content_type, project.value_size);
             },
             rec_content_type_define, rec_index_define => {},
             else => return error.Corrupt,
@@ -969,7 +974,7 @@ fn decodeRecordHeader(in: *const [record_header_size]u8) Error!RecordInfo {
         rec_blob, rec_index_put, rec_blob_type, rec_content_type_define, rec_index_define, rec_object_index_put => {},
         else => return error.Corrupt,
     }
-    const epoch_stamp = decodeEpoch(in[header_epoch_off..][0..preimage.epoch_size]) orelse return error.Corrupt;
+    const epoch_stamp = preimage.decodeEpoch(in[header_epoch_off..][0..preimage.epoch_size]) orelse return error.Corrupt;
     const storage_id = fixedHash(in[header_storage_id_off..][0..hash_size]);
     if (!bytes.nonzero(&storage_id)) return error.Corrupt;
     return .{
@@ -983,17 +988,34 @@ fn decodeRecordHeader(in: *const [record_header_size]u8) Error!RecordInfo {
     };
 }
 
-fn decodeEpoch(in: []const u8) ?@import("clock.zig").Stamp {
-    const clock_mod = @import("clock.zig");
-    if (in.len < preimage.epoch_size) return null;
-    const stamp = clock_mod.Stamp{
-        .keeper = .{ .bytes = fixedHash(in[0..hash_size]) },
-        .tick = bytes.load64(in[32..40]) orelse return null,
-        .slot = bytes.load64(in[40..48]) orelse return null,
-        .epoch = bytes.load64(in[48..56]) orelse return null,
-        .era = bytes.load64(in[56..64]) orelse return null,
+fn encodeProjectPayload(out: []u8, payload: ProjectPayload) Error![]const u8 {
+    if (payload.key.len == 0 or payload.key.len > max_key or out.len < project_fixed_payload_size + payload.key.len) return error.BadArgument;
+    if (!bytes.nonzero(&payload.hash)) return error.BadArgument;
+    @memset(out[0 .. project_fixed_payload_size + payload.key.len], 0);
+    _ = bytes.store32(out[project_index_id_off..][0..4], payload.index_id);
+    _ = bytes.store32(out[project_value_kind_off..][0..4], payload.value_kind);
+    _ = bytes.store32(out[project_content_type_off..][0..4], payload.content_type);
+    _ = bytes.store64(out[project_value_size_off..][0..8], payload.value_size);
+    _ = bytes.store16(out[project_key_len_off..][0..2], @intCast(payload.key.len));
+    _ = bytes.copy(out[project_key_off..][0..hash_size], &payload.hash);
+    _ = bytes.copy(out[project_fixed_payload_size..][0..payload.key.len], payload.key);
+    return out[0 .. project_fixed_payload_size + payload.key.len];
+}
+
+fn decodeProjectPayload(in: []const u8) Error!ProjectPayload {
+    if (in.len < project_fixed_payload_size or in.len > project_fixed_payload_size + max_key) return error.Corrupt;
+    const key_len = bytes.load16(in[project_key_len_off..][0..2]) orelse return error.Corrupt;
+    if (key_len == 0 or key_len > max_key or in.len != project_fixed_payload_size + key_len) return error.Corrupt;
+    const hash = fixedHash(in[project_key_off..][0..hash_size]);
+    if (!bytes.nonzero(&hash)) return error.Corrupt;
+    return .{
+        .index_id = bytes.load32(in[project_index_id_off..][0..4]) orelse return error.Corrupt,
+        .value_kind = bytes.load32(in[project_value_kind_off..][0..4]) orelse return error.Corrupt,
+        .content_type = bytes.load32(in[project_content_type_off..][0..4]) orelse return error.Corrupt,
+        .value_size = bytes.load64(in[project_value_size_off..][0..8]) orelse return error.Corrupt,
+        .hash = hash,
+        .key = in[project_fixed_payload_size..][0..key_len],
     };
-    return if (stamp.valid()) stamp else null;
 }
 
 fn fixedHash(in: []const u8) [hash_size]u8 {

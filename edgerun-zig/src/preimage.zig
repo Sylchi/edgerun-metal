@@ -124,6 +124,21 @@ pub fn encodeEpoch(epoch: clock.Stamp, out: []u8) bool {
         bytes_mod.store64(out[56..64], epoch.era);
 }
 
+pub fn decodeEpoch(in: []const u8) ?clock.Stamp {
+    if (in.len < epoch_size) return null;
+    var keeper_bytes: [clock.keeper_id_size]u8 = undefined;
+    _ = bytes_mod.copy(&keeper_bytes, in[0..clock.keeper_id_size]);
+
+    const stamp = clock.Stamp{
+        .keeper = .{ .bytes = keeper_bytes },
+        .tick = bytes_mod.load64(in[32..40]) orelse return null,
+        .slot = bytes_mod.load64(in[40..48]) orelse return null,
+        .epoch = bytes_mod.load64(in[48..56]) orelse return null,
+        .era = bytes_mod.load64(in[56..64]) orelse return null,
+    };
+    return if (stamp.valid()) stamp else null;
+}
+
 test "writer encodes ids integers and epochs deterministically" {
     const keeper = clock.KeeperId{ .bytes = [_]u8{1} ++ [_]u8{0} ** 31 };
     const stamp = clock.Stamp{ .keeper = keeper, .tick = 2 };
@@ -136,5 +151,6 @@ test "writer encodes ids integers and epochs deterministically" {
     try std.testing.expect(writer.writeU64(5));
     try std.testing.expect(writer.epoch(stamp));
     try std.testing.expectEqual(raw.len, writer.written().len);
+    try std.testing.expectEqual(stamp, decodeEpoch(raw[42..106]).?);
     try std.testing.expect(bytes_mod.nonzero(&hash("edgerun:zig:v1:test", writer.written())));
 }

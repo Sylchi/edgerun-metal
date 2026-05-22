@@ -89,11 +89,15 @@ fn testEpoch() clock.Stamp {
     return .{ .keeper = .{ .bytes = [_]u8{1} ++ [_]u8{0} ** 31 } };
 }
 
+fn testApp() identity.Identity {
+    return identity.Identity.init(.app, identity.Source.prepare(.hash, &preimage.rawHash("ui")).?, testEpoch()).?;
+}
+
 test "resolver hydrates stack tree children from store" {
     var data: [4096]u8 = undefined;
     var slots: [8]store.Blob = undefined;
     var source = store.Store.init(.{ .base = &data }, &slots);
-    const app = identity.Identity.init(.app, identity.Source.prepare(.hash, &preimage.rawHash("ui")).?, testEpoch()).?;
+    const app = testApp();
 
     var text_ui: [128]u8 = undefined;
     var text_object_raw: [object.header_size + 128]u8 = undefined;
@@ -138,7 +142,7 @@ test "resolver rejects unresolved tree children" {
     var data: [1024]u8 = undefined;
     var slots: [4]store.Blob = undefined;
     var source = store.Store.init(.{ .base = &data }, &slots);
-    const app = identity.Identity.init(.app, identity.Source.prepare(.hash, &preimage.rawHash("ui")).?, testEpoch()).?;
+    const app = testApp();
 
     var text_ui: [128]u8 = undefined;
     var text_object_raw: [object.header_size + 128]u8 = undefined;
@@ -161,7 +165,7 @@ test "resolver hydrates slot tree child from store" {
     var data: [2048]u8 = undefined;
     var slots: [6]store.Blob = undefined;
     var source = store.Store.init(.{ .base = &data }, &slots);
-    const app = identity.Identity.init(.app, identity.Source.prepare(.hash, &preimage.rawHash("ui")).?, testEpoch()).?;
+    const app = testApp();
 
     var button_ui: [128]u8 = undefined;
     var button_object_raw: [object.header_size + 128]u8 = undefined;
@@ -194,7 +198,7 @@ test "generic resolver detects stored tree layout type" {
     var data: [2048]u8 = undefined;
     var slots: [6]store.Blob = undefined;
     var source = store.Store.init(.{ .base = &data }, &slots);
-    const app = identity.Identity.init(.app, identity.Source.prepare(.hash, &preimage.rawHash("ui")).?, testEpoch()).?;
+    const app = testApp();
 
     var button_ui: [128]u8 = undefined;
     var button_object_raw: [object.header_size + 128]u8 = undefined;
@@ -228,7 +232,7 @@ test "tree object storage helper rejects insufficient storage" {
     var data: [object.header_size + 32]u8 = undefined;
     var slots: [1]store.Blob = undefined;
     var source = store.Store.init(.{ .base = &data }, &slots);
-    const app = identity.Identity.init(.app, identity.Source.prepare(.hash, &preimage.rawHash("ui")).?, testEpoch()).?;
+    const app = testApp();
 
     var button_ui: [128]u8 = undefined;
     var button_object_raw: [object.header_size + 128]u8 = undefined;

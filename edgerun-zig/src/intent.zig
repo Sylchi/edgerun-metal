@@ -143,32 +143,42 @@ pub fn admitWindow(user: identity.Identity, device: identity.Identity, actor: id
     return receipt;
 }
 
+const TestIdentities = struct {
+    user: identity.Identity,
+    device: identity.Identity,
+    parent: identity.Identity,
+    child: identity.Identity,
+};
+
+fn testIdentities(epoch: clock.Stamp) TestIdentities {
+    return .{
+        .user = identity.Identity.init(.user, identity.Source.prepare(.hash, &preimage.rawHash("user")).?, epoch).?,
+        .device = identity.Identity.init(.device, identity.Source.prepare(.hash, &preimage.rawHash("device")).?, epoch).?,
+        .parent = identity.Identity.init(.app, identity.Source.prepare(.hash, &preimage.rawHash("parent")).?, epoch).?,
+        .child = identity.Identity.init(.app, identity.Source.prepare(.hash, &preimage.rawHash("child")).?, epoch).?,
+    };
+}
+
 test "intent receipt binds user device actor subject and consequence" {
     const keeper = clock.KeeperId{ .bytes = [_]u8{1} ++ [_]u8{0} ** 31 };
     const epoch = clock.Stamp{ .keeper = keeper };
-    const user = identity.Identity.init(.user, identity.Source.prepare(.hash, &preimage.rawHash("user")).?, epoch).?;
-    const device = identity.Identity.init(.device, identity.Source.prepare(.hash, &preimage.rawHash("device")).?, epoch).?;
-    const parent = identity.Identity.init(.app, identity.Source.prepare(.hash, &preimage.rawHash("parent")).?, epoch).?;
-    const child = identity.Identity.init(.app, identity.Source.prepare(.hash, &preimage.rawHash("child")).?, epoch).?;
+    const ids = testIdentities(epoch);
 
-    const receipt = admit(user, device, parent, child, .spawn_app, .delegates_resources, epoch, requestId("spawn preview").?).?;
+    const receipt = admit(ids.user, ids.device, ids.parent, ids.child, .spawn_app, .delegates_resources, epoch, requestId("spawn preview").?).?;
 
     try std.testing.expect(receipt.valid());
-    try std.testing.expect(receipt.permits(parent.id, child.id, .spawn_app, .delegates_resources));
-    try std.testing.expect(!receipt.permits(child.id, parent.id, .spawn_app, .delegates_resources));
+    try std.testing.expect(receipt.permits(ids.parent.id, ids.child.id, .spawn_app, .delegates_resources));
+    try std.testing.expect(!receipt.permits(ids.child.id, ids.parent.id, .spawn_app, .delegates_resources));
     try std.testing.expect(bytes.nonzero(&receipt.id().?));
 }
 
 test "intent receipt rejects replay outside admission window" {
     const keeper = clock.KeeperId{ .bytes = [_]u8{1} ++ [_]u8{0} ** 31 };
-    const user = identity.Identity.init(.user, identity.Source.prepare(.hash, &preimage.rawHash("user")).?, .{ .keeper = keeper }).?;
-    const device = identity.Identity.init(.device, identity.Source.prepare(.hash, &preimage.rawHash("device")).?, .{ .keeper = keeper }).?;
-    const parent = identity.Identity.init(.app, identity.Source.prepare(.hash, &preimage.rawHash("parent")).?, .{ .keeper = keeper }).?;
-    const child = identity.Identity.init(.app, identity.Source.prepare(.hash, &preimage.rawHash("child")).?, .{ .keeper = keeper }).?;
+    const ids = testIdentities(.{ .keeper = keeper });
     const start = clock.Stamp{ .keeper = keeper, .tick = 10 };
     const end = clock.Stamp{ .keeper = keeper, .tick = 20 };
-    const receipt = admitWindow(user, device, parent, child, .spawn_app, .delegates_resources, start, start, end, requestId("spawn window").?).?;
+    const receipt = admitWindow(ids.user, ids.device, ids.parent, ids.child, .spawn_app, .delegates_resources, start, start, end, requestId("spawn window").?).?;
 
-    try std.testing.expect(receipt.permitsAt(.{ .keeper = keeper, .tick = 15 }, parent.id, child.id, .spawn_app, .delegates_resources));
-    try std.testing.expect(!receipt.permitsAt(.{ .keeper = keeper, .tick = 21 }, parent.id, child.id, .spawn_app, .delegates_resources));
+    try std.testing.expect(receipt.permitsAt(.{ .keeper = keeper, .tick = 15 }, ids.parent.id, ids.child.id, .spawn_app, .delegates_resources));
+    try std.testing.expect(!receipt.permitsAt(.{ .keeper = keeper, .tick = 21 }, ids.parent.id, ids.child.id, .spawn_app, .delegates_resources));
 }

@@ -1,4 +1,5 @@
 const std = @import("std");
+const bytes = @import("bytes.zig");
 
 pub const width: u16 = 240;
 pub const height: u16 = 240;
@@ -83,21 +84,16 @@ fn commandData(bus: Bus, command: u8, data: []const u8) bool {
 
 fn setWindow(bus: Bus, x0: u16, y0: u16, x1: u16, y1: u16) bool {
     var address: [4]u8 = undefined;
-    putBe16(address[0..2], x0);
-    putBe16(address[2..4], x1);
+    _ = bytes.storeBe16(address[0..2], x0);
+    _ = bytes.storeBe16(address[2..4], x1);
     if (!commandData(bus, 0x2a, &address)) return false;
-    putBe16(address[0..2], y0);
-    putBe16(address[2..4], y1);
+    _ = bytes.storeBe16(address[0..2], y0);
+    _ = bytes.storeBe16(address[2..4], y1);
     return commandData(bus, 0x2b, &address) and bus.write_command(bus.user, 0x2c);
 }
 
 fn busDelay(bus: Bus, ticks: u32) void {
     if (bus.delay) |delay| delay(bus.user, ticks);
-}
-
-fn putBe16(out: []u8, value: u16) void {
-    out[0] = @intCast(value >> 8);
-    out[1] = @intCast(value & 0xff);
 }
 
 fn glyphColumn(ch: u8, column: u16) u8 {

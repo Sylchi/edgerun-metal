@@ -1,4 +1,5 @@
 const std = @import("std");
+const bytes_mod = @import("bytes.zig");
 const pi_mmc = @import("pi_mmc.zig");
 
 pub const boot_log_block_bytes = 512;
@@ -150,17 +151,11 @@ pub fn crc32(bytes: []const u8) u32 {
 }
 
 fn putLe32(out: []u8, value: u32) void {
-    out[0] = @intCast(value & 0xff);
-    out[1] = @intCast((value >> 8) & 0xff);
-    out[2] = @intCast((value >> 16) & 0xff);
-    out[3] = @intCast((value >> 24) & 0xff);
+    _ = bytes_mod.store32(out, value);
 }
 
 fn getLe32(value: []const u8) u32 {
-    return @as(u32, value[0]) |
-        (@as(u32, value[1]) << 8) |
-        (@as(u32, value[2]) << 16) |
-        (@as(u32, value[3]) << 24);
+    return bytes_mod.load32(value) orelse 0;
 }
 
 const TestBootLogIo = struct {

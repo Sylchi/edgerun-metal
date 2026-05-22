@@ -195,32 +195,27 @@ fn canonicalObjectFromPacket(packet: Packet) ?CanonicalObjectPayload {
 }
 
 fn putLe16(out: []u8, value: u16) void {
-    out[0] = @intCast(value & 0xff);
-    out[1] = @intCast((value >> 8) & 0xff);
+    _ = bytes.store16(out, value);
 }
 
 fn putLe32(out: []u8, value: u32) void {
-    out[0] = @intCast(value & 0xff);
-    out[1] = @intCast((value >> 8) & 0xff);
-    out[2] = @intCast((value >> 16) & 0xff);
-    out[3] = @intCast((value >> 24) & 0xff);
+    _ = bytes.store32(out, value);
 }
 
 fn putBe16(out: []u8, value: u16) void {
-    out[0] = @intCast((value >> 8) & 0xff);
-    out[1] = @intCast(value & 0xff);
+    _ = bytes.storeBe16(out, value);
 }
 
 fn getLe16(in: []const u8) u16 {
-    return @as(u16, in[0]) | (@as(u16, in[1]) << 8);
+    return bytes.load16(in) orelse 0;
 }
 
 fn getLe32(in: []const u8) u32 {
-    return @as(u32, in[0]) | (@as(u32, in[1]) << 8) | (@as(u32, in[2]) << 16) | (@as(u32, in[3]) << 24);
+    return bytes.load32(in) orelse 0;
 }
 
 fn getBe16(in: []const u8) u16 {
-    return (@as(u16, in[0]) << 8) | @as(u16, in[1]);
+    return bytes.loadBe16(in) orelse 0;
 }
 
 test "builds and parses Pi Zero OTA erwire packets" {

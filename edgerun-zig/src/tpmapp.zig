@@ -258,45 +258,55 @@ fn hashBytes(domain: []const u8, value: []const u8) preimage.Hash {
     return preimage.hash(domain, value);
 }
 
+const TestIdentities = struct {
+    user: identity.Identity,
+    device: identity.Identity,
+    tpm: identity.Identity,
+    chat: identity.Identity,
+    other: identity.Identity,
+};
+
+fn testIdentities(epoch: clock.Stamp) TestIdentities {
+    return .{
+        .user = identity.Identity.init(.user, identity.Source.prepare(.hash, &preimage.rawHash("user")).?, epoch).?,
+        .device = identity.Identity.init(.device, identity.Source.prepare(.hash, &preimage.rawHash("device")).?, epoch).?,
+        .tpm = identity.Identity.init(.app, identity.Source.prepare(.hash, &preimage.rawHash("tpm app")).?, epoch).?,
+        .chat = identity.Identity.init(.app, identity.Source.prepare(.hash, &preimage.rawHash("chat")).?, epoch).?,
+        .other = identity.Identity.init(.app, identity.Source.prepare(.hash, &preimage.rawHash("other")).?, epoch).?,
+    };
+}
+
 test "tpm app seals only for authorized caller-bound policy" {
     const keeper = clock.KeeperId{ .bytes = [_]u8{1} ++ [_]u8{0} ** 31 };
     const epoch = clock.Stamp{ .keeper = keeper };
-    const user = identity.Identity.init(.user, identity.Source.prepare(.hash, &preimage.rawHash("user")).?, epoch).?;
-    const device = identity.Identity.init(.device, identity.Source.prepare(.hash, &preimage.rawHash("device")).?, epoch).?;
-    const tpm_id = identity.Identity.init(.app, identity.Source.prepare(.hash, &preimage.rawHash("tpm app")).?, epoch).?;
-    const chat = identity.Identity.init(.app, identity.Source.prepare(.hash, &preimage.rawHash("chat")).?, epoch).?;
-    const other = identity.Identity.init(.app, identity.Source.prepare(.hash, &preimage.rawHash("other")).?, epoch).?;
+    const ids = testIdentities(epoch);
     var events: [4]Event = undefined;
-    var tpm = App.init(tpm_id, device, clock.Clock.init(keeper, .{}).?, &events).?;
-    const authorization = intent.admit(user, device, chat, tpm_id, .seal_data, .writes_private_state, tpm.clock.now, intent.requestId("seal chat data").?).?;
-    const policy = seal.Policy.machineAppUser(device, chat, user);
+    var tpm = App.init(ids.tpm, ids.device, clock.Clock.init(keeper, .{}).?, &events).?;
+    const authorization = intent.admit(ids.user, ids.device, ids.chat, ids.tpm, .seal_data, .writes_private_state, tpm.clock.now, intent.requestId("seal chat data").?).?;
+    const policy = seal.Policy.machineAppUser(ids.device, ids.chat, ids.user);
 
-    const sealed = try tpm.sealFor(chat, user, policy, authorization, "message");
+    const sealed = try tpm.sealFor(ids.chat, ids.user, policy, authorization, "message");
     try std.testing.expect(sealed.valid());
     try std.testing.expectEqual(@as(usize, 1), tpm.eventCount());
     try std.testing.expectEqual(EventKind.seal, tpm.eventAt(0).?.kind);
-    try std.testing.expectError(error.Unauthorized, tpm.sealFor(other, user, policy, authorization, "message"));
+    try std.testing.expectError(error.Unauthorized, tpm.sealFor(ids.other, ids.user, policy, authorization, "message"));
 
-    const claimed_policy = seal.Policy.machineAppUser(device, other, user);
-    const second_authorization = intent.admit(user, device, chat, tpm_id, .seal_data, .writes_private_state, tpm.clock.now, intent.requestId("seal bad policy").?).?;
-    try std.testing.expectError(error.BadPolicy, tpm.sealFor(chat, user, claimed_policy, second_authorization, "message"));
+    const claimed_policy = seal.Policy.machineAppUser(ids.device, ids.other, ids.user);
+    const second_authorization = intent.admit(ids.user, ids.device, ids.chat, ids.tpm, .seal_data, .writes_private_state, tpm.clock.now, intent.requestId("seal bad policy").?).?;
+    try std.testing.expectError(error.BadPolicy, tpm.sealFor(ids.chat, ids.user, claimed_policy, second_authorization, "message"));
 }
 
 test "tpm app refuses signatures without caller intent" {
     const keeper = clock.KeeperId{ .bytes = [_]u8{1} ++ [_]u8{0} ** 31 };
     const epoch = clock.Stamp{ .keeper = keeper };
-    const user = identity.Identity.init(.user, identity.Source.prepare(.hash, &preimage.rawHash("user")).?, epoch).?;
-    const device = identity.Identity.init(.device, identity.Source.prepare(.hash, &preimage.rawHash("device")).?, epoch).?;
-    const tpm_id = identity.Identity.init(.app, identity.Source.prepare(.hash, &preimage.rawHash("tpm app")).?, epoch).?;
-    const chat = identity.Identity.init(.app, identity.Source.prepare(.hash, &preimage.rawHash("chat")).?, epoch).?;
-    const other = identity.Identity.init(.app, identity.Source.prepare(.hash, &preimage.rawHash("other")).?, epoch).?;
+    const ids = testIdentities(epoch);
     var events: [2]Event = undefined;
-    var tpm = App.init(tpm_id, device, clock.Clock.init(keeper, .{}).?, &events).?;
-    const wrong_authorization = intent.admit(user, device, other, tpm_id, .sign_data, .attests_state, tpm.clock.now, intent.requestId("wrong signer").?).?;
-    const authorization = intent.admit(user, device, chat, tpm_id, .sign_data, .attests_state, tpm.clock.now, intent.requestId("sign app state").?).?;
+    var tpm = App.init(ids.tpm, ids.device, clock.Clock.init(keeper, .{}).?, &events).?;
+    const wrong_authorization = intent.admit(ids.user, ids.device, ids.other, ids.tpm, .sign_data, .attests_state, tpm.clock.now, intent.requestId("wrong signer").?).?;
+    const authorization = intent.admit(ids.user, ids.device, ids.chat, ids.tpm, .sign_data, .attests_state, tpm.clock.now, intent.requestId("sign app state").?).?;
 
-    try std.testing.expectError(error.Unauthorized, tpm.signFor(chat, wrong_authorization, "state root"));
-    const signature = try tpm.signFor(chat, authorization, "state root");
+    try std.testing.expectError(error.Unauthorized, tpm.signFor(ids.chat, wrong_authorization, "state root"));
+    const signature = try tpm.signFor(ids.chat, authorization, "state root");
     try std.testing.expect(signature.valid());
     try std.testing.expectEqual(@as(usize, 1), tpm.eventCount());
 }
@@ -304,23 +314,19 @@ test "tpm app refuses signatures without caller intent" {
 test "tpm app exposes authorized rng to apps" {
     const keeper = clock.KeeperId{ .bytes = [_]u8{1} ++ [_]u8{0} ** 31 };
     const epoch = clock.Stamp{ .keeper = keeper };
-    const user = identity.Identity.init(.user, identity.Source.prepare(.hash, &preimage.rawHash("user")).?, epoch).?;
-    const device = identity.Identity.init(.device, identity.Source.prepare(.hash, &preimage.rawHash("device")).?, epoch).?;
-    const tpm_id = identity.Identity.init(.app, identity.Source.prepare(.hash, &preimage.rawHash("tpm app")).?, epoch).?;
-    const chat = identity.Identity.init(.app, identity.Source.prepare(.hash, &preimage.rawHash("chat")).?, epoch).?;
-    const other = identity.Identity.init(.app, identity.Source.prepare(.hash, &preimage.rawHash("other")).?, epoch).?;
+    const ids = testIdentities(epoch);
     var events: [3]Event = undefined;
-    var tpm = App.init(tpm_id, device, clock.Clock.init(keeper, .{}).?, &events).?;
-    const authorization = intent.admit(user, device, chat, tpm_id, .random_bytes, .creates_secret_material, tpm.clock.now, intent.requestId("message key material").?).?;
-    const wrong_authorization = intent.admit(user, device, other, tpm_id, .random_bytes, .creates_secret_material, tpm.clock.now, intent.requestId("other key material").?).?;
+    var tpm = App.init(ids.tpm, ids.device, clock.Clock.init(keeper, .{}).?, &events).?;
+    const authorization = intent.admit(ids.user, ids.device, ids.chat, ids.tpm, .random_bytes, .creates_secret_material, tpm.clock.now, intent.requestId("message key material").?).?;
+    const wrong_authorization = intent.admit(ids.user, ids.device, ids.other, ids.tpm, .random_bytes, .creates_secret_material, tpm.clock.now, intent.requestId("other key material").?).?;
 
     var key: [32]u8 = undefined;
-    const random = try tpm.randomFor(chat, authorization, "message-key", &key);
+    const random = try tpm.randomFor(ids.chat, authorization, "message-key", &key);
     try std.testing.expect(random.valid());
     try std.testing.expect(bytes.nonzero(&key));
     try std.testing.expectEqual(EventKind.random, tpm.eventAt(0).?.kind);
 
     var rejected: [16]u8 = undefined;
-    try std.testing.expectError(error.Unauthorized, tpm.randomFor(chat, wrong_authorization, "message-key", &rejected));
-    try std.testing.expectError(error.BadRequest, tpm.randomFor(chat, authorization, "", &rejected));
+    try std.testing.expectError(error.Unauthorized, tpm.randomFor(ids.chat, wrong_authorization, "message-key", &rejected));
+    try std.testing.expectError(error.BadRequest, tpm.randomFor(ids.chat, authorization, "", &rejected));
 }

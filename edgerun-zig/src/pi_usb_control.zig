@@ -1,4 +1,5 @@
 const std = @import("std");
+const bytes = @import("bytes.zig");
 
 pub const abi_version: u16 = 1;
 pub const magic: u32 = 0x5552_4345;
@@ -204,32 +205,27 @@ fn enumFromInt(comptime E: type, value: u32) ?E {
 }
 
 fn putLe16(out: []u8, value: u16) void {
-    out[0] = @intCast(value & 0xff);
-    out[1] = @intCast((value >> 8) & 0xff);
+    _ = bytes.store16(out, value);
 }
 
 fn putLe32(out: []u8, value: u32) void {
-    out[0] = @intCast(value & 0xff);
-    out[1] = @intCast((value >> 8) & 0xff);
-    out[2] = @intCast((value >> 16) & 0xff);
-    out[3] = @intCast((value >> 24) & 0xff);
+    _ = bytes.store32(out, value);
 }
 
 fn putLe64(out: []u8, value: u64) void {
-    putLe32(out[0..4], @intCast(value & 0xffff_ffff));
-    putLe32(out[4..8], @intCast(value >> 32));
+    _ = bytes.store64(out, value);
 }
 
 fn getLe16(in: []const u8) u16 {
-    return @as(u16, in[0]) | (@as(u16, in[1]) << 8);
+    return bytes.load16(in) orelse 0;
 }
 
 fn getLe32(in: []const u8) u32 {
-    return @as(u32, in[0]) | (@as(u32, in[1]) << 8) | (@as(u32, in[2]) << 16) | (@as(u32, in[3]) << 24);
+    return bytes.load32(in) orelse 0;
 }
 
 fn getLe64(in: []const u8) u64 {
-    return @as(u64, getLe32(in[0..4])) | (@as(u64, getLe32(in[4..8])) << 32);
+    return bytes.load64(in) orelse 0;
 }
 
 test "validates Pi USB control requests" {

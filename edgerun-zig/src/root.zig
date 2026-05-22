@@ -8,6 +8,7 @@ pub const identity = @import("identity.zig");
 pub const firmware = @import("firmware.zig");
 pub const geometry = @import("geometry.zig");
 pub const hardware_inventory = @import("hardware_inventory.zig");
+pub const hardware_inventory_app = @import("hardware_inventory_app.zig");
 pub const icon = @import("icon.zig");
 pub const object = @import("object.zig");
 pub const painter = @import("painter.zig");
@@ -23,9 +24,11 @@ pub const grant = @import("grant.zig");
 pub const input = @import("input.zig");
 pub const intent = @import("intent.zig");
 pub const layout = @import("layout.zig");
+pub const math = @import("math.zig");
 pub const pi_board = @import("pi_board.zig");
 pub const pi_mmc = @import("pi_mmc.zig");
 pub const pi_zero_w_v1_1 = @import("pi_zero_w_v1_1.zig");
+pub const pi_zero_w_v1_1_bringup = @import("pi_zero_w_v1_1_bringup.zig");
 pub const pi_zero_w_v1_1_lcd_hat = @import("pi_zero_w_v1_1_lcd_hat.zig");
 pub const pi_zero_w_v1_1_ota = @import("pi_zero_w_v1_1_ota.zig");
 pub const pi_usb_control = @import("pi_usb_control.zig");
@@ -33,6 +36,7 @@ pub const seal = @import("seal.zig");
 pub const st7789 = @import("st7789.zig");
 pub const sync = @import("sync.zig");
 pub const relay = @import("relay.zig");
+pub const tls = @import("tls.zig");
 pub const tls_tpm = @import("tls_tpm.zig");
 pub const tpm = @import("tpm.zig");
 pub const tpm_acpi = @import("tpm_acpi.zig");
@@ -43,6 +47,7 @@ pub const renderer_software = @import("renderer_software.zig");
 pub const ui = @import("ui.zig");
 pub const ui_components = @import("ui_components.zig");
 pub const ui_resolver = @import("ui_resolver.zig");
+pub const varfont = @import("varfont.zig");
 
 test {
     _ = bytes;
@@ -55,6 +60,7 @@ test {
     _ = firmware;
     _ = geometry;
     _ = hardware_inventory;
+    _ = hardware_inventory_app;
     _ = icon;
     _ = object;
     _ = painter;
@@ -70,9 +76,11 @@ test {
     _ = input;
     _ = intent;
     _ = layout;
+    _ = math;
     _ = pi_board;
     _ = pi_mmc;
     _ = pi_zero_w_v1_1;
+    _ = pi_zero_w_v1_1_bringup;
     _ = pi_zero_w_v1_1_lcd_hat;
     _ = pi_zero_w_v1_1_ota;
     _ = pi_usb_control;
@@ -80,6 +88,7 @@ test {
     _ = st7789;
     _ = sync;
     _ = relay;
+    _ = tls;
     _ = tls_tpm;
     _ = tpm;
     _ = tpm_acpi;
@@ -90,4 +99,5 @@ test {
     _ = ui;
     _ = ui_components;
     _ = ui_resolver;
+    _ = varfont;
 }

@@ -1,5 +1,6 @@
 const std = @import("std");
 const acpi = @import("acpi.zig");
+const bytes_mod = @import("bytes.zig");
 const tpm_acpi = @import("tpm_acpi.zig");
 
 pub const max_pci_devices = 128;
@@ -199,20 +200,15 @@ fn testReadPciConfig32(address: u64) ?u32 {
 }
 
 fn putLe16(out: []u8, value: u16) void {
-    out[0] = @intCast(value & 0xff);
-    out[1] = @intCast((value >> 8) & 0xff);
+    _ = bytes_mod.store16(out, value);
 }
 
 fn putLe32(out: []u8, value: u32) void {
-    out[0] = @intCast(value & 0xff);
-    out[1] = @intCast((value >> 8) & 0xff);
-    out[2] = @intCast((value >> 16) & 0xff);
-    out[3] = @intCast((value >> 24) & 0xff);
+    _ = bytes_mod.store32(out, value);
 }
 
 fn putLe64(out: []u8, value: u64) void {
-    putLe32(out[0..4], @intCast(value & 0xffff_ffff));
-    putLe32(out[4..8], @intCast(value >> 32));
+    _ = bytes_mod.store64(out, value);
 }
 
 fn finishChecksum(bytes: []u8) void {

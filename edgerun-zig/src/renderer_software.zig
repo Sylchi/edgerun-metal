@@ -1,5 +1,6 @@
 const std = @import("std");
 const ui = @import("ui.zig");
+const varfont = @import("varfont.zig");
 
 pub const Surface = struct {
     width: usize,
@@ -15,17 +16,36 @@ pub const Surface = struct {
         @memset(self.pixels, color);
     }
 
-    pub fn rasterize(self: Surface, commands: []const ui.Command) void {
+    pub fn rasterize(self: Surface, commands: []const ui.Command, font: *varfont.Cache) varfont.Error!void {
+        try self.rasterizeScaled(commands, font, default_raster_scale);
+    }
+
+    pub fn rasterizeScaled(self: Surface, commands: []const ui.Command, font: *varfont.Cache, scale: f32) varfont.Error!void {
         for (commands) |command| switch (command) {
-            .rect => |rect| self.fill(rect.bounds, rect.color),
+            .rect => |rect| self.fill(scaleRect(rect.bounds, scale), rect.color),
             .border => |border| {
-                self.fill(.{ .x = border.bounds.x, .y = border.bounds.y, .w = border.bounds.w, .h = 1 }, border.color);
-                self.fill(.{ .x = border.bounds.x, .y = border.bounds.y + border.bounds.h - 1, .w = border.bounds.w, .h = 1 }, border.color);
-                self.fill(.{ .x = border.bounds.x, .y = border.bounds.y, .w = 1, .h = border.bounds.h }, border.color);
-                self.fill(.{ .x = border.bounds.x + border.bounds.w - 1, .y = border.bounds.y, .w = 1, .h = border.bounds.h }, border.color);
+                const bounds = scaleRect(border.bounds, scale);
+                const border_width = @max(min_border_width, scale);
+                self.fill(.{ .x = bounds.x, .y = bounds.y, .w = bounds.w, .h = border_width }, border.color);
+                self.fill(.{ .x = bounds.x, .y = bounds.y + bounds.h - border_width, .w = bounds.w, .h = border_width }, border.color);
+                self.fill(.{ .x = bounds.x, .y = bounds.y, .w = border_width, .h = bounds.h }, border.color);
+                self.fill(.{ .x = bounds.x + bounds.w - border_width, .y = bounds.y, .w = border_width, .h = bounds.h }, border.color);
             },
-            .text => |text| self.rasterText(text.origin, text.value, text.color),
+            .text => |text| try font.drawText(self, scaleRect(text.origin, scale), text.value, text.color, varfont.default_px_size * scale),
             .hit, .drag_source, .drop_target, .icon_quad, .text_quad, .transition => {},
+        };
+    }
+
+    pub fn blendPixel(self: Surface, x: usize, y: usize, color: ui.Color, alpha: u8) void {
+        const index = y * self.width + x;
+        const dst = self.pixels[index];
+        const a: u16 = alpha;
+        const inv: u16 = 255 - a;
+        self.pixels[index] = .{
+            .r = @intCast((@as(u16, color.r) * a + @as(u16, dst.r) * inv) / 255),
+            .g = @intCast((@as(u16, color.g) * a + @as(u16, dst.g) * inv) / 255),
+            .b = @intCast((@as(u16, color.b) * a + @as(u16, dst.b) * inv) / 255),
+            .a = @intCast(@min(@as(u16, 255), @as(u16, dst.a) + (@as(u16, color.a) * a) / 255)),
         };
     }
 
@@ -42,18 +62,19 @@ pub const Surface = struct {
             while (x < x1) : (x += 1) self.pixels[y * self.width + x] = color;
         }
     }
-
-    fn rasterText(self: Surface, bounds: ui.Rect, value: []const u8, color: ui.Color) void {
-        const glyph_w: f32 = 5;
-        const glyph_h: f32 = 7;
-        for (value, 0..) |byte, index| {
-            if (byte == ' ') continue;
-            const x = bounds.x + @as(f32, @floatFromInt(index)) * 7;
-            if (x + glyph_w > bounds.x + bounds.w) break;
-            self.fill(.{ .x = x, .y = bounds.y + 4, .w = glyph_w, .h = glyph_h }, color);
-        }
-    }
 };
+
+const default_raster_scale: f32 = 1.0;
+const min_border_width: f32 = 1.0;
+
+fn scaleRect(bounds: ui.Rect, scale: f32) ui.Rect {
+    return .{
+        .x = bounds.x * scale,
+        .y = bounds.y * scale,
+        .w = bounds.w * scale,
+        .h = bounds.h * scale,
+    };
+}
 
 fn clampCoord(value: isize, limit: usize) usize {
     if (value <= 0) return 0;
@@ -71,8 +92,11 @@ test "software renderer rasterizes ui commands to nonblank pixels" {
 
     var pixels: [320 * 240]ui.Color = undefined;
     const surface = try Surface.init(320, 240, &pixels);
+    const font = try varfont.Face.geist();
+    var glyph_bitmap: [128 * 1024]u8 = undefined;
+    var font_cache = varfont.Cache.init(font, &glyph_bitmap);
     surface.clear(.clear);
-    surface.rasterize(scene.written());
+    try surface.rasterize(scene.written(), &font_cache);
 
     var painted: usize = 0;
     for (surface.pixels) |pixel| {

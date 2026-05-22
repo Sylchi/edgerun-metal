@@ -1,8 +1,0 @@
-arm_64bit=0
-device_tree=
-core_freq=250
-enable_uart=1
-uart_2ndstage=1
-hdmi_force_hotplug=1
-hdmi_safe=1
-kernel=kernel.img

@@ -1,4 +1,5 @@
 const std = @import("std");
+const bytes = @import("bytes.zig");
 
 pub const abi_version: u16 = 1;
 pub const vendor_id: u16 = 0x0a5c;
@@ -130,14 +131,11 @@ pub fn parseConfiguration(descriptors: []const u8) ?Transport {
 }
 
 fn putLe32(out: []u8, value: u32) void {
-    out[0] = @intCast(value & 0xff);
-    out[1] = @intCast((value >> 8) & 0xff);
-    out[2] = @intCast((value >> 16) & 0xff);
-    out[3] = @intCast((value >> 24) & 0xff);
+    _ = bytes.store32(out, value);
 }
 
 fn getLe16(in: []const u8) u16 {
-    return @as(u16, in[0]) | (@as(u16, in[1]) << 8);
+    return bytes.load16(in) orelse 0;
 }
 
 test "plans BCM2708 boot ROM transfers" {
