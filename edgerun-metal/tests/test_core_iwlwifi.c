@@ -62,7 +62,7 @@ static void test_iwlwifi_pci_prepare(void) {
   UINT8 ucode_out[8];
   UINT8 pnvm_out[4];
   UINT8 admission_key[ER_PUBLIC_KEY_LEN];
-  ErIdentity admission_identity;
+  ErCredential admission_identity;
   UINT32 i;
 
   er_crypto_blake3_provider(&crypto);
@@ -119,8 +119,8 @@ static void test_iwlwifi_pci_prepare(void) {
   test_fill_bytes(ucode_bytes, (UINTN)sizeof(ucode_bytes), 0x91u);
   test_fill_bytes(pnvm_bytes, (UINTN)sizeof(pnvm_bytes), 0x19u);
   check_int64("iwlwifi boot prepare admission",
-              er_identity_prepare(ER_IDENTITY_TYPE_PUBLIC_KEY,
-                                  ER_IDENTITY_BACKING_ED25519,
+              er_credential_prepare(ER_CREDENTIAL_KIND_PUBLIC_KEY,
+                                  ER_CREDENTIAL_BACKING_ED25519,
                                   admission_key,
                                   ER_PUBLIC_KEY_LEN,
                                   &admission_identity),

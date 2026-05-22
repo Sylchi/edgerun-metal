@@ -52,8 +52,8 @@ static void test_node_control_relay_assignment(void) {
   relay_node.abi_version = ER_WORK_ABI_VERSION;
   relay_node.role = ER_NODE_ROLE_RELAY;
   check_int64("node control relay identity",
-              er_identity_prepare(ER_IDENTITY_TYPE_PUBLIC_KEY,
-                                  ER_IDENTITY_BACKING_ED25519,
+              er_credential_prepare(ER_CREDENTIAL_KIND_PUBLIC_KEY,
+                                  ER_CREDENTIAL_BACKING_ED25519,
                                   relay_key,
                                   ER_PUBLIC_KEY_LEN,
                                   &relay_node.identity),
@@ -64,8 +64,8 @@ static void test_node_control_relay_assignment(void) {
   admission_node.abi_version = ER_WORK_ABI_VERSION;
   admission_node.role = ER_NODE_ROLE_ADMISSION;
   check_int64("node control admission identity",
-              er_identity_prepare(ER_IDENTITY_TYPE_PUBLIC_KEY,
-                                  ER_IDENTITY_BACKING_ED25519,
+              er_credential_prepare(ER_CREDENTIAL_KIND_PUBLIC_KEY,
+                                  ER_CREDENTIAL_BACKING_ED25519,
                                   admission_key,
                                   ER_PUBLIC_KEY_LEN,
                                   &admission_node.identity),
@@ -76,8 +76,8 @@ static void test_node_control_relay_assignment(void) {
   worker_node.abi_version = ER_WORK_ABI_VERSION;
   worker_node.role = ER_NODE_ROLE_STORAGE;
   check_int64("node control worker identity",
-              er_identity_prepare(ER_IDENTITY_TYPE_PUBLIC_KEY,
-                                  ER_IDENTITY_BACKING_ED25519,
+              er_credential_prepare(ER_CREDENTIAL_KIND_PUBLIC_KEY,
+                                  ER_CREDENTIAL_BACKING_ED25519,
                                   worker_key,
                                   ER_PUBLIC_KEY_LEN,
                                   &worker_node.identity),

@@ -17,30 +17,30 @@ static UINT8 er_device_identity_kind_valid(UINT16 kind) {
   }
 }
 
-static UINT16 er_device_node_id_source_kind(const ErIdentity* identity) {
-  switch (identity->identity_type) {
-    case ER_IDENTITY_TYPE_PUBLIC_KEY:
+static UINT16 er_device_node_id_source_kind(const ErCredential* identity) {
+  switch (identity->credential_kind) {
+    case ER_CREDENTIAL_KIND_PUBLIC_KEY:
       switch (identity->backing_type) {
-        case ER_IDENTITY_BACKING_TPM_P256:
+        case ER_CREDENTIAL_BACKING_TPM_P256:
           return ER_NODE_ID_SOURCE_TPM_P256_PUBLIC_KEY;
-        case ER_IDENTITY_BACKING_ED25519:
-        case ER_IDENTITY_BACKING_P256:
+        case ER_CREDENTIAL_BACKING_ED25519:
+        case ER_CREDENTIAL_BACKING_P256:
           return ER_NODE_ID_SOURCE_PUBLIC_KEY;
         default:
           return 0u;
       }
-    case ER_IDENTITY_TYPE_HASH:
+    case ER_CREDENTIAL_KIND_HASH:
       return ER_NODE_ID_SOURCE_HASH;
     default:
       return 0u;
   }
 }
 
-UINT8 er_device_identity_prepare(UINT16 kind, const ErIdentity* identity,
+UINT8 er_device_identity_prepare(UINT16 kind, const ErCredential* identity,
                                  ErDeviceIdentity* out_identity) {
   if (identity == 0 || out_identity == 0 ||
       er_device_identity_kind_valid(kind) == 0u ||
-      er_identity_valid(identity) == 0u) {
+      er_credential_valid(identity) == 0u) {
     return 0;
   }
 
@@ -62,7 +62,7 @@ UINT8 er_device_relay_identity_derive(const ErCryptoProvider* crypto,
       out_relay_identity == 0 ||
       device_identity->abi_version != ER_WORK_ABI_VERSION ||
       er_device_identity_kind_valid(device_identity->kind) == 0u ||
-      er_identity_valid(&device_identity->identity) == 0u ||
+      er_credential_valid(&device_identity->identity) == 0u ||
       er_hash_nonzero(measured_program_hash) == 0u) {
     return 0;
   }

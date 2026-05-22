@@ -1,6 +1,6 @@
 #include "er_crypto_blake3.h"
 #include "er_blake3.h"
-#include "er_identity.h"
+#include "er_credential.h"
 #include "er_mem.h"
 
 static const UINT8 g_blake3_seal_nonce_domain[] = "edgerun:c:v1:crypto:blake3-seal:nonce";
@@ -102,7 +102,7 @@ static UINT8 er_crypto_blake3_sealer_valid(const ErCryptoBlake3Sealer* sealer) {
 }
 
 static UINT8 er_crypto_blake3_nonce(const ErCryptoBlake3Sealer* sealer,
-                                    const ErIdentity* recipient,
+                                    const ErCredential* recipient,
                                     const ErByteSpan* aad,
                                     const ErByteSpan* plaintext,
                                     UINT8 nonce[ER_CRYPTO_BLAKE3_SEAL_NONCE_LEN]) {
@@ -184,7 +184,7 @@ static UINT8 er_crypto_blake3_xor_stream(const ErCryptoBlake3Sealer* sealer,
 }
 
 static UINT8 er_crypto_blake3_tag(const ErCryptoBlake3Sealer* sealer,
-                                  const ErIdentity* recipient,
+                                  const ErCredential* recipient,
                                   const ErByteSpan* aad,
                                   const UINT8 nonce[ER_CRYPTO_BLAKE3_SEAL_NONCE_LEN],
                                   const UINT8* ciphertext,
@@ -214,7 +214,7 @@ static UINT8 er_crypto_blake3_tag(const ErCryptoBlake3Sealer* sealer,
   return 1u;
 }
 
-static UINT8 er_crypto_blake3_seal(void* ctx, const ErIdentity* recipient,
+static UINT8 er_crypto_blake3_seal(void* ctx, const ErCredential* recipient,
                                    const ErByteSpan* aad,
                                    const ErByteSpan* plaintext,
                                    ErMutableBytes* sealed_out) {
@@ -225,7 +225,7 @@ static UINT8 er_crypto_blake3_seal(void* ctx, const ErIdentity* recipient,
   UINTN sealed_len;
 
   if (er_crypto_blake3_sealer_valid(sealer) == 0u ||
-      er_identity_valid(recipient) == 0u || aad == 0 ||
+      er_credential_valid(recipient) == 0u || aad == 0 ||
       plaintext == 0 || plaintext->bytes == 0 || plaintext->len == 0u ||
       sealed_out == 0 || sealed_out->bytes == 0) {
     return 0u;
@@ -260,7 +260,7 @@ static UINT8 er_crypto_blake3_seal(void* ctx, const ErIdentity* recipient,
   return 1u;
 }
 
-static UINT8 er_crypto_blake3_open(void* ctx, const ErIdentity* recipient,
+static UINT8 er_crypto_blake3_open(void* ctx, const ErCredential* recipient,
                                    const ErByteSpan* aad,
                                    const ErByteSpan* sealed,
                                    ErMutableBytes* plaintext_out) {
@@ -273,7 +273,7 @@ static UINT8 er_crypto_blake3_open(void* ctx, const ErIdentity* recipient,
   UINTN expected_sealed_len;
 
   if (er_crypto_blake3_sealer_valid(sealer) == 0u ||
-      er_identity_valid(recipient) == 0u || aad == 0 ||
+      er_credential_valid(recipient) == 0u || aad == 0 ||
       sealed == 0 || sealed->bytes == 0 ||
       sealed->len <= ER_CRYPTO_BLAKE3_SEAL_HEADER_LEN + ER_CRYPTO_BLAKE3_SEAL_TAG_LEN ||
       plaintext_out == 0 || plaintext_out->bytes == 0) {

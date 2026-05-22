@@ -26,7 +26,7 @@ mkdir -p "$BUILD_DIR"
   "${ROOT_DIR}/edgerun-metal/core/er_vfs.c" \
   "${ROOT_DIR}/edgerun-metal/core/er_crypto.c" \
   "${ROOT_DIR}/edgerun-metal/core/er_crypto_blake3.c" \
-  "${ROOT_DIR}/edgerun-metal/core/er_identity.c" \
+  "${ROOT_DIR}/edgerun-metal/core/er_credential.c" \
   "${ROOT_DIR}/edgerun-metal/core/er_mem.c" \
   "${ROOT_DIR}/edgerun-crypto/src/er_blake3.c"
 

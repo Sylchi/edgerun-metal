@@ -1,5 +1,5 @@
 #include "er_seal.h"
-#include "er_identity.h"
+#include "er_credential.h"
 #include "er_mem.h"
 
 //@optimizer-ignore-constant seal domain labels are fixed hash and key-derivation separators
@@ -224,7 +224,7 @@ UINT8 er_seal_prepare_content_key(const UINT8 key_bytes[ER_SEAL_CONTENT_KEY_LEN]
 }
 
 UINT8 er_seal_prepare_content_record(const ErCryptoProvider* crypto,
-                                     const ErIdentity* recipient,
+                                     const ErCredential* recipient,
                                      const ErByteSpan* aad,
                                      const ErByteSpan* plaintext,
                                      UINT32 expected_reuse_count,
@@ -236,7 +236,7 @@ UINT8 er_seal_prepare_content_record(const ErCryptoProvider* crypto,
   if (crypto == 0 || recipient == 0 || aad == 0 || plaintext == 0 ||
       plaintext->bytes == 0 || plaintext->len == 0u ||
       sealed_out == 0 || out_header == 0 ||
-      er_identity_valid(recipient) == 0u) {
+      er_credential_valid(recipient) == 0u) {
     return 0u;
   }
   if (aad->len > 0u && aad->bytes == 0) {
@@ -296,7 +296,7 @@ UINT8 er_seal_content_record_valid(const ErCryptoProvider* crypto,
       header->reserved != 0u ||
       header->plaintext_len == 0u ||
       header->sealed_payload_len != (UINT64)sealed_payload_len ||
-      er_identity_valid(&header->recipient) == 0u ||
+      er_credential_valid(&header->recipient) == 0u ||
       er_hash_nonzero(&header->plaintext_hash) == 0u ||
       er_hash_nonzero(&header->aad_hash) == 0u ||
       er_hash_nonzero(&header->sealed_payload_hash) == 0u ||
@@ -327,7 +327,7 @@ UINT8 er_seal_content_record_valid(const ErCryptoProvider* crypto,
 }
 
 UINT8 er_seal_wrap_content_key(const ErCryptoProvider* crypto,
-                               const ErIdentity* recipient,
+                               const ErCredential* recipient,
                                const ErByteSpan* wrap_aad,
                                const ErSealContentKey* content_key,
                                ErMutableBytes* wrapped_key_out,
@@ -338,7 +338,7 @@ UINT8 er_seal_wrap_content_key(const ErCryptoProvider* crypto,
 
   if (crypto == 0 || recipient == 0 || wrap_aad == 0 ||
       content_key == 0 || wrapped_key_out == 0 || out_wrap == 0 ||
-      er_identity_valid(recipient) == 0u ||
+      er_credential_valid(recipient) == 0u ||
       er_mem_any_nonzero(content_key->bytes, ER_SEAL_CONTENT_KEY_LEN) == 0u) {
     return 0u;
   }
@@ -398,7 +398,7 @@ UINT8 er_seal_content_key_wrap_valid(const ErCryptoProvider* crypto,
       wrap->algorithm != ER_SEAL_ALGORITHM_BLAKE3_STREAM_AUTH ||
       wrap->reserved != 0u ||
       wrap->wrapped_key_len != (UINT16)wrapped_key_len ||
-      er_identity_valid(&wrap->recipient) == 0u ||
+      er_credential_valid(&wrap->recipient) == 0u ||
       er_hash_nonzero(&wrap->content_key_hash) == 0u ||
       er_hash_nonzero(&wrap->wrap_aad_hash) == 0u ||
       er_hash_nonzero(&wrap->wrapped_key_hash) == 0u ||

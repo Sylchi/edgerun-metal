@@ -1,5 +1,5 @@
 #include "er_work_route.h"
-#include "er_identity.h"
+#include "er_credential.h"
 #include "er_mem.h"
 
 /*
@@ -211,7 +211,7 @@ static UINT8 er_work_admitted_route_valid(const ErAdmittedRoute* route) {
       er_hash_nonzero(&route->route_id) == 0u ||
       er_hash_nonzero(&route->request_hash) == 0u ||
       er_hash_nonzero(&route->admission_hash) == 0u ||
-      er_identity_valid(&route->user) == 0u ||
+      er_credential_valid(&route->user) == 0u ||
       er_node_id_nonzero(&route->source_node_id) == 0u ||
       er_node_id_nonzero(&route->target_node_id) == 0u ||
       er_node_id_nonzero(&route->relay_node_id) == 0u ||
@@ -237,8 +237,8 @@ static UINT8 er_work_hash_admission(const ErCryptoProvider* crypto,
       admission->abi_version != ER_WORK_ABI_VERSION ||
       admission->admission_node.abi_version != ER_WORK_ABI_VERSION ||
       admission->admission_node.role != ER_NODE_ROLE_ADMISSION ||
-      er_identity_valid(&admission->user) == 0u ||
-      er_identity_valid(&admission->admission_node.identity) == 0u ||
+      er_credential_valid(&admission->user) == 0u ||
+      er_credential_valid(&admission->admission_node.identity) == 0u ||
       er_hash_nonzero(&admission->admission_id) == 0u ||
       er_hash_nonzero(&admission->request_hash) == 0u ||
       er_hash_nonzero(&admission->route_commitment) == 0u ||
@@ -324,7 +324,7 @@ static UINT8 er_work_route_challenge_hash(const ErCryptoProvider* crypto,
 
 static UINT8 er_work_route_start_proof_hash(const ErCryptoProvider* crypto,
                                             const ErWorkRouteChallenge* challenge,
-                                            const ErIdentity* worker_identity,
+                                            const ErCredential* worker_identity,
                                             ErEpochStamp started_at,
                                             ErHash* out_hash) {
   UINT8 fields[ER_WORK_ROUTE_START_PROOF_FIELD_BYTES];
@@ -339,7 +339,7 @@ static UINT8 er_work_route_start_proof_hash(const ErCryptoProvider* crypto,
       er_hash_nonzero(&challenge->route_id) == 0u ||
       er_node_id_nonzero(&challenge->worker_node_id) == 0u ||
       er_node_id_nonzero(&challenge->relay_node_id) == 0u ||
-      er_identity_valid(worker_identity) == 0u ||
+      er_credential_valid(worker_identity) == 0u ||
       er_epoch_stamp_compare(started_at, challenge->issued_at) < 0 ||
       er_epoch_stamp_compare(started_at, challenge->valid_until) >= 0) {
     return 0u;
@@ -382,7 +382,7 @@ static UINT8 er_work_admitted_route_id(const ErCryptoProvider* crypto,
   if (crypto == 0 || route == 0 || out_route_id == 0 ||
       route->abi_version != ER_WORK_ABI_VERSION ||
       route->relay_count == 0u || route->relay_count > ER_ROUTE_RELAY_MAX ||
-      er_identity_valid(&route->user) == 0u ||
+      er_credential_valid(&route->user) == 0u ||
       er_hash_nonzero(&route->request_hash) == 0u ||
       er_hash_nonzero(&route->admission_hash) == 0u ||
       er_node_id_nonzero(&route->source_node_id) == 0u ||
@@ -455,7 +455,7 @@ UINT8 er_work_admitted_route_from_admission(const ErCryptoProvider* crypto,
       admission->abi_version != ER_WORK_ABI_VERSION ||
       er_hash_nonzero(&request->request_id) == 0u ||
       er_hash_nonzero(&admission->request_hash) == 0u ||
-      er_identity_equal(&request->user, &admission->user) == 0u ||
+      er_credential_equal(&request->user, &admission->user) == 0u ||
       admission->valid_until_ms > request->valid_until_ms ||
       er_work_relay_path_valid(admission) == 0u ||
       er_node_id_equal(&admission->relay_path[0], relay_node_id) == 0u ||
@@ -730,7 +730,7 @@ UINT8 er_work_route_challenge_valid_at(const ErWorkRouteChallenge* challenge,
 
 UINT8 er_work_route_start_proof_sign(const ErCryptoProvider* crypto,
                                      const ErWorkRouteChallenge* challenge,
-                                     const ErIdentity* worker_identity,
+                                     const ErCredential* worker_identity,
                                      ErEpochStamp started_at,
                                      ErWorkRouteStartProof* out_proof) {
   ErHash proof_hash;
@@ -756,7 +756,7 @@ UINT8 er_work_route_start_proof_sign(const ErCryptoProvider* crypto,
   out_proof->relay_node_id = challenge->relay_node_id;
   out_proof->started_at = started_at;
   if (er_crypto_sign(crypto, &preimage, &out_proof->signature) == 0u ||
-      er_identity_equal(&out_proof->signature.identity, worker_identity) == 0u) {
+      er_credential_equal(&out_proof->signature.identity, worker_identity) == 0u) {
     er_mem_zero((UINT8*)out_proof, (UINTN)sizeof(*out_proof));
     return 0u;
   }

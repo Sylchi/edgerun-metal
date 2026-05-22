@@ -74,7 +74,7 @@ UINT8 er_work_route_challenge_valid_at(const ErWorkRouteChallenge* challenge,
                                        ErEpochStamp now);
 UINT8 er_work_route_start_proof_sign(const ErCryptoProvider* crypto,
                                      const ErWorkRouteChallenge* challenge,
-                                     const ErIdentity* worker_identity,
+                                     const ErCredential* worker_identity,
                                      ErEpochStamp started_at,
                                      ErWorkRouteStartProof* out_proof);
 UINT8 er_work_route_start_proof_verify(const ErCryptoProvider* crypto,

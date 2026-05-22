@@ -26,7 +26,7 @@
 #include "er_epoch_clock.h"
 #include "er_ephemeral_node.h"
 #include "er_firmware_loader.h"
-#include "er_identity.h"
+#include "er_credential.h"
 #include "er_iwlwifi.h"
 #include "er_ieee80211_ap.h"
 #include "er_hw_relay.h"

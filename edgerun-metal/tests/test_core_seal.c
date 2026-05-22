@@ -29,8 +29,8 @@ static void test_sealed_content_record_format(void) {
   static const UINT8 plaintext_bytes[] = {'p', 'a', 'c', 'k', 'a', 'g', 'e'};
   ErCryptoProvider crypto;
   ErCryptoBlake3Sealer sealer;
-  ErIdentity recipient;
-  ErIdentity other_recipient;
+  ErCredential recipient;
+  ErCredential other_recipient;
   ErByteSpan aad;
   ErByteSpan plaintext;
   ErMutableBytes sealed_out;
@@ -50,15 +50,15 @@ static void test_sealed_content_record_format(void) {
   test_fill_bytes(other_recipient_key, (UINTN)sizeof(other_recipient_key),
                   TEST_SEAL_OTHER_RECIPIENT_SEED);
   check_int64("seal recipient identity",
-              er_identity_prepare(ER_IDENTITY_TYPE_PUBLIC_KEY,
-                                  ER_IDENTITY_BACKING_ED25519,
+              er_credential_prepare(ER_CREDENTIAL_KIND_PUBLIC_KEY,
+                                  ER_CREDENTIAL_BACKING_ED25519,
                                   recipient_key,
                                   (UINT16)sizeof(recipient_key),
                                   &recipient),
               1);
   check_int64("seal other recipient identity",
-              er_identity_prepare(ER_IDENTITY_TYPE_PUBLIC_KEY,
-                                  ER_IDENTITY_BACKING_ED25519,
+              er_credential_prepare(ER_CREDENTIAL_KIND_PUBLIC_KEY,
+                                  ER_CREDENTIAL_BACKING_ED25519,
                                   other_recipient_key,
                                   (UINT16)sizeof(other_recipient_key),
                                   &other_recipient),
@@ -144,7 +144,7 @@ static void test_sealed_content_key_wrap(void) {
   static const UINT8 wrap_aad_bytes[] = {'o', 'b', 'j', 'e', 'c', 't'};
   ErCryptoProvider crypto;
   ErCryptoBlake3Sealer sealer;
-  ErIdentity recipient;
+  ErCredential recipient;
   ErByteSpan wrap_aad;
   ErMutableBytes wrapped_key_out;
   ErSealedContentKeyWrap wrap;
@@ -165,8 +165,8 @@ static void test_sealed_content_key_wrap(void) {
               er_crypto_blake3_sealer_init(&sealer, root_key), 1);
   er_crypto_blake3_sealing_provider(&sealer, &crypto);
   check_int64("seal wrap recipient identity",
-              er_identity_prepare(ER_IDENTITY_TYPE_PUBLIC_KEY,
-                                  ER_IDENTITY_BACKING_ED25519,
+              er_credential_prepare(ER_CREDENTIAL_KIND_PUBLIC_KEY,
+                                  ER_CREDENTIAL_BACKING_ED25519,
                                   recipient_key,
                                   (UINT16)sizeof(recipient_key),
                                   &recipient),

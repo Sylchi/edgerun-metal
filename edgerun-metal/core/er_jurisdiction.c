@@ -1,5 +1,5 @@
 #include "er_jurisdiction.h"
-#include "er_identity.h"
+#include "er_credential.h"
 #include "er_mem.h"
 
 /*
@@ -55,16 +55,16 @@ static void er_jurisdiction_span_set(ErByteSpan* span, const UINT8* bytes,
   span->len = len;
 }
 
-static UINT8 er_jurisdiction_owner_valid(const ErIdentity* owner_identity) {
-  if (er_identity_valid(owner_identity) == 0u ||
+static UINT8 er_jurisdiction_owner_valid(const ErCredential* owner_identity) {
+  if (er_credential_valid(owner_identity) == 0u ||
       owner_identity->material_len != ER_NODE_ID_LEN) {
     return 0u;
   }
-  switch (owner_identity->identity_type) {
-    case ER_IDENTITY_TYPE_PUBLIC_KEY:
-      return (UINT8)(owner_identity->backing_type == ER_IDENTITY_BACKING_ED25519);
-    case ER_IDENTITY_TYPE_HASH:
-      return (UINT8)(owner_identity->backing_type == ER_IDENTITY_BACKING_HASH);
+  switch (owner_identity->credential_kind) {
+    case ER_CREDENTIAL_KIND_PUBLIC_KEY:
+      return (UINT8)(owner_identity->backing_type == ER_CREDENTIAL_BACKING_ED25519);
+    case ER_CREDENTIAL_KIND_HASH:
+      return (UINT8)(owner_identity->backing_type == ER_CREDENTIAL_BACKING_HASH);
     default:
       return 0u;
   }
@@ -74,10 +74,10 @@ UINT8 er_jurisdiction_node_identity_authority_valid(const ErNodeIdentity* identi
   if (identity == 0 ||
       identity->abi_version != ER_WORK_ABI_VERSION ||
       identity->role == 0u ||
-      identity->identity.identity_type != ER_IDENTITY_TYPE_PUBLIC_KEY ||
-      identity->identity.backing_type != ER_IDENTITY_BACKING_ED25519 ||
+      identity->identity.credential_kind != ER_CREDENTIAL_KIND_PUBLIC_KEY ||
+      identity->identity.backing_type != ER_CREDENTIAL_BACKING_ED25519 ||
       identity->identity.material_len != ER_NODE_ID_LEN ||
-      er_identity_valid(&identity->identity) == 0u ||
+      er_credential_valid(&identity->identity) == 0u ||
       er_mem_equal(identity->node_id.bytes,
                    identity->identity.material,
                    ER_NODE_ID_LEN) == 0u) {
@@ -120,7 +120,7 @@ UINT8 er_runtime_target_valid(UINT16 runtime_target) {
 
 static UINT8 er_admission_policy_id(const ErCryptoProvider* crypto,
                                     UINT16 source,
-                                    const ErIdentity* owner_identity,
+                                    const ErCredential* owner_identity,
                                     const ErNodeIdentity* admission_node,
                                     const ErHash* policy_hash,
                                     UINT64 max_budget,
@@ -176,7 +176,7 @@ static UINT8 er_admission_policy_id(const ErCryptoProvider* crypto,
 
 UINT8 er_admission_policy_prepare(const ErCryptoProvider* crypto,
                                   UINT16 source,
-                                  const ErIdentity* owner_identity,
+                                  const ErCredential* owner_identity,
                                   const ErNodeIdentity* admission_node,
                                   const ErHash* policy_hash,
                                   UINT64 max_budget,
@@ -233,7 +233,7 @@ UINT8 er_admission_policy_valid(const ErCryptoProvider* crypto,
 }
 
 static UINT8 er_node_instance_id(const ErCryptoProvider* crypto,
-                                 const ErIdentity* owner_identity,
+                                 const ErCredential* owner_identity,
                                  const ErNodeId* node_id,
                                  UINT16 role,
                                  UINT16 runtime_target,
@@ -299,7 +299,7 @@ static UINT8 er_node_instance_id(const ErCryptoProvider* crypto,
 }
 
 UINT8 er_node_instance_prepare(const ErCryptoProvider* crypto,
-                               const ErIdentity* owner_identity,
+                               const ErCredential* owner_identity,
                                const ErNodeId* node_id,
                                UINT16 role,
                                UINT16 runtime_target,

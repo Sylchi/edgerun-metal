@@ -4,14 +4,14 @@ enum {
   TEST_WORK_ROUTE_SIGNATURE_ALGORITHM = 2u
 };
 
-static ErIdentity g_test_work_route_signer;
+static ErCredential g_test_work_route_signer;
 
 static UINT8 test_work_route_sign(void* ctx, const ErByteSpan* preimage,
                                   ErWorkSignature* out_signature) {
   UINTN i;
 
   (void)ctx;
-  if (er_identity_valid(&g_test_work_route_signer) == 0u ||
+  if (er_credential_valid(&g_test_work_route_signer) == 0u ||
       preimage == 0 ||
       preimage->bytes == 0 ||
       preimage->len == 0u ||
@@ -29,20 +29,20 @@ static UINT8 test_work_route_sign(void* ctx, const ErByteSpan* preimage,
   return 1u;
 }
 
-static UINT8 test_work_route_verify(void* ctx, const ErIdentity* identity,
+static UINT8 test_work_route_verify(void* ctx, const ErCredential* identity,
                                     const ErByteSpan* preimage,
                                     const ErWorkSignature* signature) {
   UINTN i;
 
   (void)ctx;
-  if (er_identity_valid(identity) == 0u ||
+  if (er_credential_valid(identity) == 0u ||
       preimage == 0 ||
       preimage->bytes == 0 ||
       preimage->len == 0u ||
       signature == 0 ||
       signature->algorithm != TEST_WORK_ROUTE_SIGNATURE_ALGORITHM ||
       signature->signature_len != ER_SIGNATURE_LEN ||
-      er_identity_equal(&signature->identity, identity) == 0u) {
+      er_credential_equal(&signature->identity, identity) == 0u) {
     return 0u;
   }
   for (i = 0u; i < ER_SIGNATURE_LEN; ++i) {
@@ -60,9 +60,9 @@ static void test_device_relay_identity(void) {
   UINT8 hardware_key[ER_P256_PUBLIC_KEY_LEN];
   UINT8 ephemeral_key[ER_PUBLIC_KEY_LEN];
   UINT8 hash_material[ER_HASH_LEN];
-  ErIdentity hardware_identity;
-  ErIdentity ephemeral_identity;
-  ErIdentity hash_identity;
+  ErCredential hardware_identity;
+  ErCredential ephemeral_identity;
+  ErCredential hash_identity;
   ErHash program_hash;
   ErHash other_program_hash;
   ErDeviceIdentity hardware_device;
@@ -86,32 +86,32 @@ static void test_device_relay_identity(void) {
   test_fill_bytes(other_program_hash.bytes, ER_HASH_LEN, 0x62u);
 
   check_int64("identity prepare tpm p256",
-              er_identity_prepare(ER_IDENTITY_TYPE_PUBLIC_KEY,
-                                  ER_IDENTITY_BACKING_TPM_P256,
+              er_credential_prepare(ER_CREDENTIAL_KIND_PUBLIC_KEY,
+                                  ER_CREDENTIAL_BACKING_TPM_P256,
                                   hardware_key, ER_P256_PUBLIC_KEY_LEN,
                                   &hardware_identity),
               1);
   check_int64("identity prepare ed25519",
-              er_identity_prepare(ER_IDENTITY_TYPE_PUBLIC_KEY,
-                                  ER_IDENTITY_BACKING_ED25519,
+              er_credential_prepare(ER_CREDENTIAL_KIND_PUBLIC_KEY,
+                                  ER_CREDENTIAL_BACKING_ED25519,
                                   ephemeral_key, ER_PUBLIC_KEY_LEN,
                                   &ephemeral_identity),
               1);
   check_int64("identity prepare hash",
-              er_identity_prepare(ER_IDENTITY_TYPE_HASH,
-                                  ER_IDENTITY_BACKING_HASH,
+              er_credential_prepare(ER_CREDENTIAL_KIND_HASH,
+                                  ER_CREDENTIAL_BACKING_HASH,
                                   hash_material, ER_HASH_LEN,
                                   &hash_identity),
               1);
   check_int64("identity reject p256 short",
-              er_identity_prepare(ER_IDENTITY_TYPE_PUBLIC_KEY,
-                                  ER_IDENTITY_BACKING_TPM_P256,
+              er_credential_prepare(ER_CREDENTIAL_KIND_PUBLIC_KEY,
+                                  ER_CREDENTIAL_BACKING_TPM_P256,
                                   hardware_key, ER_PUBLIC_KEY_LEN,
                                   &hardware_identity),
               0);
   check_int64("identity reject hash as ed25519",
-              er_identity_prepare(ER_IDENTITY_TYPE_HASH,
-                                  ER_IDENTITY_BACKING_ED25519,
+              er_credential_prepare(ER_CREDENTIAL_KIND_HASH,
+                                  ER_CREDENTIAL_BACKING_ED25519,
                                   hash_material, ER_HASH_LEN,
                                   &hash_identity),
               0);
@@ -126,14 +126,14 @@ static void test_device_relay_identity(void) {
               1);
   check_int64("device identity reject kind",
               er_device_identity_prepare(99u, &hardware_identity, &hardware_device), 0);
-  er_mem_zero(hardware_identity.material, ER_IDENTITY_MATERIAL_MAX);
+  er_mem_zero(hardware_identity.material, ER_CREDENTIAL_MATERIAL_MAX);
   check_int64("device identity reject zero key",
               er_device_identity_prepare(ER_DEVICE_IDENTITY_KIND_HARDWARE,
                                          &hardware_identity, &hardware_device),
               0);
   test_fill_bytes(hardware_key, ER_P256_PUBLIC_KEY_LEN, 0x21u);
-  (void)er_identity_prepare(ER_IDENTITY_TYPE_PUBLIC_KEY,
-                            ER_IDENTITY_BACKING_TPM_P256,
+  (void)er_credential_prepare(ER_CREDENTIAL_KIND_PUBLIC_KEY,
+                            ER_CREDENTIAL_BACKING_TPM_P256,
                             hardware_key, ER_P256_PUBLIC_KEY_LEN,
                             &hardware_identity);
   check_int64("device identity hardware restore",
@@ -151,7 +151,7 @@ static void test_device_relay_identity(void) {
   check_int64("device relay role", hardware_relay.relay_node.role, ER_NODE_ROLE_RELAY);
   check_int64("device relay identity backing",
               hardware_relay.relay_node.identity.backing_type,
-              ER_IDENTITY_BACKING_TPM_P256);
+              ER_CREDENTIAL_BACKING_TPM_P256);
   check_uint64("device relay identity byte0",
                hardware_relay.relay_node.identity.material[0], 0x21u);
   check_int64("device relay deterministic derive",
@@ -386,8 +386,8 @@ static void test_work_admitted_relay_route(void) {
   request.department = ER_DEPARTMENT_CAPABILITY;
   test_fill_bytes(request.request_id.bytes, ER_HASH_LEN, 0x91u);
   check_int64("work request user identity",
-              er_identity_prepare(ER_IDENTITY_TYPE_PUBLIC_KEY,
-                                  ER_IDENTITY_BACKING_ED25519,
+              er_credential_prepare(ER_CREDENTIAL_KIND_PUBLIC_KEY,
+                                  ER_CREDENTIAL_BACKING_ED25519,
                                   user_material, ER_PUBLIC_KEY_LEN,
                                   &request.user),
               1);
@@ -407,8 +407,8 @@ static void test_work_admitted_relay_route(void) {
   admission.admission_node.role = ER_NODE_ROLE_ADMISSION;
   test_fill_bytes(admission.admission_node.node_id.bytes, ER_NODE_ID_LEN, 0xa2u);
   check_int64("work admission node identity",
-              er_identity_prepare(ER_IDENTITY_TYPE_PUBLIC_KEY,
-                                  ER_IDENTITY_BACKING_ED25519,
+              er_credential_prepare(ER_CREDENTIAL_KIND_PUBLIC_KEY,
+                                  ER_CREDENTIAL_BACKING_ED25519,
                                   admission_material, ER_PUBLIC_KEY_LEN,
                                   &admission.admission_node.identity),
               1);

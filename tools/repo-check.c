@@ -371,6 +371,10 @@ static int erc_is_canonical_object_owner_path(const char* path) {
   return erc_has_prefix(path, "edgerun-object/") != 0;
 }
 
+static int erc_is_canonical_identity_owner_path(const char* path) {
+  return erc_has_prefix(path, "edgerun-identity/") != 0;
+}
+
 static int erc_bytes_contains(const unsigned char* bytes, size_t len, const char* pattern) {
   size_t pattern_len = strlen(pattern);
   size_t i;
@@ -404,6 +408,21 @@ static int erc_scan_canonical_object_boundary(const char* path,
   return 0;
 }
 
+static int erc_scan_canonical_identity_boundary(const char* path,
+                                                const unsigned char* bytes,
+                                                size_t len) {
+  if (erc_is_canonical_identity_owner_path(path) != 0) {
+    return 0;
+  }
+  if (erc_bytes_contains(bytes, len, "Er" "Identity") != 0 ||
+      erc_bytes_contains(bytes, len, "ER_IDENTITY" "_TYPE_") != 0 ||
+      erc_bytes_contains(bytes, len, "ER_IDENTITY" "_BACKING_") != 0 ||
+      erc_bytes_contains(bytes, len, "ER_IDENTITY" "_MATERIAL_MAX") != 0) {
+    return erc_fail("edgerun-identity is the only owner of the canonical identity format");
+  }
+  return 0;
+}
+
 static int erc_scan_external_dependencies(const char* root, const char* path) {
   char full_path[4096];
   unsigned char* bytes;
@@ -427,6 +446,10 @@ static int erc_scan_external_dependencies(const char* root, const char* path) {
     }
   }
   if (erc_scan_canonical_object_boundary(path, bytes, len) != 0) {
+    free(bytes);
+    return 1;
+  }
+  if (erc_scan_canonical_identity_boundary(path, bytes, len) != 0) {
     free(bytes);
     return 1;
   }

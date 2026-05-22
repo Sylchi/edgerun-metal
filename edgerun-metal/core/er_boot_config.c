@@ -153,8 +153,8 @@ void er_boot_config_init(ErBootConfig* config) {
 }
 
 UINT8 er_boot_config_set_admission_identity(ErBootConfig* config,
-                                            const ErIdentity* admission_identity) {
-  if (config == 0 || er_identity_valid(admission_identity) == 0u) {
+                                            const ErCredential* admission_identity) {
+  if (config == 0 || er_credential_valid(admission_identity) == 0u) {
     return 0u;
   }
   config->admission_identity = *admission_identity;
@@ -291,7 +291,7 @@ UINT8 er_boot_config_valid(const ErBootConfig* config) {
       config->channel_count == 0u ||
       config->channel_count > ER_BOOT_CONFIG_CHANNEL_CAPACITY ||
       config->firmware_source_count > ER_BOOT_CONFIG_FIRMWARE_SOURCE_CAPACITY ||
-      er_identity_valid(&config->admission_identity) == 0u) {
+      er_credential_valid(&config->admission_identity) == 0u) {
     return 0u;
   }
 
