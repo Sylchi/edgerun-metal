@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.16)
 project(edgerun_crypto C)
 
 option(ER_CRYPTO_DISABLE_SIMD "Disable SIMD acceleration in edgerun-crypto" OFF)
-option(ER_CRYPTO_USE_UPSTREAM_BLAKE3_ASM "Use vendored official BLAKE3 x86_64 assembly leaves" ON)
+option(ER_CRYPTO_USE_UPSTREAM_BLAKE3_ASM "Use vendored official BLAKE3 x86_64 assembly leaves" OFF)
 option(ER_CRYPTO_ENABLE_AVX2 "Build edgerun-crypto with AVX2 acceleration" OFF)
 option(ER_CRYPTO_ENABLE_AVX512 "Build edgerun-crypto with AVX-512 acceleration" OFF)
 option(ER_CRYPTO_ENABLE_THREADS "Build hosted pthread adapter for development and benchmark runs" OFF)

@@ -1,43 +1,8 @@
 #include "er_clock.h"
 
+#include "er_bytes.h"
+
 #include <stdint.h>
-
-static void er_clock_zero(void* dst, uint64_t len) {
-  uint64_t i;
-  uint8_t* out = (uint8_t*)dst;
-
-  for (i = 0u; i < len; ++i) {
-    out[i] = 0u;
-  }
-}
-
-//@optimizer-ignore-function keeper ids are fixed-size protocol byte arrays
-static int er_clock_bytes_nonzero(const uint8_t* bytes, uint64_t len) {
-  uint64_t i;
-
-  for (i = 0u; i < len; ++i) {
-    if (bytes[i] != 0u) {
-      return 1;
-    }
-  }
-  return 0;
-}
-
-//@optimizer-ignore-function keeper ids are fixed-size protocol byte arrays
-static int er_clock_bytes_compare(const uint8_t* left, const uint8_t* right,
-                                  uint64_t len) {
-  uint64_t i;
-
-  for (i = 0u; i < len; ++i) {
-    if (left[i] < right[i]) {
-      return -1;
-    }
-    if (left[i] > right[i]) {
-      return 1;
-    }
-  }
-  return 0;
-}
 
 static int er_clock_limits_valid(const er_clock_limits_t* limits) {
   return limits != (const er_clock_limits_t*)0 &&
@@ -107,7 +72,7 @@ int er_clock_keeper_id_valid(const er_clock_keeper_id_t* keeper_id) {
   if (keeper_id == (const er_clock_keeper_id_t*)0) {
     return 0;
   }
-  return er_clock_bytes_nonzero(keeper_id->bytes, ER_CLOCK_KEEPER_ID_SIZE);
+  return er_bytes_nonzero(keeper_id->bytes, ER_CLOCK_KEEPER_ID_SIZE);
 }
 
 int er_clock_keeper_id_equal(const er_clock_keeper_id_t* left,
@@ -116,7 +81,7 @@ int er_clock_keeper_id_equal(const er_clock_keeper_id_t* left,
       er_clock_keeper_id_valid(right) == 0) {
     return 0;
   }
-  return er_clock_bytes_compare(left->bytes, right->bytes,
+  return er_bytes_compare(left->bytes, right->bytes,
                                 ER_CLOCK_KEEPER_ID_SIZE) == 0;
 }
 
@@ -133,7 +98,7 @@ int er_clock_stamp_compare(er_clock_epoch_stamp_t left,
                            er_clock_epoch_stamp_t right) {
   int result;
 
-  result = er_clock_bytes_compare(left.keeper_id.bytes, right.keeper_id.bytes,
+  result = er_bytes_compare(left.keeper_id.bytes, right.keeper_id.bytes,
                                   ER_CLOCK_KEEPER_ID_SIZE);
   if (result != 0) {
     return result;
@@ -168,7 +133,7 @@ int er_clock_init(const er_clock_keeper_id_t* keeper_id,
       er_clock_limit_shift(limits->epochs_per_era, &epoch_shift) != ER_CLOCK_OK) {
     return ER_CLOCK_ERR_BADARG;
   }
-  er_clock_zero(out_clock, (uint64_t)sizeof(*out_clock));
+  er_bytes_zero(out_clock, (uint64_t)sizeof(*out_clock));
   out_clock->now.keeper_id = *keeper_id;
   out_clock->limits = *limits;
   out_clock->tick_mask = limits->ticks_per_slot - 1u;
@@ -210,7 +175,7 @@ int er_clock_advance_with_modifier(er_clock_t* clock,
     return ER_CLOCK_ERR_OVERFLOW;
   }
   if (out_boundary != (er_clock_boundary_t*)0) {
-    er_clock_zero(out_boundary, (uint64_t)sizeof(*out_boundary));
+    er_bytes_zero(out_boundary, (uint64_t)sizeof(*out_boundary));
   }
 
   next_era = clock->now.era;

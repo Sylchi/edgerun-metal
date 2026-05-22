@@ -19,23 +19,6 @@ pub const Status = enum {
     duplicate_emoji,
 };
 
-pub const Error = error{
-    EmptyName,
-    NameTooLong,
-    IconCountExceeded,
-    MissingRequiredIcon,
-    DuplicateIcon,
-    IconProviderNameMismatch,
-    InvalidIconAtlas,
-    FontFaceCountExceeded,
-    MissingDefaultFontFace,
-    MissingFontChar,
-    InvalidFontAtlas,
-    EmojiCountExceeded,
-    MissingRequiredEmoji,
-    DuplicateEmoji,
-};
-
 pub const Limits = struct {
     max_icon_count: usize,
     max_icon_atlas_side: u32,
@@ -90,21 +73,6 @@ pub const AssetPackSpec = struct {
     icons: IconPackSpec,
     fonts: FontPackSpec,
     emoji: EmojiPackSpec,
-};
-
-pub const Runtime = struct {
-    active: AssetPackSpec,
-    limits: Limits,
-
-    pub fn init(active: AssetPackSpec, limits: Limits) Error!Runtime {
-        try statusToError(validate(active, limits));
-        return .{ .active = active, .limits = limits };
-    }
-
-    pub fn replace(self: *Runtime, replacement: AssetPackSpec) Error!void {
-        try statusToError(validate(replacement, self.limits));
-        self.active = replacement;
-    }
 };
 
 pub const required_font_chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_.:/#@[](){}<>+=%$!?&, ";
@@ -255,26 +223,6 @@ fn validateName(name: []const u8, limits: Limits) Status {
     return .ok;
 }
 
-fn statusToError(status: Status) Error!void {
-    return switch (status) {
-        .ok => {},
-        .empty_name => error.EmptyName,
-        .name_too_long => error.NameTooLong,
-        .icon_count_exceeded => error.IconCountExceeded,
-        .missing_required_icon => error.MissingRequiredIcon,
-        .duplicate_icon => error.DuplicateIcon,
-        .icon_provider_name_mismatch => error.IconProviderNameMismatch,
-        .invalid_icon_atlas => error.InvalidIconAtlas,
-        .font_face_count_exceeded => error.FontFaceCountExceeded,
-        .missing_default_font_face => error.MissingDefaultFontFace,
-        .missing_font_char => error.MissingFontChar,
-        .invalid_font_atlas => error.InvalidFontAtlas,
-        .emoji_count_exceeded => error.EmojiCountExceeded,
-        .missing_required_emoji => error.MissingRequiredEmoji,
-        .duplicate_emoji => error.DuplicateEmoji,
-    };
-}
-
 fn iconEntries(comptime provider: icon.Provider) [std.enums.values(icon.Icon).len]IconPackEntry {
     const values = std.enums.values(icon.Icon);
     var entries: [values.len]IconPackEntry = undefined;
@@ -336,16 +284,4 @@ test "icon font and emoji validation reject incomplete packs" {
     pack = tablerInterPack();
     pack.emoji.emoji = pack.emoji.emoji[0 .. pack.emoji.emoji.len - 1];
     try std.testing.expectEqual(Status.missing_required_emoji, validate(pack, limits));
-}
-
-test "asset runtime preserves active pack after invalid replacement" {
-    var runtime = try Runtime.init(tablerInterPack(), defaultLimits());
-    try std.testing.expectEqualStrings("ui-tabler-inter", runtime.active.name);
-    try runtime.replace(lucideGeistPack());
-    try std.testing.expectEqualStrings("ui-lucide-geist", runtime.active.name);
-
-    var invalid = tablerInterPack();
-    invalid.icons.entries = invalid.icons.entries[0 .. invalid.icons.entries.len - 1];
-    try std.testing.expectError(error.MissingRequiredIcon, runtime.replace(invalid));
-    try std.testing.expectEqualStrings("ui-lucide-geist", runtime.active.name);
 }

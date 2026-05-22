@@ -15,11 +15,15 @@ pub const magic = "EROBJ001";
 pub const max_owners = 16;
 pub const max_envelopes = 16;
 pub const max_children = 65536;
+pub const signature_magic = "ERSIG001";
+pub const signature_fixed_body_size = 112;
+pub const signature_max_size = 128;
 
 pub const Error = error{
     BadArgument,
     NoSpace,
     Corrupt,
+    Unsupported,
 };
 
 pub const Kind = enum(u16) {
@@ -178,6 +182,26 @@ pub const Header = struct {
 
     pub fn id(canonical: []const u8) [id_size]u8 {
         return preimage.rawHash(canonical);
+    }
+
+    pub fn idForBytes(requirements: Requirements, epoch: clock.Stamp, body: []const u8) ?[id_size]u8 {
+        if (!epoch.valid()) return null;
+        var header_raw: [header_size]u8 = undefined;
+        const header = Header{
+            .kind = .bytes,
+            .logical_len = body.len,
+            .body_len = body.len,
+            .epoch = epoch,
+            .requirements = requirements,
+        };
+        header.encode(&header_raw) catch return null;
+
+        var builder = std.crypto.hash.Blake3.init(.{});
+        builder.update(&header_raw);
+        builder.update(body);
+        var out: [id_size]u8 = undefined;
+        builder.final(&out);
+        return out;
     }
 };
 
@@ -388,6 +412,24 @@ pub const View = struct {
     }
 };
 
+pub const SignatureInfo = struct {
+    signer_id: [id_size]u8,
+    challenge_id: [id_size]u8,
+    subject_id: [id_size]u8,
+    algorithm: Algorithm,
+    signature: []const u8,
+
+    pub fn valid(self: SignatureInfo) bool {
+        return bytes.nonzero(&self.signer_id) and
+            bytes.nonzero(&self.challenge_id) and
+            bytes.nonzero(&self.subject_id) and
+            self.algorithm != .none and
+            self.signature.len != 0 and
+            self.signature.len <= signature_max_size and
+            bytes.nonzero(self.signature);
+    }
+};
+
 pub fn canonicalSize(kind: Kind, body_len: usize, owners: usize, envelopes: usize, children: usize) Error!usize {
     if (owners > max_owners or envelopes > max_envelopes or children > max_children) return error.BadArgument;
     if ((kind == .bytes or kind == .receipt) and children != 0) return error.BadArgument;
@@ -404,12 +446,12 @@ pub fn canonicalSize(kind: Kind, body_len: usize, owners: usize, envelopes: usiz
 pub const NodeWriter = struct {
     out: []u8,
 
-    pub fn bytesNode(self: NodeWriter, req: Requirements, epoch: clock.Stamp, body: []const u8) ?[]u8 {
-        return self.bytesNodeOwned(req, epoch, &.{}, &.{}, body);
+    pub fn bytesNode(self: NodeWriter, req: Requirements, epoch: clock.Stamp, body: []const u8) Error![]u8 {
+        return try self.bytesNodeOwned(req, epoch, &.{}, &.{}, body);
     }
 
-    pub fn bytesNodeOwned(self: NodeWriter, req: Requirements, epoch: clock.Stamp, owners: []const Owner, envelopes: []const Envelope, body: []const u8) ?[]u8 {
-        return self.writeNode(.{
+    pub fn bytesNodeOwned(self: NodeWriter, req: Requirements, epoch: clock.Stamp, owners: []const Owner, envelopes: []const Envelope, body: []const u8) Error![]u8 {
+        return try self.writeNode(.{
             .kind = .bytes,
             .logical_len = body.len,
             .body = body,
@@ -421,24 +463,18 @@ pub const NodeWriter = struct {
         });
     }
 
-    pub fn treeNode(self: NodeWriter, req: Requirements, epoch: clock.Stamp, children: []const Child) ?[]u8 {
-        var logical_len: u64 = 0;
-        for (children) |child| {
-            if (!child.valid(logical_len)) return null;
-            logical_len = std.math.add(u64, logical_len, child.logical_len) catch return null;
-        }
-
-        return self.treeNodeOwned(req, epoch, &.{}, &.{}, children);
+    pub fn treeNode(self: NodeWriter, req: Requirements, epoch: clock.Stamp, children: []const Child) Error![]u8 {
+        return try self.treeNodeOwned(req, epoch, &.{}, &.{}, children);
     }
 
-    pub fn treeNodeOwned(self: NodeWriter, req: Requirements, epoch: clock.Stamp, owners: []const Owner, envelopes: []const Envelope, children: []const Child) ?[]u8 {
+    pub fn treeNodeOwned(self: NodeWriter, req: Requirements, epoch: clock.Stamp, owners: []const Owner, envelopes: []const Envelope, children: []const Child) Error![]u8 {
         var logical_len: u64 = 0;
         for (children) |child| {
-            if (!child.valid(logical_len)) return null;
-            logical_len = std.math.add(u64, logical_len, child.logical_len) catch return null;
+            if (!child.valid(logical_len)) return error.BadArgument;
+            logical_len = std.math.add(u64, logical_len, child.logical_len) catch return error.NoSpace;
         }
 
-        return self.writeNode(.{
+        return try self.writeNode(.{
             .kind = .tree,
             .logical_len = logical_len,
             .body = "",
@@ -450,12 +486,12 @@ pub const NodeWriter = struct {
         });
     }
 
-    pub fn receiptNode(self: NodeWriter, req: Requirements, epoch: clock.Stamp, body: []const u8) ?[]u8 {
-        return self.receiptNodeOwned(req, epoch, &.{}, &.{}, body);
+    pub fn receiptNode(self: NodeWriter, req: Requirements, epoch: clock.Stamp, body: []const u8) Error![]u8 {
+        return try self.receiptNodeOwned(req, epoch, &.{}, &.{}, body);
     }
 
-    pub fn receiptNodeOwned(self: NodeWriter, req: Requirements, epoch: clock.Stamp, owners: []const Owner, envelopes: []const Envelope, body: []const u8) ?[]u8 {
-        return self.writeNode(.{
+    pub fn receiptNodeOwned(self: NodeWriter, req: Requirements, epoch: clock.Stamp, owners: []const Owner, envelopes: []const Envelope, body: []const u8) Error![]u8 {
+        return try self.writeNode(.{
             .kind = .receipt,
             .logical_len = body.len,
             .body = body,
@@ -467,10 +503,15 @@ pub const NodeWriter = struct {
         });
     }
 
-    fn writeNode(self: NodeWriter, spec: WriteSpec) ?[]u8 {
-        const total = canonicalSize(spec.kind, spec.body.len, spec.owners.len, spec.envelopes.len, spec.children.len) catch return null;
-        if (self.out.len < total or !spec.epoch.valid()) return null;
-        if (!validOwners(spec.owners) or !validEnvelopes(spec.owners, spec.envelopes)) return null;
+    pub fn signatureReceiptNode(self: NodeWriter, subject_canonical: []const u8, challenge_canonical: []const u8, signer_id: [id_size]u8, algorithm: Algorithm, signature: []const u8, epoch: clock.Stamp) Error![]u8 {
+        return try writeSignatureReceipt(subject_canonical, challenge_canonical, signer_id, algorithm, signature, epoch, self.out);
+    }
+
+    fn writeNode(self: NodeWriter, spec: WriteSpec) Error![]u8 {
+        const total = try canonicalSize(spec.kind, spec.body.len, spec.owners.len, spec.envelopes.len, spec.children.len);
+        if (self.out.len < total) return error.NoSpace;
+        if (!spec.epoch.valid()) return error.BadArgument;
+        if (!validOwners(spec.owners) or !validEnvelopes(spec.owners, spec.envelopes)) return error.BadArgument;
 
         const raw = self.out[0..total];
         const header = Header{
@@ -483,26 +524,124 @@ pub const NodeWriter = struct {
             .epoch = spec.epoch,
             .requirements = spec.requirements,
         };
-        header.encode(raw) catch return null;
+        try header.encode(raw);
 
         var offset: usize = header_size;
         for (spec.owners) |owner| {
-            if (!owner.encode(raw[offset..][0..owner_size])) return null;
+            if (!owner.encode(raw[offset..][0..owner_size])) return error.BadArgument;
             offset += owner_size;
         }
         for (spec.envelopes) |envelope| {
             const owner = spec.owners[envelope.owner_index];
-            if (!envelope.encode(owner, raw[offset..][0..envelope_size])) return null;
+            if (!envelope.encode(owner, raw[offset..][0..envelope_size])) return error.BadArgument;
             offset += envelope_size;
         }
         for (spec.children) |child| {
-            if (!child.encode(raw[offset..][0..child_size])) return null;
+            if (!child.encode(raw[offset..][0..child_size])) return error.BadArgument;
             offset += child_size;
         }
-        @memcpy(raw[offset..][0..spec.body.len], spec.body);
+        copyBytes(raw[offset..][0..spec.body.len], spec.body);
         return raw;
     }
 };
+
+fn copyBytes(dest: []u8, source: []const u8) void {
+    if (dest.len == 0) return;
+    if (@intFromPtr(dest.ptr) <= @intFromPtr(source.ptr)) {
+        std.mem.copyForwards(u8, dest, source);
+    } else {
+        std.mem.copyBackwards(u8, dest, source);
+    }
+}
+
+pub fn signatureRequirements() Requirements {
+    return .{
+        .durability = .durable,
+        .confidentiality = .integrity_only,
+        .portability = .public_portable,
+        .integrity = .signed,
+        .lifetime = .retained,
+        .visibility = .public,
+        .access = .explicit_io,
+    };
+}
+
+pub fn writeSignatureReceipt(subject_canonical: []const u8, challenge_canonical: []const u8, signer_id: [id_size]u8, algorithm: Algorithm, signature: []const u8, epoch: clock.Stamp, out: []u8) Error![]u8 {
+    if (!bytes.nonzero(&signer_id) or !epoch.valid()) return error.BadArgument;
+    if (algorithm == .none or signature.len == 0 or signature.len > signature_max_size or !bytes.nonzero(signature)) return error.BadArgument;
+
+    var body_storage: [signature_fixed_body_size + signature_max_size]u8 = undefined;
+    const body = try buildSignatureBody(subject_canonical, challenge_canonical, signer_id, algorithm, signature, &body_storage);
+    const total = try canonicalSize(.receipt, body.len, 0, 0, 0);
+    if (out.len < total) return error.NoSpace;
+
+    return try (NodeWriter{ .out = out[0..total] }).receiptNode(signatureRequirements(), epoch, body);
+}
+
+pub fn decodeSignatureReceipt(canonical: []const u8) Error!SignatureInfo {
+    const view = try View.decode(canonical);
+    if (view.header.kind != .receipt or
+        view.header.requirements.integrity != .signed or
+        view.body.len < signature_fixed_body_size or
+        view.body.len > signature_fixed_body_size + signature_max_size or
+        !bytes.eql(view.body[0..signature_magic.len], signature_magic))
+    {
+        return error.Corrupt;
+    }
+
+    const algorithm = enumFromInt(Algorithm, bytes.load16(view.body[104..106]) orelse return error.Corrupt) orelse return error.Corrupt;
+    const signature_len = bytes.load16(view.body[106..108]) orelse return error.Corrupt;
+    if (algorithm == .none or
+        signature_len == 0 or
+        signature_len > signature_max_size or
+        view.body.len != signature_fixed_body_size + @as(usize, signature_len) or
+        (bytes.load32(view.body[108..112]) orelse return error.Corrupt) != 0)
+    {
+        return error.Corrupt;
+    }
+
+    const info = SignatureInfo{
+        .signer_id = idFromBytes(view.body[8..40]),
+        .challenge_id = idFromBytes(view.body[40..72]),
+        .subject_id = idFromBytes(view.body[72..104]),
+        .algorithm = algorithm,
+        .signature = view.body[112..][0..signature_len],
+    };
+    if (!info.valid()) return error.Corrupt;
+    return info;
+}
+
+fn buildSignatureBody(subject_canonical: []const u8, challenge_canonical: []const u8, signer_id: [id_size]u8, algorithm: Algorithm, signature_bytes: []const u8, scratch: []u8) Error![]const u8 {
+    const subject = try View.decode(subject_canonical);
+    const challenge = try View.decode(challenge_canonical);
+    const body_len = signature_fixed_body_size + signature_bytes.len;
+    if (scratch.len < body_len) return error.NoSpace;
+    if (!writeSignatureBody(scratch[0..body_len], subject.id(), challenge.id(), signer_id, algorithm, signature_bytes)) return error.BadArgument;
+    return scratch[0..body_len];
+}
+
+fn writeSignatureBody(body: []u8, subject_id: [id_size]u8, challenge_id: [id_size]u8, signer_id: [id_size]u8, algorithm: Algorithm, signature_bytes: []const u8) bool {
+    if (body.len != signature_fixed_body_size + signature_bytes.len or
+        signature_bytes.len == 0 or
+        signature_bytes.len > signature_max_size or
+        algorithm == .none or
+        !bytes.nonzero(&subject_id) or
+        !bytes.nonzero(&challenge_id) or
+        !bytes.nonzero(&signer_id) or
+        !bytes.nonzero(signature_bytes))
+    {
+        return false;
+    }
+    @memset(body, 0);
+    @memcpy(body[0..signature_magic.len], signature_magic);
+    @memcpy(body[8..40], &signer_id);
+    @memcpy(body[40..72], &challenge_id);
+    @memcpy(body[72..104], &subject_id);
+    _ = bytes.store16(body[104..106], @intFromEnum(algorithm));
+    _ = bytes.store16(body[106..108], @intCast(signature_bytes.len));
+    @memcpy(body[112..][0..signature_bytes.len], signature_bytes);
+    return true;
+}
 
 const WriteSpec = struct {
     kind: Kind,
@@ -602,9 +741,9 @@ test "requirements are encoded and hashed deterministically" {
 test "requirements derive explicit seal policy" {
     const keeper = clock.KeeperId{ .bytes = [_]u8{1} ++ [_]u8{0} ** 31 };
     const epoch = clock.Stamp{ .keeper = keeper };
-    const user = identity.Identity.init(.user, identity.Source.init(.hash, "user").?, epoch).?;
-    const device = identity.Identity.init(.device, identity.Source.init(.hash, "device").?, epoch).?;
-    const app = identity.Identity.init(.app, identity.Source.init(.hash, "chat").?, epoch).?;
+    const user = identity.Identity.init(.user, identity.Source.prepare(.hash, &preimage.rawHash("user")).?, epoch).?;
+    const device = identity.Identity.init(.device, identity.Source.prepare(.hash, &preimage.rawHash("device")).?, epoch).?;
+    const app = identity.Identity.init(.app, identity.Source.prepare(.hash, &preimage.rawHash("chat")).?, epoch).?;
     const req = Requirements{
         .durability = .durable,
         .confidentiality = .user_app_private,
@@ -714,7 +853,7 @@ test "view decodes canonical bytes node and owns body slicing" {
 
     var raw: [header_size + 5]u8 = undefined;
     const writer = NodeWriter{ .out = &raw };
-    const canonical = writer.bytesNode(req, .{ .keeper = keeper }, "hello").?;
+    const canonical = try writer.bytesNode(req, .{ .keeper = keeper }, "hello");
     const view = try View.decode(canonical);
 
     try std.testing.expectEqual(Kind.bytes, view.header.kind);
@@ -748,7 +887,7 @@ test "writer builds owned canonical bytes nodes" {
 
     var raw: [header_size + owner_size + envelope_size + 7]u8 = undefined;
     const writer = NodeWriter{ .out = &raw };
-    const canonical = writer.bytesNodeOwned(req, .{ .keeper = keeper }, &.{owner}, &.{envelope}, "payload").?;
+    const canonical = try writer.bytesNodeOwned(req, .{ .keeper = keeper }, &.{owner}, &.{envelope}, "payload");
     const view = try View.decode(canonical);
 
     try std.testing.expectEqual(Kind.bytes, view.header.kind);
@@ -766,7 +905,7 @@ test "writer builds owned canonical bytes nodes" {
         .key_id = [_]u8{11} ++ [_]u8{0} ** 31,
         .metadata_hash = [_]u8{12} ++ [_]u8{0} ** 31,
     };
-    try std.testing.expect(writer.bytesNodeOwned(req, .{ .keeper = keeper }, &.{owner}, &.{bad_envelope}, "payload") == null);
+    try std.testing.expectError(error.BadArgument, writer.bytesNodeOwned(req, .{ .keeper = keeper }, &.{owner}, &.{bad_envelope}, "payload"));
 }
 
 test "writer builds canonical tree nodes from child records" {
@@ -786,8 +925,8 @@ test "writer builds canonical tree nodes from child records" {
     var second_raw: [header_size + 6]u8 = undefined;
     const first_writer = NodeWriter{ .out = &first_raw };
     const second_writer = NodeWriter{ .out = &second_raw };
-    const first = first_writer.bytesNode(req, epoch, "first").?;
-    const second = second_writer.bytesNode(req, epoch, "second").?;
+    const first = try first_writer.bytesNode(req, epoch, "first");
+    const second = try second_writer.bytesNode(req, epoch, "second");
 
     const children = [_]Child{
         .{
@@ -808,7 +947,7 @@ test "writer builds canonical tree nodes from child records" {
 
     var tree_raw: [header_size + child_size * 2]u8 = undefined;
     const tree_writer = NodeWriter{ .out = &tree_raw };
-    const canonical = tree_writer.treeNode(req, epoch, &children).?;
+    const canonical = try tree_writer.treeNode(req, epoch, &children);
     const view = try View.decode(canonical);
 
     try std.testing.expectEqual(Kind.tree, view.header.kind);
@@ -853,7 +992,7 @@ test "writer builds owned canonical tree nodes" {
 
     var raw: [header_size + owner_size + envelope_size + child_size]u8 = undefined;
     const writer = NodeWriter{ .out = &raw };
-    const canonical = writer.treeNodeOwned(req, epoch, &.{owner}, &.{envelope}, &.{child}).?;
+    const canonical = try writer.treeNodeOwned(req, epoch, &.{owner}, &.{envelope}, &.{child});
     const view = try View.decode(canonical);
 
     try std.testing.expectEqual(Kind.tree, view.header.kind);
@@ -880,10 +1019,70 @@ test "writer builds canonical receipt nodes" {
 
     var raw: [header_size + 7]u8 = undefined;
     const writer = NodeWriter{ .out = &raw };
-    const canonical = writer.receiptNode(req, .{ .keeper = keeper }, "receipt").?;
+    const canonical = try writer.receiptNode(req, .{ .keeper = keeper }, "receipt");
     const view = try View.decode(canonical);
 
     try std.testing.expectEqual(Kind.receipt, view.header.kind);
     try std.testing.expectEqualStrings("receipt", view.body);
     try std.testing.expectEqual(@as(u32, 0), view.header.child_count);
+}
+
+test "signature receipts bind signer challenge and subject object ids" {
+    const keeper = clock.KeeperId{ .bytes = [_]u8{1} ++ [_]u8{0} ** 31 };
+    const epoch = clock.Stamp{ .keeper = keeper };
+    const req = Requirements{
+        .durability = .durable,
+        .confidentiality = .public,
+        .portability = .public_portable,
+        .integrity = .hash_only,
+        .lifetime = .retained,
+        .visibility = .public,
+        .access = .explicit_io,
+    };
+
+    var subject_raw: [header_size + 7]u8 = undefined;
+    var challenge_raw: [header_size + 9]u8 = undefined;
+    const subject = try (NodeWriter{ .out = &subject_raw }).bytesNode(req, epoch, "subject");
+    const challenge = try (NodeWriter{ .out = &challenge_raw }).bytesNode(req, epoch, "challenge");
+
+    const signer_id = [_]u8{22} ++ [_]u8{0} ** 31;
+    const signature = [_]u8{0xa5} ** 64;
+    var receipt_raw: [header_size + signature_fixed_body_size + signature.len]u8 = undefined;
+    const receipt = try (NodeWriter{ .out = &receipt_raw }).signatureReceiptNode(subject, challenge, signer_id, .ecdsa_p256_sha256, &signature, epoch);
+    const info = try decodeSignatureReceipt(receipt);
+
+    try std.testing.expectEqualSlices(u8, &signer_id, &info.signer_id);
+    try std.testing.expectEqualSlices(u8, &Header.id(challenge), &info.challenge_id);
+    try std.testing.expectEqualSlices(u8, &Header.id(subject), &info.subject_id);
+    try std.testing.expectEqual(Algorithm.ecdsa_p256_sha256, info.algorithm);
+    try std.testing.expectEqualSlices(u8, &signature, info.signature);
+}
+
+test "signature receipts reject malformed body policy and zero signatures" {
+    const keeper = clock.KeeperId{ .bytes = [_]u8{1} ++ [_]u8{0} ** 31 };
+    const epoch = clock.Stamp{ .keeper = keeper };
+    const req = Requirements{
+        .durability = .durable,
+        .confidentiality = .public,
+        .portability = .public_portable,
+        .integrity = .hash_only,
+        .lifetime = .retained,
+        .visibility = .public,
+        .access = .explicit_io,
+    };
+
+    var subject_raw: [header_size + 7]u8 = undefined;
+    var challenge_raw: [header_size + 9]u8 = undefined;
+    const subject = try (NodeWriter{ .out = &subject_raw }).bytesNode(req, epoch, "subject");
+    const challenge = try (NodeWriter{ .out = &challenge_raw }).bytesNode(req, epoch, "challenge");
+
+    const signer_id = [_]u8{23} ++ [_]u8{0} ** 31;
+    const zero_signature = [_]u8{0} ** 64;
+    var receipt_raw: [header_size + signature_fixed_body_size + 64]u8 = undefined;
+    try std.testing.expectError(error.BadArgument, writeSignatureReceipt(subject, challenge, signer_id, .ed25519, &zero_signature, epoch, &receipt_raw));
+
+    const signature = [_]u8{0x5a} ** 64;
+    const receipt = try writeSignatureReceipt(subject, challenge, signer_id, .ed25519, &signature, epoch, &receipt_raw);
+    receipt[header_size + 108] = 1;
+    try std.testing.expectError(error.Corrupt, decodeSignatureReceipt(receipt));
 }

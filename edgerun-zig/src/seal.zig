@@ -103,9 +103,9 @@ test "seal policy captures machine app user binding" {
     const clock = @import("clock.zig");
     const keeper = clock.KeeperId{ .bytes = [_]u8{1} ++ [_]u8{0} ** 31 };
     const epoch = clock.Stamp{ .keeper = keeper };
-    const user = identity.Identity.init(.user, identity.Source.init(.hash, "user").?, epoch).?;
-    const device = identity.Identity.init(.device, identity.Source.init(.hash, "device").?, epoch).?;
-    const app = identity.Identity.init(.app, identity.Source.init(.hash, "chat").?, epoch).?;
+    const user = identity.Identity.init(.user, identity.Source.prepare(.hash, &preimage.rawHash("user")).?, epoch).?;
+    const device = identity.Identity.init(.device, identity.Source.prepare(.hash, &preimage.rawHash("device")).?, epoch).?;
+    const app = identity.Identity.init(.app, identity.Source.prepare(.hash, &preimage.rawHash("chat")).?, epoch).?;
 
     const policy = Policy.machineAppUser(device, app, user);
     try std.testing.expect(policy.valid());

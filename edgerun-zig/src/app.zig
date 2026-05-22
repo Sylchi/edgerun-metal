@@ -30,7 +30,10 @@ pub const App = struct {
 
     pub fn initFromHostSlice(id: identity.Identity, host_memory: BoundedArena, storage_bytes: usize, storage_slots: usize) ?App {
         var memory = host_memory;
-        const storage = store.Store.initFromArena(&memory, storage_bytes, storage_slots) orelse return null;
+        const storage = store.Store.initFromArena(&memory, .{
+            .data_bytes = storage_bytes,
+            .slot_count = storage_slots,
+        }) orelse return null;
         return init(id, memory, storage);
     }
 
@@ -78,7 +81,10 @@ pub const App = struct {
         }
 
         const child_memory = self.memory.split(memory_bytes) orelse return error.NoMemory;
-        const child_storage = self.storage.split(storage_bytes, storage_slots) orelse return error.NoStorage;
+        const child_storage = self.storage.split(.{
+            .data_bytes = storage_bytes,
+            .slot_count = storage_slots,
+        }) orelse return error.NoStorage;
         const receipt = grant.spawnReceipt(self.id, child_id, epoch, memory_bytes, storage_bytes, storage_slots) orelse return error.NoMemory;
 
         return .{
@@ -122,11 +128,11 @@ test "spawn transfers bounded memory and storage to child" {
 
     const keeper = clock.KeeperId{ .bytes = [_]u8{1} ++ [_]u8{0} ** 31 };
     const epoch = clock.Stamp{ .keeper = keeper };
-    const user_id = identity.Identity.init(.user, identity.Source.init(.hash, "user").?, epoch).?;
-    const device_id = identity.Identity.init(.device, identity.Source.init(.hash, "device").?, epoch).?;
-    const allocator_id = identity.Identity.init(.app, identity.Source.init(.hash, "allocator app").?, epoch).?;
-    const parent_source = identity.Source.init(.hash, "parent app").?;
-    const child_source = identity.Source.init(.hash, "child app").?;
+    const user_id = identity.Identity.init(.user, identity.Source.prepare(.hash, &preimage.rawHash("user")).?, epoch).?;
+    const device_id = identity.Identity.init(.device, identity.Source.prepare(.hash, &preimage.rawHash("device")).?, epoch).?;
+    const allocator_id = identity.Identity.init(.app, identity.Source.prepare(.hash, &preimage.rawHash("allocator app")).?, epoch).?;
+    const parent_source = identity.Source.prepare(.hash, &preimage.rawHash("parent app")).?;
+    const child_source = identity.Source.prepare(.hash, &preimage.rawHash("child app")).?;
     const parent_id = identity.Identity.init(.app, parent_source, epoch).?;
     const child_id = identity.Identity.init(.app, child_source, epoch).?;
 
@@ -167,7 +173,7 @@ test "app creates its store from its host-owned memory slice" {
 
     const keeper = clock.KeeperId{ .bytes = [_]u8{1} ++ [_]u8{0} ** 31 };
     const epoch = clock.Stamp{ .keeper = keeper };
-    const app_id = identity.Identity.init(.app, identity.Source.init(.hash, "app").?, epoch).?;
+    const app_id = identity.Identity.init(.app, identity.Source.prepare(.hash, &preimage.rawHash("app")).?, epoch).?;
     var app = App.initFromHostSlice(
         app_id,
         BoundedArena.init(.{ .base = &host_memory }),
@@ -187,11 +193,11 @@ test "apps exchange identity routed envelopes through relay boundary" {
 
     const keeper = clock.KeeperId{ .bytes = [_]u8{3} ++ [_]u8{0} ** 31 };
     const now = clock.Stamp{ .keeper = keeper, .tick = 3 };
-    const user = identity.Identity.init(.user, identity.Source.init(.hash, "routing user").?, now).?;
-    const device = identity.Identity.init(.device, identity.Source.init(.hash, "routing device").?, now).?;
-    const source_id = identity.Identity.init(.app, identity.Source.init(.hash, "routing source app").?, now).?;
-    const target_id = identity.Identity.init(.app, identity.Source.init(.hash, "routing target app").?, now).?;
-    const relay_id = identity.Identity.init(.relay, identity.Source.init(.hash, "routing relay app").?, now).?;
+    const user = identity.Identity.init(.user, identity.Source.prepare(.hash, &preimage.rawHash("routing user")).?, now).?;
+    const device = identity.Identity.init(.device, identity.Source.prepare(.hash, &preimage.rawHash("routing device")).?, now).?;
+    const source_id = identity.Identity.init(.app, identity.Source.prepare(.hash, &preimage.rawHash("routing source app")).?, now).?;
+    const target_id = identity.Identity.init(.app, identity.Source.prepare(.hash, &preimage.rawHash("routing target app")).?, now).?;
+    const relay_id = identity.Identity.init(.relay, identity.Source.prepare(.hash, &preimage.rawHash("routing relay app")).?, now).?;
 
     const source = App.initFromHostSlice(source_id, BoundedArena.init(.{ .base = &source_memory }), 64, 2).?;
     const target = App.initFromHostSlice(target_id, BoundedArena.init(.{ .base = &target_memory }), 64, 2).?;

@@ -146,10 +146,10 @@ pub fn admitWindow(user: identity.Identity, device: identity.Identity, actor: id
 test "intent receipt binds user device actor subject and consequence" {
     const keeper = clock.KeeperId{ .bytes = [_]u8{1} ++ [_]u8{0} ** 31 };
     const epoch = clock.Stamp{ .keeper = keeper };
-    const user = identity.Identity.init(.user, identity.Source.init(.hash, "user").?, epoch).?;
-    const device = identity.Identity.init(.device, identity.Source.init(.hash, "device").?, epoch).?;
-    const parent = identity.Identity.init(.app, identity.Source.init(.hash, "parent").?, epoch).?;
-    const child = identity.Identity.init(.app, identity.Source.init(.hash, "child").?, epoch).?;
+    const user = identity.Identity.init(.user, identity.Source.prepare(.hash, &preimage.rawHash("user")).?, epoch).?;
+    const device = identity.Identity.init(.device, identity.Source.prepare(.hash, &preimage.rawHash("device")).?, epoch).?;
+    const parent = identity.Identity.init(.app, identity.Source.prepare(.hash, &preimage.rawHash("parent")).?, epoch).?;
+    const child = identity.Identity.init(.app, identity.Source.prepare(.hash, &preimage.rawHash("child")).?, epoch).?;
 
     const receipt = admit(user, device, parent, child, .spawn_app, .delegates_resources, epoch, requestId("spawn preview").?).?;
 
@@ -161,10 +161,10 @@ test "intent receipt binds user device actor subject and consequence" {
 
 test "intent receipt rejects replay outside admission window" {
     const keeper = clock.KeeperId{ .bytes = [_]u8{1} ++ [_]u8{0} ** 31 };
-    const user = identity.Identity.init(.user, identity.Source.init(.hash, "user").?, .{ .keeper = keeper }).?;
-    const device = identity.Identity.init(.device, identity.Source.init(.hash, "device").?, .{ .keeper = keeper }).?;
-    const parent = identity.Identity.init(.app, identity.Source.init(.hash, "parent").?, .{ .keeper = keeper }).?;
-    const child = identity.Identity.init(.app, identity.Source.init(.hash, "child").?, .{ .keeper = keeper }).?;
+    const user = identity.Identity.init(.user, identity.Source.prepare(.hash, &preimage.rawHash("user")).?, .{ .keeper = keeper }).?;
+    const device = identity.Identity.init(.device, identity.Source.prepare(.hash, &preimage.rawHash("device")).?, .{ .keeper = keeper }).?;
+    const parent = identity.Identity.init(.app, identity.Source.prepare(.hash, &preimage.rawHash("parent")).?, .{ .keeper = keeper }).?;
+    const child = identity.Identity.init(.app, identity.Source.prepare(.hash, &preimage.rawHash("child")).?, .{ .keeper = keeper }).?;
     const start = clock.Stamp{ .keeper = keeper, .tick = 10 };
     const end = clock.Stamp{ .keeper = keeper, .tick = 20 };
     const receipt = admitWindow(user, device, parent, child, .spawn_app, .delegates_resources, start, start, end, requestId("spawn window").?).?;

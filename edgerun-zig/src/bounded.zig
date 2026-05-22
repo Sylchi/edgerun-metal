@@ -70,6 +70,25 @@ pub fn SliceList(comptime T: type) type {
             return self.items[0..self.len];
         }
 
+        pub fn mutableSlice(self: *Self) []T {
+            return self.items[0..self.len];
+        }
+
+        pub fn atPtr(self: *Self, index: usize) ?*T {
+            if (index >= self.len) return null;
+            return &self.items[index];
+        }
+
+        pub fn clear(self: *Self) void {
+            self.len = 0;
+        }
+
+        pub fn pop(self: *Self) ?T {
+            if (self.len == 0) return null;
+            self.len -= 1;
+            return self.items[self.len];
+        }
+
         pub fn full(self: Self) bool {
             return self.len == self.items.len;
         }

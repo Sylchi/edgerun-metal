@@ -1,6 +1,7 @@
 const std = @import("std");
 const bytes = @import("bytes.zig");
 const clock = @import("clock.zig");
+const input = @import("input.zig");
 const object = @import("object.zig");
 const ui = @import("ui.zig");
 
@@ -120,7 +121,7 @@ test "decode ui bytes into borrowed nodes and render hits" {
     var scene = ui.Scene.init(&commands);
     try ui.render(&scene, root, .{ .x = 0, .y = 0, .w = 320, .h = 240 }, .{});
 
-    const button_hit = ui.hitTest(scene.written(), 20, 160).?;
+    const button_hit = input.hitTest(scene.written(), 20, 160).?;
     try std.testing.expectEqual(@as(u32, 7), button_hit.slot);
     try std.testing.expectEqual(@as(u32, 30), button_hit.id);
 }
@@ -155,6 +156,7 @@ test "decode ui bytes from canonical object body" {
 test "decode ui view returned by storage" {
     const store = @import("store.zig");
     const identity = @import("identity.zig");
+    const preimage = @import("preimage.zig");
 
     var raw_ui: [128]u8 = undefined;
     var cursor = Writer.init(&raw_ui, 1, 1, .column, 0, 0).?;
@@ -168,7 +170,7 @@ test "decode ui view returned by storage" {
     var keeper = [_]u8{0} ** 32;
     keeper[0] = 1;
     const epoch = clock.Stamp{ .keeper = .{ .bytes = keeper } };
-    const app = identity.Identity.init(.app, identity.Source.init(.hash, "ui").?, epoch).?;
+    const app = identity.Identity.init(.app, identity.Source.prepare(.hash, &preimage.rawHash("ui")).?, epoch).?;
     const req = object.Requirements{
         .durability = .memory,
         .confidentiality = .public,
@@ -315,6 +317,6 @@ pub const Writer = struct {
 
     pub fn objectNodeOwned(self: Writer, out: []u8, req: object.Requirements, epoch: clock.Stamp, owners: []const object.Owner, envelopes: []const object.Envelope) ?[]u8 {
         const object_writer = object.NodeWriter{ .out = out };
-        return object_writer.bytesNodeOwned(req, epoch, owners, envelopes, self.written());
+        return object_writer.bytesNodeOwned(req, epoch, owners, envelopes, self.written()) catch return null;
     }
 };

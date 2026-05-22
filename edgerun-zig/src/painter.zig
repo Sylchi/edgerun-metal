@@ -68,9 +68,9 @@ pub const Painter = struct {
         try self.fillRect(bounds, 0.0, color);
     }
 
-    pub fn hit(self: Painter, kind: ui.HitKind, id: u32, bounds: ui.Rect) Error!void {
+    pub fn hit(self: Painter, hit_value: ui.Hit) Error!void {
         const scene = try self.activeScene();
-        scene.pushHit(kind, id, bounds) catch |err| return mapRenderError(err);
+        scene.pushHit(hit_value) catch |err| return mapRenderError(err);
     }
 
     pub fn dragSource(self: Painter, scope_id: u32, item_id: u32, index: usize, bounds: ui.Rect) Error!void {
@@ -140,7 +140,7 @@ test "painter facade pushes scene commands" {
     try painter.panel(ui.Rect.init(0.0, 0.0, 30.0, 20.0), 6.0, .text, .border);
     try painter.divider(5.0, 6.0, 50.0, .horizontal, .border);
     try painter.divider(7.0, 8.0, 30.0, .vertical, .border);
-    try painter.hit(.button, 42, ui.Rect.init(1.0, 2.0, 3.0, 4.0));
+    try painter.hit(.{ .slot = 3, .kind = .button, .id = 42, .bounds = ui.Rect.init(1.0, 2.0, 3.0, 4.0) });
     try painter.dragSource(9, 10, 2, ui.Rect.init(2.0, 3.0, 4.0, 5.0));
     try painter.dropTarget(9, 2, ui.Rect.init(3.0, 4.0, 5.0, 6.0));
     try painter.semanticIcon(ui.Rect.init(20.0, 0.0, 16.0, 16.0), .search, .text);
