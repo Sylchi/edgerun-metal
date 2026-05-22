@@ -6,7 +6,7 @@
 static const UINT8 g_seal_plaintext_domain[] = "edgerun:c:v1:seal:plaintext";
 static const UINT8 g_seal_aad_domain[] = "edgerun:c:v1:seal:aad";
 static const UINT8 g_seal_payload_domain[] = "edgerun:c:v1:seal:payload";
-static const UINT8 g_seal_object_domain[] = "edgerun:c:v1:seal:object";
+static const UINT8 g_seal_record_domain[] = "edgerun:c:v1:seal:record";
 static const UINT8 g_seal_content_key_domain[] = "edgerun:c:v1:seal:content-key";
 static const UINT8 g_seal_key_wrap_domain[] = "edgerun:c:v1:seal:key-wrap";
 
@@ -17,19 +17,19 @@ enum {
   ER_SEAL_U16_HIGH_SHIFT = 8u,
   ER_SEAL_U8_MASK = 0xffu,
   ER_SEAL_U16_MAX = 0xffffu,
-  ER_SEAL_OBJECT_SPAN_COUNT = 7u,
-  ER_SEAL_OBJECT_FIELDS_SPAN = 0u,
-  ER_SEAL_OBJECT_RECIPIENT_SPAN = 1u,
-  ER_SEAL_OBJECT_PLAINTEXT_ID_SPAN = 2u,
-  ER_SEAL_OBJECT_AAD_HASH_SPAN = 3u,
-  ER_SEAL_OBJECT_PAYLOAD_HASH_SPAN = 4u,
-  ER_SEAL_OBJECT_SEALED_PAYLOAD_SPAN = 5u,
-  ER_SEAL_OBJECT_RECIPIENT_MATERIAL_SPAN = 6u,
-  ER_SEAL_OBJECT_U16_FIELD_COUNT = 4u,
-  ER_SEAL_OBJECT_U64_FIELD_COUNT = 2u,
-  ER_SEAL_OBJECT_FIELD_BYTES =
-      (ER_SEAL_U16_FIELD_BYTES * ER_SEAL_OBJECT_U16_FIELD_COUNT) +
-      (ER_SEAL_U64_FIELD_BYTES * ER_SEAL_OBJECT_U64_FIELD_COUNT),
+  ER_SEAL_RECORD_SPAN_COUNT = 7u,
+  ER_SEAL_RECORD_FIELDS_SPAN = 0u,
+  ER_SEAL_RECORD_RECIPIENT_SPAN = 1u,
+  ER_SEAL_RECORD_PLAINTEXT_HASH_SPAN = 2u,
+  ER_SEAL_RECORD_AAD_HASH_SPAN = 3u,
+  ER_SEAL_RECORD_PAYLOAD_HASH_SPAN = 4u,
+  ER_SEAL_RECORD_SEALED_PAYLOAD_SPAN = 5u,
+  ER_SEAL_RECORD_RECIPIENT_MATERIAL_SPAN = 6u,
+  ER_SEAL_RECORD_U16_FIELD_COUNT = 4u,
+  ER_SEAL_RECORD_U64_FIELD_COUNT = 2u,
+  ER_SEAL_RECORD_FIELD_BYTES =
+      (ER_SEAL_U16_FIELD_BYTES * ER_SEAL_RECORD_U16_FIELD_COUNT) +
+      (ER_SEAL_U64_FIELD_BYTES * ER_SEAL_RECORD_U64_FIELD_COUNT),
   ER_SEAL_KEY_WRAP_SPAN_COUNT = 6u,
   ER_SEAL_KEY_WRAP_FIELDS_SPAN = 0u,
   ER_SEAL_KEY_WRAP_RECIPIENT_SPAN = 1u,
@@ -98,8 +98,8 @@ static UINT8 er_seal_valid_strategy(UINT16 strategy) {
   }
 }
 
-static void er_seal_object_fields(const ErSealedContentObjectHeader* header,
-                                  UINT8 fields[ER_SEAL_OBJECT_FIELD_BYTES]) {
+static void er_seal_record_fields(const ErSealedContentRecordHeader* header,
+                                  UINT8 fields[ER_SEAL_RECORD_FIELD_BYTES]) {
   UINT8* cursor = fields;
 
   er_seal_write_u16(&cursor, header->abi_version);
@@ -110,37 +110,37 @@ static void er_seal_object_fields(const ErSealedContentObjectHeader* header,
   er_seal_write_u64(&cursor, header->sealed_payload_len);
 }
 
-static UINT8 er_seal_hash_object_id(const ErCryptoProvider* crypto,
-                                    const ErSealedContentObjectHeader* header,
+static UINT8 er_seal_hash_record_id(const ErCryptoProvider* crypto,
+                                    const ErSealedContentRecordHeader* header,
                                     const UINT8* sealed_payload,
                                     UINTN sealed_payload_len,
                                     ErHash* out_hash) {
-  UINT8 fields[ER_SEAL_OBJECT_FIELD_BYTES];
-  ErByteSpan spans[ER_SEAL_OBJECT_SPAN_COUNT];
+  UINT8 fields[ER_SEAL_RECORD_FIELD_BYTES];
+  ErByteSpan spans[ER_SEAL_RECORD_SPAN_COUNT];
 
   if (crypto == 0 || header == 0 || sealed_payload == 0 ||
       sealed_payload_len == 0u || out_hash == 0) {
     return 0u;
   }
-  er_seal_object_fields(header, fields);
-  er_seal_set_span(&spans[ER_SEAL_OBJECT_FIELDS_SPAN],
+  er_seal_record_fields(header, fields);
+  er_seal_set_span(&spans[ER_SEAL_RECORD_FIELDS_SPAN],
                    fields, (UINTN)sizeof(fields));
-  er_seal_set_span(&spans[ER_SEAL_OBJECT_RECIPIENT_SPAN],
+  er_seal_set_span(&spans[ER_SEAL_RECORD_RECIPIENT_SPAN],
                    (const UINT8*)&header->recipient,
                    (UINTN)sizeof(header->recipient));
-  er_seal_set_span(&spans[ER_SEAL_OBJECT_PLAINTEXT_ID_SPAN],
-                   header->plaintext_object_id.bytes, ER_HASH_LEN);
-  er_seal_set_span(&spans[ER_SEAL_OBJECT_AAD_HASH_SPAN],
+  er_seal_set_span(&spans[ER_SEAL_RECORD_PLAINTEXT_HASH_SPAN],
+                   header->plaintext_hash.bytes, ER_HASH_LEN);
+  er_seal_set_span(&spans[ER_SEAL_RECORD_AAD_HASH_SPAN],
                    header->aad_hash.bytes, ER_HASH_LEN);
-  er_seal_set_span(&spans[ER_SEAL_OBJECT_PAYLOAD_HASH_SPAN],
+  er_seal_set_span(&spans[ER_SEAL_RECORD_PAYLOAD_HASH_SPAN],
                    header->sealed_payload_hash.bytes, ER_HASH_LEN);
-  er_seal_set_span(&spans[ER_SEAL_OBJECT_SEALED_PAYLOAD_SPAN],
+  er_seal_set_span(&spans[ER_SEAL_RECORD_SEALED_PAYLOAD_SPAN],
                    sealed_payload, sealed_payload_len);
-  er_seal_set_span(&spans[ER_SEAL_OBJECT_RECIPIENT_MATERIAL_SPAN],
+  er_seal_set_span(&spans[ER_SEAL_RECORD_RECIPIENT_MATERIAL_SPAN],
                    header->recipient.material, header->recipient.material_len);
-  return er_crypto_hash(crypto, g_seal_object_domain,
-                        (UINTN)(sizeof(g_seal_object_domain) - 1u),
-                        spans, ER_SEAL_OBJECT_SPAN_COUNT, out_hash);
+  return er_crypto_hash(crypto, g_seal_record_domain,
+                        (UINTN)(sizeof(g_seal_record_domain) - 1u),
+                        spans, ER_SEAL_RECORD_SPAN_COUNT, out_hash);
 }
 
 static void er_seal_key_wrap_fields(const ErSealedContentKeyWrap* wrap,
@@ -223,15 +223,15 @@ UINT8 er_seal_prepare_content_key(const UINT8 key_bytes[ER_SEAL_CONTENT_KEY_LEN]
   return 1u;
 }
 
-UINT8 er_seal_prepare_content_object(const ErCryptoProvider* crypto,
+UINT8 er_seal_prepare_content_record(const ErCryptoProvider* crypto,
                                      const ErIdentity* recipient,
                                      const ErByteSpan* aad,
                                      const ErByteSpan* plaintext,
                                      UINT32 expected_reuse_count,
                                      ErMutableBytes* sealed_out,
-                                     ErSealedContentObjectHeader* out_header) {
-  ErSealedContentObjectHeader header;
-  ErHash object_id;
+                                     ErSealedContentRecordHeader* out_header) {
+  ErSealedContentRecordHeader header;
+  ErHash record_id;
 
   if (crypto == 0 || recipient == 0 || aad == 0 || plaintext == 0 ||
       plaintext->bytes == 0 || plaintext->len == 0u ||
@@ -255,7 +255,7 @@ UINT8 er_seal_prepare_content_object(const ErCryptoProvider* crypto,
       er_seal_hash_span(crypto, g_seal_plaintext_domain,
                         (UINTN)(sizeof(g_seal_plaintext_domain) - 1u),
                         plaintext->bytes, plaintext->len,
-                        &header.plaintext_object_id) == 0u ||
+                        &header.plaintext_hash) == 0u ||
       er_seal_hash_span(crypto, g_seal_aad_domain,
                         (UINTN)(sizeof(g_seal_aad_domain) - 1u),
                         aad->bytes, aad->len, &header.aad_hash) == 0u ||
@@ -269,24 +269,24 @@ UINT8 er_seal_prepare_content_object(const ErCryptoProvider* crypto,
     return 0u;
   }
   header.sealed_payload_len = (UINT64)sealed_out->len;
-  if (er_seal_hash_object_id(crypto, &header, sealed_out->bytes,
-                             sealed_out->len, &object_id) == 0u ||
-      er_hash_nonzero(&object_id) == 0u) {
+  if (er_seal_hash_record_id(crypto, &header, sealed_out->bytes,
+                             sealed_out->len, &record_id) == 0u ||
+      er_hash_nonzero(&record_id) == 0u) {
     return 0u;
   }
-  header.sealed_object_id = object_id;
+  header.sealed_record_id = record_id;
   *out_header = header;
   return 1u;
 }
 
-UINT8 er_seal_content_object_valid(const ErCryptoProvider* crypto,
-                                   const ErSealedContentObjectHeader* header,
+UINT8 er_seal_content_record_valid(const ErCryptoProvider* crypto,
+                                   const ErSealedContentRecordHeader* header,
                                    const ErByteSpan* aad,
                                    const UINT8* sealed_payload,
                                    UINTN sealed_payload_len) {
   ErHash aad_hash;
   ErHash payload_hash;
-  ErHash object_id;
+  ErHash record_id;
 
   if (crypto == 0 || header == 0 || aad == 0 || sealed_payload == 0 ||
       sealed_payload_len == 0u ||
@@ -297,10 +297,10 @@ UINT8 er_seal_content_object_valid(const ErCryptoProvider* crypto,
       header->plaintext_len == 0u ||
       header->sealed_payload_len != (UINT64)sealed_payload_len ||
       er_identity_valid(&header->recipient) == 0u ||
-      er_hash_nonzero(&header->plaintext_object_id) == 0u ||
+      er_hash_nonzero(&header->plaintext_hash) == 0u ||
       er_hash_nonzero(&header->aad_hash) == 0u ||
       er_hash_nonzero(&header->sealed_payload_hash) == 0u ||
-      er_hash_nonzero(&header->sealed_object_id) == 0u) {
+      er_hash_nonzero(&header->sealed_record_id) == 0u) {
     return 0u;
   }
   if (aad->len > 0u && aad->bytes == 0) {
@@ -319,11 +319,11 @@ UINT8 er_seal_content_object_valid(const ErCryptoProvider* crypto,
       er_hash_equal(&payload_hash, &header->sealed_payload_hash) == 0u) {
     return 0u;
   }
-  if (er_seal_hash_object_id(crypto, header, sealed_payload,
-                             sealed_payload_len, &object_id) == 0u) {
+  if (er_seal_hash_record_id(crypto, header, sealed_payload,
+                             sealed_payload_len, &record_id) == 0u) {
     return 0u;
   }
-  return er_hash_equal(&object_id, &header->sealed_object_id);
+  return er_hash_equal(&record_id, &header->sealed_record_id);
 }
 
 UINT8 er_seal_wrap_content_key(const ErCryptoProvider* crypto,

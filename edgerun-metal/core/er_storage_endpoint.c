@@ -29,7 +29,7 @@ enum {
   ER_STORAGE_RECEIPT_REQUEST_SPAN = 1u,
   ER_STORAGE_RECEIPT_ADMISSION_SPAN = 2u,
   ER_STORAGE_RECEIPT_RELAY_PAYLOAD_SPAN = 3u,
-  ER_STORAGE_RECEIPT_SEALED_OBJECT_SPAN = 4u,
+  ER_STORAGE_RECEIPT_SEALED_RECORD_SPAN = 4u,
   ER_STORAGE_RECEIPT_TRANSIT_SPAN = 5u,
   ER_STORAGE_RECEIPT_RELAY_NODE_SPAN = 6u,
   ER_STORAGE_RECEIPT_CAPTURE_SEALED_PAYLOAD_SPAN = 7u,
@@ -148,9 +148,9 @@ static UINT8 er_storage_endpoint_route_receipt_hash(
   spans[ER_STORAGE_RECEIPT_RELAY_PAYLOAD_SPAN].bytes =
       receipt->relay_payload_hash.bytes;
   spans[ER_STORAGE_RECEIPT_RELAY_PAYLOAD_SPAN].len = ER_HASH_LEN;
-  spans[ER_STORAGE_RECEIPT_SEALED_OBJECT_SPAN].bytes =
-      receipt->sealed_object_id.bytes;
-  spans[ER_STORAGE_RECEIPT_SEALED_OBJECT_SPAN].len = ER_HASH_LEN;
+  spans[ER_STORAGE_RECEIPT_SEALED_RECORD_SPAN].bytes =
+      receipt->sealed_record_id.bytes;
+  spans[ER_STORAGE_RECEIPT_SEALED_RECORD_SPAN].len = ER_HASH_LEN;
   spans[ER_STORAGE_RECEIPT_TRANSIT_SPAN].bytes = receipt->transit_hash.bytes;
   spans[ER_STORAGE_RECEIPT_TRANSIT_SPAN].len = ER_HASH_LEN;
   spans[ER_STORAGE_RECEIPT_RELAY_NODE_SPAN].bytes = receipt->relay_node_id.bytes;
@@ -489,7 +489,7 @@ UINT8 er_storage_endpoint_capture_sealed_relay_packet(const ErCryptoProvider* cr
                                                       const UINT8* relay_packet,
                                                       UINT32 relay_packet_len,
                                                       const ErByteSpan* aad,
-                                                      const ErSealedContentObjectHeader* sealed_header,
+                                                      const ErSealedContentRecordHeader* sealed_header,
                                                       ErStorageEndpointSealedRelayCapture* out_capture) {
   ErRelayPacketHeader relay_header;
   const UINT8* sealed_payload;
@@ -509,7 +509,7 @@ UINT8 er_storage_endpoint_capture_sealed_relay_packet(const ErCryptoProvider* cr
                                                     sealed_payload_len,
                                                     &relay_payload_hash) == 0u ||
       er_hash_equal(&relay_payload_hash, &relay_header.payload_hash) == 0u ||
-      er_seal_content_object_valid(crypto, sealed_header, aad, sealed_payload,
+      er_seal_content_record_valid(crypto, sealed_header, aad, sealed_payload,
                                    sealed_payload_len) == 0u) {
     return 0u;
   }
@@ -519,8 +519,8 @@ UINT8 er_storage_endpoint_capture_sealed_relay_packet(const ErCryptoProvider* cr
   out_capture->route_id = route->route_id;
   out_capture->admission_id = route->admission_hash;
   out_capture->relay_payload_hash = relay_payload_hash;
-  out_capture->sealed_object_id = sealed_header->sealed_object_id;
-  out_capture->plaintext_object_id = sealed_header->plaintext_object_id;
+  out_capture->sealed_record_id = sealed_header->sealed_record_id;
+  out_capture->plaintext_hash = sealed_header->plaintext_hash;
   out_capture->sealed_payload_hash = sealed_header->sealed_payload_hash;
   out_capture->sequence = relay_header.sequence;
   out_capture->plaintext_len = sealed_header->plaintext_len;
@@ -548,7 +548,7 @@ UINT8 er_storage_endpoint_prepare_sealed_relay_receipt(
       er_hash_equal(&claim->admission_hash, &route->admission_hash) == 0u ||
       er_node_id_equal(&claim->relay_node_id, &route->relay_node_id) == 0u ||
       er_hash_nonzero(&capture->relay_payload_hash) == 0u ||
-      er_hash_nonzero(&capture->sealed_object_id) == 0u ||
+      er_hash_nonzero(&capture->sealed_record_id) == 0u ||
       er_hash_nonzero(&capture->sealed_payload_hash) == 0u ||
       er_hash_nonzero(&claim->transit_hash) == 0u ||
       capture->sequence == 0u ||
@@ -584,7 +584,7 @@ UINT8 er_storage_endpoint_prepare_sealed_relay_receipt(
   out_receipt->request_hash = route->request_hash;
   out_receipt->admission_id = route->admission_hash;
   out_receipt->relay_payload_hash = capture->relay_payload_hash;
-  out_receipt->sealed_object_id = capture->sealed_object_id;
+  out_receipt->sealed_record_id = capture->sealed_record_id;
   out_receipt->transit_hash = claim->transit_hash;
   out_receipt->relay_node_id = route->relay_node_id;
   out_receipt->sequence = capture->sequence;

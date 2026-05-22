@@ -32,13 +32,13 @@ typedef struct {
   UINT16 algorithm;
   UINT16 reserved;
   ErIdentity recipient;
-  ErHash plaintext_object_id;
+  ErHash plaintext_hash;
   UINT64 plaintext_len;
   ErHash aad_hash;
   ErHash sealed_payload_hash;
   UINT64 sealed_payload_len;
-  ErHash sealed_object_id;
-} ErSealedContentObjectHeader;
+  ErHash sealed_record_id;
+} ErSealedContentRecordHeader;
 
 typedef struct {
   UINT16 abi_version;
@@ -58,15 +58,15 @@ ErSealStrategy er_seal_select_strategy(UINT32 recipient_count,
 const char* er_seal_strategy_label(ErSealStrategy strategy);
 UINT8 er_seal_prepare_content_key(const UINT8 key_bytes[ER_SEAL_CONTENT_KEY_LEN],
                                   ErSealContentKey* out_key);
-UINT8 er_seal_prepare_content_object(const ErCryptoProvider* crypto,
+UINT8 er_seal_prepare_content_record(const ErCryptoProvider* crypto,
                                      const ErIdentity* recipient,
                                      const ErByteSpan* aad,
                                      const ErByteSpan* plaintext,
                                      UINT32 expected_reuse_count,
                                      ErMutableBytes* sealed_out,
-                                     ErSealedContentObjectHeader* out_header);
-UINT8 er_seal_content_object_valid(const ErCryptoProvider* crypto,
-                                   const ErSealedContentObjectHeader* header,
+                                     ErSealedContentRecordHeader* out_header);
+UINT8 er_seal_content_record_valid(const ErCryptoProvider* crypto,
+                                   const ErSealedContentRecordHeader* header,
                                    const ErByteSpan* aad,
                                    const UINT8* sealed_payload,
                                    UINTN sealed_payload_len);

@@ -57,8 +57,8 @@ typedef struct {
   ErHash route_id;
   ErHash admission_id;
   ErHash relay_payload_hash;
-  ErHash sealed_object_id;
-  ErHash plaintext_object_id;
+  ErHash sealed_record_id;
+  ErHash plaintext_hash;
   ErHash sealed_payload_hash;
   UINT64 sequence;
   UINT64 plaintext_len;
@@ -72,7 +72,7 @@ typedef struct {
   ErHash request_hash;
   ErHash admission_id;
   ErHash relay_payload_hash;
-  ErHash sealed_object_id;
+  ErHash sealed_record_id;
   ErHash transit_hash;
   ErNodeId relay_node_id;
   UINT64 sequence;
@@ -132,7 +132,7 @@ UINT8 er_storage_endpoint_capture_sealed_relay_packet(const ErCryptoProvider* cr
                                                       const UINT8* relay_packet,
                                                       UINT32 relay_packet_len,
                                                       const ErByteSpan* aad,
-                                                      const ErSealedContentObjectHeader* sealed_header,
+                                                      const ErSealedContentRecordHeader* sealed_header,
                                                       ErStorageEndpointSealedRelayCapture* out_capture);
 UINT8 er_storage_endpoint_prepare_sealed_relay_receipt(const ErCryptoProvider* crypto,
                                                        const ErAdmittedRoute* route,

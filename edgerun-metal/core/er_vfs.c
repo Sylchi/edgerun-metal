@@ -446,7 +446,7 @@ UINT8 er_vfs_prepare_object_label_ref_from_object(const ErCryptoProvider* crypto
                         spans, ER_VFS_LABEL_REF_SPAN_COUNT, &out_ref->label_hash);
 }
 
-UINT8 er_vfs_prepare_transform_ref(const ErCryptoProvider* crypto, const ErHash* plaintext_object_id,
+UINT8 er_vfs_prepare_transform_ref(const ErCryptoProvider* crypto, const ErHash* plaintext_canonical_object_id,
                                    UINT64 plaintext_len, const ErHash* transport_object_id,
                                    UINT64 transport_len, UINT16 compression_kind, UINT16 seal_kind,
                                    ErVfsObjectTransformRef* out_ref) {
@@ -454,7 +454,7 @@ UINT8 er_vfs_prepare_transform_ref(const ErCryptoProvider* crypto, const ErHash*
   UINT8* field_cursor = fields;
   ErByteSpan spans[ER_VFS_TRANSFORM_REF_SPAN_COUNT];
 
-  if (out_ref == 0 || crypto == 0 || plaintext_object_id == 0 || transport_object_id == 0) {
+  if (out_ref == 0 || crypto == 0 || plaintext_canonical_object_id == 0 || transport_object_id == 0) {
     return 0;
   }
   if (seal_kind == ER_VFS_SEAL_NONE) {
@@ -465,7 +465,7 @@ UINT8 er_vfs_prepare_transform_ref(const ErCryptoProvider* crypto, const ErHash*
   out_ref->abi_version = ER_VFS_ABI_VERSION;
   out_ref->compression_kind = compression_kind;
   out_ref->seal_kind = seal_kind;
-  out_ref->plaintext_object_id = *plaintext_object_id;
+  out_ref->plaintext_canonical_object_id = *plaintext_canonical_object_id;
   out_ref->plaintext_len = plaintext_len;
   out_ref->transport_object_id = *transport_object_id;
   out_ref->transport_len = transport_len;
@@ -474,7 +474,7 @@ UINT8 er_vfs_prepare_transform_ref(const ErCryptoProvider* crypto, const ErHash*
   er_vfs_put_transform_field16(&field_cursor, seal_kind);
   er_vfs_put_transform_field64(&field_cursor, plaintext_len);
   er_vfs_put_transform_field64(&field_cursor, transport_len);
-  er_vfs_set_span(&spans[ER_VFS_TRANSFORM_PLAINTEXT_ID_SPAN], plaintext_object_id->bytes, ER_HASH_LEN);
+  er_vfs_set_span(&spans[ER_VFS_TRANSFORM_PLAINTEXT_ID_SPAN], plaintext_canonical_object_id->bytes, ER_HASH_LEN);
   er_vfs_set_span(&spans[ER_VFS_TRANSFORM_TRANSPORT_ID_SPAN], transport_object_id->bytes, ER_HASH_LEN);
   er_vfs_set_span(&spans[ER_VFS_TRANSFORM_FIELDS_SPAN], fields, (UINTN)sizeof(fields));
   return er_crypto_hash(crypto, g_transform_domain, (UINTN)(sizeof(g_transform_domain) - 1u),
