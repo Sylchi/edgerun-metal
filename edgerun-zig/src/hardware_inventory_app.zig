@@ -4,9 +4,11 @@ const bytes = @import("bytes.zig");
 const hardware_inventory = @import("hardware_inventory.zig");
 const tpm_acpi = @import("tpm_acpi.zig");
 const ui = @import("ui.zig");
+const ui_components = @import("ui_components.zig");
 
 pub const max_rows = 8;
 pub const node_count = max_rows + 1;
+pub const component_count = node_count;
 pub const detail_bytes = 64;
 
 const magic = "ERHI001\x00";
@@ -39,6 +41,10 @@ const row_pci_ecam = 4;
 const row_tpm = 5;
 const row_pci_devices = 6;
 const row_status = 7;
+const title_index = 0;
+const row_id_base = 1;
+const stack_gap: u16 = 6;
+const stack_padding: u16 = 16;
 
 const row_titles = [_][]const u8{
     "Boot services",
@@ -137,16 +143,44 @@ pub const View = struct {
 
     pub fn rootNode(self: View, out_nodes: []ui.Node) ?ui.Node {
         if (out_nodes.len < node_count) return null;
-        out_nodes[0] = .{ .text = .{ .value = "Hardware inventory", .color = .accent } };
-        var row: usize = 0;
-        while (row < max_rows) : (row += 1) {
-            out_nodes[row + 1] = .{ .row_item = .{
-                .id = @intCast(row + 1),
-                .title = row_titles[row],
-                .detail = self.detail(row),
-            } };
+
+        var index: usize = 0;
+        while (index < node_count) : (index += 1) {
+            const component = self.componentAt(index) orelse return null;
+            out_nodes[index] = component.node();
         }
-        return .{ .stack = .{ .axis = .column, .gap = 6, .padding = 16, .children = out_nodes[0..node_count] } };
+        out_nodes[title_index].text.color = .accent;
+        return .{ .stack = .{ .axis = .column, .gap = stack_gap, .padding = stack_padding, .children = out_nodes[0..node_count] } };
+    }
+
+    pub fn componentStack(self: View, out_components: []ui_components.Component) ?ui_components.Stack {
+        if (out_components.len < component_count) return null;
+
+        var index: usize = 0;
+        while (index < component_count) : (index += 1) {
+            out_components[index] = self.componentAt(index) orelse return null;
+        }
+        return .{
+            .axis = .column,
+            .gap = stack_gap,
+            .padding = stack_padding,
+            .children = out_components[0..component_count],
+        };
+    }
+
+    fn componentAt(self: View, index: usize) ?ui_components.Component {
+        return switch (index) {
+            title_index => .{ .text = .{ .value = "Hardware inventory" } },
+            row_id_base...max_rows => |component_index| blk: {
+                const row = component_index - row_id_base;
+                break :blk .{ .row_item = .{
+                    .id = @intCast(component_index),
+                    .title = row_titles[row],
+                    .detail = self.detail(row),
+                } };
+            },
+            else => null,
+        };
     }
 };
 
@@ -270,6 +304,56 @@ test "hardware inventory state maps shared bytes into ui rows" {
     var scene = ui.Scene.init(&commands);
     try ui.render(&scene, root, .{ .x = 0, .y = 0, .w = 360, .h = 520 }, .{});
     try std.testing.expect(scene.commandCount() > max_rows);
+}
+
+test "hardware inventory view publishes canonical ui stack through app storage" {
+    const app_mod = @import("app.zig");
+    const BoundedArena = @import("arena.zig").BoundedArena;
+    const clock = @import("clock.zig");
+    const identity = @import("identity.zig");
+    const input = @import("input.zig");
+    const object = @import("object.zig");
+    const preimage = @import("preimage.zig");
+
+    var state_bytes: [state_size]u8 = undefined;
+    _ = try writeState(&state_bytes, sampleInventory(2), 11);
+    const state_view = try view(&state_bytes);
+
+    var stack_components: [component_count]ui_components.Component = undefined;
+    const stack = state_view.componentStack(&stack_components).?;
+    try std.testing.expectEqual(@as(usize, component_count), stack.children.len);
+    try std.testing.expectEqualStrings("Hardware inventory", stack.children[title_index].text.value);
+    try std.testing.expectEqualStrings("2 device(s), overflow no", stack.children[row_pci_devices + row_id_base].row_item.detail);
+
+    var host_memory: [8192]u8 = undefined;
+    const epoch = clock.Stamp{ .keeper = .{ .bytes = [_]u8{7} ++ [_]u8{0} ** 31 } };
+    const app_id = identity.Identity.init(.app, identity.Source.prepare(.hash, &preimage.rawHash("hardware inventory ui app")).?, epoch).?;
+    var app = app_mod.App.initFromHostSlice(app_id, BoundedArena.init(.{ .base = &host_memory }), 4096, 8).?;
+
+    var codec_raw: [1024]u8 = undefined;
+    var object_raw: [object.header_size + 1024]u8 = undefined;
+    var resolved: [1]object.View = undefined;
+    var render_components: [component_count]ui_components.Component = undefined;
+    var nodes: [component_count]ui.Node = undefined;
+    const scratch = app_mod.App.UiScratch{
+        .codec = &codec_raw,
+        .object = &object_raw,
+        .resolved = &resolved,
+        .components = &render_components,
+        .nodes = &nodes,
+    };
+
+    const published = try app.publishUiStack(stack, epoch, scratch);
+    const stored = app.storage.getObject(app.id.id, published.object_id).?;
+    try std.testing.expectEqual(object.Kind.bytes, stored.header.kind);
+    try std.testing.expectEqual(object.Visibility.app_namespace, stored.header.requirements.visibility);
+
+    var commands: [64]ui.Command = undefined;
+    var scene = ui.Scene.init(&commands);
+    try app.renderPublishedUi(published, scratch, &scene, .{ .x = 0, .y = 0, .w = 360, .h = 520 }, .{});
+
+    const hit = input.hitTest(scene.written(), 20, 70).?;
+    try std.testing.expectEqual(@as(u32, row_boot + row_id_base), hit.id);
 }
 
 test "hardware inventory view observes in-place producer updates" {

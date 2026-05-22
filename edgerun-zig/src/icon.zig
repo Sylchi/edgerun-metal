@@ -2,11 +2,10 @@ const std = @import("std");
 
 pub const Icon = enum(u8) {
     activity,
-    window,
+    app,
     bell,
     chat,
     check,
-    chevron_left,
     chevron_right,
     code,
     cpu,
@@ -27,7 +26,7 @@ pub const Icon = enum(u8) {
     sparkles,
     storage,
     terminal,
-    shield_check,
+    trust,
     trash,
     user,
     wallet,
@@ -48,11 +47,10 @@ const Mapping = struct {
 
 const mappings = [_]Mapping{
     .{ .label = "activity", .tabler = "activity", .lucide = "activity" },
-    .{ .label = "window", .tabler = "apps", .lucide = "app-window" },
+    .{ .label = "app", .tabler = "apps", .lucide = "app-window" },
     .{ .label = "bell", .tabler = "bell", .lucide = "bell" },
     .{ .label = "chat", .tabler = "message-circle", .lucide = "message-circle" },
     .{ .label = "check", .tabler = "check", .lucide = "check" },
-    .{ .label = "chevron-left", .tabler = "chevron-left", .lucide = "chevron-left" },
     .{ .label = "chevron-right", .tabler = "chevron-right", .lucide = "chevron-right" },
     .{ .label = "code", .tabler = "code", .lucide = "code" },
     .{ .label = "cpu", .tabler = "cpu", .lucide = "cpu" },
@@ -73,7 +71,7 @@ const mappings = [_]Mapping{
     .{ .label = "sparkles", .tabler = "sparkles", .lucide = "sparkles" },
     .{ .label = "storage", .tabler = "database", .lucide = "database" },
     .{ .label = "terminal", .tabler = "terminal-2", .lucide = "square-terminal" },
-    .{ .label = "shield-check", .tabler = "shield-check", .lucide = "shield-check" },
+    .{ .label = "trust", .tabler = "shield-check", .lucide = "shield-check" },
     .{ .label = "trash", .tabler = "trash", .lucide = "trash-2" },
     .{ .label = "user", .tabler = "user", .lucide = "user" },
     .{ .label = "wallet", .tabler = "wallet", .lucide = "wallet" },
@@ -108,15 +106,15 @@ fn mapping(value: Icon) Mapping {
 
 test "icon atlas ids are stable and one based" {
     try std.testing.expectEqual(@as(u32, 1), atlasId(.activity));
-    try std.testing.expectEqual(@as(u32, 19), atlasId(.search));
-    try std.testing.expectEqual(Icon.search, fromAtlasId(19).?);
+    try std.testing.expectEqual(@as(u32, 18), atlasId(.search));
+    try std.testing.expectEqual(Icon.search, fromAtlasId(18).?);
     try std.testing.expect(fromAtlasId(0) == null);
-    try std.testing.expect(fromAtlasId(33) == null);
+    try std.testing.expect(fromAtlasId(32) == null);
 }
 
 test "icon labels and provider names match C mappings" {
     try std.testing.expectEqualStrings("search", label(.search));
     try std.testing.expectEqualStrings("menu-2", providerName(.menu, .tabler));
-    try std.testing.expectEqualStrings("app-window", providerName(.window, .lucide));
+    try std.testing.expectEqualStrings("app-window", providerName(.app, .lucide));
     try std.testing.expectEqualStrings("triangle-alert", providerName(.warning, .lucide));
 }

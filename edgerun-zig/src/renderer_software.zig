@@ -1,5 +1,7 @@
 const std = @import("std");
+const icon = @import("icon.zig");
 const ui = @import("ui.zig");
+const varfont = @import("varfont.zig");
 
 pub const Error = error{
     PixelBudgetExceeded,
@@ -34,8 +36,9 @@ pub const Surface = struct {
                 self.fill(.{ .x = bounds.x, .y = bounds.y, .w = border_width, .h = bounds.h }, border.color);
                 self.fill(.{ .x = bounds.x + bounds.w - border_width, .y = bounds.y, .w = border_width, .h = bounds.h }, border.color);
             },
-            .text => |text| self.textPlaceholder(scaleRect(text.origin, scale), text.value, text.color),
-            .hit, .drag_source, .drop_target, .icon_quad, .text_quad, .transition => {},
+            .text => |text| self.drawTextCommand(text, scale),
+            .icon_quad => |quad| self.drawIconQuad(quad, scale),
+            .hit, .drag_source, .drop_target, .text_quad, .transition => {},
         };
     }
 
@@ -138,13 +141,260 @@ pub const Surface = struct {
         }
     }
 
-    fn textPlaceholder(self: Surface, bounds: ui.Rect, value: []const u8, color: ui.Color) void {
-        if (value.len == 0) return;
-        const bar_height = @max(min_text_placeholder_height, bounds.h * text_placeholder_height_ratio);
-        const max_width = bounds.w;
-        const width = @min(max_width, @max(min_text_placeholder_width, @as(f32, @floatFromInt(value.len)) * text_placeholder_glyph_width));
-        const y = bounds.y + @max(0.0, (bounds.h - bar_height) * 0.5);
-        self.fillRounded(.{ .x = bounds.x, .y = y, .w = width, .h = bar_height }, color, color, bar_height * text_placeholder_radius_ratio);
+    fn drawTextCommand(self: Surface, text: anytype, scale: f32) void {
+        const bounds = scaleRect(text.origin, scale);
+        const px_size = textPxSize(bounds);
+        var draw_bounds = bounds;
+        const measured = @min(bounds.w, measureText(text.value, px_size));
+        draw_bounds.x += switch (text.alignment) {
+            .start => 0.0,
+            .center => @max(0.0, (bounds.w - measured) * 0.5),
+            .end => @max(0.0, bounds.w - measured),
+        };
+        draw_bounds.w = @max(1.0, bounds.w - (draw_bounds.x - bounds.x));
+        textCache().drawText(self, draw_bounds, text.value, text.color, px_size) catch unreachable;
+    }
+
+    fn drawIconQuad(self: Surface, quad: ui.Quad, scale: f32) void {
+        const bounds = scaleRect(quad.bounds, scale);
+        const value = icon.fromAtlasId(quad.atlas_id) orelse unreachable;
+        const color = quad.color;
+        switch (value) {
+            .activity => self.iconLine(bounds, color, &.{ 0.16, 0.55, 0.31, 0.55, 0.39, 0.31, 0.52, 0.72, 0.62, 0.44, 0.70, 0.55, 0.84, 0.55 }),
+            .app => {
+                self.iconRoundRect(bounds, color, 0.18, 0.20, 0.64, 0.60, 0.08);
+                self.iconLine(bounds, color, &.{ 0.18, 0.38, 0.82, 0.38 });
+                self.iconFilledCircle(bounds, color, 0.30, 0.29, 0.025);
+                self.iconFilledCircle(bounds, color, 0.40, 0.29, 0.025);
+            },
+            .bell => {
+                self.iconLine(bounds, color, &.{ 0.30, 0.70, 0.36, 0.42, 0.42, 0.28, 0.50, 0.25, 0.58, 0.28, 0.64, 0.42, 0.70, 0.70, 0.30, 0.70 });
+                self.iconLine(bounds, color, &.{ 0.44, 0.78, 0.56, 0.78 });
+            },
+            .chat => {
+                self.iconRoundRect(bounds, color, 0.20, 0.24, 0.60, 0.45, 0.12);
+                self.iconLine(bounds, color, &.{ 0.38, 0.69, 0.30, 0.80, 0.31, 0.66 });
+            },
+            .check => self.iconLine(bounds, color, &.{ 0.22, 0.53, 0.42, 0.72, 0.78, 0.30 }),
+            .chevron_right => self.iconLine(bounds, color, &.{ 0.38, 0.24, 0.64, 0.50, 0.38, 0.76 }),
+            .code => {
+                self.iconLine(bounds, color, &.{ 0.38, 0.32, 0.22, 0.50, 0.38, 0.68 });
+                self.iconLine(bounds, color, &.{ 0.62, 0.32, 0.78, 0.50, 0.62, 0.68 });
+            },
+            .cpu => {
+                self.iconRoundRect(bounds, color, 0.30, 0.30, 0.40, 0.40, 0.06);
+                self.iconRoundRect(bounds, color, 0.40, 0.40, 0.20, 0.20, 0.03);
+                inline for (.{ 0.36, 0.50, 0.64 }) |x| {
+                    self.iconLine(bounds, color, &.{ x, 0.18, x, 0.30 });
+                    self.iconLine(bounds, color, &.{ x, 0.70, x, 0.82 });
+                }
+                inline for (.{ 0.36, 0.50, 0.64 }) |y| {
+                    self.iconLine(bounds, color, &.{ 0.18, y, 0.30, y });
+                    self.iconLine(bounds, color, &.{ 0.70, y, 0.82, y });
+                }
+            },
+            .database, .storage => self.databaseIcon(bounds, color),
+            .eye => {
+                self.iconLine(bounds, color, &.{ 0.16, 0.50, 0.32, 0.30, 0.50, 0.23, 0.68, 0.30, 0.84, 0.50, 0.68, 0.70, 0.50, 0.77, 0.32, 0.70, 0.16, 0.50 });
+                self.iconCircle(bounds, color, 0.50, 0.50, 0.12);
+            },
+            .file => {
+                self.iconLine(bounds, color, &.{ 0.30, 0.18, 0.56, 0.18, 0.72, 0.34, 0.72, 0.82, 0.30, 0.82, 0.30, 0.18 });
+                self.iconLine(bounds, color, &.{ 0.56, 0.18, 0.56, 0.34, 0.72, 0.34 });
+            },
+            .key => {
+                self.iconCircle(bounds, color, 0.36, 0.48, 0.16);
+                self.iconLine(bounds, color, &.{ 0.50, 0.56, 0.80, 0.56, 0.80, 0.68 });
+                self.iconLine(bounds, color, &.{ 0.66, 0.56, 0.66, 0.65 });
+            },
+            .lock => {
+                self.iconRoundRect(bounds, color, 0.26, 0.44, 0.48, 0.36, 0.06);
+                self.iconLine(bounds, color, &.{ 0.36, 0.44, 0.36, 0.34, 0.40, 0.22, 0.50, 0.20, 0.60, 0.22, 0.64, 0.34, 0.64, 0.44 });
+            },
+            .menu => {
+                inline for (.{ 0.31, 0.50, 0.69 }) |y| self.iconLine(bounds, color, &.{ 0.22, y, 0.78, y });
+            },
+            .message_plus => {
+                self.iconRoundRect(bounds, color, 0.20, 0.24, 0.60, 0.45, 0.12);
+                self.iconLine(bounds, color, &.{ 0.38, 0.69, 0.30, 0.80, 0.31, 0.66 });
+                self.iconLine(bounds, color, &.{ 0.50, 0.38, 0.50, 0.56 });
+                self.iconLine(bounds, color, &.{ 0.41, 0.47, 0.59, 0.47 });
+            },
+            .network => {
+                self.iconCircle(bounds, color, 0.50, 0.26, 0.08);
+                self.iconCircle(bounds, color, 0.27, 0.70, 0.08);
+                self.iconCircle(bounds, color, 0.73, 0.70, 0.08);
+                self.iconLine(bounds, color, &.{ 0.47, 0.33, 0.31, 0.63 });
+                self.iconLine(bounds, color, &.{ 0.53, 0.33, 0.69, 0.63 });
+                self.iconLine(bounds, color, &.{ 0.36, 0.70, 0.64, 0.70 });
+            },
+            .route => {
+                self.iconCircle(bounds, color, 0.25, 0.25, 0.08);
+                self.iconCircle(bounds, color, 0.75, 0.75, 0.08);
+                self.iconLine(bounds, color, &.{ 0.33, 0.25, 0.58, 0.30, 0.42, 0.70, 0.67, 0.75 });
+            },
+            .search => {
+                self.iconCircle(bounds, color, 0.46, 0.45, 0.22);
+                self.iconLine(bounds, color, &.{ 0.62, 0.62, 0.78, 0.78 });
+            },
+            .send => {
+                self.iconLine(bounds, color, &.{ 0.50, 0.78, 0.50, 0.22 });
+                self.iconLine(bounds, color, &.{ 0.30, 0.42, 0.50, 0.22, 0.70, 0.42 });
+            },
+            .server => {
+                self.iconRoundRect(bounds, color, 0.22, 0.22, 0.56, 0.20, 0.04);
+                self.iconRoundRect(bounds, color, 0.22, 0.58, 0.56, 0.20, 0.04);
+                self.iconFilledCircle(bounds, color, 0.34, 0.32, 0.025);
+                self.iconFilledCircle(bounds, color, 0.34, 0.68, 0.025);
+            },
+            .settings => {
+                self.iconCircle(bounds, color, 0.50, 0.50, 0.14);
+                inline for (.{ 0.0, 0.7853982, 1.5707964, 2.3561945, 3.1415927, 3.926991, 4.712389, 5.497787 }) |angle| {
+                    const x0 = 0.50 + @cos(angle) * 0.25;
+                    const y0 = 0.50 + @sin(angle) * 0.25;
+                    const x1 = 0.50 + @cos(angle) * 0.34;
+                    const y1 = 0.50 + @sin(angle) * 0.34;
+                    self.iconLine(bounds, color, &.{ x0, y0, x1, y1 });
+                }
+            },
+            .shield, .trust => {
+                self.iconLine(bounds, color, &.{ 0.50, 0.16, 0.76, 0.27, 0.71, 0.62, 0.50, 0.82, 0.29, 0.62, 0.24, 0.27, 0.50, 0.16 });
+                if (value == .trust) self.iconLine(bounds, color, &.{ 0.38, 0.50, 0.47, 0.59, 0.64, 0.40 });
+            },
+            .sparkles => {
+                self.iconLine(bounds, color, &.{ 0.50, 0.16, 0.56, 0.38, 0.78, 0.44, 0.56, 0.50, 0.50, 0.72, 0.44, 0.50, 0.22, 0.44, 0.44, 0.38, 0.50, 0.16 });
+                self.iconLine(bounds, color, &.{ 0.76, 0.18, 0.78, 0.28, 0.88, 0.30, 0.78, 0.32, 0.76, 0.42 });
+            },
+            .terminal => {
+                self.iconRoundRect(bounds, color, 0.18, 0.24, 0.64, 0.52, 0.07);
+                self.iconLine(bounds, color, &.{ 0.30, 0.42, 0.42, 0.52, 0.30, 0.62 });
+                self.iconLine(bounds, color, &.{ 0.50, 0.62, 0.70, 0.62 });
+            },
+            .trash => {
+                self.iconLine(bounds, color, &.{ 0.26, 0.30, 0.74, 0.30 });
+                self.iconLine(bounds, color, &.{ 0.42, 0.20, 0.58, 0.20 });
+                self.iconLine(bounds, color, &.{ 0.34, 0.30, 0.38, 0.80, 0.62, 0.80, 0.66, 0.30 });
+                self.iconLine(bounds, color, &.{ 0.46, 0.42, 0.46, 0.68 });
+                self.iconLine(bounds, color, &.{ 0.54, 0.42, 0.54, 0.68 });
+            },
+            .user => {
+                self.iconCircle(bounds, color, 0.50, 0.35, 0.14);
+                self.iconLine(bounds, color, &.{ 0.25, 0.80, 0.38, 0.64, 0.50, 0.58, 0.62, 0.64, 0.75, 0.80 });
+            },
+            .wallet => {
+                self.iconRoundRect(bounds, color, 0.18, 0.30, 0.64, 0.44, 0.07);
+                self.iconRoundRect(bounds, color, 0.58, 0.43, 0.24, 0.18, 0.04);
+                self.iconFilledCircle(bounds, color, 0.68, 0.52, 0.02);
+            },
+            .warning => {
+                self.iconLine(bounds, color, &.{ 0.50, 0.18, 0.82, 0.78, 0.18, 0.78, 0.50, 0.18 });
+                self.iconLine(bounds, color, &.{ 0.50, 0.40, 0.50, 0.56 });
+                self.iconFilledCircle(bounds, color, 0.50, 0.68, 0.025);
+            },
+            .x => {
+                self.iconLine(bounds, color, &.{ 0.28, 0.28, 0.72, 0.72 });
+                self.iconLine(bounds, color, &.{ 0.72, 0.28, 0.28, 0.72 });
+            },
+        }
+    }
+
+    fn databaseIcon(self: Surface, bounds: ui.Rect, color: ui.Color) void {
+        self.iconEllipse(bounds, color, 0.50, 0.28, 0.28, 0.10, true);
+        self.iconLine(bounds, color, &.{ 0.22, 0.28, 0.22, 0.68 });
+        self.iconLine(bounds, color, &.{ 0.78, 0.28, 0.78, 0.68 });
+        self.iconEllipse(bounds, color, 0.50, 0.48, 0.28, 0.10, false);
+        self.iconEllipse(bounds, color, 0.50, 0.68, 0.28, 0.10, false);
+    }
+
+    fn iconLine(self: Surface, bounds: ui.Rect, color: ui.Color, points: []const f32) void {
+        if (points.len < 4) return;
+        var index: usize = 2;
+        while (index < points.len) : (index += 2) {
+            self.strokeSegment(bounds, color, points[index - 2], points[index - 1], points[index], points[index + 1]);
+        }
+    }
+
+    fn iconCircle(self: Surface, bounds: ui.Rect, color: ui.Color, x: f32, y: f32, radius: f32) void {
+        self.strokeEllipse(bounds, color, x, y, radius, radius, true);
+    }
+
+    fn iconEllipse(self: Surface, bounds: ui.Rect, color: ui.Color, x: f32, y: f32, rx: f32, ry: f32, full: bool) void {
+        self.strokeEllipse(bounds, color, x, y, rx, ry, full);
+    }
+
+    fn iconFilledCircle(self: Surface, bounds: ui.Rect, color: ui.Color, x: f32, y: f32, radius: f32) void {
+        const size = @min(bounds.w, bounds.h);
+        const cx = bounds.x + bounds.w * x;
+        const cy = bounds.y + bounds.h * y;
+        const r = size * radius;
+        const area = ui.Rect.init(cx - r, cy - r, r * 2.0, r * 2.0);
+        self.fillRounded(area, color, color, r);
+    }
+
+    fn iconRoundRect(self: Surface, bounds: ui.Rect, color: ui.Color, x: f32, y: f32, w: f32, h: f32, radius: f32) void {
+        const rect = ui.Rect.init(bounds.x + bounds.w * x, bounds.y + bounds.h * y, bounds.w * w, bounds.h * h);
+        self.strokeRounded(rect, color, @min(bounds.w, bounds.h) * radius, iconStroke(bounds));
+    }
+
+    fn strokeSegment(self: Surface, bounds: ui.Rect, color: ui.Color, x0n: f32, y0n: f32, x1n: f32, y1n: f32) void {
+        const x0 = bounds.x + bounds.w * x0n;
+        const y0 = bounds.y + bounds.h * y0n;
+        const x1 = bounds.x + bounds.w * x1n;
+        const y1 = bounds.y + bounds.h * y1n;
+        const radius = iconStroke(bounds) * 0.5;
+        const left = @min(x0, x1) - radius;
+        const top = @min(y0, y1) - radius;
+        const right = @max(x0, x1) + radius;
+        const bottom = @max(y0, y1) + radius;
+        const x_start = clampCoord(@intFromFloat(@floor(left)), self.width);
+        const y_start = clampCoord(@intFromFloat(@floor(top)), self.height);
+        const x_end = clampCoord(@intFromFloat(@ceil(right)), self.width);
+        const y_end = clampCoord(@intFromFloat(@ceil(bottom)), self.height);
+        const dx = x1 - x0;
+        const dy = y1 - y0;
+        const denom = dx * dx + dy * dy;
+        if (denom <= 0.0) return;
+        var y = y_start;
+        while (y < y_end) : (y += 1) {
+            var x = x_start;
+            while (x < x_end) : (x += 1) {
+                const px = @as(f32, @floatFromInt(x)) + pixel_center;
+                const py = @as(f32, @floatFromInt(y)) + pixel_center;
+                const t = std.math.clamp(((px - x0) * dx + (py - y0) * dy) / denom, 0.0, 1.0);
+                const cx = x0 + dx * t;
+                const cy = y0 + dy * t;
+                const dist = @sqrt((px - cx) * (px - cx) + (py - cy) * (py - cy));
+                const alpha = coverageAlpha(radius, dist);
+                if (alpha != 0) self.blendPixel(x, y, color, alpha);
+            }
+        }
+    }
+
+    fn strokeEllipse(self: Surface, bounds: ui.Rect, color: ui.Color, x: f32, y: f32, rx: f32, ry: f32, full: bool) void {
+        const cx = bounds.x + bounds.w * x;
+        const cy = bounds.y + bounds.h * y;
+        const radius_x = bounds.w * rx;
+        const radius_y = bounds.h * ry;
+        const stroke = iconStroke(bounds);
+        const area = ui.Rect.init(cx - radius_x - stroke, cy - radius_y - stroke, (radius_x + stroke) * 2.0, (radius_y + stroke) * 2.0);
+        const x_start = clampCoord(@intFromFloat(@floor(area.x)), self.width);
+        const y_start = clampCoord(@intFromFloat(@floor(area.y)), self.height);
+        const x_end = clampCoord(@intFromFloat(@ceil(area.x + area.w)), self.width);
+        const y_end = clampCoord(@intFromFloat(@ceil(area.y + area.h)), self.height);
+        var py_i = y_start;
+        while (py_i < y_end) : (py_i += 1) {
+            var px_i = x_start;
+            while (px_i < x_end) : (px_i += 1) {
+                const px = @as(f32, @floatFromInt(px_i)) + pixel_center;
+                const py = @as(f32, @floatFromInt(py_i)) + pixel_center;
+                if (!full and py < cy) continue;
+                const nx = (px - cx) / @max(1.0, radius_x);
+                const ny = (py - cy) / @max(1.0, radius_y);
+                const distance = @abs(@sqrt(nx * nx + ny * ny) - 1.0) * @min(radius_x, radius_y);
+                const alpha = coverageAlpha(stroke * 0.5, distance);
+                if (alpha != 0) self.blendPixel(px_i, py_i, color, alpha);
+            }
+        }
     }
 };
 
@@ -152,14 +402,56 @@ const default_raster_scale: f32 = 1.0;
 const max_alpha: u8 = 255;
 const pixel_center: f32 = 0.5;
 const min_border_width: f32 = 1.0;
-const min_text_placeholder_width: f32 = 4.0;
-const min_text_placeholder_height: f32 = 2.0;
-const text_placeholder_height_ratio: f32 = 0.18;
-const text_placeholder_glyph_width: f32 = 7.0;
-const text_placeholder_radius_ratio: f32 = 0.5;
 const shadow_steps: usize = 4;
 const shadow_layer_alpha: f32 = 0.24;
 const shadow_fade: f32 = 0.82;
+const font_bitmap_bytes: usize = 4 * 1024 * 1024;
+var geist_face: ?varfont.Face = null;
+var geist_bitmap: [font_bitmap_bytes]u8 = undefined;
+var geist_cache: ?varfont.Cache = null;
+
+fn textCache() *varfont.Cache {
+    if (geist_cache == null) {
+        const face = varfont.Face.geist() catch unreachable;
+        geist_face = face;
+        geist_cache = varfont.Cache.init(geist_face.?, &geist_bitmap);
+        _ = geist_cache.?.setAxis("wght", 560.0);
+    }
+    return &geist_cache.?;
+}
+
+fn textPxSize(bounds: ui.Rect) f32 {
+    return @max(11.0, @min(22.0, bounds.h));
+}
+
+fn measureText(value: []const u8, px_size: f32) f32 {
+    const face = if (geist_face) |face| face else blk: {
+        const parsed = varfont.Face.geist() catch unreachable;
+        geist_face = parsed;
+        break :blk parsed;
+    };
+    var width: f32 = 0.0;
+    var previous: u16 = 0;
+    for (value) |byte| {
+        if (byte >= 0x80) unreachable;
+        const glyph_id = face.glyphId(@intCast(byte));
+        if (previous != 0) width += face.kern(previous, glyph_id, px_size);
+        width += face.advance(glyph_id, px_size);
+        previous = glyph_id;
+    }
+    return width;
+}
+
+fn iconStroke(bounds: ui.Rect) f32 {
+    return @max(1.5, @min(bounds.w, bounds.h) * 0.09);
+}
+
+fn coverageAlpha(radius: f32, distance: f32) u8 {
+    if (distance <= radius - antialias_width) return max_alpha;
+    if (distance >= radius + antialias_width) return 0;
+    const coverage = (radius + antialias_width - distance) / (antialias_width * 2.0);
+    return @intFromFloat(@round(std.math.clamp(coverage, 0.0, 1.0) * 255.0));
+}
 
 fn roundedAlpha(bounds: ui.Rect, radius: f32, x: f32, y: f32) u8 {
     const max_radius = @max(0.0, @min(bounds.w, bounds.h) * 0.5);
