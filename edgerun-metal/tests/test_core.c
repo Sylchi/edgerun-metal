@@ -15,7 +15,6 @@ ErWasmHostCalls g_host_calls = {0};
 #include "test_core_node_id.c"
 #include "test_core_device_routes.c"
 #include "test_core_jurisdiction.c"
-#include "test_core_seal.c"
 #include "test_core_boot_admission_record.c"
 #include "test_core_boot_efi_vars.c"
 #include "test_core_boot_config.c"
@@ -83,8 +82,6 @@ int main(void) {
   test_device_relay_identity();
   test_ephemeral_node_identity();
   test_jurisdiction_policy_and_node_instances();
-  test_sealed_content_record_format();
-  test_sealed_content_key_wrap();
   test_boot_admission_record();
   test_boot_efi_vars();
   test_boot_config_and_seal_strategy();

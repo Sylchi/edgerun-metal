@@ -173,5 +173,5 @@ static void test_rtw89_pci_prepare(void) {
                                            (UINTN)sizeof(firmware_out),
                                            &boot_device),
               0);
-  check_int64("rtw89 boot missing firmware skips reader", reader.called, 0);
+  check_int64("rtw89 boot missing firmware calls reader", reader.called, 1);
 }

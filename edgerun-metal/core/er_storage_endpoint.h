@@ -36,7 +36,7 @@ typedef struct {
   UINT32 accepted_packet_count;
   ErVfsObjectPacket* packets;
   UINT32 packet_capacity;
-} ErStorageEndpointObjectStore;
+} ErStorageEndpointObjectAssembly;
 
 typedef struct {
   UINT16 abi_version;
@@ -94,9 +94,9 @@ typedef struct {
   UINT32 packet_stride;
 } ErStorageEndpointObjectCache;
 
-UINT8 er_storage_endpoint_object_store_init(ErStorageEndpointObjectStore* store,
-                                            ErVfsObjectPacket* packets,
-                                            UINT32 packet_capacity);
+UINT8 er_storage_endpoint_object_assembly_init(ErStorageEndpointObjectAssembly* assembly,
+                                               ErVfsObjectPacket* packets,
+                                               UINT32 packet_capacity);
 UINT8 er_storage_endpoint_object_cache_init(ErStorageEndpointObjectCache* cache,
                                             ErStorageEndpointCacheEntry* entries,
                                             UINT32 entry_capacity,
@@ -144,10 +144,10 @@ UINT8 er_storage_endpoint_capture_object_packet(const ErCryptoProvider* crypto,
                                                 const ErChannelEnvelopeHeader* envelope,
                                                 const ErVfsObjectPacket* packet,
                                                 ErStorageEndpointObjectCapture* out_capture);
-UINT8 er_storage_endpoint_store_object_packet(const ErCryptoProvider* crypto,
-                                              const ErAdmittedRoute* route,
-                                              const ErChannelEnvelopeHeader* envelope,
-                                              const ErVfsObjectPacket* packet,
-                                              ErStorageEndpointObjectStore* store,
-                                              ErStorageEndpointObjectCapture* out_capture);
+UINT8 er_storage_endpoint_accept_object_packet(const ErCryptoProvider* crypto,
+                                               const ErAdmittedRoute* route,
+                                               const ErChannelEnvelopeHeader* envelope,
+                                               const ErVfsObjectPacket* packet,
+                                               ErStorageEndpointObjectAssembly* assembly,
+                                               ErStorageEndpointObjectCapture* out_capture);
 #endif

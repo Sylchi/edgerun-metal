@@ -191,7 +191,7 @@ static void test_mt7922_pci_prepare(void) {
   snapshot.id = MT7922_TEST_SUPPORTED_RZ616_ID;
   snapshot.bars[MT7922_TEST_MMIO_BAR_INDEX] = MT7922_TEST_MMIO_BAR;
   er_boot_config_init(&config);
-  check_int64("mt7922 boot reject missing firmware",
+  check_int64("mt7922 boot derives firmware path",
               er_mt7922_prepare_boot_device(&crypto,
                                             &config,
                                             &snapshot,
@@ -200,6 +200,6 @@ static void test_mt7922_pci_prepare(void) {
                                             firmware_out,
                                             (UINTN)sizeof(firmware_out),
                                             &boot_device),
-              0);
-  check_int64("mt7922 boot missing firmware skips reader", reader.called, 0);
+              1);
+  check_int64("mt7922 boot derived firmware calls reader", reader.called, 1);
 }

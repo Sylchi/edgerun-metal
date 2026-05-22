@@ -1,6 +1,4 @@
 #include "er_print.h"
-#include "er_gfx_console.h"
-#include "erwire.h"
 
 #define ER_COM1_PORT 0x03f8u
 #define ER_SERIAL_INTERRUPT_ENABLE_OFFSET 1u
@@ -119,9 +117,6 @@ void er_print_set_system_table(EFI_SYSTEM_TABLE* st) {
   g_firmware_console_enabled = 1u;
   g_serial_direct_enabled = 0u;
   er_serial_init();
-  er_gfx_console_init(st);
-  erwire_init(1u);
-  erwire_send_text("erwire: init ok");
 }
 
 void er_print_set_firmware_console_enabled(UINT8 enabled) {
@@ -162,8 +157,6 @@ void er_print(const char* s) {
       g_st->ConOut->OutputString == 0) {
     er_serial_write(s);
   }
-  er_gfx_console_write(s);
-
   if (g_firmware_console_enabled == 0u || g_st == 0 || g_st->ConOut == 0 || g_st->ConOut->OutputString == 0) {
     return;
   }

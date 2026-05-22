@@ -180,7 +180,7 @@ static void test_iwlwifi_pci_prepare(void) {
   reader.ucode_called = 0u;
   reader.pnvm_called = 0u;
   er_boot_config_init(&config);
-  check_int64("iwlwifi boot reject missing sources",
+  check_int64("iwlwifi boot derives firmware paths",
               er_iwlwifi_prepare_ax210_boot_device(&crypto,
                                                    &config,
                                                    &snapshot,
@@ -191,7 +191,7 @@ static void test_iwlwifi_pci_prepare(void) {
                                                    pnvm_out,
                                                    (UINTN)sizeof(pnvm_out),
                                                    &boot_device),
-              0);
-  check_int64("iwlwifi boot missing sources skips ucode", reader.ucode_called, 0);
-  check_int64("iwlwifi boot missing sources skips pnvm", reader.pnvm_called, 0);
+              1);
+  check_int64("iwlwifi boot derived source calls ucode", reader.ucode_called, 1);
+  check_int64("iwlwifi boot derived source calls pnvm", reader.pnvm_called, 1);
 }

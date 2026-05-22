@@ -76,16 +76,16 @@ $(error unsupported ER_METAL_BOARD '$(ER_METAL_BOARD)')
 endif
 
 EFI_BOOT := $(ESP_DIR)/EFI/BOOT/$(ER_METAL_BOOT_EFI)
-CFLAGS := -std=c11 -Wall -Werror -ffreestanding -fshort-wchar -fno-builtin -fno-stack-protector -fuse-ld=lld -target $(ER_METAL_TARGET) $(ER_METAL_ARCH_CFLAGS) \
+CFLAGS := -std=c11 -Wall -Werror -ffreestanding -fshort-wchar -fno-builtin -fno-stack-protector -ffunction-sections -fdata-sections -fuse-ld=lld -target $(ER_METAL_TARGET) $(ER_METAL_ARCH_CFLAGS) \
           $(ER_METAL_BOARD_CFLAGS) -I$(CURDIR)/core $(DEVICE_INCLUDE_FLAGS) -I$(CURDIR) -I$(CURDIR)/../include -I$(CURDIR)/../edgerun-storage/include -I$(CURDIR)/../edgerun-object/include -I$(CURDIR)/../edgerun-clock/include -I$(CURDIR)/$(GENERATED_DIR) -I$(CURDIR)/$(CRYPTO_DIR)/include -I$(CURDIR)/$(UI_CORE_DIR)/include -I$(CURDIR)/$(VARFONT_DIR)/include -DER_BOOT_PROFILE=$(ER_BOOT_PROFILE) -DER_TPM_REAL_BENCH_ENABLED=$(ER_TPM_REAL_BENCH_ENABLED)
 CRYPTO_CFLAGS := $(CFLAGS) -O3 $(ER_METAL_CRYPTO_DEFS)
-LDFLAGS := -nostdlib -Wl,/SUBSYSTEM:EFI_APPLICATION,/ENTRY:efi_main
+LDFLAGS := -nostdlib -Wl,/SUBSYSTEM:EFI_APPLICATION,/ENTRY:efi_main,/OPT:REF
 HOST_CFLAGS := -std=c11 -Wall -Wextra -Werror -O2 -DER_ENABLE_TEST_HOOKS=1 -I$(CURDIR)/core $(DEVICE_INCLUDE_FLAGS) -I$(CURDIR)/../include -I$(CURDIR)/../edgerun-storage/include -I$(CURDIR)/../edgerun-object/include -I$(CURDIR)/../edgerun-clock/include -I$(CURDIR)/$(GENERATED_DIR) -I$(CURDIR)/$(CRYPTO_DIR)/include -I$(CURDIR)/$(UI_CORE_DIR)/include -I$(CURDIR)/$(VARFONT_DIR)/include
 HOST_LDFLAGS :=
 
 ER_TPM_SRCS := core/er_tpm.c core/er_tls_tpm.c core/er_tls.c
-CORE_SRCS := core/efi_main.c core/efi_boot_memory.c core/efi_boot_diagnostics.c core/efi_boot_gpu.c core/efi_boot_routes.c core/efi_boot_input.c core/efi_boot_render.c core/efi_boot_render_state.c core/efi_boot_os.c core/er_boot_admission_record.c core/er_boot_efi_vars.c core/er_boot_config.c core/er_boot_profile.c core/er_boot_services.c core/er_print.c core/er_gfx_console.c core/er_ui_gop_renderer.c core/er_ui_frame_timing.c core/er_epoch_clock.c core/er_ephemeral_node.c core/er_freestanding.c core/er_netlog.c core/er_crypto.c core/er_crypto_blake3.c core/er_mem.c core/er_node_id.c core/er_block_device.c core/er_disk_analyzer.c core/er_zfs.c core/er_vfs.c core/er_credential.c core/er_node_control.c core/er_device_identity.c core/er_driver_event.c core/er_driver_policy.c core/er_jurisdiction.c core/er_work_route.c core/er_render_endpoint.c core/er_storage_endpoint.c core/er_storage_medium.c core/er_seal.c core/er_hw_relay.c core/er_relay_packet.c core/er_ble_adv.c core/er_wifi_burst.c core/er_wifi_l2.c core/er_ieee80211_ap.c core/er_network.c core/er_bus.c core/er_acpi.c core/er_tpm_acpi.c core/er_tpm_bench.c core/erwire.c core/er_native_boot.c core/wasm_vm.c core/wasm_vm_reader.c core/wasm_vm_memory_ui.c core/wasm_vm_contract.c core/wasm_vm_hostcall.c core/wasm_vm_execute.c core/er_pci.c core/er_firmware_loader.c core/er_mmio.c core/er_net_frame.c core/er_native_eth.c
-DEVICE_SRCS := $(CYW43438_DEVICE_DIR)/er_cyw43438.c $(CYW43438_DEVICE_DIR)/er_cyw43438_sdpcm.c $(PI_DEVICE_DIR)/er_pi_mmc.c $(BCM2708_USB_BOOT_DEVICE_DIR)/er_bcm2708_usb_boot.c $(PI_USB_CONTROL_DEVICE_DIR)/er_pi_usb_control.c $(PS2_KEYBOARD_DEVICE_DIR)/er_ps2_keyboard.c $(PI_ZERO2W_DEVICE_DIR)/er_pi_zero2w.c $(PI_ZERO_W_V1_1_DEVICE_DIR)/er_pi_zero_w_v1_1_ota.c $(RTW89_DEVICE_DIR)/er_rtw89.c $(MT7922_DEVICE_DIR)/er_mt7922.c $(IWLWIFI_DEVICE_DIR)/er_iwlwifi.c $(VIRTIO_DEVICE_DIR)/er_virtio.c $(VIRTIO_DEVICE_DIR)/er_virtio_blk.c $(VIRTIO_DEVICE_DIR)/er_virtio_net.c $(VIRTIO_DEVICE_DIR)/er_virtio_gpu.c $(NVME_DEVICE_DIR)/er_nvme.c
+CORE_SRCS := core/efi_main.c core/efi_boot_diagnostics.c core/er_print.c core/er_freestanding.c core/er_netlog.c core/er_crypto.c core/er_crypto_blake3.c core/er_mem.c core/er_node_id.c core/er_block_device.c core/er_disk_analyzer.c core/er_zfs.c core/er_driver_event.c core/er_driver_policy.c core/er_ble_adv.c core/er_wifi_burst.c core/er_wifi_l2.c core/er_ieee80211_ap.c core/er_bus.c core/er_acpi.c core/er_tpm_acpi.c core/er_tpm_bench.c core/er_pci.c core/er_firmware_loader.c core/er_mmio.c core/er_net_frame.c
+DEVICE_SRCS := $(RTW89_DEVICE_DIR)/er_rtw89.c $(MT7922_DEVICE_DIR)/er_mt7922.c $(IWLWIFI_DEVICE_DIR)/er_iwlwifi.c $(VIRTIO_DEVICE_DIR)/er_virtio.c $(VIRTIO_DEVICE_DIR)/er_virtio_blk.c $(VIRTIO_DEVICE_DIR)/er_virtio_net.c $(VIRTIO_DEVICE_DIR)/er_virtio_gpu.c $(NVME_DEVICE_DIR)/er_nvme.c
 SRCS := $(CORE_SRCS) $(DEVICE_SRCS)
 UI_SRCS := $(UI_CORE_DIR)/src/er_ui_assets.c $(UI_CORE_DIR)/src/er_ui_components_catalog.c $(UI_CORE_DIR)/src/er_ui_components_catalog_data.c $(UI_CORE_DIR)/src/er_ui_components_contracts.c $(UI_CORE_DIR)/src/er_ui_components_emit.c $(UI_CORE_DIR)/src/er_ui_components_internal.c $(UI_CORE_DIR)/src/er_ui_components_preview.c $(UI_CORE_DIR)/src/er_ui_components_state.c $(UI_CORE_DIR)/src/er_ui_icon.c $(UI_CORE_DIR)/src/er_ui_initial_setup.c $(UI_CORE_DIR)/src/er_ui_ledger_app.c $(UI_CORE_DIR)/src/er_ui_metal.c $(UI_CORE_DIR)/src/er_ui_node.c $(UI_CORE_DIR)/src/er_ui_node_accessibility.c $(UI_CORE_DIR)/src/er_ui_node_layout.c $(UI_CORE_DIR)/src/er_ui_node_render.c $(UI_CORE_DIR)/src/er_ui_node_render_controls.c $(UI_CORE_DIR)/src/er_ui_node_render_conversation.c $(UI_CORE_DIR)/src/er_ui_node_render_panels.c $(UI_CORE_DIR)/src/er_ui_painter.c $(UI_CORE_DIR)/src/er_ui_primitives.c $(UI_CORE_DIR)/src/er_ui_preset_code.c $(UI_CORE_DIR)/src/er_ui_record_codec.c $(UI_CORE_DIR)/src/er_ui_runtime_focus.c $(UI_CORE_DIR)/src/er_ui_runtime_input.c $(UI_CORE_DIR)/src/er_ui_runtime_internal.c $(UI_CORE_DIR)/src/er_ui_runtime_state.c $(UI_CORE_DIR)/src/er_ui_runtime_text.c $(UI_CORE_DIR)/src/er_ui_scene.c $(UI_CORE_DIR)/src/er_ui_shell.c $(UI_CORE_DIR)/src/er_ui_spacing.c $(UI_CORE_DIR)/src/er_ui_surface_renderer.c $(UI_CORE_DIR)/src/er_ui_theme.c $(UI_CORE_DIR)/src/er_ui_text.c
 VARFONT_SRCS := $(VARFONT_DIR)/src/vr_font.c $(VARFONT_DIR)/src/vr_font_utils.c $(VARFONT_DIR)/src/vr_font_axes.c $(VARFONT_DIR)/src/vr_font_cmap.c $(VARFONT_DIR)/src/vr_font_gvar.c $(VARFONT_DIR)/src/vr_font_gvar_apply.c $(VARFONT_DIR)/src/vr_font_kern.c $(VARFONT_DIR)/src/vr_font_tables.c $(VARFONT_DIR)/src/vr_font_shape.c $(VARFONT_DIR)/src/vr_font_raster.c $(VARFONT_DIR)/src/vr_font_raster_geometry.c $(VARFONT_DIR)/src/vr_font_raster_glyph.c $(VARFONT_DIR)/src/vr_font_raster_msdf.c $(VARFONT_DIR)/src/vr_font_raster_outline.c $(VARFONT_DIR)/src/vr_font_raster_storage.c $(VARFONT_DIR)/src/vr_font_atlas.c
@@ -176,7 +176,7 @@ UI_DIRTY_BENCH_SRC := tools/bench_ui_dirty.c core/efi_boot_render_state.c core/e
 UI_DIRTY_BENCH_BIN := $(BUILD_DIR)/bench-ui-dirty
 IFACE :=
 
-all: wasm-modules $(FONT_HEADER) $(FONT_BAKED_HEADER) $(EFI_OUT) $(EFI_BOOT)
+all: $(EFI_OUT) $(EFI_BOOT)
 
 os:
 	$(MAKE) rebuild-image ER_BOOT_PROFILE=4
@@ -308,7 +308,7 @@ $(ER_TPM_LIB): $(ER_TPM_OBJS)
 	rm -f $@
 	$(AR) rcs $@ $^
 
-$(EFI_OUT): $(OBJS) $(ER_TPM_LIB) $(UI_OBJS) $(VARFONT_OBJS) $(CRYPTO_OBJS) $(CRYPTO_ASM_OBJS) $(STORAGE_OBJ) $(STORAGE_PRIMITIVE_OBJS)
+$(EFI_OUT): $(OBJS) $(ER_TPM_LIB) $(CRYPTO_OBJS) $(CRYPTO_ASM_OBJS)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $^
 
 $(NETBOOT_BIN): $(NETBOOT_SRC)
