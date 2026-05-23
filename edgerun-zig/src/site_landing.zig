@@ -17,6 +17,19 @@ const content_pad: f32 = 28.0;
 const radius: f32 = 10.0;
 const terminal_h: f32 = 338.0;
 const page_top_pad: f32 = 48.0;
+const impact_card_count: usize = 3;
+const impact_card_gap: f32 = 14.0;
+const impact_card_h: f32 = 190.0;
+const impact_card_min_w: f32 = 168.0;
+const impact_split_min_w: f32 = 920.0;
+const impact_split_text_fraction: f32 = 0.48;
+const impact_split_gap_fraction: f32 = 0.06;
+const impact_heading_y: f32 = 44.0;
+const impact_heading_h: f32 = 74.0;
+const impact_copy_y: f32 = 138.0;
+const impact_copy_h: f32 = 108.0;
+const impact_cards_split_y: f32 = 36.0;
+const impact_cards_stacked_y: f32 = 286.0;
 
 const palette = struct {
     const bg = ui.Color{ .r = 11, .g = 11, .b = 11 };
@@ -126,7 +139,7 @@ fn sectionHeight(content: ui.Rect, kind: SectionKind) f32 {
         .problem => 420.0,
         .principles => if (content.w > 720.0) 430.0 else 682.0,
         .architecture => 500.0,
-        .impact => 310.0,
+        .impact => impactSectionHeight(content.w),
         .cta => 280.0,
         .footer => 250.0,
     };
@@ -279,21 +292,80 @@ fn renderArchitecture(scene: *ui.Scene, bounds: ui.Rect) ui.RenderError!void {
 }
 
 fn renderImpact(scene: *ui.Scene, bounds: ui.Rect) ui.RenderError!void {
-    const left = ui.Rect.init(bounds.x, bounds.y, bounds.w * 0.48, bounds.h);
-    const right = ui.Rect.init(bounds.x + bounds.w * 0.54, bounds.y, bounds.w * 0.46, bounds.h);
-    try tag(scene, ui.Rect.init(left.x, left.y, 72.0, 24.0), "IMPACT", palette.primary);
-    try heading(scene, ui.Rect.init(left.x, left.y + 44.0, left.w, 74.0), "What If We Didn't Need", "All Those Data Centers?");
-    try paragraph(scene, ui.Rect.init(left.x, left.y + 138.0, left.w, 84.0), "Global data centers consume 500+ TWh annually. Edge computing on consumer devices could reduce this footprint while improving privacy and resilience.");
+    const layout = impactLayout(bounds);
+    try tag(scene, ui.Rect.init(layout.copy.x, layout.copy.y, 72.0, 24.0), "IMPACT", palette.primary);
+    try heading(scene, ui.Rect.init(layout.copy.x, layout.copy.y + impact_heading_y, layout.copy.w, impact_heading_h), "What If We Didn't Need", "All Those Data Centers?");
+    try impactParagraph(scene, ui.Rect.init(layout.copy.x, layout.copy.y + impact_copy_y, layout.copy.w, impact_copy_h), "Global data centers consume 500+ TWh annually. Edge computing on consumer devices could reduce this footprint while improving privacy and resilience.");
     const scenarios = [_]struct { []const u8, []const u8, []const u8 }{
         .{ "10%", "50 TWh/yr", "Belgium" },
         .{ "30%", "150 TWh/yr", "NL + DK" },
         .{ "50%", "250 TWh/yr", "UK" },
     };
-    const cols = columns(right, 3, 14.0);
     for (scenarios, 0..) |item, index| {
-        const r = colBounds(right, cols, 14.0, index, right.y + 36.0, 190.0);
+        const r = layout.card(index);
         try impactCard(scene, r, item[0], item[1], item[2]);
     }
+}
+
+const ImpactLayout = struct {
+    copy: ui.Rect,
+    cards: ui.Rect,
+    cols: usize,
+
+    fn card(self: ImpactLayout, index: usize) ui.Rect {
+        const col = index % self.cols;
+        const row = index / self.cols;
+        const width = (self.cards.w - impact_card_gap * @as(f32, @floatFromInt(self.cols - 1))) / @as(f32, @floatFromInt(self.cols));
+        return ui.Rect.init(
+            self.cards.x + @as(f32, @floatFromInt(col)) * (width + impact_card_gap),
+            self.cards.y + @as(f32, @floatFromInt(row)) * (impact_card_h + impact_card_gap),
+            width,
+            impact_card_h,
+        );
+    }
+};
+
+fn impactLayout(bounds: ui.Rect) ImpactLayout {
+    const split = bounds.w >= impact_split_min_w;
+    if (split) {
+        const copy_w = bounds.w * impact_split_text_fraction;
+        const gap_w = bounds.w * impact_split_gap_fraction;
+        const cards_w = bounds.w - copy_w - gap_w;
+        const cards = ui.Rect.init(bounds.x + copy_w + gap_w, bounds.y + impact_cards_split_y, cards_w, impact_card_h);
+        return .{
+            .copy = ui.Rect.init(bounds.x, bounds.y, copy_w, bounds.h),
+            .cards = cards,
+            .cols = impactCardColumns(cards.w),
+        };
+    }
+
+    const cards = ui.Rect.init(bounds.x, bounds.y + impact_cards_stacked_y, bounds.w, impactCardsHeight(bounds.w));
+    return .{
+        .copy = ui.Rect.init(bounds.x, bounds.y, bounds.w, impact_cards_stacked_y),
+        .cards = cards,
+        .cols = impactCardColumns(cards.w),
+    };
+}
+
+fn impactSectionHeight(width: f32) f32 {
+    const bounds = ui.Rect.init(0.0, 0.0, width, 1.0);
+    const layout = impactLayout(bounds);
+    return @max(impact_copy_y + impact_copy_h, (layout.cards.y - bounds.y) + impactCardsHeight(layout.cards.w)) + content_pad;
+}
+
+fn impactCardsHeight(width: f32) f32 {
+    const cols = impactCardColumns(width);
+    const rows = (impact_card_count + cols - 1) / cols;
+    return @as(f32, @floatFromInt(rows)) * impact_card_h + @as(f32, @floatFromInt(rows - 1)) * impact_card_gap;
+}
+
+fn impactCardColumns(width: f32) usize {
+    var cols: usize = impact_card_count;
+    while (cols > 1) : (cols -= 1) {
+        const required = impact_card_min_w * @as(f32, @floatFromInt(cols)) + impact_card_gap * @as(f32, @floatFromInt(cols - 1));
+        if (width >= required) return cols;
+    }
+    return 1;
 }
 
 fn renderCta(scene: *ui.Scene, bounds: ui.Rect) ui.RenderError!void {
@@ -371,6 +443,10 @@ fn heading(scene: *ui.Scene, bounds: ui.Rect, first: []const u8, second: []const
 
 fn paragraph(scene: *ui.Scene, bounds: ui.Rect, value: []const u8) ui.RenderError!void {
     try scene.pushWrappedText(bounds, value, palette.dim, .{ .line_height = 18.0, .average_char_width = 8.3, .max_lines = 6 });
+}
+
+fn impactParagraph(scene: *ui.Scene, bounds: ui.Rect, value: []const u8) ui.RenderError!void {
+    try scene.pushWrappedText(bounds, value, palette.dim, .{ .line_height = 18.0, .average_char_width = 10.6, .max_lines = 6 });
 }
 
 fn problemItem(scene: *ui.Scene, bounds: ui.Rect, number: []const u8, title_value: []const u8, detail: []const u8) ui.RenderError!void {
@@ -595,6 +671,24 @@ test "landing page content height reaches footer without extra scroll space" {
     try std.testing.expect(contentHeight(640.0) > contentHeight(1280.0));
 }
 
+test "impact section cards stay inside measured section" {
+    const wide = ui.Rect.init(0.0, 0.0, content_wide, impactSectionHeight(content_wide));
+    const compact_width = impact_card_min_w * 2.0 + impact_card_gap - 1.0;
+    const compact = ui.Rect.init(0.0, 0.0, compact_width, impactSectionHeight(compact_width));
+
+    const wide_layout = impactLayout(wide);
+    try std.testing.expectEqual(@as(usize, 3), wide_layout.cols);
+    for (0..impact_card_count) |index| {
+        try std.testing.expect(rectInside(wide, wide_layout.card(index)));
+    }
+
+    const compact_layout = impactLayout(compact);
+    try std.testing.expect(compact_layout.cols < wide_layout.cols);
+    for (0..impact_card_count) |index| {
+        try std.testing.expect(rectInside(compact, compact_layout.card(index)));
+    }
+}
+
 fn hasText(commands: []const ui.Command, value: []const u8) bool {
     for (commands) |command| switch (command) {
         .text => |text_command| if (std.mem.eql(u8, text_command.value, value)) return true,
@@ -627,4 +721,11 @@ fn hasHit(commands: []const ui.Command, id: u32) bool {
         else => {},
     };
     return false;
+}
+
+fn rectInside(outer: ui.Rect, inner: ui.Rect) bool {
+    return inner.x >= outer.x and
+        inner.y >= outer.y and
+        inner.x + inner.w <= outer.x + outer.w and
+        inner.y + inner.h <= outer.y + outer.h;
 }
