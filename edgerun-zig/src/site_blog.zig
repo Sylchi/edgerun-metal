@@ -36,6 +36,19 @@ const post_title_average_char_w: f32 = 22.0;
 const post_demo_gap: f32 = 24.0;
 const post_demo_h: f32 = 32.0;
 const post_body_gap: f32 = 28.0;
+const post_demo_directive_gap: f32 = 30.0;
+const vpn_demo_h: f32 = 430.0;
+const vpn_demo_pad: f32 = 22.0;
+const vpn_demo_header_h: f32 = 74.0;
+const vpn_demo_lane_gap: f32 = 16.0;
+const vpn_demo_lane_h: f32 = 82.0;
+const vpn_demo_actor_gap: f32 = 10.0;
+const vpn_demo_actor_h: f32 = 48.0;
+const vpn_demo_actor_radius: f32 = 6.0;
+const vpn_demo_arrow_h: f32 = 2.0;
+const vpn_demo_detail_h: f32 = 64.0;
+const vpn_demo_actor_count: usize = 5;
+const vpn_demo_lane_count: usize = 3;
 const arc_local_start: usize = 0;
 const arc_local_end: usize = 10;
 const arc_network_start: usize = 10;
@@ -740,15 +753,13 @@ pub fn render(scene: *ui.Scene, bounds: ui.Rect, state: State) ui.RenderError!vo
 
         const page_y = header_h - state.scroll_y;
         if (postIndexById(state.selected_post_id)) |index| {
-            try renderPost(scene, ui.Rect.init(content.x, page_y + 52.0, content.w, 1800.0), index);
+            try renderPost(scene, ui.Rect.init(content.x, page_y + 52.0, content.w, 1800.0), index, state.hover_x, state.hover_y);
         } else {
             try renderIndex(scene, ui.Rect.init(content.x, page_y + 52.0, content.w, 1100.0));
         }
     }
 
     try renderHeader(scene, ui.Rect.init(bounds.x, bounds.y, bounds.w, header_h), content);
-    _ = state.hover_x;
-    _ = state.hover_y;
 }
 
 pub fn postById(id: u32) ?Post {
@@ -836,7 +847,7 @@ pub fn indexContentHeight(width: f32) f32 {
 pub fn postContentHeight(width: f32, post_id: u32) f32 {
     const index = postIndexById(post_id) orelse return indexContentHeight(width);
     const content_w = @min(content_wide, @max(1.0, width - content_pad * 2.0));
-    const measured_h = flowPostContent(null, ui.Rect.init(0.0, 0.0, content_w, 1.0), index) catch unreachable;
+    const measured_h = flowPostContent(null, ui.Rect.init(0.0, 0.0, content_w, 1.0), index, -1.0, -1.0) catch unreachable;
     return 52.0 + measured_h + page_bottom_pad;
 }
 
@@ -953,11 +964,11 @@ fn renderGuide(scene: *ui.Scene, bounds: ui.Rect) ui.RenderError!void {
     });
 }
 
-fn renderPost(scene: *ui.Scene, bounds: ui.Rect, index: usize) ui.RenderError!void {
-    _ = try flowPostContent(scene, bounds, index);
+fn renderPost(scene: *ui.Scene, bounds: ui.Rect, index: usize, hover_x: f32, hover_y: f32) ui.RenderError!void {
+    _ = try flowPostContent(scene, bounds, index, hover_x, hover_y);
 }
 
-fn flowPostContent(scene: ?*ui.Scene, bounds: ui.Rect, index: usize) ui.RenderError!f32 {
+fn flowPostContent(scene: ?*ui.Scene, bounds: ui.Rect, index: usize, hover_x: f32, hover_y: f32) ui.RenderError!f32 {
     const post = posts[index];
     const sidebar_split = bounds.w >= 980.0;
     const main_w = if (sidebar_split) @max(320.0, bounds.w - post_sidebar_w - post_sidebar_gap) else bounds.w;
@@ -978,7 +989,7 @@ fn flowPostContent(scene: ?*ui.Scene, bounds: ui.Rect, index: usize) ui.RenderEr
     }
 
     const content = ui.Rect.init(bounds.x, body_y, @min(main_w, 820.0), 1300.0);
-    const content_end = try flowMarkdown(scene, content, bodyWithoutTitle(post.body));
+    const content_end = try flowMarkdown(scene, content, bodyWithoutTitle(post.body), hover_x, hover_y);
     const footer_y = content_end + post_footer_gap;
     const footer_h = postFooterHeight(bounds.w, index);
     if (scene) |target| {
@@ -1084,7 +1095,11 @@ fn renderSidebar(scene: *ui.Scene, bounds: ui.Rect, post: Post) ui.RenderError!v
     try text(scene, bounds.x + 20.0, bounds.y + 236.0, bounds.w - 40.0, 12.0, post.date, palette.text);
 }
 
-fn flowMarkdown(scene: ?*ui.Scene, bounds: ui.Rect, source: []const u8) ui.RenderError!f32 {
+const DemoDirective = enum {
+    vpn_who_sees_what,
+};
+
+fn flowMarkdown(scene: ?*ui.Scene, bounds: ui.Rect, source: []const u8, hover_x: f32, hover_y: f32) ui.RenderError!f32 {
     var y = bounds.y;
     var in_code = false;
     var code_lines: [12][]const u8 = undefined;
@@ -1112,6 +1127,11 @@ fn flowMarkdown(scene: ?*ui.Scene, bounds: ui.Rect, source: []const u8) ui.Rende
             }
             continue;
         }
+        if (demoDirective(line_value)) |directive| {
+            y += try flowDemoDirective(scene, ui.Rect.init(bounds.x, y, bounds.w, demoHeight(directive)), directive, hover_x, hover_y);
+            y += post_demo_directive_gap;
+            continue;
+        }
         if (line_value.len == 0) {
             y += 12.0;
         } else if (std.mem.startsWith(u8, line_value, "# ")) {
@@ -1136,6 +1156,187 @@ fn flowMarkdown(scene: ?*ui.Scene, bounds: ui.Rect, source: []const u8) ui.Rende
         }
     }
     return y;
+}
+
+fn demoDirective(line_value: []const u8) ?DemoDirective {
+    if (std.mem.eql(u8, line_value, "[[demo:vpn_who_sees_what]]")) return .vpn_who_sees_what;
+    return null;
+}
+
+fn demoHeight(directive: DemoDirective) f32 {
+    return switch (directive) {
+        .vpn_who_sees_what => vpn_demo_h,
+    };
+}
+
+fn flowDemoDirective(scene: ?*ui.Scene, bounds: ui.Rect, directive: DemoDirective, hover_x: f32, hover_y: f32) ui.RenderError!f32 {
+    if (scene) |target| switch (directive) {
+        .vpn_who_sees_what => try renderVpnWhoSeesWhatDemo(target, bounds, hover_x, hover_y),
+    };
+    return bounds.h;
+}
+
+const VpnActorRole = enum {
+    user,
+    local_network,
+    isp,
+    vpn_provider,
+    website,
+    relay,
+    recipient,
+};
+
+const VpnActor = struct {
+    label: []const u8,
+    role: VpnActorRole,
+};
+
+const VpnLane = struct {
+    label: []const u8,
+    detail: []const u8,
+    actors: [vpn_demo_actor_count]VpnActor,
+};
+
+const vpn_lanes = [_]VpnLane{
+    .{
+        .label = "No VPN",
+        .detail = "The ISP sees destinations and timing. The website sees your ISP-facing address.",
+        .actors = .{
+            .{ .label = "You", .role = .user },
+            .{ .label = "Router", .role = .local_network },
+            .{ .label = "ISP", .role = .isp },
+            .{ .label = "Internet", .role = .relay },
+            .{ .label = "Website", .role = .website },
+        },
+    },
+    .{
+        .label = "Commercial VPN",
+        .detail = "The ISP sees a tunnel. The VPN provider now sees concentrated destination metadata.",
+        .actors = .{
+            .{ .label = "You", .role = .user },
+            .{ .label = "Router", .role = .local_network },
+            .{ .label = "ISP", .role = .isp },
+            .{ .label = "VPN Co.", .role = .vpn_provider },
+            .{ .label = "Website", .role = .website },
+        },
+    },
+    .{
+        .label = "Sealed relay",
+        .detail = "Relays move sealed objects. They should not need content, account identity, or plaintext.",
+        .actors = .{
+            .{ .label = "You", .role = .user },
+            .{ .label = "Route", .role = .local_network },
+            .{ .label = "Relay", .role = .relay },
+            .{ .label = "Relay", .role = .relay },
+            .{ .label = "Friend", .role = .recipient },
+        },
+    },
+};
+
+fn renderVpnWhoSeesWhatDemo(scene: *ui.Scene, bounds: ui.Rect, hover_x: f32, hover_y: f32) ui.RenderError!void {
+    try fill(scene, bounds, palette.card, 8.0);
+    try scene.pushRect(bounds, palette.border, .border, 8.0, 0.0);
+    const inner = bounds.insetUniform(vpn_demo_pad);
+    try tag(scene, ui.Rect.init(inner.x, inner.y, 126.0, 24.0), "NATIVE DEMO", palette.blue);
+    try text(scene, inner.x, inner.y + 38.0, inner.w, 18.0, "Who sees what?", palette.text);
+    try paragraph(scene, ui.Rect.init(inner.x + 160.0, inner.y + 2.0, @max(1.0, inner.w - 160.0), 54.0), "A VPN changes which middleman sees metadata. It does not make trust disappear.");
+
+    var hovered: ?VpnActorRole = null;
+    const lanes_top = inner.y + vpn_demo_header_h;
+    for (vpn_lanes, 0..) |lane, lane_index| {
+        const lane_y = lanes_top + @as(f32, @floatFromInt(lane_index)) * (vpn_demo_lane_h + vpn_demo_lane_gap);
+        const lane_bounds = ui.Rect.init(inner.x, lane_y, inner.w, vpn_demo_lane_h);
+        if (try renderVpnLane(scene, lane_bounds, lane, hover_x, hover_y)) |role| hovered = role;
+    }
+
+    const detail_y = lanes_top + @as(f32, @floatFromInt(vpn_demo_lane_count)) * (vpn_demo_lane_h + vpn_demo_lane_gap) + 4.0;
+    try renderVpnDetail(scene, ui.Rect.init(inner.x, detail_y, inner.w, vpn_demo_detail_h), hovered);
+}
+
+fn renderVpnLane(scene: *ui.Scene, bounds: ui.Rect, lane: VpnLane, hover_x: f32, hover_y: f32) ui.RenderError!?VpnActorRole {
+    try fill(scene, bounds, palette.neutral_soft, 6.0);
+    try text(scene, bounds.x + 14.0, bounds.y + 13.0, 122.0, 14.0, lane.label, palette.text);
+    try paragraph(scene, ui.Rect.init(bounds.x + 14.0, bounds.y + 35.0, 134.0, 38.0), lane.detail);
+
+    const actor_area_x = bounds.x + 166.0;
+    const actor_area_w = @max(1.0, bounds.w - 180.0);
+    const actor_w = (actor_area_w - vpn_demo_actor_gap * @as(f32, @floatFromInt(vpn_demo_actor_count - 1))) / @as(f32, @floatFromInt(vpn_demo_actor_count));
+    const actor_y = bounds.y + (bounds.h - vpn_demo_actor_h) * 0.5;
+    var hovered: ?VpnActorRole = null;
+    for (lane.actors, 0..) |actor, index| {
+        const actor_x = actor_area_x + @as(f32, @floatFromInt(index)) * (actor_w + vpn_demo_actor_gap);
+        const actor_bounds = ui.Rect.init(actor_x, actor_y, actor_w, vpn_demo_actor_h);
+        const is_hovered = actor_bounds.containsInclusive(hover_x, hover_y);
+        if (is_hovered) hovered = actor.role;
+        try renderVpnActor(scene, actor_bounds, actor, is_hovered);
+        if (index + 1 < vpn_demo_actor_count) {
+            const arrow_x = actor_bounds.x + actor_bounds.w + 2.0;
+            const arrow_y = actor_bounds.y + actor_bounds.h * 0.5 - vpn_demo_arrow_h * 0.5;
+            try fill(scene, ui.Rect.init(arrow_x, arrow_y, vpn_demo_actor_gap - 4.0, vpn_demo_arrow_h), palette.border, 0.0);
+        }
+    }
+    return hovered;
+}
+
+fn renderVpnActor(scene: *ui.Scene, bounds: ui.Rect, actor: VpnActor, hovered: bool) ui.RenderError!void {
+    const fill_color = vpnActorColor(actor.role);
+    try fill(scene, bounds, fill_color, vpn_demo_actor_radius);
+    try scene.pushRect(bounds, if (hovered) palette.primary else palette.border, .border, vpn_demo_actor_radius, 0.0);
+    try alignedText(scene, bounds.x + 8.0, bounds.y + 10.0, bounds.w - 16.0, 12.0, actor.label, palette.text, .center);
+    try alignedText(scene, bounds.x + 8.0, bounds.y + 29.0, bounds.w - 16.0, 10.0, vpnActorExposure(actor.role), palette.dim, .center);
+}
+
+fn renderVpnDetail(scene: *ui.Scene, bounds: ui.Rect, hovered: ?VpnActorRole) ui.RenderError!void {
+    try fill(scene, bounds, ui.Color{ .r = 9, .g = 9, .b = 9, .a = 210 }, 6.0);
+    const role = hovered orelse .vpn_provider;
+    try text(scene, bounds.x + 16.0, bounds.y + 14.0, 160.0, 14.0, vpnActorDetailTitle(role), palette.primary);
+    try paragraph(scene, ui.Rect.init(bounds.x + 16.0, bounds.y + 34.0, bounds.w - 32.0, 28.0), vpnActorDetail(role));
+}
+
+fn vpnActorColor(role: VpnActorRole) ui.Color {
+    return switch (role) {
+        .user, .recipient => ui.Color{ .r = 24, .g = 55, .b = 44, .a = 238 },
+        .local_network, .relay => ui.Color{ .r = 26, .g = 36, .b = 52, .a = 238 },
+        .isp => ui.Color{ .r = 56, .g = 42, .b = 24, .a = 238 },
+        .vpn_provider => ui.Color{ .r = 72, .g = 36, .b = 36, .a = 238 },
+        .website => ui.Color{ .r = 44, .g = 44, .b = 44, .a = 238 },
+    };
+}
+
+fn vpnActorExposure(role: VpnActorRole) []const u8 {
+    return switch (role) {
+        .user => "source",
+        .local_network => "local path",
+        .isp => "route + time",
+        .vpn_provider => "new middleman",
+        .website => "account + IP",
+        .relay => "sealed route",
+        .recipient => "decrypts",
+    };
+}
+
+fn vpnActorDetailTitle(role: VpnActorRole) []const u8 {
+    return switch (role) {
+        .user => "User device",
+        .local_network => "Local network",
+        .isp => "ISP",
+        .vpn_provider => "VPN provider",
+        .website => "Website",
+        .relay => "Relay",
+        .recipient => "Recipient",
+    };
+}
+
+fn vpnActorDetail(role: VpnActorRole) []const u8 {
+    return switch (role) {
+        .user => "The safest data is data that never leaves the device. Local intent should decide what gets sent.",
+        .local_network => "Wi-Fi and routers see local traffic shape unless another layer hides it. They are transport, not identity.",
+        .isp => "The ISP may lose final destination detail with a VPN, but it still sees the VPN endpoint and timing.",
+        .vpn_provider => "The commercial VPN becomes the concentrated metadata observer. Trust moved; it did not vanish.",
+        .website => "The service still sees account behavior, cookies, fingerprinting signals, and whatever plaintext reaches it.",
+        .relay => "A good relay carries sealed objects and minimal routing data. It should not need content or account identity.",
+        .recipient => "Only the intended recipient should decrypt message content. Transport should not become authority.",
+    };
 }
 
 fn bodyWithoutTitle(source: []const u8) []const u8 {
@@ -1307,12 +1508,24 @@ test "blog selected post footer links previous and next posts" {
     var commands: [4096]ui.Command = undefined;
     var clips: [8]ui.Rect = undefined;
     var scene = ui.Scene.initWithClips(&commands, &clips);
-    try renderPost(&scene, ui.Rect.init(0, 0, 1180, 3200), 16);
+    try renderPost(&scene, ui.Rect.init(0, 0, 1180, 3200), 16, -1.0, -1.0);
 
     try std.testing.expect(hasText(scene.written(), "Previous"));
     try std.testing.expect(hasText(scene.written(), "Next"));
     try std.testing.expect(hasHit(scene.written(), postIdAt(15)));
     try std.testing.expect(hasHit(scene.written(), postIdAt(17)));
+}
+
+test "blog renders native demo directives inside post markup" {
+    var commands: [4096]ui.Command = undefined;
+    var clips: [8]ui.Rect = undefined;
+    var scene = ui.Scene.initWithClips(&commands, &clips);
+    try renderPost(&scene, ui.Rect.init(0, 0, 1180, 3600), 14, 520.0, 1130.0);
+
+    try std.testing.expect(hasText(scene.written(), "Who sees what?"));
+    try std.testing.expect(hasText(scene.written(), "Commercial VPN"));
+    try std.testing.expect(hasText(scene.written(), "Sealed relay"));
+    try std.testing.expect(hasText(scene.written(), "VPN provider"));
 }
 
 fn hasText(commands: []const ui.Command, value: []const u8) bool {

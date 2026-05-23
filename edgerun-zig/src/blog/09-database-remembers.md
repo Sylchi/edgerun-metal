@@ -4,17 +4,43 @@ When a service stores your message, it does more than remember text. It creates 
 
 Databases are powerful, but remote storage often turns memory into rent. The account owns access. The service owns the schema. The user hopes export, deletion, and migration work later.
 
-## Purpose
+A database is not a drawer. It is a machine for shaping memory. It decides which fields exist, which indexes are fast, which relations are possible, which old values remain in backups, and which questions the service can ask later.
 
-Explain storage as a trust decision. A database is not just a box that keeps bytes. It is an operational system that decides how the bytes are shaped, copied, queried, and retained.
+## What a message becomes
 
-## Visual idea
+```text
+message -> row -> index -> replica
+replica -> backup -> analytics copy -> export
+```
 
-Message -> row -> index -> backup -> analytics copy -> export request
+A message that felt like text between two people becomes operational data. It may get an id, sender field, recipient field, timestamps, moderation state, delivery state, search index entry, notification record, backup copy, and metrics event.
 
-## Interactive demo
+Some of that is needed to run a service. The issue is authority. If the only meaningful copy lives in the service database, then the database defines reality.
 
-An append log versus remote database comparison shows the same message stored as a signed local event and as a server row. The reader can inspect ownership, deletion, sync, and replay behavior for each model.
+## Remote memory changes behavior
+
+Remote databases make product decisions easier for the operator:
+
+- accounts can be suspended centrally
+- features can query everyone at once
+- analytics can measure behavior
+- moderation can inspect state
+- migrations can rewrite history
+- exports can be limited
+- deletion can mean policy, not physics
+
+This can be useful for abuse control and service operation. It also means the user's memory is inside someone else's operating model.
+
+## Local append history
+
+An alternative is to treat important user events as signed local history:
+
+```text
+intent -> signed event -> canonical object
+canonical object -> local store -> sync copy
+```
+
+The server may still store a copy, but it is no longer the only place reality exists. The user's device can verify and replay its own history.
 
 ## Main lesson
 
@@ -22,4 +48,4 @@ If someone else owns the memory of your app, they own the default future of your
 
 ## EdgeRun seed
 
-Local object storage plus signed append-only history lets devices remember without surrendering the root of authority.
+Local object storage plus signed append-only history lets devices remember without surrendering the root of authority. A remote database can help distribute copies; it should not be the source of truth for what the user did.

@@ -4,26 +4,32 @@ A device can be physically yours while legally and technically controlled by oth
 
 Depending on country and device, users may run into legal restrictions around circumventing DRM, unlocking carrier restrictions, modifying radio or baseband behavior, bypassing access controls, repair locks and parts pairing, copying protected firmware, reverse engineering proprietary software, interoperability restrictions, security research rules, radio frequencies, and installing modified software on locked devices.
 
-## Purpose
+This is not legal advice. It is a design warning: a thing can be physically present, technically capable, and still unavailable to the owner because law, vendor policy, carrier rules, or platform controls made the useful button forbidden.
 
-Discuss ownership limits without giving legal advice. The point is not to encourage illegal activity. The point is that ownership is incomplete when using the object fully requires permission from law, vendor, carrier, and platform.
+## Four permissions
 
-## Visual idea
+For many ownership actions, the user needs several permissions at once:
+
+- physical permission: can you access the part?
+- technical permission: will the device allow it?
+- vendor permission: are tools, keys, and images available?
+- legal permission: are you allowed to bypass the lock?
+
+Buying hardware only guarantees the first one. The others can still say no.
+
+## Ownership questions
 
 ```text
-you bought the phone
-  -> can you replace the OS?
-  -> inspect firmware?
-  -> repair every part?
-  -> use all radios?
-  -> run any app?
-  -> remove vendor services?
-  -> keep it secure after support ends?
+can you replace the OS?
+can you inspect firmware?
+can you repair every part?
+can you use all radios lawfully?
+can you run any app?
+can you remove vendor services?
+can you keep it secure after support ends?
 ```
 
-## Interactive demo
-
-An ownership checklist lets the reader toggle technical permission, vendor permission, carrier permission, and legal permission for common ownership actions.
+If the answer depends on a remote approval server, hidden key, closed tool, app store exception, or anti-circumvention rule, ownership is incomplete.
 
 ## Main lesson
 

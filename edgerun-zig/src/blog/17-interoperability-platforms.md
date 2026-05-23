@@ -10,7 +10,7 @@ Your phone can send bytes to almost any server on Earth. But your WhatsApp canno
 
 The internet connects machines. Platforms separate people.
 
-## Purpose
+## The real interoperability problem
 
 Explain why interoperability is not mainly a network problem. The internet already has universal pipes. What it lacks is user-owned meaning, identity, and trust.
 
@@ -108,7 +108,7 @@ A file is not inside Google Drive. A file is a content-addressed object, owner k
 
 Once users own these primitives, apps become clients. Not prisons.
 
-## Interactive demo
+## Protocol tower
 
 A protocol tower starts with TCP and UDP. The reader stacks HTTP, WebSocket, DNS, SMTP, Matrix, ActivityPub, and custom app APIs on top.
 

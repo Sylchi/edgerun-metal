@@ -238,22 +238,45 @@ pub fn build(b: *std.Build) void {
         "er_ui_site_apps_button_id",
         "er_ui_site_launch_button_id",
         "er_ui_site_search_button_id",
+        "er_ui_site_source_button_id",
         "er_ui_site_blog_button_id",
         "er_ui_blog_back_button_id",
         "er_ui_blog_first_post_button_id",
+        "er_ui_blog_post_count",
+        "er_ui_site_host_action_kind",
+        "er_ui_site_host_action_url_ptr",
+        "er_ui_site_host_action_url_len",
+        "er_ui_site_activate_hit",
         "er_ui_site_landing_content_height",
         "er_ui_site_blog_content_height",
         "er_ui_site_blog_post_content_height",
+        "er_ui_site_content_height",
         "er_ui_clear",
         "er_ui_build_component_gallery_gpu_frame",
         "er_ui_build_component_gallery_gpu_frame_layout_gap_hover",
+        "er_ui_build_site_gpu_frame",
         "er_ui_build_site_landing_gpu_frame",
         "er_ui_build_site_blog_gpu_frame",
         "er_ui_render_input_object",
     };
     const install_ui_browser = b.addInstallArtifact(ui_browser, .{});
+    const wasm_entry = b.addExecutable(.{
+        .name = "edgerun-wasm-entry",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/wasm_entry.zig"),
+            .target = target,
+            .optimize = optimize,
+        }),
+    });
+    const run_wasm_entry = b.addRunArtifact(wasm_entry);
+    const wasm_entry_html = run_wasm_entry.addOutputFileArg("wasmentry.html");
+    const install_wasm_entry = b.addInstallFile(wasm_entry_html, "web/wasmentry.html");
+    const wasm_entry_step = b.step("wasm-entry", "Generate the immutable browser WASM entry point");
+    wasm_entry_step.dependOn(&install_wasm_entry.step);
+
     const ui_browser_step = b.step("ui-browser", "Build browser-renderable Zig UI wasm");
     ui_browser_step.dependOn(&install_ui_browser.step);
+    ui_browser_step.dependOn(&install_wasm_entry.step);
 
     const tpm_real_check = b.addExecutable(.{
         .name = "edgerun-tpm-real-check-zig",

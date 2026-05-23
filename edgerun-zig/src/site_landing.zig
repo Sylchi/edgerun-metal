@@ -8,6 +8,7 @@ pub const apps_button_id: u32 = 30_002;
 pub const launch_button_id: u32 = 30_003;
 pub const search_button_id: u32 = 30_004;
 pub const blog_button_id: u32 = 30_011;
+pub const source_button_id: u32 = 30_012;
 
 const max_columns: usize = 4;
 const header_h: f32 = 64.0;
@@ -36,6 +37,13 @@ const hero_inline_title_min_w: f32 = 720.0;
 const hero_inline_title_first_w: f32 = 286.0;
 const hero_inline_title_accent_w: f32 = 382.0;
 const hero_inline_title_gap: f32 = 12.0;
+const title_weight_offset: f32 = 0.75;
+const terminal_line_h: f32 = 22.0;
+const terminal_line_reveal_ms: f32 = 250.0;
+const terminal_hold_ms: f32 = 1600.0;
+const terminal_cursor_w: f32 = 8.0;
+const terminal_cursor_h: f32 = 14.0;
+const terminal_cursor_alpha: u8 = 190;
 const impact_card_count: usize = 3;
 const impact_card_gap: f32 = 14.0;
 const impact_card_h: f32 = 190.0;
@@ -72,6 +80,27 @@ pub const State = struct {
     scroll_y: f32 = 0.0,
     hover_x: f32 = -1.0,
     hover_y: f32 = -1.0,
+    frame_ms: f32 = 0.0,
+};
+
+const TerminalLine = struct {
+    value: []const u8,
+    color: ui.Color,
+};
+
+const terminal_lines = [_]TerminalLine{
+    .{ .value = "$ edgerun start", .color = palette.dim },
+    .{ .value = "EdgeRun v0.4.2-alpha", .color = palette.text },
+    .{ .value = "initializing wasm runtime...", .color = palette.dim },
+    .{ .value = "runtime loaded (2.1mb)", .color = palette.primary },
+    .{ .value = "generating node keypair...", .color = palette.dim },
+    .{ .value = "ed25519 keypair ready", .color = palette.primary },
+    .{ .value = "bootstrapping DHT...", .color = palette.dim },
+    .{ .value = "found 847 peers", .color = palette.dim },
+    .{ .value = "connected to 12 nodes", .color = palette.dim },
+    .{ .value = "mesh network active", .color = palette.primary },
+    .{ .value = "your node is live", .color = palette.text },
+    .{ .value = "node: af03d91c7b42e8aa", .color = palette.primary },
 };
 
 const SectionKind = enum {
@@ -171,7 +200,7 @@ fn renderHeader(scene: *ui.Scene, bounds: ui.Rect, content: ui.Rect) ui.RenderEr
 
     const logo = ui.Rect.init(content.x, bounds.y + 16.0, 32.0, 32.0);
     try fill(scene, logo, palette.primary, 7.0);
-    try iconQuad(scene, logo.insetUniform(8.0), .terminal, palette.bg);
+    try iconQuad(scene, logo.insetUniform(5.0), .terminal, palette.bg);
     try text(scene, logo.x + 42.0, bounds.y + 23.0, 110.0, 18.0, "EdgeRun", palette.text);
 
     const nav_y = bounds.y + 19.0;
@@ -181,21 +210,23 @@ fn renderHeader(scene: *ui.Scene, bounds: ui.Rect, content: ui.Rect) ui.RenderEr
 
     const launch = ui.Rect.init(content.x + content.w - 128.0, bounds.y + 16.0, 128.0, 32.0);
     try primaryButton(scene, launch, "Launch Desktop", launch_button_id);
-    const search = ui.Rect.init(launch.x - 126.0, launch.y, 112.0, 32.0);
-    try outlineButton(scene, search, "Search", search_button_id);
+    const source = ui.Rect.init(launch.x - 46.0, launch.y, 32.0, 32.0);
+    try iconButton(scene, source, .github, source_button_id);
+    const search = ui.Rect.init(source.x - 126.0, launch.y, 112.0, 32.0);
+    try outlineButtonWithLeadingIcon(scene, search, "Search", .search, search_button_id);
 }
 
 fn renderHero(scene: *ui.Scene, bounds: ui.Rect, state: State) ui.RenderError!void {
     const layout = heroLayout(bounds);
     const stacked = bounds.w < hero_split_min_w;
 
-    try renderTerminal(scene, layout.terminal);
+    try renderTerminal(scene, layout.terminal, state);
 
     const badge_w = @min(330.0, layout.copy.w);
     const badge_x = if (stacked) layout.copy.x + (layout.copy.w - badge_w) * 0.5 else layout.copy.x;
     const badge = ui.Rect.init(badge_x, layout.copy.y, badge_w, 28.0);
     try nativeBadge(scene, badge, "Written in Zig. Zero dependencies.");
-    try iconQuad(scene, ui.Rect.init(badge.x + 12.0, badge.y + 7.0, 14.0, 14.0), .terminal, palette.primary);
+    try iconQuad(scene, ui.Rect.init(badge.x + 12.0, badge.y + 5.0, 18.0, 18.0), .terminal, palette.primary);
 
     if (stacked and layout.copy.w >= hero_inline_title_min_w) {
         const title_w = hero_inline_title_first_w + hero_inline_title_gap + hero_inline_title_accent_w;
@@ -211,10 +242,8 @@ fn renderHero(scene: *ui.Scene, bounds: ui.Rect, state: State) ui.RenderError!vo
     try heroParagraph(scene, ui.Rect.init(paragraph_x, layout.copy.y + 244.0, paragraph_w, 88.0), "No signup. No account. No middlemen. EdgeRun starts a node in your browser the moment you arrive. Share your ID, connect directly, communicate privately.");
     const actions_w = hero_primary_button_w + hero_button_gap + hero_outline_button_w;
     const actions_x = if (stacked) layout.copy.x + (layout.copy.w - actions_w) * 0.5 else layout.copy.x;
-    try primaryButton(scene, ui.Rect.init(actions_x, layout.button_y, hero_primary_button_w, 42.0), "Read the Docs", docs_button_id);
+    try primaryButtonWithTrailingIcon(scene, ui.Rect.init(actions_x, layout.button_y, hero_primary_button_w, 42.0), "Read the Docs", .chevron_right, docs_button_id);
     try outlineButton(scene, ui.Rect.init(actions_x + hero_primary_button_w + hero_button_gap, layout.button_y, hero_outline_button_w, 42.0), "Browse Apps", apps_button_id);
-
-    _ = state;
 }
 
 const HeroLayout = struct {
@@ -251,7 +280,7 @@ fn heroSectionHeight(width: f32) f32 {
     return @max(terminal_bottom, actions_bottom) - bounds.y + hero_bottom_pad;
 }
 
-fn renderTerminal(scene: *ui.Scene, bounds: ui.Rect) ui.RenderError!void {
+fn renderTerminal(scene: *ui.Scene, bounds: ui.Rect, state: State) ui.RenderError!void {
     try nativeCard(scene, bounds, "", "");
     const header = ui.Rect.init(bounds.x, bounds.y, bounds.w, 40.0);
     try fill(scene, header, palette.card_alt, radius);
@@ -261,25 +290,15 @@ fn renderTerminal(scene: *ui.Scene, bounds: ui.Rect) ui.RenderError!void {
     try fill(scene, ui.Rect.init(header.x + 46.0, header.y + 14.0, 10.0, 10.0), palette.primary, 5.0);
     try text(scene, header.x + 70.0, header.y + 13.0, 140.0, 12.0, "edgerun - node", palette.dim);
 
-    const lines = [_]struct { []const u8, ui.Color }{
-        .{ "$ edgerun start", palette.dim },
-        .{ "EdgeRun v0.4.2-alpha", palette.text },
-        .{ "initializing wasm runtime...", palette.dim },
-        .{ "runtime loaded (2.1mb)", palette.primary },
-        .{ "generating node keypair...", palette.dim },
-        .{ "ed25519 keypair ready", palette.primary },
-        .{ "bootstrapping DHT...", palette.dim },
-        .{ "found 847 peers", palette.dim },
-        .{ "connected to 12 nodes", palette.dim },
-        .{ "mesh network active", palette.primary },
-        .{ "your node is live", palette.text },
-        .{ "node: af03d91c7b42e8aa", palette.primary },
-    };
+    const visible = terminalVisibleLineCount(state.frame_ms);
     var y = bounds.y + 62.0;
-    for (lines) |line| {
-        try text(scene, bounds.x + 24.0, y, bounds.w - 48.0, 14.0, line[0], line[1]);
-        y += 22.0;
+    for (terminal_lines[0..visible]) |line| {
+        try text(scene, bounds.x + 24.0, y, bounds.w - 48.0, 14.0, line.value, line.color);
+        y += terminal_line_h;
     }
+    var cursor_color = palette.primary;
+    cursor_color.a = terminal_cursor_alpha;
+    try fill(scene, ui.Rect.init(bounds.x + 24.0, y, terminal_cursor_w, terminal_cursor_h), cursor_color, 1.0);
 }
 
 fn renderStats(scene: *ui.Scene, bounds: ui.Rect) ui.RenderError!void {
@@ -339,7 +358,7 @@ fn renderArchitecture(scene: *ui.Scene, bounds: ui.Rect) ui.RenderError!void {
     try tag(scene, ui.Rect.init(left.x, left.y, 64.0, 24.0), "STACK", palette.primary);
     try heading(scene, ui.Rect.init(left.x, left.y + 44.0, left.w, 74.0), "Pure Zig.", "Zero Dependencies.");
     try paragraph(scene, ui.Rect.init(left.x, left.y + 138.0, left.w, 96.0), "Every component written from scratch. No inherited vulnerabilities. No black boxes. Compiles to WebAssembly for browser, native for desktop.");
-    try outlineButton(scene, ui.Rect.init(left.x, left.y + 264.0, 180.0, 36.0), "Explore Architecture", docs_button_id);
+    try outlineButtonWithTrailingIcon(scene, ui.Rect.init(left.x, left.y + 264.0, 180.0, 36.0), "Explore Architecture", .chevron_right, docs_button_id);
     const stack = [_]struct { []const u8, []const u8, ui.Color }{
         .{ "edgerun-metal", "Bare metal bootloader", palette.orange },
         .{ "edgerun-clock", "Distributed time sync", palette.yellow },
@@ -439,7 +458,7 @@ fn renderCta(scene: *ui.Scene, bounds: ui.Rect) ui.RenderError!void {
     try alignedText(scene, bounds.x + 40.0, bounds.y + 70.0, bounds.w - 80.0, 30.0, "Cut Out the Middlemen", palette.text, .center);
     try alignedText(scene, bounds.x + 40.0, bounds.y + 118.0, bounds.w - 80.0, 18.0, "Start with the docs. Explore the architecture. Build apps that respect users.", palette.dim, .center);
     const center = bounds.x + bounds.w * 0.5;
-    try primaryButton(scene, ui.Rect.init(center - 146.0, bounds.y + 168.0, 132.0, 38.0), "Get Started", docs_button_id);
+    try primaryButtonWithTrailingIcon(scene, ui.Rect.init(center - 146.0, bounds.y + 168.0, 132.0, 38.0), "Get Started", .chevron_right, docs_button_id);
     try outlineButton(scene, ui.Rect.init(center + 14.0, bounds.y + 168.0, 132.0, 38.0), "Browse Apps", apps_button_id);
 }
 
@@ -493,15 +512,32 @@ fn tag(scene: *ui.Scene, bounds: ui.Rect, label: []const u8, color: ui.Color) ui
 }
 
 fn title(scene: *ui.Scene, bounds: ui.Rect, value: []const u8) ui.RenderError!void {
-    try scene.pushWrappedText(bounds, value, palette.text, .{ .line_height = 58.0, .average_char_width = 22.0, .max_lines = 2 });
+    try titleWrapped(scene, bounds, value, palette.text);
 }
 
 fn titleAccent(scene: *ui.Scene, bounds: ui.Rect, value: []const u8) ui.RenderError!void {
-    try scene.pushWrappedText(bounds, value, palette.primary, .{ .line_height = 58.0, .average_char_width = 22.0, .max_lines = 2 });
+    try titleWrapped(scene, bounds, value, palette.primary);
 }
 
 fn titleLine(scene: *ui.Scene, bounds: ui.Rect, value: []const u8, color: ui.Color) ui.RenderError!void {
+    try scene.pushAlignedText(ui.Rect.init(bounds.x + title_weight_offset, bounds.y, bounds.w, bounds.h), value, color, .start);
     try scene.pushAlignedText(bounds, value, color, .start);
+}
+
+fn titleWrapped(scene: *ui.Scene, bounds: ui.Rect, value: []const u8, color: ui.Color) ui.RenderError!void {
+    const wrap = ui.TextWrap{ .line_height = 58.0, .average_char_width = 22.0, .max_lines = 2 };
+    try scene.pushWrappedText(ui.Rect.init(bounds.x + title_weight_offset, bounds.y, bounds.w, bounds.h), value, color, wrap);
+    try scene.pushWrappedText(bounds, value, color, wrap);
+}
+
+fn terminalVisibleLineCount(frame_ms: f32) usize {
+    if (frame_ms <= 0.0) return terminal_lines.len;
+    const total = @as(f32, @floatFromInt(terminal_lines.len));
+    const cycle_ms = total * terminal_line_reveal_ms + terminal_hold_ms;
+    const cycles = @floor(frame_ms / cycle_ms);
+    const elapsed = frame_ms - cycles * cycle_ms;
+    const visible = @as(usize, @intFromFloat(@floor(elapsed / terminal_line_reveal_ms))) + 1;
+    return @max(@as(usize, 1), @min(terminal_lines.len, visible));
 }
 
 fn heading(scene: *ui.Scene, bounds: ui.Rect, first: []const u8, second: []const u8) ui.RenderError!void {
@@ -623,12 +659,31 @@ fn primaryButton(scene: *ui.Scene, bounds: ui.Rect, label: []const u8, id: u32) 
     try nativeComponent(scene, bounds, .{ .button = .{ .id = id, .label = label } }, .{ .button_variant = .primary });
 }
 
+fn primaryButtonWithTrailingIcon(scene: *ui.Scene, bounds: ui.Rect, label: []const u8, icon_value: icon.Icon, id: u32) ui.RenderError!void {
+    try nativeComponent(scene, bounds, .{ .button = .{ .id = id, .label = label } }, .{ .button_variant = .primary, .button_trailing_icon = icon_value });
+}
+
 fn outlineButton(scene: *ui.Scene, bounds: ui.Rect, label: []const u8, id: u32) ui.RenderError!void {
     try nativeComponent(scene, bounds, .{ .button = .{ .id = id, .label = label } }, .{ .button_variant = .outline });
 }
 
+fn outlineButtonWithLeadingIcon(scene: *ui.Scene, bounds: ui.Rect, label: []const u8, icon_value: icon.Icon, id: u32) ui.RenderError!void {
+    try nativeComponent(scene, bounds, .{ .button = .{ .id = id, .label = label } }, .{ .button_variant = .outline, .button_leading_icon = icon_value });
+}
+
+fn outlineButtonWithTrailingIcon(scene: *ui.Scene, bounds: ui.Rect, label: []const u8, icon_value: icon.Icon, id: u32) ui.RenderError!void {
+    try nativeComponent(scene, bounds, .{ .button = .{ .id = id, .label = label } }, .{ .button_variant = .outline, .button_trailing_icon = icon_value });
+}
+
+fn iconButton(scene: *ui.Scene, bounds: ui.Rect, icon_value: icon.Icon, id: u32) ui.RenderError!void {
+    try fill(scene, bounds, palette.bg, 7.0);
+    try iconQuad(scene, bounds.insetUniform(5.0), icon_value, palette.text);
+    try hit(scene, bounds, .button, id);
+}
+
 fn nativeBadge(scene: *ui.Scene, bounds: ui.Rect, label: []const u8) ui.RenderError!void {
-    try fill(scene, bounds, palette.neutral_soft, 12.0);
+    try fill(scene, bounds, palette.card_alt, 12.0);
+    try stroke(scene, bounds, palette.border, 12.0);
     try alignedText(scene, bounds.x + 28.0, bounds.y + 8.0, bounds.w - 40.0, 12.0, label, palette.primary, .center);
 }
 
@@ -726,6 +781,9 @@ test "landing page renders site sections and primary actions" {
     try std.testing.expect(hasText(scene.written(), "Pure Zig."));
     try std.testing.expect(hasHit(scene.written(), docs_button_id));
     try std.testing.expect(hasHit(scene.written(), apps_button_id));
+    try std.testing.expect(hasIcon(scene.written(), .search));
+    try std.testing.expect(hasIcon(scene.written(), .chevron_right));
+    try std.testing.expect(hasIcon(scene.written(), .github));
 }
 
 test "landing page clips scrolled content below fixed header" {
@@ -783,6 +841,13 @@ test "split hero keeps actions inside measured section" {
     try std.testing.expect(rectInside(split, layout.terminal));
 }
 
+test "terminal animation reveals deterministic line counts" {
+    try std.testing.expectEqual(terminal_lines.len, terminalVisibleLineCount(0.0));
+    try std.testing.expectEqual(@as(usize, 1), terminalVisibleLineCount(1.0));
+    try std.testing.expectEqual(@as(usize, 2), terminalVisibleLineCount(terminal_line_reveal_ms));
+    try std.testing.expectEqual(terminal_lines.len, terminalVisibleLineCount(terminal_line_reveal_ms * @as(f32, @floatFromInt(terminal_lines.len)) + 1.0));
+}
+
 fn hasText(commands: []const ui.Command, value: []const u8) bool {
     for (commands) |command| switch (command) {
         .text => |text_command| if (std.mem.eql(u8, text_command.value, value)) return true,
@@ -804,6 +869,15 @@ fn contentTextAboveHeader(commands: []const ui.Command, value: []const u8) bool 
         .text => |text_command| {
             if (std.mem.eql(u8, text_command.value, value) and text_command.origin.y < header_h) return true;
         },
+        else => {},
+    };
+    return false;
+}
+
+fn hasIcon(commands: []const ui.Command, value: icon.Icon) bool {
+    const atlas_id = icon.atlasId(value);
+    for (commands) |command| switch (command) {
+        .icon_quad => |quad| if (quad.atlas_id == atlas_id) return true,
         else => {},
     };
     return false;

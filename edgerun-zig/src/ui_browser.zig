@@ -40,6 +40,7 @@ const font_bitmap_bytes: usize = 8 * 1024 * 1024;
 const icon_atlas_width: usize = tabler_atlas.width;
 const icon_atlas_height: usize = tabler_atlas.height;
 const post_image_bytes = @embedFile("assets/old-man-yells-at-cloud.webp");
+const site_source_url = "https://github.com/edgerun";
 
 var pixels: [max_pixels]ui.Color = undefined;
 var input_bytes: [max_input_bytes]u8 = undefined;
@@ -79,8 +80,29 @@ var last_action_from_index: u32 = 0;
 var last_action_to_index: u32 = 0;
 var gallery_list_order_scope_id: u32 = 0;
 var gallery_list_order: [component_gallery.list_row_count]u8 = component_gallery.default_list_order;
+var site_state = SiteState{};
 
 const hover_hit_kind_none: u32 = 255;
+
+const HostAction = enum(u32) {
+    none = 0,
+    open_url = 1,
+};
+
+const SiteView = enum(u32) {
+    landing = 0,
+    blog = 1,
+};
+
+const SiteState = struct {
+    view: SiteView = .landing,
+    selected_blog_post_id: u32 = 0,
+    host_action: HostAction = .none,
+
+    fn resetHostAction(state: *SiteState) void {
+        state.host_action = .none;
+    }
+};
 
 const ErrorCode = enum(u32) {
     ok = 0,
@@ -320,6 +342,10 @@ export fn er_ui_site_search_button_id() u32 {
     return site_landing.search_button_id;
 }
 
+export fn er_ui_site_source_button_id() u32 {
+    return site_landing.source_button_id;
+}
+
 export fn er_ui_site_blog_button_id() u32 {
     return site_landing.blog_button_id;
 }
@@ -336,6 +362,43 @@ export fn er_ui_blog_post_count() u32 {
     return site_blog.posts.len;
 }
 
+export fn er_ui_site_host_action_kind() u32 {
+    return @intFromEnum(site_state.host_action);
+}
+
+export fn er_ui_site_host_action_url_ptr() usize {
+    return @intFromPtr(site_source_url.ptr);
+}
+
+export fn er_ui_site_host_action_url_len() usize {
+    return site_source_url.len;
+}
+
+export fn er_ui_site_activate_hit(hit_id: u32) u32 {
+    site_state.resetHostAction();
+    switch (hit_id) {
+        site_landing.docs_button_id => {
+            site_state.view = .landing;
+            site_state.selected_blog_post_id = 0;
+        },
+        site_landing.blog_button_id => {
+            site_state.view = .blog;
+            site_state.selected_blog_post_id = 0;
+        },
+        site_landing.source_button_id => {
+            site_state.host_action = .open_url;
+        },
+        site_blog.back_button_id => {
+            site_state.selected_blog_post_id = 0;
+        },
+        else => if (site_blog.postById(hit_id) != null) {
+            site_state.view = .blog;
+            site_state.selected_blog_post_id = hit_id;
+        },
+    }
+    return @intFromEnum(site_state.host_action);
+}
+
 export fn er_ui_site_landing_content_height(width: f32) f32 {
     return site_landing.contentHeight(width);
 }
@@ -346,6 +409,16 @@ export fn er_ui_site_blog_content_height(width: f32) f32 {
 
 export fn er_ui_site_blog_post_content_height(width: f32, post_id: u32) f32 {
     return site_blog.postContentHeight(width, post_id);
+}
+
+export fn er_ui_site_content_height(width: f32) f32 {
+    return switch (site_state.view) {
+        .landing => site_landing.contentHeight(width),
+        .blog => if (site_state.selected_blog_post_id == 0)
+            site_blog.indexContentHeight(width)
+        else
+            site_blog.postContentHeight(width, site_state.selected_blog_post_id),
+    };
 }
 
 export fn er_ui_clear(width: u32, height: u32) u32 {
@@ -405,7 +478,7 @@ export fn er_ui_build_component_gallery_gpu_frame_layout_gap_hover(width: u32, h
     return @intFromEnum(ErrorCode.ok);
 }
 
-export fn er_ui_build_site_landing_gpu_frame(width: u32, height: u32, scroll_y: f32, hover_x: f32, hover_y: f32) u32 {
+export fn er_ui_build_site_landing_gpu_frame(width: u32, height: u32, scroll_y: f32, hover_x: f32, hover_y: f32, frame_ms: f32) u32 {
     if (!setFrameSize(width, height)) return finishError(.bad_size);
     ensureFontAtlas() catch return finishError(.font_atlas);
 
@@ -419,6 +492,7 @@ export fn er_ui_build_site_landing_gpu_frame(width: u32, height: u32, scroll_y: 
         .scroll_y = scroll_y,
         .hover_x = hover_x,
         .hover_y = hover_y,
+        .frame_ms = frame_ms,
     }) catch return finishError(.render_failed);
 
     last_command_count = scene.written().len;
@@ -450,6 +524,13 @@ export fn er_ui_build_site_blog_gpu_frame(width: u32, height: u32, scroll_y: f32
     packGpuScene(scene.written()) catch return finishError(.gpu_budget);
     last_error = .ok;
     return @intFromEnum(ErrorCode.ok);
+}
+
+export fn er_ui_build_site_gpu_frame(width: u32, height: u32, scroll_y: f32, hover_x: f32, hover_y: f32, frame_ms: f32) u32 {
+    return switch (site_state.view) {
+        .landing => er_ui_build_site_landing_gpu_frame(width, height, scroll_y, hover_x, hover_y, frame_ms),
+        .blog => er_ui_build_site_blog_gpu_frame(width, height, scroll_y, hover_x, hover_y, site_state.selected_blog_post_id),
+    };
 }
 
 export fn er_ui_render_input_object(input_len: usize, width: u32, height: u32) u32 {
@@ -827,9 +908,9 @@ fn iconAtlasRect(atlas_id: u32) ?AtlasRect {
     const found = tabler_atlas.rect(value);
     return .{
         .u0 = (@as(f32, @floatFromInt(found.x)) + 0.5) / @as(f32, @floatFromInt(icon_atlas_width)),
-        .v0 = (@as(f32, @floatFromInt(found.y)) + 0.5) / @as(f32, @floatFromInt(icon_atlas_height)),
+        .v0 = (@as(f32, @floatFromInt(icon_atlas_height - found.y - found.h)) + 0.5) / @as(f32, @floatFromInt(icon_atlas_height)),
         .u1 = (@as(f32, @floatFromInt(found.x + found.w)) - 0.5) / @as(f32, @floatFromInt(icon_atlas_width)),
-        .v1 = (@as(f32, @floatFromInt(found.y + found.h)) - 0.5) / @as(f32, @floatFromInt(icon_atlas_height)),
+        .v1 = (@as(f32, @floatFromInt(icon_atlas_height - found.y)) - 0.5) / @as(f32, @floatFromInt(icon_atlas_height)),
     };
 }
 
@@ -875,7 +956,7 @@ test "browser component gallery builds packed webgl buffers and atlases" {
 }
 
 test "browser site landing builds packed webgl buffers and hit state" {
-    const code = er_ui_build_site_landing_gpu_frame(1280, 800, 0.0, 1020.0, 32.0);
+    const code = er_ui_build_site_landing_gpu_frame(1280, 800, 0.0, 1020.0, 32.0, 0.0);
     try std.testing.expectEqual(@as(u32, 0), code);
     try std.testing.expect(gpu_rect_float_len > 0);
     try std.testing.expect(gpu_text_vertex_float_len > 0);
@@ -899,6 +980,21 @@ test "browser site blog builds packed webgl buffers and post hit state" {
     try std.testing.expect(er_ui_site_blog_post_content_height(1280.0, site_blog.postIdAt(16)) > 1200.0);
     try std.testing.expectEqual(@intFromEnum(ui.HitKind.button), hover_hit_kind);
     try std.testing.expectEqual(site_blog.postIdAt(0), hover_hit_id);
+}
+
+test "browser site activation keeps page state in wasm" {
+    site_state = .{};
+    defer site_state = .{};
+
+    try std.testing.expectEqual(site_landing.contentHeight(1280.0), er_ui_site_content_height(1280.0));
+    try std.testing.expectEqual(@intFromEnum(HostAction.none), er_ui_site_activate_hit(site_landing.blog_button_id));
+    try std.testing.expectEqual(site_blog.indexContentHeight(1280.0), er_ui_site_content_height(1280.0));
+    try std.testing.expectEqual(@intFromEnum(HostAction.none), er_ui_site_activate_hit(site_blog.postIdAt(0)));
+    try std.testing.expectEqual(site_blog.postContentHeight(1280.0, site_blog.postIdAt(0)), er_ui_site_content_height(1280.0));
+    try std.testing.expectEqual(@intFromEnum(HostAction.open_url), er_ui_site_activate_hit(site_landing.source_button_id));
+    try std.testing.expectEqual(@intFromEnum(HostAction.open_url), er_ui_site_host_action_kind());
+    try std.testing.expectEqual(site_source_url.len, er_ui_site_host_action_url_len());
+    try std.testing.expect(er_ui_site_host_action_url_ptr() != 0);
 }
 
 test "browser pointer runtime applies visible list reorder state" {

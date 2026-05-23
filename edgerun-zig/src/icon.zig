@@ -32,6 +32,7 @@ pub const Icon = enum(u8) {
     wallet,
     warning,
     x,
+    github,
 };
 
 pub const Provider = enum {
@@ -77,6 +78,7 @@ const mappings = [_]Mapping{
     .{ .label = "wallet", .tabler = "wallet", .lucide = "wallet" },
     .{ .label = "warning", .tabler = "alert-triangle", .lucide = "triangle-alert" },
     .{ .label = "x", .tabler = "x", .lucide = "x" },
+    .{ .label = "github", .tabler = "brand-github", .lucide = "github" },
 };
 
 pub fn label(value: Icon) []const u8 {
@@ -108,8 +110,9 @@ test "icon atlas ids are stable and one based" {
     try std.testing.expectEqual(@as(u32, 1), atlasId(.activity));
     try std.testing.expectEqual(@as(u32, 18), atlasId(.search));
     try std.testing.expectEqual(Icon.search, fromAtlasId(18).?);
+    try std.testing.expectEqual(Icon.github, fromAtlasId(32).?);
     try std.testing.expect(fromAtlasId(0) == null);
-    try std.testing.expect(fromAtlasId(32) == null);
+    try std.testing.expect(fromAtlasId(33) == null);
 }
 
 test "icon labels and provider names match C mappings" {
@@ -117,4 +120,5 @@ test "icon labels and provider names match C mappings" {
     try std.testing.expectEqualStrings("menu-2", providerName(.menu, .tabler));
     try std.testing.expectEqualStrings("app-window", providerName(.app, .lucide));
     try std.testing.expectEqualStrings("triangle-alert", providerName(.warning, .lucide));
+    try std.testing.expectEqualStrings("brand-github", providerName(.github, .tabler));
 }

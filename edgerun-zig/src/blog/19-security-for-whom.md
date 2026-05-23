@@ -4,11 +4,9 @@
 
 Security can protect the user from malware, the platform from user modification, the carrier from radio abuse, the copyright owner from copying, the payment provider from fraud, the app store from competition, the government from unauthorized communication, or the manufacturer from repair markets.
 
-## Purpose
+The phrase sounds final because nobody wants to be against security. But security is never floating in the air. It protects a specific actor from a specific threat using a specific mechanism controlled by specific keys.
 
-Make security precise. The same mechanism can protect one actor while restricting another.
-
-## Examples
+## Same mechanism, different owner
 
 - Secure boot can protect users from persistent malware.
 - Secure boot can also prevent users from installing their own OS.
@@ -17,9 +15,11 @@ Make security precise. The same mechanism can protect one actor while restrictin
 - DRM can protect copyright.
 - DRM can also prevent repair, archiving, modification, and legitimate ownership.
 
-## Interactive demo
+The technical mechanism may be identical. The political result depends on who can approve software, who can audit policy, who can recover, who can override, and who gets treated as the attacker.
 
-An override-key map shows a mechanism, who it protects, who it restricts, and who can override it. The reader can compare secure boot, app signing, DRM, payment attestation, and device management.
+## Override key
+
+Ask where the override key lives. If the user can override, the mechanism is a tool. If only the vendor can override, the mechanism is a control plane. If nobody can override, the mechanism may be brittle. If a government or payment network can override, the user is not the final authority.
 
 ## Main lesson
 
