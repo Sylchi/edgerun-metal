@@ -148,7 +148,7 @@ pub const MemoryViewReceipt = struct {
 };
 
 pub fn spawnReceipt(parent: identity.Identity, child: identity.Identity, epoch: clock.Stamp, memory_bytes: usize, storage_bytes: usize, storage_slots: usize) ?SpawnReceipt {
-    return spawnReceiptAllocated(parent, child, epoch, memory_bytes, storage_bytes, storage_slots, 1, 1, 1);
+    return spawnReceiptAllocated(parent, child, epoch, memory_bytes, storage_bytes, storage_slots, 1, 0, 0);
 }
 
 pub fn spawnReceiptAllocated(parent: identity.Identity, child: identity.Identity, epoch: clock.Stamp, memory_bytes: usize, storage_bytes: usize, storage_slots: usize, execution_ticks: u64, route_handles: u64, device_handles: u64) ?SpawnReceipt {
@@ -235,7 +235,8 @@ test "spawn receipt deterministically records delegated resources" {
     try std.testing.expect(bytes.nonzero(&receipt.id().?));
     try std.testing.expectEqual(@as(u64, 16), receipt.memory.amount);
     try std.testing.expectEqual(Resource.execution_ticks, receipt.execution_ticks.resource);
-    try std.testing.expectEqual(@as(u64, 1), receipt.route_handles.amount);
+    try std.testing.expectEqual(@as(u64, 0), receipt.route_handles.amount);
+    try std.testing.expectEqual(@as(u64, 0), receipt.device_handles.amount);
 }
 
 test "memory view receipt binds owner reader slice and byte range" {
