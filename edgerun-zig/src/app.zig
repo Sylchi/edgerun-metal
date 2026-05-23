@@ -35,6 +35,7 @@ pub const App = struct {
     execution_ticks: u64 = 0,
     route_handles: u64 = 0,
     device_handles: u64 = 0,
+    can_spawn_children: bool = true,
 
     pub fn init(id: identity.Identity, memory: BoundedArena, storage: store.Store) App {
         return .{
@@ -105,6 +106,64 @@ pub const App = struct {
         }
     };
 
+    pub const manifest_magic = "ERAPP001";
+    pub const manifest_body_size = 96;
+    pub const manifest_flags_offset = 8;
+    pub const manifest_code_hash_offset = 16;
+    pub const manifest_allocation_offset = 48;
+    pub const manifest_flag_child_spawn: u32 = 1;
+
+    pub const Manifest = struct {
+        code_hash: preimage.Hash,
+        allocation: DeclaredAllocation,
+        flags: u32 = 0,
+
+        pub fn valid(self: Manifest) bool {
+            return bytes.nonzero(&self.code_hash) and
+                self.allocation.valid() and
+                (self.flags & ~manifest_flag_child_spawn) == 0;
+        }
+
+        pub fn childSpawnAllowed(self: Manifest) bool {
+            return (self.flags & manifest_flag_child_spawn) != 0;
+        }
+
+        pub fn encodeBody(self: Manifest, out: []u8) bool {
+            if (!self.valid() or out.len < manifest_body_size) return false;
+            bytes.zero(out[0..manifest_body_size]);
+            return bytes.copy(out[0..manifest_magic.len], manifest_magic) and
+                bytes.store32(out[manifest_flags_offset..][0..4], self.flags) and
+                bytes.copy(out[manifest_code_hash_offset..][0..preimage.hash_size], &self.code_hash) and
+                writeAllocationBody(self.allocation, out[manifest_allocation_offset..][0..48]);
+        }
+
+        pub fn decodeBody(in: []const u8) ?Manifest {
+            if (in.len != manifest_body_size or !bytes.eql(in[0..manifest_magic.len], manifest_magic)) return null;
+            if (!bytes.zeroed(in[12..16])) return null;
+            const flags = bytes.load32(in[manifest_flags_offset..][0..4]) orelse return null;
+            var code_hash: preimage.Hash = undefined;
+            _ = bytes.copy(&code_hash, in[manifest_code_hash_offset..][0..preimage.hash_size]);
+            const manifest = Manifest{
+                .code_hash = code_hash,
+                .allocation = readAllocationBody(in[manifest_allocation_offset..][0..48]) orelse return null,
+                .flags = flags,
+            };
+            return if (manifest.valid()) manifest else null;
+        }
+
+        pub fn fromObject(canonical: []const u8) ?Manifest {
+            const view = object.View.decode(canonical) catch return null;
+            if (view.header.kind != .bytes or view.body.len != manifest_body_size) return null;
+            if (view.header.requirements.durability != .durable or
+                view.header.requirements.integrity != .hash_only or
+                view.header.requirements.access != .explicit_io)
+            {
+                return null;
+            }
+            return decodeBody(view.body);
+        }
+    };
+
     pub const Reclaimed = struct {
         parent: identity.Id,
         child: identity.Id,
@@ -135,6 +194,7 @@ pub const App = struct {
         app: identity.Id,
         input: preimage.Hash,
         output: preimage.Hash,
+        manifest: preimage.Hash,
         clock_start: clock.Stamp,
         clock_end: clock.Stamp,
         allocation: DeclaredAllocation,
@@ -148,6 +208,7 @@ pub const App = struct {
                 self.app.valid() and
                 bytes.nonzero(&self.input) and
                 bytes.nonzero(&self.output) and
+                bytes.nonzero(&self.manifest) and
                 self.clock_start.valid() and
                 self.clock_end.valid() and
                 self.clock_start.sameKeeper(self.clock_end) and
@@ -168,12 +229,13 @@ pub const App = struct {
             if (!self.valid()) return null;
             const allocation_id = self.allocation.id().?;
             const spawn_id = self.spawn_receipt.id().?;
-            var raw: [identity.id_size * 2 + preimage.hash_size * 4 + preimage.epoch_size * 2]u8 = undefined;
+            var raw: [identity.id_size * 2 + preimage.hash_size * 5 + preimage.epoch_size * 2]u8 = undefined;
             var writer = preimage.Writer.init(&raw);
             if (!writer.id(self.parent) or
                 !writer.id(self.app) or
                 !writer.hash(self.input) or
                 !writer.hash(self.output) or
+                !writer.hash(self.manifest) or
                 !writer.epoch(self.clock_start) or
                 !writer.epoch(self.clock_end) or
                 !writer.hash(allocation_id) or
@@ -330,6 +392,7 @@ pub const App = struct {
 
     pub fn spawnDeclared(self: *App, allocator_id: identity.Identity, child_id: identity.Identity, epoch: clock.Stamp, authorization: intent.Receipt, allocation: DeclaredAllocation) SpawnError!Spawned {
         if (!allocation.valid()) return error.BadAllocation;
+        if (!self.can_spawn_children) return error.Unauthorized;
         if (!authorization.permitsAt(epoch, allocator_id.id, child_id.id, .spawn_app, .delegates_resources)) return error.Unauthorized;
         if (allocation.execution_ticks > self.execution_ticks) return error.NoExecution;
         if (allocation.route_handles > self.route_handles) return error.NoRoute;
@@ -368,12 +431,20 @@ pub const App = struct {
         };
     }
 
-    pub fn completeWork(self: App, parent: identity.Id, input: preimage.Hash, output: preimage.Hash, clock_start: clock.Stamp, clock_end: clock.Stamp, allocation: DeclaredAllocation, spawn_receipt: grant.SpawnReceipt) ?WorkReceipt {
+    pub fn spawnManifest(self: *App, allocator_id: identity.Identity, child_id: identity.Identity, epoch: clock.Stamp, authorization: intent.Receipt, manifest_canonical: []const u8) SpawnError!Spawned {
+        const manifest = Manifest.fromObject(manifest_canonical) orelse return error.BadAllocation;
+        var spawned = try self.spawnDeclared(allocator_id, child_id, epoch, authorization, manifest.allocation);
+        spawned.app.can_spawn_children = manifest.childSpawnAllowed();
+        return spawned;
+    }
+
+    pub fn completeWork(self: App, parent: identity.Id, input: preimage.Hash, output: preimage.Hash, manifest: preimage.Hash, clock_start: clock.Stamp, clock_end: clock.Stamp, allocation: DeclaredAllocation, spawn_receipt: grant.SpawnReceipt) ?WorkReceipt {
         const receipt = WorkReceipt{
             .parent = parent,
             .app = self.id.id,
             .input = input,
             .output = output,
+            .manifest = manifest,
             .clock_start = clock_start,
             .clock_end = clock_end,
             .allocation = allocation,
@@ -401,6 +472,7 @@ pub const App = struct {
         child.execution_ticks = 0;
         child.route_handles = 0;
         child.device_handles = 0;
+        child.can_spawn_children = false;
         return .{
             .parent = self.id.id,
             .child = child.id.id,
@@ -452,6 +524,16 @@ pub const App = struct {
 
     pub fn useDevice(self: App, device: identity.Identity) bool {
         return self.device_handles != 0 and device.kind == .device;
+    }
+
+    pub fn writeManifestObject(owner: identity.Identity, manifest: Manifest, epoch: clock.Stamp, out: []u8) object.Error![]u8 {
+        var body: [manifest_body_size]u8 = undefined;
+        if (!manifest.encodeBody(&body)) return error.BadArgument;
+        const object_owner = object.Owner{
+            .kind = .app,
+            .node_id = owner.id.bytes,
+        };
+        return try (object.NodeWriter{ .out = out }).bytesNodeOwned(manifestRequirements(), epoch, &.{object_owner}, &.{}, &body);
     }
 
     pub fn shareMemoryReadOnly(self: App, reader: identity.Id, slice: SharedMemory, epoch: clock.Stamp, authorization: intent.Receipt) MemoryShareError!ReadOnlyMemory {
@@ -521,6 +603,44 @@ pub fn uiObjectRequirements() object.Requirements {
         .visibility = .app_namespace,
         .access = .hot_memory_allowed,
     };
+}
+
+pub fn manifestRequirements() object.Requirements {
+    return .{
+        .durability = .durable,
+        .confidentiality = .app_private,
+        .portability = .app_portable,
+        .integrity = .hash_only,
+        .lifetime = .retained,
+        .visibility = .app_namespace,
+        .access = .explicit_io,
+    };
+}
+
+fn writeAllocationBody(allocation: App.DeclaredAllocation, out: []u8) bool {
+    if (!allocation.valid() or out.len < 48) return false;
+    const memory_amount = std.math.cast(u64, allocation.memory_bytes) orelse return false;
+    const storage_amount = std.math.cast(u64, allocation.storage_bytes) orelse return false;
+    const slot_amount = std.math.cast(u64, allocation.storage_slots) orelse return false;
+    return bytes.store64(out[0..8], memory_amount) and
+        bytes.store64(out[8..16], storage_amount) and
+        bytes.store64(out[16..24], slot_amount) and
+        bytes.store64(out[24..32], allocation.execution_ticks) and
+        bytes.store64(out[32..40], allocation.route_handles) and
+        bytes.store64(out[40..48], allocation.device_handles);
+}
+
+fn readAllocationBody(in: []const u8) ?App.DeclaredAllocation {
+    if (in.len < 48) return null;
+    const allocation = App.DeclaredAllocation{
+        .memory_bytes = std.math.cast(usize, bytes.load64(in[0..8]) orelse return null) orelse return null,
+        .storage_bytes = std.math.cast(usize, bytes.load64(in[8..16]) orelse return null) orelse return null,
+        .storage_slots = std.math.cast(usize, bytes.load64(in[16..24]) orelse return null) orelse return null,
+        .execution_ticks = bytes.load64(in[24..32]) orelse return null,
+        .route_handles = bytes.load64(in[32..40]) orelse return null,
+        .device_handles = bytes.load64(in[40..48]) orelse return null,
+    };
+    return if (allocation.valid()) allocation else null;
 }
 
 fn mapResolverError(err: ui_resolver.Error) App.UiError {
@@ -648,6 +768,8 @@ test "declared allocation bounds app child work receipts and clean reclaim" {
     var storage_bytes: [parent_storage_bytes]u8 = undefined;
     var slots: [parent_storage_slots]store.Blob = undefined;
     var oversized_storage: [parent_storage_bytes]u8 = [_]u8{'x'} ** parent_storage_bytes;
+    var child_manifest_raw: [object.header_size + object.owner_size + App.manifest_body_size]u8 = undefined;
+    var grandchild_manifest_raw: [object.header_size + object.owner_size + App.manifest_body_size]u8 = undefined;
 
     const keeper = clock.KeeperId{ .bytes = [_]u8{7} ++ [_]u8{0} ** 31 };
     var local_clock = clock.Clock.init(keeper, .{}) orelse return error.SkipZigTest;
@@ -657,6 +779,7 @@ test "declared allocation bounds app child work receipts and clean reclaim" {
     const parent_id = identity.Identity.init(.app, identity.Source.prepare(.hash, &preimage.rawHash("declared parent")).?, start).?;
     const child_id = identity.Identity.init(.app, identity.Source.prepare(.hash, &preimage.rawHash("declared child")).?, start).?;
     const grandchild_id = identity.Identity.init(.app, identity.Source.prepare(.hash, &preimage.rawHash("declared grandchild")).?, start).?;
+    const great_grandchild_id = identity.Identity.init(.app, identity.Source.prepare(.hash, &preimage.rawHash("declared great grandchild")).?, start).?;
 
     const parent_allocation = App.DeclaredAllocation{
         .memory_bytes = parent_memory_bytes,
@@ -681,6 +804,14 @@ test "declared allocation bounds app child work receipts and clean reclaim" {
         .route_handles = child_route_handles,
         .device_handles = child_device_handles,
     };
+    const child_manifest = App.Manifest{
+        .code_hash = preimage.hash("edgerun:zig:v1:test-code", "declared child code"),
+        .allocation = child_allocation,
+        .flags = App.manifest_flag_child_spawn,
+    };
+    const child_manifest_canonical = try App.writeManifestObject(child_id, child_manifest, start, &child_manifest_raw);
+    const child_manifest_id = object.Header.id(child_manifest_canonical);
+    try std.testing.expectEqual(child_manifest.allocation, App.Manifest.fromObject(child_manifest_canonical).?.allocation);
     const child_authorization = intent.admit(
         user_id,
         device_id,
@@ -692,7 +823,7 @@ test "declared allocation bounds app child work receipts and clean reclaim" {
         intent.requestId("declared child spawn").?,
     ).?;
 
-    const spawned_child = try parent.spawnDeclared(parent_id, child_id, start, child_authorization, child_allocation);
+    const spawned_child = try parent.spawnManifest(parent_id, child_id, start, child_authorization, child_manifest_canonical);
     var child = spawned_child.app;
     try std.testing.expectEqual(@as(usize, parent_memory_bytes - child_memory_bytes), parent.memory.remaining());
     try std.testing.expectEqual(@as(usize, child_memory_bytes), child.memory.remaining());
@@ -748,7 +879,13 @@ test "declared allocation bounds app child work receipts and clean reclaim" {
         .route_handles = grandchild_route_handles,
         .device_handles = grandchild_device_handles,
     };
-    const spawned_grandchild = try child.spawnDeclared(child_id, grandchild_id, start, grandchild_authorization, grandchild_allocation);
+    const grandchild_manifest = App.Manifest{
+        .code_hash = preimage.hash("edgerun:zig:v1:test-code", "declared grandchild code"),
+        .allocation = grandchild_allocation,
+    };
+    const grandchild_manifest_canonical = try App.writeManifestObject(grandchild_id, grandchild_manifest, start, &grandchild_manifest_raw);
+    const grandchild_manifest_id = object.Header.id(grandchild_manifest_canonical);
+    const spawned_grandchild = try child.spawnManifest(child_id, grandchild_id, start, grandchild_authorization, grandchild_manifest_canonical);
     var grandchild = spawned_grandchild.app;
     try std.testing.expectEqual(@as(usize, grandchild_memory_bytes), grandchild.memory.remaining());
     try std.testing.expectEqual(@as(usize, grandchild_storage_bytes), grandchild.storage.data.len());
@@ -757,6 +894,17 @@ test "declared allocation bounds app child work receipts and clean reclaim" {
     try std.testing.expectEqual(@as(u64, 0), child.device_handles);
     try std.testing.expect(!child.useDevice(device_id));
     try std.testing.expect(grandchild.useDevice(device_id));
+    const great_grandchild_authorization = intent.admit(
+        user_id,
+        device_id,
+        grandchild_id,
+        great_grandchild_id,
+        .spawn_app,
+        .delegates_resources,
+        start,
+        intent.requestId("blocked great grandchild spawn").?,
+    ).?;
+    try std.testing.expectError(error.Unauthorized, grandchild.spawnDeclared(grandchild_id, great_grandchild_id, start, great_grandchild_authorization, grandchild_allocation));
 
     const route_admission = intent.admit(
         user_id,
@@ -776,9 +924,11 @@ test "declared allocation bounds app child work receipts and clean reclaim" {
     const output_hash = grandchild.storage.put("declared work output").?;
     _ = local_clock.advanceDefault() orelse return error.SkipZigTest;
     const end = local_clock.now;
-    const work = grandchild.completeWork(child.id.id, input_hash, output_hash, start, end, grandchild_allocation, spawned_grandchild.receipt).?;
+    const work = grandchild.completeWork(child.id.id, input_hash, output_hash, grandchild_manifest_id, start, end, grandchild_allocation, spawned_grandchild.receipt).?;
     try std.testing.expect(work.valid());
     try std.testing.expect(bytes.nonzero(&work.id().?));
+    try std.testing.expect(bytes.eql(&work.manifest, &grandchild_manifest_id));
+    try std.testing.expect(bytes.nonzero(&child_manifest_id));
     try std.testing.expect(work.clock_start.order(work.clock_end) < 0);
 
     try std.testing.expectError(error.Corrupt, parent.reclaimChild(&child, spawned_child.receipt, end));
