@@ -18,6 +18,12 @@ const allocation_count_field_size = @sizeOf(u64);
 const allocation_count_field_count = 6;
 const allocation_count_body_size = allocation_count_field_size * allocation_count_field_count;
 const allocation_body_size = allocation_count_body_size + preimage.hash_size + identity.id_size;
+const work_receipt_id_field_count = 2;
+const work_receipt_hash_field_count = 5;
+const work_receipt_epoch_field_count = 2;
+const work_receipt_body_size = identity.id_size * work_receipt_id_field_count +
+    preimage.hash_size * work_receipt_hash_field_count +
+    preimage.epoch_size * work_receipt_epoch_field_count;
 
 pub const SpawnError = error{
     BadAllocation,
@@ -27,6 +33,13 @@ pub const SpawnError = error{
     NoRoute,
     NoDevice,
     Unauthorized,
+};
+
+pub const ReceiptError = error{
+    BadArgument,
+    Corrupt,
+    NoSpace,
+    Unsupported,
 };
 
 pub const ReclaimError = error{
@@ -247,10 +260,23 @@ pub const App = struct {
 
         pub fn id(self: WorkReceipt) ?preimage.Hash {
             if (!self.valid()) return null;
+            var raw: [work_receipt_body_size]u8 = undefined;
+            const body = self.encodeBody(&raw) orelse return null;
+            return preimage.hash("edgerun:zig:v1:app-work-receipt", body);
+        }
+
+        pub fn writeObject(self: WorkReceipt, epoch: clock.Stamp, out: []u8) object.Error![]u8 {
+            if (!epoch.valid()) return error.BadArgument;
+            var body: [work_receipt_body_size]u8 = undefined;
+            const encoded = self.encodeBody(&body) orelse return error.BadArgument;
+            return try (object.NodeWriter{ .out = out }).receiptNode(workReceiptRequirements(), epoch, encoded);
+        }
+
+        fn encodeBody(self: WorkReceipt, out: []u8) ?[]const u8 {
+            if (!self.valid() or out.len < work_receipt_body_size) return null;
             const allocation_id = self.allocation.id().?;
             const spawn_id = self.spawn_receipt.id().?;
-            var raw: [identity.id_size * 2 + preimage.hash_size * 5 + preimage.epoch_size * 2]u8 = undefined;
-            var writer = preimage.Writer.init(&raw);
+            var writer = preimage.Writer.init(out[0..work_receipt_body_size]);
             if (!writer.id(self.parent) or
                 !writer.id(self.app) or
                 !writer.hash(self.input) or
@@ -263,7 +289,7 @@ pub const App = struct {
             {
                 return null;
             }
-            return preimage.hash("edgerun:zig:v1:app-work-receipt", writer.written());
+            return writer.written();
         }
     };
 
@@ -454,6 +480,12 @@ pub const App = struct {
         };
         if (!receipt.valid()) return null;
         return receipt;
+    }
+
+    pub fn putWorkReceipt(self: *App, receipt: WorkReceipt, epoch: clock.Stamp, out: []u8) ReceiptError!preimage.Hash {
+        if (!receipt.valid() or !receipt.app.eql(self.id.id)) return error.BadArgument;
+        const canonical = receipt.writeObject(epoch, out) catch |err| return mapObjectError(err);
+        return self.storage.putReceipt(self.id.id, canonical) orelse error.NoSpace;
     }
 
     pub fn reclaimChild(self: *App, child: *App, receipt: grant.SpawnReceipt, epoch: clock.Stamp) ReclaimError!Reclaimed {
@@ -655,6 +687,18 @@ pub fn manifestRequirements() object.Requirements {
     };
 }
 
+pub fn workReceiptRequirements() object.Requirements {
+    return .{
+        .durability = .durable,
+        .confidentiality = .integrity_only,
+        .portability = .app_portable,
+        .integrity = .hash_only,
+        .lifetime = .retained,
+        .visibility = .app_namespace,
+        .access = .explicit_io,
+    };
+}
+
 pub fn sealedAppRequirements() object.Requirements {
     return .{
         .durability = .durable,
@@ -721,6 +765,15 @@ fn readAllocationBody(in: []const u8) ?App.DeclaredAllocation {
         .device_handle = .{ .bytes = device_handle_bytes },
     };
     return if (allocation.valid()) allocation else null;
+}
+
+fn mapObjectError(err: object.Error) ReceiptError {
+    return switch (err) {
+        error.BadArgument => error.BadArgument,
+        error.Corrupt => error.Corrupt,
+        error.NoSpace => error.NoSpace,
+        error.Unsupported => error.Unsupported,
+    };
 }
 
 fn mapResolverError(err: ui_resolver.Error) App.UiError {
@@ -850,20 +903,20 @@ test "manifest spawn transfers declared memory and storage to child" {
 
 test "declared allocation bounds app child work receipts and clean reclaim" {
     const parent_memory_bytes = 128;
-    const parent_storage_bytes = 256;
+    const parent_storage_bytes = 1280;
     const parent_storage_slots = 8;
     const parent_execution_ticks = 16;
     const parent_route_handles = 1;
     const parent_device_handles = 1;
     const child_memory_bytes = 32;
-    const child_storage_bytes = 64;
+    const child_storage_bytes = 896;
     const child_storage_slots = 4;
     const child_execution_ticks = 8;
     const child_route_handles = 1;
     const child_device_handles = 1;
     const grandchild_memory_bytes = 8;
-    const grandchild_storage_bytes = 32;
-    const grandchild_storage_slots = 1;
+    const grandchild_storage_bytes = 640;
+    const grandchild_storage_slots = 2;
     const grandchild_execution_ticks = 4;
     const grandchild_route_handles = 1;
     const grandchild_device_handles = 1;
@@ -875,6 +928,8 @@ test "declared allocation bounds app child work receipts and clean reclaim" {
     var oversized_storage: [parent_storage_bytes]u8 = [_]u8{'x'} ** parent_storage_bytes;
     var child_manifest_raw: [object.header_size + object.owner_size + App.manifest_body_size]u8 = undefined;
     var grandchild_manifest_raw: [object.header_size + object.owner_size + App.manifest_body_size]u8 = undefined;
+    var work_receipt_raw: [object.header_size + work_receipt_body_size]u8 = undefined;
+    var work_receipt_body: [work_receipt_body_size]u8 = undefined;
 
     const keeper = clock.KeeperId{ .bytes = [_]u8{7} ++ [_]u8{0} ** 31 };
     var local_clock = clock.Clock.init(keeper, .{}) orelse return error.SkipZigTest;
@@ -1049,6 +1104,12 @@ test "declared allocation bounds app child work receipts and clean reclaim" {
     try std.testing.expect(bytes.eql(&work.manifest, &grandchild_manifest_id));
     try std.testing.expect(bytes.nonzero(&child_manifest_id));
     try std.testing.expect(work.clock_start.order(work.clock_end) < 0);
+    const work_receipt_object_id = try grandchild.putWorkReceipt(work, end, &work_receipt_raw);
+    try std.testing.expect(bytes.eql(&work_receipt_object_id, &object.Header.id(&work_receipt_raw)));
+    const stored_work_receipt = grandchild.storage.getReceipt(grandchild.id.id, work_receipt_object_id).?;
+    try std.testing.expectEqual(object.Kind.receipt, stored_work_receipt.header.kind);
+    try std.testing.expectEqual(workReceiptRequirements(), stored_work_receipt.header.requirements);
+    try std.testing.expectEqualSlices(u8, work.encodeBody(&work_receipt_body).?, stored_work_receipt.body);
     var wrong_route_receipt = spawned_grandchild.receipt;
     wrong_route_receipt.route_handle = hashMaterial("wrong receipt route");
     try std.testing.expect(grandchild.completeWork(child.id.id, input_hash, output_hash, grandchild_manifest_id, start, end, grandchild_allocation, wrong_route_receipt) == null);
