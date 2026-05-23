@@ -103,7 +103,7 @@ const palette = struct {
     const text = ui.Color{ .r = 242, .g = 242, .b = 242 };
     const dim = ui.Color{ .r = 154, .g = 154, .b = 154 };
     const primary = ui.Color{ .r = 74, .g = 222, .b = 128 };
-    const primary_soft = ui.Color{ .r = 74, .g = 222, .b = 128, .a = 34 };
+    const neutral_soft = ui.Color{ .r = 32, .g = 32, .b = 32, .a = 190 };
     const blue = ui.Color{ .r = 96, .g = 165, .b = 250 };
 };
 
@@ -899,7 +899,7 @@ fn renderWorkflow(scene: *ui.Scene, bounds: ui.Rect) ui.RenderError!void {
     var y = bounds.y + 54.0;
     for (rows) |row| {
         const box = ui.Rect.init(bounds.x + 20.0, y, 28.0, 28.0);
-        try fill(scene, box, palette.primary_soft, 7.0);
+        try fill(scene, box, palette.neutral_soft, 7.0);
         try iconQuad(scene, box.insetUniform(7.0), row[0], palette.primary);
         try text(scene, bounds.x + 60.0, y + 1.0, bounds.w - 80.0, 13.0, row[1], palette.text);
         try text(scene, bounds.x + 60.0, y + 20.0, bounds.w - 80.0, 11.0, row[2], palette.dim);
@@ -1181,15 +1181,13 @@ fn renderNodeMap(scene: *ui.Scene, bounds: ui.Rect) ui.RenderError!void {
 }
 
 fn navItem(scene: *ui.Scene, bounds: ui.Rect, label: []const u8, id: u32, active: bool) ui.RenderError!void {
-    if (active) try fill(scene, bounds, ui.Color{ .r = 74, .g = 222, .b = 128, .a = 22 }, 6.0);
+    if (active) try fill(scene, bounds, palette.neutral_soft, 6.0);
     try alignedText(scene, bounds.x, bounds.y + 7.0, bounds.w, 12.0, label, if (active) palette.primary else palette.dim, .center);
     try hit(scene, bounds, .button, id);
 }
 
 fn tag(scene: *ui.Scene, bounds: ui.Rect, label: []const u8, color: ui.Color) ui.RenderError!void {
-    var soft = color;
-    soft.a = 34;
-    try fill(scene, bounds, soft, 5.0);
+    try fill(scene, bounds, palette.neutral_soft, 5.0);
     try alignedText(scene, bounds.x + 8.0, bounds.y + 6.0, bounds.w - 16.0, 10.0, label, color, .center);
 }
 
