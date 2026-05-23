@@ -24,13 +24,18 @@ const hero_split_min_w: f32 = hero_terminal_min_w + hero_split_gap + hero_copy_m
 const hero_split_terminal_y: f32 = 84.0;
 const hero_split_copy_y: f32 = 92.0;
 const hero_stacked_copy_y: f32 = 44.0;
-const hero_stacked_copy_max_w: f32 = 560.0;
+const hero_stacked_copy_max_w: f32 = 860.0;
+const hero_stacked_paragraph_max_w: f32 = 560.0;
 const hero_stacked_button_y: f32 = 374.0;
 const hero_stacked_terminal_y: f32 = 444.0;
 const hero_bottom_pad: f32 = 48.0;
 const hero_primary_button_w: f32 = 142.0;
 const hero_outline_button_w: f32 = 126.0;
 const hero_button_gap: f32 = 14.0;
+const hero_inline_title_min_w: f32 = 720.0;
+const hero_inline_title_first_w: f32 = 286.0;
+const hero_inline_title_accent_w: f32 = 382.0;
+const hero_inline_title_gap: f32 = 12.0;
 const impact_card_count: usize = 3;
 const impact_card_gap: f32 = 14.0;
 const impact_card_h: f32 = 190.0;
@@ -192,9 +197,18 @@ fn renderHero(scene: *ui.Scene, bounds: ui.Rect, state: State) ui.RenderError!vo
     try nativeBadge(scene, badge, "Written in Zig. Zero dependencies.");
     try iconQuad(scene, ui.Rect.init(badge.x + 12.0, badge.y + 7.0, 14.0, 14.0), .terminal, palette.primary);
 
-    try title(scene, ui.Rect.init(layout.copy.x, layout.copy.y + 58.0, layout.copy.w, 92.0), "Your Node is");
-    try titleAccent(scene, ui.Rect.init(layout.copy.x, layout.copy.y + 118.0, layout.copy.w, 116.0), "Already Running");
-    try heroParagraph(scene, ui.Rect.init(layout.copy.x, layout.copy.y + 244.0, layout.copy.w, 88.0), "No signup. No account. No middlemen. EdgeRun starts a node in your browser the moment you arrive. Share your ID, connect directly, communicate privately.");
+    if (stacked and layout.copy.w >= hero_inline_title_min_w) {
+        const title_w = hero_inline_title_first_w + hero_inline_title_gap + hero_inline_title_accent_w;
+        const title_x = layout.copy.x + (layout.copy.w - title_w) * 0.5;
+        try titleLine(scene, ui.Rect.init(title_x, layout.copy.y + 58.0, hero_inline_title_first_w, 58.0), "Your Node is", palette.text);
+        try titleLine(scene, ui.Rect.init(title_x + hero_inline_title_first_w + hero_inline_title_gap, layout.copy.y + 58.0, hero_inline_title_accent_w, 58.0), "Already Running", palette.primary);
+    } else {
+        try title(scene, ui.Rect.init(layout.copy.x, layout.copy.y + 58.0, layout.copy.w, 92.0), "Your Node is");
+        try titleAccent(scene, ui.Rect.init(layout.copy.x, layout.copy.y + 118.0, layout.copy.w, 116.0), "Already Running");
+    }
+    const paragraph_w = if (stacked) @min(layout.copy.w, hero_stacked_paragraph_max_w) else layout.copy.w;
+    const paragraph_x = if (stacked) layout.copy.x + (layout.copy.w - paragraph_w) * 0.5 else layout.copy.x;
+    try heroParagraph(scene, ui.Rect.init(paragraph_x, layout.copy.y + 244.0, paragraph_w, 88.0), "No signup. No account. No middlemen. EdgeRun starts a node in your browser the moment you arrive. Share your ID, connect directly, communicate privately.");
     const actions_w = hero_primary_button_w + hero_button_gap + hero_outline_button_w;
     const actions_x = if (stacked) layout.copy.x + (layout.copy.w - actions_w) * 0.5 else layout.copy.x;
     try primaryButton(scene, ui.Rect.init(actions_x, layout.button_y, hero_primary_button_w, 42.0), "Read the Docs", docs_button_id);
@@ -484,6 +498,10 @@ fn title(scene: *ui.Scene, bounds: ui.Rect, value: []const u8) ui.RenderError!vo
 
 fn titleAccent(scene: *ui.Scene, bounds: ui.Rect, value: []const u8) ui.RenderError!void {
     try scene.pushWrappedText(bounds, value, palette.primary, .{ .line_height = 58.0, .average_char_width = 22.0, .max_lines = 2 });
+}
+
+fn titleLine(scene: *ui.Scene, bounds: ui.Rect, value: []const u8, color: ui.Color) ui.RenderError!void {
+    try scene.pushAlignedText(bounds, value, color, .start);
 }
 
 fn heading(scene: *ui.Scene, bounds: ui.Rect, first: []const u8, second: []const u8) ui.RenderError!void {
