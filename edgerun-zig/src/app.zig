@@ -231,6 +231,47 @@ pub const App = struct {
         allocation: DeclaredAllocation,
         spawn_receipt: grant.SpawnReceipt,
 
+        pub const Info = struct {
+            parent: identity.Id,
+            app: identity.Id,
+            input: preimage.Hash,
+            output: preimage.Hash,
+            manifest: preimage.Hash,
+            clock_start: clock.Stamp,
+            clock_end: clock.Stamp,
+            allocation_id: preimage.Hash,
+            spawn_receipt_id: preimage.Hash,
+
+            pub fn valid(self: Info) bool {
+                return self.parent.valid() and
+                    self.app.valid() and
+                    bytes.nonzero(&self.input) and
+                    bytes.nonzero(&self.output) and
+                    bytes.nonzero(&self.manifest) and
+                    self.clock_start.valid() and
+                    self.clock_end.valid() and
+                    self.clock_start.sameKeeper(self.clock_end) and
+                    self.clock_start.order(self.clock_end) <= 0 and
+                    bytes.nonzero(&self.allocation_id) and
+                    bytes.nonzero(&self.spawn_receipt_id);
+            }
+
+            pub fn matches(self: Info, receipt: WorkReceipt) bool {
+                if (!self.valid() or !receipt.valid()) return false;
+                const allocation_id = receipt.allocation.id() orelse return false;
+                const spawn_receipt_id = receipt.spawn_receipt.id() orelse return false;
+                return self.parent.eql(receipt.parent) and
+                    self.app.eql(receipt.app) and
+                    bytes.eql(&self.input, &receipt.input) and
+                    bytes.eql(&self.output, &receipt.output) and
+                    bytes.eql(&self.manifest, &receipt.manifest) and
+                    self.clock_start.order(receipt.clock_start) == 0 and
+                    self.clock_end.order(receipt.clock_end) == 0 and
+                    bytes.eql(&self.allocation_id, &allocation_id) and
+                    bytes.eql(&self.spawn_receipt_id, &spawn_receipt_id);
+            }
+        };
+
         pub fn valid(self: WorkReceipt) bool {
             const memory_amount = std.math.cast(u64, self.allocation.memory_bytes) orelse return false;
             const storage_amount = std.math.cast(u64, self.allocation.storage_bytes) orelse return false;
@@ -270,6 +311,32 @@ pub const App = struct {
             var body: [work_receipt_body_size]u8 = undefined;
             const encoded = self.encodeBody(&body) orelse return error.BadArgument;
             return try (object.NodeWriter{ .out = out }).receiptNode(workReceiptRequirements(), epoch, encoded);
+        }
+
+        pub fn decodeObject(canonical: []const u8) object.Error!Info {
+            const view = try object.View.decode(canonical);
+            if (view.header.kind != .receipt) return error.Corrupt;
+            if (!std.meta.eql(view.header.requirements, workReceiptRequirements())) return error.Corrupt;
+            if (view.body.len != work_receipt_body_size) return error.Corrupt;
+            return decodeBody(view.body) orelse error.Corrupt;
+        }
+
+        pub fn decodeBody(body: []const u8) ?Info {
+            if (body.len != work_receipt_body_size) return null;
+            var cursor: usize = 0;
+            const info = Info{
+                .parent = readWorkReceiptId(body, &cursor) orelse return null,
+                .app = readWorkReceiptId(body, &cursor) orelse return null,
+                .input = readWorkReceiptHash(body, &cursor) orelse return null,
+                .output = readWorkReceiptHash(body, &cursor) orelse return null,
+                .manifest = readWorkReceiptHash(body, &cursor) orelse return null,
+                .clock_start = readWorkReceiptEpoch(body, &cursor) orelse return null,
+                .clock_end = readWorkReceiptEpoch(body, &cursor) orelse return null,
+                .allocation_id = readWorkReceiptHash(body, &cursor) orelse return null,
+                .spawn_receipt_id = readWorkReceiptHash(body, &cursor) orelse return null,
+            };
+            if (cursor != work_receipt_body_size or !info.valid()) return null;
+            return info;
         }
 
         fn encodeBody(self: WorkReceipt, out: []u8) ?[]const u8 {
@@ -767,6 +834,29 @@ fn readAllocationBody(in: []const u8) ?App.DeclaredAllocation {
     return if (allocation.valid()) allocation else null;
 }
 
+fn readWorkReceiptId(in: []const u8, cursor: *usize) ?identity.Id {
+    if (cursor.* > in.len or identity.id_size > in.len - cursor.*) return null;
+    var id_bytes: [identity.id_size]u8 = undefined;
+    _ = bytes.copy(&id_bytes, in[cursor.*..][0..identity.id_size]);
+    cursor.* += identity.id_size;
+    return .{ .bytes = id_bytes };
+}
+
+fn readWorkReceiptHash(in: []const u8, cursor: *usize) ?preimage.Hash {
+    if (cursor.* > in.len or preimage.hash_size > in.len - cursor.*) return null;
+    var hash: preimage.Hash = undefined;
+    _ = bytes.copy(&hash, in[cursor.*..][0..preimage.hash_size]);
+    cursor.* += preimage.hash_size;
+    return hash;
+}
+
+fn readWorkReceiptEpoch(in: []const u8, cursor: *usize) ?clock.Stamp {
+    if (cursor.* > in.len or preimage.epoch_size > in.len - cursor.*) return null;
+    const stamp = preimage.decodeEpoch(in[cursor.*..][0..preimage.epoch_size]) orelse return null;
+    cursor.* += preimage.epoch_size;
+    return stamp;
+}
+
 fn mapObjectError(err: object.Error) ReceiptError {
     return switch (err) {
         error.BadArgument => error.BadArgument,
@@ -938,7 +1028,6 @@ test "declared allocation bounds app child work receipts and clean reclaim" {
     var grandchild_manifest_raw: [object.header_size + object.owner_size + App.manifest_body_size]u8 = undefined;
     var work_output_raw: [object.header_size + object.owner_size + object.envelope_size + 20]u8 = undefined;
     var work_receipt_raw: [object.header_size + work_receipt_body_size]u8 = undefined;
-    var work_receipt_body: [work_receipt_body_size]u8 = undefined;
 
     const keeper = clock.KeeperId{ .bytes = [_]u8{7} ++ [_]u8{0} ** 31 };
     var local_clock = clock.Clock.init(keeper, .{}) orelse return error.SkipZigTest;
@@ -1125,7 +1214,14 @@ test "declared allocation bounds app child work receipts and clean reclaim" {
     const stored_work_receipt = grandchild.storage.getReceipt(grandchild.id.id, work_receipt_object_id).?;
     try std.testing.expectEqual(object.Kind.receipt, stored_work_receipt.header.kind);
     try std.testing.expectEqual(workReceiptRequirements(), stored_work_receipt.header.requirements);
-    try std.testing.expectEqualSlices(u8, work.encodeBody(&work_receipt_body).?, stored_work_receipt.body);
+    const decoded_work_receipt = try App.WorkReceipt.decodeObject(&work_receipt_raw);
+    try std.testing.expect(decoded_work_receipt.matches(work));
+    try std.testing.expect(decoded_work_receipt.parent.eql(child.id.id));
+    try std.testing.expect(decoded_work_receipt.app.eql(grandchild.id.id));
+    try std.testing.expect(bytes.eql(&decoded_work_receipt.output, &output_hash));
+    try std.testing.expect(bytes.eql(&decoded_work_receipt.manifest, &grandchild_manifest_id));
+    try std.testing.expect(App.WorkReceipt.decodeBody(stored_work_receipt.body).?.matches(work));
+    try std.testing.expectError(error.Corrupt, App.WorkReceipt.decodeObject(output_canonical));
     var wrong_route_receipt = spawned_grandchild.receipt;
     wrong_route_receipt.route_handle = hashMaterial("wrong receipt route");
     try std.testing.expect(grandchild.completeWork(child.id.id, input_hash, output_hash, grandchild_manifest_id, start, end, grandchild_allocation, wrong_route_receipt) == null);
