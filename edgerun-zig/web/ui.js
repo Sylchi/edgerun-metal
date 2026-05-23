@@ -142,6 +142,7 @@ let siteSearchId = 0;
 let siteBlogId = 0;
 let blogBackId = 0;
 let blogFirstPostId = 0;
+let blogPostCount = 0;
 let hoverHitKind = hoverHitKindNone;
 let hoverHitId = 0;
 let lastActionKind = 0;
@@ -431,6 +432,7 @@ async function main() {
   siteBlogId = wasm.er_ui_site_blog_button_id();
   blogBackId = wasm.er_ui_blog_back_button_id();
   blogFirstPostId = wasm.er_ui_blog_first_post_button_id();
+  blogPostCount = wasm.er_ui_blog_post_count();
   initAtlases();
   await initPostImage();
   siteView = location.hash === "#blog" ? 1 : 0;
@@ -556,7 +558,7 @@ canvas.addEventListener("pointerup", (event) => {
       schedule();
       return;
     default:
-      if (hoverHitId >= blogFirstPostId && hoverHitId < blogFirstPostId + 64) {
+      if (hoverHitId >= blogFirstPostId && hoverHitId < blogFirstPostId + blogPostCount) {
         selectedBlogPostId = hoverHitId;
         scrollY = 0;
         schedule();

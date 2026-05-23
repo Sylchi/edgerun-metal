@@ -45,7 +45,7 @@ const arc_device_end: usize = 34;
 const arc_control_start: usize = 34;
 const arc_control_end: usize = 61;
 const arc_accounting_start: usize = 61;
-const arc_accounting_end: usize = 64;
+const arc_accounting_end: usize = 66;
 
 pub const season_title = "Your Device Is Already a Computer";
 pub const season_subtitle = "Before we talk about the internet, we need to understand the machine in your hand.";
@@ -694,6 +694,24 @@ pub const posts = [_]Post{
         .summary = "Explain dependencies as delegated authority and why the core cannot import behavior nobody can fully account for.",
         .body = @embedFile("blog/54-dependency-problem.md"),
     },
+    .{
+        .arc = arc_accounting,
+        .title = "Preallocation Is Accountability",
+        .date = "May 23, 2026",
+        .category = "Resources",
+        .demo = "Parent-owned memory budget",
+        .summary = "Explain why honest programs declare budgets, why hidden memory pressure punishes users, and why resource pressure should flow upward.",
+        .body = @embedFile("blog/55-preallocation-accountability.md"),
+    },
+    .{
+        .arc = arc_accounting,
+        .title = "Computers Are Deterministic. We Made Them Guess.",
+        .date = "May 23, 2026",
+        .category = "Determinism",
+        .demo = "Resource authority trace",
+        .summary = "Use a pointless swap storm to show why programs should receive explicit resources and authority instead of forcing the system to guess.",
+        .body = @embedFile("blog/56-computers-deterministic.md"),
+    },
 };
 
 const episode_labels = blk: {
@@ -828,7 +846,7 @@ fn renderArcOverview(scene: *ui.Scene, bounds: ui.Rect) ui.RenderError!void {
         .{ "11 posts", "How data moves", "keypress -> DNS -> TLS" },
         .{ "13 posts", "Who owns the device", "phone -> account -> app store" },
         .{ "27 posts", "Who controls the rules", "updates -> feeds -> AI" },
-        .{ "3 posts", "Who pays", "receipts -> settlement" },
+        .{ "5 posts", "Who pays", "receipts -> settlement" },
     };
     const cols: usize = if (bounds.w >= 1040.0) 5 else if (bounds.w >= 700.0) 3 else 2;
     const rows = (items.len + cols - 1) / cols;
@@ -1254,6 +1272,7 @@ test "blog renders committed post index through native components" {
     try std.testing.expect(hasText(scene.written(), "Already a Computer"));
     try std.testing.expect(hasText(scene.written(), posts[0].title));
     try std.testing.expect(postById(postIdAt(posts.len - 1)) != null);
+    try std.testing.expectEqualStrings("Computers Are Deterministic. We Made Them Guess.", posts[posts.len - 1].title);
     try std.testing.expectEqualStrings(arc_local, posts[0].arc);
     try std.testing.expectEqualStrings(arc_network, posts[10].arc);
     try std.testing.expectEqualStrings(arc_device, posts[21].arc);

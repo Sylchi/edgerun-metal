@@ -332,6 +332,10 @@ export fn er_ui_blog_first_post_button_id() u32 {
     return site_blog.first_post_button_id;
 }
 
+export fn er_ui_blog_post_count() u32 {
+    return site_blog.posts.len;
+}
+
 export fn er_ui_site_landing_content_height(width: f32) f32 {
     return site_landing.contentHeight(width);
 }
@@ -890,6 +894,7 @@ test "browser site blog builds packed webgl buffers and post hit state" {
     try std.testing.expect(gpu_image_vertex_float_len > 0);
     try std.testing.expect(er_ui_post_image_webp_ptr() != 0);
     try std.testing.expect(er_ui_post_image_webp_len() > 0);
+    try std.testing.expectEqual(@as(u32, @intCast(site_blog.posts.len)), er_ui_blog_post_count());
     try std.testing.expect(er_ui_site_blog_content_height(1280.0) > 5200.0);
     try std.testing.expect(er_ui_site_blog_post_content_height(1280.0, site_blog.postIdAt(16)) > 1200.0);
     try std.testing.expectEqual(@intFromEnum(ui.HitKind.button), hover_hit_kind);
