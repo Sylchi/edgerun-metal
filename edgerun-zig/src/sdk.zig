@@ -156,14 +156,18 @@ pub const Simulation = struct {
     node: Node,
     authorization: intent.Receipt,
     spawn_receipt: grant.SpawnReceipt,
+    manifest_id: preimage.Hash,
     object_id: preimage.Hash,
+    work_receipt_id: preimage.Hash,
     app_storage: store.Stats,
 
     pub fn valid(self: Simulation) bool {
         return self.node.valid() and
             self.authorization.valid() and
             self.spawn_receipt.valid() and
+            bytes.nonzero(&self.manifest_id) and
             bytes.nonzero(&self.object_id) and
+            bytes.nonzero(&self.work_receipt_id) and
             self.app_storage.valid();
     }
 };
@@ -281,6 +285,7 @@ pub fn simulate(config: Config, workspace: Workspace) Error!Simulation {
         error.NoSpace => error.NoSpace,
         error.Unsupported => error.BadConfiguration,
     };
+    const manifest_id = object.Header.id(manifest_canonical);
     const spawned = root_app.spawnManifest(
         node.ids.allocator,
         node.ids.app,
@@ -306,11 +311,20 @@ pub fn simulate(config: Config, workspace: Workspace) Error!Simulation {
     const object_id = child_app.putSealedObject(node.ids.device, node.ids.user, canonical) orelse return error.NoStorage;
     const view = child_app.storage.getObject(node.ids.app.id, object_id) orelse return error.Corrupt;
     if (!bytes.eql(&view.id(), &object_id)) return error.Corrupt;
+    const work_receipt = child_app.completeWork(node.ids.root_app.id, manifest_id, object_id, manifest_id, node.clock.now, node.clock.now, manifest.allocation, spawned.receipt) orelse return error.Corrupt;
+    const work_receipt_id = child_app.putWorkReceipt(work_receipt, node.clock.now, workspace.object[0..canonical_object_buffer_bytes]) catch |err| return switch (err) {
+        error.BadArgument => error.BadConfiguration,
+        error.Corrupt => error.Corrupt,
+        error.NoSpace => error.NoStorage,
+        error.Unsupported => error.BadConfiguration,
+    };
     return .{
         .node = node,
         .authorization = authorization,
         .spawn_receipt = spawned.receipt,
+        .manifest_id = manifest_id,
         .object_id = object_id,
+        .work_receipt_id = work_receipt_id,
         .app_storage = child_app.storage.stats(),
     };
 }
@@ -368,7 +382,10 @@ test "sdk simulation wires clock identity app object and store" {
     try std.testing.expect(result.valid());
     try std.testing.expectEqual(identity.Kind.delegated, result.node.ids.app.kind);
     try std.testing.expect(result.authorization.permitsAt(result.node.clock.now, result.node.ids.allocator.id, result.node.ids.app.id, .spawn_app, .delegates_resources));
-    try std.testing.expectEqual(@as(usize, 1), result.app_storage.slot_count);
+    try std.testing.expect(bytes.nonzero(&result.manifest_id));
+    try std.testing.expect(bytes.nonzero(&result.object_id));
+    try std.testing.expect(bytes.nonzero(&result.work_receipt_id));
+    try std.testing.expectEqual(@as(usize, 2), result.app_storage.slot_count);
 }
 
 test "sdk simulation matrix covers profiles operations materials and body sizes" {
@@ -409,7 +426,7 @@ test "sdk simulation matrix covers profiles operations materials and body sizes"
                     });
                     try std.testing.expect(result.valid());
                     try std.testing.expectEqual(identity.Kind.delegated, result.node.ids.app.kind);
-                    try std.testing.expectEqual(@as(usize, 1), result.app_storage.slot_count);
+                    try std.testing.expectEqual(@as(usize, 2), result.app_storage.slot_count);
                 }
             }
         }

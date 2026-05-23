@@ -820,9 +820,10 @@ fn hashMaterial(material: []const u8) preimage.Hash {
 
 test "manifest spawn transfers declared memory and storage to child" {
     var memory_bytes: [64]u8 = undefined;
-    var storage_bytes: [128]u8 = undefined;
+    var storage_bytes: [512]u8 = undefined;
     var slots: [4]store.Blob = undefined;
     var manifest_raw: [object.header_size + object.owner_size + App.manifest_body_size]u8 = undefined;
+    var child_state_raw: [object.header_size + object.owner_size + object.envelope_size + 11]u8 = undefined;
 
     const keeper = clock.KeeperId{ .bytes = [_]u8{1} ++ [_]u8{0} ** 31 };
     const epoch = clock.Stamp{ .keeper = keeper };
@@ -860,7 +861,7 @@ test "manifest spawn transfers declared memory and storage to child" {
         .code_hash = preimage.hash("edgerun:zig:v1:test-code", "bounded child"),
         .allocation = .{
             .memory_bytes = 16,
-            .storage_bytes = 32,
+            .storage_bytes = 288,
             .storage_slots = 2,
         },
     };
@@ -868,15 +869,22 @@ test "manifest spawn transfers declared memory and storage to child" {
     var spawned = try parent.spawnManifest(allocator_id, child_id, epoch, authorization, manifest_canonical);
     var child = spawned.app;
     try std.testing.expectEqual(@as(usize, 48), parent.memory.remaining());
-    try std.testing.expectEqual(@as(usize, 96), parent.storage.data.len());
+    try std.testing.expectEqual(@as(usize, 224), parent.storage.data.len());
     try std.testing.expectEqual(@as(usize, 2), parent.storage.slotCapacity());
     try std.testing.expectEqual(@as(usize, 16), child.memory.remaining());
-    try std.testing.expectEqual(@as(usize, 32), child.storage.data.len());
+    try std.testing.expectEqual(@as(usize, 288), child.storage.data.len());
     try std.testing.expectEqual(@as(usize, 2), child.storage.slotCapacity());
 
     const child_allocator = child.memory.allocator();
     _ = try child_allocator.alloc(u8, 8);
-    const child_hash = child.storage.put("child state").?;
+    const child_state_owner = object.Owner{
+        .kind = .app,
+        .node_id = child.id.id.bytes,
+    };
+    const child_state_req = sealedAppRequirements();
+    const child_state_envelope = sealedEnvelopeForApp(device_id, child_id, user_id, child_state_req, "manifest child state key").?;
+    const child_state_canonical = try (object.NodeWriter{ .out = &child_state_raw }).bytesNodeOwned(child_state_req, epoch, &.{child_state_owner}, &.{child_state_envelope}, "child state");
+    const child_hash = child.putSealedObject(device_id, user_id, child_state_canonical).?;
     try std.testing.expectEqual(@as(usize, 48), parent.memory.remaining());
     const oversized_manifest = App.Manifest{
         .code_hash = preimage.hash("edgerun:zig:v1:test-code", "oversized child"),
@@ -889,16 +897,16 @@ test "manifest spawn transfers declared memory and storage to child" {
     const oversized_canonical = try App.writeManifestObject(child_id, oversized_manifest, epoch, &manifest_raw);
     try std.testing.expectError(error.NoMemory, parent.spawnManifest(allocator_id, child_id, epoch, authorization, oversized_canonical));
     try std.testing.expect(spawned.receipt.valid());
-    try std.testing.expectEqual(@as(u64, 32), spawned.receipt.storage_bytes.amount);
+    try std.testing.expectEqual(@as(u64, 288), spawned.receipt.storage_bytes.amount);
 
     const reclaimed = try parent.reclaimChild(&child, spawned.receipt, epoch);
     try std.testing.expect(reclaimed.valid());
     try std.testing.expect(bytes.nonzero(&reclaimed.id().?));
     try std.testing.expectEqual(@as(usize, 64), parent.memory.remaining());
-    try std.testing.expectEqual(@as(usize, 128), parent.storage.data.len());
+    try std.testing.expectEqual(@as(usize, 512), parent.storage.data.len());
     try std.testing.expectEqual(@as(usize, 4), parent.storage.slotCapacity());
     try std.testing.expectEqual(@as(usize, 0), child.memory.remaining());
-    try std.testing.expect(child.storage.get(child_hash) == null);
+    try std.testing.expect(child.storage.getObject(child.id.id, child_hash) == null);
 }
 
 test "declared allocation bounds app child work receipts and clean reclaim" {
@@ -1015,7 +1023,7 @@ test "declared allocation bounds app child work receipts and clean reclaim" {
     const child_allocator = child.memory.allocator();
     _ = try child_allocator.alloc(u8, child_private_bytes);
     try std.testing.expectError(error.OutOfMemory, child_allocator.alloc(u8, child_memory_bytes));
-    try std.testing.expect(child.storage.put(&oversized_storage) == null);
+    try std.testing.expect(child.storage.putRawBlob(&oversized_storage) == null);
     try std.testing.expect(!child.consumeExecution(child_execution_ticks + 1));
     try std.testing.expect(child.useDevice(device_id));
     try std.testing.expect(!child.useDevice(wrong_device_id));
@@ -1145,20 +1153,30 @@ test "declared allocation bounds app child work receipts and clean reclaim" {
 
 test "app creates its store from its host-owned memory slice" {
     var host_memory: [1024]u8 = undefined;
+    var state_raw: [object.header_size + object.owner_size + object.envelope_size + 5]u8 = undefined;
 
     const keeper = clock.KeeperId{ .bytes = [_]u8{1} ++ [_]u8{0} ** 31 };
     const epoch = clock.Stamp{ .keeper = keeper };
+    const user_id = identity.Identity.init(.user, identity.Source.prepare(.hash, &preimage.rawHash("host slice user")).?, epoch).?;
+    const device_id = identity.Identity.init(.device, identity.Source.prepare(.hash, &preimage.rawHash("host slice device")).?, epoch).?;
     const app_id = identity.Identity.init(.app, identity.Source.prepare(.hash, &preimage.rawHash("app")).?, epoch).?;
     var app = App.initFromHostSlice(
         app_id,
         BoundedArena.init(.{ .base = &host_memory }),
-        64,
+        384,
         4,
     ).?;
 
-    const hash = app.storage.putOwned(.blob, app.id.id, "state").?;
-    try std.testing.expectEqualStrings("state", app.storage.getOwned(.blob, app.id.id, hash).?);
-    try std.testing.expect(app.memory.remaining() < 960);
+    const owner = object.Owner{
+        .kind = .app,
+        .node_id = app.id.id.bytes,
+    };
+    const req = sealedAppRequirements();
+    const envelope = sealedEnvelopeForApp(device_id, app_id, user_id, req, "host slice state key").?;
+    const canonical = try (object.NodeWriter{ .out = &state_raw }).bytesNodeOwned(req, epoch, &.{owner}, &.{envelope}, "state");
+    const hash = app.putSealedObject(device_id, user_id, canonical).?;
+    try std.testing.expectEqualStrings("state", app.storage.getObject(app.id.id, hash).?.body);
+    try std.testing.expect(app.memory.remaining() < 640);
 }
 
 test "app storage requires seal envelope for private durable objects" {
