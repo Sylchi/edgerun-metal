@@ -28,6 +28,9 @@ const hero_stacked_copy_max_w: f32 = 560.0;
 const hero_stacked_button_y: f32 = 374.0;
 const hero_stacked_terminal_y: f32 = 444.0;
 const hero_bottom_pad: f32 = 48.0;
+const hero_primary_button_w: f32 = 142.0;
+const hero_outline_button_w: f32 = 126.0;
+const hero_button_gap: f32 = 14.0;
 const impact_card_count: usize = 3;
 const impact_card_gap: f32 = 14.0;
 const impact_card_h: f32 = 190.0;
@@ -179,18 +182,23 @@ fn renderHeader(scene: *ui.Scene, bounds: ui.Rect, content: ui.Rect) ui.RenderEr
 
 fn renderHero(scene: *ui.Scene, bounds: ui.Rect, state: State) ui.RenderError!void {
     const layout = heroLayout(bounds);
+    const stacked = bounds.w < hero_split_min_w;
 
     try renderTerminal(scene, layout.terminal);
 
-    const badge = ui.Rect.init(layout.copy.x, layout.copy.y, @min(330.0, layout.copy.w), 28.0);
+    const badge_w = @min(330.0, layout.copy.w);
+    const badge_x = if (stacked) layout.copy.x + (layout.copy.w - badge_w) * 0.5 else layout.copy.x;
+    const badge = ui.Rect.init(badge_x, layout.copy.y, badge_w, 28.0);
     try nativeBadge(scene, badge, "Written in Zig. Zero dependencies.");
     try iconQuad(scene, ui.Rect.init(badge.x + 12.0, badge.y + 7.0, 14.0, 14.0), .terminal, palette.primary);
 
     try title(scene, ui.Rect.init(layout.copy.x, layout.copy.y + 58.0, layout.copy.w, 92.0), "Your Node is");
     try titleAccent(scene, ui.Rect.init(layout.copy.x, layout.copy.y + 118.0, layout.copy.w, 116.0), "Already Running");
     try heroParagraph(scene, ui.Rect.init(layout.copy.x, layout.copy.y + 244.0, layout.copy.w, 88.0), "No signup. No account. No middlemen. EdgeRun starts a node in your browser the moment you arrive. Share your ID, connect directly, communicate privately.");
-    try primaryButton(scene, ui.Rect.init(layout.copy.x, layout.button_y, 142.0, 42.0), "Read the Docs", docs_button_id);
-    try outlineButton(scene, ui.Rect.init(layout.copy.x + 156.0, layout.button_y, 126.0, 42.0), "Browse Apps", apps_button_id);
+    const actions_w = hero_primary_button_w + hero_button_gap + hero_outline_button_w;
+    const actions_x = if (stacked) layout.copy.x + (layout.copy.w - actions_w) * 0.5 else layout.copy.x;
+    try primaryButton(scene, ui.Rect.init(actions_x, layout.button_y, hero_primary_button_w, 42.0), "Read the Docs", docs_button_id);
+    try outlineButton(scene, ui.Rect.init(actions_x + hero_primary_button_w + hero_button_gap, layout.button_y, hero_outline_button_w, 42.0), "Browse Apps", apps_button_id);
 
     _ = state;
 }
@@ -213,9 +221,10 @@ fn heroLayout(bounds: ui.Rect) HeroLayout {
     }
 
     const copy_w = @min(bounds.w, hero_stacked_copy_max_w);
+    const copy_x = bounds.x + (bounds.w - copy_w) * 0.5;
     return .{
         .terminal = ui.Rect.init(bounds.x, bounds.y + hero_stacked_terminal_y, bounds.w, terminal_h),
-        .copy = ui.Rect.init(bounds.x, bounds.y + hero_stacked_copy_y, copy_w, hero_stacked_terminal_y - hero_stacked_copy_y),
+        .copy = ui.Rect.init(copy_x, bounds.y + hero_stacked_copy_y, copy_w, hero_stacked_terminal_y - hero_stacked_copy_y),
         .button_y = bounds.y + hero_stacked_button_y,
     };
 }
@@ -601,7 +610,8 @@ fn outlineButton(scene: *ui.Scene, bounds: ui.Rect, label: []const u8, id: u32) 
 }
 
 fn nativeBadge(scene: *ui.Scene, bounds: ui.Rect, label: []const u8) ui.RenderError!void {
-    try nativeComponent(scene, bounds, .{ .badge = .{ .label = label } }, .{ .badge_variant = .accent });
+    try fill(scene, bounds, palette.neutral_soft, 12.0);
+    try alignedText(scene, bounds.x + 28.0, bounds.y + 8.0, bounds.w - 40.0, 12.0, label, palette.primary, .center);
 }
 
 fn nativeCard(scene: *ui.Scene, bounds: ui.Rect, title_value: []const u8, detail_value: []const u8) ui.RenderError!void {
