@@ -7,6 +7,7 @@ const identity = @import("identity.zig");
 const intent = @import("intent.zig");
 const preimage = @import("preimage.zig");
 const relay = @import("relay.zig");
+const seal = @import("seal.zig");
 const store = @import("store.zig");
 const object = @import("object.zig");
 const ui = @import("ui.zig");
@@ -283,6 +284,7 @@ pub const App = struct {
     pub const UiError = error{
         NoSpace,
         Corrupt,
+        Unsealed,
         MissingObject,
         ResolutionBudgetExceeded,
         UnsupportedComponent,
@@ -536,6 +538,28 @@ pub const App = struct {
         return try (object.NodeWriter{ .out = out }).bytesNodeOwned(manifestRequirements(), epoch, &.{object_owner}, &.{}, &body);
     }
 
+    pub fn putSealedObject(self: *App, device: identity.Identity, user: identity.Identity, canonical: []const u8) ?preimage.Hash {
+        if (!self.objectSealedForApp(device, user, canonical)) return null;
+        return self.storage.putObject(self.id.id, canonical);
+    }
+
+    fn objectSealedForApp(self: App, device: identity.Identity, user: identity.Identity, canonical: []const u8) bool {
+        const view = object.View.decode(canonical) catch return false;
+        if (!objectRequiresSeal(view.header.requirements)) return true;
+        const expected_policy = seal.Policy.fromRequirements(view.header.requirements, device, self.id, user);
+        const expected_policy_id = expected_policy.id() orelse return false;
+
+        var index: usize = 0;
+        while (index < view.header.envelope_count) : (index += 1) {
+            const envelope = view.envelopeAt(index) catch return false;
+            if (envelope.kind != .app or envelope.algorithm != .aes_gcm_256) continue;
+            if (!bytes.eql(&envelope.metadata_hash, &expected_policy_id)) continue;
+            const owner = view.ownerAt(envelope.owner_index) catch return false;
+            if (owner.kind == .app and bytes.eql(&owner.node_id, &self.id.id.bytes)) return true;
+        }
+        return false;
+    }
+
     pub fn shareMemoryReadOnly(self: App, reader: identity.Id, slice: SharedMemory, epoch: clock.Stamp, authorization: intent.Receipt) MemoryShareError!ReadOnlyMemory {
         if (!slice.valid() or !reader.valid() or !slice.owner.eql(self.id.id) or !epoch.valid()) return error.Corrupt;
         const offset = self.memory.offsetOf(slice.bytes) orelse return error.Corrupt;
@@ -556,15 +580,21 @@ pub const App = struct {
     pub fn publishUiComponent(self: *App, component: ui_components.Component, epoch: clock.Stamp, scratch: UiScratch) UiError!PublishedUi {
         if (!epoch.valid()) return error.Corrupt;
         const canonical = component.toObject(scratch.codec, scratch.object, uiObjectRequirements(), epoch) orelse return error.NoSpace;
-        const object_id = self.storage.putObject(self.id.id, canonical) orelse return error.NoSpace;
+        const object_id = self.putPublicObject(canonical) orelse return error.NoSpace;
         return .{ .app = self.id.id, .object_id = object_id, .epoch = epoch };
     }
 
     pub fn publishUiStack(self: *App, stack: ui_components.Stack, epoch: clock.Stamp, scratch: UiScratch) UiError!PublishedUi {
         if (!epoch.valid()) return error.Corrupt;
         const canonical = stack.toObject(scratch.codec, scratch.object, uiObjectRequirements(), epoch) orelse return error.NoSpace;
-        const object_id = self.storage.putObject(self.id.id, canonical) orelse return error.NoSpace;
+        const object_id = self.putPublicObject(canonical) orelse return error.NoSpace;
         return .{ .app = self.id.id, .object_id = object_id, .epoch = epoch };
+    }
+
+    fn putPublicObject(self: *App, canonical: []const u8) ?preimage.Hash {
+        const view = object.View.decode(canonical) catch return null;
+        if (objectRequiresSeal(view.header.requirements)) return null;
+        return self.storage.putObject(self.id.id, canonical);
     }
 
     pub fn renderPublishedUi(self: App, publication: PublishedUi, scratch: UiScratch, scene: *ui.Scene, bounds: ui.Rect, style: ui.Style) UiError!void {
@@ -615,6 +645,40 @@ pub fn manifestRequirements() object.Requirements {
         .visibility = .app_namespace,
         .access = .explicit_io,
     };
+}
+
+pub fn sealedAppRequirements() object.Requirements {
+    return .{
+        .durability = .durable,
+        .confidentiality = .app_private,
+        .portability = .machine_bound,
+        .integrity = .sealed,
+        .lifetime = .retained,
+        .visibility = .private,
+        .access = .explicit_io,
+    };
+}
+
+pub fn sealedEnvelopeForApp(device: identity.Identity, app_id: identity.Identity, user: identity.Identity, req: object.Requirements, key_material: []const u8) ?object.Envelope {
+    const policy = seal.Policy.fromRequirements(req, device, app_id, user);
+    return .{
+        .kind = .app,
+        .owner_index = 0,
+        .algorithm = .aes_gcm_256,
+        .flags = 0,
+        .key_id = preimage.hash("edgerun:zig:v1:app-seal-key", key_material),
+        .metadata_hash = policy.id() orelse return null,
+    };
+}
+
+fn objectRequiresSeal(req: object.Requirements) bool {
+    if (req.integrity == .sealed) return true;
+    if (req.durability == .memory) return false;
+    return req.confidentiality == .app_private or
+        req.confidentiality == .user_private or
+        req.confidentiality == .user_app_private or
+        req.confidentiality == .device_private or
+        req.confidentiality == .layered;
 }
 
 fn writeAllocationBody(allocation: App.DeclaredAllocation, out: []u8) bool {
@@ -967,6 +1031,40 @@ test "app creates its store from its host-owned memory slice" {
     const hash = app.storage.putOwned(.blob, app.id.id, "state").?;
     try std.testing.expectEqualStrings("state", app.storage.getOwned(.blob, app.id.id, hash).?);
     try std.testing.expect(app.memory.remaining() < 960);
+}
+
+test "app storage requires seal envelope for private durable objects" {
+    var host_memory: [2048]u8 = undefined;
+    var unsealed_raw: [object.header_size + object.owner_size + 5]u8 = undefined;
+    var sealed_raw: [object.header_size + object.owner_size + object.envelope_size + 5]u8 = undefined;
+    var wrong_seal_raw: [object.header_size + object.owner_size + object.envelope_size + 5]u8 = undefined;
+
+    const keeper = clock.KeeperId{ .bytes = [_]u8{8} ++ [_]u8{0} ** 31 };
+    const epoch = clock.Stamp{ .keeper = keeper };
+    const user_id = identity.Identity.init(.user, identity.Source.prepare(.hash, &preimage.rawHash("seal user")).?, epoch).?;
+    const device_id = identity.Identity.init(.device, identity.Source.prepare(.hash, &preimage.rawHash("seal device")).?, epoch).?;
+    const app_id = identity.Identity.init(.app, identity.Source.prepare(.hash, &preimage.rawHash("seal app")).?, epoch).?;
+    const wrong_device_id = identity.Identity.init(.device, identity.Source.prepare(.hash, &preimage.rawHash("wrong seal device")).?, epoch).?;
+    var app = App.initFromHostSlice(app_id, BoundedArena.init(.{ .base = &host_memory }), 512, 4).?;
+
+    const req = sealedAppRequirements();
+    const owner = object.Owner{
+        .kind = .app,
+        .node_id = app_id.id.bytes,
+    };
+    const unsealed = try (object.NodeWriter{ .out = &unsealed_raw }).bytesNodeOwned(req, epoch, &.{owner}, &.{}, "state");
+    try std.testing.expect(app.putSealedObject(device_id, user_id, unsealed) == null);
+
+    const wrong_envelope = sealedEnvelopeForApp(wrong_device_id, app_id, user_id, req, "state key").?;
+    const wrong_sealed = try (object.NodeWriter{ .out = &wrong_seal_raw }).bytesNodeOwned(req, epoch, &.{owner}, &.{wrong_envelope}, "state");
+    try std.testing.expect(app.putSealedObject(device_id, user_id, wrong_sealed) == null);
+
+    const envelope = sealedEnvelopeForApp(device_id, app_id, user_id, req, "state key").?;
+    const sealed_object = try (object.NodeWriter{ .out = &sealed_raw }).bytesNodeOwned(req, epoch, &.{owner}, &.{envelope}, "state");
+    const object_id = app.putSealedObject(device_id, user_id, sealed_object).?;
+    const stored = app.storage.getObject(app.id.id, object_id).?;
+    try std.testing.expectEqual(object.Integrity.sealed, stored.header.requirements.integrity);
+    try std.testing.expectEqual(object.EnvelopeKind.app, (try stored.envelopeAt(0)).kind);
 }
 
 test "app shares owned memory read only for direct ui updates" {

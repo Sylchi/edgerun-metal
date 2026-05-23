@@ -287,13 +287,13 @@ pub fn simulate(config: Config, workspace: Workspace) Error!Simulation {
         error.Unauthorized => error.Unauthorized,
     };
     var child_app = spawned.app;
-    const canonical = writeAppObject(node.ids.app, node.clock.now, config.state_body, workspace.object[0..canonical_object_buffer_bytes]) catch |err| return switch (err) {
+    const canonical = writeAppObject(node.ids.device, node.ids.user, node.ids.app, node.clock.now, config.state_body, workspace.object[0..canonical_object_buffer_bytes]) catch |err| return switch (err) {
         error.BadArgument => error.BadConfiguration,
         error.Corrupt => error.Corrupt,
         error.NoSpace => error.NoSpace,
         error.Unsupported => error.BadConfiguration,
     };
-    const object_id = child_app.storage.putObject(node.ids.app.id, canonical) orelse return error.NoStorage;
+    const object_id = child_app.putSealedObject(node.ids.device, node.ids.user, canonical) orelse return error.NoStorage;
     const view = child_app.storage.getObject(node.ids.app.id, object_id) orelse return error.Corrupt;
     if (!bytes.eql(&view.id(), &object_id)) return error.Corrupt;
     return .{
@@ -305,12 +305,14 @@ pub fn simulate(config: Config, workspace: Workspace) Error!Simulation {
     };
 }
 
-fn writeAppObject(owner: identity.Identity, epoch: clock.Stamp, body: []const u8, out: []u8) object.Error![]u8 {
+fn writeAppObject(device: identity.Identity, user: identity.Identity, owner: identity.Identity, epoch: clock.Stamp, body: []const u8, out: []u8) object.Error![]u8 {
     const object_owner = object.Owner{
         .kind = .app,
         .node_id = owner.id.bytes,
     };
-    return try (object.NodeWriter{ .out = out }).bytesNodeOwned(appObjectRequirements(), epoch, &.{object_owner}, &.{}, body);
+    const req = appObjectRequirements();
+    const envelope = app_mod.sealedEnvelopeForApp(device, owner, user, req, "edgerun-sdk state object") orelse return error.BadArgument;
+    return try (object.NodeWriter{ .out = out }).bytesNodeOwned(req, epoch, &.{object_owner}, &.{envelope}, body);
 }
 
 fn appObjectRequirements() object.Requirements {
