@@ -253,11 +253,13 @@ pub fn simulate(config: Config, workspace: Workspace) Error!Simulation {
     if (!config.valid() or !workspace.validFor(config.resources)) return error.BadConfiguration;
     const node = try setupNode(config);
     const resources = config.resources;
-    var root_app = app_mod.App.init(
+    var manifest_raw: [object.header_size + object.owner_size + app_mod.App.manifest_body_size]u8 = undefined;
+    var root_app = app_mod.App.initAllocated(
         node.ids.root_app,
         arena.BoundedArena.init(.{ .base = workspace.memory[0..resources.parent_memory_bytes] }),
         store.Store.init(.{ .base = workspace.storage[0..resources.parent_storage_bytes] }, workspace.slots[0..resources.parent_storage_slots]),
-    );
+        parentAllocation(resources),
+    ) orelse return error.BadAllocation;
     const request = intent.requestId("edgerun-sdk spawn app") orelse return error.BadConfiguration;
     const authorization = intent.admit(
         node.ids.user,
@@ -269,14 +271,22 @@ pub fn simulate(config: Config, workspace: Workspace) Error!Simulation {
         node.clock.now,
         request,
     ) orelse return error.BadConfiguration;
-    const spawned = root_app.spawn(
+    const manifest = app_mod.App.Manifest{
+        .code_hash = preimage.hash("edgerun:zig:v1:sdk-app-code", config.child_app_material),
+        .allocation = declaredAllocation(resources),
+    };
+    const manifest_canonical = app_mod.App.writeManifestObject(node.ids.app, manifest, node.clock.now, &manifest_raw) catch |err| return switch (err) {
+        error.BadArgument => error.BadAllocation,
+        error.Corrupt => error.Corrupt,
+        error.NoSpace => error.NoSpace,
+        error.Unsupported => error.BadConfiguration,
+    };
+    const spawned = root_app.spawnManifest(
         node.ids.allocator,
         node.ids.app,
         node.clock.now,
         authorization,
-        resources.child_memory_bytes,
-        resources.child_storage_bytes,
-        resources.child_storage_slots,
+        manifest_canonical,
     ) catch |err| return switch (err) {
         error.BadAllocation => error.BadAllocation,
         error.NoExecution => error.NoMemory,
@@ -302,6 +312,22 @@ pub fn simulate(config: Config, workspace: Workspace) Error!Simulation {
         .spawn_receipt = spawned.receipt,
         .object_id = object_id,
         .app_storage = child_app.storage.stats(),
+    };
+}
+
+fn declaredAllocation(resources: ResourcePlan) app_mod.App.DeclaredAllocation {
+    return .{
+        .memory_bytes = resources.child_memory_bytes,
+        .storage_bytes = resources.child_storage_bytes,
+        .storage_slots = resources.child_storage_slots,
+    };
+}
+
+fn parentAllocation(resources: ResourcePlan) app_mod.App.DeclaredAllocation {
+    return .{
+        .memory_bytes = resources.parent_memory_bytes,
+        .storage_bytes = resources.parent_storage_bytes,
+        .storage_slots = resources.parent_storage_slots,
     };
 }
 
