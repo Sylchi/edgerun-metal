@@ -38,7 +38,7 @@ pub const Surface = struct {
             },
             .text => |text| self.drawTextCommand(text, scale),
             .icon_quad => |quad| self.drawIconQuad(quad, scale),
-            .hit, .drag_source, .drop_target, .text_quad, .transition => {},
+            .hit, .drag_source, .drop_target, .text_quad, .image_quad, .transition => {},
         };
     }
 

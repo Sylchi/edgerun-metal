@@ -113,6 +113,7 @@ pub const RenderStats = struct {
     rects: u64 = 0,
     icon_quads: u64 = 0,
     text_quads: u64 = 0,
+    image_quads: u64 = 0,
     tiles_rendered: u64 = 0,
     dirty_tiles_requested: u64 = 0,
     clipped_primitives: u64 = 0,
@@ -273,6 +274,7 @@ pub fn dirtyTilesMarkScene(plan: TilePlan, scene: ui.Scene, tile_marks: []u8, li
             .text => |text| text.origin,
             .icon_quad => |quad| quad.bounds,
             .text_quad => |quad| quad.bounds,
+            .image_quad => |quad| quad.bounds,
             else => continue,
         };
         if (!dirtyTilesMarkRect(plan, bounds.x, bounds.y, bounds.w, bounds.h, tile_marks, list)) return false;
@@ -310,7 +312,7 @@ pub fn frameDirtyTiles(state: FrameState, plan: TilePlan, prev: ?ui.Scene, next:
 pub fn frameBudgetFromPlan(tile_plan: TilePlan, scene_budget: ui.Budget, overdraw_budget: u32) FrameBudget {
     if (tile_plan.tile_count == 0 or overdraw_budget == 0) return .{};
     const frame_pixels = @as(u64, tile_plan.width) * tile_plan.height;
-    const primitive_limit = @as(u64, scene_budget.rects) + scene_budget.icon_quads + scene_budget.text_quads;
+    const primitive_limit = @as(u64, scene_budget.rects) + scene_budget.icon_quads + scene_budget.text_quads + scene_budget.image_quads;
     return .{
         .pixels_written = frame_pixels * overdraw_budget,
         .bytes_written = tile_plan.full_frame_bytes * overdraw_budget,
@@ -319,6 +321,7 @@ pub fn frameBudgetFromPlan(tile_plan: TilePlan, scene_budget: ui.Budget, overdra
         .rects = scene_budget.rects,
         .icon_quads = scene_budget.icon_quads,
         .text_quads = scene_budget.text_quads,
+        .image_quads = scene_budget.image_quads,
         .tiles_rendered = tile_plan.tile_count,
         .dirty_tiles_requested = tile_plan.max_dirty_tiles,
         .clipped_primitives = primitive_limit * tile_plan.tile_count,
@@ -335,6 +338,7 @@ pub fn renderStatsFirstBudgetViolation(stats: RenderStats, budget: FrameBudget) 
         .{ .name = "rects", .actual = stats.rects, .limit = budget.rects },
         .{ .name = "icon_quads", .actual = stats.icon_quads, .limit = budget.icon_quads },
         .{ .name = "text_quads", .actual = stats.text_quads, .limit = budget.text_quads },
+        .{ .name = "image_quads", .actual = stats.image_quads, .limit = budget.image_quads },
         .{ .name = "tiles_rendered", .actual = stats.tiles_rendered, .limit = budget.tiles_rendered },
         .{ .name = "dirty_tiles_requested", .actual = stats.dirty_tiles_requested, .limit = budget.dirty_tiles_requested },
         .{ .name = "clipped_primitives", .actual = stats.clipped_primitives, .limit = budget.clipped_primitives },
@@ -362,6 +366,7 @@ fn markCommand(plan: TilePlan, command: ui.Command, tile_marks: []u8, list: *Dir
         .text => |text| text.origin,
         .icon_quad => |quad| quad.bounds,
         .text_quad => |quad| quad.bounds,
+        .image_quad => |quad| quad.bounds,
         else => return true,
     };
     return dirtyTilesMarkRect(plan, bounds.x, bounds.y, bounds.w, bounds.h, tile_marks, list);
@@ -439,10 +444,12 @@ test "dirty tile tracking marks rects scene diffs and overflow" {
 
 test "frame budget and rgb packing match C planning contracts" {
     const plan = tilePlanFromMode(.{ .width = 20, .height = 10, .stride = 20, .refresh_hz = 1 }, 10, 5, 10).?;
-    const budget = frameBudgetFromPlan(plan, .{ .rects = 2, .icon_quads = 3, .text_quads = 4 }, 2);
+    const budget = frameBudgetFromPlan(plan, .{ .rects = 2, .icon_quads = 3, .text_quads = 4, .image_quads = 0 }, 2);
     try std.testing.expectEqual(@as(u64, 400), budget.pixels_written);
     try std.testing.expectEqual(@as(u64, plan.full_frame_bytes * 2), budget.bytes_written);
     try std.testing.expectEqual(@as(u64, 9 * plan.tile_count), budget.clipped_primitives);
+    const image_budget = frameBudgetFromPlan(plan, .{ .rects = 2, .icon_quads = 3, .text_quads = 4, .image_quads = 1 }, 2);
+    try std.testing.expectEqual(@as(u64, 10 * plan.tile_count), image_budget.clipped_primitives);
     const violation = renderStatsFirstBudgetViolation(.{ .pixels_written = 401 }, budget).?;
     try std.testing.expectEqualStrings("pixels_written", violation.name);
     try std.testing.expectEqual(@as(u32, 0x112233), packRgb(.rgbx, 0x11, 0x22, 0x33));

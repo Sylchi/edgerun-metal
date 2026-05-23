@@ -83,6 +83,11 @@ pub const HitKind = enum(u8) {
     button,
     input,
     row_item,
+    checkbox,
+    switch_control,
+    slider,
+    textarea,
+    select,
 };
 
 pub const RectMode = enum(u8) {
@@ -190,6 +195,7 @@ pub const Command = union(enum) {
     drop_target: DropTarget,
     icon_quad: Quad,
     text_quad: Quad,
+    image_quad: Quad,
     transition: Transition,
 };
 
@@ -212,6 +218,7 @@ pub const Stats = struct {
     clips: usize = 0,
     icon_quads: usize = 0,
     text_quads: usize = 0,
+    image_quads: usize = 0,
 };
 
 pub const Budget = struct {
@@ -222,6 +229,7 @@ pub const Budget = struct {
     transitions: usize = 1200,
     icon_quads: usize = 160,
     text_quads: usize = 900,
+    image_quads: usize = 16,
 };
 
 pub const BudgetViolation = struct {
@@ -315,6 +323,10 @@ pub const Scene = struct {
         if (self.clipQuad(quad)) |clipped| try self.push(.{ .text_quad = clipped });
     }
 
+    pub fn pushImageQuad(self: *Scene, quad: Quad) RenderError!void {
+        if (self.clipQuad(quad)) |clipped| try self.push(.{ .image_quad = clipped });
+    }
+
     pub fn pushText(self: *Scene, origin: Rect, value: []const u8, color: Color) RenderError!void {
         try self.pushAlignedText(origin, value, color, .start);
     }
@@ -377,6 +389,7 @@ pub const Scene = struct {
             .transition => out.transitions += 1,
             .icon_quad => out.icon_quads += 1,
             .text_quad, .text => out.text_quads += 1,
+            .image_quad => out.image_quads += 1,
         };
         return out;
     }
@@ -389,6 +402,7 @@ pub const Scene = struct {
             .text => |*text_cmd| text_cmd.color.a = scaleAlpha(text_cmd.color.a, alpha),
             .icon_quad => |*quad| quad.color.a = scaleAlpha(quad.color.a, alpha),
             .text_quad => |*quad| quad.color.a = scaleAlpha(quad.color.a, alpha),
+            .image_quad => |*quad| quad.color.a = scaleAlpha(quad.color.a, alpha),
             else => {},
         };
     }
@@ -404,6 +418,7 @@ pub const Scene = struct {
             .drop_target => |*target| translateRect(&target.bounds, dx, dy),
             .icon_quad => |*quad| translateRect(&quad.bounds, dx, dy),
             .text_quad => |*quad| translateRect(&quad.bounds, dx, dy),
+            .image_quad => |*quad| translateRect(&quad.bounds, dx, dy),
             else => {},
         };
     }
@@ -467,6 +482,7 @@ pub fn firstBudgetViolation(stats_value: Stats, budget: Budget) ?BudgetViolation
         .{ .name = "transitions", .actual = stats_value.transitions, .limit = budget.transitions },
         .{ .name = "icon_quads", .actual = stats_value.icon_quads, .limit = budget.icon_quads },
         .{ .name = "text_quads", .actual = stats_value.text_quads, .limit = budget.text_quads },
+        .{ .name = "image_quads", .actual = stats_value.image_quads, .limit = budget.image_quads },
     };
     for (entries) |entry| {
         if (entry.actual > entry.limit) return entry;
@@ -510,8 +526,19 @@ pub const Slot = struct {
 pub const Node = union(enum) {
     rect: struct { color: Color },
     text: struct { value: []const u8, color: ?Color = null },
+    card: struct { title: []const u8, detail: []const u8 },
+    badge: struct { label: []const u8 },
+    avatar: struct { label: []const u8 },
+    kbd: struct { label: []const u8 },
+    separator: void,
     button: struct { id: u32, label: []const u8 },
     input: struct { id: u32, placeholder: []const u8 },
+    textarea: struct { id: u32, placeholder: []const u8 },
+    select: struct { id: u32, label: []const u8 },
+    checkbox: struct { id: u32, label: []const u8, checked: bool },
+    switch_control: struct { id: u32, label: []const u8, checked: bool },
+    progress: struct { value: f32 },
+    slider: struct { id: u32, label: []const u8, value: f32 },
     row_item: struct { id: u32, title: []const u8, detail: []const u8 },
     slot: Slot,
     stack: Layout,
@@ -520,8 +547,19 @@ pub const Node = union(enum) {
         return switch (self) {
             .rect => .{ .w = 32, .h = 32 },
             .text => .{ .w = 96, .h = 22 },
+            .card => .{ .w = 260, .h = 96 },
+            .badge => .{ .w = 96, .h = 24 },
+            .avatar => .{ .w = 40, .h = 40 },
+            .kbd => .{ .w = 48, .h = 24 },
+            .separator => .{ .w = 220, .h = 1 },
             .button => .{ .w = 112, .h = 36 },
             .input => .{ .w = 220, .h = 40 },
+            .textarea => .{ .w = 220, .h = 88 },
+            .select => .{ .w = 220, .h = 40 },
+            .checkbox => .{ .w = 220, .h = 28 },
+            .switch_control => .{ .w = 220, .h = 32 },
+            .progress => .{ .w = 220, .h = 10 },
+            .slider => .{ .w = 220, .h = 42 },
             .row_item => .{ .w = 260, .h = 48 },
             .slot => |slot_node| slot_node.child.preferredSize(),
             .stack => |layout| stackPreferredSize(layout),
@@ -537,12 +575,56 @@ pub fn textNode(value: []const u8, color: ?Color) Node {
     return .{ .text = .{ .value = value, .color = color } };
 }
 
+pub fn cardNode(title: []const u8, detail: []const u8) Node {
+    return .{ .card = .{ .title = title, .detail = detail } };
+}
+
+pub fn badgeNode(label: []const u8) Node {
+    return .{ .badge = .{ .label = label } };
+}
+
+pub fn avatarNode(label: []const u8) Node {
+    return .{ .avatar = .{ .label = label } };
+}
+
+pub fn kbdNode(label: []const u8) Node {
+    return .{ .kbd = .{ .label = label } };
+}
+
+pub fn separatorNode() Node {
+    return .{ .separator = {} };
+}
+
 pub fn buttonNode(id: u32, label: []const u8) Node {
     return .{ .button = .{ .id = id, .label = label } };
 }
 
 pub fn inputNode(id: u32, placeholder: []const u8) Node {
     return .{ .input = .{ .id = id, .placeholder = placeholder } };
+}
+
+pub fn textareaNode(id: u32, placeholder: []const u8) Node {
+    return .{ .textarea = .{ .id = id, .placeholder = placeholder } };
+}
+
+pub fn selectNode(id: u32, label: []const u8) Node {
+    return .{ .select = .{ .id = id, .label = label } };
+}
+
+pub fn checkboxNode(id: u32, label: []const u8, checked: bool) Node {
+    return .{ .checkbox = .{ .id = id, .label = label, .checked = checked } };
+}
+
+pub fn switchNode(id: u32, label: []const u8, checked: bool) Node {
+    return .{ .switch_control = .{ .id = id, .label = label, .checked = checked } };
+}
+
+pub fn progressNode(value: f32) Node {
+    return .{ .progress = .{ .value = value } };
+}
+
+pub fn sliderNode(id: u32, label: []const u8, value: f32) Node {
+    return .{ .slider = .{ .id = id, .label = label, .value = value } };
 }
 
 pub fn rowItemNode(id: u32, title: []const u8, detail: []const u8) Node {
@@ -575,8 +657,18 @@ pub fn alignedRow(gap: f32, padding: f32, cross_align: Align, children: []const 
 
 pub const Patch = union(enum) {
     text_value: []const u8,
+    card_text: struct { title: []const u8, detail: []const u8 },
+    badge_label: []const u8,
+    avatar_label: []const u8,
+    kbd_label: []const u8,
     button_label: []const u8,
     input_placeholder: []const u8,
+    textarea_placeholder: []const u8,
+    select_label: []const u8,
+    checkbox_checked: bool,
+    switch_checked: bool,
+    progress_value: f32,
+    slider_value: f32,
     row_item: struct { title: []const u8, detail: []const u8 },
     rect_color: Color,
     style_color: Color,
@@ -588,12 +680,55 @@ pub fn applyPatch(node: *Node, patch: Patch) PatchError!void {
             .text => |*text_node| text_node.value = value,
             else => return error.WrongNodeKind,
         },
+        .card_text => |card_patch| switch (node.*) {
+            .card => |*card| {
+                card.title = card_patch.title;
+                card.detail = card_patch.detail;
+            },
+            else => return error.WrongNodeKind,
+        },
+        .badge_label => |label| switch (node.*) {
+            .badge => |*badge| badge.label = label,
+            else => return error.WrongNodeKind,
+        },
+        .avatar_label => |label| switch (node.*) {
+            .avatar => |*avatar| avatar.label = label,
+            else => return error.WrongNodeKind,
+        },
+        .kbd_label => |label| switch (node.*) {
+            .kbd => |*kbd| kbd.label = label,
+            else => return error.WrongNodeKind,
+        },
         .button_label => |label| switch (node.*) {
             .button => |*button| button.label = label,
             else => return error.WrongNodeKind,
         },
         .input_placeholder => |placeholder| switch (node.*) {
             .input => |*input| input.placeholder = placeholder,
+            else => return error.WrongNodeKind,
+        },
+        .textarea_placeholder => |placeholder| switch (node.*) {
+            .textarea => |*textarea| textarea.placeholder = placeholder,
+            else => return error.WrongNodeKind,
+        },
+        .select_label => |label| switch (node.*) {
+            .select => |*select| select.label = label,
+            else => return error.WrongNodeKind,
+        },
+        .checkbox_checked => |checked| switch (node.*) {
+            .checkbox => |*checkbox| checkbox.checked = checked,
+            else => return error.WrongNodeKind,
+        },
+        .switch_checked => |checked| switch (node.*) {
+            .switch_control => |*switch_control| switch_control.checked = checked,
+            else => return error.WrongNodeKind,
+        },
+        .progress_value => |value| switch (node.*) {
+            .progress => |*progress| progress.value = clampUnit(value),
+            else => return error.WrongNodeKind,
+        },
+        .slider_value => |value| switch (node.*) {
+            .slider => |*slider| slider.value = clampUnit(value),
             else => return error.WrongNodeKind,
         },
         .row_item => |row_patch| switch (node.*) {
@@ -623,6 +758,11 @@ fn renderInSlot(scene: *Scene, node: Node, bounds: Rect, style: Style, slot_id: 
     switch (node) {
         .rect => |rect_node| try scene.push(.{ .rect = .{ .bounds = bounds, .color = rect_node.color } }),
         .text => |text_node| try scene.push(.{ .text = .{ .origin = bounds, .value = text_node.value, .color = text_node.color orelse style.text } }),
+        .card => |card| try renderCard(scene, bounds, card.title, card.detail, style),
+        .badge => |badge| try renderBadge(scene, bounds, badge.label, style),
+        .avatar => |avatar| try renderAvatar(scene, bounds, avatar.label, style),
+        .kbd => |kbd| try renderKbd(scene, bounds, kbd.label, style),
+        .separator => try renderSeparator(scene, bounds, style),
         .button => |button| {
             try scene.pushRect(bounds, surface_shadow, .shadow, control_radius, control_shadow);
             try scene.pushGradientRect(bounds, style.accent, accent_bottom, control_radius);
@@ -638,6 +778,12 @@ fn renderInSlot(scene: *Scene, node: Node, bounds: Rect, style: Style, slot_id: 
             }
             try scene.push(.{ .hit = .{ .slot = slot_id, .kind = .input, .id = input.id, .bounds = bounds } });
         },
+        .textarea => |textarea| try renderTextarea(scene, bounds, textarea.id, textarea.placeholder, style, slot_id),
+        .select => |select| try renderSelect(scene, bounds, select.id, select.label, style, slot_id),
+        .checkbox => |checkbox| try renderCheckbox(scene, bounds, checkbox.id, checkbox.label, checkbox.checked, style, slot_id),
+        .switch_control => |switch_control| try renderSwitch(scene, bounds, switch_control.id, switch_control.label, switch_control.checked, style, slot_id),
+        .progress => |progress| try renderProgress(scene, bounds, progress.value, style),
+        .slider => |slider| try renderSlider(scene, bounds, slider.id, slider.label, slider.value, style, slot_id),
         .row_item => |row| {
             try scene.pushRect(bounds, style.row, .fill, row_radius, 0.0);
             if (rowTitleBounds(bounds, row.detail.len == 0)) |title_bounds| {
@@ -668,6 +814,169 @@ const row_title_offset_y: f32 = 8.0;
 const row_detail_offset_y: f32 = 26.0;
 const row_title_height: f32 = 18.0;
 const row_detail_height: f32 = 16.0;
+const badge_height: f32 = 24.0;
+const badge_text_height: f32 = 13.0;
+const badge_padding_x: f32 = 10.0;
+const card_padding: f32 = 14.0;
+const card_title_height: f32 = 18.0;
+const card_detail_height: f32 = 16.0;
+const card_detail_gap: f32 = 8.0;
+const avatar_size: f32 = 40.0;
+const avatar_text_height: f32 = 14.0;
+const kbd_height: f32 = 24.0;
+const kbd_text_height: f32 = 12.0;
+const separator_height: f32 = 1.0;
+const checkbox_box_size: f32 = 18.0;
+const checkbox_mark_inset: f32 = 5.0;
+const checkbox_text_gap: f32 = 10.0;
+const control_label_height: f32 = 16.0;
+const switch_width: f32 = 42.0;
+const switch_height: f32 = 24.0;
+const switch_knob_size: f32 = 18.0;
+const switch_knob_inset: f32 = 3.0;
+const progress_height: f32 = 8.0;
+const slider_label_height: f32 = 14.0;
+const slider_track_height: f32 = 6.0;
+const slider_thumb_size: f32 = 16.0;
+const slider_track_top: f32 = 26.0;
+const textarea_padding: f32 = 12.0;
+const select_arrow_w: f32 = 18.0;
+const codec_unit_scale: f32 = 1000.0;
+
+fn renderCard(scene: *Scene, bounds: Rect, title: []const u8, detail: []const u8, style: Style) RenderError!void {
+    try scene.pushRect(bounds, surface_shadow, .shadow, control_radius + 2.0, control_shadow);
+    try scene.pushRect(bounds, style.panel, .fill, control_radius + 2.0, 0.0);
+    try scene.pushRect(bounds, style.border, .border, control_radius + 2.0, 0.0);
+    const title_bounds = Rect.init(bounds.x + card_padding, bounds.y + card_padding, @max(1.0, bounds.w - card_padding * 2.0), card_title_height);
+    try scene.push(.{ .text = .{ .origin = title_bounds, .value = title, .color = style.text } });
+    if (detail.len != 0) {
+        const detail_y = title_bounds.y + title_bounds.h + card_detail_gap;
+        const detail_bounds = Rect.init(title_bounds.x, detail_y, title_bounds.w, @max(1.0, bounds.y + bounds.h - detail_y - card_padding));
+        try scene.pushWrappedText(detail_bounds, detail, style.muted, .{
+            .line_height = card_detail_height,
+            .average_char_width = 8.5,
+            .max_lines = 3,
+        });
+    }
+}
+
+fn renderBadge(scene: *Scene, bounds: Rect, label: []const u8, style: Style) RenderError!void {
+    const height = geometry.clamp(badge_height, 1.0, bounds.h);
+    const badge_bounds = Rect.init(bounds.x, bounds.y + (bounds.h - height) * 0.5, bounds.w, height);
+    var fill = style.accent;
+    fill.a = 42;
+    try scene.pushRect(badge_bounds, fill, .fill, height * 0.5, 0.0);
+    if (contentInset(badge_bounds, badge_padding_x)) |label_bounds| {
+        try scene.push(.{ .text = .{ .origin = label_bounds.withHeightCentered(badge_text_height), .value = label, .color = style.accent, .alignment = .center } });
+    }
+}
+
+fn renderAvatar(scene: *Scene, bounds: Rect, label: []const u8, style: Style) RenderError!void {
+    const size = geometry.clamp(avatar_size, 1.0, @min(bounds.w, bounds.h));
+    const avatar_bounds = Rect.init(bounds.x + (bounds.w - size) * 0.5, bounds.y + (bounds.h - size) * 0.5, size, size);
+    try scene.pushRect(avatar_bounds, style.row, .fill, size * 0.5, 0.0);
+    try scene.pushRect(avatar_bounds, style.border, .border, size * 0.5, 0.0);
+    const label_bounds = avatar_bounds.insetUniform(6.0).withHeightCentered(avatar_text_height);
+    try scene.push(.{ .text = .{ .origin = label_bounds, .value = label, .color = style.text, .alignment = .center } });
+}
+
+fn renderKbd(scene: *Scene, bounds: Rect, label: []const u8, style: Style) RenderError!void {
+    const height = geometry.clamp(kbd_height, 1.0, bounds.h);
+    const kbd_bounds = Rect.init(bounds.x, bounds.y + (bounds.h - height) * 0.5, bounds.w, height);
+    try scene.pushRect(kbd_bounds, style.row, .fill, control_radius, 0.0);
+    try scene.pushRect(kbd_bounds, style.border, .border, control_radius, 0.0);
+    if (contentInset(kbd_bounds, 8.0)) |label_bounds| {
+        try scene.push(.{ .text = .{ .origin = label_bounds.withHeightCentered(kbd_text_height), .value = label, .color = style.text, .alignment = .center } });
+    }
+}
+
+fn renderSeparator(scene: *Scene, bounds: Rect, style: Style) RenderError!void {
+    const line = Rect.init(bounds.x, bounds.y + (bounds.h - separator_height) * 0.5, bounds.w, separator_height);
+    try scene.pushRect(line, style.border, .fill, 0.0, 0.0);
+}
+
+fn renderCheckbox(scene: *Scene, bounds: Rect, id: u32, label: []const u8, checked: bool, style: Style, slot_id: u32) RenderError!void {
+    const box = Rect.init(bounds.x, bounds.y + (bounds.h - checkbox_box_size) * 0.5, checkbox_box_size, checkbox_box_size);
+    try scene.pushRect(box, if (checked) style.accent else style.panel, .fill, control_radius, 0.0);
+    try scene.pushRect(box, if (checked) style.accent else style.border, .border, control_radius, 0.0);
+    if (checked) {
+        try scene.pushRect(box.insetUniform(checkbox_mark_inset), style.bg, .fill, 2.0, 0.0);
+    }
+    const label_x = box.x + box.w + checkbox_text_gap;
+    const label_bounds = Rect.init(label_x, bounds.y + (bounds.h - control_label_height) * 0.5, @max(1.0, bounds.x + bounds.w - label_x), control_label_height);
+    try scene.push(.{ .text = .{ .origin = label_bounds, .value = label, .color = style.text } });
+    try scene.push(.{ .hit = .{ .slot = slot_id, .kind = .checkbox, .id = id, .bounds = bounds } });
+}
+
+fn renderSwitch(scene: *Scene, bounds: Rect, id: u32, label: []const u8, checked: bool, style: Style, slot_id: u32) RenderError!void {
+    const pill = Rect.init(bounds.x + bounds.w - switch_width, bounds.y + (bounds.h - switch_height) * 0.5, switch_width, switch_height);
+    try scene.pushRect(pill, if (checked) style.accent else style.row, .fill, switch_height * 0.5, 0.0);
+    try scene.pushRect(pill, style.border, .border, switch_height * 0.5, 0.0);
+    const knob_x = if (checked) pill.x + pill.w - switch_knob_size - switch_knob_inset else pill.x + switch_knob_inset;
+    const knob = Rect.init(knob_x, pill.y + switch_knob_inset, switch_knob_size, switch_knob_size);
+    try scene.pushRect(knob, style.text, .fill, switch_knob_size * 0.5, 0.0);
+    const label_bounds = Rect.init(bounds.x, bounds.y + (bounds.h - control_label_height) * 0.5, @max(1.0, pill.x - bounds.x - checkbox_text_gap), control_label_height);
+    try scene.push(.{ .text = .{ .origin = label_bounds, .value = label, .color = style.text } });
+    try scene.push(.{ .hit = .{ .slot = slot_id, .kind = .switch_control, .id = id, .bounds = bounds } });
+}
+
+fn renderTextarea(scene: *Scene, bounds: Rect, id: u32, placeholder: []const u8, style: Style, slot_id: u32) RenderError!void {
+    try scene.pushRect(bounds, style.panel, .fill, control_radius, 0.0);
+    try scene.pushRect(bounds, style.border, .border, control_radius, 0.0);
+    const text_bounds = bounds.insetUniform(textarea_padding);
+    if (text_bounds.valid()) {
+        try scene.pushWrappedText(text_bounds, placeholder, style.muted, .{
+            .line_height = control_label_height,
+            .average_char_width = 8.5,
+            .max_lines = 4,
+        });
+    }
+    try scene.push(.{ .hit = .{ .slot = slot_id, .kind = .textarea, .id = id, .bounds = bounds } });
+}
+
+fn renderSelect(scene: *Scene, bounds: Rect, id: u32, label: []const u8, style: Style, slot_id: u32) RenderError!void {
+    try scene.pushRect(bounds, style.panel, .fill, control_radius, 0.0);
+    try scene.pushRect(bounds, style.border, .border, control_radius, 0.0);
+    if (contentInset(bounds, input_text_padding)) |label_bounds| {
+        const text_bounds = Rect.init(label_bounds.x, label_bounds.y, @max(1.0, label_bounds.w - select_arrow_w), label_bounds.h);
+        try scene.push(.{ .text = .{ .origin = text_bounds, .value = label, .color = style.text } });
+        const arrow_bounds = Rect.init(label_bounds.x + label_bounds.w - select_arrow_w, label_bounds.y, select_arrow_w, label_bounds.h);
+        try scene.push(.{ .text = .{ .origin = arrow_bounds, .value = "v", .color = style.muted, .alignment = .center } });
+    }
+    try scene.push(.{ .hit = .{ .slot = slot_id, .kind = .select, .id = id, .bounds = bounds } });
+}
+
+fn renderProgress(scene: *Scene, bounds: Rect, value: f32, style: Style) RenderError!void {
+    const track = Rect.init(bounds.x, bounds.y + (bounds.h - progress_height) * 0.5, bounds.w, progress_height);
+    try scene.pushRect(track, style.row, .fill, progress_height * 0.5, 0.0);
+    try scene.pushRect(Rect.init(track.x, track.y, track.w * clampUnit(value), track.h), style.accent, .fill, progress_height * 0.5, 0.0);
+}
+
+fn renderSlider(scene: *Scene, bounds: Rect, id: u32, label: []const u8, value: f32, style: Style, slot_id: u32) RenderError!void {
+    const clamped = clampUnit(value);
+    try scene.push(.{ .text = .{ .origin = Rect.init(bounds.x, bounds.y, bounds.w, slider_label_height), .value = label, .color = style.text } });
+    const track_y = bounds.y + @min(slider_track_top, @max(0.0, bounds.h - slider_track_height));
+    const track = Rect.init(bounds.x, track_y, bounds.w, slider_track_height);
+    try scene.pushRect(track, style.row, .fill, slider_track_height * 0.5, 0.0);
+    try scene.pushRect(Rect.init(track.x, track.y, track.w * clamped, track.h), style.accent, .fill, slider_track_height * 0.5, 0.0);
+    const thumb_center = track.x + track.w * clamped;
+    const thumb = Rect.init(thumb_center - slider_thumb_size * 0.5, track.y + (track.h - slider_thumb_size) * 0.5, slider_thumb_size, slider_thumb_size);
+    try scene.pushRect(thumb, style.text, .fill, slider_thumb_size * 0.5, 0.0);
+    try scene.push(.{ .hit = .{ .slot = slot_id, .kind = .slider, .id = id, .bounds = bounds } });
+}
+
+pub fn clampUnit(value: f32) f32 {
+    if (!geometry.finite(value)) return 0.0;
+    return geometry.clamp(value, 0.0, 1.0);
+}
+
+pub fn encodeUnit(value: f32) u16 {
+    return @intFromFloat(@round(clampUnit(value) * codec_unit_scale));
+}
+
+pub fn decodeUnit(value: u16) f32 {
+    return geometry.clamp(@as(f32, @floatFromInt(value)) / codec_unit_scale, 0.0, 1.0);
+}
 
 fn contentInset(bounds: Rect, padding: f32) ?Rect {
     const clamped = geometry.clamp(padding, 0.0, @min(bounds.w, bounds.h) * 0.5);
@@ -911,6 +1220,53 @@ test "button node centers label in core renderer" {
     try std.testing.expect(@abs(label_center_y - button_center_y) < 0.01);
 }
 
+test "core renderer exposes dev-ready form and feedback primitives" {
+    var nodes = [_]Node{
+        badgeNode("Ready"),
+        checkboxNode(11, "Enable sync", true),
+        switchNode(12, "Public statistics", false),
+        progressNode(0.64),
+        sliderNode(13, "Brightness", 0.72),
+    };
+    const root = columnStack(8.0, 12.0, &nodes);
+
+    var commands: [64]Command = undefined;
+    var scene = Scene.init(&commands);
+    try render(&scene, root, Rect.init(0.0, 0.0, 320.0, 180.0), .{});
+
+    try std.testing.expect(hasText(scene.written(), "Ready"));
+    try std.testing.expect(hasText(scene.written(), "Enable sync"));
+    try std.testing.expect(hasText(scene.written(), "Public statistics"));
+    try std.testing.expect(hasText(scene.written(), "Brightness"));
+    try std.testing.expectEqual(HitKind.checkbox, hitKindFor(scene.written(), 11).?);
+    try std.testing.expectEqual(HitKind.switch_control, hitKindFor(scene.written(), 12).?);
+    try std.testing.expectEqual(HitKind.slider, hitKindFor(scene.written(), 13).?);
+}
+
+test "core renderer exposes dev-ready layout and display primitives" {
+    var nodes = [_]Node{
+        cardNode("Project", "Interactive docs and app surfaces."),
+        separatorNode(),
+        avatarNode("ER"),
+        kbdNode("⌘K"),
+        textareaNode(21, "Describe this app"),
+        selectNode(22, "Production"),
+    };
+    const root = columnStack(8.0, 12.0, &nodes);
+
+    var commands: [96]Command = undefined;
+    var scene = Scene.init(&commands);
+    try render(&scene, root, Rect.init(0.0, 0.0, 340.0, 340.0), .{});
+
+    try std.testing.expect(hasText(scene.written(), "Project"));
+    try std.testing.expect(hasText(scene.written(), "ER"));
+    try std.testing.expect(hasText(scene.written(), "⌘K"));
+    try std.testing.expect(hasText(scene.written(), "Describe this app"));
+    try std.testing.expect(hasText(scene.written(), "Production"));
+    try std.testing.expectEqual(HitKind.textarea, hitKindFor(scene.written(), 21).?);
+    try std.testing.expectEqual(HitKind.select, hitKindFor(scene.written(), 22).?);
+}
+
 test "stack layout stays inside small responsive bounds" {
     var nodes = [_]Node{
         textNode("status", .accent),
@@ -937,6 +1293,22 @@ test "stack layout stays inside small responsive bounds" {
         else => {},
     };
     try std.testing.expectEqual(@as(usize, 3), hits);
+}
+
+fn hasText(commands: []const Command, value: []const u8) bool {
+    for (commands) |command| switch (command) {
+        .text => |text_command| if (std.mem.eql(u8, text_command.value, value)) return true,
+        else => {},
+    };
+    return false;
+}
+
+fn hitKindFor(commands: []const Command, id: u32) ?HitKind {
+    for (commands) |command| switch (command) {
+        .hit => |hit| if (hit.id == id) return hit.kind,
+        else => {},
+    };
+    return null;
 }
 
 test "row layout proportionally shrinks overflowing children" {

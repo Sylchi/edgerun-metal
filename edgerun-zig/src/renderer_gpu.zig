@@ -74,6 +74,7 @@ pub const PrimitiveKind = enum(u8) {
     text,
     icon_quad,
     text_quad,
+    image_quad,
 };
 
 pub const Primitive = struct {
@@ -289,6 +290,7 @@ fn encodeCommand(command: ui.Command, out: *CommandBuffer) Error!void {
         }),
         .icon_quad => |quad| try out.append(quadPrimitive(.icon_quad, quad)),
         .text_quad => |quad| try out.append(quadPrimitive(.text_quad, quad)),
+        .image_quad => |quad| try out.append(quadPrimitive(.image_quad, quad)),
         .hit, .drag_source, .drop_target, .transition => {},
     }
 }
