@@ -386,29 +386,6 @@ pub const App = struct {
         }
     };
 
-    pub fn spawn(self: *App, allocator_id: identity.Identity, child_id: identity.Identity, epoch: clock.Stamp, authorization: intent.Receipt, memory_bytes: usize, storage_bytes: usize, storage_slots: usize) SpawnError!Spawned {
-        if (!authorization.permitsAt(epoch, allocator_id.id, child_id.id, .spawn_app, .delegates_resources)) {
-            return error.Unauthorized;
-        }
-
-        const child_memory = self.memory.split(memory_bytes) orelse return error.NoMemory;
-        const child_storage = self.storage.split(.{
-            .data_bytes = storage_bytes,
-            .slot_count = storage_slots,
-        }) orelse return error.NoStorage;
-        const receipt = grant.spawnReceipt(self.id, child_id, epoch, memory_bytes, storage_bytes, storage_slots) orelse return error.NoMemory;
-
-        return .{
-            .app = .{
-                .id = child_id,
-                .memory = child_memory,
-                .storage = child_storage,
-                .execution_ticks = 1,
-            },
-            .receipt = receipt,
-        };
-    }
-
     pub fn spawnDeclared(self: *App, allocator_id: identity.Identity, child_id: identity.Identity, epoch: clock.Stamp, authorization: intent.Receipt, allocation: DeclaredAllocation) SpawnError!Spawned {
         if (!allocation.valid()) return error.BadAllocation;
         if (!self.can_spawn_children) return error.Unauthorized;
@@ -788,10 +765,11 @@ fn hashMaterial(material: []const u8) preimage.Hash {
     return preimage.hash("edgerun:zig:v1:test-material", material);
 }
 
-test "spawn transfers bounded memory and storage to child" {
+test "manifest spawn transfers declared memory and storage to child" {
     var memory_bytes: [64]u8 = undefined;
     var storage_bytes: [128]u8 = undefined;
     var slots: [4]store.Blob = undefined;
+    var manifest_raw: [object.header_size + object.owner_size + App.manifest_body_size]u8 = undefined;
 
     const keeper = clock.KeeperId{ .bytes = [_]u8{1} ++ [_]u8{0} ** 31 };
     const epoch = clock.Stamp{ .keeper = keeper };
@@ -803,11 +781,17 @@ test "spawn transfers bounded memory and storage to child" {
     const parent_id = identity.Identity.init(.app, parent_source, epoch).?;
     const child_id = identity.Identity.init(.app, child_source, epoch).?;
 
-    var parent = App.init(
+    var parent = App.initAllocated(
         parent_id,
         BoundedArena.init(.{ .base = &memory_bytes }),
         store.Store.init(.{ .base = &storage_bytes }, &slots),
-    );
+        .{
+            .memory_bytes = memory_bytes.len,
+            .storage_bytes = storage_bytes.len,
+            .storage_slots = slots.len,
+            .execution_ticks = 2,
+        },
+    ).?;
 
     const authorization = intent.admit(
         user_id,
@@ -819,7 +803,16 @@ test "spawn transfers bounded memory and storage to child" {
         epoch,
         intent.requestId("spawn child app").?,
     ).?;
-    var spawned = try parent.spawn(allocator_id, child_id, epoch, authorization, 16, 32, 2);
+    const manifest = App.Manifest{
+        .code_hash = preimage.hash("edgerun:zig:v1:test-code", "bounded child"),
+        .allocation = .{
+            .memory_bytes = 16,
+            .storage_bytes = 32,
+            .storage_slots = 2,
+        },
+    };
+    const manifest_canonical = try App.writeManifestObject(child_id, manifest, epoch, &manifest_raw);
+    var spawned = try parent.spawnManifest(allocator_id, child_id, epoch, authorization, manifest_canonical);
     var child = spawned.app;
     try std.testing.expectEqual(@as(usize, 48), parent.memory.remaining());
     try std.testing.expectEqual(@as(usize, 96), parent.storage.data.len());
@@ -832,7 +825,16 @@ test "spawn transfers bounded memory and storage to child" {
     _ = try child_allocator.alloc(u8, 8);
     const child_hash = child.storage.put("child state").?;
     try std.testing.expectEqual(@as(usize, 48), parent.memory.remaining());
-    try std.testing.expectError(error.NoMemory, parent.spawn(allocator_id, child_id, epoch, authorization, 56, 16, 1));
+    const oversized_manifest = App.Manifest{
+        .code_hash = preimage.hash("edgerun:zig:v1:test-code", "oversized child"),
+        .allocation = .{
+            .memory_bytes = 56,
+            .storage_bytes = 16,
+            .storage_slots = 1,
+        },
+    };
+    const oversized_canonical = try App.writeManifestObject(child_id, oversized_manifest, epoch, &manifest_raw);
+    try std.testing.expectError(error.NoMemory, parent.spawnManifest(allocator_id, child_id, epoch, authorization, oversized_canonical));
     try std.testing.expect(spawned.receipt.valid());
     try std.testing.expectEqual(@as(u64, 32), spawned.receipt.storage_bytes.amount);
 
