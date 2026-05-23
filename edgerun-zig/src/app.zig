@@ -14,6 +14,11 @@ const ui = @import("ui.zig");
 const ui_components = @import("ui_components.zig");
 const ui_resolver = @import("ui_resolver.zig");
 
+const allocation_count_field_size = @sizeOf(u64);
+const allocation_count_field_count = 6;
+const allocation_count_body_size = allocation_count_field_size * allocation_count_field_count;
+const allocation_body_size = allocation_count_body_size + preimage.hash_size + identity.id_size;
+
 pub const SpawnError = error{
     BadAllocation,
     NoExecution,
@@ -36,6 +41,8 @@ pub const App = struct {
     execution_ticks: u64 = 0,
     route_handles: u64 = 0,
     device_handles: u64 = 0,
+    route_handle: preimage.Hash = [_]u8{0} ** preimage.hash_size,
+    device_handle: identity.Id = .{ .bytes = [_]u8{0} ** identity.id_size },
     can_spawn_children: bool = true,
 
     pub fn init(id: identity.Identity, memory: BoundedArena, storage: store.Store) App {
@@ -55,6 +62,8 @@ pub const App = struct {
             .execution_ticks = allocation.execution_ticks,
             .route_handles = allocation.route_handles,
             .device_handles = allocation.device_handles,
+            .route_handle = allocation.route_handle,
+            .device_handle = allocation.device_handle,
         };
     }
 
@@ -77,14 +86,20 @@ pub const App = struct {
         storage_bytes: usize,
         storage_slots: usize,
         execution_ticks: u64 = 1,
-        route_handles: u64 = 1,
-        device_handles: u64 = 1,
+        route_handles: u64 = 0,
+        device_handles: u64 = 0,
+        route_handle: preimage.Hash = [_]u8{0} ** preimage.hash_size,
+        device_handle: identity.Id = .{ .bytes = [_]u8{0} ** identity.id_size },
 
         pub fn valid(self: DeclaredAllocation) bool {
             return self.memory_bytes != 0 and
                 self.storage_bytes != 0 and
                 self.storage_slots != 0 and
-                self.execution_ticks != 0;
+                self.execution_ticks != 0 and
+                ((self.route_handles == 0 and bytes.zeroed(&self.route_handle)) or
+                    (self.route_handles != 0 and bytes.nonzero(&self.route_handle))) and
+                ((self.device_handles == 0 and !self.device_handle.valid()) or
+                    (self.device_handles != 0 and self.device_handle.valid()));
         }
 
         pub fn id(self: DeclaredAllocation) ?preimage.Hash {
@@ -92,14 +107,16 @@ pub const App = struct {
             const memory_amount = std.math.cast(u64, self.memory_bytes) orelse return null;
             const storage_amount = std.math.cast(u64, self.storage_bytes) orelse return null;
             const slot_amount = std.math.cast(u64, self.storage_slots) orelse return null;
-            var raw: [48]u8 = undefined;
+            var raw: [allocation_body_size]u8 = undefined;
             var writer = preimage.Writer.init(&raw);
             if (!writer.writeU64(memory_amount) or
                 !writer.writeU64(storage_amount) or
                 !writer.writeU64(slot_amount) or
                 !writer.writeU64(self.execution_ticks) or
                 !writer.writeU64(self.route_handles) or
-                !writer.writeU64(self.device_handles))
+                !writer.writeU64(self.device_handles) or
+                !writer.hash(self.route_handle) or
+                !writer.id(self.device_handle))
             {
                 return null;
             }
@@ -108,7 +125,7 @@ pub const App = struct {
     };
 
     pub const manifest_magic = "ERAPP001";
-    pub const manifest_body_size = 96;
+    pub const manifest_body_size = manifest_allocation_offset + allocation_body_size;
     pub const manifest_flags_offset = 8;
     pub const manifest_code_hash_offset = 16;
     pub const manifest_allocation_offset = 48;
@@ -135,7 +152,7 @@ pub const App = struct {
             return bytes.copy(out[0..manifest_magic.len], manifest_magic) and
                 bytes.store32(out[manifest_flags_offset..][0..4], self.flags) and
                 bytes.copy(out[manifest_code_hash_offset..][0..preimage.hash_size], &self.code_hash) and
-                writeAllocationBody(self.allocation, out[manifest_allocation_offset..][0..48]);
+                writeAllocationBody(self.allocation, out[manifest_allocation_offset..][0..allocation_body_size]);
         }
 
         pub fn decodeBody(in: []const u8) ?Manifest {
@@ -146,7 +163,7 @@ pub const App = struct {
             _ = bytes.copy(&code_hash, in[manifest_code_hash_offset..][0..preimage.hash_size]);
             const manifest = Manifest{
                 .code_hash = code_hash,
-                .allocation = readAllocationBody(in[manifest_allocation_offset..][0..48]) orelse return null,
+                .allocation = readAllocationBody(in[manifest_allocation_offset..][0..allocation_body_size]) orelse return null,
                 .flags = flags,
             };
             return if (manifest.valid()) manifest else null;
@@ -385,8 +402,6 @@ pub const App = struct {
                 .memory = child_memory,
                 .storage = child_storage,
                 .execution_ticks = 1,
-                .route_handles = 1,
-                .device_handles = 1,
             },
             .receipt = receipt,
         };
@@ -399,6 +414,8 @@ pub const App = struct {
         if (allocation.execution_ticks > self.execution_ticks) return error.NoExecution;
         if (allocation.route_handles > self.route_handles) return error.NoRoute;
         if (allocation.device_handles > self.device_handles) return error.NoDevice;
+        if (allocation.route_handles != 0 and !bytes.eql(&allocation.route_handle, &self.route_handle)) return error.NoRoute;
+        if (allocation.device_handles != 0 and !allocation.device_handle.eql(self.device_handle)) return error.NoDevice;
 
         const child_memory = self.memory.split(allocation.memory_bytes) orelse return error.NoMemory;
         const child_storage = self.storage.split(.{
@@ -428,6 +445,8 @@ pub const App = struct {
                 .execution_ticks = allocation.execution_ticks,
                 .route_handles = allocation.route_handles,
                 .device_handles = allocation.device_handles,
+                .route_handle = allocation.route_handle,
+                .device_handle = allocation.device_handle,
             },
             .receipt = receipt,
         };
@@ -474,6 +493,8 @@ pub const App = struct {
         child.execution_ticks = 0;
         child.route_handles = 0;
         child.device_handles = 0;
+        child.route_handle = [_]u8{0} ** preimage.hash_size;
+        child.device_handle = .{ .bytes = [_]u8{0} ** identity.id_size };
         child.can_spawn_children = false;
         return .{
             .parent = self.id.id,
@@ -485,6 +506,8 @@ pub const App = struct {
 
     pub fn createRelayEnvelope(self: App, route: relay.Route, sequence: u64, payload_object: preimage.Hash, payload_hash: preimage.Hash) ?relay.Envelope {
         if (self.route_handles == 0) return null;
+        const route_id = route.id() orelse return null;
+        if (!bytes.eql(&route_id, &self.route_handle)) return null;
         if (!route.source.eql(self.id.id)) return null;
         var envelope = relay.Envelope.init(route, sequence, payload_object, payload_hash) orelse return null;
         if (!envelope.sign(self.id)) return null;
@@ -493,6 +516,8 @@ pub const App = struct {
 
     pub fn receiveRelayEnvelope(self: App, route: relay.Route, envelope: relay.Envelope, now: clock.Stamp) relay.RouteError!Received {
         if (self.route_handles == 0) return error.WrongDestination;
+        const route_id = route.id() orelse return error.InvalidRoute;
+        if (!bytes.eql(&route_id, &self.route_handle)) return error.WrongDestination;
         try relay.deliverTo(route, envelope, self.id, now);
         return .{
             .app = self.id.id,
@@ -525,7 +550,7 @@ pub const App = struct {
     }
 
     pub fn useDevice(self: App, device: identity.Identity) bool {
-        return self.device_handles != 0 and device.kind == .device;
+        return self.device_handles != 0 and device.kind == .device and device.id.eql(self.device_handle);
     }
 
     pub fn writeManifestObject(owner: identity.Identity, manifest: Manifest, epoch: clock.Stamp, out: []u8) object.Error![]u8 {
@@ -682,7 +707,7 @@ fn objectRequiresSeal(req: object.Requirements) bool {
 }
 
 fn writeAllocationBody(allocation: App.DeclaredAllocation, out: []u8) bool {
-    if (!allocation.valid() or out.len < 48) return false;
+    if (!allocation.valid() or out.len < allocation_body_size) return false;
     const memory_amount = std.math.cast(u64, allocation.memory_bytes) orelse return false;
     const storage_amount = std.math.cast(u64, allocation.storage_bytes) orelse return false;
     const slot_amount = std.math.cast(u64, allocation.storage_slots) orelse return false;
@@ -691,11 +716,17 @@ fn writeAllocationBody(allocation: App.DeclaredAllocation, out: []u8) bool {
         bytes.store64(out[16..24], slot_amount) and
         bytes.store64(out[24..32], allocation.execution_ticks) and
         bytes.store64(out[32..40], allocation.route_handles) and
-        bytes.store64(out[40..48], allocation.device_handles);
+        bytes.store64(out[40..48], allocation.device_handles) and
+        bytes.copy(out[allocation_count_body_size..][0..preimage.hash_size], &allocation.route_handle) and
+        bytes.copy(out[allocation_count_body_size + preimage.hash_size ..][0..identity.id_size], &allocation.device_handle.bytes);
 }
 
 fn readAllocationBody(in: []const u8) ?App.DeclaredAllocation {
-    if (in.len < 48) return null;
+    if (in.len < allocation_body_size) return null;
+    var route_handle: preimage.Hash = undefined;
+    var device_handle_bytes: [identity.id_size]u8 = undefined;
+    _ = bytes.copy(&route_handle, in[allocation_count_body_size..][0..preimage.hash_size]);
+    _ = bytes.copy(&device_handle_bytes, in[allocation_count_body_size + preimage.hash_size ..][0..identity.id_size]);
     const allocation = App.DeclaredAllocation{
         .memory_bytes = std.math.cast(usize, bytes.load64(in[0..8]) orelse return null) orelse return null,
         .storage_bytes = std.math.cast(usize, bytes.load64(in[8..16]) orelse return null) orelse return null,
@@ -703,6 +734,8 @@ fn readAllocationBody(in: []const u8) ?App.DeclaredAllocation {
         .execution_ticks = bytes.load64(in[24..32]) orelse return null,
         .route_handles = bytes.load64(in[32..40]) orelse return null,
         .device_handles = bytes.load64(in[40..48]) orelse return null,
+        .route_handle = route_handle,
+        .device_handle = .{ .bytes = device_handle_bytes },
     };
     return if (allocation.valid()) allocation else null;
 }
@@ -812,8 +845,8 @@ test "declared allocation bounds app child work receipts and clean reclaim" {
     const parent_storage_bytes = 256;
     const parent_storage_slots = 8;
     const parent_execution_ticks = 16;
-    const parent_route_handles = 2;
-    const parent_device_handles = 2;
+    const parent_route_handles = 1;
+    const parent_device_handles = 1;
     const child_memory_bytes = 32;
     const child_storage_bytes = 64;
     const child_storage_slots = 4;
@@ -844,6 +877,19 @@ test "declared allocation bounds app child work receipts and clean reclaim" {
     const child_id = identity.Identity.init(.app, identity.Source.prepare(.hash, &preimage.rawHash("declared child")).?, start).?;
     const grandchild_id = identity.Identity.init(.app, identity.Source.prepare(.hash, &preimage.rawHash("declared grandchild")).?, start).?;
     const great_grandchild_id = identity.Identity.init(.app, identity.Source.prepare(.hash, &preimage.rawHash("declared great grandchild")).?, start).?;
+    const route_admission = intent.admit(
+        user_id,
+        device_id,
+        child_id,
+        grandchild_id,
+        .sync_data,
+        .exports_data,
+        start,
+        intent.requestId("declared route use").?,
+    ).?;
+    const route = relay.Route.init(route_admission, child_id, grandchild_id, .sync_data, .exports_data, hashMaterial("declared route policy")).?;
+    const route_id = route.id().?;
+    const wrong_device_id = identity.Identity.init(.device, identity.Source.prepare(.hash, &preimage.rawHash("wrong declared device")).?, start).?;
 
     const parent_allocation = App.DeclaredAllocation{
         .memory_bytes = parent_memory_bytes,
@@ -852,6 +898,8 @@ test "declared allocation bounds app child work receipts and clean reclaim" {
         .execution_ticks = parent_execution_ticks,
         .route_handles = parent_route_handles,
         .device_handles = parent_device_handles,
+        .route_handle = route_id,
+        .device_handle = device_id.id,
     };
     var parent = App.initAllocated(
         parent_id,
@@ -867,6 +915,8 @@ test "declared allocation bounds app child work receipts and clean reclaim" {
         .execution_ticks = child_execution_ticks,
         .route_handles = child_route_handles,
         .device_handles = child_device_handles,
+        .route_handle = route_id,
+        .device_handle = device_id.id,
     };
     const child_manifest = App.Manifest{
         .code_hash = preimage.hash("edgerun:zig:v1:test-code", "declared child code"),
@@ -904,6 +954,7 @@ test "declared allocation bounds app child work receipts and clean reclaim" {
     try std.testing.expect(child.storage.put(&oversized_storage) == null);
     try std.testing.expect(!child.consumeExecution(child_execution_ticks + 1));
     try std.testing.expect(child.useDevice(device_id));
+    try std.testing.expect(!child.useDevice(wrong_device_id));
 
     const grandchild_authorization = intent.admit(
         user_id,
@@ -922,6 +973,8 @@ test "declared allocation bounds app child work receipts and clean reclaim" {
         .execution_ticks = grandchild_execution_ticks,
         .route_handles = grandchild_route_handles,
         .device_handles = grandchild_device_handles,
+        .route_handle = route_id,
+        .device_handle = device_id.id,
     };
     try std.testing.expectError(error.NoMemory, child.spawnDeclared(child_id, grandchild_id, start, grandchild_authorization, impossible_grandchild));
 
@@ -932,6 +985,8 @@ test "declared allocation bounds app child work receipts and clean reclaim" {
         .execution_ticks = grandchild_execution_ticks,
         .route_handles = child_route_handles + 1,
         .device_handles = grandchild_device_handles,
+        .route_handle = route_id,
+        .device_handle = device_id.id,
     };
     try std.testing.expectError(error.NoRoute, child.spawnDeclared(child_id, grandchild_id, start, grandchild_authorization, impossible_route_grandchild));
 
@@ -942,6 +997,8 @@ test "declared allocation bounds app child work receipts and clean reclaim" {
         .execution_ticks = grandchild_execution_ticks,
         .route_handles = grandchild_route_handles,
         .device_handles = grandchild_device_handles,
+        .route_handle = route_id,
+        .device_handle = device_id.id,
     };
     const grandchild_manifest = App.Manifest{
         .code_hash = preimage.hash("edgerun:zig:v1:test-code", "declared grandchild code"),
@@ -958,6 +1015,7 @@ test "declared allocation bounds app child work receipts and clean reclaim" {
     try std.testing.expectEqual(@as(u64, 0), child.device_handles);
     try std.testing.expect(!child.useDevice(device_id));
     try std.testing.expect(grandchild.useDevice(device_id));
+    try std.testing.expect(!grandchild.useDevice(wrong_device_id));
     const great_grandchild_authorization = intent.admit(
         user_id,
         device_id,
@@ -970,17 +1028,6 @@ test "declared allocation bounds app child work receipts and clean reclaim" {
     ).?;
     try std.testing.expectError(error.Unauthorized, grandchild.spawnDeclared(grandchild_id, great_grandchild_id, start, great_grandchild_authorization, grandchild_allocation));
 
-    const route_admission = intent.admit(
-        user_id,
-        device_id,
-        child_id,
-        grandchild_id,
-        .sync_data,
-        .exports_data,
-        start,
-        intent.requestId("declared route use").?,
-    ).?;
-    const route = relay.Route.init(route_admission, child_id, grandchild_id, .sync_data, .exports_data, hashMaterial("declared route policy")).?;
     try std.testing.expect(child.createRelayEnvelope(route, 1, hashMaterial("route object"), hashMaterial("route payload")) == null);
     try std.testing.expect(!grandchild.consumeExecution(grandchild_execution_ticks + 1));
 
@@ -1186,8 +1233,6 @@ test "apps exchange identity routed envelopes through relay boundary" {
 
     var source = App.initFromHostSlice(source_id, BoundedArena.init(.{ .base = &source_memory }), 64, 2).?;
     var target = App.initFromHostSlice(target_id, BoundedArena.init(.{ .base = &target_memory }), 64, 2).?;
-    source.route_handles = 1;
-    target.route_handles = 1;
     _ = App.initFromHostSlice(relay_id, BoundedArena.init(.{ .base = &relay_memory }), 32, 1).?;
 
     const admission = intent.admitWindow(
@@ -1204,6 +1249,11 @@ test "apps exchange identity routed envelopes through relay boundary" {
     ).?;
     var route = relay.Route.init(admission, source_id, target_id, .sync_data, .exports_data, hashMaterial("app route policy")).?;
     try std.testing.expect(route.appendRelay(relay_id));
+    const route_id = route.id().?;
+    source.route_handles = 1;
+    target.route_handles = 1;
+    source.route_handle = route_id;
+    target.route_handle = route_id;
 
     const envelope = source.createRelayEnvelope(route, 1, hashMaterial("message object"), hashMaterial("sealed to target")).?;
     var public_relay = relay.RelayApp.init(relay_id).?;
