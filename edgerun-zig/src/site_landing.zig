@@ -17,11 +17,22 @@ const content_pad: f32 = 28.0;
 const radius: f32 = 10.0;
 const terminal_h: f32 = 338.0;
 const page_top_pad: f32 = 48.0;
+const hero_copy_min_w: f32 = 460.0;
+const hero_terminal_min_w: f32 = 460.0;
+const hero_split_gap: f32 = 92.0;
+const hero_split_min_w: f32 = hero_terminal_min_w + hero_split_gap + hero_copy_min_w;
+const hero_split_terminal_y: f32 = 84.0;
+const hero_split_copy_y: f32 = 92.0;
+const hero_stacked_copy_y: f32 = 44.0;
+const hero_stacked_copy_max_w: f32 = 560.0;
+const hero_stacked_button_y: f32 = 374.0;
+const hero_stacked_terminal_y: f32 = 444.0;
+const hero_bottom_pad: f32 = 48.0;
 const impact_card_count: usize = 3;
 const impact_card_gap: f32 = 14.0;
 const impact_card_h: f32 = 190.0;
 const impact_card_min_w: f32 = 168.0;
-const impact_split_min_w: f32 = 920.0;
+const impact_split_min_w: f32 = 1120.0;
 const impact_split_text_fraction: f32 = 0.48;
 const impact_split_gap_fraction: f32 = 0.06;
 const impact_heading_y: f32 = 44.0;
@@ -40,7 +51,7 @@ const palette = struct {
     const text = ui.Color{ .r = 242, .g = 242, .b = 242 };
     const dim = ui.Color{ .r = 154, .g = 154, .b = 154 };
     const primary = ui.Color{ .r = 74, .g = 222, .b = 128 };
-    const primary_soft = ui.Color{ .r = 74, .g = 222, .b = 128, .a = 34 };
+    const neutral_soft = ui.Color{ .r = 32, .g = 32, .b = 32, .a = 190 };
     const danger = ui.Color{ .r = 239, .g = 68, .b = 68 };
     const orange = ui.Color{ .r = 249, .g = 115, .b = 22 };
     const blue = ui.Color{ .r = 96, .g = 165, .b = 250 };
@@ -93,7 +104,8 @@ pub fn render(scene: *ui.Scene, bounds: ui.Rect, state: State) ui.RenderError!vo
     const content = centered(bounds, content_wide);
     const page_y = header_h - state.scroll_y;
 
-    try renderNodeMap(scene, ui.Rect.init(bounds.x, bounds.y, bounds.w, @max(bounds.h, 680.0)), state);
+    const map_h = header_h + heroSectionHeight(content.w);
+    try renderNodeMap(scene, ui.Rect.init(bounds.x, bounds.y, bounds.w, map_h), state, content.w >= hero_split_min_w);
 
     const page_clip = ui.Rect.init(bounds.x, bounds.y + header_h, bounds.w, @max(1.0, bounds.h - header_h));
     if (try scene.pushClip(page_clip)) {
@@ -134,7 +146,7 @@ fn flowSections(scene: ?*ui.Scene, bounds: ui.Rect, state: State) ui.RenderError
 
 fn sectionHeight(content: ui.Rect, kind: SectionKind) f32 {
     return switch (kind) {
-        .hero => 620.0,
+        .hero => heroSectionHeight(content.w),
         .stats => 138.0,
         .problem => 420.0,
         .principles => if (content.w > 720.0) 430.0 else 682.0,
@@ -166,23 +178,54 @@ fn renderHeader(scene: *ui.Scene, bounds: ui.Rect, content: ui.Rect) ui.RenderEr
 }
 
 fn renderHero(scene: *ui.Scene, bounds: ui.Rect, state: State) ui.RenderError!void {
-    const split = bounds.w >= 840.0;
-    const left = if (split) ui.Rect.init(bounds.x, bounds.y + 84.0, bounds.w * 0.46, terminal_h) else ui.Rect.init(bounds.x, bounds.y + 330.0, bounds.w, terminal_h);
-    const right = if (split) ui.Rect.init(bounds.x + bounds.w * 0.54, bounds.y + 92.0, bounds.w * 0.46, 360.0) else ui.Rect.init(bounds.x, bounds.y + 44.0, bounds.w, 260.0);
+    const layout = heroLayout(bounds);
 
-    try renderTerminal(scene, left);
+    try renderTerminal(scene, layout.terminal);
 
-    const badge = ui.Rect.init(right.x, right.y, @min(330.0, right.w), 28.0);
+    const badge = ui.Rect.init(layout.copy.x, layout.copy.y, @min(330.0, layout.copy.w), 28.0);
     try nativeBadge(scene, badge, "Written in Zig. Zero dependencies.");
     try iconQuad(scene, ui.Rect.init(badge.x + 12.0, badge.y + 7.0, 14.0, 14.0), .terminal, palette.primary);
 
-    try title(scene, ui.Rect.init(right.x, right.y + 58.0, right.w, 92.0), "Your Node is");
-    try titleAccent(scene, ui.Rect.init(right.x, right.y + 118.0, right.w, 116.0), "Already Running");
-    try paragraph(scene, ui.Rect.init(right.x, right.y + 244.0, right.w, 88.0), "No signup. No account. No middlemen. EdgeRun starts a node in your browser the moment you arrive. Share your ID, connect directly, communicate privately.");
-    try primaryButton(scene, ui.Rect.init(right.x, right.y + 368.0, 142.0, 42.0), "Read the Docs", docs_button_id);
-    try outlineButton(scene, ui.Rect.init(right.x + 156.0, right.y + 368.0, 126.0, 42.0), "Browse Apps", apps_button_id);
+    try title(scene, ui.Rect.init(layout.copy.x, layout.copy.y + 58.0, layout.copy.w, 92.0), "Your Node is");
+    try titleAccent(scene, ui.Rect.init(layout.copy.x, layout.copy.y + 118.0, layout.copy.w, 116.0), "Already Running");
+    try heroParagraph(scene, ui.Rect.init(layout.copy.x, layout.copy.y + 244.0, layout.copy.w, 88.0), "No signup. No account. No middlemen. EdgeRun starts a node in your browser the moment you arrive. Share your ID, connect directly, communicate privately.");
+    try primaryButton(scene, ui.Rect.init(layout.copy.x, layout.button_y, 142.0, 42.0), "Read the Docs", docs_button_id);
+    try outlineButton(scene, ui.Rect.init(layout.copy.x + 156.0, layout.button_y, 126.0, 42.0), "Browse Apps", apps_button_id);
 
     _ = state;
+}
+
+const HeroLayout = struct {
+    terminal: ui.Rect,
+    copy: ui.Rect,
+    button_y: f32,
+};
+
+fn heroLayout(bounds: ui.Rect) HeroLayout {
+    if (bounds.w >= hero_split_min_w) {
+        const terminal = ui.Rect.init(bounds.x, bounds.y + hero_split_terminal_y, bounds.w * 0.46, terminal_h);
+        const copy = ui.Rect.init(bounds.x + bounds.w * 0.54, bounds.y + hero_split_copy_y, bounds.w * 0.46, 360.0);
+        return .{
+            .terminal = terminal,
+            .copy = copy,
+            .button_y = copy.y + 368.0,
+        };
+    }
+
+    const copy_w = @min(bounds.w, hero_stacked_copy_max_w);
+    return .{
+        .terminal = ui.Rect.init(bounds.x, bounds.y + hero_stacked_terminal_y, bounds.w, terminal_h),
+        .copy = ui.Rect.init(bounds.x, bounds.y + hero_stacked_copy_y, copy_w, hero_stacked_terminal_y - hero_stacked_copy_y),
+        .button_y = bounds.y + hero_stacked_button_y,
+    };
+}
+
+fn heroSectionHeight(width: f32) f32 {
+    const bounds = ui.Rect.init(0.0, 0.0, width, 1.0);
+    const layout = heroLayout(bounds);
+    const terminal_bottom = layout.terminal.y + layout.terminal.h;
+    const actions_bottom = layout.button_y + 42.0;
+    return @max(terminal_bottom, actions_bottom) - bounds.y + hero_bottom_pad;
 }
 
 fn renderTerminal(scene: *ui.Scene, bounds: ui.Rect) ui.RenderError!void {
@@ -387,7 +430,7 @@ fn renderFooter(scene: *ui.Scene, bounds: ui.Rect, content: ui.Rect) ui.RenderEr
     try footerColumn(scene, ui.Rect.init(content.x + content.w * 0.81, bounds.y + 44.0, 140.0, 150.0), "Community", &.{ "GitHub", "Discord", "Contributing" });
 }
 
-fn renderNodeMap(scene: *ui.Scene, bounds: ui.Rect, state: State) ui.RenderError!void {
+fn renderNodeMap(scene: *ui.Scene, bounds: ui.Rect, state: State, show_status: bool) ui.RenderError!void {
     const grid: f32 = 26.0;
     var x = bounds.x;
     while (x < bounds.x + bounds.w) : (x += grid) {
@@ -406,10 +449,10 @@ fn renderNodeMap(scene: *ui.Scene, bounds: ui.Rect, state: State) ui.RenderError
     };
     for (nodes) |node| {
         const p = latLng(bounds, node[0], node[1]);
-        try fill(scene, ui.Rect.init(p.x - 5.0, p.y - 5.0, 10.0, 10.0), if (node[2]) ui.Color{ .r = 74, .g = 222, .b = 128, .a = 34 } else ui.Color{ .r = 255, .g = 255, .b = 255, .a = 20 }, 5.0);
+        try fill(scene, ui.Rect.init(p.x - 5.0, p.y - 5.0, 10.0, 10.0), ui.Color{ .r = 255, .g = 255, .b = 255, .a = if (node[2]) 24 else 16 }, 5.0);
         try fill(scene, ui.Rect.init(p.x - 2.0, p.y - 2.0, 4.0, 4.0), if (node[2]) palette.primary else palette.muted, 2.0);
     }
-    if (state.scroll_y <= 1.0) {
+    if (show_status and state.scroll_y <= 1.0) {
         try text(scene, bounds.x + 24.0, bounds.y + bounds.h - 66.0, 170.0, 14.0, "113 nodes online", palette.primary);
         try text(scene, bounds.x + 24.0, bounds.y + bounds.h - 42.0, 190.0, 12.0, "1401.2 TB/s mesh bandwidth", palette.dim);
     }
@@ -422,9 +465,7 @@ fn navItem(scene: *ui.Scene, bounds: ui.Rect, label: []const u8, id: u32) ui.Ren
 }
 
 fn tag(scene: *ui.Scene, bounds: ui.Rect, label: []const u8, color: ui.Color) ui.RenderError!void {
-    var soft = color;
-    soft.a = 34;
-    try fill(scene, bounds, soft, 5.0);
+    try fill(scene, bounds, palette.neutral_soft, 5.0);
     try alignedText(scene, bounds.x + 8.0, bounds.y + 6.0, bounds.w - 16.0, 10.0, label, color, .center);
 }
 
@@ -443,6 +484,10 @@ fn heading(scene: *ui.Scene, bounds: ui.Rect, first: []const u8, second: []const
 
 fn paragraph(scene: *ui.Scene, bounds: ui.Rect, value: []const u8) ui.RenderError!void {
     try scene.pushWrappedText(bounds, value, palette.dim, .{ .line_height = 18.0, .average_char_width = 8.3, .max_lines = 6 });
+}
+
+fn heroParagraph(scene: *ui.Scene, bounds: ui.Rect, value: []const u8) ui.RenderError!void {
+    try scene.pushWrappedText(bounds, value, palette.dim, .{ .line_height = 18.0, .average_char_width = 11.5, .max_lines = 6 });
 }
 
 fn impactParagraph(scene: *ui.Scene, bounds: ui.Rect, value: []const u8) ui.RenderError!void {
@@ -500,11 +545,11 @@ fn percentLabel(value: f32) []const u8 {
 fn principleCard(scene: *ui.Scene, bounds: ui.Rect, icon_value: icon.Icon, name: []const u8, detail: []const u8, code: []const u8) ui.RenderError!void {
     try nativeCard(scene, bounds, "", "");
     const icon_box = ui.Rect.init(bounds.x + 18.0, bounds.y + 18.0, 40.0, 40.0);
-    try fill(scene, icon_box, palette.primary_soft, 9.0);
+    try fill(scene, icon_box, palette.neutral_soft, 9.0);
     try iconQuad(scene, icon_box.insetUniform(10.0), icon_value, palette.primary);
     try text(scene, bounds.x + 74.0, bounds.y + 18.0, bounds.w - 92.0, 16.0, name, palette.text);
     try paragraph(scene, ui.Rect.init(bounds.x + 74.0, bounds.y + 40.0, bounds.w - 92.0, 28.0), detail);
-    try fill(scene, ui.Rect.init(bounds.x + 74.0, bounds.y + 76.0, @min(bounds.w - 92.0, 210.0), 24.0), ui.Color{ .r = 74, .g = 222, .b = 128, .a = 18 }, 4.0);
+    try fill(scene, ui.Rect.init(bounds.x + 74.0, bounds.y + 76.0, @min(bounds.w - 92.0, 210.0), 24.0), palette.neutral_soft, 4.0);
     try text(scene, bounds.x + 82.0, bounds.y + 83.0, bounds.w - 108.0, 11.0, code, palette.primary);
 }
 
@@ -673,6 +718,7 @@ test "landing page content height reaches footer without extra scroll space" {
 
 test "impact section cards stay inside measured section" {
     const wide = ui.Rect.init(0.0, 0.0, content_wide, impactSectionHeight(content_wide));
+    const medium = ui.Rect.init(0.0, 0.0, 968.0, impactSectionHeight(968.0));
     const compact_width = impact_card_min_w * 2.0 + impact_card_gap - 1.0;
     const compact = ui.Rect.init(0.0, 0.0, compact_width, impactSectionHeight(compact_width));
 
@@ -682,11 +728,31 @@ test "impact section cards stay inside measured section" {
         try std.testing.expect(rectInside(wide, wide_layout.card(index)));
     }
 
+    const medium_layout = impactLayout(medium);
+    try std.testing.expect(medium_layout.cards.y > medium_layout.copy.y);
+    for (0..impact_card_count) |index| {
+        try std.testing.expect(rectInside(medium, medium_layout.card(index)));
+    }
+
     const compact_layout = impactLayout(compact);
     try std.testing.expect(compact_layout.cols < wide_layout.cols);
     for (0..impact_card_count) |index| {
         try std.testing.expect(rectInside(compact, compact_layout.card(index)));
     }
+}
+
+test "stacked hero keeps actions clear of terminal" {
+    const narrow = ui.Rect.init(0.0, 0.0, 768.0, heroSectionHeight(768.0));
+    const layout = heroLayout(narrow);
+    try std.testing.expect(layout.button_y + 42.0 < layout.terminal.y);
+    try std.testing.expect(rectInside(narrow, layout.terminal));
+}
+
+test "split hero keeps actions inside measured section" {
+    const split = ui.Rect.init(0.0, 0.0, hero_split_min_w, heroSectionHeight(hero_split_min_w));
+    const layout = heroLayout(split);
+    try std.testing.expect(layout.button_y + 42.0 < split.y + split.h);
+    try std.testing.expect(rectInside(split, layout.terminal));
 }
 
 fn hasText(commands: []const ui.Command, value: []const u8) bool {
