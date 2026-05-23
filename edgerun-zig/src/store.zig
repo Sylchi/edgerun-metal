@@ -233,23 +233,23 @@ pub const Store = struct {
         return self.slots.items.len;
     }
 
-    pub fn put(self: *Store, value: []const u8) ?[hash_size]u8 {
+    pub fn putRawBlob(self: *Store, value: []const u8) ?[hash_size]u8 {
         return self.putOwned(.blob, null, value);
     }
 
-    pub fn putTypedBlob(self: *Store, content_type: u32, value: []const u8) ?[hash_size]u8 {
+    pub fn putTypedRawBlob(self: *Store, content_type: u32, value: []const u8) ?[hash_size]u8 {
         return self.putTypedOwnedBlob(null, content_type, value);
     }
 
-    pub fn putTypedOwnedBlob(self: *Store, owner: ?identity.Id, content_type: u32, value: []const u8) ?[hash_size]u8 {
+    fn putTypedOwnedBlob(self: *Store, owner: ?identity.Id, content_type: u32, value: []const u8) ?[hash_size]u8 {
         return self.putTypedOwned(.blob, owner, content_type, value);
     }
 
-    pub fn putOwned(self: *Store, kind: EntryKind, owner: ?identity.Id, value: []const u8) ?[hash_size]u8 {
+    fn putOwned(self: *Store, kind: EntryKind, owner: ?identity.Id, value: []const u8) ?[hash_size]u8 {
         return self.putTypedOwned(kind, owner, defaultContentType(kind), value);
     }
 
-    pub fn putTypedOwned(self: *Store, kind: EntryKind, owner: ?identity.Id, content_type: u32, value: []const u8) ?[hash_size]u8 {
+    fn putTypedOwned(self: *Store, kind: EntryKind, owner: ?identity.Id, content_type: u32, value: []const u8) ?[hash_size]u8 {
         if (owner) |id| {
             if (!id.valid()) return null;
         }
@@ -577,11 +577,11 @@ pub const PersistentStore = struct {
         };
     }
 
-    pub fn putBlob(self: *PersistentStore, payload: []const u8) Error![hash_size]u8 {
-        return self.putTypedBlob(type_raw, payload);
+    pub fn putRawBlob(self: *PersistentStore, payload: []const u8) Error![hash_size]u8 {
+        return self.putTypedRawBlob(type_raw, payload);
     }
 
-    pub fn putTypedBlob(self: *PersistentStore, content_type: u32, payload: []const u8) Error![hash_size]u8 {
+    pub fn putTypedRawBlob(self: *PersistentStore, content_type: u32, payload: []const u8) Error![hash_size]u8 {
         if (payload.len == 0 or content_type == type_object) return error.BadArgument;
         const hash = preimage.rawHash(payload);
         if (self.findBlob(hash)) |_| return hash;
@@ -1121,7 +1121,7 @@ test "store consumes caller-owned region without allocation" {
     var slots: [4]Blob = undefined;
     var store = Store.init(.{ .base = &data }, &slots);
 
-    const hash = store.put("hello").?;
+    const hash = store.putRawBlob("hello").?;
     try std.testing.expectEqualStrings("hello", store.get(hash).?);
     try std.testing.expectEqual(@as(usize, 59), store.data.len());
 }
@@ -1131,7 +1131,7 @@ test "store can be carved from an app-owned arena" {
     var arena = BoundedArena.init(.{ .base = &memory });
     var s = Store.initFromArena(&arena, .{ .data_bytes = 64, .slot_count = 4 }).?;
 
-    const hash = s.put("owned storage").?;
+    const hash = s.putRawBlob("owned storage").?;
     try std.testing.expectEqualStrings("owned storage", s.get(hash).?);
     try std.testing.expect(s.data.len() < 64);
     try std.testing.expect(arena.remaining() < 960);
@@ -1146,9 +1146,9 @@ test "store entries are typed and owner scoped" {
     const epoch = clock.Stamp{ .keeper = keeper };
     const app = identity.Identity.init(.app, identity.Source.prepare(.hash, &preimage.rawHash("app")).?, epoch).?;
 
-    const hash = s.putOwned(.object, app.id, "state").?;
-    try std.testing.expectEqualStrings("state", s.getOwned(.object, app.id, hash).?);
-    try std.testing.expect(s.getOwned(.blob, app.id, hash) == null);
+    const hash = s.putOwned(.blob, app.id, "state").?;
+    try std.testing.expectEqualStrings("state", s.getOwned(.blob, app.id, hash).?);
+    try std.testing.expect(s.getOwned(.blob, null, hash) == null);
 }
 
 test "typed blobs expose content type and deterministic stats root" {
@@ -1269,7 +1269,7 @@ test "store split delegates data and unused slot capacity" {
     try std.testing.expectEqual(@as(usize, 24), child.data.len());
     try std.testing.expectEqual(@as(usize, 2), child.slotCapacity());
 
-    const hash = child.put("child data").?;
+    const hash = child.putRawBlob("child data").?;
     try std.testing.expectEqualStrings("child data", child.get(hash).?);
     try std.testing.expectEqual(@as(usize, 40), parent.data.len());
 }
@@ -1280,7 +1280,7 @@ test "store reclaim returns consumed child storage and clears slots" {
     var parent = Store.init(.{ .base = &data }, &slots);
     var child = parent.split(.{ .data_bytes = 24, .slot_count = 2 }).?;
 
-    const hash = child.put("child data").?;
+    const hash = child.putRawBlob("child data").?;
     try std.testing.expectEqualStrings("child data", child.get(hash).?);
     try std.testing.expectEqual(@as(usize, 14), child.data.len());
 
@@ -1371,9 +1371,9 @@ test "persistent store replays append log after reopen" {
     var store_a = try PersistentStore.open(io_state.io(), persistentTestConfig(), &blobs_a, &keys_a, &scratch_a);
 
     try std.testing.expectEqual(@as(u64, superblock_size), io_state.used);
-    const hash = try store_a.putBlob("durable bytes");
+    const hash = try store_a.putRawBlob("durable bytes");
     const size_after_first = io_state.used;
-    try std.testing.expectEqual(hash, try store_a.putBlob("durable bytes"));
+    try std.testing.expectEqual(hash, try store_a.putRawBlob("durable bytes"));
     try std.testing.expectEqual(size_after_first, io_state.used);
     try store_a.close();
     try std.testing.expectEqual(@as(usize, 0), io_state.sync_count);
@@ -1395,8 +1395,8 @@ test "persistent store replays latest index value" {
     var scratch_a: [sdcard_block_bytes]u8 = undefined;
     var store_a = try PersistentStore.open(io_state.io(), persistentTestConfig(), &blobs_a, &keys_a, &scratch_a);
 
-    const first = try store_a.putBlob("first");
-    const second = try store_a.putBlob("second");
+    const first = try store_a.putRawBlob("first");
+    const second = try store_a.putRawBlob("second");
     try store_a.blobIndexPut(index_default, "row/current", first);
     try store_a.blobIndexPut(index_default, "row/current", second);
 
@@ -1451,7 +1451,7 @@ test "persistent store truncates corrupt tail during recovery" {
     var keys_a: [4]PersistentIndexSlot = undefined;
     var scratch_a: [sdcard_block_bytes]u8 = undefined;
     var store_a = try PersistentStore.open(io_state.io(), persistentTestConfig(), &blobs_a, &keys_a, &scratch_a);
-    _ = try store_a.putBlob("valid");
+    _ = try store_a.putRawBlob("valid");
     const valid_size = io_state.used;
     try std.testing.expect(PersistentTestIo.writeAt(&io_state, io_state.used, "junk"));
     try std.testing.expect(io_state.used > valid_size);
@@ -1473,7 +1473,7 @@ test "persistent store block-backed io stays aligned" {
     var store_a = try PersistentStore.open(io_state.io(), config, &blobs_a, &keys_a, &scratch_a);
 
     try std.testing.expectEqual(@as(u64, sdcard_block_bytes), io_state.used);
-    const hash = try store_a.putBlob("block bytes");
+    const hash = try store_a.putRawBlob("block bytes");
     try std.testing.expectEqual(@as(u64, 0), io_state.used & (sdcard_block_bytes - 1));
 
     var blobs_b: [4]PersistentBlobSlot = undefined;
@@ -1491,7 +1491,7 @@ test "persistent store verify detects payload corruption" {
     var scratch: [sdcard_block_bytes]u8 = undefined;
     var store = try PersistentStore.open(io_state.io(), persistentTestConfig(), &blobs, &keys, &scratch);
 
-    _ = try store.putBlob("hash checked");
+    _ = try store.putRawBlob("hash checked");
     io_state.bytes[superblock_size + record_header_size] ^= 0x01;
     try std.testing.expectError(error.Corrupt, store.verify());
 }
