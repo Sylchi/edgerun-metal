@@ -240,7 +240,9 @@ pub const App = struct {
                 self.spawn_receipt.storage_slots.amount == slot_amount and
                 self.spawn_receipt.execution_ticks.amount == self.allocation.execution_ticks and
                 self.spawn_receipt.route_handles.amount == self.allocation.route_handles and
-                self.spawn_receipt.device_handles.amount == self.allocation.device_handles;
+                self.spawn_receipt.device_handles.amount == self.allocation.device_handles and
+                bytes.eql(&self.spawn_receipt.route_handle, &self.allocation.route_handle) and
+                self.spawn_receipt.device_handle.eql(self.allocation.device_handle);
         }
 
         pub fn id(self: WorkReceipt) ?preimage.Hash {
@@ -435,6 +437,8 @@ pub const App = struct {
             allocation.execution_ticks,
             allocation.route_handles,
             allocation.device_handles,
+            allocation.route_handle,
+            allocation.device_handle,
         ) orelse return error.BadAllocation;
 
         return .{
@@ -484,6 +488,8 @@ pub const App = struct {
         if (receipt.execution_ticks.amount != child.execution_ticks) return error.Corrupt;
         if (receipt.route_handles.amount != child.route_handles) return error.Corrupt;
         if (receipt.device_handles.amount != child.device_handles) return error.Corrupt;
+        if (!bytes.eql(&receipt.route_handle, &child.route_handle)) return error.Corrupt;
+        if (!receipt.device_handle.eql(child.device_handle)) return error.Corrupt;
         if (!self.memory.canReclaim(child.memory) or !self.storage.canReclaim(child.storage)) return error.Corrupt;
         if (!self.memory.reclaim(&child.memory)) return error.Corrupt;
         if (!self.storage.reclaim(&child.storage)) return error.Corrupt;
@@ -1041,8 +1047,12 @@ test "declared allocation bounds app child work receipts and clean reclaim" {
     try std.testing.expect(bytes.eql(&work.manifest, &grandchild_manifest_id));
     try std.testing.expect(bytes.nonzero(&child_manifest_id));
     try std.testing.expect(work.clock_start.order(work.clock_end) < 0);
+    var wrong_route_receipt = spawned_grandchild.receipt;
+    wrong_route_receipt.route_handle = hashMaterial("wrong receipt route");
+    try std.testing.expect(grandchild.completeWork(child.id.id, input_hash, output_hash, grandchild_manifest_id, start, end, grandchild_allocation, wrong_route_receipt) == null);
 
     try std.testing.expectError(error.Corrupt, parent.reclaimChild(&child, spawned_child.receipt, end));
+    try std.testing.expectError(error.Corrupt, child.reclaimChild(&grandchild, wrong_route_receipt, end));
     const grandchild_reclaim = try child.reclaimChild(&grandchild, spawned_grandchild.receipt, end);
     try std.testing.expect(grandchild_reclaim.valid());
     try std.testing.expectEqual(@as(usize, 0), grandchild.memory.remaining());

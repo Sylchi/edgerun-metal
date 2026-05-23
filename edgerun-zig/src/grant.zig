@@ -5,6 +5,7 @@ const identity = @import("identity.zig");
 const preimage = @import("preimage.zig");
 
 pub const id_size = preimage.hash_size;
+const spawn_receipt_id_body_size = identity.id_size * 2 + preimage.hash_size * 6 + preimage.hash_size + identity.id_size;
 
 pub const Resource = enum(u16) {
     memory = 1,
@@ -56,6 +57,8 @@ pub const SpawnReceipt = struct {
     execution_ticks: Grant,
     route_handles: Grant,
     device_handles: Grant,
+    route_handle: preimage.Hash = [_]u8{0} ** preimage.hash_size,
+    device_handle: identity.Id = .{ .bytes = [_]u8{0} ** identity.id_size },
 
     pub fn valid(self: SpawnReceipt) bool {
         return self.parent.valid() and
@@ -83,7 +86,11 @@ pub const SpawnReceipt = struct {
             self.storage_slots.subject.eql(self.child) and
             self.execution_ticks.subject.eql(self.child) and
             self.route_handles.subject.eql(self.child) and
-            self.device_handles.subject.eql(self.child);
+            self.device_handles.subject.eql(self.child) and
+            ((self.route_handles.amount == 0 and bytes.zeroed(&self.route_handle)) or
+                (self.route_handles.amount != 0 and bytes.nonzero(&self.route_handle))) and
+            ((self.device_handles.amount == 0 and !self.device_handle.valid()) or
+                (self.device_handles.amount != 0 and self.device_handle.valid()));
     }
 
     pub fn id(self: SpawnReceipt) ?[id_size]u8 {
@@ -95,7 +102,7 @@ pub const SpawnReceipt = struct {
         const execution_id = self.execution_ticks.id().?;
         const route_id = self.route_handles.id().?;
         const device_id = self.device_handles.id().?;
-        var raw: [256]u8 = undefined;
+        var raw: [spawn_receipt_id_body_size]u8 = undefined;
         var writer = preimage.Writer.init(&raw);
         if (!writer.id(self.parent) or
             !writer.id(self.child) or
@@ -104,7 +111,9 @@ pub const SpawnReceipt = struct {
             !writer.hash(storage_slots_id) or
             !writer.hash(execution_id) or
             !writer.hash(route_id) or
-            !writer.hash(device_id))
+            !writer.hash(device_id) or
+            !writer.hash(self.route_handle) or
+            !writer.id(self.device_handle))
         {
             return null;
         }
@@ -148,14 +157,18 @@ pub const MemoryViewReceipt = struct {
 };
 
 pub fn spawnReceipt(parent: identity.Identity, child: identity.Identity, epoch: clock.Stamp, memory_bytes: usize, storage_bytes: usize, storage_slots: usize) ?SpawnReceipt {
-    return spawnReceiptAllocated(parent, child, epoch, memory_bytes, storage_bytes, storage_slots, 1, 0, 0);
+    return spawnReceiptAllocated(parent, child, epoch, memory_bytes, storage_bytes, storage_slots, 1, 0, 0, [_]u8{0} ** preimage.hash_size, .{ .bytes = [_]u8{0} ** identity.id_size });
 }
 
-pub fn spawnReceiptAllocated(parent: identity.Identity, child: identity.Identity, epoch: clock.Stamp, memory_bytes: usize, storage_bytes: usize, storage_slots: usize, execution_ticks: u64, route_handles: u64, device_handles: u64) ?SpawnReceipt {
+pub fn spawnReceiptAllocated(parent: identity.Identity, child: identity.Identity, epoch: clock.Stamp, memory_bytes: usize, storage_bytes: usize, storage_slots: usize, execution_ticks: u64, route_handles: u64, device_handles: u64, route_handle: preimage.Hash, device_handle: identity.Id) ?SpawnReceipt {
     const memory_amount = std.math.cast(u64, memory_bytes) orelse return null;
     const storage_amount = std.math.cast(u64, storage_bytes) orelse return null;
     const slot_amount = std.math.cast(u64, storage_slots) orelse return null;
     if (execution_ticks == 0) return null;
+    if (route_handles == 0 and bytes.nonzero(&route_handle)) return null;
+    if (route_handles != 0 and bytes.zeroed(&route_handle)) return null;
+    if (device_handles == 0 and device_handle.valid()) return null;
+    if (device_handles != 0 and !device_handle.valid()) return null;
 
     return .{
         .parent = parent.id,
@@ -202,6 +215,8 @@ pub fn spawnReceiptAllocated(parent: identity.Identity, child: identity.Identity
             .amount = device_handles,
             .epoch = epoch,
         },
+        .route_handle = route_handle,
+        .device_handle = device_handle,
     };
 }
 
@@ -229,7 +244,10 @@ test "spawn receipt deterministically records delegated resources" {
     const epoch = clock.Stamp{ .keeper = keeper };
     const parent = identity.Identity.init(.app, identity.Source.prepare(.hash, &preimage.rawHash("parent")).?, epoch).?;
     const child = identity.Identity.init(.app, identity.Source.prepare(.hash, &preimage.rawHash("child")).?, epoch).?;
+    const device = identity.Identity.init(.device, identity.Source.prepare(.hash, &preimage.rawHash("spawn receipt device")).?, epoch).?;
+    const route_handle = preimage.hash("edgerun:zig:v1:test-route", "spawn receipt route");
     const receipt = spawnReceipt(parent, child, epoch, 16, 32, 2).?;
+    const allocated_receipt = spawnReceiptAllocated(parent, child, epoch, 16, 32, 2, 4, 1, 1, route_handle, device.id).?;
 
     try std.testing.expect(receipt.valid());
     try std.testing.expect(bytes.nonzero(&receipt.id().?));
@@ -237,6 +255,13 @@ test "spawn receipt deterministically records delegated resources" {
     try std.testing.expectEqual(Resource.execution_ticks, receipt.execution_ticks.resource);
     try std.testing.expectEqual(@as(u64, 0), receipt.route_handles.amount);
     try std.testing.expectEqual(@as(u64, 0), receipt.device_handles.amount);
+    try std.testing.expect(allocated_receipt.valid());
+    try std.testing.expectEqual(@as(u64, 1), allocated_receipt.route_handles.amount);
+    try std.testing.expectEqual(@as(u64, 1), allocated_receipt.device_handles.amount);
+    try std.testing.expect(bytes.eql(&route_handle, &allocated_receipt.route_handle));
+    try std.testing.expect(allocated_receipt.device_handle.eql(device.id));
+    try std.testing.expect(spawnReceiptAllocated(parent, child, epoch, 16, 32, 2, 4, 1, 1, [_]u8{0} ** preimage.hash_size, device.id) == null);
+    try std.testing.expect(spawnReceiptAllocated(parent, child, epoch, 16, 32, 2, 4, 1, 1, route_handle, .{ .bytes = [_]u8{0} ** identity.id_size }) == null);
 }
 
 test "memory view receipt binds owner reader slice and byte range" {
