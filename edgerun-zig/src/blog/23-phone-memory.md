@@ -4,11 +4,9 @@ Photos, contacts, messages, notes, browser history, location, files, and app dat
 
 Today that context is fragmented across companies. Each company gets a slice. No single assistant can help you fully without becoming dangerously centralized.
 
-## Purpose
+The most useful assistant is the one that understands your real context. The most dangerous assistant is also the one that understands your real context unless it runs under your control.
 
-Connect personal data to AI and local assistants. The most useful assistant is the one that knows your life. The most dangerous assistant is also the one that knows your life, unless it runs under your control.
-
-## Visual idea
+## Personal context
 
 ```text
 photos + contacts + messages + notes + location + files
@@ -17,9 +15,15 @@ photos + contacts + messages + notes + location + files
   -> action
 ```
 
-## Interactive demo
+Context is the valuable part. A model without your data is generic. A model with all your data can summarize, search, plan, remind, draft, recover, and automate. But if that context must be uploaded into one cloud account, the assistant becomes a new central point of failure.
 
-A personal context map shows the same assistant task with company silos, centralized cloud import, and local user-owned storage. The reader can compare usefulness, risk, and control.
+## Three bad options
+
+- silos: every company knows one slice and the user does the integration manually
+- central import: one company gets everything and becomes dangerously powerful
+- no assistant: privacy is preserved by giving up useful computation
+
+The better path is local user-owned memory: import data locally, index it locally, run local AI first, and send only explicit sealed tasks to remote compute when needed.
 
 ## Main lesson
 

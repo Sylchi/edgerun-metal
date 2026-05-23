@@ -4,7 +4,7 @@ A VPN does not remove trust. It moves it.
 
 A VPN creates an encrypted tunnel from your device or router to someone else's network. That can be useful when your local network is hostile, censored, or untrusted. But the pipe ends somewhere, and at the end of that pipe is another network.
 
-## Purpose
+## The marketing problem
 
 Separate useful private connectivity from consumer privacy theater. The reader should leave understanding that VPN means "tunnel to another middleman," not "privacy solved."
 
@@ -75,7 +75,9 @@ So the sharper question is: why replace a regulated local network operator with 
 - metadata after the VPN exit
 - trust in the service you are using
 
-## Interactive demo
+## Who sees what
+
+[[demo:vpn_who_sees_what]]
 
 A who-sees-what map compares no VPN, commercial VPN, self-hosted VPN, end-to-end sealed message, and EdgeRun relay model.
 

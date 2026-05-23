@@ -1108,6 +1108,8 @@ test "declared allocation bounds app child work receipts and clean reclaim" {
     try std.testing.expectEqual(@as(u64, child_execution_ticks), child.execution_ticks);
     try std.testing.expectEqual(@as(u64, child_route_handles), child.route_handles);
     try std.testing.expectEqual(@as(u64, child_device_handles), child.device_handles);
+    try std.testing.expect(!child.memory.owns(memory_bytes[0..4]));
+    try std.testing.expect(!child.storage.owned.contains(storage_bytes[0..4]));
 
     const child_allocator = child.memory.allocator();
     _ = try child_allocator.alloc(u8, child_private_bytes);
@@ -1127,6 +1129,14 @@ test "declared allocation bounds app child work receipts and clean reclaim" {
         start,
         intent.requestId("declared grandchild spawn").?,
     ).?;
+    const forged_parent_slice = App.SharedMemory{
+        .owner = child.id.id,
+        .id = hashMaterial("forged parent memory slice"),
+        .offset = 0,
+        .bytes = memory_bytes[0..4],
+        .epoch = start,
+    };
+    try std.testing.expectError(error.Corrupt, child.shareMemoryReadOnly(grandchild_id.id, forged_parent_slice, start, grandchild_authorization));
     const impossible_grandchild = App.DeclaredAllocation{
         .memory_bytes = child_memory_bytes,
         .storage_bytes = grandchild_storage_bytes,

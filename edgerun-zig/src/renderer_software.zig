@@ -295,6 +295,14 @@ pub const Surface = struct {
                 self.iconLine(bounds, color, &.{ 0.28, 0.28, 0.72, 0.72 });
                 self.iconLine(bounds, color, &.{ 0.72, 0.28, 0.28, 0.72 });
             },
+            .github => {
+                self.iconCircle(bounds, color, 0.50, 0.43, 0.26);
+                self.iconLine(bounds, color, &.{ 0.32, 0.27, 0.28, 0.16, 0.42, 0.22 });
+                self.iconLine(bounds, color, &.{ 0.58, 0.22, 0.72, 0.16, 0.68, 0.27 });
+                self.iconLine(bounds, color, &.{ 0.42, 0.68, 0.36, 0.80, 0.26, 0.78 });
+                self.iconLine(bounds, color, &.{ 0.58, 0.68, 0.64, 0.80, 0.74, 0.78 });
+                self.iconLine(bounds, color, &.{ 0.50, 0.68, 0.50, 0.84 });
+            },
         }
     }
 

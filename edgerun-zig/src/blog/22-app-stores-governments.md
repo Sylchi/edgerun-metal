@@ -4,11 +4,9 @@ The app store is not just a shop. It is a border checkpoint, tax office, court, 
 
 App stores decide who can publish, what APIs apps can use, what payments are allowed, what content is acceptable, what apps are removed, what updates are allowed, what countries can access software, and what business models survive.
 
-## Purpose
+Whoever controls installation controls the practical law of the device.
 
-Explain distribution as power. Whoever controls installation controls what users are allowed to do with their own devices.
-
-## Visual idea
+## Distribution chain
 
 ```text
 developer
@@ -20,9 +18,11 @@ developer
   -> user installation
 ```
 
-## Interactive demo
+This chain can block malware and scams. It can also block competing payments, alternate browsers, emulators, repair tools, political apps, interoperability clients, adult content, crypto wallets, local runtimes, or anything that threatens the platform's business model.
 
-A gatekeeper map lets the reader submit a hypothetical app and watch it pass through publishing, API, content, payment, region, and update checkpoints.
+## Update power
+
+Distribution is not only initial installation. Updates matter more. If every security fix, feature change, and policy response needs gatekeeper approval, then the store governs the living app. It can delay fixes, require changes, remove capabilities, or make entire categories economically impossible.
 
 ## Main lesson
 

@@ -44,6 +44,7 @@ pub fn rect(value: icon.Icon) Rect {
         .user => at(232, 456),
         .wallet => at(344, 456),
         .x => at(456, 456),
+        .github => at(568, 456),
     };
 }
 
@@ -56,4 +57,5 @@ test "tabler atlas embeds canonical alpha bytes" {
     try std.testing.expectEqual(@as(u32, 232), rect(.app).x);
     try std.testing.expectEqual(@as(u32, 344), rect(.storage).x);
     try std.testing.expectEqual(@as(u32, 456), rect(.trust).x);
+    try std.testing.expectEqual(@as(u32, 568), rect(.github).x);
 }

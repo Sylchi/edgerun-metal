@@ -17,7 +17,7 @@ I had money, internet, a computer, and a place to live. But without a phone, soc
 
 That is when the problem becomes obvious: the smartphone is no longer just a device. It has become a private passport for ordinary life.
 
-## Purpose
+## The test exposes the design
 
 Expose that a society requiring one fragile proprietary device for food, transport, banking, identity, and communication is badly designed.
 
@@ -123,7 +123,7 @@ But ordinary people already bought powerful computers. They bought phones with f
 
 We bought personal supercomputers and turned them into remote controls for datacenters.
 
-## Interactive demo
+## Phone dependency checklist
 
 A phone dependency checklist asks which services the reader uses: banking, WhatsApp, Google, Apple, Facebook, Instagram, Telegram, work login, government services, crypto wallet, ride-hailing, food delivery, QR payments, password manager, authenticator app, email recovery, maps, SMS 2FA, and photo backup.
 

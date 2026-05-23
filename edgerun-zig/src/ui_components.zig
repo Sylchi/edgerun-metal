@@ -1,6 +1,7 @@
 const std = @import("std");
 const bytes = @import("bytes.zig");
 const clock = @import("clock.zig");
+const icon = @import("icon.zig");
 const ui_input = @import("input.zig");
 const object = @import("object.zig");
 const ui = @import("ui.zig");
@@ -113,6 +114,8 @@ pub const SurfaceVariant = enum {
 pub const RenderOptions = struct {
     style: ui.Style = .{},
     button_variant: ButtonVariant = .primary,
+    button_leading_icon: ?icon.Icon = null,
+    button_trailing_icon: ?icon.Icon = null,
     badge_variant: BadgeVariant = .accent,
     surface_variant: SurfaceVariant = .panel,
 };
@@ -273,29 +276,74 @@ fn renderBadge(scene: *ui.Scene, bounds: ui.Rect, label: []const u8, options: Re
 }
 
 fn renderButton(scene: *ui.Scene, bounds: ui.Rect, button: Button, options: RenderOptions) ui.RenderError!void {
+    const text_color = switch (options.button_variant) {
+        .primary => options.style.bg,
+        .outline => options.style.text,
+        .ghost => options.style.muted,
+    };
+    const icon_color = text_color;
     switch (options.button_variant) {
         .primary => {
             try scene.pushRect(bounds, options.style.accent, .fill, button_radius, 0.0);
             try scene.pushRect(bounds, options.style.accent, .border, button_radius, 0.0);
-            try scene.pushAlignedText(buttonTextBounds(bounds), button.label, options.style.bg, .center);
-            try scene.pushHit(.{ .slot = 0, .kind = .button, .id = button.id, .bounds = bounds });
         },
         .outline => {
             try scene.pushRect(bounds, options.style.panel, .fill, button_radius, 0.0);
             try scene.pushRect(bounds, options.style.border, .border, button_radius, 0.0);
-            try scene.pushAlignedText(buttonTextBounds(bounds), button.label, options.style.text, .center);
-            try scene.pushHit(.{ .slot = 0, .kind = .button, .id = button.id, .bounds = bounds });
         },
         .ghost => {
-            try scene.pushAlignedText(buttonTextBounds(bounds), button.label, options.style.muted, .center);
-            try scene.pushHit(.{ .slot = 0, .kind = .button, .id = button.id, .bounds = bounds });
+            try scene.pushRect(bounds, ui.Color.clear, .fill, button_radius, 0.0);
         },
     }
+    try renderButtonContent(scene, bounds, button.label, text_color, icon_color, options.button_leading_icon, options.button_trailing_icon);
+    try scene.pushHit(.{ .slot = 0, .kind = .button, .id = button.id, .bounds = bounds });
 }
 
 fn buttonTextBounds(bounds: ui.Rect) ui.Rect {
     const margin = @min(button_label_padding, bounds.w * 0.5);
     return ui.Rect.init(bounds.x + margin, bounds.y + (bounds.h - button_label_height) * 0.5, @max(1.0, bounds.w - margin * 2.0), button_label_height);
+}
+
+fn renderButtonContent(scene: *ui.Scene, bounds: ui.Rect, label: []const u8, text_color: ui.Color, icon_color: ui.Color, leading_icon: ?icon.Icon, trailing_icon: ?icon.Icon) ui.RenderError!void {
+    const has_leading = leading_icon != null;
+    const has_trailing = trailing_icon != null;
+    if (!has_leading and !has_trailing) {
+        try scene.pushAlignedText(buttonTextBounds(bounds), label, text_color, .center);
+        return;
+    }
+
+    const icon_count: usize = @intFromBool(has_leading) + @intFromBool(has_trailing);
+    const label_w = estimatedButtonLabelWidth(label);
+    const content_w = label_w +
+        @as(f32, @floatFromInt(icon_count)) * button_icon_size +
+        @as(f32, @floatFromInt(icon_count)) * button_icon_gap;
+    var cursor_x = bounds.x + @max(button_content_min_x, (bounds.w - content_w) * 0.5);
+    const icon_y = bounds.y + (bounds.h - button_icon_size) * 0.5;
+    const text_y = bounds.y + (bounds.h - button_label_height) * 0.5;
+
+    if (leading_icon) |value| {
+        try scene.pushIconQuad(.{
+            .bounds = ui.Rect.init(cursor_x, icon_y, button_icon_size, button_icon_size),
+            .atlas_id = icon.atlasId(value),
+            .color = icon_color,
+        });
+        cursor_x += button_icon_size + button_icon_gap;
+    }
+
+    try scene.pushAlignedText(ui.Rect.init(cursor_x, text_y, label_w, button_label_height), label, text_color, .start);
+    cursor_x += label_w + button_icon_gap;
+
+    if (trailing_icon) |value| {
+        try scene.pushIconQuad(.{
+            .bounds = ui.Rect.init(cursor_x, icon_y, button_icon_size, button_icon_size),
+            .atlas_id = icon.atlasId(value),
+            .color = icon_color,
+        });
+    }
+}
+
+fn estimatedButtonLabelWidth(label: []const u8) f32 {
+    return @max(button_label_min_width, @as(f32, @floatFromInt(label.len)) * button_label_average_w);
 }
 
 fn contentInset(bounds: ui.Rect, padding: f32) ?ui.Rect {
@@ -312,6 +360,11 @@ fn badgeLabelBounds(bounds: ui.Rect) ui.Rect {
 const button_radius: f32 = 7.0;
 const button_label_height: f32 = 14.0;
 const button_label_padding: f32 = 4.0;
+const button_label_average_w: f32 = 7.2;
+const button_label_min_width: f32 = 8.0;
+const button_icon_size: f32 = 18.0;
+const button_icon_gap: f32 = 8.0;
+const button_content_min_x: f32 = 8.0;
 const badge_height: f32 = 24.0;
 const badge_text_height: f32 = 13.0;
 const badge_padding_x: f32 = 12.0;
@@ -1327,7 +1380,7 @@ test "component render helper owns button variants and hit targets" {
     var scene = ui.Scene.init(&commands);
 
     try renderComponent(&scene, ui.Rect.init(0, 0, 120, 36), .{ .button = .{ .id = 501, .label = "Primary" } }, .{});
-    try renderComponent(&scene, ui.Rect.init(0, 44, 120, 36), .{ .button = .{ .id = 502, .label = "Outline" } }, .{ .button_variant = .outline });
+    try renderComponent(&scene, ui.Rect.init(0, 44, 120, 36), .{ .button = .{ .id = 502, .label = "Outline" } }, .{ .button_variant = .outline, .button_leading_icon = .search });
 
     const primary_hit = ui_input.hitTest(scene.written(), 12, 12).?;
     try std.testing.expectEqual(@as(u32, 501), primary_hit.id);
@@ -1335,6 +1388,7 @@ test "component render helper owns button variants and hit targets" {
     try std.testing.expectEqual(@as(u32, 502), outline_hit.id);
     try std.testing.expect(hasText(scene.written(), "Primary"));
     try std.testing.expect(hasText(scene.written(), "Outline"));
+    try std.testing.expect(hasIcon(scene.written(), .search));
 }
 
 test "component render helper owns badge and surface variants" {
@@ -1410,6 +1464,15 @@ fn hasText(commands: []const ui.Command, value: []const u8) bool {
 fn hasTextContaining(commands: []const ui.Command, value: []const u8) bool {
     for (commands) |command| switch (command) {
         .text => |text_command| if (std.mem.indexOf(u8, text_command.value, value) != null) return true,
+        else => {},
+    };
+    return false;
+}
+
+fn hasIcon(commands: []const ui.Command, value: icon.Icon) bool {
+    const atlas_id = icon.atlasId(value);
+    for (commands) |command| switch (command) {
+        .icon_quad => |quad| if (quad.atlas_id == atlas_id) return true,
         else => {},
     };
     return false;

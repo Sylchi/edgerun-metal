@@ -109,7 +109,7 @@ vendor sells phone
 
 If the vendor will not maintain the device, the vendor should not be allowed to prevent the owner from maintaining it.
 
-## Interactive demo
+## Right-to-own checklist
 
 A right-to-own checklist shows the user a phone after vendor support ends. The reader toggles bootloader unlock, firmware tools, recovery images, owner-controlled relocking, bank hardware-key support, app-store independence, repair parts, and alternative OS availability.
 

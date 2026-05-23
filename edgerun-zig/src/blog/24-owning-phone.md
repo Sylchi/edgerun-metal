@@ -17,9 +17,15 @@ Owning a device should mean more than holding the glass rectangle. It should mea
 - encrypting data to people and devices, not companies
 - revoking permissions and seeing what happened
 
-## Interactive demo
+## Authority checklist
 
 An ownership rights checklist compares today's common phone model with a user-owned runtime. Each right lights up the authority required: device key, app capability, local storage, repair path, package signature, sealed object route, or audit log.
+
+This is the difference between ownership as possession and ownership as authority. Possession says the device is in your hand. Authority says you can install, repair, inspect, export, route, revoke, and recover without a platform turning your life into a support ticket.
+
+## Replaceable clients
+
+A phone should be one client of a user's digital life. A laptop, tablet, home server, hardware key, paper recovery path, or future device should be able to participate without begging one phone ecosystem for permission.
 
 ## Main lesson
 
