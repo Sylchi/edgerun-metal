@@ -14,6 +14,8 @@ But WPA is not a complete privacy model. After the access point receives traffic
 
 ## What the router does
 
+[[demo:router_boundary]]
+
 - assigns local addresses
 - forwards packets to the ISP
 - performs NAT for many home networks

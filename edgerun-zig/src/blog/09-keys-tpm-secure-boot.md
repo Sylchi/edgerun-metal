@@ -28,6 +28,8 @@ But a TPM should not become a magic word. It does not make a bad policy good. It
 
 ## Good root-of-trust shape
 
+[[demo:secure_boot_root]]
+
 ```text
 measured boot -> local runtime identity
 local runtime identity -> user intent

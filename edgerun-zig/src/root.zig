@@ -48,6 +48,7 @@ pub const renderer_surface = @import("renderer_surface.zig");
 pub const renderer_software = @import("renderer_software.zig");
 pub const sdk = @import("sdk.zig");
 pub const component_gallery = @import("component_gallery.zig");
+pub const cheating_app_tests = @import("cheating_app_tests.zig");
 pub const ui = @import("ui.zig");
 pub const ui_components = @import("ui_components.zig");
 pub const ui_resolver = @import("ui_resolver.zig");
@@ -104,6 +105,7 @@ test {
     _ = renderer_software;
     _ = sdk;
     _ = component_gallery;
+    _ = cheating_app_tests;
     _ = ui;
     _ = ui_components;
     _ = ui_resolver;

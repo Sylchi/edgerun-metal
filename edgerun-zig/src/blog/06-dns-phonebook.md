@@ -8,6 +8,8 @@ Names feel permanent because humans need them to be memorable. The machinery und
 
 ## The lookup path
 
+[[demo:dns_lookup_path]]
+
 ```text
 friend.example -> resolver -> root
 root -> example registry -> authoritative server

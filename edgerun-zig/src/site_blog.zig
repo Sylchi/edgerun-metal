@@ -2,12 +2,13 @@ const std = @import("std");
 const icon = @import("icon.zig");
 const ui = @import("ui.zig");
 const components = @import("ui_components.zig");
-const site_landing = @import("site_landing.zig");
+const site_chrome = @import("site_chrome.zig");
 
 pub const back_button_id: u32 = 40_001;
 pub const first_post_button_id: u32 = 40_100;
+pub const first_arc_filter_button_id: u32 = 40_900;
 
-const header_h: f32 = 64.0;
+const header_h: f32 = site_chrome.header_h;
 const content_wide: f32 = 1180.0;
 const content_pad: f32 = 28.0;
 const workflow_w: f32 = 380.0;
@@ -49,6 +50,96 @@ const vpn_demo_arrow_h: f32 = 2.0;
 const vpn_demo_detail_h: f32 = 64.0;
 const vpn_demo_actor_count: usize = 5;
 const vpn_demo_lane_count: usize = 3;
+const tls_demo_h: f32 = 360.0;
+const tls_demo_pad: f32 = 22.0;
+const tls_demo_actor_count: usize = 5;
+const tls_demo_actor_h: f32 = 58.0;
+const tls_demo_actor_gap: f32 = 12.0;
+const tls_demo_path_y: f32 = 130.0;
+const tls_demo_detail_h: f32 = 66.0;
+const data_copy_demo_h: f32 = 410.0;
+const data_copy_demo_pad: f32 = 22.0;
+const data_copy_node_count: usize = 8;
+const data_copy_node_w: f32 = 136.0;
+const data_copy_node_h: f32 = 54.0;
+const data_copy_row_gap: f32 = 28.0;
+const data_copy_detail_h: f32 = 66.0;
+const identity_demo_h: f32 = 430.0;
+const identity_demo_pad: f32 = 22.0;
+const identity_signal_count: usize = 7;
+const identity_signal_h: f32 = 38.0;
+const identity_signal_gap: f32 = 10.0;
+const identity_signal_w: f32 = 188.0;
+const identity_detail_h: f32 = 68.0;
+const permission_demo_h: f32 = 400.0;
+const permission_demo_pad: f32 = 22.0;
+const permission_step_count: usize = 5;
+const permission_step_h: f32 = 46.0;
+const permission_step_gap: f32 = 12.0;
+const permission_detail_h: f32 = 68.0;
+const dns_demo_h: f32 = 390.0;
+const dns_demo_pad: f32 = 22.0;
+const dns_step_count: usize = 5;
+const dns_step_h: f32 = 54.0;
+const dns_step_gap: f32 = 12.0;
+const dns_detail_h: f32 = 68.0;
+const account_demo_h: f32 = 390.0;
+const account_demo_pad: f32 = 22.0;
+const account_path_count: usize = 4;
+const account_box_h: f32 = 54.0;
+const account_box_gap: f32 = 12.0;
+const account_detail_h: f32 = 68.0;
+const server_demo_h: f32 = 420.0;
+const server_demo_pad: f32 = 22.0;
+const server_stage_count: usize = 7;
+const server_stage_w: f32 = 122.0;
+const server_stage_h: f32 = 52.0;
+const server_stage_gap: f32 = 12.0;
+const server_detail_h: f32 = 68.0;
+const push_demo_h: f32 = 390.0;
+const push_demo_pad: f32 = 22.0;
+const push_step_count: usize = 5;
+const push_step_h: f32 = 56.0;
+const push_step_gap: f32 = 12.0;
+const push_detail_h: f32 = 68.0;
+const dependency_demo_h: f32 = 430.0;
+const dependency_demo_pad: f32 = 22.0;
+const dependency_node_count: usize = 8;
+const dependency_node_w: f32 = 128.0;
+const dependency_node_h: f32 = 50.0;
+const dependency_node_gap: f32 = 14.0;
+const dependency_detail_h: f32 = 68.0;
+const router_demo_h: f32 = 390.0;
+const router_demo_pad: f32 = 22.0;
+const router_step_count: usize = 5;
+const router_step_h: f32 = 56.0;
+const router_step_gap: f32 = 12.0;
+const router_detail_h: f32 = 68.0;
+const keypress_demo_h: f32 = 390.0;
+const keypress_demo_pad: f32 = 22.0;
+const keypress_step_count: usize = 6;
+const keypress_step_h: f32 = 54.0;
+const keypress_step_gap: f32 = 12.0;
+const keypress_detail_h: f32 = 68.0;
+const compute_demo_h: f32 = 400.0;
+const compute_demo_pad: f32 = 22.0;
+const compute_task_count: usize = 6;
+const compute_task_w: f32 = 142.0;
+const compute_task_h: f32 = 50.0;
+const compute_task_gap: f32 = 14.0;
+const compute_detail_h: f32 = 68.0;
+const storage_demo_h: f32 = 410.0;
+const storage_demo_pad: f32 = 22.0;
+const storage_stage_count: usize = 5;
+const storage_stage_h: f32 = 56.0;
+const storage_stage_gap: f32 = 12.0;
+const storage_detail_h: f32 = 68.0;
+const trust_demo_h: f32 = 410.0;
+const trust_demo_pad: f32 = 22.0;
+const trust_step_count: usize = 5;
+const trust_step_h: f32 = 56.0;
+const trust_step_gap: f32 = 12.0;
+const trust_detail_h: f32 = 68.0;
 const arc_local_start: usize = 0;
 const arc_local_end: usize = 10;
 const arc_network_start: usize = 10;
@@ -71,6 +162,9 @@ pub const arc_accounting = "Arc 4: Who Pays And Who Profits?";
 const ArcSection = struct {
     title: []const u8,
     detail: []const u8,
+    count_label: []const u8,
+    card_title: []const u8,
+    card_detail: []const u8,
     start: usize,
     end: usize,
 };
@@ -79,30 +173,45 @@ const arc_sections = [_]ArcSection{
     .{
         .title = arc_local,
         .detail = "CPU, RAM, storage, GPU, OS, apps, firmware, keys, and the door out of the machine.",
+        .count_label = "10 posts",
+        .card_title = "Your device is a computer",
+        .card_detail = "CPU -> RAM -> OS",
         .start = arc_local_start,
         .end = arc_local_end,
     },
     .{
         .title = arc_network,
         .detail = "From keypress to server: the simple message path becomes visible.",
+        .count_label = "11 posts",
+        .card_title = "How data moves",
+        .card_detail = "keypress -> DNS -> TLS",
         .start = arc_network_start,
         .end = arc_network_end,
     },
     .{
         .title = arc_device,
         .detail = "After the message arrives, the endpoint becomes the real question.",
+        .count_label = "13 posts",
+        .card_title = "Who owns the device",
+        .card_detail = "phone -> account -> app store",
         .start = arc_device_start,
         .end = arc_device_end,
     },
     .{
         .title = arc_control,
         .detail = "The hidden levers that rewrite attention, updates, payments, discovery, and trust.",
+        .count_label = "27 posts",
+        .card_title = "Who controls the rules",
+        .card_detail = "updates -> feeds -> AI",
         .start = arc_control_start,
         .end = arc_control_end,
     },
     .{
         .title = arc_accounting,
         .detail = "Receipts, contribution, settlement, and why fair systems need explicit resource accounting.",
+        .count_label = "5 posts",
+        .card_title = "Who pays",
+        .card_detail = "receipts -> settlement",
         .start = arc_accounting_start,
         .end = arc_accounting_end,
     },
@@ -740,6 +849,7 @@ pub const State = struct {
     hover_x: f32 = -1.0,
     hover_y: f32 = -1.0,
     selected_post_id: u32 = 0,
+    arc_filter_index: ?usize = null,
 };
 
 pub fn render(scene: *ui.Scene, bounds: ui.Rect, state: State) ui.RenderError!void {
@@ -755,7 +865,7 @@ pub fn render(scene: *ui.Scene, bounds: ui.Rect, state: State) ui.RenderError!vo
         if (postIndexById(state.selected_post_id)) |index| {
             try renderPost(scene, ui.Rect.init(content.x, page_y + 52.0, content.w, 1800.0), index, state.hover_x, state.hover_y);
         } else {
-            try renderIndex(scene, ui.Rect.init(content.x, page_y + 52.0, content.w, 1100.0));
+            try renderIndex(scene, ui.Rect.init(content.x, page_y + 52.0, content.w, 1100.0), state.arc_filter_index);
         }
     }
 
@@ -778,35 +888,30 @@ pub fn postIdAt(index: usize) u32 {
     return first_post_button_id + @as(u32, @intCast(index));
 }
 
+pub fn arcFilterButtonId(index: usize) u32 {
+    return first_arc_filter_button_id + @as(u32, @intCast(index));
+}
+
+pub fn arcFilterIndexById(id: u32) ?usize {
+    if (id < first_arc_filter_button_id) return null;
+    const index: usize = @intCast(id - first_arc_filter_button_id);
+    if (index >= arc_sections.len) return null;
+    return index;
+}
+
 fn episodeAt(index: usize) usize {
     return index + 1;
 }
 
 fn renderHeader(scene: *ui.Scene, bounds: ui.Rect, content: ui.Rect) ui.RenderError!void {
-    try fill(scene, bounds, palette.bg, 0.0);
-    try fill(scene, ui.Rect.init(bounds.x, bounds.y + bounds.h - 1.0, bounds.w, 1.0), palette.border, 0.0);
-
-    const logo = ui.Rect.init(content.x, bounds.y + 16.0, 32.0, 32.0);
-    try fill(scene, logo, palette.primary, 7.0);
-    try iconQuad(scene, logo.insetUniform(8.0), .terminal, palette.bg);
-    try text(scene, logo.x + 42.0, bounds.y + 23.0, 110.0, 18.0, "EdgeRun", palette.text);
-
-    const nav_y = bounds.y + 19.0;
-    try navItem(scene, ui.Rect.init(content.x + 190.0, nav_y, 68.0, 28.0), "Docs", site_landing.docs_button_id, false);
-    try navItem(scene, ui.Rect.init(content.x + 266.0, nav_y, 64.0, 28.0), "Blog", site_landing.blog_button_id, true);
-    try navItem(scene, ui.Rect.init(content.x + 338.0, nav_y, 64.0, 28.0), "Apps", site_landing.apps_button_id, false);
-
-    const launch = ui.Rect.init(content.x + content.w - 128.0, bounds.y + 16.0, 128.0, 32.0);
-    try primaryButton(scene, launch, "Launch Desktop", site_landing.launch_button_id);
-    const search = ui.Rect.init(launch.x - 126.0, launch.y, 112.0, 32.0);
-    try outlineButton(scene, search, "Search", site_landing.search_button_id);
+    try site_chrome.renderHeader(scene, bounds, content, .blog);
 }
 
-fn renderIndex(scene: *ui.Scene, bounds: ui.Rect) ui.RenderError!void {
-    _ = try flowIndexContent(scene, bounds);
+fn renderIndex(scene: *ui.Scene, bounds: ui.Rect, arc_filter_index: ?usize) ui.RenderError!void {
+    _ = try flowIndexContent(scene, bounds, arc_filter_index);
 }
 
-fn flowIndexContent(scene: ?*ui.Scene, bounds: ui.Rect) ui.RenderError!f32 {
+fn flowIndexContent(scene: ?*ui.Scene, bounds: ui.Rect, arc_filter_index: ?usize) ui.RenderError!f32 {
     const split = bounds.w >= 980.0;
     const headline_w = if (split) @min(index_intro_w, bounds.w - workflow_w - 64.0) else bounds.w;
     const workflow_y = if (split) bounds.y + 28.0 else bounds.y + 256.0;
@@ -825,12 +930,16 @@ fn flowIndexContent(scene: ?*ui.Scene, bounds: ui.Rect) ui.RenderError!f32 {
             try renderCloudMeme(target, ui.Rect.init(bounds.x, workflow_y, bounds.w, 198.0));
         }
 
-        try renderArcOverview(target, ui.Rect.init(bounds.x, overview_y, bounds.w, arc_overview_h));
+        try renderArcOverview(target, ui.Rect.init(bounds.x, overview_y, bounds.w, arc_overview_h), arc_filter_index);
     }
 
     var next_y = bounds.y + intro_h;
-    for (arc_sections) |section| {
-        next_y = try flowPostSection(scene, bounds, next_y, section);
+    if (arc_filter_index) |index| {
+        next_y = try flowPostSection(scene, bounds, next_y, arc_sections[index]);
+    } else {
+        for (arc_sections) |section| {
+            next_y = try flowPostSection(scene, bounds, next_y, section);
+        }
     }
 
     const guide_y = next_y + 90.0;
@@ -839,8 +948,12 @@ fn flowIndexContent(scene: ?*ui.Scene, bounds: ui.Rect) ui.RenderError!f32 {
 }
 
 pub fn indexContentHeight(width: f32) f32 {
+    return indexContentHeightFiltered(width, null);
+}
+
+pub fn indexContentHeightFiltered(width: f32, arc_filter_index: ?usize) f32 {
     const content_w = @min(content_wide, @max(1.0, width - content_pad * 2.0));
-    const measured_h = flowIndexContent(null, ui.Rect.init(0.0, 0.0, content_w, 1.0)) catch unreachable;
+    const measured_h = flowIndexContent(null, ui.Rect.init(0.0, 0.0, content_w, 1.0), arc_filter_index) catch unreachable;
     return 52.0 + measured_h + page_bottom_pad;
 }
 
@@ -851,25 +964,21 @@ pub fn postContentHeight(width: f32, post_id: u32) f32 {
     return 52.0 + measured_h + page_bottom_pad;
 }
 
-fn renderArcOverview(scene: *ui.Scene, bounds: ui.Rect) ui.RenderError!void {
-    const items = [_]struct { []const u8, []const u8, []const u8 }{
-        .{ "10 posts", "Your device is a computer", "CPU -> RAM -> OS" },
-        .{ "11 posts", "How data moves", "keypress -> DNS -> TLS" },
-        .{ "13 posts", "Who owns the device", "phone -> account -> app store" },
-        .{ "27 posts", "Who controls the rules", "updates -> feeds -> AI" },
-        .{ "5 posts", "Who pays", "receipts -> settlement" },
-    };
+fn renderArcOverview(scene: *ui.Scene, bounds: ui.Rect, active_index: ?usize) ui.RenderError!void {
     const cols: usize = if (bounds.w >= 1040.0) 5 else if (bounds.w >= 700.0) 3 else 2;
-    const rows = (items.len + cols - 1) / cols;
+    const rows = (arc_sections.len + cols - 1) / cols;
     const card_h = (bounds.h - arc_overview_gap * @as(f32, @floatFromInt(rows - 1))) / @as(f32, @floatFromInt(rows));
-    for (items, 0..) |item, index| {
+    for (arc_sections, 0..) |section, index| {
         const row = index / cols;
         const col = index % cols;
         const card = colBounds(bounds, cols, arc_overview_gap, col, bounds.y + @as(f32, @floatFromInt(row)) * (card_h + arc_overview_gap), card_h);
-        try fill(scene, card, palette.card_alt, 8.0);
-        try text(scene, card.x + 14.0, card.y + 12.0, card.w - 28.0, 12.0, item[0], palette.primary);
-        try text(scene, card.x + 14.0, card.y + 34.0, card.w - 28.0, 14.0, item[1], palette.text);
-        try text(scene, card.x + 14.0, card.y + 58.0, card.w - 28.0, 11.0, item[2], palette.dim);
+        const active = if (active_index) |found| found == index else false;
+        try fill(scene, card, if (active) palette.neutral_soft else palette.card_alt, site_chrome.surface_radius);
+        try scene.pushRect(card, if (active) palette.primary else palette.border, .border, site_chrome.surface_radius, 0.0);
+        try text(scene, card.x + 14.0, card.y + 12.0, card.w - 28.0, 12.0, section.count_label, palette.primary);
+        try text(scene, card.x + 14.0, card.y + 34.0, card.w - 28.0, 14.0, section.card_title, palette.text);
+        try text(scene, card.x + 14.0, card.y + 58.0, card.w - 28.0, 11.0, section.card_detail, palette.dim);
+        try hit(scene, card, .button, arcFilterButtonId(index));
     }
 }
 
@@ -890,13 +999,13 @@ fn flowPostSection(scene: ?*ui.Scene, bounds: ui.Rect, y: f32, section: ArcSecti
 }
 
 fn renderCloudMeme(scene: *ui.Scene, bounds: ui.Rect) ui.RenderError!void {
-    try fill(scene, bounds, palette.card, 8.0);
+    try fill(scene, bounds, palette.card, site_chrome.surface_radius);
     try scene.pushImageQuad(.{
         .bounds = bounds.insetUniform(1.0),
         .atlas_id = cloud_meme_image_id,
         .color = ui.Color{ .r = 255, .g = 255, .b = 255 },
     });
-    try scene.pushRect(bounds, palette.border, .border, 8.0, 0.0);
+    try scene.pushRect(bounds, palette.border, .border, site_chrome.surface_radius, 0.0);
 }
 
 fn renderWorkflow(scene: *ui.Scene, bounds: ui.Rect) ui.RenderError!void {
@@ -1097,6 +1206,20 @@ fn renderSidebar(scene: *ui.Scene, bounds: ui.Rect, post: Post) ui.RenderError!v
 
 const DemoDirective = enum {
     vpn_who_sees_what,
+    tls_endpoint,
+    data_copy_map,
+    phone_identity_stack,
+    permission_ladder,
+    dns_lookup_path,
+    account_vs_key,
+    server_pipeline,
+    push_wake_path,
+    dependency_graph,
+    router_boundary,
+    keypress_commit_path,
+    local_compute_capacity,
+    storage_sealed_objects,
+    secure_boot_root,
 };
 
 fn flowMarkdown(scene: ?*ui.Scene, bounds: ui.Rect, source: []const u8, hover_x: f32, hover_y: f32) ui.RenderError!f32 {
@@ -1160,18 +1283,60 @@ fn flowMarkdown(scene: ?*ui.Scene, bounds: ui.Rect, source: []const u8, hover_x:
 
 fn demoDirective(line_value: []const u8) ?DemoDirective {
     if (std.mem.eql(u8, line_value, "[[demo:vpn_who_sees_what]]")) return .vpn_who_sees_what;
+    if (std.mem.eql(u8, line_value, "[[demo:tls_endpoint]]")) return .tls_endpoint;
+    if (std.mem.eql(u8, line_value, "[[demo:data_copy_map]]")) return .data_copy_map;
+    if (std.mem.eql(u8, line_value, "[[demo:phone_identity_stack]]")) return .phone_identity_stack;
+    if (std.mem.eql(u8, line_value, "[[demo:permission_ladder]]")) return .permission_ladder;
+    if (std.mem.eql(u8, line_value, "[[demo:dns_lookup_path]]")) return .dns_lookup_path;
+    if (std.mem.eql(u8, line_value, "[[demo:account_vs_key]]")) return .account_vs_key;
+    if (std.mem.eql(u8, line_value, "[[demo:server_pipeline]]")) return .server_pipeline;
+    if (std.mem.eql(u8, line_value, "[[demo:push_wake_path]]")) return .push_wake_path;
+    if (std.mem.eql(u8, line_value, "[[demo:dependency_graph]]")) return .dependency_graph;
+    if (std.mem.eql(u8, line_value, "[[demo:router_boundary]]")) return .router_boundary;
+    if (std.mem.eql(u8, line_value, "[[demo:keypress_commit_path]]")) return .keypress_commit_path;
+    if (std.mem.eql(u8, line_value, "[[demo:local_compute_capacity]]")) return .local_compute_capacity;
+    if (std.mem.eql(u8, line_value, "[[demo:storage_sealed_objects]]")) return .storage_sealed_objects;
+    if (std.mem.eql(u8, line_value, "[[demo:secure_boot_root]]")) return .secure_boot_root;
     return null;
 }
 
 fn demoHeight(directive: DemoDirective) f32 {
     return switch (directive) {
         .vpn_who_sees_what => vpn_demo_h,
+        .tls_endpoint => tls_demo_h,
+        .data_copy_map => data_copy_demo_h,
+        .phone_identity_stack => identity_demo_h,
+        .permission_ladder => permission_demo_h,
+        .dns_lookup_path => dns_demo_h,
+        .account_vs_key => account_demo_h,
+        .server_pipeline => server_demo_h,
+        .push_wake_path => push_demo_h,
+        .dependency_graph => dependency_demo_h,
+        .router_boundary => router_demo_h,
+        .keypress_commit_path => keypress_demo_h,
+        .local_compute_capacity => compute_demo_h,
+        .storage_sealed_objects => storage_demo_h,
+        .secure_boot_root => trust_demo_h,
     };
 }
 
 fn flowDemoDirective(scene: ?*ui.Scene, bounds: ui.Rect, directive: DemoDirective, hover_x: f32, hover_y: f32) ui.RenderError!f32 {
     if (scene) |target| switch (directive) {
         .vpn_who_sees_what => try renderVpnWhoSeesWhatDemo(target, bounds, hover_x, hover_y),
+        .tls_endpoint => try renderTlsEndpointDemo(target, bounds, hover_x, hover_y),
+        .data_copy_map => try renderDataCopyMapDemo(target, bounds, hover_x, hover_y),
+        .phone_identity_stack => try renderPhoneIdentityStackDemo(target, bounds, hover_x, hover_y),
+        .permission_ladder => try renderPermissionLadderDemo(target, bounds, hover_x, hover_y),
+        .dns_lookup_path => try renderDnsLookupPathDemo(target, bounds, hover_x, hover_y),
+        .account_vs_key => try renderAccountVsKeyDemo(target, bounds, hover_x, hover_y),
+        .server_pipeline => try renderServerPipelineDemo(target, bounds, hover_x, hover_y),
+        .push_wake_path => try renderPushWakePathDemo(target, bounds, hover_x, hover_y),
+        .dependency_graph => try renderDependencyGraphDemo(target, bounds, hover_x, hover_y),
+        .router_boundary => try renderRouterBoundaryDemo(target, bounds, hover_x, hover_y),
+        .keypress_commit_path => try renderKeypressCommitPathDemo(target, bounds, hover_x, hover_y),
+        .local_compute_capacity => try renderLocalComputeCapacityDemo(target, bounds, hover_x, hover_y),
+        .storage_sealed_objects => try renderStorageSealedObjectsDemo(target, bounds, hover_x, hover_y),
+        .secure_boot_root => try renderSecureBootRootDemo(target, bounds, hover_x, hover_y),
     };
     return bounds.h;
 }
@@ -1339,6 +1504,1479 @@ fn vpnActorDetail(role: VpnActorRole) []const u8 {
     };
 }
 
+const TlsActorRole = enum {
+    device,
+    network,
+    tls_endpoint,
+    server,
+    database,
+};
+
+const TlsActor = struct {
+    label: []const u8,
+    exposure: []const u8,
+    role: TlsActorRole,
+};
+
+const tls_actors = [_]TlsActor{
+    .{ .label = "Device", .exposure = "plaintext before send", .role = .device },
+    .{ .label = "Network", .exposure = "encrypted tunnel", .role = .network },
+    .{ .label = "TLS endpoint", .exposure = "decrypts here", .role = .tls_endpoint },
+    .{ .label = "App server", .exposure = "policy + logs", .role = .server },
+    .{ .label = "Database", .exposure = "stored memory", .role = .database },
+};
+
+fn renderTlsEndpointDemo(scene: *ui.Scene, bounds: ui.Rect, hover_x: f32, hover_y: f32) ui.RenderError!void {
+    try fill(scene, bounds, palette.card, 8.0);
+    try scene.pushRect(bounds, palette.border, .border, 8.0, 0.0);
+    const inner = bounds.insetUniform(tls_demo_pad);
+    try tag(scene, ui.Rect.init(inner.x, inner.y, 120.0, 24.0), "TLS DEMO", palette.blue);
+    try text(scene, inner.x, inner.y + 38.0, inner.w, 18.0, "The tunnel ends at the endpoint.", palette.text);
+    try paragraph(scene, ui.Rect.init(inner.x + 152.0, inner.y + 2.0, @max(1.0, inner.w - 152.0), 54.0), "TLS protects the trip. After termination, server systems can handle plaintext unless the object stays sealed.");
+
+    const actor_area_w = inner.w;
+    const actor_w = (actor_area_w - tls_demo_actor_gap * @as(f32, @floatFromInt(tls_demo_actor_count - 1))) / @as(f32, @floatFromInt(tls_demo_actor_count));
+    var hovered: ?TlsActorRole = null;
+    for (tls_actors, 0..) |actor, index| {
+        const x = inner.x + @as(f32, @floatFromInt(index)) * (actor_w + tls_demo_actor_gap);
+        const actor_bounds = ui.Rect.init(x, inner.y + tls_demo_path_y, actor_w, tls_demo_actor_h);
+        const is_hovered = actor_bounds.containsInclusive(hover_x, hover_y);
+        if (is_hovered) hovered = actor.role;
+        try renderTlsActor(scene, actor_bounds, actor, is_hovered);
+        if (index + 1 < tls_demo_actor_count) {
+            const line_color = if (index == 0) palette.primary else palette.border;
+            try fill(scene, ui.Rect.init(actor_bounds.x + actor_bounds.w + 3.0, actor_bounds.y + 20.0, tls_demo_actor_gap - 6.0, 2.0), line_color, 0.0);
+        }
+    }
+
+    const tunnel = ui.Rect.init(inner.x + actor_w + tls_demo_actor_gap * 0.5, inner.y + tls_demo_path_y + tls_demo_actor_h + 18.0, actor_w * 2.0 + tls_demo_actor_gap, 28.0);
+    try fill(scene, tunnel, ui.Color{ .r = 20, .g = 60, .b = 42, .a = 190 }, 5.0);
+    try alignedText(scene, tunnel.x + 10.0, tunnel.y + 8.0, tunnel.w - 20.0, 10.0, "encrypted in transit", palette.primary, .center);
+    const plaintext = ui.Rect.init(tunnel.x + tunnel.w + tls_demo_actor_gap, tunnel.y, actor_w * 2.0 + tls_demo_actor_gap, 28.0);
+    try fill(scene, plaintext, ui.Color{ .r = 68, .g = 36, .b = 36, .a = 190 }, 5.0);
+    try alignedText(scene, plaintext.x + 10.0, plaintext.y + 8.0, plaintext.w - 20.0, 10.0, "plaintext after endpoint", palette.text, .center);
+
+    const detail_y = inner.y + tls_demo_path_y + tls_demo_actor_h + 62.0;
+    try renderTlsDetail(scene, ui.Rect.init(inner.x, detail_y, inner.w, tls_demo_detail_h), hovered);
+}
+
+fn renderTlsActor(scene: *ui.Scene, bounds: ui.Rect, actor: TlsActor, hovered: bool) ui.RenderError!void {
+    try fill(scene, bounds, tlsActorColor(actor.role), 6.0);
+    try scene.pushRect(bounds, if (hovered) palette.primary else palette.border, .border, 6.0, 0.0);
+    try alignedText(scene, bounds.x + 8.0, bounds.y + 11.0, bounds.w - 16.0, 12.0, actor.label, palette.text, .center);
+    try alignedText(scene, bounds.x + 8.0, bounds.y + 33.0, bounds.w - 16.0, 10.0, actor.exposure, palette.dim, .center);
+}
+
+fn renderTlsDetail(scene: *ui.Scene, bounds: ui.Rect, hovered: ?TlsActorRole) ui.RenderError!void {
+    try fill(scene, bounds, ui.Color{ .r = 9, .g = 9, .b = 9, .a = 210 }, 6.0);
+    const role = hovered orelse .tls_endpoint;
+    try text(scene, bounds.x + 16.0, bounds.y + 14.0, 180.0, 14.0, tlsDetailTitle(role), palette.primary);
+    try paragraph(scene, ui.Rect.init(bounds.x + 16.0, bounds.y + 34.0, bounds.w - 32.0, 30.0), tlsDetail(role));
+}
+
+fn tlsActorColor(role: TlsActorRole) ui.Color {
+    return switch (role) {
+        .device => ui.Color{ .r = 24, .g = 55, .b = 44, .a = 238 },
+        .network => ui.Color{ .r = 26, .g = 36, .b = 52, .a = 238 },
+        .tls_endpoint => ui.Color{ .r = 70, .g = 52, .b = 25, .a = 238 },
+        .server => ui.Color{ .r = 72, .g = 36, .b = 36, .a = 238 },
+        .database => ui.Color{ .r = 44, .g = 44, .b = 44, .a = 238 },
+    };
+}
+
+fn tlsDetailTitle(role: TlsActorRole) []const u8 {
+    return switch (role) {
+        .device => "Before TLS",
+        .network => "Network path",
+        .tls_endpoint => "TLS endpoint",
+        .server => "Server systems",
+        .database => "Stored data",
+    };
+}
+
+fn tlsDetail(role: TlsActorRole) []const u8 {
+    return switch (role) {
+        .device => "The device holds plaintext before it enters the tunnel. Local malware or bad UI can still betray the user.",
+        .network => "The network should see an encrypted connection, timing, and endpoints, not page content.",
+        .tls_endpoint => "TLS terminates here. After decryption, connection security has finished its job.",
+        .server => "Application code can log, queue, inspect, moderate, or forward plaintext after TLS termination.",
+        .database => "If plaintext is stored here, deletion, access, breach, and export become service policy questions.",
+    };
+}
+
+const DataCopyRole = enum {
+    phone,
+    app_storage,
+    sync,
+    database,
+    backup,
+    search,
+    logs,
+    analytics,
+};
+
+const DataCopyNode = struct {
+    label: []const u8,
+    exposure: []const u8,
+    role: DataCopyRole,
+};
+
+const data_copy_nodes = [_]DataCopyNode{
+    .{ .label = "Phone UI", .exposure = "visible copy", .role = .phone },
+    .{ .label = "App storage", .exposure = "local cache", .role = .app_storage },
+    .{ .label = "Cloud sync", .exposure = "replica", .role = .sync },
+    .{ .label = "Database", .exposure = "source of truth", .role = .database },
+    .{ .label = "Backups", .exposure = "old state", .role = .backup },
+    .{ .label = "Search index", .exposure = "derived text", .role = .search },
+    .{ .label = "Logs", .exposure = "metadata", .role = .logs },
+    .{ .label = "Analytics", .exposure = "behavior", .role = .analytics },
+};
+
+fn renderDataCopyMapDemo(scene: *ui.Scene, bounds: ui.Rect, hover_x: f32, hover_y: f32) ui.RenderError!void {
+    try fill(scene, bounds, palette.card, 8.0);
+    try scene.pushRect(bounds, palette.border, .border, 8.0, 0.0);
+    const inner = bounds.insetUniform(data_copy_demo_pad);
+    try tag(scene, ui.Rect.init(inner.x, inner.y, 128.0, 24.0), "COPY MAP", palette.blue);
+    try text(scene, inner.x, inner.y + 38.0, inner.w, 18.0, "Deleting the UI copy is not deleting every copy.", palette.text);
+    try paragraph(scene, ui.Rect.init(inner.x + 162.0, inner.y + 2.0, @max(1.0, inner.w - 162.0), 54.0), "One note, photo, or message can become storage, sync, backup, search, log, and analytics records.");
+
+    const map_top = inner.y + 88.0;
+    const row_w = data_copy_node_w * 4.0 + data_copy_row_gap * 3.0;
+    const start_x = inner.x + @max(0.0, (inner.w - row_w) * 0.5);
+    var hovered: ?DataCopyRole = null;
+    for (data_copy_nodes, 0..) |node, index| {
+        const row = index / 4;
+        const col = index % 4;
+        const node_bounds = ui.Rect.init(
+            start_x + @as(f32, @floatFromInt(col)) * (data_copy_node_w + data_copy_row_gap),
+            map_top + @as(f32, @floatFromInt(row)) * (data_copy_node_h + 46.0),
+            data_copy_node_w,
+            data_copy_node_h,
+        );
+        const is_hovered = node_bounds.containsInclusive(hover_x, hover_y);
+        if (is_hovered) hovered = node.role;
+        try renderDataCopyNode(scene, node_bounds, node, is_hovered);
+        if (index > 0) try renderDataCopyLink(scene, node_bounds);
+    }
+
+    const warning = ui.Rect.init(start_x, map_top + data_copy_node_h + 16.0, row_w, 24.0);
+    try fill(scene, warning, ui.Color{ .r = 66, .g = 45, .b = 26, .a = 190 }, 5.0);
+    try alignedText(scene, warning.x + 10.0, warning.y + 7.0, warning.w - 20.0, 10.0, "Delete in app UI usually removes one reference first.", palette.text, .center);
+
+    const detail_y = inner.y + inner.h - data_copy_detail_h;
+    try renderDataCopyDetail(scene, ui.Rect.init(inner.x, detail_y, inner.w, data_copy_detail_h), hovered);
+}
+
+fn renderDataCopyNode(scene: *ui.Scene, bounds: ui.Rect, node: DataCopyNode, hovered: bool) ui.RenderError!void {
+    try fill(scene, bounds, dataCopyColor(node.role), 6.0);
+    try scene.pushRect(bounds, if (hovered) palette.primary else palette.border, .border, 6.0, 0.0);
+    try alignedText(scene, bounds.x + 8.0, bounds.y + 10.0, bounds.w - 16.0, 12.0, node.label, palette.text, .center);
+    try alignedText(scene, bounds.x + 8.0, bounds.y + 31.0, bounds.w - 16.0, 10.0, node.exposure, palette.dim, .center);
+}
+
+fn renderDataCopyLink(scene: *ui.Scene, bounds: ui.Rect) ui.RenderError!void {
+    const line_y = bounds.y + bounds.h * 0.5;
+    try fill(scene, ui.Rect.init(bounds.x - data_copy_row_gap + 4.0, line_y, data_copy_row_gap - 8.0, 2.0), palette.border, 0.0);
+}
+
+fn renderDataCopyDetail(scene: *ui.Scene, bounds: ui.Rect, hovered: ?DataCopyRole) ui.RenderError!void {
+    try fill(scene, bounds, ui.Color{ .r = 9, .g = 9, .b = 9, .a = 210 }, 6.0);
+    const role = hovered orelse .database;
+    try text(scene, bounds.x + 16.0, bounds.y + 14.0, 190.0, 14.0, dataCopyTitle(role), palette.primary);
+    try paragraph(scene, ui.Rect.init(bounds.x + 16.0, bounds.y + 34.0, bounds.w - 32.0, 30.0), dataCopyDetail(role));
+}
+
+fn dataCopyColor(role: DataCopyRole) ui.Color {
+    return switch (role) {
+        .phone, .app_storage => ui.Color{ .r = 24, .g = 55, .b = 44, .a = 238 },
+        .sync, .database => ui.Color{ .r = 26, .g = 36, .b = 52, .a = 238 },
+        .backup, .search => ui.Color{ .r = 56, .g = 42, .b = 24, .a = 238 },
+        .logs, .analytics => ui.Color{ .r = 72, .g = 36, .b = 36, .a = 238 },
+    };
+}
+
+fn dataCopyTitle(role: DataCopyRole) []const u8 {
+    return switch (role) {
+        .phone => "Phone UI",
+        .app_storage => "App storage",
+        .sync => "Cloud sync",
+        .database => "Database",
+        .backup => "Backups",
+        .search => "Search index",
+        .logs => "Logs",
+        .analytics => "Analytics",
+    };
+}
+
+fn dataCopyDetail(role: DataCopyRole) []const u8 {
+    return switch (role) {
+        .phone => "The phone may only show a cached or filtered view. The visible copy is not always the source of truth.",
+        .app_storage => "Local app storage can hold drafts, caches, thumbnails, databases, and decrypted temporary state.",
+        .sync => "Sync creates another copy and conflict policy. It can help backup, but it can also become ownership.",
+        .database => "The service database often decides reality: access, deletion, export, search, and account lockout.",
+        .backup => "Backups can preserve old state after a visible delete. Retention is policy, not a UI gesture.",
+        .search => "Search indexes keep derived text or metadata so the system can find data quickly later.",
+        .logs => "Logs may retain timestamps, identifiers, errors, and routing metadata long after content changes.",
+        .analytics => "Analytics turns user behavior into another dataset with different retention and access rules.",
+    };
+}
+
+const IdentitySignalRole = enum {
+    person,
+    device_unlock,
+    carrier,
+    platform,
+    app_account,
+    payment,
+    behavior,
+};
+
+const IdentitySignal = struct {
+    label: []const u8,
+    owner: []const u8,
+    role: IdentitySignalRole,
+};
+
+const identity_signals = [_]IdentitySignal{
+    .{ .label = "Person", .owner = "human", .role = .person },
+    .{ .label = "PIN / biometric", .owner = "device vendor path", .role = .device_unlock },
+    .{ .label = "SIM / number", .owner = "carrier", .role = .carrier },
+    .{ .label = "Apple / Google", .owner = "platform account", .role = .platform },
+    .{ .label = "App login", .owner = "service policy", .role = .app_account },
+    .{ .label = "Payment card", .owner = "bank network", .role = .payment },
+    .{ .label = "Location pattern", .owner = "behavior model", .role = .behavior },
+};
+
+fn renderPhoneIdentityStackDemo(scene: *ui.Scene, bounds: ui.Rect, hover_x: f32, hover_y: f32) ui.RenderError!void {
+    try fill(scene, bounds, palette.card, 8.0);
+    try scene.pushRect(bounds, palette.border, .border, 8.0, 0.0);
+    const inner = bounds.insetUniform(identity_demo_pad);
+    try tag(scene, ui.Rect.init(inner.x, inner.y, 142.0, 24.0), "IDENTITY STACK", palette.blue);
+    try text(scene, inner.x, inner.y + 38.0, inner.w, 18.0, "Your phone correlates signals. It does not own you.", palette.text);
+    try paragraph(scene, ui.Rect.init(inner.x + 176.0, inner.y + 2.0, @max(1.0, inner.w - 176.0), 54.0), "A service may combine local unlock, carrier identity, platform accounts, payment rails, and behavior.");
+
+    const stack_x = inner.x;
+    const stack_top = inner.y + 86.0;
+    const service_x = inner.x + identity_signal_w + 72.0;
+    const service_w = @max(1.0, inner.w - identity_signal_w - 72.0);
+    var hovered: ?IdentitySignalRole = null;
+    for (identity_signals, 0..) |signal, index| {
+        const signal_y = stack_top + @as(f32, @floatFromInt(index)) * (identity_signal_h + identity_signal_gap);
+        const signal_bounds = ui.Rect.init(stack_x, signal_y, identity_signal_w, identity_signal_h);
+        const is_hovered = signal_bounds.containsInclusive(hover_x, hover_y);
+        if (is_hovered) hovered = signal.role;
+        try renderIdentitySignal(scene, signal_bounds, signal, is_hovered);
+        const route_y = signal_bounds.y + signal_bounds.h * 0.5;
+        try fill(scene, ui.Rect.init(signal_bounds.x + signal_bounds.w + 8.0, route_y, 46.0, 2.0), palette.border, 0.0);
+    }
+
+    const service_bounds = ui.Rect.init(service_x, stack_top + 30.0, service_w, 180.0);
+    try fill(scene, service_bounds, ui.Color{ .r = 55, .g = 38, .b = 50, .a = 230 }, 8.0);
+    try scene.pushRect(service_bounds, palette.border, .border, 8.0, 0.0);
+    try text(scene, service_bounds.x + 22.0, service_bounds.y + 22.0, service_bounds.w - 44.0, 16.0, "Service decides: accepted or rejected", palette.text);
+    try paragraph(scene, ui.Rect.init(service_bounds.x + 22.0, service_bounds.y + 58.0, service_bounds.w - 44.0, 72.0), "The same person can be rejected when one correlation signal fails: lost number, locked platform account, failed attestation, or changed behavior.");
+    try fill(scene, ui.Rect.init(service_bounds.x + 22.0, service_bounds.y + 144.0, service_bounds.w - 44.0, 1.0), palette.border, 0.0);
+    try alignedText(scene, service_bounds.x + 22.0, service_bounds.y + 154.0, service_bounds.w - 44.0, 12.0, "Correlation is not ownership.", palette.primary, .center);
+
+    const detail_y = inner.y + inner.h - identity_detail_h;
+    try renderIdentityDetail(scene, ui.Rect.init(inner.x, detail_y, inner.w, identity_detail_h), hovered);
+}
+
+fn renderIdentitySignal(scene: *ui.Scene, bounds: ui.Rect, signal: IdentitySignal, hovered: bool) ui.RenderError!void {
+    try fill(scene, bounds, identitySignalColor(signal.role), 6.0);
+    try scene.pushRect(bounds, if (hovered) palette.primary else palette.border, .border, 6.0, 0.0);
+    try text(scene, bounds.x + 12.0, bounds.y + 8.0, bounds.w - 24.0, 12.0, signal.label, palette.text);
+    try text(scene, bounds.x + 12.0, bounds.y + 25.0, bounds.w - 24.0, 10.0, signal.owner, palette.dim);
+}
+
+fn renderIdentityDetail(scene: *ui.Scene, bounds: ui.Rect, hovered: ?IdentitySignalRole) ui.RenderError!void {
+    try fill(scene, bounds, ui.Color{ .r = 9, .g = 9, .b = 9, .a = 210 }, 6.0);
+    const role = hovered orelse .platform;
+    try text(scene, bounds.x + 16.0, bounds.y + 14.0, 190.0, 14.0, identityDetailTitle(role), palette.primary);
+    try paragraph(scene, ui.Rect.init(bounds.x + 16.0, bounds.y + 34.0, bounds.w - 32.0, 32.0), identityDetail(role));
+}
+
+fn identitySignalColor(role: IdentitySignalRole) ui.Color {
+    return switch (role) {
+        .person => ui.Color{ .r = 24, .g = 55, .b = 44, .a = 238 },
+        .device_unlock => ui.Color{ .r = 26, .g = 36, .b = 52, .a = 238 },
+        .carrier => ui.Color{ .r = 56, .g = 42, .b = 24, .a = 238 },
+        .platform => ui.Color{ .r = 72, .g = 36, .b = 36, .a = 238 },
+        .app_account => ui.Color{ .r = 55, .g = 38, .b = 50, .a = 238 },
+        .payment => ui.Color{ .r = 44, .g = 44, .b = 44, .a = 238 },
+        .behavior => ui.Color{ .r = 38, .g = 48, .b = 44, .a = 238 },
+    };
+}
+
+fn identityDetailTitle(role: IdentitySignalRole) []const u8 {
+    return switch (role) {
+        .person => "Person",
+        .device_unlock => "Device unlock",
+        .carrier => "Carrier signal",
+        .platform => "Platform account",
+        .app_account => "App account",
+        .payment => "Payment signal",
+        .behavior => "Behavior model",
+    };
+}
+
+fn identityDetail(role: IdentitySignalRole) []const u8 {
+    return switch (role) {
+        .person => "The human is the subject. The stack should serve them, not replace them with a vendor-controlled record.",
+        .device_unlock => "PINs and biometrics unlock the device, but the trusted path is still controlled by device software.",
+        .carrier => "Phone numbers are carrier records. Losing a SIM or eSIM can break account recovery even when the person is unchanged.",
+        .platform => "Apple and Google accounts often become identity roots because apps outsource trust to platform services.",
+        .app_account => "A service account is permission inside one system. Suspension can erase reachability without erasing the person.",
+        .payment => "Cards and banks add strong signals, but they also add risk policy, fraud scoring, and regional rules.",
+        .behavior => "Location and behavior patterns can correlate identity silently, even when the user never intended to present proof.",
+    };
+}
+
+const PermissionStepRole = enum {
+    hardware,
+    bootloader,
+    os_vendor,
+    app_store,
+    app_permission,
+};
+
+const PermissionStep = struct {
+    label: []const u8,
+    blocks: []const u8,
+    role: PermissionStepRole,
+};
+
+const permission_steps = [_]PermissionStep{
+    .{ .label = "Hardware you bought", .blocks = "physical capability", .role = .hardware },
+    .{ .label = "Bootloader", .blocks = "replace OS", .role = .bootloader },
+    .{ .label = "OS vendor", .blocks = "background, files, sensors", .role = .os_vendor },
+    .{ .label = "App store", .blocks = "install and update", .role = .app_store },
+    .{ .label = "App permissions", .blocks = "camera, NFC, routes", .role = .app_permission },
+};
+
+fn renderPermissionLadderDemo(scene: *ui.Scene, bounds: ui.Rect, hover_x: f32, hover_y: f32) ui.RenderError!void {
+    try fill(scene, bounds, palette.card, 8.0);
+    try scene.pushRect(bounds, palette.border, .border, 8.0, 0.0);
+    const inner = bounds.insetUniform(permission_demo_pad);
+    try tag(scene, ui.Rect.init(inner.x, inner.y, 154.0, 24.0), "PERMISSION LADDER", palette.blue);
+    try text(scene, inner.x, inner.y + 38.0, inner.w, 18.0, "Powerful hardware, gated authority.", palette.text);
+    try paragraph(scene, ui.Rect.init(inner.x + 188.0, inner.y + 2.0, @max(1.0, inner.w - 188.0), 54.0), "The device can do the work. The question is which rung can say no to the owner.");
+
+    const ladder_x = inner.x;
+    const ladder_top = inner.y + 84.0;
+    const step_w = @min(430.0, inner.w * 0.55);
+    var hovered: ?PermissionStepRole = null;
+    for (permission_steps, 0..) |step, index| {
+        const step_y = ladder_top + @as(f32, @floatFromInt(index)) * (permission_step_h + permission_step_gap);
+        const step_bounds = ui.Rect.init(ladder_x, step_y, step_w, permission_step_h);
+        const is_hovered = step_bounds.containsInclusive(hover_x, hover_y);
+        if (is_hovered) hovered = step.role;
+        try renderPermissionStep(scene, step_bounds, step, is_hovered);
+        if (index + 1 < permission_step_count) {
+            try fill(scene, ui.Rect.init(step_bounds.x + 22.0, step_bounds.y + step_bounds.h, 2.0, permission_step_gap), palette.border, 0.0);
+        }
+    }
+
+    const task_bounds = ui.Rect.init(ladder_x + step_w + 34.0, ladder_top + 28.0, @max(1.0, inner.w - step_w - 34.0), 160.0);
+    try fill(scene, task_bounds, ui.Color{ .r = 38, .g = 42, .b = 48, .a = 230 }, 8.0);
+    try scene.pushRect(task_bounds, palette.border, .border, 8.0, 0.0);
+    try text(scene, task_bounds.x + 20.0, task_bounds.y + 20.0, task_bounds.w - 40.0, 16.0, "Try a normal owner task", palette.text);
+    try paragraph(scene, ui.Rect.init(task_bounds.x + 20.0, task_bounds.y + 56.0, task_bounds.w - 40.0, 54.0), "Replace the OS, repair a camera, use NFC, install a local runtime, or run background sync.");
+    try alignedText(scene, task_bounds.x + 20.0, task_bounds.y + 124.0, task_bounds.w - 40.0, 12.0, "Any rung can block it.", palette.primary, .center);
+
+    const detail_y = inner.y + inner.h - permission_detail_h;
+    try renderPermissionDetail(scene, ui.Rect.init(inner.x, detail_y, inner.w, permission_detail_h), hovered);
+}
+
+fn renderPermissionStep(scene: *ui.Scene, bounds: ui.Rect, step: PermissionStep, hovered: bool) ui.RenderError!void {
+    try fill(scene, bounds, permissionStepColor(step.role), 6.0);
+    try scene.pushRect(bounds, if (hovered) palette.primary else palette.border, .border, 6.0, 0.0);
+    try text(scene, bounds.x + 14.0, bounds.y + 9.0, bounds.w - 28.0, 12.0, step.label, palette.text);
+    try text(scene, bounds.x + 14.0, bounds.y + 28.0, bounds.w - 28.0, 10.0, step.blocks, palette.dim);
+}
+
+fn renderPermissionDetail(scene: *ui.Scene, bounds: ui.Rect, hovered: ?PermissionStepRole) ui.RenderError!void {
+    try fill(scene, bounds, ui.Color{ .r = 9, .g = 9, .b = 9, .a = 210 }, 6.0);
+    const role = hovered orelse .bootloader;
+    try text(scene, bounds.x + 16.0, bounds.y + 14.0, 190.0, 14.0, permissionDetailTitle(role), palette.primary);
+    try paragraph(scene, ui.Rect.init(bounds.x + 16.0, bounds.y + 34.0, bounds.w - 32.0, 32.0), permissionDetail(role));
+}
+
+fn permissionStepColor(role: PermissionStepRole) ui.Color {
+    return switch (role) {
+        .hardware => ui.Color{ .r = 24, .g = 55, .b = 44, .a = 238 },
+        .bootloader => ui.Color{ .r = 56, .g = 42, .b = 24, .a = 238 },
+        .os_vendor => ui.Color{ .r = 26, .g = 36, .b = 52, .a = 238 },
+        .app_store => ui.Color{ .r = 72, .g = 36, .b = 36, .a = 238 },
+        .app_permission => ui.Color{ .r = 44, .g = 44, .b = 44, .a = 238 },
+    };
+}
+
+fn permissionDetailTitle(role: PermissionStepRole) []const u8 {
+    return switch (role) {
+        .hardware => "Hardware",
+        .bootloader => "Bootloader",
+        .os_vendor => "OS vendor",
+        .app_store => "App store",
+        .app_permission => "App permissions",
+    };
+}
+
+fn permissionDetail(role: PermissionStepRole) []const u8 {
+    return switch (role) {
+        .hardware => "The chip can run code, store data, draw UI, and use radios. Possession does not mean authority.",
+        .bootloader => "A locked bootloader can prevent owner-maintained software after vendor support ends.",
+        .os_vendor => "The OS vendor controls background work, files, APIs, signing policy, and hardware access.",
+        .app_store => "Store review controls distribution, updates, payments, region access, and allowed business models.",
+        .app_permission => "App prompts can protect users, but broad grants still hand apps more authority than one task needs.",
+    };
+}
+
+const DnsStepRole = enum {
+    name,
+    resolver,
+    root,
+    registry,
+    authoritative,
+};
+
+const DnsStep = struct {
+    label: []const u8,
+    risk: []const u8,
+    role: DnsStepRole,
+};
+
+const dns_steps = [_]DnsStep{
+    .{ .label = "friend.example", .risk = "friendly label", .role = .name },
+    .{ .label = "Resolver", .risk = "cache or filter", .role = .resolver },
+    .{ .label = "Root", .risk = "delegation", .role = .root },
+    .{ .label = "TLD / registrar", .risk = "ownership policy", .role = .registry },
+    .{ .label = "Authoritative", .risk = "current address", .role = .authoritative },
+};
+
+fn renderDnsLookupPathDemo(scene: *ui.Scene, bounds: ui.Rect, hover_x: f32, hover_y: f32) ui.RenderError!void {
+    try fill(scene, bounds, palette.card, 8.0);
+    try scene.pushRect(bounds, palette.border, .border, 8.0, 0.0);
+    const inner = bounds.insetUniform(dns_demo_pad);
+    try tag(scene, ui.Rect.init(inner.x, inner.y, 118.0, 24.0), "DNS PATH", palette.blue);
+    try text(scene, inner.x, inner.y + 38.0, inner.w, 18.0, "A name is a lookup, not an identity.", palette.text);
+    try paragraph(scene, ui.Rect.init(inner.x + 150.0, inner.y + 2.0, @max(1.0, inner.w - 150.0), 54.0), "A friendly name becomes an address through resolvers, caches, registries, and authoritative records.");
+
+    const path_top = inner.y + 92.0;
+    const step_w = (inner.w - dns_step_gap * @as(f32, @floatFromInt(dns_step_count - 1))) / @as(f32, @floatFromInt(dns_step_count));
+    var hovered: ?DnsStepRole = null;
+    for (dns_steps, 0..) |step, index| {
+        const step_bounds = ui.Rect.init(inner.x + @as(f32, @floatFromInt(index)) * (step_w + dns_step_gap), path_top, step_w, dns_step_h);
+        const is_hovered = step_bounds.containsInclusive(hover_x, hover_y);
+        if (is_hovered) hovered = step.role;
+        try renderDnsStep(scene, step_bounds, step, is_hovered);
+        if (index + 1 < dns_step_count) {
+            try fill(scene, ui.Rect.init(step_bounds.x + step_bounds.w + 3.0, step_bounds.y + step_bounds.h * 0.5, dns_step_gap - 6.0, 2.0), palette.border, 0.0);
+        }
+    }
+
+    const warning = ui.Rect.init(inner.x, path_top + dns_step_h + 30.0, inner.w, 54.0);
+    try fill(scene, warning, ui.Color{ .r = 66, .g = 45, .b = 26, .a = 190 }, 6.0);
+    try alignedText(scene, warning.x + 12.0, warning.y + 12.0, warning.w - 24.0, 12.0, "Certificate control still starts with name control.", palette.text, .center);
+    try alignedText(scene, warning.x + 12.0, warning.y + 32.0, warning.w - 24.0, 10.0, "Cryptographic identity should be the root. Names should be labels.", palette.dim, .center);
+
+    const detail_y = inner.y + inner.h - dns_detail_h;
+    try renderDnsDetail(scene, ui.Rect.init(inner.x, detail_y, inner.w, dns_detail_h), hovered);
+}
+
+fn renderDnsStep(scene: *ui.Scene, bounds: ui.Rect, step: DnsStep, hovered: bool) ui.RenderError!void {
+    try fill(scene, bounds, dnsStepColor(step.role), 6.0);
+    try scene.pushRect(bounds, if (hovered) palette.primary else palette.border, .border, 6.0, 0.0);
+    try alignedText(scene, bounds.x + 8.0, bounds.y + 10.0, bounds.w - 16.0, 12.0, step.label, palette.text, .center);
+    try alignedText(scene, bounds.x + 8.0, bounds.y + 32.0, bounds.w - 16.0, 10.0, step.risk, palette.dim, .center);
+}
+
+fn renderDnsDetail(scene: *ui.Scene, bounds: ui.Rect, hovered: ?DnsStepRole) ui.RenderError!void {
+    try fill(scene, bounds, ui.Color{ .r = 9, .g = 9, .b = 9, .a = 210 }, 6.0);
+    const role = hovered orelse .registry;
+    try text(scene, bounds.x + 16.0, bounds.y + 14.0, 190.0, 14.0, dnsDetailTitle(role), palette.primary);
+    try paragraph(scene, ui.Rect.init(bounds.x + 16.0, bounds.y + 34.0, bounds.w - 32.0, 32.0), dnsDetail(role));
+}
+
+fn dnsStepColor(role: DnsStepRole) ui.Color {
+    return switch (role) {
+        .name => ui.Color{ .r = 24, .g = 55, .b = 44, .a = 238 },
+        .resolver => ui.Color{ .r = 26, .g = 36, .b = 52, .a = 238 },
+        .root => ui.Color{ .r = 44, .g = 44, .b = 44, .a = 238 },
+        .registry => ui.Color{ .r = 56, .g = 42, .b = 24, .a = 238 },
+        .authoritative => ui.Color{ .r = 72, .g = 36, .b = 36, .a = 238 },
+    };
+}
+
+fn dnsDetailTitle(role: DnsStepRole) []const u8 {
+    return switch (role) {
+        .name => "Name",
+        .resolver => "Resolver",
+        .root => "Root",
+        .registry => "Registry",
+        .authoritative => "Authoritative server",
+    };
+}
+
+fn dnsDetail(role: DnsStepRole) []const u8 {
+    return switch (role) {
+        .name => "The name is memorable for humans, but it is not proof of who controls the service.",
+        .resolver => "Resolvers can cache, filter, block, or lie. The answer depends on who you ask.",
+        .root => "The root delegates authority. It does not prove the human meaning behind a name.",
+        .registry => "Registrars and registries can expire, seize, suspend, or transfer control of a name.",
+        .authoritative => "The authoritative server returns today's address. That address can change without changing the label.",
+    };
+}
+
+const AccountPathRole = enum {
+    person,
+    account,
+    key,
+    service,
+};
+
+const AccountBox = struct {
+    label: []const u8,
+    detail: []const u8,
+    role: AccountPathRole,
+};
+
+const account_path = [_]AccountBox{
+    .{ .label = "Person", .detail = "real subject", .role = .person },
+    .{ .label = "Platform account", .detail = "permission container", .role = .account },
+    .{ .label = "User-owned key", .detail = "portable proof", .role = .key },
+    .{ .label = "Service", .detail = "verifies proof", .role = .service },
+};
+
+fn renderAccountVsKeyDemo(scene: *ui.Scene, bounds: ui.Rect, hover_x: f32, hover_y: f32) ui.RenderError!void {
+    try fill(scene, bounds, palette.card, 8.0);
+    try scene.pushRect(bounds, palette.border, .border, 8.0, 0.0);
+    const inner = bounds.insetUniform(account_demo_pad);
+    try tag(scene, ui.Rect.init(inner.x, inner.y, 132.0, 24.0), "IDENTITY DEMO", palette.blue);
+    try text(scene, inner.x, inner.y + 38.0, inner.w, 18.0, "Account permission is not portable identity.", palette.text);
+    try paragraph(scene, ui.Rect.init(inner.x + 166.0, inner.y + 2.0, @max(1.0, inner.w - 166.0), 54.0), "A platform account can disappear. A user-owned key can prove continuity across services.");
+
+    const lane_top = inner.y + 96.0;
+    const lane_w = (inner.w - 40.0) * 0.5;
+    var hovered: ?AccountPathRole = null;
+    hovered = (try renderAccountLane(scene, ui.Rect.init(inner.x, lane_top, lane_w, 158.0), "Account root", &.{ account_path[0], account_path[1], account_path[3] }, hover_x, hover_y)) orelse hovered;
+    hovered = (try renderAccountLane(scene, ui.Rect.init(inner.x + lane_w + 40.0, lane_top, lane_w, 158.0), "Key root", &.{ account_path[0], account_path[2], account_path[3] }, hover_x, hover_y)) orelse hovered;
+
+    const lockout = ui.Rect.init(inner.x, lane_top + 180.0, lane_w, 42.0);
+    try fill(scene, lockout, ui.Color{ .r = 72, .g = 36, .b = 36, .a = 205 }, 6.0);
+    try alignedText(scene, lockout.x + 12.0, lockout.y + 9.0, lockout.w - 24.0, 10.0, "Account locked -> service access fails", palette.text, .center);
+    try alignedText(scene, lockout.x + 12.0, lockout.y + 25.0, lockout.w - 24.0, 9.0, "same person, missing permission", palette.dim, .center);
+    const portable = ui.Rect.init(inner.x + lane_w + 40.0, lane_top + 180.0, lane_w, 42.0);
+    try fill(scene, portable, ui.Color{ .r = 24, .g = 55, .b = 44, .a = 205 }, 6.0);
+    try alignedText(scene, portable.x + 12.0, portable.y + 9.0, portable.w - 24.0, 10.0, "Key proves continuity across labels", palette.text, .center);
+    try alignedText(scene, portable.x + 12.0, portable.y + 25.0, portable.w - 24.0, 9.0, "names and recovery sit above it", palette.dim, .center);
+
+    const detail_y = inner.y + inner.h - account_detail_h;
+    try renderAccountDetail(scene, ui.Rect.init(inner.x, detail_y, inner.w, account_detail_h), hovered);
+}
+
+fn renderAccountLane(scene: *ui.Scene, bounds: ui.Rect, label: []const u8, boxes: []const AccountBox, hover_x: f32, hover_y: f32) ui.RenderError!?AccountPathRole {
+    try text(scene, bounds.x, bounds.y, bounds.w, 14.0, label, palette.text);
+    const box_w = (bounds.w - account_box_gap * @as(f32, @floatFromInt(boxes.len - 1))) / @as(f32, @floatFromInt(boxes.len));
+    var hovered: ?AccountPathRole = null;
+    for (boxes, 0..) |box, index| {
+        const box_bounds = ui.Rect.init(bounds.x + @as(f32, @floatFromInt(index)) * (box_w + account_box_gap), bounds.y + 34.0, box_w, account_box_h);
+        const is_hovered = box_bounds.containsInclusive(hover_x, hover_y);
+        if (is_hovered) hovered = box.role;
+        try renderAccountBox(scene, box_bounds, box, is_hovered);
+        if (index + 1 < boxes.len) {
+            try fill(scene, ui.Rect.init(box_bounds.x + box_bounds.w + 3.0, box_bounds.y + box_bounds.h * 0.5, account_box_gap - 6.0, 2.0), palette.border, 0.0);
+        }
+    }
+    return hovered;
+}
+
+fn renderAccountBox(scene: *ui.Scene, bounds: ui.Rect, box: AccountBox, hovered: bool) ui.RenderError!void {
+    try fill(scene, bounds, accountBoxColor(box.role), 6.0);
+    try scene.pushRect(bounds, if (hovered) palette.primary else palette.border, .border, 6.0, 0.0);
+    try alignedText(scene, bounds.x + 8.0, bounds.y + 11.0, bounds.w - 16.0, 12.0, box.label, palette.text, .center);
+    try alignedText(scene, bounds.x + 8.0, bounds.y + 32.0, bounds.w - 16.0, 10.0, box.detail, palette.dim, .center);
+}
+
+fn renderAccountDetail(scene: *ui.Scene, bounds: ui.Rect, hovered: ?AccountPathRole) ui.RenderError!void {
+    try fill(scene, bounds, ui.Color{ .r = 9, .g = 9, .b = 9, .a = 210 }, 6.0);
+    const role = hovered orelse .key;
+    try text(scene, bounds.x + 16.0, bounds.y + 14.0, 190.0, 14.0, accountDetailTitle(role), palette.primary);
+    try paragraph(scene, ui.Rect.init(bounds.x + 16.0, bounds.y + 34.0, bounds.w - 32.0, 32.0), accountDetail(role));
+}
+
+fn accountBoxColor(role: AccountPathRole) ui.Color {
+    return switch (role) {
+        .person => ui.Color{ .r = 24, .g = 55, .b = 44, .a = 238 },
+        .account => ui.Color{ .r = 72, .g = 36, .b = 36, .a = 238 },
+        .key => ui.Color{ .r = 26, .g = 52, .b = 40, .a = 238 },
+        .service => ui.Color{ .r = 44, .g = 44, .b = 44, .a = 238 },
+    };
+}
+
+fn accountDetailTitle(role: AccountPathRole) []const u8 {
+    return switch (role) {
+        .person => "Person",
+        .account => "Platform account",
+        .key => "User-owned key",
+        .service => "Service",
+    };
+}
+
+fn accountDetail(role: AccountPathRole) []const u8 {
+    return switch (role) {
+        .person => "The person should survive account suspension, region policy, device loss, and support failures.",
+        .account => "An account is permission inside one service. It can be suspended, deleted, or trapped behind recovery.",
+        .key => "A key can prove continuity without making one platform the root of identity.",
+        .service => "A service can verify proofs from user keys while names, profiles, and recovery remain replaceable layers.",
+    };
+}
+
+const ServerStageRole = enum {
+    tls_endpoint,
+    load_balancer,
+    app_handler,
+    policy,
+    queue,
+    logs,
+    database,
+};
+
+const ServerStage = struct {
+    label: []const u8,
+    exposure: []const u8,
+    role: ServerStageRole,
+};
+
+const server_stages = [_]ServerStage{
+    .{ .label = "TLS endpoint", .exposure = "decrypts", .role = .tls_endpoint },
+    .{ .label = "Load balancer", .exposure = "routes", .role = .load_balancer },
+    .{ .label = "App handler", .exposure = "runs code", .role = .app_handler },
+    .{ .label = "Policy", .exposure = "accepts/rejects", .role = .policy },
+    .{ .label = "Queue", .exposure = "delays/retries", .role = .queue },
+    .{ .label = "Logs", .exposure = "metadata", .role = .logs },
+    .{ .label = "Database", .exposure = "state owner", .role = .database },
+};
+
+fn renderServerPipelineDemo(scene: *ui.Scene, bounds: ui.Rect, hover_x: f32, hover_y: f32) ui.RenderError!void {
+    try fill(scene, bounds, palette.card, 8.0);
+    try scene.pushRect(bounds, palette.border, .border, 8.0, 0.0);
+    const inner = bounds.insetUniform(server_demo_pad);
+    try tag(scene, ui.Rect.init(inner.x, inner.y, 142.0, 24.0), "SERVER PIPELINE", palette.blue);
+    try text(scene, inner.x, inner.y + 38.0, inner.w, 18.0, "The server is code, policy, queues, logs, and memory.", palette.text);
+    try paragraph(scene, ui.Rect.init(inner.x + 176.0, inner.y + 2.0, @max(1.0, inner.w - 176.0), 54.0), "A message can be routed, delayed, logged, checked, indexed, or rejected before another person sees it.");
+
+    const path_top = inner.y + 94.0;
+    const row_w = server_stage_w * 4.0 + server_stage_gap * 3.0;
+    const start_x = inner.x + @max(0.0, (inner.w - row_w) * 0.5);
+    var hovered: ?ServerStageRole = null;
+    for (server_stages, 0..) |stage, index| {
+        const row = index / 4;
+        const col = index % 4;
+        const stage_bounds = ui.Rect.init(
+            start_x + @as(f32, @floatFromInt(col)) * (server_stage_w + server_stage_gap),
+            path_top + @as(f32, @floatFromInt(row)) * (server_stage_h + 58.0),
+            server_stage_w,
+            server_stage_h,
+        );
+        const is_hovered = stage_bounds.containsInclusive(hover_x, hover_y);
+        if (is_hovered) hovered = stage.role;
+        try renderServerStage(scene, stage_bounds, stage, is_hovered);
+        if (index > 0 and col != 0) {
+            try fill(scene, ui.Rect.init(stage_bounds.x - server_stage_gap + 3.0, stage_bounds.y + stage_bounds.h * 0.5, server_stage_gap - 6.0, 2.0), palette.border, 0.0);
+        }
+    }
+
+    const warning = ui.Rect.init(start_x, path_top + server_stage_h + 20.0, row_w, 30.0);
+    try fill(scene, warning, ui.Color{ .r = 72, .g = 36, .b = 36, .a = 190 }, 6.0);
+    try alignedText(scene, warning.x + 12.0, warning.y + 9.0, warning.w - 24.0, 10.0, "Useful coordination becomes dangerous when it becomes the source of truth.", palette.text, .center);
+
+    const detail_y = inner.y + inner.h - server_detail_h;
+    try renderServerDetail(scene, ui.Rect.init(inner.x, detail_y, inner.w, server_detail_h), hovered);
+}
+
+fn renderServerStage(scene: *ui.Scene, bounds: ui.Rect, stage: ServerStage, hovered: bool) ui.RenderError!void {
+    try fill(scene, bounds, serverStageColor(stage.role), 6.0);
+    try scene.pushRect(bounds, if (hovered) palette.primary else palette.border, .border, 6.0, 0.0);
+    try alignedText(scene, bounds.x + 8.0, bounds.y + 10.0, bounds.w - 16.0, 12.0, stage.label, palette.text, .center);
+    try alignedText(scene, bounds.x + 8.0, bounds.y + 31.0, bounds.w - 16.0, 10.0, stage.exposure, palette.dim, .center);
+}
+
+fn renderServerDetail(scene: *ui.Scene, bounds: ui.Rect, hovered: ?ServerStageRole) ui.RenderError!void {
+    try fill(scene, bounds, ui.Color{ .r = 9, .g = 9, .b = 9, .a = 210 }, 6.0);
+    const role = hovered orelse .database;
+    try text(scene, bounds.x + 16.0, bounds.y + 14.0, 190.0, 14.0, serverDetailTitle(role), palette.primary);
+    try paragraph(scene, ui.Rect.init(bounds.x + 16.0, bounds.y + 34.0, bounds.w - 32.0, 32.0), serverDetail(role));
+}
+
+fn serverStageColor(role: ServerStageRole) ui.Color {
+    return switch (role) {
+        .tls_endpoint => ui.Color{ .r = 70, .g = 52, .b = 25, .a = 238 },
+        .load_balancer, .queue => ui.Color{ .r = 26, .g = 36, .b = 52, .a = 238 },
+        .app_handler => ui.Color{ .r = 44, .g = 44, .b = 44, .a = 238 },
+        .policy => ui.Color{ .r = 72, .g = 36, .b = 36, .a = 238 },
+        .logs => ui.Color{ .r = 56, .g = 42, .b = 24, .a = 238 },
+        .database => ui.Color{ .r = 55, .g = 38, .b = 50, .a = 238 },
+    };
+}
+
+fn serverDetailTitle(role: ServerStageRole) []const u8 {
+    return switch (role) {
+        .tls_endpoint => "TLS endpoint",
+        .load_balancer => "Load balancer",
+        .app_handler => "App handler",
+        .policy => "Policy",
+        .queue => "Queue",
+        .logs => "Logs",
+        .database => "Database",
+    };
+}
+
+fn serverDetail(role: ServerStageRole) []const u8 {
+    return switch (role) {
+        .tls_endpoint => "The request becomes plaintext here. After this point, server-side systems can inspect it.",
+        .load_balancer => "Routing infrastructure can observe timing, volume, endpoint choice, and service health metadata.",
+        .app_handler => "Application code interprets the message and decides which internal systems receive it.",
+        .policy => "Spam, fraud, moderation, region, and account rules can accept, reject, or transform the message.",
+        .queue => "Queues improve reliability but also create another place where message state can wait and be copied.",
+        .logs => "Logs often preserve metadata and error context long after the visible operation has finished.",
+        .database => "If the database owns state, the user asks permission to access their own conversation.",
+    };
+}
+
+const PushStepRole = enum {
+    sender_service,
+    push_provider,
+    phone_os,
+    app_wake,
+    app_fetch,
+};
+
+const PushStep = struct {
+    label: []const u8,
+    exposure: []const u8,
+    role: PushStepRole,
+};
+
+const push_steps = [_]PushStep{
+    .{ .label = "Sender service", .exposure = "relationship", .role = .sender_service },
+    .{ .label = "Platform push", .exposure = "device token", .role = .push_provider },
+    .{ .label = "Phone OS", .exposure = "wake policy", .role = .phone_os },
+    .{ .label = "App wake", .exposure = "opens app", .role = .app_wake },
+    .{ .label = "Fetch/decrypt", .exposure = "content path", .role = .app_fetch },
+};
+
+fn renderPushWakePathDemo(scene: *ui.Scene, bounds: ui.Rect, hover_x: f32, hover_y: f32) ui.RenderError!void {
+    try fill(scene, bounds, palette.card, 8.0);
+    try scene.pushRect(bounds, palette.border, .border, 8.0, 0.0);
+    const inner = bounds.insetUniform(push_demo_pad);
+    try tag(scene, ui.Rect.init(inner.x, inner.y, 128.0, 24.0), "WAKE PATH", palette.blue);
+    try text(scene, inner.x, inner.y + 38.0, inner.w, 18.0, "A notification is delivery plus a wakeup.", palette.text);
+    try paragraph(scene, ui.Rect.init(inner.x + 162.0, inner.y + 2.0, @max(1.0, inner.w - 162.0), 54.0), "Even encrypted content can leave timing, device, app, and relationship metadata in the wake path.");
+
+    const path_top = inner.y + 104.0;
+    const step_w = (inner.w - push_step_gap * @as(f32, @floatFromInt(push_step_count - 1))) / @as(f32, @floatFromInt(push_step_count));
+    var hovered: ?PushStepRole = null;
+    for (push_steps, 0..) |step, index| {
+        const step_bounds = ui.Rect.init(inner.x + @as(f32, @floatFromInt(index)) * (step_w + push_step_gap), path_top, step_w, push_step_h);
+        const is_hovered = step_bounds.containsInclusive(hover_x, hover_y);
+        if (is_hovered) hovered = step.role;
+        try renderPushStep(scene, step_bounds, step, is_hovered);
+        if (index + 1 < push_step_count) {
+            try fill(scene, ui.Rect.init(step_bounds.x + step_bounds.w + 3.0, step_bounds.y + step_bounds.h * 0.5, push_step_gap - 6.0, 2.0), palette.border, 0.0);
+        }
+    }
+
+    const metadata = ui.Rect.init(inner.x, path_top + push_step_h + 34.0, inner.w, 62.0);
+    try fill(scene, metadata, ui.Color{ .r = 66, .g = 45, .b = 26, .a = 190 }, 6.0);
+    try text(scene, metadata.x + 18.0, metadata.y + 14.0, metadata.w - 36.0, 12.0, "Metadata still exists", palette.text);
+    try paragraph(scene, ui.Rect.init(metadata.x + 18.0, metadata.y + 34.0, metadata.w - 36.0, 24.0), "Who woke which app, on which device, at what time, and how often can be sensitive even when content is encrypted.");
+
+    const detail_y = inner.y + inner.h - push_detail_h;
+    try renderPushDetail(scene, ui.Rect.init(inner.x, detail_y, inner.w, push_detail_h), hovered);
+}
+
+fn renderPushStep(scene: *ui.Scene, bounds: ui.Rect, step: PushStep, hovered: bool) ui.RenderError!void {
+    try fill(scene, bounds, pushStepColor(step.role), 6.0);
+    try scene.pushRect(bounds, if (hovered) palette.primary else palette.border, .border, 6.0, 0.0);
+    try alignedText(scene, bounds.x + 8.0, bounds.y + 11.0, bounds.w - 16.0, 12.0, step.label, palette.text, .center);
+    try alignedText(scene, bounds.x + 8.0, bounds.y + 34.0, bounds.w - 16.0, 10.0, step.exposure, palette.dim, .center);
+}
+
+fn renderPushDetail(scene: *ui.Scene, bounds: ui.Rect, hovered: ?PushStepRole) ui.RenderError!void {
+    try fill(scene, bounds, ui.Color{ .r = 9, .g = 9, .b = 9, .a = 210 }, 6.0);
+    const role = hovered orelse .push_provider;
+    try text(scene, bounds.x + 16.0, bounds.y + 14.0, 190.0, 14.0, pushDetailTitle(role), palette.primary);
+    try paragraph(scene, ui.Rect.init(bounds.x + 16.0, bounds.y + 34.0, bounds.w - 32.0, 32.0), pushDetail(role));
+}
+
+fn pushStepColor(role: PushStepRole) ui.Color {
+    return switch (role) {
+        .sender_service => ui.Color{ .r = 44, .g = 44, .b = 44, .a = 238 },
+        .push_provider => ui.Color{ .r = 72, .g = 36, .b = 36, .a = 238 },
+        .phone_os => ui.Color{ .r = 26, .g = 36, .b = 52, .a = 238 },
+        .app_wake => ui.Color{ .r = 56, .g = 42, .b = 24, .a = 238 },
+        .app_fetch => ui.Color{ .r = 24, .g = 55, .b = 44, .a = 238 },
+    };
+}
+
+fn pushDetailTitle(role: PushStepRole) []const u8 {
+    return switch (role) {
+        .sender_service => "Sender service",
+        .push_provider => "Platform push",
+        .phone_os => "Phone OS",
+        .app_wake => "App wake",
+        .app_fetch => "Fetch/decrypt",
+    };
+}
+
+fn pushDetail(role: PushStepRole) []const u8 {
+    return switch (role) {
+        .sender_service => "The sender service often knows who should be woken, which app is involved, and when.",
+        .push_provider => "The platform push provider can learn device token, app identity, timing, and delivery status.",
+        .phone_os => "The OS decides whether and how to wake the app, balancing power, policy, and platform control.",
+        .app_wake => "A wakeup may reveal that a relationship or account action just happened, even without plaintext content.",
+        .app_fetch => "The app may fetch from a server after waking, creating another account and metadata event.",
+    };
+}
+
+const DependencyRole = enum {
+    app,
+    analytics,
+    crash,
+    login,
+    push,
+    cloud,
+    ads,
+    transitive,
+};
+
+const DependencyNode = struct {
+    label: []const u8,
+    exposure: []const u8,
+    role: DependencyRole,
+};
+
+const dependency_nodes = [_]DependencyNode{
+    .{ .label = "Chat App", .exposure = "trusted icon", .role = .app },
+    .{ .label = "Analytics", .exposure = "event stream", .role = .analytics },
+    .{ .label = "Crash SDK", .exposure = "error context", .role = .crash },
+    .{ .label = "Login SDK", .exposure = "identity path", .role = .login },
+    .{ .label = "Push SDK", .exposure = "wake path", .role = .push },
+    .{ .label = "Cloud SDK", .exposure = "remote state", .role = .cloud },
+    .{ .label = "Ads", .exposure = "tracking", .role = .ads },
+    .{ .label = "Transitive", .exposure = "hidden code", .role = .transitive },
+};
+
+fn renderDependencyGraphDemo(scene: *ui.Scene, bounds: ui.Rect, hover_x: f32, hover_y: f32) ui.RenderError!void {
+    try fill(scene, bounds, palette.card, 8.0);
+    try scene.pushRect(bounds, palette.border, .border, 8.0, 0.0);
+    const inner = bounds.insetUniform(dependency_demo_pad);
+    try tag(scene, ui.Rect.init(inner.x, inner.y, 150.0, 24.0), "DEPENDENCY GRAPH", palette.blue);
+    try text(scene, inner.x, inner.y + 38.0, inner.w, 18.0, "One app icon can hide many trust paths.", palette.text);
+    try paragraph(scene, ui.Rect.init(inner.x + 184.0, inner.y + 2.0, @max(1.0, inner.w - 184.0), 54.0), "Each SDK can bring code, network routes, update policy, logging, and transitive dependencies.");
+
+    const graph_top = inner.y + 94.0;
+    const center = ui.Rect.init(inner.x + (inner.w - dependency_node_w) * 0.5, graph_top, dependency_node_w, dependency_node_h);
+    var hovered: ?DependencyRole = null;
+    const center_hovered = center.containsInclusive(hover_x, hover_y);
+    if (center_hovered) hovered = .app;
+    try renderDependencyNode(scene, center, dependency_nodes[0], center_hovered);
+
+    const row_w = dependency_node_w * 4.0 + dependency_node_gap * 3.0;
+    const start_x = inner.x + @max(0.0, (inner.w - row_w) * 0.5);
+    for (dependency_nodes[1..], 0..) |node, offset| {
+        const index = offset + 1;
+        const row = offset / 4;
+        const col = offset % 4;
+        const node_bounds = ui.Rect.init(
+            start_x + @as(f32, @floatFromInt(col)) * (dependency_node_w + dependency_node_gap),
+            graph_top + 96.0 + @as(f32, @floatFromInt(row)) * (dependency_node_h + 44.0),
+            dependency_node_w,
+            dependency_node_h,
+        );
+        const is_hovered = node_bounds.containsInclusive(hover_x, hover_y);
+        if (is_hovered) hovered = node.role;
+        try renderDependencyLink(scene, center, node_bounds, index);
+        try renderDependencyNode(scene, node_bounds, node, is_hovered);
+    }
+
+    const warning = ui.Rect.init(start_x, graph_top + 96.0 + dependency_node_h + 16.0, row_w, 24.0);
+    try fill(scene, warning, ui.Color{ .r = 72, .g = 36, .b = 36, .a = 190 }, 5.0);
+    try alignedText(scene, warning.x + 12.0, warning.y + 7.0, warning.w - 24.0, 10.0, "Running code is authority, even when it arrived as a library.", palette.text, .center);
+
+    const detail_y = inner.y + inner.h - dependency_detail_h;
+    try renderDependencyDetail(scene, ui.Rect.init(inner.x, detail_y, inner.w, dependency_detail_h), hovered);
+}
+
+fn renderDependencyLink(scene: *ui.Scene, center: ui.Rect, target: ui.Rect, index: usize) ui.RenderError!void {
+    _ = index;
+    const x0 = center.x + center.w * 0.5;
+    const y0 = center.y + center.h;
+    const x1 = target.x + target.w * 0.5;
+    const y1 = target.y;
+    const mid_y = y0 + @max(8.0, (y1 - y0) * 0.45);
+    try fill(scene, ui.Rect.init(@min(x0, x1), mid_y, @abs(x1 - x0), 2.0), palette.border, 0.0);
+    try fill(scene, ui.Rect.init(x0, y0, 2.0, mid_y - y0), palette.border, 0.0);
+    try fill(scene, ui.Rect.init(x1, mid_y, 2.0, y1 - mid_y), palette.border, 0.0);
+}
+
+fn renderDependencyNode(scene: *ui.Scene, bounds: ui.Rect, node: DependencyNode, hovered: bool) ui.RenderError!void {
+    try fill(scene, bounds, dependencyNodeColor(node.role), 6.0);
+    try scene.pushRect(bounds, if (hovered) palette.primary else palette.border, .border, 6.0, 0.0);
+    try alignedText(scene, bounds.x + 8.0, bounds.y + 10.0, bounds.w - 16.0, 12.0, node.label, palette.text, .center);
+    try alignedText(scene, bounds.x + 8.0, bounds.y + 30.0, bounds.w - 16.0, 10.0, node.exposure, palette.dim, .center);
+}
+
+fn renderDependencyDetail(scene: *ui.Scene, bounds: ui.Rect, hovered: ?DependencyRole) ui.RenderError!void {
+    try fill(scene, bounds, ui.Color{ .r = 9, .g = 9, .b = 9, .a = 210 }, 6.0);
+    const role = hovered orelse .transitive;
+    try text(scene, bounds.x + 16.0, bounds.y + 14.0, 190.0, 14.0, dependencyDetailTitle(role), palette.primary);
+    try paragraph(scene, ui.Rect.init(bounds.x + 16.0, bounds.y + 34.0, bounds.w - 32.0, 32.0), dependencyDetail(role));
+}
+
+fn dependencyNodeColor(role: DependencyRole) ui.Color {
+    return switch (role) {
+        .app => ui.Color{ .r = 24, .g = 55, .b = 44, .a = 238 },
+        .analytics, .ads => ui.Color{ .r = 72, .g = 36, .b = 36, .a = 238 },
+        .crash, .transitive => ui.Color{ .r = 56, .g = 42, .b = 24, .a = 238 },
+        .login, .cloud => ui.Color{ .r = 55, .g = 38, .b = 50, .a = 238 },
+        .push => ui.Color{ .r = 26, .g = 36, .b = 52, .a = 238 },
+    };
+}
+
+fn dependencyDetailTitle(role: DependencyRole) []const u8 {
+    return switch (role) {
+        .app => "App",
+        .analytics => "Analytics SDK",
+        .crash => "Crash SDK",
+        .login => "Login SDK",
+        .push => "Push SDK",
+        .cloud => "Cloud SDK",
+        .ads => "Ads SDK",
+        .transitive => "Transitive dependency",
+    };
+}
+
+fn dependencyDetail(role: DependencyRole) []const u8 {
+    return switch (role) {
+        .app => "The user trusts one app icon, but the binary may include many code owners and update paths.",
+        .analytics => "Analytics can turn local actions into remote behavior streams and product experiments.",
+        .crash => "Crash reports can include sensitive context if errors capture payloads, paths, or account state.",
+        .login => "Login SDKs can outsource identity and recovery to a platform outside the app.",
+        .push => "Push SDKs connect the app to platform wake paths and delivery metadata.",
+        .cloud => "Cloud clients can make a remote database the real owner of app state.",
+        .ads => "Ad SDKs often bring identifiers, auctions, profiling, and extra network destinations.",
+        .transitive => "Indirect packages are easy to forget, but they still ship code into the user's trust boundary.",
+    };
+}
+
+const RouterStepRole = enum {
+    phone,
+    wifi,
+    router,
+    isp,
+    internet,
+};
+
+const RouterStep = struct {
+    label: []const u8,
+    exposure: []const u8,
+    role: RouterStepRole,
+};
+
+const router_steps = [_]RouterStep{
+    .{ .label = "Phone", .exposure = "creates data", .role = .phone },
+    .{ .label = "Wi-Fi", .exposure = "local radio", .role = .wifi },
+    .{ .label = "Router", .exposure = "first gatekeeper", .role = .router },
+    .{ .label = "ISP", .exposure = "outside route", .role = .isp },
+    .{ .label = "Internet", .exposure = "remote path", .role = .internet },
+};
+
+fn renderRouterBoundaryDemo(scene: *ui.Scene, bounds: ui.Rect, hover_x: f32, hover_y: f32) ui.RenderError!void {
+    try fill(scene, bounds, palette.card, 8.0);
+    try scene.pushRect(bounds, palette.border, .border, 8.0, 0.0);
+    const inner = bounds.insetUniform(router_demo_pad);
+    try tag(scene, ui.Rect.init(inner.x, inner.y, 142.0, 24.0), "ROUTER BOUNDARY", palette.blue);
+    try text(scene, inner.x, inner.y + 38.0, inner.w, 18.0, "Wi-Fi protects local air, not every later boundary.", palette.text);
+    try paragraph(scene, ui.Rect.init(inner.x + 176.0, inner.y + 2.0, @max(1.0, inner.w - 176.0), 54.0), "The router is a separate system with address assignment, forwarding, DNS settings, logs, and firewall policy.");
+
+    const path_top = inner.y + 104.0;
+    const step_w = (inner.w - router_step_gap * @as(f32, @floatFromInt(router_step_count - 1))) / @as(f32, @floatFromInt(router_step_count));
+    var hovered: ?RouterStepRole = null;
+    for (router_steps, 0..) |step, index| {
+        const step_bounds = ui.Rect.init(inner.x + @as(f32, @floatFromInt(index)) * (step_w + router_step_gap), path_top, step_w, router_step_h);
+        const is_hovered = step_bounds.containsInclusive(hover_x, hover_y);
+        if (is_hovered) hovered = step.role;
+        try renderRouterStep(scene, step_bounds, step, is_hovered);
+        if (index + 1 < router_step_count) {
+            const line_color = if (index == 1) palette.primary else palette.border;
+            try fill(scene, ui.Rect.init(step_bounds.x + step_bounds.w + 3.0, step_bounds.y + step_bounds.h * 0.5, router_step_gap - 6.0, 2.0), line_color, 0.0);
+        }
+    }
+
+    const local = ui.Rect.init(inner.x, path_top + router_step_h + 34.0, step_w * 3.0 + router_step_gap * 2.0, 44.0);
+    try fill(scene, local, ui.Color{ .r = 24, .g = 55, .b = 44, .a = 190 }, 6.0);
+    try alignedText(scene, local.x + 12.0, local.y + 10.0, local.w - 24.0, 10.0, "Local trust boundary", palette.text, .center);
+    try alignedText(scene, local.x + 12.0, local.y + 26.0, local.w - 24.0, 9.0, "device, Wi-Fi, router", palette.dim, .center);
+    const remote = ui.Rect.init(local.x + local.w + router_step_gap, local.y, inner.w - local.w - router_step_gap, 44.0);
+    try fill(scene, remote, ui.Color{ .r = 56, .g = 42, .b = 24, .a = 190 }, 6.0);
+    try alignedText(scene, remote.x + 12.0, remote.y + 10.0, remote.w - 24.0, 10.0, "Outside path", palette.text, .center);
+    try alignedText(scene, remote.x + 12.0, remote.y + 26.0, remote.w - 24.0, 9.0, "ISP and internet", palette.dim, .center);
+
+    const detail_y = inner.y + inner.h - router_detail_h;
+    try renderRouterDetail(scene, ui.Rect.init(inner.x, detail_y, inner.w, router_detail_h), hovered);
+}
+
+fn renderRouterStep(scene: *ui.Scene, bounds: ui.Rect, step: RouterStep, hovered: bool) ui.RenderError!void {
+    try fill(scene, bounds, routerStepColor(step.role), 6.0);
+    try scene.pushRect(bounds, if (hovered) palette.primary else palette.border, .border, 6.0, 0.0);
+    try alignedText(scene, bounds.x + 8.0, bounds.y + 11.0, bounds.w - 16.0, 12.0, step.label, palette.text, .center);
+    try alignedText(scene, bounds.x + 8.0, bounds.y + 34.0, bounds.w - 16.0, 10.0, step.exposure, palette.dim, .center);
+}
+
+fn renderRouterDetail(scene: *ui.Scene, bounds: ui.Rect, hovered: ?RouterStepRole) ui.RenderError!void {
+    try fill(scene, bounds, ui.Color{ .r = 9, .g = 9, .b = 9, .a = 210 }, 6.0);
+    const role = hovered orelse .router;
+    try text(scene, bounds.x + 16.0, bounds.y + 14.0, 190.0, 14.0, routerDetailTitle(role), palette.primary);
+    try paragraph(scene, ui.Rect.init(bounds.x + 16.0, bounds.y + 34.0, bounds.w - 32.0, 32.0), routerDetail(role));
+}
+
+fn routerStepColor(role: RouterStepRole) ui.Color {
+    return switch (role) {
+        .phone => ui.Color{ .r = 24, .g = 55, .b = 44, .a = 238 },
+        .wifi => ui.Color{ .r = 26, .g = 36, .b = 52, .a = 238 },
+        .router => ui.Color{ .r = 56, .g = 42, .b = 24, .a = 238 },
+        .isp => ui.Color{ .r = 72, .g = 36, .b = 36, .a = 238 },
+        .internet => ui.Color{ .r = 44, .g = 44, .b = 44, .a = 238 },
+    };
+}
+
+fn routerDetailTitle(role: RouterStepRole) []const u8 {
+    return switch (role) {
+        .phone => "Phone",
+        .wifi => "Wi-Fi",
+        .router => "Router",
+        .isp => "ISP",
+        .internet => "Internet",
+    };
+}
+
+fn routerDetail(role: RouterStepRole) []const u8 {
+    return switch (role) {
+        .phone => "The best boundary is not sending unnecessary data from the device in the first place.",
+        .wifi => "WPA protects local radio traffic. It does not decide identity, app tracking, or server trust.",
+        .router => "The router assigns addresses, forwards packets, sets DNS, applies firewall policy, and may keep logs.",
+        .isp => "The ISP sees the outside route unless other layers hide destination detail.",
+        .internet => "Past the router and ISP, DNS, TLS, VPNs, relays, servers, and databases add new boundaries.",
+    };
+}
+
+const KeypressStepRole = enum {
+    finger,
+    hardware,
+    os_event,
+    app_state,
+    render,
+    committed_object,
+};
+
+const KeypressStep = struct {
+    label: []const u8,
+    exposure: []const u8,
+    role: KeypressStepRole,
+};
+
+const keypress_steps = [_]KeypressStep{
+    .{ .label = "Finger", .exposure = "physical action", .role = .finger },
+    .{ .label = "Hardware", .exposure = "electrical event", .role = .hardware },
+    .{ .label = "OS event", .exposure = "input queue", .role = .os_event },
+    .{ .label = "App state", .exposure = "draft buffer", .role = .app_state },
+    .{ .label = "Render", .exposure = "visible pixels", .role = .render },
+    .{ .label = "Send intent", .exposure = "committed object", .role = .committed_object },
+};
+
+fn renderKeypressCommitPathDemo(scene: *ui.Scene, bounds: ui.Rect, hover_x: f32, hover_y: f32) ui.RenderError!void {
+    try fill(scene, bounds, palette.card, 8.0);
+    try scene.pushRect(bounds, palette.border, .border, 8.0, 0.0);
+    const inner = bounds.insetUniform(keypress_demo_pad);
+    try tag(scene, ui.Rect.init(inner.x, inner.y, 142.0, 24.0), "COMMIT PATH", palette.blue);
+    try text(scene, inner.x, inner.y + 38.0, inner.w, 18.0, "Typing is not the same as sending.", palette.text);
+    try paragraph(scene, ui.Rect.init(inner.x + 176.0, inner.y + 2.0, @max(1.0, inner.w - 176.0), 54.0), "Raw input can stay local. Only explicit user intent should become a durable object worth storing or sending.");
+
+    const path_top = inner.y + 104.0;
+    const step_w = (inner.w - keypress_step_gap * @as(f32, @floatFromInt(keypress_step_count - 1))) / @as(f32, @floatFromInt(keypress_step_count));
+    var hovered: ?KeypressStepRole = null;
+    for (keypress_steps, 0..) |step, index| {
+        const step_bounds = ui.Rect.init(inner.x + @as(f32, @floatFromInt(index)) * (step_w + keypress_step_gap), path_top, step_w, keypress_step_h);
+        const is_hovered = step_bounds.containsInclusive(hover_x, hover_y);
+        if (is_hovered) hovered = step.role;
+        try renderKeypressStep(scene, step_bounds, step, is_hovered);
+        if (index + 1 < keypress_step_count) {
+            const line_color = if (index + 1 == keypress_step_count - 1) palette.primary else palette.border;
+            try fill(scene, ui.Rect.init(step_bounds.x + step_bounds.w + 3.0, step_bounds.y + step_bounds.h * 0.5, keypress_step_gap - 6.0, 2.0), line_color, 0.0);
+        }
+    }
+
+    const boundary = ui.Rect.init(inner.x, path_top + keypress_step_h + 34.0, inner.w, 52.0);
+    try fill(scene, boundary, ui.Color{ .r = 24, .g = 55, .b = 44, .a = 190 }, 6.0);
+    try alignedText(scene, boundary.x + 12.0, boundary.y + 12.0, boundary.w - 24.0, 10.0, "Commit boundary", palette.text, .center);
+    try alignedText(scene, boundary.x + 12.0, boundary.y + 30.0, boundary.w - 24.0, 9.0, "drafts and corrections are local state until the user chooses to send", palette.dim, .center);
+
+    const detail_y = inner.y + inner.h - keypress_detail_h;
+    try renderKeypressDetail(scene, ui.Rect.init(inner.x, detail_y, inner.w, keypress_detail_h), hovered);
+}
+
+fn renderKeypressStep(scene: *ui.Scene, bounds: ui.Rect, step: KeypressStep, hovered: bool) ui.RenderError!void {
+    try fill(scene, bounds, keypressStepColor(step.role), 6.0);
+    try scene.pushRect(bounds, if (hovered) palette.primary else palette.border, .border, 6.0, 0.0);
+    try alignedText(scene, bounds.x + 8.0, bounds.y + 11.0, bounds.w - 16.0, 12.0, step.label, palette.text, .center);
+    try alignedText(scene, bounds.x + 8.0, bounds.y + 33.0, bounds.w - 16.0, 10.0, step.exposure, palette.dim, .center);
+}
+
+fn renderKeypressDetail(scene: *ui.Scene, bounds: ui.Rect, hovered: ?KeypressStepRole) ui.RenderError!void {
+    try fill(scene, bounds, ui.Color{ .r = 9, .g = 9, .b = 9, .a = 210 }, 6.0);
+    const role = hovered orelse .committed_object;
+    try text(scene, bounds.x + 16.0, bounds.y + 14.0, 190.0, 14.0, keypressDetailTitle(role), palette.primary);
+    try paragraph(scene, ui.Rect.init(bounds.x + 16.0, bounds.y + 34.0, bounds.w - 32.0, 32.0), keypressDetail(role));
+}
+
+fn keypressStepColor(role: KeypressStepRole) ui.Color {
+    return switch (role) {
+        .finger, .committed_object => ui.Color{ .r = 24, .g = 55, .b = 44, .a = 238 },
+        .hardware => ui.Color{ .r = 56, .g = 42, .b = 24, .a = 238 },
+        .os_event => ui.Color{ .r = 26, .g = 36, .b = 52, .a = 238 },
+        .app_state => ui.Color{ .r = 55, .g = 38, .b = 50, .a = 238 },
+        .render => ui.Color{ .r = 44, .g = 44, .b = 44, .a = 238 },
+    };
+}
+
+fn keypressDetailTitle(role: KeypressStepRole) []const u8 {
+    return switch (role) {
+        .finger => "Finger",
+        .hardware => "Hardware",
+        .os_event => "OS event",
+        .app_state => "App state",
+        .render => "Render",
+        .committed_object => "Send intent",
+    };
+}
+
+fn keypressDetail(role: KeypressStepRole) []const u8 {
+    return switch (role) {
+        .finger => "A physical action starts the path, but it is not yet a message or a network event.",
+        .hardware => "Keyboard or touch hardware reports low-level signals without knowing user meaning.",
+        .os_event => "The OS turns hardware input into an event for the focused app.",
+        .app_state => "The app can hold drafts, corrections, and deleted text before anything is committed.",
+        .render => "Pixels let the user inspect local state before choosing a durable action.",
+        .committed_object => "Only explicit send intent should become signed history, storage, or network transfer.",
+    };
+}
+
+const ComputeTaskRole = enum {
+    notes,
+    contacts,
+    calendar,
+    local_search,
+    assistant,
+    cloud_capacity,
+};
+
+const ComputeTask = struct {
+    label: []const u8,
+    owner: []const u8,
+    role: ComputeTaskRole,
+};
+
+const compute_tasks = [_]ComputeTask{
+    .{ .label = "Notes", .owner = "local text", .role = .notes },
+    .{ .label = "Contacts", .owner = "local graph", .role = .contacts },
+    .{ .label = "Calendar", .owner = "local schedule", .role = .calendar },
+    .{ .label = "Search", .owner = "local index", .role = .local_search },
+    .{ .label = "Assistant", .owner = "local context", .role = .assistant },
+    .{ .label = "Cloud", .owner = "extra capacity", .role = .cloud_capacity },
+};
+
+fn renderLocalComputeCapacityDemo(scene: *ui.Scene, bounds: ui.Rect, hover_x: f32, hover_y: f32) ui.RenderError!void {
+    try fill(scene, bounds, palette.card, 8.0);
+    try scene.pushRect(bounds, palette.border, .border, 8.0, 0.0);
+    const inner = bounds.insetUniform(compute_demo_pad);
+    try tag(scene, ui.Rect.init(inner.x, inner.y, 150.0, 24.0), "LOCAL COMPUTE", palette.blue);
+    try text(scene, inner.x, inner.y + 38.0, inner.w, 18.0, "Small personal workloads fit on the device.", palette.text);
+    try paragraph(scene, ui.Rect.init(inner.x + 184.0, inner.y + 2.0, @max(1.0, inner.w - 184.0), 54.0), "Cloud is useful for remote coordination and large jobs. It should not become the default owner of ordinary state.");
+
+    const chip = ui.Rect.init(inner.x, inner.y + 100.0, 170.0, 150.0);
+    try fill(scene, chip, ui.Color{ .r = 24, .g = 55, .b = 44, .a = 215 }, 8.0);
+    try scene.pushRect(chip, palette.primary, .border, 8.0, 0.0);
+    try alignedText(scene, chip.x + 12.0, chip.y + 32.0, chip.w - 24.0, 14.0, "Your device", palette.text, .center);
+    try alignedText(scene, chip.x + 12.0, chip.y + 64.0, chip.w - 24.0, 10.0, "CPU + storage + keys", palette.dim, .center);
+    try alignedText(scene, chip.x + 12.0, chip.y + 86.0, chip.w - 24.0, 10.0, "graphics + network", palette.dim, .center);
+
+    const task_area_x = chip.x + chip.w + 44.0;
+    const task_area_w = @max(1.0, inner.w - chip.w - 44.0);
+    const row_w = compute_task_w * 3.0 + compute_task_gap * 2.0;
+    const start_x = task_area_x + @max(0.0, (task_area_w - row_w) * 0.5);
+    var hovered: ?ComputeTaskRole = null;
+    for (compute_tasks, 0..) |task, index| {
+        const row = index / 3;
+        const col = index % 3;
+        const task_bounds = ui.Rect.init(
+            start_x + @as(f32, @floatFromInt(col)) * (compute_task_w + compute_task_gap),
+            inner.y + 96.0 + @as(f32, @floatFromInt(row)) * (compute_task_h + 42.0),
+            compute_task_w,
+            compute_task_h,
+        );
+        const is_hovered = task_bounds.containsInclusive(hover_x, hover_y);
+        if (is_hovered) hovered = task.role;
+        try renderComputeTask(scene, task_bounds, task, is_hovered);
+    }
+
+    const rule = ui.Rect.init(inner.x, inner.y + 280.0, inner.w, 34.0);
+    try fill(scene, rule, ui.Color{ .r = 26, .g = 36, .b = 52, .a = 190 }, 6.0);
+    try alignedText(scene, rule.x + 12.0, rule.y + 10.0, rule.w - 24.0, 10.0, "local first -> sync when needed -> cloud only when useful", palette.text, .center);
+
+    const detail_y = inner.y + inner.h - compute_detail_h;
+    try renderComputeDetail(scene, ui.Rect.init(inner.x, detail_y, inner.w, compute_detail_h), hovered);
+}
+
+fn renderComputeTask(scene: *ui.Scene, bounds: ui.Rect, task: ComputeTask, hovered: bool) ui.RenderError!void {
+    try fill(scene, bounds, computeTaskColor(task.role), 6.0);
+    try scene.pushRect(bounds, if (hovered) palette.primary else palette.border, .border, 6.0, 0.0);
+    try alignedText(scene, bounds.x + 8.0, bounds.y + 10.0, bounds.w - 16.0, 12.0, task.label, palette.text, .center);
+    try alignedText(scene, bounds.x + 8.0, bounds.y + 30.0, bounds.w - 16.0, 10.0, task.owner, palette.dim, .center);
+}
+
+fn renderComputeDetail(scene: *ui.Scene, bounds: ui.Rect, hovered: ?ComputeTaskRole) ui.RenderError!void {
+    try fill(scene, bounds, ui.Color{ .r = 9, .g = 9, .b = 9, .a = 210 }, 6.0);
+    const role = hovered orelse .notes;
+    try text(scene, bounds.x + 16.0, bounds.y + 14.0, 190.0, 14.0, computeDetailTitle(role), palette.primary);
+    try paragraph(scene, ui.Rect.init(bounds.x + 16.0, bounds.y + 34.0, bounds.w - 32.0, 32.0), computeDetail(role));
+}
+
+fn computeTaskColor(role: ComputeTaskRole) ui.Color {
+    return switch (role) {
+        .notes, .contacts, .calendar, .local_search, .assistant => ui.Color{ .r = 24, .g = 55, .b = 44, .a = 238 },
+        .cloud_capacity => ui.Color{ .r = 72, .g = 36, .b = 36, .a = 238 },
+    };
+}
+
+fn computeDetailTitle(role: ComputeTaskRole) []const u8 {
+    return switch (role) {
+        .notes => "Notes",
+        .contacts => "Contacts",
+        .calendar => "Calendar",
+        .local_search => "Search",
+        .assistant => "Assistant",
+        .cloud_capacity => "Cloud capacity",
+    };
+}
+
+fn computeDetail(role: ComputeTaskRole) []const u8 {
+    return switch (role) {
+        .notes => "Plain text and small documents do not need a server round trip to exist or display.",
+        .contacts => "A contact book can be local user-owned state, then replicated or shared deliberately.",
+        .calendar => "Schedules are small structured records. Remote sync can help without becoming authority.",
+        .local_search => "Local indexes can search personal state without leaking every query to a service.",
+        .assistant => "The most useful assistant needs context. That context is safest when local by default.",
+        .cloud_capacity => "Remote compute should be a chosen tool for delivery, backup, coordination, or large workloads.",
+    };
+}
+
+const StorageStageRole = enum {
+    raw_bytes,
+    app_database,
+    sealed_object,
+    verifier,
+    portable_export,
+};
+
+const StorageStage = struct {
+    label: []const u8,
+    exposure: []const u8,
+    role: StorageStageRole,
+};
+
+const storage_stages = [_]StorageStage{
+    .{ .label = "Raw bytes", .exposure = "survive on disk", .role = .raw_bytes },
+    .{ .label = "App DB", .exposure = "private meaning", .role = .app_database },
+    .{ .label = "Sealed object", .exposure = "encrypted body", .role = .sealed_object },
+    .{ .label = "Verifier", .exposure = "checks identity", .role = .verifier },
+    .{ .label = "Export", .exposure = "portable proof", .role = .portable_export },
+};
+
+fn renderStorageSealedObjectsDemo(scene: *ui.Scene, bounds: ui.Rect, hover_x: f32, hover_y: f32) ui.RenderError!void {
+    try fill(scene, bounds, palette.card, 8.0);
+    try scene.pushRect(bounds, palette.border, .border, 8.0, 0.0);
+    const inner = bounds.insetUniform(storage_demo_pad);
+    try tag(scene, ui.Rect.init(inner.x, inner.y, 142.0, 24.0), "SEALED STORAGE", palette.blue);
+    try text(scene, inner.x, inner.y + 38.0, inner.w, 18.0, "Bytes need ownership rules.", palette.text);
+    try paragraph(scene, ui.Rect.init(inner.x + 176.0, inner.y + 2.0, @max(1.0, inner.w - 176.0), 54.0), "Storage is only where bytes sit. Sealed objects add identity, verification, encryption, and exportable meaning.");
+
+    const path_top = inner.y + 104.0;
+    const stage_w = (inner.w - storage_stage_gap * @as(f32, @floatFromInt(storage_stage_count - 1))) / @as(f32, @floatFromInt(storage_stage_count));
+    var hovered: ?StorageStageRole = null;
+    for (storage_stages, 0..) |stage, index| {
+        const stage_bounds = ui.Rect.init(inner.x + @as(f32, @floatFromInt(index)) * (stage_w + storage_stage_gap), path_top, stage_w, storage_stage_h);
+        const is_hovered = stage_bounds.containsInclusive(hover_x, hover_y);
+        if (is_hovered) hovered = stage.role;
+        try renderStorageStage(scene, stage_bounds, stage, is_hovered);
+        if (index + 1 < storage_stage_count) {
+            const line_color = if (index >= 1) palette.primary else palette.border;
+            try fill(scene, ui.Rect.init(stage_bounds.x + stage_bounds.w + 3.0, stage_bounds.y + stage_bounds.h * 0.5, storage_stage_gap - 6.0, 2.0), line_color, 0.0);
+        }
+    }
+
+    const raw_band = ui.Rect.init(inner.x, path_top + storage_stage_h + 34.0, inner.w * 0.43, 50.0);
+    try fill(scene, raw_band, ui.Color{ .r = 72, .g = 36, .b = 36, .a = 190 }, 6.0);
+    try alignedText(scene, raw_band.x + 12.0, raw_band.y + 11.0, raw_band.w - 24.0, 10.0, "raw bytes -> app-private pile", palette.text, .center);
+    try alignedText(scene, raw_band.x + 12.0, raw_band.y + 30.0, raw_band.w - 24.0, 9.0, "hard to prove or move", palette.dim, .center);
+    const sealed_band = ui.Rect.init(raw_band.x + raw_band.w + storage_stage_gap, raw_band.y, inner.w - raw_band.w - storage_stage_gap, 50.0);
+    try fill(scene, sealed_band, ui.Color{ .r = 24, .g = 55, .b = 44, .a = 190 }, 6.0);
+    try alignedText(scene, sealed_band.x + 12.0, sealed_band.y + 11.0, sealed_band.w - 24.0, 10.0, "sealed object -> portable verified state", palette.text, .center);
+    try alignedText(scene, sealed_band.x + 12.0, sealed_band.y + 30.0, sealed_band.w - 24.0, 9.0, "identity travels with the bytes", palette.dim, .center);
+
+    const detail_y = inner.y + inner.h - storage_detail_h;
+    try renderStorageDetail(scene, ui.Rect.init(inner.x, detail_y, inner.w, storage_detail_h), hovered);
+}
+
+fn renderStorageStage(scene: *ui.Scene, bounds: ui.Rect, stage: StorageStage, hovered: bool) ui.RenderError!void {
+    try fill(scene, bounds, storageStageColor(stage.role), 6.0);
+    try scene.pushRect(bounds, if (hovered) palette.primary else palette.border, .border, 6.0, 0.0);
+    try alignedText(scene, bounds.x + 8.0, bounds.y + 11.0, bounds.w - 16.0, 12.0, stage.label, palette.text, .center);
+    try alignedText(scene, bounds.x + 8.0, bounds.y + 34.0, bounds.w - 16.0, 10.0, stage.exposure, palette.dim, .center);
+}
+
+fn renderStorageDetail(scene: *ui.Scene, bounds: ui.Rect, hovered: ?StorageStageRole) ui.RenderError!void {
+    try fill(scene, bounds, ui.Color{ .r = 9, .g = 9, .b = 9, .a = 210 }, 6.0);
+    const role = hovered orelse .sealed_object;
+    try text(scene, bounds.x + 16.0, bounds.y + 14.0, 190.0, 14.0, storageDetailTitle(role), palette.primary);
+    try paragraph(scene, ui.Rect.init(bounds.x + 16.0, bounds.y + 34.0, bounds.w - 32.0, 32.0), storageDetail(role));
+}
+
+fn storageStageColor(role: StorageStageRole) ui.Color {
+    return switch (role) {
+        .raw_bytes => ui.Color{ .r = 72, .g = 36, .b = 36, .a = 238 },
+        .app_database => ui.Color{ .r = 56, .g = 42, .b = 24, .a = 238 },
+        .sealed_object, .verifier, .portable_export => ui.Color{ .r = 24, .g = 55, .b = 44, .a = 238 },
+    };
+}
+
+fn storageDetailTitle(role: StorageStageRole) []const u8 {
+    return switch (role) {
+        .raw_bytes => "Raw bytes",
+        .app_database => "App database",
+        .sealed_object => "Sealed object",
+        .verifier => "Verifier",
+        .portable_export => "Export",
+    };
+}
+
+fn storageDetail(role: StorageStageRole) []const u8 {
+    return switch (role) {
+        .raw_bytes => "Bytes on disk do not say who owns them, who may open them, or whether they were changed.",
+        .app_database => "A private schema may make backups dependent on the original app and account service.",
+        .sealed_object => "A sealed object binds encrypted bytes to explicit identity, authority, and object meaning.",
+        .verifier => "Verification checks canonical bytes and signatures before treating stored data as true.",
+        .portable_export => "Good export preserves proof and meaning after the original service or app is gone.",
+    };
+}
+
+const TrustStepRole = enum {
+    rom,
+    bootloader,
+    measured_runtime,
+    tpm_key,
+    user_intent,
+};
+
+const TrustStep = struct {
+    label: []const u8,
+    exposure: []const u8,
+    role: TrustStepRole,
+};
+
+const trust_steps = [_]TrustStep{
+    .{ .label = "ROM", .exposure = "first check", .role = .rom },
+    .{ .label = "Bootloader", .exposure = "approved next", .role = .bootloader },
+    .{ .label = "Runtime", .exposure = "measured state", .role = .measured_runtime },
+    .{ .label = "TPM key", .exposure = "signs/seals", .role = .tpm_key },
+    .{ .label = "User intent", .exposure = "authorizes", .role = .user_intent },
+};
+
+fn renderSecureBootRootDemo(scene: *ui.Scene, bounds: ui.Rect, hover_x: f32, hover_y: f32) ui.RenderError!void {
+    try fill(scene, bounds, palette.card, 8.0);
+    try scene.pushRect(bounds, palette.border, .border, 8.0, 0.0);
+    const inner = bounds.insetUniform(trust_demo_pad);
+    try tag(scene, ui.Rect.init(inner.x, inner.y, 146.0, 24.0), "ROOT OF TRUST", palette.blue);
+    try text(scene, inner.x, inner.y + 38.0, inner.w, 18.0, "A root of trust must answer: root for whom?", palette.text);
+    try paragraph(scene, ui.Rect.init(inner.x + 180.0, inner.y + 2.0, @max(1.0, inner.w - 180.0), 54.0), "Secure boot and TPMs help when hardware measurements bind to user-owned runtime authority, not vendor-only approval.");
+
+    const path_top = inner.y + 104.0;
+    const step_w = (inner.w - trust_step_gap * @as(f32, @floatFromInt(trust_step_count - 1))) / @as(f32, @floatFromInt(trust_step_count));
+    var hovered: ?TrustStepRole = null;
+    for (trust_steps, 0..) |step, index| {
+        const step_bounds = ui.Rect.init(inner.x + @as(f32, @floatFromInt(index)) * (step_w + trust_step_gap), path_top, step_w, trust_step_h);
+        const is_hovered = step_bounds.containsInclusive(hover_x, hover_y);
+        if (is_hovered) hovered = step.role;
+        try renderTrustStep(scene, step_bounds, step, is_hovered);
+        if (index + 1 < trust_step_count) {
+            const line_color = if (index >= 2) palette.primary else palette.border;
+            try fill(scene, ui.Rect.init(step_bounds.x + step_bounds.w + 3.0, step_bounds.y + step_bounds.h * 0.5, trust_step_gap - 6.0, 2.0), line_color, 0.0);
+        }
+    }
+
+    const mechanism = ui.Rect.init(inner.x, path_top + trust_step_h + 34.0, inner.w, 52.0);
+    try fill(scene, mechanism, ui.Color{ .r = 26, .g = 36, .b = 52, .a = 190 }, 6.0);
+    try alignedText(scene, mechanism.x + 12.0, mechanism.y + 12.0, mechanism.w - 24.0, 10.0, "mechanism is not enough: ask who enrolls, recovers, and overrides", palette.text, .center);
+    try alignedText(scene, mechanism.x + 12.0, mechanism.y + 30.0, mechanism.w - 24.0, 9.0, "hardware is useful only when the authority chain serves the owner", palette.dim, .center);
+
+    const detail_y = inner.y + inner.h - trust_detail_h;
+    try renderTrustDetail(scene, ui.Rect.init(inner.x, detail_y, inner.w, trust_detail_h), hovered);
+}
+
+fn renderTrustStep(scene: *ui.Scene, bounds: ui.Rect, step: TrustStep, hovered: bool) ui.RenderError!void {
+    try fill(scene, bounds, trustStepColor(step.role), 6.0);
+    try scene.pushRect(bounds, if (hovered) palette.primary else palette.border, .border, 6.0, 0.0);
+    try alignedText(scene, bounds.x + 8.0, bounds.y + 11.0, bounds.w - 16.0, 12.0, step.label, palette.text, .center);
+    try alignedText(scene, bounds.x + 8.0, bounds.y + 34.0, bounds.w - 16.0, 10.0, step.exposure, palette.dim, .center);
+}
+
+fn renderTrustDetail(scene: *ui.Scene, bounds: ui.Rect, hovered: ?TrustStepRole) ui.RenderError!void {
+    try fill(scene, bounds, ui.Color{ .r = 9, .g = 9, .b = 9, .a = 210 }, 6.0);
+    const role = hovered orelse .tpm_key;
+    try text(scene, bounds.x + 16.0, bounds.y + 14.0, 190.0, 14.0, trustDetailTitle(role), palette.primary);
+    try paragraph(scene, ui.Rect.init(bounds.x + 16.0, bounds.y + 34.0, bounds.w - 32.0, 32.0), trustDetail(role));
+}
+
+fn trustStepColor(role: TrustStepRole) ui.Color {
+    return switch (role) {
+        .rom => ui.Color{ .r = 56, .g = 42, .b = 24, .a = 238 },
+        .bootloader => ui.Color{ .r = 72, .g = 36, .b = 36, .a = 238 },
+        .measured_runtime => ui.Color{ .r = 26, .g = 36, .b = 52, .a = 238 },
+        .tpm_key, .user_intent => ui.Color{ .r = 24, .g = 55, .b = 44, .a = 238 },
+    };
+}
+
+fn trustDetailTitle(role: TrustStepRole) []const u8 {
+    return switch (role) {
+        .rom => "ROM",
+        .bootloader => "Bootloader",
+        .measured_runtime => "Runtime",
+        .tpm_key => "TPM key",
+        .user_intent => "User intent",
+    };
+}
+
+fn trustDetail(role: TrustStepRole) []const u8 {
+    return switch (role) {
+        .rom => "The immutable first stage can check what runs next, but it does not decide owner policy alone.",
+        .bootloader => "Approval can protect the user or lock the user out, depending on who controls enrollment.",
+        .measured_runtime => "Measured runtime state gives a key operation context that software alone cannot prove.",
+        .tpm_key => "A TPM-backed key should sign explicit local authority, not an opaque platform blessing.",
+        .user_intent => "The chain is incomplete unless the signed action includes a real user intent boundary.",
+    };
+}
+
 fn bodyWithoutTitle(source: []const u8) []const u8 {
     if (!std.mem.startsWith(u8, source, "# ")) return source;
     const split = std.mem.indexOfScalar(u8, source, '\n') orelse return "";
@@ -1381,12 +3019,6 @@ fn renderNodeMap(scene: *ui.Scene, bounds: ui.Rect) ui.RenderError!void {
     }
 }
 
-fn navItem(scene: *ui.Scene, bounds: ui.Rect, label: []const u8, id: u32, active: bool) ui.RenderError!void {
-    if (active) try fill(scene, bounds, palette.neutral_soft, 6.0);
-    try alignedText(scene, bounds.x, bounds.y + 7.0, bounds.w, 12.0, label, if (active) palette.primary else palette.dim, .center);
-    try hit(scene, bounds, .button, id);
-}
-
 fn tag(scene: *ui.Scene, bounds: ui.Rect, label: []const u8, color: ui.Color) ui.RenderError!void {
     try fill(scene, bounds, palette.neutral_soft, 5.0);
     try alignedText(scene, bounds.x + 8.0, bounds.y + 6.0, bounds.w - 16.0, 10.0, label, color, .center);
@@ -1394,10 +3026,6 @@ fn tag(scene: *ui.Scene, bounds: ui.Rect, label: []const u8, color: ui.Color) ui
 
 fn paragraph(scene: *ui.Scene, bounds: ui.Rect, value: []const u8) ui.RenderError!void {
     try scene.pushWrappedText(bounds, value, palette.dim, .{ .line_height = line_h, .average_char_width = 10.0, .max_lines = 6 });
-}
-
-fn primaryButton(scene: *ui.Scene, bounds: ui.Rect, label: []const u8, id: u32) ui.RenderError!void {
-    try nativeComponent(scene, bounds, .{ .button = .{ .id = id, .label = label } }, .{ .button_variant = .primary });
 }
 
 fn outlineButton(scene: *ui.Scene, bounds: ui.Rect, label: []const u8, id: u32) ui.RenderError!void {
@@ -1419,15 +3047,7 @@ fn nativeComponent(scene: *ui.Scene, bounds: ui.Rect, component: components.Comp
 }
 
 fn siteStyle() ui.Style {
-    return .{
-        .bg = palette.bg,
-        .panel = palette.card,
-        .row = palette.card_alt,
-        .border = palette.border,
-        .text = palette.text,
-        .muted = palette.dim,
-        .accent = palette.primary,
-    };
+    return site_chrome.style();
 }
 
 fn fill(scene: *ui.Scene, bounds: ui.Rect, color: ui.Color, r: f32) ui.RenderError!void {
@@ -1478,7 +3098,9 @@ test "blog renders committed post index through native components" {
     try std.testing.expectEqualStrings(arc_control, posts[34].arc);
     try std.testing.expectEqualStrings(arc_accounting, posts[61].arc);
     try std.testing.expect(hasHit(scene.written(), postIdAt(0)));
-    try std.testing.expect(hasHit(scene.written(), site_landing.blog_button_id));
+    try std.testing.expect(hasHit(scene.written(), site_chrome.blog_button_id));
+    try std.testing.expect(hasHit(scene.written(), site_chrome.logo_button_id));
+    try std.testing.expect(hasHit(scene.written(), arcFilterButtonId(0)));
     try std.testing.expect(hasImage(scene.written(), cloud_meme_image_id));
 }
 
@@ -1526,6 +3148,90 @@ test "blog renders native demo directives inside post markup" {
     try std.testing.expect(hasText(scene.written(), "Commercial VPN"));
     try std.testing.expect(hasText(scene.written(), "Sealed relay"));
     try std.testing.expect(hasText(scene.written(), "VPN provider"));
+
+    scene.clear();
+    try renderPost(&scene, ui.Rect.init(0, 0, 1180, 3600), 16, 560.0, 1080.0);
+    try std.testing.expect(hasText(scene.written(), "The tunnel ends at the endpoint."));
+    try std.testing.expect(hasText(scene.written(), "TLS endpoint"));
+    try std.testing.expect(hasText(scene.written(), "plaintext after endpoint"));
+
+    scene.clear();
+    try renderPost(&scene, ui.Rect.init(0, 0, 1180, 3600), 25, 560.0, 1010.0);
+    try std.testing.expect(hasText(scene.written(), "Deleting the UI copy is not deleting every copy."));
+    try std.testing.expect(hasText(scene.written(), "Phone UI"));
+    try std.testing.expect(hasText(scene.written(), "Analytics"));
+
+    scene.clear();
+    try renderPost(&scene, ui.Rect.init(0, 0, 1180, 3600), 23, 150.0, 1020.0);
+    try std.testing.expect(hasText(scene.written(), "Your phone correlates signals. It does not own you."));
+    try std.testing.expect(hasText(scene.written(), "PIN / biometric"));
+    try std.testing.expect(hasText(scene.written(), "Service decides: accepted or rejected"));
+
+    scene.clear();
+    try renderPost(&scene, ui.Rect.init(0, 0, 1180, 3600), 27, 150.0, 1018.0);
+    try std.testing.expect(hasText(scene.written(), "Powerful hardware, gated authority."));
+    try std.testing.expect(hasText(scene.written(), "Bootloader"));
+    try std.testing.expect(hasText(scene.written(), "Any rung can block it."));
+
+    scene.clear();
+    try renderPost(&scene, ui.Rect.init(0, 0, 1180, 3600), 15, 260.0, 1040.0);
+    try std.testing.expect(hasText(scene.written(), "A name is a lookup, not an identity."));
+    try std.testing.expect(hasText(scene.written(), "friend.example"));
+    try std.testing.expect(hasText(scene.written(), "Certificate control still starts with name control."));
+
+    scene.clear();
+    try renderPost(&scene, ui.Rect.init(0, 0, 1180, 3600), 24, 520.0, 1038.0);
+    try std.testing.expect(hasText(scene.written(), "Account permission is not portable identity."));
+    try std.testing.expect(hasText(scene.written(), "Account root"));
+    try std.testing.expect(hasText(scene.written(), "Key root"));
+
+    scene.clear();
+    try renderPost(&scene, ui.Rect.init(0, 0, 1180, 3600), 17, 240.0, 1042.0);
+    try std.testing.expect(hasText(scene.written(), "The server is code, policy, queues, logs, and memory."));
+    try std.testing.expect(hasText(scene.written(), "Load balancer"));
+    try std.testing.expect(hasText(scene.written(), "Useful coordination becomes dangerous when it becomes the source of truth."));
+
+    scene.clear();
+    try renderPost(&scene, ui.Rect.init(0, 0, 1180, 3600), 19, 240.0, 1048.0);
+    try std.testing.expect(hasText(scene.written(), "A notification is delivery plus a wakeup."));
+    try std.testing.expect(hasText(scene.written(), "Platform push"));
+    try std.testing.expect(hasText(scene.written(), "Metadata still exists"));
+
+    scene.clear();
+    try renderPost(&scene, ui.Rect.init(0, 0, 1180, 3600), 11, 520.0, 1052.0);
+    try std.testing.expect(hasText(scene.written(), "One app icon can hide many trust paths."));
+    try std.testing.expect(hasText(scene.written(), "Analytics"));
+    try std.testing.expect(hasText(scene.written(), "Running code is authority, even when it arrived as a library."));
+
+    scene.clear();
+    try renderPost(&scene, ui.Rect.init(0, 0, 1180, 3600), 13, 360.0, 1110.0);
+    try std.testing.expect(hasText(scene.written(), "Wi-Fi protects local air, not every later boundary."));
+    try std.testing.expect(hasText(scene.written(), "Router"));
+    try std.testing.expect(hasText(scene.written(), "Local trust boundary"));
+
+    scene.clear();
+    try renderPost(&scene, ui.Rect.init(0, 0, 1180, 3600), 10, 520.0, 1052.0);
+    try std.testing.expect(hasText(scene.written(), "Typing is not the same as sending."));
+    try std.testing.expect(hasText(scene.written(), "Send intent"));
+    try std.testing.expect(hasText(scene.written(), "Commit boundary"));
+
+    scene.clear();
+    try renderPost(&scene, ui.Rect.init(0, 0, 1180, 3600), 12, 520.0, 1044.0);
+    try std.testing.expect(hasText(scene.written(), "Small personal workloads fit on the device."));
+    try std.testing.expect(hasText(scene.written(), "Your device"));
+    try std.testing.expect(hasText(scene.written(), "local first -> sync when needed -> cloud only when useful"));
+
+    scene.clear();
+    try renderPost(&scene, ui.Rect.init(0, 0, 1180, 3600), 3, 520.0, 1040.0);
+    try std.testing.expect(hasText(scene.written(), "Bytes need ownership rules."));
+    try std.testing.expect(hasText(scene.written(), "Sealed object"));
+    try std.testing.expect(hasText(scene.written(), "sealed object -> portable verified state"));
+
+    scene.clear();
+    try renderPost(&scene, ui.Rect.init(0, 0, 1180, 3600), 8, 520.0, 1040.0);
+    try std.testing.expect(hasText(scene.written(), "A root of trust must answer: root for whom?"));
+    try std.testing.expect(hasText(scene.written(), "TPM key"));
+    try std.testing.expect(hasText(scene.written(), "mechanism is not enough: ask who enrolls, recovers, and overrides"));
 }
 
 fn hasText(commands: []const ui.Command, value: []const u8) bool {

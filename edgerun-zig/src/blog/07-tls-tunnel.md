@@ -18,6 +18,8 @@ That is important. The mistake is treating "encrypted in transit" as "the user c
 
 ## Where the tunnel ends
 
+[[demo:tls_endpoint]]
+
 ```text
 device -> encrypted tunnel -> TLS endpoint
 TLS endpoint -> app server -> logs, queues, databases

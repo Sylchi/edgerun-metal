@@ -344,7 +344,7 @@ test "hardware inventory view publishes canonical ui stack through app storage" 
     };
 
     const published = try app.publishUiStack(stack, epoch, scratch);
-    const stored = app.storage.getObject(app.id.id, published.object_id).?;
+    const stored = app.storedObject(published.object_id).?;
     try std.testing.expectEqual(object.Kind.bytes, stored.header.kind);
     try std.testing.expectEqual(object.Visibility.app_namespace, stored.header.requirements.visibility);
 

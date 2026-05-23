@@ -95,6 +95,7 @@ pub const RectMode = enum(u8) {
     shadow,
     border,
     linear_gradient,
+    pie_slice,
 };
 
 pub const TextAlign = enum(u8) {
@@ -278,6 +279,18 @@ pub const Scene = struct {
 
     pub fn pushGradientRect(self: *Scene, bounds: Rect, top_color: Color, bottom_color: Color, radius: f32) RenderError!void {
         try self.pushRectPair(bounds, top_color, bottom_color, .linear_gradient, radius, 0.0);
+    }
+
+    pub fn pushPieSlice(self: *Scene, bounds: Rect, color: Color, start_turn: f32, end_turn: f32) RenderError!void {
+        if (!geometry.finite(start_turn) or !geometry.finite(end_turn)) return;
+        if (end_turn <= start_turn) return;
+        const encoded_angles = Color{
+            .r = unitByte(start_turn),
+            .g = unitByte(end_turn),
+            .b = 0,
+            .a = 255,
+        };
+        try self.pushRectPair(bounds, color, encoded_angles, .pie_slice, 0.0, 0.0);
     }
 
     fn pushRectPair(self: *Scene, bounds: Rect, color: Color, color2: Color, mode: RectMode, radius: f32, shadow: f32) RenderError!void {
@@ -508,6 +521,10 @@ fn translateRect(bounds: *Rect, dx: f32, dy: f32) void {
 
 fn scaleAlpha(alpha: u8, factor: f32) u8 {
     return @intFromFloat(@round(@as(f32, @floatFromInt(alpha)) * factor));
+}
+
+fn unitByte(value: f32) u8 {
+    return @intFromFloat(@round(geometry.clamp(value, 0.0, 1.0) * 255.0));
 }
 
 pub const Layout = struct {

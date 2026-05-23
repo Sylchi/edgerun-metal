@@ -1,9 +1,12 @@
 const std = @import("std");
+const clock = @import("clock.zig");
 const icon = @import("icon.zig");
+const identity = @import("identity.zig");
 const input = @import("input.zig");
 const renderer = @import("renderer_software.zig");
 const component_gallery = @import("component_gallery.zig");
 const site_blog = @import("site_blog.zig");
+const site_chrome = @import("site_chrome.zig");
 const site_landing = @import("site_landing.zig");
 const tabler_atlas = @import("tabler_atlas.zig");
 const ui = @import("ui.zig");
@@ -25,6 +28,9 @@ const max_gpu_rects: usize = 8192;
 const max_gpu_text_vertices: usize = 24576;
 const max_gpu_icon_vertices: usize = 4096;
 const max_gpu_image_vertices: usize = 384;
+const max_gpu_overlay_rects: usize = 512;
+const max_gpu_overlay_text_vertices: usize = 8192;
+const max_gpu_overlay_icon_vertices: usize = 256;
 const max_clips: usize = 64;
 const font_atlas_width: usize = 4096;
 const font_atlas_height: usize = 4096;
@@ -41,6 +47,24 @@ const icon_atlas_width: usize = tabler_atlas.width;
 const icon_atlas_height: usize = tabler_atlas.height;
 const post_image_bytes = @embedFile("assets/old-man-yells-at-cloud.webp");
 const site_source_url = "https://github.com/edgerun";
+const route_bytes_capacity: usize = 96;
+const search_query_capacity: usize = 64;
+const search_result_limit: usize = 6;
+const search_overlay_id: u32 = 70_000;
+const search_input_id: u32 = 70_001;
+const search_scrim_alpha: u8 = 204;
+const search_panel_alpha: u8 = 255;
+const search_result_alpha: u8 = 255;
+const entropy_pool_size: usize = 32;
+const ephemeral_seed_size: usize = std.crypto.sign.Ed25519.KeyPair.seed_length;
+const public_identity_prefix = "er1:";
+const public_identity_text_len: usize = public_identity_prefix.len + identity.id_size * 2;
+const initial_entropy_pool = [_]u8{
+    0x65, 0x64, 0x67, 0x65, 0x72, 0x75, 0x6e, 0x3a,
+    0x77, 0x61, 0x73, 0x6d, 0x3a, 0x69, 0x64, 0x3a,
+    0x63, 0x6c, 0x69, 0x63, 0x6b, 0x2d, 0x65, 0x6e,
+    0x74, 0x72, 0x6f, 0x70, 0x79, 0x3a, 0x76, 0x31,
+};
 
 var pixels: [max_pixels]ui.Color = undefined;
 var input_bytes: [max_input_bytes]u8 = undefined;
@@ -55,6 +79,12 @@ var gpu_icon_vertex_floats: [max_gpu_icon_vertices * gpu_icon_vertex_float_strid
 var gpu_icon_vertex_float_len: usize = 0;
 var gpu_image_vertex_floats: [max_gpu_image_vertices * gpu_image_vertex_float_stride]f32 = undefined;
 var gpu_image_vertex_float_len: usize = 0;
+var gpu_overlay_rect_floats: [max_gpu_overlay_rects * gpu_rect_float_stride]f32 = undefined;
+var gpu_overlay_rect_float_len: usize = 0;
+var gpu_overlay_text_vertex_floats: [max_gpu_overlay_text_vertices * gpu_text_vertex_float_stride]f32 = undefined;
+var gpu_overlay_text_vertex_float_len: usize = 0;
+var gpu_overlay_icon_vertex_floats: [max_gpu_overlay_icon_vertices * gpu_icon_vertex_float_stride]f32 = undefined;
+var gpu_overlay_icon_vertex_float_len: usize = 0;
 var font_atlas_alpha: [font_atlas_bytes]u8 = [_]u8{0} ** font_atlas_bytes;
 var font_bitmap: [font_bitmap_bytes]u8 = undefined;
 var font_glyphs: [font_glyph_capacity]FontGlyph = undefined;
@@ -81,6 +111,15 @@ var last_action_to_index: u32 = 0;
 var gallery_list_order_scope_id: u32 = 0;
 var gallery_list_order: [component_gallery.list_row_count]u8 = component_gallery.default_list_order;
 var site_state = SiteState{};
+var route_bytes: [route_bytes_capacity]u8 = undefined;
+var route_len: usize = 0;
+var entropy_pool: [entropy_pool_size]u8 = initialEntropyPool();
+var entropy_event_count: u64 = 0;
+var ephemeral_seed: [ephemeral_seed_size]u8 = [_]u8{0} ** ephemeral_seed_size;
+var ephemeral_public_key: [identity.ed25519_public_size]u8 = [_]u8{0} ** identity.ed25519_public_size;
+var ephemeral_identity_id: [identity.id_size]u8 = [_]u8{0} ** identity.id_size;
+var public_identity_text: [public_identity_text_len]u8 = [_]u8{0} ** public_identity_text_len;
+var ephemeral_identity_ready = false;
 
 const hover_hit_kind_none: u32 = 255;
 
@@ -97,10 +136,18 @@ const SiteView = enum(u32) {
 const SiteState = struct {
     view: SiteView = .landing,
     selected_blog_post_id: u32 = 0,
+    blog_arc_filter_index: ?usize = null,
     host_action: HostAction = .none,
+    search_open: bool = false,
+    search_query: [search_query_capacity]u8 = [_]u8{0} ** search_query_capacity,
+    search_query_len: usize = 0,
 
     fn resetHostAction(state: *SiteState) void {
         state.host_action = .none;
+    }
+
+    fn searchQuery(state: *const SiteState) []const u8 {
+        return state.search_query[0..state.search_query_len];
     }
 };
 
@@ -112,6 +159,7 @@ const ErrorCode = enum(u32) {
     render_failed = 4,
     gpu_budget = 5,
     font_atlas = 6,
+    identity_failed = 7,
 };
 
 const FontGlyph = struct {
@@ -194,6 +242,30 @@ export fn er_ui_gpu_image_vertex_buffer_len() usize {
     return gpu_image_vertex_float_len;
 }
 
+export fn er_ui_gpu_overlay_rect_buffer_ptr() usize {
+    return @intFromPtr(gpu_overlay_rect_floats[0..].ptr);
+}
+
+export fn er_ui_gpu_overlay_rect_buffer_len() usize {
+    return gpu_overlay_rect_float_len;
+}
+
+export fn er_ui_gpu_overlay_text_vertex_buffer_ptr() usize {
+    return @intFromPtr(gpu_overlay_text_vertex_floats[0..].ptr);
+}
+
+export fn er_ui_gpu_overlay_text_vertex_buffer_len() usize {
+    return gpu_overlay_text_vertex_float_len;
+}
+
+export fn er_ui_gpu_overlay_icon_vertex_buffer_ptr() usize {
+    return @intFromPtr(gpu_overlay_icon_vertex_floats[0..].ptr);
+}
+
+export fn er_ui_gpu_overlay_icon_vertex_buffer_len() usize {
+    return gpu_overlay_icon_vertex_float_len;
+}
+
 export fn er_ui_post_image_webp_ptr() usize {
     return @intFromPtr(post_image_bytes.ptr);
 }
@@ -252,6 +324,14 @@ export fn er_ui_last_error() u32 {
     return @intFromEnum(last_error);
 }
 
+export fn er_ui_site_public_identity_ptr() usize {
+    return @intFromPtr(publicIdentityText().ptr);
+}
+
+export fn er_ui_site_public_identity_len() usize {
+    return publicIdentityText().len;
+}
+
 export fn er_ui_set_device_scale(scale: f32) u32 {
     const next = normalizedDeviceScale(scale);
     if (@abs(next - font_device_scale) <= 0.001) return 0;
@@ -289,18 +369,21 @@ export fn er_ui_last_action_to_index() u32 {
 }
 
 export fn er_ui_pointer_down(x: f32, y: f32) u32 {
+    mixInteractionEntropy(.pointer_down, x, y);
     recordAction(runtime_state.pointerDown(lastCommands(), x, y));
     updateHoverHit(lastCommands(), x, y);
     return last_action_kind;
 }
 
 export fn er_ui_pointer_move(x: f32, y: f32) u32 {
+    mixInteractionEntropy(.pointer_move, x, y);
     recordAction(runtime_state.pointerMove(lastCommands(), x, y));
     updateHoverHit(lastCommands(), x, y);
     return last_action_kind;
 }
 
 export fn er_ui_pointer_up(x: f32, y: f32) u32 {
+    mixInteractionEntropy(.pointer_up, x, y);
     recordAction(runtime_state.pointerUp(lastCommands(), x, y));
     updateHoverHit(lastCommands(), x, y);
     return last_action_kind;
@@ -327,27 +410,27 @@ export fn er_ui_component_gallery_gap_wide_id() u32 {
 }
 
 export fn er_ui_site_docs_button_id() u32 {
-    return site_landing.docs_button_id;
+    return site_chrome.docs_button_id;
 }
 
 export fn er_ui_site_apps_button_id() u32 {
-    return site_landing.apps_button_id;
+    return site_chrome.apps_button_id;
 }
 
 export fn er_ui_site_launch_button_id() u32 {
-    return site_landing.launch_button_id;
+    return site_chrome.launch_button_id;
 }
 
 export fn er_ui_site_search_button_id() u32 {
-    return site_landing.search_button_id;
+    return site_chrome.search_button_id;
 }
 
 export fn er_ui_site_source_button_id() u32 {
-    return site_landing.source_button_id;
+    return site_chrome.source_button_id;
 }
 
 export fn er_ui_site_blog_button_id() u32 {
-    return site_landing.blog_button_id;
+    return site_chrome.blog_button_id;
 }
 
 export fn er_ui_blog_back_button_id() u32 {
@@ -374,29 +457,100 @@ export fn er_ui_site_host_action_url_len() usize {
     return site_source_url.len;
 }
 
+export fn er_ui_site_route_path_ptr() usize {
+    refreshRoutePath();
+    return @intFromPtr(route_bytes[0..].ptr);
+}
+
+export fn er_ui_site_route_path_len() usize {
+    refreshRoutePath();
+    return route_len;
+}
+
+export fn er_ui_site_set_route_path(path_len: usize) u32 {
+    if (path_len > input_bytes.len) return finishError(.bad_input);
+    applyRoutePath(input_bytes[0..path_len]);
+    last_error = .ok;
+    return @intFromEnum(ErrorCode.ok);
+}
+
 export fn er_ui_site_activate_hit(hit_id: u32) u32 {
     site_state.resetHostAction();
     switch (hit_id) {
-        site_landing.docs_button_id => {
+        site_chrome.logo_button_id => {
             site_state.view = .landing;
             site_state.selected_blog_post_id = 0;
+            site_state.blog_arc_filter_index = null;
+            site_state.search_open = false;
         },
-        site_landing.blog_button_id => {
+        site_chrome.search_button_id => {
+            site_state.search_open = true;
+        },
+        site_chrome.docs_button_id => {
+            site_state.view = .landing;
+            site_state.selected_blog_post_id = 0;
+            site_state.blog_arc_filter_index = null;
+            site_state.search_open = false;
+        },
+        site_chrome.blog_button_id => {
             site_state.view = .blog;
             site_state.selected_blog_post_id = 0;
+            site_state.blog_arc_filter_index = null;
+            site_state.search_open = false;
         },
-        site_landing.source_button_id => {
+        site_chrome.source_button_id => {
             site_state.host_action = .open_url;
+        },
+        site_landing.reveal_identity_button_id => {
+            if (!ephemeral_identity_ready) {
+                generateEphemeralIdentity() catch return finishError(.identity_failed);
+            }
         },
         site_blog.back_button_id => {
             site_state.selected_blog_post_id = 0;
+            site_state.search_open = false;
         },
         else => if (site_blog.postById(hit_id) != null) {
             site_state.view = .blog;
             site_state.selected_blog_post_id = hit_id;
+            site_state.search_open = false;
+        } else if (site_blog.arcFilterIndexById(hit_id)) |index| {
+            site_state.view = .blog;
+            site_state.selected_blog_post_id = 0;
+            site_state.blog_arc_filter_index = index;
+            site_state.search_open = false;
         },
     }
     return @intFromEnum(site_state.host_action);
+}
+
+export fn er_ui_site_search_open() u32 {
+    site_state.search_open = true;
+    return 0;
+}
+
+export fn er_ui_site_search_close() u32 {
+    site_state.search_open = false;
+    site_state.search_query_len = 0;
+    return 0;
+}
+
+export fn er_ui_site_search_is_open() u32 {
+    return if (site_state.search_open) 1 else 0;
+}
+
+export fn er_ui_site_search_backspace() u32 {
+    if (site_state.search_query_len > 0) site_state.search_query_len -= 1;
+    return 0;
+}
+
+export fn er_ui_site_search_input_byte(byte: u32) u32 {
+    if (byte < 32 or byte > 126) return finishError(.bad_input);
+    if (site_state.search_query_len >= site_state.search_query.len) return finishError(.bad_input);
+    site_state.search_query[site_state.search_query_len] = @intCast(byte);
+    site_state.search_query_len += 1;
+    last_error = .ok;
+    return @intFromEnum(ErrorCode.ok);
 }
 
 export fn er_ui_site_landing_content_height(width: f32) f32 {
@@ -415,7 +569,7 @@ export fn er_ui_site_content_height(width: f32) f32 {
     return switch (site_state.view) {
         .landing => site_landing.contentHeight(width),
         .blog => if (site_state.selected_blog_post_id == 0)
-            site_blog.indexContentHeight(width)
+            site_blog.indexContentHeightFiltered(width, site_state.blog_arc_filter_index)
         else
             site_blog.postContentHeight(width, site_state.selected_blog_post_id),
     };
@@ -493,6 +647,8 @@ export fn er_ui_build_site_landing_gpu_frame(width: u32, height: u32, scroll_y: 
         .hover_x = hover_x,
         .hover_y = hover_y,
         .frame_ms = frame_ms,
+        .public_identity = publicIdentityText(),
+        .public_identity_ready = ephemeral_identity_ready,
     }) catch return finishError(.render_failed);
 
     last_command_count = scene.written().len;
@@ -527,10 +683,45 @@ export fn er_ui_build_site_blog_gpu_frame(width: u32, height: u32, scroll_y: f32
 }
 
 export fn er_ui_build_site_gpu_frame(width: u32, height: u32, scroll_y: f32, hover_x: f32, hover_y: f32, frame_ms: f32) u32 {
-    return switch (site_state.view) {
-        .landing => er_ui_build_site_landing_gpu_frame(width, height, scroll_y, hover_x, hover_y, frame_ms),
-        .blog => er_ui_build_site_blog_gpu_frame(width, height, scroll_y, hover_x, hover_y, site_state.selected_blog_post_id),
-    };
+    if (!setFrameSize(width, height)) return finishError(.bad_size);
+    ensureFontAtlas() catch return finishError(.font_atlas);
+
+    var scene = ui.Scene.initWithClips(&commands, &clips);
+    switch (site_state.view) {
+        .landing => site_landing.render(&scene, .{
+            .x = 0,
+            .y = 0,
+            .w = @floatFromInt(frame_width),
+            .h = @floatFromInt(frame_height),
+        }, .{
+            .scroll_y = scroll_y,
+            .hover_x = hover_x,
+            .hover_y = hover_y,
+            .frame_ms = frame_ms,
+            .public_identity = publicIdentityText(),
+            .public_identity_ready = ephemeral_identity_ready,
+        }) catch return finishError(.render_failed),
+        .blog => site_blog.render(&scene, .{
+            .x = 0,
+            .y = 0,
+            .w = @floatFromInt(frame_width),
+            .h = @floatFromInt(frame_height),
+        }, .{
+            .scroll_y = scroll_y,
+            .hover_x = hover_x,
+            .hover_y = hover_y,
+            .selected_post_id = site_state.selected_blog_post_id,
+            .arc_filter_index = site_state.blog_arc_filter_index,
+        }) catch return finishError(.render_failed),
+    }
+    const overlay_start = scene.written().len;
+    if (site_state.search_open) renderSearchOverlay(&scene, hover_x, hover_y) catch return finishError(.render_failed);
+
+    last_command_count = scene.written().len;
+    updateHoverHit(scene.written(), hover_x, hover_y);
+    packGpuSceneWithOverlay(scene.written(), overlay_start) catch return finishError(.gpu_budget);
+    last_error = .ok;
+    return @intFromEnum(ErrorCode.ok);
 }
 
 export fn er_ui_render_input_object(input_len: usize, width: u32, height: u32) u32 {
@@ -571,6 +762,92 @@ fn finishError(code: ErrorCode) u32 {
     return @intFromEnum(code);
 }
 
+const EntropyEvent = enum(u8) {
+    pointer_down = 1,
+    pointer_move = 2,
+    pointer_up = 3,
+};
+
+fn initialEntropyPool() [entropy_pool_size]u8 {
+    return initial_entropy_pool;
+}
+
+fn mixInteractionEntropy(event: EntropyEvent, x: f32, y: f32) void {
+    entropy_event_count +%= 1;
+    var hasher = std.crypto.hash.Blake3.init(.{});
+    hasher.update("edgerun:zig:wasm-site:interaction-event:v1");
+    hasher.update(&entropy_pool);
+    var record: [21]u8 = undefined;
+    record[0] = @intFromEnum(event);
+    writeU64(record[1..9], entropy_event_count);
+    writeU32(record[9..13], @bitCast(x));
+    writeU32(record[13..17], @bitCast(y));
+    writeU32(record[17..21], @as(u32, @truncate(last_command_count)));
+    hasher.update(&record);
+    hasher.final(&entropy_pool);
+}
+
+fn generateEphemeralIdentity() !void {
+    var hasher = std.crypto.hash.Blake3.init(.{});
+    hasher.update("edgerun:zig:wasm-site:ephemeral-ed25519-seed:v1");
+    hasher.update(&entropy_pool);
+    var event_bytes: [8]u8 = undefined;
+    writeU64(&event_bytes, entropy_event_count);
+    hasher.update(&event_bytes);
+    hasher.final(&ephemeral_seed);
+
+    const keypair = try std.crypto.sign.Ed25519.KeyPair.generateDeterministic(ephemeral_seed);
+    ephemeral_public_key = keypair.public_key.toBytes();
+    const source = identity.Source.prepare(.ed25519_public, &ephemeral_public_key) orelse return error.Identity;
+    const value = identity.Identity.init(.ephemeral, source, epochFromPublicKey(&ephemeral_public_key)) orelse return error.Identity;
+    if (!value.valid()) return error.Identity;
+    ephemeral_identity_id = value.id.bytes;
+    writePublicIdentityText(&ephemeral_identity_id);
+    ephemeral_identity_ready = true;
+}
+
+fn epochFromPublicKey(public_key: *const [identity.ed25519_public_size]u8) clock.Stamp {
+    var keeper: [clock.keeper_id_size]u8 = undefined;
+    std.crypto.hash.Blake3.hash(public_key, &keeper, .{});
+    return .{ .keeper = .{ .bytes = keeper } };
+}
+
+fn publicIdentityText() []const u8 {
+    if (!ephemeral_identity_ready) return "click reveal";
+    return public_identity_text[0..];
+}
+
+fn writePublicIdentityText(id: *const [identity.id_size]u8) void {
+    @memcpy(public_identity_text[0..public_identity_prefix.len], public_identity_prefix);
+    writeHex(public_identity_text[public_identity_prefix.len..], id);
+}
+
+fn writeHex(out: []u8, value: []const u8) void {
+    std.debug.assert(out.len == value.len * 2);
+    for (value, 0..) |byte, index| {
+        out[index * 2] = hexChar(byte >> 4);
+        out[index * 2 + 1] = hexChar(byte & 0x0f);
+    }
+}
+
+fn hexChar(value: u8) u8 {
+    return switch (value) {
+        0...9 => '0' + value,
+        10...15 => 'a' + value - 10,
+        else => unreachable,
+    };
+}
+
+fn writeU64(out: []u8, value: u64) void {
+    std.debug.assert(out.len == 8);
+    for (0..8) |index| out[index] = @intCast((value >> @intCast(index * 8)) & 0xff);
+}
+
+fn writeU32(out: []u8, value: u32) void {
+    std.debug.assert(out.len == 4);
+    for (0..4) |index| out[index] = @intCast((value >> @intCast(index * 8)) & 0xff);
+}
+
 fn updateHoverHit(scene_commands: []const ui.Command, x: f32, y: f32) void {
     if (x < 0.0 or y < 0.0) {
         hover_hit_kind = hover_hit_kind_none;
@@ -600,6 +877,122 @@ fn galleryState(layout_raw: u32, grid_gap: f32, scroll_y: f32, hover_x: f32, hov
         .list_order_scope_id = gallery_list_order_scope_id,
         .list_order = gallery_list_order,
     };
+}
+
+fn applyRoutePath(path: []const u8) void {
+    site_state.search_open = false;
+    site_state.search_query_len = 0;
+    const trimmed = trimRoute(path);
+    if (std.mem.eql(u8, trimmed, "/blog")) {
+        site_state.view = .blog;
+        site_state.selected_blog_post_id = 0;
+        site_state.blog_arc_filter_index = null;
+        return;
+    }
+    if (std.mem.startsWith(u8, trimmed, "/blog/")) {
+        const raw_id = std.fmt.parseUnsigned(u32, trimmed["/blog/".len..], 10) catch {
+            site_state.view = .blog;
+            site_state.selected_blog_post_id = 0;
+            return;
+        };
+        site_state.view = .blog;
+        site_state.selected_blog_post_id = if (site_blog.postById(raw_id) != null) raw_id else 0;
+        site_state.blog_arc_filter_index = null;
+        return;
+    }
+    site_state.view = .landing;
+    site_state.selected_blog_post_id = 0;
+    site_state.blog_arc_filter_index = null;
+}
+
+fn trimRoute(path: []const u8) []const u8 {
+    if (path.len == 0) return "/";
+    const query = std.mem.indexOfScalar(u8, path, '?') orelse path.len;
+    const hash = std.mem.indexOfScalar(u8, path[0..query], '#') orelse query;
+    const trimmed = path[0..hash];
+    return if (trimmed.len == 0) "/" else trimmed;
+}
+
+fn refreshRoutePath() void {
+    route_len = switch (site_state.view) {
+        .landing => writeRoute("/"),
+        .blog => if (site_state.selected_blog_post_id == 0)
+            writeRoute("/blog")
+        else
+            writePostRoute(site_state.selected_blog_post_id),
+    };
+}
+
+fn writeRoute(value: []const u8) usize {
+    @memcpy(route_bytes[0..value.len], value);
+    return value.len;
+}
+
+fn writePostRoute(post_id: u32) usize {
+    const out = std.fmt.bufPrint(&route_bytes, "/blog/{d}", .{post_id}) catch unreachable;
+    return out.len;
+}
+
+fn renderSearchOverlay(scene: *ui.Scene, hover_x: f32, hover_y: f32) ui.RenderError!void {
+    _ = hover_x;
+    _ = hover_y;
+    const screen = ui.Rect.init(0.0, 0.0, @floatFromInt(frame_width), @floatFromInt(frame_height));
+    try scene.pushRect(screen, .{ .r = 0, .g = 0, .b = 0, .a = search_scrim_alpha }, .fill, 0.0, 0.0);
+
+    const panel_w = @min(720.0, @max(320.0, screen.w - 48.0));
+    const panel = ui.Rect.init((screen.w - panel_w) * 0.5, 92.0, panel_w, 430.0);
+    try scene.pushRect(panel, .{ .r = 5, .g = 5, .b = 5, .a = search_panel_alpha }, .fill, 10.0, 0.0);
+    try scene.pushRect(panel, .{ .r = 64, .g = 64, .b = 64, .a = 255 }, .border, 10.0, 0.0);
+    try scene.pushHit(.{ .slot = 0, .kind = .input, .id = search_overlay_id, .bounds = panel });
+
+    const input_bounds = ui.Rect.init(panel.x + 22.0, panel.y + 22.0, panel.w - 44.0, 46.0);
+    try scene.pushRect(input_bounds, .{ .r = 18, .g = 18, .b = 18, .a = 255 }, .fill, 7.0, 0.0);
+    try scene.pushRect(input_bounds, .{ .r = 70, .g = 70, .b = 70, .a = 255 }, .border, 7.0, 0.0);
+    try scene.pushIconQuad(.{ .bounds = ui.Rect.init(input_bounds.x + 14.0, input_bounds.y + 13.0, 20.0, 20.0), .atlas_id = icon.atlasId(.search), .color = .{ .r = 74, .g = 222, .b = 128 } });
+    const query = site_state.searchQuery();
+    const placeholder = if (query.len == 0) "Search posts..." else query;
+    const color = if (query.len == 0) ui.Color{ .r = 118, .g = 118, .b = 118 } else ui.Color{ .r = 242, .g = 242, .b = 242 };
+    try scene.pushText(ui.Rect.init(input_bounds.x + 46.0, input_bounds.y + 14.0, input_bounds.w - 94.0, 18.0), placeholder, color);
+    try scene.pushText(ui.Rect.init(input_bounds.x + input_bounds.w - 42.0, input_bounds.y + 15.0, 28.0, 14.0), "Esc", .{ .r = 118, .g = 118, .b = 118 });
+    try scene.pushHit(.{ .slot = 0, .kind = .input, .id = search_input_id, .bounds = input_bounds });
+
+    const results_y = input_bounds.y + input_bounds.h + 18.0;
+    var rendered: usize = 0;
+    for (site_blog.posts, 0..) |post, index| {
+        if (rendered >= search_result_limit) break;
+        if (query.len != 0 and !postMatches(post, query)) continue;
+        const row = ui.Rect.init(panel.x + 22.0, results_y + @as(f32, @floatFromInt(rendered)) * 54.0, panel.w - 44.0, 46.0);
+        const post_id = site_blog.postIdAt(index);
+        try scene.pushRect(row, .{ .r = 18, .g = 18, .b = 18, .a = search_result_alpha }, .fill, 7.0, 0.0);
+        try scene.pushRect(row, .{ .r = 48, .g = 48, .b = 48, .a = 255 }, .border, 7.0, 0.0);
+        try scene.pushText(ui.Rect.init(row.x + 14.0, row.y + 8.0, row.w - 28.0, 15.0), post.title, .{ .r = 242, .g = 242, .b = 242 });
+        try scene.pushText(ui.Rect.init(row.x + 14.0, row.y + 27.0, row.w - 28.0, 11.0), post.summary, .{ .r = 154, .g = 154, .b = 154 });
+        try scene.pushHit(.{ .slot = 0, .kind = .button, .id = post_id, .bounds = row });
+        rendered += 1;
+    }
+    if (rendered == 0) {
+        try scene.pushText(ui.Rect.init(panel.x + 22.0, results_y + 10.0, panel.w - 44.0, 18.0), "No matching posts", .{ .r = 154, .g = 154, .b = 154 });
+    }
+}
+
+fn postMatches(post: site_blog.Post, query: []const u8) bool {
+    return containsIgnoreCase(post.title, query) or containsIgnoreCase(post.summary, query) or containsIgnoreCase(post.arc, query);
+}
+
+fn containsIgnoreCase(value: []const u8, query: []const u8) bool {
+    if (query.len == 0) return true;
+    if (query.len > value.len) return false;
+    var index: usize = 0;
+    while (index + query.len <= value.len) : (index += 1) {
+        var offset: usize = 0;
+        while (offset < query.len and asciiLower(value[index + offset]) == asciiLower(query[offset])) : (offset += 1) {}
+        if (offset == query.len) return true;
+    }
+    return false;
+}
+
+fn asciiLower(value: u8) u8 {
+    return if (value >= 'A' and value <= 'Z') value + ('a' - 'A') else value;
 }
 
 fn recordAction(action: ui_runtime.Action) void {
@@ -644,19 +1037,53 @@ fn packGpuScene(scene_commands: []const ui.Command) error{Budget}!void {
     gpu_text_vertex_float_len = 0;
     gpu_icon_vertex_float_len = 0;
     gpu_image_vertex_float_len = 0;
+    clearOverlayGpuScene();
+    try packGpuSceneRange(scene_commands, .base);
+}
+
+fn packGpuSceneWithOverlay(scene_commands: []const ui.Command, overlay_start: usize) error{Budget}!void {
+    gpu_rect_float_len = 0;
+    gpu_text_vertex_float_len = 0;
+    gpu_icon_vertex_float_len = 0;
+    gpu_image_vertex_float_len = 0;
+    clearOverlayGpuScene();
+    try packGpuSceneRange(scene_commands[0..overlay_start], .base);
+    try packGpuSceneRange(scene_commands[overlay_start..], .overlay);
+}
+
+fn clearOverlayGpuScene() void {
+    gpu_overlay_rect_float_len = 0;
+    gpu_overlay_text_vertex_float_len = 0;
+    gpu_overlay_icon_vertex_float_len = 0;
+}
+
+const GpuLayer = enum {
+    base,
+    overlay,
+};
+
+fn packGpuSceneRange(scene_commands: []const ui.Command, layer: GpuLayer) error{Budget}!void {
     for (scene_commands) |command| switch (command) {
-        .rect => |rect| try pushPackedRect(rect.bounds, rect.color, rect.color2, rect.radius, rect.shadow, rectModeCode(rect.mode)),
-        .border => |border| try pushPackedRect(border.bounds, border.color, .clear, 0, 0, rectModeCode(.border)),
-        .text => |text_command| try pushPackedText(text_command.origin, text_command.value, text_command.color, text_command.alignment),
-        .icon_quad => |quad| try pushPackedIcon(quad),
-        .image_quad => |quad| try pushPackedImage(quad),
+        .rect => |rect| try pushPackedRect(layer, rect.bounds, rect.color, rect.color2, rect.radius, rect.shadow, rectModeCode(rect.mode)),
+        .border => |border| try pushPackedRect(layer, border.bounds, border.color, .clear, 0, 0, rectModeCode(.border)),
+        .text => |text_command| try pushPackedText(layer, text_command.origin, text_command.value, text_command.color, text_command.alignment),
+        .icon_quad => |quad| try pushPackedIcon(layer, quad),
+        .image_quad => |quad| if (layer == .base) try pushPackedImage(quad),
         .hit, .drag_source, .drop_target, .text_quad, .transition => {},
     };
 }
 
-fn pushPackedRect(bounds: ui.Rect, color: ui.Color, color2: ui.Color, radius: f32, shadow: f32, mode: f32) error{Budget}!void {
+fn pushPackedRect(layer: GpuLayer, bounds: ui.Rect, color: ui.Color, color2: ui.Color, radius: f32, shadow: f32, mode: f32) error{Budget}!void {
     if (!bounds.valid()) return;
-    if (gpu_rect_float_len + gpu_rect_float_stride > gpu_rect_floats.len) return error.Budget;
+    const buffer = switch (layer) {
+        .base => &gpu_rect_floats,
+        .overlay => &gpu_overlay_rect_floats,
+    };
+    const len = switch (layer) {
+        .base => &gpu_rect_float_len,
+        .overlay => &gpu_overlay_rect_float_len,
+    };
+    if (len.* + gpu_rect_float_stride > buffer.len) return error.Budget;
     const values = [_]f32{
         bounds.x,
         bounds.y,
@@ -674,12 +1101,20 @@ fn pushPackedRect(bounds: ui.Rect, color: ui.Color, color2: ui.Color, radius: f3
         channel(color2.a),
         mode,
     };
-    @memcpy(gpu_rect_floats[gpu_rect_float_len .. gpu_rect_float_len + gpu_rect_float_stride], &values);
-    gpu_rect_float_len += gpu_rect_float_stride;
+    @memcpy(buffer[len.* .. len.* + gpu_rect_float_stride], &values);
+    len.* += gpu_rect_float_stride;
 }
 
-fn pushPackedText(bounds: ui.Rect, value: []const u8, color: ui.Color, alignment: ui.TextAlign) error{Budget}!void {
+fn pushPackedText(layer: GpuLayer, bounds: ui.Rect, value: []const u8, color: ui.Color, alignment: ui.TextAlign) error{Budget}!void {
     if (value.len == 0 or !bounds.valid()) return;
+    const buffer = switch (layer) {
+        .base => gpu_text_vertex_floats[0..],
+        .overlay => gpu_overlay_text_vertex_floats[0..],
+    };
+    const len = switch (layer) {
+        .base => &gpu_text_vertex_float_len,
+        .overlay => &gpu_overlay_text_vertex_float_len,
+    };
     const px = textPx(bounds.h);
     var pen_x = bounds.x + textAlignOffset(value, px, bounds.w, alignment);
     const metrics = fontMetrics(px);
@@ -690,17 +1125,25 @@ fn pushPackedText(bounds: ui.Rect, value: []const u8, color: ui.Color, alignment
         const glyph = (getFontGlyph(byte, px) catch return error.Budget) orelse continue;
         if (glyph.w > 0.0 and glyph.h > 0.0) {
             const quad = snapGlyphQuad(pen_x + glyph.left, baseline + glyph.top, glyph.w, glyph.h);
-            try pushClippedTexturedQuad(&gpu_text_vertex_floats, &gpu_text_vertex_float_len, clip, quad, glyph.u0, glyph.v0, glyph.u1, glyph.v1, color);
+            try pushClippedTexturedQuad(buffer, len, clip, quad, glyph.u0, glyph.v0, glyph.u1, glyph.v1, color);
         }
         pen_x += glyph.advance;
         if (pen_x > bounds.x + bounds.w) break;
     }
 }
 
-fn pushPackedIcon(quad: ui.Quad) error{Budget}!void {
+fn pushPackedIcon(layer: GpuLayer, quad: ui.Quad) error{Budget}!void {
     if (!quad.bounds.valid() or quad.atlas_id == 0) return;
     const rect = iconAtlasRect(quad.atlas_id) orelse return;
-    try pushClippedTexturedQuad(&gpu_icon_vertex_floats, &gpu_icon_vertex_float_len, quad.bounds, quad.bounds, rect.u0, rect.v0, rect.u1, rect.v1, quad.color);
+    const buffer = switch (layer) {
+        .base => gpu_icon_vertex_floats[0..],
+        .overlay => gpu_overlay_icon_vertex_floats[0..],
+    };
+    const len = switch (layer) {
+        .base => &gpu_icon_vertex_float_len,
+        .overlay => &gpu_overlay_icon_vertex_float_len,
+    };
+    try pushClippedTexturedQuad(buffer, len, quad.bounds, quad.bounds, rect.u0, rect.v0, rect.u1, rect.v1, quad.color);
 }
 
 fn pushPackedImage(quad: ui.Quad) error{Budget}!void {
@@ -908,9 +1351,9 @@ fn iconAtlasRect(atlas_id: u32) ?AtlasRect {
     const found = tabler_atlas.rect(value);
     return .{
         .u0 = (@as(f32, @floatFromInt(found.x)) + 0.5) / @as(f32, @floatFromInt(icon_atlas_width)),
-        .v0 = (@as(f32, @floatFromInt(icon_atlas_height - found.y - found.h)) + 0.5) / @as(f32, @floatFromInt(icon_atlas_height)),
+        .v0 = (@as(f32, @floatFromInt(found.y)) + 0.5) / @as(f32, @floatFromInt(icon_atlas_height)),
         .u1 = (@as(f32, @floatFromInt(found.x + found.w)) - 0.5) / @as(f32, @floatFromInt(icon_atlas_width)),
-        .v1 = (@as(f32, @floatFromInt(icon_atlas_height - found.y)) - 0.5) / @as(f32, @floatFromInt(icon_atlas_height)),
+        .v1 = (@as(f32, @floatFromInt(found.y + found.h)) - 0.5) / @as(f32, @floatFromInt(icon_atlas_height)),
     };
 }
 
@@ -920,6 +1363,7 @@ fn rectModeCode(mode: ui.RectMode) f32 {
         .shadow => 1,
         .border => 2,
         .linear_gradient => 3,
+        .pie_slice => 4,
     };
 }
 
@@ -963,7 +1407,29 @@ test "browser site landing builds packed webgl buffers and hit state" {
     try std.testing.expect(gpu_icon_vertex_float_len > 0);
     try std.testing.expectEqual(site_landing.contentHeight(1280.0), er_ui_site_landing_content_height(1280.0));
     try std.testing.expectEqual(@intFromEnum(ui.HitKind.button), hover_hit_kind);
-    try std.testing.expectEqual(site_landing.search_button_id, hover_hit_id);
+    try std.testing.expectEqual(site_chrome.search_button_id, hover_hit_id);
+}
+
+test "browser site reveal derives public identity inside wasm from interaction" {
+    ephemeral_identity_ready = false;
+    entropy_pool = initialEntropyPool();
+    entropy_event_count = 0;
+    defer {
+        ephemeral_identity_ready = false;
+        entropy_pool = initialEntropyPool();
+        entropy_event_count = 0;
+    }
+
+    const before = publicIdentityText();
+    try std.testing.expectEqualStrings("click reveal", before);
+    _ = er_ui_build_site_landing_gpu_frame(1280, 800, 0.0, 108.0, 500.0, 333.0);
+    _ = er_ui_pointer_down(108.0, 500.0);
+    _ = er_ui_pointer_up(108.0, 500.0);
+    try std.testing.expectEqual(@intFromEnum(HostAction.none), er_ui_site_activate_hit(site_landing.reveal_identity_button_id));
+    try std.testing.expect(ephemeral_identity_ready);
+    try std.testing.expectEqual(@as(usize, public_identity_text_len), publicIdentityText().len);
+    try std.testing.expect(std.mem.startsWith(u8, publicIdentityText(), public_identity_prefix));
+    try std.testing.expect(identity.Source.prepare(.ed25519_public, &ephemeral_public_key) != null);
 }
 
 test "browser site blog builds packed webgl buffers and post hit state" {
@@ -987,14 +1453,61 @@ test "browser site activation keeps page state in wasm" {
     defer site_state = .{};
 
     try std.testing.expectEqual(site_landing.contentHeight(1280.0), er_ui_site_content_height(1280.0));
-    try std.testing.expectEqual(@intFromEnum(HostAction.none), er_ui_site_activate_hit(site_landing.blog_button_id));
+    try std.testing.expectEqual(@intFromEnum(HostAction.none), er_ui_site_activate_hit(site_chrome.blog_button_id));
     try std.testing.expectEqual(site_blog.indexContentHeight(1280.0), er_ui_site_content_height(1280.0));
     try std.testing.expectEqual(@intFromEnum(HostAction.none), er_ui_site_activate_hit(site_blog.postIdAt(0)));
     try std.testing.expectEqual(site_blog.postContentHeight(1280.0, site_blog.postIdAt(0)), er_ui_site_content_height(1280.0));
-    try std.testing.expectEqual(@intFromEnum(HostAction.open_url), er_ui_site_activate_hit(site_landing.source_button_id));
+    try std.testing.expectEqual(@intFromEnum(HostAction.open_url), er_ui_site_activate_hit(site_chrome.source_button_id));
     try std.testing.expectEqual(@intFromEnum(HostAction.open_url), er_ui_site_host_action_kind());
     try std.testing.expectEqual(site_source_url.len, er_ui_site_host_action_url_len());
     try std.testing.expect(er_ui_site_host_action_url_ptr() != 0);
+    try std.testing.expectEqual(@intFromEnum(HostAction.none), er_ui_site_activate_hit(site_chrome.logo_button_id));
+    try std.testing.expectEqual(site_landing.contentHeight(1280.0), er_ui_site_content_height(1280.0));
+    try std.testing.expectEqual(@intFromEnum(HostAction.none), er_ui_site_activate_hit(site_blog.arcFilterButtonId(3)));
+    try std.testing.expectEqual(site_blog.indexContentHeightFiltered(1280.0, 3), er_ui_site_content_height(1280.0));
+}
+
+test "browser native route sync owns URL path state" {
+    site_state = .{};
+    defer site_state = .{};
+
+    @memcpy(input_bytes[0.."/blog".len], "/blog");
+    try std.testing.expectEqual(@as(u32, 0), er_ui_site_set_route_path("/blog".len));
+    try std.testing.expectEqual(site_blog.indexContentHeight(1280.0), er_ui_site_content_height(1280.0));
+    try std.testing.expectEqualStrings("/blog", route_bytes[0..er_ui_site_route_path_len()]);
+
+    const route = "/blog/40100";
+    @memcpy(input_bytes[0..route.len], route);
+    try std.testing.expectEqual(@as(u32, 0), er_ui_site_set_route_path(route.len));
+    try std.testing.expectEqual(site_blog.postContentHeight(1280.0, site_blog.postIdAt(0)), er_ui_site_content_height(1280.0));
+    try std.testing.expectEqualStrings(route, route_bytes[0..er_ui_site_route_path_len()]);
+
+    @memcpy(input_bytes[0.."/".len], "/");
+    try std.testing.expectEqual(@as(u32, 0), er_ui_site_set_route_path("/".len));
+    try std.testing.expectEqual(site_landing.contentHeight(1280.0), er_ui_site_content_height(1280.0));
+    try std.testing.expectEqualStrings("/", route_bytes[0..er_ui_site_route_path_len()]);
+}
+
+test "browser native search accepts keyboard text and renders overlay results" {
+    site_state = .{};
+    defer site_state = .{};
+
+    try std.testing.expectEqual(@as(u32, 0), er_ui_site_search_open());
+    try std.testing.expectEqual(@as(u32, 1), er_ui_site_search_is_open());
+    for ("phone") |byte| try std.testing.expectEqual(@as(u32, 0), er_ui_site_search_input_byte(byte));
+    try std.testing.expectEqualStrings("phone", site_state.searchQuery());
+
+    const code = er_ui_build_site_gpu_frame(1280, 900, 0.0, -1.0, -1.0, 0.0);
+    try std.testing.expectEqual(@as(u32, 0), code);
+    try std.testing.expect(gpu_rect_float_len > 0);
+    try std.testing.expect(gpu_text_vertex_float_len > 0);
+    try std.testing.expect(gpu_overlay_rect_float_len > 0);
+    try std.testing.expect(gpu_overlay_text_vertex_float_len > 0);
+    try std.testing.expect(gpu_overlay_icon_vertex_float_len > 0);
+    try std.testing.expectEqual(@as(u32, 0), er_ui_site_search_backspace());
+    try std.testing.expectEqualStrings("phon", site_state.searchQuery());
+    try std.testing.expectEqual(@as(u32, 0), er_ui_site_search_close());
+    try std.testing.expectEqual(@as(u32, 0), er_ui_site_search_is_open());
 }
 
 test "browser pointer runtime applies visible list reorder state" {
@@ -1025,7 +1538,7 @@ test "browser packed text preserves variable font descenders" {
     try std.testing.expectEqual(@as(usize, 0), font_glyph_count);
     gpu_text_vertex_float_len = 0;
     const bounds = ui.Rect.init(0, 0, 64, 14);
-    try pushPackedText(bounds, "y", .text, .start);
+    try pushPackedText(.base, bounds, "y", .text, .start);
     try std.testing.expect(gpu_text_vertex_float_len > 0);
     try std.testing.expect(font_glyph_count > 0);
     try std.testing.expect(font_glyph_count < 8);
@@ -1062,9 +1575,16 @@ test "browser font atlas populates glyphs on demand" {
     try std.testing.expectEqual(@as(usize, 0), font_glyph_count);
 
     gpu_text_vertex_float_len = 0;
-    try pushPackedText(ui.Rect.init(0, 0, 160, 18), "EdgeRun", .text, .start);
+    try pushPackedText(.base, ui.Rect.init(0, 0, 160, 18), "EdgeRun", .text, .start);
     try std.testing.expect(gpu_text_vertex_float_len > 0);
     try std.testing.expect(font_glyph_count > 0);
     try std.testing.expect(font_glyph_count < 16);
     try std.testing.expect(font_atlas_generation > initialized_generation);
+}
+
+test "browser icon atlas uv preserves canonical top-origin rows" {
+    const found = tabler_atlas.rect(.search);
+    const rect = iconAtlasRect(icon.atlasId(.search)).?;
+    const expected_v0 = (@as(f32, @floatFromInt(found.y)) + 0.5) / @as(f32, @floatFromInt(icon_atlas_height));
+    try std.testing.expectEqual(expected_v0, rect.v0);
 }

@@ -80,7 +80,17 @@ pub const html =
     \\  float d = rounded_box(p, v_size * 0.5, v_radius);
     \\  float aa = max(fwidth(d), 0.75);
     \\  float alpha = 1.0 - smoothstep(0.0, aa, d);
-    \\  if (v_mode == 1) {
+    \\  if (v_mode == 4) {
+    \\    float outer = min(v_size.x, v_size.y) * 0.5;
+    \\    float distance = length(p);
+    \\    float edge_aa = max(fwidth(distance), 0.75);
+    \\    float circle = 1.0 - smoothstep(outer - edge_aa, outer + edge_aa, distance);
+    \\    float turn = atan(p.y, p.x) / 6.28318530718 + 0.25;
+    \\    if (turn < 0.0) turn += 1.0;
+    \\    if (turn > 1.0) turn -= 1.0;
+    \\    float in_slice = step(v_color2.r, turn) * step(turn, v_color2.g);
+    \\    out_color = vec4(v_color.rgb, v_color.a * circle * in_slice);
+    \\  } else if (v_mode == 1) {
     \\    float sd = rounded_box(p - vec2(0.0, -v_shadow * 0.18), v_size * 0.5, v_radius + v_shadow * 0.35);
     \\    float blur = max(v_shadow, 1.0);
     \\    alpha = 1.0 - smoothstep(-blur, blur, sd);
@@ -346,21 +356,26 @@ pub const html =
     \\  gl.enable(gl.BLEND);
     \\  gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
     \\
-    \\  const rectLen = wasm.er_ui_gpu_rect_buffer_len();
-    \\  if (rectLen > 0) {
-    \\    const rects = new Float32Array(wasm.memory.buffer, wasm.er_ui_gpu_rect_buffer_ptr(), rectLen);
-    \\    gl.useProgram(shapeProgram);
-    \\    gl.bindVertexArray(shapeVao);
-    \\    gl.uniform2f(shapeScreen, cssWidth, cssHeight);
-    \\    gl.bindBuffer(gl.ARRAY_BUFFER, rectVbo);
-    \\    gl.bufferData(gl.ARRAY_BUFFER, rects, gl.DYNAMIC_DRAW);
-    \\    gl.drawArraysInstanced(gl.TRIANGLES, 0, 6, rectLen / rectStride);
-    \\  }
-    \\
+    \\  drawRects(wasm.er_ui_gpu_rect_buffer_ptr, wasm.er_ui_gpu_rect_buffer_len);
     \\  drawImageTexture(postImageTexture, wasm.er_ui_gpu_image_vertex_buffer_ptr, wasm.er_ui_gpu_image_vertex_buffer_len, imageStride);
     \\  drawTextured(fontTexture, wasm.er_ui_gpu_text_vertex_buffer_ptr, wasm.er_ui_gpu_text_vertex_buffer_len, textStride);
     \\  drawTextured(iconTexture, wasm.er_ui_gpu_icon_vertex_buffer_ptr, wasm.er_ui_gpu_icon_vertex_buffer_len, iconStride);
+    \\  drawRects(wasm.er_ui_gpu_overlay_rect_buffer_ptr, wasm.er_ui_gpu_overlay_rect_buffer_len);
+    \\  drawTextured(fontTexture, wasm.er_ui_gpu_overlay_text_vertex_buffer_ptr, wasm.er_ui_gpu_overlay_text_vertex_buffer_len, textStride);
+    \\  drawTextured(iconTexture, wasm.er_ui_gpu_overlay_icon_vertex_buffer_ptr, wasm.er_ui_gpu_overlay_icon_vertex_buffer_len, iconStride);
     \\  setStatus(`${cssWidth}x${cssHeight}@${deviceScale} webgl atlas`);
+    \\}
+    \\
+    \\function drawRects(ptrFn, lenFn) {
+    \\  const len = lenFn();
+    \\  if (len === 0) return;
+    \\  const rects = new Float32Array(wasm.memory.buffer, ptrFn(), len);
+    \\  gl.useProgram(shapeProgram);
+    \\  gl.bindVertexArray(shapeVao);
+    \\  gl.uniform2f(shapeScreen, cssWidth, cssHeight);
+    \\  gl.bindBuffer(gl.ARRAY_BUFFER, rectVbo);
+    \\  gl.bufferData(gl.ARRAY_BUFFER, rects, gl.DYNAMIC_DRAW);
+    \\  gl.drawArraysInstanced(gl.TRIANGLES, 0, 6, len / rectStride);
     \\}
     \\
     \\function drawTextured(texture, ptrFn, lenFn, stride) {
@@ -407,11 +422,36 @@ pub const html =
     \\  imageStride = wasm.er_ui_gpu_image_vertex_float_stride();
     \\  initAtlases();
     \\  await initPostImage();
+    \\  syncNativeRouteFromBrowser();
     \\  paint();
     \\}
     \\
     \\function wasmPath() {
     \\  return "../bin/edgerun-ui-browser.wasm";
+    \\}
+    \\
+    \\function writeInputBytes(value) {
+    \\  const encoded = new TextEncoder().encode(value);
+    \\  if (encoded.length > wasm.er_ui_input_capacity()) throw new Error("input bridge buffer exceeded");
+    \\  new Uint8Array(wasm.memory.buffer, wasm.er_ui_input_ptr(), encoded.length).set(encoded);
+    \\  return encoded.length;
+    \\}
+    \\
+    \\function readNativeString(ptr, len) {
+    \\  const bytes = new Uint8Array(wasm.memory.buffer, ptr, len);
+    \\  return new TextDecoder().decode(bytes);
+    \\}
+    \\
+    \\function syncNativeRouteFromBrowser() {
+    \\  if (!wasm) return;
+    \\  const len = writeInputBytes(location.pathname);
+    \\  const code = wasm.er_ui_site_set_route_path(len);
+    \\  if (code !== 0) setStatus(`route error ${wasm.er_ui_last_error()}`);
+    \\}
+    \\
+    \\function syncBrowserRouteFromNative() {
+    \\  const path = readNativeString(wasm.er_ui_site_route_path_ptr(), wasm.er_ui_site_route_path_len());
+    \\  if (path !== location.pathname) history.pushState(null, "", path);
     \\}
     \\
     \\function updateCursor() {
@@ -475,17 +515,49 @@ pub const html =
     \\  }
     \\  const hostAction = wasm.er_ui_site_activate_hit(hoverHitId);
     \\  if (hostAction === 1) openNativeUrl();
+    \\  syncBrowserRouteFromNative();
     \\  scrollY = 0;
     \\  schedule();
     \\});
     \\
     \\function openNativeUrl() {
-    \\  const ptr = wasm.er_ui_site_host_action_url_ptr();
-    \\  const len = wasm.er_ui_site_host_action_url_len();
-    \\  const bytes = new Uint8Array(wasm.memory.buffer, ptr, len);
-    \\  const url = new TextDecoder().decode(bytes);
-    \\  window.open(url, "_blank", "noopener,noreferrer");
+    \\  window.open(readNativeString(wasm.er_ui_site_host_action_url_ptr(), wasm.er_ui_site_host_action_url_len()), "_blank", "noopener,noreferrer");
     \\}
+    \\
+    \\window.addEventListener("popstate", () => {
+    \\  syncNativeRouteFromBrowser();
+    \\  scrollY = 0;
+    \\  schedule();
+    \\});
+    \\
+    \\window.addEventListener("keydown", (event) => {
+    \\  if (!wasm) return;
+    \\  const isSearchShortcut = (event.key === "k" || event.key === "K") && (event.metaKey || event.ctrlKey);
+    \\  if (isSearchShortcut || (event.key === "/" && wasm.er_ui_site_search_is_open() === 0)) {
+    \\    event.preventDefault();
+    \\    wasm.er_ui_site_search_open();
+    \\    schedule();
+    \\    return;
+    \\  }
+    \\  if (wasm.er_ui_site_search_is_open() === 0) return;
+    \\  if (event.key === "Escape") {
+    \\    event.preventDefault();
+    \\    wasm.er_ui_site_search_close();
+    \\    schedule();
+    \\    return;
+    \\  }
+    \\  if (event.key === "Backspace") {
+    \\    event.preventDefault();
+    \\    wasm.er_ui_site_search_backspace();
+    \\    schedule();
+    \\    return;
+    \\  }
+    \\  if (event.key.length === 1 && !event.ctrlKey && !event.metaKey && !event.altKey) {
+    \\    event.preventDefault();
+    \\    wasm.er_ui_site_search_input_byte(event.key.charCodeAt(0));
+    \\    schedule();
+    \\  }
+    \\});
     \\
     \\function updateHoverFromEvent(event) {
     \\  const rect = canvas.getBoundingClientRect();

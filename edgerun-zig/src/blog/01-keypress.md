@@ -23,6 +23,8 @@ None of those are the same object. The keyboard does not know about the chat. Th
 
 ## The event path
 
+[[demo:keypress_commit_path]]
+
 ```text
 finger -> keyboard hardware -> OS input queue
 OS input queue -> app event loop -> draft buffer

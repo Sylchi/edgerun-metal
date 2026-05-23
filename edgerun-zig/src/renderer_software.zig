@@ -51,6 +51,7 @@ pub const Surface = struct {
             .linear_gradient => self.fillRounded(bounds, rect.color, rect.color2, radius),
             .shadow => self.shadow(bounds, rect.color, radius, shadow_spread),
             .border => self.strokeRounded(bounds, rect.color, radius, @max(min_border_width, scale)),
+            .pie_slice => self.fillPieSlice(bounds, rect.color, rect.color2),
         }
     }
 
@@ -404,12 +405,45 @@ pub const Surface = struct {
             }
         }
     }
+
+    fn fillPieSlice(self: Surface, bounds: ui.Rect, color: ui.Color, encoded_angles: ui.Color) void {
+        const x0 = clampCoord(@intFromFloat(@floor(bounds.x)), self.width);
+        const y0 = clampCoord(@intFromFloat(@floor(bounds.y)), self.height);
+        const x1 = clampCoord(@intFromFloat(@ceil(bounds.x + bounds.w)), self.width);
+        const y1 = clampCoord(@intFromFloat(@ceil(bounds.y + bounds.h)), self.height);
+        if (x1 <= x0 or y1 <= y0) return;
+
+        const start_turn = byteUnit(encoded_angles.r);
+        const end_turn = byteUnit(encoded_angles.g);
+        const cx = bounds.x + bounds.w * 0.5;
+        const cy = bounds.y + bounds.h * 0.5;
+        const radius = @min(bounds.w, bounds.h) * 0.5;
+
+        var y = y0;
+        while (y < y1) : (y += 1) {
+            var x = x0;
+            while (x < x1) : (x += 1) {
+                const px = @as(f32, @floatFromInt(x)) + pixel_center;
+                const py = @as(f32, @floatFromInt(y)) + pixel_center;
+                const dx = px - cx;
+                const dy = py - cy;
+                const distance = @sqrt(dx * dx + dy * dy);
+                if (distance > radius) continue;
+                const turn = clockwiseTurn(dx, dy);
+                if (turn < start_turn or turn > end_turn) continue;
+                const alpha = coverageAlpha(radius, distance);
+                if (alpha != 0) self.blendPixel(x, y, color, alpha);
+            }
+        }
+    }
 };
 
 const default_raster_scale: f32 = 1.0;
 const max_alpha: u8 = 255;
 const pixel_center: f32 = 0.5;
 const min_border_width: f32 = 1.0;
+const quarter_turn: f32 = 0.25;
+const byte_unit_scale: f32 = 255.0;
 const shadow_steps: usize = 4;
 const shadow_layer_alpha: f32 = 0.24;
 const shadow_fade: f32 = 0.82;
@@ -508,6 +542,17 @@ fn mixByte(a: u8, b: u8, t: f32) u8 {
 
 fn scaleByte(value: u8, factor: f32) u8 {
     return @intFromFloat(@round(std.math.clamp(@as(f32, @floatFromInt(value)) * factor, 0.0, 255.0)));
+}
+
+fn byteUnit(value: u8) f32 {
+    return @as(f32, @floatFromInt(value)) / byte_unit_scale;
+}
+
+fn clockwiseTurn(dx: f32, dy: f32) f32 {
+    var turn = std.math.atan2(dy, dx) / std.math.tau + quarter_turn;
+    if (turn < 0.0) turn += 1.0;
+    if (turn > 1.0) turn -= 1.0;
+    return turn;
 }
 
 const antialias_width: f32 = 1.0;

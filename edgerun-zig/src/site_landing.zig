@@ -2,16 +2,19 @@ const std = @import("std");
 const icon = @import("icon.zig");
 const ui = @import("ui.zig");
 const components = @import("ui_components.zig");
+const site_chrome = @import("site_chrome.zig");
 
-pub const docs_button_id: u32 = 30_001;
-pub const apps_button_id: u32 = 30_002;
-pub const launch_button_id: u32 = 30_003;
-pub const search_button_id: u32 = 30_004;
-pub const blog_button_id: u32 = 30_011;
-pub const source_button_id: u32 = 30_012;
+pub const logo_button_id: u32 = site_chrome.logo_button_id;
+pub const docs_button_id: u32 = site_chrome.docs_button_id;
+pub const apps_button_id: u32 = site_chrome.apps_button_id;
+pub const launch_button_id: u32 = site_chrome.launch_button_id;
+pub const search_button_id: u32 = site_chrome.search_button_id;
+pub const blog_button_id: u32 = site_chrome.blog_button_id;
+pub const source_button_id: u32 = site_chrome.source_button_id;
+pub const reveal_identity_button_id: u32 = 20_001;
 
 const max_columns: usize = 4;
-const header_h: f32 = 64.0;
+const header_h: f32 = site_chrome.header_h;
 const section_gap: f32 = 72.0;
 const content_wide: f32 = 1180.0;
 const content_pad: f32 = 28.0;
@@ -57,6 +60,12 @@ const impact_copy_y: f32 = 138.0;
 const impact_copy_h: f32 = 108.0;
 const impact_cards_split_y: f32 = 36.0;
 const impact_cards_stacked_y: f32 = 286.0;
+const traffic_total_percent: f32 = 100.0;
+const traffic_pie_max_size: f32 = 190.0;
+const traffic_pie_fraction: f32 = 0.36;
+const traffic_legend_gap: f32 = 30.0;
+const traffic_legend_row_h: f32 = 24.0;
+const traffic_legend_swatch: f32 = 8.0;
 
 const palette = struct {
     const bg = ui.Color{ .r = 11, .g = 11, .b = 11 };
@@ -81,6 +90,8 @@ pub const State = struct {
     hover_x: f32 = -1.0,
     hover_y: f32 = -1.0,
     frame_ms: f32 = 0.0,
+    public_identity: []const u8 = "pending",
+    public_identity_ready: bool = false,
 };
 
 const TerminalLine = struct {
@@ -93,15 +104,16 @@ const terminal_lines = [_]TerminalLine{
     .{ .value = "EdgeRun v0.4.2-alpha", .color = palette.text },
     .{ .value = "initializing wasm runtime...", .color = palette.dim },
     .{ .value = "runtime loaded (2.1mb)", .color = palette.primary },
-    .{ .value = "generating node keypair...", .color = palette.dim },
-    .{ .value = "ed25519 keypair ready", .color = palette.primary },
-    .{ .value = "bootstrapping DHT...", .color = palette.dim },
-    .{ .value = "found 847 peers", .color = palette.dim },
-    .{ .value = "connected to 12 nodes", .color = palette.dim },
+    .{ .value = "waiting for click entropy...", .color = palette.dim },
+    .{ .value = "keygen runs inside wasm", .color = palette.primary },
+    .{ .value = "identity source: ed25519_public", .color = palette.dim },
+    .{ .value = "public identity:", .color = palette.text },
+    .{ .value = "bootstrapping local app runtime...", .color = palette.dim },
     .{ .value = "mesh network active", .color = palette.primary },
-    .{ .value = "your node is live", .color = palette.text },
-    .{ .value = "node: af03d91c7b42e8aa", .color = palette.primary },
+    .{ .value = "your browser app is live", .color = palette.text },
 };
+const terminal_identity_line_index: usize = 8;
+const terminal_line_count: usize = terminal_lines.len + 1;
 
 const SectionKind = enum {
     hero,
@@ -195,25 +207,7 @@ fn sectionHeight(content: ui.Rect, kind: SectionKind) f32 {
 }
 
 fn renderHeader(scene: *ui.Scene, bounds: ui.Rect, content: ui.Rect) ui.RenderError!void {
-    try fill(scene, bounds, palette.bg, 0.0);
-    try fill(scene, ui.Rect.init(bounds.x, bounds.y + bounds.h - 1.0, bounds.w, 1.0), palette.border, 0.0);
-
-    const logo = ui.Rect.init(content.x, bounds.y + 16.0, 32.0, 32.0);
-    try fill(scene, logo, palette.primary, 7.0);
-    try iconQuad(scene, logo.insetUniform(5.0), .terminal, palette.bg);
-    try text(scene, logo.x + 42.0, bounds.y + 23.0, 110.0, 18.0, "EdgeRun", palette.text);
-
-    const nav_y = bounds.y + 19.0;
-    try navItem(scene, ui.Rect.init(content.x + 190.0, nav_y, 68.0, 28.0), "Docs", docs_button_id);
-    try navItem(scene, ui.Rect.init(content.x + 266.0, nav_y, 64.0, 28.0), "Blog", blog_button_id);
-    try navItem(scene, ui.Rect.init(content.x + 338.0, nav_y, 64.0, 28.0), "Apps", apps_button_id);
-
-    const launch = ui.Rect.init(content.x + content.w - 128.0, bounds.y + 16.0, 128.0, 32.0);
-    try primaryButton(scene, launch, "Launch Desktop", launch_button_id);
-    const source = ui.Rect.init(launch.x - 46.0, launch.y, 32.0, 32.0);
-    try iconButton(scene, source, .github, source_button_id);
-    const search = ui.Rect.init(source.x - 126.0, launch.y, 112.0, 32.0);
-    try outlineButtonWithLeadingIcon(scene, search, "Search", .search, search_button_id);
+    try site_chrome.renderHeader(scene, bounds, content, .none);
 }
 
 fn renderHero(scene: *ui.Scene, bounds: ui.Rect, state: State) ui.RenderError!void {
@@ -292,13 +286,28 @@ fn renderTerminal(scene: *ui.Scene, bounds: ui.Rect, state: State) ui.RenderErro
 
     const visible = terminalVisibleLineCount(state.frame_ms);
     var y = bounds.y + 62.0;
-    for (terminal_lines[0..visible]) |line| {
+    for (terminal_lines[0..@min(visible, terminal_identity_line_index)]) |line| {
         try text(scene, bounds.x + 24.0, y, bounds.w - 48.0, 14.0, line.value, line.color);
         y += terminal_line_h;
+    }
+    if (visible > terminal_identity_line_index) {
+        try text(scene, bounds.x + 24.0, y, bounds.w - 48.0, 14.0, state.public_identity, palette.primary);
+        y += terminal_line_h;
+    }
+    if (visible > terminal_identity_line_index + 1) {
+        for (terminal_lines[terminal_identity_line_index..@min(visible - 1, terminal_lines.len)]) |line| {
+            try text(scene, bounds.x + 24.0, y, bounds.w - 48.0, 14.0, line.value, line.color);
+            y += terminal_line_h;
+        }
     }
     var cursor_color = palette.primary;
     cursor_color.a = terminal_cursor_alpha;
     try fill(scene, ui.Rect.init(bounds.x + 24.0, y, terminal_cursor_w, terminal_cursor_h), cursor_color, 1.0);
+
+    if (!state.public_identity_ready) {
+        const reveal = ui.Rect.init(bounds.x + 24.0, bounds.y + bounds.h - 54.0, 174.0, 32.0);
+        try outlineButton(scene, reveal, "Reveal Identity", reveal_identity_button_id);
+    }
 }
 
 fn renderStats(scene: *ui.Scene, bounds: ui.Rect) ui.RenderError!void {
@@ -500,12 +509,6 @@ fn renderNodeMap(scene: *ui.Scene, bounds: ui.Rect, state: State, show_status: b
     }
 }
 
-fn navItem(scene: *ui.Scene, bounds: ui.Rect, label: []const u8, id: u32) ui.RenderError!void {
-    try fill(scene, bounds, ui.Color.clear, 6.0);
-    try alignedText(scene, bounds.x, bounds.y + 7.0, bounds.w, 12.0, label, palette.dim, .center);
-    try hit(scene, bounds, .button, id);
-}
-
 fn tag(scene: *ui.Scene, bounds: ui.Rect, label: []const u8, color: ui.Color) ui.RenderError!void {
     try fill(scene, bounds, palette.neutral_soft, 5.0);
     try alignedText(scene, bounds.x + 8.0, bounds.y + 6.0, bounds.w - 16.0, 10.0, label, color, .center);
@@ -525,19 +528,19 @@ fn titleLine(scene: *ui.Scene, bounds: ui.Rect, value: []const u8, color: ui.Col
 }
 
 fn titleWrapped(scene: *ui.Scene, bounds: ui.Rect, value: []const u8, color: ui.Color) ui.RenderError!void {
-    const wrap = ui.TextWrap{ .line_height = 58.0, .average_char_width = 22.0, .max_lines = 2 };
+    const wrap = ui.TextWrap{ .line_height = 58.0, .average_char_width = 27.0, .max_lines = 2 };
     try scene.pushWrappedText(ui.Rect.init(bounds.x + title_weight_offset, bounds.y, bounds.w, bounds.h), value, color, wrap);
     try scene.pushWrappedText(bounds, value, color, wrap);
 }
 
 fn terminalVisibleLineCount(frame_ms: f32) usize {
-    if (frame_ms <= 0.0) return terminal_lines.len;
-    const total = @as(f32, @floatFromInt(terminal_lines.len));
+    if (frame_ms <= 0.0) return terminal_line_count;
+    const total = @as(f32, @floatFromInt(terminal_line_count));
     const cycle_ms = total * terminal_line_reveal_ms + terminal_hold_ms;
     const cycles = @floor(frame_ms / cycle_ms);
     const elapsed = frame_ms - cycles * cycle_ms;
     const visible = @as(usize, @intFromFloat(@floor(elapsed / terminal_line_reveal_ms))) + 1;
-    return @max(@as(usize, 1), @min(terminal_lines.len, visible));
+    return @max(@as(usize, 1), @min(terminal_line_count, visible));
 }
 
 fn heading(scene: *ui.Scene, bounds: ui.Rect, first: []const u8, second: []const u8) ui.RenderError!void {
@@ -576,19 +579,24 @@ fn traffic(scene: *ui.Scene, bounds: ui.Rect) ui.RenderError!void {
         .{ "Akamai", 6.1, palette.cyan },
         .{ "Others", 43.1, palette.muted },
     };
-    const bar = ui.Rect.init(bounds.x + 24.0, bounds.y + 66.0, bounds.w - 48.0, 32.0);
-    var x = bar.x;
+    const pie_size = @min(traffic_pie_max_size, bounds.w * traffic_pie_fraction);
+    const pie = ui.Rect.init(bounds.x + 38.0, bounds.y + 78.0, pie_size, pie_size);
+    var start_turn: f32 = 0.0;
     for (companies) |company| {
-        const w = bar.w * company[1] / 100.0;
-        try fill(scene, ui.Rect.init(x, bar.y, w, bar.h), company[2], 2.0);
-        x += w;
+        const end_turn = start_turn + company[1] / traffic_total_percent;
+        try scene.pushPieSlice(pie, company[2], start_turn, end_turn);
+        start_turn = end_turn;
     }
-    var y = bounds.y + 124.0;
-    for (companies[0..5]) |company| {
-        try fill(scene, ui.Rect.init(bounds.x + 24.0, y + 5.0, 8.0, 8.0), company[2], 2.0);
-        try text(scene, bounds.x + 40.0, y, 104.0, 12.0, company[0], palette.dim);
-        try text(scene, bounds.x + 150.0, y, 60.0, 12.0, percentLabel(company[1]), palette.text);
-        y += 24.0;
+    try scene.pushRect(pie, palette.border, .border, pie_size * 0.5, 0.0);
+
+    const legend_x = pie.x + pie.w + traffic_legend_gap;
+    const legend_w = @max(1.0, bounds.x + bounds.w - 24.0 - legend_x);
+    var y = pie.y + 2.0;
+    for (companies) |company| {
+        try fill(scene, ui.Rect.init(legend_x, y + 5.0, traffic_legend_swatch, traffic_legend_swatch), company[2], 2.0);
+        try text(scene, legend_x + 20.0, y, @max(1.0, legend_w - 88.0), 12.0, company[0], palette.dim);
+        try text(scene, legend_x + legend_w - 60.0, y, 60.0, 12.0, percentLabel(company[1]), palette.text);
+        y += traffic_legend_row_h;
     }
     try fill(scene, ui.Rect.init(bounds.x + 24.0, bounds.y + bounds.h - 64.0, bounds.w - 48.0, 1.0), palette.border, 0.0);
     try paragraph(scene, ui.Rect.init(bounds.x + 24.0, bounds.y + bounds.h - 46.0, bounds.w - 48.0, 32.0), "56.9% of internet traffic flows through just 5 companies. Your data. Their servers.");
@@ -601,6 +609,7 @@ fn percentLabel(value: f32) []const u8 {
         83 => "8.3%",
         78 => "7.8%",
         61 => "6.1%",
+        431 => "43.1%",
         else => "",
     };
 }
@@ -667,18 +676,8 @@ fn outlineButton(scene: *ui.Scene, bounds: ui.Rect, label: []const u8, id: u32) 
     try nativeComponent(scene, bounds, .{ .button = .{ .id = id, .label = label } }, .{ .button_variant = .outline });
 }
 
-fn outlineButtonWithLeadingIcon(scene: *ui.Scene, bounds: ui.Rect, label: []const u8, icon_value: icon.Icon, id: u32) ui.RenderError!void {
-    try nativeComponent(scene, bounds, .{ .button = .{ .id = id, .label = label } }, .{ .button_variant = .outline, .button_leading_icon = icon_value });
-}
-
 fn outlineButtonWithTrailingIcon(scene: *ui.Scene, bounds: ui.Rect, label: []const u8, icon_value: icon.Icon, id: u32) ui.RenderError!void {
     try nativeComponent(scene, bounds, .{ .button = .{ .id = id, .label = label } }, .{ .button_variant = .outline, .button_trailing_icon = icon_value });
-}
-
-fn iconButton(scene: *ui.Scene, bounds: ui.Rect, icon_value: icon.Icon, id: u32) ui.RenderError!void {
-    try fill(scene, bounds, palette.bg, 7.0);
-    try iconQuad(scene, bounds.insetUniform(5.0), icon_value, palette.text);
-    try hit(scene, bounds, .button, id);
 }
 
 fn nativeBadge(scene: *ui.Scene, bounds: ui.Rect, label: []const u8) ui.RenderError!void {
@@ -698,15 +697,7 @@ fn nativeComponent(scene: *ui.Scene, bounds: ui.Rect, component: components.Comp
 }
 
 fn siteStyle() ui.Style {
-    return .{
-        .bg = palette.bg,
-        .panel = palette.card,
-        .row = palette.card_alt,
-        .border = palette.border,
-        .text = palette.text,
-        .muted = palette.dim,
-        .accent = palette.primary,
-    };
+    return site_chrome.style();
 }
 
 fn fill(scene: *ui.Scene, bounds: ui.Rect, color: ui.Color, r: f32) ui.RenderError!void {
@@ -779,6 +770,8 @@ test "landing page renders site sections and primary actions" {
     try std.testing.expect(hasText(scene.written(), "Already Running"));
     try std.testing.expect(hasText(scene.written(), "Centralization Crisis"));
     try std.testing.expect(hasText(scene.written(), "Pure Zig."));
+    try std.testing.expect(hasText(scene.written(), "Others"));
+    try std.testing.expect(hasPieSlice(scene.written()));
     try std.testing.expect(hasHit(scene.written(), docs_button_id));
     try std.testing.expect(hasHit(scene.written(), apps_button_id));
     try std.testing.expect(hasIcon(scene.written(), .search));
@@ -842,10 +835,10 @@ test "split hero keeps actions inside measured section" {
 }
 
 test "terminal animation reveals deterministic line counts" {
-    try std.testing.expectEqual(terminal_lines.len, terminalVisibleLineCount(0.0));
+    try std.testing.expectEqual(terminal_line_count, terminalVisibleLineCount(0.0));
     try std.testing.expectEqual(@as(usize, 1), terminalVisibleLineCount(1.0));
     try std.testing.expectEqual(@as(usize, 2), terminalVisibleLineCount(terminal_line_reveal_ms));
-    try std.testing.expectEqual(terminal_lines.len, terminalVisibleLineCount(terminal_line_reveal_ms * @as(f32, @floatFromInt(terminal_lines.len)) + 1.0));
+    try std.testing.expectEqual(terminal_line_count, terminalVisibleLineCount(terminal_line_reveal_ms * @as(f32, @floatFromInt(terminal_line_count)) + 1.0));
 }
 
 fn hasText(commands: []const ui.Command, value: []const u8) bool {
@@ -886,6 +879,14 @@ fn hasIcon(commands: []const ui.Command, value: icon.Icon) bool {
 fn hasHit(commands: []const ui.Command, id: u32) bool {
     for (commands) |command| switch (command) {
         .hit => |hit_command| if (hit_command.id == id) return true,
+        else => {},
+    };
+    return false;
+}
+
+fn hasPieSlice(commands: []const ui.Command) bool {
+    for (commands) |command| switch (command) {
+        .rect => |rect_command| if (rect_command.mode == .pie_slice) return true,
         else => {},
     };
     return false;

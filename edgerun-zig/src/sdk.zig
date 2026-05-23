@@ -35,7 +35,8 @@ pub const profile_ui_child_slots: usize = 32;
 pub const max_parent_memory_bytes = profile_ui_parent_memory;
 pub const max_parent_storage_bytes = profile_ui_parent_storage;
 pub const max_parent_slots = profile_ui_parent_slots;
-pub const canonical_object_buffer_bytes = 512;
+const minimum_canonical_object_buffer_bytes = 512;
+pub const canonical_object_buffer_bytes = @max(minimum_canonical_object_buffer_bytes, app_mod.work_receipt_object_size);
 pub const max_state_body_bytes = canonical_object_buffer_bytes - object.header_size - object.owner_size;
 pub const benchmark_iterations: usize = 2_000;
 
@@ -275,6 +276,8 @@ pub fn simulate(config: Config, workspace: Workspace) Error!Simulation {
         node.clock.now,
         request,
     ) orelse return error.BadConfiguration;
+    const admission = root_app.admissionCapability(authorization) orelse return error.Unauthorized;
+    root_app.admitAuthorization(authorization, admission) catch return error.Unauthorized;
     const manifest = app_mod.App.Manifest{
         .code_hash = preimage.hash("edgerun:zig:v1:sdk-app-code", config.child_app_material),
         .allocation = declaredAllocation(resources),
@@ -297,6 +300,7 @@ pub fn simulate(config: Config, workspace: Workspace) Error!Simulation {
         error.NoExecution => error.NoMemory,
         error.NoMemory => error.NoMemory,
         error.NoStorage => error.NoStorage,
+        error.NoReceipt => error.Corrupt,
         error.NoRoute => error.Unauthorized,
         error.NoDevice => error.Unauthorized,
         error.Unauthorized => error.Unauthorized,
@@ -309,9 +313,9 @@ pub fn simulate(config: Config, workspace: Workspace) Error!Simulation {
         error.Unsupported => error.BadConfiguration,
     };
     const object_id = child_app.putSealedObject(node.ids.device, node.ids.user, canonical) orelse return error.NoStorage;
-    const view = child_app.storage.getObject(node.ids.app.id, object_id) orelse return error.Corrupt;
+    const view = child_app.storedObject(object_id) orelse return error.Corrupt;
     if (!bytes.eql(&view.id(), &object_id)) return error.Corrupt;
-    const work_receipt = child_app.completeWork(node.ids.root_app.id, manifest_id, object_id, manifest_id, node.clock.now, node.clock.now, manifest.allocation, spawned.receipt) orelse return error.Corrupt;
+    const work_receipt = child_app.completeWork(node.ids.root_app.id, manifest_id, object_id, manifest.code_hash, manifest_id, node.clock.now, node.clock.now, manifest.allocation, spawned.receipt) orelse return error.Corrupt;
     const work_receipt_id = child_app.putWorkReceipt(work_receipt, node.clock.now, workspace.object[0..canonical_object_buffer_bytes]) catch |err| return switch (err) {
         error.BadArgument => error.BadConfiguration,
         error.Corrupt => error.Corrupt,
@@ -325,7 +329,7 @@ pub fn simulate(config: Config, workspace: Workspace) Error!Simulation {
         .manifest_id = manifest_id,
         .object_id = object_id,
         .work_receipt_id = work_receipt_id,
-        .app_storage = child_app.storage.stats(),
+        .app_storage = child_app.storageStats(),
     };
 }
 
