@@ -121,6 +121,7 @@ fn commandChecksum(commands: []const ui.Command) u64 {
         .drop_target => |target| sum = mix(sum, @truncate(target.index)),
         .icon_quad => |quad| sum = mix(sum, @truncate(quad.atlas_id)),
         .text_quad => |quad| sum = mix(sum, @truncate(quad.atlas_id)),
+        .image_quad => |quad| sum = mix(sum, @truncate(quad.atlas_id)),
         .transition => |transition_value| sum = mix(sum, @truncate(transition_value.id)),
     };
     return sum;

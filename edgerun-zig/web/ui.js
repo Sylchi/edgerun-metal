@@ -85,14 +85,29 @@ void main() {
   out_color = vec4(v_color.rgb, v_color.a * a);
 }`;
 
+const imageFragmentSource = `#version 300 es
+precision highp float;
+in vec2 v_uv;
+in vec4 v_color;
+out vec4 out_color;
+uniform sampler2D u_tex;
+void main() {
+  vec4 texel = texture(u_tex, v_uv);
+  out_color = vec4(texel.rgb * v_color.rgb, texel.a * v_color.a);
+}`;
+
 const canvas = document.getElementById("edgerun");
-const wasmBuildVersion = "webgl-atlas-1";
+const wasmBuildVersion = "webgl-site-4";
 const hoverHitKindNone = 255;
+const actionKindDragStarted = 3;
+const actionKindDragMoved = 4;
+const actionKindReordered = 6;
 
 let wasm;
 let gl;
 let shapeProgram;
 let texturedProgram;
+let imageProgram;
 let shapeVao;
 let texturedVao;
 let rectVbo;
@@ -100,11 +115,16 @@ let texturedVbo;
 let shapeScreen;
 let texturedScreen;
 let texturedTex;
+let imageScreen;
+let imageTex;
 let fontTexture;
 let iconTexture;
+let postImageTexture;
+let fontAtlasGeneration = 0;
 let rectStride = 15;
 let textStride = 8;
 let iconStride = 8;
+let imageStride = 8;
 let scrollY = 0;
 let hoverX = -1;
 let hoverY = -1;
@@ -115,12 +135,22 @@ let layoutGridId = 0;
 let gapCompactId = 0;
 let gapDefaultId = 0;
 let gapWideId = 0;
+let siteDocsId = 0;
+let siteAppsId = 0;
+let siteLaunchId = 0;
+let siteSearchId = 0;
+let siteBlogId = 0;
+let blogBackId = 0;
+let blogFirstPostId = 0;
 let hoverHitKind = hoverHitKindNone;
 let hoverHitId = 0;
+let lastActionKind = 0;
 let scheduled = false;
 let cssWidth = 1;
 let cssHeight = 1;
 let deviceScale = 1;
+let siteView = 0;
+let selectedBlogPostId = 0;
 
 function setStatus(value) {
   console.debug(value);
@@ -195,6 +225,10 @@ function initGpu() {
   gl.vertexAttribPointer(1, 4, gl.FLOAT, false, 32, 16);
   texturedScreen = gl.getUniformLocation(texturedProgram, "u_screen");
   texturedTex = gl.getUniformLocation(texturedProgram, "u_tex");
+
+  imageProgram = program(texturedVertexSource, imageFragmentSource);
+  imageScreen = gl.getUniformLocation(imageProgram, "u_screen");
+  imageTex = gl.getUniformLocation(imageProgram, "u_tex");
 }
 
 function alphaTexture(width, height, ptr) {
@@ -210,6 +244,22 @@ function alphaTexture(width, height, ptr) {
   return texture;
 }
 
+async function rgbaTextureFromWebp(ptr, len) {
+  const bytes = new Uint8Array(wasm.memory.buffer, ptr, len);
+  const blob = new Blob([bytes.slice()], { type: "image/webp" });
+  const bitmap = await createImageBitmap(blob);
+  const texture = gl.createTexture();
+  gl.bindTexture(gl.TEXTURE_2D, texture);
+  gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, bitmap);
+  bitmap.close();
+  return texture;
+}
+
 function initAtlases() {
   if (fontTexture) gl.deleteTexture(fontTexture);
   fontTexture = alphaTexture(
@@ -217,6 +267,7 @@ function initAtlases() {
     wasm.er_ui_font_atlas_height(),
     wasm.er_ui_font_atlas_ptr(),
   );
+  fontAtlasGeneration = wasm.er_ui_font_atlas_generation();
   if (!iconTexture) {
     iconTexture = alphaTexture(
       wasm.er_ui_icon_atlas_width(),
@@ -224,6 +275,26 @@ function initAtlases() {
       wasm.er_ui_icon_atlas_ptr(),
     );
   }
+}
+
+async function initPostImage() {
+  if (postImageTexture) gl.deleteTexture(postImageTexture);
+  postImageTexture = await rgbaTextureFromWebp(
+    wasm.er_ui_post_image_webp_ptr(),
+    wasm.er_ui_post_image_webp_len(),
+  );
+}
+
+function refreshFontAtlas() {
+  const nextGeneration = wasm.er_ui_font_atlas_generation();
+  if (fontTexture && nextGeneration === fontAtlasGeneration) return;
+  if (fontTexture) gl.deleteTexture(fontTexture);
+  fontTexture = alphaTexture(
+    wasm.er_ui_font_atlas_width(),
+    wasm.er_ui_font_atlas_height(),
+    wasm.er_ui_font_atlas_ptr(),
+  );
+  fontAtlasGeneration = nextGeneration;
 }
 
 function fitCanvas() {
@@ -257,15 +328,22 @@ function schedule() {
 function paint() {
   if (!wasm || !gl) return;
   fitCanvas();
-  const code = wasm.er_ui_build_component_gallery_gpu_frame_layout_gap_hover(
-    cssWidth,
-    cssHeight,
-    scrollY,
-    layoutMode,
-    gridGap,
-    hoverX,
-    hoverY,
-  );
+  const code = siteView === 1
+    ? wasm.er_ui_build_site_blog_gpu_frame(
+      cssWidth,
+      cssHeight,
+      scrollY,
+      hoverX,
+      hoverY,
+      selectedBlogPostId,
+    )
+    : wasm.er_ui_build_site_landing_gpu_frame(
+      cssWidth,
+      cssHeight,
+      scrollY,
+      hoverX,
+      hoverY,
+    );
   if (code !== 0) {
     setStatus(`error ${wasm.er_ui_last_error()}`);
     return;
@@ -274,6 +352,7 @@ function paint() {
   hoverHitKind = wasm.er_ui_hover_hit_kind();
   hoverHitId = wasm.er_ui_hover_hit_id();
   updateCursor();
+  refreshFontAtlas();
 
   gl.viewport(0, 0, canvas.width, canvas.height);
   gl.clearColor(0.035, 0.035, 0.043, 1.0);
@@ -292,6 +371,7 @@ function paint() {
     gl.drawArraysInstanced(gl.TRIANGLES, 0, 6, rectLen / rectStride);
   }
 
+  drawImageTexture(postImageTexture, wasm.er_ui_gpu_image_vertex_buffer_ptr, wasm.er_ui_gpu_image_vertex_buffer_len, imageStride);
   drawTextured(iconTexture, wasm.er_ui_gpu_icon_vertex_buffer_ptr, wasm.er_ui_gpu_icon_vertex_buffer_len, iconStride);
   drawTextured(fontTexture, wasm.er_ui_gpu_text_vertex_buffer_ptr, wasm.er_ui_gpu_text_vertex_buffer_len, textStride);
   setStatus(`${cssWidth}x${cssHeight}@${deviceScale} webgl atlas · ${rectLen / rectStride} rects`);
@@ -312,6 +392,22 @@ function drawTextured(texture, ptrFn, lenFn, stride) {
   gl.drawArrays(gl.TRIANGLES, 0, len / stride);
 }
 
+function drawImageTexture(texture, ptrFn, lenFn, stride) {
+  const len = lenFn();
+  if (len === 0) return;
+  if (!texture) throw new Error("post image texture missing");
+  const values = new Float32Array(wasm.memory.buffer, ptrFn(), len);
+  gl.useProgram(imageProgram);
+  gl.bindVertexArray(texturedVao);
+  gl.activeTexture(gl.TEXTURE0);
+  gl.bindTexture(gl.TEXTURE_2D, texture);
+  gl.uniform1i(imageTex, 0);
+  gl.uniform2f(imageScreen, cssWidth, cssHeight);
+  gl.bindBuffer(gl.ARRAY_BUFFER, texturedVbo);
+  gl.bufferData(gl.ARRAY_BUFFER, values, gl.DYNAMIC_DRAW);
+  gl.drawArrays(gl.TRIANGLES, 0, len / stride);
+}
+
 async function main() {
   initGpu();
   const response = await fetch(`../zig-out/bin/edgerun-ui-browser.wasm?v=${wasmBuildVersion}`, { cache: "no-store" });
@@ -322,22 +418,41 @@ async function main() {
   rectStride = wasm.er_ui_gpu_rect_float_stride();
   textStride = wasm.er_ui_gpu_text_vertex_float_stride();
   iconStride = wasm.er_ui_gpu_icon_vertex_float_stride();
+  imageStride = wasm.er_ui_gpu_image_vertex_float_stride();
   layoutMasonryId = wasm.er_ui_component_gallery_layout_masonry_id();
   layoutGridId = wasm.er_ui_component_gallery_layout_grid_id();
   gapCompactId = wasm.er_ui_component_gallery_gap_compact_id();
   gapDefaultId = wasm.er_ui_component_gallery_gap_default_id();
   gapWideId = wasm.er_ui_component_gallery_gap_wide_id();
+  siteDocsId = wasm.er_ui_site_docs_button_id();
+  siteAppsId = wasm.er_ui_site_apps_button_id();
+  siteLaunchId = wasm.er_ui_site_launch_button_id();
+  siteSearchId = wasm.er_ui_site_search_button_id();
+  siteBlogId = wasm.er_ui_site_blog_button_id();
+  blogBackId = wasm.er_ui_blog_back_button_id();
+  blogFirstPostId = wasm.er_ui_blog_first_post_button_id();
   initAtlases();
+  await initPostImage();
+  siteView = location.hash === "#blog" ? 1 : 0;
   paint();
 }
 
 function updateCursor() {
+  if (lastActionKind === actionKindDragStarted || lastActionKind === actionKindDragMoved) {
+    canvas.style.cursor = "grabbing";
+    return;
+  }
   switch (hoverHitKind) {
     case 0:
     case 2:
+    case 3:
+    case 4:
+    case 5:
+    case 7:
       canvas.style.cursor = "pointer";
       return;
     case 1:
+    case 6:
       canvas.style.cursor = "text";
       return;
     default:
@@ -349,23 +464,42 @@ window.addEventListener("resize", schedule);
 
 canvas.addEventListener("wheel", (event) => {
   event.preventDefault();
-  scrollY = Math.max(0, Math.min(2600, scrollY + event.deltaY));
+  scrollY = Math.max(0, Math.min(scrollLimit(), scrollY + event.deltaY));
   schedule();
 }, { passive: false });
 
 canvas.addEventListener("pointermove", (event) => {
   updateHoverFromEvent(event);
+  lastActionKind = wasm ? wasm.er_ui_pointer_move(hoverX, hoverY) : 0;
   schedule();
 });
 
 canvas.addEventListener("pointerleave", () => {
   hoverX = -1;
   hoverY = -1;
+  lastActionKind = 0;
+  schedule();
+});
+
+canvas.addEventListener("pointerdown", (event) => {
+  updateHoverFromEvent(event);
+  lastActionKind = wasm ? wasm.er_ui_pointer_down(hoverX, hoverY) : 0;
+  if (!canvas.hasPointerCapture(event.pointerId)) {
+    canvas.setPointerCapture(event.pointerId);
+  }
   schedule();
 });
 
 canvas.addEventListener("pointerup", (event) => {
   updateHoverFromEvent(event);
+  lastActionKind = wasm ? wasm.er_ui_pointer_up(hoverX, hoverY) : 0;
+  if (canvas.hasPointerCapture(event.pointerId)) {
+    canvas.releasePointerCapture(event.pointerId);
+  }
+  if (lastActionKind === actionKindReordered) {
+    schedule();
+    return;
+  }
   paint();
   switch (hoverHitId) {
     case layoutMasonryId:
@@ -393,7 +527,40 @@ canvas.addEventListener("pointerup", (event) => {
       scrollY = 0;
       schedule();
       return;
+    case siteDocsId:
+      siteView = 0;
+      selectedBlogPostId = 0;
+      location.hash = "";
+      scrollY = 0;
+      schedule();
+      return;
+    case siteBlogId:
+      siteView = 1;
+      selectedBlogPostId = 0;
+      location.hash = "blog";
+      scrollY = 0;
+      schedule();
+      return;
+    case siteAppsId:
+      setStatus("apps");
+      return;
+    case siteLaunchId:
+      setStatus("launch desktop");
+      return;
+    case siteSearchId:
+      setStatus("search");
+      return;
+    case blogBackId:
+      selectedBlogPostId = 0;
+      scrollY = 0;
+      schedule();
+      return;
     default:
+      if (hoverHitId >= blogFirstPostId && hoverHitId < blogFirstPostId + 64) {
+        selectedBlogPostId = hoverHitId;
+        scrollY = 0;
+        schedule();
+      }
       return;
   }
 });
@@ -402,6 +569,20 @@ function updateHoverFromEvent(event) {
   const rect = canvas.getBoundingClientRect();
   hoverX = event.clientX - rect.left;
   hoverY = event.clientY - rect.top;
+}
+
+function scrollLimit() {
+  if (!wasm) return 0;
+  if (siteView === 0) {
+    return Math.max(0, wasm.er_ui_site_landing_content_height(cssWidth) - cssHeight);
+  }
+  if (siteView === 1 && selectedBlogPostId === 0) {
+    return Math.max(0, wasm.er_ui_site_blog_content_height(cssWidth) - cssHeight);
+  }
+  if (siteView === 1 && selectedBlogPostId !== 0) {
+    return Math.max(0, wasm.er_ui_site_blog_post_content_height(cssWidth, selectedBlogPostId) - cssHeight);
+  }
+  return 0;
 }
 
 main().catch((err) => {

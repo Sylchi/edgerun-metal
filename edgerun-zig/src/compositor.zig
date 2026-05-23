@@ -193,6 +193,7 @@ pub const Compositor = struct {
             .text => |text| try self.markRect(text.origin),
             .icon_quad => |quad| try self.markRect(quad.bounds),
             .text_quad => |quad| try self.markRect(quad.bounds),
+            .image_quad => |quad| try self.markRect(quad.bounds),
             .hit, .drag_source, .drop_target, .transition => {},
         }
     }

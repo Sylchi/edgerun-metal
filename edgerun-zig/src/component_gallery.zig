@@ -314,6 +314,8 @@ pub const ComponentGalleryState = struct {
     scroll_y: f32 = 0.0,
     hover_x: f32 = hover_disabled_coord,
     hover_y: f32 = hover_disabled_coord,
+    list_order_scope_id: u32 = 0,
+    list_order: [list_row_count]u8 = default_list_order,
 };
 
 pub const LayoutMode = enum(u32) {
@@ -348,6 +350,9 @@ const CardKind = enum {
     skeleton,
     security,
 };
+
+pub const list_row_count: usize = 4;
+pub const default_list_order = [_]u8{ 0, 1, 2, 3 };
 
 const ShowcaseCard = struct {
     title: []const u8,
@@ -713,7 +718,7 @@ fn renderShowcaseCard(scene: *ui.Scene, bounds: ui.Rect, spec: ShowcaseCard, sta
         .form => try renderForm(scene, body, spec.id),
         .metrics => try renderMetrics(scene, body),
         .table => try renderTable(scene, body, spec.id),
-        .list => try renderList(scene, body, spec.id),
+        .list => try renderList(scene, body, spec.id, state),
         .centered => try renderCentered(scene, body, spec.id, spec.title),
         .controls => try renderControls(scene, body, spec.id),
         .navigation => try renderNavigation(scene, body, spec.id),
@@ -915,11 +920,11 @@ fn rowsForTableHeight(height: f32) usize {
     return @as(usize, @intFromFloat((height - 80) / 42)) + 1;
 }
 
-fn renderList(scene: *ui.Scene, bounds: ui.Rect, base_id: u32) ui.RenderError!void {
-    try renderListRows(scene, bounds, base_id, 4);
+fn renderList(scene: *ui.Scene, bounds: ui.Rect, base_id: u32, state: ComponentGalleryState) ui.RenderError!void {
+    try renderListRows(scene, bounds, base_id, 4, state.list_order, state.list_order_scope_id);
 }
 
-fn renderListRows(scene: *ui.Scene, bounds: ui.Rect, base_id: u32, row_limit: usize) ui.RenderError!void {
+fn renderListRows(scene: *ui.Scene, bounds: ui.Rect, base_id: u32, row_limit: usize, order: [list_row_count]u8, order_scope_id: u32) ui.RenderError!void {
     const rows = [_]struct { []const u8, []const u8, []const u8 }{
         .{ "Blue Bottle Coffee", "Food and Drink", "-$6.50" },
         .{ "Whole Foods Market", "Groceries", "-$142.30" },
@@ -928,17 +933,28 @@ fn renderListRows(scene: *ui.Scene, bounds: ui.Rect, base_id: u32, row_limit: us
     };
     var row_cursor = ui.LinearCursor.init(bounds, .column, 10);
     const visible_rows = @min(@min(row_limit, rows.len), rowsForListHeight(bounds.h));
-    for (rows[0..visible_rows], 0..) |row, index| {
+    for (0..visible_rows) |index| {
+        const row_index = orderedRowIndex(index, order, order_scope_id == base_id);
+        const row = rows[row_index];
         const r = row_cursor.take(54);
+        try scene.pushDropTarget(.{ .scope_id = base_id, .index = index, .bounds = r });
+        try scene.pushDragSource(.{ .scope_id = base_id, .item_id = base_id + @as(u32, @intCast(row_index)), .index = index, .bounds = r });
         try fill(scene, r, if (hovered(r)) palette.row_hover else palette.row, 7);
         const icon_box = ui.Rect.init(r.x + 10, r.y + 10, 34, 34);
         try fill(scene, icon_box, palette.panel, 7);
-        try iconQuad(scene, icon_box.insetUniform(8), listRowIcon(index), if (row[2][0] == '+') palette.green else palette.muted);
+        try iconQuad(scene, icon_box.insetUniform(8), listRowIcon(row_index), if (row[2][0] == '+') palette.green else palette.muted);
         try text(scene, r.x + 56, r.y + 11, r.w - 128, 16, row[0], palette.text);
         try text(scene, r.x + 56, r.y + 31, r.w - 128, 14, row[1], palette.muted);
         try alignedText(scene, r.x + r.w - 70, r.y + 21, 58, 12, row[2], if (row[2][0] == '+') palette.green else palette.muted, .end);
-        try hit(scene, r, .row_item, base_id + @as(u32, @intCast(index)));
+        try hit(scene, r, .row_item, base_id + @as(u32, @intCast(row_index)));
     }
+}
+
+fn orderedRowIndex(index: usize, order: [list_row_count]u8, enabled: bool) usize {
+    if (!enabled) return index;
+    const value: usize = order[index];
+    if (value >= list_row_count) return index;
+    return value;
 }
 
 fn rowsForListHeight(height: f32) usize {
@@ -1055,7 +1071,7 @@ fn renderCalendar(scene: *ui.Scene, bounds: ui.Rect, base_id: u32) ui.RenderErro
         y += cell + 6;
     }
     const list_y = y + 8;
-    try renderListRows(scene, ui.Rect.init(bounds.x, list_y, bounds.w, @max(54, bounds.y + bounds.h - list_y)), base_id + 40, 2);
+    try renderListRows(scene, ui.Rect.init(bounds.x, list_y, bounds.w, @max(54, bounds.y + bounds.h - list_y)), base_id + 40, 2, default_list_order, 0);
 }
 
 fn renderSkeleton(scene: *ui.Scene, bounds: ui.Rect) ui.RenderError!void {
@@ -1393,7 +1409,7 @@ test "component gallery table amount column is right aligned" {
 test "component gallery list amount column is right aligned" {
     var commands: [256]ui.Command = undefined;
     var scene = ui.Scene.init(&commands);
-    try renderListRows(&scene, ui.Rect.init(0, 0, 360, 246), preview_base_id + 6100, 4);
+    try renderListRows(&scene, ui.Rect.init(0, 0, 360, 246), preview_base_id + 6100, 4, default_list_order, 0);
 
     try std.testing.expectEqual(ui.TextAlign.end, textCommand(scene.written(), "-$6.50").?.text.alignment);
     try std.testing.expectEqual(ui.TextAlign.end, textCommand(scene.written(), "+$4,200").?.text.alignment);
@@ -1403,12 +1419,32 @@ test "component gallery list amount column is right aligned" {
 test "component gallery list rows render semantic icons" {
     var commands: [256]ui.Command = undefined;
     var scene = ui.Scene.init(&commands);
-    try renderListRows(&scene, ui.Rect.init(0, 0, 360, 246), preview_base_id + 6150, 4);
+    try renderListRows(&scene, ui.Rect.init(0, 0, 360, 246), preview_base_id + 6150, 4, default_list_order, 0);
 
     try std.testing.expect(hasIcon(scene.written(), icon.atlasId(.wallet)));
     try std.testing.expect(hasIcon(scene.written(), icon.atlasId(.storage)));
     try std.testing.expect(hasIcon(scene.written(), icon.atlasId(.send)));
     try std.testing.expect(hasIcon(scene.written(), icon.atlasId(.database)));
+}
+
+test "component gallery list rows expose canonical drag and drop targets" {
+    var commands: [256]ui.Command = undefined;
+    var scene = ui.Scene.init(&commands);
+    try renderListRows(&scene, ui.Rect.init(0, 0, 360, 246), preview_base_id + 6200, 4, default_list_order, 0);
+
+    try std.testing.expectEqual(@as(usize, 4), scene.stats().drag_sources);
+    try std.testing.expectEqual(@as(usize, 4), scene.stats().drop_targets);
+}
+
+test "component gallery list rows render reordered state by scope" {
+    var commands: [256]ui.Command = undefined;
+    var scene = ui.Scene.init(&commands);
+    const scope_id = preview_base_id + 6250;
+    try renderListRows(&scene, ui.Rect.init(0, 0, 360, 246), scope_id, 4, .{ 1, 0, 2, 3 }, scope_id);
+
+    const whole_foods = textCommandIndex(scene.written(), "Whole Foods Market").?;
+    const blue_bottle = textCommandIndex(scene.written(), "Blue Bottle Coffee").?;
+    try std.testing.expect(whole_foods < blue_bottle);
 }
 
 test "component gallery icon buttons emit visible icon quads" {

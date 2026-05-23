@@ -21,6 +21,17 @@ pub const RecordKind = enum(u16) {
     input = 3,
     row_item = 4,
     slot = 5,
+    badge = 6,
+    checkbox = 7,
+    switch_control = 8,
+    progress = 9,
+    slider = 10,
+    card = 11,
+    avatar = 12,
+    kbd = 13,
+    separator = 14,
+    textarea = 15,
+    select = 16,
 };
 
 pub fn decodeObject(canonical: []const u8, out_nodes: []ui.Node) Error!ui.Node {
@@ -72,6 +83,17 @@ pub fn decodeBytes(raw: []const u8, out_nodes: []ui.Node) Error!ui.Node {
             .button => .{ .button = .{ .id = id, .label = try stringRef(string_table, a, b) } },
             .input => .{ .input = .{ .id = id, .placeholder = try stringRef(string_table, a, b) } },
             .row_item => .{ .row_item = .{ .id = id, .title = try stringRef(string_table, a, b), .detail = try stringRef(string_table, c, d) } },
+            .badge => .{ .badge = .{ .label = try stringRef(string_table, a, b) } },
+            .checkbox => .{ .checkbox = .{ .id = id, .label = try stringRef(string_table, a, b), .checked = decodeBool(c) orelse return error.Corrupt } },
+            .switch_control => .{ .switch_control = .{ .id = id, .label = try stringRef(string_table, a, b), .checked = decodeBool(c) orelse return error.Corrupt } },
+            .progress => .{ .progress = .{ .value = ui.decodeUnit(c) } },
+            .slider => .{ .slider = .{ .id = id, .label = try stringRef(string_table, a, b), .value = ui.decodeUnit(c) } },
+            .card => .{ .card = .{ .title = try stringRef(string_table, a, b), .detail = try stringRef(string_table, c, d) } },
+            .avatar => .{ .avatar = .{ .label = try stringRef(string_table, a, b) } },
+            .kbd => .{ .kbd = .{ .label = try stringRef(string_table, a, b) } },
+            .separator => .{ .separator = {} },
+            .textarea => .{ .textarea = .{ .id = id, .placeholder = try stringRef(string_table, a, b) } },
+            .select => .{ .select = .{ .id = id, .label = try stringRef(string_table, a, b) } },
             .slot => blk: {
                 if (a >= node_count) return error.Corrupt;
                 break :blk .{ .slot = .{ .id = id, .child = &out_nodes[a] } };
@@ -96,6 +118,25 @@ fn recordKind(value: u16) ?RecordKind {
         @intFromEnum(RecordKind.input) => .input,
         @intFromEnum(RecordKind.row_item) => .row_item,
         @intFromEnum(RecordKind.slot) => .slot,
+        @intFromEnum(RecordKind.badge) => .badge,
+        @intFromEnum(RecordKind.checkbox) => .checkbox,
+        @intFromEnum(RecordKind.switch_control) => .switch_control,
+        @intFromEnum(RecordKind.progress) => .progress,
+        @intFromEnum(RecordKind.slider) => .slider,
+        @intFromEnum(RecordKind.card) => .card,
+        @intFromEnum(RecordKind.avatar) => .avatar,
+        @intFromEnum(RecordKind.kbd) => .kbd,
+        @intFromEnum(RecordKind.separator) => .separator,
+        @intFromEnum(RecordKind.textarea) => .textarea,
+        @intFromEnum(RecordKind.select) => .select,
+        else => null,
+    };
+}
+
+fn decodeBool(value: u16) ?bool {
+    return switch (value) {
+        0 => false,
+        1 => true,
         else => null,
     };
 }
@@ -151,6 +192,54 @@ test "decode ui bytes from canonical object body" {
     const root = try decodeObject(canonical_node, &nodes);
     try std.testing.expectEqual(@as(usize, 1), root.stack.children.len);
     try std.testing.expectEqualStrings("From object", root.stack.children[0].button.label);
+}
+
+test "decode dev component primitive records" {
+    var raw: [256]u8 = undefined;
+    var writer = Writer.init(&raw, 5, 5, .column, 6, 8).?;
+    const badge = writer.string("Ready").?;
+    const checkbox = writer.string("Enable sync").?;
+    const switch_label = writer.string("Public").?;
+    const slider = writer.string("Brightness").?;
+    try std.testing.expect(writer.record(0, .badge, 0, badge, .{}));
+    try std.testing.expect(writer.record(1, .checkbox, 11, checkbox, .{ .offset = 1, .len = 0 }));
+    try std.testing.expect(writer.record(2, .switch_control, 12, switch_label, .{}));
+    try std.testing.expect(writer.record(3, .progress, 0, .{}, .{ .offset = ui.encodeUnit(0.64), .len = 0 }));
+    try std.testing.expect(writer.record(4, .slider, 13, slider, .{ .offset = ui.encodeUnit(0.72), .len = 0 }));
+
+    var nodes: [5]ui.Node = undefined;
+    const root = try decodeBytes(writer.written(), &nodes);
+    try std.testing.expectEqualStrings("Ready", root.stack.children[0].badge.label);
+    try std.testing.expect(root.stack.children[1].checkbox.checked);
+    try std.testing.expect(!root.stack.children[2].switch_control.checked);
+    try std.testing.expect(@abs(root.stack.children[3].progress.value - 0.64) < 0.001);
+    try std.testing.expect(@abs(root.stack.children[4].slider.value - 0.72) < 0.001);
+}
+
+test "decode layout and display primitive records" {
+    var raw: [320]u8 = undefined;
+    var writer = Writer.init(&raw, 6, 6, .column, 6, 8).?;
+    const card_title = writer.string("Project").?;
+    const card_detail = writer.string("Interactive docs").?;
+    const avatar = writer.string("ER").?;
+    const kbd = writer.string("CmdK").?;
+    const textarea = writer.string("Describe this app").?;
+    const select = writer.string("Production").?;
+    try std.testing.expect(writer.record(0, .card, 0, card_title, card_detail));
+    try std.testing.expect(writer.record(1, .separator, 0, .{}, .{}));
+    try std.testing.expect(writer.record(2, .avatar, 0, avatar, .{}));
+    try std.testing.expect(writer.record(3, .kbd, 0, kbd, .{}));
+    try std.testing.expect(writer.record(4, .textarea, 21, textarea, .{}));
+    try std.testing.expect(writer.record(5, .select, 22, select, .{}));
+
+    var nodes: [6]ui.Node = undefined;
+    const root = try decodeBytes(writer.written(), &nodes);
+    try std.testing.expectEqualStrings("Project", root.stack.children[0].card.title);
+    try std.testing.expect(root.stack.children[1] == .separator);
+    try std.testing.expectEqualStrings("ER", root.stack.children[2].avatar.label);
+    try std.testing.expectEqualStrings("CmdK", root.stack.children[3].kbd.label);
+    try std.testing.expectEqual(@as(u32, 21), root.stack.children[4].textarea.id);
+    try std.testing.expectEqualStrings("Production", root.stack.children[5].select.label);
 }
 
 test "decode ui view returned by storage" {
