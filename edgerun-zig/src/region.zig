@@ -7,6 +7,20 @@ pub const Region = struct {
         return self.base.len;
     }
 
+    pub fn end(self: Region) usize {
+        return @intFromPtr(self.base.ptr) + self.base.len;
+    }
+
+    pub fn canAppendSuffix(self: Region, suffix: Region) bool {
+        return self.end() == @intFromPtr(suffix.base.ptr);
+    }
+
+    pub fn appendSuffix(self: *Region, suffix: Region) bool {
+        if (!self.canAppendSuffix(suffix)) return false;
+        self.base = self.base.ptr[0 .. self.base.len + suffix.base.len];
+        return true;
+    }
+
     pub fn split(self: *Region, size: usize) ?Region {
         if (size > self.base.len) return null;
 
@@ -31,10 +45,10 @@ pub const Region = struct {
     pub fn contains(self: Region, slice: []const u8) bool {
         if (slice.len == 0) return false;
         const start = @intFromPtr(self.base.ptr);
-        const end = start + self.base.len;
+        const region_end = start + self.base.len;
         const slice_start = @intFromPtr(slice.ptr);
         const slice_end = slice_start + slice.len;
-        return start <= slice_start and slice_end <= end;
+        return start <= slice_start and slice_end <= region_end;
     }
 
     pub fn offsetOf(self: Region, slice: []const u8) ?usize {
@@ -50,6 +64,15 @@ test "split transfers ownership out of parent" {
 
     try std.testing.expectEqual(@as(usize, 10), parent.len());
     try std.testing.expectEqual(@as(usize, 6), child.len());
+}
+
+test "append suffix reclaims adjacent split region" {
+    var memory: [16]u8 = undefined;
+    var parent = Region{ .base = &memory };
+    const child = parent.split(6).?;
+
+    try std.testing.expect(parent.appendSuffix(child));
+    try std.testing.expectEqual(@as(usize, 16), parent.len());
 }
 
 test "region reports contained slice offset" {

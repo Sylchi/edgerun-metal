@@ -28,6 +28,20 @@ pub const BoundedArena = struct {
         };
     }
 
+    pub fn canReclaim(self: BoundedArena, child: BoundedArena) bool {
+        return self.region.canAppendSuffix(child.owned) and self.owned.canAppendSuffix(child.owned);
+    }
+
+    pub fn reclaim(self: *BoundedArena, child: *BoundedArena) bool {
+        if (!self.canReclaim(child.*)) return false;
+        child.owned.zero();
+        if (!self.region.appendSuffix(child.owned)) return false;
+        if (!self.owned.appendSuffix(child.owned)) return false;
+        child.region = .{ .base = child.region.base[0..0] };
+        child.owned = .{ .base = child.owned.base[0..0] };
+        return true;
+    }
+
     pub fn takeRegion(self: *BoundedArena, size: usize) ?Region {
         const child = self.region.takePrefix(size) orelse return null;
         self.owned = self.region;
@@ -109,6 +123,22 @@ test "parent can delegate child arena by splitting capability" {
     try std.testing.expectEqual(@as(usize, 40), parent.remaining());
     try std.testing.expect(child.remaining() <= 8);
     try std.testing.expect(!parent.owns(child.region.base));
+}
+
+test "parent reclaims delegated arena after child exit" {
+    var memory: [64]u8 = [_]u8{7} ** 64;
+    var parent = BoundedArena.init(.{ .base = &memory });
+    var child = parent.split(24).?;
+
+    const child_allocator = child.allocator();
+    const private = try child_allocator.alloc(u8, 8);
+    @memset(private, 3);
+
+    try std.testing.expectEqual(@as(usize, 40), parent.remaining());
+    try std.testing.expect(parent.reclaim(&child));
+    try std.testing.expectEqual(@as(usize, 64), parent.remaining());
+    try std.testing.expectEqual(@as(usize, 0), child.remaining());
+    try std.testing.expectEqual(@as(u8, 0), memory[40]);
 }
 
 test "arena carves regions and typed slices from the same capability" {

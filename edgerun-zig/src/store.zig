@@ -176,10 +176,11 @@ pub const IndexCursor = struct {
 
 pub const Store = struct {
     data: Region,
+    owned: Region,
     slots: BlobList,
 
     pub fn init(data: Region, slots: []Blob) Store {
-        return .{ .data = data, .slots = BlobList.from(slots) };
+        return .{ .data = data, .owned = data, .slots = BlobList.from(slots) };
     }
 
     pub fn initFromArena(arena: *BoundedArena, shape: Shape) ?Store {
@@ -194,10 +195,34 @@ pub const Store = struct {
         if (shape.slot_count > self.slots.items.len - self.slots.len) return null;
 
         const child_data = self.data.split(shape.data_bytes) orelse return null;
+        const owned_start = @intFromPtr(self.owned.base.ptr);
+        const child_start = @intFromPtr(child_data.base.ptr);
+        if (child_start < owned_start) return null;
+        self.owned.base = self.owned.base[0 .. child_start - owned_start];
         const child_slot_start = self.slots.items.len - shape.slot_count;
         const child_slots = self.slots.items[child_slot_start..];
         self.slots.items = self.slots.items[0..child_slot_start];
         return Store.init(child_data, child_slots);
+    }
+
+    pub fn canReclaim(self: Store, child: Store) bool {
+        return self.data.canAppendSuffix(child.owned) and
+            self.owned.canAppendSuffix(child.owned) and
+            childSlotsAreSuffix(self.slots.items, child.slots.items);
+    }
+
+    pub fn reclaim(self: *Store, child: *Store) bool {
+        if (!self.canReclaim(child.*)) return false;
+        child.owned.zero();
+        clearBlobSlots(child.slots.items);
+        if (!self.data.appendSuffix(child.owned)) return false;
+        if (!self.owned.appendSuffix(child.owned)) return false;
+        self.slots.items = self.slots.items.ptr[0 .. self.slots.items.len + child.slots.items.len];
+        child.data = .{ .base = child.data.base[0..0] };
+        child.owned = .{ .base = child.owned.base[0..0] };
+        child.slots.clear();
+        child.slots.items = child.slots.items[0..0];
+        return true;
     }
 
     pub fn slotCount(self: Store) usize {
@@ -1069,6 +1094,20 @@ fn sameOwner(left: ?identity.Id, right: ?identity.Id) bool {
     return left.?.eql(right.?);
 }
 
+fn childSlotsAreSuffix(parent: []Blob, child: []Blob) bool {
+    const parent_end = @intFromPtr(parent.ptr) + parent.len * @sizeOf(Blob);
+    return parent_end == @intFromPtr(child.ptr);
+}
+
+fn clearBlobSlots(slots: []Blob) void {
+    for (slots) |*slot| {
+        slot.* = .{
+            .hash = [_]u8{0} ** hash_size,
+            .bytes = &.{},
+        };
+    }
+}
+
 fn entryKeyEqual(entry: IndexEntry, key: []const u8) bool {
     return entry.key_len == key.len and bytes.eql(entry.key[0..entry.key_len], key);
 }
@@ -1233,6 +1272,23 @@ test "store split delegates data and unused slot capacity" {
     const hash = child.put("child data").?;
     try std.testing.expectEqualStrings("child data", child.get(hash).?);
     try std.testing.expectEqual(@as(usize, 40), parent.data.len());
+}
+
+test "store reclaim returns consumed child storage and clears slots" {
+    var data: [64]u8 = undefined;
+    var slots: [4]Blob = undefined;
+    var parent = Store.init(.{ .base = &data }, &slots);
+    var child = parent.split(.{ .data_bytes = 24, .slot_count = 2 }).?;
+
+    const hash = child.put("child data").?;
+    try std.testing.expectEqualStrings("child data", child.get(hash).?);
+    try std.testing.expectEqual(@as(usize, 14), child.data.len());
+
+    try std.testing.expect(parent.reclaim(&child));
+    try std.testing.expectEqual(@as(usize, 64), parent.data.len());
+    try std.testing.expectEqual(@as(usize, 4), parent.slotCapacity());
+    try std.testing.expectEqual(@as(usize, 0), child.data.len());
+    try std.testing.expect(child.get(hash) == null);
 }
 
 const PersistentTestIo = struct {

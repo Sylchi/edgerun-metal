@@ -11,6 +11,8 @@ pub const owner_size = 36;
 pub const envelope_size = 76;
 pub const child_size = 84;
 pub const magic = "EROBJ001";
+pub const header_reserved_start = 132;
+pub const header_reserved_size = header_size - header_reserved_start;
 pub const max_owners = 16;
 pub const max_envelopes = 16;
 pub const max_children = 65536;
@@ -154,6 +156,7 @@ pub const Header = struct {
         if (in.len < header_size) return error.Corrupt;
         if (!bytes.eql(in[0..magic.len], magic)) return error.Corrupt;
         if ((bytes.load16(in[8..10]) orelse return error.Corrupt) != 1) return error.Corrupt;
+        if (!zeroed(in[header_reserved_start..header_size])) return error.Corrupt;
 
         const kind = enumFromInt(Kind, bytes.load16(in[10..12]) orelse return error.Corrupt) orelse
             return error.Corrupt;
@@ -754,6 +757,32 @@ test "header encode decode owns canonical layout" {
     try std.testing.expectEqual(Kind.bytes, decoded.kind);
     try std.testing.expectEqual(@as(u64, 5), decoded.body_len);
     try std.testing.expectEqual(Integrity.hash_only, decoded.requirements.integrity);
+}
+
+test "header decode rejects nonzero reserved bytes" {
+    const keeper = clock.KeeperId{ .bytes = [_]u8{1} ++ [_]u8{0} ** 31 };
+    const req = Requirements{
+        .durability = .durable,
+        .confidentiality = .public,
+        .portability = .public_portable,
+        .integrity = .hash_only,
+        .lifetime = .retained,
+        .visibility = .public,
+        .access = .explicit_io,
+    };
+    const header = Header{
+        .kind = .bytes,
+        .logical_len = 5,
+        .body_len = 5,
+        .epoch = .{ .keeper = keeper },
+        .requirements = req,
+    };
+
+    var raw: [header_size]u8 = undefined;
+    try header.encode(&raw);
+    raw[header_reserved_start] = 1;
+
+    try std.testing.expectError(error.Corrupt, Header.decode(&raw));
 }
 
 test "owner and child encode decode are symmetric" {

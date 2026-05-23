@@ -14,8 +14,17 @@ const ui_components = @import("ui_components.zig");
 const ui_resolver = @import("ui_resolver.zig");
 
 pub const SpawnError = error{
+    BadAllocation,
+    NoExecution,
     NoMemory,
     NoStorage,
+    NoRoute,
+    NoDevice,
+    Unauthorized,
+};
+
+pub const ReclaimError = error{
+    Corrupt,
     Unauthorized,
 };
 
@@ -23,12 +32,27 @@ pub const App = struct {
     id: identity.Identity,
     memory: BoundedArena,
     storage: store.Store,
+    execution_ticks: u64 = 0,
+    route_handles: u64 = 0,
+    device_handles: u64 = 0,
 
     pub fn init(id: identity.Identity, memory: BoundedArena, storage: store.Store) App {
         return .{
             .id = id,
             .memory = memory,
             .storage = storage,
+        };
+    }
+
+    pub fn initAllocated(id: identity.Identity, memory: BoundedArena, storage: store.Store, allocation: DeclaredAllocation) ?App {
+        if (!allocation.valid()) return null;
+        return .{
+            .id = id,
+            .memory = memory,
+            .storage = storage,
+            .execution_ticks = allocation.execution_ticks,
+            .route_handles = allocation.route_handles,
+            .device_handles = allocation.device_handles,
         };
     }
 
@@ -44,6 +68,121 @@ pub const App = struct {
     pub const Spawned = struct {
         app: App,
         receipt: grant.SpawnReceipt,
+    };
+
+    pub const DeclaredAllocation = struct {
+        memory_bytes: usize,
+        storage_bytes: usize,
+        storage_slots: usize,
+        execution_ticks: u64 = 1,
+        route_handles: u64 = 1,
+        device_handles: u64 = 1,
+
+        pub fn valid(self: DeclaredAllocation) bool {
+            return self.memory_bytes != 0 and
+                self.storage_bytes != 0 and
+                self.storage_slots != 0 and
+                self.execution_ticks != 0;
+        }
+
+        pub fn id(self: DeclaredAllocation) ?preimage.Hash {
+            if (!self.valid()) return null;
+            const memory_amount = std.math.cast(u64, self.memory_bytes) orelse return null;
+            const storage_amount = std.math.cast(u64, self.storage_bytes) orelse return null;
+            const slot_amount = std.math.cast(u64, self.storage_slots) orelse return null;
+            var raw: [48]u8 = undefined;
+            var writer = preimage.Writer.init(&raw);
+            if (!writer.writeU64(memory_amount) or
+                !writer.writeU64(storage_amount) or
+                !writer.writeU64(slot_amount) or
+                !writer.writeU64(self.execution_ticks) or
+                !writer.writeU64(self.route_handles) or
+                !writer.writeU64(self.device_handles))
+            {
+                return null;
+            }
+            return preimage.hash("edgerun:zig:v1:app-declared-allocation", writer.written());
+        }
+    };
+
+    pub const Reclaimed = struct {
+        parent: identity.Id,
+        child: identity.Id,
+        epoch: clock.Stamp,
+        receipt: grant.SpawnReceipt,
+
+        pub fn valid(self: Reclaimed) bool {
+            return self.parent.valid() and
+                self.child.valid() and
+                self.epoch.valid() and
+                self.receipt.valid() and
+                self.receipt.parent.eql(self.parent) and
+                self.receipt.child.eql(self.child);
+        }
+
+        pub fn id(self: Reclaimed) ?preimage.Hash {
+            if (!self.valid()) return null;
+            const receipt_id = self.receipt.id().?;
+            var raw: [identity.id_size * 2 + preimage.hash_size + preimage.epoch_size]u8 = undefined;
+            var writer = preimage.Writer.init(&raw);
+            if (!writer.id(self.parent) or !writer.id(self.child) or !writer.hash(receipt_id) or !writer.epoch(self.epoch)) return null;
+            return preimage.hash("edgerun:zig:v1:app-reclaim", writer.written());
+        }
+    };
+
+    pub const WorkReceipt = struct {
+        parent: identity.Id,
+        app: identity.Id,
+        input: preimage.Hash,
+        output: preimage.Hash,
+        clock_start: clock.Stamp,
+        clock_end: clock.Stamp,
+        allocation: DeclaredAllocation,
+        spawn_receipt: grant.SpawnReceipt,
+
+        pub fn valid(self: WorkReceipt) bool {
+            const memory_amount = std.math.cast(u64, self.allocation.memory_bytes) orelse return false;
+            const storage_amount = std.math.cast(u64, self.allocation.storage_bytes) orelse return false;
+            const slot_amount = std.math.cast(u64, self.allocation.storage_slots) orelse return false;
+            return self.parent.valid() and
+                self.app.valid() and
+                bytes.nonzero(&self.input) and
+                bytes.nonzero(&self.output) and
+                self.clock_start.valid() and
+                self.clock_end.valid() and
+                self.clock_start.sameKeeper(self.clock_end) and
+                self.clock_start.order(self.clock_end) <= 0 and
+                self.allocation.valid() and
+                self.spawn_receipt.valid() and
+                self.spawn_receipt.parent.eql(self.parent) and
+                self.spawn_receipt.child.eql(self.app) and
+                self.spawn_receipt.memory.amount == memory_amount and
+                self.spawn_receipt.storage_bytes.amount == storage_amount and
+                self.spawn_receipt.storage_slots.amount == slot_amount and
+                self.spawn_receipt.execution_ticks.amount == self.allocation.execution_ticks and
+                self.spawn_receipt.route_handles.amount == self.allocation.route_handles and
+                self.spawn_receipt.device_handles.amount == self.allocation.device_handles;
+        }
+
+        pub fn id(self: WorkReceipt) ?preimage.Hash {
+            if (!self.valid()) return null;
+            const allocation_id = self.allocation.id().?;
+            const spawn_id = self.spawn_receipt.id().?;
+            var raw: [identity.id_size * 2 + preimage.hash_size * 4 + preimage.epoch_size * 2]u8 = undefined;
+            var writer = preimage.Writer.init(&raw);
+            if (!writer.id(self.parent) or
+                !writer.id(self.app) or
+                !writer.hash(self.input) or
+                !writer.hash(self.output) or
+                !writer.epoch(self.clock_start) or
+                !writer.epoch(self.clock_end) or
+                !writer.hash(allocation_id) or
+                !writer.hash(spawn_id))
+            {
+                return null;
+            }
+            return preimage.hash("edgerun:zig:v1:app-work-receipt", writer.written());
+        }
     };
 
     pub const Received = struct {
@@ -181,12 +320,97 @@ pub const App = struct {
                 .id = child_id,
                 .memory = child_memory,
                 .storage = child_storage,
+                .execution_ticks = 1,
+                .route_handles = 1,
+                .device_handles = 1,
             },
             .receipt = receipt,
         };
     }
 
+    pub fn spawnDeclared(self: *App, allocator_id: identity.Identity, child_id: identity.Identity, epoch: clock.Stamp, authorization: intent.Receipt, allocation: DeclaredAllocation) SpawnError!Spawned {
+        if (!allocation.valid()) return error.BadAllocation;
+        if (!authorization.permitsAt(epoch, allocator_id.id, child_id.id, .spawn_app, .delegates_resources)) return error.Unauthorized;
+        if (allocation.execution_ticks > self.execution_ticks) return error.NoExecution;
+        if (allocation.route_handles > self.route_handles) return error.NoRoute;
+        if (allocation.device_handles > self.device_handles) return error.NoDevice;
+
+        const child_memory = self.memory.split(allocation.memory_bytes) orelse return error.NoMemory;
+        const child_storage = self.storage.split(.{
+            .data_bytes = allocation.storage_bytes,
+            .slot_count = allocation.storage_slots,
+        }) orelse return error.NoStorage;
+        self.execution_ticks -= allocation.execution_ticks;
+        self.route_handles -= allocation.route_handles;
+        self.device_handles -= allocation.device_handles;
+        const receipt = grant.spawnReceiptAllocated(
+            self.id,
+            child_id,
+            epoch,
+            allocation.memory_bytes,
+            allocation.storage_bytes,
+            allocation.storage_slots,
+            allocation.execution_ticks,
+            allocation.route_handles,
+            allocation.device_handles,
+        ) orelse return error.BadAllocation;
+
+        return .{
+            .app = .{
+                .id = child_id,
+                .memory = child_memory,
+                .storage = child_storage,
+                .execution_ticks = allocation.execution_ticks,
+                .route_handles = allocation.route_handles,
+                .device_handles = allocation.device_handles,
+            },
+            .receipt = receipt,
+        };
+    }
+
+    pub fn completeWork(self: App, parent: identity.Id, input: preimage.Hash, output: preimage.Hash, clock_start: clock.Stamp, clock_end: clock.Stamp, allocation: DeclaredAllocation, spawn_receipt: grant.SpawnReceipt) ?WorkReceipt {
+        const receipt = WorkReceipt{
+            .parent = parent,
+            .app = self.id.id,
+            .input = input,
+            .output = output,
+            .clock_start = clock_start,
+            .clock_end = clock_end,
+            .allocation = allocation,
+            .spawn_receipt = spawn_receipt,
+        };
+        if (!receipt.valid()) return null;
+        return receipt;
+    }
+
+    pub fn reclaimChild(self: *App, child: *App, receipt: grant.SpawnReceipt, epoch: clock.Stamp) ReclaimError!Reclaimed {
+        if (!epoch.valid() or !receipt.valid()) return error.Corrupt;
+        if (!receipt.parent.eql(self.id.id) or !receipt.child.eql(child.id.id)) return error.Unauthorized;
+        if (receipt.memory.amount != child.memory.owned.len()) return error.Corrupt;
+        if (receipt.storage_bytes.amount != child.storage.owned.len()) return error.Corrupt;
+        if (receipt.storage_slots.amount != child.storage.slotCapacity()) return error.Corrupt;
+        if (receipt.execution_ticks.amount != child.execution_ticks) return error.Corrupt;
+        if (receipt.route_handles.amount != child.route_handles) return error.Corrupt;
+        if (receipt.device_handles.amount != child.device_handles) return error.Corrupt;
+        if (!self.memory.canReclaim(child.memory) or !self.storage.canReclaim(child.storage)) return error.Corrupt;
+        if (!self.memory.reclaim(&child.memory)) return error.Corrupt;
+        if (!self.storage.reclaim(&child.storage)) return error.Corrupt;
+        self.execution_ticks += child.execution_ticks;
+        self.route_handles += child.route_handles;
+        self.device_handles += child.device_handles;
+        child.execution_ticks = 0;
+        child.route_handles = 0;
+        child.device_handles = 0;
+        return .{
+            .parent = self.id.id,
+            .child = child.id.id,
+            .epoch = epoch,
+            .receipt = receipt,
+        };
+    }
+
     pub fn createRelayEnvelope(self: App, route: relay.Route, sequence: u64, payload_object: preimage.Hash, payload_hash: preimage.Hash) ?relay.Envelope {
+        if (self.route_handles == 0) return null;
         if (!route.source.eql(self.id.id)) return null;
         var envelope = relay.Envelope.init(route, sequence, payload_object, payload_hash) orelse return null;
         if (!envelope.sign(self.id)) return null;
@@ -194,6 +418,7 @@ pub const App = struct {
     }
 
     pub fn receiveRelayEnvelope(self: App, route: relay.Route, envelope: relay.Envelope, now: clock.Stamp) relay.RouteError!Received {
+        if (self.route_handles == 0) return error.WrongDestination;
         try relay.deliverTo(route, envelope, self.id, now);
         return .{
             .app = self.id.id,
@@ -217,6 +442,16 @@ pub const App = struct {
             .bytes = slice,
             .epoch = epoch,
         };
+    }
+
+    pub fn consumeExecution(self: *App, ticks: u64) bool {
+        if (ticks == 0 or ticks > self.execution_ticks) return false;
+        self.execution_ticks -= ticks;
+        return true;
+    }
+
+    pub fn useDevice(self: App, device: identity.Identity) bool {
+        return self.device_handles != 0 and device.kind == .device;
     }
 
     pub fn shareMemoryReadOnly(self: App, reader: identity.Id, slice: SharedMemory, epoch: clock.Stamp, authorization: intent.Receipt) MemoryShareError!ReadOnlyMemory {
@@ -372,9 +607,198 @@ test "spawn transfers bounded memory and storage to child" {
 
     const child_allocator = child.memory.allocator();
     _ = try child_allocator.alloc(u8, 8);
+    const child_hash = child.storage.put("child state").?;
     try std.testing.expectEqual(@as(usize, 48), parent.memory.remaining());
+    try std.testing.expectError(error.NoMemory, parent.spawn(allocator_id, child_id, epoch, authorization, 56, 16, 1));
     try std.testing.expect(spawned.receipt.valid());
     try std.testing.expectEqual(@as(u64, 32), spawned.receipt.storage_bytes.amount);
+
+    const reclaimed = try parent.reclaimChild(&child, spawned.receipt, epoch);
+    try std.testing.expect(reclaimed.valid());
+    try std.testing.expect(bytes.nonzero(&reclaimed.id().?));
+    try std.testing.expectEqual(@as(usize, 64), parent.memory.remaining());
+    try std.testing.expectEqual(@as(usize, 128), parent.storage.data.len());
+    try std.testing.expectEqual(@as(usize, 4), parent.storage.slotCapacity());
+    try std.testing.expectEqual(@as(usize, 0), child.memory.remaining());
+    try std.testing.expect(child.storage.get(child_hash) == null);
+}
+
+test "declared allocation bounds app child work receipts and clean reclaim" {
+    const parent_memory_bytes = 128;
+    const parent_storage_bytes = 256;
+    const parent_storage_slots = 8;
+    const parent_execution_ticks = 16;
+    const parent_route_handles = 2;
+    const parent_device_handles = 2;
+    const child_memory_bytes = 32;
+    const child_storage_bytes = 64;
+    const child_storage_slots = 4;
+    const child_execution_ticks = 8;
+    const child_route_handles = 1;
+    const child_device_handles = 1;
+    const grandchild_memory_bytes = 8;
+    const grandchild_storage_bytes = 32;
+    const grandchild_storage_slots = 1;
+    const grandchild_execution_ticks = 4;
+    const grandchild_route_handles = 1;
+    const grandchild_device_handles = 1;
+    const child_private_bytes = 12;
+
+    var memory_bytes: [parent_memory_bytes]u8 = undefined;
+    var storage_bytes: [parent_storage_bytes]u8 = undefined;
+    var slots: [parent_storage_slots]store.Blob = undefined;
+    var oversized_storage: [parent_storage_bytes]u8 = [_]u8{'x'} ** parent_storage_bytes;
+
+    const keeper = clock.KeeperId{ .bytes = [_]u8{7} ++ [_]u8{0} ** 31 };
+    var local_clock = clock.Clock.init(keeper, .{}) orelse return error.SkipZigTest;
+    const start = local_clock.now;
+    const user_id = identity.Identity.init(.user, identity.Source.prepare(.hash, &preimage.rawHash("declared user")).?, start).?;
+    const device_id = identity.Identity.init(.device, identity.Source.prepare(.hash, &preimage.rawHash("declared device")).?, start).?;
+    const parent_id = identity.Identity.init(.app, identity.Source.prepare(.hash, &preimage.rawHash("declared parent")).?, start).?;
+    const child_id = identity.Identity.init(.app, identity.Source.prepare(.hash, &preimage.rawHash("declared child")).?, start).?;
+    const grandchild_id = identity.Identity.init(.app, identity.Source.prepare(.hash, &preimage.rawHash("declared grandchild")).?, start).?;
+
+    const parent_allocation = App.DeclaredAllocation{
+        .memory_bytes = parent_memory_bytes,
+        .storage_bytes = parent_storage_bytes,
+        .storage_slots = parent_storage_slots,
+        .execution_ticks = parent_execution_ticks,
+        .route_handles = parent_route_handles,
+        .device_handles = parent_device_handles,
+    };
+    var parent = App.initAllocated(
+        parent_id,
+        BoundedArena.init(.{ .base = &memory_bytes }),
+        store.Store.init(.{ .base = &storage_bytes }, &slots),
+        parent_allocation,
+    ).?;
+
+    const child_allocation = App.DeclaredAllocation{
+        .memory_bytes = child_memory_bytes,
+        .storage_bytes = child_storage_bytes,
+        .storage_slots = child_storage_slots,
+        .execution_ticks = child_execution_ticks,
+        .route_handles = child_route_handles,
+        .device_handles = child_device_handles,
+    };
+    const child_authorization = intent.admit(
+        user_id,
+        device_id,
+        parent_id,
+        child_id,
+        .spawn_app,
+        .delegates_resources,
+        start,
+        intent.requestId("declared child spawn").?,
+    ).?;
+
+    const spawned_child = try parent.spawnDeclared(parent_id, child_id, start, child_authorization, child_allocation);
+    var child = spawned_child.app;
+    try std.testing.expectEqual(@as(usize, parent_memory_bytes - child_memory_bytes), parent.memory.remaining());
+    try std.testing.expectEqual(@as(usize, child_memory_bytes), child.memory.remaining());
+    try std.testing.expectEqual(@as(usize, child_storage_bytes), child.storage.data.len());
+    try std.testing.expectEqual(@as(usize, child_storage_slots), child.storage.slotCapacity());
+    try std.testing.expectEqual(@as(u64, parent_execution_ticks - child_execution_ticks), parent.execution_ticks);
+    try std.testing.expectEqual(@as(u64, child_execution_ticks), child.execution_ticks);
+    try std.testing.expectEqual(@as(u64, child_route_handles), child.route_handles);
+    try std.testing.expectEqual(@as(u64, child_device_handles), child.device_handles);
+
+    const child_allocator = child.memory.allocator();
+    _ = try child_allocator.alloc(u8, child_private_bytes);
+    try std.testing.expectError(error.OutOfMemory, child_allocator.alloc(u8, child_memory_bytes));
+    try std.testing.expect(child.storage.put(&oversized_storage) == null);
+    try std.testing.expect(!child.consumeExecution(child_execution_ticks + 1));
+    try std.testing.expect(child.useDevice(device_id));
+
+    const grandchild_authorization = intent.admit(
+        user_id,
+        device_id,
+        child_id,
+        grandchild_id,
+        .spawn_app,
+        .delegates_resources,
+        start,
+        intent.requestId("declared grandchild spawn").?,
+    ).?;
+    const impossible_grandchild = App.DeclaredAllocation{
+        .memory_bytes = child_memory_bytes,
+        .storage_bytes = grandchild_storage_bytes,
+        .storage_slots = grandchild_storage_slots,
+        .execution_ticks = grandchild_execution_ticks,
+        .route_handles = grandchild_route_handles,
+        .device_handles = grandchild_device_handles,
+    };
+    try std.testing.expectError(error.NoMemory, child.spawnDeclared(child_id, grandchild_id, start, grandchild_authorization, impossible_grandchild));
+
+    const impossible_route_grandchild = App.DeclaredAllocation{
+        .memory_bytes = grandchild_memory_bytes,
+        .storage_bytes = grandchild_storage_bytes,
+        .storage_slots = grandchild_storage_slots,
+        .execution_ticks = grandchild_execution_ticks,
+        .route_handles = child_route_handles + 1,
+        .device_handles = grandchild_device_handles,
+    };
+    try std.testing.expectError(error.NoRoute, child.spawnDeclared(child_id, grandchild_id, start, grandchild_authorization, impossible_route_grandchild));
+
+    const grandchild_allocation = App.DeclaredAllocation{
+        .memory_bytes = grandchild_memory_bytes,
+        .storage_bytes = grandchild_storage_bytes,
+        .storage_slots = grandchild_storage_slots,
+        .execution_ticks = grandchild_execution_ticks,
+        .route_handles = grandchild_route_handles,
+        .device_handles = grandchild_device_handles,
+    };
+    const spawned_grandchild = try child.spawnDeclared(child_id, grandchild_id, start, grandchild_authorization, grandchild_allocation);
+    var grandchild = spawned_grandchild.app;
+    try std.testing.expectEqual(@as(usize, grandchild_memory_bytes), grandchild.memory.remaining());
+    try std.testing.expectEqual(@as(usize, grandchild_storage_bytes), grandchild.storage.data.len());
+    try std.testing.expectEqual(@as(u64, child_execution_ticks - grandchild_execution_ticks), child.execution_ticks);
+    try std.testing.expectEqual(@as(u64, 0), child.route_handles);
+    try std.testing.expectEqual(@as(u64, 0), child.device_handles);
+    try std.testing.expect(!child.useDevice(device_id));
+    try std.testing.expect(grandchild.useDevice(device_id));
+
+    const route_admission = intent.admit(
+        user_id,
+        device_id,
+        child_id,
+        grandchild_id,
+        .sync_data,
+        .exports_data,
+        start,
+        intent.requestId("declared route use").?,
+    ).?;
+    const route = relay.Route.init(route_admission, child_id, grandchild_id, .sync_data, .exports_data, hashMaterial("declared route policy")).?;
+    try std.testing.expect(child.createRelayEnvelope(route, 1, hashMaterial("route object"), hashMaterial("route payload")) == null);
+    try std.testing.expect(!grandchild.consumeExecution(grandchild_execution_ticks + 1));
+
+    const input_hash = preimage.hash("edgerun:zig:v1:test-input", "declared work input");
+    const output_hash = grandchild.storage.put("declared work output").?;
+    _ = local_clock.advanceDefault() orelse return error.SkipZigTest;
+    const end = local_clock.now;
+    const work = grandchild.completeWork(child.id.id, input_hash, output_hash, start, end, grandchild_allocation, spawned_grandchild.receipt).?;
+    try std.testing.expect(work.valid());
+    try std.testing.expect(bytes.nonzero(&work.id().?));
+    try std.testing.expect(work.clock_start.order(work.clock_end) < 0);
+
+    try std.testing.expectError(error.Corrupt, parent.reclaimChild(&child, spawned_child.receipt, end));
+    const grandchild_reclaim = try child.reclaimChild(&grandchild, spawned_grandchild.receipt, end);
+    try std.testing.expect(grandchild_reclaim.valid());
+    try std.testing.expectEqual(@as(usize, 0), grandchild.memory.remaining());
+    try std.testing.expect(grandchild.storage.get(output_hash) == null);
+    try std.testing.expectEqual(@as(u64, child_execution_ticks), child.execution_ticks);
+    try std.testing.expectEqual(@as(u64, child_route_handles), child.route_handles);
+    try std.testing.expectEqual(@as(u64, child_device_handles), child.device_handles);
+
+    const child_reclaim = try parent.reclaimChild(&child, spawned_child.receipt, end);
+    try std.testing.expect(child_reclaim.valid());
+    try std.testing.expectEqual(@as(usize, parent_memory_bytes), parent.memory.remaining());
+    try std.testing.expectEqual(@as(usize, parent_storage_bytes), parent.storage.data.len());
+    try std.testing.expectEqual(@as(usize, parent_storage_slots), parent.storage.slotCapacity());
+    try std.testing.expectEqual(@as(u64, parent_execution_ticks), parent.execution_ticks);
+    try std.testing.expectEqual(@as(u64, parent_route_handles), parent.route_handles);
+    try std.testing.expectEqual(@as(u64, parent_device_handles), parent.device_handles);
+    try std.testing.expectEqual(@as(usize, 0), child.memory.remaining());
 }
 
 test "app creates its store from its host-owned memory slice" {
@@ -512,8 +936,10 @@ test "apps exchange identity routed envelopes through relay boundary" {
     const target_id = identity.Identity.init(.app, identity.Source.prepare(.hash, &preimage.rawHash("routing target app")).?, now).?;
     const relay_id = identity.Identity.init(.relay, identity.Source.prepare(.hash, &preimage.rawHash("routing relay app")).?, now).?;
 
-    const source = App.initFromHostSlice(source_id, BoundedArena.init(.{ .base = &source_memory }), 64, 2).?;
-    const target = App.initFromHostSlice(target_id, BoundedArena.init(.{ .base = &target_memory }), 64, 2).?;
+    var source = App.initFromHostSlice(source_id, BoundedArena.init(.{ .base = &source_memory }), 64, 2).?;
+    var target = App.initFromHostSlice(target_id, BoundedArena.init(.{ .base = &target_memory }), 64, 2).?;
+    source.route_handles = 1;
+    target.route_handles = 1;
     _ = App.initFromHostSlice(relay_id, BoundedArena.init(.{ .base = &relay_memory }), 32, 1).?;
 
     const admission = intent.admitWindow(
