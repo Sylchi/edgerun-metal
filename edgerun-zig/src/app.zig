@@ -903,19 +903,19 @@ test "manifest spawn transfers declared memory and storage to child" {
 
 test "declared allocation bounds app child work receipts and clean reclaim" {
     const parent_memory_bytes = 128;
-    const parent_storage_bytes = 1280;
+    const parent_storage_bytes = 2048;
     const parent_storage_slots = 8;
     const parent_execution_ticks = 16;
     const parent_route_handles = 1;
     const parent_device_handles = 1;
     const child_memory_bytes = 32;
-    const child_storage_bytes = 896;
+    const child_storage_bytes = 1536;
     const child_storage_slots = 4;
     const child_execution_ticks = 8;
     const child_route_handles = 1;
     const child_device_handles = 1;
     const grandchild_memory_bytes = 8;
-    const grandchild_storage_bytes = 640;
+    const grandchild_storage_bytes = 1024;
     const grandchild_storage_slots = 2;
     const grandchild_execution_ticks = 4;
     const grandchild_route_handles = 1;
@@ -928,6 +928,7 @@ test "declared allocation bounds app child work receipts and clean reclaim" {
     var oversized_storage: [parent_storage_bytes]u8 = [_]u8{'x'} ** parent_storage_bytes;
     var child_manifest_raw: [object.header_size + object.owner_size + App.manifest_body_size]u8 = undefined;
     var grandchild_manifest_raw: [object.header_size + object.owner_size + App.manifest_body_size]u8 = undefined;
+    var work_output_raw: [object.header_size + object.owner_size + object.envelope_size + 20]u8 = undefined;
     var work_receipt_raw: [object.header_size + work_receipt_body_size]u8 = undefined;
     var work_receipt_body: [work_receipt_body_size]u8 = undefined;
 
@@ -1095,7 +1096,14 @@ test "declared allocation bounds app child work receipts and clean reclaim" {
     try std.testing.expect(!grandchild.consumeExecution(grandchild_execution_ticks + 1));
 
     const input_hash = preimage.hash("edgerun:zig:v1:test-input", "declared work input");
-    const output_hash = grandchild.storage.put("declared work output").?;
+    const output_owner = object.Owner{
+        .kind = .app,
+        .node_id = grandchild.id.id.bytes,
+    };
+    const output_req = sealedAppRequirements();
+    const output_envelope = sealedEnvelopeForApp(device_id, grandchild_id, user_id, output_req, "declared work output key").?;
+    const output_canonical = try (object.NodeWriter{ .out = &work_output_raw }).bytesNodeOwned(output_req, start, &.{output_owner}, &.{output_envelope}, "declared work output");
+    const output_hash = grandchild.putSealedObject(device_id, user_id, output_canonical).?;
     _ = local_clock.advanceDefault() orelse return error.SkipZigTest;
     const end = local_clock.now;
     const work = grandchild.completeWork(child.id.id, input_hash, output_hash, grandchild_manifest_id, start, end, grandchild_allocation, spawned_grandchild.receipt).?;
@@ -1119,7 +1127,7 @@ test "declared allocation bounds app child work receipts and clean reclaim" {
     const grandchild_reclaim = try child.reclaimChild(&grandchild, spawned_grandchild.receipt, end);
     try std.testing.expect(grandchild_reclaim.valid());
     try std.testing.expectEqual(@as(usize, 0), grandchild.memory.remaining());
-    try std.testing.expect(grandchild.storage.get(output_hash) == null);
+    try std.testing.expect(grandchild.storage.getObject(grandchild.id.id, output_hash) == null);
     try std.testing.expectEqual(@as(u64, child_execution_ticks), child.execution_ticks);
     try std.testing.expectEqual(@as(u64, child_route_handles), child.route_handles);
     try std.testing.expectEqual(@as(u64, child_device_handles), child.device_handles);
