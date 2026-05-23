@@ -25,6 +25,8 @@ Deleting something may remove a reference before every physical trace is gone. C
 
 Raw bytes are not enough. A durable system needs to answer:
 
+[[demo:storage_sealed_objects]]
+
 - what is this object?
 - who created it?
 - who can verify it?

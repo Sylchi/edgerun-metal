@@ -8,6 +8,8 @@ The phone is not identifying a soul. It is correlating evidence. Some evidence i
 
 ## The signal stack
 
+[[demo:phone_identity_stack]]
+
 When a service decides "this is you," it may combine:
 
 - device unlock

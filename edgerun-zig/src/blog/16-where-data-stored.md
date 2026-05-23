@@ -8,6 +8,8 @@ The screen gives a false sense of location. If the phone shows the photo, note, 
 
 ## Copy map
 
+[[demo:data_copy_map]]
+
 One ordinary object can spread quickly:
 
 ```text

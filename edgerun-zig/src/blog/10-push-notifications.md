@@ -8,6 +8,8 @@ Push notifications exist because phones are battery-constrained. Letting every a
 
 ## The wake path
 
+[[demo:push_wake_path]]
+
 ```text
 sender service -> platform push service
 platform push service -> phone OS

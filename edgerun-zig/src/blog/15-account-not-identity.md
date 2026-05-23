@@ -8,6 +8,8 @@ An account is a relationship with a service. It is useful, but it is not the per
 
 ## Account identity
 
+[[demo:account_vs_key]]
+
 ```text
 real person -> platform account -> app login -> service access
 ```

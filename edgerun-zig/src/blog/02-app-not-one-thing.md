@@ -27,6 +27,8 @@ Each dependency brings code, update paths, policy, logging, and failure modes. S
 
 ## The hidden trust graph
 
+[[demo:dependency_graph]]
+
 ```text
 chat app -> login SDK -> identity provider
 chat app -> analytics SDK -> event stream

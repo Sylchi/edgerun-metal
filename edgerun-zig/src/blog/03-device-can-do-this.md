@@ -8,6 +8,8 @@ The cloud became the default owner partly because it was convenient for develope
 
 ## What your device already has
 
+[[demo:local_compute_capacity]]
+
 A normal modern phone or laptop has:
 
 - billions of operations per second

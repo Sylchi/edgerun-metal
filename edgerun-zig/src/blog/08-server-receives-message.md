@@ -8,6 +8,8 @@ The word "server" hides a lot. It sounds like one machine waiting politely for r
 
 ## Inside the building
 
+[[demo:server_pipeline]]
+
 ```text
 TLS endpoint -> load balancer -> app handler
 app handler -> policy -> queue -> delivery

@@ -8,6 +8,8 @@ The phone is powerful enough to be a personal computer, but the authority model 
 
 ## Permission ladder
 
+[[demo:permission_ladder]]
+
 ```text
 hardware you bought
   -> bootloader
