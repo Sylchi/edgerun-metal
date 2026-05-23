@@ -50,6 +50,7 @@ const default_state_body = "edgerun-sdk state";
 
 pub const Error = error{
     BadConfiguration,
+    BadAllocation,
     NoMemory,
     NoStorage,
     Unauthorized,
@@ -277,8 +278,12 @@ pub fn simulate(config: Config, workspace: Workspace) Error!Simulation {
         resources.child_storage_bytes,
         resources.child_storage_slots,
     ) catch |err| return switch (err) {
+        error.BadAllocation => error.BadAllocation,
+        error.NoExecution => error.NoMemory,
         error.NoMemory => error.NoMemory,
         error.NoStorage => error.NoStorage,
+        error.NoRoute => error.Unauthorized,
+        error.NoDevice => error.Unauthorized,
         error.Unauthorized => error.Unauthorized,
     };
     var child_app = spawned.app;

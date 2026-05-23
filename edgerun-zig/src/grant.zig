@@ -11,6 +11,9 @@ pub const Resource = enum(u16) {
     storage_bytes = 2,
     storage_slots = 3,
     read_only_memory = 4,
+    execution_ticks = 5,
+    route_handles = 6,
+    device_handles = 7,
 };
 
 pub const Grant = struct {
@@ -23,7 +26,7 @@ pub const Grant = struct {
     pub fn valid(self: Grant) bool {
         return self.issuer.valid() and
             self.subject.valid() and
-            self.amount != 0 and
+            (self.amount != 0 or self.resource == .route_handles or self.resource == .device_handles) and
             self.epoch.valid();
     }
 
@@ -50,6 +53,9 @@ pub const SpawnReceipt = struct {
     memory: Grant,
     storage_bytes: Grant,
     storage_slots: Grant,
+    execution_ticks: Grant,
+    route_handles: Grant,
+    device_handles: Grant,
 
     pub fn valid(self: SpawnReceipt) bool {
         return self.parent.valid() and
@@ -57,15 +63,27 @@ pub const SpawnReceipt = struct {
             self.memory.valid() and
             self.storage_bytes.valid() and
             self.storage_slots.valid() and
+            self.execution_ticks.valid() and
+            self.route_handles.valid() and
+            self.device_handles.valid() and
             self.memory.resource == .memory and
             self.storage_bytes.resource == .storage_bytes and
             self.storage_slots.resource == .storage_slots and
+            self.execution_ticks.resource == .execution_ticks and
+            self.route_handles.resource == .route_handles and
+            self.device_handles.resource == .device_handles and
             self.memory.issuer.eql(self.parent) and
             self.storage_bytes.issuer.eql(self.parent) and
             self.storage_slots.issuer.eql(self.parent) and
+            self.execution_ticks.issuer.eql(self.parent) and
+            self.route_handles.issuer.eql(self.parent) and
+            self.device_handles.issuer.eql(self.parent) and
             self.memory.subject.eql(self.child) and
             self.storage_bytes.subject.eql(self.child) and
-            self.storage_slots.subject.eql(self.child);
+            self.storage_slots.subject.eql(self.child) and
+            self.execution_ticks.subject.eql(self.child) and
+            self.route_handles.subject.eql(self.child) and
+            self.device_handles.subject.eql(self.child);
     }
 
     pub fn id(self: SpawnReceipt) ?[id_size]u8 {
@@ -74,13 +92,19 @@ pub const SpawnReceipt = struct {
         const memory_id = self.memory.id().?;
         const storage_bytes_id = self.storage_bytes.id().?;
         const storage_slots_id = self.storage_slots.id().?;
-        var raw: [160]u8 = undefined;
+        const execution_id = self.execution_ticks.id().?;
+        const route_id = self.route_handles.id().?;
+        const device_id = self.device_handles.id().?;
+        var raw: [256]u8 = undefined;
         var writer = preimage.Writer.init(&raw);
         if (!writer.id(self.parent) or
             !writer.id(self.child) or
             !writer.hash(memory_id) or
             !writer.hash(storage_bytes_id) or
-            !writer.hash(storage_slots_id))
+            !writer.hash(storage_slots_id) or
+            !writer.hash(execution_id) or
+            !writer.hash(route_id) or
+            !writer.hash(device_id))
         {
             return null;
         }
@@ -124,9 +148,14 @@ pub const MemoryViewReceipt = struct {
 };
 
 pub fn spawnReceipt(parent: identity.Identity, child: identity.Identity, epoch: clock.Stamp, memory_bytes: usize, storage_bytes: usize, storage_slots: usize) ?SpawnReceipt {
+    return spawnReceiptAllocated(parent, child, epoch, memory_bytes, storage_bytes, storage_slots, 1, 1, 1);
+}
+
+pub fn spawnReceiptAllocated(parent: identity.Identity, child: identity.Identity, epoch: clock.Stamp, memory_bytes: usize, storage_bytes: usize, storage_slots: usize, execution_ticks: u64, route_handles: u64, device_handles: u64) ?SpawnReceipt {
     const memory_amount = std.math.cast(u64, memory_bytes) orelse return null;
     const storage_amount = std.math.cast(u64, storage_bytes) orelse return null;
     const slot_amount = std.math.cast(u64, storage_slots) orelse return null;
+    if (execution_ticks == 0) return null;
 
     return .{
         .parent = parent.id,
@@ -150,6 +179,27 @@ pub fn spawnReceipt(parent: identity.Identity, child: identity.Identity, epoch: 
             .subject = child.id,
             .resource = .storage_slots,
             .amount = slot_amount,
+            .epoch = epoch,
+        },
+        .execution_ticks = .{
+            .issuer = parent.id,
+            .subject = child.id,
+            .resource = .execution_ticks,
+            .amount = execution_ticks,
+            .epoch = epoch,
+        },
+        .route_handles = .{
+            .issuer = parent.id,
+            .subject = child.id,
+            .resource = .route_handles,
+            .amount = route_handles,
+            .epoch = epoch,
+        },
+        .device_handles = .{
+            .issuer = parent.id,
+            .subject = child.id,
+            .resource = .device_handles,
+            .amount = device_handles,
             .epoch = epoch,
         },
     };
@@ -184,6 +234,8 @@ test "spawn receipt deterministically records delegated resources" {
     try std.testing.expect(receipt.valid());
     try std.testing.expect(bytes.nonzero(&receipt.id().?));
     try std.testing.expectEqual(@as(u64, 16), receipt.memory.amount);
+    try std.testing.expectEqual(Resource.execution_ticks, receipt.execution_ticks.resource);
+    try std.testing.expectEqual(@as(u64, 1), receipt.route_handles.amount);
 }
 
 test "memory view receipt binds owner reader slice and byte range" {
