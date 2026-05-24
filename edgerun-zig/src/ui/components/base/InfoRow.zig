@@ -2,6 +2,7 @@ const std = @import("std");
 const common = @import("../../../ui_component_common.zig");
 const layout = @import("../../../layouts/Types.zig");
 const ui = @import("../../../ui.zig");
+const base_text_block = @import("TextBlock.zig");
 
 const RenderOptions = common.RenderOptions;
 
@@ -36,26 +37,14 @@ pub fn render(scene: *ui.Scene, bounds: ui.Rect, params: Params, metrics: Metric
     }
     const text_bounds = textBounds(bounds, metrics);
     try scene.pushAlignedText(ui.Rect.init(text_bounds.x, bounds.y + metrics.title_y, text_bounds.w, metrics.title_height), params.title, options.style.text, .start);
-    try scene.pushWrappedText(ui.Rect.init(text_bounds.x, bounds.y + metrics.detail_y, text_bounds.w, metrics.detail_height), params.detail, options.style.muted, .{
-        .line_height = metrics.detail_line_height,
-        .average_char_width = metrics.detail_average_w,
-        .max_lines = metrics.detail_max_lines,
-    });
+    try base_text_block.render(scene, ui.Rect.init(text_bounds.x, bounds.y + metrics.detail_y, text_bounds.w, metrics.detail_height), params.detail, options.style.muted, detailMetrics(metrics));
     try scene.pushHit(.{ .slot = 0, .kind = params.hit_kind, .id = params.id, .bounds = bounds });
 }
 
 pub fn measure(title: []const u8, detail: []const u8, constraints: layout.Constraints, metrics: Metrics) layout.Measurement {
     const text_constraints = constraints.inner(textInsets(metrics));
-    const title_measure = layout.measureText(title, text_constraints, .{
-        .line_height = metrics.title_height,
-        .average_char_width = metrics.title_average_w,
-        .max_lines = metrics.title_max_lines,
-    });
-    const detail_measure = layout.measureText(detail, text_constraints, .{
-        .line_height = metrics.detail_line_height,
-        .average_char_width = metrics.detail_average_w,
-        .max_lines = metrics.detail_max_lines,
-    });
+    const title_measure = base_text_block.measure(title, text_constraints, titleMetrics(metrics));
+    const detail_measure = base_text_block.measure(detail, text_constraints, detailMetrics(metrics));
     const content_width = @max(title_measure.preferred.w, detail_measure.preferred.w) + metrics.padding_left + metrics.padding_right;
     const content_height = metrics.title_y + title_measure.preferred.h + (metrics.detail_y - metrics.title_y - metrics.title_height) + detail_measure.preferred.h;
     const resolved_height = @max(metrics.height, content_height);
@@ -72,6 +61,22 @@ fn textBounds(bounds: ui.Rect, metrics: Metrics) ui.Rect {
 
 fn textInsets(metrics: Metrics) layout.Insets {
     return .{ .left = metrics.padding_left, .right = metrics.padding_right };
+}
+
+fn titleMetrics(metrics: Metrics) base_text_block.Metrics {
+    return .{
+        .line_height = metrics.title_height,
+        .average_char_width = metrics.title_average_w,
+        .max_lines = metrics.title_max_lines,
+    };
+}
+
+fn detailMetrics(metrics: Metrics) base_text_block.Metrics {
+    return .{
+        .line_height = metrics.detail_line_height,
+        .average_char_width = metrics.detail_average_w,
+        .max_lines = metrics.detail_max_lines,
+    };
 }
 
 pub const default_height: f32 = 70.0;
