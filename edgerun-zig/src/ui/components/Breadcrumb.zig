@@ -1,5 +1,6 @@
 const std = @import("std");
 const common = @import("../../ui_component_common.zig");
+const base_label_hit = @import("base/LabelHit.zig");
 const ui = @import("../../ui.zig");
 const ui_input = @import("../../input.zig");
 
@@ -72,8 +73,7 @@ pub fn renderBreadcrumb(breadcrumb: Breadcrumb, scene: *ui.Scene, bounds: ui.Rec
         const item_w = breadcrumbItemWidth(item.label);
         if (cursor_x + item_w > right) break;
         const item_bounds = ui.Rect.init(cursor_x, y, item_w, breadcrumb_item_h);
-        try scene.pushAlignedText(item_bounds.insetLtrb(breadcrumb_item_padding_x, breadcrumb_text_y, breadcrumb_item_padding_x, breadcrumb_text_y), item.label, if (item.current) options.style.text else options.style.muted, .start);
-        try scene.pushHit(.{ .slot = 0, .kind = .button, .id = item.id, .bounds = item_bounds });
+        try base_label_hit.render(scene, item_bounds, .{ .id = item.id, .label = item.label, .color = if (item.current) options.style.text else options.style.muted, .alignment = .start }, breadcrumb_label_insets);
         cursor_x += item_w;
         if (index + 1 < breadcrumb.items.len) {
             if (cursor_x + breadcrumb_separator_w > right) break;
@@ -196,10 +196,15 @@ const breadcrumb_text_h: f32 = 14.0;
 const breadcrumb_avg_w: f32 = 8.0;
 const breadcrumb_min_w: f32 = 18.0;
 const breadcrumb_separator_w: f32 = 16.0;
+const breadcrumb_label_insets = base_label_hit.Insets{ .x = breadcrumb_item_padding_x, .y = breadcrumb_text_y };
+const breadcrumb_width_metrics = base_label_hit.WidthMetrics{
+    .average_char_width = breadcrumb_avg_w,
+    .min_width = breadcrumb_min_w,
+    .padding_x = breadcrumb_item_padding_x,
+};
 
 fn breadcrumbItemWidth(label: []const u8) f32 {
-    const label_w = @as(f32, @floatFromInt(label.len)) * breadcrumb_avg_w;
-    return @max(breadcrumb_min_w, label_w + breadcrumb_item_padding_x * 2.0);
+    return base_label_hit.width(label, breadcrumb_width_metrics);
 }
 
 test "breadcrumb component renders path and hit targets" {

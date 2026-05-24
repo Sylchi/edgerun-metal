@@ -1,5 +1,6 @@
 const std = @import("std");
 const common = @import("../../ui_component_common.zig");
+const base_label_hit = @import("base/LabelHit.zig");
 const base_surface = @import("base/Surface.zig");
 const ui = @import("../../ui.zig");
 const ui_input = @import("../../input.zig");
@@ -81,8 +82,7 @@ pub fn renderNav(nav: Nav, scene: *ui.Scene, bounds: ui.Rect, options: RenderOpt
             try scene.pushRect(item_bounds, style.row, .fill, nav_item_radius, 0.0);
             try scene.pushRect(ui.Rect.init(item_bounds.x + nav_active_inset_x, item_bounds.y + item_bounds.h - nav_active_h, @max(1.0, item_bounds.w - nav_active_inset_x * 2.0), nav_active_h), style.accent, .fill, nav_active_h * 0.5, 0.0);
         }
-        try scene.pushAlignedText(item_bounds.insetLtrb(nav_item_padding_x, nav_item_text_y, nav_item_padding_x, nav_item_text_y), item.label, if (item.active) style.text else style.muted, .center);
-        try scene.pushHit(.{ .slot = 0, .kind = .button, .id = item.id, .bounds = item_bounds });
+        try base_label_hit.render(scene, item_bounds, .{ .id = item.id, .label = item.label, .color = if (item.active) style.text else style.muted }, nav_label_insets);
         cursor_x += item_w + nav_item_gap;
     }
 }
@@ -210,10 +210,15 @@ const nav_item_avg_w: f32 = 8.5;
 const nav_item_min_w: f32 = 44.0;
 const nav_active_h: f32 = 3.0;
 const nav_active_inset_x: f32 = 12.0;
+const nav_label_insets = base_label_hit.Insets{ .x = nav_item_padding_x, .y = nav_item_text_y };
+const nav_width_metrics = base_label_hit.WidthMetrics{
+    .average_char_width = nav_item_avg_w,
+    .min_width = nav_item_min_w,
+    .padding_x = nav_item_padding_x,
+};
 
 fn navItemWidth(label: []const u8) f32 {
-    const label_w = @as(f32, @floatFromInt(label.len)) * nav_item_avg_w;
-    return @max(nav_item_min_w, label_w + nav_item_padding_x * 2.0);
+    return base_label_hit.width(label, nav_width_metrics);
 }
 
 test "nav component renders active item and hit targets" {
