@@ -65,6 +65,15 @@ const call_with_params_wasm = [_]u8{
     0x07, 0x00, 0x20, 0x00, 0x20, 0x01, 0x7c, 0x0b,
 };
 
+const exported_add_params_wasm = [_]u8{
+    0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00,
+    0x01, 0x07, 0x01, 0x60, 0x02, 0x7e, 0x7e, 0x01,
+    0x7e, 0x03, 0x02, 0x01, 0x00, 0x07, 0x07, 0x01,
+    0x03, 'a',  'd',  'd',  0x00, 0x00, 0x0a, 0x09,
+    0x01, 0x07, 0x00, 0x20, 0x00, 0x20, 0x01, 0x7c,
+    0x0b,
+};
+
 const signed_i32_const_wasm = [_]u8{
     0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00,
     0x01, 0x05, 0x01, 0x60, 0x00, 0x01, 0x7e, 0x03,
@@ -576,6 +585,15 @@ test "wasm interpreter passes call arguments through callee locals" {
 
     try std.testing.expectEqual(@as(i64, 42), try executeRuntime(&memory, &ticks, &call_with_params_wasm));
     try std.testing.expectEqual(@as(u64, 4), ticks);
+}
+
+test "wasm interpreter executes exported i64 functions with parameters" {
+    var memory: [256]u8 = undefined;
+    var ticks: u64 = 12;
+    var runtime = wasm.Runtime.init(&memory, &ticks);
+
+    try std.testing.expectEqual(@as(i64, 42), try wasm.executeExportI64Args(&runtime, &exported_add_params_wasm, "add", &.{ 40, 2 }));
+    try std.testing.expectEqual(@as(u64, 8), ticks);
 }
 
 test "wasm interpreter decodes signed i32 constants" {
