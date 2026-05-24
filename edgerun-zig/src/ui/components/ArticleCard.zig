@@ -5,6 +5,7 @@ const ui_input = @import("../../input.zig");
 const layout = @import("../../layouts/Types.zig");
 const base_badge = @import("base/Badge.zig");
 const base_surface = @import("base/Surface.zig");
+const base_text_block = @import("base/TextBlock.zig");
 
 const RenderOptions = common.RenderOptions;
 
@@ -33,31 +34,15 @@ pub fn renderArticleCard(article: ArticleCard, scene: *ui.Scene, bounds: ui.Rect
     const badge_width = @min(article_badge_max_width, @max(article_badge_min_width, inset.w * article_badge_width_ratio));
     try renderCategoryBadge(scene, ui.Rect.init(inset.x, inset.y, badge_width, article_badge_height), article.category, options);
     try scene.pushAlignedText(ui.Rect.init(inset.x + badge_width + article_gap, inset.y + article_meta_y, @max(1.0, inset.w - badge_width - article_gap), article_meta_height), article.meta, options.style.muted, .end);
-    try scene.pushWrappedText(ui.Rect.init(inset.x, inset.y + article_title_y, inset.w - article_arrow_slot, article_title_h), article.title, options.style.text, .{
-        .line_height = article_title_line_h,
-        .average_char_width = article_title_avg_w,
-        .max_lines = article_title_max_lines,
-    });
-    try scene.pushWrappedText(ui.Rect.init(inset.x, bounds.y + bounds.h - article_summary_bottom_offset, inset.w - article_arrow_slot, article_summary_h), article.summary, options.style.muted, .{
-        .line_height = article_summary_line_h,
-        .average_char_width = article_summary_avg_w,
-        .max_lines = article_summary_max_lines,
-    });
+    try base_text_block.render(scene, ui.Rect.init(inset.x, inset.y + article_title_y, inset.w - article_arrow_slot, article_title_h), article.title, options.style.text, article_title_metrics);
+    try base_text_block.render(scene, ui.Rect.init(inset.x, bounds.y + bounds.h - article_summary_bottom_offset, inset.w - article_arrow_slot, article_summary_h), article.summary, options.style.muted, article_summary_metrics);
     try scene.pushHit(.{ .slot = 0, .kind = .button, .id = article.id, .bounds = bounds });
 }
 
 pub fn measureArticleCard(article: ArticleCard, constraints: layout.Constraints) layout.Measurement {
     const content = constraints.inner(layout.Insets.uniform(article_padding));
-    const title = layout.measureText(article.title, content, .{
-        .line_height = article_title_line_h,
-        .average_char_width = article_title_avg_w,
-        .max_lines = article_title_max_lines,
-    });
-    const summary = layout.measureText(article.summary, content, .{
-        .line_height = article_summary_line_h,
-        .average_char_width = article_summary_avg_w,
-        .max_lines = article_summary_max_lines,
-    });
+    const title = base_text_block.measure(article.title, content, article_title_metrics);
+    const summary = base_text_block.measure(article.summary, content, article_summary_metrics);
     const preferred = ui.Size{
         .w = constraints.width.exactValue() orelse @max(article_min_width, @max(title.preferred.w, summary.preferred.w) + article_padding * 2.0),
         .h = article_padding * 2.0 + article_badge_height + article_gap + title.preferred.h + article_gap + summary.preferred.h,
@@ -94,6 +79,16 @@ const article_summary_avg_w: f32 = 10.0;
 const article_summary_max_lines: usize = 2;
 const article_min_width: f32 = 180.0;
 const article_min_height: f32 = 96.0;
+const article_title_metrics = base_text_block.Metrics{
+    .line_height = article_title_line_h,
+    .average_char_width = article_title_avg_w,
+    .max_lines = article_title_max_lines,
+};
+const article_summary_metrics = base_text_block.Metrics{
+    .line_height = article_summary_line_h,
+    .average_char_width = article_summary_avg_w,
+    .max_lines = article_summary_max_lines,
+};
 
 test "article card renders category title and hit target" {
     const article = ArticleCard{
