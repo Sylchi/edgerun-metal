@@ -42,6 +42,7 @@ const ext_memory_fill: u32 = 11;
 const ext_table_init: u32 = 12;
 const ext_elem_drop: u32 = 13;
 const ext_table_copy: u32 = 14;
+const ext_table_grow: u32 = 15;
 const ext_table_size: u32 = 16;
 const ext_table_fill: u32 = 17;
 const i32_min_as_f32: f32 = -2147483648.0;
@@ -378,6 +379,7 @@ pub const Error = error{
     Unsupported,
     NoMemory,
     MemoryGrowthRequiresAuthority,
+    TableGrowthRequiresAuthority,
     NoExecution,
     MissingExport,
     MissingImport,
@@ -392,6 +394,7 @@ pub const Runtime = struct {
     execution_ticks: *u64,
     imports: []const HostImport = &.{},
     memory_grow_authority: ?MemoryGrowAuthority = null,
+    table_grow_authority: ?TableGrowAuthority = null,
 
     pub fn init(memory: []u8, execution_ticks: *u64) Runtime {
         return initWithImports(memory, execution_ticks, &.{});
@@ -435,6 +438,22 @@ pub const MemoryGrowRequest = struct {
 pub const MemoryGrowAuthority = struct {
     context: ?*anyopaque = null,
     request: *const fn (context: ?*anyopaque, runtime: *Runtime, grow: MemoryGrowRequest) Error!bool,
+};
+
+pub const TableGrowRequest = struct {
+    previous_entries: usize,
+    requested_entries: usize,
+    delta_entries: usize,
+
+    pub fn valid(self: TableGrowRequest) bool {
+        return self.requested_entries >= self.previous_entries and
+            self.delta_entries == self.requested_entries - self.previous_entries;
+    }
+};
+
+pub const TableGrowAuthority = struct {
+    context: ?*anyopaque = null,
+    request: *const fn (context: ?*anyopaque, runtime: *Runtime, grow: TableGrowRequest) Error!bool,
 };
 
 pub const HostImport = struct {
@@ -1728,6 +1747,7 @@ const Executor = struct {
             ext_table_init => try self.tableInit(frame, reader),
             ext_elem_drop => try self.elemDrop(reader),
             ext_table_copy => try self.tableCopy(frame, reader),
+            ext_table_grow => try self.tableGrow(frame, reader),
             ext_table_size => try self.tableSize(frame, reader),
             ext_table_fill => try self.tableFill(frame, reader),
             else => return error.Unsupported,
@@ -1954,6 +1974,46 @@ const Executor = struct {
     fn tableSize(self: *Executor, frame: *Frame, reader: *Reader) Error!void {
         try readTableIndex(reader);
         try frame.pushI32(@intCast(self.module.table_min_entries));
+    }
+
+    fn tableGrow(self: *Executor, frame: *Frame, reader: *Reader) Error!void {
+        try readTableIndex(reader);
+        const delta = try frame.popI32();
+        if (delta < 0) return error.Corrupt;
+        const function_ref = try frame.popFuncref();
+        if (function_ref) |index| {
+            if (index >= self.module.totalFunctionCount()) return error.Corrupt;
+        }
+        const previous_entries = self.module.table_min_entries;
+        const delta_entries: usize = @intCast(delta);
+        const requested_entries = checkedAdd(previous_entries, delta_entries) orelse {
+            try frame.pushI32(-1);
+            return;
+        };
+        if (requested_entries > max_table_entries) {
+            try frame.pushI32(-1);
+            return;
+        }
+        if (delta_entries > 0) {
+            const request = TableGrowRequest{
+                .previous_entries = previous_entries,
+                .requested_entries = requested_entries,
+                .delta_entries = delta_entries,
+            };
+            if (!request.valid()) return error.Corrupt;
+            const authority = self.runtime.table_grow_authority orelse return error.TableGrowthRequiresAuthority;
+            const granted = try authority.request(authority.context, self.runtime, request);
+            if (!granted) {
+                try frame.pushI32(-1);
+                return;
+            }
+        }
+        var index: usize = previous_entries;
+        while (index < requested_entries) : (index += 1) {
+            self.module.table_entries[index] = function_ref;
+        }
+        self.module.table_min_entries = requested_entries;
+        try frame.pushI32(@intCast(previous_entries));
     }
 
     fn tableFill(self: *Executor, frame: *Frame, reader: *Reader) Error!void {
@@ -2543,6 +2603,7 @@ fn skipExtendedOpcodeImmediate(reader: *Reader) Error!void {
             try readTableIndex(reader);
             try readTableIndex(reader);
         },
+        ext_table_grow => try readTableIndex(reader),
         ext_table_size => try readTableIndex(reader),
         ext_table_fill => try readTableIndex(reader),
         else => return error.Unsupported,
