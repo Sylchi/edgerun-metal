@@ -112,6 +112,7 @@ pub fn main(init: std.process.Init) !void {
 
     var scene_state = SceneState{};
     const buffers = try scene_state.rebuild(width, height, &font_atlas);
+    renderer_gles.refreshFontTexture(gl, &font_atlas);
     try renderer_gles.renderFrame(gl, width, height, buffers);
     _ = try renderer_gles.verifyFrameNonBlank(width, height);
     if (c.eglSwapBuffers(egl.display, egl.surface) != c.EGL_TRUE) return error.EglSwapFailed;

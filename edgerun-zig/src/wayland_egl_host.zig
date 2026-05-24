@@ -23,6 +23,7 @@ const default_seconds: u32 = 5;
 const frame_ms: i32 = 16;
 const wayland_fixed_scale: f32 = 256.0;
 const pointer_button_left: u32 = 0x110;
+const wl_seat_protocol_version: u32 = 1;
 const max_commands: usize = 4096;
 const max_clips: usize = 64;
 const max_rects: usize = 8192;
@@ -126,7 +127,8 @@ pub fn main(init: std.process.Init) !void {
     const options = try parseOptions(args);
 
     var app = AppState{};
-    var wl = try initWayland(options.width, options.height, &app);
+    var wl: WaylandState = undefined;
+    try initWayland(&wl, options.width, options.height, &app);
     defer deinitWayland(&wl);
     var egl = try initEgl(&wl);
     defer deinitEgl(&egl);
@@ -136,6 +138,7 @@ pub fn main(init: std.process.Init) !void {
 
     var scene_state = SceneState{};
     var buffers = try scene_state.rebuild(wl.width, wl.height, app, &font_atlas);
+    renderer_gles.refreshFontTexture(gl, &font_atlas);
     updateHoverHit(&app, scene_state.commandSlice());
 
     var frames_remaining: u32 = options.seconds * 60;
@@ -146,10 +149,12 @@ pub fn main(init: std.process.Init) !void {
         if (wl.resized) {
             c.wl_egl_window_resize(egl.window, wl.width, wl.height, 0, 0);
             buffers = try scene_state.rebuild(wl.width, wl.height, app, &font_atlas);
+            renderer_gles.refreshFontTexture(gl, &font_atlas);
             updateHoverHit(&app, scene_state.commandSlice());
             wl.resized = false;
         } else if (wl.input_dirty) {
             buffers = try scene_state.rebuild(wl.width, wl.height, app, &font_atlas);
+            renderer_gles.refreshFontTexture(gl, &font_atlas);
             updateHoverHit(&app, scene_state.commandSlice());
             wl.input_dirty = false;
         }
@@ -219,30 +224,29 @@ fn parseOptions(args: []const [:0]const u8) !Options {
     return options;
 }
 
-fn initWayland(width: i32, height: i32, app: *AppState) !WaylandState {
+fn initWayland(state: *WaylandState, width: i32, height: i32, app: *AppState) !void {
     const display = c.wl_display_connect(null) orelse return error.WaylandConnectFailed;
     errdefer c.wl_display_disconnect(display);
     const registry = c.wl_display_get_registry(display) orelse return error.WaylandRegistryFailed;
-    var state = WaylandState{ .display = display, .registry = registry, .app = app, .width = width, .height = height };
-    if (c.wl_registry_add_listener(registry, &registry_listener, &state) != 0) return error.WaylandRegistryFailed;
+    state.* = .{ .display = display, .registry = registry, .app = app, .width = width, .height = height };
+    if (c.wl_registry_add_listener(registry, &registry_listener, state) != 0) return error.WaylandRegistryFailed;
     if (c.wl_display_roundtrip(display) < 0) return error.WaylandRoundtripFailed;
     const compositor = state.compositor orelse return error.MissingWaylandCompositor;
     const wm_base = state.wm_base orelse return error.MissingXdgWmBase;
-    if (c.xdg_wm_base_add_listener(wm_base, &wm_base_listener, &state) != 0) return error.XdgListenerFailed;
+    if (c.xdg_wm_base_add_listener(wm_base, &wm_base_listener, state) != 0) return error.XdgListenerFailed;
     if (state.seat) |seat| {
-        if (c.wl_seat_add_listener(seat, &seat_listener, &state) != 0) return error.WaylandSeatListenerFailed;
+        if (c.wl_seat_add_listener(seat, &seat_listener, state) != 0) return error.WaylandSeatListenerFailed;
     }
     state.surface = c.wl_compositor_create_surface(compositor) orelse return error.WaylandSurfaceFailed;
     state.xdg_surface = c.xdg_wm_base_get_xdg_surface(wm_base, state.surface) orelse return error.XdgSurfaceFailed;
-    if (c.xdg_surface_add_listener(state.xdg_surface, &xdg_surface_listener, &state) != 0) return error.XdgListenerFailed;
+    if (c.xdg_surface_add_listener(state.xdg_surface, &xdg_surface_listener, state) != 0) return error.XdgListenerFailed;
     state.toplevel = c.xdg_surface_get_toplevel(state.xdg_surface) orelse return error.XdgToplevelFailed;
-    if (c.xdg_toplevel_add_listener(state.toplevel, &xdg_toplevel_listener, &state) != 0) return error.XdgListenerFailed;
+    if (c.xdg_toplevel_add_listener(state.toplevel, &xdg_toplevel_listener, state) != 0) return error.XdgListenerFailed;
     c.xdg_toplevel_set_title(state.toplevel, "EdgeRun EGL GPU");
     c.wl_surface_commit(state.surface);
     while (!state.configured) {
         if (c.wl_display_dispatch(display) < 0) return error.WaylandDispatchFailed;
     }
-    return state;
 }
 
 fn deinitWayland(state: *WaylandState) void {
@@ -338,7 +342,7 @@ fn registryGlobal(data: ?*anyopaque, registry: ?*c.wl_registry, name: u32, inter
     } else if (std.mem.eql(u8, iface, "xdg_wm_base")) {
         state.wm_base = @ptrCast(c.wl_registry_bind(reg, name, &c.xdg_wm_base_interface, @min(version, 1)));
     } else if (std.mem.eql(u8, iface, "wl_seat")) {
-        state.seat = @ptrCast(c.wl_registry_bind(reg, name, &c.wl_seat_interface, @min(version, 7)));
+        state.seat = @ptrCast(c.wl_registry_bind(reg, name, &c.wl_seat_interface, @min(version, wl_seat_protocol_version)));
     }
 }
 fn registryRemove(_: ?*anyopaque, _: ?*c.wl_registry, _: u32) callconv(.c) void {}
