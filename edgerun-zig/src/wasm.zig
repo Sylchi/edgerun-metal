@@ -57,6 +57,8 @@ const f32_sign_mask: u32 = 0x80000000;
 const f32_magnitude_mask: u32 = 0x7fffffff;
 const f64_sign_mask: u64 = 0x8000000000000000;
 const f64_magnitude_mask: u64 = 0x7fffffffffffffff;
+const f32_two: f32 = 2.0;
+const f64_two: f64 = 2.0;
 
 const wasm_magic = [_]u8{ 0x00, 0x61, 0x73, 0x6d };
 const wasm_version = [_]u8{ 0x01, 0x00, 0x00, 0x00 };
@@ -330,6 +332,10 @@ const Opcode = enum(u8) {
     i64_rotr = 0x8a,
     f32_abs = 0x8b,
     f32_neg = 0x8c,
+    f32_ceil = 0x8d,
+    f32_floor = 0x8e,
+    f32_trunc = 0x8f,
+    f32_nearest = 0x90,
     f32_sqrt = 0x91,
     f32_add = 0x92,
     f32_sub = 0x93,
@@ -340,6 +346,10 @@ const Opcode = enum(u8) {
     f32_copysign = 0x98,
     f64_abs = 0x99,
     f64_neg = 0x9a,
+    f64_ceil = 0x9b,
+    f64_floor = 0x9c,
+    f64_trunc = 0x9d,
+    f64_nearest = 0x9e,
     f64_sqrt = 0x9f,
     f64_add = 0xa0,
     f64_sub = 0xa1,
@@ -764,6 +774,10 @@ const FloatBinaryOp = enum {
 const FloatUnaryOp = enum {
     abs,
     neg,
+    ceil,
+    floor,
+    trunc,
+    nearest,
     sqrt,
 };
 
@@ -1551,6 +1565,10 @@ const Executor = struct {
                 .i32_popcnt => try pushI32Unary(&frame, .popcnt),
                 .f32_abs => try pushF32Unary(&frame, .abs),
                 .f32_neg => try pushF32Unary(&frame, .neg),
+                .f32_ceil => try pushF32Unary(&frame, .ceil),
+                .f32_floor => try pushF32Unary(&frame, .floor),
+                .f32_trunc => try pushF32Unary(&frame, .trunc),
+                .f32_nearest => try pushF32Unary(&frame, .nearest),
                 .f32_sqrt => try pushF32Unary(&frame, .sqrt),
                 .f32_add => try pushF32Binary(&frame, .add),
                 .f32_sub => try pushF32Binary(&frame, .sub),
@@ -1561,6 +1579,10 @@ const Executor = struct {
                 .f32_copysign => try pushF32Binary(&frame, .copysign),
                 .f64_abs => try pushF64Unary(&frame, .abs),
                 .f64_neg => try pushF64Unary(&frame, .neg),
+                .f64_ceil => try pushF64Unary(&frame, .ceil),
+                .f64_floor => try pushF64Unary(&frame, .floor),
+                .f64_trunc => try pushF64Unary(&frame, .trunc),
+                .f64_nearest => try pushF64Unary(&frame, .nearest),
                 .f64_sqrt => try pushF64Unary(&frame, .sqrt),
                 .f64_add => try pushF64Binary(&frame, .add),
                 .f64_sub => try pushF64Binary(&frame, .sub),
@@ -2413,6 +2435,10 @@ fn opcodeFromByte(value: u8) ?Opcode {
         @intFromEnum(Opcode.i64_rotr) => .i64_rotr,
         @intFromEnum(Opcode.f32_abs) => .f32_abs,
         @intFromEnum(Opcode.f32_neg) => .f32_neg,
+        @intFromEnum(Opcode.f32_ceil) => .f32_ceil,
+        @intFromEnum(Opcode.f32_floor) => .f32_floor,
+        @intFromEnum(Opcode.f32_trunc) => .f32_trunc,
+        @intFromEnum(Opcode.f32_nearest) => .f32_nearest,
         @intFromEnum(Opcode.f32_sqrt) => .f32_sqrt,
         @intFromEnum(Opcode.f32_add) => .f32_add,
         @intFromEnum(Opcode.f32_sub) => .f32_sub,
@@ -2423,6 +2449,10 @@ fn opcodeFromByte(value: u8) ?Opcode {
         @intFromEnum(Opcode.f32_copysign) => .f32_copysign,
         @intFromEnum(Opcode.f64_abs) => .f64_abs,
         @intFromEnum(Opcode.f64_neg) => .f64_neg,
+        @intFromEnum(Opcode.f64_ceil) => .f64_ceil,
+        @intFromEnum(Opcode.f64_floor) => .f64_floor,
+        @intFromEnum(Opcode.f64_trunc) => .f64_trunc,
+        @intFromEnum(Opcode.f64_nearest) => .f64_nearest,
         @intFromEnum(Opcode.f64_sqrt) => .f64_sqrt,
         @intFromEnum(Opcode.f64_add) => .f64_add,
         @intFromEnum(Opcode.f64_sub) => .f64_sub,
@@ -2754,6 +2784,10 @@ fn skipOpcodeImmediate(reader: *Reader, opcode: Opcode) Error!void {
         .i64_popcnt,
         .f32_abs,
         .f32_neg,
+        .f32_ceil,
+        .f32_floor,
+        .f32_trunc,
+        .f32_nearest,
         .f32_sqrt,
         .f32_add,
         .f32_sub,
@@ -2764,6 +2798,10 @@ fn skipOpcodeImmediate(reader: *Reader, opcode: Opcode) Error!void {
         .f32_copysign,
         .f64_abs,
         .f64_neg,
+        .f64_ceil,
+        .f64_floor,
+        .f64_trunc,
+        .f64_nearest,
         .f64_sqrt,
         .f64_add,
         .f64_sub,
@@ -2922,6 +2960,10 @@ fn applyF32Unary(op: FloatUnaryOp, value: f32) f32 {
     return switch (op) {
         .abs => @abs(value),
         .neg => -value,
+        .ceil => @ceil(value),
+        .floor => @floor(value),
+        .trunc => @trunc(value),
+        .nearest => nearestF32(value),
         .sqrt => @sqrt(value),
     };
 }
@@ -2930,6 +2972,10 @@ fn applyF64Unary(op: FloatUnaryOp, value: f64) f64 {
     return switch (op) {
         .abs => @abs(value),
         .neg => -value,
+        .ceil => @ceil(value),
+        .floor => @floor(value),
+        .trunc => @trunc(value),
+        .nearest => nearestF64(value),
         .sqrt => @sqrt(value),
     };
 }
@@ -3088,6 +3134,38 @@ fn copySignF64(left: f64, right: f64) f64 {
     const magnitude = @as(u64, @bitCast(left)) & f64_magnitude_mask;
     const sign = @as(u64, @bitCast(right)) & f64_sign_mask;
     return @bitCast(magnitude | sign);
+}
+
+fn nearestF32(value: f32) f32 {
+    if (isNanF32(value)) return value;
+
+    const lower = @floor(value);
+    const upper = @ceil(value);
+    const lower_distance = value - lower;
+    const upper_distance = upper - value;
+    if (lower_distance < upper_distance) return lower;
+    if (upper_distance < lower_distance) return upper;
+    return if (evenF32(lower)) lower else upper;
+}
+
+fn nearestF64(value: f64) f64 {
+    if (isNanF64(value)) return value;
+
+    const lower = @floor(value);
+    const upper = @ceil(value);
+    const lower_distance = value - lower;
+    const upper_distance = upper - value;
+    if (lower_distance < upper_distance) return lower;
+    if (upper_distance < lower_distance) return upper;
+    return if (evenF64(lower)) lower else upper;
+}
+
+fn evenF32(value: f32) bool {
+    return @mod(@abs(value), f32_two) == 0;
+}
+
+fn evenF64(value: f64) bool {
+    return @mod(@abs(value), f64_two) == 0;
 }
 
 fn isNanF32(value: f32) bool {
