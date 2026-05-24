@@ -2,6 +2,7 @@ const std = @import("std");
 const common = @import("../../ui_component_common.zig");
 const layout = @import("../../layouts/Types.zig");
 const base_surface = @import("base/Surface.zig");
+const base_text_block = @import("base/TextBlock.zig");
 const ui = @import("../../ui.zig");
 const ui_input = @import("../../input.zig");
 
@@ -77,11 +78,7 @@ pub fn renderDetails(details: Details, scene: *ui.Scene, bounds: ui.Rect, option
     if (!details.open) return;
     const body_y = summary_bounds.y + summary_bounds.h + details_body_gap;
     if (body_y >= bounds.y + bounds.h - details_padding_y) return;
-    try scene.pushWrappedText(ui.Rect.init(summary_bounds.x, body_y, summary_bounds.w, @max(1.0, bounds.y + bounds.h - details_padding_y - body_y)), details.body, style.muted, .{
-        .line_height = details_body_line_h,
-        .average_char_width = details_body_avg_w,
-        .max_lines = details_body_max_lines,
-    });
+    try base_text_block.render(scene, ui.Rect.init(summary_bounds.x, body_y, summary_bounds.w, @max(1.0, bounds.y + bounds.h - details_padding_y - body_y)), details.body, style.muted, details_body_metrics);
 }
 
 pub fn measureDetails(details: Details, constraints: layout.Constraints) layout.Measurement {
@@ -95,11 +92,7 @@ pub fn measureDetails(details: Details, constraints: layout.Constraints) layout.
     var content_width = summary.preferred.w + details_marker_w;
     var content_height = @max(details_summary_h, summary.preferred.h);
     if (details.open) {
-        const body = layout.measureText(details.body, content_constraints, .{
-            .line_height = details_body_line_h,
-            .average_char_width = details_body_avg_w,
-            .max_lines = details_body_max_lines,
-        });
+        const body = base_text_block.measure(details.body, content_constraints, details_body_metrics);
         content_width = @max(content_width, body.preferred.w);
         content_height += details_body_gap + body.preferred.h;
     }
@@ -203,6 +196,11 @@ const details_body_line_h: f32 = 18.0;
 const details_body_avg_w: f32 = 9.0;
 const details_body_max_lines: usize = 5;
 const details_min_w: f32 = 180.0;
+const details_body_metrics = base_text_block.Metrics{
+    .line_height = details_body_line_h,
+    .average_char_width = details_body_avg_w,
+    .max_lines = details_body_max_lines,
+};
 
 fn detailsInsets() layout.Insets {
     return .{ .top = details_padding_y, .right = details_padding_x, .bottom = details_padding_y, .left = details_padding_x };

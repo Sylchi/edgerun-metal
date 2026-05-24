@@ -3,6 +3,7 @@ const common = @import("../../ui_component_common.zig");
 const layout = @import("../../layouts/Types.zig");
 const base_frame = @import("base/Frame.zig");
 const base_surface = @import("base/Surface.zig");
+const base_text_block = @import("base/TextBlock.zig");
 const ui = @import("../../ui.zig");
 
 const ComponentRegistry = common.ComponentRegistry;
@@ -70,34 +71,18 @@ pub fn renderFigure(figure: Figure, scene: *ui.Scene, bounds: ui.Rect, options: 
 
     const media_bounds = ui.Rect.init(bounds.x + figure_padding_x, bounds.y + figure_padding_y, @max(1.0, bounds.w - figure_padding_x * 2.0), @max(1.0, bounds.h - figure_padding_y * 2.0 - figure_caption_h - figure_caption_gap));
     try base_frame.render(scene, media_bounds, .{ .fill = style.row, .border = style.border, .radius = figure_media_radius });
-    try scene.pushWrappedText(media_bounds.insetUniform(figure_alt_padding), figure.alt, style.muted, .{
-        .line_height = figure_alt_line_h,
-        .average_char_width = figure_alt_avg_w,
-        .max_lines = figure_alt_max_lines,
-    });
+    try base_text_block.render(scene, media_bounds.insetUniform(figure_alt_padding), figure.alt, style.muted, figure_alt_metrics);
 
     const caption_y = media_bounds.y + media_bounds.h + figure_caption_gap;
-    try scene.pushWrappedText(ui.Rect.init(media_bounds.x, caption_y, media_bounds.w, figure_caption_h), figure.caption, style.text, .{
-        .line_height = figure_caption_line_h,
-        .average_char_width = figure_caption_avg_w,
-        .max_lines = figure_caption_max_lines,
-    });
+    try base_text_block.render(scene, ui.Rect.init(media_bounds.x, caption_y, media_bounds.w, figure_caption_h), figure.caption, style.text, figure_caption_metrics);
 }
 
 pub fn measureFigure(figure: Figure, constraints: layout.Constraints) layout.Measurement {
     const inner = constraints.inner(figureInsets());
     const width = inner.width.limit(figure_default_media_w);
     const media_height = @max(figure_min_media_h, width * figure_media_aspect_h_over_w);
-    const caption = layout.measureText(figure.caption, inner, .{
-        .line_height = figure_caption_line_h,
-        .average_char_width = figure_caption_avg_w,
-        .max_lines = figure_caption_max_lines,
-    });
-    const alt = layout.measureText(figure.alt, .{ .width = .{ .exact = width - figure_alt_padding * 2.0 }, .text_wrap = constraints.text_wrap }, .{
-        .line_height = figure_alt_line_h,
-        .average_char_width = figure_alt_avg_w,
-        .max_lines = figure_alt_max_lines,
-    });
+    const caption = base_text_block.measure(figure.caption, inner, figure_caption_metrics);
+    const alt = base_text_block.measure(figure.alt, .{ .width = .{ .exact = width - figure_alt_padding * 2.0 }, .text_wrap = constraints.text_wrap }, figure_alt_metrics);
     const content_height = @max(media_height, alt.preferred.h + figure_alt_padding * 2.0) + figure_caption_gap + caption.preferred.h;
     return layout.Measurement.flexible(
         .{ .w = figure_min_w, .h = figure_padding_y * 2.0 + figure_min_media_h + figure_caption_gap + figure_caption_line_h },
@@ -194,6 +179,16 @@ const figure_default_media_w: f32 = 360.0;
 const figure_min_w: f32 = 180.0;
 const figure_min_media_h: f32 = 96.0;
 const figure_media_aspect_h_over_w: f32 = 0.45;
+const figure_alt_metrics = base_text_block.Metrics{
+    .line_height = figure_alt_line_h,
+    .average_char_width = figure_alt_avg_w,
+    .max_lines = figure_alt_max_lines,
+};
+const figure_caption_metrics = base_text_block.Metrics{
+    .line_height = figure_caption_line_h,
+    .average_char_width = figure_caption_avg_w,
+    .max_lines = figure_caption_max_lines,
+};
 
 fn figureInsets() layout.Insets {
     return .{ .top = figure_padding_y, .right = figure_padding_x, .bottom = figure_padding_y, .left = figure_padding_x };

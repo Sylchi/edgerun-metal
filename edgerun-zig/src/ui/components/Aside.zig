@@ -3,6 +3,7 @@ const common = @import("../../ui_component_common.zig");
 const layout = @import("../../layouts/Types.zig");
 const base_accent_rail = @import("base/AccentRail.zig");
 const base_surface = @import("base/Surface.zig");
+const base_text_block = @import("base/TextBlock.zig");
 const ui = @import("../../ui.zig");
 
 const ComponentRegistry = common.ComponentRegistry;
@@ -69,30 +70,14 @@ pub fn renderAside(aside: Aside, scene: *ui.Scene, bounds: ui.Rect, options: Ren
     try base_accent_rail.render(scene, bounds, style.accent, .{ .radius = base_surface.radius });
 
     const content = bounds.insetLtrb(aside_padding_x, aside_padding_y, aside_padding_x, aside_padding_y);
-    try scene.pushWrappedText(ui.Rect.init(content.x, content.y, content.w, aside_title_h), aside.title, style.text, .{
-        .line_height = aside_title_line_h,
-        .average_char_width = aside_title_avg_w,
-        .max_lines = aside_title_max_lines,
-    });
-    try scene.pushWrappedText(ui.Rect.init(content.x, content.y + aside_body_y, content.w, @max(1.0, content.h - aside_body_y)), aside.body, style.muted, .{
-        .line_height = aside_body_line_h,
-        .average_char_width = aside_body_avg_w,
-        .max_lines = aside_body_max_lines,
-    });
+    try base_text_block.render(scene, ui.Rect.init(content.x, content.y, content.w, aside_title_h), aside.title, style.text, aside_title_metrics);
+    try base_text_block.render(scene, ui.Rect.init(content.x, content.y + aside_body_y, content.w, @max(1.0, content.h - aside_body_y)), aside.body, style.muted, aside_body_metrics);
 }
 
 pub fn measureAside(aside: Aside, constraints: layout.Constraints) layout.Measurement {
     const content_constraints = constraints.inner(asideInsets());
-    const title = layout.measureText(aside.title, content_constraints, .{
-        .line_height = aside_title_line_h,
-        .average_char_width = aside_title_avg_w,
-        .max_lines = aside_title_max_lines,
-    });
-    const body = layout.measureText(aside.body, content_constraints, .{
-        .line_height = aside_body_line_h,
-        .average_char_width = aside_body_avg_w,
-        .max_lines = aside_body_max_lines,
-    });
+    const title = base_text_block.measure(aside.title, content_constraints, aside_title_metrics);
+    const body = base_text_block.measure(aside.body, content_constraints, aside_body_metrics);
     const content_width = @max(title.preferred.w, body.preferred.w);
     const content_height = title.preferred.h + aside_body_gap + body.preferred.h;
     return layout.Measurement.flexible(
@@ -175,6 +160,16 @@ const aside_body_line_h: f32 = 18.0;
 const aside_body_avg_w: f32 = 9.0;
 const aside_body_max_lines: usize = 4;
 const aside_min_w: f32 = 180.0;
+const aside_title_metrics = base_text_block.Metrics{
+    .line_height = aside_title_line_h,
+    .average_char_width = aside_title_avg_w,
+    .max_lines = aside_title_max_lines,
+};
+const aside_body_metrics = base_text_block.Metrics{
+    .line_height = aside_body_line_h,
+    .average_char_width = aside_body_avg_w,
+    .max_lines = aside_body_max_lines,
+};
 
 fn asideInsets() layout.Insets {
     return .{ .top = aside_padding_y, .right = aside_padding_x, .bottom = aside_padding_y, .left = aside_padding_x };

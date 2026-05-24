@@ -3,6 +3,7 @@ const common = @import("../../ui_component_common.zig");
 const ui = @import("../../ui.zig");
 const layout = @import("../../layouts/Types.zig");
 const base_marker = @import("base/Marker.zig");
+const base_text_block = @import("base/TextBlock.zig");
 
 const ComponentRegistry = common.ComponentRegistry;
 const HtmlCursor = common.HtmlCursor;
@@ -72,11 +73,7 @@ pub fn renderList(list: List, scene: *ui.Scene, bounds: ui.Rect, options: Render
         } else {
             try base_marker.renderFilled(scene, ui.Rect.init(bounds.x + list_bullet_x, y + list_bullet_y, list_bullet_size, list_bullet_size), options.style.accent);
         }
-        try scene.pushWrappedText(ui.Rect.init(bounds.x + list_text_x, y, @max(1.0, bounds.w - list_text_x), list_item_h), item, options.style.text, .{
-            .line_height = list_line_h,
-            .average_char_width = list_avg_w,
-            .max_lines = list_item_max_lines,
-        });
+        try base_text_block.render(scene, ui.Rect.init(bounds.x + list_text_x, y, @max(1.0, bounds.w - list_text_x), list_item_h), item, options.style.text, list_item_metrics);
         y += list_item_h + list_item_gap;
     }
 }
@@ -86,11 +83,7 @@ pub fn measureList(list: List, constraints: layout.Constraints) layout.Measureme
     var preferred_height: f32 = 0;
     const text_constraints = constraints.inner(.{ .left = list_text_x });
     for (list.items) |item| {
-        const item_measure = layout.measureText(item, text_constraints, .{
-            .line_height = list_line_h,
-            .average_char_width = list_avg_w,
-            .max_lines = list_item_max_lines,
-        });
+        const item_measure = base_text_block.measure(item, text_constraints, list_item_metrics);
         preferred_width = @max(preferred_width, item_measure.preferred.w + list_text_x);
         preferred_height += @max(list_item_h, item_measure.preferred.h);
         if (preferred_height != 0) preferred_height += list_item_gap;
@@ -223,6 +216,11 @@ const list_text_x: f32 = 28.0;
 const list_line_h: f32 = 18.0;
 const list_avg_w: f32 = 9.0;
 const list_item_max_lines: usize = 2;
+const list_item_metrics = base_text_block.Metrics{
+    .line_height = list_line_h,
+    .average_char_width = list_avg_w,
+    .max_lines = list_item_max_lines,
+};
 
 fn orderedMarker(index: usize) []const u8 {
     const markers = [_][]const u8{ "1.", "2.", "3.", "4.", "5.", "6.", "7.", "8.", "9." };
