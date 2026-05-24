@@ -3815,16 +3815,13 @@ fn readListHtml(html: []const u8, out_items: [][]const u8, text_out: []u8) HtmlE
 
 fn readListItemsHtml(html: []const u8, out_items: [][]const u8, text_out: []u8) HtmlError![]const []const u8 {
     var text = HtmlTextArena.init(text_out);
-    var cursor: usize = 0;
+    var cursor = HtmlCursor.init(html);
     var item_count: usize = 0;
-    while (cursor < html.len) {
+    while (!cursor.done()) {
         if (item_count == out_items.len) return error.HtmlBudgetExceeded;
-        if (!std.mem.startsWith(u8, html[cursor..], "<li>")) return error.InvalidHtml;
-        const value_start = cursor + "<li>".len;
-        const value_end_relative = std.mem.indexOf(u8, html[value_start..], "</li>") orelse return error.InvalidHtml;
-        out_items[item_count] = try text.unescape(html[value_start .. value_start + value_end_relative]);
+        out_items[item_count] = try text.unescape(try cursor.fieldBetween("<li>", "</li>"));
+        try cursor.consume("</li>");
         item_count += 1;
-        cursor = value_start + value_end_relative + "</li>".len;
     }
     if (item_count == 0) return error.InvalidHtml;
     return out_items[0..item_count];
@@ -3955,30 +3952,19 @@ fn readChoiceGroupHtml(html: []const u8, out_options: []ChoiceOption, text_out: 
 fn readChoiceOptionsHtml(html: []const u8, group_id: u32, out_options: []ChoiceOption, text: *HtmlTextArena) HtmlError![]const ChoiceOption {
     var expected_name_buffer: [17]u8 = undefined;
     const expected_name = std.fmt.bufPrint(&expected_name_buffer, "choice-{d}", .{group_id}) catch unreachable;
-    var cursor: usize = 0;
+    var cursor = HtmlCursor.init(html);
     var option_count: usize = 0;
-    while (cursor < html.len) {
+    while (!cursor.done()) {
         if (option_count == out_options.len) return error.HtmlBudgetExceeded;
-        if (!std.mem.startsWith(u8, html[cursor..], "<label data-er-id=\"")) return error.InvalidHtml;
-        const after_id_start = cursor + "<label data-er-id=\"".len;
-        const after_id = html[after_id_start..];
-        const id_end = std.mem.indexOf(u8, after_id, "\" data-er-selected=\"") orelse return error.InvalidHtml;
-        const id = try parseHtmlU32(after_id[0..id_end]);
-        const selected_start = after_id_start + id_end + "\" data-er-selected=\"".len;
-        const after_selected = html[selected_start..];
-        const selected_end = std.mem.indexOf(u8, after_selected, "\"><input type=\"radio\" name=\"") orelse return error.InvalidHtml;
-        const selected = try parseHtmlBool(after_selected[0..selected_end]);
-        const name_start = selected_start + selected_end + "\"><input type=\"radio\" name=\"".len;
-        const after_name = html[name_start..];
-        const name_end = std.mem.indexOf(u8, after_name, "\">") orelse return error.InvalidHtml;
-        if (!std.mem.eql(u8, after_name[0..name_end], expected_name)) return error.InvalidHtml;
-        const label_start = name_start + name_end + "\">".len;
-        const label_end_relative = std.mem.indexOf(u8, html[label_start..], "</label>") orelse return error.InvalidHtml;
-        const label = try text.unescape(html[label_start .. label_start + label_end_relative]);
+        const id = try parseHtmlU32(try cursor.fieldBetween("<label data-er-id=\"", "\" data-er-selected=\""));
+        const selected = try parseHtmlBool(try cursor.fieldBetween("\" data-er-selected=\"", "\"><input type=\"radio\" name=\""));
+        const name = try cursor.fieldBetween("\"><input type=\"radio\" name=\"", "\">");
+        if (!std.mem.eql(u8, name, expected_name)) return error.InvalidHtml;
+        const label = try text.unescape(try cursor.fieldBetween("\">", "</label>"));
+        try cursor.consume("</label>");
         if (label.len == 0) return error.InvalidHtml;
         out_options[option_count] = .{ .id = id, .label = label, .selected = selected };
         option_count += 1;
-        cursor = label_start + label_end_relative + "</label>".len;
     }
     if (option_count == 0) return error.InvalidHtml;
     return out_options[0..option_count];
@@ -4258,45 +4244,35 @@ fn readRegionHtmlForTag(comptime tag: RegionTag, html: []const u8, out_component
 }
 
 fn readTableRowsHtml(html: []const u8, column_count: usize, out_rows: []TableRow, out_cells: []TableCell, cell_count: *usize, text: *HtmlTextArena) HtmlError![]const TableRow {
-    var cursor: usize = 0;
+    var cursor = HtmlCursor.init(html);
     var row_count: usize = 0;
-    while (cursor < html.len) {
+    while (!cursor.done()) {
         if (row_count == out_rows.len) return error.HtmlBudgetExceeded;
-        const prefix = "<tr data-er-row-id=\"";
-        if (!std.mem.startsWith(u8, html[cursor..], prefix)) return error.InvalidHtml;
-        const after_id_start = cursor + prefix.len;
-        const id_end_relative = std.mem.indexOf(u8, html[after_id_start..], "\">") orelse return error.InvalidHtml;
-        const id = try parseHtmlU32(html[after_id_start .. after_id_start + id_end_relative]);
-        const cells_start = after_id_start + id_end_relative + "\">".len;
-        const row_end_relative = std.mem.indexOf(u8, html[cells_start..], "</tr>") orelse return error.InvalidHtml;
-        const cells = try readTableCellsHtml(html[cells_start .. cells_start + row_end_relative], "td", out_cells, cell_count, text);
+        const id = try parseHtmlU32(try cursor.fieldBetween("<tr data-er-row-id=\"", "\">"));
+        const cells_html = try cursor.fieldBetween("\">", "</tr>");
+        const cells = try readTableCellsHtml(cells_html, "td", out_cells, cell_count, text);
+        try cursor.consume("</tr>");
         if (cells.len != column_count) return error.InvalidHtml;
         out_rows[row_count] = .{ .id = id, .cells = cells };
         row_count += 1;
-        cursor = cells_start + row_end_relative + "</tr>".len;
     }
     return out_rows[0..row_count];
 }
 
 fn readTableCellsHtml(html: []const u8, comptime tag: []const u8, out_cells: []TableCell, cell_count: *usize, text: *HtmlTextArena) HtmlError![]const TableCell {
     const start = cell_count.*;
-    var cursor: usize = 0;
-    while (cursor < html.len) {
+    var cursor = HtmlCursor.init(html);
+    while (!cursor.done()) {
         if (cell_count.* == out_cells.len) return error.HtmlBudgetExceeded;
         const prefix = "<" ++ tag ++ " data-er-align=\"";
         const close = "</" ++ tag ++ ">";
-        if (!std.mem.startsWith(u8, html[cursor..], prefix)) return error.InvalidHtml;
-        const after_align_start = cursor + prefix.len;
-        const align_end_relative = std.mem.indexOf(u8, html[after_align_start..], "\">") orelse return error.InvalidHtml;
-        const alignment = parseAlignName(html[after_align_start .. after_align_start + align_end_relative]) orelse return error.InvalidHtml;
-        const value_start = after_align_start + align_end_relative + "\">".len;
-        const value_end_relative = std.mem.indexOf(u8, html[value_start..], close) orelse return error.InvalidHtml;
+        const alignment = parseAlignName(try cursor.fieldBetween(prefix, "\">")) orelse return error.InvalidHtml;
         out_cells[cell_count.*] = .{
-            .value = try text.unescape(html[value_start .. value_start + value_end_relative]),
+            .value = try text.unescape(try cursor.fieldBetween("\">", close)),
             .alignment = alignment,
         };
+        try cursor.consume(close);
         cell_count.* += 1;
-        cursor = value_start + value_end_relative + close.len;
     }
     return out_cells[start..cell_count.*];
 }
