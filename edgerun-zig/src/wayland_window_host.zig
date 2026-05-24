@@ -1,8 +1,11 @@
 const std = @import("std");
+const icon = @import("icon.zig");
 const renderer_font_atlas = @import("renderer_font_atlas.zig");
 const renderer_ir = @import("renderer_ir.zig");
 const renderer_native_present = @import("renderer_native_present.zig");
 const renderer_software = @import("renderer_software.zig");
+const site_landing = @import("site_landing.zig");
+const tabler_atlas = @import("tabler_atlas.zig");
 const ui = @import("ui.zig");
 
 const linux = std.os.linux;
@@ -14,15 +17,19 @@ const default_seconds: u32 = 5;
 const default_refresh_hz: u32 = 60;
 const tile_width: u32 = 64;
 const tile_height: u32 = 64;
-const max_commands: usize = 64;
-const max_rects: usize = 256;
-const max_text_vertices: usize = 8192;
-const empty_texture_vertices: usize = 0;
+const max_commands: usize = 4096;
+const max_clips: usize = 64;
+const max_rects: usize = 8192;
+const max_text_vertices: usize = 24576;
+const max_icon_vertices: usize = 4096;
+const max_image_vertices: usize = 384;
+const max_overlay_rects: usize = 512;
+const max_overlay_text_vertices: usize = 8192;
+const max_overlay_icon_vertices: usize = 256;
 const max_tiles: usize = 512;
 const max_registry_globals: usize = 128;
 const socket_read_bytes: usize = 8192;
 const message_bytes: usize = 512;
-const empty_alpha = [_]u8{255};
 
 const display_id: u32 = 1;
 const registry_id: u32 = 2;
@@ -64,11 +71,11 @@ const wl_shm_format_xrgb8888: u32 = 1;
 const IrStorage = renderer_ir.FixedBuffers(
     max_rects,
     max_text_vertices,
-    empty_texture_vertices,
-    empty_texture_vertices,
-    empty_texture_vertices,
-    empty_texture_vertices,
-    empty_texture_vertices,
+    max_icon_vertices,
+    max_image_vertices,
+    max_overlay_rects,
+    max_overlay_text_vertices,
+    max_overlay_icon_vertices,
 );
 
 const Options = struct {
@@ -395,24 +402,21 @@ fn renderAndCommit(client: *WaylandClient, allocator: std.mem.Allocator, width: 
     defer allocator.free(pixels);
 
     var commands: [max_commands]ui.Command = undefined;
-    var scene = ui.Scene.init(&commands);
-    var nodes: [5]ui.Node = undefined;
-    try ui.render(&scene, sampleRoot(&nodes), .{ .x = 0, .y = 0, .w = @floatFromInt(width), .h = @floatFromInt(height) }, .{});
+    var clips: [max_clips]ui.Rect = undefined;
+    var scene = ui.Scene.initWithClips(&commands, &clips);
+    try renderBrowserLandingScene(&scene, width, height);
 
     var ir_storage = IrStorage{};
     const buffers = ir_storage.buffers();
     var font_atlas = renderer_font_atlas.Atlas.init();
-    try renderer_ir.packScene(buffers, .{
-        .font = font_atlas.source(),
-        .icon = renderer_font_atlas.nullIconSource(&font_atlas),
-    }, scene.written());
+    try renderer_ir.packScene(buffers, sources(&font_atlas), scene.written());
 
     var tile_marks: [max_tiles]u8 = undefined;
     var dirty_ids: [max_tiles]u32 = undefined;
     var sink_state = WaylandCommitSink{};
     const atlases = renderer_software.IrAtlases{
         .font = .{ .width = renderer_font_atlas.width, .height = renderer_font_atlas.height, .alpha = font_atlas.alphaSlice() },
-        .icon = .{ .width = 1, .height = 1, .alpha = &empty_alpha },
+        .icon = .{ .width = tabler_atlas.width, .height = tabler_atlas.height, .alpha = tabler_atlas.alpha },
     };
     const receipt = try renderer_native_present.renderCpuAndSubmit(
         .{ .wayland = .{
@@ -426,7 +430,7 @@ fn renderAndCommit(client: *WaylandClient, allocator: std.mem.Allocator, width: 
         buffers,
         atlases,
         .{ .width = width, .height = height, .pixels = pixels },
-        .bg,
+        siteBackground(),
         default_refresh_hz,
         tile_width,
         tile_height,
@@ -453,14 +457,42 @@ const WaylandCommitSink = struct {
     }
 };
 
-fn sampleRoot(children: []ui.Node) ui.Node {
-    std.debug.assert(children.len >= 5);
-    children[0] = .{ .text = .{ .value = "EdgeRun native Wayland", .color = .accent } };
-    children[1] = .{ .input = .{ .id = 10, .placeholder = "canonical IR -> CPU pixels -> Wayland shm" } };
-    children[2] = .{ .row_item = .{ .id = 20, .title = "same UI frame", .detail = "browser, cpu, gpu, drm, wayland" } };
-    children[3] = .{ .slot = .{ .id = 7, .child = &children[4] } };
-    children[4] = .{ .button = .{ .id = 30, .label = "Native" } };
-    return .{ .stack = .{ .axis = .column, .gap = 18, .padding = 48, .children = children[0..4] } };
+fn renderBrowserLandingScene(scene: *ui.Scene, width: u32, height: u32) !void {
+    try site_landing.render(scene, .{
+        .x = 0,
+        .y = 0,
+        .w = @floatFromInt(width),
+        .h = @floatFromInt(height),
+    }, .{
+        .scroll_y = 0.0,
+        .hover_x = -1.0,
+        .hover_y = -1.0,
+        .frame_ms = 0.0,
+        .public_identity = "native-wayland",
+        .public_identity_ready = true,
+    });
+}
+
+fn sources(font_atlas: *renderer_font_atlas.Atlas) renderer_ir.Sources {
+    return .{
+        .font = font_atlas.source(),
+        .icon = .{ .context = font_atlas, .rect = iconAtlasRect },
+    };
+}
+
+fn iconAtlasRect(_: *anyopaque, atlas_id: u32) ?renderer_ir.AtlasRect {
+    const value = icon.fromAtlasId(atlas_id) orelse return null;
+    const found = tabler_atlas.rect(value);
+    return .{
+        .u0 = (@as(f32, @floatFromInt(found.x)) + 0.5) / @as(f32, @floatFromInt(tabler_atlas.width)),
+        .v0 = (@as(f32, @floatFromInt(found.y)) + 0.5) / @as(f32, @floatFromInt(tabler_atlas.height)),
+        .u1 = (@as(f32, @floatFromInt(found.x + found.w)) - 0.5) / @as(f32, @floatFromInt(tabler_atlas.width)),
+        .v1 = (@as(f32, @floatFromInt(found.y + found.h)) - 0.5) / @as(f32, @floatFromInt(tabler_atlas.height)),
+    };
+}
+
+fn siteBackground() ui.Color {
+    return .{ .r = 11, .g = 11, .b = 11 };
 }
 
 fn packXrgb8888(out: []u8, pixels: []const ui.Color) void {
@@ -741,4 +773,28 @@ test "wayland xrgb pack swaps renderer color channels for shm" {
     };
     packXrgb8888(&out, &pixels);
     try std.testing.expectEqualSlices(u8, &.{ 3, 2, 1, 255, 7, 6, 5, 255 }, &out);
+}
+
+test "wayland host renders the browser landing app through canonical ir" {
+    var commands: [max_commands]ui.Command = undefined;
+    var clips: [max_clips]ui.Rect = undefined;
+    var scene = ui.Scene.initWithClips(&commands, &clips);
+    try renderBrowserLandingScene(&scene, 1280, 800);
+    try std.testing.expect(hasText(scene.written(), "Your Node is"));
+    try std.testing.expect(hasText(scene.written(), "Already Running"));
+
+    var ir_storage = IrStorage{};
+    const buffers = ir_storage.buffers();
+    var font_atlas = renderer_font_atlas.Atlas.init();
+    try renderer_ir.packScene(buffers, sources(&font_atlas), scene.written());
+    try std.testing.expect(ir_storage.rect_len > 0);
+    try std.testing.expect(ir_storage.text_vertex_len > 0);
+    try std.testing.expect(ir_storage.icon_vertex_len > 0);
+}
+
+fn hasText(commands: []const ui.Command, value: []const u8) bool {
+    for (commands) |command| {
+        if (command == .text and std.mem.eql(u8, command.text.value, value)) return true;
+    }
+    return false;
 }
