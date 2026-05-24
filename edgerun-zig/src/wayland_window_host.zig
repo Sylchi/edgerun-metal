@@ -110,11 +110,13 @@ const Options = struct {
     height: u32 = default_height,
     seconds: u32 = default_seconds,
     present: PresentMode = .cpu,
+    dmabuf_fd: ?posix.fd_t = null,
 };
 
 const PresentMode = enum {
     cpu,
     gpu_record,
+    gpu_dmabuf,
 };
 
 const ObjectKind = enum {
@@ -288,7 +290,7 @@ pub fn main(init: std.process.Init) !void {
     defer client.close(init.io);
     try client.bootstrap();
     try client.createWindow(options.width, options.height);
-    var app = try NativeApp.init(&client, allocator, options.width, options.height, options.present);
+    var app = try NativeApp.init(&client, allocator, options);
     defer app.deinit();
     try app.render(&client);
     try client.eventLoop(options.seconds, &app);
@@ -315,17 +317,23 @@ fn parseOptions(args: []const [:0]const u8) !Options {
             index += 1;
             if (index >= args.len) return error.InvalidArguments;
             options.present = try parsePresentMode(args[index]);
+        } else if (std.mem.eql(u8, arg, "--dmabuf-fd")) {
+            index += 1;
+            if (index >= args.len) return error.InvalidArguments;
+            options.dmabuf_fd = try std.fmt.parseInt(posix.fd_t, args[index], 10);
         } else {
             return error.InvalidArguments;
         }
     }
     if (options.width == 0 or options.height == 0 or options.seconds == 0) return error.InvalidArguments;
+    if (options.present == .gpu_dmabuf and options.dmabuf_fd == null) return error.MissingDmabufFd;
     return options;
 }
 
 fn parsePresentMode(value: []const u8) !PresentMode {
     if (std.mem.eql(u8, value, "cpu")) return .cpu;
     if (std.mem.eql(u8, value, "gpu-record")) return .gpu_record;
+    if (std.mem.eql(u8, value, "gpu-dmabuf")) return .gpu_dmabuf;
     return error.InvalidArguments;
 }
 
@@ -579,6 +587,7 @@ const NativeApp = struct {
     width: u32,
     height: u32,
     present: PresentMode,
+    dmabuf_fd: ?posix.fd_t,
     shm: ShmBuffer,
     pixels: []ui.Color,
     commands: [max_commands]ui.Command = undefined,
@@ -593,7 +602,9 @@ const NativeApp = struct {
     state: AppState = .{},
     gpu_recorder: GpuRecorder = .{},
 
-    fn init(client: *WaylandClient, allocator: std.mem.Allocator, width: u32, height: u32, present: PresentMode) !NativeApp {
+    fn init(client: *WaylandClient, allocator: std.mem.Allocator, options: Options) !NativeApp {
+        const width = options.width;
+        const height = options.height;
         const stride = width * @sizeOf(u32);
         const shm = try client.createShmBuffer(@as(usize, stride) * height, width, height, stride);
         errdefer shm.deinit();
@@ -605,7 +616,8 @@ const NativeApp = struct {
             .allocator = allocator,
             .width = width,
             .height = height,
-            .present = present,
+            .present = options.present,
+            .dmabuf_fd = options.dmabuf_fd,
             .shm = shm,
             .pixels = pixels,
             .gpu_primitives = gpu_primitives,
@@ -669,6 +681,32 @@ const NativeApp = struct {
                 if (!receipt.valid() or !sink_state.submitted) return error.WaylandCommitRejected;
                 try self.renderSoftwarePixels(buffers, atlases);
             },
+            .gpu_dmabuf => {
+                const dmabuf_surface = try self.dmabufSurface();
+                const import = try DmabufImport.fromNativeSurface(dmabuf_surface);
+                try client.createDmabufBuffer(import);
+                var dmabuf_sink_state = WaylandDmabufCommitSink{};
+                const receipt = try renderer_native_present.renderGpuBackedAndSubmit(
+                    dmabuf_surface,
+                    buffers,
+                    atlases.resources(),
+                    self.gpu_recorder.device(),
+                    .{
+                        .primitives = self.gpu_primitives,
+                        .gpu_tile_marks = &self.gpu_tile_marks,
+                        .gpu_dirty_ids = &self.gpu_dirty_ids,
+                        .native_tile_marks = &self.tile_marks,
+                        .native_dirty_ids = &self.dirty_ids,
+                    },
+                    default_refresh_hz,
+                    tile_width,
+                    tile_height,
+                    dmabuf_sink_state.sink(),
+                );
+                if (!receipt.valid() or !dmabuf_sink_state.submitted) return error.WaylandCommitRejected;
+                try client.attachDmabufCommit(self.width, self.height);
+                return;
+            },
         }
         packXrgb8888(self.shm.memory, self.pixels);
         try client.attachCommit(self.width, self.height);
@@ -682,6 +720,24 @@ const NativeApp = struct {
             .height = self.height,
             .stride = self.width,
             .scale = 1,
+        } };
+    }
+
+    fn dmabufSurface(self: *const NativeApp) !renderer_native_present.NativeSurface {
+        const fd = self.dmabuf_fd orelse return error.MissingDmabufFd;
+        if (fd < 0) return error.InvalidDmabufImport;
+        return .{ .wayland = .{
+            .surface_id = surface_id,
+            .buffer_id = dmabuf_wl_buffer_id,
+            .width = self.width,
+            .height = self.height,
+            .stride = self.width,
+            .scale = 1,
+            .format = .xrgb8888,
+            .gpu_buffer = .{
+                .kind = .dma_buf,
+                .handle = @intCast(fd),
+            },
         } };
     }
 
@@ -781,6 +837,20 @@ const WaylandCommitSink = struct {
     fn submit(context: *anyopaque, commit: renderer_native_present.WaylandCommit) bool {
         const self: *WaylandCommitSink = @ptrCast(@alignCast(context));
         self.submitted = commit.surface_id == surface_id and commit.buffer_id == wl_buffer_id and commit.dirty_tiles.len != 0;
+        return self.submitted;
+    }
+};
+
+const WaylandDmabufCommitSink = struct {
+    submitted: bool = false,
+
+    fn sink(self: *WaylandDmabufCommitSink) renderer_native_present.Sink {
+        return .{ .context = self, .submit_wayland = submit };
+    }
+
+    fn submit(context: *anyopaque, commit: renderer_native_present.WaylandCommit) bool {
+        const self: *WaylandDmabufCommitSink = @ptrCast(@alignCast(context));
+        self.submitted = commit.surface_id == surface_id and commit.buffer_id == dmabuf_wl_buffer_id and commit.dirty_tiles.len != 0;
         return self.submitted;
     }
 };
@@ -1185,6 +1255,7 @@ test "wayland bind message encodes registry name interface version and new id" {
 test "wayland host parses explicit presentation mode" {
     try std.testing.expectEqual(PresentMode.cpu, try parsePresentMode("cpu"));
     try std.testing.expectEqual(PresentMode.gpu_record, try parsePresentMode("gpu-record"));
+    try std.testing.expectEqual(PresentMode.gpu_dmabuf, try parsePresentMode("gpu-dmabuf"));
     try std.testing.expectError(error.InvalidArguments, parsePresentMode("gpu"));
 
     const args = [_][:0]const u8{ "wayland-window", "--width", "800", "--height", "600", "--seconds", "1", "--present", "gpu-record" };
@@ -1193,6 +1264,14 @@ test "wayland host parses explicit presentation mode" {
     try std.testing.expectEqual(@as(u32, 600), options.height);
     try std.testing.expectEqual(@as(u32, 1), options.seconds);
     try std.testing.expectEqual(PresentMode.gpu_record, options.present);
+
+    const dmabuf_args = [_][:0]const u8{ "wayland-window", "--present", "gpu-dmabuf", "--dmabuf-fd", "17" };
+    const dmabuf_options = try parseOptions(&dmabuf_args);
+    try std.testing.expectEqual(PresentMode.gpu_dmabuf, dmabuf_options.present);
+    try std.testing.expectEqual(@as(posix.fd_t, 17), dmabuf_options.dmabuf_fd.?);
+
+    const missing_fd_args = [_][:0]const u8{ "wayland-window", "--present", "gpu-dmabuf" };
+    try std.testing.expectError(error.MissingDmabufFd, parseOptions(&missing_fd_args));
 }
 
 test "wayland registry global parser keeps interface slice and version" {
@@ -1327,6 +1406,26 @@ test "wayland dmabuf import derives from gpu backed native wayland surface" {
         .stride = 320,
         .gpu_buffer = .{ .kind = .dma_buf, .handle = 11 },
     } }));
+}
+
+test "wayland native app builds dmabuf surface only in explicit fd mode" {
+    var app = NativeApp{
+        .allocator = std.testing.allocator,
+        .width = 320,
+        .height = 240,
+        .present = .gpu_dmabuf,
+        .dmabuf_fd = 19,
+        .shm = undefined,
+        .pixels = &.{},
+        .gpu_primitives = &.{},
+    };
+    const surface = try app.dmabufSurface();
+    const import = try DmabufImport.fromNativeSurface(surface);
+    try std.testing.expectEqual(@as(posix.fd_t, 19), import.fd);
+    try std.testing.expectEqual(@as(u32, 320 * @sizeOf(u32)), import.stride);
+
+    app.dmabuf_fd = null;
+    try std.testing.expectError(error.MissingDmabufFd, app.dmabufSurface());
 }
 
 test "wayland attach message can target shm or dmabuf buffers" {
