@@ -53,6 +53,7 @@ pub const ui = @import("ui.zig");
 pub const ui_components = @import("ui_components.zig");
 pub const ui_resolver = @import("ui_resolver.zig");
 pub const varfont = @import("varfont.zig");
+pub const wasm = @import("wasm.zig");
 
 test {
     _ = bytes;
@@ -110,4 +111,5 @@ test {
     _ = ui_components;
     _ = ui_resolver;
     _ = varfont;
+    _ = wasm;
 }
