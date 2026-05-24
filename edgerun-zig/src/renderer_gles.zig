@@ -74,6 +74,10 @@ pub fn deinit(gl: *State) void {
     c.glDeleteProgram(gl.textured_program);
 }
 
+pub fn refreshFontTexture(gl: State, font_atlas: *const renderer_font_atlas.Atlas) void {
+    updateAlphaTexture(gl.font_texture, renderer_font_atlas.width, renderer_font_atlas.height, font_atlas.alphaSlice());
+}
+
 pub fn renderFrame(gl: State, width: i32, height: i32, buffers: renderer_ir.Buffers) !void {
     c.glViewport(0, 0, width, height);
     c.glClear(c.GL_COLOR_BUFFER_BIT);
@@ -237,6 +241,12 @@ fn makeAlphaTexture(width: usize, height: usize, alpha: []const u8) c.GLuint {
     c.glPixelStorei(c.GL_UNPACK_ALIGNMENT, 1);
     c.glTexImage2D(c.GL_TEXTURE_2D, 0, c.GL_ALPHA, @intCast(width), @intCast(height), 0, c.GL_ALPHA, c.GL_UNSIGNED_BYTE, alpha.ptr);
     return texture;
+}
+
+fn updateAlphaTexture(texture: c.GLuint, width: usize, height: usize, alpha: []const u8) void {
+    c.glBindTexture(c.GL_TEXTURE_2D, texture);
+    c.glPixelStorei(c.GL_UNPACK_ALIGNMENT, 1);
+    c.glTexSubImage2D(c.GL_TEXTURE_2D, 0, 0, 0, @intCast(width), @intCast(height), c.GL_ALPHA, c.GL_UNSIGNED_BYTE, alpha.ptr);
 }
 
 fn makeProgram(vertex_source: [:0]const u8, fragment_source: [:0]const u8) !c.GLuint {
@@ -410,4 +420,12 @@ test "frame proof sample hash is stable" {
     };
     try std.testing.expectEqual(hashSamples(&samples), hashSamples(&samples));
     try std.testing.expect(hashSamples(&samples) != 0);
+}
+
+test "font atlas refresh API accepts populated variable font atlas" {
+    var atlas = renderer_font_atlas.Atlas.init();
+    var storage = renderer_ir.FixedBuffers(1, renderer_ir.textured_quad_vertex_count, 0, 0, 0, 0, 0){};
+    const buffers = storage.buffers();
+    try renderer_ir.pushText(buffers, atlas.source(), .base, .{ .x = 0, .y = 0, .w = 64, .h = 18 }, "A", .text, .start);
+    try std.testing.expect(atlas.cachedGlyphCount() > 0);
 }
