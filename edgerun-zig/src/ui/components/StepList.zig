@@ -2,6 +2,7 @@ const std = @import("std");
 const common = @import("../../ui_component_common.zig");
 const layout = @import("../../layouts/Types.zig");
 const base_info_row = @import("base/InfoRow.zig");
+const base_marker = @import("base/Marker.zig");
 const base_surface = @import("base/Surface.zig");
 const ui = @import("../../ui.zig");
 const ui_input = @import("../../input.zig");
@@ -93,7 +94,7 @@ pub fn renderStepList(list: StepList, scene: *ui.Scene, bounds: ui.Rect, options
         const step_bounds = ui.Rect.init(content_x, y, content_w, row_metrics.height);
         try base_info_row.render(scene, step_bounds, .{ .id = step.id, .title = step.title, .detail = step.detail }, row_metrics, options);
         const marker_bounds = ui.Rect.init(step_bounds.x + step_marker_x, step_bounds.y + step_marker_y, step_marker_size, step_marker_size);
-        try scene.pushRect(marker_bounds, stepStateColor(step.state, style), .fill, step_marker_size * 0.5, 0.0);
+        try base_marker.renderFilled(scene, marker_bounds, stepStateColor(step.state, style));
         y += row_metrics.height + step_item_gap;
     }
 }

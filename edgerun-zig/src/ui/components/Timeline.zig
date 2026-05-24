@@ -1,6 +1,7 @@
 const std = @import("std");
 const common = @import("../../ui_component_common.zig");
 const layout = @import("../../layouts/Types.zig");
+const base_marker = @import("base/Marker.zig");
 const base_surface = @import("base/Surface.zig");
 const ui = @import("../../ui.zig");
 const ui_input = @import("../../input.zig");
@@ -83,7 +84,7 @@ pub fn renderTimeline(timeline: Timeline, scene: *ui.Scene, bounds: ui.Rect, opt
         if (y + timeline_event_h > bottom) break;
         const event_bounds = ui.Rect.init(content_x, y, content_w, timeline_event_h);
         const marker_bounds = ui.Rect.init(event_bounds.x + timeline_marker_x, event_bounds.y + timeline_marker_y, timeline_marker_size, timeline_marker_size);
-        try scene.pushRect(marker_bounds, style.accent, .fill, timeline_marker_size * 0.5, 0.0);
+        try base_marker.renderFilled(scene, marker_bounds, style.accent);
         try scene.pushAlignedText(ui.Rect.init(event_bounds.x + timeline_text_x, event_bounds.y + timeline_time_y, timeline_time_w, timeline_time_h), event.time, style.accent, .start);
         try scene.pushAlignedText(ui.Rect.init(event_bounds.x + timeline_text_x + timeline_time_w + timeline_text_gap, event_bounds.y + timeline_title_y, @max(1.0, event_bounds.w - timeline_text_x - timeline_time_w - timeline_text_gap - timeline_text_padding_x), timeline_title_h), event.title, style.text, .start);
         try scene.pushWrappedText(ui.Rect.init(event_bounds.x + timeline_text_x, event_bounds.y + timeline_detail_y, @max(1.0, event_bounds.w - timeline_text_x - timeline_text_padding_x), timeline_detail_h), event.detail, style.muted, .{

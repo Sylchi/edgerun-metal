@@ -1,6 +1,7 @@
 const std = @import("std");
 const common = @import("../../ui_component_common.zig");
 const layout = @import("../../layouts/Types.zig");
+const base_marker = @import("base/Marker.zig");
 const base_surface = @import("base/Surface.zig");
 const ui = @import("../../ui.zig");
 const ui_input = @import("../../input.zig");
@@ -94,10 +95,7 @@ pub fn renderChoiceGroup(group: ChoiceGroup, scene: *ui.Scene, bounds: ui.Rect, 
             try scene.pushRect(option_bounds, style.row, .fill, choice_option_radius, 0.0);
         }
         const marker_bounds = ui.Rect.init(option_bounds.x + choice_marker_x, option_bounds.y + choice_marker_y, choice_marker_size, choice_marker_size);
-        try scene.pushRect(marker_bounds, style.border, .border, choice_marker_size * 0.5, 0.0);
-        if (option.selected) {
-            try scene.pushRect(marker_bounds.insetUniform(choice_marker_selected_inset), style.accent, .fill, (choice_marker_size - choice_marker_selected_inset * 2.0) * 0.5, 0.0);
-        }
+        try base_marker.renderRadio(scene, marker_bounds, style.border, style.accent, option.selected, choice_marker_selected_inset);
         try scene.pushAlignedText(ui.Rect.init(option_bounds.x + choice_label_x, option_bounds.y + choice_label_y, @max(1.0, option_bounds.w - choice_label_x - choice_option_padding_x), choice_label_h), option.label, style.text, .start);
         try scene.pushHit(.{ .slot = 0, .kind = .button, .id = option.id, .bounds = option_bounds });
         y += choice_option_h + choice_option_gap;
