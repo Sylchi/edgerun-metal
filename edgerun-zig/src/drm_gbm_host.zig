@@ -44,6 +44,8 @@ const IrStorage = renderer_ir.FixedBuffers(
 const Options = struct {
     device: []const u8 = default_device_path,
     seconds: u32 = default_seconds,
+    connector_id: ?u32 = null,
+    mode_index: u32 = 0,
 };
 
 const DrmTarget = struct {
@@ -96,7 +98,7 @@ pub fn main(init: std.process.Init) !void {
     try requireDrmMaster(fd);
     defer dropDrmMaster(fd);
 
-    const target = try chooseTarget(fd);
+    const target = try chooseTarget(fd, options);
     const width: i32 = @intCast(target.mode.hdisplay);
     const height: i32 = @intCast(target.mode.vdisplay);
 
@@ -119,7 +121,7 @@ pub fn main(init: std.process.Init) !void {
     defer if (saved) |crtc| c.drmModeFreeCrtc(crtc);
     try setCrtc(fd, target, scanout.fb_id);
     sleepSeconds(options.seconds);
-    if (saved) |crtc| restoreCrtc(fd, crtc);
+    if (saved) |crtc| restoreCrtc(fd, target, crtc);
 }
 
 fn parseOptions(args: []const [:0]const u8) !Options {
@@ -134,6 +136,14 @@ fn parseOptions(args: []const [:0]const u8) !Options {
             index += 1;
             if (index >= args.len) return error.InvalidArguments;
             options.seconds = try std.fmt.parseUnsigned(u32, args[index], 10);
+        } else if (std.mem.eql(u8, args[index], "--connector")) {
+            index += 1;
+            if (index >= args.len) return error.InvalidArguments;
+            options.connector_id = try std.fmt.parseUnsigned(u32, args[index], 10);
+        } else if (std.mem.eql(u8, args[index], "--mode-index")) {
+            index += 1;
+            if (index >= args.len) return error.InvalidArguments;
+            options.mode_index = try std.fmt.parseUnsigned(u32, args[index], 10);
         } else {
             return error.InvalidArguments;
         }
@@ -158,22 +168,27 @@ fn dropDrmMaster(fd: posix.fd_t) void {
     _ = c.drmDropMaster(fd);
 }
 
-fn chooseTarget(fd: posix.fd_t) !DrmTarget {
+fn chooseTarget(fd: posix.fd_t, options: Options) !DrmTarget {
     const resources = c.drmModeGetResources(fd) orelse return error.DrmResourcesFailed;
     defer c.drmModeFreeResources(resources);
     var connector_index: c_int = 0;
     while (connector_index < resources.*.count_connectors) : (connector_index += 1) {
         const connector_id = resources.*.connectors[@intCast(connector_index)];
+        if (options.connector_id) |requested| {
+            if (connector_id != requested) continue;
+        }
         const connector = c.drmModeGetConnector(fd, connector_id) orelse continue;
         defer c.drmModeFreeConnector(connector);
         if (connector.*.connection != c.DRM_MODE_CONNECTED or connector.*.count_modes == 0) continue;
+        if (options.mode_index >= connector.*.count_modes) return error.InvalidDrmModeIndex;
         const crtc_id = findCrtcForConnector(fd, resources, connector) orelse continue;
         return .{
             .connector_id = connector.*.connector_id,
             .crtc_id = crtc_id,
-            .mode = connector.*.modes[0],
+            .mode = connector.*.modes[@intCast(options.mode_index)],
         };
     }
+    if (options.connector_id != null) return error.RequestedDrmConnectorUnavailable;
     return error.NoConnectedDrmConnector;
 }
 
@@ -279,8 +294,14 @@ fn setCrtc(fd: posix.fd_t, target: DrmTarget, fb_id: u32) !void {
     if (c.drmModeSetCrtc(fd, target.crtc_id, fb_id, 0, 0, &connector_id, 1, &mode) != 0) return error.DrmSetCrtcFailed;
 }
 
-fn restoreCrtc(fd: posix.fd_t, crtc: c.drmModeCrtcPtr) void {
-    _ = c.drmModeSetCrtc(fd, crtc.*.crtc_id, crtc.*.buffer_id, crtc.*.x, crtc.*.y, &crtc.*.crtc_id, 0, &crtc.*.mode);
+fn restoreCrtc(fd: posix.fd_t, target: DrmTarget, crtc: c.drmModeCrtcPtr) void {
+    var connector_id = target.connector_id;
+    if (crtc.*.mode_valid != 0) {
+        var mode = crtc.*.mode;
+        _ = c.drmModeSetCrtc(fd, crtc.*.crtc_id, crtc.*.buffer_id, crtc.*.x, crtc.*.y, &connector_id, 1, &mode);
+    } else {
+        _ = c.drmModeSetCrtc(fd, crtc.*.crtc_id, 0, crtc.*.x, crtc.*.y, &connector_id, 1, null);
+    }
 }
 
 fn sleepSeconds(seconds: u32) void {
@@ -289,10 +310,22 @@ fn sleepSeconds(seconds: u32) void {
 }
 
 test "drm gbm host parses explicit device and duration" {
-    const args = [_][:0]const u8{ "drm-gbm-window", "--device", "/dev/dri/card7", "--seconds", "2" };
+    const args = [_][:0]const u8{
+        "drm-gbm-window",
+        "--device",
+        "/dev/dri/card7",
+        "--seconds",
+        "2",
+        "--connector",
+        "378",
+        "--mode-index",
+        "3",
+    };
     const options = try parseOptions(&args);
     try std.testing.expectEqualStrings("/dev/dri/card7", options.device);
     try std.testing.expectEqual(@as(u32, 2), options.seconds);
+    try std.testing.expectEqual(@as(u32, 378), options.connector_id.?);
+    try std.testing.expectEqual(@as(u32, 3), options.mode_index);
 }
 
 test "drm gbm host rejects incomplete arguments" {
