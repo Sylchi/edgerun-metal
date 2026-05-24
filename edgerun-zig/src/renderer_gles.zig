@@ -11,6 +11,7 @@ pub const c = @cImport({
 
 pub const State = struct {
     rect_program: c.GLuint,
+    text_program: c.GLuint,
     textured_program: c.GLuint,
     rect_vbo: c.GLuint,
     textured_vbo: c.GLuint,
@@ -57,10 +58,11 @@ pub fn init(font_atlas: *renderer_font_atlas.Atlas) !State {
     c.glBlendFunc(c.GL_SRC_ALPHA, c.GL_ONE_MINUS_SRC_ALPHA);
     return .{
         .rect_program = try makeProgram(rect_vertex_shader, rect_fragment_shader),
+        .text_program = try makeProgram(textured_vertex_shader, text_fragment_shader),
         .textured_program = try makeProgram(textured_vertex_shader, textured_fragment_shader),
         .rect_vbo = makeBuffer(),
         .textured_vbo = makeBuffer(),
-        .font_texture = makeAlphaTexture(renderer_font_atlas.width, renderer_font_atlas.height, font_atlas.alphaSlice()),
+        .font_texture = makeRgbTexture(renderer_font_atlas.width, renderer_font_atlas.height, font_atlas.textureSlice()),
         .icon_texture = makeAlphaTexture(tabler_atlas.width, tabler_atlas.height, tabler_atlas.alpha),
     };
 }
@@ -71,21 +73,22 @@ pub fn deinit(gl: *State) void {
     c.glDeleteBuffers(1, &gl.rect_vbo);
     c.glDeleteBuffers(1, &gl.textured_vbo);
     c.glDeleteProgram(gl.rect_program);
+    c.glDeleteProgram(gl.text_program);
     c.glDeleteProgram(gl.textured_program);
 }
 
 pub fn refreshFontTexture(gl: State, font_atlas: *const renderer_font_atlas.Atlas) void {
-    updateAlphaTexture(gl.font_texture, renderer_font_atlas.width, renderer_font_atlas.height, font_atlas.alphaSlice());
+    updateRgbTexture(gl.font_texture, renderer_font_atlas.width, renderer_font_atlas.height, font_atlas.textureSlice());
 }
 
 pub fn renderFrame(gl: State, width: i32, height: i32, buffers: renderer_ir.Buffers) !void {
     c.glViewport(0, 0, width, height);
     c.glClear(c.GL_COLOR_BUFFER_BIT);
     try drawRects(gl, width, height, buffers.liveRects());
-    try drawTextured(gl, width, height, buffers.liveTextVertices(), gl.font_texture);
+    try drawText(gl, width, height, buffers.liveTextVertices());
     try drawTextured(gl, width, height, buffers.liveIconVertices(), gl.icon_texture);
     try drawRects(gl, width, height, buffers.liveOverlayRects());
-    try drawTextured(gl, width, height, buffers.liveOverlayTextVertices(), gl.font_texture);
+    try drawText(gl, width, height, buffers.liveOverlayTextVertices());
     try drawTextured(gl, width, height, buffers.liveOverlayIconVertices(), gl.icon_texture);
 }
 
@@ -206,13 +209,21 @@ fn drawRects(gl: State, width: i32, height: i32, values: []const f32) !void {
 }
 
 fn drawTextured(gl: State, width: i32, height: i32, values: []const f32, texture: c.GLuint) !void {
+    try drawTextureProgram(gl, width, height, values, texture, gl.textured_program);
+}
+
+fn drawText(gl: State, width: i32, height: i32, values: []const f32) !void {
+    try drawTextureProgram(gl, width, height, values, gl.font_texture, gl.text_program);
+}
+
+fn drawTextureProgram(gl: State, width: i32, height: i32, values: []const f32, texture: c.GLuint, program: c.GLuint) !void {
     if (values.len == 0) return;
     if (values.len % renderer_ir.text_vertex_float_stride != 0) return error.InvalidIrBuffer;
-    c.glUseProgram(gl.textured_program);
-    c.glUniform2f(c.glGetUniformLocation(gl.textured_program, "u_screen"), @floatFromInt(width), @floatFromInt(height));
+    c.glUseProgram(program);
+    c.glUniform2f(c.glGetUniformLocation(program, "u_screen"), @floatFromInt(width), @floatFromInt(height));
     c.glActiveTexture(c.GL_TEXTURE0);
     c.glBindTexture(c.GL_TEXTURE_2D, texture);
-    c.glUniform1i(c.glGetUniformLocation(gl.textured_program, "u_tex"), 0);
+    c.glUniform1i(c.glGetUniformLocation(program, "u_tex"), 0);
     c.glBindBuffer(c.GL_ARRAY_BUFFER, gl.textured_vbo);
     c.glBufferData(c.GL_ARRAY_BUFFER, @intCast(values.len * @sizeOf(f32)), values.ptr, c.GL_DYNAMIC_DRAW);
     c.glEnableVertexAttribArray(0);
@@ -247,6 +258,25 @@ fn updateAlphaTexture(texture: c.GLuint, width: usize, height: usize, alpha: []c
     c.glBindTexture(c.GL_TEXTURE_2D, texture);
     c.glPixelStorei(c.GL_UNPACK_ALIGNMENT, 1);
     c.glTexSubImage2D(c.GL_TEXTURE_2D, 0, 0, 0, @intCast(width), @intCast(height), c.GL_ALPHA, c.GL_UNSIGNED_BYTE, alpha.ptr);
+}
+
+fn makeRgbTexture(width: usize, height: usize, pixels: []const u8) c.GLuint {
+    var texture: c.GLuint = 0;
+    c.glGenTextures(1, &texture);
+    c.glBindTexture(c.GL_TEXTURE_2D, texture);
+    c.glTexParameteri(c.GL_TEXTURE_2D, c.GL_TEXTURE_MIN_FILTER, c.GL_LINEAR);
+    c.glTexParameteri(c.GL_TEXTURE_2D, c.GL_TEXTURE_MAG_FILTER, c.GL_LINEAR);
+    c.glTexParameteri(c.GL_TEXTURE_2D, c.GL_TEXTURE_WRAP_S, c.GL_CLAMP_TO_EDGE);
+    c.glTexParameteri(c.GL_TEXTURE_2D, c.GL_TEXTURE_WRAP_T, c.GL_CLAMP_TO_EDGE);
+    c.glPixelStorei(c.GL_UNPACK_ALIGNMENT, 1);
+    c.glTexImage2D(c.GL_TEXTURE_2D, 0, c.GL_RGB, @intCast(width), @intCast(height), 0, c.GL_RGB, c.GL_UNSIGNED_BYTE, pixels.ptr);
+    return texture;
+}
+
+fn updateRgbTexture(texture: c.GLuint, width: usize, height: usize, pixels: []const u8) void {
+    c.glBindTexture(c.GL_TEXTURE_2D, texture);
+    c.glPixelStorei(c.GL_UNPACK_ALIGNMENT, 1);
+    c.glTexSubImage2D(c.GL_TEXTURE_2D, 0, 0, 0, @intCast(width), @intCast(height), c.GL_RGB, c.GL_UNSIGNED_BYTE, pixels.ptr);
 }
 
 fn makeProgram(vertex_source: [:0]const u8, fragment_source: [:0]const u8) !c.GLuint {
@@ -374,6 +404,22 @@ const textured_fragment_shader =
     \\uniform sampler2D u_tex;
     \\void main() {
     \\  float a = texture2D(u_tex, v_uv).a;
+    \\  gl_FragColor = vec4(v_color.rgb, v_color.a * a);
+    \\}
+;
+
+const text_fragment_shader =
+    \\precision mediump float;
+    \\varying vec2 v_uv;
+    \\varying vec4 v_color;
+    \\uniform sampler2D u_tex;
+    \\float median3(float a, float b, float c) {
+    \\  return max(min(a, b), min(max(a, b), c));
+    \\}
+    \\void main() {
+    \\  vec3 sample = texture2D(u_tex, v_uv).rgb;
+    \\  float sd = median3(sample.r, sample.g, sample.b);
+    \\  float a = smoothstep(0.47, 0.53, sd);
     \\  gl_FragColor = vec4(v_color.rgb, v_color.a * a);
     \\}
 ;

@@ -107,7 +107,7 @@ pub fn main() !void {
     var pixels: [width * height]ui.Color = undefined;
     const surface = try renderer_software.Surface.init(width, height, &pixels);
     const atlases = renderer_software.IrAtlases{
-        .font = .{ .width = renderer_font_atlas.width, .height = renderer_font_atlas.height, .alpha = font_atlas.alphaSlice() },
+        .font = .{ .width = renderer_font_atlas.width, .height = renderer_font_atlas.height, .pixels = font_atlas.textureSlice() },
         .icon = .{ .width = 1, .height = 1, .alpha = &empty_alpha },
     };
     const ir_render_start = nowNs();

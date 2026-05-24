@@ -22,6 +22,16 @@ pub const AlphaAtlas = struct {
     }
 };
 
+pub const FontAtlas = struct {
+    width: usize,
+    height: usize,
+    pixels: []const u8,
+
+    pub fn valid(self: FontAtlas) bool {
+        return self.width != 0 and self.height != 0 and self.pixels.len >= self.width * self.height * font_atlas_channels;
+    }
+};
+
 pub const RgbaTexture = struct {
     width: usize,
     height: usize,
@@ -33,7 +43,7 @@ pub const RgbaTexture = struct {
 };
 
 pub const IrAtlases = struct {
-    font: AlphaAtlas,
+    font: FontAtlas,
     icon: AlphaAtlas,
     image: ?RgbaTexture = null,
 
@@ -102,7 +112,7 @@ pub const Surface = struct {
         for (renderer_ir.drawBatches(buffers)) |batch| switch (batch) {
             .rects, .overlay_rects => |rects| try self.rasterizeIrRects(rects),
             .image => |vertices| if (image_texture) |texture| try self.rasterizeRgbaTexturedQuads(vertices, texture),
-            .text, .overlay_text => |vertices| try self.rasterizeAlphaTexturedQuads(vertices, atlases.font),
+            .text, .overlay_text => |vertices| try self.rasterizeFontTexturedQuads(vertices, atlases.font),
             .icon, .overlay_icon => |vertices| try self.rasterizeAlphaTexturedQuads(vertices, atlases.icon),
         };
     }
@@ -165,6 +175,36 @@ pub const Surface = struct {
         var iter = renderer_ir.TexturedQuadIterator.init(vertices) catch return error.InvalidIrBuffer;
         while (iter.next() catch return error.InvalidIrBuffer) |quad| {
             try self.rasterizeAlphaTexturedQuad(quad, atlas);
+        }
+    }
+
+    fn rasterizeFontTexturedQuads(self: Surface, vertices: []const f32, atlas: FontAtlas) Error!void {
+        var iter = renderer_ir.TexturedQuadIterator.init(vertices) catch return error.InvalidIrBuffer;
+        while (iter.next() catch return error.InvalidIrBuffer) |quad| {
+            try self.rasterizeFontTexturedQuad(quad, atlas);
+        }
+    }
+
+    fn rasterizeFontTexturedQuad(self: Surface, quad: renderer_ir.TexturedQuad, atlas: FontAtlas) Error!void {
+        const px0 = clampCoord(@intFromFloat(@floor(quad.bounds.x)), self.width);
+        const py0 = clampCoord(@intFromFloat(@floor(quad.bounds.y)), self.height);
+        const px1 = clampCoord(@intFromFloat(@ceil(quad.bounds.x + quad.bounds.w)), self.width);
+        const py1 = clampCoord(@intFromFloat(@ceil(quad.bounds.y + quad.bounds.h)), self.height);
+        if (px1 <= px0 or py1 <= py0) return;
+
+        var y = py0;
+        while (y < py1) : (y += 1) {
+            const fy = (@as(f32, @floatFromInt(y)) + pixel_center - quad.bounds.y) / quad.bounds.h;
+            const v = lerp(quad.v0, quad.v1, fy);
+            var x = px0;
+            while (x < px1) : (x += 1) {
+                const fx = (@as(f32, @floatFromInt(x)) + pixel_center - quad.bounds.x) / quad.bounds.w;
+                const u = lerp(quad.u0, quad.u1, fx);
+                const alpha = scaleByte(quad.color.a, sampleFontAlpha(atlas, u, v) / max_alpha_float);
+                var color = quad.color;
+                color.a = max_alpha;
+                if (alpha != 0) self.blendPixel(x, y, color, alpha);
+            }
         }
     }
 
@@ -589,10 +629,15 @@ pub const Surface = struct {
 
 const default_raster_scale: f32 = 1.0;
 const max_alpha: u8 = 255;
+const max_alpha_float: f32 = 255.0;
 const pixel_center: f32 = 0.5;
 const min_border_width: f32 = 1.0;
 const quarter_turn: f32 = 0.25;
 const byte_unit_scale: f32 = 255.0;
+const font_atlas_channels: usize = 3;
+const font_distance_midpoint: f32 = 128.0;
+const font_distance_spread: f32 = 2.0;
+const font_coverage_center: f32 = 0.5;
 const shadow_steps: usize = 4;
 const shadow_layer_alpha: f32 = 0.24;
 const shadow_fade: f32 = 0.82;
@@ -711,6 +756,39 @@ fn sampleAlpha(atlas: AlphaAtlas, u: f32, v: f32) f32 {
     const a01: f32 = @floatFromInt(atlas.alpha[y1 * atlas.width + x0]);
     const a11: f32 = @floatFromInt(atlas.alpha[y1 * atlas.width + x1]);
     return lerp(lerp(a00, a10, tx), lerp(a01, a11, tx), ty);
+}
+
+fn sampleFontAlpha(atlas: FontAtlas, u: f32, v: f32) f32 {
+    const x = std.math.clamp(u, 0.0, 1.0) * @as(f32, @floatFromInt(atlas.width - 1));
+    const y = std.math.clamp(v, 0.0, 1.0) * @as(f32, @floatFromInt(atlas.height - 1));
+    const x0: usize = @intFromFloat(@floor(x));
+    const y0: usize = @intFromFloat(@floor(y));
+    const x1 = @min(x0 + 1, atlas.width - 1);
+    const y1 = @min(y0 + 1, atlas.height - 1);
+    const tx = x - @as(f32, @floatFromInt(x0));
+    const ty = y - @as(f32, @floatFromInt(y0));
+    const a00 = fontCoverage(sampleFontMedian(atlas, x0, y0));
+    const a10 = fontCoverage(sampleFontMedian(atlas, x1, y0));
+    const a01 = fontCoverage(sampleFontMedian(atlas, x0, y1));
+    const a11 = fontCoverage(sampleFontMedian(atlas, x1, y1));
+    return lerp(lerp(a00, a10, tx), lerp(a01, a11, tx), ty);
+}
+
+fn sampleFontMedian(atlas: FontAtlas, x: usize, y: usize) f32 {
+    const offset = (y * atlas.width + x) * font_atlas_channels;
+    const r: f32 = @floatFromInt(atlas.pixels[offset]);
+    const g: f32 = @floatFromInt(atlas.pixels[offset + 1]);
+    const b: f32 = @floatFromInt(atlas.pixels[offset + 2]);
+    return median3(r, g, b);
+}
+
+fn median3(a: f32, b: f32, c: f32) f32 {
+    return @max(@min(a, b), @min(@max(a, b), c));
+}
+
+fn fontCoverage(encoded: f32) f32 {
+    const signed_distance = (encoded - font_distance_midpoint) * font_distance_spread / max_alpha_float;
+    return std.math.clamp(signed_distance + font_coverage_center, 0.0, 1.0) * max_alpha_float;
 }
 
 fn sampleRgba(texture: RgbaTexture, u: f32, v: f32) ui.Color {
@@ -878,12 +956,16 @@ test "software renderer rasterizes alpha textured ir with supplied atlases" {
         1.0,
         .{ .r = 255, .g = 32, .b = 16, .a = 200 },
     );
+    const font_pixels = [_]u8{
+        0,   0,   0,   255, 255, 255,
+        255, 255, 255, 255, 255, 255,
+    };
     const alpha = [_]u8{
         0,   255,
         255, 255,
     };
     const atlases = IrAtlases{
-        .font = .{ .width = 2, .height = 2, .alpha = &alpha },
+        .font = .{ .width = 2, .height = 2, .pixels = &font_pixels },
         .icon = .{ .width = 2, .height = 2, .alpha = &alpha },
     };
 
@@ -915,6 +997,7 @@ test "software renderer rasterizes image ir with supplied rgba texture" {
         1.0,
         .{ .r = 128, .g = 255, .b = 255, .a = 255 },
     );
+    const font_pixels = [_]u8{ 255, 255, 255 } ** 4;
     const alpha = [_]u8{ 255, 255, 255, 255 };
     const image = [_]ui.Color{
         .{ .r = 255, .g = 0, .b = 0, .a = 255 },
@@ -923,7 +1006,7 @@ test "software renderer rasterizes image ir with supplied rgba texture" {
         .{ .r = 255, .g = 0, .b = 0, .a = 255 },
     };
     const atlases = IrAtlases{
-        .font = .{ .width = 2, .height = 2, .alpha = &alpha },
+        .font = .{ .width = 2, .height = 2, .pixels = &font_pixels },
         .icon = .{ .width = 2, .height = 2, .alpha = &alpha },
         .image = .{ .width = 2, .height = 2, .pixels = &image },
     };
@@ -956,9 +1039,10 @@ test "software renderer frame rejects missing image texture through presentation
         .{ .r = 255, .g = 255, .b = 255, .a = 255 },
     );
 
+    const font_pixels = [_]u8{ 255, 255, 255 } ** 4;
     const alpha = [_]u8{ 255, 255, 255, 255 };
     const atlases = IrAtlases{
-        .font = .{ .width = 2, .height = 2, .alpha = &alpha },
+        .font = .{ .width = 2, .height = 2, .pixels = &font_pixels },
         .icon = .{ .width = 2, .height = 2, .alpha = &alpha },
     };
     try std.testing.expectError(error.MissingImageTexture, surface.renderIrFrameWithAtlases(buffers, atlases));
