@@ -157,6 +157,11 @@ pub const App = struct {
         spawned_children: bounded.FixedList(SpawnRecord, spawned_child_capacity) = .{},
     };
 
+    pub const ExecutionAllocation = struct {
+        memory: []u8,
+        execution_ticks: *u64,
+    };
+
     pub fn init(id: identity.Identity, memory: BoundedArena, storage: store.Store) App {
         return .{
             .id = id,
@@ -214,6 +219,13 @@ pub const App = struct {
 
     pub fn executionRemaining(self: App) u64 {
         return self.state.execution_ticks;
+    }
+
+    pub fn executionAllocation(self: *App) ExecutionAllocation {
+        return .{
+            .memory = self.state.memory.owned.base,
+            .execution_ticks = &self.state.execution_ticks,
+        };
     }
 
     pub fn routeHandleCount(self: App) u64 {
