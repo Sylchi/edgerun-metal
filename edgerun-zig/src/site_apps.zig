@@ -245,13 +245,13 @@ fn renderAppGrid(scene: *ui.Scene, bounds: ui.Rect) ui.RenderError!void {
 }
 
 fn renderAppCard(scene: *ui.Scene, bounds: ui.Rect, app: App, id: u32) ui.RenderError!void {
-    try components.renderArticleCard(scene, bounds, .{
+    try (components.ArticleCard{
         .id = id,
         .category = app.category,
         .meta = app.status,
         .title = app.name,
         .summary = app.summary,
-    }, .{ .style = siteStyle() });
+    }).render(scene, bounds, .{ .style = siteStyle() });
     const icon_box = ui.Rect.init(bounds.x + bounds.w - 48.0, bounds.y + 54.0, 28.0, 28.0);
     try iconQuad(scene, icon_box, app.icon_value, palette.primary);
 }
