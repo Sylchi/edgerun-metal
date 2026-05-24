@@ -44,7 +44,7 @@ pub const Heading = struct {
     }
 
     pub fn register(registry: *ComponentRegistry) RegistryError!void {
-        try registry.register(descriptor);
+        return common.registerDescriptor(registry, descriptor);
     }
 };
 
@@ -52,13 +52,13 @@ pub const descriptor = common.ComponentDescriptor{
     .name = "heading",
     .html_prefix = "<h",
     .markdown_prefix = "#",
-    .render = renderRegistered,
-    .write_html = writeHtmlRegistered,
-    .write_markdown = writeMarkdownRegistered,
+    .render = common.renderAdapter(Heading, renderHeading),
+    .write_html = common.writeHtmlAdapter(Heading, writeHtml),
+    .write_markdown = common.writeMarkdownAdapter(Heading, writeMarkdown),
 };
 
 pub fn register(registry: *ComponentRegistry) RegistryError!void {
-    return Heading.register(registry);
+    return common.registerDescriptor(registry, descriptor);
 }
 
 pub fn renderHeading(heading: Heading, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
@@ -69,11 +69,6 @@ pub fn renderHeading(heading: Heading, scene: *ui.Scene, bounds: ui.Rect, option
 pub fn measureHeading(heading: Heading, constraints: layout.Constraints) layout.Measurement {
     if (!validHeadingLevel(heading.level)) return layout.Measurement.fixed(.{ .w = 0, .h = 0 });
     return base_text_block.measure(heading.value, constraints, headingMetrics(heading.level));
-}
-
-fn renderRegistered(component: *const anyopaque, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
-    const heading: *const Heading = @ptrCast(@alignCast(component));
-    return renderHeading(heading.*, scene, bounds, options);
 }
 
 pub fn writeHtml(heading: Heading, out: []u8) HtmlError![]u8 {
@@ -90,11 +85,6 @@ pub fn writeHtml(heading: Heading, out: []u8) HtmlError![]u8 {
     return writer.written();
 }
 
-fn writeHtmlRegistered(component: *const anyopaque, out: []u8) HtmlError![]u8 {
-    const heading: *const Heading = @ptrCast(@alignCast(component));
-    return writeHtml(heading.*, out);
-}
-
 pub fn writeMarkdown(heading: Heading, out: []u8) MarkdownError![]u8 {
     if (!validHeadingLevel(heading.level) or heading.value.len == 0) return error.InvalidMarkdown;
     var writer = MarkdownWriter.init(out);
@@ -103,11 +93,6 @@ pub fn writeMarkdown(heading: Heading, out: []u8) MarkdownError![]u8 {
     try writer.writeByte(' ');
     try writer.writeEscapedInline(heading.value);
     return writer.written();
-}
-
-fn writeMarkdownRegistered(component: *const anyopaque, out: []u8) MarkdownError![]u8 {
-    const heading: *const Heading = @ptrCast(@alignCast(component));
-    return writeMarkdown(heading.*, out);
 }
 
 pub fn readMarkdown(markdown: []const u8, text_out: []u8) MarkdownError!Heading {

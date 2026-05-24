@@ -2,6 +2,7 @@ const std = @import("std");
 const icon = @import("icon.zig");
 const ui = @import("ui.zig");
 const interaction = @import("ui_interaction.zig");
+const layout = @import("layouts/Types.zig");
 
 pub const Error = error{
     Corrupt,
@@ -133,6 +134,77 @@ pub const ComponentRegistry = struct {
         return null;
     }
 };
+
+pub fn registerDescriptor(registry: *ComponentRegistry, descriptor: ComponentDescriptor) RegistryError!void {
+    return registry.register(descriptor);
+}
+
+pub fn renderNode(scene: *ui.Scene, bounds: ui.Rect, node: ui.Node, options: RenderOptions) ui.RenderError!void {
+    return ui.render(scene, node, bounds, options.style);
+}
+
+pub fn measureNode(node: ui.Node, constraints: layout.Constraints) layout.Measurement {
+    const size = node.preferredSize();
+    return layout.Measurement.flexible(
+        .{ .w = @min(size.w, constraints.width.limit(size.w)), .h = @min(size.h, constraints.height.limit(size.h)) },
+        size,
+        .{ .w = node_measure_max_width, .h = size.h },
+    ).applyExact(constraints);
+}
+
+pub fn collectHit(collector: *interaction.Collector, bounds: ui.Rect, kind: ui.HitKind, id: u32) interaction.Error!void {
+    return collector.addHit(bounds, kind, id);
+}
+
+const node_measure_max_width: f32 = 4096.0;
+
+pub fn renderAdapter(
+    comptime Component: type,
+    comptime renderFn: fn (Component, *ui.Scene, ui.Rect, RenderOptions) ui.RenderError!void,
+) *const fn (*const anyopaque, *ui.Scene, ui.Rect, RenderOptions) ui.RenderError!void {
+    return struct {
+        fn call(component: *const anyopaque, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
+            const typed: *const Component = @ptrCast(@alignCast(component));
+            return renderFn(typed.*, scene, bounds, options);
+        }
+    }.call;
+}
+
+pub fn collectAdapter(
+    comptime Component: type,
+    comptime collectFn: fn (Component, *interaction.Collector, ui.Rect) interaction.Error!void,
+) *const fn (*const anyopaque, *interaction.Collector, ui.Rect) interaction.Error!void {
+    return struct {
+        fn call(component: *const anyopaque, collector: *interaction.Collector, bounds: ui.Rect) interaction.Error!void {
+            const typed: *const Component = @ptrCast(@alignCast(component));
+            return collectFn(typed.*, collector, bounds);
+        }
+    }.call;
+}
+
+pub fn writeHtmlAdapter(
+    comptime Component: type,
+    comptime writeFn: fn (Component, []u8) HtmlError![]u8,
+) *const fn (*const anyopaque, []u8) HtmlError![]u8 {
+    return struct {
+        fn call(component: *const anyopaque, out: []u8) HtmlError![]u8 {
+            const typed: *const Component = @ptrCast(@alignCast(component));
+            return writeFn(typed.*, out);
+        }
+    }.call;
+}
+
+pub fn writeMarkdownAdapter(
+    comptime Component: type,
+    comptime writeFn: fn (Component, []u8) MarkdownError![]u8,
+) *const fn (*const anyopaque, []u8) MarkdownError![]u8 {
+    return struct {
+        fn call(component: *const anyopaque, out: []u8) MarkdownError![]u8 {
+            const typed: *const Component = @ptrCast(@alignCast(component));
+            return writeFn(typed.*, out);
+        }
+    }.call;
+}
 
 pub const HtmlWriter = struct {
     out: []u8,
@@ -505,6 +577,10 @@ pub fn parseHtmlU32(value: []const u8) HtmlError!u32 {
     return std.fmt.parseUnsigned(u32, value, 10) catch error.InvalidHtml;
 }
 
+pub fn parseHtmlU16(value: []const u8) HtmlError!u16 {
+    return std.fmt.parseUnsigned(u16, value, 10) catch error.InvalidHtml;
+}
+
 pub fn parseHtmlBool(value: []const u8) HtmlError!bool {
     if (std.mem.eql(u8, value, "true")) return true;
     if (std.mem.eql(u8, value, "false")) return false;
@@ -515,10 +591,43 @@ pub fn parseMarkdownU32(value: []const u8) MarkdownError!u32 {
     return std.fmt.parseUnsigned(u32, value, 10) catch error.InvalidMarkdown;
 }
 
+pub fn parseMarkdownU16(value: []const u8) MarkdownError!u16 {
+    return std.fmt.parseUnsigned(u16, value, 10) catch error.InvalidMarkdown;
+}
+
 pub fn parseMarkdownBool(value: []const u8) MarkdownError!bool {
     if (std.mem.eql(u8, value, "true")) return true;
     if (std.mem.eql(u8, value, "false")) return false;
     return error.InvalidMarkdown;
+}
+
+pub fn axisName(axis: ui.Axis) []const u8 {
+    return switch (axis) {
+        .column => "column",
+        .row => "row",
+    };
+}
+
+pub fn parseAxisName(value: []const u8) ?ui.Axis {
+    if (std.mem.eql(u8, value, "column")) return .column;
+    if (std.mem.eql(u8, value, "row")) return .row;
+    return null;
+}
+
+pub fn percentFromUnit(value: f32) u32 {
+    return @intFromFloat(@round(ui.clampUnit(value) * 100.0));
+}
+
+pub fn parseHtmlPercent(value: []const u8) HtmlError!f32 {
+    const parsed = try parseHtmlU32(value);
+    if (parsed > 100) return error.InvalidHtml;
+    return @as(f32, @floatFromInt(parsed)) / 100.0;
+}
+
+pub fn parseMarkdownPercent(value: []const u8) MarkdownError!f32 {
+    const parsed = try parseMarkdownU32(value);
+    if (parsed > 100) return error.InvalidMarkdown;
+    return @as(f32, @floatFromInt(parsed)) / 100.0;
 }
 
 fn markdownEscapable(byte: u8) bool {

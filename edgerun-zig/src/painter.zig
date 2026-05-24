@@ -68,11 +68,6 @@ pub const Painter = struct {
         try self.fillRect(bounds, 0.0, color);
     }
 
-    pub fn hit(self: Painter, hit_value: ui.Hit) Error!void {
-        const scene = try self.activeScene();
-        scene.pushHit(hit_value) catch |err| return mapRenderError(err);
-    }
-
     pub fn dragSource(self: Painter, scope_id: u32, item_id: u32, index: usize, bounds: ui.Rect) Error!void {
         const scene = try self.activeScene();
         scene.pushDragSource(.{ .scope_id = scope_id, .item_id = item_id, .index = index, .bounds = bounds }) catch |err| return mapRenderError(err);
@@ -84,18 +79,13 @@ pub const Painter = struct {
     }
 
     pub fn semanticIcon(self: Painter, bounds: ui.Rect, value: icon.Icon, color: ui.Color) Error!void {
-        try self.iconAtlas(bounds, icon.atlasId(value), color);
+        try self.iconId(bounds, icon.id(value), color);
     }
 
-    pub fn iconAtlas(self: Painter, bounds: ui.Rect, atlas_id: u32, color: ui.Color) Error!void {
-        if (atlas_id == 0) return error.InvalidIcon;
+    pub fn iconId(self: Painter, bounds: ui.Rect, icon_id: u32, color: ui.Color) Error!void {
+        if (icon_id == 0) return error.InvalidIcon;
         const scene = try self.activeScene();
-        scene.pushIconQuad(.{ .bounds = bounds, .atlas_id = atlas_id, .color = color }) catch |err| return mapRenderError(err);
-    }
-
-    pub fn iconQuad(self: Painter, bounds: ui.Rect, tex_u0: f32, tex_v0: f32, tex_u1: f32, tex_v1: f32, color: ui.Color) Error!void {
-        const scene = try self.activeScene();
-        scene.pushIconQuad(.{ .bounds = bounds, .u0 = tex_u0, .v0 = tex_v0, .u1 = tex_u1, .v1 = tex_v1, .color = color }) catch |err| return mapRenderError(err);
+        scene.pushIconQuad(.{ .bounds = bounds, .icon_id = icon_id, .color = color }) catch |err| return mapRenderError(err);
     }
 
     pub fn textQuad(self: Painter, bounds: ui.Rect, tex_u0: f32, tex_v0: f32, tex_u1: f32, tex_v1: f32, color: ui.Color) Error!void {
@@ -121,14 +111,14 @@ fn mapRenderError(err: ui.RenderError) Error {
     };
 }
 
-test "painter rejects missing scene and invalid atlas ids" {
+test "painter rejects missing scene and invalid icon ids" {
     const painter = Painter.init(null);
     try std.testing.expectError(error.InvalidScene, painter.fillRect(ui.Rect.init(0, 0, 1, 1), 0, .text));
 
     var commands: [4]ui.Command = undefined;
     var scene = ui.Scene.init(&commands);
     const valid = Painter.init(&scene);
-    try std.testing.expectError(error.InvalidIcon, valid.iconAtlas(ui.Rect.init(0, 0, 16, 16), 0, .text));
+    try std.testing.expectError(error.InvalidIcon, valid.iconId(ui.Rect.init(0, 0, 16, 16), 0, .text));
 }
 
 test "painter facade pushes scene commands" {
@@ -140,16 +130,13 @@ test "painter facade pushes scene commands" {
     try painter.panel(ui.Rect.init(0.0, 0.0, 30.0, 20.0), 6.0, .text, .border);
     try painter.divider(5.0, 6.0, 50.0, .horizontal, .border);
     try painter.divider(7.0, 8.0, 30.0, .vertical, .border);
-    try painter.hit(.{ .slot = 3, .kind = .button, .id = 42, .bounds = ui.Rect.init(1.0, 2.0, 3.0, 4.0) });
     try painter.dragSource(9, 10, 2, ui.Rect.init(2.0, 3.0, 4.0, 5.0));
     try painter.dropTarget(9, 2, ui.Rect.init(3.0, 4.0, 5.0, 6.0));
     try painter.semanticIcon(ui.Rect.init(20.0, 0.0, 16.0, 16.0), .search, .text);
-    try painter.iconQuad(ui.Rect.init(0.0, 0.0, 16.0, 16.0), 0.0, 0.0, 1.0, 1.0, .text);
     try painter.textQuad(ui.Rect.init(0.0, 20.0, 16.0, 16.0), 0.0, 0.0, 1.0, 1.0, .text);
     try painter.transition(.{ .id = 7, .property = .opacity, .from = 0.0, .to = 1.0, .duration_ms = 120 });
 
     var rects: usize = 0;
-    var hits: usize = 0;
     var drag_sources: usize = 0;
     var drop_targets: usize = 0;
     var icon_quads: usize = 0;
@@ -157,7 +144,6 @@ test "painter facade pushes scene commands" {
     var transitions: usize = 0;
     for (scene.written()) |command| switch (command) {
         .rect => rects += 1,
-        .hit => hits += 1,
         .drag_source => drag_sources += 1,
         .drop_target => drop_targets += 1,
         .icon_quad => icon_quads += 1,
@@ -167,10 +153,9 @@ test "painter facade pushes scene commands" {
     };
 
     try std.testing.expectEqual(@as(usize, 6), rects);
-    try std.testing.expectEqual(@as(usize, 1), hits);
     try std.testing.expectEqual(@as(usize, 1), drag_sources);
     try std.testing.expectEqual(@as(usize, 1), drop_targets);
-    try std.testing.expectEqual(@as(usize, 2), icon_quads);
+    try std.testing.expectEqual(@as(usize, 1), icon_quads);
     try std.testing.expectEqual(@as(usize, 1), text_quads);
     try std.testing.expectEqual(@as(usize, 1), transitions);
 }

@@ -1,5 +1,5 @@
 const std = @import("std");
-const icon = @import("icon.zig");
+const icon_vector = @import("icon_vector.zig");
 const renderer_ir = @import("renderer_ir.zig");
 const renderer_present = @import("renderer_present.zig");
 const ui = @import("ui.zig");
@@ -8,7 +8,7 @@ const varfont = @import("varfont.zig");
 pub const Error = renderer_present.Error || error{
     PixelBudgetExceeded,
     InvalidIrBuffer,
-    InvalidIrAtlas,
+    InvalidIrResource,
     UnsupportedIrPrimitive,
 };
 
@@ -32,15 +32,13 @@ pub const RgbaTexture = struct {
     }
 };
 
-pub const IrAtlases = struct {
+pub const IrResources = struct {
     font: AlphaAtlas,
-    icon: AlphaAtlas,
     image: ?RgbaTexture = null,
 
-    pub fn resources(self: IrAtlases) renderer_present.Resources {
+    pub fn presentationResources(self: IrResources) renderer_present.Resources {
         return .{
             .font_atlas = self.font.valid(),
-            .icon_atlas = self.icon.valid(),
             .image_texture = if (self.image) |image| image.valid() else false,
         };
     }
@@ -77,7 +75,7 @@ pub const Surface = struct {
             },
             .text => |text| self.drawTextCommand(text, scale),
             .icon_quad => |quad| self.drawIconQuad(quad, scale),
-            .hit, .drag_source, .drop_target, .text_quad, .image_quad, .transition => {},
+            .drag_source, .drop_target, .text_quad, .image_quad, .transition => {},
         };
     }
 
@@ -86,28 +84,29 @@ pub const Surface = struct {
         if (buffers.hasTexturedVertices()) return error.UnsupportedIrPrimitive;
         for (renderer_ir.drawBatches(buffers)) |batch| switch (batch) {
             .rects, .overlay_rects => |rects| try self.rasterizeIrRects(rects),
-            .image, .text, .icon, .overlay_text, .overlay_icon => {},
+            .icon, .overlay_icon => |icons| try self.rasterizeIrIcons(icons),
+            .image, .text, .overlay_text => {},
         };
     }
 
-    pub fn rasterizeIrWithAtlases(self: Surface, buffers: renderer_ir.Buffers, atlases: IrAtlases) Error!void {
+    pub fn rasterizeIrWithResources(self: Surface, buffers: renderer_ir.Buffers, resources: IrResources) Error!void {
         renderer_ir.validateBuffers(buffers) catch return error.InvalidIrBuffer;
-        if (!atlases.font.valid() or !atlases.icon.valid()) return error.InvalidIrAtlas;
+        if (!resources.font.valid()) return error.InvalidIrResource;
         const image_texture = if (!buffers.hasImageVertices())
             null
         else
-            atlases.image orelse return error.InvalidIrAtlas;
-        if (image_texture) |texture| if (!texture.valid()) return error.InvalidIrAtlas;
+            resources.image orelse return error.InvalidIrResource;
+        if (image_texture) |texture| if (!texture.valid()) return error.InvalidIrResource;
 
         for (renderer_ir.drawBatches(buffers)) |batch| switch (batch) {
             .rects, .overlay_rects => |rects| try self.rasterizeIrRects(rects),
             .image => |vertices| if (image_texture) |texture| try self.rasterizeRgbaTexturedQuads(vertices, texture),
-            .text, .overlay_text => |vertices| try self.rasterizeAlphaTexturedQuads(vertices, atlases.font),
-            .icon, .overlay_icon => |vertices| try self.rasterizeAlphaTexturedQuads(vertices, atlases.icon),
+            .text, .overlay_text => |vertices| try self.rasterizeBilinearAlphaTexturedQuads(vertices, resources.font),
+            .icon, .overlay_icon => |icons| try self.rasterizeIrIcons(icons),
         };
     }
 
-    pub fn renderIrFrameWithAtlases(self: Surface, buffers: renderer_ir.Buffers, atlases: IrAtlases) Error!renderer_present.Receipt {
+    pub fn renderIrFrameWithResources(self: Surface, buffers: renderer_ir.Buffers, resources: IrResources) Error!renderer_present.Receipt {
         const receipt = renderer_present.present(.{
             .target = .{
                 .kind = .cpu,
@@ -115,12 +114,12 @@ pub const Surface = struct {
                 .height = @intCast(self.height),
             },
             .buffers = buffers,
-            .resources = atlases.resources(),
+            .resources = resources.presentationResources(),
         }) catch |err| return switch (err) {
             error.InvalidBuffer => error.InvalidIrBuffer,
             else => err,
         };
-        try self.rasterizeIrWithAtlases(buffers, atlases);
+        try self.rasterizeIrWithResources(buffers, resources);
         return receipt;
     }
 
@@ -128,6 +127,13 @@ pub const Surface = struct {
         var iter = renderer_ir.RectIterator.init(rects) catch return error.InvalidIrBuffer;
         while (iter.next() catch return error.InvalidIrBuffer) |rect| {
             self.drawRect(rect, default_raster_scale);
+        }
+    }
+
+    fn rasterizeIrIcons(self: Surface, icons: []const f32) Error!void {
+        var iter = renderer_ir.IconIterator.init(icons) catch return error.InvalidIrBuffer;
+        while (iter.next() catch return error.InvalidIrBuffer) |instance| {
+            self.drawIconInstance(instance.bounds, instance.color, instance.icon_id, default_raster_scale);
         }
     }
 
@@ -161,32 +167,81 @@ pub const Surface = struct {
         }
     }
 
-    fn rasterizeAlphaTexturedQuads(self: Surface, vertices: []const f32, atlas: AlphaAtlas) Error!void {
+    fn rasterizeNearestAlphaTexturedQuads(self: Surface, vertices: []const f32, atlas: AlphaAtlas) Error!void {
         var iter = renderer_ir.TexturedQuadIterator.init(vertices) catch return error.InvalidIrBuffer;
         while (iter.next() catch return error.InvalidIrBuffer) |quad| {
-            try self.rasterizeAlphaTexturedQuad(quad, atlas);
+            try self.rasterizeNearestAlphaTexturedQuad(quad, atlas);
         }
     }
 
-    fn rasterizeAlphaTexturedQuad(self: Surface, quad: renderer_ir.TexturedQuad, atlas: AlphaAtlas) Error!void {
+    fn rasterizeNearestAlphaTexturedQuad(self: Surface, quad: renderer_ir.TexturedQuad, atlas: AlphaAtlas) Error!void {
         const px0 = clampCoord(@intFromFloat(@floor(quad.bounds.x)), self.width);
         const py0 = clampCoord(@intFromFloat(@floor(quad.bounds.y)), self.height);
         const px1 = clampCoord(@intFromFloat(@ceil(quad.bounds.x + quad.bounds.w)), self.width);
         const py1 = clampCoord(@intFromFloat(@ceil(quad.bounds.y + quad.bounds.h)), self.height);
         if (px1 <= px0 or py1 <= py0) return;
 
+        const atlas_w: f32 = @floatFromInt(atlas.width - 1);
+        const atlas_h: f32 = @floatFromInt(atlas.height - 1);
+        const u_step = (quad.u1 - quad.u0) / quad.bounds.w;
+        const v_step = (quad.v1 - quad.v0) / quad.bounds.h;
         var y = py0;
         while (y < py1) : (y += 1) {
-            const fy = (@as(f32, @floatFromInt(y)) + pixel_center - quad.bounds.y) / quad.bounds.h;
-            const v = lerp(quad.v0, quad.v1, fy);
+            const v = quad.v0 + (@as(f32, @floatFromInt(y)) + pixel_center - quad.bounds.y) * v_step;
+            const sample_y = nearestSampleIndex(v, atlas_h, atlas.height);
             var x = px0;
             while (x < px1) : (x += 1) {
-                const fx = (@as(f32, @floatFromInt(x)) + pixel_center - quad.bounds.x) / quad.bounds.w;
-                const u = lerp(quad.u0, quad.u1, fx);
-                const alpha = scaleByte(quad.color.a, sampleAlpha(atlas, u, v) / 255.0);
+                const u = quad.u0 + (@as(f32, @floatFromInt(x)) + pixel_center - quad.bounds.x) * u_step;
+                const sample_x = nearestSampleIndex(u, atlas_w, atlas.width);
+                const alpha = scaleByte(quad.color.a, @as(f32, @floatFromInt(atlas.alpha[sample_y * atlas.width + sample_x])) / byte_unit_scale);
                 var color = quad.color;
                 color.a = 255;
                 if (alpha != 0) self.blendPixel(x, y, color, alpha);
+            }
+        }
+    }
+
+    fn rasterizeBilinearAlphaTexturedQuads(self: Surface, vertices: []const f32, atlas: AlphaAtlas) Error!void {
+        var iter = renderer_ir.TexturedQuadIterator.init(vertices) catch return error.InvalidIrBuffer;
+        while (iter.next() catch return error.InvalidIrBuffer) |quad| {
+            try self.rasterizeBilinearAlphaTexturedQuad(quad, atlas);
+        }
+    }
+
+    fn rasterizeBilinearAlphaTexturedQuad(self: Surface, quad: renderer_ir.TexturedQuad, atlas: AlphaAtlas) Error!void {
+        const px0 = clampCoord(@intFromFloat(@floor(quad.bounds.x)), self.width);
+        const py0 = clampCoord(@intFromFloat(@floor(quad.bounds.y)), self.height);
+        const px1 = clampCoord(@intFromFloat(@ceil(quad.bounds.x + quad.bounds.w)), self.width);
+        const py1 = clampCoord(@intFromFloat(@ceil(quad.bounds.y + quad.bounds.h)), self.height);
+        if (px1 <= px0 or py1 <= py0) return;
+
+        const u_step = (quad.u1 - quad.u0) / quad.bounds.w;
+        const v_step = (quad.v1 - quad.v0) / quad.bounds.h;
+        const atlas_w: f32 = @floatFromInt(atlas.width - 1);
+        const atlas_h: f32 = @floatFromInt(atlas.height - 1);
+        var color = quad.color;
+        color.a = max_alpha;
+        var y = py0;
+        while (y < py1) : (y += 1) {
+            const v = quad.v0 + (@as(f32, @floatFromInt(y)) + pixel_center - quad.bounds.y) * v_step;
+            const sample_y = bilinearAxis(v, atlas_h, atlas.height);
+            const row0 = sample_y.index0 * atlas.width;
+            const row1 = sample_y.index1 * atlas.width;
+            var x = px0;
+            while (x < px1) : (x += 1) {
+                const u = quad.u0 + (@as(f32, @floatFromInt(x)) + pixel_center - quad.bounds.x) * u_step;
+                const sample_x = bilinearAxis(u, atlas_w, atlas.width);
+                var sampled_alpha = bilinearAlphaByte(
+                    atlas.alpha[row0 + sample_x.index0],
+                    atlas.alpha[row0 + sample_x.index1],
+                    atlas.alpha[row1 + sample_x.index0],
+                    atlas.alpha[row1 + sample_x.index1],
+                    sample_x.fraction,
+                    sample_y.fraction,
+                );
+                if (quad.bounds.h <= small_text_sharpen_max_glyph_h) sampled_alpha = sharpenSmallTextAlpha(sampled_alpha);
+                const alpha = scaleAlphaByte(quad.color.a, sampled_alpha);
+                if (alpha != 0) self.blendPixelAt(y * self.width + x, color, alpha);
             }
         }
     }
@@ -205,7 +260,10 @@ pub const Surface = struct {
     }
 
     pub fn blendPixel(self: Surface, x: usize, y: usize, color: ui.Color, alpha: u8) void {
-        const index = y * self.width + x;
+        self.blendPixelAt(y * self.width + x, color, alpha);
+    }
+
+    fn blendPixelAt(self: Surface, index: usize, color: ui.Color, alpha: u8) void {
         const dst = self.pixels[index];
         const a: u16 = alpha;
         const inv: u16 = 255 - a;
@@ -232,6 +290,14 @@ pub const Surface = struct {
     }
 
     fn fillRounded(self: Surface, bounds: ui.Rect, top_color: ui.Color, bottom_color: ui.Color, radius: f32) void {
+        if (radius <= 0.0 and colorsEqual(top_color, bottom_color) and top_color.a == max_alpha) {
+            self.fill(bounds, top_color);
+            return;
+        }
+        if (radius > 0.0 and colorsEqual(top_color, bottom_color) and top_color.a == max_alpha) {
+            self.fillRoundedSolid(bounds, top_color, radius);
+            return;
+        }
         const x0 = clampCoord(@intFromFloat(@floor(bounds.x)), self.width);
         const y0 = clampCoord(@intFromFloat(@floor(bounds.y)), self.height);
         const x1 = clampCoord(@intFromFloat(@ceil(bounds.x + bounds.w)), self.width);
@@ -247,11 +313,44 @@ pub const Surface = struct {
             while (x < x1) : (x += 1) {
                 const px = @as(f32, @floatFromInt(x)) + pixel_center;
                 const alpha = roundedAlpha(bounds, radius, px, py);
-                if (alpha == max_alpha) {
-                    self.pixels[y * self.width + x] = color;
-                } else if (alpha != 0) {
-                    self.blendPixel(x, y, color, alpha);
-                }
+                self.drawCoveredPixel(x, y, color, alpha);
+            }
+        }
+    }
+
+    fn fillRoundedSolid(self: Surface, bounds: ui.Rect, color: ui.Color, radius: f32) void {
+        const r = @min(radius, @min(bounds.w * 0.5, bounds.h * 0.5));
+        if (r <= 0.0) {
+            self.fill(bounds, color);
+            return;
+        }
+
+        const center_w = bounds.w - r * 2.0;
+        if (center_w > 0.0) self.fill(ui.Rect.init(bounds.x + r, bounds.y, center_w, bounds.h), color);
+        const center_h = bounds.h - r * 2.0;
+        if (center_h > 0.0) self.fill(ui.Rect.init(bounds.x, bounds.y + r, bounds.w, center_h), color);
+
+        const corner = ui.Rect.init(bounds.x, bounds.y, r, r);
+        self.fillRoundedCorner(bounds, corner, color, r);
+        self.fillRoundedCorner(bounds, ui.Rect.init(bounds.x + bounds.w - r, bounds.y, r, r), color, r);
+        self.fillRoundedCorner(bounds, ui.Rect.init(bounds.x, bounds.y + bounds.h - r, r, r), color, r);
+        self.fillRoundedCorner(bounds, ui.Rect.init(bounds.x + bounds.w - r, bounds.y + bounds.h - r, r, r), color, r);
+    }
+
+    fn fillRoundedCorner(self: Surface, bounds: ui.Rect, corner: ui.Rect, color: ui.Color, radius: f32) void {
+        const x0 = clampCoord(@intFromFloat(@floor(corner.x)), self.width);
+        const y0 = clampCoord(@intFromFloat(@floor(corner.y)), self.height);
+        const x1 = clampCoord(@intFromFloat(@ceil(corner.x + corner.w)), self.width);
+        const y1 = clampCoord(@intFromFloat(@ceil(corner.y + corner.h)), self.height);
+        if (x1 <= x0 or y1 <= y0) return;
+
+        var y = y0;
+        while (y < y1) : (y += 1) {
+            const py = @as(f32, @floatFromInt(y)) + pixel_center;
+            var x = x0;
+            while (x < x1) : (x += 1) {
+                const px = @as(f32, @floatFromInt(x)) + pixel_center;
+                self.drawCoveredPixel(x, y, color, roundedAlpha(bounds, radius, px, py));
             }
         }
     }
@@ -281,14 +380,41 @@ pub const Surface = struct {
 
     fn shadow(self: Surface, bounds: ui.Rect, color: ui.Color, radius: f32, spread: f32) void {
         if (spread <= 0.0) return;
-        var step: usize = shadow_steps;
-        while (step > 0) : (step -= 1) {
-            const t = @as(f32, @floatFromInt(step)) / @as(f32, @floatFromInt(shadow_steps));
-            const grow = spread * t;
-            var layer_color = color;
-            layer_color.a = scaleByte(color.a, shadow_layer_alpha * (1.0 - t * shadow_fade));
-            self.fillRounded(bounds.insetUniform(-grow), layer_color, layer_color, radius + grow);
+        var shadow_color = color;
+        shadow_color.a = scaleByte(color.a, cpu_shadow_alpha);
+        if (shadow_color.a == 0) return;
+        const outer = bounds.insetUniform(-spread);
+        const x0 = clampCoord(@intFromFloat(@floor(outer.x)), self.width);
+        const y0 = clampCoord(@intFromFloat(@floor(outer.y)), self.height);
+        const x1 = clampCoord(@intFromFloat(@ceil(outer.x + outer.w)), self.width);
+        const y1 = clampCoord(@intFromFloat(@ceil(outer.y + outer.h)), self.height);
+        if (x1 <= x0 or y1 <= y0) return;
+
+        var y = y0;
+        while (y < y1) : (y += 1) {
+            const py = @as(f32, @floatFromInt(y)) + pixel_center;
+            var x = x0;
+            while (x < x1) : (x += 1) {
+                const px = @as(f32, @floatFromInt(x)) + pixel_center;
+                if (bounds.containsInclusive(px, py)) continue;
+                const distance = roundedOutsideDistance(bounds, radius, px, py);
+                if (distance <= 0.0 or distance >= spread) continue;
+                const t = 1.0 - distance / spread;
+                const coverage = scaleByte(max_alpha, t * t);
+                self.drawCoveredPixel(x, y, shadow_color, coverage);
+            }
         }
+    }
+
+    fn drawCoveredPixel(self: Surface, x: usize, y: usize, color: ui.Color, coverage: u8) void {
+        if (coverage == 0 or color.a == 0) return;
+        if (coverage == max_alpha and color.a == max_alpha) {
+            self.pixels[y * self.width + x] = color;
+            return;
+        }
+        var source = color;
+        source.a = max_alpha;
+        self.blendPixel(x, y, source, scaleByte(color.a, @as(f32, @floatFromInt(coverage)) / byte_unit_scale));
     }
 
     fn drawTextCommand(self: Surface, text: anytype, scale: f32) void {
@@ -305,163 +431,22 @@ pub const Surface = struct {
         textCache().drawText(self, draw_bounds, text.value, text.color, px_size) catch unreachable;
     }
 
-    fn drawIconQuad(self: Surface, quad: ui.Quad, scale: f32) void {
-        const bounds = scaleRect(quad.bounds, scale);
-        const value = icon.fromAtlasId(quad.atlas_id) orelse unreachable;
-        const color = quad.color;
-        switch (value) {
-            .activity => self.iconLine(bounds, color, &.{ 0.16, 0.55, 0.31, 0.55, 0.39, 0.31, 0.52, 0.72, 0.62, 0.44, 0.70, 0.55, 0.84, 0.55 }),
-            .app => {
-                self.iconRoundRect(bounds, color, 0.18, 0.20, 0.64, 0.60, 0.08);
-                self.iconLine(bounds, color, &.{ 0.18, 0.38, 0.82, 0.38 });
-                self.iconFilledCircle(bounds, color, 0.30, 0.29, 0.025);
-                self.iconFilledCircle(bounds, color, 0.40, 0.29, 0.025);
-            },
-            .bell => {
-                self.iconLine(bounds, color, &.{ 0.30, 0.70, 0.36, 0.42, 0.42, 0.28, 0.50, 0.25, 0.58, 0.28, 0.64, 0.42, 0.70, 0.70, 0.30, 0.70 });
-                self.iconLine(bounds, color, &.{ 0.44, 0.78, 0.56, 0.78 });
-            },
-            .chat => {
-                self.iconRoundRect(bounds, color, 0.20, 0.24, 0.60, 0.45, 0.12);
-                self.iconLine(bounds, color, &.{ 0.38, 0.69, 0.30, 0.80, 0.31, 0.66 });
-            },
-            .check => self.iconLine(bounds, color, &.{ 0.22, 0.53, 0.42, 0.72, 0.78, 0.30 }),
-            .chevron_right => self.iconLine(bounds, color, &.{ 0.38, 0.24, 0.64, 0.50, 0.38, 0.76 }),
-            .code => {
-                self.iconLine(bounds, color, &.{ 0.38, 0.32, 0.22, 0.50, 0.38, 0.68 });
-                self.iconLine(bounds, color, &.{ 0.62, 0.32, 0.78, 0.50, 0.62, 0.68 });
-            },
-            .cpu => {
-                self.iconRoundRect(bounds, color, 0.30, 0.30, 0.40, 0.40, 0.06);
-                self.iconRoundRect(bounds, color, 0.40, 0.40, 0.20, 0.20, 0.03);
-                inline for (.{ 0.36, 0.50, 0.64 }) |x| {
-                    self.iconLine(bounds, color, &.{ x, 0.18, x, 0.30 });
-                    self.iconLine(bounds, color, &.{ x, 0.70, x, 0.82 });
-                }
-                inline for (.{ 0.36, 0.50, 0.64 }) |y| {
-                    self.iconLine(bounds, color, &.{ 0.18, y, 0.30, y });
-                    self.iconLine(bounds, color, &.{ 0.70, y, 0.82, y });
-                }
-            },
-            .database, .storage => self.databaseIcon(bounds, color),
-            .eye => {
-                self.iconLine(bounds, color, &.{ 0.16, 0.50, 0.32, 0.30, 0.50, 0.23, 0.68, 0.30, 0.84, 0.50, 0.68, 0.70, 0.50, 0.77, 0.32, 0.70, 0.16, 0.50 });
-                self.iconCircle(bounds, color, 0.50, 0.50, 0.12);
-            },
-            .file => {
-                self.iconLine(bounds, color, &.{ 0.30, 0.18, 0.56, 0.18, 0.72, 0.34, 0.72, 0.82, 0.30, 0.82, 0.30, 0.18 });
-                self.iconLine(bounds, color, &.{ 0.56, 0.18, 0.56, 0.34, 0.72, 0.34 });
-            },
-            .key => {
-                self.iconCircle(bounds, color, 0.36, 0.48, 0.16);
-                self.iconLine(bounds, color, &.{ 0.50, 0.56, 0.80, 0.56, 0.80, 0.68 });
-                self.iconLine(bounds, color, &.{ 0.66, 0.56, 0.66, 0.65 });
-            },
-            .lock => {
-                self.iconRoundRect(bounds, color, 0.26, 0.44, 0.48, 0.36, 0.06);
-                self.iconLine(bounds, color, &.{ 0.36, 0.44, 0.36, 0.34, 0.40, 0.22, 0.50, 0.20, 0.60, 0.22, 0.64, 0.34, 0.64, 0.44 });
-            },
-            .menu => {
-                inline for (.{ 0.31, 0.50, 0.69 }) |y| self.iconLine(bounds, color, &.{ 0.22, y, 0.78, y });
-            },
-            .message_plus => {
-                self.iconRoundRect(bounds, color, 0.20, 0.24, 0.60, 0.45, 0.12);
-                self.iconLine(bounds, color, &.{ 0.38, 0.69, 0.30, 0.80, 0.31, 0.66 });
-                self.iconLine(bounds, color, &.{ 0.50, 0.38, 0.50, 0.56 });
-                self.iconLine(bounds, color, &.{ 0.41, 0.47, 0.59, 0.47 });
-            },
-            .network => {
-                self.iconCircle(bounds, color, 0.50, 0.26, 0.08);
-                self.iconCircle(bounds, color, 0.27, 0.70, 0.08);
-                self.iconCircle(bounds, color, 0.73, 0.70, 0.08);
-                self.iconLine(bounds, color, &.{ 0.47, 0.33, 0.31, 0.63 });
-                self.iconLine(bounds, color, &.{ 0.53, 0.33, 0.69, 0.63 });
-                self.iconLine(bounds, color, &.{ 0.36, 0.70, 0.64, 0.70 });
-            },
-            .route => {
-                self.iconCircle(bounds, color, 0.25, 0.25, 0.08);
-                self.iconCircle(bounds, color, 0.75, 0.75, 0.08);
-                self.iconLine(bounds, color, &.{ 0.33, 0.25, 0.58, 0.30, 0.42, 0.70, 0.67, 0.75 });
-            },
-            .search => {
-                self.iconCircle(bounds, color, 0.46, 0.45, 0.22);
-                self.iconLine(bounds, color, &.{ 0.62, 0.62, 0.78, 0.78 });
-            },
-            .send => {
-                self.iconLine(bounds, color, &.{ 0.50, 0.78, 0.50, 0.22 });
-                self.iconLine(bounds, color, &.{ 0.30, 0.42, 0.50, 0.22, 0.70, 0.42 });
-            },
-            .server => {
-                self.iconRoundRect(bounds, color, 0.22, 0.22, 0.56, 0.20, 0.04);
-                self.iconRoundRect(bounds, color, 0.22, 0.58, 0.56, 0.20, 0.04);
-                self.iconFilledCircle(bounds, color, 0.34, 0.32, 0.025);
-                self.iconFilledCircle(bounds, color, 0.34, 0.68, 0.025);
-            },
-            .settings => {
-                self.iconCircle(bounds, color, 0.50, 0.50, 0.14);
-                inline for (.{ 0.0, 0.7853982, 1.5707964, 2.3561945, 3.1415927, 3.926991, 4.712389, 5.497787 }) |angle| {
-                    const x0 = 0.50 + @cos(angle) * 0.25;
-                    const y0 = 0.50 + @sin(angle) * 0.25;
-                    const x1 = 0.50 + @cos(angle) * 0.34;
-                    const y1 = 0.50 + @sin(angle) * 0.34;
-                    self.iconLine(bounds, color, &.{ x0, y0, x1, y1 });
-                }
-            },
-            .shield, .trust => {
-                self.iconLine(bounds, color, &.{ 0.50, 0.16, 0.76, 0.27, 0.71, 0.62, 0.50, 0.82, 0.29, 0.62, 0.24, 0.27, 0.50, 0.16 });
-                if (value == .trust) self.iconLine(bounds, color, &.{ 0.38, 0.50, 0.47, 0.59, 0.64, 0.40 });
-            },
-            .sparkles => {
-                self.iconLine(bounds, color, &.{ 0.50, 0.16, 0.56, 0.38, 0.78, 0.44, 0.56, 0.50, 0.50, 0.72, 0.44, 0.50, 0.22, 0.44, 0.44, 0.38, 0.50, 0.16 });
-                self.iconLine(bounds, color, &.{ 0.76, 0.18, 0.78, 0.28, 0.88, 0.30, 0.78, 0.32, 0.76, 0.42 });
-            },
-            .terminal => {
-                self.iconRoundRect(bounds, color, 0.18, 0.24, 0.64, 0.52, 0.07);
-                self.iconLine(bounds, color, &.{ 0.30, 0.42, 0.42, 0.52, 0.30, 0.62 });
-                self.iconLine(bounds, color, &.{ 0.50, 0.62, 0.70, 0.62 });
-            },
-            .trash => {
-                self.iconLine(bounds, color, &.{ 0.26, 0.30, 0.74, 0.30 });
-                self.iconLine(bounds, color, &.{ 0.42, 0.20, 0.58, 0.20 });
-                self.iconLine(bounds, color, &.{ 0.34, 0.30, 0.38, 0.80, 0.62, 0.80, 0.66, 0.30 });
-                self.iconLine(bounds, color, &.{ 0.46, 0.42, 0.46, 0.68 });
-                self.iconLine(bounds, color, &.{ 0.54, 0.42, 0.54, 0.68 });
-            },
-            .user => {
-                self.iconCircle(bounds, color, 0.50, 0.35, 0.14);
-                self.iconLine(bounds, color, &.{ 0.25, 0.80, 0.38, 0.64, 0.50, 0.58, 0.62, 0.64, 0.75, 0.80 });
-            },
-            .wallet => {
-                self.iconRoundRect(bounds, color, 0.18, 0.30, 0.64, 0.44, 0.07);
-                self.iconRoundRect(bounds, color, 0.58, 0.43, 0.24, 0.18, 0.04);
-                self.iconFilledCircle(bounds, color, 0.68, 0.52, 0.02);
-            },
-            .warning => {
-                self.iconLine(bounds, color, &.{ 0.50, 0.18, 0.82, 0.78, 0.18, 0.78, 0.50, 0.18 });
-                self.iconLine(bounds, color, &.{ 0.50, 0.40, 0.50, 0.56 });
-                self.iconFilledCircle(bounds, color, 0.50, 0.68, 0.025);
-            },
-            .x => {
-                self.iconLine(bounds, color, &.{ 0.28, 0.28, 0.72, 0.72 });
-                self.iconLine(bounds, color, &.{ 0.72, 0.28, 0.28, 0.72 });
-            },
-            .github => {
-                self.iconCircle(bounds, color, 0.50, 0.43, 0.26);
-                self.iconLine(bounds, color, &.{ 0.32, 0.27, 0.28, 0.16, 0.42, 0.22 });
-                self.iconLine(bounds, color, &.{ 0.58, 0.22, 0.72, 0.16, 0.68, 0.27 });
-                self.iconLine(bounds, color, &.{ 0.42, 0.68, 0.36, 0.80, 0.26, 0.78 });
-                self.iconLine(bounds, color, &.{ 0.58, 0.68, 0.64, 0.80, 0.74, 0.78 });
-                self.iconLine(bounds, color, &.{ 0.50, 0.68, 0.50, 0.84 });
-            },
-        }
+    fn drawIconQuad(self: Surface, quad: ui.IconQuad, scale: f32) void {
+        self.drawIconInstance(quad.bounds, quad.color, quad.icon_id, scale);
     }
 
-    fn databaseIcon(self: Surface, bounds: ui.Rect, color: ui.Color) void {
-        self.iconEllipse(bounds, color, 0.50, 0.28, 0.28, 0.10, true);
-        self.iconLine(bounds, color, &.{ 0.22, 0.28, 0.22, 0.68 });
-        self.iconLine(bounds, color, &.{ 0.78, 0.28, 0.78, 0.68 });
-        self.iconEllipse(bounds, color, 0.50, 0.48, 0.28, 0.10, false);
-        self.iconEllipse(bounds, color, 0.50, 0.68, 0.28, 0.10, false);
+    fn drawIconInstance(self: Surface, icon_bounds: ui.Rect, color: ui.Color, icon_id: u32, scale: f32) void {
+        const bounds = scaleRect(icon_bounds, scale);
+        var iter = icon_vector.Iterator.init(icon_vector.dataForIconId(icon_id));
+        while (iter.next() catch unreachable) |op| {
+            switch (op) {
+                .polyline => |points| self.iconLine(bounds, color, points),
+                .circle => |circle| self.iconCircle(bounds, color, circle.cx, circle.cy, circle.radius),
+                .ellipse => |ellipse| self.iconEllipse(bounds, color, ellipse.cx, ellipse.cy, ellipse.rx, ellipse.ry, ellipse.full),
+                .round_rect => |rect| self.iconRoundRect(bounds, color, rect.x, rect.y, rect.w, rect.h, rect.radius),
+                .filled_circle => |circle| self.iconFilledCircle(bounds, color, circle.cx, circle.cy, circle.radius),
+            }
+        }
     }
 
     fn iconLine(self: Surface, bounds: ui.Rect, color: ui.Color, points: []const f32) void {
@@ -593,9 +578,11 @@ const pixel_center: f32 = 0.5;
 const min_border_width: f32 = 1.0;
 const quarter_turn: f32 = 0.25;
 const byte_unit_scale: f32 = 255.0;
-const shadow_steps: usize = 4;
-const shadow_layer_alpha: f32 = 0.24;
-const shadow_fade: f32 = 0.82;
+const cpu_shadow_alpha: f32 = 0.34;
+const small_text_sharpen_max_glyph_h: f32 = 14.0;
+const small_text_sharpen_midpoint: f32 = 128.0;
+const small_text_sharpen_contrast: f32 = 1.18;
+const small_text_sharpen_lift: f32 = 8.0;
 const font_bitmap_bytes: usize = 4 * 1024 * 1024;
 var geist_face: ?varfont.Face = null;
 var geist_bitmap: [font_bitmap_bytes]u8 = undefined;
@@ -663,6 +650,21 @@ fn roundedAlpha(bounds: ui.Rect, radius: f32, x: f32, y: f32) u8 {
     return @intFromFloat(@round(std.math.clamp(coverage, 0.0, 1.0) * 255.0));
 }
 
+fn roundedOutsideDistance(bounds: ui.Rect, radius: f32, x: f32, y: f32) f32 {
+    const r = @min(@max(radius, 0.0), @max(0.0, @min(bounds.w, bounds.h) * 0.5));
+    const half_w = bounds.w * 0.5;
+    const half_h = bounds.h * 0.5;
+    const center_x = bounds.x + half_w;
+    const center_y = bounds.y + half_h;
+    const qx = @abs(x - center_x) - @max(0.0, half_w - r);
+    const qy = @abs(y - center_y) - @max(0.0, half_h - r);
+    const outside_x = @max(qx, 0.0);
+    const outside_y = @max(qy, 0.0);
+    const outside = @sqrt(outside_x * outside_x + outside_y * outside_y);
+    const inside = @min(@max(qx, qy), 0.0);
+    return outside + inside - r;
+}
+
 fn clampRange(value: f32, lower: f32, upper: f32) f32 {
     if (lower > upper) return (lower + upper) * 0.5;
     return std.math.clamp(value, lower, upper);
@@ -689,6 +691,10 @@ fn mixByte(a: u8, b: u8, t: f32) u8 {
     return @intFromFloat(@round(af + (bf - af) * t));
 }
 
+fn colorsEqual(a: ui.Color, b: ui.Color) bool {
+    return a.r == b.r and a.g == b.g and a.b == b.b and a.a == b.a;
+}
+
 fn lerp(a: f32, b: f32, t: f32) f32 {
     return a + (b - a) * std.math.clamp(t, 0.0, 1.0);
 }
@@ -697,20 +703,47 @@ fn scaleByte(value: u8, factor: f32) u8 {
     return @intFromFloat(@round(std.math.clamp(@as(f32, @floatFromInt(value)) * factor, 0.0, 255.0)));
 }
 
-fn sampleAlpha(atlas: AlphaAtlas, u: f32, v: f32) f32 {
-    const x = std.math.clamp(u, 0.0, 1.0) * @as(f32, @floatFromInt(atlas.width - 1));
-    const y = std.math.clamp(v, 0.0, 1.0) * @as(f32, @floatFromInt(atlas.height - 1));
-    const x0: usize = @intFromFloat(@floor(x));
-    const y0: usize = @intFromFloat(@floor(y));
-    const x1 = @min(x0 + 1, atlas.width - 1);
-    const y1 = @min(y0 + 1, atlas.height - 1);
-    const tx = x - @as(f32, @floatFromInt(x0));
-    const ty = y - @as(f32, @floatFromInt(y0));
-    const a00: f32 = @floatFromInt(atlas.alpha[y0 * atlas.width + x0]);
-    const a10: f32 = @floatFromInt(atlas.alpha[y0 * atlas.width + x1]);
-    const a01: f32 = @floatFromInt(atlas.alpha[y1 * atlas.width + x0]);
-    const a11: f32 = @floatFromInt(atlas.alpha[y1 * atlas.width + x1]);
-    return lerp(lerp(a00, a10, tx), lerp(a01, a11, tx), ty);
+fn nearestSampleIndex(value: f32, max_index_float: f32, len: usize) usize {
+    const scaled = std.math.clamp(value, 0.0, 1.0) * max_index_float;
+    const index: usize = @intFromFloat(@round(scaled));
+    return @min(index, len - 1);
+}
+
+const BilinearAxis = struct {
+    index0: usize,
+    index1: usize,
+    fraction: f32,
+};
+
+fn bilinearAxis(value: f32, max_index_float: f32, len: usize) BilinearAxis {
+    const scaled = std.math.clamp(value, 0.0, 1.0) * max_index_float;
+    const index0: usize = @intFromFloat(@floor(scaled));
+    return .{
+        .index0 = index0,
+        .index1 = @min(index0 + 1, len - 1),
+        .fraction = scaled - @as(f32, @floatFromInt(index0)),
+    };
+}
+
+fn bilinearAlphaByte(a00: u8, a10: u8, a01: u8, a11: u8, tx: f32, ty: f32) u8 {
+    return @intFromFloat(@round(lerp(
+        lerp(@as(f32, @floatFromInt(a00)), @as(f32, @floatFromInt(a10)), tx),
+        lerp(@as(f32, @floatFromInt(a01)), @as(f32, @floatFromInt(a11)), tx),
+        ty,
+    )));
+}
+
+fn scaleAlphaByte(tint: u8, sample: u8) u8 {
+    if (tint == max_alpha) return sample;
+    return @intCast((@as(u16, tint) * @as(u16, sample) + 127) / 255);
+}
+
+fn sharpenSmallTextAlpha(sample: u8) u8 {
+    if (sample == 0 or sample == max_alpha) return sample;
+    const value = small_text_sharpen_midpoint +
+        (@as(f32, @floatFromInt(sample)) - small_text_sharpen_midpoint) * small_text_sharpen_contrast +
+        small_text_sharpen_lift;
+    return @intFromFloat(@round(std.math.clamp(value, 0.0, byte_unit_scale)));
 }
 
 fn sampleRgba(texture: RgbaTexture, u: f32, v: f32) ui.Color {
@@ -838,7 +871,6 @@ test "software renderer rasterizes rect ir equivalent to command path" {
     var source_context: u8 = 0;
     const sources = renderer_ir.Sources{
         .font = .{ .context = &source_context, .metrics = irTestFontMetrics, .width = irTestTextWidth, .glyph = irTestGlyph },
-        .icon = .{ .context = &source_context, .rect = irTestIconRect },
     };
     try renderer_ir.packSceneWithOverlay(buffers, sources, scene.written(), 3);
 
@@ -850,7 +882,7 @@ test "software renderer rasterizes rect ir equivalent to command path" {
     try std.testing.expectEqualSlices(ui.Color, &command_pixels, &ir_pixels);
 }
 
-test "software renderer rejects textured ir without atlases" {
+test "software renderer rejects textured ir without resources" {
     var pixels: [4]ui.Color = undefined;
     const surface = try Surface.init(2, 2, &pixels);
     var storage = renderer_ir.FixedBuffers(0, 1, 0, 0, 0, 0, 0){};
@@ -859,7 +891,7 @@ test "software renderer rejects textured ir without atlases" {
     try std.testing.expectError(error.UnsupportedIrPrimitive, surface.rasterizeIr(buffers));
 }
 
-test "software renderer rasterizes alpha textured ir with supplied atlases" {
+test "software renderer rasterizes alpha textured ir with supplied resources" {
     var pixels: [8 * 8]ui.Color = undefined;
     const surface = try Surface.init(8, 8, &pixels);
     surface.clear(.clear);
@@ -882,18 +914,24 @@ test "software renderer rasterizes alpha textured ir with supplied atlases" {
         0,   255,
         255, 255,
     };
-    const atlases = IrAtlases{
+    const resources = IrResources{
         .font = .{ .width = 2, .height = 2, .alpha = &alpha },
-        .icon = .{ .width = 2, .height = 2, .alpha = &alpha },
     };
 
-    const receipt = try surface.renderIrFrameWithAtlases(buffers, atlases);
+    const receipt = try surface.renderIrFrameWithResources(buffers, resources);
     try std.testing.expect(receipt.valid());
     try std.testing.expectEqual(renderer_present.Transport.software_pixels, receipt.transport);
     try std.testing.expectEqual(@as(usize, 1), receipt.primitive_count);
     const pixel = pixels[4 * 8 + 4];
     try std.testing.expect(pixel.a > 0);
     try std.testing.expect(pixel.r > pixel.g);
+}
+
+test "software renderer sharpens small text alpha without changing solid coverage" {
+    try std.testing.expectEqual(@as(u8, 0), sharpenSmallTextAlpha(0));
+    try std.testing.expectEqual(max_alpha, sharpenSmallTextAlpha(max_alpha));
+    try std.testing.expect(sharpenSmallTextAlpha(64) < 64);
+    try std.testing.expect(sharpenSmallTextAlpha(160) > 160);
 }
 
 test "software renderer rasterizes image ir with supplied rgba texture" {
@@ -922,13 +960,12 @@ test "software renderer rasterizes image ir with supplied rgba texture" {
         .{ .r = 255, .g = 0, .b = 0, .a = 255 },
         .{ .r = 255, .g = 0, .b = 0, .a = 255 },
     };
-    const atlases = IrAtlases{
+    const resources = IrResources{
         .font = .{ .width = 2, .height = 2, .alpha = &alpha },
-        .icon = .{ .width = 2, .height = 2, .alpha = &alpha },
         .image = .{ .width = 2, .height = 2, .pixels = &image },
     };
 
-    const receipt = try surface.renderIrFrameWithAtlases(buffers, atlases);
+    const receipt = try surface.renderIrFrameWithResources(buffers, resources);
     try std.testing.expect(receipt.valid());
     try std.testing.expect(receipt.requirements.image_texture);
     const pixel = pixels[4 * 8 + 4];
@@ -957,11 +994,10 @@ test "software renderer frame rejects missing image texture through presentation
     );
 
     const alpha = [_]u8{ 255, 255, 255, 255 };
-    const atlases = IrAtlases{
+    const resources = IrResources{
         .font = .{ .width = 2, .height = 2, .alpha = &alpha },
-        .icon = .{ .width = 2, .height = 2, .alpha = &alpha },
     };
-    try std.testing.expectError(error.MissingImageTexture, surface.renderIrFrameWithAtlases(buffers, atlases));
+    try std.testing.expectError(error.MissingImageTexture, surface.renderIrFrameWithResources(buffers, resources));
 }
 
 fn sampleRoot(children: []ui.Node) ui.Node {
@@ -983,9 +1019,5 @@ fn irTestTextWidth(_: *anyopaque, value: []const u8, _: u8) f32 {
 }
 
 fn irTestGlyph(_: *anyopaque, _: u8, _: u8) renderer_ir.Error!?renderer_ir.Glyph {
-    return null;
-}
-
-fn irTestIconRect(_: *anyopaque, _: u32) ?renderer_ir.AtlasRect {
     return null;
 }

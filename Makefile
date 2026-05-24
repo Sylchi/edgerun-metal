@@ -55,7 +55,7 @@ ui-core-test:
 	zig build --build-file edgerun-zig/build.zig --cache-dir $(BUILD_DIR)/edgerun-zig ui-core-test
 
 wayland-window:
-	zig build --build-file edgerun-zig/build.zig --cache-dir $(BUILD_DIR)/edgerun-zig wayland-window -- --seconds 5
+	zig build --build-file edgerun-zig/build.zig --cache-dir $(BUILD_DIR)/edgerun-zig -Doptimize=ReleaseFast wayland-window -- --width 1280 --height 900 --path /academy/40166
 
 wayland-window-test:
 	zig build --build-file edgerun-zig/build.zig --cache-dir $(BUILD_DIR)/edgerun-zig wayland-window-test

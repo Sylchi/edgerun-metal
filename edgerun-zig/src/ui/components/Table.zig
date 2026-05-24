@@ -56,7 +56,7 @@ pub const Table = struct {
     }
 
     pub fn register(registry: *ComponentRegistry) RegistryError!void {
-        return registry.register(descriptor);
+        return common.registerDescriptor(registry, descriptor);
     }
 };
 
@@ -64,14 +64,14 @@ pub const descriptor = common.ComponentDescriptor{
     .name = "table",
     .html_prefix = "<table data-er-component=\"table\"",
     .markdown_prefix = ":::table",
-    .render = renderRegistered,
-    .collect_interactions = collectRegistered,
-    .write_html = writeHtmlRegistered,
-    .write_markdown = writeMarkdownRegistered,
+    .render = common.renderAdapter(Table, renderTable),
+    .collect_interactions = common.collectAdapter(Table, collectTableInteractions),
+    .write_html = common.writeHtmlAdapter(Table, writeHtml),
+    .write_markdown = common.writeMarkdownAdapter(Table, writeMarkdown),
 };
 
 pub fn register(registry: *ComponentRegistry) RegistryError!void {
-    return Table.register(registry);
+    return common.registerDescriptor(registry, descriptor);
 }
 
 pub fn renderTable(table: Table, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
@@ -108,19 +108,9 @@ pub fn collectTableInteractions(table: Table, collector: *interaction.Collector,
     for (table.rows) |row| {
         if (row.cells.len != column_count) continue;
         if (y + table_row_h > bounds.y + bounds.h - table_padding_y) break;
-        try collector.add(.{ .kind = .row_item, .id = row.id, .bounds = ui.Rect.init(bounds.x + table_row_inset, y, @max(1.0, bounds.w - table_row_inset * 2.0), table_row_h) });
+        try collector.addHit(ui.Rect.init(bounds.x + table_row_inset, y, @max(1.0, bounds.w - table_row_inset * 2.0), table_row_h), .row_item, row.id);
         y += table_row_h + table_row_gap;
     }
-}
-
-fn renderRegistered(component: *const anyopaque, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
-    const table: *const Table = @ptrCast(@alignCast(component));
-    return renderTable(table.*, scene, bounds, options);
-}
-
-fn collectRegistered(component: *const anyopaque, collector: *interaction.Collector, bounds: ui.Rect) interaction.Error!void {
-    const table: *const Table = @ptrCast(@alignCast(component));
-    return collectTableInteractions(table.*, collector, bounds);
 }
 
 pub fn writeHtml(table: Table, out: []u8) HtmlError![]u8 {
@@ -155,11 +145,6 @@ pub fn writeHtml(table: Table, out: []u8) HtmlError![]u8 {
     return writer.written();
 }
 
-fn writeHtmlRegistered(component: *const anyopaque, out: []u8) HtmlError![]u8 {
-    const table: *const Table = @ptrCast(@alignCast(component));
-    return writeHtml(table.*, out);
-}
-
 pub fn writeMarkdown(table: Table, out: []u8) MarkdownError![]u8 {
     if (table.headers.len == 0) return error.InvalidMarkdown;
     var writer = MarkdownWriter.init(out);
@@ -184,11 +169,6 @@ pub fn writeMarkdown(table: Table, out: []u8) MarkdownError![]u8 {
     }
     try writer.endDirective();
     return writer.written();
-}
-
-fn writeMarkdownRegistered(component: *const anyopaque, out: []u8) MarkdownError![]u8 {
-    const table: *const Table = @ptrCast(@alignCast(component));
-    return writeMarkdown(table.*, out);
 }
 
 pub fn readMarkdown(markdown: []const u8, out_rows: []TableRow, out_cells: []TableCell, text_out: []u8) MarkdownError!Table {
@@ -343,8 +323,7 @@ test "table component renders rows aligns numeric cells and collects row hits" {
 
     try std.testing.expectEqual(ui.TextAlign.end, textCommand(scene.written(), "Amount").?.text.alignment);
     try std.testing.expectEqual(ui.TextAlign.end, textCommand(scene.written(), "$0.00").?.text.alignment);
-    try std.testing.expect(ui_input.hitTest(scene.written(), 20, 58) == null);
-    const hit = ui_input.regionHitTest(collector.written(), 20, 58).?;
+    const hit = ui_input.hitTest(collector.written(), 20, 58).?;
     try std.testing.expectEqual(@as(u32, 701), hit.id);
 }
 
@@ -421,7 +400,7 @@ test "table registers explicit runtime descriptor" {
     try std.testing.expect(std.mem.indexOf(u8, encoded_html, "<table data-er-component=\"table\"") != null);
     try std.testing.expect(std.mem.indexOf(u8, encoded_markdown, ":::table") != null);
     try std.testing.expect(textCommand(scene.written(), "WASM") != null);
-    try std.testing.expectEqual(@as(u32, 91), ui_input.regionHitTest(collector.written(), 20, 58).?.id);
+    try std.testing.expectEqual(@as(u32, 91), ui_input.hitTest(collector.written(), 20, 58).?.id);
 }
 
 test "table registry descriptor can be updated at runtime" {

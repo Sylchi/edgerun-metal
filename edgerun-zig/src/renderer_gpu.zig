@@ -99,6 +99,7 @@ pub const Primitive = struct {
     buffer_handle: u64 = 0,
     buffer_modifier: u64 = 0,
     atlas_id: u32 = 0,
+    icon_id: u32 = 0,
     u0: f32 = 0.0,
     v0: f32 = 0.0,
     u1: f32 = 1.0,
@@ -371,7 +372,7 @@ fn encodeIrBuffers(
         .rects, .overlay_rects => |rects| try encodeIrRects(rects, out),
         .image => |vertices| try encodeIrTextured(.image_quad, vertices, out),
         .text, .overlay_text => |vertices| try encodeIrTextured(.text_quad, vertices, out),
-        .icon, .overlay_icon => |vertices| try encodeIrTextured(.icon_quad, vertices, out),
+        .icon, .overlay_icon => |instances| try encodeIrIcons(instances, out),
     };
 }
 
@@ -406,6 +407,21 @@ fn encodeIrTextured(
     while (iter.next() catch return error.InvalidIrBuffer) |quad| {
         const primitive = irTexturedPrimitive(kind, quad);
         try out.append(primitive);
+    }
+}
+
+fn encodeIrIcons(
+    values: []const f32,
+    out: *CommandBuffer,
+) Error!void {
+    var iter = renderer_ir.IconIterator.init(values) catch return error.InvalidIrBuffer;
+    while (iter.next() catch return error.InvalidIrBuffer) |instance| {
+        try out.append(.{
+            .kind = .icon_quad,
+            .bounds = instance.bounds,
+            .color = instance.color,
+            .icon_id = instance.icon_id,
+        });
     }
 }
 
@@ -455,10 +471,10 @@ fn encodeCommand(command: ui.Command, out: *CommandBuffer) Error!void {
             .bounds = text_cmd.origin,
             .color = text_cmd.color,
         }),
-        .icon_quad => |quad| try out.append(quadPrimitive(.icon_quad, quad)),
+        .icon_quad => |quad| try out.append(iconPrimitive(quad)),
         .text_quad => |quad| try out.append(quadPrimitive(.text_quad, quad)),
         .image_quad => |quad| try out.append(quadPrimitive(.image_quad, quad)),
-        .hit, .drag_source, .drop_target, .transition => {},
+        .drag_source, .drop_target, .transition => {},
     }
 }
 
@@ -472,6 +488,15 @@ fn quadPrimitive(kind: PrimitiveKind, quad: ui.Quad) Primitive {
         .v0 = quad.v0,
         .u1 = quad.u1,
         .v1 = quad.v1,
+    };
+}
+
+fn iconPrimitive(quad: ui.IconQuad) Primitive {
+    return .{
+        .kind = .icon_quad,
+        .bounds = quad.bounds,
+        .color = quad.color,
+        .icon_id = quad.icon_id,
     };
 }
 
@@ -621,7 +646,6 @@ test "gpu renderer encodes canonical ir frames" {
     var source_context: u8 = 0;
     const sources = renderer_ir.Sources{
         .font = .{ .context = &source_context, .metrics = testFontMetrics, .width = testTextWidth, .glyph = testGlyph },
-        .icon = .{ .context = &source_context, .rect = testIconRect },
     };
     try renderer_ir.packScene(buffers, sources, scene.written());
 
@@ -640,7 +664,7 @@ test "gpu renderer encodes canonical ir frames" {
     );
 
     const surfaces = [_]Surface{testSurface()};
-    const receipt = try renderer.renderIrWithResources(&surfaces, buffers, .{ .font_atlas = true, .icon_atlas = true });
+    const receipt = try renderer.renderIrWithResources(&surfaces, buffers, .{ .font_atlas = true });
     try std.testing.expect(receipt.valid());
     try std.testing.expectEqual(ui.RectMode.shadow, primitives[1].rect_mode);
     try std.testing.expect(primitives[1].radius > 0.0);
@@ -650,6 +674,38 @@ test "gpu renderer encodes canonical ir frames" {
     try std.testing.expect(test_device.uploaded == receipt.primitive_count);
     try std.testing.expect(test_device.rendered == receipt.dirty_tile_count);
     try std.testing.expectEqual(receipt.sequence, test_device.last_sequence);
+}
+
+test "gpu renderer keeps semantic icon ids separate from texture atlas ids" {
+    const expected_icon_id: u32 = 7;
+    var storage = renderer_ir.FixedBuffers(0, 0, 1, 0, 0, 0, 0){};
+    const buffers = storage.buffers();
+    try renderer_ir.pushIcon(buffers, .base, .{
+        .bounds = .{ .x = 8, .y = 8, .w = 16, .h = 16 },
+        .icon_id = expected_icon_id,
+        .color = .accent,
+    });
+
+    var primitives: [4]Primitive = undefined;
+    var tile_marks: [16]u8 = undefined;
+    var dirty_ids: [16]u32 = undefined;
+    var test_device = TestDevice{};
+    var renderer = try Renderer.init(
+        test_device.device(),
+        .{ .width = 64, .height = 64, .stride = 64, .refresh_hz = 60 },
+        16,
+        16,
+        &primitives,
+        &tile_marks,
+        &dirty_ids,
+    );
+
+    const receipt = try renderer.renderIrWithResources(&.{}, buffers, .{});
+    try std.testing.expect(receipt.valid());
+    try std.testing.expectEqual(@as(usize, 1), receipt.primitive_count);
+    try std.testing.expectEqual(PrimitiveKind.icon_quad, primitives[0].kind);
+    try std.testing.expectEqual(expected_icon_id, primitives[0].icon_id);
+    try std.testing.expectEqual(@as(u32, 0), primitives[0].atlas_id);
 }
 
 test "gpu renderer receipts carry hardware rasterization capability" {
@@ -709,9 +765,5 @@ fn testTextWidth(_: *anyopaque, value: []const u8, _: u8) f32 {
 }
 
 fn testGlyph(_: *anyopaque, _: u8, _: u8) renderer_ir.Error!?renderer_ir.Glyph {
-    return null;
-}
-
-fn testIconRect(_: *anyopaque, _: u32) ?renderer_ir.AtlasRect {
     return null;
 }

@@ -1,8 +1,7 @@
 const std = @import("std");
-const icon = @import("icon.zig");
+const icon_vector = @import("icon_vector.zig");
 const renderer_font_atlas = @import("renderer_font_atlas.zig");
 const renderer_ir = @import("renderer_ir.zig");
-const tabler_atlas = @import("tabler_atlas.zig");
 const ui = @import("ui.zig");
 
 pub const c = @cImport({
@@ -13,10 +12,11 @@ pub const State = struct {
     rect_program: c.GLuint,
     textured_program: c.GLuint,
     image_program: c.GLuint,
+    line_program: c.GLuint,
     rect_vbo: c.GLuint,
     textured_vbo: c.GLuint,
+    line_vbo: c.GLuint,
     font_texture: c.GLuint,
-    icon_texture: c.GLuint,
     image_texture: ?c.GLuint,
 };
 
@@ -61,6 +61,13 @@ const verification_grid_denominator: i32 = @intCast(verification_sample_axis + 1
 const opaque_alpha_min: u8 = 16;
 const fnv64_offset_basis: u64 = 0xcbf29ce484222325;
 const fnv64_prime: u64 = 0x100000001b3;
+const icon_circle_segments: usize = 12;
+const icon_line_vertex_count: usize = 6;
+const icon_position_components: usize = 2;
+const icon_line_float_count: usize = icon_line_vertex_count * icon_position_components;
+const icon_min_line_len: f32 = 0.001;
+const icon_min_stroke_px: f32 = 1.5;
+const icon_stroke_scale: f32 = 0.085;
 
 pub fn init(font_atlas: *renderer_font_atlas.Atlas, image: ?RgbaTexture) !State {
     try requireHardwareGl();
@@ -75,10 +82,11 @@ pub fn init(font_atlas: *renderer_font_atlas.Atlas, image: ?RgbaTexture) !State 
         .rect_program = try makeProgram(rect_vertex_shader, rect_fragment_shader),
         .textured_program = try makeProgram(textured_vertex_shader, textured_fragment_shader),
         .image_program = try makeProgram(textured_vertex_shader, image_fragment_shader),
+        .line_program = try makeProgram(line_vertex_shader, line_fragment_shader),
         .rect_vbo = makeBuffer(),
         .textured_vbo = makeBuffer(),
+        .line_vbo = makeBuffer(),
         .font_texture = makeAlphaTexture(renderer_font_atlas.width, renderer_font_atlas.height, font_atlas.alphaSlice()),
-        .icon_texture = makeAlphaTexture(tabler_atlas.width, tabler_atlas.height, tabler_atlas.alpha),
         .image_texture = image_texture,
     };
 }
@@ -86,12 +94,13 @@ pub fn init(font_atlas: *renderer_font_atlas.Atlas, image: ?RgbaTexture) !State 
 pub fn deinit(gl: *State) void {
     if (gl.image_texture) |texture| c.glDeleteTextures(1, &texture);
     c.glDeleteTextures(1, &gl.font_texture);
-    c.glDeleteTextures(1, &gl.icon_texture);
     c.glDeleteBuffers(1, &gl.rect_vbo);
     c.glDeleteBuffers(1, &gl.textured_vbo);
+    c.glDeleteBuffers(1, &gl.line_vbo);
     c.glDeleteProgram(gl.rect_program);
     c.glDeleteProgram(gl.textured_program);
     c.glDeleteProgram(gl.image_program);
+    c.glDeleteProgram(gl.line_program);
 }
 
 pub fn refreshFontTexture(gl: State, font_atlas: *const renderer_font_atlas.Atlas) void {
@@ -109,10 +118,10 @@ pub fn renderFrameToViewport(gl: State, logical_width: i32, logical_height: i32,
     try drawRects(gl, logical_width, logical_height, scale, buffers.liveRects());
     try drawImage(gl, logical_width, logical_height, buffers.liveImageVertices());
     try drawTextured(gl, logical_width, logical_height, buffers.liveTextVertices(), gl.font_texture);
-    try drawTextured(gl, logical_width, logical_height, buffers.liveIconVertices(), gl.icon_texture);
+    try drawIcons(gl, logical_width, logical_height, buffers.liveIconVertices());
     try drawRects(gl, logical_width, logical_height, scale, buffers.liveOverlayRects());
     try drawTextured(gl, logical_width, logical_height, buffers.liveOverlayTextVertices(), gl.font_texture);
-    try drawTextured(gl, logical_width, logical_height, buffers.liveOverlayIconVertices(), gl.icon_texture);
+    try drawIcons(gl, logical_width, logical_height, buffers.liveOverlayIconVertices());
 }
 
 fn drawImage(gl: State, width: i32, height: i32, values: []const f32) !void {
@@ -133,7 +142,6 @@ pub fn verifyFrameNonBlank(width: i32, height: i32) !FrameProof {
 pub fn sources(font_atlas: *renderer_font_atlas.Atlas) renderer_ir.Sources {
     return .{
         .font = font_atlas.source(),
-        .icon = .{ .context = font_atlas, .rect = iconAtlasRect },
     };
 }
 
@@ -268,6 +276,118 @@ fn drawTexturedWithProgram(gl: State, width: i32, height: i32, values: []const f
     c.glDrawArrays(c.GL_TRIANGLES, 0, @intCast(values.len / renderer_ir.text_vertex_float_stride));
 }
 
+fn drawIcons(gl: State, width: i32, height: i32, values: []const f32) !void {
+    var iter = renderer_ir.IconIterator.init(values) catch return error.InvalidIrBuffer;
+    c.glUseProgram(gl.line_program);
+    c.glUniform2f(c.glGetUniformLocation(gl.line_program, "u_screen"), @floatFromInt(width), @floatFromInt(height));
+    c.glBindBuffer(c.GL_ARRAY_BUFFER, gl.line_vbo);
+    c.glEnableVertexAttribArray(0);
+    c.glVertexAttribPointer(0, 2, c.GL_FLOAT, c.GL_FALSE, 2 * @sizeOf(f32), null);
+    while (iter.next() catch return error.InvalidIrBuffer) |instance| {
+        try drawIconInstance(gl, instance);
+    }
+}
+
+fn drawIconInstance(gl: State, instance: renderer_ir.IconInstance) !void {
+    c.glUniform4f(c.glGetUniformLocation(gl.line_program, "u_color"), colorF(instance.color.r), colorF(instance.color.g), colorF(instance.color.b), colorF(instance.color.a));
+    var iter = icon_vector.Iterator.init(icon_vector.dataForIconId(instance.icon_id));
+    while (iter.next() catch return error.InvalidIrBuffer) |op| {
+        switch (op) {
+            .polyline => |points| try drawIconPolyline(gl, instance.bounds, points),
+            .circle => |circle| try drawIconCircle(gl, instance.bounds, circle.cx, circle.cy, circle.radius),
+            .ellipse => |ellipse| try drawIconEllipse(gl, instance.bounds, ellipse.cx, ellipse.cy, ellipse.rx, ellipse.ry, ellipse.full),
+            .round_rect => |rect| try drawIconBox(gl, ui.Rect.init(
+                instance.bounds.x + instance.bounds.w * rect.x,
+                instance.bounds.y + instance.bounds.h * rect.y,
+                instance.bounds.w * rect.w,
+                instance.bounds.h * rect.h,
+            )),
+            .filled_circle => |circle| try drawIconFilledCircle(gl, instance.bounds, circle.cx, circle.cy, circle.radius),
+        }
+    }
+}
+
+fn drawIconBox(gl: State, bounds: ui.Rect) !void {
+    try drawIconLine(gl, bounds, 0.22, 0.22, 0.78, 0.22);
+    try drawIconLine(gl, bounds, 0.78, 0.22, 0.78, 0.78);
+    try drawIconLine(gl, bounds, 0.78, 0.78, 0.22, 0.78);
+    try drawIconLine(gl, bounds, 0.22, 0.78, 0.22, 0.22);
+}
+
+fn drawIconPolyline(gl: State, bounds: ui.Rect, points: []const f32) !void {
+    if (points.len < icon_vector.polyline_min_points * icon_vector.point_float_count) return;
+    var index: usize = icon_vector.point_float_count;
+    while (index < points.len) : (index += icon_vector.point_float_count) {
+        try drawIconLine(gl, bounds, points[index - 2], points[index - 1], points[index], points[index + 1]);
+    }
+}
+
+fn drawIconCircle(gl: State, bounds: ui.Rect, cx: f32, cy: f32, radius: f32) !void {
+    try drawIconEllipse(gl, bounds, cx, cy, radius, radius, true);
+}
+
+fn drawIconEllipse(gl: State, bounds: ui.Rect, cx: f32, cy: f32, rx: f32, ry: f32, full: bool) !void {
+    const start: f32 = if (full) 0.0 else 0.5;
+    const end: f32 = 1.0;
+    const span = end - start;
+    var prev_x = cx + @cos(start * std.math.tau) * rx;
+    var prev_y = cy + @sin(start * std.math.tau) * ry;
+    var index: usize = 1;
+    while (index <= icon_circle_segments) : (index += 1) {
+        const turn = start + @as(f32, @floatFromInt(index)) * span / @as(f32, @floatFromInt(icon_circle_segments));
+        const angle = turn * std.math.tau;
+        const next_x = cx + @cos(angle) * rx;
+        const next_y = cy + @sin(angle) * ry;
+        try drawIconLine(gl, bounds, prev_x, prev_y, next_x, next_y);
+        prev_x = next_x;
+        prev_y = next_y;
+    }
+}
+
+fn drawIconFilledCircle(gl: State, bounds: ui.Rect, cx: f32, cy: f32, radius: f32) !void {
+    _ = gl;
+    var values: [(icon_circle_segments + 2) * 2]f32 = undefined;
+    const center_x = bounds.x + bounds.w * cx;
+    const center_y = bounds.y + bounds.h * cy;
+    const pixel_radius = @min(bounds.w, bounds.h) * radius;
+    values[0] = center_x;
+    values[1] = center_y;
+    var index: usize = 0;
+    while (index <= icon_circle_segments) : (index += 1) {
+        const angle = @as(f32, @floatFromInt(index)) * std.math.tau / @as(f32, @floatFromInt(icon_circle_segments));
+        const offset = (index + 1) * 2;
+        values[offset] = center_x + @cos(angle) * pixel_radius;
+        values[offset + 1] = center_y + @sin(angle) * pixel_radius;
+    }
+    c.glBufferData(c.GL_ARRAY_BUFFER, @intCast(values.len * @sizeOf(f32)), &values, c.GL_DYNAMIC_DRAW);
+    c.glDrawArrays(c.GL_TRIANGLE_FAN, 0, @intCast(values.len / 2));
+}
+
+fn drawIconLine(gl: State, bounds: ui.Rect, x0n: f32, y0n: f32, x1n: f32, y1n: f32) !void {
+    _ = gl;
+    const x0 = bounds.x + bounds.w * x0n;
+    const y0 = bounds.y + bounds.h * y0n;
+    const x1 = bounds.x + bounds.w * x1n;
+    const y1 = bounds.y + bounds.h * y1n;
+    const dx = x1 - x0;
+    const dy = y1 - y0;
+    const len = @sqrt(dx * dx + dy * dy);
+    if (len <= icon_min_line_len) return;
+    const half_width = @max(icon_min_stroke_px, @min(bounds.w, bounds.h) * icon_stroke_scale) * 0.5;
+    const nx = -dy / len * half_width;
+    const ny = dx / len * half_width;
+    const values: [icon_line_float_count]f32 = .{
+        x0 + nx, y0 + ny,
+        x1 + nx, y1 + ny,
+        x1 - nx, y1 - ny,
+        x0 + nx, y0 + ny,
+        x1 - nx, y1 - ny,
+        x0 - nx, y0 - ny,
+    };
+    c.glBufferData(c.GL_ARRAY_BUFFER, @intCast(values.len * @sizeOf(f32)), &values, c.GL_DYNAMIC_DRAW);
+    c.glDrawArrays(c.GL_TRIANGLES, 0, icon_line_vertex_count);
+}
+
 fn makeBuffer() c.GLuint {
     var buffer: c.GLuint = 0;
     c.glGenBuffers(1, &buffer);
@@ -343,17 +463,6 @@ fn rectMode(mode: ui.RectMode) c.GLint {
         .border => 2,
         .linear_gradient => 3,
         .pie_slice => 0,
-    };
-}
-
-fn iconAtlasRect(_: *anyopaque, atlas_id: u32) ?renderer_ir.AtlasRect {
-    const value = icon.fromAtlasId(atlas_id) orelse return null;
-    const found = tabler_atlas.rect(value);
-    return .{
-        .u0 = (@as(f32, @floatFromInt(found.x)) + 0.5) / @as(f32, @floatFromInt(tabler_atlas.width)),
-        .v0 = (@as(f32, @floatFromInt(found.y)) + 0.5) / @as(f32, @floatFromInt(tabler_atlas.height)),
-        .u1 = (@as(f32, @floatFromInt(found.x + found.w)) - 0.5) / @as(f32, @floatFromInt(tabler_atlas.width)),
-        .v1 = (@as(f32, @floatFromInt(found.y + found.h)) - 0.5) / @as(f32, @floatFromInt(tabler_atlas.height)),
     };
 }
 
@@ -444,6 +553,23 @@ const image_fragment_shader =
     \\void main() {
     \\  vec4 texel = texture2D(u_tex, v_uv);
     \\  gl_FragColor = vec4(texel.rgb * v_color.rgb, texel.a * v_color.a);
+    \\}
+;
+
+const line_vertex_shader =
+    \\attribute vec2 a_pos;
+    \\uniform vec2 u_screen;
+    \\void main() {
+    \\  vec2 ndc = vec2(a_pos.x / u_screen.x * 2.0 - 1.0, 1.0 - a_pos.y / u_screen.y * 2.0);
+    \\  gl_Position = vec4(ndc, 0.0, 1.0);
+    \\}
+;
+
+const line_fragment_shader =
+    \\precision mediump float;
+    \\uniform vec4 u_color;
+    \\void main() {
+    \\  gl_FragColor = u_color;
     \\}
 ;
 

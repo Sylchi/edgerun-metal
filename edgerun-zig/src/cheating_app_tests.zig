@@ -17,6 +17,7 @@ const signed_receipt_bytes = object.header_size + object.signature_fixed_body_si
 const TestIds = struct {
     user: identity.Identity,
     device: identity.Identity,
+    allocator: identity.Identity,
     parent: identity.Identity,
     child: identity.Identity,
     grandchild: identity.Identity,
@@ -28,6 +29,7 @@ fn ids(epoch: clock.Stamp) TestIds {
     return .{
         .user = identity.Identity.init(.user, identity.Source.prepare(.hash, &preimage.rawHash("cheating user")).?, epoch).?,
         .device = identity.Identity.init(.device, identity.Source.prepare(.hash, &preimage.rawHash("cheating device")).?, epoch).?,
+        .allocator = identity.Identity.init(.app, identity.Source.prepare(.hash, &preimage.rawHash("cheating allocator")).?, epoch).?,
         .parent = identity.Identity.init(.app, identity.Source.prepare(.hash, &preimage.rawHash("cheating parent")).?, epoch).?,
         .child = identity.Identity.init(.app, identity.Source.prepare(.hash, &preimage.rawHash("cheating child")).?, epoch).?,
         .grandchild = identity.Identity.init(.app, identity.Source.prepare(.hash, &preimage.rawHash("cheating grandchild")).?, epoch).?,
@@ -68,7 +70,7 @@ fn spawnAuthorization(test_ids: TestIds, actor: identity.Identity, child: identi
 
 fn admittedSpawnAuthorization(app: *App, test_ids: TestIds, actor: identity.Identity, child: identity.Identity, epoch: clock.Stamp, label: []const u8) intent.Receipt {
     const authorization = spawnAuthorization(test_ids, actor, child, epoch, label);
-    app.admitAuthorization(authorization, app.admissionCapability(authorization) orelse unreachable) catch unreachable;
+    app.admitOwnAuthorization(authorization, actor, child) catch unreachable;
     return authorization;
 }
 
@@ -91,7 +93,7 @@ fn signingCapability(test_ids: TestIds, epoch: clock.Stamp) App.SigningCapabilit
 
 fn admittedSigningCapability(app: *App, test_ids: TestIds, epoch: clock.Stamp) App.SigningCapability {
     const capability = signingCapability(test_ids, epoch);
-    app.admitAuthorization(capability.authorization, app.admissionCapability(capability.authorization) orelse unreachable) catch unreachable;
+    app.admitOwnAuthorization(capability.authorization, test_ids.parent, test_ids.parent) catch unreachable;
     return capability;
 }
 
@@ -160,7 +162,7 @@ test "cheating app cannot steal parent allocation id" {
     var cheating = spawned.app;
     const owned_slice = try cheating.reserveSharedMemory(1, "owned child byte", epoch);
     const forged_slice = App.SharedMemory{
-        .owner = cheating.id.id,
+        .owner = cheating.id,
         .id = parent_allocation.id().?,
         .offset = owned_slice.offset,
         .bytes = owned_slice.bytes,
@@ -169,7 +171,7 @@ test "cheating app cannot steal parent allocation id" {
     const share = intent.admit(
         test_ids.user,
         test_ids.device,
-        test_ids.child,
+        test_ids.allocator,
         test_ids.reader,
         .grant_resource,
         .exports_data,
@@ -177,7 +179,7 @@ test "cheating app cannot steal parent allocation id" {
         intent.requestId("cheating forged allocation share").?,
     ).?;
 
-    try std.testing.expectError(error.Corrupt, cheating.shareMemoryReadOnly(test_ids.reader.id, forged_slice, epoch, share));
+    try std.testing.expectError(error.Corrupt, cheating.shareMemoryReadOnly(test_ids.allocator, test_ids.reader, forged_slice, epoch, share));
 }
 
 test "cheating app cannot read sibling storage" {
@@ -237,7 +239,7 @@ test "cheating app cannot share memory with unadmitted grant" {
     const share = intent.admit(
         test_ids.user,
         test_ids.device,
-        test_ids.child,
+        test_ids.allocator,
         test_ids.reader,
         .grant_resource,
         .exports_data,
@@ -245,7 +247,7 @@ test "cheating app cannot share memory with unadmitted grant" {
         intent.requestId("cheating unadmitted memory share").?,
     ).?;
 
-    try std.testing.expectError(error.Unauthorized, cheating.shareMemoryReadOnly(test_ids.reader.id, shared, epoch, share));
+    try std.testing.expectError(error.Unauthorized, cheating.shareMemoryReadOnly(test_ids.allocator, test_ids.reader, shared, epoch, share));
 }
 
 test "cheating app cannot spawn with authorization for different actor" {
@@ -404,9 +406,8 @@ test "cheating app cannot admit parent authorization with child capability" {
         allocation(child_memory_bytes, child_storage_bytes, child_storage_slots, 1),
     ).?;
     const authorization = spawnAuthorization(test_ids, test_ids.parent, test_ids.child, epoch, "cheating wrong admission capability");
-    const child_capability = child.admissionCapability(authorization).?;
 
-    try std.testing.expectError(error.BadArgument, parent.admitAuthorization(authorization, child_capability));
+    try std.testing.expectError(error.BadArgument, parent.admitAuthorizationFromApp(authorization, child, test_ids.parent, test_ids.child));
 }
 
 test "cheating app cannot double report work" {
@@ -444,7 +445,7 @@ test "cheating app cannot double report work" {
         admittedSpawnAuthorization(&parent, test_ids, test_ids.parent, test_ids.child, epoch, "cheating work child spawn"),
         child_manifest,
     );
-    const work = spawned.app.completeWork(parent.id.id, testHash("work input"), testHash("work output"), testHash("cheating app code"), manifest_id, epoch, end, child_allocation, spawned.receipt).?;
+    const work = spawned.app.completeWork(parent.id, testHash("work input"), testHash("work output"), testHash("cheating app code"), manifest_id, epoch, end, child_allocation, spawned.receipt).?;
     const draft = try work.writeObject(end, &draft_raw);
     const context = App.WorkReceiptDraftContext{
         .child = test_ids.child,
@@ -499,7 +500,7 @@ test "cheating app cannot sign work with unadmitted signing capability" {
         admittedSpawnAuthorization(&parent, test_ids, test_ids.parent, test_ids.child, epoch, "cheating unadmitted signing child spawn"),
         child_manifest,
     );
-    const work = spawned.app.completeWork(parent.id.id, testHash("unadmitted signing input"), testHash("unadmitted signing output"), testHash("cheating app code"), manifest_id, epoch, end, child_allocation, spawned.receipt).?;
+    const work = spawned.app.completeWork(parent.id, testHash("unadmitted signing input"), testHash("unadmitted signing output"), testHash("cheating app code"), manifest_id, epoch, end, child_allocation, spawned.receipt).?;
     const draft = try work.writeObject(end, &draft_raw);
     const context = App.WorkReceiptDraftContext{
         .child = test_ids.child,
@@ -553,7 +554,7 @@ test "cheating app cannot report work for app hash not spawned" {
         child_manifest,
     );
     const wrong_app_hash = testHash("cheating different app code");
-    const work = spawned.app.completeWork(parent.id.id, testHash("wrong app hash input"), testHash("wrong app hash output"), wrong_app_hash, manifest_id, epoch, end, child_allocation, spawned.receipt).?;
+    const work = spawned.app.completeWork(parent.id, testHash("wrong app hash input"), testHash("wrong app hash output"), wrong_app_hash, manifest_id, epoch, end, child_allocation, spawned.receipt).?;
     const draft = try work.writeObject(end, &draft_raw);
     const context = App.WorkReceiptDraftContext{
         .child = test_ids.child,

@@ -1,8 +1,12 @@
 const std = @import("std");
+const authority = @import("authority.zig");
 const bytes = @import("bytes.zig");
 const clock = @import("clock.zig");
 const identity = @import("identity.zig");
+const intent = @import("intent.zig");
 const preimage = @import("preimage.zig");
+const seal = @import("seal.zig");
+const tpmapp = @import("tpmapp.zig");
 
 pub const id_size = preimage.hash_size;
 pub const header_size = 148;
@@ -435,6 +439,79 @@ pub const SignatureInfo = struct {
     }
 };
 
+pub const SealContext = struct {
+    tpm: *tpmapp.App,
+    caller: identity.Identity,
+    user: ?identity.Identity = null,
+    authorization: intent.Receipt,
+    owner_index: u16 = 0,
+
+    pub fn valid(self: SealContext) bool {
+        return authority.dataActor(self.caller) != null and
+            authority.Principal.tpm(self.tpm.id) != null and
+            self.authorization.valid() and
+            optionalUserValid(self.user) and
+            authorizationBindsDeviceGrant(self.authorization, self.tpm.device, self.caller, self.tpm.id, .seal_data, .writes_private_state);
+    }
+};
+
+pub const OpenContext = struct {
+    tpm: *tpmapp.App,
+    caller: identity.Identity,
+    user: ?identity.Identity = null,
+    authorization: intent.Receipt,
+
+    pub fn valid(self: OpenContext) bool {
+        return authority.dataActor(self.caller) != null and
+            authority.Principal.tpm(self.tpm.id) != null and
+            self.authorization.valid() and
+            optionalUserValid(self.user) and
+            authorizationBindsDeviceGrant(self.authorization, self.tpm.device, self.caller, self.tpm.id, .unseal_data, .reads_private_state);
+    }
+};
+
+pub const EncryptionResult = struct {
+    sealed: tpmapp.Sealed,
+    envelope: Envelope,
+
+    pub fn valid(self: EncryptionResult) bool {
+        return self.sealed.valid() and bytes.nonzero(&self.envelope.key_id) and bytes.nonzero(&self.envelope.metadata_hash);
+    }
+};
+
+pub const EncryptionError = Error || tpmapp.Error;
+
+pub fn sealPolicyForRequirements(req: Requirements, device: identity.Identity, caller: identity.Identity, user: ?identity.Identity) ?seal.Policy {
+    const device_principal = authority.Principal.device(device) orelse return null;
+    const caller_principal = authority.dataActor(caller) orelse return null;
+    return switch (req.confidentiality) {
+        .public => seal.Policy.public(),
+        .integrity_only => seal.Policy.integrityOnly(),
+        .app_private, .device_private => if (user == null) seal.Policy.machineAppIds(device_principal.id, caller_principal.id) else null,
+        .user_private, .user_app_private, .layered => if (user) |data_user| seal.Policy.machineAppUserIds(device_principal.id, caller_principal.id, data_user.id) else null,
+    };
+}
+
+pub fn encryptWithTpm(req: Requirements, plaintext: []const u8, context: SealContext) EncryptionError!EncryptionResult {
+    if (!context.valid() or !requiresSeal(req) or plaintext.len == 0) return error.BadArgument;
+    if (!dataUserMatchesGrant(req, context.user, context.authorization)) return error.BadArgument;
+    const policy = sealPolicyForRequirements(req, context.tpm.device, context.caller, context.user) orelse return error.BadArgument;
+    const sealed = try context.tpm.sealFor(context.caller, context.user, policy, context.authorization, plaintext);
+    const envelope = envelopeFromTpmSeal(context.caller, context.owner_index, sealed) orelse return error.BadArgument;
+    return .{ .sealed = sealed, .envelope = envelope };
+}
+
+pub fn decryptWithTpm(view: View, sealed: tpmapp.Sealed, context: OpenContext) EncryptionError!preimage.Hash {
+    if (!context.valid() or !sealed.valid() or !requiresSeal(view.header.requirements)) return error.BadArgument;
+    if (!dataUserMatchesGrant(view.header.requirements, context.user, context.authorization)) return error.BadArgument;
+    const policy = sealPolicyForRequirements(view.header.requirements, context.tpm.device, context.caller, context.user) orelse return error.BadArgument;
+    const policy_id = policy.id() orelse return error.BadArgument;
+    const sealed_policy_id = sealed.policy.id() orelse return error.BadArgument;
+    if (!bytes.eql(&policy_id, &sealed_policy_id)) return error.BadArgument;
+    if (!hasEnvelopeForTpmSeal(view, context.caller, sealed)) return error.Corrupt;
+    return try context.tpm.unsealFor(context.caller, context.user, sealed, context.authorization);
+}
+
 pub fn canonicalSize(kind: Kind, body_len: usize, owners: usize, envelopes: usize, children: usize) Error!usize {
     if (owners > max_owners or envelopes > max_envelopes or children > max_children) return error.BadArgument;
     if ((kind == .bytes or kind == .receipt) and children != 0) return error.BadArgument;
@@ -674,6 +751,84 @@ fn validEnvelopes(owners: []const Owner, envelopes: []const Envelope) bool {
     return true;
 }
 
+fn requiresSeal(req: Requirements) bool {
+    if (req.integrity == .sealed) return true;
+    if (req.durability == .memory) return false;
+    return switch (req.confidentiality) {
+        .public, .integrity_only => false,
+        .app_private, .user_private, .user_app_private, .device_private, .layered => true,
+    };
+}
+
+fn envelopeKindForIdentity(id: identity.Identity) ?EnvelopeKind {
+    return switch (id.kind) {
+        .device => .device,
+        .storage => .storage,
+        .app => .app,
+        .user => .user,
+        else => null,
+    };
+}
+
+fn ownerKindForIdentity(id: identity.Identity) ?OwnerKind {
+    return switch (id.kind) {
+        .device => .device,
+        .storage => .storage,
+        .app => .app,
+        .user => .user,
+        else => null,
+    };
+}
+
+fn envelopeFromTpmSeal(caller: identity.Identity, owner_index: u16, sealed: tpmapp.Sealed) ?Envelope {
+    const policy_id = sealed.policy.id() orelse return null;
+    return .{
+        .kind = envelopeKindForIdentity(caller) orelse return null,
+        .owner_index = owner_index,
+        .algorithm = .aes_gcm_256,
+        .flags = 0,
+        .key_id = sealed.ciphertext_hash,
+        .metadata_hash = policy_id,
+    };
+}
+
+fn hasEnvelopeForTpmSeal(view: View, caller: identity.Identity, sealed: tpmapp.Sealed) bool {
+    const expected_kind = envelopeKindForIdentity(caller) orelse return false;
+    const expected_owner_kind = ownerKindForIdentity(caller) orelse return false;
+    const policy_id = sealed.policy.id() orelse return false;
+    var index: usize = 0;
+    while (index < view.header.envelope_count) : (index += 1) {
+        const envelope = view.envelopeAt(index) catch return false;
+        if (envelope.kind != expected_kind or envelope.algorithm != .aes_gcm_256) continue;
+        if (!bytes.eql(&envelope.key_id, &sealed.ciphertext_hash)) continue;
+        if (!bytes.eql(&envelope.metadata_hash, &policy_id)) continue;
+        const owner = view.ownerAt(envelope.owner_index) catch return false;
+        if (owner.kind == expected_owner_kind and bytes.eql(&owner.node_id, &caller.id.bytes)) return true;
+    }
+    return false;
+}
+
+fn optionalUserValid(user: ?identity.Identity) bool {
+    return if (user) |value| value.kind == .user and value.id.valid() else true;
+}
+
+fn dataUserMatchesGrant(req: Requirements, user: ?identity.Identity, authorization: intent.Receipt) bool {
+    return switch (req.confidentiality) {
+        .public, .integrity_only => user == null,
+        .app_private, .device_private => user == null,
+        .user_private, .user_app_private, .layered => user != null and user.?.id.eql(authorization.intent.user),
+    };
+}
+
+fn authorizationBindsDeviceGrant(authorization: intent.Receipt, device: identity.Identity, actor: identity.Identity, tpm: identity.Identity, action: intent.Action, consequence: intent.Consequence) bool {
+    const device_principal = authority.Principal.device(device) orelse return false;
+    const actor_principal = authority.dataActor(actor) orelse return false;
+    const tpm_principal = authority.Principal.tpm(tpm) orelse return false;
+    return authorization.intent.device.eql(device_principal.id) and
+        authorization.admitted_by.eql(device_principal.id) and
+        authority.receiptPermits(authorization, authorization.intent.epoch, actor_principal, tpm_principal, action, consequence);
+}
+
 fn envelopeOwnerMatches(envelope_kind: EnvelopeKind, owner_kind: OwnerKind) bool {
     return switch (envelope_kind) {
         .none, .signature => true,
@@ -904,6 +1059,170 @@ test "writer builds owned canonical bytes nodes" {
         .metadata_hash = [_]u8{12} ++ [_]u8{0} ** 31,
     };
     try std.testing.expectError(error.BadArgument, writer.bytesNodeOwned(req, .{ .keeper = keeper }, &.{owner}, &.{bad_envelope}, "payload"));
+}
+
+test "object tpm encryption binds storage envelope to caller policy" {
+    var events: [4]tpmapp.Event = undefined;
+    const keeper = clock.KeeperId{ .bytes = [_]u8{9} ++ [_]u8{0} ** 31 };
+    const epoch = clock.Stamp{ .keeper = keeper };
+    const user = identity.Identity.init(.user, identity.Source.prepare(.hash, &preimage.rawHash("object seal user")).?, epoch).?;
+    const other_user = identity.Identity.init(.user, identity.Source.prepare(.hash, &preimage.rawHash("object seal other user")).?, epoch).?;
+    const device = identity.Identity.init(.device, identity.Source.prepare(.hash, &preimage.rawHash("object seal device")).?, epoch).?;
+    const other_device = identity.Identity.init(.device, identity.Source.prepare(.hash, &preimage.rawHash("object seal other device")).?, epoch).?;
+    const tpm_public = [_]u8{0xb1} ** identity.p256_public_size;
+    const tpm_id = identity.Identity.init(.app, identity.Source.prepare(.tpm_p256_public, &tpm_public).?, epoch).?;
+    const storage = identity.Identity.init(.storage, identity.Source.prepare(.hash, &preimage.rawHash("object seal storage")).?, epoch).?;
+    const other_storage = identity.Identity.init(.storage, identity.Source.prepare(.hash, &preimage.rawHash("object seal other storage")).?, epoch).?;
+    var tpm = tpmapp.App.init(tpm_id, device, clock.Clock.init(keeper, .{}).?, &events).?;
+
+    const seal_authorization = intent.admit(user, device, storage, tpm_id, .seal_data, .writes_private_state, tpm.clock.now, intent.requestId("object storage seal").?).?;
+    try tpm.admitCallerAuthorization(seal_authorization, storage);
+
+    const req = Requirements{
+        .durability = .durable,
+        .confidentiality = .user_private,
+        .portability = .machine_bound,
+        .integrity = .sealed,
+        .lifetime = .retained,
+        .visibility = .private,
+        .access = .explicit_io,
+    };
+    const encrypted = try encryptWithTpm(req, "bank record", .{
+        .tpm = &tpm,
+        .caller = storage,
+        .user = user,
+        .authorization = seal_authorization,
+    });
+    try std.testing.expect(encrypted.valid());
+    try std.testing.expectEqual(EnvelopeKind.storage, encrypted.envelope.kind);
+    try std.testing.expect(tpm.eventAt(0).?.caller.eql(authority.Principal.storage(storage).?));
+
+    try std.testing.expectError(error.BadArgument, encryptWithTpm(req, "bank record", .{
+        .tpm = &tpm,
+        .caller = user,
+        .user = user,
+        .authorization = seal_authorization,
+    }));
+
+    try std.testing.expectError(error.BadArgument, encryptWithTpm(req, "bank record", .{
+        .tpm = &tpm,
+        .caller = storage,
+        .user = other_user,
+        .authorization = seal_authorization,
+    }));
+
+    const wrong_device_authorization = intent.admit(user, other_device, storage, tpm_id, .seal_data, .writes_private_state, tpm.clock.now, intent.requestId("object wrong device seal").?).?;
+    try std.testing.expectError(error.BadArgument, encryptWithTpm(req, "bank record", .{
+        .tpm = &tpm,
+        .caller = storage,
+        .user = user,
+        .authorization = wrong_device_authorization,
+    }));
+
+    const owner = Owner{ .kind = .storage, .node_id = storage.id.bytes };
+    var raw: [header_size + owner_size + envelope_size + 11]u8 = undefined;
+    const canonical = try (NodeWriter{ .out = &raw }).bytesNodeOwned(req, tpm.clock.now, &.{owner}, &.{encrypted.envelope}, "bank record");
+    const view = try View.decode(canonical);
+
+    const unseal_authorization = intent.admit(user, device, storage, tpm_id, .unseal_data, .reads_private_state, tpm.clock.now, intent.requestId("object storage unseal").?).?;
+    try tpm.admitCallerAuthorization(unseal_authorization, storage);
+    const open_event = try decryptWithTpm(view, encrypted.sealed, .{
+        .tpm = &tpm,
+        .caller = storage,
+        .user = user,
+        .authorization = unseal_authorization,
+    });
+    try std.testing.expect(bytes.nonzero(&open_event));
+    try std.testing.expectEqual(@as(usize, 2), tpm.eventCount());
+
+    try std.testing.expectError(error.BadArgument, decryptWithTpm(view, encrypted.sealed, .{
+        .tpm = &tpm,
+        .caller = user,
+        .user = user,
+        .authorization = unseal_authorization,
+    }));
+
+    try std.testing.expectError(error.BadArgument, decryptWithTpm(view, encrypted.sealed, .{
+        .tpm = &tpm,
+        .caller = other_storage,
+        .user = user,
+        .authorization = unseal_authorization,
+    }));
+
+    try std.testing.expectError(error.BadArgument, decryptWithTpm(view, encrypted.sealed, .{
+        .tpm = &tpm,
+        .caller = storage,
+        .user = other_user,
+        .authorization = unseal_authorization,
+    }));
+}
+
+test "object app private encryption is app sealed without user decrypt principal" {
+    var events: [4]tpmapp.Event = undefined;
+    const keeper = clock.KeeperId{ .bytes = [_]u8{10} ++ [_]u8{0} ** 31 };
+    const epoch = clock.Stamp{ .keeper = keeper };
+    const grant_user = identity.Identity.init(.user, identity.Source.prepare(.hash, &preimage.rawHash("app private grant user")).?, epoch).?;
+    const device = identity.Identity.init(.device, identity.Source.prepare(.hash, &preimage.rawHash("app private device")).?, epoch).?;
+    const tpm_public = [_]u8{0xb2} ** identity.p256_public_size;
+    const tpm_id = identity.Identity.init(.app, identity.Source.prepare(.tpm_p256_public, &tpm_public).?, epoch).?;
+    const app = identity.Identity.init(.app, identity.Source.prepare(.hash, &preimage.rawHash("app private owner")).?, epoch).?;
+    const other_app = identity.Identity.init(.app, identity.Source.prepare(.hash, &preimage.rawHash("app private other app")).?, epoch).?;
+    var tpm = tpmapp.App.init(tpm_id, device, clock.Clock.init(keeper, .{}).?, &events).?;
+
+    const req = Requirements{
+        .durability = .durable,
+        .confidentiality = .app_private,
+        .portability = .machine_bound,
+        .integrity = .sealed,
+        .lifetime = .retained,
+        .visibility = .private,
+        .access = .explicit_io,
+    };
+    const seal_authorization = intent.admit(grant_user, device, app, tpm_id, .seal_data, .writes_private_state, tpm.clock.now, intent.requestId("app private seal storage grant").?).?;
+    try tpm.admitCallerAuthorization(seal_authorization, app);
+
+    const encrypted = try encryptWithTpm(req, "developer license", .{
+        .tpm = &tpm,
+        .caller = app,
+        .authorization = seal_authorization,
+    });
+    try std.testing.expect(encrypted.sealed.policy.user == null);
+    try std.testing.expectEqual(seal.Scope.machine_app, encrypted.sealed.policy.scope);
+    try std.testing.expectEqual(EnvelopeKind.app, encrypted.envelope.kind);
+
+    try std.testing.expectError(error.BadArgument, encryptWithTpm(req, "developer license", .{
+        .tpm = &tpm,
+        .caller = app,
+        .user = grant_user,
+        .authorization = seal_authorization,
+    }));
+
+    const owner = Owner{ .kind = .app, .node_id = app.id.bytes };
+    var raw: [header_size + owner_size + envelope_size + 17]u8 = undefined;
+    const canonical = try (NodeWriter{ .out = &raw }).bytesNodeOwned(req, tpm.clock.now, &.{owner}, &.{encrypted.envelope}, "developer license");
+    const view = try View.decode(canonical);
+
+    const unseal_authorization = intent.admit(grant_user, device, app, tpm_id, .unseal_data, .reads_private_state, tpm.clock.now, intent.requestId("app private unseal storage grant").?).?;
+    try tpm.admitCallerAuthorization(unseal_authorization, app);
+    const open_event = try decryptWithTpm(view, encrypted.sealed, .{
+        .tpm = &tpm,
+        .caller = app,
+        .authorization = unseal_authorization,
+    });
+    try std.testing.expect(bytes.nonzero(&open_event));
+
+    try std.testing.expectError(error.BadArgument, decryptWithTpm(view, encrypted.sealed, .{
+        .tpm = &tpm,
+        .caller = app,
+        .user = grant_user,
+        .authorization = unseal_authorization,
+    }));
+
+    try std.testing.expectError(error.BadArgument, decryptWithTpm(view, encrypted.sealed, .{
+        .tpm = &tpm,
+        .caller = other_app,
+        .authorization = unseal_authorization,
+    }));
 }
 
 test "writer builds canonical tree nodes from child records" {

@@ -45,7 +45,7 @@ pub const Callout = struct {
     }
 
     pub fn register(registry: *ComponentRegistry) RegistryError!void {
-        try registry.register(descriptor);
+        return common.registerDescriptor(registry, descriptor);
     }
 };
 
@@ -53,13 +53,13 @@ pub const descriptor = common.ComponentDescriptor{
     .name = "callout",
     .html_prefix = "<blockquote data-er-component=\"callout\"",
     .markdown_prefix = "> ",
-    .render = renderRegistered,
-    .write_html = writeHtmlRegistered,
-    .write_markdown = writeMarkdownRegistered,
+    .render = common.renderAdapter(Callout, renderCallout),
+    .write_html = common.writeHtmlAdapter(Callout, writeHtml),
+    .write_markdown = common.writeMarkdownAdapter(Callout, writeMarkdown),
 };
 
 pub fn register(registry: *ComponentRegistry) RegistryError!void {
-    return Callout.register(registry);
+    return common.registerDescriptor(registry, descriptor);
 }
 
 pub fn renderCallout(callout: Callout, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
@@ -75,11 +75,6 @@ pub fn measureCallout(callout: Callout, constraints: layout.Constraints) layout.
     return base_text_block.measure(callout.value, constraints.inner(insets), callout_metrics).withInsets(insets).applyExact(constraints);
 }
 
-fn renderRegistered(component: *const anyopaque, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
-    const callout: *const Callout = @ptrCast(@alignCast(component));
-    return renderCallout(callout.*, scene, bounds, options);
-}
-
 pub fn writeHtml(callout: Callout, out: []u8) HtmlError![]u8 {
     var writer = HtmlWriter.init(out);
     try writer.writeAll("<blockquote data-er-component=\"callout\">");
@@ -88,22 +83,12 @@ pub fn writeHtml(callout: Callout, out: []u8) HtmlError![]u8 {
     return writer.written();
 }
 
-fn writeHtmlRegistered(component: *const anyopaque, out: []u8) HtmlError![]u8 {
-    const callout: *const Callout = @ptrCast(@alignCast(component));
-    return writeHtml(callout.*, out);
-}
-
 pub fn writeMarkdown(callout: Callout, out: []u8) MarkdownError![]u8 {
     if (callout.value.len == 0) return error.InvalidMarkdown;
     var writer = MarkdownWriter.init(out);
     try writer.writeAll("> ");
     try writer.writeEscapedInline(callout.value);
     return writer.written();
-}
-
-fn writeMarkdownRegistered(component: *const anyopaque, out: []u8) MarkdownError![]u8 {
-    const callout: *const Callout = @ptrCast(@alignCast(component));
-    return writeMarkdown(callout.*, out);
 }
 
 pub fn readMarkdown(markdown: []const u8, text_out: []u8) MarkdownError!Callout {

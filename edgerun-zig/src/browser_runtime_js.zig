@@ -109,7 +109,26 @@ pub const source =
     \\  out_color = vec4(texel.rgb * v_color.rgb, texel.a * v_color.a);
     \\}`;
     \\
-    \\document.head.insertAdjacentHTML("beforeend", `<style>html,body{width:100%;height:100%;margin:0;background:#09090b;overflow:hidden}canvas{display:block;width:100vw;height:100vh;background:#09090b;outline:none}#edgerun-dom{position:fixed;inset:0;z-index:2}#edgerun-dom[hidden]{display:none}<\/style>`);
+    \\const lineVertexSource = `#version 300 es
+    \\layout(location = 0) in vec2 a_pos;
+    \\layout(location = 1) in vec4 a_color;
+    \\uniform vec2 u_screen;
+    \\out vec4 v_color;
+    \\void main() {
+    \\  vec2 ndc = vec2(a_pos.x / u_screen.x * 2.0 - 1.0, 1.0 - a_pos.y / u_screen.y * 2.0);
+    \\  gl_Position = vec4(ndc, 0.0, 1.0);
+    \\  v_color = a_color;
+    \\}`;
+    \\
+    \\const lineFragmentSource = `#version 300 es
+    \\precision mediump float;
+    \\in vec4 v_color;
+    \\out vec4 out_color;
+    \\void main() {
+    \\  out_color = v_color;
+    \\}`;
+    \\
+    \\document.head.insertAdjacentHTML("beforeend", `<style>html,body{width:100%;height:100%;margin:0;background:#09090b;overflow:hidden}canvas{display:block;width:100vw;height:100vh;background:#09090b;outline:none;cursor:none}#edgerun-dom{position:fixed;inset:0;z-index:2}#edgerun-dom[hidden]{display:none}<\/style>`);
     \\document.body.innerHTML = `<main id="edgerun-dom" hidden><\/main><canvas id="edgerun" tabindex="0" aria-label="EdgeRun native UI surface"><\/canvas>`;
     \\const canvas = document.getElementById("edgerun");
     \\const wasmBuildVersion = "index-1";
@@ -132,6 +151,16 @@ pub const source =
     \\const hostCommandPushRouteHash = 2;
     \\const hostCommandSetTitle = 3;
     \\const hostCommandSetElementHtml = 4;
+    \\const iconVectorOpPolyline = 1;
+    \\const iconVectorOpCircle = 2;
+    \\const iconVectorOpEllipse = 3;
+    \\const iconVectorOpRoundRect = 4;
+    \\const iconVectorOpFilledCircle = 5;
+    \\const iconVectorPointFloatCount = 2;
+    \\const iconCircleSegments = 12;
+    \\const iconLineVertexFloatCount = 6;
+    \\const iconLineVertexByteStride = iconLineVertexFloatCount * Float32Array.BYTES_PER_ELEMENT;
+    \\const iconLineColorByteOffset = 2 * Float32Array.BYTES_PER_ELEMENT;
     \\const hostCommandHandlers = {
     \\  [hostCommandOpenUrl]: (payload) => window.open(payload, "_blank", "noopener,noreferrer"),
     \\  [hostCommandPushRouteHash]: pushNativeRouteHash,
@@ -144,22 +173,24 @@ pub const source =
     \\let shapeProgram;
     \\let texturedProgram;
     \\let imageProgram;
+    \\let lineProgram;
     \\let shapeVao;
     \\let texturedVao;
     \\let rectVbo;
     \\let texturedVbo;
+    \\let lineVbo;
     \\let shapeScreen;
     \\let texturedScreen;
     \\let texturedTex;
     \\let imageScreen;
     \\let imageTex;
+    \\let lineScreen;
     \\let fontTexture;
-    \\let iconTexture;
     \\let postImageTexture;
     \\let fontAtlasGeneration = 0;
     \\let rectStride = 15;
     \\let textStride = 8;
-    \\let iconStride = 8;
+    \\let iconStride = 9;
     \\let imageStride = 8;
     \\let scheduled = false;
     \\let cssWidth = 1;
@@ -236,6 +267,10 @@ pub const source =
     \\  imageProgram = program(texturedVertexSource, imageFragmentSource);
     \\  imageScreen = gl.getUniformLocation(imageProgram, "u_screen");
     \\  imageTex = gl.getUniformLocation(imageProgram, "u_tex");
+    \\
+    \\  lineProgram = program(lineVertexSource, lineFragmentSource);
+    \\  lineVbo = gl.createBuffer();
+    \\  lineScreen = gl.getUniformLocation(lineProgram, "u_screen");
     \\}
     \\
     \\function alphaTexture(width, height, ptr) {
@@ -269,8 +304,6 @@ pub const source =
     \\  if (fontTexture) gl.deleteTexture(fontTexture);
     \\  fontTexture = alphaTexture(wasm.er_ui_font_atlas_width(), wasm.er_ui_font_atlas_height(), wasm.er_ui_font_atlas_ptr());
     \\  fontAtlasGeneration = wasm.er_ui_font_atlas_generation();
-    \\  if (iconTexture) gl.deleteTexture(iconTexture);
-    \\  iconTexture = alphaTexture(wasm.er_ui_icon_atlas_width(), wasm.er_ui_icon_atlas_height(), wasm.er_ui_icon_atlas_ptr());
     \\}
     \\
     \\function initPostImage() {
@@ -323,7 +356,6 @@ pub const source =
     \\  }
     \\  schedule();
     \\
-    \\  updateCursor();
     \\  refreshFontAtlas();
     \\
     \\  gl.viewport(0, 0, canvas.width, canvas.height);
@@ -335,10 +367,10 @@ pub const source =
     \\  drawRects(wasm.er_ui_gpu_rect_buffer_ptr, wasm.er_ui_gpu_rect_buffer_len);
     \\  drawImageTexture(postImageTexture, wasm.er_ui_gpu_image_vertex_buffer_ptr, wasm.er_ui_gpu_image_vertex_buffer_len, imageStride);
     \\  drawTextured(fontTexture, wasm.er_ui_gpu_text_vertex_buffer_ptr, wasm.er_ui_gpu_text_vertex_buffer_len, textStride);
-    \\  drawTextured(iconTexture, wasm.er_ui_gpu_icon_vertex_buffer_ptr, wasm.er_ui_gpu_icon_vertex_buffer_len, iconStride);
+    \\  drawIcons(wasm.er_ui_gpu_icon_vertex_buffer_ptr, wasm.er_ui_gpu_icon_vertex_buffer_len);
     \\  drawRects(wasm.er_ui_gpu_overlay_rect_buffer_ptr, wasm.er_ui_gpu_overlay_rect_buffer_len);
     \\  drawTextured(fontTexture, wasm.er_ui_gpu_overlay_text_vertex_buffer_ptr, wasm.er_ui_gpu_overlay_text_vertex_buffer_len, textStride);
-    \\  drawTextured(iconTexture, wasm.er_ui_gpu_overlay_icon_vertex_buffer_ptr, wasm.er_ui_gpu_overlay_icon_vertex_buffer_len, iconStride);
+    \\  drawIcons(wasm.er_ui_gpu_overlay_icon_vertex_buffer_ptr, wasm.er_ui_gpu_overlay_icon_vertex_buffer_len);
     \\}
     \\
     \\function drawRects(ptrFn, lenFn) {
@@ -368,6 +400,124 @@ pub const source =
     \\  gl.drawArrays(gl.TRIANGLES, 0, len / stride);
     \\}
     \\
+    \\function drawIcons(ptrFn, lenFn) {
+    \\  const len = lenFn();
+    \\  if (len === 0) return;
+    \\  if (len % iconStride !== 0) throw new Error("invalid icon instance buffer");
+    \\  const instances = new Float32Array(wasm.memory.buffer, ptrFn(), len);
+    \\  const out = [];
+    \\  for (let offset = 0; offset < len; offset += iconStride) {
+    \\    const x = instances[offset + 0];
+    \\    const y = instances[offset + 1];
+    \\    const w = instances[offset + 2];
+    \\    const h = instances[offset + 3];
+    \\    const color = [instances[offset + 4], instances[offset + 5], instances[offset + 6], instances[offset + 7]];
+    \\    const id = Math.round(instances[offset + 8]);
+    \\    pushIconLines(out, x, y, w, h, color, id);
+    \\  }
+    \\  if (out.length === 0) return;
+    \\  const values = new Float32Array(out);
+    \\  gl.useProgram(lineProgram);
+    \\  gl.uniform2f(lineScreen, cssWidth, cssHeight);
+    \\  gl.bindBuffer(gl.ARRAY_BUFFER, lineVbo);
+    \\  gl.bufferData(gl.ARRAY_BUFFER, values, gl.DYNAMIC_DRAW);
+    \\  gl.enableVertexAttribArray(0);
+    \\  gl.enableVertexAttribArray(1);
+    \\  gl.vertexAttribPointer(0, 2, gl.FLOAT, false, iconLineVertexByteStride, 0);
+    \\  gl.vertexAttribPointer(1, 4, gl.FLOAT, false, iconLineVertexByteStride, iconLineColorByteOffset);
+    \\  gl.drawArrays(gl.TRIANGLES, 0, values.length / iconLineVertexFloatCount);
+    \\}
+    \\
+    \\function pushIconLines(out, x, y, w, h, color, id) {
+    \\  const line = (x0, y0, x1, y1) => pushLine(out, x + w * x0, y + h * y0, x + w * x1, y + h * y1, Math.max(1.5, Math.min(w, h) * 0.085), color);
+    \\  const vectorLen = wasm.er_ui_icon_vector_len(id);
+    \\  if (vectorLen === 0) return;
+    \\  const vectorPtr = wasm.er_ui_icon_vector_ptr(id);
+    \\  if (vectorPtr === 0) return;
+    \\  const vector = new Float32Array(wasm.memory.buffer, vectorPtr, vectorLen);
+    \\  let offset = 0;
+    \\  while (offset < vectorLen) {
+    \\    const op = vector[offset++];
+    \\    if (op === iconVectorOpPolyline) {
+    \\      const count = Math.round(vector[offset++]);
+    \\      const start = offset;
+    \\      offset += count * iconVectorPointFloatCount;
+    \\      for (let i = start + iconVectorPointFloatCount; i < offset; i += iconVectorPointFloatCount) line(vector[i - 2], vector[i - 1], vector[i], vector[i + 1]);
+    \\    } else if (op === iconVectorOpCircle) {
+    \\      circleLines(line, vector[offset], vector[offset + 1], vector[offset + 2]);
+    \\      offset += 3;
+    \\    } else if (op === iconVectorOpEllipse) {
+    \\      ellipseLines(line, vector[offset], vector[offset + 1], vector[offset + 2], vector[offset + 3], vector[offset + 4] !== 0);
+    \\      offset += 5;
+    \\    } else if (op === iconVectorOpRoundRect) {
+    \\      boxLines(line, vector[offset], vector[offset + 1], vector[offset + 2], vector[offset + 3]);
+    \\      offset += 5;
+    \\    } else if (op === iconVectorOpFilledCircle) {
+    \\      pushFilledCircle(out, x + w * vector[offset], y + h * vector[offset + 1], Math.min(w, h) * vector[offset + 2], color);
+    \\      offset += 3;
+    \\    } else {
+    \\      throw new Error("invalid icon vector op");
+    \\    }
+    \\  }
+    \\}
+    \\
+    \\function circleLines(line, cx, cy, r) {
+    \\  ellipseLines(line, cx, cy, r, r, true);
+    \\}
+    \\
+    \\function ellipseLines(line, cx, cy, rx, ry, full) {
+    \\  const segments = iconCircleSegments;
+    \\  const start = full ? 0 : 0.5;
+    \\  const span = 1 - start;
+    \\  let px = cx + Math.cos(start * Math.PI * 2) * rx;
+    \\  let py = cy + Math.sin(start * Math.PI * 2) * ry;
+    \\  for (let i = 1; i <= segments; i++) {
+    \\    const turn = start + i * span / segments;
+    \\    const a = turn * Math.PI * 2;
+    \\    const nx = cx + Math.cos(a) * rx;
+    \\    const ny = cy + Math.sin(a) * ry;
+    \\    line(px, py, nx, ny);
+    \\    px = nx;
+    \\    py = ny;
+    \\  }
+    \\}
+    \\
+    \\function pushFilledCircle(out, cx, cy, r, color) {
+    \\  for (let i = 0; i < iconCircleSegments; i++) {
+    \\    const a0 = i * Math.PI * 2 / iconCircleSegments;
+    \\    const a1 = (i + 1) * Math.PI * 2 / iconCircleSegments;
+    \\    pushVertex(out, cx, cy, color);
+    \\    pushVertex(out, cx + Math.cos(a0) * r, cy + Math.sin(a0) * r, color);
+    \\    pushVertex(out, cx + Math.cos(a1) * r, cy + Math.sin(a1) * r, color);
+    \\  }
+    \\}
+    \\
+    \\function boxLines(line, x, y, w, h) {
+    \\  line(x, y, x + w, y);
+    \\  line(x + w, y, x + w, y + h);
+    \\  line(x + w, y + h, x, y + h);
+    \\  line(x, y + h, x, y);
+    \\}
+    \\
+    \\function pushLine(out, x0, y0, x1, y1, width, color) {
+    \\  const dx = x1 - x0;
+    \\  const dy = y1 - y0;
+    \\  const len = Math.hypot(dx, dy);
+    \\  if (len <= 0.001) return;
+    \\  const nx = -dy / len * width * 0.5;
+    \\  const ny = dx / len * width * 0.5;
+    \\  pushVertex(out, x0 + nx, y0 + ny, color);
+    \\  pushVertex(out, x1 + nx, y1 + ny, color);
+    \\  pushVertex(out, x1 - nx, y1 - ny, color);
+    \\  pushVertex(out, x0 + nx, y0 + ny, color);
+    \\  pushVertex(out, x1 - nx, y1 - ny, color);
+    \\  pushVertex(out, x0 - nx, y0 - ny, color);
+    \\}
+    \\
+    \\function pushVertex(out, x, y, color) {
+    \\  out.push(x, y, color[0], color[1], color[2], color[3]);
+    \\}
+    \\
     \\function drawImageTexture(texture, ptrFn, lenFn, stride) {
     \\  const len = lenFn();
     \\  if (len === 0) return;
@@ -389,6 +539,7 @@ pub const source =
     \\  initGpu();
     \\  fitCanvas();
     \\  wasm.er_ui_set_device_scale(deviceScale);
+    \\  syncHostAppearance();
     \\  rectStride = wasm.er_ui_gpu_rect_float_stride();
     \\  textStride = wasm.er_ui_gpu_text_vertex_float_stride();
     \\  iconStride = wasm.er_ui_gpu_icon_vertex_float_stride();
@@ -422,8 +573,16 @@ pub const source =
     \\  dispatchBrowserEvent(browserEventHashChange, 0, 0, 0, len, null);
     \\}
     \\
-    \\function updateCursor() {
-    \\  canvas.style.cursor = readNativeString(wasm.er_ui_cursor_css_ptr(), wasm.er_ui_cursor_css_len());
+    \\function hostAppearanceValue() {
+    \\  if (!window.matchMedia) return 0;
+    \\  if (window.matchMedia("(prefers-color-scheme: dark)").matches) return 2;
+    \\  if (window.matchMedia("(prefers-color-scheme: light)").matches) return 1;
+    \\  return 0;
+    \\}
+    \\
+    \\function syncHostAppearance() {
+    \\  if (!wasm || !wasm.er_ui_set_host_appearance) return;
+    \\  wasm.er_ui_set_host_appearance(hostAppearanceValue());
     \\}
     \\
     \\function dispatchBrowserEvent(kind, x, y, deltaY, textLen, event) {
@@ -459,6 +618,14 @@ pub const source =
     \\window.addEventListener("resize", () => {
     \\  dispatchBrowserEvent(browserEventResize, 0, 0, 0, 0, null);
     \\});
+    \\
+    \\if (window.matchMedia) {
+    \\  const darkPreference = window.matchMedia("(prefers-color-scheme: dark)");
+    \\  darkPreference.addEventListener("change", () => {
+    \\    syncHostAppearance();
+    \\    schedule();
+    \\  });
+    \\}
     \\
     \\canvas.addEventListener("wheel", (event) => {
     \\  dispatchBrowserEvent(browserEventWheel, 0, 0, event.deltaY, 0, event);
@@ -541,8 +708,13 @@ test "browser runtime javascript owns dom and browser policy after wasm eval" {
     try std.testing.expect(contains("<canvas id=\"edgerun\""));
     try std.testing.expect(contains("wasm = globalThis.__edgerunWasm"));
     try std.testing.expect(contains("dispatchBrowserEvent(browserEventWheel"));
+    try std.testing.expect(contains("prefers-color-scheme: dark"));
+    try std.testing.expect(contains("wasm.er_ui_set_host_appearance(hostAppearanceValue())"));
     try std.testing.expect(contains("window.addEventListener(\"keydown\""));
     try std.testing.expect(contains("wasm.er_ui_build_browser_frame(cssWidth, cssHeight, performance.now())"));
+    try std.testing.expect(contains("cursor:none"));
+    try std.testing.expect(!contains("style.cursor"));
+    try std.testing.expect(!contains("er_ui_cursor_css"));
     try std.testing.expect(!contains("WebAssembly.instantiateStreaming"));
     try std.testing.expect(!contains("console.debug"));
     try std.testing.expect(!contains("webgl atlas"));

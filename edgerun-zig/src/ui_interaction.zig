@@ -26,24 +26,18 @@ pub const Collector = struct {
     }
 
     pub fn add(self: *Collector, region: Region) Error!void {
+        if (!region.bounds.valid()) return error.InvalidInteractionBounds;
         if (self.len == self.regions.len) return error.InteractionBudgetExceeded;
         self.regions[self.len] = region;
         self.len += 1;
     }
 
-    pub fn written(self: Collector) []const Region {
-        return self.regions[0..self.len];
+    pub fn addHit(self: *Collector, bounds: ui.Rect, kind: ui.HitKind, id: u32) Error!void {
+        try self.add(.{ .kind = kind, .id = id, .bounds = bounds });
     }
 
-    pub fn emitSceneHits(self: Collector, scene: *ui.Scene) ui.RenderError!void {
-        for (self.written()) |region| {
-            try scene.pushHit(.{
-                .slot = region.slot,
-                .kind = region.kind,
-                .id = region.id,
-                .bounds = region.bounds,
-            });
-        }
+    pub fn written(self: Collector) []const Region {
+        return self.regions[0..self.len];
     }
 };
 
@@ -68,16 +62,13 @@ test "interaction collector records regions outside render commands" {
     try std.testing.expectEqual(@as(u32, 2), hitTest(collector.written(), 4, 4).?.id);
 }
 
-test "interaction collector can emit legacy scene hits" {
+test "interaction collector rejects invalid regions before consuming budget" {
     var regions: [1]Region = undefined;
     var collector = Collector.init(&regions);
-    var commands: [2]ui.Command = undefined;
-    var scene = ui.Scene.init(&commands);
 
-    try collector.add(.{ .slot = 9, .kind = .row_item, .id = 7, .bounds = ui.Rect.init(0, 0, 12, 12) });
-    try collector.emitSceneHits(&scene);
+    try std.testing.expectError(error.InvalidInteractionBounds, collector.addHit(ui.Rect.init(0, 0, 0, 10), .button, 1));
+    try std.testing.expectEqual(@as(usize, 0), collector.written().len);
 
-    try std.testing.expectEqual(@as(usize, 1), scene.written().len);
-    try std.testing.expectEqual(@as(u32, 9), scene.written()[0].hit.slot);
-    try std.testing.expectEqual(@as(u32, 7), scene.written()[0].hit.id);
+    try collector.addHit(ui.Rect.init(0, 0, 10, 10), .button, 2);
+    try std.testing.expectError(error.InteractionBudgetExceeded, collector.addHit(ui.Rect.init(10, 0, 10, 10), .button, 3));
 }

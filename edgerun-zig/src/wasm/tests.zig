@@ -1437,7 +1437,7 @@ test "wasm interpreter produces clocked work receipt for execution" {
     const app_hash = preimage.hash("edgerun:zig:v1:wasm-test-code", &return_forty_two_wasm);
     const manifest = preimage.hash("edgerun:zig:v1:wasm-test-manifest", "return forty two manifest");
     const result = try wasm_app.executeExportI64Receipt(&app, &return_forty_two_wasm, "main", .{
-        .parent = parent.id,
+        .parent = parent,
         .input = input,
         .app_hash = app_hash,
         .manifest = manifest,
@@ -1494,6 +1494,60 @@ test "wasm parser accepts large borrowed code bodies" {
 
     var memory: [256]u8 = undefined;
     var ticks: u64 = 700;
+    try std.testing.expectEqual(@as(i64, 42), try executeRuntime(&memory, &ticks, writer.written()));
+}
+
+test "wasm parser accepts compiler-shaped modules beyond demo function and type caps" {
+    const type_count: u32 = 17;
+    const function_count: u32 = 17;
+    const main_function_index: u32 = function_count - 1;
+    const type_payload_size: u32 = 1 + type_count * 4;
+    const function_payload_size: u32 = 1 + function_count;
+    const export_payload_size: u32 = 1 + 1 + 4 + 1 + 1;
+    const function_body_size: u32 = 4;
+    const encoded_function_body_size: u32 = 1 + function_body_size;
+    const code_payload_size: u32 = 1 + function_count * encoded_function_body_size;
+
+    var bytes: [256]u8 = undefined;
+    var writer = TestByteWriter{ .bytes = &bytes };
+
+    try writer.writeAll(&.{ 0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00 });
+
+    try writer.writeByte(0x01);
+    try writeU32Leb(&writer, type_payload_size);
+    try writeU32Leb(&writer, type_count);
+    var type_index: u32 = 0;
+    while (type_index < type_count) : (type_index += 1) {
+        try writer.writeAll(&.{ 0x60, 0x00, 0x01, 0x7e });
+    }
+
+    try writer.writeByte(0x03);
+    try writeU32Leb(&writer, function_payload_size);
+    try writeU32Leb(&writer, function_count);
+    var function_index: u32 = 0;
+    while (function_index < function_count) : (function_index += 1) {
+        try writer.writeByte(0x00);
+    }
+
+    try writer.writeByte(0x07);
+    try writeU32Leb(&writer, export_payload_size);
+    try writer.writeAll(&.{ 0x01, 0x04, 'm', 'a', 'i', 'n', 0x00 });
+    try writeU32Leb(&writer, main_function_index);
+
+    try writer.writeByte(0x0a);
+    try writeU32Leb(&writer, code_payload_size);
+    try writeU32Leb(&writer, function_count);
+    function_index = 0;
+    while (function_index < function_count) : (function_index += 1) {
+        try writeU32Leb(&writer, function_body_size);
+        try writer.writeByte(0x00);
+        try writer.writeByte(0x42);
+        try writer.writeByte(if (function_index == main_function_index) 0x2a else 0x00);
+        try writer.writeByte(0x0b);
+    }
+
+    var memory: [256]u8 = undefined;
+    var ticks: u64 = 16;
     try std.testing.expectEqual(@as(i64, 42), try executeRuntime(&memory, &ticks, writer.written()));
 }
 

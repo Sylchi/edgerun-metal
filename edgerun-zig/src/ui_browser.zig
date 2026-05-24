@@ -2,8 +2,9 @@ const std = @import("std");
 const browser_runtime_js = @import("browser_runtime_js.zig");
 const clock = @import("clock.zig");
 const icon = @import("icon.zig");
+const icon_vector = @import("icon_vector.zig");
 const identity = @import("identity.zig");
-const input = @import("input.zig");
+const interaction = @import("ui_interaction.zig");
 const renderer = @import("renderer_software.zig");
 const renderer_ir = @import("renderer_ir.zig");
 const renderer_present = @import("renderer_present.zig");
@@ -15,7 +16,6 @@ const site_cursor = @import("site_cursor.zig");
 const site_images = @import("site_images.zig");
 const site_landing = @import("site_landing.zig");
 const site_navigation = @import("site_navigation.zig");
-const tabler_atlas = @import("tabler_atlas.zig");
 const ui = @import("ui.zig");
 const ui_codec = @import("ui_codec.zig");
 const ui_runtime = @import("ui_runtime.zig");
@@ -27,9 +27,10 @@ const max_pixels: usize = max_width * max_height;
 const max_input_bytes: usize = 8192;
 const max_nodes: usize = 256;
 const max_commands: usize = 4096;
+const max_interaction_regions: usize = 4096;
 const gpu_rect_float_stride: usize = renderer_ir.rect_float_stride;
 const gpu_text_vertex_float_stride: usize = renderer_ir.text_vertex_float_stride;
-const gpu_icon_vertex_float_stride: usize = renderer_ir.icon_vertex_float_stride;
+const gpu_icon_vertex_float_stride: usize = renderer_ir.icon_instance_float_stride;
 const gpu_image_vertex_float_stride: usize = renderer_ir.image_vertex_float_stride;
 const max_gpu_rects: usize = 8192;
 const max_gpu_text_vertices: usize = 24576;
@@ -48,8 +49,6 @@ const font_last_char: u8 = renderer_ir.font_last_char;
 const font_padding: usize = 8;
 const font_row_gap: usize = 8;
 const font_bitmap_bytes: usize = 8 * 1024 * 1024;
-const icon_atlas_width: usize = tabler_atlas.width;
-const icon_atlas_height: usize = tabler_atlas.height;
 const site_source_url = "https://github.com/edgerun";
 const route_bytes_capacity: usize = site_navigation.route_path_capacity;
 const route_hash_bytes_capacity: usize = site_navigation.route_hash_capacity;
@@ -57,18 +56,6 @@ const host_command_capacity: usize = 4;
 const title_text = "EdgeRun Academy";
 const dom_surface_id = "edgerun-dom";
 const boot_dom_html = "";
-const search_query_capacity: usize = 64;
-const search_result_limit: usize = 6;
-const search_overlay_id: u32 = 70_000;
-const search_input_id: u32 = 70_001;
-const search_scrim_alpha: u8 = 204;
-const search_panel_alpha: u8 = 255;
-const search_result_alpha: u8 = 255;
-const key_slash: u32 = '/';
-const key_upper_k: u32 = 'K';
-const key_lower_k: u32 = 'k';
-const key_backspace_text = "Backspace";
-const key_escape_text = "Escape";
 const entropy_pool_size: usize = 32;
 const ephemeral_seed_size: usize = std.crypto.sign.Ed25519.KeyPair.seed_length;
 const public_identity_prefix = "er1:";
@@ -84,6 +71,7 @@ var pixels: [max_pixels]ui.Color = undefined;
 var input_bytes: [max_input_bytes]u8 = undefined;
 var nodes: [max_nodes]ui.Node = undefined;
 var commands: [max_commands]ui.Command = undefined;
+var interaction_regions: [max_interaction_regions]interaction.Region = undefined;
 var clips: [max_clips]ui.Rect = undefined;
 var gpu_rect_floats: [max_gpu_rects * gpu_rect_float_stride]f32 = undefined;
 var gpu_rect_float_len: usize = 0;
@@ -113,11 +101,10 @@ var font_atlas_generation: u32 = 0;
 var frame_width: usize = 0;
 var frame_height: usize = 0;
 var last_command_count: usize = 0;
+var last_region_count: usize = 0;
 var last_present_primitive_count: usize = 0;
 var last_present_transport: renderer_present.Transport = .webgl_buffers;
 var last_error: ErrorCode = .ok;
-var hover_hit_kind: u32 = hover_hit_kind_none;
-var hover_hit_id: u32 = 0;
 var runtime_state = ui_runtime.State{};
 var last_action_kind: u32 = @intFromEnum(ui_runtime.ActionKind.none);
 var last_action_hit_id: u32 = 0;
@@ -144,8 +131,15 @@ var ephemeral_identity_id: [identity.id_size]u8 = [_]u8{0} ** identity.id_size;
 var public_identity_text: [public_identity_text_len]u8 = [_]u8{0} ** public_identity_text_len;
 var ephemeral_identity_ready = false;
 var gpu_source_context: u8 = 0;
+var host_appearance: HostAppearance = .unknown;
 
 const hover_hit_kind_none: u32 = 255;
+
+const HostAppearance = enum(u32) {
+    unknown = 0,
+    light = 1,
+    dark = 2,
+};
 
 const HostAction = enum(u32) {
     none = 0,
@@ -194,16 +188,9 @@ const SiteState = struct {
     blog_arc_filter_index: ?usize = null,
     scroll_y: f32 = 0.0,
     host_action: HostAction = .none,
-    search_open: bool = false,
-    search_query: [search_query_capacity]u8 = [_]u8{0} ** search_query_capacity,
-    search_query_len: usize = 0,
 
     fn resetHostAction(state: *SiteState) void {
         state.host_action = .none;
-    }
-
-    fn searchQuery(state: *const SiteState) []const u8 {
-        return state.search_query[0..state.search_query_len];
     }
 
     fn resetScroll(state: *SiteState) void {
@@ -265,10 +252,6 @@ fn gpuSources() renderer_ir.Sources {
             .width = textWidthForIr,
             .glyph = fontGlyphForIr,
         },
-        .icon = .{
-            .context = &gpu_source_context,
-            .rect = iconAtlasRectForIr,
-        },
     };
 }
 
@@ -293,10 +276,6 @@ fn fontGlyphForIr(_: *anyopaque, ch: u8, px: u8) renderer_ir.Error!?renderer_ir.
         .top = glyph.top,
         .advance = glyph.advance,
     };
-}
-
-fn iconAtlasRectForIr(_: *anyopaque, atlas_id: u32) ?renderer_ir.AtlasRect {
-    return iconAtlasRect(atlas_id);
 }
 
 export fn er_ui_max_width() u32 {
@@ -421,16 +400,14 @@ export fn er_ui_font_atlas_generation() u32 {
     return font_atlas_generation;
 }
 
-export fn er_ui_icon_atlas_width() u32 {
-    return icon_atlas_width;
+export fn er_ui_icon_vector_ptr(atlas_id: u32) usize {
+    const values = icon_vector.dataForIconId(atlas_id);
+    if (values.len == 0) return 0;
+    return @intFromPtr(values.ptr);
 }
 
-export fn er_ui_icon_atlas_height() u32 {
-    return icon_atlas_height;
-}
-
-export fn er_ui_icon_atlas_ptr() usize {
-    return @intFromPtr(tabler_atlas.alpha.ptr);
+export fn er_ui_icon_vector_len(atlas_id: u32) usize {
+    return icon_vector.dataForIconId(atlas_id).len;
 }
 
 export fn er_ui_width() u32 {
@@ -469,25 +446,33 @@ export fn er_ui_set_device_scale(scale: f32) u32 {
     return 1;
 }
 
+export fn er_ui_set_host_appearance(value: u32) u32 {
+    host_appearance = hostAppearanceFromInt(value);
+    return @intFromEnum(host_appearance);
+}
+
+export fn er_ui_host_appearance() u32 {
+    return @intFromEnum(host_appearance);
+}
+
+fn hostAppearanceFromInt(value: u32) HostAppearance {
+    return switch (value) {
+        @intFromEnum(HostAppearance.light) => .light,
+        @intFromEnum(HostAppearance.dark) => .dark,
+        else => .unknown,
+    };
+}
+
 export fn er_ui_hover_hit_kind() u32 {
-    return hover_hit_kind;
+    return currentHoverHitKind();
 }
 
 export fn er_ui_hover_hit_id() u32 {
-    return hover_hit_id;
+    return currentHoverHitId();
 }
 
 export fn er_ui_cursor_kind() u32 {
     return @intFromEnum(currentCursorKind());
-}
-
-export fn er_ui_cursor_css_ptr() usize {
-    const value = currentCursorCss();
-    return @intFromPtr(value.ptr);
-}
-
-export fn er_ui_cursor_css_len() usize {
-    return currentCursorCss().len;
 }
 
 export fn er_ui_last_action_kind() u32 {
@@ -512,22 +497,19 @@ export fn er_ui_last_action_to_index() u32 {
 
 export fn er_ui_pointer_down(x: f32, y: f32) u32 {
     mixInteractionEntropy(.pointer_down, x, y);
-    recordAction(runtime_state.pointerDown(lastCommands(), x, y));
-    updateHoverHit(lastCommands(), x, y);
+    recordAction(runtime_state.pointerDown(lastCommands(), lastRegions(), x, y));
     return last_action_kind;
 }
 
 export fn er_ui_pointer_move(x: f32, y: f32) u32 {
     mixInteractionEntropy(.pointer_move, x, y);
-    recordAction(runtime_state.pointerMove(lastCommands(), x, y));
-    updateHoverHit(lastCommands(), x, y);
+    recordAction(runtime_state.pointerMove(lastCommands(), lastRegions(), x, y));
     return last_action_kind;
 }
 
 export fn er_ui_pointer_up(x: f32, y: f32) u32 {
     mixInteractionEntropy(.pointer_up, x, y);
-    recordAction(runtime_state.pointerUp(lastCommands(), x, y));
-    updateHoverHit(lastCommands(), x, y);
+    recordAction(runtime_state.pointerUp(lastCommands(), lastRegions(), x, y));
     return last_action_kind;
 }
 
@@ -536,7 +518,7 @@ export fn er_ui_site_pointer_up(x: f32, y: f32) u32 {
     if (action_kind == @intFromEnum(ui_runtime.ActionKind.reordered)) {
         return @intFromEnum(HostAction.none);
     }
-    return er_ui_site_activate_hit(hover_hit_id);
+    return er_ui_site_activate_hit(currentHoverHitId());
 }
 
 export fn er_ui_component_gallery_layout_masonry_id() u32 {
@@ -569,10 +551,6 @@ export fn er_ui_site_apps_button_id() u32 {
 
 export fn er_ui_site_launch_button_id() u32 {
     return site_chrome.launch_button_id;
-}
-
-export fn er_ui_site_search_button_id() u32 {
-    return site_chrome.search_button_id;
 }
 
 export fn er_ui_site_source_button_id() u32 {
@@ -723,9 +701,6 @@ export fn er_ui_site_activate_hit(hit_id: u32) u32 {
         return @intFromEnum(site_state.host_action);
     }
     switch (hit_id) {
-        site_chrome.search_button_id => {
-            site_state.search_open = true;
-        },
         site_chrome.source_button_id => {
             site_state.host_action = .open_url;
             queueHostCommand(.open_url) catch return finishError(.bad_input);
@@ -740,69 +715,12 @@ export fn er_ui_site_activate_hit(hit_id: u32) u32 {
     return @intFromEnum(site_state.host_action);
 }
 
-export fn er_ui_site_search_open() u32 {
-    site_state.search_open = true;
-    return 0;
-}
-
-export fn er_ui_site_search_close() u32 {
-    site_state.search_open = false;
-    site_state.search_query_len = 0;
-    return 0;
-}
-
-export fn er_ui_site_search_is_open() u32 {
-    return if (site_state.search_open) 1 else 0;
-}
-
-export fn er_ui_site_search_backspace() u32 {
-    if (site_state.search_query_len > 0) site_state.search_query_len -= 1;
-    return 0;
-}
-
-export fn er_ui_site_search_input_byte(byte: u32) u32 {
-    if (byte < 32 or byte > 126) return finishError(.bad_input);
-    if (site_state.search_query_len >= site_state.search_query.len) return finishError(.bad_input);
-    site_state.search_query[site_state.search_query_len] = @intCast(byte);
-    site_state.search_query_len += 1;
-    last_error = .ok;
-    return @intFromEnum(ErrorCode.ok);
-}
-
 export fn er_ui_site_key_event(key_len: usize, ctrl: u32, meta: u32, alt: u32) u32 {
-    if (key_len == 0) return 0;
+    _ = ctrl;
+    _ = meta;
+    _ = alt;
     if (key_len > input_bytes.len) return finishError(.bad_input);
-    const key = input_bytes[0..key_len];
-    const ctrl_or_meta = modifierPressed(ctrl) or modifierPressed(meta);
-    const alt_pressed = modifierPressed(alt);
-
-    const key_byte = singleAsciiKey(key);
-    const search_shortcut = key_byte != null and (key_byte.? == key_lower_k or key_byte.? == key_upper_k) and ctrl_or_meta;
-    if (search_shortcut or (key_byte != null and key_byte.? == key_slash and !site_state.search_open)) {
-        site_state.search_open = true;
-        last_error = .ok;
-        return 1;
-    }
-
-    if (!site_state.search_open) return 0;
-    if (std.mem.eql(u8, key, key_escape_text)) {
-        site_state.search_open = false;
-        site_state.search_query_len = 0;
-        last_error = .ok;
-        return 1;
-    }
-    if (std.mem.eql(u8, key, key_backspace_text)) {
-        if (site_state.search_query_len > 0) site_state.search_query_len -= 1;
-        last_error = .ok;
-        return 1;
-    }
-    if (!ctrl_or_meta and !alt_pressed and key_byte != null and key_byte.? >= 32 and key_byte.? <= 126) {
-        if (site_state.search_query_len >= site_state.search_query.len) return finishError(.bad_input);
-        site_state.search_query[site_state.search_query_len] = key_byte.?;
-        site_state.search_query_len += 1;
-        last_error = .ok;
-        return 1;
-    }
+    last_error = .ok;
     return 0;
 }
 
@@ -839,7 +757,7 @@ export fn er_ui_browser_event(kind_raw: u32, x: f32, y: f32, delta_y: f32, ctrl:
         .pointer_leave => {
             browser_hover_x = -1.0;
             browser_hover_y = -1.0;
-            updateHoverHit(lastCommands(), -1.0, -1.0);
+            runtime_state.clearHover();
             return browser_event_schedule_frame;
         },
         .pointer_down => {
@@ -876,15 +794,6 @@ export fn er_ui_browser_boot() u32 {
     queueHostCommand(.set_element_html) catch return finishError(.bad_input);
     last_error = .ok;
     return browser_event_host_command | browser_event_schedule_frame;
-}
-
-fn singleAsciiKey(key: []const u8) ?u8 {
-    if (key.len != 1) return null;
-    return key[0];
-}
-
-fn modifierPressed(value: u32) bool {
-    return value != 0;
 }
 
 fn queueHostCommand(kind: HostCommandKind) error{HostCommandBudget}!void {
@@ -968,14 +877,16 @@ export fn er_ui_render_component_gallery_layout_gap_hover(width: u32, height: u3
     const surface = beginFrame(width, height) orelse return finishError(.bad_size);
 
     var scene = ui.Scene.init(&commands);
-    component_gallery.renderComponentGallery(&scene, .{
+    var frame_regions: [max_interaction_regions]interaction.Region = undefined;
+    var collector = interaction.Collector.init(&frame_regions);
+    component_gallery.renderComponentGallery(&scene, &collector, .{
         .x = 0,
         .y = 0,
         .w = @floatFromInt(frame_width),
         .h = @floatFromInt(frame_height),
     }, galleryState(layout_raw, grid_gap, scroll_y, hover_x, hover_y)) catch return finishError(.render_failed);
 
-    return finishCpuSceneFrame(surface, scene, .{ .enabled = true, .x = hover_x, .y = hover_y }, .bg);
+    return finishCpuSceneFrame(surface, scene, collector.written(), .{ .enabled = true, .x = hover_x, .y = hover_y }, .bg);
 }
 
 export fn er_ui_build_component_gallery_gpu_frame(width: u32, height: u32, scroll_y: f32) u32 {
@@ -986,21 +897,25 @@ export fn er_ui_build_component_gallery_gpu_frame_layout_gap_hover(width: u32, h
     if (!setFrameSize(width, height)) return finishError(.bad_size);
 
     var scene = ui.Scene.init(&commands);
-    component_gallery.renderComponentGallery(&scene, .{
+    var frame_regions: [max_interaction_regions]interaction.Region = undefined;
+    var collector = interaction.Collector.init(&frame_regions);
+    component_gallery.renderComponentGallery(&scene, &collector, .{
         .x = 0,
         .y = 0,
         .w = @floatFromInt(frame_width),
         .h = @floatFromInt(frame_height),
     }, galleryState(layout_raw, grid_gap, scroll_y, hover_x, hover_y)) catch return finishError(.render_failed);
 
-    return finishGpuSceneFrame(scene, hover_x, hover_y);
+    return finishGpuSceneFrame(scene, collector.written(), hover_x, hover_y);
 }
 
 export fn er_ui_build_site_landing_gpu_frame(width: u32, height: u32, scroll_y: f32, hover_x: f32, hover_y: f32, frame_ms: f32) u32 {
     if (!setFrameSize(width, height)) return finishError(.bad_size);
 
     var scene = ui.Scene.initWithClips(&commands, &clips);
-    site_landing.render(&scene, .{
+    var frame_regions: [max_interaction_regions]interaction.Region = undefined;
+    var collector = interaction.Collector.init(&frame_regions);
+    site_landing.render(&scene, &collector, .{
         .x = 0,
         .y = 0,
         .w = @floatFromInt(frame_width),
@@ -1014,14 +929,16 @@ export fn er_ui_build_site_landing_gpu_frame(width: u32, height: u32, scroll_y: 
         .public_identity_ready = ephemeral_identity_ready,
     }) catch return finishError(.render_failed);
 
-    return finishGpuSceneFrame(scene, hover_x, hover_y);
+    return finishGpuSceneFrame(scene, collector.written(), hover_x, hover_y);
 }
 
 export fn er_ui_build_site_blog_gpu_frame(width: u32, height: u32, scroll_y: f32, hover_x: f32, hover_y: f32, selected_post_id: u32) u32 {
     if (!setFrameSize(width, height)) return finishError(.bad_size);
 
     var scene = ui.Scene.initWithClips(&commands, &clips);
-    site_blog.render(&scene, .{
+    var frame_regions: [max_interaction_regions]interaction.Region = undefined;
+    var collector = interaction.Collector.init(&frame_regions);
+    site_blog.render(&scene, &collector, .{
         .x = 0,
         .y = 0,
         .w = @floatFromInt(frame_width),
@@ -1033,14 +950,16 @@ export fn er_ui_build_site_blog_gpu_frame(width: u32, height: u32, scroll_y: f32
         .selected_post_id = selected_post_id,
     }) catch return finishError(.render_failed);
 
-    return finishGpuSceneFrame(scene, hover_x, hover_y);
+    return finishGpuSceneFrame(scene, collector.written(), hover_x, hover_y);
 }
 
 export fn er_ui_build_site_apps_gpu_frame(width: u32, height: u32, scroll_y: f32, hover_x: f32, hover_y: f32) u32 {
     if (!setFrameSize(width, height)) return finishError(.bad_size);
 
     var scene = ui.Scene.initWithClips(&commands, &clips);
-    site_apps.render(&scene, .{
+    var frame_regions: [max_interaction_regions]interaction.Region = undefined;
+    var collector = interaction.Collector.init(&frame_regions);
+    site_apps.render(&scene, &collector, .{
         .x = 0,
         .y = 0,
         .w = @floatFromInt(frame_width),
@@ -1051,7 +970,7 @@ export fn er_ui_build_site_apps_gpu_frame(width: u32, height: u32, scroll_y: f32
         .hover_y = hover_y,
     }) catch return finishError(.render_failed);
 
-    return finishGpuSceneFrame(scene, hover_x, hover_y);
+    return finishGpuSceneFrame(scene, collector.written(), hover_x, hover_y);
 }
 
 export fn er_ui_build_site_gpu_frame(width: u32, height: u32, hover_x: f32, hover_y: f32, frame_ms: f32) u32 {
@@ -1059,8 +978,10 @@ export fn er_ui_build_site_gpu_frame(width: u32, height: u32, hover_x: f32, hove
     site_state.scroll_y = @min(site_state.scroll_y, siteScrollLimit(@floatFromInt(frame_width), @floatFromInt(frame_height)));
 
     var scene = ui.Scene.initWithClips(&commands, &clips);
+    var frame_regions: [max_interaction_regions]interaction.Region = undefined;
+    var collector = interaction.Collector.init(&frame_regions);
     switch (site_state.view) {
-        .landing => site_landing.render(&scene, .{
+        .landing => site_landing.render(&scene, &collector, .{
             .x = 0,
             .y = 0,
             .w = @floatFromInt(frame_width),
@@ -1073,7 +994,7 @@ export fn er_ui_build_site_gpu_frame(width: u32, height: u32, hover_x: f32, hove
             .public_identity = publicIdentityText(),
             .public_identity_ready = ephemeral_identity_ready,
         }) catch return finishError(.render_failed),
-        .blog => site_blog.render(&scene, .{
+        .blog => site_blog.render(&scene, &collector, .{
             .x = 0,
             .y = 0,
             .w = @floatFromInt(frame_width),
@@ -1085,7 +1006,7 @@ export fn er_ui_build_site_gpu_frame(width: u32, height: u32, hover_x: f32, hove
             .selected_post_id = site_state.selected_blog_post_id,
             .arc_filter_index = site_state.blog_arc_filter_index,
         }) catch return finishError(.render_failed),
-        .apps => site_apps.render(&scene, .{
+        .apps => site_apps.render(&scene, &collector, .{
             .x = 0,
             .y = 0,
             .w = @floatFromInt(frame_width),
@@ -1096,33 +1017,22 @@ export fn er_ui_build_site_gpu_frame(width: u32, height: u32, hover_x: f32, hove
             .hover_y = hover_y,
         }) catch return finishError(.render_failed),
     }
-    const overlay_start = scene.written().len;
-    if (site_state.search_open) renderSearchOverlay(&scene, hover_x, hover_y) catch return finishError(.render_failed);
-
-    return finishGpuSceneFrameWithOverlay(scene, hover_x, hover_y, overlay_start);
+    return finishGpuSceneFrame(scene, collector.written(), hover_x, hover_y);
 }
 
 export fn er_ui_build_browser_frame(width: u32, height: u32, frame_ms: f32) u32 {
     return er_ui_build_site_gpu_frame(width, height, browser_hover_x, browser_hover_y, frame_ms);
 }
 
-fn finishGpuSceneFrame(scene: ui.Scene, hover_x: f32, hover_y: f32) u32 {
-    last_command_count = scene.written().len;
-    updateHoverHit(scene.written(), hover_x, hover_y);
+fn finishGpuSceneFrame(scene: ui.Scene, regions: []const interaction.Region, hover_x: f32, hover_y: f32) u32 {
+    storeLastRegions(regions) catch return finishError(.render_failed);
+    runtime_state.refreshHover(lastRegions(), hover_x, hover_y);
+    var frame_scene = scene;
+    site_cursor.render(&frame_scene, hover_x, hover_y, currentCursorKind()) catch return finishError(.render_failed);
+    last_command_count = frame_scene.written().len;
     ensureFontAtlas() catch return finishError(.font_atlas);
     const buffers = gpuBuffers();
-    renderer_ir.packScene(buffers, gpuSources(), scene.written()) catch return finishError(.gpu_budget);
-    presentBrowserBuffers(buffers) catch return finishError(.render_failed);
-    last_error = .ok;
-    return @intFromEnum(ErrorCode.ok);
-}
-
-fn finishGpuSceneFrameWithOverlay(scene: ui.Scene, hover_x: f32, hover_y: f32, overlay_start: usize) u32 {
-    last_command_count = scene.written().len;
-    updateHoverHit(scene.written(), hover_x, hover_y);
-    ensureFontAtlas() catch return finishError(.font_atlas);
-    const buffers = gpuBuffers();
-    renderer_ir.packSceneWithOverlay(buffers, gpuSources(), scene.written(), overlay_start) catch return finishError(.gpu_budget);
+    renderer_ir.packScene(buffers, gpuSources(), frame_scene.written()) catch return finishError(.gpu_budget);
     presentBrowserBuffers(buffers) catch return finishError(.render_failed);
     last_error = .ok;
     return @intFromEnum(ErrorCode.ok);
@@ -1134,10 +1044,13 @@ const HoverUpdate = struct {
     y: f32 = 0.0,
 };
 
-fn finishCpuSceneFrame(surface: renderer.Surface, scene: ui.Scene, hover: HoverUpdate, background: ui.Color) u32 {
-    last_command_count = scene.written().len;
-    if (hover.enabled) updateHoverHit(scene.written(), hover.x, hover.y);
-    renderSceneIr(surface, scene.written(), background) catch return finishError(.render_failed);
+fn finishCpuSceneFrame(surface: renderer.Surface, scene: ui.Scene, regions: []const interaction.Region, hover: HoverUpdate, background: ui.Color) u32 {
+    storeLastRegions(regions) catch return finishError(.render_failed);
+    if (hover.enabled) runtime_state.refreshHover(lastRegions(), hover.x, hover.y);
+    var frame_scene = scene;
+    if (hover.enabled) site_cursor.render(&frame_scene, hover.x, hover.y, currentCursorKind()) catch return finishError(.render_failed);
+    last_command_count = frame_scene.written().len;
+    renderSceneIr(surface, frame_scene.written(), background) catch return finishError(.render_failed);
     last_error = .ok;
     return @intFromEnum(ErrorCode.ok);
 }
@@ -1155,7 +1068,7 @@ export fn er_ui_render_input_object(input_len: usize, width: u32, height: u32) u
         .h = @floatFromInt(frame_height),
     }, .{}) catch return finishError(.render_failed);
 
-    return finishCpuSceneFrame(surface, scene, .{ .enabled = false }, .bg);
+    return finishCpuSceneFrame(surface, scene, &.{}, .{ .enabled = false }, .bg);
 }
 
 fn beginFrame(width_raw: u32, height_raw: u32) ?renderer.Surface {
@@ -1171,9 +1084,8 @@ fn renderSceneIr(surface: renderer.Surface, scene_commands: []const ui.Command, 
     try renderer_ir.packScene(buffers, gpuSources(), scene_commands);
     surface.clear(background);
     const image_texture = try site_images.cloudMeme();
-    const receipt = try surface.renderIrFrameWithAtlases(buffers, .{
+    const receipt = try surface.renderIrFrameWithResources(buffers, .{
         .font = .{ .width = font_atlas_width, .height = font_atlas_height, .alpha = &font_atlas_alpha },
-        .icon = .{ .width = icon_atlas_width, .height = icon_atlas_height, .alpha = tabler_atlas.alpha },
         .image = image_texture,
     });
     recordPresentation(receipt);
@@ -1189,7 +1101,6 @@ fn presentBrowserBuffers(buffers: renderer_ir.Buffers) renderer_present.Error!vo
         .buffers = buffers,
         .resources = .{
             .font_atlas = true,
-            .icon_atlas = true,
             .image_texture = true,
         },
     });
@@ -1299,23 +1210,18 @@ fn writeU32(out: []u8, value: u32) void {
     for (0..4) |index| out[index] = @intCast((value >> @intCast(index * 8)) & 0xff);
 }
 
-fn updateHoverHit(scene_commands: []const ui.Command, x: f32, y: f32) void {
-    if (x < 0.0 or y < 0.0) {
-        hover_hit_kind = hover_hit_kind_none;
-        hover_hit_id = 0;
-        return;
-    }
-    if (input.hitTest(scene_commands, x, y)) |hit| {
-        hover_hit_kind = @intFromEnum(hit.kind);
-        hover_hit_id = hit.id;
-        return;
-    }
-    hover_hit_kind = hover_hit_kind_none;
-    hover_hit_id = 0;
-}
-
 fn lastCommands() []const ui.Command {
     return commands[0..last_command_count];
+}
+
+fn lastRegions() []const interaction.Region {
+    return interaction_regions[0..last_region_count];
+}
+
+fn storeLastRegions(regions: []const interaction.Region) error{InteractionBudgetExceeded}!void {
+    if (regions.len > interaction_regions.len) return error.InteractionBudgetExceeded;
+    @memcpy(interaction_regions[0..regions.len], regions);
+    last_region_count = regions.len;
 }
 
 fn galleryState(layout_raw: u32, grid_gap: f32, scroll_y: f32, hover_x: f32, hover_y: f32) component_gallery.ComponentGalleryState {
@@ -1335,8 +1241,6 @@ fn applyRoutePath(path: []const u8) void {
 }
 
 fn applyRoute(route: site_navigation.Route) void {
-    site_state.search_open = false;
-    site_state.search_query_len = 0;
     site_state.resetScroll();
     site_state.view = route.view;
     site_state.selected_blog_post_id = route.selected_blog_post_id;
@@ -1369,74 +1273,15 @@ fn currentRoute() site_navigation.Route {
 
 fn currentCursorKind() CursorKind {
     const action_kind: ui_runtime.ActionKind = @enumFromInt(@as(u8, @intCast(last_action_kind)));
-    const hit_kind: ?ui.HitKind = if (hover_hit_kind == hover_hit_kind_none) null else @enumFromInt(@as(u8, @intCast(hover_hit_kind)));
-    return site_cursor.fromState(action_kind, hit_kind);
+    return site_cursor.fromState(action_kind, runtime_state.hoverKind());
 }
 
-fn currentCursorCss() []const u8 {
-    return site_cursor.css(currentCursorKind());
+fn currentHoverHitKind() u32 {
+    return if (runtime_state.hoverKind()) |kind| @intFromEnum(kind) else hover_hit_kind_none;
 }
 
-fn renderSearchOverlay(scene: *ui.Scene, hover_x: f32, hover_y: f32) ui.RenderError!void {
-    _ = hover_x;
-    _ = hover_y;
-    const screen = ui.Rect.init(0.0, 0.0, @floatFromInt(frame_width), @floatFromInt(frame_height));
-    try scene.pushRect(screen, .{ .r = 0, .g = 0, .b = 0, .a = search_scrim_alpha }, .fill, 0.0, 0.0);
-
-    const panel_w = @min(720.0, @max(320.0, screen.w - 48.0));
-    const panel = ui.Rect.init((screen.w - panel_w) * 0.5, 92.0, panel_w, 430.0);
-    try scene.pushRect(panel, .{ .r = 5, .g = 5, .b = 5, .a = search_panel_alpha }, .fill, 10.0, 0.0);
-    try scene.pushRect(panel, .{ .r = 64, .g = 64, .b = 64, .a = 255 }, .border, 10.0, 0.0);
-    try scene.pushHit(.{ .slot = 0, .kind = .input, .id = search_overlay_id, .bounds = panel });
-
-    const input_bounds = ui.Rect.init(panel.x + 22.0, panel.y + 22.0, panel.w - 44.0, 46.0);
-    try scene.pushRect(input_bounds, .{ .r = 18, .g = 18, .b = 18, .a = 255 }, .fill, 7.0, 0.0);
-    try scene.pushRect(input_bounds, .{ .r = 70, .g = 70, .b = 70, .a = 255 }, .border, 7.0, 0.0);
-    try scene.pushIconQuad(.{ .bounds = ui.Rect.init(input_bounds.x + 14.0, input_bounds.y + 13.0, 20.0, 20.0), .atlas_id = icon.atlasId(.search), .color = .{ .r = 74, .g = 222, .b = 128 } });
-    const query = site_state.searchQuery();
-    const placeholder = if (query.len == 0) "Search lessons..." else query;
-    const color = if (query.len == 0) ui.Color{ .r = 118, .g = 118, .b = 118 } else ui.Color{ .r = 242, .g = 242, .b = 242 };
-    try scene.pushText(ui.Rect.init(input_bounds.x + 46.0, input_bounds.y + 14.0, input_bounds.w - 94.0, 18.0), placeholder, color);
-    try scene.pushText(ui.Rect.init(input_bounds.x + input_bounds.w - 42.0, input_bounds.y + 15.0, 28.0, 14.0), "Esc", .{ .r = 118, .g = 118, .b = 118 });
-    try scene.pushHit(.{ .slot = 0, .kind = .input, .id = search_input_id, .bounds = input_bounds });
-
-    const results_y = input_bounds.y + input_bounds.h + 18.0;
-    var rendered: usize = 0;
-    for (site_blog.posts, 0..) |post, index| {
-        if (rendered >= search_result_limit) break;
-        if (query.len != 0 and !postMatches(post, query)) continue;
-        const row = ui.Rect.init(panel.x + 22.0, results_y + @as(f32, @floatFromInt(rendered)) * 54.0, panel.w - 44.0, 46.0);
-        const post_id = site_blog.postIdAt(index);
-        try scene.pushRect(row, .{ .r = 18, .g = 18, .b = 18, .a = search_result_alpha }, .fill, 7.0, 0.0);
-        try scene.pushRect(row, .{ .r = 48, .g = 48, .b = 48, .a = 255 }, .border, 7.0, 0.0);
-        try scene.pushText(ui.Rect.init(row.x + 14.0, row.y + 8.0, row.w - 28.0, 15.0), post.title, .{ .r = 242, .g = 242, .b = 242 });
-        try scene.pushText(ui.Rect.init(row.x + 14.0, row.y + 27.0, row.w - 28.0, 11.0), post.summary, .{ .r = 154, .g = 154, .b = 154 });
-        try scene.pushHit(.{ .slot = 0, .kind = .button, .id = post_id, .bounds = row });
-        rendered += 1;
-    }
-    if (rendered == 0) {
-        try scene.pushText(ui.Rect.init(panel.x + 22.0, results_y + 10.0, panel.w - 44.0, 18.0), "No matching lessons", .{ .r = 154, .g = 154, .b = 154 });
-    }
-}
-
-fn postMatches(post: site_blog.Post, query: []const u8) bool {
-    return containsIgnoreCase(post.title, query) or containsIgnoreCase(post.summary, query) or containsIgnoreCase(post.arc, query);
-}
-
-fn containsIgnoreCase(value: []const u8, query: []const u8) bool {
-    if (query.len == 0) return true;
-    if (query.len > value.len) return false;
-    var index: usize = 0;
-    while (index + query.len <= value.len) : (index += 1) {
-        var offset: usize = 0;
-        while (offset < query.len and asciiLower(value[index + offset]) == asciiLower(query[offset])) : (offset += 1) {}
-        if (offset == query.len) return true;
-    }
-    return false;
-}
-
-fn asciiLower(value: u8) u8 {
-    return if (value >= 'A' and value <= 'Z') value + ('a' - 'A') else value;
+fn currentHoverHitId() u32 {
+    return runtime_state.hoverHitId();
 }
 
 fn recordAction(action: ui_runtime.Action) void {
@@ -1451,6 +1296,14 @@ fn recordAction(action: ui_runtime.Action) void {
         },
         else => {},
     }
+}
+
+fn hasRectColor(items: []const ui.Command, color: ui.Color) bool {
+    for (items) |command| switch (command) {
+        .rect => |rect| if (std.meta.eql(rect.color, color)) return true,
+        else => {},
+    };
+    return false;
 }
 
 fn applyGalleryListReorder(scope_id: u32, from_index: usize, to_index: usize) void {
@@ -1607,45 +1460,33 @@ fn textWidth(value: []const u8, px: u8) f32 {
     return out;
 }
 
-fn iconAtlasRect(atlas_id: u32) ?renderer_ir.AtlasRect {
-    const value = icon.fromAtlasId(atlas_id) orelse return null;
-    const found = tabler_atlas.rect(value);
-    return .{
-        .u0 = (@as(f32, @floatFromInt(found.x)) + 0.5) / @as(f32, @floatFromInt(icon_atlas_width)),
-        .v0 = (@as(f32, @floatFromInt(found.y)) + 0.5) / @as(f32, @floatFromInt(icon_atlas_height)),
-        .u1 = (@as(f32, @floatFromInt(found.x + found.w)) - 0.5) / @as(f32, @floatFromInt(icon_atlas_width)),
-        .v1 = (@as(f32, @floatFromInt(found.y + found.h)) - 0.5) / @as(f32, @floatFromInt(icon_atlas_height)),
-    };
-}
+test "browser hover state exposes interaction region kind and id" {
+    var regions: [1]interaction.Region = undefined;
+    var collector = interaction.Collector.init(&regions);
+    try collector.addHit(ui.Rect.init(10, 20, 40, 30), .button, 42);
 
-test "browser hover state exposes scene hit kind and id" {
-    var local_commands: [4]ui.Command = undefined;
-    var scene = ui.Scene.init(&local_commands);
-    try scene.pushHit(.{ .slot = 0, .kind = .button, .id = 42, .bounds = ui.Rect.init(10, 20, 40, 30) });
+    runtime_state.refreshHover(collector.written(), 20, 30);
+    try std.testing.expectEqual(@intFromEnum(ui.HitKind.button), er_ui_hover_hit_kind());
+    try std.testing.expectEqual(@as(u32, 42), er_ui_hover_hit_id());
 
-    updateHoverHit(scene.written(), 20, 30);
-    try std.testing.expectEqual(@intFromEnum(ui.HitKind.button), hover_hit_kind);
-    try std.testing.expectEqual(@as(u32, 42), hover_hit_id);
-
-    updateHoverHit(scene.written(), -1, -1);
-    try std.testing.expectEqual(hover_hit_kind_none, hover_hit_kind);
-    try std.testing.expectEqual(@as(u32, 0), hover_hit_id);
+    runtime_state.refreshHover(collector.written(), -1, -1);
+    try std.testing.expectEqual(hover_hit_kind_none, er_ui_hover_hit_kind());
+    try std.testing.expectEqual(@as(u32, 0), er_ui_hover_hit_id());
 }
 
 test "browser cpu ir finish preserves hover state when disabled" {
-    hover_hit_kind = @intFromEnum(ui.HitKind.button);
-    hover_hit_id = 99;
+    runtime_state.hovered = .{ .kind = .button, .id = 99, .bounds = ui.Rect.init(0, 0, 1, 1) };
     var local_commands: [1]ui.Command = undefined;
     const scene = ui.Scene.init(&local_commands);
     var local_pixels: [4]ui.Color = undefined;
     const surface = try renderer.Surface.init(2, 2, &local_pixels);
 
-    try std.testing.expectEqual(@as(u32, 0), finishCpuSceneFrame(surface, scene, .{ .enabled = false }, .bg));
-    try std.testing.expectEqual(@intFromEnum(ui.HitKind.button), hover_hit_kind);
-    try std.testing.expectEqual(@as(u32, 99), hover_hit_id);
+    try std.testing.expectEqual(@as(u32, 0), finishCpuSceneFrame(surface, scene, &.{}, .{ .enabled = false }, .bg));
+    try std.testing.expectEqual(@intFromEnum(ui.HitKind.button), er_ui_hover_hit_kind());
+    try std.testing.expectEqual(@as(u32, 99), er_ui_hover_hit_id());
 }
 
-test "browser component gallery builds packed webgl buffers and atlases" {
+test "browser component gallery builds packed webgl buffers and vector icons" {
     font_atlas_ready = false;
     const code = er_ui_build_component_gallery_gpu_frame_layout_gap_hover(960, 640, 0.0, @intFromEnum(component_gallery.LayoutMode.masonry), component_gallery.grid_gap_default, -1.0, -1.0);
     try std.testing.expectEqual(@as(u32, 0), code);
@@ -1656,7 +1497,8 @@ test "browser component gallery builds packed webgl buffers and atlases" {
     try std.testing.expect(gpu_text_vertex_float_len > 0);
     try std.testing.expect(gpu_icon_vertex_float_len > 0);
     try std.testing.expect(er_ui_font_atlas_ptr() != 0);
-    try std.testing.expect(er_ui_icon_atlas_ptr() != 0);
+    try std.testing.expect(er_ui_icon_vector_ptr(icon.id(.search)) != 0);
+    try std.testing.expect(er_ui_icon_vector_len(icon.id(.search)) > 0);
 }
 
 test "browser component gallery cpu render uses canonical ir buffers" {
@@ -1675,14 +1517,14 @@ test "browser component gallery cpu render uses canonical ir buffers" {
 }
 
 test "browser site landing builds packed webgl buffers and hit state" {
-    const code = er_ui_build_site_landing_gpu_frame(1280, 800, 0.0, 1020.0, 32.0, 0.0);
+    const code = er_ui_build_site_landing_gpu_frame(1280, 800, 0.0, 1065.0, 32.0, 0.0);
     try std.testing.expectEqual(@as(u32, 0), code);
     try std.testing.expect(gpu_rect_float_len > 0);
     try std.testing.expect(gpu_text_vertex_float_len > 0);
     try std.testing.expect(gpu_icon_vertex_float_len > 0);
     try std.testing.expectEqual(site_landing.contentHeight(1280.0), er_ui_site_landing_content_height(1280.0));
-    try std.testing.expectEqual(@intFromEnum(ui.HitKind.button), hover_hit_kind);
-    try std.testing.expectEqual(site_chrome.search_button_id, hover_hit_id);
+    try std.testing.expectEqual(@intFromEnum(ui.HitKind.button), er_ui_hover_hit_kind());
+    try std.testing.expectEqual(site_chrome.source_button_id, er_ui_hover_hit_id());
 }
 
 test "browser site reveal derives public identity inside wasm from interaction" {
@@ -1721,8 +1563,8 @@ test "browser site blog builds packed webgl buffers and post hit state" {
     try std.testing.expectEqual(@as(u32, @intCast(site_blog.posts.len)), er_ui_blog_post_count());
     try std.testing.expect(er_ui_site_blog_content_height(1280.0) > 5200.0);
     try std.testing.expect(er_ui_site_blog_post_content_height(1280.0, site_blog.postIdAt(16)) > 1200.0);
-    try std.testing.expectEqual(@intFromEnum(ui.HitKind.button), hover_hit_kind);
-    try std.testing.expectEqual(site_blog.postIdAt(0), hover_hit_id);
+    try std.testing.expectEqual(@intFromEnum(ui.HitKind.button), er_ui_hover_hit_kind());
+    try std.testing.expectEqual(site_blog.postIdAt(0), er_ui_hover_hit_id());
 }
 
 test "browser site apps builds packed webgl buffers and hit state" {
@@ -1732,9 +1574,10 @@ test "browser site apps builds packed webgl buffers and hit state" {
     try std.testing.expect(gpu_text_vertex_float_len > 0);
     try std.testing.expect(gpu_icon_vertex_float_len > 0);
     try std.testing.expectEqual(site_apps.contentHeight(1280.0), er_ui_site_apps_content_height(1280.0));
-    try std.testing.expectEqual(@intFromEnum(ui.HitKind.button), hover_hit_kind);
-    try std.testing.expectEqual(site_apps.first_app_button_id, hover_hit_id);
+    try std.testing.expectEqual(@intFromEnum(ui.HitKind.button), er_ui_hover_hit_kind());
+    try std.testing.expectEqual(site_apps.first_app_button_id, er_ui_hover_hit_id());
     try std.testing.expectEqual(@intFromEnum(CursorKind.pointer), er_ui_cursor_kind());
+    try std.testing.expect(hasRectColor(lastCommands(), site_cursor.accent));
 }
 
 test "browser site activation keeps page state in wasm" {
@@ -1795,28 +1638,6 @@ test "browser native route sync owns URL path state" {
     try std.testing.expectEqualStrings("/apps", route_bytes[0..er_ui_site_route_path_len()]);
 }
 
-test "browser native search accepts keyboard text and renders overlay results" {
-    site_state = .{};
-    defer site_state = .{};
-
-    try std.testing.expectEqual(@as(u32, 0), er_ui_site_search_open());
-    try std.testing.expectEqual(@as(u32, 1), er_ui_site_search_is_open());
-    for ("phone") |byte| try std.testing.expectEqual(@as(u32, 0), er_ui_site_search_input_byte(byte));
-    try std.testing.expectEqualStrings("phone", site_state.searchQuery());
-
-    const code = er_ui_build_site_gpu_frame(1280, 900, -1.0, -1.0, 0.0);
-    try std.testing.expectEqual(@as(u32, 0), code);
-    try std.testing.expect(gpu_rect_float_len > 0);
-    try std.testing.expect(gpu_text_vertex_float_len > 0);
-    try std.testing.expect(gpu_overlay_rect_float_len > 0);
-    try std.testing.expect(gpu_overlay_text_vertex_float_len > 0);
-    try std.testing.expect(gpu_overlay_icon_vertex_float_len > 0);
-    try std.testing.expectEqual(@as(u32, 0), er_ui_site_search_backspace());
-    try std.testing.expectEqualStrings("phon", site_state.searchQuery());
-    try std.testing.expectEqual(@as(u32, 0), er_ui_site_search_close());
-    try std.testing.expectEqual(@as(u32, 0), er_ui_site_search_is_open());
-}
-
 fn writeInputForTest(value: []const u8) usize {
     @memcpy(input_bytes[0..value.len], value);
     return value.len;
@@ -1831,31 +1652,15 @@ fn keyEventForTest(value: []const u8, ctrl: bool, meta: bool, alt: bool) u32 {
     );
 }
 
-test "browser native key policy owns search shortcuts and text editing" {
+test "browser native key policy stays inert until an app owns text input" {
     site_state = .{};
     defer site_state = .{};
 
-    try std.testing.expectEqual(@as(u32, 1), keyEventForTest("/", false, false, false));
-    try std.testing.expectEqual(@as(u32, 1), er_ui_site_search_is_open());
-    for ("phone") |byte| {
-        const key = [_]u8{byte};
-        try std.testing.expectEqual(@as(u32, 1), keyEventForTest(&key, false, false, false));
-    }
-    try std.testing.expectEqualStrings("phone", site_state.searchQuery());
-    try std.testing.expectEqual(@as(u32, 1), keyEventForTest(key_backspace_text, false, false, false));
-    try std.testing.expectEqualStrings("phon", site_state.searchQuery());
-    try std.testing.expectEqual(@as(u32, 1), keyEventForTest(key_escape_text, false, false, false));
-    try std.testing.expectEqual(@as(u32, 0), er_ui_site_search_is_open());
-
-    try std.testing.expectEqual(@as(u32, 1), keyEventForTest("k", true, false, false));
-    try std.testing.expectEqual(@as(u32, 1), er_ui_site_search_is_open());
+    try std.testing.expectEqual(@as(u32, 0), keyEventForTest("/", false, false, false));
+    try std.testing.expectEqual(@as(u32, 0), keyEventForTest("k", true, false, false));
+    try std.testing.expectEqual(@as(u32, 0), keyEventForTest("K", false, true, false));
     try std.testing.expectEqual(@as(u32, 0), keyEventForTest("x", false, false, true));
     try std.testing.expectEqual(@as(u32, 0), keyEventForTest("ArrowDown", false, false, false));
-    try std.testing.expectEqualStrings("", site_state.searchQuery());
-
-    site_state.search_open = false;
-    try std.testing.expectEqual(@as(u32, 1), keyEventForTest("K", false, true, false));
-    try std.testing.expectEqual(@as(u32, 1), er_ui_site_search_is_open());
 }
 
 test "browser native event pump owns dom event interpretation" {
@@ -1882,8 +1687,7 @@ test "browser native event pump owns dom event interpretation" {
     try std.testing.expectEqual(@as(f32, -1.0), browser_hover_x);
     try std.testing.expectEqual(@as(f32, -1.0), browser_hover_y);
 
-    try std.testing.expectEqual(browser_event_prevent_default | browser_event_schedule_frame, er_ui_browser_event(@intFromEnum(BrowserEventKind.key_down), 0, 0, 0, 0, 0, 0, writeInputForTest("/"), 1280.0, 900.0));
-    try std.testing.expectEqual(@as(u32, 1), er_ui_site_search_is_open());
+    try std.testing.expectEqual(@as(u32, 0), er_ui_browser_event(@intFromEnum(BrowserEventKind.key_down), 0, 0, 0, 0, 0, 0, writeInputForTest("/"), 1280.0, 900.0));
 
     try std.testing.expectEqual(browser_event_schedule_frame, er_ui_browser_event(@intFromEnum(BrowserEventKind.hashchange), 0, 0, 0, 0, 0, 0, writeInputForTest("#/apps"), 1280.0, 900.0));
     try std.testing.expectEqualStrings("/apps", route_bytes[0..er_ui_site_route_path_len()]);
@@ -1893,11 +1697,8 @@ test "browser native event pump owns dom event interpretation" {
     try std.testing.expectEqualStrings("/apps", route_bytes[0..er_ui_site_route_path_len()]);
 
     site_state.host_action = .none;
-    var local_commands: [1]ui.Command = undefined;
-    var scene = ui.Scene.init(&local_commands);
-    try scene.pushHit(.{ .slot = 0, .kind = .button, .id = site_chrome.source_button_id, .bounds = ui.Rect.init(0, 0, 40, 40) });
-    last_command_count = scene.written().len;
-    @memcpy(commands[0..last_command_count], scene.written());
+    last_command_count = 0;
+    try storeLastRegions(&.{.{ .slot = 0, .kind = .button, .id = site_chrome.source_button_id, .bounds = ui.Rect.init(0, 0, 40, 40) }});
     const pointer_result = er_ui_browser_event(@intFromEnum(BrowserEventKind.pointer_up), 8.0, 8.0, 0, 0, 0, 0, 0, 1280.0, 900.0);
     try std.testing.expectEqual(browser_event_release_pointer | browser_event_schedule_frame | browser_event_host_command, pointer_result);
     try std.testing.expectEqual(@as(u32, 2), er_ui_host_command_count());
@@ -1927,6 +1728,15 @@ test "browser native boot emits document title host command" {
     try std.testing.expectEqualStrings(boot_dom_html, (@as([*]const u8, @ptrFromInt(er_ui_host_command_payload_ptr(1))))[0..er_ui_host_command_payload_len(1)]);
 }
 
+test "browser native records host appearance preference" {
+    try std.testing.expectEqual(@as(u32, 1), er_ui_set_host_appearance(1));
+    try std.testing.expectEqual(@as(u32, 1), er_ui_host_appearance());
+    try std.testing.expectEqual(@as(u32, 2), er_ui_set_host_appearance(2));
+    try std.testing.expectEqual(@as(u32, 2), er_ui_host_appearance());
+    try std.testing.expectEqual(@as(u32, 0), er_ui_set_host_appearance(99));
+    try std.testing.expectEqual(@as(u32, 0), er_ui_host_appearance());
+}
+
 test "browser native exposes eval bootstrap javascript bytes" {
     const bootstrap_js: [*]const u8 = @ptrFromInt(er_ui_bootstrap_js_ptr());
     const bytes = bootstrap_js[0..er_ui_bootstrap_js_len()];
@@ -1949,31 +1759,36 @@ test "browser native site state owns scroll position" {
 }
 
 test "browser native cursor intent owns hit and drag cursor policy" {
-    hover_hit_kind = hover_hit_kind_none;
+    runtime_state.clearHover();
     last_action_kind = @intFromEnum(ui_runtime.ActionKind.none);
     try std.testing.expectEqual(@intFromEnum(CursorKind.default), er_ui_cursor_kind());
-    try std.testing.expectEqualStrings(site_cursor.css_default, currentCursorCss());
 
-    hover_hit_kind = @intFromEnum(ui.HitKind.input);
+    runtime_state.hovered = .{ .kind = .input, .id = 1, .bounds = ui.Rect.init(0, 0, 1, 1) };
     try std.testing.expectEqual(@intFromEnum(CursorKind.text), er_ui_cursor_kind());
-    try std.testing.expectEqualStrings(site_cursor.css_text, currentCursorCss());
 
-    hover_hit_kind = @intFromEnum(ui.HitKind.button);
+    runtime_state.hovered = .{ .kind = .button, .id = 2, .bounds = ui.Rect.init(0, 0, 1, 1) };
     try std.testing.expectEqual(@intFromEnum(CursorKind.pointer), er_ui_cursor_kind());
-    try std.testing.expectEqualStrings(site_cursor.css_pointer, currentCursorCss());
 
     last_action_kind = @intFromEnum(ui_runtime.ActionKind.drag_started);
     try std.testing.expectEqual(@intFromEnum(CursorKind.grabbing), er_ui_cursor_kind());
-    const cursor_css_ptr: [*]const u8 = @ptrFromInt(er_ui_cursor_css_ptr());
-    try std.testing.expectEqualStrings(site_cursor.css_grabbing, cursor_css_ptr[0..er_ui_cursor_css_len()]);
+}
+
+test "browser native cursor is scene-drawn from runtime pointer state" {
+    var local_commands: [16]ui.Command = undefined;
+    const scene = ui.Scene.init(&local_commands);
+    var local_pixels: [64]ui.Color = undefined;
+    const surface = try renderer.Surface.init(8, 8, &local_pixels);
+
+    last_action_kind = @intFromEnum(ui_runtime.ActionKind.none);
+    const regions = [_]interaction.Region{.{ .slot = 0, .kind = .button, .id = 4, .bounds = ui.Rect.init(0, 0, 8, 8) }};
+    try std.testing.expectEqual(@as(u32, 0), finishCpuSceneFrame(surface, scene, &regions, .{ .enabled = true, .x = 4.0, .y = 4.0 }, .bg));
+    try std.testing.expectEqual(@intFromEnum(CursorKind.pointer), er_ui_cursor_kind());
+    try std.testing.expect(hasRectColor(local_commands[0..last_command_count], site_cursor.accent));
 }
 
 test "browser native pointer up owns activation suppression policy" {
-    var local_commands: [3]ui.Command = undefined;
-    var scene = ui.Scene.init(&local_commands);
-    try scene.pushHit(.{ .slot = 0, .kind = .button, .id = site_chrome.blog_button_id, .bounds = ui.Rect.init(0, 0, 40, 40) });
-    last_command_count = scene.written().len;
-    @memcpy(commands[0..last_command_count], scene.written());
+    last_command_count = 0;
+    try storeLastRegions(&.{.{ .slot = 0, .kind = .button, .id = site_chrome.blog_button_id, .bounds = ui.Rect.init(0, 0, 40, 40) }});
 
     site_state = .{};
     runtime_state = .{};
@@ -1984,13 +1799,13 @@ test "browser native pointer up owns activation suppression policy" {
     try std.testing.expectEqual(@intFromEnum(HostAction.none), er_ui_site_pointer_up(8, 8));
     try std.testing.expectEqual(site_blog.indexContentHeight(1280.0), er_ui_site_content_height(1280.0));
 
-    var drag_commands: [4]ui.Command = undefined;
+    var drag_commands: [2]ui.Command = undefined;
     var drag_scene = ui.Scene.init(&drag_commands);
     try drag_scene.pushDragSource(.{ .scope_id = 81, .item_id = 1, .index = 0, .bounds = ui.Rect.init(0, 0, 40, 40) });
     try drag_scene.pushDropTarget(.{ .scope_id = 81, .index = 2, .bounds = ui.Rect.init(0, 70, 40, 40) });
-    try drag_scene.pushHit(.{ .slot = 0, .kind = .button, .id = site_chrome.apps_button_id, .bounds = ui.Rect.init(0, 70, 40, 40) });
     last_command_count = drag_scene.written().len;
     @memcpy(commands[0..last_command_count], drag_scene.written());
+    try storeLastRegions(&.{.{ .slot = 0, .kind = .button, .id = site_chrome.apps_button_id, .bounds = ui.Rect.init(0, 70, 40, 40) }});
     runtime_state = .{};
     site_state = .{};
 
@@ -2012,6 +1827,7 @@ test "browser pointer runtime applies visible list reorder state" {
     try scene.pushDropTarget(.{ .scope_id = 81, .index = 0, .bounds = ui.Rect.init(0, 0, 80, 40) });
     try scene.pushDropTarget(.{ .scope_id = 81, .index = 2, .bounds = ui.Rect.init(0, 80, 80, 40) });
     last_command_count = scene.written().len;
+    try storeLastRegions(&.{});
 
     try std.testing.expectEqual(@intFromEnum(ui_runtime.ActionKind.none), er_ui_pointer_down(8, 8));
     try std.testing.expectEqual(@intFromEnum(ui_runtime.ActionKind.drag_started), er_ui_pointer_move(8, 88));
@@ -2072,9 +1888,14 @@ test "browser font atlas populates glyphs on demand" {
     try std.testing.expect(font_atlas_generation > initialized_generation);
 }
 
-test "browser icon atlas uv preserves canonical top-origin rows" {
-    const found = tabler_atlas.rect(.search);
-    const rect = iconAtlasRect(icon.atlasId(.search)).?;
-    const expected_v0 = (@as(f32, @floatFromInt(found.y)) + 0.5) / @as(f32, @floatFromInt(icon_atlas_height));
-    try std.testing.expectEqual(expected_v0, rect.v0);
+test "browser icon buffer stores semantic icon instances" {
+    gpu_icon_vertex_float_len = 0;
+    try renderer_ir.pushIcon(gpuBuffers(), .base, .{
+        .bounds = ui.Rect.init(1, 2, 3, 4),
+        .color = .accent,
+        .icon_id = icon.id(.search),
+    });
+    const instance = try renderer_ir.iconAt(gpu_icon_vertex_floats[0..gpu_icon_vertex_float_len], 0);
+    try std.testing.expectEqual(ui.Rect.init(1, 2, 3, 4), instance.bounds);
+    try std.testing.expectEqual(icon.id(.search), instance.icon_id);
 }

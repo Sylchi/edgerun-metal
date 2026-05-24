@@ -3,7 +3,7 @@ const ui = @import("ui.zig");
 
 pub const rect_float_stride: usize = 15;
 pub const text_vertex_float_stride: usize = 8;
-pub const icon_vertex_float_stride: usize = 8;
+pub const icon_instance_float_stride: usize = 9;
 pub const image_vertex_float_stride: usize = 8;
 pub const font_first_px: u8 = 11;
 pub const font_last_px: u8 = 48;
@@ -44,6 +44,15 @@ const textured_color_r_index: usize = 4;
 const textured_color_g_index: usize = 5;
 const textured_color_b_index: usize = 6;
 const textured_color_a_index: usize = 7;
+const icon_x_index: usize = 0;
+const icon_y_index: usize = 1;
+const icon_w_index: usize = 2;
+const icon_h_index: usize = 3;
+const icon_color_r_index: usize = 4;
+const icon_color_g_index: usize = 5;
+const icon_color_b_index: usize = 6;
+const icon_color_a_index: usize = 7;
+const icon_id_index: usize = 8;
 
 pub const Layer = enum {
     base,
@@ -65,13 +74,6 @@ pub const Glyph = struct {
     left: f32,
     top: f32,
     advance: f32,
-};
-
-pub const AtlasRect = struct {
-    u0: f32,
-    v0: f32,
-    u1: f32,
-    v1: f32,
 };
 
 pub const RectInstance = struct {
@@ -100,6 +102,12 @@ pub const TexturedQuad = struct {
     color: ui.Color,
 };
 
+pub const IconInstance = struct {
+    bounds: ui.Rect,
+    color: ui.Color,
+    icon_id: u32,
+};
+
 pub const DrawBatch = union(enum) {
     rects: []const f32,
     image: []const f32,
@@ -117,14 +125,8 @@ pub const FontAtlas = struct {
     glyph: *const fn (context: *anyopaque, ch: u8, px: u8) Error!?Glyph,
 };
 
-pub const IconAtlas = struct {
-    context: *anyopaque,
-    rect: *const fn (context: *anyopaque, atlas_id: u32) ?AtlasRect,
-};
-
 pub const Sources = struct {
     font: FontAtlas,
-    icon: IconAtlas,
 };
 
 pub const Buffers = struct {
@@ -190,10 +192,8 @@ pub const Buffers = struct {
 
     pub fn hasTexturedVertices(self: Buffers) bool {
         return self.text_vertex_len.* != 0 or
-            self.icon_vertex_len.* != 0 or
             self.image_vertex_len.* != 0 or
-            self.overlay_text_vertex_len.* != 0 or
-            self.overlay_icon_vertex_len.* != 0;
+            self.overlay_text_vertex_len.* != 0;
     }
 };
 
@@ -247,11 +247,11 @@ pub fn FixedBuffers(
     return struct {
         rects: [rect_instances * rect_float_stride]f32 = undefined,
         text_vertices: [text_vertices_count * text_vertex_float_stride]f32 = undefined,
-        icon_vertices: [icon_vertices_count * icon_vertex_float_stride]f32 = undefined,
+        icon_vertices: [icon_vertices_count * icon_instance_float_stride]f32 = undefined,
         image_vertices: [image_vertices_count * image_vertex_float_stride]f32 = undefined,
         overlay_rects: [overlay_rect_instances * rect_float_stride]f32 = undefined,
         overlay_text_vertices: [overlay_text_vertices_count * text_vertex_float_stride]f32 = undefined,
-        overlay_icon_vertices: [overlay_icon_vertices_count * icon_vertex_float_stride]f32 = undefined,
+        overlay_icon_vertices: [overlay_icon_vertices_count * icon_instance_float_stride]f32 = undefined,
         rect_len: usize = 0,
         text_vertex_len: usize = 0,
         icon_vertex_len: usize = 0,
@@ -299,9 +299,9 @@ pub fn packSceneRange(buffers: Buffers, sources: Sources, scene_commands: []cons
         .rect => |rect| try pushRect(buffers, layer, rect.bounds, rect.color, rect.color2, rect.radius, rect.shadow, rectModeCode(rect.mode)),
         .border => |border| try pushRect(buffers, layer, border.bounds, border.color, .clear, 0, 0, rectModeCode(.border)),
         .text => |text_command| try pushText(buffers, sources.font, layer, text_command.origin, text_command.value, text_command.color, text_command.alignment),
-        .icon_quad => |quad| try pushIcon(buffers, sources.icon, layer, quad),
+        .icon_quad => |quad| try pushIcon(buffers, layer, quad),
         .image_quad => |quad| if (layer == .base) try pushImage(buffers, quad),
-        .hit, .drag_source, .drop_target, .text_quad, .transition => {},
+        .drag_source, .drop_target, .text_quad, .transition => {},
     };
 }
 
@@ -364,9 +364,8 @@ pub fn pushText(buffers: Buffers, font: FontAtlas, layer: Layer, bounds: ui.Rect
     }
 }
 
-pub fn pushIcon(buffers: Buffers, icon: IconAtlas, layer: Layer, quad: ui.Quad) Error!void {
-    if (!quad.bounds.valid() or quad.atlas_id == 0) return;
-    const rect = icon.rect(icon.context, quad.atlas_id) orelse return;
+pub fn pushIcon(buffers: Buffers, layer: Layer, quad: ui.IconQuad) Error!void {
+    if (!quad.bounds.valid() or quad.icon_id == 0) return;
     const buffer = switch (layer) {
         .base => buffers.icon_vertices,
         .overlay => buffers.overlay_icon_vertices,
@@ -375,7 +374,20 @@ pub fn pushIcon(buffers: Buffers, icon: IconAtlas, layer: Layer, quad: ui.Quad) 
         .base => buffers.icon_vertex_len,
         .overlay => buffers.overlay_icon_vertex_len,
     };
-    try pushClippedTexturedQuad(buffer, len, quad.bounds, quad.bounds, rect.u0, rect.v0, rect.u1, rect.v1, quad.color);
+    if (len.* + icon_instance_float_stride > buffer.len) return error.Budget;
+    const values = [_]f32{
+        quad.bounds.x,
+        quad.bounds.y,
+        quad.bounds.w,
+        quad.bounds.h,
+        channel(quad.color.r),
+        channel(quad.color.g),
+        channel(quad.color.b),
+        channel(quad.color.a),
+        @floatFromInt(quad.icon_id),
+    };
+    @memcpy(buffer[len.* .. len.* + icon_instance_float_stride], &values);
+    len.* += icon_instance_float_stride;
 }
 
 pub fn pushImage(buffers: Buffers, quad: ui.Quad) Error!void {
@@ -479,8 +491,14 @@ pub fn primitiveCount(buffers: Buffers) Error!usize {
 pub fn batchPrimitiveCount(batch: DrawBatch) Error!usize {
     return switch (batch) {
         .rects, .overlay_rects => |rects| rectCount(rects),
-        .image, .text, .icon, .overlay_text, .overlay_icon => |vertices| texturedQuadCount(vertices),
+        .image, .text, .overlay_text => |vertices| texturedQuadCount(vertices),
+        .icon, .overlay_icon => |instances| iconCount(instances),
     };
+}
+
+pub fn iconCount(values: []const f32) Error!usize {
+    if (values.len % icon_instance_float_stride != 0) return error.InvalidBuffer;
+    return values.len / icon_instance_float_stride;
 }
 
 pub fn texturedQuadCount(values: []const f32) Error!usize {
@@ -502,6 +520,48 @@ pub fn texturedVertexAt(values: []const f32, index: usize) Error!TexturedVertex 
         .color = colorFromChannels(vertex[textured_color_r_index], vertex[textured_color_g_index], vertex[textured_color_b_index], vertex[textured_color_a_index]),
     };
 }
+
+pub fn iconAt(values: []const f32, index: usize) Error!IconInstance {
+    const count = try iconCount(values);
+    if (index >= count) return error.InvalidBuffer;
+    const start = index * icon_instance_float_stride;
+    const instance = values[start .. start + icon_instance_float_stride];
+    return .{
+        .bounds = ui.Rect.init(
+            instance[icon_x_index],
+            instance[icon_y_index],
+            instance[icon_w_index],
+            instance[icon_h_index],
+        ),
+        .color = .{
+            .r = byteFromChannel(instance[icon_color_r_index]),
+            .g = byteFromChannel(instance[icon_color_g_index]),
+            .b = byteFromChannel(instance[icon_color_b_index]),
+            .a = byteFromChannel(instance[icon_color_a_index]),
+        },
+        .icon_id = @intFromFloat(instance[icon_id_index]),
+    };
+}
+
+pub const IconIterator = struct {
+    values: []const f32,
+    index: usize = 0,
+    count: usize,
+
+    pub fn init(values: []const f32) Error!IconIterator {
+        return .{
+            .values = values,
+            .count = try iconCount(values),
+        };
+    }
+
+    pub fn next(self: *IconIterator) Error!?IconInstance {
+        if (self.index >= self.count) return null;
+        const icon_value = try iconAt(self.values, self.index);
+        self.index += 1;
+        return icon_value;
+    }
+};
 
 pub fn texturedQuadAt(values: []const f32, index: usize) Error!TexturedQuad {
     const a = try texturedVertexAt(values, index);
@@ -629,19 +689,14 @@ fn testGlyph(_: *anyopaque, ch: u8, _: u8) Error!?Glyph {
     };
 }
 
-fn testIconRect(_: *anyopaque, atlas_id: u32) ?AtlasRect {
-    if (atlas_id == 0) return null;
-    return .{ .u0 = 0.25, .v0 = 0.25, .u1 = 0.75, .v1 = 0.75 };
-}
-
 test "renderer ir packs scene primitives into canonical buffers" {
     var rects: [rect_float_stride * 4]f32 = undefined;
     var text_vertices: [text_vertex_float_stride * textured_quad_vertex_count * 8]f32 = undefined;
-    var icon_vertices: [icon_vertex_float_stride * textured_quad_vertex_count]f32 = undefined;
+    var icon_vertices: [icon_instance_float_stride]f32 = undefined;
     var image_vertices: [image_vertex_float_stride * textured_quad_vertex_count]f32 = undefined;
     var overlay_rects: [rect_float_stride]f32 = undefined;
     var overlay_text_vertices: [text_vertex_float_stride * textured_quad_vertex_count]f32 = undefined;
-    var overlay_icon_vertices: [icon_vertex_float_stride * textured_quad_vertex_count]f32 = undefined;
+    var overlay_icon_vertices: [icon_instance_float_stride]f32 = undefined;
     var rect_len: usize = 77;
     var text_vertex_len: usize = 77;
     var icon_vertex_len: usize = 77;
@@ -668,20 +723,19 @@ test "renderer ir packs scene primitives into canonical buffers" {
     var source_context: u8 = 0;
     const sources = Sources{
         .font = .{ .context = &source_context, .metrics = testFontMetrics, .width = testTextWidth, .glyph = testGlyph },
-        .icon = .{ .context = &source_context, .rect = testIconRect },
     };
 
     var commands: [4]ui.Command = undefined;
     var scene = ui.Scene.init(&commands);
     try scene.pushRect(ui.Rect.init(1, 2, 30, 40), .accent, .linear_gradient, 4, 0);
     try scene.pushAlignedText(ui.Rect.init(4, 6, 80, 16), "IR", .text, .start);
-    try scene.pushIconQuad(.{ .bounds = ui.Rect.init(8, 10, 12, 12), .color = .text, .atlas_id = 1 });
+    try scene.pushIconQuad(.{ .bounds = ui.Rect.init(8, 10, 12, 12), .color = .text, .icon_id = 1 });
 
     try packScene(buffers, sources, scene.written());
 
     try std.testing.expectEqual(rect_float_stride, rect_len);
     try std.testing.expectEqual(text_vertex_float_stride * textured_quad_vertex_count * 2, text_vertex_len);
-    try std.testing.expectEqual(icon_vertex_float_stride * textured_quad_vertex_count, icon_vertex_len);
+    try std.testing.expectEqual(icon_instance_float_stride, icon_vertex_len);
     try std.testing.expectEqual(@as(usize, 0), image_vertex_len);
     try std.testing.expectEqual(@as(usize, 0), overlay_rect_len);
     try std.testing.expectEqual(@as(usize, 0), overlay_text_vertex_len);
@@ -696,6 +750,10 @@ test "renderer ir packs scene primitives into canonical buffers" {
     try std.testing.expectEqual(ui.Color.text, first_text_vertex.color);
     try std.testing.expect(first_text_vertex.u >= 0.0);
     try std.testing.expect(first_text_vertex.v >= 0.0);
+    const first_icon = try iconAt(icon_vertices[0..icon_vertex_len], 0);
+    try std.testing.expectEqual(ui.Rect.init(8, 10, 12, 12), first_icon.bounds);
+    try std.testing.expectEqual(ui.Color.text, first_icon.color);
+    try std.testing.expectEqual(@as(u32, 1), first_icon.icon_id);
 }
 
 test "renderer ir fixed buffers expose writable canonical buffer view" {
@@ -741,7 +799,7 @@ test "renderer ir iterates rects and textured quads" {
 }
 
 test "renderer ir owns canonical draw batch order" {
-    var storage = FixedBuffers(1, textured_quad_vertex_count, textured_quad_vertex_count, textured_quad_vertex_count, 1, textured_quad_vertex_count, textured_quad_vertex_count){};
+    var storage = FixedBuffers(1, textured_quad_vertex_count, 1, textured_quad_vertex_count, 1, textured_quad_vertex_count, 1){};
     const batches = drawBatches(storage.buffers());
     try std.testing.expectEqual(@as(usize, 7), batches.len);
     try std.testing.expectEqual(DrawBatch{ .rects = storage.rects[0..0] }, batches[0]);
@@ -793,11 +851,11 @@ test "renderer ir validates live buffer lengths before slicing" {
 test "renderer ir separates overlay commands from base buffers" {
     var rects: [rect_float_stride]f32 = undefined;
     var text_vertices: [text_vertex_float_stride * textured_quad_vertex_count]f32 = undefined;
-    var icon_vertices: [icon_vertex_float_stride * textured_quad_vertex_count]f32 = undefined;
+    var icon_vertices: [icon_instance_float_stride]f32 = undefined;
     var image_vertices: [image_vertex_float_stride * textured_quad_vertex_count]f32 = undefined;
     var overlay_rects: [rect_float_stride]f32 = undefined;
     var overlay_text_vertices: [text_vertex_float_stride * textured_quad_vertex_count]f32 = undefined;
-    var overlay_icon_vertices: [icon_vertex_float_stride * textured_quad_vertex_count]f32 = undefined;
+    var overlay_icon_vertices: [icon_instance_float_stride]f32 = undefined;
     var rect_len: usize = 0;
     var text_vertex_len: usize = 0;
     var icon_vertex_len: usize = 0;
@@ -824,7 +882,6 @@ test "renderer ir separates overlay commands from base buffers" {
     var source_context: u8 = 0;
     const sources = Sources{
         .font = .{ .context = &source_context, .metrics = testFontMetrics, .width = testTextWidth, .glyph = testGlyph },
-        .icon = .{ .context = &source_context, .rect = testIconRect },
     };
 
     var commands: [2]ui.Command = undefined;

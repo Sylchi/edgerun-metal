@@ -1,8 +1,8 @@
 const byte_utils = @import("../bytes.zig");
 
-const max_functions = 16;
+const max_functions = 64;
 const max_imports = 16;
-const max_types = 16;
+const max_types = 64;
 const max_type_params = 5;
 const max_type_results = 4;
 const max_locals = 16;

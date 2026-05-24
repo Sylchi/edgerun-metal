@@ -1,5 +1,6 @@
 const std = @import("std");
 const icon = @import("icon.zig");
+const interaction = @import("ui_interaction.zig");
 const ui = @import("ui.zig");
 const components = @import("ui_components.zig");
 const site_chrome = @import("site_chrome.zig");
@@ -8,7 +9,6 @@ pub const logo_button_id: u32 = site_chrome.logo_button_id;
 pub const docs_button_id: u32 = site_chrome.docs_button_id;
 pub const apps_button_id: u32 = site_chrome.apps_button_id;
 pub const launch_button_id: u32 = site_chrome.launch_button_id;
-pub const search_button_id: u32 = site_chrome.search_button_id;
 pub const blog_button_id: u32 = site_chrome.blog_button_id;
 pub const source_button_id: u32 = site_chrome.source_button_id;
 pub const mobile_menu_button_id: u32 = site_chrome.mobile_menu_button_id;
@@ -159,10 +159,10 @@ const sections = [_]Section{
 
 pub fn contentHeight(width: f32) f32 {
     const bounds = ui.Rect.init(0.0, 0.0, @max(1.0, width), 1.0);
-    return flowSections(null, bounds, .{}) catch unreachable;
+    return flowSections(null, null, bounds, .{}) catch unreachable;
 }
 
-pub fn render(scene: *ui.Scene, bounds: ui.Rect, state: State) ui.RenderError!void {
+pub fn render(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, state: State) (ui.RenderError || interaction.Error)!void {
     try fill(scene, bounds, palette.bg, 0.0);
 
     const content = centered(bounds, content_wide);
@@ -176,13 +176,13 @@ pub fn render(scene: *ui.Scene, bounds: ui.Rect, state: State) ui.RenderError!vo
     if (try scene.pushClip(page_clip)) {
         defer scene.popClip();
 
-        _ = try flowSections(scene, ui.Rect.init(bounds.x, page_y, bounds.w, bounds.h), state);
+        _ = try flowSections(scene, collector, ui.Rect.init(bounds.x, page_y, bounds.w, bounds.h), state);
     }
 
-    try renderHeader(scene, ui.Rect.init(bounds.x, bounds.y, bounds.w, header_h), content);
+    try renderHeader(scene, collector, ui.Rect.init(bounds.x, bounds.y, bounds.w, header_h), content);
 }
 
-fn flowSections(scene: ?*ui.Scene, bounds: ui.Rect, state: State) ui.RenderError!f32 {
+fn flowSections(scene: ?*ui.Scene, collector: ?*interaction.Collector, bounds: ui.Rect, state: State) (ui.RenderError || interaction.Error)!f32 {
     const content = centered(bounds, content_wide);
     var cursor_y = bounds.y + page_top_pad;
     for (sections) |section| {
@@ -194,13 +194,13 @@ fn flowSections(scene: ?*ui.Scene, bounds: ui.Rect, state: State) ui.RenderError
         };
         if (scene) |target| {
             switch (section.kind) {
-                .hero => try renderHero(target, section_bounds, state),
+                .hero => try renderHero(target, collector.?, section_bounds, state),
                 .stats => try renderStats(target, section_bounds),
                 .problem => try renderProblem(target, section_bounds),
                 .principles => try renderPrinciples(target, section_bounds),
-                .architecture => try renderArchitecture(target, section_bounds),
+                .architecture => try renderArchitecture(target, collector.?, section_bounds),
                 .impact => try renderImpact(target, section_bounds),
-                .cta => try renderCta(target, section_bounds),
+                .cta => try renderCta(target, collector.?, section_bounds),
                 .footer => try renderFooter(target, section_bounds, content),
             }
         }
@@ -222,15 +222,15 @@ fn sectionHeight(content: ui.Rect, kind: SectionKind) f32 {
     };
 }
 
-fn renderHeader(scene: *ui.Scene, bounds: ui.Rect, content: ui.Rect) ui.RenderError!void {
-    try site_chrome.renderHeader(scene, bounds, content, .none);
+fn renderHeader(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, content: ui.Rect) (ui.RenderError || interaction.Error)!void {
+    try site_chrome.renderHeader(scene, collector, bounds, content, .none);
 }
 
-fn renderHero(scene: *ui.Scene, bounds: ui.Rect, state: State) ui.RenderError!void {
+fn renderHero(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, state: State) (ui.RenderError || interaction.Error)!void {
     const layout = heroLayout(bounds);
     const stacked = bounds.w < hero_split_min_w;
 
-    try renderTerminal(scene, layout.terminal, state);
+    try renderTerminal(scene, collector, layout.terminal, state);
     try renderTerminalHint(scene, layout.terminal, state, stacked);
 
     const badge_w = @min(330.0, layout.copy.w);
@@ -256,8 +256,8 @@ fn renderHero(scene: *ui.Scene, bounds: ui.Rect, state: State) ui.RenderError!vo
     try heroParagraph(scene, ui.Rect.init(paragraph_x, layout.copy.y + 244.0, paragraph_w, 88.0), "No signup. No account. No middlemen. EdgeRun starts a node in your browser the moment you arrive. Share your ID, connect directly, communicate privately.");
     const actions_w = hero_primary_button_w + hero_button_gap + hero_outline_button_w;
     const actions_x = if (stacked) layout.copy.x + (layout.copy.w - actions_w) * 0.5 else layout.copy.x;
-    try primaryButtonWithTrailingIcon(scene, ui.Rect.init(actions_x, layout.button_y, hero_primary_button_w, 42.0), "Read the Docs", .chevron_right, docs_button_id);
-    try outlineButton(scene, ui.Rect.init(actions_x + hero_primary_button_w + hero_button_gap, layout.button_y, hero_outline_button_w, 42.0), "Browse Apps", apps_button_id);
+    try primaryButtonWithTrailingIcon(scene, collector, ui.Rect.init(actions_x, layout.button_y, hero_primary_button_w, 42.0), "Read the Docs", .chevron_right, docs_button_id);
+    try outlineButton(scene, collector, ui.Rect.init(actions_x + hero_primary_button_w + hero_button_gap, layout.button_y, hero_outline_button_w, 42.0), "Browse Apps", apps_button_id);
 }
 
 const HeroLayout = struct {
@@ -295,7 +295,7 @@ fn heroSectionHeight(width: f32) f32 {
     return if (width >= hero_split_min_w) @max(measured, hero_split_min_h) else measured;
 }
 
-fn renderTerminal(scene: *ui.Scene, bounds: ui.Rect, state: State) ui.RenderError!void {
+fn renderTerminal(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, state: State) (ui.RenderError || interaction.Error)!void {
     try nativeCard(scene, bounds, "", "");
     const header = ui.Rect.init(bounds.x, bounds.y, bounds.w, 40.0);
     try fill(scene, header, palette.card_alt, radius);
@@ -332,7 +332,7 @@ fn renderTerminal(scene: *ui.Scene, bounds: ui.Rect, state: State) ui.RenderErro
 
     if (!state.public_identity_ready) {
         const reveal = ui.Rect.init(bounds.x + 24.0, bounds.y + bounds.h - 54.0, 196.0, 32.0);
-        try outlineButton(scene, reveal, "Click to Reveal ID", reveal_identity_button_id);
+        try outlineButton(scene, collector, reveal, "Click to Reveal ID", reveal_identity_button_id);
     }
 }
 
@@ -406,13 +406,13 @@ fn renderPrinciples(scene: *ui.Scene, bounds: ui.Rect) ui.RenderError!void {
     }
 }
 
-fn renderArchitecture(scene: *ui.Scene, bounds: ui.Rect) ui.RenderError!void {
+fn renderArchitecture(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect) (ui.RenderError || interaction.Error)!void {
     const left = ui.Rect.init(bounds.x, bounds.y, bounds.w * 0.36, bounds.h);
     const right = ui.Rect.init(bounds.x + bounds.w * 0.43, bounds.y, bounds.w * 0.57, bounds.h);
     try tag(scene, ui.Rect.init(left.x, left.y, 64.0, 24.0), "STACK", palette.primary);
     try heading(scene, ui.Rect.init(left.x, left.y + 44.0, left.w, 74.0), "Pure Zig.", "Zero Dependencies.");
     try paragraph(scene, ui.Rect.init(left.x, left.y + 138.0, left.w, 96.0), "Every component written from scratch. No inherited vulnerabilities. No black boxes. Compiles to WebAssembly for browser, native for desktop.");
-    try outlineButtonWithTrailingIcon(scene, ui.Rect.init(left.x, left.y + 264.0, 180.0, 36.0), "Explore Architecture", .chevron_right, docs_button_id);
+    try outlineButtonWithTrailingIcon(scene, collector, ui.Rect.init(left.x, left.y + 264.0, 180.0, 36.0), "Explore Architecture", .chevron_right, docs_button_id);
     const stack = [_]struct { []const u8, []const u8, ui.Color }{
         .{ "edgerun-metal", "Bare metal bootloader", palette.orange },
         .{ "edgerun-clock", "Distributed time sync", palette.yellow },
@@ -507,13 +507,13 @@ fn impactCardColumns(width: f32) usize {
     return 1;
 }
 
-fn renderCta(scene: *ui.Scene, bounds: ui.Rect) ui.RenderError!void {
+fn renderCta(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect) (ui.RenderError || interaction.Error)!void {
     try nativeCard(scene, bounds, "", "");
     try alignedText(scene, bounds.x + 40.0, bounds.y + 70.0, bounds.w - 80.0, 30.0, "Cut Out the Middlemen", palette.text, .center);
     try alignedText(scene, bounds.x + 40.0, bounds.y + 118.0, bounds.w - 80.0, 18.0, "Start with the docs. Explore the architecture. Build apps that respect users.", palette.dim, .center);
     const center = bounds.x + bounds.w * 0.5;
-    try primaryButtonWithTrailingIcon(scene, ui.Rect.init(center - 146.0, bounds.y + 168.0, 132.0, 38.0), "Get Started", .chevron_right, docs_button_id);
-    try outlineButton(scene, ui.Rect.init(center + 14.0, bounds.y + 168.0, 132.0, 38.0), "Browse Apps", apps_button_id);
+    try primaryButtonWithTrailingIcon(scene, collector, ui.Rect.init(center - 146.0, bounds.y + 168.0, 132.0, 38.0), "Get Started", .chevron_right, docs_button_id);
+    try outlineButton(scene, collector, ui.Rect.init(center + 14.0, bounds.y + 168.0, 132.0, 38.0), "Browse Apps", apps_button_id);
 }
 
 fn renderFooter(scene: *ui.Scene, bounds: ui.Rect, content: ui.Rect) ui.RenderError!void {
@@ -715,20 +715,20 @@ fn footerColumn(scene: *ui.Scene, bounds: ui.Rect, heading_value: []const u8, it
     }
 }
 
-fn primaryButton(scene: *ui.Scene, bounds: ui.Rect, label: []const u8, id: u32) ui.RenderError!void {
-    try nativeComponent(scene, bounds, .{ .button = .{ .id = id, .label = label } }, .{ .button_variant = .primary });
+fn primaryButton(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, label: []const u8, id: u32) (ui.RenderError || interaction.Error)!void {
+    try nativeComponent(scene, collector, bounds, .{ .button = .{ .id = id, .label = label } }, .{ .button_variant = .primary });
 }
 
-fn primaryButtonWithTrailingIcon(scene: *ui.Scene, bounds: ui.Rect, label: []const u8, icon_value: icon.Icon, id: u32) ui.RenderError!void {
-    try nativeComponent(scene, bounds, .{ .button = .{ .id = id, .label = label } }, .{ .button_variant = .primary, .button_trailing_icon = icon_value });
+fn primaryButtonWithTrailingIcon(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, label: []const u8, icon_value: icon.Icon, id: u32) (ui.RenderError || interaction.Error)!void {
+    try nativeComponent(scene, collector, bounds, .{ .button = .{ .id = id, .label = label } }, .{ .button_variant = .primary, .button_trailing_icon = icon_value });
 }
 
-fn outlineButton(scene: *ui.Scene, bounds: ui.Rect, label: []const u8, id: u32) ui.RenderError!void {
-    try nativeComponent(scene, bounds, .{ .button = .{ .id = id, .label = label } }, .{ .button_variant = .outline });
+fn outlineButton(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, label: []const u8, id: u32) (ui.RenderError || interaction.Error)!void {
+    try nativeComponent(scene, collector, bounds, .{ .button = .{ .id = id, .label = label } }, .{ .button_variant = .outline });
 }
 
-fn outlineButtonWithTrailingIcon(scene: *ui.Scene, bounds: ui.Rect, label: []const u8, icon_value: icon.Icon, id: u32) ui.RenderError!void {
-    try nativeComponent(scene, bounds, .{ .button = .{ .id = id, .label = label } }, .{ .button_variant = .outline, .button_trailing_icon = icon_value });
+fn outlineButtonWithTrailingIcon(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, label: []const u8, icon_value: icon.Icon, id: u32) (ui.RenderError || interaction.Error)!void {
+    try nativeComponent(scene, collector, bounds, .{ .button = .{ .id = id, .label = label } }, .{ .button_variant = .outline, .button_trailing_icon = icon_value });
 }
 
 fn nativeBadge(scene: *ui.Scene, bounds: ui.Rect, label: []const u8) ui.RenderError!void {
@@ -738,13 +738,14 @@ fn nativeBadge(scene: *ui.Scene, bounds: ui.Rect, label: []const u8) ui.RenderEr
 }
 
 fn nativeCard(scene: *ui.Scene, bounds: ui.Rect, title_value: []const u8, detail_value: []const u8) ui.RenderError!void {
-    try nativeComponent(scene, bounds, .{ .card = .{ .title = title_value, .detail = detail_value } }, .{ .surface_variant = .elevated });
+    try components.renderComponent(scene, bounds, .{ .card = .{ .title = title_value, .detail = detail_value } }, .{ .style = siteStyle(), .surface_variant = .elevated });
 }
 
-fn nativeComponent(scene: *ui.Scene, bounds: ui.Rect, component: components.Component, options: components.RenderOptions) ui.RenderError!void {
+fn nativeComponent(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, component: components.Component, options: components.RenderOptions) (ui.RenderError || interaction.Error)!void {
     var resolved = options;
     resolved.style = siteStyle();
     try components.renderComponent(scene, bounds, component, resolved);
+    try components.collectComponentInteractions(collector, bounds, component);
 }
 
 fn siteStyle() ui.Style {
@@ -771,11 +772,7 @@ fn alignedText(scene: *ui.Scene, x: f32, y: f32, w: f32, h: f32, value: []const 
 }
 
 fn iconQuad(scene: *ui.Scene, bounds: ui.Rect, value: icon.Icon, color: ui.Color) ui.RenderError!void {
-    try scene.pushIconQuad(.{ .bounds = bounds, .atlas_id = icon.atlasId(value), .color = color });
-}
-
-fn hit(scene: *ui.Scene, bounds: ui.Rect, kind: ui.HitKind, id: u32) ui.RenderError!void {
-    try scene.pushHit(.{ .slot = 0, .kind = kind, .id = id, .bounds = bounds });
+    try scene.pushIconQuad(.{ .bounds = bounds, .icon_id = icon.id(value), .color = color });
 }
 
 fn centered(bounds: ui.Rect, max_w: f32) ui.Rect {
@@ -818,7 +815,9 @@ test "landing page renders site sections and primary actions" {
     var commands: [4096]ui.Command = undefined;
     var clips: [8]ui.Rect = undefined;
     var scene = ui.Scene.initWithClips(&commands, &clips);
-    try render(&scene, ui.Rect.init(0, 0, 1280, 3600), .{});
+    var regions: [128]interaction.Region = undefined;
+    var collector = interaction.Collector.init(&regions);
+    try render(&scene, &collector, ui.Rect.init(0, 0, 1280, 3600), .{});
 
     try std.testing.expect(hasText(scene.written(), "EdgeRun"));
     try std.testing.expect(hasText(scene.written(), "Already Running"));
@@ -828,9 +827,8 @@ test "landing page renders site sections and primary actions" {
     try std.testing.expect(hasText(scene.written(), "Click to Reveal ID"));
     try std.testing.expect(!hasText(scene.written(), "113 nodes online"));
     try std.testing.expect(hasPieSlice(scene.written()));
-    try std.testing.expect(hasHit(scene.written(), docs_button_id));
-    try std.testing.expect(hasHit(scene.written(), apps_button_id));
-    try std.testing.expect(hasIcon(scene.written(), .search));
+    try std.testing.expect(hasHit(collector.written(), docs_button_id));
+    try std.testing.expect(hasHit(collector.written(), apps_button_id));
     try std.testing.expect(hasIcon(scene.written(), .chevron_right));
     try std.testing.expect(hasIcon(scene.written(), .github));
 }
@@ -839,7 +837,9 @@ test "landing page clips scrolled content below fixed header" {
     var commands: [4096]ui.Command = undefined;
     var clips: [8]ui.Rect = undefined;
     var scene = ui.Scene.initWithClips(&commands, &clips);
-    try render(&scene, ui.Rect.init(0, 0, 1280, 900), .{ .scroll_y = 2300.0 });
+    var regions: [128]interaction.Region = undefined;
+    var collector = interaction.Collector.init(&regions);
+    try render(&scene, &collector, ui.Rect.init(0, 0, 1280, 900), .{ .scroll_y = 2300.0 });
 
     const cta = textOrigin(scene.written(), "Cut Out the Middlemen").?;
     try std.testing.expect(cta.y >= header_h);
@@ -847,7 +847,7 @@ test "landing page clips scrolled content below fixed header" {
 }
 
 test "landing page content height reaches footer without extra scroll space" {
-    try std.testing.expectEqual(try flowSections(null, ui.Rect.init(0.0, 0.0, 1280.0, 1.0), .{}), contentHeight(1280.0));
+    try std.testing.expectEqual(try flowSections(null, null, ui.Rect.init(0.0, 0.0, 1280.0, 1.0), .{}), contentHeight(1280.0));
     try std.testing.expect(contentHeight(640.0) > contentHeight(1280.0));
 }
 
@@ -962,19 +962,16 @@ fn contentTextAboveHeader(commands: []const ui.Command, value: []const u8) bool 
 }
 
 fn hasIcon(commands: []const ui.Command, value: icon.Icon) bool {
-    const atlas_id = icon.atlasId(value);
+    const icon_id = icon.id(value);
     for (commands) |command| switch (command) {
-        .icon_quad => |quad| if (quad.atlas_id == atlas_id) return true,
+        .icon_quad => |quad| if (quad.icon_id == icon_id) return true,
         else => {},
     };
     return false;
 }
 
-fn hasHit(commands: []const ui.Command, id: u32) bool {
-    for (commands) |command| switch (command) {
-        .hit => |hit_command| if (hit_command.id == id) return true,
-        else => {},
-    };
+fn hasHit(regions: []const interaction.Region, id: u32) bool {
+    for (regions) |region| if (region.id == id) return true;
     return false;
 }
 

@@ -1,5 +1,6 @@
 const std = @import("std");
 const icon = @import("icon.zig");
+const icon_vector = @import("icon_vector.zig");
 
 pub const Status = enum {
     ok,
@@ -9,7 +10,7 @@ pub const Status = enum {
     missing_required_icon,
     duplicate_icon,
     icon_provider_name_mismatch,
-    invalid_icon_atlas,
+    invalid_icon_vector,
     font_face_count_exceeded,
     missing_default_font_face,
     missing_font_char,
@@ -21,8 +22,7 @@ pub const Status = enum {
 
 pub const Limits = struct {
     max_icon_count: usize,
-    max_icon_atlas_side: u32,
-    max_icon_atlas_bytes: usize,
+    max_icon_vector_bytes: usize,
     max_font_faces: usize,
     max_font_atlas_side: u32,
     max_font_atlas_bytes: usize,
@@ -39,9 +39,7 @@ pub const IconPackSpec = struct {
     name: []const u8,
     provider: icon.Provider,
     entries: []const IconPackEntry,
-    atlas_width: u32,
-    atlas_height: u32,
-    atlas_bytes: usize,
+    vector_bytes: usize,
 };
 
 pub const FontFaceSpec = struct {
@@ -80,8 +78,7 @@ pub const required_font_chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstu
 pub fn defaultLimits() Limits {
     return .{
         .max_icon_count = 256,
-        .max_icon_atlas_side = 4096,
-        .max_icon_atlas_bytes = 16_777_216,
+        .max_icon_vector_bytes = 64 * 1024,
         .max_font_faces = 8,
         .max_font_atlas_side = 4096,
         .max_font_atlas_bytes = 16_777_216,
@@ -94,13 +91,7 @@ pub fn validateIconPack(pack: IconPackSpec, limits: Limits) Status {
     const name_status = validateName(pack.name, limits);
     if (name_status != .ok) return name_status;
     if (pack.entries.len > limits.max_icon_count) return .icon_count_exceeded;
-    if (pack.atlas_width == 0 or pack.atlas_height == 0 or
-        pack.atlas_width > limits.max_icon_atlas_side or
-        pack.atlas_height > limits.max_icon_atlas_side or
-        pack.atlas_bytes == 0 or pack.atlas_bytes > limits.max_icon_atlas_bytes)
-    {
-        return .invalid_icon_atlas;
-    }
+    if (pack.vector_bytes == 0 or pack.vector_bytes > limits.max_icon_vector_bytes) return .invalid_icon_vector;
 
     for (pack.entries, 0..) |entry, i| {
         for (pack.entries[i + 1 ..]) |other| {
@@ -180,9 +171,7 @@ pub fn tablerInterPack() AssetPackSpec {
             .name = "tabler-svg",
             .provider = .tabler,
             .entries = &tabler_icon_entries,
-            .atlas_width = bundled_icon_atlas_w,
-            .atlas_height = bundled_icon_atlas_h,
-            .atlas_bytes = bundled_icon_atlas_w * bundled_icon_atlas_h,
+            .vector_bytes = bundledIconVectorBytes(),
         },
         .fonts = .{
             .name = "inter",
@@ -202,9 +191,7 @@ pub fn lucideGeistPack() AssetPackSpec {
             .name = "lucide-svg",
             .provider = .lucide,
             .entries = &lucide_icon_entries,
-            .atlas_width = bundled_icon_atlas_w,
-            .atlas_height = bundled_icon_atlas_h,
-            .atlas_bytes = bundled_icon_atlas_w * bundled_icon_atlas_h,
+            .vector_bytes = bundledIconVectorBytes(),
         },
         .fonts = .{
             .name = "geist",
@@ -232,8 +219,6 @@ fn iconEntries(comptime provider: icon.Provider) [std.enums.values(icon.Icon).le
     return entries;
 }
 
-const bundled_icon_atlas_w: u32 = 672;
-const bundled_icon_atlas_h: u32 = 560;
 const bundled_font_atlas_side: u32 = 1024;
 const tabler_icon_entries = iconEntries(.tabler);
 const lucide_icon_entries = iconEntries(.lucide);
@@ -249,6 +234,14 @@ const required_emoji = [_]EmojiSpec{
     .{ .key = "document", .label = "document" },
     .{ .key = "surface", .label = "surface" },
 };
+
+fn bundledIconVectorBytes() usize {
+    var total: usize = 0;
+    for (std.enums.values(icon.Icon)) |value| {
+        total += icon_vector.data(value).len * @sizeOf(f32);
+    }
+    return total;
+}
 
 test "bundled asset packs validate" {
     const limits = defaultLimits();

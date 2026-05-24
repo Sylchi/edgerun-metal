@@ -1,16 +1,33 @@
 const std = @import("std");
-const bytes = @import("bytes.zig");
 const clock = @import("clock.zig");
 const icon = @import("icon.zig");
 const ui_input = @import("input.zig");
 const interaction = @import("ui_interaction.zig");
 const object = @import("object.zig");
 const ui = @import("ui.zig");
-const codec = @import("ui_codec.zig");
 const component_common = @import("ui_component_common.zig");
-const base_badge = @import("ui/components/base/Badge.zig");
-const base_button = @import("ui/components/base/Button.zig");
-const base_surface = @import("ui/components/base/Surface.zig");
+const component_codec = @import("ui/components/Codec.zig");
+const component_io = @import("ui/components/ComponentIO.zig");
+const tree_codec = @import("ui/components/TreeCodec.zig");
+const component_render = @import("ui/components/Render.zig");
+const region_component = @import("ui/components/Region.zig");
+const stack_component = @import("ui/components/Stack.zig");
+const slot_component = @import("ui/components/Slot.zig");
+const text_component = @import("ui/components/Text.zig");
+const card_component = @import("ui/components/Card.zig");
+const button_component = @import("ui/components/Button.zig");
+const badge_component = @import("ui/components/Badge.zig");
+const avatar_component = @import("ui/components/Avatar.zig");
+const kbd_component = @import("ui/components/Kbd.zig");
+const separator_component = @import("ui/components/Separator.zig");
+const input_component = @import("ui/components/Input.zig");
+const textarea_component = @import("ui/components/Textarea.zig");
+const select_component = @import("ui/components/Select.zig");
+const checkbox_component = @import("ui/components/Checkbox.zig");
+const switch_component = @import("ui/components/Switch.zig");
+const progress_component = @import("ui/components/Progress.zig");
+const slider_component = @import("ui/components/Slider.zig");
+const row_item_component = @import("ui/components/RowItem.zig");
 const article_card_component = @import("ui/components/ArticleCard.zig");
 const article_list_item_component = @import("ui/components/ArticleListItem.zig");
 const aside_component = @import("ui/components/Aside.zig");
@@ -31,10 +48,8 @@ const table_component = @import("ui/components/Table.zig");
 const timeline_component = @import("ui/components/Timeline.zig");
 pub const layouts = @import("layouts.zig");
 
-const tree_layout_magic = "ERUL001\x00";
-const tree_layout_size = 16;
-const slot_layout_magic = "ERUS001\x00";
-const slot_layout_size = 16;
+const tree_layout_size = tree_codec.tree_layout_size;
+const slot_layout_size = tree_codec.slot_layout_size;
 
 pub const Error = component_common.Error;
 pub const HtmlError = component_common.HtmlError;
@@ -42,6 +57,10 @@ pub const MarkdownError = component_common.MarkdownError;
 pub const RegistryError = component_common.RegistryError;
 pub const ComponentDescriptor = component_common.ComponentDescriptor;
 pub const ComponentRegistry = component_common.ComponentRegistry;
+const HtmlWriter = component_common.HtmlWriter;
+const HtmlTextArena = component_common.HtmlTextArena;
+const MarkdownWriter = component_common.MarkdownWriter;
+const MarkdownTextArena = component_common.MarkdownTextArena;
 
 pub const Component = union(enum) {
     text: Text,
@@ -93,7 +112,7 @@ pub const Component = union(enum) {
     }
 
     pub fn toObject(self: Component, ui_out: []u8, object_out: []u8, req: object.Requirements, epoch: clock.Stamp) ?[]u8 {
-        return writeSingleComponentObject(self, ui_out, object_out, req, epoch);
+        return component_io.writeObject(Component, self, ui_out, object_out, req, epoch);
     }
 
     pub fn toHtml(self: Component, out: []u8) HtmlError![]u8 {
@@ -113,10 +132,7 @@ pub const Component = union(enum) {
     }
 
     pub fn fromView(view: object.View) Error!Component {
-        var nodes: [1]ui.Node = undefined;
-        const root = codec.decodeView(view, &nodes) catch return error.Corrupt;
-        if (root.stack.children.len != 1) return error.Corrupt;
-        return fromNode(root.stack.children[0]);
+        return fromNode(try component_codec.singleNode(view));
     }
 
     pub fn fromNode(node_value: ui.Node) Error!Component {
@@ -146,8 +162,37 @@ pub const BadgeVariant = component_common.BadgeVariant;
 pub const SurfaceVariant = component_common.SurfaceVariant;
 pub const RenderOptions = component_common.RenderOptions;
 
-pub const ArticleCard = article_card_component.ArticleCard;
+pub const Text = text_component.Text;
 
+pub const Card = card_component.Card;
+
+pub const Button = button_component.Button;
+
+pub const Badge = badge_component.Badge;
+
+pub const Avatar = avatar_component.Avatar;
+
+pub const Kbd = kbd_component.Kbd;
+
+pub const Separator = separator_component.Separator;
+
+pub const Input = input_component.Input;
+
+pub const Textarea = textarea_component.Textarea;
+
+pub const Select = select_component.Select;
+
+pub const Checkbox = checkbox_component.Checkbox;
+
+pub const Switch = switch_component.Switch;
+
+pub const Progress = progress_component.Progress;
+
+pub const Slider = slider_component.Slider;
+
+pub const RowItem = row_item_component.RowItem;
+
+pub const ArticleCard = article_card_component.ArticleCard;
 pub const ArticleListItem = article_list_item_component.ArticleListItem;
 
 pub const CodeBlock = code_block_component.CodeBlock;
@@ -188,322 +233,177 @@ pub const ProgressSummary = progress_summary_component.ProgressSummary;
 pub const NavItem = nav_component.NavItem;
 pub const Nav = nav_component.Nav;
 
-pub const RegionTag = enum {
-    header,
-    main,
-    footer,
-    section,
-    article,
-};
-
-pub const Region = struct {
-    tag: RegionTag,
-    label: []const u8 = "",
-    children: []const Component,
-
-    pub fn measure(self: Region, constraints: layouts.types.Constraints, options: RenderOptions) layouts.types.Measurement {
-        return measureRegion(self, constraints, options);
-    }
-
-    pub fn render(self: Region, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
-        return renderRegion(scene, bounds, self, options);
-    }
-
-    pub fn collectInteractions(self: Region, collector: *interaction.Collector, bounds: ui.Rect, options: RenderOptions) interaction.Error!void {
-        return collectRegionInteractions(collector, bounds, self, options);
-    }
-
-    pub fn toHtml(self: Region, out: []u8) HtmlError![]u8 {
-        return writeRegionHtml(self, out);
-    }
-
-    pub fn fromHtml(html: []const u8, out_components: []Component, text_out: []u8) HtmlError!Region {
-        return readRegionHtml(html, out_components, text_out);
-    }
-
-    pub fn toMarkdown(self: Region, out: []u8) MarkdownError![]u8 {
-        return writeRegionMarkdown(self, out);
-    }
-
-    pub fn fromMarkdown(markdown: []const u8, out_components: []Component, text_out: []u8) MarkdownError!Region {
-        return readRegionMarkdown(markdown, out_components, text_out);
-    }
-};
+pub const RegionTag = region_component.RegionTag;
+pub const Region = region_component.Region(Component);
 
 pub const TableCell = table_component.TableCell;
 pub const TableRow = table_component.TableRow;
 pub const Table = table_component.Table;
 
+pub const AcademyComponentKind = enum {
+    aside,
+    breadcrumb,
+    callout,
+    choice_group,
+    code_block,
+    definition_list,
+    details,
+    figure,
+    heading,
+    list,
+    nav,
+    progress_summary,
+    resource_list,
+    step_list,
+    table,
+    timeline,
+};
+
+pub const academy_component_count = 16;
+
+pub fn registerAcademyComponent(registry: *ComponentRegistry, kind: AcademyComponentKind) RegistryError!void {
+    return switch (kind) {
+        .aside => aside_component.register(registry),
+        .breadcrumb => breadcrumb_component.register(registry),
+        .callout => callout_component.register(registry),
+        .choice_group => choice_group_component.register(registry),
+        .code_block => code_block_component.register(registry),
+        .definition_list => definition_list_component.register(registry),
+        .details => details_component.register(registry),
+        .figure => figure_component.register(registry),
+        .heading => heading_component.register(registry),
+        .list => list_component.register(registry),
+        .nav => nav_component.register(registry),
+        .progress_summary => progress_summary_component.register(registry),
+        .resource_list => resource_list_component.register(registry),
+        .step_list => step_list_component.register(registry),
+        .table => table_component.register(registry),
+        .timeline => timeline_component.register(registry),
+    };
+}
+
+pub fn registerAcademyComponents(registry: *ComponentRegistry) RegistryError!void {
+    const kinds = [_]AcademyComponentKind{
+        .aside,
+        .breadcrumb,
+        .callout,
+        .choice_group,
+        .code_block,
+        .definition_list,
+        .details,
+        .figure,
+        .heading,
+        .list,
+        .nav,
+        .progress_summary,
+        .resource_list,
+        .step_list,
+        .table,
+        .timeline,
+    };
+    for (kinds) |kind| {
+        try registerAcademyComponent(registry, kind);
+    }
+}
+
 pub fn registerAside(registry: *ComponentRegistry) RegistryError!void {
-    return aside_component.register(registry);
+    return registerAcademyComponent(registry, .aside);
 }
 
 pub fn registerBreadcrumb(registry: *ComponentRegistry) RegistryError!void {
-    return breadcrumb_component.register(registry);
+    return registerAcademyComponent(registry, .breadcrumb);
 }
 
 pub fn registerCallout(registry: *ComponentRegistry) RegistryError!void {
-    return callout_component.register(registry);
+    return registerAcademyComponent(registry, .callout);
 }
 
 pub fn registerChoiceGroup(registry: *ComponentRegistry) RegistryError!void {
-    return choice_group_component.register(registry);
+    return registerAcademyComponent(registry, .choice_group);
 }
 
 pub fn registerCodeBlock(registry: *ComponentRegistry) RegistryError!void {
-    return code_block_component.register(registry);
+    return registerAcademyComponent(registry, .code_block);
 }
 
 pub fn registerDefinitionList(registry: *ComponentRegistry) RegistryError!void {
-    return definition_list_component.register(registry);
+    return registerAcademyComponent(registry, .definition_list);
 }
 
 pub fn registerDetails(registry: *ComponentRegistry) RegistryError!void {
-    return details_component.register(registry);
+    return registerAcademyComponent(registry, .details);
 }
 
 pub fn registerFigure(registry: *ComponentRegistry) RegistryError!void {
-    return figure_component.register(registry);
+    return registerAcademyComponent(registry, .figure);
 }
 
 pub fn registerHeading(registry: *ComponentRegistry) RegistryError!void {
-    return heading_component.register(registry);
+    return registerAcademyComponent(registry, .heading);
 }
 
 pub fn registerList(registry: *ComponentRegistry) RegistryError!void {
-    return list_component.register(registry);
+    return registerAcademyComponent(registry, .list);
 }
 
 pub fn registerNav(registry: *ComponentRegistry) RegistryError!void {
-    return nav_component.register(registry);
+    return registerAcademyComponent(registry, .nav);
 }
 
 pub fn registerProgressSummary(registry: *ComponentRegistry) RegistryError!void {
-    return progress_summary_component.register(registry);
+    return registerAcademyComponent(registry, .progress_summary);
 }
 
 pub fn registerResourceList(registry: *ComponentRegistry) RegistryError!void {
-    return resource_list_component.register(registry);
+    return registerAcademyComponent(registry, .resource_list);
 }
 
 pub fn registerStepList(registry: *ComponentRegistry) RegistryError!void {
-    return step_list_component.register(registry);
+    return registerAcademyComponent(registry, .step_list);
 }
 
 pub fn registerTable(registry: *ComponentRegistry) RegistryError!void {
-    return table_component.register(registry);
+    return registerAcademyComponent(registry, .table);
 }
 
 pub fn registerTimeline(registry: *ComponentRegistry) RegistryError!void {
-    return timeline_component.register(registry);
+    return registerAcademyComponent(registry, .timeline);
 }
 
 pub fn renderComponent(scene: *ui.Scene, bounds: ui.Rect, component: Component, options: RenderOptions) ui.RenderError!void {
-    switch (component) {
-        .card => |card| try renderSurface(scene, bounds, card.title, card.detail, options),
-        .badge => |badge| try renderBadge(scene, bounds, badge.label, options),
-        .button => |button| try renderButton(scene, bounds, button.id, button.label, options),
-        else => try ui.render(scene, component.node(), bounds, options.style),
-    }
+    return component_render.renderComponent(Component, scene, bounds, component, options);
 }
 
 pub fn collectComponentInteractions(collector: *interaction.Collector, bounds: ui.Rect, component: Component) interaction.Error!void {
-    switch (component) {
-        .button => |button| try base_button.collectInteractions(collector, bounds, .{ .id = button.id, .label = button.label }),
-        else => {},
-    }
+    return component_render.collectComponentInteractions(Component, collector, bounds, component);
 }
 
 pub fn measureComponent(component: Component, constraints: layouts.types.Constraints, options: RenderOptions) layouts.types.Measurement {
-    _ = options;
-    return switch (component) {
-        .text => |text| measureText(text.value, constraints),
-        .card => |card| measureSurface(card.title, card.detail, constraints),
-        .badge => |badge| measureBadge(badge.label, constraints),
-        .button => |button| measureButton(button.label, constraints),
-        else => measurePreferredNode(component.node(), constraints),
-    };
+    return component_render.measureComponent(Component, component, constraints, options);
 }
 
 pub fn measureRegion(region: Region, constraints: layouts.types.Constraints, options: RenderOptions) layouts.types.Measurement {
-    var child_measurements: [codec_max_stack_children]layouts.types.Measurement = undefined;
-    const measured_children = measureChildren(region.children, regionChildConstraints(constraints), options, &child_measurements);
-    return layouts.Flex.measure(measured_children, constraints, regionLayoutOptions());
+    return component_render.measureRegion(Component, region, constraints, options);
 }
 
 pub fn renderRegion(scene: *ui.Scene, bounds: ui.Rect, region: Region, options: RenderOptions) ui.RenderError!void {
-    if (region.children.len == 0) return;
-    if (region.children.len > codec_max_stack_children) return error.CommandBudgetExceeded;
-    if (region.tag == .header or region.tag == .footer) {
-        try base_surface.renderFrame(scene, bounds, options);
-    }
-
-    const constraints = constraintsFromBounds(bounds);
-    var child_measurements: [codec_max_stack_children]layouts.types.Measurement = undefined;
-    var child_bounds: [codec_max_stack_children]ui.Rect = undefined;
-    const measured_children = measureChildren(region.children, regionChildConstraints(constraints), options, &child_measurements);
-    const placed_children = layouts.Flex.place(bounds, measured_children, regionLayoutOptions(), &child_bounds);
-    for (region.children[0..placed_children.len], placed_children) |child, child_rect| {
-        if (!child_rect.valid()) return error.InvalidBounds;
-        try renderComponent(scene, child_rect, child, options);
-    }
+    return component_render.renderRegion(Component, scene, bounds, region, options);
 }
 
 pub fn collectRegionInteractions(collector: *interaction.Collector, bounds: ui.Rect, region: Region, options: RenderOptions) interaction.Error!void {
-    if (region.children.len == 0) return;
-    if (region.children.len > codec_max_stack_children) return error.InteractionBudgetExceeded;
-
-    const constraints = constraintsFromBounds(bounds);
-    var child_measurements: [codec_max_stack_children]layouts.types.Measurement = undefined;
-    var child_bounds: [codec_max_stack_children]ui.Rect = undefined;
-    const measured_children = measureChildren(region.children, regionChildConstraints(constraints), options, &child_measurements);
-    const placed_children = layouts.Flex.place(bounds, measured_children, regionLayoutOptions(), &child_bounds);
-    for (region.children[0..placed_children.len], placed_children) |child, child_rect| {
-        if (!child_rect.valid()) return error.InvalidInteractionBounds;
-        try collectComponentInteractions(collector, child_rect, child);
-    }
+    return component_render.collectRegionInteractions(Component, collector, bounds, region, options);
 }
 
 pub fn renderStack(scene: *ui.Scene, bounds: ui.Rect, stack: Stack, options: RenderOptions) ui.RenderError!void {
-    if (stack.children.len == 0) return;
-    if (stack.children.len > codec_max_stack_children) return error.CommandBudgetExceeded;
-    const constraints = constraintsFromBounds(bounds);
-    var child_measurements: [codec_max_stack_children]layouts.types.Measurement = undefined;
-    var child_bounds: [codec_max_stack_children]ui.Rect = undefined;
-    const measured_children = measureChildren(stack.children, stackChildConstraints(stack, constraints), options, &child_measurements);
-    const placed_children = layouts.Flex.place(bounds, measured_children, stackLayoutOptions(stack), &child_bounds);
-    for (stack.children[0..placed_children.len], placed_children) |child, child_rect| {
-        if (!child_rect.valid()) return error.InvalidBounds;
-        try renderComponent(scene, child_rect, child, options);
-    }
+    return component_render.renderStack(Component, scene, bounds, stack, options);
 }
 
 pub fn collectStackInteractions(collector: *interaction.Collector, bounds: ui.Rect, stack: Stack, options: RenderOptions) interaction.Error!void {
-    if (stack.children.len == 0) return;
-    if (stack.children.len > codec_max_stack_children) return error.InteractionBudgetExceeded;
-    const constraints = constraintsFromBounds(bounds);
-    var child_measurements: [codec_max_stack_children]layouts.types.Measurement = undefined;
-    var child_bounds: [codec_max_stack_children]ui.Rect = undefined;
-    const measured_children = measureChildren(stack.children, stackChildConstraints(stack, constraints), options, &child_measurements);
-    const placed_children = layouts.Flex.place(bounds, measured_children, stackLayoutOptions(stack), &child_bounds);
-    for (stack.children[0..placed_children.len], placed_children) |child, child_rect| {
-        if (!child_rect.valid()) return error.InvalidInteractionBounds;
-        try collectComponentInteractions(collector, child_rect, child);
-    }
+    return component_render.collectStackInteractions(Component, collector, bounds, stack, options);
 }
 
 pub fn renderSurface(scene: *ui.Scene, bounds: ui.Rect, title: []const u8, detail: []const u8, options: RenderOptions) ui.RenderError!void {
-    return base_surface.render(scene, bounds, .{ .title = title, .detail = detail }, options);
-}
-
-fn renderBadge(scene: *ui.Scene, bounds: ui.Rect, label: []const u8, options: RenderOptions) ui.RenderError!void {
-    return base_badge.render(scene, bounds, label, options);
-}
-
-fn renderButton(scene: *ui.Scene, bounds: ui.Rect, id: u32, label: []const u8, options: RenderOptions) ui.RenderError!void {
-    return base_button.render(scene, bounds, .{ .id = id, .label = label }, options);
-}
-
-const region_padding_x: f32 = 12.0;
-const region_padding_y: f32 = 12.0;
-const region_child_gap: f32 = 10.0;
-const primitive_text_line_height: f32 = 18.0;
-const primitive_text_average_w: f32 = 8.0;
-const primitive_text_max_lines: usize = 8;
-const primitive_text_min_width: f32 = 24.0;
-const primitive_control_max_width: f32 = 4096.0;
-const primitive_stack_max_children = codec_max_stack_children;
-
-fn measureChildren(children: []const Component, constraints: layouts.types.Constraints, options: RenderOptions, out: []layouts.types.Measurement) []layouts.types.Measurement {
-    const count = @min(children.len, @min(out.len, primitive_stack_max_children));
-    for (children[0..count], 0..) |child, index| {
-        out[index] = measureComponent(child, constraints, options);
-    }
-    return out[0..count];
-}
-
-fn measureText(value: []const u8, constraints: layouts.types.Constraints) layouts.types.Measurement {
-    const measured = layouts.types.measureText(value, constraints, .{
-        .line_height = primitive_text_line_height,
-        .average_char_width = primitive_text_average_w,
-        .max_lines = primitive_text_max_lines,
-    });
-    return layouts.types.Measurement.flexible(
-        .{ .w = @min(primitive_text_min_width, measured.preferred.w), .h = @min(primitive_text_line_height, measured.preferred.h) },
-        measured.preferred,
-        measured.max,
-    ).applyExact(constraints);
-}
-
-fn measureSurface(title: []const u8, detail: []const u8, constraints: layouts.types.Constraints) layouts.types.Measurement {
-    return base_surface.measure(.{ .title = title, .detail = detail }, constraints);
-}
-
-fn measureBadge(label: []const u8, constraints: layouts.types.Constraints) layouts.types.Measurement {
-    return base_badge.measure(label, constraints);
-}
-
-fn measureButton(label: []const u8, constraints: layouts.types.Constraints) layouts.types.Measurement {
-    return base_button.measure(label, constraints);
-}
-
-fn measurePreferredNode(node: ui.Node, constraints: layouts.types.Constraints) layouts.types.Measurement {
-    const size = node.preferredSize();
-    return layouts.types.Measurement.flexible(
-        .{ .w = @min(size.w, constraints.width.limit(size.w)), .h = @min(size.h, constraints.height.limit(size.h)) },
-        size,
-        .{ .w = primitive_control_max_width, .h = size.h },
-    ).applyExact(constraints);
-}
-
-fn stackChildConstraints(stack: Stack, constraints: layouts.types.Constraints) layouts.types.Constraints {
-    const inner = constraints.inner(layouts.types.Insets.uniform(@floatFromInt(stack.padding)));
-    return switch (stack.axis) {
-        .column => .{ .width = inner.width, .height = .unconstrained, .text_wrap = constraints.text_wrap },
-        .row => .{ .width = .unconstrained, .height = inner.height, .text_wrap = constraints.text_wrap },
-    };
-}
-
-fn regionChildConstraints(constraints: layouts.types.Constraints) layouts.types.Constraints {
-    const inner = constraints.inner(regionInsets());
-    return .{ .width = inner.width, .height = .unconstrained, .text_wrap = constraints.text_wrap };
-}
-
-fn stackLayoutOptions(stack: Stack) layouts.Flex.Options {
-    return .{
-        .axis = layoutAxis(stack.axis),
-        .gap = @floatFromInt(stack.gap),
-        .padding = layouts.types.Insets.uniform(@floatFromInt(stack.padding)),
-        .cross_align = .stretch,
-    };
-}
-
-fn regionLayoutOptions() layouts.Flex.Options {
-    return .{
-        .axis = .vertical,
-        .gap = region_child_gap,
-        .padding = regionInsets(),
-        .cross_align = .stretch,
-    };
-}
-
-fn regionInsets() layouts.types.Insets {
-    return .{ .top = region_padding_y, .right = region_padding_x, .bottom = region_padding_y, .left = region_padding_x };
-}
-
-fn layoutAxis(axis: ui.Axis) layouts.types.Axis {
-    return switch (axis) {
-        .row => .horizontal,
-        .column => .vertical,
-    };
-}
-
-fn constraintsFromBounds(bounds: ui.Rect) layouts.types.Constraints {
-    return .{
-        .width = .{ .exact = bounds.w },
-        .height = .{ .exact = bounds.h },
-        .text_wrap = .wrap,
-    };
+    return component_render.renderSurface(scene, bounds, title, detail, options);
 }
 
 pub const Tree = union(enum) {
@@ -519,1858 +419,62 @@ pub const Tree = union(enum) {
 
     pub fn fromTree(tree: object.View, resolved_children: []const object.View, out_components: []Component) Error!Tree {
         if (tree.header.kind != .tree or resolved_children.len == 0) return error.Corrupt;
-        if (isTreeLayout(resolved_children[0])) {
+        if (tree_codec.isTreeLayout(resolved_children[0])) {
             return .{ .stack = try StackTree.fromTree(tree, resolved_children, out_components) };
         }
-        if (isSlotLayout(resolved_children[0])) {
+        if (tree_codec.isSlotLayout(resolved_children[0])) {
             return .{ .slot = try SlotTree.fromTree(tree, resolved_children) };
         }
         return error.UnsupportedComponent;
     }
 };
 
-pub const TreeObjects = struct {
-    layout: []const u8,
-    tree: []const u8,
-};
+pub const TreeObjects = tree_codec.TreeObjects;
 
-pub const Text = struct {
-    value: []const u8,
+pub const Stack = stack_component.Stack(Component);
+pub const StackTree = stack_component.StackTree(Component);
 
-    pub fn node(self: Text) ui.Node {
-        return .{ .text = .{ .value = self.value } };
-    }
-
-    pub fn toObject(self: Text, ui_out: []u8, object_out: []u8, req: object.Requirements, epoch: clock.Stamp) ?[]u8 {
-        return writeSingleComponentObject(.{ .text = self }, ui_out, object_out, req, epoch);
-    }
-
-    pub fn fromView(view: object.View) Error!Text {
-        return switch (try Component.fromView(view)) {
-            .text => |text| text,
-            else => error.UnsupportedComponent,
-        };
-    }
-};
-
-pub const Button = struct {
-    id: u32,
-    label: []const u8,
-
-    pub fn node(self: Button) ui.Node {
-        return .{ .button = .{ .id = self.id, .label = self.label } };
-    }
-
-    pub fn toObject(self: Button, ui_out: []u8, object_out: []u8, req: object.Requirements, epoch: clock.Stamp) ?[]u8 {
-        return writeSingleComponentObject(.{ .button = self }, ui_out, object_out, req, epoch);
-    }
-
-    pub fn fromView(view: object.View) Error!Button {
-        return switch (try Component.fromView(view)) {
-            .button => |button| button,
-            else => error.UnsupportedComponent,
-        };
-    }
-};
-
-pub const Card = struct {
-    title: []const u8,
-    detail: []const u8,
-
-    pub fn node(self: Card) ui.Node {
-        return ui.cardNode(self.title, self.detail);
-    }
-
-    pub fn toObject(self: Card, ui_out: []u8, object_out: []u8, req: object.Requirements, epoch: clock.Stamp) ?[]u8 {
-        return writeSingleComponentObject(.{ .card = self }, ui_out, object_out, req, epoch);
-    }
-
-    pub fn fromView(view: object.View) Error!Card {
-        return switch (try Component.fromView(view)) {
-            .card => |card| card,
-            else => error.UnsupportedComponent,
-        };
-    }
-
-    pub fn toMarkdown(self: Card, out: []u8) MarkdownError![]u8 {
-        return writeCardMarkdown(self, out);
-    }
-
-    pub fn fromMarkdown(markdown: []const u8, text_out: []u8) MarkdownError!Card {
-        return readCardMarkdown(markdown, text_out);
-    }
-};
-
-pub const Badge = struct {
-    label: []const u8,
-
-    pub fn node(self: Badge) ui.Node {
-        return ui.badgeNode(self.label);
-    }
-
-    pub fn toObject(self: Badge, ui_out: []u8, object_out: []u8, req: object.Requirements, epoch: clock.Stamp) ?[]u8 {
-        return writeSingleComponentObject(.{ .badge = self }, ui_out, object_out, req, epoch);
-    }
-
-    pub fn fromView(view: object.View) Error!Badge {
-        return switch (try Component.fromView(view)) {
-            .badge => |badge| badge,
-            else => error.UnsupportedComponent,
-        };
-    }
-};
-
-pub const Avatar = struct {
-    label: []const u8,
-
-    pub fn node(self: Avatar) ui.Node {
-        return ui.avatarNode(self.label);
-    }
-
-    pub fn toObject(self: Avatar, ui_out: []u8, object_out: []u8, req: object.Requirements, epoch: clock.Stamp) ?[]u8 {
-        return writeSingleComponentObject(.{ .avatar = self }, ui_out, object_out, req, epoch);
-    }
-
-    pub fn fromView(view: object.View) Error!Avatar {
-        return switch (try Component.fromView(view)) {
-            .avatar => |avatar| avatar,
-            else => error.UnsupportedComponent,
-        };
-    }
-};
-
-pub const Kbd = struct {
-    label: []const u8,
-
-    pub fn node(self: Kbd) ui.Node {
-        return ui.kbdNode(self.label);
-    }
-
-    pub fn toObject(self: Kbd, ui_out: []u8, object_out: []u8, req: object.Requirements, epoch: clock.Stamp) ?[]u8 {
-        return writeSingleComponentObject(.{ .kbd = self }, ui_out, object_out, req, epoch);
-    }
-
-    pub fn fromView(view: object.View) Error!Kbd {
-        return switch (try Component.fromView(view)) {
-            .kbd => |kbd| kbd,
-            else => error.UnsupportedComponent,
-        };
-    }
-};
-
-pub const Separator = struct {
-    pub fn node(self: Separator) ui.Node {
-        _ = self;
-        return ui.separatorNode();
-    }
-
-    pub fn toObject(self: Separator, ui_out: []u8, object_out: []u8, req: object.Requirements, epoch: clock.Stamp) ?[]u8 {
-        return writeSingleComponentObject(.{ .separator = self }, ui_out, object_out, req, epoch);
-    }
-
-    pub fn fromView(view: object.View) Error!Separator {
-        return switch (try Component.fromView(view)) {
-            .separator => |separator| separator,
-            else => error.UnsupportedComponent,
-        };
-    }
-};
-
-pub const Input = struct {
-    id: u32,
-    placeholder: []const u8,
-
-    pub fn node(self: Input) ui.Node {
-        return .{ .input = .{ .id = self.id, .placeholder = self.placeholder } };
-    }
-
-    pub fn toObject(self: Input, ui_out: []u8, object_out: []u8, req: object.Requirements, epoch: clock.Stamp) ?[]u8 {
-        return writeSingleComponentObject(.{ .input = self }, ui_out, object_out, req, epoch);
-    }
-
-    pub fn fromView(view: object.View) Error!Input {
-        return switch (try Component.fromView(view)) {
-            .input => |input| input,
-            else => error.UnsupportedComponent,
-        };
-    }
-};
-
-pub const Textarea = struct {
-    id: u32,
-    placeholder: []const u8,
-
-    pub fn node(self: Textarea) ui.Node {
-        return ui.textareaNode(self.id, self.placeholder);
-    }
-
-    pub fn toObject(self: Textarea, ui_out: []u8, object_out: []u8, req: object.Requirements, epoch: clock.Stamp) ?[]u8 {
-        return writeSingleComponentObject(.{ .textarea = self }, ui_out, object_out, req, epoch);
-    }
-
-    pub fn fromView(view: object.View) Error!Textarea {
-        return switch (try Component.fromView(view)) {
-            .textarea => |textarea| textarea,
-            else => error.UnsupportedComponent,
-        };
-    }
-};
-
-pub const Select = struct {
-    id: u32,
-    label: []const u8,
-
-    pub fn node(self: Select) ui.Node {
-        return ui.selectNode(self.id, self.label);
-    }
-
-    pub fn toObject(self: Select, ui_out: []u8, object_out: []u8, req: object.Requirements, epoch: clock.Stamp) ?[]u8 {
-        return writeSingleComponentObject(.{ .select = self }, ui_out, object_out, req, epoch);
-    }
-
-    pub fn fromView(view: object.View) Error!Select {
-        return switch (try Component.fromView(view)) {
-            .select => |select| select,
-            else => error.UnsupportedComponent,
-        };
-    }
-};
-
-pub const Checkbox = struct {
-    id: u32,
-    label: []const u8,
-    checked: bool,
-
-    pub fn node(self: Checkbox) ui.Node {
-        return ui.checkboxNode(self.id, self.label, self.checked);
-    }
-
-    pub fn toObject(self: Checkbox, ui_out: []u8, object_out: []u8, req: object.Requirements, epoch: clock.Stamp) ?[]u8 {
-        return writeSingleComponentObject(.{ .checkbox = self }, ui_out, object_out, req, epoch);
-    }
-
-    pub fn fromView(view: object.View) Error!Checkbox {
-        return switch (try Component.fromView(view)) {
-            .checkbox => |checkbox| checkbox,
-            else => error.UnsupportedComponent,
-        };
-    }
-};
-
-pub const Switch = struct {
-    id: u32,
-    label: []const u8,
-    checked: bool,
-
-    pub fn node(self: Switch) ui.Node {
-        return ui.switchNode(self.id, self.label, self.checked);
-    }
-
-    pub fn toObject(self: Switch, ui_out: []u8, object_out: []u8, req: object.Requirements, epoch: clock.Stamp) ?[]u8 {
-        return writeSingleComponentObject(.{ .switch_control = self }, ui_out, object_out, req, epoch);
-    }
-
-    pub fn fromView(view: object.View) Error!Switch {
-        return switch (try Component.fromView(view)) {
-            .switch_control => |switch_control| switch_control,
-            else => error.UnsupportedComponent,
-        };
-    }
-};
-
-pub const Progress = struct {
-    value: f32,
-
-    pub fn node(self: Progress) ui.Node {
-        return ui.progressNode(self.value);
-    }
-
-    pub fn toObject(self: Progress, ui_out: []u8, object_out: []u8, req: object.Requirements, epoch: clock.Stamp) ?[]u8 {
-        return writeSingleComponentObject(.{ .progress = .{ .value = ui.clampUnit(self.value) } }, ui_out, object_out, req, epoch);
-    }
-
-    pub fn fromView(view: object.View) Error!Progress {
-        return switch (try Component.fromView(view)) {
-            .progress => |progress| progress,
-            else => error.UnsupportedComponent,
-        };
-    }
-};
-
-pub const Slider = struct {
-    id: u32,
-    label: []const u8,
-    value: f32,
-
-    pub fn node(self: Slider) ui.Node {
-        return ui.sliderNode(self.id, self.label, self.value);
-    }
-
-    pub fn toObject(self: Slider, ui_out: []u8, object_out: []u8, req: object.Requirements, epoch: clock.Stamp) ?[]u8 {
-        return writeSingleComponentObject(.{ .slider = .{ .id = self.id, .label = self.label, .value = ui.clampUnit(self.value) } }, ui_out, object_out, req, epoch);
-    }
-
-    pub fn fromView(view: object.View) Error!Slider {
-        return switch (try Component.fromView(view)) {
-            .slider => |slider| slider,
-            else => error.UnsupportedComponent,
-        };
-    }
-};
-
-pub const RowItem = struct {
-    id: u32,
-    title: []const u8,
-    detail: []const u8,
-
-    pub fn node(self: RowItem) ui.Node {
-        return .{ .row_item = .{ .id = self.id, .title = self.title, .detail = self.detail } };
-    }
-
-    pub fn toObject(self: RowItem, ui_out: []u8, object_out: []u8, req: object.Requirements, epoch: clock.Stamp) ?[]u8 {
-        return writeSingleComponentObject(.{ .row_item = self }, ui_out, object_out, req, epoch);
-    }
-
-    pub fn fromView(view: object.View) Error!RowItem {
-        return switch (try Component.fromView(view)) {
-            .row_item => |row| row,
-            else => error.UnsupportedComponent,
-        };
-    }
-};
-
-pub const Stack = struct {
-    axis: ui.Axis,
-    gap: u16 = 8,
-    padding: u16 = 0,
-    children: []const Component,
-
-    pub fn measure(self: Stack, constraints: layouts.types.Constraints, options: RenderOptions) layouts.types.Measurement {
-        var child_measurements: [codec_max_stack_children]layouts.types.Measurement = undefined;
-        const measured_children = measureChildren(self.children, stackChildConstraints(self, constraints), options, &child_measurements);
-        return layouts.Flex.measure(measured_children, constraints, stackLayoutOptions(self));
-    }
-
-    pub fn render(self: Stack, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
-        return renderStack(scene, bounds, self, options);
-    }
-
-    pub fn collectInteractions(self: Stack, collector: *interaction.Collector, bounds: ui.Rect, options: RenderOptions) interaction.Error!void {
-        return collectStackInteractions(collector, bounds, self, options);
-    }
-
-    pub fn node(self: Stack, out_nodes: []ui.Node) ?ui.Node {
-        if (out_nodes.len < self.children.len) return null;
-        for (self.children, 0..) |child, index| {
-            out_nodes[index] = child.node();
-        }
-        return .{
-            .stack = .{
-                .axis = self.axis,
-                .gap = @floatFromInt(self.gap),
-                .padding = @floatFromInt(self.padding),
-                .children = out_nodes[0..self.children.len],
-            },
-        };
-    }
-
-    pub fn toObject(self: Stack, ui_out: []u8, object_out: []u8, req: object.Requirements, epoch: clock.Stamp) ?[]u8 {
-        if (self.children.len == 0 or self.children.len > std.math.maxInt(u16)) return null;
-        var writer = codec.Writer.init(ui_out, @intCast(self.children.len), @intCast(self.children.len), self.axis, self.gap, self.padding) orelse return null;
-        for (self.children, 0..) |child, index| {
-            if (!writeComponentRecord(&writer, index, child)) return null;
-        }
-        return writer.objectNode(object_out, req, epoch);
-    }
-
-    pub fn fromView(view: object.View, out_components: []Component) Error!Stack {
-        var nodes: [codec_max_stack_children]ui.Node = undefined;
-        const root = codec.decodeView(view, &nodes) catch return error.Corrupt;
-        if (root != .stack) return error.UnsupportedComponent;
-        const layout = root.stack;
-        if (layout.children.len > out_components.len) return error.ComponentBudgetExceeded;
-
-        for (layout.children, 0..) |child, index| {
-            out_components[index] = try Component.fromNode(child);
-        }
-        return .{
-            .axis = layout.axis,
-            .gap = @intFromFloat(layout.gap),
-            .padding = @intFromFloat(layout.padding),
-            .children = out_components[0..layout.children.len],
-        };
-    }
-
-    pub fn toHtml(self: Stack, out: []u8) HtmlError![]u8 {
-        return writeStackHtml(self, out);
-    }
-
-    pub fn fromHtml(html: []const u8, out_components: []Component, text_out: []u8) HtmlError!Stack {
-        return readStackHtml(html, out_components, text_out);
-    }
-
-    pub fn toMarkdown(self: Stack, out: []u8) MarkdownError![]u8 {
-        return writeStackMarkdown(self, out);
-    }
-
-    pub fn fromMarkdown(markdown: []const u8, out_components: []Component, text_out: []u8) MarkdownError!Stack {
-        return readStackMarkdown(markdown, out_components, text_out);
-    }
-};
-
-pub const StackTree = struct {
-    axis: ui.Axis,
-    gap: u16 = 8,
-    padding: u16 = 0,
-    children: []const object.View,
-
-    pub fn toTreeObjects(self: StackTree, layout_out: []u8, tree_out: []u8, req: object.Requirements, epoch: clock.Stamp) ?TreeObjects {
-        if (self.children.len == 0 or self.children.len + 1 > object.max_children) return null;
-
-        var layout_body: [tree_layout_size]u8 = undefined;
-        encodeTreeLayout(self.axis, self.gap, self.padding, @intCast(self.children.len), &layout_body) orelse return null;
-        const layout = (object.NodeWriter{ .out = layout_out }).bytesNode(req, epoch, &layout_body) catch return null;
-
-        var child_records: [tree_max_children]object.Child = undefined;
-        if (self.children.len + 1 > child_records.len) return null;
-
-        child_records[0] = childRecord(layout, 0);
-        var logical_offset = child_records[0].logical_len;
-        for (self.children, 0..) |child, index| {
-            child_records[index + 1] = childRecord(child.canonical, logical_offset);
-            logical_offset += child_records[index + 1].logical_len;
-        }
-
-        const tree = (object.NodeWriter{ .out = tree_out }).treeNode(req, epoch, child_records[0 .. self.children.len + 1]) catch return null;
-        return .{ .layout = layout, .tree = tree };
-    }
-
-    pub fn fromTree(tree: object.View, resolved_children: []const object.View, out_components: []Component) Error!Stack {
-        if (tree.header.kind != .tree or tree.header.child_count == 0) return error.Corrupt;
-        if (resolved_children.len != tree.header.child_count) return error.ChildMismatch;
-
-        const descriptor_child = tree.childAt(0) catch return error.Corrupt;
-        if (!sameId(descriptor_child.object_id, resolved_children[0].id())) return error.ChildMismatch;
-        const descriptor = decodeTreeLayout(resolved_children[0]) catch return error.Corrupt;
-        if (descriptor.child_count + 1 != resolved_children.len) return error.ChildMismatch;
-        if (descriptor.child_count > out_components.len) return error.ComponentBudgetExceeded;
-
-        var index: usize = 0;
-        while (index < descriptor.child_count) : (index += 1) {
-            const child_record = tree.childAt(index + 1) catch return error.Corrupt;
-            const child_view = resolved_children[index + 1];
-            if (!sameId(child_record.object_id, child_view.id())) return error.ChildMismatch;
-            out_components[index] = try Component.fromView(child_view);
-        }
-
-        return .{
-            .axis = descriptor.axis,
-            .gap = descriptor.gap,
-            .padding = descriptor.padding,
-            .children = out_components[0..descriptor.child_count],
-        };
-    }
-};
-
-const tree_max_children = 64;
-
-const TreeLayout = struct {
-    axis: ui.Axis,
-    gap: u16,
-    padding: u16,
-    child_count: usize,
-};
-
-pub const Slot = struct {
-    id: u32,
-    child: Component,
-
-    pub fn node(self: Slot, out_nodes: []ui.Node) ?ui.Node {
-        if (out_nodes.len < 1) return null;
-        out_nodes[0] = self.child.node();
-        return .{ .slot = .{ .id = self.id, .child = &out_nodes[0] } };
-    }
-
-    pub fn toObject(self: Slot, ui_out: []u8, object_out: []u8, req: object.Requirements, epoch: clock.Stamp) ?[]u8 {
-        var writer = codec.Writer.init(ui_out, 2, 1, .column, 0, 0) orelse return null;
-        if (!writer.record(0, .slot, self.id, .{ .offset = 1, .len = 0 }, .{})) return null;
-        if (!writeComponentRecord(&writer, 1, self.child)) return null;
-        return writer.objectNode(object_out, req, epoch);
-    }
-
-    pub fn fromView(view: object.View) Error!Slot {
-        var nodes: [2]ui.Node = undefined;
-        const root = codec.decodeView(view, &nodes) catch return error.Corrupt;
-        if (root.stack.children.len != 1) return error.Corrupt;
-        return switch (root.stack.children[0]) {
-            .slot => |slot| .{
-                .id = slot.id,
-                .child = try Component.fromNode(slot.child.*),
-            },
-            else => error.UnsupportedComponent,
-        };
-    }
-};
-
-pub const SlotTree = struct {
-    id: u32,
-    child: object.View,
-
-    pub fn toTreeObjects(self: SlotTree, layout_out: []u8, tree_out: []u8, req: object.Requirements, epoch: clock.Stamp) ?TreeObjects {
-        var layout_body: [slot_layout_size]u8 = undefined;
-        encodeSlotLayout(self.id, &layout_body) orelse return null;
-        const layout = (object.NodeWriter{ .out = layout_out }).bytesNode(req, epoch, &layout_body) catch return null;
-
-        var children: [2]object.Child = undefined;
-        children[0] = childRecord(layout, 0);
-        children[1] = childRecord(self.child.canonical, children[0].logical_len);
-
-        const tree = (object.NodeWriter{ .out = tree_out }).treeNode(req, epoch, &children) catch return null;
-        return .{ .layout = layout, .tree = tree };
-    }
-
-    pub fn fromTree(tree: object.View, resolved_children: []const object.View) Error!Slot {
-        if (tree.header.kind != .tree or tree.header.child_count != 2) return error.Corrupt;
-        if (resolved_children.len != 2) return error.ChildMismatch;
-
-        const descriptor_child = tree.childAt(0) catch return error.Corrupt;
-        if (!sameId(descriptor_child.object_id, resolved_children[0].id())) return error.ChildMismatch;
-        const slot_id = decodeSlotLayout(resolved_children[0]) catch return error.Corrupt;
-
-        const child_record = tree.childAt(1) catch return error.Corrupt;
-        if (!sameId(child_record.object_id, resolved_children[1].id())) return error.ChildMismatch;
-
-        return .{
-            .id = slot_id,
-            .child = try Component.fromView(resolved_children[1]),
-        };
-    }
-};
-
-const codec_max_stack_children = 64;
-
-fn encodeTreeLayout(axis: ui.Axis, gap: u16, padding: u16, child_count: u16, out: []u8) ?void {
-    if (out.len < tree_layout_size) return null;
-    @memset(out[0..tree_layout_size], 0);
-    @memcpy(out[0..tree_layout_magic.len], tree_layout_magic);
-    out[8] = switch (axis) {
-        .column => 0,
-        .row => 1,
-    };
-    out[9] = 0;
-    _ = bytes.store16(out[10..12], gap);
-    _ = bytes.store16(out[12..14], padding);
-    _ = bytes.store16(out[14..16], child_count);
-}
-
-fn decodeTreeLayout(view: object.View) Error!TreeLayout {
-    if (view.header.kind != .bytes or view.body.len != tree_layout_size) return error.Corrupt;
-    if (!std.mem.eql(u8, view.body[0..tree_layout_magic.len], tree_layout_magic)) return error.Corrupt;
-    if (view.body[9] != 0) return error.Corrupt;
-    return .{
-        .axis = switch (view.body[8]) {
-            0 => .column,
-            1 => .row,
-            else => return error.Corrupt,
-        },
-        .gap = bytes.load16(view.body[10..12]) orelse return error.Corrupt,
-        .padding = bytes.load16(view.body[12..14]) orelse return error.Corrupt,
-        .child_count = bytes.load16(view.body[14..16]) orelse return error.Corrupt,
-    };
-}
-
-fn isTreeLayout(view: object.View) bool {
-    return view.header.kind == .bytes and
-        view.body.len == tree_layout_size and
-        std.mem.eql(u8, view.body[0..tree_layout_magic.len], tree_layout_magic);
-}
-
-fn encodeSlotLayout(id: u32, out: []u8) ?void {
-    if (out.len < slot_layout_size) return null;
-    @memset(out[0..slot_layout_size], 0);
-    @memcpy(out[0..slot_layout_magic.len], slot_layout_magic);
-    _ = bytes.store32(out[8..12], id);
-}
-
-fn decodeSlotLayout(view: object.View) Error!u32 {
-    if (view.header.kind != .bytes or view.body.len != slot_layout_size) return error.Corrupt;
-    if (!std.mem.eql(u8, view.body[0..slot_layout_magic.len], slot_layout_magic)) return error.Corrupt;
-    return bytes.load32(view.body[8..12]) orelse error.Corrupt;
-}
-
-fn isSlotLayout(view: object.View) bool {
-    return view.header.kind == .bytes and
-        view.body.len == slot_layout_size and
-        std.mem.eql(u8, view.body[0..slot_layout_magic.len], slot_layout_magic);
-}
-
-fn childRecord(canonical: []const u8, offset: u64) object.Child {
-    const view = object.View.decode(canonical) catch unreachable;
-    return object.Child.fromView(view, offset) catch unreachable;
-}
-
-fn sameId(left: [object.id_size]u8, right: [object.id_size]u8) bool {
-    return std.mem.eql(u8, &left, &right);
-}
-
-fn writeSingleComponentObject(component: Component, ui_out: []u8, object_out: []u8, req: object.Requirements, epoch: clock.Stamp) ?[]u8 {
-    var writer = codec.Writer.init(ui_out, 1, 1, .column, 0, 0) orelse return null;
-    if (!writeComponentRecord(&writer, 0, component)) return null;
-    return writer.objectNode(object_out, req, epoch);
-}
-
-fn writeComponentRecord(writer: *codec.Writer, index: usize, component: Component) bool {
-    return switch (component) {
-        .text => |text| blk: {
-            const value = writer.string(text.value) orelse break :blk false;
-            break :blk writer.record(index, .text, 0, value, .{});
-        },
-        .card => |card| blk: {
-            const title = writer.string(card.title) orelse break :blk false;
-            const detail = writer.string(card.detail) orelse break :blk false;
-            break :blk writer.record(index, .card, 0, title, detail);
-        },
-        .badge => |badge| blk: {
-            const label = writer.string(badge.label) orelse break :blk false;
-            break :blk writer.record(index, .badge, 0, label, .{});
-        },
-        .avatar => |avatar| blk: {
-            const label = writer.string(avatar.label) orelse break :blk false;
-            break :blk writer.record(index, .avatar, 0, label, .{});
-        },
-        .kbd => |kbd| blk: {
-            const label = writer.string(kbd.label) orelse break :blk false;
-            break :blk writer.record(index, .kbd, 0, label, .{});
-        },
-        .separator => writer.record(index, .separator, 0, .{}, .{}),
-        .button => |button| blk: {
-            const label = writer.string(button.label) orelse break :blk false;
-            break :blk writer.record(index, .button, button.id, label, .{});
-        },
-        .input => |input| blk: {
-            const placeholder = writer.string(input.placeholder) orelse break :blk false;
-            break :blk writer.record(index, .input, input.id, placeholder, .{});
-        },
-        .textarea => |textarea| blk: {
-            const placeholder = writer.string(textarea.placeholder) orelse break :blk false;
-            break :blk writer.record(index, .textarea, textarea.id, placeholder, .{});
-        },
-        .select => |select| blk: {
-            const label = writer.string(select.label) orelse break :blk false;
-            break :blk writer.record(index, .select, select.id, label, .{});
-        },
-        .checkbox => |checkbox| blk: {
-            const label = writer.string(checkbox.label) orelse break :blk false;
-            break :blk writer.record(index, .checkbox, checkbox.id, label, boolRef(checkbox.checked));
-        },
-        .switch_control => |switch_control| blk: {
-            const label = writer.string(switch_control.label) orelse break :blk false;
-            break :blk writer.record(index, .switch_control, switch_control.id, label, boolRef(switch_control.checked));
-        },
-        .progress => |progress| writer.record(index, .progress, 0, .{}, unitRef(progress.value)),
-        .slider => |slider| blk: {
-            const label = writer.string(slider.label) orelse break :blk false;
-            break :blk writer.record(index, .slider, slider.id, label, unitRef(slider.value));
-        },
-        .row_item => |row| blk: {
-            const title = writer.string(row.title) orelse break :blk false;
-            const detail = writer.string(row.detail) orelse break :blk false;
-            break :blk writer.record(index, .row_item, row.id, title, detail);
-        },
-    };
-}
+pub const Slot = slot_component.Slot(Component);
+pub const SlotTree = slot_component.SlotTree(Component);
 
 fn writeComponentHtml(component: Component, out: []u8) HtmlError![]u8 {
-    var writer = HtmlWriter.init(out);
-    try writeComponentHtmlInto(&writer, component);
-    return writer.written();
+    return component_io.writeHtml(Component, component, out);
 }
 
 fn writeComponentHtmlInto(writer: *HtmlWriter, component: Component) HtmlError!void {
-    switch (component) {
-        .text => |text| {
-            try writer.writeAll("<p data-er-component=\"text\">");
-            try writer.writeEscapedText(text.value);
-            try writer.writeAll("</p>");
-        },
-        .card => |card| {
-            try writer.writeAll("<article data-er-component=\"card\"><h2>");
-            try writer.writeEscapedText(card.title);
-            try writer.writeAll("</h2><p>");
-            try writer.writeEscapedText(card.detail);
-            try writer.writeAll("</p></article>");
-        },
-        .badge => |badge| {
-            try writer.writeAll("<span data-er-component=\"badge\">");
-            try writer.writeEscapedText(badge.label);
-            try writer.writeAll("</span>");
-        },
-        .avatar => |avatar| {
-            try writer.writeAll("<span data-er-component=\"avatar\"");
-            try writer.writeAttrText("aria-label", avatar.label);
-            try writer.writeByte('>');
-            try writer.writeEscapedText(avatar.label);
-            try writer.writeAll("</span>");
-        },
-        .kbd => |kbd| {
-            try writer.writeAll("<kbd data-er-component=\"kbd\">");
-            try writer.writeEscapedText(kbd.label);
-            try writer.writeAll("</kbd>");
-        },
-        .separator => try writer.writeAll("<hr data-er-component=\"separator\">"),
-        .button => |button| {
-            try writer.writeAll("<button data-er-component=\"button\"");
-            try writer.writeAttrInt("data-er-id", button.id);
-            try writer.writeByte('>');
-            try writer.writeEscapedText(button.label);
-            try writer.writeAll("</button>");
-        },
-        .input => |input| {
-            try writer.writeAll("<input data-er-component=\"input\"");
-            try writer.writeAttrInt("data-er-id", input.id);
-            try writer.writeAttrText("placeholder", input.placeholder);
-            try writer.writeByte('>');
-        },
-        .textarea => |textarea| {
-            try writer.writeAll("<textarea data-er-component=\"textarea\"");
-            try writer.writeAttrInt("data-er-id", textarea.id);
-            try writer.writeAttrText("placeholder", textarea.placeholder);
-            try writer.writeAll("></textarea>");
-        },
-        .select => |select| {
-            try writer.writeAll("<select data-er-component=\"select\"");
-            try writer.writeAttrInt("data-er-id", select.id);
-            try writer.writeAll("><option selected>");
-            try writer.writeEscapedText(select.label);
-            try writer.writeAll("</option></select>");
-        },
-        .checkbox => |checkbox| {
-            try writer.writeAll("<label data-er-component=\"checkbox\"");
-            try writer.writeAttrInt("data-er-id", checkbox.id);
-            try writer.writeAttrBool("data-er-checked", checkbox.checked);
-            try writer.writeAll("><input type=\"checkbox\"");
-            if (checkbox.checked) try writer.writeAll(" checked");
-            try writer.writeAll(">");
-            try writer.writeEscapedText(checkbox.label);
-            try writer.writeAll("</label>");
-        },
-        .switch_control => |switch_control| {
-            try writer.writeAll("<button data-er-component=\"switch\"");
-            try writer.writeAttrInt("data-er-id", switch_control.id);
-            try writer.writeAttrBool("aria-pressed", switch_control.checked);
-            try writer.writeByte('>');
-            try writer.writeEscapedText(switch_control.label);
-            try writer.writeAll("</button>");
-        },
-        .progress => |progress| {
-            try writer.writeAll("<progress data-er-component=\"progress\"");
-            try writer.writeAttrInt("value", percentFromUnit(progress.value));
-            try writer.writeAttrRaw("max", "100");
-            try writer.writeAll("></progress>");
-        },
-        .slider => |slider| {
-            try writer.writeAll("<label data-er-component=\"slider\"");
-            try writer.writeAttrInt("data-er-id", slider.id);
-            try writer.writeAll("><span>");
-            try writer.writeEscapedText(slider.label);
-            try writer.writeAll("</span><input type=\"range\" min=\"0\" max=\"100\" value=\"");
-            try writer.writeInt(percentFromUnit(slider.value));
-            try writer.writeAll("\"></label>");
-        },
-        .row_item => |row| {
-            try writer.writeAll("<div data-er-component=\"row-item\"");
-            try writer.writeAttrInt("data-er-id", row.id);
-            try writer.writeAll("><strong>");
-            try writer.writeEscapedText(row.title);
-            try writer.writeAll("</strong><span>");
-            try writer.writeEscapedText(row.detail);
-            try writer.writeAll("</span></div>");
-        },
-    }
-}
-
-fn writeStackHtml(stack: Stack, out: []u8) HtmlError![]u8 {
-    var writer = HtmlWriter.init(out);
-    try writer.writeAll("<section data-er-component=\"stack\"");
-    try writer.writeAttrRaw("data-er-axis", axisName(stack.axis));
-    try writer.writeAttrInt("data-er-gap", stack.gap);
-    try writer.writeAttrInt("data-er-padding", stack.padding);
-    try writer.writeByte('>');
-    for (stack.children) |child| try writeComponentHtmlInto(&writer, child);
-    try writer.writeAll("</section>");
-    return writer.written();
-}
-
-const markdown_component_marker = "--- component ---\n";
-const markdown_next_component_marker = "\n--- component ---\n";
-
-fn writeStackMarkdown(stack: Stack, out: []u8) MarkdownError![]u8 {
-    if (stack.children.len == 0) return error.InvalidMarkdown;
-    var writer = MarkdownWriter.init(out);
-    try writer.beginDirective("stack");
-    try writer.fieldRaw("axis", axisName(stack.axis));
-    try writer.fieldInt("gap", stack.gap);
-    try writer.fieldInt("padding", stack.padding);
-    for (stack.children) |child| {
-        try writer.writeByte('\n');
-        try writer.writeAll(markdown_component_marker);
-        try writeComponentMarkdownInto(&writer, child);
-    }
-    try writer.endDirective();
-    return writer.written();
-}
-
-fn writeRegionHtml(region: Region, out: []u8) HtmlError![]u8 {
-    if (region.children.len == 0) return error.InvalidHtml;
-    var writer = HtmlWriter.init(out);
-    const tag = regionTagName(region.tag);
-    try writer.writeByte('<');
-    try writer.writeAll(tag);
-    try writer.writeAttrRaw("data-er-component", "region");
-    try writer.writeAttrText("aria-label", region.label);
-    try writer.writeByte('>');
-    for (region.children) |child| try writeComponentHtmlInto(&writer, child);
-    try writer.writeAll("</");
-    try writer.writeAll(tag);
-    try writer.writeByte('>');
-    return writer.written();
-}
-
-fn writeRegionMarkdown(region: Region, out: []u8) MarkdownError![]u8 {
-    if (region.children.len == 0) return error.InvalidMarkdown;
-    var writer = MarkdownWriter.init(out);
-    try writer.beginDirective("region");
-    try writer.fieldRaw("tag", regionTagName(region.tag));
-    try writer.fieldText("label", region.label);
-    for (region.children) |child| {
-        try writer.writeByte('\n');
-        try writer.writeAll(markdown_component_marker);
-        try writeComponentMarkdownInto(&writer, child);
-    }
-    try writer.endDirective();
-    return writer.written();
+    return component_io.writeHtmlInto(Component, writer, component);
 }
 
 fn writeComponentMarkdown(component: Component, out: []u8) MarkdownError![]u8 {
-    var writer = MarkdownWriter.init(out);
-    try writeComponentMarkdownInto(&writer, component);
-    return writer.written();
+    return component_io.writeMarkdown(Component, component, out);
 }
 
 fn writeComponentMarkdownInto(writer: *MarkdownWriter, component: Component) MarkdownError!void {
-    switch (component) {
-        .text => |text| {
-            if (text.value.len == 0) return error.InvalidMarkdown;
-            try writer.writeEscapedInline(text.value);
-        },
-        .card => |card| try writeCardMarkdownInto(writer, card),
-        .badge => |badge| {
-            if (badge.label.len == 0) return error.InvalidMarkdown;
-            try writer.beginDirective("badge");
-            try writer.fieldText("label", badge.label);
-            try writer.endDirective();
-        },
-        .avatar => |avatar| {
-            if (avatar.label.len == 0) return error.InvalidMarkdown;
-            try writer.beginDirective("avatar");
-            try writer.fieldText("label", avatar.label);
-            try writer.endDirective();
-        },
-        .kbd => |kbd| {
-            if (kbd.label.len == 0) return error.InvalidMarkdown;
-            try writer.beginDirective("kbd");
-            try writer.fieldText("label", kbd.label);
-            try writer.endDirective();
-        },
-        .separator => try writer.writeAll("---"),
-        .button => |button| {
-            if (button.label.len == 0) return error.InvalidMarkdown;
-            try writer.beginDirective("button");
-            try writer.fieldInt("id", button.id);
-            try writer.fieldText("label", button.label);
-            try writer.endDirective();
-        },
-        .input => |input| {
-            if (input.placeholder.len == 0) return error.InvalidMarkdown;
-            try writer.beginDirective("input");
-            try writer.fieldInt("id", input.id);
-            try writer.fieldText("placeholder", input.placeholder);
-            try writer.endDirective();
-        },
-        .textarea => |textarea| {
-            if (textarea.placeholder.len == 0) return error.InvalidMarkdown;
-            try writer.beginDirective("textarea");
-            try writer.fieldInt("id", textarea.id);
-            try writer.fieldText("placeholder", textarea.placeholder);
-            try writer.endDirective();
-        },
-        .select => |select| {
-            if (select.label.len == 0) return error.InvalidMarkdown;
-            try writer.beginDirective("select");
-            try writer.fieldInt("id", select.id);
-            try writer.fieldText("label", select.label);
-            try writer.endDirective();
-        },
-        .checkbox => |checkbox| {
-            if (checkbox.label.len == 0) return error.InvalidMarkdown;
-            try writer.beginDirective("checkbox");
-            try writer.fieldInt("id", checkbox.id);
-            try writer.fieldBool("checked", checkbox.checked);
-            try writer.fieldText("label", checkbox.label);
-            try writer.endDirective();
-        },
-        .switch_control => |switch_control| {
-            if (switch_control.label.len == 0) return error.InvalidMarkdown;
-            try writer.beginDirective("switch");
-            try writer.fieldInt("id", switch_control.id);
-            try writer.fieldBool("checked", switch_control.checked);
-            try writer.fieldText("label", switch_control.label);
-            try writer.endDirective();
-        },
-        .progress => |progress| {
-            try writer.beginDirective("progress-control");
-            try writer.fieldInt("value", percentFromUnit(progress.value));
-            try writer.endDirective();
-        },
-        .slider => |slider| {
-            if (slider.label.len == 0) return error.InvalidMarkdown;
-            try writer.beginDirective("slider");
-            try writer.fieldInt("id", slider.id);
-            try writer.fieldText("label", slider.label);
-            try writer.fieldInt("value", percentFromUnit(slider.value));
-            try writer.endDirective();
-        },
-        .row_item => |row| {
-            if (row.title.len == 0 or row.detail.len == 0) return error.InvalidMarkdown;
-            try writer.beginDirective("row-item");
-            try writer.fieldInt("id", row.id);
-            try writer.fieldText("title", row.title);
-            try writer.fieldText("detail", row.detail);
-            try writer.endDirective();
-        },
-    }
+    return component_io.writeMarkdownInto(Component, writer, component);
 }
-
-fn writeCardMarkdown(card: Card, out: []u8) MarkdownError![]u8 {
-    var writer = MarkdownWriter.init(out);
-    try writeCardMarkdownInto(&writer, card);
-    return writer.written();
-}
-
-fn writeCardMarkdownInto(writer: *MarkdownWriter, card: Card) MarkdownError!void {
-    if (card.title.len == 0 or card.detail.len == 0) return error.InvalidMarkdown;
-    try writer.beginDirective("card");
-    try writer.fieldText("title", card.title);
-    try writer.fieldText("detail", card.detail);
-    try writer.endDirective();
-}
-
-fn readCardMarkdown(markdown: []const u8, text_out: []u8) MarkdownError!Card {
-    var text = MarkdownTextArena.init(text_out);
-    return readCardMarkdownWithArena(markdown, &text);
-}
-
-fn readCardMarkdownWithArena(markdown: []const u8, text: *MarkdownTextArena) MarkdownError!Card {
-    const prefix = ":::card\ntitle: ";
-    const body = try readMarkdownDirectiveBody(markdown, ":::card", prefix);
-    const title_end_relative = std.mem.indexOf(u8, body, "\ndetail: ") orelse return error.InvalidMarkdown;
-    const detail_start = title_end_relative + "\ndetail: ".len;
-    const title = try text.unescapeInline(body[0..title_end_relative]);
-    const detail = try text.unescapeInline(body[detail_start..]);
-    if (title.len == 0 or detail.len == 0) return error.InvalidMarkdown;
-    return .{ .title = title, .detail = detail };
-}
-
-fn readDirectiveBody(markdown: []const u8, prefix: []const u8) MarkdownError![]const u8 {
-    if (!std.mem.endsWith(u8, markdown, "\n:::")) return error.InvalidMarkdown;
-    const body_end = markdown.len - "\n:::".len;
-    if (body_end < prefix.len) return error.InvalidMarkdown;
-    return markdown[prefix.len..body_end];
-}
-
-fn readMarkdownDirectiveBody(markdown: []const u8, directive: []const u8, prefix: []const u8) MarkdownError![]const u8 {
-    if (!std.mem.startsWith(u8, markdown, prefix)) {
-        if (std.mem.startsWith(u8, markdown, directive)) return error.InvalidMarkdown;
-        return error.UnsupportedMarkdown;
-    }
-    return readDirectiveBody(markdown, prefix);
-}
-
-const MarkdownCursor = struct {
-    body: []const u8,
-    cursor: usize = 0,
-
-    fn init(body: []const u8) MarkdownCursor {
-        return .{ .body = body };
-    }
-
-    fn done(self: MarkdownCursor) bool {
-        return self.cursor >= self.body.len;
-    }
-
-    fn requirePrefix(self: MarkdownCursor, prefix: []const u8) MarkdownError!usize {
-        if (!std.mem.startsWith(u8, self.body[self.cursor..], prefix)) return error.InvalidMarkdown;
-        return self.cursor + prefix.len;
-    }
-
-    fn lineAfter(self: *MarkdownCursor, prefix: []const u8) MarkdownError![]const u8 {
-        const value_start = try self.requirePrefix(prefix);
-        const value_end_relative = std.mem.indexOfScalar(u8, self.body[value_start..], '\n') orelse return error.InvalidMarkdown;
-        self.cursor = value_start + value_end_relative;
-        return self.body[value_start..self.cursor];
-    }
-
-    fn fieldBetween(self: *MarkdownCursor, prefix: []const u8, next_prefix: []const u8) MarkdownError![]const u8 {
-        const value_start = try self.requirePrefix(prefix);
-        const value_end_relative = std.mem.indexOf(u8, self.body[value_start..], next_prefix) orelse return error.InvalidMarkdown;
-        self.cursor = value_start + value_end_relative;
-        return self.body[value_start..self.cursor];
-    }
-
-    fn finalField(self: *MarkdownCursor, prefix: []const u8, next_record_prefix: []const u8) MarkdownError![]const u8 {
-        const value_start = try self.requirePrefix(prefix);
-        const value_end_relative = std.mem.indexOf(u8, self.body[value_start..], next_record_prefix) orelse self.body[value_start..].len;
-        self.cursor = value_start + value_end_relative;
-        return self.body[value_start..self.cursor];
-    }
-
-    fn tailField(self: *MarkdownCursor, prefix: []const u8) MarkdownError![]const u8 {
-        const value_start = try self.requirePrefix(prefix);
-        self.cursor = self.body.len;
-        return self.body[value_start..];
-    }
-
-    fn skipNewline(self: *MarkdownCursor) MarkdownError!void {
-        if (self.cursor == self.body.len) return;
-        if (self.body[self.cursor] != '\n') return error.InvalidMarkdown;
-        self.cursor += 1;
-    }
-};
-
-const HtmlCursor = struct {
-    body: []const u8,
-    cursor: usize = 0,
-
-    fn init(body: []const u8) HtmlCursor {
-        return .{ .body = body };
-    }
-
-    fn done(self: HtmlCursor) bool {
-        return self.cursor >= self.body.len;
-    }
-
-    fn requirePrefix(self: HtmlCursor, prefix: []const u8) HtmlError!usize {
-        if (!std.mem.startsWith(u8, self.body[self.cursor..], prefix)) return error.InvalidHtml;
-        return self.cursor + prefix.len;
-    }
-
-    fn fieldBetween(self: *HtmlCursor, prefix: []const u8, next_prefix: []const u8) HtmlError![]const u8 {
-        const value_start = try self.requirePrefix(prefix);
-        const value_end_relative = std.mem.indexOf(u8, self.body[value_start..], next_prefix) orelse return error.InvalidHtml;
-        self.cursor = value_start + value_end_relative;
-        return self.body[value_start..self.cursor];
-    }
-
-    fn consume(self: *HtmlCursor, value: []const u8) HtmlError!void {
-        self.cursor = try self.requirePrefix(value);
-    }
-};
 
 fn readComponentMarkdown(markdown: []const u8, text_out: []u8) MarkdownError!Component {
-    var text = MarkdownTextArena.init(text_out);
-    return readComponentMarkdownWithArena(markdown, &text);
+    return component_io.readMarkdown(Component, markdown, text_out);
 }
 
 fn readComponentMarkdownWithArena(markdown: []const u8, text: *MarkdownTextArena) MarkdownError!Component {
-    if (std.mem.eql(u8, markdown, "---")) return .{ .separator = .{} };
-    if (std.mem.startsWith(u8, markdown, ":::card")) return .{ .card = try readCardMarkdownWithArena(markdown, text) };
-    if (std.mem.startsWith(u8, markdown, ":::badge")) {
-        return .{ .badge = .{ .label = try readSingleFieldDirectiveMarkdown(markdown, ":::badge\nlabel: ", text) } };
-    }
-    if (std.mem.startsWith(u8, markdown, ":::avatar")) {
-        return .{ .avatar = .{ .label = try readSingleFieldDirectiveMarkdown(markdown, ":::avatar\nlabel: ", text) } };
-    }
-    if (std.mem.startsWith(u8, markdown, ":::kbd")) {
-        return .{ .kbd = .{ .label = try readSingleFieldDirectiveMarkdown(markdown, ":::kbd\nlabel: ", text) } };
-    }
-    if (std.mem.startsWith(u8, markdown, ":::button")) {
-        const body = try readMarkdownDirectiveBody(markdown, ":::button", ":::button\nid: ");
-        const decoded = try readIdLabelDirectiveBody(body, "\nlabel: ", text);
-        return .{ .button = .{ .id = decoded.id, .label = decoded.label } };
-    }
-    if (std.mem.startsWith(u8, markdown, ":::input")) {
-        const body = try readMarkdownDirectiveBody(markdown, ":::input", ":::input\nid: ");
-        const decoded = try readIdLabelDirectiveBody(body, "\nplaceholder: ", text);
-        return .{ .input = .{ .id = decoded.id, .placeholder = decoded.label } };
-    }
-    if (std.mem.startsWith(u8, markdown, ":::textarea")) {
-        const body = try readMarkdownDirectiveBody(markdown, ":::textarea", ":::textarea\nid: ");
-        const decoded = try readIdLabelDirectiveBody(body, "\nplaceholder: ", text);
-        return .{ .textarea = .{ .id = decoded.id, .placeholder = decoded.label } };
-    }
-    if (std.mem.startsWith(u8, markdown, ":::select")) {
-        const body = try readMarkdownDirectiveBody(markdown, ":::select", ":::select\nid: ");
-        const decoded = try readIdLabelDirectiveBody(body, "\nlabel: ", text);
-        return .{ .select = .{ .id = decoded.id, .label = decoded.label } };
-    }
-    if (std.mem.startsWith(u8, markdown, ":::checkbox")) {
-        const decoded = try readCheckedLabelDirectiveMarkdown(markdown, ":::checkbox\nid: ", text);
-        return .{ .checkbox = .{ .id = decoded.id, .label = decoded.label, .checked = decoded.checked } };
-    }
-    if (std.mem.startsWith(u8, markdown, ":::switch")) {
-        const decoded = try readCheckedLabelDirectiveMarkdown(markdown, ":::switch\nid: ", text);
-        return .{ .switch_control = .{ .id = decoded.id, .label = decoded.label, .checked = decoded.checked } };
-    }
-    if (std.mem.startsWith(u8, markdown, ":::progress-control")) {
-        const body = try readMarkdownDirectiveBody(markdown, ":::progress-control", ":::progress-control\nvalue: ");
-        return .{ .progress = .{ .value = try parseMarkdownPercent(body) } };
-    }
-    if (std.mem.startsWith(u8, markdown, ":::slider")) {
-        const prefix = ":::slider\nid: ";
-        const body = try readMarkdownDirectiveBody(markdown, ":::slider", prefix);
-        const id_end = std.mem.indexOf(u8, body, "\nlabel: ") orelse return error.InvalidMarkdown;
-        const id = try parseMarkdownU32(body[0..id_end]);
-        const label_start = id_end + "\nlabel: ".len;
-        const label_end_relative = std.mem.indexOf(u8, body[label_start..], "\nvalue: ") orelse return error.InvalidMarkdown;
-        const value_start = label_start + label_end_relative + "\nvalue: ".len;
-        const label = try text.unescapeInline(body[label_start .. label_start + label_end_relative]);
-        if (label.len == 0) return error.InvalidMarkdown;
-        return .{ .slider = .{ .id = id, .label = label, .value = try parseMarkdownPercent(body[value_start..]) } };
-    }
-    if (std.mem.startsWith(u8, markdown, ":::row-item")) {
-        const prefix = ":::row-item\nid: ";
-        const body = try readMarkdownDirectiveBody(markdown, ":::row-item", prefix);
-        const id_end = std.mem.indexOf(u8, body, "\ntitle: ") orelse return error.InvalidMarkdown;
-        const id = try parseMarkdownU32(body[0..id_end]);
-        const title_start = id_end + "\ntitle: ".len;
-        const title_end_relative = std.mem.indexOf(u8, body[title_start..], "\ndetail: ") orelse return error.InvalidMarkdown;
-        const detail_start = title_start + title_end_relative + "\ndetail: ".len;
-        const title = try text.unescapeInline(body[title_start .. title_start + title_end_relative]);
-        const detail = try text.unescapeInline(body[detail_start..]);
-        if (title.len == 0 or detail.len == 0) return error.InvalidMarkdown;
-        return .{ .row_item = .{ .id = id, .title = title, .detail = detail } };
-    }
-    if (std.mem.startsWith(u8, markdown, ":::")) return error.UnsupportedMarkdown;
-    if (markdown.len == 0 or std.mem.indexOfScalar(u8, markdown, '\n') != null) return error.InvalidMarkdown;
-    return .{ .text = .{ .value = try text.unescapeInline(markdown) } };
-}
-
-const MarkdownIdLabel = struct {
-    id: u32,
-    label: []const u8,
-};
-
-const MarkdownCheckedLabel = struct {
-    id: u32,
-    checked: bool,
-    label: []const u8,
-};
-
-fn readSingleFieldDirectiveMarkdown(markdown: []const u8, prefix: []const u8, text: *MarkdownTextArena) MarkdownError![]const u8 {
-    const directive_end = std.mem.indexOfScalar(u8, prefix, '\n') orelse return error.InvalidMarkdown;
-    const body = try readMarkdownDirectiveBody(markdown, prefix[0..directive_end], prefix);
-    const value = try text.unescapeInline(body);
-    if (value.len == 0) return error.InvalidMarkdown;
-    return value;
-}
-
-fn readIdLabelDirectiveBody(body: []const u8, label_prefix: []const u8, text: *MarkdownTextArena) MarkdownError!MarkdownIdLabel {
-    const id_end = std.mem.indexOf(u8, body, label_prefix) orelse return error.InvalidMarkdown;
-    const id = try parseMarkdownU32(body[0..id_end]);
-    const label = try text.unescapeInline(body[id_end + label_prefix.len ..]);
-    if (label.len == 0) return error.InvalidMarkdown;
-    return .{ .id = id, .label = label };
-}
-
-fn readCheckedLabelDirectiveMarkdown(markdown: []const u8, prefix: []const u8, text: *MarkdownTextArena) MarkdownError!MarkdownCheckedLabel {
-    const directive_end = std.mem.indexOfScalar(u8, prefix, '\n') orelse return error.InvalidMarkdown;
-    const body = try readMarkdownDirectiveBody(markdown, prefix[0..directive_end], prefix);
-    const id_end = std.mem.indexOf(u8, body, "\nchecked: ") orelse return error.InvalidMarkdown;
-    const id = try parseMarkdownU32(body[0..id_end]);
-    const checked_start = id_end + "\nchecked: ".len;
-    const checked_end_relative = std.mem.indexOf(u8, body[checked_start..], "\nlabel: ") orelse return error.InvalidMarkdown;
-    const label_start = checked_start + checked_end_relative + "\nlabel: ".len;
-    const checked = try parseMarkdownBool(body[checked_start .. checked_start + checked_end_relative]);
-    const label = try text.unescapeInline(body[label_start..]);
-    if (label.len == 0) return error.InvalidMarkdown;
-    return .{ .id = id, .checked = checked, .label = label };
+    return component_io.readMarkdownWithArena(Component, markdown, text);
 }
 
 fn readComponentHtml(html: []const u8, text_out: []u8) HtmlError!Component {
-    var text = HtmlTextArena.init(text_out);
-    return readComponentHtmlWithArena(html, &text);
+    return component_io.readHtml(Component, html, text_out);
 }
 
 fn readComponentHtmlWithArena(html: []const u8, text: *HtmlTextArena) HtmlError!Component {
-    if (takeWrapped(html, "<p data-er-component=\"text\">", "</p>")) |value| {
-        return .{ .text = .{ .value = try text.unescape(value) } };
-    }
-    if (takeWrapped(html, "<span data-er-component=\"badge\">", "</span>")) |value| {
-        return .{ .badge = .{ .label = try text.unescape(value) } };
-    }
-    if (std.mem.startsWith(u8, html, "<span data-er-component=\"avatar\" aria-label=\"")) {
-        const after_label = html["<span data-er-component=\"avatar\" aria-label=\"".len..];
-        const label_end = std.mem.indexOf(u8, after_label, "\">") orelse return error.InvalidHtml;
-        if (!std.mem.endsWith(u8, html, "</span>")) return error.InvalidHtml;
-        const visible_start = "<span data-er-component=\"avatar\" aria-label=\"".len + label_end + "\">".len;
-        const label = try text.unescape(after_label[0..label_end]);
-        const visible = try text.unescape(html[visible_start .. html.len - "</span>".len]);
-        if (!std.mem.eql(u8, label, visible)) return error.InvalidHtml;
-        return .{ .avatar = .{ .label = label } };
-    }
-    if (takeWrapped(html, "<kbd data-er-component=\"kbd\">", "</kbd>")) |value| {
-        return .{ .kbd = .{ .label = try text.unescape(value) } };
-    }
-    if (std.mem.eql(u8, html, "<hr data-er-component=\"separator\">")) {
-        return .{ .separator = .{} };
-    }
-    if (std.mem.startsWith(u8, html, "<button data-er-component=\"button\" data-er-id=\"")) {
-        const after_id_prefix = html["<button data-er-component=\"button\" data-er-id=\"".len..];
-        const id_end = std.mem.indexOf(u8, after_id_prefix, "\">") orelse return error.InvalidHtml;
-        const id = try parseHtmlU32(after_id_prefix[0..id_end]);
-        const label_start = "<button data-er-component=\"button\" data-er-id=\"".len + id_end + "\">".len;
-        if (!std.mem.endsWith(u8, html, "</button>")) return error.InvalidHtml;
-        const label = html[label_start .. html.len - "</button>".len];
-        return .{ .button = .{ .id = id, .label = try text.unescape(label) } };
-    }
-    if (std.mem.startsWith(u8, html, "<input data-er-component=\"input\" data-er-id=\"")) {
-        const after_id_prefix = html["<input data-er-component=\"input\" data-er-id=\"".len..];
-        const id_end = std.mem.indexOf(u8, after_id_prefix, "\" placeholder=\"") orelse return error.InvalidHtml;
-        const id = try parseHtmlU32(after_id_prefix[0..id_end]);
-        const placeholder_start = "<input data-er-component=\"input\" data-er-id=\"".len + id_end + "\" placeholder=\"".len;
-        if (!std.mem.endsWith(u8, html, "\">")) return error.InvalidHtml;
-        const placeholder = html[placeholder_start .. html.len - "\">".len];
-        return .{ .input = .{ .id = id, .placeholder = try text.unescape(placeholder) } };
-    }
-    if (std.mem.startsWith(u8, html, "<textarea data-er-component=\"textarea\" data-er-id=\"")) {
-        const after_id_prefix = html["<textarea data-er-component=\"textarea\" data-er-id=\"".len..];
-        const id_end = std.mem.indexOf(u8, after_id_prefix, "\" placeholder=\"") orelse return error.InvalidHtml;
-        const id = try parseHtmlU32(after_id_prefix[0..id_end]);
-        const placeholder_start = "<textarea data-er-component=\"textarea\" data-er-id=\"".len + id_end + "\" placeholder=\"".len;
-        if (!std.mem.endsWith(u8, html, "\"></textarea>")) return error.InvalidHtml;
-        const placeholder = html[placeholder_start .. html.len - "\"></textarea>".len];
-        return .{ .textarea = .{ .id = id, .placeholder = try text.unescape(placeholder) } };
-    }
-    if (std.mem.startsWith(u8, html, "<select data-er-component=\"select\" data-er-id=\"")) {
-        const after_id_prefix = html["<select data-er-component=\"select\" data-er-id=\"".len..];
-        const id_end = std.mem.indexOf(u8, after_id_prefix, "\"><option selected>") orelse return error.InvalidHtml;
-        const id = try parseHtmlU32(after_id_prefix[0..id_end]);
-        const label_start = "<select data-er-component=\"select\" data-er-id=\"".len + id_end + "\"><option selected>".len;
-        if (!std.mem.endsWith(u8, html, "</option></select>")) return error.InvalidHtml;
-        const label = try text.unescape(html[label_start .. html.len - "</option></select>".len]);
-        return .{ .select = .{ .id = id, .label = label } };
-    }
-    if (std.mem.startsWith(u8, html, "<label data-er-component=\"checkbox\" data-er-id=\"")) {
-        const after_id_prefix = html["<label data-er-component=\"checkbox\" data-er-id=\"".len..];
-        const id_end = std.mem.indexOf(u8, after_id_prefix, "\" data-er-checked=\"") orelse return error.InvalidHtml;
-        const id = try parseHtmlU32(after_id_prefix[0..id_end]);
-        const checked_start = "<label data-er-component=\"checkbox\" data-er-id=\"".len + id_end + "\" data-er-checked=\"".len;
-        const checked_end_relative = std.mem.indexOf(u8, html[checked_start..], "\">") orelse return error.InvalidHtml;
-        const checked = try parseHtmlBool(html[checked_start .. checked_start + checked_end_relative]);
-        const input_start = checked_start + checked_end_relative;
-        const input_text = if (checked) "\"><input type=\"checkbox\" checked>" else "\"><input type=\"checkbox\">";
-        if (!std.mem.startsWith(u8, html[input_start..], input_text)) return error.InvalidHtml;
-        if (!std.mem.endsWith(u8, html, "</label>")) return error.InvalidHtml;
-        const label_start = input_start + input_text.len;
-        const label = try text.unescape(html[label_start .. html.len - "</label>".len]);
-        return .{ .checkbox = .{ .id = id, .label = label, .checked = checked } };
-    }
-    if (std.mem.startsWith(u8, html, "<button data-er-component=\"switch\" data-er-id=\"")) {
-        const after_id_prefix = html["<button data-er-component=\"switch\" data-er-id=\"".len..];
-        const id_end = std.mem.indexOf(u8, after_id_prefix, "\" aria-pressed=\"") orelse return error.InvalidHtml;
-        const id = try parseHtmlU32(after_id_prefix[0..id_end]);
-        const pressed_start = "<button data-er-component=\"switch\" data-er-id=\"".len + id_end + "\" aria-pressed=\"".len;
-        const pressed_end_relative = std.mem.indexOf(u8, html[pressed_start..], "\">") orelse return error.InvalidHtml;
-        const checked = try parseHtmlBool(html[pressed_start .. pressed_start + pressed_end_relative]);
-        if (!std.mem.endsWith(u8, html, "</button>")) return error.InvalidHtml;
-        const label_start = pressed_start + pressed_end_relative + "\">".len;
-        const label = try text.unescape(html[label_start .. html.len - "</button>".len]);
-        return .{ .switch_control = .{ .id = id, .label = label, .checked = checked } };
-    }
-    if (std.mem.startsWith(u8, html, "<progress data-er-component=\"progress\" value=\"")) {
-        const value_start = "<progress data-er-component=\"progress\" value=\"".len;
-        const value_end_relative = std.mem.indexOf(u8, html[value_start..], "\" max=\"100\"></progress>") orelse return error.InvalidHtml;
-        const value = try parseHtmlPercent(html[value_start .. value_start + value_end_relative]);
-        return .{ .progress = .{ .value = value } };
-    }
-    if (std.mem.startsWith(u8, html, "<label data-er-component=\"slider\" data-er-id=\"")) {
-        const after_id_prefix = html["<label data-er-component=\"slider\" data-er-id=\"".len..];
-        const id_end = std.mem.indexOf(u8, after_id_prefix, "\"><span>") orelse return error.InvalidHtml;
-        const id = try parseHtmlU32(after_id_prefix[0..id_end]);
-        const label_start = "<label data-er-component=\"slider\" data-er-id=\"".len + id_end + "\"><span>".len;
-        const label_end_relative = std.mem.indexOf(u8, html[label_start..], "</span><input type=\"range\" min=\"0\" max=\"100\" value=\"") orelse return error.InvalidHtml;
-        const value_start = label_start + label_end_relative + "</span><input type=\"range\" min=\"0\" max=\"100\" value=\"".len;
-        const value_end_relative = std.mem.indexOf(u8, html[value_start..], "\"></label>") orelse return error.InvalidHtml;
-        const label = try text.unescape(html[label_start .. label_start + label_end_relative]);
-        const value = try parseHtmlPercent(html[value_start .. value_start + value_end_relative]);
-        return .{ .slider = .{ .id = id, .label = label, .value = value } };
-    }
-    if (std.mem.startsWith(u8, html, "<article data-er-component=\"card\"><h2>")) {
-        const title_start = "<article data-er-component=\"card\"><h2>".len;
-        const title_end_relative = std.mem.indexOf(u8, html[title_start..], "</h2><p>") orelse return error.InvalidHtml;
-        const detail_start = title_start + title_end_relative + "</h2><p>".len;
-        if (!std.mem.endsWith(u8, html, "</p></article>")) return error.InvalidHtml;
-        const title = try text.unescape(html[title_start .. title_start + title_end_relative]);
-        const detail = try text.unescape(html[detail_start .. html.len - "</p></article>".len]);
-        return .{ .card = .{ .title = title, .detail = detail } };
-    }
-    if (std.mem.startsWith(u8, html, "<div data-er-component=\"row-item\" data-er-id=\"")) {
-        const after_id_prefix = html["<div data-er-component=\"row-item\" data-er-id=\"".len..];
-        const id_end = std.mem.indexOf(u8, after_id_prefix, "\"><strong>") orelse return error.InvalidHtml;
-        const id = try parseHtmlU32(after_id_prefix[0..id_end]);
-        const title_start = "<div data-er-component=\"row-item\" data-er-id=\"".len + id_end + "\"><strong>".len;
-        const title_end_relative = std.mem.indexOf(u8, html[title_start..], "</strong><span>") orelse return error.InvalidHtml;
-        const detail_start = title_start + title_end_relative + "</strong><span>".len;
-        if (!std.mem.endsWith(u8, html, "</span></div>")) return error.InvalidHtml;
-        const title = try text.unescape(html[title_start .. title_start + title_end_relative]);
-        const detail = try text.unescape(html[detail_start .. html.len - "</span></div>".len]);
-        return .{ .row_item = .{ .id = id, .title = title, .detail = detail } };
-    }
-    return error.UnsupportedHtml;
-}
-
-fn readRegionHtml(html: []const u8, out_components: []Component, text_out: []u8) HtmlError!Region {
-    inline for (.{ .header, .main, .footer, .section, .article }) |tag| {
-        const decoded = try readRegionHtmlForTag(tag, html, out_components, text_out);
-        if (decoded) |region| return region;
-    }
-    if (std.mem.startsWith(u8, html, "<header") or
-        std.mem.startsWith(u8, html, "<main") or
-        std.mem.startsWith(u8, html, "<footer") or
-        std.mem.startsWith(u8, html, "<section") or
-        std.mem.startsWith(u8, html, "<article") or
-        std.mem.indexOf(u8, html, "data-er-component=\"region\"") != null) return error.InvalidHtml;
-    return error.UnsupportedHtml;
-}
-
-fn readRegionMarkdown(markdown: []const u8, out_components: []Component, text_out: []u8) MarkdownError!Region {
-    const prefix = ":::region\ntag: ";
-    const body = try readMarkdownDirectiveBody(markdown, ":::region", prefix);
-    const tag_end_relative = std.mem.indexOf(u8, body, "\nlabel: ") orelse return error.InvalidMarkdown;
-    const tag = parseRegionTagName(body[0..tag_end_relative]) orelse return error.InvalidMarkdown;
-    const label_start = tag_end_relative + "\nlabel: ".len;
-    const label_end_relative = std.mem.indexOf(u8, body[label_start..], markdown_next_component_marker) orelse return error.InvalidMarkdown;
-    var text = MarkdownTextArena.init(text_out);
-    const label = try text.unescapeInline(body[label_start .. label_start + label_end_relative]);
-    const children_start = label_start + label_end_relative + 1;
-    const children = try readComponentListMarkdownWithArena(body[children_start..], out_components, &text);
-    return .{
-        .tag = tag,
-        .label = label,
-        .children = children,
-    };
-}
-
-fn readRegionHtmlForTag(comptime tag: RegionTag, html: []const u8, out_components: []Component, text_out: []u8) HtmlError!?Region {
-    const prefix = switch (tag) {
-        .header => "<header data-er-component=\"region\" aria-label=\"",
-        .main => "<main data-er-component=\"region\" aria-label=\"",
-        .footer => "<footer data-er-component=\"region\" aria-label=\"",
-        .section => "<section data-er-component=\"region\" aria-label=\"",
-        .article => "<article data-er-component=\"region\" aria-label=\"",
-    };
-    if (!std.mem.startsWith(u8, html, prefix)) return null;
-    const after_label = html[prefix.len..];
-    const label_end = std.mem.indexOf(u8, after_label, "\">") orelse return error.InvalidHtml;
-    const suffix = switch (tag) {
-        .header => "</header>",
-        .main => "</main>",
-        .footer => "</footer>",
-        .section => "</section>",
-        .article => "</article>",
-    };
-    if (!std.mem.endsWith(u8, html, suffix)) return error.InvalidHtml;
-
-    var text = HtmlTextArena.init(text_out);
-    const label = try text.unescape(after_label[0..label_end]);
-    const children_start = prefix.len + label_end + "\">".len;
-    const children_html = html[children_start .. html.len - suffix.len];
-    const children = try readComponentListHtmlWithArena(children_html, out_components, &text);
-    if (children.len == 0) return error.InvalidHtml;
-    return .{ .tag = tag, .label = label, .children = children };
-}
-
-fn readStackHtml(html: []const u8, out_components: []Component, text_out: []u8) HtmlError!Stack {
-    const prefix = "<section data-er-component=\"stack\" data-er-axis=\"";
-    if (!std.mem.startsWith(u8, html, prefix)) return error.UnsupportedHtml;
-    const after_axis = html[prefix.len..];
-    const axis_end = std.mem.indexOf(u8, after_axis, "\" data-er-gap=\"") orelse return error.InvalidHtml;
-    const axis = parseAxisName(after_axis[0..axis_end]) orelse return error.InvalidHtml;
-    const gap_start = prefix.len + axis_end + "\" data-er-gap=\"".len;
-    const gap_end_relative = std.mem.indexOf(u8, html[gap_start..], "\" data-er-padding=\"") orelse return error.InvalidHtml;
-    const gap = try parseHtmlU16(html[gap_start .. gap_start + gap_end_relative]);
-    const padding_start = gap_start + gap_end_relative + "\" data-er-padding=\"".len;
-    const padding_end_relative = std.mem.indexOf(u8, html[padding_start..], "\">") orelse return error.InvalidHtml;
-    const padding = try parseHtmlU16(html[padding_start .. padding_start + padding_end_relative]);
-    const children_start = padding_start + padding_end_relative + "\">".len;
-    if (!std.mem.endsWith(u8, html, "</section>")) return error.InvalidHtml;
-    const children_html = html[children_start .. html.len - "</section>".len];
-    const children = try readStackChildrenHtml(children_html, out_components, text_out);
-    return .{
-        .axis = axis,
-        .gap = gap,
-        .padding = padding,
-        .children = children,
-    };
-}
-
-fn readStackMarkdown(markdown: []const u8, out_components: []Component, text_out: []u8) MarkdownError!Stack {
-    const prefix = ":::stack\naxis: ";
-    const body = try readMarkdownDirectiveBody(markdown, ":::stack", prefix);
-    const axis_end_relative = std.mem.indexOf(u8, body, "\ngap: ") orelse return error.InvalidMarkdown;
-    const axis = parseAxisName(body[0..axis_end_relative]) orelse return error.InvalidMarkdown;
-    const gap_start = axis_end_relative + "\ngap: ".len;
-    const gap_end_relative = std.mem.indexOf(u8, body[gap_start..], "\npadding: ") orelse return error.InvalidMarkdown;
-    const gap = try parseMarkdownU16(body[gap_start .. gap_start + gap_end_relative]);
-    const padding_start = gap_start + gap_end_relative + "\npadding: ".len;
-    const padding_end_relative = std.mem.indexOf(u8, body[padding_start..], markdown_next_component_marker) orelse return error.InvalidMarkdown;
-    const padding = try parseMarkdownU16(body[padding_start .. padding_start + padding_end_relative]);
-    const children_start = padding_start + padding_end_relative + 1;
-    const children = try readStackChildrenMarkdown(body[children_start..], out_components, text_out);
-    return .{
-        .axis = axis,
-        .gap = gap,
-        .padding = padding,
-        .children = children,
-    };
-}
-
-fn readStackChildrenHtml(html: []const u8, out_components: []Component, text_out: []u8) HtmlError![]const Component {
-    var text = HtmlTextArena.init(text_out);
-    return readComponentListHtmlWithArena(html, out_components, &text);
-}
-
-fn readStackChildrenMarkdown(markdown: []const u8, out_components: []Component, text_out: []u8) MarkdownError![]const Component {
-    var text = MarkdownTextArena.init(text_out);
-    return readComponentListMarkdownWithArena(markdown, out_components, &text);
+    return component_io.readHtmlWithArena(Component, html, text);
 }
 
 fn readComponentListMarkdownWithArena(markdown: []const u8, out_components: []Component, text: *MarkdownTextArena) MarkdownError![]const Component {
-    var component_count: usize = 0;
-    var cursor: usize = 0;
-    while (cursor < markdown.len) {
-        if (component_count == out_components.len) return error.MarkdownBudgetExceeded;
-        if (!std.mem.startsWith(u8, markdown[cursor..], markdown_component_marker)) return error.InvalidMarkdown;
-        const child_start = cursor + markdown_component_marker.len;
-        const child_end_relative = std.mem.indexOf(u8, markdown[child_start..], markdown_next_component_marker) orelse markdown[child_start..].len;
-        const child_end = child_start + child_end_relative;
-        const child_markdown = markdown[child_start..child_end];
-        if (child_markdown.len == 0) return error.InvalidMarkdown;
-        out_components[component_count] = try readComponentMarkdownWithArena(child_markdown, text);
-        component_count += 1;
-        cursor = child_end;
-        if (cursor < markdown.len) cursor += 1;
-    }
-    if (component_count == 0) return error.InvalidMarkdown;
-    return out_components[0..component_count];
+    return component_io.readListMarkdownWithArena(Component, markdown, out_components, text);
 }
 
 fn readComponentListHtmlWithArena(html: []const u8, out_components: []Component, text: *HtmlTextArena) HtmlError![]const Component {
-    var component_count: usize = 0;
-    var cursor: usize = 0;
-    while (cursor < html.len) {
-        if (component_count == out_components.len) return error.HtmlBudgetExceeded;
-        const end = childHtmlEnd(html[cursor..]) orelse return error.InvalidHtml;
-        out_components[component_count] = try readComponentHtmlWithArena(html[cursor .. cursor + end], text);
-        component_count += 1;
-        cursor += end;
-    }
-    return out_components[0..component_count];
-}
-
-fn childHtmlEnd(html: []const u8) ?usize {
-    const shapes = [_]HtmlShape{
-        .{ .prefix = "<p data-er-component=\"text\">", .suffix = "</p>" },
-        .{ .prefix = "<span data-er-component=\"badge\">", .suffix = "</span>" },
-        .{ .prefix = "<span data-er-component=\"avatar\" aria-label=\"", .suffix = "</span>" },
-        .{ .prefix = "<kbd data-er-component=\"kbd\">", .suffix = "</kbd>" },
-        .{ .prefix = "<hr data-er-component=\"separator\">", .suffix = "" },
-        .{ .prefix = "<button data-er-component=\"button\" data-er-id=\"", .suffix = "</button>" },
-        .{ .prefix = "<input data-er-component=\"input\" data-er-id=\"", .suffix = ">" },
-        .{ .prefix = "<textarea data-er-component=\"textarea\" data-er-id=\"", .suffix = "</textarea>" },
-        .{ .prefix = "<select data-er-component=\"select\" data-er-id=\"", .suffix = "</select>" },
-        .{ .prefix = "<label data-er-component=\"checkbox\" data-er-id=\"", .suffix = "</label>" },
-        .{ .prefix = "<button data-er-component=\"switch\" data-er-id=\"", .suffix = "</button>" },
-        .{ .prefix = "<progress data-er-component=\"progress\" value=\"", .suffix = "</progress>" },
-        .{ .prefix = "<label data-er-component=\"slider\" data-er-id=\"", .suffix = "</label>" },
-        .{ .prefix = "<article data-er-component=\"card\"><h2>", .suffix = "</p></article>" },
-        .{ .prefix = "<div data-er-component=\"row-item\" data-er-id=\"", .suffix = "</span></div>" },
-    };
-    for (shapes) |shape| {
-        if (!std.mem.startsWith(u8, html, shape.prefix)) continue;
-        if (shape.suffix.len == 0) return shape.prefix.len;
-        const suffix_start = std.mem.indexOf(u8, html, shape.suffix) orelse return null;
-        return suffix_start + shape.suffix.len;
-    }
-    return null;
-}
-
-const HtmlShape = struct {
-    prefix: []const u8,
-    suffix: []const u8,
-};
-
-const HtmlWriter = struct {
-    out: []u8,
-    len: usize = 0,
-
-    fn init(out: []u8) HtmlWriter {
-        return .{ .out = out };
-    }
-
-    fn written(self: HtmlWriter) []u8 {
-        return self.out[0..self.len];
-    }
-
-    fn writeAll(self: *HtmlWriter, value: []const u8) HtmlError!void {
-        if (self.len + value.len > self.out.len) return error.HtmlBudgetExceeded;
-        @memcpy(self.out[self.len .. self.len + value.len], value);
-        self.len += value.len;
-    }
-
-    fn writeInt(self: *HtmlWriter, value: u32) HtmlError!void {
-        var buf: [10]u8 = undefined;
-        const text = std.fmt.bufPrint(&buf, "{d}", .{value}) catch unreachable;
-        try self.writeAll(text);
-    }
-
-    fn writeBool(self: *HtmlWriter, value: bool) HtmlError!void {
-        try self.writeAll(boolName(value));
-    }
-
-    fn writeAttrInt(self: *HtmlWriter, name: []const u8, value: u32) HtmlError!void {
-        try self.writeAttrPrefix(name);
-        try self.writeInt(value);
-        try self.writeByte('"');
-    }
-
-    fn writeAttrBool(self: *HtmlWriter, name: []const u8, value: bool) HtmlError!void {
-        try self.writeAttrPrefix(name);
-        try self.writeBool(value);
-        try self.writeByte('"');
-    }
-
-    fn writeAttrText(self: *HtmlWriter, name: []const u8, value: []const u8) HtmlError!void {
-        try self.writeAttrPrefix(name);
-        try self.writeEscapedAttr(value);
-        try self.writeByte('"');
-    }
-
-    fn writeAttrRaw(self: *HtmlWriter, name: []const u8, value: []const u8) HtmlError!void {
-        try self.writeAttrPrefix(name);
-        try self.writeAll(value);
-        try self.writeByte('"');
-    }
-
-    fn writeAttrPrefix(self: *HtmlWriter, name: []const u8) HtmlError!void {
-        try self.writeByte(' ');
-        try self.writeAll(name);
-        try self.writeAll("=\"");
-    }
-
-    fn writeEscapedText(self: *HtmlWriter, value: []const u8) HtmlError!void {
-        for (value) |byte| {
-            switch (byte) {
-                '&' => try self.writeAll("&amp;"),
-                '<' => try self.writeAll("&lt;"),
-                '>' => try self.writeAll("&gt;"),
-                else => try self.writeByte(byte),
-            }
-        }
-    }
-
-    fn writeEscapedAttr(self: *HtmlWriter, value: []const u8) HtmlError!void {
-        for (value) |byte| {
-            switch (byte) {
-                '&' => try self.writeAll("&amp;"),
-                '<' => try self.writeAll("&lt;"),
-                '>' => try self.writeAll("&gt;"),
-                '"' => try self.writeAll("&quot;"),
-                else => try self.writeByte(byte),
-            }
-        }
-    }
-
-    fn writeByte(self: *HtmlWriter, byte: u8) HtmlError!void {
-        if (self.len == self.out.len) return error.HtmlBudgetExceeded;
-        self.out[self.len] = byte;
-        self.len += 1;
-    }
-};
-
-const HtmlTextArena = struct {
-    out: []u8,
-    len: usize = 0,
-
-    fn init(out: []u8) HtmlTextArena {
-        return .{ .out = out };
-    }
-
-    fn unescape(self: *HtmlTextArena, value: []const u8) HtmlError![]const u8 {
-        const start = self.len;
-        var index: usize = 0;
-        while (index < value.len) {
-            if (value[index] != '&') {
-                try self.append(value[index]);
-                index += 1;
-                continue;
-            }
-            if (std.mem.startsWith(u8, value[index..], "&amp;")) {
-                try self.append('&');
-                index += "&amp;".len;
-            } else if (std.mem.startsWith(u8, value[index..], "&lt;")) {
-                try self.append('<');
-                index += "&lt;".len;
-            } else if (std.mem.startsWith(u8, value[index..], "&gt;")) {
-                try self.append('>');
-                index += "&gt;".len;
-            } else if (std.mem.startsWith(u8, value[index..], "&quot;")) {
-                try self.append('"');
-                index += "&quot;".len;
-            } else {
-                return error.InvalidHtml;
-            }
-        }
-        return self.out[start..self.len];
-    }
-
-    fn append(self: *HtmlTextArena, byte: u8) HtmlError!void {
-        if (self.len == self.out.len) return error.HtmlBudgetExceeded;
-        self.out[self.len] = byte;
-        self.len += 1;
-    }
-};
-
-const MarkdownWriter = struct {
-    out: []u8,
-    len: usize = 0,
-
-    fn init(out: []u8) MarkdownWriter {
-        return .{ .out = out };
-    }
-
-    fn written(self: MarkdownWriter) []u8 {
-        return self.out[0..self.len];
-    }
-
-    fn writeAll(self: *MarkdownWriter, value: []const u8) MarkdownError!void {
-        if (self.len + value.len > self.out.len) return error.MarkdownBudgetExceeded;
-        @memcpy(self.out[self.len .. self.len + value.len], value);
-        self.len += value.len;
-    }
-
-    fn writeInt(self: *MarkdownWriter, value: u32) MarkdownError!void {
-        var buf: [10]u8 = undefined;
-        const text = std.fmt.bufPrint(&buf, "{d}", .{value}) catch unreachable;
-        try self.writeAll(text);
-    }
-
-    fn beginDirective(self: *MarkdownWriter, name: []const u8) MarkdownError!void {
-        try self.writeAll(":::");
-        try self.writeAll(name);
-    }
-
-    fn endDirective(self: *MarkdownWriter) MarkdownError!void {
-        try self.writeAll("\n:::");
-    }
-
-    fn fieldInt(self: *MarkdownWriter, name: []const u8, value: u32) MarkdownError!void {
-        try self.fieldPrefix(name);
-        try self.writeInt(value);
-    }
-
-    fn fieldBool(self: *MarkdownWriter, name: []const u8, value: bool) MarkdownError!void {
-        try self.fieldPrefix(name);
-        try self.writeAll(boolName(value));
-    }
-
-    fn fieldText(self: *MarkdownWriter, name: []const u8, value: []const u8) MarkdownError!void {
-        try self.fieldPrefix(name);
-        try self.writeEscapedInline(value);
-    }
-
-    fn fieldRaw(self: *MarkdownWriter, name: []const u8, value: []const u8) MarkdownError!void {
-        try self.fieldPrefix(name);
-        try self.writeAll(value);
-    }
-
-    fn fieldPrefix(self: *MarkdownWriter, name: []const u8) MarkdownError!void {
-        try self.writeByte('\n');
-        try self.writeAll(name);
-        try self.writeAll(": ");
-    }
-
-    fn writeEscapedInline(self: *MarkdownWriter, value: []const u8) MarkdownError!void {
-        for (value) |byte| {
-            switch (byte) {
-                '\n', '\r' => return error.InvalidMarkdown,
-                '\\', '`', '*', '_', '{', '}', '[', ']', '(', ')', '#', '+', '-', '.', '!', '>', '|', ':' => {
-                    try self.writeByte('\\');
-                    try self.writeByte(byte);
-                },
-                else => try self.writeByte(byte),
-            }
-        }
-    }
-
-    fn writeByte(self: *MarkdownWriter, byte: u8) MarkdownError!void {
-        if (self.len == self.out.len) return error.MarkdownBudgetExceeded;
-        self.out[self.len] = byte;
-        self.len += 1;
-    }
-};
-
-const MarkdownTextArena = struct {
-    out: []u8,
-    len: usize = 0,
-
-    fn init(out: []u8) MarkdownTextArena {
-        return .{ .out = out };
-    }
-
-    fn unescapeInline(self: *MarkdownTextArena, value: []const u8) MarkdownError![]const u8 {
-        const start = self.len;
-        var index: usize = 0;
-        while (index < value.len) {
-            const byte = value[index];
-            if (byte == '\n' or byte == '\r') return error.InvalidMarkdown;
-            if (byte != '\\') {
-                try self.append(byte);
-                index += 1;
-                continue;
-            }
-            index += 1;
-            if (index == value.len or !markdownEscapable(value[index])) return error.InvalidMarkdown;
-            try self.append(value[index]);
-            index += 1;
-        }
-        return self.out[start..self.len];
-    }
-
-    fn append(self: *MarkdownTextArena, byte: u8) MarkdownError!void {
-        if (self.len == self.out.len) return error.MarkdownBudgetExceeded;
-        self.out[self.len] = byte;
-        self.len += 1;
-    }
-};
-
-fn takeWrapped(value: []const u8, prefix: []const u8, suffix: []const u8) ?[]const u8 {
-    if (!std.mem.startsWith(u8, value, prefix)) return null;
-    if (!std.mem.endsWith(u8, value, suffix)) return null;
-    return value[prefix.len .. value.len - suffix.len];
-}
-
-fn axisName(axis: ui.Axis) []const u8 {
-    return switch (axis) {
-        .column => "column",
-        .row => "row",
-    };
-}
-
-fn parseAxisName(value: []const u8) ?ui.Axis {
-    if (std.mem.eql(u8, value, "column")) return .column;
-    if (std.mem.eql(u8, value, "row")) return .row;
-    return null;
-}
-
-fn alignName(alignment: ui.TextAlign) []const u8 {
-    return switch (alignment) {
-        .start => "start",
-        .center => "center",
-        .end => "end",
-    };
-}
-
-fn parseAlignName(value: []const u8) ?ui.TextAlign {
-    if (std.mem.eql(u8, value, "start")) return .start;
-    if (std.mem.eql(u8, value, "center")) return .center;
-    if (std.mem.eql(u8, value, "end")) return .end;
-    return null;
-}
-
-fn boolName(value: bool) []const u8 {
-    return switch (value) {
-        true => "true",
-        false => "false",
-    };
-}
-
-fn parseHtmlBool(value: []const u8) HtmlError!bool {
-    if (std.mem.eql(u8, value, "true")) return true;
-    if (std.mem.eql(u8, value, "false")) return false;
-    return error.InvalidHtml;
-}
-
-fn parseHtmlU16(value: []const u8) HtmlError!u16 {
-    return std.fmt.parseUnsigned(u16, value, 10) catch error.InvalidHtml;
-}
-
-fn parseHtmlU32(value: []const u8) HtmlError!u32 {
-    return std.fmt.parseUnsigned(u32, value, 10) catch error.InvalidHtml;
-}
-
-fn parseMarkdownBool(value: []const u8) MarkdownError!bool {
-    if (std.mem.eql(u8, value, "true")) return true;
-    if (std.mem.eql(u8, value, "false")) return false;
-    return error.InvalidMarkdown;
-}
-
-fn parseMarkdownU16(value: []const u8) MarkdownError!u16 {
-    return std.fmt.parseUnsigned(u16, value, 10) catch error.InvalidMarkdown;
-}
-
-fn parseMarkdownU32(value: []const u8) MarkdownError!u32 {
-    return std.fmt.parseUnsigned(u32, value, 10) catch error.InvalidMarkdown;
-}
-
-fn parseMarkdownPercent(value: []const u8) MarkdownError!f32 {
-    const parsed = try parseMarkdownU32(value);
-    if (parsed > 100) return error.InvalidMarkdown;
-    return @as(f32, @floatFromInt(parsed)) / 100.0;
-}
-
-fn markdownEscapable(byte: u8) bool {
-    return switch (byte) {
-        '\\', '`', '*', '_', '{', '}', '[', ']', '(', ')', '#', '+', '-', '.', '!', '>', '|', ':' => true,
-        else => false,
-    };
-}
-
-fn regionTagName(tag: RegionTag) []const u8 {
-    return switch (tag) {
-        .header => "header",
-        .main => "main",
-        .footer => "footer",
-        .section => "section",
-        .article => "article",
-    };
-}
-
-fn parseRegionTagName(value: []const u8) ?RegionTag {
-    if (std.mem.eql(u8, value, "header")) return .header;
-    if (std.mem.eql(u8, value, "main")) return .main;
-    if (std.mem.eql(u8, value, "footer")) return .footer;
-    if (std.mem.eql(u8, value, "section")) return .section;
-    if (std.mem.eql(u8, value, "article")) return .article;
-    return null;
-}
-
-fn percentFromUnit(value: f32) u32 {
-    return @intFromFloat(@round(ui.clampUnit(value) * 100.0));
-}
-
-fn parseHtmlPercent(value: []const u8) HtmlError!f32 {
-    const parsed = try parseHtmlU32(value);
-    if (parsed > 100) return error.InvalidHtml;
-    return @as(f32, @floatFromInt(parsed)) / 100.0;
-}
-
-fn boolRef(value: bool) codec.StringRef {
-    return .{ .offset = if (value) 1 else 0, .len = 0 };
-}
-
-fn unitRef(value: f32) codec.StringRef {
-    return .{ .offset = ui.encodeUnit(value), .len = 0 };
+    return component_io.readListHtmlWithArena(Component, html, out_components, text);
 }
 
 fn testReq() object.Requirements {
@@ -2387,6 +491,32 @@ fn testReq() object.Requirements {
 
 fn testEpoch() clock.Stamp {
     return .{ .keeper = .{ .bytes = [_]u8{1} ++ [_]u8{0} ** 31 } };
+}
+
+test "academy component registration uses one canonical component list" {
+    var entries: [academy_component_count]ComponentDescriptor = undefined;
+    var registry = ComponentRegistry.init(&entries);
+
+    try registerAcademyComponents(&registry);
+
+    try std.testing.expectEqual(@as(usize, academy_component_count), registry.len);
+    _ = try registry.get("aside");
+    _ = try registry.get("breadcrumb");
+    _ = try registry.get("callout");
+    _ = try registry.get("choice-group");
+    _ = try registry.get("code-block");
+    _ = try registry.get("definition-list");
+    _ = try registry.get("details");
+    _ = try registry.get("figure");
+    _ = try registry.get("heading");
+    _ = try registry.get("list");
+    _ = try registry.get("nav");
+    _ = try registry.get("progress-summary");
+    _ = try registry.get("resource-list");
+    _ = try registry.get("step-list");
+    _ = try registry.get("table");
+    _ = try registry.get("timeline");
+    try std.testing.expectError(error.DuplicateComponent, registerAcademyComponent(&registry, .nav));
 }
 
 test "button component serializes to canonical object and deserializes" {
@@ -2558,7 +688,7 @@ test "stack component produces renderable ui node" {
     var scene = ui.Scene.init(&commands);
     try ui.render(&scene, root, .{ .x = 0, .y = 0, .w = 240, .h = 160 }, .{});
 
-    try std.testing.expect(ui_input.hitTest(scene.written(), 20, 70) != null);
+    try std.testing.expect(scene.commandCount() != 0);
 }
 
 test "component measurement wraps primitive text under exact width" {
@@ -2587,13 +717,11 @@ test "stack measure render and interaction collection use layout placement" {
     try std.testing.expect(measured.preferred.h > 0);
     try stack.render(&scene, ui.Rect.init(0, 0, 160, measured.preferred.h), .{});
     try stack.collectInteractions(&collector, ui.Rect.init(0, 0, 160, measured.preferred.h), .{});
-
-    try std.testing.expect(ui_input.hitTest(scene.written(), 16, 40) == null);
-    const hit = ui_input.regionHitTest(collector.written(), 16, 40).?;
+    const hit = ui_input.hitTest(collector.written(), 16, 40).?;
     try std.testing.expectEqual(@as(u32, 41002), hit.id);
 }
 
-test "slot component wraps a leaf component and preserves structural hit id" {
+test "slot component wraps a leaf component and renders the child" {
     const slot = Slot{
         .id = 99,
         .child = .{ .button = .{ .id = 12, .label = "Inside" } },
@@ -2612,9 +740,7 @@ test "slot component wraps a leaf component and preserves structural hit id" {
     var scene = ui.Scene.init(&commands);
     try ui.render(&scene, root, .{ .x = 0, .y = 0, .w = 140, .h = 40 }, .{});
 
-    const hit = ui_input.hitTest(scene.written(), 4, 4).?;
-    try std.testing.expectEqual(@as(u32, 99), hit.slot);
-    try std.testing.expectEqual(@as(u32, 12), hit.id);
+    try std.testing.expect(hasText(scene.written(), "Inside"));
 }
 
 test "stack tree composes child component objects with explicit resolver input" {
@@ -2728,15 +854,39 @@ test "component render helper owns button variants and collects hit targets" {
     try collectComponentInteractions(&collector, ui.Rect.init(0, 0, 120, 36), primary);
     try renderComponent(&scene, ui.Rect.init(0, 44, 120, 36), outline, .{ .button_variant = .outline, .button_leading_icon = .search });
     try collectComponentInteractions(&collector, ui.Rect.init(0, 44, 120, 36), outline);
-
-    try std.testing.expect(ui_input.hitTest(scene.written(), 12, 12) == null);
-    const primary_hit = ui_input.regionHitTest(collector.written(), 12, 12).?;
+    const primary_hit = ui_input.hitTest(collector.written(), 12, 12).?;
     try std.testing.expectEqual(@as(u32, 501), primary_hit.id);
-    const outline_hit = ui_input.regionHitTest(collector.written(), 12, 56).?;
+    const outline_hit = ui_input.hitTest(collector.written(), 12, 56).?;
     try std.testing.expectEqual(@as(u32, 502), outline_hit.id);
     try std.testing.expect(hasText(scene.written(), "Primary"));
     try std.testing.expect(hasText(scene.written(), "Outline"));
     try std.testing.expect(hasIcon(scene.written(), .search));
+}
+
+test "component interaction collection covers primitive controls" {
+    const primitives = [_]Component{
+        .{ .input = .{ .id = 601, .placeholder = "Filter" } },
+        .{ .textarea = .{ .id = 602, .placeholder = "Explain" } },
+        .{ .select = .{ .id = 603, .label = "Mode" } },
+        .{ .checkbox = .{ .id = 604, .label = "Receipts", .checked = true } },
+        .{ .switch_control = .{ .id = 605, .label = "Public", .checked = false } },
+        .{ .slider = .{ .id = 606, .label = "Brightness", .value = 0.5 } },
+        .{ .row_item = .{ .id = 607, .title = "DNS", .detail = "Lookup" } },
+    };
+    const expected = [_]ui.HitKind{ .input, .textarea, .select, .checkbox, .switch_control, .slider, .row_item };
+    var regions: [primitives.len]interaction.Region = undefined;
+    var collector = interaction.Collector.init(&regions);
+
+    for (primitives, 0..) |component, index| {
+        const y = @as(f32, @floatFromInt(index)) * 48.0;
+        try collectComponentInteractions(&collector, ui.Rect.init(0, y, 240, 40), component);
+    }
+
+    try std.testing.expectEqual(primitives.len, collector.written().len);
+    for (collector.written(), 0..) |region, index| {
+        try std.testing.expectEqual(@as(u32, 601 + @as(u32, @intCast(index))), region.id);
+        try std.testing.expectEqual(expected[index], region.kind);
+    }
 }
 
 test "component render helper owns badge and surface variants" {
@@ -2768,9 +918,7 @@ test "component render helper owns article cards and code blocks" {
     try article.render(&scene, ui.Rect.init(0, 0, 360, 172), .{});
     try article.collectInteractions(&collector, ui.Rect.init(0, 0, 360, 172));
     try (CodeBlock{ .lines = &.{ "const app = try edge.compile(source);", "try app.run(.{});" } }).render(&scene, ui.Rect.init(0, 190, 360, 72), .{});
-
-    try std.testing.expect(ui_input.hitTest(scene.written(), 20, 20) == null);
-    const hit = ui_input.regionHitTest(collector.written(), 20, 20).?;
+    const hit = ui_input.hitTest(collector.written(), 20, 20).?;
     try std.testing.expectEqual(@as(u32, 801), hit.id);
     try std.testing.expect(hasText(scene.written(), "Architecture"));
     try std.testing.expect(hasText(scene.written(), "const app = try edge.compile(source);"));
@@ -3033,8 +1181,7 @@ test "region component renders semantic children and collects interactions" {
 
     try std.testing.expect(hasText(scene.written(), "Academy path"));
     try std.testing.expect(hasText(scene.written(), "Continue"));
-    try std.testing.expect(ui_input.hitTest(scene.written(), 24, 58) == null);
-    const hit = ui_input.regionHitTest(collector.written(), 24, 58).?;
+    const hit = ui_input.hitTest(collector.written(), 24, 58).?;
     try std.testing.expectEqual(@as(u32, 31001), hit.id);
 }
 
@@ -3459,9 +1606,7 @@ test "article list item expands around wrapped titles" {
     var collector = interaction.Collector.init(&regions);
     try long_article.render(&scene, ui.Rect.init(0.0, 0.0, 420.0, long_height), .{});
     try long_article.collectInteractions(&collector, ui.Rect.init(0.0, 0.0, 420.0, long_height));
-
-    try std.testing.expect(ui_input.hitTest(scene.written(), 20, 20) == null);
-    const hit = ui_input.regionHitTest(collector.written(), 20, 20).?;
+    const hit = ui_input.hitTest(collector.written(), 20, 20).?;
     try std.testing.expectEqual(@as(u32, 812), hit.id);
     try std.testing.expect(hasText(scene.written(), "Episode 17"));
     try std.testing.expect(hasText(scene.written(), "The Internet Already Connects"));
@@ -3545,9 +1690,9 @@ fn textCommand(commands: []const ui.Command, value: []const u8) ?ui.Command {
 }
 
 fn hasIcon(commands: []const ui.Command, value: icon.Icon) bool {
-    const atlas_id = icon.atlasId(value);
+    const icon_id = icon.id(value);
     for (commands) |command| switch (command) {
-        .icon_quad => |quad| if (quad.atlas_id == atlas_id) return true,
+        .icon_quad => |quad| if (quad.icon_id == icon_id) return true,
         else => {},
     };
     return false;

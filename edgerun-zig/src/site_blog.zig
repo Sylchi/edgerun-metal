@@ -3,6 +3,7 @@ const icon = @import("icon.zig");
 const ui = @import("ui.zig");
 const components = @import("ui_components.zig");
 const site_chrome = @import("site_chrome.zig");
+const interaction = @import("ui_interaction.zig");
 
 pub const back_button_id: u32 = 40_001;
 pub const first_post_button_id: u32 = 40_100;
@@ -22,7 +23,7 @@ const post_list_gap: f32 = 0.0;
 const arc_overview_gap: f32 = 18.0;
 const arc_overview_h: f32 = 96.0;
 const lesson_rhythm_gap: f32 = 24.0;
-const lesson_rhythm_h: f32 = 96.0;
+const lesson_rhythm_h: f32 = 118.0;
 const section_header_h: f32 = 62.0;
 const section_gap: f32 = 18.0;
 const page_bottom_pad: f32 = 160.0;
@@ -177,6 +178,12 @@ const trust_step_count: usize = 5;
 const trust_step_h: f32 = 56.0;
 const trust_step_gap: f32 = 12.0;
 const trust_detail_h: f32 = 68.0;
+const authority_flow_demo_h: f32 = 430.0;
+const authority_flow_demo_pad: f32 = 22.0;
+const authority_flow_stage_count: usize = 6;
+const authority_flow_stage_h: f32 = 62.0;
+const authority_flow_stage_gap: f32 = 12.0;
+const authority_flow_detail_h: f32 = 82.0;
 const arc_local_start: usize = 0;
 const arc_local_end: usize = 10;
 const arc_network_start: usize = 10;
@@ -186,7 +193,7 @@ const arc_device_end: usize = 34;
 const arc_control_start: usize = 34;
 const arc_control_end: usize = 61;
 const arc_accounting_start: usize = 61;
-const arc_accounting_end: usize = 66;
+const arc_accounting_end: usize = 67;
 
 pub const season_title = "EdgeRun Academy";
 pub const season_subtitle = "A practical, slightly irreverent path through devices, networks, security, and user-owned computing.";
@@ -246,7 +253,7 @@ const arc_sections = [_]ArcSection{
     .{
         .title = arc_accounting,
         .detail = "Receipts, contribution, settlement, and why fair systems need explicit resource accounting.",
-        .count_label = "5 lessons",
+        .count_label = "6 lessons",
         .card_title = "Who pays",
         .card_detail = "receipts -> settlement",
         .start = arc_accounting_start,
@@ -871,6 +878,15 @@ pub const posts = [_]Post{
         .summary = "Use a pointless swap storm to show why programs should receive explicit resources and authority instead of forcing the system to guess.",
         .body = @embedFile("blog/56-computers-deterministic.md"),
     },
+    .{
+        .arc = arc_accounting,
+        .title = "Authority Is Not A Vibe. It Is A Receipt Chain.",
+        .date = "May 25, 2026",
+        .category = "Authority",
+        .demo = "Actor, authority, receipt, object",
+        .summary = "Explain how messages, memory views, storage, TPM operations, and child apps move without one principal becoming another.",
+        .body = @embedFile("blog/57-authority-movement.md"),
+    },
 };
 
 const episode_labels = blk: {
@@ -889,7 +905,7 @@ pub const State = struct {
     arc_filter_index: ?usize = null,
 };
 
-pub fn render(scene: *ui.Scene, bounds: ui.Rect, state: State) ui.RenderError!void {
+pub fn render(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, state: State) (ui.RenderError || interaction.Error)!void {
     try fill(scene, bounds, palette.bg, 0.0);
 
     const content = centered(bounds, content_wide);
@@ -901,13 +917,13 @@ pub fn render(scene: *ui.Scene, bounds: ui.Rect, state: State) ui.RenderError!vo
         defer scene.popClip();
 
         if (postIndexById(state.selected_post_id)) |index| {
-            try renderPost(scene, ui.Rect.init(content.x, page_y + 52.0, content.w, 1800.0), index, state.hover_x, state.hover_y);
+            try renderPost(scene, collector, ui.Rect.init(content.x, page_y + 52.0, content.w, 1800.0), index, state.hover_x, state.hover_y);
         } else {
-            try renderIndex(scene, ui.Rect.init(content.x, page_y + 52.0, content.w, 1100.0), state.arc_filter_index);
+            try renderIndex(scene, collector, ui.Rect.init(content.x, page_y + 52.0, content.w, 1100.0), state.arc_filter_index);
         }
     }
 
-    try renderHeader(scene, ui.Rect.init(bounds.x, bounds.y, bounds.w, header_h), content);
+    try renderHeader(scene, collector, ui.Rect.init(bounds.x, bounds.y, bounds.w, header_h), content);
 }
 
 pub fn postById(id: u32) ?Post {
@@ -941,15 +957,15 @@ fn episodeAt(index: usize) usize {
     return index + 1;
 }
 
-fn renderHeader(scene: *ui.Scene, bounds: ui.Rect, content: ui.Rect) ui.RenderError!void {
-    try site_chrome.renderHeader(scene, bounds, content, .blog);
+fn renderHeader(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, content: ui.Rect) (ui.RenderError || interaction.Error)!void {
+    try site_chrome.renderHeader(scene, collector, bounds, content, .blog);
 }
 
-fn renderIndex(scene: *ui.Scene, bounds: ui.Rect, arc_filter_index: ?usize) ui.RenderError!void {
-    _ = try flowIndexContent(scene, bounds, arc_filter_index);
+fn renderIndex(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, arc_filter_index: ?usize) (ui.RenderError || interaction.Error)!void {
+    _ = try flowIndexContent(scene, collector, bounds, arc_filter_index);
 }
 
-fn flowIndexContent(scene: ?*ui.Scene, bounds: ui.Rect, arc_filter_index: ?usize) ui.RenderError!f32 {
+fn flowIndexContent(scene: ?*ui.Scene, collector: ?*interaction.Collector, bounds: ui.Rect, arc_filter_index: ?usize) (ui.RenderError || interaction.Error)!f32 {
     const split = bounds.w >= 980.0;
     const headline_w = if (split) @min(index_intro_w, bounds.w - workflow_w - 64.0) else bounds.w;
     const workflow_y = if (split) bounds.y + 18.0 else bounds.y + 230.0;
@@ -969,16 +985,16 @@ fn flowIndexContent(scene: ?*ui.Scene, bounds: ui.Rect, arc_filter_index: ?usize
             try renderCloudMeme(target, ui.Rect.init(bounds.x, workflow_y, bounds.w, 184.0));
         }
 
-        try renderArcOverview(target, ui.Rect.init(bounds.x, overview_y, bounds.w, arc_overview_h), arc_filter_index);
-        try renderLessonRhythm(target, ui.Rect.init(bounds.x, rhythm_y, bounds.w, lesson_rhythm_h));
+        try renderArcOverview(target, collector.?, ui.Rect.init(bounds.x, overview_y, bounds.w, arc_overview_h), arc_filter_index);
+        try renderLessonRhythm(target, collector.?, ui.Rect.init(bounds.x, rhythm_y, bounds.w, lesson_rhythm_h));
     }
 
     var next_y = bounds.y + intro_h;
     if (arc_filter_index) |index| {
-        next_y = try flowPostSection(scene, bounds, next_y, arc_sections[index]);
+        next_y = try flowPostSection(scene, collector, bounds, next_y, arc_sections[index]);
     } else {
         for (arc_sections) |section| {
-            next_y = try flowPostSection(scene, bounds, next_y, section);
+            next_y = try flowPostSection(scene, collector, bounds, next_y, section);
         }
     }
 
@@ -993,18 +1009,18 @@ pub fn indexContentHeight(width: f32) f32 {
 
 pub fn indexContentHeightFiltered(width: f32, arc_filter_index: ?usize) f32 {
     const content_w = @min(content_wide, @max(1.0, width - content_pad * 2.0));
-    const measured_h = flowIndexContent(null, ui.Rect.init(0.0, 0.0, content_w, 1.0), arc_filter_index) catch unreachable;
+    const measured_h = flowIndexContent(null, null, ui.Rect.init(0.0, 0.0, content_w, 1.0), arc_filter_index) catch unreachable;
     return 52.0 + measured_h + page_bottom_pad;
 }
 
 pub fn postContentHeight(width: f32, post_id: u32) f32 {
     const index = postIndexById(post_id) orelse return indexContentHeight(width);
     const content_w = @min(content_wide, @max(1.0, width - content_pad * 2.0));
-    const measured_h = flowPostContent(null, ui.Rect.init(0.0, 0.0, content_w, 1.0), index, -1.0, -1.0) catch unreachable;
+    const measured_h = flowPostContent(null, null, ui.Rect.init(0.0, 0.0, content_w, 1.0), index, -1.0, -1.0) catch unreachable;
     return 52.0 + measured_h + page_bottom_pad;
 }
 
-fn renderArcOverview(scene: *ui.Scene, bounds: ui.Rect, active_index: ?usize) ui.RenderError!void {
+fn renderArcOverview(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, active_index: ?usize) (ui.RenderError || interaction.Error)!void {
     const cols: usize = if (bounds.w >= 1040.0) 5 else if (bounds.w >= 700.0) 3 else 2;
     const rows = (arc_sections.len + cols - 1) / cols;
     const card_h = (bounds.h - arc_overview_gap * @as(f32, @floatFromInt(rows - 1))) / @as(f32, @floatFromInt(rows));
@@ -1018,19 +1034,21 @@ fn renderArcOverview(scene: *ui.Scene, bounds: ui.Rect, active_index: ?usize) ui
         try text(scene, card.x + 14.0, card.y + 12.0, card.w - 28.0, 12.0, section.count_label, palette.primary);
         try text(scene, card.x + 14.0, card.y + 34.0, card.w - 28.0, 14.0, section.card_title, palette.text);
         try text(scene, card.x + 14.0, card.y + 58.0, card.w - 28.0, 11.0, section.card_detail, palette.dim);
-        try hit(scene, card, .button, arcFilterButtonId(index));
+        try hit(collector, card, .button, arcFilterButtonId(index));
     }
 }
 
-fn renderLessonRhythm(scene: *ui.Scene, bounds: ui.Rect) ui.RenderError!void {
+fn renderLessonRhythm(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect) (ui.RenderError || interaction.Error)!void {
     try nativeCard(scene, bounds, "", "");
     try tag(scene, ui.Rect.init(bounds.x + 18.0, bounds.y + 18.0, 92.0, 24.0), "HOW TO READ", palette.blue);
     try text(scene, bounds.x + 128.0, bounds.y + 23.0, bounds.w - 286.0, 14.0, "Every lesson has a job: notice the ordinary action, name the hidden authority, then ask what the user can own.", palette.text);
-    try outlineButton(scene, ui.Rect.init(bounds.x + bounds.w - 140.0, bounds.y + 14.0, 122.0, 32.0), "All Lessons", all_lessons_button_id);
+    try outlineButton(scene, collector, ui.Rect.init(bounds.x + bounds.w - 140.0, bounds.y + 14.0, 122.0, 32.0), "All Lessons", all_lessons_button_id);
 
     const gap: f32 = 14.0;
-    const item_y = bounds.y + 56.0;
-    const item_h: f32 = 22.0;
+    const item_title_y = bounds.y + 58.0;
+    const item_detail_y = item_title_y + 30.0;
+    const item_title_h: f32 = 24.0;
+    const item_detail_h: f32 = 16.0;
     const item_w = (bounds.w - 36.0 - gap * 2.0) / 3.0;
     const steps = [_]struct { []const u8, []const u8 }{
         .{ "1. Observe", "start with something normal" },
@@ -1039,12 +1057,12 @@ fn renderLessonRhythm(scene: *ui.Scene, bounds: ui.Rect) ui.RenderError!void {
     };
     for (steps, 0..) |step, index| {
         const x = bounds.x + 18.0 + @as(f32, @floatFromInt(index)) * (item_w + gap);
-        try text(scene, x, item_y, item_w, item_h, step[0], palette.primary);
-        try text(scene, x, item_y + 22.0, item_w, item_h, step[1], palette.dim);
+        try text(scene, x, item_title_y, item_w, item_title_h, step[0], palette.primary);
+        try text(scene, x, item_detail_y, item_w, item_detail_h, step[1], palette.dim);
     }
 }
 
-fn flowPostSection(scene: ?*ui.Scene, bounds: ui.Rect, y: f32, section: ArcSection) ui.RenderError!f32 {
+fn flowPostSection(scene: ?*ui.Scene, collector: ?*interaction.Collector, bounds: ui.Rect, y: f32, section: ArcSection) (ui.RenderError || interaction.Error)!f32 {
     if (scene) |target| {
         try text(target, bounds.x, y, bounds.w, 20.0, section.title, palette.text);
         try paragraph(target, ui.Rect.init(bounds.x, y + 28.0, @min(bounds.w, 760.0), 30.0), section.detail);
@@ -1053,7 +1071,7 @@ fn flowPostSection(scene: ?*ui.Scene, bounds: ui.Rect, y: f32, section: ArcSecti
     var item_y = y + section_header_h;
     for (posts[section.start..section.end], section.start..) |post, index| {
         const item_h = postListItemHeight(bounds.w, index, post);
-        if (scene) |target| try renderPostListItem(target, ui.Rect.init(bounds.x, item_y, bounds.w, item_h), index, post);
+        if (scene) |target| try renderPostListItem(target, collector.?, ui.Rect.init(bounds.x, item_y, bounds.w, item_h), index, post);
         item_y += item_h + post_list_gap;
     }
 
@@ -1089,7 +1107,7 @@ fn renderWorkflow(scene: *ui.Scene, bounds: ui.Rect) ui.RenderError!void {
     }
 }
 
-fn renderPostListItem(scene: *ui.Scene, bounds: ui.Rect, index: usize, post: Post) ui.RenderError!void {
+fn renderPostListItem(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, index: usize, post: Post) (ui.RenderError || interaction.Error)!void {
     const text_x = bounds.x + post_list_padding_x;
     const text_w = postListTextWidth(bounds.w);
     const meta_y = bounds.y + post_list_padding_y;
@@ -1116,7 +1134,7 @@ fn renderPostListItem(scene: *ui.Scene, bounds: ui.Rect, index: usize, post: Pos
 
     try fill(scene, ui.Rect.init(bounds.x, bounds.y + bounds.h - post_list_divider_h, bounds.w, post_list_divider_h), palette.border, 0.0);
     try iconQuad(scene, ui.Rect.init(bounds.x + bounds.w - 22.0, bounds.y + (bounds.h - 16.0) * 0.5, 16.0, 16.0), .chevron_right, palette.primary);
-    try hit(scene, bounds, .button, postIdAt(index));
+    try hit(collector, bounds, .button, postIdAt(index));
 }
 
 fn postListItemHeight(width: f32, index: usize, post: Post) f32 {
@@ -1159,11 +1177,11 @@ fn renderReaderGuide(scene: *ui.Scene, bounds: ui.Rect) ui.RenderError!void {
     });
 }
 
-fn renderPost(scene: *ui.Scene, bounds: ui.Rect, index: usize, hover_x: f32, hover_y: f32) ui.RenderError!void {
-    _ = try flowPostContent(scene, bounds, index, hover_x, hover_y);
+fn renderPost(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, index: usize, hover_x: f32, hover_y: f32) (ui.RenderError || interaction.Error)!void {
+    _ = try flowPostContent(scene, collector, bounds, index, hover_x, hover_y);
 }
 
-fn flowPostContent(scene: ?*ui.Scene, bounds: ui.Rect, index: usize, hover_x: f32, hover_y: f32) ui.RenderError!f32 {
+fn flowPostContent(scene: ?*ui.Scene, collector: ?*interaction.Collector, bounds: ui.Rect, index: usize, hover_x: f32, hover_y: f32) (ui.RenderError || interaction.Error)!f32 {
     const post = posts[index];
     const sidebar_split = bounds.w >= 980.0;
     const main_w = if (sidebar_split) @max(320.0, bounds.w - post_sidebar_w - post_sidebar_gap) else bounds.w;
@@ -1173,7 +1191,7 @@ fn flowPostContent(scene: ?*ui.Scene, bounds: ui.Rect, index: usize, hover_x: f3
     const demo_y = focus_y + post_focus_h + post_demo_gap;
     const body_y = demo_y + post_demo_h + post_body_gap;
     if (scene) |target| {
-        try outlineButton(target, ui.Rect.init(bounds.x, bounds.y, 134.0, 34.0), "All Lessons", back_button_id);
+        try outlineButton(target, collector.?, ui.Rect.init(bounds.x, bounds.y, 134.0, 34.0), "All Lessons", back_button_id);
         try nativeBadge(target, ui.Rect.init(bounds.x, bounds.y + 62.0, 118.0, 24.0), episodeLabel(episodeAt(index)));
         try text(target, bounds.x + 136.0, bounds.y + 68.0, 280.0, 12.0, post.arc, palette.dim);
         try target.pushWrappedText(ui.Rect.init(bounds.x, bounds.y + post_header_top_h, title_w, title_h), post.title, palette.text, .{
@@ -1190,7 +1208,7 @@ fn flowPostContent(scene: ?*ui.Scene, bounds: ui.Rect, index: usize, hover_x: f3
     const footer_y = content_end + post_footer_gap;
     const footer_h = postFooterHeight(bounds.w, index);
     if (scene) |target| {
-        try renderPostFooter(target, ui.Rect.init(bounds.x, footer_y, bounds.w, footer_h), index);
+        try renderPostFooter(target, collector.?, ui.Rect.init(bounds.x, footer_y, bounds.w, footer_h), index);
         if (sidebar_split) try renderSidebar(target, ui.Rect.init(bounds.x + bounds.w - post_sidebar_w, bounds.y + post_header_top_h, post_sidebar_w, post_sidebar_h), index);
     }
     return footer_y + footer_h;
@@ -1203,7 +1221,7 @@ fn renderLessonFocus(scene: *ui.Scene, bounds: ui.Rect, post: Post) ui.RenderErr
     try paragraph(scene, ui.Rect.init(bounds.x + 18.0, bounds.y + 54.0, bounds.w - 36.0, 28.0), "Use the demo, then read for the authority shift: what action looks local, who actually decides, and what a user-owned version would change.");
 }
 
-fn renderPostFooter(scene: *ui.Scene, bounds: ui.Rect, index: usize) ui.RenderError!void {
+fn renderPostFooter(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, index: usize) (ui.RenderError || interaction.Error)!void {
     const has_previous = neighborIndex(index, .previous, 0) != null;
     const has_next = neighborIndex(index, .next, 0) != null;
     if (!has_previous and !has_next) return;
@@ -1212,19 +1230,19 @@ fn renderPostFooter(scene: *ui.Scene, bounds: ui.Rect, index: usize) ui.RenderEr
         const column_w = (bounds.w - post_footer_column_gap) * 0.5;
         const previous = ui.Rect.init(bounds.x, bounds.y, column_w, bounds.h);
         const next = ui.Rect.init(bounds.x + column_w + post_footer_column_gap, bounds.y, column_w, bounds.h);
-        _ = try flowNeighborColumn(scene, previous, index, .previous);
-        _ = try flowNeighborColumn(scene, next, index, .next);
+        _ = try flowNeighborColumn(scene, collector, previous, index, .previous);
+        _ = try flowNeighborColumn(scene, collector, next, index, .next);
         return;
     }
 
     var y = bounds.y;
     if (has_previous) {
         const previous = ui.Rect.init(bounds.x, y, bounds.w, bounds.h);
-        y += try flowNeighborColumn(scene, previous, index, .previous) + 42.0;
+        y += try flowNeighborColumn(scene, collector, previous, index, .previous) + 42.0;
     }
     if (has_next) {
         const next = ui.Rect.init(bounds.x, y, bounds.w, bounds.h);
-        _ = try flowNeighborColumn(scene, next, index, .next);
+        _ = try flowNeighborColumn(scene, collector, next, index, .next);
     }
 }
 
@@ -1252,10 +1270,10 @@ const NeighborDirection = enum {
 };
 
 fn renderNeighborColumnHeight(width: f32, index: usize, direction: NeighborDirection) f32 {
-    return flowNeighborColumn(null, ui.Rect.init(0.0, 0.0, width, 1.0), index, direction) catch unreachable;
+    return flowNeighborColumn(null, null, ui.Rect.init(0.0, 0.0, width, 1.0), index, direction) catch unreachable;
 }
 
-fn flowNeighborColumn(scene: ?*ui.Scene, bounds: ui.Rect, index: usize, direction: NeighborDirection) ui.RenderError!f32 {
+fn flowNeighborColumn(scene: ?*ui.Scene, collector: ?*interaction.Collector, bounds: ui.Rect, index: usize, direction: NeighborDirection) (ui.RenderError || interaction.Error)!f32 {
     const heading = switch (direction) {
         .previous => "Previous",
         .next => "Next",
@@ -1267,7 +1285,7 @@ fn flowNeighborColumn(scene: ?*ui.Scene, bounds: ui.Rect, index: usize, directio
         const neighbor_index = neighborIndex(index, direction, count) orelse break;
         const neighbor = posts[neighbor_index];
         const item_h = postListItemHeight(bounds.w, neighbor_index, neighbor);
-        if (scene) |target| try renderPostListItem(target, ui.Rect.init(bounds.x, y, bounds.w, item_h), neighbor_index, neighbor);
+        if (scene) |target| try renderPostListItem(target, collector.?, ui.Rect.init(bounds.x, y, bounds.w, item_h), neighbor_index, neighbor);
         y += item_h + post_footer_list_gap;
     }
     return y - bounds.y;
@@ -1339,6 +1357,7 @@ const DemoDirective = enum {
     local_compute_capacity,
     storage_sealed_objects,
     secure_boot_root,
+    authority_flow,
 };
 
 fn flowMarkdown(scene: ?*ui.Scene, bounds: ui.Rect, post_index: usize, source: []const u8, hover_x: f32, hover_y: f32) ui.RenderError!f32 {
@@ -1421,6 +1440,7 @@ fn demoDirective(line_value: []const u8) ?DemoDirective {
     if (std.mem.eql(u8, line_value, "[[demo:local_compute_capacity]]")) return .local_compute_capacity;
     if (std.mem.eql(u8, line_value, "[[demo:storage_sealed_objects]]")) return .storage_sealed_objects;
     if (std.mem.eql(u8, line_value, "[[demo:secure_boot_root]]")) return .secure_boot_root;
+    if (std.mem.eql(u8, line_value, "[[demo:authority_flow]]")) return .authority_flow;
     return null;
 }
 
@@ -1442,6 +1462,7 @@ fn demoHeight(directive: DemoDirective) f32 {
         .local_compute_capacity => compute_demo_h,
         .storage_sealed_objects => storage_demo_h,
         .secure_boot_root => trust_demo_h,
+        .authority_flow => authority_flow_demo_h,
     };
 }
 
@@ -1463,6 +1484,7 @@ fn flowDemoDirective(scene: ?*ui.Scene, bounds: ui.Rect, post_index: usize, dire
         .local_compute_capacity => try renderLocalComputeCapacityDemo(target, bounds, hover_x, hover_y),
         .storage_sealed_objects => try renderStorageSealedObjectsDemo(target, bounds, hover_x, hover_y),
         .secure_boot_root => try renderSecureBootRootDemo(target, bounds, hover_x, hover_y),
+        .authority_flow => try renderAuthorityFlowDemo(target, bounds, hover_x, hover_y),
     };
     return bounds.h;
 }
@@ -1472,6 +1494,104 @@ const PostModelCard = enum {
     authority_shift,
     user_owned_shape,
 };
+
+const AuthorityFlowStage = enum {
+    app,
+    allocator,
+    host,
+    relay,
+    storage,
+    tpm,
+};
+
+fn renderAuthorityFlowDemo(scene: *ui.Scene, bounds: ui.Rect, hover_x: f32, hover_y: f32) ui.RenderError!void {
+    try fill(scene, bounds, palette.card, 8.0);
+    try scene.pushRect(bounds, palette.border, .border, 8.0, 0.0);
+    const inner = bounds.insetUniform(authority_flow_demo_pad);
+    try tag(scene, ui.Rect.init(inner.x, inner.y, 152.0, 24.0), "AUTHORITY FLOW", palette.blue);
+    try paragraph(scene, ui.Rect.init(inner.x + 176.0, inner.y + 2.0, @max(1.0, inner.w - 176.0), 48.0), "Follow one request without letting any participant become another participant.");
+
+    const stages = [_]AuthorityFlowStage{ .app, .allocator, .host, .relay, .storage, .tpm };
+    const column_count: usize = if (inner.w >= 620.0) 3 else 2;
+    const row_count: usize = (authority_flow_stage_count + column_count - 1) / column_count;
+    const stage_w = (inner.w - authority_flow_stage_gap * @as(f32, @floatFromInt(column_count - 1))) / @as(f32, @floatFromInt(column_count));
+    const stages_y = inner.y + 76.0;
+    var active: AuthorityFlowStage = .relay;
+
+    for (stages, 0..) |stage, index| {
+        const column = index % column_count;
+        const row = index / column_count;
+        const stage_bounds = ui.Rect.init(
+            inner.x + @as(f32, @floatFromInt(column)) * (stage_w + authority_flow_stage_gap),
+            stages_y + @as(f32, @floatFromInt(row)) * (authority_flow_stage_h + authority_flow_stage_gap),
+            stage_w,
+            authority_flow_stage_h,
+        );
+        const hovered = stage_bounds.containsInclusive(hover_x, hover_y);
+        if (hovered) active = stage;
+        try renderAuthorityFlowStage(scene, stage_bounds, stage, hovered);
+    }
+
+    const detail_y = stages_y + @as(f32, @floatFromInt(row_count)) * (authority_flow_stage_h + authority_flow_stage_gap) + 16.0;
+    try renderAuthorityFlowDetail(scene, ui.Rect.init(inner.x, detail_y, inner.w, authority_flow_detail_h), active);
+}
+
+fn renderAuthorityFlowStage(scene: *ui.Scene, bounds: ui.Rect, stage: AuthorityFlowStage, hovered: bool) ui.RenderError!void {
+    try fill(scene, bounds, authorityFlowStageColor(stage), 7.0);
+    try scene.pushRect(bounds, if (hovered) palette.primary else palette.border, .border, 7.0, 0.0);
+    try text(scene, bounds.x + 12.0, bounds.y + 11.0, bounds.w - 24.0, 14.0, authorityFlowStageTitle(stage), palette.text);
+    try paragraph(scene, ui.Rect.init(bounds.x + 12.0, bounds.y + 32.0, bounds.w - 24.0, 24.0), authorityFlowStageBody(stage));
+}
+
+fn renderAuthorityFlowDetail(scene: *ui.Scene, bounds: ui.Rect, stage: AuthorityFlowStage) ui.RenderError!void {
+    try fill(scene, bounds, ui.Color{ .r = 9, .g = 9, .b = 9, .a = 220 }, 6.0);
+    try text(scene, bounds.x + 16.0, bounds.y + 14.0, 260.0, 14.0, authorityFlowStageTitle(stage), palette.primary);
+    try paragraph(scene, ui.Rect.init(bounds.x + 16.0, bounds.y + 34.0, bounds.w - 32.0, 42.0), authorityFlowStageDetail(stage));
+}
+
+fn authorityFlowStageTitle(stage: AuthorityFlowStage) []const u8 {
+    return switch (stage) {
+        .app => "App",
+        .allocator => "Allocator",
+        .host => "Host",
+        .relay => "Relay",
+        .storage => "Storage",
+        .tpm => "TPM",
+    };
+}
+
+fn authorityFlowStageBody(stage: AuthorityFlowStage) []const u8 {
+    return switch (stage) {
+        .app => "owns memory and identity",
+        .allocator => "approves resource movement",
+        .host => "spawns from allocation",
+        .relay => "forwards encrypted objects",
+        .storage => "stores sealed objects",
+        .tpm => "uses policy-bound keys",
+    };
+}
+
+fn authorityFlowStageDetail(stage: AuthorityFlowStage) []const u8 {
+    return switch (stage) {
+        .app => "The app can ask and can encrypt, but it cannot become the reader, storage authority, TPM, parent, or child.",
+        .allocator => "The allocator signs resource movement. A memory view names owner bytes, reader identity, allocator approval, and the exact grant receipt.",
+        .host => "The host performs spawn and reclaim. Parent apps keep ledgers and handles, not direct child memory authority.",
+        .relay => "The relay proves transit for a route. It can forward a sealed message, but it does not read or become either endpoint.",
+        .storage => "Storage accepts canonical objects and stores encrypted bytes. App-private data stays sealed to the app policy.",
+        .tpm => "The TPM role is explicit and TPM-backed. It seals, unseals, signs, or generates secret material only for admitted policy-bound callers.",
+    };
+}
+
+fn authorityFlowStageColor(stage: AuthorityFlowStage) ui.Color {
+    return switch (stage) {
+        .app => ui.Color{ .r = 26, .g = 46, .b = 68, .a = 238 },
+        .allocator => ui.Color{ .r = 57, .g = 42, .b = 22, .a = 238 },
+        .host => ui.Color{ .r = 42, .g = 48, .b = 32, .a = 238 },
+        .relay => ui.Color{ .r = 30, .g = 55, .b = 45, .a = 238 },
+        .storage => ui.Color{ .r = 52, .g = 35, .b = 58, .a = 238 },
+        .tpm => ui.Color{ .r = 65, .g = 32, .b = 32, .a = 238 },
+    };
+}
 
 fn renderPostModelDemo(scene: *ui.Scene, bounds: ui.Rect, post_index: usize, hover_x: f32, hover_y: f32) ui.RenderError!void {
     const post = posts[post_index];
@@ -3305,19 +3425,26 @@ fn paragraph(scene: *ui.Scene, bounds: ui.Rect, value: []const u8) ui.RenderErro
     try scene.pushWrappedText(bounds, value, palette.dim, .{ .line_height = line_h, .average_char_width = 10.0, .max_lines = 6 });
 }
 
-fn outlineButton(scene: *ui.Scene, bounds: ui.Rect, label: []const u8, id: u32) ui.RenderError!void {
-    try nativeComponent(scene, bounds, .{ .button = .{ .id = id, .label = label } }, .{ .button_variant = .outline });
+fn outlineButton(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, label: []const u8, id: u32) (ui.RenderError || interaction.Error)!void {
+    try nativeComponent(scene, collector, bounds, .{ .button = .{ .id = id, .label = label } }, .{ .button_variant = .outline });
 }
 
 fn nativeBadge(scene: *ui.Scene, bounds: ui.Rect, label: []const u8) ui.RenderError!void {
-    try nativeComponent(scene, bounds, .{ .badge = .{ .label = label } }, .{ .badge_variant = .accent });
+    try nativeComponentVisual(scene, bounds, .{ .badge = .{ .label = label } }, .{ .badge_variant = .accent });
 }
 
 fn nativeCard(scene: *ui.Scene, bounds: ui.Rect, title_value: []const u8, detail_value: []const u8) ui.RenderError!void {
-    try nativeComponent(scene, bounds, .{ .card = .{ .title = title_value, .detail = detail_value } }, .{ .surface_variant = .elevated });
+    try nativeComponentVisual(scene, bounds, .{ .card = .{ .title = title_value, .detail = detail_value } }, .{ .surface_variant = .elevated });
 }
 
-fn nativeComponent(scene: *ui.Scene, bounds: ui.Rect, component: components.Component, options: components.RenderOptions) ui.RenderError!void {
+fn nativeComponent(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, component: components.Component, options: components.RenderOptions) (ui.RenderError || interaction.Error)!void {
+    var resolved = options;
+    resolved.style = siteStyle();
+    try components.renderComponent(scene, bounds, component, resolved);
+    try components.collectComponentInteractions(collector, bounds, component);
+}
+
+fn nativeComponentVisual(scene: *ui.Scene, bounds: ui.Rect, component: components.Component, options: components.RenderOptions) ui.RenderError!void {
     var resolved = options;
     resolved.style = siteStyle();
     try components.renderComponent(scene, bounds, component, resolved);
@@ -3343,11 +3470,11 @@ fn alignedText(scene: *ui.Scene, x: f32, y: f32, w: f32, h: f32, value: []const 
 }
 
 fn iconQuad(scene: *ui.Scene, bounds: ui.Rect, value: icon.Icon, color: ui.Color) ui.RenderError!void {
-    try scene.pushIconQuad(.{ .bounds = bounds, .atlas_id = icon.atlasId(value), .color = color });
+    try scene.pushIconQuad(.{ .bounds = bounds, .icon_id = icon.id(value), .color = color });
 }
 
-fn hit(scene: *ui.Scene, bounds: ui.Rect, kind: ui.HitKind, id: u32) ui.RenderError!void {
-    try scene.pushHit(.{ .slot = 0, .kind = kind, .id = id, .bounds = bounds });
+fn hit(collector: *interaction.Collector, bounds: ui.Rect, kind: ui.HitKind, id: u32) interaction.Error!void {
+    try collector.add(.{ .slot = 0, .kind = kind, .id = id, .bounds = bounds });
 }
 
 fn centered(bounds: ui.Rect, max_w: f32) ui.Rect {
@@ -3363,8 +3490,10 @@ fn colBounds(bounds: ui.Rect, cols: usize, gap: f32, col: usize, y: f32, h: f32)
 test "blog renders committed post index through native components" {
     var commands: [4096]ui.Command = undefined;
     var clips: [8]ui.Rect = undefined;
+    var regions: [512]interaction.Region = undefined;
     var scene = ui.Scene.initWithClips(&commands, &clips);
-    try render(&scene, ui.Rect.init(0, 0, 1280, 1800), .{});
+    var collector = interaction.Collector.init(&regions);
+    try render(&scene, &collector, ui.Rect.init(0, 0, 1280, 1800), .{});
 
     try std.testing.expectEqualStrings("EdgeRun Academy", season_title);
     try std.testing.expectEqual(posts.len, arc_accounting_end);
@@ -3375,17 +3504,17 @@ test "blog renders committed post index through native components" {
     try std.testing.expect(hasText(scene.written(), "3. Own"));
     try std.testing.expect(hasText(scene.written(), posts[0].title));
     try std.testing.expect(postById(postIdAt(posts.len - 1)) != null);
-    try std.testing.expectEqualStrings("Computers Are Deterministic. We Made Them Guess.", posts[posts.len - 1].title);
+    try std.testing.expectEqualStrings("Authority Is Not A Vibe. It Is A Receipt Chain.", posts[posts.len - 1].title);
     try std.testing.expectEqualStrings(arc_local, posts[0].arc);
     try std.testing.expectEqualStrings(arc_network, posts[10].arc);
     try std.testing.expectEqualStrings(arc_device, posts[21].arc);
     try std.testing.expectEqualStrings(arc_control, posts[34].arc);
     try std.testing.expectEqualStrings(arc_accounting, posts[61].arc);
-    try std.testing.expect(hasHit(scene.written(), postIdAt(0)));
-    try std.testing.expect(hasHit(scene.written(), site_chrome.blog_button_id));
-    try std.testing.expect(hasHit(scene.written(), site_chrome.logo_button_id));
-    try std.testing.expect(hasHit(scene.written(), all_lessons_button_id));
-    try std.testing.expect(hasHit(scene.written(), arcFilterButtonId(0)));
+    try std.testing.expect(hasHit(collector.written(), postIdAt(0)));
+    try std.testing.expect(hasHit(collector.written(), site_chrome.blog_button_id));
+    try std.testing.expect(hasHit(collector.written(), site_chrome.logo_button_id));
+    try std.testing.expect(hasHit(collector.written(), all_lessons_button_id));
+    try std.testing.expect(hasHit(collector.written(), arcFilterButtonId(0)));
     try std.testing.expect(hasImage(scene.written(), cloud_meme_image_id));
 }
 
@@ -3433,16 +3562,20 @@ test "blog post list rows expand for wrapped titles and summaries" {
     try std.testing.expect(long_h > short_h);
 
     var commands: [64]ui.Command = undefined;
+    var regions: [8]interaction.Region = undefined;
     var scene = ui.Scene.init(&commands);
-    try renderPostListItem(&scene, ui.Rect.init(0.0, 0.0, 320.0, long_h), 1, long_post);
-    try std.testing.expect(hasHit(scene.written(), postIdAt(1)));
+    var collector = interaction.Collector.init(&regions);
+    try renderPostListItem(&scene, &collector, ui.Rect.init(0.0, 0.0, 320.0, long_h), 1, long_post);
+    try std.testing.expect(hasHit(collector.written(), postIdAt(1)));
 }
 
 test "blog renders authoring guide after expanded season index" {
     var commands: [4096]ui.Command = undefined;
     var clips: [8]ui.Rect = undefined;
+    var regions: [512]interaction.Region = undefined;
     var scene = ui.Scene.initWithClips(&commands, &clips);
-    try render(&scene, ui.Rect.init(0, 0, 1280, 1800), .{ .scroll_y = indexContentHeight(1280.0) - 1600.0 });
+    var collector = interaction.Collector.init(&regions);
+    try render(&scene, &collector, ui.Rect.init(0, 0, 1280, 1800), .{ .scroll_y = indexContentHeight(1280.0) - 1600.0 });
 
     try std.testing.expect(textWithin(scene.written(), "Start at the phone. End with user-owned authority.", ui.Rect.init(0, 64.0, 1280.0, 1736.0)));
     try std.testing.expect(textWithin(scene.written(), "05 accounting and resources", ui.Rect.init(0, 64.0, 1280.0, 1736.0)));
@@ -3451,14 +3584,18 @@ test "blog renders authoring guide after expanded season index" {
 test "blog node map scrolls with page content" {
     var commands_top: [4096]ui.Command = undefined;
     var clips_top: [8]ui.Rect = undefined;
+    var regions_top: [512]interaction.Region = undefined;
     var scene_top = ui.Scene.initWithClips(&commands_top, &clips_top);
-    try render(&scene_top, ui.Rect.init(0, 0, 1280, 900), .{});
+    var collector_top = interaction.Collector.init(&regions_top);
+    try render(&scene_top, &collector_top, ui.Rect.init(0, 0, 1280, 900), .{});
 
     const scroll_delta = node_map_grid * @as(f32, @floatFromInt(node_map_pattern_divisor));
     var commands_scrolled: [4096]ui.Command = undefined;
     var clips_scrolled: [8]ui.Rect = undefined;
+    var regions_scrolled: [512]interaction.Region = undefined;
     var scene_scrolled = ui.Scene.initWithClips(&commands_scrolled, &clips_scrolled);
-    try render(&scene_scrolled, ui.Rect.init(0, 0, 1280, 900), .{ .scroll_y = scroll_delta });
+    var collector_scrolled = interaction.Collector.init(&regions_scrolled);
+    try render(&scene_scrolled, &collector_scrolled, ui.Rect.init(0, 0, 1280, 900), .{ .scroll_y = scroll_delta });
 
     const first_top = firstNodeMapDot(scene_top.written()).?;
     const first_scrolled = firstNodeMapDot(scene_scrolled.written()).?;
@@ -3468,8 +3605,10 @@ test "blog node map scrolls with page content" {
 test "blog renders selected markdown post body" {
     var commands: [4096]ui.Command = undefined;
     var clips: [8]ui.Rect = undefined;
+    var regions: [512]interaction.Region = undefined;
     var scene = ui.Scene.initWithClips(&commands, &clips);
-    try render(&scene, ui.Rect.init(0, 0, 1280, 3600), .{ .selected_post_id = postIdAt(0) });
+    var collector = interaction.Collector.init(&regions);
+    try render(&scene, &collector, ui.Rect.init(0, 0, 1280, 3600), .{ .selected_post_id = postIdAt(0) });
 
     try std.testing.expect(hasText(scene.written(), "All Lessons"));
     try std.testing.expect(std.mem.startsWith(u8, bodyWithoutTitle(posts[0].body), "Before your message"));
@@ -3484,26 +3623,30 @@ test "blog renders selected markdown post body" {
     try std.testing.expect(hasText(scene.written(), "User-owned shape"));
     try std.testing.expect(hasText(scene.written(), "Starts with"));
     try std.testing.expect(hasText(scene.written(), "Next"));
-    try std.testing.expect(hasHit(scene.written(), back_button_id));
+    try std.testing.expect(hasHit(collector.written(), back_button_id));
 }
 
 test "blog selected post footer links previous and next posts" {
     var commands: [4096]ui.Command = undefined;
     var clips: [8]ui.Rect = undefined;
+    var regions: [512]interaction.Region = undefined;
     var scene = ui.Scene.initWithClips(&commands, &clips);
-    try renderPost(&scene, ui.Rect.init(0, 0, 1180, 3200), 16, -1.0, -1.0);
+    var collector = interaction.Collector.init(&regions);
+    try renderPost(&scene, &collector, ui.Rect.init(0, 0, 1180, 3200), 16, -1.0, -1.0);
 
     try std.testing.expect(hasText(scene.written(), "Previous"));
     try std.testing.expect(hasText(scene.written(), "Next"));
-    try std.testing.expect(hasHit(scene.written(), postIdAt(15)));
-    try std.testing.expect(hasHit(scene.written(), postIdAt(17)));
+    try std.testing.expect(hasHit(collector.written(), postIdAt(15)));
+    try std.testing.expect(hasHit(collector.written(), postIdAt(17)));
 }
 
 test "blog renders native demo directives inside post markup" {
     var commands: [4096]ui.Command = undefined;
     var clips: [8]ui.Rect = undefined;
+    var regions: [512]interaction.Region = undefined;
     var scene = ui.Scene.initWithClips(&commands, &clips);
-    try renderPost(&scene, ui.Rect.init(0, 0, 1180, 3600), 14, 520.0, 1130.0);
+    var collector = interaction.Collector.init(&regions);
+    try renderPost(&scene, &collector, ui.Rect.init(0, 0, 1180, 3600), 14, 520.0, 1130.0);
 
     try std.testing.expect(hasText(scene.written(), "Who sees what?"));
     try std.testing.expect(hasText(scene.written(), "Commercial VPN"));
@@ -3511,88 +3654,109 @@ test "blog renders native demo directives inside post markup" {
     try std.testing.expect(hasText(scene.written(), "VPN provider"));
 
     scene.clear();
-    try renderPost(&scene, ui.Rect.init(0, 0, 1180, 3600), 16, 560.0, 1080.0);
+    collector.clear();
+    try renderPost(&scene, &collector, ui.Rect.init(0, 0, 1180, 3600), 16, 560.0, 1080.0);
     try std.testing.expect(hasText(scene.written(), "The tunnel ends at the endpoint."));
     try std.testing.expect(hasText(scene.written(), "TLS endpoint"));
     try std.testing.expect(hasText(scene.written(), "plaintext after endpoint"));
 
     scene.clear();
-    try renderPost(&scene, ui.Rect.init(0, 0, 1180, 3600), 25, 560.0, 1010.0);
+    collector.clear();
+    try renderPost(&scene, &collector, ui.Rect.init(0, 0, 1180, 3600), 25, 560.0, 1010.0);
     try std.testing.expect(hasText(scene.written(), "Deleting the UI copy is not deleting every copy."));
     try std.testing.expect(hasText(scene.written(), "Phone UI"));
     try std.testing.expect(hasText(scene.written(), "Analytics"));
 
     scene.clear();
-    try renderPost(&scene, ui.Rect.init(0, 0, 1180, 3600), 23, 150.0, 1020.0);
+    collector.clear();
+    try renderPost(&scene, &collector, ui.Rect.init(0, 0, 1180, 3600), 23, 150.0, 1020.0);
     try std.testing.expect(hasText(scene.written(), "Your phone correlates signals. It does not own you."));
     try std.testing.expect(hasText(scene.written(), "PIN / biometric"));
     try std.testing.expect(hasText(scene.written(), "Service decides: accepted or rejected"));
 
     scene.clear();
-    try renderPost(&scene, ui.Rect.init(0, 0, 1180, 3600), 27, 150.0, 1018.0);
+    collector.clear();
+    try renderPost(&scene, &collector, ui.Rect.init(0, 0, 1180, 3600), 27, 150.0, 1018.0);
     try std.testing.expect(hasText(scene.written(), "Powerful hardware, gated authority."));
     try std.testing.expect(hasText(scene.written(), "Bootloader"));
     try std.testing.expect(hasText(scene.written(), "Any rung can block it."));
 
     scene.clear();
-    try renderPost(&scene, ui.Rect.init(0, 0, 1180, 3600), 15, 260.0, 1040.0);
+    collector.clear();
+    try renderPost(&scene, &collector, ui.Rect.init(0, 0, 1180, 3600), 15, 260.0, 1040.0);
     try std.testing.expect(hasText(scene.written(), "A name is a lookup, not an identity."));
     try std.testing.expect(hasText(scene.written(), "friend.example"));
     try std.testing.expect(hasText(scene.written(), "Certificate control still starts with name control."));
 
     scene.clear();
-    try renderPost(&scene, ui.Rect.init(0, 0, 1180, 3600), 24, 520.0, 1038.0);
+    collector.clear();
+    try renderPost(&scene, &collector, ui.Rect.init(0, 0, 1180, 3600), 24, 520.0, 1038.0);
     try std.testing.expect(hasText(scene.written(), "Account permission is not portable identity."));
     try std.testing.expect(hasText(scene.written(), "Account root"));
     try std.testing.expect(hasText(scene.written(), "Key root"));
 
     scene.clear();
-    try renderPost(&scene, ui.Rect.init(0, 0, 1180, 3600), 17, 240.0, 1042.0);
+    collector.clear();
+    try renderPost(&scene, &collector, ui.Rect.init(0, 0, 1180, 3600), 17, 240.0, 1042.0);
     try std.testing.expect(hasText(scene.written(), "The server is code, policy, queues, logs, and memory."));
     try std.testing.expect(hasText(scene.written(), "Load balancer"));
     try std.testing.expect(hasText(scene.written(), "Useful coordination becomes dangerous when it becomes the source of truth."));
 
     scene.clear();
-    try renderPost(&scene, ui.Rect.init(0, 0, 1180, 3600), 19, 240.0, 1048.0);
+    collector.clear();
+    try renderPost(&scene, &collector, ui.Rect.init(0, 0, 1180, 3600), 19, 240.0, 1048.0);
     try std.testing.expect(hasText(scene.written(), "A notification is delivery plus a wakeup."));
     try std.testing.expect(hasText(scene.written(), "Platform push"));
     try std.testing.expect(hasText(scene.written(), "Metadata still exists"));
 
     scene.clear();
-    try renderPost(&scene, ui.Rect.init(0, 0, 1180, 3600), 11, 520.0, 1052.0);
+    collector.clear();
+    try renderPost(&scene, &collector, ui.Rect.init(0, 0, 1180, 3600), 11, 520.0, 1052.0);
     try std.testing.expect(hasText(scene.written(), "One app icon can hide many trust paths."));
     try std.testing.expect(hasText(scene.written(), "Analytics"));
     try std.testing.expect(hasText(scene.written(), "Running code is authority, even when it arrived as a library."));
 
     scene.clear();
-    try renderPost(&scene, ui.Rect.init(0, 0, 1180, 3600), 13, 360.0, 1110.0);
+    collector.clear();
+    try renderPost(&scene, &collector, ui.Rect.init(0, 0, 1180, 3600), 13, 360.0, 1110.0);
     try std.testing.expect(hasText(scene.written(), "Wi-Fi protects local air, not every later boundary."));
     try std.testing.expect(hasText(scene.written(), "Router"));
     try std.testing.expect(hasText(scene.written(), "Local trust boundary"));
 
     scene.clear();
-    try renderPost(&scene, ui.Rect.init(0, 0, 1180, 3600), 10, 520.0, 1052.0);
+    collector.clear();
+    try renderPost(&scene, &collector, ui.Rect.init(0, 0, 1180, 3600), 10, 520.0, 1052.0);
     try std.testing.expect(hasText(scene.written(), "Typing is not the same as sending."));
     try std.testing.expect(hasText(scene.written(), "Send intent"));
     try std.testing.expect(hasText(scene.written(), "Commit boundary"));
 
     scene.clear();
-    try renderPost(&scene, ui.Rect.init(0, 0, 1180, 3600), 12, 520.0, 1044.0);
+    collector.clear();
+    try renderPost(&scene, &collector, ui.Rect.init(0, 0, 1180, 3600), 12, 520.0, 1044.0);
     try std.testing.expect(hasText(scene.written(), "Small personal workloads fit on the device."));
     try std.testing.expect(hasText(scene.written(), "Your device"));
     try std.testing.expect(hasText(scene.written(), "local first -> sync when needed -> cloud only when useful"));
 
     scene.clear();
-    try renderPost(&scene, ui.Rect.init(0, 0, 1180, 3600), 3, 520.0, 1040.0);
+    collector.clear();
+    try renderPost(&scene, &collector, ui.Rect.init(0, 0, 1180, 3600), 3, 520.0, 1040.0);
     try std.testing.expect(hasText(scene.written(), "Bytes need ownership rules."));
     try std.testing.expect(hasText(scene.written(), "Sealed object"));
     try std.testing.expect(hasText(scene.written(), "sealed object -> portable verified state"));
 
     scene.clear();
-    try renderPost(&scene, ui.Rect.init(0, 0, 1180, 3600), 8, 520.0, 1040.0);
+    collector.clear();
+    try renderPost(&scene, &collector, ui.Rect.init(0, 0, 1180, 3600), 8, 520.0, 1040.0);
     try std.testing.expect(hasText(scene.written(), "A root of trust must answer: root for whom?"));
     try std.testing.expect(hasText(scene.written(), "TPM key"));
     try std.testing.expect(hasText(scene.written(), "mechanism is not enough: ask who enrolls, recovers, and overrides"));
+
+    scene.clear();
+    collector.clear();
+    try renderPost(&scene, &collector, ui.Rect.init(0, 0, 1180, 3600), posts.len - 1, -1.0, -1.0);
+    try std.testing.expect(hasText(scene.written(), "AUTHORITY FLOW"));
+    try std.testing.expect(hasText(scene.written(), "Relay"));
+    try std.testing.expect(hasText(scene.written(), "TPM"));
 }
 
 fn hasText(commands: []const ui.Command, value: []const u8) bool {
@@ -3629,11 +3793,10 @@ fn hasTextPrefix(commands: []const ui.Command, value: []const u8) bool {
     return false;
 }
 
-fn hasHit(commands: []const ui.Command, id: u32) bool {
-    for (commands) |command| switch (command) {
-        .hit => |hit_command| if (hit_command.id == id) return true,
-        else => {},
-    };
+fn hasHit(regions: []const interaction.Region, id: u32) bool {
+    for (regions) |region| {
+        if (region.id == id) return true;
+    }
     return false;
 }
 

@@ -1,6 +1,7 @@
 const std = @import("std");
 const app_mod = @import("app.zig");
 const arena = @import("arena.zig");
+const authority = @import("authority.zig");
 const bytes = @import("bytes.zig");
 const clock = @import("clock.zig");
 const grant = @import("grant.zig");
@@ -277,11 +278,11 @@ pub fn simulate(config: Config, workspace: Workspace) Error!Simulation {
         node.clock.now,
         request,
     ) orelse return error.BadConfiguration;
-    const admission = root_app.admissionCapability(authorization) orelse return error.Unauthorized;
-    root_app.admitAuthorization(authorization, admission) catch return error.Unauthorized;
+    root_app.admitOwnAuthorization(authorization, node.ids.allocator, node.ids.app) catch return error.Unauthorized;
     const manifest = app_mod.App.Manifest{
         .code_hash = preimage.hash("edgerun:zig:v1:sdk-app-code", config.child_app_material),
         .allocation = declaredAllocation(resources),
+        .flags = app_mod.App.manifest_flag_app_private_storage,
     };
     const manifest_canonical = app_mod.App.writeManifestObject(node.ids.app, manifest, node.clock.now, &manifest_raw) catch |err| return switch (err) {
         error.BadArgument => error.BadAllocation,
@@ -317,7 +318,7 @@ pub fn simulate(config: Config, workspace: Workspace) Error!Simulation {
     const object_id = child_app.putSealedObject(node.ids.device, node.ids.user, canonical) orelse return error.NoStorage;
     const view = child_app.storedObject(object_id) orelse return error.Corrupt;
     if (!bytes.eql(&view.id(), &object_id)) return error.Corrupt;
-    const work_receipt = child_app.completeWork(node.ids.root_app.id, manifest_id, object_id, manifest.code_hash, manifest_id, node.clock.now, node.clock.now, manifest.allocation, spawned.receipt) orelse return error.Corrupt;
+    const work_receipt = child_app.completeWork(node.ids.root_app, manifest_id, object_id, manifest.code_hash, manifest_id, node.clock.now, node.clock.now, manifest.allocation, spawned.receipt) orelse return error.Corrupt;
     const work_receipt_id = child_app.putWorkReceipt(work_receipt, node.clock.now, workspace.object[0..canonical_object_buffer_bytes]) catch |err| return switch (err) {
         error.BadArgument => error.BadConfiguration,
         error.Corrupt => error.Corrupt,
@@ -387,7 +388,14 @@ test "sdk simulation wires clock identity app object and store" {
 
     try std.testing.expect(result.valid());
     try std.testing.expectEqual(identity.Kind.delegated, result.node.ids.app.kind);
-    try std.testing.expect(result.authorization.permitsAt(result.node.clock.now, result.node.ids.allocator.id, result.node.ids.app.id, .spawn_app, .delegates_resources));
+    try std.testing.expect(authority.receiptPermits(
+        result.authorization,
+        result.node.clock.now,
+        authority.Principal.app(result.node.ids.allocator).?,
+        authority.Principal.app(result.node.ids.app).?,
+        .spawn_app,
+        .delegates_resources,
+    ));
     try std.testing.expect(bytes.nonzero(&result.manifest_id));
     try std.testing.expect(bytes.nonzero(&result.object_id));
     try std.testing.expect(bytes.nonzero(&result.work_receipt_id));

@@ -85,13 +85,13 @@ pub fn label(value: Icon) []const u8 {
     return mapping(value).label;
 }
 
-pub fn atlasId(value: Icon) u32 {
+pub fn id(value: Icon) u32 {
     return @as(u32, @intFromEnum(value)) + 1;
 }
 
-pub fn fromAtlasId(atlas_id: u32) ?Icon {
-    if (atlas_id == 0 or atlas_id > mappings.len) return null;
-    return @enumFromInt(atlas_id - 1);
+pub fn fromId(icon_id: u32) ?Icon {
+    if (icon_id == 0 or icon_id > mappings.len) return null;
+    return @enumFromInt(icon_id - 1);
 }
 
 pub fn providerName(value: Icon, provider: Provider) []const u8 {
@@ -106,13 +106,13 @@ fn mapping(value: Icon) Mapping {
     return mappings[@intFromEnum(value)];
 }
 
-test "icon atlas ids are stable and one based" {
-    try std.testing.expectEqual(@as(u32, 1), atlasId(.activity));
-    try std.testing.expectEqual(@as(u32, 18), atlasId(.search));
-    try std.testing.expectEqual(Icon.search, fromAtlasId(18).?);
-    try std.testing.expectEqual(Icon.github, fromAtlasId(32).?);
-    try std.testing.expect(fromAtlasId(0) == null);
-    try std.testing.expect(fromAtlasId(33) == null);
+test "icon ids are stable and one based" {
+    try std.testing.expectEqual(@as(u32, 1), id(.activity));
+    try std.testing.expectEqual(@as(u32, 18), id(.search));
+    try std.testing.expectEqual(Icon.search, fromId(18).?);
+    try std.testing.expectEqual(Icon.github, fromId(32).?);
+    try std.testing.expect(fromId(0) == null);
+    try std.testing.expect(fromId(33) == null);
 }
 
 test "icon labels and provider names match C mappings" {

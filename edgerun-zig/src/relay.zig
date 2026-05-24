@@ -1,4 +1,5 @@
 const std = @import("std");
+const authority = @import("authority.zig");
 const bounded = @import("bounded.zig");
 const bytes = @import("bytes.zig");
 const clock = @import("clock.zig");
@@ -8,7 +9,10 @@ const preimage = @import("preimage.zig");
 
 pub const id_size = preimage.hash_size;
 pub const max_relays = 8;
-pub const RelayPath = bounded.FixedList(identity.Id, max_relays);
+pub const route_header_encoded_size = preimage.hash_size + authority.principal_encoded_size + authority.principal_encoded_size + authority.u16_encoded_size + authority.u16_encoded_size + preimage.hash_size + preimage.epoch_size + preimage.epoch_size;
+pub const envelope_unsigned_encoded_size = preimage.hash_size + preimage.hash_size + authority.principal_encoded_size + authority.principal_encoded_size + authority.u16_encoded_size + authority.u16_encoded_size + @sizeOf(u64) + preimage.hash_size + preimage.hash_size;
+pub const transit_encoded_size = authority.principal_encoded_size + preimage.hash_size + preimage.hash_size + preimage.hash_size + @sizeOf(u64) + authority.principal_encoded_size + authority.principal_encoded_size + authority.u32_encoded_size;
+pub const RelayPath = bounded.FixedList(authority.Principal, max_relays);
 
 pub const RouteError = error{
     InvalidAdmission,
@@ -22,8 +26,8 @@ pub const RouteError = error{
 
 pub const Route = struct {
     admission: preimage.Hash,
-    source: identity.Id,
-    target: identity.Id,
+    source: authority.Principal,
+    target: authority.Principal,
     action: intent.Action,
     consequence: intent.Consequence,
     policy: preimage.Hash,
@@ -33,13 +37,15 @@ pub const Route = struct {
 
     pub fn init(admission: intent.Receipt, source: identity.Identity, target: identity.Identity, action: intent.Action, consequence: intent.Consequence, policy: preimage.Hash) ?Route {
         const admission_id = admission.id() orelse return null;
-        if (!admission.permitsAt(admission.intent.epoch, source.id, target.id, action, consequence)) return null;
+        const source_principal = authority.routeEndpoint(source) orelse return null;
+        const target_principal = authority.routeEndpoint(target) orelse return null;
+        if (!authority.receiptPermits(admission, admission.intent.epoch, source_principal, target_principal, action, consequence)) return null;
         if (!bytes.nonzero(&policy)) return null;
 
         return .{
             .admission = admission_id,
-            .source = source.id,
-            .target = target.id,
+            .source = source_principal,
+            .target = target_principal,
             .action = action,
             .consequence = consequence,
             .policy = policy,
@@ -49,8 +55,8 @@ pub const Route = struct {
     }
 
     pub fn appendRelay(self: *Route, relay: identity.Identity) bool {
-        if (relay.kind != .relay and relay.kind != .app) return false;
-        return self.relays.append(relay.id);
+        const relay_principal = authority.routeRelay(relay) orelse return false;
+        return self.relays.append(relay_principal);
     }
 
     pub fn valid(self: Route) bool {
@@ -58,6 +64,7 @@ pub const Route = struct {
             self.source.valid() and
             self.target.valid() and
             bytes.nonzero(&self.policy) and
+            self.relays.len != 0 and
             self.not_before.valid() and
             self.not_after.valid() and
             self.not_before.sameKeeper(self.not_after) and
@@ -71,7 +78,7 @@ pub const Route = struct {
             now.order(self.not_after) <= 0;
     }
 
-    pub fn containsRelay(self: Route, relay: identity.Id) bool {
+    pub fn containsRelay(self: Route, relay: authority.Principal) bool {
         for (self.relays.slice()) |route_relay| {
             if (route_relay.eql(relay)) return true;
         }
@@ -81,11 +88,11 @@ pub const Route = struct {
     pub fn id(self: Route) ?preimage.Hash {
         if (!self.valid()) return null;
 
-        var header: [260]u8 = undefined;
+        var header: [route_header_encoded_size]u8 = undefined;
         var writer = preimage.Writer.init(&header);
         if (!writer.hash(self.admission) or
-            !writer.id(self.source) or
-            !writer.id(self.target) or
+            !writePrincipal(&writer, self.source) or
+            !writePrincipal(&writer, self.target) or
             !writer.writeU16(@intFromEnum(self.action)) or
             !writer.writeU16(@intFromEnum(self.consequence)) or
             !writer.hash(self.policy) or
@@ -99,7 +106,7 @@ pub const Route = struct {
         builder.bytes(writer.written());
 
         for (self.relays.slice()) |route_relay| {
-            builder.id(route_relay);
+            if (!appendPrincipal(&builder, route_relay)) return null;
         }
 
         return builder.final();
@@ -107,7 +114,7 @@ pub const Route = struct {
 };
 
 pub const Signature = struct {
-    signer: identity.Id,
+    signer: authority.Principal,
     digest: preimage.Hash,
 
     pub fn valid(self: Signature) bool {
@@ -118,8 +125,8 @@ pub const Signature = struct {
 pub const Envelope = struct {
     route: preimage.Hash,
     admission: preimage.Hash,
-    from: identity.Id,
-    to: identity.Id,
+    from: authority.Principal,
+    to: authority.Principal,
     action: intent.Action,
     consequence: intent.Consequence,
     sequence: u64,
@@ -144,8 +151,9 @@ pub const Envelope = struct {
     }
 
     pub fn sign(self: *Envelope, signer: identity.Identity) bool {
-        if (!signer.id.eql(self.from)) return false;
-        self.signature = .{ .signer = signer.id, .digest = self.signatureDigest(signer.id) orelse return false };
+        const signer_principal = authority.routeEndpoint(signer) orelse return false;
+        if (!signer_principal.eql(self.from)) return false;
+        self.signature = .{ .signer = signer_principal, .digest = self.signatureDigest(signer_principal) orelse return false };
         return true;
     }
 
@@ -168,7 +176,7 @@ pub const Envelope = struct {
         const unsigned = self.unsignedDigest() orelse return null;
         var builder = preimage.Builder.init("edgerun:zig:v1:relay-envelope-id");
         builder.hash(unsigned);
-        builder.id(self.signature.signer);
+        if (!appendPrincipal(&builder, self.signature.signer)) return null;
         builder.hash(self.signature.digest);
         return builder.final();
     }
@@ -179,11 +187,11 @@ pub const Envelope = struct {
         return bytes.eql(&expected, &self.signature.digest);
     }
 
-    fn signatureDigest(self: Envelope, signer: identity.Id) ?preimage.Hash {
+    fn signatureDigest(self: Envelope, signer: authority.Principal) ?preimage.Hash {
         if (!signer.valid()) return null;
         const unsigned = self.unsignedDigest() orelse return null;
         var builder = preimage.Builder.init("edgerun:zig:v1:relay-envelope-signature");
-        builder.id(signer);
+        if (!appendPrincipal(&builder, signer)) return null;
         builder.hash(unsigned);
         return builder.final();
     }
@@ -200,12 +208,12 @@ pub const Envelope = struct {
             return null;
         }
 
-        var raw: [204]u8 = undefined;
+        var raw: [envelope_unsigned_encoded_size]u8 = undefined;
         var writer = preimage.Writer.init(&raw);
         if (!writer.hash(self.route) or
             !writer.hash(self.admission) or
-            !writer.id(self.from) or
-            !writer.id(self.to) or
+            !writePrincipal(&writer, self.from) or
+            !writePrincipal(&writer, self.to) or
             !writer.writeU16(@intFromEnum(self.action)) or
             !writer.writeU16(@intFromEnum(self.consequence)) or
             !writer.writeU64(self.sequence) or
@@ -219,11 +227,11 @@ pub const Envelope = struct {
 };
 
 pub const TransitReceipt = struct {
-    relay: identity.Id,
+    relay: authority.Principal,
     route: preimage.Hash,
     envelope: preimage.Hash,
-    from: identity.Id,
-    to: identity.Id,
+    from: authority.Principal,
+    to: authority.Principal,
     sequence: u64,
     previous: preimage.Hash,
     transit: preimage.Hash,
@@ -236,6 +244,17 @@ pub const TransitReceipt = struct {
             self.to.valid() and
             self.sequence != 0 and
             bytes.nonzero(&self.transit);
+    }
+
+    pub fn permits(self: TransitReceipt, route: Route, envelope: Envelope) bool {
+        const route_id = route.id() orelse return false;
+        const envelope_id = envelope.id() orelse return false;
+        return self.valid() and
+            route.containsRelay(self.relay) and
+            bytes.eql(&self.route, &route_id) and
+            bytes.eql(&self.envelope, &envelope_id) and
+            self.from.eql(envelope.from) and
+            self.to.eql(envelope.to);
     }
 };
 
@@ -250,22 +269,24 @@ pub const RelayApp = struct {
     }
 
     pub fn forward(self: *RelayApp, route: Route, envelope: Envelope, now: clock.Stamp) RouteError!TransitReceipt {
+        const relay_principal = authority.routeRelay(self.id) orelse return error.WrongRelay;
         if (!route.activeAt(now)) return error.ReplayWindow;
-        if (!route.containsRelay(self.id.id)) return error.WrongRelay;
+        if (!route.containsRelay(relay_principal)) return error.WrongRelay;
         try envelope.validFor(route);
 
         self.sequence += 1;
         const envelope_id = envelope.id() orelse return error.InvalidEnvelope;
         const route_id = route.id() orelse return error.InvalidRoute;
         const previous = self.previous;
-        var raw: [172]u8 = undefined;
+        var raw: [transit_encoded_size]u8 = undefined;
         var writer = preimage.Writer.init(&raw);
-        if (!writer.id(self.id.id) or
+        if (!writePrincipal(&writer, relay_principal) or
             !writer.hash(route_id) or
             !writer.hash(envelope_id) or
             !writer.hash(previous) or
             !writer.writeU64(self.sequence) or
-            !writer.id(envelope.to) or
+            !writePrincipal(&writer, envelope.from) or
+            !writePrincipal(&writer, envelope.to) or
             !writer.writeU32(@intCast(route.relays.len)))
         {
             return error.InvalidRoute;
@@ -275,7 +296,7 @@ pub const RelayApp = struct {
         self.previous = transit;
 
         return .{
-            .relay = self.id.id,
+            .relay = relay_principal,
             .route = route_id,
             .envelope = envelope_id,
             .from = envelope.from,
@@ -287,10 +308,25 @@ pub const RelayApp = struct {
     }
 };
 
-pub fn deliverTo(route: Route, envelope: Envelope, recipient: identity.Identity, now: clock.Stamp) RouteError!void {
-    if (!recipient.id.eql(route.target) or !envelope.to.eql(recipient.id)) return error.WrongDestination;
+pub fn deliverTo(route: Route, envelope: Envelope, transit: TransitReceipt, recipient: identity.Identity, now: clock.Stamp) RouteError!void {
+    const recipient_principal = authority.routeEndpoint(recipient) orelse return error.WrongDestination;
+    if (!recipient_principal.eql(route.target) or !envelope.to.eql(recipient_principal)) return error.WrongDestination;
     if (!route.activeAt(now)) return error.ReplayWindow;
     try envelope.validFor(route);
+    if (!transit.permits(route, envelope)) return error.WrongRelay;
+}
+
+fn writePrincipal(writer: *preimage.Writer, principal: authority.Principal) bool {
+    var raw: [authority.principal_encoded_size]u8 = undefined;
+    if (!principal.encode(&raw)) return false;
+    return writer.raw(&raw);
+}
+
+fn appendPrincipal(builder: *preimage.Builder, principal: authority.Principal) bool {
+    var raw: [authority.principal_encoded_size]u8 = undefined;
+    if (!principal.encode(&raw)) return false;
+    builder.bytes(&raw);
+    return true;
 }
 
 fn hashMaterial(material: []const u8) preimage.Hash {
@@ -327,10 +363,14 @@ test "relay forwards identity routed envelope without payload authority" {
     var relay_app = RelayApp.init(relay_id).?;
     const receipt = try relay_app.forward(route, envelope, now);
     try std.testing.expect(receipt.valid());
-    try deliverTo(route, envelope, target, now);
+    try deliverTo(route, envelope, receipt, target, now);
+
+    var forged_transit = receipt;
+    forged_transit.relay = authority.Principal.relay(identity.Identity.init(.relay, identity.Source.prepare(.hash, &preimage.rawHash("wrong relay")).?, now).?).?;
+    try std.testing.expectError(error.WrongRelay, deliverTo(route, envelope, forged_transit, target, now));
 
     var tampered = envelope;
-    tampered.to = source.id;
+    tampered.to = authority.Principal.app(source).?;
     try std.testing.expectError(error.InvalidEnvelope, relay_app.forward(route, tampered, now));
 }
 

@@ -43,7 +43,7 @@ pub fn render(scene: *ui.Scene, bounds: ui.Rect, params: Params, metrics: Metric
 }
 
 pub fn collectInteractions(collector: *interaction.Collector, bounds: ui.Rect, params: Params) interaction.Error!void {
-    try collector.add(.{ .kind = params.hit_kind, .id = params.id, .bounds = bounds });
+    try collector.addHit(bounds, params.hit_kind, params.id);
 }
 
 pub fn measure(title: []const u8, detail: []const u8, constraints: layout.Constraints, metrics: Metrics) layout.Measurement {
@@ -109,8 +109,7 @@ test "base info row renders text and collects hit target" {
     try collectInteractions(&collector, ui.Rect.init(0, 0, 240, default_height), .{ .id = 7, .title = "DNS", .detail = "Name lookup." });
 
     try std.testing.expect(scene.written().len >= 3);
-    try std.testing.expect(ui_input.hitTest(scene.written(), 20, 20) == null);
-    try std.testing.expectEqual(@as(u32, 7), ui_input.regionHitTest(collector.written(), 20, 20).?.id);
+    try std.testing.expectEqual(@as(u32, 7), ui_input.hitTest(collector.written(), 20, 20).?.id);
 }
 
 test "base info row measurement grows with detail" {

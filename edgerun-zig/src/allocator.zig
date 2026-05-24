@@ -14,10 +14,9 @@ pub const Allocator = struct {
         return .{ .id = id };
     }
 
-    pub fn spawnChild(self: Allocator, host: app.ExecutionHost, parent: *app.App, child_id: identity.Identity, epoch: clock.Stamp, authorization: intent.Receipt, manifest_canonical: []const u8) app.SpawnError!app.App.Spawned {
-        const admission = parent.admissionCapability(authorization) orelse return error.Unauthorized;
-        parent.admitAuthorization(authorization, admission) catch return error.Unauthorized;
-        return host.spawnManifest(parent, self.id, child_id, epoch, authorization, manifest_canonical);
+    pub fn spawnChild(self: Allocator, host: app.ExecutionHost, parent: *app.App, child_id: identity.Identity, epoch: clock.Stamp, authorization: intent.Receipt, manifest_canonical: []const u8) app.SpawnError!app.App.ChildHandle {
+        parent.admitOwnAuthorization(authorization, self.id, child_id) catch return error.Unauthorized;
+        return host.spawnManifestHandle(parent, self.id, child_id, epoch, authorization, manifest_canonical);
     }
 };
 
@@ -61,7 +60,8 @@ test "allocator app is the authorized actor for spawn transitions" {
     };
     const manifest_canonical = try app.App.writeManifestObject(child_id, manifest, epoch, &manifest_raw);
 
-    const spawned = try allocator.spawnChild(host, &parent, child_id, epoch, authorization, manifest_canonical);
-    try std.testing.expect(spawned.receipt.valid());
+    const child = try allocator.spawnChild(host, &parent, child_id, epoch, authorization, manifest_canonical);
+    try std.testing.expect(child.valid());
+    try std.testing.expect(child.child.id.eql(child_id.id));
     try std.testing.expectEqual(@as(usize, 56), parent.memoryRemaining());
 }

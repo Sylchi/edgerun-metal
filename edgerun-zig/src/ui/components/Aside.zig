@@ -47,7 +47,7 @@ pub const Aside = struct {
     }
 
     pub fn register(registry: *ComponentRegistry) RegistryError!void {
-        try registry.register(descriptor);
+        return common.registerDescriptor(registry, descriptor);
     }
 };
 
@@ -55,13 +55,13 @@ pub const descriptor = common.ComponentDescriptor{
     .name = "aside",
     .html_prefix = "<aside data-er-component=\"aside\"",
     .markdown_prefix = ":::aside",
-    .render = renderRegistered,
-    .write_html = writeHtmlRegistered,
-    .write_markdown = writeMarkdownRegistered,
+    .render = common.renderAdapter(Aside, renderAside),
+    .write_html = common.writeHtmlAdapter(Aside, writeHtml),
+    .write_markdown = common.writeMarkdownAdapter(Aside, writeMarkdown),
 };
 
 pub fn register(registry: *ComponentRegistry) RegistryError!void {
-    return Aside.register(registry);
+    return common.registerDescriptor(registry, descriptor);
 }
 
 pub fn renderAside(aside: Aside, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
@@ -87,11 +87,6 @@ pub fn measureAside(aside: Aside, constraints: layout.Constraints) layout.Measur
     ).withInsets(asideInsets()).applyExact(constraints);
 }
 
-fn renderRegistered(component: *const anyopaque, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
-    const aside: *const Aside = @ptrCast(@alignCast(component));
-    return renderAside(aside.*, scene, bounds, options);
-}
-
 pub fn writeHtml(aside: Aside, out: []u8) HtmlError![]u8 {
     if (aside.title.len == 0 or aside.body.len == 0) return error.InvalidHtml;
     var writer = HtmlWriter.init(out);
@@ -103,11 +98,6 @@ pub fn writeHtml(aside: Aside, out: []u8) HtmlError![]u8 {
     return writer.written();
 }
 
-fn writeHtmlRegistered(component: *const anyopaque, out: []u8) HtmlError![]u8 {
-    const aside: *const Aside = @ptrCast(@alignCast(component));
-    return writeHtml(aside.*, out);
-}
-
 pub fn writeMarkdown(aside: Aside, out: []u8) MarkdownError![]u8 {
     if (aside.title.len == 0 or aside.body.len == 0) return error.InvalidMarkdown;
     var writer = MarkdownWriter.init(out);
@@ -116,11 +106,6 @@ pub fn writeMarkdown(aside: Aside, out: []u8) MarkdownError![]u8 {
     try writer.fieldText("body", aside.body);
     try writer.endDirective();
     return writer.written();
-}
-
-fn writeMarkdownRegistered(component: *const anyopaque, out: []u8) MarkdownError![]u8 {
-    const aside: *const Aside = @ptrCast(@alignCast(component));
-    return writeMarkdown(aside.*, out);
 }
 
 pub fn readMarkdown(markdown: []const u8, text_out: []u8) MarkdownError!Aside {

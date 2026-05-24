@@ -45,24 +45,78 @@ pub fn measure(children: []const layout.Measurement, constraints: layout.Constra
 
 pub fn place(bounds: ui.Rect, children: []const layout.Measurement, options: Options, out: []ui.Rect) []ui.Rect {
     const count = @min(children.len, out.len);
-    const inner = bounds.insetLtrb(options.padding.left, options.padding.top, options.padding.right, options.padding.bottom);
-    var cursor: f32 = 0;
+    var cursor = Cursor.init(bounds, options);
     for (children[0..count], 0..) |child, index| {
-        const child_size = layout.toLogical(options.axis, child.preferred);
-        const main_size = child_size.w;
-        const cross_size = switch (options.cross_align) {
-            .start => @min(child_size.h, if (options.axis == .horizontal) inner.h else inner.w),
-            .stretch => if (options.axis == .horizontal) inner.h else inner.w,
-        };
-        const rect = switch (options.axis) {
-            .horizontal => ui.Rect.init(inner.x + cursor, inner.y, main_size, cross_size),
-            .vertical => ui.Rect.init(inner.x, inner.y + cursor, cross_size, main_size),
-        };
-        out[index] = rect;
-        cursor += main_size + options.gap;
+        out[index] = cursor.next(child);
     }
     return out[0..count];
 }
+
+pub const Cursor = struct {
+    inner: ui.Rect,
+    options: Options,
+    offset: f32 = 0,
+    index: usize = 0,
+
+    pub fn init(bounds: ui.Rect, options: Options) Cursor {
+        return .{
+            .inner = bounds.insetLtrb(options.padding.left, options.padding.top, options.padding.right, options.padding.bottom),
+            .options = options,
+        };
+    }
+
+    pub fn next(self: *Cursor, child: layout.Measurement) ui.Rect {
+        const main_offset = self.claimMainOffset(child);
+        return self.rectAt(main_offset, child);
+    }
+
+    pub fn nextWithinBounds(self: *Cursor, child: layout.Measurement) ?ui.Rect {
+        const main_offset = self.nextMainOffset();
+        const child_size = layout.toLogical(self.options.axis, child.preferred);
+        if (main_offset + child_size.w > self.innerMainSize()) return null;
+        _ = self.claimMainOffset(child);
+        return self.rectAt(main_offset, child);
+    }
+
+    fn claimMainOffset(self: *Cursor, child: layout.Measurement) f32 {
+        const main_offset = self.nextMainOffset();
+        const child_size = layout.toLogical(self.options.axis, child.preferred);
+        self.offset = main_offset + child_size.w;
+        self.index += 1;
+        return main_offset;
+    }
+
+    fn nextMainOffset(self: Cursor) f32 {
+        return self.offset + if (self.index == 0) 0 else self.options.gap;
+    }
+
+    fn rectAt(self: Cursor, main_offset: f32, child: layout.Measurement) ui.Rect {
+        const child_size = layout.toLogical(self.options.axis, child.preferred);
+        const main_size = child_size.w;
+        const cross_size = switch (self.options.cross_align) {
+            .start => @min(child_size.h, self.innerCrossSize()),
+            .stretch => self.innerCrossSize(),
+        };
+        return switch (self.options.axis) {
+            .horizontal => ui.Rect.init(self.inner.x + main_offset, self.inner.y, main_size, cross_size),
+            .vertical => ui.Rect.init(self.inner.x, self.inner.y + main_offset, cross_size, main_size),
+        };
+    }
+
+    fn innerMainSize(self: Cursor) f32 {
+        return switch (self.options.axis) {
+            .horizontal => self.inner.w,
+            .vertical => self.inner.h,
+        };
+    }
+
+    fn innerCrossSize(self: Cursor) f32 {
+        return switch (self.options.axis) {
+            .horizontal => self.inner.h,
+            .vertical => self.inner.w,
+        };
+    }
+};
 
 test "flex measures vertical stack with parent-owned gap and padding" {
     const children = [_]layout.Measurement{
@@ -91,4 +145,16 @@ test "flex places horizontal children in order" {
     try std.testing.expectEqual(@as(f32, 0), rects[0].x);
     try std.testing.expectEqual(@as(f32, 56), rects[1].x);
     try std.testing.expectEqual(@as(f32, 50), rects[0].h);
+}
+
+test "flex cursor places dynamic rows without scratch arrays" {
+    var cursor = Cursor.init(ui.Rect.init(0, 0, 200, 84), .{ .axis = .vertical, .gap = 6, .padding = layout.Insets.uniform(8) });
+    const first = cursor.nextWithinBounds(layout.Measurement.fixed(.{ .w = 120, .h = 30 })).?;
+    const second = cursor.nextWithinBounds(layout.Measurement.fixed(.{ .w = 120, .h = 30 })).?;
+
+    try std.testing.expect(cursor.nextWithinBounds(layout.Measurement.fixed(.{ .w = 120, .h = 30 })) == null);
+    try std.testing.expectEqual(@as(f32, 8), first.x);
+    try std.testing.expectEqual(@as(f32, 8), first.y);
+    try std.testing.expectEqual(@as(f32, 44), second.y);
+    try std.testing.expectEqual(@as(f32, 184), first.w);
 }

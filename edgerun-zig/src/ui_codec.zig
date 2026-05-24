@@ -1,7 +1,6 @@
 const std = @import("std");
 const bytes = @import("bytes.zig");
 const clock = @import("clock.zig");
-const input = @import("input.zig");
 const object = @import("object.zig");
 const ui = @import("ui.zig");
 
@@ -141,7 +140,7 @@ fn decodeBool(value: u16) ?bool {
     };
 }
 
-test "decode ui bytes into borrowed nodes and render hits" {
+test "decode ui bytes into borrowed nodes and render paint" {
     var raw: [256]u8 = undefined;
     var cursor = Writer.init(&raw, 5, 4, .column, 10, 16).?;
     const title = cursor.string("edgerun ui");
@@ -162,9 +161,15 @@ test "decode ui bytes into borrowed nodes and render hits" {
     var scene = ui.Scene.init(&commands);
     try ui.render(&scene, root, .{ .x = 0, .y = 0, .w = 320, .h = 240 }, .{});
 
-    const button_hit = input.hitTest(scene.written(), 20, 160).?;
-    try std.testing.expectEqual(@as(u32, 7), button_hit.slot);
-    try std.testing.expectEqual(@as(u32, 30), button_hit.id);
+    try std.testing.expect(hasText(scene.written(), "Render"));
+}
+
+fn hasText(commands: []const ui.Command, value: []const u8) bool {
+    for (commands) |command| switch (command) {
+        .text => |text_command| if (std.mem.eql(u8, text_command.value, value)) return true,
+        else => {},
+    };
+    return false;
 }
 
 test "decode ui bytes from canonical object body" {

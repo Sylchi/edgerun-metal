@@ -46,7 +46,7 @@ pub const List = struct {
     }
 
     pub fn register(registry: *ComponentRegistry) RegistryError!void {
-        try registry.register(descriptor);
+        return common.registerDescriptor(registry, descriptor);
     }
 };
 
@@ -54,13 +54,13 @@ pub const descriptor = common.ComponentDescriptor{
     .name = "list",
     .html_prefix = "<ul data-er-component=\"list\"",
     .markdown_prefix = "- ",
-    .render = renderRegistered,
-    .write_html = writeHtmlRegistered,
-    .write_markdown = writeMarkdownRegistered,
+    .render = common.renderAdapter(List, renderList),
+    .write_html = common.writeHtmlAdapter(List, writeHtml),
+    .write_markdown = common.writeMarkdownAdapter(List, writeMarkdown),
 };
 
 pub fn register(registry: *ComponentRegistry) RegistryError!void {
-    return List.register(registry);
+    return common.registerDescriptor(registry, descriptor);
 }
 
 pub fn renderList(list: List, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
@@ -96,11 +96,6 @@ pub fn measureList(list: List, constraints: layout.Constraints) layout.Measureme
     );
 }
 
-fn renderRegistered(component: *const anyopaque, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
-    const list: *const List = @ptrCast(@alignCast(component));
-    return renderList(list.*, scene, bounds, options);
-}
-
 pub fn writeHtml(list: List, out: []u8) HtmlError![]u8 {
     if (list.items.len == 0) return error.InvalidHtml;
     var writer = HtmlWriter.init(out);
@@ -119,11 +114,6 @@ pub fn writeHtml(list: List, out: []u8) HtmlError![]u8 {
     return writer.written();
 }
 
-fn writeHtmlRegistered(component: *const anyopaque, out: []u8) HtmlError![]u8 {
-    const list: *const List = @ptrCast(@alignCast(component));
-    return writeHtml(list.*, out);
-}
-
 pub fn writeMarkdown(list: List, out: []u8) MarkdownError![]u8 {
     if (list.items.len == 0) return error.InvalidMarkdown;
     var writer = MarkdownWriter.init(out);
@@ -139,11 +129,6 @@ pub fn writeMarkdown(list: List, out: []u8) MarkdownError![]u8 {
         try writer.writeEscapedInline(item);
     }
     return writer.written();
-}
-
-fn writeMarkdownRegistered(component: *const anyopaque, out: []u8) MarkdownError![]u8 {
-    const list: *const List = @ptrCast(@alignCast(component));
-    return writeMarkdown(list.*, out);
 }
 
 pub fn readMarkdown(markdown: []const u8, out_items: [][]const u8, text_out: []u8) MarkdownError!List {

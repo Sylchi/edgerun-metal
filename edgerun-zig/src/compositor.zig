@@ -7,9 +7,8 @@ pub const Error = error{
     InvalidTarget,
     InvalidSurface,
     InvalidIrBuffer,
-    InvalidIrAtlas,
+    InvalidIrResource,
     MissingFontAtlas,
-    MissingIconAtlas,
     MissingImageTexture,
     UnsupportedIrPrimitive,
     DamageBudgetExceeded,
@@ -158,7 +157,7 @@ pub const Compositor = struct {
         self: *Compositor,
         surfaces: []const Surface,
         buffers: renderer_ir.Buffers,
-        atlases: renderer_software.IrAtlases,
+        resources: renderer_software.IrResources,
         background: ui.Color,
     ) Error!Receipt {
         self.target.clear(background);
@@ -171,12 +170,11 @@ pub const Compositor = struct {
         }
 
         try self.markIrDamage(buffers);
-        const presentation = self.target.renderIrFrameWithAtlases(buffers, atlases) catch |err| return switch (err) {
+        const presentation = self.target.renderIrFrameWithResources(buffers, resources) catch |err| return switch (err) {
             error.InvalidIrBuffer => error.InvalidIrBuffer,
             error.InvalidBuffer => error.InvalidIrBuffer,
-            error.InvalidIrAtlas => error.InvalidIrAtlas,
+            error.InvalidIrResource => error.InvalidIrResource,
             error.MissingFontAtlas => error.MissingFontAtlas,
-            error.MissingIconAtlas => error.MissingIconAtlas,
             error.MissingImageTexture => error.MissingImageTexture,
             error.UnsupportedIrPrimitive => error.UnsupportedIrPrimitive,
             error.PixelBudgetExceeded => error.InvalidTarget,
@@ -239,7 +237,7 @@ pub const Compositor = struct {
             .icon_quad => |quad| try self.markRect(quad.bounds),
             .text_quad => |quad| try self.markRect(quad.bounds),
             .image_quad => |quad| try self.markRect(quad.bounds),
-            .hit, .drag_source, .drop_target, .transition => {},
+            .drag_source, .drop_target, .transition => {},
         }
     }
 
@@ -421,7 +419,6 @@ test "compositor renders canonical ir above app surfaces" {
     var source_context: u8 = 0;
     const sources = renderer_ir.Sources{
         .font = .{ .context = &source_context, .metrics = testFontMetrics, .width = testTextWidth, .glyph = testGlyph },
-        .icon = .{ .context = &source_context, .rect = testIconRect },
     };
     try renderer_ir.packScene(buffers, sources, scene.written());
 
@@ -432,7 +429,6 @@ test "compositor renders canonical ir above app surfaces" {
     const alpha = [_]u8{255};
     const ir_receipt = try ir_compositor.composeIr(&.{app_surface}, buffers, .{
         .font = .{ .width = 1, .height = 1, .alpha = &alpha },
-        .icon = .{ .width = 1, .height = 1, .alpha = &alpha },
     }, .clear);
 
     try std.testing.expect(ir_receipt.valid());
@@ -449,9 +445,5 @@ fn testTextWidth(_: *anyopaque, value: []const u8, _: u8) f32 {
 }
 
 fn testGlyph(_: *anyopaque, _: u8, _: u8) renderer_ir.Error!?renderer_ir.Glyph {
-    return null;
-}
-
-fn testIconRect(_: *anyopaque, _: u32) ?renderer_ir.AtlasRect {
     return null;
 }

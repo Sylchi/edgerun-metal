@@ -288,7 +288,8 @@ pub fn dirtyTilesMarkIrBuffers(plan: TilePlan, buffers: renderer_ir.Buffers, til
     for (renderer_ir.drawBatches(buffers)) |batch| {
         const marked = switch (batch) {
             .rects, .overlay_rects => |rects| dirtyTilesMarkIrRects(plan, rects, tile_marks, list),
-            .image, .text, .icon, .overlay_text, .overlay_icon => |vertices| dirtyTilesMarkIrTextured(plan, vertices, tile_marks, list),
+            .image, .text, .overlay_text => |vertices| dirtyTilesMarkIrTextured(plan, vertices, tile_marks, list),
+            .icon, .overlay_icon => |icons| dirtyTilesMarkIrIcons(plan, icons, tile_marks, list),
         };
         if (!marked) return false;
     }
@@ -397,6 +398,14 @@ fn dirtyTilesMarkIrTextured(plan: TilePlan, values: []const f32, tile_marks: []u
     var iter = renderer_ir.TexturedQuadIterator.init(values) catch return false;
     while (iter.next() catch return false) |quad| {
         if (!dirtyTilesMarkRect(plan, quad.bounds.x, quad.bounds.y, quad.bounds.w, quad.bounds.h, tile_marks, list)) return false;
+    }
+    return true;
+}
+
+fn dirtyTilesMarkIrIcons(plan: TilePlan, values: []const f32, tile_marks: []u8, list: *DirtyTileList) bool {
+    var iter = renderer_ir.IconIterator.init(values) catch return false;
+    while (iter.next() catch return false) |instance| {
+        if (!dirtyTilesMarkRect(plan, instance.bounds.x, instance.bounds.y, instance.bounds.w, instance.bounds.h, tile_marks, list)) return false;
     }
     return true;
 }
