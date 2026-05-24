@@ -14,6 +14,7 @@ const details_component = @import("ui/components/Details.zig");
 const figure_component = @import("ui/components/Figure.zig");
 const nav_component = @import("ui/components/Nav.zig");
 const progress_summary_component = @import("ui/components/ProgressSummary.zig");
+const resource_list_component = @import("ui/components/ResourceList.zig");
 const table_component = @import("ui/components/Table.zig");
 
 const tree_layout_magic = "ERUL001\x00";
@@ -350,36 +351,8 @@ pub const Timeline = struct {
     }
 };
 
-pub const ResourceItem = struct {
-    id: u32,
-    label: []const u8,
-    href: []const u8,
-    detail: []const u8,
-};
-
-pub const ResourceList = struct {
-    items: []const ResourceItem,
-
-    pub fn render(self: ResourceList, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
-        return renderResourceList(scene, bounds, self, options);
-    }
-
-    pub fn toHtml(self: ResourceList, out: []u8) HtmlError![]u8 {
-        return writeResourceListHtml(self, out);
-    }
-
-    pub fn fromHtml(html: []const u8, out_items: []ResourceItem, text_out: []u8) HtmlError!ResourceList {
-        return readResourceListHtml(html, out_items, text_out);
-    }
-
-    pub fn toMarkdown(self: ResourceList, out: []u8) MarkdownError![]u8 {
-        return writeResourceListMarkdown(self, out);
-    }
-
-    pub fn fromMarkdown(markdown: []const u8, out_items: []ResourceItem, text_out: []u8) MarkdownError!ResourceList {
-        return readResourceListMarkdown(markdown, out_items, text_out);
-    }
-};
+pub const ResourceItem = resource_list_component.ResourceItem;
+pub const ResourceList = resource_list_component.ResourceList;
 
 pub const ProgressSummary = progress_summary_component.ProgressSummary;
 
@@ -450,6 +423,10 @@ pub fn registerNav(registry: *ComponentRegistry) RegistryError!void {
 
 pub fn registerProgressSummary(registry: *ComponentRegistry) RegistryError!void {
     return progress_summary_component.register(registry);
+}
+
+pub fn registerResourceList(registry: *ComponentRegistry) RegistryError!void {
+    return resource_list_component.register(registry);
 }
 
 pub fn registerTable(registry: *ComponentRegistry) RegistryError!void {
@@ -677,31 +654,6 @@ pub fn renderTimeline(scene: *ui.Scene, bounds: ui.Rect, timeline: Timeline, opt
         });
         try scene.pushHit(.{ .slot = 0, .kind = .row_item, .id = event.id, .bounds = event_bounds });
         y += timeline_event_h + timeline_event_gap;
-    }
-}
-
-pub fn renderResourceList(scene: *ui.Scene, bounds: ui.Rect, list: ResourceList, options: RenderOptions) ui.RenderError!void {
-    if (list.items.len == 0) return;
-    const style = options.style;
-    try scene.pushRect(bounds, style.panel, .fill, resource_radius, 0.0);
-    try scene.pushRect(bounds, style.border, .border, resource_radius, 0.0);
-
-    var y = bounds.y + resource_padding_y;
-    const content_x = bounds.x + resource_padding_x;
-    const content_w = @max(1.0, bounds.w - resource_padding_x * 2.0);
-    const bottom = bounds.y + bounds.h - resource_padding_y;
-    for (list.items) |item| {
-        if (y + resource_item_h > bottom) break;
-        const item_bounds = ui.Rect.init(content_x, y, content_w, resource_item_h);
-        try scene.pushRect(item_bounds, style.row, .fill, resource_item_radius, 0.0);
-        try scene.pushAlignedText(ui.Rect.init(item_bounds.x + resource_item_padding_x, item_bounds.y + resource_label_y, @max(1.0, item_bounds.w - resource_item_padding_x * 2.0), resource_label_h), item.label, style.text, .start);
-        try scene.pushWrappedText(ui.Rect.init(item_bounds.x + resource_item_padding_x, item_bounds.y + resource_detail_y, @max(1.0, item_bounds.w - resource_item_padding_x * 2.0), resource_detail_h), item.detail, style.muted, .{
-            .line_height = resource_detail_line_h,
-            .average_char_width = resource_detail_avg_w,
-            .max_lines = resource_detail_max_lines,
-        });
-        try scene.pushHit(.{ .slot = 0, .kind = .button, .id = item.id, .bounds = item_bounds });
-        y += resource_item_h + resource_item_gap;
     }
 }
 
@@ -991,20 +943,6 @@ const timeline_detail_line_h: f32 = 17.0;
 const timeline_detail_avg_w: f32 = 8.5;
 const timeline_detail_max_lines: usize = 2;
 const timeline_text_padding_x: f32 = 10.0;
-const resource_radius: f32 = 8.0;
-const resource_padding_x: f32 = 12.0;
-const resource_padding_y: f32 = 12.0;
-const resource_item_h: f32 = 70.0;
-const resource_item_gap: f32 = 8.0;
-const resource_item_radius: f32 = 6.0;
-const resource_item_padding_x: f32 = 12.0;
-const resource_label_y: f32 = 11.0;
-const resource_label_h: f32 = 16.0;
-const resource_detail_y: f32 = 34.0;
-const resource_detail_h: f32 = 30.0;
-const resource_detail_line_h: f32 = 15.0;
-const resource_detail_avg_w: f32 = 8.5;
-const resource_detail_max_lines: usize = 2;
 const region_radius: f32 = 8.0;
 const region_padding_x: f32 = 12.0;
 const region_padding_y: f32 = 12.0;
@@ -1953,26 +1891,6 @@ fn writeTimelineHtml(timeline: Timeline, out: []u8) HtmlError![]u8 {
     return writer.written();
 }
 
-fn writeResourceListHtml(list: ResourceList, out: []u8) HtmlError![]u8 {
-    if (list.items.len == 0) return error.InvalidHtml;
-    var writer = HtmlWriter.init(out);
-    try writer.writeAll("<ul data-er-component=\"resource-list\">");
-    for (list.items) |item| {
-        if (item.label.len == 0 or item.href.len == 0 or item.detail.len == 0) return error.InvalidHtml;
-        try writer.writeAll("<li");
-        try writer.writeAttrInt("data-er-id", item.id);
-        try writer.writeAll("><a");
-        try writer.writeAttrText("href", item.href);
-        try writer.writeByte('>');
-        try writer.writeEscapedText(item.label);
-        try writer.writeAll("</a><p>");
-        try writer.writeEscapedText(item.detail);
-        try writer.writeAll("</p></li>");
-    }
-    try writer.writeAll("</ul>");
-    return writer.written();
-}
-
 fn writeRegionHtml(region: Region, out: []u8) HtmlError![]u8 {
     if (region.children.len == 0) return error.InvalidHtml;
     var writer = HtmlWriter.init(out);
@@ -2169,21 +2087,6 @@ fn writeCardMarkdownInto(writer: *MarkdownWriter, card: Card) MarkdownError!void
     try writer.endDirective();
 }
 
-fn writeResourceListMarkdown(list: ResourceList, out: []u8) MarkdownError![]u8 {
-    if (list.items.len == 0) return error.InvalidMarkdown;
-    var writer = MarkdownWriter.init(out);
-    try writer.beginDirective("resources");
-    for (list.items) |item| {
-        if (item.label.len == 0 or item.href.len == 0 or item.detail.len == 0) return error.InvalidMarkdown;
-        try writer.fieldInt("item", item.id);
-        try writer.fieldText("label", item.label);
-        try writer.fieldText("href", item.href);
-        try writer.fieldText("detail", item.detail);
-    }
-    try writer.endDirective();
-    return writer.written();
-}
-
 fn writeStepListMarkdown(list: StepList, out: []u8) MarkdownError![]u8 {
     if (list.steps.len == 0) return error.InvalidMarkdown;
     var writer = MarkdownWriter.init(out);
@@ -2331,27 +2234,6 @@ fn readCardMarkdownWithArena(markdown: []const u8, text: *MarkdownTextArena) Mar
     const detail = try text.unescapeInline(body[detail_start..]);
     if (title.len == 0 or detail.len == 0) return error.InvalidMarkdown;
     return .{ .title = title, .detail = detail };
-}
-
-fn readResourceListMarkdown(markdown: []const u8, out_items: []ResourceItem, text_out: []u8) MarkdownError!ResourceList {
-    const prefix = ":::resources\n";
-    const body = try readMarkdownDirectiveBody(markdown, ":::resources", prefix);
-    var text = MarkdownTextArena.init(text_out);
-    var item_count: usize = 0;
-    var cursor = MarkdownCursor.init(body);
-    while (!cursor.done()) {
-        if (item_count == out_items.len) return error.MarkdownBudgetExceeded;
-        const id = try parseMarkdownU32(try cursor.lineAfter("item: "));
-        const label = try text.unescapeInline(try cursor.fieldBetween("\nlabel: ", "\nhref: "));
-        const href = try text.unescapeInline(try cursor.fieldBetween("\nhref: ", "\ndetail: "));
-        const detail = try text.unescapeInline(try cursor.finalField("\ndetail: ", "\nitem: "));
-        if (label.len == 0 or href.len == 0 or detail.len == 0) return error.InvalidMarkdown;
-        out_items[item_count] = .{ .id = id, .label = label, .href = href, .detail = detail };
-        item_count += 1;
-        try cursor.skipNewline();
-    }
-    if (item_count == 0) return error.InvalidMarkdown;
-    return .{ .items = out_items[0..item_count] };
 }
 
 fn readStepListMarkdown(markdown: []const u8, out_steps: []StepItem, text_out: []u8) MarkdownError!StepList {
@@ -2966,34 +2848,6 @@ fn readTimelineEventsHtml(html: []const u8, out_events: []TimelineEvent, text: *
     }
     if (event_count == 0) return error.InvalidHtml;
     return out_events[0..event_count];
-}
-
-fn readResourceListHtml(html: []const u8, out_items: []ResourceItem, text_out: []u8) HtmlError!ResourceList {
-    const body = takeWrapped(html, "<ul data-er-component=\"resource-list\">", "</ul>") orelse {
-        if (std.mem.startsWith(u8, html, "<ul")) return error.InvalidHtml;
-        return error.UnsupportedHtml;
-    };
-    var text = HtmlTextArena.init(text_out);
-    const items = try readResourceItemsHtml(body, out_items, &text);
-    return .{ .items = items };
-}
-
-fn readResourceItemsHtml(html: []const u8, out_items: []ResourceItem, text: *HtmlTextArena) HtmlError![]const ResourceItem {
-    var cursor = HtmlCursor.init(html);
-    var item_count: usize = 0;
-    while (!cursor.done()) {
-        if (item_count == out_items.len) return error.HtmlBudgetExceeded;
-        const id = try parseHtmlU32(try cursor.fieldBetween("<li data-er-id=\"", "\"><a href=\""));
-        const href = try text.unescape(try cursor.fieldBetween("\"><a href=\"", "\">"));
-        const label = try text.unescape(try cursor.fieldBetween("\">", "</a><p>"));
-        const detail = try text.unescape(try cursor.fieldBetween("</a><p>", "</p></li>"));
-        try cursor.consume("</p></li>");
-        if (href.len == 0 or label.len == 0 or detail.len == 0) return error.InvalidHtml;
-        out_items[item_count] = .{ .id = id, .label = label, .href = href, .detail = detail };
-        item_count += 1;
-    }
-    if (item_count == 0) return error.InvalidHtml;
-    return out_items[0..item_count];
 }
 
 fn readRegionHtml(html: []const u8, out_components: []Component, text_out: []u8) HtmlError!Region {
@@ -4320,54 +4174,6 @@ test "timeline html codec rejects malformed events" {
     try std.testing.expectError(error.InvalidHtml, Timeline.fromHtml("<ol data-er-component=\"timeline\"></ol>", &events, &text));
     try std.testing.expectError(error.InvalidHtml, Timeline.fromHtml("<ol data-er-component=\"timeline\"><li data-er-id=\"x\"><time>1</time><strong>Broken</strong><p>Bad id</p></li></ol>", &events, &text));
     try std.testing.expectError(error.InvalidHtml, Timeline.fromHtml("<ol data-er-component=\"timeline\"><li data-er-id=\"1\"><time></time><strong>Broken</strong><p>Missing time</p></li></ol>", &events, &text));
-}
-
-test "resource list component renders links and hit targets" {
-    const items = [_]ResourceItem{
-        .{ .id = 38001, .label = "DNS simulator", .href = "#/demo/dns", .detail = "Watch the resolver answer a cached name." },
-        .{ .id = 38002, .label = "TLS walkthrough", .href = "#/demo/tls", .detail = "Follow a protected connection from client to server." },
-    };
-    const list = ResourceList{ .items = &items };
-    var commands: [96]ui.Command = undefined;
-    var scene = ui.Scene.init(&commands);
-
-    try list.render(&scene, ui.Rect.init(0, 0, 380, 190), .{});
-
-    try std.testing.expect(hasText(scene.written(), "DNS simulator"));
-    try std.testing.expect(hasText(scene.written(), "TLS walkthrough"));
-    const hit = ui_input.hitTest(scene.written(), 24, 96).?;
-    try std.testing.expectEqual(@as(u32, 38002), hit.id);
-}
-
-test "resource list html codec roundtrips semantic links" {
-    const items = [_]ResourceItem{
-        .{ .id = 38101, .label = "Receipt viewer", .href = "#/tools/receipts", .detail = "Inspect object ids and signatures." },
-        .{ .id = 38102, .label = "Identity & keys", .href = "#/lessons/identity", .detail = "Learn why accounts are not identity." },
-    };
-    const list = ResourceList{ .items = &items };
-    var html: [768]u8 = undefined;
-    var decoded_items: [2]ResourceItem = undefined;
-    var text: [256]u8 = undefined;
-
-    const encoded = try list.toHtml(&html);
-    const decoded = try ResourceList.fromHtml(encoded, &decoded_items, &text);
-
-    try std.testing.expectEqualStrings("<ul data-er-component=\"resource-list\"><li data-er-id=\"38101\"><a href=\"#/tools/receipts\">Receipt viewer</a><p>Inspect object ids and signatures.</p></li><li data-er-id=\"38102\"><a href=\"#/lessons/identity\">Identity &amp; keys</a><p>Learn why accounts are not identity.</p></li></ul>", encoded);
-    try std.testing.expectEqual(@as(usize, 2), decoded.items.len);
-    try std.testing.expectEqual(@as(u32, 38102), decoded.items[1].id);
-    try std.testing.expectEqualStrings("Identity & keys", decoded.items[1].label);
-    try std.testing.expectEqualStrings("#/lessons/identity", decoded.items[1].href);
-    try std.testing.expectEqualStrings("Learn why accounts are not identity.", decoded.items[1].detail);
-}
-
-test "resource list html codec rejects malformed links" {
-    var items: [2]ResourceItem = undefined;
-    var text: [128]u8 = undefined;
-
-    try std.testing.expectError(error.InvalidHtml, ResourceList.fromHtml("<ul><li><a href=\"#\">Plain</a></li></ul>", &items, &text));
-    try std.testing.expectError(error.InvalidHtml, ResourceList.fromHtml("<ul data-er-component=\"resource-list\"></ul>", &items, &text));
-    try std.testing.expectError(error.InvalidHtml, ResourceList.fromHtml("<ul data-er-component=\"resource-list\"><li data-er-id=\"x\"><a href=\"#\">Broken</a><p>Bad id</p></li></ul>", &items, &text));
-    try std.testing.expectError(error.InvalidHtml, ResourceList.fromHtml("<ul data-er-component=\"resource-list\"><li data-er-id=\"1\"><a href=\"\">Broken</a><p>Missing href</p></li></ul>", &items, &text));
 }
 
 test "region component renders semantic children" {
