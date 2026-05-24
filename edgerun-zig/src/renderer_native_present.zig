@@ -755,10 +755,9 @@ test "native cpu render submits drm commit from canonical ir" {
     try renderer_ir.pushRect(buffers, .base, .{ .x = 0, .y = 0, .w = 32, .h = 32 }, .accent, .clear, 0, 0, 0);
 
     var pixels: [64 * 64]ui.Color = undefined;
-    const font_pixels = [_]u8{ 255, 255, 255 };
     const alpha = [_]u8{255};
     const atlases = renderer_software.IrAtlases{
-        .font = .{ .width = 1, .height = 1, .pixels = &font_pixels },
+        .font = .{ .width = 1, .height = 1, .alpha = &alpha },
         .icon = .{ .width = 1, .height = 1, .alpha = &alpha },
     };
     var tile_marks: [16]u8 = undefined;
@@ -797,10 +796,9 @@ test "native cpu render rejects framebuffer size mismatch" {
     try renderer_ir.pushRect(buffers, .base, .{ .x = 0, .y = 0, .w = 16, .h = 16 }, .accent, .clear, 0, 0, 0);
 
     var pixels: [32 * 32]ui.Color = undefined;
-    const font_pixels = [_]u8{ 255, 255, 255 };
     const alpha = [_]u8{255};
     const atlases = renderer_software.IrAtlases{
-        .font = .{ .width = 1, .height = 1, .pixels = &font_pixels },
+        .font = .{ .width = 1, .height = 1, .alpha = &alpha },
         .icon = .{ .width = 1, .height = 1, .alpha = &alpha },
     };
     var tile_marks: [16]u8 = undefined;

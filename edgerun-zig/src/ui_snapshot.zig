@@ -50,7 +50,7 @@ fn renderSnapshot(init: std.process.Init, out_path: []const u8) !void {
     const surface = try renderer_software.Surface.init(width, height, pixels);
     surface.clear(.bg);
     _ = try surface.renderIrFrameWithAtlases(buffers, .{
-        .font = .{ .width = renderer_font_atlas.width, .height = renderer_font_atlas.height, .pixels = font_atlas.textureSlice() },
+        .font = .{ .width = renderer_font_atlas.width, .height = renderer_font_atlas.height, .alpha = font_atlas.alphaSlice() },
         .icon = .{ .width = 1, .height = 1, .alpha = &empty_alpha },
     });
 
@@ -101,7 +101,7 @@ test "snapshot packs and rasterizes through renderer ir" {
     const surface = try renderer_software.Surface.init(320, 240, &pixels);
     surface.clear(.bg);
     const receipt = try surface.renderIrFrameWithAtlases(buffers, .{
-        .font = .{ .width = renderer_font_atlas.width, .height = renderer_font_atlas.height, .pixels = font_atlas.textureSlice() },
+        .font = .{ .width = renderer_font_atlas.width, .height = renderer_font_atlas.height, .alpha = font_atlas.alphaSlice() },
         .icon = .{ .width = 1, .height = 1, .alpha = &empty_alpha },
     });
     try std.testing.expect(receipt.valid());
