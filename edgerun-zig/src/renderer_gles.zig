@@ -85,10 +85,11 @@ pub fn renderFrame(gl: State, width: i32, height: i32, buffers: renderer_ir.Buff
 pub fn renderFrameToViewport(gl: State, logical_width: i32, logical_height: i32, framebuffer_width: i32, framebuffer_height: i32, buffers: renderer_ir.Buffers) !void {
     c.glViewport(0, 0, framebuffer_width, framebuffer_height);
     c.glClear(c.GL_COLOR_BUFFER_BIT);
-    try drawRects(gl, logical_width, logical_height, buffers.liveRects());
+    const scale = viewportScale(logical_width, logical_height, framebuffer_width, framebuffer_height);
+    try drawRects(gl, logical_width, logical_height, scale, buffers.liveRects());
     try drawTextured(gl, logical_width, logical_height, buffers.liveTextVertices(), gl.font_texture);
     try drawTextured(gl, logical_width, logical_height, buffers.liveIconVertices(), gl.icon_texture);
-    try drawRects(gl, logical_width, logical_height, buffers.liveOverlayRects());
+    try drawRects(gl, logical_width, logical_height, scale, buffers.liveOverlayRects());
     try drawTextured(gl, logical_width, logical_height, buffers.liveOverlayTextVertices(), gl.font_texture);
     try drawTextured(gl, logical_width, logical_height, buffers.liveOverlayIconVertices(), gl.icon_texture);
 }
@@ -189,10 +190,18 @@ fn hashByte(hash: u64, byte: u8) u64 {
     return (hash ^ byte) *% fnv64_prime;
 }
 
-fn drawRects(gl: State, width: i32, height: i32, values: []const f32) !void {
+fn viewportScale(logical_width: i32, logical_height: i32, framebuffer_width: i32, framebuffer_height: i32) f32 {
+    if (logical_width <= 0 or logical_height <= 0 or framebuffer_width <= 0 or framebuffer_height <= 0) return 1.0;
+    const x_scale = @as(f32, @floatFromInt(framebuffer_width)) / @as(f32, @floatFromInt(logical_width));
+    const y_scale = @as(f32, @floatFromInt(framebuffer_height)) / @as(f32, @floatFromInt(logical_height));
+    return @max(x_scale, y_scale);
+}
+
+fn drawRects(gl: State, width: i32, height: i32, scale: f32, values: []const f32) !void {
     var iter = renderer_ir.RectIterator.init(values) catch return error.InvalidIrBuffer;
     c.glUseProgram(gl.rect_program);
     c.glUniform2f(c.glGetUniformLocation(gl.rect_program, "u_screen"), @floatFromInt(width), @floatFromInt(height));
+    c.glUniform1f(c.glGetUniformLocation(gl.rect_program, "u_pixel_scale"), scale);
     c.glBindBuffer(c.GL_ARRAY_BUFFER, gl.rect_vbo);
     const verts = [_]f32{ 0, 0, 1, 0, 0, 1, 1, 1 };
     c.glBufferData(c.GL_ARRAY_BUFFER, @intCast(verts.len * @sizeOf(f32)), &verts, c.GL_STATIC_DRAW);
@@ -320,13 +329,14 @@ const rect_vertex_shader =
 ;
 
 const rect_fragment_shader =
-    \\precision mediump float;
+    \\precision highp float;
     \\varying vec2 v_local;
     \\varying vec2 v_size;
     \\uniform vec4 u_color;
     \\uniform vec4 u_color2;
     \\uniform float u_radius;
     \\uniform float u_shadow;
+    \\uniform float u_pixel_scale;
     \\uniform int u_mode;
     \\float rounded_box(vec2 p, vec2 b, float r) {
     \\  vec2 q = abs(p) - b + vec2(r);
@@ -335,7 +345,7 @@ const rect_fragment_shader =
     \\void main() {
     \\  vec2 p = v_local - v_size * 0.5;
     \\  float d = rounded_box(p, v_size * 0.5, u_radius);
-    \\  float aa = 1.0;
+    \\  float aa = 1.0 / max(u_pixel_scale, 1.0);
     \\  float alpha = 1.0 - smoothstep(0.0, aa, d);
     \\  if (u_mode == 1) {
     \\    float sd = rounded_box(p - vec2(0.0, -u_shadow * 0.18), v_size * 0.5, u_radius + u_shadow * 0.35);
@@ -424,6 +434,12 @@ test "frame proof sample hash is stable" {
     };
     try std.testing.expectEqual(hashSamples(&samples), hashSamples(&samples));
     try std.testing.expect(hashSamples(&samples) != 0);
+}
+
+test "viewport scale follows the EGL framebuffer backing size" {
+    try std.testing.expectEqual(@as(f32, 1.0), viewportScale(1280, 720, 1280, 720));
+    try std.testing.expectEqual(@as(f32, 2.0), viewportScale(1280, 720, 2560, 1440));
+    try std.testing.expectEqual(@as(f32, 1.0), viewportScale(0, 720, 2560, 1440));
 }
 
 test "font atlas refresh API accepts populated variable font atlas" {

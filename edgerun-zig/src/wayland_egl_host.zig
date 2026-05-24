@@ -85,6 +85,20 @@ const EglState = struct {
     context: c.EGLContext,
     surface: c.EGLSurface,
     window: *c.wl_egl_window,
+
+    fn surfaceSize(self: EglState) !SurfaceSize {
+        var width: c.EGLint = 0;
+        var height: c.EGLint = 0;
+        if (c.eglQuerySurface(self.display, self.surface, c.EGL_WIDTH, &width) != c.EGL_TRUE) return error.EglSurfaceQueryFailed;
+        if (c.eglQuerySurface(self.display, self.surface, c.EGL_HEIGHT, &height) != c.EGL_TRUE) return error.EglSurfaceQueryFailed;
+        if (width <= 0 or height <= 0) return error.InvalidFramebufferSize;
+        return .{ .width = width, .height = height };
+    }
+};
+
+const SurfaceSize = struct {
+    width: i32,
+    height: i32,
 };
 
 const SceneState = struct {
@@ -169,9 +183,10 @@ pub fn main(init: std.process.Init) !void {
             updateHoverHit(&app, scene_state.commandSlice());
             wl.input_dirty = false;
         }
-        try renderer_gles.renderFrameToViewport(gl, wl.width, wl.height, wl.framebufferWidth(), wl.framebufferHeight(), buffers);
+        const framebuffer = try egl.surfaceSize();
+        try renderer_gles.renderFrameToViewport(gl, wl.width, wl.height, framebuffer.width, framebuffer.height, buffers);
         if (!frame_verified) {
-            _ = try renderer_gles.verifyFrameNonBlank(wl.framebufferWidth(), wl.framebufferHeight());
+            _ = try renderer_gles.verifyFrameNonBlank(framebuffer.width, framebuffer.height);
             frame_verified = true;
         }
         if (c.eglSwapBuffers(egl.display, egl.surface) != c.EGL_TRUE) return error.EglSwapFailed;
@@ -306,6 +321,7 @@ fn initEgl(wl: *WaylandState) !EglState {
     const egl_surface = c.eglCreateWindowSurface(egl_display, config, @ptrCast(window), null);
     if (egl_surface == c.EGL_NO_SURFACE) return error.EglSurfaceFailed;
     if (c.eglMakeCurrent(egl_display, egl_surface, egl_surface, context) != c.EGL_TRUE) return error.EglMakeCurrentFailed;
+    if (c.eglSwapInterval(egl_display, 1) != c.EGL_TRUE) return error.EglSwapIntervalFailed;
     return .{ .display = egl_display, .context = context, .surface = egl_surface, .window = window };
 }
 
