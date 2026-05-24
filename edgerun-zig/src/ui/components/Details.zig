@@ -1,6 +1,7 @@
 const std = @import("std");
 const common = @import("../../ui_component_common.zig");
 const layout = @import("../../layouts/Types.zig");
+const base_surface = @import("base/Surface.zig");
 const ui = @import("../../ui.zig");
 const ui_input = @import("../../input.zig");
 
@@ -66,8 +67,7 @@ pub fn register(registry: *ComponentRegistry) RegistryError!void {
 
 pub fn renderDetails(details: Details, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
     const style = options.style;
-    try scene.pushRect(bounds, style.panel, .fill, details_radius, 0.0);
-    try scene.pushRect(bounds, style.border, .border, details_radius, 0.0);
+    try base_surface.renderFrame(scene, bounds, options);
 
     const summary_bounds = ui.Rect.init(bounds.x + details_padding_x, bounds.y + details_padding_y, @max(1.0, bounds.w - details_padding_x * 2.0), details_summary_h);
     try scene.pushAlignedText(ui.Rect.init(summary_bounds.x, summary_bounds.y + details_summary_text_y, @max(1.0, summary_bounds.w - details_marker_w), details_summary_text_h), details.summary, style.text, .start);
@@ -190,7 +190,6 @@ pub fn readHtml(html: []const u8, text_out: []u8) HtmlError!Details {
     };
 }
 
-const details_radius: f32 = 8.0;
 const details_padding_x: f32 = 14.0;
 const details_padding_y: f32 = 12.0;
 const details_summary_h: f32 = 28.0;

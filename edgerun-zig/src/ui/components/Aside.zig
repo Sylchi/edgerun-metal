@@ -1,6 +1,7 @@
 const std = @import("std");
 const common = @import("../../ui_component_common.zig");
 const layout = @import("../../layouts/Types.zig");
+const base_surface = @import("base/Surface.zig");
 const ui = @import("../../ui.zig");
 
 const ComponentRegistry = common.ComponentRegistry;
@@ -63,9 +64,8 @@ pub fn register(registry: *ComponentRegistry) RegistryError!void {
 
 pub fn renderAside(aside: Aside, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
     const style = options.style;
-    try scene.pushRect(bounds, style.panel, .fill, aside_radius, 0.0);
-    try scene.pushRect(bounds, style.border, .border, aside_radius, 0.0);
-    try scene.pushRect(ui.Rect.init(bounds.x, bounds.y, aside_accent_w, bounds.h), style.accent, .fill, aside_radius, 0.0);
+    try base_surface.renderFrame(scene, bounds, options);
+    try scene.pushRect(ui.Rect.init(bounds.x, bounds.y, aside_accent_w, bounds.h), style.accent, .fill, base_surface.radius, 0.0);
 
     const content = bounds.insetLtrb(aside_padding_x, aside_padding_y, aside_padding_x, aside_padding_y);
     try scene.pushWrappedText(ui.Rect.init(content.x, content.y, content.w, aside_title_h), aside.title, style.text, .{
@@ -162,7 +162,6 @@ pub fn readHtml(html: []const u8, text_out: []u8) HtmlError!Aside {
     return .{ .title = title, .body = content };
 }
 
-const aside_radius: f32 = 8.0;
 const aside_accent_w: f32 = 4.0;
 const aside_padding_x: f32 = 18.0;
 const aside_padding_y: f32 = 14.0;

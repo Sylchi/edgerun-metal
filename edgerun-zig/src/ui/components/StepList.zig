@@ -1,6 +1,7 @@
 const std = @import("std");
 const common = @import("../../ui_component_common.zig");
 const layout = @import("../../layouts/Types.zig");
+const base_surface = @import("base/Surface.zig");
 const ui = @import("../../ui.zig");
 const ui_input = @import("../../input.zig");
 
@@ -78,8 +79,7 @@ pub fn register(registry: *ComponentRegistry) RegistryError!void {
 pub fn renderStepList(list: StepList, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
     if (list.steps.len == 0) return;
     const style = options.style;
-    try scene.pushRect(bounds, style.panel, .fill, step_radius, 0.0);
-    try scene.pushRect(bounds, style.border, .border, step_radius, 0.0);
+    try base_surface.renderFrame(scene, bounds, options);
 
     var y = bounds.y + step_padding_y;
     const content_x = bounds.x + step_padding_x;
@@ -238,7 +238,6 @@ fn parseStepStateName(value: []const u8) ?StepState {
     return null;
 }
 
-const step_radius: f32 = 8.0;
 const step_padding_x: f32 = 14.0;
 const step_padding_y: f32 = 14.0;
 const step_item_h: f32 = 58.0;

@@ -2,6 +2,7 @@ const std = @import("std");
 const common = @import("../../ui_component_common.zig");
 const ui = @import("../../ui.zig");
 const layout = @import("../../layouts/Types.zig");
+const base_surface = @import("base/Surface.zig");
 
 const ComponentRegistry = common.ComponentRegistry;
 const HtmlError = common.HtmlError;
@@ -60,9 +61,10 @@ pub fn register(registry: *ComponentRegistry) RegistryError!void {
 }
 
 pub fn renderCallout(callout: Callout, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
-    try scene.pushRect(bounds, options.style.row, .fill, callout_radius, 0.0);
-    try scene.pushRect(bounds, options.style.border, .border, callout_radius, 0.0);
-    try scene.pushRect(ui.Rect.init(bounds.x, bounds.y, callout_accent_w, bounds.h), options.style.accent, .fill, callout_radius, 0.0);
+    var frame_options = options;
+    frame_options.surface_variant = .subtle;
+    try base_surface.renderFrame(scene, bounds, frame_options);
+    try scene.pushRect(ui.Rect.init(bounds.x, bounds.y, callout_accent_w, bounds.h), options.style.accent, .fill, base_surface.radius, 0.0);
     try scene.pushWrappedText(bounds.insetLtrb(callout_text_x, callout_text_y, callout_text_x, callout_text_y), callout.value, options.style.text, .{
         .line_height = callout_line_h,
         .average_char_width = callout_avg_w,
@@ -131,7 +133,6 @@ pub fn readHtml(html: []const u8, text_out: []u8) HtmlError!Callout {
     return error.UnsupportedHtml;
 }
 
-const callout_radius: f32 = 8.0;
 const callout_accent_w: f32 = 4.0;
 const callout_text_x: f32 = 18.0;
 const callout_text_y: f32 = 14.0;

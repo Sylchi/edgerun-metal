@@ -3,6 +3,8 @@ const common = @import("../../ui_component_common.zig");
 const ui = @import("../../ui.zig");
 const ui_input = @import("../../input.zig");
 const layout = @import("../../layouts/Types.zig");
+const base_badge = @import("base/Badge.zig");
+const base_surface = @import("base/Surface.zig");
 
 const RenderOptions = common.RenderOptions;
 
@@ -24,7 +26,9 @@ pub const ArticleCard = struct {
 };
 
 pub fn renderArticleCard(article: ArticleCard, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
-    try renderCardSurface(scene, bounds, options);
+    var frame_options = options;
+    frame_options.surface_variant = .elevated;
+    try base_surface.renderFrame(scene, bounds, frame_options);
     const inset = bounds.insetUniform(article_padding);
     const badge_width = @min(article_badge_max_width, @max(article_badge_min_width, inset.w * article_badge_width_ratio));
     try renderCategoryBadge(scene, ui.Rect.init(inset.x, inset.y, badge_width, article_badge_height), article.category, options);
@@ -65,34 +69,10 @@ pub fn measureArticleCard(article: ArticleCard, constraints: layout.Constraints)
     );
 }
 
-fn renderCardSurface(scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
-    try scene.pushRect(bounds.insetUniform(-surface_shadow_inset), surface_shadow, .shadow, surface_radius, surface_shadow_size);
-    try scene.pushRect(bounds, options.style.panel, .fill, surface_radius, 0.0);
-    try scene.pushRect(bounds, options.style.border, .border, surface_radius, 0.0);
-}
-
 fn renderCategoryBadge(scene: *ui.Scene, bounds: ui.Rect, label: []const u8, options: RenderOptions) ui.RenderError!void {
-    var fill = options.style.accent;
-    fill.a = badge_fill_alpha;
-    const height = @min(badge_height, bounds.h);
-    const badge_bounds = ui.Rect.init(bounds.x, bounds.y + (bounds.h - height) * 0.5, bounds.w, height);
-    try scene.pushRect(badge_bounds, fill, .fill, height * 0.5, 0.0);
-    try scene.pushAlignedText(badgeLabelBounds(badge_bounds), label, options.style.accent, .center);
+    return base_badge.render(scene, bounds, label, options);
 }
 
-fn badgeLabelBounds(bounds: ui.Rect) ui.Rect {
-    const padding = @min(badge_padding_x, bounds.w * 0.5);
-    return ui.Rect.init(bounds.x + padding, bounds.y + (bounds.h - badge_text_height) * 0.5, @max(1.0, bounds.w - padding * 2.0), badge_text_height);
-}
-
-const surface_radius: f32 = 10.0;
-const surface_shadow = ui.Color{ .r = 0, .g = 0, .b = 0, .a = 96 };
-const surface_shadow_size: f32 = 8.0;
-const surface_shadow_inset: f32 = 1.0;
-const badge_height: f32 = 24.0;
-const badge_text_height: f32 = 13.0;
-const badge_padding_x: f32 = 12.0;
-const badge_fill_alpha: u8 = 48;
 const article_padding: f32 = 18.0;
 const article_gap: f32 = 12.0;
 const article_badge_min_width: f32 = 96.0;

@@ -1,6 +1,7 @@
 const std = @import("std");
 const common = @import("../../ui_component_common.zig");
 const layout = @import("../../layouts/Types.zig");
+const base_surface = @import("base/Surface.zig");
 const ui = @import("../../ui.zig");
 const ui_input = @import("../../input.zig");
 
@@ -73,8 +74,7 @@ pub fn register(registry: *ComponentRegistry) RegistryError!void {
 pub fn renderChoiceGroup(group: ChoiceGroup, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
     if (group.options.len == 0) return;
     const style = options.style;
-    try scene.pushRect(bounds, style.panel, .fill, choice_radius, 0.0);
-    try scene.pushRect(bounds, style.border, .border, choice_radius, 0.0);
+    try base_surface.renderFrame(scene, bounds, options);
 
     const content_x = bounds.x + choice_padding_x;
     const content_w = @max(1.0, bounds.w - choice_padding_x * 2.0);
@@ -251,7 +251,6 @@ fn readOptionsHtml(html: []const u8, group_id: u32, out_options: []ChoiceOption,
     return out_options[0..option_count];
 }
 
-const choice_radius: f32 = 8.0;
 const choice_padding_x: f32 = 14.0;
 const choice_padding_y: f32 = 14.0;
 const choice_legend_h: f32 = 42.0;

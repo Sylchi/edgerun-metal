@@ -1,5 +1,6 @@
 const std = @import("std");
 const common = @import("../../ui_component_common.zig");
+const base_surface = @import("base/Surface.zig");
 const ui = @import("../../ui.zig");
 const ui_input = @import("../../input.zig");
 
@@ -70,8 +71,7 @@ pub fn register(registry: *ComponentRegistry) RegistryError!void {
 pub fn renderTable(table: Table, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
     if (table.headers.len == 0) return;
     const style = options.style;
-    try scene.pushRect(bounds, style.panel, .fill, table_radius, 0.0);
-    try scene.pushRect(bounds, style.border, .border, table_radius, 0.0);
+    try base_surface.renderFrame(scene, bounds, options);
 
     const column_count = table.headers.len;
     const column_w = @max(1.0, (bounds.w - table_padding_x * 2.0) / @as(f32, @floatFromInt(column_count)));
@@ -282,7 +282,6 @@ fn tableCellBounds(bounds: ui.Rect, column_w: f32, y: f32, index: usize) ui.Rect
     return ui.Rect.init(bounds.x + table_padding_x + column_w * @as(f32, @floatFromInt(index)), y, @max(1.0, column_w - table_column_gap), table_text_h);
 }
 
-const table_radius: f32 = 8.0;
 const table_row_radius: f32 = 6.0;
 const table_padding_x: f32 = 14.0;
 const table_padding_y: f32 = 14.0;

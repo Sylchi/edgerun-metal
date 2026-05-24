@@ -7,6 +7,9 @@ const object = @import("object.zig");
 const ui = @import("ui.zig");
 const codec = @import("ui_codec.zig");
 const component_common = @import("ui_component_common.zig");
+const base_badge = @import("ui/components/base/Badge.zig");
+const base_button = @import("ui/components/base/Button.zig");
+const base_surface = @import("ui/components/base/Surface.zig");
 const article_card_component = @import("ui/components/ArticleCard.zig");
 const article_list_item_component = @import("ui/components/ArticleListItem.zig");
 const aside_component = @import("ui/components/Aside.zig");
@@ -290,7 +293,7 @@ pub fn renderComponent(scene: *ui.Scene, bounds: ui.Rect, component: Component, 
     switch (component) {
         .card => |card| try renderSurface(scene, bounds, card.title, card.detail, options),
         .badge => |badge| try renderBadge(scene, bounds, badge.label, options),
-        .button => |button| try renderButton(scene, bounds, button, options),
+        .button => |button| try renderButton(scene, bounds, button.id, button.label, options),
         else => try ui.render(scene, component.node(), bounds, options.style),
     }
 }
@@ -316,8 +319,7 @@ pub fn renderRegion(scene: *ui.Scene, bounds: ui.Rect, region: Region, options: 
     if (region.children.len == 0) return;
     if (region.children.len > codec_max_stack_children) return error.CommandBudgetExceeded;
     if (region.tag == .header or region.tag == .footer) {
-        try scene.pushRect(bounds, options.style.panel, .fill, region_radius, 0.0);
-        try scene.pushRect(bounds, options.style.border, .border, region_radius, 0.0);
+        try base_surface.renderFrame(scene, bounds, options);
     }
 
     const constraints = constraintsFromBounds(bounds);
@@ -346,155 +348,17 @@ pub fn renderStack(scene: *ui.Scene, bounds: ui.Rect, stack: Stack, options: Ren
 }
 
 pub fn renderSurface(scene: *ui.Scene, bounds: ui.Rect, title: []const u8, detail: []const u8, options: RenderOptions) ui.RenderError!void {
-    const style = options.style;
-    const radius = switch (options.surface_variant) {
-        .panel => surface_radius,
-        .elevated => surface_radius + 2.0,
-        .subtle => surface_radius,
-    };
-    if (options.surface_variant == .elevated) {
-        try scene.pushRect(bounds.insetUniform(-1.0), surface_shadow, .shadow, radius, surface_shadow_size);
-    }
-    const fill_color = switch (options.surface_variant) {
-        .panel, .elevated => style.panel,
-        .subtle => style.row,
-    };
-    try scene.pushRect(bounds, fill_color, .fill, radius, 0.0);
-    try scene.pushRect(bounds, style.border, .border, radius, 0.0);
-    if (title.len == 0 and detail.len == 0) return;
-
-    const title_bounds = ui.Rect.init(bounds.x + surface_padding, bounds.y + surface_padding, @max(1.0, bounds.w - surface_padding * 2.0), surface_title_height);
-    if (title.len != 0) {
-        try scene.pushAlignedText(title_bounds, title, style.text, .start);
-    }
-    if (detail.len != 0) {
-        const detail_y = title_bounds.y + title_bounds.h + surface_detail_gap;
-        const detail_bounds = ui.Rect.init(title_bounds.x, detail_y, title_bounds.w, @max(1.0, bounds.y + bounds.h - detail_y - surface_padding));
-        try scene.pushWrappedText(detail_bounds, detail, style.muted, .{
-            .line_height = surface_detail_height,
-            .average_char_width = 8.5,
-            .max_lines = 3,
-        });
-    }
+    return base_surface.render(scene, bounds, .{ .title = title, .detail = detail }, options);
 }
 
 fn renderBadge(scene: *ui.Scene, bounds: ui.Rect, label: []const u8, options: RenderOptions) ui.RenderError!void {
-    const style = options.style;
-    const color = switch (options.badge_variant) {
-        .accent => style.accent,
-        .neutral => style.muted,
-        .danger => ui.Color{ .r = 239, .g = 68, .b = 68 },
-    };
-    var fill = color;
-    fill.a = badge_fill_alpha;
-    const height = @min(badge_height, bounds.h);
-    const badge_bounds = ui.Rect.init(bounds.x, bounds.y + (bounds.h - height) * 0.5, bounds.w, height);
-    try scene.pushRect(badge_bounds, fill, .fill, height * 0.5, 0.0);
-    try scene.pushAlignedText(badgeLabelBounds(badge_bounds), label, color, .center);
+    return base_badge.render(scene, bounds, label, options);
 }
 
-fn renderButton(scene: *ui.Scene, bounds: ui.Rect, button: Button, options: RenderOptions) ui.RenderError!void {
-    const text_color = switch (options.button_variant) {
-        .primary => options.style.bg,
-        .outline => options.style.text,
-        .ghost => options.style.muted,
-    };
-    const icon_color = text_color;
-    switch (options.button_variant) {
-        .primary => {
-            try scene.pushRect(bounds, options.style.accent, .fill, button_radius, 0.0);
-            try scene.pushRect(bounds, options.style.accent, .border, button_radius, 0.0);
-        },
-        .outline => {
-            try scene.pushRect(bounds, options.style.panel, .fill, button_radius, 0.0);
-            try scene.pushRect(bounds, options.style.border, .border, button_radius, 0.0);
-        },
-        .ghost => {
-            try scene.pushRect(bounds, ui.Color.clear, .fill, button_radius, 0.0);
-        },
-    }
-    try renderButtonContent(scene, bounds, button.label, text_color, icon_color, options.button_leading_icon, options.button_trailing_icon);
-    try scene.pushHit(.{ .slot = 0, .kind = .button, .id = button.id, .bounds = bounds });
+fn renderButton(scene: *ui.Scene, bounds: ui.Rect, id: u32, label: []const u8, options: RenderOptions) ui.RenderError!void {
+    return base_button.render(scene, bounds, .{ .id = id, .label = label }, options);
 }
 
-fn buttonTextBounds(bounds: ui.Rect) ui.Rect {
-    const margin = @min(button_label_padding, bounds.w * 0.5);
-    return ui.Rect.init(bounds.x + margin, bounds.y + (bounds.h - button_label_height) * 0.5, @max(1.0, bounds.w - margin * 2.0), button_label_height);
-}
-
-fn renderButtonContent(scene: *ui.Scene, bounds: ui.Rect, label: []const u8, text_color: ui.Color, icon_color: ui.Color, leading_icon: ?icon.Icon, trailing_icon: ?icon.Icon) ui.RenderError!void {
-    const has_leading = leading_icon != null;
-    const has_trailing = trailing_icon != null;
-    if (!has_leading and !has_trailing) {
-        try scene.pushAlignedText(buttonTextBounds(bounds), label, text_color, .center);
-        return;
-    }
-
-    const icon_count: usize = @intFromBool(has_leading) + @intFromBool(has_trailing);
-    const label_w = estimatedButtonLabelWidth(label);
-    const content_w = label_w +
-        @as(f32, @floatFromInt(icon_count)) * button_icon_size +
-        @as(f32, @floatFromInt(icon_count)) * button_icon_gap;
-    var cursor_x = bounds.x + @max(button_content_min_x, (bounds.w - content_w) * 0.5);
-    const icon_y = bounds.y + (bounds.h - button_icon_size) * 0.5;
-    const text_y = bounds.y + (bounds.h - button_label_height) * 0.5;
-
-    if (leading_icon) |value| {
-        try scene.pushIconQuad(.{
-            .bounds = ui.Rect.init(cursor_x, icon_y, button_icon_size, button_icon_size),
-            .atlas_id = icon.atlasId(value),
-            .color = icon_color,
-        });
-        cursor_x += button_icon_size + button_icon_gap;
-    }
-
-    try scene.pushAlignedText(ui.Rect.init(cursor_x, text_y, label_w, button_label_height), label, text_color, .start);
-    cursor_x += label_w + button_icon_gap;
-
-    if (trailing_icon) |value| {
-        try scene.pushIconQuad(.{
-            .bounds = ui.Rect.init(cursor_x, icon_y, button_icon_size, button_icon_size),
-            .atlas_id = icon.atlasId(value),
-            .color = icon_color,
-        });
-    }
-}
-
-fn estimatedButtonLabelWidth(label: []const u8) f32 {
-    return @max(button_label_min_width, @as(f32, @floatFromInt(label.len)) * button_label_average_w);
-}
-
-fn contentInset(bounds: ui.Rect, padding: f32) ?ui.Rect {
-    const clamped = @min(padding, @min(bounds.w, bounds.h) * 0.5);
-    const out = bounds.insetUniform(clamped);
-    return if (out.valid()) out else null;
-}
-
-fn badgeLabelBounds(bounds: ui.Rect) ui.Rect {
-    const padding = @min(badge_padding_x, bounds.w * 0.5);
-    return ui.Rect.init(bounds.x + padding, bounds.y + (bounds.h - badge_text_height) * 0.5, @max(1.0, bounds.w - padding * 2.0), badge_text_height);
-}
-
-const button_radius: f32 = 7.0;
-const button_label_height: f32 = 16.0;
-const button_label_padding: f32 = 14.0;
-const button_label_average_w: f32 = 8.0;
-const button_label_min_width: f32 = 8.0;
-const button_icon_size: f32 = 18.0;
-const button_icon_gap: f32 = 8.0;
-const button_content_min_x: f32 = 14.0;
-const badge_height: f32 = 24.0;
-const badge_text_height: f32 = 13.0;
-const badge_padding_x: f32 = 12.0;
-const badge_fill_alpha: u8 = 48;
-const surface_radius: f32 = 10.0;
-const surface_padding: f32 = 16.0;
-const surface_title_height: f32 = 18.0;
-const surface_detail_height: f32 = 16.0;
-const surface_detail_gap: f32 = 8.0;
-const surface_shadow = ui.Color{ .r = 0, .g = 0, .b = 0, .a = 96 };
-const surface_shadow_size: f32 = 8.0;
-const region_radius: f32 = 8.0;
 const region_padding_x: f32 = 12.0;
 const region_padding_y: f32 = 12.0;
 const region_child_gap: f32 = 10.0;
@@ -503,13 +367,6 @@ const primitive_text_average_w: f32 = 8.0;
 const primitive_text_max_lines: usize = 8;
 const primitive_text_min_width: f32 = 24.0;
 const primitive_control_max_width: f32 = 4096.0;
-const primitive_card_min_width: f32 = 160.0;
-const primitive_card_title_average_w: f32 = 8.5;
-const primitive_card_detail_average_w: f32 = 8.0;
-const primitive_card_detail_max_lines: usize = 3;
-const primitive_badge_min_width: f32 = 28.0;
-const primitive_button_min_width: f32 = 44.0;
-const primitive_horizontal_padding_scale: f32 = 2.0;
 const primitive_stack_max_children = codec_max_stack_children;
 
 fn measureChildren(children: []const Component, constraints: layouts.types.Constraints, options: RenderOptions, out: []layouts.types.Measurement) []layouts.types.Measurement {
@@ -534,42 +391,15 @@ fn measureText(value: []const u8, constraints: layouts.types.Constraints) layout
 }
 
 fn measureSurface(title: []const u8, detail: []const u8, constraints: layouts.types.Constraints) layouts.types.Measurement {
-    const inner = constraints.inner(layouts.types.Insets.uniform(surface_padding));
-    const title_measure = layouts.types.measureText(title, inner, .{
-        .line_height = surface_title_height,
-        .average_char_width = primitive_card_title_average_w,
-        .max_lines = 1,
-    });
-    const detail_measure = layouts.types.measureText(detail, inner, .{
-        .line_height = surface_detail_height,
-        .average_char_width = primitive_card_detail_average_w,
-        .max_lines = primitive_card_detail_max_lines,
-    });
-    const content_width = @max(title_measure.preferred.w, detail_measure.preferred.w);
-    const content_height = title_measure.preferred.h + surface_detail_gap + detail_measure.preferred.h;
-    return layouts.types.Measurement.flexible(
-        .{ .w = primitive_card_min_width, .h = surface_padding * primitive_horizontal_padding_scale + surface_title_height },
-        .{ .w = content_width + surface_padding * primitive_horizontal_padding_scale, .h = content_height + surface_padding * primitive_horizontal_padding_scale },
-        .{ .w = primitive_control_max_width, .h = content_height + surface_padding * primitive_horizontal_padding_scale },
-    ).applyExact(constraints);
+    return base_surface.measure(.{ .title = title, .detail = detail }, constraints);
 }
 
 fn measureBadge(label: []const u8, constraints: layouts.types.Constraints) layouts.types.Measurement {
-    const preferred_width = @max(primitive_badge_min_width, @as(f32, @floatFromInt(label.len)) * button_label_average_w + badge_padding_x * primitive_horizontal_padding_scale);
-    return layouts.types.Measurement.flexible(
-        .{ .w = primitive_badge_min_width, .h = badge_height },
-        .{ .w = preferred_width, .h = badge_height },
-        .{ .w = primitive_control_max_width, .h = badge_height },
-    ).applyExact(constraints);
+    return base_badge.measure(label, constraints);
 }
 
 fn measureButton(label: []const u8, constraints: layouts.types.Constraints) layouts.types.Measurement {
-    const preferred_width = @max(primitive_button_min_width, estimatedButtonLabelWidth(label) + button_label_padding * primitive_horizontal_padding_scale);
-    return layouts.types.Measurement.flexible(
-        .{ .w = primitive_button_min_width, .h = ui.buttonNode(0, "").preferredSize().h },
-        .{ .w = preferred_width, .h = ui.buttonNode(0, "").preferredSize().h },
-        .{ .w = primitive_control_max_width, .h = ui.buttonNode(0, "").preferredSize().h },
-    ).applyExact(constraints);
+    return base_button.measure(label, constraints);
 }
 
 fn measurePreferredNode(node: ui.Node, constraints: layouts.types.Constraints) layouts.types.Measurement {
