@@ -3,6 +3,7 @@ const app_mod = @import("app.zig");
 const BoundedArena = @import("arena.zig").BoundedArena;
 const byte_utils = @import("bytes.zig");
 const clock = @import("clock.zig");
+const grant = @import("grant.zig");
 const identity = @import("identity.zig");
 const preimage = @import("preimage.zig");
 const store = @import("store.zig");
@@ -469,6 +470,58 @@ test "wasm interpreter executes exported i64 function and charges app ticks" {
 
     try std.testing.expectEqual(@as(i64, 42), try wasm.executeExportI64(&app, &return_forty_two_wasm, "main"));
     try std.testing.expectEqual(@as(u64, 2), app.executionRemaining());
+}
+
+test "wasm interpreter produces clocked work receipt for execution" {
+    var memory: [256]u8 = undefined;
+    var storage_bytes: [64]u8 = undefined;
+    var slots: [1]store.Blob = undefined;
+    var app = testApp(&memory, &storage_bytes, &slots, 4);
+    const start = clock.Stamp{ .keeper = .{ .bytes = [_]u8{92} ++ [_]u8{0} ** 31 } };
+    const end = clock.Stamp{ .keeper = start.keeper, .tick = 2 };
+    const parent = identity.Identity.init(.app, identity.Source.prepare(.hash, &preimage.rawHash("wasm receipt parent")).?, start).?;
+    const allocation = App.DeclaredAllocation{
+        .memory_bytes = memory.len,
+        .storage_bytes = storage_bytes.len,
+        .storage_slots = slots.len,
+        .execution_ticks = 4,
+    };
+    const spawn_receipt = grant.spawnReceiptAllocated(
+        parent,
+        app.id,
+        start,
+        allocation.memory_bytes,
+        allocation.storage_bytes,
+        allocation.storage_slots,
+        allocation.execution_ticks,
+        allocation.route_handles,
+        allocation.device_handles,
+        allocation.route_handle,
+        allocation.device_handle,
+    ).?;
+    const input = preimage.hash("edgerun:zig:v1:wasm-test-input", "return forty two input");
+    const app_hash = preimage.hash("edgerun:zig:v1:wasm-test-code", &return_forty_two_wasm);
+    const manifest = preimage.hash("edgerun:zig:v1:wasm-test-manifest", "return forty two manifest");
+    const result = try wasm.executeExportI64Receipt(&app, &return_forty_two_wasm, "main", .{
+        .parent = parent.id,
+        .input = input,
+        .app_hash = app_hash,
+        .manifest = manifest,
+        .clock_start = start,
+        .clock_end = end,
+        .allocation = allocation,
+        .spawn_receipt = spawn_receipt,
+    });
+
+    try std.testing.expectEqual(@as(i64, 42), result.value);
+    try std.testing.expectEqualSlices(u8, &wasm.outputHashI64(42), &result.output);
+    try std.testing.expect(result.receipt.valid());
+    try std.testing.expect(result.receipt.parent.eql(parent.id));
+    try std.testing.expect(result.receipt.app.eql(app.id.id));
+    try std.testing.expectEqual(@as(u64, 2), result.receipt.execution_used);
+    try std.testing.expectEqual(start, result.receipt.clock_start);
+    try std.testing.expectEqual(end, result.receipt.clock_end);
+    try std.testing.expectEqual(allocation, result.receipt.allocation);
 }
 
 test "wasm interpreter executes nop as charged no-op" {
