@@ -27,7 +27,7 @@ pub const ReceiptResult = struct {
 pub fn executeExportI64(app: *App, wasm_bytes: []const u8, export_name: []const u8) wasm.Error!i64 {
     const allocation = app.executionAllocation();
     var runtime = wasm.Runtime.init(allocation.memory, allocation.execution_ticks);
-    return wasm.executeExportI64Runtime(&runtime, wasm_bytes, export_name);
+    return wasm.executeExportI64(&runtime, wasm_bytes, export_name);
 }
 
 pub fn executeExportI64Receipt(app: *App, wasm_bytes: []const u8, export_name: []const u8, context: ReceiptContext) wasm.Error!ReceiptResult {

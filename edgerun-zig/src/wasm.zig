@@ -992,7 +992,7 @@ const Executor = struct {
     }
 };
 
-pub fn executeExportI64Runtime(runtime: *Runtime, wasm_bytes: []const u8, export_name: []const u8) Error!i64 {
+pub fn executeExportI64(runtime: *Runtime, wasm_bytes: []const u8, export_name: []const u8) Error!i64 {
     if (export_name.len == 0) return error.BadArgument;
     const module = try Module.parse(wasm_bytes);
     const required_memory = try module.requiredMemoryBytes();

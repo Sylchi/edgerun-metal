@@ -465,7 +465,7 @@ fn testApp(memory: []u8, storage_bytes: []u8, slots: []store.Blob, execution_tic
 
 fn executeRuntime(memory: []u8, ticks: *u64, wasm_bytes: []const u8) wasm.Error!i64 {
     var runtime = wasm.Runtime.init(memory, ticks);
-    return wasm.executeExportI64Runtime(&runtime, wasm_bytes, "main");
+    return wasm.executeExportI64(&runtime, wasm_bytes, "main");
 }
 
 test "wasm interpreter executes exported i64 function and charges app ticks" {
@@ -483,7 +483,7 @@ test "wasm interpreter core runs from explicit runtime allocation" {
     var ticks: u64 = 4;
     var runtime = wasm.Runtime.init(&memory, &ticks);
 
-    try std.testing.expectEqual(@as(i64, 42), try wasm.executeExportI64Runtime(&runtime, &return_forty_two_wasm, "main"));
+    try std.testing.expectEqual(@as(i64, 42), try wasm.executeExportI64(&runtime, &return_forty_two_wasm, "main"));
     try std.testing.expectEqual(@as(u64, 2), ticks);
 }
 
