@@ -204,6 +204,7 @@ const Opcode = enum(u8) {
     call_indirect = 0x11,
     drop = 0x1a,
     select = 0x1b,
+    select_typed = 0x1c,
     local_get = 0x20,
     local_set = 0x21,
     local_tee = 0x22,
@@ -1480,6 +1481,13 @@ const Executor = struct {
                     const true_value = try frame.pop();
                     try frame.push(if (condition != 0) true_value else false_value);
                 },
+                .select_typed => {
+                    const value_type = try readSelectType(&reader);
+                    const condition = try frame.popI32();
+                    const false_value = try popTypedValue(&frame, value_type);
+                    const true_value = try popTypedValue(&frame, value_type);
+                    try frame.push(if (condition != 0) true_value else false_value);
+                },
                 .local_get => {
                     const index = try reader.readU32Leb();
                     if (index >= local_limit) return error.Corrupt;
@@ -1986,6 +1994,7 @@ fn opcodeFromByte(value: u8) ?Opcode {
         @intFromEnum(Opcode.call_indirect) => .call_indirect,
         @intFromEnum(Opcode.drop) => .drop,
         @intFromEnum(Opcode.select) => .select,
+        @intFromEnum(Opcode.select_typed) => .select_typed,
         @intFromEnum(Opcode.local_get) => .local_get,
         @intFromEnum(Opcode.local_set) => .local_set,
         @intFromEnum(Opcode.local_tee) => .local_tee,
@@ -2146,6 +2155,12 @@ fn readBlockType(reader: *Reader) Error!void {
     if (!supportedValue(value_type)) return error.Unsupported;
 }
 
+fn readSelectType(reader: *Reader) Error!ValueType {
+    const type_count = try reader.readU32Leb();
+    if (type_count != 1) return error.Unsupported;
+    return readValueType(reader);
+}
+
 const IfSkipResult = enum {
     reached_else,
     reached_end,
@@ -2258,6 +2273,7 @@ fn skipOpcodeImmediate(reader: *Reader, opcode: Opcode) Error!void {
             }
             _ = try reader.readU32Leb();
         },
+        .select_typed => _ = try readSelectType(reader),
         .call_indirect => {
             _ = try reader.readU32Leb();
             _ = try reader.readU32Leb();
