@@ -39,6 +39,8 @@ const ext_memory_init: u32 = 8;
 const ext_data_drop: u32 = 9;
 const ext_memory_copy: u32 = 10;
 const ext_memory_fill: u32 = 11;
+const ext_table_init: u32 = 12;
+const ext_elem_drop: u32 = 13;
 const i32_min_as_f32: f32 = -2147483648.0;
 const i32_max_plus_one_as_f32: f32 = 2147483648.0;
 const u32_max_plus_one_as_f32: f32 = 4294967296.0;
@@ -670,6 +672,13 @@ const DataSegment = struct {
     dropped: bool = false,
 };
 
+const ElementSegment = struct {
+    entries: [max_table_entries]usize = undefined,
+    count: usize = 0,
+    passive: bool = false,
+    dropped: bool = false,
+};
+
 const Global = struct {
     value_type: ValueType = .i64,
     mutable: bool = false,
@@ -780,6 +789,8 @@ const Module = struct {
     table_entries: [max_table_entries]?usize = [_]?usize{null} ** max_table_entries,
     table_min_entries: usize = 0,
     has_table: bool = false,
+    element_segments: [max_data_segments]ElementSegment = undefined,
+    element_segment_count: usize = 0,
     data_segments: [max_data_segments]DataSegment = undefined,
     data_segment_count: usize = 0,
     declared_data_count: ?usize = null,
@@ -1108,19 +1119,23 @@ const Module = struct {
     fn parseElementSection(self: *Module, reader: *Reader) Error!void {
         const count = try reader.readU32Leb();
         if (count > max_data_segments) return error.Unsupported;
+        self.element_segment_count = count;
+        for (self.element_segments[0..count]) |*segment| {
+            segment.* = .{};
+        }
         var segment_index: usize = 0;
         while (segment_index < count) : (segment_index += 1) {
             const mode = try reader.readU32Leb();
             switch (mode) {
                 0 => try self.parseActiveFunctionElements(reader, 0, .function_index_vector),
-                1 => try self.skipPassiveFunctionElements(reader, .element_kind),
+                1 => try self.parsePassiveFunctionElements(reader, segment_index, .element_kind),
                 2 => {
                     const table_index = try reader.readU32Leb();
                     try self.parseActiveFunctionElements(reader, table_index, .element_kind);
                 },
                 3 => try self.skipPassiveFunctionElements(reader, .element_kind),
                 4 => try self.parseActiveFunctionElements(reader, 0, .ref_func_expression_vector),
-                5 => try self.skipPassiveFunctionElements(reader, .ref_func_expression_vector),
+                5 => try self.parsePassiveFunctionElements(reader, segment_index, .ref_func_expression_vector),
                 6 => {
                     const table_index = try reader.readU32Leb();
                     try self.parseActiveFunctionElements(reader, table_index, .ref_func_expression_vector);
@@ -1153,6 +1168,24 @@ const Module = struct {
             };
             if (function_ref >= self.totalFunctionCount()) return error.Corrupt;
             self.table_entries[base + function_index] = function_ref;
+        }
+    }
+
+    fn parsePassiveFunctionElements(self: *Module, reader: *Reader, segment_index: usize, payload: ElementPayload) Error!void {
+        const function_count = try readElementFunctionCount(reader, payload);
+        const segment = &self.element_segments[segment_index];
+        segment.passive = true;
+        segment.count = function_count;
+        var function_index: usize = 0;
+        while (function_index < function_count) : (function_index += 1) {
+            const function_ref = switch (payload) {
+                .function_index_vector,
+                .element_kind,
+                => try reader.readU32Leb(),
+                .ref_func_expression_vector => try readRefFuncExpression(reader),
+            };
+            if (function_ref >= self.totalFunctionCount()) return error.Corrupt;
+            segment.entries[function_index] = function_ref;
         }
     }
 
@@ -1657,6 +1690,8 @@ const Executor = struct {
             ext_data_drop => try self.dataDrop(reader),
             ext_memory_copy => try self.memoryCopy(frame, reader),
             ext_memory_fill => try self.memoryFill(frame, reader),
+            ext_table_init => try self.tableInit(frame, reader),
+            ext_elem_drop => try self.elemDrop(reader),
             else => return error.Unsupported,
         }
     }
@@ -1817,6 +1852,31 @@ const Executor = struct {
         const data_index = try reader.readU32Leb();
         if (data_index >= self.module.data_segment_count) return error.Corrupt;
         self.module.data_segments[data_index].dropped = true;
+    }
+
+    fn tableInit(self: *Executor, frame: *Frame, reader: *Reader) Error!void {
+        const element_index = try reader.readU32Leb();
+        try readTableIndex(reader);
+        if (element_index >= self.module.element_segment_count) return error.Corrupt;
+        const segment = self.module.element_segments[element_index];
+        if (!segment.passive or segment.dropped) return error.Trap;
+        const length = try popMemoryLength(frame);
+        const source = try popMemoryBase(frame);
+        const destination = try popMemoryBase(frame);
+        const source_end = checkedAdd(source, length) orelse return error.Trap;
+        if (source_end > segment.count) return error.Trap;
+        const destination_end = checkedAdd(destination, length) orelse return error.Trap;
+        if (destination_end > self.module.table_min_entries or destination_end > max_table_entries) return error.Trap;
+        var index: usize = 0;
+        while (index < length) : (index += 1) {
+            self.module.table_entries[destination + index] = segment.entries[source + index];
+        }
+    }
+
+    fn elemDrop(self: *Executor, reader: *Reader) Error!void {
+        const element_index = try reader.readU32Leb();
+        if (element_index >= self.module.element_segment_count) return error.Corrupt;
+        self.module.element_segments[element_index].dropped = true;
     }
 
     fn memoryFill(self: *Executor, frame: *Frame, reader: *Reader) Error!void {
@@ -2358,6 +2418,11 @@ fn skipExtendedOpcodeImmediate(reader: *Reader) Error!void {
             try readMemoryIndex(reader);
         },
         ext_memory_fill => try readMemoryIndex(reader),
+        ext_table_init => {
+            _ = try reader.readU32Leb();
+            try readTableIndex(reader);
+        },
+        ext_elem_drop => _ = try reader.readU32Leb(),
         else => return error.Unsupported,
     }
 }
@@ -2974,6 +3039,11 @@ fn readMemoryImmediate(reader: *Reader) Error!u32 {
 fn readMemoryIndex(reader: *Reader) Error!void {
     const memory_index = try reader.readU32Leb();
     if (memory_index != 0) return error.Unsupported;
+}
+
+fn readTableIndex(reader: *Reader) Error!void {
+    const table_index = try reader.readU32Leb();
+    if (table_index != 0) return error.Unsupported;
 }
 
 fn memoryLoadSize(kind: MemoryLoad) usize {
