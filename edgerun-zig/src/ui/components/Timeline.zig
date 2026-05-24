@@ -1,6 +1,7 @@
 const std = @import("std");
 const common = @import("../../ui_component_common.zig");
 const layout = @import("../../layouts/Types.zig");
+const base_surface = @import("base/Surface.zig");
 const ui = @import("../../ui.zig");
 const ui_input = @import("../../input.zig");
 
@@ -72,8 +73,7 @@ pub fn register(registry: *ComponentRegistry) RegistryError!void {
 pub fn renderTimeline(timeline: Timeline, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
     if (timeline.events.len == 0) return;
     const style = options.style;
-    try scene.pushRect(bounds, style.panel, .fill, timeline_radius, 0.0);
-    try scene.pushRect(bounds, style.border, .border, timeline_radius, 0.0);
+    try base_surface.renderFrame(scene, bounds, options);
 
     var y = bounds.y + timeline_padding_y;
     const content_x = bounds.x + timeline_padding_x;
@@ -212,7 +212,6 @@ fn readEventsHtml(html: []const u8, out_events: []TimelineEvent, text: *HtmlText
     return out_events[0..event_count];
 }
 
-const timeline_radius: f32 = 8.0;
 const timeline_padding_x: f32 = 12.0;
 const timeline_padding_y: f32 = 12.0;
 const timeline_event_h: f32 = 82.0;

@@ -1,6 +1,7 @@
 const std = @import("std");
 const common = @import("../../ui_component_common.zig");
 const layout = @import("../../layouts/Types.zig");
+const base_surface = @import("base/Surface.zig");
 const ui = @import("../../ui.zig");
 const ui_input = @import("../../input.zig");
 
@@ -71,8 +72,7 @@ pub fn register(registry: *ComponentRegistry) RegistryError!void {
 pub fn renderDefinitionList(list: DefinitionList, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
     if (list.items.len == 0) return;
     const style = options.style;
-    try scene.pushRect(bounds, style.panel, .fill, definition_radius, 0.0);
-    try scene.pushRect(bounds, style.border, .border, definition_radius, 0.0);
+    try base_surface.renderFrame(scene, bounds, options);
 
     var y = bounds.y + definition_padding_y;
     const content_x = bounds.x + definition_padding_x;
@@ -204,7 +204,6 @@ fn readItemsHtml(html: []const u8, out_items: []DefinitionItem, text: *HtmlTextA
     return out_items[0..item_count];
 }
 
-const definition_radius: f32 = 8.0;
 const definition_padding_x: f32 = 12.0;
 const definition_padding_y: f32 = 12.0;
 const definition_item_h: f32 = 76.0;

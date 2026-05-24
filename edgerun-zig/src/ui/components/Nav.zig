@@ -1,5 +1,6 @@
 const std = @import("std");
 const common = @import("../../ui_component_common.zig");
+const base_surface = @import("base/Surface.zig");
 const ui = @import("../../ui.zig");
 const ui_input = @import("../../input.zig");
 
@@ -67,8 +68,7 @@ pub fn register(registry: *ComponentRegistry) RegistryError!void {
 pub fn renderNav(nav: Nav, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
     if (nav.items.len == 0) return;
     const style = options.style;
-    try scene.pushRect(bounds, style.panel, .fill, nav_radius, 0.0);
-    try scene.pushRect(bounds, style.border, .border, nav_radius, 0.0);
+    try base_surface.renderFrame(scene, bounds, options);
 
     var cursor_x = bounds.x + nav_padding_x;
     const item_y = bounds.y + @max(0.0, (bounds.h - nav_item_h) * 0.5);
@@ -200,7 +200,6 @@ fn readItemsHtml(html: []const u8, out_items: []NavItem, text: *HtmlTextArena) H
     return out_items[0..item_count];
 }
 
-const nav_radius: f32 = 8.0;
 const nav_padding_x: f32 = 8.0;
 const nav_item_h: f32 = 34.0;
 const nav_item_gap: f32 = 6.0;

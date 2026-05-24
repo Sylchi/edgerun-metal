@@ -1,5 +1,6 @@
 const std = @import("std");
 const common = @import("../../ui_component_common.zig");
+const base_surface = @import("base/Surface.zig");
 const ui = @import("../../ui.zig");
 const ui_input = @import("../../input.zig");
 
@@ -61,8 +62,7 @@ pub fn register(registry: *ComponentRegistry) RegistryError!void {
 pub fn renderProgressSummary(summary: ProgressSummary, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
     if (summary.total == 0 or summary.completed > summary.total) return;
     const style = options.style;
-    try scene.pushRect(bounds, style.panel, .fill, progress_summary_radius, 0.0);
-    try scene.pushRect(bounds, style.border, .border, progress_summary_radius, 0.0);
+    try base_surface.renderFrame(scene, bounds, options);
 
     const content = bounds.insetLtrb(progress_summary_padding_x, progress_summary_padding_y, progress_summary_padding_x, progress_summary_padding_y);
     try scene.pushAlignedText(ui.Rect.init(content.x, content.y, content.w, progress_summary_label_h), summary.label, style.text, .start);
@@ -157,7 +157,6 @@ pub fn readHtml(html: []const u8, text_out: []u8) HtmlError!ProgressSummary {
     return .{ .id = id, .label = label, .completed = completed, .total = total };
 }
 
-const progress_summary_radius: f32 = 8.0;
 const progress_summary_padding_x: f32 = 14.0;
 const progress_summary_padding_y: f32 = 14.0;
 const progress_summary_label_h: f32 = 16.0;

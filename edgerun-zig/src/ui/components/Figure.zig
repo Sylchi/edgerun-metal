@@ -1,6 +1,7 @@
 const std = @import("std");
 const common = @import("../../ui_component_common.zig");
 const layout = @import("../../layouts/Types.zig");
+const base_surface = @import("base/Surface.zig");
 const ui = @import("../../ui.zig");
 
 const ComponentRegistry = common.ComponentRegistry;
@@ -64,8 +65,7 @@ pub fn register(registry: *ComponentRegistry) RegistryError!void {
 
 pub fn renderFigure(figure: Figure, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
     const style = options.style;
-    try scene.pushRect(bounds, style.panel, .fill, figure_radius, 0.0);
-    try scene.pushRect(bounds, style.border, .border, figure_radius, 0.0);
+    try base_surface.renderFrame(scene, bounds, options);
 
     const media_bounds = ui.Rect.init(bounds.x + figure_padding_x, bounds.y + figure_padding_y, @max(1.0, bounds.w - figure_padding_x * 2.0), @max(1.0, bounds.h - figure_padding_y * 2.0 - figure_caption_h - figure_caption_gap));
     try scene.pushRect(media_bounds, style.row, .fill, figure_media_radius, 0.0);
@@ -178,7 +178,6 @@ pub fn readHtml(html: []const u8, text_out: []u8) HtmlError!Figure {
     return .{ .src = src, .alt = alt, .caption = caption };
 }
 
-const figure_radius: f32 = 8.0;
 const figure_media_radius: f32 = 6.0;
 const figure_padding_x: f32 = 12.0;
 const figure_padding_y: f32 = 12.0;
