@@ -66,6 +66,7 @@ const Opcode = enum(u8) {
     end = 0x0b,
     br = 0x0c,
     br_if = 0x0d,
+    br_table = 0x0e,
     @"return" = 0x0f,
     call = 0x10,
     call_indirect = 0x11,
@@ -1017,6 +1018,18 @@ const Executor = struct {
                     const condition = try frame.popI32();
                     if (condition != 0) try branchToControl(&reader, &controls, &control_len, branch_depth);
                 },
+                .br_table => {
+                    const target_count = try reader.readU32Leb();
+                    const selector = @as(u32, @bitCast(try frame.popI32()));
+                    var selected_target: ?u32 = null;
+                    var target_index: u32 = 0;
+                    while (target_index < target_count) : (target_index += 1) {
+                        const target = try reader.readU32Leb();
+                        if (target_index == selector) selected_target = target;
+                    }
+                    const default_target = try reader.readU32Leb();
+                    try branchToControl(&reader, &controls, &control_len, selected_target orelse default_target);
+                },
                 .i64_const => try frame.push(try reader.readI64Leb()),
                 .i32_const => try frame.push(@as(i64, try reader.readI32Leb())),
                 .i64_add => try pushI64Binary(&frame, .add),
@@ -1444,6 +1457,7 @@ fn opcodeFromByte(value: u8) ?Opcode {
         @intFromEnum(Opcode.end) => .end,
         @intFromEnum(Opcode.br) => .br,
         @intFromEnum(Opcode.br_if) => .br_if,
+        @intFromEnum(Opcode.br_table) => .br_table,
         @intFromEnum(Opcode.@"return") => .@"return",
         @intFromEnum(Opcode.call) => .call,
         @intFromEnum(Opcode.call_indirect) => .call_indirect,
@@ -1619,6 +1633,14 @@ fn skipOpcodeImmediate(reader: *Reader, opcode: Opcode) Error!void {
         .memory_size,
         .memory_grow,
         => _ = try reader.readU32Leb(),
+        .br_table => {
+            const target_count = try reader.readU32Leb();
+            var target_index: u32 = 0;
+            while (target_index < target_count) : (target_index += 1) {
+                _ = try reader.readU32Leb();
+            }
+            _ = try reader.readU32Leb();
+        },
         .call_indirect => {
             _ = try reader.readU32Leb();
             _ = try reader.readU32Leb();
