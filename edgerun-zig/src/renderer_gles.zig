@@ -413,12 +413,8 @@ const text_fragment_shader =
     \\varying vec2 v_uv;
     \\varying vec4 v_color;
     \\uniform sampler2D u_tex;
-    \\float median3(float a, float b, float c) {
-    \\  return max(min(a, b), min(max(a, b), c));
-    \\}
     \\void main() {
-    \\  vec3 sample = texture2D(u_tex, v_uv).rgb;
-    \\  float sd = median3(sample.r, sample.g, sample.b);
+    \\  float sd = texture2D(u_tex, v_uv).b;
     \\  float a = smoothstep(0.47, 0.53, sd);
     \\  gl_FragColor = vec4(v_color.rgb, v_color.a * a);
     \\}
@@ -474,4 +470,9 @@ test "font atlas refresh API accepts populated variable font atlas" {
     const buffers = storage.buffers();
     try renderer_ir.pushText(buffers, atlas.source(), .base, .{ .x = 0, .y = 0, .w = 64, .h = 18 }, "A", .text, .start);
     try std.testing.expect(atlas.cachedGlyphCount() > 0);
+}
+
+test "text shader samples varfont true distance channel" {
+    try std.testing.expect(std.mem.indexOf(u8, text_fragment_shader, "texture2D(u_tex, v_uv).b") != null);
+    try std.testing.expect(std.mem.indexOf(u8, text_fragment_shader, "median3") == null);
 }

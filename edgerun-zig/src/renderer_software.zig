@@ -635,6 +635,7 @@ const min_border_width: f32 = 1.0;
 const quarter_turn: f32 = 0.25;
 const byte_unit_scale: f32 = 255.0;
 const font_atlas_channels: usize = 3;
+const font_distance_channel_index: usize = 2;
 const font_distance_midpoint: f32 = 128.0;
 const font_distance_spread: f32 = 2.0;
 const font_coverage_center: f32 = 0.5;
@@ -767,23 +768,16 @@ fn sampleFontAlpha(atlas: FontAtlas, u: f32, v: f32) f32 {
     const y1 = @min(y0 + 1, atlas.height - 1);
     const tx = x - @as(f32, @floatFromInt(x0));
     const ty = y - @as(f32, @floatFromInt(y0));
-    const a00 = fontCoverage(sampleFontMedian(atlas, x0, y0));
-    const a10 = fontCoverage(sampleFontMedian(atlas, x1, y0));
-    const a01 = fontCoverage(sampleFontMedian(atlas, x0, y1));
-    const a11 = fontCoverage(sampleFontMedian(atlas, x1, y1));
+    const a00 = fontCoverage(sampleFontDistance(atlas, x0, y0));
+    const a10 = fontCoverage(sampleFontDistance(atlas, x1, y0));
+    const a01 = fontCoverage(sampleFontDistance(atlas, x0, y1));
+    const a11 = fontCoverage(sampleFontDistance(atlas, x1, y1));
     return lerp(lerp(a00, a10, tx), lerp(a01, a11, tx), ty);
 }
 
-fn sampleFontMedian(atlas: FontAtlas, x: usize, y: usize) f32 {
+fn sampleFontDistance(atlas: FontAtlas, x: usize, y: usize) f32 {
     const offset = (y * atlas.width + x) * font_atlas_channels;
-    const r: f32 = @floatFromInt(atlas.pixels[offset]);
-    const g: f32 = @floatFromInt(atlas.pixels[offset + 1]);
-    const b: f32 = @floatFromInt(atlas.pixels[offset + 2]);
-    return median3(r, g, b);
-}
-
-fn median3(a: f32, b: f32, c: f32) f32 {
-    return @max(@min(a, b), @min(@max(a, b), c));
+    return @floatFromInt(atlas.pixels[offset + font_distance_channel_index]);
 }
 
 fn fontCoverage(encoded: f32) f32 {
