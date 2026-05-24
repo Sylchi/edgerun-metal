@@ -1,5 +1,6 @@
 const std = @import("std");
 const common = @import("../../ui_component_common.zig");
+const interaction = @import("../../ui_interaction.zig");
 const base_surface = @import("base/Surface.zig");
 const ui = @import("../../ui.zig");
 const ui_input = @import("../../input.zig");
@@ -34,6 +35,10 @@ pub const Table = struct {
         return renderTable(self, scene, bounds, options);
     }
 
+    pub fn collectInteractions(self: Table, collector: *interaction.Collector, bounds: ui.Rect) interaction.Error!void {
+        return collectTableInteractions(self, collector, bounds);
+    }
+
     pub fn toHtml(self: Table, out: []u8) HtmlError![]u8 {
         return writeHtml(self, out);
     }
@@ -60,6 +65,7 @@ pub const descriptor = common.ComponentDescriptor{
     .html_prefix = "<table data-er-component=\"table\"",
     .markdown_prefix = ":::table",
     .render = renderRegistered,
+    .collect_interactions = collectRegistered,
     .write_html = writeHtmlRegistered,
     .write_markdown = writeMarkdownRegistered,
 };
@@ -91,7 +97,18 @@ pub fn renderTable(table: Table, scene: *ui.Scene, bounds: ui.Rect, options: Ren
             const cell_bounds = tableCellBounds(bounds, column_w, y + table_text_y, index);
             try scene.pushAlignedText(cell_bounds, cell.value, style.text, cell.alignment);
         }
-        try scene.pushHit(.{ .slot = 0, .kind = .row_item, .id = row.id, .bounds = row_bounds });
+        y += table_row_h + table_row_gap;
+    }
+}
+
+pub fn collectTableInteractions(table: Table, collector: *interaction.Collector, bounds: ui.Rect) interaction.Error!void {
+    if (table.headers.len == 0) return;
+    const column_count = table.headers.len;
+    var y = bounds.y + table_padding_y + table_header_h + table_row_gap;
+    for (table.rows) |row| {
+        if (row.cells.len != column_count) continue;
+        if (y + table_row_h > bounds.y + bounds.h - table_padding_y) break;
+        try collector.add(.{ .kind = .row_item, .id = row.id, .bounds = ui.Rect.init(bounds.x + table_row_inset, y, @max(1.0, bounds.w - table_row_inset * 2.0), table_row_h) });
         y += table_row_h + table_row_gap;
     }
 }
@@ -99,6 +116,11 @@ pub fn renderTable(table: Table, scene: *ui.Scene, bounds: ui.Rect, options: Ren
 fn renderRegistered(component: *const anyopaque, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
     const table: *const Table = @ptrCast(@alignCast(component));
     return renderTable(table.*, scene, bounds, options);
+}
+
+fn collectRegistered(component: *const anyopaque, collector: *interaction.Collector, bounds: ui.Rect) interaction.Error!void {
+    const table: *const Table = @ptrCast(@alignCast(component));
+    return collectTableInteractions(table.*, collector, bounds);
 }
 
 pub fn writeHtml(table: Table, out: []u8) HtmlError![]u8 {
@@ -293,7 +315,7 @@ const table_text_y: f32 = 12.0;
 const table_text_h: f32 = 14.0;
 const table_column_gap: f32 = 10.0;
 
-test "table component renders rows and right aligned numeric cells" {
+test "table component renders rows aligns numeric cells and collects row hits" {
     const headers = [_]TableCell{
         .{ .value = "Item" },
         .{ .value = "Amount", .alignment = .end },
@@ -313,12 +335,16 @@ test "table component renders rows and right aligned numeric cells" {
     const table = Table{ .id = 7, .headers = &headers, .rows = &rows };
     var commands: [64]ui.Command = undefined;
     var scene = ui.Scene.init(&commands);
+    var regions: [4]interaction.Region = undefined;
+    var collector = interaction.Collector.init(&regions);
 
     try table.render(&scene, ui.Rect.init(0, 0, 360, 160), .{});
+    try table.collectInteractions(&collector, ui.Rect.init(0, 0, 360, 160));
 
     try std.testing.expectEqual(ui.TextAlign.end, textCommand(scene.written(), "Amount").?.text.alignment);
     try std.testing.expectEqual(ui.TextAlign.end, textCommand(scene.written(), "$0.00").?.text.alignment);
-    const hit = ui_input.hitTest(scene.written(), 20, 58).?;
+    try std.testing.expect(ui_input.hitTest(scene.written(), 20, 58) == null);
+    const hit = ui_input.regionHitTest(collector.written(), 20, 58).?;
     try std.testing.expectEqual(@as(u32, 701), hit.id);
 }
 
@@ -379,6 +405,8 @@ test "table registers explicit runtime descriptor" {
     var markdown: [512]u8 = undefined;
     var commands: [16]ui.Command = undefined;
     var scene = ui.Scene.init(&commands);
+    var regions: [2]interaction.Region = undefined;
+    var collector = interaction.Collector.init(&regions);
 
     try Table.register(&registry);
     try std.testing.expectError(error.DuplicateComponent, Table.register(&registry));
@@ -388,10 +416,12 @@ test "table registers explicit runtime descriptor" {
     const encoded_html = try registry.writeHtml("table", &table, &html);
     const encoded_markdown = try registry.writeMarkdown("table", &table, &markdown);
     try registry.render("table", &table, &scene, ui.Rect.init(0, 0, 240, 100), .{});
+    try registry.collectInteractions("table", &table, &collector, ui.Rect.init(0, 0, 240, 100));
 
     try std.testing.expect(std.mem.indexOf(u8, encoded_html, "<table data-er-component=\"table\"") != null);
     try std.testing.expect(std.mem.indexOf(u8, encoded_markdown, ":::table") != null);
     try std.testing.expect(textCommand(scene.written(), "WASM") != null);
+    try std.testing.expectEqual(@as(u32, 91), ui_input.regionHitTest(collector.written(), 20, 58).?.id);
 }
 
 test "table registry descriptor can be updated at runtime" {

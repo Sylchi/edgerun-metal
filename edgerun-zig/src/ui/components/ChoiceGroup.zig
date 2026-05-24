@@ -1,5 +1,6 @@
 const std = @import("std");
 const common = @import("../../ui_component_common.zig");
+const interaction = @import("../../ui_interaction.zig");
 const layout = @import("../../layouts/Types.zig");
 const base_marker = @import("base/Marker.zig");
 const base_surface = @import("base/Surface.zig");
@@ -34,6 +35,10 @@ pub const ChoiceGroup = struct {
         return renderChoiceGroup(self, scene, bounds, options);
     }
 
+    pub fn collectInteractions(self: ChoiceGroup, collector: *interaction.Collector, bounds: ui.Rect) interaction.Error!void {
+        return collectChoiceGroupInteractions(self, collector, bounds);
+    }
+
     pub fn measure(self: ChoiceGroup, constraints: layout.Constraints, options: RenderOptions) layout.Measurement {
         _ = options;
         return measureChoiceGroup(self, constraints);
@@ -65,6 +70,7 @@ pub const descriptor = common.ComponentDescriptor{
     .html_prefix = "<fieldset data-er-component=\"choice-group\"",
     .markdown_prefix = ":::choice",
     .render = renderRegistered,
+    .collect_interactions = collectRegistered,
     .write_html = writeHtmlRegistered,
     .write_markdown = writeMarkdownRegistered,
 };
@@ -94,7 +100,19 @@ pub fn renderChoiceGroup(group: ChoiceGroup, scene: *ui.Scene, bounds: ui.Rect, 
         const marker_bounds = ui.Rect.init(option_bounds.x + choice_marker_x, option_bounds.y + choice_marker_y, choice_marker_size, choice_marker_size);
         try base_marker.renderRadio(scene, marker_bounds, style.border, style.accent, option.selected, choice_marker_selected_inset);
         try scene.pushAlignedText(ui.Rect.init(option_bounds.x + choice_label_x, option_bounds.y + choice_label_y, @max(1.0, option_bounds.w - choice_label_x - choice_option_padding_x), choice_label_h), option.label, style.text, .start);
-        try scene.pushHit(.{ .slot = 0, .kind = .button, .id = option.id, .bounds = option_bounds });
+        y += choice_option_h + choice_option_gap;
+    }
+}
+
+pub fn collectChoiceGroupInteractions(group: ChoiceGroup, collector: *interaction.Collector, bounds: ui.Rect) interaction.Error!void {
+    if (group.options.len == 0) return;
+    const content_x = bounds.x + choice_padding_x;
+    const content_w = @max(1.0, bounds.w - choice_padding_x * 2.0);
+    var y = bounds.y + choice_padding_y + choice_legend_h + choice_option_gap;
+    const bottom = bounds.y + bounds.h - choice_padding_y;
+    for (group.options) |option| {
+        if (y + choice_option_h > bottom) break;
+        try collector.add(.{ .kind = .button, .id = option.id, .bounds = ui.Rect.init(content_x, y, content_w, choice_option_h) });
         y += choice_option_h + choice_option_gap;
     }
 }
@@ -120,6 +138,11 @@ pub fn measureChoiceGroup(group: ChoiceGroup, constraints: layout.Constraints) l
 fn renderRegistered(component: *const anyopaque, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
     const group: *const ChoiceGroup = @ptrCast(@alignCast(component));
     return renderChoiceGroup(group.*, scene, bounds, options);
+}
+
+fn collectRegistered(component: *const anyopaque, collector: *interaction.Collector, bounds: ui.Rect) interaction.Error!void {
+    const group: *const ChoiceGroup = @ptrCast(@alignCast(component));
+    return collectChoiceGroupInteractions(group.*, collector, bounds);
 }
 
 pub fn writeHtml(group: ChoiceGroup, out: []u8) HtmlError![]u8 {
@@ -273,7 +296,7 @@ fn choiceInsets() layout.Insets {
     return .{ .top = choice_padding_y, .right = choice_padding_x, .bottom = choice_padding_y, .left = choice_padding_x };
 }
 
-test "choice group component renders selected option and hit targets" {
+test "choice group component renders selected option and collects hit targets" {
     const options = [_]ChoiceOption{
         .{ .id = 33001, .label = "Browser asks DNS" },
         .{ .id = 33002, .label = "GPU opens a socket", .selected = true },
@@ -282,12 +305,16 @@ test "choice group component renders selected option and hit targets" {
     const group = ChoiceGroup{ .id = 33000, .legend = "Which part looks up a domain name?", .options = &options };
     var commands: [96]ui.Command = undefined;
     var scene = ui.Scene.init(&commands);
+    var regions: [4]interaction.Region = undefined;
+    var collector = interaction.Collector.init(&regions);
 
     try group.render(&scene, ui.Rect.init(0, 0, 380, 180), .{});
+    try group.collectInteractions(&collector, ui.Rect.init(0, 0, 380, 180));
 
     try std.testing.expect(hasTextContaining(scene.written(), "domain name"));
     try std.testing.expect(hasText(scene.written(), "GPU opens a socket"));
-    const hit = ui_input.hitTest(scene.written(), 24, 104).?;
+    try std.testing.expect(ui_input.hitTest(scene.written(), 24, 104) == null);
+    const hit = ui_input.regionHitTest(collector.written(), 24, 104).?;
     try std.testing.expectEqual(@as(u32, 33002), hit.id);
 }
 
@@ -350,6 +377,8 @@ test "choice group registers explicit runtime descriptor" {
     var markdown: [768]u8 = undefined;
     var commands: [96]ui.Command = undefined;
     var scene = ui.Scene.init(&commands);
+    var regions: [4]interaction.Region = undefined;
+    var collector = interaction.Collector.init(&regions);
 
     try ChoiceGroup.register(&registry);
     try std.testing.expectError(error.DuplicateComponent, ChoiceGroup.register(&registry));
@@ -359,10 +388,12 @@ test "choice group registers explicit runtime descriptor" {
     const encoded_html = try registry.writeHtml("choice-group", &group, &html);
     const encoded_markdown = try registry.writeMarkdown("choice-group", &group, &markdown);
     try registry.render("choice-group", &group, &scene, ui.Rect.init(0, 0, 380, 180), .{});
+    try registry.collectInteractions("choice-group", &group, &collector, ui.Rect.init(0, 0, 380, 180));
 
     try std.testing.expect(std.mem.indexOf(u8, encoded_html, "<fieldset data-er-component=\"choice-group\"") != null);
     try std.testing.expect(std.mem.indexOf(u8, encoded_markdown, ":::choice") != null);
     try std.testing.expect(hasText(scene.written(), "The resolver and cache"));
+    try std.testing.expectEqual(@as(u32, 33202), ui_input.regionHitTest(collector.written(), 24, 104).?.id);
 }
 
 fn hasText(commands: []const ui.Command, value: []const u8) bool {
