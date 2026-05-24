@@ -1,6 +1,8 @@
 const byte_utils = @import("bytes.zig");
 
 const max_functions = 16;
+const max_imports = 16;
+const max_import_name = 32;
 const max_types = 16;
 const max_type_params = 5;
 const max_locals = 16;
@@ -161,6 +163,7 @@ pub const Error = error{
     NoMemory,
     NoExecution,
     MissingExport,
+    MissingImport,
     StackOverflow,
     StackUnderflow,
     Trap,
@@ -170,11 +173,17 @@ pub const Error = error{
 pub const Runtime = struct {
     memory: []u8,
     execution_ticks: *u64,
+    imports: []const HostImport = &.{},
 
     pub fn init(memory: []u8, execution_ticks: *u64) Runtime {
+        return initWithImports(memory, execution_ticks, &.{});
+    }
+
+    pub fn initWithImports(memory: []u8, execution_ticks: *u64, imports: []const HostImport) Runtime {
         return .{
             .memory = memory,
             .execution_ticks = execution_ticks,
+            .imports = imports,
         };
     }
 
@@ -187,6 +196,13 @@ pub const Runtime = struct {
         self.execution_ticks.* -= ticks;
         return true;
     }
+};
+
+pub const HostImport = struct {
+    module: []const u8,
+    name: []const u8,
+    context: ?*anyopaque = null,
+    call: *const fn (context: ?*anyopaque, args: []const i64) Error!?i64,
 };
 
 const Reader = struct {
@@ -317,6 +333,21 @@ const Function = struct {
     code_index: usize = 0,
 };
 
+const ImportedFunction = struct {
+    module: [max_import_name]u8 = undefined,
+    module_len: usize = 0,
+    name: [max_import_name]u8 = undefined,
+    name_len: usize = 0,
+    type_index: usize = 0,
+
+    fn matches(self: ImportedFunction, host: HostImport) bool {
+        return self.module_len == host.module.len and
+            self.name_len == host.name.len and
+            byte_utils.eql(self.module[0..self.module_len], host.module) and
+            byte_utils.eql(self.name[0..self.name_len], host.name);
+    }
+};
+
 const Export = struct {
     name: [max_export_name]u8 = undefined,
     name_len: usize = 0,
@@ -402,6 +433,8 @@ const MemoryStore = enum {
 const Module = struct {
     types: [max_types]FuncType = undefined,
     type_count: usize = 0,
+    imports: [max_imports]ImportedFunction = undefined,
+    import_count: usize = 0,
     functions: [max_functions]Function = undefined,
     function_count: usize = 0,
     code: [max_functions]Code = undefined,
@@ -433,7 +466,7 @@ const Module = struct {
             var section_reader = Reader{ .bytes = payload };
             switch (section) {
                 .type => try module.parseTypeSection(&section_reader),
-                .import => try parseEmptySection(&section_reader),
+                .import => try module.parseImportSection(&section_reader),
                 .function => try module.parseFunctionSection(&section_reader),
                 .memory => try module.parseMemorySection(&section_reader),
                 .global => try module.parseGlobalSection(&section_reader),
@@ -473,6 +506,7 @@ const Module = struct {
     fn parseFunctionSection(self: *Module, reader: *Reader) Error!void {
         const count = try reader.readU32Leb();
         if (count > max_functions) return error.Unsupported;
+        if (self.import_count + count > max_functions) return error.Unsupported;
         self.function_count = count;
         for (self.functions[0..count], 0..) |*function, index| {
             const type_index = try reader.readU32Leb();
@@ -481,6 +515,38 @@ const Module = struct {
                 .type_index = type_index,
                 .code_index = index,
             };
+        }
+    }
+
+    fn parseImportSection(self: *Module, reader: *Reader) Error!void {
+        const count = try reader.readU32Leb();
+        if (count > max_imports) return error.Unsupported;
+        var import_index: usize = 0;
+        while (import_index < count) : (import_index += 1) {
+            const module_len = try reader.readU32Leb();
+            if (module_len == 0 or module_len > max_import_name) return error.Unsupported;
+            const module_name = try reader.readBytes(module_len);
+            const name_len = try reader.readU32Leb();
+            if (name_len == 0 or name_len > max_import_name) return error.Unsupported;
+            const import_name = try reader.readBytes(name_len);
+            const kind = externalKindFromByte(try reader.readByte()) orelse return error.Unsupported;
+            switch (kind) {
+                .function => {
+                    if (self.import_count >= max_imports) return error.Unsupported;
+                    const type_index = try reader.readU32Leb();
+                    if (type_index >= self.type_count) return error.Corrupt;
+                    const imported = &self.imports[self.import_count];
+                    imported.* = .{
+                        .module_len = module_len,
+                        .name_len = name_len,
+                        .type_index = type_index,
+                    };
+                    @memcpy(imported.module[0..module_len], module_name);
+                    @memcpy(imported.name[0..name_len], import_name);
+                    self.import_count += 1;
+                },
+                .table, .memory, .global => return error.Unsupported,
+            }
         }
     }
 
@@ -525,7 +591,7 @@ const Module = struct {
             const kind = externalKindFromByte(try reader.readByte()) orelse return error.Unsupported;
             const index = try reader.readU32Leb();
             switch (kind) {
-                .function => if (index >= self.function_count) return error.Corrupt,
+                .function => if (index >= self.totalFunctionCount()) return error.Corrupt,
                 .table, .memory, .global => return error.Unsupported,
             }
             exp.* = .{
@@ -539,9 +605,7 @@ const Module = struct {
 
     fn parseStartSection(self: *Module, reader: *Reader) Error!void {
         const index = try reader.readU32Leb();
-        if (index >= self.function_count) return error.Corrupt;
-        const function = self.functions[index];
-        const function_type = self.types[function.type_index];
+        const function_type = self.types[try self.typeIndexForFunction(index)];
         if (!function_type.noParamsNoResult()) return error.Unsupported;
         self.start_function_index = index;
     }
@@ -604,6 +668,24 @@ const Module = struct {
             if (exp.kind == .function and exp.matches(name)) return exp.index;
         }
         return error.MissingExport;
+    }
+
+    fn totalFunctionCount(self: Module) usize {
+        return self.import_count + self.function_count;
+    }
+
+    fn typeIndexForFunction(self: Module, function_index: usize) Error!usize {
+        if (function_index < self.import_count) return self.imports[function_index].type_index;
+        const defined_index = function_index - self.import_count;
+        if (defined_index >= self.function_count) return error.Corrupt;
+        return self.functions[defined_index].type_index;
+    }
+
+    fn codeIndexForFunction(self: Module, function_index: usize) Error!usize {
+        if (function_index < self.import_count) return error.MissingImport;
+        const defined_index = function_index - self.import_count;
+        if (defined_index >= self.function_count) return error.Corrupt;
+        return self.functions[defined_index].code_index;
     }
 
     fn requiredMemoryBytes(self: Module) Error!usize {
@@ -675,8 +757,7 @@ const Executor = struct {
 
     fn runExport(self: *Executor, name: []const u8, args: []const i64) Error!i64 {
         const function_index = try self.module.findExport(name);
-        const function = self.module.functions[function_index];
-        const function_type = self.module.types[function.type_index];
+        const function_type = self.module.types[try self.module.typeIndexForFunction(function_index)];
         if (!function_type.i64ResultWithArgs(args)) return error.Unsupported;
         return (try self.runFunction(function_index, 0, args)) orelse error.Corrupt;
     }
@@ -690,11 +771,11 @@ const Executor = struct {
 
     fn runFunction(self: *Executor, function_index: usize, depth: usize, args: []const i64) Error!?i64 {
         if (depth >= max_call_depth) return error.Unsupported;
-        if (function_index >= self.module.function_count) return error.Corrupt;
-        const function = self.module.functions[function_index];
-        const function_type = self.module.types[function.type_index];
+        if (function_index < self.module.import_count) return try self.runImportedFunction(function_index, args);
+        if (function_index >= self.module.totalFunctionCount()) return error.Corrupt;
+        const function_type = self.module.types[try self.module.typeIndexForFunction(function_index)];
         if (!function_type.supportedResult()) return error.Unsupported;
-        const code = self.module.code[function.code_index];
+        const code = self.module.code[try self.module.codeIndexForFunction(function_index)];
         var frame = try Frame.init(function_type, code, args);
         const local_limit = function_type.param_count + code.local_count;
         var controls: [max_control_depth]ControlFrame = undefined;
@@ -913,9 +994,8 @@ const Executor = struct {
     }
 
     fn callFunctionFromFrame(self: *Executor, frame: *Frame, function_index: usize, depth: usize) Error!?i64 {
-        if (function_index >= self.module.function_count) return error.Corrupt;
-        const function = self.module.functions[function_index];
-        const function_type = self.module.types[function.type_index];
+        if (function_index >= self.module.totalFunctionCount()) return error.Corrupt;
+        const function_type = self.module.types[try self.module.typeIndexForFunction(function_index)];
         if (!function_type.supportedResult()) return error.Unsupported;
         var args: [max_type_params]i64 = undefined;
         var remaining = function_type.param_count;
@@ -924,6 +1004,23 @@ const Executor = struct {
             args[remaining] = try frame.pop();
         }
         return try self.runFunction(function_index, depth + 1, args[0..function_type.param_count]);
+    }
+
+    fn runImportedFunction(self: *Executor, function_index: usize, args: []const i64) Error!?i64 {
+        const imported = self.module.imports[function_index];
+        const function_type = self.module.types[imported.type_index];
+        if (!function_type.supportedResult() or args.len != function_type.param_count) return error.Unsupported;
+        for (self.runtime.imports) |host| {
+            if (!imported.matches(host)) continue;
+            const result = try host.call(host.context, args);
+            if (function_type.result_count == 0) {
+                if (result != null) return error.Corrupt;
+                return null;
+            }
+            if (function_type.result_type != .i64) return error.Unsupported;
+            return result orelse error.Corrupt;
+        }
+        return error.MissingImport;
     }
 
     fn loadMemory(self: *Executor, frame: *Frame, reader: *Reader, kind: MemoryLoad) Error!void {
