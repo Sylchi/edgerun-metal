@@ -4,6 +4,7 @@ const ui = @import("../../ui.zig");
 const layout = @import("../../layouts/Types.zig");
 const base_accent_rail = @import("base/AccentRail.zig");
 const base_surface = @import("base/Surface.zig");
+const base_text_block = @import("base/TextBlock.zig");
 
 const ComponentRegistry = common.ComponentRegistry;
 const HtmlError = common.HtmlError;
@@ -66,20 +67,12 @@ pub fn renderCallout(callout: Callout, scene: *ui.Scene, bounds: ui.Rect, option
     frame_options.surface_variant = .subtle;
     try base_surface.renderFrame(scene, bounds, frame_options);
     try base_accent_rail.render(scene, bounds, options.style.accent, .{ .radius = base_surface.radius });
-    try scene.pushWrappedText(bounds.insetLtrb(callout_text_x, callout_text_y, callout_text_x, callout_text_y), callout.value, options.style.text, .{
-        .line_height = callout_line_h,
-        .average_char_width = callout_avg_w,
-        .max_lines = callout_max_lines,
-    });
+    try base_text_block.render(scene, bounds.insetLtrb(callout_text_x, callout_text_y, callout_text_x, callout_text_y), callout.value, options.style.text, callout_metrics);
 }
 
 pub fn measureCallout(callout: Callout, constraints: layout.Constraints) layout.Measurement {
     const insets = calloutInsets();
-    return layout.measureText(callout.value, constraints.inner(insets), .{
-        .line_height = callout_line_h,
-        .average_char_width = callout_avg_w,
-        .max_lines = callout_max_lines,
-    }).withInsets(insets).applyExact(constraints);
+    return base_text_block.measure(callout.value, constraints.inner(insets), callout_metrics).withInsets(insets).applyExact(constraints);
 }
 
 fn renderRegistered(component: *const anyopaque, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
@@ -139,6 +132,11 @@ const callout_text_y: f32 = 14.0;
 const callout_line_h: f32 = 18.0;
 const callout_avg_w: f32 = 9.0;
 const callout_max_lines: usize = 4;
+const callout_metrics = base_text_block.Metrics{
+    .line_height = callout_line_h,
+    .average_char_width = callout_avg_w,
+    .max_lines = callout_max_lines,
+};
 
 fn calloutInsets() layout.Insets {
     return .{
