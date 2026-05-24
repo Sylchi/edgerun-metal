@@ -194,6 +194,29 @@ const DmabufImport = struct {
             self.stride >= self.width * @sizeOf(u32) and
             isSupportedDmabufFormat(self.format);
     }
+
+    fn fromNativeSurface(surface: renderer_native_present.NativeSurface) !DmabufImport {
+        return switch (surface) {
+            .drm => error.UnsupportedDmabufSurface,
+            .wayland => |value| fromWaylandSurface(value),
+        };
+    }
+
+    fn fromWaylandSurface(surface: renderer_native_present.WaylandSurface) !DmabufImport {
+        const gpu_buffer = surface.gpu_buffer orelse return error.InvalidDmabufImport;
+        if (gpu_buffer.kind != .dma_buf or gpu_buffer.plane_count != 1) return error.InvalidDmabufImport;
+        if (gpu_buffer.handle > @as(u64, @intCast(std.math.maxInt(posix.fd_t)))) return error.InvalidDmabufImport;
+        const import = DmabufImport{
+            .fd = @intCast(gpu_buffer.handle),
+            .width = surface.width,
+            .height = surface.height,
+            .stride = surface.stride * @sizeOf(u32),
+            .format = dmabufFormat(surface.format),
+            .offset = gpu_buffer.offset,
+        };
+        if (!import.valid()) return error.InvalidDmabufImport;
+        return import;
+    }
 };
 
 const AppState = struct {
@@ -424,7 +447,13 @@ const WaylandClient = struct {
     }
 
     fn attachCommit(self: *WaylandClient, width: u32, height: u32) !void {
-        try self.sendAttach();
+        try self.sendAttach(wl_buffer_id);
+        try self.sendDamage(width, height);
+        try self.send(makeSurfaceCommit);
+    }
+
+    fn attachDmabufCommit(self: *WaylandClient, width: u32, height: u32) !void {
+        try self.sendAttach(dmabuf_wl_buffer_id);
         try self.sendDamage(width, height);
         try self.send(makeSurfaceCommit);
     }
@@ -452,9 +481,9 @@ const WaylandClient = struct {
         try writeAll(self.fd, bytes);
     }
 
-    fn sendAttach(self: WaylandClient) !void {
+    fn sendAttach(self: WaylandClient, buffer_id: u32) !void {
         var buffer: [message_bytes]u8 = undefined;
-        try writeAll(self.fd, try makeAttach(&buffer));
+        try writeAll(self.fd, try makeAttach(&buffer, buffer_id));
     }
 
     fn sendCreatePool(self: WaylandClient, fd: posix.fd_t, bytes: i32) !void {
@@ -961,9 +990,9 @@ fn makeSurfaceCommit(buffer: []u8) ![]const u8 {
     return msg.finish();
 }
 
-fn makeAttach(buffer: []u8) ![]const u8 {
+fn makeAttach(buffer: []u8, buffer_id: u32) ![]const u8 {
     var msg = try MessageWriter.init(buffer, surface_id, wl_surface_attach);
-    try msg.putU32(wl_buffer_id);
+    try msg.putU32(buffer_id);
     try msg.putI32(0);
     try msg.putI32(0);
     return msg.finish();
@@ -1054,6 +1083,13 @@ fn isSupportedDmabufFormat(format: u32) bool {
         drm_format_argb8888,
         => true,
         else => false,
+    };
+}
+
+fn dmabufFormat(format: renderer_native_present.PixelFormat) u32 {
+    return switch (format) {
+        .xrgb8888 => drm_format_xrgb8888,
+        .argb8888 => drm_format_argb8888,
     };
 }
 
@@ -1251,6 +1287,59 @@ test "wayland dmabuf import validates fd dimensions stride and format" {
         .stride = 64 * @sizeOf(u32),
         .format = 0,
     }).valid());
+}
+
+test "wayland dmabuf import derives from gpu backed native wayland surface" {
+    const import = try DmabufImport.fromNativeSurface(.{ .wayland = .{
+        .surface_id = surface_id,
+        .buffer_id = dmabuf_wl_buffer_id,
+        .width = 320,
+        .height = 240,
+        .stride = 320,
+        .format = .argb8888,
+        .gpu_buffer = .{
+            .kind = .dma_buf,
+            .handle = 7,
+            .offset = 128,
+        },
+    } });
+    try std.testing.expectEqual(@as(posix.fd_t, 7), import.fd);
+    try std.testing.expectEqual(@as(u32, 320), import.width);
+    try std.testing.expectEqual(@as(u32, 240), import.height);
+    try std.testing.expectEqual(@as(u32, 320 * @sizeOf(u32)), import.stride);
+    try std.testing.expectEqual(drm_format_argb8888, import.format);
+    try std.testing.expectEqual(@as(u32, 128), import.offset);
+
+    try std.testing.expectError(error.InvalidDmabufImport, DmabufImport.fromNativeSurface(.{ .wayland = .{
+        .surface_id = surface_id,
+        .buffer_id = dmabuf_wl_buffer_id,
+        .width = 320,
+        .height = 240,
+        .stride = 320,
+        .gpu_buffer = .{ .kind = .scanout, .handle = 9 },
+    } }));
+    try std.testing.expectError(error.UnsupportedDmabufSurface, DmabufImport.fromNativeSurface(.{ .drm = .{
+        .framebuffer_id = 1,
+        .connector_id = 2,
+        .crtc_id = 3,
+        .width = 320,
+        .height = 240,
+        .stride = 320,
+        .gpu_buffer = .{ .kind = .dma_buf, .handle = 11 },
+    } }));
+}
+
+test "wayland attach message can target shm or dmabuf buffers" {
+    var shm_buffer: [32]u8 = undefined;
+    const shm = try makeAttach(&shm_buffer, wl_buffer_id);
+    try std.testing.expectEqual(@as(u32, surface_id), std.mem.readInt(u32, shm[0..4], .little));
+    try std.testing.expectEqual(@as(u16, wl_surface_attach), std.mem.readInt(u16, shm[4..6], .little));
+    try std.testing.expectEqual(@as(u16, 20), std.mem.readInt(u16, shm[6..8], .little));
+    try std.testing.expectEqual(@as(u32, wl_buffer_id), std.mem.readInt(u32, shm[8..12], .little));
+
+    var dmabuf_buffer: [32]u8 = undefined;
+    const dmabuf = try makeAttach(&dmabuf_buffer, dmabuf_wl_buffer_id);
+    try std.testing.expectEqual(@as(u32, dmabuf_wl_buffer_id), std.mem.readInt(u32, dmabuf[8..12], .little));
 }
 
 test "wayland xdg configure event marks window configured" {
