@@ -64,40 +64,18 @@ pub const Category = enum {
     }
 };
 
-pub const Status = enum {
-    cataloged,
-    native_primitive,
-    exact_port,
-
-    pub fn label(self: Status) []const u8 {
-        return switch (self) {
-            .cataloged => "Cataloged",
-            .native_primitive => "Native primitive",
-            .exact_port => "Exact port",
-        };
-    }
-
-    pub fn hasNativeRenderer(self: Status) bool {
-        return self == .native_primitive or self == .exact_port;
-    }
-};
-
 pub const ComponentSpec = struct {
     name: []const u8,
     slug: []const u8,
-    route: []const u8,
     category: Category,
-    source_component: []const u8,
-    edge_builder: []const u8,
-    status: Status = .exact_port,
 
     pub fn hasNativeRenderer(self: ComponentSpec) bool {
-        return self.status.hasNativeRenderer();
+        _ = self;
+        return true;
     }
 };
 
 pub const categories = [_]Category{ .foundation, .form, .overlay, .navigation, .data_display, .feedback, .layout, .media };
-pub const statuses = [_]Status{ .cataloged, .native_primitive, .exact_port };
 
 pub const CategorySummary = struct {
     category: Category,
@@ -105,159 +83,32 @@ pub const CategorySummary = struct {
     count: usize,
 };
 
-pub const StatusSummary = struct {
-    status: Status,
-    label: []const u8,
-    count: usize,
-};
-
 pub const component_catalog = [_]ComponentSpec{
-    componentSpec("Accordion", "accordion", "Layout", "Accordion", "accordion_node"),
-    componentSpec("Alert", "alert", "Feedback", "Alert", "alert_node"),
-    componentSpec("Alert Dialog", "alert-dialog", "Overlay", "AlertDialog", "alert_dialog_node"),
-    componentSpec("Aspect Ratio", "aspect-ratio", "Media", "AspectRatio", "aspect_ratio_node"),
-    componentSpec("Avatar", "avatar", "Data Display", "Avatar", "avatar_node"),
-    componentSpec("Badge", "badge", "Foundation", "Badge", "badge"),
-    componentSpec("Breadcrumb", "breadcrumb", "Navigation", "Breadcrumb", "breadcrumb"),
-    componentSpec("Button", "button", "Foundation", "Button", "button"),
-    componentSpec("Button Group", "button-group", "Foundation", "ButtonGroup", "button_group_node"),
-    componentSpec("Calendar", "calendar", "Form", "Calendar", "calendar_node"),
-    componentSpec("Card", "card", "Layout", "Card", "card"),
-    componentSpec("Carousel", "carousel", "Media", "Carousel", "carousel_node"),
-    componentSpec("Chart", "chart", "Data Display", "Chart", "chart_node"),
-    componentSpec("Checkbox", "checkbox", "Form", "Checkbox", "checkbox"),
-    componentSpec("Collapsible", "collapsible", "Layout", "Collapsible", "collapsible_node"),
-    componentSpec("Combobox", "combobox", "Form", "Combobox", "combobox_node"),
-    componentSpec("Command", "command", "Overlay", "Command", "command_palette"),
-    componentSpec("Context Menu", "context-menu", "Overlay", "ContextMenu", "context_menu_node"),
-    componentSpec("Data Table", "data-table", "Data Display", "DataTable", "data_table_node"),
-    componentSpec("Date Picker", "date-picker", "Form", "DatePicker", "date_picker_node"),
-    componentSpec("Dialog", "dialog", "Overlay", "Dialog", "dialog"),
-    componentSpec("Direction", "direction", "Foundation", "DirectionProvider", "direction_node"),
-    componentSpec("Drawer", "drawer", "Overlay", "Drawer", "drawer_node"),
-    componentSpec("Dropdown Menu", "dropdown-menu", "Overlay", "DropdownMenu", "dropdown_menu_node"),
-    componentSpec("Empty", "empty", "Feedback", "Empty", "empty_state"),
-    componentSpec("Field", "field", "Form", "Field", "field_node"),
-    componentSpec("Hover Card", "hover-card", "Overlay", "HoverCard", "hover_card_node"),
-    componentSpec("Input", "input", "Form", "Input", "field_node"),
-    componentSpec("Input Group", "input-group", "Form", "InputGroup", "input_group_node"),
-    componentSpec("Input OTP", "input-otp", "Form", "InputOTP", "input_otp_node"),
-    componentSpec("Item", "item", "Data Display", "Item", "list_row_node"),
-    componentSpec("Kbd", "kbd", "Foundation", "Kbd", "kbd_node"),
-    componentSpec("Label", "label", "Form", "Label", "text"),
-    componentSpec("Menubar", "menubar", "Navigation", "Menubar", "menubar_node"),
-    componentSpec("Native Select", "native-select", "Form", "NativeSelect", "select_node"),
-    componentSpec("Navigation Menu", "navigation-menu", "Navigation", "NavigationMenu", "navigation_menu_node"),
-    componentSpec("Pagination", "pagination", "Navigation", "Pagination", "pagination_node"),
-    componentSpec("Popover", "popover", "Overlay", "Popover", "popover_node"),
-    componentSpec("Progress", "progress", "Feedback", "Progress", "progress_bar_node"),
-    componentSpec("Radio Group", "radio-group", "Form", "RadioGroup", "radio"),
-    componentSpec("Resizable", "resizable", "Layout", "Resizable", "resizable_node"),
-    componentSpec("Scroll Area", "scroll-area", "Layout", "ScrollArea", "scroll_area"),
-    componentSpec("Select", "select", "Form", "Select", "select_node"),
-    componentSpec("Separator", "separator", "Layout", "Separator", "divider"),
-    componentSpec("Sheet", "sheet", "Overlay", "Sheet", "sheet_node"),
-    componentSpec("Sidebar", "sidebar", "Navigation", "Sidebar", "sidebar_node"),
-    componentSpec("Skeleton", "skeleton", "Feedback", "Skeleton", "skeleton"),
-    componentSpec("Slider", "slider", "Form", "Slider", "slider_node"),
-    componentSpec("Sonner", "sonner", "Feedback", "Sonner", "toast"),
-    componentSpec("Switch", "switch", "Form", "Switch", "toggle_node"),
-    componentSpec("Table", "table", "Data Display", "Table", "table_node"),
-    componentSpec("Tabs", "tabs", "Navigation", "Tabs", "tabs_node"),
-    componentSpec("Textarea", "textarea", "Form", "Textarea", "text_area_node"),
-    componentSpec("Toast", "toast", "Feedback", "Toast", "toast"),
-    componentSpec("Toggle", "toggle", "Foundation", "Toggle", "toggle_node"),
-    componentSpec("Toggle Group", "toggle-group", "Foundation", "ToggleGroup", "toggle_group_node"),
-    componentSpec("Tooltip", "tooltip", "Overlay", "Tooltip", "tooltip"),
+    componentSpec("Avatar", "avatar", .data_display),
+    componentSpec("Badge", "badge", .foundation),
+    componentSpec("Button", "button", .foundation),
+    componentSpec("Card", "card", .layout),
+    componentSpec("Checkbox", "checkbox", .form),
+    componentSpec("Input", "input", .form),
+    componentSpec("Kbd", "kbd", .foundation),
+    componentSpec("Progress", "progress", .feedback),
+    componentSpec("Row Item", "row-item", .data_display),
+    componentSpec("Select", "select", .form),
+    componentSpec("Separator", "separator", .layout),
+    componentSpec("Slider", "slider", .form),
+    componentSpec("Stack", "stack", .layout),
+    componentSpec("Switch", "switch", .form),
+    componentSpec("Text", "text", .foundation),
+    componentSpec("Textarea", "textarea", .form),
+    componentSpec("Slot", "slot", .layout),
 };
 
-fn componentSpec(name: []const u8, slug: []const u8, category_label: []const u8, source: []const u8, builder: []const u8) ComponentSpec {
+fn componentSpec(name: []const u8, slug: []const u8, category: Category) ComponentSpec {
     return .{
         .name = name,
         .slug = slug,
-        .route = routeFor(slug),
-        .category = categoryFromLabel(category_label),
-        .source_component = source,
-        .edge_builder = builder,
+        .category = category,
     };
-}
-
-fn routeFor(slug: []const u8) []const u8 {
-    @setEvalBranchQuota(6000);
-    const routes = [_]struct { []const u8, []const u8 }{
-        .{ "accordion", "/docs/components/accordion" },
-        .{ "alert", "/docs/components/alert" },
-        .{ "alert-dialog", "/docs/components/alert-dialog" },
-        .{ "aspect-ratio", "/docs/components/aspect-ratio" },
-        .{ "avatar", "/docs/components/avatar" },
-        .{ "badge", "/docs/components/badge" },
-        .{ "breadcrumb", "/docs/components/breadcrumb" },
-        .{ "button", "/docs/components/button" },
-        .{ "button-group", "/docs/components/button-group" },
-        .{ "calendar", "/docs/components/calendar" },
-        .{ "card", "/docs/components/card" },
-        .{ "carousel", "/docs/components/carousel" },
-        .{ "chart", "/docs/components/chart" },
-        .{ "checkbox", "/docs/components/checkbox" },
-        .{ "collapsible", "/docs/components/collapsible" },
-        .{ "combobox", "/docs/components/combobox" },
-        .{ "command", "/docs/components/command" },
-        .{ "context-menu", "/docs/components/context-menu" },
-        .{ "data-table", "/docs/components/data-table" },
-        .{ "date-picker", "/docs/components/date-picker" },
-        .{ "dialog", "/docs/components/dialog" },
-        .{ "direction", "/docs/components/direction" },
-        .{ "drawer", "/docs/components/drawer" },
-        .{ "dropdown-menu", "/docs/components/dropdown-menu" },
-        .{ "empty", "/docs/components/empty" },
-        .{ "field", "/docs/components/field" },
-        .{ "hover-card", "/docs/components/hover-card" },
-        .{ "input", "/docs/components/input" },
-        .{ "input-group", "/docs/components/input-group" },
-        .{ "input-otp", "/docs/components/input-otp" },
-        .{ "item", "/docs/components/item" },
-        .{ "kbd", "/docs/components/kbd" },
-        .{ "label", "/docs/components/label" },
-        .{ "menubar", "/docs/components/menubar" },
-        .{ "native-select", "/docs/components/native-select" },
-        .{ "navigation-menu", "/docs/components/navigation-menu" },
-        .{ "pagination", "/docs/components/pagination" },
-        .{ "popover", "/docs/components/popover" },
-        .{ "progress", "/docs/components/progress" },
-        .{ "radio-group", "/docs/components/radio-group" },
-        .{ "resizable", "/docs/components/resizable" },
-        .{ "scroll-area", "/docs/components/scroll-area" },
-        .{ "select", "/docs/components/select" },
-        .{ "separator", "/docs/components/separator" },
-        .{ "sheet", "/docs/components/sheet" },
-        .{ "sidebar", "/docs/components/sidebar" },
-        .{ "skeleton", "/docs/components/skeleton" },
-        .{ "slider", "/docs/components/slider" },
-        .{ "sonner", "/docs/components/sonner" },
-        .{ "switch", "/docs/components/switch" },
-        .{ "table", "/docs/components/table" },
-        .{ "tabs", "/docs/components/tabs" },
-        .{ "textarea", "/docs/components/textarea" },
-        .{ "toast", "/docs/components/toast" },
-        .{ "toggle", "/docs/components/toggle" },
-        .{ "toggle-group", "/docs/components/toggle-group" },
-        .{ "tooltip", "/docs/components/tooltip" },
-    };
-    for (routes) |entry| {
-        if (std.mem.eql(u8, slug, entry[0])) return entry[1];
-    }
-    return "/docs/components";
-}
-
-fn categoryFromLabel(label: []const u8) Category {
-    if (std.mem.eql(u8, label, "Foundation")) return .foundation;
-    if (std.mem.eql(u8, label, "Form")) return .form;
-    if (std.mem.eql(u8, label, "Overlay")) return .overlay;
-    if (std.mem.eql(u8, label, "Navigation")) return .navigation;
-    if (std.mem.eql(u8, label, "Data Display")) return .data_display;
-    if (std.mem.eql(u8, label, "Feedback")) return .feedback;
-    if (std.mem.eql(u8, label, "Media")) return .media;
-    return .layout;
 }
 
 pub fn findBySlug(slug: []const u8) ?*const ComponentSpec {
@@ -268,18 +119,7 @@ pub fn findBySlug(slug: []const u8) ?*const ComponentSpec {
 }
 
 pub fn nativeComponentCount() usize {
-    var count: usize = 0;
-    for (component_catalog) |spec| {
-        if (spec.hasNativeRenderer()) count += 1;
-    }
-    return count;
-}
-
-pub fn findBySourceComponent(source_component: []const u8) ?*const ComponentSpec {
-    for (&component_catalog) |*spec| {
-        if (std.mem.eql(u8, spec.source_component, source_component)) return spec;
-    }
-    return null;
+    return component_catalog.len;
 }
 
 pub fn countByCategory(category: Category) usize {
@@ -290,20 +130,8 @@ pub fn countByCategory(category: Category) usize {
     return count;
 }
 
-pub fn countByStatus(status: Status) usize {
-    var count: usize = 0;
-    for (component_catalog) |spec| {
-        if (spec.status == status) count += 1;
-    }
-    return count;
-}
-
 pub fn categorySummary(category: Category) CategorySummary {
     return .{ .category = category, .label = category.label(), .count = countByCategory(category) };
-}
-
-pub fn statusSummary(status: Status) StatusSummary {
-    return .{ .status = status, .label = status.label(), .count = countByStatus(status) };
 }
 
 pub const ComponentGalleryState = struct {
@@ -375,7 +203,7 @@ const showcase_cards = [_]ShowcaseCard{
     card("Account Access", "Update credentials", .form, 948),
     card("Mobile Pairing", "Scan to connect device", .centered, 958),
     card("Preferences", "Manage account settings", .controls, 972),
-    card("Navigation", "Menu, breadcrumb, and rows", .navigation, 980),
+    card("Navigation", "Menu, tabs, and rows", .navigation, 980),
     card("Transfer Funds", "Move money between accounts", .form, 1019),
     card("Q2 Dividend Income", "Quarterly payouts", .list, 959),
     card("Room Controls", "Smart home controls", .controls, 973),
@@ -1285,15 +1113,13 @@ fn shortestColumn(values: []const f32) usize {
 }
 
 test "component gallery catalog mirrors canonical component count" {
-    try std.testing.expectEqual(@as(usize, 57), component_catalog.len);
-    try std.testing.expectEqual(@as(usize, 57), nativeComponentCount());
+    try std.testing.expectEqual(@as(usize, 17), component_catalog.len);
+    try std.testing.expectEqual(component_catalog.len, nativeComponentCount());
     try std.testing.expect(findBySlug("button").?.hasNativeRenderer());
-    try std.testing.expectEqualStrings("/docs/components/button", findBySlug("button").?.route);
-    try std.testing.expectEqualStrings("/docs/components/accordion", findBySlug("accordion").?.route);
-    try std.testing.expectEqualStrings("InputGroup", findBySlug("input-group").?.source_component);
-    try std.testing.expectEqualStrings("input_group_node", findBySourceComponent("InputGroup").?.edge_builder);
-    try std.testing.expect(countByCategory(.form) >= 10);
-    try std.testing.expectEqual(@as(usize, 57), countByStatus(.exact_port));
+    try std.testing.expect(findBySlug("accordion") == null);
+    try std.testing.expectEqual(Category.foundation, findBySlug("button").?.category);
+    try std.testing.expectEqual(@as(usize, 6), countByCategory(.form));
+    try std.testing.expectEqual(@as(usize, 4), countByCategory(.layout));
 }
 
 test "component gallery renders component wall commands and interaction regions" {
