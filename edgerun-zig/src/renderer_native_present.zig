@@ -1,10 +1,13 @@
 const std = @import("std");
 const renderer_ir = @import("renderer_ir.zig");
 const renderer_present = @import("renderer_present.zig");
+const renderer_software = @import("renderer_software.zig");
 const renderer_surface = @import("renderer_surface.zig");
+const ui = @import("ui.zig");
 
-pub const Error = renderer_present.Error || error{
+pub const Error = renderer_software.Error || error{
     UnsupportedTarget,
+    InvalidFramebuffer,
     InvalidNativeSurface,
     InvalidTilePlan,
     DirtyTileBudgetExceeded,
@@ -152,6 +155,18 @@ pub const Sink = struct {
     }
 };
 
+pub const CpuFramebuffer = struct {
+    width: u32,
+    height: u32,
+    pixels: []ui.Color,
+
+    pub fn valid(self: CpuFramebuffer) bool {
+        return self.width != 0 and
+            self.height != 0 and
+            self.pixels.len >= @as(usize, self.width) * @as(usize, self.height);
+    }
+};
+
 pub fn planPresent(
     surface: NativeSurface,
     buffers: renderer_ir.Buffers,
@@ -219,6 +234,30 @@ pub fn planAndSubmit(
     return submit(request, sink);
 }
 
+pub fn renderCpuAndSubmit(
+    surface: NativeSurface,
+    buffers: renderer_ir.Buffers,
+    atlases: renderer_software.IrAtlases,
+    framebuffer: CpuFramebuffer,
+    background: ui.Color,
+    refresh_hz: u32,
+    tile_width: u32,
+    tile_height: u32,
+    tile_marks: []u8,
+    dirty_ids: []u32,
+    sink: Sink,
+) Error!Receipt {
+    try surface.validate();
+    if (!framebuffer.valid()) return error.InvalidFramebuffer;
+    const target = surface.target();
+    if (framebuffer.width != target.width or framebuffer.height != target.height) return error.InvalidFramebuffer;
+
+    const software_surface = try renderer_software.Surface.init(framebuffer.width, framebuffer.height, framebuffer.pixels);
+    software_surface.clear(background);
+    _ = try software_surface.renderIrFrameWithAtlases(buffers, atlases);
+    return planAndSubmit(surface, buffers, atlasResources(atlases), refresh_hz, tile_width, tile_height, tile_marks, dirty_ids, sink);
+}
+
 fn commitForSurface(surface: NativeSurface, dirty_tiles: []const u32) Commit {
     return switch (surface) {
         .drm => |value| .{ .drm = .{
@@ -233,6 +272,14 @@ fn commitForSurface(surface: NativeSurface, dirty_tiles: []const u32) Commit {
             .scale = value.scale,
             .dirty_tiles = dirty_tiles,
         } },
+    };
+}
+
+fn atlasResources(atlases: renderer_software.IrAtlases) renderer_present.Resources {
+    return .{
+        .font_atlas = atlases.font.valid(),
+        .icon_atlas = atlases.icon.valid(),
+        .image_texture = if (atlases.image) |image| image.valid() else false,
     };
 }
 
@@ -457,4 +504,81 @@ test "native presentation rejects mismatched and failing sinks" {
 
     var rejecting_sink = TestSink{ .reject = true };
     try std.testing.expectError(error.SinkRejected, planAndSubmit(surface, buffers, .{}, 60, 16, 16, &tile_marks, &dirty_ids, rejecting_sink.waylandSink()));
+}
+
+test "native cpu render submits drm commit from canonical ir" {
+    var storage = renderer_ir.FixedBuffers(1, 0, 0, 0, 0, 0, 0){};
+    const buffers = storage.buffers();
+    try renderer_ir.pushRect(buffers, .base, .{ .x = 0, .y = 0, .w = 32, .h = 32 }, .accent, .clear, 0, 0, 0);
+
+    var pixels: [64 * 64]ui.Color = undefined;
+    const alpha = [_]u8{255};
+    const atlases = renderer_software.IrAtlases{
+        .font = .{ .width = 1, .height = 1, .alpha = &alpha },
+        .icon = .{ .width = 1, .height = 1, .alpha = &alpha },
+    };
+    var tile_marks: [16]u8 = undefined;
+    var dirty_ids: [16]u32 = undefined;
+    var sink_state = TestSink{};
+    const receipt = try renderCpuAndSubmit(
+        .{ .drm = .{
+            .framebuffer_id = 41,
+            .connector_id = 43,
+            .crtc_id = 47,
+            .width = 64,
+            .height = 64,
+            .stride = 64,
+        } },
+        buffers,
+        atlases,
+        .{ .width = 64, .height = 64, .pixels = &pixels },
+        .clear,
+        60,
+        16,
+        16,
+        &tile_marks,
+        &dirty_ids,
+        sink_state.drmSink(),
+    );
+
+    try std.testing.expect(receipt.valid());
+    try std.testing.expectEqual(@as(usize, 1), sink_state.drm_count);
+    try std.testing.expectEqual(@as(u32, 41), sink_state.last_framebuffer_id);
+    try std.testing.expectEqual(ui.Color.accent, pixels[0]);
+}
+
+test "native cpu render rejects framebuffer size mismatch" {
+    var storage = renderer_ir.FixedBuffers(1, 0, 0, 0, 0, 0, 0){};
+    const buffers = storage.buffers();
+    try renderer_ir.pushRect(buffers, .base, .{ .x = 0, .y = 0, .w = 16, .h = 16 }, .accent, .clear, 0, 0, 0);
+
+    var pixels: [32 * 32]ui.Color = undefined;
+    const alpha = [_]u8{255};
+    const atlases = renderer_software.IrAtlases{
+        .font = .{ .width = 1, .height = 1, .alpha = &alpha },
+        .icon = .{ .width = 1, .height = 1, .alpha = &alpha },
+    };
+    var tile_marks: [16]u8 = undefined;
+    var dirty_ids: [16]u32 = undefined;
+    var sink_state = TestSink{};
+
+    try std.testing.expectError(error.InvalidFramebuffer, renderCpuAndSubmit(
+        .{ .wayland = .{
+            .surface_id = 53,
+            .buffer_id = 59,
+            .width = 64,
+            .height = 64,
+            .stride = 64,
+        } },
+        buffers,
+        atlases,
+        .{ .width = 32, .height = 32, .pixels = &pixels },
+        .clear,
+        60,
+        16,
+        16,
+        &tile_marks,
+        &dirty_ids,
+        sink_state.waylandSink(),
+    ));
 }
