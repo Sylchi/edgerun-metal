@@ -1,5 +1,6 @@
 const std = @import("std");
 const common = @import("../../ui_component_common.zig");
+const interaction = @import("../../ui_interaction.zig");
 const layout = @import("../../layouts/Types.zig");
 const base_marker = @import("base/Marker.zig");
 const base_surface = @import("base/Surface.zig");
@@ -33,6 +34,10 @@ pub const Timeline = struct {
         return renderTimeline(self, scene, bounds, options);
     }
 
+    pub fn collectInteractions(self: Timeline, collector: *interaction.Collector, bounds: ui.Rect) interaction.Error!void {
+        return collectTimelineInteractions(self, collector, bounds);
+    }
+
     pub fn measure(self: Timeline, constraints: layout.Constraints, options: RenderOptions) layout.Measurement {
         _ = options;
         return measureTimeline(self, constraints);
@@ -64,6 +69,7 @@ pub const descriptor = common.ComponentDescriptor{
     .html_prefix = "<ol data-er-component=\"timeline\"",
     .markdown_prefix = ":::timeline",
     .render = renderRegistered,
+    .collect_interactions = collectRegistered,
     .write_html = writeHtmlRegistered,
     .write_markdown = writeMarkdownRegistered,
 };
@@ -89,7 +95,19 @@ pub fn renderTimeline(timeline: Timeline, scene: *ui.Scene, bounds: ui.Rect, opt
         try scene.pushAlignedText(ui.Rect.init(event_bounds.x + timeline_text_x, event_bounds.y + timeline_time_y, timeline_time_w, timeline_time_h), event.time, style.accent, .start);
         try scene.pushAlignedText(ui.Rect.init(event_bounds.x + timeline_text_x + timeline_time_w + timeline_text_gap, event_bounds.y + timeline_title_y, @max(1.0, event_bounds.w - timeline_text_x - timeline_time_w - timeline_text_gap - timeline_text_padding_x), timeline_title_h), event.title, style.text, .start);
         try base_text_block.render(scene, ui.Rect.init(event_bounds.x + timeline_text_x, event_bounds.y + timeline_detail_y, @max(1.0, event_bounds.w - timeline_text_x - timeline_text_padding_x), timeline_detail_h), event.detail, style.muted, timeline_detail_metrics);
-        try scene.pushHit(.{ .slot = 0, .kind = .row_item, .id = event.id, .bounds = event_bounds });
+        y += timeline_event_h + timeline_event_gap;
+    }
+}
+
+pub fn collectTimelineInteractions(timeline: Timeline, collector: *interaction.Collector, bounds: ui.Rect) interaction.Error!void {
+    if (timeline.events.len == 0) return;
+    var y = bounds.y + timeline_padding_y;
+    const content_x = bounds.x + timeline_padding_x;
+    const content_w = @max(1.0, bounds.w - timeline_padding_x * 2.0);
+    const bottom = bounds.y + bounds.h - timeline_padding_y;
+    for (timeline.events) |event| {
+        if (y + timeline_event_h > bottom) break;
+        try collector.add(.{ .kind = .row_item, .id = event.id, .bounds = ui.Rect.init(content_x, y, content_w, timeline_event_h) });
         y += timeline_event_h + timeline_event_gap;
     }
 }
@@ -114,6 +132,11 @@ pub fn measureTimeline(timeline: Timeline, constraints: layout.Constraints) layo
 fn renderRegistered(component: *const anyopaque, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
     const timeline: *const Timeline = @ptrCast(@alignCast(component));
     return renderTimeline(timeline.*, scene, bounds, options);
+}
+
+fn collectRegistered(component: *const anyopaque, collector: *interaction.Collector, bounds: ui.Rect) interaction.Error!void {
+    const timeline: *const Timeline = @ptrCast(@alignCast(component));
+    return collectTimelineInteractions(timeline.*, collector, bounds);
 }
 
 pub fn writeHtml(timeline: Timeline, out: []u8) HtmlError![]u8 {
@@ -269,7 +292,7 @@ fn timelineInsets() layout.Insets {
     return .{ .top = timeline_padding_y, .right = timeline_padding_x, .bottom = timeline_padding_y, .left = timeline_padding_x };
 }
 
-test "timeline component renders events and hit targets" {
+test "timeline component renders events and collects hit targets" {
     const events = [_]TimelineEvent{
         .{ .id = 37001, .time = "1", .title = "Browser asks", .detail = "The app asks for a name to become an address." },
         .{ .id = 37002, .time = "2", .title = "Resolver answers", .detail = "A cached or authoritative answer comes back." },
@@ -277,12 +300,16 @@ test "timeline component renders events and hit targets" {
     const timeline = Timeline{ .events = &events };
     var commands: [96]ui.Command = undefined;
     var scene = ui.Scene.init(&commands);
+    var regions: [4]interaction.Region = undefined;
+    var collector = interaction.Collector.init(&regions);
 
     try timeline.render(&scene, ui.Rect.init(0, 0, 380, 210), .{});
+    try timeline.collectInteractions(&collector, ui.Rect.init(0, 0, 380, 210));
 
     try std.testing.expect(hasText(scene.written(), "Browser asks"));
     try std.testing.expect(hasText(scene.written(), "Resolver answers"));
-    const hit = ui_input.hitTest(scene.written(), 24, 104).?;
+    try std.testing.expect(ui_input.hitTest(scene.written(), 24, 104) == null);
+    const hit = ui_input.regionHitTest(collector.written(), 24, 104).?;
     try std.testing.expectEqual(@as(u32, 37002), hit.id);
 }
 
@@ -345,6 +372,8 @@ test "timeline registers explicit runtime descriptor" {
     var markdown: [768]u8 = undefined;
     var commands: [96]ui.Command = undefined;
     var scene = ui.Scene.init(&commands);
+    var regions: [4]interaction.Region = undefined;
+    var collector = interaction.Collector.init(&regions);
 
     try Timeline.register(&registry);
     try std.testing.expectError(error.DuplicateComponent, Timeline.register(&registry));
@@ -354,10 +383,12 @@ test "timeline registers explicit runtime descriptor" {
     const encoded_html = try registry.writeHtml("timeline", &timeline, &html);
     const encoded_markdown = try registry.writeMarkdown("timeline", &timeline, &markdown);
     try registry.render("timeline", &timeline, &scene, ui.Rect.init(0, 0, 380, 210), .{});
+    try registry.collectInteractions("timeline", &timeline, &collector, ui.Rect.init(0, 0, 380, 210));
 
     try std.testing.expect(std.mem.indexOf(u8, encoded_html, "<ol data-er-component=\"timeline\"") != null);
     try std.testing.expect(std.mem.indexOf(u8, encoded_markdown, ":::timeline") != null);
     try std.testing.expect(hasText(scene.written(), "Receipt written"));
+    try std.testing.expectEqual(@as(u32, 37202), ui_input.regionHitTest(collector.written(), 24, 104).?.id);
 }
 
 fn hasText(commands: []const ui.Command, value: []const u8) bool {

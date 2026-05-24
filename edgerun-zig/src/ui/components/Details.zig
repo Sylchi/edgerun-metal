@@ -1,5 +1,6 @@
 const std = @import("std");
 const common = @import("../../ui_component_common.zig");
+const interaction = @import("../../ui_interaction.zig");
 const layout = @import("../../layouts/Types.zig");
 const base_surface = @import("base/Surface.zig");
 const base_text_block = @import("base/TextBlock.zig");
@@ -25,6 +26,10 @@ pub const Details = struct {
 
     pub fn render(self: Details, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
         return renderDetails(self, scene, bounds, options);
+    }
+
+    pub fn collectInteractions(self: Details, collector: *interaction.Collector, bounds: ui.Rect) interaction.Error!void {
+        return collectDetailsInteractions(self, collector, bounds);
     }
 
     pub fn measure(self: Details, constraints: layout.Constraints, options: RenderOptions) layout.Measurement {
@@ -58,6 +63,7 @@ pub const descriptor = common.ComponentDescriptor{
     .html_prefix = "<details data-er-component=\"details\"",
     .markdown_prefix = ":::details",
     .render = renderRegistered,
+    .collect_interactions = collectRegistered,
     .write_html = writeHtmlRegistered,
     .write_markdown = writeMarkdownRegistered,
 };
@@ -73,12 +79,16 @@ pub fn renderDetails(details: Details, scene: *ui.Scene, bounds: ui.Rect, option
     const summary_bounds = ui.Rect.init(bounds.x + details_padding_x, bounds.y + details_padding_y, @max(1.0, bounds.w - details_padding_x * 2.0), details_summary_h);
     try scene.pushAlignedText(ui.Rect.init(summary_bounds.x, summary_bounds.y + details_summary_text_y, @max(1.0, summary_bounds.w - details_marker_w), details_summary_text_h), details.summary, style.text, .start);
     try scene.pushAlignedText(ui.Rect.init(summary_bounds.x + summary_bounds.w - details_marker_w, summary_bounds.y + details_summary_text_y, details_marker_w, details_summary_text_h), if (details.open) "v" else ">", style.accent, .center);
-    try scene.pushHit(.{ .slot = 0, .kind = .button, .id = details.id, .bounds = summary_bounds });
 
     if (!details.open) return;
     const body_y = summary_bounds.y + summary_bounds.h + details_body_gap;
     if (body_y >= bounds.y + bounds.h - details_padding_y) return;
     try base_text_block.render(scene, ui.Rect.init(summary_bounds.x, body_y, summary_bounds.w, @max(1.0, bounds.y + bounds.h - details_padding_y - body_y)), details.body, style.muted, details_body_metrics);
+}
+
+pub fn collectDetailsInteractions(details: Details, collector: *interaction.Collector, bounds: ui.Rect) interaction.Error!void {
+    const summary_bounds = ui.Rect.init(bounds.x + details_padding_x, bounds.y + details_padding_y, @max(1.0, bounds.w - details_padding_x * 2.0), details_summary_h);
+    try collector.add(.{ .kind = .button, .id = details.id, .bounds = summary_bounds });
 }
 
 pub fn measureDetails(details: Details, constraints: layout.Constraints) layout.Measurement {
@@ -102,6 +112,11 @@ pub fn measureDetails(details: Details, constraints: layout.Constraints) layout.
 fn renderRegistered(component: *const anyopaque, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
     const details: *const Details = @ptrCast(@alignCast(component));
     return renderDetails(details.*, scene, bounds, options);
+}
+
+fn collectRegistered(component: *const anyopaque, collector: *interaction.Collector, bounds: ui.Rect) interaction.Error!void {
+    const details: *const Details = @ptrCast(@alignCast(component));
+    return collectDetailsInteractions(details.*, collector, bounds);
 }
 
 pub fn writeHtml(details: Details, out: []u8) HtmlError![]u8 {
@@ -207,7 +222,7 @@ fn detailsInsets() layout.Insets {
     return .{ .top = details_padding_y, .right = details_padding_x, .bottom = details_padding_y, .left = details_padding_x };
 }
 
-test "details component renders summary and open body" {
+test "details component renders summary open body and collects hit target" {
     const details = Details{
         .id = 32001,
         .summary = "Why does DNS matter?",
@@ -216,12 +231,16 @@ test "details component renders summary and open body" {
     };
     var commands: [64]ui.Command = undefined;
     var scene = ui.Scene.init(&commands);
+    var regions: [2]interaction.Region = undefined;
+    var collector = interaction.Collector.init(&regions);
 
     try details.render(&scene, ui.Rect.init(0, 0, 360, 120), .{});
+    try details.collectInteractions(&collector, ui.Rect.init(0, 0, 360, 120));
 
     try std.testing.expect(hasText(scene.written(), "Why does DNS matter?"));
     try std.testing.expect(hasTextContaining(scene.written(), "name lookup"));
-    const hit = ui_input.hitTest(scene.written(), 20, 20).?;
+    try std.testing.expect(ui_input.hitTest(scene.written(), 20, 20) == null);
+    const hit = ui_input.regionHitTest(collector.written(), 20, 20).?;
     try std.testing.expectEqual(@as(u32, 32001), hit.id);
 }
 
@@ -301,6 +320,8 @@ test "details registers explicit runtime descriptor" {
     var markdown: [512]u8 = undefined;
     var commands: [32]ui.Command = undefined;
     var scene = ui.Scene.init(&commands);
+    var regions: [2]interaction.Region = undefined;
+    var collector = interaction.Collector.init(&regions);
 
     try Details.register(&registry);
     try std.testing.expectError(error.DuplicateComponent, Details.register(&registry));
@@ -310,10 +331,12 @@ test "details registers explicit runtime descriptor" {
     const encoded_html = try registry.writeHtml("details", &details, &html);
     const encoded_markdown = try registry.writeMarkdown("details", &details, &markdown);
     try registry.render("details", &details, &scene, ui.Rect.init(0, 0, 320, 120), .{});
+    try registry.collectInteractions("details", &details, &collector, ui.Rect.init(0, 0, 320, 120));
 
     try std.testing.expect(std.mem.indexOf(u8, encoded_html, "<details data-er-component=\"details\"") != null);
     try std.testing.expect(std.mem.indexOf(u8, encoded_markdown, ":::details") != null);
     try std.testing.expect(hasTextContaining(scene.written(), "registered app surface"));
+    try std.testing.expectEqual(@as(u32, 32004), ui_input.regionHitTest(collector.written(), 20, 20).?.id);
 }
 
 fn hasText(commands: []const ui.Command, value: []const u8) bool {
