@@ -1,7 +1,9 @@
 const std = @import("std");
 const icon = @import("icon.zig");
+const input = @import("input.zig");
 const renderer_font_atlas = @import("renderer_font_atlas.zig");
 const renderer_ir = @import("renderer_ir.zig");
+const site_chrome = @import("site_chrome.zig");
 const site_landing = @import("site_landing.zig");
 const tabler_atlas = @import("tabler_atlas.zig");
 const ui = @import("ui.zig");
@@ -21,6 +23,8 @@ const default_width: i32 = 960;
 const default_height: i32 = 540;
 const default_seconds: u32 = 5;
 const frame_ms: i32 = 16;
+const wayland_fixed_scale: f32 = 256.0;
+const pointer_button_left: u32 = 0x110;
 const max_commands: usize = 4096;
 const max_clips: usize = 64;
 const max_rects: usize = 8192;
@@ -52,12 +56,16 @@ const WaylandState = struct {
     registry: *c.wl_registry,
     compositor: ?*c.wl_compositor = null,
     wm_base: ?*c.xdg_wm_base = null,
+    seat: ?*c.wl_seat = null,
+    pointer: ?*c.wl_pointer = null,
     surface: ?*c.wl_surface = null,
     xdg_surface: ?*c.xdg_surface = null,
     toplevel: ?*c.xdg_toplevel = null,
     configured: bool = false,
     closed: bool = false,
     resized: bool = false,
+    input_dirty: bool = false,
+    app: *AppState,
     width: i32,
     height: i32,
 };
@@ -82,21 +90,43 @@ const SceneState = struct {
     commands: [max_commands]ui.Command = undefined,
     clips: [max_clips]ui.Rect = undefined,
     ir_storage: IrStorage = .{},
+    command_len: usize = 0,
 
-    fn rebuild(self: *SceneState, width: i32, height: i32, font_atlas: *renderer_font_atlas.Atlas) !renderer_ir.Buffers {
+    fn rebuild(self: *SceneState, width: i32, height: i32, app: AppState, font_atlas: *renderer_font_atlas.Atlas) !renderer_ir.Buffers {
         var scene = ui.Scene.initWithClips(&self.commands, &self.clips);
         try site_landing.render(&scene, .{
             .x = 0,
             .y = 0,
             .w = @floatFromInt(width),
             .h = @floatFromInt(height),
-        }, .{
-            .public_identity = "native-egl-gpu",
-            .public_identity_ready = true,
-        });
+        }, app.siteState());
+        self.command_len = scene.written().len;
         const buffers = self.ir_storage.buffers();
         try renderer_ir.packScene(buffers, sources(font_atlas), scene.written());
         return buffers;
+    }
+
+    fn commandSlice(self: *const SceneState) []const ui.Command {
+        return self.commands[0..self.command_len];
+    }
+};
+
+const AppState = struct {
+    scroll_y: f32 = 0.0,
+    hover_x: f32 = -1.0,
+    hover_y: f32 = -1.0,
+    hover_hit_id: u32 = 0,
+    public_identity_ready: bool = true,
+    public_identity: []const u8 = "native-egl-gpu",
+
+    fn siteState(self: AppState) site_landing.State {
+        return .{
+            .scroll_y = self.scroll_y,
+            .hover_x = self.hover_x,
+            .hover_y = self.hover_y,
+            .public_identity_ready = self.public_identity_ready,
+            .public_identity = self.public_identity,
+        };
     }
 };
 
@@ -106,7 +136,8 @@ pub fn main(init: std.process.Init) !void {
     defer allocator.free(args);
     const options = try parseOptions(args);
 
-    var wl = try initWayland(options.width, options.height);
+    var app = AppState{};
+    var wl = try initWayland(options.width, options.height, &app);
     defer deinitWayland(&wl);
     var egl = try initEgl(&wl);
     defer deinitEgl(&egl);
@@ -115,7 +146,8 @@ pub fn main(init: std.process.Init) !void {
     defer deinitGl(&gl);
 
     var scene_state = SceneState{};
-    var buffers = try scene_state.rebuild(wl.width, wl.height, &font_atlas);
+    var buffers = try scene_state.rebuild(wl.width, wl.height, app, &font_atlas);
+    updateHoverHit(&app, scene_state.commandSlice());
 
     var frames_remaining: u32 = options.seconds * 60;
     while (!wl.closed and frames_remaining != 0) : (frames_remaining -= 1) {
@@ -123,8 +155,13 @@ pub fn main(init: std.process.Init) !void {
 
         if (wl.resized) {
             c.wl_egl_window_resize(egl.window, wl.width, wl.height, 0, 0);
-            buffers = try scene_state.rebuild(wl.width, wl.height, &font_atlas);
+            buffers = try scene_state.rebuild(wl.width, wl.height, app, &font_atlas);
+            updateHoverHit(&app, scene_state.commandSlice());
             wl.resized = false;
+        } else if (wl.input_dirty) {
+            buffers = try scene_state.rebuild(wl.width, wl.height, app, &font_atlas);
+            updateHoverHit(&app, scene_state.commandSlice());
+            wl.input_dirty = false;
         }
         try renderFrame(gl, wl.width, wl.height, buffers, &font_atlas);
         if (c.eglSwapBuffers(egl.display, egl.surface) != c.EGL_TRUE) return error.EglSwapFailed;
@@ -188,16 +225,19 @@ fn parseOptions(args: []const [:0]const u8) !Options {
     return options;
 }
 
-fn initWayland(width: i32, height: i32) !WaylandState {
+fn initWayland(width: i32, height: i32, app: *AppState) !WaylandState {
     const display = c.wl_display_connect(null) orelse return error.WaylandConnectFailed;
     errdefer c.wl_display_disconnect(display);
     const registry = c.wl_display_get_registry(display) orelse return error.WaylandRegistryFailed;
-    var state = WaylandState{ .display = display, .registry = registry, .width = width, .height = height };
+    var state = WaylandState{ .display = display, .registry = registry, .app = app, .width = width, .height = height };
     if (c.wl_registry_add_listener(registry, &registry_listener, &state) != 0) return error.WaylandRegistryFailed;
     if (c.wl_display_roundtrip(display) < 0) return error.WaylandRoundtripFailed;
     const compositor = state.compositor orelse return error.MissingWaylandCompositor;
     const wm_base = state.wm_base orelse return error.MissingXdgWmBase;
     if (c.xdg_wm_base_add_listener(wm_base, &wm_base_listener, &state) != 0) return error.XdgListenerFailed;
+    if (state.seat) |seat| {
+        if (c.wl_seat_add_listener(seat, &seat_listener, &state) != 0) return error.WaylandSeatListenerFailed;
+    }
     state.surface = c.wl_compositor_create_surface(compositor) orelse return error.WaylandSurfaceFailed;
     state.xdg_surface = c.xdg_wm_base_get_xdg_surface(wm_base, state.surface) orelse return error.XdgSurfaceFailed;
     if (c.xdg_surface_add_listener(state.xdg_surface, &xdg_surface_listener, &state) != 0) return error.XdgListenerFailed;
@@ -212,6 +252,8 @@ fn initWayland(width: i32, height: i32) !WaylandState {
 }
 
 fn deinitWayland(state: *WaylandState) void {
+    if (state.pointer) |value| c.wl_pointer_destroy(value);
+    if (state.seat) |value| c.wl_seat_destroy(value);
     if (state.toplevel) |value| c.xdg_toplevel_destroy(value);
     if (state.xdg_surface) |value| c.xdg_surface_destroy(value);
     if (state.surface) |value| c.wl_surface_destroy(value);
@@ -425,6 +467,37 @@ fn iconAtlasRect(_: *anyopaque, atlas_id: u32) ?renderer_ir.AtlasRect {
     };
 }
 
+fn updateHoverHit(app: *AppState, commands: []const ui.Command) void {
+    if (app.hover_x < 0.0 or app.hover_y < 0.0) {
+        app.hover_hit_id = 0;
+        return;
+    }
+    app.hover_hit_id = if (input.hitTest(commands, app.hover_x, app.hover_y)) |hit| hit.id else 0;
+}
+
+fn activateHit(app: *AppState) void {
+    switch (app.hover_hit_id) {
+        site_chrome.logo_button_id,
+        site_chrome.docs_button_id,
+        => app.scroll_y = 0.0,
+        site_landing.reveal_identity_button_id => {
+            app.public_identity_ready = true;
+            app.public_identity = "native-egl-gpu";
+        },
+        else => {},
+    }
+}
+
+fn scrollBy(app: *AppState, width: i32, height: i32, delta_y: f32) void {
+    if (!std.math.isFinite(delta_y)) return;
+    const limit = @max(0.0, site_landing.contentHeight(@floatFromInt(width)) - @as(f32, @floatFromInt(height)));
+    app.scroll_y = std.math.clamp(app.scroll_y + delta_y, 0.0, limit);
+}
+
+fn fixedToFloat(value: c.wl_fixed_t) f32 {
+    return @as(f32, @floatFromInt(value)) / wayland_fixed_scale;
+}
+
 const registry_listener = c.wl_registry_listener{ .global = registryGlobal, .global_remove = registryRemove };
 fn registryGlobal(data: ?*anyopaque, registry: ?*c.wl_registry, name: u32, interface: [*c]const u8, version: u32) callconv(.c) void {
     const state: *WaylandState = @ptrCast(@alignCast(data.?));
@@ -434,9 +507,63 @@ fn registryGlobal(data: ?*anyopaque, registry: ?*c.wl_registry, name: u32, inter
         state.compositor = @ptrCast(c.wl_registry_bind(reg, name, &c.wl_compositor_interface, @min(version, 4)));
     } else if (std.mem.eql(u8, iface, "xdg_wm_base")) {
         state.wm_base = @ptrCast(c.wl_registry_bind(reg, name, &c.xdg_wm_base_interface, @min(version, 1)));
+    } else if (std.mem.eql(u8, iface, "wl_seat")) {
+        state.seat = @ptrCast(c.wl_registry_bind(reg, name, &c.wl_seat_interface, @min(version, 7)));
     }
 }
 fn registryRemove(_: ?*anyopaque, _: ?*c.wl_registry, _: u32) callconv(.c) void {}
+
+const seat_listener = c.wl_seat_listener{ .capabilities = seatCapabilities, .name = seatName };
+fn seatCapabilities(data: ?*anyopaque, seat: ?*c.wl_seat, capabilities: u32) callconv(.c) void {
+    const state: *WaylandState = @ptrCast(@alignCast(data.?));
+    if ((capabilities & c.WL_SEAT_CAPABILITY_POINTER) != 0 and state.pointer == null) {
+        state.pointer = c.wl_seat_get_pointer(seat);
+        if (state.pointer) |pointer| {
+            _ = c.wl_pointer_add_listener(pointer, &pointer_listener, state);
+        }
+    } else if ((capabilities & c.WL_SEAT_CAPABILITY_POINTER) == 0 and state.pointer != null) {
+        c.wl_pointer_destroy(state.pointer.?);
+        state.pointer = null;
+    }
+}
+fn seatName(_: ?*anyopaque, _: ?*c.wl_seat, _: [*c]const u8) callconv(.c) void {}
+
+const pointer_listener = c.wl_pointer_listener{
+    .enter = pointerEnter,
+    .leave = pointerLeave,
+    .motion = pointerMotion,
+    .button = pointerButton,
+    .axis = pointerAxis,
+};
+fn pointerEnter(data: ?*anyopaque, _: ?*c.wl_pointer, _: u32, _: ?*c.wl_surface, sx: c.wl_fixed_t, sy: c.wl_fixed_t) callconv(.c) void {
+    const state: *WaylandState = @ptrCast(@alignCast(data.?));
+    state.app.hover_x = fixedToFloat(sx);
+    state.app.hover_y = fixedToFloat(sy);
+    state.input_dirty = true;
+}
+fn pointerLeave(data: ?*anyopaque, _: ?*c.wl_pointer, _: u32, _: ?*c.wl_surface) callconv(.c) void {
+    const state: *WaylandState = @ptrCast(@alignCast(data.?));
+    state.app.hover_x = -1.0;
+    state.app.hover_y = -1.0;
+    state.app.hover_hit_id = 0;
+    state.input_dirty = true;
+}
+fn pointerMotion(data: ?*anyopaque, _: ?*c.wl_pointer, _: u32, sx: c.wl_fixed_t, sy: c.wl_fixed_t) callconv(.c) void {
+    const state: *WaylandState = @ptrCast(@alignCast(data.?));
+    state.app.hover_x = fixedToFloat(sx);
+    state.app.hover_y = fixedToFloat(sy);
+    state.input_dirty = true;
+}
+fn pointerButton(data: ?*anyopaque, _: ?*c.wl_pointer, _: u32, _: u32, button: u32, button_state: u32) callconv(.c) void {
+    const state: *WaylandState = @ptrCast(@alignCast(data.?));
+    if (button == pointer_button_left and button_state == c.WL_POINTER_BUTTON_STATE_RELEASED) activateHit(state.app);
+    state.input_dirty = true;
+}
+fn pointerAxis(data: ?*anyopaque, _: ?*c.wl_pointer, _: u32, axis: u32, value: c.wl_fixed_t) callconv(.c) void {
+    const state: *WaylandState = @ptrCast(@alignCast(data.?));
+    if (axis == c.WL_POINTER_AXIS_VERTICAL_SCROLL) scrollBy(state.app, state.width, state.height, fixedToFloat(value));
+    state.input_dirty = true;
+}
 
 const wm_base_listener = c.xdg_wm_base_listener{ .ping = wmBasePing };
 fn wmBasePing(_: ?*anyopaque, wm_base: ?*c.xdg_wm_base, serial: u32) callconv(.c) void {
@@ -549,4 +676,29 @@ test "software GL renderer names are rejected" {
     try std.testing.expect(isSoftwareRenderer("softpipe"));
     try std.testing.expect(isSoftwareRenderer("Mesa swrast"));
     try std.testing.expect(!isSoftwareRenderer("AMD Radeon 780M Graphics (radeonsi, phoenix, ACO)"));
+}
+
+test "egl host input helpers update hover activation and scroll state" {
+    var commands: [4]ui.Command = undefined;
+    var scene = ui.Scene.init(&commands);
+    try scene.pushHit(.{ .slot = 0, .kind = .button, .id = site_landing.reveal_identity_button_id, .bounds = ui.Rect.init(8, 8, 80, 32) });
+
+    var app = AppState{ .public_identity_ready = false, .public_identity = "pending" };
+    updateHoverHit(&app, scene.written());
+    try std.testing.expectEqual(@as(u32, 0), app.hover_hit_id);
+
+    app.hover_x = 16.0;
+    app.hover_y = 16.0;
+    updateHoverHit(&app, scene.written());
+    try std.testing.expectEqual(site_landing.reveal_identity_button_id, app.hover_hit_id);
+
+    activateHit(&app);
+    try std.testing.expect(app.public_identity_ready);
+    try std.testing.expectEqualStrings("native-egl-gpu", app.public_identity);
+
+    scrollBy(&app, default_width, 200, 120.0);
+    try std.testing.expect(app.scroll_y > 0.0);
+    const before = app.scroll_y;
+    scrollBy(&app, default_width, 200, std.math.nan(f32));
+    try std.testing.expectEqual(before, app.scroll_y);
 }
