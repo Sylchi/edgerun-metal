@@ -1106,34 +1106,11 @@ const Module = struct {
         for (self.data_segments[0..count]) |*segment| {
             const mode = try reader.readU32Leb();
             switch (mode) {
-                0 => {
-                    const offset = try readConstantI32Expression(reader);
-                    if (offset < 0) return error.NoMemory;
-                    const byte_count = try reader.readU32Leb();
-                    segment.* = .{
-                        .offset = @intCast(offset),
-                        .bytes = try reader.readBytes(byte_count),
-                        .active = true,
-                    };
-                },
-                1 => {
-                    const byte_count = try reader.readU32Leb();
-                    segment.* = .{
-                        .bytes = try reader.readBytes(byte_count),
-                        .active = false,
-                    };
-                },
+                0 => segment.* = try parseActiveDataSegment(reader),
+                1 => segment.* = try parsePassiveDataSegment(reader),
                 2 => {
-                    const memory_index = try reader.readU32Leb();
-                    if (memory_index != 0) return error.Unsupported;
-                    const offset = try readConstantI32Expression(reader);
-                    if (offset < 0) return error.NoMemory;
-                    const byte_count = try reader.readU32Leb();
-                    segment.* = .{
-                        .offset = @intCast(offset),
-                        .bytes = try reader.readBytes(byte_count),
-                        .active = true,
-                    };
+                    try readMemoryIndex(reader);
+                    segment.* = try parseActiveDataSegment(reader);
                 },
                 else => return error.Unsupported,
             }
@@ -2209,6 +2186,25 @@ fn readTableMinimumEntries(reader: *Reader) Error!usize {
         if (encoded_max < min) return error.Corrupt;
     }
     return min;
+}
+
+fn parseActiveDataSegment(reader: *Reader) Error!DataSegment {
+    const offset = try readConstantI32Expression(reader);
+    if (offset < 0) return error.NoMemory;
+    const byte_count = try reader.readU32Leb();
+    return .{
+        .offset = @intCast(offset),
+        .bytes = try reader.readBytes(byte_count),
+        .active = true,
+    };
+}
+
+fn parsePassiveDataSegment(reader: *Reader) Error!DataSegment {
+    const byte_count = try reader.readU32Leb();
+    return .{
+        .bytes = try reader.readBytes(byte_count),
+        .active = false,
+    };
 }
 
 fn findHostImport(runtime: Runtime, imported: anytype, kind: HostImportKind) Error!HostImport {
