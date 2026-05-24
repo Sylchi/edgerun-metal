@@ -255,7 +255,7 @@ pub fn renderCpuAndSubmit(
     const software_surface = try renderer_software.Surface.init(framebuffer.width, framebuffer.height, framebuffer.pixels);
     software_surface.clear(background);
     _ = try software_surface.renderIrFrameWithAtlases(buffers, atlases);
-    return planAndSubmit(surface, buffers, atlasResources(atlases), refresh_hz, tile_width, tile_height, tile_marks, dirty_ids, sink);
+    return planAndSubmit(surface, buffers, atlases.resources(), refresh_hz, tile_width, tile_height, tile_marks, dirty_ids, sink);
 }
 
 fn commitForSurface(surface: NativeSurface, dirty_tiles: []const u32) Commit {
@@ -272,14 +272,6 @@ fn commitForSurface(surface: NativeSurface, dirty_tiles: []const u32) Commit {
             .scale = value.scale,
             .dirty_tiles = dirty_tiles,
         } },
-    };
-}
-
-fn atlasResources(atlases: renderer_software.IrAtlases) renderer_present.Resources {
-    return .{
-        .font_atlas = atlases.font.valid(),
-        .icon_atlas = atlases.icon.valid(),
-        .image_texture = if (atlases.image) |image| image.valid() else false,
     };
 }
 

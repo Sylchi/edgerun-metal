@@ -36,6 +36,14 @@ pub const IrAtlases = struct {
     font: AlphaAtlas,
     icon: AlphaAtlas,
     image: ?RgbaTexture = null,
+
+    pub fn resources(self: IrAtlases) renderer_present.Resources {
+        return .{
+            .font_atlas = self.font.valid(),
+            .icon_atlas = self.icon.valid(),
+            .image_texture = if (self.image) |image| image.valid() else false,
+        };
+    }
 };
 
 pub const Surface = struct {
@@ -107,7 +115,7 @@ pub const Surface = struct {
                 .height = @intCast(self.height),
             },
             .buffers = buffers,
-            .resources = atlasResources(atlases),
+            .resources = atlases.resources(),
         }) catch |err| return switch (err) {
             error.InvalidBuffer => error.InvalidIrBuffer,
             else => err,
@@ -578,14 +586,6 @@ pub const Surface = struct {
         }
     }
 };
-
-fn atlasResources(atlases: IrAtlases) renderer_present.Resources {
-    return .{
-        .font_atlas = atlases.font.valid(),
-        .icon_atlas = atlases.icon.valid(),
-        .image_texture = if (atlases.image) |image| image.valid() else false,
-    };
-}
 
 const default_raster_scale: f32 = 1.0;
 const max_alpha: u8 = 255;
