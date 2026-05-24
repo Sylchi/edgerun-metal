@@ -80,6 +80,10 @@ pub const Component = union(enum) {
         return renderComponent(scene, bounds, self, options);
     }
 
+    pub fn measure(self: Component, constraints: layouts.types.Constraints, options: RenderOptions) layouts.types.Measurement {
+        return measureComponent(self, constraints, options);
+    }
+
     pub fn toObject(self: Component, ui_out: []u8, object_out: []u8, req: object.Requirements, epoch: clock.Stamp) ?[]u8 {
         return writeSingleComponentObject(self, ui_out, object_out, req, epoch);
     }
@@ -189,6 +193,10 @@ pub const Region = struct {
     label: []const u8 = "",
     children: []const Component,
 
+    pub fn measure(self: Region, constraints: layouts.types.Constraints, options: RenderOptions) layouts.types.Measurement {
+        return measureRegion(self, constraints, options);
+    }
+
     pub fn render(self: Region, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
         return renderRegion(scene, bounds, self, options);
     }
@@ -287,22 +295,53 @@ pub fn renderComponent(scene: *ui.Scene, bounds: ui.Rect, component: Component, 
     }
 }
 
+pub fn measureComponent(component: Component, constraints: layouts.types.Constraints, options: RenderOptions) layouts.types.Measurement {
+    _ = options;
+    return switch (component) {
+        .text => |text| measureText(text.value, constraints),
+        .card => |card| measureSurface(card.title, card.detail, constraints),
+        .badge => |badge| measureBadge(badge.label, constraints),
+        .button => |button| measureButton(button.label, constraints),
+        else => measurePreferredNode(component.node(), constraints),
+    };
+}
+
+pub fn measureRegion(region: Region, constraints: layouts.types.Constraints, options: RenderOptions) layouts.types.Measurement {
+    var child_measurements: [codec_max_stack_children]layouts.types.Measurement = undefined;
+    const measured_children = measureChildren(region.children, regionChildConstraints(constraints), options, &child_measurements);
+    return layouts.Flex.measure(measured_children, constraints, regionLayoutOptions());
+}
+
 pub fn renderRegion(scene: *ui.Scene, bounds: ui.Rect, region: Region, options: RenderOptions) ui.RenderError!void {
     if (region.children.len == 0) return;
+    if (region.children.len > codec_max_stack_children) return error.CommandBudgetExceeded;
     if (region.tag == .header or region.tag == .footer) {
         try scene.pushRect(bounds, options.style.panel, .fill, region_radius, 0.0);
         try scene.pushRect(bounds, options.style.border, .border, region_radius, 0.0);
     }
 
-    var y = bounds.y + region_padding_y;
-    const child_x = bounds.x + region_padding_x;
-    const child_w = @max(1.0, bounds.w - region_padding_x * 2.0);
-    const bottom = bounds.y + bounds.h - region_padding_y;
-    for (region.children) |child| {
-        const child_h = regionChildHeight(child);
-        if (y + child_h > bottom) break;
-        try renderComponent(scene, ui.Rect.init(child_x, y, child_w, child_h), child, options);
-        y += child_h + region_child_gap;
+    const constraints = constraintsFromBounds(bounds);
+    var child_measurements: [codec_max_stack_children]layouts.types.Measurement = undefined;
+    var child_bounds: [codec_max_stack_children]ui.Rect = undefined;
+    const measured_children = measureChildren(region.children, regionChildConstraints(constraints), options, &child_measurements);
+    const placed_children = layouts.Flex.place(bounds, measured_children, regionLayoutOptions(), &child_bounds);
+    for (region.children[0..placed_children.len], placed_children) |child, child_rect| {
+        if (!child_rect.valid()) return error.InvalidBounds;
+        try renderComponent(scene, child_rect, child, options);
+    }
+}
+
+pub fn renderStack(scene: *ui.Scene, bounds: ui.Rect, stack: Stack, options: RenderOptions) ui.RenderError!void {
+    if (stack.children.len == 0) return;
+    if (stack.children.len > codec_max_stack_children) return error.CommandBudgetExceeded;
+    const constraints = constraintsFromBounds(bounds);
+    var child_measurements: [codec_max_stack_children]layouts.types.Measurement = undefined;
+    var child_bounds: [codec_max_stack_children]ui.Rect = undefined;
+    const measured_children = measureChildren(stack.children, stackChildConstraints(stack, constraints), options, &child_measurements);
+    const placed_children = layouts.Flex.place(bounds, measured_children, stackLayoutOptions(stack), &child_bounds);
+    for (stack.children[0..placed_children.len], placed_children) |child, child_rect| {
+        if (!child_rect.valid()) return error.InvalidBounds;
+        try renderComponent(scene, child_rect, child, options);
     }
 }
 
@@ -459,24 +498,136 @@ const region_radius: f32 = 8.0;
 const region_padding_x: f32 = 12.0;
 const region_padding_y: f32 = 12.0;
 const region_child_gap: f32 = 10.0;
-const region_text_h: f32 = 32.0;
-const region_card_h: f32 = 88.0;
-const region_badge_h: f32 = 28.0;
-const region_button_h: f32 = 40.0;
-const region_input_h: f32 = 40.0;
-const region_row_h: f32 = 66.0;
-const region_separator_h: f32 = 1.0;
+const primitive_text_line_height: f32 = 18.0;
+const primitive_text_average_w: f32 = 8.0;
+const primitive_text_max_lines: usize = 8;
+const primitive_text_min_width: f32 = 24.0;
+const primitive_control_max_width: f32 = 4096.0;
+const primitive_card_min_width: f32 = 160.0;
+const primitive_card_title_average_w: f32 = 8.5;
+const primitive_card_detail_average_w: f32 = 8.0;
+const primitive_card_detail_max_lines: usize = 3;
+const primitive_badge_min_width: f32 = 28.0;
+const primitive_button_min_width: f32 = 44.0;
+const primitive_horizontal_padding_scale: f32 = 2.0;
+const primitive_stack_max_children = codec_max_stack_children;
 
-fn regionChildHeight(component: Component) f32 {
-    return switch (component) {
-        .text => region_text_h,
-        .card => region_card_h,
-        .badge => region_badge_h,
-        .separator => region_separator_h,
-        .button => region_button_h,
-        .input => region_input_h,
-        .row_item => region_row_h,
-        else => region_text_h,
+fn measureChildren(children: []const Component, constraints: layouts.types.Constraints, options: RenderOptions, out: []layouts.types.Measurement) []layouts.types.Measurement {
+    const count = @min(children.len, @min(out.len, primitive_stack_max_children));
+    for (children[0..count], 0..) |child, index| {
+        out[index] = measureComponent(child, constraints, options);
+    }
+    return out[0..count];
+}
+
+fn measureText(value: []const u8, constraints: layouts.types.Constraints) layouts.types.Measurement {
+    const measured = layouts.types.measureText(value, constraints, .{
+        .line_height = primitive_text_line_height,
+        .average_char_width = primitive_text_average_w,
+        .max_lines = primitive_text_max_lines,
+    });
+    return layouts.types.Measurement.flexible(
+        .{ .w = @min(primitive_text_min_width, measured.preferred.w), .h = @min(primitive_text_line_height, measured.preferred.h) },
+        measured.preferred,
+        measured.max,
+    ).applyExact(constraints);
+}
+
+fn measureSurface(title: []const u8, detail: []const u8, constraints: layouts.types.Constraints) layouts.types.Measurement {
+    const inner = constraints.inner(layouts.types.Insets.uniform(surface_padding));
+    const title_measure = layouts.types.measureText(title, inner, .{
+        .line_height = surface_title_height,
+        .average_char_width = primitive_card_title_average_w,
+        .max_lines = 1,
+    });
+    const detail_measure = layouts.types.measureText(detail, inner, .{
+        .line_height = surface_detail_height,
+        .average_char_width = primitive_card_detail_average_w,
+        .max_lines = primitive_card_detail_max_lines,
+    });
+    const content_width = @max(title_measure.preferred.w, detail_measure.preferred.w);
+    const content_height = title_measure.preferred.h + surface_detail_gap + detail_measure.preferred.h;
+    return layouts.types.Measurement.flexible(
+        .{ .w = primitive_card_min_width, .h = surface_padding * primitive_horizontal_padding_scale + surface_title_height },
+        .{ .w = content_width + surface_padding * primitive_horizontal_padding_scale, .h = content_height + surface_padding * primitive_horizontal_padding_scale },
+        .{ .w = primitive_control_max_width, .h = content_height + surface_padding * primitive_horizontal_padding_scale },
+    ).applyExact(constraints);
+}
+
+fn measureBadge(label: []const u8, constraints: layouts.types.Constraints) layouts.types.Measurement {
+    const preferred_width = @max(primitive_badge_min_width, @as(f32, @floatFromInt(label.len)) * button_label_average_w + badge_padding_x * primitive_horizontal_padding_scale);
+    return layouts.types.Measurement.flexible(
+        .{ .w = primitive_badge_min_width, .h = badge_height },
+        .{ .w = preferred_width, .h = badge_height },
+        .{ .w = primitive_control_max_width, .h = badge_height },
+    ).applyExact(constraints);
+}
+
+fn measureButton(label: []const u8, constraints: layouts.types.Constraints) layouts.types.Measurement {
+    const preferred_width = @max(primitive_button_min_width, estimatedButtonLabelWidth(label) + button_label_padding * primitive_horizontal_padding_scale);
+    return layouts.types.Measurement.flexible(
+        .{ .w = primitive_button_min_width, .h = ui.buttonNode(0, "").preferredSize().h },
+        .{ .w = preferred_width, .h = ui.buttonNode(0, "").preferredSize().h },
+        .{ .w = primitive_control_max_width, .h = ui.buttonNode(0, "").preferredSize().h },
+    ).applyExact(constraints);
+}
+
+fn measurePreferredNode(node: ui.Node, constraints: layouts.types.Constraints) layouts.types.Measurement {
+    const size = node.preferredSize();
+    return layouts.types.Measurement.flexible(
+        .{ .w = @min(size.w, constraints.width.limit(size.w)), .h = @min(size.h, constraints.height.limit(size.h)) },
+        size,
+        .{ .w = primitive_control_max_width, .h = size.h },
+    ).applyExact(constraints);
+}
+
+fn stackChildConstraints(stack: Stack, constraints: layouts.types.Constraints) layouts.types.Constraints {
+    const inner = constraints.inner(layouts.types.Insets.uniform(@floatFromInt(stack.padding)));
+    return switch (stack.axis) {
+        .column => .{ .width = inner.width, .height = .unconstrained, .text_wrap = constraints.text_wrap },
+        .row => .{ .width = .unconstrained, .height = inner.height, .text_wrap = constraints.text_wrap },
+    };
+}
+
+fn regionChildConstraints(constraints: layouts.types.Constraints) layouts.types.Constraints {
+    const inner = constraints.inner(regionInsets());
+    return .{ .width = inner.width, .height = .unconstrained, .text_wrap = constraints.text_wrap };
+}
+
+fn stackLayoutOptions(stack: Stack) layouts.Flex.Options {
+    return .{
+        .axis = layoutAxis(stack.axis),
+        .gap = @floatFromInt(stack.gap),
+        .padding = layouts.types.Insets.uniform(@floatFromInt(stack.padding)),
+        .cross_align = .stretch,
+    };
+}
+
+fn regionLayoutOptions() layouts.Flex.Options {
+    return .{
+        .axis = .vertical,
+        .gap = region_child_gap,
+        .padding = regionInsets(),
+        .cross_align = .stretch,
+    };
+}
+
+fn regionInsets() layouts.types.Insets {
+    return .{ .top = region_padding_y, .right = region_padding_x, .bottom = region_padding_y, .left = region_padding_x };
+}
+
+fn layoutAxis(axis: ui.Axis) layouts.types.Axis {
+    return switch (axis) {
+        .row => .horizontal,
+        .column => .vertical,
+    };
+}
+
+fn constraintsFromBounds(bounds: ui.Rect) layouts.types.Constraints {
+    return .{
+        .width = .{ .exact = bounds.w },
+        .height = .{ .exact = bounds.h },
+        .text_wrap = .wrap,
     };
 }
 
@@ -818,6 +969,16 @@ pub const Stack = struct {
     gap: u16 = 8,
     padding: u16 = 0,
     children: []const Component,
+
+    pub fn measure(self: Stack, constraints: layouts.types.Constraints, options: RenderOptions) layouts.types.Measurement {
+        var child_measurements: [codec_max_stack_children]layouts.types.Measurement = undefined;
+        const measured_children = measureChildren(self.children, stackChildConstraints(self, constraints), options, &child_measurements);
+        return layouts.Flex.measure(measured_children, constraints, stackLayoutOptions(self));
+    }
+
+    pub fn render(self: Stack, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
+        return renderStack(scene, bounds, self, options);
+    }
 
     pub fn node(self: Stack, out_nodes: []ui.Node) ?ui.Node {
         if (out_nodes.len < self.children.len) return null;
@@ -2521,6 +2682,34 @@ test "stack component produces renderable ui node" {
     try std.testing.expect(ui_input.hitTest(scene.written(), 20, 70) != null);
 }
 
+test "component measurement wraps primitive text under exact width" {
+    const component = Component{ .text = .{ .value = "A browser shell loads the tiny bootstrap and wasm owns the rest" } };
+    const wide = component.measure(.{ .width = .{ .exact = 360 }, .text_wrap = .wrap }, .{});
+    const narrow = component.measure(.{ .width = .{ .exact = 120 }, .text_wrap = .wrap }, .{});
+
+    try std.testing.expectEqual(@as(f32, 360), wide.preferred.w);
+    try std.testing.expectEqual(@as(f32, 120), narrow.preferred.w);
+    try std.testing.expect(narrow.preferred.h > wide.preferred.h);
+}
+
+test "stack measure and render use layout placement" {
+    const children = [_]Component{
+        .{ .text = .{ .value = "Intro" } },
+        .{ .button = .{ .id = 41002, .label = "Continue" } },
+    };
+    const stack = Stack{ .axis = .column, .gap = 6, .padding = 8, .children = &children };
+    const measured = stack.measure(.{ .width = .{ .exact = 160 }, .text_wrap = .wrap }, .{});
+    var commands: [32]ui.Command = undefined;
+    var scene = ui.Scene.init(&commands);
+
+    try std.testing.expectEqual(@as(f32, 160), measured.preferred.w);
+    try std.testing.expect(measured.preferred.h > 0);
+    try stack.render(&scene, ui.Rect.init(0, 0, 160, measured.preferred.h), .{});
+
+    const hit = ui_input.hitTest(scene.written(), 16, 40).?;
+    try std.testing.expectEqual(@as(u32, 41002), hit.id);
+}
+
 test "slot component wraps a leaf component and preserves structural hit id" {
     const slot = Slot{
         .id = 99,
@@ -2948,6 +3137,20 @@ test "region component renders semantic children" {
     try std.testing.expect(hasText(scene.written(), "Continue"));
     const hit = ui_input.hitTest(scene.written(), 24, 58).?;
     try std.testing.expectEqual(@as(u32, 31001), hit.id);
+}
+
+test "region measurement follows wrapped child content" {
+    const children = [_]Component{
+        .{ .text = .{ .value = "Normal people understand IT systems faster when each layer explains the next layer in the path." } },
+        .{ .button = .{ .id = 31002, .label = "Next" } },
+    };
+    const region = Region{ .tag = .main, .label = "Lesson body", .children = &children };
+    const wide = region.measure(.{ .width = .{ .exact = 360 }, .text_wrap = .wrap }, .{});
+    const narrow = region.measure(.{ .width = .{ .exact = 160 }, .text_wrap = .wrap }, .{});
+
+    try std.testing.expectEqual(@as(f32, 360), wide.preferred.w);
+    try std.testing.expectEqual(@as(f32, 160), narrow.preferred.w);
+    try std.testing.expect(narrow.preferred.h > wide.preferred.h);
 }
 
 test "region html codec roundtrips landmark content" {
