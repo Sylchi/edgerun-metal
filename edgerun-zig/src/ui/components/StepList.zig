@@ -1,5 +1,6 @@
 const std = @import("std");
 const common = @import("../../ui_component_common.zig");
+const layout = @import("../../layouts/Types.zig");
 const ui = @import("../../ui.zig");
 const ui_input = @import("../../input.zig");
 
@@ -33,6 +34,11 @@ pub const StepList = struct {
 
     pub fn render(self: StepList, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
         return renderStepList(self, scene, bounds, options);
+    }
+
+    pub fn measure(self: StepList, constraints: layout.Constraints, options: RenderOptions) layout.Measurement {
+        _ = options;
+        return measureStepList(self, constraints);
     }
 
     pub fn toHtml(self: StepList, out: []u8) HtmlError![]u8 {
@@ -92,6 +98,23 @@ pub fn renderStepList(list: StepList, scene: *ui.Scene, bounds: ui.Rect, options
         try scene.pushHit(.{ .slot = 0, .kind = .row_item, .id = step.id, .bounds = step_bounds });
         y += step_item_h + step_item_gap;
     }
+}
+
+pub fn measureStepList(list: StepList, constraints: layout.Constraints) layout.Measurement {
+    const content = constraints.inner(stepInsets());
+    var preferred_width: f32 = 0;
+    var preferred_height: f32 = 0;
+    for (list.steps, 0..) |step, index| {
+        if (index != 0) preferred_height += step_item_gap;
+        const row = measureStepItem(step, content);
+        preferred_width = @max(preferred_width, row.preferred.w);
+        preferred_height += row.preferred.h;
+    }
+    return layout.Measurement.flexible(
+        .{ .w = step_min_w, .h = step_padding_y * 2.0 },
+        .{ .w = preferred_width, .h = preferred_height },
+        .{ .w = constraints.width.limit(preferred_width), .h = preferred_height },
+    ).withInsets(stepInsets()).applyExact(constraints);
 }
 
 fn renderRegistered(component: *const anyopaque, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
@@ -228,8 +251,28 @@ const step_text_x: f32 = 42.0;
 const step_text_padding_x: f32 = 10.0;
 const step_title_y: f32 = 11.0;
 const step_title_h: f32 = 16.0;
+const step_title_avg_w: f32 = 8.5;
 const step_detail_y: f32 = 32.0;
 const step_detail_h: f32 = 14.0;
+const step_detail_avg_w: f32 = 8.5;
+const step_text_max_lines: usize = 1;
+const step_min_w: f32 = 180.0;
+
+fn measureStepItem(step: StepItem, constraints: layout.Constraints) layout.Measurement {
+    const text_constraints = constraints.inner(.{ .left = step_text_x, .right = step_text_padding_x });
+    const title = layout.measureText(step.title, text_constraints, .{ .line_height = step_title_h, .average_char_width = step_title_avg_w, .max_lines = step_text_max_lines });
+    const detail = layout.measureText(step.detail, text_constraints, .{ .line_height = step_detail_h, .average_char_width = step_detail_avg_w, .max_lines = step_text_max_lines });
+    const text_width = @max(title.preferred.w, detail.preferred.w) + step_text_x + step_text_padding_x;
+    return layout.Measurement.flexible(
+        .{ .w = step_min_w, .h = step_item_h },
+        .{ .w = text_width, .h = step_item_h },
+        .{ .w = constraints.width.limit(text_width), .h = step_item_h },
+    ).applyExact(constraints);
+}
+
+fn stepInsets() layout.Insets {
+    return .{ .top = step_padding_y, .right = step_padding_x, .bottom = step_padding_y, .left = step_padding_x };
+}
 
 test "step list component renders lesson state and hit targets" {
     const steps = [_]StepItem{
@@ -247,6 +290,23 @@ test "step list component renders lesson state and hit targets" {
     try std.testing.expect(hasTextContaining(scene.written(), "packet across"));
     const hit = ui_input.hitTest(scene.written(), 24, 92).?;
     try std.testing.expectEqual(@as(u32, 34002), hit.id);
+}
+
+test "step list measurement counts every lesson row" {
+    const one = [_]StepItem{
+        .{ .id = 34001, .title = "Device", .detail = "Name the parts of the machine.", .state = .done },
+    };
+    const many = [_]StepItem{
+        one[0],
+        .{ .id = 34002, .title = "Network", .detail = "Follow a packet across a boundary.", .state = .current },
+        .{ .id = 34003, .title = "Identity", .detail = "Bind authority to a key." },
+    };
+
+    const single = (StepList{ .steps = &one }).measure(.{ .width = .{ .exact = 320 }, .text_wrap = .wrap }, .{});
+    const full = (StepList{ .steps = &many }).measure(.{ .width = .{ .exact = 320 }, .text_wrap = .wrap }, .{});
+
+    try std.testing.expectEqual(@as(f32, 320), full.preferred.w);
+    try std.testing.expect(full.preferred.h > single.preferred.h);
 }
 
 test "step list html codec roundtrips semantic ordered steps" {

@@ -1,5 +1,6 @@
 const std = @import("std");
 const common = @import("../../ui_component_common.zig");
+const layout = @import("../../layouts/Types.zig");
 const ui = @import("../../ui.zig");
 
 const ComponentRegistry = common.ComponentRegistry;
@@ -20,6 +21,11 @@ pub const Figure = struct {
 
     pub fn render(self: Figure, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
         return renderFigure(self, scene, bounds, options);
+    }
+
+    pub fn measure(self: Figure, constraints: layout.Constraints, options: RenderOptions) layout.Measurement {
+        _ = options;
+        return measureFigure(self, constraints);
     }
 
     pub fn toHtml(self: Figure, out: []u8) HtmlError![]u8 {
@@ -76,6 +82,28 @@ pub fn renderFigure(figure: Figure, scene: *ui.Scene, bounds: ui.Rect, options: 
         .average_char_width = figure_caption_avg_w,
         .max_lines = figure_caption_max_lines,
     });
+}
+
+pub fn measureFigure(figure: Figure, constraints: layout.Constraints) layout.Measurement {
+    const inner = constraints.inner(figureInsets());
+    const width = inner.width.limit(figure_default_media_w);
+    const media_height = @max(figure_min_media_h, width * figure_media_aspect_h_over_w);
+    const caption = layout.measureText(figure.caption, inner, .{
+        .line_height = figure_caption_line_h,
+        .average_char_width = figure_caption_avg_w,
+        .max_lines = figure_caption_max_lines,
+    });
+    const alt = layout.measureText(figure.alt, .{ .width = .{ .exact = width - figure_alt_padding * 2.0 }, .text_wrap = constraints.text_wrap }, .{
+        .line_height = figure_alt_line_h,
+        .average_char_width = figure_alt_avg_w,
+        .max_lines = figure_alt_max_lines,
+    });
+    const content_height = @max(media_height, alt.preferred.h + figure_alt_padding * 2.0) + figure_caption_gap + caption.preferred.h;
+    return layout.Measurement.flexible(
+        .{ .w = figure_min_w, .h = figure_padding_y * 2.0 + figure_min_media_h + figure_caption_gap + figure_caption_line_h },
+        .{ .w = width, .h = content_height },
+        .{ .w = constraints.width.limit(width), .h = content_height },
+    ).withInsets(figureInsets()).applyExact(constraints);
 }
 
 fn renderRegistered(component: *const anyopaque, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
@@ -163,6 +191,14 @@ const figure_caption_h: f32 = 42.0;
 const figure_caption_line_h: f32 = 18.0;
 const figure_caption_avg_w: f32 = 9.0;
 const figure_caption_max_lines: usize = 2;
+const figure_default_media_w: f32 = 360.0;
+const figure_min_w: f32 = 180.0;
+const figure_min_media_h: f32 = 96.0;
+const figure_media_aspect_h_over_w: f32 = 0.45;
+
+fn figureInsets() layout.Insets {
+    return .{ .top = figure_padding_y, .right = figure_padding_x, .bottom = figure_padding_y, .left = figure_padding_x };
+}
 
 test "figure component renders alt text and caption" {
     const figure = Figure{
@@ -177,6 +213,21 @@ test "figure component renders alt text and caption" {
 
     try std.testing.expect(hasTextContaining(scene.written(), "Packet path"));
     try std.testing.expect(hasTextContaining(scene.written(), "DNS translates"));
+}
+
+test "figure measurement keeps media and caption responsive" {
+    const figure = Figure{
+        .src = "/assets/dns-path.png",
+        .alt = "Packet path from browser to resolver with each boundary labelled",
+        .caption = "DNS translates a name before the browser can connect to the next hop.",
+    };
+
+    const wide = figure.measure(.{ .width = .{ .exact = 360 }, .text_wrap = .wrap }, .{});
+    const narrow = figure.measure(.{ .width = .{ .exact = 200 }, .text_wrap = .wrap }, .{});
+
+    try std.testing.expectEqual(@as(f32, 360), wide.preferred.w);
+    try std.testing.expectEqual(@as(f32, 200), narrow.preferred.w);
+    try std.testing.expect(wide.preferred.h > narrow.preferred.h);
 }
 
 test "figure html codec roundtrips semantic media" {

@@ -1,5 +1,6 @@
 const std = @import("std");
 const common = @import("../../ui_component_common.zig");
+const layout = @import("../../layouts/Types.zig");
 const ui = @import("../../ui.zig");
 const ui_input = @import("../../input.zig");
 
@@ -26,6 +27,11 @@ pub const DefinitionList = struct {
 
     pub fn render(self: DefinitionList, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
         return renderDefinitionList(self, scene, bounds, options);
+    }
+
+    pub fn measure(self: DefinitionList, constraints: layout.Constraints, options: RenderOptions) layout.Measurement {
+        _ = options;
+        return measureDefinitionList(self, constraints);
     }
 
     pub fn toHtml(self: DefinitionList, out: []u8) HtmlError![]u8 {
@@ -85,6 +91,23 @@ pub fn renderDefinitionList(list: DefinitionList, scene: *ui.Scene, bounds: ui.R
         try scene.pushHit(.{ .slot = 0, .kind = .row_item, .id = item.id, .bounds = item_bounds });
         y += definition_item_h + definition_item_gap;
     }
+}
+
+pub fn measureDefinitionList(list: DefinitionList, constraints: layout.Constraints) layout.Measurement {
+    const content = constraints.inner(definitionInsets());
+    var preferred_width: f32 = 0;
+    var preferred_height: f32 = 0;
+    for (list.items, 0..) |item, index| {
+        if (index != 0) preferred_height += definition_item_gap;
+        const row = measureDefinitionItem(item, content);
+        preferred_width = @max(preferred_width, row.preferred.w);
+        preferred_height += row.preferred.h;
+    }
+    return layout.Measurement.flexible(
+        .{ .w = definition_min_w, .h = definition_padding_y * 2.0 },
+        .{ .w = preferred_width, .h = preferred_height },
+        .{ .w = constraints.width.limit(preferred_width), .h = preferred_height },
+    ).withInsets(definitionInsets()).applyExact(constraints);
 }
 
 fn renderRegistered(component: *const anyopaque, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
@@ -190,11 +213,31 @@ const definition_item_radius: f32 = 6.0;
 const definition_item_padding_x: f32 = 12.0;
 const definition_term_y: f32 = 11.0;
 const definition_term_h: f32 = 16.0;
+const definition_term_avg_w: f32 = 8.5;
 const definition_detail_y: f32 = 34.0;
 const definition_detail_h: f32 = 34.0;
 const definition_detail_line_h: f32 = 16.0;
 const definition_detail_avg_w: f32 = 8.5;
 const definition_detail_max_lines: usize = 2;
+const definition_term_max_lines: usize = 1;
+const definition_min_w: f32 = 180.0;
+
+fn measureDefinitionItem(item: DefinitionItem, constraints: layout.Constraints) layout.Measurement {
+    const text_constraints = constraints.inner(layout.Insets.uniform(definition_item_padding_x));
+    const term = layout.measureText(item.term, text_constraints, .{ .line_height = definition_term_h, .average_char_width = definition_term_avg_w, .max_lines = definition_term_max_lines });
+    const detail = layout.measureText(item.detail, text_constraints, .{ .line_height = definition_detail_line_h, .average_char_width = definition_detail_avg_w, .max_lines = definition_detail_max_lines });
+    const content_width = @max(term.preferred.w, detail.preferred.w) + definition_item_padding_x * 2.0;
+    const content_height = definition_term_y + term.preferred.h + (definition_detail_y - definition_term_y - definition_term_h) + detail.preferred.h;
+    return layout.Measurement.flexible(
+        .{ .w = definition_min_w, .h = definition_item_h },
+        .{ .w = content_width, .h = @max(definition_item_h, content_height) },
+        .{ .w = constraints.width.limit(content_width), .h = @max(definition_item_h, content_height) },
+    ).applyExact(constraints);
+}
+
+fn definitionInsets() layout.Insets {
+    return .{ .top = definition_padding_y, .right = definition_padding_x, .bottom = definition_padding_y, .left = definition_padding_x };
+}
 
 test "definition list component renders glossary rows and hit targets" {
     const items = [_]DefinitionItem{
@@ -210,6 +253,21 @@ test "definition list component renders glossary rows and hit targets" {
     try std.testing.expect(hasText(scene.written(), "DNS"));
     const hit = ui_input.hitTest(scene.written(), 24, 104).?;
     try std.testing.expectEqual(@as(u32, 36002), hit.id);
+}
+
+test "definition list measurement grows with wrapped details" {
+    const items = [_]DefinitionItem{
+        .{ .id = 36001, .term = "DNS", .detail = "Turns a name into an address the network can route, cache, and explain to the browser." },
+        .{ .id = 36002, .term = "TLS", .detail = "Protects bytes while they travel between endpoints." },
+    };
+    const list = DefinitionList{ .items = &items };
+
+    const wide = list.measure(.{ .width = .{ .exact = 420 }, .text_wrap = .wrap }, .{});
+    const narrow = list.measure(.{ .width = .{ .exact = 220 }, .text_wrap = .wrap }, .{});
+
+    try std.testing.expectEqual(@as(f32, 420), wide.preferred.w);
+    try std.testing.expectEqual(@as(f32, 220), narrow.preferred.w);
+    try std.testing.expect(narrow.preferred.h >= wide.preferred.h);
 }
 
 test "definition list html codec roundtrips semantic terms" {

@@ -1,5 +1,6 @@
 const std = @import("std");
 const common = @import("../../ui_component_common.zig");
+const layout = @import("../../layouts/Types.zig");
 const ui = @import("../../ui.zig");
 
 const ComponentRegistry = common.ComponentRegistry;
@@ -19,6 +20,11 @@ pub const Aside = struct {
 
     pub fn render(self: Aside, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
         return renderAside(self, scene, bounds, options);
+    }
+
+    pub fn measure(self: Aside, constraints: layout.Constraints, options: RenderOptions) layout.Measurement {
+        _ = options;
+        return measureAside(self, constraints);
     }
 
     pub fn toHtml(self: Aside, out: []u8) HtmlError![]u8 {
@@ -72,6 +78,27 @@ pub fn renderAside(aside: Aside, scene: *ui.Scene, bounds: ui.Rect, options: Ren
         .average_char_width = aside_body_avg_w,
         .max_lines = aside_body_max_lines,
     });
+}
+
+pub fn measureAside(aside: Aside, constraints: layout.Constraints) layout.Measurement {
+    const content_constraints = constraints.inner(asideInsets());
+    const title = layout.measureText(aside.title, content_constraints, .{
+        .line_height = aside_title_line_h,
+        .average_char_width = aside_title_avg_w,
+        .max_lines = aside_title_max_lines,
+    });
+    const body = layout.measureText(aside.body, content_constraints, .{
+        .line_height = aside_body_line_h,
+        .average_char_width = aside_body_avg_w,
+        .max_lines = aside_body_max_lines,
+    });
+    const content_width = @max(title.preferred.w, body.preferred.w);
+    const content_height = title.preferred.h + aside_body_gap + body.preferred.h;
+    return layout.Measurement.flexible(
+        .{ .w = aside_min_w, .h = aside_padding_y * 2.0 + aside_title_line_h + aside_body_gap + aside_body_line_h },
+        .{ .w = content_width, .h = content_height },
+        .{ .w = constraints.width.limit(content_width), .h = content_height },
+    ).withInsets(asideInsets()).applyExact(constraints);
 }
 
 fn renderRegistered(component: *const anyopaque, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
@@ -144,9 +171,15 @@ const aside_title_line_h: f32 = 18.0;
 const aside_title_avg_w: f32 = 9.0;
 const aside_title_max_lines: usize = 1;
 const aside_body_y: f32 = 30.0;
+const aside_body_gap: f32 = 8.0;
 const aside_body_line_h: f32 = 18.0;
 const aside_body_avg_w: f32 = 9.0;
 const aside_body_max_lines: usize = 4;
+const aside_min_w: f32 = 180.0;
+
+fn asideInsets() layout.Insets {
+    return .{ .top = aside_padding_y, .right = aside_padding_x, .bottom = aside_padding_y, .left = aside_padding_x };
+}
 
 test "aside component renders title and body" {
     const aside = Aside{
@@ -160,6 +193,20 @@ test "aside component renders title and body" {
 
     try std.testing.expect(hasText(scene.written(), "Mental model"));
     try std.testing.expect(hasTextContaining(scene.written(), "capability as a key"));
+}
+
+test "aside measurement follows wrapped body content" {
+    const aside = Aside{
+        .title = "Mental model",
+        .body = "A capability is easier to understand when the layout lets the explanation wrap instead of guessing a fixed height.",
+    };
+
+    const wide = aside.measure(.{ .width = .{ .exact = 520 }, .text_wrap = .wrap }, .{});
+    const narrow = aside.measure(.{ .width = .{ .exact = 180 }, .text_wrap = .wrap }, .{});
+
+    try std.testing.expectEqual(@as(f32, 520), wide.preferred.w);
+    try std.testing.expectEqual(@as(f32, 180), narrow.preferred.w);
+    try std.testing.expect(narrow.preferred.h > wide.preferred.h);
 }
 
 test "aside html codec roundtrips semantic side note" {
