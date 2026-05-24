@@ -48,6 +48,9 @@ const xdg_surface_id: u32 = 10;
 const xdg_toplevel_id: u32 = 11;
 const shm_pool_id: u32 = 12;
 const wl_buffer_id: u32 = 13;
+const linux_dmabuf_id: u32 = 14;
+const dmabuf_params_id: u32 = 15;
+const dmabuf_wl_buffer_id: u32 = 16;
 
 const wl_display_sync: u16 = 0;
 const wl_display_get_registry: u16 = 1;
@@ -65,6 +68,9 @@ const xdg_wm_base_pong: u16 = 3;
 const xdg_surface_get_toplevel: u16 = 1;
 const xdg_surface_ack_configure: u16 = 4;
 const xdg_toplevel_set_title: u16 = 2;
+const zwp_linux_dmabuf_create_params: u16 = 1;
+const zwp_linux_buffer_params_add: u16 = 1;
+const zwp_linux_buffer_params_create_immed: u16 = 3;
 
 const wl_display_error_event: u16 = 0;
 const wl_registry_global_event: u16 = 0;
@@ -80,6 +86,9 @@ const xdg_surface_configure_event: u16 = 0;
 const xdg_toplevel_close_event: u16 = 1;
 
 const wl_shm_format_xrgb8888: u32 = 1;
+const drm_format_xrgb8888: u32 = 0x34325258;
+const drm_format_argb8888: u32 = 0x34325241;
+const dmabuf_flags_none: u32 = 0;
 const wl_pointer_button_left: u32 = 0x110;
 const wl_pointer_button_released: u32 = 0;
 const wl_pointer_axis_vertical_scroll: u32 = 0;
@@ -121,6 +130,9 @@ const ObjectKind = enum {
     xdg_toplevel,
     seat,
     pointer,
+    linux_dmabuf,
+    dmabuf_params,
+    dmabuf_buffer,
 };
 
 const RegistryGlobal = struct {
@@ -135,6 +147,7 @@ const RegistryInterface = enum {
     shm,
     wm_base,
     seat,
+    linux_dmabuf,
 };
 
 const RegistryState = struct {
@@ -302,6 +315,9 @@ const WaylandClient = struct {
         client.object_kinds[xdg_toplevel_id] = .xdg_toplevel;
         client.object_kinds[seat_id] = .seat;
         client.object_kinds[pointer_id] = .pointer;
+        client.object_kinds[linux_dmabuf_id] = .linux_dmabuf;
+        client.object_kinds[dmabuf_params_id] = .dmabuf_params;
+        client.object_kinds[dmabuf_wl_buffer_id] = .dmabuf_buffer;
         return client;
     }
 
@@ -845,6 +861,32 @@ fn makeDestroyPool(buffer: []u8) ![]const u8 {
     return msg.finish();
 }
 
+fn makeDmabufCreateParams(buffer: []u8) ![]const u8 {
+    var msg = try MessageWriter.init(buffer, linux_dmabuf_id, zwp_linux_dmabuf_create_params);
+    try msg.putU32(dmabuf_params_id);
+    return msg.finish();
+}
+
+fn makeDmabufAddPlane(buffer: []u8, plane_index: u32, offset: u32, stride: u32, modifier: u64) ![]const u8 {
+    var msg = try MessageWriter.init(buffer, dmabuf_params_id, zwp_linux_buffer_params_add);
+    try msg.putU32(plane_index);
+    try msg.putU32(offset);
+    try msg.putU32(stride);
+    try msg.putU32(@intCast(modifier >> 32));
+    try msg.putU32(@truncate(modifier));
+    return msg.finish();
+}
+
+fn makeDmabufCreateImmediate(buffer: []u8, width: u32, height: u32, format: u32) ![]const u8 {
+    var msg = try MessageWriter.init(buffer, dmabuf_params_id, zwp_linux_buffer_params_create_immed);
+    try msg.putU32(dmabuf_wl_buffer_id);
+    try msg.putI32(@intCast(width));
+    try msg.putI32(@intCast(height));
+    try msg.putU32(format);
+    try msg.putU32(dmabuf_flags_none);
+    return msg.finish();
+}
+
 fn makeGetXdgSurface(buffer: []u8) ![]const u8 {
     var msg = try MessageWriter.init(buffer, wm_base_id, xdg_wm_base_get_xdg_surface);
     try msg.putU32(xdg_surface_id);
@@ -952,6 +994,7 @@ fn registryInterface(value: []const u8) RegistryInterface {
     if (std.mem.eql(u8, value, "wl_shm")) return .shm;
     if (std.mem.eql(u8, value, "xdg_wm_base")) return .wm_base;
     if (std.mem.eql(u8, value, "wl_seat")) return .seat;
+    if (std.mem.eql(u8, value, "zwp_linux_dmabuf_v1")) return .linux_dmabuf;
     return .other;
 }
 
@@ -1069,6 +1112,51 @@ test "wayland registry global parser keeps interface slice and version" {
     try std.testing.expectEqual(@as(u32, 11), global.name);
     try std.testing.expectEqual(RegistryInterface.shm, global.interface);
     try std.testing.expectEqual(@as(u32, 1), global.version);
+}
+
+test "wayland registry parser discovers linux dmabuf global" {
+    var payload: [48]u8 = undefined;
+    std.mem.writeInt(u32, payload[0..4], 23, .little);
+    std.mem.writeInt(u32, payload[4..8], 20, .little);
+    @memcpy(payload[8..27], "zwp_linux_dmabuf_v1");
+    payload[27] = 0;
+    std.mem.writeInt(u32, payload[28..32], 4, .little);
+    const global = try parseRegistryGlobal(payload[0..32]);
+    try std.testing.expectEqual(@as(u32, 23), global.name);
+    try std.testing.expectEqual(RegistryInterface.linux_dmabuf, global.interface);
+    try std.testing.expectEqual(@as(u32, 4), global.version);
+}
+
+test "wayland dmabuf messages encode params add and immediate buffer creation" {
+    var create_params_buffer: [64]u8 = undefined;
+    const create_params = try makeDmabufCreateParams(&create_params_buffer);
+    try std.testing.expectEqual(@as(u32, linux_dmabuf_id), std.mem.readInt(u32, create_params[0..4], .little));
+    try std.testing.expectEqual(@as(u16, zwp_linux_dmabuf_create_params), std.mem.readInt(u16, create_params[4..6], .little));
+    try std.testing.expectEqual(@as(u16, 12), std.mem.readInt(u16, create_params[6..8], .little));
+    try std.testing.expectEqual(@as(u32, dmabuf_params_id), std.mem.readInt(u32, create_params[8..12], .little));
+
+    var add_buffer: [64]u8 = undefined;
+    const modifier: u64 = 0x1122334455667788;
+    const add = try makeDmabufAddPlane(&add_buffer, 2, 128, 4096, modifier);
+    try std.testing.expectEqual(@as(u32, dmabuf_params_id), std.mem.readInt(u32, add[0..4], .little));
+    try std.testing.expectEqual(@as(u16, zwp_linux_buffer_params_add), std.mem.readInt(u16, add[4..6], .little));
+    try std.testing.expectEqual(@as(u16, 28), std.mem.readInt(u16, add[6..8], .little));
+    try std.testing.expectEqual(@as(u32, 2), std.mem.readInt(u32, add[8..12], .little));
+    try std.testing.expectEqual(@as(u32, 128), std.mem.readInt(u32, add[12..16], .little));
+    try std.testing.expectEqual(@as(u32, 4096), std.mem.readInt(u32, add[16..20], .little));
+    try std.testing.expectEqual(@as(u32, 0x11223344), std.mem.readInt(u32, add[20..24], .little));
+    try std.testing.expectEqual(@as(u32, 0x55667788), std.mem.readInt(u32, add[24..28], .little));
+
+    var create_immed_buffer: [64]u8 = undefined;
+    const create_immed = try makeDmabufCreateImmediate(&create_immed_buffer, 1280, 800, drm_format_xrgb8888);
+    try std.testing.expectEqual(@as(u32, dmabuf_params_id), std.mem.readInt(u32, create_immed[0..4], .little));
+    try std.testing.expectEqual(@as(u16, zwp_linux_buffer_params_create_immed), std.mem.readInt(u16, create_immed[4..6], .little));
+    try std.testing.expectEqual(@as(u16, 28), std.mem.readInt(u16, create_immed[6..8], .little));
+    try std.testing.expectEqual(@as(u32, dmabuf_wl_buffer_id), std.mem.readInt(u32, create_immed[8..12], .little));
+    try std.testing.expectEqual(@as(u32, 1280), std.mem.readInt(u32, create_immed[12..16], .little));
+    try std.testing.expectEqual(@as(u32, 800), std.mem.readInt(u32, create_immed[16..20], .little));
+    try std.testing.expectEqual(drm_format_xrgb8888, std.mem.readInt(u32, create_immed[20..24], .little));
+    try std.testing.expectEqual(dmabuf_flags_none, std.mem.readInt(u32, create_immed[24..28], .little));
 }
 
 test "wayland xdg configure event marks window configured" {
