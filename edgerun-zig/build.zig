@@ -235,6 +235,43 @@ pub fn build(b: *std.Build) void {
     const wayland_egl_window_step = b.step("wayland-egl-window", "Open a native Wayland EGL/GLES window using canonical UI IR");
     wayland_egl_window_step.dependOn(&run_wayland_egl_window.step);
 
+    const drm_gbm_window = b.addExecutable(.{
+        .name = "edgerun-drm-gbm-window",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/drm_gbm_host.zig"),
+            .target = target,
+            .optimize = optimize,
+        }),
+    });
+    drm_gbm_window.root_module.addIncludePath(.{ .cwd_relative = "/usr/include/libdrm" });
+    drm_gbm_window.root_module.linkSystemLibrary("c", .{});
+    drm_gbm_window.root_module.linkSystemLibrary("gbm", .{});
+    drm_gbm_window.root_module.linkSystemLibrary("drm", .{});
+    drm_gbm_window.root_module.linkSystemLibrary("EGL", .{});
+    drm_gbm_window.root_module.linkSystemLibrary("GLESv2", .{});
+    const run_drm_gbm_window = b.addRunArtifact(drm_gbm_window);
+    if (b.args) |args| run_drm_gbm_window.addArgs(args);
+    const drm_gbm_window_step = b.step("drm-gbm-window", "Render canonical UI IR through EGL/GLES to a DRM/GBM scanout surface");
+    drm_gbm_window_step.dependOn(&run_drm_gbm_window.step);
+
+    const drm_gbm_tests = b.addTest(.{
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/drm_gbm_host.zig"),
+            .target = target,
+            .optimize = optimize,
+        }),
+    });
+    drm_gbm_tests.root_module.addIncludePath(.{ .cwd_relative = "/usr/include/libdrm" });
+    drm_gbm_tests.root_module.linkSystemLibrary("c", .{});
+    drm_gbm_tests.root_module.linkSystemLibrary("gbm", .{});
+    drm_gbm_tests.root_module.linkSystemLibrary("drm", .{});
+    drm_gbm_tests.root_module.linkSystemLibrary("EGL", .{});
+    drm_gbm_tests.root_module.linkSystemLibrary("GLESv2", .{});
+    const run_drm_gbm_tests = b.addRunArtifact(drm_gbm_tests);
+    const drm_gbm_test_step = b.step("drm-gbm-test", "Run DRM/GBM host tests");
+    drm_gbm_test_step.dependOn(&run_drm_gbm_tests.step);
+    test_step.dependOn(&run_drm_gbm_tests.step);
+
     const ui_browser_target = b.resolveTargetQuery(std.Target.Query.parse(.{
         .arch_os_abi = "wasm32-freestanding",
     }) catch unreachable);
