@@ -79,14 +79,18 @@ pub fn refreshFontTexture(gl: State, font_atlas: *const renderer_font_atlas.Atla
 }
 
 pub fn renderFrame(gl: State, width: i32, height: i32, buffers: renderer_ir.Buffers) !void {
-    c.glViewport(0, 0, width, height);
+    try renderFrameToViewport(gl, width, height, width, height, buffers);
+}
+
+pub fn renderFrameToViewport(gl: State, logical_width: i32, logical_height: i32, framebuffer_width: i32, framebuffer_height: i32, buffers: renderer_ir.Buffers) !void {
+    c.glViewport(0, 0, framebuffer_width, framebuffer_height);
     c.glClear(c.GL_COLOR_BUFFER_BIT);
-    try drawRects(gl, width, height, buffers.liveRects());
-    try drawTextured(gl, width, height, buffers.liveTextVertices(), gl.font_texture);
-    try drawTextured(gl, width, height, buffers.liveIconVertices(), gl.icon_texture);
-    try drawRects(gl, width, height, buffers.liveOverlayRects());
-    try drawTextured(gl, width, height, buffers.liveOverlayTextVertices(), gl.font_texture);
-    try drawTextured(gl, width, height, buffers.liveOverlayIconVertices(), gl.icon_texture);
+    try drawRects(gl, logical_width, logical_height, buffers.liveRects());
+    try drawTextured(gl, logical_width, logical_height, buffers.liveTextVertices(), gl.font_texture);
+    try drawTextured(gl, logical_width, logical_height, buffers.liveIconVertices(), gl.icon_texture);
+    try drawRects(gl, logical_width, logical_height, buffers.liveOverlayRects());
+    try drawTextured(gl, logical_width, logical_height, buffers.liveOverlayTextVertices(), gl.font_texture);
+    try drawTextured(gl, logical_width, logical_height, buffers.liveOverlayIconVertices(), gl.icon_texture);
 }
 
 pub fn verifyFrameNonBlank(width: i32, height: i32) !FrameProof {
