@@ -15,6 +15,7 @@ const figure_component = @import("ui/components/Figure.zig");
 const nav_component = @import("ui/components/Nav.zig");
 const progress_summary_component = @import("ui/components/ProgressSummary.zig");
 const resource_list_component = @import("ui/components/ResourceList.zig");
+const step_list_component = @import("ui/components/StepList.zig");
 const table_component = @import("ui/components/Table.zig");
 
 const tree_layout_magic = "ERUL001\x00";
@@ -277,42 +278,9 @@ pub const ChoiceGroup = struct {
     }
 };
 
-pub const StepState = enum {
-    done,
-    current,
-    todo,
-};
-
-pub const StepItem = struct {
-    id: u32,
-    title: []const u8,
-    detail: []const u8,
-    state: StepState = .todo,
-};
-
-pub const StepList = struct {
-    steps: []const StepItem,
-
-    pub fn render(self: StepList, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
-        return renderStepList(scene, bounds, self, options);
-    }
-
-    pub fn toHtml(self: StepList, out: []u8) HtmlError![]u8 {
-        return writeStepListHtml(self, out);
-    }
-
-    pub fn fromHtml(html: []const u8, out_steps: []StepItem, text_out: []u8) HtmlError!StepList {
-        return readStepListHtml(html, out_steps, text_out);
-    }
-
-    pub fn toMarkdown(self: StepList, out: []u8) MarkdownError![]u8 {
-        return writeStepListMarkdown(self, out);
-    }
-
-    pub fn fromMarkdown(markdown: []const u8, out_steps: []StepItem, text_out: []u8) MarkdownError!StepList {
-        return readStepListMarkdown(markdown, out_steps, text_out);
-    }
-};
+pub const StepState = step_list_component.StepState;
+pub const StepItem = step_list_component.StepItem;
+pub const StepList = step_list_component.StepList;
 
 pub const BreadcrumbItem = breadcrumb_component.BreadcrumbItem;
 pub const Breadcrumb = breadcrumb_component.Breadcrumb;
@@ -427,6 +395,10 @@ pub fn registerProgressSummary(registry: *ComponentRegistry) RegistryError!void 
 
 pub fn registerResourceList(registry: *ComponentRegistry) RegistryError!void {
     return resource_list_component.register(registry);
+}
+
+pub fn registerStepList(registry: *ComponentRegistry) RegistryError!void {
+    return step_list_component.register(registry);
 }
 
 pub fn registerTable(registry: *ComponentRegistry) RegistryError!void {
@@ -602,31 +574,6 @@ pub fn renderChoiceGroup(scene: *ui.Scene, bounds: ui.Rect, group: ChoiceGroup, 
         try scene.pushAlignedText(ui.Rect.init(option_bounds.x + choice_label_x, option_bounds.y + choice_label_y, @max(1.0, option_bounds.w - choice_label_x - choice_option_padding_x), choice_label_h), option.label, style.text, .start);
         try scene.pushHit(.{ .slot = 0, .kind = .button, .id = option.id, .bounds = option_bounds });
         y += choice_option_h + choice_option_gap;
-    }
-}
-
-pub fn renderStepList(scene: *ui.Scene, bounds: ui.Rect, list: StepList, options: RenderOptions) ui.RenderError!void {
-    if (list.steps.len == 0) return;
-    const style = options.style;
-    try scene.pushRect(bounds, style.panel, .fill, step_radius, 0.0);
-    try scene.pushRect(bounds, style.border, .border, step_radius, 0.0);
-
-    var y = bounds.y + step_padding_y;
-    const content_x = bounds.x + step_padding_x;
-    const content_w = @max(1.0, bounds.w - step_padding_x * 2.0);
-    const bottom = bounds.y + bounds.h - step_padding_y;
-    for (list.steps) |step| {
-        if (y + step_item_h > bottom) break;
-        const step_bounds = ui.Rect.init(content_x, y, content_w, step_item_h);
-        if (step.state == .current) {
-            try scene.pushRect(step_bounds, style.row, .fill, step_item_radius, 0.0);
-        }
-        const marker_bounds = ui.Rect.init(step_bounds.x + step_marker_x, step_bounds.y + step_marker_y, step_marker_size, step_marker_size);
-        try scene.pushRect(marker_bounds, stepStateColor(step.state, style), .fill, step_marker_size * 0.5, 0.0);
-        try scene.pushAlignedText(ui.Rect.init(step_bounds.x + step_text_x, step_bounds.y + step_title_y, @max(1.0, step_bounds.w - step_text_x - step_text_padding_x), step_title_h), step.title, style.text, .start);
-        try scene.pushAlignedText(ui.Rect.init(step_bounds.x + step_text_x, step_bounds.y + step_detail_y, @max(1.0, step_bounds.w - step_text_x - step_text_padding_x), step_detail_h), step.detail, style.muted, .start);
-        try scene.pushHit(.{ .slot = 0, .kind = .row_item, .id = step.id, .bounds = step_bounds });
-        y += step_item_h + step_item_gap;
     }
 }
 
@@ -907,21 +854,6 @@ const choice_marker_selected_inset: f32 = 4.0;
 const choice_label_x: f32 = 36.0;
 const choice_label_y: f32 = 10.0;
 const choice_label_h: f32 = 14.0;
-const step_radius: f32 = 8.0;
-const step_padding_x: f32 = 14.0;
-const step_padding_y: f32 = 14.0;
-const step_item_h: f32 = 58.0;
-const step_item_gap: f32 = 8.0;
-const step_item_radius: f32 = 6.0;
-const step_marker_x: f32 = 12.0;
-const step_marker_y: f32 = 18.0;
-const step_marker_size: f32 = 16.0;
-const step_text_x: f32 = 42.0;
-const step_text_padding_x: f32 = 10.0;
-const step_title_y: f32 = 11.0;
-const step_title_h: f32 = 16.0;
-const step_detail_y: f32 = 32.0;
-const step_detail_h: f32 = 14.0;
 const timeline_radius: f32 = 8.0;
 const timeline_padding_x: f32 = 12.0;
 const timeline_padding_y: f32 = 12.0;
@@ -965,14 +897,6 @@ fn regionChildHeight(component: Component) f32 {
         .input => region_input_h,
         .row_item => region_row_h,
         else => region_text_h,
-    };
-}
-
-fn stepStateColor(state: StepState, style: ui.Style) ui.Color {
-    return switch (state) {
-        .done => style.accent,
-        .current => style.text,
-        .todo => style.border,
     };
 }
 
@@ -1852,25 +1776,6 @@ fn writeChoiceGroupHtml(group: ChoiceGroup, out: []u8) HtmlError![]u8 {
     return writer.written();
 }
 
-fn writeStepListHtml(list: StepList, out: []u8) HtmlError![]u8 {
-    if (list.steps.len == 0) return error.InvalidHtml;
-    var writer = HtmlWriter.init(out);
-    try writer.writeAll("<ol data-er-component=\"step-list\">");
-    for (list.steps) |step| {
-        if (step.title.len == 0 or step.detail.len == 0) return error.InvalidHtml;
-        try writer.writeAll("<li");
-        try writer.writeAttrInt("data-er-id", step.id);
-        try writer.writeAttrRaw("data-er-state", stepStateName(step.state));
-        try writer.writeAll("><strong>");
-        try writer.writeEscapedText(step.title);
-        try writer.writeAll("</strong><span>");
-        try writer.writeEscapedText(step.detail);
-        try writer.writeAll("</span></li>");
-    }
-    try writer.writeAll("</ol>");
-    return writer.written();
-}
-
 fn writeTimelineHtml(timeline: Timeline, out: []u8) HtmlError![]u8 {
     if (timeline.events.len == 0) return error.InvalidHtml;
     var writer = HtmlWriter.init(out);
@@ -2087,21 +1992,6 @@ fn writeCardMarkdownInto(writer: *MarkdownWriter, card: Card) MarkdownError!void
     try writer.endDirective();
 }
 
-fn writeStepListMarkdown(list: StepList, out: []u8) MarkdownError![]u8 {
-    if (list.steps.len == 0) return error.InvalidMarkdown;
-    var writer = MarkdownWriter.init(out);
-    try writer.beginDirective("steps");
-    for (list.steps) |step| {
-        if (step.title.len == 0 or step.detail.len == 0) return error.InvalidMarkdown;
-        try writer.fieldInt("step", step.id);
-        try writer.fieldRaw("state", stepStateName(step.state));
-        try writer.fieldText("title", step.title);
-        try writer.fieldText("detail", step.detail);
-    }
-    try writer.endDirective();
-    return writer.written();
-}
-
 fn writeTimelineMarkdown(timeline: Timeline, out: []u8) MarkdownError![]u8 {
     if (timeline.events.len == 0) return error.InvalidMarkdown;
     var writer = MarkdownWriter.init(out);
@@ -2234,27 +2124,6 @@ fn readCardMarkdownWithArena(markdown: []const u8, text: *MarkdownTextArena) Mar
     const detail = try text.unescapeInline(body[detail_start..]);
     if (title.len == 0 or detail.len == 0) return error.InvalidMarkdown;
     return .{ .title = title, .detail = detail };
-}
-
-fn readStepListMarkdown(markdown: []const u8, out_steps: []StepItem, text_out: []u8) MarkdownError!StepList {
-    const prefix = ":::steps\n";
-    const body = try readMarkdownDirectiveBody(markdown, ":::steps", prefix);
-    var text = MarkdownTextArena.init(text_out);
-    var step_count: usize = 0;
-    var cursor = MarkdownCursor.init(body);
-    while (!cursor.done()) {
-        if (step_count == out_steps.len) return error.MarkdownBudgetExceeded;
-        const id = try parseMarkdownU32(try cursor.lineAfter("step: "));
-        const state = parseStepStateName(try cursor.fieldBetween("\nstate: ", "\ntitle: ")) orelse return error.InvalidMarkdown;
-        const title = try text.unescapeInline(try cursor.fieldBetween("\ntitle: ", "\ndetail: "));
-        const detail = try text.unescapeInline(try cursor.finalField("\ndetail: ", "\nstep: "));
-        if (title.len == 0 or detail.len == 0) return error.InvalidMarkdown;
-        out_steps[step_count] = .{ .id = id, .title = title, .detail = detail, .state = state };
-        step_count += 1;
-        try cursor.skipNewline();
-    }
-    if (step_count == 0) return error.InvalidMarkdown;
-    return .{ .steps = out_steps[0..step_count] };
 }
 
 fn readTimelineMarkdown(markdown: []const u8, out_events: []TimelineEvent, text_out: []u8) MarkdownError!Timeline {
@@ -2792,34 +2661,6 @@ fn readChoiceOptionsHtml(html: []const u8, group_id: u32, out_options: []ChoiceO
     }
     if (option_count == 0) return error.InvalidHtml;
     return out_options[0..option_count];
-}
-
-fn readStepListHtml(html: []const u8, out_steps: []StepItem, text_out: []u8) HtmlError!StepList {
-    const body = takeWrapped(html, "<ol data-er-component=\"step-list\">", "</ol>") orelse {
-        if (std.mem.startsWith(u8, html, "<ol")) return error.InvalidHtml;
-        return error.UnsupportedHtml;
-    };
-    var text = HtmlTextArena.init(text_out);
-    const steps = try readStepItemsHtml(body, out_steps, &text);
-    return .{ .steps = steps };
-}
-
-fn readStepItemsHtml(html: []const u8, out_steps: []StepItem, text: *HtmlTextArena) HtmlError![]const StepItem {
-    var cursor = HtmlCursor.init(html);
-    var step_count: usize = 0;
-    while (!cursor.done()) {
-        if (step_count == out_steps.len) return error.HtmlBudgetExceeded;
-        const id = try parseHtmlU32(try cursor.fieldBetween("<li data-er-id=\"", "\" data-er-state=\""));
-        const state = parseStepStateName(try cursor.fieldBetween("\" data-er-state=\"", "\"><strong>")) orelse return error.InvalidHtml;
-        const title = try text.unescape(try cursor.fieldBetween("\"><strong>", "</strong><span>"));
-        const detail = try text.unescape(try cursor.fieldBetween("</strong><span>", "</span></li>"));
-        try cursor.consume("</span></li>");
-        if (title.len == 0 or detail.len == 0) return error.InvalidHtml;
-        out_steps[step_count] = .{ .id = id, .title = title, .detail = detail, .state = state };
-        step_count += 1;
-    }
-    if (step_count == 0) return error.InvalidHtml;
-    return out_steps[0..step_count];
 }
 
 fn readTimelineHtml(html: []const u8, out_events: []TimelineEvent, text_out: []u8) HtmlError!Timeline {
@@ -3365,21 +3206,6 @@ fn validMarkdownFenceLanguage(value: []const u8) bool {
         }
     }
     return true;
-}
-
-fn stepStateName(state: StepState) []const u8 {
-    return switch (state) {
-        .done => "done",
-        .current => "current",
-        .todo => "todo",
-    };
-}
-
-fn parseStepStateName(value: []const u8) ?StepState {
-    if (std.mem.eql(u8, value, "done")) return .done;
-    if (std.mem.eql(u8, value, "current")) return .current;
-    if (std.mem.eql(u8, value, "todo")) return .todo;
-    return null;
 }
 
 fn regionTagName(tag: RegionTag) []const u8 {
@@ -4077,55 +3903,6 @@ test "choice group html codec rejects malformed radio groups" {
     try std.testing.expectError(error.InvalidHtml, ChoiceGroup.fromHtml("<fieldset data-er-component=\"choice-group\" data-er-id=\"x\"><legend>Broken</legend></fieldset>", &options, &text));
     try std.testing.expectError(error.InvalidHtml, ChoiceGroup.fromHtml("<fieldset data-er-component=\"choice-group\" data-er-id=\"1\"><legend>Broken</legend><label data-er-id=\"2\" data-er-selected=\"maybe\"><input type=\"radio\" name=\"choice-1\">Option</label></fieldset>", &options, &text));
     try std.testing.expectError(error.InvalidHtml, ChoiceGroup.fromHtml("<fieldset data-er-component=\"choice-group\" data-er-id=\"1\"><legend>Broken</legend><label data-er-id=\"2\" data-er-selected=\"false\"><input type=\"radio\" name=\"choice-9\">Option</label></fieldset>", &options, &text));
-}
-
-test "step list component renders lesson state and hit targets" {
-    const steps = [_]StepItem{
-        .{ .id = 34001, .title = "Device", .detail = "Name the parts of the machine.", .state = .done },
-        .{ .id = 34002, .title = "Network", .detail = "Follow a packet across a boundary.", .state = .current },
-        .{ .id = 34003, .title = "Identity", .detail = "Bind authority to a key." },
-    };
-    const list = StepList{ .steps = &steps };
-    var commands: [96]ui.Command = undefined;
-    var scene = ui.Scene.init(&commands);
-
-    try list.render(&scene, ui.Rect.init(0, 0, 380, 220), .{});
-
-    try std.testing.expect(hasText(scene.written(), "Network"));
-    try std.testing.expect(hasTextContaining(scene.written(), "packet across"));
-    const hit = ui_input.hitTest(scene.written(), 24, 92).?;
-    try std.testing.expectEqual(@as(u32, 34002), hit.id);
-}
-
-test "step list html codec roundtrips semantic ordered steps" {
-    const steps = [_]StepItem{
-        .{ .id = 34101, .title = "RAM desk", .detail = "Temporary work surface.", .state = .done },
-        .{ .id = 34102, .title = "Storage", .detail = "Long term memory & files.", .state = .current },
-    };
-    const list = StepList{ .steps = &steps };
-    var html: [768]u8 = undefined;
-    var decoded_steps: [2]StepItem = undefined;
-    var text: [256]u8 = undefined;
-
-    const encoded = try list.toHtml(&html);
-    const decoded = try StepList.fromHtml(encoded, &decoded_steps, &text);
-
-    try std.testing.expectEqualStrings("<ol data-er-component=\"step-list\"><li data-er-id=\"34101\" data-er-state=\"done\"><strong>RAM desk</strong><span>Temporary work surface.</span></li><li data-er-id=\"34102\" data-er-state=\"current\"><strong>Storage</strong><span>Long term memory &amp; files.</span></li></ol>", encoded);
-    try std.testing.expectEqual(@as(usize, 2), decoded.steps.len);
-    try std.testing.expectEqual(@as(u32, 34102), decoded.steps[1].id);
-    try std.testing.expectEqual(StepState.current, decoded.steps[1].state);
-    try std.testing.expectEqualStrings("Storage", decoded.steps[1].title);
-    try std.testing.expectEqualStrings("Long term memory & files.", decoded.steps[1].detail);
-}
-
-test "step list html codec rejects malformed steps" {
-    var steps: [2]StepItem = undefined;
-    var text: [128]u8 = undefined;
-
-    try std.testing.expectError(error.InvalidHtml, StepList.fromHtml("<ol><li>Plain</li></ol>", &steps, &text));
-    try std.testing.expectError(error.InvalidHtml, StepList.fromHtml("<ol data-er-component=\"step-list\"></ol>", &steps, &text));
-    try std.testing.expectError(error.InvalidHtml, StepList.fromHtml("<ol data-er-component=\"step-list\"><li data-er-id=\"x\" data-er-state=\"todo\"><strong>Broken</strong><span>Bad id</span></li></ol>", &steps, &text));
-    try std.testing.expectError(error.InvalidHtml, StepList.fromHtml("<ol data-er-component=\"step-list\"><li data-er-id=\"1\" data-er-state=\"later\"><strong>Broken</strong><span>Bad state</span></li></ol>", &steps, &text));
 }
 
 test "timeline component renders events and hit targets" {
