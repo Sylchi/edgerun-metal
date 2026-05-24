@@ -44,7 +44,7 @@ pub fn renderArticleCard(article: ArticleCard, scene: *ui.Scene, bounds: ui.Rect
 }
 
 pub fn collectArticleCardInteractions(article: ArticleCard, collector: *interaction.Collector, bounds: ui.Rect) interaction.Error!void {
-    try collector.add(.{ .kind = .button, .id = article.id, .bounds = bounds });
+    try collector.addHit(bounds, .button, article.id);
 }
 
 pub fn measureArticleCard(article: ArticleCard, constraints: layout.Constraints) layout.Measurement {
@@ -113,9 +113,7 @@ test "article card renders category title and collects hit target" {
 
     try article.render(&scene, ui.Rect.init(0, 0, 360, 172), .{});
     try article.collectInteractions(&collector, ui.Rect.init(0, 0, 360, 172));
-
-    try std.testing.expect(ui_input.hitTest(scene.written(), 20, 20) == null);
-    const hit = ui_input.regionHitTest(collector.written(), 20, 20).?;
+    const hit = ui_input.hitTest(collector.written(), 20, 20).?;
     try std.testing.expectEqual(@as(u32, 801), hit.id);
     try std.testing.expect(hasText(scene.written(), "Architecture"));
     try std.testing.expect(hasTextContaining(scene.written(), "EdgeRun Apps"));

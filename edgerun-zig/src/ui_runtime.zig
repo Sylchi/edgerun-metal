@@ -1,5 +1,6 @@
 const std = @import("std");
 const input = @import("input.zig");
+const interaction = @import("ui_interaction.zig");
 const ui = @import("ui.zig");
 
 const drag_start_threshold_px: f32 = 5.0;
@@ -16,7 +17,7 @@ pub const ActionKind = enum(u8) {
 
 pub const Action = struct {
     kind: ActionKind = .none,
-    hit: ?ui.Hit = null,
+    hit: ?interaction.Region = null,
     source: ?ui.DragSource = null,
     target: ?ui.DropTarget = null,
 
@@ -36,12 +37,28 @@ const DragState = struct {
 };
 
 pub const State = struct {
-    hovered: ?ui.Hit = null,
-    active: ?ui.Hit = null,
+    hovered: ?interaction.Region = null,
+    active: ?interaction.Region = null,
     drag: ?DragState = null,
 
-    pub fn pointerDown(self: *State, commands: []const ui.Command, x: f32, y: f32) Action {
-        const hit = input.hitTest(commands, x, y);
+    pub fn refreshHover(self: *State, regions: []const interaction.Region, x: f32, y: f32) void {
+        self.hovered = if (x < 0.0 or y < 0.0) null else input.hitTest(regions, x, y);
+    }
+
+    pub fn clearHover(self: *State) void {
+        self.hovered = null;
+    }
+
+    pub fn hoverKind(self: State) ?ui.HitKind {
+        return if (self.hovered) |hit| hit.kind else null;
+    }
+
+    pub fn hoverHitId(self: State) u32 {
+        return if (self.hovered) |hit| hit.id else 0;
+    }
+
+    pub fn pointerDown(self: *State, commands: []const ui.Command, regions: []const interaction.Region, x: f32, y: f32) Action {
+        const hit = input.hitTest(regions, x, y);
         self.hovered = hit;
         self.active = hit;
         self.drag = if (input.dragSourceAt(commands, x, y)) |source| .{
@@ -54,8 +71,8 @@ pub const State = struct {
         return if (hit) |value| .{ .kind = .hovered, .hit = value } else Action.none();
     }
 
-    pub fn pointerMove(self: *State, commands: []const ui.Command, x: f32, y: f32) Action {
-        self.hovered = input.hitTest(commands, x, y);
+    pub fn pointerMove(self: *State, commands: []const ui.Command, regions: []const interaction.Region, x: f32, y: f32) Action {
+        self.hovered = input.hitTest(regions, x, y);
         if (self.drag) |*drag| {
             drag.current_x = x;
             drag.current_y = y;
@@ -72,8 +89,9 @@ pub const State = struct {
         return if (self.hovered) |value| .{ .kind = .hovered, .hit = value } else Action.none();
     }
 
-    pub fn pointerUp(self: *State, commands: []const ui.Command, x: f32, y: f32) Action {
-        self.hovered = input.hitTest(commands, x, y);
+    pub fn pointerUp(self: *State, commands: []const ui.Command, regions: []const interaction.Region, x: f32, y: f32) Action {
+        _ = commands;
+        self.hovered = input.hitTest(regions, x, y);
         const finished_drag = self.drag;
         self.drag = null;
         defer self.active = null;
@@ -101,7 +119,7 @@ pub const State = struct {
     }
 };
 
-fn sameHit(left: ui.Hit, right: ui.Hit) bool {
+fn sameHit(left: interaction.Region, right: interaction.Region) bool {
     return left.kind == right.kind and left.id == right.id and left.slot == right.slot;
 }
 
@@ -114,13 +132,35 @@ fn dragDistanceExceeded(drag: DragState, x: f32, y: f32) bool {
 test "runtime emits activation for stable pointer press" {
     var commands: [4]ui.Command = undefined;
     var scene = ui.Scene.init(&commands);
-    try scene.pushHit(.{ .slot = 0, .kind = .button, .id = 9, .bounds = ui.Rect.init(0, 0, 40, 30) });
+    var regions: [1]interaction.Region = undefined;
+    var collector = interaction.Collector.init(&regions);
+    try collector.addHit(ui.Rect.init(0, 0, 40, 30), .button, 9);
 
     var state = State{};
-    try std.testing.expectEqual(ActionKind.hovered, state.pointerDown(scene.written(), 8, 8).kind);
-    const action = state.pointerUp(scene.written(), 8, 8);
+    try std.testing.expectEqual(ActionKind.hovered, state.pointerDown(scene.written(), collector.written(), 8, 8).kind);
+    const action = state.pointerUp(scene.written(), collector.written(), 8, 8);
     try std.testing.expectEqual(ActionKind.activated, action.kind);
     try std.testing.expectEqual(@as(u32, 9), action.hit.?.id);
+}
+
+test "runtime refreshes hover from current interaction regions" {
+    var regions: [1]interaction.Region = undefined;
+    var collector = interaction.Collector.init(&regions);
+    try collector.addHit(ui.Rect.init(10, 20, 40, 30), .button, 42);
+
+    var state = State{};
+    state.refreshHover(collector.written(), 20, 30);
+    try std.testing.expectEqual(@as(u32, 42), state.hovered.?.id);
+    try std.testing.expectEqual(@as(u32, 42), state.hoverHitId());
+    try std.testing.expectEqual(ui.HitKind.button, state.hoverKind().?);
+
+    state.clearHover();
+    try std.testing.expect(state.hovered == null);
+    try std.testing.expectEqual(@as(u32, 0), state.hoverHitId());
+    try std.testing.expect(state.hoverKind() == null);
+
+    state.refreshHover(collector.written(), -1, -1);
+    try std.testing.expectEqual(@as(u32, 0), state.hoverHitId());
 }
 
 test "runtime emits reorder only after drag threshold and changed target" {
@@ -131,10 +171,10 @@ test "runtime emits reorder only after drag threshold and changed target" {
     try scene.pushDropTarget(.{ .scope_id = 7, .index = 2, .bounds = ui.Rect.init(0, 80, 40, 30) });
 
     var state = State{};
-    try std.testing.expectEqual(ActionKind.none, state.pointerDown(scene.written(), 8, 8).kind);
-    try std.testing.expectEqual(ActionKind.none, state.pointerMove(scene.written(), 10, 10).kind);
-    try std.testing.expectEqual(ActionKind.drag_started, state.pointerMove(scene.written(), 8, 88).kind);
-    const action = state.pointerUp(scene.written(), 8, 88);
+    try std.testing.expectEqual(ActionKind.none, state.pointerDown(scene.written(), &.{}, 8, 8).kind);
+    try std.testing.expectEqual(ActionKind.none, state.pointerMove(scene.written(), &.{}, 10, 10).kind);
+    try std.testing.expectEqual(ActionKind.drag_started, state.pointerMove(scene.written(), &.{}, 8, 88).kind);
+    const action = state.pointerUp(scene.written(), &.{}, 8, 88);
     try std.testing.expectEqual(ActionKind.reordered, action.kind);
     try std.testing.expectEqual(@as(usize, 0), action.source.?.index);
     try std.testing.expectEqual(@as(usize, 2), action.target.?.index);

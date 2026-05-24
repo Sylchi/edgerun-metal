@@ -1,6 +1,7 @@
 const std = @import("std");
 const icon = @import("icon.zig");
 const input = @import("input.zig");
+const interaction = @import("ui_interaction.zig");
 const linux_drm = @import("linux_drm.zig");
 const renderer_font_atlas = @import("renderer_font_atlas.zig");
 const renderer_gpu = @import("renderer_gpu.zig");
@@ -8,10 +9,15 @@ const renderer_gpu_buffer = @import("renderer_gpu_buffer.zig");
 const renderer_ir = @import("renderer_ir.zig");
 const renderer_native_present = @import("renderer_native_present.zig");
 const renderer_software = @import("renderer_software.zig");
+const site_apps = @import("site_apps.zig");
+const site_blog = @import("site_blog.zig");
 const site_chrome = @import("site_chrome.zig");
+const site_cursor = @import("site_cursor.zig");
+const site_images = @import("site_images.zig");
 const site_landing = @import("site_landing.zig");
-const tabler_atlas = @import("tabler_atlas.zig");
+const site_navigation = @import("site_navigation.zig");
 const ui = @import("ui.zig");
+const ui_runtime = @import("ui_runtime.zig");
 
 const linux = std.os.linux;
 const posix = std.posix;
@@ -24,6 +30,7 @@ const tile_width: u32 = 64;
 const tile_height: u32 = 64;
 const max_commands: usize = 4096;
 const max_clips: usize = 64;
+const max_interaction_regions: usize = 1024;
 const max_rects: usize = 8192;
 const max_text_vertices: usize = 24576;
 const max_icon_vertices: usize = 4096;
@@ -36,6 +43,7 @@ const max_gpu_primitives: usize = 32768;
 const max_registry_globals: usize = 128;
 const socket_read_bytes: usize = 8192;
 const message_bytes: usize = 512;
+const pointer_motion_render_step: f32 = 8.0;
 
 const display_id: u32 = 1;
 const registry_id: u32 = 2;
@@ -53,6 +61,8 @@ const wl_buffer_id: u32 = 13;
 const linux_dmabuf_id: u32 = 14;
 const dmabuf_params_id: u32 = 15;
 const dmabuf_wl_buffer_id: u32 = 16;
+const xdg_decoration_manager_id: u32 = 17;
+const xdg_toplevel_decoration_id: u32 = 18;
 
 const wl_display_sync: u16 = 0;
 const wl_display_get_registry: u16 = 1;
@@ -70,6 +80,11 @@ const xdg_wm_base_pong: u16 = 3;
 const xdg_surface_get_toplevel: u16 = 1;
 const xdg_surface_ack_configure: u16 = 4;
 const xdg_toplevel_set_title: u16 = 2;
+const xdg_toplevel_set_app_id: u16 = 3;
+const xdg_toplevel_move: u16 = 5;
+const xdg_toplevel_set_minimized: u16 = 13;
+const xdg_decoration_manager_get_toplevel_decoration: u16 = 1;
+const xdg_toplevel_decoration_set_mode: u16 = 1;
 const zwp_linux_dmabuf_create_params: u16 = 1;
 const zwp_linux_buffer_params_add: u16 = 1;
 const zwp_linux_buffer_params_create_immed: u16 = 3;
@@ -95,7 +110,21 @@ const wl_pointer_button_left: u32 = 0x110;
 const wl_pointer_button_released: u32 = 0;
 const wl_pointer_axis_vertical_scroll: u32 = 0;
 const wl_seat_capability_pointer: u32 = 1;
+const xdg_toplevel_decoration_mode_server_side: u32 = 2;
 const fixed_scale: f32 = 256.0;
+const client_decor_h: f32 = 34.0;
+const client_decor_button_size: f32 = 24.0;
+const client_decor_button_gap: f32 = 8.0;
+const client_decor_icon_size: f32 = 14.0;
+const client_decor_minimize_w: f32 = 10.0;
+const client_decor_minimize_h: f32 = 2.0;
+const client_decor_close_id: u32 = 40_000;
+const client_decor_minimize_id: u32 = 40_001;
+const client_decor_drag_id: u32 = 40_002;
+const client_decor_bg = ui.Color{ .r = 24, .g = 24, .b = 27 };
+const client_decor_border = ui.Color{ .r = 52, .g = 52, .b = 58 };
+const client_decor_text = ui.Color{ .r = 232, .g = 232, .b = 235 };
+const client_decor_dim = ui.Color{ .r = 156, .g = 156, .b = 164 };
 
 const IrStorage = renderer_ir.FixedBuffers(
     max_rects,
@@ -114,6 +143,7 @@ const Options = struct {
     present: PresentMode = .cpu,
     drm_device: []const u8 = linux_drm.default_device_path,
     dmabuf_fd: ?posix.fd_t = null,
+    path: []const u8 = "/",
 };
 
 const PresentMode = enum {
@@ -138,6 +168,8 @@ const ObjectKind = enum {
     linux_dmabuf,
     dmabuf_params,
     dmabuf_buffer,
+    decoration_manager,
+    toplevel_decoration,
 };
 
 const RegistryGlobal = struct {
@@ -153,6 +185,7 @@ const RegistryInterface = enum {
     wm_base,
     seat,
     linux_dmabuf,
+    xdg_decoration_manager,
 };
 
 const RegistryState = struct {
@@ -229,9 +262,10 @@ const AppState = struct {
     scroll_y: f32 = 0.0,
     hover_x: f32 = -1.0,
     hover_y: f32 = -1.0,
-    hover_hit_id: u32 = 0,
+    runtime: ui_runtime.State = .{},
     public_identity_ready: bool = true,
     public_identity: []const u8 = "native-wayland",
+    route: site_navigation.Route = .{},
 };
 
 const Message = struct {
@@ -294,10 +328,10 @@ pub fn main(init: std.process.Init) !void {
     defer client.close(init.io);
     try client.bootstrap();
     try client.createWindow(options.width, options.height);
-    var app = try NativeApp.init(&client, allocator, options);
-    defer app.deinit();
+    const app = try NativeApp.create(&client, allocator, options);
+    defer app.destroy();
     try app.render(&client);
-    try client.eventLoop(options.seconds, &app);
+    try client.eventLoop(options.seconds, app);
 }
 
 fn parseOptions(args: []const [:0]const u8) !Options {
@@ -329,6 +363,10 @@ fn parseOptions(args: []const [:0]const u8) !Options {
             index += 1;
             if (index >= args.len) return error.InvalidArguments;
             options.dmabuf_fd = try std.fmt.parseInt(posix.fd_t, args[index], 10);
+        } else if (std.mem.eql(u8, arg, "--path")) {
+            index += 1;
+            if (index >= args.len) return error.InvalidArguments;
+            options.path = args[index];
         } else {
             return error.InvalidArguments;
         }
@@ -376,6 +414,8 @@ const WaylandClient = struct {
         client.object_kinds[linux_dmabuf_id] = .linux_dmabuf;
         client.object_kinds[dmabuf_params_id] = .dmabuf_params;
         client.object_kinds[dmabuf_wl_buffer_id] = .dmabuf_buffer;
+        client.object_kinds[xdg_decoration_manager_id] = .decoration_manager;
+        client.object_kinds[xdg_toplevel_decoration_id] = .toplevel_decoration;
         return client;
     }
 
@@ -416,6 +456,7 @@ const WaylandClient = struct {
         try self.send(makeGetXdgSurface);
         try self.send(makeGetToplevel);
         try self.sendTitle("EdgeRun Native Wayland");
+        try self.sendAppId("dev.edgerun.Native");
         try self.send(makeSurfaceCommit);
         while (!self.state.configured) try self.readEventsBlocking();
     }
@@ -490,6 +531,23 @@ const WaylandClient = struct {
         try writeAll(self.fd, bytes);
     }
 
+    fn sendAppId(self: WaylandClient, app_id: []const u8) !void {
+        var buffer: [message_bytes]u8 = undefined;
+        const bytes = try makeSetAppId(&buffer, app_id);
+        try writeAll(self.fd, bytes);
+    }
+
+    fn sendMove(self: WaylandClient, serial: u32) !void {
+        var buffer: [message_bytes]u8 = undefined;
+        const bytes = try makeMove(&buffer, serial);
+        try writeAll(self.fd, bytes);
+    }
+
+    fn sendMinimize(self: WaylandClient) !void {
+        var buffer: [message_bytes]u8 = undefined;
+        try writeAll(self.fd, try makeSetMinimized(&buffer));
+    }
+
     fn sendDamage(self: WaylandClient, width: u32, height: u32) !void {
         var buffer: [message_bytes]u8 = undefined;
         const bytes = try makeDamageBuffer(&buffer, width, height);
@@ -546,17 +604,19 @@ const WaylandClient = struct {
         if (n == 0) return error.WaylandConnectionClosed;
         self.read_len += n;
         var offset: usize = 0;
+        var needs_render = false;
         while (nextMessage(self.read_buffer[offset..self.read_len])) |message| {
             const kind = self.object_kinds[message.object_id];
             try self.replyToMessage(kind, message);
             try handleMessage(&self.state, kind, message);
-            if (try app.handleWaylandInput(self, kind, message)) try app.render(self);
+            needs_render = (try app.handleWaylandInput(self, kind, message)) or needs_render;
             offset += message.payload.len + 8;
         }
         if (offset != 0) {
             std.mem.copyForwards(u8, self.read_buffer[0 .. self.read_len - offset], self.read_buffer[offset..self.read_len]);
             self.read_len -= offset;
         }
+        if (needs_render) try app.render(self);
     }
 
     fn replyToMessage(self: WaylandClient, kind: ObjectKind, message: Message) !void {
@@ -599,8 +659,11 @@ const NativeApp = struct {
     pixels: []ui.Color,
     commands: [max_commands]ui.Command = undefined,
     clips: [max_clips]ui.Rect = undefined,
+    regions: [max_interaction_regions]interaction.Region = undefined,
+    region_len: usize = 0,
     ir_storage: IrStorage = .{},
-    font_atlas: renderer_font_atlas.Atlas = renderer_font_atlas.Atlas.init(),
+    font_storage: renderer_font_atlas.AsciiFontStorage = .{},
+    font_atlas: renderer_font_atlas.Atlas,
     gpu_primitives: []renderer_gpu.Primitive,
     gpu_tile_marks: [max_tiles]u8 = undefined,
     gpu_dirty_ids: [max_tiles]u32 = undefined,
@@ -611,7 +674,7 @@ const NativeApp = struct {
     gpu_buffer_device: renderer_gpu_buffer.CpuFilledDevice = .{},
     drm_buffer: ?linux_drm.DumbBuffer = null,
 
-    fn init(client: *WaylandClient, allocator: std.mem.Allocator, options: Options) !NativeApp {
+    fn create(client: *WaylandClient, allocator: std.mem.Allocator, options: Options) !*NativeApp {
         const width = options.width;
         const height = options.height;
         const stride = width * @sizeOf(u32);
@@ -621,22 +684,32 @@ const NativeApp = struct {
         errdefer allocator.free(pixels);
         const gpu_primitives = try allocator.alloc(renderer_gpu.Primitive, max_gpu_primitives);
         errdefer allocator.free(gpu_primitives);
-        const drm_buffer: ?linux_drm.DumbBuffer = if (options.present == .gpu_dmabuf and options.dmabuf_fd == null)
+        var drm_buffer: ?linux_drm.DumbBuffer = if (options.present == .gpu_dmabuf and options.dmabuf_fd == null)
             try linux_drm.DumbBuffer.createExported(options.drm_device, width, height, .xrgb8888)
         else
             null;
         errdefer if (drm_buffer) |*buffer| buffer.deinit();
-        return .{
-            .allocator = allocator,
-            .width = width,
-            .height = height,
-            .present = options.present,
-            .dmabuf_fd = options.dmabuf_fd,
-            .shm = shm,
-            .pixels = pixels,
-            .gpu_primitives = gpu_primitives,
-            .drm_buffer = drm_buffer,
-        };
+
+        const self = try allocator.create(NativeApp);
+        errdefer allocator.destroy(self);
+        self.allocator = allocator;
+        self.width = width;
+        self.height = height;
+        self.present = options.present;
+        self.dmabuf_fd = options.dmabuf_fd;
+        self.shm = shm;
+        self.pixels = pixels;
+        self.gpu_primitives = gpu_primitives;
+        self.region_len = 0;
+        self.ir_storage = .{};
+        self.font_storage = .{};
+        _ = try renderer_font_atlas.compileGeistAscii(&self.font_storage);
+        self.font_atlas = self.font_storage.atlas().?;
+        self.state = .{ .route = site_navigation.fromPath(options.path) };
+        self.gpu_recorder = .{};
+        self.gpu_buffer_device = .{};
+        self.drm_buffer = drm_buffer;
+        return self;
     }
 
     fn deinit(self: *NativeApp) void {
@@ -646,25 +719,34 @@ const NativeApp = struct {
         self.shm.deinit();
     }
 
+    fn destroy(self: *NativeApp) void {
+        const allocator = self.allocator;
+        self.deinit();
+        allocator.destroy(self);
+    }
+
     fn render(self: *NativeApp, client: *WaylandClient) !void {
         var scene = ui.Scene.initWithClips(&self.commands, &self.clips);
-        try renderBrowserLandingScene(&scene, self.width, self.height, self.state);
-        self.updateHoverHit(scene.written());
+        var collector = interaction.Collector.init(&self.regions);
+        try renderNativeSiteScene(&scene, &collector, self.width, self.height, self.state);
+        self.region_len = collector.written().len;
+        self.updateHoverHit(self.regionSlice());
+        try site_cursor.render(&scene, self.state.hover_x, self.state.hover_y, site_cursor.fromState(.none, self.state.runtime.hoverKind()));
 
         const buffers = self.ir_storage.buffers();
         try renderer_ir.packScene(buffers, sources(&self.font_atlas), scene.written());
 
         var sink_state = WaylandCommitSink{};
-        const atlases = renderer_software.IrAtlases{
+        const resources = renderer_software.IrResources{
             .font = .{ .width = renderer_font_atlas.width, .height = renderer_font_atlas.height, .alpha = self.font_atlas.alphaSlice() },
-            .icon = .{ .width = tabler_atlas.width, .height = tabler_atlas.height, .alpha = tabler_atlas.alpha },
+            .image = try site_images.cloudMeme(),
         };
         switch (self.present) {
             .cpu => {
                 const receipt = try renderer_native_present.renderCpuAndSubmit(
                     self.waylandSurface(),
                     buffers,
-                    atlases,
+                    resources,
                     .{ .width = self.width, .height = self.height, .pixels = self.pixels },
                     siteBackground(),
                     default_refresh_hz,
@@ -680,7 +762,7 @@ const NativeApp = struct {
                 const receipt = try renderer_native_present.renderGpuAndSubmit(
                     self.waylandSurface(),
                     buffers,
-                    atlases.resources(),
+                    resources.presentationResources(),
                     self.gpu_recorder.device(),
                     .{
                         .primitives = self.gpu_primitives,
@@ -695,13 +777,13 @@ const NativeApp = struct {
                     sink_state.sink(),
                 );
                 if (!receipt.valid() or !sink_state.submitted) return error.WaylandCommitRejected;
-                try self.renderSoftwarePixels(buffers, atlases);
+                try self.renderSoftwarePixels(buffers, resources);
             },
             .gpu_dmabuf => {
                 const dmabuf_surface = try self.dmabufSurface();
                 const import = try DmabufImport.fromNativeSurface(dmabuf_surface);
                 try client.createDmabufBuffer(import);
-                try self.renderSoftwarePixels(buffers, atlases);
+                try self.renderSoftwarePixels(buffers, resources);
                 if (self.drm_buffer) |*buffer| {
                     const memory = try buffer.map();
                     packXrgb8888Strided(memory, buffer.pitch_bytes, self.width, self.height, self.pixels);
@@ -710,7 +792,7 @@ const NativeApp = struct {
                 const receipt = try renderer_native_present.renderGpuBackedAndSubmit(
                     dmabuf_surface,
                     buffers,
-                    atlases.resources(),
+                    resources.presentationResources(),
                     self.gpu_buffer_device.device(),
                     .{
                         .primitives = self.gpu_primitives,
@@ -764,39 +846,49 @@ const NativeApp = struct {
         } };
     }
 
-    fn renderSoftwarePixels(self: *NativeApp, buffers: renderer_ir.Buffers, atlases: renderer_software.IrAtlases) !void {
+    fn renderSoftwarePixels(self: *NativeApp, buffers: renderer_ir.Buffers, resources: renderer_software.IrResources) !void {
         const software_surface = try renderer_software.Surface.init(self.width, self.height, self.pixels);
         software_surface.clear(siteBackground());
-        _ = try software_surface.renderIrFrameWithAtlases(buffers, atlases);
+        _ = try software_surface.renderIrFrameWithResources(buffers, resources);
     }
 
     fn handleWaylandInput(self: *NativeApp, client: *WaylandClient, kind: ObjectKind, message: Message) !bool {
-        _ = client;
         if (kind != .pointer) return false;
         switch (message.opcode) {
             wl_pointer_enter_event => {
                 if (message.payload.len < 16) return error.InvalidWaylandMessage;
                 self.state.hover_x = fixedToFloat(std.mem.readInt(i32, message.payload[8..12], .little));
                 self.state.hover_y = fixedToFloat(std.mem.readInt(i32, message.payload[12..16], .little));
+                self.updateHoverHit(self.regionSlice());
                 return true;
             },
             wl_pointer_leave_event => {
                 self.state.hover_x = -1.0;
                 self.state.hover_y = -1.0;
-                self.state.hover_hit_id = 0;
+                self.state.runtime.clearHover();
                 return true;
             },
             wl_pointer_motion_event => {
                 if (message.payload.len < 12) return error.InvalidWaylandMessage;
+                const old_x = self.state.hover_x;
+                const old_y = self.state.hover_y;
+                const old_hit = self.state.runtime.hoverHitId();
                 self.state.hover_x = fixedToFloat(std.mem.readInt(i32, message.payload[4..8], .little));
                 self.state.hover_y = fixedToFloat(std.mem.readInt(i32, message.payload[8..12], .little));
-                return true;
+                self.updateHoverHit(self.regionSlice());
+                if (self.state.runtime.hoverHitId() != old_hit) return true;
+                return @abs(self.state.hover_x - old_x) >= pointer_motion_render_step or
+                    @abs(self.state.hover_y - old_y) >= pointer_motion_render_step;
             },
             wl_pointer_button_event => {
                 if (message.payload.len < 16) return error.InvalidWaylandMessage;
+                const serial = std.mem.readInt(u32, message.payload[0..4], .little);
                 const button = std.mem.readInt(u32, message.payload[8..12], .little);
                 const state = std.mem.readInt(u32, message.payload[12..16], .little);
-                if (button == wl_pointer_button_left and state == wl_pointer_button_released) self.activateHit();
+                if (button == wl_pointer_button_left) {
+                    if (state == wl_pointer_button_released) try self.activateHit(client);
+                    if (state != wl_pointer_button_released and self.state.runtime.hoverHitId() == client_decor_drag_id) try client.sendMove(serial);
+                }
                 return true;
             },
             wl_pointer_axis_event => {
@@ -810,12 +902,16 @@ const NativeApp = struct {
         }
     }
 
-    fn updateHoverHit(self: *NativeApp, commands: []const ui.Command) void {
-        updateHoverHitForState(&self.state, commands);
+    fn updateHoverHit(self: *NativeApp, regions: []const interaction.Region) void {
+        self.state.runtime.refreshHover(regions, self.state.hover_x, self.state.hover_y);
     }
 
-    fn activateHit(self: *NativeApp) void {
-        activateHitForState(&self.state);
+    fn regionSlice(self: *const NativeApp) []const interaction.Region {
+        return self.regions[0..self.region_len];
+    }
+
+    fn activateHit(self: *NativeApp, client: *WaylandClient) !void {
+        try activateHitForState(&self.state, client);
     }
 
     fn scrollBy(self: *NativeApp, delta_y: f32) void {
@@ -823,19 +919,30 @@ const NativeApp = struct {
     }
 };
 
-fn updateHoverHitForState(state: *AppState, commands: []const ui.Command) void {
-    if (state.hover_x < 0.0 or state.hover_y < 0.0) {
-        state.hover_hit_id = 0;
-        return;
-    }
-    state.hover_hit_id = if (input.hitTest(commands, state.hover_x, state.hover_y)) |hit| hit.id else 0;
+fn updateHoverHitForState(state: *AppState, regions: []const interaction.Region) void {
+    state.runtime.refreshHover(regions, state.hover_x, state.hover_y);
 }
 
-fn activateHitForState(state: *AppState) void {
-    switch (state.hover_hit_id) {
-        site_chrome.logo_button_id,
-        site_chrome.docs_button_id,
-        => state.scroll_y = 0.0,
+fn activateHitForState(state: *AppState, client: ?*WaylandClient) !void {
+    const hover_hit_id = state.runtime.hoverHitId();
+    switch (hover_hit_id) {
+        client_decor_close_id => {
+            state.runtime.clearHover();
+            if (client) |value| value.state.closed = true;
+            return;
+        },
+        client_decor_minimize_id => {
+            if (client) |value| try value.sendMinimize();
+            return;
+        },
+        else => {},
+    }
+    if (site_navigation.fromHit(hover_hit_id, state.route)) |route| {
+        state.route = route;
+        state.scroll_y = 0.0;
+        return;
+    }
+    switch (hover_hit_id) {
         site_landing.reveal_identity_button_id => {
             state.public_identity_ready = true;
             state.public_identity = "native-wayland";
@@ -846,7 +953,8 @@ fn activateHitForState(state: *AppState) void {
 
 fn scrollStateBy(state: *AppState, width: u32, height: u32, delta_y: f32) void {
     if (!std.math.isFinite(delta_y)) return;
-    const limit = @max(0.0, site_landing.contentHeight(@floatFromInt(width)) - @as(f32, @floatFromInt(height)));
+    const viewport_h = @max(1.0, @as(f32, @floatFromInt(height)) - client_decor_h);
+    const limit = @max(0.0, contentHeightForRoute(@floatFromInt(width), state.route) - viewport_h);
     state.scroll_y = std.math.clamp(state.scroll_y + delta_y, 0.0, limit);
 }
 
@@ -925,37 +1033,87 @@ const GpuRecorder = struct {
     }
 };
 
-fn renderBrowserLandingScene(scene: *ui.Scene, width: u32, height: u32, state: AppState) !void {
-    try site_landing.render(scene, .{
-        .x = 0,
-        .y = 0,
-        .w = @floatFromInt(width),
-        .h = @floatFromInt(height),
-    }, .{
-        .scroll_y = state.scroll_y,
-        .hover_x = state.hover_x,
-        .hover_y = state.hover_y,
-        .frame_ms = 0.0,
-        .public_identity = state.public_identity,
-        .public_identity_ready = state.public_identity_ready,
+fn renderNativeSiteScene(scene: *ui.Scene, collector: *interaction.Collector, width: u32, height: u32, state: AppState) !void {
+    try renderClientDecoration(scene, collector, @floatFromInt(width));
+    const content_y = client_decor_h;
+    const content_h = @max(1.0, @as(f32, @floatFromInt(height)) - content_y);
+    const bounds = ui.Rect.init(0, content_y, @floatFromInt(width), content_h);
+    switch (state.route.view) {
+        .landing => try site_landing.render(scene, collector, bounds, .{
+            .scroll_y = state.scroll_y,
+            .hover_x = state.hover_x,
+            .hover_y = state.hover_y,
+            .frame_ms = 0.0,
+            .public_identity = state.public_identity,
+            .public_identity_ready = state.public_identity_ready,
+        }),
+        .blog => try site_blog.render(scene, collector, bounds, .{
+            .scroll_y = state.scroll_y,
+            .hover_x = state.hover_x,
+            .hover_y = state.hover_y,
+            .selected_post_id = state.route.selected_blog_post_id,
+            .arc_filter_index = state.route.blog_arc_filter_index,
+        }),
+        .apps => try site_apps.render(scene, collector, bounds, .{
+            .scroll_y = state.scroll_y,
+            .hover_x = state.hover_x,
+            .hover_y = state.hover_y,
+        }),
+    }
+}
+
+fn renderClientDecoration(scene: *ui.Scene, collector: *interaction.Collector, width: f32) !void {
+    const bounds = ui.Rect.init(0.0, 0.0, width, client_decor_h);
+    try scene.pushRect(bounds, client_decor_bg, .fill, 0.0, 0.0);
+    try scene.pushRect(ui.Rect.init(0.0, client_decor_h - 1.0, width, 1.0), client_decor_border, .fill, 0.0, 0.0);
+    try scene.pushAlignedText(ui.Rect.init(14.0, 8.0, @max(1.0, width - 168.0), 15.0), "EdgeRun Native", client_decor_text, .start);
+
+    const close = clientDecorButton(width, 0);
+    const minimize = clientDecorButton(width, 1);
+    try scene.pushRect(minimize, client_decor_border, .border, 12.0, 0.0);
+    try scene.pushRect(centeredRect(minimize, client_decor_minimize_w, client_decor_minimize_h), client_decor_dim, .fill, 1.0, 0.0);
+    try collector.addHit(minimize, .button, client_decor_minimize_id);
+
+    try scene.pushRect(close, client_decor_border, .border, 12.0, 0.0);
+    try scene.pushIconQuad(.{
+        .bounds = centeredRect(close, client_decor_icon_size, client_decor_icon_size),
+        .icon_id = icon.id(.x),
+        .color = client_decor_dim,
     });
+    try collector.addHit(close, .button, client_decor_close_id);
+
+    const drag_w = @max(1.0, minimize.x - client_decor_button_gap - 140.0);
+    try collector.addHit(ui.Rect.init(0.0, 0.0, drag_w, client_decor_h), .button, client_decor_drag_id);
+}
+
+fn clientDecorButton(width: f32, index: usize) ui.Rect {
+    const offset = @as(f32, @floatFromInt(index + 1)) * (client_decor_button_size + client_decor_button_gap);
+    return ui.Rect.init(width - offset, 5.0, client_decor_button_size, client_decor_button_size);
+}
+
+fn centeredRect(bounds: ui.Rect, w: f32, h: f32) ui.Rect {
+    return ui.Rect.init(
+        bounds.x + (bounds.w - w) * 0.5,
+        bounds.y + (bounds.h - h) * 0.5,
+        w,
+        h,
+    );
+}
+
+fn contentHeightForRoute(width: f32, route: site_navigation.Route) f32 {
+    return switch (route.view) {
+        .landing => site_landing.contentHeight(width),
+        .blog => if (route.selected_blog_post_id == 0)
+            site_blog.indexContentHeightFiltered(width, route.blog_arc_filter_index)
+        else
+            site_blog.postContentHeight(width, route.selected_blog_post_id),
+        .apps => site_apps.contentHeight(width),
+    };
 }
 
 fn sources(font_atlas: *renderer_font_atlas.Atlas) renderer_ir.Sources {
     return .{
         .font = font_atlas.source(),
-        .icon = .{ .context = font_atlas, .rect = iconAtlasRect },
-    };
-}
-
-fn iconAtlasRect(_: *anyopaque, atlas_id: u32) ?renderer_ir.AtlasRect {
-    const value = icon.fromAtlasId(atlas_id) orelse return null;
-    const found = tabler_atlas.rect(value);
-    return .{
-        .u0 = (@as(f32, @floatFromInt(found.x)) + 0.5) / @as(f32, @floatFromInt(tabler_atlas.width)),
-        .v0 = (@as(f32, @floatFromInt(found.y)) + 0.5) / @as(f32, @floatFromInt(tabler_atlas.height)),
-        .u1 = (@as(f32, @floatFromInt(found.x + found.w)) - 0.5) / @as(f32, @floatFromInt(tabler_atlas.width)),
-        .v1 = (@as(f32, @floatFromInt(found.y + found.h)) - 0.5) / @as(f32, @floatFromInt(tabler_atlas.height)),
     };
 }
 
@@ -1088,6 +1246,37 @@ fn makeSetTitle(buffer: []u8, title: []const u8) ![]const u8 {
     return msg.finish();
 }
 
+fn makeSetAppId(buffer: []u8, app_id: []const u8) ![]const u8 {
+    var msg = try MessageWriter.init(buffer, xdg_toplevel_id, xdg_toplevel_set_app_id);
+    try msg.putString(app_id);
+    return msg.finish();
+}
+
+fn makeMove(buffer: []u8, serial: u32) ![]const u8 {
+    var msg = try MessageWriter.init(buffer, xdg_toplevel_id, xdg_toplevel_move);
+    try msg.putU32(seat_id);
+    try msg.putU32(serial);
+    return msg.finish();
+}
+
+fn makeSetMinimized(buffer: []u8) ![]const u8 {
+    var msg = try MessageWriter.init(buffer, xdg_toplevel_id, xdg_toplevel_set_minimized);
+    return msg.finish();
+}
+
+fn makeGetToplevelDecoration(buffer: []u8) ![]const u8 {
+    var msg = try MessageWriter.init(buffer, xdg_decoration_manager_id, xdg_decoration_manager_get_toplevel_decoration);
+    try msg.putU32(xdg_toplevel_decoration_id);
+    try msg.putU32(xdg_toplevel_id);
+    return msg.finish();
+}
+
+fn makeSetServerSideDecoration(buffer: []u8) ![]const u8 {
+    var msg = try MessageWriter.init(buffer, xdg_toplevel_decoration_id, xdg_toplevel_decoration_set_mode);
+    try msg.putU32(xdg_toplevel_decoration_mode_server_side);
+    return msg.finish();
+}
+
 fn makeSurfaceCommit(buffer: []u8) ![]const u8 {
     var msg = try MessageWriter.init(buffer, surface_id, wl_surface_commit);
     return msg.finish();
@@ -1177,6 +1366,7 @@ fn registryInterface(value: []const u8) RegistryInterface {
     if (std.mem.eql(u8, value, "xdg_wm_base")) return .wm_base;
     if (std.mem.eql(u8, value, "wl_seat")) return .seat;
     if (std.mem.eql(u8, value, "zwp_linux_dmabuf_v1")) return .linux_dmabuf;
+    if (std.mem.eql(u8, value, "zxdg_decoration_manager_v1")) return .xdg_decoration_manager;
     return .other;
 }
 
@@ -1291,12 +1481,13 @@ test "wayland host parses explicit presentation mode" {
     try std.testing.expectEqual(PresentMode.gpu_dmabuf, try parsePresentMode("gpu-dmabuf"));
     try std.testing.expectError(error.InvalidArguments, parsePresentMode("gpu"));
 
-    const args = [_][:0]const u8{ "wayland-window", "--width", "800", "--height", "600", "--seconds", "1", "--present", "gpu-record" };
+    const args = [_][:0]const u8{ "wayland-window", "--width", "800", "--height", "600", "--seconds", "1", "--present", "gpu-record", "--path", "/academy" };
     const options = try parseOptions(&args);
     try std.testing.expectEqual(@as(u32, 800), options.width);
     try std.testing.expectEqual(@as(u32, 600), options.height);
     try std.testing.expectEqual(@as(u32, 1), options.seconds);
     try std.testing.expectEqual(PresentMode.gpu_record, options.present);
+    try std.testing.expectEqualStrings("/academy", options.path);
 
     const dmabuf_args = [_][:0]const u8{ "wayland-window", "--present", "gpu-dmabuf", "--dmabuf-fd", "17" };
     const dmabuf_options = try parseOptions(&dmabuf_args);
@@ -1335,6 +1526,53 @@ test "wayland registry parser discovers linux dmabuf global" {
     try std.testing.expectEqual(@as(u32, 23), global.name);
     try std.testing.expectEqual(RegistryInterface.linux_dmabuf, global.interface);
     try std.testing.expectEqual(@as(u32, 4), global.version);
+}
+
+test "wayland registry parser discovers xdg decoration manager global" {
+    var payload: [48]u8 = undefined;
+    std.mem.writeInt(u32, payload[0..4], 31, .little);
+    std.mem.writeInt(u32, payload[4..8], 27, .little);
+    @memcpy(payload[8..34], "zxdg_decoration_manager_v1");
+    payload[34] = 0;
+    payload[35] = 0;
+    std.mem.writeInt(u32, payload[36..40], 1, .little);
+    const global = try parseRegistryGlobal(payload[0..40]);
+    try std.testing.expectEqual(@as(u32, 31), global.name);
+    try std.testing.expectEqual(RegistryInterface.xdg_decoration_manager, global.interface);
+    try std.testing.expectEqual(@as(u32, 1), global.version);
+}
+
+test "wayland xdg decoration message encoders stay explicit but unused by client chrome" {
+    var get_buffer: [64]u8 = undefined;
+    const get = try makeGetToplevelDecoration(&get_buffer);
+    try std.testing.expectEqual(@as(u32, xdg_decoration_manager_id), std.mem.readInt(u32, get[0..4], .little));
+    try std.testing.expectEqual(@as(u16, xdg_decoration_manager_get_toplevel_decoration), std.mem.readInt(u16, get[4..6], .little));
+    try std.testing.expectEqual(@as(u16, 16), std.mem.readInt(u16, get[6..8], .little));
+    try std.testing.expectEqual(@as(u32, xdg_toplevel_decoration_id), std.mem.readInt(u32, get[8..12], .little));
+    try std.testing.expectEqual(@as(u32, xdg_toplevel_id), std.mem.readInt(u32, get[12..16], .little));
+
+    var mode_buffer: [64]u8 = undefined;
+    const mode = try makeSetServerSideDecoration(&mode_buffer);
+    try std.testing.expectEqual(@as(u32, xdg_toplevel_decoration_id), std.mem.readInt(u32, mode[0..4], .little));
+    try std.testing.expectEqual(@as(u16, xdg_toplevel_decoration_set_mode), std.mem.readInt(u16, mode[4..6], .little));
+    try std.testing.expectEqual(@as(u16, 12), std.mem.readInt(u16, mode[6..8], .little));
+    try std.testing.expectEqual(xdg_toplevel_decoration_mode_server_side, std.mem.readInt(u32, mode[8..12], .little));
+}
+
+test "wayland xdg toplevel client chrome messages encode move and minimize" {
+    var move_buffer: [64]u8 = undefined;
+    const move = try makeMove(&move_buffer, 77);
+    try std.testing.expectEqual(@as(u32, xdg_toplevel_id), std.mem.readInt(u32, move[0..4], .little));
+    try std.testing.expectEqual(@as(u16, xdg_toplevel_move), std.mem.readInt(u16, move[4..6], .little));
+    try std.testing.expectEqual(@as(u16, 16), std.mem.readInt(u16, move[6..8], .little));
+    try std.testing.expectEqual(@as(u32, seat_id), std.mem.readInt(u32, move[8..12], .little));
+    try std.testing.expectEqual(@as(u32, 77), std.mem.readInt(u32, move[12..16], .little));
+
+    var minimize_buffer: [64]u8 = undefined;
+    const minimize = try makeSetMinimized(&minimize_buffer);
+    try std.testing.expectEqual(@as(u32, xdg_toplevel_id), std.mem.readInt(u32, minimize[0..4], .little));
+    try std.testing.expectEqual(@as(u16, xdg_toplevel_set_minimized), std.mem.readInt(u16, minimize[4..6], .little));
+    try std.testing.expectEqual(@as(u16, 8), std.mem.readInt(u16, minimize[6..8], .little));
 }
 
 test "wayland dmabuf messages encode params add and immediate buffer creation" {
@@ -1455,6 +1693,7 @@ test "wayland native app builds dmabuf surface only in explicit fd mode" {
         .dmabuf_fd = 19,
         .shm = undefined,
         .pixels = &.{},
+        .font_atlas = renderer_font_atlas.Atlas.init(),
         .gpu_primitives = &.{},
     };
     const surface = try app.dmabufSurface();
@@ -1475,6 +1714,7 @@ test "wayland native app builds dmabuf surface from owned drm buffer" {
         .dmabuf_fd = null,
         .shm = undefined,
         .pixels = &.{},
+        .font_atlas = renderer_font_atlas.Atlas.init(),
         .gpu_primitives = &.{},
         .drm_buffer = .{
             .drm_fd = 18,
@@ -1530,8 +1770,10 @@ test "wayland xrgb pack swaps renderer color channels for shm" {
 test "wayland host renders the browser landing app through canonical ir" {
     var commands: [max_commands]ui.Command = undefined;
     var clips: [max_clips]ui.Rect = undefined;
+    var regions: [max_interaction_regions]interaction.Region = undefined;
     var scene = ui.Scene.initWithClips(&commands, &clips);
-    try renderBrowserLandingScene(&scene, 1280, 800, .{});
+    var collector = interaction.Collector.init(&regions);
+    try renderNativeSiteScene(&scene, &collector, 1280, 800, .{});
     try std.testing.expect(hasText(scene.written(), "Your Node is"));
     try std.testing.expect(hasText(scene.written(), "Already Running"));
 
@@ -1542,6 +1784,40 @@ test "wayland host renders the browser landing app through canonical ir" {
     try std.testing.expect(ir_storage.rect_len > 0);
     try std.testing.expect(ir_storage.text_vertex_len > 0);
     try std.testing.expect(ir_storage.icon_vertex_len > 0);
+}
+
+test "wayland host renders academy post route through canonical ir" {
+    var commands: [max_commands]ui.Command = undefined;
+    var clips: [max_clips]ui.Rect = undefined;
+    var regions: [max_interaction_regions]interaction.Region = undefined;
+    var scene = ui.Scene.initWithClips(&commands, &clips);
+    var collector = interaction.Collector.init(&regions);
+    const post_id = site_blog.postIdAt(site_blog.posts.len - 1);
+    var path: [site_navigation.route_path_capacity]u8 = undefined;
+    const route_path = try std.fmt.bufPrint(&path, "/academy/{d}", .{post_id});
+    try renderNativeSiteScene(&scene, &collector, 1280, 1800, .{ .route = site_navigation.fromPath(route_path) });
+    try std.testing.expect(hasText(scene.written(), "AUTHORITY FLOW"));
+    try std.testing.expect(hasText(scene.written(), "Relay"));
+    try std.testing.expect(hasText(scene.written(), "TPM"));
+}
+
+test "wayland host renders client side decoration above app content" {
+    var state = AppState{};
+    state.route = site_navigation.fromPath("/academy");
+    var commands: [max_commands]ui.Command = undefined;
+    var clips: [max_clips]ui.Rect = undefined;
+    var regions: [max_interaction_regions]interaction.Region = undefined;
+    var scene = ui.Scene.initWithClips(&commands, &clips);
+    var collector = interaction.Collector.init(&regions);
+    try renderNativeSiteScene(&scene, &collector, 1280, 800, state);
+
+    try std.testing.expect(hasText(scene.written(), "EdgeRun Native"));
+    try std.testing.expect(hasIcon(scene.written(), .x));
+    try std.testing.expectEqual(@as(f32, 0.0), (try hitRect(collector.written(), client_decor_drag_id)).y);
+    try std.testing.expect((try hitRect(collector.written(), client_decor_close_id)).x > 1200.0);
+
+    const logo = try hitRect(collector.written(), site_chrome.logo_button_id);
+    try std.testing.expect(logo.y >= client_decor_h);
 }
 
 test "wayland gpu recorder accepts canonical ir frame callbacks" {
@@ -1593,25 +1869,54 @@ test "wayland host pointer input updates hover activation and scroll state" {
     var state = AppState{};
     var commands: [max_commands]ui.Command = undefined;
     var clips: [max_clips]ui.Rect = undefined;
+    var regions: [max_interaction_regions]interaction.Region = undefined;
     var scene = ui.Scene.initWithClips(&commands, &clips);
-    try renderBrowserLandingScene(&scene, 1280, 800, state);
-    updateHoverHitForState(&state, scene.written());
-    try std.testing.expectEqual(@as(u32, 0), state.hover_hit_id);
+    var collector = interaction.Collector.init(&regions);
+    try renderNativeSiteScene(&scene, &collector, 1280, 800, state);
+    updateHoverHitForState(&state, collector.written());
+    try std.testing.expect(state.runtime.hovered == null);
 
-    const docs = try hitRect(scene.written(), site_landing.docs_button_id);
+    const docs = try hitRect(collector.written(), site_landing.docs_button_id);
     state.hover_x = docs.x + docs.w * 0.5;
     state.hover_y = docs.y + docs.h * 0.5;
-    updateHoverHitForState(&state, scene.written());
-    try std.testing.expect(state.hover_hit_id != 0);
+    updateHoverHitForState(&state, collector.written());
+    try std.testing.expect(state.runtime.hovered != null);
+    try std.testing.expectEqual(site_cursor.Kind.pointer, site_cursor.fromState(.none, state.runtime.hovered.?.kind));
 
-    const old_hit = state.hover_hit_id;
-    activateHitForState(&state);
-    try std.testing.expectEqual(old_hit, state.hover_hit_id);
+    const old_hit = state.runtime.hovered.?.id;
+    try activateHitForState(&state, null);
+    try std.testing.expectEqual(old_hit, state.runtime.hovered.?.id);
 
     scrollStateBy(&state, 1280, 800, 320.0);
     try std.testing.expectEqual(@as(f32, 320.0), state.scroll_y);
     scrollStateBy(&state, 1280, 800, 200000.0);
     try std.testing.expect(state.scroll_y <= site_landing.contentHeight(1280.0));
+}
+
+test "wayland host appends scene cursor from native hover state" {
+    var app = NativeApp{
+        .allocator = std.testing.allocator,
+        .width = 1280,
+        .height = 800,
+        .present = .cpu,
+        .dmabuf_fd = null,
+        .shm = undefined,
+        .pixels = &.{},
+        .font_atlas = renderer_font_atlas.Atlas.init(),
+        .gpu_primitives = &.{},
+    };
+    var scene = ui.Scene.initWithClips(&app.commands, &app.clips);
+    var collector = interaction.Collector.init(&app.regions);
+    try renderNativeSiteScene(&scene, &collector, app.width, app.height, app.state);
+    app.region_len = collector.written().len;
+    const docs = try hitRect(app.regionSlice(), site_landing.docs_button_id);
+    app.state.hover_x = docs.x + docs.w * 0.5;
+    app.state.hover_y = docs.y + docs.h * 0.5;
+    app.updateHoverHit(app.regionSlice());
+    try site_cursor.render(&scene, app.state.hover_x, app.state.hover_y, site_cursor.fromState(.none, app.state.runtime.hoverKind()));
+
+    try std.testing.expectEqual(site_cursor.Kind.pointer, site_cursor.fromState(.none, app.state.runtime.hoverKind()));
+    try std.testing.expect(hasRectColor(scene.written(), site_cursor.accent));
 }
 
 fn hasText(commands: []const ui.Command, value: []const u8) bool {
@@ -1621,9 +1926,26 @@ fn hasText(commands: []const ui.Command, value: []const u8) bool {
     return false;
 }
 
-fn hitRect(commands: []const ui.Command, id: u32) !ui.Rect {
-    for (commands) |command| {
-        if (command == .hit and command.hit.id == id) return command.hit.bounds;
+fn hasRectColor(commands: []const ui.Command, color: ui.Color) bool {
+    for (commands) |command| switch (command) {
+        .rect => |rect| if (std.meta.eql(rect.color, color)) return true,
+        else => {},
+    };
+    return false;
+}
+
+fn hasIcon(commands: []const ui.Command, value: icon.Icon) bool {
+    const icon_id = icon.id(value);
+    for (commands) |command| switch (command) {
+        .icon_quad => |quad| if (quad.icon_id == icon_id) return true,
+        else => {},
+    };
+    return false;
+}
+
+fn hitRect(regions: []const interaction.Region, id: u32) !ui.Rect {
+    for (regions) |region| {
+        if (region.id == id) return region.bounds;
     }
     return error.MissingHit;
 }

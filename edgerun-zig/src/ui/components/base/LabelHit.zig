@@ -26,7 +26,7 @@ pub fn render(scene: *ui.Scene, bounds: ui.Rect, params: Params, insets: Insets)
 }
 
 pub fn collect(collector: *interaction.Collector, bounds: ui.Rect, params: Params) interaction.Error!void {
-    try collector.add(.{ .kind = params.hit_kind, .id = params.id, .bounds = bounds });
+    try collector.addHit(bounds, params.hit_kind, params.id);
 }
 
 pub fn width(label: []const u8, metrics: WidthMetrics) f32 {

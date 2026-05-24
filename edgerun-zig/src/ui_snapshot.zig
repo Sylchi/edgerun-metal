@@ -10,7 +10,6 @@ const max_commands: usize = 64;
 const max_rects: usize = 256;
 const max_text_vertices: usize = 8192;
 const empty_texture_vertices: usize = 0;
-const empty_alpha = [_]u8{255};
 const SnapshotIrStorage = renderer_ir.FixedBuffers(
     max_rects,
     max_text_vertices,
@@ -43,15 +42,13 @@ fn renderSnapshot(init: std.process.Init, out_path: []const u8) !void {
     var font_atlas = renderer_font_atlas.Atlas.init();
     const sources = renderer_ir.Sources{
         .font = font_atlas.source(),
-        .icon = renderer_font_atlas.nullIconSource(&font_atlas),
     };
     try renderer_ir.packScene(buffers, sources, scene.written());
 
     const surface = try renderer_software.Surface.init(width, height, pixels);
     surface.clear(.bg);
-    _ = try surface.renderIrFrameWithAtlases(buffers, .{
+    _ = try surface.renderIrFrameWithResources(buffers, .{
         .font = .{ .width = renderer_font_atlas.width, .height = renderer_font_atlas.height, .alpha = font_atlas.alphaSlice() },
-        .icon = .{ .width = 1, .height = 1, .alpha = &empty_alpha },
     });
 
     const io = init.io;
@@ -91,7 +88,6 @@ test "snapshot packs and rasterizes through renderer ir" {
     var font_atlas = renderer_font_atlas.Atlas.init();
     const sources = renderer_ir.Sources{
         .font = font_atlas.source(),
-        .icon = renderer_font_atlas.nullIconSource(&font_atlas),
     };
     try renderer_ir.packScene(buffers, sources, scene.written());
     try std.testing.expect(ir_storage.rect_len > 0);
@@ -100,9 +96,8 @@ test "snapshot packs and rasterizes through renderer ir" {
     var pixels: [320 * 240]ui.Color = undefined;
     const surface = try renderer_software.Surface.init(320, 240, &pixels);
     surface.clear(.bg);
-    const receipt = try surface.renderIrFrameWithAtlases(buffers, .{
+    const receipt = try surface.renderIrFrameWithResources(buffers, .{
         .font = .{ .width = renderer_font_atlas.width, .height = renderer_font_atlas.height, .alpha = font_atlas.alphaSlice() },
-        .icon = .{ .width = 1, .height = 1, .alpha = &empty_alpha },
     });
     try std.testing.expect(receipt.valid());
 

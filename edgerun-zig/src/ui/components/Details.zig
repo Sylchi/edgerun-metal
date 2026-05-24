@@ -54,7 +54,7 @@ pub const Details = struct {
     }
 
     pub fn register(registry: *ComponentRegistry) RegistryError!void {
-        try registry.register(descriptor);
+        return common.registerDescriptor(registry, descriptor);
     }
 };
 
@@ -62,14 +62,14 @@ pub const descriptor = common.ComponentDescriptor{
     .name = "details",
     .html_prefix = "<details data-er-component=\"details\"",
     .markdown_prefix = ":::details",
-    .render = renderRegistered,
-    .collect_interactions = collectRegistered,
-    .write_html = writeHtmlRegistered,
-    .write_markdown = writeMarkdownRegistered,
+    .render = common.renderAdapter(Details, renderDetails),
+    .collect_interactions = common.collectAdapter(Details, collectDetailsInteractions),
+    .write_html = common.writeHtmlAdapter(Details, writeHtml),
+    .write_markdown = common.writeMarkdownAdapter(Details, writeMarkdown),
 };
 
 pub fn register(registry: *ComponentRegistry) RegistryError!void {
-    return Details.register(registry);
+    return common.registerDescriptor(registry, descriptor);
 }
 
 pub fn renderDetails(details: Details, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
@@ -88,7 +88,7 @@ pub fn renderDetails(details: Details, scene: *ui.Scene, bounds: ui.Rect, option
 
 pub fn collectDetailsInteractions(details: Details, collector: *interaction.Collector, bounds: ui.Rect) interaction.Error!void {
     const summary_bounds = ui.Rect.init(bounds.x + details_padding_x, bounds.y + details_padding_y, @max(1.0, bounds.w - details_padding_x * 2.0), details_summary_h);
-    try collector.add(.{ .kind = .button, .id = details.id, .bounds = summary_bounds });
+    try collector.addHit(summary_bounds, .button, details.id);
 }
 
 pub fn measureDetails(details: Details, constraints: layout.Constraints) layout.Measurement {
@@ -109,16 +109,6 @@ pub fn measureDetails(details: Details, constraints: layout.Constraints) layout.
     ).withInsets(detailsInsets()).applyExact(constraints);
 }
 
-fn renderRegistered(component: *const anyopaque, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
-    const details: *const Details = @ptrCast(@alignCast(component));
-    return renderDetails(details.*, scene, bounds, options);
-}
-
-fn collectRegistered(component: *const anyopaque, collector: *interaction.Collector, bounds: ui.Rect) interaction.Error!void {
-    const details: *const Details = @ptrCast(@alignCast(component));
-    return collectDetailsInteractions(details.*, collector, bounds);
-}
-
 pub fn writeHtml(details: Details, out: []u8) HtmlError![]u8 {
     var writer = HtmlWriter.init(out);
     try writer.writeAll("<details data-er-component=\"details\"");
@@ -132,11 +122,6 @@ pub fn writeHtml(details: Details, out: []u8) HtmlError![]u8 {
     return writer.written();
 }
 
-fn writeHtmlRegistered(component: *const anyopaque, out: []u8) HtmlError![]u8 {
-    const details: *const Details = @ptrCast(@alignCast(component));
-    return writeHtml(details.*, out);
-}
-
 pub fn writeMarkdown(details: Details, out: []u8) MarkdownError![]u8 {
     if (details.summary.len == 0 or details.body.len == 0) return error.InvalidMarkdown;
     var writer = MarkdownWriter.init(out);
@@ -147,11 +132,6 @@ pub fn writeMarkdown(details: Details, out: []u8) MarkdownError![]u8 {
     try writer.fieldText("body", details.body);
     try writer.endDirective();
     return writer.written();
-}
-
-fn writeMarkdownRegistered(component: *const anyopaque, out: []u8) MarkdownError![]u8 {
-    const details: *const Details = @ptrCast(@alignCast(component));
-    return writeMarkdown(details.*, out);
 }
 
 pub fn readMarkdown(markdown: []const u8, text_out: []u8) MarkdownError!Details {
@@ -239,8 +219,7 @@ test "details component renders summary open body and collects hit target" {
 
     try std.testing.expect(hasText(scene.written(), "Why does DNS matter?"));
     try std.testing.expect(hasTextContaining(scene.written(), "name lookup"));
-    try std.testing.expect(ui_input.hitTest(scene.written(), 20, 20) == null);
-    const hit = ui_input.regionHitTest(collector.written(), 20, 20).?;
+    const hit = ui_input.hitTest(collector.written(), 20, 20).?;
     try std.testing.expectEqual(@as(u32, 32001), hit.id);
 }
 
@@ -336,7 +315,7 @@ test "details registers explicit runtime descriptor" {
     try std.testing.expect(std.mem.indexOf(u8, encoded_html, "<details data-er-component=\"details\"") != null);
     try std.testing.expect(std.mem.indexOf(u8, encoded_markdown, ":::details") != null);
     try std.testing.expect(hasTextContaining(scene.written(), "registered app surface"));
-    try std.testing.expectEqual(@as(u32, 32004), ui_input.regionHitTest(collector.written(), 20, 20).?.id);
+    try std.testing.expectEqual(@as(u32, 32004), ui_input.hitTest(collector.written(), 20, 20).?.id);
 }
 
 fn hasText(commands: []const ui.Command, value: []const u8) bool {

@@ -1,7 +1,6 @@
 const std = @import("std");
 const bytes = @import("bytes.zig");
 const identity = @import("identity.zig");
-const object = @import("object.zig");
 const preimage = @import("preimage.zig");
 
 pub const id_size = preimage.hash_size;
@@ -39,21 +38,29 @@ pub const Policy = struct {
     }
 
     pub fn machineApp(device: identity.Identity, app: identity.Identity) Policy {
+        return machineAppIds(device.id, app.id);
+    }
+
+    pub fn machineAppIds(device: identity.Id, app: identity.Id) Policy {
         return .{
             .scope = .machine_app,
             .algorithm = .tpm_sealed_aes256,
-            .device = device.id,
-            .app = app.id,
+            .device = device,
+            .app = app,
         };
     }
 
     pub fn machineAppUser(device: identity.Identity, app: identity.Identity, user: identity.Identity) Policy {
+        return machineAppUserIds(device.id, app.id, user.id);
+    }
+
+    pub fn machineAppUserIds(device: identity.Id, app: identity.Id, user: identity.Id) Policy {
         return .{
             .scope = .machine_app_user,
             .algorithm = .tpm_sealed_aes256,
-            .device = device.id,
-            .app = app.id,
-            .user = user.id,
+            .device = device,
+            .app = app,
+            .user = user,
         };
     }
 
@@ -64,15 +71,6 @@ pub const Policy = struct {
             .device = source_device.id,
             .app = app.id,
             .user = user.id,
-        };
-    }
-
-    pub fn fromRequirements(req: object.Requirements, device: identity.Identity, app: identity.Identity, user: identity.Identity) Policy {
-        return switch (req.confidentiality) {
-            .public => public(),
-            .integrity_only => integrityOnly(),
-            .app_private, .device_private => machineApp(device, app),
-            .user_private, .user_app_private, .layered => machineAppUser(device, app, user),
         };
     }
 
@@ -122,13 +120,4 @@ test "seal policy captures machine app user binding" {
     try std.testing.expect(bytes.nonzero(&policy.id().?));
     try std.testing.expect(Policy.public().valid());
     try std.testing.expect(Policy.integrityOnly().valid());
-    try std.testing.expect(Policy.fromRequirements(.{
-        .durability = .durable,
-        .confidentiality = .user_private,
-        .portability = .machine_bound,
-        .integrity = .sealed,
-        .lifetime = .retained,
-        .visibility = .private,
-        .access = .explicit_io,
-    }, device, app, user).valid());
 }

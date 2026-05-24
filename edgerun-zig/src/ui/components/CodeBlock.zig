@@ -44,7 +44,7 @@ pub const CodeBlock = struct {
     }
 
     pub fn register(registry: *ComponentRegistry) RegistryError!void {
-        try registry.register(descriptor);
+        return common.registerDescriptor(registry, descriptor);
     }
 };
 
@@ -52,13 +52,13 @@ pub const descriptor = common.ComponentDescriptor{
     .name = "code-block",
     .html_prefix = "<pre data-er-component=\"code-block\"",
     .markdown_prefix = "```",
-    .render = renderRegistered,
-    .write_html = writeHtmlRegistered,
-    .write_markdown = writeMarkdownRegistered,
+    .render = common.renderAdapter(CodeBlock, renderCodeBlock),
+    .write_html = common.writeHtmlAdapter(CodeBlock, writeHtml),
+    .write_markdown = common.writeMarkdownAdapter(CodeBlock, writeMarkdown),
 };
 
 pub fn register(registry: *ComponentRegistry) RegistryError!void {
-    return CodeBlock.register(registry);
+    return common.registerDescriptor(registry, descriptor);
 }
 
 pub fn renderCodeBlock(block: CodeBlock, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
@@ -91,11 +91,6 @@ pub fn measureCodeBlock(block: CodeBlock, constraints: layout.Constraints) layou
     );
 }
 
-fn renderRegistered(component: *const anyopaque, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
-    const block: *const CodeBlock = @ptrCast(@alignCast(component));
-    return renderCodeBlock(block.*, scene, bounds, options);
-}
-
 pub fn writeHtml(block: CodeBlock, out: []u8) HtmlError![]u8 {
     if (block.git_commit) |commit| try validateGitCommitHtml(commit);
     var writer = HtmlWriter.init(out);
@@ -109,11 +104,6 @@ pub fn writeHtml(block: CodeBlock, out: []u8) HtmlError![]u8 {
     }
     try writer.writeAll("</code></pre>");
     return writer.written();
-}
-
-fn writeHtmlRegistered(component: *const anyopaque, out: []u8) HtmlError![]u8 {
-    const block: *const CodeBlock = @ptrCast(@alignCast(component));
-    return writeHtml(block.*, out);
 }
 
 pub fn writeMarkdown(block: CodeBlock, out: []u8) MarkdownError![]u8 {
@@ -134,11 +124,6 @@ pub fn writeMarkdown(block: CodeBlock, out: []u8) MarkdownError![]u8 {
     }
     try writer.writeAll("\n```");
     return writer.written();
-}
-
-fn writeMarkdownRegistered(component: *const anyopaque, out: []u8) MarkdownError![]u8 {
-    const block: *const CodeBlock = @ptrCast(@alignCast(component));
-    return writeMarkdown(block.*, out);
 }
 
 pub fn readMarkdown(markdown: []const u8, out_lines: [][]const u8) MarkdownError!CodeBlock {

@@ -137,18 +137,22 @@ pub const SpawnReceipt = struct {
 
 pub const MemoryViewReceipt = struct {
     owner: identity.Id,
+    allocator: identity.Id,
     reader: identity.Id,
     slice: preimage.Hash,
     offset: u64,
+    authorization: preimage.Hash,
     memory: Grant,
 
     pub fn valid(self: MemoryViewReceipt) bool {
         return self.owner.valid() and
+            self.allocator.valid() and
             self.reader.valid() and
             bytes.nonzero(&self.slice) and
+            bytes.nonzero(&self.authorization) and
             self.memory.valid() and
             self.memory.resource == .read_only_memory and
-            self.memory.issuer.eql(self.owner) and
+            self.memory.issuer.eql(self.allocator) and
             self.memory.subject.eql(self.reader);
     }
 
@@ -156,12 +160,14 @@ pub const MemoryViewReceipt = struct {
         if (!self.valid()) return null;
 
         const grant_id = self.memory.id().?;
-        var raw: [144]u8 = undefined;
+        var raw: [208]u8 = undefined;
         var writer = preimage.Writer.init(&raw);
         if (!writer.id(self.owner) or
+            !writer.id(self.allocator) or
             !writer.id(self.reader) or
             !writer.hash(self.slice) or
             !writer.writeU64(self.offset) or
+            !writer.hash(self.authorization) or
             !writer.hash(grant_id))
         {
             return null;
@@ -234,18 +240,20 @@ pub fn spawnReceiptAllocated(parent: identity.Identity, child: identity.Identity
     };
 }
 
-pub fn memoryViewReceipt(owner: identity.Identity, reader: identity.Id, slice: preimage.Hash, epoch: clock.Stamp, offset: usize, bytes_len: usize) ?MemoryViewReceipt {
+pub fn memoryViewReceipt(owner: identity.Identity, allocator: identity.Identity, reader: identity.Identity, slice: preimage.Hash, authorization: preimage.Hash, epoch: clock.Stamp, offset: usize, bytes_len: usize) ?MemoryViewReceipt {
     const offset_amount = std.math.cast(u64, offset) orelse return null;
     const byte_amount = std.math.cast(u64, bytes_len) orelse return null;
 
     return .{
         .owner = owner.id,
-        .reader = reader,
+        .allocator = allocator.id,
+        .reader = reader.id,
         .slice = slice,
         .offset = offset_amount,
+        .authorization = authorization,
         .memory = .{
-            .issuer = owner.id,
-            .subject = reader,
+            .issuer = allocator.id,
+            .subject = reader.id,
             .resource = .read_only_memory,
             .amount = byte_amount,
             .epoch = epoch,
@@ -286,12 +294,16 @@ test "memory view receipt binds owner reader slice and byte range" {
     const keeper = clock.KeeperId{ .bytes = [_]u8{2} ++ [_]u8{0} ** 31 };
     const epoch = clock.Stamp{ .keeper = keeper };
     const owner = identity.Identity.init(.app, identity.Source.prepare(.hash, &preimage.rawHash("memory owner")).?, epoch).?;
+    const allocator = identity.Identity.init(.app, identity.Source.prepare(.hash, &preimage.rawHash("memory allocator")).?, epoch).?;
     const reader = identity.Identity.init(.app, identity.Source.prepare(.hash, &preimage.rawHash("memory reader")).?, epoch).?;
     const slice = preimage.hash("edgerun:zig:v1:test-slice", "ui-state");
-    const receipt = memoryViewReceipt(owner, reader.id, slice, epoch, 8, 32).?;
+    const authorization = preimage.hash("edgerun:zig:v1:test-memory-grant", "allocator approved");
+    const receipt = memoryViewReceipt(owner, allocator, reader, slice, authorization, epoch, 8, 32).?;
 
     try std.testing.expect(receipt.valid());
     try std.testing.expect(bytes.nonzero(&receipt.id().?));
+    try std.testing.expect(receipt.allocator.eql(allocator.id));
+    try std.testing.expect(bytes.eql(&receipt.authorization, &authorization));
     try std.testing.expectEqual(Resource.read_only_memory, receipt.memory.resource);
     try std.testing.expectEqual(@as(u64, 32), receipt.memory.amount);
     try std.testing.expectEqual(@as(u64, 8), receipt.offset);

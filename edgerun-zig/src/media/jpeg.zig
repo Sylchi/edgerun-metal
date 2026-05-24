@@ -1,6 +1,6 @@
 const std = @import("std");
-const ui = @import("ui.zig");
-const image = @import("image.zig");
+const ui = @import("../ui.zig");
+const image = @import("common.zig");
 
 const marker_prefix: u8 = 0xff;
 const marker_soi: u8 = 0xd8;

@@ -311,7 +311,7 @@ pub fn planAndSubmit(
 pub fn renderCpuAndSubmit(
     surface: NativeSurface,
     buffers: renderer_ir.Buffers,
-    atlases: renderer_software.IrAtlases,
+    resources: renderer_software.IrResources,
     framebuffer: CpuFramebuffer,
     background: ui.Color,
     refresh_hz: u32,
@@ -328,8 +328,8 @@ pub fn renderCpuAndSubmit(
 
     const software_surface = try renderer_software.Surface.init(framebuffer.width, framebuffer.height, framebuffer.pixels);
     software_surface.clear(background);
-    _ = try software_surface.renderIrFrameWithAtlases(buffers, atlases);
-    return planAndSubmit(surface, buffers, atlases.resources(), refresh_hz, tile_width, tile_height, tile_marks, dirty_ids, sink);
+    _ = try software_surface.renderIrFrameWithResources(buffers, resources);
+    return planAndSubmit(surface, buffers, resources.presentationResources(), refresh_hz, tile_width, tile_height, tile_marks, dirty_ids, sink);
 }
 
 pub fn renderGpuAndSubmit(
@@ -756,9 +756,8 @@ test "native cpu render submits drm commit from canonical ir" {
 
     var pixels: [64 * 64]ui.Color = undefined;
     const alpha = [_]u8{255};
-    const atlases = renderer_software.IrAtlases{
+    const resources = renderer_software.IrResources{
         .font = .{ .width = 1, .height = 1, .alpha = &alpha },
-        .icon = .{ .width = 1, .height = 1, .alpha = &alpha },
     };
     var tile_marks: [16]u8 = undefined;
     var dirty_ids: [16]u32 = undefined;
@@ -773,7 +772,7 @@ test "native cpu render submits drm commit from canonical ir" {
             .stride = 64,
         } },
         buffers,
-        atlases,
+        resources,
         .{ .width = 64, .height = 64, .pixels = &pixels },
         .clear,
         60,
@@ -797,9 +796,8 @@ test "native cpu render rejects framebuffer size mismatch" {
 
     var pixels: [32 * 32]ui.Color = undefined;
     const alpha = [_]u8{255};
-    const atlases = renderer_software.IrAtlases{
+    const resources = renderer_software.IrResources{
         .font = .{ .width = 1, .height = 1, .alpha = &alpha },
-        .icon = .{ .width = 1, .height = 1, .alpha = &alpha },
     };
     var tile_marks: [16]u8 = undefined;
     var dirty_ids: [16]u32 = undefined;
@@ -814,7 +812,7 @@ test "native cpu render rejects framebuffer size mismatch" {
             .stride = 64,
         } },
         buffers,
-        atlases,
+        resources,
         .{ .width = 32, .height = 32, .pixels = &pixels },
         .clear,
         60,

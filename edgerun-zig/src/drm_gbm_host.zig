@@ -4,6 +4,7 @@ const renderer_gles = @import("renderer_gles.zig");
 const renderer_ir = @import("renderer_ir.zig");
 const site_landing = @import("site_landing.zig");
 const ui = @import("ui.zig");
+const interaction = @import("ui_interaction.zig");
 
 const linux = std.os.linux;
 const posix = std.posix;
@@ -23,6 +24,7 @@ const crtc_depth: u8 = 24;
 const crtc_bpp: u8 = 32;
 const max_commands: usize = 4096;
 const max_clips: usize = 64;
+const max_interaction_regions: usize = 1024;
 const max_rects: usize = 8192;
 const max_text_vertices: usize = 24576;
 const max_icon_vertices: usize = 4096;
@@ -68,11 +70,13 @@ const EglState = struct {
 const SceneState = struct {
     commands: [max_commands]ui.Command = undefined,
     clips: [max_clips]ui.Rect = undefined,
+    regions: [max_interaction_regions]interaction.Region = undefined,
     ir_storage: IrStorage = .{},
 
     fn rebuild(self: *SceneState, width: i32, height: i32, font_atlas: *renderer_font_atlas.Atlas) !renderer_ir.Buffers {
         var scene = ui.Scene.initWithClips(&self.commands, &self.clips);
-        try site_landing.render(&scene, .{
+        var collector = interaction.Collector.init(&self.regions);
+        try site_landing.render(&scene, &collector, .{
             .x = 0,
             .y = 0,
             .w = @floatFromInt(width),

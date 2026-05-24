@@ -52,7 +52,7 @@ pub const Breadcrumb = struct {
     }
 
     pub fn register(registry: *ComponentRegistry) RegistryError!void {
-        try registry.register(descriptor);
+        return common.registerDescriptor(registry, descriptor);
     }
 };
 
@@ -60,14 +60,14 @@ pub const descriptor = common.ComponentDescriptor{
     .name = "breadcrumb",
     .html_prefix = "<nav data-er-component=\"breadcrumb\"",
     .markdown_prefix = ":::breadcrumb",
-    .render = renderRegistered,
-    .collect_interactions = collectRegistered,
-    .write_html = writeHtmlRegistered,
-    .write_markdown = writeMarkdownRegistered,
+    .render = common.renderAdapter(Breadcrumb, renderBreadcrumb),
+    .collect_interactions = common.collectAdapter(Breadcrumb, collectBreadcrumbInteractions),
+    .write_html = common.writeHtmlAdapter(Breadcrumb, writeHtml),
+    .write_markdown = common.writeMarkdownAdapter(Breadcrumb, writeMarkdown),
 };
 
 pub fn register(registry: *ComponentRegistry) RegistryError!void {
-    return Breadcrumb.register(registry);
+    return common.registerDescriptor(registry, descriptor);
 }
 
 pub fn renderBreadcrumb(breadcrumb: Breadcrumb, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
@@ -106,16 +106,6 @@ pub fn collectBreadcrumbInteractions(breadcrumb: Breadcrumb, collector: *interac
     }
 }
 
-fn renderRegistered(component: *const anyopaque, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
-    const breadcrumb: *const Breadcrumb = @ptrCast(@alignCast(component));
-    return renderBreadcrumb(breadcrumb.*, scene, bounds, options);
-}
-
-fn collectRegistered(component: *const anyopaque, collector: *interaction.Collector, bounds: ui.Rect) interaction.Error!void {
-    const breadcrumb: *const Breadcrumb = @ptrCast(@alignCast(component));
-    return collectBreadcrumbInteractions(breadcrumb.*, collector, bounds);
-}
-
 pub fn writeHtml(breadcrumb: Breadcrumb, out: []u8) HtmlError![]u8 {
     if (breadcrumb.items.len == 0) return error.InvalidHtml;
     var writer = HtmlWriter.init(out);
@@ -135,11 +125,6 @@ pub fn writeHtml(breadcrumb: Breadcrumb, out: []u8) HtmlError![]u8 {
     return writer.written();
 }
 
-fn writeHtmlRegistered(component: *const anyopaque, out: []u8) HtmlError![]u8 {
-    const breadcrumb: *const Breadcrumb = @ptrCast(@alignCast(component));
-    return writeHtml(breadcrumb.*, out);
-}
-
 pub fn writeMarkdown(breadcrumb: Breadcrumb, out: []u8) MarkdownError![]u8 {
     if (breadcrumb.items.len == 0) return error.InvalidMarkdown;
     var writer = MarkdownWriter.init(out);
@@ -153,11 +138,6 @@ pub fn writeMarkdown(breadcrumb: Breadcrumb, out: []u8) MarkdownError![]u8 {
     }
     try writer.endDirective();
     return writer.written();
-}
-
-fn writeMarkdownRegistered(component: *const anyopaque, out: []u8) MarkdownError![]u8 {
-    const breadcrumb: *const Breadcrumb = @ptrCast(@alignCast(component));
-    return writeMarkdown(breadcrumb.*, out);
 }
 
 pub fn readMarkdown(markdown: []const u8, out_items: []BreadcrumbItem, text_out: []u8) MarkdownError!Breadcrumb {
@@ -252,8 +232,7 @@ test "breadcrumb component renders path and collects hit targets" {
 
     try std.testing.expect(hasText(scene.written(), "Academy"));
     try std.testing.expect(hasText(scene.written(), "DNS"));
-    try std.testing.expect(ui_input.hitTest(scene.written(), 92, 20) == null);
-    const hit = ui_input.regionHitTest(collector.written(), 92, 20).?;
+    const hit = ui_input.hitTest(collector.written(), 92, 20).?;
     try std.testing.expectEqual(@as(u32, 35002), hit.id);
 }
 
@@ -316,7 +295,7 @@ test "breadcrumb registers explicit runtime descriptor" {
     try std.testing.expect(std.mem.indexOf(u8, encoded_html, "<nav data-er-component=\"breadcrumb\"") != null);
     try std.testing.expect(std.mem.indexOf(u8, encoded_markdown, ":::breadcrumb") != null);
     try std.testing.expect(hasText(scene.written(), "DNS"));
-    try std.testing.expectEqual(@as(u32, 35202), ui_input.regionHitTest(collector.written(), 92, 20).?.id);
+    try std.testing.expectEqual(@as(u32, 35202), ui_input.hitTest(collector.written(), 92, 20).?.id);
 }
 
 fn hasText(commands: []const ui.Command, value: []const u8) bool {

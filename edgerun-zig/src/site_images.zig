@@ -1,4 +1,4 @@
-const image = @import("image.zig");
+const image = @import("media/image.zig");
 const renderer_software = @import("renderer_software.zig");
 const ui = @import("ui.zig");
 

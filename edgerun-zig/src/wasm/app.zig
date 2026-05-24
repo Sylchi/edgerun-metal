@@ -9,7 +9,7 @@ const byte_utils = @import("../bytes.zig");
 const App = app_mod.App;
 
 pub const ReceiptContext = struct {
-    parent: identity.Id,
+    parent: identity.Identity,
     input: preimage.Hash,
     app_hash: preimage.Hash,
     manifest: preimage.Hash,

@@ -225,7 +225,6 @@ pub fn build(b: *std.Build) void {
     wayland_egl_window.root_module.addCSourceFile(.{ .file = xdg_shell_code });
     wayland_egl_window.root_module.linkSystemLibrary("c", .{});
     wayland_egl_window.root_module.linkSystemLibrary("wayland-client", .{});
-    wayland_egl_window.root_module.linkSystemLibrary("wayland-cursor", .{});
     wayland_egl_window.root_module.linkSystemLibrary("wayland-egl", .{});
     wayland_egl_window.root_module.linkSystemLibrary("EGL", .{});
     wayland_egl_window.root_module.linkSystemLibrary("GLESv2", .{});
@@ -316,17 +315,14 @@ pub fn build(b: *std.Build) void {
         "er_ui_font_atlas_height",
         "er_ui_font_atlas_ptr",
         "er_ui_font_atlas_generation",
-        "er_ui_icon_atlas_width",
-        "er_ui_icon_atlas_height",
-        "er_ui_icon_atlas_ptr",
+        "er_ui_icon_vector_ptr",
+        "er_ui_icon_vector_len",
         "er_ui_width",
         "er_ui_height",
         "er_ui_input_ptr",
         "er_ui_input_capacity",
         "er_ui_last_error",
         "er_ui_set_device_scale",
-        "er_ui_cursor_css_ptr",
-        "er_ui_cursor_css_len",
         "er_ui_browser_boot",
         "er_ui_browser_event",
         "er_ui_host_command_count",

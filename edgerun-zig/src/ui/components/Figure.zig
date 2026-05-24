@@ -48,7 +48,7 @@ pub const Figure = struct {
     }
 
     pub fn register(registry: *ComponentRegistry) RegistryError!void {
-        try registry.register(descriptor);
+        return common.registerDescriptor(registry, descriptor);
     }
 };
 
@@ -56,13 +56,13 @@ pub const descriptor = common.ComponentDescriptor{
     .name = "figure",
     .html_prefix = "<figure data-er-component=\"figure\"",
     .markdown_prefix = ":::figure",
-    .render = renderRegistered,
-    .write_html = writeHtmlRegistered,
-    .write_markdown = writeMarkdownRegistered,
+    .render = common.renderAdapter(Figure, renderFigure),
+    .write_html = common.writeHtmlAdapter(Figure, writeHtml),
+    .write_markdown = common.writeMarkdownAdapter(Figure, writeMarkdown),
 };
 
 pub fn register(registry: *ComponentRegistry) RegistryError!void {
-    return Figure.register(registry);
+    return common.registerDescriptor(registry, descriptor);
 }
 
 pub fn renderFigure(figure: Figure, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
@@ -91,11 +91,6 @@ pub fn measureFigure(figure: Figure, constraints: layout.Constraints) layout.Mea
     ).withInsets(figureInsets()).applyExact(constraints);
 }
 
-fn renderRegistered(component: *const anyopaque, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
-    const figure: *const Figure = @ptrCast(@alignCast(component));
-    return renderFigure(figure.*, scene, bounds, options);
-}
-
 pub fn writeHtml(figure: Figure, out: []u8) HtmlError![]u8 {
     if (figure.src.len == 0 or figure.alt.len == 0 or figure.caption.len == 0) return error.InvalidHtml;
     var writer = HtmlWriter.init(out);
@@ -108,11 +103,6 @@ pub fn writeHtml(figure: Figure, out: []u8) HtmlError![]u8 {
     return writer.written();
 }
 
-fn writeHtmlRegistered(component: *const anyopaque, out: []u8) HtmlError![]u8 {
-    const figure: *const Figure = @ptrCast(@alignCast(component));
-    return writeHtml(figure.*, out);
-}
-
 pub fn writeMarkdown(figure: Figure, out: []u8) MarkdownError![]u8 {
     if (figure.src.len == 0 or figure.alt.len == 0 or figure.caption.len == 0) return error.InvalidMarkdown;
     var writer = MarkdownWriter.init(out);
@@ -122,11 +112,6 @@ pub fn writeMarkdown(figure: Figure, out: []u8) MarkdownError![]u8 {
     try writer.fieldText("caption", figure.caption);
     try writer.endDirective();
     return writer.written();
-}
-
-fn writeMarkdownRegistered(component: *const anyopaque, out: []u8) MarkdownError![]u8 {
-    const figure: *const Figure = @ptrCast(@alignCast(component));
-    return writeMarkdown(figure.*, out);
 }
 
 pub fn readMarkdown(markdown: []const u8, text_out: []u8) MarkdownError!Figure {

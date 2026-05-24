@@ -79,7 +79,7 @@ pub fn renderArticleListItem(article: ArticleListItem, scene: *ui.Scene, bounds:
 }
 
 pub fn collectArticleListItemInteractions(article: ArticleListItem, collector: *interaction.Collector, bounds: ui.Rect) interaction.Error!void {
-    try collector.add(.{ .kind = .button, .id = article.id, .bounds = bounds });
+    try collector.addHit(bounds, .button, article.id);
 }
 
 const article_list_padding_x: f32 = 6.0;
@@ -142,9 +142,7 @@ test "article list item expands around wrapped titles and summaries" {
     try std.testing.expect(long_height > short_height);
     try long_article.render(&scene, ui.Rect.init(0.0, 0.0, 420.0, long_height), .{});
     try long_article.collectInteractions(&collector, ui.Rect.init(0.0, 0.0, 420.0, long_height));
-
-    try std.testing.expect(ui_input.hitTest(scene.written(), 20.0, 20.0) == null);
-    const hit = ui_input.regionHitTest(collector.written(), 20.0, 20.0).?;
+    const hit = ui_input.hitTest(collector.written(), 20.0, 20.0).?;
     try std.testing.expectEqual(@as(u32, 4202), hit.id);
     try std.testing.expect(hasTextContaining(scene.written(), "very long lesson"));
     try std.testing.expect(hasTextContaining(scene.written(), "operating system"));

@@ -19,6 +19,7 @@ pub const max_axes = 16;
 pub const max_avar_segments = 96;
 pub const max_kern_pairs = 1024;
 pub const max_points = 768;
+pub const max_contours = 128;
 pub const max_contour_points = max_points * 2 + 2;
 pub const max_edges = 2048;
 pub const max_curves = 1024;
@@ -27,8 +28,8 @@ pub const vertices_per_glyph = 6;
 pub const default_px_size: f32 = 18.0;
 const glyph_padding = 1;
 const raster_samples_small: usize = 8;
-const raster_samples_medium: usize = 6;
-const raster_samples_large: usize = 4;
+const raster_samples_medium: usize = 8;
+const raster_samples_large: usize = 8;
 const raster_small_px_limit: f32 = 14.0;
 const raster_medium_px_limit: f32 = 28.0;
 const msdf_channels = 3;
@@ -123,7 +124,7 @@ const Table = struct {
     len: usize,
 };
 
-const Point = struct {
+pub const Point = struct {
     x: f32,
     y: f32,
     on_curve: bool,
@@ -166,7 +167,7 @@ pub const AtlasFormat = enum {
     }
 };
 
-const OutlineCounts = struct {
+pub const OutlineCounts = struct {
     points: usize,
     contours: usize,
 };
@@ -516,6 +517,29 @@ pub const Face = struct {
         return out[0..text.len];
     }
 
+    pub fn fixedAxisValues(self: Face, comptime axis_tag: *const [4:0]u8, value: f32) [max_axes]f32 {
+        var values = [_]f32{0.0} ** max_axes;
+        for (self.axes[0..self.axis_count], 0..) |axis, index| {
+            if (std.mem.eql(u8, &axis.tag, axis_tag[0..4])) {
+                values[index] = self.mapAxisValue(index, value);
+                return values;
+            }
+        }
+        return values;
+    }
+
+    pub fn outline(
+        self: Face,
+        glyph_id: u16,
+        axis_values: [max_axes]f32,
+        points: *[max_points]Point,
+        contour_ends: *[max_contours]u16,
+    ) Error!OutlineCounts {
+        const counts = try self.loadGlyphOutline(glyph_id, points, contour_ends, 0);
+        try self.applyGvar(glyph_id, points[0..counts.points], contour_ends[0..counts.contours], axis_values);
+        return counts;
+    }
+
     fn parseDirectory(self: *Face) Error!void {
         if (self.data.len < 12) return error.InvalidFont;
         const scalar = readU32(self.data, 0);
@@ -795,12 +819,12 @@ pub const Face = struct {
         }
         if (glyph.len < 10) return error.InvalidFont;
         var points: [max_points]Point = undefined;
-        var contour_ends: [128]u16 = undefined;
-        const outline = try self.loadGlyphOutline(glyph_id, &points, &contour_ends, 0);
-        if (outline.contours == 0 or outline.points == 0) {
+        var contour_ends: [max_contours]u16 = undefined;
+        const outline_counts = try self.loadGlyphOutline(glyph_id, &points, &contour_ends, 0);
+        if (outline_counts.contours == 0 or outline_counts.points == 0) {
             return emptyGlyph(glyph_id, px_size, advance_value, start, variation_key, format);
         }
-        try self.applyGvar(glyph_id, points[0..outline.points], contour_ends[0..outline.contours], axis_values);
+        try self.applyGvar(glyph_id, points[0..outline_counts.points], contour_ends[0..outline_counts.contours], axis_values);
         var edges: [max_edges]Edge = undefined;
         var curves: [max_curves]Curve = undefined;
         var edge_colors: [max_edges]u8 = undefined;
@@ -808,15 +832,15 @@ pub const Face = struct {
         const scale = px_size / @as(f32, @floatFromInt(self.units_per_em));
         const raster = switch (format) {
             .alpha8 => RasterOutline{
-                .edge_count = try flattenContours(points[0..outline.points], contour_ends[0..outline.contours], &edges, 0.0, 0.0, scale),
+                .edge_count = try flattenContours(points[0..outline_counts.points], contour_ends[0..outline_counts.contours], &edges, 0.0, 0.0, scale),
                 .curve_count = 0,
             },
-            .sdf8 => try buildMsdfOutline(points[0..outline.points], contour_ends[0..outline.contours], scale, &edges, &edge_colors, &curves, &curve_colors),
-            .msdf_rgb => try buildMsdfOutline(points[0..outline.points], contour_ends[0..outline.contours], scale, &edges, &edge_colors, &curves, &curve_colors),
+            .sdf8 => try buildMsdfOutline(points[0..outline_counts.points], contour_ends[0..outline_counts.contours], scale, &edges, &edge_colors, &curves, &curve_colors),
+            .msdf_rgb => try buildMsdfOutline(points[0..outline_counts.points], contour_ends[0..outline_counts.contours], scale, &edges, &edge_colors, &curves, &curve_colors),
         };
         if (raster.edge_count == 0 and raster.curve_count == 0) return emptyGlyph(glyph_id, px_size, advance_value, start, variation_key, format);
 
-        const design_bounds = pointBounds(points[0..outline.points]);
+        const design_bounds = pointBounds(points[0..outline_counts.points]);
         const left = @as(i16, @intFromFloat(@floor(design_bounds.x_min * scale))) - glyph_padding;
         const right = @as(i16, @intFromFloat(@ceil(design_bounds.x_max * scale))) + glyph_padding;
         const top = @as(i16, @intFromFloat(@floor(-design_bounds.y_max * scale))) - glyph_padding;
@@ -964,7 +988,7 @@ pub const Face = struct {
         return .{ .start = start, .end = end };
     }
 
-    fn loadGlyphOutline(self: Face, glyph_id: u16, points: *[max_points]Point, contour_ends: *[128]u16, depth: usize) Error!OutlineCounts {
+    fn loadGlyphOutline(self: Face, glyph_id: u16, points: *[max_points]Point, contour_ends: *[max_contours]u16, depth: usize) Error!OutlineCounts {
         if (depth > max_composite_depth) return error.UnsupportedGlyph;
         const glyph = self.glyphSlice(glyph_id) orelse return error.InvalidFont;
         if (glyph.len == 0) return .{ .points = 0, .contours = 0 };
@@ -977,7 +1001,7 @@ pub const Face = struct {
         return self.loadCompositeGlyph(glyph, points, contour_ends, depth);
     }
 
-    fn loadCompositeGlyph(self: Face, glyph: []const u8, points: *[max_points]Point, contour_ends: *[128]u16, depth: usize) Error!OutlineCounts {
+    fn loadCompositeGlyph(self: Face, glyph: []const u8, points: *[max_points]Point, contour_ends: *[max_contours]u16, depth: usize) Error!OutlineCounts {
         var cursor: usize = 10;
         var out_points: usize = 0;
         var out_contours: usize = 0;
@@ -1027,7 +1051,7 @@ pub const Face = struct {
             }
 
             var component_points: [max_points]Point = undefined;
-            var component_contours: [128]u16 = undefined;
+            var component_contours: [max_contours]u16 = undefined;
             const component = try self.loadGlyphOutline(component_glyph, &component_points, &component_contours, depth + 1);
             if (out_points + component.points > max_points or out_contours + component.contours > contour_ends.len) return error.GlyphPointBudgetExceeded;
 
@@ -1053,7 +1077,7 @@ pub const Face = struct {
     }
 };
 
-fn parseSimpleGlyph(glyph: []const u8, contour_count: usize, points: *[max_points]Point, contour_ends: *[128]u16) Error!usize {
+fn parseSimpleGlyph(glyph: []const u8, contour_count: usize, points: *[max_points]Point, contour_ends: *[max_contours]u16) Error!usize {
     if (contour_count > contour_ends.len) return error.GlyphPointBudgetExceeded;
     var cursor: usize = 10;
     var i: usize = 0;

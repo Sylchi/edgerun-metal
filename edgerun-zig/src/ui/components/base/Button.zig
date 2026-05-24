@@ -35,7 +35,7 @@ pub fn render(scene: *ui.Scene, bounds: ui.Rect, params: Params, options: Render
 }
 
 pub fn collectInteractions(collector: *interaction.Collector, bounds: ui.Rect, params: Params) interaction.Error!void {
-    try collector.add(.{ .kind = .button, .id = params.id, .bounds = bounds });
+    try collector.addHit(bounds, .button, params.id);
 }
 
 pub fn measure(label: []const u8, constraints: layout.Constraints) layout.Measurement {
@@ -67,7 +67,7 @@ fn renderContent(scene: *ui.Scene, bounds: ui.Rect, label: []const u8, text_colo
     if (leading_icon) |value| {
         try scene.pushIconQuad(.{
             .bounds = ui.Rect.init(cursor_x, icon_y, icon_size, icon_size),
-            .atlas_id = icon.atlasId(value),
+            .icon_id = icon.id(value),
             .color = text_color,
         });
         cursor_x += icon_size + icon_gap;
@@ -79,7 +79,7 @@ fn renderContent(scene: *ui.Scene, bounds: ui.Rect, label: []const u8, text_colo
     if (trailing_icon) |value| {
         try scene.pushIconQuad(.{
             .bounds = ui.Rect.init(cursor_x, icon_y, icon_size, icon_size),
-            .atlas_id = icon.atlasId(value),
+            .icon_id = icon.id(value),
             .color = text_color,
         });
     }

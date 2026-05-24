@@ -1,6 +1,7 @@
 const std = @import("std");
 const common = @import("../../ui_component_common.zig");
 const interaction = @import("../../ui_interaction.zig");
+const flex = @import("../../layouts/Flex.zig");
 const layout = @import("../../layouts/Types.zig");
 const base_info_row = @import("base/InfoRow.zig");
 const base_surface = @import("base/Surface.zig");
@@ -58,7 +59,7 @@ pub const DefinitionList = struct {
     }
 
     pub fn register(registry: *ComponentRegistry) RegistryError!void {
-        try registry.register(descriptor);
+        return common.registerDescriptor(registry, descriptor);
     }
 };
 
@@ -66,42 +67,33 @@ pub const descriptor = common.ComponentDescriptor{
     .name = "definition-list",
     .html_prefix = "<dl data-er-component=\"definition-list\"",
     .markdown_prefix = ":::definitions",
-    .render = renderRegistered,
-    .collect_interactions = collectRegistered,
-    .write_html = writeHtmlRegistered,
-    .write_markdown = writeMarkdownRegistered,
+    .render = common.renderAdapter(DefinitionList, renderDefinitionList),
+    .collect_interactions = common.collectAdapter(DefinitionList, collectDefinitionListInteractions),
+    .write_html = common.writeHtmlAdapter(DefinitionList, writeHtml),
+    .write_markdown = common.writeMarkdownAdapter(DefinitionList, writeMarkdown),
 };
 
 pub fn register(registry: *ComponentRegistry) RegistryError!void {
-    return DefinitionList.register(registry);
+    return common.registerDescriptor(registry, descriptor);
 }
 
 pub fn renderDefinitionList(list: DefinitionList, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
     if (list.items.len == 0) return;
     try base_surface.renderFrame(scene, bounds, options);
 
-    var y = bounds.y + definition_padding_y;
-    const content_x = bounds.x + definition_padding_x;
-    const content_w = @max(1.0, bounds.w - definition_padding_x * 2.0);
-    const bottom = bounds.y + bounds.h - definition_padding_y;
+    var cursor = definitionCursor(bounds);
     for (list.items) |item| {
-        if (y + definition_row_metrics.height > bottom) break;
-        const item_bounds = ui.Rect.init(content_x, y, content_w, definition_row_metrics.height);
+        const item_bounds = cursor.nextWithinBounds(measureDefinitionItem(item, .{})) orelse break;
         try base_info_row.render(scene, item_bounds, .{ .id = item.id, .title = item.term, .detail = item.detail }, definition_row_metrics, options);
-        y += definition_row_metrics.height + definition_item_gap;
     }
 }
 
 pub fn collectDefinitionListInteractions(list: DefinitionList, collector: *interaction.Collector, bounds: ui.Rect) interaction.Error!void {
     if (list.items.len == 0) return;
-    var y = bounds.y + definition_padding_y;
-    const content_x = bounds.x + definition_padding_x;
-    const content_w = @max(1.0, bounds.w - definition_padding_x * 2.0);
-    const bottom = bounds.y + bounds.h - definition_padding_y;
+    var cursor = definitionCursor(bounds);
     for (list.items) |item| {
-        if (y + definition_row_metrics.height > bottom) break;
-        try base_info_row.collectInteractions(collector, ui.Rect.init(content_x, y, content_w, definition_row_metrics.height), .{ .id = item.id, .title = item.term, .detail = item.detail });
-        y += definition_row_metrics.height + definition_item_gap;
+        const item_bounds = cursor.nextWithinBounds(measureDefinitionItem(item, .{})) orelse break;
+        try base_info_row.collectInteractions(collector, item_bounds, .{ .id = item.id, .title = item.term, .detail = item.detail });
     }
 }
 
@@ -122,16 +114,6 @@ pub fn measureDefinitionList(list: DefinitionList, constraints: layout.Constrain
     ).withInsets(definitionInsets()).applyExact(constraints);
 }
 
-fn renderRegistered(component: *const anyopaque, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
-    const list: *const DefinitionList = @ptrCast(@alignCast(component));
-    return renderDefinitionList(list.*, scene, bounds, options);
-}
-
-fn collectRegistered(component: *const anyopaque, collector: *interaction.Collector, bounds: ui.Rect) interaction.Error!void {
-    const list: *const DefinitionList = @ptrCast(@alignCast(component));
-    return collectDefinitionListInteractions(list.*, collector, bounds);
-}
-
 pub fn writeHtml(list: DefinitionList, out: []u8) HtmlError![]u8 {
     if (list.items.len == 0) return error.InvalidHtml;
     var writer = HtmlWriter.init(out);
@@ -150,11 +132,6 @@ pub fn writeHtml(list: DefinitionList, out: []u8) HtmlError![]u8 {
     return writer.written();
 }
 
-fn writeHtmlRegistered(component: *const anyopaque, out: []u8) HtmlError![]u8 {
-    const list: *const DefinitionList = @ptrCast(@alignCast(component));
-    return writeHtml(list.*, out);
-}
-
 pub fn writeMarkdown(list: DefinitionList, out: []u8) MarkdownError![]u8 {
     if (list.items.len == 0) return error.InvalidMarkdown;
     var writer = MarkdownWriter.init(out);
@@ -167,11 +144,6 @@ pub fn writeMarkdown(list: DefinitionList, out: []u8) MarkdownError![]u8 {
     }
     try writer.endDirective();
     return writer.written();
-}
-
-fn writeMarkdownRegistered(component: *const anyopaque, out: []u8) MarkdownError![]u8 {
-    const list: *const DefinitionList = @ptrCast(@alignCast(component));
-    return writeMarkdown(list.*, out);
 }
 
 pub fn readMarkdown(markdown: []const u8, out_items: []DefinitionItem, text_out: []u8) MarkdownError!DefinitionList {
@@ -234,6 +206,10 @@ fn measureDefinitionItem(item: DefinitionItem, constraints: layout.Constraints) 
     return base_info_row.measure(item.term, item.detail, constraints, definition_row_metrics);
 }
 
+fn definitionCursor(bounds: ui.Rect) flex.Cursor {
+    return flex.Cursor.init(bounds, .{ .axis = .vertical, .gap = definition_item_gap, .padding = definitionInsets() });
+}
+
 fn definitionInsets() layout.Insets {
     return .{ .top = definition_padding_y, .right = definition_padding_x, .bottom = definition_padding_y, .left = definition_padding_x };
 }
@@ -253,8 +229,7 @@ test "definition list component renders glossary rows and collects hit targets" 
     try list.collectInteractions(&collector, ui.Rect.init(0, 0, 380, 200));
 
     try std.testing.expect(hasText(scene.written(), "DNS"));
-    try std.testing.expect(ui_input.hitTest(scene.written(), 24, 104) == null);
-    const hit = ui_input.regionHitTest(collector.written(), 24, 104).?;
+    const hit = ui_input.hitTest(collector.written(), 24, 104).?;
     try std.testing.expectEqual(@as(u32, 36002), hit.id);
 }
 
@@ -331,7 +306,7 @@ test "definition list registers explicit runtime descriptor" {
     try std.testing.expect(std.mem.indexOf(u8, encoded_html, "<dl data-er-component=\"definition-list\"") != null);
     try std.testing.expect(std.mem.indexOf(u8, encoded_markdown, ":::definitions") != null);
     try std.testing.expect(hasText(scene.written(), "Capability"));
-    try std.testing.expectEqual(@as(u32, 36202), ui_input.regionHitTest(collector.written(), 24, 104).?.id);
+    try std.testing.expectEqual(@as(u32, 36202), ui_input.hitTest(collector.written(), 24, 104).?.id);
 }
 
 fn hasText(commands: []const ui.Command, value: []const u8) bool {

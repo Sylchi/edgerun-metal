@@ -4,7 +4,6 @@ const renderer_ir = @import("renderer_ir.zig");
 pub const Error = renderer_ir.Error || error{
     InvalidTarget,
     MissingFontAtlas,
-    MissingIconAtlas,
     MissingImageTexture,
 };
 
@@ -62,13 +61,11 @@ pub const Target = struct {
 
 pub const Resources = struct {
     font_atlas: bool = false,
-    icon_atlas: bool = false,
     image_texture: bool = false,
 };
 
 pub const Requirements = struct {
     font_atlas: bool,
-    icon_atlas: bool,
     image_texture: bool,
 };
 
@@ -115,14 +112,12 @@ pub const Frame = struct {
 pub fn validateResources(buffers: renderer_ir.Buffers, resources: Resources) Error!void {
     const required = bufferRequirements(buffers);
     if (required.font_atlas and !resources.font_atlas) return error.MissingFontAtlas;
-    if (required.icon_atlas and !resources.icon_atlas) return error.MissingIconAtlas;
     if (required.image_texture and !resources.image_texture) return error.MissingImageTexture;
 }
 
 pub fn bufferRequirements(buffers: renderer_ir.Buffers) Requirements {
     return .{
         .font_atlas = buffers.text_vertex_len.* != 0 or buffers.overlay_text_vertex_len.* != 0,
-        .icon_atlas = buffers.icon_vertex_len.* != 0 or buffers.overlay_icon_vertex_len.* != 0,
         .image_texture = buffers.image_vertex_len.* != 0,
     };
 }
@@ -187,48 +182,47 @@ test "presentation frame rejects invalid dimensions and missing texture resource
     };
     try std.testing.expectError(error.MissingFontAtlas, text_frame.validate());
 
-    var icon_storage = renderer_ir.FixedBuffers(0, 0, renderer_ir.textured_quad_vertex_count, 0, 0, 0, 0){};
-    icon_storage.icon_vertex_len = renderer_ir.textured_quad_vertex_count * renderer_ir.icon_vertex_float_stride;
+    var icon_storage = renderer_ir.FixedBuffers(0, 0, 1, 0, 0, 0, 0){};
+    icon_storage.icon_vertex_len = renderer_ir.icon_instance_float_stride;
     const icon_frame = Frame{
         .target = .{ .kind = .browser, .width = 64, .height = 48 },
         .buffers = icon_storage.buffers(),
         .resources = .{ .font_atlas = true },
     };
-    try std.testing.expectError(error.MissingIconAtlas, icon_frame.validate());
+    try icon_frame.validate();
 
     var image_storage = renderer_ir.FixedBuffers(0, 0, 0, renderer_ir.textured_quad_vertex_count, 0, 0, 0){};
     image_storage.image_vertex_len = renderer_ir.textured_quad_vertex_count * renderer_ir.image_vertex_float_stride;
     const image_frame = Frame{
         .target = .{ .kind = .drm, .width = 64, .height = 48 },
         .buffers = image_storage.buffers(),
-        .resources = .{ .font_atlas = true, .icon_atlas = true },
+        .resources = .{ .font_atlas = true },
     };
     try std.testing.expectError(error.MissingImageTexture, image_frame.validate());
 
     const invalid_target = Frame{
         .target = .{ .kind = .wayland, .width = 0, .height = 48 },
         .buffers = image_storage.buffers(),
-        .resources = .{ .font_atlas = true, .icon_atlas = true, .image_texture = true },
+        .resources = .{ .font_atlas = true, .image_texture = true },
     };
     try std.testing.expectError(error.InvalidTarget, invalid_target.validate());
 }
 
 test "presentation receipt records canonical resource requirements" {
-    var storage = renderer_ir.FixedBuffers(0, renderer_ir.textured_quad_vertex_count, renderer_ir.textured_quad_vertex_count, renderer_ir.textured_quad_vertex_count, 0, 0, 0){};
+    var storage = renderer_ir.FixedBuffers(0, renderer_ir.textured_quad_vertex_count, 1, renderer_ir.textured_quad_vertex_count, 0, 0, 0){};
     storage.text_vertex_len = renderer_ir.textured_quad_vertex_count * renderer_ir.text_vertex_float_stride;
-    storage.icon_vertex_len = renderer_ir.textured_quad_vertex_count * renderer_ir.icon_vertex_float_stride;
+    storage.icon_vertex_len = renderer_ir.icon_instance_float_stride;
     storage.image_vertex_len = renderer_ir.textured_quad_vertex_count * renderer_ir.image_vertex_float_stride;
 
     const frame = Frame{
         .target = .{ .kind = .gpu, .width = 320, .height = 240 },
         .buffers = storage.buffers(),
-        .resources = .{ .font_atlas = true, .icon_atlas = true, .image_texture = true },
+        .resources = .{ .font_atlas = true, .image_texture = true },
     };
     const receipt = try present(frame);
     try std.testing.expectEqual(PrimitiveFormat.canonical_ir, receipt.primitive_format);
     try std.testing.expectEqual(Transport.gpu_command_stream, receipt.transport);
     try std.testing.expect(receipt.requirements.font_atlas);
-    try std.testing.expect(receipt.requirements.icon_atlas);
     try std.testing.expect(receipt.requirements.image_texture);
     try std.testing.expectEqual(@as(usize, 3), receipt.primitive_count);
 }
