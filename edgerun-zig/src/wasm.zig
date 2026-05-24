@@ -898,10 +898,8 @@ const Module = struct {
         var import_index: usize = 0;
         while (import_index < count) : (import_index += 1) {
             const module_len = try reader.readU32Leb();
-            if (module_len == 0 or module_len > max_import_name) return error.Unsupported;
             const module_name = try reader.readBytes(module_len);
             const name_len = try reader.readU32Leb();
-            if (name_len == 0 or name_len > max_import_name) return error.Unsupported;
             const import_name = try reader.readBytes(name_len);
             const kind = externalKindFromByte(try reader.readByte()) orelse return error.Unsupported;
             switch (kind) {
@@ -911,12 +909,10 @@ const Module = struct {
                     if (type_index >= self.type_count) return error.Corrupt;
                     const imported = &self.imports[self.import_count];
                     imported.* = .{
-                        .module_len = module_len,
-                        .name_len = name_len,
+                        .module = module_name,
+                        .name = import_name,
                         .type_index = type_index,
                     };
-                    @memcpy(imported.module[0..module_len], module_name);
-                    @memcpy(imported.name[0..name_len], import_name);
                     self.import_count += 1;
                 },
                 .memory => try self.parseMemoryImport(reader, module_name, import_name),
@@ -929,13 +925,11 @@ const Module = struct {
     fn parseMemoryImport(self: *Module, reader: *Reader, module_name: []const u8, import_name: []const u8) Error!void {
         if (self.imported_memory != null or self.has_memory) return error.Unsupported;
         const min_pages = try readMemoryMinimumPages(reader);
-        var imported = ImportedMemory{
-            .module_len = module_name.len,
-            .name_len = import_name.len,
+        const imported = ImportedMemory{
+            .module = module_name,
+            .name = import_name,
             .min_pages = min_pages,
         };
-        @memcpy(imported.module[0..module_name.len], module_name);
-        @memcpy(imported.name[0..import_name.len], import_name);
         self.imported_memory = imported;
         self.has_memory = true;
         self.memory_min_pages = min_pages;
@@ -947,13 +941,11 @@ const Module = struct {
         if (ref_type != wasm_funcref_type) return error.Unsupported;
         const min_entries = try readTableMinimumEntries(reader);
         if (min_entries > max_table_entries) return error.Unsupported;
-        var imported = ImportedTable{
-            .module_len = module_name.len,
-            .name_len = import_name.len,
+        const imported = ImportedTable{
+            .module = module_name,
+            .name = import_name,
             .min_entries = min_entries,
         };
-        @memcpy(imported.module[0..module_name.len], module_name);
-        @memcpy(imported.name[0..import_name.len], import_name);
         self.imported_table = imported;
         self.has_table = true;
         self.table_min_entries = min_entries;
@@ -983,13 +975,11 @@ const Module = struct {
             .value_type = value_type,
             .mutable = mutability == 1,
         };
-        var imported = ImportedGlobal{
-            .module_len = module_name.len,
-            .name_len = import_name.len,
+        const imported = ImportedGlobal{
+            .module = module_name,
+            .name = import_name,
             .global_index = global_index,
         };
-        @memcpy(imported.module[0..module_name.len], module_name);
-        @memcpy(imported.name[0..import_name.len], import_name);
         self.imported_globals[self.imported_global_count] = imported;
         self.imported_global_count += 1;
         self.global_count += 1;
@@ -1028,7 +1018,6 @@ const Module = struct {
         self.export_count = count;
         for (self.exports[0..count]) |*exp| {
             const name_len = try reader.readU32Leb();
-            if (name_len == 0 or name_len > max_export_name) return error.Unsupported;
             const name = try reader.readBytes(name_len);
             const kind = externalKindFromByte(try reader.readByte()) orelse return error.Unsupported;
             const index = try reader.readU32Leb();
@@ -1039,11 +1028,10 @@ const Module = struct {
                 .global => if (index >= self.global_count) return error.Corrupt,
             }
             exp.* = .{
-                .name_len = name_len,
+                .name = name,
                 .kind = kind,
                 .index = index,
             };
-            @memcpy(exp.name[0..name_len], name);
         }
     }
 
