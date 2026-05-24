@@ -43,6 +43,7 @@ const ext_table_init: u32 = 12;
 const ext_elem_drop: u32 = 13;
 const ext_table_copy: u32 = 14;
 const ext_table_size: u32 = 16;
+const ext_table_fill: u32 = 17;
 const i32_min_as_f32: f32 = -2147483648.0;
 const i32_max_plus_one_as_f32: f32 = 2147483648.0;
 const u32_max_plus_one_as_f32: f32 = 4294967296.0;
@@ -1728,6 +1729,7 @@ const Executor = struct {
             ext_elem_drop => try self.elemDrop(reader),
             ext_table_copy => try self.tableCopy(frame, reader),
             ext_table_size => try self.tableSize(frame, reader),
+            ext_table_fill => try self.tableFill(frame, reader),
             else => return error.Unsupported,
         }
     }
@@ -1952,6 +1954,22 @@ const Executor = struct {
     fn tableSize(self: *Executor, frame: *Frame, reader: *Reader) Error!void {
         try readTableIndex(reader);
         try frame.pushI32(@intCast(self.module.table_min_entries));
+    }
+
+    fn tableFill(self: *Executor, frame: *Frame, reader: *Reader) Error!void {
+        try readTableIndex(reader);
+        const length = try popMemoryLength(frame);
+        const function_ref = try frame.popFuncref();
+        const destination = try popMemoryBase(frame);
+        const destination_end = checkedAdd(destination, length) orelse return error.Trap;
+        if (destination_end > self.module.table_min_entries or destination_end > max_table_entries) return error.Trap;
+        if (function_ref) |index| {
+            if (index >= self.module.totalFunctionCount()) return error.Corrupt;
+        }
+        var index: usize = destination;
+        while (index < destination_end) : (index += 1) {
+            self.module.table_entries[index] = function_ref;
+        }
     }
 
     fn memoryFill(self: *Executor, frame: *Frame, reader: *Reader) Error!void {
@@ -2526,6 +2544,7 @@ fn skipExtendedOpcodeImmediate(reader: *Reader) Error!void {
             try readTableIndex(reader);
         },
         ext_table_size => try readTableIndex(reader),
+        ext_table_fill => try readTableIndex(reader),
         else => return error.Unsupported,
     }
 }
