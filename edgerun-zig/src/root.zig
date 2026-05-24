@@ -60,8 +60,8 @@ pub const ui = @import("ui.zig");
 pub const ui_components = @import("ui_components.zig");
 pub const ui_resolver = @import("ui_resolver.zig");
 pub const varfont = @import("varfont.zig");
-pub const wasm = @import("wasm.zig");
-pub const wasm_app = @import("wasm_app.zig");
+pub const wasm = @import("wasm/root.zig");
+pub const wasm_app = @import("wasm/app.zig");
 
 test {
     _ = bytes;
