@@ -1593,10 +1593,10 @@ const Executor = struct {
                     const value = try frame.popI64();
                     try frame.pushI32(@bitCast(@as(u32, @truncate(@as(u64, @bitCast(value))))));
                 },
-                .i32_trunc_f32_s => try frame.pushI32(try truncF32ToI32(try frame.popF32())),
-                .i32_trunc_f32_u => try frame.pushI32(@bitCast(try truncF32ToU32(try frame.popF32()))),
-                .i32_trunc_f64_s => try frame.pushI32(try truncF64ToI32(try frame.popF64())),
-                .i32_trunc_f64_u => try frame.pushI32(@bitCast(try truncF64ToU32(try frame.popF64()))),
+                .i32_trunc_f32_s => try frame.pushI32(try truncFloatToInt(f32, i32, try frame.popF32())),
+                .i32_trunc_f32_u => try frame.pushI32(@bitCast(try truncFloatToInt(f32, u32, try frame.popF32()))),
+                .i32_trunc_f64_s => try frame.pushI32(try truncFloatToInt(f64, i32, try frame.popF64())),
+                .i32_trunc_f64_u => try frame.pushI32(@bitCast(try truncFloatToInt(f64, u32, try frame.popF64()))),
                 .i64_extend_i32_s => {
                     const value = try frame.popI32();
                     try frame.pushI64(value);
@@ -1605,10 +1605,10 @@ const Executor = struct {
                     const value: u32 = @bitCast(try frame.popI32());
                     try frame.pushI64(@intCast(value));
                 },
-                .i64_trunc_f32_s => try frame.pushI64(try truncF32ToI64(try frame.popF32())),
-                .i64_trunc_f32_u => try frame.pushI64(@bitCast(try truncF32ToU64(try frame.popF32()))),
-                .i64_trunc_f64_s => try frame.pushI64(try truncF64ToI64(try frame.popF64())),
-                .i64_trunc_f64_u => try frame.pushI64(@bitCast(try truncF64ToU64(try frame.popF64()))),
+                .i64_trunc_f32_s => try frame.pushI64(try truncFloatToInt(f32, i64, try frame.popF32())),
+                .i64_trunc_f32_u => try frame.pushI64(@bitCast(try truncFloatToInt(f32, u64, try frame.popF32()))),
+                .i64_trunc_f64_s => try frame.pushI64(try truncFloatToInt(f64, i64, try frame.popF64())),
+                .i64_trunc_f64_u => try frame.pushI64(@bitCast(try truncFloatToInt(f64, u64, try frame.popF64()))),
                 .f32_convert_i32_s => try frame.push(.{ .f32 = @floatFromInt(try frame.popI32()) }),
                 .f32_convert_i32_u => try frame.push(.{ .f32 = @floatFromInt(@as(u32, @bitCast(try frame.popI32()))) }),
                 .f32_convert_i64_s => try frame.push(.{ .f32 = @floatFromInt(try frame.popI64()) }),
@@ -1743,14 +1743,14 @@ const Executor = struct {
     fn executeExtendedOpcode(self: *Executor, frame: *Frame, reader: *Reader) Error!void {
         const opcode = try reader.readU32Leb();
         switch (opcode) {
-            ext_i32_trunc_sat_f32_s => try frame.pushI32(saturatingTruncF32ToI32(try frame.popF32())),
-            ext_i32_trunc_sat_f32_u => try frame.pushI32(@bitCast(saturatingTruncF32ToU32(try frame.popF32()))),
-            ext_i32_trunc_sat_f64_s => try frame.pushI32(saturatingTruncF64ToI32(try frame.popF64())),
-            ext_i32_trunc_sat_f64_u => try frame.pushI32(@bitCast(saturatingTruncF64ToU32(try frame.popF64()))),
-            ext_i64_trunc_sat_f32_s => try frame.pushI64(saturatingTruncF32ToI64(try frame.popF32())),
-            ext_i64_trunc_sat_f32_u => try frame.pushI64(@bitCast(saturatingTruncF32ToU64(try frame.popF32()))),
-            ext_i64_trunc_sat_f64_s => try frame.pushI64(saturatingTruncF64ToI64(try frame.popF64())),
-            ext_i64_trunc_sat_f64_u => try frame.pushI64(@bitCast(saturatingTruncF64ToU64(try frame.popF64()))),
+            ext_i32_trunc_sat_f32_s => try frame.pushI32(saturatingTruncFloatToInt(f32, i32, try frame.popF32())),
+            ext_i32_trunc_sat_f32_u => try frame.pushI32(@bitCast(saturatingTruncFloatToInt(f32, u32, try frame.popF32()))),
+            ext_i32_trunc_sat_f64_s => try frame.pushI32(saturatingTruncFloatToInt(f64, i32, try frame.popF64())),
+            ext_i32_trunc_sat_f64_u => try frame.pushI32(@bitCast(saturatingTruncFloatToInt(f64, u32, try frame.popF64()))),
+            ext_i64_trunc_sat_f32_s => try frame.pushI64(saturatingTruncFloatToInt(f32, i64, try frame.popF32())),
+            ext_i64_trunc_sat_f32_u => try frame.pushI64(@bitCast(saturatingTruncFloatToInt(f32, u64, try frame.popF32()))),
+            ext_i64_trunc_sat_f64_s => try frame.pushI64(saturatingTruncFloatToInt(f64, i64, try frame.popF64())),
+            ext_i64_trunc_sat_f64_u => try frame.pushI64(@bitCast(saturatingTruncFloatToInt(f64, u64, try frame.popF64()))),
             ext_memory_init => try self.memoryInit(frame, reader),
             ext_data_drop => try self.dataDrop(reader),
             ext_memory_copy => try self.memoryCopy(frame, reader),
@@ -2988,96 +2988,62 @@ fn invalidTrunc(value: anytype, min: @TypeOf(value), max_exclusive: @TypeOf(valu
     return value != value or value < min or value >= max_exclusive;
 }
 
-fn truncF32ToI32(value: f32) Error!i32 {
-    if (invalidTrunc(value, i32_min_as_f32, i32_max_plus_one_as_f32)) return error.ArithmeticTrap;
+fn truncFloatToInt(comptime Float: type, comptime Int: type, value: Float) Error!Int {
+    if (invalidTrunc(value, truncMin(Float, Int), truncMaxExclusive(Float, Int))) return error.ArithmeticTrap;
     return @intFromFloat(value);
 }
 
-fn truncF32ToU32(value: f32) Error!u32 {
-    if (invalidTrunc(value, 0.0, u32_max_plus_one_as_f32)) return error.ArithmeticTrap;
+fn saturatingTruncFloatToInt(comptime Float: type, comptime Int: type, value: Float) Int {
+    if (isNan(value)) return 0;
+    switch (Int) {
+        i32, i64 => {
+            if (value <= truncMin(Float, Int)) return minSigned(Int);
+            if (value >= truncMaxExclusive(Float, Int)) return maxSigned(Int);
+        },
+        u32, u64 => {
+            if (value <= 0.0) return 0;
+            if (value >= truncMaxExclusive(Float, Int)) return maxUnsigned(Int);
+        },
+        else => @compileError("unsupported wasm truncation target type"),
+    }
     return @intFromFloat(value);
 }
 
-fn truncF64ToI32(value: f64) Error!i32 {
-    if (invalidTrunc(value, i32_min_as_f64, i32_max_plus_one_as_f64)) return error.ArithmeticTrap;
-    return @intFromFloat(value);
+fn truncMin(comptime Float: type, comptime Int: type) Float {
+    return switch (Int) {
+        i32 => switch (Float) {
+            f32 => i32_min_as_f32,
+            f64 => i32_min_as_f64,
+            else => @compileError("unsupported wasm truncation source type"),
+        },
+        i64 => switch (Float) {
+            f32 => i64_min_as_f32,
+            f64 => i64_min_as_f64,
+            else => @compileError("unsupported wasm truncation source type"),
+        },
+        u32, u64 => 0.0,
+        else => @compileError("unsupported wasm truncation target type"),
+    };
 }
 
-fn truncF64ToU32(value: f64) Error!u32 {
-    if (invalidTrunc(value, 0.0, u32_max_plus_one_as_f64)) return error.ArithmeticTrap;
-    return @intFromFloat(value);
-}
-
-fn truncF32ToI64(value: f32) Error!i64 {
-    if (invalidTrunc(value, i64_min_as_f32, i64_max_plus_one_as_f32)) return error.ArithmeticTrap;
-    return @intFromFloat(value);
-}
-
-fn truncF32ToU64(value: f32) Error!u64 {
-    if (invalidTrunc(value, 0.0, u64_max_plus_one_as_f32)) return error.ArithmeticTrap;
-    return @intFromFloat(value);
-}
-
-fn truncF64ToI64(value: f64) Error!i64 {
-    if (invalidTrunc(value, i64_min_as_f64, i64_max_plus_one_as_f64)) return error.ArithmeticTrap;
-    return @intFromFloat(value);
-}
-
-fn truncF64ToU64(value: f64) Error!u64 {
-    if (invalidTrunc(value, 0.0, u64_max_plus_one_as_f64)) return error.ArithmeticTrap;
-    return @intFromFloat(value);
-}
-
-fn saturatingTruncF32ToI32(value: f32) i32 {
-    if (value != value) return 0;
-    if (value <= i32_min_as_f32) return minSigned(i32);
-    if (value >= i32_max_plus_one_as_f32) return maxSigned(i32);
-    return @intFromFloat(value);
-}
-
-fn saturatingTruncF32ToU32(value: f32) u32 {
-    if (value != value or value <= 0.0) return 0;
-    if (value >= u32_max_plus_one_as_f32) return maxUnsigned(u32);
-    return @intFromFloat(value);
-}
-
-fn saturatingTruncF64ToI32(value: f64) i32 {
-    if (value != value) return 0;
-    if (value <= i32_min_as_f64) return minSigned(i32);
-    if (value >= i32_max_plus_one_as_f64) return maxSigned(i32);
-    return @intFromFloat(value);
-}
-
-fn saturatingTruncF64ToU32(value: f64) u32 {
-    if (value != value or value <= 0.0) return 0;
-    if (value >= u32_max_plus_one_as_f64) return maxUnsigned(u32);
-    return @intFromFloat(value);
-}
-
-fn saturatingTruncF32ToI64(value: f32) i64 {
-    if (value != value) return 0;
-    if (value <= i64_min_as_f32) return minSigned(i64);
-    if (value >= i64_max_plus_one_as_f32) return maxSigned(i64);
-    return @intFromFloat(value);
-}
-
-fn saturatingTruncF32ToU64(value: f32) u64 {
-    if (value != value or value <= 0.0) return 0;
-    if (value >= u64_max_plus_one_as_f32) return maxUnsigned(u64);
-    return @intFromFloat(value);
-}
-
-fn saturatingTruncF64ToI64(value: f64) i64 {
-    if (value != value) return 0;
-    if (value <= i64_min_as_f64) return minSigned(i64);
-    if (value >= i64_max_plus_one_as_f64) return maxSigned(i64);
-    return @intFromFloat(value);
-}
-
-fn saturatingTruncF64ToU64(value: f64) u64 {
-    if (value != value or value <= 0.0) return 0;
-    if (value >= u64_max_plus_one_as_f64) return maxUnsigned(u64);
-    return @intFromFloat(value);
+fn truncMaxExclusive(comptime Float: type, comptime Int: type) Float {
+    return switch (Float) {
+        f32 => switch (Int) {
+            i32 => i32_max_plus_one_as_f32,
+            u32 => u32_max_plus_one_as_f32,
+            i64 => i64_max_plus_one_as_f32,
+            u64 => u64_max_plus_one_as_f32,
+            else => @compileError("unsupported wasm truncation target type"),
+        },
+        f64 => switch (Int) {
+            i32 => i32_max_plus_one_as_f64,
+            u32 => u32_max_plus_one_as_f64,
+            i64 => i64_max_plus_one_as_f64,
+            u64 => u64_max_plus_one_as_f64,
+            else => @compileError("unsupported wasm truncation target type"),
+        },
+        else => @compileError("unsupported wasm truncation source type"),
+    };
 }
 
 fn readConstantI32Expression(reader: *Reader) Error!i32 {
