@@ -3,6 +3,7 @@ const common = @import("../../ui_component_common.zig");
 const layout = @import("../../layouts/Types.zig");
 const base_marker = @import("base/Marker.zig");
 const base_surface = @import("base/Surface.zig");
+const base_text_block = @import("base/TextBlock.zig");
 const ui = @import("../../ui.zig");
 const ui_input = @import("../../input.zig");
 
@@ -87,11 +88,7 @@ pub fn renderTimeline(timeline: Timeline, scene: *ui.Scene, bounds: ui.Rect, opt
         try base_marker.renderFilled(scene, marker_bounds, style.accent);
         try scene.pushAlignedText(ui.Rect.init(event_bounds.x + timeline_text_x, event_bounds.y + timeline_time_y, timeline_time_w, timeline_time_h), event.time, style.accent, .start);
         try scene.pushAlignedText(ui.Rect.init(event_bounds.x + timeline_text_x + timeline_time_w + timeline_text_gap, event_bounds.y + timeline_title_y, @max(1.0, event_bounds.w - timeline_text_x - timeline_time_w - timeline_text_gap - timeline_text_padding_x), timeline_title_h), event.title, style.text, .start);
-        try scene.pushWrappedText(ui.Rect.init(event_bounds.x + timeline_text_x, event_bounds.y + timeline_detail_y, @max(1.0, event_bounds.w - timeline_text_x - timeline_text_padding_x), timeline_detail_h), event.detail, style.muted, .{
-            .line_height = timeline_detail_line_h,
-            .average_char_width = timeline_detail_avg_w,
-            .max_lines = timeline_detail_max_lines,
-        });
+        try base_text_block.render(scene, ui.Rect.init(event_bounds.x + timeline_text_x, event_bounds.y + timeline_detail_y, @max(1.0, event_bounds.w - timeline_text_x - timeline_text_padding_x), timeline_detail_h), event.detail, style.muted, timeline_detail_metrics);
         try scene.pushHit(.{ .slot = 0, .kind = .row_item, .id = event.id, .bounds = event_bounds });
         y += timeline_event_h + timeline_event_gap;
     }
@@ -237,24 +234,27 @@ const timeline_detail_max_lines: usize = 2;
 const timeline_text_padding_x: f32 = 10.0;
 const timeline_text_max_lines: usize = 1;
 const timeline_min_w: f32 = 180.0;
+const timeline_time_metrics = base_text_block.Metrics{
+    .line_height = timeline_time_h,
+    .average_char_width = timeline_time_avg_w,
+    .max_lines = timeline_text_max_lines,
+};
+const timeline_title_metrics = base_text_block.Metrics{
+    .line_height = timeline_title_h,
+    .average_char_width = timeline_title_avg_w,
+    .max_lines = timeline_text_max_lines,
+};
+const timeline_detail_metrics = base_text_block.Metrics{
+    .line_height = timeline_detail_line_h,
+    .average_char_width = timeline_detail_avg_w,
+    .max_lines = timeline_detail_max_lines,
+};
 
 fn measureTimelineEvent(event: TimelineEvent, constraints: layout.Constraints) layout.Measurement {
     const text_constraints = constraints.inner(.{ .left = timeline_text_x, .right = timeline_text_padding_x });
-    const time = layout.measureText(event.time, .{ .width = .{ .exact = timeline_time_w }, .text_wrap = .nowrap }, .{
-        .line_height = timeline_time_h,
-        .average_char_width = timeline_time_avg_w,
-        .max_lines = timeline_text_max_lines,
-    });
-    const title = layout.measureText(event.title, text_constraints.inner(.{ .left = timeline_time_w + timeline_text_gap }), .{
-        .line_height = timeline_title_h,
-        .average_char_width = timeline_title_avg_w,
-        .max_lines = timeline_text_max_lines,
-    });
-    const detail = layout.measureText(event.detail, text_constraints, .{
-        .line_height = timeline_detail_line_h,
-        .average_char_width = timeline_detail_avg_w,
-        .max_lines = timeline_detail_max_lines,
-    });
+    const time = base_text_block.measure(event.time, .{ .width = .{ .exact = timeline_time_w }, .text_wrap = .nowrap }, timeline_time_metrics);
+    const title = base_text_block.measure(event.title, text_constraints.inner(.{ .left = timeline_time_w + timeline_text_gap }), timeline_title_metrics);
+    const detail = base_text_block.measure(event.detail, text_constraints, timeline_detail_metrics);
     const header_width = timeline_text_x + time.preferred.w + timeline_text_gap + title.preferred.w + timeline_text_padding_x;
     const detail_width = timeline_text_x + detail.preferred.w + timeline_text_padding_x;
     const content_height = timeline_title_y + @max(time.preferred.h, title.preferred.h) + (timeline_detail_y - timeline_title_y - timeline_title_h) + detail.preferred.h;

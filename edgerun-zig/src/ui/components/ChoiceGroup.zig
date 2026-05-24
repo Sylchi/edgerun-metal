@@ -3,6 +3,7 @@ const common = @import("../../ui_component_common.zig");
 const layout = @import("../../layouts/Types.zig");
 const base_marker = @import("base/Marker.zig");
 const base_surface = @import("base/Surface.zig");
+const base_text_block = @import("base/TextBlock.zig");
 const ui = @import("../../ui.zig");
 const ui_input = @import("../../input.zig");
 
@@ -80,11 +81,7 @@ pub fn renderChoiceGroup(group: ChoiceGroup, scene: *ui.Scene, bounds: ui.Rect, 
     const content_x = bounds.x + choice_padding_x;
     const content_w = @max(1.0, bounds.w - choice_padding_x * 2.0);
     var y = bounds.y + choice_padding_y;
-    try scene.pushWrappedText(ui.Rect.init(content_x, y, content_w, choice_legend_h), group.legend, style.text, .{
-        .line_height = choice_legend_line_h,
-        .average_char_width = choice_legend_avg_w,
-        .max_lines = choice_legend_max_lines,
-    });
+    try base_text_block.render(scene, ui.Rect.init(content_x, y, content_w, choice_legend_h), group.legend, style.text, choice_legend_metrics);
     y += choice_legend_h + choice_option_gap;
 
     const bottom = bounds.y + bounds.h - choice_padding_y;
@@ -104,19 +101,11 @@ pub fn renderChoiceGroup(group: ChoiceGroup, scene: *ui.Scene, bounds: ui.Rect, 
 
 pub fn measureChoiceGroup(group: ChoiceGroup, constraints: layout.Constraints) layout.Measurement {
     const content_constraints = constraints.inner(choiceInsets());
-    const legend = layout.measureText(group.legend, content_constraints, .{
-        .line_height = choice_legend_line_h,
-        .average_char_width = choice_legend_avg_w,
-        .max_lines = choice_legend_max_lines,
-    });
+    const legend = base_text_block.measure(group.legend, content_constraints, choice_legend_metrics);
     var content_width = legend.preferred.w;
     var content_height = legend.preferred.h;
     for (group.options, 0..) |option, index| {
-        const option_measure = layout.measureText(option.label, content_constraints.inner(.{ .left = choice_label_x, .right = choice_option_padding_x }), .{
-            .line_height = choice_label_h,
-            .average_char_width = choice_label_avg_w,
-            .max_lines = choice_label_max_lines,
-        });
+        const option_measure = base_text_block.measure(option.label, content_constraints.inner(.{ .left = choice_label_x, .right = choice_option_padding_x }), choice_label_metrics);
         content_width = @max(content_width, option_measure.preferred.w + choice_label_x + choice_option_padding_x);
         content_height += choice_option_gap + @max(choice_option_h, option_measure.preferred.h);
         if (index == 0) content_height += 0;
@@ -269,6 +258,16 @@ const choice_label_h: f32 = 14.0;
 const choice_label_avg_w: f32 = 8.5;
 const choice_label_max_lines: usize = 1;
 const choice_min_w: f32 = 180.0;
+const choice_legend_metrics = base_text_block.Metrics{
+    .line_height = choice_legend_line_h,
+    .average_char_width = choice_legend_avg_w,
+    .max_lines = choice_legend_max_lines,
+};
+const choice_label_metrics = base_text_block.Metrics{
+    .line_height = choice_label_h,
+    .average_char_width = choice_label_avg_w,
+    .max_lines = choice_label_max_lines,
+};
 
 fn choiceInsets() layout.Insets {
     return .{ .top = choice_padding_y, .right = choice_padding_x, .bottom = choice_padding_y, .left = choice_padding_x };
