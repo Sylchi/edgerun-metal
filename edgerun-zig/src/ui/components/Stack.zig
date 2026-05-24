@@ -6,14 +6,11 @@ const component_render = @import("Render.zig");
 const interaction = @import("../../ui_interaction.zig");
 const layouts = @import("../../layouts.zig");
 const object = @import("../../object.zig");
-const stack_io = @import("StackIO.zig");
 const std = @import("std");
 const tree_codec = @import("TreeCodec.zig");
 const ui = @import("../../ui.zig");
 
 const Error = common.Error;
-const HtmlError = common.HtmlError;
-const MarkdownError = common.MarkdownError;
 const RenderOptions = common.RenderOptions;
 const codec_max_children: usize = 64;
 
@@ -78,22 +75,6 @@ pub fn Stack(comptime Component: type) type {
                 .padding = @intFromFloat(layout.padding),
                 .children = out_components[0..layout.children.len],
             };
-        }
-
-        pub fn toHtml(self: Self, out: []u8) HtmlError![]u8 {
-            return stack_io.writeHtml(Component, self, out);
-        }
-
-        pub fn fromHtml(html: []const u8, out_components: []Component, text_out: []u8) HtmlError!Self {
-            return stack_io.readHtml(Self, Component, html, out_components, text_out);
-        }
-
-        pub fn toMarkdown(self: Self, out: []u8) MarkdownError![]u8 {
-            return stack_io.writeMarkdown(Component, self, out);
-        }
-
-        pub fn fromMarkdown(markdown: []const u8, out_components: []Component, text_out: []u8) MarkdownError!Self {
-            return stack_io.readMarkdown(Self, Component, markdown, out_components, text_out);
         }
     };
 }

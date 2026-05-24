@@ -18,6 +18,11 @@ const index_intro_w: f32 = 760.0;
 const guide_h: f32 = 280.0;
 const line_h: f32 = 18.0;
 const code_line_h: f32 = 17.0;
+const code_pad_x: f32 = 18.0;
+const code_pad_y: f32 = 18.0;
+const code_text_h: f32 = 12.0;
+const code_radius: f32 = 10.0;
+const code_clip_inset: f32 = 1.0;
 const cloud_meme_image_id: u32 = 1;
 const post_list_gap: f32 = 0.0;
 const arc_overview_gap: f32 = 18.0;
@@ -3401,7 +3406,18 @@ fn episodeLabel(episode: usize) []const u8 {
 }
 
 fn codeBlock(scene: *ui.Scene, bounds: ui.Rect, lines: []const []const u8) ui.RenderError!void {
-    try (components.CodeBlock{ .lines = lines }).render(scene, bounds, .{ .style = siteStyle() });
+    const style = siteStyle();
+    try fill(scene, bounds, style.bg, code_radius);
+    try scene.pushRect(bounds, style.border, .border, code_radius, 0.0);
+    if (try scene.pushClip(bounds.insetUniform(code_clip_inset))) {
+        defer scene.popClip();
+        var y = bounds.y + code_pad_y;
+        for (lines) |line| {
+            if (y + code_line_h > bounds.y + bounds.h - code_pad_y) break;
+            try alignedText(scene, bounds.x + code_pad_x, y, bounds.w - code_pad_x * 2.0, code_text_h, line, style.accent, .start);
+            y += code_line_h;
+        }
+    }
 }
 
 fn renderNodeMap(scene: *ui.Scene, bounds: ui.Rect) ui.RenderError!void {

@@ -2,26 +2,10 @@ const common = @import("../../ui_component_common.zig");
 const clock = @import("../../clock.zig");
 const codec = @import("../../ui_codec.zig");
 const object = @import("../../object.zig");
-const std = @import("std");
 const ui = @import("../../ui.zig");
 
 const Error = common.Error;
 pub const Writer = codec.Writer;
-pub const MarkdownIdText = struct {
-    id: u32,
-    text: []const u8,
-};
-pub const MarkdownCheckedText = struct {
-    id: u32,
-    checked: bool,
-    text: []const u8,
-};
-pub const MarkdownIdTwoText = struct {
-    id: u32,
-    first: []const u8,
-    second: []const u8,
-};
-
 pub fn singleNode(view: object.View) Error!ui.Node {
     var nodes: [1]ui.Node = undefined;
     const root = codec.decodeView(view, &nodes) catch return error.Corrupt;
@@ -85,59 +69,6 @@ pub fn boolRef(value: bool) codec.StringRef {
 
 pub fn unitRef(value: f32) codec.StringRef {
     return .{ .offset = ui.encodeUnit(value), .len = 0 };
-}
-
-pub fn readIdTextDirectiveMarkdown(
-    markdown: []const u8,
-    directive: []const u8,
-    id_prefix: []const u8,
-    text_prefix: []const u8,
-    text: *common.MarkdownTextArena,
-) common.MarkdownError!MarkdownIdText {
-    const body = try common.readMarkdownDirectiveBody(markdown, directive, id_prefix);
-    const id_end = std.mem.indexOf(u8, body, text_prefix) orelse return error.InvalidMarkdown;
-    const id = try common.parseMarkdownU32(body[0..id_end]);
-    const value = try text.unescapeInline(body[id_end + text_prefix.len ..]);
-    if (value.len == 0) return error.InvalidMarkdown;
-    return .{ .id = id, .text = value };
-}
-
-pub fn readCheckedTextDirectiveMarkdown(
-    markdown: []const u8,
-    directive: []const u8,
-    id_prefix: []const u8,
-    text: *common.MarkdownTextArena,
-) common.MarkdownError!MarkdownCheckedText {
-    const body = try common.readMarkdownDirectiveBody(markdown, directive, id_prefix);
-    const id_end = std.mem.indexOf(u8, body, "\nchecked: ") orelse return error.InvalidMarkdown;
-    const id = try common.parseMarkdownU32(body[0..id_end]);
-    const checked_start = id_end + "\nchecked: ".len;
-    const checked_end_relative = std.mem.indexOf(u8, body[checked_start..], "\nlabel: ") orelse return error.InvalidMarkdown;
-    const label_start = checked_start + checked_end_relative + "\nlabel: ".len;
-    const checked = try common.parseMarkdownBool(body[checked_start .. checked_start + checked_end_relative]);
-    const value = try text.unescapeInline(body[label_start..]);
-    if (value.len == 0) return error.InvalidMarkdown;
-    return .{ .id = id, .checked = checked, .text = value };
-}
-
-pub fn readIdTwoTextDirectiveMarkdown(
-    markdown: []const u8,
-    directive: []const u8,
-    id_prefix: []const u8,
-    first_prefix: []const u8,
-    second_prefix: []const u8,
-    text: *common.MarkdownTextArena,
-) common.MarkdownError!MarkdownIdTwoText {
-    const body = try common.readMarkdownDirectiveBody(markdown, directive, id_prefix);
-    const id_end = std.mem.indexOf(u8, body, first_prefix) orelse return error.InvalidMarkdown;
-    const id = try common.parseMarkdownU32(body[0..id_end]);
-    const first_start = id_end + first_prefix.len;
-    const first_end_relative = std.mem.indexOf(u8, body[first_start..], second_prefix) orelse return error.InvalidMarkdown;
-    const second_start = first_start + first_end_relative + second_prefix.len;
-    const first = try text.unescapeInline(body[first_start .. first_start + first_end_relative]);
-    const second = try text.unescapeInline(body[second_start..]);
-    if (first.len == 0 or second.len == 0) return error.InvalidMarkdown;
-    return .{ .id = id, .first = first, .second = second };
 }
 
 fn recordObject(kind: codec.RecordKind, id: u32, a: codec.StringRef, b: codec.StringRef, ui_out: []u8, object_out: []u8, req: object.Requirements, epoch: clock.Stamp) ?[]u8 {
