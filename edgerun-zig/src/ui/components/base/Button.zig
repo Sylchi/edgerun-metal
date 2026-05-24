@@ -1,6 +1,7 @@
 const std = @import("std");
 const common = @import("../../../ui_component_common.zig");
 const icon = @import("../../../icon.zig");
+const interaction = @import("../../../ui_interaction.zig");
 const layout = @import("../../../layouts/Types.zig");
 const ui = @import("../../../ui.zig");
 
@@ -31,7 +32,10 @@ pub fn render(scene: *ui.Scene, bounds: ui.Rect, params: Params, options: Render
         },
     }
     try renderContent(scene, bounds, params.label, text_color, options.button_leading_icon, options.button_trailing_icon);
-    try scene.pushHit(.{ .slot = 0, .kind = .button, .id = params.id, .bounds = bounds });
+}
+
+pub fn collectInteractions(collector: *interaction.Collector, bounds: ui.Rect, params: Params) interaction.Error!void {
+    try collector.add(.{ .kind = .button, .id = params.id, .bounds = bounds });
 }
 
 pub fn measure(label: []const u8, constraints: layout.Constraints) layout.Measurement {

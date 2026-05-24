@@ -1,5 +1,6 @@
 const std = @import("std");
 const common = @import("../../ui_component_common.zig");
+const interaction = @import("../../ui_interaction.zig");
 const layout = @import("../../layouts/Types.zig");
 const base_info_row = @import("base/InfoRow.zig");
 const base_surface = @import("base/Surface.zig");
@@ -30,6 +31,10 @@ pub const ResourceList = struct {
 
     pub fn render(self: ResourceList, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
         return renderResourceList(self, scene, bounds, options);
+    }
+
+    pub fn collectInteractions(self: ResourceList, collector: *interaction.Collector, bounds: ui.Rect) interaction.Error!void {
+        return collectResourceListInteractions(self, collector, bounds);
     }
 
     pub fn measure(self: ResourceList, constraints: layout.Constraints, options: RenderOptions) layout.Measurement {
@@ -63,6 +68,7 @@ pub const descriptor = common.ComponentDescriptor{
     .html_prefix = "<ul data-er-component=\"resource-list\"",
     .markdown_prefix = ":::resources",
     .render = renderRegistered,
+    .collect_interactions = collectRegistered,
     .write_html = writeHtmlRegistered,
     .write_markdown = writeMarkdownRegistered,
 };
@@ -87,6 +93,19 @@ pub fn renderResourceList(list: ResourceList, scene: *ui.Scene, bounds: ui.Rect,
     }
 }
 
+pub fn collectResourceListInteractions(list: ResourceList, collector: *interaction.Collector, bounds: ui.Rect) interaction.Error!void {
+    if (list.items.len == 0) return;
+    var y = bounds.y + resource_padding_y;
+    const content_x = bounds.x + resource_padding_x;
+    const content_w = @max(1.0, bounds.w - resource_padding_x * 2.0);
+    const bottom = bounds.y + bounds.h - resource_padding_y;
+    for (list.items) |item| {
+        if (y + resource_row_metrics.height > bottom) break;
+        try base_info_row.collectInteractions(collector, ui.Rect.init(content_x, y, content_w, resource_row_metrics.height), .{ .id = item.id, .title = item.label, .detail = item.detail, .hit_kind = .button });
+        y += resource_row_metrics.height + resource_item_gap;
+    }
+}
+
 pub fn measureResourceList(list: ResourceList, constraints: layout.Constraints) layout.Measurement {
     const content = constraints.inner(resourceInsets());
     var preferred_width: f32 = 0;
@@ -107,6 +126,11 @@ pub fn measureResourceList(list: ResourceList, constraints: layout.Constraints) 
 fn renderRegistered(component: *const anyopaque, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
     const list: *const ResourceList = @ptrCast(@alignCast(component));
     return renderResourceList(list.*, scene, bounds, options);
+}
+
+fn collectRegistered(component: *const anyopaque, collector: *interaction.Collector, bounds: ui.Rect) interaction.Error!void {
+    const list: *const ResourceList = @ptrCast(@alignCast(component));
+    return collectResourceListInteractions(list.*, collector, bounds);
 }
 
 pub fn writeHtml(list: ResourceList, out: []u8) HtmlError![]u8 {
@@ -216,7 +240,7 @@ fn resourceInsets() layout.Insets {
     return .{ .top = resource_padding_y, .right = resource_padding_x, .bottom = resource_padding_y, .left = resource_padding_x };
 }
 
-test "resource list component renders links and hit targets" {
+test "resource list component renders links and collects hit targets" {
     const items = [_]ResourceItem{
         .{ .id = 38001, .label = "DNS simulator", .href = "#/demo/dns", .detail = "Watch the resolver answer a cached name." },
         .{ .id = 38002, .label = "TLS walkthrough", .href = "#/demo/tls", .detail = "Follow a protected connection from client to server." },
@@ -224,12 +248,16 @@ test "resource list component renders links and hit targets" {
     const list = ResourceList{ .items = &items };
     var commands: [96]ui.Command = undefined;
     var scene = ui.Scene.init(&commands);
+    var regions: [4]interaction.Region = undefined;
+    var collector = interaction.Collector.init(&regions);
 
     try list.render(&scene, ui.Rect.init(0, 0, 380, 190), .{});
+    try list.collectInteractions(&collector, ui.Rect.init(0, 0, 380, 190));
 
     try std.testing.expect(hasText(scene.written(), "DNS simulator"));
     try std.testing.expect(hasText(scene.written(), "TLS walkthrough"));
-    const hit = ui_input.hitTest(scene.written(), 24, 96).?;
+    try std.testing.expect(ui_input.hitTest(scene.written(), 24, 96) == null);
+    const hit = ui_input.regionHitTest(collector.written(), 24, 96).?;
     try std.testing.expectEqual(@as(u32, 38002), hit.id);
 }
 
@@ -292,6 +320,8 @@ test "resource list registers explicit runtime descriptor" {
     var markdown: [768]u8 = undefined;
     var commands: [96]ui.Command = undefined;
     var scene = ui.Scene.init(&commands);
+    var regions: [4]interaction.Region = undefined;
+    var collector = interaction.Collector.init(&regions);
 
     try ResourceList.register(&registry);
     try std.testing.expectError(error.DuplicateComponent, ResourceList.register(&registry));
@@ -301,10 +331,12 @@ test "resource list registers explicit runtime descriptor" {
     const encoded_html = try registry.writeHtml("resource-list", &list, &html);
     const encoded_markdown = try registry.writeMarkdown("resource-list", &list, &markdown);
     try registry.render("resource-list", &list, &scene, ui.Rect.init(0, 0, 380, 190), .{});
+    try registry.collectInteractions("resource-list", &list, &collector, ui.Rect.init(0, 0, 380, 190));
 
     try std.testing.expect(std.mem.indexOf(u8, encoded_html, "<ul data-er-component=\"resource-list\"") != null);
     try std.testing.expect(std.mem.indexOf(u8, encoded_markdown, ":::resources") != null);
     try std.testing.expect(hasText(scene.written(), "Receipt viewer"));
+    try std.testing.expectEqual(@as(u32, 38202), ui_input.regionHitTest(collector.written(), 24, 96).?.id);
 }
 
 fn hasText(commands: []const ui.Command, value: []const u8) bool {

@@ -1,5 +1,6 @@
 const std = @import("std");
 const common = @import("../../ui_component_common.zig");
+const interaction = @import("../../ui_interaction.zig");
 const layout = @import("../../layouts/Types.zig");
 const base_info_row = @import("base/InfoRow.zig");
 const base_marker = @import("base/Marker.zig");
@@ -39,6 +40,10 @@ pub const StepList = struct {
         return renderStepList(self, scene, bounds, options);
     }
 
+    pub fn collectInteractions(self: StepList, collector: *interaction.Collector, bounds: ui.Rect) interaction.Error!void {
+        return collectStepListInteractions(self, collector, bounds);
+    }
+
     pub fn measure(self: StepList, constraints: layout.Constraints, options: RenderOptions) layout.Measurement {
         _ = options;
         return measureStepList(self, constraints);
@@ -70,6 +75,7 @@ pub const descriptor = common.ComponentDescriptor{
     .html_prefix = "<ol data-er-component=\"step-list\"",
     .markdown_prefix = ":::steps",
     .render = renderRegistered,
+    .collect_interactions = collectRegistered,
     .write_html = writeHtmlRegistered,
     .write_markdown = writeMarkdownRegistered,
 };
@@ -99,6 +105,21 @@ pub fn renderStepList(list: StepList, scene: *ui.Scene, bounds: ui.Rect, options
     }
 }
 
+pub fn collectStepListInteractions(list: StepList, collector: *interaction.Collector, bounds: ui.Rect) interaction.Error!void {
+    if (list.steps.len == 0) return;
+    var y = bounds.y + step_padding_y;
+    const content_x = bounds.x + step_padding_x;
+    const content_w = @max(1.0, bounds.w - step_padding_x * 2.0);
+    const bottom = bounds.y + bounds.h - step_padding_y;
+    for (list.steps) |step| {
+        var row_metrics = step_row_metrics;
+        row_metrics.fill = step.state == .current;
+        if (y + row_metrics.height > bottom) break;
+        try base_info_row.collectInteractions(collector, ui.Rect.init(content_x, y, content_w, row_metrics.height), .{ .id = step.id, .title = step.title, .detail = step.detail });
+        y += row_metrics.height + step_item_gap;
+    }
+}
+
 pub fn measureStepList(list: StepList, constraints: layout.Constraints) layout.Measurement {
     const content = constraints.inner(stepInsets());
     var preferred_width: f32 = 0;
@@ -119,6 +140,11 @@ pub fn measureStepList(list: StepList, constraints: layout.Constraints) layout.M
 fn renderRegistered(component: *const anyopaque, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
     const list: *const StepList = @ptrCast(@alignCast(component));
     return renderStepList(list.*, scene, bounds, options);
+}
+
+fn collectRegistered(component: *const anyopaque, collector: *interaction.Collector, bounds: ui.Rect) interaction.Error!void {
+    const list: *const StepList = @ptrCast(@alignCast(component));
+    return collectStepListInteractions(list.*, collector, bounds);
 }
 
 pub fn writeHtml(list: StepList, out: []u8) HtmlError![]u8 {
@@ -263,7 +289,7 @@ fn stepInsets() layout.Insets {
     return .{ .top = step_padding_y, .right = step_padding_x, .bottom = step_padding_y, .left = step_padding_x };
 }
 
-test "step list component renders lesson state and hit targets" {
+test "step list component renders lesson state and collects hit targets" {
     const steps = [_]StepItem{
         .{ .id = 34001, .title = "Device", .detail = "Name the parts of the machine.", .state = .done },
         .{ .id = 34002, .title = "Network", .detail = "Follow a packet across a boundary.", .state = .current },
@@ -272,12 +298,16 @@ test "step list component renders lesson state and hit targets" {
     const list = StepList{ .steps = &steps };
     var commands: [96]ui.Command = undefined;
     var scene = ui.Scene.init(&commands);
+    var regions: [4]interaction.Region = undefined;
+    var collector = interaction.Collector.init(&regions);
 
     try list.render(&scene, ui.Rect.init(0, 0, 380, 220), .{});
+    try list.collectInteractions(&collector, ui.Rect.init(0, 0, 380, 220));
 
     try std.testing.expect(hasText(scene.written(), "Network"));
     try std.testing.expect(hasTextContaining(scene.written(), "packet across"));
-    const hit = ui_input.hitTest(scene.written(), 24, 92).?;
+    try std.testing.expect(ui_input.hitTest(scene.written(), 24, 92) == null);
+    const hit = ui_input.regionHitTest(collector.written(), 24, 92).?;
     try std.testing.expectEqual(@as(u32, 34002), hit.id);
 }
 
@@ -341,6 +371,8 @@ test "step list registers explicit runtime descriptor" {
     var markdown: [768]u8 = undefined;
     var commands: [96]ui.Command = undefined;
     var scene = ui.Scene.init(&commands);
+    var regions: [4]interaction.Region = undefined;
+    var collector = interaction.Collector.init(&regions);
 
     try StepList.register(&registry);
     try std.testing.expectError(error.DuplicateComponent, StepList.register(&registry));
@@ -350,10 +382,12 @@ test "step list registers explicit runtime descriptor" {
     const encoded_html = try registry.writeHtml("step-list", &list, &html);
     const encoded_markdown = try registry.writeMarkdown("step-list", &list, &markdown);
     try registry.render("step-list", &list, &scene, ui.Rect.init(0, 0, 380, 220), .{});
+    try registry.collectInteractions("step-list", &list, &collector, ui.Rect.init(0, 0, 380, 220));
 
     try std.testing.expect(std.mem.indexOf(u8, encoded_html, "<ol data-er-component=\"step-list\"") != null);
     try std.testing.expect(std.mem.indexOf(u8, encoded_markdown, ":::steps") != null);
     try std.testing.expect(hasText(scene.written(), "Network"));
+    try std.testing.expectEqual(@as(u32, 34202), ui_input.regionHitTest(collector.written(), 24, 92).?.id);
 }
 
 fn hasText(commands: []const ui.Command, value: []const u8) bool {

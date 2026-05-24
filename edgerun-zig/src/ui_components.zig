@@ -84,6 +84,10 @@ pub const Component = union(enum) {
         return renderComponent(scene, bounds, self, options);
     }
 
+    pub fn collectInteractions(self: Component, collector: *interaction.Collector, bounds: ui.Rect) interaction.Error!void {
+        return collectComponentInteractions(collector, bounds, self);
+    }
+
     pub fn measure(self: Component, constraints: layouts.types.Constraints, options: RenderOptions) layouts.types.Measurement {
         return measureComponent(self, constraints, options);
     }
@@ -205,6 +209,10 @@ pub const Region = struct {
         return renderRegion(scene, bounds, self, options);
     }
 
+    pub fn collectInteractions(self: Region, collector: *interaction.Collector, bounds: ui.Rect, options: RenderOptions) interaction.Error!void {
+        return collectRegionInteractions(collector, bounds, self, options);
+    }
+
     pub fn toHtml(self: Region, out: []u8) HtmlError![]u8 {
         return writeRegionHtml(self, out);
     }
@@ -299,6 +307,13 @@ pub fn renderComponent(scene: *ui.Scene, bounds: ui.Rect, component: Component, 
     }
 }
 
+pub fn collectComponentInteractions(collector: *interaction.Collector, bounds: ui.Rect, component: Component) interaction.Error!void {
+    switch (component) {
+        .button => |button| try base_button.collectInteractions(collector, bounds, .{ .id = button.id, .label = button.label }),
+        else => {},
+    }
+}
+
 pub fn measureComponent(component: Component, constraints: layouts.types.Constraints, options: RenderOptions) layouts.types.Measurement {
     _ = options;
     return switch (component) {
@@ -334,6 +349,21 @@ pub fn renderRegion(scene: *ui.Scene, bounds: ui.Rect, region: Region, options: 
     }
 }
 
+pub fn collectRegionInteractions(collector: *interaction.Collector, bounds: ui.Rect, region: Region, options: RenderOptions) interaction.Error!void {
+    if (region.children.len == 0) return;
+    if (region.children.len > codec_max_stack_children) return error.InteractionBudgetExceeded;
+
+    const constraints = constraintsFromBounds(bounds);
+    var child_measurements: [codec_max_stack_children]layouts.types.Measurement = undefined;
+    var child_bounds: [codec_max_stack_children]ui.Rect = undefined;
+    const measured_children = measureChildren(region.children, regionChildConstraints(constraints), options, &child_measurements);
+    const placed_children = layouts.Flex.place(bounds, measured_children, regionLayoutOptions(), &child_bounds);
+    for (region.children[0..placed_children.len], placed_children) |child, child_rect| {
+        if (!child_rect.valid()) return error.InvalidInteractionBounds;
+        try collectComponentInteractions(collector, child_rect, child);
+    }
+}
+
 pub fn renderStack(scene: *ui.Scene, bounds: ui.Rect, stack: Stack, options: RenderOptions) ui.RenderError!void {
     if (stack.children.len == 0) return;
     if (stack.children.len > codec_max_stack_children) return error.CommandBudgetExceeded;
@@ -345,6 +375,20 @@ pub fn renderStack(scene: *ui.Scene, bounds: ui.Rect, stack: Stack, options: Ren
     for (stack.children[0..placed_children.len], placed_children) |child, child_rect| {
         if (!child_rect.valid()) return error.InvalidBounds;
         try renderComponent(scene, child_rect, child, options);
+    }
+}
+
+pub fn collectStackInteractions(collector: *interaction.Collector, bounds: ui.Rect, stack: Stack, options: RenderOptions) interaction.Error!void {
+    if (stack.children.len == 0) return;
+    if (stack.children.len > codec_max_stack_children) return error.InteractionBudgetExceeded;
+    const constraints = constraintsFromBounds(bounds);
+    var child_measurements: [codec_max_stack_children]layouts.types.Measurement = undefined;
+    var child_bounds: [codec_max_stack_children]ui.Rect = undefined;
+    const measured_children = measureChildren(stack.children, stackChildConstraints(stack, constraints), options, &child_measurements);
+    const placed_children = layouts.Flex.place(bounds, measured_children, stackLayoutOptions(stack), &child_bounds);
+    for (stack.children[0..placed_children.len], placed_children) |child, child_rect| {
+        if (!child_rect.valid()) return error.InvalidInteractionBounds;
+        try collectComponentInteractions(collector, child_rect, child);
     }
 }
 
@@ -809,6 +853,10 @@ pub const Stack = struct {
 
     pub fn render(self: Stack, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
         return renderStack(scene, bounds, self, options);
+    }
+
+    pub fn collectInteractions(self: Stack, collector: *interaction.Collector, bounds: ui.Rect, options: RenderOptions) interaction.Error!void {
+        return collectStackInteractions(collector, bounds, self, options);
     }
 
     pub fn node(self: Stack, out_nodes: []ui.Node) ?ui.Node {
@@ -2523,7 +2571,7 @@ test "component measurement wraps primitive text under exact width" {
     try std.testing.expect(narrow.preferred.h > wide.preferred.h);
 }
 
-test "stack measure and render use layout placement" {
+test "stack measure render and interaction collection use layout placement" {
     const children = [_]Component{
         .{ .text = .{ .value = "Intro" } },
         .{ .button = .{ .id = 41002, .label = "Continue" } },
@@ -2532,12 +2580,16 @@ test "stack measure and render use layout placement" {
     const measured = stack.measure(.{ .width = .{ .exact = 160 }, .text_wrap = .wrap }, .{});
     var commands: [32]ui.Command = undefined;
     var scene = ui.Scene.init(&commands);
+    var regions: [2]interaction.Region = undefined;
+    var collector = interaction.Collector.init(&regions);
 
     try std.testing.expectEqual(@as(f32, 160), measured.preferred.w);
     try std.testing.expect(measured.preferred.h > 0);
     try stack.render(&scene, ui.Rect.init(0, 0, 160, measured.preferred.h), .{});
+    try stack.collectInteractions(&collector, ui.Rect.init(0, 0, 160, measured.preferred.h), .{});
 
-    const hit = ui_input.hitTest(scene.written(), 16, 40).?;
+    try std.testing.expect(ui_input.hitTest(scene.written(), 16, 40) == null);
+    const hit = ui_input.regionHitTest(collector.written(), 16, 40).?;
     try std.testing.expectEqual(@as(u32, 41002), hit.id);
 }
 
@@ -2664,16 +2716,23 @@ test "tree union detects stack and slot descriptors" {
     try std.testing.expectEqual(@as(u32, 10), slot_tree.slot.child.button.id);
 }
 
-test "component render helper owns button variants and hit targets" {
+test "component render helper owns button variants and collects hit targets" {
     var commands: [16]ui.Command = undefined;
     var scene = ui.Scene.init(&commands);
+    var regions: [4]interaction.Region = undefined;
+    var collector = interaction.Collector.init(&regions);
 
-    try renderComponent(&scene, ui.Rect.init(0, 0, 120, 36), .{ .button = .{ .id = 501, .label = "Primary" } }, .{});
-    try renderComponent(&scene, ui.Rect.init(0, 44, 120, 36), .{ .button = .{ .id = 502, .label = "Outline" } }, .{ .button_variant = .outline, .button_leading_icon = .search });
+    const primary = Component{ .button = .{ .id = 501, .label = "Primary" } };
+    const outline = Component{ .button = .{ .id = 502, .label = "Outline" } };
+    try renderComponent(&scene, ui.Rect.init(0, 0, 120, 36), primary, .{});
+    try collectComponentInteractions(&collector, ui.Rect.init(0, 0, 120, 36), primary);
+    try renderComponent(&scene, ui.Rect.init(0, 44, 120, 36), outline, .{ .button_variant = .outline, .button_leading_icon = .search });
+    try collectComponentInteractions(&collector, ui.Rect.init(0, 44, 120, 36), outline);
 
-    const primary_hit = ui_input.hitTest(scene.written(), 12, 12).?;
+    try std.testing.expect(ui_input.hitTest(scene.written(), 12, 12) == null);
+    const primary_hit = ui_input.regionHitTest(collector.written(), 12, 12).?;
     try std.testing.expectEqual(@as(u32, 501), primary_hit.id);
-    const outline_hit = ui_input.hitTest(scene.written(), 12, 56).?;
+    const outline_hit = ui_input.regionHitTest(collector.written(), 12, 56).?;
     try std.testing.expectEqual(@as(u32, 502), outline_hit.id);
     try std.testing.expect(hasText(scene.written(), "Primary"));
     try std.testing.expect(hasText(scene.written(), "Outline"));
@@ -2958,7 +3017,7 @@ test "stack markdown codec rejects malformed or unsupported children" {
     try std.testing.expectError(error.UnsupportedMarkdown, Stack.fromMarkdown(":::stack\naxis: column\ngap: 1\npadding: 0\n--- component ---\n:::unknown\nvalue: no\n:::\n:::", &components, &text));
 }
 
-test "region component renders semantic children" {
+test "region component renders semantic children and collects interactions" {
     const children = [_]Component{
         .{ .text = .{ .value = "Academy path" } },
         .{ .button = .{ .id = 31001, .label = "Continue" } },
@@ -2966,12 +3025,16 @@ test "region component renders semantic children" {
     const region = Region{ .tag = .main, .label = "Lesson body", .children = &children };
     var commands: [64]ui.Command = undefined;
     var scene = ui.Scene.init(&commands);
+    var regions: [2]interaction.Region = undefined;
+    var collector = interaction.Collector.init(&regions);
 
     try region.render(&scene, ui.Rect.init(0, 0, 360, 120), .{});
+    try region.collectInteractions(&collector, ui.Rect.init(0, 0, 360, 120), .{});
 
     try std.testing.expect(hasText(scene.written(), "Academy path"));
     try std.testing.expect(hasText(scene.written(), "Continue"));
-    const hit = ui_input.hitTest(scene.written(), 24, 58).?;
+    try std.testing.expect(ui_input.hitTest(scene.written(), 24, 58) == null);
+    const hit = ui_input.regionHitTest(collector.written(), 24, 58).?;
     try std.testing.expectEqual(@as(u32, 31001), hit.id);
 }
 

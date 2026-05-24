@@ -1,5 +1,6 @@
 const std = @import("std");
 const common = @import("../../ui_component_common.zig");
+const interaction = @import("../../ui_interaction.zig");
 const layout = @import("../../layouts/Types.zig");
 const base_info_row = @import("base/InfoRow.zig");
 const base_surface = @import("base/Surface.zig");
@@ -29,6 +30,10 @@ pub const DefinitionList = struct {
 
     pub fn render(self: DefinitionList, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
         return renderDefinitionList(self, scene, bounds, options);
+    }
+
+    pub fn collectInteractions(self: DefinitionList, collector: *interaction.Collector, bounds: ui.Rect) interaction.Error!void {
+        return collectDefinitionListInteractions(self, collector, bounds);
     }
 
     pub fn measure(self: DefinitionList, constraints: layout.Constraints, options: RenderOptions) layout.Measurement {
@@ -62,6 +67,7 @@ pub const descriptor = common.ComponentDescriptor{
     .html_prefix = "<dl data-er-component=\"definition-list\"",
     .markdown_prefix = ":::definitions",
     .render = renderRegistered,
+    .collect_interactions = collectRegistered,
     .write_html = writeHtmlRegistered,
     .write_markdown = writeMarkdownRegistered,
 };
@@ -86,6 +92,19 @@ pub fn renderDefinitionList(list: DefinitionList, scene: *ui.Scene, bounds: ui.R
     }
 }
 
+pub fn collectDefinitionListInteractions(list: DefinitionList, collector: *interaction.Collector, bounds: ui.Rect) interaction.Error!void {
+    if (list.items.len == 0) return;
+    var y = bounds.y + definition_padding_y;
+    const content_x = bounds.x + definition_padding_x;
+    const content_w = @max(1.0, bounds.w - definition_padding_x * 2.0);
+    const bottom = bounds.y + bounds.h - definition_padding_y;
+    for (list.items) |item| {
+        if (y + definition_row_metrics.height > bottom) break;
+        try base_info_row.collectInteractions(collector, ui.Rect.init(content_x, y, content_w, definition_row_metrics.height), .{ .id = item.id, .title = item.term, .detail = item.detail });
+        y += definition_row_metrics.height + definition_item_gap;
+    }
+}
+
 pub fn measureDefinitionList(list: DefinitionList, constraints: layout.Constraints) layout.Measurement {
     const content = constraints.inner(definitionInsets());
     var preferred_width: f32 = 0;
@@ -106,6 +125,11 @@ pub fn measureDefinitionList(list: DefinitionList, constraints: layout.Constrain
 fn renderRegistered(component: *const anyopaque, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
     const list: *const DefinitionList = @ptrCast(@alignCast(component));
     return renderDefinitionList(list.*, scene, bounds, options);
+}
+
+fn collectRegistered(component: *const anyopaque, collector: *interaction.Collector, bounds: ui.Rect) interaction.Error!void {
+    const list: *const DefinitionList = @ptrCast(@alignCast(component));
+    return collectDefinitionListInteractions(list.*, collector, bounds);
 }
 
 pub fn writeHtml(list: DefinitionList, out: []u8) HtmlError![]u8 {
@@ -214,7 +238,7 @@ fn definitionInsets() layout.Insets {
     return .{ .top = definition_padding_y, .right = definition_padding_x, .bottom = definition_padding_y, .left = definition_padding_x };
 }
 
-test "definition list component renders glossary rows and hit targets" {
+test "definition list component renders glossary rows and collects hit targets" {
     const items = [_]DefinitionItem{
         .{ .id = 36001, .term = "DNS", .detail = "Turns a name into an address the network can route." },
         .{ .id = 36002, .term = "TLS", .detail = "Protects bytes while they travel between endpoints." },
@@ -222,11 +246,15 @@ test "definition list component renders glossary rows and hit targets" {
     const list = DefinitionList{ .items = &items };
     var commands: [64]ui.Command = undefined;
     var scene = ui.Scene.init(&commands);
+    var regions: [4]interaction.Region = undefined;
+    var collector = interaction.Collector.init(&regions);
 
     try list.render(&scene, ui.Rect.init(0, 0, 380, 200), .{});
+    try list.collectInteractions(&collector, ui.Rect.init(0, 0, 380, 200));
 
     try std.testing.expect(hasText(scene.written(), "DNS"));
-    const hit = ui_input.hitTest(scene.written(), 24, 104).?;
+    try std.testing.expect(ui_input.hitTest(scene.written(), 24, 104) == null);
+    const hit = ui_input.regionHitTest(collector.written(), 24, 104).?;
     try std.testing.expectEqual(@as(u32, 36002), hit.id);
 }
 
@@ -287,6 +315,8 @@ test "definition list registers explicit runtime descriptor" {
     var markdown: [512]u8 = undefined;
     var commands: [64]ui.Command = undefined;
     var scene = ui.Scene.init(&commands);
+    var regions: [4]interaction.Region = undefined;
+    var collector = interaction.Collector.init(&regions);
 
     try DefinitionList.register(&registry);
     try std.testing.expectError(error.DuplicateComponent, DefinitionList.register(&registry));
@@ -296,10 +326,12 @@ test "definition list registers explicit runtime descriptor" {
     const encoded_html = try registry.writeHtml("definition-list", &list, &html);
     const encoded_markdown = try registry.writeMarkdown("definition-list", &list, &markdown);
     try registry.render("definition-list", &list, &scene, ui.Rect.init(0, 0, 380, 200), .{});
+    try registry.collectInteractions("definition-list", &list, &collector, ui.Rect.init(0, 0, 380, 200));
 
     try std.testing.expect(std.mem.indexOf(u8, encoded_html, "<dl data-er-component=\"definition-list\"") != null);
     try std.testing.expect(std.mem.indexOf(u8, encoded_markdown, ":::definitions") != null);
     try std.testing.expect(hasText(scene.written(), "Capability"));
+    try std.testing.expectEqual(@as(u32, 36202), ui_input.regionHitTest(collector.written(), 24, 104).?.id);
 }
 
 fn hasText(commands: []const ui.Command, value: []const u8) bool {

@@ -1,7 +1,9 @@
 const std = @import("std");
 const common = @import("../../../ui_component_common.zig");
+const interaction = @import("../../../ui_interaction.zig");
 const layout = @import("../../../layouts/Types.zig");
 const ui = @import("../../../ui.zig");
+const ui_input = @import("../../../input.zig");
 const base_text_block = @import("TextBlock.zig");
 
 const RenderOptions = common.RenderOptions;
@@ -38,7 +40,10 @@ pub fn render(scene: *ui.Scene, bounds: ui.Rect, params: Params, metrics: Metric
     const text_bounds = textBounds(bounds, metrics);
     try scene.pushAlignedText(ui.Rect.init(text_bounds.x, bounds.y + metrics.title_y, text_bounds.w, metrics.title_height), params.title, options.style.text, .start);
     try base_text_block.render(scene, ui.Rect.init(text_bounds.x, bounds.y + metrics.detail_y, text_bounds.w, metrics.detail_height), params.detail, options.style.muted, detailMetrics(metrics));
-    try scene.pushHit(.{ .slot = 0, .kind = params.hit_kind, .id = params.id, .bounds = bounds });
+}
+
+pub fn collectInteractions(collector: *interaction.Collector, bounds: ui.Rect, params: Params) interaction.Error!void {
+    try collector.add(.{ .kind = params.hit_kind, .id = params.id, .bounds = bounds });
 }
 
 pub fn measure(title: []const u8, detail: []const u8, constraints: layout.Constraints, metrics: Metrics) layout.Measurement {
@@ -94,13 +99,18 @@ const default_title_max_lines: usize = 1;
 const default_detail_average_w: f32 = 8.5;
 const default_detail_max_lines: usize = 2;
 
-test "base info row renders text and hit target" {
+test "base info row renders text and collects hit target" {
     var commands: [12]ui.Command = undefined;
     var scene = ui.Scene.init(&commands);
+    var regions: [2]interaction.Region = undefined;
+    var collector = interaction.Collector.init(&regions);
 
     try render(&scene, ui.Rect.init(0, 0, 240, default_height), .{ .id = 7, .title = "DNS", .detail = "Name lookup." }, .{}, .{});
+    try collectInteractions(&collector, ui.Rect.init(0, 0, 240, default_height), .{ .id = 7, .title = "DNS", .detail = "Name lookup." });
 
-    try std.testing.expect(scene.written().len >= 4);
+    try std.testing.expect(scene.written().len >= 3);
+    try std.testing.expect(ui_input.hitTest(scene.written(), 20, 20) == null);
+    try std.testing.expectEqual(@as(u32, 7), ui_input.regionHitTest(collector.written(), 20, 20).?.id);
 }
 
 test "base info row measurement grows with detail" {
