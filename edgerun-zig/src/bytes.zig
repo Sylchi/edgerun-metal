@@ -76,6 +76,18 @@ pub fn store64(out: []u8, value: u64) bool {
         store32(out[4..8], @truncate(value >> 32));
 }
 
+pub fn stored64(value: u64) [8]u8 {
+    const bits_per_byte = 8;
+    const byte_count = 8;
+    var out: [byte_count]u8 = undefined;
+    var index: usize = 0;
+    while (index < byte_count) : (index += 1) {
+        const shift: u6 = @intCast(index * bits_per_byte);
+        out[index] = @truncate(value >> shift);
+    }
+    return out;
+}
+
 pub fn storeBe16(out: []u8, value: u16) bool {
     if (out.len < 2) return false;
     out[0] = @truncate(value >> 8);
@@ -130,6 +142,7 @@ test "little endian roundtrip" {
 
     try testing.expect(store64(&raw, 0x1122334455667788));
     try testing.expectEqual(@as(u64, 0x1122334455667788), load64(&raw).?);
+    try testing.expectEqualSlices(u8, &raw, &stored64(0x1122334455667788));
 }
 
 test "byte zero copy and fixed length compare match C helpers" {
