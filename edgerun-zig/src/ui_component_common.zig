@@ -1,6 +1,7 @@
 const std = @import("std");
 const icon = @import("icon.zig");
 const ui = @import("ui.zig");
+const interaction = @import("ui_interaction.zig");
 
 pub const Error = error{
     Corrupt,
@@ -59,6 +60,7 @@ pub const ComponentDescriptor = struct {
     html_prefix: []const u8,
     markdown_prefix: []const u8,
     render: *const fn (component: *const anyopaque, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void,
+    collect_interactions: ?*const fn (component: *const anyopaque, collector: *interaction.Collector, bounds: ui.Rect) interaction.Error!void = null,
     write_html: *const fn (component: *const anyopaque, out: []u8) HtmlError![]u8,
     write_markdown: *const fn (component: *const anyopaque, out: []u8) MarkdownError![]u8,
 };
@@ -91,6 +93,13 @@ pub const ComponentRegistry = struct {
     pub fn render(self: ComponentRegistry, name: []const u8, component: *const anyopaque, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) (RegistryError || ui.RenderError)!void {
         const descriptor = try self.get(name);
         return descriptor.render(component, scene, bounds, options);
+    }
+
+    pub fn collectInteractions(self: ComponentRegistry, name: []const u8, component: *const anyopaque, collector: *interaction.Collector, bounds: ui.Rect) (RegistryError || interaction.Error)!void {
+        const descriptor = try self.get(name);
+        if (descriptor.collect_interactions) |collect| {
+            return collect(component, collector, bounds);
+        }
     }
 
     pub fn writeHtml(self: ComponentRegistry, name: []const u8, component: *const anyopaque, out: []u8) (RegistryError || HtmlError)![]u8 {

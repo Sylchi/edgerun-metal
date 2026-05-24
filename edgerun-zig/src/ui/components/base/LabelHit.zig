@@ -1,5 +1,6 @@
 const std = @import("std");
 const ui = @import("../../../ui.zig");
+const interaction = @import("../../../ui_interaction.zig");
 
 pub const Params = struct {
     id: u32,
@@ -22,7 +23,10 @@ pub const WidthMetrics = struct {
 
 pub fn render(scene: *ui.Scene, bounds: ui.Rect, params: Params, insets: Insets) ui.RenderError!void {
     try scene.pushAlignedText(bounds.insetLtrb(insets.x, insets.y, insets.x, insets.y), params.label, params.color, params.alignment);
-    try scene.pushHit(.{ .slot = 0, .kind = params.hit_kind, .id = params.id, .bounds = bounds });
+}
+
+pub fn collect(collector: *interaction.Collector, bounds: ui.Rect, params: Params) interaction.Error!void {
+    try collector.add(.{ .kind = params.hit_kind, .id = params.id, .bounds = bounds });
 }
 
 pub fn width(label: []const u8, metrics: WidthMetrics) f32 {
@@ -30,7 +34,7 @@ pub fn width(label: []const u8, metrics: WidthMetrics) f32 {
     return @max(metrics.min_width, label_width + metrics.padding_x * 2.0);
 }
 
-test "base label hit renders text and button hit" {
+test "base label hit renders text without owning hit tracking" {
     var commands: [4]ui.Command = undefined;
     var scene = ui.Scene.init(&commands);
 
@@ -42,10 +46,23 @@ test "base label hit renders text and button hit" {
     }, .{ .x = 8.0, .y = 6.0 });
 
     const written = scene.written();
-    try std.testing.expectEqual(@as(usize, 2), written.len);
+    try std.testing.expectEqual(@as(usize, 1), written.len);
     try std.testing.expect(written[0] == .text);
-    try std.testing.expect(written[1] == .hit);
-    try std.testing.expectEqual(@as(u32, 90), written[1].hit.id);
+}
+
+test "base label hit collects interaction region separately" {
+    var regions: [1]interaction.Region = undefined;
+    var collector = interaction.Collector.init(&regions);
+
+    try collect(&collector, ui.Rect.init(0, 0, 120, 32), .{
+        .id = 90,
+        .label = "Academy",
+        .color = ui.Color.text,
+        .alignment = .start,
+    });
+
+    try std.testing.expectEqual(@as(usize, 1), collector.written().len);
+    try std.testing.expectEqual(@as(u32, 90), collector.written()[0].id);
 }
 
 test "base label hit width includes padding and minimum" {
