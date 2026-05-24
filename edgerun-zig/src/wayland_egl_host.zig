@@ -139,6 +139,7 @@ pub fn main(init: std.process.Init) !void {
     updateHoverHit(&app, scene_state.commandSlice());
 
     var frames_remaining: u32 = options.seconds * 60;
+    var frame_verified = false;
     while (!wl.closed and frames_remaining != 0) : (frames_remaining -= 1) {
         try pumpWaylandEvents(&wl);
 
@@ -153,6 +154,10 @@ pub fn main(init: std.process.Init) !void {
             wl.input_dirty = false;
         }
         try renderer_gles.renderFrame(gl, wl.width, wl.height, buffers);
+        if (!frame_verified) {
+            try renderer_gles.verifyFrameNonBlank(wl.width, wl.height);
+            frame_verified = true;
+        }
         if (c.eglSwapBuffers(egl.display, egl.surface) != c.EGL_TRUE) return error.EglSwapFailed;
         sleepFrame();
     }

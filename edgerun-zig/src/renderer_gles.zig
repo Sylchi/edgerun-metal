@@ -18,6 +18,18 @@ pub const State = struct {
     icon_texture: c.GLuint,
 };
 
+pub const Pixel = struct {
+    r: u8,
+    g: u8,
+    b: u8,
+    a: u8,
+};
+
+const verification_sample_axis: usize = 17;
+const verification_sample_count: usize = verification_sample_axis * verification_sample_axis;
+const verification_grid_denominator: i32 = @intCast(verification_sample_axis + 1);
+const opaque_alpha_min: u8 = 16;
+
 pub fn init(font_atlas: *renderer_font_atlas.Atlas) !State {
     try requireHardwareGl();
     c.glClearColor(0.043, 0.043, 0.043, 1.0);
@@ -53,6 +65,13 @@ pub fn renderFrame(gl: State, width: i32, height: i32, buffers: renderer_ir.Buff
     try drawTextured(gl, width, height, buffers.liveOverlayIconVertices(), gl.icon_texture);
 }
 
+pub fn verifyFrameNonBlank(width: i32, height: i32) !void {
+    if (width <= 0 or height <= 0) return error.InvalidFramebufferSize;
+    var samples: [verification_sample_count]Pixel = undefined;
+    readVerificationSamples(width, height, &samples);
+    if (!samplesHaveVisibleVariation(&samples)) return error.BlankGpuFrame;
+}
+
 pub fn sources(font_atlas: *renderer_font_atlas.Atlas) renderer_ir.Sources {
     return .{
         .font = font_atlas.source(),
@@ -70,6 +89,42 @@ pub fn isSoftwareRenderer(renderer: []const u8) bool {
     return std.ascii.indexOfIgnoreCase(renderer, "llvmpipe") != null or
         std.ascii.indexOfIgnoreCase(renderer, "softpipe") != null or
         std.ascii.indexOfIgnoreCase(renderer, "swrast") != null;
+}
+
+fn readVerificationSamples(width: i32, height: i32, samples: *[verification_sample_count]Pixel) void {
+    c.glFinish();
+    var index: usize = 0;
+    var x_slot: i32 = 1;
+    while (x_slot <= verification_sample_axis) : (x_slot += 1) {
+        var y_slot: i32 = 1;
+        while (y_slot <= verification_sample_axis) : (y_slot += 1) {
+            var pixel = [_]u8{ 0, 0, 0, 0 };
+            const x = sampleCoordinate(width, x_slot);
+            const y = sampleCoordinate(height, y_slot);
+            c.glReadPixels(x, y, 1, 1, c.GL_RGBA, c.GL_UNSIGNED_BYTE, &pixel);
+            samples[index] = .{ .r = pixel[0], .g = pixel[1], .b = pixel[2], .a = pixel[3] };
+            index += 1;
+        }
+    }
+}
+
+fn sampleCoordinate(size: i32, slot: i32) i32 {
+    const last = size - 1;
+    const scaled = @divTrunc(size * slot, verification_grid_denominator);
+    return std.math.clamp(scaled, 0, last);
+}
+
+fn samplesHaveVisibleVariation(samples: []const Pixel) bool {
+    if (samples.len == 0) return false;
+    const first = samples[0];
+    var opaque_count: usize = 0;
+    for (samples) |sample| {
+        if (sample.a >= opaque_alpha_min) opaque_count += 1;
+        if (sample.r != first.r or sample.g != first.g or sample.b != first.b or sample.a != first.a) {
+            return opaque_count != 0;
+        }
+    }
+    return false;
 }
 
 fn drawRects(gl: State, width: i32, height: i32, values: []const f32) !void {
@@ -272,4 +327,25 @@ test "rect modes map to stable shader mode ids" {
     try std.testing.expectEqual(@as(c.GLint, 2), rectMode(.border));
     try std.testing.expectEqual(@as(c.GLint, 3), rectMode(.linear_gradient));
     try std.testing.expectEqual(@as(c.GLint, 0), rectMode(.pie_slice));
+}
+
+test "frame verification rejects uniform samples and accepts variation" {
+    const uniform = [_]Pixel{
+        .{ .r = 11, .g = 11, .b = 11, .a = 255 },
+        .{ .r = 11, .g = 11, .b = 11, .a = 255 },
+    };
+    try std.testing.expect(!samplesHaveVisibleVariation(&uniform));
+
+    const varied = [_]Pixel{
+        .{ .r = 11, .g = 11, .b = 11, .a = 255 },
+        .{ .r = 74, .g = 222, .b = 128, .a = 255 },
+    };
+    try std.testing.expect(samplesHaveVisibleVariation(&varied));
+}
+
+test "frame verification sample coordinates stay in bounds" {
+    try std.testing.expectEqual(@as(i32, 0), sampleCoordinate(1, 1));
+    try std.testing.expectEqual(@as(i32, 1), sampleCoordinate(18, 1));
+    try std.testing.expectEqual(@as(i32, 9), sampleCoordinate(18, 9));
+    try std.testing.expectEqual(@as(i32, 17), sampleCoordinate(18, 17));
 }
