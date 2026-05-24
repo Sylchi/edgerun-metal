@@ -10,6 +10,7 @@ const component_common = @import("ui_component_common.zig");
 const aside_component = @import("ui/components/Aside.zig");
 const details_component = @import("ui/components/Details.zig");
 const figure_component = @import("ui/components/Figure.zig");
+const nav_component = @import("ui/components/Nav.zig");
 const progress_summary_component = @import("ui/components/ProgressSummary.zig");
 const table_component = @import("ui/components/Table.zig");
 
@@ -435,37 +436,8 @@ pub const ResourceList = struct {
 
 pub const ProgressSummary = progress_summary_component.ProgressSummary;
 
-pub const NavItem = struct {
-    id: u32,
-    label: []const u8,
-    href: []const u8 = "",
-    active: bool = false,
-};
-
-pub const Nav = struct {
-    label: []const u8 = "",
-    items: []const NavItem,
-
-    pub fn render(self: Nav, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
-        return renderNav(scene, bounds, self, options);
-    }
-
-    pub fn toHtml(self: Nav, out: []u8) HtmlError![]u8 {
-        return writeNavHtml(self, out);
-    }
-
-    pub fn fromHtml(html: []const u8, out_items: []NavItem, text_out: []u8) HtmlError!Nav {
-        return readNavHtml(html, out_items, text_out);
-    }
-
-    pub fn toMarkdown(self: Nav, out: []u8) MarkdownError![]u8 {
-        return writeNavMarkdown(self, out);
-    }
-
-    pub fn fromMarkdown(markdown: []const u8, out_items: []NavItem, text_out: []u8) MarkdownError!Nav {
-        return readNavMarkdown(markdown, out_items, text_out);
-    }
-};
+pub const NavItem = nav_component.NavItem;
+pub const Nav = nav_component.Nav;
 
 pub const RegionTag = enum {
     header,
@@ -515,6 +487,10 @@ pub fn registerDetails(registry: *ComponentRegistry) RegistryError!void {
 
 pub fn registerFigure(registry: *ComponentRegistry) RegistryError!void {
     return figure_component.register(registry);
+}
+
+pub fn registerNav(registry: *ComponentRegistry) RegistryError!void {
+    return nav_component.register(registry);
 }
 
 pub fn registerProgressSummary(registry: *ComponentRegistry) RegistryError!void {
@@ -816,29 +792,6 @@ pub fn renderResourceList(scene: *ui.Scene, bounds: ui.Rect, list: ResourceList,
         });
         try scene.pushHit(.{ .slot = 0, .kind = .button, .id = item.id, .bounds = item_bounds });
         y += resource_item_h + resource_item_gap;
-    }
-}
-
-pub fn renderNav(scene: *ui.Scene, bounds: ui.Rect, nav: Nav, options: RenderOptions) ui.RenderError!void {
-    if (nav.items.len == 0) return;
-    const style = options.style;
-    try scene.pushRect(bounds, style.panel, .fill, nav_radius, 0.0);
-    try scene.pushRect(bounds, style.border, .border, nav_radius, 0.0);
-
-    var cursor_x = bounds.x + nav_padding_x;
-    const item_y = bounds.y + @max(0.0, (bounds.h - nav_item_h) * 0.5);
-    const item_right = bounds.x + bounds.w - nav_padding_x;
-    for (nav.items) |item| {
-        const item_w = navItemWidth(item.label);
-        if (cursor_x + item_w > item_right) break;
-        const item_bounds = ui.Rect.init(cursor_x, item_y, item_w, nav_item_h);
-        if (item.active) {
-            try scene.pushRect(item_bounds, style.row, .fill, nav_item_radius, 0.0);
-            try scene.pushRect(ui.Rect.init(item_bounds.x + nav_active_inset_x, item_bounds.y + item_bounds.h - nav_active_h, @max(1.0, item_bounds.w - nav_active_inset_x * 2.0), nav_active_h), style.accent, .fill, nav_active_h * 0.5, 0.0);
-        }
-        try scene.pushAlignedText(item_bounds.insetLtrb(nav_item_padding_x, nav_item_text_y, nav_item_padding_x, nav_item_text_y), item.label, if (item.active) style.text else style.muted, .center);
-        try scene.pushHit(.{ .slot = 0, .kind = .button, .id = item.id, .bounds = item_bounds });
-        cursor_x += item_w + nav_item_gap;
     }
 }
 
@@ -1164,23 +1117,6 @@ const resource_detail_h: f32 = 30.0;
 const resource_detail_line_h: f32 = 15.0;
 const resource_detail_avg_w: f32 = 8.5;
 const resource_detail_max_lines: usize = 2;
-const nav_radius: f32 = 8.0;
-const nav_padding_x: f32 = 8.0;
-const nav_item_h: f32 = 34.0;
-const nav_item_gap: f32 = 6.0;
-const nav_item_radius: f32 = 7.0;
-const nav_item_padding_x: f32 = 14.0;
-const nav_item_text_y: f32 = 9.0;
-const nav_item_avg_w: f32 = 8.5;
-const nav_item_min_w: f32 = 44.0;
-const nav_active_h: f32 = 3.0;
-const nav_active_inset_x: f32 = 12.0;
-
-fn navItemWidth(label: []const u8) f32 {
-    const label_w = @as(f32, @floatFromInt(label.len)) * nav_item_avg_w;
-    return @max(nav_item_min_w, label_w + nav_item_padding_x * 2.0);
-}
-
 const region_radius: f32 = 8.0;
 const region_padding_x: f32 = 12.0;
 const region_padding_y: f32 = 12.0;
@@ -2191,25 +2127,6 @@ fn writeResourceListHtml(list: ResourceList, out: []u8) HtmlError![]u8 {
     return writer.written();
 }
 
-fn writeNavHtml(nav: Nav, out: []u8) HtmlError![]u8 {
-    if (nav.items.len == 0) return error.InvalidHtml;
-    var writer = HtmlWriter.init(out);
-    try writer.writeAll("<nav data-er-component=\"nav\"");
-    try writer.writeAttrText("aria-label", nav.label);
-    try writer.writeByte('>');
-    for (nav.items) |item| {
-        try writer.writeAll("<a");
-        try writer.writeAttrInt("data-er-id", item.id);
-        try writer.writeAttrBool("data-er-active", item.active);
-        try writer.writeAttrText("href", item.href);
-        try writer.writeByte('>');
-        try writer.writeEscapedText(item.label);
-        try writer.writeAll("</a>");
-    }
-    try writer.writeAll("</nav>");
-    return writer.written();
-}
-
 fn writeRegionHtml(region: Region, out: []u8) HtmlError![]u8 {
     if (region.children.len == 0) return error.InvalidHtml;
     var writer = HtmlWriter.init(out);
@@ -2400,22 +2317,6 @@ fn writeBreadcrumbMarkdown(breadcrumb: Breadcrumb, out: []u8) MarkdownError![]u8
         if (item.label.len == 0) return error.InvalidMarkdown;
         try writer.fieldInt("item", item.id);
         try writer.fieldBool("current", item.current);
-        try writer.fieldText("href", item.href);
-        try writer.fieldText("label", item.label);
-    }
-    try writer.endDirective();
-    return writer.written();
-}
-
-fn writeNavMarkdown(nav: Nav, out: []u8) MarkdownError![]u8 {
-    if (nav.items.len == 0) return error.InvalidMarkdown;
-    var writer = MarkdownWriter.init(out);
-    try writer.beginDirective("nav");
-    try writer.fieldText("label", nav.label);
-    for (nav.items) |item| {
-        if (item.label.len == 0) return error.InvalidMarkdown;
-        try writer.fieldInt("item", item.id);
-        try writer.fieldBool("active", item.active);
         try writer.fieldText("href", item.href);
         try writer.fieldText("label", item.label);
     }
@@ -2618,29 +2519,6 @@ fn readBreadcrumbMarkdown(markdown: []const u8, out_items: []BreadcrumbItem, tex
     }
     if (item_count == 0) return error.InvalidMarkdown;
     return .{ .items = out_items[0..item_count] };
-}
-
-fn readNavMarkdown(markdown: []const u8, out_items: []NavItem, text_out: []u8) MarkdownError!Nav {
-    const prefix = ":::nav\nlabel: ";
-    const body = try readMarkdownDirectiveBody(markdown, ":::nav", prefix);
-    const label_end_relative = std.mem.indexOf(u8, body, "\nitem: ") orelse return error.InvalidMarkdown;
-    var text = MarkdownTextArena.init(text_out);
-    const nav_label = try text.unescapeInline(body[0..label_end_relative]);
-    var item_count: usize = 0;
-    var cursor = MarkdownCursor.init(body[label_end_relative + 1 ..]);
-    while (!cursor.done()) {
-        if (item_count == out_items.len) return error.MarkdownBudgetExceeded;
-        const id = try parseMarkdownU32(try cursor.lineAfter("item: "));
-        const active = try parseMarkdownBool(try cursor.fieldBetween("\nactive: ", "\nhref: "));
-        const href = try text.unescapeInline(try cursor.fieldBetween("\nhref: ", "\nlabel: "));
-        const item_label = try text.unescapeInline(try cursor.finalField("\nlabel: ", "\nitem: "));
-        if (item_label.len == 0) return error.InvalidMarkdown;
-        out_items[item_count] = .{ .id = id, .label = item_label, .href = href, .active = active };
-        item_count += 1;
-        try cursor.skipNewline();
-    }
-    if (item_count == 0) return error.InvalidMarkdown;
-    return .{ .label = nav_label, .items = out_items[0..item_count] };
 }
 
 fn readCardMarkdown(markdown: []const u8, text_out: []u8) MarkdownError!Card {
@@ -3398,46 +3276,6 @@ fn readResourceItemsHtml(html: []const u8, out_items: []ResourceItem, text: *Htm
         try cursor.consume("</p></li>");
         if (href.len == 0 or label.len == 0 or detail.len == 0) return error.InvalidHtml;
         out_items[item_count] = .{ .id = id, .label = label, .href = href, .detail = detail };
-        item_count += 1;
-    }
-    if (item_count == 0) return error.InvalidHtml;
-    return out_items[0..item_count];
-}
-
-fn readNavHtml(html: []const u8, out_items: []NavItem, text_out: []u8) HtmlError!Nav {
-    const prefix = "<nav data-er-component=\"nav\" aria-label=\"";
-    if (!std.mem.startsWith(u8, html, prefix)) {
-        if (std.mem.startsWith(u8, html, "<nav")) return error.InvalidHtml;
-        return error.UnsupportedHtml;
-    }
-    const after_label = html[prefix.len..];
-    const label_end = std.mem.indexOf(u8, after_label, "\">") orelse return error.InvalidHtml;
-    if (!std.mem.endsWith(u8, html, "</nav>")) return error.InvalidHtml;
-
-    var text = HtmlTextArena.init(text_out);
-    const label = try text.unescape(after_label[0..label_end]);
-    const items_start = prefix.len + label_end + "\">".len;
-    const items_html = html[items_start .. html.len - "</nav>".len];
-    const items = try readNavItemsHtml(items_html, out_items, &text);
-    return .{ .label = label, .items = items };
-}
-
-fn readNavItemsHtml(html: []const u8, out_items: []NavItem, text: *HtmlTextArena) HtmlError![]const NavItem {
-    var cursor = HtmlCursor.init(html);
-    var item_count: usize = 0;
-    while (!cursor.done()) {
-        if (item_count == out_items.len) return error.HtmlBudgetExceeded;
-        const id = try parseHtmlU32(try cursor.fieldBetween("<a data-er-id=\"", "\" data-er-active=\""));
-        const active = try parseHtmlBool(try cursor.fieldBetween("\" data-er-active=\"", "\" href=\""));
-        const href = try text.unescape(try cursor.fieldBetween("\" href=\"", "\">"));
-        const label = try text.unescape(try cursor.fieldBetween("\">", "</a>"));
-        try cursor.consume("</a>");
-        out_items[item_count] = .{
-            .id = id,
-            .label = label,
-            .href = href,
-            .active = active,
-        };
         item_count += 1;
     }
     if (item_count == 0) return error.InvalidHtml;
@@ -4911,56 +4749,6 @@ test "resource list html codec rejects malformed links" {
     try std.testing.expectError(error.InvalidHtml, ResourceList.fromHtml("<ul data-er-component=\"resource-list\"></ul>", &items, &text));
     try std.testing.expectError(error.InvalidHtml, ResourceList.fromHtml("<ul data-er-component=\"resource-list\"><li data-er-id=\"x\"><a href=\"#\">Broken</a><p>Bad id</p></li></ul>", &items, &text));
     try std.testing.expectError(error.InvalidHtml, ResourceList.fromHtml("<ul data-er-component=\"resource-list\"><li data-er-id=\"1\"><a href=\"\">Broken</a><p>Missing href</p></li></ul>", &items, &text));
-}
-
-test "nav component renders active item and hit targets" {
-    const items = [_]NavItem{
-        .{ .id = 30011, .label = "Academy", .href = "#/academy", .active = true },
-        .{ .id = 30012, .label = "Systems", .href = "#/systems" },
-        .{ .id = 30013, .label = "Security", .href = "#/security" },
-    };
-    const nav = Nav{ .label = "Academy sections", .items = &items };
-    var commands: [64]ui.Command = undefined;
-    var scene = ui.Scene.init(&commands);
-
-    try nav.render(&scene, ui.Rect.init(0, 0, 360, 48), .{});
-
-    try std.testing.expect(hasText(scene.written(), "Academy"));
-    try std.testing.expect(hasText(scene.written(), "Security"));
-    const hit = ui_input.hitTest(scene.written(), 20, 24).?;
-    try std.testing.expectEqual(@as(u32, 30011), hit.id);
-}
-
-test "nav html codec roundtrips semantic nav" {
-    const items = [_]NavItem{
-        .{ .id = 30021, .label = "Start & Map", .href = "#/start?mode=human", .active = true },
-        .{ .id = 30022, .label = "Network < DNS", .href = "#/network" },
-    };
-    const nav = Nav{ .label = "Academy & Lessons", .items = &items };
-    var html: [512]u8 = undefined;
-    var decoded_items: [2]NavItem = undefined;
-    var text: [256]u8 = undefined;
-
-    const encoded = try nav.toHtml(&html);
-    const decoded = try Nav.fromHtml(encoded, &decoded_items, &text);
-
-    try std.testing.expectEqualStrings("<nav data-er-component=\"nav\" aria-label=\"Academy &amp; Lessons\"><a data-er-id=\"30021\" data-er-active=\"true\" href=\"#/start?mode=human\">Start &amp; Map</a><a data-er-id=\"30022\" data-er-active=\"false\" href=\"#/network\">Network &lt; DNS</a></nav>", encoded);
-    try std.testing.expectEqualStrings("Academy & Lessons", decoded.label);
-    try std.testing.expectEqual(@as(usize, 2), decoded.items.len);
-    try std.testing.expectEqual(@as(u32, 30021), decoded.items[0].id);
-    try std.testing.expect(decoded.items[0].active);
-    try std.testing.expectEqualStrings("#/start?mode=human", decoded.items[0].href);
-    try std.testing.expectEqualStrings("Network < DNS", decoded.items[1].label);
-}
-
-test "nav html codec rejects malformed nav" {
-    var items: [2]NavItem = undefined;
-    var text: [128]u8 = undefined;
-
-    try std.testing.expectError(error.InvalidHtml, Nav.fromHtml("<nav><a href=\"#\">Plain</a></nav>", &items, &text));
-    try std.testing.expectError(error.InvalidHtml, Nav.fromHtml("<nav data-er-component=\"nav\" aria-label=\"Main\"><a data-er-id=\"x\" data-er-active=\"false\" href=\"#\">Broken</a></nav>", &items, &text));
-    try std.testing.expectError(error.InvalidHtml, Nav.fromHtml("<nav data-er-component=\"nav\" aria-label=\"Main\"><a data-er-id=\"1\" data-er-active=\"maybe\" href=\"#\">Broken</a></nav>", &items, &text));
-    try std.testing.expectError(error.InvalidHtml, Nav.fromHtml("<nav data-er-component=\"nav\" aria-label=\"Main\"></nav>", &items, &text));
 }
 
 test "region component renders semantic children" {
