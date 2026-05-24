@@ -205,6 +205,10 @@ pub const GpuNativeReceipt = struct {
             else => false,
         };
     }
+
+    pub fn hardwareGpuBackedValid(self: GpuNativeReceipt) bool {
+        return self.gpuBackedValid() and self.gpu.hardwareGpuValid();
+    }
 };
 
 pub const Sink = struct {
@@ -515,11 +519,13 @@ const TestGpuDevice = struct {
     presented: usize = 0,
     last_sequence: u64 = 0,
     last_buffer_modifier: u64 = 0,
+    rasterization: renderer_gpu.Rasterization = .recorded_commands,
     reject_present: bool = false,
 
     fn device(self: *TestGpuDevice) renderer_gpu.Device {
         return .{
             .context = self,
+            .rasterization = self.rasterization,
             .begin_frame = beginFrame,
             .upload_primitives = uploadPrimitives,
             .render_tiles = renderTiles,
@@ -858,6 +864,8 @@ test "native gpu render submits wayland commit from canonical ir" {
 
     try std.testing.expect(receipt.valid());
     try std.testing.expect(!receipt.gpuBackedValid());
+    try std.testing.expect(!receipt.hardwareGpuBackedValid());
+    try std.testing.expectEqual(renderer_gpu.Rasterization.recorded_commands, receipt.gpu.rasterization);
     try std.testing.expectEqual(renderer_present.Transport.gpu_command_stream, receipt.gpu.presentation_transport);
     try std.testing.expectEqual(renderer_present.Transport.wayland_surface, receipt.native.transport);
     try std.testing.expectEqual(@as(usize, 1), gpu_device.began);
@@ -909,6 +917,8 @@ test "native gpu backed render binds scanout surface before native commit" {
 
     try std.testing.expect(receipt.valid());
     try std.testing.expect(receipt.gpuBackedValid());
+    try std.testing.expect(!receipt.hardwareGpuBackedValid());
+    try std.testing.expectEqual(renderer_gpu.Rasterization.recorded_commands, receipt.gpu.rasterization);
     try std.testing.expectEqual(renderer_present.Transport.gpu_command_stream, receipt.gpu.presentation_transport);
     try std.testing.expectEqual(renderer_present.Transport.drm_framebuffer, receipt.native.transport);
     try std.testing.expectEqual(@as(usize, 1), gpu_device.began);
@@ -961,6 +971,48 @@ test "native gpu backed render rejects shared memory as gpu output" {
     ));
     try std.testing.expectEqual(@as(usize, 0), gpu_device.began);
     try std.testing.expectEqual(@as(usize, 0), sink_state.wayland_count);
+}
+
+test "native gpu backed receipt distinguishes hardware gpu rasterization" {
+    var storage = renderer_ir.FixedBuffers(1, 0, 0, 0, 0, 0, 0){};
+    const buffers = storage.buffers();
+    try renderer_ir.pushRect(buffers, .base, .{ .x = 4, .y = 4, .w = 24, .h = 24 }, .accent, .clear, 0, 0, 0);
+
+    var primitives: [16]renderer_gpu.Primitive = undefined;
+    var gpu_tile_marks: [16]u8 = undefined;
+    var gpu_dirty_ids: [16]u32 = undefined;
+    var native_tile_marks: [16]u8 = undefined;
+    var native_dirty_ids: [16]u32 = undefined;
+    var gpu_device = TestGpuDevice{ .rasterization = .hardware_gpu };
+    var sink_state = TestSink{};
+    const receipt = try renderGpuBackedAndSubmit(
+        .{ .wayland = .{
+            .surface_id = 109,
+            .buffer_id = 113,
+            .width = 64,
+            .height = 64,
+            .stride = 64,
+            .gpu_buffer = .{ .kind = .dma_buf, .handle = 0xdef },
+        } },
+        buffers,
+        .{},
+        gpu_device.device(),
+        .{
+            .primitives = &primitives,
+            .gpu_tile_marks = &gpu_tile_marks,
+            .gpu_dirty_ids = &gpu_dirty_ids,
+            .native_tile_marks = &native_tile_marks,
+            .native_dirty_ids = &native_dirty_ids,
+        },
+        60,
+        16,
+        16,
+        sink_state.waylandSink(),
+    );
+
+    try std.testing.expect(receipt.gpuBackedValid());
+    try std.testing.expect(receipt.hardwareGpuBackedValid());
+    try std.testing.expectEqual(renderer_gpu.Rasterization.hardware_gpu, receipt.gpu.rasterization);
 }
 
 test "native gpu backed wayland render requires dma buf surface" {

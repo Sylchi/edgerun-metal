@@ -19,6 +19,12 @@ pub const Backend = enum(u8) {
     gpu,
 };
 
+pub const Rasterization = enum(u8) {
+    recorded_commands,
+    cpu_filled_gpu_buffer,
+    hardware_gpu,
+};
+
 pub const SurfaceFormat = enum(u32) {
     xrgb8888 = 0x34325258,
     argb8888 = 0x34325241,
@@ -135,14 +141,20 @@ pub const Receipt = struct {
     dirty_tile_count: usize,
     presentation_primitive_count: usize = 0,
     presentation_transport: renderer_present.Transport = .gpu_command_stream,
+    rasterization: Rasterization = .recorded_commands,
 
     pub fn valid(self: Receipt) bool {
         return self.sequence != 0 and self.primitive_count != 0;
+    }
+
+    pub fn hardwareGpuValid(self: Receipt) bool {
+        return self.valid() and self.rasterization == .hardware_gpu;
     }
 };
 
 pub const Device = struct {
     context: *anyopaque,
+    rasterization: Rasterization = .recorded_commands,
     begin_frame: *const fn (context: *anyopaque, frame: Frame) bool,
     upload_primitives: *const fn (context: *anyopaque, primitives: []const Primitive) bool,
     render_tiles: *const fn (context: *anyopaque, dirty_tiles: []const u32) bool,
@@ -208,6 +220,7 @@ pub const Renderer = struct {
             .sequence = frame.sequence,
             .primitive_count = frame.primitives.len,
             .dirty_tile_count = frame.dirty_tiles.len,
+            .rasterization = self.device.rasterization,
         };
     }
 
@@ -249,6 +262,7 @@ pub const Renderer = struct {
             .dirty_tile_count = frame.dirty_tiles.len,
             .presentation_primitive_count = presentation.primitive_count,
             .presentation_transport = presentation.transport,
+            .rasterization = self.device.rasterization,
         };
     }
 };
@@ -457,10 +471,12 @@ const TestDevice = struct {
     rendered: usize = 0,
     presented: usize = 0,
     last_sequence: u64 = 0,
+    rasterization: Rasterization = .recorded_commands,
 
     fn device(self: *TestDevice) Device {
         return .{
             .context = self,
+            .rasterization = self.rasterization,
             .begin_frame = beginFrame,
             .upload_primitives = uploadPrimitives,
             .render_tiles = renderTiles,
@@ -582,6 +598,8 @@ test "gpu renderer submits encoded frame to required device callbacks" {
     try std.testing.expect(test_device.rendered == receipt.dirty_tile_count);
     try std.testing.expectEqual(@as(usize, 1), test_device.presented);
     try std.testing.expectEqual(receipt.sequence, test_device.last_sequence);
+    try std.testing.expectEqual(Rasterization.recorded_commands, receipt.rasterization);
+    try std.testing.expect(!receipt.hardwareGpuValid());
 }
 
 test "gpu renderer encodes canonical ir frames" {
@@ -619,6 +637,30 @@ test "gpu renderer encodes canonical ir frames" {
     try std.testing.expect(test_device.uploaded == receipt.primitive_count);
     try std.testing.expect(test_device.rendered == receipt.dirty_tile_count);
     try std.testing.expectEqual(receipt.sequence, test_device.last_sequence);
+}
+
+test "gpu renderer receipts carry hardware rasterization capability" {
+    var storage = renderer_ir.FixedBuffers(1, 0, 0, 0, 0, 0, 0){};
+    const buffers = storage.buffers();
+    try renderer_ir.pushRect(buffers, .base, .{ .x = 0, .y = 0, .w = 32, .h = 32 }, .accent, .clear, 0, 0, 0);
+
+    var primitives: [16]Primitive = undefined;
+    var tile_marks: [64]u8 = undefined;
+    var dirty_ids: [64]u32 = undefined;
+    var test_device = TestDevice{ .rasterization = .hardware_gpu };
+    var renderer = try Renderer.init(
+        test_device.device(),
+        .{ .width = 320, .height = 240, .stride = 320, .refresh_hz = 120 },
+        64,
+        64,
+        &primitives,
+        &tile_marks,
+        &dirty_ids,
+    );
+
+    const receipt = try renderer.renderIr(&.{}, buffers);
+    try std.testing.expect(receipt.hardwareGpuValid());
+    try std.testing.expectEqual(Rasterization.hardware_gpu, receipt.rasterization);
 }
 
 test "gpu renderer rejects textured canonical ir without declared resources" {
