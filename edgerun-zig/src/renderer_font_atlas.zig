@@ -5,7 +5,7 @@ const varfont = @import("varfont.zig");
 pub const width: usize = 1024;
 pub const height: usize = 1024;
 pub const bytes: usize = width * height;
-pub const glyph_capacity: usize = 256;
+pub const glyph_capacity: usize = 1280;
 
 const padding: usize = 4;
 const row_gap: usize = 4;
@@ -51,7 +51,16 @@ pub const Atlas = struct {
 
     fn resolveGlyph(self: *Atlas, ch: u8, px: u8) renderer_ir.Error!?renderer_ir.Glyph {
         if (self.findGlyph(ch, px)) |found| return found;
-        return self.cacheGlyph(ch, px) catch null;
+        return self.cacheGlyph(ch, px) catch |err| switch (err) {
+            error.GlyphBitmapBudgetExceeded, error.GlyphCacheFull => error.Budget,
+            error.InvalidFont,
+            error.MissingTable,
+            error.UnsupportedCmap,
+            error.UnsupportedGlyph,
+            error.GlyphPointBudgetExceeded,
+            error.GlyphEdgeBudgetExceeded,
+            => null,
+        };
     }
 
     fn findGlyph(self: *const Atlas, ch: u8, px: u8) ?renderer_ir.Glyph {
@@ -170,4 +179,19 @@ test "font atlas supplies renderer ir text vertices" {
     try renderer_ir.pushText(buffers, sources.font, .base, .{ .x = 0, .y = 0, .w = 64, .h = 18 }, "A", .text, .start);
     try std.testing.expectEqual(@as(usize, renderer_ir.textured_quad_vertex_count * renderer_ir.text_vertex_float_stride), storage.text_vertex_len);
     try std.testing.expect(atlas.cachedGlyphCount() > 0);
+}
+
+test "font atlas caches ascii glyphs across common sizes" {
+    var atlas = Atlas.init();
+    const source = atlas.source();
+    const px_sizes = [_]u8{ 11, 16, 24, 32 };
+
+    for (px_sizes) |px| {
+        var ch: usize = renderer_ir.font_first_char;
+        while (ch <= renderer_ir.font_last_char) : (ch += 1) {
+            _ = try source.glyph(source.context, @intCast(ch), px);
+        }
+    }
+
+    try std.testing.expect(atlas.cachedGlyphCount() > 256);
 }
