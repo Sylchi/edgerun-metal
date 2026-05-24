@@ -129,7 +129,7 @@ pub const NativeSurface = union(enum) {
                 .width = surface.width,
                 .height = surface.height,
                 .is_opaque = surface.format == .xrgb8888,
-                .buffer = try gpuSurfaceBuffer(surface.width, surface.height, surface.stride, surface.format, surface.gpu_buffer),
+                .buffer = try gpuSurfaceBuffer(.drm, surface.width, surface.height, surface.stride, surface.format, surface.gpu_buffer),
             },
             .wayland => |surface| .{
                 .id = surface.buffer_id,
@@ -137,7 +137,7 @@ pub const NativeSurface = union(enum) {
                 .height = surface.height,
                 .buffer_scale = @intCast(surface.scale),
                 .is_opaque = surface.format == .xrgb8888,
-                .buffer = try gpuSurfaceBuffer(surface.width, surface.height, surface.stride, surface.format, surface.gpu_buffer),
+                .buffer = try gpuSurfaceBuffer(.wayland, surface.width, surface.height, surface.stride, surface.format, surface.gpu_buffer),
             },
         };
     }
@@ -413,9 +413,10 @@ fn commitForSurface(surface: NativeSurface, dirty_tiles: []const u32) Commit {
     };
 }
 
-fn gpuSurfaceBuffer(width: u32, height: u32, stride: u32, format: PixelFormat, maybe_buffer: ?GpuBuffer) Error!renderer_gpu.SurfaceBuffer {
+fn gpuSurfaceBuffer(target: renderer_present.TargetKind, width: u32, height: u32, stride: u32, format: PixelFormat, maybe_buffer: ?GpuBuffer) Error!renderer_gpu.SurfaceBuffer {
     const buffer = maybe_buffer orelse return error.InvalidGpuBuffer;
     if (!buffer.valid()) return error.InvalidGpuBuffer;
+    if (!gpuBufferKindMatchesTarget(target, buffer.kind)) return error.InvalidGpuBuffer;
     const surface_buffer = renderer_gpu.SurfaceBuffer{
         .kind = buffer.kind,
         .width = width,
@@ -429,6 +430,17 @@ fn gpuSurfaceBuffer(width: u32, height: u32, stride: u32, format: PixelFormat, m
     };
     if (!surface_buffer.valid()) return error.InvalidGpuBuffer;
     return surface_buffer;
+}
+
+fn gpuBufferKindMatchesTarget(target: renderer_present.TargetKind, kind: renderer_gpu.BufferKind) bool {
+    return switch (target) {
+        .drm => kind == .scanout or kind == .dma_buf,
+        .wayland => kind == .dma_buf,
+        .cpu,
+        .gpu,
+        .browser,
+        => false,
+    };
 }
 
 fn gpuSurfaceFormat(format: PixelFormat) renderer_gpu.SurfaceFormat {
@@ -924,6 +936,92 @@ test "native gpu backed render rejects shared memory as gpu output" {
     ));
     try std.testing.expectEqual(@as(usize, 0), gpu_device.began);
     try std.testing.expectEqual(@as(usize, 0), sink_state.wayland_count);
+}
+
+test "native gpu backed wayland render requires dma buf surface" {
+    var storage = renderer_ir.FixedBuffers(1, 0, 0, 0, 0, 0, 0){};
+    const buffers = storage.buffers();
+    try renderer_ir.pushRect(buffers, .base, .{ .x = 0, .y = 0, .w = 16, .h = 16 }, .accent, .clear, 0, 0, 0);
+
+    var primitives: [16]renderer_gpu.Primitive = undefined;
+    var gpu_tile_marks: [16]u8 = undefined;
+    var gpu_dirty_ids: [16]u32 = undefined;
+    var native_tile_marks: [16]u8 = undefined;
+    var native_dirty_ids: [16]u32 = undefined;
+    var gpu_device = TestGpuDevice{};
+    var sink_state = TestSink{};
+
+    try std.testing.expectError(error.InvalidGpuBuffer, renderGpuBackedAndSubmit(
+        .{ .wayland = .{
+            .surface_id = 113,
+            .buffer_id = 127,
+            .width = 64,
+            .height = 64,
+            .stride = 64,
+            .gpu_buffer = .{ .kind = .scanout, .handle = 0x123 },
+        } },
+        buffers,
+        .{},
+        gpu_device.device(),
+        .{
+            .primitives = &primitives,
+            .gpu_tile_marks = &gpu_tile_marks,
+            .gpu_dirty_ids = &gpu_dirty_ids,
+            .native_tile_marks = &native_tile_marks,
+            .native_dirty_ids = &native_dirty_ids,
+        },
+        60,
+        16,
+        16,
+        sink_state.waylandSink(),
+    ));
+    try std.testing.expectEqual(@as(usize, 0), gpu_device.began);
+    try std.testing.expectEqual(@as(usize, 0), sink_state.wayland_count);
+}
+
+test "native gpu backed wayland render accepts dma buf surface" {
+    var storage = renderer_ir.FixedBuffers(1, 0, 0, 0, 0, 0, 0){};
+    const buffers = storage.buffers();
+    try renderer_ir.pushRect(buffers, .base, .{ .x = 4, .y = 4, .w = 24, .h = 24 }, .accent, .clear, 0, 0, 0);
+
+    var primitives: [16]renderer_gpu.Primitive = undefined;
+    var gpu_tile_marks: [16]u8 = undefined;
+    var gpu_dirty_ids: [16]u32 = undefined;
+    var native_tile_marks: [16]u8 = undefined;
+    var native_dirty_ids: [16]u32 = undefined;
+    var gpu_device = TestGpuDevice{};
+    var sink_state = TestSink{};
+    const receipt = try renderGpuBackedAndSubmit(
+        .{ .wayland = .{
+            .surface_id = 131,
+            .buffer_id = 137,
+            .width = 64,
+            .height = 64,
+            .stride = 64,
+            .gpu_buffer = .{ .kind = .dma_buf, .handle = 0x456, .modifier = 0x8877665544332211 },
+        } },
+        buffers,
+        .{},
+        gpu_device.device(),
+        .{
+            .primitives = &primitives,
+            .gpu_tile_marks = &gpu_tile_marks,
+            .gpu_dirty_ids = &gpu_dirty_ids,
+            .native_tile_marks = &native_tile_marks,
+            .native_dirty_ids = &native_dirty_ids,
+        },
+        60,
+        16,
+        16,
+        sink_state.waylandSink(),
+    );
+
+    try std.testing.expect(receipt.valid());
+    try std.testing.expectEqual(renderer_present.Transport.wayland_surface, receipt.native.transport);
+    try std.testing.expectEqual(@as(usize, 1), gpu_device.began);
+    try std.testing.expectEqual(@as(u64, 0x8877665544332211), gpu_device.last_buffer_modifier);
+    try std.testing.expectEqual(@as(usize, 1), sink_state.wayland_count);
+    try std.testing.expectEqual(@as(u32, 131), sink_state.last_surface_id);
 }
 
 test "native gpu render rejects missing resources before native submit" {
