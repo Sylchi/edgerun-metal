@@ -20,6 +20,7 @@ const c = @cImport({
 const default_width: i32 = 960;
 const default_height: i32 = 540;
 const default_seconds: u32 = 5;
+const default_surface_scale: i32 = 2;
 const frame_ms: i32 = 16;
 const wayland_fixed_scale: f32 = 256.0;
 const pointer_button_left: u32 = 0x110;
@@ -47,6 +48,7 @@ const IrStorage = renderer_ir.FixedBuffers(
 const Options = struct {
     width: i32 = default_width,
     height: i32 = default_height,
+    scale: i32 = default_surface_scale,
     seconds: u32 = default_seconds,
 };
 
@@ -67,6 +69,15 @@ const WaylandState = struct {
     app: *AppState,
     width: i32,
     height: i32,
+    scale: i32,
+
+    fn framebufferWidth(self: WaylandState) i32 {
+        return self.width * self.scale;
+    }
+
+    fn framebufferHeight(self: WaylandState) i32 {
+        return self.height * self.scale;
+    }
 };
 
 const EglState = struct {
@@ -128,7 +139,7 @@ pub fn main(init: std.process.Init) !void {
 
     var app = AppState{};
     var wl: WaylandState = undefined;
-    try initWayland(&wl, options.width, options.height, &app);
+    try initWayland(&wl, options.width, options.height, options.scale, &app);
     defer deinitWayland(&wl);
     var egl = try initEgl(&wl);
     defer deinitEgl(&egl);
@@ -147,7 +158,7 @@ pub fn main(init: std.process.Init) !void {
         try pumpWaylandEvents(&wl);
 
         if (wl.resized) {
-            c.wl_egl_window_resize(egl.window, wl.width, wl.height, 0, 0);
+            c.wl_egl_window_resize(egl.window, wl.framebufferWidth(), wl.framebufferHeight(), 0, 0);
             buffers = try scene_state.rebuild(wl.width, wl.height, app, &font_atlas);
             renderer_gles.refreshFontTexture(gl, &font_atlas);
             updateHoverHit(&app, scene_state.commandSlice());
@@ -158,9 +169,9 @@ pub fn main(init: std.process.Init) !void {
             updateHoverHit(&app, scene_state.commandSlice());
             wl.input_dirty = false;
         }
-        try renderer_gles.renderFrame(gl, wl.width, wl.height, buffers);
+        try renderer_gles.renderFrameToViewport(gl, wl.width, wl.height, wl.framebufferWidth(), wl.framebufferHeight(), buffers);
         if (!frame_verified) {
-            _ = try renderer_gles.verifyFrameNonBlank(wl.width, wl.height);
+            _ = try renderer_gles.verifyFrameNonBlank(wl.framebufferWidth(), wl.framebufferHeight());
             frame_verified = true;
         }
         if (c.eglSwapBuffers(egl.display, egl.surface) != c.EGL_TRUE) return error.EglSwapFailed;
@@ -212,6 +223,10 @@ fn parseOptions(args: []const [:0]const u8) !Options {
             index += 1;
             if (index >= args.len) return error.InvalidArguments;
             options.height = try std.fmt.parseInt(i32, args[index], 10);
+        } else if (std.mem.eql(u8, args[index], "--scale")) {
+            index += 1;
+            if (index >= args.len) return error.InvalidArguments;
+            options.scale = try std.fmt.parseInt(i32, args[index], 10);
         } else if (std.mem.eql(u8, args[index], "--seconds")) {
             index += 1;
             if (index >= args.len) return error.InvalidArguments;
@@ -220,15 +235,15 @@ fn parseOptions(args: []const [:0]const u8) !Options {
             return error.InvalidArguments;
         }
     }
-    if (options.width <= 0 or options.height <= 0 or options.seconds == 0) return error.InvalidArguments;
+    if (options.width <= 0 or options.height <= 0 or options.scale <= 0 or options.seconds == 0) return error.InvalidArguments;
     return options;
 }
 
-fn initWayland(state: *WaylandState, width: i32, height: i32, app: *AppState) !void {
+fn initWayland(state: *WaylandState, width: i32, height: i32, scale: i32, app: *AppState) !void {
     const display = c.wl_display_connect(null) orelse return error.WaylandConnectFailed;
     errdefer c.wl_display_disconnect(display);
     const registry = c.wl_display_get_registry(display) orelse return error.WaylandRegistryFailed;
-    state.* = .{ .display = display, .registry = registry, .app = app, .width = width, .height = height };
+    state.* = .{ .display = display, .registry = registry, .app = app, .width = width, .height = height, .scale = scale };
     if (c.wl_registry_add_listener(registry, &registry_listener, state) != 0) return error.WaylandRegistryFailed;
     if (c.wl_display_roundtrip(display) < 0) return error.WaylandRoundtripFailed;
     const compositor = state.compositor orelse return error.MissingWaylandCompositor;
@@ -238,6 +253,7 @@ fn initWayland(state: *WaylandState, width: i32, height: i32, app: *AppState) !v
         if (c.wl_seat_add_listener(seat, &seat_listener, state) != 0) return error.WaylandSeatListenerFailed;
     }
     state.surface = c.wl_compositor_create_surface(compositor) orelse return error.WaylandSurfaceFailed;
+    c.wl_surface_set_buffer_scale(state.surface, scale);
     state.xdg_surface = c.xdg_wm_base_get_xdg_surface(wm_base, state.surface) orelse return error.XdgSurfaceFailed;
     if (c.xdg_surface_add_listener(state.xdg_surface, &xdg_surface_listener, state) != 0) return error.XdgListenerFailed;
     state.toplevel = c.xdg_surface_get_toplevel(state.xdg_surface) orelse return error.XdgToplevelFailed;
@@ -285,7 +301,7 @@ fn initEgl(wl: *WaylandState) !EglState {
     if (context == c.EGL_NO_CONTEXT) return error.EglContextFailed;
     errdefer _ = c.eglDestroyContext(egl_display, context);
     const surface = wl.surface orelse return error.WaylandSurfaceFailed;
-    const window = c.wl_egl_window_create(surface, wl.width, wl.height) orelse return error.EglWindowFailed;
+    const window = c.wl_egl_window_create(surface, wl.framebufferWidth(), wl.framebufferHeight()) orelse return error.EglWindowFailed;
     errdefer c.wl_egl_window_destroy(window);
     const egl_surface = c.eglCreateWindowSurface(egl_display, config, @ptrCast(window), null);
     if (egl_surface == c.EGL_NO_SURFACE) return error.EglSurfaceFailed;
