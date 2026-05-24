@@ -24,6 +24,7 @@ pub const grant = @import("grant.zig");
 pub const input = @import("input.zig");
 pub const intent = @import("intent.zig");
 pub const layout = @import("layout.zig");
+pub const linux_drm = @import("linux_drm.zig");
 pub const math = @import("math.zig");
 pub const pi_board = @import("pi_board.zig");
 pub const pi_mmc = @import("pi_mmc.zig");
@@ -88,6 +89,7 @@ test {
     _ = input;
     _ = intent;
     _ = layout;
+    _ = linux_drm;
     _ = math;
     _ = pi_board;
     _ = pi_mmc;
