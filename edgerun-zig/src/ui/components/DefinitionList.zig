@@ -1,6 +1,7 @@
 const std = @import("std");
 const common = @import("../../ui_component_common.zig");
 const layout = @import("../../layouts/Types.zig");
+const base_info_row = @import("base/InfoRow.zig");
 const base_surface = @import("base/Surface.zig");
 const ui = @import("../../ui.zig");
 const ui_input = @import("../../input.zig");
@@ -71,7 +72,6 @@ pub fn register(registry: *ComponentRegistry) RegistryError!void {
 
 pub fn renderDefinitionList(list: DefinitionList, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
     if (list.items.len == 0) return;
-    const style = options.style;
     try base_surface.renderFrame(scene, bounds, options);
 
     var y = bounds.y + definition_padding_y;
@@ -79,17 +79,10 @@ pub fn renderDefinitionList(list: DefinitionList, scene: *ui.Scene, bounds: ui.R
     const content_w = @max(1.0, bounds.w - definition_padding_x * 2.0);
     const bottom = bounds.y + bounds.h - definition_padding_y;
     for (list.items) |item| {
-        if (y + definition_item_h > bottom) break;
-        const item_bounds = ui.Rect.init(content_x, y, content_w, definition_item_h);
-        try scene.pushRect(item_bounds, style.row, .fill, definition_item_radius, 0.0);
-        try scene.pushAlignedText(ui.Rect.init(item_bounds.x + definition_item_padding_x, item_bounds.y + definition_term_y, @max(1.0, item_bounds.w - definition_item_padding_x * 2.0), definition_term_h), item.term, style.text, .start);
-        try scene.pushWrappedText(ui.Rect.init(item_bounds.x + definition_item_padding_x, item_bounds.y + definition_detail_y, @max(1.0, item_bounds.w - definition_item_padding_x * 2.0), definition_detail_h), item.detail, style.muted, .{
-            .line_height = definition_detail_line_h,
-            .average_char_width = definition_detail_avg_w,
-            .max_lines = definition_detail_max_lines,
-        });
-        try scene.pushHit(.{ .slot = 0, .kind = .row_item, .id = item.id, .bounds = item_bounds });
-        y += definition_item_h + definition_item_gap;
+        if (y + definition_row_metrics.height > bottom) break;
+        const item_bounds = ui.Rect.init(content_x, y, content_w, definition_row_metrics.height);
+        try base_info_row.render(scene, item_bounds, .{ .id = item.id, .title = item.term, .detail = item.detail }, definition_row_metrics, options);
+        y += definition_row_metrics.height + definition_item_gap;
     }
 }
 
@@ -104,7 +97,7 @@ pub fn measureDefinitionList(list: DefinitionList, constraints: layout.Constrain
         preferred_height += row.preferred.h;
     }
     return layout.Measurement.flexible(
-        .{ .w = definition_min_w, .h = definition_padding_y * 2.0 },
+        .{ .w = definition_row_metrics.min_width, .h = definition_padding_y * 2.0 },
         .{ .w = preferred_width, .h = preferred_height },
         .{ .w = constraints.width.limit(preferred_width), .h = preferred_height },
     ).withInsets(definitionInsets()).applyExact(constraints);
@@ -206,32 +199,15 @@ fn readItemsHtml(html: []const u8, out_items: []DefinitionItem, text: *HtmlTextA
 
 const definition_padding_x: f32 = 12.0;
 const definition_padding_y: f32 = 12.0;
-const definition_item_h: f32 = 76.0;
 const definition_item_gap: f32 = 8.0;
-const definition_item_radius: f32 = 6.0;
-const definition_item_padding_x: f32 = 12.0;
-const definition_term_y: f32 = 11.0;
-const definition_term_h: f32 = 16.0;
-const definition_term_avg_w: f32 = 8.5;
-const definition_detail_y: f32 = 34.0;
-const definition_detail_h: f32 = 34.0;
-const definition_detail_line_h: f32 = 16.0;
-const definition_detail_avg_w: f32 = 8.5;
-const definition_detail_max_lines: usize = 2;
-const definition_term_max_lines: usize = 1;
-const definition_min_w: f32 = 180.0;
+const definition_row_metrics = base_info_row.Metrics{
+    .height = 76.0,
+    .detail_height = 34.0,
+    .detail_line_height = 16.0,
+};
 
 fn measureDefinitionItem(item: DefinitionItem, constraints: layout.Constraints) layout.Measurement {
-    const text_constraints = constraints.inner(layout.Insets.uniform(definition_item_padding_x));
-    const term = layout.measureText(item.term, text_constraints, .{ .line_height = definition_term_h, .average_char_width = definition_term_avg_w, .max_lines = definition_term_max_lines });
-    const detail = layout.measureText(item.detail, text_constraints, .{ .line_height = definition_detail_line_h, .average_char_width = definition_detail_avg_w, .max_lines = definition_detail_max_lines });
-    const content_width = @max(term.preferred.w, detail.preferred.w) + definition_item_padding_x * 2.0;
-    const content_height = definition_term_y + term.preferred.h + (definition_detail_y - definition_term_y - definition_term_h) + detail.preferred.h;
-    return layout.Measurement.flexible(
-        .{ .w = definition_min_w, .h = definition_item_h },
-        .{ .w = content_width, .h = @max(definition_item_h, content_height) },
-        .{ .w = constraints.width.limit(content_width), .h = @max(definition_item_h, content_height) },
-    ).applyExact(constraints);
+    return base_info_row.measure(item.term, item.detail, constraints, definition_row_metrics);
 }
 
 fn definitionInsets() layout.Insets {

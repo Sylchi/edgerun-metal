@@ -1,6 +1,7 @@
 const std = @import("std");
 const common = @import("../../ui_component_common.zig");
 const layout = @import("../../layouts/Types.zig");
+const base_info_row = @import("base/InfoRow.zig");
 const base_surface = @import("base/Surface.zig");
 const ui = @import("../../ui.zig");
 const ui_input = @import("../../input.zig");
@@ -72,7 +73,6 @@ pub fn register(registry: *ComponentRegistry) RegistryError!void {
 
 pub fn renderResourceList(list: ResourceList, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
     if (list.items.len == 0) return;
-    const style = options.style;
     try base_surface.renderFrame(scene, bounds, options);
 
     var y = bounds.y + resource_padding_y;
@@ -80,17 +80,10 @@ pub fn renderResourceList(list: ResourceList, scene: *ui.Scene, bounds: ui.Rect,
     const content_w = @max(1.0, bounds.w - resource_padding_x * 2.0);
     const bottom = bounds.y + bounds.h - resource_padding_y;
     for (list.items) |item| {
-        if (y + resource_item_h > bottom) break;
-        const item_bounds = ui.Rect.init(content_x, y, content_w, resource_item_h);
-        try scene.pushRect(item_bounds, style.row, .fill, resource_item_radius, 0.0);
-        try scene.pushAlignedText(ui.Rect.init(item_bounds.x + resource_item_padding_x, item_bounds.y + resource_label_y, @max(1.0, item_bounds.w - resource_item_padding_x * 2.0), resource_label_h), item.label, style.text, .start);
-        try scene.pushWrappedText(ui.Rect.init(item_bounds.x + resource_item_padding_x, item_bounds.y + resource_detail_y, @max(1.0, item_bounds.w - resource_item_padding_x * 2.0), resource_detail_h), item.detail, style.muted, .{
-            .line_height = resource_detail_line_h,
-            .average_char_width = resource_detail_avg_w,
-            .max_lines = resource_detail_max_lines,
-        });
-        try scene.pushHit(.{ .slot = 0, .kind = .button, .id = item.id, .bounds = item_bounds });
-        y += resource_item_h + resource_item_gap;
+        if (y + resource_row_metrics.height > bottom) break;
+        const item_bounds = ui.Rect.init(content_x, y, content_w, resource_row_metrics.height);
+        try base_info_row.render(scene, item_bounds, .{ .id = item.id, .title = item.label, .detail = item.detail, .hit_kind = .button }, resource_row_metrics, options);
+        y += resource_row_metrics.height + resource_item_gap;
     }
 }
 
@@ -105,7 +98,7 @@ pub fn measureResourceList(list: ResourceList, constraints: layout.Constraints) 
         preferred_height += row.preferred.h;
     }
     return layout.Measurement.flexible(
-        .{ .w = resource_min_w, .h = resource_padding_y * 2.0 },
+        .{ .w = resource_row_metrics.min_width, .h = resource_padding_y * 2.0 },
         .{ .w = preferred_width, .h = preferred_height },
         .{ .w = constraints.width.limit(preferred_width), .h = preferred_height },
     ).withInsets(resourceInsets()).applyExact(constraints);
@@ -212,32 +205,11 @@ fn readItemsHtml(html: []const u8, out_items: []ResourceItem, text: *HtmlTextAre
 
 const resource_padding_x: f32 = 12.0;
 const resource_padding_y: f32 = 12.0;
-const resource_item_h: f32 = 70.0;
 const resource_item_gap: f32 = 8.0;
-const resource_item_radius: f32 = 6.0;
-const resource_item_padding_x: f32 = 12.0;
-const resource_label_y: f32 = 11.0;
-const resource_label_h: f32 = 16.0;
-const resource_label_avg_w: f32 = 8.5;
-const resource_detail_y: f32 = 34.0;
-const resource_detail_h: f32 = 30.0;
-const resource_detail_line_h: f32 = 15.0;
-const resource_detail_avg_w: f32 = 8.5;
-const resource_detail_max_lines: usize = 2;
-const resource_label_max_lines: usize = 1;
-const resource_min_w: f32 = 180.0;
+const resource_row_metrics = base_info_row.Metrics{};
 
 fn measureResourceItem(item: ResourceItem, constraints: layout.Constraints) layout.Measurement {
-    const text_constraints = constraints.inner(layout.Insets.uniform(resource_item_padding_x));
-    const label = layout.measureText(item.label, text_constraints, .{ .line_height = resource_label_h, .average_char_width = resource_label_avg_w, .max_lines = resource_label_max_lines });
-    const detail = layout.measureText(item.detail, text_constraints, .{ .line_height = resource_detail_line_h, .average_char_width = resource_detail_avg_w, .max_lines = resource_detail_max_lines });
-    const content_width = @max(label.preferred.w, detail.preferred.w) + resource_item_padding_x * 2.0;
-    const content_height = resource_label_y + label.preferred.h + (resource_detail_y - resource_label_y - resource_label_h) + detail.preferred.h;
-    return layout.Measurement.flexible(
-        .{ .w = resource_min_w, .h = resource_item_h },
-        .{ .w = content_width, .h = @max(resource_item_h, content_height) },
-        .{ .w = constraints.width.limit(content_width), .h = @max(resource_item_h, content_height) },
-    ).applyExact(constraints);
+    return base_info_row.measure(item.label, item.detail, constraints, resource_row_metrics);
 }
 
 fn resourceInsets() layout.Insets {
