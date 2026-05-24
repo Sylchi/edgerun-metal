@@ -3,6 +3,7 @@ const ui = @import("ui.zig");
 
 pub const Error = error{
     InteractionBudgetExceeded,
+    InvalidInteractionBounds,
 };
 
 pub const Region = struct {
