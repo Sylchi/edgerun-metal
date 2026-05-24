@@ -9,6 +9,7 @@ const renderer_gpu_buffer = @import("renderer_gpu_buffer.zig");
 const renderer_ir = @import("renderer_ir.zig");
 const renderer_native_present = @import("renderer_native_present.zig");
 const renderer_software = @import("renderer_software.zig");
+const component_gallery = @import("component_gallery.zig");
 const site_apps = @import("site_apps.zig");
 const site_blog = @import("site_blog.zig");
 const site_chrome = @import("site_chrome.zig");
@@ -44,6 +45,7 @@ const max_registry_globals: usize = 128;
 const socket_read_bytes: usize = 8192;
 const message_bytes: usize = 512;
 const pointer_motion_render_step: f32 = 8.0;
+const cursor_scene_budget: usize = 32;
 
 const display_id: u32 = 1;
 const registry_id: u32 = 2;
@@ -69,6 +71,7 @@ const wl_display_get_registry: u16 = 1;
 const wl_registry_bind: u16 = 0;
 const wl_compositor_create_surface: u16 = 0;
 const wl_seat_get_pointer: u16 = 0;
+const wl_pointer_set_cursor: u16 = 0;
 const wl_shm_create_pool: u16 = 0;
 const wl_shm_pool_create_buffer: u16 = 0;
 const wl_shm_pool_destroy: u16 = 1;
@@ -508,6 +511,12 @@ const WaylandClient = struct {
         try self.send(makeSurfaceCommit);
     }
 
+    fn attachCommitRect(self: *WaylandClient, rect: PixelRect) !void {
+        try self.sendAttach(wl_buffer_id);
+        try self.sendDamageRect(rect);
+        try self.send(makeSurfaceCommit);
+    }
+
     fn attachDmabufCommit(self: *WaylandClient, width: u32, height: u32) !void {
         try self.sendAttach(dmabuf_wl_buffer_id);
         try self.sendDamage(width, height);
@@ -548,9 +557,20 @@ const WaylandClient = struct {
         try writeAll(self.fd, try makeSetMinimized(&buffer));
     }
 
+    fn sendHidePointerCursor(self: WaylandClient, serial: u32) !void {
+        var buffer: [message_bytes]u8 = undefined;
+        try writeAll(self.fd, try makeHidePointerCursor(&buffer, serial));
+    }
+
     fn sendDamage(self: WaylandClient, width: u32, height: u32) !void {
         var buffer: [message_bytes]u8 = undefined;
         const bytes = try makeDamageBuffer(&buffer, width, height);
+        try writeAll(self.fd, bytes);
+    }
+
+    fn sendDamageRect(self: WaylandClient, rect: PixelRect) !void {
+        var buffer: [message_bytes]u8 = undefined;
+        const bytes = try makeDamageBufferRect(&buffer, rect);
         try writeAll(self.fd, bytes);
     }
 
@@ -649,6 +669,17 @@ const ShmBuffer = struct {
     }
 };
 
+const PixelRect = struct {
+    x: usize,
+    y: usize,
+    w: usize,
+    h: usize,
+
+    fn valid(self: PixelRect) bool {
+        return self.w != 0 and self.h != 0;
+    }
+};
+
 const NativeApp = struct {
     allocator: std.mem.Allocator,
     width: u32,
@@ -657,12 +688,14 @@ const NativeApp = struct {
     dmabuf_fd: ?posix.fd_t,
     shm: ShmBuffer,
     pixels: []ui.Color,
+    base_pixels: []ui.Color,
+    base_pixels_ready: bool = false,
+    cursor_damage: ?PixelRect = null,
     commands: [max_commands]ui.Command = undefined,
     clips: [max_clips]ui.Rect = undefined,
     regions: [max_interaction_regions]interaction.Region = undefined,
     region_len: usize = 0,
     ir_storage: IrStorage = .{},
-    font_storage: renderer_font_atlas.AsciiFontStorage = .{},
     font_atlas: renderer_font_atlas.Atlas,
     gpu_primitives: []renderer_gpu.Primitive,
     gpu_tile_marks: [max_tiles]u8 = undefined,
@@ -682,6 +715,8 @@ const NativeApp = struct {
         errdefer shm.deinit();
         const pixels = try allocator.alloc(ui.Color, @as(usize, width) * height);
         errdefer allocator.free(pixels);
+        const base_pixels = try allocator.alloc(ui.Color, @as(usize, width) * height);
+        errdefer allocator.free(base_pixels);
         const gpu_primitives = try allocator.alloc(renderer_gpu.Primitive, max_gpu_primitives);
         errdefer allocator.free(gpu_primitives);
         var drm_buffer: ?linux_drm.DumbBuffer = if (options.present == .gpu_dmabuf and options.dmabuf_fd == null)
@@ -699,12 +734,13 @@ const NativeApp = struct {
         self.dmabuf_fd = options.dmabuf_fd;
         self.shm = shm;
         self.pixels = pixels;
+        self.base_pixels = base_pixels;
+        self.base_pixels_ready = false;
+        self.cursor_damage = null;
         self.gpu_primitives = gpu_primitives;
         self.region_len = 0;
         self.ir_storage = .{};
-        self.font_storage = .{};
-        _ = try renderer_font_atlas.compileGeistAscii(&self.font_storage);
-        self.font_atlas = self.font_storage.atlas().?;
+        self.font_atlas = renderer_font_atlas.Atlas.initWithFont(renderer_font_atlas.geist_ascii_font.body());
         self.state = .{ .route = site_navigation.fromPath(options.path) };
         self.gpu_recorder = .{};
         self.gpu_buffer_device = .{};
@@ -715,6 +751,7 @@ const NativeApp = struct {
     fn deinit(self: *NativeApp) void {
         if (self.drm_buffer) |*buffer| buffer.deinit();
         self.allocator.free(self.gpu_primitives);
+        self.allocator.free(self.base_pixels);
         self.allocator.free(self.pixels);
         self.shm.deinit();
     }
@@ -731,7 +768,8 @@ const NativeApp = struct {
         try renderNativeSiteScene(&scene, &collector, self.width, self.height, self.state);
         self.region_len = collector.written().len;
         self.updateHoverHit(self.regionSlice());
-        try site_cursor.render(&scene, self.state.hover_x, self.state.hover_y, site_cursor.fromState(.none, self.state.runtime.hoverKind()));
+        const cursor_kind = site_cursor.fromState(.none, self.state.runtime.hoverKind());
+        if (self.present != .cpu) try site_cursor.render(&scene, self.state.hover_x, self.state.hover_y, cursor_kind);
 
         const buffers = self.ir_storage.buffers();
         try renderer_ir.packScene(buffers, sources(&self.font_atlas), scene.written());
@@ -757,6 +795,9 @@ const NativeApp = struct {
                     sink_state.sink(),
                 );
                 if (!receipt.valid() or !sink_state.submitted) return error.WaylandCommitRejected;
+                @memcpy(self.base_pixels, self.pixels);
+                self.base_pixels_ready = true;
+                self.cursor_damage = try self.renderCursorOverlay(cursor_kind);
             },
             .gpu_record => {
                 const receipt = try renderer_native_present.renderGpuAndSubmit(
@@ -816,6 +857,39 @@ const NativeApp = struct {
         try client.attachCommit(self.width, self.height);
     }
 
+    fn renderCursorOnly(self: *NativeApp, client: *WaylandClient, old_x: f32, old_y: f32, old_kind: site_cursor.Kind) !void {
+        if (self.present != .cpu or !self.base_pixels_ready) return error.CursorOverlayUnavailable;
+        const old_damage = cursorPixelRect(self.width, self.height, old_x, old_y, old_kind);
+        const next_kind = site_cursor.fromState(.none, self.state.runtime.hoverKind());
+        const next_damage = cursorPixelRect(self.width, self.height, self.state.hover_x, self.state.hover_y, next_kind);
+        const damage = unionPixelRect(old_damage, next_damage) orelse return;
+        self.restoreBasePixels(damage);
+        self.cursor_damage = try self.renderCursorOverlay(next_kind);
+        const final_damage = unionPixelRect(damage, self.cursor_damage) orelse damage;
+        packXrgb8888Rect(self.shm.memory, self.shm.stride, self.width, self.height, self.pixels, final_damage);
+        try client.attachCommitRect(final_damage);
+    }
+
+    fn renderCursorOverlay(self: *NativeApp, kind: site_cursor.Kind) !?PixelRect {
+        const damage = cursorPixelRect(self.width, self.height, self.state.hover_x, self.state.hover_y, kind) orelse return null;
+        var cursor_commands: [cursor_scene_budget]ui.Command = undefined;
+        var scene = ui.Scene.init(&cursor_commands);
+        try site_cursor.render(&scene, self.state.hover_x, self.state.hover_y, kind);
+        const surface = try renderer_software.Surface.init(self.width, self.height, self.pixels);
+        surface.rasterize(scene.written());
+        return damage;
+    }
+
+    fn restoreBasePixels(self: *NativeApp, rect: PixelRect) void {
+        var row: usize = 0;
+        const width_usize: usize = self.width;
+        while (row < rect.h) : (row += 1) {
+            const start = (rect.y + row) * width_usize + rect.x;
+            const end = start + rect.w;
+            @memcpy(self.pixels[start..end], self.base_pixels[start..end]);
+        }
+    }
+
     fn waylandSurface(self: *const NativeApp) renderer_native_present.NativeSurface {
         return .{ .wayland = .{
             .surface_id = surface_id,
@@ -857,15 +931,24 @@ const NativeApp = struct {
         switch (message.opcode) {
             wl_pointer_enter_event => {
                 if (message.payload.len < 16) return error.InvalidWaylandMessage;
+                const serial = std.mem.readInt(u32, message.payload[0..4], .little);
+                try client.sendHidePointerCursor(serial);
                 self.state.hover_x = fixedToFloat(std.mem.readInt(i32, message.payload[8..12], .little));
                 self.state.hover_y = fixedToFloat(std.mem.readInt(i32, message.payload[12..16], .little));
                 self.updateHoverHit(self.regionSlice());
                 return true;
             },
             wl_pointer_leave_event => {
+                const old_x = self.state.hover_x;
+                const old_y = self.state.hover_y;
+                const old_kind = site_cursor.fromState(.none, self.state.runtime.hoverKind());
                 self.state.hover_x = -1.0;
                 self.state.hover_y = -1.0;
                 self.state.runtime.clearHover();
+                if (self.present == .cpu and self.base_pixels_ready) {
+                    try self.renderCursorOnly(client, old_x, old_y, old_kind);
+                    return false;
+                }
                 return true;
             },
             wl_pointer_motion_event => {
@@ -873,10 +956,15 @@ const NativeApp = struct {
                 const old_x = self.state.hover_x;
                 const old_y = self.state.hover_y;
                 const old_hit = self.state.runtime.hoverHitId();
+                const old_kind = site_cursor.fromState(.none, self.state.runtime.hoverKind());
                 self.state.hover_x = fixedToFloat(std.mem.readInt(i32, message.payload[4..8], .little));
                 self.state.hover_y = fixedToFloat(std.mem.readInt(i32, message.payload[8..12], .little));
                 self.updateHoverHit(self.regionSlice());
                 if (self.state.runtime.hoverHitId() != old_hit) return true;
+                if (self.present == .cpu and self.base_pixels_ready) {
+                    try self.renderCursorOnly(client, old_x, old_y, old_kind);
+                    return false;
+                }
                 return @abs(self.state.hover_x - old_x) >= pointer_motion_render_step or
                     @abs(self.state.hover_y - old_y) >= pointer_motion_render_step;
             },
@@ -1059,6 +1147,11 @@ fn renderNativeSiteScene(scene: *ui.Scene, collector: *interaction.Collector, wi
             .hover_x = state.hover_x,
             .hover_y = state.hover_y,
         }),
+        .components => try component_gallery.renderComponentGallery(scene, collector, bounds, .{
+            .scroll_y = state.scroll_y,
+            .hover_x = state.hover_x,
+            .hover_y = state.hover_y,
+        }),
     }
 }
 
@@ -1108,12 +1201,13 @@ fn contentHeightForRoute(width: f32, route: site_navigation.Route) f32 {
         else
             site_blog.postContentHeight(width, route.selected_blog_post_id),
         .apps => site_apps.contentHeight(width),
+        .components => component_gallery.contentHeight(width),
     };
 }
 
 fn sources(font_atlas: *renderer_font_atlas.Atlas) renderer_ir.Sources {
     return .{
-        .font = font_atlas.source(),
+        .font = font_atlas.objectSource(),
     };
 }
 
@@ -1123,6 +1217,29 @@ fn siteBackground() ui.Color {
 
 fn packXrgb8888(out: []u8, pixels: []const ui.Color) void {
     packXrgb8888Strided(out, @intCast(pixels.len * @sizeOf(u32)), @intCast(pixels.len), 1, pixels);
+}
+
+fn packXrgb8888Rect(out: []u8, stride_bytes: u32, width: u32, height: u32, pixels: []const ui.Color, rect: PixelRect) void {
+    if (!rect.valid()) return;
+    const width_usize: usize = width;
+    const height_usize: usize = height;
+    if (rect.x >= width_usize or rect.y >= height_usize) return;
+    const x_end = @min(width_usize, rect.x + rect.w);
+    const y_end = @min(height_usize, rect.y + rect.h);
+    var y = rect.y;
+    while (y < y_end) : (y += 1) {
+        const pixel_row = y * width_usize;
+        const byte_row = y * stride_bytes;
+        var x = rect.x;
+        while (x < x_end) : (x += 1) {
+            const pixel = pixels[pixel_row + x];
+            const base = byte_row + x * @sizeOf(u32);
+            out[base + 0] = pixel.b;
+            out[base + 1] = pixel.g;
+            out[base + 2] = pixel.r;
+            out[base + 3] = 255;
+        }
+    }
 }
 
 fn packXrgb8888Strided(out: []u8, stride_bytes: u32, width: u32, height: u32, pixels: []const ui.Color) void {
@@ -1139,6 +1256,37 @@ fn packXrgb8888Strided(out: []u8, stride_bytes: u32, width: u32, height: u32, pi
         }
         if (stride_bytes > row_bytes) @memset(out[out_row + row_bytes .. out_row + stride_bytes], 0);
     }
+}
+
+fn cursorPixelRect(width: u32, height: u32, x: f32, y: f32, kind: site_cursor.Kind) ?PixelRect {
+    const bounds = site_cursor.damageBounds(x, y, kind) orelse return null;
+    return clampPixelRect(width, height, bounds);
+}
+
+fn clampPixelRect(width: u32, height: u32, bounds: ui.Rect) ?PixelRect {
+    const max_w: i32 = @intCast(width);
+    const max_h: i32 = @intCast(height);
+    const x0 = std.math.clamp(@as(i32, @intFromFloat(@floor(bounds.x))), 0, max_w);
+    const y0 = std.math.clamp(@as(i32, @intFromFloat(@floor(bounds.y))), 0, max_h);
+    const x1 = std.math.clamp(@as(i32, @intFromFloat(@ceil(bounds.x + bounds.w))), 0, max_w);
+    const y1 = std.math.clamp(@as(i32, @intFromFloat(@ceil(bounds.y + bounds.h))), 0, max_h);
+    if (x1 <= x0 or y1 <= y0) return null;
+    return .{
+        .x = @intCast(x0),
+        .y = @intCast(y0),
+        .w = @intCast(x1 - x0),
+        .h = @intCast(y1 - y0),
+    };
+}
+
+fn unionPixelRect(a: ?PixelRect, b: ?PixelRect) ?PixelRect {
+    if (a == null) return b;
+    if (b == null) return a;
+    const left = @min(a.?.x, b.?.x);
+    const top = @min(a.?.y, b.?.y);
+    const right = @max(a.?.x + a.?.w, b.?.x + b.?.w);
+    const bottom = @max(a.?.y + a.?.h, b.?.y + b.?.h);
+    return .{ .x = left, .y = top, .w = right - left, .h = bottom - top };
 }
 
 fn fixedToFloat(value: i32) f32 {
@@ -1175,6 +1323,15 @@ fn makeCreateSurface(buffer: []u8) ![]const u8 {
 fn makeGetPointer(buffer: []u8) ![]const u8 {
     var msg = try MessageWriter.init(buffer, seat_id, wl_seat_get_pointer);
     try msg.putU32(pointer_id);
+    return msg.finish();
+}
+
+fn makeHidePointerCursor(buffer: []u8, serial: u32) ![]const u8 {
+    var msg = try MessageWriter.init(buffer, pointer_id, wl_pointer_set_cursor);
+    try msg.putU32(serial);
+    try msg.putU32(0);
+    try msg.putI32(0);
+    try msg.putI32(0);
     return msg.finish();
 }
 
@@ -1291,11 +1448,15 @@ fn makeAttach(buffer: []u8, buffer_id: u32) ![]const u8 {
 }
 
 fn makeDamageBuffer(buffer: []u8, width: u32, height: u32) ![]const u8 {
+    return makeDamageBufferRect(buffer, .{ .x = 0, .y = 0, .w = width, .h = height });
+}
+
+fn makeDamageBufferRect(buffer: []u8, rect: PixelRect) ![]const u8 {
     var msg = try MessageWriter.init(buffer, surface_id, wl_surface_damage_buffer);
-    try msg.putI32(0);
-    try msg.putI32(0);
-    try msg.putI32(@intCast(width));
-    try msg.putI32(@intCast(height));
+    try msg.putI32(@intCast(rect.x));
+    try msg.putI32(@intCast(rect.y));
+    try msg.putI32(@intCast(rect.w));
+    try msg.putI32(@intCast(rect.h));
     return msg.finish();
 }
 
@@ -1575,6 +1736,20 @@ test "wayland xdg toplevel client chrome messages encode move and minimize" {
     try std.testing.expectEqual(@as(u16, 8), std.mem.readInt(u16, minimize[6..8], .little));
 }
 
+test "wayland pointer cursor message hides native compositor cursor" {
+    var buffer: [64]u8 = undefined;
+    const serial: u32 = 91;
+    const message = try makeHidePointerCursor(&buffer, serial);
+
+    try std.testing.expectEqual(@as(u32, pointer_id), std.mem.readInt(u32, message[0..4], .little));
+    try std.testing.expectEqual(@as(u16, wl_pointer_set_cursor), std.mem.readInt(u16, message[4..6], .little));
+    try std.testing.expectEqual(@as(u16, 24), std.mem.readInt(u16, message[6..8], .little));
+    try std.testing.expectEqual(serial, std.mem.readInt(u32, message[8..12], .little));
+    try std.testing.expectEqual(@as(u32, 0), std.mem.readInt(u32, message[12..16], .little));
+    try std.testing.expectEqual(@as(i32, 0), std.mem.readInt(i32, message[16..20], .little));
+    try std.testing.expectEqual(@as(i32, 0), std.mem.readInt(i32, message[20..24], .little));
+}
+
 test "wayland dmabuf messages encode params add and immediate buffer creation" {
     var create_params_buffer: [64]u8 = undefined;
     const create_params = try makeDmabufCreateParams(&create_params_buffer);
@@ -1693,7 +1868,8 @@ test "wayland native app builds dmabuf surface only in explicit fd mode" {
         .dmabuf_fd = 19,
         .shm = undefined,
         .pixels = &.{},
-        .font_atlas = renderer_font_atlas.Atlas.init(),
+        .base_pixels = &.{},
+        .font_atlas = renderer_font_atlas.Atlas.initWithFont(renderer_font_atlas.geist_ascii_font.body()),
         .gpu_primitives = &.{},
     };
     const surface = try app.dmabufSurface();
@@ -1714,7 +1890,8 @@ test "wayland native app builds dmabuf surface from owned drm buffer" {
         .dmabuf_fd = null,
         .shm = undefined,
         .pixels = &.{},
-        .font_atlas = renderer_font_atlas.Atlas.init(),
+        .base_pixels = &.{},
+        .font_atlas = renderer_font_atlas.Atlas.initWithFont(renderer_font_atlas.geist_ascii_font.body()),
         .gpu_primitives = &.{},
         .drm_buffer = .{
             .drm_fd = 18,
@@ -1745,6 +1922,18 @@ test "wayland attach message can target shm or dmabuf buffers" {
     try std.testing.expectEqual(@as(u32, dmabuf_wl_buffer_id), std.mem.readInt(u32, dmabuf[8..12], .little));
 }
 
+test "wayland damage message can target only cursor rectangle" {
+    var buffer: [32]u8 = undefined;
+    const damage = try makeDamageBufferRect(&buffer, .{ .x = 3, .y = 5, .w = 7, .h = 11 });
+    try std.testing.expectEqual(@as(u32, surface_id), std.mem.readInt(u32, damage[0..4], .little));
+    try std.testing.expectEqual(@as(u16, wl_surface_damage_buffer), std.mem.readInt(u16, damage[4..6], .little));
+    try std.testing.expectEqual(@as(u16, 24), std.mem.readInt(u16, damage[6..8], .little));
+    try std.testing.expectEqual(@as(i32, 3), std.mem.readInt(i32, damage[8..12], .little));
+    try std.testing.expectEqual(@as(i32, 5), std.mem.readInt(i32, damage[12..16], .little));
+    try std.testing.expectEqual(@as(i32, 7), std.mem.readInt(i32, damage[16..20], .little));
+    try std.testing.expectEqual(@as(i32, 11), std.mem.readInt(i32, damage[20..24], .little));
+}
+
 test "wayland xdg configure event marks window configured" {
     var payload: [4]u8 = undefined;
     std.mem.writeInt(u32, &payload, 99, .little);
@@ -1767,6 +1956,25 @@ test "wayland xrgb pack swaps renderer color channels for shm" {
     try std.testing.expectEqualSlices(u8, &.{ 3, 2, 1, 255, 7, 6, 5, 255 }, &out);
 }
 
+test "wayland xrgb rect pack updates only cursor damage bytes" {
+    var out = [_]u8{0xaa} ** (4 * 4 * @sizeOf(u32));
+    const pixels = [_]ui.Color{
+        .{ .r = 1, .g = 2, .b = 3 },    .{ .r = 4, .g = 5, .b = 6 },    .{ .r = 7, .g = 8, .b = 9 },    .{ .r = 10, .g = 11, .b = 12 },
+        .{ .r = 13, .g = 14, .b = 15 }, .{ .r = 16, .g = 17, .b = 18 }, .{ .r = 19, .g = 20, .b = 21 }, .{ .r = 22, .g = 23, .b = 24 },
+        .{ .r = 25, .g = 26, .b = 27 }, .{ .r = 28, .g = 29, .b = 30 }, .{ .r = 31, .g = 32, .b = 33 }, .{ .r = 34, .g = 35, .b = 36 },
+        .{ .r = 37, .g = 38, .b = 39 }, .{ .r = 40, .g = 41, .b = 42 }, .{ .r = 43, .g = 44, .b = 45 }, .{ .r = 46, .g = 47, .b = 48 },
+    };
+
+    packXrgb8888Rect(&out, 4 * @sizeOf(u32), 4, 4, &pixels, .{ .x = 1, .y = 1, .w = 2, .h = 2 });
+
+    try std.testing.expectEqualSlices(u8, &.{ 0xaa, 0xaa, 0xaa, 0xaa }, out[0..4]);
+    try std.testing.expectEqualSlices(u8, &.{ 18, 17, 16, 255 }, out[20..24]);
+    try std.testing.expectEqualSlices(u8, &.{ 21, 20, 19, 255 }, out[24..28]);
+    try std.testing.expectEqualSlices(u8, &.{ 30, 29, 28, 255 }, out[36..40]);
+    try std.testing.expectEqualSlices(u8, &.{ 33, 32, 31, 255 }, out[40..44]);
+    try std.testing.expectEqualSlices(u8, &.{ 0xaa, 0xaa, 0xaa, 0xaa }, out[60..64]);
+}
+
 test "wayland host renders the browser landing app through canonical ir" {
     var commands: [max_commands]ui.Command = undefined;
     var clips: [max_clips]ui.Rect = undefined;
@@ -1779,7 +1987,7 @@ test "wayland host renders the browser landing app through canonical ir" {
 
     var ir_storage = IrStorage{};
     const buffers = ir_storage.buffers();
-    var font_atlas = renderer_font_atlas.Atlas.init();
+    var font_atlas = renderer_font_atlas.Atlas.initWithFont(renderer_font_atlas.geist_ascii_font.body());
     try renderer_ir.packScene(buffers, sources(&font_atlas), scene.written());
     try std.testing.expect(ir_storage.rect_len > 0);
     try std.testing.expect(ir_storage.text_vertex_len > 0);
@@ -1890,7 +2098,7 @@ test "wayland host pointer input updates hover activation and scroll state" {
     scrollStateBy(&state, 1280, 800, 320.0);
     try std.testing.expectEqual(@as(f32, 320.0), state.scroll_y);
     scrollStateBy(&state, 1280, 800, 200000.0);
-    try std.testing.expect(state.scroll_y <= site_landing.contentHeight(1280.0));
+    try std.testing.expect(state.scroll_y <= contentHeightForRoute(1280.0, state.route));
 }
 
 test "wayland host appends scene cursor from native hover state" {
@@ -1902,7 +2110,8 @@ test "wayland host appends scene cursor from native hover state" {
         .dmabuf_fd = null,
         .shm = undefined,
         .pixels = &.{},
-        .font_atlas = renderer_font_atlas.Atlas.init(),
+        .base_pixels = &.{},
+        .font_atlas = renderer_font_atlas.Atlas.initWithFont(renderer_font_atlas.geist_ascii_font.body()),
         .gpu_primitives = &.{},
     };
     var scene = ui.Scene.initWithClips(&app.commands, &app.clips);
