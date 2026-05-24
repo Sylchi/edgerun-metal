@@ -25,6 +25,7 @@ const resource_list_component = @import("ui/components/ResourceList.zig");
 const step_list_component = @import("ui/components/StepList.zig");
 const table_component = @import("ui/components/Table.zig");
 const timeline_component = @import("ui/components/Timeline.zig");
+pub const layouts = @import("layouts.zig");
 
 const tree_layout_magic = "ERUL001\x00";
 const tree_layout_size = 16;

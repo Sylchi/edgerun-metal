@@ -2,6 +2,7 @@ const std = @import("std");
 const common = @import("../../ui_component_common.zig");
 const ui = @import("../../ui.zig");
 const ui_input = @import("../../input.zig");
+const layout = @import("../../layouts/Types.zig");
 
 const RenderOptions = common.RenderOptions;
 
@@ -14,6 +15,11 @@ pub const ArticleCard = struct {
 
     pub fn render(self: ArticleCard, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
         return renderArticleCard(self, scene, bounds, options);
+    }
+
+    pub fn measure(self: ArticleCard, constraints: layout.Constraints, options: RenderOptions) layout.Measurement {
+        _ = options;
+        return measureArticleCard(self, constraints);
     }
 };
 
@@ -34,6 +40,29 @@ pub fn renderArticleCard(article: ArticleCard, scene: *ui.Scene, bounds: ui.Rect
         .max_lines = article_summary_max_lines,
     });
     try scene.pushHit(.{ .slot = 0, .kind = .button, .id = article.id, .bounds = bounds });
+}
+
+pub fn measureArticleCard(article: ArticleCard, constraints: layout.Constraints) layout.Measurement {
+    const content = constraints.inner(layout.Insets.uniform(article_padding));
+    const title = layout.measureText(article.title, content, .{
+        .line_height = article_title_line_h,
+        .average_char_width = article_title_avg_w,
+        .max_lines = article_title_max_lines,
+    });
+    const summary = layout.measureText(article.summary, content, .{
+        .line_height = article_summary_line_h,
+        .average_char_width = article_summary_avg_w,
+        .max_lines = article_summary_max_lines,
+    });
+    const preferred = ui.Size{
+        .w = constraints.width.exactValue() orelse @max(article_min_width, @max(title.preferred.w, summary.preferred.w) + article_padding * 2.0),
+        .h = article_padding * 2.0 + article_badge_height + article_gap + title.preferred.h + article_gap + summary.preferred.h,
+    };
+    return layout.Measurement.flexible(
+        .{ .w = @min(article_min_width, preferred.w), .h = @min(article_min_height, preferred.h) },
+        preferred,
+        .{ .w = @max(preferred.w, constraints.width.limit(preferred.w)), .h = preferred.h },
+    );
 }
 
 fn renderCardSurface(scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
@@ -83,6 +112,8 @@ const article_summary_h: f32 = 44.0;
 const article_summary_line_h: f32 = 18.0;
 const article_summary_avg_w: f32 = 10.0;
 const article_summary_max_lines: usize = 2;
+const article_min_width: f32 = 180.0;
+const article_min_height: f32 = 96.0;
 
 test "article card renders category title and hit target" {
     const article = ArticleCard{
@@ -101,6 +132,21 @@ test "article card renders category title and hit target" {
     try std.testing.expectEqual(@as(u32, 801), hit.id);
     try std.testing.expect(hasText(scene.written(), "Architecture"));
     try std.testing.expect(hasTextContaining(scene.written(), "EdgeRun Apps"));
+}
+
+test "article card measurement uses assigned card width" {
+    const article = ArticleCard{
+        .id = 801,
+        .category = "Architecture",
+        .meta = "May 23, 2026",
+        .title = "EdgeRun Apps Run Where The User Is",
+        .summary = "A short introduction to identity-routed apps and local execution.",
+    };
+
+    const measured = article.measure(.{ .width = .{ .exact = 260 }, .text_wrap = .wrap }, .{});
+
+    try std.testing.expectEqual(@as(f32, 260), measured.preferred.w);
+    try std.testing.expect(measured.preferred.h >= article_min_height);
 }
 
 fn hasText(commands: []const ui.Command, value: []const u8) bool {

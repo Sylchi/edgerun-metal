@@ -1,6 +1,7 @@
 const std = @import("std");
 const common = @import("../../ui_component_common.zig");
 const ui = @import("../../ui.zig");
+const layout = @import("../../layouts/Types.zig");
 
 const ComponentRegistry = common.ComponentRegistry;
 const HtmlCursor = common.HtmlCursor;
@@ -19,6 +20,11 @@ pub const List = struct {
 
     pub fn render(self: List, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
         return renderList(self, scene, bounds, options);
+    }
+
+    pub fn measure(self: List, constraints: layout.Constraints, options: RenderOptions) layout.Measurement {
+        _ = options;
+        return measureList(self, constraints);
     }
 
     pub fn toHtml(self: List, out: []u8) HtmlError![]u8 {
@@ -72,6 +78,28 @@ pub fn renderList(list: List, scene: *ui.Scene, bounds: ui.Rect, options: Render
         });
         y += list_item_h + list_item_gap;
     }
+}
+
+pub fn measureList(list: List, constraints: layout.Constraints) layout.Measurement {
+    var preferred_width: f32 = 0;
+    var preferred_height: f32 = 0;
+    const text_constraints = constraints.inner(.{ .left = list_text_x });
+    for (list.items) |item| {
+        const item_measure = layout.measureText(item, text_constraints, .{
+            .line_height = list_line_h,
+            .average_char_width = list_avg_w,
+            .max_lines = list_item_max_lines,
+        });
+        preferred_width = @max(preferred_width, item_measure.preferred.w + list_text_x);
+        preferred_height += @max(list_item_h, item_measure.preferred.h);
+        if (preferred_height != 0) preferred_height += list_item_gap;
+    }
+    if (preferred_height > 0) preferred_height -= list_item_gap;
+    return layout.Measurement.flexible(
+        .{ .w = @min(preferred_width, constraints.width.limit(preferred_width)), .h = @min(list_item_h, preferred_height) },
+        .{ .w = constraints.width.exactValue() orelse preferred_width, .h = constraints.height.exactValue() orelse preferred_height },
+        .{ .w = @max(preferred_width, constraints.width.limit(preferred_width)), .h = preferred_height },
+    );
 }
 
 fn renderRegistered(component: *const anyopaque, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
@@ -214,6 +242,21 @@ test "list component renders ordered markers and wrapped items" {
 
     try std.testing.expect(hasText(scene.written(), "1."));
     try std.testing.expect(hasTextContaining(scene.written(), "Resolver answers"));
+}
+
+test "list measurement honors exact width and stable row height" {
+    const items = [_][]const u8{
+        "Browser asks a resolver for the address attached to a name",
+        "Cache remembers the answer for a short time",
+    };
+    const list = List{ .ordered = true, .items = &items };
+
+    const wide = list.measure(.{ .width = .{ .exact = 360 }, .text_wrap = .wrap }, .{});
+    const narrow = list.measure(.{ .width = .{ .exact = 140 }, .text_wrap = .wrap }, .{});
+
+    try std.testing.expectEqual(@as(f32, 360), wide.preferred.w);
+    try std.testing.expectEqual(@as(f32, 140), narrow.preferred.w);
+    try std.testing.expectEqual(wide.preferred.h, narrow.preferred.h);
 }
 
 test "list html codec roundtrips ordered escaped items" {

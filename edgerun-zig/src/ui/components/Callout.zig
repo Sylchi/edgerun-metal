@@ -1,6 +1,7 @@
 const std = @import("std");
 const common = @import("../../ui_component_common.zig");
 const ui = @import("../../ui.zig");
+const layout = @import("../../layouts/Types.zig");
 
 const ComponentRegistry = common.ComponentRegistry;
 const HtmlError = common.HtmlError;
@@ -17,6 +18,11 @@ pub const Callout = struct {
 
     pub fn render(self: Callout, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
         return renderCallout(self, scene, bounds, options);
+    }
+
+    pub fn measure(self: Callout, constraints: layout.Constraints, options: RenderOptions) layout.Measurement {
+        _ = options;
+        return measureCallout(self, constraints);
     }
 
     pub fn toHtml(self: Callout, out: []u8) HtmlError![]u8 {
@@ -62,6 +68,15 @@ pub fn renderCallout(callout: Callout, scene: *ui.Scene, bounds: ui.Rect, option
         .average_char_width = callout_avg_w,
         .max_lines = callout_max_lines,
     });
+}
+
+pub fn measureCallout(callout: Callout, constraints: layout.Constraints) layout.Measurement {
+    const insets = calloutInsets();
+    return layout.measureText(callout.value, constraints.inner(insets), .{
+        .line_height = callout_line_h,
+        .average_char_width = callout_avg_w,
+        .max_lines = callout_max_lines,
+    }).withInsets(insets).applyExact(constraints);
 }
 
 fn renderRegistered(component: *const anyopaque, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
@@ -124,6 +139,15 @@ const callout_line_h: f32 = 18.0;
 const callout_avg_w: f32 = 9.0;
 const callout_max_lines: usize = 4;
 
+fn calloutInsets() layout.Insets {
+    return .{
+        .top = callout_text_y,
+        .right = callout_text_x,
+        .bottom = callout_text_y,
+        .left = callout_text_x,
+    };
+}
+
 test "callout component renders accent and wrapped text" {
     const callout = Callout{ .value = "A name is a lookup, not an identity." };
     var commands: [16]ui.Command = undefined;
@@ -133,6 +157,16 @@ test "callout component renders accent and wrapped text" {
 
     try std.testing.expect(hasTextContaining(scene.written(), "lookup, not an identity"));
     try std.testing.expect(hasFilledRect(scene.written()));
+}
+
+test "callout measurement includes padding and wraps body text" {
+    const callout = Callout{ .value = "A capability opens one specific door, and the layout should know how tall that explanation becomes." };
+
+    const wide = callout.measure(.{ .width = .{ .exact = 360 }, .text_wrap = .wrap }, .{});
+    const narrow = callout.measure(.{ .width = .{ .exact = 160 }, .text_wrap = .wrap }, .{});
+
+    try std.testing.expectEqual(@as(f32, 360), wide.preferred.w);
+    try std.testing.expect(narrow.preferred.h > wide.preferred.h);
 }
 
 test "callout html codec roundtrips escaped quote content" {

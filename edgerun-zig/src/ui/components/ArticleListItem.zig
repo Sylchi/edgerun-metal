@@ -2,6 +2,7 @@ const std = @import("std");
 const common = @import("../../ui_component_common.zig");
 const ui = @import("../../ui.zig");
 const ui_input = @import("../../input.zig");
+const layout = @import("../../layouts/Types.zig");
 
 const RenderOptions = common.RenderOptions;
 
@@ -14,6 +15,11 @@ pub const ArticleListItem = struct {
 
     pub fn height(self: ArticleListItem, width: f32) f32 {
         return articleListItemHeight(width, self);
+    }
+
+    pub fn measure(self: ArticleListItem, constraints: layout.Constraints, options: RenderOptions) layout.Measurement {
+        _ = options;
+        return measureArticleListItem(self, constraints);
     }
 
     pub fn render(self: ArticleListItem, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
@@ -31,6 +37,16 @@ pub fn articleListItemHeight(width: f32, article: ArticleListItem) f32 {
         article_list_title_summary_gap +
         @as(f32, @floatFromInt(summary_lines)) * article_list_summary_line_height;
     return @max(article_list_min_height, article_list_padding_y * 2.0 + text_height);
+}
+
+pub fn measureArticleListItem(article: ArticleListItem, constraints: layout.Constraints) layout.Measurement {
+    const width = constraints.width.exactValue() orelse constraints.width.limit(article_list_default_width);
+    const height = articleListItemHeight(width, article);
+    return layout.Measurement.flexible(
+        .{ .w = @min(article_list_min_width, width), .h = @min(article_list_min_height, height) },
+        .{ .w = width, .h = constraints.height.exactValue() orelse height },
+        .{ .w = @max(width, article_list_min_width), .h = height },
+    );
 }
 
 pub fn renderArticleListItem(article: ArticleListItem, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
@@ -79,6 +95,8 @@ const article_list_summary_line_height: f32 = 18.0;
 const article_list_summary_average_char_width: f32 = 9.0;
 const article_list_summary_max_lines: usize = 3;
 const article_list_divider_height: f32 = 1.0;
+const article_list_min_width: f32 = 180.0;
+const article_list_default_width: f32 = 420.0;
 
 fn articleListTextWidth(width: f32) f32 {
     return @max(1.0, width - article_list_padding_x * 2.0 - article_list_arrow_slot);
@@ -124,6 +142,23 @@ test "article list item expands around wrapped titles and summaries" {
     try std.testing.expectEqual(@as(u32, 4202), hit.id);
     try std.testing.expect(hasTextContaining(scene.written(), "very long lesson"));
     try std.testing.expect(hasTextContaining(scene.written(), "operating system"));
+}
+
+test "article list item measurement follows exact width" {
+    const article = ArticleListItem{
+        .id = 4202,
+        .category = "Security",
+        .meta = "Long",
+        .title = "A very long lesson title that needs more than one line in a normal academy list",
+        .summary = "A longer summary explains why the phone, operating system, and cloud account all participate in the user's security boundary.",
+    };
+
+    const wide = article.measure(.{ .width = .{ .exact = 420 }, .text_wrap = .wrap }, .{});
+    const narrow = article.measure(.{ .width = .{ .exact = 140 }, .text_wrap = .wrap }, .{});
+
+    try std.testing.expectEqual(@as(f32, 420), wide.preferred.w);
+    try std.testing.expectEqual(@as(f32, 140), narrow.preferred.w);
+    try std.testing.expect(narrow.preferred.h >= wide.preferred.h);
 }
 
 fn hasTextContaining(commands: []const ui.Command, value: []const u8) bool {
