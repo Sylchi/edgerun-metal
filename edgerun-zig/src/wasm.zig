@@ -201,8 +201,16 @@ pub const Runtime = struct {
 pub const HostImport = struct {
     module: []const u8,
     name: []const u8,
+    kind: HostImportKind = .function,
     context: ?*anyopaque = null,
-    call: *const fn (context: ?*anyopaque, args: []const i64) Error!?i64,
+    call: ?*const fn (context: ?*anyopaque, args: []const i64) Error!?i64 = null,
+    memory_min_pages: usize = 0,
+    memory_max_pages: ?usize = null,
+};
+
+pub const HostImportKind = enum {
+    function,
+    memory,
 };
 
 const Reader = struct {
@@ -348,6 +356,23 @@ const ImportedFunction = struct {
     }
 };
 
+const ImportedMemory = struct {
+    module: [max_import_name]u8 = undefined,
+    module_len: usize = 0,
+    name: [max_import_name]u8 = undefined,
+    name_len: usize = 0,
+    min_pages: usize = 0,
+    max_pages: ?usize = null,
+
+    fn matches(self: ImportedMemory, host: HostImport) bool {
+        return host.kind == .memory and
+            self.module_len == host.module.len and
+            self.name_len == host.name.len and
+            byte_utils.eql(self.module[0..self.module_len], host.module) and
+            byte_utils.eql(self.name[0..self.name_len], host.name);
+    }
+};
+
 const Export = struct {
     name: [max_export_name]u8 = undefined,
     name_len: usize = 0,
@@ -362,6 +387,11 @@ const Export = struct {
 const DataSegment = struct {
     offset: usize = 0,
     bytes: []const u8 = &.{},
+};
+
+const Limits = struct {
+    min: usize = 0,
+    max: ?usize = null,
 };
 
 const Global = struct {
@@ -445,6 +475,7 @@ const Module = struct {
     global_count: usize = 0,
     data_segments: [max_data_segments]DataSegment = undefined,
     data_segment_count: usize = 0,
+    imported_memory: ?ImportedMemory = null,
     memory_min_pages: usize = 0,
     start_function_index: ?usize = null,
 
@@ -545,22 +576,34 @@ const Module = struct {
                     @memcpy(imported.name[0..name_len], import_name);
                     self.import_count += 1;
                 },
-                .table, .memory, .global => return error.Unsupported,
+                .memory => try self.parseMemoryImport(reader, module_name, import_name),
+                .table, .global => return error.Unsupported,
             }
         }
+    }
+
+    fn parseMemoryImport(self: *Module, reader: *Reader, module_name: []const u8, import_name: []const u8) Error!void {
+        if (self.imported_memory != null or self.memory_min_pages != 0) return error.Unsupported;
+        const limits = try readLimits(reader);
+        var imported = ImportedMemory{
+            .module_len = module_name.len,
+            .name_len = import_name.len,
+            .min_pages = limits.min,
+            .max_pages = limits.max,
+        };
+        @memcpy(imported.module[0..module_name.len], module_name);
+        @memcpy(imported.name[0..import_name.len], import_name);
+        self.imported_memory = imported;
+        self.memory_min_pages = limits.min;
     }
 
     fn parseMemorySection(self: *Module, reader: *Reader) Error!void {
         const count = try reader.readU32Leb();
         if (count > 1) return error.Unsupported;
         if (count == 0) return;
-        const limits = try reader.readByte();
-        if (limits != 0 and limits != 1) return error.Unsupported;
-        self.memory_min_pages = try reader.readU32Leb();
-        if (limits == 1) {
-            const max_pages = try reader.readU32Leb();
-            if (max_pages < self.memory_min_pages) return error.Corrupt;
-        }
+        if (self.imported_memory != null) return error.Corrupt;
+        const limits = try readLimits(reader);
+        self.memory_min_pages = limits.min;
     }
 
     fn parseGlobalSection(self: *Module, reader: *Reader) Error!void {
@@ -690,6 +733,22 @@ const Module = struct {
 
     fn requiredMemoryBytes(self: Module) Error!usize {
         return checkedMul(self.memory_min_pages, wasm_page_bytes) orelse error.Unsupported;
+    }
+
+    fn resolveImports(self: Module, runtime: Runtime) Error!void {
+        for (self.imports[0..self.import_count]) |imported| {
+            for (runtime.imports) |host| {
+                if (host.kind == .function and imported.matches(host)) break;
+            } else return error.MissingImport;
+        }
+        if (self.imported_memory) |imported| {
+            for (runtime.imports) |host| {
+                if (!imported.matches(host)) continue;
+                try validateImportedMemory(imported, host);
+                return;
+            }
+            return error.MissingImport;
+        }
     }
 
     fn applyDataSegments(self: Module, runtime: *Runtime) Error!void {
@@ -1011,8 +1070,10 @@ const Executor = struct {
         const function_type = self.module.types[imported.type_index];
         if (!function_type.supportedResult() or args.len != function_type.param_count) return error.Unsupported;
         for (self.runtime.imports) |host| {
+            if (host.kind != .function) continue;
             if (!imported.matches(host)) continue;
-            const result = try host.call(host.context, args);
+            const call = host.call orelse return error.Corrupt;
+            const result = try call(host.context, args);
             if (function_type.result_count == 0) {
                 if (result != null) return error.Corrupt;
                 return null;
@@ -1099,6 +1160,7 @@ pub fn executeExportI64(runtime: *Runtime, wasm_bytes: []const u8, export_name: 
 pub fn executeExportI64Args(runtime: *Runtime, wasm_bytes: []const u8, export_name: []const u8, args: []const i64) Error!i64 {
     if (export_name.len == 0) return error.BadArgument;
     const module = try Module.parse(wasm_bytes);
+    try module.resolveImports(runtime.*);
     const required_memory = try module.requiredMemoryBytes();
     if (required_memory > runtime.memoryLen()) return error.NoMemory;
     try module.applyDataSegments(runtime);
@@ -1128,6 +1190,29 @@ fn minSigned(comptime Int: type) Int {
 
 fn readValueType(reader: *Reader) Error!ValueType {
     return valueTypeFromByte(try reader.readByte()) orelse error.Unsupported;
+}
+
+fn readLimits(reader: *Reader) Error!Limits {
+    const limits = try reader.readByte();
+    if (limits != 0 and limits != 1) return error.Unsupported;
+    const min = try reader.readU32Leb();
+    var max: ?usize = null;
+    if (limits == 1) {
+        max = try reader.readU32Leb();
+        if (max.? < min) return error.Corrupt;
+    }
+    return .{
+        .min = min,
+        .max = max,
+    };
+}
+
+fn validateImportedMemory(imported: ImportedMemory, host: HostImport) Error!void {
+    if (host.memory_min_pages < imported.min_pages) return error.NoMemory;
+    if (imported.max_pages) |imported_max| {
+        const host_max = host.memory_max_pages orelse return error.Unsupported;
+        if (host_max > imported_max) return error.Unsupported;
+    }
 }
 
 fn sectionFromByte(value: u8) ?Section {
