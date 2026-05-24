@@ -2,6 +2,7 @@ const std = @import("std");
 const common = @import("../../ui_component_common.zig");
 const base_progress_bar = @import("base/ProgressBar.zig");
 const base_surface = @import("base/Surface.zig");
+const interaction = @import("../../ui_interaction.zig");
 const ui = @import("../../ui.zig");
 const ui_input = @import("../../input.zig");
 
@@ -24,6 +25,10 @@ pub const ProgressSummary = struct {
 
     pub fn render(self: ProgressSummary, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
         return renderProgressSummary(self, scene, bounds, options);
+    }
+
+    pub fn collectInteractions(self: ProgressSummary, collector: *interaction.Collector, bounds: ui.Rect) interaction.Error!void {
+        return collectProgressSummaryInteractions(self, collector, bounds);
     }
 
     pub fn toHtml(self: ProgressSummary, out: []u8) HtmlError![]u8 {
@@ -52,6 +57,7 @@ pub const descriptor = common.ComponentDescriptor{
     .html_prefix = "<section data-er-component=\"progress-summary\"",
     .markdown_prefix = ":::progress",
     .render = renderRegistered,
+    .collect_interactions = collectRegistered,
     .write_html = writeHtmlRegistered,
     .write_markdown = writeMarkdownRegistered,
 };
@@ -71,13 +77,21 @@ pub fn renderProgressSummary(summary: ProgressSummary, scene: *ui.Scene, bounds:
     const bar_bounds = ui.Rect.init(content.x, content.y + progress_summary_bar_y, content.w, progress_summary_bar_h);
     const ratio = @as(f32, @floatFromInt(summary.completed)) / @as(f32, @floatFromInt(summary.total));
     try base_progress_bar.render(scene, bar_bounds, .{ .value = ratio }, options);
+}
 
-    try scene.pushHit(.{ .slot = 0, .kind = .button, .id = summary.id, .bounds = bounds });
+pub fn collectProgressSummaryInteractions(summary: ProgressSummary, collector: *interaction.Collector, bounds: ui.Rect) interaction.Error!void {
+    if (summary.total == 0 or summary.completed > summary.total) return;
+    try collector.add(.{ .kind = .button, .id = summary.id, .bounds = bounds });
 }
 
 fn renderRegistered(component: *const anyopaque, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
     const summary: *const ProgressSummary = @ptrCast(@alignCast(component));
     return renderProgressSummary(summary.*, scene, bounds, options);
+}
+
+fn collectRegistered(component: *const anyopaque, collector: *interaction.Collector, bounds: ui.Rect) interaction.Error!void {
+    const summary: *const ProgressSummary = @ptrCast(@alignCast(component));
+    return collectProgressSummaryInteractions(summary.*, collector, bounds);
 }
 
 pub fn writeHtml(summary: ProgressSummary, out: []u8) HtmlError![]u8 {
@@ -161,15 +175,19 @@ const progress_summary_label_h: f32 = 16.0;
 const progress_summary_bar_y: f32 = 30.0;
 const progress_summary_bar_h: f32 = 10.0;
 
-test "progress summary component renders progress and hit target" {
+test "progress summary component renders progress and collects hit target" {
     const summary = ProgressSummary{ .id = 39001, .label = "Academy progress", .completed = 3, .total = 8 };
     var commands: [48]ui.Command = undefined;
     var scene = ui.Scene.init(&commands);
+    var regions: [2]interaction.Region = undefined;
+    var collector = interaction.Collector.init(&regions);
 
     try summary.render(&scene, ui.Rect.init(0, 0, 360, 96), .{});
+    try summary.collectInteractions(&collector, ui.Rect.init(0, 0, 360, 96));
 
     try std.testing.expect(hasText(scene.written(), "Academy progress"));
-    const hit = ui_input.hitTest(scene.written(), 20, 20).?;
+    try std.testing.expect(ui_input.hitTest(scene.written(), 20, 20) == null);
+    const hit = ui_input.regionHitTest(collector.written(), 20, 20).?;
     try std.testing.expectEqual(@as(u32, 39001), hit.id);
 }
 
@@ -206,6 +224,8 @@ test "progress summary registers explicit runtime descriptor" {
     var markdown: [256]u8 = undefined;
     var commands: [32]ui.Command = undefined;
     var scene = ui.Scene.init(&commands);
+    var regions: [2]interaction.Region = undefined;
+    var collector = interaction.Collector.init(&regions);
 
     try ProgressSummary.register(&registry);
     try std.testing.expectError(error.DuplicateComponent, ProgressSummary.register(&registry));
@@ -215,10 +235,12 @@ test "progress summary registers explicit runtime descriptor" {
     const encoded_html = try registry.writeHtml("progress-summary", &summary, &html);
     const encoded_markdown = try registry.writeMarkdown("progress-summary", &summary, &markdown);
     try registry.render("progress-summary", &summary, &scene, ui.Rect.init(0, 0, 320, 96), .{});
+    try registry.collectInteractions("progress-summary", &summary, &collector, ui.Rect.init(0, 0, 320, 96));
 
     try std.testing.expect(std.mem.indexOf(u8, encoded_html, "<section data-er-component=\"progress-summary\"") != null);
     try std.testing.expect(std.mem.indexOf(u8, encoded_markdown, ":::progress") != null);
     try std.testing.expect(hasText(scene.written(), "Runtime progress"));
+    try std.testing.expectEqual(@as(u32, 39201), ui_input.regionHitTest(collector.written(), 20, 20).?.id);
 }
 
 fn hasText(commands: []const ui.Command, value: []const u8) bool {

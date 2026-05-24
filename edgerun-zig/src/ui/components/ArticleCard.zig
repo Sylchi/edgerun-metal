@@ -1,5 +1,6 @@
 const std = @import("std");
 const common = @import("../../ui_component_common.zig");
+const interaction = @import("../../ui_interaction.zig");
 const ui = @import("../../ui.zig");
 const ui_input = @import("../../input.zig");
 const layout = @import("../../layouts/Types.zig");
@@ -20,6 +21,10 @@ pub const ArticleCard = struct {
         return renderArticleCard(self, scene, bounds, options);
     }
 
+    pub fn collectInteractions(self: ArticleCard, collector: *interaction.Collector, bounds: ui.Rect) interaction.Error!void {
+        return collectArticleCardInteractions(self, collector, bounds);
+    }
+
     pub fn measure(self: ArticleCard, constraints: layout.Constraints, options: RenderOptions) layout.Measurement {
         _ = options;
         return measureArticleCard(self, constraints);
@@ -36,7 +41,10 @@ pub fn renderArticleCard(article: ArticleCard, scene: *ui.Scene, bounds: ui.Rect
     try scene.pushAlignedText(ui.Rect.init(inset.x + badge_width + article_gap, inset.y + article_meta_y, @max(1.0, inset.w - badge_width - article_gap), article_meta_height), article.meta, options.style.muted, .end);
     try base_text_block.render(scene, ui.Rect.init(inset.x, inset.y + article_title_y, inset.w - article_arrow_slot, article_title_h), article.title, options.style.text, article_title_metrics);
     try base_text_block.render(scene, ui.Rect.init(inset.x, bounds.y + bounds.h - article_summary_bottom_offset, inset.w - article_arrow_slot, article_summary_h), article.summary, options.style.muted, article_summary_metrics);
-    try scene.pushHit(.{ .slot = 0, .kind = .button, .id = article.id, .bounds = bounds });
+}
+
+pub fn collectArticleCardInteractions(article: ArticleCard, collector: *interaction.Collector, bounds: ui.Rect) interaction.Error!void {
+    try collector.add(.{ .kind = .button, .id = article.id, .bounds = bounds });
 }
 
 pub fn measureArticleCard(article: ArticleCard, constraints: layout.Constraints) layout.Measurement {
@@ -90,7 +98,7 @@ const article_summary_metrics = base_text_block.Metrics{
     .max_lines = article_summary_max_lines,
 };
 
-test "article card renders category title and hit target" {
+test "article card renders category title and collects hit target" {
     const article = ArticleCard{
         .id = 801,
         .category = "Architecture",
@@ -100,10 +108,14 @@ test "article card renders category title and hit target" {
     };
     var commands: [64]ui.Command = undefined;
     var scene = ui.Scene.init(&commands);
+    var regions: [2]interaction.Region = undefined;
+    var collector = interaction.Collector.init(&regions);
 
     try article.render(&scene, ui.Rect.init(0, 0, 360, 172), .{});
+    try article.collectInteractions(&collector, ui.Rect.init(0, 0, 360, 172));
 
-    const hit = ui_input.hitTest(scene.written(), 20, 20).?;
+    try std.testing.expect(ui_input.hitTest(scene.written(), 20, 20) == null);
+    const hit = ui_input.regionHitTest(collector.written(), 20, 20).?;
     try std.testing.expectEqual(@as(u32, 801), hit.id);
     try std.testing.expect(hasText(scene.written(), "Architecture"));
     try std.testing.expect(hasTextContaining(scene.written(), "EdgeRun Apps"));

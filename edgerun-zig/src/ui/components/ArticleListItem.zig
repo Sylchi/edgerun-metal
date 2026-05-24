@@ -1,5 +1,6 @@
 const std = @import("std");
 const common = @import("../../ui_component_common.zig");
+const interaction = @import("../../ui_interaction.zig");
 const ui = @import("../../ui.zig");
 const ui_input = @import("../../input.zig");
 const layout = @import("../../layouts/Types.zig");
@@ -25,6 +26,10 @@ pub const ArticleListItem = struct {
 
     pub fn render(self: ArticleListItem, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
         return renderArticleListItem(self, scene, bounds, options);
+    }
+
+    pub fn collectInteractions(self: ArticleListItem, collector: *interaction.Collector, bounds: ui.Rect) interaction.Error!void {
+        return collectArticleListItemInteractions(self, collector, bounds);
     }
 };
 
@@ -71,7 +76,10 @@ pub fn renderArticleListItem(article: ArticleListItem, scene: *ui.Scene, bounds:
 
     const divider = ui.Rect.init(bounds.x, bounds.y + bounds.h - article_list_divider_height, bounds.w, article_list_divider_height);
     try scene.pushRect(divider, options.style.border, .fill, 0.0, 0.0);
-    try scene.pushHit(.{ .slot = 0, .kind = .button, .id = article.id, .bounds = bounds });
+}
+
+pub fn collectArticleListItemInteractions(article: ArticleListItem, collector: *interaction.Collector, bounds: ui.Rect) interaction.Error!void {
+    try collector.add(.{ .kind = .button, .id = article.id, .bounds = bounds });
 }
 
 const article_list_padding_x: f32 = 6.0;
@@ -128,11 +136,15 @@ test "article list item expands around wrapped titles and summaries" {
     const long_height = long_article.height(420.0);
     var commands: [32]ui.Command = undefined;
     var scene = ui.Scene.init(&commands);
+    var regions: [2]interaction.Region = undefined;
+    var collector = interaction.Collector.init(&regions);
 
     try std.testing.expect(long_height > short_height);
     try long_article.render(&scene, ui.Rect.init(0.0, 0.0, 420.0, long_height), .{});
+    try long_article.collectInteractions(&collector, ui.Rect.init(0.0, 0.0, 420.0, long_height));
 
-    const hit = ui_input.hitTest(scene.written(), 20.0, 20.0).?;
+    try std.testing.expect(ui_input.hitTest(scene.written(), 20.0, 20.0) == null);
+    const hit = ui_input.regionHitTest(collector.written(), 20.0, 20.0).?;
     try std.testing.expectEqual(@as(u32, 4202), hit.id);
     try std.testing.expect(hasTextContaining(scene.written(), "very long lesson"));
     try std.testing.expect(hasTextContaining(scene.written(), "operating system"));

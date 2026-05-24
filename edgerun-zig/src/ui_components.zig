@@ -3,6 +3,7 @@ const bytes = @import("bytes.zig");
 const clock = @import("clock.zig");
 const icon = @import("icon.zig");
 const ui_input = @import("input.zig");
+const interaction = @import("ui_interaction.zig");
 const object = @import("object.zig");
 const ui = @import("ui.zig");
 const codec = @import("ui_codec.zig");
@@ -2695,17 +2696,22 @@ test "component render helper owns article cards and code blocks" {
     var commands: [64]ui.Command = undefined;
     var clips: [4]ui.Rect = undefined;
     var scene = ui.Scene.initWithClips(&commands, &clips);
-
-    try (ArticleCard{
+    var regions: [2]interaction.Region = undefined;
+    var collector = interaction.Collector.init(&regions);
+    const article = ArticleCard{
         .id = 801,
         .category = "Architecture",
         .meta = "May 23, 2026",
         .title = "EdgeRun Apps Run Where The User Is",
         .summary = "A short introduction to identity-routed apps and local execution.",
-    }).render(&scene, ui.Rect.init(0, 0, 360, 172), .{});
+    };
+
+    try article.render(&scene, ui.Rect.init(0, 0, 360, 172), .{});
+    try article.collectInteractions(&collector, ui.Rect.init(0, 0, 360, 172));
     try (CodeBlock{ .lines = &.{ "const app = try edge.compile(source);", "try app.run(.{});" } }).render(&scene, ui.Rect.init(0, 190, 360, 72), .{});
 
-    const hit = ui_input.hitTest(scene.written(), 20, 20).?;
+    try std.testing.expect(ui_input.hitTest(scene.written(), 20, 20) == null);
+    const hit = ui_input.regionHitTest(collector.written(), 20, 20).?;
     try std.testing.expectEqual(@as(u32, 801), hit.id);
     try std.testing.expect(hasText(scene.written(), "Architecture"));
     try std.testing.expect(hasText(scene.written(), "const app = try edge.compile(source);"));
@@ -3386,9 +3392,13 @@ test "article list item expands around wrapped titles" {
 
     var commands: [32]ui.Command = undefined;
     var scene = ui.Scene.init(&commands);
+    var regions: [2]interaction.Region = undefined;
+    var collector = interaction.Collector.init(&regions);
     try long_article.render(&scene, ui.Rect.init(0.0, 0.0, 420.0, long_height), .{});
+    try long_article.collectInteractions(&collector, ui.Rect.init(0.0, 0.0, 420.0, long_height));
 
-    const hit = ui_input.hitTest(scene.written(), 20, 20).?;
+    try std.testing.expect(ui_input.hitTest(scene.written(), 20, 20) == null);
+    const hit = ui_input.regionHitTest(collector.written(), 20, 20).?;
     try std.testing.expectEqual(@as(u32, 812), hit.id);
     try std.testing.expect(hasText(scene.written(), "Episode 17"));
     try std.testing.expect(hasText(scene.written(), "The Internet Already Connects"));
