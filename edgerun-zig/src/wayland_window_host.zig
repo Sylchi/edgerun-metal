@@ -1,9 +1,11 @@
 const std = @import("std");
 const icon = @import("icon.zig");
+const input = @import("input.zig");
 const renderer_font_atlas = @import("renderer_font_atlas.zig");
 const renderer_ir = @import("renderer_ir.zig");
 const renderer_native_present = @import("renderer_native_present.zig");
 const renderer_software = @import("renderer_software.zig");
+const site_chrome = @import("site_chrome.zig");
 const site_landing = @import("site_landing.zig");
 const tabler_atlas = @import("tabler_atlas.zig");
 const ui = @import("ui.zig");
@@ -37,16 +39,19 @@ const sync_callback_id: u32 = 3;
 const compositor_id: u32 = 4;
 const shm_id: u32 = 5;
 const wm_base_id: u32 = 6;
-const surface_id: u32 = 7;
-const xdg_surface_id: u32 = 8;
-const xdg_toplevel_id: u32 = 9;
-const shm_pool_id: u32 = 10;
-const wl_buffer_id: u32 = 11;
+const seat_id: u32 = 7;
+const pointer_id: u32 = 8;
+const surface_id: u32 = 9;
+const xdg_surface_id: u32 = 10;
+const xdg_toplevel_id: u32 = 11;
+const shm_pool_id: u32 = 12;
+const wl_buffer_id: u32 = 13;
 
 const wl_display_sync: u16 = 0;
 const wl_display_get_registry: u16 = 1;
 const wl_registry_bind: u16 = 0;
 const wl_compositor_create_surface: u16 = 0;
+const wl_seat_get_pointer: u16 = 0;
 const wl_shm_create_pool: u16 = 0;
 const wl_shm_pool_create_buffer: u16 = 0;
 const wl_shm_pool_destroy: u16 = 1;
@@ -62,11 +67,22 @@ const xdg_toplevel_set_title: u16 = 2;
 const wl_display_error_event: u16 = 0;
 const wl_registry_global_event: u16 = 0;
 const wl_callback_done_event: u16 = 0;
+const wl_pointer_enter_event: u16 = 0;
+const wl_pointer_leave_event: u16 = 1;
+const wl_pointer_motion_event: u16 = 2;
+const wl_pointer_button_event: u16 = 3;
+const wl_pointer_axis_event: u16 = 4;
+const wl_seat_capabilities_event: u16 = 0;
 const xdg_wm_base_ping_event: u16 = 0;
 const xdg_surface_configure_event: u16 = 0;
 const xdg_toplevel_close_event: u16 = 1;
 
 const wl_shm_format_xrgb8888: u32 = 1;
+const wl_pointer_button_left: u32 = 0x110;
+const wl_pointer_button_released: u32 = 0;
+const wl_pointer_axis_vertical_scroll: u32 = 0;
+const wl_seat_capability_pointer: u32 = 1;
+const fixed_scale: f32 = 256.0;
 
 const IrStorage = renderer_ir.FixedBuffers(
     max_rects,
@@ -95,12 +111,22 @@ const ObjectKind = enum {
     surface,
     xdg_surface,
     xdg_toplevel,
+    seat,
+    pointer,
 };
 
 const RegistryGlobal = struct {
     name: u32,
-    interface: []const u8,
+    interface: RegistryInterface,
     version: u32,
+};
+
+const RegistryInterface = enum {
+    other,
+    compositor,
+    shm,
+    wm_base,
+    seat,
 };
 
 const RegistryState = struct {
@@ -113,9 +139,9 @@ const RegistryState = struct {
         self.len += 1;
     }
 
-    fn find(self: RegistryState, interface: []const u8) ?RegistryGlobal {
+    fn find(self: RegistryState, interface: RegistryInterface) ?RegistryGlobal {
         for (self.globals[0..self.len]) |global| {
-            if (std.mem.eql(u8, global.interface, interface)) return global;
+            if (global.interface == interface) return global;
         }
         return null;
     }
@@ -126,6 +152,16 @@ const WaylandState = struct {
     registry_done: bool = false,
     configured: bool = false,
     closed: bool = false,
+    seat_has_pointer: bool = false,
+};
+
+const AppState = struct {
+    scroll_y: f32 = 0.0,
+    hover_x: f32 = -1.0,
+    hover_y: f32 = -1.0,
+    hover_hit_id: u32 = 0,
+    public_identity_ready: bool = true,
+    public_identity: []const u8 = "native-wayland",
 };
 
 const Message = struct {
@@ -188,8 +224,10 @@ pub fn main(init: std.process.Init) !void {
     defer client.close(init.io);
     try client.bootstrap();
     try client.createWindow(options.width, options.height);
-    try renderAndCommit(&client, allocator, options.width, options.height);
-    try client.eventLoop(options.seconds);
+    var app = try NativeApp.init(&client, allocator, options.width, options.height);
+    defer app.deinit();
+    try app.render(&client);
+    try client.eventLoop(options.seconds, &app);
 }
 
 fn parseOptions(args: []const [:0]const u8) !Options {
@@ -244,6 +282,8 @@ const WaylandClient = struct {
         client.object_kinds[surface_id] = .surface;
         client.object_kinds[xdg_surface_id] = .xdg_surface;
         client.object_kinds[xdg_toplevel_id] = .xdg_toplevel;
+        client.object_kinds[seat_id] = .seat;
+        client.object_kinds[pointer_id] = .pointer;
         return client;
     }
 
@@ -256,15 +296,25 @@ const WaylandClient = struct {
         try self.send(makeGetRegistry);
         try self.send(makeSync);
         while (!self.state.registry_done) try self.readEventsBlocking();
-        const compositor = self.state.registry.find("wl_compositor") orelse return error.MissingWaylandCompositor;
-        const shm = self.state.registry.find("wl_shm") orelse return error.MissingWaylandShm;
-        const wm_base = self.state.registry.find("xdg_wm_base") orelse return error.MissingXdgWmBase;
+        const compositor = self.state.registry.find(.compositor) orelse return error.MissingWaylandCompositor;
+        const shm = self.state.registry.find(.shm) orelse return error.MissingWaylandShm;
+        const wm_base = self.state.registry.find(.wm_base) orelse return error.MissingXdgWmBase;
+        const seat = self.state.registry.find(.seat);
         try self.sendBind(compositor.name, "wl_compositor", @min(compositor.version, 4), compositor_id);
         try self.sendBind(shm.name, "wl_shm", @min(shm.version, 1), shm_id);
         try self.sendBind(wm_base.name, "xdg_wm_base", @min(wm_base.version, 1), wm_base_id);
+        if (seat) |value| {
+            try self.sendBind(value.name, "wl_seat", value.version, seat_id);
+        }
         try self.send(makeSync);
         self.state.registry_done = false;
         while (!self.state.registry_done) try self.readEventsBlocking();
+        if (self.state.seat_has_pointer) {
+            try self.send(makeGetPointer);
+            try self.send(makeSync);
+            self.state.registry_done = false;
+            while (!self.state.registry_done) try self.readEventsBlocking();
+        }
     }
 
     fn createWindow(self: *WaylandClient, width: u32, height: u32) !void {
@@ -278,13 +328,13 @@ const WaylandClient = struct {
         while (!self.state.configured) try self.readEventsBlocking();
     }
 
-    fn eventLoop(self: *WaylandClient, seconds: u32) !void {
+    fn eventLoop(self: *WaylandClient, seconds: u32, app: *NativeApp) !void {
         var remaining_ms: i32 = @intCast(seconds * std.time.ms_per_s);
         while (!self.state.closed and remaining_ms > 0) {
             const step_ms: i32 = @min(remaining_ms, 100);
             var fds = [_]posix.pollfd{.{ .fd = self.fd, .events = linux.POLL.IN, .revents = 0 }};
             const ready = try posix.poll(&fds, step_ms);
-            if (ready != 0 and (fds[0].revents & linux.POLL.IN) != 0) try self.readEventsBlocking();
+            if (ready != 0 and (fds[0].revents & linux.POLL.IN) != 0) try self.readEvents(app);
             remaining_ms -= step_ms;
         }
     }
@@ -363,6 +413,24 @@ const WaylandClient = struct {
         }
     }
 
+    fn readEvents(self: *WaylandClient, app: *NativeApp) !void {
+        const n = try posix.read(self.fd, self.read_buffer[self.read_len..]);
+        if (n == 0) return error.WaylandConnectionClosed;
+        self.read_len += n;
+        var offset: usize = 0;
+        while (nextMessage(self.read_buffer[offset..self.read_len])) |message| {
+            const kind = self.object_kinds[message.object_id];
+            try self.replyToMessage(kind, message);
+            try handleMessage(&self.state, kind, message);
+            if (try app.handleWaylandInput(self, kind, message)) try app.render(self);
+            offset += message.payload.len + 8;
+        }
+        if (offset != 0) {
+            std.mem.copyForwards(u8, self.read_buffer[0 .. self.read_len - offset], self.read_buffer[offset..self.read_len]);
+            self.read_len -= offset;
+        }
+    }
+
     fn replyToMessage(self: WaylandClient, kind: ObjectKind, message: Message) !void {
         if (message.payload.len < 4) return;
         const serial = std.mem.readInt(u32, message.payload[0..4], .little);
@@ -393,54 +461,156 @@ const ShmBuffer = struct {
     }
 };
 
-fn renderAndCommit(client: *WaylandClient, allocator: std.mem.Allocator, width: u32, height: u32) !void {
-    const stride = width * @sizeOf(u32);
-    var shm = try client.createShmBuffer(@as(usize, stride) * height, width, height, stride);
-    defer shm.deinit();
+const NativeApp = struct {
+    allocator: std.mem.Allocator,
+    width: u32,
+    height: u32,
+    shm: ShmBuffer,
+    pixels: []ui.Color,
+    commands: [max_commands]ui.Command = undefined,
+    clips: [max_clips]ui.Rect = undefined,
+    ir_storage: IrStorage = .{},
+    font_atlas: renderer_font_atlas.Atlas = renderer_font_atlas.Atlas.init(),
+    tile_marks: [max_tiles]u8 = undefined,
+    dirty_ids: [max_tiles]u32 = undefined,
+    state: AppState = .{},
 
-    const pixels = try allocator.alloc(ui.Color, @as(usize, width) * height);
-    defer allocator.free(pixels);
-
-    var commands: [max_commands]ui.Command = undefined;
-    var clips: [max_clips]ui.Rect = undefined;
-    var scene = ui.Scene.initWithClips(&commands, &clips);
-    try renderBrowserLandingScene(&scene, width, height);
-
-    var ir_storage = IrStorage{};
-    const buffers = ir_storage.buffers();
-    var font_atlas = renderer_font_atlas.Atlas.init();
-    try renderer_ir.packScene(buffers, sources(&font_atlas), scene.written());
-
-    var tile_marks: [max_tiles]u8 = undefined;
-    var dirty_ids: [max_tiles]u32 = undefined;
-    var sink_state = WaylandCommitSink{};
-    const atlases = renderer_software.IrAtlases{
-        .font = .{ .width = renderer_font_atlas.width, .height = renderer_font_atlas.height, .alpha = font_atlas.alphaSlice() },
-        .icon = .{ .width = tabler_atlas.width, .height = tabler_atlas.height, .alpha = tabler_atlas.alpha },
-    };
-    const receipt = try renderer_native_present.renderCpuAndSubmit(
-        .{ .wayland = .{
-            .surface_id = surface_id,
-            .buffer_id = wl_buffer_id,
+    fn init(client: *WaylandClient, allocator: std.mem.Allocator, width: u32, height: u32) !NativeApp {
+        const stride = width * @sizeOf(u32);
+        const shm = try client.createShmBuffer(@as(usize, stride) * height, width, height, stride);
+        errdefer shm.deinit();
+        const pixels = try allocator.alloc(ui.Color, @as(usize, width) * height);
+        errdefer allocator.free(pixels);
+        return .{
+            .allocator = allocator,
             .width = width,
             .height = height,
-            .stride = width,
-            .scale = 1,
-        } },
-        buffers,
-        atlases,
-        .{ .width = width, .height = height, .pixels = pixels },
-        siteBackground(),
-        default_refresh_hz,
-        tile_width,
-        tile_height,
-        &tile_marks,
-        &dirty_ids,
-        sink_state.sink(),
-    );
-    if (!receipt.valid() or !sink_state.submitted) return error.WaylandCommitRejected;
-    packXrgb8888(shm.memory, pixels);
-    try client.attachCommit(width, height);
+            .shm = shm,
+            .pixels = pixels,
+        };
+    }
+
+    fn deinit(self: *NativeApp) void {
+        self.allocator.free(self.pixels);
+        self.shm.deinit();
+    }
+
+    fn render(self: *NativeApp, client: *WaylandClient) !void {
+        var scene = ui.Scene.initWithClips(&self.commands, &self.clips);
+        try renderBrowserLandingScene(&scene, self.width, self.height, self.state);
+        self.updateHoverHit(scene.written());
+
+        const buffers = self.ir_storage.buffers();
+        try renderer_ir.packScene(buffers, sources(&self.font_atlas), scene.written());
+
+        var sink_state = WaylandCommitSink{};
+        const atlases = renderer_software.IrAtlases{
+            .font = .{ .width = renderer_font_atlas.width, .height = renderer_font_atlas.height, .alpha = self.font_atlas.alphaSlice() },
+            .icon = .{ .width = tabler_atlas.width, .height = tabler_atlas.height, .alpha = tabler_atlas.alpha },
+        };
+        const receipt = try renderer_native_present.renderCpuAndSubmit(
+            .{ .wayland = .{
+                .surface_id = surface_id,
+                .buffer_id = wl_buffer_id,
+                .width = self.width,
+                .height = self.height,
+                .stride = self.width,
+                .scale = 1,
+            } },
+            buffers,
+            atlases,
+            .{ .width = self.width, .height = self.height, .pixels = self.pixels },
+            siteBackground(),
+            default_refresh_hz,
+            tile_width,
+            tile_height,
+            &self.tile_marks,
+            &self.dirty_ids,
+            sink_state.sink(),
+        );
+        if (!receipt.valid() or !sink_state.submitted) return error.WaylandCommitRejected;
+        packXrgb8888(self.shm.memory, self.pixels);
+        try client.attachCommit(self.width, self.height);
+    }
+
+    fn handleWaylandInput(self: *NativeApp, client: *WaylandClient, kind: ObjectKind, message: Message) !bool {
+        _ = client;
+        if (kind != .pointer) return false;
+        switch (message.opcode) {
+            wl_pointer_enter_event => {
+                if (message.payload.len < 16) return error.InvalidWaylandMessage;
+                self.state.hover_x = fixedToFloat(std.mem.readInt(i32, message.payload[8..12], .little));
+                self.state.hover_y = fixedToFloat(std.mem.readInt(i32, message.payload[12..16], .little));
+                return true;
+            },
+            wl_pointer_leave_event => {
+                self.state.hover_x = -1.0;
+                self.state.hover_y = -1.0;
+                self.state.hover_hit_id = 0;
+                return true;
+            },
+            wl_pointer_motion_event => {
+                if (message.payload.len < 12) return error.InvalidWaylandMessage;
+                self.state.hover_x = fixedToFloat(std.mem.readInt(i32, message.payload[4..8], .little));
+                self.state.hover_y = fixedToFloat(std.mem.readInt(i32, message.payload[8..12], .little));
+                return true;
+            },
+            wl_pointer_button_event => {
+                if (message.payload.len < 16) return error.InvalidWaylandMessage;
+                const button = std.mem.readInt(u32, message.payload[8..12], .little);
+                const state = std.mem.readInt(u32, message.payload[12..16], .little);
+                if (button == wl_pointer_button_left and state == wl_pointer_button_released) self.activateHit();
+                return true;
+            },
+            wl_pointer_axis_event => {
+                if (message.payload.len < 12) return error.InvalidWaylandMessage;
+                const axis = std.mem.readInt(u32, message.payload[4..8], .little);
+                const value = fixedToFloat(std.mem.readInt(i32, message.payload[8..12], .little));
+                if (axis == wl_pointer_axis_vertical_scroll) self.scrollBy(value);
+                return true;
+            },
+            else => return false,
+        }
+    }
+
+    fn updateHoverHit(self: *NativeApp, commands: []const ui.Command) void {
+        updateHoverHitForState(&self.state, commands);
+    }
+
+    fn activateHit(self: *NativeApp) void {
+        activateHitForState(&self.state);
+    }
+
+    fn scrollBy(self: *NativeApp, delta_y: f32) void {
+        scrollStateBy(&self.state, self.width, self.height, delta_y);
+    }
+};
+
+fn updateHoverHitForState(state: *AppState, commands: []const ui.Command) void {
+    if (state.hover_x < 0.0 or state.hover_y < 0.0) {
+        state.hover_hit_id = 0;
+        return;
+    }
+    state.hover_hit_id = if (input.hitTest(commands, state.hover_x, state.hover_y)) |hit| hit.id else 0;
+}
+
+fn activateHitForState(state: *AppState) void {
+    switch (state.hover_hit_id) {
+        site_chrome.logo_button_id,
+        site_chrome.docs_button_id,
+        => state.scroll_y = 0.0,
+        site_landing.reveal_identity_button_id => {
+            state.public_identity_ready = true;
+            state.public_identity = "native-wayland";
+        },
+        else => {},
+    }
+}
+
+fn scrollStateBy(state: *AppState, width: u32, height: u32, delta_y: f32) void {
+    if (!std.math.isFinite(delta_y)) return;
+    const limit = @max(0.0, site_landing.contentHeight(@floatFromInt(width)) - @as(f32, @floatFromInt(height)));
+    state.scroll_y = std.math.clamp(state.scroll_y + delta_y, 0.0, limit);
 }
 
 const WaylandCommitSink = struct {
@@ -457,19 +627,19 @@ const WaylandCommitSink = struct {
     }
 };
 
-fn renderBrowserLandingScene(scene: *ui.Scene, width: u32, height: u32) !void {
+fn renderBrowserLandingScene(scene: *ui.Scene, width: u32, height: u32, state: AppState) !void {
     try site_landing.render(scene, .{
         .x = 0,
         .y = 0,
         .w = @floatFromInt(width),
         .h = @floatFromInt(height),
     }, .{
-        .scroll_y = 0.0,
-        .hover_x = -1.0,
-        .hover_y = -1.0,
+        .scroll_y = state.scroll_y,
+        .hover_x = state.hover_x,
+        .hover_y = state.hover_y,
         .frame_ms = 0.0,
-        .public_identity = "native-wayland",
-        .public_identity_ready = true,
+        .public_identity = state.public_identity,
+        .public_identity_ready = state.public_identity_ready,
     });
 }
 
@@ -505,6 +675,10 @@ fn packXrgb8888(out: []u8, pixels: []const ui.Color) void {
     }
 }
 
+fn fixedToFloat(value: i32) f32 {
+    return @as(f32, @floatFromInt(value)) / fixed_scale;
+}
+
 fn makeGetRegistry(buffer: []u8) ![]const u8 {
     var msg = try MessageWriter.init(buffer, display_id, wl_display_get_registry);
     try msg.putU32(registry_id);
@@ -529,6 +703,12 @@ fn makeBind(buffer: []u8, name: u32, interface: []const u8, version: u32, new_id
 fn makeCreateSurface(buffer: []u8) ![]const u8 {
     var msg = try MessageWriter.init(buffer, compositor_id, wl_compositor_create_surface);
     try msg.putU32(surface_id);
+    return msg.finish();
+}
+
+fn makeGetPointer(buffer: []u8) ![]const u8 {
+    var msg = try MessageWriter.init(buffer, seat_id, wl_seat_get_pointer);
+    try msg.putU32(pointer_id);
     return msg.finish();
 }
 
@@ -634,6 +814,13 @@ fn handleMessage(state: *WaylandState, kind: ObjectKind, message: Message) !void
         .xdg_toplevel => {
             if (message.opcode == xdg_toplevel_close_event) state.closed = true;
         },
+        .seat => {
+            if (message.opcode == wl_seat_capabilities_event) {
+                if (message.payload.len < 4) return error.InvalidWaylandMessage;
+                const capabilities = std.mem.readInt(u32, message.payload[0..4], .little);
+                state.seat_has_pointer = (capabilities & wl_seat_capability_pointer) != 0;
+            }
+        },
         else => {},
     }
 }
@@ -645,9 +832,17 @@ fn parseRegistryGlobal(payload: []const u8) !RegistryGlobal {
     if (string_len == 0) return error.InvalidWaylandMessage;
     const padded = paddedLen(string_len);
     if (payload.len < 8 + padded + 4) return error.InvalidWaylandMessage;
-    const interface = payload[8 .. 8 + string_len - 1];
+    const interface_name = payload[8 .. 8 + string_len - 1];
     const version = std.mem.readInt(u32, payload[8 + padded ..][0..4], .little);
-    return .{ .name = name, .interface = interface, .version = version };
+    return .{ .name = name, .interface = registryInterface(interface_name), .version = version };
+}
+
+fn registryInterface(value: []const u8) RegistryInterface {
+    if (std.mem.eql(u8, value, "wl_compositor")) return .compositor;
+    if (std.mem.eql(u8, value, "wl_shm")) return .shm;
+    if (std.mem.eql(u8, value, "xdg_wm_base")) return .wm_base;
+    if (std.mem.eql(u8, value, "wl_seat")) return .seat;
+    return .other;
 }
 
 fn paddedLen(len: u32) usize {
@@ -749,7 +944,7 @@ test "wayland registry global parser keeps interface slice and version" {
     std.mem.writeInt(u32, payload[16..20], 1, .little);
     const global = try parseRegistryGlobal(payload[0..20]);
     try std.testing.expectEqual(@as(u32, 11), global.name);
-    try std.testing.expectEqualStrings("wl_shm", global.interface);
+    try std.testing.expectEqual(RegistryInterface.shm, global.interface);
     try std.testing.expectEqual(@as(u32, 1), global.version);
 }
 
@@ -779,7 +974,7 @@ test "wayland host renders the browser landing app through canonical ir" {
     var commands: [max_commands]ui.Command = undefined;
     var clips: [max_clips]ui.Rect = undefined;
     var scene = ui.Scene.initWithClips(&commands, &clips);
-    try renderBrowserLandingScene(&scene, 1280, 800);
+    try renderBrowserLandingScene(&scene, 1280, 800, .{});
     try std.testing.expect(hasText(scene.written(), "Your Node is"));
     try std.testing.expect(hasText(scene.written(), "Already Running"));
 
@@ -792,9 +987,41 @@ test "wayland host renders the browser landing app through canonical ir" {
     try std.testing.expect(ir_storage.icon_vertex_len > 0);
 }
 
+test "wayland host pointer input updates hover activation and scroll state" {
+    var state = AppState{};
+    var commands: [max_commands]ui.Command = undefined;
+    var clips: [max_clips]ui.Rect = undefined;
+    var scene = ui.Scene.initWithClips(&commands, &clips);
+    try renderBrowserLandingScene(&scene, 1280, 800, state);
+    updateHoverHitForState(&state, scene.written());
+    try std.testing.expectEqual(@as(u32, 0), state.hover_hit_id);
+
+    const docs = try hitRect(scene.written(), site_landing.docs_button_id);
+    state.hover_x = docs.x + docs.w * 0.5;
+    state.hover_y = docs.y + docs.h * 0.5;
+    updateHoverHitForState(&state, scene.written());
+    try std.testing.expect(state.hover_hit_id != 0);
+
+    const old_hit = state.hover_hit_id;
+    activateHitForState(&state);
+    try std.testing.expectEqual(old_hit, state.hover_hit_id);
+
+    scrollStateBy(&state, 1280, 800, 320.0);
+    try std.testing.expectEqual(@as(f32, 320.0), state.scroll_y);
+    scrollStateBy(&state, 1280, 800, 200000.0);
+    try std.testing.expect(state.scroll_y <= site_landing.contentHeight(1280.0));
+}
+
 fn hasText(commands: []const ui.Command, value: []const u8) bool {
     for (commands) |command| {
         if (command == .text and std.mem.eql(u8, command.text.value, value)) return true;
     }
     return false;
+}
+
+fn hitRect(commands: []const ui.Command, id: u32) !ui.Rect {
+    for (commands) |command| {
+        if (command == .hit and command.hit.id == id) return command.hit.bounds;
+    }
+    return error.MissingHit;
 }
