@@ -186,6 +186,7 @@ pub const Receipt = struct {
 pub const GpuNativeReceipt = struct {
     gpu: renderer_gpu.Receipt,
     native: Receipt,
+    buffer: ?GpuBuffer = null,
 
     pub fn valid(self: GpuNativeReceipt) bool {
         return self.gpu.valid() and
@@ -393,6 +394,14 @@ pub fn renderGpuBackedAndSubmit(
     return .{
         .gpu = gpu_receipt,
         .native = native_receipt,
+        .buffer = gpuBufferForReceipt(surface),
+    };
+}
+
+fn gpuBufferForReceipt(surface: NativeSurface) ?GpuBuffer {
+    return switch (surface) {
+        .drm => |value| value.gpu_buffer,
+        .wayland => |value| value.gpu_buffer,
     };
 }
 
@@ -892,7 +901,10 @@ test "native gpu backed render binds scanout surface before native commit" {
     try std.testing.expectEqual(@as(usize, 1), gpu_device.began);
     try std.testing.expectEqual(@as(usize, 2), receipt.gpu.primitive_count);
     try std.testing.expectEqual(receipt.gpu.primitive_count, gpu_device.uploaded);
+    try std.testing.expectEqual(renderer_gpu.BufferKind.scanout, receipt.buffer.?.kind);
+    try std.testing.expectEqual(@as(u64, 0xabc), receipt.buffer.?.handle);
     try std.testing.expectEqual(@as(u64, 0x0102030405060708), gpu_device.last_buffer_modifier);
+    try std.testing.expectEqual(@as(u64, 0x0102030405060708), receipt.buffer.?.modifier);
     try std.testing.expectEqual(@as(usize, 1), sink_state.drm_count);
     try std.testing.expectEqual(@as(u32, 97), sink_state.last_framebuffer_id);
 }
@@ -1019,7 +1031,10 @@ test "native gpu backed wayland render accepts dma buf surface" {
     try std.testing.expect(receipt.valid());
     try std.testing.expectEqual(renderer_present.Transport.wayland_surface, receipt.native.transport);
     try std.testing.expectEqual(@as(usize, 1), gpu_device.began);
+    try std.testing.expectEqual(renderer_gpu.BufferKind.dma_buf, receipt.buffer.?.kind);
+    try std.testing.expectEqual(@as(u64, 0x456), receipt.buffer.?.handle);
     try std.testing.expectEqual(@as(u64, 0x8877665544332211), gpu_device.last_buffer_modifier);
+    try std.testing.expectEqual(@as(u64, 0x8877665544332211), receipt.buffer.?.modifier);
     try std.testing.expectEqual(@as(usize, 1), sink_state.wayland_count);
     try std.testing.expectEqual(@as(u32, 131), sink_state.last_surface_id);
 }
