@@ -13,6 +13,7 @@ const choice_group_component = @import("ui/components/ChoiceGroup.zig");
 const definition_list_component = @import("ui/components/DefinitionList.zig");
 const details_component = @import("ui/components/Details.zig");
 const figure_component = @import("ui/components/Figure.zig");
+const heading_component = @import("ui/components/Heading.zig");
 const nav_component = @import("ui/components/Nav.zig");
 const progress_summary_component = @import("ui/components/ProgressSummary.zig");
 const resource_list_component = @import("ui/components/ResourceList.zig");
@@ -168,30 +169,7 @@ pub const CodeBlock = struct {
     }
 };
 
-pub const Heading = struct {
-    level: u8,
-    value: []const u8,
-
-    pub fn render(self: Heading, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
-        return renderHeading(scene, bounds, self, options);
-    }
-
-    pub fn toHtml(self: Heading, out: []u8) HtmlError![]u8 {
-        return writeHeadingHtml(self, out);
-    }
-
-    pub fn fromHtml(html: []const u8, text_out: []u8) HtmlError!Heading {
-        return readHeadingHtml(html, text_out);
-    }
-
-    pub fn toMarkdown(self: Heading, out: []u8) MarkdownError![]u8 {
-        return writeHeadingMarkdown(self, out);
-    }
-
-    pub fn fromMarkdown(markdown: []const u8, text_out: []u8) MarkdownError!Heading {
-        return readHeadingMarkdown(markdown, text_out);
-    }
-};
+pub const Heading = heading_component.Heading;
 
 pub const List = struct {
     ordered: bool = false,
@@ -334,6 +312,10 @@ pub fn registerFigure(registry: *ComponentRegistry) RegistryError!void {
     return figure_component.register(registry);
 }
 
+pub fn registerHeading(registry: *ComponentRegistry) RegistryError!void {
+    return heading_component.register(registry);
+}
+
 pub fn registerNav(registry: *ComponentRegistry) RegistryError!void {
     return nav_component.register(registry);
 }
@@ -443,27 +425,6 @@ pub fn renderCodeBlock(scene: *ui.Scene, bounds: ui.Rect, block: CodeBlock, opti
             y += code_line_height;
         }
     }
-}
-
-pub fn renderHeading(scene: *ui.Scene, bounds: ui.Rect, heading: Heading, options: RenderOptions) ui.RenderError!void {
-    if (!validHeadingLevel(heading.level)) return;
-    const line_height: f32 = switch (heading.level) {
-        1 => heading_h1_line_h,
-        2 => heading_h2_line_h,
-        3 => heading_h3_line_h,
-        else => unreachable,
-    };
-    const avg_width: f32 = switch (heading.level) {
-        1 => heading_h1_avg_w,
-        2 => heading_h2_avg_w,
-        3 => heading_h3_avg_w,
-        else => unreachable,
-    };
-    try scene.pushWrappedText(bounds, heading.value, options.style.text, .{
-        .line_height = line_height,
-        .average_char_width = avg_width,
-        .max_lines = 3,
-    });
 }
 
 pub fn renderList(scene: *ui.Scene, bounds: ui.Rect, list: List, options: RenderOptions) ui.RenderError!void {
@@ -706,12 +667,6 @@ const code_padding_y: f32 = 18.0;
 const code_line_height: f32 = 17.0;
 const code_text_height: f32 = 12.0;
 const code_clip_inset: f32 = 1.0;
-const heading_h1_line_h: f32 = 34.0;
-const heading_h2_line_h: f32 = 26.0;
-const heading_h3_line_h: f32 = 21.0;
-const heading_h1_avg_w: f32 = 15.0;
-const heading_h2_avg_w: f32 = 12.0;
-const heading_h3_avg_w: f32 = 10.5;
 const list_item_h: f32 = 42.0;
 const list_item_gap: f32 = 4.0;
 const list_marker_w: f32 = 24.0;
@@ -1553,20 +1508,6 @@ fn writeStackMarkdown(stack: Stack, out: []u8) MarkdownError![]u8 {
     return writer.written();
 }
 
-fn writeHeadingHtml(heading: Heading, out: []u8) HtmlError![]u8 {
-    if (!validHeadingLevel(heading.level)) return error.InvalidHtml;
-    var writer = HtmlWriter.init(out);
-    try writer.writeByte('<');
-    try writer.writeByte('h');
-    try writer.writeByte('0' + heading.level);
-    try writer.writeAll(" data-er-component=\"heading\">");
-    try writer.writeEscapedText(heading.value);
-    try writer.writeAll("</h");
-    try writer.writeByte('0' + heading.level);
-    try writer.writeByte('>');
-    return writer.written();
-}
-
 fn writeListHtml(list: List, out: []u8) HtmlError![]u8 {
     if (list.items.len == 0) return error.InvalidHtml;
     var writer = HtmlWriter.init(out);
@@ -1737,16 +1678,6 @@ fn writeComponentMarkdownInto(writer: *MarkdownWriter, component: Component) Mar
     }
 }
 
-fn writeHeadingMarkdown(heading: Heading, out: []u8) MarkdownError![]u8 {
-    if (!validHeadingLevel(heading.level) or heading.value.len == 0) return error.InvalidMarkdown;
-    var writer = MarkdownWriter.init(out);
-    var level: u8 = 0;
-    while (level < heading.level) : (level += 1) try writer.writeByte('#');
-    try writer.writeAll(" ");
-    try writer.writeEscapedInline(heading.value);
-    return writer.written();
-}
-
 fn writeListMarkdown(list: List, out: []u8) MarkdownError![]u8 {
     if (list.items.len == 0) return error.InvalidMarkdown;
     var writer = MarkdownWriter.init(out);
@@ -1799,25 +1730,6 @@ fn writeCodeBlockMarkdown(block: CodeBlock, out: []u8) MarkdownError![]u8 {
     }
     try writer.writeAll("\n```");
     return writer.written();
-}
-
-fn readHeadingMarkdown(markdown: []const u8, text_out: []u8) MarkdownError!Heading {
-    if (std.mem.indexOfScalar(u8, markdown, '\n') != null) return error.InvalidMarkdown;
-    const level: u8 = if (std.mem.startsWith(u8, markdown, "### "))
-        3
-    else if (std.mem.startsWith(u8, markdown, "## "))
-        2
-    else if (std.mem.startsWith(u8, markdown, "# "))
-        1
-    else if (std.mem.startsWith(u8, markdown, "#"))
-        return error.InvalidMarkdown
-    else
-        return error.UnsupportedMarkdown;
-    const value_start: usize = @as(usize, level) + 1;
-    var text = MarkdownTextArena.init(text_out);
-    const value = try text.unescapeInline(markdown[value_start..]);
-    if (value.len == 0) return error.InvalidMarkdown;
-    return .{ .level = level, .value = value };
 }
 
 fn readListMarkdown(markdown: []const u8, out_items: [][]const u8, text_out: []u8) MarkdownError!List {
@@ -2274,21 +2186,6 @@ fn readComponentHtmlWithArena(html: []const u8, text: *HtmlTextArena) HtmlError!
         const detail = try text.unescape(html[detail_start .. html.len - "</span></div>".len]);
         return .{ .row_item = .{ .id = id, .title = title, .detail = detail } };
     }
-    return error.UnsupportedHtml;
-}
-
-fn readHeadingHtml(html: []const u8, text_out: []u8) HtmlError!Heading {
-    var text = HtmlTextArena.init(text_out);
-    inline for (.{ 1, 2, 3 }) |level| {
-        var prefix: [32]u8 = undefined;
-        const prefix_text = std.fmt.bufPrint(&prefix, "<h{d} data-er-component=\"heading\">", .{level}) catch unreachable;
-        var suffix: [6]u8 = undefined;
-        const suffix_text = std.fmt.bufPrint(&suffix, "</h{d}>", .{level}) catch unreachable;
-        if (takeWrapped(html, prefix_text, suffix_text)) |value| {
-            return .{ .level = level, .value = try text.unescape(value) };
-        }
-    }
-    if (std.mem.startsWith(u8, html, "<h")) return error.InvalidHtml;
     return error.UnsupportedHtml;
 }
 
@@ -2888,10 +2785,6 @@ fn parseRegionTagName(value: []const u8) ?RegionTag {
     if (std.mem.eql(u8, value, "section")) return .section;
     if (std.mem.eql(u8, value, "article")) return .article;
     return null;
-}
-
-fn validHeadingLevel(level: u8) bool {
-    return level >= 1 and level <= 3;
 }
 
 fn orderedMarker(index: usize) []const u8 {
