@@ -1,4 +1,5 @@
 const std = @import("std");
+const components = @import("ui_components.zig");
 const icon = @import("icon.zig");
 const ui = @import("ui.zig");
 const interaction = @import("ui_interaction.zig");
@@ -67,15 +68,45 @@ pub const Category = enum {
 pub const ComponentSpec = struct {
     name: []const u8,
     slug: []const u8,
+    route: []const u8,
     category: Category,
+    source_component: []const u8,
+    edge_builder: []const u8,
+    status: Status,
 
     pub fn hasNativeRenderer(self: ComponentSpec) bool {
-        _ = self;
-        return true;
+        return self.status.hasNativeRenderer();
+    }
+
+    pub fn nativeComponent(self: ComponentSpec, id: u32) ?components.Component {
+        return componentForSlug(self.slug, id);
     }
 };
 
 pub const categories = [_]Category{ .foundation, .form, .overlay, .navigation, .data_display, .feedback, .layout, .media };
+
+pub const Status = enum {
+    cataloged,
+    native_primitive,
+    exact_port,
+
+    pub fn label(self: Status) []const u8 {
+        return switch (self) {
+            .cataloged => "Cataloged",
+            .native_primitive => "Native primitive",
+            .exact_port => "Exact port",
+        };
+    }
+
+    pub fn hasNativeRenderer(self: Status) bool {
+        return switch (self) {
+            .cataloged => false,
+            .native_primitive, .exact_port => true,
+        };
+    }
+};
+
+pub const statuses = [_]Status{ .cataloged, .native_primitive, .exact_port };
 
 pub const CategorySummary = struct {
     category: Category,
@@ -83,31 +114,94 @@ pub const CategorySummary = struct {
     count: usize,
 };
 
-pub const component_catalog = [_]ComponentSpec{
-    componentSpec("Avatar", "avatar", .data_display),
-    componentSpec("Badge", "badge", .foundation),
-    componentSpec("Button", "button", .foundation),
-    componentSpec("Card", "card", .layout),
-    componentSpec("Checkbox", "checkbox", .form),
-    componentSpec("Input", "input", .form),
-    componentSpec("Kbd", "kbd", .foundation),
-    componentSpec("Progress", "progress", .feedback),
-    componentSpec("Row Item", "row-item", .data_display),
-    componentSpec("Select", "select", .form),
-    componentSpec("Separator", "separator", .layout),
-    componentSpec("Slider", "slider", .form),
-    componentSpec("Stack", "stack", .layout),
-    componentSpec("Switch", "switch", .form),
-    componentSpec("Text", "text", .foundation),
-    componentSpec("Textarea", "textarea", .form),
-    componentSpec("Slot", "slot", .layout),
+pub const StatusSummary = struct {
+    status: Status,
+    label: []const u8,
+    count: usize,
 };
 
-fn componentSpec(name: []const u8, slug: []const u8, category: Category) ComponentSpec {
+const catalog_eval_branch_quota: u32 = component_route_count * component_route_count * 2;
+
+pub const component_catalog = blk: {
+    @setEvalBranchQuota(catalog_eval_branch_quota);
+    break :blk [_]ComponentSpec{
+        catalogSpec("Accordion", "accordion", .layout, "Accordion", "accordion_node"),
+        catalogSpec("Alert", "alert", .feedback, "Alert", "alert_node"),
+        catalogSpec("Alert Dialog", "alert-dialog", .overlay, "AlertDialog", "alert_dialog_node"),
+        catalogSpec("Aspect Ratio", "aspect-ratio", .media, "AspectRatio", "aspect_ratio_node"),
+        nativeSpec("Avatar", "avatar", .data_display, "Avatar", "avatar_node"),
+        nativeSpec("Badge", "badge", .foundation, "Badge", "badge"),
+        catalogSpec("Breadcrumb", "breadcrumb", .navigation, "Breadcrumb", "breadcrumb"),
+        nativeSpec("Button", "button", .foundation, "Button", "button"),
+        catalogSpec("Button Group", "button-group", .foundation, "ButtonGroup", "button_group_node"),
+        catalogSpec("Calendar", "calendar", .form, "Calendar", "calendar_node"),
+        nativeSpec("Card", "card", .layout, "Card", "card"),
+        catalogSpec("Carousel", "carousel", .media, "Carousel", "carousel_node"),
+        catalogSpec("Chart", "chart", .data_display, "Chart", "chart_node"),
+        nativeSpec("Checkbox", "checkbox", .form, "Checkbox", "checkbox"),
+        catalogSpec("Collapsible", "collapsible", .layout, "Collapsible", "collapsible_node"),
+        catalogSpec("Combobox", "combobox", .form, "Combobox", "combobox_node"),
+        catalogSpec("Command", "command", .overlay, "Command", "command_palette"),
+        catalogSpec("Context Menu", "context-menu", .overlay, "ContextMenu", "context_menu_node"),
+        catalogSpec("Data Table", "data-table", .data_display, "DataTable", "data_table_node"),
+        catalogSpec("Date Picker", "date-picker", .form, "DatePicker", "date_picker_node"),
+        catalogSpec("Dialog", "dialog", .overlay, "Dialog", "dialog"),
+        catalogSpec("Direction", "direction", .foundation, "DirectionProvider", "direction_node"),
+        catalogSpec("Drawer", "drawer", .overlay, "Drawer", "drawer_node"),
+        catalogSpec("Dropdown Menu", "dropdown-menu", .overlay, "DropdownMenu", "dropdown_menu_node"),
+        catalogSpec("Empty", "empty", .feedback, "Empty", "empty_state"),
+        catalogSpec("Field", "field", .form, "Field", "field_node"),
+        catalogSpec("Hover Card", "hover-card", .overlay, "HoverCard", "hover_card_node"),
+        nativeSpec("Input", "input", .form, "Input", "field_node"),
+        catalogSpec("Input Group", "input-group", .form, "InputGroup", "input_group_node"),
+        catalogSpec("Input OTP", "input-otp", .form, "InputOTP", "input_otp_node"),
+        nativeSpec("Item", "item", .data_display, "Item", "list_row_node"),
+        nativeSpec("Kbd", "kbd", .foundation, "Kbd", "kbd_node"),
+        nativeSpec("Label", "label", .form, "Label", "text"),
+        catalogSpec("Menubar", "menubar", .navigation, "Menubar", "menubar_node"),
+        nativeSpec("Native Select", "native-select", .form, "NativeSelect", "select_node"),
+        catalogSpec("Navigation Menu", "navigation-menu", .navigation, "NavigationMenu", "navigation_menu_node"),
+        catalogSpec("Pagination", "pagination", .navigation, "Pagination", "pagination_node"),
+        catalogSpec("Popover", "popover", .overlay, "Popover", "popover_node"),
+        nativeSpec("Progress", "progress", .feedback, "Progress", "progress_bar_node"),
+        catalogSpec("Radio Group", "radio-group", .form, "RadioGroup", "radio"),
+        catalogSpec("Resizable", "resizable", .layout, "Resizable", "resizable_node"),
+        catalogSpec("Scroll Area", "scroll-area", .layout, "ScrollArea", "scroll_area"),
+        nativeSpec("Select", "select", .form, "Select", "select_node"),
+        nativeSpec("Separator", "separator", .layout, "Separator", "divider"),
+        catalogSpec("Sheet", "sheet", .overlay, "Sheet", "sheet_node"),
+        catalogSpec("Sidebar", "sidebar", .navigation, "Sidebar", "sidebar_node"),
+        catalogSpec("Skeleton", "skeleton", .feedback, "Skeleton", "skeleton"),
+        nativeSpec("Slider", "slider", .form, "Slider", "slider_node"),
+        catalogSpec("Sonner", "sonner", .feedback, "Sonner", "toast"),
+        nativeSpec("Switch", "switch", .form, "Switch", "toggle_node"),
+        catalogSpec("Table", "table", .data_display, "Table", "table_node"),
+        catalogSpec("Tabs", "tabs", .navigation, "Tabs", "tabs_node"),
+        nativeSpec("Textarea", "textarea", .form, "Textarea", "text_area_node"),
+        catalogSpec("Toast", "toast", .feedback, "Toast", "toast"),
+        catalogSpec("Toggle", "toggle", .foundation, "Toggle", "toggle_node"),
+        catalogSpec("Toggle Group", "toggle-group", .foundation, "ToggleGroup", "toggle_group_node"),
+        catalogSpec("Tooltip", "tooltip", .overlay, "Tooltip", "tooltip"),
+    };
+};
+
+fn catalogSpec(name: []const u8, slug: []const u8, category: Category, source_component: []const u8, edge_builder: []const u8) ComponentSpec {
+    return componentSpec(name, slug, category, source_component, edge_builder, .cataloged);
+}
+
+fn nativeSpec(name: []const u8, slug: []const u8, category: Category, source_component: []const u8, edge_builder: []const u8) ComponentSpec {
+    return componentSpec(name, slug, category, source_component, edge_builder, .native_primitive);
+}
+
+fn componentSpec(name: []const u8, slug: []const u8, category: Category, source_component: []const u8, edge_builder: []const u8, status: Status) ComponentSpec {
     return .{
         .name = name,
         .slug = slug,
+        .route = routeFor(slug),
         .category = category,
+        .source_component = source_component,
+        .edge_builder = edge_builder,
+        .status = status,
     };
 }
 
@@ -119,7 +213,14 @@ pub fn findBySlug(slug: []const u8) ?*const ComponentSpec {
 }
 
 pub fn nativeComponentCount() usize {
-    return component_catalog.len;
+    return countByStatus(.native_primitive) + countByStatus(.exact_port);
+}
+
+pub fn findBySourceComponent(source_component: []const u8) ?*const ComponentSpec {
+    for (&component_catalog) |*spec| {
+        if (std.mem.eql(u8, spec.source_component, source_component)) return spec;
+    }
+    return null;
 }
 
 pub fn countByCategory(category: Category) usize {
@@ -130,9 +231,115 @@ pub fn countByCategory(category: Category) usize {
     return count;
 }
 
+pub fn countByStatus(status: Status) usize {
+    var count: usize = 0;
+    for (component_catalog) |spec| {
+        if (spec.status == status) count += 1;
+    }
+    return count;
+}
+
 pub fn categorySummary(category: Category) CategorySummary {
     return .{ .category = category, .label = category.label(), .count = countByCategory(category) };
 }
+
+pub fn statusSummary(status: Status) StatusSummary {
+    return .{ .status = status, .label = status.label(), .count = countByStatus(status) };
+}
+
+pub fn componentForSlug(slug: []const u8, id: u32) ?components.Component {
+    if (std.mem.eql(u8, slug, "avatar")) return .{ .avatar = .{ .label = "ER" } };
+    if (std.mem.eql(u8, slug, "badge")) return .{ .badge = .{ .label = "Ready" } };
+    if (std.mem.eql(u8, slug, "button")) return .{ .button = .{ .id = id, .label = "Continue" } };
+    if (std.mem.eql(u8, slug, "card")) return .{ .card = .{ .title = "Card", .detail = "Canonical surface" } };
+    if (std.mem.eql(u8, slug, "checkbox")) return .{ .checkbox = .{ .id = id, .label = "Enabled", .checked = true } };
+    if (std.mem.eql(u8, slug, "input")) return .{ .input = .{ .id = id, .placeholder = "Input" } };
+    if (std.mem.eql(u8, slug, "item")) return .{ .row_item = .{ .id = id, .title = "Item", .detail = "Composed row" } };
+    if (std.mem.eql(u8, slug, "kbd")) return .{ .kbd = .{ .label = "Ctrl K" } };
+    if (std.mem.eql(u8, slug, "label")) return .{ .text = .{ .value = "Label" } };
+    if (std.mem.eql(u8, slug, "native-select")) return .{ .select = .{ .id = id, .label = "Native select" } };
+    if (std.mem.eql(u8, slug, "progress")) return .{ .progress = .{ .value = 0.64 } };
+    if (std.mem.eql(u8, slug, "select")) return .{ .select = .{ .id = id, .label = "Select" } };
+    if (std.mem.eql(u8, slug, "separator")) return .{ .separator = .{} };
+    if (std.mem.eql(u8, slug, "slider")) return .{ .slider = .{ .id = id, .label = "Slider", .value = 0.72 } };
+    if (std.mem.eql(u8, slug, "switch")) return .{ .switch_control = .{ .id = id, .label = "Switch", .checked = true } };
+    if (std.mem.eql(u8, slug, "textarea")) return .{ .textarea = .{ .id = id, .placeholder = "Textarea" } };
+    return null;
+}
+
+fn routeFor(slug: []const u8) []const u8 {
+    inline for (component_routes) |entry| {
+        if (std.mem.eql(u8, slug, entry.slug)) return entry.route;
+    }
+    unreachable;
+}
+
+const Route = struct {
+    slug: []const u8,
+    route: []const u8,
+};
+
+const component_route_count: u32 = 57;
+
+const component_routes = [_]Route{
+    .{ .slug = "accordion", .route = "/docs/components/accordion" },
+    .{ .slug = "alert", .route = "/docs/components/alert" },
+    .{ .slug = "alert-dialog", .route = "/docs/components/alert-dialog" },
+    .{ .slug = "aspect-ratio", .route = "/docs/components/aspect-ratio" },
+    .{ .slug = "avatar", .route = "/docs/components/avatar" },
+    .{ .slug = "badge", .route = "/docs/components/badge" },
+    .{ .slug = "breadcrumb", .route = "/docs/components/breadcrumb" },
+    .{ .slug = "button", .route = "/docs/components/button" },
+    .{ .slug = "button-group", .route = "/docs/components/button-group" },
+    .{ .slug = "calendar", .route = "/docs/components/calendar" },
+    .{ .slug = "card", .route = "/docs/components/card" },
+    .{ .slug = "carousel", .route = "/docs/components/carousel" },
+    .{ .slug = "chart", .route = "/docs/components/chart" },
+    .{ .slug = "checkbox", .route = "/docs/components/checkbox" },
+    .{ .slug = "collapsible", .route = "/docs/components/collapsible" },
+    .{ .slug = "combobox", .route = "/docs/components/combobox" },
+    .{ .slug = "command", .route = "/docs/components/command" },
+    .{ .slug = "context-menu", .route = "/docs/components/context-menu" },
+    .{ .slug = "data-table", .route = "/docs/components/data-table" },
+    .{ .slug = "date-picker", .route = "/docs/components/date-picker" },
+    .{ .slug = "dialog", .route = "/docs/components/dialog" },
+    .{ .slug = "direction", .route = "/docs/components/direction" },
+    .{ .slug = "drawer", .route = "/docs/components/drawer" },
+    .{ .slug = "dropdown-menu", .route = "/docs/components/dropdown-menu" },
+    .{ .slug = "empty", .route = "/docs/components/empty" },
+    .{ .slug = "field", .route = "/docs/components/field" },
+    .{ .slug = "hover-card", .route = "/docs/components/hover-card" },
+    .{ .slug = "input", .route = "/docs/components/input" },
+    .{ .slug = "input-group", .route = "/docs/components/input-group" },
+    .{ .slug = "input-otp", .route = "/docs/components/input-otp" },
+    .{ .slug = "item", .route = "/docs/components/item" },
+    .{ .slug = "kbd", .route = "/docs/components/kbd" },
+    .{ .slug = "label", .route = "/docs/components/label" },
+    .{ .slug = "menubar", .route = "/docs/components/menubar" },
+    .{ .slug = "native-select", .route = "/docs/components/native-select" },
+    .{ .slug = "navigation-menu", .route = "/docs/components/navigation-menu" },
+    .{ .slug = "pagination", .route = "/docs/components/pagination" },
+    .{ .slug = "popover", .route = "/docs/components/popover" },
+    .{ .slug = "progress", .route = "/docs/components/progress" },
+    .{ .slug = "radio-group", .route = "/docs/components/radio-group" },
+    .{ .slug = "resizable", .route = "/docs/components/resizable" },
+    .{ .slug = "scroll-area", .route = "/docs/components/scroll-area" },
+    .{ .slug = "select", .route = "/docs/components/select" },
+    .{ .slug = "separator", .route = "/docs/components/separator" },
+    .{ .slug = "sheet", .route = "/docs/components/sheet" },
+    .{ .slug = "sidebar", .route = "/docs/components/sidebar" },
+    .{ .slug = "skeleton", .route = "/docs/components/skeleton" },
+    .{ .slug = "slider", .route = "/docs/components/slider" },
+    .{ .slug = "sonner", .route = "/docs/components/sonner" },
+    .{ .slug = "switch", .route = "/docs/components/switch" },
+    .{ .slug = "table", .route = "/docs/components/table" },
+    .{ .slug = "tabs", .route = "/docs/components/tabs" },
+    .{ .slug = "textarea", .route = "/docs/components/textarea" },
+    .{ .slug = "toast", .route = "/docs/components/toast" },
+    .{ .slug = "toggle", .route = "/docs/components/toggle" },
+    .{ .slug = "toggle-group", .route = "/docs/components/toggle-group" },
+    .{ .slug = "tooltip", .route = "/docs/components/tooltip" },
+};
 
 pub const ComponentGalleryState = struct {
     contribution_bar: usize = 5,
@@ -1112,14 +1319,45 @@ fn shortestColumn(values: []const f32) usize {
     return best;
 }
 
-test "component gallery catalog mirrors canonical component count" {
-    try std.testing.expectEqual(@as(usize, 17), component_catalog.len);
-    try std.testing.expectEqual(component_catalog.len, nativeComponentCount());
+test "component gallery catalog is the authoritative component registry" {
+    try std.testing.expectEqual(@as(usize, 57), component_catalog.len);
+    try std.testing.expectEqual(@as(usize, 16), nativeComponentCount());
+    try std.testing.expectEqual(@as(usize, 41), countByStatus(.cataloged));
+    try std.testing.expectEqual(@as(usize, 0), countByStatus(.exact_port));
     try std.testing.expect(findBySlug("button").?.hasNativeRenderer());
-    try std.testing.expect(findBySlug("accordion") == null);
+    try std.testing.expect(!findBySlug("accordion").?.hasNativeRenderer());
+    try std.testing.expectEqualStrings("/docs/components/input-group", findBySlug("input-group").?.route);
+    try std.testing.expectEqualStrings("Button", findBySourceComponent("Button").?.source_component);
     try std.testing.expectEqual(Category.foundation, findBySlug("button").?.category);
-    try std.testing.expectEqual(@as(usize, 6), countByCategory(.form));
-    try std.testing.expectEqual(@as(usize, 4), countByCategory(.layout));
+    try std.testing.expectEqual(@as(usize, 15), countByCategory(.form));
+    try std.testing.expectEqual(@as(usize, 6), countByCategory(.layout));
+}
+
+test "component gallery native catalog entries render through canonical components" {
+    var commands: [256]ui.Command = undefined;
+    var regions: [64]interaction.Region = undefined;
+    var scene = ui.Scene.init(&commands);
+    var collector = interaction.Collector.init(&regions);
+    var rendered: usize = 0;
+
+    for (component_catalog, 0..) |spec, index| {
+        const component = spec.nativeComponent(preview_base_id + @as(u32, @intCast(index))) orelse {
+            try std.testing.expect(!spec.hasNativeRenderer());
+            continue;
+        };
+        try std.testing.expect(spec.hasNativeRenderer());
+        const y = @as(f32, @floatFromInt(rendered)) * 48.0;
+        const bounds = ui.Rect.init(0, y, 220, 36);
+        try component.render(&scene, bounds, .{});
+        try component.collectInteractions(&collector, bounds);
+        rendered += 1;
+    }
+
+    try std.testing.expectEqual(nativeComponentCount(), rendered);
+    try std.testing.expect(scene.written().len > nativeComponentCount());
+    try std.testing.expect(collector.written().len > 6);
+    try std.testing.expect(hasHit(collector.written(), preview_base_id + 7));
+    try std.testing.expect(findBySlug("accordion").?.nativeComponent(preview_base_id) == null);
 }
 
 test "component gallery renders component wall commands and interaction regions" {
