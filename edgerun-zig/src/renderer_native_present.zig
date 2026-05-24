@@ -26,6 +26,7 @@ pub const GpuBuffer = struct {
     kind: renderer_gpu.BufferKind,
     handle: u64,
     offset: u32 = 0,
+    modifier: u64 = 0,
     plane_count: u8 = 1,
 
     pub fn valid(self: GpuBuffer) bool {
@@ -423,6 +424,7 @@ fn gpuSurfaceBuffer(width: u32, height: u32, stride: u32, format: PixelFormat, m
         .format = gpuSurfaceFormat(format),
         .handle = buffer.handle,
         .offset = buffer.offset,
+        .modifier = buffer.modifier,
         .plane_count = buffer.plane_count,
     };
     if (!surface_buffer.valid()) return error.InvalidGpuBuffer;
@@ -480,6 +482,7 @@ const TestGpuDevice = struct {
     rendered: usize = 0,
     presented: usize = 0,
     last_sequence: u64 = 0,
+    last_buffer_modifier: u64 = 0,
     reject_present: bool = false,
 
     fn device(self: *TestGpuDevice) renderer_gpu.Device {
@@ -503,6 +506,7 @@ const TestGpuDevice = struct {
         const self: *TestGpuDevice = @ptrCast(@alignCast(context));
         if (primitives.len == 0) return false;
         self.uploaded += primitives.len;
+        self.last_buffer_modifier = primitives[0].buffer_modifier;
         return true;
     }
 
@@ -852,7 +856,7 @@ test "native gpu backed render binds scanout surface before native commit" {
             .width = 64,
             .height = 64,
             .stride = 64,
-            .gpu_buffer = .{ .kind = .scanout, .handle = 0xabc },
+            .gpu_buffer = .{ .kind = .scanout, .handle = 0xabc, .modifier = 0x0102030405060708 },
         } },
         buffers,
         .{},
@@ -876,6 +880,7 @@ test "native gpu backed render binds scanout surface before native commit" {
     try std.testing.expectEqual(@as(usize, 1), gpu_device.began);
     try std.testing.expectEqual(@as(usize, 2), receipt.gpu.primitive_count);
     try std.testing.expectEqual(receipt.gpu.primitive_count, gpu_device.uploaded);
+    try std.testing.expectEqual(@as(u64, 0x0102030405060708), gpu_device.last_buffer_modifier);
     try std.testing.expectEqual(@as(usize, 1), sink_state.drm_count);
     try std.testing.expectEqual(@as(u32, 97), sink_state.last_framebuffer_id);
 }
