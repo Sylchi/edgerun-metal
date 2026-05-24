@@ -84,11 +84,7 @@ pub fn renderDetails(details: Details, scene: *ui.Scene, bounds: ui.Rect, option
 pub fn measureDetails(details: Details, constraints: layout.Constraints) layout.Measurement {
     const content_constraints = constraints.inner(detailsInsets());
     const summary_constraints = content_constraints.inner(.{ .right = details_marker_w });
-    const summary = layout.measureText(details.summary, summary_constraints, .{
-        .line_height = details_summary_text_h,
-        .average_char_width = details_summary_avg_w,
-        .max_lines = details_summary_max_lines,
-    });
+    const summary = base_text_block.measure(details.summary, summary_constraints, details_summary_metrics);
     var content_width = summary.preferred.w + details_marker_w;
     var content_height = @max(details_summary_h, summary.preferred.h);
     if (details.open) {
@@ -196,6 +192,11 @@ const details_body_line_h: f32 = 18.0;
 const details_body_avg_w: f32 = 9.0;
 const details_body_max_lines: usize = 5;
 const details_min_w: f32 = 180.0;
+const details_summary_metrics = base_text_block.Metrics{
+    .line_height = details_summary_text_h,
+    .average_char_width = details_summary_avg_w,
+    .max_lines = details_summary_max_lines,
+};
 const details_body_metrics = base_text_block.Metrics{
     .line_height = details_body_line_h,
     .average_char_width = details_body_avg_w,
