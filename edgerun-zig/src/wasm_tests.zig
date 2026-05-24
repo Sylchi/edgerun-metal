@@ -418,6 +418,33 @@ const active_data_out_of_bounds_wasm = [_]u8{
     0x00, 0x00, 0x00, 0x00,
 };
 
+const memory_without_declaration_wasm = [_]u8{
+    0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00,
+    0x01, 0x05, 0x01, 0x60, 0x00, 0x01, 0x7e, 0x03,
+    0x02, 0x01, 0x00, 0x07, 0x08, 0x01, 0x04, 'm',
+    'a',  'i',  'n',  0x00, 0x00, 0x0a, 0x09, 0x01,
+    0x07, 0x00, 0x41, 0x00, 0x29, 0x03, 0x00, 0x0b,
+};
+
+const memory_declared_page_boundary_load_wasm = [_]u8{
+    0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00,
+    0x01, 0x05, 0x01, 0x60, 0x00, 0x01, 0x7e, 0x03,
+    0x02, 0x01, 0x00, 0x05, 0x03, 0x01, 0x00, 0x01,
+    0x07, 0x08, 0x01, 0x04, 'm',  'a',  'i',  'n',
+    0x00, 0x00, 0x0a, 0x0b, 0x01, 0x09, 0x00, 0x41,
+    0x80, 0x80, 0x04, 0x29, 0x03, 0x00, 0x0b,
+};
+
+const active_data_declared_page_boundary_wasm = [_]u8{
+    0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00,
+    0x01, 0x05, 0x01, 0x60, 0x00, 0x01, 0x7e, 0x03,
+    0x02, 0x01, 0x00, 0x05, 0x03, 0x01, 0x00, 0x01,
+    0x07, 0x08, 0x01, 0x04, 'm',  'a',  'i',  'n',
+    0x00, 0x00, 0x0a, 0x06, 0x01, 0x04, 0x00, 0x42,
+    0x00, 0x0b, 0x0b, 0x09, 0x01, 0x00, 0x41, 0x80,
+    0x80, 0x04, 0x0b, 0x01, 0xaa,
+};
+
 fn testApp(memory: []u8, storage_bytes: []u8, slots: []store.Blob, execution_ticks: u64) App {
     const epoch = clock.Stamp{ .keeper = .{ .bytes = [_]u8{91} ++ [_]u8{0} ** 31 } };
     const app_id = identity.Identity.init(.app, identity.Source.prepare(.hash, &preimage.rawHash("wasm test app")).?, epoch).?;
@@ -745,6 +772,33 @@ test "wasm interpreter rejects active data outside app allocation" {
     var app = testApp(&memory, &storage_bytes, &slots, 8);
 
     try std.testing.expectError(error.NoMemory, wasm.executeExportI64(&app, &active_data_out_of_bounds_wasm, "main"));
+}
+
+test "wasm interpreter rejects memory access without module memory declaration" {
+    var memory: [wasm_page_bytes]u8 = undefined;
+    var storage_bytes: [64]u8 = undefined;
+    var slots: [1]store.Blob = undefined;
+    var app = testApp(&memory, &storage_bytes, &slots, 8);
+
+    try std.testing.expectError(error.NoMemory, wasm.executeExportI64(&app, &memory_without_declaration_wasm, "main"));
+}
+
+test "wasm interpreter bounds memory access by module declaration" {
+    var memory: [wasm_page_bytes * 2]u8 = undefined;
+    var storage_bytes: [64]u8 = undefined;
+    var slots: [1]store.Blob = undefined;
+    var app = testApp(&memory, &storage_bytes, &slots, 8);
+
+    try std.testing.expectError(error.NoMemory, wasm.executeExportI64(&app, &memory_declared_page_boundary_load_wasm, "main"));
+}
+
+test "wasm interpreter bounds active data by module declaration" {
+    var memory: [wasm_page_bytes * 2]u8 = undefined;
+    var storage_bytes: [64]u8 = undefined;
+    var slots: [1]store.Blob = undefined;
+    var app = testApp(&memory, &storage_bytes, &slots, 8);
+
+    try std.testing.expectError(error.NoMemory, wasm.executeExportI64(&app, &active_data_declared_page_boundary_wasm, "main"));
 }
 
 test "wasm interpreter reads and writes only app owned linear memory" {

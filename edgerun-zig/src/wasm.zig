@@ -589,10 +589,11 @@ const Module = struct {
     }
 
     fn applyDataSegments(self: Module, app: *App) Error!void {
+        const limit = try self.requiredMemoryBytes();
         const memory = app.state.memory.owned.base;
         for (self.data_segments[0..self.data_segment_count]) |segment| {
             const end = std.math.add(usize, segment.offset, segment.bytes.len) catch return error.NoMemory;
-            if (end > memory.len) return error.NoMemory;
+            if (end > limit or end > memory.len) return error.NoMemory;
             @memcpy(memory[segment.offset..end], segment.bytes);
         }
     }
@@ -944,9 +945,10 @@ const Executor = struct {
     }
 
     fn memoryRange(self: *Executor, address: usize, size: usize) Error![]u8 {
+        const limit = try self.module.requiredMemoryBytes();
         const memory = self.app.state.memory.owned.base;
         const end = std.math.add(usize, address, size) catch return error.NoMemory;
-        if (end > memory.len) return error.NoMemory;
+        if (end > limit or end > memory.len) return error.NoMemory;
         return memory[address..end];
     }
 
