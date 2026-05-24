@@ -74,6 +74,17 @@ const exported_add_params_wasm = [_]u8{
     0x0b,
 };
 
+const imported_double_wasm = [_]u8{
+    0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00,
+    0x01, 0x0a, 0x02, 0x60, 0x01, 0x7e, 0x01, 0x7e,
+    0x60, 0x00, 0x01, 0x7e, 0x02, 0x0e, 0x01, 0x03,
+    'e',  'n',  'v',  0x06, 'd',  'o',  'u',  'b',
+    'l',  'e',  0x00, 0x00, 0x03, 0x02, 0x01, 0x01,
+    0x07, 0x08, 0x01, 0x04, 'm',  'a',  'i',  'n',
+    0x00, 0x01, 0x0a, 0x08, 0x01, 0x06, 0x00, 0x42,
+    0x15, 0x10, 0x00, 0x0b,
+};
+
 const signed_i32_const_wasm = [_]u8{
     0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00,
     0x01, 0x05, 0x01, 0x60, 0x00, 0x01, 0x7e, 0x03,
@@ -594,6 +605,33 @@ test "wasm interpreter executes exported i64 functions with parameters" {
 
     try std.testing.expectEqual(@as(i64, 42), try wasm.executeExportI64Args(&runtime, &exported_add_params_wasm, "add", &.{ 40, 2 }));
     try std.testing.expectEqual(@as(u64, 8), ticks);
+}
+
+fn doubleImport(_: ?*anyopaque, args: []const i64) wasm.Error!?i64 {
+    if (args.len != 1) return error.Corrupt;
+    return args[0] * 2;
+}
+
+test "wasm interpreter resolves and calls imported functions" {
+    var memory: [256]u8 = undefined;
+    var ticks: u64 = 16;
+    const imports = [_]wasm.HostImport{.{
+        .module = "env",
+        .name = "double",
+        .call = doubleImport,
+    }};
+    var runtime = wasm.Runtime.initWithImports(&memory, &ticks, &imports);
+
+    try std.testing.expectEqual(@as(i64, 42), try wasm.executeExportI64(&runtime, &imported_double_wasm, "main"));
+    try std.testing.expectEqual(@as(u64, 13), ticks);
+}
+
+test "wasm interpreter reports unresolved imported functions" {
+    var memory: [256]u8 = undefined;
+    var ticks: u64 = 16;
+    var runtime = wasm.Runtime.init(&memory, &ticks);
+
+    try std.testing.expectError(error.MissingImport, wasm.executeExportI64(&runtime, &imported_double_wasm, "main"));
 }
 
 test "wasm interpreter decodes signed i32 constants" {
