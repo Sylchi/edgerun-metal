@@ -7,6 +7,8 @@ const object = @import("object.zig");
 const ui = @import("ui.zig");
 const codec = @import("ui_codec.zig");
 const component_common = @import("ui_component_common.zig");
+const article_card_component = @import("ui/components/ArticleCard.zig");
+const article_list_item_component = @import("ui/components/ArticleListItem.zig");
 const aside_component = @import("ui/components/Aside.zig");
 const breadcrumb_component = @import("ui/components/Breadcrumb.zig");
 const callout_component = @import("ui/components/Callout.zig");
@@ -131,21 +133,9 @@ pub const BadgeVariant = component_common.BadgeVariant;
 pub const SurfaceVariant = component_common.SurfaceVariant;
 pub const RenderOptions = component_common.RenderOptions;
 
-pub const ArticleCard = struct {
-    id: u32,
-    category: []const u8,
-    meta: []const u8,
-    title: []const u8,
-    summary: []const u8,
-};
+pub const ArticleCard = article_card_component.ArticleCard;
 
-pub const ArticleListItem = struct {
-    id: u32,
-    category: []const u8,
-    meta: []const u8,
-    title: []const u8,
-    summary: []const u8,
-};
+pub const ArticleListItem = article_list_item_component.ArticleListItem;
 
 pub const CodeBlock = code_block_component.CodeBlock;
 
@@ -294,69 +284,6 @@ pub fn renderComponent(scene: *ui.Scene, bounds: ui.Rect, component: Component, 
         .button => |button| try renderButton(scene, bounds, button, options),
         else => try ui.render(scene, component.node(), bounds, options.style),
     }
-}
-
-pub fn renderArticleCard(scene: *ui.Scene, bounds: ui.Rect, article: ArticleCard, options: RenderOptions) ui.RenderError!void {
-    try renderSurface(scene, bounds, "", "", .{ .style = options.style, .surface_variant = .elevated });
-    const inset = bounds.insetUniform(article_padding);
-    const badge_width = @min(article_badge_max_width, @max(article_badge_min_width, inset.w * 0.28));
-    try renderBadge(scene, ui.Rect.init(inset.x, inset.y, badge_width, article_badge_height), article.category, .{ .style = options.style, .badge_variant = .accent });
-    try scene.pushAlignedText(ui.Rect.init(inset.x + badge_width + article_gap, inset.y + 6.0, @max(1.0, inset.w - badge_width - article_gap), article_meta_height), article.meta, options.style.muted, .end);
-    try scene.pushWrappedText(ui.Rect.init(inset.x, inset.y + 42.0, inset.w - article_arrow_slot, 50.0), article.title, options.style.text, .{
-        .line_height = 22.0,
-        .average_char_width = 10.5,
-        .max_lines = 2,
-    });
-    try scene.pushWrappedText(ui.Rect.init(inset.x, bounds.y + bounds.h - 58.0, inset.w - article_arrow_slot, 44.0), article.summary, options.style.muted, .{
-        .line_height = 18.0,
-        .average_char_width = 10.0,
-        .max_lines = 2,
-    });
-    try scene.pushHit(.{ .slot = 0, .kind = .button, .id = article.id, .bounds = bounds });
-}
-
-pub fn articleListItemHeight(width: f32, article: ArticleListItem) f32 {
-    const text_width = articleListTextWidth(width);
-    const title_lines = wrappedLineCount(article.title, text_width, article_list_title_average_char_width, article_list_title_max_lines);
-    const summary_lines = wrappedLineCount(article.summary, text_width, article_list_summary_average_char_width, article_list_summary_max_lines);
-    const text_height = article_list_meta_height +
-        article_list_meta_gap +
-        @as(f32, @floatFromInt(title_lines)) * article_list_title_line_height +
-        article_list_title_summary_gap +
-        @as(f32, @floatFromInt(summary_lines)) * article_list_summary_line_height;
-    return @max(article_list_min_height, article_list_padding_y * 2.0 + text_height);
-}
-
-pub fn renderArticleListItem(scene: *ui.Scene, bounds: ui.Rect, article: ArticleListItem, options: RenderOptions) ui.RenderError!void {
-    const text_width = articleListTextWidth(bounds.w);
-    const text_x = bounds.x + article_list_padding_x;
-    const text_top = bounds.y + article_list_padding_y;
-    const meta_bounds = ui.Rect.init(text_x, text_top, text_width, article_list_meta_height);
-    const meta = if (article.meta.len != 0) article.meta else article.category;
-    try scene.pushAlignedText(meta_bounds, article.category, options.style.accent, .start);
-    try scene.pushAlignedText(meta_bounds, meta, options.style.muted, .end);
-
-    const title_y = text_top + article_list_meta_height + article_list_meta_gap;
-    const title_lines = wrappedLineCount(article.title, text_width, article_list_title_average_char_width, article_list_title_max_lines);
-    const title_h = @as(f32, @floatFromInt(title_lines)) * article_list_title_line_height;
-    try scene.pushWrappedText(ui.Rect.init(text_x, title_y, text_width, title_h), article.title, options.style.text, .{
-        .line_height = article_list_title_line_height,
-        .average_char_width = article_list_title_average_char_width,
-        .max_lines = article_list_title_max_lines,
-    });
-
-    const summary_y = title_y + title_h + article_list_title_summary_gap;
-    const summary_lines = wrappedLineCount(article.summary, text_width, article_list_summary_average_char_width, article_list_summary_max_lines);
-    const summary_h = @as(f32, @floatFromInt(summary_lines)) * article_list_summary_line_height;
-    try scene.pushWrappedText(ui.Rect.init(text_x, summary_y, text_width, summary_h), article.summary, options.style.muted, .{
-        .line_height = article_list_summary_line_height,
-        .average_char_width = article_list_summary_average_char_width,
-        .max_lines = article_list_summary_max_lines,
-    });
-
-    const divider = ui.Rect.init(bounds.x, bounds.y + bounds.h - article_list_divider_height, bounds.w, article_list_divider_height);
-    try scene.pushRect(divider, options.style.border, .fill, 0.0, 0.0);
-    try scene.pushHit(.{ .slot = 0, .kind = .button, .id = article.id, .bounds = bounds });
 }
 
 pub fn renderRegion(scene: *ui.Scene, bounds: ui.Rect, region: Region, options: RenderOptions) ui.RenderError!void {
@@ -527,43 +454,6 @@ const surface_detail_height: f32 = 16.0;
 const surface_detail_gap: f32 = 8.0;
 const surface_shadow = ui.Color{ .r = 0, .g = 0, .b = 0, .a = 96 };
 const surface_shadow_size: f32 = 8.0;
-const article_padding: f32 = 18.0;
-const article_gap: f32 = 12.0;
-const article_badge_min_width: f32 = 96.0;
-const article_badge_max_width: f32 = 140.0;
-const article_badge_height: f32 = 24.0;
-const article_meta_height: f32 = 12.0;
-const article_arrow_slot: f32 = 24.0;
-const article_list_padding_x: f32 = 6.0;
-const article_list_padding_y: f32 = 16.0;
-const article_list_arrow_slot: f32 = 34.0;
-const article_list_min_height: f32 = 104.0;
-const article_list_meta_height: f32 = 14.0;
-const article_list_meta_gap: f32 = 10.0;
-const article_list_title_line_height: f32 = 25.0;
-const article_list_title_average_char_width: f32 = 10.5;
-const article_list_title_max_lines: usize = 3;
-const article_list_title_summary_gap: f32 = 8.0;
-const article_list_summary_line_height: f32 = 18.0;
-const article_list_summary_average_char_width: f32 = 9.0;
-const article_list_summary_max_lines: usize = 3;
-const article_list_divider_height: f32 = 1.0;
-fn articleListTextWidth(width: f32) f32 {
-    return @max(1.0, width - article_list_padding_x * 2.0 - article_list_arrow_slot);
-}
-
-fn wrappedLineCount(value: []const u8, width: f32, average_char_width: f32, max_lines: usize) usize {
-    if (value.len == 0 or max_lines == 0) return 0;
-    const char_capacity = @max(@as(usize, 1), @as(usize, @intFromFloat(@max(1.0, width / average_char_width))));
-    var byte_cursor: usize = 0;
-    var line_count: usize = 0;
-    while (line_count < max_lines) : (line_count += 1) {
-        byte_cursor = ui.skipAsciiSpace(value, byte_cursor);
-        if (byte_cursor >= value.len) return line_count;
-        byte_cursor = ui.wrappedLine(value, byte_cursor, char_capacity).next;
-    }
-    return line_count;
-}
 const region_radius: f32 = 8.0;
 const region_padding_x: f32 = 12.0;
 const region_padding_y: f32 = 12.0;
@@ -2786,13 +2676,13 @@ test "component render helper owns article cards and code blocks" {
     var clips: [4]ui.Rect = undefined;
     var scene = ui.Scene.initWithClips(&commands, &clips);
 
-    try renderArticleCard(&scene, ui.Rect.init(0, 0, 360, 172), .{
+    try (ArticleCard{
         .id = 801,
         .category = "Architecture",
         .meta = "May 23, 2026",
         .title = "EdgeRun Apps Run Where The User Is",
         .summary = "A short introduction to identity-routed apps and local execution.",
-    }, .{});
+    }).render(&scene, ui.Rect.init(0, 0, 360, 172), .{});
     try (CodeBlock{ .lines = &.{ "const app = try edge.compile(source);", "try app.run(.{});" } }).render(&scene, ui.Rect.init(0, 190, 360, 72), .{});
 
     const hit = ui_input.hitTest(scene.written(), 20, 20).?;
@@ -3456,13 +3346,13 @@ test "article list item expands around wrapped titles" {
         .title = "The Internet Already Connects Everything. Platforms Keep It Apart.",
         .summary = "Show why TCP and UDP move bytes, but platforms still trap identity, data, contacts, and meaning.",
     };
-    const short_height = articleListItemHeight(420.0, short_article);
-    const long_height = articleListItemHeight(420.0, long_article);
+    const short_height = short_article.height(420.0);
+    const long_height = long_article.height(420.0);
     try std.testing.expect(long_height > short_height);
 
     var commands: [32]ui.Command = undefined;
     var scene = ui.Scene.init(&commands);
-    try renderArticleListItem(&scene, ui.Rect.init(0.0, 0.0, 420.0, long_height), long_article, .{});
+    try long_article.render(&scene, ui.Rect.init(0.0, 0.0, 420.0, long_height), .{});
 
     const hit = ui_input.hitTest(scene.written(), 20, 20).?;
     try std.testing.expectEqual(@as(u32, 812), hit.id);
