@@ -2,6 +2,7 @@ const std = @import("std");
 const common = @import("../../ui_component_common.zig");
 const base_label_hit = @import("base/LabelHit.zig");
 const base_surface = @import("base/Surface.zig");
+const interaction = @import("../../ui_interaction.zig");
 const ui = @import("../../ui.zig");
 const ui_input = @import("../../input.zig");
 
@@ -32,6 +33,10 @@ pub const Nav = struct {
         return renderNav(self, scene, bounds, options);
     }
 
+    pub fn collectInteractions(self: Nav, collector: *interaction.Collector, bounds: ui.Rect) interaction.Error!void {
+        return collectNavInteractions(self, collector, bounds);
+    }
+
     pub fn toHtml(self: Nav, out: []u8) HtmlError![]u8 {
         return writeHtml(self, out);
     }
@@ -58,6 +63,7 @@ pub const descriptor = common.ComponentDescriptor{
     .html_prefix = "<nav data-er-component=\"nav\"",
     .markdown_prefix = ":::nav",
     .render = renderRegistered,
+    .collect_interactions = collectRegistered,
     .write_html = writeHtmlRegistered,
     .write_markdown = writeMarkdownRegistered,
 };
@@ -87,9 +93,27 @@ pub fn renderNav(nav: Nav, scene: *ui.Scene, bounds: ui.Rect, options: RenderOpt
     }
 }
 
+pub fn collectNavInteractions(nav: Nav, collector: *interaction.Collector, bounds: ui.Rect) interaction.Error!void {
+    if (nav.items.len == 0) return;
+    var cursor_x = bounds.x + nav_padding_x;
+    const item_y = bounds.y + @max(0.0, (bounds.h - nav_item_h) * 0.5);
+    const item_right = bounds.x + bounds.w - nav_padding_x;
+    for (nav.items) |item| {
+        const item_w = navItemWidth(item.label);
+        if (cursor_x + item_w > item_right) break;
+        try base_label_hit.collect(collector, ui.Rect.init(cursor_x, item_y, item_w, nav_item_h), .{ .id = item.id, .label = item.label, .color = ui.Color.text });
+        cursor_x += item_w + nav_item_gap;
+    }
+}
+
 fn renderRegistered(component: *const anyopaque, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
     const nav: *const Nav = @ptrCast(@alignCast(component));
     return renderNav(nav.*, scene, bounds, options);
+}
+
+fn collectRegistered(component: *const anyopaque, collector: *interaction.Collector, bounds: ui.Rect) interaction.Error!void {
+    const nav: *const Nav = @ptrCast(@alignCast(component));
+    return collectNavInteractions(nav.*, collector, bounds);
 }
 
 pub fn writeHtml(nav: Nav, out: []u8) HtmlError![]u8 {
@@ -221,7 +245,7 @@ fn navItemWidth(label: []const u8) f32 {
     return base_label_hit.width(label, nav_width_metrics);
 }
 
-test "nav component renders active item and hit targets" {
+test "nav component renders active item and collects hit targets" {
     const items = [_]NavItem{
         .{ .id = 30011, .label = "Academy", .href = "#/academy", .active = true },
         .{ .id = 30012, .label = "Systems", .href = "#/systems" },
@@ -230,12 +254,16 @@ test "nav component renders active item and hit targets" {
     const nav = Nav{ .label = "Academy sections", .items = &items };
     var commands: [64]ui.Command = undefined;
     var scene = ui.Scene.init(&commands);
+    var regions: [8]interaction.Region = undefined;
+    var collector = interaction.Collector.init(&regions);
 
     try nav.render(&scene, ui.Rect.init(0, 0, 360, 48), .{});
+    try nav.collectInteractions(&collector, ui.Rect.init(0, 0, 360, 48));
 
     try std.testing.expect(hasText(scene.written(), "Academy"));
     try std.testing.expect(hasText(scene.written(), "Security"));
-    const hit = ui_input.hitTest(scene.written(), 20, 24).?;
+    try std.testing.expect(ui_input.hitTest(scene.written(), 20, 24) == null);
+    const hit = ui_input.regionHitTest(collector.written(), 20, 24).?;
     try std.testing.expectEqual(@as(u32, 30011), hit.id);
 }
 
@@ -283,6 +311,8 @@ test "nav registers explicit runtime descriptor" {
     var markdown: [512]u8 = undefined;
     var commands: [64]ui.Command = undefined;
     var scene = ui.Scene.init(&commands);
+    var regions: [4]interaction.Region = undefined;
+    var collector = interaction.Collector.init(&regions);
 
     try Nav.register(&registry);
     try std.testing.expectError(error.DuplicateComponent, Nav.register(&registry));
@@ -292,10 +322,12 @@ test "nav registers explicit runtime descriptor" {
     const encoded_html = try registry.writeHtml("nav", &nav, &html);
     const encoded_markdown = try registry.writeMarkdown("nav", &nav, &markdown);
     try registry.render("nav", &nav, &scene, ui.Rect.init(0, 0, 360, 48), .{});
+    try registry.collectInteractions("nav", &nav, &collector, ui.Rect.init(0, 0, 360, 48));
 
     try std.testing.expect(std.mem.indexOf(u8, encoded_html, "<nav data-er-component=\"nav\"") != null);
     try std.testing.expect(std.mem.indexOf(u8, encoded_markdown, ":::nav") != null);
     try std.testing.expect(hasText(scene.written(), "Academy"));
+    try std.testing.expectEqual(@as(u32, 30031), ui_input.regionHitTest(collector.written(), 20, 24).?.id);
 }
 
 fn hasText(commands: []const ui.Command, value: []const u8) bool {

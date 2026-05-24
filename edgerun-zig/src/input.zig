@@ -1,5 +1,6 @@
 const std = @import("std");
 const ui = @import("ui.zig");
+const interaction = @import("ui_interaction.zig");
 
 pub fn hitTest(commands: []const ui.Command, x: f32, y: f32) ?ui.Hit {
     var index = commands.len;
@@ -11,6 +12,10 @@ pub fn hitTest(commands: []const ui.Command, x: f32, y: f32) ?ui.Hit {
         }
     }
     return null;
+}
+
+pub fn regionHitTest(regions: []const interaction.Region, x: f32, y: f32) ?interaction.Region {
+    return interaction.hitTest(regions, x, y);
 }
 
 pub fn dragSourceAt(commands: []const ui.Command, x: f32, y: f32) ?ui.DragSource {

@@ -1,6 +1,7 @@
 const std = @import("std");
 const common = @import("../../ui_component_common.zig");
 const base_label_hit = @import("base/LabelHit.zig");
+const interaction = @import("../../ui_interaction.zig");
 const ui = @import("../../ui.zig");
 const ui_input = @import("../../input.zig");
 
@@ -30,6 +31,10 @@ pub const Breadcrumb = struct {
         return renderBreadcrumb(self, scene, bounds, options);
     }
 
+    pub fn collectInteractions(self: Breadcrumb, collector: *interaction.Collector, bounds: ui.Rect) interaction.Error!void {
+        return collectBreadcrumbInteractions(self, collector, bounds);
+    }
+
     pub fn toHtml(self: Breadcrumb, out: []u8) HtmlError![]u8 {
         return writeHtml(self, out);
     }
@@ -56,6 +61,7 @@ pub const descriptor = common.ComponentDescriptor{
     .html_prefix = "<nav data-er-component=\"breadcrumb\"",
     .markdown_prefix = ":::breadcrumb",
     .render = renderRegistered,
+    .collect_interactions = collectRegistered,
     .write_html = writeHtmlRegistered,
     .write_markdown = writeMarkdownRegistered,
 };
@@ -83,9 +89,31 @@ pub fn renderBreadcrumb(breadcrumb: Breadcrumb, scene: *ui.Scene, bounds: ui.Rec
     }
 }
 
+pub fn collectBreadcrumbInteractions(breadcrumb: Breadcrumb, collector: *interaction.Collector, bounds: ui.Rect) interaction.Error!void {
+    if (breadcrumb.items.len == 0) return;
+    var cursor_x = bounds.x + breadcrumb_padding_x;
+    const y = bounds.y + @max(0.0, (bounds.h - breadcrumb_item_h) * 0.5);
+    const right = bounds.x + bounds.w - breadcrumb_padding_x;
+    for (breadcrumb.items, 0..) |item, index| {
+        const item_w = breadcrumbItemWidth(item.label);
+        if (cursor_x + item_w > right) break;
+        try base_label_hit.collect(collector, ui.Rect.init(cursor_x, y, item_w, breadcrumb_item_h), .{ .id = item.id, .label = item.label, .color = ui.Color.text });
+        cursor_x += item_w;
+        if (index + 1 < breadcrumb.items.len) {
+            if (cursor_x + breadcrumb_separator_w > right) break;
+            cursor_x += breadcrumb_separator_w;
+        }
+    }
+}
+
 fn renderRegistered(component: *const anyopaque, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
     const breadcrumb: *const Breadcrumb = @ptrCast(@alignCast(component));
     return renderBreadcrumb(breadcrumb.*, scene, bounds, options);
+}
+
+fn collectRegistered(component: *const anyopaque, collector: *interaction.Collector, bounds: ui.Rect) interaction.Error!void {
+    const breadcrumb: *const Breadcrumb = @ptrCast(@alignCast(component));
+    return collectBreadcrumbInteractions(breadcrumb.*, collector, bounds);
 }
 
 pub fn writeHtml(breadcrumb: Breadcrumb, out: []u8) HtmlError![]u8 {
@@ -207,7 +235,7 @@ fn breadcrumbItemWidth(label: []const u8) f32 {
     return base_label_hit.width(label, breadcrumb_width_metrics);
 }
 
-test "breadcrumb component renders path and hit targets" {
+test "breadcrumb component renders path and collects hit targets" {
     const items = [_]BreadcrumbItem{
         .{ .id = 35001, .label = "Academy", .href = "#/academy" },
         .{ .id = 35002, .label = "Systems", .href = "#/systems" },
@@ -216,12 +244,16 @@ test "breadcrumb component renders path and hit targets" {
     const breadcrumb = Breadcrumb{ .items = &items };
     var commands: [64]ui.Command = undefined;
     var scene = ui.Scene.init(&commands);
+    var regions: [8]interaction.Region = undefined;
+    var collector = interaction.Collector.init(&regions);
 
     try breadcrumb.render(&scene, ui.Rect.init(0, 0, 360, 40), .{});
+    try breadcrumb.collectInteractions(&collector, ui.Rect.init(0, 0, 360, 40));
 
     try std.testing.expect(hasText(scene.written(), "Academy"));
     try std.testing.expect(hasText(scene.written(), "DNS"));
-    const hit = ui_input.hitTest(scene.written(), 92, 20).?;
+    try std.testing.expect(ui_input.hitTest(scene.written(), 92, 20) == null);
+    const hit = ui_input.regionHitTest(collector.written(), 92, 20).?;
     try std.testing.expectEqual(@as(u32, 35002), hit.id);
 }
 
@@ -268,6 +300,8 @@ test "breadcrumb registers explicit runtime descriptor" {
     var markdown: [512]u8 = undefined;
     var commands: [64]ui.Command = undefined;
     var scene = ui.Scene.init(&commands);
+    var regions: [4]interaction.Region = undefined;
+    var collector = interaction.Collector.init(&regions);
 
     try Breadcrumb.register(&registry);
     try std.testing.expectError(error.DuplicateComponent, Breadcrumb.register(&registry));
@@ -277,10 +311,12 @@ test "breadcrumb registers explicit runtime descriptor" {
     const encoded_html = try registry.writeHtml("breadcrumb", &breadcrumb, &html);
     const encoded_markdown = try registry.writeMarkdown("breadcrumb", &breadcrumb, &markdown);
     try registry.render("breadcrumb", &breadcrumb, &scene, ui.Rect.init(0, 0, 360, 40), .{});
+    try registry.collectInteractions("breadcrumb", &breadcrumb, &collector, ui.Rect.init(0, 0, 360, 40));
 
     try std.testing.expect(std.mem.indexOf(u8, encoded_html, "<nav data-er-component=\"breadcrumb\"") != null);
     try std.testing.expect(std.mem.indexOf(u8, encoded_markdown, ":::breadcrumb") != null);
     try std.testing.expect(hasText(scene.written(), "DNS"));
+    try std.testing.expectEqual(@as(u32, 35202), ui_input.regionHitTest(collector.written(), 92, 20).?.id);
 }
 
 fn hasText(commands: []const ui.Command, value: []const u8) bool {
